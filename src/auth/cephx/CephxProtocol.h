@@ -205,6 +205,8 @@ extern void cephx_build_service_ticket_request(uint32_t keys,
 
 extern bool cephx_build_service_ticket_reply(CryptoKey& principal_secret,
 					     vector<CephXSessionAuthInfo> ticket_info,
+                                             bool should_encrypt_ticket,
+                                             CryptoKey& ticket_enc_key,
 					     bufferlist& reply);
 
 struct CephXServiceTicketRequest {
@@ -338,7 +340,7 @@ WRITE_CLASS_ENCODER(CephXAuthorize);
 /*
  * Decode an extract ticket
  */
-bool cephx_decode_ticket(KeyStore& keys, uint32_t service_id, CephXTicketBlob& ticket_blob, AuthTicket& ticket);
+bool cephx_decode_ticket(KeyStore& keys, uint32_t service_id, CephXTicketBlob& ticket_blob, CephXServiceTicketInfo& ticket_info);
 
 /*
  * Verify authorizer and generate reply authorizer

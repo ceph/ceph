@@ -84,17 +84,19 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 
       CryptoKey session_key;
       CephXSessionAuthInfo info;
+      bool should_enc_ticket = false;
 
       CryptoKey principal_secret;
       if (key_server->get_secret(entity_name, principal_secret) < 0) {
 	ret = -EPERM;
 	break;
       }
-      AuthTicket old_ticket;
+      CephXServiceTicketInfo old_ticket_info;
 
-      if (cephx_decode_ticket(*key_server, CEPH_ENTITY_TYPE_AUTH, req.old_ticket, old_ticket)) {
-        global_id = old_ticket.global_id;
-        dout(0) << "decoded old_ticket with global_id=" << old_ticket.global_id << dendl;
+      if (cephx_decode_ticket(*key_server, CEPH_ENTITY_TYPE_AUTH, req.old_ticket, old_ticket_info)) {
+        global_id = old_ticket_info.ticket.global_id;
+        dout(10) << "decoded old_ticket with global_id=" << global_id << dendl;
+        should_enc_ticket = true;
       }
 
       info.ticket.init_timestamps(g_clock.now(), g_conf.auth_mon_ticket_ttl);
@@ -116,7 +118,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       info_vec.push_back(info);
 
       build_cephx_response_header(cephx_header.request_type, 0, result_bl);
-      if (!cephx_build_service_ticket_reply(principal_secret, info_vec, result_bl)) {
+      if (!cephx_build_service_ticket_reply(principal_secret, info_vec, should_enc_ticket, old_ticket_info.session_key, result_bl)) {
         ret = -EIO;
         break;
       }
@@ -157,8 +159,9 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
           info_vec.push_back(info);
         }
       }
+      CryptoKey no_key;
       build_cephx_response_header(cephx_header.request_type, ret, result_bl);
-      cephx_build_service_ticket_reply(auth_ticket_info.session_key, info_vec, result_bl);
+      cephx_build_service_ticket_reply(auth_ticket_info.session_key, info_vec, false, no_key, result_bl);
     }
     break;
 

@@ -60,6 +60,8 @@ bool cephx_build_service_ticket(CephXSessionAuthInfo& info, bufferlist& reply)
 bool cephx_build_service_ticket_reply(
                      CryptoKey& principal_secret,
                      vector<CephXSessionAuthInfo> ticket_info_vec,
+                     bool should_encrypt_ticket,
+                     CryptoKey& ticket_enc_key,
                      bufferlist& reply)
 {
   uint32_t num = ticket_info_vec.size();
@@ -79,8 +81,21 @@ bool cephx_build_service_ticket_reply(
     if (encode_encrypt(msg_a, principal_secret, reply) < 0)
       return false;
 
-    if (!cephx_build_service_ticket(info, reply))
-      return false; 
+    bufferlist service_ticket_bl;
+
+    if (!cephx_build_service_ticket(info, service_ticket_bl))
+      return false;
+
+    ::encode((__u8)should_encrypt_ticket, reply);
+
+    if (should_encrypt_ticket) {
+      bufferlist enc_ticket;
+
+      if (encode_encrypt(service_ticket_bl, ticket_enc_key, reply) < 0)
+        return false;
+    } else {
+      reply.claim_append(service_ticket_bl);
+    }
   }
   return true;
 }
@@ -98,7 +113,20 @@ bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
     dout(0) << "verify_service_ticket_reply failed decode_decrypt with secret " << secret << dendl;
     return false;
   }
-  ::decode(ticket, indata);
+   __u8 ticket_enc;
+  ::decode(ticket_enc, indata);
+  if (ticket_enc) {
+    dout(10) << "getting encrypted ticket" << dendl;
+    bufferlist service_ticket_bl;
+    if (decode_decrypt(service_ticket_bl, session_key, indata) < 0)
+      return false;
+    bufferlist::iterator iter = service_ticket_bl.begin();
+    ::decode(ticket, iter);
+    dout(10) << "ticket.secret_id=" <<  ticket.secret_id << dendl;
+  } else {
+    dout(10) << "got unencrypted ticket" << dendl;
+    ::decode(ticket, indata);
+  }
   dout(10) << "verify_service_ticket_reply service " << ceph_entity_type_name(service_id)
 	   << " secret_id " << ticket.secret_id
 	   << " session_key " << msg_a.session_key
@@ -220,6 +248,7 @@ CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id)
 
   CephXAuthorize msg;
   msg.nonce = a->nonce;
+
   if (encode_encrypt(msg, session_key, a->bl) < 0) {
     dout(0) << "failed to encrypt authorizer" << dendl;
     delete a;
@@ -256,11 +285,10 @@ void CephXTicketManager::validate_tickets(uint32_t mask, uint32_t& have, uint32_
   }
 }
 
-bool cephx_decode_ticket(KeyStore& keys, uint32_t service_id, CephXTicketBlob& ticket_blob, AuthTicket& ticket)
+bool cephx_decode_ticket(KeyStore& keys, uint32_t service_id, CephXTicketBlob& ticket_blob, CephXServiceTicketInfo& ticket_info)
 {
   uint64_t secret_id = ticket_blob.secret_id;
   CryptoKey service_secret;
-  CephXServiceTicketInfo ticket_info;
 
   if (!ticket_blob.blob.length()) {
     return false;
@@ -283,7 +311,6 @@ bool cephx_decode_ticket(KeyStore& keys, uint32_t service_id, CephXTicketBlob& t
     return false;
   }
 
-  ticket = ticket_info.ticket;
   return true;
 }
 
