@@ -424,6 +424,7 @@ void Monitor::resend_routed_requests()
 void Monitor::remove_session(Session *s)
 {
   dout(10) << "remove_session " << s << " " << s->inst << dendl;
+  assert(!s->closed);
   for (set<__u64>::iterator p = s->routed_request_tids.begin();
        p != s->routed_request_tids.end();
        p++) {
@@ -735,7 +736,8 @@ bool Monitor::ms_handle_reset(Connection *con)
   Mutex::Locker l(lock);
 
   dout(10) << "reset/close on session " << s->inst << dendl;
-  remove_session(s);
+  if (!s->closed)
+    remove_session(s);
   s->put();
     
   // remove from connection, too.

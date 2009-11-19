@@ -66,6 +66,7 @@ struct SessionMap {
   multimap<int, Session*> by_osd;
 
   void remove_session(Session *s) {
+    assert(!s->closed);
     for (map<nstring,Subscription*>::iterator p = s->sub_map.begin(); p != s->sub_map.end(); ++p)
       p->second->type_item.remove_myself();
     s->sub_map.clear();
