@@ -370,17 +370,15 @@ void MonClient::_reopen_session()
     waiting_for_session.pop_front();
   }
 
-  // restart authentication process?
-  if (state != MC_STATE_HAVE_SESSION) {
-    state = MC_STATE_NEGOTIATING;
+  // restart authentication handshake
+  state = MC_STATE_NEGOTIATING;
 
-    MAuth *m = new MAuth;
-    m->protocol = 0;
-    ::encode(auth_supported, m->auth_payload);
-    ::encode(entity_name, m->auth_payload);
-    ::encode(global_id, m->auth_payload);
-    _send_mon_message(m, true);
-  }
+  MAuth *m = new MAuth;
+  m->protocol = 0;
+  ::encode(auth_supported, m->auth_payload);
+  ::encode(entity_name, m->auth_payload);
+  ::encode(global_id, m->auth_payload);
+  _send_mon_message(m, true);
 
   if (!sub_have.empty())
     _renew_subs();
