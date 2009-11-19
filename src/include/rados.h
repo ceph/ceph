@@ -21,12 +21,6 @@ static inline int ceph_fsid_compare(const struct ceph_fsid *a,
 	return memcmp(a, b, sizeof(*a));
 }
 
-static inline void ceph_fsid_set(struct ceph_fsid *d,
-				 const struct ceph_fsid *s)
-{
-	memcpy(d, s, sizeof(*d));
-}
-
 /*
  * ino, object, etc.
  */
