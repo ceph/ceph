@@ -334,8 +334,8 @@ EOF
 	mon = "allow rwx"
 	osd = "allow rwx"
 EOF
-		    $SUDO $CEPH_BIN/authtool --gen-key --name=osd.$osd --caps=$osd_caps $key_fn
 		fi
+		$SUDO $CEPH_BIN/authtool --gen-key --name=osd.$osd --caps=$osd_caps $key_fn
 		echo adding osd$osd key to auth repository
 		$SUDO $CEPH_ADM -i $key_fn auth add osd.$osd
 	    fi
