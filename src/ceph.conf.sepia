@@ -65,7 +65,7 @@
 	filestore max sync interval = 5
 
 ;	btrfs devs = "/dev/disk/by-path/pci-0000:05:01.0-scsi-2:0:0:0"
-	valgrind = "--tool=memcheck --log-file=/data/sepia$id/v.osd$id"
+;	valgrind = "--tool=memcheck --log-file=/data/sepia$id/v.osd$id"
 
 [osd2]
 	host = sepia2
