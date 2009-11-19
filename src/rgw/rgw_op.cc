@@ -4,7 +4,7 @@
 
 #include <sstream>
 
-#include "include/base64.h"
+#include "common/base64.h"
 
 #include "rgw_access.h"
 #include "rgw_op.h"

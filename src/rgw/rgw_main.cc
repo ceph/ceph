@@ -27,7 +27,7 @@
 #include <sstream>
 
 #include "include/types.h"
-#include "include/base64.h"
+#include "common/base64.h"
 #include "common/BackTrace.h"
 
 using namespace std;

@@ -10,7 +10,7 @@ using namespace std;
 #include <openssl/rand.h>
 #include "common/common_init.h"
 
-#include "include/base64.h"
+#include "common/base64.h"
 #include "rgw_user.h"
 #include "rgw_access.h"
 #include "rgw_acl.h"

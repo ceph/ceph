@@ -1,13 +1,10 @@
-#ifndef __BASE64_H
-#define __BASE64_H
-
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 #include <openssl/buffer.h>
 
 #include <string.h>
 
-static int encode_base64(const char *in, int in_len, char *out, int out_len)
+int encode_base64(const char *in, int in_len, char *out, int out_len)
 {
   BIO *bmem, *b64;
   BUF_MEM *bptr; 
@@ -33,7 +30,7 @@ static int encode_base64(const char *in, int in_len, char *out, int out_len)
   return 0;
 }
 
-static int decode_base64(const char *in, int in_len, char *out, int out_len)
+int decode_base64(const char *in, int in_len, char *out, int out_len)
 {
   BIO *b64, *bmem;
   int ret;
@@ -52,5 +49,3 @@ static int decode_base64(const char *in, int in_len, char *out, int out_len)
 
   return ret;
 }
-
-#endif
