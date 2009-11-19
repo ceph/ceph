@@ -56,6 +56,7 @@ public:
   }
   int dec() {
     lock.lock();
+    assert(nref > 0);
     int r = --nref; 
     lock.unlock();
     return r;
@@ -67,6 +68,7 @@ public:
   }
   void sub(int d) {
     lock.lock();
+    assert(nref >= d);
     nref -= d;
     lock.unlock();
   }
