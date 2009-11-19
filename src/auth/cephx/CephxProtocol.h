@@ -354,7 +354,7 @@ extern bool cephx_verify_authorizer(KeyStore& keys, bufferlist::iterator& indata
 /*
  * encode+encrypt macros
  */
-#define AUTH_ENC_MAGIC 0xff009cad8826aa55
+#define AUTH_ENC_MAGIC 0xff009cad8826aa55ull
 
 template <typename T>
 int decode_decrypt_enc_bl(T& t, CryptoKey key, bufferlist& bl_enc) {
