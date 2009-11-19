@@ -1947,7 +1947,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	      << " for " << *in << dendl;
       pi->ctime = ctime;
     }
-    if (size > latest->size) {
+    if (in->inode.is_file() &&   // ONLY if regular file
+	size > latest->size) {
       dout(7) << "  size " << pi->size << " -> " << size
 	      << " for " << *in << dendl;
       pi->size = size;
