@@ -28,6 +28,8 @@ struct EntityName {
   uint32_t entity_type;
   string name;
 
+  EntityName() : entity_type(0) {}
+
   void encode(bufferlist& bl) const {
     ::encode(entity_type, bl);
     ::encode(name, bl);
