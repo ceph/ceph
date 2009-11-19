@@ -1063,7 +1063,7 @@ void MDS::recovery_done()
   mdcache->reissue_all_caps();
   
   // tell connected clients
-  bcast_mds_map();  
+  //bcast_mds_map();     // not anymore, they get this from the monitor
 
   mdcache->populate_mydir();
 }

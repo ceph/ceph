@@ -94,8 +94,6 @@ class Inode;
 class Dentry;
 
 struct MetaRequest {
-  MClientRequest *request;    // the actual request to send out
-  //used in constructing MClientRequests
   ceph_mds_request_head head;
   filepath path, path2;
   bufferlist data;
@@ -133,24 +131,8 @@ struct MetaRequest {
 
   Inode *target;
 
-  MetaRequest(MClientRequest *req, tid_t t) : 
-    request(req), inode_drop(0), inode_unless(0),
-    old_inode_drop(0), old_inode_unless(0),
-    dentry_drop(0), dentry_unless(0),
-    old_dentry_drop(0), old_dentry_unless(0),
-    inode(NULL), old_inode(NULL),
-    dentry(NULL), old_dentry(NULL),
-    resend_mds(-1), num_fwd(0), retry_attempt(0),
-    ref(1), reply(0), 
-    kick(false), got_safe(false), got_unsafe(false), item(this), unsafe_item(this),
-    lock("MetaRequest lock"),
-    caller_cond(0), dispatch_cond(0),
-    target(0) {
-    memcpy(&head, &req->head, sizeof(ceph_mds_request_head));
-  }
-
   MetaRequest(int op) : 
-    request(NULL), inode_drop(0), inode_unless(0),
+    inode_drop(0), inode_unless(0),
     old_inode_drop(0), old_inode_unless(0),
     dentry_drop(0), dentry_unless(0),
     old_dentry_drop(0), old_dentry_unless(0),
@@ -861,7 +843,7 @@ public:
 		   //MClientRequest *req, int uid, int gid,
 		   Inode **ptarget = 0,
 		   int use_mds=-1, bufferlist *pdirbl=0);
-  void encode_cap_releases(MetaRequest *request, int mds);
+  void encode_cap_releases(MetaRequest *request, MClientRequest *m, int mds);
   int encode_inode_release(Inode *in, MClientRequest *req,
 			   int mds, int drop,
 			   int unless,int force=0);

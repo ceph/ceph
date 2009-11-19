@@ -109,6 +109,7 @@ class FileStore : public JournalingObjectStore {
   int mount();
   int umount();
   int mkfs();
+  int mkjournal();
 
   int statfs(struct statfs *buf);
 

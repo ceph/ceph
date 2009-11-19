@@ -222,7 +222,7 @@ int OSD::peek_super(const char *dev, nstring& magic, ceph_fsid_t& fsid, int& who
 
 // cons/des
 
-OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, const char *jdev) : 
+OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, const char *jdev, bool newjournal) : 
   osd_lock("OSD::osd_lock"),
   timer(osd_lock),
   messenger(m),
@@ -267,6 +267,7 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, c
 {
   monc->set_messenger(messenger);
   
+  mknewjournal = newjournal;
   osdmap = 0;
 
   memset(&my_stat, 0, sizeof(my_stat));
@@ -319,10 +320,19 @@ int OSD::init()
     dout(0) << " unable to create object store" << dendl;
     return -ENODEV;
   }
+
+  if (mknewjournal) {
+    int r = store->mkjournal();
+    if (r < 0) {
+      dout(0) << " unable to create new jouranl" << dendl;
+      return r;
+    }
+  }
+
   int r = store->mount();
   if (r < 0) {
     dout(0) << " unable to mount object store" << dendl;
-    return -1;
+    return r;
   }
   
   dout(2) << "boot" << dendl;

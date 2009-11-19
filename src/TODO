@@ -53,6 +53,7 @@ v0.18
 - fixed mds log trimming bug
 - fixed mds cap vs snap deadlock
 - filestore faster flushing
+- uclient and kclient snapshot fixes
 
 - mount btrfs by UUID?
 
@@ -69,12 +70,66 @@ v0.18
 pending wire, disk format changes
 
 bugs
+- SIGBUS
 - mds rstat bug (on 2* cp -av usr + 11_kernel_untar_build)
 mds/CInode.cc: In function 'virtual void CInode::finish_scatter_gather_update(int)':
 mds/CInode.cc:1233: FAILED assert(pi->rstat.rfiles >= 0)
-- mislinked directory?
+- mislinked directory?  (cpusr.sh, mv /c/* /c/t, more cpusr, ls /c/t)
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
+- kclient: after reconnect,
+cp: writing `/c/ceph2.2/bin/gs-gpl': Bad file descriptor
+  - need to somehow wake up unreconnected caps?   hrm!!
+- kclient: ~300 (306, 311) second delay before able to reconnect to restarted monitor???
+- kclient: socket creation
+- kclient: bdi thing after mount failures, multiple attempts
+[ 1438.509155] ------------[ cut here ]------------
+[ 1438.513933] WARNING: at fs/sysfs/dir.c:487 sysfs_add_one+0xf3/0x10a()
+[ 1438.520560] Hardware name: PDSMi
+[ 1438.523898] sysfs: cannot create duplicate filename '/class/bdi/0:25'
+[ 1438.530526] Modules linked in: ceph fan ac battery container ehci_hcd uhci_hcd thermal button processor
+[ 1438.546600] Pid: 2829, comm: mount.ceph Tainted: G        W  2.6.32-rc2 #1
+[ 1438.553722] Call Trace:
+[ 1438.556279]  [<ffffffff81131c21>] ? sysfs_add_one+0xf3/0x10a
+[ 1438.562179]  [<ffffffff810453d7>] warn_slowpath_common+0x77/0xa4
+[ 1438.568399]  [<ffffffff81045479>] warn_slowpath_fmt+0x64/0x66
+[ 1438.574364]  [<ffffffff8106db61>] ? trace_hardirqs_on_caller+0x113/0x13e
+[ 1438.581312]  [<ffffffff81131b26>] ? sysfs_pathname+0x37/0x3f
+[ 1438.587132]  [<ffffffff81131b26>] ? sysfs_pathname+0x37/0x3f
+[ 1438.593017]  [<ffffffff81131b26>] ? sysfs_pathname+0x37/0x3f
+[ 1438.598894]  [<ffffffff81131c21>] sysfs_add_one+0xf3/0x10a
+[ 1438.604593]  [<ffffffff811322a3>] create_dir+0x58/0x93
+[ 1438.609929]  [<ffffffff81132316>] sysfs_create_dir+0x38/0x4f
+[ 1438.615825]  [<ffffffff8146c955>] ? _spin_unlock+0x30/0x4b
+[ 1438.621520]  [<ffffffff81256497>] kobject_add_internal+0x125/0x201
+[ 1438.627939]  [<ffffffff8125664b>] kobject_add_varg+0x41/0x4d
+[ 1438.633820]  [<ffffffff8125675c>] kobject_add+0x89/0x8b
+[ 1438.639263]  [<ffffffff8106d8c8>] ? mark_held_locks+0x4d/0x6b
+[ 1438.645245]  [<ffffffff8106c683>] ? lockdep_init_map+0xae/0x540
+[ 1438.651351]  [<ffffffff812562ec>] ? kobject_get+0x1a/0x22
+[ 1438.656906]  [<ffffffff812cdeb9>] ? get_device+0x14/0x1a
+[ 1438.662371]  [<ffffffff812ce93e>] device_add+0x119/0x627
+[ 1438.667877]  [<ffffffff8126040d>] ? __spin_lock_init+0x31/0x54
+[ 1438.673933]  [<ffffffff812cee65>] device_register+0x19/0x1d
+[ 1438.679703]  [<ffffffff812cef77>] device_create_vargs+0x10e/0x13b
+[ 1438.686028]  [<ffffffff810ba606>] bdi_register+0x80/0x192
+[ 1438.691635]  [<ffffffff8106c683>] ? lockdep_init_map+0xae/0x540
+[ 1438.697762]  [<ffffffff810a5e33>] ? mempool_kmalloc+0x11/0x13
+[ 1438.703714]  [<ffffffff810a6288>] ? mempool_create_node+0x122/0x16e
+[ 1438.710218]  [<ffffffffa004e756>] ? ceph_set_super+0x0/0xd8 [ceph]
+[ 1438.716620]  [<ffffffff810a5da6>] ? mempool_kfree+0x0/0xb
+[ 1438.722221]  [<ffffffff810a5e22>] ? mempool_kmalloc+0x0/0x13
+[ 1438.728072]  [<ffffffff810ba73b>] bdi_register_dev+0x23/0x25
+[ 1438.733944]  [<ffffffffa004e127>] ceph_get_sb+0xa20/0x104f [ceph]
+[ 1438.740267]  [<ffffffff810d3d4f>] ? __kmalloc+0x15c/0x1ef
+[ 1438.745869]  [<ffffffff810d792a>] ? __alloc_percpu+0xb/0xd
+[ 1438.751545]  [<ffffffff810dbcb4>] vfs_kern_mount+0x9d/0x158
+[ 1438.757359]  [<ffffffff810dbdcc>] do_kern_mount+0x47/0xe7
+[ 1438.762967]  [<ffffffff810f2749>] do_mount+0x743/0x7a9
+[ 1438.768284]  [<ffffffff810b8baa>] ? strndup_user+0x5d/0x85
+[ 1438.773962]  [<ffffffff810f282e>] sys_mount+0x7f/0xc1
+[ 1438.779204]  [<ffffffff8146c393>] ? trace_hardirqs_on_thunk+0x3a/0x3f
+[ 1438.785846]  [<ffffffff8100baab>] system_call_fastpath+0x16/0x1b
 
 greg
 - osd: error handling
@@ -167,6 +222,7 @@ osd
 - optimize remove wrt recovery pushes?
 
 uclient
+- fix client_lock vs other mutex with C_SafeCond
 - clean up check_caps to more closely mirror kclient logic
 - readdir from cache
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it

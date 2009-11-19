@@ -37,7 +37,7 @@ using namespace std;
 
 void usage() 
 {
-  cerr << "usage: cosd -i osdid [--osd-data=path] [--osd-journal=path] [--mkfs]" << std::endl;
+  cerr << "usage: cosd -i osdid [--osd-data=path] [--osd-journal=path] [--mkfs] [--mkjournal]" << std::endl;
   cerr << "   --debug_osd N   set debug level (e.g. 10)" << std::endl;
   generic_server_usage();
 }
@@ -63,10 +63,13 @@ int main(int argc, const char **argv)
   if (g_conf.clock_tare) g_clock.tare();
 
   // osd specific args
-  bool mkfs = 0;
+  bool mkfs = false;
+  bool mkjournal = false;
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("mkfs", '\0')) {
-      mkfs = 1; 
+      mkfs = true;
+    } else if (CONF_ARG_EQ("mkjournal", '\0')) {
+      mkjournal = true;
     } else {
       cerr << "unrecognized arg " << args[i] << std::endl;
       ARGS_USAGE();
@@ -160,7 +163,7 @@ int main(int argc, const char **argv)
   rank.start();
 
   // start osd
-  OSD *osd = new OSD(whoami, m, hbm, &mc, g_conf.osd_data, g_conf.osd_journal);
+  OSD *osd = new OSD(whoami, m, hbm, &mc, g_conf.osd_data, g_conf.osd_journal, mkjournal);
   if (osd->init() < 0) {
     cout << "error initializing osd" << std::endl;
     return 1;

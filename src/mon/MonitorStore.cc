@@ -255,6 +255,7 @@ int MonitorStore::write_bl_ss(bufferlist& bl, const char *a, const char *b, bool
   }
   
   char tfn[200];
+  int err = 0;
   int fd;
   if (append) {
     fd = ::open(fn, O_WRONLY|O_CREAT|O_APPEND, 0644);
@@ -274,16 +275,20 @@ int MonitorStore::write_bl_ss(bufferlist& bl, const char *a, const char *b, bool
     if (r < 0) {
       char buf[80];
       derr(0) << "put_bl_ss ::write() errored out, errno is " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+      err = -errno;
+      break;
     }
   }
 
-  if (sync)
+  if (sync && !err)
     ::fsync(fd);
   ::close(fd);
-  if (!append) {
+  if (!append && !err) {
     ::rename(tfn, fn);
   }
 
-  return 0;
+  assert(!err);  // for now
+
+  return err;
 }
 

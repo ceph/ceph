@@ -328,18 +328,9 @@ int FileStore::mkfs()
   dout(10) << "mkfs fsid is " << fsid << dendl;
 
   // journal?
-  open_journal();
-  if (journal) {
-    if (journal->create() < 0) {
-      dout(0) << "mkfs error creating journal on " << fn << dendl;
-    } else {
-      dout(0) << "mkfs created journal on " << fn << dendl;
-    }
-    delete journal;
-    journal = 0;
-  } else {
-    dout(10) << "mkfs no journal at " << fn << dendl;
-  }
+  int err = mkjournal();
+  if (err)
+    return err;
 
   if (g_conf.filestore_dev) {
     char cmd[PATH_MAX];
@@ -349,9 +340,30 @@ int FileStore::mkfs()
   }
 
   dout(1) << "mkfs done in " << basedir << dendl;
-
   return 0;
 }
+
+int FileStore::mkjournal()
+{
+  int err;
+
+  open_journal();
+  if (journal) {
+    err = journal->create();
+    if (err < 0) {
+      dout(0) << "mkjournal error creating journal on " << journalpath << dendl;
+    } else {
+      dout(0) << "mkjournal created journal on " << journalpath << dendl;
+    }
+    delete journal;
+    journal = 0;
+  } else {
+    err = -ENOENT;
+    dout(10) << "mkjournal no journal at " << journalpath << dendl;
+  }
+  return err;
+}
+
 
 Mutex sig_lock("FileStore.cc sig_lock");
 Cond sig_cond;

@@ -53,11 +53,6 @@ static ostream& _prefix(SimpleMessenger *rank) {
 #define opened_socket() //dout(20) << "opened_socket " << ++sockopen << dendl;
 
 
-#ifdef DARWIN
-sig_t old_sigint_handler = 0;
-#else
-sighandler_t old_sigint_handler = 0;
-#endif
 
 /********************************************
  * Accepter
@@ -223,7 +218,8 @@ void *SimpleMessenger::Accepter::entry()
       }
       rank->lock.Unlock();
     } else {
-      dout(0) << "accepter no incoming connection?  sd = " << sd << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+      dout(0) << "accepter no incoming connection?  sd = " << sd
+	      << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       if (++errors > 4)
 	break;
     }
@@ -1264,18 +1260,12 @@ void SimpleMessenger::Pipe::fail()
   assert(lock.is_locked());
 
   stop();
-  report_failures();
 
+  discard_queue();
+  
   for (unsigned i=0; i<rank->local.size(); i++) 
     if (rank->local[i])
       rank->local[i]->queue_reset(connection_state->get());
-
-  // unregister
-  lock.Unlock();
-  rank->lock.Lock();
-  unregister_pipe();
-  rank->lock.Unlock();
-  lock.Lock();
 }
 
 void SimpleMessenger::Pipe::was_session_reset()
@@ -1283,7 +1273,8 @@ void SimpleMessenger::Pipe::was_session_reset()
   assert(lock.is_locked());
 
   dout(10) << "was_session_reset" << dendl;
-  report_failures();
+  discard_queue();
+
   for (unsigned i=0; i<rank->local.size(); i++) 
     if (rank->local[i])
       rank->local[i]->queue_remote_reset(connection_state->get());
@@ -1293,21 +1284,10 @@ void SimpleMessenger::Pipe::was_session_reset()
   connect_seq = 0;
 }
 
-void SimpleMessenger::Pipe::report_failures()
-{
-  // report failures
-  q[CEPH_MSG_PRIO_HIGHEST].splice(q[CEPH_MSG_PRIO_HIGHEST].begin(), sent);
-  while (1) {
-    Message *m = _get_next_outgoing();
-    if (!m)
-      break;
-    m->put();
-  }
-}
-
 void SimpleMessenger::Pipe::stop()
 {
   dout(10) << "stop" << dendl;
+  assert(lock.is_locked());
   state = STATE_CLOSED;
   cond.Signal();
   if (sd >= 0) {
@@ -1420,8 +1400,8 @@ void SimpleMessenger::Pipe::reader()
 	derr(0) << "reader got bad seq " << m->get_seq() << " expected " << in_seq
 		<< " for " << *m << " from " << m->get_source() << dendl;
 	assert(in_seq == m->get_seq()); // for now!
-	fault(false, true);
 	delete m;
+	fault(false, true);
 	continue;
       }
 
@@ -1475,42 +1455,10 @@ void SimpleMessenger::Pipe::reader()
 
  
   // reap?
-  bool reap = false;
   reader_running = false;
-  if (!writer_running)
-    reap = true;
-
-  lock.Unlock();
-
-  if (reap) {
-    dout(10) << "reader queueing for reap" << dendl;
-    if (sd >= 0) {
-      ::close(sd);
-      sd = -1;
-      closed_socket();
-    }
-    rank->lock.Lock();
-    {
-      rank->pipe_reap_queue.push_back(this);
-      rank->wait_cond.Signal();
-    }
-    rank->lock.Unlock();
-  }
-
+  unlock_maybe_reap();
   dout(10) << "reader done" << dendl;
 }
-
-/*
-class FakeSocketError : public Context {
-  int sd;
-public:
-  FakeSocketError(int s) : sd(s) {}
-  void finish(int r) {
-    cout << "faking socket error on " << sd << std::endl;
-    ::close(sd);
-  }
-};
-*/
 
 /* write msgs to socket.
  * also, client.
@@ -1614,28 +1562,34 @@ void SimpleMessenger::Pipe::writer()
   dout(20) << "writer finishing" << dendl;
 
   // reap?
-  bool reap = false;
   writer_running = false;
-  if (!reader_running) reap = true;
+  unlock_maybe_reap();
+  dout(10) << "writer done" << dendl;
+}
 
-  lock.Unlock();
-  
-  if (reap) {
-    dout(10) << "writer queueing for reap" << dendl;
+void SimpleMessenger::Pipe::unlock_maybe_reap()
+{
+  if (!reader_running && !writer_running) {
+    // close
     if (sd >= 0) {
       ::close(sd);
       sd = -1;
       closed_socket();
     }
+
+    lock.Unlock();
+
+    // queue for reap
+    dout(10) << "unlock_maybe_reap queueing for reap" << dendl;
     rank->lock.Lock();
     {
       rank->pipe_reap_queue.push_back(this);
       rank->wait_cond.Signal();
     }
     rank->lock.Unlock();
+  } else {
+    lock.Unlock();
   }
-
-  dout(10) << "writer done" << dendl;
 }
 
 
@@ -1997,9 +1951,11 @@ void SimpleMessenger::reaper()
 
   while (!pipe_reap_queue.empty()) {
     Pipe *p = pipe_reap_queue.front();
-    dout(10) << "reaper reaping pipe " << p << " " << p->get_peer_addr() << dendl;
-    p->unregister_pipe();
     pipe_reap_queue.pop_front();
+    dout(10) << "reaper reaping pipe " << p << " " << p->get_peer_addr() << dendl;
+    p->lock.Lock();
+    p->lock.Unlock();
+    p->unregister_pipe();
     assert(pipes.count(p));
     pipes.erase(p);
     p->join();
@@ -2321,6 +2277,7 @@ void SimpleMessenger::send_keepalive(const entity_inst_t& dest)
 {
   const entity_addr_t dest_addr = dest.addr;
   entity_addr_t dest_proc_addr = dest_addr;
+
   lock.Lock();
   {
     // local?
@@ -2342,15 +2299,10 @@ void SimpleMessenger::send_keepalive(const entity_inst_t& dest)
 	  pipe->lock.Unlock();
 	}
       }
-      if (!pipe) {
-	dout(20) << "send_keepalive remote, " << dest_addr << ", new pipe." << dendl;
-	// not connected.
-	pipe = connect_rank(dest_proc_addr, dest.name.type());
-	pipe->send_keepalive();
-      }
+      if (!pipe)
+	dout(20) << "send_keepalive no pipe for " << dest_addr << ", doing nothing." << dendl;
     }
   }
-
   lock.Unlock();
 }
 
@@ -2368,10 +2320,9 @@ void SimpleMessenger::wait()
     if (num_local == 0) {
       dout(10) << "wait: everything stopped" << dendl;
       break;   // everything stopped.
-    } else {
-      dout(10) << "wait: local still has " << local.size() << " items, waiting" << dendl;
     }
-    
+
+    dout(10) << "wait: local still has " << local.size() << " items, waiting" << dendl;
     wait_cond.Wait(lock);
   }
   lock.Unlock();
@@ -2387,18 +2338,13 @@ void SimpleMessenger::wait()
   lock.Lock();
   {
     dout(10) << "wait: closing pipes" << dendl;
-    list<Pipe*> toclose;
-    for (hash_map<entity_addr_t,Pipe*>::iterator i = rank_pipe.begin();
-         i != rank_pipe.end();
-         i++)
-      toclose.push_back(i->second);
-    for (list<Pipe*>::iterator i = toclose.begin();
-	 i != toclose.end();
-	 i++) {
-      (*i)->unregister_pipe();
-      (*i)->lock.Lock();
-      (*i)->stop();
-      (*i)->lock.Unlock();
+
+    while (!rank_pipe.empty()) {
+      Pipe *p = rank_pipe.begin()->second;
+      p->unregister_pipe();
+      p->lock.Lock();
+      p->stop();
+      p->lock.Unlock();
     }
 
     reaper();

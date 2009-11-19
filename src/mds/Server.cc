@@ -446,9 +446,9 @@ void Server::reconnect_clients()
     reconnect_gather_finish();
     return;
   }
+
+  // clients will get the mdsmap and discover we're reconnecting via the monitor.
   
-  dout(7) << "reconnect_clients -- sending mdsmap to clients with sessions" << dendl;
-  mds->bcast_mds_map();  // send mdsmap to all client sessions
   reconnect_start = g_clock.now();
   dout(1) << "reconnect_clients -- " << client_reconnect_gather.size() << " sessions" << dendl;
 }
@@ -459,8 +459,22 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   int from = m->get_source().num();
   Session *session = get_session(m);
 
-  if (!session) {
-    dout(1) << " no session for " << m->get_source() << ", ignoring reconnect, sending close" << dendl;
+  if (!mds->is_reconnect() || !session) {
+    stringstream ss;
+    utime_t delay = g_clock.now();
+    delay -= reconnect_start;
+
+    if (!mds->is_reconnect()) {
+      // XXX maybe in the future we can do better than this?
+      dout(1) << " no longer in reconnect state, ignoring reconnect, sending close" << dendl;
+      ss << "denied reconnect attempt (mds is " << ceph_mds_state_name(mds->get_state())
+	 << ") from " << m->get_source_inst();
+    } else {
+      dout(1) << " no session for " << m->get_source() << ", ignoring reconnect, sending close" << dendl;
+      ss << "denied reconnect attempt from " << m->get_source_inst() << " (no session)";
+    }
+    ss << " after " << delay << " (allowed interval " << g_conf.mds_reconnect_timeout << ")";
+    mds->logclient.log(LOG_INFO, ss);
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_source_inst());
     delete m;
     return;

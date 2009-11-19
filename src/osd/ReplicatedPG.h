@@ -102,7 +102,13 @@ public:
     AccessMode() : state(IDLE),
 		   num_wr(0), wake(false) {}
 
+    void check_mode() {
+      if (num_wr == 0)
+	state = IDLE;
+    }
+
     bool try_read(entity_inst_t& c) {
+      check_mode();
       switch (state) {
       case IDLE:
       case DELAYED:
@@ -120,6 +126,7 @@ public:
       }
     }
     bool try_write(entity_inst_t& c) {
+      check_mode();
       switch (state) {
       case IDLE:
 	state = DELAYED;
@@ -138,6 +145,7 @@ public:
       }
     }
     bool try_rmw(entity_inst_t& c) {
+      check_mode();
       switch (state) {
       case IDLE:
 	state = RMW;
@@ -173,21 +181,10 @@ public:
     void finish_write() {
       assert(num_wr > 0);
       --num_wr;
-      if (num_wr == 0)
-	switch (state) {
-	case DELAYED:
-	  state = IDLE;
-	  wake = true;
-	  break;
-	case RMW:
-	case DELAYED_FLUSHING:
-	case RMW_FLUSHING:
-	  state = IDLE;
-	  wake = true;
-	  break;
-	default:
-	  assert(0);
-	}
+      if (num_wr == 0) {
+	state = IDLE;
+	wake = true;
+      }
     }
   };
 
@@ -491,7 +488,11 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
 
 inline ostream& operator<<(ostream& out, ReplicatedPG::AccessMode& mode)
 {
-  return out << mode.get_state_name(mode.state) << "(wr=" << mode.num_wr << ")";    
+  out << mode.get_state_name(mode.state) << "(wr=" << mode.num_wr;
+  if (mode.wake)
+    out << " WAKE";
+  out << ")";
+  return out;
 }
 
 #endif

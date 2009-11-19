@@ -429,6 +429,7 @@ public:
   virtual int mount() = 0;
   virtual int umount() = 0;
   virtual int mkfs() = 0;  // wipe
+  virtual int mkjournal() = 0; // journal only
 
   virtual int statfs(struct statfs *buf) = 0;
 
