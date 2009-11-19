@@ -279,11 +279,6 @@ int FileStore::open_journal()
   struct stat st;
   char fn[PATH_MAX];
 
-  if (journalpath.length() == 0) {
-    sprintf(fn, "%s.journal", basedir.c_str());
-    if (::stat(fn, &st) == 0)
-      journalpath = fn;
-  }
   if (journalpath.length()) {
     dout(10) << "open_journal at " << journalpath << dendl;
     journal = new FileJournal(fsid, &finisher, &sync_cond, journalpath.c_str(), g_conf.journal_dio);
