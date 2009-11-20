@@ -388,7 +388,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
 
     s->auth_handler = get_auth_service_handler(&mon->key_server, supported);
     if (!s->auth_handler) {
-      ret = -EPERM;
+      ret = -ENOTSUP;
       goto reply;
     }
     start = true;
