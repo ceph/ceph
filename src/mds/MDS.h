@@ -184,7 +184,7 @@ class MDS : public Dispatcher {
   int state;         // my confirmed state
   int want_state;    // the state i want
 
-  list<Context*> waiting_for_active, waiting_for_replay;
+  list<Context*> waiting_for_active, waiting_for_replay, waiting_for_reconnect;
   list<Context*> replay_queue;
   map<int, list<Context*> > waiting_for_active_peer;
   list<Context*> waiting_for_nolaggy;
@@ -203,11 +203,15 @@ class MDS : public Dispatcher {
   void wait_for_replay(Context *c) { 
     waiting_for_replay.push_back(c); 
   }
+  void wait_for_reconnect(Context *c) {
+    waiting_for_reconnect.push_back(c);
+  }
   void enqueue_replay(Context *c) {
     replay_queue.push_back(c);
   }
 
   int get_state() { return state; } 
+  int get_want_state() { return want_state; } 
   bool is_creating() { return state == MDSMap::STATE_CREATING; }
   bool is_starting() { return state == MDSMap::STATE_STARTING; }
   bool is_standby()  { return state == MDSMap::STATE_STANDBY; }

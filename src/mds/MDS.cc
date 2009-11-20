@@ -994,6 +994,7 @@ void MDS::reconnect_start()
 {
   dout(1) << "reconnect_start" << dendl;
   server->reconnect_clients();
+  finish_contexts(waiting_for_reconnect);
 }
 void MDS::reconnect_done()
 {

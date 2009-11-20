@@ -101,7 +101,7 @@ void Server::dispatch(Message *m)
   // active?
   if (!mds->is_active() && 
       !(mds->is_stopping() && m->get_orig_source().is_mds())) {
-    if (mds->is_reconnect() &&
+    if ((mds->is_reconnect() || mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) &&
 	m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
 	((MClientRequest*)m)->is_replay()) {
       dout(3) << "queuing replayed op" << dendl;
@@ -457,6 +457,11 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   int from = m->get_source().num();
   Session *session = get_session(m);
 
+  if (!mds->is_reconnect() && mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) {
+    dout(10) << " we're almost in reconnect state (mdsmap delivery race?); waiting" << dendl;
+    mds->wait_for_reconnect(new C_MDS_RetryMessage(mds, m));
+    return;
+  }
   if (!mds->is_reconnect() || !session) {
     stringstream ss;
     utime_t delay = g_clock.now();
