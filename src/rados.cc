@@ -342,7 +342,9 @@ int main(int argc, const char **argv)
       else
 	usage();
     }
-    aio_bench(rados, p, seconds, concurrent_ios, write_size, verify);
+    ret = aio_bench(rados, p, seconds, concurrent_ios, write_size, verify);
+    if (ret != 0)
+      cerr << "error during benchmark: " << ret << std::endl;
   }
   else {
     cerr << "unrecognized command " << nargs[0] << std::endl;

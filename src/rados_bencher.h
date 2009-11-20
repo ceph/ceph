@@ -40,7 +40,7 @@ struct bench_data {
   char *object_contents; //pointer to the contents written to each object
 };
 
-void write_bench(Rados& rados, rados_pool_t pool,
+int write_bench(Rados& rados, rados_pool_t pool,
 		 int secondsToRun, int concurrentios, bench_data *data);
 void *status_printer(void * data_store);
 
@@ -48,7 +48,9 @@ void *status_printer(void * data_store);
 int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
 	      int concurrentios, int writeSize, int readOffResults) {
 
-  char* contentsChars = new char[writeSize];  
+  char* contentsChars = new char[writeSize];
+  int r = 0;
+  
   dataLock.Lock();
   bench_data *data = new bench_data();
   data->done = false;
@@ -71,11 +73,12 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
   //set up the pool
   cout << "open pool result = " << rados.open_pool("data",&pool) << " pool = " << pool << std::endl;
   
-  write_bench(rados, pool, secondsToRun, concurrentios, data);
+  r = write_bench(rados, pool, secondsToRun, concurrentios, data);
+  if (r != 0) goto out;
 
   //check objects for consistency if requested
-  int errors = 0;
   if (readOffResults) {
+    int errors = 0;
     char matchName[128];
     object_t oid;
     bufferlist actualContents;
@@ -89,7 +92,8 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
       oid = object_t(matchName);
       snprintf(contentsChars, writeSize, "I'm the %dth object!", i);
       start_time = g_clock.now();
-      rados.read(pool, oid, 0, actualContents, writeSize);
+      r = rados.read(pool, oid, 0, actualContents, writeSize);
+      if (r < 0) goto out;
       lat = g_clock.now() - start_time;
       total_latency += (double) lat;
       if (strcmp(contentsChars, actualContents.c_str()) != 0 ) {
@@ -102,20 +106,18 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
     avg_bw = data->finished * writeSize / (total_latency) / (1024 *1024);
     cout << "read avg latency: " << avg_latency
 	 << " read avg bw: " << avg_bw << std::endl;
-  }
-
   
-  if (readOffResults) {
     if (errors) cout << "WARNING: There were " << errors << " total errors in copying!\n";
     else cout << "No errors in copying!\n";
   }
   
+ out:
   delete contentsChars;
   delete data;
-  return 0;
+  return r;
 }
 
-void write_bench(Rados& rados, rados_pool_t pool,
+int write_bench(Rados& rados, rados_pool_t pool,
 		 int secondsToRun, int concurrentios, bench_data *data) {
   cout << "Maintaining " << concurrentios << " concurrent writes of "
        << data->object_size << " bytes for at least "
@@ -128,6 +130,7 @@ void write_bench(Rados& rados, rados_pool_t pool,
   utime_t startTimes[concurrentios];
   time_t initialTime;
   utime_t stopTime;
+  int r = 0;
 
   time(&initialTime);
   stringstream initialTimeS("");
@@ -150,7 +153,11 @@ void write_bench(Rados& rados, rados_pool_t pool,
   dataLock.Unlock();
   for (int i = 0; i<concurrentios; ++i) {
     startTimes[i] = g_clock.now();
-    rados.aio_write(pool, name[i], 0, *contents[i], data->object_size, &completions[i]);
+    r = rados.aio_write(pool, name[i], 0, *contents[i], data->object_size, &completions[i]);
+    if (r < 0) { //naughty, doesn't clean up heap
+	dataLock.Unlock();
+	return -5; //EIO
+    }
     dataLock.Lock();
     ++data->started;
     ++data->in_flight;
@@ -178,6 +185,11 @@ void write_bench(Rados& rados, rados_pool_t pool,
     newContents->append(data->object_contents, data->object_size);
     completions[slot]->wait_for_safe();
     dataLock.Lock();
+    r = completions[slot]->get_return_value();
+    if (r != 0) {
+      dataLock.Unlock();
+      return r;
+    }
     data->cur_latency = g_clock.now() - startTimes[slot];
     totalLatency += data->cur_latency;
     if( data->cur_latency > data->max_latency) data->max_latency = data->cur_latency;
@@ -192,7 +204,9 @@ void write_bench(Rados& rados, rados_pool_t pool,
     //write new stuff to rados, then delete old stuff
     //and save locations of new stuff for later deletion
     startTimes[slot] = g_clock.now();
-    rados.aio_write(pool, newName, 0, *newContents, data->object_size, &completions[slot]);
+    r = rados.aio_write(pool, newName, 0, *newContents, data->object_size, &completions[slot]);
+    if (r < 0) //naughty; doesn't clean up heap space.
+      return r;
     dataLock.Lock();
     ++data->started;
     ++data->in_flight;
@@ -240,6 +254,7 @@ void write_bench(Rados& rados, rados_pool_t pool,
        << "Average Latency:       " << data->avg_latency << std::endl
        << "Max latency:           " << data->max_latency << std::endl
        << "Min latency:           " << data->min_latency << std::endl;
+  return 0;
 }
 
 void *status_printer(void * data_store) {
