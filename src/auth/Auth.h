@@ -127,7 +127,9 @@ struct AuthCapsInfo {
   bool allow_all;
   bufferlist caps;
 
- void encode(bufferlist& bl) const {
+  AuthCapsInfo() : allow_all(false) {}
+
+  void encode(bufferlist& bl) const {
     uint32_t a = (uint32_t)allow_all;
     ::encode(a, bl);
     ::encode(caps, bl);
@@ -153,7 +155,7 @@ struct AuthTicket {
   AuthCapsInfo caps;
   __u32 flags;
 
-  AuthTicket() : flags(0) {}
+  AuthTicket() : global_id(0), flags(0) {}
 
   void init_timestamps(utime_t now, double ttl) {
     created = now;
@@ -223,6 +225,8 @@ WRITE_CLASS_ENCODER(ExpiringCryptoKey);
 struct RotatingSecrets {
   map<uint64_t, ExpiringCryptoKey> secrets;
   version_t max_ver;
+
+  RotatingSecrets() : max_ver(0) {}
 
   void encode(bufferlist& bl) const {
     ::encode(secrets, bl);
