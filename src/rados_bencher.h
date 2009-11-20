@@ -23,21 +23,22 @@
 
 Mutex dataLock("data mutex");
 
-struct write_data {
+struct bench_data {
   bool done;
-  int writeSize;
-  int *in_flight;
-  int *started;
-  int *finished;
-  double *min_latency;
-  double *max_latency;
-  double *avg_latency;
-  utime_t *cur_latency;
-  utime_t *startTime;
+  int object_size;
+  int trans_size;
+  int in_flight;
+  int started;
+  int finished;
+  double min_latency;
+  double max_latency;
+  double avg_latency;
+  utime_t cur_latency;
+  utime_t startTime;
 };
 
 static void *status_printer(void * data_store) {
-  write_data *data = (write_data *) data_store;
+  bench_data *data = (bench_data *) data_store;
   Cond cond;
   int i = 0;
   int previous_writes = 0;
@@ -50,9 +51,9 @@ static void *status_printer(void * data_store) {
   while(!data->done) {
     if (i % 20 == 0) {
       if (i > 0)
-	cout << "min lat: " << *data->min_latency
-	     << " max lat: " << *data->max_latency
-	     << " avg lat: " << *data->avg_latency << std::endl;
+	cout << "min lat: " << data->min_latency
+	     << " max lat: " << data->max_latency
+	     << " avg lat: " << data->avg_latency << std::endl;
       //I'm naughty and don't reset the fill
       cout << setfill(' ') 
 	   << setw(5) << "sec" 
@@ -64,35 +65,35 @@ static void *status_printer(void * data_store) {
 	   << setw(10) << "last lat"
 	   << setw(10) << "avg lat" << std::endl;
     }
-    bandwidth = (double)(*data->finished - previous_writes)
-      * (data->writeSize)
+    bandwidth = (double)(data->finished - previous_writes)
+      * (data->trans_size)
       / (1024*1024)
       / cycleSinceChange;
-    avg_bandwidth = (double) (data->writeSize) * (*data->finished)
-      / (double)(g_clock.now() - *data->startTime) / (1024*1024);
-    if (previous_writes != *data->finished) {
-      previous_writes = *data->finished;
+    avg_bandwidth = (double) (data->trans_size) * (data->finished)
+      / (double)(g_clock.now() - data->startTime) / (1024*1024);
+    if (previous_writes != data->finished) {
+      previous_writes = data->finished;
       cycleSinceChange = 0;
       cout << setfill(' ') 
 	   << setw(5) << i
-	   << setw(8) << *data->in_flight
-	   << setw(10) << *data->started
-	   << setw(10) << *data->finished
+	   << setw(8) << data->in_flight
+	   << setw(10) << data->started
+	   << setw(10) << data->finished
 	   << setw(10) << avg_bandwidth
 	   << setw(10) << bandwidth
-	   << setw(10) << (double)*data->cur_latency
-	   << setw(10) << *data->avg_latency << std::endl;
+	   << setw(10) << (double)data->cur_latency
+	   << setw(10) << data->avg_latency << std::endl;
     }
     else {
       cout << setfill(' ')
 	   << setw(5) << i
-	   << setw(8) << *data->in_flight
-	   << setw(10) << *data->started
-	   << setw(10) << *data->finished
+	   << setw(8) << data->in_flight
+	   << setw(10) << data->started
+	   << setw(10) << data->finished
 	   << setw(10) << avg_bandwidth
 	   << setw(10) << '0'
 	   << setw(10) << '-'
-	   << setw(10) << *data->avg_latency << std::endl;
+	   << setw(10) << data->avg_latency << std::endl;
     }
     ++i;
     ++cycleSinceChange;
@@ -109,22 +110,25 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
        << writeSize << " bytes for at least "
        << secondsToRun << " seconds." << std::endl;
   
+  dataLock.Lock();
+  bench_data *data = new bench_data();
+  data->done = false;
+  data->trans_size = writeSize;
+  data->started = 0;
+  data->finished = 0;
+  data->min_latency = 9999.0; // this better be higher than initial latency!
+  data->max_latency = 0;
+  data->avg_latency = 0;
+  dataLock.Unlock();
+
   Rados::AioCompletion* completions[concurrentios];
   char* name[concurrentios];
   bufferlist* contents[concurrentios];
   char* contentsChars = new char[writeSize];
   double totalLatency = 0;
-  double minLatency=9999.0; // this better be higher than initial latency!
-  double maxLatency=0;
-  double avgLatency=0;
-  utime_t currentLatency;
   utime_t startTimes[concurrentios];
   char bw[20];
-  int writesMade = 0;
-  int writesCompleted = 0;
-  int writes_waiting = 0;
   time_t initialTime;
-  utime_t startTime;
   utime_t stopTime;
   
   time(&initialTime);
@@ -143,30 +147,21 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
   
   //set up the pool, get start time, and go!
   cout << "open pool result = " << rados.open_pool("data",&pool) << " pool = " << pool << std::endl;
-  dataLock.Lock();
-  write_data *data = new write_data();
-  data->done = false;
-  data->writeSize = writeSize;
-  data->in_flight = &writes_waiting;
-  data->started = &writesMade;
-  data->finished = &writesCompleted;
-  data->min_latency = &minLatency;
-  data->max_latency = &maxLatency;
-  data->avg_latency = &avgLatency;
-  data->cur_latency = &currentLatency;
-  data->startTime = &startTime;
-  dataLock.Unlock();
+
   
   pthread_t print_thread;
   
   pthread_create(&print_thread, NULL, status_printer, (void *)data);
-  startTime = g_clock.now();
-  
+  dataLock.Lock();
+  data->startTime = g_clock.now();
+  dataLock.Unlock();
   for (int i = 0; i<concurrentios; ++i) {
     startTimes[i] = g_clock.now();
     rados.aio_write(pool, name[i], 0, *contents[i], writeSize, &completions[i]);
-    ++writesMade;
-    ++writes_waiting;
+    dataLock.Lock();
+    ++data->started;
+    ++data->in_flight;
+    dataLock.Unlock();
   }
   
   //keep on adding new writes as old ones complete until we've passed minimum time
@@ -175,61 +170,63 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
   char* newName;
   utime_t runtime;
   
-  utime_t lastPrint = startTime;
-  utime_t timePassed = g_clock.now() - startTime;
+  utime_t timePassed = g_clock.now() - data->startTime;
+  //don't need locking for reads because other thread doesn't write
   
   runtime.set_from_double(secondsToRun);
-  stopTime = startTime + runtime;
+  stopTime = data->startTime + runtime;
   while( g_clock.now() < stopTime ) {
-    slot = writesCompleted % concurrentios;
+    slot = data->finished % concurrentios;
     //create new contents and name on the heap, and fill them
     newContents = new bufferlist();
     newName = new char[128];
-    snprintf(newName, 128, "Object %s:%d", iTime, writesMade);
-    snprintf(contentsChars, writeSize, "I'm the %dth object!", writesMade);
+    snprintf(newName, 128, "Object %s:%d", iTime, data->started);
+    snprintf(contentsChars, writeSize, "I'm the %dth object!", data->started);
     newContents->append(contentsChars, writeSize);
     completions[slot]->wait_for_safe();
     dataLock.Lock();
-    currentLatency = g_clock.now() - startTimes[slot];
-    totalLatency += currentLatency;
-    if( currentLatency > maxLatency) maxLatency = currentLatency;
-    if (currentLatency < minLatency) minLatency = currentLatency;
-    ++writesCompleted;
-    avgLatency = totalLatency / writesCompleted;
-    --writes_waiting;
+    data->cur_latency = g_clock.now() - startTimes[slot];
+    totalLatency += data->cur_latency;
+    if( data->cur_latency > data->max_latency) data->max_latency = data->cur_latency;
+    if (data->cur_latency < data->min_latency) data->min_latency = data->cur_latency;
+    ++data->finished;
+    data->avg_latency = totalLatency / data->finished;
+    --data->in_flight;
     dataLock.Unlock();
     completions[slot]->release();
-    timePassed = g_clock.now() - startTime;
+    timePassed = g_clock.now() - data->startTime;
     
     //write new stuff to rados, then delete old stuff
     //and save locations of new stuff for later deletion
     startTimes[slot] = g_clock.now();
     rados.aio_write(pool, newName, 0, *newContents, writeSize, &completions[slot]);
-    ++writesMade;
-    ++writes_waiting;
+    dataLock.Lock();
+    ++data->started;
+    ++data->in_flight;
+    dataLock.Unlock();
     delete name[slot];
     delete contents[slot];
     name[slot] = newName;
     contents[slot] = newContents;
   }
   
-  while (writesCompleted < writesMade) {
-    slot = writesCompleted % concurrentios;
+  while (data->finished < data->started) {
+    slot = data->finished % concurrentios;
     completions[slot]->wait_for_safe();
     dataLock.Lock();
-    currentLatency = g_clock.now() - startTimes[slot];
-    totalLatency += currentLatency;
-    if (currentLatency > maxLatency) maxLatency = currentLatency;
-    if (currentLatency < minLatency) minLatency = currentLatency;
-    ++writesCompleted;
-    avgLatency = totalLatency / writesCompleted;
+    data->cur_latency = g_clock.now() - startTimes[slot];
+    totalLatency += data->cur_latency;
+    if (data->cur_latency > data->max_latency) data->max_latency = data->cur_latency;
+    if (data->cur_latency < data->min_latency) data->min_latency = data->cur_latency;
+    ++data->finished;
+    data->avg_latency = totalLatency / data->finished;
+    --data->in_flight;
     dataLock.Unlock();
     completions[slot]-> release();
-    --writes_waiting;
     delete name[slot];
     delete contents[slot];
   }
-  timePassed = g_clock.now() - startTime;
+  timePassed = g_clock.now() - data->startTime;
   dataLock.Lock();
   data->done = true;
   dataLock.Unlock();
@@ -245,7 +242,7 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
     double total_latency = 0;
     double avg_latency;
     double avg_bw;
-    for (int i = 0; i < writesCompleted; ++i ) {
+    for (int i = 0; i < data->finished; ++i ) {
       snprintf(matchName, 128, "Object %s:%d", iTime, i);
       oid = object_t(matchName);
       snprintf(contentsChars, writeSize, "I'm the %dth object!", i);
@@ -259,23 +256,23 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
       }
       actualContents.clear();
     }
-    avg_latency = total_latency / writesCompleted;
-    avg_bw = writesCompleted * writeSize / (total_latency) / (1024 *1024);
+    avg_latency = total_latency / data->finished;
+    avg_bw = data->finished * writeSize / (total_latency) / (1024 *1024);
     cout << "read avg latency: " << avg_latency
 	 << " read avg bw: " << avg_bw << std::endl;
   }
   double bandwidth;
-  bandwidth = ((double)writesCompleted)*((double)writeSize)/(double)timePassed;
+  bandwidth = ((double)data->finished)*((double)writeSize)/(double)timePassed;
   bandwidth = bandwidth/(1024*1024); // we want it in MB/sec
   sprintf(bw, "%.3lf \n", bandwidth);
   
   cout << "Total time run:        " << timePassed << std::endl
-       << "Total writes made:     " << writesCompleted << std::endl
+       << "Total writes made:     " << data->finished << std::endl
        << "Write size:            " << writeSize << std::endl
        << "Bandwidth (MB/sec):    " << bw << std::endl
-       << "Average Latency:       " << avgLatency << std::endl
-       << "Max latency:           " << maxLatency << std::endl
-       << "Min latency:           " << minLatency << std::endl;
+       << "Average Latency:       " << data->avg_latency << std::endl
+       << "Max latency:           " << data->max_latency << std::endl
+       << "Min latency:           " << data->min_latency << std::endl;
   
   if (readOffResults) {
     if (errors) cout << "WARNING: There were " << errors << " total errors in copying!\n";
