@@ -276,9 +276,6 @@ void FileStore::get_coname(coll_t cid, const sobject_t& oid, char *s)
 
 int FileStore::open_journal()
 {
-  struct stat st;
-  char fn[PATH_MAX];
-
   if (journalpath.length()) {
     dout(10) << "open_journal at " << journalpath << dendl;
     journal = new FileJournal(fsid, &finisher, &sync_cond, journalpath.c_str(), g_conf.journal_dio);
@@ -340,11 +337,9 @@ int FileStore::mkfs()
 
 int FileStore::mkjournal()
 {
-  int err;
-
   open_journal();
   if (journal) {
-    err = journal->create();
+    int err = journal->create();
     if (err < 0) {
       dout(0) << "mkjournal error creating journal on " << journalpath << dendl;
     } else {
@@ -352,11 +347,8 @@ int FileStore::mkjournal()
     }
     delete journal;
     journal = 0;
-  } else {
-    err = -ENOENT;
-    dout(10) << "mkjournal no journal at " << journalpath << dendl;
   }
-  return err;
+  return 0;
 }
 
 
