@@ -166,13 +166,7 @@ Session *Server::get_session(Message *m)
     dout(20) << "get_session got " << session->inst << " from message" << dendl;
     session->put();  // not carry ref
   } else {
-    session = mds->sessionmap.get_session(m->get_source());
-    if (session) {
-      dout(20) << "get_session set " << session->inst << " in connection" << dendl;
-      m->get_connection()->set_priv(session->get());
-    } else {
-      dout(20) << "get_session " << m->get_source() << " dne" << dendl;
-    }
+    dout(20) << "get_session dne for " << m->get_source_inst() << dendl;
   }
   return session;
 }
@@ -185,14 +179,20 @@ void Server::handle_client_session(MClientSession *m)
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
   assert(m->get_source().is_client()); // should _not_ come from an mds!
 
+  if (!session) {
+    dout(0) << " ignoring sessionless msg " << *m << dendl;
+    delete m;
+    return;
+  }
+
   switch (m->get_op()) {
   case CEPH_SESSION_REQUEST_OPEN:
-    if (session && (session->is_opening() || session->is_open())) {
+    if (session->is_opening() || session->is_open()) {
       dout(10) << "already open|opening, dropping this req" << dendl;
       return;
     }
-    assert(!session);  // ?
-    session = mds->sessionmap.get_or_add_session(m->get_source_inst());
+    if (session->is_closed())
+      mds->sessionmap.add_session(session);
     mds->sessionmap.set_state(session, Session::STATE_OPENING);
     mds->sessionmap.touch_session(session);
     pv = ++mds->sessionmap.projected;
@@ -202,10 +202,6 @@ void Server::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_REQUEST_RENEWCAPS:
-    if (!session) {
-      dout(10) << "dne, dropping this req" << dendl;
-      return;
-    }
     mds->sessionmap.touch_session(session);
     if (session->is_stale()) {
       mds->sessionmap.set_state(session, Session::STATE_OPEN);
@@ -217,8 +213,8 @@ void Server::handle_client_session(MClientSession *m)
     
   case CEPH_SESSION_REQUEST_CLOSE:
     {
-      if (!session || session->is_closing()) {
-	dout(10) << "already closing|dne, dropping this req" << dendl;
+      if (session->is_closed() || session->is_closing()) {
+	dout(10) << "already closed|closing, dropping this req" << dendl;
 	return;
       }
       if (m->get_seq() < session->get_push_seq()) {
@@ -264,7 +260,8 @@ void Server::_session_logged(Session *session, bool open, version_t pv, interval
     mds->sessionmap.set_state(session, Session::STATE_OPEN);
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), session->inst);
   } else if (session->is_closing() || session->is_stale_closing()) {
-    // kill any lingering capabilities
+
+    // kill any lingering capabilities, leases, requests
     while (!session->caps.empty()) {
       Capability *cap = session->caps.front();
       CInode *in = cap->get_inode();
@@ -277,8 +274,6 @@ void Server::_session_logged(Session *session, bool open, version_t pv, interval
       dout(20) << " killing client lease of " << *dn << dendl;
       dn->remove_client_lease(r, r->mask, mds->locker);
     }
-
-    // kill pending requests
     while (!session->requests.empty()) {
       mdcache->request_kill(session->requests.front());
     }
@@ -293,6 +288,9 @@ void Server::_session_logged(Session *session, bool open, version_t pv, interval
     else if (session->is_stale_closing())
       mds->messenger->mark_down(session->inst.addr); // kill connection
     mds->sessionmap.remove_session(session);
+    mds->sessionmap.set_state(session, Session::STATE_CLOSED);
+
+    session->clear();
   } else {
     // close must have been canceled (by an import?) ...
     assert(!open);
@@ -308,7 +306,7 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm)
 	   << dendl;
   for (map<client_t,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
     Session *session = mds->sessionmap.get_or_add_session(p->second);
-    if (session->is_undef() || session->is_closing())
+    if (session->is_closed() || session->is_closing())
       mds->sessionmap.set_state(session, Session::STATE_OPENING);
     mds->sessionmap.touch_session(session);
   }

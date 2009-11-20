@@ -1496,20 +1496,21 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
 
   is_valid = authorize_handler->verify_authorizer(authorizer_data, authorizer_reply, name, global_id, caps_info);
 
-#if 0
-  if (isvalid) {
-    Session *s = (Session *)con->get_priv();
+  if (is_valid) {
+    entity_name_t n(con->get_peer_type(), global_id);
+    Session *s = sessionmap.get_session(n);
     if (!s) {
       s = new Session;
-      if (!s) {
-        dout(0) << "ouch.. out of memory, can't open session" << dendl;
-        isvalid = false;
-        return false;
-      }
+      s->inst.addr = con->get_peer_addr();
+      s->inst.name = n;
+      dout(10) << " new session " << s << " for " << s->inst << dendl;
+      con->set_priv(s);
+    } else {
+      dout(10) << " existing session " << s << " for " << s->inst << dendl;
       con->set_priv(s->get());
-      dout(10) << " new session " << s << dendl;
     }
 
+    /*
     s->caps.set_allow_all(caps_info.allow_all);
  
     if (caps_info.caps.length() > 0) {
@@ -1517,11 +1518,10 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
       s->caps.parse(iter);
       dout(10) << " session " << s << " has caps " << s->caps << dendl;
     }
-    
-    s->put();
+    */
   }
-#endif
-  return true;
+
+  return true;  // we made a decision (see is_valid)
 };
 
 

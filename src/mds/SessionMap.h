@@ -39,14 +39,13 @@ class MDRequest;
 class Session : public RefCountedObject {
   // -- state etc --
 public:
-  static const int STATE_UNDEF = 0;
+  static const int STATE_CLOSED = 0;
   static const int STATE_OPENING = 1;   // journaling open
   static const int STATE_OPEN = 2;
   static const int STATE_CLOSING = 3;   // journaling close
   static const int STATE_STALE = 4;
   static const int STATE_STALE_PURGING = 5;
   static const int STATE_STALE_CLOSING = 6;
-  //static const int STATE_RECONNECTING = 5; // ?
 
 private:
   int state;
@@ -83,7 +82,7 @@ public:
 
   client_t get_client() { return client_t(inst.name.num()); }
 
-  bool is_undef() { return state == STATE_UNDEF; }
+  bool is_closed() { return state == STATE_CLOSED; }
   bool is_opening() { return state == STATE_OPENING; }
   bool is_open() { return state == STATE_OPEN; }
   bool is_closing() { return state == STATE_CLOSING; }
@@ -143,11 +142,23 @@ public:
 
 
   Session() : 
-    state(STATE_UNDEF), 
+    state(STATE_CLOSED), 
     session_list_item(this),
     cap_push_seq(0) { }
   ~Session() {
     assert(!session_list_item.is_on_xlist());
+  }
+
+  void clear() {
+    pending_prealloc_inos.clear();
+    prealloc_inos.clear();
+    used_inos.clear();
+
+    cap_push_seq = 0;
+    last_cap_renew = utime_t();
+
+    completed_requests.clear();
+    assert(waiting_for_trim.empty());
   }
 
   void encode(bufferlist& bl) const {
@@ -209,6 +220,11 @@ public:
     Session *s = session_map[i.name] = new Session;
     s->inst = i;
     return s;
+  }
+  void add_session(Session *s) {
+    assert(session_map.count(s->inst.name) == 0);
+    session_map[s->inst.name] = s;
+    s->get();
   }
   void remove_session(Session *s) {
     s->trim_completed_requests(0);
