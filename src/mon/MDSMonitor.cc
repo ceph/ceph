@@ -664,7 +664,6 @@ void MDSMonitor::tick()
 	  pending_mdsmap.up[info.rank] = sgid;
 	  pending_mdsmap.last_failure = pending_mdsmap.epoch;
 	}
-	pending_mdsmap.mds_info.erase(gid);
 
 	if (si.state > 0) {
 	  // blacklist
@@ -673,6 +672,7 @@ void MDSMonitor::tick()
 	  mon->osdmon()->blacklist(info.addr, until);
 	  propose_osdmap = true;
 	}
+	pending_mdsmap.mds_info.erase(gid);
 	
 	do_propose = true;
       } else if (info.state == MDSMap::STATE_STANDBY_REPLAY) {
