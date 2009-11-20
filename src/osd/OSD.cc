@@ -1613,7 +1613,7 @@ void OSD::_dispatch(Message *m)
 
 #define ALLOW_MESSAGES_FROM(peers) \
 do { \
-  if ((m->get_connection()->get_peer_type() & (peers)) == 0) { \
+  if (m->get_connection() && (m->get_connection()->get_peer_type() & (peers)) == 0) { \
     dout(0) << "filtered out request, peer=" << m->get_connection()->get_peer_type() \
            << " allowing=" << #peers << " message=" << *m << dendl; \
     delete m; \
