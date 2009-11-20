@@ -74,6 +74,7 @@ int gen_rand_alphanumeric(char *dest, int size) /* size should be the required s
   return 0;
 }
 
+#if 0
 static int rebuild_policy(RGWAccessControlPolicy& src, RGWAccessControlPolicy& dest)
 {
   ACLOwner *owner = (ACLOwner *)src.find_first("Owner");
@@ -112,7 +113,7 @@ static int rebuild_policy(RGWAccessControlPolicy& src, RGWAccessControlPolicy& d
 
   return 0; 
 }
-
+#endif
 
 int main(int argc, char **argv) 
 {
