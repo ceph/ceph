@@ -45,8 +45,11 @@ struct rados_statfs_t {
 int rados_open_pool(const char *name, rados_pool_t *pool);
 int rados_close_pool(rados_pool_t pool);
 void rados_set_snap(rados_pool_t pool, rados_snap_t snap);
+  /* After creating a new rados_list_ctx_t, call this to initialize it*/
 void rados_pool_init_ctx(rados_list_ctx_t *ctx);
+  /* Once you've finished with a rados_list_ctx_t, call before you dump it*/
 void rados_pool_close_ctx(rados_list_ctx_t *ctx);
+  /* Given a rados_list_ctx_t and its pool, get the next object in sequence*/
 int rados_pool_list_next(rados_pool_t pool, const char **entry, rados_list_ctx_t *ctx);
 
 /* snapshots */
