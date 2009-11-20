@@ -130,6 +130,11 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
   char bw[20];
   time_t initialTime;
   utime_t stopTime;
+
+  //fill in contentsChars deterministically so we can check returns
+  for (int i = 0; i < writeSize; ++i) {
+    contentsChars[i] = i % sizeof(char);
+  }
   
   time(&initialTime);
   stringstream initialTimeS("");
@@ -140,7 +145,7 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
   for (int i = 0; i<concurrentios; ++i) {
     name[i] = new char[128];
     contents[i] = new bufferlist();
-    snprintf(name[i], 128, "Object %s:%d", iTime, i);
+    snprintf(name[i], 128, "Object %d:%s", i, iTime);
     snprintf(contentsChars, writeSize, "I'm the %dth object!", i);
     contents[i]->append(contentsChars, writeSize);
   }
@@ -180,7 +185,7 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
     //create new contents and name on the heap, and fill them
     newContents = new bufferlist();
     newName = new char[128];
-    snprintf(newName, 128, "Object %s:%d", iTime, data->started);
+    snprintf(newName, 128, "Object %d:%s", data->started, iTime);
     snprintf(contentsChars, writeSize, "I'm the %dth object!", data->started);
     newContents->append(contentsChars, writeSize);
     completions[slot]->wait_for_safe();
@@ -243,7 +248,7 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
     double avg_latency;
     double avg_bw;
     for (int i = 0; i < data->finished; ++i ) {
-      snprintf(matchName, 128, "Object %s:%d", iTime, i);
+      snprintf(matchName, 128, "Object %d:%d", i, iTime);
       oid = object_t(matchName);
       snprintf(contentsChars, writeSize, "I'm the %dth object!", i);
       start_time = g_clock.now();
