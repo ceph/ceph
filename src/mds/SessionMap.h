@@ -112,7 +112,6 @@ public:
   // -- completed requests --
 private:
   set<tid_t> completed_requests;
-  map<tid_t, Context*> waiting_for_trim;
 
 public:
   void add_completed_request(tid_t t) {
@@ -123,18 +122,6 @@ public:
     while (!completed_requests.empty() && 
 	   (mintid == 0 || *completed_requests.begin() < mintid))
       completed_requests.erase(completed_requests.begin());
-
-    // kick waiters
-    list<Context*> fls;
-    while (!waiting_for_trim.empty() &&
-	   (mintid == 0 || waiting_for_trim.begin()->first < mintid)) {
-      fls.push_back(waiting_for_trim.begin()->second);
-      waiting_for_trim.erase(waiting_for_trim.begin());
-    }
-    finish_contexts(fls);
-  }
-  void add_trim_waiter(tid_t tid, Context *c) {
-    waiting_for_trim[tid] = c;
   }
   bool have_completed_request(tid_t tid) const {
     return completed_requests.count(tid);
@@ -158,7 +145,6 @@ public:
     last_cap_renew = utime_t();
 
     completed_requests.clear();
-    assert(waiting_for_trim.empty());
   }
 
   void encode(bufferlist& bl) const {
