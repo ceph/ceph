@@ -619,7 +619,13 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       assert(session);
       dout(20) << " (session prealloc " << session->prealloc_inos << ")" << dendl;
       if (used_preallocated_ino) {
-	inodeno_t i = session->take_ino();
+	inodeno_t next = session->next_ino();
+	inodeno_t i = session->take_ino(used_preallocated_ino);
+	if (next != i) {
+	  stringstream ss;
+	  ss << " replayed op " << client_reqs << " used ino " << i << " but session next is " << next;
+	  mds->logclient.log(LOG_WARN, ss);
+	}
 	assert(i == used_preallocated_ino);
 	session->used_inos.clear();
 	mds->sessionmap.projected = ++mds->sessionmap.version;

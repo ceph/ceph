@@ -60,6 +60,11 @@ public:
   interval_set<inodeno_t> prealloc_inos;   // preallocated, ready to use.
   interval_set<inodeno_t> used_inos;       // journaling use
 
+  inodeno_t next_ino() {
+    if (prealloc_inos.empty())
+      return 0;
+    return prealloc_inos.start();
+  }
   inodeno_t take_ino(inodeno_t ino = 0) {
     assert(!prealloc_inos.empty());
 
