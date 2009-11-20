@@ -36,7 +36,6 @@ struct bench_data {
   double avg_latency;
   utime_t cur_latency; //latency of last completed transaction
   utime_t startTime; //start time for benchmark
-  char *iTime; //identifier time char[] that the object names are marked with
   char *object_contents; //pointer to the contents written to each object
 };
 
@@ -61,7 +60,6 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
   data->min_latency = 9999.0; // this better be higher than initial latency!
   data->max_latency = 0;
   data->avg_latency = 0;
-  data->iTime = new char[100];
   data->object_contents = contentsChars;
   dataLock.Unlock();
 
@@ -88,7 +86,7 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
     double avg_latency;
     double avg_bw;
     for (int i = 0; i < data->finished; ++i ) {
-      snprintf(matchName, 128, "Object %d:%s", i, data->iTime);
+      snprintf(matchName, 128, "Object %d", i);
       oid = object_t(matchName);
       snprintf(contentsChars, writeSize, "I'm the %dth object!", i);
       start_time = g_clock.now();
@@ -135,12 +133,11 @@ int write_bench(Rados& rados, rados_pool_t pool,
   time(&initialTime);
   stringstream initialTimeS("");
   initialTimeS << initialTime;
-  strcpy(data->iTime, initialTimeS.str().c_str());
   //set up writes so I can start them together
   for (int i = 0; i<concurrentios; ++i) {
     name[i] = new char[128];
     contents[i] = new bufferlist();
-    snprintf(name[i], 128, "Object %d:%s", i, data->iTime);
+    snprintf(name[i], 128, "Object %d", i);
     snprintf(data->object_contents, data->object_size, "I'm the %dth object!", i);
     contents[i]->append(data->object_contents, data->object_size);
   }
@@ -180,7 +177,7 @@ int write_bench(Rados& rados, rados_pool_t pool,
     //create new contents and name on the heap, and fill them
     newContents = new bufferlist();
     newName = new char[128];
-    snprintf(newName, 128, "Object %d:%s", data->started, data->iTime);
+    snprintf(newName, 128, "Object %d", data->started);
     snprintf(data->object_contents, data->object_size, "I'm the %dth object!", data->started);
     newContents->append(data->object_contents, data->object_size);
     completions[slot]->wait_for_safe();
