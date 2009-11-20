@@ -1009,8 +1009,10 @@ void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon,
 
   g_conf.entity_name->from_type_id(g_conf.type, g_conf.id);
 
-  if (cf)
-	delete cf;
+  if (cf) {
+    delete cf;
+    cf = NULL;
+  }
 
   // open new conf
   string fn = g_conf.conf;
@@ -1023,12 +1025,16 @@ void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon,
     if (read_conf)
       break;
     delete cf;
+    cf = NULL;
   }
 
   if (conf_specified && !read_conf) {
     cerr << "error reading config file(s) " << g_conf.conf << std::endl;
     exit(1);
   }
+
+  if (!cf)
+    return;
 
   if (show_config) {
     cf->dump();

@@ -572,13 +572,14 @@ void ExportControl::load(ConfFile *conf)
   int ret;
 
 #define EVERYONE "0.0.0.0/0"
+   if (!conf)
+      return;
 
   ret = conf->read("mount", "allow", &allow_def, EVERYONE);
 
   for (std::list<ConfSection*>::const_iterator p = conf->get_section_list().begin();
 	p != conf->get_section_list().end();
 	p++) {
-
     /* is it a 'mount' sections */
     if (strncmp(MOUNT_SEC_NAME, (*p)->get_name().c_str(), mnt_len) == 0) {
 	const char *section = (*p)->get_name().c_str();
