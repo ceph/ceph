@@ -44,16 +44,21 @@ v0.17
 - osd: fix pg parsing, restarts on larger clusters
 
 v0.18
-- basic ENOSPC handling
+- osd: basic ENOSPC handling
 - big endian fixes (required protocol/disk format change)
-- improved object -> pg hash function; selectable
-- selectable crush hash function(s)
+- osd: improved object -> pg hash function; selectable
+- crush: selectable hash function(s)
 - mds restart bug fixes
-- kclient mds reconnect bug fixes
+- kclient: mds reconnect bug fixes
 - fixed mds log trimming bug
 - fixed mds cap vs snap deadlock
-- filestore faster flushing
-- uclient and kclient snapshot fixes
+- filestore: faster flushing
+- uclient,kclient: snapshot fixes
+- mds: fix recursive accounting bug
+- uclient: fixes for 32bit clients
+- auth: 'none' security framework
+- mon: "safely" bail on write errors (e.g. ENOSPC)
+- mds: fix replay/reconnect race (caused (fast) client reconnect to fail)
 
 - mount btrfs by UUID?
 
@@ -79,54 +84,68 @@ cp: writing `/c/ceph2.2/bin/gs-gpl': Bad file descriptor
   - need to somehow wake up unreconnected caps?   hrm!!
 - kclient: ~300 (306, 311) second delay before able to reconnect to restarted monitor???
 - kclient: socket creation
-- kclient: bdi thing after mount failures, multiple attempts
-[ 1438.509155] ------------[ cut here ]------------
-[ 1438.513933] WARNING: at fs/sysfs/dir.c:487 sysfs_add_one+0xf3/0x10a()
-[ 1438.520560] Hardware name: PDSMi
-[ 1438.523898] sysfs: cannot create duplicate filename '/class/bdi/0:25'
-[ 1438.530526] Modules linked in: ceph fan ac battery container ehci_hcd uhci_hcd thermal button processor
-[ 1438.546600] Pid: 2829, comm: mount.ceph Tainted: G        W  2.6.32-rc2 #1
-[ 1438.553722] Call Trace:
-[ 1438.556279]  [<ffffffff81131c21>] ? sysfs_add_one+0xf3/0x10a
-[ 1438.562179]  [<ffffffff810453d7>] warn_slowpath_common+0x77/0xa4
-[ 1438.568399]  [<ffffffff81045479>] warn_slowpath_fmt+0x64/0x66
-[ 1438.574364]  [<ffffffff8106db61>] ? trace_hardirqs_on_caller+0x113/0x13e
-[ 1438.581312]  [<ffffffff81131b26>] ? sysfs_pathname+0x37/0x3f
-[ 1438.587132]  [<ffffffff81131b26>] ? sysfs_pathname+0x37/0x3f
-[ 1438.593017]  [<ffffffff81131b26>] ? sysfs_pathname+0x37/0x3f
-[ 1438.598894]  [<ffffffff81131c21>] sysfs_add_one+0xf3/0x10a
-[ 1438.604593]  [<ffffffff811322a3>] create_dir+0x58/0x93
-[ 1438.609929]  [<ffffffff81132316>] sysfs_create_dir+0x38/0x4f
-[ 1438.615825]  [<ffffffff8146c955>] ? _spin_unlock+0x30/0x4b
-[ 1438.621520]  [<ffffffff81256497>] kobject_add_internal+0x125/0x201
-[ 1438.627939]  [<ffffffff8125664b>] kobject_add_varg+0x41/0x4d
-[ 1438.633820]  [<ffffffff8125675c>] kobject_add+0x89/0x8b
-[ 1438.639263]  [<ffffffff8106d8c8>] ? mark_held_locks+0x4d/0x6b
-[ 1438.645245]  [<ffffffff8106c683>] ? lockdep_init_map+0xae/0x540
-[ 1438.651351]  [<ffffffff812562ec>] ? kobject_get+0x1a/0x22
-[ 1438.656906]  [<ffffffff812cdeb9>] ? get_device+0x14/0x1a
-[ 1438.662371]  [<ffffffff812ce93e>] device_add+0x119/0x627
-[ 1438.667877]  [<ffffffff8126040d>] ? __spin_lock_init+0x31/0x54
-[ 1438.673933]  [<ffffffff812cee65>] device_register+0x19/0x1d
-[ 1438.679703]  [<ffffffff812cef77>] device_create_vargs+0x10e/0x13b
-[ 1438.686028]  [<ffffffff810ba606>] bdi_register+0x80/0x192
-[ 1438.691635]  [<ffffffff8106c683>] ? lockdep_init_map+0xae/0x540
-[ 1438.697762]  [<ffffffff810a5e33>] ? mempool_kmalloc+0x11/0x13
-[ 1438.703714]  [<ffffffff810a6288>] ? mempool_create_node+0x122/0x16e
-[ 1438.710218]  [<ffffffffa004e756>] ? ceph_set_super+0x0/0xd8 [ceph]
-[ 1438.716620]  [<ffffffff810a5da6>] ? mempool_kfree+0x0/0xb
-[ 1438.722221]  [<ffffffff810a5e22>] ? mempool_kmalloc+0x0/0x13
-[ 1438.728072]  [<ffffffff810ba73b>] bdi_register_dev+0x23/0x25
-[ 1438.733944]  [<ffffffffa004e127>] ceph_get_sb+0xa20/0x104f [ceph]
-[ 1438.740267]  [<ffffffff810d3d4f>] ? __kmalloc+0x15c/0x1ef
-[ 1438.745869]  [<ffffffff810d792a>] ? __alloc_percpu+0xb/0xd
-[ 1438.751545]  [<ffffffff810dbcb4>] vfs_kern_mount+0x9d/0x158
-[ 1438.757359]  [<ffffffff810dbdcc>] do_kern_mount+0x47/0xe7
-[ 1438.762967]  [<ffffffff810f2749>] do_mount+0x743/0x7a9
-[ 1438.768284]  [<ffffffff810b8baa>] ? strndup_user+0x5d/0x85
-[ 1438.773962]  [<ffffffff810f282e>] sys_mount+0x7f/0xc1
-[ 1438.779204]  [<ffffffff8146c393>] ? trace_hardirqs_on_thunk+0x3a/0x3f
-[ 1438.785846]  [<ffffffff8100baab>] system_call_fastpath+0x16/0x1b
+- kclient: leak of osdc->request_mutex?
+[   80  3585.080000] events/0      D 00000000421fb690     0     5      2 0x00000000
+[   80  3585.080000] 60356f18 7082df00 7084dcd0 7084c000 7084dcf0 60013d64 7084dcf0 60028eaa 
+[   80  3585.080000]        7084c000 7019b180 7084dd40 60266517 7084dd20 6004be47 7084c000 7084c000 
+[   80  3585.080000]        70204730 00000001 7082df00 70204750 7084ddb0 60266d82 686373c0 70204750 
+[   80  3585.080000] Call Trace: 
+[   80  3585.080000] 7084dcc8:  [<60013d64>] _switch_to+0x5e/0xae
+[   80  3585.080000] 7084dcd8:  [<60028eaa>] deactivate_task+0x28/0x30
+[   80  3585.080000] 7084dcf8:  [<60266517>] schedule+0x23a/0x280
+[   80  3585.080000] 7084dd08:  [<6004be47>] debug_mutex_free_waiter+0x4d/0x51
+[   80  3585.080000] 7084dd48:  [<60266d82>] __mutex_lock_slowpath+0x129/0x21d
+[   80  3585.080000] 7084dda8:  [<60198e18>] handle_timeout+0x0/0x2b4
+[   80  3585.080000] 7084ddb8:  [<602673ee>] mutex_lock+0x25/0x3a
+[   80  3585.080000] 7084ddc8:  [<60197461>] ceph_monc_request_next_osdmap+0x64/0x96
+[   80  3585.080000] 7084dde8:  [<60198ebf>] handle_timeout+0xa7/0x2b4
+[   80  3585.080000] 7084de48:  [<60198e18>] handle_timeout+0x0/0x2b4
+[   80  3585.080000] 7084de58:  [<600408df>] worker_thread+0xff/0x18f
+[   80  3585.080000] 7084de80:  [<60043d14>] autoremove_wake_function+0x0/0x38
+[   80  3585.080000] 7084dec0:  [<600407e0>] worker_thread+0x0/0x18f
+[   80  3585.080000] 7084ded8:  [<60043a6b>] kthread+0x91/0x99
+[   80  3585.080000] 7084df48:  [<60021c09>] run_kernel_thread+0x41/0x4a
+[   80  3585.080000] 7084df58:  [<600439da>] kthread+0x0/0x99
+[   80  3585.080000] 7084df98:  [<60021bf0>] run_kernel_thread+0x28/0x4a
+[   80  3585.080000] 7084dfc8:  [<60013cdc>] new_thread_handler+0x72/0x9c
+[   80  3585.080000] 
+[   80  3585.080000] INFO: task cp:1267 blocked for more than 120 seconds.
+[   80  3585.080000] "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+[   80  3585.080000] cp            D 00000000421fb690     0  1267   1235 0x00000000
+[   80  3585.080000] 60356f18 70868000 68637340 68636000 68637360 60013d64 68637360 60028eaa 
+[   80  3585.080000]        68636000 7019b180 686373b0 60266517 5a00000000024050 68636000 68636000 68636000 
+[   80  3585.080000]        70204730 00000001 70868000 70204750 68637420 60266d82 70204750 7084dd50 
+[   80  3585.080000] Call Trace: 
+[   80  3585.080000] 68637338:  [<60013d64>] _switch_to+0x5e/0xae
+[   80  3585.080000] 68637348:  [<60028eaa>] deactivate_task+0x28/0x30
+[   80  3585.080000] 68637368:  [<60266517>] schedule+0x23a/0x280
+[   80  3585.080000] 686373b8:  [<60266d82>] __mutex_lock_slowpath+0x129/0x21d
+[   80  3585.080000] 68637428:  [<602673ee>] mutex_lock+0x25/0x3a
+[   80  3585.080000] 68637438:  [<602680c0>] _spin_unlock_irqrestore+0x18/0x1c
+[   80  3585.080000] 68637458:  [<60199f3e>] ceph_osdc_start_request+0x53/0x297
+[   80  3585.080000] 68637498:  [<6017f624>] ceph_writepages_start+0xabd/0x1072
+[   80  3585.080000] 68637568:  [<60028133>] arch_prctl+0xee/0x157
+[   80  3585.080000] 68637598:  [<602680a6>] _spin_unlock_irq+0xe/0x10
+[   80  3585.080000] 686375a8:  [<6002c824>] finish_task_switch+0x42/0x88
+[   80  3585.080000] 68637638:  [<6005f6e9>] do_writepages+0x1f/0x28
+[   80  3585.080000] 68637648:  [<6009ac38>] writeback_single_inode+0xe6/0x23f
+[   80  3585.080000] 68637688:  [<6009b7a4>] writeback_inodes_wb+0x359/0x3e9
+[   80  3585.080000] 686376a8:  [<6005f9e3>] get_dirty_limits+0x1e7/0x219
+[   80  3585.080000] 68637728:  [<6009b9ec>] writeback_inodes_wbc+0x19/0x1b
+[   80  3585.080000] 68637738:  [<6005fbc7>] balance_dirty_pages_ratelimited_nr+0x133/0x256
+[   80  3585.080000] 686377f8:  [<6005a4f9>] generic_file_buffered_write+0x22f/0x2b7
+[   80  3585.080000] 686378d8:  [<6005aa60>] __generic_file_aio_write+0x38d/0x3cd
+[   80  3585.080000] 68637998:  [<6005ab01>] generic_file_aio_write+0x61/0xa9
+[   80  3585.080000] 686379d8:  [<6017bc67>] ceph_aio_write+0x679/0x998
+[   80  3585.080000] 68637a38:  [<6005b08d>] generic_file_aio_read+0x544/0x5ec
+[   80  3585.080000] 68637ae0:  [<60016abf>] copy_chunk_to_user+0x0/0x22
+[   80  3585.080000] 68637b18:  [<600803cc>] do_sync_write+0xf4/0x139
+[   80  3585.080000] 68637b88:  [<60043d14>] autoremove_wake_function+0x0/0x38
+[   80  3585.080000] 68637c58:  [<60080e28>] vfs_write+0xb8/0x181
+[   80  3585.080000] 68637c98:  [<60080fb5>] sys_write+0x47/0x6f
+[   80  3585.080000] 68637cd8:  [<60016549>] handle_syscall+0x59/0x70
+[   80  3585.080000] 68637cf8:  [<60025863>] userspace+0x3c0/0x465
+[   80  3585.080000] 68637fc8:  [<60013c63>] fork_handler+0x62/0x69
 
 greg
 - osd: error handling
