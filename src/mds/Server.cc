@@ -288,9 +288,8 @@ void Server::_session_logged(Session *session, bool open, version_t pv, interval
     else if (session->is_stale_closing())
       mds->messenger->mark_down(session->inst.addr); // kill connection
     mds->sessionmap.set_state(session, Session::STATE_CLOSED);
-    mds->sessionmap.remove_session(session);
-
     session->clear();
+    mds->sessionmap.remove_session(session);
   } else {
     // close must have been canceled (by an import?) ...
     assert(!open);
