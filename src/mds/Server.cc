@@ -287,8 +287,8 @@ void Server::_session_logged(Session *session, bool open, version_t pv, interval
       mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), session->inst);
     else if (session->is_stale_closing())
       mds->messenger->mark_down(session->inst.addr); // kill connection
-    mds->sessionmap.remove_session(session);
     mds->sessionmap.set_state(session, Session::STATE_CLOSED);
+    mds->sessionmap.remove_session(session);
 
     session->clear();
   } else {
@@ -399,7 +399,6 @@ void Server::find_idle_sessions()
     Session *session = mds->sessionmap.get_oldest_session(Session::STATE_STALE);
     if (!session) break;
     assert(session->is_stale());
-    dout(20) << "oldest stale session is " << session->inst << dendl;
     if (session->last_cap_renew >= cutoff) {
       dout(20) << "oldest stale session is " << session->inst << " and sufficiently new (" 
 	       << session->last_cap_renew << ")" << dendl;
@@ -589,15 +588,6 @@ void Server::reconnect_tick()
 	 p++) {
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
       dout(1) << "reconnect gave up on " << session->inst << dendl;
-
-      /* no, we need to respect g_conf.mds_session_autoclose
-      // since we are reconnecting, cheat a bit and don't project anything.
-      mds->sessionmap.projected++;
-      mds->sessionmap.version++;
-      mdlog->submit_entry(new ESession(session->inst, false, mds->sessionmap.version));
-      mds->messenger->mark_down(session->inst.addr);
-      */
-
       failed_reconnects++;
     }
     client_reconnect_gather.clear();
