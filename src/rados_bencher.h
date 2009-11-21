@@ -41,11 +41,12 @@ struct bench_data {
 
 int write_bench(Rados& rados, rados_pool_t pool,
 		 int secondsToRun, int concurrentios, bench_data *data);
+int seq_read_bench(Rados& rados, rados_pool_t pool, bench_data *data);
 void *status_printer(void * data_store);
-
+void sanitize_object_contents(bench_data *data, int length);
   
 int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
-	      int concurrentios, int writeSize, int readOffResults) {
+	      int concurrentios, int writeSize, int sequentialTest) {
 
   char* contentsChars = new char[writeSize];
   int r = 0;
@@ -65,9 +66,7 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
 
 
   //fill in contentsChars deterministically so we can check returns
-  for (int i = 0; i < writeSize; ++i) {
-    contentsChars[i] = i % sizeof(char);
-  }
+  sanitize_object_contents(data, writeSize);
   //set up the pool
   cout << "open pool result = " << rados.open_pool("data",&pool) << " pool = " << pool << std::endl;
   
@@ -75,38 +74,8 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
   if (r != 0) goto out;
 
   //check objects for consistency if requested
-  if (readOffResults) {
-    int errors = 0;
-    char matchName[128];
-    object_t oid;
-    bufferlist actualContents;
-    utime_t start_time;
-    utime_t lat;
-    double total_latency = 0;
-    double avg_latency;
-    double avg_bw;
-    for (int i = 0; i < data->finished; ++i ) {
-      snprintf(matchName, 128, "Object %d", i);
-      oid = object_t(matchName);
-      snprintf(contentsChars, writeSize, "I'm the %dth object!", i);
-      start_time = g_clock.now();
-      r = rados.read(pool, oid, 0, actualContents, writeSize);
-      if (r < 0) goto out;
-      lat = g_clock.now() - start_time;
-      total_latency += (double) lat;
-      if (strcmp(contentsChars, actualContents.c_str()) != 0 ) {
-	cerr << "Object " << matchName << " is not correct!";
-	++errors;
-      }
-      actualContents.clear();
-    }
-    avg_latency = total_latency / data->finished;
-    avg_bw = data->finished * writeSize / (total_latency) / (1024 *1024);
-    cout << "read avg latency: " << avg_latency
-	 << " read avg bw: " << avg_bw << std::endl;
-  
-    if (errors) cout << "WARNING: There were " << errors << " total errors in copying!\n";
-    else cout << "No errors in copying!\n";
+  if (sequentialTest) {
+    r = seq_read_bench(rados, pool, data);
   }
   
  out:
@@ -126,13 +95,9 @@ int write_bench(Rados& rados, rados_pool_t pool,
   bufferlist* contents[concurrentios];
   double totalLatency = 0;
   utime_t startTimes[concurrentios];
-  time_t initialTime;
   utime_t stopTime;
   int r = 0;
 
-  time(&initialTime);
-  stringstream initialTimeS("");
-  initialTimeS << initialTime;
   //set up writes so I can start them together
   for (int i = 0; i<concurrentios; ++i) {
     name[i] = new char[128];
@@ -254,6 +219,50 @@ int write_bench(Rados& rados, rados_pool_t pool,
   return 0;
 }
 
+int seq_read_bench(Rados& rados, rados_pool_t pool, bench_data *data) {
+  int errors = 0;
+  char matchName[128];
+  object_t oid;
+  bufferlist actualContents;
+  utime_t start_time;
+  utime_t last_start;
+  double total_latency = 0;
+  double avg_latency;
+  double avg_bw;
+  int r = 0;
+  sanitize_object_contents(data, 128);
+  start_time = g_clock.now();
+  for (int i = 0; i < data->finished; ++i ) {
+    snprintf(matchName, 128, "Object %d", i);
+    oid = object_t(matchName);
+    snprintf(data->object_contents, data->object_size, "I'm the %dth object!", i);
+    last_start = g_clock.now();
+    r = rados.read(pool, oid, 0, actualContents, data->object_size);
+    if (r != data->object_size) {
+      if (r < 0) return r;
+      else return -5; //EIO
+    }
+    total_latency += (double) g_clock.now() - last_start;
+    if (memcmp(data->object_contents, actualContents.c_str(), data->object_size) != 0 ) {
+      cerr << "Object " << matchName << " is not correct!";
+      ++errors;
+    }
+    actualContents.clear();
+  }
+  last_start = g_clock.now();
+  avg_latency = total_latency / data->finished;
+  avg_bw = data->finished * data->object_size /
+    (double)(last_start - start_time) / (1024 *1024);
+  cout << "read avg latency: " << avg_latency
+       << " read avg bw: " << avg_bw << std::endl;
+  
+  if (errors) cout << "WARNING: There were " << errors << " total errors in copying!\n";
+  else cout << "No errors in copying!\n";
+  return 0;
+}
+
+
+
 void *status_printer(void * data_store) {
   bench_data *data = (bench_data *) data_store;
   Cond cond;
@@ -318,4 +327,10 @@ void *status_printer(void * data_store) {
   }
   dataLock.Unlock();
   return NULL;
+}
+
+inline void sanitize_object_contents (bench_data *data, int length) {
+  for (int i = 0; i < length; ++i) {
+    data->object_contents[i] = i % sizeof(char);
+  }
 }
