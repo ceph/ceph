@@ -4417,7 +4417,7 @@ void Server::_rename_prepare(MDRequest *mdr,
     srcdnl->get_inode()->get_nested_dirfrags(ls);
     int auth = srcdn->authority().first;
     for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) 
-      mdcache->adjust_subtree_auth(*p, auth, auth);
+      mdcache->adjust_subtree_auth(*p, auth, auth, false);
   }
 
   // do inode updates in journal, even if we aren't auth (hmm, is this necessary?)
@@ -5052,7 +5052,7 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
     srcdnl->get_inode()->get_nested_dirfrags(ls);
     int auth = srcdn->authority().first;
     for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) 
-      mdcache->adjust_subtree_auth(*p, auth, auth);
+      mdcache->adjust_subtree_auth(*p, auth, auth, false);
   }
 
   // journal it

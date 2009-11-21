@@ -508,8 +508,8 @@ protected:
 public:
   bool is_subtrees() { return !subtrees.empty(); }
   void list_subtrees(list<CDir*>& ls);
-  void adjust_subtree_auth(CDir *root, pair<int,int> auth);
-  void adjust_subtree_auth(CDir *root, int a, int b=CDIR_AUTH_UNKNOWN) {
+  void adjust_subtree_auth(CDir *root, pair<int,int> auth, bool do_eval=true);
+  void adjust_subtree_auth(CDir *root, int a, int b=CDIR_AUTH_UNKNOWN, bool do_eval=true) {
     adjust_subtree_auth(root, pair<int,int>(a,b)); 
   }
   void adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<int,int> auth);
@@ -524,7 +524,7 @@ public:
   void try_subtree_merge(CDir *root);
   void try_subtree_merge_at(CDir *root);
   void subtree_merge_writebehind_finish(CInode *in, Mutation *mut);
-  void eval_subtree_root(CDir *dir);
+  void eval_subtree_root(CInode *diri);
   CDir *get_subtree_root(CDir *dir);
   bool is_leaf_subtree(CDir *dir) {
     assert(subtrees.count(dir));

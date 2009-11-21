@@ -650,7 +650,7 @@ void MDCache::list_subtrees(list<CDir*>& ls)
  * merge with parent and/or child subtrees, if is it appropriate.
  * merge can ONLY happen if both parent and child have unambiguous auth.
  */
-void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth)
+void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth, bool do_eval)
 {
   dout(7) << "adjust_subtree_auth " << dir->get_dir_auth() << " -> " << auth
 	  << " on " << *dir << dendl;
@@ -714,7 +714,8 @@ void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth)
       }
     }
 
-    eval_subtree_root(dir);
+    if (do_eval)
+      eval_subtree_root(dir->get_inode());
   }
 
   show_subtrees();
@@ -787,7 +788,7 @@ void MDCache::try_subtree_merge_at(CDir *dir)
       }
     }
 
-    eval_subtree_root(dir);
+    eval_subtree_root(dir->get_inode());
 
     // journal inode? 
     //  (this is a large hammer to ensure that dirfragtree updates will
@@ -831,12 +832,12 @@ void MDCache::subtree_merge_writebehind_finish(CInode *in, Mutation *mut)
   in->auth_unpin(this);
 }
 
-void MDCache::eval_subtree_root(CDir *dir)
+void MDCache::eval_subtree_root(CInode *diri)
 {
   // evaluate subtree inode filelock?
   //  (we should scatter the filelock on subtree bounds)
-  if (dir->inode->is_auth())
-    mds->locker->try_eval(dir->inode, CEPH_LOCK_IFILE | CEPH_LOCK_INEST);
+  if (diri->is_auth())
+    mds->locker->try_eval(diri, CEPH_LOCK_IFILE | CEPH_LOCK_INEST);
 }
 
 
