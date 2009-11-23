@@ -179,42 +179,38 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
     goto out;
   }
 
-  // can i handle this query without a map update?
+  if (mdsmap.get_epoch() != m->get_last_epoch_seen()) {
+    dout(10) << "mds_beacon " << *m
+	     << " ignoring requested state, because mds hasn't seen latest map" << dendl;
+    goto ignore;
+  }
 
   if (info.laggy()) {
     return false;  // no longer laggy, need to update map.
   }
-  else if (state == MDSMap::STATE_BOOT) {
+  if (state == MDSMap::STATE_BOOT) {
     // ignore, already booted.
     goto out;
   }
-  else {
-    // is there a state change here?
-    if (info.state != state) {
-      if (mdsmap.get_epoch() != m->get_last_epoch_seen()) {
-	dout(10) << "mds_beacon " << *m
-		 << " ignoring requested state, because mds hasn't seen latest map" << dendl;
-	goto ignore;
-      }
-      
-      // legal state change?
-      if ((info.state == MDSMap::STATE_STANDBY ||
-	   info.state == MDSMap::STATE_STANDBY_REPLAY) && state > 0) {
-	dout(10) << "mds_beacon mds can't activate itself (" << ceph_mds_state_name(info.state)
-		 << " -> " << ceph_mds_state_name(state) << ")" << dendl;
-	goto ignore;
-      }
-
-      if (info.state == MDSMap::STATE_STANDBY &&
-	  state == MDSMap::STATE_STANDBY_REPLAY &&
-	  (pending_mdsmap.is_degraded() ||
-	   pending_mdsmap.get_state(info.rank) < MDSMap::STATE_ACTIVE)) {
-	dout(10) << "mds_beacon can't standby-replay mds" << info.rank << " at this time (cluster degraded, or mds not active)" << dendl;
-	goto ignore;
-      }
-      
-      return false;  // need to update map
+  // is there a state change here?
+  if (info.state != state) {    
+    // legal state change?
+    if ((info.state == MDSMap::STATE_STANDBY ||
+	 info.state == MDSMap::STATE_STANDBY_REPLAY) && state > 0) {
+      dout(10) << "mds_beacon mds can't activate itself (" << ceph_mds_state_name(info.state)
+	       << " -> " << ceph_mds_state_name(state) << ")" << dendl;
+      goto ignore;
     }
+    
+    if (info.state == MDSMap::STATE_STANDBY &&
+	state == MDSMap::STATE_STANDBY_REPLAY &&
+	(pending_mdsmap.is_degraded() ||
+	 pending_mdsmap.get_state(info.rank) < MDSMap::STATE_ACTIVE)) {
+      dout(10) << "mds_beacon can't standby-replay mds" << info.rank << " at this time (cluster degraded, or mds not active)" << dendl;
+      goto ignore;
+    }
+    
+    return false;  // need to update map
   }
 
  ignore:
@@ -299,7 +295,7 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
     MDSMap::mds_info_t& info = pending_mdsmap.get_info_gid(gid);
 
     if (info.laggy()) {
-      dout(10) << "prepare_beacon clearly laggy flag on " << addr << dendl;
+      dout(10) << "prepare_beacon clearing laggy flag on " << addr << dendl;
       info.clear_laggy();
     }
   
