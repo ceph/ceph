@@ -202,13 +202,17 @@ void Server::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_REQUEST_RENEWCAPS:
-    mds->sessionmap.touch_session(session);
-    if (session->is_stale()) {
-      mds->sessionmap.set_state(session, Session::STATE_OPEN);
-      mds->locker->resume_stale_caps(session);
+    if (session->is_closed()) {
+      dout(10) << "ignoring renewcaps on clsoed session" << dendl;
+    } else {
+      mds->sessionmap.touch_session(session);
+      if (session->is_stale()) {
+	mds->sessionmap.set_state(session, Session::STATE_OPEN);
+	mds->locker->resume_stale_caps(session);
+      }
+      mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->get_seq()), 
+				   session->inst);
     }
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->get_seq()), 
-				 session->inst);
     break;
     
   case CEPH_SESSION_REQUEST_CLOSE:

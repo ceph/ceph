@@ -224,8 +224,12 @@ public:
     s->put();
   }
   void touch_session(Session *session) {
-    by_state[session->state].push_back(&session->session_list_item);
-    session->last_cap_renew = g_clock.now();
+    if (session->session_list_item.is_on_xlist()) {
+      by_state[session->state].push_back(&session->session_list_item);
+      session->last_cap_renew = g_clock.now();
+    } else {
+      assert(0);  // hrm, should happen?
+    }
   }
   Session *get_oldest_session(int state) {
     if (by_state[state].empty()) return 0;
