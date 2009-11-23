@@ -78,6 +78,16 @@ private:
   virtual void _rollback(version_t tid) = 0;
   virtual void _server_update(bufferlist& bl) { assert(0); }
 
+  void _note_prepare(int mds, __u64 reqid) {
+    pending_for_mds[version].mds = mds;
+    pending_for_mds[version].reqid = reqid;
+    pending_for_mds[version].tid = version;
+  }
+  void _note_commit(__u64 tid) {
+    pending_for_mds.erase(tid);
+  }
+  
+
   MDSTableServer(MDS *m, int tab) : MDSTable(m, get_mdstable_name(tab), false), table(tab) {}
   virtual ~MDSTableServer() {}
 

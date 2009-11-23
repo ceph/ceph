@@ -779,9 +779,11 @@ void ETableServer::replay(MDS *mds)
   switch (op) {
   case TABLESERVER_OP_PREPARE:
     server->_prepare(mutation, reqid, bymds);
+    server->_note_prepare(bymds, reqid);
     break;
   case TABLESERVER_OP_COMMIT:
     server->_commit(tid);
+    server->_note_commit(tid);
     break;
   case TABLESERVER_OP_SERVER_UPDATE:
     server->_server_update(mutation);
