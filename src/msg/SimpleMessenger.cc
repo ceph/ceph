@@ -814,12 +814,12 @@ int SimpleMessenger::Pipe::accept()
 
   rc = tcp_write(sd, (char*)&reply, sizeof(reply));
   if (rc < 0)
-    goto fail;
+    goto fail_unlocked;
 
   if (reply.authorizer_len) {
     rc = tcp_write(sd, authorizer_reply.c_str(), authorizer_reply.length());
     if (rc < 0)
-      goto fail;
+      goto fail_unlocked;
   }
 
   lock.Lock();
@@ -832,8 +832,6 @@ int SimpleMessenger::Pipe::accept()
   return 0;   // success.
 
 
- fail:
-  rank->lock.Unlock();
  fail_unlocked:
   lock.Lock();
   state = STATE_CLOSED;
