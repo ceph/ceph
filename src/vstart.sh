@@ -351,12 +351,10 @@ if [ "$start_mds" -eq 1 ]; then
     for name in a b c d e f g h i j k l m n o p
     do
 	if [ "$new" -eq 1 ]; then
-	    cat <<EOF >> $conf
-[mds.$name]
-EOF
+	    key_fn=dev/mds.$name.keyring
 	    if [ "$cephx" -eq 1 ] && [ $overwrite_conf -eq 1 ]; then
-		key_fn=dev/mds.$name.keyring
 	    	cat <<EOF >> $conf
+[mds.$name]
         keys file = $key_fn
 EOF
 		cat <<EOF > $mds_caps
