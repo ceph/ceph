@@ -501,6 +501,20 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	//} else
 	//ss << "mdsmap fsid " << map.fsid << " does not match monitor fsid " << mon->monmap->fsid;
     }
+    else if (m->cmd[1] == "set_state" && m->cmd.size() == 4) {
+      __u64 gid = atoi(m->cmd[2].c_str());
+      int state = atoi(m->cmd[3].c_str());
+      if (!pending_mdsmap.is_dne_gid(gid)) {
+	MDSMap::mds_info_t& info = pending_mdsmap.get_info_gid(gid);
+	info.state = state;
+	stringstream ss;
+	ss << "set mds gid " << gid << " to state " << state << " " << ceph_mds_state_name(state);
+	string rs;
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	return true;
+      }
+    }
   }
   if (r == -EINVAL) 
     ss << "unrecognized command";
