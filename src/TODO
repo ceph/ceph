@@ -147,6 +147,118 @@ cp: writing `/c/ceph2.2/bin/gs-gpl': Bad file descriptor
 [   80  3585.080000] 68637cf8:  [<60025863>] userspace+0x3c0/0x465
 [   80  3585.080000] 68637fc8:  [<60013c63>] fork_handler+0x62/0x69
 
+- kclient lockdep warning:
+[3272340.634840] =======================================================
+[3272340.636809] [ INFO: possible circular locking dependency detected ]
+[3272340.636809] 2.6.32-rc2 #1
+[3272340.636809] -------------------------------------------------------
+[3272340.636809] fstest/22237 is trying to acquire lock:
+[3272340.636809]  (&osdc->request_mutex){+.+...}, at: [<ffffffffa00b4711>] ceph_osdc_start_request+0x58/0x2bd [ceph]
+[3272340.636809] 
+[3272340.636809] but task is already holding lock:
+[3272340.636809]  (&mm->mmap_sem){++++++}, at: [<ffffffff81029923>] do_page_fault+0x10a/0x27e
+[3272340.636809] 
+[3272340.636809] which lock already depends on the new lock.
+[3272340.636809] 
+[3272340.636809] 
+[3272340.636809] the existing dependency chain (in reverse order) is:
+[3272340.636809] 
+[3272340.636809] -> #3 (&mm->mmap_sem){++++++}:
+[3272340.636809]        [<ffffffff8107017e>] __lock_acquire+0x148c/0x17e3
+[3272340.636809]        [<ffffffff810705c5>] lock_acquire+0xf0/0x10d
+[3272340.636809]        [<ffffffff8146ba8a>] down_read+0x48/0x7c
+[3272340.636809]        [<ffffffff8102995a>] do_page_fault+0x141/0x27e
+[3272340.636809]        [<ffffffff8146d43f>] page_fault+0x1f/0x30
+[3272340.636809]        [<ffffffff813d1b3d>] skb_copy_datagram_iovec+0xaa/0x264
+[3272340.636809]        [<ffffffff814089e2>] tcp_rcv_established+0x240/0x941
+[3272340.636809]        [<ffffffff8140f9e1>] tcp_v4_do_rcv+0x31/0x1d7
+[3272340.636809]        [<ffffffff813ff397>] tcp_prequeue_process+0x9c/0xb4
+[3272340.636809]        [<ffffffff8140063e>] tcp_recvmsg+0x495/0x90b
+[3272340.636809]        [<ffffffff813c9b90>] sock_common_recvmsg+0x32/0x47
+[3272340.636809]        [<ffffffff813c8014>] sock_recvmsg+0x10e/0x133
+[3272340.636809]        [<ffffffff813c92fb>] sys_recvfrom+0xa3/0xf8
+[3272340.636809]        [<ffffffff8100baab>] system_call_fastpath+0x16/0x1b
+[3272340.636809] 
+[3272340.636809] -> #2 (sk_lock-AF_INET){+.+.+.}:
+[3272340.636809]        [<ffffffff8107017e>] __lock_acquire+0x148c/0x17e3
+[3272340.636809]        [<ffffffff810705c5>] lock_acquire+0xf0/0x10d
+[3272340.636809]        [<ffffffff813ca8be>] lock_sock_nested+0xea/0xfe
+[3272340.636809]        [<ffffffff8141ca81>] inet_stream_connect+0x2b/0x259
+[3272340.636809]        [<ffffffffa00a7c5a>] con_work+0x369/0x1607 [ceph]
+[3272340.636809]        [<ffffffff8105b1ee>] worker_thread+0x283/0x398
+[3272340.636809]        [<ffffffff8105f114>] kthread+0x7d/0x85
+[3272340.636809]        [<ffffffff8100cb1a>] child_rip+0xa/0x20
+[3272340.636809] 
+[3272340.636809] -> #1 (&con->out_mutex){+.+.+.}:
+[3272340.636809]        [<ffffffff8107017e>] __lock_acquire+0x148c/0x17e3
+[3272340.636809]        [<ffffffff810705c5>] lock_acquire+0xf0/0x10d
+[3272340.636809]        [<ffffffff8146b4f8>] mutex_lock_nested+0x6c/0x32a
+[3272340.636809]        [<ffffffffa00a901e>] ceph_con_send+0xa3/0x235 [ceph]
+[3272340.636809]        [<ffffffffa00b33c0>] __send_request+0x113/0x1e9 [ceph]
+[3272340.636809]        [<ffffffffa00b4863>] ceph_osdc_start_request+0x1aa/0x2bd [ceph]
+[3272340.636809]        [<ffffffffa0098873>] ceph_writepages_start+0xacd/0x10cd [ceph]
+[3272340.636809]        [<ffffffff810ab799>] do_writepages+0x1f/0x28
+[3272340.636809]        [<ffffffff810f5c22>] writeback_single_inode+0xea/0x24c
+[3272340.636809]        [<ffffffff810f68b8>] writeback_inodes_wb+0x363/0x3fb
+[3272340.636809]        [<ffffffff810f6a83>] wb_writeback+0x133/0x1b3
+[3272340.636809]        [<ffffffff810f6d76>] wb_do_writeback+0x1c3/0x1d9
+[3272340.636809]        [<ffffffff810f6dc6>] bdi_writeback_task+0x3a/0xa9
+[3272340.636809]        [<ffffffff810bacab>] bdi_start_fn+0x71/0xce
+[3272340.636809]        [<ffffffff8105f114>] kthread+0x7d/0x85
+[3272340.636809]        [<ffffffff8100cb1a>] child_rip+0xa/0x20
+[3272340.636809] 
+[3272340.636809] -> #0 (&osdc->request_mutex){+.+...}:
+[3272340.636809]        [<ffffffff8106fea3>] __lock_acquire+0x11b1/0x17e3
+[3272340.636809]        [<ffffffff810705c5>] lock_acquire+0xf0/0x10d
+[3272340.636809]        [<ffffffff8146b4f8>] mutex_lock_nested+0x6c/0x32a
+[3272340.636809]        [<ffffffffa00b4711>] ceph_osdc_start_request+0x58/0x2bd [ceph]
+[3272340.636809]        [<ffffffffa00b5598>] ceph_osdc_readpages+0x123/0x217 [ceph]
+[3272340.636809]        [<ffffffffa0099006>] ceph_readpages+0x193/0x459 [ceph]
+[3272340.636809]        [<ffffffff810ac66b>] __do_page_cache_readahead+0x184/0x1fa
+[3272340.636809]        [<ffffffff810ac6fd>] ra_submit+0x1c/0x20
+[3272340.636809]        [<ffffffff810aca62>] ondemand_readahead+0x284/0x297
+[3272340.636809]        [<ffffffff810acaed>] page_cache_async_readahead+0x78/0x84
+[3272340.636809]        [<ffffffff810a4821>] filemap_fault+0xbc/0x37b
+[3272340.636809]        [<ffffffff810bc27a>] __do_fault+0x54/0x454
+[3272340.636809]        [<ffffffff810be519>] handle_mm_fault+0x392/0x72b
+[3272340.636809]        [<ffffffff81029a7d>] do_page_fault+0x264/0x27e
+[3272340.636809]        [<ffffffff8146d43f>] page_fault+0x1f/0x30
+[3272340.636809] 
+[3272340.636809] other info that might help us debug this:
+[3272340.636809] 
+[3272340.636809] 1 lock held by fstest/22237:
+[3272340.636809]  #0:  (&mm->mmap_sem){++++++}, at: [<ffffffff81029923>] do_page_fault+0x10a/0x27e
+[3272340.636809] 
+[3272340.636809] stack backtrace:
+[3272340.636809] Pid: 22237, comm: fstest Not tainted 2.6.32-rc2 #1
+[3272340.636809] Call Trace:
+[3272340.636809]  [<ffffffff8106e796>] print_circular_bug+0xb3/0xc2
+[3272340.636809]  [<ffffffff8106fea3>] __lock_acquire+0x11b1/0x17e3
+[3272340.636809]  [<ffffffff8125c1e4>] ? sprintf+0x68/0x6a
+[3272340.636809]  [<ffffffff810705c5>] lock_acquire+0xf0/0x10d
+[3272340.636809]  [<ffffffffa00b4711>] ? ceph_osdc_start_request+0x58/0x2bd [ceph]
+[3272340.636809]  [<ffffffff8146b4f8>] mutex_lock_nested+0x6c/0x32a
+[3272340.636809]  [<ffffffffa00b4711>] ? ceph_osdc_start_request+0x58/0x2bd [ceph]
+[3272340.636809]  [<ffffffffa00b4711>] ? ceph_osdc_start_request+0x58/0x2bd [ceph]
+[3272340.636809]  [<ffffffffa00b4711>] ceph_osdc_start_request+0x58/0x2bd [ceph]
+[3272340.636809]  [<ffffffffa00b5598>] ceph_osdc_readpages+0x123/0x217 [ceph]
+[3272340.636809]  [<ffffffffa0099006>] ceph_readpages+0x193/0x459 [ceph]
+[3272340.636809]  [<ffffffff810ac66b>] __do_page_cache_readahead+0x184/0x1fa
+[3272340.636809]  [<ffffffff810ac570>] ? __do_page_cache_readahead+0x89/0x1fa
+[3272340.636809]  [<ffffffff810ac6fd>] ra_submit+0x1c/0x20
+[3272340.636809]  [<ffffffff810aca62>] ondemand_readahead+0x284/0x297
+[3272340.636809]  [<ffffffff810acaed>] page_cache_async_readahead+0x78/0x84
+[3272340.636809]  [<ffffffff810a3f39>] ? find_get_page+0x0/0x11d
+[3272340.636809]  [<ffffffff810a4821>] filemap_fault+0xbc/0x37b
+[3272340.636809]  [<ffffffff810bc27a>] __do_fault+0x54/0x454
+[3272340.636809]  [<ffffffff8106a3b9>] ? get_lock_stats+0x19/0x4c
+[3272340.636809]  [<ffffffff8106a964>] ? put_lock_stats+0xe/0x27
+[3272340.636809]  [<ffffffff810be519>] handle_mm_fault+0x392/0x72b
+[3272340.636809]  [<ffffffff81029a7d>] do_page_fault+0x264/0x27e
+[3272340.636809]  [<ffffffff8146d43f>] page_fault+0x1f/0x30
+
+
+
 greg
 - osd: error handling
 - uclient: readdir from cache
