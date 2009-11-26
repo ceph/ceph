@@ -464,7 +464,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     mds->wait_for_reconnect(new C_MDS_RetryMessage(mds, m));
     return;
   }
-  if (!mds->is_reconnect() || !session) {
+  if (!mds->is_reconnect() || !session || session->is_closed()) {
     stringstream ss;
     utime_t delay = g_clock.now();
     delay -= reconnect_start;
