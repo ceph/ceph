@@ -16,6 +16,7 @@
 #define __OBJECT_H
 
 #include <stdint.h>
+#include <stdio.h>
 
 #include <iostream>
 #include <iomanip>
