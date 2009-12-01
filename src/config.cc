@@ -470,6 +470,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_dump_cache_on_map, 0, OPT_BOOL, false),
 	OPTION(mds_dump_cache_after_rejoin, 0, OPT_BOOL, true),
 	OPTION(mds_hack_log_expire_for_better_stats, 0, OPT_BOOL, false),
+	OPTION(mds_kill_mdstable_at, 0, OPT_INT, 0),
 	OPTION(osd_data, 0, OPT_STR, ""),
 	OPTION(osd_journal, 0, OPT_STR, ""),
 	OPTION(osd_journal_size, 0, OPT_INT, 0),         // in mb

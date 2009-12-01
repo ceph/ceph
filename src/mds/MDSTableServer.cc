@@ -48,6 +48,8 @@ void MDSTableServer::handle_prepare(MMDSTableRequest *req)
   _prepare(req->bl, req->reqid, from);
   _note_prepare(from, req->reqid);
 
+  assert(g_conf.mds_kill_mdstable_at != 1);
+
   ETableServer *le = new ETableServer(table, TABLESERVER_OP_PREPARE, req->reqid, from, version, version);
   le->mutation = bl;  // original request, NOT modified return value coming out of _prepare!
   mds->mdlog->submit_entry(le, new C_Prepare(this, req, version));
@@ -57,6 +59,9 @@ void MDSTableServer::handle_prepare(MMDSTableRequest *req)
 void MDSTableServer::_prepare_logged(MMDSTableRequest *req, version_t tid)
 {
   dout(7) << "_create_logged " << *req << " tid " << tid << dendl;
+
+  assert(g_conf.mds_kill_mdstable_at != 2);
+
   MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_AGREE, req->reqid, tid);
   reply->bl = req->bl;
   mds->send_message_mds(reply, req->get_source().num());
@@ -73,6 +78,9 @@ void MDSTableServer::handle_commit(MMDSTableRequest *req)
   version_t tid = req->tid;
 
   if (pending_for_mds.count(tid)) {
+
+    assert(g_conf.mds_kill_mdstable_at != 5);
+
     _commit(tid);
     _note_commit(tid);
     mds->mdlog->submit_entry(new ETableServer(table, TABLESERVER_OP_COMMIT, 0, -1, tid, version));
@@ -94,6 +102,9 @@ void MDSTableServer::handle_commit(MMDSTableRequest *req)
 void MDSTableServer::_commit_logged(MMDSTableRequest *req)
 {
   dout(7) << "_commit_logged, sending ACK" << dendl;
+
+  assert(g_conf.mds_kill_mdstable_at != 6);
+
   MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_ACK, req->reqid, req->tid);
   mds->send_message_mds(reply, req->get_source().num());
   delete req;

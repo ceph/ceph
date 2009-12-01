@@ -53,6 +53,9 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
   case TABLESERVER_OP_AGREE:
     if (pending_prepare.count(reqid)) {
       dout(10) << "got agree on " << reqid << " atid " << tid << dendl;
+
+      assert(g_conf.mds_kill_mdstable_at != 3);
+
       Context *onfinish = pending_prepare[reqid].onfinish;
       *pending_prepare[reqid].ptid = tid;
       if (pending_prepare[reqid].pbl)
@@ -84,6 +87,8 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
   case TABLESERVER_OP_ACK:
     dout(10) << "got ack on tid " << tid << ", logging" << dendl;
 
+    assert(g_conf.mds_kill_mdstable_at != 7);
+
     // remove from committing list
     assert(pending_commit.count(tid));
     assert(pending_commit[tid]->pending_commit_tids[table].count(tid));
@@ -104,6 +109,8 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
 void MDSTableClient::_logged_ack(version_t tid)
 {
   dout(10) << "_logged_ack " << tid << dendl;
+
+  assert(g_conf.mds_kill_mdstable_at != 8);
 
   assert(pending_commit.count(tid));
   assert(pending_commit[tid]->pending_commit_tids[table].count(tid));
@@ -144,6 +151,8 @@ void MDSTableClient::commit(version_t tid, LogSegment *ls)
   assert(pending_commit.count(tid) == 0);
   pending_commit[tid] = ls;
   ls->pending_commit_tids[table].insert(tid);
+
+  assert(g_conf.mds_kill_mdstable_at != 4);
 
   // send message
   MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_COMMIT, 0, tid);

@@ -273,6 +273,8 @@ struct md_config_t {
 
   bool mds_hack_log_expire_for_better_stats;
 
+  int mds_kill_mdstable_at;   // non-zero to specify kill point
+
   // osd
   const char *osd_data;
   const char *osd_journal;
