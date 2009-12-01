@@ -510,7 +510,7 @@ public:
   void list_subtrees(list<CDir*>& ls);
   void adjust_subtree_auth(CDir *root, pair<int,int> auth, bool do_eval=true);
   void adjust_subtree_auth(CDir *root, int a, int b=CDIR_AUTH_UNKNOWN, bool do_eval=true) {
-    adjust_subtree_auth(root, pair<int,int>(a,b)); 
+    adjust_subtree_auth(root, pair<int,int>(a,b), do_eval); 
   }
   void adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<int,int> auth);
   void adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, int a) {
