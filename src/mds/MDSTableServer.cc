@@ -46,6 +46,7 @@ void MDSTableServer::handle_prepare(MMDSTableRequest *req)
   bufferlist bl = req->bl;
 
   _prepare(req->bl, req->reqid, from);
+  _note_prepare(from, req->reqid);
 
   ETableServer *le = new ETableServer(table, TABLESERVER_OP_PREPARE, req->reqid, from, version, version);
   le->mutation = bl;  // original request, NOT modified return value coming out of _prepare!
@@ -73,6 +74,7 @@ void MDSTableServer::handle_commit(MMDSTableRequest *req)
 
   if (pending_for_mds.count(tid)) {
     _commit(tid);
+    _note_commit(tid);
     mds->mdlog->submit_entry(new ETableServer(table, TABLESERVER_OP_COMMIT, 0, -1, tid, version));
     mds->mdlog->wait_for_sync(new C_Commit(this, req));
   }

@@ -103,7 +103,7 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
 
 void MDSTableClient::_logged_ack(version_t tid)
 {
-  dout(10) << "_logged_ack" << dendl;
+  dout(10) << "_logged_ack " << tid << dendl;
 
   assert(pending_commit.count(tid));
   assert(pending_commit[tid]->pending_commit_tids[table].count(tid));
@@ -156,11 +156,13 @@ void MDSTableClient::commit(version_t tid, LogSegment *ls)
 
 void MDSTableClient::got_journaled_agree(version_t tid, LogSegment *ls)
 {
+  dout(10) << "got_journaled_agree " << tid << dendl;
   ls->pending_commit_tids[table].insert(tid);
   pending_commit[tid] = ls;
 }
 void MDSTableClient::got_journaled_ack(version_t tid)
 {
+  dout(10) << "got_journaled_ack " << tid << dendl;
   if (pending_commit.count(tid))
     pending_commit[tid]->pending_commit_tids[table].erase(tid);
   pending_commit.erase(tid);
