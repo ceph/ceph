@@ -35,13 +35,14 @@ struct bench_data {
   double max_latency;
   double avg_latency;
   utime_t cur_latency; //latency of last completed transaction
-  utime_t startTime; //start time for benchmark
+  utime_t start_time; //start time for benchmark
   char *object_contents; //pointer to the contents written to each object
 };
 
 int write_bench(Rados& rados, rados_pool_t pool,
 		 int secondsToRun, int concurrentios, bench_data *data);
-int seq_read_bench(Rados& rados, rados_pool_t pool, bench_data *data);
+int seq_read_bench(Rados& rados, rados_pool_t pool,
+		   int concurrentios, bench_data *data, int verify);
 void *status_printer(void * data_store);
 void sanitize_object_contents(bench_data *data, int length);
   
@@ -56,6 +57,7 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
   data->done = false;
   data->object_size = writeSize;
   data->trans_size = writeSize; //just for now
+  data->in_flight = 0;
   data->started = 0;
   data->finished = 0;
   data->min_latency = 9999.0; // this better be higher than initial latency!
@@ -75,7 +77,7 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
 
   //check objects for consistency if requested
   if (sequentialTest) {
-    r = seq_read_bench(rados, pool, data);
+    r = seq_read_bench(rados, pool, concurrentios, data, 1);
   }
   
  out:
@@ -93,8 +95,8 @@ int write_bench(Rados& rados, rados_pool_t pool,
   Rados::AioCompletion* completions[concurrentios];
   char* name[concurrentios];
   bufferlist* contents[concurrentios];
-  double totalLatency = 0;
-  utime_t startTimes[concurrentios];
+  double total_latency = 0;
+  utime_t start_times[concurrentios];
   utime_t stopTime;
   int r = 0;
 
@@ -111,10 +113,10 @@ int write_bench(Rados& rados, rados_pool_t pool,
   
   pthread_create(&print_thread, NULL, status_printer, (void *)data);
   dataLock.Lock();
-  data->startTime = g_clock.now();
+  data->start_time = g_clock.now();
   dataLock.Unlock();
   for (int i = 0; i<concurrentios; ++i) {
-    startTimes[i] = g_clock.now();
+    start_times[i] = g_clock.now();
     r = rados.aio_write(pool, name[i], 0, *contents[i], data->object_size, &completions[i]);
     if (r < 0) { //naughty, doesn't clean up heap
 	dataLock.Unlock();
@@ -132,11 +134,11 @@ int write_bench(Rados& rados, rados_pool_t pool,
   char* newName;
   utime_t runtime;
   
-  utime_t timePassed = g_clock.now() - data->startTime;
+  utime_t timePassed = g_clock.now() - data->start_time;
   //don't need locking for reads because other thread doesn't write
   
   runtime.set_from_double(secondsToRun);
-  stopTime = data->startTime + runtime;
+  stopTime = data->start_time + runtime;
   while( g_clock.now() < stopTime ) {
     slot = data->finished % concurrentios;
     //create new contents and name on the heap, and fill them
@@ -152,20 +154,20 @@ int write_bench(Rados& rados, rados_pool_t pool,
       dataLock.Unlock();
       return r;
     }
-    data->cur_latency = g_clock.now() - startTimes[slot];
-    totalLatency += data->cur_latency;
+    data->cur_latency = g_clock.now() - start_times[slot];
+    total_latency += data->cur_latency;
     if( data->cur_latency > data->max_latency) data->max_latency = data->cur_latency;
     if (data->cur_latency < data->min_latency) data->min_latency = data->cur_latency;
     ++data->finished;
-    data->avg_latency = totalLatency / data->finished;
+    data->avg_latency = total_latency / data->finished;
     --data->in_flight;
     dataLock.Unlock();
     completions[slot]->release();
-    timePassed = g_clock.now() - data->startTime;
+    timePassed = g_clock.now() - data->start_time;
     
     //write new stuff to rados, then delete old stuff
     //and save locations of new stuff for later deletion
-    startTimes[slot] = g_clock.now();
+    start_times[slot] = g_clock.now();
     r = rados.aio_write(pool, newName, 0, *newContents, data->object_size, &completions[slot]);
     if (r < 0) //naughty; doesn't clean up heap space.
       return r;
@@ -183,12 +185,12 @@ int write_bench(Rados& rados, rados_pool_t pool,
     slot = data->finished % concurrentios;
     completions[slot]->wait_for_safe();
     dataLock.Lock();
-    data->cur_latency = g_clock.now() - startTimes[slot];
-    totalLatency += data->cur_latency;
+    data->cur_latency = g_clock.now() - start_times[slot];
+    total_latency += data->cur_latency;
     if (data->cur_latency > data->max_latency) data->max_latency = data->cur_latency;
     if (data->cur_latency < data->min_latency) data->min_latency = data->cur_latency;
     ++data->finished;
-    data->avg_latency = totalLatency / data->finished;
+    data->avg_latency = total_latency / data->finished;
     --data->in_flight;
     dataLock.Unlock();
     completions[slot]-> release();
@@ -196,7 +198,7 @@ int write_bench(Rados& rados, rados_pool_t pool,
     delete contents[slot];
   }
 
-  timePassed = g_clock.now() - data->startTime;
+  timePassed = g_clock.now() - data->start_time;
   dataLock.Lock();
   data->done = true;
   dataLock.Unlock();
@@ -296,7 +298,7 @@ void *status_printer(void * data_store) {
       / (1024*1024)
       / cycleSinceChange;
     avg_bandwidth = (double) (data->trans_size) * (data->finished)
-      / (double)(g_clock.now() - data->startTime) / (1024*1024);
+      / (double)(g_clock.now() - data->start_time) / (1024*1024);
     if (previous_writes != data->finished) {
       previous_writes = data->finished;
       cycleSinceChange = 0;
