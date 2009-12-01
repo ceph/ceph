@@ -19,14 +19,14 @@
 [mon]
 	mon data = /data/mon$num
 	debug mon = 20
-	debug ms = 1
+	debug ms = 20
 	mon osd down out interval = 0  ; 10 minutes
 
 [mon0]
 	host = sepia1
 	mon addr = 10.3.14.128:6789
 	log dir = /data/sepia1
-	valgrind = "--tool=memcheck --log-file=/data/sepia1/v.mon$id"
+;	valgrind = "--tool=memcheck --log-file=/data/sepia1/v.mon$id"
 
 ; ---------------------
 [mds]
