@@ -105,6 +105,8 @@ void MDSTableServer::handle_rollback(MMDSTableRequest *req)
 {
   dout(7) << "handle_rollback " << *req << dendl;
   _rollback(req->tid);
+  _note_rollback(req->tid);
+  mds->mdlog->submit_entry(new ETableServer(table, TABLESERVER_OP_ROLLBACK, 0, -1, req->tid, version));
   delete req;
 }
 

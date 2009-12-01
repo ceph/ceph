@@ -86,6 +86,9 @@ private:
   void _note_commit(__u64 tid) {
     pending_for_mds.erase(tid);
   }
+  void _note_rollback(__u64 tid) {
+    pending_for_mds.erase(tid);
+  }
   
 
   MDSTableServer(MDS *m, int tab) : MDSTable(m, get_mdstable_name(tab), false), table(tab) {}

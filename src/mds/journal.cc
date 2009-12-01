@@ -785,6 +785,10 @@ void ETableServer::replay(MDS *mds)
     server->_commit(tid);
     server->_note_commit(tid);
     break;
+  case TABLESERVER_OP_ROLLBACK:
+    server->_rollback(tid);
+    server->_note_rollback(tid);
+    break;
   case TABLESERVER_OP_SERVER_UPDATE:
     server->_server_update(mutation);
     break;
