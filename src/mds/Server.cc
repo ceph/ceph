@@ -203,7 +203,7 @@ void Server::handle_client_session(MClientSession *m)
 
   case CEPH_SESSION_REQUEST_RENEWCAPS:
     if (session->is_closed()) {
-      dout(10) << "ignoring renewcaps on clsoed session" << dendl;
+      dout(10) << "ignoring renewcaps on closed session" << dendl;
     } else {
       mds->sessionmap.touch_session(session);
       if (session->is_stale()) {
@@ -934,6 +934,12 @@ void Server::handle_client_request(MClientRequest *req)
     session = get_session(req);
     if (!session) {
       dout(5) << "no session for " << req->get_orig_source() << ", dropping" << dendl;
+      delete req;
+      return;
+    }
+    if (session->is_closed() || session->is_closing() || session->is_stale_purging() ||
+	session->is_stale_closing()) {
+      dout(5) << "session closed|closing|stale_purging|stale_closing, dropping" << dendl;
       delete req;
       return;
     }
