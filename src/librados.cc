@@ -312,7 +312,7 @@ bool RadosClient::init()
   monclient.init();
 
   monclient.authenticate(g_conf.client_mount_timeout);
-
+  messenger->set_myname(entity_name_t::CLIENT(monclient.get_global_id()));
 
   lock.Lock();
 
