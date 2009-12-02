@@ -39,8 +39,8 @@ int main(int argc, char **argv)
 		perror("ioctl IOC_GET_LAYOUT error");
 		return 1;
 	}
-	printf("layout:\n stripe_unit %lld\n stripe_count %lld\n object_size %lld\n data_pool %lld\n",
-	       l.stripe_unit, l.stripe_count, l.object_size, l.data_pool);
+	printf("layout:\n stripe_unit %lld\n stripe_count %lld\n object_size %lld\n data_pool %lld\npreferred osd %lld\n",
+	       l.stripe_unit, l.stripe_count, l.object_size, l.data_pool, l.preferred_osd);
 
 	/* dataloc */
 	dl.file_offset = atoll(argv[2]);
