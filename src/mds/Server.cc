@@ -1752,6 +1752,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
   }
 
   mdr->dn[n].push_back(dn);
+  mdr->in[n] = dn->get_projected_linkage()->get_inode();
 
   // -- lock --
   for (int i=0; i<(int)mdr->dn[n].size(); i++) 
