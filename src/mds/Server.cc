@@ -2308,6 +2308,9 @@ void Server::handle_client_readdir(MDRequest *mdr)
     if (offset && strcmp(dn->get_name().c_str(), offset) <= 0)
       continue;
 
+    if (dnl->get_inode()->ino() == CEPH_INO_CEPH)
+      continue;
+
     CInode *in = dnl->get_inode();
 
     // remote link?
