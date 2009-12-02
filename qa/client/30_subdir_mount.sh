@@ -3,10 +3,10 @@
 basedir=`echo $0 | sed 's/[^/]*$//g'`.
 . $basedir/common.sh
 
-mount
+client_mount
 mkdir -p $mnt/sub
 echo sub > $mnt/sub/file
-umount
+client_umount
 
 mkdir -p $mnt/1
 mkdir -p $mnt/2
