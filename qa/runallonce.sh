@@ -2,14 +2,14 @@
 
 set -e
 
-basedir=`pwd`
-testdir="${basedir}/testspace"
+basedir=`echo $0 | sed 's/[^/]*$//g'`.
+testdir="$1"
 
-mkdir -p $testdir
+test -d $testdir || ( echo "specify test dir" && exit 1 )
+cd $testdir
 
 for test in `cd $basedir && find workunits/* | grep .sh`
 do
-  cd $testdir
   echo "------ running test $test ------"
   mkdir -p $test
   pushd .
