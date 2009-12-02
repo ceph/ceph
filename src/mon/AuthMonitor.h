@@ -106,7 +106,7 @@ private:
 
   void check_rotate();
  public:
-  AuthMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p), last_rotating_ver(0), max_global_id(-1), last_allocated_id(-1) {}
+  AuthMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p), last_rotating_ver(0), max_global_id(0), last_allocated_id(0) {}
   void pre_auth(MAuth *m);
   
   void tick();  // check state, take actions

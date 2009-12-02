@@ -192,10 +192,11 @@ bool AuthMonitor::update_from_paxos()
     mon->key_server.set_ver(keys_ver);
   }
 
-  if (last_allocated_id == (uint64_t)-1) {
+  if (last_allocated_id == 0)
     last_allocated_id = max_global_id;
-  }
-  dout(10) << "update_from_paxos() last_allocated_id=" << last_allocated_id << " max_global_id=" << max_global_id << dendl;
+
+  dout(10) << "update_from_paxos() last_allocated_id=" << last_allocated_id
+	   << " max_global_id=" << max_global_id << dendl;
 
   bufferlist bl;
   ::encode(max_global_id, bl);
@@ -244,6 +245,8 @@ void AuthMonitor::init()
       ::decode(mon->key_server, p);
     }
   }
+
+  last_allocated_id = max_global_id;
 
   /* should only happen on the first time */
   update_from_paxos();
@@ -309,14 +312,14 @@ void AuthMonitor::committed()
 void AuthMonitor::election_finished()
 {
   dout(10) << "AuthMonitor::election_starting" << dendl;
-  last_allocated_id = -1;
+  last_allocated_id = 0;
 }
 
 uint64_t AuthMonitor::assign_global_id(MAuth *m, bool should_increase_max)
 {
   int total_mon = mon->monmap->size();
-  dout(10) << "AuthMonitor::assign_global_id m=" << *m << " mon=" << mon->whoami << "/" << total_mon << " last_allocated="
-          << last_allocated_id << " max_global_id=" <<  max_global_id << dendl;
+  dout(10) << "AuthMonitor::assign_global_id m=" << *m << " mon=" << mon->whoami << "/" << total_mon
+	   << " last_allocated=" << last_allocated_id << " max_global_id=" <<  max_global_id << dendl;
 
   uint64_t next_global_id = last_allocated_id + 1;
 
