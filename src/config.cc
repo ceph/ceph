@@ -171,9 +171,12 @@ void argv_to_deq(int argc, const char **argv,
 void vec_to_argv(std::vector<const char*>& args,
                  int& argc, const char **&argv)
 {
+  const char *myname = "asdf";
+  if (argc && argv)
+    myname = argv[0];
   argv = (const char**)malloc(sizeof(char*) * argc);
   argc = 1;
-  argv[0] = "asdf";
+  argv[0] = myname;
 
   for (unsigned i=0; i<args.size(); i++) 
     argv[argc++] = args[i];
