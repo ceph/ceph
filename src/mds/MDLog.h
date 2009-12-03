@@ -152,11 +152,12 @@ public:
 		  logger(0),
 		  replay_thread(this),
 		  expiring_events(0), expired_events(0),
-		  writing_subtree_map(false) {
-  }		  
+		  writing_subtree_map(false),
+		  cur_event(NULL) { }		  
   ~MDLog();
 
 
+  // -- segments --
   void start_new_segment(Context *onsync=0);
   LogSegment *get_current_segment() { 
     return segments.empty() ? 0:segments.rbegin()->second; 
@@ -182,7 +183,21 @@ public:
   bool is_capped() { return capped; }
   void cap();
 
+  // -- events --
+private:
+  LogEvent *cur_event;
+public:
+  void start_entry(LogEvent *e) {
+    assert(cur_event == NULL);
+    cur_event = e;
+  }
   void submit_entry( LogEvent *e, Context *c = 0, bool wait_for_safe=false );
+  void start_submit_entry(LogEvent *e, Context *c = 0, bool wait_for_safe=false) {
+    start_entry(e);
+    submit_entry(e, c, wait_for_safe);
+  }
+  bool entry_is_open() { return cur_event != NULL; }
+
   void wait_for_sync( Context *c );
   void wait_for_safe( Context *c );
   void flush();

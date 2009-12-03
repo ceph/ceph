@@ -1128,6 +1128,8 @@ void Migrator::handle_export_ack(MExportDirAck *m)
   // log completion. 
   //  include export bounds, to ensure they're in the journal.
   EExport *le = new EExport(mds->mdlog, dir);
+  mds->mdlog->start_entry(le);
+
   le->metablob.add_dir_context(dir);
   le->metablob.add_dir( dir, false );
   for (set<CDir*>::iterator p = bounds.begin();
@@ -1654,6 +1656,8 @@ void Migrator::handle_export_dir(MExportDir *m)
 
   // start the journal entry
   EImportStart *le = new EImportStart(dir->dirfrag(), m->bounds);
+  mds->mdlog->start_entry(le);
+
   le->metablob.add_dir_context(dir);
   
   // adjust auth (list us _first_)
@@ -1821,7 +1825,7 @@ void Migrator::import_reverse(CDir *dir)
   }
 	 
   // log our failure
-  mds->mdlog->submit_entry(new EImportFinish(dir, false));	// log failure
+  mds->mdlog->start_submit_entry(new EImportFinish(dir, false));	// log failure
        
   // bystanders?
   if (import_bystanders[dir].empty()) {
@@ -1923,7 +1927,7 @@ void Migrator::import_finish(CDir *dir)
   dout(7) << "import_finish on " << *dir << dendl;
 
   // log finish
-  mds->mdlog->submit_entry(new EImportFinish(dir, true));
+  mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
 
   // clear updated scatterlocks
   /*
@@ -2298,6 +2302,7 @@ void Migrator::handle_export_caps(MExportCaps *ex)
 
   C_M_LoggedImportCaps *finish = new C_M_LoggedImportCaps(this, in, ex->get_source().num());
   ESessions *le = new ESessions(++mds->sessionmap.projected);
+  mds->mdlog->start_entry(le);
 
   // decode new caps
   bufferlist::iterator blp = ex->cap_bl.begin();

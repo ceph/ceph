@@ -150,6 +150,9 @@ void MDLog::append()
 
 void MDLog::submit_entry( LogEvent *le, Context *c, bool wait_safe ) 
 {
+  assert(le == cur_event);
+  cur_event = NULL;
+
   if (!g_conf.mds_log) {
     // hack: log is disabled.
     if (c) {

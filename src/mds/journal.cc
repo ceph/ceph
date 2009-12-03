@@ -165,7 +165,10 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
       if (in->is_any_caps()) {
 	if (in->is_any_caps_wanted()) {
 	  dout(20) << "try_to_expire requeueing open file " << *in << dendl;
-	  if (!le) le = new EOpen(mds->mdlog);
+	  if (!le) {
+	    le = new EOpen(mds->mdlog);
+	    mds->mdlog->start_entry(le);
+	  }
 	  le->add_clean_inode(in);
 	  ls->open_files.push_back(&in->xlist_open_file);
 	} else {

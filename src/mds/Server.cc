@@ -196,8 +196,8 @@ void Server::handle_client_session(MClientSession *m)
     mds->sessionmap.set_state(session, Session::STATE_OPENING);
     mds->sessionmap.touch_session(session);
     pv = ++mds->sessionmap.projected;
-    mdlog->submit_entry(new ESession(m->get_source_inst(), true, pv),
-			new C_MDS_session_finish(mds, session, true, pv));
+    mdlog->start_submit_entry(new ESession(m->get_source_inst(), true, pv),
+			      new C_MDS_session_finish(mds, session, true, pv));
     mdlog->flush();
     break;
 
@@ -242,8 +242,8 @@ void Server::handle_client_session(MClientSession *m)
       } else
 	piv = 0;
       
-      mdlog->submit_entry(new ESession(m->get_source_inst(), false, pv, both, piv),
-			  new C_MDS_session_finish(mds, session, false, pv, both, piv));
+      mdlog->start_submit_entry(new ESession(m->get_source_inst(), false, pv, both, piv),
+				new C_MDS_session_finish(mds, session, false, pv, both, piv));
       mdlog->flush();
     }
     break;
@@ -352,8 +352,8 @@ void Server::terminate_sessions()
     if (session->is_closing()) continue;
     mds->sessionmap.set_state(session, Session::STATE_CLOSING);
     version_t pv = ++mds->sessionmap.projected;
-    mdlog->submit_entry(new ESession(session->inst, false, pv),
-			new C_MDS_session_finish(mds, session, false, pv));
+    mdlog->start_submit_entry(new ESession(session->inst, false, pv),
+			      new C_MDS_session_finish(mds, session, false, pv));
     mdlog->flush();
   }
 }
@@ -431,8 +431,8 @@ void Server::_finish_session_purge(Session *session)
   assert(session->is_stale_purging());
   mds->sessionmap.set_state(session, Session::STATE_STALE_CLOSING);
   version_t pv = ++mds->sessionmap.projected;
-  mdlog->submit_entry(new ESession(session->inst, false, pv),
-		      new C_MDS_session_finish(mds, session, false, pv));
+  mdlog->start_submit_entry(new ESession(session->inst, false, pv),
+			    new C_MDS_session_finish(mds, session, false, pv));
   mdlog->flush();
 }
 
@@ -490,8 +490,8 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     dout(7) << " client had no session, removing from session map" << dendl;
     assert(session);  // ?
     version_t pv = ++mds->sessionmap.projected;
-    mdlog->submit_entry(new ESession(session->inst, false, pv),
-			new C_MDS_session_finish(mds, session, false, pv));
+    mdlog->start_submit_entry(new ESession(session->inst, false, pv),
+			      new C_MDS_session_finish(mds, session, false, pv));
     mdlog->flush();
   } else {
     
@@ -2055,6 +2055,7 @@ void Server::handle_client_open(MDRequest *mdr)
   if (!cur->xlist_open_file.is_on_xlist()) {
     LogSegment *ls = mds->mdlog->get_current_segment();
     EOpen *le = new EOpen(mds->mdlog);
+    mdlog->start_entry(le);
     le->add_clean_inode(cur);
     ls->open_files.push_back(&cur->xlist_open_file);
     mds->mdlog->submit_entry(le);
@@ -2181,6 +2182,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "openc");
+  mdlog->start_entry(le);
   le->metablob.add_client_req(req->get_reqid());
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
@@ -2463,6 +2465,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
   // project update
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "setattr");
+  mdlog->start_entry(le);
 
   pi = cur->project_inode();
 
@@ -2546,6 +2549,7 @@ void Server::handle_client_opent(MDRequest *mdr, int cmode)
 
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "open_truncate");
+  mdlog->start_entry(le);
   le->metablob.add_truncate_start(in->ino());
   le->metablob.add_client_req(mdr->reqid);
 
@@ -2617,6 +2621,7 @@ void Server::handle_client_setlayout(MDRequest *mdr)
   // log + wait
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "setlayout");
+  mdlog->start_entry(le);
   le->metablob.add_client_req(req->get_reqid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
@@ -2698,6 +2703,7 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   // log + wait
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "setxattr");
+  mdlog->start_entry(le);
   le->metablob.add_client_req(req->get_reqid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_cow_inode(mdr, &le->metablob, cur);
@@ -2742,6 +2748,7 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   // log + wait
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "removexattr");
+  mdlog->start_entry(le);
   le->metablob.add_client_req(req->get_reqid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_cow_inode(mdr, &le->metablob, cur);
@@ -2833,6 +2840,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "mknod");
+  mdlog->start_entry(le);
   le->metablob.add_client_req(req->get_reqid());
   journal_allocated_inos(mdr, &le->metablob);
   
@@ -2883,6 +2891,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "mkdir");
+  mdlog->start_entry(le);
   le->metablob.add_client_req(req->get_reqid());
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
@@ -2946,6 +2955,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "symlink");
+  mdlog->start_entry(le);
   le->metablob.add_client_req(req->get_reqid());
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
@@ -3056,6 +3066,7 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
 
   // log + wait
   EUpdate *le = new EUpdate(mdlog, "link_local");
+  mdlog->start_entry(le);
   le->metablob.add_client_req(mdr->reqid);
   mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, 1);      // new dn
   mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, 0, PREDIRTY_PRIMARY);           // targeti
@@ -3143,6 +3154,7 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
   // add to event
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, inc ? "link_remote":"unlink_remote");
+  mdlog->start_entry(le);
   le->metablob.add_client_req(mdr->reqid);
   if (!mdr->more()->slaves.empty()) {
     dout(20) << " noting uncommitted_slaves " << mdr->more()->slaves << dendl;
@@ -3269,6 +3281,7 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_link_prep", mdr->reqid, mdr->slave_to_mds,
 				      ESlaveUpdate::OP_PREPARE, ESlaveUpdate::LINK);
+  mdlog->start_entry(le);
 
   inode_t *pi = dnl->get_inode()->project_inode();
 
@@ -3365,7 +3378,7 @@ void Server::_commit_slave_link(MDRequest *mdr, int r, CInode *targeti)
     // write a commit to the journal
     ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_link_commit", mdr->reqid, mdr->slave_to_mds,
 					ESlaveUpdate::OP_COMMIT, ESlaveUpdate::LINK);
-    mdlog->submit_entry(le, new C_MDS_CommittedSlave(this, mdr));
+    mdlog->start_submit_entry(le, new C_MDS_CommittedSlave(this, mdr));
     mdlog->flush();
   } else {
     do_link_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr);
@@ -3442,6 +3455,7 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   // journal it
   ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_link_rollback", rollback.reqid, master,
 				      ESlaveUpdate::OP_ROLLBACK, ESlaveUpdate::LINK);
+  mdlog->start_entry(le);
   le->commit.add_dir_context(parent);
   le->commit.add_dir(parent, true);
   le->commit.add_primary_dentry(in->get_parent_dn(), true, 0);
@@ -3641,6 +3655,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
 
   // prepare log entry
   EUpdate *le = new EUpdate(mdlog, "unlink_local");
+  mdlog->start_entry(le);
   le->metablob.add_client_req(mdr->reqid);
 
   if (straydn) {
@@ -4140,6 +4155,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   // -- prepare journal entry --
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "rename");
+  mdlog->start_entry(le);
   le->metablob.add_client_req(mdr->reqid);
   if (!mdr->more()->slaves.empty()) {
     dout(20) << " noting uncommitted_slaves " << mdr->more()->slaves << dendl;
@@ -4757,6 +4773,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     mdr->ls = mdlog->get_current_segment();
     ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_prep", mdr->reqid, mdr->slave_to_mds,
 					ESlaveUpdate::OP_PREPARE, ESlaveUpdate::RENAME);
+    mdlog->start_entry(le);
     le->rollback = mdr->more()->rollback_bl;
 
     bufferlist blah;  // inode import data... obviously not used if we're the slave
@@ -4835,7 +4852,9 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
   ESlaveUpdate *le;
   if (r == 0) {
     // write a commit to the journal
-    le = new ESlaveUpdate(mdlog, "slave_rename_commit", mdr->reqid, mdr->slave_to_mds, ESlaveUpdate::OP_COMMIT, ESlaveUpdate::RENAME);
+    le = new ESlaveUpdate(mdlog, "slave_rename_commit", mdr->reqid, mdr->slave_to_mds,
+			  ESlaveUpdate::OP_COMMIT, ESlaveUpdate::RENAME);
+    mdlog->start_entry(le);
 
     // unfreeze+singleauth inode
     //  hmm, do i really need to delay this?
@@ -5075,6 +5094,8 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   // journal it
   ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_rollback", rollback.reqid, master,
 				      ESlaveUpdate::OP_ROLLBACK, ESlaveUpdate::RENAME);
+  mdlog->start_entry(le);
+
   le->commit.add_dir_context(srcdir);
   le->commit.add_primary_dentry(srcdn, true, 0);
   le->commit.add_dir_context(destdir);
@@ -5328,6 +5349,8 @@ void Server::handle_client_mksnap(MDRequest *mdr)
 
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "mksnap");
+  mdlog->start_entry(le);
+
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_table_transaction(TABLE_SNAP, stid);
   mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
@@ -5472,6 +5495,8 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
   
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "rmsnap");
+  mdlog->start_entry(le);
+
   le->metablob.add_client_req(req->get_reqid());
   le->metablob.add_table_transaction(TABLE_SNAP, stid);
   mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);

@@ -1510,6 +1510,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     metablob = &eu->metablob;
     le = eu;
   }
+  mds->mdlog->start_entry(le);
   if (update_size) {  // FIXME if/when we do max_size nested accounting
     mdcache->predirty_journal_parents(mut, metablob, in, 0, PREDIRTY_PRIMARY);
     // no cow, here!
@@ -1591,6 +1592,7 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
       dout(10) << " adding to open file list " << *cur << dendl;
       LogSegment *ls = mds->mdlog->get_current_segment();
       EOpen *le = new EOpen(mds->mdlog);
+      mds->mdlog->start_entry(le);
       le->add_clean_inode(cur);
       ls->open_files.push_back(&cur->xlist_open_file);
       mds->mdlog->submit_entry(le);
@@ -1915,6 +1917,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 
   // do the update.
   EUpdate *le = new EUpdate(mds->mdlog, "cap update");
+  mds->mdlog->start_entry(le);
 
   // xattrs update?
   map<string,bufferptr> *px = 0;
@@ -2823,6 +2826,8 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   lock->start_flush();
 
   EUpdate *le = new EUpdate(mds->mdlog, "scatter_writebehind");
+  mds->mdlog->start_entry(le);
+
   mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mut, &le->metablob, in);
   

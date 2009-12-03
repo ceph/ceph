@@ -51,6 +51,7 @@ void MDSTableServer::handle_prepare(MMDSTableRequest *req)
   assert(g_conf.mds_kill_mdstable_at != 1);
 
   ETableServer *le = new ETableServer(table, TABLESERVER_OP_PREPARE, req->reqid, from, version, version);
+  mds->mdlog->start_entry(le);
   le->mutation = bl;  // original request, NOT modified return value coming out of _prepare!
   mds->mdlog->submit_entry(le, new C_Prepare(this, req, version));
   mds->mdlog->flush();
@@ -83,7 +84,8 @@ void MDSTableServer::handle_commit(MMDSTableRequest *req)
 
     _commit(tid);
     _note_commit(tid);
-    mds->mdlog->submit_entry(new ETableServer(table, TABLESERVER_OP_COMMIT, 0, -1, tid, version));
+    mds->mdlog->start_submit_entry(new ETableServer(table, TABLESERVER_OP_COMMIT, 0, -1, 
+						    tid, version));
     mds->mdlog->wait_for_sync(new C_Commit(this, req));
   }
   else if (tid <= version) {
@@ -117,7 +119,8 @@ void MDSTableServer::handle_rollback(MMDSTableRequest *req)
   dout(7) << "handle_rollback " << *req << dendl;
   _rollback(req->tid);
   _note_rollback(req->tid);
-  mds->mdlog->submit_entry(new ETableServer(table, TABLESERVER_OP_ROLLBACK, 0, -1, req->tid, version));
+  mds->mdlog->start_submit_entry(new ETableServer(table, TABLESERVER_OP_ROLLBACK, 0, -1, 
+						  req->tid, version));
   delete req;
 }
 
@@ -130,6 +133,7 @@ void MDSTableServer::do_server_update(bufferlist& bl)
   dout(10) << "do_server_update len " << bl.length() << dendl;
   _server_update(bl);
   ETableServer *le = new ETableServer(table, TABLESERVER_OP_SERVER_UPDATE, 0, -1, 0, version);
+  mds->mdlog->start_entry(le);
   le->mutation = bl;
   mds->mdlog->submit_entry(le);
 }

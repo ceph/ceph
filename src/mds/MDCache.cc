@@ -389,7 +389,8 @@ void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, Conte
 
   mut->ls = mds->mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mds->mdlog, "create system file");
-  
+  mds->mdlog->start_entry(le);
+
   predirty_journal_parents(mut, &le->metablob, in, dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, in);
   if (mdir)
@@ -808,6 +809,8 @@ void MDCache::try_subtree_merge_at(CDir *dir)
       Mutation *mut = new Mutation;
       mut->ls = mds->mdlog->get_current_segment();
       EUpdate *le = new EUpdate(mds->mdlog, "subtree merge writebehind");
+      mds->mdlog->start_entry(le);
+
       le->metablob.add_dir_context(in->get_parent_dn()->get_dir());
       journal_dirty_inode(mut, &le->metablob, in);
       
@@ -1636,6 +1639,8 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
   bool do_parent_mtime = flags & PREDIRTY_DIR;
   bool shallow = flags & PREDIRTY_SHALLOW;
 
+  assert(mds->mdlog->entry_is_open());
+
   // declare now?
   if (mut->now == utime_t())
     mut->now = g_clock.real_now();
@@ -1898,10 +1903,10 @@ struct C_MDC_CommittedMaster : public Context {
 void MDCache::log_master_commit(metareqid_t reqid)
 {
   dout(10) << "log_master_commit " << reqid << dendl;
-  mds->mdlog->submit_entry(new ECommitted(reqid), 
-			   new C_MDC_CommittedMaster(this, reqid, 
-						     uncommitted_masters[reqid].ls,
-						     uncommitted_masters[reqid].waiters));
+  mds->mdlog->start_submit_entry(new ECommitted(reqid), 
+				 new C_MDC_CommittedMaster(this, reqid, 
+							   uncommitted_masters[reqid].ls,
+							   uncommitted_masters[reqid].waiters));
   mds->mdcache->uncommitted_masters.erase(reqid);
 }
 
@@ -1968,6 +1973,8 @@ ESubtreeMap *MDCache::create_subtree_map()
 	   << dendl;
   
   ESubtreeMap *le = new ESubtreeMap();
+  mds->mdlog->start_entry(le);
+
   
   CDir *mydir = 0;
   if (myin) {
@@ -2465,8 +2472,9 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
       // replay
       assert(uncommitted_slave_updates[from].count(*p));
       // log commit
-      mds->mdlog->submit_entry(new ESlaveUpdate(mds->mdlog, "unknown", *p, from,
-						ESlaveUpdate::OP_COMMIT, uncommitted_slave_updates[from][*p]->origop));
+      mds->mdlog->start_submit_entry(new ESlaveUpdate(mds->mdlog, "unknown", *p, from,
+						      ESlaveUpdate::OP_COMMIT,
+						      uncommitted_slave_updates[from][*p]->origop));
 
       delete uncommitted_slave_updates[from][*p];
       uncommitted_slave_updates[from].erase(*p);
@@ -2569,11 +2577,11 @@ void MDCache::disambiguate_imports()
     if (dir->authority().first != CDIR_AUTH_UNKNOWN) {
       dout(10) << "ambiguous import auth known, must not be me " << *dir << dendl;
       cancel_ambiguous_import(q->first);
-      mds->mdlog->submit_entry(new EImportFinish(dir, false));
+      mds->mdlog->start_submit_entry(new EImportFinish(dir, false));
     } else {
       dout(10) << "ambiguous import auth unknown, must be me " << *dir << dendl;
       finish_ambiguous_import(q->first);
-      mds->mdlog->submit_entry(new EImportFinish(dir, true));
+      mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
     }
   }
   assert(my_ambiguous_imports.empty());
@@ -4368,6 +4376,7 @@ void MDCache::queue_file_recover(CInode *in)
     Mutation *mut = new Mutation;
     mut->ls = mds->mdlog->get_current_segment();
     EUpdate *le = new EUpdate(mds->mdlog, "queue_file_recover cow");
+    mds->mdlog->start_entry(le);
     predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
 
     s.erase(*s.begin());
@@ -4624,6 +4633,7 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   mut->add_projected_inode(in);
 
   EUpdate *le = new EUpdate(mds->mdlog, "truncate finish");
+  mds->mdlog->start_entry(le);
   le->metablob.add_dir_context(in->get_parent_dir());
   le->metablob.add_primary_dentry(in->get_projected_parent_dn(), true, in);
   le->metablob.add_truncate_finish(in->ino(), ls->offset);
@@ -6582,6 +6592,7 @@ void MDCache::_anchor_prepared(CInode *in, version_t atid, bool add)
   Mutation *mut = new Mutation;
   mut->ls = mds->mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mds->mdlog, add ? "anchor_create":"anchor_destroy");
+  mds->mdlog->start_entry(le);
   predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
   journal_dirty_inode(mut, &le->metablob, in);
   le->metablob.add_table_transaction(TABLE_ANCHOR, atid);
@@ -6656,6 +6667,8 @@ void MDCache::snaprealm_create(MDRequest *mdr, CInode *in)
   Mutation *mut = new Mutation;
   mut->ls = mds->mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mds->mdlog, "snaprealm_create");
+  mds->mdlog->start_entry(le);
+
   le->metablob.add_table_transaction(TABLE_SNAP, mdr->more()->stid);
 
   inode_t *pi = in->project_inode();
@@ -6934,6 +6947,8 @@ void MDCache::_purge_stray_purged(CDentry *dn)
   version_t pdv = dn->pre_dirty();
 
   EUpdate *le = new EUpdate(mds->mdlog, "purge_stray");
+  mds->mdlog->start_entry(le);
+
   le->metablob.add_dir_context(dn->dir);
   le->metablob.add_null_dentry(dn, true);
   le->metablob.add_destroyed_inode(in->ino());
@@ -8289,6 +8304,8 @@ void MDCache::fragment_stored(MDRequest *mdr)
 
   mdr->ls = mds->mdlog->get_current_segment();
   EFragment *le = new EFragment(mds->mdlog, diri->ino(), basefrag, bits);
+  mds->mdlog->start_entry(le);
+
   le->metablob.add_dir_context(*resultfrags.begin());
 
   // dft lock

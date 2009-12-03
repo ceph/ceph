@@ -94,8 +94,8 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
     assert(pending_commit[tid]->pending_commit_tids[table].count(tid));
     
     // log ACK.
-    mds->mdlog->submit_entry(new ETableClient(table, TABLESERVER_OP_ACK, tid),
-			     new C_LoggedAck(this, tid));
+    mds->mdlog->start_submit_entry(new ETableClient(table, TABLESERVER_OP_ACK, tid),
+				   new C_LoggedAck(this, tid));
     break;
 
   default:
