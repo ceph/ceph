@@ -371,7 +371,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	    // notify them; wait in aborting state
 	    import_notify_abort(dir, bounds);
 	    import_state[df] = IMPORT_ABORTING;
-	    assert(mds_kill_import_at != 10);
+	    assert(g_conf.mds_kill_import_at != 10);
 	  }
 	}
 	break;
@@ -599,13 +599,13 @@ void Migrator::export_dir(CDir *dir, int dest)
   export_peer[dir] = dest;
 
   dir->state_set(CDir::STATE_EXPORTING);
-  assert(mds_kill_export_at != 1);
+  assert(g_conf.mds_kill_export_at != 1);
 
   // send ExportDirDiscover (ask target)
   filepath path;
   dir->inode->make_path(path);
   mds->send_message_mds(new MExportDirDiscover(path, dir->dirfrag()), dest);
-  assert(mds_kill_export_at != 2);
+  assert(g_conf.mds_kill_export_at != 2);
 
   // start the freeze, but hold it up with an auth_pin.
   dir->auth_pin(this);
@@ -635,7 +635,7 @@ void Migrator::handle_export_discover_ack(MExportDirDiscoverAck *m)
     // freeze the subtree
     export_state[dir] = EXPORT_FREEZING;
     dir->auth_unpin(this);
-    assert(mds_kill_export_at != 3);
+    assert(g_conf.mds_kill_export_at != 3);
   }
   
   delete m;  // done
@@ -736,7 +736,7 @@ void Migrator::export_frozen(CDir *dir)
   // send.
   export_state[dir] = EXPORT_PREPPING;
   mds->send_message_mds(prep, dest);
-  assert (mds_kill_export_at != 4);
+  assert (g_conf.mds_kill_export_at != 4);
 }
 
 void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
@@ -754,7 +754,7 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
     return;
   }
 
-  assert (mds_kill_export_at != 5);
+  assert (g_conf.mds_kill_export_at != 5);
   // send warnings
   int dest = export_peer[dir];
   set<CDir*> bounds;
@@ -783,7 +783,7 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
   }
   export_state[dir] = EXPORT_WARNING;
 
-  assert(mds_kill_export_at != 6);
+  assert(g_conf.mds_kill_export_at != 6);
   // nobody to warn?
   if (export_warning_ack_waiting.count(dir) == 0) 
     export_go(dir);  // start export.
@@ -824,7 +824,7 @@ void Migrator::export_go_synced(CDir *dir)
   
   export_warning_ack_waiting.erase(dir);
   export_state[dir] = EXPORT_EXPORTING;
-  assert(kill_mds_export_at != 7);
+  assert(g_conf.mds_kill_export_at != 7);
 
   assert(dir->get_cum_auth_pins() == 0);
 
@@ -854,7 +854,7 @@ void Migrator::export_go_synced(CDir *dir)
 
   // send
   mds->send_message_mds(req, dest);
-  assert(kill_mds_export_at != 8);
+  assert(g_conf.mds_kill_export_at != 8);
 
   // stats
   if (mds->logger) mds->logger->inc(l_mds_ex);
@@ -1130,7 +1130,7 @@ void Migrator::handle_export_ack(MExportDirAck *m)
   export_warning_ack_waiting.erase(dir);
   
   export_state[dir] = EXPORT_LOGGINGFINISH;
-  assert (mds_kill_export_at != 9);
+  assert (g_conf.mds_kill_export_at != 9);
   set<CDir*> bounds;
   cache->get_subtree_bounds(dir, bounds);
 
@@ -1154,7 +1154,7 @@ void Migrator::handle_export_ack(MExportDirAck *m)
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_safe(new C_MDS_ExportFinishLogged(this, dir));
   mds->mdlog->flush();
-  assert (mds_kill_export_at != 10);
+  assert (g_conf.mds_kill_export_at != 10);
   
   delete m;
 }
@@ -1259,7 +1259,7 @@ void Migrator::export_logged_finish(CDir *dir)
 
   // wait for notifyacks
   export_state[dir] = EXPORT_NOTIFYING;
-  assert (mds_kill_export_at != 11);
+  assert (g_conf.mds_kill_export_at != 11);
   
   // no notifies to wait for?
   if (export_notify_ack_waiting[dir].empty())
@@ -1323,7 +1323,7 @@ void Migrator::export_finish(CDir *dir)
 {
   dout(5) << "export_finish " << *dir << dendl;
 
-  assert (mds_kill_export_at != 12);
+  assert (g_conf.mds_kill_export_at != 12);
   if (export_state.count(dir) == 0) {
     dout(7) << "target must have failed, not sending final commit message.  export succeeded anyway." << dendl;
     return;
@@ -1335,7 +1335,7 @@ void Migrator::export_finish(CDir *dir)
   } else {
     dout(7) << "not sending MExportDirFinish, dest has failed" << dendl;
   }
-  assert(mds_kill_export_at != 13);
+  assert(g_conf.mds_kill_export_at != 13);
   
   // finish export (adjust local cache state)
   C_Contexts *fin = new C_Contexts;
@@ -1424,7 +1424,7 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
     return;
   }
 
-  assert (mds_kill_import_at != 1);
+  assert (g_conf.mds_kill_import_at != 1);
 
   // do we have it?
   CInode *in = cache->get_inode(m->get_dirfrag().ino);
@@ -1454,7 +1454,7 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
   // reply
   dout(7) << " sending export_discover_ack on " << *in << dendl;
   mds->send_message_mds(new MExportDirDiscoverAck(df), import_peer[df]);
-  assert (md_kill_import_at != 2);  
+  assert (g_conf.mds_kill_import_at != 2);  
 }
 
 void Migrator::handle_export_cancel(MExportDirCancel *m)
@@ -1533,7 +1533,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 
     // change import state
     import_state[dir->dirfrag()] = IMPORT_PREPPING;
-    assert(mds_kill_import_at != 3);
+    assert(g_conf.mds_kill_import_at != 3);
     import_bound_ls[dir] = m->get_bounds();
     
     // bystander list
@@ -1634,7 +1634,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   
   // note new state
   import_state[dir->dirfrag()] = IMPORT_PREPPED;
-  assert(mds_kill_import_at != 4);
+  assert(g_conf.mds_kill_import_at != 4);
   // done 
   delete m;
 
@@ -1660,7 +1660,7 @@ public:
 
 void Migrator::handle_export_dir(MExportDir *m)
 {
-  assert (mds_kill_import_at != 5);
+  assert (g_conf.mds_kill_import_at != 5);
   CDir *dir = cache->get_dirfrag(m->dirfrag);
   assert(dir);
 
@@ -1723,7 +1723,7 @@ void Migrator::handle_export_dir(MExportDir *m)
 
   // note state
   import_state[dir->dirfrag()] = IMPORT_LOGGINGSTART;
-  assert (mds_kill_import_at != 6);
+  assert (g_conf.mds_kill_import_at != 6);
 
   // some stats
   if (mds->logger) {
@@ -1855,7 +1855,7 @@ void Migrator::import_reverse(CDir *dir)
     dout(7) << "notifying bystanders of abort" << dendl;
     import_notify_abort(dir, bounds);
     import_state[dir->dirfrag()] = IMPORT_ABORTING;
-    assert (mds_kill_import_at != 10);
+    assert (g_conf.mds_kill_import_at != 10);
   }
 }
 
@@ -1916,7 +1916,7 @@ void Migrator::import_logged_start(CDir *dir, int from,
   // note state
   import_state[dir->dirfrag()] = IMPORT_ACKING;
 
-  assert (mds_kill_import_at != 7);
+  assert (g_conf.mds_kill_import_at != 7);
 
   // force open client sessions and finish cap import
   mds->server->finish_force_open_sessions(imported_client_map);
@@ -1930,7 +1930,7 @@ void Migrator::import_logged_start(CDir *dir, int from,
   // send notify's etc.
   dout(7) << "sending ack for " << *dir << " to old auth mds" << from << dendl;
   mds->send_message_mds(new MExportDirAck(dir->dirfrag()), from);
-  assert (mds_kill_import_at != 8);
+  assert (g_conf.mds_kill_import_at != 8);
 
   cache->show_subtrees();
 }
@@ -1951,7 +1951,7 @@ void Migrator::import_finish(CDir *dir)
 
   // log finish
   mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
-  assert(mds_kill_import_at != 9);
+  assert(g_conf.mds_kill_import_at != 9);
 
   // clear updated scatterlocks
   /*
