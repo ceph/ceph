@@ -598,11 +598,13 @@ void Migrator::export_dir(CDir *dir, int dest)
   export_peer[dir] = dest;
 
   dir->state_set(CDir::STATE_EXPORTING);
+  assert(mds_kill_export_at != 1);
 
   // send ExportDirDiscover (ask target)
   filepath path;
   dir->inode->make_path(path);
   mds->send_message_mds(new MExportDirDiscover(path, dir->dirfrag()), dest);
+  assert(mds_kill_export_at != 2);
 
   // start the freeze, but hold it up with an auth_pin.
   dir->auth_pin(this);
@@ -632,6 +634,7 @@ void Migrator::handle_export_discover_ack(MExportDirDiscoverAck *m)
     // freeze the subtree
     export_state[dir] = EXPORT_FREEZING;
     dir->auth_unpin(this);
+    assert(mds_kill_export_at != 3);
   }
   
   delete m;  // done
