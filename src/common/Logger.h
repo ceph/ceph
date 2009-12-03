@@ -39,7 +39,7 @@ class Logger {
   bool open;
 
   // values for this instance
-  vector<long> vals;
+  vector<__s64> vals;
   vector<double> fvals;
   vector< vector<double> > vals_to_avg;  // for calculating variance
 
@@ -60,9 +60,9 @@ class Logger {
 
   void _open_log();
 
-  long inc(int f, long v = 1);
-  long set(int f, long v);
-  long get(int f);
+  __s64 inc(int f, __s64 v = 1);
+  __s64 set(int f, __s64 v);
+  __s64 get(int f);
 
   double fset(int f, double v);
   double finc(int f, double v);

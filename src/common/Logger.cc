@@ -239,14 +239,14 @@ void Logger::_flush()
 
 
 
-long Logger::inc(int key, long v)
+__s64 Logger::inc(int key, __s64 v)
 {
   if (!open || !g_conf.logger)
     return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
   vals[i] += v;
-  long r = vals[i];
+  __s64 r = vals[i];
   logger_lock.Unlock();
   return r;
 }
@@ -263,14 +263,14 @@ double Logger::finc(int key, double v)
   return r;
 }
 
-long Logger::set(int key, long v)
+__s64 Logger::set(int key, __s64 v)
 {
   if (!open || !g_conf.logger)
     return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
   //cout << this << " set " << i << " to " << v << std::endl;
-  long r = vals[i] = v;
+  __s64 r = vals[i] = v;
   logger_lock.Unlock();
   return r;
 }
@@ -302,13 +302,13 @@ double Logger::favg(int key, double v)
   return r;
 }
 
-long Logger::get(int key)
+__s64 Logger::get(int key)
 {
   if (!open || !g_conf.logger)
     return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
-  long r = 0;
+  __s64 r = 0;
   if (i >= 0 && i < (int)vals.size())
     r = vals[i];
   logger_lock.Unlock();
