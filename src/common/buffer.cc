@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <fstream>
 
+Spinlock buffer_lock("buffer_lock");
 atomic_t buffer_total_alloc;
 
 

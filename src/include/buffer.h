@@ -58,7 +58,20 @@ using std::string;
 #include "crc32c.h"
 #include "assert.h"
 
+#include "common/Spinlock.h"
+
 extern atomic_t buffer_total_alloc;
+extern Spinlock buffer_lock;
+
+//#define BUFFER_DEBUG
+
+#ifdef BUFFER_DEBUG
+# define bdout { buffer_lock.lock(); cout
+# define bendl std::endl; buffer_lock.unlock(); }
+#else
+# define bdout if (0) { cout
+# define bendl std::endl; }
+#endif
 
 class buffer {
   /*
@@ -138,13 +151,16 @@ private:
       else
 	data = 0;
       inc_total_alloc(len);
+      bdout << "raw_char alloc " << (void *)data << " " << l << " " << buffer_total_alloc.test() << bendl;
     }
     raw_char(unsigned l, char *b) : raw(b, l) {
       inc_total_alloc(len);
+      bdout << "raw_char alloc " << (void *)data << " " << l << " " << buffer_total_alloc.test() << bendl;
     }
     ~raw_char() {
       delete[] data;
       dec_total_alloc(len);      
+      bdout << "raw_char free " << (void *)data << " " << buffer_total_alloc.test() << bendl;
     }
     raw* clone_empty() {
       return new raw_char(len);
@@ -159,13 +175,16 @@ private:
       else
 	data = 0;
       inc_total_alloc(len);
+      bdout << "raw_malloc alloc " << (void *)data << " " << l << " " << buffer_total_alloc.test() << bendl;
     }
     raw_malloc(unsigned l, char *b) : raw(b, l) {
       inc_total_alloc(len);
+      bdout << "raw_malloc alloc " << (void *)data << " " << l << " " << buffer_total_alloc.test() << bendl;
     }
     ~raw_malloc() {
       free(data);
       dec_total_alloc(len);      
+      bdout << "raw_malloc free " << (void *)data << " " << buffer_total_alloc.test() << bendl;
     }
     raw* clone_empty() {
       return new raw_malloc(len);
@@ -189,10 +208,12 @@ private:
       if (!data)
 	throw new bad_alloc;
       inc_total_alloc(len);
+      bdout << "raw_mmap alloc " << (void *)data << " " << l << " " << buffer_total_alloc.test() << bendl;
     }
     ~raw_mmap_pages() {
       ::munmap(data, len);
       dec_total_alloc(len);
+      bdout << "raw_mmap free " << (void *)data << " " << buffer_total_alloc.test() << bendl;
     }
     raw* clone_empty() {
       return new raw_mmap_pages(len);
@@ -213,10 +234,12 @@ private:
       if (!data)
 	throw new bad_alloc;
       inc_total_alloc(len);
+      bdout << "raw_posix_aligned alloc " << (void *)data << " " << l << " " << buffer_total_alloc.test() << bendl;
     }
     ~raw_posix_aligned() {
       ::free((void*)data);
       dec_total_alloc(len);
+      bdout << "raw_posix_aligned free " << (void *)data << " " << buffer_total_alloc.test() << bendl;
     }
     raw* clone_empty() {
       return new raw_posix_aligned(len);
