@@ -7,3 +7,14 @@ mds_kill_export_at:
 1: After moving to STATE_EXPORTING
 2: After sending MExportDirDiscover
 3: After recieving MExportDirDiscoverAck and auth_unpin'ing.
+4: After sending MExportDirPrep
+5: After receiving MExportDirPrepAck
+6: After sending out MExportDirNotify to all replicas
+7: After switching to state EXPORT_EXPORTING
+   (all replicas have acked ExportDirNotify)
+8: After sending MExportDir to recipient
+9: After receipt of MExportAck (new state: EXPORT_LOGGINGFINISH)
+10: After logging EExport to journal
+11: After sending out MExportDirNotify (new state: EXPORT_NOTIFYING)
+12: After receiving MExportDirNotifyAck from all bystanders
+13: After sending MExportDirFinish to importer

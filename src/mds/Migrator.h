@@ -10,6 +10,8 @@
  * License version 2.1, as published by the Free Software 
  * Foundation.  See file COPYING.
  * 
+ * Handles the import and export of authority for mds cache data.
+ * See src/doc/exports.txt for a general description.
  */
 
 #ifndef __MDS_MIGRATOR_H

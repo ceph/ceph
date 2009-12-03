@@ -735,6 +735,7 @@ void Migrator::export_frozen(CDir *dir)
   // send.
   export_state[dir] = EXPORT_PREPPING;
   mds->send_message_mds(prep, dest);
+  assert (mds_kill_export_at != 4);
 }
 
 void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
@@ -752,6 +753,7 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
     return;
   }
 
+  assert (mds_kill_export_at != 5);
   // send warnings
   int dest = export_peer[dir];
   set<CDir*> bounds;
@@ -780,6 +782,7 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
   }
   export_state[dir] = EXPORT_WARNING;
 
+  assert(mds_kill_export_at != 6);
   // nobody to warn?
   if (export_warning_ack_waiting.count(dir) == 0) 
     export_go(dir);  // start export.
@@ -820,6 +823,7 @@ void Migrator::export_go_synced(CDir *dir)
   
   export_warning_ack_waiting.erase(dir);
   export_state[dir] = EXPORT_EXPORTING;
+  assert(kill_mds_export_at != 7);
 
   assert(dir->get_cum_auth_pins() == 0);
 
@@ -849,6 +853,7 @@ void Migrator::export_go_synced(CDir *dir)
 
   // send
   mds->send_message_mds(req, dest);
+  assert(kill_mds_export_at != 8);
 
   // stats
   if (mds->logger) mds->logger->inc(l_mds_ex);
@@ -1124,7 +1129,7 @@ void Migrator::handle_export_ack(MExportDirAck *m)
   export_warning_ack_waiting.erase(dir);
   
   export_state[dir] = EXPORT_LOGGINGFINISH;
-  
+  assert (mds_kill_export_at != 9);
   set<CDir*> bounds;
   cache->get_subtree_bounds(dir, bounds);
 
@@ -1148,6 +1153,7 @@ void Migrator::handle_export_ack(MExportDirAck *m)
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_safe(new C_MDS_ExportFinishLogged(this, dir));
   mds->mdlog->flush();
+  assert (mds_kill_export_at != 10);
   
   delete m;
 }
@@ -1252,6 +1258,7 @@ void Migrator::export_logged_finish(CDir *dir)
 
   // wait for notifyacks
   export_state[dir] = EXPORT_NOTIFYING;
+  assert (mds_kill_export_at != 11);
   
   // no notifies to wait for?
   if (export_notify_ack_waiting[dir].empty())
@@ -1315,6 +1322,7 @@ void Migrator::export_finish(CDir *dir)
 {
   dout(5) << "export_finish " << *dir << dendl;
 
+  assert (mds_kill_export_at != 12);
   if (export_state.count(dir) == 0) {
     dout(7) << "target must have failed, not sending final commit message.  export succeeded anyway." << dendl;
     return;
@@ -1326,6 +1334,7 @@ void Migrator::export_finish(CDir *dir)
   } else {
     dout(7) << "not sending MExportDirFinish, dest has failed" << dendl;
   }
+  assert(mds_kill_export_at != 13);
   
   // finish export (adjust local cache state)
   C_Contexts *fin = new C_Contexts;
