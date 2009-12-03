@@ -10,8 +10,8 @@
  * License version 2.1, as published by the Free Software 
  * Foundation.  See file COPYING.
  * 
- * Handles the import and export of authority for mds cache data.
- * See src/doc/exports.txt for a general description.
+ * Handles the import and export of  mds authorities and actual cache data.
+ * See src/doc/exports.txt for a description.
  */
 
 #ifndef __MDS_MIGRATOR_H
@@ -59,12 +59,11 @@ public:
   // export stages.  used to clean up intelligently if there's a failure.
   const static int EXPORT_DISCOVERING   = 1;  // dest is disovering export dir
   const static int EXPORT_FREEZING      = 2;  // we're freezing the dir tree
-  const static int EXPORT_PREPPING      = 4;  // sending dest spanning tree to export bounds
-  const static int EXPORT_WARNING       = 5;  // warning bystanders of dir_auth_pending
-  const static int EXPORT_EXPORTING     = 6;  // sent actual export, waiting for ack
-  const static int EXPORT_LOGGINGFINISH = 7;  // logging EExportFinish
-  const static int EXPORT_NOTIFYING     = 8;  // waiting for notifyacks
-  const static int EXPORT_ABORTING      = 9;  // notifying bystanders of abort
+  const static int EXPORT_PREPPING      = 3;  // sending dest spanning tree to export bounds
+  const static int EXPORT_WARNING       = 4;  // warning bystanders of dir_auth_pending
+  const static int EXPORT_EXPORTING     = 5;  // sent actual export, waiting for ack
+  const static int EXPORT_LOGGINGFINISH = 6;  // logging EExportFinish
+  const static int EXPORT_NOTIFYING     = 7;  // waiting for notifyacks
   static const char *get_export_statename(int s) {
     switch (s) {
     case EXPORT_DISCOVERING: return "discovering";
@@ -74,7 +73,6 @@ public:
     case EXPORT_EXPORTING: return "exporting";
     case EXPORT_LOGGINGFINISH: return "loggingfinish";
     case EXPORT_NOTIFYING: return "notifying";
-    case EXPORT_ABORTING: return "aborting";
     default: assert(0); return 0;
     }
   }
@@ -99,7 +97,7 @@ public:
   const static int IMPORT_PREPPED       = 4; // opened bounds, waiting for import
   const static int IMPORT_LOGGINGSTART  = 5; // got import, logging EImportStart
   const static int IMPORT_ACKING        = 6; // logged EImportStart, sent ack, waiting for finish
-  const static int IMPORT_ABORTING      = 8; // notifying bystanders of an abort before unfreezing
+  const static int IMPORT_ABORTING      = 7; // notifying bystanders of an abort before unfreezing
   static const char *get_import_statename(int s) {
     switch (s) {
     case IMPORT_DISCOVERING: return "discovering";

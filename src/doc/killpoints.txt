@@ -3,6 +3,16 @@ mds_kill_mdstable_at
 mds_kill_export_at
 mds_kill_import_at
 
+mds_kill_mdstable_at:
+1: (Server) After receiving MMDStableRequest
+2: (Server) After logging request, before sending reply to client
+3: (Client) After receiving Agree from Server
+4: (Client) Prior to sending Commit to server, but after making local change
+5: (Server) After receiving commit message from client (before doing so)
+6: (Server) After logging commit, before sending Ack
+7: (Client) After receiving commit Ack from server
+8: (Client) After logging Ack from server
+
 mds_kill_export_at:
 1: After moving to STATE_EXPORTING
 2: After sending MExportDirDiscover
