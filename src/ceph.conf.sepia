@@ -13,7 +13,10 @@
 	chdir = /home/sage/ceph/src
 	restart on core dump = false
 	user = sage
-	pre start command = "cp /home/sage/ceph/src/c$type /tmp/c$type.`date +%Y%m%d.%H%M%S`"
+;	pre start command = "cp /home/sage/ceph/src/c$type /tmp/c$type.`date +%Y%m%d.%H%M%S`"
+	copy executable to = "/tmp/c$type.`date +%Y%m%d.%H%M%S`"
+	post start command = "echo 0x7f > /proc/\`pgrep c$type | head -1\`/coredump_filter"
+
 
 ; ---------------------
 [mon]

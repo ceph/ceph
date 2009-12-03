@@ -160,7 +160,17 @@ for name in $what; do
 
     check_host || continue
 
-    cmd="$BINDIR/c$type -i $id"
+    # binary?
+    binary="$BINDIR/c$type"
+    if [ "$command" = "start" ]; then
+	get_conf copy_executable_to "" "copy executable to"
+	if [ -n "$copy_executable_to" ]; then
+	    scp $binary "$host:$copy_executable_to"
+	    binary="$copy_executable_to"
+	fi
+    fi
+
+    cmd="$binary -i $id"
 
     # conf file
     if [ "$host" = "$hostname" ]; then
