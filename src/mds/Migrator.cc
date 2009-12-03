@@ -371,6 +371,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	    // notify them; wait in aborting state
 	    import_notify_abort(dir, bounds);
 	    import_state[df] = IMPORT_ABORTING;
+	    assert(mds_kill_import_at != 10);
 	  }
 	}
 	break;
@@ -1423,6 +1424,8 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
     return;
   }
 
+  assert (mds_kill_import_at != 1);
+
   // do we have it?
   CInode *in = cache->get_inode(m->get_dirfrag().ino);
   if (!in) {
@@ -1443,7 +1446,7 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
   dout(7) << "handle_export_discover have " << df << " inode " << *in << dendl;
   
   import_state[m->get_dirfrag()] = IMPORT_DISCOVERED;
-  
+
   // pin inode in the cache (for now)
   assert(in->is_dir());
   in->get(CInode::PIN_IMPORTING);
@@ -1451,6 +1454,7 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
   // reply
   dout(7) << " sending export_discover_ack on " << *in << dendl;
   mds->send_message_mds(new MExportDirDiscoverAck(df), import_peer[df]);
+  assert (md_kill_import_at != 2);  
 }
 
 void Migrator::handle_export_cancel(MExportDirCancel *m)
@@ -1529,6 +1533,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
 
     // change import state
     import_state[dir->dirfrag()] = IMPORT_PREPPING;
+    assert(mds_kill_import_at != 3);
     import_bound_ls[dir] = m->get_bounds();
     
     // bystander list
@@ -1629,7 +1634,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   
   // note new state
   import_state[dir->dirfrag()] = IMPORT_PREPPED;
-  
+  assert(mds_kill_import_at != 4);
   // done 
   delete m;
 
@@ -1655,6 +1660,7 @@ public:
 
 void Migrator::handle_export_dir(MExportDir *m)
 {
+  assert (mds_kill_import_at != 5);
   CDir *dir = cache->get_dirfrag(m->dirfrag);
   assert(dir);
 
@@ -1717,6 +1723,7 @@ void Migrator::handle_export_dir(MExportDir *m)
 
   // note state
   import_state[dir->dirfrag()] = IMPORT_LOGGINGSTART;
+  assert (mds_kill_import_at != 6);
 
   // some stats
   if (mds->logger) {
@@ -1848,6 +1855,7 @@ void Migrator::import_reverse(CDir *dir)
     dout(7) << "notifying bystanders of abort" << dendl;
     import_notify_abort(dir, bounds);
     import_state[dir->dirfrag()] = IMPORT_ABORTING;
+    assert (mds_kill_import_at != 10);
   }
 }
 
@@ -1908,6 +1916,8 @@ void Migrator::import_logged_start(CDir *dir, int from,
   // note state
   import_state[dir->dirfrag()] = IMPORT_ACKING;
 
+  assert (mds_kill_import_at != 7);
+
   // force open client sessions and finish cap import
   mds->server->finish_force_open_sessions(imported_client_map);
   
@@ -1920,6 +1930,7 @@ void Migrator::import_logged_start(CDir *dir, int from,
   // send notify's etc.
   dout(7) << "sending ack for " << *dir << " to old auth mds" << from << dendl;
   mds->send_message_mds(new MExportDirAck(dir->dirfrag()), from);
+  assert (mds_kill_import_at != 8);
 
   cache->show_subtrees();
 }
@@ -1940,6 +1951,7 @@ void Migrator::import_finish(CDir *dir)
 
   // log finish
   mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
+  assert(mds_kill_import_at != 9);
 
   // clear updated scatterlocks
   /*

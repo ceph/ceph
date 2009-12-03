@@ -18,3 +18,15 @@ mds_kill_export_at:
 11: After sending out MExportDirNotify (new state: EXPORT_NOTIFYING)
 12: After receiving MExportDirNotifyAck from all bystanders
 13: After sending MExportDirFinish to importer
+
+mds_kill_import_at:
+1: After moving to IMPORT_DISCOVERING
+2: After moving to IMPORT_DISCOVERED and sending MExportDirDiscoverAck
+3: After moving to IMPORT_PREPPING.
+4: After moving to IMPORT_PREPPED and sending MExportDirPrepAck
+5: After receiving MExportDir message
+6: After moving to IMPORT_LOGGINGSTART and writing EImportStart
+7: After moving to IMPORT_ACKING.
+8: After sending out MExportDirAck
+9: After logging EImportFinish
+10: After entering IMPORT_ABORTING.
