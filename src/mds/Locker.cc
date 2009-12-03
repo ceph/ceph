@@ -813,8 +813,11 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
     if (in->is_auth()) {
       if (want_scatter)
 	file_mixed((ScatterLock*)lock);
-      else 
+      else {
+	if (nowait && lock->is_updated())
+	  return false;   // don't do nested lock, as that may scatter_writebehind in simple_lock!
 	simple_lock(lock);
+      }
 
       if (nowait && !lock->can_wrlock(client))
 	return false;
