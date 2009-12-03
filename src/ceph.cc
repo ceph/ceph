@@ -96,6 +96,7 @@ void handle_observe(MMonObserve *observe)
   lock.Lock();
   registered.insert(observe->machine_id);  
   lock.Unlock();
+  delete observe;
 }
 
 void handle_notify(MMonObserveNotify *notify)
@@ -223,6 +224,8 @@ void handle_notify(MMonObserveNotify *notify)
   }
 
   map_ver[notify->machine_id] = notify->ver;
+
+  delete notify;
 }
 
 static void send_observe_requests();
@@ -299,7 +302,7 @@ void handle_ack(MMonCommandAck *ack)
     which++;
     which = which % LAST;
 
-    if(ack->version > last_seen_version)
+    if (ack->version > last_seen_version)
       last_seen_version = ack->version;
 
     string w = ack->cmd[0];
@@ -336,6 +339,7 @@ void handle_ack(MMonCommandAck *ack)
     }
     lock.Unlock();
   }
+  delete ack;
 }
 
 void send_command()
