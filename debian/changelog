@@ -1,3 +1,23 @@
+ceph (0.18) unstable; urgency=low
+
+  * crush: selectable hash functions
+  * osdmap: selectable hash functions
+  * osd: basic ENOSPC handling
+  * big endian fixes
+  * mds restart fixes
+  * mds: fixed mds log trimming bug
+  * mds: fixed cap vs snap deadlock
+  * mds: fix journaling nesting problems
+  * mds: fix replay/reconnect race
+  * mds: misc journal replay, session fixes
+  * mds: fixed recursive accounting bug
+  * filestore: faster flushing
+  * uclient: snapshot fixes
+  * uclient: fixes for 32bit clients
+  * mon: safely bail (assert(0)) on write errors (like ENOSPC)
+
+ -- Sage Weil <sage@newdream.net>  Fri,  4 Dec 2009 10:01:00 -0800
+
 ceph (0.17) unstable; urgency=low
 
   * kclient: fix multiple mds mdsmap decoding

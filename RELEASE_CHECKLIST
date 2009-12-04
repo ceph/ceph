@@ -5,7 +5,6 @@
 
 - adjust version in configure.ac
 - adjust version in src/include/ceph_fs.h
-- adjust version in ceph.spec
 - add entry to debian/changelog, with proper version
 - commit
 - git tag version
