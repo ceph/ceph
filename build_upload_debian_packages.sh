@@ -62,7 +62,7 @@ EOF
     tar zcf ceph-$finalvers.tar.gz ceph-$finalvers
 fi;
 
-if [ "$repo" == "stable" ]; then
+if [ "$repo" == "stable" && "$arch" == "amd64" ]; then
     scp ceph-$vers.tar.gz sage@ceph.newdream.net:ceph.newdream.net/downloads
 fi
 
