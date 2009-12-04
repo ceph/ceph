@@ -208,12 +208,12 @@ void Logger::_flush()
 	double avg = (fvals[i] / (double)vals[i]);
 	double var = 0.0;
 	if (g_conf.logger_calc_variance) {
-	  int n = vals[i];
+	  __s64 n = vals[i];
 	  for (vector<double>::iterator p = vals_to_avg[i].begin(); n--; ++p) 
 	    var += (avg - *p) * (avg - *p);
 	}
 	char s[30];
-	sprintf(s, "\t%.5lf\t%ld\t%.5lf", avg, vals[i], var);
+	sprintf(s, "\t%.5lf\t%lld\t%.5lf", avg, (long long int)vals[i], var);
 	out << s;
       } else
 	out << "\t0\t0\t0";
