@@ -468,6 +468,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   stringstream ss;
   utime_t delay = g_clock.now();
   delay -= reconnect_start;
+  dout(10) << " reconnect_start " << reconnect_start << " delay " << delay << dendl;
 
   if (!mds->is_reconnect() || !session || session->is_closed()) {
     if (!mds->is_reconnect()) {
