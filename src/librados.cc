@@ -37,7 +37,7 @@ using namespace std;
 
 #include "osdc/Objecter.h"
 
-#include "include/librados.h"
+#include "osdc/librados.h"
 
 #define RADOS_LIST_MAX_ENTRIES 1024
 #define DOUT_SUBSYS rados
@@ -1342,8 +1342,6 @@ static Mutex rados_init_mutex("rados_init");
 static int rados_initialized = 0;
 
 static RadosClient *radosp;
-
-#include "include/librados.h"
 
 extern "C" int rados_initialize(int argc, const char **argv) 
 {

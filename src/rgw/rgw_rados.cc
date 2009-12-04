@@ -4,7 +4,7 @@
 #include "rgw_access.h"
 #include "rgw_rados.h"
 
-#include "include/librados.h"
+#include "osdc/librados.h"
 
 #include <string>
 #include <iostream>

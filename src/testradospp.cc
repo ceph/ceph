@@ -12,7 +12,7 @@
  * 
  */
 
-#include "include/librados.h"
+#include "osdc/librados.h"
 
 #include <iostream>
 

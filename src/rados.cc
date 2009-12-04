@@ -12,8 +12,9 @@
  * 
  */
 
-#include "rados_bencher.h"
-#include "include/librados.h"
+#include "osdc/rados_bencher.h"
+#include "osdc/librados.h"
+
 #include "config.h"
 #include "common/common_init.h"
 #include "common/Cond.h"

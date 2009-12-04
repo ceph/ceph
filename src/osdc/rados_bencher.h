@@ -10,7 +10,7 @@
  * Foundation.  See file COPYING.
  * 
  */
-#include "include/librados.h"
+#include "osdc/librados.h"
 #include "config.h"
 #include "common/common_init.h"
 #include "common/Cond.h"
