@@ -46,7 +46,7 @@ struct bench_data {
 int write_bench(Rados& rados, rados_pool_t pool,
 		 int secondsToRun, int concurrentios, bench_data *data);
 int seq_read_bench(Rados& rados, rados_pool_t pool,
-		   int concurrentios, bench_data *data);
+		   int secondsToRun, int concurrentios, bench_data *data);
 void *status_printer(void * data_store);
 void sanitize_object_contents(bench_data *data, int length);
   
@@ -100,7 +100,7 @@ int aio_bench(Rados& rados, rados_pool_t pool, int operation,
     if (r != 0) goto out;
   }
   else if (OP_SEQ_READ == operation) {
-    r = seq_read_bench(rados, pool, concurrentios, data);
+    r = seq_read_bench(rados, pool, secondsToRun, concurrentios, data);
     if (r != 0) goto out;
   }
   else if (OP_RAND_READ == operation) {
@@ -263,7 +263,7 @@ int write_bench(Rados& rados, rados_pool_t pool,
   return 0;
 }
 
-int seq_read_bench(Rados& rados, rados_pool_t pool,
+int seq_read_bench(Rados& rados, rados_pool_t pool, int seconds_to_run,
 		   int concurrentios, bench_data *write_data) {
   bench_data *data = new bench_data();
   data->done = false;
@@ -283,6 +283,8 @@ int seq_read_bench(Rados& rados, rados_pool_t pool,
   int errors = 0;
   utime_t start_time;
   utime_t start_times[concurrentios];
+  utime_t time_to_run;
+  time_to_run.set_from_double(seconds_to_run);
   double total_latency = 0;
   int r = 0;
   sanitize_object_contents(data, 128); //clean it up once; subsequent
@@ -319,8 +321,12 @@ int seq_read_bench(Rados& rados, rados_pool_t pool,
   char* newName;
   utime_t runtime;
   bufferlist *cur_contents;
+  utime_t finish_time = data->start_time + time_to_run;
+  bool not_overtime = true;
 
-  for (int i = 0; i < write_data->finished - concurrentios; ++i) {
+  for (int i = 0;
+       i < write_data->finished - concurrentios && not_overtime;
+       ++i) {
     slot = data->finished % concurrentios;
     newName = new char[128];
     snprintf(newName, 128, "Object %d", data->started);
@@ -361,6 +367,8 @@ int seq_read_bench(Rados& rados, rados_pool_t pool,
     delete name[slot];
     name[slot] = newName;
     delete cur_contents;
+    if (seconds_to_run != 0)
+      not_overtime = !(g_clock.now() > finish_time);
   }
 
   //wait for final reads to complete
