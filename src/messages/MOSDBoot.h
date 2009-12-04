@@ -23,10 +23,12 @@
 class MOSDBoot : public PaxosServiceMessage {
  public:
   OSDSuperblock sb;
+  entity_addr_t hb_addr;
 
   MOSDBoot() : PaxosServiceMessage( MSG_OSD_BOOT, 0){}
-  MOSDBoot(OSDSuperblock& s) : 
-    PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch), sb(s) {
+  MOSDBoot(OSDSuperblock& s, entity_addr_t& hb_addr_ref) : 
+    PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch),
+    sb(s), hb_addr(hb_addr_ref) {
   }
 
   const char *get_type_name() { return "osd_boot"; }
@@ -37,11 +39,13 @@ class MOSDBoot : public PaxosServiceMessage {
   void encode_payload() {
     paxos_encode();
     ::encode(sb, payload);
+    ::encode(hb_addr, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(sb, p);
+    ::decode(hb_addr, p);
   }
 };
 

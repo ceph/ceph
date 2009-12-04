@@ -155,10 +155,11 @@ public:
 
     map<entity_addr_t,utime_t> new_blacklist;
     vector<entity_addr_t> old_blacklist;
+    map<int32_t, entity_addr_t> new_hb_up;
 
     void encode(bufferlist& bl) {
       // base
-      __u16 v = 2;
+      __u16 v = 3;
       ::encode(v, bl);
       ::encode(fsid, bl);
       ::encode(epoch, bl); 
@@ -176,6 +177,7 @@ public:
       ::encode(new_pg_temp, bl);
 
       // extended
+      ::encode(new_hb_up, bl);
       ::encode(new_pool_names, bl);
       ::encode(new_up_thru, bl);
       ::encode(new_last_clean_interval, bl);
@@ -204,6 +206,8 @@ public:
 	::decode(new_pg_temp, p);
       
       // extended
+      if (v >= 3)
+	::decode(new_hb_up, p);
       ::decode(new_pool_names, p);
       ::decode(new_up_thru, p);
       ::decode(new_last_clean_interval, p);
@@ -240,6 +244,7 @@ private:
   int32_t max_osd;
   vector<uint8_t> osd_state;
   vector<entity_addr_t> osd_addr;
+  vector<entity_addr_t> osd_hb_addr;
   vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
   vector<osd_info_t> osd_info;
   map<pg_t,vector<int> > pg_temp;  // temp pg mapping (e.g. while we rebuild)
@@ -301,6 +306,7 @@ private:
       osd_weight[o] = CEPH_OSD_OUT;
     }
     osd_addr.resize(m);
+    osd_hb_addr.resize(m);
   }
 
   void get_all_osds(set<int32_t>& ls) { 
@@ -390,6 +396,10 @@ private:
     assert(exists(osd));
     return osd_addr[osd];
   }
+  const entity_addr_t &get_hb_addr(int osd) {
+    assert(exists(osd));
+    return osd_hb_addr[osd];
+  }
   entity_inst_t get_inst(int osd) {
     assert(exists(osd) && is_up(osd));
     return entity_inst_t(entity_name_t::OSD(osd),
@@ -406,8 +416,7 @@ private:
   entity_inst_t get_hb_inst(int osd) {
     assert(exists(osd));
     entity_inst_t i(entity_name_t::OSD(osd),
-		    osd_addr[osd]);
-    i.addr.erank = i.addr.erank + 1;  // heartbeat addr erank is regular addr erank + 1
+		    osd_hb_addr[osd]);
     return i;
   }
 
@@ -493,12 +502,18 @@ private:
       //cout << "epoch " << epoch << " down osd" << i->first << endl;
     }
     for (map<int32_t,entity_addr_t>::iterator i = inc.new_up.begin();
-         i != inc.new_up.end(); 
+         i != inc.new_up.end();
          i++) {
       osd_state[i->first] |= CEPH_OSD_UP;
       osd_addr[i->first] = i->second;
+      if (inc.new_hb_up.empty()) {
+	//this is a backward-compatibility hack
+	osd_hb_addr[i->first] = i->second;
+	osd_hb_addr[i->first].erank = osd_hb_addr[i->first].erank + 1;
+      }
+      else osd_hb_addr[i->first] = inc.new_hb_up[i->first];
       osd_info[i->first].up_from = epoch;
-      //cout << "epoch " << epoch << " up osd" << i->first << " at " << i->second << endl;
+      //cout << "epoch " << epoch << " up osd" << i->first << " at " << i->second << "with hb addr" << osd_hb_addr[i->first] << std::endl;
     }
 
     // info
@@ -542,7 +557,7 @@ private:
 
   // serialize, unserialize
   void encode(bufferlist& bl) {
-    __u16 v = 2;
+    __u16 v = 3;
     ::encode(v, bl);
 
     // base
@@ -572,9 +587,9 @@ private:
     ::encode(cbl, bl);
 
     // extended
+    ::encode(osd_hb_addr, bl);
     ::encode(osd_info, bl);
     ::encode(pool_name, bl);
-
     ::encode(blacklist, bl);
   }
   
@@ -609,8 +624,8 @@ private:
     crush.decode(cblp);
 
     // extended
+    ::decode(osd_hb_addr, p);
     ::decode(osd_info, p);
-
     ::decode(pool_name, p);
     name_pool.clear();
     for (map<int,nstring>::iterator i = pool_name.begin(); i != pool_name.end(); i++)

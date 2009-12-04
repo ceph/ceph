@@ -1264,7 +1264,8 @@ void OSD::ms_handle_connect(Connection *con)
 void OSD::send_boot()
 {
   dout(10) << "send_boot" << dendl;
-  monc->send_mon_message(new MOSDBoot(superblock));
+  entity_addr_t hb_addr = heartbeat_messenger->get_myaddr();
+  monc->send_mon_message(new MOSDBoot(superblock, hb_addr));
 }
 
 void OSD::queue_want_up_thru(epoch_t want)

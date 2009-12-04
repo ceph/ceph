@@ -437,6 +437,7 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     // mark new guy up.
     down_pending_out.erase(from);  // if any
     pending_inc.new_up[from] = m->get_orig_source_addr();
+    pending_inc.new_hb_up[from] = m->hb_addr;
     
     // mark in?
     pending_inc.new_weight[from] = CEPH_OSD_IN;

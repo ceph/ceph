@@ -52,7 +52,7 @@ void OSDMap::print(ostream& out)
 	  << " down_at " << info.down_at
 	  << " last_clean " << info.last_clean_first << "-" << info.last_clean_last << ")";
       if (is_up(i))
-	out << " " << get_addr(i);
+	out << " " << get_addr(i) << " " << get_hb_addr(i);
       out << "\n";
     }
   }
