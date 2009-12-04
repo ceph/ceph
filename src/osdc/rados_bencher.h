@@ -22,6 +22,10 @@
 #include <sstream>
 
 Mutex dataLock("data mutex");
+const int OP_WRITE     = 1;
+const int OP_SEQ_READ  = 2;
+const int OP_RAND_READ = 3;
+const char *BENCH_DATA = "benchmark_write_data";
 
 struct bench_data {
   bool done; //is the benchmark is done
@@ -42,42 +46,66 @@ struct bench_data {
 int write_bench(Rados& rados, rados_pool_t pool,
 		 int secondsToRun, int concurrentios, bench_data *data);
 int seq_read_bench(Rados& rados, rados_pool_t pool,
-		   int concurrentios, bench_data *data, int verify);
+		   int concurrentios, bench_data *data);
 void *status_printer(void * data_store);
 void sanitize_object_contents(bench_data *data, int length);
   
-int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
-	      int concurrentios, int writeSize, int sequentialTest) {
-
-  char* contentsChars = new char[writeSize];
+int aio_bench(Rados& rados, rados_pool_t pool, int operation,
+	      int secondsToRun, int concurrentios, int op_size) {
+  int object_size = op_size;
+  int num_objects = 0;
+  char* contentsChars = new char[op_size];
   int r = 0;
+
+  //set up the pool
+  cout << "open pool result = " << rados.open_pool("data",&pool)
+       << " pool = " << pool << std::endl;
+  
+  //get data from previous write run, if available
+  if (operation != OP_WRITE) {
+    bufferlist object_data;
+    r = rados.read(pool, BENCH_DATA, 0, object_data, sizeof(int)*2);
+    if (r <= 0) {
+      delete contentsChars;
+      if (r == -2)
+	cerr << "Must write data before running a read benchmark!" << std::endl;
+      return r;
+    }
+    bufferlist::iterator p = object_data.begin();
+    ::decode(object_size, p);
+    ::decode(num_objects, p);
+  } else {
+    object_size = op_size;
+  }
   
   dataLock.Lock();
   bench_data *data = new bench_data();
   data->done = false;
-  data->object_size = writeSize;
-  data->trans_size = writeSize; //just for now
+  data->object_size = object_size;
+  data->trans_size = op_size;
   data->in_flight = 0;
   data->started = 0;
-  data->finished = 0;
+  data->finished = num_objects;
   data->min_latency = 9999.0; // this better be higher than initial latency!
   data->max_latency = 0;
   data->avg_latency = 0;
   data->object_contents = contentsChars;
   dataLock.Unlock();
 
-
   //fill in contentsChars deterministically so we can check returns
-  sanitize_object_contents(data, writeSize);
-  //set up the pool
-  cout << "open pool result = " << rados.open_pool("data",&pool) << " pool = " << pool << std::endl;
-  
-  r = write_bench(rados, pool, secondsToRun, concurrentios, data);
-  if (r != 0) goto out;
+  sanitize_object_contents(data, data->object_size);
 
-  //check objects for consistency if requested
-  if (sequentialTest) {
-    r = seq_read_bench(rados, pool, concurrentios, data, 1);
+  if (OP_WRITE == operation) {
+    r = write_bench(rados, pool, secondsToRun, concurrentios, data);
+    if (r != 0) goto out;
+  }
+  else if (OP_SEQ_READ == operation) {
+    r = seq_read_bench(rados, pool, concurrentios, data);
+    if (r != 0) goto out;
+  }
+  else if (OP_RAND_READ == operation) {
+    cerr << "Random test not implemented yet!" << std::endl;
+    r = -1;
   }
   
  out:
@@ -223,11 +251,20 @@ int write_bench(Rados& rados, rados_pool_t pool,
        << "Average Latency:       " << data->avg_latency << std::endl
        << "Max latency:           " << data->max_latency << std::endl
        << "Min latency:           " << data->min_latency << std::endl;
+
+  //write object size/number data for read benchmarks
+  int written_objects[2];
+  written_objects[0] = data->object_size;
+  written_objects[1] = data->finished;
+  bufferlist b_write;
+  ::encode(data->object_size, b_write);
+  ::encode(data->finished, b_write);
+  rados.write(pool, BENCH_DATA, 0, b_write, sizeof(int)*2);
   return 0;
 }
 
 int seq_read_bench(Rados& rados, rados_pool_t pool,
-		   int concurrentios, bench_data *write_data, int verify) {
+		   int concurrentios, bench_data *write_data) {
   bench_data *data = new bench_data();
   data->done = false;
   data->object_size = write_data->object_size;
@@ -315,15 +352,11 @@ int seq_read_bench(Rados& rados, rados_pool_t pool,
     dataLock.Lock();
     ++data->started;
     ++data->in_flight;
+    snprintf(data->object_contents, data->object_size, "I'm the %dth object!", i);
     dataLock.Unlock();
-    if (verify) {
-      dataLock.Lock();
-      snprintf(data->object_contents, data->object_size, "I'm the %dth object!", i);
-      dataLock.Unlock();
-      if (memcmp(data->object_contents, cur_contents->c_str(), data->object_size) != 0) {
-	cerr << name[slot] << " is not correct!";
-	++errors;
-      }
+    if (memcmp(data->object_contents, cur_contents->c_str(), data->object_size) != 0) {
+      cerr << name[slot] << " is not correct!";
+      ++errors;
     }
     delete name[slot];
     name[slot] = newName;
@@ -348,16 +381,12 @@ int seq_read_bench(Rados& rados, rados_pool_t pool,
     ++data->finished;
     data->avg_latency = total_latency / data->finished;
     --data->in_flight;
-    dataLock.Unlock();
     completions[slot]-> release();
-    if (verify) {
-      dataLock.Lock();
-      snprintf(data->object_contents, data->object_size, "I'm the %dth object!", data->finished-1);
-      dataLock.Unlock();
-      if (memcmp(data->object_contents, contents[slot]->c_str(), data->object_size) != 0) {
-	cerr << name[slot] << " is not correct!" << std::endl;
-	++errors;
-      }
+    snprintf(data->object_contents, data->object_size, "I'm the %dth object!", data->finished-1);
+    dataLock.Unlock();
+    if (memcmp(data->object_contents, contents[slot]->c_str(), data->object_size) != 0) {
+      cerr << name[slot] << " is not correct!" << std::endl;
+      ++errors;
     }
     delete name[slot];
     delete contents[slot];

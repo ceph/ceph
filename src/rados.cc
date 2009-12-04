@@ -49,8 +49,8 @@ void usage()
   cerr << "   mksnap foo  -- create snap 'foo'\n";
   cerr << "   rmsnap foo  -- remove snap 'foo'\n\n";
 
-  cerr << "   bench <seconds> [-t concurrentwrites] [-b writesize] [verify]\n";
-  cerr << "              default is 16 concurrent IOs and 4 MB writes size\n\n";
+  cerr << "   bench <seconds> write|seq|rand [-t concurrent_operations] [-b op_size]\n";
+  cerr << "              default is 16 concurrent IOs and 4 MB op size\n\n";
 
   cerr << "Options:\n";
   cerr << "   -p pool\n";
@@ -84,7 +84,7 @@ int main(int argc, const char **argv)
   const char *pool = 0;
  
   int concurrent_ios = 16;
-  int write_size = 1 << 22;
+  int op_size = 1 << 22;
 
   const char *snapname = 0;
   rados_snap_t snapid = CEPH_NOSNAP;
@@ -101,7 +101,7 @@ int main(int argc, const char **argv)
     } else if (CONF_ARG_EQ("concurrent-ios", 't')) {
       CONF_SAFE_SET_ARG_VAL(&concurrent_ios, OPT_INT);
     } else if (CONF_ARG_EQ("block-size", 'b')) {
-      CONF_SAFE_SET_ARG_VAL(&write_size, OPT_INT);
+      CONF_SAFE_SET_ARG_VAL(&op_size, OPT_INT);
     } else if (args[i][0] == '-' && nargs.empty()) {
       cerr << "unrecognized option " << args[i] << std::endl;
       usage();
@@ -333,17 +333,19 @@ int main(int argc, const char **argv)
   }
   
   else if (strcmp(nargs[0], "bench") == 0) {
-    if (!pool || nargs.size() < 2)
+    if (!pool || nargs.size() < 3)
       usage();
     int seconds = atoi(nargs[1]);
-    int verify = 0;
-    for (unsigned i=2; i<nargs.size(); i++) {
-      if (strcmp(nargs[i], "verify") == 0)
-	verify = 1;
-      else
-	usage();
-    }
-    ret = aio_bench(rados, p, seconds, concurrent_ios, write_size, verify);
+    int operation = 0;
+    if (strcmp(nargs[2], "write") == 0)
+      operation = OP_WRITE;
+    else if (strcmp(nargs[2], "seq") == 0)
+      operation = OP_SEQ_READ;
+    else if (strcmp(nargs[2], "rand") == 0)
+      operation = OP_RAND_READ;
+    else
+      usage();
+    ret = aio_bench(rados, p, operation, seconds, concurrent_ios, op_size);
     if (ret != 0)
       cerr << "error during benchmark: " << ret << std::endl;
   }
