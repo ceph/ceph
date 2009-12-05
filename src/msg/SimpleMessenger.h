@@ -379,9 +379,11 @@ private:
   entity_addr_t rank_addr;
   
   // local
-  unsigned max_local, num_local;
+  /*unsigned max_local, num_local;
   vector<Endpoint*> local;
-  vector<bool>             stopped;
+  vector<bool>             stopped; */
+  Endpoint *local_endpoint;
+  bool endpoint_stopped;
   
   // remote
   hash_map<entity_addr_t, Pipe*> rank_pipe;
@@ -415,8 +417,7 @@ public:
   SimpleMessenger() :
     accepter(this),
     lock("SimpleMessenger::lock"), started(false), did_bind(false), need_addr(true),
-    max_local(0), num_local(0),
-    my_type(-1),
+    local_endpoint(NULL), my_type(-1),
     global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0) { }
   ~SimpleMessenger() { }
 
