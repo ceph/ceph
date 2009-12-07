@@ -786,10 +786,10 @@ int SimpleMessenger::Pipe::accept()
   out_seq = existing->out_seq;
   in_seq = existing->in_seq;
   dout(10) << "accept   out_seq " << out_seq << "  in_seq " << in_seq << dendl;
-  for (map<int, list<Message*> >::iterator p = existing->q.begin();
-       p != existing->q.end();
+  for (map<int, list<Message*> >::iterator p = existing->out_q.begin();
+       p != existing->out_q.end();
        p++)
-    q[p->first].splice(q[p->first].begin(), p->second);
+    out_q[p->first].splice(out_q[p->first].begin(), p->second);
   
   existing->lock.Unlock();
 
@@ -1158,7 +1158,7 @@ void SimpleMessenger::Pipe::requeue_sent()
   if (sent.empty())
     return;
 
-  list<Message*>& rq = q[CEPH_MSG_PRIO_HIGHEST];
+  list<Message*>& rq = out_q[CEPH_MSG_PRIO_HIGHEST];
   while (!sent.empty()) {
     Message *m = sent.back();
     sent.pop_back();
@@ -1175,10 +1175,10 @@ void SimpleMessenger::Pipe::discard_queue()
   for (list<Message*>::iterator p = sent.begin(); p != sent.end(); p++)
     (*p)->put();
   sent.clear();
-  for (map<int,list<Message*> >::iterator p = q.begin(); p != q.end(); p++)
+  for (map<int,list<Message*> >::iterator p = out_q.begin(); p != out_q.end(); p++)
     for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++)
       (*r)->put();
-  q.clear();
+  out_q.clear();
 }
 
 

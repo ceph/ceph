@@ -108,7 +108,7 @@ private:
     bool reader_running;
     bool writer_running;
 
-    map<int, list<Message*> > q;  // priority queue
+    map<int, list<Message*> > out_q;  // priority queue
     list<Message*> sent;
     Cond cond;
     bool keepalive;
@@ -164,7 +164,7 @@ private:
       out_seq(0), in_seq(0), in_seq_acked(0),
       reader_thread(this), writer_thread(this) { }
     ~Pipe() {
-      assert(q.empty());
+      assert(out_q.empty());
       assert(sent.empty());
       connection_state->put();
     }
@@ -195,7 +195,7 @@ private:
 
     __u32 get_out_seq() { return out_seq; }
 
-    bool is_queued() { return !q.empty() || keepalive; }
+    bool is_queued() { return !out_q.empty() || keepalive; }
 
     entity_addr_t& get_peer_addr() { return peer_addr; }
 
@@ -224,7 +224,7 @@ private:
     }    
     void _send(Message *m) {
       m->get();
-      q[m->get_priority()].push_back(m);
+      out_q[m->get_priority()].push_back(m);
       cond.Signal();
     }
     void send_keepalive() {
@@ -238,14 +238,14 @@ private:
     }
     Message *_get_next_outgoing() {
       Message *m = 0;
-      while (!m && !q.empty()) {
-	map<int, list<Message*> >::reverse_iterator p = q.rbegin();
+      while (!m && !out_q.empty()) {
+	map<int, list<Message*> >::reverse_iterator p = out_q.rbegin();
 	if (!p->second.empty()) {
 	  m = p->second.front();
 	  p->second.pop_front();
 	}
 	if (p->second.empty())
-	  q.erase(p->first);
+	  out_q.erase(p->first);
       }
       return m;
     }
