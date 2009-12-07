@@ -1450,9 +1450,8 @@ int FileStore::_write(coll_t cid, const sobject_t& oid,
       derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     }
 
-    if (g_conf.filestore_flusher)
-      queue_flusher(fd, offset, len);
-    else {
+    if (!g_conf.filestore_flusher ||
+	!queue_flusher(fd, offset, len)) {
       if (g_conf.filestore_sync_flush)
 	::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
       ::close(fd);
@@ -1585,16 +1584,30 @@ int FileStore::_clone_range(coll_t cid, const sobject_t& oldoid, const sobject_t
 }
 
 
-void FileStore::queue_flusher(int fd, __u64 off, __u64 len)
+bool FileStore::queue_flusher(int fd, __u64 off, __u64 len)
 {
+  bool queued;
   lock.Lock();
-  dout(10) << "queue_flusher ep " << sync_epoch << " fd " << fd << " " << off << "~" << len << dendl;
-  flusher_queue.push_back(sync_epoch);
-  flusher_queue.push_back(fd);
-  flusher_queue.push_back(off);
-  flusher_queue.push_back(len);
-  flusher_cond.Signal();
+  if (flusher_queue_len < g_conf.filestore_flusher_max_fds) {
+    flusher_queue.push_back(sync_epoch);
+    flusher_queue.push_back(fd);
+    flusher_queue.push_back(off);
+    flusher_queue.push_back(len);
+    flusher_queue_len++;
+    flusher_cond.Signal();
+    dout(10) << "queue_flusher ep " << sync_epoch << " fd " << fd << " " << off << "~" << len
+	     << " qlen " << flusher_queue_len
+	     << dendl;
+    queued = true;
+  } else {
+    dout(10) << "queue_flusher ep " << sync_epoch << " fd " << fd << " " << off << "~" << len
+	     << " qlen " << flusher_queue_len 
+	     << " hit flusher_max_fds " << g_conf.filestore_flusher_max_fds
+	     << ", skipping async flush" << dendl;
+    queued = false;
+  }
   lock.Unlock();
+  return queued;
 }
 
 void FileStore::flusher_entry()
@@ -1605,7 +1618,9 @@ void FileStore::flusher_entry()
     if (!flusher_queue.empty()) {
       list<__u64> q;
       q.swap(flusher_queue);
-      
+
+      int num = flusher_queue_len;  // see how many we're taking, here
+
       lock.Unlock();
       while (!q.empty()) {
 	__u64 ep = q.front();
@@ -1625,6 +1640,7 @@ void FileStore::flusher_entry()
 	::close(fd);
       }
       lock.Lock();
+      flusher_queue_len -= num;   // they're definitely closed, forget
     } else {
       if (stop)
 	break;

@@ -84,6 +84,7 @@ class FileStore : public JournalingObjectStore {
   // flusher thread
   Cond flusher_cond;
   list<__u64> flusher_queue;
+  int flusher_queue_len;
   void flusher_entry();
   struct FlusherThread : public Thread {
     FileStore *fs;
@@ -93,7 +94,7 @@ class FileStore : public JournalingObjectStore {
       return 0;
     }
   } flusher_thread;
-  void queue_flusher(int fd, __u64 off, __u64 len);
+  bool queue_flusher(int fd, __u64 off, __u64 len);
   int open_journal();
 
  public:
@@ -104,7 +105,7 @@ class FileStore : public JournalingObjectStore {
     attrs(this), fake_attrs(false), 
     collections(this), fake_collections(false),
     lock("FileStore::lock"),
-    sync_epoch(0), stop(false), sync_thread(this), flusher_thread(this) { }
+    sync_epoch(0), stop(false), sync_thread(this), flusher_queue_len(0), flusher_thread(this) { }
 
   int mount();
   int umount();
