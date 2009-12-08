@@ -69,7 +69,7 @@ class Logger {
   double favg(int f, double v);
 
   //void flush();
-  void _flush();
+  void _flush(bool reset=true);
 
   void set_start(utime_t s);
 };

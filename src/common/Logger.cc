@@ -88,13 +88,17 @@ static void flush_all_loggers()
   int now_sec = fromstart.sec();
 
   // do any catching up we need to
-  while (now_sec - last_flush >= g_conf.logger_interval) {
-    generic_dout(20) << "fromstart " << fromstart << " last_flush " << last_flush << " flushing" << dendl;
-    for (list<Logger*>::iterator p = logger_list.begin();
-	 p != logger_list.end();
-	 ++p) 
-      (*p)->_flush();
-    last_flush += g_conf.logger_interval;
+  bool twice = now_sec - last_flush >= 2 * g_conf.logger_interval;
+ again:
+  generic_dout(20) << "fromstart " << fromstart << " last_flush " << last_flush << " flushing" << dendl;
+  for (list<Logger*>::iterator p = logger_list.begin();
+       p != logger_list.end();
+       ++p) 
+    (*p)->_flush();
+  last_flush = now_sec - (now_sec % g_conf.logger_interval);
+  if (twice) {
+    twice = false;
+    goto again;
   }
 
   // schedule next flush event
@@ -185,7 +189,7 @@ Logger::~Logger()
 }
 
 
-void Logger::_flush()
+void Logger::_flush(bool reset)
 {
   // header?
   wrote_header_last++;
@@ -228,11 +232,13 @@ void Logger::_flush()
   }
   out << std::endl;
   
-  // reset the counters
-  for (int i=0; i<type->num_keys; i++) {
-    if (type->inc_keys[i]) {
-      this->vals[i] = 0;
-      this->fvals[i] = 0;
+  if (reset) {
+    // reset the counters
+    for (int i=0; i<type->num_keys; i++) {
+      if (type->inc_keys[i]) {
+	this->vals[i] = 0;
+	this->fvals[i] = 0;
+      }
     }
   }
 }
