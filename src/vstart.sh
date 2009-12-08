@@ -73,6 +73,9 @@ case $1 in
     --nodaemon )
 	    nodaemon=1
 	    ;;
+    --smallmds )
+	    smallmds=1
+	    ;;
     mon | cmon )
 	    start_mon=1
 	    start_all=0
@@ -356,6 +359,12 @@ if [ "$start_mds" -eq 1 ]; then
 	    	cat <<EOF >> $conf
 [mds.$name]
 EOF
+		if [ "$smallmds" -eq 1 ]; then
+		    cat <<EOF >> $conf
+	mds log max segments = 2
+	mds cache size = 10000
+EOF
+		fi
 		if [ "$cephx" -eq 1 ]; then
 	    	    cat <<EOF >> $conf
         keys file = $key_fn
