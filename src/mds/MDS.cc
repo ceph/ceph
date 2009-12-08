@@ -1469,7 +1469,15 @@ bool MDS::ms_handle_reset(Connection *con)
 {
   Mutex::Locker l(mds_lock);
   dout(0) << "ms_handle_reset on " << con->get_peer_addr() << dendl;
-  objecter->ms_handle_reset(con);
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
+    objecter->ms_handle_reset(con);
+  } else if (con->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT) {
+    Session *session = (Session *)con->get_priv();
+    if (!session || session->is_closed())
+      messenger->mark_down(con->get_peer_addr());
+    if (session)
+      session->put();
+  }
   return false;
 }
 
