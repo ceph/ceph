@@ -5,6 +5,8 @@ set -e
 basedir=`echo $0 | sed 's/[^/]*$//g'`.
 testdir="$1"
 
+[ ${basedir:0:1} == "." ] && basedir=`pwd`/${basedir:1}
+
 test -d $testdir || ( echo "specify test dir" && exit 1 )
 cd $testdir
 
