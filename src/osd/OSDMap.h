@@ -698,10 +698,14 @@ private:
     switch (g_conf.osd_pg_layout) {
     case CEPH_PG_LAYOUT_CRUSH:
       {
+	int preferred = pg.preferred();
+	if (preferred >= max_osd || preferred >= crush.get_max_devices())
+	  preferred = -1;
+
 	// what crush rule?
 	int ruleno = crush.find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
 	if (ruleno >= 0)
-	  crush.do_rule(ruleno, pps, osds, size, pg.preferred(), osd_weight);
+	  crush.do_rule(ruleno, pps, osds, size, preferred, osd_weight);
       }
       break;
       
