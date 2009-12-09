@@ -202,8 +202,7 @@ public:
       ::decode(new_up, p);
       ::decode(new_down, p);
       ::decode(new_weight, p);
-      if (v >= 2)
-	::decode(new_pg_temp, p);
+      ::decode(new_pg_temp, p);
       
       // extended
       if (v >= 3)
@@ -212,12 +211,6 @@ public:
       ::decode(new_up_thru, p);
       ::decode(new_last_clean_interval, p);
       ::decode(new_lost, p);
-      if (v < 2) {
-	map<pg_t,uint32_t> new_pg_swap_primary;
-	list<pg_t> old_pg_swap_primary;
-	::decode(new_pg_swap_primary, p);
-	::decode(old_pg_swap_primary, p);
-      }
       ::decode(new_blacklist, p);
       ::decode(old_blacklist, p);
     }
@@ -639,10 +632,6 @@ private:
     for (map<int,nstring>::iterator i = pool_name.begin(); i != pool_name.end(); i++)
       name_pool[i->second] = i->first;
    
-    if (v < 2) {
-      map<pg_t,uint32_t> pg_swap_primary;
-      ::decode(pg_swap_primary, p);
-    }
     ::decode(blacklist, p);
   }
  
