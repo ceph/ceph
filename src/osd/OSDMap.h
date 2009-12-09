@@ -624,7 +624,15 @@ private:
     crush.decode(cblp);
 
     // extended
-    ::decode(osd_hb_addr, p);
+    if (v >= 3)
+      ::decode(osd_hb_addr, p);
+    if (v < 3 || (osd_hb_addr.empty() && osd_addr.size())) {
+      osd_hb_addr.resize(osd_addr.size());
+      for (unsigned i=0; i<osd_addr.size(); i++) {
+	osd_hb_addr[i] = osd_addr[i];
+	osd_hb_addr[i].erank = osd_hb_addr[i].erank + 1;
+      }
+    }
     ::decode(osd_info, p);
     ::decode(pool_name, p);
     name_pool.clear();
