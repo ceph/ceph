@@ -2256,7 +2256,7 @@ int FileStore::collection_list(coll_t c, vector<sobject_t>& ls)
   ls.resize(inolist.size());
   int i = 0;
   for (vector< pair<ino_t,sobject_t> >::iterator p = inolist.begin(); p != inolist.end(); p++)
-    ls[i++] = p->second;
+    ls[i++].swap(p->second);
   
   dout(10) << "collection_list " << fn << " = 0 (" << ls.size() << " objects)" << dendl;
   ::closedir(dir);

@@ -33,6 +33,9 @@ struct object_t {
   nstring name;
 
   object_t(const char *s = 0) : name(s) {}
+  void swap(object_t& o) {
+    name.swap(o.name);
+  }
   
   void encode(bufferlist &bl) const {
     ::encode(name, bl);
@@ -127,6 +130,13 @@ struct sobject_t {
 
   sobject_t() : snap(0) {}
   sobject_t(object_t o, snapid_t s) : oid(o), snap(s) {}
+
+  void swap(sobject_t& o) {
+    oid.swap(o.oid);
+    snapid_t t = snap;
+    snap = o.snap;
+    o.snap = t;
+  }
 
   void encode(bufferlist& bl) const {
     ::encode(oid, bl);
