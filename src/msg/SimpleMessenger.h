@@ -98,7 +98,7 @@ private:
     entity_addr_t peer_addr;
     Policy policy;
     
-    Mutex lock;
+    Mutex pipe_lock;
     int state;
 
   protected:
@@ -159,7 +159,7 @@ private:
     Pipe(SimpleMessenger *r, int st) : 
       rank(r),
       sd(-1), peer_type(-1),
-      lock("SimpleMessenger::Pipe::lock"),
+      pipe_lock("SimpleMessenger::Pipe::pipe_lock"),
       state(st), 
       connection_state(new Connection),
       reader_running(false), writer_running(false),
@@ -191,9 +191,9 @@ private:
 	return;
       cond.Signal();
       reader_thread.kill(SIGUSR2);
-      lock.Unlock();
+      pipe_lock.Unlock();
       reader_thread.join();
-      lock.Lock();
+      pipe_lock.Lock();
     }
 
     // public constructors
@@ -206,7 +206,7 @@ private:
       dout(0) << "queuing received message " << m << "in msgr " << rank << dendl;
       list<Message *>& queue = in_q[priority];
 
-      lock.Lock();
+      pipe_lock.Lock();
       queue.push_back(m);
       if ( 1 == queue.size()) { //this pipe isn't on the endpoint queue
 	if (!queue_items.count(priority)) { //create an item for that priority
@@ -214,18 +214,20 @@ private:
 	    pair_item(priority, new xlist<Pipe *>::item(this));
 	  queue_items.insert(pair_item);
 	}
-	rank->local_endpoint->queue_lock.Lock();
+	pipe_lock.Unlock();
+	rank->local_endpoint->endpoint_lock.Lock();
 	rank->local_endpoint->
 	  queued_pipes[priority].push_back(queue_items[priority]);
-	rank->local_endpoint->queue_lock.Unlock();
+	rank->local_endpoint->endpoint_lock.Unlock();
+	pipe_lock.Lock();
       }
-      lock.Unlock();
+      pipe_lock.Unlock();
 
       //increment queue length counter
-      rank->local_endpoint->lock.Lock();
+      rank->local_endpoint->endpoint_lock.Lock();
       ++rank->local_endpoint->qlen;
       rank->local_endpoint->cond.Signal();
-      rank->local_endpoint->lock.Unlock();
+      rank->local_endpoint->endpoint_lock.Unlock();
     }
     
     void queue_received(Message *m) {
@@ -259,9 +261,9 @@ private:
     void stop();
 
     void send(Message *m) {
-      lock.Lock();
+      pipe_lock.Lock();
       _send(m);
-      lock.Unlock();
+      pipe_lock.Unlock();
     }    
     void _send(Message *m) {
       m->get();
@@ -269,9 +271,9 @@ private:
       cond.Signal();
     }
     void send_keepalive() {
-      lock.Lock();
+      pipe_lock.Lock();
       _send_keepalive();
-      lock.Unlock();
+      pipe_lock.Unlock();
     }    
     void _send_keepalive() {
       keepalive = true;
@@ -304,9 +306,8 @@ private:
   class Endpoint : public Messenger {
     SimpleMessenger *rank;
     Pipe *local_pipe;
-    Mutex lock;
+    Mutex endpoint_lock;
     Cond cond;
-    Mutex queue_lock;
     map<int, xlist<Pipe *> > queued_pipes;
     map<int, xlist<Pipe *>::iterator> queued_pipe_iters;
     bool stop;
@@ -341,33 +342,32 @@ private:
     }
 
     void queue_connect(Connection *con) {
-      lock.Lock();
+      endpoint_lock.Lock();
       connect_q.push_back(con);
       local_delivery((Message*)D_CONNECT, CEPH_MSG_PRIO_HIGHEST);
       cond.Signal();
-      lock.Unlock();
+      endpoint_lock.Unlock();
     }
     void queue_remote_reset(Connection *con) {
-      lock.Lock();
+      endpoint_lock.Lock();
       remote_reset_q.push_back(con);
       local_delivery((Message*)D_BAD_REMOTE_RESET, CEPH_MSG_PRIO_HIGHEST);
       cond.Signal();
-      lock.Unlock();
+      endpoint_lock.Unlock();
     }
     void queue_reset(Connection *con) {
-      lock.Lock();
+      endpoint_lock.Lock();
       reset_q.push_back(con);
       local_delivery((Message*)D_BAD_RESET, CEPH_MSG_PRIO_HIGHEST);
       cond.Signal();
-      lock.Unlock();
+      endpoint_lock.Unlock();
     }
 
   public:
     Endpoint(SimpleMessenger *r, entity_name_t name, int rn) : 
       Messenger(name),
       rank(r),
-      lock("SimpleMessenger::Endpoint::lock"),
-      queue_lock("SimpleMessenger::Endpoint:queue_lock"),
+      endpoint_lock("SimpleMessenger::Endpoint::endpoint_lock"),
       stop(false),
       qlen(0),
       my_rank(rn),
