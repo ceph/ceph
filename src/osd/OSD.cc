@@ -983,7 +983,7 @@ void OSD::update_heartbeat_peers()
 	       (!osdmap->is_up(p->first) ||
 		osdmap->get_hb_inst(p->first) != old_inst[p->first])) {
       dout(10) << " marking down old _to peer " << old_inst[p->first] << " as of " << p->second << dendl;      
-      messenger->mark_down(old_inst[p->first].addr);
+      heartbeat_messenger->mark_down(old_inst[p->first].addr);
     }
   }
 
@@ -1809,6 +1809,9 @@ void OSD::note_down_osd(int osd)
   messenger->mark_down(osdmap->get_addr(osd));
 
   heartbeat_lock.Lock();
+
+  heartbeat_messenger->mark_down(osdmap->get_hb_addr(osd));
+
   if (heartbeat_inst.count(osd)) {
     if (heartbeat_inst[osd] == osdmap->get_hb_inst(osd)) {
       dout(10) << "note_down_osd removing heartbeat_inst " << heartbeat_inst[osd] << dendl;
