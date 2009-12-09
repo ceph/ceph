@@ -421,6 +421,10 @@ int FileStore::mount()
     fake_collections = true;
   }
 
+  // get fsid
+  char fn[PATH_MAX];
+  sprintf(fn, "%s/fsid", basedir.c_str());
+
   // fake attrs? 
   // let's test to see if they work.
   if (g_conf.filestore_fake_attrs) {
@@ -429,8 +433,8 @@ int FileStore::mount()
   } else {
     int x = rand();
     int y = x+1;
-    do_setxattr(basedir.c_str(), "user.test", &x, sizeof(x));
-    do_getxattr(basedir.c_str(), "user.test", &y, sizeof(y));
+    do_setxattr(fn, "user.test", &x, sizeof(x));
+    do_getxattr(fn, "user.test", &y, sizeof(y));
     /*dout(10) << "x = " << x << "   y = " << y 
 	     << "  r1 = " << r1 << "  r2 = " << r2
 	     << " " << strerror(errno)
@@ -441,10 +445,6 @@ int FileStore::mount()
     }
   }
 
-  char fn[PATH_MAX];
-
-  // get fsid
-  sprintf(fn, "%s/fsid", basedir.c_str());
   fsid_fd = ::open(fn, O_RDWR|O_CREAT, 0644);
   ::read(fsid_fd, &fsid, sizeof(fsid));
 
