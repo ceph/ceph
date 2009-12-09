@@ -1407,11 +1407,11 @@ void SimpleMessenger::Pipe::reader()
 	       << m->get_seq() << " " << m << " " << *m
 	       << dendl;
       
-      // deliver
+      //deliver
       if (rank->local_endpoint)
-	rank->local_endpoint->queue_message(m);
+	queue_received(m);
       else derr(0) << "reader got message " << *m
-		   << "which isn't local" << dendl;
+		   << "but there is no endpoint!" << dendl;
 
       lock.Lock();
     } 
@@ -2197,7 +2197,7 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
       if (dest_addr.get_erank() == 0 && local_endpoint) {
         // local
         dout(20) << "submit_message " << *m << " local" << dendl;
-	local_endpoint->queue_message(m);
+	local_endpoint->local_delivery(m, m->get_priority());
       } else {
         derr(0) << "submit_message " << *m << " " << dest_addr << " local but wrong erank? dropping." << dendl;
         assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
