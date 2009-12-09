@@ -16,7 +16,8 @@
 	chdir = /home/sage/ceph/src
 	restart on core dump = false
 	user = sage
-	pre start command = "cp /home/sage/ceph/src/c$type /tmp/c$type.`date +%Y%m%d.%H%M%S`"
+	copy executable to = "/tmp/c$type.`date +%Y%m%d.%H%M%S`"
+	post start command = "echo 0x7f > /proc/\`pgrep c$type | head -1\`/coredump_filter"
 
 ; ---------------------
 [mon]
@@ -38,7 +39,7 @@
 [mon2]
 	host = cosd2
 	mon addr = 10.3.14.97:6789
-	log dir = /data/ceph4
+	log dir = /data/cosd2
 
 
 ; ---------------------
@@ -54,10 +55,6 @@
 	log dir = /data/ceph4
 ;	valgrind = --tool=massif
 
-[mds.bar]
-	host = cephbooter
-	log dir = /data/cephbooter
-	auto start = false
 
 ; ---------------------
 [osd]
@@ -67,7 +64,7 @@
 	debug journal = 20
 	log dir = /data/cosd$id
 	osd data = /mnt/osd$id
-	btrfs options = "flushoncommit,wedgeabortedtrans,usertrans"
+	btrfs options = "flushoncommit" ;,wedgeabortedtrans,usertrans"
 ;	user = root
 
 ;	osd journal = /mnt/osd$id/journal
