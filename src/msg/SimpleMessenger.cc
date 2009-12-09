@@ -259,74 +259,79 @@ void SimpleMessenger::Accepter::stop()
 
 void SimpleMessenger::Endpoint::dispatch_entry()
 {
+  dout(0) << "entered SimpleMessenger::Endpoint::dispatch_entry" << dendl;
+  map<int, xlist<Pipe *> >::reverse_iterator high_iter;
   lock.Lock();
   while (!stop) {
-    if (!dispatch_queue.empty()) {
-      list<Message*> ls;
+    dout(0) << "in outer !stop loop of SimpleMessenger::Endpoint::dispatch_entry" << dendl;
+    while (!queued_pipes.empty()) {
+      dout(0) << "SimpleMessenger::Endpoint::dispatch_entry delivering a message qlen " << qlen << dendl;
+      //get highest-priority pipe
+      high_iter = queued_pipes.rbegin();
+      int priority = high_iter->first;
+      xlist<Pipe *>& pipe_list = high_iter->second;
+      Pipe *pipe = pipe_list.front();
+      dout(0) << "high priority: " << priority << " taking pipe " << pipe << dendl;
+      //move pipe to back of line -- or just take off if no more messages
+      pipe->lock.Lock();
+      list<Message *>& m_queue = pipe->in_q[priority];
+      pipe_list.pop_front();
+      if (m_queue.size() > 1) {
+	pipe_list.push_back(pipe->queue_items[priority]);
+	dout(0) << "requeuing pipe because there are more messages" << dendl;
+      }
+      if (pipe_list.empty())
+	queued_pipes.erase(priority);
+      --qlen;
+      lock.Unlock(); //done with the pipe queue for a while
 
-      // take highest priority message off the queue
-      map<int, list<Message*> >::reverse_iterator p = dispatch_queue.rbegin();
-      ls.push_back(p->second.front());
-      p->second.pop_front();
-      if (p->second.empty())
-	dispatch_queue.erase(p->first);
-      qlen--;
-
-      lock.Unlock();
+      //get message from pipe
+      Message *m = m_queue.front();
+      m_queue.pop_front();
+      pipe->lock.Unlock(); // done with the pipe's message queue now
       {
-        // deliver
-        while (!ls.empty()) {
-	  if (stop) {
-	    dout(1) << "dispatch: stop=true, discarding " << ls.size() 
-		    << " messages in dispatch queue" << dendl;
-	    break;
-	  }
-          Message *m = ls.front();
-          ls.pop_front();
-	  if ((long)m == D_BAD_REMOTE_RESET) {
-	    lock.Lock();
-	    Connection *con = remote_reset_q.front();
-	    remote_reset_q.pop_front();
-	    lock.Unlock();
-	    ms_deliver_handle_remote_reset(con);
-	    con->put();
- 	  } else if ((long)m == D_CONNECT) {
-	    lock.Lock();
-	    Connection *con = connect_q.front();
-	    connect_q.pop_front();
-	    lock.Unlock();
-	    ms_deliver_handle_connect(con);
-	    con->put();
- 	  } else if ((long)m == D_BAD_RESET) {
-	    lock.Lock();
-	    Connection *con = reset_q.front();
-	    reset_q.pop_front();
-	    lock.Unlock();
-	    ms_deliver_handle_reset(con);
-	    con->put();
-	  } else {
-	    dout(1) << "<== " << m->get_source_inst()
-		    << " " << m->get_seq()
-		    << " ==== " << *m
-		    << " ==== " << m->get_payload().length() << "+" << m->get_middle().length()
-		    << "+" << m->get_data().length()
-		    << " (" << m->get_footer().front_crc << " " << m->get_footer().middle_crc
-		    << " " << m->get_footer().data_crc << ")"
-		    << " " << m 
-		    << dendl;
-	    ms_deliver_dispatch(m);
-	    dout(20) << "done calling dispatch on " << m << dendl;
-	  }
-        }
+	if ((long)m == D_BAD_REMOTE_RESET) {
+	  lock.Lock();
+	  Connection *con = remote_reset_q.front();
+	  remote_reset_q.pop_front();
+	  lock.Unlock();
+	  ms_deliver_handle_remote_reset(con);
+	  con->put();
+	} else if ((long)m == D_CONNECT) {
+	  lock.Lock();
+	  Connection *con = connect_q.front();
+	  connect_q.pop_front();
+	  lock.Unlock();
+	  ms_deliver_handle_connect(con);
+	  con->put();
+	} else if ((long)m == D_BAD_RESET) {
+	  lock.Lock();
+	  Connection *con = reset_q.front();
+	  reset_q.pop_front();
+	  lock.Unlock();
+	  ms_deliver_handle_reset(con);
+	  con->put();
+	} else {
+	  dout(1) << "<== " << m->get_source_inst()
+		  << " " << m->get_seq()
+		  << " ==== " << *m
+		  << " ==== " << m->get_payload().length() << "+" << m->get_middle().length()
+		  << "+" << m->get_data().length()
+		  << " (" << m->get_footer().front_crc << " " << m->get_footer().middle_crc
+		  << " " << m->get_footer().data_crc << ")"
+		  << " " << m 
+		  << dendl;
+	  ms_deliver_dispatch(m);
+	  dout(20) << "done calling dispatch on " << m << dendl;
+	}
       }
       lock.Lock();
-      continue;
     }
-    cond.Wait(lock);
+    cond.Wait(lock); //wait for something to get put on queue
   }
   lock.Unlock();
   dout(15) << "dispatch: ending loop " << dendl;
-
+  
   // deregister
   rank->unregister_entity(this);
   put();

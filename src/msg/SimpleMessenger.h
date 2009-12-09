@@ -102,6 +102,7 @@ private:
     int state;
 
   protected:
+    friend class Endpoint;
     Connection *connection_state;
 
     utime_t backoff;         // backoff time
@@ -111,7 +112,7 @@ private:
 
     map<int, list<Message*> > out_q;  // priority queue for outbound msgs
     map<int, list<Message*> > in_q; // and inbound ones
-    map<int, xlist<Pipe *>::item > queue_items; //put in msgr queue
+    map<int, xlist<Pipe *>::item* > queue_items; //put in msgr queue
     list<Message*> sent;
     Cond cond;
     bool keepalive;
@@ -167,6 +168,10 @@ private:
       out_seq(0), in_seq(0), in_seq_acked(0),
       reader_thread(this), writer_thread(this) { }
     ~Pipe() {
+      for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
+	   i != queue_items.end();
+	   ++i)
+	delete i->second;
       assert(out_q.empty());
       assert(sent.empty());
       connection_state->put();
@@ -198,21 +203,29 @@ private:
     //we have two queue_received's to allow local signal delivery
     // via Message * (that doesn't actually point to a Message)
     void queue_received(Message *m, int priority) {
+      dout(0) << "queuing received message " << m << "in msgr " << rank << dendl;
       list<Message *>& queue = in_q[priority];
+
       lock.Lock();
       queue.push_back(m);
-      if ( 1 == queue.size()) {
+      if ( 1 == queue.size()) { //this pipe isn't on the endpoint queue
 	if (!queue_items.count(priority)) { //create an item for that priority
-	  pair< int, xlist<Pipe *>::item >
-	    pair_item(priority, xlist<Pipe *>::item(this));
+	  pair< int, xlist<Pipe *>::item* >
+	    pair_item(priority, new xlist<Pipe *>::item(this));
 	  queue_items.insert(pair_item);
 	}
 	rank->local_endpoint->queue_lock.Lock();
 	rank->local_endpoint->
-	  queued_pipes[priority].push_back(&queue_items[priority]);
+	  queued_pipes[priority].push_back(queue_items[priority]);
 	rank->local_endpoint->queue_lock.Unlock();
       }
       lock.Unlock();
+
+      //increment queue length counter
+      rank->local_endpoint->lock.Lock();
+      ++rank->local_endpoint->qlen;
+      rank->local_endpoint->cond.Signal();
+      rank->local_endpoint->lock.Unlock();
     }
     
     void queue_received(Message *m) {
