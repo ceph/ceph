@@ -218,7 +218,6 @@ private:
     //we have two queue_received's to allow local signal delivery
     // via Message * (that doesn't actually point to a Message)
     void queue_received(Message *m, int priority) {
-      dout(0) << "queuing received message " << m << "in msgr " << rank << dendl;
       list<Message *>& queue = in_q[priority];
 
       pipe_lock.Lock();
@@ -237,7 +236,6 @@ private:
       ++rank->local_endpoint->qlen;
       rank->local_endpoint->qlen_lock.unlock();
       rank->local_endpoint->cond.Signal();
-      dout(0) << "finished queuing received message " << m << "in msgr " << rank << dendl;
     }
     
     void queue_received(Message *m) {
