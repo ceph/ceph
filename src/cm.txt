@@ -25,6 +25,11 @@ device 20 device20
 device 21 device21
 device 22 device22
 device 23 device23
+device 24 device24
+device 25 device25
+device 26 device26
+device 27 device27
+
 
 # types
 type 0 device
@@ -32,98 +37,47 @@ type 1 domain
 type 2 pool
 
 # buckets
-pool metaroot {
-     	id -2
-	alg straw
-	item device0 weight 1.000
-	item device4 weight 1.000
-	item device8 weight 1.000
-	item device12 weight 1.000
-	item device16 weight 1.000
-	item device20 weight 1.000
-}
-
-domain cosd1 {
-	id -3		# do not change unnecessarily
-	alg uniform	# do not change bucket size (4) unnecessarily
-	item device1 weight 1.000 pos 0
-	item device2 weight 1.000 pos 1
-	item device3 weight 1.000 pos 2
-}
-domain cosd2 {
-	id -4		# do not change unnecessarily
-	alg uniform	# do not change bucket size (4) unnecessarily
-	item device5 weight 1.000 pos 0
-	item device6 weight 1.000 pos 1
-	item device7 weight 1.000 pos 2
-}
-domain cosd3 {
-	id -5		# do not change unnecessarily
-	alg uniform	# do not change bucket size (4) unnecessarily
-	item device9 weight 1.000 pos 0
-	item device10 weight 1.000 pos 1
-	item device11 weight 1.000 pos 2
-}
-domain cosd4 {
-	id -6		# do not change unnecessarily
-	alg uniform	# do not change bucket size (4) unnecessarily
-	item device13 weight 1.000 pos 0
-	item device14 weight 1.000 pos 1
-	item device15 weight 1.000 pos 2
-}
-domain cosd5 {
-	id -7		# do not change unnecessarily
-	alg uniform	# do not change bucket size (4) unnecessarily
-	item device17 weight 1.000 pos 0
-	item device18 weight 1.000 pos 1
-	item device19 weight 1.000 pos 2
-}
-domain cosd6 {
-	id -8		# do not change unnecessarily
-	alg uniform	# do not change bucket size (4) unnecessarily
-	item device21 weight 1.000 pos 0
-	item device22 weight 1.000 pos 1
-	item device23 weight 1.000 pos 2
-}
-pool root {
+domain root {
 	id -1		# do not change unnecessarily
 	alg straw
-	item cosd1 weight 4.000
-	item cosd2 weight 4.000
-	item cosd3 weight 4.000
-	item cosd4 weight 4.000
-	item cosd5 weight 4.000
-#	item cosd6 weight 4.000
+	item device0 weight 1.000
+	item device1 weight 1.000
+	item device2 weight 1.000
+	item device3 weight 1.000
+	item device4 weight 1.000
+	item device5 weight 1.000
+	item device6 weight 1.000
+	item device7 weight 1.000
+	item device8 weight 1.000
+	item device9 weight 1.0
 }
 
-
-
 # rules
-rule metadata {
-	pool 0
+rule data {
+	ruleset 0
 	type replicated
-	min_size 2
-	max_size 3
-	step take metaroot
+	min_size 1
+	max_size 10
+	step take root
 	step choose firstn 0 type device
 	step emit
 }
-rule data {
-	pool 1
+rule metadata {
+	ruleset 1
 	type replicated
-	min_size 2
-	max_size 3
+	min_size 1
+	max_size 10
 	step take root
-	step chooseleaf firstn 0 type domain
+	step choose firstn 0 type device
 	step emit
 }
 rule casdata {
-	pool 2
+	ruleset 2
 	type replicated
-	min_size 2
-	max_size 2
+	min_size 1
+	max_size 10
 	step take root
-	step chooseleaf firstn 0 type domain
+	step choose firstn 0 type device
 	step emit
 }
 
