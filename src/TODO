@@ -77,6 +77,7 @@ v0.19
 
 
 pending wire, disk format changes
+- add v to PGMap, PGMap::Incremental
 
 bugs
 - mds memory leak
@@ -265,6 +266,7 @@ mds
   - rename: importing inode... also journal imported client map?
 
 mon
+- don't allow lpg_num expansion and osd addition at the same time?
 - how to shrink cluster?
 - how to tell osd to cleanly shut down
 - mds injectargs N should take mds# or id.  * should bcast to standy mds's.

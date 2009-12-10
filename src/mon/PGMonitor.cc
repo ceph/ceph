@@ -552,8 +552,21 @@ bool PGMonitor::register_new_pgs()
       }
     }
   } 
-  dout(10) << "register_new_pgs registered " << created << " new pgs" << dendl;
-  if (created) {
+
+  int max = MIN(osdmap->get_max_osd(), osdmap->crush.get_max_devices());
+  int removed = 0;
+  for (set<pg_t>::iterator p = pg_map.creating_pgs.begin();
+       p != pg_map.creating_pgs.end();
+       p++)
+    if (p->preferred() >= max) {
+      dout(20) << " removing creating_pg " << *p << " because preferred >= max osd or crush device" << dendl;
+      pending_inc.pg_remove.insert(*p);
+      removed++;
+    }
+
+  dout(10) << "register_new_pgs registered " << created << " new pgs, removed "
+	   << removed << " uncreated pgs" << dendl;
+  if (created || removed) {
     pending_inc.pg_scan = epoch;
     return true;
   }
@@ -566,6 +579,9 @@ void PGMonitor::send_pg_creates()
 
   map<int, MOSDPGCreate*> msg;
   utime_t now = g_clock.now();
+  
+  OSDMap *osdmap = &mon->osdmon()->osdmap;
+  int max = MIN(osdmap->get_max_osd(), osdmap->crush.get_max_devices());
 
   for (set<pg_t>::iterator p = pg_map.creating_pgs.begin();
        p != pg_map.creating_pgs.end();
@@ -582,6 +598,10 @@ void PGMonitor::send_pg_creates()
       continue;  // blarney!
     }
     int osd = acting[0];
+
+    // don't send creates for non-existant preferred osds!
+    if (pgid.preferred() >= max)
+      continue;
 
     // throttle?
     if (last_sent_pg_create.count(osd) &&

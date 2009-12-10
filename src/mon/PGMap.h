@@ -44,6 +44,7 @@ public:
     set<int> osd_stat_rm;
     epoch_t osdmap_epoch;
     epoch_t pg_scan;  // osdmap epoch
+    set<pg_t> pg_remove;
 
     void encode(bufferlist &bl) const {
       ::encode(version, bl);
@@ -52,6 +53,7 @@ public:
       ::encode(osd_stat_rm, bl);
       ::encode(osdmap_epoch, bl);
       ::encode(pg_scan, bl);
+      ::encode(pg_remove, bl);
     }
     void decode(bufferlist::iterator &bl) {
       ::decode(version, bl);
@@ -60,6 +62,8 @@ public:
       ::decode(osd_stat_rm, bl);
       ::decode(osdmap_epoch, bl);
       ::decode(pg_scan, bl);
+      if (!bl.end())
+	::decode(pg_remove, bl);
     }
 
     Incremental() : version(0), osdmap_epoch(0), pg_scan(0) {}
@@ -101,6 +105,15 @@ public:
 	nearfull_osds.erase(from);
       }
     }
+    for (set<pg_t>::iterator p = inc.pg_remove.begin();
+	 p != inc.pg_remove.end();
+	 p++) {
+      if (pg_set.count(*p)) {
+	pg_set.erase(*p);
+	stat_pg_sub(*p, pg_stat[*p]);
+	pg_stat.erase(*p);
+      }
+    }
 
     for (set<int>::iterator p = inc.osd_stat_rm.begin();
 	 p != inc.osd_stat_rm.end();
@@ -109,6 +122,7 @@ public:
 	stat_osd_sub(osd_stat[*p]);
 	osd_stat.erase(*p);
       }
+
     if (inc.osdmap_epoch)
       last_osdmap_epoch = inc.osdmap_epoch;
     if (inc.pg_scan)
