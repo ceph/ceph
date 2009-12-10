@@ -35,6 +35,17 @@ using namespace __gnu_cxx;
 #include "tcp.h"
 
 
+/*
+ * This class handles transmission and reception of messages. Generally
+ * speaking, there are 3 major components:
+ * 1) SimpleMessenger. It's the exterior class and handles the others.
+ * 2) Endpoint. Wraps the Messenger object which this SimpleMessenger serves,
+ *    and handles individual message delivery. Once upon a time you could have
+ *    multiple Endpoints in a SimpleMessenger; now it *might* be simpler and
+ *    cleaner to merge the class with SimpleMessenger itself.
+ * 3) Pipe. Each network connection is handled through a pipe, which handles
+ *    the input and output of each message.
+ */
 
 /* Rank - per-process
  */
@@ -217,6 +228,7 @@ private:
 
     //we have two queue_received's to allow local signal delivery
     // via Message * (that doesn't actually point to a Message)
+    //Don't call while holding pipe_lock!
     void queue_received(Message *m, int priority) {
       list<Message *>& queue = in_q[priority];
 

@@ -257,6 +257,15 @@ void SimpleMessenger::Accepter::stop()
  * Endpoint
  */
 
+/*
+ * This function delivers incoming messages to the Messenger.
+ * Pipes with messages are kept in queues; when beginning a message
+ * delivery the highest-priority queue is selected, the pipe from the
+ * front of the queue is removed, and its message read. If the pipe
+ * has remaining messages at that priority level, it is re-placed on to the
+ * end of the queue. If the queue is empty; it's removed.
+ * The message is then delivered and the process starts again.
+ */
 void SimpleMessenger::Endpoint::dispatch_entry()
 {
   endpoint_lock.Lock();
@@ -1173,6 +1182,10 @@ void SimpleMessenger::Pipe::requeue_sent()
   }
 }
 
+/*
+ * Tears down the Pipe's message queues, and removes them from the Endpoint.
+ * Must hold pipe_lock prior to calling.
+ */
 void SimpleMessenger::Pipe::discard_queue()
 {
   dout(10) << "discard_queue" << dendl;
