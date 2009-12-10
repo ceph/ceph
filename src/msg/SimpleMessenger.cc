@@ -1179,6 +1179,17 @@ void SimpleMessenger::Pipe::requeue_sent()
 void SimpleMessenger::Pipe::discard_queue()
 {
   dout(10) << "discard_queue" << dendl;
+  bool endpoint = false;
+  if (rank->local_endpoint) {
+    pipe_lock.Unlock();
+    rank->local_endpoint->endpoint_lock.Lock();//to remove from pipe queue
+    for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
+	 i != queue_items.end();
+	 ++i)
+      i->second->remove_myself();
+    endpoint = true;
+    pipe_lock.Lock();
+  }
   for (list<Message*>::iterator p = sent.begin(); p != sent.end(); p++)
     (*p)->put();
   sent.clear();
@@ -1186,6 +1197,17 @@ void SimpleMessenger::Pipe::discard_queue()
     for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++)
       (*r)->put();
   out_q.clear();
+  for (map<int,list<Message*> >::iterator p = in_q.begin(); p != in_q.end(); p++) {
+    if (endpoint) {
+      int size = in_q.size();
+      rank->local_endpoint->qlen -= size;
+    }
+    for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++)
+      delete *r;
+  }
+  if (endpoint)
+    rank->local_endpoint->endpoint_lock.Unlock();
+  in_q.clear();
 }
 
 
@@ -1941,12 +1963,12 @@ void SimpleMessenger::reaper()
     pipe_reap_queue.pop_front();
     dout(10) << "reaper reaping pipe " << p << " " << p->get_peer_addr() << dendl;
     p->pipe_lock.Lock();
+    p->discard_queue();
     p->pipe_lock.Unlock();
     p->unregister_pipe();
     assert(pipes.count(p));
     pipes.erase(p);
     p->join();
-    p->discard_queue();
     dout(10) << "reaper reaped pipe " << p << " " << p->get_peer_addr() << dendl;
     assert(p->sd < 0);
     delete p;
