@@ -946,6 +946,7 @@ bool parse_config_file(ConfFile *cf, bool auto_update)
       config_option *opt = &config_optionsp[i];
       conf_read_key(NULL, opt->conf_name, opt->type, opt->val_ptr, opt->val_ptr, true);
   }
+  conf_read_key(NULL, "lockdep", OPT_INT, &g_lockdep, &g_lockdep, false);
 
   return true;
 }
