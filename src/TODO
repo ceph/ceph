@@ -61,10 +61,12 @@ v0.18
 - mds: fix replay/reconnect race (caused (fast) client reconnect to fail)
 - mds: misc journal replay, session fixes
 
+v0.19
 
-- mount btrfs by UUID?
+- ms_dispatch fairness
 
-- qa
+- qa: snap test.  maybe walk through 2.6.* kernel trees?
+
 - osd: rebuild pg log
 - osd: handle storage errors
 
@@ -77,7 +79,7 @@ v0.18
 pending wire, disk format changes
 
 bugs
-- SIGBUS
+- mds memory leak
 - mislinked directory?  (cpusr.sh, mv /c/* /c/t, more cpusr, ls /c/t)
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
