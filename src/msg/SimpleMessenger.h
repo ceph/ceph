@@ -344,23 +344,20 @@ private:
     void queue_connect(Connection *con) {
       endpoint_lock.Lock();
       connect_q.push_back(con);
-      local_delivery((Message*)D_CONNECT, CEPH_MSG_PRIO_HIGHEST);
-      cond.Signal();
       endpoint_lock.Unlock();
+      local_delivery((Message*)D_CONNECT, CEPH_MSG_PRIO_HIGHEST);
     }
     void queue_remote_reset(Connection *con) {
       endpoint_lock.Lock();
       remote_reset_q.push_back(con);
-      local_delivery((Message*)D_BAD_REMOTE_RESET, CEPH_MSG_PRIO_HIGHEST);
-      cond.Signal();
       endpoint_lock.Unlock();
+      local_delivery((Message*)D_BAD_REMOTE_RESET, CEPH_MSG_PRIO_HIGHEST);
     }
     void queue_reset(Connection *con) {
       endpoint_lock.Lock();
+      endpoint_lock.Unlock();
       reset_q.push_back(con);
       local_delivery((Message*)D_BAD_RESET, CEPH_MSG_PRIO_HIGHEST);
-      cond.Signal();
-      endpoint_lock.Unlock();
     }
 
   public:
