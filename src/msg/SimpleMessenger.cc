@@ -1184,11 +1184,16 @@ void SimpleMessenger::Pipe::discard_queue()
   bool endpoint = false;
   if (rank->local_endpoint) {
     pipe_lock.Unlock();
-    rank->local_endpoint->endpoint_lock.Lock();//to remove from pipe queue
+    xlist<Pipe *>* list_on;
+    rank->local_endpoint->endpoint_lock.Lock();//to remove from round-robin
     for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
 	 i != queue_items.end();
 	 ++i)
-      i->second->remove_myself();
+      if ((list_on = i->second->get_xlist())) { //if in round-robin
+	i->second->remove_myself(); //take off
+	if (!list_on->size()) //if round-robin queue is empty
+	  rank->local_endpoint->queued_pipes.erase(i->first); //remove from map
+      }
     rank->local_endpoint->endpoint_lock.Unlock();
     endpoint = true;
     pipe_lock.Lock();
