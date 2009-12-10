@@ -3074,6 +3074,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 
     // create pg!
     assert(role != 0);
+    assert(!info.dne());
     pg = _create_lock_pg(info.pgid, t);
     dout(10) << " got info on new pg, creating" << dendl;
     pg->acting.swap(acting);
@@ -3274,6 +3275,13 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
         continue;
       }
       assert(role > 0);
+
+      if (!history.epoch_created) {
+	dout(10) << " pg " << pgid << " not created, replying with empty info" << dendl;
+        PG::Info empty(pgid);
+        notify_list[from].push_back(empty);
+	continue;
+      }
 
       ObjectStore::Transaction t;
       pg = _create_lock_pg(pgid, t);
