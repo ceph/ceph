@@ -364,8 +364,8 @@ private:
     }
     void queue_reset(Connection *con) {
       endpoint_lock.Lock();
-      endpoint_lock.Unlock();
       reset_q.push_back(con);
+      endpoint_lock.Unlock();
       local_delivery((Message*)D_BAD_RESET, CEPH_MSG_PRIO_HIGHEST);
     }
 
