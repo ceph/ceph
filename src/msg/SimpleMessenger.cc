@@ -1117,8 +1117,12 @@ int SimpleMessenger::Pipe::connect()
       backoff = utime_t();
       dout(20) << "connect success " << connect_seq << ", lossy = " << policy.lossy << dendl;
       
-      if (rank->local_endpoint)
-	rank->local_endpoint->queue_connect(connection_state->get());
+      if (rank->local_endpoint) {
+	Connection * cstate = connection_state->get();
+	pipe_lock.Unlock();
+	rank->local_endpoint->queue_connect(cstate);
+	pipe_lock.Lock();
+      }
       
       if (!reader_running) {
 	dout(20) << "connect starting reader" << dendl;
@@ -1305,8 +1309,12 @@ void SimpleMessenger::Pipe::fail()
 
   discard_queue();
   
-  if (rank->local_endpoint)
-    rank->local_endpoint->queue_reset(connection_state->get());
+  if (rank->local_endpoint) {
+    Connection * cstate = connection_state->get();
+    pipe_lock.Unlock();
+    rank->local_endpoint->queue_reset(cstate);
+    pipe_lock.Lock();
+  }
 }
 
 void SimpleMessenger::Pipe::was_session_reset()
@@ -1316,8 +1324,12 @@ void SimpleMessenger::Pipe::was_session_reset()
   dout(10) << "was_session_reset" << dendl;
   discard_queue();
 
-  if (rank->local_endpoint)
-    rank->local_endpoint->queue_remote_reset(connection_state->get());
+  if (rank->local_endpoint) {
+    Connection * cstate = connection_state->get();
+    pipe_lock.Unlock();
+    rank->local_endpoint->queue_remote_reset(cstate);
+    pipe_lock.Lock();
+  }
 
   out_seq = 0;
   in_seq = 0;
