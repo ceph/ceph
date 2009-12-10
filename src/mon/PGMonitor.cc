@@ -362,7 +362,10 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
 	       << " state " << pg_state_string(p->second.state)
 	       << " but DNE in pg_map!!"
 	       << dendl;
-      assert(0);
+      stringstream ss;
+      ss << "got " << pgid << " pg_stat from osd" << from << " but dne in pg_map";
+      mon->logclient.log(LOG_ERROR, ss);
+      continue;
     }
       
     dout(15) << " got " << pgid
