@@ -1743,6 +1743,7 @@ void PG::update_stats()
     // update our stat summary
     info.stats.reported.inc(info.history.same_primary_since);
     info.stats.version = info.last_update;
+    info.stats.created = info.history.epoch_created;
     pg_stats_valid = true;
     pg_stats_stable = info.stats;
     pg_stats_stable.state = state;
