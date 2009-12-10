@@ -26,6 +26,7 @@ using namespace std;
 using namespace __gnu_cxx;
 
 #include "common/Mutex.h"
+#include "common/Spinlock.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
 
@@ -232,10 +233,10 @@ private:
       pipe_lock.Unlock();
 
       //increment queue length counter
-      rank->local_endpoint->endpoint_lock.Lock();
+      rank->local_endpoint->qlen_lock.lock();
       ++rank->local_endpoint->qlen;
+      rank->local_endpoint->qlen_lock.unlock();
       rank->local_endpoint->cond.Signal();
-      rank->local_endpoint->endpoint_lock.Unlock();
       dout(0) << "finished queuing received message " << m << "in msgr " << rank << dendl;
     }
     
@@ -321,6 +322,7 @@ private:
     map<int, xlist<Pipe *>::iterator> queued_pipe_iters;
     bool stop;
     int qlen;
+    Spinlock qlen_lock;
     int my_rank;
 
     class DispatchThread : public Thread {
@@ -376,6 +378,7 @@ private:
       endpoint_lock("SimpleMessenger::Endpoint::endpoint_lock"),
       stop(false),
       qlen(0),
+      qlen_lock("SimpleMessenger::Endpoint::qlen_lock"),
       my_rank(rn),
       dispatch_thread(this) {
       local_pipe = new Pipe(r, Pipe::STATE_OPEN);

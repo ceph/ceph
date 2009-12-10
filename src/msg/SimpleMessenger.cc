@@ -283,8 +283,10 @@ void SimpleMessenger::Endpoint::dispatch_entry()
       }
       if (pipe_list.empty())
 	queued_pipes.erase(priority);
-      --qlen;
       endpoint_lock.Unlock(); //done with the pipe queue for a while
+      qlen_lock.lock();
+      --qlen;
+      qlen_lock.unlock();
 
       //get message from pipe
       Message *m = m_queue.front();
@@ -1187,6 +1189,7 @@ void SimpleMessenger::Pipe::discard_queue()
 	 i != queue_items.end();
 	 ++i)
       i->second->remove_myself();
+    rank->local_endpoint->endpoint_lock.Unlock();
     endpoint = true;
     pipe_lock.Lock();
   }
@@ -1200,13 +1203,13 @@ void SimpleMessenger::Pipe::discard_queue()
   for (map<int,list<Message*> >::iterator p = in_q.begin(); p != in_q.end(); p++) {
     if (endpoint) {
       int size = in_q.size();
+      rank->local_endpoint->qlen_lock.lock();
       rank->local_endpoint->qlen -= size;
+      rank->local_endpoint->qlen_lock.unlock();
     }
     for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++)
       delete *r;
   }
-  if (endpoint)
-    rank->local_endpoint->endpoint_lock.Unlock();
   in_q.clear();
 }
 
