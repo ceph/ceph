@@ -124,7 +124,8 @@ private:
 
     map<int, list<Message*> > out_q;  // priority queue for outbound msgs
     map<int, list<Message*> > in_q; // and inbound ones
-    map<int, xlist<Pipe *>::item* > queue_items; //put in msgr queue
+    int in_qlen;
+    map<int, xlist<Pipe *>::item* > queue_items; // _map_ protected by pipe_lock, *item protected by endpoint_lock.
     list<Message*> sent;
     Cond cond;
     bool keepalive;
@@ -175,7 +176,7 @@ private:
       state(st), 
       connection_state(new Connection),
       reader_running(false), writer_running(false),
-      keepalive(false),
+      in_qlen(0), keepalive(false),
       connect_seq(0), peer_global_seq(0),
       out_seq(0), in_seq(0), in_seq_acked(0),
       reader_thread(this), writer_thread(this) { }
@@ -220,8 +221,9 @@ private:
 	queue_items[priority] = new xlist<Pipe *>::item(this);
       pipe_lock.Unlock();
       rank->local_endpoint->endpoint_lock.Lock();
-      rank->local_endpoint->
-	queued_pipes[priority].push_back(queue_items[priority]);
+      if (rank->local_endpoint->queued_pipes.empty())
+	rank->local_endpoint->cond.Signal();
+      rank->local_endpoint->queued_pipes[priority].push_back(queue_items[priority]);
       rank->local_endpoint->endpoint_lock.Unlock();
       pipe_lock.Lock();
     }
@@ -235,25 +237,22 @@ private:
       pipe_lock.Lock();
       bool was_empty = queue.empty();
       queue.push_back(m);
-      if (was_empty) { //this pipe isn't on the endpoint queue
-	if (!queue_items.count(priority)) { //create an item for that priority
-	  queue_items[priority] = new xlist<Pipe *>::item(this);
-	}
+      if (was_empty) //this pipe isn't on the endpoint queue
 	enqueue_me(priority);
-      }
-      pipe_lock.Unlock();
 
-      //increment queue length counter
+      //increment queue length counters
+      in_qlen++;
       rank->local_endpoint->qlen_lock.lock();
       ++rank->local_endpoint->qlen;
       rank->local_endpoint->qlen_lock.unlock();
-      rank->local_endpoint->cond.Signal();
+
+      pipe_lock.Unlock();
     }
     
     void queue_received(Message *m) {
       m->set_recv_stamp(g_clock.now());
-      assert (m->nref.test() == 0);
-      queue_received(m, m->get_priority() );
+      assert(m->nref.test() == 0);
+      queue_received(m, m->get_priority());
     }
 
     __u32 get_out_seq() { return out_seq; }

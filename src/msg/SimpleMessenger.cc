@@ -281,20 +281,23 @@ void SimpleMessenger::Endpoint::dispatch_entry()
       //move pipe to back of line -- or just take off if no more messages
       pipe->pipe_lock.Lock();
       list<Message *>& m_queue = pipe->in_q[priority];
-      pipe_list.pop_front();
-      if (m_queue.size() > 1) {
-	pipe_list.push_back(pipe->queue_items[priority]);
-      }
-      if (pipe_list.empty())
-	queued_pipes.erase(priority);
-      endpoint_lock.Unlock(); //done with the pipe queue for a while
-      qlen_lock.lock();
-      --qlen;
-      qlen_lock.unlock();
-
-      //get message from pipe
       Message *m = m_queue.front();
       m_queue.pop_front();
+
+      if (m_queue.empty()) {
+	pipe_list.pop_front();  // pipe is done
+	if (pipe_list.empty())
+	  queued_pipes.erase(priority);
+      } else {
+	pipe_list.push_back(pipe->queue_items[priority]);  // move to end of list
+      }
+      endpoint_lock.Unlock(); //done with the pipe queue for a while
+
+      pipe->in_qlen--;
+      qlen_lock.lock();
+      qlen--;
+      qlen_lock.unlock();
+
       pipe->pipe_lock.Unlock(); // done with the pipe's message queue now
       {
 	if ((long)m == D_BAD_REMOTE_RESET) {
@@ -1200,15 +1203,27 @@ void SimpleMessenger::Pipe::discard_queue()
     rank->local_endpoint->endpoint_lock.Lock();//to remove from round-robin
     for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
 	 i != queue_items.end();
-	 ++i)
+	 ++i) {
       if ((list_on = i->second->get_xlist())) { //if in round-robin
 	i->second->remove_myself(); //take off
 	if (!list_on->size()) //if round-robin queue is empty
 	  rank->local_endpoint->queued_pipes.erase(i->first); //remove from map
       }
+    }
     rank->local_endpoint->endpoint_lock.Unlock();
     endpoint = true;
     pipe_lock.Lock();
+
+    // clear queue_items
+    while (!queue_items.empty()) {
+      delete queue_items.begin()->second;
+      queue_items.erase(queue_items.begin());
+    }
+
+    // adjust qlen
+    rank->local_endpoint->qlen_lock.lock();
+    rank->local_endpoint->qlen -= in_qlen;
+    rank->local_endpoint->qlen_lock.unlock();
   }
   for (list<Message*>::iterator p = sent.begin(); p != sent.end(); p++)
     (*p)->put();
@@ -1217,17 +1232,11 @@ void SimpleMessenger::Pipe::discard_queue()
     for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++)
       (*r)->put();
   out_q.clear();
-  for (map<int,list<Message*> >::iterator p = in_q.begin(); p != in_q.end(); p++) {
-    if (endpoint) {
-      int size = in_q.size();
-      rank->local_endpoint->qlen_lock.lock();
-      rank->local_endpoint->qlen -= size;
-      rank->local_endpoint->qlen_lock.unlock();
-    }
+  for (map<int,list<Message*> >::iterator p = in_q.begin(); p != in_q.end(); p++)
     for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++)
       delete *r;
-  }
   in_q.clear();
+  in_qlen = 0;
 }
 
 
