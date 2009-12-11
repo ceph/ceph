@@ -245,7 +245,7 @@ for name in $what; do
 	    
 	killall)
 	    echo "killall c$type on $host"
-	    do_cmd "killall -9 c$type || true"
+	    do_cmd "pkill ^c$type || true"
 	    ;;
 	
 	force-reload | reload)
