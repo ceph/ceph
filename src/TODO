@@ -80,6 +80,7 @@ pending wire, disk format changes
 - add v to PGMap, PGMap::Incremental
 
 bugs
+- osd pg split breaks if not all osds are up...
 - mds memory leak
 - mislinked directory?  (cpusr.sh, mv /c/* /c/t, more cpusr, ls /c/t)
 - premature filejournal trimming?

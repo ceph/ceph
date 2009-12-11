@@ -2693,6 +2693,7 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
   dout(10) << "split_pg " << *parent << dendl;
   pg_t parentid = parent->info.pgid;
 
+  // split objects
   vector<sobject_t> olist;
   store->collection_list(coll_t::build_pg_coll(parent->info.pgid), olist);  
 
@@ -2710,13 +2711,6 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
       store->stat(coll_t::build_pg_coll(parentid), poid, &st);
       store->getattr(coll_t::build_pg_coll(parentid), poid, OI_ATTR, bv);
       object_info_t oi(bv);
-
-      if (oi.version > child->info.last_update) {
-	child->info.last_update = oi.version;
-	dout(25) << "        tagging pg with v " << oi.version << "  > " << child->info.last_update << dendl;
-      } else {
-	dout(25) << "    not tagging pg with v " << oi.version << " <= " << child->info.last_update << dendl;
-      }
 
       t.collection_add(coll_t::build_pg_coll(pgid), coll_t::build_pg_coll(parentid), poid);
       t.collection_remove(coll_t::build_pg_coll(parentid), poid);
@@ -2742,11 +2736,57 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
     }
   }
 
-  // sub off child stats
+  // split log
+  parent->log.index();
+  dout(20) << " parent " << parent->info.pgid << " log was ";
+  parent->log.print(*_dout);
+  *_dout << dendl;
+  parent->log.unindex();
+
+  list<PG::Log::Entry>::iterator p = parent->log.log.begin();
+  while (p != parent->log.log.end()) {
+    list<PG::Log::Entry>::iterator cur = p;
+    p++;
+    sobject_t& poid = cur->soid;
+    ceph_object_layout l = osdmap->make_object_layout(poid.oid, parentid.pool(), parentid.preferred());
+    pg_t pgid = osdmap->raw_pg_to_pg(pg_t(l.ol_pgid));
+    if (pgid != parentid) {
+      dout(20) << "  moving " << *cur << " from " << parentid << " -> " << pgid << dendl;
+      PG *child = children[pgid];
+
+      child->log.log.splice(child->log.log.end(), parent->log.log, cur);
+    }
+  }
+
+  parent->log.index();
+  dout(20) << " parent " << parent->info.pgid << " log now ";
+  parent->log.print(*_dout);
+  *_dout << dendl;
+
   for (map<pg_t,PG*>::iterator p = children.begin();
        p != children.end();
        p++) {
-    parent->info.stats.sub(p->second->info.stats);
+    PG *child = p->second;
+
+    // fix log bounds
+    if (!child->log.log.empty()) {
+      child->log.head = child->log.log.rbegin()->version;
+      child->log.tail =  parent->log.tail;
+      child->log.backlog = parent->log.backlog;
+      child->log.index();
+    }
+    child->info.last_update = child->log.head;
+    child->info.last_complete = parent->info.last_complete;
+    child->info.log_tail =  parent->log.tail;
+    child->info.log_backlog = parent->log.backlog;
+    child->info.snap_trimq = parent->info.snap_trimq;
+
+    dout(20) << " child " << p->first << " log now ";
+    child->log.print(*_dout);
+    *_dout << dendl;
+
+    // sub off child stats
+    parent->info.stats.sub(child->info.stats);
   }
 }  
 
