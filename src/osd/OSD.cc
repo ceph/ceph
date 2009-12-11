@@ -233,9 +233,9 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, c
   whoami(id),
   dev_path(dev), journal_path(jdev),
   state(STATE_BOOTING), boot_epoch(0), up_epoch(0),
-  op_tp("OSD::op_tp", g_conf.osd_maxthreads),
-  recovery_tp("OSD::recovery_tp", 1),
-  disk_tp("OSD::disk_tp", 2),
+  op_tp("OSD::op_tp", g_conf.osd_op_threads),
+  recovery_tp("OSD::recovery_tp", g_conf.osd_recovery_threads),
+  disk_tp("OSD::disk_tp", g_conf.osd_disk_threads),
   heartbeat_lock("OSD::heartbeat_lock"),
   heartbeat_stop(false), heartbeat_epoch(0),
   heartbeat_messenger(hbm),
@@ -3996,7 +3996,7 @@ void OSD::handle_op(MOSDOp *op)
     stat_rd_ops_in_queue++;
   }
 
-  if (g_conf.osd_maxthreads < 1) {
+  if (g_conf.osd_op_threads < 1) {
     // do it now.
     if (op->get_type() == CEPH_MSG_OSD_OP)
       pg->do_op((MOSDOp*)op);
@@ -4058,7 +4058,7 @@ void OSD::handle_sub_op(MOSDSubOp *op)
     return;
   }
 
-  if (g_conf.osd_maxthreads < 1) {
+  if (g_conf.osd_op_threads < 1) {
     pg->do_sub_op(op);    // do it now
   } else {
     enqueue_op(pg, op);     // queue for worker threads
@@ -4092,7 +4092,7 @@ void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
   } 
 
   PG *pg = _lookup_lock_pg(pgid);
-  if (g_conf.osd_maxthreads < 1) {
+  if (g_conf.osd_op_threads < 1) {
     pg->do_sub_op_reply(op);    // do it now
   } else {
     enqueue_op(pg, op);     // queue for worker threads
