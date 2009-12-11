@@ -510,7 +510,7 @@ bool Monitor::ms_dispatch(Message *m)
       entity_name = s->auth_handler->get_entity_name();
     }
   }
-  src_is_mon = (connection && connection->get_peer_type() & CEPH_ENTITY_TYPE_MON);
+  src_is_mon = !connection || (connection->get_peer_type() & CEPH_ENTITY_TYPE_MON);
 #define ALLOW_CAPS(service_id, allow_caps) \
 do { \
   if (src_is_mon) \
