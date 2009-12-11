@@ -7,7 +7,7 @@ testdir="$1"
 
 [ ${basedir:0:1} == "." ] && basedir=`pwd`/${basedir:1}
 
-test -d $testdir || ( echo "specify test dir" && exit 1 )
+[ -z "$testdir" ] || [ ! -d "$testdir" ] && echo "specify test dir" && exit 1
 cd $testdir
 
 for test in `cd $basedir && find workunits/* | grep .sh`
