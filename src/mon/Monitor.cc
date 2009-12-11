@@ -534,13 +534,10 @@ do { \
 } while (0)
 
 #define EXIT_NOT_ADMIN \
-do { \
-  if (!entity_name.is_admin()) { \
+  if (connection) \
     dout(0) << "filtered out request (not admin), peer=" << connection->get_peer_type() \
-           << " entity_name=" << entity_name.to_str() << dendl; \
-    goto out; \
-  } \
-} while (0)
+	    << " entity_name=" << entity_name.to_str() << dendl;	\
+  goto out; 
 
 #define IS_NOT_ADMIN (!src_is_mon) && (!entity_name.is_admin())
 
