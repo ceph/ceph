@@ -58,8 +58,8 @@ int aio_bench(Rados& rados, rados_pool_t pool, int operation,
   int r = 0;
 
   //set up the pool
-  cout << "open pool result = " << rados.open_pool("data",&pool)
-       << " pool = " << pool << std::endl;
+  r = rados.open_pool("data",&pool);
+  //cout << "open pool result = " << r << " pool = " << pool << std::endl;
   
   //get data from previous write run, if available
   if (operation != OP_WRITE) {

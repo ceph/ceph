@@ -56,7 +56,7 @@ class RadosClient : public Dispatcher
   bool ms_dispatch(Message *m);
 
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) {
-    dout(0) << "RadosClient::ms_get_authorizer type=" << dest_type << dendl;
+    //dout(0) << "RadosClient::ms_get_authorizer type=" << dest_type << dendl;
     /* monitor authorization is being handled on different layer */
     if (dest_type == CEPH_ENTITY_TYPE_MON)
       return true;
@@ -282,7 +282,6 @@ public:
 
 bool RadosClient::init()
 {
-  dout(0) << "entity name=" << g_conf.entity_name->to_str() << dendl;
   // get monmap
   if (monclient.build_initial_monmap() < 0)
     return false;
@@ -684,8 +683,6 @@ int RadosClient::write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist
 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
-  dout(0) << "going to write" << dendl;
-
   lock.Lock();
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
   objecter->write(oid, layout,
@@ -700,8 +697,6 @@ int RadosClient::write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist
 
   if (r < 0)
     return r;
-
-  dout(0) << "did write" << dendl;
 
   return len;
 }
@@ -721,8 +716,6 @@ int RadosClient::write_full(PoolCtx& pool, const object_t& oid, bufferlist& bl)
 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
-  dout(0) << "going to write_full" << dendl;
-
   lock.Lock();
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
   objecter->write_full(oid, layout,
@@ -734,8 +727,6 @@ int RadosClient::write_full(PoolCtx& pool, const object_t& oid, bufferlist& bl)
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
-
-  dout(0) << "did write_full" << dendl;
 
   return r;
 }
@@ -808,8 +799,6 @@ int RadosClient::remove(PoolCtx& pool, const object_t& oid)
   int r;
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
-  dout(0) << "going to write" << dendl;
-
   lock.Lock();
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
   objecter->remove(oid, layout,
@@ -849,8 +838,6 @@ int RadosClient::exec(PoolCtx& pool, const object_t& oid, const char *cls, const
     cond.Wait(mylock);
   mylock.Unlock();
 
-  dout(0) << "after call got " << outbl.length() << " bytes" << dendl;
-
   return r;
 }
 
@@ -863,9 +850,6 @@ int RadosClient::read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist&
   bool done;
   int r;
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-
-
-  dout(0) << "going to read" << dendl;
 
   lock.Lock();
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
@@ -906,8 +890,6 @@ int RadosClient::stat(PoolCtx& pool, const object_t& oid, __u64 *psize, time_t *
   if (!psize)
     psize = &size;
 
-  dout(0) << "going to stat" << dendl;
-
   lock.Lock();
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
   objecter->stat(oid, layout,
@@ -937,9 +919,6 @@ int RadosClient::getxattr(PoolCtx& pool, const object_t& oid, const char *name, 
   bool done;
   int r;
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-
-
-  dout(0) << "going to getxattr" << dendl;
 
   lock.Lock();
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
@@ -975,8 +954,6 @@ int RadosClient::setxattr(PoolCtx& pool, const object_t& oid, const char *name, 
 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
-  dout(0) << "going to setxattr" << dendl;
-
   lock.Lock();
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
   objecter->setxattr(oid, layout, name,
@@ -991,8 +968,6 @@ int RadosClient::setxattr(PoolCtx& pool, const object_t& oid, const char *name, 
 
   if (r < 0)
     return r;
-
-  dout(0) << "did setxattr" << dendl;
 
   return bl.length();
 }
@@ -1012,8 +987,6 @@ int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<nstring, buff
 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
-  dout(0) << "going to setxattr" << dendl;
-
   lock.Lock();
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
   objecter->getxattrs(oid, layout, pool.snap_seq,
@@ -1025,8 +998,6 @@ int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<nstring, buff
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
-
-  dout(0) << "did setxattr" << dendl;
 
   return r;
 }
@@ -1351,12 +1322,6 @@ extern "C" int rados_initialize(int argc, const char **argv)
   if (!rados_initialized) {
     __rados_init(argc, argv);
     radosp = new RadosClient;
-
-    if (!radosp) {
-      dout(0) <<  "radosp is NULL" << dendl;
-      ret = -ENOMEM;
-      goto out;
-    }
     radosp->init();
   }
   ++rados_initialized;
