@@ -147,7 +147,7 @@ public:
     char *buf;
     unsigned maxlen;
 
-    AioCompletion() : lock("RadosClient::AioCompletion"),
+    AioCompletion() : lock("RadosClient::AioCompletion::lock"),
 		      ref(1), rval(0), ack(false), safe(false), 
 		      callback(0), callback_arg(0),
 		      pbl(0), buf(0), maxlen(0) { }
@@ -734,13 +734,13 @@ int RadosClient::write_full(PoolCtx& pool, const object_t& oid, bufferlist& bl)
 int RadosClient::aio_read(PoolCtx& pool, const object_t oid, off_t off, bufferlist *pbl, size_t len,
 			  AioCompletion **pc)
 {
-  Mutex::Locker l(lock);
  
   AioCompletion *c = new AioCompletion;
   Context *onack = new C_aio_Ack(c);
 
   c->pbl = pbl;
 
+  Mutex::Locker l(lock);
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
   objecter->read(oid, layout,
 		 off, len, pool.snap_seq, &c->bl, 0,
@@ -758,6 +758,7 @@ int RadosClient::aio_read(PoolCtx& pool, const object_t oid, off_t off, char *bu
   c->buf = buf;
   c->maxlen = len;
 
+  Mutex::Locker l(lock);
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
   objecter->read(oid, layout,
 		 off, len, pool.snap_seq, &c->bl, 0,
@@ -770,8 +771,6 @@ int RadosClient::aio_read(PoolCtx& pool, const object_t oid, off_t off, char *bu
 int RadosClient::aio_write(PoolCtx& pool, const object_t oid, off_t off, const bufferlist& bl, size_t len,
 			   AioCompletion **pc)
 {
-  Mutex::Locker l(lock);
-
   SnapContext snapc;
   utime_t ut = g_clock.now();
 
@@ -779,6 +778,7 @@ int RadosClient::aio_write(PoolCtx& pool, const object_t oid, off_t off, const b
   Context *onack = new C_aio_Ack(c);
   Context *onsafe = new C_aio_Safe(c);
 
+  Mutex::Locker l(lock);
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
   objecter->write(oid, layout,
 		  off, len, pool.snapc, bl, ut, 0,
@@ -1326,7 +1326,6 @@ extern "C" int rados_initialize(int argc, const char **argv)
   }
   ++rados_initialized;
 
-out:
   rados_init_mutex.Unlock();
   return ret;
 }
