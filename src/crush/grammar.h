@@ -99,7 +99,7 @@ struct crush_grammar : public grammar<crush_grammar>
       bucket_item = str_p("item") >> name
 				  >> !( str_p("weight") >> real_p )
 				  >> !( str_p("pos") >> posint );
-      bucket = name >> name >> '{' >> !bucket_id >> bucket_alg >> *bucket_item >> '}';
+      bucket = name >> name >> '{' >> !bucket_id >> bucket_alg >> *bucket_hash >> *bucket_item >> '}';
 
       // rules
       step_take = str_p("take") >> name;
