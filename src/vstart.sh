@@ -12,6 +12,7 @@ start_mds=0
 start_osd=0
 localhost=0
 nodaemon=0
+smallmds=0
 overwrite_conf=1
 cephx=0
 
