@@ -504,13 +504,13 @@ int FileStore::mount()
     dout(0) << " found snaps " << snaps << dendl;
   }
 
-  btrfs_usertrans = false;
+  //btrfs_usertrans = false;
   btrfs_trans_start_end = true;  // trans start/end interface
-  r = apply_transaction(empty, 0);
+  r = -1; //apply_transaction(empty, 0);
   if (r == 0) {
     dout(0) << "mount btrfs USERTRANS ioctl is supported" << dendl;
   } else {
-    dout(0) << "mount btrfs USERTRANS ioctl is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+    //dout(0) << "mount btrfs USERTRANS ioctl is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
     btrfs_usertrans = false;
     r = apply_transaction(empty, 0);
     if (r == 0) {
