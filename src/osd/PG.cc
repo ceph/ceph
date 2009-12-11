@@ -1629,13 +1629,20 @@ void PG::_finish_recovery(Context *c)
     dout(10) << "_finish_recovery" << dendl;
     finish_sync_event = 0;
     purge_strays();
+
     update_stats();
 
     if (state_test(PG_STATE_INCONSISTENT)) {
       dout(10) << "_finish_recovery requeueing for scrub" << dendl;
       osd->scrub_wq.queue(this);
+    } else if (log.backlog) {
+      ObjectStore::Transaction t;
+      drop_backlog();
+      write_info(t);
+      write_log(t);
+      int tr = osd->store->apply_transaction(t);
+      assert(tr == 0);
     }
-
   } else {
     dout(10) << "_finish_recovery -- stale" << dendl;
   }
