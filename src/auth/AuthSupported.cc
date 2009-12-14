@@ -19,7 +19,7 @@
 #define DOUT_SUBSYS auth
 
 static bool _supported_initialized = false;
-static Mutex _supported_lock("auth_service_handler_init");
+static Mutex _supported_lock("auth_supported_init");
 static map<int, bool> auth_supported;
 
 static void _init_supported(void)
