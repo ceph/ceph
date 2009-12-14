@@ -85,17 +85,20 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
     break;
 
   case TABLESERVER_OP_ACK:
-    dout(10) << "got ack on tid " << tid << ", logging" << dendl;
-
-    assert(g_conf.mds_kill_mdstable_at != 7);
-
-    // remove from committing list
-    assert(pending_commit.count(tid));
-    assert(pending_commit[tid]->pending_commit_tids[table].count(tid));
-    
-    // log ACK.
-    mds->mdlog->start_submit_entry(new ETableClient(table, TABLESERVER_OP_ACK, tid),
-				   new C_LoggedAck(this, tid));
+    if (pending_commit.count(tid)) {
+      dout(10) << "got ack on tid " << tid << ", logging" << dendl;
+      
+      assert(g_conf.mds_kill_mdstable_at != 7);
+      
+      // remove from committing list
+      assert(pending_commit[tid]->pending_commit_tids[table].count(tid));
+      
+      // log ACK.
+      mds->mdlog->start_submit_entry(new ETableClient(table, TABLESERVER_OP_ACK, tid),
+				     new C_LoggedAck(this, tid));
+    } else {
+      dout(10) << "got stray ack on tid " << tid << ", ignoring" << dendl;
+    }
     break;
 
   default:
