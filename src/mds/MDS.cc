@@ -569,6 +569,15 @@ void MDS::beacon_kill(utime_t lab)
 }
 
 
+void MDS::handle_command(MMonCommand *m)
+{
+  dout(20) << "handle_command args: " << m->cmd << dendl;
+  if (m->cmd[0] == "injectargs")
+    parse_config_option_string(m->cmd[1]);
+  else 
+    dout(0) << "unrecognized command! " << m->cmd << dendl;
+  delete m;
+}
 
 void MDS::handle_mds_map(MMDSMap *m)
 {
@@ -1239,8 +1248,7 @@ do { \
     // misc
   case MSG_MON_COMMAND:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
-    parse_config_option_string(((MMonCommand*)m)->cmd[0]);
-    delete m;
+    handle_command((MMonCommand*)m);
     break;    
     
   default:

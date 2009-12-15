@@ -454,12 +454,19 @@ void Monitor::handle_observe(MMonObserve *m)
 void Monitor::inject_args(const entity_inst_t& inst, vector<string>& args, version_t version)
 {
   dout(10) << "inject_args " << inst << " " << args << dendl;
-  MMonCommand *c = new MMonCommand(monmap->fsid, version);
-  c->cmd = args;
-  try_send_message(c, inst);
+  vector<string> new_args = args;
+  new_args.insert(new_args.begin(), "injectargs");
+  send_command(inst, new_args, version);
 }
 
-
+void Monitor::send_command(const entity_inst_t& inst,
+			   const vector<string>& com, version_t version)
+{
+  dout(10) << "send_command " << inst << "" << com << dendl;
+  MMonCommand *c = new MMonCommand(monmap->fsid, version);
+  c->cmd = com;
+  try_send_message(c, inst);
+}
 
 
 void Monitor::stop_cluster()

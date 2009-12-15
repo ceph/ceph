@@ -185,6 +185,8 @@ public:
     inject_args(inst, a, version);
   }
   void inject_args(const entity_inst_t& inst, vector<string>& args, version_t version);  
+void send_command(const entity_inst_t& inst,
+			   const vector<string>& com, version_t version);
 
 public:
   struct C_Command : public Context {

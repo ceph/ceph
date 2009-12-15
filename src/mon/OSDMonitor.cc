@@ -937,6 +937,30 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  ss << "specify osd number or *";
       }
     }
+    else if (m->cmd[1] == "tell") {
+      m->cmd.erase(m->cmd.begin()); //take out first two args; don't need them
+      m->cmd.erase(m->cmd.begin());
+      if (m->cmd[0] == "*") {
+	m->cmd.erase(m->cmd.begin()); //and now we're done with the target num
+	for (int i = 0; i < osdmap.get_max_osd(); ++i) {
+	  mon->send_command(osdmap.get_inst(i), m->cmd, paxos->get_version());
+	}
+      } else {
+	errno = 0;
+	int who = strtol(m->cmd[0].c_str(), 0, 10);
+	m->cmd.erase(m->cmd.begin()); //done with target num now
+	if (!errno && who >= 0) {
+	  if (osdmap.is_up(who)) {
+	    mon->send_command(osdmap.get_inst(who), m->cmd, paxos->get_version());
+	    r = 0;
+	    ss << "ok";
+	  } else {
+	    ss << "osd" << who << " no up";
+	    r = -ENOENT;
+	  }
+	} else ss << "specify osd number or *";
+      }
+    }
     else if ((m->cmd[1] == "scrub" || m->cmd[1] == "repair") && m->cmd.size() > 2) {
       if (m->cmd[2] == "*") {
 	ss << "osds ";

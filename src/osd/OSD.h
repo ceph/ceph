@@ -537,6 +537,8 @@ protected:
   void send_pg_stats();
   void handle_pg_stats_ack(class MPGStatsAck *ack);
 
+  void handle_command(class MMonCommand *m);
+
   void pg_stat_queue_enqueue(PG *pg) {
     pg_stat_queue_lock.Lock();
     if (pg->is_primary() && !pg->stat_queue_item.is_on_xlist()) {

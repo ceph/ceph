@@ -375,6 +375,7 @@ class MDS : public Dispatcher {
   void ms_handle_remote_reset(Connection *con);
 
   // special message types
+  void handle_command(class MMonCommand *m);
   void handle_mds_map(class MMDSMap *m);
 };
 

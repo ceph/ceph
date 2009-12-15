@@ -449,6 +449,31 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	  ss << "specify mds number or *";
       }
     }
+    else if (m->cmd[1] == "tell") {
+      m->cmd.erase(m->cmd.begin()); //take out first two args; don't need them
+      m->cmd.erase(m->cmd.begin());
+      if (m->cmd[0] == "*") {
+	m->cmd.erase(m->cmd.begin()); //and now we're done with the target num
+	for (unsigned i = 0; i < mdsmap.get_max_mds(); ++i) {
+	  if (mdsmap.is_active(i))
+	    mon->send_command(mdsmap.get_inst(i), m->cmd, paxos->get_version());
+	}
+      } else {
+	errno = 0;
+	int who = strtol(m->cmd[0].c_str(), 0, 10);
+	m->cmd.erase(m->cmd.begin()); //done with target num now
+	if (!errno && who >= 0) {
+	  if (mdsmap.is_up(who)) {
+	    mon->send_command(mdsmap.get_inst(who), m->cmd, paxos->get_version());
+	    r = 0;
+	    ss << "ok";
+	  } else {
+	    ss << "mds" << who << " no up";
+	    r = -ENOENT;
+	  }
+	} else ss << "specify mds number or *";
+      }
+    }
   }
 
   if (r != -1) {
