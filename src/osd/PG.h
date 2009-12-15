@@ -1024,7 +1024,7 @@ inline ostream& operator<<(ostream& out, const PG& pg)
       out << " (log bound mismatch, empty)";
     }
   } else {
-    if (((pg.log.log.begin()->version.version >= pg.log.tail.version) &&  // sloppy check
+    if (((pg.log.log.begin()->version.version <= pg.log.tail.version) &&  // sloppy check
          !pg.log.backlog) ||
         (pg.log.log.rbegin()->version.version != pg.log.head.version)) {
       out << " (log bound mismatch, actual=["
