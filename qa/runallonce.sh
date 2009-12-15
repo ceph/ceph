@@ -14,8 +14,10 @@ for test in `cd $basedir && find workunits/* | grep .sh`
 do
   echo "------ running test $test ------"
   mkdir -p $test
+  mkdir -p ${basedir}/logs/${test}.log
+  rmdir ${basedir}/logs/${test}.log
   pushd .
   cd $test
-  ${basedir}/${test}
+  ${basedir}/${test} 2>&1 | tee ${basedir}/logs/${test}.log
   popd
 done
