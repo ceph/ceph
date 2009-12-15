@@ -408,6 +408,12 @@ void Server::find_idle_sessions()
       break;
     }
 
+    stringstream ss;
+    utime_t age = now;
+    age -= session->last_cap_renew;
+    ss << "closing stale session " << session->inst << " after " << age;
+    mds->logclient.log(LOG_INFO, ss);
+
     dout(10) << "autoclosing stale session " << session->inst << " last " << session->last_cap_renew << dendl;
     mds->sessionmap.set_state(session, Session::STATE_STALE_PURGING);
     if (session->prealloc_inos.empty()) {
