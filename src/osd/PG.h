@@ -98,13 +98,14 @@ public:
     struct History {
       epoch_t epoch_created;       // epoch in which PG was created
       epoch_t last_epoch_started;  // lower bound on last epoch started (anywhere, not necessarily locally)
+      epoch_t last_epoch_split;    // as parent
 
       epoch_t same_up_since;       // same acting set since
       epoch_t same_acting_since;   // same acting set since
       epoch_t same_primary_since;  // same primary at least back through this epoch.
       History() : 	      
 	epoch_created(0),
-	last_epoch_started(0),
+	last_epoch_started(0), last_epoch_split(0),
 	same_up_since(0), same_acting_since(0), same_primary_since(0) {}
 
       void merge(const History &other) {
@@ -112,11 +113,14 @@ public:
 	  epoch_created = other.epoch_created;
 	if (last_epoch_started < other.last_epoch_started)
 	  last_epoch_started = other.last_epoch_started;
+	if (last_epoch_split < other.last_epoch_started)
+	  last_epoch_split = other.last_epoch_started;
       }
 
       void encode(bufferlist &bl) const {
 	::encode(epoch_created, bl);
 	::encode(last_epoch_started, bl);
+	::encode(last_epoch_split, bl);
 	::encode(same_acting_since, bl);
 	::encode(same_up_since, bl);
 	::encode(same_primary_since, bl);
@@ -124,11 +128,10 @@ public:
       void decode(bufferlist::iterator &bl, version_t v) {
 	::decode(epoch_created, bl);
 	::decode(last_epoch_started, bl);
+	if (v >= 21)
+	  ::decode(last_epoch_split, bl);
 	::decode(same_acting_since, bl);
-	if (v >= 20)
-	  ::decode(same_up_since, bl);
-	else
-	  same_up_since = same_acting_since;
+	::decode(same_up_since, bl);
 	::decode(same_primary_since, bl);
       }
     } history;
@@ -141,7 +144,7 @@ public:
     bool dne() const { return history.epoch_created == 0; }
 
     void encode(bufferlist &bl) const {
-      __u8 v = 20;
+      __u8 v = 21;
       ::encode(v, bl);
 
       ::encode(pgid, bl);
