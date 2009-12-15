@@ -46,8 +46,11 @@ pending wire, disk format changes
 - add v to PGMap, PGMap::Incremental
 
 bugs
+- mds recovery flag set on inode that didn't get recovered??
+- mon delay when starting new mds, when current mds is already laggy
+- mds file purge should truncate in place, or remove from namespace before purge.  otherwise new ref can appear before inode is destroyed.
+- mds memory leak (after some combo of client failures, mds restarts+reconnects?)
 - osd pg split breaks if not all osds are up...
-- mds memory leak
 - mislinked directory?  (cpusr.sh, mv /c/* /c/t, more cpusr, ls /c/t)
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
@@ -104,6 +107,57 @@ ceph3:/c# [68724.067160] BUG: unable to handle kernel NULL pointer dereference a
 [68724.178904]  [<ffffffffa00900e0>] ? delayed_work+0x0/0x368 [ceph]
 [68724.178904]  [<ffffffff8146a56e>] ? preempt_schedule+0x3e/0x4b
 [68724.306901]  [<ffffffff8105f4d0>] ? autoremove_ceph3:/c# [68724.067160]
+
+
+filestore performance notes
+- write ordering options
+  - fs only (no journal)
+  - fs, journal
+  - fs + journal in parallel
+  - journal sync, then fs
+- and the issues
+  - latency
+  - effect of a btrfs hang
+  - unexpected error handling (EIO, ENOSPC)
+  - impact on ack, sync ordering semantics.
+  - how to throttle request stream to disk io rate
+  - rmw vs delayed mode
+
+- if journal is on fs, then
+  - throttling isn't an issue, but
+  - fs stalls are also journal stalls
+
+- fs only
+  - latency: commits are bad.
+  - hang: bad.
+  - errors: could be handled, aren't
+  - acks: supported
+  - throttle: fs does it
+  - rmw: pg toggles mode
+- fs, journal
+  - latency: good, unless fs hangs
+  - hang: bad.  latency spikes.  overall throughput drops.
+  - errors: could probably be handled, isn't.
+  - acks: supported
+  - throttle: btrfs does it (by hanging), which leads to a (necessary) latency spike
+  - rmw: pg toggles mode
+- fs | journal
+  - latency: good
+  - hang: no latency spike.  fs throughput may drop, to the extent btrfs throughput necessarily will.
+  - errors: not detected until later.  could journal addendum record.  or die (like we do now)
+  - acks: could be flexible.. maybe supported, maybe not.  will need some extra locking smarts?
+  - throttle: ??
+  - rmw: rmw must block on prior fs writes.
+- journal, fs (writeahead)
+  - latency: good (commit only, no acks)
+  - hang: same as |
+  - errors: same as |
+  - acks: never.
+  - throttle: ??
+  - rmw: rmw must block on prior fs writes.
+
+- separate reads/writes into separate op queues?
+- 
 
 
 greg
