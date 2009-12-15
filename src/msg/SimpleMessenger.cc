@@ -1577,8 +1577,11 @@ void SimpleMessenger::Pipe::writer()
       Message *m = _get_next_outgoing();
       if (m) {
 	m->set_seq(++out_seq);
-	sent.push_back(m); // move to sent list
-	m->get();
+	if (!policy.lossy) {
+	  // put on sent list
+	  sent.push_back(m); 
+	  m->get();
+	}
 	pipe_lock.Unlock();
 
         dout(20) << "writer encoding " << m->get_seq() << " " << m << " " << *m << dendl;
