@@ -4,6 +4,7 @@
 [ "$CEPH_NUM_OSD" = "" ] && CEPH_NUM_OSD=1
 [ "$CEPH_NUM_MDS" = "" ] && CEPH_NUM_MDS=1
 
+extra_conf=""
 new=0
 debug=0
 start_all=1
@@ -99,6 +100,11 @@ case $1 in
 	    ;;
     -k )
 	    overwrite_conf=0
+	    shift
+	    ;;
+    -o )
+	    extra_conf="$extra_conf	$2
+"
 	    shift
 	    ;;
     * )
@@ -232,6 +238,7 @@ if [ "$start_mon" -eq 1 ]; then
 	logger dir = log
 	chdir = ""
 	pid file = out/\$type\$id.pid
+$extra_conf
 EOF
 			[ "$cephx" -eq 1 ] && cat<<EOF >> $conf
         supported auth = cephx
