@@ -24,6 +24,7 @@ class Finisher {
   Cond           finisher_cond;
   bool           finisher_stop;
   vector<Context*> finisher_queue;
+  list<pair<Context*,int> > finisher_queue_rval;
   
   void *finisher_thread_entry();
 
@@ -34,9 +35,13 @@ class Finisher {
   } finisher_thread;
 
  public:
-  void queue(Context *c) {
+  void queue(Context *c, int r = 0) {
     finisher_lock.Lock();
-    finisher_queue.push_back(c);
+    if (r) {
+      finisher_queue_rval.push_back(pair<Context*, int>(c, r));
+      finisher_queue.push_back(NULL);
+    } else
+      finisher_queue.push_back(c);
     finisher_cond.Signal();
     finisher_lock.Unlock();
   }

@@ -24,11 +24,26 @@ void *Finisher::finisher_thread_entry()
   while (!finisher_stop) {
     while (!finisher_queue.empty()) {
       vector<Context*> ls;
+      list<pair<Context*,int> > ls_rval;
       ls.swap(finisher_queue);
-
+      ls_rval.swap(finisher_queue_rval);
       finisher_lock.Unlock();
 
-      finish_contexts(ls, 0);
+      for (vector<Context*>::iterator p = ls.begin();
+	   p != ls.end();
+	   p++) {
+	if (*p) {
+	  (*p)->finish(0);
+	  delete *p;
+	} else {
+	  assert(!ls_rval.empty());
+	  Context *c = ls_rval.front().first;
+	  c->finish(ls_rval.front().second);
+	  delete c;
+	  ls_rval.pop_front();
+	}
+      }
+      ls.clear();
 
       finisher_lock.Lock();
     }
