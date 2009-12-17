@@ -46,6 +46,30 @@ pending wire, disk format changes
 - add v to PGMap, PGMap::Incremental
 
 bugs
+- kclient calculation of expected space needed for caps during reconnect converges to incorrect value:
+Dec 16 21:09:44 ceph4 kernel: [200451.959112] ceph: mds0 10.3.14.98:6802 socket closed
+Dec 16 21:09:46 ceph4 kernel: [200454.456519] ceph: mds0 10.3.14.98:6802 connection failed
+Dec 16 21:10:10 ceph4 kernel: [200478.000289] ceph: reconnect to recovering mds0
+Dec 16 21:10:10 ceph4 kernel: [200478.005164] ceph: estimating i need 7048085 bytes for 45180 caps
+Dec 16 21:10:10 ceph4 kernel: [200478.214756] ceph: i guessed 7048085, and did 40724 of 45180 caps, retrying with 7752893
+Dec 16 21:10:10 ceph4 kernel: [200478.446193] ceph: i guessed 7752893, and did 44432 of 45180 caps, retrying with 7830421
+Dec 16 21:10:10 ceph4 kernel: [200478.679594] ceph: i guessed 7830421, and did 44828 of 45180 caps, retrying with 7830421
+Dec 16 21:10:11 ceph4 kernel: [200478.913978] ceph: i guessed 7830421, and did 44828 of 45180 caps, retrying with 7830421
+Dec 16 21:10:11 ceph4 kernel: [200479.147611] ceph: i guessed 7830421, and did 44828 of 45180 caps, retrying with 7830421
+Dec 16 21:10:11 ceph4 kernel: [200479.381505] ceph: i guessed 7830421, and did 44828 of 45180 caps, retrying with 7830421
+...
+
+- msgr local_endpoint teardown vs msg delivery race
+==1989== Process terminating with default action of signal 11 (SIGSEGV): dumping core
+==1989==  Access not within mapped region at address 0x13C
+==1989==    at 0x660C22: SimpleMessenger::Pipe::queue_received(Message*, int) (SimpleMessenger.h:246)
+==1989==    by 0x660CF2: SimpleMessenger::Pipe::queue_received(Message*) (SimpleMessenger.h:255)
+==1989==    by 0x655045: SimpleMessenger::Pipe::reader() (SimpleMessenger.cc:1478)
+==1989==    by 0x663E2C: SimpleMessenger::Pipe::Reader::entry() (SimpleMessenger.h:159)
+==1989==    by 0x65B3EA: Thread::_entry_func(void*) (Thread.h:39)
+==1989==    by 0x5030F99: start_thread (in /lib/libpthread-2.9.so)
+==1989==    by 0x5E5555C: clone (in /lib/libc-2.9.so)
+
 - mds recovery flag set on inode that didn't get recovered??
 - mon delay when starting new mds, when current mds is already laggy
 - mds file purge should truncate in place, or remove from namespace before purge.  otherwise new ref can appear before inode is destroyed.
