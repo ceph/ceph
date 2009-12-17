@@ -415,18 +415,24 @@ void Server::find_idle_sessions()
     mds->logclient.log(LOG_INFO, ss);
 
     dout(10) << "autoclosing stale session " << session->inst << " last " << session->last_cap_renew << dendl;
-    mds->sessionmap.set_state(session, Session::STATE_STALE_PURGING);
-    if (session->prealloc_inos.empty()) {
-      _finish_session_purge(session);
-    } else {
-      C_Gather *fin = new C_Gather(new C_MDS_session_purged(this, session));
-      for (map<inodeno_t,inodeno_t>::iterator p = session->prealloc_inos.m.begin();
-	   p != session->prealloc_inos.m.end();
-	   p++) {
-	inodeno_t last = p->first + p->second;
-	for (inodeno_t i = p->first; i < last; i = i + 1)
-	  mds->mdcache->purge_prealloc_ino(i, fin->new_sub());
-      }
+    end_session(session);
+  }
+}
+
+void Server::end_session (Session *session)
+{
+  assert (session);
+  mds->sessionmap.set_state(session, Session::STATE_STALE_PURGING);
+  if (session->prealloc_inos.empty()) {
+    _finish_session_purge(session);
+  } else {
+    C_Gather *fin = new C_Gather(new C_MDS_session_purged(this, session));
+    for (map<inodeno_t,inodeno_t>::iterator p = session->prealloc_inos.m.begin();
+	 p != session->prealloc_inos.m.end();
+	 p++) {
+      inodeno_t last = p->first + p->second;
+      for (inodeno_t i = p->first; i < last; i = i + 1)
+	mds->mdcache->purge_prealloc_ino(i, fin->new_sub());
     }
   }
 }
