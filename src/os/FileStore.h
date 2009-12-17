@@ -80,6 +80,28 @@ class FileStore : public JournalingObjectStore {
 
   void sync_fs(); // actuall sync underlying fs
 
+  // op thread
+  struct Op {
+    __u64 op;
+    list<Transaction*> tls;
+    Context *onreadable, *oncommit;
+  };
+
+  Finisher op_finisher;
+  Mutex op_lock;
+  Cond op_cond;
+  list<Op*> op_queue;
+  void op_entry();
+  struct OpThread : public Thread {
+    FileStore *fs;
+    OpThread(FileStore *f) : fs(f) {}
+    void *entry() {
+      fs->op_entry();
+      return 0;
+    }
+  } op_thread;
+  void queue_op(__u64 op, list<Transaction*>& tls, Context *onreadable, Context *ondisk);
+
   // flusher thread
   Cond flusher_cond;
   list<__u64> flusher_queue;
@@ -94,6 +116,7 @@ class FileStore : public JournalingObjectStore {
     }
   } flusher_thread;
   bool queue_flusher(int fd, __u64 off, __u64 len);
+
   int open_journal();
 
  public:
@@ -104,7 +127,9 @@ class FileStore : public JournalingObjectStore {
     attrs(this), fake_attrs(false), 
     collections(this), fake_collections(false),
     lock("FileStore::lock"),
-    sync_epoch(0), stop(false), sync_thread(this), flusher_queue_len(0), flusher_thread(this) { }
+    sync_epoch(0), stop(false), sync_thread(this),
+    op_lock("FileStore::op_lock"), op_thread(this),
+    flusher_queue_len(0), flusher_thread(this) { }
 
   int mount();
   int umount();
@@ -113,11 +138,15 @@ class FileStore : public JournalingObjectStore {
 
   int statfs(struct statfs *buf);
 
+  int do_transactions(list<Transaction*> &tls, __u64 op_seq);
   unsigned apply_transaction(Transaction& t, Context *onjournal=0, Context *ondisk=0);
   unsigned apply_transactions(list<Transaction*>& tls, Context *onjournal=0, Context *ondisk=0);
   int _transaction_start(__u64 bytes, __u64 ops);
   void _transaction_finish(int id);
   unsigned _do_transaction(Transaction& t);
+
+  int queue_transactions(list<Transaction*>& tls, Context *onreadable,
+			  Context *onjournal=0, Context *ondisk=0);
 
   // ------------------
   // objects

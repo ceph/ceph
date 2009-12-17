@@ -419,21 +419,23 @@ int FileStore::mount()
   snprintf(fn, sizeof(fn), "%s/current/commit_op_seq", basedir.c_str());
   op_fd = ::open(fn, O_CREAT|O_RDWR, 0644);
   assert(op_fd >= 0);
-  op_seq = 0;
-  ::read(op_fd, &op_seq, sizeof(op_seq));
+  __u64 initial_op_seq = 0;
+  ::read(op_fd, &initial_op_seq, sizeof(initial_op_seq));
 
-  dout(5) << "mount op_seq is " << op_seq << dendl;
+  dout(5) << "mount op_seq is " << initial_op_seq << dendl;
 
   // journal
   open_journal();
-  r = journal_replay();
+  r = journal_replay(initial_op_seq);
   if (r == -EINVAL) {
     dout(0) << "mount got EINVAL on journal open, not mounting" << dendl;
     return r;
   }
   journal_start();
   sync_thread.create();
+  op_thread.create();
   flusher_thread.create();
+  op_finisher.start();
 
 
   // is this btrfs?
@@ -500,11 +502,15 @@ int FileStore::umount()
   stop = true;
   sync_cond.Signal();
   flusher_cond.Signal();
+  op_cond.Signal();
   lock.Unlock();
   sync_thread.join();
+  op_thread.join();
   flusher_thread.join();
 
   journal_stop();
+
+  op_finisher.stop();
 
   ::close(fsid_fd);
   ::close(op_fd);
@@ -521,7 +527,101 @@ int FileStore::umount()
 }
 
 
+/// -----------------------------
 
+void FileStore::queue_op(__u64 op_seq, list<Transaction*>& tls, Context *onreadable,
+			 Context *oncommit)
+{
+  op_lock.Lock();
+  Op *o = new Op;
+  dout(10) << "queue_op " << o << " " << op_seq << dendl;
+  o->op = op_seq;
+  o->tls.swap(tls);
+  o->onreadable = onreadable;
+  o->oncommit = oncommit;
+  op_queue.push_back(o);
+  op_cond.Signal();
+  op_lock.Unlock();
+}
+
+void FileStore::op_entry()
+{
+  op_lock.Lock();
+  while (1) {
+    while (!op_queue.empty()) {
+      Op *o = op_queue.front();
+      op_queue.pop_front();
+      op_lock.Unlock();
+
+      dout(10) << "op_entry " << o << " " << o->op << " start" << dendl;
+      op_apply_start(o->op, o->oncommit);
+      int r = do_transactions(o->tls, o->op);
+      op_apply_finish();
+      dout(10) << "op_entry " << o << " " << o->op << " r = " << r
+	       << ", finisher " << o->onreadable << dendl;
+
+      op_finisher.queue(o->onreadable, r);
+
+      delete o;
+
+      op_lock.Lock();
+    }
+    if (stop)
+      break;
+    op_cond.Wait(op_lock);
+  }
+  op_lock.Unlock();
+}
+
+
+int FileStore::queue_transactions(list<Transaction*> &tls,
+				  Context *onreadable,
+				  Context *onjournal,
+				  Context *ondisk)
+{
+  __u64 op;
+
+  op = op_journal_start(0);
+  journal_transactions(tls, op, onjournal);
+
+  // queue inside journal lock, to preserve ordering
+  queue_op(op, tls, onreadable, ondisk);
+
+  op_journal_finish();
+
+  return 0;
+}
+
+int FileStore::do_transactions(list<Transaction*> &tls, __u64 op_seq)
+{
+  int r;
+
+  __u64 bytes = 0, ops = 0;
+  for (list<Transaction*>::iterator p = tls.begin();
+       p != tls.end();
+       p++) {
+    bytes += (*p)->get_num_bytes();
+    ops += (*p)->get_num_ops();
+  }
+
+  int id = _transaction_start(bytes, ops);
+  if (id < 0) {
+    return id;
+  }
+    
+  for (list<Transaction*>::iterator p = tls.begin();
+       p != tls.end();
+       p++) {
+    r = _do_transaction(**p);
+    if (r < 0)
+      break;
+  }
+  
+  ::pwrite(op_fd, &op_seq, sizeof(op_seq), 0);
+  
+  _transaction_finish(id);
+  return r;
+}
 
 unsigned FileStore::apply_transaction(Transaction &t,
 				      Context *onjournal,
@@ -537,46 +637,36 @@ unsigned FileStore::apply_transactions(list<Transaction*> &tls,
 				       Context *ondisk)
 {
   int r = 0;
-  op_start();
 
-  __u64 bytes = 0, ops = 0;
-  for (list<Transaction*>::iterator p = tls.begin();
-       p != tls.end();
-       p++) {
-    bytes += (*p)->get_num_bytes();
-    ops += (*p)->get_num_ops();
-  }
+  if (g_conf.filestore_journal_parallel) {
+    // use op pool
+    Cond my_cond;
+    Mutex my_lock("FileStore::apply_transaction::my_lock");
+    bool done;
+    C_SafeCond *onreadable = new C_SafeCond(&my_lock, &my_cond, &done, &r);
 
-  int id = _transaction_start(bytes, ops);
-  if (id < 0) {
-    op_journal_start();
-    op_finish();
-    return id;
-  }
+    dout(10) << "apply queued" << dendl;
+    queue_transactions(tls, onreadable, onjournal, ondisk);
     
-  for (list<Transaction*>::iterator p = tls.begin();
-       p != tls.end();
-       p++) {
-    r = _do_transaction(**p);
-    if (r < 0)
-      break;
-  }
-  
-  _transaction_finish(id);
-
-  op_journal_start();
-  dout(10) << "op_seq is " << op_seq << dendl;
-  if (r >= 0) {
-    journal_transactions(tls, onjournal, ondisk);
-
-    ::pwrite(op_fd, &op_seq, sizeof(op_seq), 0);
-
+    my_lock.Lock();
+    while (!done)
+      my_cond.Wait(my_lock);
+    my_lock.Unlock();
+    dout(10) << "apply done r = " << r << dendl;
   } else {
-    delete onjournal;
-    delete ondisk;
-  }
+    __u64 op_seq = op_apply_start(0, ondisk);
+    r = do_transactions(tls, op_seq);
+    op_apply_finish();
 
-  op_finish();
+    if (r >= 0) {
+      op_journal_start(op_seq);
+      journal_transactions(tls, op_seq, onjournal);
+      op_journal_finish();
+    } else {
+      delete onjournal;
+      delete ondisk;
+    }
+  }
   return r;
 }
 

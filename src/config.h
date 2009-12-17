@@ -339,6 +339,8 @@ struct md_config_t {
   bool filestore_flusher;
   int filestore_flusher_max_fds;
   bool filestore_sync_flush;
+  bool filestore_journal_parallel;
+  bool filestore_journal_writeahead;
   
   // ebofs
   bool  ebofs;

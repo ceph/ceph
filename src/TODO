@@ -253,6 +253,7 @@ filestore performance notes
   - acks: never.
   - throttle: ??
   - rmw: rmw must block on prior fs writes.
+  * JourningObjectStore interface needs work?
 
 - separate reads/writes into separate op queues?
 - 
