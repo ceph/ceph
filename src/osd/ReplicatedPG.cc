@@ -642,11 +642,6 @@ void ReplicatedPG::do_op(MOSDOp *op)
   if (mode.is_rmw_mode())
     apply_repop(repop);
 
-  // (logical) local ack.
-  //  (if alone and delayed, this will apply the update.)
-  int whoami = osd->get_nodeid();
-  assert(repop->waitfor_ack.count(whoami));
-  repop->waitfor_ack.erase(whoami);
   eval_repop(repop);
   repop->put();
 
@@ -1807,6 +1802,25 @@ void ReplicatedPG::log_op(vector<Log::Entry>& logv, eversion_t trim_to,
 // ========================================================================
 // rep op gather
 
+class C_OSD_OpApplied : public Context {
+public:
+  ReplicatedPG *pg;
+  ReplicatedPG::RepGather *repop;
+
+  C_OSD_OpApplied(ReplicatedPG *p, ReplicatedPG::RepGather *rg) :
+    pg(p), repop(rg) {
+    repop->get();
+    pg->get();    // we're copying the pointer
+  }
+  void finish(int r) {
+    pg->lock();
+    pg->op_applied(repop);
+    repop->put();
+    pg->unlock();
+    pg->put();
+  }
+};
+
 class C_OSD_OpCommit : public Context {
 public:
   ReplicatedPG *pg;
@@ -1826,25 +1840,6 @@ public:
   }
 };
 
-/** op_commit
- * transaction commit on the acker.
- */
-void ReplicatedPG::op_ondisk(RepGather *repop)
-{
-  if (repop->aborted) {
-    dout(10) << "op_ondisk " << *repop << " -- aborted" << dendl;
-  } else if (repop->waitfor_disk.count(osd->get_nodeid()) == 0) {
-    dout(10) << "op_ondisk " << *repop << " -- already marked ondisk" << dendl;
-  } else {
-    dout(10) << "op_ondisk " << *repop << dendl;
-    repop->waitfor_disk.erase(osd->get_nodeid());
-    repop->waitfor_nvram.erase(osd->get_nodeid());
-    last_complete_ondisk = repop->pg_local_last_complete;
-    eval_repop(repop);
-  }
-}
-
-
 void ReplicatedPG::apply_repop(RepGather *repop)
 {
   dout(10) << "apply_repop  applying update on " << *repop << dendl;
@@ -1860,13 +1855,24 @@ void ReplicatedPG::apply_repop(RepGather *repop)
     dout(-10) << "apply_repop  apply transaction return " << r << " on " << *repop << dendl;
     assert(0);
   }
-  
+ 
+  op_applied(repop);
+}
+
+void ReplicatedPG::op_applied(RepGather *repop)
+{
+  dout(10) << "op_applied " << *repop << dendl;
+
   // discard my reference to the buffer
   repop->ctx->op->get_data().clear();
-  tls.clear();
   repop->ctx->op_t.clear_data();
   
   repop->applied = true;
+
+  // (logical) local ack.
+  int whoami = osd->get_nodeid();
+  assert(repop->waitfor_ack.count(whoami));
+  repop->waitfor_ack.erase(whoami);
   
   if (repop->ctx->clone_obc) {
     put_object_context(repop->ctx->clone_obc);
@@ -1874,7 +1880,7 @@ void ReplicatedPG::apply_repop(RepGather *repop)
   }
 
   dout(10) << "apply_repop mode was " << mode << dendl;
-  mode.finish_write();
+  mode.write_applied();
   dout(10) << "apply_repop mode now " << mode << " (finish_write)" << dendl;
 
   put_object_context(repop->obc);
@@ -1916,8 +1922,24 @@ void ReplicatedPG::apply_repop(RepGather *repop)
     }
     break;
   }   
-  
 }
+
+void ReplicatedPG::op_ondisk(RepGather *repop)
+{
+  if (repop->aborted) {
+    dout(10) << "op_ondisk " << *repop << " -- aborted" << dendl;
+  } else if (repop->waitfor_disk.count(osd->get_nodeid()) == 0) {
+    dout(10) << "op_ondisk " << *repop << " -- already marked ondisk" << dendl;
+  } else {
+    dout(10) << "op_ondisk " << *repop << dendl;
+    repop->waitfor_disk.erase(osd->get_nodeid());
+    repop->waitfor_nvram.erase(osd->get_nodeid());
+    last_complete_ondisk = repop->pg_local_last_complete;
+    eval_repop(repop);
+  }
+}
+
+
 
 void ReplicatedPG::eval_repop(RepGather *repop)
 {
@@ -1928,7 +1950,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   // apply?
   if (!repop->applied &&
       mode.is_delayed_mode() &&
-      repop->waitfor_ack.empty())  // all replicas have acked
+      repop->waitfor_ack.size() == 1)  // all other replicas have acked
     apply_repop(repop);
 
   // disk?
@@ -2032,7 +2054,7 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContext *
   RepGather *repop = new RepGather(ctx, obc, noop, rep_tid, info.last_complete);
 
   dout(10) << "new_repop mode was " << mode << dendl;
-  mode.start_write();
+  mode.write_start();
   obc->get();  // we take a ref
   dout(10) << "new_repop mode now " << mode << " (start_write)" << dendl;
 

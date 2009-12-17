@@ -174,17 +174,19 @@ public:
       return state == RMW || state == RMW_FLUSHING;
     }
 
-    void start_write() {
+    void write_start() {
       num_wr++;
       assert(state == DELAYED || state == RMW);
     }
-    void finish_write() {
+    void write_applied() {
       assert(num_wr > 0);
       --num_wr;
       if (num_wr == 0) {
 	state = IDLE;
 	wake = true;
       }
+    }
+    void write_commit() {
     }
   };
 
@@ -323,6 +325,8 @@ protected:
   map<tid_t, RepGather*> repop_map;
 
   void apply_repop(RepGather *repop);
+  void op_applied(RepGather *repop);
+  void op_ondisk(RepGather *repop);
   void eval_repop(RepGather*);
   void issue_repop(RepGather *repop, int dest, utime_t now,
 		   bool old_exists, __u64 old_size, eversion_t old_version);
@@ -331,6 +335,8 @@ protected:
                  int result, int ack_type,
                  int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
 
+  friend class C_OSD_OpCommit;
+  friend class C_OSD_OpApplied;
 
   // projected object info
   map<sobject_t, ObjectContext*> object_contexts;
@@ -386,7 +392,6 @@ protected:
 
 
   // low level ops
-  void op_ondisk(RepGather *repop);
 
   void _make_clone(ObjectStore::Transaction& t,
 		   const sobject_t& head, const sobject_t& coid,
@@ -398,7 +403,6 @@ protected:
   int prepare_transaction(OpContext *ctx);
   void log_op(vector<Log::Entry>& log, eversion_t trim_to, ObjectStore::Transaction& t);
   
-  friend class C_OSD_OpCommit;
   friend class C_OSD_RepModifyCommit;
 
   // pg on-disk content
