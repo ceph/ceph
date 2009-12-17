@@ -574,7 +574,17 @@ void MDS::handle_command(MMonCommand *m)
   dout(20) << "handle_command args: " << m->cmd << dendl;
   if (m->cmd[0] == "injectargs")
     parse_config_option_string(m->cmd[1]);
-  else 
+  else if (m->cmd[0] == "session" && m->cmd[1] == "kill") {
+    Session *session = sessionmap.
+      get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
+				strtol(m->cmd[2].c_str(), 0, 10)));
+    if (session) {
+      dout(20) << "killing session " << session << dendl;
+      server->end_session(session);
+    } else dout(20) << "session " << session << " not in sessionmap!" << dendl;
+  } else if (m->cmd[0] == "issue_caps") {
+    dout(0) << "issue_caps command not yet implemented" << dendl;
+  }
     dout(0) << "unrecognized command! " << m->cmd << dendl;
   delete m;
 }
