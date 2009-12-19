@@ -571,7 +571,7 @@ void MDS::beacon_kill(utime_t lab)
 
 void MDS::handle_command(MMonCommand *m)
 {
-  dout(20) << "handle_command args: " << m->cmd << dendl;
+  dout(10) << "handle_command args: " << m->cmd << dendl;
   if (m->cmd[0] == "injectargs")
     parse_config_option_string(m->cmd[1]);
   else if (m->cmd[0] == "session" && m->cmd[1] == "kill") {
@@ -581,11 +581,24 @@ void MDS::handle_command(MMonCommand *m)
     if (session) {
       dout(20) << "killing session " << session << dendl;
       server->end_session(session);
-    } else dout(20) << "session " << session << " not in sessionmap!" << dendl;
+    } else dout(15) << "session " << session << " not in sessionmap!" << dendl;
   } else if (m->cmd[0] == "issue_caps") {
-    dout(0) << "issue_caps command not yet implemented" << dendl;
-  }
-    dout(0) << "unrecognized command! " << m->cmd << dendl;
+    long inum = strtol(m->cmd[1].c_str(), 0, 10);
+    CInode * ino = mdcache->get_inode(inodeno_t(inum));
+    if (ino) {
+      bool r = locker->issue_caps(ino);
+      dout(20) << "called issue_caps on inode "  << inum
+	       << " with result " << r << dendl;
+    } else dout(15) << "inode " << inum << " not in mdcache!" << dendl;
+  } else if (m->cmd[0] == "try_eval") {
+    long inum = strtol(m->cmd[1].c_str(), 0, 10);
+    int mask = strtol(m->cmd[2].c_str(), 0, 10);
+    CInode * ino = mdcache->get_inode(inodeno_t(inum));
+    if (ino) {
+      locker->try_eval(ino, mask);
+      dout(20) << "try_eval(" << inum << ", " << mask << ")" << dendl;
+    } else dout(15) << "inode " << inum << " not in mdcache!" << dendl;
+  } else dout(0) << "unrecognized command! " << m->cmd << dendl;
   delete m;
 }
 
