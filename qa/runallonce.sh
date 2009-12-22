@@ -15,7 +15,7 @@ do
   echo "------ running test $test ------"
   mkdir -p $test
   mkdir -p ${basedir}/logs
-  rm ${basedir}/logs/${test}.log
+  test -e ${basedir}/logs/${test}.log && rm ${basedir}/logs/${test}.log
   pushd .
   cd $test
   ${basedir}/${test} 2>&1 | tee ${basedir}/logs/${test}.log
