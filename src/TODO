@@ -46,6 +46,14 @@ pending wire, disk format changes
 - add v to PGMap, PGMap::Incremental
 
 bugs
+- mon: dup osd boot messages to log
+09.12.21 14:09:33.634098    log 09.12.21 14:09:32.612955 mon0 10.3.14.128:6789/0/0 198 : [INF] osd6 10.3.14.133:6800/14770/0 boot
+09.12.21 14:09:33.634125    log 09.12.21 14:09:32.614155 mon0 10.3.14.128:6789/0/0 199 : [INF] osd6 10.3.14.133:6800/14770/0 boot
+09.12.21 14:09:33.634137    log 09.12.21 14:09:32.614726 mon0 10.3.14.128:6789/0/0 200 : [INF] osd6 10.3.14.133:6800/14770/0 boot
+09.12.21 14:09:33.634148    log 09.12.21 14:09:32.615444 mon0 10.3.14.128:6789/0/0 201 : [INF] osd6 10.3.14.133:6800/14770/0 boot
+
+- vi file on one (k)client, cat on another, get all zeros.
+
 - kclient mds caps state recall deadlock?
 [211048.250655] BUG: soft lockup - CPU#0 stuck for 61s! [ceph-msgr/0:2571]
 [211048.250661] Modules linked in: ceph fan ac battery container uhci_hcd ehci_hcd thermal button processor
@@ -435,3 +443,8 @@ radosgw
  - upload using post
  - torrent
  - handle gracefully PUT/GET requestPayment
+
+
+
+-- for nicer kclient debug output (everything but messenger, but including msg in/out)
+echo 'module ceph +p' > /sys/kernel/debug/dynamic_debug/control ; echo 'file fs/ceph/messenger.c -p' > /sys/kernel/debug/dynamic_debug/control ; echo 'file ' `grep -- --- /sys/kernel/debug/dynamic_debug/control | grep ceph | awk '{print $1}' | sed 's/:/ line /'` +p  > /sys/kernel/debug/dynamic_debug/control ; echo 'file ' `grep -- === /sys/kernel/debug/dynamic_debug/control | grep ceph | awk '{print $1}' | sed 's/:/ line /'` +p  > /sys/kernel/debug/dynamic_debug/control
