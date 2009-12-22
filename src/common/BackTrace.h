@@ -19,11 +19,7 @@ struct BackTrace {
     free(strings);
   }
 
-  void print(ostream& out) {
-    for (size_t i = skip; i < size; i++)
-      out << " " << (i-skip+1) << ": " << strings[i] << std::endl;
-  }
-
+  void print(std::ostream& out);
 };
 
 #endif

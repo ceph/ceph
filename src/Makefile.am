@@ -311,6 +311,7 @@ libcommon_files = \
 	auth/KeyRing.cc \
 	common/LogClient.cc \
 	msg/Message.cc \
+	common/BackTrace.cc \
 	common/Logger.cc \
 	common/ClassLibrary.cc \
 	common/Clock.cc \
