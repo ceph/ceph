@@ -47,21 +47,13 @@ inline uint32_t rjhash32(uint32_t a) {
 
 template<> struct rjhash<uint32_t> {
   inline size_t operator()(const uint32_t x) const {
-#ifdef __LP64__
-    return rjhash64(x);
-#else
     return rjhash32(x);
-#endif
   }
 };
 
 template<> struct rjhash<uint64_t> {
   inline size_t operator()(const uint64_t x) const {
-#ifdef __LP64__
     return rjhash64(x);
-#else
-    return rjhash32(x) ^ rjhash32(x >> 32);
-#endif
   }
 };
 
