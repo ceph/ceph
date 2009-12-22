@@ -1358,7 +1358,7 @@ bool OSDMonitor::prepare_pool_op_create (MPoolOp *m)
 
 void OSDMonitor::_pool_op(MPoolOp *m, int replyCode, epoch_t epoch)
 {
-  MPoolOpReply *reply = new MPoolOpReply(m->fsid, m->tid,
+  MPoolOpReply *reply = new MPoolOpReply(m->fsid, m->get_tid(),
 					 replyCode, epoch, mon->get_epoch());
   mon->send_reply(m, reply);
   delete m;

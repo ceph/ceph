@@ -51,9 +51,9 @@ public:
 
   osd_reqid_t get_reqid() { return osd_reqid_t(get_orig_source(),
 					       head.client_inc,
-					       head.tid); }
+					       header.tid); }
   int get_client_inc() { return head.client_inc; }
-  tid_t get_client_tid() { return head.tid; }
+  tid_t get_client_tid() { return header.tid; }
   
   object_t& get_oid() { return oid; }
   pg_t     get_pg() { return pg_t(head.layout.ol_pgid); }
@@ -90,7 +90,7 @@ public:
     oid(_oid),
     rmw_flags(flags) {
     memset(&head, 0, sizeof(head));
-    head.tid = tid;
+    set_tid(tid);
     head.client_inc = inc;
     head.layout = ol;
     head.osdmap_epoch = mapepoch;

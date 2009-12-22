@@ -177,7 +177,6 @@ public:
   bufferlist snapbl;
 
  public:
-  long get_tid() { return head.tid; }
   int get_op() { return head.op; }
 
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
@@ -195,14 +194,14 @@ public:
   MClientReply(MClientRequest *req, int result = 0) : 
     Message(CEPH_MSG_CLIENT_REPLY) {
     memset(&head, 0, sizeof(head));
-    head.tid = req->get_tid();
+    header.tid = req->get_tid();
     head.op = req->get_op();
     head.result = result;
     head.safe = 1;
   }
   const char *get_type_name() { return "creply"; }
   void print(ostream& o) {
-    o << "client_reply(???:" << head.tid;
+    o << "client_reply(???:" << get_tid();
     o << " = " << get_result();
     if (get_result() <= 0) {
       char buf[80];

@@ -35,7 +35,6 @@ class MOSDOpReply : public Message {
   object_t oid;
   vector<OSDOp> ops;
 
-  long     get_tid() { return head.tid; }
   object_t get_oid() { return oid; }
   pg_t     get_pg() { return pg_t(head.layout.ol_pgid); }
   int      get_flags() { return head.flags; }
@@ -64,7 +63,7 @@ public:
   MOSDOpReply(MOSDOp *req, __s32 result, epoch_t e, int acktype) :
     Message(CEPH_MSG_OSD_OPREPLY) {
     memset(&head, 0, sizeof(head));
-    head.tid = req->head.tid;
+    set_tid(req->get_tid());
     head.client_inc = req->head.client_inc;
     ops = req->ops;
     head.result = result;
@@ -101,7 +100,7 @@ public:
   const char *get_type_name() { return "osd_op_reply"; }
   
   void print(ostream& out) {
-    out << "osd_op_reply(" << head.tid
+    out << "osd_op_reply(" << get_tid()
 	<< " " << oid << " " << ops;
     if (may_write()) {
       if (is_ondisk())

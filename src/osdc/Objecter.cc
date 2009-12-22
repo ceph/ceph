@@ -705,7 +705,7 @@ void Objecter::pool_op_submit(PoolOp *op) {
 
 void Objecter::handle_pool_op_reply(MPoolOpReply *m) {
   dout(10) << "handle_pool_op_reply " << *m << dendl;
-  tid_t tid = m->tid;
+  tid_t tid = m->get_tid();
   if (op_pool.count(tid)) {
     PoolOp *op = op_pool[tid];
     dout(10) << "have request " << tid << " at " << op << " Op: " << get_pool_op_name(op->pool_op) << dendl;
@@ -757,7 +757,7 @@ void Objecter::poolstat_submit(PoolStatOp *op)
 void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
 {
   dout(10) << "handle_get_pool_stats_reply " << *m << dendl;
-  tid_t tid = m->tid;
+  tid_t tid = m->get_tid();
 
   if (op_poolstat.count(tid)) {
     PoolStatOp *op = op_poolstat[tid];
@@ -798,7 +798,7 @@ void Objecter::fs_stats_submit(StatfsOp *op)
 
 void Objecter::handle_fs_stats_reply(MStatfsReply *m) {
   dout(10) << "handle_fs_stats_reply " << *m << dendl;
-  tid_t tid = m->h.tid;
+  tid_t tid = m->get_tid();
 
   if (op_statfs.count(tid)) {
     StatfsOp *op = op_statfs[tid];

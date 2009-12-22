@@ -88,7 +88,7 @@ public:
 
   metareqid_t get_reqid() {
     // FIXME: for now, assume clients always have 1 incarnation
-    return metareqid_t(get_orig_source(), head.tid); 
+    return metareqid_t(get_orig_source(), header.tid); 
   }
 
   /*bool open_file_mode_is_readonly() {
@@ -125,7 +125,6 @@ public:
   }
 
   // normal fields
-  void set_tid(tid_t t) { head.tid = t; }
   void set_oldest_client_tid(tid_t t) { head.oldest_client_tid = t; }
   void inc_num_fwd() { head.num_fwd = head.num_fwd + 1; }
   void set_retry_attempt(int a) { head.num_retry = a; }
@@ -141,7 +140,6 @@ public:
     head.flags = head.flags | CEPH_MDS_FLAG_REPLAY;
   }
     
-  tid_t get_tid() { return head.tid; }
   tid_t get_oldest_client_tid() { return head.oldest_client_tid; }
   int get_num_fwd() { return head.num_fwd; }
   int get_retry_attempt() { return head.num_retry; }

@@ -36,7 +36,6 @@ public:
   // subop metadata
   osd_reqid_t reqid;
   pg_t pgid;
-  tid_t rep_tid;
   sobject_t poid;
 
   vector<OSDOp> ops;
@@ -56,7 +55,6 @@ public:
     ::decode(map_epoch, p);
     ::decode(reqid, p);
     ::decode(pgid, p);
-    ::decode(rep_tid, p);
     ::decode(poid, p);
 
     unsigned num_ops;
@@ -75,7 +73,6 @@ public:
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
     ::encode(pgid, payload);
-    ::encode(rep_tid, payload);
     ::encode(poid, payload);
     __u32 num_ops = ops.size();
     ::encode(num_ops, payload);
@@ -92,7 +89,6 @@ public:
   epoch_t get_map_epoch() { return map_epoch; }
 
   pg_t get_pg() { return pgid; }
-  tid_t get_rep_tid() { return rep_tid; }
   sobject_t get_poid() { return poid; }
 
   int get_ack_type() { return ack_type; }
@@ -116,12 +112,12 @@ public:
     map_epoch(e),
     reqid(req->reqid),
     pgid(req->pgid),
-    rep_tid(req->rep_tid),
     poid(req->poid),
     ops(req->ops),
     ack_type(at),
     result(result_) {
     memset(&peer_stat, 0, sizeof(peer_stat));
+    set_tid(req->get_tid());
   }
   MOSDSubOpReply() {}
 

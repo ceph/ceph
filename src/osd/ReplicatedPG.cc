@@ -2568,7 +2568,7 @@ void ReplicatedPG::sub_op_modify_ondisk(MOSDSubOp *op, int ackerosd, eversion_t 
 void ReplicatedPG::sub_op_modify_reply(MOSDSubOpReply *r)
 {
   // must be replication.
-  tid_t rep_tid = r->get_rep_tid();
+  tid_t rep_tid = r->get_tid();
   int fromosd = r->get_source().num();
   
   osd->take_peer_stat(fromosd, r->get_peer_stat());

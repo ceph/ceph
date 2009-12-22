@@ -53,7 +53,6 @@ public:
   pg_stat_t pg_stats;
   
   // subop metadata
-  tid_t rep_tid;
   eversion_t version;
 
   // piggybacked osd/og state
@@ -84,7 +83,6 @@ public:
     ::decode(mtime, p);
     ::decode(noop, p);
     ::decode(acks_wanted, p);
-    ::decode(rep_tid, p);
     ::decode(version, p);
     ::decode(old_exists, p);
     ::decode(old_size, p);
@@ -116,7 +114,6 @@ public:
     ::encode(mtime, payload);
     ::encode(noop, payload);
     ::encode(acks_wanted, payload);
-    ::encode(rep_tid, payload);
     ::encode(version, payload);
     ::encode(old_exists, payload);
     ::encode(old_size, payload);
@@ -147,10 +144,10 @@ public:
     acks_wanted(aw),
     noop(noop_),   
     old_exists(false), old_size(0),
-    rep_tid(rtid),
     version(v)
   {
     memset(&peer_stat, 0, sizeof(peer_stat));
+    set_tid(rtid);
   }
   MOSDSubOp() {}
 

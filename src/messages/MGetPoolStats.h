@@ -21,30 +21,29 @@
 class MGetPoolStats : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;
-  tid_t tid;
   vector<string> pools;
 
   MGetPoolStats() : PaxosServiceMessage(MSG_GETPOOLSTATS, 0) {}
   MGetPoolStats(const ceph_fsid_t& f, tid_t t, vector<string>& ls, version_t l) :
     PaxosServiceMessage(MSG_GETPOOLSTATS, l),
-    fsid(f), tid(t), pools(ls) { }
+    fsid(f), pools(ls) {
+    set_tid(t);
+  }
 
   const char *get_type_name() { return "getpoolstats"; }
   void print(ostream& out) {
-    out << "getpoolstats(" << tid << " " << pools << " v" << version << ")";
+    out << "getpoolstats(" << get_tid() << " " << pools << " v" << version << ")";
   }
 
   void encode_payload() {
     paxos_encode();
     ::encode(fsid, payload);
-    ::encode(tid, payload);
     ::encode(pools, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);
-    ::decode(tid, p);
     ::decode(pools, p);
   }
 };

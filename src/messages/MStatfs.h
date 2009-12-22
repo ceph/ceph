@@ -22,27 +22,26 @@
 class MStatfs : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;
-  tid_t tid;
 
   MStatfs() : PaxosServiceMessage(CEPH_MSG_STATFS, 0) {}
   MStatfs(const ceph_fsid_t& f, tid_t t, version_t v) :
-    PaxosServiceMessage(CEPH_MSG_STATFS, v), fsid(f), tid(t) {}
+    PaxosServiceMessage(CEPH_MSG_STATFS, v), fsid(f) {
+    set_tid(t);
+  }
 
   const char *get_type_name() { return "statfs"; }
   void print(ostream& out) {
-    out << "statfs(" << tid << " v" << version << ")";
+    out << "statfs(" << get_tid() << " v" << version << ")";
   }
 
   void encode_payload() {
     paxos_encode();
     ::encode(fsid, payload);
-    ::encode(tid, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);
-    ::decode(tid, p);
   }
 };
 

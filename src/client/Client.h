@@ -94,6 +94,7 @@ class Inode;
 class Dentry;
 
 struct MetaRequest {
+  __u64 tid;
   ceph_mds_request_head head;
   filepath path, path2;
   bufferlist data;
@@ -146,14 +147,14 @@ struct MetaRequest {
     target(0) {
     memset(&head, 0, sizeof(ceph_mds_request_head));
     head.op = op;
-}
+  }
 
   MetaRequest* get() {++ref; return this; }
 
   void put() {if(--ref == 0) delete this; }
 
   // normal fields
-  void set_tid(tid_t t) { head.tid = t; }
+  void set_tid(tid_t t) { tid = t; }
   void set_oldest_client_tid(tid_t t) { head.oldest_client_tid = t; }
   void inc_num_fwd() { head.num_fwd = head.num_fwd + 1; }
   void set_retry_attempt(int a) { head.num_retry = a; }
@@ -167,7 +168,7 @@ struct MetaRequest {
     head.flags = head.flags | CEPH_MDS_FLAG_WANT_DENTRY;
   }
   int get_op() { return head.op; }
-  tid_t get_tid() { return head.tid; }
+  tid_t get_tid() { return tid; }
   filepath& get_filepath() { return path; }
   filepath& get_filepath2() { return path2; }
 

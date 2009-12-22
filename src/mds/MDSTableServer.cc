@@ -76,7 +76,7 @@ void MDSTableServer::handle_commit(MMDSTableRequest *req)
 {
   dout(7) << "handle_commit " << *req << dendl;
 
-  version_t tid = req->tid;
+  version_t tid = req->get_tid();
 
   if (pending_for_mds.count(tid)) {
 
@@ -107,7 +107,7 @@ void MDSTableServer::_commit_logged(MMDSTableRequest *req)
 
   assert(g_conf.mds_kill_mdstable_at != 6);
 
-  MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_ACK, req->reqid, req->tid);
+  MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_ACK, req->reqid, req->get_tid());
   mds->send_message_mds(reply, req->get_source().num());
   delete req;
 }
@@ -117,10 +117,10 @@ void MDSTableServer::_commit_logged(MMDSTableRequest *req)
 void MDSTableServer::handle_rollback(MMDSTableRequest *req)
 {
   dout(7) << "handle_rollback " << *req << dendl;
-  _rollback(req->tid);
-  _note_rollback(req->tid);
+  _rollback(req->get_tid());
+  _note_rollback(req->get_tid());
   mds->mdlog->start_submit_entry(new ETableServer(table, TABLESERVER_OP_ROLLBACK, 0, -1, 
-						  req->tid, version));
+						  req->get_tid(), version));
   delete req;
 }
 

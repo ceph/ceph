@@ -24,20 +24,21 @@ class MMDSTableRequest : public Message {
   __u16 table;
   __s16 op;
   __u64 reqid;
-  version_t tid;
   bufferlist bl;
 
   MMDSTableRequest() {}
   MMDSTableRequest(int tab, int o, __u64 r, version_t v=0) : 
     Message(MSG_MDS_TABLE_REQUEST),
-    table(tab), op(o), reqid(r), tid(v) { }
+    table(tab), op(o), reqid(r) {
+    set_tid(v);
+  }
   
   virtual const char *get_type_name() { return "mds_table_request"; }
   void print(ostream& o) {
     o << "mds_table_request(" << get_mdstable_name(table)
       << " " << get_mdstableserver_opname(op);
     if (reqid) o << " " << reqid;
-    if (tid) o << " tid " << tid;
+    if (get_tid()) o << " tid " << get_tid();
     if (bl.length()) o << " " << bl.length() << " bytes";
     o << ")";
   }
@@ -47,7 +48,6 @@ class MMDSTableRequest : public Message {
     ::decode(table, p);
     ::decode(op, p);
     ::decode(reqid, p);
-    ::decode(tid, p);
     ::decode(bl, p);
   }
 
@@ -55,7 +55,6 @@ class MMDSTableRequest : public Message {
     ::encode(table, payload);
     ::encode(op, payload);
     ::encode(reqid, payload);
-    ::encode(tid, payload);
     ::encode(bl, payload);
   }
 };

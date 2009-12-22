@@ -42,7 +42,7 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
   dout(10) << "handle_request " << *m << dendl;
   assert(m->table == table);
 
-  version_t tid = m->tid;
+  version_t tid = m->get_tid();
   __u64 reqid = m->reqid;
 
   switch (m->op) {

@@ -217,7 +217,7 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   }
 
   // fill out stfs
-  reply = new MStatfsReply(mon->monmap->fsid, statfs->tid, mon->get_epoch());
+  reply = new MStatfsReply(mon->monmap->fsid, statfs->get_tid(), mon->get_epoch());
 
   // these are in KB.
   reply->h.st.kb = pg_map.osd_sum.kb;
@@ -241,7 +241,7 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
     goto out;
   }
   
-  reply = new MGetPoolStatsReply(m->fsid, m->tid, paxos->get_version());
+  reply = new MGetPoolStatsReply(m->fsid, m->get_tid(), paxos->get_version());
 
   for (vector<string>::iterator p = m->pools.begin();
        p != m->pools.end();

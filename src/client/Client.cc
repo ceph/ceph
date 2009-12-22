@@ -945,6 +945,7 @@ int Client::make_request(MetaRequest *request,
 inline MClientRequest* Client::make_request_from_Meta(MetaRequest *request)
 {
   MClientRequest *req = new MClientRequest(request->get_op());
+  req->set_tid(request->tid);
   memcpy(&req->head, &request->head, sizeof(ceph_mds_request_head));
   //if the filepath's haven't been set, set them!
   if (request->path.empty()) {
@@ -1697,7 +1698,7 @@ void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int
 				   flush,
 				   cap->mseq);
   m->head.issue_seq = cap->issue_seq;
-  m->head.client_tid = tid;
+  m->set_tid(tid);
 
   m->head.uid = in->uid;
   m->head.gid = in->gid;

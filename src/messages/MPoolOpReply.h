@@ -19,25 +19,25 @@
 class MPoolOpReply : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;
-  tid_t tid;
   int replyCode;
   epoch_t epoch;
 
 
   MPoolOpReply() : PaxosServiceMessage(MSG_POOLOPREPLY, 0) {}
   MPoolOpReply( ceph_fsid_t& f, tid_t t, int rc, int e, version_t v) :
-    PaxosServiceMessage(MSG_POOLOPREPLY, v), fsid(f), tid(t), replyCode(rc), epoch(e) {}
+    PaxosServiceMessage(MSG_POOLOPREPLY, v), fsid(f), replyCode(rc), epoch(e) {
+    set_tid(t);
+  }
 
   const char *get_type_name() { return "poolopreply"; }
 
   void print(ostream& out) {
-    out << "poolopreply(" << tid << " v" << version << ")";
+    out << "poolopreply(" << get_tid() << " v" << version << ")";
   }
 
   void encode_payload() {
     paxos_encode();
     ::encode(fsid, payload);
-    ::encode(tid, payload);
     ::encode(replyCode, payload);
     ::encode(epoch, payload);
   }
@@ -45,7 +45,6 @@ public:
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);
-    ::decode(tid, p);
     ::decode(replyCode, p);
     ::decode(epoch, p);
   }
