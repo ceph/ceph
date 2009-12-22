@@ -2545,6 +2545,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   // send ack to acker
   MOSDSubOpReply *ack = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
   ack->set_peer_stat(osd->get_my_stat_for(g_clock.now(), ackerosd));
+  ack->set_priority(CEPH_MSG_PRIO_HIGH);
   osd->messenger->send_message(ack, osd->osdmap->get_inst(ackerosd));
 }
 
