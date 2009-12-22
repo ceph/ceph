@@ -1,6 +1,8 @@
 
 #include <ostream>
 #include <cxxabi.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "BackTrace.h"
 
@@ -34,8 +36,8 @@ void BackTrace::print(std::ostream& out)
       }
       else {
 	// demangling failed, just pretend it's a C function with no args
-	std::strncpy(function, foo, sz);
-	std::strncat(function, "()", sz);
+	strncpy(function, foo, sz);
+	strncat(function, "()", sz);
 	function[sz-1] = 0;
       }
       out << " " << (i-skip+1) << ": (" << function << end << std::endl;

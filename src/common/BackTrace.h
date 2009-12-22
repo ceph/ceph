@@ -2,6 +2,7 @@
 #define _CEPH_BACKTRACE
 
 #include <execinfo.h>
+#include <stdlib.h>
 
 struct BackTrace {
   const static int max = 100;
