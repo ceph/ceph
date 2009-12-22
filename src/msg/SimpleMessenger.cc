@@ -608,6 +608,7 @@ int SimpleMessenger::Pipe::accept()
   bufferptr bp;
   bufferlist authorizer, authorizer_reply;
   bool authorizer_valid;
+  __u64 feat_missing;
 
   // this should roughly mirror pseudocode at
   //  http://ceph.newdream.net/wiki/Messaging_protocol
@@ -652,6 +653,14 @@ int SimpleMessenger::Pipe::accept()
 	     << ", their proto " << connect.protocol_version << dendl;
     if (connect.protocol_version != reply.protocol_version) {
       reply.tag = CEPH_MSGR_TAG_BADPROTOVER;
+      rank->lock.Unlock();
+      goto reply;
+    }
+
+    feat_missing = CEPH_FEATURE_REQUIRED & ~(__u64)connect.features;
+    if (feat_missing) {
+      dout(1) << "peer missing required features " << std::hex << feat_missing << std::dec << dendl;
+      reply.tag = CEPH_MSGR_TAG_FEATURES;
       rank->lock.Unlock();
       goto reply;
     }
@@ -779,6 +788,7 @@ int SimpleMessenger::Pipe::accept()
     assert(0);    
 
   reply:
+    reply.features = ((__u64)connect.features & CEPH_FEATURE_SUPPORTED) | CEPH_FEATURE_REQUIRED;
     reply.authorizer_len = authorizer_reply.length();
     rc = tcp_write(sd, (char*)&reply, sizeof(reply));
     if (rc < 0)
@@ -995,6 +1005,7 @@ int SimpleMessenger::Pipe::connect()
     bufferlist authorizer_reply;
 
     ceph_msg_connect connect;
+    connect.features = CEPH_FEATURE_SUPPORTED;
     connect.host_type = rank->my_type;
     connect.global_seq = gseq;
     connect.connect_seq = cseq;
@@ -1066,6 +1077,14 @@ int SimpleMessenger::Pipe::connect()
       goto stop_locked;
     }
 
+    if (reply.tag == CEPH_MSGR_TAG_FEATURES) {
+      dout(0) << "connect protocol feature mismatch, my " << std::hex
+	      << connect.features << " < peer " << reply.features
+	      << " missing " << (reply.features & ~CEPH_FEATURE_SUPPORTED)
+	      << std::dec << dendl;
+      goto fail_locked;
+    }
+
     if (reply.tag == CEPH_MSGR_TAG_BADPROTOVER) {
       dout(0) << "connect protocol version mismatch, my " << connect.protocol_version
 	      << " != " << reply.protocol_version << dendl;
@@ -1111,6 +1130,12 @@ int SimpleMessenger::Pipe::connect()
     }
 
     if (reply.tag == CEPH_MSGR_TAG_READY) {
+      __u64 feat_missing = CEPH_FEATURE_REQUIRED & ~(__u64)reply.features;
+      if (feat_missing) {
+	dout(1) << "missing required features " << std::hex << feat_missing << std::dec << dendl;
+	goto fail_locked;
+      }
+
       // hooray!
       peer_global_seq = reply.global_seq;
       policy.lossy = reply.flags & CEPH_MSG_CONNECT_LOSSY;
