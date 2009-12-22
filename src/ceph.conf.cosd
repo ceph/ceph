@@ -44,24 +44,26 @@
 
 ; ---------------------
 [mds]
-	debug mds = 20
+;	debug mds = 20
 	debug ms = 1
 ;	debug journaler = 20
 ;	log dir = /data/ceph4
 ;	log dir = /home/sage/ceph/src/log
 
 [mds.foo]
-	host = ceph4
-	log dir = /data/ceph4
+	host = cosd3
+	log dir = /data/cosd3
+;	host = ceph4
+;	log dir = /data/ceph4
 ;	valgrind = --tool=massif
 
 
 ; ---------------------
 [osd]
 	debug ms = 1
-	debug osd = 20
-	debug filestore = 10
-	debug journal = 20
+;	debug osd = 20
+;	debug filestore = 10
+;	debug journal = 20
 	log dir = /data/cosd$id
 	osd data = /mnt/osd$id
 	btrfs options = "flushoncommit" ;,wedgeabortedtrans,usertrans"
