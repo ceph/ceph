@@ -2960,7 +2960,8 @@ void Client::renew_caps()
        p != mds_sessions.end();
        p++) {
     dout(15) << "renew_caps requesting from mds" << p->first << dendl;
-    renew_caps(p->first);
+    if (mdsmap->get_state(p->first) >= MDSMap::STATE_REJOIN)
+      renew_caps(p->first);
   }
 }
 
