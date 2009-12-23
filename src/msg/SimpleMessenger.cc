@@ -667,14 +667,15 @@ int SimpleMessenger::Pipe::accept()
       goto reply;
     }
     
+    rank->lock.Unlock();
     if (rank->verify_authorizer(connection_state, peer_type,
 				connect.authorizer_protocol, authorizer, authorizer_reply, authorizer_valid) &&
 	!authorizer_valid) {
       dout(0) << "accept bad authorizer" << dendl;
       reply.tag = CEPH_MSGR_TAG_BADAUTHORIZER;
-      rank->lock.Unlock();
       goto reply;
     }
+    rank->lock.Lock();
     
     // existing?
     if (rank->rank_pipe.count(peer_addr)) {
