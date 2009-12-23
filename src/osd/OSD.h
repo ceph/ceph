@@ -92,6 +92,7 @@ class OSDMap;
 class MLog;
 class MClass;
 
+extern const coll_t meta_coll;
 
 class OSD : public Dispatcher {
   /** OSD **/

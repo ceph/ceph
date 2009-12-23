@@ -104,6 +104,9 @@ static ostream& _prefix(ostream& out, int whoami, OSDMap *osdmap) {
 }
 
 
+const coll_t meta_coll;
+
+
 ObjectStore *OSD::create_object_store(const char *dev, const char *jdev)
 {
   struct stat st;

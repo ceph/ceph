@@ -309,9 +309,6 @@ namespace __gnu_cxx {
 }
 
 
-const coll_t meta_coll;
-
-
 
 inline ostream& operator<<(ostream& out, const ceph_object_layout &ol)
 {
