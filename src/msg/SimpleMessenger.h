@@ -125,7 +125,7 @@ private:
     map<int, list<Message*> > out_q;  // priority queue for outbound msgs
     map<int, list<Message*> > in_q; // and inbound ones
     int in_qlen;
-    map<int, xlist<Pipe *>::item* > queue_items; // _map_ protected by pipe_lock, *item protected by endpoint_lock.
+    map<int, xlist<Pipe *>::item* > queue_items; // _map_ protected by pipe_lock, *item protected by q.lock
     list<Message*> sent;
     Cond cond;
     bool keepalive;
@@ -183,8 +183,11 @@ private:
     ~Pipe() {
       for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
 	   i != queue_items.end();
-	   ++i)
+	   ++i) {
+	if (i->second->is_on_xlist())
+	  i->second->remove_myself();
 	delete i->second;
+      }
       assert(out_q.empty());
       assert(sent.empty());
       connection_state->put();
@@ -220,11 +223,11 @@ private:
       if (!queue_items.count(priority))
 	queue_items[priority] = new xlist<Pipe *>::item(this);
       pipe_lock.Unlock();
-      rank->local_endpoint->endpoint_lock.Lock();
-      if (rank->local_endpoint->queued_pipes.empty())
-	rank->local_endpoint->cond.Signal();
-      rank->local_endpoint->queued_pipes[priority].push_back(queue_items[priority]);
-      rank->local_endpoint->endpoint_lock.Unlock();
+      rank->dispatch_queue.lock.Lock();
+      if (rank->dispatch_queue.queued_pipes.empty())
+	rank->dispatch_queue.cond.Signal();
+      rank->dispatch_queue.queued_pipes[priority].push_back(queue_items[priority]);
+      rank->dispatch_queue.lock.Unlock();
       pipe_lock.Lock();
     }
 
@@ -242,9 +245,9 @@ private:
 
       //increment queue length counters
       in_qlen++;
-      rank->local_endpoint->qlen_lock.lock();
-      ++rank->local_endpoint->qlen;
-      rank->local_endpoint->qlen_lock.unlock();
+      rank->dispatch_queue.qlen_lock.lock();
+      ++rank->dispatch_queue.qlen;
+      rank->dispatch_queue.qlen_lock.unlock();
 
       pipe_lock.Unlock();
     }
@@ -321,18 +324,76 @@ private:
   };
 
 
+  struct DispatchQueue {
+    Mutex lock;
+    Cond cond;
+    bool stop;
+
+    map<int, xlist<Pipe *> > queued_pipes;
+    map<int, xlist<Pipe *>::iterator> queued_pipe_iters;
+    int qlen;
+    Spinlock qlen_lock;
+    
+    enum { D_CONNECT, D_BAD_REMOTE_RESET, D_BAD_RESET };
+    list<Connection*> connect_q;
+    list<Connection*> remote_reset_q;
+    list<Connection*> reset_q;
+
+    Pipe *local_pipe;
+    void local_delivery(Message *m, int priority) {
+      local_pipe->queue_received(m, priority);
+    }
+
+    int get_queue_len() {
+      qlen_lock.lock();
+      int l = qlen;
+      qlen_lock.unlock();
+      return l;
+    }
+    
+    void local_delivery(Message *m) {
+      local_pipe->queue_received(m);
+    }
+
+    void queue_connect(Connection *con) {
+      lock.Lock();
+      connect_q.push_back(con);
+      lock.Unlock();
+      local_delivery((Message*)D_CONNECT, CEPH_MSG_PRIO_HIGHEST);
+    }
+    void queue_remote_reset(Connection *con) {
+      lock.Lock();
+      remote_reset_q.push_back(con);
+      lock.Unlock();
+      local_delivery((Message*)D_BAD_REMOTE_RESET, CEPH_MSG_PRIO_HIGHEST);
+    }
+    void queue_reset(Connection *con) {
+      lock.Lock();
+      reset_q.push_back(con);
+      lock.Unlock();
+      local_delivery((Message*)D_BAD_RESET, CEPH_MSG_PRIO_HIGHEST);
+    }
+    
+    DispatchQueue() :
+      lock("SimpleMessenger::DispatchQeueu::lock"), 
+      stop(false),
+      qlen(0),
+      qlen_lock("SimpleMessenger::DispatchQueue::qlen_lock"),
+      local_pipe(NULL)
+    {}
+    ~DispatchQueue() {
+      for (map< int, xlist<Pipe *> >::iterator i = queued_pipes.begin();
+	   i != queued_pipes.end();
+	   ++i) {
+	i->second.clear();
+      }
+    }
+  } dispatch_queue;
+
+
   // messenger interface
   class Endpoint : public Messenger {
     SimpleMessenger *rank;
-    Pipe *local_pipe;
-    Mutex endpoint_lock;
-    Cond cond;
-    map<int, xlist<Pipe *> > queued_pipes;
-    map<int, xlist<Pipe *>::iterator> queued_pipe_iters;
-    bool stop;
-    int qlen;
-    Spinlock qlen_lock;
-    int my_rank;
 
     class DispatchThread : public Thread {
       Endpoint *m;
@@ -348,57 +409,12 @@ private:
     friend class SimpleMessenger;
 
   public:
-    enum { D_CONNECT, D_BAD_REMOTE_RESET, D_BAD_RESET };
-    list<Connection*> connect_q;
-    list<Connection*> remote_reset_q;
-    list<Connection*> reset_q;
-
-    void local_delivery(Message *m, int priority) {
-      local_pipe->queue_received(m, priority);
-    }
-
-    void local_delivery(Message *m) {
-      local_pipe->queue_received(m);
-    }
-
-    void queue_connect(Connection *con) {
-      endpoint_lock.Lock();
-      connect_q.push_back(con);
-      endpoint_lock.Unlock();
-      local_delivery((Message*)D_CONNECT, CEPH_MSG_PRIO_HIGHEST);
-    }
-    void queue_remote_reset(Connection *con) {
-      endpoint_lock.Lock();
-      remote_reset_q.push_back(con);
-      endpoint_lock.Unlock();
-      local_delivery((Message*)D_BAD_REMOTE_RESET, CEPH_MSG_PRIO_HIGHEST);
-    }
-    void queue_reset(Connection *con) {
-      endpoint_lock.Lock();
-      reset_q.push_back(con);
-      endpoint_lock.Unlock();
-      local_delivery((Message*)D_BAD_RESET, CEPH_MSG_PRIO_HIGHEST);
-    }
-
-  public:
     Endpoint(SimpleMessenger *r, entity_name_t name, int rn) : 
       Messenger(name),
       rank(r),
-      endpoint_lock("SimpleMessenger::Endpoint::endpoint_lock"),
-      stop(false),
-      qlen(0),
-      qlen_lock("SimpleMessenger::Endpoint::qlen_lock"),
-      my_rank(rn),
       dispatch_thread(this) {
-      local_pipe = new Pipe(r, Pipe::STATE_OPEN);
     }
     ~Endpoint() {
-      for (map< int, xlist<Pipe *> >::iterator i = queued_pipes.begin();
-	   i != queued_pipes.end();
-	   ++i) {
-	i->second.clear();
-      }
-      delete local_pipe;
     }
 
     void destroy() {
@@ -410,16 +426,15 @@ private:
     }
 
     void ready();
-    bool is_stopped() { return stop; }
+    //bool is_stopped() { return stop; }
 
     void wait() {
       dispatch_thread.join();
     }
     
-    int get_dispatch_queue_len() { return qlen; }
+    int get_dispatch_queue_len() { return rank->dispatch_queue.get_queue_len(); }
 
     entity_addr_t get_myaddr();
-
 
     int shutdown();
     void suicide();
@@ -485,8 +500,13 @@ public:
     accepter(this),
     lock("SimpleMessenger::lock"), started(false), did_bind(false), need_addr(true),
     local_endpoint(NULL), my_type(-1),
-    global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0) { }
-  ~SimpleMessenger() { }
+    global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0) {
+    // for local dmsg delivery
+    dispatch_queue.local_pipe = new Pipe(this, Pipe::STATE_OPEN);
+  }
+  ~SimpleMessenger() {
+    delete dispatch_queue.local_pipe;
+  }
 
   //void set_listen_addr(tcpaddr_t& a);
 

@@ -210,6 +210,7 @@ void *SimpleMessenger::Accepter::entry()
       }
       
       rank->lock.Lock();
+
       if (rank->local_endpoint) {
 	Pipe *p = new Pipe(rank, Pipe::STATE_ACCEPTING);
 	p->sd = sd;
@@ -268,12 +269,12 @@ void SimpleMessenger::Accepter::stop()
  */
 void SimpleMessenger::Endpoint::dispatch_entry()
 {
-  endpoint_lock.Lock();
-  while (!stop) {
-    while (!queued_pipes.empty()) {
+  DispatchQueue& q = rank->dispatch_queue;
+  q.lock.Lock();
+  while (!q.stop) {
+    while (!q.queued_pipes.empty() && !q.stop) {
       //get highest-priority pipe
-      map<int, xlist<Pipe *> >::reverse_iterator high_iter =
-	queued_pipes.rbegin();
+      map<int, xlist<Pipe *> >::reverse_iterator high_iter = q.queued_pipes.rbegin();
       int priority = high_iter->first;
       xlist<Pipe *>& pipe_list = high_iter->second;
 
@@ -287,38 +288,38 @@ void SimpleMessenger::Endpoint::dispatch_entry()
       if (m_queue.empty()) {
 	pipe_list.pop_front();  // pipe is done
 	if (pipe_list.empty())
-	  queued_pipes.erase(priority);
+	  q.queued_pipes.erase(priority);
       } else {
 	pipe_list.push_back(pipe->queue_items[priority]);  // move to end of list
       }
-      endpoint_lock.Unlock(); //done with the pipe queue for a while
+      q.lock.Unlock(); //done with the pipe queue for a while
 
       pipe->in_qlen--;
-      qlen_lock.lock();
-      qlen--;
-      qlen_lock.unlock();
+      q.qlen_lock.lock();
+      q.qlen--;
+      q.qlen_lock.unlock();
 
       pipe->pipe_lock.Unlock(); // done with the pipe's message queue now
       {
-	if ((long)m == D_BAD_REMOTE_RESET) {
-	  endpoint_lock.Lock();
-	  Connection *con = remote_reset_q.front();
-	  remote_reset_q.pop_front();
-	  endpoint_lock.Unlock();
+	if ((long)m == DispatchQueue::D_BAD_REMOTE_RESET) {
+	  q.lock.Lock();
+	  Connection *con = q.remote_reset_q.front();
+	  q.remote_reset_q.pop_front();
+	  q.lock.Unlock();
 	  ms_deliver_handle_remote_reset(con);
 	  con->put();
-	} else if ((long)m == D_CONNECT) {
-	  endpoint_lock.Lock();
-	  Connection *con = connect_q.front();
-	  connect_q.pop_front();
-	  endpoint_lock.Unlock();
+	} else if ((long)m == DispatchQueue::D_CONNECT) {
+	  q.lock.Lock();
+	  Connection *con = q.connect_q.front();
+	  q.connect_q.pop_front();
+	  q.lock.Unlock();
 	  ms_deliver_handle_connect(con);
 	  con->put();
-	} else if ((long)m == D_BAD_RESET) {
-	  endpoint_lock.Lock();
-	  Connection *con = reset_q.front();
-	  reset_q.pop_front();
-	  endpoint_lock.Unlock();
+	} else if ((long)m == DispatchQueue::D_BAD_RESET) {
+	  q.lock.Lock();
+	  Connection *con = q.reset_q.front();
+	  q.reset_q.pop_front();
+	  q.lock.Unlock();
 	  ms_deliver_handle_reset(con);
 	  con->put();
 	} else {
@@ -335,12 +336,12 @@ void SimpleMessenger::Endpoint::dispatch_entry()
 	  dout(20) << "done calling dispatch on " << m << dendl;
 	}
       }
-      endpoint_lock.Lock();
+      q.lock.Lock();
     }
-    if (!stop)
-      cond.Wait(endpoint_lock); //wait for something to get put on queue
+    if (!q.stop)
+      q.cond.Wait(q.lock); //wait for something to get put on queue
   }
-  endpoint_lock.Unlock();
+  q.lock.Unlock();
   dout(15) << "dispatch: ending loop " << dendl;
   
   // deregister
@@ -360,17 +361,18 @@ void SimpleMessenger::Endpoint::ready()
 int SimpleMessenger::Endpoint::shutdown()
 {
   dout(10) << "shutdown " << get_myaddr() << dendl;
-  
+  DispatchQueue& q = rank->dispatch_queue;
+
   // stop my dispatch thread
   if (dispatch_thread.am_self()) {
     dout(10) << "shutdown i am dispatch, setting stop flag" << dendl;
-    stop = true;
+    q.stop = true;
   } else {
     dout(10) << "shutdown i am not dispatch, setting stop flag and joining thread." << dendl;
-    endpoint_lock.Lock();
-    stop = true;
-    cond.Signal();
-    endpoint_lock.Unlock();
+    q.lock.Lock();
+    q.stop = true;
+    q.cond.Signal();
+    q.lock.Unlock();
   }
   return 0;
 }
@@ -468,7 +470,7 @@ void SimpleMessenger::Endpoint::mark_down(entity_addr_t a)
 entity_addr_t SimpleMessenger::Endpoint::get_myaddr()
 {
   entity_addr_t a = rank->rank_addr;
-  a.erank = my_rank;
+  a.erank = 0;
   return a;  
 }
 
@@ -1148,7 +1150,7 @@ int SimpleMessenger::Pipe::connect()
       if (rank->local_endpoint) {
 	Connection * cstate = connection_state->get();
 	pipe_lock.Unlock();
-	rank->local_endpoint->queue_connect(cstate);
+	rank->dispatch_queue.queue_connect(cstate);
 	pipe_lock.Lock();
       }
       
@@ -1215,41 +1217,40 @@ void SimpleMessenger::Pipe::requeue_sent()
 }
 
 /*
- * Tears down the Pipe's message queues, and removes them from the Endpoint.
+ * Tears down the Pipe's message queues, and removes them from the DispatchQueue
  * Must hold pipe_lock prior to calling.
  */
 void SimpleMessenger::Pipe::discard_queue()
 {
   dout(10) << "discard_queue" << dendl;
-  bool endpoint = false;
-  if (rank->local_endpoint) {
-    pipe_lock.Unlock();
-    xlist<Pipe *>* list_on;
-    rank->local_endpoint->endpoint_lock.Lock();//to remove from round-robin
-    for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
-	 i != queue_items.end();
-	 ++i) {
-      if ((list_on = i->second->get_xlist())) { //if in round-robin
-	i->second->remove_myself(); //take off
-	if (!list_on->size()) //if round-robin queue is empty
-	  rank->local_endpoint->queued_pipes.erase(i->first); //remove from map
-      }
-    }
-    rank->local_endpoint->endpoint_lock.Unlock();
-    endpoint = true;
-    pipe_lock.Lock();
+  DispatchQueue& q = rank->dispatch_queue;
 
-    // clear queue_items
-    while (!queue_items.empty()) {
-      delete queue_items.begin()->second;
-      queue_items.erase(queue_items.begin());
+  pipe_lock.Unlock();
+  xlist<Pipe *>* list_on;
+  q.lock.Lock();//to remove from round-robin
+  for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
+       i != queue_items.end();
+       ++i) {
+    if ((list_on = i->second->get_xlist())) { //if in round-robin
+      i->second->remove_myself(); //take off
+      if (!list_on->size()) //if round-robin queue is empty
+	q.queued_pipes.erase(i->first); //remove from map
     }
-
-    // adjust qlen
-    rank->local_endpoint->qlen_lock.lock();
-    rank->local_endpoint->qlen -= in_qlen;
-    rank->local_endpoint->qlen_lock.unlock();
   }
+  q.lock.Unlock();
+  pipe_lock.Lock();
+
+  // clear queue_items
+  while (!queue_items.empty()) {
+    delete queue_items.begin()->second;
+    queue_items.erase(queue_items.begin());
+  }
+
+  // adjust qlen
+  q.qlen_lock.lock();
+  q.qlen -= in_qlen;
+  q.qlen_lock.unlock();
+
   for (list<Message*>::iterator p = sent.begin(); p != sent.end(); p++)
     (*p)->put();
   sent.clear();
@@ -1346,7 +1347,7 @@ void SimpleMessenger::Pipe::fail()
   if (rank->local_endpoint) {
     Connection * cstate = connection_state->get();
     pipe_lock.Unlock();
-    rank->local_endpoint->queue_reset(cstate);
+    rank->dispatch_queue.queue_reset(cstate);
     pipe_lock.Lock();
   }
 }
@@ -1361,7 +1362,7 @@ void SimpleMessenger::Pipe::was_session_reset()
   if (rank->local_endpoint) {
     Connection * cstate = connection_state->get();
     pipe_lock.Unlock();
-    rank->local_endpoint->queue_remote_reset(cstate);
+    rank->dispatch_queue.queue_remote_reset(cstate);
     pipe_lock.Lock();
   }
 
@@ -1497,12 +1498,7 @@ void SimpleMessenger::Pipe::reader()
       dout(10) << "reader got message "
 	       << m->get_seq() << " " << m << " " << *m
 	       << dendl;
-      
-      //deliver
-      if (rank->local_endpoint)
-	queue_received(m);
-      else derr(0) << "reader got message " << *m
-		   << "but there is no endpoint!" << dendl;
+      queue_received(m);
 
       pipe_lock.Lock();
     } 
@@ -2258,11 +2254,9 @@ void SimpleMessenger::unregister_entity(Endpoint *msgr)
   dout(10) << "unregister_entity " << msgr->get_myname() << dendl;
   
   // remove from local directory.
-  assert(msgr->my_rank >= 0);
   assert(local_endpoint == msgr);
   local_endpoint = 0;
   endpoint_stopped = true;
-  msgr->my_rank = -1;
 
   assert(msgr->nref.test() > 1);
   msgr->put();
@@ -2291,7 +2285,7 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
       if (dest_addr.get_erank() == 0 && local_endpoint) {
         // local
         dout(20) << "submit_message " << *m << " local" << dendl;
-	local_endpoint->local_delivery(m, m->get_priority());
+	dispatch_queue.local_delivery(m, m->get_priority());
       } else {
         derr(0) << "submit_message " << *m << " " << dest_addr << " local but wrong erank? dropping." << dendl;
         assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
