@@ -82,7 +82,6 @@ bugs
 [ 4683.521159]  [<ffffffff810298f0>] ? do_page_fault+0x104/0x278
 [ 4683.526947]  [<ffffffff8100baeb>] system_call_fastpath+0x16/0x1b
 
-
 - kclient: multiple incoming replies, or aborted (osd) request, can deplete reply msgpool
   - reproduce: read large file, hit control-c.  dropping the request empties out the reply pool.
   - this is actually harmless, except that one aborted request and one active request means the aborted reply gets
@@ -95,7 +94,11 @@ bugs
 09.12.21 14:09:33.634137    log 09.12.21 14:09:32.614726 mon0 10.3.14.128:6789/0/0 200 : [INF] osd6 10.3.14.133:6800/14770/0 boot
 09.12.21 14:09:33.634148    log 09.12.21 14:09:32.615444 mon0 10.3.14.128:6789/0/0 201 : [INF] osd6 10.3.14.133:6800/14770/0 boot
 
+- mon delay when starting new mds, when current mds is already laggy
+
 - vi file on one (k)client, :w, cat on another, get all zeros.
+  - or: cp a large text file, less on one host, vi on another, change one thing, :w.  view on either host and
+    second page will be written to first page (or something along those lines)
 
 - kclient mds caps state recall deadlock?
 [211048.250655] BUG: soft lockup - CPU#0 stuck for 61s! [ceph-msgr/0:2571]
@@ -156,10 +159,6 @@ bugs
 (03:35:29 PM) Isteriat: Stat files in sequential order...Expected 1024 files but only got 0
 (03:35:29 PM) Isteriat: Cleaning up test directory after error.
 
-- kclient: prepare_pages vs connection reset!
-  - only do prepare_pages if reply is from the expected osd?
-  - what if we get a second reply that from a new (correct) osd?
-
 - osd pg split breaks if not all osds are up...
 
 - kclient calculation of expected space needed for caps during reconnect converges to incorrect value:
@@ -175,27 +174,15 @@ Dec 16 21:10:11 ceph4 kernel: [200479.147611] ceph: i guessed 7830421, and did 4
 Dec 16 21:10:11 ceph4 kernel: [200479.381505] ceph: i guessed 7830421, and did 44828 of 45180 caps, retrying with 7830421
 ...
 
-- msgr local_endpoint teardown vs msg delivery race
-==1989== Process terminating with default action of signal 11 (SIGSEGV): dumping core
-==1989==  Access not within mapped region at address 0x13C
-==1989==    at 0x660C22: SimpleMessenger::Pipe::queue_received(Message*, int) (SimpleMessenger.h:246)
-==1989==    by 0x660CF2: SimpleMessenger::Pipe::queue_received(Message*) (SimpleMessenger.h:255)
-==1989==    by 0x655045: SimpleMessenger::Pipe::reader() (SimpleMessenger.cc:1478)
-==1989==    by 0x663E2C: SimpleMessenger::Pipe::Reader::entry() (SimpleMessenger.h:159)
-==1989==    by 0x65B3EA: Thread::_entry_func(void*) (Thread.h:39)
-==1989==    by 0x5030F99: start_thread (in /lib/libpthread-2.9.so)
-==1989==    by 0x5E5555C: clone (in /lib/libc-2.9.so)
-
 - mds recovery flag set on inode that didn't get recovered??
-- mon delay when starting new mds, when current mds is already laggy
 - mds memory leak (after some combo of client failures, mds restarts+reconnects?)
 - osd pg split breaks if not all osds are up...
 - mislinked directory?  (cpusr.sh, mv /c/* /c/t, more cpusr, ls /c/t)
-- premature filejournal trimming?
-- weird osd_lock contention during osd restart?
+
 - kclient: after reconnect,
 cp: writing `/c/ceph2.2/bin/gs-gpl': Bad file descriptor
   - need to somehow wake up unreconnected caps?   hrm!!
+
 - kclient: socket creation
 
 - mds file purge should truncate in place, or remove from namespace before purge.  otherwise new ref can appear before inode is destroyed.

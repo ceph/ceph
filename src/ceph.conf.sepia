@@ -75,51 +75,51 @@
 	host = sepia2
 [osd3]
 	host = sepia3
-;[osd4]
-;	host = sepia4
-;[osd5]
-;	host = sepia5
-;[osd6]
-;	host = sepia6
-;[osd7]
-;	host = sepia7
-;[osd8]
-;	host = sepia8
-;[osd9]
-;	host = sepia9
-;[osd10]
-;	host = sepia10
-;[osd11]
-;	host = sepia11
-;[osd12]
-;	host = sepia12
-;[osd13]
-;	host = sepia13
-;[osd14]
-;	host = sepia14
-;[osd15]
-;	host = sepia15
-;[osd16]
-;	host = sepia16
-;[osd17]
-;	host = sepia17
-;[osd18]
-;	host = sepia18
-;[osd19]
-;	host = sepia19
-;[osd20]
-;	host = sepia20
-;[osd21]
-;	host = sepia21
-;[osd22]
-;	host = sepia22
-;[osd23]
-;	host = sepia23
-;[osd24]
-;	host = sepia24
-;[osd25]
-;	host = sepia25
-;[osd26]
-;	host = sepia26
-;[osd27]
-;	host = sepia27
+[osd4]
+	host = sepia4
+[osd5]
+	host = sepia5
+[osd6]
+	host = sepia6
+[osd7]
+	host = sepia7
+[osd8]
+	host = sepia8
+[osd9]
+	host = sepia9
+[osd10]
+	host = sepia10
+[osd11]
+	host = sepia11
+[osd12]
+	host = sepia12
+[osd13]
+	host = sepia13
+[osd14]
+	host = sepia14
+[osd15]
+	host = sepia15
+[osd16]
+	host = sepia16
+[osd17]
+	host = sepia17
+[osd18]
+	host = sepia18
+[osd19]
+	host = sepia19
+[osd20]
+	host = sepia20
+[osd21]
+	host = sepia21
+[osd22]
+	host = sepia22
+[osd23]
+	host = sepia23
+[osd24]
+	host = sepia24
+[osd25]
+	host = sepia25
+[osd26]
+	host = sepia26
+[osd27]
+	host = sepia27
