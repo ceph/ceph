@@ -147,7 +147,7 @@ private:
     write_lock("FileJournal::write_lock"),
     write_stop(false), write_thread(this) { }
   ~FileJournal() {
-    delete zero_buf;
+    delete[] zero_buf;
   }
 
   int create();
