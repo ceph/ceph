@@ -35,6 +35,12 @@ v0.19
 - feature bits during connection handshake
 - kclient: handle enomem on reply using tid in msg header
 
+- remove erank from ceph_entity_addr
+
+- compat/incompat features for ondisk format?
+  - mds format
+  - osd format
+
 - qa: snap test.  maybe walk through 2.6.* kernel trees?
 
 - osd: rebuild pg log
@@ -42,15 +48,26 @@ v0.19
 
 - rebuild mds hierarchy
 
-- kclient: msgs built with a page list
 - kclient: retry alloc on ENOMEM when reading from connection?
 
 
-pending wire, disk format changes
+pending wire format changes
 /- include a __u64 tid in ceph_msg_header
-/- compat bits during protocol handshake
-- compat bits during auth/mount
+/- compat bits during connection handshake
+- compat bits during auth/mount with monitor?
+- remove erank from ceph_entity_addr
+
+pending mds format changes
+- compat/incompat flags
+
+pending osd format changes
+- current/ subdir 
+- compat/incompat flags
+
+pending mon format changes
 - add v to PGMap, PGMap::Incremental
+  - others?
+- compat/incompat flags
 
 bugs
 - kclient: on umount -f
@@ -94,13 +111,13 @@ bugs
 09.12.21 14:09:33.634137    log 09.12.21 14:09:32.614726 mon0 10.3.14.128:6789/0/0 200 : [INF] osd6 10.3.14.133:6800/14770/0 boot
 09.12.21 14:09:33.634148    log 09.12.21 14:09:32.615444 mon0 10.3.14.128:6789/0/0 201 : [INF] osd6 10.3.14.133:6800/14770/0 boot
 
-- mon delay when starting new mds, when current mds is already laggy
+- fix mon delay when starting new mds, when current mds is already laggy
 
 - vi file on one (k)client, :w, cat on another, get all zeros.
   - or: cp a large text file, less on one host, vi on another, change one thing, :w.  view on either host and
     second page will be written to first page (or something along those lines)
 
-- kclient mds caps state recall deadlock?
+- kclient mds caps state recall deadlock?  (fixed?)
 [211048.250655] BUG: soft lockup - CPU#0 stuck for 61s! [ceph-msgr/0:2571]
 [211048.250661] Modules linked in: ceph fan ac battery container uhci_hcd ehci_hcd thermal button processor
 [211048.250661] irq event stamp: 2649905664
@@ -160,19 +177,6 @@ bugs
 (03:35:29 PM) Isteriat: Cleaning up test directory after error.
 
 - osd pg split breaks if not all osds are up...
-
-- kclient calculation of expected space needed for caps during reconnect converges to incorrect value:
-Dec 16 21:09:44 ceph4 kernel: [200451.959112] ceph: mds0 10.3.14.98:6802 socket closed
-Dec 16 21:09:46 ceph4 kernel: [200454.456519] ceph: mds0 10.3.14.98:6802 connection failed
-Dec 16 21:10:10 ceph4 kernel: [200478.000289] ceph: reconnect to recovering mds0
-Dec 16 21:10:10 ceph4 kernel: [200478.005164] ceph: estimating i need 7048085 bytes for 45180 caps
-Dec 16 21:10:10 ceph4 kernel: [200478.214756] ceph: i guessed 7048085, and did 40724 of 45180 caps, retrying with 7752893
-Dec 16 21:10:10 ceph4 kernel: [200478.446193] ceph: i guessed 7752893, and did 44432 of 45180 caps, retrying with 7830421
-Dec 16 21:10:10 ceph4 kernel: [200478.679594] ceph: i guessed 7830421, and did 44828 of 45180 caps, retrying with 7830421
-Dec 16 21:10:11 ceph4 kernel: [200478.913978] ceph: i guessed 7830421, and did 44828 of 45180 caps, retrying with 7830421
-Dec 16 21:10:11 ceph4 kernel: [200479.147611] ceph: i guessed 7830421, and did 44828 of 45180 caps, retrying with 7830421
-Dec 16 21:10:11 ceph4 kernel: [200479.381505] ceph: i guessed 7830421, and did 44828 of 45180 caps, retrying with 7830421
-...
 
 - mds recovery flag set on inode that didn't get recovered??
 - mds memory leak (after some combo of client failures, mds restarts+reconnects?)
@@ -307,7 +311,7 @@ filestore performance notes
 
 
 greg
-- osd: error handling
+- csync data import/export tool?
 - uclient: readdir from cache
 - mds: basic auth checks
 
@@ -351,7 +355,6 @@ kclient
 - ENOMEM
   - message pools
   - sockets?  (this can actual generates a lockdep warning :/)
-- use page lists for large messages?  e.g. reconnect
 - fs-portable file layout virtual xattr (see Andreas' -fsdevel thread)
 - statlite
 - audit/combine/rework/whatever invalidate, writeback threads and associated invariants
