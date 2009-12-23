@@ -163,7 +163,7 @@ Session *Server::get_session(Message *m)
 {
   Session *session = (Session *)m->get_connection()->get_priv();
   if (session) {
-    dout(20) << "get_session got " << session->inst << " from message" << dendl;
+    dout(20) << "get_session have " << session << " " << session->inst << " state " << session->get_state() << dendl;
     session->put();  // not carry ref
   } else {
     dout(20) << "get_session dne for " << m->get_source_inst() << dendl;
@@ -308,7 +308,7 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm)
 	   << " on " << cm.size() << " clients"
 	   << dendl;
   for (map<client_t,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
-    Session *session = mds->sessionmap.get_or_add_session(p->second);
+    Session *session = mds->sessionmap.get_or_add_open_session(p->second);
     if (session->is_closed() || session->is_closing())
       mds->sessionmap.set_state(session, Session::STATE_OPENING);
     mds->sessionmap.touch_session(session);
@@ -488,10 +488,14 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       dout(1) << " no longer in reconnect state, ignoring reconnect, sending close" << dendl;
       ss << "denied reconnect attempt (mds is " << ceph_mds_state_name(mds->get_state())
 	 << ") from " << m->get_source_inst();
-    } else {
+    } else if (!session) {
       dout(1) << " no session for " << m->get_source() << ", ignoring reconnect, sending close" << dendl;
       ss << "denied reconnect attempt from " << m->get_source_inst() << " (no session)";
-    }
+    } else if (session->is_closed()) {
+      dout(1) << " no session for " << m->get_source() << ", ignoring reconnect, sending close" << dendl;
+      ss << "denied reconnect attempt from " << m->get_source_inst() << " (session closed)";
+    } else
+      assert(0);
     ss << " after " << delay << " (allowed interval " << g_conf.mds_reconnect_timeout << ")";
     mds->logclient.log(LOG_INFO, ss);
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_source_inst());

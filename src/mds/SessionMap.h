@@ -39,13 +39,14 @@ class MDRequest;
 class Session : public RefCountedObject {
   // -- state etc --
 public:
-  static const int STATE_CLOSED = 0;
+  static const int STATE_NEW = 0;
   static const int STATE_OPENING = 1;   // journaling open
   static const int STATE_OPEN = 2;
   static const int STATE_CLOSING = 3;   // journaling close
   static const int STATE_STALE = 4;
   static const int STATE_STALE_PURGING = 5;
   static const int STATE_STALE_CLOSING = 6;
+  static const int STATE_CLOSED = 7;
 
 private:
   int state;
@@ -87,13 +88,15 @@ public:
 
   client_t get_client() { return client_t(inst.name.num()); }
 
-  bool is_closed() { return state == STATE_CLOSED; }
+  int get_state() { return state; }
+  bool is_new() { return state == STATE_NEW; }
   bool is_opening() { return state == STATE_OPENING; }
   bool is_open() { return state == STATE_OPEN; }
   bool is_closing() { return state == STATE_CLOSING; }
   bool is_stale() { return state == STATE_STALE; }
   bool is_stale_purging() { return state == STATE_STALE_PURGING; }
   bool is_stale_closing() { return state == STATE_STALE_CLOSING; }
+  bool is_closed() { return state == STATE_CLOSED; }
 
   // -- caps --
 private:
@@ -134,7 +137,7 @@ public:
 
 
   Session() : 
-    state(STATE_CLOSED), 
+    state(STATE_NEW), 
     session_list_item(this),
     cap_push_seq(0) { }
   ~Session() {
@@ -205,16 +208,19 @@ public:
       return session_map[w];
     return 0;
   }
-  Session* get_or_add_session(entity_inst_t i) {
+  Session* get_or_add_open_session(entity_inst_t i) {
     if (session_map.count(i.name))
       return session_map[i.name];
     Session *s = session_map[i.name] = new Session;
     s->inst = i;
+    set_state(s, Session::STATE_OPEN);
+    s->last_cap_renew = g_clock.now();
     return s;
   }
   void add_session(Session *s) {
     assert(session_map.count(s->inst.name) == 0);
     session_map[s->inst.name] = s;
+    by_state[s->state].push_back(&s->session_list_item);
     s->get();
   }
   void remove_session(Session *s) {
@@ -261,11 +267,8 @@ public:
   void open_sessions(map<client_t,entity_inst_t>& client_map) {
     for (map<client_t,entity_inst_t>::iterator p = client_map.begin(); 
 	 p != client_map.end(); 
-	 ++p) {
-      Session *session = get_or_add_session(p->second);
-      session->inst = p->second;
-      set_state(session, Session::STATE_OPEN);
-    }
+	 ++p)
+      get_or_add_open_session(p->second);
     version++;
   }
 

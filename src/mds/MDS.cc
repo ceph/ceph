@@ -1504,8 +1504,10 @@ bool MDS::ms_handle_reset(Connection *con)
     objecter->ms_handle_reset(con);
   } else if (con->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT) {
     Session *session = (Session *)con->get_priv();
-    if (!session || session->is_closed())
+    if (!session || session->is_closed() || session->is_new())
       messenger->mark_down(con->get_peer_addr());
+    if (session->is_new())
+      sessionmap.remove_session(session);
     if (session)
       session->put();
   }
@@ -1524,6 +1526,8 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
 			       bool& is_valid)
 {
+  Mutex::Locker l(mds_lock);
+
   AuthAuthorizeHandler *authorize_handler = get_authorize_handler(protocol);
   if (!authorize_handler) {
     is_valid = false;
@@ -1545,6 +1549,7 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
       s->inst.name = n;
       dout(10) << " new session " << s << " for " << s->inst << dendl;
       con->set_priv(s);
+      sessionmap.add_session(s);
     } else {
       dout(10) << " existing session " << s << " for " << s->inst << dendl;
       con->set_priv(s->get());
