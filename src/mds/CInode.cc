@@ -1634,10 +1634,13 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
   bool plink = linklock.is_xlocked_by_client(client);
   bool pxattr = xattrlock.is_xlocked_by_client(client);
 
-  inode_t *i = (pfile|pauth|plink|pxattr) ? pi : oi;
+  bool plocal = versionlock.get_last_wrlock_client() == client;
+  
+  inode_t *i = (pfile|pauth|plink|pxattr|plocal) ? pi : oi;
   i->ctime.encode_timeval(&e.ctime);
   
   dout(20) << " pfile " << pfile << " pauth " << pauth << " plink " << plink << " pxattr " << pxattr
+	   << " plocal " << plocal
 	   << " ctime " << i->ctime
 	   << " valid=" << valid << dendl;
 

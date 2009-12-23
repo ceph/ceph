@@ -2457,6 +2457,8 @@ void Server::handle_client_setattr(MDRequest *mdr)
     xlocks.insert(&cur->authlock);
   if (mask & (CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME|CEPH_SETATTR_SIZE))
     xlocks.insert(&cur->filelock);
+  if (mask & CEPH_SETATTR_CTIME)
+    wrlocks.insert(&cur->versionlock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;

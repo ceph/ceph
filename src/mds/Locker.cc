@@ -3076,7 +3076,7 @@ void Locker::local_wrlock_grab(LocalLock *lock, Mutation *mut)
   
   assert(lock->can_wrlock());
   assert(!mut->wrlocks.count(lock));
-  lock->get_wrlock();
+  lock->get_wrlock(mut->get_client());
   mut->wrlocks.insert(lock);
   mut->locks.insert(lock);
 }
@@ -3088,7 +3088,7 @@ bool Locker::local_wrlock_start(LocalLock *lock, MDRequest *mut)
   
   if (lock->can_wrlock()) {
     assert(!mut->wrlocks.count(lock));
-    lock->get_wrlock();
+    lock->get_wrlock(mut->get_client());
     mut->wrlocks.insert(lock);
     mut->locks.insert(lock);
     return true;

@@ -20,6 +20,8 @@
 
 class LocalLock : public SimpleLock {
 public:
+  client_t last_wrlock_client;
+  
   LocalLock(MDSCacheObject *o, int t) : 
     SimpleLock(o, t) {
     set_state(LOCK_LOCK); // always.
@@ -28,17 +30,30 @@ public:
   bool can_wrlock() {
     return !is_xlocked();
   }
-  void get_wrlock() {
+  void get_wrlock(client_t client) {
     assert(can_wrlock());
     if (num_wrlock == 0) parent->get(MDSCacheObject::PIN_LOCK);
     ++num_wrlock;
+    last_wrlock_client = client;
   }
   void put_wrlock() {
     --num_wrlock;
-    if (num_wrlock == 0) parent->put(MDSCacheObject::PIN_LOCK);
+    if (num_wrlock == 0) {
+      parent->put(MDSCacheObject::PIN_LOCK);
+      last_wrlock_client = client_t();
+    }
   }
   bool is_wrlocked() { return num_wrlock > 0; }
   int get_num_wrlocks() { return num_wrlock; }
+  client_t get_last_wrlock_client() { return last_wrlock_client; }
+
+  virtual void print(ostream& out) {
+    out << "(";
+    _print(out);
+    if (last_wrlock_client >= 0)
+      out << " last_client=" << last_wrlock_client;
+    out << ")";
+  }
 };
 
 
