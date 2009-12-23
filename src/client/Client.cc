@@ -1332,6 +1332,8 @@ void Client::handle_mds_map(MMDSMap* m)
     if (!mdsmap->is_up(p->first) ||
 	mdsmap->get_inst(p->first) != p->second.inst) {
       messenger->mark_down(p->second.inst.addr);
+      if (mdsmap->is_up(p->first))
+	p->second.inst = mdsmap->get_inst(p->first);
     } else if (oldstate == newstate)
       continue;  // no change
     
