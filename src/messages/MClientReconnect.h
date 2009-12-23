@@ -20,7 +20,7 @@
 
 class MClientReconnect : public Message {
 public:
-  __u8 closed;  // true if this session was closed by the client.
+  bool closed;  // true if this session was closed by the client.
   map<inodeno_t, cap_reconnect_t>  caps;   // only head inodes
   vector<ceph_mds_snaprealm_reconnect> realms;
 
@@ -49,15 +49,23 @@ public:
   }
 
   void encode_payload() {
-    ::encode(closed, payload);
-    ::encode(caps, payload);
-    ::encode(realms, payload);
+    if (!closed) {
+      ::encode(caps, data);
+      ::encode_nohead(realms, data);
+    }
   }
   void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(closed, p);
-    ::decode(caps, p);
-    ::decode(realms, p);
+    bufferlist::iterator p = data.begin();
+    if (p.end()) {
+      closed = true;
+    } else {
+      closed = false;
+      ::decode(caps, p);
+      while (p.end()) {
+	realms.push_back(ceph_mds_snaprealm_reconnect());
+	::decode(realms.back(), p);
+      }
+    }
   }
 
 };
