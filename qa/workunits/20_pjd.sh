@@ -1,5 +1,5 @@
 #!/bin/bash
-wget http://ceph.newdream.net/qa/pjd-fstest-20080816.tgz
+wget http://ceph.newdream.net/qa/pjd.tgz
 tar zxvf pjd*
 cd pjd*
 make
