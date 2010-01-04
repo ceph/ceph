@@ -2230,7 +2230,7 @@ SimpleMessenger::Endpoint *SimpleMessenger::register_entity(entity_name_t name)
   }
 
   // create messenger
-  Endpoint *msgr = new Endpoint(this, name, 0);
+  Endpoint *msgr = new Endpoint(this, name);
 
   // now i know my type.
   if (my_type >= 0)

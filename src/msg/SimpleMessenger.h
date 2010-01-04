@@ -409,7 +409,7 @@ private:
     friend class SimpleMessenger;
 
   public:
-    Endpoint(SimpleMessenger *r, entity_name_t name, int rn) : 
+    Endpoint(SimpleMessenger *r, entity_name_t name) : 
       Messenger(name),
       rank(r),
       dispatch_thread(this) {
@@ -428,10 +428,6 @@ private:
     void ready();
     //bool is_stopped() { return stop; }
 
-    void wait() {
-      dispatch_thread.join();
-    }
-    
     int get_dispatch_queue_len() { return rank->dispatch_queue.get_queue_len(); }
 
     entity_addr_t get_myaddr();
