@@ -49,7 +49,7 @@ using namespace __gnu_cxx;
 
 /* Rank - per-process
  */
-class SimpleMessenger {
+class SimpleMessenger : public Messenger {
 public:
   struct Policy {
     bool lossy;
@@ -389,7 +389,7 @@ private:
       }
     }
   } dispatch_queue;
-
+  
 
   // messenger interface
   class Endpoint : public Messenger {
@@ -491,11 +491,68 @@ private:
       return default_policy;
   }
 
+  //Messenger-required functions
+  void destroy() {
+    if (!endpoint_stopped)
+      local_endpoint->destroy();
+    Messenger::destroy();
+  }
+
+  entity_addr_t get_myaddr() {
+    if (!endpoint_stopped)
+      return local_endpoint->get_myaddr();
+    return entity_addr_t();
+  }
+
+  int get_dispatch_queue_len() {
+    return dispatch_queue.get_queue_len();
+  }
+
+  void ready() {
+    if (!endpoint_stopped)
+      local_endpoint->ready();
+  }
+
+  int shutdown() {
+    if (!endpoint_stopped)
+      return local_endpoint->shutdown();
+    return -1;
+  }
+
+  void suicide() {
+    if (!endpoint_stopped)
+      local_endpoint->suicide();
+  }
+
+  void prepare_dest(const entity_inst_t& inst) {
+    if (!endpoint_stopped)
+      local_endpoint->prepare_dest(inst);
+  }
+
+  int send_message(Message *m, entity_inst_t dest) {
+    if (!endpoint_stopped)
+      return local_endpoint->send_message(m, dest);
+    return -1;
+  }
+
+  int forward_message(Message *m, entity_inst_t dest) {
+    if (!endpoint_stopped)
+      return local_endpoint->forward_message(m, dest);
+    return -1;
+  }
+
+  int lazy_send_message(Message *m, entity_inst_t dest) {
+    if (!endpoint_stopped)
+      return local_endpoint->lazy_send_message(m, dest);
+    return -1;
+  }
+  
 public:
   SimpleMessenger() :
+    Messenger(entity_name_t()),
     accepter(this),
     lock("SimpleMessenger::lock"), started(false), did_bind(false), need_addr(true),
-    local_endpoint(NULL), my_type(-1),
+    local_endpoint(NULL), endpoint_stopped(true), my_type(-1),
     global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0) {
     // for local dmsg delivery
     dispatch_queue.local_pipe = new Pipe(this, Pipe::STATE_OPEN);
@@ -526,8 +583,7 @@ public:
   void unregister_entity(Endpoint *ms);
 
   void submit_message(Message *m, const entity_inst_t& addr, bool lazy=false);  
-  void prepare_dest(const entity_inst_t& inst);
-  void send_keepalive(const entity_inst_t& addr);  
+  int send_keepalive(entity_inst_t addr);
 
   void learned_addr(entity_addr_t peer_addr_for_me);
 

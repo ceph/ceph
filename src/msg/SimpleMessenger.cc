@@ -2329,7 +2329,7 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
   lock.Unlock();
 }
 
-void SimpleMessenger::send_keepalive(const entity_inst_t& dest)
+int SimpleMessenger::send_keepalive(entity_inst_t dest)
 {
   const entity_addr_t dest_addr = dest.addr;
   entity_addr_t dest_proc_addr = dest_addr;
@@ -2360,6 +2360,7 @@ void SimpleMessenger::send_keepalive(const entity_inst_t& dest)
     }
   }
   lock.Unlock();
+  return 0;
 }
 
 
