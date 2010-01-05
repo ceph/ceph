@@ -625,11 +625,11 @@ int main(int argc, const char **argv, const char *envp[])
     return -1;
   
   // start up network
-  SimpleMessenger rank;
-  messenger = rank.register_entity(entity_name_t::ADMIN());
+  SimpleMessenger *rank = new SimpleMessenger();
+  messenger = rank->register_entity(entity_name_t::ADMIN());
   messenger->add_dispatcher_head(&dispatcher);
 
-  rank.start();
+  rank->start();
 
   mc.set_messenger(messenger);
   mc.init();
@@ -677,8 +677,8 @@ int main(int argc, const char **argv, const char *envp[])
 
 
   // wait for messenger to finish
-  rank.wait();
-  messenger->destroy();
+  rank->wait();
+  rank->destroy();
   return 0;
 }
 

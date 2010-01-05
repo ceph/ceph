@@ -68,12 +68,12 @@ int main(int argc, const char **argv, const char *envp[]) {
     return -1;
 
   // start up network
-  SimpleMessenger rank;
+  SimpleMessenger *rank = new SimpleMessenger();
   cout << "mounting ceph" << std::endl;
 
-  Client *client = new Client(rank.register_entity(entity_name_t::CLIENT()), &mc);
+  Client *client = new Client(rank->register_entity(entity_name_t::CLIENT()), &mc);
 
-  rank.start();
+  rank->start();
 
   // start client
   client->init();
@@ -100,7 +100,8 @@ int main(int argc, const char **argv, const char *envp[]) {
   delete client;
   
   // wait for messenger to finish
-  rank.wait();
+  rank->wait();
+  rank->destroy();
   
   return 0;
 }

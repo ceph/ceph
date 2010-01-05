@@ -50,7 +50,7 @@ class RadosClient : public Dispatcher
   OSDMap osdmap;
   Messenger *messenger;
   MonClient monclient;
-  SimpleMessenger rank;
+  SimpleMessenger *rank;
 
   bool _dispatch(Message *m);
   bool ms_dispatch(Message *m);
@@ -75,7 +75,10 @@ class RadosClient : public Dispatcher
 
  
 public:
-  RadosClient() : messenger(NULL), lock("radosclient") {}
+  RadosClient() : messenger(NULL), lock("radosclient") {
+    rank = new SimpleMessenger();
+  }
+
   ~RadosClient();
   bool init();
   void shutdown();
@@ -286,9 +289,9 @@ bool RadosClient::init()
   if (monclient.build_initial_monmap() < 0)
     return false;
 
-  dout(1) << "starting msgr at " << rank.get_rank_addr() << dendl;
+  dout(1) << "starting msgr at " << rank->get_rank_addr() << dendl;
 
-  messenger = rank.register_entity(entity_name_t::CLIENT(-1));
+  messenger = rank->register_entity(entity_name_t::CLIENT(-1));
   assert_warn(messenger);
   if (!messenger)
     return false;
@@ -302,7 +305,7 @@ bool RadosClient::init()
   
   messenger->add_dispatcher_head(this);
 
-  rank.start(1);
+  rank->start(1);
   messenger->add_dispatcher_head(this);
 
   dout(1) << "setting wanted keys" << dendl;
@@ -336,7 +339,8 @@ void RadosClient::shutdown()
   objecter->shutdown();
   lock.Unlock();
   messenger->shutdown();
-  rank.wait();
+  rank->wait();
+  rank->destroy();
   dout(1) << "shutdown" << dendl;
 }
 

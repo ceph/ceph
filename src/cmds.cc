@@ -67,27 +67,27 @@ int main(int argc, const char **argv)
   if (mc.build_initial_monmap() < 0)
     return -1;
 
-  SimpleMessenger rank;
-  rank.bind();
+  SimpleMessenger *rank = new SimpleMessenger();
+  rank->bind();
   cout << "starting mds." << g_conf.id
-       << " at " << rank.get_rank_addr() 
+       << " at " << rank->get_rank_addr() 
        << std::endl;
 
-  Messenger *m = rank.register_entity(entity_name_t::MDS(-1));
+  Messenger *m = rank->register_entity(entity_name_t::MDS(-1));
   assert_warn(m);
   if (!m)
     return 1;
 
-  rank.set_policy(entity_name_t::TYPE_CLIENT, SimpleMessenger::Policy::stateful_server());
-  rank.set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossless_peer());
+  rank->set_policy(entity_name_t::TYPE_CLIENT, SimpleMessenger::Policy::stateful_server());
+  rank->set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossless_peer());
 
-  rank.start();
+  rank->start();
   
   // start mds
   MDS *mds = new MDS(g_conf.id, m, &mc);
   mds->init();
   
-  rank.wait();
+  rank->wait();
 
   // yuck: grab the mds lock, so we can be sure that whoever in *mds 
   // called shutdown finishes what they were doing.
@@ -98,6 +98,8 @@ int main(int argc, const char **argv)
   // detection, etc.).  don't bother if it was a suicide.
   if (mds->is_stopped())
     delete mds;
+
+  rank->destroy();
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];

@@ -166,7 +166,7 @@ int MonClient::get_monmap_privately()
     monc_lock.Unlock();
     messenger->shutdown();
     rank->wait();
-    messenger->destroy();
+    rank->destroy();
     messenger = 0;
     monc_lock.Lock();
   }

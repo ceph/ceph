@@ -138,12 +138,13 @@ int main(int argc, const char **argv)
   g_my_addr.ss_addr() = mc.get_my_addr().ss_addr();
   g_my_addr.set_port(0);
 
-  SimpleMessenger rank, rank_hb;
-  rank.bind();
-  rank_hb.bind();
+  SimpleMessenger *rank = new SimpleMessenger();
+  SimpleMessenger *rank_hb = new SimpleMessenger();
+  rank->bind();
+  rank_hb->bind();
 
   cout << "starting osd" << whoami
-       << " at " << rank.get_rank_addr() 
+       << " at " << rank->get_rank_addr() 
        << " osd_data " << g_conf.osd_data
        << " " << ((g_conf.osd_journal && g_conf.osd_journal[0]) ? g_conf.osd_journal:"(no journal)")
        << " fsid " << mc.monmap.fsid
@@ -151,21 +152,21 @@ int main(int argc, const char **argv)
 
   g_timer.shutdown();
 
-  Messenger *m = rank.register_entity(entity_name_t::OSD(whoami));
+  Messenger *m = rank->register_entity(entity_name_t::OSD(whoami));
   assert_warn(m);
   if (!m)
     return 1;
-  Messenger *hbm = rank_hb.register_entity(entity_name_t::OSD(whoami));
+  Messenger *hbm = rank_hb->register_entity(entity_name_t::OSD(whoami));
   assert_warn(hbm);
   if (!hbm)
     return 1;
 
-  rank.set_default_policy(SimpleMessenger::Policy::stateless_server());
-  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::client());
-  rank.set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless_peer());
+  rank->set_default_policy(SimpleMessenger::Policy::stateless_server());
+  rank->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::client());
+  rank->set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless_peer());
 
-  rank.start();
-  rank_hb.start(true);  // only need to daemon() once
+  rank->start();
+  rank_hb->start(true);  // only need to daemon() once
 
   // start osd
   OSD *osd = new OSD(whoami, m, hbm, &mc, g_conf.osd_data, g_conf.osd_journal, mkjournal);
@@ -174,8 +175,10 @@ int main(int argc, const char **argv)
     return 1;
   }
 
-  rank.wait();
-  rank_hb.wait();
+  rank->wait();
+  rank->destroy();
+  rank_hb->wait();
+  rank_hb->wait();
 
   // done
   delete osd;

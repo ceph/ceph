@@ -127,7 +127,7 @@ int main(int argc, const char **argv)
 	 << "         continuing with monmap configuration" << std::endl;
 
   // bind
-  SimpleMessenger rank;
+  SimpleMessenger *rank = new SimpleMessenger();
 
   cout << "starting mon" << whoami 
        << " at " << monmap.get_inst(whoami).addr
@@ -135,24 +135,25 @@ int main(int argc, const char **argv)
        << " fsid " << monmap.get_fsid()
        << std::endl;
   g_my_addr = monmap.get_inst(whoami).addr;
-  err = rank.bind();
+  err = rank->bind();
   if (err < 0)
     return 1;
 
   _dout_create_courtesy_output_symlink("mon", whoami);
   
   // start monitor
-  Messenger *m = rank.register_entity(entity_name_t::MON(whoami));
+  Messenger *m = rank->register_entity(entity_name_t::MON(whoami));
   m->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
   Monitor *mon = new Monitor(whoami, &store, m, &monmap);
 
-  rank.start();  // may daemonize
+  rank->start();  // may daemonize
 
-  rank.set_default_policy(SimpleMessenger::Policy::stateless_server());
-  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossless_peer());
+  rank->set_default_policy(SimpleMessenger::Policy::stateless_server());
+  rank->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossless_peer());
 
   mon->init();
-  rank.wait();
+  rank->wait();
+  rank->destroy();
 
   store.umount();
   delete mon;

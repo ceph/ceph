@@ -71,7 +71,7 @@ extern "C" void ceph_deinitialize()
     client->shutdown();
     delete client;
     rank->wait();
-    delete rank;
+    rank->destroy();
     delete monclient;
   }
   ceph_client_mutex.Unlock();

@@ -55,7 +55,7 @@ int main(int argc, const char **argv, char *envp[])
     return -1;
 
   // start up network
-  SimpleMessenger rank;
+  SimpleMessenger *rank = new SimpleMessenger();
   cout << "starting csyn" << std::endl;
 
   list<Client*> clients;
@@ -63,13 +63,13 @@ int main(int argc, const char **argv, char *envp[])
 
   cout << "mounting and starting " << g_conf.num_client << " syn client(s)" << std::endl;
   for (int i=0; i<g_conf.num_client; i++) {
-    Client *client = new Client(rank.register_entity(entity_name_t(entity_name_t::TYPE_CLIENT,-1)), &mc);
+    Client *client = new Client(rank->register_entity(entity_name_t(entity_name_t::TYPE_CLIENT,-1)), &mc);
     SyntheticClient *syn = new SyntheticClient(client);
     clients.push_back(client);
     synclients.push_back(syn);
   }
 
-  rank.start();
+  rank->start();
 
   for (list<SyntheticClient*>::iterator p = synclients.begin(); 
        p != synclients.end();
@@ -88,7 +88,8 @@ int main(int argc, const char **argv, char *envp[])
   }
     
   // wait for messenger to finish
-  rank.wait();
+  rank->wait();
+  rank->destroy();
   
   return 0;
 }

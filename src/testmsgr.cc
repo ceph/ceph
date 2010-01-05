@@ -82,19 +82,19 @@ int main(int argc, const char **argv, const char *envp[]) {
   
   // start up network
   g_my_addr = mc.get_mon_addr(whoami);
-  SimpleMessenger rank;
-  int err = rank.bind();
+  SimpleMessenger *rank = new SimpleMessenger();
+  int err = rank->bind();
   if (err < 0)
     return 1;
 
   _dout_create_courtesy_output_symlink("mon", whoami);
 
   // start monitor
-  messenger = rank.register_entity(entity_name_t::MON(whoami));
+  messenger = rank->register_entity(entity_name_t::MON(whoami));
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
   messenger->add_dispatcher_head(&dispatcher);
 
-  rank.start();
+  rank->start();
   
   int isend = 0;
   if (whoami == 0)
@@ -126,7 +126,8 @@ int main(int argc, const char **argv, const char *envp[]) {
   lock.Unlock();
 
   // wait for messenger to finish
-  rank.wait();
+  rank->wait();
+  rank->destroy();
   
   return 0;
 }
