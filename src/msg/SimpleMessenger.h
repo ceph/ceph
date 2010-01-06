@@ -542,16 +542,12 @@ public:
 			 bool& isvalid);
 
   Endpoint *register_entity(entity_name_t addr);
-  void rename_entity(Endpoint *ms, entity_name_t newaddr);
   void unregister_entity(Endpoint *ms);
 
   void submit_message(Message *m, const entity_inst_t& addr, bool lazy=false);  
   int send_keepalive(entity_inst_t addr);
 
   void learned_addr(entity_addr_t peer_addr_for_me);
-
-  // create a new messenger
-  Endpoint *new_entity(entity_name_t addr);
 
   void set_default_policy(Policy p) {
     default_policy = p;
