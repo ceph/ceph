@@ -73,7 +73,6 @@ public:
   void sigint();
 
 private:
-  class Endpoint;
   class Pipe;
 
   // incoming
@@ -394,38 +393,6 @@ private:
     }
   } dispatch_queue;
 
-  class Endpoint : public Messenger {
-    SimpleMessenger *rank;
-    friend class SimpleMessenger;
-  public:
-    Endpoint(SimpleMessenger *r, entity_name_t name) :
-      Messenger(name),
-      rank(r) {}
-    ~Endpoint() {}
-
-    void destroy() {
-      rank->destroy();
-      Messenger::destroy();
-    }
-
-    void ready() { rank->ready(); }
-
-    int get_dispatch_queue_len() { return rank->get_dispatch_queue_len(); }
-
-    entity_addr_t get_myaddr() { return rank->get_myaddr(); }
-
-    int shutdown() { return rank->shutdown(); }
-    void suicide() { rank->suicide(); }
-    void prepare_dest(const entity_inst_t& inst) { rank->prepare_dest(inst); }
-    int send_message(Message *m, entity_inst_t dest) {
-      return rank->send_message(m, dest); }
-    int forward_message(Message *m, entity_inst_t dest) {
-      return rank->forward_message(m, dest); }
-    int lazy_send_message(Message *m, entity_inst_t dest) {
-      return rank->lazy_send_message(m, dest); }
-    int send_keepalive(entity_inst_t dest) { return rank->send_keepalive(dest);}
-  };
-  
   // SimpleMessenger stuff
  public:
   Mutex lock;
@@ -438,10 +405,6 @@ private:
   entity_addr_t rank_addr;
   
   // local
-  /*unsigned max_local, num_local;
-  vector<Endpoint*> local;
-  vector<bool>             stopped; */
-  Endpoint *local_endpoint;
   bool endpoint_stopped;
   
   // remote
@@ -514,7 +477,7 @@ public:
     Messenger(entity_name_t()),
     accepter(this),
     lock("SimpleMessenger::lock"), started(false), did_bind(false), need_addr(true),
-    local_endpoint(NULL), endpoint_stopped(true), my_type(-1),
+    endpoint_stopped(true), my_type(-1),
     global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
     dispatch_thread(this), rank(this) {
     // for local dmsg delivery
@@ -541,8 +504,8 @@ public:
   bool verify_authorizer(Connection *con, int peer_type, int protocol, bufferlist& auth, bufferlist& auth_reply,
 			 bool& isvalid);
 
-  Endpoint *register_entity(entity_name_t addr);
-  void unregister_entity(Endpoint *ms);
+  bool register_entity(entity_name_t addr);
+  void unregister_entity(entity_name_t addr);
 
   void submit_message(Message *m, const entity_inst_t& addr, bool lazy=false);  
   int send_keepalive(entity_inst_t addr);

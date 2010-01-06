@@ -211,7 +211,7 @@ void *SimpleMessenger::Accepter::entry()
       
       rank->lock.Lock();
 
-      if (rank->local_endpoint) {
+      if (!rank->endpoint_stopped) {
 	Pipe *p = new Pipe(rank, Pipe::STATE_ACCEPTING);
 	p->sd = sd;
 	p->start_reader();
@@ -254,9 +254,7 @@ void SimpleMessenger::Accepter::stop()
 
 
 
-/**********************************
- * Endpoint
- */
+//**********************************
 
 /*
  * This function delivers incoming messages to the Messenger.
@@ -1131,7 +1129,7 @@ int SimpleMessenger::Pipe::connect()
       backoff = utime_t();
       dout(20) << "connect success " << connect_seq << ", lossy = " << policy.lossy << dendl;
       
-      if (rank->local_endpoint) {
+      if (!rank->endpoint_stopped) {
 	Connection * cstate = connection_state->get();
 	pipe_lock.Unlock();
 	rank->dispatch_queue.queue_connect(cstate);
@@ -1328,7 +1326,7 @@ void SimpleMessenger::Pipe::fail()
 
   discard_queue();
   
-  if (rank->local_endpoint) {
+  if (!rank->endpoint_stopped) {
     Connection * cstate = connection_state->get();
     pipe_lock.Unlock();
     rank->dispatch_queue.queue_reset(cstate);
@@ -1343,7 +1341,7 @@ void SimpleMessenger::Pipe::was_session_reset()
   dout(10) << "was_session_reset" << dendl;
   discard_queue();
 
-  if (rank->local_endpoint) {
+  if (!rank->endpoint_stopped) {
     Connection * cstate = connection_state->get();
     pipe_lock.Unlock();
     rank->dispatch_queue.queue_remote_reset(cstate);
@@ -2184,66 +2182,55 @@ SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr, 
 
 AuthAuthorizer *SimpleMessenger::get_authorizer(int peer_type, bool force_new)
 {
-  if (local_endpoint)
-    return local_endpoint->ms_deliver_get_authorizer(peer_type, force_new);
-  return 0;
+  return ms_deliver_get_authorizer(peer_type, force_new);
 }
 
 bool SimpleMessenger::verify_authorizer(Connection *con, int peer_type,
 					int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
 					bool& isvalid)
 {
-  if (local_endpoint)
-    return local_endpoint->ms_deliver_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid);
-  return false;
+  return ms_deliver_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid);
 }
 
 
 
 /* register_entity 
  */
-SimpleMessenger::Endpoint *SimpleMessenger::register_entity(entity_name_t name)
+bool SimpleMessenger::register_entity(entity_name_t name)
 {
   dout(10) << "register_entity " << name << dendl;
   lock.Lock();
   
-  if (local_endpoint) { //already have an Endpoint set
+  if (!endpoint_stopped) { //already have a working entity set
     lock.Unlock();
-    return NULL;
+    return false;
   }
 
-  // create messenger
-  Endpoint *msgr = new Endpoint(this, name);
-
+  // set it up
+  Messenger::set_myname(name);
   // now i know my type.
   if (my_type >= 0)
     assert(my_type == name.type());
   else
     my_type = name.type();
 
-  msgr->get();
-  local_endpoint = msgr;
   endpoint_stopped = false;
 
-  dout(10) << "register_entity " << name << " at " << msgr->get_myaddr() << dendl;
+  dout(10) << "register_entity " << name << " at " << get_myaddr() << dendl;
 
   lock.Unlock();
-  return msgr;
+  return true;
 }
 
 
-void SimpleMessenger::unregister_entity(Endpoint *msgr)
+void SimpleMessenger::unregister_entity(entity_name_t name)
 {
   lock.Lock();
-  dout(10) << "unregister_entity " << msgr->get_myname() << dendl;
+  dout(10) << "unregister_entity " << get_myname() << dendl;
   
   // remove from local directory.
-  assert(local_endpoint == msgr);
-  local_endpoint = 0;
+  assert(get_myname() == name);
   endpoint_stopped = true;
-
-  assert(msgr->nref.test() > 1);
-  msgr->put();
 
   wait_cond.Signal();
 
@@ -2266,7 +2253,7 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
   {
     // local?
     if (rank_addr.is_local_to(dest_addr)) {
-      if (dest_addr.get_erank() == 0 && local_endpoint) {
+      if (dest_addr.get_erank() == 0 && !endpoint_stopped) {
         // local
         dout(20) << "submit_message " << *m << " local" << dendl;
 	dispatch_queue.local_delivery(m, m->get_priority());
@@ -2357,7 +2344,7 @@ void SimpleMessenger::wait()
     // reap dead pipes
     reaper();
 
-    if (!local_endpoint) {
+    if (endpoint_stopped) {
       dout(10) << "wait: everything stopped" << dendl;
       break;   // everything stopped.
     }
