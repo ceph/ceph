@@ -49,9 +49,10 @@ extern "C" int ceph_initialize(int argc, const char **argv)
     }
     //network connection
     rank = new SimpleMessenger();
+    rank->register_entity(entity_name_t::CLIENT());
 
     //at last the client
-    client = new Client(rank->register_entity(entity_name_t::CLIENT()), monclient);
+    client = new Client(rank, monclient);
 
     rank->start();
 

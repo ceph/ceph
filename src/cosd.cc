@@ -151,12 +151,13 @@ int main(int argc, const char **argv)
        << std::endl;
 
   g_timer.shutdown();
-
-  Messenger *m = rank->register_entity(entity_name_t::OSD(whoami));
+  rank->register_entity(entity_name_t::OSD(whoami));
+  Messenger *m = rank;
   assert_warn(m);
   if (!m)
     return 1;
-  Messenger *hbm = rank_hb->register_entity(entity_name_t::OSD(whoami));
+  rank_hb->register_entity(entity_name_t::OSD(whoami));
+  Messenger *hbm = rank_hb;
   assert_warn(hbm);
   if (!hbm)
     return 1;
@@ -178,7 +179,7 @@ int main(int argc, const char **argv)
   rank->wait();
   rank->destroy();
   rank_hb->wait();
-  rank_hb->wait();
+  rank_hb->destroy();
 
   // done
   delete osd;

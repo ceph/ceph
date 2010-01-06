@@ -73,7 +73,8 @@ int main(int argc, const char **argv)
        << " at " << rank->get_rank_addr() 
        << std::endl;
 
-  Messenger *m = rank->register_entity(entity_name_t::MDS(-1));
+  Messenger *m = rank;
+  rank->register_entity(entity_name_t::MDS(-1));
   assert_warn(m);
   if (!m)
     return 1;

@@ -142,7 +142,8 @@ int main(int argc, const char **argv)
   _dout_create_courtesy_output_symlink("mon", whoami);
   
   // start monitor
-  Messenger *m = rank->register_entity(entity_name_t::MON(whoami));
+  Messenger *m = rank;
+  rank->register_entity(entity_name_t::MON(whoami));
   m->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
   Monitor *mon = new Monitor(whoami, &store, m, &monmap);
 

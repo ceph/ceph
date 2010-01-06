@@ -137,8 +137,8 @@ int MonClient::get_monmap_privately()
   SimpleMessenger *rank = NULL; 
   bool temp_msgr = false;
   if (!messenger) {
-    rank = new SimpleMessenger;
-    messenger = rank->register_entity(entity_name_t::CLIENT(-1));
+    messenger = rank = new SimpleMessenger();
+    rank->register_entity(entity_name_t::CLIENT(-1));
     messenger->add_dispatcher_head(this);
     rank->start(true);  // do not daemonize!
     temp_msgr = true; 

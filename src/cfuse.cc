@@ -70,8 +70,8 @@ int main(int argc, const char **argv, const char *envp[]) {
   // start up network
   SimpleMessenger *rank = new SimpleMessenger();
   cout << "mounting ceph" << std::endl;
-
-  Client *client = new Client(rank->register_entity(entity_name_t::CLIENT()), &mc);
+  rank->register_entity(entity_name_t::CLIENT());
+  Client *client = new Client(rank, &mc);
 
   rank->start();
 

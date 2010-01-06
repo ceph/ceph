@@ -90,7 +90,8 @@ int main(int argc, const char **argv, const char *envp[]) {
   _dout_create_courtesy_output_symlink("mon", whoami);
 
   // start monitor
-  messenger = rank->register_entity(entity_name_t::MON(whoami));
+  rank->register_entity(entity_name_t::MON(whoami));
+  messenger = rank;
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
   messenger->add_dispatcher_head(&dispatcher);
 

@@ -291,7 +291,8 @@ bool RadosClient::init()
 
   dout(1) << "starting msgr at " << rank->get_rank_addr() << dendl;
 
-  messenger = rank->register_entity(entity_name_t::CLIENT(-1));
+  rank->register_entity(entity_name_t::CLIENT(-1));
+  messenger = rank;
   assert_warn(messenger);
   if (!messenger)
     return false;
