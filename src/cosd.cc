@@ -177,9 +177,7 @@ int main(int argc, const char **argv)
   }
 
   rank->wait();
-  rank->destroy();
   rank_hb->wait();
-  rank_hb->destroy();
 
   // done
   delete osd;

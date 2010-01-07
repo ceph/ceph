@@ -341,7 +341,6 @@ void RadosClient::shutdown()
   lock.Unlock();
   messenger->shutdown();
   rank->wait();
-  rank->destroy();
   dout(1) << "shutdown" << dendl;
 }
 

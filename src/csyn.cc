@@ -90,7 +90,6 @@ int main(int argc, const char **argv, char *envp[])
     
   // wait for messenger to finish
   rank->wait();
-  rank->destroy();
   
   return 0;
 }

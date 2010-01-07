@@ -100,8 +100,6 @@ int main(int argc, const char **argv)
   if (mds->is_stopped())
     delete mds;
 
-  rank->destroy();
-
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];
   sprintf(s, "gmon/%d", getpid());

@@ -154,7 +154,6 @@ int main(int argc, const char **argv)
 
   mon->init();
   rank->wait();
-  rank->destroy();
 
   store.umount();
   delete mon;
