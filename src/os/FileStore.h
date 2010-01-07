@@ -101,6 +101,8 @@ class FileStore : public JournalingObjectStore {
     }
   } op_thread;
   void queue_op(__u64 op, list<Transaction*>& tls, Context *onreadable, Context *ondisk);
+  void _journaled_ahead(__u64 op, list<Transaction*> &tls, Context *onreadable,	Context *onjournal, Context *ondisk);
+  friend class C_JournaledAhead;
 
   // flusher thread
   Cond flusher_cond;
