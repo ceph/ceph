@@ -352,7 +352,6 @@ void SimpleMessenger::ready()
 {
   dout(10) << "ready " << get_myaddr() << dendl;
   assert(!dispatch_thread.is_started());
-  get();
   dispatch_thread.create();
 }
 

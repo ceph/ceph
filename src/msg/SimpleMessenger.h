@@ -463,7 +463,9 @@ private:
   public:
     DispatchThread(SimpleMessenger *_rank) : rank(_rank) {}
     void *entry() {
+      rank->get();
       rank->dispatch_entry();
+      rank->put();
       return 0;
     }
   } dispatch_thread;
