@@ -505,7 +505,6 @@ public:
 			 bool& isvalid);
 
   bool register_entity(entity_name_t addr);
-  void unregister_entity(entity_name_t addr);
 
   void submit_message(Message *m, const entity_inst_t& addr, bool lazy=false);  
   int send_keepalive(entity_inst_t addr);

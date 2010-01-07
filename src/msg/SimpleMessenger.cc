@@ -340,9 +340,12 @@ void SimpleMessenger::dispatch_entry()
       dispatch_queue.cond.Wait(dispatch_queue.lock); //wait for something to be put on queue
   }
   dispatch_queue.lock.Unlock();
-  dout(15) << "dispatch: ending loop " << dendl;
-  
-  put(); //this thread is shutting down, so one less reference
+
+  //tell everything else it's time to stop
+  lock.Lock();
+  endpoint_stopped = true;
+  wait_cond.Signal();
+  lock.Unlock();
 }
 
 void SimpleMessenger::ready()
@@ -2221,22 +2224,6 @@ bool SimpleMessenger::register_entity(entity_name_t name)
   lock.Unlock();
   return true;
 }
-
-
-void SimpleMessenger::unregister_entity(entity_name_t name)
-{
-  lock.Lock();
-  dout(10) << "unregister_entity " << get_myname() << dendl;
-  
-  // remove from local directory.
-  assert(get_myname() == name);
-  endpoint_stopped = true;
-
-  wait_cond.Signal();
-
-  lock.Unlock();
-}
-
 
 void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool lazy)
 {
