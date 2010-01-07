@@ -851,7 +851,7 @@ protected:
   static int find_osd_dev(char *result, int whoami);
   static ObjectStore *create_object_store(const char *dev, const char *jdev);
   static int mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami);
-  static int peek_super(const char *dev, nstring& magic, ceph_fsid_t& fsid, int& whoami);
+  static int peek_super(const char *dev, const char *journal, nstring& magic, ceph_fsid_t& fsid, int& whoami);
 
   // startup/shutdown
   int init();

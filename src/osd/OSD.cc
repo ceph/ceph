@@ -193,9 +193,9 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
   return r;
 }
 
-int OSD::peek_super(const char *dev, nstring& magic, ceph_fsid_t& fsid, int& whoami)
+int OSD::peek_super(const char *dev, const char *journal, nstring& magic, ceph_fsid_t& fsid, int& whoami)
 {
-  ObjectStore *store = create_object_store(dev, NULL);
+  ObjectStore *store = create_object_store(dev, journal);
   if (!store)
 	return -ENODEV;
   int err = store->mount();
