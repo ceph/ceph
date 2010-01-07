@@ -31,11 +31,15 @@ v0.19
 - ms_dispatch fairness
 - kclient: bad fsid deadlock fix
 - tids in fixed msg header (protocol change)
-
 - feature bits during connection handshake
+
 - kclient: handle enomem on reply using tid in msg header
 
 - remove erank from ceph_entity_addr
+
+- get recovered filestore files
+- audit truncation sequence
+  - should mds recovery recover truncation metadata?
 
 - compat/incompat features for ondisk format?
   - mds format
@@ -70,6 +74,8 @@ pending mon format changes
 - compat/incompat flags
 
 bugs
+- dbench dcache_readdir bug
+
 - kclient: on umount -f
 [ 4683.361323] INFO: task umount:15840 blocked for more than 120 seconds.
 [ 4683.367910] "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
@@ -103,7 +109,8 @@ bugs
   - reproduce: read large file, hit control-c.  dropping the request empties out the reply pool.
   - this is actually harmless, except that one aborted request and one active request means the aborted reply gets
     the message but the active request doesn't.
-    -> put tids in ceph_msg_hdr?
+  - actually, we can replace prepare_pages with a smarter alloc_msg, now that tid is in the header.
+    - then we need a revoke_msg_incoming in place of revoke_pages?
 
 - mon: dup osd boot messages to log
 09.12.21 14:09:33.634098    log 09.12.21 14:09:32.612955 mon0 10.3.14.128:6789/0/0 198 : [INF] osd6 10.3.14.133:6800/14770/0 boot
@@ -112,63 +119,6 @@ bugs
 09.12.21 14:09:33.634148    log 09.12.21 14:09:32.615444 mon0 10.3.14.128:6789/0/0 201 : [INF] osd6 10.3.14.133:6800/14770/0 boot
 
 - fix mon delay when starting new mds, when current mds is already laggy
-
-- vi file on one (k)client, :w, cat on another, get all zeros.
-  - or: cp a large text file, less on one host, vi on another, change one thing, :w.  view on either host and
-    second page will be written to first page (or something along those lines)
-
-- kclient mds caps state recall deadlock?  (fixed?)
-[211048.250655] BUG: soft lockup - CPU#0 stuck for 61s! [ceph-msgr/0:2571]
-[211048.250661] Modules linked in: ceph fan ac battery container uhci_hcd ehci_hcd thermal button processor
-[211048.250661] irq event stamp: 2649905664
-[211048.250661] hardirqs last  enabled at (2649905663): [<ffffffff8100c480>] restore_args+0x0/0x30
-[211048.250661] hardirqs last disabled at (2649905664): [<ffffffff8100b927>] save_args+0x67/0x70
-[211048.250661] softirqs last  enabled at (2649905662): [<ffffffff8104bad5>] __do_softirq+0x219/0x228
-[211048.250661] softirqs last disabled at (2649905649): [<ffffffff8100cc1c>] call_softirq+0x1c/0x28
-[211048.250661] CPU 0:
-[211048.250661] Modules linked in: ceph fan ac battery container uhci_hcd ehci_hcd thermal button processor
-[211048.250661] Pid: 2571, comm: ceph-msgr/0 Not tainted 2.6.32-rc2 #1 PDSMi
-[211048.250661] RIP: 0010:[<ffffffff8107099c>]  [<ffffffff8107099c>] lock_acquired+0x2aa/0x2b0
-[211048.250661] RSP: 0018:ffff88011c9f3960  EFLAGS: 00000286
-[211048.250661] RAX: ffff88011d4cc580 RBX: ffff88011c9f3970 RCX: 0000000000004f01
-        
-[211048.250661] RDX: ffff88011c9f3fd8 RSI: ffffffff816d45f8 RDI: 0000000000000001
-[211048.250661] RBP: ffffffff8100c5ee R08: 0000000000000005 R09: 0000000000000000
-[211048.250661] R10: 0000000000000002 R11: 0000000000000246 R12: 0000000000000004
-[211048.250661] R13: 0000000000000001 R14: 0000000000000005 R15: 0000000000000000
-[211048.250661] FS:  0000000000000000(0000) GS:ffff88002f000000(0000) knlGS:0000000000000000
-[211048.250661] CS:  0010 DS: 0018 ES: 0018 CR0: 000000008005003b
-[211048.250661] CR2: 000000000040fc00 CR3: 000000011c3da000 CR4: 00000000000006f0
-[211048.250661] DR0: 0000000000000000 DR1: 0000000000000000 DR2: 0000000000000000
-[211048.250661] DR3: 0000000000000000 DR6: 00000000ffff0ff0 DR7: 0000000000000400
-[211048.250661] Call Trace:
-[211048.250661]  [<ffffffff8146cb43>] ? _spin_lock+0x68/0x70
-[211048.250661]  [<ffffffff810ec502>] ? igrab+0x18/0x40
-[211048.250661]  [<ffffffff8146c96c>] ? _spin_unlock+0x47/0x4b
-[211048.250661]  [<ffffffff810ec502>] ? igrab+0x18/0x40
-        
-[211048.250661]  [<ffffffffa007b6e0>] ? iterate_session_caps+0x78/0x111 [ceph]
-[211048.250661]  [<ffffffffa0080aee>] ? trim_caps_cb+0x0/0x1bc [ceph]
-[211048.250661]  [<ffffffffa007f6ca>] ? handle_session+0x2b3/0x40a [ceph]
-[211048.250661]  [<ffffffffa007f8c5>] ? dispatch+0xa4/0x1053 [ceph]
-[211048.250661]  [<ffffffff8106d8c8>] ? mark_held_locks+0x4d/0x6b
-[211048.250661]  [<ffffffff8146ab56>] ? __mutex_unlock_slowpath+0x10d/0x130
-[211048.250661]  [<ffffffff8106db61>] ? trace_hardirqs_on_caller+0x113/0x13e
-[211048.250661]  [<ffffffff8106db99>] ? trace_hardirqs_on+0xd/0xf
-[211048.250661]  [<ffffffffa0077a71>] ? try_read+0xebe/0x15a4 [ceph]
-[211048.250661]  [<ffffffffa0078b45>] ? con_work+0x15b/0x1679 [ceph]
-[211048.250661]  [<ffffffff8105b194>] ? worker_thread+0x229/0x398
-[211048.250661]  [<ffffffff8105b1ee>] ? worker_thread+0x283/0x398
-[211048.250661]  [<ffffffff8105b194>] ? worker_thread+0x229/0x398
-[211048.250661]  [<ffffffffa00789ea>] ? con_work+0x0/0x1679 [ceph]
-[211048.250661]  [<ffffffff8105f4d0>] ? autoremove_wake_function+0x0/0x38
-[211048.250661]  [<ffffffff8105af6b>] ? worker_thread+0x0/0x398
-[211048.250661]  [<ffffffff8105f114>] ? kthread+0x7d/0x85
-[211048.250661]  [<ffffffff8100cb1a>] ? child_rip+0xa/0x20
-[211048.250661]  [<ffffffff8100c480>] ? restore_args+0x0/0x30
-[211048.250661]  [<ffffffff810632b3>] ? __atomic_notifier_call_chain+0x0/0xb2
-[211048.250661]  [<ffffffff8105f097>] ? kthread+0x0/0x85
-[211048.250661]  [<ffffffff8100cb10>] ? child_rip+0x0/0x20
 
 - bonnie++ -u root -d /mnt/ceph/ -s 0 -n 1
 (03:35:29 PM) Isteriat: Using uid:0, gid:0.
