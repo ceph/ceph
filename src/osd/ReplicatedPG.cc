@@ -1047,7 +1047,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  truncated.substr_of(odata, odata.length() - trim, trim);
 	  keep.swap(odata);
 	  
-	  if (seq == rd.op.trunc.truncate_seq) {
+	  if (seq == m.op.trunc.truncate_seq) {
 	    // keep any valid extents beyond 'from'
 	    unsigned data_end = from;
 	    for (map<__u64,__u64>::iterator q = tm.m.begin();
