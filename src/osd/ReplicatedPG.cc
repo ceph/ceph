@@ -638,10 +638,6 @@ void ReplicatedPG::do_op(MOSDOp *op)
     }
   }
 
-  // apply immediately?
-  if (mode.is_rmw_mode())
-    apply_repop(repop);
-
   eval_repop(repop);
   repop->put();
 
@@ -1833,7 +1829,7 @@ public:
   }
   void finish(int r) {
     pg->lock();
-    pg->op_ondisk(repop);
+    pg->op_commit(repop);
     repop->put();
     pg->unlock();
     pg->put();
@@ -1843,20 +1839,32 @@ public:
 void ReplicatedPG::apply_repop(RepGather *repop)
 {
   dout(10) << "apply_repop  applying update on " << *repop << dendl;
+  assert(!repop->applying);
   assert(!repop->applied);
 
   Context *oncommit = new C_OSD_OpCommit(this, repop);
 
+  repop->applying = true;
+
   list<ObjectStore::Transaction*> tls;
   tls.push_back(&repop->ctx->op_t);
   tls.push_back(&repop->ctx->local_t);
-  int r = osd->store->apply_transactions(tls, oncommit);
-  if (r) {
-    dout(-10) << "apply_repop  apply transaction return " << r << " on " << *repop << dendl;
-    assert(0);
+
+  if (1) {
+    Context *onapplied = new C_OSD_OpApplied(this, repop);
+    int r = osd->store->queue_transactions(tls, onapplied, oncommit);
+    if (r) {
+      dout(-10) << "apply_repop  queue_transactions returned " << r << " on " << *repop << dendl;
+      assert(0);
+    }
+  } else {
+    int r = osd->store->apply_transactions(tls, oncommit);
+    if (r) {
+      dout(-10) << "apply_repop  apply_transactions returned " << r << " on " << *repop << dendl;
+      assert(0);
+    }    
+    op_applied(repop);
   }
- 
-  op_applied(repop);
 }
 
 void ReplicatedPG::op_applied(RepGather *repop)
@@ -1867,6 +1875,7 @@ void ReplicatedPG::op_applied(RepGather *repop)
   repop->ctx->op->get_data().clear();
   repop->ctx->op_t.clear_data();
   
+  repop->applying = false;
   repop->applied = true;
 
   // (logical) local ack.
@@ -1879,9 +1888,9 @@ void ReplicatedPG::op_applied(RepGather *repop)
     repop->ctx->clone_obc = 0;
   }
 
-  dout(10) << "apply_repop mode was " << mode << dendl;
+  dout(10) << "op_applied mode was " << mode << dendl;
   mode.write_applied();
-  dout(10) << "apply_repop mode now " << mode << " (finish_write)" << dendl;
+  dout(10) << "op_applied mode now " << mode << " (finish_write)" << dendl;
 
   put_object_context(repop->obc);
   repop->obc = 0;
@@ -1895,7 +1904,7 @@ void ReplicatedPG::op_applied(RepGather *repop)
   switch (first.op.op) { 
 #if 0
   case CEPH_OSD_OP_UNBALANCEREADS:
-    dout(-10) << "apply_repop  completed unbalance-reads on " << oid << dendl;
+    dout(-10) << "op_applied  completed unbalance-reads on " << oid << dendl;
     unbalancing_reads.erase(oid);
     if (waiting_for_unbalanced_reads.count(oid)) {
       osd->take_waiters(waiting_for_unbalanced_reads[oid]);
@@ -1904,7 +1913,7 @@ void ReplicatedPG::op_applied(RepGather *repop)
     break;
 
   case CEPH_OSD_OP_BALANCEREADS:
-    dout(-10) << "apply_repop  completed balance-reads on " << oid << dendl;
+    dout(-10) << "op_applied  completed balance-reads on " << oid << dendl;
     /*
     if (waiting_for_balanced_reads.count(oid)) {
       osd->take_waiters(waiting_for_balanced_reads[oid]);
@@ -1915,25 +1924,27 @@ void ReplicatedPG::op_applied(RepGather *repop)
 #endif
 
   case CEPH_OSD_OP_WRUNLOCK:
-    dout(-10) << "apply_repop  completed wrunlock on " << soid << dendl;
+    dout(-10) << "op_applied  completed wrunlock on " << soid << dendl;
     if (waiting_for_wr_unlock.count(soid)) {
       osd->take_waiters(waiting_for_wr_unlock[soid]);
       waiting_for_wr_unlock.erase(soid);
     }
     break;
   }   
+
+  eval_repop(repop);
 }
 
-void ReplicatedPG::op_ondisk(RepGather *repop)
+void ReplicatedPG::op_commit(RepGather *repop)
 {
   if (repop->aborted) {
-    dout(10) << "op_ondisk " << *repop << " -- aborted" << dendl;
+    dout(10) << "op_commit " << *repop << " -- aborted" << dendl;
   } else if (repop->waitfor_disk.count(osd->get_nodeid()) == 0) {
-    dout(10) << "op_ondisk " << *repop << " -- already marked ondisk" << dendl;
+    dout(10) << "op_commit " << *repop << " -- already marked ondisk" << dendl;
   } else {
-    dout(10) << "op_ondisk " << *repop << dendl;
+    dout(10) << "op_commit " << *repop << dendl;
     repop->waitfor_disk.erase(osd->get_nodeid());
-    repop->waitfor_nvram.erase(osd->get_nodeid());
+    //repop->waitfor_nvram.erase(osd->get_nodeid());
     last_complete_ondisk = repop->pg_local_last_complete;
     eval_repop(repop);
   }
@@ -1948,11 +1959,12 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   MOSDOp *op = (MOSDOp *)repop->ctx->op;
 
   // apply?
-  if (!repop->applied &&
-      mode.is_delayed_mode() &&
-      repop->waitfor_ack.size() == 1)  // all other replicas have acked
+  if (!repop->applied && !repop->applying &&
+      ((mode.is_delayed_mode() &&
+	repop->waitfor_ack.size() == 1) ||  // all other replicas have acked
+       mode.is_rmw_mode()))
     apply_repop(repop);
-
+  
   // disk?
   if (repop->can_send_disk()) {
     if (op->wants_ondisk()) {
@@ -1964,6 +1976,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
     }
   }
 
+  /*
   // nvram?
   else if (repop->can_send_nvram()) {
     if (op->wants_onnvram()) {
@@ -1973,7 +1986,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
       osd->messenger->send_message(reply, op->get_orig_source_inst());
       repop->sent_nvram = true;
     }
-  }
+    }*/
 
   // ack?
   else if (repop->can_send_ack()) {
@@ -2090,14 +2103,14 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
     // disk
     if (repop->waitfor_disk.count(fromosd)) {
       repop->waitfor_disk.erase(fromosd);
-      repop->waitfor_nvram.erase(fromosd);
+      //repop->waitfor_nvram.erase(fromosd);
       repop->waitfor_ack.erase(fromosd);
       peer_last_complete_ondisk[fromosd] = peer_lcod;
     }
-  } else if (ack_type & CEPH_OSD_FLAG_ONNVRAM) {
+/*} else if (ack_type & CEPH_OSD_FLAG_ONNVRAM) {
     // nvram
     repop->waitfor_nvram.erase(fromosd);
-    repop->waitfor_ack.erase(fromosd);
+    repop->waitfor_ack.erase(fromosd);*/
   } else {
     // ack
     repop->waitfor_ack.erase(fromosd);
@@ -2415,56 +2428,6 @@ void ReplicatedPG::put_snapset_context(SnapSetContext *ssc)
 
 // sub op modify
 
-
-// commit (to disk) callback
-class C_OSD_RepModifyCommit : public Context {
-public:
-  ReplicatedPG *pg;
-
-  MOSDSubOp *op;
-  int destosd;
-
-  eversion_t pg_last_complete;
-
-  Mutex lock;
-  Cond cond;
-  bool acked;
-  bool waiting;
-
-  C_OSD_RepModifyCommit(ReplicatedPG *p, MOSDSubOp *oo, int dosd, eversion_t lc) : 
-    pg(p), op(oo), destosd(dosd), pg_last_complete(lc),
-    lock("C_OSD_RepModifyCommit::lock"),
-    acked(false), waiting(false) { 
-    pg->get();  // we're copying the pointer.
-  }
-  void finish(int r) {
-    lock.Lock();
-    assert(!waiting);
-    while (!acked) {
-      waiting = true;
-      cond.Wait(lock);
-    }
-    assert(acked);
-    lock.Unlock();
-
-    pg->lock();
-    pg->sub_op_modify_ondisk(op, destosd, pg_last_complete);
-    pg->unlock();
-    pg->put();
-  }
-  void ack() {
-    lock.Lock();
-    assert(!acked);
-    acked = true;
-    if (waiting) cond.Signal();
-
-    // discard my reference to buffer
-    op->get_data().clear();
-
-    lock.Unlock();
-  }
-};
-
 void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
 {
   const sobject_t& soid = op->poid;
@@ -2550,42 +2513,75 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       tls.push_back(&localt);
     }
   }
-    
-  C_OSD_RepModifyCommit *oncommit = new C_OSD_RepModifyCommit(this, op, ackerosd,
-							      info.last_complete);
-  int r = osd->store->apply_transactions(tls, oncommit);
+  
+  RepModify *rm = new RepModify;
+  rm->pg = this;
+  rm->op = op;
+  rm->ctx = ctx;
+  rm->ackerosd = ackerosd;
+  rm->last_complete = info.last_complete;
+  
+  Context *oncommit = new C_OSD_RepModifyCommit(rm);
+  Context *onapply = new C_OSD_RepModifyApply(rm);
+  int r = osd->store->queue_transactions(tls, onapply, oncommit);
   if (r) {
     derr(0) << "error applying transaction: r = " << r << dendl;
     assert(0);
   }
-
-  // ack myself.
-  oncommit->ack(); 
-
-  delete ctx;
-
-  // send ack to acker
-  MOSDSubOpReply *ack = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
-  ack->set_peer_stat(osd->get_my_stat_for(g_clock.now(), ackerosd));
-  ack->set_priority(CEPH_MSG_PRIO_HIGH);
-  osd->messenger->send_message(ack, osd->osdmap->get_inst(ackerosd));
 }
 
-void ReplicatedPG::sub_op_modify_ondisk(MOSDSubOp *op, int ackerosd, eversion_t last_complete)
+void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
 {
+  lock();
+  dout(10) << "sub_op_modify_applied on " << rm << " op " << *rm->op << dendl;
+
+  delete rm->ctx;
+
+  if (!rm->committed) {
+    // send ack to acker only if we haven't sent a commit already
+    MOSDSubOpReply *ack = new MOSDSubOpReply(rm->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
+    ack->set_peer_stat(osd->get_my_stat_for(g_clock.now(), rm->ackerosd));
+    ack->set_priority(CEPH_MSG_PRIO_HIGH);
+    osd->messenger->send_message(ack, osd->osdmap->get_inst(rm->ackerosd));
+  }
+
+  rm->applied = true;
+  bool done = rm->applied && rm->committed;
+
+  unlock();
+  if (done) {
+    delete rm->op;
+    delete rm;
+    put();
+  }
+}
+
+void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
+{
+  lock();
+
   // send commit.
-  dout(10) << "rep_modify_commit on op " << *op
-           << ", sending commit to osd" << ackerosd
+  dout(10) << "sub_op_modify_commit on op " << *rm->op
+           << ", sending commit to osd" << rm->ackerosd
            << dendl;
-  if (osd->osdmap->is_up(ackerosd)) {
-    last_complete_ondisk = last_complete;
-    MOSDSubOpReply *commit = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ONDISK);
-    commit->set_last_complete_ondisk(last_complete);
-    commit->set_peer_stat(osd->get_my_stat_for(g_clock.now(), ackerosd));
-    osd->messenger->send_message(commit, osd->osdmap->get_inst(ackerosd));
+  if (osd->osdmap->is_up(rm->ackerosd)) {
+    last_complete_ondisk = rm->last_complete;
+    MOSDSubOpReply *commit = new MOSDSubOpReply(rm->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ONDISK);
+    commit->set_last_complete_ondisk(rm->last_complete);
+    commit->set_peer_stat(osd->get_my_stat_for(g_clock.now(), rm->ackerosd));
+    osd->messenger->send_message(commit, osd->osdmap->get_inst(rm->ackerosd));
   }
   
-  delete op;
+  rm->committed = true;
+  bool done = rm->applied && rm->committed;
+
+  unlock();
+  if (done) {
+    delete rm->op;
+    delete rm;
+    put();
+  }
+
 }
 
 void ReplicatedPG::sub_op_modify_reply(MOSDSubOpReply *r)
@@ -3276,7 +3272,7 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
     RepGather *repop = repop_queue.front();
     repop_queue.pop_front();
     dout(10) << " applying repop tid " << repop->rep_tid << dendl;
-    if (!repop->applied)
+    if (!repop->applied && !repop->applying)
       apply_repop(repop);
     repop->aborted = true;
     repop_map.erase(repop->rep_tid);

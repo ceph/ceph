@@ -419,6 +419,9 @@ public:
   virtual unsigned apply_transaction(Transaction& t, Context *onjournal=0, Context *ondisk=0) = 0;
   virtual unsigned apply_transactions(list<Transaction*>& tls, Context *onjournal=0, Context *ondisk=0) = 0;
 
+  virtual int queue_transactions(list<Transaction*>& tls, Context *onreadable,
+				 Context *onjournal=0, Context *ondisk=0) = 0;
+
 
 
  public:

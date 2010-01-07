@@ -257,12 +257,14 @@ public:
     tid_t rep_tid;
     bool noop;
 
-    bool applied, aborted;
+    bool applying, applied, aborted;
 
     set<int>  waitfor_ack;
-    set<int>  waitfor_nvram;
+    //set<int>  waitfor_nvram;
     set<int>  waitfor_disk;
-    bool sent_ack, sent_nvram, sent_disk;
+    bool sent_ack;
+    //bool sent_nvram;
+    bool sent_disk;
     
     utime_t   start;
     
@@ -275,27 +277,31 @@ public:
       ctx(c), obc(pi),
       rep_tid(rt), 
       noop(noop_),
-      applied(false), aborted(false),
-      sent_ack(false), sent_nvram(false), sent_disk(false),
+      applying(false), applied(false), aborted(false),
+      sent_ack(false),
+      //sent_nvram(false),
+      sent_disk(false),
       pg_local_last_complete(lc) { }
 
     bool can_send_ack() { 
       return
-	!sent_ack && !sent_nvram && !sent_disk &&
+	!sent_ack && /*!sent_nvram && */!sent_disk &&
 	waitfor_ack.empty(); 
     }
+    /*
     bool can_send_nvram() { 
       return
 	!sent_nvram && !sent_disk &&
 	waitfor_ack.empty() && waitfor_disk.empty(); 
     }
+    */
     bool can_send_disk() { 
       return
 	!sent_disk &&
-	waitfor_ack.empty() && waitfor_nvram.empty() && waitfor_disk.empty(); 
+	waitfor_disk.empty(); 
     }
     bool can_delete() { 
-      return waitfor_ack.empty() && waitfor_nvram.empty() && waitfor_disk.empty(); 
+      return waitfor_ack.empty() && /*waitfor_nvram.empty() &&*/ waitfor_disk.empty(); 
     }
 
     void get() {
@@ -326,7 +332,7 @@ protected:
 
   void apply_repop(RepGather *repop);
   void op_applied(RepGather *repop);
-  void op_ondisk(RepGather *repop);
+  void op_commit(RepGather *repop);
   void eval_repop(RepGather*);
   void issue_repop(RepGather *repop, int dest, utime_t now,
 		   bool old_exists, __u64 old_size, eversion_t old_version);
@@ -403,8 +409,6 @@ protected:
   int prepare_transaction(OpContext *ctx);
   void log_op(vector<Log::Entry>& log, eversion_t trim_to, ObjectStore::Transaction& t);
   
-  friend class C_OSD_RepModifyCommit;
-
   // pg on-disk content
   void clean_up_local(ObjectStore::Transaction& t);
 
@@ -415,8 +419,35 @@ protected:
   int recover_primary(int max);
   int recover_replicas(int max);
 
+  struct RepModify {
+    ReplicatedPG *pg;
+    MOSDSubOp *op;
+    OpContext *ctx;
+    bool applied, committed;
+    int ackerosd;
+    eversion_t last_complete;
+    
+    RepModify() : applied(false), committed(false), ackerosd(-1) {}
+  };
+
+  struct C_OSD_RepModifyApply : public Context {
+    RepModify *rm;
+    C_OSD_RepModifyApply(RepModify *r) : rm(r) { }
+    void finish(int r) {
+      rm->pg->sub_op_modify_applied(rm);
+    }
+  };
+  struct C_OSD_RepModifyCommit : public Context {
+    RepModify *rm;
+    C_OSD_RepModifyCommit(RepModify *r) : rm(r) { }
+    void finish(int r) {
+      rm->pg->sub_op_modify_commit(rm);
+    }
+  };
+
   void sub_op_modify(MOSDSubOp *op);
-  void sub_op_modify_ondisk(MOSDSubOp *op, int ackerosd, eversion_t last_complete);
+  void sub_op_modify_applied(RepModify *rm);
+  void sub_op_modify_commit(RepModify *rm);
 
   void sub_op_modify_reply(MOSDSubOpReply *reply);
   void sub_op_push(MOSDSubOp *op);
@@ -480,7 +511,10 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::ObjectContext& obc)
 
 inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
 {
-  out << "repgather(" << &repop << " rep_tid=" << repop.rep_tid 
+  out << "repgather(" << &repop
+      << (repop.applying ? " applying" : "")
+      << (repop.applied ? " applied" : "")
+      << " rep_tid=" << repop.rep_tid 
       << " wfack=" << repop.waitfor_ack
     //<< " wfnvram=" << repop.waitfor_nvram
       << " wfdisk=" << repop.waitfor_disk;
