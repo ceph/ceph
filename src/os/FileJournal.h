@@ -103,6 +103,8 @@ private:
   Cond write_cond;
   bool write_stop;
 
+  Cond commit_cond;
+
   int _open(bool wr, bool create=false);
   void print_header();
   void read_header();
@@ -145,7 +147,8 @@ private:
     full_commit_seq(0), full_restart_seq(0),
     fd(-1),
     write_lock("FileJournal::write_lock"),
-    write_stop(false), write_thread(this) { }
+    write_stop(false),
+    write_thread(this) { }
   ~FileJournal() {
     delete[] zero_buf;
   }
@@ -163,6 +166,8 @@ private:
   void submit_entry(__u64 seq, bufferlist& bl, Context *oncommit);  // submit an item
   void committed_thru(__u64 seq);
   bool is_full();
+
+  void set_wait_on_full(bool b) { wait_on_full = b; }
 
   // reads
   bool read_entry(bufferlist& bl, __u64& seq);

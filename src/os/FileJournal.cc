@@ -289,6 +289,7 @@ bool FileJournal::check_for_wrap(__u64 seq, off64_t *pos, off64_t size, bool can
   if (full_commit_seq || full_restart_seq)
     return false;
 
+ retry:
   if (do_sync_cond) {
     __s64 approxroom = header.wrap ?
       header.wrap + *pos - header.start :
@@ -332,6 +333,13 @@ bool FileJournal::check_for_wrap(__u64 seq, off64_t *pos, off64_t size, bool can
 	     << " >= " << header.max_size
 	     << dendl;
   }
+
+  // wait?
+  if (wait_on_full) {
+    dout(1) << "submit_entry waiting for a commit" << dendl;
+    commit_cond.Wait(write_lock);
+    goto retry;
+  }  
 
   full_commit_seq = seq;
   full_restart_seq = seq+1;
@@ -655,6 +663,8 @@ void FileJournal::committed_thru(__u64 seq)
     writeq.pop_front();  
   }
   
+  commit_cond.Signal();
+
   dout(10) << "committed_thru done" << dendl;
 }
 

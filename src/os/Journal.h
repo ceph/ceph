@@ -25,15 +25,19 @@ protected:
   __u64 fsid;
   Finisher *finisher;
   Cond *do_sync_cond;
+  bool wait_on_full;
 
 public:
   Journal(__u64 f, Finisher *fin, Cond *c=0) : fsid(f), finisher(fin),
-					       do_sync_cond(c) { }
+					       do_sync_cond(c),
+					       wait_on_full(false) { }
   virtual ~Journal() { }
 
   virtual int create() = 0;
   virtual int open(__u64 last_seq) = 0;
   virtual void close() = 0;
+
+  void set_wait_on_full(bool b) { wait_on_full = b; }
 
   // writes
   virtual bool is_writeable() = 0;
