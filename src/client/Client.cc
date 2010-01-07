@@ -173,8 +173,6 @@ Client::~Client()
   if (osdmap) { delete osdmap; osdmap = 0; }
   if (mdsmap) { delete mdsmap; mdsmap = 0; }
 
-  if (messenger)
-    messenger->destroy();
 }
 
 

@@ -111,8 +111,6 @@ Monitor::~Monitor()
     delete *p;
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     delete *p;
-  if (messenger)
-    messenger->destroy();
 }
 
 void Monitor::init()

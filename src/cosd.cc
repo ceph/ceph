@@ -178,9 +178,10 @@ int main(int argc, const char **argv)
 
   rank->wait();
   rank_hb->wait();
-
   // done
   delete osd;
+  rank->destroy();
+  rank_hb->destroy();
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];
