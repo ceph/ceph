@@ -391,7 +391,7 @@ void SimpleMessenger::prepare_dest(const entity_inst_t& inst)
   lock.Unlock();
 }
 
-int SimpleMessenger::send_message(Message *m, entity_inst_t dest)
+int SimpleMessenger::send_message(Message *m, const entity_inst_t& dest)
 {
   // set envelope
   m->get_header().src = get_myinst();
@@ -410,7 +410,7 @@ int SimpleMessenger::send_message(Message *m, entity_inst_t dest)
   return 0;
 }
 
-int SimpleMessenger::forward_message(Message *m, entity_inst_t dest)
+int SimpleMessenger::forward_message(Message *m, const entity_inst_t& dest)
 {
   // set envelope
   m->get_header().src = get_myinst();
@@ -430,7 +430,7 @@ int SimpleMessenger::forward_message(Message *m, entity_inst_t dest)
 
 
 
-int SimpleMessenger::lazy_send_message(Message *m, entity_inst_t dest)
+int SimpleMessenger::lazy_send_message(Message *m, const entity_inst_t& dest)
 {
   // set envelope
   m->get_header().src = get_myinst();
@@ -2285,7 +2285,7 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
   lock.Unlock();
 }
 
-int SimpleMessenger::send_keepalive(entity_inst_t dest)
+int SimpleMessenger::send_keepalive(const entity_inst_t& dest)
 {
   const entity_addr_t dest_addr = dest.addr;
   entity_addr_t dest_proc_addr = dest_addr;

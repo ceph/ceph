@@ -47,9 +47,6 @@ protected:
 			       nref(1) {
     _my_name = w;
   }
-  virtual ~Messenger() {
-    assert(nref.test() == 0);
-  }
 
   void get() {
     nref.inc();
@@ -67,7 +64,7 @@ protected:
   virtual entity_addr_t get_myaddr() = 0;
   entity_inst_t get_myinst() { return entity_inst_t(get_myname(), get_myaddr()); }
   
-  void set_myname(entity_name_t m) { _my_name = m; }
+  void set_myname(const entity_name_t m) { _my_name = m; }
 
   void set_default_send_priority(int p) { default_send_priority = p; }
   int get_default_send_priority() { return default_send_priority; }
@@ -150,15 +147,20 @@ protected:
 
   // send message
   virtual void prepare_dest(const entity_inst_t& inst) {}
-  virtual int send_message(Message *m, entity_inst_t dest) = 0;
-  virtual int forward_message(Message *m, entity_inst_t dest) = 0;
-  virtual int lazy_send_message(Message *m, entity_inst_t dest) {
+  virtual int send_message(Message *m, const entity_inst_t& dest) = 0;
+  virtual int forward_message(Message *m, const entity_inst_t& dest) = 0;
+  virtual int lazy_send_message(Message *m, const entity_inst_t& dest) {
     return send_message(m, dest);
   }
-  virtual int send_keepalive(entity_inst_t dest) = 0;
+  virtual int send_keepalive(const entity_inst_t& dest) = 0;
 
-  virtual void mark_down(entity_addr_t a) {}
+  virtual void mark_down(const entity_addr_t& a) {}
 
+protected:
+  //destruction should be handled via destroy()
+  virtual ~Messenger() {
+    assert(nref.test() == 0);
+  }
 };
 
 
