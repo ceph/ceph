@@ -89,12 +89,11 @@ int main(int argc, const char **argv, const char *envp[])
     return -1;
   
   // start up network
-  SimpleMessenger *rank = new SimpleMessenger();
-  rank->bind();
+  SimpleMessenger *messenger = new SimpleMessenger();
+  messenger->bind();
   g_conf.daemonize = false; // not us!
-  rank->start();
-  messenger = rank;
-  rank->register_entity(entity_name_t::ADMIN());
+  messenger->start();
+  messenger->register_entity(entity_name_t::ADMIN());
   messenger->add_dispatcher_head(&dispatcher);
 
   inodeno_t ino = MDS_INO_LOG_OFFSET + mds;
@@ -131,7 +130,7 @@ int main(int argc, const char **argv, const char *envp[])
   messenger->shutdown();
 
   // wait for messenger to finish
-  rank->wait();
+  messenger->wait();
   
   return 0;
 }

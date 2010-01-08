@@ -48,9 +48,8 @@ using namespace std;
 class RadosClient : public Dispatcher
 {
   OSDMap osdmap;
-  Messenger *messenger;
   MonClient monclient;
-  SimpleMessenger *rank;
+  SimpleMessenger *messenger;
 
   bool _dispatch(Message *m);
   bool ms_dispatch(Message *m);
@@ -76,7 +75,7 @@ class RadosClient : public Dispatcher
  
 public:
   RadosClient() : messenger(NULL), lock("radosclient") {
-    rank = new SimpleMessenger();
+    messenger = new SimpleMessenger();
   }
 
   ~RadosClient();
@@ -289,10 +288,9 @@ bool RadosClient::init()
   if (monclient.build_initial_monmap() < 0)
     return false;
 
-  dout(1) << "starting msgr at " << rank->get_rank_addr() << dendl;
+  dout(1) << "starting msgr at " << messenger->get_ms_addr() << dendl;
 
-  rank->register_entity(entity_name_t::CLIENT(-1));
-  messenger = rank;
+  messenger->register_entity(entity_name_t::CLIENT(-1));
   assert_warn(messenger);
   if (!messenger)
     return false;
@@ -306,7 +304,7 @@ bool RadosClient::init()
   
   messenger->add_dispatcher_head(this);
 
-  rank->start(1);
+  messenger->start(1);
   messenger->add_dispatcher_head(this);
 
   dout(1) << "setting wanted keys" << dendl;
@@ -340,14 +338,14 @@ void RadosClient::shutdown()
   objecter->shutdown();
   lock.Unlock();
   messenger->shutdown();
-  rank->wait();
+  messenger->wait();
   dout(1) << "shutdown" << dendl;
 }
 
 RadosClient::~RadosClient()
 {
   if (messenger)
-    messenger->shutdown();
+    messenger->destroy();
 }
 
 

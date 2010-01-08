@@ -30,7 +30,7 @@ static int client_initialized = 0;
 static int client_mount = 0;
 static Client *client = NULL;
 static MonClient *monclient = NULL;
-static SimpleMessenger *rank = NULL;
+static SimpleMessenger *messenger = NULL;
 
 extern "C" int ceph_initialize(int argc, const char **argv)
 {
@@ -48,13 +48,13 @@ extern "C" int ceph_initialize(int argc, const char **argv)
       return -1; //error!
     }
     //network connection
-    rank = new SimpleMessenger();
-    rank->register_entity(entity_name_t::CLIENT());
+    messenger = new SimpleMessenger();
+    messenger->register_entity(entity_name_t::CLIENT());
 
     //at last the client
-    client = new Client(rank, monclient);
+    client = new Client(messenger, monclient);
 
-    rank->start();
+    messenger->start();
 
     client->init();
   }
@@ -71,8 +71,8 @@ extern "C" void ceph_deinitialize()
     client->unmount();
     client->shutdown();
     delete client;
-    rank->wait();
-    rank->destroy();
+    messenger->wait();
+    messenger->destroy();
     delete monclient;
   }
   ceph_client_mutex.Unlock();

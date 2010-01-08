@@ -51,8 +51,6 @@ using namespace __gnu_cxx;
  * the destructor will lead to badness.
  */
 
-/* Rank - per-process
- */
 class SimpleMessenger : public Messenger {
 public:
   struct Policy {
@@ -78,11 +76,11 @@ private:
   // incoming
   class Accepter : public Thread {
   public:
-    SimpleMessenger *rank;
+    SimpleMessenger *messenger;
     bool done;
     int listen_sd;
     
-    Accepter(SimpleMessenger *r) : rank(r), done(false), listen_sd(-1) {}
+    Accepter(SimpleMessenger *r) : messenger(r), done(false), listen_sd(-1) {}
     
     void *entry();
     void stop();
@@ -95,7 +93,7 @@ private:
   // pipe
   class Pipe {
   public:
-    SimpleMessenger *rank;
+    SimpleMessenger *messenger;
     ostream& _pipe_prefix();
 
     enum {
@@ -173,7 +171,7 @@ private:
     
   public:
     Pipe(SimpleMessenger *r, int st) : 
-      rank(r),
+      messenger(r),
       sd(-1), peer_type(-1),
       pipe_lock("SimpleMessenger::Pipe::pipe_lock"),
       state(st), 
@@ -226,11 +224,11 @@ private:
       if (!queue_items.count(priority))
 	queue_items[priority] = new xlist<Pipe *>::item(this);
       pipe_lock.Unlock();
-      rank->dispatch_queue.lock.Lock();
-      if (rank->dispatch_queue.queued_pipes.empty())
-	rank->dispatch_queue.cond.Signal();
-      rank->dispatch_queue.queued_pipes[priority].push_back(queue_items[priority]);
-      rank->dispatch_queue.lock.Unlock();
+      messenger->dispatch_queue.lock.Lock();
+      if (messenger->dispatch_queue.queued_pipes.empty())
+	messenger->dispatch_queue.cond.Signal();
+      messenger->dispatch_queue.queued_pipes[priority].push_back(queue_items[priority]);
+      messenger->dispatch_queue.lock.Unlock();
       pipe_lock.Lock();
     }
 
@@ -248,9 +246,9 @@ private:
 
       //increment queue length counters
       in_qlen++;
-      rank->dispatch_queue.qlen_lock.lock();
-      ++rank->dispatch_queue.qlen;
-      rank->dispatch_queue.qlen_lock.unlock();
+      messenger->dispatch_queue.qlen_lock.lock();
+      ++messenger->dispatch_queue.qlen;
+      messenger->dispatch_queue.qlen_lock.unlock();
 
       pipe_lock.Unlock();
     }
@@ -402,7 +400,7 @@ private:
 
   // where i listen
   bool need_addr;
-  entity_addr_t rank_addr;
+  entity_addr_t ms_addr;
   
   // local
   bool endpoint_stopped;
@@ -422,7 +420,7 @@ private:
       
   Pipe *connect_rank(const entity_addr_t& addr, int type);
 
-  const entity_addr_t &get_rank_addr() { return rank_addr; }
+  const entity_addr_t &get_ms_addr() { return ms_addr; }
 
   void mark_down(entity_addr_t addr);
 
@@ -459,20 +457,20 @@ private:
 
 private:
   class DispatchThread : public Thread {
-    SimpleMessenger *rank;
+    SimpleMessenger *messenger;
   public:
-    DispatchThread(SimpleMessenger *_rank) : rank(_rank) {}
+    DispatchThread(SimpleMessenger *_messenger) : messenger(_messenger) {}
     void *entry() {
-      rank->get();
-      rank->dispatch_entry();
-      rank->put();
+      messenger->get();
+      messenger->dispatch_entry();
+      messenger->put();
       return 0;
     }
   } dispatch_thread;
 
   void dispatch_entry();
 
-  SimpleMessenger *rank; //hack to make dout macro work, will fix
+  SimpleMessenger *messenger; //hack to make dout macro work, will fix
 
 public:
   SimpleMessenger() :
@@ -481,7 +479,7 @@ public:
     lock("SimpleMessenger::lock"), started(false), did_bind(false), need_addr(true),
     endpoint_stopped(true), my_type(-1),
     global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
-    dispatch_thread(this), rank(this) {
+    dispatch_thread(this), messenger(this) {
     // for local dmsg delivery
     dispatch_queue.local_pipe = new Pipe(this, Pipe::STATE_OPEN);
   }

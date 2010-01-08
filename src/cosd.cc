@@ -138,50 +138,48 @@ int main(int argc, const char **argv)
   g_my_addr.ss_addr() = mc.get_my_addr().ss_addr();
   g_my_addr.set_port(0);
 
-  SimpleMessenger *rank = new SimpleMessenger();
-  SimpleMessenger *rank_hb = new SimpleMessenger();
-  rank->bind();
-  rank_hb->bind();
+  SimpleMessenger *messenger = new SimpleMessenger();
+  SimpleMessenger *messenger_hb = new SimpleMessenger();
+  messenger->bind();
+  messenger_hb->bind();
 
   cout << "starting osd" << whoami
-       << " at " << rank->get_rank_addr() 
+       << " at " << messenger->get_ms_addr() 
        << " osd_data " << g_conf.osd_data
        << " " << ((g_conf.osd_journal && g_conf.osd_journal[0]) ? g_conf.osd_journal:"(no journal)")
        << " fsid " << mc.monmap.fsid
        << std::endl;
 
   g_timer.shutdown();
-  rank->register_entity(entity_name_t::OSD(whoami));
-  Messenger *m = rank;
-  assert_warn(m);
-  if (!m)
+  messenger->register_entity(entity_name_t::OSD(whoami));
+  assert_warn(messenger);
+  if (!messenger)
     return 1;
-  rank_hb->register_entity(entity_name_t::OSD(whoami));
-  Messenger *hbm = rank_hb;
-  assert_warn(hbm);
-  if (!hbm)
+  messenger_hb->register_entity(entity_name_t::OSD(whoami));
+  assert_warn(messenger_hb);
+  if (!messenger_hb)
     return 1;
 
-  rank->set_default_policy(SimpleMessenger::Policy::stateless_server());
-  rank->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::client());
-  rank->set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless_peer());
+  messenger->set_default_policy(SimpleMessenger::Policy::stateless_server());
+  messenger->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::client());
+  messenger->set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless_peer());
 
-  rank->start();
-  rank_hb->start(true);  // only need to daemon() once
+  messenger->start();
+  messenger_hb->start(true);  // only need to daemon() once
 
   // start osd
-  OSD *osd = new OSD(whoami, m, hbm, &mc, g_conf.osd_data, g_conf.osd_journal, mkjournal);
+  OSD *osd = new OSD(whoami, messenger, messenger_hb, &mc, g_conf.osd_data, g_conf.osd_journal, mkjournal);
   if (osd->init() < 0) {
     cout << "error initializing osd" << std::endl;
     return 1;
   }
 
-  rank->wait();
-  rank_hb->wait();
+  messenger->wait();
+  messenger_hb->wait();
   // done
   delete osd;
-  rank->destroy();
-  rank_hb->destroy();
+  messenger->destroy();
+  messenger_hb->destroy();
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];

@@ -127,7 +127,7 @@ int main(int argc, const char **argv)
 	 << "         continuing with monmap configuration" << std::endl;
 
   // bind
-  SimpleMessenger *rank = new SimpleMessenger();
+  SimpleMessenger *messenger = new SimpleMessenger();
 
   cout << "starting mon" << whoami 
        << " at " << monmap.get_inst(whoami).addr
@@ -135,29 +135,28 @@ int main(int argc, const char **argv)
        << " fsid " << monmap.get_fsid()
        << std::endl;
   g_my_addr = monmap.get_inst(whoami).addr;
-  err = rank->bind();
+  err = messenger->bind();
   if (err < 0)
     return 1;
 
   _dout_create_courtesy_output_symlink("mon", whoami);
   
   // start monitor
-  Messenger *m = rank;
-  rank->register_entity(entity_name_t::MON(whoami));
-  m->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
-  Monitor *mon = new Monitor(whoami, &store, m, &monmap);
+  messenger->register_entity(entity_name_t::MON(whoami));
+  messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
+  Monitor *mon = new Monitor(whoami, &store, messenger, &monmap);
 
-  rank->start();  // may daemonize
+  messenger->start();  // may daemonize
 
-  rank->set_default_policy(SimpleMessenger::Policy::stateless_server());
-  rank->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossless_peer());
+  messenger->set_default_policy(SimpleMessenger::Policy::stateless_server());
+  messenger->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossless_peer());
 
   mon->init();
-  rank->wait();
+  messenger->wait();
 
   store.umount();
   delete mon;
-  rank->destroy();
+  messenger->destroy();
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];

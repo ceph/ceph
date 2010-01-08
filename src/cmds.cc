@@ -67,28 +67,27 @@ int main(int argc, const char **argv)
   if (mc.build_initial_monmap() < 0)
     return -1;
 
-  SimpleMessenger *rank = new SimpleMessenger();
-  rank->bind();
+  SimpleMessenger *messenger = new SimpleMessenger();
+  messenger->bind();
   cout << "starting mds." << g_conf.id
-       << " at " << rank->get_rank_addr() 
+       << " at " << messenger->get_ms_addr() 
        << std::endl;
 
-  Messenger *m = rank;
-  rank->register_entity(entity_name_t::MDS(-1));
-  assert_warn(m);
-  if (!m)
+  messenger->register_entity(entity_name_t::MDS(-1));
+  assert_warn(messenger);
+  if (!messenger)
     return 1;
 
-  rank->set_policy(entity_name_t::TYPE_CLIENT, SimpleMessenger::Policy::stateful_server());
-  rank->set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossless_peer());
+  messenger->set_policy(entity_name_t::TYPE_CLIENT, SimpleMessenger::Policy::stateful_server());
+  messenger->set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossless_peer());
 
-  rank->start();
+  messenger->start();
   
   // start mds
-  MDS *mds = new MDS(g_conf.id, m, &mc);
+  MDS *mds = new MDS(g_conf.id, messenger, &mc);
   mds->init();
   
-  rank->wait();
+  messenger->wait();
 
   // yuck: grab the mds lock, so we can be sure that whoever in *mds 
   // called shutdown finishes what they were doing.
