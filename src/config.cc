@@ -187,6 +187,8 @@ bool parse_ip_port(const char *s, entity_addr_t& a, const char **end)
   int count = 0; // digit count
   int off = 0;
 
+  memset(&a, 0, sizeof(a));
+
   while (1) {
     // parse the #.
     int val = 0;

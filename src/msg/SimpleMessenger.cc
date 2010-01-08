@@ -141,7 +141,6 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
     else
       rank->rank_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
   }
-  rank->rank_addr.erank = 0;
 
   dout(1) << "accepter.bind rank_addr is " << rank->rank_addr << " need_addr=" << rank->need_addr << dendl;
   rank->did_bind = true;
@@ -470,7 +469,6 @@ void SimpleMessenger::Endpoint::mark_down(entity_addr_t a)
 entity_addr_t SimpleMessenger::Endpoint::get_myaddr()
 {
   entity_addr_t a = rank->rank_addr;
-  a.erank = 0;
   return a;  
 }
 
@@ -969,7 +967,7 @@ int SimpleMessenger::Pipe::connect()
   }
 
   dout(20) << "connect read peer addr " << paddr << " on socket " << sd << dendl;
-  if (!peer_addr.is_local_to(paddr)) {
+  if (peer_addr != paddr) {
     if (paddr.is_blank_addr() &&
 	peer_addr.get_port() == paddr.get_port() &&
 	peer_addr.get_nonce() == paddr.get_nonce()) {
@@ -2271,24 +2269,23 @@ void SimpleMessenger::unregister_entity(Endpoint *msgr)
 void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool lazy)
 {
   const entity_addr_t& dest_addr = dest.addr;
-  m->get_header().dst_erank = dest_addr.erank;
 
   assert(m->nref.test() == 0);
 
   // lookup
   entity_addr_t dest_proc_addr = dest_addr;
-  dest_proc_addr.erank = 0;
+
 
   lock.Lock();
   {
     // local?
-    if (rank_addr.is_local_to(dest_addr)) {
-      if (dest_addr.get_erank() == 0 && local_endpoint) {
+    if (rank_addr == dest_addr) {
+      if (local_endpoint) {
         // local
         dout(20) << "submit_message " << *m << " local" << dendl;
 	dispatch_queue.local_delivery(m, m->get_priority());
       } else {
-        derr(0) << "submit_message " << *m << " " << dest_addr << " local but wrong erank? dropping." << dendl;
+        derr(0) << "submit_message " << *m << " " << dest_addr << " local but no local endpoint, dropping." << dendl;
         assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
 	delete m;
       }
@@ -2337,7 +2334,7 @@ void SimpleMessenger::send_keepalive(const entity_inst_t& dest)
   lock.Lock();
   {
     // local?
-    if (!rank_addr.is_local_to(dest_addr)) {
+    if (rank_addr != dest_addr) {
       // remote.
       Pipe *pipe = 0;
       if (rank_pipe.count( dest_proc_addr )) {
