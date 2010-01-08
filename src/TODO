@@ -32,10 +32,10 @@ v0.19
 - kclient: bad fsid deadlock fix
 - tids in fixed msg header (protocol change)
 - feature bits during connection handshake
+- remove erank from ceph_entity_addr
 
 - kclient: handle enomem on reply using tid in msg header
 
-- remove erank from ceph_entity_addr
 
 - get recovered filestore files
 - audit truncation sequence
@@ -59,7 +59,7 @@ pending wire format changes
 /- include a __u64 tid in ceph_msg_header
 /- compat bits during connection handshake
 - compat bits during auth/mount with monitor?
-- remove erank from ceph_entity_addr
+/- remove erank from ceph_entity_addr
 
 pending mds format changes
 - compat/incompat flags
@@ -74,8 +74,6 @@ pending mon format changes
 - compat/incompat flags
 
 bugs
-- dbench dcache_readdir bug
-
 - kclient: on umount -f
 [ 4683.361323] INFO: task umount:15840 blocked for more than 120 seconds.
 [ 4683.367910] "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
