@@ -352,32 +352,6 @@ int FileStore::mkjournal()
 }
 
 
-Mutex sig_lock("FileStore.cc sig_lock");
-Cond sig_cond;
-bool sig_installed = false;
-int sig_pending = 0;
-int trans_running = 0;
-struct sigaction safe_sigint;
-struct sigaction old_sigint, old_sigterm;
-
-void _handle_signal(int signal)
-{
-  cerr << "got signal " << signal << ", stopping" << std::endl;
-  _exit(0);
-}
-
-void handle_signal(int signal, siginfo_t *info, void *p)
-{
-  //cout << "sigint signal " << signal << std::endl;
-  int running;
-  sig_lock.Lock();
-  running = trans_running;
-  sig_pending = signal;
-  sig_lock.Unlock();
-  if (!running)
-    _handle_signal(signal);
-}
-
 int FileStore::lock_fsid()
 {
   struct flock l;
@@ -535,26 +509,6 @@ int FileStore::mount()
     btrfs = 0;
   }
 
-  // install signal handler for SIGINT, SIGTERM?
-  if (!btrfs_usertrans) {
-    sig_lock.Lock();
-    if (!sig_installed) {
-      dout(10) << "mount installing signal handler to (somewhat) protect transactions" << dendl;
-      sigset_t trans_sigmask;
-      sigemptyset(&trans_sigmask);
-      sigaddset(&trans_sigmask, SIGINT);
-      sigaddset(&trans_sigmask, SIGTERM);
-      
-      memset(&safe_sigint, 0, sizeof(safe_sigint));
-      safe_sigint.sa_sigaction = handle_signal;
-      safe_sigint.sa_mask = trans_sigmask;
-      sigaction(SIGTERM, &safe_sigint, &old_sigterm);
-      sigaction(SIGINT, &safe_sigint, &old_sigint);
-      sig_installed = true;
-    }
-    sig_lock.Unlock();
-  }
-
   // all okay.
   return 0;
 }
@@ -682,16 +636,6 @@ int FileStore::_transaction_start(__u64 bytes, __u64 ops)
   }
   dout(10) << "transaction_start " << fd << dendl;
 
-  sig_lock.Lock();
- retry:
-  if (trans_running && sig_pending) {
-    dout(-10) << "transaction_start signal " << sig_pending << " pending" << dendl;
-    sig_cond.Wait(sig_lock);
-    goto retry;
-  }
-  trans_running++;
-  sig_lock.Unlock();
-
   char fn[PATH_MAX];
   sprintf(fn, "%s/trans.%d", basedir.c_str(), fd);
   ::mknod(fn, 0644, 0);
@@ -716,14 +660,6 @@ void FileStore::_transaction_finish(int fd)
   dout(10) << "transaction_finish " << fd << dendl;
   ::ioctl(fd, BTRFS_IOC_TRANS_END);
   ::close(fd);
-
-  sig_lock.Lock();
-  trans_running--;
-  if (trans_running == 0 && sig_pending) {
-    dout(-10) << "transaction_finish signal " << sig_pending << " pending" << dendl;
-    _handle_signal(sig_pending);
-  }
-  sig_lock.Unlock();
 #endif /* DARWIN */
 }
 

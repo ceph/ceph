@@ -502,7 +502,7 @@ private:
       if (inc.new_hb_up.empty()) {
 	//this is a backward-compatibility hack
 	osd_hb_addr[i->first] = i->second;
-	osd_hb_addr[i->first].erank = osd_hb_addr[i->first].erank + 1;
+	//osd_hb_addr[i->first].erank = osd_hb_addr[i->first].erank + 1;
       }
       else osd_hb_addr[i->first] = inc.new_hb_up[i->first];
       osd_info[i->first].up_from = epoch;
@@ -623,7 +623,7 @@ private:
       osd_hb_addr.resize(osd_addr.size());
       for (unsigned i=0; i<osd_addr.size(); i++) {
 	osd_hb_addr[i] = osd_addr[i];
-	osd_hb_addr[i].erank = osd_hb_addr[i].erank + 1;
+	//osd_hb_addr[i].erank = osd_hb_addr[i].erank + 1;
       }
     }
     ::decode(osd_info, p);

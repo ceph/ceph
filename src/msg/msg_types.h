@@ -129,15 +129,13 @@ static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
 }
 
 struct entity_addr_t {
-  __u32 erank;
-  __u32 nonce;
+  __u64 nonce;
   sockaddr_storage addr;
 
-  entity_addr_t() : erank(0), nonce(0) { 
+  entity_addr_t() : nonce(0) { 
     memset(&addr, 0, sizeof(addr));
   }
   entity_addr_t(const ceph_entity_addr &o) {
-    erank = o.erank;
     nonce = o.nonce;
     addr = o.in_addr;
     addr.ss_family = ntohs(addr.ss_family);
@@ -146,9 +144,6 @@ struct entity_addr_t {
   __u32 get_nonce() const { return nonce; }
   void set_nonce(__u32 n) { nonce = n; }
   
-  __u32 get_erank() const { return erank; }
-  void set_erank(__u32 r) { erank = r; }
-
   sockaddr_storage &ss_addr() {
     return addr;
   }
@@ -191,17 +186,12 @@ struct entity_addr_t {
 
   operator ceph_entity_addr() const {
     ceph_entity_addr a;
-    a.erank = erank;
     a.nonce = nonce;
     a.in_addr = addr;
     a.in_addr.ss_family = htons(addr.ss_family);
     return a;
   }
 
-  bool is_local_to(const entity_addr_t &o) const {
-    return nonce == o.nonce &&
-      memcmp(&addr, &o.addr, sizeof(addr)) == 0;
-  }
   bool is_same_host(const entity_addr_t &o) const {
     if (addr.ss_family != o.addr.ss_family)
       return false;
@@ -233,12 +223,10 @@ struct entity_addr_t {
   }
 
   void encode(bufferlist& bl) const {
-    ::encode(erank, bl);
     ::encode(nonce, bl);
     ::encode(addr, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(erank, bl);
     ::decode(nonce, bl);
     ::decode(addr, bl);
   }
@@ -247,7 +235,7 @@ WRITE_CLASS_ENCODER(entity_addr_t)
 
 inline ostream& operator<<(ostream& out, const entity_addr_t &addr)
 {
-  return out << addr.addr << '/' << addr.nonce << '/' << addr.erank;
+  return out << addr.addr << '/' << addr.nonce;
 }
 
 inline bool operator==(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) == 0; }
