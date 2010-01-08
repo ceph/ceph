@@ -273,6 +273,9 @@ later
 - cas
 - osd failure declarations
 - rename over old files should flush data, or revert back to old contents
+- clean up SimpleMessenger interface and usage a little. Can probably unify
+	some/all of shutdown, wait, destroy. Possibly move destroy into put()
+	and make get/put usage more consistent/stringently mandated.
 
 rados
 - make rest interface superset of s3?
