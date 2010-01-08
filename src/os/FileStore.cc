@@ -47,7 +47,6 @@
 
 #define ATTR_MAX 80
 
-#define COMMIT_SNAP_DIR "commit_snaps"
 #define COMMIT_SNAP_ITEM "%lld"
 
 #ifndef __CYGWIN__
@@ -222,7 +221,7 @@ bool FileStore::parse_coll(char *s, coll_t& c)
 
 void FileStore::get_cdir(coll_t cid, char *s) 
 {
-  s += sprintf(s, "%s/", basedir.c_str());
+  s += sprintf(s, "%s/current/", basedir.c_str());
   s += cid.print(s);
 }
 
@@ -259,8 +258,8 @@ int FileStore::mkfs()
     return -EBUSY;
 
   // wipe
-  sprintf(cmd, "test -d %s && rm -r %s/* ; mkdir -p %s",
-	  basedir.c_str(), basedir.c_str(), basedir.c_str());
+  sprintf(cmd, "test -d %s && ( test -d %s/current && rm -r %s/current/* %s/fsid || rm -r %s/* ) ; mkdir -p %s",
+	  basedir.c_str(), basedir.c_str(), basedir.c_str(), basedir.c_str(), basedir.c_str(), basedir.c_str());
   
   dout(5) << "wipe: " << cmd << dendl;
   system(cmd);
@@ -276,6 +275,33 @@ int FileStore::mkfs()
   ::write(fsid_fd, &fsid, sizeof(fsid));
   ::close(fsid_fd);
   dout(10) << "mkfs fsid is " << fsid << dendl;
+
+  // current
+  struct btrfs_ioctl_vol_args volargs;
+  memset(&volargs, 0, sizeof(volargs));
+  int fd = ::open(basedir.c_str(), O_RDONLY);
+  volargs.fd = 0;
+  strcpy(volargs.name, "current");
+  int r = ::ioctl(fd, BTRFS_IOC_SUBVOL_CREATE, (unsigned long int)&volargs);
+  char current_fn[PATH_MAX];
+  sprintf(current_fn, "%s/current", basedir.c_str());
+  if (r == 0) {
+    // yay
+    dout(2) << " created btrfs subvol " << current_fn << dendl;
+    ::chmod(current_fn, 0755);
+  } else if (errno == EEXIST) {
+    dout(2) << " current already exists" << dendl;
+    r = 0;
+  } else if (errno == EOPNOTSUPP || errno == ENOTTY) {
+    dout(2) << " BTRFS_IOC_SUBVOL_CREATE ioctl failed, trying mkdir " << current_fn << dendl;
+    r = ::mkdir(current_fn, 0755);
+  }
+  ::close(fd);
+  if (r < 0) {
+    char err[80];
+    dout(0) << "failed to create current: " << strerror_r(errno, err, sizeof(err)) << dendl;
+    return -errno;
+  }
 
   // journal?
   int err = mkjournal();
@@ -386,7 +412,7 @@ int FileStore::mount()
   dout(10) << "mount fsid is " << fsid << dendl;
 
   // get epoch
-  sprintf(fn, "%s/commit_op_seq", basedir.c_str());
+  sprintf(fn, "%s/current/commit_op_seq", basedir.c_str());
   op_fd = ::open(fn, O_CREAT|O_RDWR, 0644);
   assert(op_fd >= 0);
   op_seq = 0;
@@ -412,13 +438,10 @@ int FileStore::mount()
 
   btrfs_snap = false;
   if (btrfs_snap) {
-    char dirname[100];
-    sprintf(dirname, "%s/%s", basedir.c_str(), COMMIT_SNAP_DIR);
-    ::mkdir(dirname, 0755);
-    snapdir_fd = ::open(dirname, O_RDONLY);
+    snapdir_fd = ::open(basedir.c_str(), O_RDONLY);
 
     // get snap list
-    DIR *dir = ::opendir(dirname);
+    DIR *dir = ::opendir(basedir.c_str());
     if (!dir)
       return -errno;
 
@@ -583,7 +606,7 @@ int FileStore::_transaction_start(__u64 bytes, __u64 ops)
   dout(10) << "transaction_start " << fd << dendl;
 
   char fn[PATH_MAX];
-  sprintf(fn, "%s/trans.%d", basedir.c_str(), fd);
+  sprintf(fn, "%s/current/trans.%d", basedir.c_str(), fd);
   ::mknod(fn, 0644, 0);
 
   return fd;
@@ -600,7 +623,7 @@ void FileStore::_transaction_finish(int fd)
     return;
 
   char fn[PATH_MAX];
-  sprintf(fn, "%s/trans.%d", basedir.c_str(), fd);
+  sprintf(fn, "%s/current/trans.%d", basedir.c_str(), fd);
   ::unlink(fn);
   
   dout(10) << "transaction_finish " << fd << dendl;
@@ -1512,7 +1535,7 @@ int FileStore::list_collections(vector<coll_t>& ls)
   dout(10) << "list_collections" << dendl;
 
   char fn[PATH_MAX];
-  sprintf(fn, "%s", basedir.c_str());
+  sprintf(fn, "%s/current", basedir.c_str());
 
   DIR *dir = ::opendir(fn);
   if (!dir)
