@@ -134,13 +134,13 @@ int MonClient::get_monmap_privately()
   dout(10) << "get_monmap_privately" << dendl;
   Mutex::Locker l(monc_lock);
   
-  SimpleMessenger *messenger = NULL; 
   bool temp_msgr = false;
+  SimpleMessenger* smessenger = NULL;
   if (!messenger) {
-    messenger = messenger = new SimpleMessenger();
-    messenger->register_entity(entity_name_t::CLIENT(-1));
+    messenger = smessenger = new SimpleMessenger();
+    smessenger->register_entity(entity_name_t::CLIENT(-1));
     messenger->add_dispatcher_head(this);
-    messenger->start(true);  // do not daemonize!
+    smessenger->start(true);  // do not daemonize!
     temp_msgr = true; 
   }
   
@@ -165,7 +165,7 @@ int MonClient::get_monmap_privately()
   if (temp_msgr) {
     monc_lock.Unlock();
     messenger->shutdown();
-    messenger->wait();
+    smessenger->wait();
     messenger->destroy();
     messenger = 0;
     monc_lock.Lock();
