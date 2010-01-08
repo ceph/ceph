@@ -403,7 +403,7 @@ private:
   entity_addr_t ms_addr;
   
   // local
-  bool endpoint_stopped;
+  bool destination_stopped;
   
   // remote
   hash_map<entity_addr_t, Pipe*> rank_pipe;
@@ -477,7 +477,7 @@ public:
     Messenger(entity_name_t()),
     accepter(this),
     lock("SimpleMessenger::lock"), started(false), did_bind(false), need_addr(true),
-    endpoint_stopped(true), my_type(-1),
+    destination_stopped(true), my_type(-1),
     global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
     dispatch_thread(this), messenger(this) {
     // for local dmsg delivery

@@ -211,7 +211,7 @@ void *SimpleMessenger::Accepter::entry()
       
       messenger->lock.Lock();
 
-      if (!messenger->endpoint_stopped) {
+      if (!messenger->destination_stopped) {
 	Pipe *p = new Pipe(messenger, Pipe::STATE_ACCEPTING);
 	p->sd = sd;
 	p->start_reader();
@@ -343,7 +343,7 @@ void SimpleMessenger::dispatch_entry()
 
   //tell everything else it's time to stop
   lock.Lock();
-  endpoint_stopped = true;
+  destination_stopped = true;
   wait_cond.Signal();
   lock.Unlock();
 }
@@ -1131,7 +1131,7 @@ int SimpleMessenger::Pipe::connect()
       backoff = utime_t();
       dout(20) << "connect success " << connect_seq << ", lossy = " << policy.lossy << dendl;
       
-      if (!messenger->endpoint_stopped) {
+      if (!messenger->destination_stopped) {
 	Connection * cstate = connection_state->get();
 	pipe_lock.Unlock();
 	messenger->dispatch_queue.queue_connect(cstate);
@@ -1328,7 +1328,7 @@ void SimpleMessenger::Pipe::fail()
 
   discard_queue();
   
-  if (!messenger->endpoint_stopped) {
+  if (!messenger->destination_stopped) {
     Connection * cstate = connection_state->get();
     pipe_lock.Unlock();
     messenger->dispatch_queue.queue_reset(cstate);
@@ -1343,7 +1343,7 @@ void SimpleMessenger::Pipe::was_session_reset()
   dout(10) << "was_session_reset" << dendl;
   discard_queue();
 
-  if (!messenger->endpoint_stopped) {
+  if (!messenger->destination_stopped) {
     Connection * cstate = connection_state->get();
     pipe_lock.Unlock();
     messenger->dispatch_queue.queue_remote_reset(cstate);
@@ -2203,7 +2203,7 @@ bool SimpleMessenger::register_entity(entity_name_t name)
   dout(10) << "register_entity " << name << dendl;
   lock.Lock();
   
-  if (!endpoint_stopped) { //already have a working entity set
+  if (!destination_stopped) { //already have a working entity set
     lock.Unlock();
     return false;
   }
@@ -2216,7 +2216,7 @@ bool SimpleMessenger::register_entity(entity_name_t name)
   else
     my_type = name.type();
 
-  endpoint_stopped = false;
+  destination_stopped = false;
 
   dout(10) << "register_entity " << name << " at " << get_myaddr() << dendl;
 
@@ -2239,7 +2239,7 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
   {
     // local?
     if (ms_addr.is_local_to(dest_addr)) {
-      if (dest_addr.get_erank() == 0 && !endpoint_stopped) {
+      if (dest_addr.get_erank() == 0 && !destination_stopped) {
         // local
         dout(20) << "submit_message " << *m << " local" << dendl;
 	dispatch_queue.local_delivery(m, m->get_priority());
@@ -2330,7 +2330,7 @@ void SimpleMessenger::wait()
     // reap dead pipes
     reaper();
 
-    if (endpoint_stopped) {
+    if (destination_stopped) {
       dout(10) << "wait: everything stopped" << dendl;
       break;   // everything stopped.
     }
