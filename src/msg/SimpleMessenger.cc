@@ -2236,7 +2236,7 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
   {
     // local?
     if (ms_addr == dest_addr) {
-      if (dest_addr.get_erank() == 0 && !destination_stopped) {
+      if (!destination_stopped) {
         // local
         dout(20) << "submit_message " << *m << " local" << dendl;
 	dispatch_queue.local_delivery(m, m->get_priority());
