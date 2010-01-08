@@ -54,23 +54,27 @@ int main(int argc, const char **argv, char *envp[])
   if (mc.build_initial_monmap() < 0)
     return -1;
 
-  // start up network
-  SimpleMessenger *messenger = new SimpleMessenger();
   cout << "starting csyn" << std::endl;
 
   list<Client*> clients;
   list<SyntheticClient*> synclients;
+  SimpleMessenger* messengers[g_conf.num_client];
+  MonClient* mclients[g_conf.num_client];
 
   cout << "mounting and starting " << g_conf.num_client << " syn client(s)" << std::endl;
   for (int i=0; i<g_conf.num_client; i++) {
-    messenger->register_entity(entity_name_t(entity_name_t::TYPE_CLIENT,-1));
-    Client *client = new Client(messenger, &mc);
+    messengers[i] = new SimpleMessenger();
+    messengers[i]->register_entity(entity_name_t(entity_name_t::TYPE_CLIENT,-1));
+    messengers[i]->bind();
+    mclients[i] = new MonClient();
+    mclients[i]->build_initial_monmap();
+    Client *client = new Client(messengers[i], mclients[i]);
     SyntheticClient *syn = new SyntheticClient(client);
     clients.push_back(client);
     synclients.push_back(syn);
+    messengers[i]->start();
   }
 
-  messenger->start();
 
   for (list<SyntheticClient*>::iterator p = synclients.begin(); 
        p != synclients.end();
@@ -82,15 +86,18 @@ int main(int argc, const char **argv, char *envp[])
     Client *client = clients.front();
     SyntheticClient *syn = synclients.front();
     clients.pop_front();
-    synclients.pop_front();    
+    synclients.pop_front();
     syn->join_thread();
     delete syn;
     delete client;
   }
-    
-  // wait for messenger to finish
-  messenger->wait();
-  
+
+  for (int i = 0; i < g_conf.num_client; ++i) {
+    // wait for messenger to finish
+    delete mclients[i];
+    messengers[i]->wait();
+    messengers[i]->destroy();
+  }
   return 0;
 }
 
