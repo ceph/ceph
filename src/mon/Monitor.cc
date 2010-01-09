@@ -111,6 +111,20 @@ Monitor::~Monitor()
     delete *p;
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     delete *p;
+  //clean out SessionMap's subscriptions
+  for (map<nstring, xlist<Subscription*> >::iterator i
+	 = session_map.subs.begin();
+       i != session_map.subs.end();
+       ++i) {
+    while (!i->second.empty()) {
+      session_map.remove_sub(i->second.front());
+    }
+  }
+  //clean out SessionMap's sessions
+  while (!session_map.sessions.empty()) {
+    session_map.remove_session(session_map.sessions.front());
+  }
+
 }
 
 void Monitor::init()
