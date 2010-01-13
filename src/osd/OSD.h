@@ -31,6 +31,7 @@
 #include "common/ClassHandler.h"
 
 #include "include/LogEntry.h"
+#include "include/CompatSet.h"
 
 #include "auth/KeyRing.h"
 
@@ -157,6 +158,7 @@ private:
   void write_superblock(ObjectStore::Transaction& t);
   int read_superblock();
 
+  CompatSet osd_compat;
 
   // -- state --
 public:
@@ -872,6 +874,15 @@ protected:
 
   void init_op_flags(MOSDOp *op);
 };
+
+//compatibility of the executable
+#define CEPH_OSD_FEATURE_INCOMPAT_BASE "initial feature set(~v.18)"
+extern const char *ceph_osd_feature_compat[];
+extern const char *ceph_osd_feature_ro_compat[];
+extern const char *ceph_osd_feature_incompat[];
+static const int ceph_osd_feature_compat_size = 0;
+static const int ceph_osd_feature_ro_compat_size = 0;
+static const int ceph_osd_feature_incompat_size = 1;
 
 
 #endif

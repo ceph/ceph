@@ -106,6 +106,12 @@ static ostream& _prefix(ostream& out, int whoami, OSDMap *osdmap) {
 
 const coll_t meta_coll;
 
+const char *ceph_osd_feature_compat[ceph_osd_feature_compat_size] = {};
+const char *ceph_osd_feature_ro_compat[ceph_osd_feature_ro_compat_size] = {};
+const char *ceph_osd_feature_incompat[ceph_osd_feature_incompat_size] =
+  { CEPH_OSD_FEATURE_INCOMPAT_BASE };
+
+
 
 ObjectStore *OSD::create_object_store(const char *dev, const char *jdev)
 {
@@ -235,6 +241,9 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, c
   logclient(messenger, &mc->monmap),
   whoami(id),
   dev_path(dev), journal_path(jdev),
+  osd_compat(ceph_osd_feature_compat, ceph_osd_feature_compat_size,
+	     ceph_osd_feature_ro_compat, ceph_osd_feature_ro_compat_size,
+	     ceph_osd_feature_incompat, ceph_osd_feature_incompat_size),
   state(STATE_BOOTING), boot_epoch(0), up_epoch(0),
   op_tp("OSD::op_tp", g_conf.osd_op_threads),
   recovery_tp("OSD::recovery_tp", g_conf.osd_recovery_threads),
@@ -570,11 +579,13 @@ int OSD::shutdown()
   return r;
 }
 
-
-
 void OSD::write_superblock(ObjectStore::Transaction& t)
 {
   dout(10) << "write_superblock " << superblock << dendl;
+
+  //hack: at minimum it's using the baseline feature set
+  if (!superblock.compat_features.incompat.count(CEPH_OSD_FEATURE_INCOMPAT_BASE))
+    superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_BASE);
 
   bufferlist bl;
   ::encode(superblock, bl);
@@ -592,6 +603,24 @@ int OSD::read_superblock()
   ::decode(superblock, p);
 
   dout(10) << "read_superblock " << superblock << dendl;
+
+  if (osd_compat.compare(superblock.compat_features) < 0) {
+    dout(5) << "The disk uses features unsupported by the executable." << dendl;
+    if (osd_compat.writeable(superblock.compat_features)) {
+      dout(5) << "it is still writeable, though. Missing features:" << dendl;
+      CompatSet diff = osd_compat.unsupported(superblock.compat_features);
+      for (CompatSet::iterator i = diff.begin(); i != diff.end(); ++i) {
+	dout(5) << *i << dendl;
+      }
+    }
+    else {
+      dout(0) << "Cannot write to disk! Missing features:" << dendl;
+      CompatSet diff = osd_compat.unsupported(superblock.compat_features);
+      for (CompatSet::iterator i = diff.begin(); i != diff.end(); ++i)
+	dout(0) << *i << dendl;;
+      return -EOPNOTSUPP;
+    }
+  }
 
   if (ceph_fsid_compare(&superblock.fsid, &monc->get_fsid())) {
     derr(0) << "read_superblock fsid " << superblock.fsid << " != monmap " << monc->get_fsid() << dendl;

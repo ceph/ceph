@@ -19,6 +19,7 @@
 
 #include "msg/msg_types.h"
 #include "include/types.h"
+#include "include/CompatSet.h"
 #include "include/interval_set.h"
 #include "include/nstring.h"
 
@@ -1012,6 +1013,8 @@ public:
   epoch_t oldest_map, newest_map;    // oldest/newest maps we have.
   double weight;
 
+  CompatSet compat_features;
+
   // last interval over which i mounted and was then active
   epoch_t mounted;     // last epoch i mounted
   epoch_t clean_thru;  // epoch i was active and clean thru
@@ -1034,6 +1037,7 @@ public:
     ::encode(oldest_map, bl);
     ::encode(newest_map, bl);
     ::encode(weight, bl);
+    compat_features.encode(bl);
     ::encode(clean_thru, bl);
     ::encode(mounted, bl);
   }
@@ -1048,6 +1052,7 @@ public:
     ::decode(oldest_map, bl);
     ::decode(newest_map, bl);
     ::decode(weight, bl);
+    compat_features.decode(bl);
     ::decode(clean_thru, bl);
     ::decode(mounted, bl);
   }
