@@ -20,6 +20,7 @@
 #include "mdstypes.h"
 
 #include "msg/Dispatcher.h"
+#include "include/CompatSet.h"
 #include "include/types.h"
 #include "include/Context.h"
 #include "common/DecayCounter.h"
@@ -144,6 +145,8 @@ class MDS : public Dispatcher {
   string name;
   int whoami;
   int incarnation;
+
+  CompatSet mds_features;
   
   int standby_for_rank;
   string standby_for_name;
@@ -395,6 +398,12 @@ public:
   }
 };
 
-
+#define CEPH_MDS_FEATURE_INCOMPAT_BASE "initial feature set (~v.18)"
+static const int ceph_mds_feature_compat_size = 0;
+static const int ceph_mds_feature_ro_compat_size = 0;
+static const int ceph_mds_feature_incompat_size = 1;
+extern const char *ceph_mds_feature_compat[];
+extern const char *ceph_mds_feature_ro_compat[];
+extern const char *ceph_mds_feature_incompat[];
 
 #endif

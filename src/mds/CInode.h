@@ -18,6 +18,7 @@
 #define __CINODE_H
 
 #include "config.h"
+#include "include/CompatSet.h"
 #include "include/types.h"
 #include "include/lru.h"
 
@@ -53,11 +54,13 @@ class ObjectOperation;
 ostream& operator<<(ostream& out, CInode& in);
 
 
+
 // cached inode wrapper
 class CInode : public MDSCacheObject {
 private:
   static boost::pool<> pool;
 public:
+  CompatSet ondisk_ino_features;
   static void *operator new(size_t num_bytes) { 
     return pool.malloc();
   }
@@ -918,5 +921,7 @@ public:
   void print(ostream& out);
 
 };
+
+
 
 #endif

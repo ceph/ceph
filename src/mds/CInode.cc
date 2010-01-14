@@ -42,7 +42,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << dbeginl << "mds" << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") "
 
-
 boost::pool<> CInode::pool(sizeof(CInode));
 boost::pool<> Capability::pool(sizeof(Capability));
 
@@ -664,6 +663,9 @@ void CInode::store(Context *fin)
   bufferlist bl;
   nstring magic = CEPH_FS_ONDISK_MAGIC;
   ::encode(magic, bl);
+  //hack: in future will want to only write USED features
+  //since we currently only have one feature, though, this works
+  mdcache->mds->mds_features.encode(bl);
   encode_store(bl);
 
   // write it.
@@ -733,9 +735,20 @@ void CInode::_fetched(bufferlist& bl, Context *fin)
 	    << "'" << dendl;
     fin->finish(-EINVAL);
   } else {
-    decode_store(p);
-    dout(10) << "_fetched " << *this << dendl;
-    fin->finish(0);
+    ondisk_ino_features.decode(p);
+    CompatSet& mds_features = mdcache->mds->mds_features;
+    if ( !mds_features.writeable(ondisk_ino_features)) {
+      dout(0) << "mds data on-disk uses unknown features!" << dendl;
+      CompatSet diff = mds_features.unsupported(ondisk_ino_features);
+      dout(0) << "missing features:" << dendl;
+      for (CompatSet::iterator i = diff.begin(); i != diff.end(); ++i)
+	dout(0) << *i << dendl;
+      fin->finish(-EOPNOTSUPP);
+    } else {
+      decode_store(p);
+      dout(10) << "_fetched " << *this << dendl;
+      fin->finish(0);
+    }
   }
   delete fin;
 }

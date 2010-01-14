@@ -70,6 +70,11 @@
 #undef dout_prefix
 #define dout_prefix *_dout << dbeginl << "mds" << whoami << '.' << incarnation << ' '
 
+const char *ceph_mds_feature_compat[ceph_mds_feature_compat_size] = {};
+const char *ceph_mds_feature_ro_compat[ceph_mds_feature_ro_compat_size]=
+  {};
+const char *ceph_mds_feature_incompat[ceph_mds_feature_incompat_size] =
+  { CEPH_MDS_FEATURE_INCOMPAT_BASE };
 
 
 // cons/des
@@ -78,6 +83,9 @@ MDS::MDS(const char *n, Messenger *m, MonClient *mc) :
   timer(mds_lock),
   name(n),
   whoami(-1), incarnation(0),
+  mds_features(ceph_mds_feature_compat, ceph_mds_feature_compat_size,
+	       ceph_mds_feature_ro_compat, ceph_mds_feature_ro_compat_size,
+	       ceph_mds_feature_incompat, ceph_mds_feature_incompat_size),
   standby_for_rank(-1),
   standby_replay_for(-1),
   messenger(m),
