@@ -295,6 +295,8 @@ int FileStore::mkfs()
   } else if (errno == EOPNOTSUPP || errno == ENOTTY) {
     dout(2) << " BTRFS_IOC_SUBVOL_CREATE ioctl failed, trying mkdir " << current_fn << dendl;
     r = ::mkdir(current_fn, 0755);
+    if (errno == EEXIST)
+      r = 0;
   }
   ::close(fd);
   if (r < 0) {
