@@ -29,10 +29,18 @@ using namespace std;
 
 #include "msg/SimpleMessenger.h"
 
+#include "include/CompatSet.h"
 #include "include/nstring.h"
 
 #include "common/Timer.h"
 #include "common/common_init.h"
+
+extern const int ceph_mon_feature_compat_size;
+extern const char *ceph_mon_feature_compat[];
+extern const int ceph_mon_feature_ro_compat_size;
+extern const char *ceph_mon_feature_ro_compat[];
+extern const int ceph_mon_feature_incompat_size;
+extern const char *ceph_mon_feature_incompat[];
 
 void usage()
 {
@@ -66,6 +74,13 @@ int main(int argc, const char **argv)
 
   if (g_conf.clock_tare) g_clock.tare();
 
+  CompatSet mon_features(ceph_mon_feature_compat, ceph_mon_feature_compat_size,
+			 ceph_mon_feature_ro_compat,
+			 ceph_mon_feature_ro_compat_size,
+			 ceph_mon_feature_incompat,
+			 ceph_mon_feature_incompat_size);
+  CompatSet ondisk_features;
+
   MonitorStore store(g_conf.mon_data);
   err = store.mount();
   if (err < 0) {
@@ -92,6 +107,26 @@ int main(int argc, const char **argv)
     cerr << "mon fs magic '" << magic << "' != current '" << CEPH_MON_ONDISK_MAGIC << "'" << std::endl;
     exit(1);
   }
+
+  bufferlist features;
+  store.get_bl_ss(features, COMPAT_SET_LOC, 0);
+  if (features.length() == 0) {
+    cerr << "mon fs missing feature list. Exiting now" << std::endl;
+    exit(1);
+  }
+  bufferlist::iterator it = features.begin();
+  ondisk_features.decode(it);
+  
+  if (!mon_features.writeable(ondisk_features)) {
+    cerr << "monitor executable cannot read disk! Missing features: "
+	 << std::endl;
+    CompatSet diff = mon_features.unsupported(ondisk_features);
+    for (CompatSet::iterator iter = diff.begin(); iter != diff.end(); ++iter) {
+      cerr << *iter << std::endl;
+    }
+    exit(1);
+  }
+
 
   // monmap?
   MonMap monmap;

@@ -51,6 +51,8 @@ class MClass;
 class MAuthRotating;
 class MRoute;
 
+#define COMPAT_SET_LOC "feature_set"
+
 class Monitor : public Dispatcher {
 public:
   // me
@@ -225,5 +227,14 @@ public:
 
   LogClient *get_logclient() { return &logclient; }
 };
+
+#define CEPH_MON_FEATURE_INCOMPAT_BASE "initial feature set (~v.18)"
+static const int ceph_mon_feature_compat_size = 0;
+static const int ceph_mon_feature_ro_compat_size = 0;
+static const int ceph_mon_feature_incompat_size = 1;
+extern const char *ceph_mon_feature_compat[];
+extern const char *ceph_mon_feature_ro_compat[];
+extern const char *ceph_mon_feature_incompat[];
+
 
 #endif
