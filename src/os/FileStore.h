@@ -118,7 +118,7 @@ class FileStore : public JournalingObjectStore {
   unsigned apply_transactions(list<Transaction*>& tls, Context *onjournal=0, Context *ondisk=0);
   int _transaction_start(__u64 bytes, __u64 ops);
   void _transaction_finish(int id);
-  unsigned _apply_transaction(Transaction& t);
+  unsigned _do_transaction(Transaction& t);
   int _do_usertrans(list<Transaction*>& tls);
 
   // ------------------

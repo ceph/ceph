@@ -583,7 +583,7 @@ unsigned FileStore::apply_transactions(list<Transaction*> &tls,
     for (list<Transaction*>::iterator p = tls.begin();
 	 p != tls.end();
 	 p++) {
-      r = _apply_transaction(**p);
+      r = _do_transaction(**p);
       if (r < 0)
 	break;
     }
@@ -663,9 +663,9 @@ void FileStore::_transaction_finish(int fd)
 #endif /* DARWIN */
 }
 
-unsigned FileStore::_apply_transaction(Transaction& t)
+unsigned FileStore::_do_transaction(Transaction& t)
 {
-  dout(10) << "_apply_transaction on " << &t << dendl;
+  dout(10) << "_do_transaction on " << &t << dendl;
 
   while (t.have_op()) {
     int op = t.get_op();
