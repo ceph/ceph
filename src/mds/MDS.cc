@@ -574,6 +574,12 @@ void MDS::handle_command(MMonCommand *m)
   dout(10) << "handle_command args: " << m->cmd << dendl;
   if (m->cmd[0] == "injectargs")
     parse_config_option_string(m->cmd[1]);
+  else if (m->cmd[0] == "dumpcache") {
+    if (m->cmd.size() > 1)
+      mdcache->dump_cache(m->cmd[1].c_str());
+    else
+      mdcache->dump_cache();
+  }
   else if (m->cmd[0] == "session" && m->cmd[1] == "kill") {
     Session *session = sessionmap.
       get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,

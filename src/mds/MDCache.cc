@@ -8584,12 +8584,15 @@ void MDCache::show_cache()
 }
 
 
-void MDCache::dump_cache()
+void MDCache::dump_cache(const char *fn)
 {
   if (g_conf.debug_mds < 2) return;
 
-  char fn[20];
-  sprintf(fn, "cachedump.%d.mds%d", (int)mds->mdsmap->get_epoch(), mds->get_nodeid());
+  char deffn[200];
+  if (!fn) {
+    sprintf(deffn, "cachedump.%d.mds%d", (int)mds->mdsmap->get_epoch(), mds->get_nodeid());
+    fn = deffn;
+  }
 
   dout(1) << "dump_cache to " << fn << dendl;
 

@@ -1061,7 +1061,7 @@ private:
   // == crap fns ==
  public:
   void show_cache();
-  void dump_cache();
+  void dump_cache(const char *fn=0);
   void show_subtrees(int dbl=10);
 
   CInode *hack_pick_random_inode() {
