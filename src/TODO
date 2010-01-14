@@ -34,16 +34,12 @@ v0.19
 - feature bits during connection handshake
 - remove erank from ceph_entity_addr
 
+- compat/incompat bits
+
 - kclient: handle enomem on reply using tid in msg header
 
-
-- get recovered filestore files
 - audit truncation sequence
   - should mds recovery recover truncation metadata?
-
-- compat/incompat features for ondisk format?
-  - mds format
-  - osd format
 
 - qa: snap test.  maybe walk through 2.6.* kernel trees?
 
@@ -74,6 +70,10 @@ pending mon format changes
 - compat/incompat flags
 
 bugs
+- 'mount.ceph server:/ relpath' puts relpath (not canonicalized name) in /etc/mtab. df gets confused
+uml:~# grep ceph /etc/mtab
+10.0.1.252:/ mnt ceph rw 0 0
+
 - kclient: on umount -f
 [ 4683.361323] INFO: task umount:15840 blocked for more than 120 seconds.
 [ 4683.367910] "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
