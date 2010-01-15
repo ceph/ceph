@@ -2377,7 +2377,7 @@ void SimpleMessenger::wait()
 
 
 
-void SimpleMessenger::mark_down(entity_addr_t addr)
+void SimpleMessenger::mark_down(const entity_addr_t& addr)
 {
   lock.Lock();
   if (rank_pipe.count(addr)) {

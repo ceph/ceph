@@ -422,7 +422,7 @@ private:
 
   const entity_addr_t &get_ms_addr() { return ms_addr; }
 
-  void mark_down(entity_addr_t addr);
+  void mark_down(const entity_addr_t& addr);
 
   void reaper();
 

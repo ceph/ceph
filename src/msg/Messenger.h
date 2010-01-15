@@ -154,7 +154,7 @@ protected:
   }
   virtual int send_keepalive(const entity_inst_t& dest) = 0;
 
-  virtual void mark_down(const entity_addr_t& a) {}
+  virtual void mark_down(const entity_addr_t& a) = 0;
 
 protected:
   //destruction should be handled via destroy()
