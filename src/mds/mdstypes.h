@@ -20,7 +20,8 @@ using namespace std;
 
 #include <boost/pool/pool.hpp>
 
-#define CEPH_FS_ONDISK_MAGIC "ceph fs volume v011"
+#define CEPH_FS_ONDISK_MAGIC "ceph fs volume v012"
+#define CEPH_FS_OLD_ONDISK_MAGIC "ceph fs volume v011"
 
 
 //#define MDS_REF_SET      // define me for improved debug output, sanity checking

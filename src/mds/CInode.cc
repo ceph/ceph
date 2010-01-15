@@ -726,17 +726,18 @@ void CInode::fetch(Context *fin)
 void CInode::_fetched(bufferlist& bl, Context *fin)
 {
   dout(10) << "_fetched" << dendl;
+  CompatSet& mds_features = mdcache->mds->mds_features;
   bufferlist::iterator p = bl.begin();
   nstring magic;
   ::decode(magic, p);
   dout(10) << " magic is '" << magic << "' (expecting '" << CEPH_FS_ONDISK_MAGIC << "')" << dendl;
-  if (magic != CEPH_FS_ONDISK_MAGIC) {
+  if (magic != CEPH_FS_ONDISK_MAGIC && magic != CEPH_FS_OLD_ONDISK_MAGIC) {
     dout(0) << "on disk magic '" << magic << "' != my magic '" << CEPH_FS_ONDISK_MAGIC
 	    << "'" << dendl;
     fin->finish(-EINVAL);
   } else {
-    ondisk_ino_features.decode(p);
-    CompatSet& mds_features = mdcache->mds->mds_features;
+    if (magic != CEPH_FS_OLD_ONDISK_MAGIC) ondisk_ino_features.decode(p);
+    else ondisk_ino_features = mds_features;
     if ( !mds_features.writeable(ondisk_ino_features)) {
       dout(0) << "mds data on-disk uses unknown features!" << dendl;
       CompatSet diff = mds_features.unsupported(ondisk_ino_features);

@@ -29,7 +29,8 @@
 
 #define CEPH_OSD_NEARFULL_RATIO .8
 #define CEPH_OSD_FULL_RATIO .95
-
+//this #define copied from OSD.h
+#define CEPH_OSD_FEATURE_INCOMPAT_BASE "initial feature set(~v.18)"
 
 
 /* osdreqid_t - caller name + incarnation# + tid to unique identify this request
@@ -1027,7 +1028,7 @@ public:
   }
 
   void encode(bufferlist &bl) const {
-    __u8 v = 1;
+    __u8 v = 2;
     ::encode(v, bl);
 
     ::encode(magic, bl);
@@ -1052,7 +1053,10 @@ public:
     ::decode(oldest_map, bl);
     ::decode(newest_map, bl);
     ::decode(weight, bl);
-    compat_features.decode(bl);
+    if (v >= 2) compat_features.decode(bl);
+    else { //upgrade it!
+      compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_BASE);
+    }
     ::decode(clean_thru, bl);
     ::decode(mounted, bl);
   }

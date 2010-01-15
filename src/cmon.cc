@@ -111,11 +111,17 @@ int main(int argc, const char **argv)
   bufferlist features;
   store.get_bl_ss(features, COMPAT_SET_LOC, 0);
   if (features.length() == 0) {
-    cerr << "mon fs missing feature list. Exiting now" << std::endl;
-    exit(1);
+    cerr << "WARNING: mon fs missing feature list.\n"
+	 << "Assuming it is old-style and introducing one." << std::endl;
+    //we only want the baseline ~v.18 features assumed to be on disk.
+    //They'll be first in the incompat list.
+    ondisk_features = CompatSet(NULL, 0, NULL, 0,
+				ceph_mon_feature_incompat,
+				1);
+  } else {
+    bufferlist::iterator it = features.begin();
+    ondisk_features.decode(it);
   }
-  bufferlist::iterator it = features.begin();
-  ondisk_features.decode(it);
   
   if (!mon_features.writeable(ondisk_features)) {
     cerr << "monitor executable cannot read disk! Missing features: "
