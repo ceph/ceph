@@ -42,7 +42,7 @@ void SessionMap::dump()
 object_t SessionMap::get_object_name()
 {
   char s[30];
-  sprintf(s, "mds%d_sessionmap", mds->whoami);
+  snprintf(s, sizeof(s), "mds%d_sessionmap", mds->whoami);
   return object_t(s);
 }
 

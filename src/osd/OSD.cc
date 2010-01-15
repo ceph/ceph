@@ -374,7 +374,7 @@ int OSD::init()
   // log
   static LogType osd_logtype(l_osd_first, l_osd_last);
   char name[80];
-  sprintf(name, "osd%d", whoami);
+  snprintf(name, sizeof(name), "osd%d", whoami);
   logger = new Logger(name, (LogType*)&osd_logtype);
   osd_logtype.add_set(l_osd_opq, "opq");
   osd_logtype.add_inc(l_osd_op, "op");

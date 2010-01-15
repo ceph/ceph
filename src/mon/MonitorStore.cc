@@ -35,7 +35,7 @@ static ostream& _prefix(const string& dir) {
 
 int MonitorStore::mount()
 {
-  char t[200];
+  char t[1024];
 
   dout(1) << "mount" << dendl;
   // verify dir exists
@@ -47,7 +47,7 @@ int MonitorStore::mount()
   ::closedir(d);
 
   // open lockfile
-  sprintf(t, "%s/lock", dir.c_str());
+  snprintf(t, sizeof(t), "%s/lock", dir.c_str());
   lock_fd = ::open(t, O_CREAT|O_RDWR, 0600);
   if (lock_fd < 0)
     return -errno;
@@ -66,8 +66,8 @@ int MonitorStore::mount()
   if (g_conf.chdir && g_conf.chdir[0] && dir[0] != '/') {
     // combine it with the cwd, in case fuse screws things up (i.e. fakefuse)
     string old = dir;
-    char cwd[200];
-    getcwd(cwd, 200);
+    char cwd[1024];
+    getcwd(cwd, sizeof(cwd));
     dir = cwd;
     dir += "/";
     dir += old;
@@ -85,8 +85,8 @@ int MonitorStore::mkfs()
 {
   dout(1) << "mkfs" << dendl;
 
-  char cmd[200];
-  sprintf(cmd, "test -d %s && /bin/rm -r %s ; mkdir -p %s", dir.c_str(), dir.c_str(), dir.c_str());
+  char cmd[1024];
+  snprintf(cmd, sizeof(cmd), "test -d %s && /bin/rm -r %s ; mkdir -p %s", dir.c_str(), dir.c_str(), dir.c_str());
   dout(1) << cmd << dendl;
   int r = system(cmd);
   return r;
@@ -100,11 +100,11 @@ void MonitorStore::sync()
 
 version_t MonitorStore::get_int(const char *a, const char *b)
 {
-  char fn[200];
+  char fn[1024];
   if (b)
-    sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
+    snprintf(fn, sizeof(fn), "%s/%s/%s", dir.c_str(), a, b);
   else
-    sprintf(fn, "%s/%s", dir.c_str(), a);
+    snprintf(fn, sizeof(fn), "%s/%s", dir.c_str(), a);
   
   FILE *f = ::fopen(fn, "r");
   if (!f) 
@@ -127,21 +127,21 @@ version_t MonitorStore::get_int(const char *a, const char *b)
 
 void MonitorStore::put_int(version_t val, const char *a, const char *b, bool sync)
 {
-  char fn[200];
-  sprintf(fn, "%s/%s", dir.c_str(), a);
+  char fn[1024];
+  snprintf(fn, sizeof(fn), "%s/%s", dir.c_str(), a);
   if (b) {
     ::mkdir(fn, 0755);
     dout(15) << "set_int " << a << "/" << b << " = " << val << dendl;
-    sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
+    snprintf(fn, sizeof(fn), "%s/%s/%s", dir.c_str(), a, b);
   } else {
     dout(15) << "set_int " << a << " = " << val << dendl;
   }
   
   char vs[30];
-  sprintf(vs, "%lld\n", (unsigned long long)val);
+  snprintf(vs, sizeof(vs), "%lld\n", (unsigned long long)val);
 
-  char tfn[200];
-  sprintf(tfn, "%s.new", fn);
+  char tfn[1024];
+  snprintf(tfn, sizeof(tfn), "%s.new", fn);
 
   int fd = ::open(tfn, O_WRONLY|O_CREAT, 0644);
   assert(fd >= 0);
@@ -158,13 +158,13 @@ void MonitorStore::put_int(version_t val, const char *a, const char *b, bool syn
 
 bool MonitorStore::exists_bl_ss(const char *a, const char *b)
 {
-  char fn[200];
+  char fn[1024];
   if (b) {
     dout(15) << "exists_bl " << a << "/" << b << dendl;
-    sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
+    snprintf(fn, sizeof(fn), "%s/%s/%s", dir.c_str(), a, b);
   } else {
     dout(15) << "exists_bl " << a << dendl;
-    sprintf(fn, "%s/%s", dir.c_str(), a);
+    snprintf(fn, sizeof(fn), "%s/%s", dir.c_str(), a);
   }
   
   struct stat st;
@@ -176,24 +176,24 @@ bool MonitorStore::exists_bl_ss(const char *a, const char *b)
 
 int MonitorStore::erase_ss(const char *a, const char *b)
 {
-  char fn[200];
+  char fn[1024];
   if (b) {
     dout(15) << "erase_ss " << a << "/" << b << dendl;
-    sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
+    snprintf(fn, sizeof(fn), "%s/%s/%s", dir.c_str(), a, b);
   } else {
     dout(15) << "erase_ss " << a << dendl;
-    sprintf(fn, "%s/%s", dir.c_str(), a);
+    snprintf(fn, sizeof(fn), "%s/%s", dir.c_str(), a);
   }
   return ::unlink(fn);
 }
 
 int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
 {
-  char fn[200];
+  char fn[1024];
   if (b) {
-    sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
+    snprintf(fn, sizeof(fn), "%s/%s/%s", dir.c_str(), a, b);
   } else {
-    sprintf(fn, "%s/%s", dir.c_str(), a);
+    snprintf(fn, sizeof(fn), "%s/%s", dir.c_str(), a);
   }
   
   int fd = ::open(fn, O_RDONLY);
@@ -240,23 +240,23 @@ int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
 
 int MonitorStore::write_bl_ss(bufferlist& bl, const char *a, const char *b, bool append, bool sync)
 {
-  char fn[200];
-  sprintf(fn, "%s/%s", dir.c_str(), a);
+  char fn[1024];
+  snprintf(fn, sizeof(fn), "%s/%s", dir.c_str(), a);
   if (b) {
     ::mkdir(fn, 0755);
     dout(15) << "put_bl " << a << "/" << b << " = " << bl.length() << " bytes" << dendl;
-    sprintf(fn, "%s/%s/%s", dir.c_str(), a, b);
+    snprintf(fn, sizeof(fn), "%s/%s/%s", dir.c_str(), a, b);
   } else {
     dout(15) << "put_bl " << a << " = " << bl.length() << " bytes" << dendl;
   }
   
-  char tfn[200];
+  char tfn[1024];
   int err = 0;
   int fd;
   if (append) {
     fd = ::open(fn, O_WRONLY|O_CREAT|O_APPEND, 0644);
   } else {
-    sprintf(tfn, "%s.new", fn);
+    snprintf(tfn, sizeof(tfn), "%s.new", fn);
     fd = ::open(tfn, O_WRONLY|O_CREAT, 0644);
   }
   assert(fd >= 0);

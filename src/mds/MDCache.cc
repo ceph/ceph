@@ -277,7 +277,7 @@ void MDCache::create_empty_hierarchy(C_Gather *gather)
 
   // create mds dir
   char myname[10];
-  sprintf(myname, "mds%d", mds->whoami);
+  snprintf(myname, sizeof(myname), "mds%d", mds->whoami);
   CInode *my = create_system_inode(MDS_INO_MDSDIR(mds->whoami), S_IFDIR);
   CDir *mydir = my->get_or_open_dirfrag(this, frag_t());
   cephdir->add_primary_dentry(myname, my);
@@ -487,7 +487,7 @@ void MDCache::open_root()
     }
 
     char n[10];
-    sprintf(n, "mds%d", mds->whoami);
+    snprintf(n, sizeof(n), "mds%d", mds->whoami);
     CDentry *mydn = cephdir->lookup(n);
     assert(mydn);
     
@@ -521,7 +521,7 @@ void MDCache::open_root()
     }
     
     char n[10];
-    sprintf(n, "mds%d", mds->whoami);
+    snprintf(n, sizeof(n), "mds%d", mds->whoami);
     CDentry *mydn = cephdir->lookup(n);
     if (!mydn) {
       filepath fp;
@@ -4536,7 +4536,7 @@ void MDCache::_recovered(CInode *in, int r, __u64 size, utime_t mtime)
 void MDCache::purge_prealloc_ino(inodeno_t ino, Context *fin)
 {
   char n[30];
-  sprintf(n, "%llx.%08llx", (long long unsigned)ino, 0ull);
+  snprintf(n, sizeof(n), "%llx.%08llx", (long long unsigned)ino, 0ull);
   object_t oid(n);
   dout(10) << "purge_prealloc_ino " << ino << " oid " << oid << dendl;
   ceph_object_layout ol = mds->osdmap->make_object_layout(oid,
@@ -7426,7 +7426,7 @@ void MDCache::handle_discover(MDiscover *dis)
       // is this a new mds dir?
       if (curdir->ino() == MDS_INO_CEPH) {
 	char t[10];
-	sprintf(t, "mds%d", from);
+	snprintf(t, sizeof(t), "mds%d", from);
 	if (t == dis->get_dentry(i)) {
 	  // yes.
 	  _create_system_file(curdir, t, create_system_inode(MDS_INO_MDSDIR(from), S_IFDIR),
@@ -8512,9 +8512,9 @@ void MDCache::show_subtrees(int dbl)
 
     char s[10];
     if (dir->get_dir_auth().second == CDIR_AUTH_UNKNOWN)
-      sprintf(s, "%2d   ", dir->get_dir_auth().first);
+      snprintf(s, sizeof(s), "%2d   ", dir->get_dir_auth().first);
     else
-      sprintf(s, "%2d,%2d", dir->get_dir_auth().first, dir->get_dir_auth().second);
+      snprintf(s, sizeof(s), "%2d,%2d", dir->get_dir_auth().first, dir->get_dir_auth().second);
     
     // print
     dout(dbl) << indent << "|_" << pad << s << " " << auth << *dir << dendl;
@@ -8590,7 +8590,7 @@ void MDCache::dump_cache(const char *fn)
 
   char deffn[200];
   if (!fn) {
-    sprintf(deffn, "cachedump.%d.mds%d", (int)mds->mdsmap->get_epoch(), mds->get_nodeid());
+    snprintf(deffn, sizeof(deffn), "cachedump.%d.mds%d", (int)mds->mdsmap->get_epoch(), mds->get_nodeid());
     fn = deffn;
   }
 

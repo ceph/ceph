@@ -48,7 +48,7 @@ void MDLog::reopen_logger(utime_t start, bool append)
 {
   // logger
   char name[80];
-  sprintf(name, "mds%d.log", mds->get_nodeid());
+  snprintf(name, sizeof(name), "mds%d.log", mds->get_nodeid());
   logger = new Logger(name, &mdlog_logtype, append);
   logger->set_start(start);
 

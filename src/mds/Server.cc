@@ -84,7 +84,7 @@ void Server::reopen_logger(utime_t start, bool append)
 
   // logger
   char name[80];
-  sprintf(name, "mds%d.server", mds->get_nodeid());
+  snprintf(name, sizeof(name), "mds%d.server", mds->get_nodeid());
   logger = new Logger(name, &mdserver_logtype, append);
   logger->set_start(start);
 }

@@ -1024,8 +1024,8 @@ void MDBalancer::dump_pop_map()
   return; // this is dumb
 
 
-  char fn[20];
-  sprintf(fn, "popdump.%d.mds%d", beat_epoch, mds->get_nodeid());
+  char fn[32];
+  snprintf(fn, sizeof(fn), "popdump.%d.mds%d", beat_epoch, mds->get_nodeid());
 
   dout(1) << "dump_pop_map to " << fn << dendl;
 

@@ -146,7 +146,8 @@ lock_mtab (void) {
 		signals_have_been_setup = 1;
 	}
 
-	sprintf(linktargetfile, MOUNTLOCK_LINKTARGET, getpid ());
+	snprintf(linktargetfile, sizeof(linktargetfile), MOUNTLOCK_LINKTARGET,
+		 getpid ());
 
 	i = open (linktargetfile, O_WRONLY|O_CREAT, S_IRUSR|S_IWUSR);
 	if (i < 0) {

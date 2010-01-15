@@ -331,7 +331,7 @@ void Ager::load_freelist()
 {
   generic_dout(1) << "save_freelist " << el << dendl;
   char s[100];
-  sprintf(s, "ebofs.freelist.%d", el);
+  snprintf(s, sizeof(s), "ebofs.freelist.%d", el);
   bufferlist bl;
   ((Ebofs*)store)->_export_freelist(bl);
   ::unlink(s);

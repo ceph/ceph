@@ -477,7 +477,7 @@ void CInode::make_path_string(string& s, bool force, CDentry *use_parent)
   } 
   else {
     char n[20];
-    sprintf(n, "#%llx", (unsigned long long)(ino()));
+    snprintf(n, sizeof(n), "#%llx", (unsigned long long)(ino()));
     s += n;
   }
 }
@@ -520,7 +520,7 @@ void CInode::make_anchor_trace(vector<Anchor>& trace)
 void CInode::name_stray_dentry(string& dname)
 {
   char s[20];
-  sprintf(s, "%llx", (unsigned long long)inode.ino.val);
+  snprintf(s, sizeof(s), "%llx", (unsigned long long)inode.ino.val);
   dname = s;
 }
 
@@ -672,7 +672,7 @@ void CInode::store(Context *fin)
   m.setxattr("inode", bl);
 
   char n[30];
-  sprintf(n, "%llx.%08llx", (long long unsigned)ino(), (long long unsigned)frag_t());
+  snprintf(n, sizeof(n), "%llx.%08llx", (long long unsigned)ino(), (long long unsigned)frag_t());
   object_t oid(n);
   OSDMap *osdmap = mdcache->mds->objecter->osdmap;
   ceph_object_layout ol = osdmap->make_object_layout(oid,
@@ -708,7 +708,7 @@ void CInode::fetch(Context *fin)
 
   C_Inode_Fetched *c = new C_Inode_Fetched(this, fin);
   char n[30];
-  sprintf(n, "%llx.%08llx", (long long unsigned)ino(), (long long unsigned)frag_t());
+  snprintf(n, sizeof(n), "%llx.%08llx", (long long unsigned)ino(), (long long unsigned)frag_t());
   object_t oid(n);
 
   ObjectOperation rd;
@@ -785,7 +785,7 @@ void CInode::store_parent(Context *fin)
   SnapContext snapc;
 
   char n[30];
-  sprintf(n, "%llx.%08llx", (long long unsigned)ino(), (long long unsigned)frag_t());
+  snprintf(n, sizeof(n), "%llx.%08llx", (long long unsigned)ino(), (long long unsigned)frag_t());
   object_t oid(n);
   OSDMap *osdmap = mdcache->mds->objecter->osdmap;
   ceph_object_layout ol = osdmap->make_object_layout(oid,

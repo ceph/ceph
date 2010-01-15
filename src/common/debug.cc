@@ -65,8 +65,8 @@ void _dout_open_log()
 
     char hostname[80];
     gethostname(hostname, 79);
-    sprintf(_dout_path, "%s/%s.%d", _dout_dir, hostname, getpid());
-    sprintf(_dout_file, "%s.%d", hostname, getpid());
+    snprintf(_dout_path, sizeof(_dout_path), "%s/%s.%d", _dout_dir, hostname, getpid());
+    snprintf(_dout_file, sizeof(_dout_file), "%s.%d", hostname, getpid());
   }
 
   _dout_out.close();
@@ -91,8 +91,8 @@ int _dout_rename_output_file()  // after calling daemon()
     gethostname(hostname, 79);
 
     strcpy(oldpath, _dout_path);
-    sprintf(_dout_path, "%s/%s.%d", _dout_dir, hostname, getpid());
-    sprintf(_dout_file, "%s.%d", hostname, getpid());
+    snprintf(_dout_path, sizeof(_dout_path), "%s/%s.%d", _dout_dir, hostname, getpid());
+    snprintf(_dout_file, sizeof(_dout_file), "%s.%d", hostname, getpid());
     dout(0) << "---- renamed log " << oldpath << " -> " << _dout_path << " ----" << dendl;
     ::rename(oldpath, _dout_path);
 
@@ -111,14 +111,14 @@ int _dout_create_courtesy_output_symlink(const char *type, __s64 n)
     if (_dout_need_open)
       _dout_open_log();
 
-    sprintf(_dout_symlink_path, "%s/%s%lld", _dout_symlink_dir, type, (long long)n);
+    snprintf(_dout_symlink_path, sizeof(_dout_symlink_path), "%s/%s%lld", _dout_symlink_dir, type, (long long)n);
 
     // rotate out old symlink
     int n = 0;
     while (1) {
       char fn[200];
       struct stat st;
-      sprintf(fn, "%s.%lld", _dout_symlink_path, (long long)n);
+      snprintf(fn, sizeof(fn), "%s.%lld", _dout_symlink_path, (long long)n);
       if (::stat(fn, &st) != 0)
 	break;
       n++;
@@ -126,10 +126,10 @@ int _dout_create_courtesy_output_symlink(const char *type, __s64 n)
     while (n >= 0) {
       char a[200], b[200];
       if (n)
-	sprintf(a, "%s.%lld", _dout_symlink_path, (long long)n-1);
+	snprintf(a, sizeof(a), "%s.%lld", _dout_symlink_path, (long long)n-1);
       else
-	sprintf(a, "%s", _dout_symlink_path);
-      sprintf(b, "%s.%lld", _dout_symlink_path, (long long)n);
+	snprintf(a, sizeof(a), "%s", _dout_symlink_path);
+      snprintf(b, sizeof(b), "%s.%lld", _dout_symlink_path, (long long)n);
       ::rename(a, b);
       dout(0) << "---- renamed symlink " << a << " -> " << b << " ----" << dendl;
       n--;

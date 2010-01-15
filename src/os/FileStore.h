@@ -54,10 +54,10 @@ class FileStore : public JournalingObjectStore {
   bool fake_collections;
   
   // helper fns
-  void append_oname(const sobject_t &oid, char *s);
+  void append_oname(const sobject_t &oid, char *s, int len);
   //void get_oname(sobject_t oid, char *s);
-  void get_cdir(coll_t cid, char *s);
-  void get_coname(coll_t cid, const sobject_t& oid, char *s);
+  void get_cdir(coll_t cid, char *s, int len);
+  void get_coname(coll_t cid, const sobject_t& oid, char *s, int len);
   bool parse_object(char *s, sobject_t& o);
   bool parse_coll(char *s, coll_t& c);
   

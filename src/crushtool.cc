@@ -478,7 +478,7 @@ void print_rule_name(ostream& out, int t, CrushWrapper &crush)
 void print_fixedpoint(ostream& out, int i)
 {
   char s[20];
-  sprintf(s, "%.3f", (float)i / (float)0x10000);
+  snprintf(s, sizeof(s), "%.3f", (float)i / (float)0x10000);
   out << s;
 }
 
@@ -810,11 +810,11 @@ int main(int argc, const char **argv)
 
 	char format[20];
 	if (l.size)
-	  sprintf(format, "%s%%d", l.name);
+	  snprintf(format, sizeof(format), "%s%%d", l.name);
 	else
 	  strcpy(format, l.name);
 	char name[20];
-	sprintf(name, format, i);
+	snprintf(name, sizeof(name), format, i);
 	crush.set_item_name(id, name);
 
 	dout(0) << " in bucket " << id << " '" << name << "' size " << j << " weight " << weight << dendl;

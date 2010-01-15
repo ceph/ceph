@@ -1798,10 +1798,10 @@ int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len, bool 
       char buf[20];
       while (left > 0) {
 	if (col == 0) {
-	  sprintf(buf, "%05x : ", pos);
+	  snprintf(buf, sizeof(buf), "%05x : ", pos);
 	  *_dout << buf;
 	}
-	sprintf(buf, " %02x", ((unsigned char*)v->iov_base)[vpos]);
+	snprintf(buf, sizeof(buf), " %02x", ((unsigned char*)v->iov_base)[vpos]);
 	*_dout << buf;
 	left--;
 	if (!left)
@@ -2052,7 +2052,7 @@ static void write_pid_file(int pid)
   int fd = ::open(g_conf.pid_file, O_CREAT|O_TRUNC|O_WRONLY, 0644);
   if (fd >= 0) {
     char buf[20];
-    int len = sprintf(buf, "%d\n", pid);
+    int len = snprintf(buf, sizeof(buf), "%d\n", pid);
     ::write(fd, buf, len);
     ::close(fd);
   }

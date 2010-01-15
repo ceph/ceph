@@ -255,14 +255,14 @@ void MDS::reopen_logger(utime_t start)
 
   // log
   char name[80];
-  sprintf(name, "mds%d", whoami);
+  snprintf(name, sizeof(name), "mds%d", whoami);
 
   bool append = mdsmap->get_inc(whoami) > 1;
 
   logger = new Logger(name, (LogType*)&mds_logtype, append);
   logger->set_start(start);
 
-  sprintf(name, "mds%d.mem", whoami);
+  snprintf(name, sizeof(name), "mds%d.mem", whoami);
   mlogger = new Logger(name, (LogType*)&mdm_logtype, append);
 
   mdlog->reopen_logger(start, append);

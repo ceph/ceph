@@ -260,7 +260,7 @@ const string& SnapInfo::get_long_name()
 {
   if (long_name.length() == 0) {
     char nm[80];
-    sprintf(nm, "_%s_%llu", name.c_str(), (unsigned long long)ino);
+    snprintf(nm, sizeof(nm), "_%s_%llu", name.c_str(), (unsigned long long)ino);
     long_name = nm;
   }
   return long_name;

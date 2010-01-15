@@ -281,7 +281,7 @@ void Client::init()
     char s[80];
     char hostname[80];
     gethostname(hostname, 79);
-    sprintf(s,"clients.%s.%d", hostname, getpid());
+    snprintf(s, sizeof(s), "clients.%s.%d", hostname, getpid());
     client_logger = new Logger(s, &client_logtype);
   }
   client_logger_lock.Unlock();
@@ -5898,7 +5898,7 @@ int Client::get_file_stripe_address(int fd, loff_t offset, string& address)
   // now we need to turn it into a string
   char foo[30];
   __u8 *quad = (__u8*) &addr.in4_addr().sin_addr;
-  sprintf(foo, "%d.%d.%d.%d", (int)quad[0], (int)quad[1], (int)quad[2], (int)quad[3]);
+  snprintf(foo, sizeof(foo), "%d.%d.%d.%d", (int)quad[0], (int)quad[1], (int)quad[2], (int)quad[3]);
   address = foo;
   return 0;
 }

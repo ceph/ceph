@@ -114,9 +114,9 @@ object_t MDSTable::get_object_name()
 {
   char n[50];
   if (per_mds)
-    sprintf(n, "mds%d_%s", mds->whoami, table_name);
+    snprintf(n, sizeof(n), "mds%d_%s", mds->whoami, table_name);
   else
-    sprintf(n, "mds_%s", table_name);
+    snprintf(n, sizeof(n), "mds_%s", table_name);
   return object_t(n);
 }
 

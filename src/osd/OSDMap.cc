@@ -176,7 +176,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
       dout(20) << "added domain bucket i " << ritems[i] << " of size " << j << dendl;
 
       char bname[10];
-      sprintf(bname, "dom%d", i);
+      snprintf(bname, sizeof(bname), "dom%d", i);
       crush.set_item_name(ritems[i], bname);
     }
     

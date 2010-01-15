@@ -133,11 +133,11 @@ struct pg_t {
     return coll_t(u.pg64, sn);
     }*/
 
-  int print(char *o) {
+  int print(char *o, int maxlen) {
     if (preferred() >= 0)
-      return sprintf(o, "%d.%xp%d", pool(), ps(), preferred());
+      return snprintf(o, maxlen, "%d.%xp%d", pool(), ps(), preferred());
     else
-      return sprintf(o, "%d.%x", pool(), ps());
+      return snprintf(o, maxlen, "%d.%x", pool(), ps());
   }
   bool parse(const char *s) {
     int pool;
@@ -235,14 +235,14 @@ struct coll_t {
     return coll_t(p, s);
   }
 
-  int print(char *o) {
+  int print(char *o, int maxlen) {
     if (pgid == pg_t() && snap == 0)
-      return sprintf(o, "meta");
-    int len = pgid.print(o);
+      return snprintf(o, maxlen, "meta");
+    int len = pgid.print(o, maxlen);
     if (snap != CEPH_NOSNAP)
-      len += sprintf(o+len, "_%llx", (long long unsigned)snap);
+      len += snprintf(o + len, maxlen - len, "_%llx", (long long unsigned)snap);
     else {
-      strcat(o+len, "_head");
+      strncat(o + len, "_head", maxlen - len);
       len += 5;
     }
     return len;

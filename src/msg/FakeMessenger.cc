@@ -389,9 +389,9 @@ int FakeMessenger::submit_message(Message *m, entity_inst_t inst)
   loggers[dest]->inc("-recv",1);
   
   char s[20];
-  sprintf(s,"+%s", m->get_type_name());
+  snprintf(s, sizeof(s), "+%s", m->get_type_name());
   loggers[get_myaddr()]->inc(s);
-  sprintf(s,"-%s", m->get_type_name());
+  snprintf(s, sizeof(s), ,"-%s", m->get_type_name());
   loggers[dest]->inc(s);
 #endif
 

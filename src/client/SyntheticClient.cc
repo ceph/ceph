@@ -295,7 +295,7 @@ string SyntheticClient::get_sarg(int seq)
   }
   if (a.length() == 0 || a == "~") {
     char s[30];
-    sprintf(s,"syn.%lld.%d", (long long)client->whoami.v, seq);
+    snprintf(s, sizeof(s), "syn.%lld.%d", (long long)client->whoami.v, seq);
     a = s;
   } 
   return a;
@@ -765,7 +765,7 @@ int SyntheticClient::run()
 	int playdata = iargs.front(); iargs.pop_front();
         string prefix = get_sarg(0);
 	char realtfile[100];
-	sprintf(realtfile, tfile.c_str(), (int)client->get_nodeid().v);
+	snprintf(realtfile, sizeof(realtfile), tfile.c_str(), (int)client->get_nodeid().v);
 
         if (run_me()) {
           dout(-2) << "trace " << tfile << " prefix=" << prefix << " count=" << iarg1 << " data=" << playdata << dendl;
@@ -1661,14 +1661,14 @@ int SyntheticClient::make_dirs(const char *basedir, int dirs, int files, int dep
   char d[500];
   dout(3) << "make_dirs " << basedir << " dirs " << dirs << " files " << files << " depth " << depth << dendl;
   for (int i=0; i<files; i++) {
-    sprintf(d,"%s/file.%d", basedir, i);
+    snprintf(d, sizeof(d), "%s/file.%d", basedir, i);
     client->mknod(d, 0644);
   }
 
   if (depth == 0) return 0;
 
   for (int i=0; i<dirs; i++) {
-    sprintf(d, "%s/dir.%d", basedir, i);
+    snprintf(d, sizeof(d), "%s/dir.%d", basedir, i);
     make_dirs(d, dirs, files, depth-1);
   }
   
@@ -1691,14 +1691,14 @@ int SyntheticClient::stat_dirs(const char *basedir, int dirs, int files, int dep
   char d[500];
   dout(3) << "stat_dirs " << basedir << " dirs " << dirs << " files " << files << " depth " << depth << dendl;
   for (int i=0; i<files; i++) {
-    sprintf(d,"%s/file.%d", basedir, i);
+    snprintf(d, sizeof(d), "%s/file.%d", basedir, i);
     client->lstat(d, &st);
   }
 
   if (depth == 0) return 0;
 
   for (int i=0; i<dirs; i++) {
-    sprintf(d, "%s/dir.%d", basedir, i);
+    snprintf(d, sizeof(d), "%s/dir.%d", basedir, i);
     stat_dirs(d, dirs, files, depth-1);
   }
   
@@ -1725,7 +1725,7 @@ int SyntheticClient::read_dirs(const char *basedir, int dirs, int files, int dep
   }
 
   for (int i=0; i<files; i++) {
-    sprintf(d,"%s/file.%d", basedir, i);
+    snprintf(d, sizeof(d), "%s/file.%d", basedir, i);
     utime_t s = g_clock.now();
     if (client->lstat(d, &st) < 0) {
       dout(2) << "read_dirs failed stat on " << d << ", stopping" << dendl;
@@ -1737,7 +1737,7 @@ int SyntheticClient::read_dirs(const char *basedir, int dirs, int files, int dep
 
   if (depth > 0) 
     for (int i=0; i<dirs; i++) {
-      sprintf(d, "%s/dir.%d", basedir, i);
+      snprintf(d, sizeof(d), "%s/dir.%d", basedir, i);
       if (read_dirs(d, dirs, files, depth-1) < 0) return -1;
     }
 
@@ -1752,14 +1752,14 @@ int SyntheticClient::make_files(int num, int count, int priv, bool more)
 
   if (priv) {
     for (int c=0; c<count; c++) {
-      sprintf(d,"dir.%d.run%d", whoami, c);
+      snprintf(d, sizeof(d), "dir.%d.run%d", whoami, c);
       client->mkdir(d, 0755);
     }
   } else {
     // shared
     if (true || whoami == 0) {
       for (int c=0; c<count; c++) {
-        sprintf(d,"dir.%d.run%d", 0, c);
+        snprintf(d, sizeof(d), "dir.%d.run%d", 0, c);
         client->mkdir(d, 0755);
       }
     } else {
@@ -1772,7 +1772,7 @@ int SyntheticClient::make_files(int num, int count, int priv, bool more)
   utime_t start = g_clock.now();
   for (int c=0; c<count; c++) {
     for (int n=0; n<num; n++) {
-      sprintf(d,"dir.%d.run%d/file.client%d.%d", priv ? whoami:0, c, whoami, n);
+      snprintf(d, sizeof(d), "dir.%d.run%d/file.client%d.%d", priv ? whoami:0, c, whoami, n);
 
       client->mknod(d, 0644);
 
@@ -1806,7 +1806,7 @@ int SyntheticClient::link_test()
 
   utime_t start = g_clock.now();
   for (int i=0; i<num; i++) {
-    sprintf(d,"orig/file.%d", i);
+    snprintf(d, sizeof(d), "orig/file.%d", i);
     client->mknod(d, 0755);
   }
   utime_t end = g_clock.now();
@@ -1817,8 +1817,8 @@ int SyntheticClient::link_test()
   // link
   start = g_clock.now();
   for (int i=0; i<num; i++) {
-    sprintf(d,"orig/file.%d", i);
-    sprintf(e,"copy/file.%d", i);
+    snprintf(d, sizeof(d), "orig/file.%d", i);
+    snprintf(e, sizeof(e), "copy/file.%d", i);
     client->link(d, e);
   }
   end = g_clock.now();
@@ -1835,7 +1835,7 @@ int SyntheticClient::create_shared(int num)
   char d[255];
   client->mkdir("test", 0755);
   for (int n=0; n<num; n++) {
-    sprintf(d,"test/file.%d", n);
+    snprintf(d, sizeof(d), "test/file.%d", n);
     client->mknod(d, 0644);
   }
   
@@ -1850,14 +1850,14 @@ int SyntheticClient::open_shared(int num, int count)
     // open
     list<int> fds;
     for (int n=0; n<num; n++) {
-      sprintf(d,"test/file.%d", n);
+      snprintf(d, sizeof(d), "test/file.%d", n);
       int fd = client->open(d,O_RDONLY);
       if (fd > 0) fds.push_back(fd);
     }
 
     if (false && client->get_nodeid() == 0)
       for (int n=0; n<num; n++) {
-	sprintf(d,"test/file.%d", n);
+	snprintf(d, sizeof(d), "test/file.%d", n);
 	client->unlink(d);
       }
 
@@ -2863,17 +2863,17 @@ void SyntheticClient::foo()
     client->mkdir("/a", 0755);
     client->mkdir("/b", 0755);
     for (int i=0; i<10; i++) {
-      sprintf(a, "/a/%d", i);
+      snprintf(a, sizeof(a), "/a/%d", i);
       client->mknod(a, 0644);
     }
     while (1) {
       for (int i=0; i<10; i++) {
-	sprintf(a, "/a/%d", i);
-	sprintf(b, "/b/%d", i);
+	snprintf(a, sizeof(a), "/a/%d", i);
+	snprintf(b, sizeof(b), "/b/%d", i);
 	client->link(a, b);
       }
       for (int i=0; i<10; i++) {
-	sprintf(b, "/b/%d", i);
+	snprintf(b, sizeof(b), "/b/%d", i);
 	client->unlink(b);
       }
     }
@@ -2922,7 +2922,7 @@ void SyntheticClient::foo()
       int b = rand() % s;
       int c = rand() % s;
       char src[80];
-      sprintf(src, "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
+      snprintf(src, sizeof(src), "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
       //int fd = 
       client->open(src, O_RDONLY);
     }
@@ -2942,8 +2942,8 @@ void SyntheticClient::foo()
       int f = rand() % s;
       char src[80];
       char dst[80];
-      sprintf(src, "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
-      sprintf(dst, "syn.0.0/dir.%d/dir.%d/file.%d", d, e, f);
+      snprintf(src, sizeof(src), "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
+      snprintf(dst, sizeof(dst), "syn.0.0/dir.%d/dir.%d/file.%d", d, e, f);
       client->rename(src, dst);
     }
     return;
@@ -2962,8 +2962,8 @@ void SyntheticClient::foo()
       int f = rand() % s;
       char src[80];
       char dst[80];
-      sprintf(src, "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
-      sprintf(dst, "syn.0.0/dir.%d/dir.%d/newlink.%d", d, e, f);
+      snprintf(src, sizeof(src), "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
+      snprintf(dst, sizeof(dst), "syn.0.0/dir.%d/dir.%d/newlink.%d", d, e, f);
       client->link(src, dst);
     }
     srand(0);
@@ -2977,8 +2977,8 @@ void SyntheticClient::foo()
       int f = rand() % s;
       char src[80];
       char dst[80];
-      sprintf(src, "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
-      sprintf(dst, "syn.0.0/dir.%d/dir.%d/newlink.%d", d, e, f);
+      snprintf(src, sizeof(src), "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
+      snprintf(dst, sizeof(dst), "syn.0.0/dir.%d/dir.%d/newlink.%d", d, e, f);
       client->unlink(dst);
     }
 
@@ -3065,7 +3065,7 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
 	  char t[80];
 	  for (int d=0; d<dep; d++) {
 	    int a = rand() % dirs;
-	    sprintf(t, "/dir.%d", a);
+	    snprintf(t, sizeof(t), "/dir.%d", a);
 	    src += t;
 	  }
 	}
@@ -3074,7 +3074,7 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
 	  char t[80];
 	  for (int d=0; d<dep; d++) {
 	    int a = rand() % dirs;
-	    sprintf(t, "/dir.%d", a);
+	    snprintf(t, sizeof(t), "/dir.%d", a);
 	    dst += t;
 	  }
 	}
@@ -3092,11 +3092,11 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
 	char t[80];
 	for (int d=0; d<depth; d++) {
 	  int a = rand() % dirs;
-	  sprintf(t, "/dir.%d", a);
+	  snprintf(t, sizeof(t), "/dir.%d", a);
 	  src += t;
 	}
 	int a = rand() % files;
-	sprintf(t, "/file.%d", a);
+	snprintf(t, sizeof(t), "/file.%d", a);
 	src += t;
       }
       string dst = basedir;
@@ -3104,11 +3104,11 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
 	char t[80];
 	for (int d=0; d<depth; d++) {
 	  int a = rand() % dirs;
-	  sprintf(t, "/dir.%d", a);
+	  snprintf(t, sizeof(t), "/dir.%d", a);
 	  dst += t;
 	}
 	int a = rand() % files;
-	sprintf(t, "/file.%d", a);
+	snprintf(t, sizeof(t), "/file.%d", a);
 	dst += t;
       }
       
@@ -3145,11 +3145,11 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
       if (depth) {
 	int d = rand() % (depth+1);
 	for (int k=0; k<d; k++) {
-	  sprintf(f, "/dir.%d", rand() % dirs);
+	  snprintf(f, sizeof(f), "/dir.%d", rand() % dirs);
 	  file += f;
 	}
       }
-      sprintf(f, "/file.%d", rand() % files);
+      snprintf(f, sizeof(f), "/file.%d", rand() % files);
       file += f;
       
       // pick a dir for our link
@@ -3157,11 +3157,11 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
       if (depth) {
 	int d = rand() % (depth+1);
 	for (int k=0; k<d; k++) {
-	  sprintf(f, "/dir.%d", rand() % dirs);
+	  snprintf(f, sizeof(f), "/dir.%d", rand() % dirs);
 	  ln += f;
 	}
       }
-      sprintf(f, "/ln.%d", i);
+      snprintf(f, sizeof(f), "/ln.%d", i);
       ln += f;
       
       client->link(file.c_str(), ln.c_str());  

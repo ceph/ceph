@@ -39,11 +39,11 @@ char *nice_blocks(block_t b)
   static char s[20];
   float sz = b*4.0;
   if (sz > (10 << 20)) 
-    sprintf(s,"%.1f GB", sz / (1024.0*1024.0));
+    snprintf(s, sizeof(s), "%.1f GB", sz / (1024.0*1024.0));
   else if (sz > (10 << 10)) 
-    sprintf(s,"%.1f MB", sz / (1024.0));
+    snprintf(s, sizeof(s), "%.1f MB", sz / (1024.0));
   else 
-    sprintf(s,"%llu KB", b*4ULL);
+    snprintf(s, sizeof(s), "%llu KB", b*4ULL);
   return s;
 }
 

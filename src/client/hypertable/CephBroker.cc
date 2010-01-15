@@ -156,7 +156,7 @@ void CephBroker::read(ResponseCallbackRead *cb, uint32_t fd, uint32_t amount) {
 
   if (!m_open_file_map.get(fd, fdata)) {
     char errbuf[32];
-    sprintf(errbuf, "%d", fd);
+    snprintf(errbuf, sizeof(errbuf), "%d", fd);
     cb->error(Error::DFSBROKER_BAD_FILE_HANDLE, errbuf);
     HT_ERRORF("bad file handle: %d", fd);
     return;
@@ -190,7 +190,7 @@ void CephBroker::append(ResponseCallbackAppend *cb, uint32_t fd,
 
   if (!m_open_file_map.get(fd, fdata)) {
     char errbuf[32];
-    sprintf(errbuf, "%d", fd);
+    snprintf(errbuf, sizeof(errbuf), "%d", fd);
     cb->error(Error::DFSBROKER_BAD_FILE_HANDLE, errbuf);
     return;
   }
@@ -226,7 +226,7 @@ void CephBroker::seek(ResponseCallback *cb, uint32_t fd, uint64_t offset) {
 
   if (!m_open_file_map.get(fd, fdata)) {
     char errbuf[32];
-    sprintf(errbuf, "%d", fd);
+    snprintf(errbuf, sizeof(errbuf), "%d", fd);
     cb->error(Error::DFSBROKER_BAD_FILE_HANDLE, errbuf);
     return;
   }
@@ -283,7 +283,7 @@ void CephBroker::pread(ResponseCallbackRead *cb, uint32_t fd, uint64_t offset,
 
   if (!m_open_file_map.get(fd, fdata)) {
     char errbuf[32];
-    sprintf(errbuf, "%d", fd);
+    snprintf(errbuf, sizeof(errbuf), "%d", fd);
     cb->error(Error::DFSBROKER_BAD_FILE_HANDLE, errbuf);
     return;
   }
@@ -360,7 +360,7 @@ void CephBroker::flush(ResponseCallback *cb, uint32_t fd) {
 
   if (!m_open_file_map.get(fd, fdata)) {
     char errbuf[32];
-    sprintf(errbuf, "%d", fd);
+    snprintf(errbuf, sizeof(errbuf), "%d", fd);
     cb->error(Error::DFSBROKER_BAD_FILE_HANDLE, errbuf);
     return;
   }

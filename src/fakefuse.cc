@@ -100,7 +100,7 @@ int main(int argc, const char **argv) {
   Monitor *mon[g_conf.num_mon];
   for (int i=0; i<g_conf.num_mon; i++) {
     char fn[100];
-    sprintf(fn, "mondata/mon%d", i);
+    snprintf(fn, sizeof(fn), "mondata/mon%d", i);
     MonitorStore *store = new MonitorStore(fn);
     mon[i] = new Monitor(i, store, new FakeMessenger(entity_name_t::MON(i)), monmap);
     mon[i]->mkfs();

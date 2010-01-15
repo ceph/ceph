@@ -85,7 +85,7 @@ int MonClient::build_initial_monmap()
 	for (int i=0; i<15; i++) {
 	  char monname[20];
 	  char *val = 0;
-	  sprintf(monname, "mon%d", i);
+	  snprintf(monname, sizeof(monname), "mon%d", i);
 	  c.read(monname, "mon addr", &val, 0);
 	  if (!val || !val[0])
 	    break;

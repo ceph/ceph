@@ -1008,10 +1008,11 @@ void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon,
     g_conf.type = strdup(module_type);
 
     if (g_conf.id) {
-  	g_conf.name = (char *)malloc(strlen(module_type) + strlen(g_conf.id) + 2);
-	sprintf(g_conf.name, "%s.%s", g_conf.type, g_conf.id);
-	g_conf.alt_name = (char *)malloc(strlen(module_type) + strlen(g_conf.id) + 1);
-	sprintf(g_conf.alt_name, "%s%s", module_type, g_conf.id);
+	int len = strlen(module_type) + strlen(g_conf.id) + 2;
+  	g_conf.name = (char *)malloc(len);
+	snprintf(g_conf.name, len, "%s.%s", g_conf.type, g_conf.id);
+	g_conf.alt_name = (char *)malloc(len - 1);
+	snprintf(g_conf.alt_name, len - 1, "%s%s", module_type, g_conf.id);
     } else {
 	g_conf.name = g_conf.type;
     }
