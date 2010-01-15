@@ -41,9 +41,9 @@ void _dout_open_log()
     if (g_conf.log_dir[0] == '/') 
       strcpy(_dout_dir, g_conf.log_dir);
     else {
-      getcwd(_dout_dir, 100);
-      strcat(_dout_dir, "/");
-      strcat(_dout_dir, g_conf.log_dir);
+      getcwd(_dout_dir, sizeof(_dout_dir));
+      strncat(_dout_dir, "/", sizeof(_dout_dir));
+      strncat(_dout_dir, g_conf.log_dir, sizeof(_dout_dir));
     }
 
     if (!g_conf.log_sym_dir)
@@ -52,9 +52,9 @@ void _dout_open_log()
     if (g_conf.log_sym_dir[0] == '/') 
       strcpy(_dout_symlink_dir, g_conf.log_sym_dir);
     else {
-      getcwd(_dout_symlink_dir, 100);
-      strcat(_dout_symlink_dir, "/");
-      strcat(_dout_symlink_dir, g_conf.log_sym_dir);
+      getcwd(_dout_symlink_dir, sizeof(_dout_symlink_dir));
+      strncat(_dout_symlink_dir, "/", sizeof(_dout_symlink_dir));
+      strncat(_dout_symlink_dir, g_conf.log_sym_dir, sizeof(_dout_symlink_dir));
     }
 
     // make symlink target absolute or relative?
