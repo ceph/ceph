@@ -18,54 +18,63 @@
 #include <vector>
 
 struct CompatSet {
-  set<string> compat, ro_compat, incompat;
-  vector<set<string> *> all_features;
-  
-  CompatSet(const char **compat_a, int c_size,
-	    const char **ro_compat_a, int ro_size,
-	    const char **incompat_a, int inc_size) :
-    compat(), ro_compat(), incompat(){
-    for (int i = 0; i < c_size; ++i)
-      compat.insert(string(compat_a[i]));
-    for (int j = 0; j < ro_size; ++j)
-      ro_compat.insert(string(ro_compat_a[j]));
-    for (int k = 0; k < inc_size; ++k)
-      incompat.insert(string(incompat_a[k]));
-    all_features.push_back(&compat);
-    all_features.push_back(&ro_compat);
-    all_features.push_back(&incompat);
+
+  struct Feature {
+    __u64 id;
+    string name;
+
+    Feature(__u64 _id, const char *_name) : id(_id), name(_name) {}
+    Feature(__u64 _id, string& _name) : id(_id), name(_name) {}
+  };
+
+  struct FeatureSet {
+    __u64 mask;
+    map <__u64,string> names;
+    void insert(Feature f) {
+      mask |= f.id;
+      names[f.id] = f.name;
+    }
+
+    void encode(bufferlist& bl) const {
+      ::encode(mask, bl);
+      ::encode(names, bl);
+    }
+
+    void decode(bufferlist::iterator& bl) {
+      ::decode(mask, bl);
+      ::decode(names, bl);
+    }
+  };
+
+  FeatureSet compat, ro_compat, incompat;
+
+  CompatSet(FeatureSet& _compat, FeatureSet& _ro_compat, FeatureSet& _incompat) :
+    compat(_compat), ro_compat(_ro_compat), incompat(_incompat) {}
+
+  CompatSet(Feature _compat[], Feature _ro_compat[], Feature _incompat[]) :
+    compat(), ro_compat(), incompat()
+  {
+    for (int i = 0; _compat[i].id != 0; ++i) compat.insert(_compat[i]);
+    for (int j = 0; _ro_compat[j].id !=0; ++j) ro_compat.insert(_ro_compat[j]);
+    for (int k = 0; _incompat[k].id != 0; ++k) incompat.insert(_incompat[k]);
   }
-  
-  CompatSet() : compat(), ro_compat(), incompat() {
-    all_features.push_back(&compat);
-    all_features.push_back(&ro_compat);
-    all_features.push_back(&incompat);
-  }
-  
+
+  CompatSet() : compat(), ro_compat(), incompat() { }
+
+
   /* does this filesystem implementation have the
      features required to read the other? */
-  bool readable(CompatSet other) {
-    //make sure other's incompat string is a subset of ours
-    for ( set<string>::iterator i = other.incompat.begin();
-	  i != other.incompat.end();
-	  ++i) {
-      if (!incompat.count(*i)) return false; //we don't have that flag!
-    }
-    return true;
+  bool readable(CompatSet& other) {
+    return !((other.incompat.mask ^ incompat.mask) & other.incompat.mask);
   }
-  
+
   /* does this filesystem implementation have the
      features required to write the other? */
-  bool writeable(CompatSet other) {
-    if (!readable(other)) return false;
-    for (set<string>::iterator i = other.ro_compat.begin();
-	 i != other.ro_compat.end();
-	 ++i) {
-      if (!ro_compat.count(*i))	return false;
-    }
-    return true;
+  bool writeable(CompatSet& other) {
+    return readable(other) &&
+      !((other.ro_compat.mask ^ ro_compat.mask) & other.ro_compat.mask);
   }
-  
+
   /* Compare this CompatSet to another.
    * CAREFULLY NOTE: This operation is NOT commutative.
    * a > b DOES NOT imply that b < a.
@@ -75,119 +84,58 @@ struct CompatSet {
    * -1: This CompatSet is missing at least one feature
    *     described in the other. It may still have more features, though.
    */
-  int compare(CompatSet other) {
-    //check sizes, that's fast and easy
-    if (other.compat.size() > compat.size() ||
-	other.ro_compat.size() > ro_compat.size() ||
-	other.incompat.size() > incompat.size() ) {
-      return -1;
-    }
-    //well, we have at least as many features, let's compare them all
-    if (!writeable(other)) return -1; //compares ro_compat and incompat
-    for (set<string>::iterator i = other.compat.begin();
-	 i != other.compat.end();
-	 ++i) {
-      if (!compat.count(*i)) return -1;
-    }
-    //if we make it this far we have all the features other does
-    //do we have more?
-    if (other.compat.size() < compat.size() ||
-	other.ro_compat.size() < ro_compat.size() ||
-	other.incompat.size() < incompat.size() ) {
-      return 1;
-    }
-    //apparently we have the exact same feature set
-    return 0;
+  int compare(CompatSet& other) {
+    if ((other.compat.mask == compat.mask) &&
+	(other.ro_compat.mask == ro_compat.mask) &&
+	(other.incompat.mask == incompat.mask)) return 0;
+    //okay, they're not the same
+
+    //if we're writeable we have a superset of theirs on incompat and ro_compat
+    if (writeable(other) && !((other.compat.mask ^ compat.mask)
+			      & other.compat.mask)) return 1;
+    //if we make it here, we weren't writeable or had a difference compat set
+    return -1;
   }
-  
+
   /* Get the features supported by other CompatSet but not this one,
    * as a CompatSet.
    */
-  CompatSet unsupported(CompatSet other) {
-    CompatSet difference;
-    for (set<string>::iterator i = other.compat.begin();
-	 i != other.compat.end();
-	 ++i) {
-      if (!compat.count(*i)) difference.compat.insert(*i);
-    }
-    for (set<string>::iterator j = other.ro_compat.begin();
-	 j != other.ro_compat.end();
-	 ++j) {
-      if (!ro_compat.count(*j))	difference.ro_compat.insert(*j);
-    }
-    for (set<string>::iterator k = other.incompat.begin();
-	 k != other.incompat.end();
-	 ++k) {
-      if (!incompat.count(*k)) difference.incompat.insert(*k);
-    }
-    return difference;
-  }
-  
-  class iterator {
-  private:
-    friend class CompatSet;
-    CompatSet *cset;
-    vector<set<string> *>::iterator feature_it;
-    set<string>::iterator it;
-  public:
-    iterator(CompatSet *comset) : cset(comset){
-      feature_it = cset->all_features.begin();
-      it = (*feature_it)->begin();
-    }
-    
-    string operator*() {
-      //check that we actually have contents, here
-      if ( cset->all_features.end() != feature_it) { //if not at end
-	return (*it);
+  CompatSet unsupported(CompatSet& other) {
+    CompatSet diff;
+    __u64 other_compat =
+      ((other.compat.mask ^ compat.mask) & other.compat.mask);
+    __u64 other_ro_compat =
+      ((other.ro_compat.mask ^ ro_compat.mask) & other.ro_compat.mask);
+    __u64 other_incompat =
+      ((other.incompat.mask ^ incompat.mask) & other.incompat.mask);
+    for (int i = 0; i < 64; ++i) {
+      int mask = 1 << i;
+      if (mask & other_compat) {
+	diff.compat.insert( Feature(mask & other_compat,
+				    other.compat.names[mask&other_compat]));
       }
-      return string();
-    }
-    
-    iterator& operator++() {
-      if (feature_it == cset->all_features.end()) return *this;//at end
-      if (it != (*feature_it)->end()) { //if not at end of cur stringset
-	if (++it != (*feature_it)->end()) return *this; //move along current set
+      if (mask & other_ro_compat) {
+	diff.ro_compat.insert(Feature(mask & other_ro_compat,
+				      other.compat.names[mask&other_ro_compat]));
       }
-      if (++feature_it != cset->all_features.end()) { //move to next set
-	it = (*feature_it)->begin(); //start it over in new set
-	if ((*feature_it)->end() == it) return operator++(); //damn, keep moving
-	return *this; //yay, done
+      if (mask & other_incompat) {
+	diff.incompat.insert( Feature(mask & other_incompat,
+				      other.incompat.names[mask&other_incompat]));
       }
-      return *this; //at full end now, returning end iterator
     }
-    
-    bool operator==(const iterator& other) const {
-      return (other.cset == cset
-	      && other.feature_it == feature_it
-	      && other.it == it);
-    }
-    
-    bool operator!=(const iterator& other) const { return !operator==(other);}
-  };
-  
-  iterator begin() {
-    iterator it(this);
-    if ((*it.feature_it)->end() == it.it) ++it;
-    return it;
-  }
-  
-  iterator end() {
-    iterator it(this);
-    it.feature_it = all_features.end();
-    it.it = all_features[2]->end();
-    return it;
+    return diff;
   }
   
   void encode(bufferlist& bl) const {
-    ::encode(compat, bl);
-    ::encode(ro_compat, bl);
-    ::encode(incompat, bl);
+    compat.encode(bl);
+    ro_compat.encode(bl);
+    incompat.encode(bl);
   }
   
   void decode(bufferlist::iterator& bl) {
-    ::decode(compat, bl);
-    ::decode(ro_compat, bl);
-    ::decode(incompat, bl);
+    compat.decode(bl);
+    ro_compat.decode(bl);
+    incompat.decode(bl);
   }
 };
 #endif
