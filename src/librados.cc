@@ -1408,6 +1408,55 @@ extern "C" int rados_read(rados_pool_t pool, const char *o, off_t off, char *buf
   return ret;
 }
 
+// snaps
+
+extern "C" int rados_snap_create(const rados_pool_t pool, const char *snapname)
+{
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  return radosp->snap_create(ctx, snapname);
+}
+
+extern "C" int rados_snap_remove(const rados_pool_t pool, const char *snapname)
+{
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  return radosp->snap_remove(ctx, snapname);
+}
+
+extern "C" int rados_snap_list(rados_pool_t pool, rados_snap_t *snaps, int maxlen)
+{
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  vector<rados_snap_t> snapvec;
+  int r = radosp->snap_list(ctx, &snapvec);
+  if (r < 0)
+    return r;
+  if ((int)snapvec.size() <= maxlen) {
+    for (unsigned i=0; i<snapvec.size(); i++)
+      snaps[i] = snapvec[i];
+    return snapvec.size();
+  }
+  return -ERANGE;
+}
+
+extern "C" int rados_snap_lookup(rados_pool_t pool, const char *name, rados_snap_t *id)
+{
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  return radosp->snap_lookup(ctx, name, id);
+}
+
+extern "C" int rados_snap_get_name(rados_pool_t pool, rados_snap_t id, char *name, int maxlen)
+{
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  std::string sname;
+  int r = radosp->snap_get_name(ctx, id, &sname);
+  if (r < 0)
+    return r;
+  if ((int)sname.length() >= maxlen)
+    return -ERANGE;
+  strncpy(name, sname.c_str(), maxlen);
+  return 0;
+}
+
+
 extern "C" int rados_getxattr(rados_pool_t pool, const char *o, const char *name, char *buf, size_t len)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;

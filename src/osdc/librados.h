@@ -56,6 +56,7 @@ int rados_pool_list_next(rados_pool_t pool, const char **entry, rados_list_ctx_t
 int rados_snap_create(const rados_pool_t pool, const char *snapname);
 int rados_snap_remove(const rados_pool_t pool, const char *snapname);
 int rados_snap_list(rados_pool_t pool, rados_snap_t *snaps, int maxlen);
+int rados_snap_lookup(rados_pool_t pool, const char *name, rados_snap_t *id);
 int rados_snap_get_name(rados_pool_t pool, rados_snap_t id, char *name, int maxlen);
 
 /* read/write objects */
