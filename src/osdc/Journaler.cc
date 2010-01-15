@@ -125,18 +125,12 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   ::decode(h, p);
 
   if (h.magic != magic) {
-    //special-case nasty hack for an upgrade path
-#define CEPH_FS_ONDISK_MAGIC "ceph fs volume v012"
-#define CEPH_FS_OLD_ONDISK_MAGIC "ceph fs volume v011"
-    if (strcmp(magic, CEPH_FS_ONDISK_MAGIC) != 0
-	 && strcmp(h.magic.c_str(), CEPH_FS_OLD_ONDISK_MAGIC) != 0) {
-      dout(0) << "on disk magic '" << h.magic << "' != my magic '"
-	      << magic << "'" << dendl;
-      list<Context*> ls;
-      ls.swap(waitfor_recover);
-      finish_contexts(ls, -EINVAL);
-      return;
-    }
+    dout(0) << "on disk magic '" << h.magic << "' != my magic '"
+	    << magic << "'" << dendl;
+    list<Context*> ls;
+    ls.swap(waitfor_recover);
+    finish_contexts(ls, -EINVAL);
+    return;
   }
 
   set_layout(&h.layout);
