@@ -72,10 +72,12 @@ static ostream& _prefix(Monitor *mon) {
 		<< " ";
 }
 
-const char *ceph_mon_feature_compat[ceph_mon_feature_compat_size] = {};
-const char *ceph_mon_feature_ro_compat[ceph_mon_feature_ro_compat_size] = {};
-const char *ceph_mon_feature_incompat[ceph_mon_feature_incompat_size] =
-  { CEPH_MON_FEATURE_INCOMPAT_BASE };
+const CompatSet::Feature ceph_mon_feature_compat[] = 
+  {END_FEATURE};
+const CompatSet::Feature ceph_mon_feature_ro_compat[] = 
+  {END_FEATURE};
+const CompatSet::Feature ceph_mon_feature_incompat[] =
+  { CEPH_MON_FEATURE_INCOMPAT_BASE , CompatSet::Feature(0, "")};
 
 Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   whoami(w), 
@@ -897,11 +899,9 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   store->put_bl_ss(magicbl, "magic", 0);
 
   bufferlist features;
-  CompatSet mon_features(ceph_mon_feature_compat, ceph_mon_feature_compat_size,
+  CompatSet mon_features(ceph_mon_feature_compat,
 			 ceph_mon_feature_ro_compat,
-			 ceph_mon_feature_ro_compat_size,
-			 ceph_mon_feature_incompat,
-			 ceph_mon_feature_incompat_size);
+			 ceph_mon_feature_incompat);
   mon_features.encode(features);
   store->put_bl_ss(features, COMPAT_SET_LOC, 0);
 

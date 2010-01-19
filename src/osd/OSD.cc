@@ -106,10 +106,17 @@ static ostream& _prefix(ostream& out, int whoami, OSDMap *osdmap) {
 
 const coll_t meta_coll;
 
-const char *ceph_osd_feature_compat[ceph_osd_feature_compat_size] = {};
-const char *ceph_osd_feature_ro_compat[ceph_osd_feature_ro_compat_size] = {};
-const char *ceph_osd_feature_incompat[ceph_osd_feature_incompat_size] =
-  { CEPH_OSD_FEATURE_INCOMPAT_BASE };
+
+const struct CompatSet::Feature ceph_osd_feature_compat[] = {
+  END_FEATURE
+};
+const struct CompatSet::Feature ceph_osd_feature_incompat[] = {
+  CEPH_OSD_FEATURE_INCOMPAT_BASE,
+  END_FEATURE
+};
+const struct CompatSet::Feature ceph_osd_feature_ro_compat[] = {
+  END_FEATURE
+};
 
 
 
@@ -241,9 +248,9 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, c
   logclient(messenger, &mc->monmap),
   whoami(id),
   dev_path(dev), journal_path(jdev),
-  osd_compat(ceph_osd_feature_compat, ceph_osd_feature_compat_size,
-	     ceph_osd_feature_ro_compat, ceph_osd_feature_ro_compat_size,
-	     ceph_osd_feature_incompat, ceph_osd_feature_incompat_size),
+  osd_compat(ceph_osd_feature_compat,
+	     ceph_osd_feature_ro_compat,
+	     ceph_osd_feature_incompat),
   state(STATE_BOOTING), boot_epoch(0), up_epoch(0),
   op_tp("OSD::op_tp", g_conf.osd_op_threads),
   recovery_tp("OSD::recovery_tp", g_conf.osd_recovery_threads),
@@ -584,7 +591,8 @@ void OSD::write_superblock(ObjectStore::Transaction& t)
   dout(10) << "write_superblock " << superblock << dendl;
 
   //hack: at minimum it's using the baseline feature set
-  if (!superblock.compat_features.incompat.count(CEPH_OSD_FEATURE_INCOMPAT_BASE))
+  if (!superblock.compat_features.incompat.mask |
+      CEPH_OSD_FEATURE_INCOMPAT_BASE.id)
     superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_BASE);
 
   bufferlist bl;
@@ -609,15 +617,12 @@ int OSD::read_superblock()
     if (osd_compat.writeable(superblock.compat_features)) {
       dout(5) << "it is still writeable, though. Missing features:" << dendl;
       CompatSet diff = osd_compat.unsupported(superblock.compat_features);
-      for (CompatSet::iterator i = diff.begin(); i != diff.end(); ++i) {
-	dout(5) << *i << dendl;
-      }
+      //NEEDS_ITER
     }
     else {
       dout(0) << "Cannot write to disk! Missing features:" << dendl;
       CompatSet diff = osd_compat.unsupported(superblock.compat_features);
-      for (CompatSet::iterator i = diff.begin(); i != diff.end(); ++i)
-	dout(0) << *i << dendl;;
+      //NEEDS_ITER
       return -EOPNOTSUPP;
     }
   }

@@ -35,12 +35,9 @@ using namespace std;
 #include "common/Timer.h"
 #include "common/common_init.h"
 
-extern const int ceph_mon_feature_compat_size;
-extern const char *ceph_mon_feature_compat[];
-extern const int ceph_mon_feature_ro_compat_size;
-extern const char *ceph_mon_feature_ro_compat[];
-extern const int ceph_mon_feature_incompat_size;
-extern const char *ceph_mon_feature_incompat[];
+extern const CompatSet::Feature ceph_mon_feature_compat[];
+extern const CompatSet::Feature ceph_mon_feature_ro_compat[];
+extern const CompatSet::Feature ceph_mon_feature_incompat[];
 
 void usage()
 {
@@ -74,11 +71,9 @@ int main(int argc, const char **argv)
 
   if (g_conf.clock_tare) g_clock.tare();
 
-  CompatSet mon_features(ceph_mon_feature_compat, ceph_mon_feature_compat_size,
+  CompatSet mon_features(ceph_mon_feature_compat,
 			 ceph_mon_feature_ro_compat,
-			 ceph_mon_feature_ro_compat_size,
-			 ceph_mon_feature_incompat,
-			 ceph_mon_feature_incompat_size);
+			 ceph_mon_feature_incompat);
   CompatSet ondisk_features;
 
   MonitorStore store(g_conf.mon_data);
@@ -114,10 +109,11 @@ int main(int argc, const char **argv)
     cerr << "WARNING: mon fs missing feature list.\n"
 	 << "Assuming it is old-style and introducing one." << std::endl;
     //we only want the baseline ~v.18 features assumed to be on disk.
-    //They'll be first in the incompat list.
-    ondisk_features = CompatSet(NULL, 0, NULL, 0,
-				ceph_mon_feature_incompat,
-				1);
+    //If new features are introduced this code needs to disappear or
+    //be made smarter.
+    ondisk_features = CompatSet(ceph_mon_feature_compat,
+				ceph_mon_feature_ro_compat,
+				ceph_mon_feature_incompat);
   } else {
     bufferlist::iterator it = features.begin();
     ondisk_features.decode(it);
@@ -127,9 +123,7 @@ int main(int argc, const char **argv)
     cerr << "monitor executable cannot read disk! Missing features: "
 	 << std::endl;
     CompatSet diff = mon_features.unsupported(ondisk_features);
-    for (CompatSet::iterator iter = diff.begin(); iter != diff.end(); ++iter) {
-      cerr << *iter << std::endl;
-    }
+    //NEEDS_COMPATSET_ITER
     exit(1);
   }
 

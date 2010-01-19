@@ -29,8 +29,8 @@
 
 #define CEPH_OSD_NEARFULL_RATIO .8
 #define CEPH_OSD_FULL_RATIO .95
-//this #define copied from OSD.h
-#define CEPH_OSD_FEATURE_INCOMPAT_BASE "initial feature set(~v.18)"
+
+#define CEPH_OSD_FEATURE_INCOMPAT_BASE CompatSet::Feature(1, "initial feature set(~v.18)")
 
 
 /* osdreqid_t - caller name + incarnation# + tid to unique identify this request

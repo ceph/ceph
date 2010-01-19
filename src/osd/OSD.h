@@ -876,13 +876,9 @@ protected:
 };
 
 //compatibility of the executable
-#define CEPH_OSD_FEATURE_INCOMPAT_BASE "initial feature set(~v.18)"
-extern const char *ceph_osd_feature_compat[];
-extern const char *ceph_osd_feature_ro_compat[];
-extern const char *ceph_osd_feature_incompat[];
-static const int ceph_osd_feature_compat_size = 0;
-static const int ceph_osd_feature_ro_compat_size = 0;
-static const int ceph_osd_feature_incompat_size = 1;
+extern const CompatSet::Feature ceph_osd_feature_compat[];
+extern const CompatSet::Feature ceph_osd_feature_ro_compat[];
+extern const CompatSet::Feature ceph_osd_feature_incompat[];
 
 
 #endif

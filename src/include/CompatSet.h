@@ -17,6 +17,8 @@
 #include "include/buffer.h"
 #include <vector>
 
+#define END_FEATURE CompatSet::Feature(0, "")
+
 struct CompatSet {
 
   struct Feature {
@@ -30,6 +32,8 @@ struct CompatSet {
   struct FeatureSet {
     __u64 mask;
     map <__u64,string> names;
+
+    FeatureSet() : mask(0), names() {}
     void insert(Feature f) {
       mask |= f.id;
       names[f.id] = f.name;
@@ -51,7 +55,7 @@ struct CompatSet {
   CompatSet(FeatureSet& _compat, FeatureSet& _ro_compat, FeatureSet& _incompat) :
     compat(_compat), ro_compat(_ro_compat), incompat(_incompat) {}
 
-  CompatSet(Feature _compat[], Feature _ro_compat[], Feature _incompat[]) :
+  CompatSet(const Feature _compat[], const Feature _ro_compat[], const Feature _incompat[]) :
     compat(), ro_compat(), incompat()
   {
     for (int i = 0; _compat[i].id != 0; ++i) compat.insert(_compat[i]);
