@@ -678,6 +678,8 @@ struct pg_pool_t {
   }
 
   void encode(bufferlist& bl) const {
+    __u8 vv = 1;
+    ::encode(vv, bl);
     v.num_snaps = snaps.size();
     v.num_removed_snap_intervals = removed_snaps.m.size();
     ::encode(v, bl);
@@ -685,6 +687,8 @@ struct pg_pool_t {
     removed_snaps.encode_nohead(bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 vv;
+    ::decode(vv, bl);
     ::decode(v, bl);
     ::decode_nohead(v.num_snaps, snaps, bl);
     removed_snaps.decode_nohead(v.num_removed_snap_intervals, bl);
