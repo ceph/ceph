@@ -156,6 +156,8 @@ void handle_notify(MMonObserveNotify *notify)
 	  dout(0) << "   log " << summary.tail.back() << dendl;
       } else {
 	LogEntry le;
+	__u8 v;
+	::decode(v, p);
 	while (!p.end()) {
 	  le.decode(p);
 	  dout(0) << "   log " << le << dendl;
@@ -181,7 +183,8 @@ void handle_notify(MMonObserveNotify *notify)
 	}
       } else {
 	ClassInfo info;
-
+	__u8 v;
+	::decode(v, p);
 	while (!p.end()) {
           info.decode(p);
 	  dout(0) << "   class " << info << dendl;

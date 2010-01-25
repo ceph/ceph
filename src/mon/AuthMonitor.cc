@@ -157,6 +157,8 @@ bool AuthMonitor::update_from_paxos()
     if (v) {
       dout(7) << "update_from_paxos startup: loading summary e" << v << dendl;
       bufferlist::iterator p = latest.begin();
+      __u8 v;
+      ::decode(v, p);
       ::decode(max_global_id, p);
       ::decode(mon->key_server, p);
     }
@@ -169,6 +171,8 @@ bool AuthMonitor::update_from_paxos()
     assert(success);
 
     bufferlist::iterator p = bl.begin();
+    __u8 v;
+    ::decode(v, p);
     while (!p.end()) {
       Incremental inc;
       ::decode(inc, p);
@@ -199,6 +203,8 @@ bool AuthMonitor::update_from_paxos()
 	   << " max_global_id=" << max_global_id << dendl;
 
   bufferlist bl;
+  __u8 v = 1;
+  ::encode(v, bl);
   ::encode(max_global_id, bl);
   Mutex::Locker l(mon->key_server.get_lock());
   ::encode(mon->key_server, bl);
@@ -261,6 +267,8 @@ void AuthMonitor::create_pending()
 void AuthMonitor::encode_pending(bufferlist &bl)
 {
   dout(10) << "encode_pending v " << (paxos->get_version() + 1) << dendl;
+  __u8 v = 1;
+  ::encode(v, bl);
   for (vector<Incremental>::iterator p = pending_auth.begin();
        p != pending_auth.end();
        p++)

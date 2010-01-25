@@ -45,6 +45,8 @@ public:
     bufferlist auth_data;
 
     void encode(bufferlist& bl) const {
+      __u8 v = 1;
+      ::encode(v, bl);
       __u32 _type = (__u32)inc_type;
       ::encode(_type, bl);
       if (_type == GLOBAL_ID) {
@@ -55,6 +57,8 @@ public:
       }
     }
     void decode(bufferlist::iterator& bl) {
+      __u8 v;
+      ::decode(v, bl);
       __u32 _type;
       ::decode(_type, bl);
       inc_type = (IncType)_type;

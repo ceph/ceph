@@ -47,6 +47,8 @@ public:
     set<pg_t> pg_remove;
 
     void encode(bufferlist &bl) const {
+      __u8 v = 1;
+      ::encode(v, bl);
       ::encode(version, bl);
       ::encode(pg_stat_updates, bl);
       ::encode(osd_stat_updates, bl);
@@ -56,6 +58,8 @@ public:
       ::encode(pg_remove, bl);
     }
     void decode(bufferlist::iterator &bl) {
+      __u8 v;
+      ::decode(v, bl);
       ::decode(version, bl);
       ::decode(pg_stat_updates, bl);
       ::decode(osd_stat_updates, bl);
@@ -183,6 +187,8 @@ public:
 	    nearfull_ratio(CEPH_OSD_NEARFULL_RATIO) {}
 
   void encode(bufferlist &bl) {
+    __u8 v = 1;
+    ::encode(v, bl);
     ::encode(version, bl);
     ::encode(pg_stat, bl);
     ::encode(osd_stat, bl);
@@ -190,6 +196,8 @@ public:
     ::encode(last_pg_scan, bl);
   }
   void decode(bufferlist::iterator &bl) {
+    __u8 v;
+    ::decode(v, bl);
     ::decode(version, bl);
     ::decode(pg_stat, bl);
     ::decode(osd_stat, bl);

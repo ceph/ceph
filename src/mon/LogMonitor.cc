@@ -120,6 +120,8 @@ bool LogMonitor::update_from_paxos()
     assert(success);
 
     bufferlist::iterator p = bl.begin();
+    __u8 v;
+    ::decode(v, p);
     while (!p.end()) {
       LogEntry le;
       le.decode(p);
@@ -179,6 +181,8 @@ void LogMonitor::create_pending()
 void LogMonitor::encode_pending(bufferlist &bl)
 {
   dout(10) << "encode_pending v " << (paxos->get_version() + 1) << dendl;
+  __u8 v = 1;
+  ::encode(v, bl);
   for (multimap<utime_t,LogEntry>::iterator p = pending_log.begin();
        p != pending_log.end();
        p++)

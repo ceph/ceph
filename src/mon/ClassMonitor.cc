@@ -118,6 +118,8 @@ bool ClassMonitor::update_from_paxos()
     assert(success);
 
     bufferlist::iterator p = bl.begin();
+    __u8 v;
+    ::decode(v, p);
     ClassLibraryIncremental inc;
     ::decode(inc, p);
     ClassImpl impl;
@@ -170,6 +172,8 @@ void ClassMonitor::create_pending()
 void ClassMonitor::encode_pending(bufferlist &bl)
 {
   dout(10) << "encode_pending v " << (paxos->get_version() + 1) << dendl;
+  __u8 v = 1;
+  ::encode(v, bl);
   for (multimap<utime_t,ClassLibraryIncremental>::iterator p = pending_class.begin();
        p != pending_class.end();
        p++)

@@ -61,6 +61,8 @@ struct LogEntry {
   LogEntryKey key() const { return LogEntryKey(who, stamp, seq); }
 
   void encode(bufferlist& bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
     __u16 t = type;
     ::encode(who, bl);
     ::encode(stamp, bl);
@@ -69,6 +71,8 @@ struct LogEntry {
     ::encode(msg, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
     __u16 t;
     ::decode(who, bl);
     ::decode(stamp, bl);
@@ -100,10 +104,14 @@ struct LogSummary {
   }
 
   void encode(bufferlist& bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
     ::encode(version, bl);
     ::encode(tail, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
     ::decode(version, bl);
     ::decode(tail, bl);
   }

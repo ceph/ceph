@@ -26,10 +26,14 @@ struct ClassImpl {
   version_t seq;
 
   void encode(bufferlist& bl) const {
+    __u8 v = 0;
+    ::encode(v, bl);
     ::encode(binary, bl);
     ::encode(seq, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
     ::decode(binary, bl);
     ::decode(seq, bl);
   }
@@ -44,10 +48,14 @@ struct ClassInfo {
   ClassVersion version;
 
   void encode(bufferlist& bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
     ::encode(name, bl);
     ::encode(version, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
     ::decode(name, bl);
     ::decode(version, bl);
   }
@@ -68,12 +76,16 @@ struct ClassLibraryIncremental {
    bufferlist impl;
 
   void encode(bufferlist& bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
     __u32 _op = (__u32)op;
     ::encode(_op, bl);
     ::encode(info, bl);
     ::encode(impl, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
     __u32 _op;
     ::decode(_op, bl);
     op = (ClassLibraryIncOp)_op;
@@ -103,9 +115,13 @@ public:
   string default_ver;
 
   void encode(bufferlist& bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
     ::encode(m, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
     ::decode(m, bl);
   }
 
@@ -172,10 +188,14 @@ struct ClassLibrary {
     return (info != NULL);
   }
   void encode(bufferlist& bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
     ::encode(version, bl);
     ::encode(library_map, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
     ::decode(version, bl);
     ::decode(library_map, bl);
   }
