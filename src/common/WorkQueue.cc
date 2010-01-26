@@ -19,7 +19,7 @@
 
 #define DOUT_SUBSYS tp
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << pthread_self() << " " << name << " "
+#define dout_prefix *_dout << dbeginl << std::hex << pthread_self() << std::dec << " " << name << " "
 
 
 void ThreadPool::worker()

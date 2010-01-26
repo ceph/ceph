@@ -8,8 +8,8 @@
 
 #undef dout
 #undef derr
-#define  dout(l)    if (l<=g_conf.debug_lockdep) *_dout << g_clock.now() << " " << pthread_self() << " tls: "
-#define  derr(l)    if (l<=g_conf.debug_lockdep) *_derr << g_clock.now() << " " << pthread_self() << " tls: "
+#define  dout(l)    if (l<=g_conf.debug_lockdep) *_dout << g_clock.now() << " " << std::hex << pthread_self() << std::dec << " tls: "
+#define  derr(l)    if (l<=g_conf.debug_lockdep) *_derr << g_clock.now() << " " << std::hex << pthread_self() << std::dec << " tls: "
 
 
 pthread_key_t   _tls_key = 0;
