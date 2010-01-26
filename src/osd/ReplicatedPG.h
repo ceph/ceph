@@ -129,7 +129,12 @@ public:
       check_mode();
       switch (state) {
       case IDLE:
-	state = DELAYED;
+	if (g_conf.filestore_journal_writeahead ||
+	    g_conf.filestore_journal_parallel) {
+	  state = RMW;
+	  client = c;
+	} else
+	  state = DELAYED;
       case DELAYED:
 	return true;
       case RMW:
