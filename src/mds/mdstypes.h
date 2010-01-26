@@ -736,10 +736,9 @@ WRITE_CLASS_ENCODER(cap_reconnect_t)
 struct dirfrag_t {
   inodeno_t ino;
   frag_t    frag;
-  uint32_t  _pad;
 
-  dirfrag_t() : ino(0), _pad(0) { }
-  dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f), _pad(0) { }
+  dirfrag_t() : ino(0) { }
+  dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f) { }
 };
 
 inline void encode(const dirfrag_t &f, bufferlist& bl) { 
