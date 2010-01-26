@@ -16,6 +16,14 @@ void Finisher::stop()
   finisher_thread.join();
 }
 
+void Finisher::wait_for_empty()
+{
+  finisher_lock.Lock();
+  while (!finisher_queue.empty())
+    finisher_cond.Wait(finisher_lock);
+  finisher_lock.Unlock();
+}
+
 void *Finisher::finisher_thread_entry()
 {
   finisher_lock.Lock();
@@ -46,6 +54,7 @@ void *Finisher::finisher_thread_entry()
       ls.clear();
 
       finisher_lock.Lock();
+      finisher_empty_cond.Signal();
     }
     if (finisher_stop) break;
     
