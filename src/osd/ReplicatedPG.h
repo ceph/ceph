@@ -426,8 +426,11 @@ protected:
     bool applied, committed;
     int ackerosd;
     eversion_t last_complete;
+
+    ObjectStore::Transaction opt, localt;
+    list<ObjectStore::Transaction*> tls;
     
-    RepModify() : applied(false), committed(false), ackerosd(-1) {}
+    RepModify() : pg(NULL), op(NULL), ctx(NULL), applied(false), committed(false), ackerosd(-1) {}
   };
 
   struct C_OSD_RepModifyApply : public Context {

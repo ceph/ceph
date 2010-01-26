@@ -2466,9 +2466,12 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   osd->logger->inc(l_osd_r_wr);
   osd->logger->inc(l_osd_r_wrb, op->get_data().length());
   
-  list<ObjectStore::Transaction*> tls;
-  ObjectStore::Transaction opt, localt;
-  OpContext *ctx = 0;
+  RepModify *rm = new RepModify;
+  rm->pg = this;
+  rm->op = op;
+  rm->ctx = 0;
+  rm->ackerosd = ackerosd;
+  rm->last_complete = info.last_complete;
 
   if (!op->noop) {
     if (op->logbl.length()) {
@@ -2476,15 +2479,15 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       vector<Log::Entry> log;
       
       bufferlist::iterator p = op->get_data().begin();
-      ::decode(opt, p);
+      ::decode(rm->opt, p);
       p = op->logbl.begin();
       ::decode(log, p);
       
       info.stats = op->pg_stats;
-      log_op(log, op->pg_trim_to, localt);
+      log_op(log, op->pg_trim_to, rm->localt);
 
-      tls.push_back(&opt);
-      tls.push_back(&localt);
+      rm->tls.push_back(&rm->opt);
+      rm->tls.push_back(&rm->localt);
     } else {
       // do op
       ObjectState obs(op->poid);
@@ -2492,40 +2495,33 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       obs.oi.size = op->old_size;
       obs.exists = op->old_exists;
       
-      ctx = new OpContext(op, op->reqid, op->ops, op->get_data(), &obs, this);
+      rm->ctx = new OpContext(op, op->reqid, op->ops, op->get_data(), &obs, this);
       
-      ctx->mtime = op->mtime;
-      ctx->at_version = op->version;
-      ctx->snapc = op->snapc;
+      rm->ctx->mtime = op->mtime;
+      rm->ctx->at_version = op->version;
+      rm->ctx->snapc = op->snapc;
 
       SnapSetContext ssc(op->poid.oid);
       ssc.snapset = op->snapset;
-      ctx->obs->ssc = &ssc;
+      rm->ctx->obs->ssc = &ssc;
       
-      prepare_transaction(ctx);
-      log_op(ctx->log, op->pg_trim_to, ctx->local_t);
+      prepare_transaction(rm->ctx);
+      log_op(rm->ctx->log, op->pg_trim_to, rm->ctx->local_t);
     
-      tls.push_back(&ctx->op_t);
-      tls.push_back(&ctx->local_t);
+      rm->tls.push_back(&rm->ctx->op_t);
+      rm->tls.push_back(&rm->ctx->local_t);
     }
   } else {
     // just trim the log
     if (op->pg_trim_to != eversion_t()) {
-      trim(localt, op->pg_trim_to);
-      tls.push_back(&localt);
+      trim(rm->localt, op->pg_trim_to);
+      rm->tls.push_back(&rm->localt);
     }
   }
   
-  RepModify *rm = new RepModify;
-  rm->pg = this;
-  rm->op = op;
-  rm->ctx = ctx;
-  rm->ackerosd = ackerosd;
-  rm->last_complete = info.last_complete;
-  
   Context *oncommit = new C_OSD_RepModifyCommit(rm);
   Context *onapply = new C_OSD_RepModifyApply(rm);
-  int r = osd->store->queue_transactions(tls, onapply, oncommit);
+  int r = osd->store->queue_transactions(rm->tls, onapply, oncommit);
   if (r) {
     derr(0) << "error applying transaction: r = " << r << dendl;
     assert(0);
@@ -2536,8 +2532,6 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
 {
   lock();
   dout(10) << "sub_op_modify_applied on " << rm << " op " << *rm->op << dendl;
-
-  delete rm->ctx;
 
   if (!rm->committed) {
     // send ack to acker only if we haven't sent a commit already
@@ -2552,6 +2546,7 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
 
   unlock();
   if (done) {
+    delete rm->ctx;
     delete rm->op;
     delete rm;
     put();
@@ -2579,11 +2574,11 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
 
   unlock();
   if (done) {
+    delete rm->ctx;
     delete rm->op;
     delete rm;
     put();
   }
-
 }
 
 void ReplicatedPG::sub_op_modify_reply(MOSDSubOpReply *r)
