@@ -567,6 +567,7 @@ void FileStore::op_entry()
       delete o;
 
       op_lock.Lock();
+      op_empty_cond.Signal();
     }
     if (stop)
       break;
@@ -590,6 +591,21 @@ struct C_JournaledAhead : public Context {
     fs->_journaled_ahead(op, tls, onreadable, onjournal, ondisk);
   }
 };
+
+struct C_DeleteTrans : public Context {
+  ObjectStore::Transaction *t;
+  C_DeleteTrans(ObjectStore::Transaction *tt) : t(tt) {}
+  void finish(int r) {
+    delete t;
+  }
+};
+
+int FileStore::queue_transaction(Transaction *t)
+{
+  list<Transaction*> tls;
+  tls.push_back(t);
+  return queue_transactions(tls, new C_DeleteTrans(t));
+}
 
 int FileStore::queue_transactions(list<Transaction*> &tls,
 				  Context *onreadable,
@@ -1372,6 +1388,34 @@ void FileStore::sync(Context *onsafe)
   ObjectStore::Transaction t;
   apply_transaction(t);
   sync();
+}
+
+void FileStore::sync_and_flush()
+{
+  dout(10) << "sync_and_flush" << dendl;
+  sync();
+  
+  if (g_conf.filestore_journal_writeahead) {
+    dout(10) << "sync_and_flush waiting for journal finisher" << dendl;
+    finisher.wait_for_empty();
+  }
+  
+  op_lock.Lock();
+  while (!op_queue.empty()) {
+    dout(10) << "sync_and_flush waiting for op queue to flush" << dendl;
+    op_empty_cond.Wait(op_lock);
+  }
+  op_lock.Unlock();
+
+  dout(10) << "sync_and_flush waiting for apply finisher" << dendl;
+  op_finisher.wait_for_empty();
+
+  if (!g_conf.filestore_journal_writeahead) {
+    dout(10) << "sync_and_flush waiting for journal finisher" << dendl;
+    finisher.wait_for_empty();
+  }
+
+  dout(10) << "sync_and_flush done" << dendl;
 }
 
 

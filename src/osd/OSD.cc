@@ -1924,6 +1924,11 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   recovery_tp.pause();
   disk_tp.pause_new();   // _process() may be waiting for a replica message
+  
+  osd_lock.Unlock();
+  store->sync_and_flush();
+  osd_lock.Lock();
+
   map_lock.get_write();
 
   assert(osd_lock.is_locked());
@@ -2153,6 +2158,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   write_superblock(t);
   int r = store->apply_transaction(t, fin);
   if (r) {
+    map_lock.put_write();
     char buf[80];
     dout(0) << "error writing map: " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
     shutdown();

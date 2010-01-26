@@ -419,6 +419,7 @@ public:
   virtual unsigned apply_transaction(Transaction& t, Context *onjournal=0, Context *ondisk=0) = 0;
   virtual unsigned apply_transactions(list<Transaction*>& tls, Context *onjournal=0, Context *ondisk=0) = 0;
 
+  virtual int queue_transaction(Transaction* t) = 0;
   virtual int queue_transactions(list<Transaction*>& tls, Context *onreadable,
 				 Context *onjournal=0, Context *ondisk=0) = 0;
 
@@ -504,6 +505,7 @@ public:
 
   virtual void sync(Context *onsync) {}
   virtual void sync() {}
+  virtual void sync_and_flush() {}
     
   virtual void _fake_writes(bool b) {};
   virtual void _get_frag_stat(FragmentationStat& st) {};

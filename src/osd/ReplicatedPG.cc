@@ -1954,10 +1954,12 @@ void ReplicatedPG::op_commit(RepGather *repop)
 
 void ReplicatedPG::eval_repop(RepGather *repop)
 {
-  dout(10) << "eval_repop " << *repop << dendl;
-  
   MOSDOp *op = (MOSDOp *)repop->ctx->op;
 
+  dout(10) << "eval_repop " << *repop
+	   << " wants=" << (op->wants_ack() ? "a":"") << (op->wants_ondisk() ? "d":"")
+	   << dendl;
+ 
   // apply?
   if (!repop->applied && !repop->applying &&
       ((mode.is_delayed_mode() &&

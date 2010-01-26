@@ -89,7 +89,7 @@ class FileStore : public JournalingObjectStore {
 
   Finisher op_finisher;
   Mutex op_lock;
-  Cond op_cond;
+  Cond op_cond, op_empty_cond;
   list<Op*> op_queue;
   void op_entry();
   struct OpThread : public Thread {
@@ -147,6 +147,7 @@ class FileStore : public JournalingObjectStore {
   void _transaction_finish(int id);
   unsigned _do_transaction(Transaction& t);
 
+  int queue_transaction(Transaction* t);
   int queue_transactions(list<Transaction*>& tls, Context *onreadable,
 			  Context *onjournal=0, Context *ondisk=0);
 
@@ -172,6 +173,7 @@ class FileStore : public JournalingObjectStore {
 
   void sync();
   void sync(Context *onsafe);
+  void sync_and_flush();
 
   // attrs
   int getattr(coll_t cid, const sobject_t& oid, const char *name, void *value, size_t size);
