@@ -2770,9 +2770,10 @@ bool ReplicatedPG::pull(const sobject_t& soid)
 
   // send op
   osd_reqid_t rid;
-  tid_t tid = osd->get_tid();
+  rid.name = entity_name_t::OSD(osd->whoami);
+  rid.tid = osd->get_tid();
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, soid, false, CEPH_OSD_FLAG_ACK,
-				   osd->osdmap->get_epoch(), tid, v);
+				   osd->osdmap->get_epoch(), rid.tid, v);
   subop->ops = vector<OSDOp>(1);
   subop->ops[0].op.op = CEPH_OSD_OP_PULL;
   subop->data_subset.swap(data_subset);
@@ -2913,9 +2914,11 @@ void ReplicatedPG::push(const sobject_t& soid, int peer,
   osd->logger->inc(l_osd_r_pushb, bl.length());
   
   // send
-  osd_reqid_t rid;  // useless?
+  osd_reqid_t rid;
+  rid.name = entity_name_t::OSD(osd->whoami);
+  rid.tid = osd->get_tid();
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, soid, false, 0,
-				   osd->osdmap->get_epoch(), osd->get_tid(), oi.version);
+				   osd->osdmap->get_epoch(), rid.tid, oi.version);
   subop->ops = vector<OSDOp>(1);
   subop->ops[0].op.op = CEPH_OSD_OP_PUSH;
   subop->ops[0].op.extent.offset = 0;
