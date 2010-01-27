@@ -1968,14 +1968,12 @@ void ReplicatedPG::eval_repop(RepGather *repop)
     apply_repop(repop);
   
   // disk?
-  if (repop->can_send_disk()) {
-    if (op->wants_ondisk()) {
-      // send commit.
-      MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ONDISK);
-      dout(10) << " sending commit on " << *repop << " " << reply << dendl;
-      osd->messenger->send_message(reply, op->get_orig_source_inst());
-      repop->sent_disk = true;
-    }
+  if (repop->can_send_disk() && op->wants_ondisk()) {
+    // send commit.
+    MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ONDISK);
+    dout(10) << " sending commit on " << *repop << " " << reply << dendl;
+    osd->messenger->send_message(reply, op->get_orig_source_inst());
+    repop->sent_disk = true;
   }
 
   /*
