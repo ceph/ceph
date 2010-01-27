@@ -118,6 +118,8 @@ public:
       }
 
       void encode(bufferlist &bl) const {
+	__u8 struct_v = 1;
+	::encode(struct_v, bl);
 	::encode(epoch_created, bl);
 	::encode(last_epoch_started, bl);
 	::encode(last_epoch_split, bl);
@@ -125,11 +127,12 @@ public:
 	::encode(same_up_since, bl);
 	::encode(same_primary_since, bl);
       }
-      void decode(bufferlist::iterator &bl, version_t v) {
+      void decode(bufferlist::iterator &bl) {
+	__u8 struct_v;
+	::decode(struct_v, bl);
 	::decode(epoch_created, bl);
 	::decode(last_epoch_started, bl);
-	if (v >= 21)
-	  ::decode(last_epoch_split, bl);
+	::decode(last_epoch_split, bl);
 	::decode(same_acting_since, bl);
 	::decode(same_up_since, bl);
 	::decode(same_primary_since, bl);
@@ -166,7 +169,7 @@ public:
       ::decode(log_tail, bl);
       ::decode(log_backlog, bl);
       ::decode(stats, bl);
-      history.decode(bl, v);
+      history.decode(bl);
       ::decode(snap_trimq, bl);
     }
   };
@@ -205,7 +208,7 @@ public:
     void decode(bufferlist::iterator &bl) {
       ::decode(type, bl);
       ::decode(since, bl);
-      history.decode(bl, ~0ull);
+      history.decode(bl);
     }
   };
   WRITE_CLASS_ENCODER(Query)
@@ -253,6 +256,8 @@ public:
       bool is_update() const { return is_clone() || is_modify() || is_backlog(); }
 
       void encode(bufferlist &bl) const {
+	__u8 struct_v = 1;
+	::encode(struct_v, bl);
 	::encode(op, bl);
 	::encode(soid, bl);
 	::encode(version, bl);
@@ -263,6 +268,8 @@ public:
 	  ::encode(snaps, bl);
       }
       void decode(bufferlist::iterator &bl) {
+	__u8 struct_v;
+	::decode(struct_v, bl);
 	::decode(op, bl);
 	::decode(soid, bl);
 	::decode(version, bl);
@@ -306,12 +313,16 @@ public:
     }
 
     void encode(bufferlist& bl) const {
+      __u8 struct_v = 1;
+      ::encode(struct_v, bl);
       ::encode(head, bl);
       ::encode(tail, bl);
       ::encode(backlog, bl);
       ::encode(log, bl);
     }
     void decode(bufferlist::iterator &bl) {
+      __u8 struct_v = 1;
+      ::decode(struct_v, bl);
       ::decode(head, bl);
       ::decode(tail, bl);
       ::decode(backlog, bl);
@@ -435,10 +446,14 @@ public:
     bool trim_to(eversion_t v, ObjectStore::Transaction& t);
 
     void encode(bufferlist& bl) const {
+      __u8 struct_v = 1;
+      ::encode(struct_v, bl);
       ::encode(tail, bl);
       ::encode(head, bl);
     }
     void decode(bufferlist::iterator& bl) {
+      __u8 struct_v;
+      ::decode(struct_v, bl);
       ::decode(tail, bl);
       ::decode(head, bl);
     }
@@ -559,9 +574,13 @@ public:
     }
 
     void encode(bufferlist &bl) const {
+      __u8 struct_v = 1;
+      ::encode(struct_v, bl);
       ::encode(missing, bl);
     }
     void decode(bufferlist::iterator &bl) {
+      __u8 struct_v;
+      ::decode(struct_v, bl);
       ::decode(missing, bl);
 
       for (map<sobject_t,item>::iterator it = missing.begin();
@@ -632,6 +651,8 @@ public:
     bool maybe_went_rw;
 
     void encode(bufferlist& bl) const {
+      __u8 struct_v = 1;
+      ::encode(struct_v, bl);
       ::encode(first, bl);
       ::encode(last, bl);
       ::encode(up, bl);
@@ -639,6 +660,8 @@ public:
       ::encode(maybe_went_rw, bl);
     }
     void decode(bufferlist::iterator& bl) {
+      __u8 struct_v;
+      ::decode(struct_v, bl);
       ::decode(first, bl);
       ::decode(last, bl);
       ::decode(up, bl);

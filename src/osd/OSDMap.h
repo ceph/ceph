@@ -89,6 +89,8 @@ struct osd_info_t {
   osd_info_t() : last_clean_first(0), last_clean_last(0),
 		 up_from(0), up_thru(0), down_at(0), lost_at(0) {}
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(last_clean_first, bl);
     ::encode(last_clean_last, bl);
     ::encode(up_from, bl);
@@ -97,6 +99,8 @@ struct osd_info_t {
     ::encode(lost_at, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(last_clean_first, bl);
     ::decode(last_clean_last, bl);
     ::decode(up_from, bl);
