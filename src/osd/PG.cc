@@ -1636,11 +1636,11 @@ void PG::_finish_recovery(Context *c)
       dout(10) << "_finish_recovery requeueing for scrub" << dendl;
       osd->scrub_wq.queue(this);
     } else if (log.backlog) {
-      ObjectStore::Transaction t;
+      ObjectStore::Transaction *t = new ObjectStore::Transaction;
       drop_backlog();
-      write_info(t);
-      write_log(t);
-      int tr = osd->store->apply_transaction(t);
+      write_info(*t);
+      write_log(*t);
+      int tr = osd->store->queue_transaction(t);
       assert(tr == 0);
     }
   } else {
@@ -2084,9 +2084,9 @@ void PG::read_log(ObjectStore *store)
 	oi.last_reqid = i->reqid;
 	bufferlist bl;
 	::encode(oi, bl);
-	ObjectStore::Transaction t;
-	t.setattr(coll_t::build_pg_coll(info.pgid), i->soid, OI_ATTR, bl);
-	int tr = osd->store->apply_transaction(t);
+	ObjectStore::Transaction *t = new ObjectStore::Transaction;
+	t->setattr(coll_t::build_pg_coll(info.pgid), i->soid, OI_ATTR, bl);
+	int tr = osd->store->queue_transaction(t);
 	assert(tr == 0);
 
 	stringstream ss;

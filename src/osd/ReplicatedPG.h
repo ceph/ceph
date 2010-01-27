@@ -293,6 +293,8 @@ public:
     utime_t   start;
     
     eversion_t          pg_local_last_complete;
+
+    list<ObjectStore::Transaction*> tls;
     
     RepGather(OpContext *c, ObjectContext *pi, bool noop_, tid_t rt, 
 	      eversion_t lc) :

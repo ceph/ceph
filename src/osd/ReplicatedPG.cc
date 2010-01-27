@@ -735,7 +735,7 @@ bool ReplicatedPG::snap_trimmer()
     for (vector<sobject_t>::iterator p = ls.begin(); p != ls.end(); p++) {
       const sobject_t& coid = *p;
 
-      ObjectStore::Transaction t;
+      ObjectStore::Transaction *t = new ObjectStore::Transaction;
 
       // load clone info
       bufferlist bl;
@@ -764,10 +764,10 @@ bool ReplicatedPG::snap_trimmer()
       if (newsnaps.empty()) {
 	// remove clone
 	dout(10) << coid << " snaps " << snaps << " -> " << newsnaps << " ... deleting" << dendl;
-	t.remove(coll_t::build_pg_coll(info.pgid), coid);
-	t.collection_remove(coll_t::build_snap_pg_coll(info.pgid, snaps[0]), coid);
+	t->remove(coll_t::build_pg_coll(info.pgid), coid);
+	t->collection_remove(coll_t::build_snap_pg_coll(info.pgid, snaps[0]), coid);
 	if (snaps.size() > 1)
-	  t.collection_remove(coll_t::build_snap_pg_coll(info.pgid, snaps[snaps.size()-1]), coid);
+	  t->collection_remove(coll_t::build_snap_pg_coll(info.pgid, snaps[snaps.size()-1]), coid);
 
 	// ...from snapset
 	snapid_t last = coid.snap;
@@ -798,16 +798,16 @@ bool ReplicatedPG::snap_trimmer()
 	coi.snaps.swap(newsnaps);
 	bl.clear();
 	::encode(coi, bl);
-	t.setattr(coll_t::build_pg_coll(info.pgid), coid, OI_ATTR, bl);
+	t->setattr(coll_t::build_pg_coll(info.pgid), coid, OI_ATTR, bl);
 
 	if (snaps[0] != newsnaps[0]) {
-	  t.collection_remove(coll_t::build_snap_pg_coll(info.pgid, snaps[0]), coid);
-	  t.collection_add(coll_t::build_snap_pg_coll(info.pgid, newsnaps[0]), coll_t::build_pg_coll(info.pgid), coid);
+	  t->collection_remove(coll_t::build_snap_pg_coll(info.pgid, snaps[0]), coid);
+	  t->collection_add(coll_t::build_snap_pg_coll(info.pgid, newsnaps[0]), coll_t::build_pg_coll(info.pgid), coid);
 	}
 	if (snaps.size() > 1 && snaps[snaps.size()-1] != newsnaps[newsnaps.size()-1]) {
-	  t.collection_remove(coll_t::build_snap_pg_coll(info.pgid, snaps[snaps.size()-1]), coid);
+	  t->collection_remove(coll_t::build_snap_pg_coll(info.pgid, snaps[snaps.size()-1]), coid);
 	  if (newsnaps.size() > 1)
-	    t.collection_add(coll_t::build_snap_pg_coll(info.pgid, newsnaps[newsnaps.size()-1]), coll_t::build_pg_coll(info.pgid), coid);
+	    t->collection_add(coll_t::build_snap_pg_coll(info.pgid, newsnaps[newsnaps.size()-1]), coll_t::build_pg_coll(info.pgid), coid);
 	}	      
       }
 
@@ -817,14 +817,14 @@ bool ReplicatedPG::snap_trimmer()
       sobject_t snapoid(coid.oid, snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR);
       if (snapset.clones.empty() && !snapset.head_exists) {
 	dout(10) << coid << " removing " << snapoid << dendl;
-	t.remove(coll_t::build_pg_coll(info.pgid), snapoid);
+	t->remove(coll_t::build_pg_coll(info.pgid), snapoid);
       } else {
 	bl.clear();
 	::encode(snapset, bl);
-	t.setattr(coll_t::build_pg_coll(info.pgid), snapoid, SS_ATTR, bl);
+	t->setattr(coll_t::build_pg_coll(info.pgid), snapoid, SS_ATTR, bl);
       }
 
-      int tr = osd->store->apply_transaction(t);
+      int tr = osd->store->queue_transaction(t);
       assert(tr == 0);
 
       // give other threads a chance at this pg
@@ -833,12 +833,12 @@ bool ReplicatedPG::snap_trimmer()
     }
 
     // remove snap collection
-    ObjectStore::Transaction t;
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
     dout(10) << "removing snap " << sn << " collection " << c << dendl;
     snap_collections.erase(sn);
-    write_info(t);
-    t.remove_collection(c);
-    int tr = osd->store->apply_transaction(t);
+    write_info(*t);
+    t->remove_collection(c);
+    int tr = osd->store->queue_transaction(t);
     assert(tr == 0);
  
     info.snap_trimq.erase(sn);
@@ -847,9 +847,9 @@ bool ReplicatedPG::snap_trimmer()
   // done
   dout(10) << "snap_trimmer done" << dendl;
 
-  ObjectStore::Transaction t;
-  write_info(t);
-  int tr = osd->store->apply_transaction(t);
+  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  write_info(*t);
+  int tr = osd->store->queue_transaction(t);
   assert(tr == 0);
   unlock();
   return true;
@@ -1842,28 +1842,17 @@ void ReplicatedPG::apply_repop(RepGather *repop)
   assert(!repop->applying);
   assert(!repop->applied);
 
-  Context *oncommit = new C_OSD_OpCommit(this, repop);
-
   repop->applying = true;
 
-  list<ObjectStore::Transaction*> tls;
-  tls.push_back(&repop->ctx->op_t);
-  tls.push_back(&repop->ctx->local_t);
+  repop->tls.push_back(&repop->ctx->op_t);
+  repop->tls.push_back(&repop->ctx->local_t);
 
-  if (1) {
-    Context *onapplied = new C_OSD_OpApplied(this, repop);
-    int r = osd->store->queue_transactions(tls, onapplied, oncommit);
-    if (r) {
-      dout(-10) << "apply_repop  queue_transactions returned " << r << " on " << *repop << dendl;
-      assert(0);
-    }
-  } else {
-    int r = osd->store->apply_transactions(tls, oncommit);
-    if (r) {
-      dout(-10) << "apply_repop  apply_transactions returned " << r << " on " << *repop << dendl;
-      assert(0);
-    }    
-    op_applied(repop);
+  Context *oncommit = new C_OSD_OpCommit(this, repop);
+  Context *onapplied = new C_OSD_OpApplied(this, repop);
+  int r = osd->store->queue_transactions(repop->tls, onapplied, oncommit);
+  if (r) {
+    dout(-10) << "apply_repop  queue_transactions returned " << r << " on " << *repop << dendl;
+    assert(0);
   }
 }
 
@@ -3128,8 +3117,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 	   << dendl;
 
   // write object and add it to the PG
-  ObjectStore::Transaction t;
-  t.remove(coll_t::build_pg_coll(info.pgid), soid);  // in case old version exists
+  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  t->remove(coll_t::build_pg_coll(info.pgid), soid);  // in case old version exists
 
   __u64 boff = 0;
   for (map<sobject_t, interval_set<__u64> >::iterator p = clone_subsets.begin();
@@ -3139,33 +3128,33 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 	 q != p->second.m.end(); 
 	 q++) {
       dout(15) << " clone_range " << p->first << " " << q->first << "~" << q->second << dendl;
-      t.clone_range(coll_t::build_pg_coll(info.pgid), soid, p->first, q->first, q->second);
+      t->clone_range(coll_t::build_pg_coll(info.pgid), soid, p->first, q->first, q->second);
     }
   for (map<__u64,__u64>::iterator p = data_subset.m.begin();
        p != data_subset.m.end(); 
        p++) {
     bufferlist bit;
     bit.substr_of(data, boff, p->second);
-    t.write(coll_t::build_pg_coll(info.pgid), soid, p->first, p->second, bit);
+    t->write(coll_t::build_pg_coll(info.pgid), soid, p->first, p->second, bit);
     dout(15) << " write " << p->first << "~" << p->second << dendl;
     boff += p->second;
   }
 
   if (data_subset.empty())
-    t.touch(coll_t::build_pg_coll(info.pgid), soid);
+    t->touch(coll_t::build_pg_coll(info.pgid), soid);
 
-  t.setattrs(coll_t::build_pg_coll(info.pgid), soid, op->attrset);
+  t->setattrs(coll_t::build_pg_coll(info.pgid), soid, op->attrset);
   if (soid.snap && soid.snap < CEPH_NOSNAP &&
       op->attrset.count(OI_ATTR)) {
     bufferlist bl;
     bl.push_back(op->attrset[OI_ATTR]);
     object_info_t oi(bl);
     if (oi.snaps.size()) {
-      coll_t lc = make_snap_collection(t, oi.snaps[0]);
-      t.collection_add(lc, coll_t::build_pg_coll(info.pgid), soid);
+      coll_t lc = make_snap_collection(*t, oi.snaps[0]);
+      t->collection_add(lc, coll_t::build_pg_coll(info.pgid), soid);
       if (oi.snaps.size() > 1) {
-	coll_t hc = make_snap_collection(t, oi.snaps[oi.snaps.size()-1]);
-	t.collection_add(hc, coll_t::build_pg_coll(info.pgid), soid);
+	coll_t hc = make_snap_collection(*t, oi.snaps[oi.snaps.size()-1]);
+	t->collection_add(hc, coll_t::build_pg_coll(info.pgid), soid);
       }
     }
   }
@@ -3188,9 +3177,11 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   }
 
   // apply to disk!
-  write_info(t);
-  int r = osd->store->apply_transaction(t, new C_OSD_Commit(this, info.history.same_acting_since,
-								 info.last_complete));
+  write_info(*t);
+  int r = osd->store->queue_transaction(t,
+					new ObjectStore::C_DeleteTransaction(t),
+					new C_OSD_Commit(this, info.history.same_acting_since,
+							 info.last_complete));
   assert(r == 0);
 
   osd->logger->inc(l_osd_r_pull);
@@ -3403,7 +3394,7 @@ int ReplicatedPG::recover_primary(int max)
 	    dout(10) << "recover_primary cloning " << head << " v" << latest->prior_version
 		     << " to " << soid << " v" << latest->version
 		     << " snaps " << latest->snaps << dendl;
-	    ObjectStore::Transaction t;
+	    ObjectStore::Transaction *t = new ObjectStore::Transaction;
 
 	    ObjectContext *headobc = get_object_context(head);
 
@@ -3413,11 +3404,11 @@ int ReplicatedPG::recover_primary(int max)
 	    oi.last_reqid = headobc->obs.oi.last_reqid;
 	    oi.mtime = headobc->obs.oi.mtime;
 	    ::decode(oi.snaps, latest->snaps);
-	    _make_clone(t, head, soid, &oi);
+	    _make_clone(*t, head, soid, &oi);
 
 	    put_object_context(headobc);
 
-	    int tr = osd->store->apply_transaction(t);
+	    int tr = osd->store->queue_transaction(t);
 	    assert(tr == 0);
 	    missing.got(latest->soid, latest->version);
 	    missing_loc.erase(latest->soid);
@@ -3463,10 +3454,10 @@ int ReplicatedPG::recover_primary(int max)
   uptodate_set.insert(osd->whoami);
   if (is_all_uptodate()) {
     dout(-7) << "recover_primary complete" << dendl;
-    ObjectStore::Transaction t;
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
     C_Contexts *fin = new C_Contexts;
-    finish_recovery(t, fin->contexts);
-    int tr = osd->store->apply_transaction(t, fin);
+    finish_recovery(*t, fin->contexts);
+    int tr = osd->store->queue_transaction(t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(tr == 0);
   } else {
     dout(-10) << "recover_primary primary now complete, starting peer recovery" << dendl;
@@ -3516,10 +3507,10 @@ int ReplicatedPG::recover_replicas(int max)
   dout(-10) << "recover_replicas - nothing to do!" << dendl;
 
   if (is_all_uptodate()) {
-    ObjectStore::Transaction t;
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
     C_Contexts *fin = new C_Contexts;
-    finish_recovery(t, fin->contexts);
-    int tr = osd->store->apply_transaction(t, fin);
+    finish_recovery(*t, fin->contexts);
+    int tr = osd->store->queue_transaction(t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(tr == 0);
   } else {
     dout(10) << "recover_replicas not all uptodate, acting " << acting << ", uptodate " << uptodate_set << dendl;
