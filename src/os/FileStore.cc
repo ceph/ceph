@@ -1391,6 +1391,9 @@ void FileStore::sync_and_flush()
   dout(10) << "sync_and_flush" << dendl;
   sync();
   
+  if (journal)
+    journal->flush();
+
   if (g_conf.filestore_journal_writeahead) {
     dout(10) << "sync_and_flush waiting for journal finisher" << dendl;
     finisher.wait_for_empty();

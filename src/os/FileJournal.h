@@ -100,7 +100,7 @@ private:
   
   // write thread
   Mutex write_lock;
-  Cond write_cond;
+  Cond write_cond, write_empty_cond;
   bool write_stop;
 
   Cond commit_cond;
@@ -156,6 +156,8 @@ private:
   int create();
   int open(__u64 last_seq);
   void close();
+
+  void flush();
 
   bool is_writeable() {
     return read_pos == 0;

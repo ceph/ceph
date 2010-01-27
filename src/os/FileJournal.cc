@@ -545,6 +545,17 @@ void FileJournal::do_write(bufferlist& bl)
   }
 }
 
+void FileJournal::flush()
+{
+  write_lock.Lock();
+  while ((!writeq.empty() || writing) && !write_stop) {
+    dout(10) << "flush waiting for writeq to empty and writes to complete" << dendl;
+    write_empty_cond.Wait(write_lock);
+  }
+  write_lock.Unlock();
+  dout(10) << "flush done" << dendl;
+}
+
 
 void FileJournal::write_thread_entry()
 {
@@ -556,6 +567,7 @@ void FileJournal::write_thread_entry()
     if (writeq.empty()) {
       // sleep
       dout(20) << "write_thread_entry going to sleep" << dendl;
+      write_empty_cond.Signal();
       write_cond.Wait(write_lock);
       dout(20) << "write_thread_entry woke up" << dendl;
       continue;
@@ -568,7 +580,7 @@ void FileJournal::write_thread_entry()
       prepare_multi_write(bl);
     do_write(bl);
   }
-
+  write_empty_cond.Signal();
   write_lock.Unlock();
   dout(10) << "write_thread_entry finish" << dendl;
 }

@@ -37,6 +37,8 @@ public:
   virtual int open(__u64 last_seq) = 0;
   virtual void close() = 0;
 
+  virtual void flush() = 0;
+
   void set_wait_on_full(bool b) { wait_on_full = b; }
 
   // writes
