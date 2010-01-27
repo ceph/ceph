@@ -62,12 +62,12 @@ pending mds format changes
 
 pending osd format changes
 - current/ subdir 
-- compat/incompat flags
+/- compat/incompat flags
 
 pending mon format changes
-- add v to PGMap, PGMap::Incremental
-  - others?
-- compat/incompat flags
+/- add v to PGMap, PGMap::Incremental
+ /- others?
+/- compat/incompat flags
 
 bugs
 - 'mount.ceph server:/ relpath' puts relpath (not canonicalized name) in /etc/mtab. df gets confused
