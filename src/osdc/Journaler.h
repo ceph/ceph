@@ -76,6 +76,8 @@ public:
       magic(m) { }
 
     void encode(bufferlist &bl) const {
+      __u8 struct_v = 1;
+      ::encode(struct_v, bl);
       ::encode(magic, bl);
       ::encode(trimmed_pos, bl);
       ::encode(expire_pos, bl);
@@ -84,6 +86,8 @@ public:
       ::encode(layout, bl);
     }
     void decode(bufferlist::iterator &bl) {
+      __u8 struct_v;
+      ::decode(struct_v, bl);
       ::decode(magic, bl);
       ::decode(trimmed_pos, bl);
       ::decode(expire_pos, bl);
