@@ -30,6 +30,7 @@ public:
    * journal header
    */
   struct header_t {
+    __u64 version;
     __u64 fsid;
     __u32 block_size;
     __u32 alignment;
@@ -37,7 +38,7 @@ public:
     __s64 wrap;       // wrap byte pos (if any)
     __s64 start;      // offset of first entry
 
-    header_t() : fsid(0), block_size(0), alignment(0), max_size(0), wrap(0), start(0) {}
+    header_t() : version(1), fsid(0), block_size(0), alignment(0), max_size(0), wrap(0), start(0) {}
 
     void clear() {
       wrap = 0;
