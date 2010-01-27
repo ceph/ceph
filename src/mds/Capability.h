@@ -79,6 +79,8 @@ public:
     Export(int w, int i, int p, snapid_t cf, ceph_seq_t s, utime_t lis) : 
       wanted(w), issued(i), pending(p), client_follows(cf), mseq(s), last_issue_stamp(lis) {}
     void encode(bufferlist &bl) const {
+      __u8 struct_v = 1;
+      ::encode(struct_v, bl);
       ::encode(wanted, bl);
       ::encode(issued, bl);
       ::encode(pending, bl);
@@ -87,6 +89,8 @@ public:
       ::encode(last_issue_stamp, bl);
     }
     void decode(bufferlist::iterator &p) {
+      __u8 struct_v;
+      ::decode(struct_v, p);
       ::decode(wanted, p);
       ::decode(issued, p);
       ::decode(pending, p);
@@ -117,11 +121,15 @@ public:
     revoke_info() {}
     revoke_info(__u32 b, ceph_seq_t s, ceph_seq_t li) : before(b), seq(s), last_issue(li) {}
     void encode(bufferlist& bl) const {
+      __u8 struct_v = 1;
+      ::encode(struct_v, bl);
       ::encode(before, bl);
       ::encode(seq, bl);
       ::encode(last_issue, bl);
     }
     void decode(bufferlist::iterator& bl) {
+      __u8 struct_v;
+      ::decode(struct_v, bl);
       ::decode(before, bl);
       ::decode(seq, bl);
       ::decode(last_issue, bl);
@@ -314,6 +322,8 @@ public:
 
   // serializers
   void encode(bufferlist &bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(last_sent, bl);
     ::encode(last_issue_stamp, bl);
 
@@ -322,6 +332,8 @@ public:
     ::encode(_revokes, bl);
   }
   void decode(bufferlist::iterator &bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(last_sent, bl);
     ::decode(last_issue_stamp, bl);
 

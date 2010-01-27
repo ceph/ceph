@@ -34,12 +34,16 @@ public:
   }
 
   void encode(bufferlist &bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(ino, bl);
     ::encode(basefrag, bl);
     ::encode(bits, bl);
     ::encode(metablob, bl);
   } 
   void decode(bufferlist::iterator &bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(ino, bl);
     ::decode(basefrag, bl);
     ::decode(bits, bl);

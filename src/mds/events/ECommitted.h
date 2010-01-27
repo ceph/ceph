@@ -31,9 +31,13 @@ public:
   }
 
   void encode(bufferlist &bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(reqid, bl);
   } 
   void decode(bufferlist::iterator &bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(reqid, bl);
   }
 

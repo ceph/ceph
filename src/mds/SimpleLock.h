@@ -387,10 +387,14 @@ public:
 
   // encode/decode
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(state, bl);
     ::encode(gather_set, bl);
   }
   void decode(bufferlist::iterator& p) {
+    __u8 struct_v;
+    ::decode(struct_v, p);
     ::decode(state, p);
     ::decode(gather_set, p);
   }

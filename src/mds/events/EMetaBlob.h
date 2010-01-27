@@ -87,6 +87,8 @@ public:
     fullbit() {}
 
     void encode(bufferlist& bl) const {
+      __u8 struct_v = 1;
+      ::encode(struct_v, bl);
       assert(_enc.length());
       bl.append(_enc); 
       /*
@@ -106,6 +108,8 @@ public:
       */
     }
     void decode(bufferlist::iterator &bl) {
+      __u8 struct_v;
+      ::decode(struct_v, bl);
       ::decode(dn, bl);
       ::decode(dnfirst, bl);
       ::decode(dnlast, bl);
@@ -155,6 +159,8 @@ public:
     remotebit() {}
 
     void encode(bufferlist& bl) const {
+      __u8 struct_v = 1;
+      ::encode(struct_v, bl);
       assert(_enc.length());
       bl.append(_enc);
       /*
@@ -168,6 +174,8 @@ public:
       */
     }
     void decode(bufferlist::iterator &bl) {
+      __u8 struct_v;
+      ::decode(struct_v, bl);
       ::decode(dn, bl);
       ::decode(dnfirst, bl);
       ::decode(dnlast, bl);
@@ -208,6 +216,8 @@ public:
     nullbit() {}
 
     void encode(bufferlist& bl) const {
+      __u8 struct_v = 1;
+      ::encode(struct_v, bl);
       assert(_enc.length());
       bl.append(_enc);
       /*
@@ -219,6 +229,8 @@ public:
       */
     }
     void decode(bufferlist::iterator &bl) {
+      __u8 struct_v;
+      ::decode(struct_v, bl);
       ::decode(dn, bl);
       ::decode(dnfirst, bl);
       ::decode(dnlast, bl);
@@ -296,6 +308,8 @@ public:
     }
 
     void encode(bufferlist& bl) const {
+      __u8 struct_v = 1;
+      ::encode(struct_v, bl);
       ::encode(fnode, bl);
       ::encode(state, bl);
       ::encode(nfull, bl);
@@ -305,6 +319,8 @@ public:
       ::encode(dnbl, bl);
     }
     void decode(bufferlist::iterator &bl) {
+      __u8 struct_v;
+      ::decode(struct_v, bl);
       ::decode(fnode, bl);
       ::decode(state, bl);
       ::decode(nfull, bl);
@@ -344,6 +360,8 @@ private:
 
  public:
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(lump_order, bl);
     ::encode(lump_map, bl);
     bufferlist rootbl;
@@ -364,6 +382,8 @@ private:
     ::encode(client_reqs, bl);
   } 
   void decode(bufferlist::iterator &bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(lump_order, bl);
     ::decode(lump_map, bl);
     bufferlist rootbl;

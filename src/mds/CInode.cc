@@ -1907,6 +1907,8 @@ void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waite
 
 void CInode::encode_export(bufferlist& bl)
 {
+  __u8 struct_v = 1;
+  ::encode(struct_v, bl);
   _encode_base(bl);
 
   bool dirty = is_dirty();
@@ -1935,6 +1937,9 @@ void CInode::finish_export(utime_t now)
 void CInode::decode_import(bufferlist::iterator& p,
 			   LogSegment *ls)
 {
+  __u8 struct_v;
+  ::decode(struct_v, p);
+
   _decode_base(p);
 
   bool dirty;

@@ -38,6 +38,8 @@ public:
   }
 
   void encode(bufferlist &bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(type, bl);
     ::encode(metablob, bl);
     ::encode(client_map, bl);
@@ -45,6 +47,8 @@ public:
     ::encode(had_slaves, bl);
   } 
   void decode(bufferlist::iterator &bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(type, bl);
     ::decode(metablob, bl);
     ::decode(client_map, bl);

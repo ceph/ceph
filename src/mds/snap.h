@@ -28,12 +28,16 @@ struct SnapInfo {
   string name, long_name;
   
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(snapid, bl);
     ::encode(ino, bl);
     ::encode(stamp, bl);
     ::encode(name, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(snapid, bl);
     ::decode(ino, bl);
     ::decode(stamp, bl);
@@ -69,10 +73,14 @@ struct snaplink_t {
   inodeno_t ino;
   snapid_t first;
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(ino, bl);
     ::encode(first, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(ino, bl);
     ::decode(first, bl);
   }
@@ -95,6 +103,8 @@ struct SnapRealm {
   map<snapid_t, snaplink_t> past_parents;  // key is "last" (or NOSNAP)
 
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(seq, bl);
     ::encode(created, bl);
     ::encode(last_created, bl);
@@ -104,6 +114,8 @@ struct SnapRealm {
     ::encode(past_parents, bl);
   }
   void decode(bufferlist::iterator& p) {
+    __u8 struct_v;
+    ::decode(struct_v, p);
     ::decode(seq, p);
     ::decode(created, p);
     ::decode(last_created, p);
