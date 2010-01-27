@@ -50,6 +50,9 @@ v0.19
 
 - kclient: retry alloc on ENOMEM when reading from connection?
 
+filestore
+- need to check per-object state for conflicting reads and unapplied writes
+- use want_delayed(), want_rmw() to toggle delayed/rmw mode?  or just for rmw->delayed transition?
 
 pending wire format changes
 /- include a __u64 tid in ceph_msg_header

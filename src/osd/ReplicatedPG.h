@@ -95,7 +95,6 @@ public:
     }
     state_t state;
     int num_wr;
-    entity_inst_t client;
     list<Message*> waiting;
     bool wake;
 
@@ -107,17 +106,50 @@ public:
 	state = IDLE;
     }
 
+    bool want_delayed() {
+      check_mode();
+      switch (state) {
+      case IDLE:
+	state = DELAYED;
+      case DELAYED:
+	return true;
+      case RMW:
+	state = RMW_FLUSHING;
+	return true;
+      case DELAYED_FLUSHING:
+      case RMW_FLUSHING:
+	return false;
+      default:
+	assert(0);
+      }
+    }
+    bool want_rmw() {
+      check_mode();
+      switch (state) {
+      case IDLE:
+	state = RMW;
+	return true;
+      case DELAYED:
+	state = DELAYED_FLUSHING;
+	return false;
+      case RMW:
+	state = RMW_FLUSHING;
+	return false;
+      case DELAYED_FLUSHING:
+      case RMW_FLUSHING:
+	return false;
+      default:
+	assert(0);
+      }
+    }
+
     bool try_read(entity_inst_t& c) {
       check_mode();
       switch (state) {
       case IDLE:
       case DELAYED:
-	return true;
       case RMW:
-	if (c == client)
-	  return true;
-	state = RMW_FLUSHING;
-	return false;
+	return true;
       case DELAYED_FLUSHING:
       case RMW_FLUSHING:
 	return false;
@@ -129,18 +161,9 @@ public:
       check_mode();
       switch (state) {
       case IDLE:
-	if (g_conf.filestore_journal_writeahead ||
-	    g_conf.filestore_journal_parallel) {
-	  state = RMW;
-	  client = c;
-	} else
-	  state = DELAYED;
+	state = RMW;  /* default to RMW; it's a better all around policy */
       case DELAYED:
-	return true;
       case RMW:
-	if (c == client)
-	  return true;
-	state = RMW_FLUSHING;
 	return true;
       case DELAYED_FLUSHING:
       case RMW_FLUSHING:
@@ -154,16 +177,12 @@ public:
       switch (state) {
       case IDLE:
 	state = RMW;
-	client = c;
 	return true;
       case DELAYED:
 	state = DELAYED_FLUSHING;
 	return false;
       case RMW:
-	if (c == client)
-	  return true;
-	state = RMW_FLUSHING;
-	return false;
+	return true;
       case DELAYED_FLUSHING:
       case RMW_FLUSHING:
 	return false;
