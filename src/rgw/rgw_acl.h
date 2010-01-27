@@ -108,9 +108,13 @@ public:
   void set_permissions(int perm) { flags = perm; }
 
   void encode(bufferlist& bl) const {
-     ::encode(flags, bl);
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    ::encode(flags, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(flags, bl);
   }
   void to_xml(ostream& out) {
@@ -172,10 +176,14 @@ public:
   }
 
   void encode(bufferlist& bl) const {
-     ::encode(type, bl);
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    ::encode(type, bl);
   }
   void decode(bufferlist::iterator& bl) {
-     ::decode(type, bl);
+    __u8 struct_v;
+    ::decode(struct_v, bl);
+    ::decode(type, bl);
   }
 };
 WRITE_CLASS_ENCODER(ACLGranteeType)
@@ -224,14 +232,18 @@ public:
   ACLPermission& get_permission() { return permission; }
 
   void encode(bufferlist& bl) const {
-     ::encode(type, bl);
-     ::encode(id, bl);
-     ::encode(uri, bl);
-     ::encode(email, bl);
-     ::encode(permission, bl);
-     ::encode(name, bl);
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    ::encode(type, bl);
+    ::encode(id, bl);
+    ::encode(uri, bl);
+    ::encode(email, bl);
+    ::encode(permission, bl);
+    ::encode(name, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(type, bl);
     ::decode(id, bl);
     ::decode(uri, bl);
@@ -289,11 +301,15 @@ public:
   void xml_end(const char *el);
   int get_perm(string& id, int perm_mask);
   void encode(bufferlist& bl) const {
-     ::encode(user_map_initialized, bl);
-     ::encode(acl_user_map, bl);
-     ::encode(grant_map, bl);
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    ::encode(user_map_initialized, bl);
+    ::encode(acl_user_map, bl);
+    ::encode(grant_map, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(user_map_initialized, bl);
     ::decode(acl_user_map, bl);
     ::decode(grant_map, bl);
@@ -331,10 +347,14 @@ public:
 
   void xml_end(const char *el);
   void encode(bufferlist& bl) const {
-     ::encode(id, bl);
-     ::encode(display_name, bl);
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    ::encode(id, bl);
+    ::encode(display_name, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(id, bl);
     ::decode(display_name, bl);
   }
@@ -365,12 +385,16 @@ public:
   int get_perm(string& id, int perm_mask);
 
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(owner, bl);
     ::encode(acl, bl);
   }
   void decode(bufferlist::iterator& bl) {
-     ::decode(owner, bl);
-     ::decode(acl, bl);
+    __u8 struct_v;
+    ::decode(struct_v, bl);
+    ::decode(owner, bl);
+    ::decode(acl, bl);
    }
   void to_xml(ostream& out) {
     out << "<AccessControlPolicy>";
