@@ -630,7 +630,6 @@ int FileStore::queue_transactions(list<Transaction*> &tls,
   dout(10) << "queue_transactions (trailing journal) " << op_seq << " " << tls << dendl;
   int r = do_transactions(tls, op_seq);
   op_apply_finish();
-  op_finisher.queue(onreadable, r);
     
   if (r >= 0) {
     op_journal_start(op_seq);
@@ -640,6 +639,11 @@ int FileStore::queue_transactions(list<Transaction*> &tls,
     delete onjournal;
     delete ondisk;
   }
+
+  // start on_readable finisher after we queue journal item, as on_readable callback
+  // is allowed to delete the Transaction
+  op_finisher.queue(onreadable, r);
+
   return r;
 }
 
