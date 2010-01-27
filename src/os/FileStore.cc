@@ -592,19 +592,11 @@ struct C_JournaledAhead : public Context {
   }
 };
 
-struct C_DeleteTrans : public Context {
-  ObjectStore::Transaction *t;
-  C_DeleteTrans(ObjectStore::Transaction *tt) : t(tt) {}
-  void finish(int r) {
-    delete t;
-  }
-};
-
 int FileStore::queue_transaction(Transaction *t)
 {
   list<Transaction*> tls;
   tls.push_back(t);
-  return queue_transactions(tls, new C_DeleteTrans(t));
+  return queue_transactions(tls, new C_DeleteTransaction(t));
 }
 
 int FileStore::queue_transactions(list<Transaction*> &tls,

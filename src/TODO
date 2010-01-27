@@ -53,6 +53,9 @@ v0.19
 filestore
 - need to check per-object state for conflicting reads and unapplied writes
 - use want_delayed(), want_rmw() to toggle delayed/rmw mode?  or just for rmw->delayed transition?
+- audit queue_transaction calls for dependencies
+- convert apply_transaction calls in handle_map to queue?
+  - need an osdmap cache layer?
 
 pending wire format changes
 /- include a __u64 tid in ceph_msg_header
