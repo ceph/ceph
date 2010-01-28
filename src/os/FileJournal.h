@@ -49,6 +49,7 @@ public:
   struct entry_header_t {
     uint64_t seq;  // fs op seq #
     uint64_t len;
+    uint64_t pre_pad, post_pad;
     uint64_t magic1;
     uint64_t magic2;
     
