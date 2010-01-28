@@ -10,7 +10,7 @@
 #include "config.h"
 
 #undef dout
-#define  dout(l)    if (l<=g_conf.debug_lockdep) *_dout << g_clock.now() << " " << pthread_self() << " lockdep: "
+#define  dout(l)    if (l<=g_conf.debug_lockdep) *_dout << g_clock.now() << " " << std::hex << pthread_self() << std::dec << " lockdep: "
 
 
 // global
