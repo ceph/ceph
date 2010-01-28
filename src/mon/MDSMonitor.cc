@@ -698,10 +698,8 @@ void MDSMonitor::tick()
 	  si.inc = ++pending_mdsmap.inc[info.rank];
 	  pending_mdsmap.up[info.rank] = sgid;
 	  pending_mdsmap.last_failure = pending_mdsmap.epoch;
-	}
 
-	if (si.state > 0) {
-	  // blacklist
+	  // blacklist laggy mds
 	  utime_t until = now;
 	  until += g_conf.mds_blacklist_interval;
 	  mon->osdmon()->blacklist(info.addr, until);
