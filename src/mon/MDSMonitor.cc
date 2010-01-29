@@ -673,7 +673,7 @@ void MDSMonitor::tick()
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sgid];
 	dout(10) << " replacing " << info.addr << " mds" << info.rank << "." << info.inc
 		 << " " << ceph_mds_state_name(info.state)
-		 << " with " << sgid << "/" << si.name << " " << info.addr << dendl;
+		 << " with " << sgid << "/" << si.name << " " << si.addr << dendl;
 	switch (info.state) {
 	case MDSMap::STATE_CREATING:
 	case MDSMap::STATE_STARTING:
