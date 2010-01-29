@@ -1386,34 +1386,52 @@ void FileStore::sync(Context *onsafe)
   sync();
 }
 
-void FileStore::sync_and_flush()
+void FileStore::_flush_op_queue()
 {
-  dout(10) << "sync_and_flush" << dendl;
-  sync();
-  
-  if (journal)
-    journal->flush();
-
-  if (g_conf.filestore_journal_writeahead) {
-    dout(10) << "sync_and_flush waiting for journal finisher" << dendl;
-    finisher.wait_for_empty();
-  }
-  
   op_lock.Lock();
   while (!op_queue.empty()) {
-    dout(10) << "sync_and_flush waiting for op queue to flush" << dendl;
+    dout(10) << "_flush_op_queue waiting for op queue to flush" << dendl;
     op_empty_cond.Wait(op_lock);
   }
   op_lock.Unlock();
 
-  dout(10) << "sync_and_flush waiting for apply finisher" << dendl;
+  dout(10) << "_flush_op_queue waiting for apply finisher" << dendl;
   op_finisher.wait_for_empty();
+}
 
-  if (!g_conf.filestore_journal_writeahead) {
-    dout(10) << "sync_and_flush waiting for journal finisher" << dendl;
-    finisher.wait_for_empty();
+/*
+ * flush - make every queued write readable
+ */
+void FileStore::flush()
+{
+  dout(10) << "flush" << dendl;
+ 
+  if (g_conf.filestore_journal_writeahead) {
+    if (journal)
+      journal->flush();
   }
 
+  _flush_op_queue();
+}
+
+/*
+ * sync_and_flush - make every queued write readable AND committed to disk
+ */
+void FileStore::sync_and_flush()
+{
+  dout(10) << "sync_and_flush" << dendl;
+
+  if (g_conf.filestore_journal_writeahead) {
+    if (journal)
+      journal->flush();
+    _flush_op_queue();
+  } else if (g_conf.filestore_journal_parallel) {
+    _flush_op_queue();
+    sync();
+  } else {
+    _flush_op_queue();
+    sync();
+  }
   dout(10) << "sync_and_flush done" << dendl;
 }
 

@@ -173,6 +173,8 @@ class FileStore : public JournalingObjectStore {
 
   void sync();
   void sync(Context *onsafe);
+  void _flush_op_queue();
+  void flush();
   void sync_and_flush();
 
   // attrs

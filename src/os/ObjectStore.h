@@ -519,6 +519,7 @@ public:
 
   virtual void sync(Context *onsync) {}
   virtual void sync() {}
+  virtual void flush() {}
   virtual void sync_and_flush() {}
     
   virtual void _fake_writes(bool b) {};

@@ -553,6 +553,8 @@ void FileJournal::flush()
     write_empty_cond.Wait(write_lock);
   }
   write_lock.Unlock();
+  dout(10) << "flush waiting for finisher" << dendl;
+  finisher->wait_for_empty();
   dout(10) << "flush done" << dendl;
 }
 
