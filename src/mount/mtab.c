@@ -22,6 +22,8 @@
 #include <mntent.h>
 #include <stdarg.h>
 
+#include "mount/canonicalize.c"
+
 
 /* Updating mtab ----------------------------------------------*/
 
@@ -249,7 +251,7 @@ update_mtab_entry(const char *spec, const char *node, const char *type,
 		opts = "rw";
 
 	mnt.mnt_fsname = strdup(spec);
-	mnt.mnt_dir = strdup(node);
+	mnt.mnt_dir = canonicalize_path(strdup(node));
 	mnt.mnt_type = strdup(type);
 	mnt.mnt_opts = strdup(opts);
 	mnt.mnt_freq = freq;
