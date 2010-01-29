@@ -2509,6 +2509,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
       pi->size = req->head.args.setattr.size;
       pi->truncate_size = pi->size;
       pi->truncate_seq++;
+      pi->truncate_pending++;
       le->metablob.add_truncate_start(cur->ino());
     } else {
       pi->size = req->head.args.setattr.size;

@@ -342,6 +342,7 @@ struct inode_t {
   uint64_t   size;        // on directory, # dentries
   uint32_t   truncate_seq;
   uint64_t   truncate_size, truncate_from;
+  uint32_t   truncate_pending;
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
   uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
@@ -363,6 +364,7 @@ struct inode_t {
 	      mode(0), uid(0), gid(0),
 	      nlink(0), anchored(false),
 	      size(0), truncate_seq(0), truncate_size(0), truncate_from(0),
+	      truncate_pending(0),
 	      time_warp_seq(0),
 	      version(0), file_data_version(0), xattr_version(0), last_renamed_version(0) { 
     memset(&layout, 0, sizeof(layout));
@@ -373,7 +375,7 @@ struct inode_t {
   bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }
   bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
 
-  bool is_truncating() const { return truncate_size != -1ull; }
+  bool is_truncating() const { return (truncate_pending > 0); }
 
   int64_t get_layout_size_increment() {
     return layout.fl_object_size * layout.fl_stripe_count;

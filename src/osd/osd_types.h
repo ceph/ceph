@@ -1162,7 +1162,7 @@ struct object_info_t {
   osd_reqid_t wrlock_by;   // [head]
   vector<snapid_t> snaps;  // [clone]
 
-  bufferlist truncate_info;  // bah.. messy layering.
+  __u64 truncate_seq, truncate_size;
 
   void encode(bufferlist& bl) const {
     const __u8 v = 1;
@@ -1177,7 +1177,8 @@ struct object_info_t {
       ::encode(wrlock_by, bl);
     else
       ::encode(snaps, bl);
-    ::encode(truncate_info, bl);
+    ::encode(truncate_seq, bl);
+    ::encode(truncate_size, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 v;
@@ -1192,7 +1193,8 @@ struct object_info_t {
       ::decode(wrlock_by, bl);
     else
       ::decode(snaps, bl);
-    ::decode(truncate_info, bl);
+    ::decode(truncate_seq, bl);
+    ::decode(truncate_size, bl);
   }
   void decode(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
@@ -1288,13 +1290,13 @@ inline ostream& operator<<(ostream& out, const OSDOp& op) {
     case CEPH_OSD_OP_TRUNCATE:
       out << " " << op.op.extent.offset;
       break;
-    case CEPH_OSD_OP_SETTRUNC:
     case CEPH_OSD_OP_MASKTRUNC:
     case CEPH_OSD_OP_TRIMTRUNC:
-      out << " " << op.op.trunc.truncate_seq << "@" << op.op.trunc.truncate_size;
+      out << " " << op.op.extent.truncate_seq << "@" << op.op.extent.truncate_size;
       break;
     default:
       out << " " << op.op.extent.offset << "~" << op.op.extent.length;
+      out << " [" << op.op.extent.truncate_seq << "@" << op.op.extent.truncate_size << "]";
     }
   } else if (ceph_osd_op_type_attr(op.op.op)) {
     // xattr name

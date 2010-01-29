@@ -4626,7 +4626,7 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
   pi->truncate_from = 0;
-  pi->truncate_size = (__u64)-1ull;
+  pi->truncate_pending--;
 
   Mutation *mut = new Mutation;
   mut->ls = mds->mdlog->get_current_segment();
