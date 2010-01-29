@@ -381,6 +381,7 @@ void FileJournal::prepare_multi_write(bufferlist& bl)
     // add it this entry
     entry_header_t h;
     h.seq = seq;
+    h.flags = 0;
     h.len = ebl.length();
     h.pre_pad = 0;
     h.post_pad = 0;
@@ -448,6 +449,7 @@ bool FileJournal::prepare_single_dio_write(bufferlist& bl)
   bufferptr bp = buffer::create_page_aligned(size);
   entry_header_t *h = (entry_header_t*)bp.c_str();
   h->seq = seq;
+  h->flags = 0;
   h->len = ebl.length();
   h->pre_pad = 0;
   h->post_pad = size - base_size;

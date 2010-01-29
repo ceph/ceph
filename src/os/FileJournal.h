@@ -30,7 +30,8 @@ public:
    * journal header
    */
   struct header_t {
-    __u64 version;
+    __u32 version;
+    __u32 flags;
     __u64 fsid;
     __u32 block_size;
     __u32 alignment;
@@ -38,7 +39,7 @@ public:
     __s64 wrap;       // wrap byte pos (if any)
     __s64 start;      // offset of first entry
 
-    header_t() : version(1), fsid(0), block_size(0), alignment(0), max_size(0), wrap(0), start(0) {}
+    header_t() : version(1), flags(0), fsid(0), block_size(0), alignment(0), max_size(0), wrap(0), start(0) {}
 
     void clear() {
       wrap = 0;
@@ -48,8 +49,9 @@ public:
 
   struct entry_header_t {
     uint64_t seq;  // fs op seq #
-    uint64_t len;
-    uint64_t pre_pad, post_pad;
+    uint32_t flags;
+    uint32_t len;
+    uint32_t pre_pad, post_pad;
     uint64_t magic1;
     uint64_t magic2;
     
