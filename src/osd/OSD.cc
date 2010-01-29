@@ -1953,15 +1953,10 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
 
     dout(10) << "handle_osd_map got full map epoch " << p->first << dendl;
-    ObjectStore::Transaction ft;
-    ft.write(meta_coll, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
-    int r = store->apply_transaction(ft);
-    if (r) {
-      char buf[80];
-      dout(0) << "error writing map: " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
-      shutdown();
-      return;
-    }
+    ObjectStore::Transaction *ft = new ObjectStore::Transaction;
+    ft->write(meta_coll, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
+    int r = store->queue_transaction(ft);
+    assert(r == 0);
 
     if (p->first > superblock.newest_map)
       superblock.newest_map = p->first;
@@ -1985,15 +1980,10 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
 
     dout(10) << "handle_osd_map got incremental map epoch " << p->first << dendl;
-    ObjectStore::Transaction ft;
-    ft.write(meta_coll, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
-    int r = store->apply_transaction(ft);
-    if (r) {
-      char buf[80];
-      dout(0) << "error writing map: " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
-      shutdown();
-      return;
-    }
+    ObjectStore::Transaction *ft = new ObjectStore::Transaction;
+    ft->write(meta_coll, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
+    int r = store->queue_transaction(ft);
+    assert(r == 0);
 
     if (p->first > superblock.newest_map)
       superblock.newest_map = p->first;
@@ -2003,6 +1993,9 @@ void OSD::handle_osd_map(MOSDMap *m)
 
     logger->inc(l_osd_mapi);
   }
+
+  // flush new maps (so they are readable)
+  store->flush();
 
   // advance if we can
   bool advanced = false;
@@ -2036,12 +2029,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       ObjectStore::Transaction ft;
       ft.write(meta_coll, get_osdmap_pobject_name(cur+1), 0, bl.length(), bl);
       int r = store->apply_transaction(ft);
-      if (r) {
-	char buf[80];
-	dout(0) << "error writing map: " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
-	shutdown();
-	return;
-      }
+      assert(r == 0);
 
       // notify messenger
       for (map<int32_t,uint8_t>::iterator i = inc.new_down.begin();
