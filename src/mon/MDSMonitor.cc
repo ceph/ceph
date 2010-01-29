@@ -628,7 +628,7 @@ void MDSMonitor::tick()
   // make sure last_beacon is fully populated
   for (map<__u64,MDSMap::mds_info_t>::iterator p = pending_mdsmap.mds_info.begin();
        p != pending_mdsmap.mds_info.end();
-       ++p) 
+       ++p) {
     if (last_beacon.count(p->first) == 0) {
       const MDSMap::mds_info_t& info = p->second;
       dout(10) << " adding " << p->second.addr << " mds" << info.rank << "." << info.inc
@@ -637,6 +637,7 @@ void MDSMonitor::tick()
       last_beacon[p->first].stamp = g_clock.now();
       last_beacon[p->first].seq = 0;
     }
+  }
 
   if (mon->osdmon()->paxos->is_writeable()) {
 
@@ -706,13 +707,14 @@ void MDSMonitor::tick()
 	  propose_osdmap = true;
 	}
 	pending_mdsmap.mds_info.erase(gid);
-	
+	last_beacon.erase(gid);
 	do_propose = true;
       } else if (info.state == MDSMap::STATE_STANDBY_REPLAY) {
 	dout(10) << " failing " << info.addr << " mds" << info.rank << "." << info.inc
 		 << " " << ceph_mds_state_name(info.state)
 		 << dendl;
 	pending_mdsmap.mds_info.erase(gid);
+	last_beacon.erase(gid);
 	do_propose = true;
       } else if (!info.laggy()) {
 	// just mark laggy
@@ -722,8 +724,6 @@ void MDSMonitor::tick()
 	info.laggy_since = now;
 	do_propose = true;
       }
-      
-      last_beacon.erase(gid);
     }
 
     if (propose_osdmap)
