@@ -1926,7 +1926,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   disk_tp.pause_new();   // _process() may be waiting for a replica message
   
   osd_lock.Unlock();
-  store->sync_and_flush();
+  store->flush();
   osd_lock.Lock();
 
   map_lock.get_write();
