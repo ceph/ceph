@@ -387,12 +387,14 @@ void FileJournal::prepare_multi_write(bufferlist& bl)
     h.post_pad = 0;
     h.make_magic(queue_pos, header.fsid);
 
+ 
     // pad?
-    if (queue_pos + size % header.alignment) {
-      h.post_pad = header.alignment - (queue_pos + size % header.alignment);
+    if ((queue_pos + size) % header.alignment) {
+      h.post_pad = header.alignment - ((queue_pos + size) % header.alignment);
       size += h.post_pad;
-      //dout(20) << "   padding with " << pad << " bytes, queue_pos now " << queue_pos << dendl;
+      //dout(20) << "   padding with " << h.post_pad << " bytes, queue_pos now " << queue_pos << dendl;
     }
+    dout(15) << " pad " << h.pre_pad << " " << h.post_pad << " len " << h.len << dendl;
 
     bl.append((const char*)&h, sizeof(h));
     bl.claim_append(ebl);
@@ -444,7 +446,7 @@ bool FileJournal::prepare_single_dio_write(bufferlist& bl)
 
   // build it
   dout(15) << "prepare_single_dio_write will write " << write_pos << " : seq " << seq
-	   << " len " << ebl.length() << " -> " << size << dendl;
+	   << " len " << ebl.length() << " -> " << size << " (base " << base_size << ")" << dendl;
 
   bufferptr bp = buffer::create_page_aligned(size);
   entry_header_t *h = (entry_header_t*)bp.c_str();
@@ -453,6 +455,7 @@ bool FileJournal::prepare_single_dio_write(bufferlist& bl)
   h->len = ebl.length();
   h->pre_pad = 0;
   h->post_pad = size - base_size;
+  dout(15) << " pad " << h->pre_pad << " " << h->post_pad << dendl;
   h->make_magic(write_pos, header.fsid);
   ebl.copy(0, ebl.length(), bp.c_str()+sizeof(*h)+h->pre_pad);
   memcpy(bp.c_str() + sizeof(*h) + h->pre_pad + ebl.length() + h->post_pad, h, sizeof(*h));
