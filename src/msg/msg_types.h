@@ -129,13 +129,15 @@ static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
 }
 
 struct entity_addr_t {
-  __u64 nonce;
+  __u32 type;
+  __u32 nonce;
   sockaddr_storage addr;
 
-  entity_addr_t() : nonce(0) { 
+  entity_addr_t() : type(0), nonce(0) { 
     memset(&addr, 0, sizeof(addr));
   }
   entity_addr_t(const ceph_entity_addr &o) {
+    type = o.type;
     nonce = o.nonce;
     addr = o.in_addr;
     addr.ss_family = ntohs(addr.ss_family);
@@ -186,6 +188,7 @@ struct entity_addr_t {
 
   operator ceph_entity_addr() const {
     ceph_entity_addr a;
+    a.type = 0;
     a.nonce = nonce;
     a.in_addr = addr;
     a.in_addr.ss_family = htons(addr.ss_family);
@@ -223,10 +226,12 @@ struct entity_addr_t {
   }
 
   void encode(bufferlist& bl) const {
+    ::encode(type, bl);
     ::encode(nonce, bl);
     ::encode(addr, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    ::decode(type, bl);
     ::decode(nonce, bl);
     ::decode(addr, bl);
   }

@@ -42,6 +42,8 @@ protected:
   }
   
   void encode(bufferlist &bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(base, bl);
     ::encode(metablob, bl);
     ::encode(bounds, bl);
@@ -49,6 +51,8 @@ protected:
     ::encode(client_map, bl);
   }
   void decode(bufferlist::iterator &bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(base, bl);
     ::decode(metablob, bl);
     ::decode(bounds, bl);

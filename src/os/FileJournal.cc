@@ -389,10 +389,27 @@ void FileJournal::prepare_multi_write(bufferlist& bl)
     // add it this entry
     entry_header_t h;
     h.seq = seq;
+    h.flags = 0;
     h.len = ebl.length();
+    h.pre_pad = 0;
+    h.post_pad = 0;
     h.make_magic(queue_pos, header.fsid);
+
+ 
+    // pad?
+    if ((queue_pos + size) % header.alignment) {
+      h.post_pad = header.alignment - ((queue_pos + size) % header.alignment);
+      size += h.post_pad;
+      //dout(20) << "   padding with " << h.post_pad << " bytes, queue_pos now " << queue_pos << dendl;
+    }
+    dout(15) << " pad " << h.pre_pad << " " << h.post_pad << " len " << h.len << dendl;
+
     bl.append((const char*)&h, sizeof(h));
     bl.claim_append(ebl);
+    if (h.post_pad) {
+      bufferptr bp = buffer::create_static(h.post_pad, zero_buf);
+      bl.push_back(bp);
+    }
     bl.append((const char*)&h, sizeof(h));
     
     if (writeq.front().fin) {
@@ -405,15 +422,6 @@ void FileJournal::prepare_multi_write(bufferlist& bl)
     journalq.push_back(pair<__u64,off64_t>(seq, queue_pos));
 
     queue_pos += size;
-
-    // pad...
-    if (queue_pos % header.alignment) {
-      int pad = header.alignment - (queue_pos % header.alignment);
-      bufferptr bp = buffer::create_static(pad, zero_buf);
-      bl.push_back(bp);
-      queue_pos += pad;
-      //dout(20) << "   padding with " << pad << " bytes, queue_pos now " << queue_pos << dendl;
-    }
 
     if (eleft) {
       if (--eleft == 0) {
@@ -437,8 +445,8 @@ bool FileJournal::prepare_single_dio_write(bufferlist& bl)
   __u64 seq = writeq.front().seq;
   bufferlist &ebl = writeq.front().bl;
     
-  off64_t size = 2*sizeof(entry_header_t) + ebl.length();
-  size = ROUND_UP_TO(size, header.alignment);
+  off64_t base_size = 2*sizeof(entry_header_t) + ebl.length();
+  off64_t size = ROUND_UP_TO(base_size, header.alignment);
   
   if (!check_for_wrap(seq, &write_pos, size, true))
     return false;
@@ -446,15 +454,19 @@ bool FileJournal::prepare_single_dio_write(bufferlist& bl)
 
   // build it
   dout(15) << "prepare_single_dio_write will write " << write_pos << " : seq " << seq
-	   << " len " << ebl.length() << " -> " << size << dendl;
+	   << " len " << ebl.length() << " -> " << size << " (base " << base_size << ")" << dendl;
 
   bufferptr bp = buffer::create_page_aligned(size);
   entry_header_t *h = (entry_header_t*)bp.c_str();
   h->seq = seq;
+  h->flags = 0;
   h->len = ebl.length();
+  h->pre_pad = 0;
+  h->post_pad = size - base_size;
+  dout(15) << " pad " << h->pre_pad << " " << h->post_pad << dendl;
   h->make_magic(write_pos, header.fsid);
-  ebl.copy(0, ebl.length(), bp.c_str()+sizeof(*h));
-  memcpy(bp.c_str() + sizeof(*h) + ebl.length(), h, sizeof(*h));
+  ebl.copy(0, ebl.length(), bp.c_str()+sizeof(*h)+h->pre_pad);
+  memcpy(bp.c_str() + sizeof(*h) + h->pre_pad + ebl.length() + h->post_pad, h, sizeof(*h));
   bl.push_back(bp);
   
   if (writeq.front().fin) {
@@ -531,7 +543,8 @@ void FileJournal::do_write(bufferlist& bl)
   writing = false;
 
   write_pos += bl.length();
-  write_pos = ROUND_UP_TO(write_pos, header.alignment);
+  //write_pos = ROUND_UP_TO(write_pos, header.alignment);
+  assert(write_pos % header.alignment == 0);
 
   // kick finisher?  
   //  only if we haven't filled up recently!
@@ -722,9 +735,15 @@ bool FileJournal::read_entry(bufferlist& bl, __u64& seq)
     return false;
   }
 
+  if (h.pre_pad)
+    ::lseek64(fd, h.pre_pad, SEEK_CUR);
+
   // body
   bufferptr bp(h.len);
   ::read(fd, bp.c_str(), h.len);
+
+  if (h.post_pad)
+    ::lseek64(fd, h.post_pad, SEEK_CUR);
 
   // footer
   entry_header_t f;
@@ -760,8 +779,9 @@ bool FileJournal::read_entry(bufferlist& bl, __u64& seq)
   seq = h.seq;
   journalq.push_back(pair<__u64,off64_t>(h.seq, read_pos));
 
-  read_pos += 2*sizeof(entry_header_t) + h.len;
-  read_pos = ROUND_UP_TO(read_pos, header.alignment);
+  read_pos += 2*sizeof(entry_header_t) + h.pre_pad + h.len + h.post_pad;
+  assert(read_pos % header.alignment == 0);
+  //read_pos = ROUND_UP_TO(read_pos, header.alignment);
   
   return true;
 }

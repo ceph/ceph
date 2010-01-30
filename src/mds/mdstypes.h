@@ -478,11 +478,15 @@ struct old_inode_t {
   map<string,bufferptr> xattrs;
 
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(first, bl);
     ::encode(inode, bl);
     ::encode(xattrs, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(first, bl);
     ::decode(inode, bl);
     ::decode(xattrs, bl);
@@ -529,11 +533,15 @@ struct old_rstat_t {
   nest_info_t rstat, accounted_rstat;
 
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(first, bl);
     ::encode(rstat, bl);
     ::encode(accounted_rstat, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(first, bl);
     ::decode(rstat, bl);
     ::decode(accounted_rstat, bl);    
@@ -625,10 +633,14 @@ struct string_snap_t {
   string_snap_t(const nstring& n, snapid_t s) : name(n), snapid(s) {}
   string_snap_t(const char *n, snapid_t s) : name(n), snapid(s) {}
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(name, bl);
     ::encode(snapid, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 struct_v = 1;
+    ::decode(struct_v, bl);
     ::decode(name, bl);
     ::decode(snapid, bl);
   }
@@ -736,10 +748,9 @@ WRITE_CLASS_ENCODER(cap_reconnect_t)
 struct dirfrag_t {
   inodeno_t ino;
   frag_t    frag;
-  uint32_t  _pad;
 
-  dirfrag_t() : ino(0), _pad(0) { }
-  dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f), _pad(0) { }
+  dirfrag_t() : ino(0) { }
+  dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f) { }
 };
 
 inline void encode(const dirfrag_t &f, bufferlist& bl) { 
@@ -800,10 +811,14 @@ public:
       vec[i].reset(now);
   }
   void encode(bufferlist &bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     for (int i=0; i<NUM; i++)
       ::encode(vec[i], bl);
   }
   void decode(bufferlist::iterator &p) {
+    __u8 struct_v;
+    ::decode(struct_v, p);
     for (int i=0; i<NUM; i++)
       ::decode(vec[i], p);
   }
@@ -816,10 +831,14 @@ public:
   DecayCounter vec[NUM];
 
   void encode(bufferlist &bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     for (int i=0; i<NUM; i++)
       ::encode(vec[i], bl);
   }
   void decode(bufferlist::iterator &p) {
+    __u8 struct_v;
+    ::decode(struct_v, p);
     for (int i=0; i<NUM; i++)
       ::decode(vec[i], p);
   }
@@ -914,6 +933,8 @@ struct mds_load_t {
   double mds_load();  // defiend in MDBalancer.cc
 
   void encode(bufferlist &bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(auth, bl);
     ::encode(all, bl);
     ::encode(req_rate, bl);
@@ -922,6 +943,8 @@ struct mds_load_t {
     ::encode(cpu_load_avg, bl);
   }
   void decode(bufferlist::iterator &bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(auth, bl);
     ::decode(all, bl);
     ::decode(req_rate, bl);
@@ -1055,12 +1078,16 @@ public:
   MDSCacheObjectInfo() : ino(0) {}
 
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(ino, bl);
     ::encode(dirfrag, bl);
     ::encode(dname, bl);
     ::encode(snapid, bl);
   }
   void decode(bufferlist::iterator& p) {
+    __u8 struct_v;
+    ::decode(struct_v, p);
     ::decode(ino, p);
     ::decode(dirfrag, p);
     ::decode(dname, p);

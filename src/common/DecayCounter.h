@@ -42,6 +42,8 @@ public:
  public:
 
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(half_life, bl);
     ::encode(k, bl);
     ::encode(val, bl);
@@ -49,6 +51,8 @@ public:
     ::encode(vel, bl);
   }
   void decode(bufferlist::iterator &p) {
+    __u8 struct_v;
+    ::decode(struct_v, p);
     ::decode(half_life, p);
     ::decode(k, p);
     ::decode(val, p);

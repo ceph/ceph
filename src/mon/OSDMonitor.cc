@@ -433,6 +433,10 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     pending_inc.new_down[from] = false;
     
     paxos->wait_for_commit(new C_RetryMessage(this, m));
+  } else if (pending_inc.new_up.count(from)) {
+    // already prepared, just wait
+    dout(7) << "prepare_boot already prepared, waiting on " << m->get_orig_source_addr() << dendl;
+    paxos->wait_for_commit(new C_Booted(this, m, false));
   } else {
     // mark new guy up.
     down_pending_out.erase(from);  // if any

@@ -43,11 +43,15 @@ struct osd_reqid_t {
   osd_reqid_t() : tid(0), inc(0) {}
   osd_reqid_t(const entity_name_t& a, int i, tid_t t) : name(a), tid(t), inc(i) {}
   void encode(bufferlist &bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(name, bl);
     ::encode(tid, bl);
     ::encode(inc, bl);
   }
   void decode(bufferlist::iterator &bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(name, bl);
     ::decode(tid, bl);
     ::decode(inc, bl);
@@ -267,10 +271,14 @@ struct coll_t {
   }
 
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(pgid, bl);
     ::encode(snap, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(pgid, bl);
     ::decode(snap, bl);
   }
@@ -520,11 +528,15 @@ struct pool_snap_info_t {
   nstring name;
 
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(snapid, bl);
     ::encode(stamp, bl);
     ::encode(name, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(snapid, bl);
     ::decode(stamp, bl);
     ::decode(name, bl);
@@ -1218,11 +1230,15 @@ struct ScrubMap {
     map<nstring,bufferptr> attrs;
 
     void encode(bufferlist& bl) const {
+      __u8 struct_v = 1;
+      ::encode(struct_v, bl);
       ::encode(poid, bl);
       ::encode(size, bl);
       ::encode(attrs, bl);
     }
     void decode(bufferlist::iterator& bl) {
+      __u8 struct_v;
+      ::decode(struct_v, bl);
       ::decode(poid, bl);
       ::decode(size, bl);
       ::decode(attrs, bl);
@@ -1235,11 +1251,15 @@ struct ScrubMap {
   bufferlist logbl;
 
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(objects, bl);
     ::encode(attrs, bl);
     ::encode(logbl, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(objects, bl);
     ::decode(attrs, bl);
     ::decode(logbl, bl);

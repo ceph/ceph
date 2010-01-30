@@ -68,17 +68,15 @@ pending mds format changes
 
 pending osd format changes
 - current/ subdir 
-- compat/incompat flags
+/- compat/incompat flags
 
 pending mon format changes
-- add v to PGMap, PGMap::Incremental
-  - others?
-- compat/incompat flags
+/- add v to PGMap, PGMap::Incremental
+ /- others?
+/- compat/incompat flags
 
 bugs
-- 'mount.ceph server:/ relpath' puts relpath (not canonicalized name) in /etc/mtab. df gets confused
-uml:~# grep ceph /etc/mtab
-10.0.1.252:/ mnt ceph rw 0 0
+/- 'mount.ceph server:/ relpath' puts relpath (not canonicalized name) in /etc/mtab. df gets confused
 
 - kclient: on umount -f
 [ 4683.361323] INFO: task umount:15840 blocked for more than 120 seconds.
@@ -122,7 +120,7 @@ uml:~# grep ceph /etc/mtab
 09.12.21 14:09:33.634137    log 09.12.21 14:09:32.614726 mon0 10.3.14.128:6789/0/0 200 : [INF] osd6 10.3.14.133:6800/14770/0 boot
 09.12.21 14:09:33.634148    log 09.12.21 14:09:32.615444 mon0 10.3.14.128:6789/0/0 201 : [INF] osd6 10.3.14.133:6800/14770/0 boot
 
-- fix mon delay when starting new mds, when current mds is already laggy
+/- fix mon delay when starting new mds, when current mds is already laggy
 
 - bonnie++ -u root -d /mnt/ceph/ -s 0 -n 1
 (03:35:29 PM) Isteriat: Using uid:0, gid:0.

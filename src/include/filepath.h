@@ -181,11 +181,15 @@ class filepath {
 
   // encoding
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(ino, bl);
     ::encode(path, bl);
   }
   void decode(bufferlist::iterator& blp) {
     bits.clear();
+    __u8 struct_v;
+    ::decode(struct_v, blp);
     ::decode(ino, blp);
     ::decode(path, blp);
   }

@@ -47,6 +47,8 @@ class ESession : public LogEvent {
     inos(i), inotablev(iv) { }
 
   void encode(bufferlist &bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(client_inst, bl);
     ::encode(open, bl);
     ::encode(cmapv, bl);
@@ -54,6 +56,8 @@ class ESession : public LogEvent {
     ::encode(inotablev, bl);
   }
   void decode(bufferlist::iterator &bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(client_inst, bl);
     ::decode(open, bl);
     ::decode(cmapv, bl);

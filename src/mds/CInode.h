@@ -408,6 +408,8 @@ private:
   void encode_parent_mutation(ObjectOperation& m);
 
   void encode_store(bufferlist& bl) {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(inode, bl);
     if (is_symlink())
       ::encode(symlink, bl);
@@ -419,6 +421,8 @@ private:
     ::encode(old_inodes, bl);
   }
   void decode_store(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(inode, bl);
     if (is_symlink())
       ::decode(symlink, bl);

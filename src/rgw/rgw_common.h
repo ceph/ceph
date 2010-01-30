@@ -163,6 +163,8 @@ struct RGWObjEnt {
   char etag[MD5_DIGEST_LENGTH * 2 + 1];
 
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     __u64 s = size;
     __u32 mt = mtime;
     ::encode(name, bl);
@@ -170,6 +172,8 @@ struct RGWObjEnt {
     ::encode(mt, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     __u32 mt;
     __u64 s;
     ::decode(name, bl);

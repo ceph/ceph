@@ -31,11 +31,15 @@ public:
     __s32 mds;
     version_t tid;
     void encode(bufferlist& bl) const {
+      __u8 struct_v = 1;
+      ::encode(struct_v, bl);
       ::encode(reqid, bl);
       ::encode(mds, bl);
       ::encode(tid, bl);
     }
     void decode(bufferlist::iterator& bl) {
+      __u8 struct_v;
+      ::decode(struct_v, bl);
       ::decode(reqid, bl);
       ::decode(mds, bl);
       ::decode(tid, bl);

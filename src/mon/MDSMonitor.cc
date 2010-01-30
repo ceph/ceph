@@ -628,7 +628,7 @@ void MDSMonitor::tick()
   // make sure last_beacon is fully populated
   for (map<__u64,MDSMap::mds_info_t>::iterator p = pending_mdsmap.mds_info.begin();
        p != pending_mdsmap.mds_info.end();
-       ++p) 
+       ++p) {
     if (last_beacon.count(p->first) == 0) {
       const MDSMap::mds_info_t& info = p->second;
       dout(10) << " adding " << p->second.addr << " mds" << info.rank << "." << info.inc
@@ -637,6 +637,7 @@ void MDSMonitor::tick()
       last_beacon[p->first].stamp = g_clock.now();
       last_beacon[p->first].seq = 0;
     }
+  }
 
   if (mon->osdmon()->paxos->is_writeable()) {
 
@@ -673,7 +674,7 @@ void MDSMonitor::tick()
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sgid];
 	dout(10) << " replacing " << info.addr << " mds" << info.rank << "." << info.inc
 		 << " " << ceph_mds_state_name(info.state)
-		 << " with " << sgid << "/" << si.name << " " << info.addr << dendl;
+		 << " with " << sgid << "/" << si.name << " " << si.addr << dendl;
 	switch (info.state) {
 	case MDSMap::STATE_CREATING:
 	case MDSMap::STATE_STARTING:
@@ -698,23 +699,22 @@ void MDSMonitor::tick()
 	  si.inc = ++pending_mdsmap.inc[info.rank];
 	  pending_mdsmap.up[info.rank] = sgid;
 	  pending_mdsmap.last_failure = pending_mdsmap.epoch;
-	}
 
-	if (si.state > 0) {
-	  // blacklist
+	  // blacklist laggy mds
 	  utime_t until = now;
 	  until += g_conf.mds_blacklist_interval;
 	  mon->osdmon()->blacklist(info.addr, until);
 	  propose_osdmap = true;
 	}
 	pending_mdsmap.mds_info.erase(gid);
-	
+	last_beacon.erase(gid);
 	do_propose = true;
       } else if (info.state == MDSMap::STATE_STANDBY_REPLAY) {
 	dout(10) << " failing " << info.addr << " mds" << info.rank << "." << info.inc
 		 << " " << ceph_mds_state_name(info.state)
 		 << dendl;
 	pending_mdsmap.mds_info.erase(gid);
+	last_beacon.erase(gid);
 	do_propose = true;
       } else if (!info.laggy()) {
 	// just mark laggy
@@ -724,8 +724,6 @@ void MDSMonitor::tick()
 	info.laggy_since = now;
 	do_propose = true;
       }
-      
-      last_beacon.erase(gid);
     }
 
     if (propose_osdmap)

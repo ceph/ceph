@@ -32,6 +32,8 @@ struct link_rollback {
   utime_t old_dir_rctime;
 
   void encode(bufferlist &bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(reqid, bl);
     ::encode(ino, bl);
     ::encode(was_inc, bl);
@@ -40,6 +42,8 @@ struct link_rollback {
     ::encode(old_dir_rctime, bl);
   }
   void decode(bufferlist::iterator &bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(reqid, bl);
     ::decode(ino, bl);
     ::decode(was_inc, bl);
@@ -61,6 +65,8 @@ struct rename_rollback {
     utime_t old_ctime;
     
     void encode(bufferlist &bl) const {
+      __u8 struct_v = 1;
+      ::encode(struct_v, bl);
       ::encode(dirfrag, bl);
       ::encode(dirfrag_old_mtime, bl);
       ::encode(dirfrag_old_rctime, bl);
@@ -71,6 +77,8 @@ struct rename_rollback {
       ::encode(old_ctime, bl);
    } 
     void decode(bufferlist::iterator &bl) {
+      __u8 struct_v;
+      ::decode(struct_v, bl);
       ::decode(dirfrag, bl);
       ::decode(dirfrag_old_mtime, bl);
       ::decode(dirfrag_old_rctime, bl);
@@ -89,6 +97,8 @@ struct rename_rollback {
   utime_t ctime;
 
   void encode(bufferlist &bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(reqid, bl);
     encode(orig_src, bl);
     encode(orig_dest, bl);
@@ -96,6 +106,8 @@ struct rename_rollback {
     ::encode(ctime, bl);
  }
   void decode(bufferlist::iterator &bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(reqid, bl);
     decode(orig_src, bl);
     decode(orig_dest, bl);
@@ -149,6 +161,8 @@ public:
   }
 
   void encode(bufferlist &bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(type, bl);
     ::encode(reqid, bl);
     ::encode(master, bl);
@@ -158,6 +172,8 @@ public:
     ::encode(rollback, bl);
   } 
   void decode(bufferlist::iterator &bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(type, bl);
     ::decode(reqid, bl);
     ::decode(master, bl);

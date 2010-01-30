@@ -46,6 +46,8 @@ public:
     nref(nr), updated(u) { }
   
   void encode(bufferlist &bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(ino, bl);
     ::encode(dirino, bl);
     ::encode(dn_hash, bl);
@@ -53,6 +55,8 @@ public:
     ::encode(updated, bl);
   }
   void decode(bufferlist::iterator &bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(ino, bl);
     ::decode(dirino, bl);
     ::decode(dn_hash, bl);

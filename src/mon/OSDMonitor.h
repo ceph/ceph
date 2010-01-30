@@ -93,11 +93,12 @@ private:
   struct C_Booted : public Context {
     OSDMonitor *cmon;
     MOSDBoot *m;
-    C_Booted(OSDMonitor *cm, MOSDBoot *m_) : 
-      cmon(cm), m(m_) {}
+    bool logit;
+    C_Booted(OSDMonitor *cm, MOSDBoot *m_, bool l=true) : 
+      cmon(cm), m(m_), logit(l) {}
     void finish(int r) {
       if (r >= 0)
-	cmon->_booted(m, true);
+	cmon->_booted(m, logit);
       else
 	cmon->dispatch((PaxosServiceMessage*)m);
     }
