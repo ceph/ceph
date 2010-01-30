@@ -226,10 +226,52 @@ public:
     bool registered; 
     ObjectState obs;
 
+    Mutex lock;
+    Cond cond;
+    int unstable_writes, readers, writers_waiting, readers_waiting;
+
     ObjectContext(const sobject_t& s) :
-      ref(0), registered(false), obs(s) {}
+      ref(0), registered(false), obs(s),
+      lock("ReplicatedPG::ObjectContext::lock"),
+      unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0) {}
 
     void get() { ++ref; }
+
+    // do simple synchronous mutual exclusion, for now.  now waitqueues or anything fancy.
+    void ondisk_write_lock() {
+      lock.Lock();
+      writers_waiting++;
+      while (readers_waiting || readers)
+	cond.Wait(lock);
+      writers_waiting--;
+      unstable_writes++;
+      lock.Unlock();
+    }
+    void ondisk_write_unlock() {
+      lock.Lock();
+      assert(unstable_writes > 0);
+      unstable_writes--;
+      if (!unstable_writes && readers_waiting)
+	cond.Signal();
+      lock.Unlock();
+    }
+    void ondisk_read_lock() {
+      lock.Lock();
+      readers_waiting++;
+      while (unstable_writes)
+	cond.Wait(lock);
+      readers_waiting--;
+      readers++;
+      lock.Unlock();
+    }
+    void ondisk_read_unlock() {
+      lock.Lock();
+      assert(readers > 0);
+      readers--;
+      if (!readers && writers_waiting)
+	cond.Signal();
+      lock.Unlock();
+    }
   };
 
 
