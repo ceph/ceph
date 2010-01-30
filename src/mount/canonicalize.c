@@ -27,8 +27,7 @@
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
-
-#include "canonicalize.h"
+#include <limits.h>
 
 #ifndef MAXSYMLINKS
 # define MAXSYMLINKS 256
