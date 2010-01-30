@@ -116,8 +116,9 @@ private:
   void write_thread_entry();
 
   bool check_for_wrap(__u64 seq, off64_t *pos, off64_t size, bool can_wrap);
-  bool prepare_single_dio_write(bufferlist& bl);
   void prepare_multi_write(bufferlist& bl);
+  bool prepare_single_write(bufferlist& bl, off64_t& queue_pos, bool can_wrap);
+  bool prepare_single_dio_write(bufferlist& bl, off64_t& queue_pos, bool can_wrap);
   void do_write(bufferlist& bl);
 
   class Writer : public Thread {
