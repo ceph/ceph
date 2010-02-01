@@ -247,6 +247,8 @@ void AuthMonitor::init()
     if (v) {
       dout(0) << "AuthMonitor::init() startup: loading summary e" << v << dendl;
       bufferlist::iterator p = latest.begin();
+      __u8 v;
+      ::decode(v, p);
       ::decode(max_global_id, p);
       ::decode(mon->key_server, p);
     }
