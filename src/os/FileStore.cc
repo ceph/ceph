@@ -567,8 +567,8 @@ void FileStore::op_entry()
       delete o;
 
       op_lock.Lock();
-      op_empty_cond.Signal();
     }
+    op_empty_cond.Signal();
     if (stop)
       break;
     op_cond.Wait(op_lock);
