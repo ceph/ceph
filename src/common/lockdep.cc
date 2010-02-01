@@ -210,14 +210,18 @@ int lockdep_locked(const char *name, int id, bool force_backtrace)
   return id;
 }
 
-int lockdep_unlocked(const char *name, int id)
+int lockdep_will_unlock(const char *name, int id)
 {
   pthread_t p = pthread_self();
   
-  if (id < 0) id = lockdep_register(name);
+  if (id < 0) {
+    //id = lockdep_register(name);
+    assert(id == -1);
+    return id;
+  }
 
   pthread_mutex_lock(&lockdep_mutex);
-  dout(20) << "_unlocked " << name << std::endl;
+  dout(20) << "_will_unlock " << name << std::endl;
 
   // don't assert.. lockdep may be enabled at any point in time
   //assert(held.count(p));

@@ -45,14 +45,14 @@ private:
   void _locked() {    // just locked
     id = lockdep_locked(name, id, backtrace);
   }
-  void _unlocked() {  // just unlocked
-    id = lockdep_unlocked(name, id);
+  void _will_unlock() {  // about to unlock
+    id = lockdep_will_unlock(name, id);
   }
 #else
   void _register() {}
   void _will_lock() {} // about to lock
   void _locked() {}    // just locked
-  void _unlocked() {}  // just unlocked
+  void _will_unlock() {}  // about to unlock
 #endif
 
 public:
@@ -90,9 +90,9 @@ public:
   void unlock() {
     assert(nlock > 0);
     --nlock;
+    if (lockdep && g_lockdep) _will_unlock();
     int r = pthread_spin_unlock(&_s);
     assert(r == 0);
-    if (lockdep && g_lockdep) _unlocked();
   }
 
 public:

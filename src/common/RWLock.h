@@ -39,7 +39,7 @@ class RWLock
   }
 
   void unlock() {
-    if (g_lockdep) id = lockdep_unlocked(name, id);
+    if (g_lockdep) id = lockdep_will_unlock(name, id);
     pthread_rwlock_unlock(&L);
   }
 
