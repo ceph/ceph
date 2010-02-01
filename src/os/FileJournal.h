@@ -132,10 +132,7 @@ private:
   } write_thread;
 
   off64_t get_top() {
-    if (directio)
-      return block_size;
-    else
-      return sizeof(header);
+    return ROUND_UP_TO(sizeof(header), block_size);
   }
 
  public:

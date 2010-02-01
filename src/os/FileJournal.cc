@@ -34,7 +34,7 @@ int FileJournal::_open(bool forwrite, bool create)
 
   if (forwrite) {
     flags = O_RDWR;
-    if (directio) flags |= O_DIRECT;
+    if (directio) flags |= O_DIRECT | O_SYNC;
   } else {
     flags = O_RDONLY;
   }
@@ -88,7 +88,9 @@ int FileJournal::_open(bool forwrite, bool create)
   memset(zero_buf, 0, header.alignment);
 
   dout(2) << "_open " << fn << " fd " << fd 
-	  << ": " << max_size << " bytes, block size " << block_size << dendl;
+	  << ": " << max_size 
+	  << " bytes, block size " << block_size
+	  << " bytes, directio = " << directio << dendl;
 
   return 0;
 }
@@ -107,7 +109,7 @@ int FileJournal::create()
   header.fsid = fsid;
   header.max_size = max_size;
   header.block_size = block_size;
-  if (directio)
+  if (g_conf.journal_block_align || directio)
     header.alignment = block_size;
   else
     header.alignment = 16;  // at least stay word aligned on 64bit machines...
@@ -450,6 +452,8 @@ void FileJournal::do_write(bufferlist& bl)
 	   << (hbp.length() ? " + header":"")
 	   << dendl;
   
+  utime_t from = g_clock.now();
+
   // header
   if (hbp.length())
     ::pwrite(fd, hbp.c_str(), hbp.length(), 0);
@@ -484,14 +488,18 @@ void FileJournal::do_write(bufferlist& bl)
     pos += (*it).length();
   }
   if (!directio) {
-    dout(20) << "do_write fsync start" << dendl;
+    dout(20) << "do_write fsync" << dendl;
 #ifdef DARWIN
     ::fsync(fd);
 #else
     ::fdatasync(fd);
+    //::sync_file_range(fd, write_pos, bl.length(),
+    //SYNC_FILE_RANGE_WAIT_BEFORE|SYNC_FILE_RANGE_WRITE|SYNC_FILE_RANGE_WAIT_AFTER);
 #endif
-    dout(20) << "do_write fsync finish" << dendl;
   }
+
+  utime_t lat = g_clock.now() - from;    
+  dout(20) << "do_write latency " << lat << dendl;
 
   write_lock.Lock();    
 
