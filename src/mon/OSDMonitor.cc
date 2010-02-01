@@ -946,9 +946,11 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       m->cmd.erase(m->cmd.begin());
       if (m->cmd[0] == "*") {
 	m->cmd.erase(m->cmd.begin()); //and now we're done with the target num
-	for (int i = 0; i < osdmap.get_max_osd(); ++i) {
-	  mon->send_command(osdmap.get_inst(i), m->cmd, paxos->get_version());
-	}
+	for (int i = 0; i < osdmap.get_max_osd(); ++i)
+	  if (osdmap.is_up(i))
+	    mon->send_command(osdmap.get_inst(i), m->cmd, paxos->get_version());
+	r = 0;
+	ss << "ok";
       } else {
 	errno = 0;
 	int who = strtol(m->cmd[0].c_str(), 0, 10);
