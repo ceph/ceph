@@ -534,9 +534,11 @@ void FileJournal::do_write(bufferlist& bl)
 #ifdef DARWIN
     ::fsync(fd);
 #else
-    ::fdatasync(fd);
-    //::sync_file_range(fd, write_pos, bl.length(),
-    //SYNC_FILE_RANGE_WAIT_BEFORE|SYNC_FILE_RANGE_WRITE|SYNC_FILE_RANGE_WAIT_AFTER);
+    if (is_bdev)
+      ::sync_file_range(fd, write_pos, bl.length(),
+			SYNC_FILE_RANGE_WAIT_BEFORE|SYNC_FILE_RANGE_WRITE|SYNC_FILE_RANGE_WAIT_AFTER);
+    else
+      ::fdatasync(fd);
 #endif
   }
 
