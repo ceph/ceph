@@ -36,13 +36,11 @@ public:
     __u32 block_size;
     __u32 alignment;
     __s64 max_size;   // max size of journal ring buffer
-    __s64 wrap;       // wrap byte pos (if any)
     __s64 start;      // offset of first entry
 
-    header_t() : version(1), flags(0), fsid(0), block_size(0), alignment(0), max_size(0), wrap(0), start(0) {}
+    header_t() : version(1), flags(0), fsid(0), block_size(0), alignment(0), max_size(0), start(0) {}
 
     void clear() {
-      wrap = 0;
       start = block_size;
     }
   } header;
@@ -116,11 +114,14 @@ private:
   void stop_writer();
   void write_thread_entry();
 
-  bool check_for_wrap(__u64 seq, off64_t *pos, off64_t size, bool can_wrap);
+  bool check_for_full(__u64 seq, off64_t pos, off64_t size);
   void prepare_multi_write(bufferlist& bl);
-  bool prepare_single_write(bufferlist& bl, off64_t& queue_pos, bool can_wrap);
-  bool prepare_single_dio_write(bufferlist& bl, off64_t& queue_pos, bool can_wrap);
+  bool prepare_single_write(bufferlist& bl, off64_t& queue_pos);
+  bool prepare_single_dio_write(bufferlist& bl, off64_t& queue_pos);
   void do_write(bufferlist& bl);
+
+  void write_bl(off64_t& pos, bufferlist& bl);
+  void wrap_read_bl(off64_t& pos, int64_t len, bufferlist& bl);
 
   class Writer : public Thread {
     FileJournal *journal;
