@@ -73,6 +73,7 @@ private:
 
   off64_t max_size;
   size_t block_size;
+  bool is_bdev;
   bool directio;
   bool writing, must_write_header;
   off64_t write_pos;      // byte where the next entry to be written will go
@@ -140,7 +141,7 @@ private:
     Journal(fsid, fin, sync_cond), fn(f),
     zero_buf(NULL),
     max_size(0), block_size(0),
-    directio(dio),
+    is_bdev(false),directio(dio),
     writing(false), must_write_header(false),
     write_pos(0), read_pos(0),
     last_committed_seq(0), 

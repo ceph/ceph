@@ -14,6 +14,7 @@
 
 #include "config.h"
 #include "FileJournal.h"
+#include "include/color.h"
 
 #include <stdio.h>
 #include <sys/types.h>
@@ -81,7 +82,48 @@ int FileJournal::_open(bool forwrite, bool create)
     max_size = sectors * 512ULL;
 # endif
 #endif
+    is_bdev = true;
   }
+
+  // try to check if the disk write cache is on
+  if (is_bdev) {
+    if (geteuid() == 0) {
+      char cmd[4096];
+      snprintf(cmd, sizeof(cmd), "/sbin/hdparm -W %s > /tmp/out.%d", fn.c_str(), getpid());
+      int r = system(cmd);
+      if (r == 0) {
+	snprintf(cmd, sizeof(cmd), "/tmp/out.%d", getpid());
+	FILE *f = fopen(cmd, "r");
+	if (f) {
+	  while (!feof(f)) {
+	    char s[100];
+	    fgets(s, sizeof(s), f);
+	    int on;
+	    if (sscanf(s, " write-caching =  %d", &on) == 1) {
+	      if (on) {
+		dout(0) << "WARNING: disk write cache is ON, journaling will not be reliable" << dendl;
+		dout(0) << "         disable with 'hdparm -W 0 " << fn << "'" << dendl;
+		cout << TEXT_RED
+		     << " ** WARNING: disk write cache is ON on " << fn << ".\n"
+		     << "    Journaling will not be reliable.  Disable write cache with\n"
+		     << "    'hdparm -W 0 " << fn << "'"
+		     << TEXT_NORMAL
+		     << std::endl;
+	      } else {
+		dout(10) << "_open disk write cache is off (good) on " << fn << dendl;
+	      }
+	      break;
+	    }
+	  }
+	  fclose(f);
+	}
+	::unlink(cmd);
+      } else
+	dout(10) << "_open failed to run '" << cmd << "', NOT checking disk write cache on " << fn << dendl;      
+    } else
+      dout(10) << "_open not root, NOT checking disk write cache on " << fn << dendl;
+  } else
+    dout(10) << "_open journal is not a block device, NOT checking disk write cache on " << fn << dendl;
 
   // static zeroed buffer for alignment padding
   zero_buf = new char[header.alignment];
