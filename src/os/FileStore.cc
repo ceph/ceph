@@ -534,13 +534,35 @@ int FileStore::umount()
 void FileStore::queue_op(__u64 op_seq, list<Transaction*>& tls, Context *onreadable,
 			 Context *oncommit)
 {
-  op_lock.Lock();
   Op *o = new Op;
-  dout(10) << "queue_op " << o << " " << op_seq << dendl;
+
+  __u64 bytes = 0, ops = 0;
+  for (list<Transaction*>::iterator p = tls.begin();
+       p != tls.end();
+       p++) {
+    bytes += (*p)->get_num_bytes();
+    ops += (*p)->get_num_ops();
+  }
+
+  op_lock.Lock();
+
+  while ((g_conf.filestore_queue_max_ops && op_queue_len >= (unsigned)g_conf.filestore_queue_max_ops) ||
+	 (g_conf.filestore_queue_max_bytes && op_queue_bytes >= (unsigned)g_conf.filestore_queue_max_bytes)) {
+    dout(2) << "queue_op " << o << " throttle: "
+	     << op_queue_len << " > " << g_conf.filestore_queue_max_ops << " ops || "
+	     << op_queue_bytes << " > " << g_conf.filestore_queue_max_bytes << dendl;
+    op_throttle_cond.Wait(op_lock);
+  }
+  op_queue_len++;
+  op_queue_bytes += bytes;
+
+  dout(10) << "queue_op " << o << " seq " << op_seq << " " << bytes << " bytes" << dendl;
   o->op = op_seq;
   o->tls.swap(tls);
   o->onreadable = onreadable;
   o->oncommit = oncommit;
+  o->ops = ops;
+  o->bytes = bytes;
   op_queue.push_back(o);
   op_cond.Signal();
   op_lock.Unlock();
@@ -564,9 +586,14 @@ void FileStore::op_entry()
 
       op_finisher.queue(o->onreadable, r);
 
-      delete o;
-
       op_lock.Lock();
+
+      op_queue_len--;
+      op_queue_bytes -= o->bytes;
+      op_throttle_cond.Signal();
+      dout(10) << "op_entry finished " << o->bytes << " bytes, queue now "
+	       << op_queue_len << " ops, " << op_queue_bytes << " bytes" << dendl;
+      delete o;
     }
     op_empty_cond.Signal();
     if (stop)

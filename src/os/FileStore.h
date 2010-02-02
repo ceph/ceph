@@ -85,12 +85,14 @@ class FileStore : public JournalingObjectStore {
     __u64 op;
     list<Transaction*> tls;
     Context *onreadable, *oncommit;
+    __u64 ops, bytes;
   };
 
   Finisher op_finisher;
   Mutex op_lock;
-  Cond op_cond, op_empty_cond;
+  Cond op_cond, op_empty_cond, op_throttle_cond;
   list<Op*> op_queue;
+  __u64 op_queue_len, op_queue_bytes;
   void op_entry();
   struct OpThread : public Thread {
     FileStore *fs;
@@ -130,7 +132,7 @@ class FileStore : public JournalingObjectStore {
     collections(this), fake_collections(false),
     lock("FileStore::lock"),
     sync_epoch(0), stop(false), sync_thread(this),
-    op_lock("FileStore::op_lock"), op_thread(this),
+    op_lock("FileStore::op_lock"), op_queue_len(0), op_queue_bytes(0), op_thread(this),
     flusher_queue_len(0), flusher_thread(this) { }
 
   int mount();
