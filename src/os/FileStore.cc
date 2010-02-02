@@ -21,6 +21,8 @@
 
 #include "osd/osd_types.h"
 
+#include "include/color.h"
+
 #include "common/Timer.h"
 
 #include <unistd.h>
@@ -488,6 +490,34 @@ int FileStore::mount()
   } else {
     dout(0) << "mount did NOT detect btrfs" << dendl;
     btrfs = 0;
+  }
+
+
+  // sanity check(s)
+  if (!btrfs) {
+    if (!journal || !g_conf.filestore_journal_writeahead) {
+      dout(0) << "mount WARNING: no btrfs, and no journal in writeahead mode; data may be lost" << dendl;
+      cerr << TEXT_RED 
+	   << " ** WARNING: no btrfs AND (no journal OR journal not in writeahead mode)\n"
+	   << "             For non-btrfs volumes, a writeahead journal is required to\n"
+	   << "             maintain on-disk consistency in the event of a crash.  Your conf\n"
+	   << "             should include something like:\n"
+	   << "        osd journal = /path/to/journal_device_or_file\n"
+	   << "        filestore journal writeahead = true\n"
+	   << TEXT_NORMAL;
+    }
+  }
+
+  if (!journal && g_conf.filestore_max_sync_interval > 2.0) {
+    dout(0) << "mount WARNING: no journal, and max_sync_interval is large (>2seconds)" << dendl;
+    cerr << TEXT_YELLOW
+	 << " ** WARNING: No journal, and sync interval is large (" << g_conf.filestore_max_sync_interval << ").\n"
+	 << "             If you will not be using an osd journal, you should decrease the\n"
+	 << "             filestore_max_sync_interval, or else the commit latency will be\n"
+	 << "             very high.  For example,\n"
+	 << "        filestore max sync interval = .2   ; 200 ms commit interval\n"
+	 << TEXT_NORMAL;
+
   }
 
   // all okay.
