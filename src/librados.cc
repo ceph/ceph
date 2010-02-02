@@ -139,6 +139,7 @@ public:
     Mutex lock;
     Cond cond;
     int ref, rval;
+    bool released;
     bool ack, safe;
 
     rados_callback_t callback;
@@ -150,7 +151,7 @@ public:
     unsigned maxlen;
 
     AioCompletion() : lock("RadosClient::AioCompletion::lock"),
-		      ref(1), rval(0), ack(false), safe(false), 
+		      ref(1), rval(0), released(false), ack(false), safe(false), 
 		      callback(0), callback_arg(0),
 		      pbl(0), buf(0), maxlen(0) { }
 
@@ -196,11 +197,22 @@ public:
 
     void get() {
       lock.Lock();
+      assert(ref > 0);
       ref++;
       lock.Unlock();
     }
+    void release() {
+      lock.Lock();
+      assert(!released);
+      released = true;
+      put_unlock();
+    }
     void put() {
       lock.Lock();
+      put_unlock();
+    }
+    void put_unlock() {
+      assert(ref > 0);
       int n = --ref;
       lock.Unlock();
       if (!n)
@@ -233,10 +245,7 @@ public:
 	c->lock.Lock();
       }
 
-      int n = --c->ref;
-      c->lock.Unlock();
-      if (!n)
-	delete c;
+      c->put_unlock();
     }
     C_aio_Ack(AioCompletion *_c) : c(_c) {
       c->get();
@@ -262,10 +271,7 @@ public:
 	c->lock.Lock();
       }
 
-      int n = --c->ref;
-      c->lock.Unlock();
-      if (!n)
-	delete c;
+      c->put_unlock();
     }
     C_aio_Safe(AioCompletion *_c) : c(_c) {
       c->get();

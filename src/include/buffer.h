@@ -804,8 +804,15 @@ public:
       }
     }
 
+    bool is_contiguous() {
+      return &(*_buffers.begin()) == &(*_buffers.rbegin());
+    }
     void rebuild() {
-      ptr nb(_len);
+      ptr nb;
+      if ((_len & ~PAGE_MASK) == 0)
+	nb = buffer::create_page_aligned(_len);
+      else
+	nb = buffer::create(_len);
       unsigned pos = 0;
       for (std::list<ptr>::iterator it = _buffers.begin();
 	   it != _buffers.end();

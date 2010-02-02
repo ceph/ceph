@@ -4626,7 +4626,7 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
   pi->truncate_from = 0;
-  pi->truncate_size = (__u64)-1ull;
+  pi->truncate_pending--;
 
   Mutation *mut = new Mutation;
   mut->ls = mds->mdlog->get_current_segment();
@@ -8586,8 +8586,6 @@ void MDCache::show_cache()
 
 void MDCache::dump_cache(const char *fn)
 {
-  if (g_conf.debug_mds < 2) return;
-
   char deffn[200];
   if (!fn) {
     snprintf(deffn, sizeof(deffn), "cachedump.%d.mds%d", (int)mds->mdsmap->get_epoch(), mds->get_nodeid());
@@ -8607,13 +8605,13 @@ void MDCache::dump_cache(const char *fn)
     for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p) {
       CDir *dir = *p;
       myfile << *dir->inode << std::endl;
-      myfile << *dir << std::endl;
+      myfile << " " << *dir << std::endl;
       
-      for (CDir::map_t::iterator p = dir->items.begin();
-	   p != dir->items.end();
-	   ++p) {
-	CDentry *dn = p->second;
-	myfile << *dn << std::endl;
+      for (CDir::map_t::iterator q = dir->items.begin();
+	   q != dir->items.end();
+	   ++q) {
+	CDentry *dn = q->second;
+	myfile << "  " << *dn << std::endl;
       }
     }
   }

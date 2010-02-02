@@ -203,7 +203,7 @@ int write_bench(Rados& rados, rados_pool_t pool,
     ++data->started;
     ++data->in_flight;
     dataLock.Unlock();
-    delete name[slot];
+    delete[] name[slot];
     delete contents[slot];
     name[slot] = newName;
     contents[slot] = newContents;
@@ -227,7 +227,7 @@ int write_bench(Rados& rados, rados_pool_t pool,
     --data->in_flight;
     dataLock.Unlock();
     completions[slot]-> release();
-    delete name[slot];
+    delete[] name[slot];
     delete contents[slot];
   }
 

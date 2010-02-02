@@ -139,7 +139,7 @@ struct MetaRequest {
     old_dentry_drop(0), old_dentry_unless(0),
     inode(NULL), old_inode(NULL),
     dentry(NULL), old_dentry(NULL),
-    resend_mds(-1), num_fwd(0), retry_attempt(0),
+    mds(-1), resend_mds(-1), num_fwd(0), retry_attempt(0),
     ref(1), reply(0), 
     kick(false), got_safe(false), got_unsafe(false), item(this), unsafe_item(this),
     lock("MetaRequest lock"),

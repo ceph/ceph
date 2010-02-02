@@ -358,6 +358,7 @@ struct md_config_t {
   
   // journal
   bool journal_dio;
+  bool journal_block_align;
   int journal_max_write_bytes;
   int journal_max_write_entries;
 

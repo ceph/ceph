@@ -1561,6 +1561,7 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino,
     in->inode.layout = mds->mdcache->default_file_layout;
 
   in->inode.truncate_size = -1ull;  // not truncated, yet!
+  in->inode.truncate_seq = 1; /* starting with 1, 0 is kept for no-truncation logic */
 
   in->inode.uid = mdr->client_request->get_caller_uid();
   in->inode.gid = mdr->client_request->get_caller_gid();
@@ -2509,6 +2510,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
       pi->size = req->head.args.setattr.size;
       pi->truncate_size = pi->size;
       pi->truncate_seq++;
+      pi->truncate_pending++;
       le->metablob.add_truncate_start(cur->ino());
     } else {
       pi->size = req->head.args.setattr.size;

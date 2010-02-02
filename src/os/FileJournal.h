@@ -36,13 +36,11 @@ public:
     __u32 block_size;
     __u32 alignment;
     __s64 max_size;   // max size of journal ring buffer
-    __s64 wrap;       // wrap byte pos (if any)
     __s64 start;      // offset of first entry
 
-    header_t() : version(1), flags(0), fsid(0), block_size(0), alignment(0), max_size(0), wrap(0), start(0) {}
+    header_t() : version(1), flags(0), fsid(0), block_size(0), alignment(0), max_size(0), start(0) {}
 
     void clear() {
-      wrap = 0;
       start = block_size;
     }
   } header;
@@ -73,6 +71,7 @@ private:
 
   off64_t max_size;
   size_t block_size;
+  bool is_bdev;
   bool directio;
   bool writing, must_write_header;
   off64_t write_pos;      // byte where the next entry to be written will go
@@ -117,10 +116,14 @@ private:
   void stop_writer();
   void write_thread_entry();
 
-  bool check_for_wrap(__u64 seq, off64_t *pos, off64_t size, bool can_wrap);
-  bool prepare_single_dio_write(bufferlist& bl);
+  bool check_for_full(__u64 seq, off64_t pos, off64_t size);
   void prepare_multi_write(bufferlist& bl);
+  bool prepare_single_write(bufferlist& bl, off64_t& queue_pos);
+  bool prepare_single_dio_write(bufferlist& bl, off64_t& queue_pos);
   void do_write(bufferlist& bl);
+
+  void write_bl(off64_t& pos, bufferlist& bl);
+  void wrap_read_bl(off64_t& pos, int64_t len, bufferlist& bl);
 
   class Writer : public Thread {
     FileJournal *journal;
@@ -133,10 +136,7 @@ private:
   } write_thread;
 
   off64_t get_top() {
-    if (directio)
-      return block_size;
-    else
-      return sizeof(header);
+    return ROUND_UP_TO(sizeof(header), block_size);
   }
 
  public:
@@ -144,7 +144,7 @@ private:
     Journal(fsid, fin, sync_cond), fn(f),
     zero_buf(NULL),
     max_size(0), block_size(0),
-    directio(dio),
+    is_bdev(false),directio(dio),
     writing(false), must_write_header(false),
     write_pos(0), read_pos(0),
     last_committed_seq(0), 

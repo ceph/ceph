@@ -3920,8 +3920,9 @@ void OSD::handle_op(MOSDOp *op)
   int pool = pgid.pool();
   int perm = caps.get_pool_cap(pool);
 
-  dout(0) << "request for pool=" << pool << " perm=" << perm << " may_read=" << op->may_read() << " may_write=" << op->may_write()
-          << " may_exec=" << op->may_exec() << dendl;
+  dout(10) << "request for pool=" << pool << " perm=" << perm
+	   << " may_read=" << op->may_read() << " may_write=" << op->may_write()
+	   << " may_exec=" << op->may_exec() << dendl;
 
   if (op->may_read()) {
     if (!(perm & OSD_POOL_CAP_R)) {

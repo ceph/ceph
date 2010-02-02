@@ -542,7 +542,8 @@ static struct config_option config_optionsp[] = {
 	OPTION(ebofs_max_prefetch, 0, OPT_INT, 1000), // 4k blocks
 	OPTION(ebofs_realloc, 0, OPT_BOOL, false),    // hrm, this can cause bad fragmentation, don't use!
 	OPTION(ebofs_verify_csum_on_read, 0, OPT_BOOL, true),
-	OPTION(journal_dio, 0, OPT_BOOL, false),
+	OPTION(journal_dio, 0, OPT_BOOL, true),
+	OPTION(journal_block_align, 0, OPT_BOOL, true),
 	OPTION(journal_max_write_bytes, 0, OPT_INT, 0),
 	OPTION(journal_max_write_entries, 0, OPT_INT, 100),
 	OPTION(bdev_lock, 0, OPT_BOOL, true),
@@ -694,6 +695,8 @@ static bool init_g_conf()
   int len = sizeof(config_optionsp)/sizeof(config_option);
   int i;
   config_option *opt;
+
+  memset(&g_conf, 0, sizeof(g_conf));
 
   for (i = 0; i<len; i++) {
     opt = &config_optionsp[i];
