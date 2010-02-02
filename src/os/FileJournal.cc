@@ -758,7 +758,7 @@ bool FileJournal::read_entry(bufferlist& bl, __u64& seq)
 	  << " " << h->len << " bytes"
 	  << dendl;
 
-  if (seq && h->seq != seq) {
+  if (seq && h->seq < seq) {
     dout(2) << "read_entry " << read_pos << " : got seq " << h->seq << ", expected " << seq << ", stopping" << dendl;
     return false;
   }
