@@ -1045,6 +1045,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
     case CEPH_OSD_OP_WRITE:
       { // write
+        __u32 seq = oi.truncate_seq;
+        if (seq && (seq > op.extent.truncate_seq) &&
+            (op.extent.offset + op.extent.length > oi.size)) {
+	  op.extent.length =  (op.extent.offset > oi.size ? 0 : oi.size - op.extent.offset);
+        }
+
         if (op.extent.length) {
 	  bufferlist nbl;
 	  bp.copy(op.extent.length, nbl);
@@ -1247,6 +1253,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  oi.truncate_seq = op.extent.truncate_seq;
 	  oi.truncate_size = op.extent.truncate_size;
 	} else {
+	  dout(10) << " seq " << op.extent.truncate_seq << " > old_seq " << old_seq
+		   << " already truncated" << dendl;
 	  // object was already truncated, no-op.
 	}
       }
