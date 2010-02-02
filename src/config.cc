@@ -520,8 +520,8 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_auto_weight, 0, OPT_BOOL, false),
 	OPTION(osd_class_timeout, 0, OPT_FLOAT, 10.0),
 	OPTION(filestore, 0, OPT_BOOL, false),
-	OPTION(filestore_max_sync_interval, 0, OPT_DOUBLE, .2),    // seconds
-	OPTION(filestore_min_sync_interval, 0, OPT_DOUBLE, .001),  // seconds
+	OPTION(filestore_max_sync_interval, 0, OPT_DOUBLE, 5),    // seconds
+	OPTION(filestore_min_sync_interval, 0, OPT_DOUBLE, .01),  // seconds
 	OPTION(filestore_fake_attrs, 0, OPT_BOOL, false),
 	OPTION(filestore_fake_collections, 0, OPT_BOOL, false),
 	OPTION(filestore_dev, 0, OPT_STR, 0),
@@ -529,7 +529,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(filestore_flusher, 0, OPT_BOOL, true),
 	OPTION(filestore_flusher_max_fds, 0, OPT_INT, 512),
 	OPTION(filestore_sync_flush, 0, OPT_BOOL, false),
-	OPTION(filestore_journal_parallel, 0, OPT_BOOL, false),
+	OPTION(filestore_journal_parallel, 0, OPT_BOOL, true),
 	OPTION(filestore_journal_writeahead, 0, OPT_BOOL, false),
 	OPTION(filestore_queue_max_ops, 0, OPT_INT, 500),
 	OPTION(filestore_queue_max_bytes, 0, OPT_INT, 100 << 20),
