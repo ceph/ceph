@@ -539,6 +539,11 @@ int OSD::shutdown()
     p->second->unlock();
   }
 
+  osd_lock.Unlock();
+  store->sync();
+  store->flush();
+  osd_lock.Lock();
+
   // zap waiters (bleh, this is messy)
   finished_lock.Lock();
   finished.clear();

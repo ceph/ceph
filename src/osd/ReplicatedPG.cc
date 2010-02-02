@@ -1777,8 +1777,11 @@ void ReplicatedPG::op_applied(RepGather *repop)
 
   // (logical) local ack.
   int whoami = osd->get_nodeid();
-  assert(repop->waitfor_ack.count(whoami));
-  repop->waitfor_ack.erase(whoami);
+
+  if (!repop->aborted) {
+    assert(repop->waitfor_ack.count(whoami));
+    repop->waitfor_ack.erase(whoami);
+  }
   
   if (repop->ctx->clone_obc) {
     put_object_context(repop->ctx->clone_obc);
@@ -1831,7 +1834,8 @@ void ReplicatedPG::op_applied(RepGather *repop)
     break;
   }   
 
-  eval_repop(repop);
+  if (!repop->aborted)
+    eval_repop(repop);
 
   repop->put();
   unlock();
