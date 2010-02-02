@@ -356,6 +356,8 @@ bool FileJournal::check_for_full(__u64 seq, off64_t pos, off64_t size)
       writing_seq.push_back(writeq.front().seq);
       writing_fin.push_back(writeq.front().fin);
     }
+    throttle_ops.put(1);
+    throttle_bytes.put(writeq.front().bl.length());
     writeq.pop_front();
   }  
   print_header();
@@ -363,7 +365,7 @@ bool FileJournal::check_for_full(__u64 seq, off64_t pos, off64_t size)
 
 }
 
-void FileJournal::prepare_multi_write(bufferlist& bl)
+void FileJournal::prepare_multi_write(bufferlist& bl, __u64& orig_ops, __u64& orig_bytes)
 {
   // gather queued writes
   off64_t queue_pos = write_pos;
@@ -375,9 +377,11 @@ void FileJournal::prepare_multi_write(bufferlist& bl)
     return;
   
   while (!writeq.empty()) {
-    bool r = prepare_single_write(bl, queue_pos);
+    bool r = prepare_single_write(bl, queue_pos, orig_bytes);
     if (!r)
       break;
+
+    orig_ops++;
 
     if (eleft) {
       if (--eleft == 0) {
@@ -396,7 +400,7 @@ void FileJournal::prepare_multi_write(bufferlist& bl)
   //assert(write_pos + bl.length() == queue_pos);
 }
 
-bool FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos)
+bool FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, __u64& orig_size)
 {
   // grab next item
   __u64 seq = writeq.front().seq;
@@ -406,6 +410,8 @@ bool FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos)
 
   if (!check_for_full(seq, queue_pos, size))
     return false;
+
+  orig_size += ebl.length();
 
   // add to write buffer
   dout(15) << "prepare_single_write will write " << queue_pos << " : seq " << seq
@@ -598,9 +604,19 @@ void FileJournal::write_thread_entry()
       continue;
     }
     
+    __u64 orig_ops = 0;
+    __u64 orig_bytes = 0;
+
     bufferlist bl;
-    prepare_multi_write(bl);
+    prepare_multi_write(bl, orig_ops, orig_bytes);
     do_write(bl);
+    
+    __u64 new_ops = throttle_ops.put(orig_ops);
+    __u64 new_bytes = throttle_bytes.put(orig_bytes);
+    dout(10) << "write_thread throttle finished " << orig_ops << " ops and " 
+	     << orig_bytes << " bytes, now "
+	     << new_ops << " ops and " << new_bytes << " bytes"
+	     << dendl;
   }
   write_empty_cond.Signal();
   write_lock.Unlock();
@@ -616,6 +632,9 @@ void FileJournal::submit_entry(__u64 seq, bufferlist& e, Context *oncommit)
   dout(10) << "submit_entry seq " << seq
 	   << " len " << e.length()
 	   << " (" << oncommit << ")" << dendl;
+
+  throttle_ops.take(1);
+  throttle_bytes.take(e.length());
   
   if (!full_commit_seq && full_restart_seq && 
       seq >= full_restart_seq) {
@@ -690,6 +709,8 @@ void FileJournal::committed_thru(__u64 seq)
 	     << dendl;
     if (writeq.front().fin)
       finisher->queue(writeq.front().fin);
+    throttle_ops.put(1);
+    throttle_bytes.put(writeq.front().bl.length());
     writeq.pop_front();  
   }
   
@@ -803,4 +824,12 @@ bool FileJournal::read_entry(bufferlist& bl, __u64& seq)
   assert(read_pos % header.alignment == 0);
  
   return true;
+}
+
+void FileJournal::throttle()
+{
+  if (throttle_ops.wait(g_conf.journal_queue_max_ops))
+    dout(1) << "throttle: waited for ops" << dendl;
+  if (throttle_bytes.wait(g_conf.journal_queue_max_bytes))
+    dout(1) << "throttle: waited for bytes" << dendl;
 }

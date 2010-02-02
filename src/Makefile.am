@@ -469,6 +469,7 @@ noinst_HEADERS = \
         common/Semaphore.h\
 	common/Spinlock.h\
         common/Thread.h\
+        common/Throttle.h\
         common/Timer.h\
         common/tls.h\
 	common/WorkQueue.h\

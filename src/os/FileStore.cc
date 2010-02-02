@@ -633,6 +633,9 @@ int FileStore::queue_transactions(list<Transaction*> &tls,
 {
   if (journal && journal->is_writeable()) {
     if (g_conf.filestore_journal_parallel) {
+
+      journal->throttle();
+
       __u64 op = op_journal_start(0);
       dout(10) << "queue_transactions (parallel) " << op << " " << tls << dendl;
       

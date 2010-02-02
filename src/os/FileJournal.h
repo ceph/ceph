@@ -23,6 +23,7 @@ using std::deque;
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/Thread.h"
+#include "common/Throttle.h"
 
 class FileJournal : public Journal {
 public:
@@ -101,6 +102,9 @@ private:
   };
   deque<write_item> writeq;
   
+  // throttle
+  Throttle throttle_ops, throttle_bytes;
+
   // write thread
   Mutex write_lock;
   Cond write_cond, write_empty_cond;
@@ -117,9 +121,8 @@ private:
   void write_thread_entry();
 
   bool check_for_full(__u64 seq, off64_t pos, off64_t size);
-  void prepare_multi_write(bufferlist& bl);
-  bool prepare_single_write(bufferlist& bl, off64_t& queue_pos);
-  bool prepare_single_dio_write(bufferlist& bl, off64_t& queue_pos);
+  void prepare_multi_write(bufferlist& bl, __u64& orig_ops, __u64& orig_bytse);
+  bool prepare_single_write(bufferlist& bl, off64_t& queue_pos, __u64& orig_bytes);
   void do_write(bufferlist& bl);
 
   void write_bl(off64_t& pos, bufferlist& bl);
@@ -162,6 +165,8 @@ private:
   void close();
 
   void flush();
+
+  void throttle();
 
   bool is_writeable() {
     return read_pos == 0;

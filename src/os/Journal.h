@@ -38,6 +38,7 @@ public:
   virtual void close() = 0;
 
   virtual void flush() = 0;
+  virtual void throttle() = 0;
 
   void set_wait_on_full(bool b) { wait_on_full = b; }
 
