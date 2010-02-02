@@ -51,8 +51,8 @@ v0.19
 - kclient: retry alloc on ENOMEM when reading from connection?
 
 filestore
-- need to check per-object state for conflicting reads and unapplied writes
-- use want_delayed(), want_rmw() to toggle delayed/rmw mode?  or just for rmw->delayed transition?
+- throttling
+- flush objects onto primary during recovery
 - audit queue_transaction calls for dependencies
 - convert apply_transaction calls in handle_map to queue?
   - need an osdmap cache layer?
