@@ -23,7 +23,7 @@ using namespace std;
 
 void usage()
 {
-  cout << " usage: [--gen-key] [--name=<name>] [--caps=<filename>] [--list] [--print-key] <filename>" << std::endl;
+  cout << " usage: [--create-keyring] [--gen-key] [--name=<name>] [--caps=<filename>] [--list] [--print-key] <filename>" << std::endl;
   exit(1);
 }
 
@@ -41,6 +41,7 @@ int main(int argc, const char **argv)
   bool gen_key = false;
   bool list = false;
   bool print_key = true;
+  bool create_keyring = false;
   const char *name = "";
   const char *caps_fn = NULL;
 
@@ -55,6 +56,8 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&caps_fn, OPT_STR);
     } else if (CONF_ARG_EQ("print-key", 'p')) {
       CONF_SAFE_SET_ARG_VAL(&print_key, OPT_BOOL);
+    } else if (CONF_ARG_EQ("create-keyring", 'c')) {
+      CONF_SAFE_SET_ARG_VAL(&create_keyring, OPT_BOOL);
     } else if (!fn) {
       fn = args[i];
     } else 
@@ -85,7 +88,7 @@ int main(int argc, const char **argv)
       cerr << "error reading file " << fn << std::endl;
       exit(1);
     }
-  } else if (r == -ENOENT) {
+  } else if (create_keyring && r == -ENOENT) {
     cout << "creating " << fn << std::endl;
   } else {
     cerr << "can't open " << fn << ": " << strerror(errno) << std::endl;
