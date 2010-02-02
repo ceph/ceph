@@ -1201,7 +1201,8 @@ struct object_info_t {
     decode(p);
   }
 
-  object_info_t(sobject_t s) : soid(s), size(0) {}
+  object_info_t(sobject_t s) : soid(s), size(0),
+                               truncate_seq(0), truncate_size(0) {}
   object_info_t(bufferlist& bl) {
     decode(bl);
   }
