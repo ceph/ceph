@@ -331,14 +331,6 @@ bool FileJournal::check_for_full(__u64 seq, off64_t pos, off64_t size)
 
   if (room >= size) {
     dout(10) << "check_for_full at " << pos << " : " << size << " < " << room << dendl;
-
-    // wait?
-    if (wait_on_full) {
-      dout(1) << "check_for_full waiting for a commit" << dendl;
-      commit_cond.Wait(write_lock);
-      goto retry;
-    }  
-
     if (pos + size > header.max_size)
       must_write_header = true;
     return true;
@@ -349,6 +341,14 @@ bool FileJournal::check_for_full(__u64 seq, off64_t pos, off64_t size)
 	  << pos << " >= " << room
 	  << " (max_size " << header.max_size << " start " << header.start << ")"
 	  << dendl;
+
+  // wait?
+  if (wait_on_full) {
+    dout(1) << "check_for_full waiting for a commit" << dendl;
+    commit_cond.Wait(write_lock);
+    goto retry;
+  }  
+
   full_commit_seq = seq;
   full_restart_seq = seq+1;
   while (!writeq.empty()) {
