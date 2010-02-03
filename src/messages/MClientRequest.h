@@ -178,12 +178,18 @@ public:
     if (head.op == CEPH_MDS_OP_GETATTR)
       out << " " << ccap_string(head.args.getattr.mask);
     if (head.op == CEPH_MDS_OP_SETATTR) {
-      if (head.args.setattr.mask & CEPH_SETATTR_MODE) out << " mode";
-      if (head.args.setattr.mask & CEPH_SETATTR_UID) out << " uid";
-      if (head.args.setattr.mask & CEPH_SETATTR_GID) out << " gid";
-      if (head.args.setattr.mask & CEPH_SETATTR_SIZE) out << " size";
-      if (head.args.setattr.mask & CEPH_SETATTR_MTIME) out << " mtime";
-      if (head.args.setattr.mask & CEPH_SETATTR_ATIME) out << " atime";
+      if (head.args.setattr.mask & CEPH_SETATTR_MODE)
+	out << " mode=0" << ios::oct << head.args.setattr.mode << ios::dec;
+      if (head.args.setattr.mask & CEPH_SETATTR_UID)
+	out << " uid=" << head.args.setattr.uid;
+      if (head.args.setattr.mask & CEPH_SETATTR_GID)
+	out << " gid=" << head.args.setattr.gid;
+      if (head.args.setattr.mask & CEPH_SETATTR_SIZE)
+	out << " size=" << head.args.setattr.size;
+      if (head.args.setattr.mask & CEPH_SETATTR_MTIME)
+	out << " mtime=" << utime_t(head.args.setattr.mtime);
+      if (head.args.setattr.mask & CEPH_SETATTR_ATIME)
+	out << " atime=" << utime_t(head.args.setattr.atime);
     }
     //if (!get_filepath().empty()) 
     out << " " << get_filepath();
