@@ -2412,10 +2412,11 @@ class C_MDS_inode_update_finish : public Context {
   MDS *mds;
   MDRequest *mdr;
   CInode *in;
-  bool smaller, changed_ranges;
+  bool truncating_smaller, changed_ranges;
 public:
-  C_MDS_inode_update_finish(MDS *m, MDRequest *r, CInode *i, bool sm=false, bool cr=false) :
-    mds(m), mdr(r), in(i), smaller(sm), changed_ranges(cr) { }
+  C_MDS_inode_update_finish(MDS *m, MDRequest *r, CInode *i,
+			    bool sm=false, bool cr=false) :
+    mds(m), mdr(r), in(i), truncating_smaller(sm), changed_ranges(cr) { }
   void finish(int r) {
     assert(r == 0);
 
@@ -2424,7 +2425,7 @@ public:
     mdr->apply();
 
     // notify any clients
-    if (smaller && in->inode.is_truncating()) {
+    if (truncating_smaller && in->inode.is_truncating()) {
       mds->locker->issue_truncate(in);
       mds->mdcache->truncate_inode(in, mdr->ls);
     }
@@ -2470,14 +2471,18 @@ void Server::handle_client_setattr(MDRequest *mdr)
 
   // trunc from bigger -> smaller?
   inode_t *pi = cur->get_projected_inode();
+
   __u64 old_size = MAX(pi->size, req->head.args.setattr.old_size);
-  bool smaller = req->head.args.setattr.size < old_size;
-  if ((mask & CEPH_SETATTR_SIZE) && smaller && pi->is_truncating()) {
-    dout(10) << " waiting for pending truncate from " << pi->truncate_from
-	     << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
-    cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
-    mds->mdlog->flush();
-    return;
+  bool truncating_smaller = false;
+  if (mask & CEPH_SETATTR_SIZE) {
+    truncating_smaller = req->head.args.setattr.size < old_size;
+    if (truncating_smaller && pi->is_truncating()) {
+      dout(10) << " waiting for pending truncate from " << pi->truncate_from
+	       << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
+      cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
+      mds->mdlog->flush();
+      return;
+    }
   }
 
   bool changed_ranges = false;
@@ -2505,7 +2510,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
   if (mask & (CEPH_SETATTR_ATIME | CEPH_SETATTR_MTIME))
     pi->time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
   if (mask & CEPH_SETATTR_SIZE) {
-    if (smaller) {
+    if (truncating_smaller) {
       pi->truncate_from = old_size;
       pi->size = req->head.args.setattr.size;
       pi->truncate_size = pi->size;
@@ -2536,7 +2541,8 @@ void Server::handle_client_setattr(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   
-  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur, smaller, changed_ranges));
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur,
+								   truncating_smaller, changed_ranges));
 
   // flush immediately if there are readers/writers waiting
   if (cur->get_caps_wanted() & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR))
