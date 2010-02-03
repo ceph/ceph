@@ -805,7 +805,7 @@ void FileStore::_journaled_ahead(__u64 op,
 
 int FileStore::do_transactions(list<Transaction*> &tls, __u64 op_seq)
 {
-  int r;
+  int r = 0;
 
   __u64 bytes = 0, ops = 0;
   for (list<Transaction*>::iterator p = tls.begin();
