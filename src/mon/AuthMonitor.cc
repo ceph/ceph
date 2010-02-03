@@ -92,17 +92,17 @@ void AuthMonitor::on_active()
 void AuthMonitor::create_initial(bufferlist& bl)
 {
   dout(0) << "create_initial -- creating initial map" << dendl;
-  if (g_conf.keys_file) {
+  if (g_conf.keyring) {
     map<string, EntityAuth> keys_map;
-    dout(0) << "reading initial keys file " << dendl;
+    dout(0) << "reading initial keyring " << dendl;
     bufferlist bl;
 
-    string k = g_conf.keys_file;
+    string k = g_conf.keyring;
     list<string> ls;
     get_str_list(k, ls);
     int r = -1;
     for (list<string>::iterator p = ls.begin(); p != ls.end(); p++)
-      if ((r = bl.read_file(g_conf.keys_file)) >= 0)
+      if ((r = bl.read_file(g_conf.keyring)) >= 0)
 	break;
     if (r >= 0) {
       bool read_ok = false;
@@ -111,7 +111,7 @@ void AuthMonitor::create_initial(bufferlist& bl)
         ::decode(keys_map, iter);
         read_ok = true;
       } catch (buffer::error *err) {
-        cerr << "error reading file " << g_conf.keys_file << std::endl;
+        cerr << "error reading file " << g_conf.keyring << std::endl;
       }
       if (read_ok) {
         map<string, EntityAuth>::iterator iter = keys_map.begin();
