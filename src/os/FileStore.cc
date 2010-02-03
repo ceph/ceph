@@ -49,7 +49,7 @@
 
 #define ATTR_MAX 80
 
-#define COMMIT_SNAP_ITEM "%lld"
+#define COMMIT_SNAP_ITEM "snap_%lld"
 
 #ifndef __CYGWIN__
 # ifndef DARWIN
@@ -287,8 +287,6 @@ int FileStore::mkfs()
   volargs.fd = 0;
   strcpy(volargs.name, "current");
   int r = ::ioctl(fd, BTRFS_IOC_SUBVOL_CREATE, (unsigned long int)&volargs);
-  char current_fn[PATH_MAX];
-  snprintf(current_fn, sizeof(current_fn), "%s/current", basedir.c_str());
   if (r == 0) {
     // yay
     dout(2) << " created btrfs subvol " << current_fn << dendl;
@@ -446,10 +444,13 @@ int FileStore::mount()
   Transaction empty;
   btrfs = 1;
 
-  btrfs_snap = false;
-  if (btrfs_snap) {
-    snapdir_fd = ::open(basedir.c_str(), O_RDONLY);
+  // open some dir handles
+  basedir_fd = ::open(basedir.c_str(), O_RDONLY);
+  current_fd = ::open(current_fn, O_RDONLY);
+  dout(10) << "basedir_fd " << basedir_fd << "=" << basedir
+	   << ", current_fd " << current_fd << "=" << current_fn << dendl;
 
+  if (true) { //g_conf.filestore_btrfs_snap) {
     // get snap list
     DIR *dir = ::opendir(basedir.c_str());
     if (!dir)
@@ -558,6 +559,8 @@ int FileStore::umount()
 
   ::close(fsid_fd);
   ::close(op_fd);
+  ::close(current_fd);
+  ::close(basedir_fd);
 
   if (g_conf.filestore_dev) {
     char cmd[PATH_MAX];
@@ -1379,22 +1382,24 @@ void FileStore::sync_entry()
 
       dout(15) << "sync_entry committing " << cp << " sync_epoch " << sync_epoch << dendl;
 
+      bool do_snap = g_conf.filestore_btrfs_snap;
 
-      if (btrfs_snap) {
+      if (do_snap) {
 	btrfs_ioctl_vol_args snapargs;
-	snapargs.fd = snapdir_fd;
+	snapargs.fd = current_fd;
 	snprintf(snapargs.name, sizeof(snapargs.name), COMMIT_SNAP_ITEM, (long long unsigned)cp);
-	dout(0) << "taking snap '" << snapargs.name << "'" << dendl;
-	int r = ::ioctl(snapargs.fd, BTRFS_IOC_SNAP_CREATE, &snapargs);
+	dout(10) << "taking snap '" << snapargs.name << "'" << dendl;
+	int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &snapargs);
 	char buf[100];
-	dout(0) << "snap create '" << snapargs.name << "' got " << r
+	dout(20) << "snap create '" << snapargs.name << "' got " << r
 		<< " " << strerror_r(r < 0 ? errno : 0, buf, sizeof(buf)) << dendl;
+	assert(r == 0);
 	snaps.push_back(cp);
       }
 
       commit_started();
 
-      if (!btrfs_snap) {
+      if (!do_snap) {
 	if (btrfs) {
 	  dout(15) << "sync_entry doing btrfs sync" << dendl;
 	  // do a full btrfs commit
@@ -1412,17 +1417,18 @@ void FileStore::sync_entry()
       commit_finish();
 
       // remove old snaps?
-      if (false && btrfs_snap) {
+      if (do_snap) {
 	while (snaps.size() > 2) {
 	  btrfs_ioctl_vol_args snapargs;
-	  snapargs.fd = snapdir_fd;
+	  snapargs.fd = 0;
 	  snprintf(snapargs.name, sizeof(snapargs.name), COMMIT_SNAP_ITEM, (long long unsigned)snaps.front());
 	  snaps.pop_front();
-	  dout(0) << "removing snap '" << snapargs.name << "'" << dendl;
-	  int r = ::ioctl(snapargs.fd, BTRFS_IOC_SNAP_DESTROY, &snapargs);
+	  dout(10) << "removing snap '" << snapargs.name << "'" << dendl;
+	  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_DESTROY, &snapargs);
 	  char buf[100];
-	  dout(0) << "snap destroyed '" << snapargs.name << "' got " << r
+	  dout(20) << "snap destroyed '" << snapargs.name << "' got " << r
 		  << " " << strerror_r(r < 0 ? errno : 0, buf, sizeof(buf)) << dendl;
+	  assert(r == 0);
 	}
       }
 

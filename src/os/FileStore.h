@@ -35,14 +35,14 @@ using namespace __gnu_cxx;
 
 class FileStore : public JournalingObjectStore {
   string basedir, journalpath;
+  char current_fn[PATH_MAX];
   __u64 fsid;
   
   int btrfs;
-  bool btrfs_snap;
   bool btrfs_trans_start_end;
   int fsid_fd, op_fd;
 
-  int snapdir_fd;
+  int basedir_fd, current_fd;
   deque<__u64> snaps;
 
   // fake attrs?
@@ -126,14 +126,17 @@ class FileStore : public JournalingObjectStore {
  public:
   FileStore(const char *base, const char *jdev = 0) : 
     basedir(base), journalpath(jdev ? jdev:""),
-    btrfs(false), btrfs_snap(false), btrfs_trans_start_end(false),
+    btrfs(false), btrfs_trans_start_end(false),
     fsid_fd(-1), op_fd(-1),
     attrs(this), fake_attrs(false), 
     collections(this), fake_collections(false),
     lock("FileStore::lock"),
     sync_epoch(0), stop(false), sync_thread(this),
     op_lock("FileStore::op_lock"), op_queue_len(0), op_queue_bytes(0), op_thread(this),
-    flusher_queue_len(0), flusher_thread(this) { }
+    flusher_queue_len(0), flusher_thread(this) {
+    // init current_fn
+    snprintf(current_fn, sizeof(current_fn), "%s/current", basedir.c_str());
+  }
 
   int mount();
   int umount();
