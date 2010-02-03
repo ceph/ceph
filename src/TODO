@@ -33,45 +33,21 @@ v0.19
 - tids in fixed msg header (protocol change)
 - feature bits during connection handshake
 - remove erank from ceph_entity_addr
+- disk format, compat/incompat bits
+- journal format improvements
+- kclient: cephx
+- improved truncation
 
-- compat/incompat bits
-
-- kclient: handle enomem on reply using tid in msg header
-
-- audit truncation sequence
-  - should mds recovery recover truncation metadata?
+- mkcephfs: cephx support
 
 - qa: snap test.  maybe walk through 2.6.* kernel trees?
-
 - osd: rebuild pg log
 - osd: handle storage errors
-
 - rebuild mds hierarchy
-
 - kclient: retry alloc on ENOMEM when reading from connection?
 
 
-pending wire format changes
-/- include a __u64 tid in ceph_msg_header
-/- compat bits during connection handshake
-- compat bits during auth/mount with monitor?
-/- remove erank from ceph_entity_addr
-
-pending mds format changes
-- compat/incompat flags
-
-pending osd format changes
-- current/ subdir 
-/- compat/incompat flags
-
-pending mon format changes
-/- add v to PGMap, PGMap::Incremental
- /- others?
-/- compat/incompat flags
-
 bugs
-/- 'mount.ceph server:/ relpath' puts relpath (not canonicalized name) in /etc/mtab. df gets confused
-
 - kclient: on umount -f
 [ 4683.361323] INFO: task umount:15840 blocked for more than 120 seconds.
 [ 4683.367910] "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
@@ -100,21 +76,6 @@ bugs
 [ 4683.515784]  [<ffffffff810ed518>] sys_umount+0x2b2/0x2df
 [ 4683.521159]  [<ffffffff810298f0>] ? do_page_fault+0x104/0x278
 [ 4683.526947]  [<ffffffff8100baeb>] system_call_fastpath+0x16/0x1b
-
-- kclient: multiple incoming replies, or aborted (osd) request, can deplete reply msgpool
-  - reproduce: read large file, hit control-c.  dropping the request empties out the reply pool.
-  - this is actually harmless, except that one aborted request and one active request means the aborted reply gets
-    the message but the active request doesn't.
-  - actually, we can replace prepare_pages with a smarter alloc_msg, now that tid is in the header.
-    - then we need a revoke_msg_incoming in place of revoke_pages?
-
-- mon: dup osd boot messages to log
-09.12.21 14:09:33.634098    log 09.12.21 14:09:32.612955 mon0 10.3.14.128:6789/0/0 198 : [INF] osd6 10.3.14.133:6800/14770/0 boot
-09.12.21 14:09:33.634125    log 09.12.21 14:09:32.614155 mon0 10.3.14.128:6789/0/0 199 : [INF] osd6 10.3.14.133:6800/14770/0 boot
-09.12.21 14:09:33.634137    log 09.12.21 14:09:32.614726 mon0 10.3.14.128:6789/0/0 200 : [INF] osd6 10.3.14.133:6800/14770/0 boot
-09.12.21 14:09:33.634148    log 09.12.21 14:09:32.615444 mon0 10.3.14.128:6789/0/0 201 : [INF] osd6 10.3.14.133:6800/14770/0 boot
-
-/- fix mon delay when starting new mds, when current mds is already laggy
 
 - bonnie++ -u root -d /mnt/ceph/ -s 0 -n 1
 (03:35:29 PM) Isteriat: Using uid:0, gid:0.
