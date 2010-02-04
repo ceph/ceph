@@ -377,6 +377,8 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
     set<__u32> supported;
     
     try {
+      __u8 struct_v = 1;
+      ::decode(struct_v, indata);
       ::decode(supported, indata);
       ::decode(entity_name, indata);
       ::decode(s->global_id, indata);

@@ -992,10 +992,12 @@ bool Monitor::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool
 
   }
 
-  bufferlist ticket_data;
-  ret = cephx_build_service_ticket(info, ticket_data);
+  CephXTicketBlob blob;
+  ret = cephx_build_service_ticket_blob(info, blob);
   if (ret < 0)
     return false;
+  bufferlist ticket_data;
+  ::encode(blob, ticket_data);
 
   dout(0) << "built service ticket" << dendl;
   bufferlist::iterator iter = ticket_data.begin();

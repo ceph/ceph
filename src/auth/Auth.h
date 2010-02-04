@@ -109,10 +109,14 @@ struct EntityAuth {
   map<string, bufferlist> caps;
 
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(key, bl);
     ::encode(caps, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(key, bl);
     ::decode(caps, bl);
   }
@@ -130,12 +134,16 @@ struct AuthCapsInfo {
   AuthCapsInfo() : allow_all(false) {}
 
   void encode(bufferlist& bl) const {
-    uint32_t a = (uint32_t)allow_all;
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    __u8 a = (__u8)allow_all;
     ::encode(a, bl);
     ::encode(caps, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    uint32_t a;
+    __u8 struct_v;
+    ::decode(struct_v, bl);
+    __u8 a;
     ::decode(a, bl);
     allow_all = (bool)a;
     ::decode(caps, bl);
@@ -212,10 +220,14 @@ struct ExpiringCryptoKey {
   utime_t expiration;
 
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(key, bl);
     ::encode(expiration, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(key, bl);
     ::decode(expiration, bl);
   }
@@ -229,10 +241,14 @@ struct RotatingSecrets {
   RotatingSecrets() : max_ver(0) {}
 
   void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(secrets, bl);
     ::encode(max_ver, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(secrets, bl);
     ::decode(max_ver, bl);
   }

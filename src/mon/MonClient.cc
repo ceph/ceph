@@ -375,6 +375,8 @@ void MonClient::_reopen_session()
 
   MAuth *m = new MAuth;
   m->protocol = 0;
+  __u8 struct_v = 1;
+  ::encode(struct_v, m->auth_payload);
   ::encode(auth_supported, m->auth_payload);
   ::encode(entity_name, m->auth_payload);
   ::encode(global_id, m->auth_payload);

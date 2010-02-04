@@ -34,18 +34,18 @@ int cephx_calc_client_server_challenge(CryptoKey& secret, __u64 server_challenge
  * Authentication
  */
 
-bool cephx_build_service_ticket(CephXSessionAuthInfo& info, bufferlist& reply)
+bool cephx_build_service_ticket_blob(CephXSessionAuthInfo& info, CephXTicketBlob& blob)
 {
   CephXServiceTicketInfo ticket_info;
   ticket_info.session_key = info.session_key;
   ticket_info.ticket = info.ticket;
   ticket_info.ticket.caps = info.ticket.caps;
-  ::encode(info.secret_id, reply);
+
   dout(10) << "build_service_ticket encoded info.secret_id=" << info.secret_id
 	   <<  " ticket_info.ticket.name=" << ticket_info.ticket.name.to_str() << dendl;
-  if (encode_encrypt(ticket_info, info.service_secret, reply) < 0)
+  blob.secret_id = info.secret_id;
+  if (encode_encrypt_enc_bl(ticket_info, info.service_secret, blob.blob) < 0)
     return false;
-
   return true;
 }
 
@@ -64,6 +64,9 @@ bool cephx_build_service_ticket_reply(
                      CryptoKey& ticket_enc_key,
                      bufferlist& reply)
 {
+  __u8 service_ticket_reply_v = 1;
+  ::encode(service_ticket_reply_v, reply);
+
   uint32_t num = ticket_info_vec.size();
   ::encode(num, reply);
   dout(10) << "build_service_ticket_reply encoding " << num
@@ -75,6 +78,9 @@ bool cephx_build_service_ticket_reply(
     CephXSessionAuthInfo& info = *ticket_iter;
     ::encode(info.service_id, reply);
 
+    __u8 service_ticket_v = 1;
+    ::encode(service_ticket_v, reply);
+
     CephXServiceTicket msg_a;
     msg_a.session_key = info.session_key;
     msg_a.validity = info.validity;
@@ -83,8 +89,10 @@ bool cephx_build_service_ticket_reply(
 
     bufferlist service_ticket_bl;
 
-    if (!cephx_build_service_ticket(info, service_ticket_bl))
+    CephXTicketBlob blob;
+    if (!cephx_build_service_ticket_blob(info, blob))
       return false;
+    ::encode(blob, service_ticket_bl);
 
     ::encode((__u8)should_encrypt_ticket, reply);
 
@@ -105,15 +113,18 @@ bool cephx_build_service_ticket_reply(
  * this ServiceTicket with the result.
  */
 bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
-					      bufferlist::iterator& indata)
+						     bufferlist::iterator& indata)
 {
-  CephXServiceTicket msg_a;
+  __u8 service_ticket_v;
+  ::decode(service_ticket_v, indata);
 
+  CephXServiceTicket msg_a;
   if (decode_decrypt(msg_a, secret, indata) < 0) {
     dout(0) << "verify_service_ticket_reply failed decode_decrypt with secret " << secret << dendl;
     return false;
   }
-   __u8 ticket_enc;
+  
+  __u8 ticket_enc;
   ::decode(ticket_enc, indata);
   if (ticket_enc) {
     dout(10) << "getting encrypted ticket" << dendl;
@@ -209,6 +220,9 @@ void CephXTicketManager::set_have_need_key(uint32_t service_id, uint32_t& have, 
 bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
 						     bufferlist::iterator& indata)
 {
+  __u8 service_ticket_reply_v;
+  ::decode(service_ticket_reply_v, indata);
+
   uint32_t num;
   ::decode(num, indata);
   dout(10) << "verify_service_ticket_reply got " << num << " keys" << dendl;
@@ -242,8 +256,12 @@ CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id)
   a->session_key = session_key;
   a->nonce = ((__u64)rand() << 32) + rand();
 
+  __u8 authorizer_v = 1;
+  ::encode(authorizer_v, a->bl);
+
   ::encode(global_id, a->bl);
   ::encode(service_id, a->bl);
+
   ::encode(ticket, a->bl);
 
   CephXAuthorize msg;
@@ -322,41 +340,51 @@ bool cephx_decode_ticket(KeyStore& keys, uint32_t service_id, CephXTicketBlob& t
 bool cephx_verify_authorizer(KeyStore& keys, bufferlist::iterator& indata,
                        CephXServiceTicketInfo& ticket_info, bufferlist& reply_bl)
 {
+  __u8 authorizer_v;
+  ::decode(authorizer_v, indata);
+
   uint32_t service_id;
-  uint64_t secret_id;
   uint64_t global_id;
   CryptoKey service_secret;
 
   ::decode(global_id, indata);
   ::decode(service_id, indata);
-  ::decode(secret_id, indata);
-  dout(10) << "verify_authorizer decrypted service_id=" << service_id << " secret_id=" << secret_id << dendl;
 
-  if (secret_id == (uint64_t)-1) {
+  // ticket blob
+  CephXTicketBlob ticket;
+  ::decode(ticket, indata);
+  dout(10) << "verify_authorizer decrypted service_id=" << service_id
+	   << " secret_id=" << ticket.secret_id << dendl;
+
+  if (ticket.secret_id == (uint64_t)-1) {
     EntityName name;
     name.entity_type = service_id;
     if (!keys.get_secret(name, service_secret)) {
-      dout(0) << "verify_authorizer could not get general service secret for service_id=" << service_id << " secret_id=" << secret_id << dendl;
+      dout(0) << "verify_authorizer could not get general service secret for service_id=" << service_id
+	      << " secret_id=" << ticket.secret_id << dendl;
       return false;
     }
   } else {
-    if (!keys.get_service_secret(service_id, secret_id, service_secret)) {
-      dout(0) << "verify_authorizer could not get service secret for service_id=" << service_id << " secret_id=" << secret_id << dendl;
+    if (!keys.get_service_secret(service_id, ticket.secret_id, service_secret)) {
+      dout(0) << "verify_authorizer could not get service secret for service_id=" << service_id
+	      << " secret_id=" << ticket.secret_id << dendl;
       return false;
     }
   }
-  if (decode_decrypt(ticket_info, service_secret, indata) < 0) {
+  if (decode_decrypt_enc_bl(ticket_info, service_secret, ticket.blob) < 0) {
     dout(0) << "verify_authorizer could not decrypt ticket info" << dendl;
     return false;
   }
 
   if (ticket_info.ticket.global_id != global_id) {
-    dout(0) << "verify_authorizer global_id mismatch: declared id=" << global_id << " ticket_id=" << ticket_info.ticket.global_id << dendl;
+    dout(0) << "verify_authorizer global_id mismatch: declared id=" << global_id
+	    << " ticket_id=" << ticket_info.ticket.global_id << dendl;
     return false;
   }
 
   dout(10) << "verify_authorizer global_id=" << global_id << dendl;
 
+  // CephXAuthorize
   CephXAuthorize auth_msg;
   if (decode_decrypt(auth_msg, ticket_info.session_key, indata) < 0) {
     dout(0) << "verify_authorizercould not decrypt authorize request" << dendl;

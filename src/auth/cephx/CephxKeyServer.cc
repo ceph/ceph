@@ -286,9 +286,8 @@ bool KeyServer::updated_rotating(bufferlist& rotating_bl, version_t& rotating_ve
 
   if (data.rotating_ver <= rotating_ver)
     return false;
-
-  ::encode(data.rotating_ver, rotating_bl);
-  ::encode(data.rotating_secrets, rotating_bl);
+ 
+  data.encode_rotating(rotating_bl);
 
   rotating_ver = data.rotating_ver;
 

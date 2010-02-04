@@ -9,6 +9,8 @@ bool AuthNoneAuthorizeHandler::verify_authorizer(bufferlist& authorizer_data, bu
   bufferlist::iterator iter = authorizer_data.begin();
 
   try {
+    __u8 struct_v = 1;
+    ::decode(struct_v, iter);
     ::decode(entity_name, iter);
     ::decode(global_id, iter);
   } catch (buffer::error *err) {

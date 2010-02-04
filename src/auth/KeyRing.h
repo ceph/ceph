@@ -69,18 +69,19 @@ public:
   void import(KeyRing& other);
 
   // weirdness
+  void dump_rotating();
   void set_rotating(RotatingSecrets& secrets);
   bool need_rotating_secrets();
   bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret);
 
   void encode(bufferlist& bl) const {
-    __u8 v = 1;
-    ::encode(v, bl);
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(keys, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    __u8 v;
-    ::decode(v, bl);
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(keys, bl);
   }
 };
