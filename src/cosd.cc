@@ -92,7 +92,8 @@ int main(int argc, const char **argv)
   _dout_create_courtesy_output_symlink("osd", whoami);
 
   // get monmap
-  MonClient mc;
+  RotatingKeyRing rkeys;
+  MonClient mc(&rkeys);
   if (mc.build_initial_monmap() < 0)
     return -1;
   if (mc.get_monmap_privately() < 0)

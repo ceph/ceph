@@ -19,9 +19,13 @@
 #include "config.h"
 #include "Auth.h"
 
+class KeyRing;
+class RotatingKeyRing;
+
 struct AuthAuthorizeHandler {
   virtual ~AuthAuthorizeHandler() {}
-  virtual bool verify_authorizer(bufferlist& authorizer_data, bufferlist& authorizer_reply,
+  virtual bool verify_authorizer(KeyRing *keys, RotatingKeyRing *rkeys,
+				 bufferlist& authorizer_data, bufferlist& authorizer_reply,
                                  EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info) = 0;
 };
 

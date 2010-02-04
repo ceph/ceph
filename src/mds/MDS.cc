@@ -63,6 +63,7 @@
 #include "messages/MMonCommand.h"
 
 #include "auth/AuthAuthorizeHandler.h"
+#include "auth/KeyRing.h"
 
 #include "config.h"
 
@@ -1549,7 +1550,8 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
   EntityName name;
   uint64_t global_id;
 
-  is_valid = authorize_handler->verify_authorizer(authorizer_data, authorizer_reply, name, global_id, caps_info);
+  is_valid = authorize_handler->verify_authorizer(&g_keyring, monc->rotating_secrets,
+						  authorizer_data, authorizer_reply, name, global_id, caps_info);
 
   if (is_valid) {
     entity_name_t n(con->get_peer_type(), global_id);

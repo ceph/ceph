@@ -288,7 +288,7 @@ void MonClient::handle_auth(MAuthReply *m)
   if (state == MC_STATE_NEGOTIATING) {
     if (!auth || (int)m->protocol != auth->get_protocol()) {
       delete auth;
-      auth = get_auth_client_handler(m->protocol);
+      auth = get_auth_client_handler(m->protocol, rotating_secrets);
       if (!auth) {
 	delete m;
 	return;
@@ -506,7 +506,10 @@ int MonClient::_check_auth_rotating()
     _send_mon_message(m);
   }
 
-  if (!g_keyring.need_rotating_secrets())
+  if (!rotating_secrets)
+    return 0;
+
+  if (!rotating_secrets->need_new_secrets())
     return 0;
 
   if (!auth_principal_needs_rotating_keys(entity_name)) {
@@ -536,8 +539,11 @@ int MonClient::wait_auth_rotating(double timeout)
     return 0;
   }
   
+  if (!rotating_secrets)
+    return 0;
+
   while (auth_principal_needs_rotating_keys(entity_name) &&
-	 g_keyring.need_rotating_secrets())
+	 rotating_secrets->need_new_secrets())
     auth_cond.WaitInterval(monc_lock, interval);
   return 0;
 }

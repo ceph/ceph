@@ -18,7 +18,8 @@
 #include "../AuthAuthorizeHandler.h"
 
 struct CephxAuthorizeHandler : public AuthAuthorizeHandler {
-  bool verify_authorizer(bufferlist& authorizer_data, bufferlist& authorizer_reply,
+  bool verify_authorizer(KeyRing *keys, RotatingKeyRing *rkeys,
+			 bufferlist& authorizer_data, bufferlist& authorizer_reply,
                          EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info);
 };
 

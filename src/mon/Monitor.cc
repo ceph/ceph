@@ -1034,7 +1034,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
   if (!authorizer_data.length())
     return true; /* we're not picky */
 
-  int ret = cephx_verify_authorizer(key_server, iter, auth_ticket_info, authorizer_reply);
+  int ret = cephx_verify_authorizer(&key_server, NULL, iter, auth_ticket_info, authorizer_reply);
   dout(0) << "Monitor::verify_authorizer returns " << ret << dendl;
 
   isvalid = (ret >= 0);

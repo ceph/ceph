@@ -83,7 +83,7 @@
 #define CEPHX_REQUEST_TYPE_MASK            0x0F00
 
 #include "../Auth.h"
-
+#include "../RotatingKeyRing.h"
 
 /*
  * Authentication
@@ -372,12 +372,14 @@ WRITE_CLASS_ENCODER(CephXAuthorize);
 /*
  * Decode an extract ticket
  */
-bool cephx_decode_ticket(KeyStore& keys, uint32_t service_id, CephXTicketBlob& ticket_blob, CephXServiceTicketInfo& ticket_info);
+bool cephx_decode_ticket(KeyStore *keys, RotatingKeyRing *rkeys,
+			 uint32_t service_id, CephXTicketBlob& ticket_blob, CephXServiceTicketInfo& ticket_info);
 
 /*
  * Verify authorizer and generate reply authorizer
  */
-extern bool cephx_verify_authorizer(KeyStore& keys, bufferlist::iterator& indata,
+extern bool cephx_verify_authorizer(KeyStore *keys, RotatingKeyRing *rkeys,
+				    bufferlist::iterator& indata,
 				    CephXServiceTicketInfo& ticket_info, bufferlist& reply_bl);
 
 

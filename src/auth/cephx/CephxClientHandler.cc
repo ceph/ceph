@@ -143,13 +143,15 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
   case CEPHX_GET_ROTATING_KEY:
     {
       dout(10) << " get_rotating_key" << dendl;
-      RotatingSecrets secrets;
-      CryptoKey secret_key;
-      g_keyring.get_master(secret_key);
-      if (decode_decrypt(secrets, secret_key, indata) == 0) {
-	g_keyring.set_rotating(secrets);
-      } else {
-	derr(0) << "could not set rotating key: decode_decrypt failed" << dendl;
+      if (rotating_secrets) {
+	RotatingSecrets secrets;
+	CryptoKey secret_key;
+	g_keyring.get_master(secret_key);
+	if (decode_decrypt(secrets, secret_key, indata) == 0) {
+	  rotating_secrets->set_secrets(secrets);
+	} else {
+	  derr(0) << "could not set rotating key: decode_decrypt failed" << dendl;
+	}
       }
     }
     break;

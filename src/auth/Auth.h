@@ -234,12 +234,17 @@ struct ExpiringCryptoKey {
 };
 WRITE_CLASS_ENCODER(ExpiringCryptoKey);
 
+static inline ostream& operator<<(ostream& out, const ExpiringCryptoKey& c)
+{
+  return out << c.key << " expires " << c.expiration;
+}
+
 struct RotatingSecrets {
   map<uint64_t, ExpiringCryptoKey> secrets;
   version_t max_ver;
-
+  
   RotatingSecrets() : max_ver(0) {}
-
+  
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
@@ -252,11 +257,20 @@ struct RotatingSecrets {
     ::decode(secrets, bl);
     ::decode(max_ver, bl);
   }
+  
+  void add(ExpiringCryptoKey& key) {
+    secrets[++max_ver] = key;
+    while (secrets.size() > KEY_ROTATE_NUM)
+      secrets.erase(secrets.begin());
+  }
+  
+  bool need_new_secrets() {
+    return secrets.size() < KEY_ROTATE_NUM;
+  }
 
-  void add(ExpiringCryptoKey& key);
+  void dump();
 };
 WRITE_CLASS_ENCODER(RotatingSecrets);
-
 
 
 
@@ -264,7 +278,7 @@ class KeyStore {
 public:
   virtual ~KeyStore() {}
   virtual bool get_secret(EntityName& name, CryptoKey& secret) = 0;
-  virtual bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret) = 0;
+  //virtual bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret) = 0;
 };
 
 static inline bool auth_principal_needs_rotating_keys(EntityName& name)

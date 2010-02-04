@@ -23,6 +23,7 @@
 #include "common/Timer.h"
 
 #include "auth/AuthClientHandler.h"
+#include "auth/RotatingKeyRing.h"
 
 #include "messages/MMonSubscribe.h"
 
@@ -163,16 +164,20 @@ public:
     _sub_got(what, have);
   }
   
+  RotatingKeyRing *rotating_secrets;
+
  public:
-  MonClient() : state(MC_STATE_NONE),
-                messenger(NULL), cur_mon(-1),
-		monc_lock("MonClient::monc_lock"),
-		timer(monc_lock),
-		hunting(false),
-		want_monmap(false),
-		want_keys(0), global_id(0),
-		authenticate_err(0),
-		auth(NULL) { }
+  MonClient(RotatingKeyRing *rkeys=0) :
+    state(MC_STATE_NONE),
+    messenger(NULL), cur_mon(-1),
+    monc_lock("MonClient::monc_lock"),
+    timer(monc_lock),
+    hunting(false),
+    want_monmap(false),
+    want_keys(0), global_id(0),
+    authenticate_err(0),
+    auth(NULL),
+    rotating_secrets(rkeys) { }
   ~MonClient() {
     timer.cancel_all_events();
   }

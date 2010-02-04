@@ -63,7 +63,8 @@ int main(int argc, const char **argv)
   if (g_conf.clock_tare) g_clock.tare();
 
   // get monmap
-  MonClient mc;
+  RotatingKeyRing rkeys;
+  MonClient mc(&rkeys);
   if (mc.build_initial_monmap() < 0)
     return -1;
 

@@ -309,6 +309,7 @@ libcommon_files = \
 	auth/Crypto.cc \
 	auth/ExportControl.cc \
 	auth/KeyRing.cc \
+	auth/RotatingKeyRing.cc \
 	common/LogClient.cc \
 	msg/Message.cc \
 	common/BackTrace.cc \
@@ -432,6 +433,7 @@ noinst_HEADERS = \
 	auth/AuthServiceHandler.h\
 	auth/AuthAuthorizeHandler.h\
 	auth/KeyRing.h\
+	auth/RotatingKeyRing.h\
 	auth/Crypto.h\
 	auth/ExportControl.h\
 	ceph_ver.h \

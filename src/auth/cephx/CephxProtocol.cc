@@ -303,7 +303,7 @@ void CephXTicketManager::validate_tickets(uint32_t mask, uint32_t& have, uint32_
   }
 }
 
-bool cephx_decode_ticket(KeyStore& keys, uint32_t service_id, CephXTicketBlob& ticket_blob, CephXServiceTicketInfo& ticket_info)
+bool cephx_decode_ticket(KeyStore *keys, RotatingKeyRing *rkeys, uint32_t service_id, CephXTicketBlob& ticket_blob, CephXServiceTicketInfo& ticket_info)
 {
   uint64_t secret_id = ticket_blob.secret_id;
   CryptoKey service_secret;
@@ -312,14 +312,16 @@ bool cephx_decode_ticket(KeyStore& keys, uint32_t service_id, CephXTicketBlob& t
     return false;
   }
 
-  if (secret_id == (uint64_t)-1) {
-    if (!keys.get_secret(*g_conf.entity_name, service_secret)) {
-      dout(0) << "ceph_decode_ticket could not get general service secret for service_id=" << service_id << " secret_id=" << secret_id << dendl;
+  if (secret_id == (uint64_t)-1 || rkeys == NULL) {
+    if (!keys->get_secret(*g_conf.entity_name, service_secret)) {
+      dout(0) << "ceph_decode_ticket could not get general service secret for service_id="
+	      << service_id << " secret_id=" << secret_id << dendl;
       return false;
     }
   } else {
-    if (!keys.get_service_secret(service_id, secret_id, service_secret)) {
-      dout(0) << "ceph_decode_ticket could not get service secret for service_id=" << service_id << " secret_id=" << secret_id << dendl;
+    if (!rkeys->get_service_secret(secret_id, service_secret)) {
+      dout(0) << "ceph_decode_ticket could not get service secret for service_id=" 
+	      << service_id << " secret_id=" << secret_id << dendl;
       return false;
     }
   }
@@ -337,8 +339,9 @@ bool cephx_decode_ticket(KeyStore& keys, uint32_t service_id, CephXTicketBlob& t
  *
  * {timestamp + 1}^session_key
  */
-bool cephx_verify_authorizer(KeyStore& keys, bufferlist::iterator& indata,
-                       CephXServiceTicketInfo& ticket_info, bufferlist& reply_bl)
+bool cephx_verify_authorizer(KeyStore *keys, RotatingKeyRing *rkeys,
+			     bufferlist::iterator& indata,
+			     CephXServiceTicketInfo& ticket_info, bufferlist& reply_bl)
 {
   __u8 authorizer_v;
   ::decode(authorizer_v, indata);
@@ -356,16 +359,16 @@ bool cephx_verify_authorizer(KeyStore& keys, bufferlist::iterator& indata,
   dout(10) << "verify_authorizer decrypted service_id=" << service_id
 	   << " secret_id=" << ticket.secret_id << dendl;
 
-  if (ticket.secret_id == (uint64_t)-1) {
+  if (ticket.secret_id == (uint64_t)-1 || rkeys == NULL) {
     EntityName name;
     name.entity_type = service_id;
-    if (!keys.get_secret(name, service_secret)) {
+    if (!keys->get_secret(name, service_secret)) {
       dout(0) << "verify_authorizer could not get general service secret for service_id=" << service_id
 	      << " secret_id=" << ticket.secret_id << dendl;
       return false;
     }
   } else {
-    if (!keys.get_service_secret(service_id, ticket.secret_id, service_secret)) {
+    if (!rkeys->get_service_secret(ticket.secret_id, service_secret)) {
       dout(0) << "verify_authorizer could not get service secret for service_id=" << service_id
 	      << " secret_id=" << ticket.secret_id << dendl;
       return false;

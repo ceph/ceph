@@ -20,23 +20,16 @@
 #include "auth/Crypto.h"
 #include "auth/Auth.h"
 
-/*
-  KeyRing is being used at the service side, for holding the temporary rotating
-  key of that service
-*/
-
 class KeyRing : public KeyStore {
   map<string, EntityAuth> keys;
-  RotatingSecrets rotating_secrets;
-  Mutex lock;
-public:
-  KeyRing() : lock("KeyRing") {}
 
+public:
   map<string, EntityAuth>& get_keys() { return keys; }  // yuck
 
   bool load(const char *filename);
   void print(ostream& out);
 
+  // accessors
   bool get_auth(EntityName& name, EntityAuth &a) {
     string n = name.to_str();
     if (keys.count(n)) {
@@ -57,7 +50,7 @@ public:
     get_secret(*g_conf.entity_name, dest);
   }
 
-  //
+  // modifiers
   void add(EntityName& name, EntityAuth &a) {
     string s = name.to_str();
     keys[s] = a;
@@ -68,12 +61,7 @@ public:
   }
   void import(KeyRing& other);
 
-  // weirdness
-  void dump_rotating();
-  void set_rotating(RotatingSecrets& secrets);
-  bool need_rotating_secrets();
-  bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret);
-
+  // encoders
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
@@ -88,7 +76,5 @@ public:
 WRITE_CLASS_ENCODER(KeyRing)
 
 extern KeyRing g_keyring;
-
-
 
 #endif

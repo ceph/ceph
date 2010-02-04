@@ -20,7 +20,7 @@
 
 class AuthNoneClientHandler : public AuthClientHandler {
 public:
-  AuthNoneClientHandler() {}
+  AuthNoneClientHandler(RotatingKeyRing *rkeys) {}
 
   void reset() { }
 
