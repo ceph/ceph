@@ -33,7 +33,7 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool d
     _dout_open_log();
 
   if (init_keys && is_supported_auth(CEPH_AUTH_CEPHX)) {
-    g_keyring.load_master(g_conf.keyring);
+    g_keyring.load(g_conf.keyring);
   }
 }
 

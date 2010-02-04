@@ -20,6 +20,7 @@ using namespace std;
 #include "common/common_init.h"
 #include "auth/Crypto.h"
 #include "auth/Auth.h"
+#include "auth/KeyRing.h"
 
 void usage()
 {
@@ -40,10 +41,11 @@ int main(int argc, const char **argv)
   const char *fn = 0;
   bool gen_key = false;
   bool list = false;
-  bool print_key = true;
+  bool print_key = false;
   bool create_keyring = false;
   const char *name = "";
   const char *caps_fn = NULL;
+  const char *import_keyring = NULL;
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("gen-key", 'g')) {
@@ -58,6 +60,8 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&print_key, OPT_BOOL);
     } else if (CONF_ARG_EQ("create-keyring", 'c')) {
       CONF_SAFE_SET_ARG_VAL(&create_keyring, OPT_BOOL);
+    } else if (CONF_ARG_EQ("import-keyring", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&import_keyring, OPT_STR);
     } else if (!fn) {
       fn = args[i];
     } else 
@@ -68,8 +72,11 @@ int main(int argc, const char **argv)
     usage();
   }
 
-  map<string, EntityAuth> keys_map;
+  bool modified = false;
+  KeyRing keyring;
   string s = name;
+  EntityName ename;
+  ename.from_str(s);
 
   if (caps_fn) {
     if (!name || !(*name)) {
@@ -79,61 +86,76 @@ int main(int argc, const char **argv)
   }
 
   bufferlist bl;
-  int r = bl.read_file(fn, true);
-  if (r >= 0) {
-    try {
-      bufferlist::iterator iter = bl.begin();
-      ::decode(keys_map, iter);
-    } catch (buffer::error *err) {
-      cerr << "error reading file " << fn << std::endl;
-      exit(1);
-    }
-  } else if (create_keyring && r == -ENOENT) {
+  int r = 0;
+  if (create_keyring) {
     cout << "creating " << fn << std::endl;
   } else {
-    cerr << "can't open " << fn << ": " << strerror(errno) << std::endl;
-    exit(1);
+    r = bl.read_file(fn, true);
+    if (r >= 0) {
+      try {
+	bufferlist::iterator iter = bl.begin();
+	::decode(keyring, iter);
+      } catch (buffer::error *err) {
+	cerr << "error reading file " << fn << std::endl;
+	exit(1);
+      }
+    } else {
+      cerr << "can't open " << fn << ": " << strerror(-r) << std::endl;
+      exit(1);
+    }
   }
 
   if (gen_key) {
-    CryptoKey key;
-    key.create(CEPH_CRYPTO_AES);
-    keys_map[s].key = key;
+    EntityAuth eauth;
+    eauth.key.create(CEPH_CRYPTO_AES);
+    keyring.add(ename, eauth);
+    modified = true;
   } else if (list) {
-    map<string, EntityAuth>::iterator iter = keys_map.begin();
-    for (; iter != keys_map.end(); ++iter) {
-      string n = iter->first;
-      if (n.empty()) {
-        cout << "<default key>" << std::endl;
-      } else {
-        cout << n << std::endl;
-      }
-      cout << "\tkey: " << iter->second.key << std::endl;
-      map<string, bufferlist>::iterator capsiter = iter->second.caps.begin();
-      for (; capsiter != iter->second.caps.end(); ++capsiter) {
-        bufferlist::iterator dataiter = capsiter->second.begin();
-        string caps;
-        ::decode(caps, dataiter);
-	cout << "\tcaps: [" << capsiter->first << "] " << caps << std::endl;
-      }
-    }
+    keyring.print(cout);
   } else if (print_key) {
-    if (keys_map.count(s)) {
+    CryptoKey key;
+    if (keyring.get_secret(ename, key)) {
       string a;
-      keys_map[s].key.encode_base64(a);
+      key.encode_base64(a);
       cout << a << std::endl;
+    } else {
+      cerr << "entity " << ename << " not found" << std::endl;
     }
-    else
-      cerr << "entity " << s << " not found" << std::endl;
+  } else if (import_keyring) {
+    KeyRing other;
+    bufferlist obl;
+    int r = obl.read_file(import_keyring);
+    if (r >= 0) {
+      try {
+	bufferlist::iterator iter = obl.begin();
+	::decode(other, iter);
+      } catch (buffer::error *err) {
+	cerr << "error reading file " << import_keyring << std::endl;
+	exit(1);
+      }
+      
+      cout << "importing contents of " << import_keyring << " into " << fn << std::endl;
+      //other.print(cout);
+      keyring.import(other);
+      modified = true;
+
+    } else {
+      cerr << "can't open " << import_keyring << ": " << strerror(-r) << std::endl;
+      exit(1);
+    }
+  } else {
+    cerr << "no command specified" << std::endl;
+    usage();
   }
 
+
   if (caps_fn) {
-    map<string, bufferlist>& caps = keys_map[s].caps;
     ConfFile *cf = new ConfFile(caps_fn);
     if (!cf->parse()) {
       cerr << "could not parse caps file " << caps_fn << std::endl;
       exit(1);
     }
+    map<string, bufferlist> caps;
     const char *key_names[] = { "mon", "osd", "mds", NULL };
     for (int i=0; key_names[i]; i++) {
       char *val;
@@ -146,16 +168,18 @@ int main(int argc, const char **argv)
         free(val);
       }
     }
+    keyring.set_caps(ename, caps);
+    modified = true;
   }
 
-  if (gen_key) {
-    bufferlist bl2;
-    ::encode(keys_map, bl2);
-    r = bl2.write_file(fn);
-
+  if (modified) {
+    bufferlist bl;
+    ::encode(keyring, bl);
+    r = bl.write_file(fn);
     if (r < 0) {
       cerr << "could not write " << fn << std::endl;
     }
+    //cout << "wrote " << bl.length() << " bytes to " << fn << std::endl;
   }
 
   return 0;

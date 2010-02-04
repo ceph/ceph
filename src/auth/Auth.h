@@ -50,7 +50,7 @@ struct EntityName {
     return s;
   }
 
-  bool from_str(string& s) {
+  bool from_str(const string& s) {
     int pos = s.find('.');
 
     if (pos < 0)

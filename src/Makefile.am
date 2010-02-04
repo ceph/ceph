@@ -59,7 +59,7 @@ streamtest_LDADD = libos.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += dumpjournal dupstore streamtest
 
 test_trans_SOURCES = test_trans.cc
-test_trans_LDADD = libos.a libcommon.a -lpthread -lm
+test_trans_LDADD = libos.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += test_trans
 
 # synthetic client
