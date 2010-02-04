@@ -64,15 +64,10 @@ bool KeyRing::load(const char *filename_list)
 
 void KeyRing::print(ostream& out)
 {
-  for (map<string, EntityAuth>::iterator p = keys.begin();
+  for (map<EntityName, EntityAuth>::iterator p = keys.begin();
        p != keys.end();
        ++p) {
-    string n = p->first;
-    if (n.empty()) {
-      out << "<default key>" << std::endl;
-    } else {
-      out << n << std::endl;
-    }
+    out << p->first << std::endl;
     out << "\tkey: " << p->second.key << std::endl;
 
     for (map<string, bufferlist>::iterator q = p->second.caps.begin();
@@ -88,7 +83,7 @@ void KeyRing::print(ostream& out)
 
 void KeyRing::import(KeyRing& other)
 {
-  for (map<string, EntityAuth>::iterator p = other.keys.begin();
+  for (map<EntityName, EntityAuth>::iterator p = other.keys.begin();
        p != other.keys.end();
        ++p) {
     dout(10) << " importing " << p->first << " " << p->second << dendl;

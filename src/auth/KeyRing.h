@@ -21,27 +21,25 @@
 #include "auth/Auth.h"
 
 class KeyRing : public KeyStore {
-  map<string, EntityAuth> keys;
+  map<EntityName, EntityAuth> keys;
 
 public:
-  map<string, EntityAuth>& get_keys() { return keys; }  // yuck
+  map<EntityName, EntityAuth>& get_keys() { return keys; }  // yuck
 
   bool load(const char *filename);
   void print(ostream& out);
 
   // accessors
   bool get_auth(EntityName& name, EntityAuth &a) {
-    string n = name.to_str();
-    if (keys.count(n)) {
-      a = keys[n];
+    if (keys.count(name)) {
+      a = keys[name];
       return true;
     }
     return false;
   }
   bool get_secret(EntityName& name, CryptoKey& secret) {
-    string n = name.to_str();
-    if (keys.count(n)) {
-      secret = keys[n].key;
+    if (keys.count(name)) {
+      secret = keys[name].key;
       return true;
     }
     return false;
@@ -52,12 +50,10 @@ public:
 
   // modifiers
   void add(EntityName& name, EntityAuth &a) {
-    string s = name.to_str();
-    keys[s] = a;
+    keys[name] = a;
   }
   void set_caps(EntityName& name, map<string, bufferlist>& caps) {
-    string s = name.to_str();
-    keys[s].caps = caps;
+    keys[name].caps = caps;
   }
   void import(KeyRing& other);
 
