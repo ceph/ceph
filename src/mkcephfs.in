@@ -217,7 +217,7 @@ for name in $what; do
 
 	if [ -n "$keyring" ]; then
 	    if [ -n "$ssh" ]; then
-		scp -qv /tmp/keyring.osd.$id $host:$keyring
+		scp -q /tmp/keyring.osd.$id $host:$keyring
 	    else
 		cp -v /tmp/keyring.osd.$id $keyring
 	    fi
@@ -232,7 +232,7 @@ for name in $what; do
 	get_conf keyring "" "keyring"
 	if [ -n "$keyring" ]; then
 	    if [ -n "$ssh" ]; then
-		scp -qv /tmp/keyring.mds.$id $host:$keyring
+		scp -q /tmp/keyring.mds.$id $host:$keyring
 	    else
 		cp -v /tmp/keyring.mds.$id $keyring
 	    fi
