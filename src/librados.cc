@@ -318,7 +318,11 @@ bool RadosClient::init()
   dout(1) << "iit" << dendl;
   monclient.init();
 
-  monclient.authenticate(g_conf.client_mount_timeout);
+  int err = monclient.authenticate(g_conf.client_mount_timeout);
+  if (err) {
+    dout(0) << *g_conf.entity_name << " authentication error " << strerror(-err) << dendl;
+    return false;
+  }
   messenger->set_myname(entity_name_t::CLIENT(monclient.get_global_id()));
 
   lock.Lock();

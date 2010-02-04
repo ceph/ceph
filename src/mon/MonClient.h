@@ -94,7 +94,6 @@ private:
   // authenticate
 private:
   Cond map_cond;
-  Cond authenticate_cond;
   int authenticate_err;
 
   list<Message*> waiting_for_session;

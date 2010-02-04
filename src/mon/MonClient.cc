@@ -273,7 +273,7 @@ int MonClient::authenticate(double timeout)
     _reopen_session();
 
   while (state != MC_STATE_HAVE_SESSION && !authenticate_err)
-    authenticate_cond.Wait(monc_lock);
+    auth_cond.Wait(monc_lock);
 
   if (state == MC_STATE_HAVE_SESSION) {
     dout(5) << "authenticate success, global_id " << global_id << dendl;
@@ -329,7 +329,6 @@ void MonClient::handle_auth(MAuthReply *m)
 	_send_mon_message(waiting_for_session.front());
 	waiting_for_session.pop_front();
       }
-      authenticate_cond.SignalAll();
     }
   
     _check_auth_rotating();
@@ -491,7 +490,7 @@ int MonClient::wait_authenticate(double timeout)
   if (cur_mon < 0)
     _reopen_session();
 
-  int ret = authenticate_cond.WaitInterval(monc_lock, interval);
+  int ret = auth_cond.WaitInterval(monc_lock, interval);
   dout(0) << "wait_authenticate ended, returned " << ret << dendl;
   return ret;
 }
