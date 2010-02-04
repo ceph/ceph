@@ -24,7 +24,7 @@ class RotatingKeyRing;
 
 struct AuthAuthorizeHandler {
   virtual ~AuthAuthorizeHandler() {}
-  virtual bool verify_authorizer(KeyRing *keys, RotatingKeyRing *rkeys,
+  virtual bool verify_authorizer(KeyStore *keys,
 				 bufferlist& authorizer_data, bufferlist& authorizer_reply,
                                  EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info) = 0;
 };

@@ -276,7 +276,7 @@ int MonClient::authenticate(double timeout)
     authenticate_cond.Wait(monc_lock);
 
   if (state == MC_STATE_HAVE_SESSION) {
-    dout(5) << "authenticate success, global_id" << global_id << dendl;
+    dout(5) << "authenticate success, global_id " << global_id << dendl;
   }
 
   return authenticate_err;
@@ -506,14 +506,15 @@ int MonClient::_check_auth_rotating()
     _send_mon_message(m);
   }
 
-  if (!rotating_secrets)
-    return 0;
-
-  if (!rotating_secrets->need_new_secrets())
-    return 0;
-
-  if (!auth_principal_needs_rotating_keys(entity_name)) {
+  if (!rotating_secrets ||
+      !auth_principal_needs_rotating_keys(entity_name)) {
     dout(20) << "_check_auth_rotating not needed by " << entity_name << dendl;
+    return 0;
+  }
+
+  if (!rotating_secrets->need_new_secrets()) {
+    dout(20) << "_check_auth_rotating have uptodate secrets" << dendl;
+    rotating_secrets->dump_rotating();
     return 0;
   }
 

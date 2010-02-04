@@ -6,6 +6,7 @@
 
 #include "Crypto.h"
 #include "auth/RotatingKeyRing.h"
+#include "auth/KeyRing.h"
 
 #define DOUT_SUBSYS auth
 #undef dout_prefix
@@ -33,9 +34,21 @@ void RotatingKeyRing::dump_rotating()
     dout(0) << " id " << iter->first << " " << iter->second << dendl;
 }
 
-bool RotatingKeyRing::get_service_secret(uint64_t secret_id, CryptoKey& secret)
+bool RotatingKeyRing::get_secret(EntityName& name, CryptoKey& secret)
 {
   Mutex::Locker l(lock);
+  return keyring->get_secret(name, secret);
+}
+
+bool RotatingKeyRing::get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret)
+{
+  Mutex::Locker l(lock);
+
+  if (service_id != this->service_id) {
+    dout(0) << "do not have service " << ceph_entity_type_name(service_id)
+	    << ", i am " << ceph_entity_type_name(this->service_id) << dendl;
+    return false;
+  }
 
   map<uint64_t, ExpiringCryptoKey>::iterator iter = secrets.secrets.find(secret_id);
   if (iter == secrets.secrets.end()) {

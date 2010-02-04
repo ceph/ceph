@@ -21,20 +21,28 @@
 #include "auth/Auth.h"
 
 /*
- * mediate access to a service's rotating secrets
+ * mediate access to a service's keyring and rotating secrets
  */
 
-class RotatingKeyRing {
+class KeyRing;
+
+class RotatingKeyRing : public KeyStore {
+  uint32_t service_id;
   RotatingSecrets secrets;
+  KeyRing *keyring;
   Mutex lock;
 
 public:
-  RotatingKeyRing() : lock("RotatingKeyRing::lock") {}
+  RotatingKeyRing(uint32_t s, KeyRing *kr) :
+    service_id(s),
+    keyring(kr),
+    lock("RotatingKeyRing::lock") {}
 
   bool need_new_secrets();
   void set_secrets(RotatingSecrets& s);
   void dump_rotating();
-  bool get_service_secret(uint64_t secret_id, CryptoKey& secret);
+  bool get_secret(EntityName& name, CryptoKey& secret);
+  bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret);
 };
 
 #endif

@@ -278,7 +278,7 @@ class KeyStore {
 public:
   virtual ~KeyStore() {}
   virtual bool get_secret(EntityName& name, CryptoKey& secret) = 0;
-  //virtual bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret) = 0;
+  virtual bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret) = 0;
 };
 
 static inline bool auth_principal_needs_rotating_keys(EntityName& name)
@@ -286,6 +286,5 @@ static inline bool auth_principal_needs_rotating_keys(EntityName& name)
   return ((name.entity_type == CEPH_ENTITY_TYPE_OSD) ||
           (name.entity_type == CEPH_ENTITY_TYPE_MDS));
 }
-
 
 #endif

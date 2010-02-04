@@ -92,7 +92,7 @@ int main(int argc, const char **argv)
   _dout_create_courtesy_output_symlink("osd", whoami);
 
   // get monmap
-  RotatingKeyRing rkeys;
+  RotatingKeyRing rkeys(CEPH_ENTITY_TYPE_OSD, &g_keyring);
   MonClient mc(&rkeys);
   if (mc.build_initial_monmap() < 0)
     return -1;

@@ -93,7 +93,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       }
       CephXServiceTicketInfo old_ticket_info;
 
-      if (cephx_decode_ticket(key_server, NULL, CEPH_ENTITY_TYPE_AUTH, req.old_ticket, old_ticket_info)) {
+      if (cephx_decode_ticket(key_server, CEPH_ENTITY_TYPE_AUTH, req.old_ticket, old_ticket_info)) {
         global_id = old_ticket_info.ticket.global_id;
         dout(10) << "decoded old_ticket with global_id=" << global_id << dendl;
         should_enc_ticket = true;
@@ -135,7 +135,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 
       bufferlist tmp_bl;
       CephXServiceTicketInfo auth_ticket_info;
-      if (!cephx_verify_authorizer(key_server, NULL, indata, auth_ticket_info, tmp_bl)) {
+      if (!cephx_verify_authorizer(key_server, indata, auth_ticket_info, tmp_bl)) {
         ret = -EPERM;
 	break;
       }
@@ -148,7 +148,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       vector<CephXSessionAuthInfo> info_vec;
       for (uint32_t service_id = 1; service_id <= ticket_req.keys; service_id <<= 1) {
         if (ticket_req.keys & service_id) {
-	  dout(10) << " adding key for service " << service_id << dendl;
+	  dout(10) << " adding key for service " << ceph_entity_type_name(service_id) << dendl;
           CephXSessionAuthInfo info;
           int r = key_server->build_session_auth_info(service_id, auth_ticket_info, info);
           if (r < 0) {

@@ -167,7 +167,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 
 AuthAuthorizer *CephxClientHandler::build_authorizer(uint32_t service_id)
 {
-  dout(10) << "build_authorizer for service " << service_id << dendl;
+  dout(10) << "build_authorizer for service " << ceph_entity_type_name(service_id) << dendl;
   return tickets.build_authorizer(service_id);
 }
 

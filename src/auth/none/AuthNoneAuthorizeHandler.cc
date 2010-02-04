@@ -3,7 +3,7 @@
 #include "AuthNoneAuthorizeHandler.h"
 
 
-bool AuthNoneAuthorizeHandler::verify_authorizer(KeyRing *keys, RotatingKeyRing *rkeys,
+bool AuthNoneAuthorizeHandler::verify_authorizer(KeyStore *keys,
 						 bufferlist& authorizer_data, bufferlist& authorizer_reply,
 						 EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info)
 {

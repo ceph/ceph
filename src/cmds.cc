@@ -33,6 +33,8 @@ using namespace std;
 
 #include "mon/MonClient.h"
 
+#include "auth/KeyRing.h"
+
 void usage()
 {
   cerr << "usage: cmds -i name [flags] [--mds rank] [--shadow rank]\n";
@@ -63,7 +65,7 @@ int main(int argc, const char **argv)
   if (g_conf.clock_tare) g_clock.tare();
 
   // get monmap
-  RotatingKeyRing rkeys;
+  RotatingKeyRing rkeys(CEPH_ENTITY_TYPE_MDS, &g_keyring);
   MonClient mc(&rkeys);
   if (mc.build_initial_monmap() < 0)
     return -1;

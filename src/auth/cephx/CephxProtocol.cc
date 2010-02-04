@@ -197,11 +197,12 @@ void CephXTicketManager::set_have_need_key(uint32_t service_id, uint32_t& have, 
   if (iter == tickets_map.end()) {
     have &= ~service_id;
     need |= service_id;
-    dout(10) << "couldn't find entry for service_id " << service_id << dendl;
+    dout(10) << "couldn't find entry for service_id " << ceph_entity_type_name(service_id) << dendl;
     return;
   }
 
-  dout(10) << "service_id=" << service_id << " need=" << iter->second.need_key() << " have=" << iter->second.have_key() << dendl;
+  dout(10) << "set_have_need_key service " << ceph_entity_type_name(service_id) << " (" << service_id << ")"
+	   << " need=" << iter->second.need_key() << " have=" << iter->second.have_key() << dendl;
   if (iter->second.need_key())
     need |= service_id;
   else
@@ -230,7 +231,7 @@ bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
   for (int i=0; i<(int)num; i++) {
     uint32_t type;
     ::decode(type, indata);
-    dout(10) << "got key for service_id=" << type << dendl;
+    dout(10) << "got key for service_id " << ceph_entity_type_name(type) << dendl;
     CephXTicketHandler& handler = tickets_map[type];
     handler.service_id = type;
     if (!handler.verify_service_ticket_reply(secret, indata)) {
@@ -284,7 +285,7 @@ CephXAuthorizer *CephXTicketManager::build_authorizer(uint32_t service_id)
 {
   map<uint32_t, CephXTicketHandler>::iterator iter = tickets_map.find(service_id);
   if (iter == tickets_map.end()) {
-    dout(0) << "no TicketHandler for service " << service_id << dendl;
+    dout(0) << "no TicketHandler for service " << ceph_entity_type_name(service_id) << dendl;
     return NULL;
   }
 
@@ -301,9 +302,10 @@ void CephXTicketManager::validate_tickets(uint32_t mask, uint32_t& have, uint32_
       set_have_need_key(i, have, need);
     }
   }
+  dout(10) << "validate_tickets want " << mask << " have " << have << " need " << need << dendl;
 }
 
-bool cephx_decode_ticket(KeyStore *keys, RotatingKeyRing *rkeys, uint32_t service_id, CephXTicketBlob& ticket_blob, CephXServiceTicketInfo& ticket_info)
+bool cephx_decode_ticket(KeyStore *keys, uint32_t service_id, CephXTicketBlob& ticket_blob, CephXServiceTicketInfo& ticket_info)
 {
   uint64_t secret_id = ticket_blob.secret_id;
   CryptoKey service_secret;
@@ -312,16 +314,16 @@ bool cephx_decode_ticket(KeyStore *keys, RotatingKeyRing *rkeys, uint32_t servic
     return false;
   }
 
-  if (secret_id == (uint64_t)-1 || rkeys == NULL) {
+  if (secret_id == (uint64_t)-1) {
     if (!keys->get_secret(*g_conf.entity_name, service_secret)) {
       dout(0) << "ceph_decode_ticket could not get general service secret for service_id="
-	      << service_id << " secret_id=" << secret_id << dendl;
+	      << ceph_entity_type_name(service_id) << " secret_id=" << secret_id << dendl;
       return false;
     }
   } else {
-    if (!rkeys->get_service_secret(secret_id, service_secret)) {
+    if (!keys->get_service_secret(service_id, secret_id, service_secret)) {
       dout(0) << "ceph_decode_ticket could not get service secret for service_id=" 
-	      << service_id << " secret_id=" << secret_id << dendl;
+	      << ceph_entity_type_name(service_id) << " secret_id=" << secret_id << dendl;
       return false;
     }
   }
@@ -339,7 +341,7 @@ bool cephx_decode_ticket(KeyStore *keys, RotatingKeyRing *rkeys, uint32_t servic
  *
  * {timestamp + 1}^session_key
  */
-bool cephx_verify_authorizer(KeyStore *keys, RotatingKeyRing *rkeys,
+bool cephx_verify_authorizer(KeyStore *keys,
 			     bufferlist::iterator& indata,
 			     CephXServiceTicketInfo& ticket_info, bufferlist& reply_bl)
 {
@@ -356,21 +358,21 @@ bool cephx_verify_authorizer(KeyStore *keys, RotatingKeyRing *rkeys,
   // ticket blob
   CephXTicketBlob ticket;
   ::decode(ticket, indata);
-  dout(10) << "verify_authorizer decrypted service_id=" << service_id
+  dout(10) << "verify_authorizer decrypted service " << ceph_entity_type_name(service_id)
 	   << " secret_id=" << ticket.secret_id << dendl;
 
-  if (ticket.secret_id == (uint64_t)-1 || rkeys == NULL) {
+  if (ticket.secret_id == (uint64_t)-1) {
     EntityName name;
     name.entity_type = service_id;
     if (!keys->get_secret(name, service_secret)) {
-      dout(0) << "verify_authorizer could not get general service secret for service_id=" << service_id
-	      << " secret_id=" << ticket.secret_id << dendl;
+      dout(0) << "verify_authorizer could not get general service secret for service "
+	      << ceph_entity_type_name(service_id) << " secret_id=" << ticket.secret_id << dendl;
       return false;
     }
   } else {
-    if (!rkeys->get_service_secret(ticket.secret_id, service_secret)) {
-      dout(0) << "verify_authorizer could not get service secret for service_id=" << service_id
-	      << " secret_id=" << ticket.secret_id << dendl;
+    if (!keys->get_service_secret(service_id, ticket.secret_id, service_secret)) {
+      dout(0) << "verify_authorizer could not get service secret for service "
+	      << ceph_entity_type_name(service_id) << " secret_id=" << ticket.secret_id << dendl;
       return false;
     }
   }

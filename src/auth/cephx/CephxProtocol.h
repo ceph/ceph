@@ -372,13 +372,13 @@ WRITE_CLASS_ENCODER(CephXAuthorize);
 /*
  * Decode an extract ticket
  */
-bool cephx_decode_ticket(KeyStore *keys, RotatingKeyRing *rkeys,
+bool cephx_decode_ticket(KeyStore *keys,
 			 uint32_t service_id, CephXTicketBlob& ticket_blob, CephXServiceTicketInfo& ticket_info);
 
 /*
  * Verify authorizer and generate reply authorizer
  */
-extern bool cephx_verify_authorizer(KeyStore *keys, RotatingKeyRing *rkeys,
+extern bool cephx_verify_authorizer(KeyStore *keys,
 				    bufferlist::iterator& indata,
 				    CephXServiceTicketInfo& ticket_info, bufferlist& reply_bl);
 

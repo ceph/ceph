@@ -20,7 +20,7 @@
 #include "auth/Crypto.h"
 #include "auth/Auth.h"
 
-class KeyRing : public KeyStore {
+class KeyRing {
   map<EntityName, EntityAuth> keys;
 
 public:

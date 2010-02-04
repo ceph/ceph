@@ -5,7 +5,7 @@
 #include "CephxAuthorizeHandler.h"
 
 
-bool CephxAuthorizeHandler::verify_authorizer(KeyRing *keys, RotatingKeyRing *rkeys,
+bool CephxAuthorizeHandler::verify_authorizer(KeyStore *keys,
 					      bufferlist& authorizer_data, bufferlist& authorizer_reply,
                                               EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info)
 {
@@ -18,7 +18,7 @@ bool CephxAuthorizeHandler::verify_authorizer(KeyRing *keys, RotatingKeyRing *rk
 
   CephXServiceTicketInfo auth_ticket_info;
 
-  bool isvalid = cephx_verify_authorizer(keys, rkeys, iter, auth_ticket_info, authorizer_reply);
+  bool isvalid = cephx_verify_authorizer(keys, iter, auth_ticket_info, authorizer_reply);
   dout(0) << "CephxAuthorizeHandler::verify_authorizer isvalid=" << isvalid << dendl;
 
   if (isvalid) {
