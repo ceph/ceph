@@ -1568,7 +1568,7 @@ bool OSD::ms_dispatch(Message *m)
 
 bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
 {
-  dout(0) << "OSD::ms_get_authorizer type=" << dest_type << dendl;
+  dout(10) << "OSD::ms_get_authorizer type=" << ceph_entity_type_name(dest_type) << dendl;
 
   if (dest_type == CEPH_ENTITY_TYPE_MON)
     return true;

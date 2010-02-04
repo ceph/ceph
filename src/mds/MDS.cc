@@ -1210,7 +1210,7 @@ bool MDS::ms_dispatch(Message *m)
 
 bool MDS::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
 {
-  dout(0) << "MDS::ms_get_authorizer type=" << dest_type << dendl;
+  dout(10) << "MDS::ms_get_authorizer type=" << ceph_entity_type_name(dest_type) << dendl;
 
   /* monitor authorization is being handled on different layer */
   if (dest_type == CEPH_ENTITY_TYPE_MON)
