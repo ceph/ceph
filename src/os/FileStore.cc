@@ -357,44 +357,25 @@ int FileStore::lock_fsid()
   return 0;
 }
 
-int FileStore::mount() 
+int FileStore::_detect_fs()
 {
   char buf[80];
-
-  if (g_conf.filestore_dev) {
-    dout(0) << "mounting" << dendl;
-    char cmd[100];
-    snprintf(cmd, sizeof(cmd), "mount %s", g_conf.filestore_dev);
-    //system(cmd);
-  }
-
-  dout(5) << "basedir " << basedir << " journal " << journalpath << dendl;
   
-  // make sure global base dir exists
-  struct stat st;
-  int r = ::stat(basedir.c_str(), &st);
-  if (r != 0) {
-    derr(0) << "unable to stat basedir " << basedir << ", " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    return -errno;
-  }
-  
+  // fake collections?
   if (g_conf.filestore_fake_collections) {
     dout(0) << "faking collections (in memory)" << dendl;
     fake_collections = true;
   }
 
-  // get fsid
-  char fn[PATH_MAX];
-  snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
-
-  // fake attrs? 
-  // let's test to see if they work.
+  // xattrs?
   if (g_conf.filestore_fake_attrs) {
-    dout(0) << "faking attrs (in memory)" << dendl;
+    dout(0) << "faking xattrs (in memory)" << dendl;
     fake_attrs = true;
   } else {
+    char fn[PATH_MAX];
     int x = rand();
     int y = x+1;
+    snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
     do_setxattr(fn, "user.test", &x, sizeof(x));
     do_getxattr(fn, "user.test", &y, sizeof(y));
     /*dout(10) << "x = " << x << "   y = " << y 
@@ -402,87 +383,22 @@ int FileStore::mount()
 	     << " " << strerror(errno)
 	     << dendl;*/
     if (x != y) {
-      derr(0) << "xattrs don't appear to work (" << strerror_r(errno, buf, sizeof(buf)) << ") on " << basedir << ", be sure to mount underlying file system with 'user_xattr' option" << dendl;
+      derr(0) << "xattrs don't appear to work (" << strerror_r(errno, buf, sizeof(buf))
+	      << ") on " << fn << ", be sure to mount underlying file system with 'user_xattr' option" << dendl;
       return -errno;
     }
   }
 
-  fsid_fd = ::open(fn, O_RDWR|O_CREAT, 0644);
-  ::read(fsid_fd, &fsid, sizeof(fsid));
-
-  if (lock_fsid() < 0)
-    return -EBUSY;
-
-  dout(10) << "mount fsid is " << fsid << dendl;
-
-  // get epoch
-  snprintf(fn, sizeof(fn), "%s/current/commit_op_seq", basedir.c_str());
-  op_fd = ::open(fn, O_CREAT|O_RDWR, 0644);
-  assert(op_fd >= 0);
-  __u64 initial_op_seq = 0;
-  {
-    char s[40];
-    int l = ::read(op_fd, s, sizeof(s));
-    s[l] = 0;
-    initial_op_seq = atoll(s);
-  }
-  dout(5) << "mount op_seq is " << initial_op_seq << dendl;
-
-  // journal
-  open_journal();
-  r = journal_replay(initial_op_seq);
-  if (r == -EINVAL) {
-    dout(0) << "mount got EINVAL on journal open, not mounting" << dendl;
-    return r;
-  }
-  journal_start();
-  sync_thread.create();
-  op_tp.start();
-  flusher_thread.create();
-  op_finisher.start();
-
-  if (journal && g_conf.filestore_journal_writeahead)
-    journal->set_wait_on_full(true);
-
-  // is this btrfs?
-  Transaction empty;
-  btrfs = 1;
-
-  // open some dir handles
-  basedir_fd = ::open(basedir.c_str(), O_RDONLY);
-  current_fd = ::open(current_fn, O_RDONLY);
-  dout(10) << "basedir_fd " << basedir_fd << "=" << basedir
-	   << ", current_fd " << current_fd << "=" << current_fn << dendl;
-
-  if (true) { //g_conf.filestore_btrfs_snap) {
-    // get snap list
-    DIR *dir = ::opendir(basedir.c_str());
-    if (!dir)
-      return -errno;
-
-    struct dirent sde, *de;
-    while (::readdir_r(dir, &sde, &de) == 0) {
-      if (!de)
-	break;
-      long long unsigned c;
-      if (sscanf(de->d_name, COMMIT_SNAP_ITEM, &c) == 1)
-	snaps.push_back(c);
-    }
-    
-    ::closedir(dir);
-
-    dout(0) << " found snaps " << snaps << dendl;
-  }
-
-  btrfs_trans_start_end = true;  // trans start/end interface
-  r = apply_transaction(empty, 0);
+  // btrfs?
+  int fd = ::open(basedir.c_str(), O_RDONLY);
+  if (fd < 0)
+    return -errno;
+  int r = ::ioctl(fd, BTRFS_IOC_TRANS_START);
   if (r == 0) {
     dout(0) << "mount btrfs TRANS_START ioctl is supported" << dendl;
-  } else {
-    dout(0) << "mount btrfs TRANS_START ioctl is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
-  }
-  if (r == 0) {
-    // do we have the shiny new CLONE_RANGE ioctl?
+    ::ioctl(fd, BTRFS_IOC_TRANS_END);
+
+    // clone_range?
     btrfs = 2;
     int r = _do_clone_range(fsid_fd, -1, 0, 1);
     if (r == -EBADF) {
@@ -493,11 +409,16 @@ int FileStore::mount()
     }
     dout(0) << "mount detected btrfs" << dendl;      
   } else {
+    dout(0) << "mount btrfs TRANS_START ioctl is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
     dout(0) << "mount did NOT detect btrfs" << dendl;
     btrfs = 0;
   }
+  ::close(fd);
+  return 0;
+}
 
-
+int FileStore::_sanity_check_fs()
+{
   // sanity check(s)
   if (!btrfs) {
     if (!journal || !g_conf.filestore_journal_writeahead) {
@@ -536,6 +457,138 @@ int FileStore::mount()
 	 << TEXT_NORMAL;
 
   }
+
+  return 0;
+}
+
+int FileStore::mount() 
+{
+  char buf[80];
+
+  if (g_conf.filestore_dev) {
+    dout(0) << "mounting" << dendl;
+    char cmd[100];
+    snprintf(cmd, sizeof(cmd), "mount %s", g_conf.filestore_dev);
+    //system(cmd);
+  }
+
+  dout(5) << "basedir " << basedir << " journal " << journalpath << dendl;
+  
+  // make sure global base dir exists
+  struct stat st;
+  int r = ::stat(basedir.c_str(), &st);
+  if (r != 0) {
+    derr(0) << "unable to stat basedir " << basedir << ", " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    return -errno;
+  }
+  
+  // test for btrfs, xattrs, etc.
+  r = _detect_fs();
+  if (r < 0)
+    return r;
+
+  // get fsid
+  char fn[PATH_MAX];
+  snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
+  fsid_fd = ::open(fn, O_RDWR|O_CREAT, 0644);
+  ::read(fsid_fd, &fsid, sizeof(fsid));
+
+  if (lock_fsid() < 0)
+    return -EBUSY;
+
+  dout(10) << "mount fsid is " << fsid << dendl;
+
+  // open some dir handles
+  basedir_fd = ::open(basedir.c_str(), O_RDONLY);
+
+  // roll back?
+  if (true) {
+    // get snap list
+    DIR *dir = ::opendir(basedir.c_str());
+    if (!dir)
+      return -errno;
+
+    struct dirent sde, *de;
+    while (::readdir_r(dir, &sde, &de) == 0) {
+      if (!de)
+	break;
+      long long unsigned c;
+      if (sscanf(de->d_name, COMMIT_SNAP_ITEM, &c) == 1)
+	snaps.push_back(c);
+    }
+    
+    ::closedir(dir);
+
+    dout(0) << "mount found snaps " << snaps << dendl;
+  }
+  if (g_conf.filestore_btrfs_snap) {
+    if (snaps.empty()) {
+      dout(0) << "mount WARNING: no consistent snaps found, store may be in inconsistent state" << dendl;
+    } else if (!btrfs) {
+      dout(0) << "mount WARNING: not btrfs, store may be in inconsistent state" << dendl;
+    } else {
+      __u64 cp = snaps.back();
+      btrfs_ioctl_vol_args snapargs;
+
+      // drop current
+      snapargs.fd = 0;
+      strcpy(snapargs.name, "current");
+      int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_DESTROY, &snapargs);
+      if (r) {
+	char buf[80];
+	dout(0) << "error removing old current subvol: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+	char s[PATH_MAX];
+	snprintf(s, sizeof(s), "%s/current.remove.me.%d", basedir.c_str(), rand());
+	r = ::rename(current_fn, s);
+	assert(r == 0);
+      }
+      assert(r == 0);
+      
+      // roll back
+      char s[PATH_MAX];
+      snprintf(s, sizeof(s), "%s/" COMMIT_SNAP_ITEM, basedir.c_str(), (long long unsigned)cp);
+      snapargs.fd = ::open(s, O_RDONLY);
+      r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &snapargs);
+      assert(r == 0);
+      ::close(snapargs.fd);
+      dout(10) << "mount rolled back to consistent snap " << cp << dendl;
+      snaps.pop_back();
+    }
+  }
+
+  current_fd = ::open(current_fn, O_RDONLY);
+  assert(current_fd >= 0);
+
+  // init op_seq
+  op_fd = ::open(current_op_seq_fn, O_CREAT|O_RDWR, 0644);
+  assert(op_fd >= 0);
+
+  __u64 initial_op_seq = 0;
+  {
+    char s[40];
+    int l = ::read(op_fd, s, sizeof(s));
+    s[l] = 0;
+    initial_op_seq = atoll(s);
+  }
+  dout(5) << "mount op_seq is " << initial_op_seq << dendl;
+
+  // journal
+  open_journal();
+  r = journal_replay(initial_op_seq);
+  if (r == -EINVAL) {
+    dout(0) << "mount got EINVAL on journal open, not mounting" << dendl;
+    return r;
+  }
+  journal_start();
+  sync_thread.create();
+  op_tp.start();
+  flusher_thread.create();
+  op_finisher.start();
+
+  if (journal && g_conf.filestore_journal_writeahead)
+    journal->set_wait_on_full(true);
+
+  _sanity_check_fs();
 
   // all okay.
   return 0;

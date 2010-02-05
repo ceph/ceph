@@ -40,6 +40,7 @@ using namespace __gnu_cxx;
 class FileStore : public JournalingObjectStore {
   string basedir, journalpath;
   char current_fn[PATH_MAX];
+  char current_op_seq_fn[PATH_MAX];
   __u64 fsid;
   
   int btrfs;
@@ -168,8 +169,12 @@ class FileStore : public JournalingObjectStore {
     flusher_queue_len(0), flusher_thread(this) {
     // init current_fn
     snprintf(current_fn, sizeof(current_fn), "%s/current", basedir.c_str());
+    snprintf(current_op_seq_fn, sizeof(current_op_seq_fn), "%s/current/commit_op_seq", basedir.c_str());
   }
 
+  int _detect_fs();
+  int _sanity_check_fs();
+  
   int mount();
   int umount();
   int mkfs();
