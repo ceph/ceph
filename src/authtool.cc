@@ -89,6 +89,7 @@ int main(int argc, const char **argv)
   int r = 0;
   if (create_keyring) {
     cout << "creating " << fn << std::endl;
+    modified = true;
   } else {
     r = bl.read_file(fn, true);
     if (r >= 0) {
