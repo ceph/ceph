@@ -273,10 +273,10 @@ int MonClient::authenticate(double timeout)
     _reopen_session();
 
   while (state != MC_STATE_HAVE_SESSION && !authenticate_err)
-    authenticate_cond.Wait(monc_lock);
+    auth_cond.Wait(monc_lock);
 
   if (state == MC_STATE_HAVE_SESSION) {
-    dout(5) << "authenticate success, global_id" << global_id << dendl;
+    dout(5) << "authenticate success, global_id " << global_id << dendl;
   }
 
   return authenticate_err;
@@ -288,7 +288,7 @@ void MonClient::handle_auth(MAuthReply *m)
   if (state == MC_STATE_NEGOTIATING) {
     if (!auth || (int)m->protocol != auth->get_protocol()) {
       delete auth;
-      auth = get_auth_client_handler(m->protocol);
+      auth = get_auth_client_handler(m->protocol, rotating_secrets);
       if (!auth) {
 	delete m;
 	return;
@@ -329,7 +329,6 @@ void MonClient::handle_auth(MAuthReply *m)
 	_send_mon_message(waiting_for_session.front());
 	waiting_for_session.pop_front();
       }
-      authenticate_cond.SignalAll();
     }
   
     _check_auth_rotating();
@@ -375,6 +374,8 @@ void MonClient::_reopen_session()
 
   MAuth *m = new MAuth;
   m->protocol = 0;
+  __u8 struct_v = 1;
+  ::encode(struct_v, m->auth_payload);
   ::encode(auth_supported, m->auth_payload);
   ::encode(entity_name, m->auth_payload);
   ::encode(global_id, m->auth_payload);
@@ -489,7 +490,7 @@ int MonClient::wait_authenticate(double timeout)
   if (cur_mon < 0)
     _reopen_session();
 
-  int ret = authenticate_cond.WaitInterval(monc_lock, interval);
+  int ret = auth_cond.WaitInterval(monc_lock, interval);
   dout(0) << "wait_authenticate ended, returned " << ret << dendl;
   return ret;
 }
@@ -504,11 +505,15 @@ int MonClient::_check_auth_rotating()
     _send_mon_message(m);
   }
 
-  if (!g_keyring.need_rotating_secrets())
-    return 0;
-
-  if (!auth_principal_needs_rotating_keys(entity_name)) {
+  if (!rotating_secrets ||
+      !auth_principal_needs_rotating_keys(entity_name)) {
     dout(20) << "_check_auth_rotating not needed by " << entity_name << dendl;
+    return 0;
+  }
+
+  if (!rotating_secrets->need_new_secrets()) {
+    dout(20) << "_check_auth_rotating have uptodate secrets" << dendl;
+    rotating_secrets->dump_rotating();
     return 0;
   }
 
@@ -534,8 +539,11 @@ int MonClient::wait_auth_rotating(double timeout)
     return 0;
   }
   
+  if (!rotating_secrets)
+    return 0;
+
   while (auth_principal_needs_rotating_keys(entity_name) &&
-	 g_keyring.need_rotating_secrets())
+	 rotating_secrets->need_new_secrets())
     auth_cond.WaitInterval(monc_lock, interval);
   return 0;
 }

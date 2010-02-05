@@ -85,6 +85,8 @@ int FileJournal::_open(bool forwrite, bool create)
     is_bdev = true;
   }
 
+  max_size -= max_size % block_size;
+
   // try to check if the disk write cache is on
   if (is_bdev) {
     if (geteuid() == 0) {
@@ -202,6 +204,11 @@ int FileJournal::open(__u64 next_seq)
   }
   if (header.block_size != block_size) {
     dout(2) << "open journal block size " << header.block_size << " != current " << block_size << dendl;
+    err = -EINVAL;
+  }
+  if (header.max_size % header.block_size) {
+    dout(2) << "open journal max size " << header.max_size
+	    << " not a multiple of block size " << header.block_size << dendl;
     err = -EINVAL;
   }
   if (header.alignment != block_size && directio) {

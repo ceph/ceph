@@ -63,6 +63,7 @@
 #include "messages/MMonCommand.h"
 
 #include "auth/AuthAuthorizeHandler.h"
+#include "auth/KeyRing.h"
 
 #include "config.h"
 
@@ -1209,7 +1210,7 @@ bool MDS::ms_dispatch(Message *m)
 
 bool MDS::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
 {
-  dout(0) << "MDS::ms_get_authorizer type=" << dest_type << dendl;
+  dout(10) << "MDS::ms_get_authorizer type=" << ceph_entity_type_name(dest_type) << dendl;
 
   /* monitor authorization is being handled on different layer */
   if (dest_type == CEPH_ENTITY_TYPE_MON)
@@ -1549,7 +1550,8 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
   EntityName name;
   uint64_t global_id;
 
-  is_valid = authorize_handler->verify_authorizer(authorizer_data, authorizer_reply, name, global_id, caps_info);
+  is_valid = authorize_handler->verify_authorizer(monc->rotating_secrets,
+						  authorizer_data, authorizer_reply, name, global_id, caps_info);
 
   if (is_valid) {
     entity_name_t n(con->get_peer_type(), global_id);

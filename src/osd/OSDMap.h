@@ -163,7 +163,7 @@ public:
 
     void encode(bufferlist& bl) {
       // base
-      __u16 v = 3;
+      __u16 v = CEPH_OSDMAP_INC_VERSION;
       ::encode(v, bl);
       ::encode(fsid, bl);
       ::encode(epoch, bl); 
@@ -209,8 +209,7 @@ public:
       ::decode(new_pg_temp, p);
       
       // extended
-      if (v >= 3)
-	::decode(new_hb_up, p);
+      ::decode(new_hb_up, p);
       ::decode(new_pool_names, p);
       ::decode(new_up_thru, p);
       ::decode(new_last_clean_interval, p);
@@ -554,7 +553,7 @@ private:
 
   // serialize, unserialize
   void encode(bufferlist& bl) {
-    __u16 v = 3;
+    __u16 v = CEPH_OSDMAP_VERSION;
     ::encode(v, bl);
 
     // base
@@ -611,8 +610,7 @@ private:
     ::decode(osd_state, p);
     ::decode(osd_weight, p);
     ::decode(osd_addr, p);
-    if (v >= 2)
-      ::decode(pg_temp, p);
+    ::decode(pg_temp, p);
 
     // crush
     bufferlist cbl;
@@ -621,15 +619,7 @@ private:
     crush.decode(cblp);
 
     // extended
-    if (v >= 3)
-      ::decode(osd_hb_addr, p);
-    if (v < 3 || (osd_hb_addr.empty() && osd_addr.size())) {
-      osd_hb_addr.resize(osd_addr.size());
-      for (unsigned i=0; i<osd_addr.size(); i++) {
-	osd_hb_addr[i] = osd_addr[i];
-	//osd_hb_addr[i].erank = osd_hb_addr[i].erank + 1;
-      }
-    }
+    ::decode(osd_hb_addr, p);
     ::decode(osd_info, p);
     ::decode(pool_name, p);
     name_pool.clear();

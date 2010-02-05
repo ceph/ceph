@@ -143,13 +143,15 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
   case CEPHX_GET_ROTATING_KEY:
     {
       dout(10) << " get_rotating_key" << dendl;
-      RotatingSecrets secrets;
-      CryptoKey secret_key;
-      g_keyring.get_master(secret_key);
-      if (decode_decrypt(secrets, secret_key, indata) == 0) {
-	g_keyring.set_rotating(secrets);
-      } else {
-	derr(0) << "could not set rotating key: decode_decrypt failed" << dendl;
+      if (rotating_secrets) {
+	RotatingSecrets secrets;
+	CryptoKey secret_key;
+	g_keyring.get_master(secret_key);
+	if (decode_decrypt(secrets, secret_key, indata) == 0) {
+	  rotating_secrets->set_secrets(secrets);
+	} else {
+	  derr(0) << "could not set rotating key: decode_decrypt failed" << dendl;
+	}
       }
     }
     break;
@@ -165,7 +167,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 
 AuthAuthorizer *CephxClientHandler::build_authorizer(uint32_t service_id)
 {
-  dout(10) << "build_authorizer for service " << service_id << dendl;
+  dout(10) << "build_authorizer for service " << ceph_entity_type_name(service_id) << dendl;
   return tickets.build_authorizer(service_id);
 }
 

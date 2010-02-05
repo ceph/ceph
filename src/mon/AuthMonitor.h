@@ -28,6 +28,7 @@ class MMonCommand;
 class MAuth;
 class MAuthMon;
 class MMonGlobalID;
+class KeyRing;
 
 #define MIN_GLOBAL_ID 0x1000
 
@@ -77,6 +78,8 @@ private:
   version_t last_rotating_ver;
   uint64_t max_global_id;
   uint64_t last_allocated_id;
+
+  void import_keyring(KeyRing& keyring);
 
   void push_cephx_inc(KeyServerData::Incremental& auth_inc) {
     Incremental inc;

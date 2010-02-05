@@ -26,6 +26,7 @@
 #include "common/Timer.h"
 
 #include "auth/AuthServiceHandler.h"
+#include "auth/KeyRing.h"
 
 #include "osd/osd_types.h"
 #include "osd/PG.h"  // yuck
@@ -92,45 +93,29 @@ void AuthMonitor::on_active()
 void AuthMonitor::create_initial(bufferlist& bl)
 {
   dout(0) << "create_initial -- creating initial map" << dendl;
-  if (g_conf.keys_file) {
-    map<string, EntityAuth> keys_map;
-    dout(0) << "reading initial keys file " << dendl;
+  if (g_conf.keyring) {
+    dout(0) << "reading initial keyring " << dendl;
     bufferlist bl;
 
-    string k = g_conf.keys_file;
+    string k = g_conf.keyring;
     list<string> ls;
     get_str_list(k, ls);
     int r = -1;
     for (list<string>::iterator p = ls.begin(); p != ls.end(); p++)
-      if ((r = bl.read_file(g_conf.keys_file)) >= 0)
+      if ((r = bl.read_file(g_conf.keyring)) >= 0)
 	break;
     if (r >= 0) {
+      KeyRing keyring;
       bool read_ok = false;
       try {
         bufferlist::iterator iter = bl.begin();
-        ::decode(keys_map, iter);
+        ::decode(keyring, iter);
         read_ok = true;
       } catch (buffer::error *err) {
-        cerr << "error reading file " << g_conf.keys_file << std::endl;
+        cerr << "error reading file " << g_conf.keyring << std::endl;
       }
-      if (read_ok) {
-        map<string, EntityAuth>::iterator iter = keys_map.begin();
-        for (; iter != keys_map.end(); ++iter) {
-          string n = iter->first;
-          if (!n.empty()) {
-            dout(0) << "read key for entry: " << n << dendl;
-	    KeyServerData::Incremental auth_inc;
-            if (!auth_inc.name.from_str(n)) {
-              dout(0) << "bad entity name " << n << dendl;
-              continue;
-            }
-            auth_inc.auth = iter->second; 
-            auth_inc.op = KeyServerData::AUTH_INC_ADD;
-            push_cephx_inc(auth_inc);
-          }
-        }
-      }
-
+      if (read_ok)
+	import_keyring(keyring);
     }
   }
 
@@ -390,6 +375,8 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
     set<__u32> supported;
     
     try {
+      __u8 struct_v = 1;
+      ::decode(struct_v, indata);
       ::decode(supported, indata);
       ::decode(entity_name, indata);
       ::decode(s->global_id, indata);
@@ -489,6 +476,19 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
   return true;
 }
 
+void AuthMonitor::import_keyring(KeyRing& keyring)
+{
+  for (map<EntityName, EntityAuth>::iterator p = keyring.get_keys().begin();
+       p != keyring.get_keys().end();
+       p++) {
+    KeyServerData::Incremental auth_inc;
+    auth_inc.name = p->first;
+    auth_inc.auth = p->second; 
+    auth_inc.op = KeyServerData::AUTH_INC_ADD;
+    dout(10) << " importing " << auth_inc.name << " " << auth_inc.auth << dendl;
+    push_cephx_inc(auth_inc);
+  }
+}
 
 bool AuthMonitor::prepare_command(MMonCommand *m)
 {
@@ -498,12 +498,27 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
   // nothing here yet
   if (m->cmd.size() > 1) {
-    if (m->cmd[1] == "add" && m->cmd.size() >= 2) {
-      string entity_name;
+    if (m->cmd[1] == "import") {
+      bufferlist bl = m->get_data();
+      bufferlist::iterator iter = bl.begin();
+      KeyRing keyring;
+      try {
+        ::decode(keyring, iter);
+      } catch (buffer::error *err) {
+        ss << "error decoding keyring";
+        rs = -EINVAL;
+        goto done;
+      }
+      import_keyring(keyring);
+      ss << "imported keyring";
+      getline(ss, rs);
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      return true;
+    }
+    else if (m->cmd[1] == "add" && m->cmd.size() >= 2) {
       KeyServerData::Incremental auth_inc;
       if (m->cmd.size() >= 3) {
-        entity_name = m->cmd[2];
-        if (!auth_inc.name.from_str(entity_name)) {
+        if (!auth_inc.name.from_str(m->cmd[2])) {
           ss << "bad entity name";
           rs = -EINVAL;
           goto done;
@@ -513,35 +528,30 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       bufferlist bl = m->get_data();
       dout(0) << "AuthMonitor::prepare_command bl.length()=" << bl.length() << dendl;
       bufferlist::iterator iter = bl.begin();
-      map<string, EntityAuth> crypto_map;
+      KeyRing keyring;
       try {
-        ::decode(crypto_map, iter);
+        ::decode(keyring, iter);
       } catch (buffer::error *err) {
-        ss << "error decoding key";
+        ss << "error decoding keyring";
         rs = -EINVAL;
         goto done;
       }
 
-      for (map<string, EntityAuth>::iterator miter = crypto_map.begin(); miter != crypto_map.end(); ++miter) {
-	KeyServerData::Incremental auth_inc;
-        dout(0) << "storing auth for " << entity_name  << dendl;
-        if (miter->first.empty()) {
-          if (entity_name.empty())
-            continue;
-          auth_inc.name.from_str(entity_name);
-        } else {
-          string s = miter->first;
-          auth_inc.name.from_str(s);
-        }
-        auth_inc.auth = miter->second;
-        auth_inc.op = KeyServerData::AUTH_INC_ADD;
-        push_cephx_inc(auth_inc);
+      if (!keyring.get_auth(auth_inc.name, auth_inc.auth)) {
+	ss << "key for " << auth_inc.name << " not found in provided keyring";
+        rs = -EINVAL;
+        goto done;
       }
-      ss << "updated";
+      auth_inc.op = KeyServerData::AUTH_INC_ADD;
+      dout(10) << " importing " << auth_inc.name << " " << auth_inc.auth << dendl;
+      push_cephx_inc(auth_inc);
+
+      ss << "added key for " << auth_inc.name;
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
-    } else if (m->cmd[1] == "del" && m->cmd.size() >= 3) {
+    }
+    else if (m->cmd[1] == "del" && m->cmd.size() >= 3) {
       string name = m->cmd[2];
       KeyServerData::Incremental auth_inc;
       auth_inc.name.from_str(name);
@@ -557,11 +567,13 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
-    } else if (m->cmd[1] == "list") {
+    }
+    else if (m->cmd[1] == "list") {
       mon->key_server.list_secrets(ss);
       err = 0;
       goto done;
-    } else {
+    }
+    else {
       auth_usage(ss);
     }
   } else {

@@ -35,6 +35,8 @@ struct KeyServerData {
   KeyServerData() : version(0), rotating_ver(0) {}
 
   void encode(bufferlist& bl) const {
+     __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(version, bl);
     ::encode(rotating_ver, bl);
     ::encode(next_rotating_time, bl);
@@ -42,6 +44,8 @@ struct KeyServerData {
     ::encode(rotating_secrets, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(version, bl);
     ::decode(rotating_ver, bl);
     ::decode(next_rotating_time, bl);
@@ -49,8 +53,16 @@ struct KeyServerData {
     ::decode(rotating_secrets, bl);
   }
 
+  void encode_rotating(bufferlist& bl) {
+     __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    ::encode(rotating_ver, bl);
+    ::encode(rotating_secrets, bl);
+  }
   void decode_rotating(bufferlist& rotating_bl) {
     bufferlist::iterator iter = rotating_bl.begin();
+    __u8 struct_v;
+    ::decode(struct_v, iter);
     ::decode(rotating_ver, iter);
     ::decode(rotating_secrets, iter);
   }
@@ -100,7 +112,9 @@ struct KeyServerData {
     EntityAuth auth;
     
     void encode(bufferlist& bl) const {
-      __u32 _op = (__u32)op;
+      __u8 struct_v = 1;
+      ::encode(struct_v, bl);
+     __u32 _op = (__u32)op;
       ::encode(_op, bl);
       if (op == AUTH_INC_SET_ROTATING) {
 	::encode(rotating_bl, bl);
@@ -110,6 +124,8 @@ struct KeyServerData {
       }
     }
     void decode(bufferlist::iterator& bl) {
+      __u8 struct_v;
+      ::decode(struct_v, bl);
       __u32 _op;
       ::decode(_op, bl);
       op = (IncrementalOp)_op;

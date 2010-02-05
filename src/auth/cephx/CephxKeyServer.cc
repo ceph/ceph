@@ -20,16 +20,6 @@
 #include <sstream>
 
 
-void RotatingSecrets::add(ExpiringCryptoKey& key)
-{
-  secrets[++max_ver] = key;
-
-  while (secrets.size() > KEY_ROTATE_NUM) {
-    map<uint64_t, ExpiringCryptoKey>::iterator iter = secrets.lower_bound(0);
-    secrets.erase(iter);
-  }
-}
-
 bool KeyServerData::get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret, uint64_t& secret_id)
 {
   map<uint32_t, RotatingSecrets>::iterator iter = rotating_secrets.find(service_id);
@@ -286,9 +276,8 @@ bool KeyServer::updated_rotating(bufferlist& rotating_bl, version_t& rotating_ve
 
   if (data.rotating_ver <= rotating_ver)
     return false;
-
-  ::encode(data.rotating_ver, rotating_bl);
-  ::encode(data.rotating_secrets, rotating_bl);
+ 
+  data.encode_rotating(rotating_bl);
 
   rotating_ver = data.rotating_ver;
 

@@ -8600,11 +8600,13 @@ void MDCache::dump_cache(const char *fn)
   for (hash_map<vinodeno_t,CInode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        it++) {
+    CInode *in = it->second;
+    myfile << *in << std::endl;
+
     list<CDir*> dfs;
-    it->second->get_dirfrags(dfs);
+    in->get_dirfrags(dfs);
     for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p) {
       CDir *dir = *p;
-      myfile << *dir->inode << std::endl;
       myfile << " " << *dir << std::endl;
       
       for (CDir::map_t::iterator q = dir->items.begin();

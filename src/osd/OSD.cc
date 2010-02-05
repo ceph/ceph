@@ -445,6 +445,7 @@ int OSD::init()
 
   heartbeat_messenger->add_dispatcher_head(&heartbeat_dispatcher);
 
+  monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
   monc->init();
 
   monc->sub_want("monmap", 0);
@@ -1572,7 +1573,7 @@ bool OSD::ms_dispatch(Message *m)
 
 bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
 {
-  dout(0) << "OSD::ms_get_authorizer type=" << dest_type << dendl;
+  dout(10) << "OSD::ms_get_authorizer type=" << ceph_entity_type_name(dest_type) << dendl;
 
   if (dest_type == CEPH_ENTITY_TYPE_MON)
     return true;
@@ -1602,7 +1603,8 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
   EntityName name;
   uint64_t global_id;
 
-  isvalid = authorize_handler->verify_authorizer(authorizer_data, authorizer_reply, name, global_id, caps_info);
+  isvalid = authorize_handler->verify_authorizer(monc->rotating_secrets,
+						 authorizer_data, authorizer_reply, name, global_id, caps_info);
 
   dout(10) << "OSD::ms_verify_authorizer name=" << name << dendl;
 

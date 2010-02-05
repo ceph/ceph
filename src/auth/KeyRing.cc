@@ -30,155 +30,65 @@ using namespace std;
 
 KeyRing g_keyring;
 
-bool KeyRing::load_master(const char *filename_list)
+bool KeyRing::load(const char *filename_list)
 {
   string k = filename_list;
   string filename;
   list<string> ls;
   get_str_list(k, ls);
-  int fd = -1;
+  bufferlist bl;
+  bool loaded = false;
   for (list<string>::iterator p = ls.begin(); p != ls.end(); p++) {
     // subst in home dir?
     size_t pos = p->find("~/");
     if (pos != string::npos)
       p->replace(pos, 1, getenv("HOME"));
 
-    fd = open(p->c_str(), O_RDONLY);
-    if (fd >= 0) {
+    if (bl.read_file(p->c_str(), true) == 0) {
+      loaded = true;
       filename = *p;
       break;
     }
   }
-  if (fd < 0) {
+  if (!loaded) {
     dout(0) << "can't open key file(s) " << filename_list << dendl;
     return false;
   }
 
-  // get size
-  struct stat st;
-  int rc = fstat(fd, &st);
-  if (rc != 0) {
-    dout(0) << "error stat'ing key file " << filename << dendl;
-    return false;
-  }
-  __int32_t len = st.st_size;
- 
-  bufferlist bl;
+  bufferlist::iterator p = bl.begin();
+  decode(p);
 
-  bufferptr bp(len);
-  int off = 0;
-  while (off < len) {
-    int r = read(fd, bp.c_str()+off, len-off);
-    if (r < 0) {
-      derr(0) << "errno on read " << strerror(errno) << dendl;
-      return false;
-    }
-    off += r;
-  }
-  bl.append(bp);
-  close(fd);
-
-  bufferlist::iterator iter = bl.begin();
-
-  map<string, EntityAuth> m;
-  map<string, EntityAuth>::iterator miter;
-
-  ::decode(m, iter);
-
-  string name = g_conf.entity_name->to_str();
-
-  dout(10) << "looking for key entry name=" << name << dendl;
-
-  miter = m.find(name);
-  if (miter == m.end()) {
-    miter = m.find("");
-    if (miter == m.end())
-      return false; 
-  }
-  master = miter->second.key;
   dout(1) << "loaded key file " << filename << dendl;
   return true;
 }
 
-void KeyRing::set_rotating(RotatingSecrets& secrets)
+void KeyRing::print(ostream& out)
 {
-  Mutex::Locker l(lock);
+  for (map<EntityName, EntityAuth>::iterator p = keys.begin();
+       p != keys.end();
+       ++p) {
+    out << p->first << std::endl;
+    out << "\tkey: " << p->second.key << std::endl;
 
-  rotating_secrets = secrets;
-
-  dout(0) << "KeyRing::set_rotating max_ver=" << secrets.max_ver << dendl;
-
-  map<uint64_t, ExpiringCryptoKey>::iterator iter = secrets.secrets.begin();
-
-  for (; iter != secrets.secrets.end(); ++iter) {
-    ExpiringCryptoKey& key = iter->second;
-
-    dout(0) << "id: " << iter->first << dendl;
-    dout(0) << "key.expiration: " << key.expiration << dendl;
-    bufferptr& bp = key.key.get_secret();
-    bufferlist bl;
-    bl.append(bp);
-    hexdump(" key", bl.c_str(), bl.length());
+    for (map<string, bufferlist>::iterator q = p->second.caps.begin();
+	 q != p->second.caps.end();
+	 ++q) {
+      bufferlist::iterator dataiter = q->second.begin();
+      string caps;
+      ::decode(caps, dataiter);
+      out << "\tcaps: [" << q->first << "] " << caps << std::endl;
+    }
   }
 }
 
-void KeyRing::get_master(CryptoKey& dest)
+void KeyRing::import(KeyRing& other)
 {
-  Mutex::Locker l(lock);
-
-  dest = master;
-}
-
-bool KeyRing::need_rotating_secrets()
-{
-  Mutex::Locker l(lock);
-
-  if (rotating_secrets.secrets.size() < KEY_ROTATE_NUM)
-    return true;
-
-  map<uint64_t, ExpiringCryptoKey>::iterator iter = rotating_secrets.secrets.lower_bound(0);
-  ExpiringCryptoKey& key = iter->second;
-  if (key.expiration < g_clock.now()) {
-    dout(0) << "key.expiration=" << key.expiration << " now=" << g_clock.now() << dendl;
-    return true;
-  }
-
-  return false;
-}
-
-bool KeyRing::get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret)
-{
-  Mutex::Locker l(lock);
-  /* we ignore the service id, there's only one service id that we're handling */
-
-{
-  map<uint64_t, ExpiringCryptoKey>::iterator iter = rotating_secrets.secrets.begin();
-  dout(0) << "dumping rotating secrets: this=" << dendl;
-
-  for (; iter != rotating_secrets.secrets.end(); ++iter) {
-    ExpiringCryptoKey& key = iter->second;
-
-    dout(0) << "id: " << iter->first << dendl;
-    dout(0) << "key.expiration: " << key.expiration << dendl;
-    bufferptr& bp = key.key.get_secret();
-    bufferlist bl;
-    bl.append(bp);
-    hexdump(" key", bl.c_str(), bl.length());
+  for (map<EntityName, EntityAuth>::iterator p = other.keys.begin();
+       p != other.keys.end();
+       ++p) {
+    dout(10) << " importing " << p->first << " " << p->second << dendl;
+    keys[p->first] = p->second;
   }
 }
 
-  map<uint64_t, ExpiringCryptoKey>::iterator iter = rotating_secrets.secrets.find(secret_id);
-  if (iter == rotating_secrets.secrets.end()) {
-    dout(0) << "could not find secret_id=" << secret_id << dendl;
-    return false;
-  }
-
-  ExpiringCryptoKey& key = iter->second;
-  if (key.expiration > g_clock.now()) {
-    secret = key.key;
-    return true;
-  }
-  dout(0) << "secret expired!" << dendl;
-  return false;
-}
 

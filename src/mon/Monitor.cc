@@ -992,10 +992,12 @@ bool Monitor::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool
 
   }
 
-  bufferlist ticket_data;
-  ret = cephx_build_service_ticket(info, ticket_data);
+  CephXTicketBlob blob;
+  ret = cephx_build_service_ticket_blob(info, blob);
   if (ret < 0)
     return false;
+  bufferlist ticket_data;
+  ::encode(blob, ticket_data);
 
   dout(0) << "built service ticket" << dendl;
   bufferlist::iterator iter = ticket_data.begin();
@@ -1032,7 +1034,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
   if (!authorizer_data.length())
     return true; /* we're not picky */
 
-  int ret = cephx_verify_authorizer(key_server, iter, auth_ticket_info, authorizer_reply);
+  int ret = cephx_verify_authorizer(&key_server, iter, auth_ticket_info, authorizer_reply);
   dout(0) << "Monitor::verify_authorizer returns " << ret << dendl;
 
   isvalid = (ret >= 0);

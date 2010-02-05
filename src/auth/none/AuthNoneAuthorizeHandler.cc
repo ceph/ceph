@@ -3,12 +3,15 @@
 #include "AuthNoneAuthorizeHandler.h"
 
 
-bool AuthNoneAuthorizeHandler::verify_authorizer(bufferlist& authorizer_data, bufferlist& authorizer_reply,
-                                              EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info)
+bool AuthNoneAuthorizeHandler::verify_authorizer(KeyStore *keys,
+						 bufferlist& authorizer_data, bufferlist& authorizer_reply,
+						 EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info)
 {
   bufferlist::iterator iter = authorizer_data.begin();
 
   try {
+    __u8 struct_v = 1;
+    ::decode(struct_v, iter);
     ::decode(entity_name, iter);
     ::decode(global_id, iter);
   } catch (buffer::error *err) {

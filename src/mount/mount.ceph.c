@@ -198,6 +198,8 @@ static int parse_options(char ** optionsp, int * filesys_flags)
 			*filesys_flags &= ~MS_RDONLY;
                 } else if (strncmp(data, "remount", 7) == 0) {
                         *filesys_flags |= MS_REMOUNT;
+                } else if (strncmp(data, "sync", 4) == 0) {
+                        *filesys_flags |= MS_SYNCHRONOUS;
 		} else if (strncmp(data, "secretfile", 7) == 0) {
 			char *fn = value;
 			char *end = fn;

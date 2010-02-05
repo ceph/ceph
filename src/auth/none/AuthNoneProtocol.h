@@ -20,6 +20,8 @@
 struct AuthNoneAuthorizer : public AuthAuthorizer {
   AuthNoneAuthorizer() : AuthAuthorizer(CEPH_AUTH_NONE) { }
   bool build_authorizer(uint64_t global_id) {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
     ::encode(*g_conf.entity_name, bl);
     ::encode(global_id, bl);
     return 0;

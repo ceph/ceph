@@ -20,34 +20,57 @@
 #include "auth/Crypto.h"
 #include "auth/Auth.h"
 
-/*
-  KeyRing is being used at the service side, for holding the temporary rotating
-  key of that service
-*/
+class KeyRing {
+  map<EntityName, EntityAuth> keys;
 
-class KeyRing : public KeyStore {
-  CryptoKey master;
-  RotatingSecrets rotating_secrets;
-  Mutex lock;
 public:
-  KeyRing() : lock("KeyRing") {}
+  map<EntityName, EntityAuth>& get_keys() { return keys; }  // yuck
 
-  bool load_master(const char *filename);
-  void set_rotating(RotatingSecrets& secrets);
+  bool load(const char *filename);
+  void print(ostream& out);
 
-  void get_master(CryptoKey& dest);
-
-  bool need_rotating_secrets();
-
-  bool get_secret(EntityName& name, CryptoKey& secret) {
-    get_master(secret);
-    return true;
+  // accessors
+  bool get_auth(EntityName& name, EntityAuth &a) {
+    if (keys.count(name)) {
+      a = keys[name];
+      return true;
+    }
+    return false;
   }
-  bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret);
+  bool get_secret(EntityName& name, CryptoKey& secret) {
+    if (keys.count(name)) {
+      secret = keys[name].key;
+      return true;
+    }
+    return false;
+  }
+  void get_master(CryptoKey& dest) {
+    get_secret(*g_conf.entity_name, dest);
+  }
+
+  // modifiers
+  void add(EntityName& name, EntityAuth &a) {
+    keys[name] = a;
+  }
+  void set_caps(EntityName& name, map<string, bufferlist>& caps) {
+    keys[name].caps = caps;
+  }
+  void import(KeyRing& other);
+
+  // encoders
+  void encode(bufferlist& bl) const {
+    __u8 struct_v = 1;
+    ::encode(struct_v, bl);
+    ::encode(keys, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
+    ::decode(keys, bl);
+  }
 };
+WRITE_CLASS_ENCODER(KeyRing)
 
 extern KeyRing g_keyring;
-
-
 
 #endif

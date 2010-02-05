@@ -25,6 +25,7 @@
 
 class MAuthReply;
 class AuthClientHandler;
+class RotatingKeyRing;
 
 class AuthClientHandler {
 protected:
@@ -78,7 +79,7 @@ public:
 };
 
 
-extern AuthClientHandler *get_auth_client_handler(int proto);
+extern AuthClientHandler *get_auth_client_handler(int proto, RotatingKeyRing *rkeys);
 
 #endif
 
