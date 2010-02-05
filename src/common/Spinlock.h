@@ -19,15 +19,10 @@
 #include "include/assert.h"
 #include "lockdep.h"
 
-#define LOCKDEP
+//#define SPINLOCK_LOCKDEP
 
 class Spinlock {
 private:
-  const char *name;
-  int id;
-  bool lockdep;
-  bool backtrace;  // gather backtrace on lock acquisition
-
   pthread_spinlock_t _s;
   int nlock;
 
@@ -35,18 +30,27 @@ private:
   void operator=(Spinlock &M) {}
   Spinlock( const Spinlock &M ) {}
 
-#ifdef LOCKDEP
+#ifdef SPINLOCK_LOCKDEP
+  const char *name;
+  int id;
+  bool lockdep;
+  bool backtrace;  // gather backtrace on lock acquisition
+
   void _register() {
-    id = lockdep_register(name);
+    if (lockdep && g_lockdep)
+      id = lockdep_register(name);
   }
   void _will_lock() { // about to lock
-    id = lockdep_will_lock(name, id);
+    if (lockdep && g_lockdep)
+      id = lockdep_will_lock(name, id);
   }
   void _locked() {    // just locked
-    id = lockdep_locked(name, id, backtrace);
+    if (lockdep && g_lockdep)
+      id = lockdep_locked(name, id, backtrace);
   }
   void _will_unlock() {  // about to unlock
-    id = lockdep_will_unlock(name, id);
+    if (lockdep && g_lockdep)
+      id = lockdep_will_unlock(name, id);
   }
 #else
   void _register() {}
@@ -57,9 +61,13 @@ private:
 
 public:
   Spinlock(const char *n, bool ld=true, bool bt=false) :
-    name(n), id(-1), lockdep(ld), backtrace(bt), nlock(0) {
+    nlock(0)
+#ifdef SPINLOCK_LOCKDEP
+    , name(n), id(-1), lockdep(ld), backtrace(bt)
+#endif
+  {
     pthread_spin_init(&_s, 0);
-    if (lockdep && g_lockdep) _register();
+    _register();
   }
   ~Spinlock() {
     assert(nlock == 0);
@@ -73,16 +81,16 @@ public:
   bool try_lock() {
     int r = pthread_spin_trylock(&_s);
     if (r == 0) {
-      if (lockdep && g_lockdep) _locked();
+      _locked();
       nlock++;
     }
     return r == 0;
   }
 
   void lock() {
-    if (lockdep && g_lockdep) _will_lock();
+    _will_lock();
     int r = pthread_spin_lock(&_s);
-    if (lockdep && g_lockdep) _locked();
+    _locked();
     assert(r == 0);
     nlock++;
   }
@@ -90,7 +98,7 @@ public:
   void unlock() {
     assert(nlock > 0);
     --nlock;
-    if (lockdep && g_lockdep) _will_unlock();
+    _will_unlock();
     int r = pthread_spin_unlock(&_s);
     assert(r == 0);
   }
