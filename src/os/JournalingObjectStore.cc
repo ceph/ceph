@@ -29,7 +29,7 @@ void JournalingObjectStore::journal_stop()
 int JournalingObjectStore::journal_replay(__u64 fs_op_seq)
 {
   dout(10) << "journal_replay fs op_seq " << fs_op_seq << dendl;
-  op_seq = applied_seq = fs_op_seq;
+  op_seq = fs_op_seq;
 
   if (!journal)
     return 0;
@@ -99,9 +99,6 @@ __u64 JournalingObjectStore::op_apply_start(__u64 op, Context *ondisk)
 
   if (!op)
     op = ++op_seq;
-  assert(op > applied_seq);  // !!
-  applied_seq = op;
-
   dout(10) << "op_apply_start " << op << dendl;
 
   if (ondisk)
@@ -151,7 +148,7 @@ bool JournalingObjectStore::commit_start()
     cond.Wait(lock);
   }
   
-  if (applied_seq == committed_seq) {
+  if (op_seq == committed_seq) {
     dout(10) << "commit_start nothing to do" << dendl;
     blocked = false;
     cond.Signal();
@@ -167,7 +164,7 @@ void JournalingObjectStore::commit_started()
   Mutex::Locker l(lock);
   dout(10) << "commit_started" << dendl;
   // allow new ops. (underlying fs should now be committing all prior ops)
-  committing_seq = applied_seq;
+  committing_seq = op_seq;
   blocked = false;
   cond.Signal();
 }

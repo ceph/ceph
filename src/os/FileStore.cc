@@ -433,7 +433,7 @@ int FileStore::mount()
   }
   journal_start();
   sync_thread.create();
-  op_thread.create();
+  op_tp.start();
   flusher_thread.create();
   op_finisher.start();
 
@@ -547,10 +547,9 @@ int FileStore::umount()
   stop = true;
   sync_cond.Signal();
   flusher_cond.Signal();
-  op_cond.Signal();
   lock.Unlock();
   sync_thread.join();
-  op_thread.join();
+  op_tp.stop();
   flusher_thread.join();
 
   journal_stop();
@@ -579,8 +578,6 @@ int FileStore::umount()
 void FileStore::queue_op(__u64 op_seq, list<Transaction*>& tls, Context *onreadable,
 			 Context *oncommit)
 {
-  Op *o = new Op;
-
   __u64 bytes = 0, ops = 0;
   for (list<Transaction*>::iterator p = tls.begin();
        p != tls.end();
@@ -589,64 +586,76 @@ void FileStore::queue_op(__u64 op_seq, list<Transaction*>& tls, Context *onreada
     ops += (*p)->get_num_ops();
   }
 
-  op_lock.Lock();
+  // initialize next_finish on first op
+  if (next_finish == 0)
+    next_finish = op_seq;
 
-  while ((g_conf.filestore_queue_max_ops && op_queue_len >= (unsigned)g_conf.filestore_queue_max_ops) ||
-	 (g_conf.filestore_queue_max_bytes && op_queue_bytes >= (unsigned)g_conf.filestore_queue_max_bytes)) {
-    dout(2) << "queue_op " << o << " throttle: "
-	     << op_queue_len << " > " << g_conf.filestore_queue_max_ops << " ops || "
-	     << op_queue_bytes << " > " << g_conf.filestore_queue_max_bytes << dendl;
-    op_throttle_cond.Wait(op_lock);
-  }
-  op_queue_len++;
-  op_queue_bytes += bytes;
-
-  dout(10) << "queue_op " << o << " seq " << op_seq << " " << bytes << " bytes" << dendl;
+  Op *o = new Op;
   o->op = op_seq;
   o->tls.swap(tls);
   o->onreadable = onreadable;
   o->oncommit = oncommit;
   o->ops = ops;
   o->bytes = bytes;
-  op_queue.push_back(o);
-  op_cond.Signal();
-  op_lock.Unlock();
-}
 
-void FileStore::op_entry()
-{
-  op_lock.Lock();
-  while (1) {
-    while (!op_queue.empty()) {
-      Op *o = op_queue.front();
-      op_queue.pop_front();
-      op_lock.Unlock();
-
-      dout(10) << "op_entry " << o << " " << o->op << " start" << dendl;
-      op_apply_start(o->op, o->oncommit);
-      int r = do_transactions(o->tls, o->op);
-      op_apply_finish();
-      dout(10) << "op_entry " << o << " " << o->op << " r = " << r
-	       << ", finisher " << o->onreadable << dendl;
-
-      op_finisher.queue(o->onreadable, r);
-
-      op_lock.Lock();
-
-      op_queue_len--;
-      op_queue_bytes -= o->bytes;
-      op_throttle_cond.Signal();
-      dout(10) << "op_entry finished " << o->bytes << " bytes, queue now "
-	       << op_queue_len << " ops, " << op_queue_bytes << " bytes" << dendl;
-      delete o;
-    }
-    op_empty_cond.Signal();
-    if (stop)
-      break;
-    op_cond.Wait(op_lock);
+  op_tp.lock();
+  while ((g_conf.filestore_queue_max_ops && op_queue_len >= (unsigned)g_conf.filestore_queue_max_ops) ||
+	 (g_conf.filestore_queue_max_bytes && op_queue_bytes >= (unsigned)g_conf.filestore_queue_max_bytes)) {
+    dout(2) << "queue_op " << o << " throttle: "
+	     << op_queue_len << " > " << g_conf.filestore_queue_max_ops << " ops || "
+	     << op_queue_bytes << " > " << g_conf.filestore_queue_max_bytes << dendl;
+    op_tp.wait(op_throttle_cond);
   }
-  op_lock.Unlock();
+  op_tp.unlock();
+
+  dout(10) << "queue_op " << o << " seq " << op_seq << " " << bytes << " bytes" << dendl;
+  op_wq.queue(o);
 }
+
+void FileStore::_do_op(Op *o)
+{
+  dout(10) << "_do_op " << o << " " << o->op << " start" << dendl;
+  op_apply_start(o->op, o->oncommit);
+  int r = do_transactions(o->tls, o->op);
+  op_apply_finish();
+  dout(10) << "_do_op " << o << " " << o->op << " r = " << r
+	   << ", finisher " << o->onreadable << dendl;
+  
+  /*dout(10) << "op_entry finished " << o->bytes << " bytes, queue now "
+	   << op_queue_len << " ops, " << op_queue_bytes << " bytes" << dendl;
+  */
+}
+
+void FileStore::_finish_op(Op *o)
+{
+  // called with tp lock held
+  op_queue_len--;
+  op_queue_bytes -= o->bytes;
+  op_throttle_cond.Signal();
+
+  if (next_finish == o->op) {
+    dout(10) << "_finish_op " << o->op << " next_finish " << next_finish
+	     << " queueing " << o->onreadable << dendl;
+    next_finish++;
+    op_finisher.queue(o->onreadable);
+
+    while (finish_queue.begin()->first == next_finish) {
+      Context *c = finish_queue.begin()->second;
+      finish_queue.erase(finish_queue.begin());
+      dout(10) << "_finish_op " << o->op << " next_finish " << next_finish
+	       << " queueing delayed " << c << dendl;
+      op_finisher.queue(c);
+      next_finish++;
+    }
+  } else {
+    dout(10) << "_finish_op " << o->op << " next_finish " << next_finish
+	     << ", delaying " << o->onreadable << dendl;
+    finish_queue[o->op] = o->onreadable;
+  }
+
+  delete o;
+}
+
 
 struct C_JournaledAhead : public Context {
   FileStore *fs;
@@ -1466,13 +1475,8 @@ void FileStore::sync(Context *onsafe)
 
 void FileStore::_flush_op_queue()
 {
-  op_lock.Lock();
-  while (!op_queue.empty()) {
-    dout(10) << "_flush_op_queue waiting for op queue to flush" << dendl;
-    op_empty_cond.Wait(op_lock);
-  }
-  op_lock.Unlock();
-
+  dout(10) << "_flush_op_queue draining for op tp" << dendl;
+  op_tp.drain();
   dout(10) << "_flush_op_queue waiting for apply finisher" << dendl;
   op_finisher.wait_for_empty();
 }

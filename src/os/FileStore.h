@@ -18,6 +18,9 @@
 
 #include "ObjectStore.h"
 #include "JournalingObjectStore.h"
+
+#include "common/WorkQueue.h"
+
 #include "common/Mutex.h"
 
 #include "Fake.h"
@@ -26,6 +29,7 @@
 #include <signal.h>
 
 #include <map>
+#include <deque>
 using namespace std;
 
 #include <ext/hash_map>
@@ -80,30 +84,57 @@ class FileStore : public JournalingObjectStore {
 
   void sync_fs(); // actuall sync underlying fs
 
-  // op thread
+  // -- op workqueue --
   struct Op {
     __u64 op;
     list<Transaction*> tls;
     Context *onreadable, *oncommit;
     __u64 ops, bytes;
   };
-
-  Finisher op_finisher;
-  Mutex op_lock;
-  Cond op_cond, op_empty_cond, op_throttle_cond;
-  list<Op*> op_queue;
+  deque<Op*> op_queue;
   __u64 op_queue_len, op_queue_bytes;
-  void op_entry();
-  struct OpThread : public Thread {
-    FileStore *fs;
-    OpThread(FileStore *f) : fs(f) {}
-    void *entry() {
-      fs->op_entry();
-      return 0;
+  Cond op_throttle_cond;
+  Finisher op_finisher;
+  __u64 next_finish;
+  map<__u64, Context*> finish_queue;
+
+  ThreadPool op_tp;
+  struct OpWQ : public ThreadPool::WorkQueue<Op> {
+    FileStore *store;
+    OpWQ(FileStore *fs, ThreadPool *tp) : ThreadPool::WorkQueue<Op>("FileStore::OpWQ", tp), store(fs) {}
+
+    bool _enqueue(Op *o) {
+      store->op_queue.push_back(o);
+      store->op_queue_len++;
+      store->op_queue_bytes += o->bytes;
+      return true;
     }
-  } op_thread;
+    void _dequeue(Op *o) {
+      assert(0);
+    }
+    Op *_dequeue() {
+      if (store->op_queue.empty())
+	return NULL;
+      Op *o = store->op_queue.front();
+      store->op_queue.pop_front();
+      return o;
+    }
+    void _process(Op *o) {
+      store->_do_op(o);
+    }
+    void _process_finish(Op *o) {
+      store->_finish_op(o);
+    }
+    void _clear() {
+      assert(store->op_queue.empty());
+    }
+  } op_wq;
+
+  void _do_op(Op *o);
+  void _finish_op(Op *o);
   void queue_op(__u64 op, list<Transaction*>& tls, Context *onreadable, Context *ondisk);
-  void _journaled_ahead(__u64 op, list<Transaction*> &tls, Context *onreadable,	Context *onjournal, Context *ondisk);
+  void _journaled_ahead(__u64 op, list<Transaction*> &tls,
+			Context *onreadable,	Context *onjournal, Context *ondisk);
   friend class C_JournaledAhead;
 
   // flusher thread
@@ -132,7 +163,8 @@ class FileStore : public JournalingObjectStore {
     collections(this), fake_collections(false),
     lock("FileStore::lock"),
     sync_epoch(0), stop(false), sync_thread(this),
-    op_lock("FileStore::op_lock"), op_queue_len(0), op_queue_bytes(0), op_thread(this),
+    op_queue_len(0), op_queue_bytes(0), next_finish(0),
+    op_tp("FileStore::op_tp", g_conf.filestore_op_threads), op_wq(this, &op_tp),
     flusher_queue_len(0), flusher_thread(this) {
     // init current_fn
     snprintf(current_fn, sizeof(current_fn), "%s/current", basedir.c_str());

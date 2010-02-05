@@ -43,6 +43,7 @@ void ThreadPool::worker()
 	  _lock.Unlock();
 	  wq->_void_process(item);
 	  _lock.Lock();
+	  wq->_void_process_finish(item);
 	  dout(15) << "worker wq " << wq->name << " done processing " << item << dendl;
 	  processing--;
 	  if (_pause || _draining)

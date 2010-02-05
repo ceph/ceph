@@ -33,6 +33,7 @@ class ThreadPool {
     virtual void _clear() = 0;
     virtual void *_void_dequeue() = 0;
     virtual void _void_process(void *) = 0;
+    virtual void _void_process_finish(void *) = 0;
   };  
 
 public:
@@ -44,6 +45,7 @@ public:
     virtual void _dequeue(T *) = 0;
     virtual T *_dequeue() = 0;
     virtual void _process(T *) = 0;
+    virtual void _process_finish(T *) {}
     virtual void _clear() = 0;
     
     void *_void_dequeue() {
@@ -51,6 +53,9 @@ public:
     }
     void _void_process(void *p) {
       _process((T *)p);
+    }
+    void _void_process_finish(void *p) {
+      _process_finish((T *)p);
     }
 
   public:
@@ -162,6 +167,9 @@ public:
   }
   void unlock() {
     _lock.Unlock();
+  }
+  void wait(Cond &c) {
+    c.Wait(_lock);
   }
 
   void start();

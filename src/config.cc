@@ -534,6 +534,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(filestore_journal_writeahead, 0, OPT_BOOL, false),
 	OPTION(filestore_queue_max_ops, 0, OPT_INT, 500),
 	OPTION(filestore_queue_max_bytes, 0, OPT_INT, 100 << 20),
+	OPTION(filestore_op_threads, 0, OPT_INT, 2),
 	OPTION(ebofs, 0, OPT_BOOL, false),
 	OPTION(ebofs_cloneable, 0, OPT_BOOL, true),
 	OPTION(ebofs_verify, 0, OPT_BOOL, false),
