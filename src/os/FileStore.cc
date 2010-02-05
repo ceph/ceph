@@ -420,8 +420,12 @@ int FileStore::mount()
   op_fd = ::open(fn, O_CREAT|O_RDWR, 0644);
   assert(op_fd >= 0);
   __u64 initial_op_seq = 0;
-  ::read(op_fd, &initial_op_seq, sizeof(initial_op_seq));
-
+  {
+    char s[40];
+    int l = ::read(op_fd, s, sizeof(s));
+    s[l] = 0;
+    initial_op_seq = atoll(s);
+  }
   dout(5) << "mount op_seq is " << initial_op_seq << dendl;
 
   // journal
@@ -1390,6 +1394,9 @@ void FileStore::sync_entry()
       sync_epoch++;
 
       dout(15) << "sync_entry committing " << cp << " sync_epoch " << sync_epoch << dendl;
+      char s[30];
+      sprintf(s, "%lld", (long long unsigned)cp);
+      ::pwrite(op_fd, s, strlen(s), 0);
 
       bool do_snap = g_conf.filestore_btrfs_snap;
 
