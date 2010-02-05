@@ -191,7 +191,7 @@ for name in $what; do
 
     if [ "$type" = "mon" ]; then
 	if [ -n "$ssh" ]; then
-	    scp -q $monkeyring $host:$tmpkeyring
+	    scp -q $monkeyring $user@$host:$tmpkeyring
 	else
 	    cp $monkeyring $tmpkeyring
 	fi
@@ -215,30 +215,29 @@ for name in $what; do
 	    do_root_cmd "umount $btrfs_path ; for f in $btrfs_devs ; do umount \$f ; done ; modprobe btrfs ; mkfs.btrfs $btrfs_devs ; modprobe btrfs ; btrfsctl -a ; mount -t btrfs $btrfs_opt $first_dev $btrfs_path ; chown $osd_user $btrfs_path ; chmod +w $btrfs_path "
 	fi
 
+	[ -n "$ssh" ] && scp $monmap $host:$monmap
+	do_cmd "$BINDIR/cosd -c $conf --monmap $monmap -i $num --mkfs --osd-data $osd_data"
+
 	if [ -n "$keyring" ]; then
 	    if [ -n "$ssh" ]; then
-		scp -q /tmp/keyring.osd.$id $host:$keyring
+		scp /tmp/keyring.osd.$id $user@$host:$keyring
 	    else
 		cp -v /tmp/keyring.osd.$id $keyring
 	    fi
 	fi
 	rm /tmp/keyring.osd.$id
-
-	[ -n "$ssh" ] && scp $monmap $host:$monmap
-	do_cmd "$BINDIR/cosd -c $conf --monmap $monmap -i $num --mkfs --osd-data $osd_data"
     fi
 
     if [ "$type" = "mds" ]; then
 	get_conf keyring "" "keyring"
 	if [ -n "$keyring" ]; then
 	    if [ -n "$ssh" ]; then
-		scp -q /tmp/keyring.mds.$id $host:$keyring
+		scp /tmp/keyring.mds.$id $user@$host:$keyring
 	    else
 		cp -v /tmp/keyring.mds.$id $keyring
 	    fi
 	fi
 	rm /tmp/keyring.mds.$id
-	echo
     fi
 
 done
