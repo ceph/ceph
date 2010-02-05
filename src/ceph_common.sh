@@ -54,7 +54,7 @@ check_host() {
 	host=$hostname
     fi
 
-    echo -n "=== $name === "
+    echo "=== $name === "
 
     return 0
 }
