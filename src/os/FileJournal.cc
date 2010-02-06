@@ -444,6 +444,12 @@ bool FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos)
 
 void FileJournal::write_bl(off64_t& pos, bufferlist& bl)
 {
+  // make sure this is a single, contiguous buffer
+  if (directio && !bl.is_contiguous()) {
+    bl.rebuild();
+    assert((bl.length() & ~PAGE_MASK) == 0);
+  }
+
   ::lseek64(fd, pos, SEEK_SET);
 
   for (list<bufferptr>::const_iterator it = bl.buffers().begin();
@@ -488,13 +494,6 @@ void FileJournal::do_write(bufferlist& bl)
 
   // entry
   off64_t pos = write_pos;
-
-  // make sure this is a single, contiguous buffer
-  if (directio && !bl.is_contiguous()) {
-    bl.rebuild();
-    //dout(0) << "len " << bl.length() << " page_mask " << PAGE_MASK << " ~" << ~PAGE_MASK << dendl;
-    assert((bl.length() & ~PAGE_MASK) == 0);
-  }
 
   // split?
   off64_t split = 0;
