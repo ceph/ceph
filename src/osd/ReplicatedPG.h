@@ -416,6 +416,14 @@ protected:
   map<sobject_t, ObjectContext*> object_contexts;
   map<object_t, SnapSetContext*> snapset_contexts;
 
+  ObjectContext *lookup_object_context(const sobject_t& soid) {
+    if (object_contexts.count(soid)) {
+      ObjectContext *obc = object_contexts[soid];
+      obc->ref++;
+      return obc;
+    }
+    return NULL;
+  }
   ObjectContext *get_object_context(const sobject_t& soid, bool can_create=true);
   void register_object_context(ObjectContext *obc) {
     if (!obc->registered) {
@@ -515,12 +523,23 @@ protected:
       rm->pg->sub_op_modify_commit(rm);
     }
   };
+  struct C_OSD_WrotePushedObject : public Context {
+    ReplicatedPG *pg;
+    ObjectStore::Transaction *t;
+    ObjectContext *obc;
+    C_OSD_WrotePushedObject(ReplicatedPG *p, ObjectStore::Transaction *tt, ObjectContext *o) :
+      pg(p), t(tt), obc(o) {}
+    void finish(int r) {
+      pg->_wrote_pushed_object(t, obc);
+    }
+  };
 
   void sub_op_modify(MOSDSubOp *op);
   void sub_op_modify_applied(RepModify *rm);
   void sub_op_modify_commit(RepModify *rm);
 
   void sub_op_modify_reply(MOSDSubOpReply *reply);
+  void _wrote_pushed_object(ObjectStore::Transaction *t, ObjectContext *obc);
   void sub_op_push(MOSDSubOp *op);
   void sub_op_push_reply(MOSDSubOpReply *reply);
   void sub_op_pull(MOSDSubOp *op);

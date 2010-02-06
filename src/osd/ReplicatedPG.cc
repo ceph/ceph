@@ -2951,6 +2951,16 @@ void ReplicatedPG::_committed(epoch_t same_since, eversion_t last_complete)
   }
 }
 
+void ReplicatedPG::_wrote_pushed_object(ObjectStore::Transaction *t, ObjectContext *obc)
+{
+  dout(10) << "_wrote_pushed_object " << *obc << dendl;
+  lock();
+  obc->ondisk_write_unlock();
+  put_object_context(obc);
+  unlock();
+  delete t;
+}
+
 /** op_push
  * NOTE: called from opqueue.
  */
@@ -2974,6 +2984,11 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
   bufferlist data;
   data.claim(op->get_data());
+
+  // we need this later, and it gets clobbered by t.setattrs()
+  bufferlist oibl;
+  if (op->attrset.count(OI_ATTR))
+    oibl.push_back(op->attrset[OI_ATTR]);
 
   // determine data/clone subsets
   data_subset = op->data_subset;
@@ -3098,12 +3113,26 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       dout(10) << " log.complete_to = " << log.complete_to->version << dendl;
   }
 
-  // XXX: track ObjectContext
+  // track ObjectContext
+  Context *onreadable = 0;
+  if (is_primary()) {
+    dout(10) << " setting up obc for " << soid << dendl;
+    ObjectContext *obc = 0;
+    find_object_context(soid.oid, soid.snap, &obc, true);
+    register_object_context(obc);
+    obc->ondisk_write_lock();
+    
+    obc->obs.oi.decode(oibl);
+
+    onreadable = new C_OSD_WrotePushedObject(this, t, obc);
+  } else {
+    onreadable = new ObjectStore::C_DeleteTransaction(t);
+  }
 
   // apply to disk!
   write_info(*t);
   int r = osd->store->queue_transaction(t,
-					new ObjectStore::C_DeleteTransaction(t),
+					onreadable,
 					new C_OSD_Commit(this, info.history.same_acting_since,
 							 info.last_complete));
   assert(r == 0);
@@ -3126,6 +3155,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     if (info.is_uptodate())
       uptodate_set.insert(osd->get_nodeid());
     
+    /*
     if (is_active()) {
       // are others missing this too?  (only if we're active.. skip
       // this part if we're still repeering, it'll just confuse us)
@@ -3138,6 +3168,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 	}
       }
     }
+    */
 
   } else {
     // ack if i'm a replica and being pushed to.
@@ -3411,6 +3442,12 @@ int ReplicatedPG::recover_replicas(int max)
     sobject_t soid = peer_missing[peer].rmissing.begin()->second;
     eversion_t v = peer_missing[peer].rmissing.begin()->first;
 
+    ObjectContext *obc = lookup_object_context(soid);
+    if (obc) {
+      dout(10) << " ondisk_read_lock for " << soid << dendl;
+      obc->ondisk_read_lock();
+    }
+
     start_recovery_op(soid);
     started++;
 
@@ -3422,6 +3459,12 @@ int ReplicatedPG::recover_replicas(int max)
       if (peer_missing.count(peer) &&
           peer_missing[peer].is_missing(soid)) 
 	push_to_replica(soid, peer);
+    }
+
+    if (obc) {
+      dout(10) << " ondisk_read_unlock on " << soid << dendl;
+      obc->ondisk_read_unlock();
+      put_object_context(obc);
     }
 
     if (started >= max)
