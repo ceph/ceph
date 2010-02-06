@@ -452,7 +452,7 @@ int OSD::init()
 
   osd_lock.Unlock();
 
-  monc->authenticate(30.0);
+  monc->authenticate();
   monc->wait_auth_rotating(30.0);
 
   osd_lock.Lock();
