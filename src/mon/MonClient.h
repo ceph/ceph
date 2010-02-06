@@ -109,8 +109,7 @@ public:
   int _check_auth_rotating();
   int wait_auth_rotating(double timeout);
 
-  int authenticate(double timeout);
-  int wait_authenticate(double timeout);
+  int authenticate(double timeout=30.0);
 
   // mon subscriptions
 private:

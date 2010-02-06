@@ -478,23 +478,6 @@ void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
   delete m;
 }
 
-int MonClient::wait_authenticate(double timeout)
-{
-  Mutex::Locker l(monc_lock);
-  utime_t interval;
-  interval += timeout;
-
-  if (state == MC_STATE_HAVE_SESSION)
-    return 0;
-
-  if (cur_mon < 0)
-    _reopen_session();
-
-  int ret = auth_cond.WaitInterval(monc_lock, interval);
-  dout(0) << "wait_authenticate ended, returned " << ret << dendl;
-  return ret;
-}
-
 int MonClient::_check_auth_rotating()
 {
   if (state == MC_STATE_HAVE_SESSION && auth && auth->need_tickets()) {
