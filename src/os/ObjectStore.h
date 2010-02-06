@@ -393,6 +393,8 @@ public:
     }
 
     void encode(bufferlist& bl) const {
+      __u8 struct_v = 1;
+      ::encode(struct_v, bl);
       ::encode(ops, bl);
       ::encode(bls, bl);
       ::encode(oids, bl);
@@ -402,6 +404,8 @@ public:
       ::encode(attrsets, bl);
     }
     void decode(bufferlist::iterator &bl) {
+      __u8 struct_v;
+      ::decode(struct_v, bl);
       ::decode(ops, bl);
       ::decode(bls, bl);
       ::decode(oids, bl);
