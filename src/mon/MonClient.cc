@@ -272,8 +272,20 @@ int MonClient::authenticate(double timeout)
   if (cur_mon < 0)
     _reopen_session();
 
-  while (state != MC_STATE_HAVE_SESSION && !authenticate_err)
-    auth_cond.Wait(monc_lock);
+  utime_t until = g_clock.now();
+  until += timeout;
+  if (timeout > 0.0)
+    dout(10) << "authenticate will time out at " << until << dendl;
+  while (state != MC_STATE_HAVE_SESSION && !authenticate_err) {
+    if (timeout > 0.0) {
+      int r = auth_cond.WaitUntil(monc_lock, until);
+      if (r == ETIMEDOUT) {
+	dout(0) << "authenticate timed out after " << timeout << dendl;
+	authenticate_err = -r;
+      }
+    } else
+      auth_cond.Wait(monc_lock);
+  }
 
   if (state == MC_STATE_HAVE_SESSION) {
     dout(5) << "authenticate success, global_id " << global_id << dendl;
