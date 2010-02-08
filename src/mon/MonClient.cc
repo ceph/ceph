@@ -118,7 +118,6 @@ int MonClient::get_monmap()
   Mutex::Locker l(monc_lock);
   
   _sub_want("monmap", monmap.get_epoch());
-  want_monmap = true;
   if (cur_mon < 0)
     _reopen_session();
 

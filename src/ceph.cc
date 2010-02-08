@@ -639,6 +639,10 @@ int main(int argc, const char **argv, const char *envp[])
     cerr << "unable to authenticate as " << *g_conf.entity_name << std::endl;
     return -1;
   }
+  if (mc.get_monmap() < 0) {
+    cerr << "unable to get monmap" << std::endl;
+    return -1;
+  }
 
   if (watch) {
     lock.Lock();

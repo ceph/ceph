@@ -171,7 +171,7 @@ public:
     monc_lock("MonClient::monc_lock"),
     timer(monc_lock),
     hunting(false),
-    want_monmap(false),
+    want_monmap(true),
     want_keys(0), global_id(0),
     authenticate_err(0),
     auth(NULL),
