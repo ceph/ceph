@@ -1295,11 +1295,12 @@ inline ostream& operator<<(ostream& out, const OSDOp& op) {
       break;
     case CEPH_OSD_OP_MASKTRUNC:
     case CEPH_OSD_OP_TRIMTRUNC:
-      out << " " << op.op.extent.truncate_seq << "@" << op.op.extent.truncate_size;
+      out << " " << op.op.extent.truncate_seq << "@" << (__s64)op.op.extent.truncate_size;
       break;
     default:
       out << " " << op.op.extent.offset << "~" << op.op.extent.length;
-      out << " [" << op.op.extent.truncate_seq << "@" << op.op.extent.truncate_size << "]";
+      if (op.op.extent.truncate_seq)
+	out << " [" << op.op.extent.truncate_seq << "@" << (__s64)op.op.extent.truncate_size << "]";
     }
   } else if (ceph_osd_op_type_attr(op.op.op)) {
     // xattr name
