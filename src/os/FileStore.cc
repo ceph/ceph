@@ -828,8 +828,6 @@ int FileStore::do_transactions(list<Transaction*> &tls, __u64 op_seq)
       break;
   }
   
-  ::pwrite(op_fd, &op_seq, sizeof(op_seq), 0);
-  
   _transaction_finish(id);
   return r;
 }
@@ -1448,7 +1446,7 @@ void FileStore::sync_entry()
 
       dout(15) << "sync_entry committing " << cp << " sync_epoch " << sync_epoch << dendl;
       char s[30];
-      sprintf(s, "%lld", (long long unsigned)cp);
+      sprintf(s, "%lld\n", (long long unsigned)cp);
       ::pwrite(op_fd, s, strlen(s), 0);
 
       bool do_snap = g_conf.filestore_btrfs_snap;
