@@ -40,6 +40,7 @@ int main(int argc, const char **argv)
 
   const char *fn = 0;
   bool gen_key = false;
+  const char *add_key = 0;
   bool list = false;
   bool print_key = false;
   bool create_keyring = false;
@@ -50,6 +51,8 @@ int main(int argc, const char **argv)
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("gen-key", 'g')) {
       CONF_SAFE_SET_ARG_VAL(&gen_key, OPT_BOOL);
+    } else if (CONF_ARG_EQ("add-key", 'a')) {
+      CONF_SAFE_SET_ARG_VAL(&add_key, OPT_STR);
     } else if (CONF_ARG_EQ("name", 'n')) {
       CONF_SAFE_SET_ARG_VAL(&name, OPT_STR);
     } else if (CONF_ARG_EQ("list", 'l')) {
@@ -76,7 +79,10 @@ int main(int argc, const char **argv)
   KeyRing keyring;
   string s = name;
   EntityName ename;
-  ename.from_str(s);
+  if (name[0] && !ename.from_str(s)) {
+    cerr << "'" << s << "' is not a valid entity name" << std::endl;
+    exit(1);
+  }
 
   if (caps_fn) {
     if (!name || !(*name)) {
@@ -111,6 +117,22 @@ int main(int argc, const char **argv)
     eauth.key.create(CEPH_CRYPTO_AES);
     keyring.add(ename, eauth);
     modified = true;
+  } else if (add_key) {
+    if (!name) {
+      cerr << "must speicfy a name to add a key" << std::endl;
+      exit(1);
+    }
+    EntityAuth eauth;
+    string ekey(add_key);
+    try {
+      eauth.key.decode_base64(ekey);
+    } catch (buffer::error *err) {
+      cerr << "can't decode key '" << add_key << "'" << std::endl;
+      exit(1);
+    }
+    keyring.add(ename, eauth);    
+    modified = true;
+    cout << "added entity " << ename << " auth " << eauth << std::endl;  
   } else if (list) {
     keyring.print(cout);
   } else if (print_key) {
@@ -139,7 +161,6 @@ int main(int argc, const char **argv)
       //other.print(cout);
       keyring.import(other);
       modified = true;
-
     } else {
       cerr << "can't open " << import_keyring << ": " << strerror(-r) << std::endl;
       exit(1);

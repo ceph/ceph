@@ -59,6 +59,14 @@ public:
     e.append('\0');
     s = e.c_str();
   }
+  void decode_base64(const string& s) {
+    bufferlist e;
+    e.append(s);
+    bufferlist bl;
+    bl.decode_base64(e);
+    bufferlist::iterator p = bl.begin();
+    decode(p);
+  }
 
   // --
   int create(int type);
