@@ -3511,6 +3511,8 @@ void OSD::_remove_pg(PG *pg)
 
   int n = 0;
 
+  ObjectStore::Transaction *rmt = new ObjectStore::Transaction;
+
   // snap collections
   for (set<snapid_t>::iterator p = pg->snap_collections.begin();
        p != pg->snap_collections.end();
@@ -3537,10 +3539,7 @@ void OSD::_remove_pg(PG *pg)
 	}
       }
     }
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    t->remove_collection(coll_t::build_snap_pg_coll(pgid, *p));
-    int tr = store->queue_transaction(t);
-    assert(tr == 0);
+    rmt->remove_collection(coll_t::build_snap_pg_coll(pgid, *p));
   }
 
   // (what remains of the) main collection
@@ -3567,6 +3566,10 @@ void OSD::_remove_pg(PG *pg)
   }
 
   pg->unlock();
+
+  dout(10) << "_remove_pg " << pgid << " flushing store" << dendl;
+  store->flush();
+  
   dout(10) << "_remove_pg " << pgid << " taking osd_lock" << dendl;
   osd_lock.Lock();
   pg->lock();
@@ -3580,9 +3583,8 @@ void OSD::_remove_pg(PG *pg)
   dout(10) << "_remove_pg " << pgid << " removing final" << dendl;
 
   {
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    t->remove_collection(coll_t::build_pg_coll(pgid));
-    int tr = store->queue_transaction(t);
+    rmt->remove_collection(coll_t::build_pg_coll(pgid));
+    int tr = store->queue_transaction(rmt);
     assert(tr == 0);
   }
   
