@@ -1765,6 +1765,8 @@ void ReplicatedPG::apply_repop(RepGather *repop)
 
 void ReplicatedPG::op_applied(RepGather *repop)
 {
+  repop->obc->ondisk_write_unlock();
+
   lock();
   dout(10) << "op_applied " << *repop << dendl;
 
@@ -1791,8 +1793,6 @@ void ReplicatedPG::op_applied(RepGather *repop)
   dout(10) << "op_applied mode was " << mode << dendl;
   mode.write_applied();
   dout(10) << "op_applied mode now " << mode << " (finish_write)" << dendl;
-
-  repop->obc->ondisk_write_unlock();
 
   put_object_context(repop->obc);
   repop->obc = 0;
@@ -2954,8 +2954,8 @@ void ReplicatedPG::_committed(epoch_t same_since, eversion_t last_complete)
 void ReplicatedPG::_wrote_pushed_object(ObjectStore::Transaction *t, ObjectContext *obc)
 {
   dout(10) << "_wrote_pushed_object " << *obc << dendl;
-  lock();
   obc->ondisk_write_unlock();
+  lock();
   put_object_context(obc);
   unlock();
   delete t;
