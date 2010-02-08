@@ -1,4 +1,4 @@
-ceph (0.18) unstable; urgency=low
+ceph (0.18-1) unstable; urgency=low
 
   * crush: selectable hash functions
   * osdmap: selectable hash functions
@@ -18,7 +18,7 @@ ceph (0.18) unstable; urgency=low
 
  -- Sage Weil <sage@newdream.net>  Fri,  4 Dec 2009 10:01:00 -0800
 
-ceph (0.17) unstable; urgency=low
+ceph (0.17-1) unstable; urgency=low
 
   * kclient: fix multiple mds mdsmap decoding
   * kclient: fix mon subscription renewal
