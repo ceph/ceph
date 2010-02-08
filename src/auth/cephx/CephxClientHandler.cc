@@ -54,8 +54,7 @@ int CephxClientHandler::build_request(bufferlist& bl)
     req.old_ticket = ticket_handler.ticket;
 
     if (req.old_ticket.blob.length()) {
-      dout(0) << "old ticket len=" << req.old_ticket.blob.length() << dendl;
-      hexdump("encoded ticket:", req.old_ticket.blob.c_str(), req.old_ticket.blob.length());
+      dout(20) << "old ticket len=" << req.old_ticket.blob.length() << dendl;
     }
 
     ::encode(req, bl);
