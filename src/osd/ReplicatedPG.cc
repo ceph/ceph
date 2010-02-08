@@ -577,7 +577,16 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
   // we are acker.
   if (!noop) {
+
+    if (op->may_read()) {
+      dout(10) << " taking ondisk_read_lock" << dendl;
+      obc->ondisk_read_lock();
+    }
     int result = prepare_transaction(ctx);
+    if (op->may_read()) {
+      dout(10) << " dropping ondisk_read_lock" << dendl;
+      obc->ondisk_read_unlock();
+    }
 
     if (result >= 0)
       log_op_stats(soid, ctx);
