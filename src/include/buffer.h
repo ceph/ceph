@@ -1125,6 +1125,7 @@ public:
     }
 
     void encode_base64(list& o);
+    void decode_base64(list& o);
 
     void hexdump(std::ostream &out) const;
     int read_file(const char *fn, bool silent=false);
