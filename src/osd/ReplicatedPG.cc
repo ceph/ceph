@@ -632,8 +632,10 @@ void ReplicatedPG::do_op(MOSDOp *op)
         peer_missing[peer].is_missing(soid)) {
       // push it before this update. 
       // FIXME, this is probably extra much work (eg if we're about to overwrite)
+      obc->ondisk_read_lock();
       push_to_replica(soid, peer);
       start_recovery_op(soid);
+      obc->ondisk_read_unlock();
     }
     
     issue_repop(repop, peer, now, old_exists, old_size, old_version);
