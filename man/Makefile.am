@@ -17,4 +17,5 @@ dist_man_MANS = \
 	mount.ceph.8 \
 	radosgw.8 \
 	radosgw_admin.8 \
-	cauthtool.8
+	cauthtool.8 \
+	rados.8

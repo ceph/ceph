@@ -1,0 +1,103 @@
+.TH RADOS 8
+.SH NAME
+rados \- rados object storage utility
+.SH SYNOPSIS
+.B rados
+[ \fB\-m\fI monaddr\fR ]
+[ \fB\-p\fP | \fB\-\-pool\fI pool\fR ]
+[ \fB\-s\fP | \fB\-\-snap\fI snap\fR ]
+[ \fB\-i\fI infile\fR ]
+[ \fB\-o\fI outfile\fR ]
+\fIcommand ...\fR
+
+.SH DESCRIPTION
+.B rados
+is a utility for interacting with a Ceph object storage cluster (RADOS), part of the
+Ceph distributed file system.
+.SH OPTIONS
+.TP
+\fB\-p\fI pool\fR, \fB\-\-pool \fIpool\fR
+Interact with the given \fIpool\fP.  Required by most commands.
+.TP
+\fB\-s\fI snap\fR, \fB\-\-snap \fIsnap\fR
+Read from the given pool snapshot.  Valid for all pool-specific read operations.
+.TP
+\fB\-i \fIinfile\fP
+will specify an input file to be passed along as a payload with the \fIcommand\fP to the
+monitor cluster.  This is only used for specific monitor commands.
+.TP
+\fB\-o \fIoutfile\fP
+will write any payload returned by the monitor cluster with its reply to \fIoutfile\fP.
+Only specific monitor commands (e.g. \fIosd getmap\fP) return a payload.
+.TP
+\fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
+Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
+to determine monitor addresses during startup.
+.TP
+\fB\-m\fI monaddress[:port]\fR
+Connect to specified monitor (instead of looking through \fIceph.conf\fR).
+.SH GLOBAL COMMANDS
+.TP
+\fBlspools\fI
+List object pools
+.TP
+\fBdf\fI
+Show utilization statistics, including disk usage (bytes) and object counts, over the entire system
+and broken down by pool.
+.SH POOL SPECIFIC COMMANDS
+.TP
+\fBget \fIname\fP \fIoutfile\fP
+Read object \fIname\fP from the cluster and write it to \fIoutfile\fP.
+.TP
+\fBput \fIname\fP \fIinfile\fP
+Write object \fIname\fP to the cluster with contents from \fIinfile\fP.
+.TP
+\fBrm \fIname\fP
+Remove object \fIname\fP.
+.TP
+\fBls \fIoutfile\fP
+List objects in given pool and write to \fIoutfile\fP.
+.TP
+\fBlssnap\fP
+List snapshots for given pool.
+.TP
+\fBmksnap \fIfoo\fP
+Create pool snapshot named \fIfoo\fP.
+.TP
+\fBrmsnap \fIfoo\fP
+Remove pool snapshot names \fIfoo\fP.
+.TP
+\fBbench \fIseconds\fP \fImode\fP [ \fB-b \fIobjsize\fP ] [ \fB-t threads\fP ]
+Benchmark for \fIseconds\fP.  The \fImode\fP can be write or read.  The default object size is 4 KB, and the
+default number of simulated threads (parallel writes) is 16.
+.SH EXAMPLES
+To view cluster utilization:
+.IP
+rados df
+.PP
+To get a list object in pool \fIfoo\FP sent to stdout:
+.IP
+rados -p foo ls -
+.PP
+To write an object:
+.IP
+rados -p foo put myobject blah.txt
+.PP
+To create a snapshot:
+.IP
+rados -p foo mksnap mysnap
+.PP
+To delete the object:
+.IP
+rados -p foo rm myobject
+.PP
+To read a previously snapshotted version of an object:
+.IP
+rados -p foo -s mysnap get myobject blah.txt.old
+.PP
+.SH AVAILABILITY
+.B rados
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR ceph (8)
