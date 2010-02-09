@@ -191,6 +191,7 @@ for name in $what; do
     fi
 
     get_conf pid_file "/var/run/ceph/$type.$id.pid" "pid file"
+    [ -n "$pid_file" ] && mkdir -p `dirname $pid_file`
 
     case "$command" in
 	start)

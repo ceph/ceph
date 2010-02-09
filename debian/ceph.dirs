@@ -1,6 +1,5 @@
 usr/bin
 var/log/ceph
 var/log/ceph/stat
-var/run/ceph
 etc/ceph
 usr/share/doc/ceph
