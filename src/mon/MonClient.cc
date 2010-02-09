@@ -118,7 +118,6 @@ int MonClient::get_monmap()
   Mutex::Locker l(monc_lock);
   
   _sub_want("monmap", monmap.get_epoch());
-  want_monmap = true;
   if (cur_mon < 0)
     _reopen_session();
 
@@ -272,8 +271,20 @@ int MonClient::authenticate(double timeout)
   if (cur_mon < 0)
     _reopen_session();
 
-  while (state != MC_STATE_HAVE_SESSION && !authenticate_err)
-    auth_cond.Wait(monc_lock);
+  utime_t until = g_clock.now();
+  until += timeout;
+  if (timeout > 0.0)
+    dout(10) << "authenticate will time out at " << until << dendl;
+  while (state != MC_STATE_HAVE_SESSION && !authenticate_err) {
+    if (timeout > 0.0) {
+      int r = auth_cond.WaitUntil(monc_lock, until);
+      if (r == ETIMEDOUT) {
+	dout(0) << "authenticate timed out after " << timeout << dendl;
+	authenticate_err = -r;
+      }
+    } else
+      auth_cond.Wait(monc_lock);
+  }
 
   if (state == MC_STATE_HAVE_SESSION) {
     dout(5) << "authenticate success, global_id " << global_id << dendl;
@@ -476,23 +487,6 @@ void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
   }
 
   delete m;
-}
-
-int MonClient::wait_authenticate(double timeout)
-{
-  Mutex::Locker l(monc_lock);
-  utime_t interval;
-  interval += timeout;
-
-  if (state == MC_STATE_HAVE_SESSION)
-    return 0;
-
-  if (cur_mon < 0)
-    _reopen_session();
-
-  int ret = auth_cond.WaitInterval(monc_lock, interval);
-  dout(0) << "wait_authenticate ended, returned " << ret << dendl;
-  return ret;
 }
 
 int MonClient::_check_auth_rotating()

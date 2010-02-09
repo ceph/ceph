@@ -113,7 +113,7 @@ int main(int argc, const char **argv)
   nstring magic;
   ceph_fsid_t fsid;
   int w;
-  int r = OSD::peek_super(g_conf.osd_data, g_conf.osd_journal, magic, fsid, w);
+  int r = OSD::peek_meta(g_conf.osd_data, magic, fsid, w);
   if (r < 0) {
     cerr << TEXT_RED << " ** " << TEXT_HAZARD << "ERROR: " << TEXT_RED
          << "unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror_r(-r, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;

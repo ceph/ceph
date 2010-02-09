@@ -1025,7 +1025,6 @@ inline ostream& operator<<(ostream& out, ObjectExtent &ex)
 
 class OSDSuperblock {
 public:
-  nstring magic;
   ceph_fsid fsid;
   int32_t whoami;    // my role in this fs.
   epoch_t current_epoch;             // most recent epoch
@@ -1046,10 +1045,9 @@ public:
   }
 
   void encode(bufferlist &bl) const {
-    __u8 v = 2;
+    __u8 v = 3;
     ::encode(v, bl);
 
-    ::encode(magic, bl);
     ::encode(fsid, bl);
     ::encode(whoami, bl);
     ::encode(current_epoch, bl);
@@ -1064,7 +1062,10 @@ public:
     __u8 v;
     ::decode(v, bl);
 
-    ::decode(magic, bl);
+    if (v < 3) {
+      nstring magic;
+      ::decode(magic, bl);
+    }
     ::decode(fsid, bl);
     ::decode(whoami, bl);
     ::decode(current_epoch, bl);
@@ -1083,7 +1084,7 @@ WRITE_CLASS_ENCODER(OSDSuperblock)
 
 inline ostream& operator<<(ostream& out, OSDSuperblock& sb)
 {
-  return out << "sb('" << sb.magic << "' fsid " << sb.fsid
+  return out << "sb(" << sb.fsid
              << " osd" << sb.whoami
              << " e" << sb.current_epoch
              << " [" << sb.oldest_map << "," << sb.newest_map << "]"
@@ -1295,11 +1296,12 @@ inline ostream& operator<<(ostream& out, const OSDOp& op) {
       break;
     case CEPH_OSD_OP_MASKTRUNC:
     case CEPH_OSD_OP_TRIMTRUNC:
-      out << " " << op.op.extent.truncate_seq << "@" << op.op.extent.truncate_size;
+      out << " " << op.op.extent.truncate_seq << "@" << (__s64)op.op.extent.truncate_size;
       break;
     default:
       out << " " << op.op.extent.offset << "~" << op.op.extent.length;
-      out << " [" << op.op.extent.truncate_seq << "@" << op.op.extent.truncate_size << "]";
+      if (op.op.extent.truncate_seq)
+	out << " [" << op.op.extent.truncate_seq << "@" << (__s64)op.op.extent.truncate_size << "]";
     }
   } else if (ceph_osd_op_type_attr(op.op.op)) {
     // xattr name

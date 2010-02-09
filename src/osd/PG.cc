@@ -1763,6 +1763,12 @@ void PG::update_stats()
     pg_stats_stable.ondisk_log_start = log.tail;
 
     pg_stats_stable.num_object_copies = pg_stats_stable.num_objects * osd->osdmap->get_pg_size(info.pgid);
+
+    if (is_degraded())
+      pg_stats_stable.num_objects_degraded =
+	pg_stats_stable.num_objects * (osd->osdmap->get_pg_size(info.pgid) - acting.size());
+    else
+      pg_stats_stable.num_objects_degraded = 0;
     if (!is_clean() && is_active()) {
       pg_stats_stable.num_objects_missing_on_primary = missing.num_missing();
       int degraded = missing.num_missing();
@@ -1770,7 +1776,7 @@ void PG::update_stats()
 	assert(peer_missing.count(acting[i]));
 	degraded += peer_missing[acting[i]].num_missing();
       }
-      pg_stats_stable.num_objects_degraded = degraded;
+      pg_stats_stable.num_objects_degraded += degraded;
     }
 
     dout(15) << "update_stats " << pg_stats_stable.reported << dendl;

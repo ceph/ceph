@@ -32,6 +32,15 @@ void buffer::list::encode_base64(buffer::list& o)
   o.push_back(bp);
 }
 
+void buffer::list::decode_base64(buffer::list& e)
+{
+  bufferptr bp(e.length() * 3 / 4 + 1);
+  int l = ceph_unarmor(bp.c_str(), e.c_str(), e.c_str() + e.length());
+  assert(l <= (int)bp.length());
+  bp.set_length(l);
+  push_back(bp);
+}
+
 
 int buffer::list::read_file(const char *fn, bool silent)
 {

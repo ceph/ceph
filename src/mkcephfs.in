@@ -224,6 +224,8 @@ for name in $what; do
 	    else
 		cp -v /tmp/keyring.osd.$id $keyring
 	    fi
+	else
+	    echo WARNING: no keyring specified for $name
 	fi
 	rm /tmp/keyring.osd.$id
     fi
@@ -236,6 +238,8 @@ for name in $what; do
 	    else
 		cp -v /tmp/keyring.mds.$id $keyring
 	    fi
+	else
+	    echo WARNING: no keyring specified for $name
 	fi
 	rm /tmp/keyring.mds.$id
     fi

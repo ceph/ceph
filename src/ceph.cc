@@ -635,8 +635,14 @@ int main(int argc, const char **argv, const char *envp[])
   mc.set_messenger(messenger);
   mc.init();
 
-  if (mc.get_monmap() < 0)
+  if (mc.authenticate() < 0) {
+    cerr << "unable to authenticate as " << *g_conf.entity_name << std::endl;
     return -1;
+  }
+  if (mc.get_monmap() < 0) {
+    cerr << "unable to get monmap" << std::endl;
+    return -1;
+  }
 
   if (watch) {
     lock.Lock();

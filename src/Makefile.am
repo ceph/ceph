@@ -488,6 +488,7 @@ noinst_HEADERS = \
         crush/types.h\
 	include/ClassLibrary.h\
         include/Context.h\
+	include/CompatSet.h\
         include/Distribution.h\
 	include/LogEntry.h\
 	include/assert.h\
@@ -682,6 +683,7 @@ noinst_HEADERS = \
         mon/PaxosService.h\
         mon/Session.h\
         mon/mon_types.h\
+	mount/canonicalize.c\
 	mount/mtab.c\
         msg/Dispatcher.h\
         msg/FakeMessenger.h\

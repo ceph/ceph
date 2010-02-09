@@ -109,8 +109,7 @@ public:
   int _check_auth_rotating();
   int wait_auth_rotating(double timeout);
 
-  int authenticate(double timeout);
-  int wait_authenticate(double timeout);
+  int authenticate(double timeout=0.0);
 
   // mon subscriptions
 private:
@@ -172,7 +171,7 @@ public:
     monc_lock("MonClient::monc_lock"),
     timer(monc_lock),
     hunting(false),
-    want_monmap(false),
+    want_monmap(true),
     want_keys(0), global_id(0),
     authenticate_err(0),
     auth(NULL),

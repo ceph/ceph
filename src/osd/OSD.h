@@ -122,6 +122,8 @@ protected:
     }
   };
 
+  bool dispatch_running;
+
   void tick();
 
   void _dispatch(Message *m);
@@ -853,7 +855,14 @@ protected:
   static int find_osd_dev(char *result, int whoami);
   static ObjectStore *create_object_store(const char *dev, const char *jdev);
   static int mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami);
-  static int peek_super(const char *dev, const char *journal, nstring& magic, ceph_fsid_t& fsid, int& whoami);
+
+private:
+  static int write_meta(const char *base, const char *file, const char *val, size_t vallen);
+  static int read_meta(const char *base, const char *file, char *val, size_t vallen);
+  static int write_meta(const char *base, ceph_fsid_t& fsid, int whoami);
+public:
+  static int peek_meta(const char *dev, nstring& magic, ceph_fsid_t& fsid, int& whoami);
+  
 
   // startup/shutdown
   int init();
