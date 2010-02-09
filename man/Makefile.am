@@ -1,6 +1,6 @@
 AUTOMAKE_OPTIONS = gnu
 
-man_MANS = \
+dist_man_MANS = \
 	cosd.8 \
 	cmds.8 \
 	cmon.8 \
@@ -17,5 +17,3 @@ man_MANS = \
 	mount.ceph.8 \
 	radosgw.8 \
 	radosgw_admin.8
-
-dist_man_MANS = $(man_MANS)
