@@ -5,8 +5,8 @@
 # Provides:          ceph
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
-# Required-Start:    $local_fs $named $network $time
-# Required-Stop:     $local_fs $named $network $time
+# Required-Start:    $remote_fs $named $network $time
+# Required-Stop:     $remote_fs $named $network $time
 # Short-Description: Start Ceph distributed file system daemons at boot time
 # Description:       Enable Ceph distributed file system services.
 ### END INIT INFO
