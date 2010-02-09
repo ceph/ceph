@@ -1,0 +1,83 @@
+.TH CAUTHTOOL 8
+.SH NAME
+cauthtool \- ceph keyring manipulation tool
+.SH SYNOPSIS
+.B cauthtool
+\fIkeyringfile\fP
+[ \fB\-l\fR | \fB\-\-list\fR ]
+[ \fB\-c\fR | \fB\-\-create-keyring\fR ]
+[ \fB\-p\fR | \fB\-\-print\fR ]
+[ \fB\-n\fR | \fB\-\-name\fR \fIentityname\fP ]
+[ \fB\-\-gen-key\fR ]
+[ \fB\-a\fR | \fB\-\-add-key \fIbase64_key\fP ]
+[ \fB\-\-caps\fR \fIcapfils\fP ]
+.SH DESCRIPTION
+.B cauthtool
+is a utility to create, view, and modify a Ceph keyring file.  A keyring
+file stores one or more Ceph authentication keys and possibly an 
+associated capability specification.  Each key is associated with an
+entity name, of the form \fI{client,mon,mds,osd}.name\fP.
+.SH OPTIONS
+.TP
+\fB\-l\fP, \fB\-\-list\fP
+will list all keys and capabilities present in the keyring.
+.TP
+\fB\-p\fP, \fB\-\-print\fP
+will print an encoded key for the specified \fIentityname\fP.  This is suitable for the mount -o secret= argument.
+.TP
+\fB\-c\fP, \fB\-\-create-keyring\fP
+will create a new keyring, overwriting any existing \fIkeyringfile\fP.
+.TP
+\fB\-\-gen\-key\fP
+will generate a new secret key for the specified \fIentityname\fP:
+.TP
+\fB\-\-add\-key\fP
+will add an encoded key to the keyring.
+.TP
+\fB\-\-caps\fI capsfile \fP
+will set the capabilities associated with a given key.
+.SH CAPS FILE FORMAT
+The caps file format consists of zero or more key/value pairs.  The key is the name of the Ceph
+subsystem (osd, mds, mon).  The value is a comma separated list of allow, deny clauses with a permission
+specifier containing one or more of \fIrwx\fP, for read, write, and execute permission.  For
+example,
+.IP
+osd = "allow rwx [pool foo]"  # can read, write, and execute objects
+.IP
+mds = "allow"      # can access mds server
+.IP
+mon = "allow rwx"  # can modify cluster state (i.e., is a server daemon)
+.PP
+A librados user restricted to a single pool might look like
+.IP
+osd = "allow rw pool foo"
+.PP
+A client mounting the file system with minimal permissions would need caps like
+.IP
+mds = "allow"
+.IP
+osd = "allow rw pool data"
+.PP
+.SH EXAMPLE
+To create a new keyring containing a key for \fIclient.foo\fP:
+.IP
+cauthtool -c -n client.foo --gen-key keyring.bin
+.PP
+To associate some capabilities with the key:
+.IP
+cauthtool -n client.foo --caps foocaps.conf keyring.bin
+.PP
+To display the contents of the keyring:
+.IP
+cauthtool -l keyring.bin
+.PP
+When mount a Ceph file system, you can grab the appropriately encoded secret key with
+.IP
+mount -t ceph serverhost:/ mountpoint -o name=foo,secret=`cauthtool -p -n client.foo keyring.bin`
+.PP
+.SH AVAILABILITY
+.B cauthtool
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR ceph (8)

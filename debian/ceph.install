@@ -9,6 +9,7 @@ usr/bin/cmon
 usr/bin/cmds
 usr/bin/cosd
 usr/bin/mkmonfs
+usr/bin/cauthtool
 usr/sbin/mount.ceph
 usr/sbin/mkcephfs
 usr/lib/ceph/ceph_common.sh
