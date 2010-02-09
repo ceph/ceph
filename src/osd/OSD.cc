@@ -313,6 +313,7 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, c
   logclient(messenger, &mc->monmap),
   whoami(id),
   dev_path(dev), journal_path(jdev),
+  mknewjournal(newjournal), dispatch_running(false),
   osd_compat(ceph_osd_feature_compat,
 	     ceph_osd_feature_ro_compat,
 	     ceph_osd_feature_incompat),
@@ -351,7 +352,6 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, c
 {
   monc->set_messenger(messenger);
   
-  mknewjournal = newjournal;
   osdmap = 0;
 
   memset(&my_stat, 0, sizeof(my_stat));
@@ -1325,7 +1325,11 @@ void OSD::tick()
 
   timer.add_event_after(1.0, new C_Tick(this));
 
-  do_waiters();
+  // only do waiters if dispatch() isn't currently running.  (if it is,
+  // it'll do the waiters, and doing them here may screw up ordering
+  // of op_queue vs handle_osd_map.)
+  if (!dispatch_running)
+    do_waiters();
 }
 
 // =========================================
@@ -1625,7 +1629,9 @@ bool OSD::ms_dispatch(Message *m)
 {
   // lock!
   osd_lock.Lock();
+  dispatch_running = true;
   _dispatch(m);
+  dispatch_running = false;
   do_waiters();
   osd_lock.Unlock();
   return true;
