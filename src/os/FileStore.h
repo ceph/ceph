@@ -113,6 +113,9 @@ class FileStore : public JournalingObjectStore {
     void _dequeue(Op *o) {
       assert(0);
     }
+    bool _empty() {
+      return store->op_queue.empty();
+    }
     Op *_dequeue() {
       if (store->op_queue.empty())
 	return NULL;

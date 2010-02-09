@@ -121,12 +121,12 @@ void ThreadPool::unpause()
   _lock.Unlock();
 }
 
-void ThreadPool::drain()
+void ThreadPool::drain(_WorkQueue *wq)
 {
   dout(10) << "drain" << dendl;
   _lock.Lock();
   _draining = true;
-  while (processing)
+  while (processing || (wq != NULL && !wq->_empty()))
     _wait_cond.Wait(_lock);
   _draining = false;
   _lock.Unlock();

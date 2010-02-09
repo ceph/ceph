@@ -1533,8 +1533,8 @@ void FileStore::sync(Context *onsafe)
 
 void FileStore::_flush_op_queue()
 {
-  dout(10) << "_flush_op_queue draining for op tp" << dendl;
-  op_tp.drain();
+  dout(10) << "_flush_op_queue draining op tp" << dendl;
+  op_wq.drain();
   dout(10) << "_flush_op_queue waiting for apply finisher" << dendl;
   op_finisher.wait_for_empty();
 }

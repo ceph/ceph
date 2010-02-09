@@ -367,6 +367,9 @@ private:
     void _dequeue(PG *pg) {
       assert(0);
     }
+    bool _empty() {
+      return osd->op_queue.empty();
+    }
     PG *_dequeue() {
       if (osd->op_queue.empty())
 	return NULL;
@@ -618,6 +621,9 @@ protected:
     OSD *osd;
     BacklogWQ(OSD *o, ThreadPool *tp) : ThreadPool::WorkQueue<PG>("OSD::BacklogWQ", tp), osd(o) {}
 
+    bool _empty() {
+      return osd->backlog_queue.empty();
+    }
     bool _enqueue(PG *pg) {
       if (!pg->backlog_item.get_xlist()) {
 	pg->get();
@@ -666,6 +672,9 @@ protected:
     OSD *osd;
     RecoveryWQ(OSD *o, ThreadPool *tp) : ThreadPool::WorkQueue<PG>("OSD::RecoveryWQ", tp), osd(o) {}
 
+    bool _empty() {
+      return osd->recovery_queue.empty();
+    }
     bool _enqueue(PG *pg) {
       if (!pg->recovery_item.get_xlist()) {
 	pg->get();
@@ -737,6 +746,9 @@ protected:
     OSD *osd;
     SnapTrimWQ(OSD *o, ThreadPool *tp) : ThreadPool::WorkQueue<PG>("OSD::SnapTrimWQ", tp), osd(o) {}
 
+    bool _empty() {
+      return osd->snap_trim_queue.empty();
+    }
     bool _enqueue(PG *pg) {
       if (pg->snap_trim_item.is_on_xlist())
 	return false;
@@ -769,6 +781,9 @@ protected:
     OSD *osd;
     ScrubWQ(OSD *o, ThreadPool *tp) : ThreadPool::WorkQueue<PG>("OSD::ScrubWQ", tp), osd(o) {}
 
+    bool _empty() {
+      return osd->scrub_queue.empty();
+    }
     bool _enqueue(PG *pg) {
       if (pg->scrub_item.is_on_xlist())
 	return false;
@@ -807,6 +822,9 @@ protected:
     OSD *osd;
     RemoveWQ(OSD *o, ThreadPool *tp) : ThreadPool::WorkQueue<PG>("OSD::RemoveWQ", tp), osd(o) {}
 
+    bool _empty() {
+      return osd->remove_queue.empty();
+    }
     bool _enqueue(PG *pg) {
       if (pg->remove_item.is_on_xlist())
 	return false;
