@@ -278,8 +278,8 @@ EOF
 EOF
 		fi
 
-	        [ "$cephx" -eq 1 ] && $SUDO $CEPH_BIN/authtool --create-keyring --gen-key --name=mon. $keyring_fn
-	        [ "$cephx" -eq 1 ] && $SUDO $CEPH_BIN/authtool --create-keyring --gen-key --name=client.admin --caps=$admin_caps $keyring_fn
+	        [ "$cephx" -eq 1 ] && $SUDO $CEPH_BIN/cauthtool --create-keyring --gen-key --name=mon. $keyring_fn
+	        [ "$cephx" -eq 1 ] && $SUDO $CEPH_BIN/cauthtool --create-keyring --gen-key --name=client.admin --caps=$admin_caps $keyring_fn
 
 		# build a fresh fs monmap, mon fs
 		str="$CEPH_BIN/monmaptool --create --clobber"
@@ -346,7 +346,7 @@ EOF
 	osd = "allow rwx"
 EOF
 		fi
-		$SUDO $CEPH_BIN/authtool --create-keyring --gen-key --name=osd.$osd --caps=$osd_caps $key_fn
+		$SUDO $CEPH_BIN/cauthtool --create-keyring --gen-key --name=osd.$osd --caps=$osd_caps $key_fn
 		echo adding osd$osd key to auth repository
 		$SUDO $CEPH_ADM -i $key_fn auth add osd.$osd
 	    fi
@@ -385,7 +385,7 @@ EOF
 EOF
 		fi
 	    fi
-	    $SUDO $CEPH_BIN/authtool --create-keyring --gen-key --name=mds.$name --caps=$mds_caps $key_fn
+	    $SUDO $CEPH_BIN/cauthtool --create-keyring --gen-key --name=mds.$name --caps=$mds_caps $key_fn
 	    $SUDO $CEPH_ADM -i $key_fn auth add mds.$name
 	fi
 	
