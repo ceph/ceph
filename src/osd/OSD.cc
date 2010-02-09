@@ -150,9 +150,10 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
   if (err < 0) return err;
     
   OSDSuperblock sb;
-  sb.magic = CEPH_OSD_ONDISK_MAGIC;
   sb.fsid = fsid;
   sb.whoami = whoami;
+
+  write_meta(dev, fsid, whoami);
 
   // age?
   if (g_conf.osd_age_time != 0) {
@@ -206,30 +207,94 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
   return r;
 }
 
-int OSD::peek_super(const char *dev, const char *journal, nstring& magic, ceph_fsid_t& fsid, int& whoami)
+
+int OSD::write_meta(const char *base, const char *file, const char *val, size_t vallen)
 {
-  ObjectStore *store = create_object_store(dev, journal);
-  if (!store)
-	return -ENODEV;
-  int err = store->mount();
-  if (err < 0) 
-    return err;
+  char fn[PATH_MAX];
+  int fd;
 
-  OSDSuperblock sb;
-  bufferlist bl;
-  err = store->read(meta_coll, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
-  store->umount();
-  delete store;
+  snprintf(fn, sizeof(fn), "%s/%s", base, file);
+  fd = ::open(fn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
+  ::write(fd, val, vallen);
+  ::close(fd);
 
-  if (err < 0) 
-    return -ENOENT;
+  return 0;
+}
 
-  bufferlist::iterator p = bl.begin();
-  ::decode(sb, p);
+int OSD::read_meta(const char *base, const char *file, char *val, size_t vallen)
+{
+  char fn[PATH_MAX];
+  int fd, len;
 
-  magic = sb.magic;
-  fsid = sb.fsid;
-  whoami = sb.whoami;
+  snprintf(fn, sizeof(fn), "%s/%s", base, file);
+  fd = ::open(fn, O_RDONLY);
+  len = ::read(fd, val, vallen);
+  ::close(fd);
+  if (len > 0 && len < (int)vallen)
+    val[len] = 0;
+  return len;
+}
+
+#define FSID_FORMAT "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-" \
+	"%02x%02x%02x%02x%02x%02x"
+#define PR_FSID(f) (f)->fsid[0], (f)->fsid[1], (f)->fsid[2], (f)->fsid[3], \
+		(f)->fsid[4], (f)->fsid[5], (f)->fsid[6], (f)->fsid[7],    \
+		(f)->fsid[8], (f)->fsid[9], (f)->fsid[10], (f)->fsid[11],  \
+		(f)->fsid[12], (f)->fsid[13], (f)->fsid[14], (f)->fsid[15]
+
+int OSD::write_meta(const char *base, ceph_fsid_t& fsid, int whoami)
+{
+  char val[80];
+  
+  snprintf(val, sizeof(val), "%s\n", CEPH_OSD_ONDISK_MAGIC);
+  write_meta(base, "magic", val, strlen(val));
+
+  snprintf(val, sizeof(val), "%d\n", whoami);
+  write_meta(base, "whoami", val, strlen(val));
+
+  snprintf(val, sizeof(val), FSID_FORMAT "\n", PR_FSID(&fsid));
+  write_meta(base, "ceph_fsid", val, strlen(val));
+  
+  return 0;
+}
+
+int OSD::peek_meta(const char *dev, nstring& magic, ceph_fsid_t& fsid, int& whoami)
+{
+  char val[80] = { 0 };
+
+  if (read_meta(dev, "magic", val, sizeof(val)) < 0)
+    return -errno;
+  int l = strlen(val);
+  if (l && val[l-1] == '\n')
+    val[l-1] = 0;
+  magic = val;
+
+  if (read_meta(dev, "whoami", val, sizeof(val)) < 0)
+    return -errno;
+  whoami = atoi(val);
+
+  if (read_meta(dev, "ceph_fsid", val, sizeof(val)) < 0)
+    return -errno;
+  
+  memset(&fsid, 0, sizeof(fsid));
+  unsigned o = 0;
+  for (char *p = val; *p && p < (val+sizeof(val)) && o < 2*sizeof(fsid); p++) {
+    int digit = -1;
+    if (*p >= '0' && *p <= '9')
+      digit = *p - '0';
+    else if (*p >= 'a' && *p <= 'f')
+      digit = *p - 'a' + 10;
+    else if (*p >= 'A' && *p <= 'F')
+      digit = *p - 'A' + 10;
+
+    if (digit >= 0) {
+      if (o & 1)
+	fsid.fsid[o/2] = fsid.fsid[o/2] * 16 + digit;
+      else
+	fsid.fsid[o/2] = digit;
+      o++;
+    }    
+  }
   return 0;
 }
 
