@@ -50,6 +50,7 @@ public:
 
 private:
   int state;
+  __u64 state_seq;
   friend class SessionMap;
 public:
   entity_inst_t inst;
@@ -89,6 +90,7 @@ public:
   client_t get_client() { return client_t(inst.name.num()); }
 
   int get_state() { return state; }
+  __u64 get_state_seq() { return state_seq; }
   bool is_new() { return state == STATE_NEW; }
   bool is_opening() { return state == STATE_OPENING; }
   bool is_open() { return state == STATE_OPEN; }
@@ -137,7 +139,7 @@ public:
 
 
   Session() : 
-    state(STATE_NEW), 
+    state(STATE_NEW), state_seq(0),
     session_list_item(this),
     cap_push_seq(0) { }
   ~Session() {
@@ -241,11 +243,13 @@ public:
     if (by_state[state].empty()) return 0;
     return by_state[state].front();
   }
-  void set_state(Session *session, int s) {
+  __u64 set_state(Session *session, int s) {
     if (session->state != s) {
       session->state = s;
+      session->state_seq++;
       by_state[s].push_back(&session->session_list_item);
     }
+    return session->state_seq;
   }
   void dump();
 
