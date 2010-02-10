@@ -1075,6 +1075,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	info.stats.num_wr++;
 	info.stats.num_wr_kb += SHIFT_ROUND_UP(op.extent.length, 10);
 	ssc->snapset.head_exists = true;
+
+	if (!seq)
+		oi.truncate_seq = op.extent.truncate_seq;
       }
       break;
       
