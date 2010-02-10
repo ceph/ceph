@@ -13,7 +13,7 @@ else
     if [ "@sysconfdir@" = "/usr/etc" ]; then
 	ETCDIR=/etc/ceph
     else
-	ETCDIR=@sysconfdir@
+	ETCDIR=@sysconfdir@/ceph
     fi
 fi
 
