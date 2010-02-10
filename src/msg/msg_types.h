@@ -131,7 +131,11 @@ static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
 struct entity_addr_t {
   __u32 type;
   __u32 nonce;
-  sockaddr_storage addr;
+  union {
+    sockaddr_storage addr;
+    sockaddr_in addr4;
+    sockaddr_in6 addr6;
+  };
 
   entity_addr_t() : type(0), nonce(0) { 
     memset(&addr, 0, sizeof(addr));
@@ -150,25 +154,24 @@ struct entity_addr_t {
     return addr;
   }
   sockaddr_in &in4_addr() {
-    return *(sockaddr_in *)&addr;
+    return addr4;
   }
   sockaddr_in6 &in6_addr() {
-    return *(sockaddr_in6 *)&addr;
+    return addr6;
   }
 
   void set_in4_quad(int pos, int val) {
-    sockaddr_in *in4 = (sockaddr_in *)&addr;
-    in4->sin_family = AF_INET;
-    unsigned char *ipq = (unsigned char*)&in4->sin_addr.s_addr;
+    addr4.sin_family = AF_INET;
+    unsigned char *ipq = (unsigned char*)&addr4.sin_addr.s_addr;
     ipq[pos] = val;
   }
   void set_port(int port) {
     switch (addr.ss_family) {
     case AF_INET:
-      ((sockaddr_in *)&addr)->sin_port = htons(port);
+      addr4.sin_port = htons(port);
       break;
     case AF_INET6:
-      ((sockaddr_in6 *)&addr)->sin6_port = htons(port);
+      addr6.sin6_port = htons(port);
       break;
     default:
       assert(0);
@@ -177,10 +180,10 @@ struct entity_addr_t {
   int get_port() const {
     switch (addr.ss_family) {
     case AF_INET:
-      return ntohs(((const sockaddr_in *)&addr)->sin_port);
+      return ntohs(addr4.sin_port);
       break;
     case AF_INET6:
-      return ntohs(((const sockaddr_in6 *)&addr)->sin6_port);
+      return ntohs(addr6.sin6_port);
       break;
     }
     return 0;
@@ -199,26 +202,24 @@ struct entity_addr_t {
     if (addr.ss_family != o.addr.ss_family)
       return false;
     if (addr.ss_family == AF_INET)
-      return ((struct sockaddr_in *)&addr)->sin_addr.s_addr ==
-	((struct sockaddr_in *)&o.addr)->sin_addr.s_addr;
+      return addr4.sin_addr.s_addr == o.addr4.sin_addr.s_addr;
     if (addr.ss_family == AF_INET6)
-      return memcmp(((struct sockaddr_in6 *)&addr)->sin6_addr.s6_addr,
-		    ((struct sockaddr_in6 *)&o.addr)->sin6_addr.s6_addr,
-		    sizeof(((struct sockaddr_in6 *)&addr)->sin6_addr.s6_addr));
+      return memcmp(addr6.sin6_addr.s6_addr,
+		    o.addr6.sin6_addr.s6_addr,
+		    sizeof(addr6.sin6_addr.s6_addr));
     return false;
   }
 
   bool is_blank_addr() {
     switch (addr.ss_family) {
     case AF_INET:
-      return ((sockaddr_in *)&addr)->sin_addr.s_addr == INADDR_ANY;
+      return addr4.sin_addr.s_addr == INADDR_ANY;
     case AF_INET6:
       {
-	sockaddr_in6 *in6 = (sockaddr_in6 *)&addr;
-	return in6->sin6_addr.s6_addr32[0] == 0 &&
-	  in6->sin6_addr.s6_addr32[1] == 0 &&
-	  in6->sin6_addr.s6_addr32[2] == 0 &&
-	  in6->sin6_addr.s6_addr32[3] == 0;
+	return addr6.sin6_addr.s6_addr32[0] == 0 &&
+	  addr6.sin6_addr.s6_addr32[1] == 0 &&
+	  addr6.sin6_addr.s6_addr32[2] == 0 &&
+	  addr6.sin6_addr.s6_addr32[3] == 0;
       }
     default:
       return true;
