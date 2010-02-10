@@ -505,7 +505,7 @@ int MonClient::_check_auth_rotating()
     return 0;
   }
 
-  if (!rotating_secrets->need_new_secrets()) {
+  if (!rotating_secrets->need_new_secrets(g_clock.now())) {
     dout(20) << "_check_auth_rotating have uptodate secrets" << dendl;
     rotating_secrets->dump_rotating();
     return 0;

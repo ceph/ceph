@@ -23,13 +23,12 @@
 
 struct KeyServerData {
   version_t version;
-  version_t rotating_ver;
-  utime_t next_rotating_time;
 
   /* for each entity */
   map<EntityName, EntityAuth> secrets;
 
   /* for each service type */
+  version_t rotating_ver;
   map<uint32_t, RotatingSecrets> rotating_secrets;
 
   KeyServerData() : version(0), rotating_ver(0) {}
@@ -39,7 +38,6 @@ struct KeyServerData {
     ::encode(struct_v, bl);
     ::encode(version, bl);
     ::encode(rotating_ver, bl);
-    ::encode(next_rotating_time, bl);
     ::encode(secrets, bl);
     ::encode(rotating_secrets, bl);
   }
@@ -48,7 +46,6 @@ struct KeyServerData {
     ::decode(struct_v, bl);
     ::decode(version, bl);
     ::decode(rotating_ver, bl);
-    ::decode(next_rotating_time, bl);
     ::decode(secrets, bl);
     ::decode(rotating_secrets, bl);
   }
@@ -80,10 +77,6 @@ struct KeyServerData {
     if (iter == secrets.end())
       return;
     secrets.erase(iter);
-  }
-
-  void add_rotating_secret(uint32_t service_id, ExpiringCryptoKey& key) {
-    rotating_secrets[service_id].add(key);
   }
 
   bool get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret, uint64_t& secret_id);
@@ -173,9 +166,9 @@ class KeyServer : public KeyStore {
 
   Mutex lock;
 
-  void _rotate_secret(uint32_t service_id, int factor);
-  void _generate_all_rotating_secrets(bool init);
-  bool _check_rotate();
+  int _rotate_secret(uint32_t service_id);
+  bool _check_rotating_secrets();
+  void _dump_rotating_secrets();
   int _build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, CephXSessionAuthInfo& info);
   bool _get_service_caps(EntityName& name, uint32_t service_id, AuthCapsInfo& caps);
 public:
@@ -186,7 +179,7 @@ public:
   bool get_secret(EntityName& name, CryptoKey& secret);
   bool get_caps(EntityName& name, string& type, AuthCapsInfo& caps);
   bool get_active_rotating_secret(EntityName& name, CryptoKey& secret);
-  int start_server(bool init);
+  int start_server();
   void rotate_timeout(double timeout);
 
   int build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, CephXSessionAuthInfo& info);
@@ -232,10 +225,11 @@ public:
     data.remove_secret(name);
   }
 
-  void add_rotating_secret(uint32_t service_id, ExpiringCryptoKey& key) {
+  /*void add_rotating_secret(uint32_t service_id, ExpiringCryptoKey& key) {
     Mutex::Locker l(lock);
     data.add_rotating_secret(service_id, key);
   }
+  */
   void clone_to(KeyServerData& dst) {
     Mutex::Locker l(lock);
     dst = data;

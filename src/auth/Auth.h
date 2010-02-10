@@ -213,7 +213,7 @@ struct AuthAuthorizer {
 /*
  * Key management
  */ 
-#define KEY_ROTATE_NUM 3
+#define KEY_ROTATE_NUM 3   /* prev, current, next */
 
 struct ExpiringCryptoKey {
   CryptoKey key;
@@ -258,14 +258,33 @@ struct RotatingSecrets {
     ::decode(max_ver, bl);
   }
   
-  void add(ExpiringCryptoKey& key) {
+  uint64_t add(ExpiringCryptoKey& key) {
     secrets[++max_ver] = key;
     while (secrets.size() > KEY_ROTATE_NUM)
       secrets.erase(secrets.begin());
+    return max_ver;
   }
   
   bool need_new_secrets() {
     return secrets.size() < KEY_ROTATE_NUM;
+  }
+  bool need_new_secrets(utime_t now) {
+    return secrets.size() < KEY_ROTATE_NUM || current().expiration <= now;
+  }
+
+  ExpiringCryptoKey& previous() {
+    return secrets.begin()->second;
+  }
+  ExpiringCryptoKey& current() {
+    map<uint64_t, ExpiringCryptoKey>::iterator p = secrets.begin();
+    p++;
+    return p->second;
+  }
+  ExpiringCryptoKey& next() {
+    return secrets.rbegin()->second;
+  }
+  bool empty() {
+    return secrets.empty();
   }
 
   void dump();

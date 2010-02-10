@@ -84,7 +84,7 @@ void AuthMonitor::on_active()
 
   if (!mon->is_leader())
     return;
-  mon->key_server.start_server(true);
+  mon->key_server.start_server();
 /*
   check_rotate();
 */

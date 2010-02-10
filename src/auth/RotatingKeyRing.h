@@ -39,6 +39,7 @@ public:
     lock("RotatingKeyRing::lock") {}
 
   bool need_new_secrets();
+  bool need_new_secrets(utime_t now);
   void set_secrets(RotatingSecrets& s);
   void dump_rotating();
   bool get_secret(EntityName& name, CryptoKey& secret);

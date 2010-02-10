@@ -18,6 +18,11 @@ bool RotatingKeyRing::need_new_secrets()
   Mutex::Locker l(lock);
   return secrets.need_new_secrets();
 }
+bool RotatingKeyRing::need_new_secrets(utime_t now)
+{
+  Mutex::Locker l(lock);
+  return secrets.need_new_secrets(now);
+}
 
 void RotatingKeyRing::set_secrets(RotatingSecrets& s)
 {

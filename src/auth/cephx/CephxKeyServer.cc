@@ -65,8 +65,15 @@ bool KeyServerData::get_service_secret(uint32_t service_id, uint64_t secret_id, 
   RotatingSecrets& secrets = iter->second;
   map<uint64_t, ExpiringCryptoKey>::iterator riter = secrets.secrets.find(secret_id);
 
-  if (riter == secrets.secrets.end())
+  if (riter == secrets.secrets.end()) {
+    dout(10) << "get_service_secret service " << ceph_entity_type_name(service_id) << " secret " << secret_id
+            << " not found; i have:" << dendl;
+    for (map<uint64_t, ExpiringCryptoKey>::iterator iter = secrets.secrets.begin();
+        iter != secrets.secrets.end();
+        ++iter)
+      dout(10) << " id " << iter->first << " " << iter->second << dendl;
     return false;
+  }
 
   secret = riter->second.key;
 
@@ -111,35 +118,38 @@ KeyServer::KeyServer() : lock("KeyServer::lock")
 {
 }
 
-int KeyServer::start_server(bool init)
+int KeyServer::start_server()
 {
   Mutex::Locker l(lock);
 
-  if (init) {
-    _generate_all_rotating_secrets(init);
-  }
+  _check_rotating_secrets();
+  _dump_rotating_secrets();
   return 0;
 }
 
-void KeyServer::_generate_all_rotating_secrets(bool init)
+bool KeyServer::_check_rotating_secrets()
 {
-  data.rotating_ver++;
-  data.next_rotating_time = g_clock.now();
-  data.next_rotating_time += g_conf.auth_mon_ticket_ttl;
-  dout(10) << "generate_all_rotating_secrets" << dendl;
+  dout(10) << "_check_rotating_secrets" << dendl;
 
-  int i = KEY_ROTATE_NUM;
+  int added = 0;
+  added += _rotate_secret(CEPH_ENTITY_TYPE_AUTH);
+  added += _rotate_secret(CEPH_ENTITY_TYPE_MON);
+  added += _rotate_secret(CEPH_ENTITY_TYPE_OSD);
+  added += _rotate_secret(CEPH_ENTITY_TYPE_MDS);
 
-  if (init)
-    i = 1;
-
-  for (; i <= KEY_ROTATE_NUM; i++) {
-    _rotate_secret(CEPH_ENTITY_TYPE_AUTH, i);
-    _rotate_secret(CEPH_ENTITY_TYPE_MON, i);
-    _rotate_secret(CEPH_ENTITY_TYPE_OSD, i);
-    _rotate_secret(CEPH_ENTITY_TYPE_MDS, i);
+  if (added) {
+    data.rotating_ver++;
+    //data.next_rotating_time = g_clock.now();
+    //data.next_rotating_time += MIN(g_conf.auth_mon_ticket_ttl, g_conf.auth_service_ticket_ttl);
+    _dump_rotating_secrets();
+    return true;
   }
+  return false;
+}
 
+void KeyServer::_dump_rotating_secrets()
+{
+  dout(10) << "_dump_rotating_secrets" << dendl;
   for (map<uint32_t, RotatingSecrets>::iterator iter = data.rotating_secrets.begin();
        iter != data.rotating_secrets.end();
        ++iter) {
@@ -154,24 +164,28 @@ void KeyServer::_generate_all_rotating_secrets(bool init)
   }
 }
 
-void KeyServer::_rotate_secret(uint32_t service_id, int factor)
+int KeyServer::_rotate_secret(uint32_t service_id)
 {
-  ExpiringCryptoKey ek;
-  generate_secret(ek.key);
-  ek.expiration = g_clock.now();
-  ek.expiration += (g_conf.auth_mon_ticket_ttl * factor);
-  
-  data.add_rotating_secret(service_id, ek);
-}
+  RotatingSecrets& r = data.rotating_secrets[service_id];
+  int added = 0;
+  utime_t now = g_clock.now();
+  double ttl = service_id == CEPH_ENTITY_TYPE_AUTH ? g_conf.auth_mon_ticket_ttl : g_conf.auth_service_ticket_ttl;
 
-bool KeyServer::_check_rotate()
-{
-  if (g_clock.now() > data.next_rotating_time) {
-    dout(0) << "KeyServer::check_rotate: need to rotate keys" << dendl;
-    _generate_all_rotating_secrets(false);
-    return true;
+  while (r.need_new_secrets(now)) {
+    ExpiringCryptoKey ek;
+    generate_secret(ek.key);
+    if (r.empty())
+      ek.expiration = now;
+    else
+      ek.expiration = MAX(now, r.next().expiration);
+    ek.expiration += ttl;
+    uint64_t secret_id = r.add(ek);
+    dout(10) << "_rotate_secret adding " << ceph_entity_type_name(service_id)
+	     << " id " << secret_id << " " << ek
+	     << dendl;
+    added++;
   }
-  return false;
+  return added;
 }
 
 bool KeyServer::get_secret(EntityName& name, CryptoKey& secret)
@@ -279,7 +293,7 @@ bool KeyServer::updated_rotating(bufferlist& rotating_bl, version_t& rotating_ve
 {
   Mutex::Locker l(lock);
 
-  _check_rotate(); 
+  _check_rotating_secrets(); 
 
   if (data.rotating_ver <= rotating_ver)
     return false;
