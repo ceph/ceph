@@ -37,14 +37,13 @@ using namespace __gnu_cxx;
 
 /*
  * This class handles transmission and reception of messages. Generally
- * speaking, there are 3 major components:
- * 1) SimpleMessenger. It's the exterior class and handles the others.
- * 2) Endpoint. Wraps the Messenger object which this SimpleMessenger serves,
- *    and handles individual message delivery. Once upon a time you could have
- *    multiple Endpoints in a SimpleMessenger; now it *might* be simpler and
- *    cleaner to merge the class with SimpleMessenger itself.
- * 3) Pipe. Each network connection is handled through a pipe, which handles
+ * speaking, there are 2 major components:
+ * 1) Pipe. Each network connection is handled through a pipe, which handles
  *    the input and output of each message.
+ * 2) SimpleMessenger. It's the exterior class passed to the external 
+ *    message handler and handles queuing and ordering of pipes. Each
+ *    pipe maintains its own message ordering, but the SimpleMessenger
+ *    decides what order pipes get to deliver messages in.
  *
  * This class should only be created on the heap, and it should be destroyed
  * via a call to destroy(). Making it on the stack or otherwise calling
