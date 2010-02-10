@@ -86,7 +86,7 @@ int main(int argc, const char **argv)
 
   // whoami?
   if (!store.exists_bl_ss("whoami")) {
-    cerr << "mon fs missing 'whoami'" << std::endl;
+    cerr << "mon fs missing 'whoami'.. did you run mkcephfs?" << std::endl;
     exit(1);
   }
   int w = store.get_int("whoami");
