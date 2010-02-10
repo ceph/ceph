@@ -41,8 +41,9 @@ bool cephx_build_service_ticket_blob(CephXSessionAuthInfo& info, CephXTicketBlob
   ticket_info.ticket = info.ticket;
   ticket_info.ticket.caps = info.ticket.caps;
 
-  dout(10) << "build_service_ticket encoded info.secret_id=" << info.secret_id
-	   <<  " ticket_info.ticket.name=" << ticket_info.ticket.name.to_str() << dendl;
+  dout(10) << "build_service_ticket service " << ceph_entity_type_name(info.service_id)
+	   << " secret_id " << info.secret_id
+	   << " ticket_info.ticket.name=" << ticket_info.ticket.name.to_str() << dendl;
   blob.secret_id = info.secret_id;
   if (encode_encrypt_enc_bl(ticket_info, info.service_secret, blob.blob) < 0)
     return false;

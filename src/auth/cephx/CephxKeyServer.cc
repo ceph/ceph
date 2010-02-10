@@ -19,22 +19,29 @@
 
 #include <sstream>
 
+#define DOUT_SUBSYS auth
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "cephx keyserverdata: "
 
 bool KeyServerData::get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret, uint64_t& secret_id)
 {
   map<uint32_t, RotatingSecrets>::iterator iter = rotating_secrets.find(service_id);
-  if (iter == rotating_secrets.end())
+  if (iter == rotating_secrets.end()) { 
+    dout(10) << "get_service_secret service " << ceph_entity_type_name(service_id) << " not found " << dendl;
     return false;
+  }
 
   RotatingSecrets& secrets = iter->second;
-  map<uint64_t, ExpiringCryptoKey>::iterator riter = secrets.secrets.lower_bound(0);
+
+  // second to oldest
+  map<uint64_t, ExpiringCryptoKey>::iterator riter = secrets.secrets.begin();
   if (secrets.secrets.size() > 1)
     ++riter;
 
-
   secret_id = riter->first;
   secret = riter->second;
-
+  dout(10) << "get_service_secret service " << ceph_entity_type_name(service_id)
+	   << " id " << secret_id << " " << secret << dendl;
   return true;
 }
 
@@ -46,7 +53,6 @@ bool KeyServerData::get_service_secret(uint32_t service_id, CryptoKey& secret, u
     return false;
 
   secret = e.key;
-
   return true;
 }
 
@@ -96,6 +102,11 @@ bool KeyServerData::get_caps(EntityName& name, string& type, AuthCapsInfo& caps_
   return true;
 }
 
+
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "cephx keyserver: "
+
+
 KeyServer::KeyServer() : lock("KeyServer::lock")
 {
 }
@@ -115,7 +126,7 @@ void KeyServer::_generate_all_rotating_secrets(bool init)
   data.rotating_ver++;
   data.next_rotating_time = g_clock.now();
   data.next_rotating_time += g_conf.auth_mon_ticket_ttl;
-  dout(0) << "generate_all_rotating_secrets()" << dendl;
+  dout(10) << "generate_all_rotating_secrets" << dendl;
 
   int i = KEY_ROTATE_NUM;
 
@@ -129,21 +140,17 @@ void KeyServer::_generate_all_rotating_secrets(bool init)
     _rotate_secret(CEPH_ENTITY_TYPE_MDS, i);
   }
 
-  dout(0) << "generated: " << dendl;
-  
-  map<uint32_t, RotatingSecrets>::iterator iter = data.rotating_secrets.begin();
-
-  for (; iter != data.rotating_secrets.end(); ++iter) {
-    dout(0) << "service id: " << iter->first << dendl;
+  for (map<uint32_t, RotatingSecrets>::iterator iter = data.rotating_secrets.begin();
+       iter != data.rotating_secrets.end();
+       ++iter) {
     RotatingSecrets& key = iter->second;
-
-    map<uint64_t, ExpiringCryptoKey>::iterator mapiter = key.secrets.begin();
-    for (; mapiter != key.secrets.end(); ++mapiter) {
-      dout(0) << "  id: " << mapiter->first << dendl;
-      bufferptr bp = mapiter->second.key.get_secret();
-      hexdump("    key", bp.c_str(), bp.length());
-      dout(0) << "    expiration: " << mapiter->second.expiration << dendl;
-    }
+    for (map<uint64_t, ExpiringCryptoKey>::iterator mapiter = key.secrets.begin();
+	 mapiter != key.secrets.end();
+	 ++mapiter)
+      dout(10) << "service " << ceph_entity_type_name(iter->first)
+	       << " id " << mapiter->first
+	       << " key " << mapiter->second
+	       << dendl;
   }
 }
 
@@ -319,18 +326,17 @@ bool KeyServer::get_service_caps(EntityName& name, uint32_t service_id, AuthCaps
 }
 
 
-int KeyServer::_build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, CephXSessionAuthInfo& info)
+int KeyServer::_build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info,
+					CephXSessionAuthInfo& info)
 {
+  info.service_id = service_id;
   info.ticket.name = auth_ticket_info.ticket.name;
   info.ticket.global_id = auth_ticket_info.ticket.global_id;
   info.ticket.init_timestamps(g_clock.now(), g_conf.auth_service_ticket_ttl);
 
   generate_secret(info.session_key);
 
-  info.service_id = service_id;
-
   string s = ceph_entity_type_name(service_id);
-
   if (!data.get_caps(info.ticket.name, s, info.ticket.caps)) {
     return -EINVAL;
   }
@@ -338,7 +344,8 @@ int KeyServer::_build_session_auth_info(uint32_t service_id, CephXServiceTicketI
   return 0;
 }
 
-int KeyServer::build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, CephXSessionAuthInfo& info)
+int KeyServer::build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info,
+				       CephXSessionAuthInfo& info)
 {
   if (get_service_secret(service_id, info.service_secret, info.secret_id) < 0) {
     return -EPERM;
