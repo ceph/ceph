@@ -18,7 +18,7 @@ else
 fi
 
 usage_exit() {
-    echo "usage: $0 [--allhosts] [-c ceph.conf] [--clobber_old_data] [--mkbtrfs] [-k adminkeyring]"
+    echo "usage: $0 [--allhosts] [-c ceph.conf] [--clobber] [--mkbtrfs] [-k adminkeyring]"
     exit
 }
 
@@ -42,7 +42,7 @@ case $1 in
     --allhosts | -a)
 	    allhosts=1
 	    ;;
-    --clobber_old_data)
+    --clobber | --clobber_old_data)
 	    clobber="--clobber"
 	    ;;
     --mkbtrfs)
