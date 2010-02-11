@@ -994,7 +994,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
     case CEPH_OSD_OP_STAT:
       {
 	struct stat st;
-	memset(&st, sizeof(st), 0);
+	memset(&st, 0, sizeof(st));
 	result = osd->store->stat(coll_t::build_pg_coll(info.pgid), soid, &st);
 	if (result >= 0) {
 	  __u64 size = st.st_size;
