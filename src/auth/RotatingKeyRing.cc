@@ -63,11 +63,6 @@ bool RotatingKeyRing::get_service_secret(uint32_t service_id, uint64_t secret_id
     return false;
   }
 
-  ExpiringCryptoKey& key = iter->second;
-  if (key.expiration > g_clock.now()) {
-    secret = key.key;
-    return true;
-  }
-  dout(0) << "secret " << key << " expired!" << dendl;
-  return false;
+  secret = iter->second.key;
+  return true;
 }
