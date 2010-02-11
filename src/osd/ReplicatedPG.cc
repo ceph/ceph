@@ -1066,7 +1066,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  ssc->snapset.clone_overlap[newest].subtract(ch);
 	  add_interval_usage(ch, info.stats);
 	}
-	if (op.extent.offset + op.extent.length > oi.size) {
+	if (op.extent.length && (op.extent.offset + op.extent.length > oi.size)) {
 	  __u64 new_size = op.extent.offset + op.extent.length;
 	  info.stats.num_bytes += new_size - oi.size;
 	  info.stats.num_kb += SHIFT_ROUND_UP(new_size, 10) - SHIFT_ROUND_UP(oi.size, 10);
