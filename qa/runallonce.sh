@@ -10,14 +10,14 @@ testdir="$1"
 [ -z "$testdir" ] || [ ! -d "$testdir" ] && echo "specify test dir" && exit 1
 cd $testdir
 
-for test in `cd $basedir && find workunits/* | grep .sh`
+for test in `cd $basedir/workunits && ls | grep .sh`
 do
   echo "------ running test $test ------"
   mkdir -p $test
-  mkdir -p ${basedir}/logs
+  test -d ${basedir}/logs || mkdir -p ${basedir}/logs
   test -e ${basedir}/logs/${test}.log && rm ${basedir}/logs/${test}.log
   pushd .
   cd $test
-  ${basedir}/${test} 2>&1 | tee ${basedir}/logs/${test}.log
+  ${basedir}/workunits/${test} 2>&1 | tee ${basedir}/logs/${test}.log
   popd
 done
