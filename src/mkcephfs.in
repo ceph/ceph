@@ -18,7 +18,7 @@ else
 fi
 
 usage_exit() {
-    echo "usage: $0 -c ceph.conf [--clobber] [--allhosts] [--mkbtrfs] [-k adminkeyring]"
+    echo "usage: $0 -c ceph.conf [--allhosts] [--mkbtrfs] [-k adminkeyring]"
     echo "   ** be careful, this WILL clobber old data; check your ceph.conf carefully **"
     exit
 }
@@ -200,7 +200,7 @@ for name in $what; do
 	    cp $monkeyring $tmpkeyring
 	fi
 	get_conf mon_data "" "mon data"
-	do_cmd "$BINDIR/mkmonfs $clobber --mon-data $mon_data -i $num --monmap $monmap --osdmap $osdmap -k $tmpkeyring ; rm $tmpkeyring"
+	do_cmd "$BINDIR/mkmonfs --clobber --mon-data $mon_data -i $num --monmap $monmap --osdmap $osdmap -k $tmpkeyring ; rm $tmpkeyring"
 
 	if [ -n "$ssh" ]; then
 	    scp -p $adminkeyring $user@$host:$mon_data/admin_keyring.bin
