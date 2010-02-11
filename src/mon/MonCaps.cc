@@ -87,6 +87,7 @@ bool MonCaps::parse(bufferlist::iterator& iter)
 
   try {
     ::decode(s, iter);
+    text = s;
 
     generic_dout(0) << "decoded caps: " << s << dendl;
 

@@ -34,6 +34,7 @@ struct MonServiceCap {
 };
 
 class MonCaps {
+  string text;
   rwx_t default_action;
   map<int, MonServiceCap> services_map;
   bool get_next_token(string s, size_t& pos, string& token);
@@ -42,6 +43,7 @@ class MonCaps {
   bool allow_all;
 public:
   MonCaps() : default_action(0), allow_all(false) {}
+  const string& get_str() { return text; }
   bool parse(bufferlist::iterator& iter);
   rwx_t get_caps(int service);
   void set_allow_all(bool allow) { allow_all = allow; }

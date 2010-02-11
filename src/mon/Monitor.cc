@@ -537,6 +537,10 @@ bool Monitor::ms_dispatch(Message *m)
     }
   }
   src_is_mon = !connection || (connection->get_peer_type() & CEPH_ENTITY_TYPE_MON);
+
+  if (s)
+    dout(20) << " caps " << s->caps.get_str() << dendl;
+
 #define ALLOW_CAPS(service_id, allow_caps) \
 do { \
   if (src_is_mon) \
