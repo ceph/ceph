@@ -18,7 +18,8 @@ else
 fi
 
 usage_exit() {
-    echo "usage: $0 [--allhosts] [-c ceph.conf] [--clobber] [--mkbtrfs] [-k adminkeyring]"
+    echo "usage: $0 -c ceph.conf [--clobber] [--allhosts] [--mkbtrfs] [-k adminkeyring]"
+    echo "   ** be careful, this WILL clobber old data; check your ceph.conf carefully **"
     exit
 }
 
@@ -33,6 +34,7 @@ usecrushmapsrc=
 usecrushmap=
 verbose=0
 adminkeyring=""
+conf=""
 
 while [ $# -ge 1 ]; do
 case $1 in
@@ -80,6 +82,8 @@ case $1 in
 esac
 shift
 done
+
+[ -z "$conf" ] && usage_exit
 
 verify_conf
 
@@ -199,9 +203,9 @@ for name in $what; do
 	do_cmd "$BINDIR/mkmonfs $clobber --mon-data $mon_data -i $num --monmap $monmap --osdmap $osdmap -k $tmpkeyring ; rm $tmpkeyring"
 
 	if [ -n "$ssh" ]; then
-	    scp $adminkeyring $user@$host:$mon_data/admin_keyring.bin
+	    scp -p $adminkeyring $user@$host:$mon_data/admin_keyring.bin
 	else
-	    cp -v $adminkeyring $mon_data/admin_keyring.bin
+	    cp -av $adminkeyring $mon_data/admin_keyring.bin
 	fi
     fi
 
