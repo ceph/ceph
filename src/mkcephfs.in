@@ -197,6 +197,12 @@ for name in $what; do
 	fi
 	get_conf mon_data "" "mon data"
 	do_cmd "$BINDIR/mkmonfs $clobber --mon-data $mon_data -i $num --monmap $monmap --osdmap $osdmap -k $tmpkeyring ; rm $tmpkeyring"
+
+	if [ -n "$ssh" ]; then
+	    scp $adminkeyring $user@$host:$mon_data/admin_keyring.bin
+	else
+	    cp -v $adminkeyring $mon_data/admin_keyring.bin
+	fi
     fi
 
     if [ "$type" = "osd" ]; then
