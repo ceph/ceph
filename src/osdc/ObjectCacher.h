@@ -19,9 +19,10 @@ class Objecter;
 class ObjectCacher {
  public:
 
-  typedef void (*flush_set_callback_t) (void *p, inodeno_t ino);
-
   class Object;
+  class ObjectSet;
+
+  typedef void (*flush_set_callback_t) (void *p, ObjectSet *oset);
 
   // read scatter/gather  
   struct OSDRead {
@@ -131,9 +132,14 @@ class ObjectCacher {
     // ObjectCacher::Object fields
     ObjectCacher *oc;
     sobject_t oid;
-    inodeno_t ino;
+  public:
+    ObjectSet *oset;
+    xlist<Object*>::item set_item;
+  private:
     ceph_object_layout layout;
     
+    friend class ObjectSet;
+
   public:
     map<loff_t, BufferHead*>     data;
 
@@ -163,21 +169,24 @@ class ObjectCacher {
     int rdlock_ref;  // how many ppl want or are using a READ lock
 
   public:
-    Object(ObjectCacher *_oc, sobject_t o, inodeno_t i, ceph_object_layout& l) : 
+    Object(ObjectCacher *_oc, sobject_t o, ObjectSet *os, ceph_object_layout& l) : 
       oc(_oc),
-      oid(o), ino(i), layout(l),
+      oid(o), oset(os), set_item(this), layout(l),
       last_write_tid(0), last_ack_tid(0), last_commit_tid(0),
       uncommitted_item(this),
-      lock_state(LOCK_NONE), wrlock_ref(0), rdlock_ref(0)
-      {}
+      lock_state(LOCK_NONE), wrlock_ref(0), rdlock_ref(0) {
+      // add to set
+      os->objects.push_back(&set_item);
+    }
     ~Object() {
       assert(data.empty());
+      set_item.remove_myself();
     }
 
     sobject_t get_soid() { return oid; }
     object_t get_oid() { return oid.oid; }
     snapid_t get_snap() { return oid.snap; }
-    inodeno_t get_ino() { return ino; }
+    ObjectSet *get_object_set() { return oset; }
     
     ceph_object_layout& get_layout() { return layout; }
     void set_layout(ceph_object_layout& l) { layout = l; }
@@ -235,6 +244,22 @@ class ObjectCacher {
 
   };
   
+
+  struct ObjectSet {
+    void *parent;
+
+    inodeno_t ino;
+    __u64 truncate_seq, truncate_size;
+
+    xlist<Object*> objects;
+    xlist<Object*> uncommitted;
+
+    int dirty_tx;
+
+    ObjectSet(void *p, inodeno_t i) : parent(p), ino(i), truncate_seq(0), truncate_size(0), dirty_tx(0) {}
+  };
+
+
   // ******* ObjectCacher *********
   // ObjectCacher fields
  public:
@@ -248,9 +273,6 @@ class ObjectCacher {
   void *flush_set_callback_arg;
 
   hash_map<sobject_t, Object*> objects;
-  hash_map<inodeno_t, set<Object*> > objects_by_ino;
-  hash_map<inodeno_t, int> dirty_tx_by_ino;
-  hash_map<inodeno_t, xlist<Object*> > uncommitted_by_ino;
 
   set<BufferHead*>    dirty_bh;
   LRU   lru_dirty, lru_rest;
@@ -270,22 +292,21 @@ class ObjectCacher {
   
 
   // objects
-  Object *get_object_maybe(sobject_t oid, inodeno_t ino, ceph_object_layout &l) {
+  Object *get_object_maybe(sobject_t oid, ceph_object_layout &l) {
     // have it?
     if (objects.count(oid))
       return objects[oid];
     return NULL;
   }
 
-  Object *get_object(sobject_t oid, inodeno_t ino, ceph_object_layout &l) {
+  Object *get_object(sobject_t oid, ObjectSet *oset, ceph_object_layout &l) {
     // have it?
     if (objects.count(oid))
       return objects[oid];
 
     // create it.
-    Object *o = new Object(this, oid, ino, l);
+    Object *o = new Object(this, oid, oset, l);
     objects[oid] = o;
-    objects_by_ino[ino].insert(o);
     return o;
   }
   void close_object(Object *ob);
@@ -306,11 +327,11 @@ class ObjectCacher {
     case BufferHead::STATE_CLEAN: stat_clean += bh->length(); break;
     case BufferHead::STATE_DIRTY: 
       stat_dirty += bh->length(); 
-      dirty_tx_by_ino[bh->ob->get_ino()] += bh->length();
+      bh->ob->oset->dirty_tx += bh->length();
       break;
     case BufferHead::STATE_TX: 
       stat_tx += bh->length(); 
-      dirty_tx_by_ino[bh->ob->get_ino()] += bh->length();
+      bh->ob->oset->dirty_tx += bh->length();
       break;
     case BufferHead::STATE_RX: stat_rx += bh->length(); break;
     }
@@ -322,11 +343,11 @@ class ObjectCacher {
     case BufferHead::STATE_CLEAN: stat_clean -= bh->length(); break;
     case BufferHead::STATE_DIRTY: 
       stat_dirty -= bh->length(); 
-      dirty_tx_by_ino[bh->ob->get_ino()] -= bh->length();
+      bh->ob->oset->dirty_tx -= bh->length();
       break;
     case BufferHead::STATE_TX: 
       stat_tx -= bh->length(); 
-      dirty_tx_by_ino[bh->ob->get_ino()] -= bh->length();
+      bh->ob->oset->dirty_tx -= bh->length();
       break;
     case BufferHead::STATE_RX: stat_rx -= bh->length(); break;
     }
@@ -504,12 +525,12 @@ class ObjectCacher {
   class C_RetryRead : public Context {
     ObjectCacher *oc;
     OSDRead *rd;
-    inodeno_t ino;
+    ObjectSet *oset;
     Context *onfinish;
   public:
-    C_RetryRead(ObjectCacher *_oc, OSDRead *r, inodeno_t i, Context *c) : oc(_oc), rd(r), ino(i), onfinish(c) {}
+    C_RetryRead(ObjectCacher *_oc, OSDRead *r, ObjectSet *os, Context *c) : oc(_oc), rd(r), oset(os), onfinish(c) {}
     void finish(int) {
-      int r = oc->readx(rd, ino, onfinish);
+      int r = oc->readx(rd, oset, onfinish);
       if (r > 0 && onfinish) {
         onfinish->finish(r);
         delete onfinish;
@@ -520,87 +541,87 @@ class ObjectCacher {
 
 
   // non-blocking.  async.
-  int readx(OSDRead *rd, inodeno_t ino, Context *onfinish);
-  int writex(OSDWrite *wr, inodeno_t ino);
-  bool is_cached(inodeno_t ino, vector<ObjectExtent>& extents, snapid_t snapid);
+  int readx(OSDRead *rd, ObjectSet *oset, Context *onfinish);
+  int writex(OSDWrite *wr, ObjectSet *oset);
+  bool is_cached(ObjectSet *oset, vector<ObjectExtent>& extents, snapid_t snapid);
 
   // write blocking
   bool wait_for_write(__u64 len, Mutex& lock);
   
   // blocking.  atomic+sync.
-  int atomic_sync_readx(OSDRead *rd, inodeno_t ino, Mutex& lock);
-  int atomic_sync_writex(OSDWrite *wr, inodeno_t ino, Mutex& lock);
+  int atomic_sync_readx(OSDRead *rd, ObjectSet *oset, Mutex& lock);
+  int atomic_sync_writex(OSDWrite *wr, ObjectSet *oset, Mutex& lock);
 
-  bool set_is_cached(inodeno_t ino);
-  bool set_is_dirty_or_committing(inodeno_t ino);
+  bool set_is_cached(ObjectSet *oset);
+  bool set_is_dirty_or_committing(ObjectSet *oset);
 
-  bool flush_set(inodeno_t ino, Context *onfinish=0);
+  bool flush_set(ObjectSet *oset, Context *onfinish=0);
   void flush_all(Context *onfinish=0);
 
-  bool commit_set(inodeno_t ino, Context *oncommit);
+  bool commit_set(ObjectSet *oset, Context *oncommit);
   void commit_all(Context *oncommit=0);
 
-  void purge_set(inodeno_t ino);
+  void purge_set(ObjectSet *oset);
 
-  loff_t release_set(inodeno_t ino);  // returns # of bytes not released (ie non-clean)
+  loff_t release_set(ObjectSet *oset);  // returns # of bytes not released (ie non-clean)
   __u64 release_all();
 
-  void truncate_set(inodeno_t ino, vector<ObjectExtent>& ex);
+  void truncate_set(ObjectSet *oset, vector<ObjectExtent>& ex);
 
-  void kick_sync_writers(inodeno_t ino);
-  void kick_sync_readers(inodeno_t ino);
+  void kick_sync_writers(ObjectSet *oset);
+  void kick_sync_readers(ObjectSet *oset);
 
 
   // file functions
 
   /*** async+caching (non-blocking) file interface ***/
-  int file_is_cached(inodeno_t ino, ceph_file_layout *layout, snapid_t snapid,
+  int file_is_cached(ObjectSet *oset, ceph_file_layout *layout, snapid_t snapid,
 		     loff_t offset, __u64 len) {
     vector<ObjectExtent> extents;
-    filer.file_to_extents(ino, layout, offset, len, extents);
-    return is_cached(ino, extents, snapid);
+    filer.file_to_extents(oset->ino, layout, offset, len, extents);
+    return is_cached(oset, extents, snapid);
   }
 
-  int file_read(inodeno_t ino, ceph_file_layout *layout, snapid_t snapid,
+  int file_read(ObjectSet *oset, ceph_file_layout *layout, snapid_t snapid,
                 loff_t offset, __u64 len, 
                 bufferlist *bl,
 		int flags,
                 Context *onfinish) {
     OSDRead *rd = prepare_read(snapid, bl, flags);
-    filer.file_to_extents(ino, layout, offset, len, rd->extents);
-    return readx(rd, ino, onfinish);
+    filer.file_to_extents(oset->ino, layout, offset, len, rd->extents);
+    return readx(rd, oset, onfinish);
   }
 
-  int file_write(inodeno_t ino, ceph_file_layout *layout, const SnapContext& snapc,
+  int file_write(ObjectSet *oset, ceph_file_layout *layout, const SnapContext& snapc,
                  loff_t offset, __u64 len, 
                  bufferlist& bl, utime_t mtime, int flags) {
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags);
-    filer.file_to_extents(ino, layout, offset, len, wr->extents);
-    return writex(wr, ino);
+    filer.file_to_extents(oset->ino, layout, offset, len, wr->extents);
+    return writex(wr, oset);
   }
 
 
 
   /*** sync+blocking file interface ***/
 
-  int file_atomic_sync_read(inodeno_t ino, ceph_file_layout *layout, 
+  int file_atomic_sync_read(ObjectSet *oset, ceph_file_layout *layout, 
 			    snapid_t snapid,
                             loff_t offset, __u64 len, 
                             bufferlist *bl, int flags,
                             Mutex &lock) {
     OSDRead *rd = prepare_read(snapid, bl, flags);
-    filer.file_to_extents(ino, layout, offset, len, rd->extents);
-    return atomic_sync_readx(rd, ino, lock);
+    filer.file_to_extents(oset->ino, layout, offset, len, rd->extents);
+    return atomic_sync_readx(rd, oset, lock);
   }
 
-  int file_atomic_sync_write(inodeno_t ino, ceph_file_layout *layout, 
+  int file_atomic_sync_write(ObjectSet *oset, ceph_file_layout *layout, 
 			     const SnapContext& snapc,
                              loff_t offset, __u64 len, 
                              bufferlist& bl, utime_t mtime, int flags,
                              Mutex &lock) {
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags);
-    filer.file_to_extents(ino, layout, offset, len, wr->extents);
-    return atomic_sync_writex(wr, ino, lock);
+    filer.file_to_extents(oset->ino, layout, offset, len, wr->extents);
+    return atomic_sync_writex(wr, oset, lock);
   }
 
 };
@@ -625,7 +646,7 @@ inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
 inline ostream& operator<<(ostream& out, ObjectCacher::Object &ob)
 {
   out << "object["
-      << ob.get_soid() << " ino " << hex << ob.get_ino() << dec
+      << ob.get_soid() << " oset " << ob.oset << dec
       << " wr " << ob.last_write_tid << "/" << ob.last_ack_tid << "/" << ob.last_commit_tid;
 
   switch (ob.lock_state) {

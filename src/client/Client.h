@@ -62,6 +62,7 @@ using std::fstream;
 using namespace __gnu_cxx;
 
 
+#include "osdc/ObjectCacher.h"
 
 class MClientSession;
 class MClientRequest;
@@ -404,6 +405,8 @@ class Inode {
   map<int,int> open_by_mode;
   map<int,int> cap_refs;
 
+  ObjectCacher::ObjectSet oset;
+
   __u64     reported_size, wanted_max_size, requested_max_size;
 
   int       ref;      // ref count. 1 for each dentry, fh that links to me.
@@ -480,6 +483,7 @@ class Inode {
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
     cap_item(this), flushing_cap_item(this), last_flush_tid(0),
     snaprealm(0), snaprealm_item(this), snapdir_parent(0),
+    oset((void *)this, ino),
     reported_size(0), wanted_max_size(0), requested_max_size(0),
     ref(0), ll_ref(0), 
     dir(0), dn(0),
@@ -1138,7 +1142,7 @@ protected:
   void _release(Inode *in, bool checkafter=true);
   void _flush(Inode *in, Context *onfinish=NULL);
   void _flushed(Inode *in);
-  void flush_set_callback(inodeno_t ino);
+  void flush_set_callback(ObjectCacher::ObjectSet *oset);
 
   void close_release(Inode *in);
   void close_safe(Inode *in);

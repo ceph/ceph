@@ -329,7 +329,7 @@ public:
 
   struct StatfsOp {
     tid_t tid;
-    ceph_statfs *stats;
+    struct ceph_statfs *stats;
     Context *onfinish;
 
     utime_t last_submit;
@@ -653,7 +653,7 @@ private:
   void fs_stats_submit(StatfsOp *op);
 public:
   void handle_fs_stats_reply(MStatfsReply *m);
-  void get_fs_stats(ceph_statfs& result, Context *onfinish);
+  void get_fs_stats(struct ceph_statfs& result, Context *onfinish);
 
   // ---------------------------
   // some scatter/gather hackery

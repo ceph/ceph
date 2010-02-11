@@ -95,10 +95,10 @@ ostream& operator<<(ostream &out, Inode &in)
 }
 
 
-void client_flush_set_callback(void *p, inodeno_t ino)
+void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 {
   Client *client = (Client*)p;
-  client->flush_set_callback(ino);
+  client->flush_set_callback(oset);
 }
 
 
@@ -1528,7 +1528,7 @@ void Client::put_inode(Inode *in, int n)
     remove_all_caps(in);
 
     //cout << "put_inode deleting " << in << " " << in->ino << std::endl;
-    objectcacher->release_set(in->ino);
+    objectcacher->release_set(&in->oset);
     if (in->snapdir_parent)
       put_inode(in->snapdir_parent);
     inode_map.erase(in->vino());
@@ -1961,7 +1961,7 @@ void Client::wake_inode_waiters(int mds_num)
 void Client::_release(Inode *in, bool checkafter)
 {
   if (in->cap_refs[CEPH_CAP_FILE_CACHE]) {
-    objectcacher->release_set(in->ino);
+    objectcacher->release_set(&in->oset);
     if (checkafter)
       put_cap_ref(in, CEPH_CAP_FILE_CACHE);
     else 
@@ -1975,18 +1975,18 @@ void Client::_flush(Inode *in, Context *onfinish)
   dout(10) << "_flush " << *in << dendl;
   if (!onfinish)
     onfinish = new C_NoopContext;
-  bool safe = objectcacher->commit_set(in->ino, onfinish);
+  bool safe = objectcacher->commit_set(&in->oset, onfinish);
   if (safe && onfinish) {
     onfinish->finish(0);
     delete onfinish;
   }
 }
 
-void Client::flush_set_callback(inodeno_t ino)
+void Client::flush_set_callback(ObjectCacher::ObjectSet *oset)
 {
   //  Mutex::Locker l(client_lock);
   assert(client_lock.is_locked());   // will be called via dispatch() -> objecter -> ...
-  Inode *in = inode_map[vinodeno_t(ino,CEPH_NOSNAP)];
+  Inode *in = (Inode *)oset->parent;
   if (in)
     _flushed(in);
 }
@@ -1998,7 +1998,7 @@ void Client::_flushed(Inode *in)
 
   // release clean pages too, if we dont hold RDCACHE reference
   if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0)
-    objectcacher->release_set(in->ino);
+    objectcacher->release_set(&in->oset);
 
   put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 }
@@ -2555,7 +2555,7 @@ void Client::handle_cap_trunc(Inode *in, MClientCaps *m)
     filer->file_to_extents(in->ino, &in->layout, 
 			   m->get_size(), in->size - m->get_size(),
 			   ls);
-    objectcacher->truncate_set(in->ino, ls);
+    objectcacher->truncate_set(&in->oset, ls);
   }
   
   in->reported_size = in->size = m->get_size(); 
@@ -4361,10 +4361,10 @@ int Client::_read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl)
 	     << " min " << min
 	     << " (caller wants " << off << "~" << len << ")" << dendl;
     if (l > (loff_t)len) {
-      if (objectcacher->file_is_cached(in->ino, &in->layout, in->snapid, off, min))
+      if (objectcacher->file_is_cached(&in->oset, &in->layout, in->snapid, off, min))
 	dout(20) << "readahead already have min" << dendl;
       else {
-	objectcacher->file_read(in->ino, &in->layout, in->snapid, off, l, NULL, 0, 0);
+	objectcacher->file_read(&in->oset, &in->layout, in->snapid, off, l, NULL, 0, 0);
 	dout(20) << "readahead initiated" << dendl;
       }
     }
@@ -4377,10 +4377,10 @@ int Client::_read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl)
   bool done = false;
   Context *onfinish = new C_SafeCond(&flock, &cond, &done, &rvalue);
   if (in->snapid == CEPH_NOSNAP)
-    r = objectcacher->file_read(in->ino, &in->layout, in->snapid,
+    r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
 				off, len, bl, 0, onfinish);
   else
-    r = objectcacher->file_read(in->ino, &in->layout, in->snapid,
+    r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
 				off, len, bl, 0, onfinish);
   if (r == 0) {
     while (!done) 
@@ -4563,7 +4563,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     objectcacher->wait_for_write(size, client_lock);
     
     // async, caching, non-blocking.
-    objectcacher->file_write(in->ino, &in->layout, in->snaprealm->get_snap_context(),
+    objectcacher->file_write(&in->oset, &in->layout, in->snaprealm->get_snap_context(),
 			     offset, size, bl, g_clock.now(), 0);
   } else {
     /*
