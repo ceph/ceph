@@ -197,7 +197,7 @@ int main(int argc, const char **argv)
   if (modified) {
     bufferlist bl;
     ::encode(keyring, bl);
-    r = bl.write_file(fn);
+    r = bl.write_file(fn, 0600);
     if (r < 0) {
       cerr << "could not write " << fn << std::endl;
     }

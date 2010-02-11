@@ -71,9 +71,9 @@ int buffer::list::read_file(const char *fn, bool silent)
   return 0;
 }
 
-int buffer::list::write_file(const char *fn)
+int buffer::list::write_file(const char *fn, int mode)
 {
-  int fd = ::open(fn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
+  int fd = ::open(fn, O_WRONLY|O_CREAT|O_TRUNC, mode);
   if (fd < 0) {
     char buf[80];
     cerr << "can't write " << fn << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
