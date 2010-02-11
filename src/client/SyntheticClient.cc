@@ -307,6 +307,7 @@ int SyntheticClient::run()
   client->init();
   dout(15) << "mounting" << dendl;
   if (client->mount() < 0) {
+    dout(0) << "failed to mount" << dendl;
     client->shutdown();
     return -1;
   }

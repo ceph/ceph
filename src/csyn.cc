@@ -54,14 +54,12 @@ int main(int argc, const char **argv, char *envp[])
   if (mc.build_initial_monmap() < 0)
     return -1;
 
-  cout << "starting csyn" << std::endl;
-
   list<Client*> clients;
   list<SyntheticClient*> synclients;
   SimpleMessenger* messengers[g_conf.num_client];
   MonClient* mclients[g_conf.num_client];
 
-  cout << "mounting and starting " << g_conf.num_client << " syn client(s)" << std::endl;
+  cout << "csyn: starting " << g_conf.num_client << " syn client(s)" << std::endl;
   for (int i=0; i<g_conf.num_client; i++) {
     messengers[i] = new SimpleMessenger();
     messengers[i]->register_entity(entity_name_t(entity_name_t::TYPE_CLIENT,-1));
@@ -75,13 +73,12 @@ int main(int argc, const char **argv, char *envp[])
     messengers[i]->start();
   }
 
-
   for (list<SyntheticClient*>::iterator p = synclients.begin(); 
        p != synclients.end();
        p++)
     (*p)->start_thread();
 
-  cout << "waiting for client(s) to finish" << std::endl;
+  //cout << "waiting for client(s) to finish" << std::endl;
   while (!clients.empty()) {
     Client *client = clients.front();
     SyntheticClient *syn = synclients.front();
