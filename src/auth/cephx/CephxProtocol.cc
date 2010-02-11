@@ -89,21 +89,21 @@ bool cephx_build_service_ticket_reply(
       return false;
 
     bufferlist service_ticket_bl;
-
     CephXTicketBlob blob;
     if (!cephx_build_service_ticket_blob(info, blob))
       return false;
     ::encode(blob, service_ticket_bl);
 
+    dout(20) << "service_ticket_blob is ";
+    service_ticket_bl.hexdump(*_dout);
+    *_dout << dendl;
+
     ::encode((__u8)should_encrypt_ticket, reply);
-
     if (should_encrypt_ticket) {
-      bufferlist enc_ticket;
-
       if (encode_encrypt(service_ticket_bl, ticket_enc_key, reply) < 0)
         return false;
     } else {
-      reply.claim_append(service_ticket_bl);
+      ::encode(service_ticket_bl, reply);
     }
   }
   return true;
@@ -127,18 +127,19 @@ bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
   
   __u8 ticket_enc;
   ::decode(ticket_enc, indata);
+
+  bufferlist service_ticket_bl;
   if (ticket_enc) {
-    dout(10) << "getting encrypted ticket" << dendl;
-    bufferlist service_ticket_bl;
+    dout(10) << " got encrypted ticket" << dendl;
     if (decode_decrypt(service_ticket_bl, session_key, indata) < 0)
       return false;
-    bufferlist::iterator iter = service_ticket_bl.begin();
-    ::decode(ticket, iter);
-    dout(10) << "ticket.secret_id=" <<  ticket.secret_id << dendl;
   } else {
-    dout(10) << "got unencrypted ticket" << dendl;
-    ::decode(ticket, indata);
+    ::decode(service_ticket_bl, indata);
   }
+  bufferlist::iterator iter = service_ticket_bl.begin();
+  ::decode(ticket, iter);
+  dout(10) << " ticket.secret_id=" <<  ticket.secret_id << dendl;
+
   dout(10) << "verify_service_ticket_reply service " << ceph_entity_type_name(service_id)
 	   << " secret_id " << ticket.secret_id
 	   << " session_key " << msg_a.session_key
