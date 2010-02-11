@@ -51,14 +51,16 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
   struct CephXRequestHeader cephx_header;
   ::decode(cephx_header, indata);
 
+
   switch (cephx_header.request_type) {
   case CEPHX_GET_AUTH_SESSION_KEY:
     {
+      dout(10) << "handle_request get_auth_session_key for " << entity_name << dendl;
+
       CephXAuthenticate req;
       ::decode(req, indata);
 
       CryptoKey secret;
-      dout(10) << "handle_request get_auth_session_key for " << entity_name << dendl;
       if (!key_server->get_secret(entity_name, secret)) {
         dout(0) << "couldn't find entity name: " << entity_name << dendl;
 	ret = -EPERM;
