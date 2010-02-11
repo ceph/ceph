@@ -159,7 +159,7 @@ bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
 bool CephXTicketHandler::have_key()
 {
   if (have_key_flag) {
-    dout(20) << "have_key: g_clock.now()=" << g_clock.now() << " renew_after=" << renew_after << " expires=" << expires << dendl;
+    //dout(20) << "have_key: g_clock.now()=" << g_clock.now() << " renew_after=" << renew_after << " expires=" << expires << dendl;
     have_key_flag = g_clock.now() < expires;
   }
 
@@ -169,7 +169,7 @@ bool CephXTicketHandler::have_key()
 bool CephXTicketHandler::need_key()
 {
   if (have_key_flag) {
-    dout(20) << "need_key: g_clock.now()=" << g_clock.now() << " renew_after=" << renew_after << " expires=" << expires << dendl;
+    //dout(20) << "need_key: g_clock.now()=" << g_clock.now() << " renew_after=" << renew_after << " expires=" << expires << dendl;
     return (!expires.is_zero()) && (g_clock.now() >= renew_after);
   }
 
@@ -198,12 +198,12 @@ void CephXTicketManager::set_have_need_key(uint32_t service_id, uint32_t& have, 
   if (iter == tickets_map.end()) {
     have &= ~service_id;
     need |= service_id;
-    dout(10) << "couldn't find entry for service_id " << ceph_entity_type_name(service_id) << dendl;
+    dout(10) << "set_have_need_key no handler for service " << ceph_entity_type_name(service_id) << dendl;
     return;
   }
 
-  dout(10) << "set_have_need_key service " << ceph_entity_type_name(service_id) << " (" << service_id << ")"
-	   << " need=" << iter->second.need_key() << " have=" << iter->second.have_key() << dendl;
+  //dout(10) << "set_have_need_key service " << ceph_entity_type_name(service_id) << " (" << service_id << ")"
+  //<< " need=" << iter->second.need_key() << " have=" << iter->second.have_key() << dendl;
   if (iter->second.need_key())
     need |= service_id;
   else

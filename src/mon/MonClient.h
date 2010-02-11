@@ -106,6 +106,7 @@ private:
 public:
   void set_entity_name(EntityName name) { entity_name = name; }
 
+  int _check_auth_tickets();
   int _check_auth_rotating();
   int wait_auth_rotating(double timeout);
 

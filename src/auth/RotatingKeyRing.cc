@@ -28,6 +28,7 @@ void RotatingKeyRing::set_secrets(RotatingSecrets& s)
 {
   Mutex::Locker l(lock);
   secrets = s;
+  dump_rotating();
 }
 
 void RotatingKeyRing::dump_rotating()

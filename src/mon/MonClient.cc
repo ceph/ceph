@@ -342,7 +342,7 @@ void MonClient::handle_auth(MAuthReply *m)
       }
     }
   
-    _check_auth_rotating();
+    _check_auth_tickets();
   }
   auth_cond.SignalAll();
 }
@@ -430,7 +430,7 @@ void MonClient::tick()
 {
   dout(10) << "tick" << dendl;
 
-  _check_auth_rotating();
+  _check_auth_tickets();
   
   if (hunting) {
     dout(1) << "continuing hunt" << dendl;
@@ -489,36 +489,50 @@ void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
   delete m;
 }
 
+int MonClient::_check_auth_tickets()
+{
+  if (state == MC_STATE_HAVE_SESSION && auth) {
+    if (auth->need_tickets()) {
+      dout(10) << "_check_auth_tickets getting new tickets!" << dendl;
+      MAuth *m = new MAuth;
+      m->protocol = auth->get_protocol();
+      auth->build_request(m->auth_payload);
+      _send_mon_message(m);
+    }
+
+    _check_auth_rotating();
+  }
+  return 0;
+}
+
 int MonClient::_check_auth_rotating()
 {
-  if (state == MC_STATE_HAVE_SESSION && auth && auth->need_tickets()) {
-    dout(10) << "need new tickets!" << dendl;
-    MAuth *m = new MAuth;
-    m->protocol = auth->get_protocol();
-    auth->build_request(m->auth_payload);
-    _send_mon_message(m);
-  }
-
   if (!rotating_secrets ||
       !auth_principal_needs_rotating_keys(entity_name)) {
     dout(20) << "_check_auth_rotating not needed by " << entity_name << dendl;
     return 0;
   }
 
-  if (!rotating_secrets->need_new_secrets(g_clock.now())) {
-    dout(20) << "_check_auth_rotating have uptodate secrets" << dendl;
+  if (!auth || state != MC_STATE_HAVE_SESSION) {
+    dout(10) << "_check_auth_rotating waiting for auth session" << dendl;
+    return 0;
+  }
+
+  utime_t cutoff = g_clock.now();
+  cutoff -= MIN(30.0, g_conf.auth_service_ticket_ttl / 4.0);
+  if (!rotating_secrets->need_new_secrets(cutoff)) {
+    dout(10) << "_check_auth_rotating have uptodate secrets (they expire after " << cutoff << ")" << dendl;
     rotating_secrets->dump_rotating();
     return 0;
   }
 
-  if (auth) {
-    MAuth *m = new MAuth;
-    m->protocol = auth->get_protocol();
-    if (auth->build_rotating_request(m->auth_payload)) {
-      _send_mon_message(m);
-    } else {
-      delete m;
-    }
+  dout(10) << "_check_auth_rotating renewing rotating keys (they expired before " << cutoff << ")" << dendl;
+  MAuth *m = new MAuth;
+  m->protocol = auth->get_protocol();
+  if (auth->build_rotating_request(m->auth_payload)) {
+    _send_mon_message(m);
+  } else {
+    delete m;
   }
   return 0;
 }
@@ -526,8 +540,8 @@ int MonClient::_check_auth_rotating()
 int MonClient::wait_auth_rotating(double timeout)
 {
   Mutex::Locker l(monc_lock);
-  utime_t interval;
-  interval += timeout;
+  utime_t until = g_clock.now();
+  until += timeout;
 
   if (auth->get_protocol() == CEPH_AUTH_NONE) {
     return 0;
@@ -537,8 +551,11 @@ int MonClient::wait_auth_rotating(double timeout)
     return 0;
 
   while (auth_principal_needs_rotating_keys(entity_name) &&
-	 rotating_secrets->need_new_secrets())
-    auth_cond.WaitInterval(monc_lock, interval);
+	 rotating_secrets->need_new_secrets()) {
+    dout(10) << "wait_auth_rotating waiting (until " << until << ")" << dendl;
+    auth_cond.WaitUntil(monc_lock, until);
+  }
+  dout(10) << "wait_auth_rotating done" << dendl;
   return 0;
 }
 
