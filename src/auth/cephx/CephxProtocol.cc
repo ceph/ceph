@@ -215,6 +215,13 @@ void CephXTicketManager::set_have_need_key(uint32_t service_id, uint32_t& have, 
     have &= ~service_id;
 }
 
+void CephXTicketManager::invalidate_ticket(uint32_t service_id)
+{
+  map<uint32_t, CephXTicketHandler>::iterator iter = tickets_map.find(service_id);
+  if (iter != tickets_map.end())
+    iter->second.invalidate_ticket();
+}
+
 /*
  * PRINCIPAL: verify our attempt to authenticate succeeded.  fill out
  * this ServiceTicket with the result.

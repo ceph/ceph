@@ -97,6 +97,8 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
     server_challenge = ch.server_challenge;
     dout(10) << " got initial server challenge " << server_challenge << dendl;
     starting = false;
+
+    tickets.invalidate_ticket(CEPH_ENTITY_TYPE_AUTH);
     return -EAGAIN;
   }
 

@@ -290,6 +290,10 @@ struct CephXTicketHandler {
 
   bool have_key();
   bool need_key();
+
+  void invalidate_ticket() {
+    have_key_flag = 0;
+  }
 };
 
 struct CephXTicketManager {
@@ -311,6 +315,7 @@ struct CephXTicketManager {
   bool need_key(uint32_t service_id);
   void set_have_need_key(uint32_t service_id, uint32_t& have, uint32_t& need);
   void validate_tickets(uint32_t mask, uint32_t& have, uint32_t& need);
+  void invalidate_ticket(uint32_t service_id);
 };
 
 
