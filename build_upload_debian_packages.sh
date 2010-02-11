@@ -64,7 +64,7 @@ tar zxf ceph_$finalvers.orig.tar.gz
 
 # copy in debian dir, fix up changelog
 echo setting up debian dir
-cp -aL ../debian ceph-$finalvers
+cp -a ../debian ceph-$finalvers
 if [ "$vers" != "$finalvers" ]; then
     cd ceph-$finalvers
     DEBEMAIL="sage@newdream.net" dch -v $finalvers-1 'git snapshot'

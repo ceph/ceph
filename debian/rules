@@ -18,6 +18,7 @@ build-stamp: configure-stamp
 	./autogen.sh
 	./configure --prefix=/usr
 	$(MAKE)
+	cp src/init-ceph debian/ceph.init
 
 	touch $@
 clean: 
