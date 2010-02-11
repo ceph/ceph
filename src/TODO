@@ -37,8 +37,13 @@ v0.19
 - journal format improvements
 - kclient: cephx
 - improved truncation
-
+- cephx: lots of fixes
 - mkcephfs: cephx support
+- debian: packaging fixes
+
+v0.20
+
+- new filestore, journaling
 
 - qa: snap test.  maybe walk through 2.6.* kernel trees?
 - osd: rebuild pg log
