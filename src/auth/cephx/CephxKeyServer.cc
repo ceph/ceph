@@ -33,10 +33,13 @@ bool KeyServerData::get_service_secret(uint32_t service_id, ExpiringCryptoKey& s
 
   RotatingSecrets& secrets = iter->second;
 
-  // second to oldest
+  // second to oldest, unless it's expired
   map<uint64_t, ExpiringCryptoKey>::iterator riter = secrets.secrets.begin();
   if (secrets.secrets.size() > 1)
     ++riter;
+
+  if (riter->second.expiration < g_clock.now())
+    ++riter;   // "current" key has expired, use "next" key instead
 
   secret_id = riter->first;
   secret = riter->second;
