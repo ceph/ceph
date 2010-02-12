@@ -3861,27 +3861,35 @@ bool OSD::_recover_now()
 
 void OSD::do_recovery(PG *pg)
 {
-  pg->lock();
-
+  // see how many we should try to start.  note that this is a bit racy.
+  recovery_wq.lock();
   int max = g_conf.osd_recovery_max_active - recovery_ops_active;
- 
-  dout(10) << "do_recovery starting " << max
-	   << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops) on "
-	   << *pg << dendl;
+  recovery_wq.unlock();
+  if (max == 0) {
+    dout(10) << "do_recovery raced and failed to start anything; requeuing " << *pg << dendl;
+    recovery_wq.queue(pg);
+  } else {
+
+    pg->lock();
+    
+    dout(10) << "do_recovery starting " << max
+	     << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops) on "
+	     << *pg << dendl;
 #ifdef DEBUG_RECOVERY_OIDS
-  dout(20) << "  active was " << recovery_oids << dendl;
+    dout(20) << "  active was " << recovery_oids << dendl;
 #endif
-
-  int started = pg->start_recovery_ops(max);
-
-  dout(10) << "do_recovery started " << started
-	   << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops) on "
-	   << *pg << dendl;
-
-  if (started < max)
-    pg->recovery_item.remove_myself();
-
-  pg->unlock();
+    
+    int started = pg->start_recovery_ops(max);
+    
+    dout(10) << "do_recovery started " << started
+	     << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops) on "
+	     << *pg << dendl;
+    
+    if (started < max)
+      pg->recovery_item.remove_myself();
+    
+    pg->unlock();
+  }
   pg->put();
 }
 
