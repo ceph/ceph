@@ -87,7 +87,7 @@ public:
     snapid_t snap_seq;
     SnapContext snapc;
 
-    PoolCtx(int pid, snapid_t s) : poolid(pid), snap_seq(CEPH_NOSNAP) {}
+    PoolCtx(int pid, snapid_t s = CEPH_NOSNAP) : poolid(pid), snap_seq(s) {}
 
     void set_snap(snapid_t s) {
       if (!s)
