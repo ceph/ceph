@@ -2176,6 +2176,11 @@ void OSD::handle_osd_map(MOSDMap *m)
 	 p != pool_map.end();
 	 p++) {
       const pg_pool_t* pi = osdmap->get_pg_pool(p->first);
+      if (NULL == pi) {
+	dout(10) << " pool " << p->first
+		 << " appears to have been deleted" << dendl;
+	continue;
+      }
       if (pi->get_snap_epoch() == cur+1) {
 	PGPool *pool = p->second;
 	pi->build_removed_snaps(pool->newly_removed_snaps);
@@ -2509,6 +2514,12 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
        it++) {
     PG *pg = it->second;
     pg->lock();
+    if (!osdmap->have_pg_pool(pg->info.pgid.pool())) {
+      //pool is deleted!
+      queue_pg_for_deletion(pg);
+      pg->unlock();
+      continue;
+    }
     if (pg->is_active()) {
       // update started counter
       if (!pg->info.snap_trimq.empty())
@@ -3543,37 +3554,42 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
 	  << m->pg_list.size() << " pgs" << dendl;
   
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
-
+  
   for (vector<pg_t>::iterator it = m->pg_list.begin();
        it != m->pg_list.end();
        it++) {
     pg_t pgid = *it;
-    PG *pg;
-
+    
     if (pg_map.count(pgid) == 0) {
       dout(10) << " don't have pg " << pgid << dendl;
       continue;
     }
-
-    pg = _lookup_lock_pg(pgid);
+    dout(5) << "queue_pg_for_deletion: " << pgid << dendl;
+    PG *pg = _lookup_lock_pg(pgid);
     if (pg->info.history.same_acting_since <= m->get_epoch()) {
       if (pg->deleting) {
 	dout(10) << *pg << " already removing." << dendl;
       } else {
-	dout(10) << *pg << " removing." << dendl;
-	assert(pg->get_role() == -1);
 	assert(pg->get_primary() == m->get_source().num());
-	pg->deleting = true;
-	remove_wq.queue(pg);
+	queue_pg_for_deletion(pg);
       }
     } else {
       dout(10) << *pg << " ignoring remove request, pg changed in epoch "
-	       << pg->info.history.same_acting_since << " > " << m->get_epoch() << dendl;
+	       << pg->info.history.same_acting_since
+	       << " > " << m->get_epoch() << dendl;
     }
     pg->unlock();
   }
-
   delete m;
+}
+
+
+void OSD::queue_pg_for_deletion(PG *pg)
+{
+  dout(10) << *pg << " removing." << dendl;
+  assert(pg->get_role() == -1);
+  pg->deleting = true;
+  remove_wq.queue(pg);
 }
 
 void OSD::_remove_pg(PG *pg)

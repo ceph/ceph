@@ -601,6 +601,7 @@ protected:
   void handle_pg_trim(class MOSDPGTrim *m);
 
   void handle_pg_remove(class MOSDPGRemove *m);
+  void queue_pg_for_deletion(PG *pg);
   void _remove_pg(PG *pg);
 
   // helper for handle_pg_log and handle_pg_info

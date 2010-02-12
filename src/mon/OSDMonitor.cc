@@ -130,8 +130,9 @@ bool OSDMonitor::update_from_paxos()
 
 void OSDMonitor::create_pending()
 {
-  pending_inc = OSDMap::Incremental(osdmap.epoch+1);
+  pending_inc = OSDMap::Incremental(osdmap.highest_pool_num, osdmap.epoch+1);
   pending_inc.fsid = mon->monmap->fsid;
+  pending_inc.highest_pool_num_new = osdmap.highest_pool_num;
   
   dout(10) << "create_pending e " << pending_inc.epoch << dendl;
 }
@@ -1005,18 +1006,12 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 
 int OSDMonitor::prepare_new_pool(string& name)
 {
-  int pool = 1;
-  int err = 0;
-  for (map<int,nstring>::iterator i = osdmap.pool_name.begin();
-       i != osdmap.pool_name.end();
-       i++) {
-    if (i->second == name) {
-      err = -EEXIST;
-      goto out;
-    }
-    if (i->first >= pool)
-      pool = i->first + 1;
+  if (osdmap.name_pool.count(name)) {
+    return -EEXIST;
   }
+  if (-1 == pending_inc.highest_pool_num_new)
+    pending_inc.highest_pool_num_new = osdmap.highest_pool_num;
+  int pool = ++pending_inc.highest_pool_num_new;
   pending_inc.new_pools[pool].v.type = CEPH_PG_TYPE_REP;
   pending_inc.new_pools[pool].v.size = 2;
   pending_inc.new_pools[pool].v.crush_ruleset = 0;
@@ -1026,8 +1021,7 @@ int OSDMonitor::prepare_new_pool(string& name)
   pending_inc.new_pools[pool].v.lpgp_num = 0;
   pending_inc.new_pools[pool].v.last_change = pending_inc.epoch;
   pending_inc.new_pool_names[pool] = name;
-out:
-  return err;
+  return 0;
 }
 
 bool OSDMonitor::prepare_command(MMonCommand *m)

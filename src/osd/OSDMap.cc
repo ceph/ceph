@@ -100,6 +100,8 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
   rulesets[CEPH_DATA_RULE] = "data";
   rulesets[CEPH_METADATA_RULE] = "metadata";
   rulesets[CEPH_CASDATA_RULE] = "casdata";
+  //If you add new rulesets, you MUST change the default "highest_pool_num"
+  //initialization to match or very bad things WILL happen, like losing pools!
   
   int pool = 0;
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
