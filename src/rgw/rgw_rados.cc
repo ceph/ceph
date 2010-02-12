@@ -274,15 +274,13 @@ int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& d
 
 int RGWRados::delete_bucket(std::string& id, std::string& bucket)
 {
-  /* TODO! */
-#if 0
-  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1;
-  char buf[len];
-  snprintf(buf, len, "%s/%s", DIR_NAME, bucket.c_str());
+  rados_pool_t pool;
 
-  if (rmdir(buf) < 0)
-    return -errno;
-#endif
+  int r = open_pool(bucket, &pool);
+  if (r < 0) return r;
+
+  r = rados->delete_pool(pool);
+  if (r < 0) return r;
   return 0;
 }
 
