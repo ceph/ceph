@@ -835,8 +835,8 @@ void PG::build_prior()
    * that we need in order to proceed.  This sucks...
    *
    * To minimize the risk of this happening, we CANNOT go active if
-   * any OSDs in the prior set are down until we send an MOSDAlive to
-   * the monitor such that the OSDMap sets osd_up_thru to an epoch.
+   * _any_ OSDs in the prior set are down until we send an MOSDAlive
+   * to the monitor such that the OSDMap sets osd_up_thru to an epoch.
    * Then, we have something like
    *
    *  1: A B
@@ -875,7 +875,6 @@ void PG::build_prior()
   // and prior PG mappings.  move backwards in time.
   state_clear(PG_STATE_CRASHED);
   state_clear(PG_STATE_DOWN);
-  bool any_up_now = false;
   bool some_down = false;
 
   // generate past intervals, if we don't have them.
@@ -932,11 +931,6 @@ void PG::build_prior()
       if (osd->osdmap->is_up(o)) {  // is up now
 	// did any osds survive _this_ interval?
 	any_survived = true;
-
-	// are any osds alive from the last interval started?
-	if (interval.first <= info.history.last_epoch_started &&
-	    interval.last >= info.history.last_epoch_started)
-	  any_up_now = true;
       } else if (pinfo.lost_at > interval.first) {
 	dout(10) << "build_prior  prior osd" << o
 		 << " is down, but marked lost at " << pinfo.lost_at << dendl;
