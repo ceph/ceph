@@ -213,7 +213,9 @@ void *SimpleMessenger::Accepter::entry()
       if (!messenger->destination_stopped) {
 	Pipe *p = new Pipe(messenger, Pipe::STATE_ACCEPTING);
 	p->sd = sd;
+	p->pipe_lock.Lock();
 	p->start_reader();
+	p->pipe_lock.Unlock();
 	messenger->pipes.insert(p);
       }
       messenger->lock.Unlock();
@@ -2165,10 +2167,12 @@ SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr, 
   
   // create pipe
   Pipe *pipe = new Pipe(this, Pipe::STATE_CONNECTING);
+  pipe->pipe_lock.Lock();
   pipe->set_peer_type(type);
   pipe->set_peer_addr(addr);
   pipe->policy = get_policy(type);
   pipe->start_writer();
+  pipe->pipe_lock.Unlock();
   pipe->register_pipe();
   pipes.insert(pipe);
 
