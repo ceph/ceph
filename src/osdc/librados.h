@@ -52,6 +52,9 @@ void rados_pool_close_ctx(rados_list_ctx_t *ctx);
   /* Given a rados_list_ctx_t and its pool, get the next object in sequence*/
 int rados_pool_list_next(rados_pool_t pool, const char **entry, rados_list_ctx_t *ctx);
 
+int rados_create_pool(const char *name);
+int rados_delete_pool(const rados_pool_t pool);
+
 /* snapshots */
 int rados_snap_create(const rados_pool_t pool, const char *snapname);
 int rados_snap_remove(const rados_pool_t pool, const char *snapname);
@@ -130,6 +133,7 @@ public:
   int get_fs_stats(rados_statfs_t& result);
 
   int create_pool(const char *name);
+  int delete_pool(const rados_pool_t& pool);
 
   int snap_create(const rados_pool_t pool, const char *snapname);
   int snap_remove(const rados_pool_t pool, const char *snapname);

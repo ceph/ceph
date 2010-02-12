@@ -671,6 +671,7 @@ public:
   int delete_pool_snap(int pool, string& snapName, Context *onfinish);
 
   int create_pool(string& name, Context *onfinish);
+  int delete_pool(int pool, Context *onfinish);
 
   void handle_pool_op_reply(MPoolOpReply *m);
 

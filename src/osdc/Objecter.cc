@@ -696,6 +696,22 @@ int Objecter::create_pool(string& name, Context *onfinish) {
   return 0;
 }
 
+int Objecter::delete_pool(int pool, Context *onfinish) {
+  dout(10) << "delete_pool " << pool << dendl;
+  PoolOp *op = new PoolOp;
+  if (!op) return -ENOMEM;
+  op->tid = ++last_tid;
+  op->pool = pool;
+  op->name = "delete";
+  op->onfinish = onfinish;
+  op->pool_op = POOL_OP_DELETE;
+  op_pool[op->tid] = op;
+
+  pool_op_submit(op);
+
+  return 0;
+}
+
 void Objecter::pool_op_submit(PoolOp *op) {
   dout(10) << "pool_op_submit " << op->tid << dendl;
   monc->send_mon_message(new MPoolOp(monc->get_fsid(), op->tid, op->pool,
