@@ -106,6 +106,7 @@ class FileStore : public JournalingObjectStore {
     lock("FileStore::lock"),
     sync_epoch(0), stop(false), sync_thread(this), flusher_queue_len(0), flusher_thread(this) { }
 
+  bool test_mount_in_use();
   int mount();
   int umount();
   int mkfs();

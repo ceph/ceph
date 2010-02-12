@@ -145,11 +145,9 @@ int main(int argc, const char **argv)
 
   g_timer.shutdown();
   messenger->register_entity(entity_name_t::OSD(whoami));
-  assert_warn(messenger);
   if (!messenger)
     return 1;
   messenger_hb->register_entity(entity_name_t::OSD(whoami));
-  assert_warn(messenger_hb);
   if (!messenger_hb)
     return 1;
 
@@ -157,13 +155,22 @@ int main(int argc, const char **argv)
   messenger->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::client());
   messenger->set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless_peer());
 
+
+  OSD *osd = new OSD(whoami, messenger, messenger_hb, &mc, g_conf.osd_data, g_conf.osd_journal, mkjournal);
+
+  int err = osd->pre_init();
+  if (err < 0) {
+    char buf[80];
+    cerr << "error initializing osd: " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
+    return 1;
+  }
+
   messenger->start();
   messenger_hb->start(true);  // only need to daemon() once
 
   // start osd
-  OSD *osd = new OSD(whoami, messenger, messenger_hb, &mc, g_conf.osd_data, g_conf.osd_journal, mkjournal);
   if (osd->init() < 0) {
-    cout << "error initializing osd" << std::endl;
+    cout << "error starting osd" << std::endl;
     return 1;
   }
 

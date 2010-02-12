@@ -865,6 +865,7 @@ public:
   
 
   // startup/shutdown
+  int pre_init();
   int init();
   int shutdown();
 

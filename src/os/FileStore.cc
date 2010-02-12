@@ -351,10 +351,27 @@ int FileStore::lock_fsid()
   int r = ::fcntl(fsid_fd, F_SETLK, &l);
   if (r < 0) {
     char buf[80];
-    derr(0) << "mount failed to lock " << basedir << "/fsid, is another cosd still running? " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    derr(0) << "lock_fsid failed to lock " << basedir << "/fsid, is another cosd still running? " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     return -errno;
   }
   return 0;
+}
+
+bool FileStore::test_mount_in_use()
+{
+  dout(5) << "test_mount basedir " << basedir << " journal " << journalpath << dendl;
+  char fn[PATH_MAX];
+  snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
+
+  // verify fs isn't in use
+
+  fsid_fd = ::open(fn, O_RDWR, 0644);
+  if (fsid_fd < 0)
+    return 0;   // no fsid, ok.
+  bool inuse = lock_fsid() < 0;
+  ::close(fsid_fd);
+  fsid_fd = -1;
+  return inuse;
 }
 
 int FileStore::mount() 

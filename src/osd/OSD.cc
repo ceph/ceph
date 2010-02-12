@@ -389,17 +389,33 @@ void handle_signal(int signal)
 
 void cls_initialize(OSD *_osd);
 
+
+int OSD::pre_init()
+{
+  Mutex::Locker lock(osd_lock);
+  
+  assert(!store);
+  store = create_object_store(dev_path, journal_path);
+  if (!store) {
+    dout(0) << " unable to create object store" << dendl;
+    return -ENODEV;
+  }
+
+  if (store->test_mount_in_use()) {
+    dout(0) << "object store " << dev_path << " is currently in use" << dendl;
+    cout << "object store " << dev_path << " is currently in use (cosd already running?)" << std::endl;
+    return -EBUSY;
+  }
+  return 0;
+}
+
 int OSD::init()
 {
   Mutex::Locker lock(osd_lock);
 
   // mount.
   dout(2) << "mounting " << dev_path << " " << (journal_path ? journal_path : "(no journal)") << dendl;
-  store = create_object_store(dev_path, journal_path);
-  if (!store) {
-    dout(0) << " unable to create object store" << dendl;
-    return -ENODEV;
-  }
+  assert(store);  // call pre_init() first!
 
   if (mknewjournal) {
     int r = store->mkjournal();

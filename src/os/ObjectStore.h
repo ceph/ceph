@@ -430,6 +430,7 @@ public:
   virtual ~ObjectStore() {}
 
   // mgmt
+  virtual bool test_mount_in_use() = 0;
   virtual int mount() = 0;
   virtual int umount() = 0;
   virtual int mkfs() = 0;  // wipe
