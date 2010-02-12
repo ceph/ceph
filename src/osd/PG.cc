@@ -1799,20 +1799,20 @@ void PG::write_info(ObjectStore::Transaction& t)
 {
   // pg state
   bufferlist infobl;
+  __u8 struct_v = 1;
+  ::encode(struct_v, infobl);
   ::encode(info, infobl);
+  ::encode(past_intervals, infobl);
   dout(20) << "write_info info " << infobl.length() << dendl;
   t.collection_setattr(coll_t::build_pg_coll(info.pgid), "info", infobl);
  
   // local state
   bufferlist snapbl;
+  struct_v = 1;
+  ::encode(struct_v, snapbl);
   ::encode(snap_collections, snapbl);
   dout(20) << "write_info snap " << snapbl.length() << dendl;
   t.collection_setattr(coll_t::build_pg_coll(info.pgid), "snap_collections", snapbl);
-
-  bufferlist ki;
-  ::encode(past_intervals, ki);
-  dout(20) << "write_info pastintervals " << ki.length() << dendl;
-  t.collection_setattr(coll_t::build_pg_coll(info.pgid), "past_intervals", ki);
 
   dirty_info = false;
 }
@@ -2107,25 +2107,21 @@ void PG::read_state(ObjectStore *store)
 {
   bufferlist bl;
   bufferlist::iterator p;
+  __u8 struct_v;
 
   // info
   store->collection_getattr(coll_t::build_pg_coll(info.pgid), "info", bl);
   p = bl.begin();
+  ::decode(struct_v, p);
   ::decode(info, p);
+  ::decode(past_intervals, p);
   
   // snap_collections
   bl.clear();
   store->collection_getattr(coll_t::build_pg_coll(info.pgid), "snap_collections", bl);
   p = bl.begin();
+  ::decode(struct_v, p);
   ::decode(snap_collections, p);
-
-  // past_intervals
-  bl.clear();
-  store->collection_getattr(coll_t::build_pg_coll(info.pgid), "past_intervals", bl);
-  if (bl.length()) {
-    p = bl.begin();
-    ::decode(past_intervals, p);
-  }
 
   read_log(store);
 }
