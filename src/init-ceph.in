@@ -57,6 +57,16 @@ signal_daemon() {
     echo done
 }
 
+daemon_is_running() {
+    name=$1
+    daemon=$2
+    pidfile=$3
+    do_cmd "[ -e $pidfile ] || exit 1   # no pid, presumably not running
+	pid=\`cat $pidfile\`
+	[ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline && exit 0 # running
+        exit 1  # pid is something else" "" "okfail"
+}
+
 stop_daemon() {
     name=$1
     daemon=$2
@@ -218,14 +228,19 @@ for name in $what; do
 		echo Mounting Btrfs on $host:$btrfs_path
 		do_root_cmd "modprobe btrfs ; btrfsctl -a ; egrep -q '^[^ ]+ $btrfs_path' /proc/mounts || mount -t btrfs $btrfs_opt $first_dev $btrfs_path"
 	    fi
-	    echo Starting Ceph $name on $host...
-	    get_conf pre_start_eval "" "pre start eval"
-	    [ -n "$pre_start_eval" ] && $pre_start_eval
-	    get_conf pre_start "" "pre start command"
-	    get_conf post_start "" "post start command"
-            [ -n "$pre_start" ] && do_cmd "$pre_start"
-	    do_cmd "$cmd" $runarg
-            [ -n "$post_start" ] && do_cmd "$post_start"
+	    echo -n Starting Ceph $name on $host...
+	    if daemon_is_running $name c$type $pid_file; then
+		echo already running
+	    else
+		echo
+		get_conf pre_start_eval "" "pre start eval"
+		[ -n "$pre_start_eval" ] && $pre_start_eval
+		get_conf pre_start "" "pre start command"
+		get_conf post_start "" "post start command"
+		[ -n "$pre_start" ] && do_cmd "$pre_start"
+		do_cmd "$cmd" $runarg
+		[ -n "$post_start" ] && do_cmd "$post_start"
+	    fi
 	    ;;
 	
 	stop)

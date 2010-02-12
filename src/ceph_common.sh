@@ -65,13 +65,13 @@ do_cmd() {
 	ulimit -c unlimited
 	whoami=`whoami`
 	if [ "$whoami" = "$user" ] || [ -z "$user" ]; then
-	    bash -c "$1" || { echo "failed: '$1'" ; exit 1; }
+	    bash -c "$1" || { [ -z "$3" ] && echo "failed: '$1'" && exit 1; }
 	else
-	    sudo su $user -c "$1" || { echo "failed: '$1'" ; exit 1; }
+	    sudo su $user -c "$1" || { [ -z "$3" ] && echo "failed: '$1'" && exit 1; }
 	fi
     else
 	[ $verbose -eq 1 ] && echo "--- $ssh $2 \"cd $dir ; ulimit -c unlimited ; $1\""
-	$ssh $2 "cd $dir ; ulimit -c unlimited ; $1" || { echo "failed: '$ssh $1'" ; exit 1; }
+	$ssh $2 "cd $dir ; ulimit -c unlimited ; $1" || { [ -z "$3" ] && echo "failed: '$ssh $1'" && exit 1; }
     fi
 }
 
