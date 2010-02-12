@@ -1295,11 +1295,12 @@ bool OSDMonitor::preprocess_pool_op ( MPoolOp *m) {
     }
     return false; //this message needs to go through preparation
   case POOL_OP_DELETE_SNAP:
-    //it's a snap deletion request if we make it here
     if (!snap_exists) {
       _pool_op(m, -ENOENT, pending_inc.epoch);
       return true; //done with this message
     }
+    return false;
+  case POOL_OP_DELETE: //can't delete except on master
     return false;
   default:
     assert(0);
@@ -1323,6 +1324,8 @@ bool OSDMonitor::prepare_pool_op (MPoolOp *m)
 {
   if (m->op == POOL_OP_CREATE) {
     return prepare_pool_op_create(m);
+  } else if (m->op == POOL_OP_DELETE) {
+    return prepare_pool_op_delete(m);
   }
   const pg_pool_t *p = osdmap.get_pg_pool(m->pool);
   pg_pool_t* pp = 0;
@@ -1353,6 +1356,13 @@ bool OSDMonitor::prepare_pool_op_create (MPoolOp *m)
 {
   int err = prepare_new_pool(m->name);
   paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, err, pending_inc.epoch));
+  return true;
+}
+
+bool OSDMonitor::prepare_pool_op_delete (MPoolOp *m)
+{
+  pending_inc.old_pools.insert(m->pool);
+  paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, 0, pending_inc.epoch));
   return true;
 }
 

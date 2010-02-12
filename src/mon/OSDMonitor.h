@@ -88,6 +88,7 @@ private:
   bool preprocess_pool_op_create ( class MPoolOp *m);
   bool prepare_pool_op (MPoolOp *m);
   bool prepare_pool_op_create (MPoolOp *m);
+  bool prepare_pool_op_delete(MPoolOp *m);
   void _pool_op(MPoolOp *m, int replyCode, epoch_t epoch);
 
   struct C_Booted : public Context {
