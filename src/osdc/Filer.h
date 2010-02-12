@@ -133,7 +133,6 @@ class Filer {
     assert(snap);  // (until there is a non-NOSNAP write)
     vector<ObjectExtent> extents;
     file_to_extents(ino, layout, offset, len, extents);
-printf("read_trunc %lld~%lld %d@%lld\n", offset, len, truncate_seq, truncate_size);
     objecter->sg_read_trunc(extents, snap, bl, flags,
 			    truncate_size, truncate_seq, onfinish);
     return 0;
@@ -167,7 +166,6 @@ printf("read_trunc %lld~%lld %d@%lld\n", offset, len, truncate_seq, truncate_siz
 	   __u32 truncate_seq,
             Context *onack,
             Context *oncommit) {
-printf("write_trunc %lld~%lld %d@%lld\n", offset, len, truncate_seq, truncate_size);
     vector<ObjectExtent> extents;
     file_to_extents(ino, layout, offset, len, extents);
     objecter->sg_write_trunc(extents, snapc, bl, mtime, flags,
