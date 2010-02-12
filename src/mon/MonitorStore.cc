@@ -86,7 +86,7 @@ int MonitorStore::mkfs()
   dout(1) << "mkfs" << dendl;
 
   char cmd[1024];
-  snprintf(cmd, sizeof(cmd), "test -d %s && /bin/rm -r %s ; mkdir -p %s", dir.c_str(), dir.c_str(), dir.c_str());
+  snprintf(cmd, sizeof(cmd), "test -d %s && /bin/rm -rf %s ; mkdir -p %s", dir.c_str(), dir.c_str(), dir.c_str());
   dout(1) << cmd << dendl;
   int r = system(cmd);
   return r;
