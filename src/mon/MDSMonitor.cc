@@ -140,6 +140,16 @@ bool MDSMonitor::preprocess_query(PaxosServiceMessage *m)
   }
 }
 
+void MDSMonitor::_note_beacon(MMDSBeacon *m)
+{
+  __u64 gid = m->get_global_id();
+  version_t seq = m->get_seq();
+
+  dout(15) << "_note_beacon " << *m << " noting time" << dendl;
+  last_beacon[gid].stamp = g_clock.now();  
+  last_beacon[gid].seq = seq;
+}
+
 bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 {
   entity_addr_t addr = m->get_orig_source_inst().addr;
@@ -186,6 +196,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   }
 
   if (info.laggy()) {
+    _note_beacon(m);
     return false;  // no longer laggy, need to update map.
   }
   if (state == MDSMap::STATE_BOOT) {
@@ -209,19 +220,17 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
       dout(10) << "mds_beacon can't standby-replay mds" << info.rank << " at this time (cluster degraded, or mds not active)" << dendl;
       goto ignore;
     }
-    
+    _note_beacon(m);
     return false;  // need to update map
   }
 
  ignore:
   // note time and reply
-  dout(15) << "mds_beacon " << *m << " noting time and replying" << dendl;
-  last_beacon[gid].stamp = g_clock.now();  
-  last_beacon[gid].seq = seq;
+  _note_beacon(m);
   mon->send_reply(m,
 		  new MMDSBeacon(mon->monmap->fsid, m->get_global_id(), m->get_name(),
 				 mdsmap.get_epoch(), state, seq));
-
+  
   // done
  out:
   delete m;
