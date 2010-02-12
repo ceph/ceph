@@ -96,11 +96,12 @@ int main(int argc, const char **argv)
   MonClient mc(&rkeys);
   if (mc.build_initial_monmap() < 0)
     return -1;
-  if (mc.get_monmap_privately() < 0)
-    return -1;
 
   char buf[80];
   if (mkfs) {
+    if (mc.get_monmap_privately() < 0)
+      return -1;
+
     int err = OSD::mkfs(g_conf.osd_data, g_conf.osd_journal, mc.monmap.fsid, whoami);
     if (err < 0) {
       cerr << "error creating empty object store in " << g_conf.osd_data << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
@@ -130,14 +131,6 @@ int main(int argc, const char **argv)
     cerr << "OSD magic " << magic << " != my " << CEPH_OSD_ONDISK_MAGIC << std::endl;
     exit(1);
   }
-  if (ceph_fsid_compare(&fsid, &mc.monmap.fsid)) {
-    cerr << "OSD fsid " << fsid << " != monmap fsid " << mc.monmap.fsid << std::endl;
-    exit(1);
-  }
-
-  // start up network
-  g_my_addr.ss_addr() = mc.get_my_addr().ss_addr();
-  g_my_addr.set_port(0);
 
   SimpleMessenger *messenger = new SimpleMessenger();
   SimpleMessenger *messenger_hb = new SimpleMessenger();
@@ -148,7 +141,6 @@ int main(int argc, const char **argv)
        << " at " << messenger->get_ms_addr() 
        << " osd_data " << g_conf.osd_data
        << " " << ((g_conf.osd_journal && g_conf.osd_journal[0]) ? g_conf.osd_journal:"(no journal)")
-       << " fsid " << mc.monmap.fsid
        << std::endl;
 
   g_timer.shutdown();

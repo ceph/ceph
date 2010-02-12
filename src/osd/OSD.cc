@@ -693,11 +693,6 @@ int OSD::read_superblock()
     }
   }
 
-  if (ceph_fsid_compare(&superblock.fsid, &monc->get_fsid())) {
-    derr(0) << "read_superblock fsid " << superblock.fsid << " != monmap " << monc->get_fsid() << dendl;
-    return -1;
-  }
-
   if (whoami != superblock.whoami) {
     derr(0) << "read_superblock superblock says osd" << superblock.whoami
 	    << ", but i (think i) am osd" << whoami << dendl;
