@@ -73,7 +73,7 @@ int main(int argc, char **argv)
   dev /= n;
   dev = sqrt(dev);
 
-  double pgavg = (double)osdmap.get_pg_pool(0).get_pg_num() / (double)n;
+  double pgavg = (double)osdmap.get_pg_pool(0)->get_pg_num() / (double)n;
   double edev = sqrt(pgavg) * (double)avg / pgavg;
   cout << " avg " << avg
        << " stddev " << dev

@@ -222,11 +222,11 @@ void SnapServer::check_osd_map(bool force)
        p != need_to_purge.end();
        p++) {
     int id = p->first;
-    const pg_pool_t& pi = mds->osdmap->get_pg_pool(id);
+    const pg_pool_t *pi = mds->osdmap->get_pg_pool(id);
     for (set<snapid_t>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 q++) {
-      if (pi.is_removed_snap(*q)) {
+      if (pi->is_removed_snap(*q)) {
 	dout(10) << " osdmap marks " << *q << " as removed" << dendl;
 	all_purged[id].push_back(*q);
       } else {

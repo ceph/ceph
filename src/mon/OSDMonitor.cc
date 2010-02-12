@@ -584,12 +584,12 @@ bool OSDMonitor::preprocess_remove_snaps(MRemoveSnaps *m)
       dout(10) << " ignoring removed_snaps " << q->second << " on non-existent pool " << q->first << dendl;
       continue;
     }
-    const pg_pool_t& pi = osdmap.get_pg_pool(q->first);
+    const pg_pool_t *pi = osdmap.get_pg_pool(q->first);
     for (vector<snapid_t>::iterator p = q->second.begin(); 
 	 p != q->second.end();
 	 p++) {
-      if (*p > pi.get_snap_seq() ||
-	  !pi.removed_snaps.contains(*p))
+      if (*p > pi->get_snap_seq() ||
+	  !pi->removed_snaps.contains(*p))
 	return false;
     }
   }
@@ -1145,7 +1145,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  ss << "unrecognized pool '" << m->cmd[3] << "'";
 	  err = -ENOENT;
 	} else {
-	  const pg_pool_t *p = &osdmap.get_pg_pool(pool);
+	  const pg_pool_t *p = osdmap.get_pg_pool(pool);
 	  pg_pool_t *pp = 0;
 	  if (pending_inc.new_pools.count(pool))
 	    pp = &pending_inc.new_pools[pool];
@@ -1174,7 +1174,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  ss << "unrecognized pool '" << m->cmd[3] << "'";
 	  err = -ENOENT;
 	} else {
-	  const pg_pool_t *p = &osdmap.get_pg_pool(pool);
+	  const pg_pool_t *p = osdmap.get_pg_pool(pool);
 	  pg_pool_t *pp = 0;
 	  if (pending_inc.new_pools.count(pool))
 	    pp = &pending_inc.new_pools[pool];
@@ -1217,7 +1217,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  ss << "unrecognized pool '" << m->cmd[3] << "'";
 	  err = -ENOENT;
 	} else {
-	  const pg_pool_t *p = &osdmap.get_pg_pool(pool);
+	  const pg_pool_t *p = osdmap.get_pg_pool(pool);
 	  int n = atoi(m->cmd[5].c_str());
 	  if (n) {
 	    if (m->cmd[4] == "size") {
@@ -1290,7 +1290,7 @@ bool OSDMonitor::preprocess_pool_op ( MPoolOp *m) {
   pg_pool_t *pp = 0;
   if (pending_inc.new_pools.count(m->pool)) pp = &pending_inc.new_pools[m->pool];
   //check if the snapname exists
-  if ((osdmap.get_pg_pool(m->pool).snap_exists(m->name.c_str())) ||
+  if ((osdmap.get_pg_pool(m->pool)->snap_exists(m->name.c_str())) ||
       (pp && pp->snap_exists(m->name.c_str()))) snap_exists = true;
 
   switch (m->op) {
@@ -1330,7 +1330,7 @@ bool OSDMonitor::prepare_pool_op (MPoolOp *m)
   if (m->op == POOL_OP_CREATE) {
     return prepare_pool_op_create(m);
   }
-  const pg_pool_t *p = &osdmap.get_pg_pool(m->pool);
+  const pg_pool_t *p = osdmap.get_pg_pool(m->pool);
   pg_pool_t* pp = 0;
   //if the pool isn't already in the update, add it
   if (!pending_inc.new_pools.count(m->pool))

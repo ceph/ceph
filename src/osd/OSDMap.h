@@ -643,8 +643,8 @@ private:
 
   ceph_object_layout make_object_layout(object_t oid, int pg_pool, int preferred=-1, int object_stripe_unit = 0) {
     // calculate ps (placement seed)
-    pg_pool_t pool = get_pg_pool(pg_pool);
-    ps_t ps = ceph_str_hash(pool.v.object_hash, oid.name.c_str(), oid.name.length());
+    const pg_pool_t *pool = get_pg_pool(pg_pool);
+    ps_t ps = ceph_str_hash(pool->v.object_hash, oid.name.c_str(), oid.name.length());
 
     // mix in preferred osd, so we don't get the same peers for
     // all of the placement pgs (e.g. 0.0p*)
@@ -664,18 +664,18 @@ private:
 
   int get_pg_num(int pg_pool)
   {
-    pg_pool_t pool = get_pg_pool(pg_pool);
-    return pool.get_pg_num();
+    const pg_pool_t *pool = get_pg_pool(pg_pool);
+    return pool->get_pg_num();
   }
 
   int get_pg_layout(int pg_pool, int seed, ceph_object_layout& layout) {
-    pg_pool_t pool = get_pg_pool(pg_pool);
+    const pg_pool_t *pool = get_pg_pool(pg_pool);
 
     pg_t pgid = pg_t(seed, pg_pool, -1);
     layout.ol_pgid = pgid.v;
     layout.ol_stripe_unit = 0;
 
-    return pool.get_pg_num();
+    return pool->get_pg_num();
   }
 
   // pg -> (osd list)
@@ -822,9 +822,10 @@ private:
   bool have_pg_pool(int p) const {
     return pools.count(p);
   }
-  const pg_pool_t& get_pg_pool(int p) {
-    assert(pools.count(p));
-    return pools[p];
+  const pg_pool_t* get_pg_pool(int p) {
+    if(pools.count(p))
+      return &pools[p];
+    return NULL;
   }
   unsigned get_pg_size(pg_t pg) {
     assert(pools.count(pg.pool()));

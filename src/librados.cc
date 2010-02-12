@@ -553,9 +553,9 @@ int RadosClient::create_pool(string& name)
 int RadosClient::snap_list(PoolCtx *pool, vector<rados_snap_t> *snaps)
 {
   Mutex::Locker l(lock);
-  const pg_pool_t& pi = objecter->osdmap->get_pg_pool(pool->poolid);
-  for (map<snapid_t,pool_snap_info_t>::const_iterator p = pi.snaps.begin();
-       p != pi.snaps.end();
+  const pg_pool_t *pi = objecter->osdmap->get_pg_pool(pool->poolid);
+  for (map<snapid_t,pool_snap_info_t>::const_iterator p = pi->snaps.begin();
+       p != pi->snaps.end();
        p++)
     snaps->push_back(p->first);
   return 0;
@@ -564,9 +564,9 @@ int RadosClient::snap_list(PoolCtx *pool, vector<rados_snap_t> *snaps)
 int RadosClient::snap_lookup(PoolCtx *pool, const char *name, rados_snap_t *snapid)
 {
   Mutex::Locker l(lock);
-  const pg_pool_t& pi = objecter->osdmap->get_pg_pool(pool->poolid);
-  for (map<snapid_t,pool_snap_info_t>::const_iterator p = pi.snaps.begin();
-       p != pi.snaps.end();
+  const pg_pool_t *pi = objecter->osdmap->get_pg_pool(pool->poolid);
+  for (map<snapid_t,pool_snap_info_t>::const_iterator p = pi->snaps.begin();
+       p != pi->snaps.end();
        p++) {
     if (p->second.name == name) {
       *snapid = p->first;
@@ -579,9 +579,9 @@ int RadosClient::snap_lookup(PoolCtx *pool, const char *name, rados_snap_t *snap
 int RadosClient::snap_get_name(PoolCtx *pool, rados_snap_t snapid, std::string *s)
 {
   Mutex::Locker l(lock);
-  const pg_pool_t& pi = objecter->osdmap->get_pg_pool(pool->poolid);
-  map<snapid_t,pool_snap_info_t>::const_iterator p = pi.snaps.find(snapid);
-  if (p == pi.snaps.end())
+  const pg_pool_t *pi = objecter->osdmap->get_pg_pool(pool->poolid);
+  map<snapid_t,pool_snap_info_t>::const_iterator p = pi->snaps.find(snapid);
+  if (p == pi->snaps.end())
     return -ENOENT;
   *s = p->second.name.c_str();
   return 0;
@@ -590,9 +590,9 @@ int RadosClient::snap_get_name(PoolCtx *pool, rados_snap_t snapid, std::string *
 int RadosClient::snap_get_stamp(PoolCtx *pool, rados_snap_t snapid, time_t *t)
 {
   Mutex::Locker l(lock);
-  const pg_pool_t& pi = objecter->osdmap->get_pg_pool(pool->poolid);
-  map<snapid_t,pool_snap_info_t>::const_iterator p = pi.snaps.find(snapid);
-  if (p == pi.snaps.end())
+  const pg_pool_t *pi = objecter->osdmap->get_pg_pool(pool->poolid);
+  map<snapid_t,pool_snap_info_t>::const_iterator p = pi->snaps.find(snapid);
+  if (p == pi->snaps.end())
     return -ENOENT;
   *t = p->second.stamp.sec();
   return 0;

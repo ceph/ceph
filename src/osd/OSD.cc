@@ -740,11 +740,11 @@ PGPool* OSD::_get_pool(int id)
     pool_map[id] = p;
     p->get();
     
-    const pg_pool_t& pi = osdmap->get_pg_pool(id);
-    p->info = pi;
-    p->snapc = pi.get_snap_context();
+    const pg_pool_t *pi = osdmap->get_pg_pool(id);
+    p->info = *pi;
+    p->snapc = pi->get_snap_context();
 
-    pi.build_removed_snaps(p->removed_snaps);
+    pi->build_removed_snaps(p->removed_snaps);
   }
   dout(10) << "_get_pool " << p->id << " " << p->num_pg << " -> " << (p->num_pg+1) << dendl;
   p->num_pg++;
@@ -2175,18 +2175,18 @@ void OSD::handle_osd_map(MOSDMap *m)
     for (map<int, PGPool*>::iterator p = pool_map.begin();
 	 p != pool_map.end();
 	 p++) {
-      const pg_pool_t& pi = osdmap->get_pg_pool(p->first);
-      if (pi.get_snap_epoch() == cur+1) {
+      const pg_pool_t* pi = osdmap->get_pg_pool(p->first);
+      if (pi->get_snap_epoch() == cur+1) {
 	PGPool *pool = p->second;
-	pi.build_removed_snaps(pool->newly_removed_snaps);
+	pi->build_removed_snaps(pool->newly_removed_snaps);
 	pool->newly_removed_snaps.subtract(pool->removed_snaps);
 	dout(10) << " pool " << p->first << " removed_snaps " << pool->removed_snaps
 		 << ", newly so are " << pool->newly_removed_snaps << ")"
 		 << dendl;
-	pool->info = pi;
-	pool->snapc = pi.get_snap_context();
+	pool->info = *pi;
+	pool->snapc = pi->get_snap_context();
       } else {
-	dout(10) << " pool " << p->first << " unchanged (snap_epoch = " << pi.get_snap_epoch() << ")" << dendl;
+	dout(10) << " pool " << p->first << " unchanged (snap_epoch = " << pi->get_snap_epoch() << ")" << dendl;
       }
     }
 

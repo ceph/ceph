@@ -5868,7 +5868,7 @@ int Client::get_file_replication(int fd)
   Inode *in = f->inode;
 
   pool = in->layout.fl_pg_pool;
-  return osdmap->get_pg_pool(pool).get_size();
+  return osdmap->get_pg_pool(pool)->get_size();
 }
 
 int Client::get_default_preferred_pg(int fd)
