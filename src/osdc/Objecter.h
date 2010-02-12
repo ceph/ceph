@@ -486,6 +486,23 @@ private:
     ops[0].op.op = CEPH_OSD_OP_READ;
     ops[0].op.extent.offset = off;
     ops[0].op.extent.length = len;
+    ops[0].op.extent.truncate_size = 0;
+    ops[0].op.extent.truncate_seq = 0;
+    Op *o = new Op(oid, ol, ops, flags, onfinish, 0);
+    o->snapid = snap;
+    o->outbl = pbl;
+    return op_submit(o);
+  }
+  tid_t read_trunc(const object_t& oid, ceph_object_layout ol, 
+	     __u64 off, __u64 len, snapid_t snap, bufferlist *pbl, int flags,
+	     __u64 trunc_size, __u32 trunc_seq,
+	     Context *onfinish) {
+    vector<OSDOp> ops(1);
+    ops[0].op.op = CEPH_OSD_OP_READ;
+    ops[0].op.extent.offset = off;
+    ops[0].op.extent.length = len;
+    ops[0].op.extent.truncate_size = trunc_size;
+    ops[0].op.extent.truncate_seq = trunc_seq;
     Op *o = new Op(oid, ol, ops, flags, onfinish, 0);
     o->snapid = snap;
     o->outbl = pbl;
@@ -543,6 +560,25 @@ private:
     ops[0].op.op = CEPH_OSD_OP_WRITE;
     ops[0].op.extent.offset = off;
     ops[0].op.extent.length = len;
+    ops[0].op.extent.truncate_size = 0;
+    ops[0].op.extent.truncate_seq = 0;
+    ops[0].data = bl;
+    Op *o = new Op(oid, ol, ops, flags, onack, oncommit);
+    o->mtime = mtime;
+    o->snapc = snapc;
+    return op_submit(o);
+  }
+  tid_t write_trunc(const object_t& oid, ceph_object_layout ol,
+	      __u64 off, __u64 len, const SnapContext& snapc, const bufferlist &bl,
+	      utime_t mtime, int flags,
+	     __u64 trunc_size, __u32 trunc_seq,
+              Context *onack, Context *oncommit) {
+    vector<OSDOp> ops(1);
+    ops[0].op.op = CEPH_OSD_OP_WRITE;
+    ops[0].op.extent.offset = off;
+    ops[0].op.extent.length = len;
+    ops[0].op.extent.truncate_size = trunc_size;
+    ops[0].op.extent.truncate_seq = trunc_seq;
     ops[0].data = bl;
     Op *o = new Op(oid, ol, ops, flags, onack, oncommit);
     o->mtime = mtime;
@@ -678,28 +714,33 @@ public:
     }      
   };
 
-  void sg_read(vector<ObjectExtent>& extents, snapid_t snap, bufferlist *bl, int flags, Context *onfinish) {
+  void sg_read_trunc(vector<ObjectExtent>& extents, snapid_t snap, bufferlist *bl, int flags,
+		__u64 trunc_size, __u32 trunc_seq, Context *onfinish) {
     if (extents.size() == 1) {
-      read(extents[0].oid, extents[0].layout, extents[0].offset, extents[0].length,
-	   snap, bl, flags, onfinish);
+      read_trunc(extents[0].oid, extents[0].layout, extents[0].offset, extents[0].length,
+	   snap, bl, flags, trunc_size, trunc_seq, onfinish);
     } else {
       C_Gather *g = new C_Gather;
       vector<bufferlist> resultbl(extents.size());
       int i=0;
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
-	read(p->oid, p->layout, p->offset, p->length,
-	     snap, &resultbl[i++], flags, g->new_sub());
+	read_trunc(p->oid, p->layout, p->offset, p->length,
+	     snap, &resultbl[i++], flags, trunc_size, trunc_seq, g->new_sub());
       }
       g->set_finisher(new C_SGRead(this, extents, resultbl, bl, onfinish));
     }
   }
 
+  void sg_read(vector<ObjectExtent>& extents, snapid_t snap, bufferlist *bl, int flags, Context *onfinish) {
+    sg_read_trunc(extents, snap, bl, flags, 0, 0, onfinish);
+  }
 
-  void sg_write(vector<ObjectExtent>& extents, const SnapContext& snapc, const bufferlist& bl, utime_t mtime,
-		int flags, Context *onack, Context *oncommit) {
+  void sg_write_trunc(vector<ObjectExtent>& extents, const SnapContext& snapc, const bufferlist& bl, utime_t mtime,
+		int flags, __u64 trunc_size, __u32 trunc_seq,
+		Context *onack, Context *oncommit) {
     if (extents.size() == 1) {
-      write(extents[0].oid, extents[0].layout, extents[0].offset, extents[0].length,
-	    snapc, bl, mtime, flags, onack, oncommit);
+      write_trunc(extents[0].oid, extents[0].layout, extents[0].offset, extents[0].length,
+	    snapc, bl, mtime, flags, trunc_size, trunc_seq, onack, oncommit);
     } else {
       C_Gather *gack = 0, *gcom = 0;
       if (onack)
@@ -713,12 +754,17 @@ public:
 	     bit++)
 	  bl.copy(bit->first, bit->second, cur);
 	assert(cur.length() == p->length);
-	write(p->oid, p->layout, p->offset, p->length, 
-	      snapc, cur, mtime, flags,
+	write_trunc(p->oid, p->layout, p->offset, p->length, 
+	      snapc, cur, mtime, flags, trunc_size, trunc_seq,
 	      gack ? gack->new_sub():0,
 	      gcom ? gcom->new_sub():0);
       }
     }
+  }
+
+  void sg_write(vector<ObjectExtent>& extents, const SnapContext& snapc, const bufferlist& bl, utime_t mtime,
+		int flags, Context *onack, Context *oncommit) {
+    sg_write_trunc(extents, snapc, bl, mtime, flags, 0, 0, onack, oncommit);
   }
 
   void ms_handle_connect(Connection *con);

@@ -355,7 +355,7 @@ class Inode {
   ceph_file_layout layout;
   uint64_t   size;        // on directory, # dentries
   uint32_t   truncate_seq;
-  uint64_t   truncate_size, truncate_from;
+  uint64_t   truncate_size;
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
   uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
@@ -474,7 +474,7 @@ class Inode {
 
   Inode(vinodeno_t vino, ceph_file_layout *layout) : 
     ino(vino.ino), snapid(vino.snapid),
-    rdev(0), mode(0), uid(0), gid(0), nlink(0), size(0), truncate_seq(0), truncate_size(0), truncate_from(0),
+    rdev(0), mode(0), uid(0), gid(0), nlink(0), size(0), truncate_seq(0), truncate_size(0),
     time_warp_seq(0), max_size(0), version(0), xattr_version(0),
     flags(0),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 

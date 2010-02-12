@@ -4415,8 +4415,10 @@ int Client::_read_sync(Fh *f, __u64 off, __u64 len, bufferlist *bl)
     bufferlist tbl;
     
     int wanted = left;
-    filer->read(in->ino, &in->layout, in->snapid,
-		pos, left, &tbl, flags, onfinish);
+    filer->read_trunc(in->ino, &in->layout, in->snapid,
+		      pos, left, &tbl, flags,
+		      in->truncate_size, in->truncate_seq,
+		      onfinish);
     while (!done)
       cond.Wait(client_lock);
 
@@ -4581,8 +4583,10 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     unsafe_sync_write++;
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);  // released by onsafe callback
     
-    filer->write(in->ino, &in->layout, in->snaprealm->get_snap_context(),
-		 offset, size, bl, g_clock.now(), 0, onfinish, onsafe);
+    filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
+		       offset, size, bl, g_clock.now(), 0,
+		       in->truncate_size, in->truncate_seq,
+		       onfinish, onsafe);
     
     while (!done)
       cond.Wait(client_lock);

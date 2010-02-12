@@ -120,6 +120,24 @@ class Filer {
     return 0;
   }
 
+  int read_trunc(inodeno_t ino,
+	   ceph_file_layout *layout,
+	   snapid_t snap,
+           __u64 offset, 
+           __u64 len, 
+           bufferlist *bl,   // ptr to data
+	   int flags,
+	   __u64 truncate_size,
+	   __u32 truncate_seq,
+           Context *onfinish) {
+    assert(snap);  // (until there is a non-NOSNAP write)
+    vector<ObjectExtent> extents;
+    file_to_extents(ino, layout, offset, len, extents);
+printf("read_trunc %lld~%lld %d@%lld\n", offset, len, truncate_seq, truncate_size);
+    objecter->sg_read_trunc(extents, snap, bl, flags,
+			    truncate_size, truncate_seq, onfinish);
+    return 0;
+  }
 
   int write(inodeno_t ino,
 	    ceph_file_layout *layout,
@@ -134,6 +152,26 @@ class Filer {
     vector<ObjectExtent> extents;
     file_to_extents(ino, layout, offset, len, extents);
     objecter->sg_write(extents, snapc, bl, mtime, flags, onack, oncommit);
+    return 0;
+  }
+
+  int write_trunc(inodeno_t ino,
+	    ceph_file_layout *layout,
+	    const SnapContext& snapc,
+	    __u64 offset, 
+            __u64 len, 
+            bufferlist& bl,
+	    utime_t mtime,
+            int flags, 
+	   __u64 truncate_size,
+	   __u32 truncate_seq,
+            Context *onack,
+            Context *oncommit) {
+printf("write_trunc %lld~%lld %d@%lld\n", offset, len, truncate_seq, truncate_size);
+    vector<ObjectExtent> extents;
+    file_to_extents(ino, layout, offset, len, extents);
+    objecter->sg_write_trunc(extents, snapc, bl, mtime, flags,
+		       truncate_size, truncate_seq, onack, oncommit);
     return 0;
   }
 
