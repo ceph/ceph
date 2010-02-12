@@ -889,7 +889,7 @@ void PG::build_prior()
     dout(10) << "build_prior " << interval << dendl;
 
     if (interval.last < info.history.last_epoch_started)
-      continue;  // we don't care
+      break;  // we don't care
 
     if (interval.acting.empty())
       continue;
