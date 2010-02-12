@@ -1363,6 +1363,11 @@ void OSD::send_boot()
 {
   dout(10) << "send_boot" << dendl;
   entity_addr_t hb_addr = heartbeat_messenger->get_myaddr();
+  if (hb_addr.is_blank_addr()) {
+    int port = hb_addr.get_port();
+    hb_addr = messenger->get_myaddr();
+    hb_addr.set_port(port);
+  }
   monc->send_mon_message(new MOSDBoot(superblock, hb_addr));
 }
 
