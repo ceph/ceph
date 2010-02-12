@@ -434,10 +434,13 @@ void ObjectCacher::bh_read(BufferHead *bh)
   // finisher
   C_ReadFinish *onfinish = new C_ReadFinish(this, bh->ob->get_soid(), bh->start(), bh->length());
 
+  ObjectSet *oset = bh->ob->oset;
+
   // go
-  objecter->read(bh->ob->get_oid(), bh->ob->get_layout(), 
+  objecter->read_trunc(bh->ob->get_oid(), bh->ob->get_layout(), 
 		 bh->start(), bh->length(), bh->ob->get_snap(),
 		 &onfinish->bl, 0,
+		 oset->truncate_size, oset->truncate_seq,
 		 onfinish);
 }
 
@@ -525,10 +528,13 @@ void ObjectCacher::bh_write(BufferHead *bh)
   C_WriteAck *onack = new C_WriteAck(this, bh->ob->get_soid(), bh->start(), bh->length());
   C_WriteCommit *oncommit = new C_WriteCommit(this, bh->ob->get_soid(), bh->start(), bh->length());
 
+  ObjectSet *oset = bh->ob->oset;
+
   // go
-  tid_t tid = objecter->write(bh->ob->get_oid(), bh->ob->get_layout(),
+  tid_t tid = objecter->write_trunc(bh->ob->get_oid(), bh->ob->get_layout(),
 			      bh->start(), bh->length(),
 			      bh->snapc, bh->bl, bh->last_write, 0,
+			      oset->truncate_size, oset->truncate_seq,
 			      onack, oncommit);
 
   // set bh last_write_tid
@@ -537,7 +543,7 @@ void ObjectCacher::bh_write(BufferHead *bh)
   bh->ob->last_write_tid = tid;
   bh->last_write_tid = tid;
   if (commit_set_callback)
-    bh->ob->oset->uncommitted.push_back(&bh->ob->uncommitted_item);
+    oset->uncommitted.push_back(&bh->ob->uncommitted_item);
 
   mark_tx(bh);
 }
@@ -1085,9 +1091,10 @@ int ObjectCacher::atomic_sync_readx(OSDRead *rd, ObjectSet *oset, Mutex& lock)
     Mutex flock("ObjectCacher::atomic_sync_readx flock 1");
     Cond cond;
     bool done = false;
-    objecter->read(rd->extents[0].oid, rd->extents[0].layout, 
+    objecter->read_trunc(rd->extents[0].oid, rd->extents[0].layout, 
 		   rd->extents[0].offset, rd->extents[0].length,
 		   rd->snap, rd->bl, 0,
+		   oset->truncate_size, oset->truncate_seq,
 		   new C_SafeCond(&flock, &cond, &done));
 
     // block
@@ -1165,7 +1172,8 @@ int ObjectCacher::atomic_sync_writex(OSDWrite *wr, ObjectSet *oset, Mutex& lock)
       Mutex flock("ObjectCacher::atomic_sync_writex flock");
       Cond cond;
       bool done = false;
-      objecter->sg_write(wr->extents, wr->snapc, wr->bl, wr->mtime, 0, 
+      objecter->sg_write_trunc(wr->extents, wr->snapc, wr->bl, wr->mtime, 0,
+			 oset->truncate_size, oset->truncate_seq,
 			 new C_SafeCond(&flock, &cond, &done), 0);
       
       // block

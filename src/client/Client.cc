@@ -357,6 +357,7 @@ void Client::update_inode_file_bits(Inode *in,
       dout(10) << "truncate_seq " << in->truncate_seq << " -> "
 	       << truncate_seq << dendl;
       in->truncate_seq = truncate_seq;
+      in->oset.truncate_seq = truncate_seq;
     }
   }
   if (truncate_seq >= in->truncate_seq &&
@@ -364,6 +365,7 @@ void Client::update_inode_file_bits(Inode *in,
     dout(10) << "truncate_size " << in->truncate_size << " -> "
 	     << truncate_size << dendl;
     in->truncate_size = truncate_size;
+    in->oset.truncate_size = truncate_size;
   }
   
   // be careful with size, mtime, atime
