@@ -711,7 +711,6 @@ public:
   set<int>    prior_set;   // current+prior OSDs, as defined by info.history.last_epoch_started.
   set<int>    prior_set_down;          // down osds exluded from prior_set
   map<int,epoch_t> prior_set_up_thru;  // osds whose up_thru we care about
-  bool        must_notify_mon;
   bool        need_up_thru;
   set<int>    stray_set;   // non-acting osds that have PG data.
   set<int>    uptodate_set;  // current OSDs that are uptodate
@@ -855,7 +854,7 @@ public:
     role(0),
     state(0),
     have_master_log(true),
-    must_notify_mon(false), need_up_thru(false),
+    need_up_thru(false),
     pg_stats_lock("PG::pg_stats_lock"),
     pg_stats_valid(false),
     finish_sync_event(NULL)

@@ -806,7 +806,6 @@ void PG::clear_prior()
   prior_set.clear();
   prior_set_down.clear();
   prior_set_up_thru.clear();
-  must_notify_mon = false;
 }
 
 
@@ -937,8 +936,7 @@ void PG::build_prior()
 	prior_set_down.insert(o);
       } else {
 	dout(10) << "build_prior  prior osd" << o
-		 << " is down, must notify mon" << dendl;
-	must_notify_mon = true;
+		 << " is down" << dendl;
 	need_down++;
 	prior_set_down.insert(o);
       }
@@ -976,7 +974,6 @@ void PG::build_prior()
 	   << (is_crashed() ? " crashed":"")
 	   << (is_down() ? " down":"")
 	   << (some_down ? " some_down":"")
-	   << (must_notify_mon ? " must_notify_mon":"")
 	   << dendl;
 }
 
@@ -1350,7 +1347,7 @@ void PG::peer(ObjectStore::Transaction& t, list<Context*>& tfin,
   assert(info.last_complete >= log.tail || log.backlog);
 
   // -- do need to notify the monitor?
-  if (must_notify_mon) {
+  if (true) {
     if (osd->osdmap->get_up_thru(osd->whoami) < info.history.same_acting_since) {
       dout(10) << "up_thru " << osd->osdmap->get_up_thru(osd->whoami)
 	       << " < same_since " << info.history.same_acting_since
