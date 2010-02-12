@@ -140,7 +140,7 @@ if echo $what | grep -q mon0 ; then
 EOF
     [ -e "$monkeyring" ] && rm -f $monkeyring
     $BINDIR/cauthtool --create-keyring --gen-key --name=client.admin --caps=/tmp/admin_caps.$$ $adminkeyring
-    rm /tmp/admin_caps.$$
+    rm -f /tmp/admin_caps.$$
 
     # mon keyring (for monitor)
     echo Building monitor keyring with all service keys
@@ -197,10 +197,11 @@ for name in $what; do
 	if [ -n "$ssh" ]; then
 	    scp -q $monkeyring $user@$host:$tmpkeyring
 	else
-	    cp $monkeyring $tmpkeyring
+	    cp -a $monkeyring $tmpkeyring
+	    chown $user $tmpkeyring
 	fi
 	get_conf mon_data "" "mon data"
-	do_cmd "$BINDIR/mkmonfs --clobber --mon-data $mon_data -i $num --monmap $monmap --osdmap $osdmap -k $tmpkeyring ; rm $tmpkeyring"
+	do_cmd "$BINDIR/mkmonfs --clobber --mon-data $mon_data -i $num --monmap $monmap --osdmap $osdmap -k $tmpkeyring ; rm -f $tmpkeyring"
 
 	if [ -n "$ssh" ]; then
 	    scp -p $adminkeyring $user@$host:$mon_data/admin_keyring.bin
@@ -237,7 +238,7 @@ for name in $what; do
 	else
 	    echo WARNING: no keyring specified for $name
 	fi
-	rm /tmp/keyring.osd.$id
+	rm -f /tmp/keyring.osd.$id
     fi
 
     if [ "$type" = "mds" ]; then
@@ -251,9 +252,9 @@ for name in $what; do
 	else
 	    echo WARNING: no keyring specified for $name
 	fi
-	rm /tmp/keyring.mds.$id
+	rm -f /tmp/keyring.mds.$id
     fi
 
 done
 
-rm $monkeyring
+rm -f $monkeyring
