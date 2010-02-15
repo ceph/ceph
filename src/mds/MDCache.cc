@@ -3308,7 +3308,8 @@ bool MDCache::parallel_fetch_traverse_dir(inodeno_t ino, filepath& path,
     frag_t fg = cur->pick_dirfrag(path[i]);
     CDir *dir = cur->get_or_open_dirfrag(this, fg);
     CDentry *dn = dir->lookup(path[i]);
-    if (!dn) {
+    CDentry::linkage_t *dnl = dn->get_linkage();
+    if (!dn || dnl->is_null()) {
       if (!dir->is_complete()) {
 	// fetch dir
 	fetch_queue.insert(dir);
@@ -3321,7 +3322,6 @@ bool MDCache::parallel_fetch_traverse_dir(inodeno_t ino, filepath& path,
 	return true;
       }
     }
-    CDentry::linkage_t *dnl = dn->get_linkage();
     cur = dnl->get_inode();
     if (!cur) {
       assert(dnl->is_remote());
@@ -5997,10 +5997,12 @@ bool MDCache::path_is_mine(filepath& path)
     dout(15) << "path_is_mine seg " << i << ": " << path[i] << " under " << *cur << dendl;
     frag_t fg = cur->pick_dirfrag(path[i]);
     CDir *dir = cur->get_dirfrag(fg);
-    if (!dir) return cur->is_auth();
+    if (!dir)
+      return cur->is_auth();
     CDentry *dn = dir->lookup(path[i]);
-    if (!dn) return dir->is_auth();
     CDentry::linkage_t *dnl = dn->get_linkage();
+    if (!dn || dnl->is_null())
+      return dir->is_auth();
     assert(dnl->is_primary());
     cur = dnl->get_inode();
   }
