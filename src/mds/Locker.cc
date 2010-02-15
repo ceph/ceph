@@ -1676,14 +1676,8 @@ void Locker::handle_client_caps(MClientCaps *m)
 	      << " client" << client << " on " << *in << dendl;
       // this cap now follows a later snap (i.e. the one initiating this flush, or later)
       cap->client_follows = follows+1;
-      
-      if (in->last <= follows) {
-	dout(10) << "  flushsnap releasing cloned cap" << dendl;
-	in->remove_client_cap(client);
-      } else {
-	dout(10) << "  flushsnap NOT releasing live cap" << dendl;
-      }
-      
+      cap->confirm_receipt(cap->get_last_sent(), 0);
+   
       // we can prepare the ack now, since this FLUSHEDSNAP is independent of any
       // other cap ops.  (except possibly duplicate FLUSHSNAP requests, but worst
       // case we get a dup response, so whatever.)
@@ -1693,11 +1687,19 @@ void Locker::handle_client_caps(MClientCaps *m)
 	ack->set_snap_follows(follows);
 	ack->set_client_tid(m->get_client_tid());
       }
-      if (!_do_cap_update(in, cap, m->get_dirty(), 0, follows, m, ack)) {
+      if (!_do_cap_update(in, cap, m->get_dirty(), follows, m, ack)) {
 	if (ack)
 	  mds->send_message_client(ack, client);
 	eval_cap_gather(in);
       }
+
+      // remove cap _after_ do_cap_update() (which takes the Capability*)
+      if (in->last <= follows) {
+	dout(10) << "  flushsnap releasing cloned cap" << dendl;
+	in->remove_client_cap(client);
+      } else {
+	dout(10) << "  flushsnap NOT releasing live cap" << dendl;
+      }      
     } else
       dout(7) << " not auth, ignoring flushsnap on " << *in << dendl;
     goto out;
@@ -1740,7 +1742,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       if (m->get_op() == CEPH_CAP_OP_DROP)
 	can_issue = false;
       
-      if (_do_cap_update(in, cap, m->get_dirty(), cap->wanted(), follows, m, ack)) {
+      if (_do_cap_update(in, cap, m->get_dirty(), follows, m, ack)) {
 	// updated, cap msg is delayed
 	cap->inc_suppress();
 	eval(in, CEPH_CAP_LOCKS);
@@ -1853,11 +1855,12 @@ static __u64 calc_bounding(__u64 t)
  * if we update, return true; otherwise, false (no updated needed).
  */
 bool Locker::_do_cap_update(CInode *in, Capability *cap,
-			    int dirty, int wanted, snapid_t follows, MClientCaps *m,
+			    int dirty, snapid_t follows, MClientCaps *m,
 			    MClientCaps *ack)
 {
   dout(10) << "_do_cap_update dirty " << ccap_string(dirty)
-	   << " wanted " << ccap_string(wanted)
+	   << " issued " << ccap_string(cap->issued())
+	   << " wanted " << ccap_string(cap->wanted())
 	   << " on " << *in << dendl;
   assert(in->is_auth());
   client_t client = m->get_source().num();
