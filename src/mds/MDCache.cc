@@ -1405,6 +1405,8 @@ inode_t *MDCache::journal_dirty_inode(Mutation *mut, EMetaBlob *metablob, CInode
   if (in->is_root()) {
     return metablob->add_root(true, in, in->get_projected_inode());
   } else {
+    if (follows == CEPH_NOSNAP && in->last != CEPH_NOSNAP)
+      follows = in->first - 1;
     CDentry *dn = in->get_projected_parent_dn();
     if (!dn->get_projected_linkage()->is_null())  // no need to cow a null dentry
       journal_cow_dentry(mut, metablob, dn, follows);
