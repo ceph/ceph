@@ -129,7 +129,7 @@ public:
     ceph_fsid_t fsid;
     epoch_t epoch;   // new epoch; we are a diff from epoch-1 to epoch
     utime_t modified;
-    int highest_pool_num_new; //incremented by the OSDMonitor on each pool create
+    int32_t new_pool_max; //incremented by the OSDMonitor on each pool create
     int32_t new_flags;
 
     /*
@@ -169,7 +169,7 @@ public:
       ::encode(fsid, bl);
       ::encode(epoch, bl); 
       ::encode(modified, bl);
-      ::encode(highest_pool_num_new, bl);
+      ::encode(new_pool_max, bl);
       ::encode(new_flags, bl);
       ::encode(fullmap, bl);
       ::encode(crush, bl);
@@ -198,7 +198,7 @@ public:
       ::decode(fsid, p);
       ::decode(epoch, p);
       ::decode(modified, p);
-      ::decode(highest_pool_num_new, p);
+      ::decode(new_pool_max, p);
       ::decode(new_flags, p);
       ::decode(fullmap, p);
       ::decode(crush, p);
@@ -222,7 +222,7 @@ public:
     }
 
     Incremental(epoch_t e=0) :
-      epoch(e), highest_pool_num_new(-1), new_flags(-1), new_max_osd(-1) {
+      epoch(e), new_pool_max(-1), new_flags(-1), new_max_osd(-1) {
       memset(&fsid, 0, sizeof(fsid));
     }
     Incremental(bufferlist &bl) {
@@ -238,7 +238,7 @@ private:
   ceph_fsid_t fsid;
   epoch_t epoch;        // what epoch of the osd cluster descriptor is this
   utime_t created, modified; // epoch start time
-  int highest_pool_num; //the largest pool num in this epoch
+  int32_t pool_max;     // the largest pool num, ever
 
   uint32_t flags;
 
@@ -265,6 +265,7 @@ private:
 
  public:
   OSDMap() : epoch(0), 
+	     pool_max(-1),
 	     flags(0),
 	     max_osd(0) { 
     memset(&fsid, 0, sizeof(fsid));
@@ -468,8 +469,9 @@ private:
     if (inc.new_max_osd >= 0) 
       set_max_osd(inc.new_max_osd);
 
-    if (inc.highest_pool_num_new != -1)
-      highest_pool_num = inc.highest_pool_num_new;
+    if (inc.new_pool_max != -1)
+      pool_max = inc.new_pool_max;
+
     for (set<int32_t>::iterator p = inc.old_pools.begin();
 	 p != inc.old_pools.end();
 	 p++) {
@@ -574,7 +576,7 @@ private:
       max_pools = pools.rbegin()->first + 1;
     ::encode(max_pools, bl);
     ::encode(pools, bl);
-    ::encode(highest_pool_num, bl);
+    ::encode(pool_max, bl);
 
     ::encode(flags, bl);
     
@@ -611,7 +613,7 @@ private:
     int32_t max_pools;
     ::decode(max_pools, p);
     ::decode(pools, p);
-    ::decode(highest_pool_num, p);
+    ::decode(pool_max, p);
 
     ::decode(flags, p);
 

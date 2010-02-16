@@ -100,10 +100,9 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
   rulesets[CEPH_DATA_RULE] = "data";
   rulesets[CEPH_METADATA_RULE] = "metadata";
   rulesets[CEPH_CASDATA_RULE] = "casdata";
-  highest_pool_num = 2; //keep this updated; 0-based indexing!
   
-  int pool = 0;
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
+    int pool = ++pool_max;
     pools[pool].v.type = CEPH_PG_TYPE_REP;
     pools[pool].v.size = 2;
     pools[pool].v.crush_ruleset = p->first;
@@ -114,7 +113,6 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
     pools[pool].v.lpgp_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
     pools[pool].v.last_change = epoch;
     pool_name[pool] = p->second;
-    pool++;
   }
 
   build_simple_crush_map(crush, rulesets, num_osd, num_dom);

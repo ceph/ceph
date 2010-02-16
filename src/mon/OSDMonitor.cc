@@ -132,7 +132,6 @@ void OSDMonitor::create_pending()
 {
   pending_inc = OSDMap::Incremental(osdmap.epoch+1);
   pending_inc.fsid = mon->monmap->fsid;
-  pending_inc.highest_pool_num_new = osdmap.highest_pool_num;
   
   dout(10) << "create_pending e " << pending_inc.epoch << dendl;
 }
@@ -1009,9 +1008,9 @@ int OSDMonitor::prepare_new_pool(string& name)
   if (osdmap.name_pool.count(name)) {
     return -EEXIST;
   }
-  if (-1 == pending_inc.highest_pool_num_new)
-    pending_inc.highest_pool_num_new = osdmap.highest_pool_num;
-  int pool = ++pending_inc.highest_pool_num_new;
+  if (-1 == pending_inc.new_pool_max)
+    pending_inc.new_pool_max = osdmap.pool_max;
+  int pool = ++pending_inc.new_pool_max;
   pending_inc.new_pools[pool].v.type = CEPH_PG_TYPE_REP;
   pending_inc.new_pools[pool].v.size = 2;
   pending_inc.new_pools[pool].v.crush_ruleset = 0;
