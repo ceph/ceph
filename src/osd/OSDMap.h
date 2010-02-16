@@ -571,10 +571,6 @@ private:
     ::encode(created, bl);
     ::encode(modified, bl);
 
-    int32_t max_pools = 0;
-    if (pools.size())
-      max_pools = pools.rbegin()->first + 1;
-    ::encode(max_pools, bl);
     ::encode(pools, bl);
     ::encode(pool_max, bl);
 
@@ -610,8 +606,6 @@ private:
     ::decode(created, p);
     ::decode(modified, p);
 
-    int32_t max_pools;
-    ::decode(max_pools, p);
     ::decode(pools, p);
     ::decode(pool_max, p);
 
