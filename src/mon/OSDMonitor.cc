@@ -1205,6 +1205,19 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	return true;
+      } else if (m->cmd[2] == "delete" && m->cmd.size() >= 4) {
+	//hey, let's delete a pool!
+	int pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
+	if (pool < 0) {
+	  ss << "unrecognized pool '" << m->cmd[3] << "'";
+	  err = -ENOENT;
+	} else {
+	  pending_inc.old_pools.insert(pool);
+	  ss << "pool '" << m->cmd[3] << "' deleted";
+	  getline(ss, rs);
+	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	  return true;
+	}
       } else if (m->cmd[2] == "set") {
 	int pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
 	if (pool < 0) {
