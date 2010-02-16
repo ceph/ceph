@@ -130,7 +130,7 @@ bool OSDMonitor::update_from_paxos()
 
 void OSDMonitor::create_pending()
 {
-  pending_inc = OSDMap::Incremental(osdmap.highest_pool_num, osdmap.epoch+1);
+  pending_inc = OSDMap::Incremental(osdmap.epoch+1);
   pending_inc.fsid = mon->monmap->fsid;
   pending_inc.highest_pool_num_new = osdmap.highest_pool_num;
   

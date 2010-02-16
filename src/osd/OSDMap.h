@@ -265,7 +265,6 @@ private:
 
  public:
   OSDMap() : epoch(0), 
-	     highest_pool_num(2),
 	     flags(0),
 	     max_osd(0) { 
     memset(&fsid, 0, sizeof(fsid));
