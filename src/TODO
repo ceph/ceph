@@ -44,6 +44,7 @@ v0.19
 v0.20
 
 - new filestore, journaling
+- multiple mds fixes
 
 - qa: snap test.  maybe walk through 2.6.* kernel trees?
 - osd: rebuild pg log
@@ -53,36 +54,13 @@ v0.20
 
 
 bugs
-- kclient: on umount -f
-[ 4683.361323] INFO: task umount:15840 blocked for more than 120 seconds.
-[ 4683.367910] "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
-[ 4683.375792] umount        D 0000000000000000     0 15840   2614 0x00000000
-[ 4683.382761]  ffff880104ee9c58 0000000000000046 0000000000000000 ffffffff8145f50a
-[ 4683.390297]  ffff88010901aa00 ffff880104ee9fd8 ffff880104ee9fd8 0000000000004000
-[ 4683.397862]  000000000000df18 ffff880104ee9fd8 ffff880104ee9fd8 00000000001d2d80
-[ 4683.405414] Call Trace:
-[ 4683.407911]  [<ffffffff8145f50a>] ? _spin_unlock_irq+0x36/0x51
-[ 4683.413794]  [<ffffffffa0166867>] ? check_cap_flush+0xa4/0x235 [ceph]
-[ 4683.420285]  [<ffffffff8145dbc6>] mutex_lock_nested+0x1b9/0x317
-[ 4683.426255]  [<ffffffffa0166867>] ? check_cap_flush+0xa4/0x235 [ceph]
-[ 4683.432769]  [<ffffffffa0166867>] check_cap_flush+0xa4/0x235 [ceph]
-[ 4683.439090]  [<ffffffffa0167c2c>] ceph_mdsc_sync+0x186/0x303 [ceph]
-[ 4683.445396]  [<ffffffff8145d8b6>] ? mutex_unlock+0x9/0xb
-[ 4683.450766]  [<ffffffffa0171832>] ? ceph_osdc_sync+0xe4/0x170 [ceph]
-[ 4683.457188]  [<ffffffffa01478f4>] ceph_syncfs+0x4e/0xc8 [ceph]
-[ 4683.469161]  [<ffffffff810f6084>] __sync_filesystem+0x5e/0x72
-[ 4683.474968]  [<ffffffff810f6231>] sync_filesystem+0x35/0x4c
-[ 4683.480596]  [<ffffffff810d89d8>] generic_shutdown_super+0x28/0xcd
-[ 4683.486831]  [<ffffffff810d8ac8>] kill_anon_super+0x11/0x4f
-[ 4683.492474]  [<ffffffffa01473eb>] ceph_kill_sb+0x4d/0xa3 [ceph]
-[ 4683.498453]  [<ffffffff810d8e5c>] ? deactivate_super+0x60/0x7d
-[ 4683.504344]  [<ffffffff810d8e64>] deactivate_super+0x68/0x7d
-[ 4683.510067]  [<ffffffff810ecf58>] mntput_no_expire+0x78/0xb3
-[ 4683.515784]  [<ffffffff810ed518>] sys_umount+0x2b2/0x2df
-[ 4683.521159]  [<ffffffff810298f0>] ? do_page_fault+0x104/0x278
-[ 4683.526947]  [<ffffffff8100baeb>] system_call_fastpath+0x16/0x1b
+- './ceph osd setmap foo -i foo' will clobber old pools.
 
-- bonnie++ -u root -d /mnt/ceph/ -s 0 -n 1
+- dbench 1, restart mds (may take a few times), dbench will error out.
+
+- rm -r failure (on kernel tree)
+
+?- bonnie++ -u root -d /mnt/ceph/ -s 0 -n 1
 (03:35:29 PM) Isteriat: Using uid:0, gid:0.
 (03:35:29 PM) Isteriat: Create files in sequential order...done.
 (03:35:29 PM) Isteriat: Stat files in sequential order...Expected 1024 files but only got 0
@@ -95,11 +73,11 @@ bugs
 - osd pg split breaks if not all osds are up...
 - mislinked directory?  (cpusr.sh, mv /c/* /c/t, more cpusr, ls /c/t)
 
-- kclient: after reconnect,
+?- kclient: after reconnect,
 cp: writing `/c/ceph2.2/bin/gs-gpl': Bad file descriptor
   - need to somehow wake up unreconnected caps?   hrm!!
 
-- kclient: socket creation
+?- kclient: socket creation
 
 - mds file purge should truncate in place, or remove from namespace before purge.  otherwise new ref can appear before inode is destroyed.
 mds/MDCache.cc: In function 'void MDCache::remove_inode(CInode*)':
