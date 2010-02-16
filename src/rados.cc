@@ -128,7 +128,7 @@ int main(int argc, const char **argv)
     ret = rados.open_pool(pool, &p);
     if (ret < 0) {
       cerr << "error opening pool " << pool << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      goto out;
+      goto no_pool_out;
     }
   }
 
@@ -358,6 +358,7 @@ int main(int argc, const char **argv)
   if (pool)
     rados.close_pool(p);
 
+ no_pool_out:
   rados.shutdown();
   if (ret < 0)
     return 1;
