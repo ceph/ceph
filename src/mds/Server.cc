@@ -204,9 +204,8 @@ void Server::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_REQUEST_RENEWCAPS:
-    if (session->is_closed()) {
-      dout(10) << "ignoring renewcaps on closed session" << dendl;
-    } else {
+    if (session->is_open() || session->is_stale()) {
+      assert(session->is_stale() || session->is_open());
       mds->sessionmap.touch_session(session);
       if (session->is_stale()) {
 	mds->sessionmap.set_state(session, Session::STATE_OPEN);
@@ -214,6 +213,8 @@ void Server::handle_client_session(MClientSession *m)
       }
       mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->get_seq()), 
 				   session->inst);
+    } else {
+      dout(10) << "ignoring renewcaps on non open|stale session (" << session->get_state() << ")" << dendl;
     }
     break;
     
@@ -229,7 +230,7 @@ void Server::handle_client_session(MClientSession *m)
 	return;
       }
       if (m->get_seq() != session->get_push_seq()) {
-	dout(10) << "old push seq " << m->get_seq() << " != " << session->get_push_seq() 
+	dout(0) << "old push seq " << m->get_seq() << " != " << session->get_push_seq() 
 		 << ", BUGGY!" << dendl;
 	assert(0);
       }
