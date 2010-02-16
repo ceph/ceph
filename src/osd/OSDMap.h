@@ -198,7 +198,8 @@ public:
       ::decode(fsid, p);
       ::decode(epoch, p);
       ::decode(modified, p);
-      ::decode(new_pool_max, p);
+      if (v >= 4)
+	::decode(new_pool_max, p);
       ::decode(new_flags, p);
       ::decode(fullmap, p);
       ::decode(crush, p);
@@ -606,8 +607,15 @@ private:
     ::decode(created, p);
     ::decode(modified, p);
 
+    int32_t max_pools;
+    if (v < 4) {
+      ::decode(max_pools, p);
+    }
     ::decode(pools, p);
-    ::decode(pool_max, p);
+    if (v >= 4)
+      ::decode(pool_max, p);
+    else
+      pool_max = max_pools;
 
     ::decode(flags, p);
 
