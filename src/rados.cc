@@ -45,6 +45,8 @@ void usage()
   cerr << "   rm objname  -- remove object\n";
   cerr << "   ls          -- list objects in pool\n\n";
 
+  cerr << "   mkpool foo  -- create pool 'foo'\n";
+  cerr << "   rmpool foo  -- remove pool 'foo'\n";
   cerr << "   lssnap      -- list snaps\n";
   cerr << "   mksnap foo  -- create snap 'foo'\n";
   cerr << "   rmsnap foo  -- remove snap 'foo'\n\n";
@@ -272,6 +274,29 @@ int main(int argc, const char **argv)
     }
   }
 
+  else if (strcmp(nargs[0], "mkpool") == 0) {
+    if (nargs.size() < 2)
+      usage();
+    ret = rados.create_pool(nargs[1]);
+    if (ret < 0) {
+      cerr << "error creating pool " << nargs[1] << ": "
+	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      goto out;
+    }
+    cout << "successfully created pool " << nargs[1] << std::endl;
+  }
+  else if (strcmp(nargs[0], "rmpool") == 0) {
+    if (nargs.size() < 2)
+      usage();
+    rados_pool_t rm_me;
+    rados.open_pool(nargs[1], &rm_me);
+    ret = rados.delete_pool(rm_me);
+    if (ret < 0) {
+      cerr << "error deleting pool " << nargs[1] << ": "
+	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+    }
+    cout << "successfully deleted pool " << nargs[1] << std::endl;
+  }
   else if (strcmp(nargs[0], "lssnap") == 0) {
     if (!pool || nargs.size() != 1)
       usage();
