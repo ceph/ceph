@@ -607,7 +607,7 @@ private:
     ::decode(created, p);
     ::decode(modified, p);
 
-    int32_t max_pools;
+    int32_t max_pools = 0;
     if (v < 4) {
       ::decode(max_pools, p);
     }
