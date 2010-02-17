@@ -11,7 +11,12 @@
 - build debs for amd64, i386
 - email ml + post news entry
 
+- upload release tarball
+
 - make matching commit, tag for ceph-client.git
 
 - pull into -standalone.git
 - update -standalone.git debian/changelog to match
+- upload backport tarball
+- update debian changelog (will get clobbered.. bleh)
+- build backport .deb
