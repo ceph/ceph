@@ -52,6 +52,12 @@ v0.20
 - rebuild mds hierarchy
 - kclient: retry alloc on ENOMEM when reading from connection?
 
+filestore
+- throttling
+- flush objects onto primary during recovery
+- audit queue_transaction calls for dependencies
+- convert apply_transaction calls in handle_map to queue?
+  - need an osdmap cache layer?
 
 bugs
 - dbench 1, restart mds (may take a few times), dbench will error out.
@@ -193,6 +199,7 @@ filestore performance notes
   - acks: never.
   - throttle: ??
   - rmw: rmw must block on prior fs writes.
+  * JourningObjectStore interface needs work?
 
 - separate reads/writes into separate op queues?
 - 

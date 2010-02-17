@@ -23,6 +23,7 @@ using std::deque;
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/Thread.h"
+#include "common/Throttle.h"
 
 class FileJournal : public Journal {
 public:
@@ -101,10 +102,15 @@ private:
   };
   deque<write_item> writeq;
   
+  // throttle
+  Throttle throttle_ops, throttle_bytes;
+
   // write thread
   Mutex write_lock;
-  Cond write_cond;
+  Cond write_cond, write_empty_cond;
   bool write_stop;
+
+  Cond commit_cond;
 
   int _open(bool wr, bool create=false);
   void print_header();
@@ -115,9 +121,8 @@ private:
   void write_thread_entry();
 
   bool check_for_full(__u64 seq, off64_t pos, off64_t size);
-  void prepare_multi_write(bufferlist& bl);
-  bool prepare_single_write(bufferlist& bl, off64_t& queue_pos);
-  bool prepare_single_dio_write(bufferlist& bl, off64_t& queue_pos);
+  void prepare_multi_write(bufferlist& bl, __u64& orig_ops, __u64& orig_bytse);
+  bool prepare_single_write(bufferlist& bl, off64_t& queue_pos, __u64& orig_bytes);
   void do_write(bufferlist& bl);
 
   void write_bl(off64_t& pos, bufferlist& bl);
@@ -149,7 +154,8 @@ private:
     full_commit_seq(0), full_restart_seq(0),
     fd(-1),
     write_lock("FileJournal::write_lock"),
-    write_stop(false), write_thread(this) { }
+    write_stop(false),
+    write_thread(this) { }
   ~FileJournal() {
     delete[] zero_buf;
   }
@@ -157,6 +163,10 @@ private:
   int create();
   int open(__u64 last_seq);
   void close();
+
+  void flush();
+
+  void throttle();
 
   bool is_writeable() {
     return read_pos == 0;
@@ -167,6 +177,8 @@ private:
   void submit_entry(__u64 seq, bufferlist& bl, Context *oncommit);  // submit an item
   void committed_thru(__u64 seq);
   bool is_full();
+
+  void set_wait_on_full(bool b) { wait_on_full = b; }
 
   // reads
   bool read_entry(bufferlist& bl, __u64& seq);

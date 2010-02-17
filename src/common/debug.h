@@ -69,8 +69,8 @@ inline ostream& operator<<(ostream& out, _bad_endl_use_dendl_t) {
 
 
 // generic macros
-#define generic_dout(x) do { if ((x) <= g_conf.debug) { *_dout << dbeginl
-#define generic_derr(x) do { if ((x) <= g_conf.debug) { *_derr << dbeginl
+#define generic_dout(x) do { if ((x) <= g_conf.debug) { *_dout << dbeginl << std::hex << pthread_self() << std::dec << " "
+#define generic_derr(x) do { if ((x) <= g_conf.debug) { *_derr << dbeginl << std::hex << pthread_self() << std::dec << " "
 
 #define pdout(x,p) do { if ((x) <= (p)) { *_dout << dbeginl
 

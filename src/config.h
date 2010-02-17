@@ -106,6 +106,7 @@ struct md_config_t {
   int debug_paxos;
   int debug_tp;
   int debug_auth;
+  int debug_finisher;
 
   // clock
   bool clock_lock;
@@ -336,9 +337,15 @@ struct md_config_t {
   bool  filestore_fake_collections;
   const char  *filestore_dev;
   bool filestore_btrfs_trans;
+  bool filestore_btrfs_snap;
   bool filestore_flusher;
   int filestore_flusher_max_fds;
   bool filestore_sync_flush;
+  bool filestore_journal_parallel;
+  bool filestore_journal_writeahead;
+  int filestore_queue_max_ops;
+  int filestore_queue_max_bytes;
+  int filestore_op_threads;
   
   // ebofs
   bool  ebofs;
@@ -358,6 +365,8 @@ struct md_config_t {
   bool journal_block_align;
   int journal_max_write_bytes;
   int journal_max_write_entries;
+  int journal_queue_max_ops;
+  int journal_queue_max_bytes;
 
   // block device
   bool  bdev_lock;

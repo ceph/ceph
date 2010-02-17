@@ -21,9 +21,10 @@
 
 class Finisher {
   Mutex          finisher_lock;
-  Cond           finisher_cond;
-  bool           finisher_stop;
+  Cond           finisher_cond, finisher_empty_cond;
+  bool           finisher_stop, finisher_running;
   vector<Context*> finisher_queue;
+  list<pair<Context*,int> > finisher_queue_rval;
   
   void *finisher_thread_entry();
 
@@ -34,9 +35,13 @@ class Finisher {
   } finisher_thread;
 
  public:
-  void queue(Context *c) {
+  void queue(Context *c, int r = 0) {
     finisher_lock.Lock();
-    finisher_queue.push_back(c);
+    if (r) {
+      finisher_queue_rval.push_back(pair<Context*, int>(c, r));
+      finisher_queue.push_back(NULL);
+    } else
+      finisher_queue.push_back(c);
     finisher_cond.Signal();
     finisher_lock.Unlock();
   }
@@ -58,7 +63,10 @@ class Finisher {
   void start();
   void stop();
 
-  Finisher() : finisher_lock("Finisher::finisher_lock"), finisher_stop(false), finisher_thread(this) {}
+  void wait_for_empty();
+
+  Finisher() : finisher_lock("Finisher::finisher_lock"),
+	       finisher_stop(false), finisher_running(false), finisher_thread(this) {}
 };
 
 #endif

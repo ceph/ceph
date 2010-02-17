@@ -179,9 +179,9 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
     utime_t start = g_clock.now();
     object_t oid("disk_bw_test");
     for (int i=0; i<1000; i++) {
-      ObjectStore::Transaction t;
-      t.write(meta_coll, sobject_t(oid, 0), i*bl.length(), bl.length(), bl);
-      store->apply_transaction(t);
+      ObjectStore::Transaction *t = new ObjectStore::Transaction;
+      t->write(meta_coll, sobject_t(oid, 0), i*bl.length(), bl.length(), bl);
+      store->queue_transaction(t);
     }
     store->sync();
     utime_t end = g_clock.now();
@@ -620,6 +620,11 @@ int OSD::shutdown()
     p->second->on_shutdown();
     p->second->unlock();
   }
+
+  osd_lock.Unlock();
+  store->sync();
+  store->flush();
+  osd_lock.Lock();
 
   // zap waiters (bleh, this is messy)
   finished_lock.Lock();
@@ -2013,6 +2018,11 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   recovery_tp.pause();
   disk_tp.pause_new();   // _process() may be waiting for a replica message
+  
+  osd_lock.Unlock();
+  store->flush();
+  osd_lock.Lock();
+
   map_lock.get_write();
 
   assert(osd_lock.is_locked());
@@ -2037,15 +2047,10 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
 
     dout(10) << "handle_osd_map got full map epoch " << p->first << dendl;
-    ObjectStore::Transaction ft;
-    ft.write(meta_coll, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
-    int r = store->apply_transaction(ft);
-    if (r) {
-      char buf[80];
-      dout(0) << "error writing map: " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
-      shutdown();
-      return;
-    }
+    ObjectStore::Transaction *ft = new ObjectStore::Transaction;
+    ft->write(meta_coll, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
+    int r = store->queue_transaction(ft);
+    assert(r == 0);
 
     if (p->first > superblock.newest_map)
       superblock.newest_map = p->first;
@@ -2069,15 +2074,10 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
 
     dout(10) << "handle_osd_map got incremental map epoch " << p->first << dendl;
-    ObjectStore::Transaction ft;
-    ft.write(meta_coll, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
-    int r = store->apply_transaction(ft);
-    if (r) {
-      char buf[80];
-      dout(0) << "error writing map: " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
-      shutdown();
-      return;
-    }
+    ObjectStore::Transaction *ft = new ObjectStore::Transaction;
+    ft->write(meta_coll, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
+    int r = store->queue_transaction(ft);
+    assert(r == 0);
 
     if (p->first > superblock.newest_map)
       superblock.newest_map = p->first;
@@ -2087,6 +2087,9 @@ void OSD::handle_osd_map(MOSDMap *m)
 
     logger->inc(l_osd_mapi);
   }
+
+  // flush new maps (so they are readable)
+  store->flush();
 
   // advance if we can
   bool advanced = false;
@@ -2120,12 +2123,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       ObjectStore::Transaction ft;
       ft.write(meta_coll, get_osdmap_pobject_name(cur+1), 0, bl.length(), bl);
       int r = store->apply_transaction(ft);
-      if (r) {
-	char buf[80];
-	dout(0) << "error writing map: " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
-	shutdown();
-	return;
-      }
+      assert(r == 0);
 
       // notify messenger
       for (map<int32_t,uint8_t>::iterator i = inc.new_down.begin();
@@ -2247,6 +2245,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   write_superblock(t);
   int r = store->apply_transaction(t, fin);
   if (r) {
+    map_lock.put_write();
     char buf[80];
     dout(0) << "error writing map: " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
     shutdown();
@@ -2783,21 +2782,21 @@ void OSD::kick_pg_split_queue()
     // FIXME: this should be done in a separate thread, eventually
 
     // create and lock children
-    ObjectStore::Transaction t;
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
     C_Contexts *fin = new C_Contexts;
     map<pg_t,PG*> children;
     for (set<pg_t>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 q++) {
-      PG *pg = _create_lock_new_pg(*q, creating_pgs[*q].acting, t);
+      PG *pg = _create_lock_new_pg(*q, creating_pgs[*q].acting, *t);
       children[*q] = pg;
     }
 
     // split
-    split_pg(parent, children, t); 
+    split_pg(parent, children, *t); 
 
     parent->update_stats();
-    parent->write_info(t);
+    parent->write_info(*t);
 
     // unlock parent, children
     parent->unlock();
@@ -2806,17 +2805,17 @@ void OSD::kick_pg_split_queue()
       // fix up pg metadata
       pg->info.last_complete = pg->info.last_update;
 
-      pg->write_info(t);
-      pg->write_log(t);
+      pg->write_info(*t);
+      pg->write_log(*t);
 
       wake_pg_waiters(pg->info.pgid);
 
-      pg->peer(t, fin->contexts, query_map, &info_map);
+      pg->peer(*t, fin->contexts, query_map, &info_map);
       pg->update_stats();
       pg->unlock();
       created++;
     }
-    int tr = store->apply_transaction(t, fin);
+    int tr = store->queue_transaction(t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(tr == 0);
 
     // remove from queue
@@ -2946,7 +2945,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
   map< int, map<pg_t,PG::Query> > query_map;
   map<int, MOSDPGInfo*> info_map;
 
-  ObjectStore::Transaction t;
+  ObjectStore::Transaction *t = new ObjectStore::Transaction;
   C_Contexts *fin = new C_Contexts;
   vector<PG*> to_peer;
 
@@ -3017,7 +3016,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
       if (osdmap->is_up(*p))
 	query_map[*p][pgid] = PG::Query(PG::Query::INFO, history);
     
-    PG *pg = try_create_pg(pgid, t);
+    PG *pg = try_create_pg(pgid, *t);
     if (pg) {
       to_peer.push_back(pg);
       pg->unlock();
@@ -3028,12 +3027,12 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
     PG *pg = *p;
     pg->lock();
     wake_pg_waiters(pg->info.pgid);
-    pg->peer(t, fin->contexts, query_map, &info_map);
+    pg->peer(*t, fin->contexts, query_map, &info_map);
     pg->update_stats();
     pg->unlock();
   }
 
-  int tr = store->apply_transaction(t, fin);
+  int tr = store->queue_transaction(t, new ObjectStore::C_DeleteTransaction(t), fin);
   assert(tr == 0);
 
   do_queries(query_map);
@@ -3111,7 +3110,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
-  ObjectStore::Transaction t;
+  ObjectStore::Transaction *t = new ObjectStore::Transaction;
   C_Contexts *fin = new C_Contexts;
   
   // look for unknown PGs i'm primary for
@@ -3148,7 +3147,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	if (creating_pgs.count(pgid)) {
 	  creating_pgs[pgid].prior.erase(from);
 
-	  pg = try_create_pg(pgid, t);
+	  pg = try_create_pg(pgid, *t);
 	  if (!pg) 
 	    continue;
 	} else {
@@ -3161,14 +3160,14 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 
       // ok, create PG locally using provided Info and History
       if (!pg) {
-	pg = _create_lock_pg(pgid, t);
+	pg = _create_lock_pg(pgid, *t);
 	pg->acting.swap(acting);
 	pg->up.swap(up);
 	pg->set_role(role);
 	pg->info.history = history;
 	pg->clear_primary_state();  // yep, notably, set hml=false
-	pg->write_info(t);
-	pg->write_log(t);
+	pg->write_info(*t);
+	pg->write_log(*t);
       }
       
       created++;
@@ -3203,13 +3202,13 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	pg->state_clear(PG_STATE_CLEAN);
       }
       
-      pg->peer(t, fin->contexts, query_map, &info_map);
+      pg->peer(*t, fin->contexts, query_map, &info_map);
       pg->update_stats();
     }
     pg->unlock();
   }
   
-  int tr = store->apply_transaction(t, fin);
+  int tr = store->queue_transaction(t, new ObjectStore::C_DeleteTransaction(t), fin);
   assert(tr == 0);
 
   do_queries(query_map);
@@ -3240,7 +3239,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 			   map<int, MOSDPGInfo*>* info_map,
 			   int& created)
 {
-  ObjectStore::Transaction t;
+  ObjectStore::Transaction *t = new ObjectStore::Transaction;
   C_Contexts *fin = new C_Contexts;
 
   PG *pg = 0;
@@ -3258,16 +3257,14 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     // create pg!
     assert(role != 0);
     assert(!info.dne());
-    pg = _create_lock_pg(info.pgid, t);
+    pg = _create_lock_pg(info.pgid, *t);
     dout(10) << " got info on new pg, creating" << dendl;
     pg->acting.swap(acting);
     pg->up.swap(up);
     pg->set_role(role);
     pg->info.history = info.history;
-    pg->write_info(t);
-    pg->write_log(t);
-    int tr = store->apply_transaction(t);
-    assert(tr == 0);
+    pg->write_info(*t);
+    pg->write_log(*t);
     created++;
   } else {
     pg = _lookup_lock_pg(info.pgid);
@@ -3295,11 +3292,11 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     if (pg->peer_log_requested.count(from) ||
 	pg->peer_summary_requested.count(from)) {
       if (!pg->is_active()) {
-	pg->proc_replica_log(t, info, log, missing, from);
+	pg->proc_replica_log(*t, info, log, missing, from);
 	
 	// peer
 	map< int, map<pg_t,PG::Query> > query_map;
-	pg->peer(t, fin->contexts, query_map, info_map);
+	pg->peer(*t, fin->contexts, query_map, info_map);
 	pg->update_stats();
 	do_queries(query_map);
       } else {
@@ -3312,18 +3309,18 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     if (!pg->info.dne()) {
       // i am REPLICA
       if (!pg->is_active()) {
-	pg->merge_log(t, info, log, missing, from);
-	pg->activate(t, fin->contexts, info_map);
+	pg->merge_log(*t, info, log, missing, from);
+	pg->activate(*t, fin->contexts, info_map);
       } else {
 	// just update our stats
 	dout(10) << *pg << " writing updated stats" << dendl;
 	pg->info.stats = info.stats;
-	pg->write_info(t);
+	pg->write_info(*t);
       }
     }
   }
 
-  int tr = store->apply_transaction(t, fin);
+  int tr = store->queue_transaction(t, new ObjectStore::C_DeleteTransaction(t), fin);
   assert(tr == 0);
 
   pg->unlock();
@@ -3399,10 +3396,10 @@ void OSD::handle_pg_trim(MOSDPGTrim *m)
       }
     } else {
       // primary is instructing us to trim
-      ObjectStore::Transaction t;
-      pg->trim(t, m->trim_to);
-      pg->write_info(t);
-      int tr = store->apply_transaction(t);
+      ObjectStore::Transaction *t = new ObjectStore::Transaction;
+      pg->trim(*t, m->trim_to);
+      pg->write_info(*t);
+      int tr = store->queue_transaction(t, new ObjectStore::C_DeleteTransaction(t));
       assert(tr == 0);
     }
     pg->unlock();
@@ -3466,15 +3463,15 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 	continue;
       }
 
-      ObjectStore::Transaction t;
-      pg = _create_lock_pg(pgid, t);
+      ObjectStore::Transaction *t = new ObjectStore::Transaction;
+      pg = _create_lock_pg(pgid, *t);
       pg->acting.swap( acting );
       pg->up.swap( up );
       pg->set_role(role);
       pg->info.history = history;
-      pg->write_info(t);
-      pg->write_log(t);
-      int tr = store->apply_transaction(t);
+      pg->write_info(*t);
+      pg->write_log(*t);
+      int tr = store->queue_transaction(t);
       assert(tr == 0);
       created++;
 
@@ -3608,14 +3605,16 @@ void OSD::_remove_pg(PG *pg)
   pg->log.zero();
 
   {
-    ObjectStore::Transaction t;
-    pg->write_info(t);
-    t.remove(meta_coll, pg->log_oid);
-    int tr = store->apply_transaction(t);
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    pg->write_info(*t);
+    t->remove(meta_coll, pg->log_oid);
+    int tr = store->queue_transaction(t);
     assert(tr == 0);
   }
 
   int n = 0;
+
+  ObjectStore::Transaction *rmt = new ObjectStore::Transaction;
 
   // snap collections
   for (set<snapid_t>::iterator p = pg->snap_collections.begin();
@@ -3627,10 +3626,10 @@ void OSD::_remove_pg(PG *pg)
     for (vector<sobject_t>::iterator q = olist.begin();
 	 q != olist.end();
 	 q++) {
-      ObjectStore::Transaction t;
-      t.remove(coll_t::build_snap_pg_coll(pgid, *p), *q);
-      t.remove(coll_t::build_pg_coll(pgid), *q);          // we may hit this twice, but it's harmless
-      int tr = store->apply_transaction(t);
+      ObjectStore::Transaction *t = new ObjectStore::Transaction;
+      t->remove(coll_t::build_snap_pg_coll(pgid, *p), *q);
+      t->remove(coll_t::build_pg_coll(pgid), *q);          // we may hit this twice, but it's harmless
+      int tr = store->queue_transaction(t);
       assert(tr == 0);
 
       if ((++n & 0xff) == 0) {
@@ -3643,10 +3642,7 @@ void OSD::_remove_pg(PG *pg)
 	}
       }
     }
-    ObjectStore::Transaction t;
-    t.remove_collection(coll_t::build_snap_pg_coll(pgid, *p));
-    int tr = store->apply_transaction(t);
-    assert(tr == 0);
+    rmt->remove_collection(coll_t::build_snap_pg_coll(pgid, *p));
   }
 
   // (what remains of the) main collection
@@ -3656,9 +3652,9 @@ void OSD::_remove_pg(PG *pg)
   for (vector<sobject_t>::iterator p = olist.begin();
        p != olist.end();
        p++) {
-    ObjectStore::Transaction t;
-    t.remove(coll_t::build_pg_coll(pgid), *p);
-    int tr = store->apply_transaction(t);
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    t->remove(coll_t::build_pg_coll(pgid), *p);
+    int tr = store->queue_transaction(t);
     assert(tr == 0);
 
     if ((++n & 0xff) == 0) {
@@ -3673,6 +3669,10 @@ void OSD::_remove_pg(PG *pg)
   }
 
   pg->unlock();
+
+  dout(10) << "_remove_pg " << pgid << " flushing store" << dendl;
+  store->flush();
+  
   dout(10) << "_remove_pg " << pgid << " taking osd_lock" << dendl;
   osd_lock.Lock();
   pg->lock();
@@ -3686,9 +3686,8 @@ void OSD::_remove_pg(PG *pg)
   dout(10) << "_remove_pg " << pgid << " removing final" << dendl;
 
   {
-    ObjectStore::Transaction t;
-    t.remove_collection(coll_t::build_pg_coll(pgid));
-    int tr = store->apply_transaction(t);
+    rmt->remove_collection(coll_t::build_pg_coll(pgid));
+    int tr = store->queue_transaction(rmt);
     assert(tr == 0);
   }
   
@@ -3784,15 +3783,15 @@ void OSD::generate_backlog(PG *pg)
     dout(10) << *pg << "  generated backlog, peering" << dendl;
 
     map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
-    ObjectStore::Transaction t;
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
     C_Contexts *fin = new C_Contexts;
-    pg->peer(t, fin->contexts, query_map, NULL);
+    pg->peer(*t, fin->contexts, query_map, NULL);
     do_queries(query_map);
     if (pg->dirty_info)
-      pg->write_info(t);
+      pg->write_info(*t);
     if (pg->dirty_log)
-      pg->write_log(t);
-    int tr = store->apply_transaction(t, fin);
+      pg->write_log(*t);
+    int tr = store->queue_transaction(t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(tr == 0);
   }
 
@@ -3836,10 +3835,10 @@ void OSD::activate_pg(pg_t pgid, utime_t activate_at)
 	pg->is_replay() &&
 	pg->get_role() == 0 &&
 	pg->replay_until == activate_at) {
-      ObjectStore::Transaction t;
+      ObjectStore::Transaction *t = new ObjectStore::Transaction;
       C_Contexts *fin = new C_Contexts;
-      pg->activate(t, fin->contexts);
-      int tr = store->apply_transaction(t, fin);
+      pg->activate(*t, fin->contexts);
+      int tr = store->queue_transaction(t, new ObjectStore::C_DeleteTransaction(t), fin);
       assert(tr == 0);
     }
     pg->unlock();

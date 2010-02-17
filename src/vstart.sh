@@ -248,6 +248,8 @@ EOF
 	pid file = out/\$name.pid
 $CMDSDEBUG
 [osd]
+	filestore journal writeahead = 1
+	filestore journal parallel = 0
 $COSDDEBUG
 [mon]
 $CMONDEBUG

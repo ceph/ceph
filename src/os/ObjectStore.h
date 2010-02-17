@@ -420,8 +420,26 @@ public:
     }
   };
 
+  struct C_DeleteTransaction : public Context {
+    ObjectStore::Transaction *t;
+    C_DeleteTransaction(ObjectStore::Transaction *tt) : t(tt) {}
+    void finish(int r) {
+      delete t;
+    }
+  };
+
+
   virtual unsigned apply_transaction(Transaction& t, Context *onjournal=0, Context *ondisk=0) = 0;
   virtual unsigned apply_transactions(list<Transaction*>& tls, Context *onjournal=0, Context *ondisk=0) = 0;
+
+  virtual int queue_transaction(Transaction* t) = 0;
+  virtual int queue_transaction(Transaction *t, Context *onreadable, Context *onjournal=0, Context *ondisk=0) {
+    list<Transaction*> tls;
+    tls.push_back(t);
+    return queue_transactions(tls, onreadable, onjournal, ondisk);
+  }
+  virtual int queue_transactions(list<Transaction*>& tls, Context *onreadable,
+				 Context *onjournal=0, Context *ondisk=0) = 0;
 
 
 
@@ -506,6 +524,8 @@ public:
 
   virtual void sync(Context *onsync) {}
   virtual void sync() {}
+  virtual void flush() {}
+  virtual void sync_and_flush() {}
     
   virtual void _fake_writes(bool b) {};
   virtual void _get_frag_stat(FragmentationStat& st) {};

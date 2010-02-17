@@ -31,8 +31,10 @@ class ThreadPool {
     _WorkQueue(string n) : name(n) {}
     virtual ~_WorkQueue() {}
     virtual void _clear() = 0;
+    virtual bool _empty() = 0;
     virtual void *_void_dequeue() = 0;
     virtual void _void_process(void *) = 0;
+    virtual void _void_process_finish(void *) = 0;
   };  
 
 public:
@@ -44,13 +46,16 @@ public:
     virtual void _dequeue(T *) = 0;
     virtual T *_dequeue() = 0;
     virtual void _process(T *) = 0;
-    virtual void _clear() = 0;
+    virtual void _process_finish(T *) {}
     
     void *_void_dequeue() {
       return (void *)_dequeue();
     }
     void _void_process(void *p) {
       _process((T *)p);
+    }
+    void _void_process_finish(void *p) {
+      _process_finish((T *)p);
     }
 
   public:
@@ -87,6 +92,9 @@ public:
     }
     void _kick() {
       pool->_kick();
+    }
+    void drain() {
+      pool->drain(this);
     }
 
   };
@@ -163,13 +171,16 @@ public:
   void unlock() {
     _lock.Unlock();
   }
+  void wait(Cond &c) {
+    c.Wait(_lock);
+  }
 
   void start();
   void stop(bool clear_after=true);
   void pause();
   void pause_new();
   void unpause();
-  void drain();
+  void drain(_WorkQueue *wq = 0);
 };
 
 

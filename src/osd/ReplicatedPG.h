@@ -95,7 +95,6 @@ public:
     }
     state_t state;
     int num_wr;
-    entity_inst_t client;
     list<Message*> waiting;
     bool wake;
 
@@ -107,17 +106,50 @@ public:
 	state = IDLE;
     }
 
+    bool want_delayed() {
+      check_mode();
+      switch (state) {
+      case IDLE:
+	state = DELAYED;
+      case DELAYED:
+	return true;
+      case RMW:
+	state = RMW_FLUSHING;
+	return true;
+      case DELAYED_FLUSHING:
+      case RMW_FLUSHING:
+	return false;
+      default:
+	assert(0);
+      }
+    }
+    bool want_rmw() {
+      check_mode();
+      switch (state) {
+      case IDLE:
+	state = RMW;
+	return true;
+      case DELAYED:
+	state = DELAYED_FLUSHING;
+	return false;
+      case RMW:
+	state = RMW_FLUSHING;
+	return false;
+      case DELAYED_FLUSHING:
+      case RMW_FLUSHING:
+	return false;
+      default:
+	assert(0);
+      }
+    }
+
     bool try_read(entity_inst_t& c) {
       check_mode();
       switch (state) {
       case IDLE:
       case DELAYED:
-	return true;
       case RMW:
-	if (c == client)
-	  return true;
-	state = RMW_FLUSHING;
-	return false;
+	return true;
       case DELAYED_FLUSHING:
       case RMW_FLUSHING:
 	return false;
@@ -129,13 +161,9 @@ public:
       check_mode();
       switch (state) {
       case IDLE:
-	state = DELAYED;
+	state = RMW;  /* default to RMW; it's a better all around policy */
       case DELAYED:
-	return true;
       case RMW:
-	if (c == client)
-	  return true;
-	state = RMW_FLUSHING;
 	return true;
       case DELAYED_FLUSHING:
       case RMW_FLUSHING:
@@ -149,16 +177,12 @@ public:
       switch (state) {
       case IDLE:
 	state = RMW;
-	client = c;
 	return true;
       case DELAYED:
 	state = DELAYED_FLUSHING;
 	return false;
       case RMW:
-	if (c == client)
-	  return true;
-	state = RMW_FLUSHING;
-	return false;
+	return true;
       case DELAYED_FLUSHING:
       case RMW_FLUSHING:
 	return false;
@@ -174,17 +198,19 @@ public:
       return state == RMW || state == RMW_FLUSHING;
     }
 
-    void start_write() {
+    void write_start() {
       num_wr++;
       assert(state == DELAYED || state == RMW);
     }
-    void finish_write() {
+    void write_applied() {
       assert(num_wr > 0);
       --num_wr;
       if (num_wr == 0) {
 	state = IDLE;
 	wake = true;
       }
+    }
+    void write_commit() {
     }
   };
 
@@ -200,10 +226,52 @@ public:
     bool registered; 
     ObjectState obs;
 
+    Mutex lock;
+    Cond cond;
+    int unstable_writes, readers, writers_waiting, readers_waiting;
+
     ObjectContext(const sobject_t& s) :
-      ref(0), registered(false), obs(s) {}
+      ref(0), registered(false), obs(s),
+      lock("ReplicatedPG::ObjectContext::lock"),
+      unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0) {}
 
     void get() { ++ref; }
+
+    // do simple synchronous mutual exclusion, for now.  now waitqueues or anything fancy.
+    void ondisk_write_lock() {
+      lock.Lock();
+      writers_waiting++;
+      while (readers_waiting || readers)
+	cond.Wait(lock);
+      writers_waiting--;
+      unstable_writes++;
+      lock.Unlock();
+    }
+    void ondisk_write_unlock() {
+      lock.Lock();
+      assert(unstable_writes > 0);
+      unstable_writes--;
+      if (!unstable_writes && readers_waiting)
+	cond.Signal();
+      lock.Unlock();
+    }
+    void ondisk_read_lock() {
+      lock.Lock();
+      readers_waiting++;
+      while (unstable_writes)
+	cond.Wait(lock);
+      readers_waiting--;
+      readers++;
+      lock.Unlock();
+    }
+    void ondisk_read_unlock() {
+      lock.Lock();
+      assert(readers > 0);
+      readers--;
+      if (!readers && writers_waiting)
+	cond.Signal();
+      lock.Unlock();
+    }
   };
 
 
@@ -255,16 +323,20 @@ public:
     tid_t rep_tid;
     bool noop;
 
-    bool applied, aborted;
+    bool applying, applied, aborted;
 
     set<int>  waitfor_ack;
-    set<int>  waitfor_nvram;
+    //set<int>  waitfor_nvram;
     set<int>  waitfor_disk;
-    bool sent_ack, sent_nvram, sent_disk;
+    bool sent_ack;
+    //bool sent_nvram;
+    bool sent_disk;
     
     utime_t   start;
     
     eversion_t          pg_local_last_complete;
+
+    list<ObjectStore::Transaction*> tls;
     
     RepGather(OpContext *c, ObjectContext *pi, bool noop_, tid_t rt, 
 	      eversion_t lc) :
@@ -273,27 +345,31 @@ public:
       ctx(c), obc(pi),
       rep_tid(rt), 
       noop(noop_),
-      applied(false), aborted(false),
-      sent_ack(false), sent_nvram(false), sent_disk(false),
+      applying(false), applied(false), aborted(false),
+      sent_ack(false),
+      //sent_nvram(false),
+      sent_disk(false),
       pg_local_last_complete(lc) { }
 
     bool can_send_ack() { 
       return
-	!sent_ack && !sent_nvram && !sent_disk &&
+	!sent_ack && /*!sent_nvram && */!sent_disk &&
 	waitfor_ack.empty(); 
     }
+    /*
     bool can_send_nvram() { 
       return
 	!sent_nvram && !sent_disk &&
 	waitfor_ack.empty() && waitfor_disk.empty(); 
     }
+    */
     bool can_send_disk() { 
       return
 	!sent_disk &&
-	waitfor_ack.empty() && waitfor_nvram.empty() && waitfor_disk.empty(); 
+	waitfor_disk.empty(); 
     }
     bool can_delete() { 
-      return waitfor_ack.empty() && waitfor_nvram.empty() && waitfor_disk.empty(); 
+      return waitfor_ack.empty() && /*waitfor_nvram.empty() &&*/ waitfor_disk.empty(); 
     }
 
     void get() {
@@ -323,6 +399,8 @@ protected:
   map<tid_t, RepGather*> repop_map;
 
   void apply_repop(RepGather *repop);
+  void op_applied(RepGather *repop);
+  void op_commit(RepGather *repop);
   void eval_repop(RepGather*);
   void issue_repop(RepGather *repop, int dest, utime_t now,
 		   bool old_exists, __u64 old_size, eversion_t old_version);
@@ -331,11 +409,21 @@ protected:
                  int result, int ack_type,
                  int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
 
+  friend class C_OSD_OpCommit;
+  friend class C_OSD_OpApplied;
 
   // projected object info
   map<sobject_t, ObjectContext*> object_contexts;
   map<object_t, SnapSetContext*> snapset_contexts;
 
+  ObjectContext *lookup_object_context(const sobject_t& soid) {
+    if (object_contexts.count(soid)) {
+      ObjectContext *obc = object_contexts[soid];
+      obc->ref++;
+      return obc;
+    }
+    return NULL;
+  }
   ObjectContext *get_object_context(const sobject_t& soid, bool can_create=true);
   void register_object_context(ObjectContext *obc) {
     if (!obc->registered) {
@@ -386,7 +474,6 @@ protected:
 
 
   // low level ops
-  void op_ondisk(RepGather *repop);
 
   void _make_clone(ObjectStore::Transaction& t,
 		   const sobject_t& head, const sobject_t& coid,
@@ -398,9 +485,6 @@ protected:
   int prepare_transaction(OpContext *ctx);
   void log_op(vector<Log::Entry>& log, eversion_t trim_to, ObjectStore::Transaction& t);
   
-  friend class C_OSD_OpCommit;
-  friend class C_OSD_RepModifyCommit;
-
   // pg on-disk content
   void clean_up_local(ObjectStore::Transaction& t);
 
@@ -411,10 +495,51 @@ protected:
   int recover_primary(int max);
   int recover_replicas(int max);
 
+  struct RepModify {
+    ReplicatedPG *pg;
+    MOSDSubOp *op;
+    OpContext *ctx;
+    bool applied, committed;
+    int ackerosd;
+    eversion_t last_complete;
+
+    ObjectStore::Transaction opt, localt;
+    list<ObjectStore::Transaction*> tls;
+    
+    RepModify() : pg(NULL), op(NULL), ctx(NULL), applied(false), committed(false), ackerosd(-1) {}
+  };
+
+  struct C_OSD_RepModifyApply : public Context {
+    RepModify *rm;
+    C_OSD_RepModifyApply(RepModify *r) : rm(r) { }
+    void finish(int r) {
+      rm->pg->sub_op_modify_applied(rm);
+    }
+  };
+  struct C_OSD_RepModifyCommit : public Context {
+    RepModify *rm;
+    C_OSD_RepModifyCommit(RepModify *r) : rm(r) { }
+    void finish(int r) {
+      rm->pg->sub_op_modify_commit(rm);
+    }
+  };
+  struct C_OSD_WrotePushedObject : public Context {
+    ReplicatedPG *pg;
+    ObjectStore::Transaction *t;
+    ObjectContext *obc;
+    C_OSD_WrotePushedObject(ReplicatedPG *p, ObjectStore::Transaction *tt, ObjectContext *o) :
+      pg(p), t(tt), obc(o) {}
+    void finish(int r) {
+      pg->_wrote_pushed_object(t, obc);
+    }
+  };
+
   void sub_op_modify(MOSDSubOp *op);
-  void sub_op_modify_ondisk(MOSDSubOp *op, int ackerosd, eversion_t last_complete);
+  void sub_op_modify_applied(RepModify *rm);
+  void sub_op_modify_commit(RepModify *rm);
 
   void sub_op_modify_reply(MOSDSubOpReply *reply);
+  void _wrote_pushed_object(ObjectStore::Transaction *t, ObjectContext *obc);
   void sub_op_push(MOSDSubOp *op);
   void sub_op_push_reply(MOSDSubOpReply *reply);
   void sub_op_pull(MOSDSubOp *op);
@@ -476,7 +601,10 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::ObjectContext& obc)
 
 inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
 {
-  out << "repgather(" << &repop << " rep_tid=" << repop.rep_tid 
+  out << "repgather(" << &repop
+      << (repop.applying ? " applying" : "")
+      << (repop.applied ? " applied" : "")
+      << " rep_tid=" << repop.rep_tid 
       << " wfack=" << repop.waitfor_ack
     //<< " wfnvram=" << repop.waitfor_nvram
       << " wfdisk=" << repop.waitfor_disk;
