@@ -49,7 +49,7 @@ public:
   }
 
   // modifiers
-  void add(EntityName& name, EntityAuth &a) {
+  void add(const EntityName& name, EntityAuth &a) {
     keys[name] = a;
   }
   void set_caps(EntityName& name, map<string, bufferlist>& caps) {

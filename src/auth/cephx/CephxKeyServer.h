@@ -17,6 +17,7 @@
 
 #include "config.h"
 
+#include "auth/KeyRing.h"
 #include "CephxProtocol.h"
 
 #include "common/Timer.h"
@@ -233,6 +234,13 @@ public:
   void clone_to(KeyServerData& dst) {
     Mutex::Locker l(lock);
     dst = data;
+  }
+  void export_keyring(KeyRing& keyring) {
+    for (map<EntityName, EntityAuth>::iterator p = data.secrets.begin();
+	 p != data.secrets.end();
+	 p++) {
+      keyring.add(p->first, p->second);
+    }
   }
 
   bool updated_rotating(bufferlist& rotating_bl, version_t& rotating_ver);

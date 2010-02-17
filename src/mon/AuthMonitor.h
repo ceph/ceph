@@ -79,6 +79,7 @@ private:
   uint64_t max_global_id;
   uint64_t last_allocated_id;
 
+  void export_keyring(KeyRing& keyring);
   void import_keyring(KeyRing& keyring);
 
   void push_cephx_inc(KeyServerData::Incremental& auth_inc) {

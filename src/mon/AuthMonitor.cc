@@ -465,15 +465,50 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
         m->cmd[1] == "list") {
       return false;
     }
+    else if (m->cmd[1] == "export") {
+      KeyRing keyring;
+      export_keyring(keyring);
+      if (m->cmd.size() > 2) {
+	EntityName ename;
+	EntityAuth eauth;
+	if (ename.from_str(m->cmd[2])) {
+	  if (keyring.get_auth(ename, eauth)) {
+	    KeyRing kr;
+	    kr.add(ename, eauth);
+	    ::encode(kr, rdata);
+	    ss << "export " << eauth;
+	    r = 0;
+	  } else {
+	    ss << "no key for " << eauth;
+	    r = -ENOENT;
+	  }
+	} else {
+	  ss << "invalid entity_auth " << m->cmd[2];
+	  r = -EINVAL;
+	}
+      } else {
+	::encode(keyring, rdata);
+	ss << "exported master keyring";
+	r = 0;
+      }
+    } else {
+      auth_usage(ss);
+      r = -EINVAL;
+    }
+  } else {
+    auth_usage(ss);
+    r = -EINVAL;
   }
-
-  auth_usage(ss);
-  r = -EINVAL;
 
   string rs;
   getline(ss, rs, '\0');
   mon->reply_command(m, r, rs, rdata, paxos->get_version());
   return true;
+}
+
+void AuthMonitor::export_keyring(KeyRing& keyring)
+{
+  mon->key_server.export_keyring(keyring);
 }
 
 void AuthMonitor::import_keyring(KeyRing& keyring)
