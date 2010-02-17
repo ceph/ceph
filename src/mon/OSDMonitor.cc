@@ -1036,7 +1036,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     }
-    else if (m->cmd[1] == "setmap" && m->cmd.size() == 3) {
+    /*else if (m->cmd[1] == "setmap" && m->cmd.size() == 3) {
       OSDMap map;
       map.decode(m->get_data());
       epoch_t e = atoi(m->cmd[2].c_str());
@@ -1053,6 +1053,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  ss << "osdmap fsid " << map.fsid << " does not match monitor fsid " << mon->monmap->fsid;
       err = -EINVAL;
     }
+    */
     else if (m->cmd[1] == "setmaxosd" && m->cmd.size() > 2) {
       pending_inc.new_max_osd = atoi(m->cmd[2].c_str());
       ss << "set new max_osd = " << pending_inc.new_max_osd;

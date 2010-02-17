@@ -54,8 +54,6 @@ v0.20
 
 
 bugs
-- './ceph osd setmap foo -i foo' will clobber old pools.
-
 - dbench 1, restart mds (may take a few times), dbench will error out.
 
 - rm -r failure (on kernel tree)
