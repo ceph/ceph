@@ -1,3 +1,20 @@
+ceph (0.19-1) unstable; urgency=low
+
+  * msgr: simplification, cleanup, fixes
+  * msgr: tids in message header (protocol change)
+  * msgr: feature bits during handshake
+  * disk format, compat/incompat features for disk format
+  * struct versioning throughout, to ease future disk format changes
+  * truncation fixes
+  * cephx: lots of fixes, mkcephfs support
+  * debian: packaging fixes
+  * rados: pool deletion
+  * osd: recovery fixes
+  * misc protocol changes
+  * misc bug fixes
+
+ -- Sage Weil <sage@newdream.net>  Wed, 17 Feb 2009 13:50:00 -0800
+
 ceph (0.18-1) unstable; urgency=low
 
   * crush: selectable hash functions
