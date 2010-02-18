@@ -125,10 +125,10 @@ void ThreadPool::drain(_WorkQueue *wq)
 {
   dout(10) << "drain" << dendl;
   _lock.Lock();
-  _draining = true;
+  _draining++;
   while (processing || (wq != NULL && !wq->_empty()))
     _wait_cond.Wait(_lock);
-  _draining = false;
+  _draining--;
   _lock.Unlock();
 }
 

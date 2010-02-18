@@ -23,7 +23,8 @@ class ThreadPool {
   string name;
   Mutex _lock;
   Cond _cond;
-  bool _stop, _pause, _draining;
+  bool _stop, _pause;
+  int _draining;
   Cond _wait_cond;
 
   struct _WorkQueue {
@@ -124,7 +125,8 @@ public:
     name(nm),
     _lock((new string(name + "::lock"))->c_str()),  // deliberately leak this
     _stop(false),
-    _pause(false), _draining(false),
+    _pause(false),
+    _draining(0),
     last_work_queue(0),
     processing(0) {
     set_num_threads(n);
