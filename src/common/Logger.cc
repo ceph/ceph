@@ -134,9 +134,10 @@ void Logger::_open_log()
 
   filename = "";
   if (g_conf.chdir && g_conf.chdir[0] && g_conf.logger_dir[0] != '/') {
-    char cwd[200];
-    getcwd(cwd, 200);
-    filename = cwd;
+    char cwd[PATH_MAX];
+    char *c = getcwd(cwd, sizeof(cwd));
+    assert(c);
+    filename = c;
     filename += "/";
   }
   
