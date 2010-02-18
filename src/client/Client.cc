@@ -1671,6 +1671,7 @@ void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int
 {
   int held = cap->issued | cap->implemented;
   int revoking = cap->implemented & ~cap->issued;
+  retain &= ~revoking;
   int dropping = cap->issued & ~retain;
   int op = CEPH_CAP_OP_UPDATE;
 
