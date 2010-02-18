@@ -1520,7 +1520,7 @@ CDentry* Server::prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dn
  *
  * create a new inode.  set c/m/atime.  hit dir pop.
  */
-CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino,
+CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino, unsigned mode,
 				  ceph_file_layout *layout) 
 {
   CInode *in = new CInode(mdcache);
@@ -1570,8 +1570,23 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino,
   in->inode.truncate_size = -1ull;  // not truncated, yet!
   in->inode.truncate_seq = 1; /* starting with 1, 0 is kept for no-truncation logic */
 
+  CInode *diri = dir->get_inode();
+
+  dout(10) << oct << " dir mode 0" << diri->inode.mode << " new mode 0" << mode << dec << dendl;
+
+  if (diri->inode.mode & S_ISGID) {
+    dout(10) << " dir is sticky" << dendl;
+    in->inode.gid = diri->inode.gid;
+    if (S_ISDIR(mode)) {
+      dout(10) << " new dir also sticky" << dendl;      
+      mode |= S_ISGID;
+    }
+  } else 
+    in->inode.gid = mdr->client_request->get_caller_gid();
+
   in->inode.uid = mdr->client_request->get_caller_uid();
-  in->inode.gid = mdr->client_request->get_caller_gid();
+  in->inode.mode = mode;
+
   in->inode.ctime = in->inode.mtime = in->inode.atime = mdr->now;   // now
 
   mdcache->add_inode(in);  // add
@@ -2157,6 +2172,8 @@ void Server::handle_client_openc(MDRequest *mdr)
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, !excl, false, false);
   if (!dn) return;
+  CInode *diri = dn->get_dir()->get_inode();
+  rdlocks.insert(&diri->authlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
@@ -2178,7 +2195,6 @@ void Server::handle_client_openc(MDRequest *mdr)
 
   // created null dn.
 
-  CInode *diri = dn->get_dir()->get_inode();
     
   // create inode.
   mdr->now = g_clock.real_now();
@@ -2188,13 +2204,13 @@ void Server::handle_client_openc(MDRequest *mdr)
 
   int cmode = ceph_flags_to_mode(req->head.args.open.flags);
 
-  CInode *in = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino), &layout);
+  CInode *in = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
+				 req->head.args.open.mode | S_IFREG, &layout);
   assert(in);
   
   // it's a file.
   dn->push_projected_linkage(in);
 
-  in->inode.mode = req->head.args.open.mode | S_IFREG;
   in->inode.version = dn->pre_dirty();
   if (cmode & CEPH_FILE_MODE_WR) {
     in->inode.client_ranges[client].first = 0;
@@ -2849,19 +2865,21 @@ void Server::handle_client_mknod(MDRequest *mdr)
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false, false);
   if (!dn) return;
+  CInode *diri = dn->get_dir()->get_inode();
+  rdlocks.insert(&diri->authlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
   snapid_t follows = dn->get_dir()->inode->find_snaprealm()->get_newest_seq();
   mdr->now = g_clock.real_now();
 
-  CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino));
+  CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
+				   req->head.args.mknod.mode);
   assert(newi);
 
   dn->push_projected_linkage(newi);
 
   newi->inode.rdev = req->head.args.mknod.rdev;
-  newi->inode.mode = req->head.args.mknod.mode;
   if ((newi->inode.mode & S_IFMT) == 0)
     newi->inode.mode |= S_IFREG;
   newi->inode.version = dn->pre_dirty();
@@ -2895,6 +2913,8 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false, false);
   if (!dn) return;
+  CInode *diri = dn->get_dir()->get_inode();
+  rdlocks.insert(&diri->authlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
@@ -2903,15 +2923,15 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   snapid_t follows = realm->get_newest_seq();
   mdr->now = g_clock.real_now();
 
-  CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino));  
+  unsigned mode = req->head.args.mkdir.mode;
+  mode &= ~S_IFMT;
+  mode |= S_IFDIR;
+  CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino), mode);  
   assert(newi);
 
   // it's a directory.
   dn->push_projected_linkage(newi);
 
-  newi->inode.mode = req->head.args.mkdir.mode;
-  newi->inode.mode &= ~S_IFMT;
-  newi->inode.mode |= S_IFDIR;
   newi->inode.version = dn->pre_dirty();
   newi->inode.rstat.rsubdirs = 1;
 
@@ -2963,21 +2983,21 @@ void Server::handle_client_symlink(MDRequest *mdr)
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false, false);
   if (!dn) return;
+  CInode *diri = dn->get_dir()->get_inode();
+  rdlocks.insert(&diri->authlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
   mdr->now = g_clock.real_now();
   snapid_t follows = dn->get_dir()->inode->find_snaprealm()->get_newest_seq();
 
-  CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino));
+  unsigned mode = S_IFLNK | 0777;
+  CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino), mode);
   assert(newi);
 
   // it's a symlink
   dn->push_projected_linkage(newi);
 
-  newi->inode.mode &= ~S_IFMT;
-  newi->inode.mode |= S_IFLNK;
-  newi->inode.mode |= 0777;     // ?
   newi->symlink = req->get_path2();
   newi->inode.size = newi->symlink.length();
   newi->inode.rstat.rbytes = newi->inode.size;
