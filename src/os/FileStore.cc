@@ -966,102 +966,158 @@ unsigned FileStore::_do_transaction(Transaction& t)
       
     case Transaction::OP_WRITE:
       {
+	coll_t cid = t.get_cid();
+	sobject_t oid = t.get_oid();
 	__u64 off = t.get_length();
 	__u64 len = t.get_length();
-	_write(t.get_cid(), t.get_oid(), off, len, t.get_bl());
+	bufferlist bl;
+	t.get_bl(bl);
+	_write(cid, oid, off, len, bl);
       }
       break;
       
     case Transaction::OP_ZERO:
       {
+	coll_t cid = t.get_cid();
+	sobject_t oid = t.get_oid();
 	__u64 off = t.get_length();
 	__u64 len = t.get_length();
-	_zero(t.get_cid(), t.get_oid(), off, len);
+	_zero(cid, oid, off, len);
       }
       break;
       
     case Transaction::OP_TRIMCACHE:
       {
+	coll_t cid = t.get_cid();
+	sobject_t oid = t.get_oid();
 	__u64 off = t.get_length();
 	__u64 len = t.get_length();
-	trim_from_cache(t.get_cid(), t.get_oid(), off, len);
+	trim_from_cache(cid, oid, off, len);
       }
       break;
       
     case Transaction::OP_TRUNCATE:
-      _truncate(t.get_cid(), t.get_oid(), t.get_length());
+      {
+	coll_t cid = t.get_cid();
+	sobject_t oid = t.get_oid();
+	__u64 off = t.get_length();
+	_truncate(cid, oid, off);
+      }
       break;
       
     case Transaction::OP_REMOVE:
-      _remove(t.get_cid(), t.get_oid());
+      {
+	coll_t cid = t.get_cid();
+	sobject_t oid = t.get_oid();
+	_remove(cid, oid);
+      }
       break;
       
     case Transaction::OP_SETATTR:
       {
-	bufferlist& bl = t.get_bl();
-	_setattr(t.get_cid(), t.get_oid(), t.get_attrname(), bl.c_str(), bl.length());
+	coll_t cid = t.get_cid();
+	sobject_t oid = t.get_oid();
+	string name = t.get_attrname();
+	bufferlist bl;
+	t.get_bl(bl);
+	_setattr(cid, oid, name.c_str(), bl.c_str(), bl.length());
       }
       break;
       
     case Transaction::OP_SETATTRS:
-      _setattrs(t.get_cid(), t.get_oid(), t.get_attrset());
+      {
+	coll_t cid = t.get_cid();
+	sobject_t oid = t.get_oid();
+	map<nstring, bufferptr> aset;
+	t.get_attrset(aset);
+	_setattrs(cid, oid, aset);
+      }
       break;
 
     case Transaction::OP_RMATTR:
-      _rmattr(t.get_cid(), t.get_oid(), t.get_attrname());
+      {
+	coll_t cid = t.get_cid();
+	sobject_t oid = t.get_oid();
+	string name = t.get_attrname();
+	_rmattr(cid, oid, name.c_str());
+      }
       break;
 
     case Transaction::OP_RMATTRS:
-      _rmattrs(t.get_cid(), t.get_oid());
+      {
+	coll_t cid = t.get_cid();
+	sobject_t oid = t.get_oid();
+	_rmattrs(cid, oid);
+      }
       break;
       
     case Transaction::OP_CLONE:
       {
+	coll_t cid = t.get_cid();
 	const sobject_t& oid = t.get_oid();
 	const sobject_t& noid = t.get_oid();
-	_clone(t.get_cid(), oid, noid);
+	_clone(cid, oid, noid);
       }
       break;
 
     case Transaction::OP_CLONERANGE:
       {
+	coll_t cid = t.get_cid();
 	const sobject_t& oid = t.get_oid();
 	const sobject_t& noid = t.get_oid();
  	__u64 off = t.get_length();
 	__u64 len = t.get_length();
-	_clone_range(t.get_cid(), oid, noid, off, len);
+	_clone_range(cid, oid, noid, off, len);
       }
       break;
 
     case Transaction::OP_MKCOLL:
-      _create_collection(t.get_cid());
+      {
+	coll_t cid = t.get_cid();
+	_create_collection(cid);
+      }
       break;
 
     case Transaction::OP_RMCOLL:
-      _destroy_collection(t.get_cid());
+      {
+	coll_t cid = t.get_cid();
+	_destroy_collection(cid);
+      }
       break;
 
     case Transaction::OP_COLL_ADD:
       {
 	coll_t ocid = t.get_cid();
 	coll_t ncid = t.get_cid();
-	_collection_add(ocid, ncid, t.get_oid());
+	sobject_t oid = t.get_oid();
+	_collection_add(ocid, ncid, oid);
       }
       break;
 
     case Transaction::OP_COLL_REMOVE:
-      _collection_remove(t.get_cid(), t.get_oid());
+       {
+	coll_t cid = t.get_cid();
+	sobject_t oid = t.get_oid();
+	_collection_remove(cid, oid);
+       }
       break;
 
     case Transaction::OP_COLL_SETATTR:
       {
-	bufferlist& bl = t.get_bl();
-	_collection_setattr(t.get_cid(), t.get_attrname(), bl.c_str(), bl.length());
+	coll_t cid = t.get_cid();
+	string name = t.get_attrname();
+	bufferlist bl;
+	t.get_bl(bl);
+	_collection_setattr(cid, name.c_str(), bl.c_str(), bl.length());
       }
       break;
 
     case Transaction::OP_COLL_RMATTR:
-      _collection_rmattr(t.get_cid(), t.get_attrname());
+      {
+	coll_t cid = t.get_cid();
+	string name = t.get_attrname();
+	_collection_rmattr(cid, name.c_str());
+      }
       break;
 
     case Transaction::OP_STARTSYNC:
@@ -1489,6 +1545,7 @@ void FileStore::sync_entry()
 	  // do a full btrfs commit
 	  ::ioctl(op_fd, BTRFS_IOC_SYNC);
 	} else {
+	  dout(15) << "sync_entry doing fsync on " << current_op_seq_fn << dendl;
 	  // make the file system's journal commit.
 	  //  this works with ext3, but NOT ext4
 	  ::fsync(op_fd);  

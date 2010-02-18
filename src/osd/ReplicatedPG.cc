@@ -1786,7 +1786,6 @@ void ReplicatedPG::op_applied(RepGather *repop)
 
   // discard my reference to the buffer
   repop->ctx->op->get_data().clear();
-  repop->ctx->op_t.clear_data();
   
   repop->applying = false;
   repop->applied = true;

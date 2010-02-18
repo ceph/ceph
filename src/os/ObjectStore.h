@@ -106,11 +106,13 @@ public:
     static const int OP_RMATTRS =      28;  // cid, oid
 
   private:
-    /*
-    int len;
-    int blen;  // for btrfs transactions
-    */
-    vector<int8_t> ops;
+    __u64 ops, bytes;
+    bufferlist tbl;
+    bufferlist::iterator p;
+
+    // -- old format --
+    bool old;
+    vector<int8_t> opvec;
     vector<bufferlist> bls;
     vector<sobject_t> oids;
     vector<coll_t> cids;
@@ -125,233 +127,263 @@ public:
     unsigned opp, blp, oidp, cidp, lengthp, attrnamep, attrsetp;
 
   public:
-    /*
-    int get_trans_len() { return len ? len : ops.size(); }
-    int get_btrfs_len() { return blen; }
-    */
-
     __u64 get_num_bytes() {
-      // be conservative!
-      __u64 s = 16384 +
-	(ops.size() + oids.size() + cids.size() + lengths.size()) * 4096;
-      for (vector<bufferlist>::iterator p = bls.begin(); p != bls.end(); p++)
-	s += bls.size() + 4096;
-      return s;
+      if (old) {
+	__u64 s = 16384 +
+	  (opvec.size() + oids.size() + cids.size() + lengths.size()) * 4096;
+	for (vector<bufferlist>::iterator p = bls.begin(); p != bls.end(); p++)
+	  s += bls.size() + 4096;
+	return s;
+      }
+      return bytes;
     }
 
     bool empty() {
-      return ops.empty();
-    }
-    void clear_data() {
-      bls.clear();
+      if (old)
+	return opvec.empty();
+      return !ops;
     }
 
     bool have_op() {
-      return opp < ops.size();
+      if (old)
+	return opp < opvec.size();
+      if (p.get_off() == 0)
+	p = tbl.begin();
+      return !p.end();
     }
-    int get_num_ops() { return ops.size(); }
+    int get_num_ops() {
+      if (old)
+	return opvec.size();
+      return ops;
+    }
     int get_op() {
-      return ops[opp++];
+      if (old)
+	return opvec[opp++];
+      if (p.get_off() == 0)
+	p = tbl.begin();
+      __u32 op;
+      ::decode(op, p);
+      return op;
     }
-    bufferlist &get_bl() {
-      return bls[blp++];
+    void get_bl(bufferlist& bl) {
+      if (old) {
+	bl = bls[blp++];
+	return;
+      }
+      if (p.get_off() == 0)
+	p = tbl.begin();
+      ::decode(bl, p);
     }
     sobject_t get_oid() {
-      return oids[oidp++];
+      if (old)
+	return oids[oidp++];
+      if (p.get_off() == 0)
+	p = tbl.begin();
+      sobject_t soid;
+      ::decode(soid, p);
+      return soid;
     }
     coll_t get_cid() {
-      return cids[cidp++];
+      if (old)
+	return cids[cidp++];
+      if (p.get_off() == 0)
+	p = tbl.begin();
+      coll_t c;
+      ::decode(c, p);
+      return c;
     }
     __u64 get_length() {
-      return lengths[lengthp++];
+      if (old)
+	return lengths[lengthp++];
+      if (p.get_off() == 0)
+	p = tbl.begin();
+      __u64 len;
+      ::decode(len, p);
+      return len;
     }
-    const char *get_attrname() {
-      return attrnames[attrnamep++].c_str();
+    string get_attrname() {
+      if (old)
+	return string(attrnames[attrnamep++].c_str());
+      if (p.get_off() == 0)
+	p = tbl.begin();
+      string s;
+      ::decode(s, p);
+      return s;
     }
-    map<nstring,bufferptr>& get_attrset() {
-      return attrsets[attrsetp++];
+    void get_attrset(map<nstring,bufferptr>& aset) {
+      if (old) {
+	aset = attrsets[attrsetp++];
+	return;
+      }
+      if (p.get_off() == 0)
+	p = tbl.begin();
+      ::decode(aset, p);
     }
 
+    // -----------------------------
+
     void start_sync() {
-      int op = OP_STARTSYNC;
-      ops.push_back(op);
+      __u32 op = OP_STARTSYNC;
+      ::encode(op, tbl);
+      ops++;
     }
     void touch(coll_t cid, const sobject_t& oid) {
-      int op = OP_TOUCH;
-      ops.push_back(op);
-      cids.push_back(cid);
-      oids.push_back(oid);
-      //len++;
-      //blen += 3;
+      __u32 op = OP_TOUCH;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(oid, tbl);
+      ops++;
     }
-    void write(coll_t cid, const sobject_t& oid, __u64 off, size_t len, const bufferlist& bl) {
-      int op = OP_WRITE;
-      ops.push_back(op);
-      cids.push_back(cid);
-      oids.push_back(oid);
-      lengths.push_back(off);
-      lengths.push_back(len);
-      bls.push_back(bl);
-      //len++;
-      //blen += 3 + bl.buffers().size();
+    void write(coll_t cid, const sobject_t& oid, __u64 off, __u64 len, const bufferlist& data) {
+      __u32 op = OP_WRITE;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(oid, tbl);
+      ::encode(off, tbl);
+      ::encode(len, tbl);
+      ::encode(data, tbl);
+      ops++;
     }
-    void zero(coll_t cid, const sobject_t& oid, __u64 off, size_t len) {
-      int op = OP_ZERO;
-      ops.push_back(op);
-      cids.push_back(cid);
-      oids.push_back(oid);
-      lengths.push_back(off);
-      lengths.push_back(len);
-      //len++;
-      //blen += 3 + 1;
+    void zero(coll_t cid, const sobject_t& oid, __u64 off, __u64 len) {
+      __u32 op = OP_ZERO;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(oid, tbl);
+      ::encode(off, tbl);
+      ::encode(len, tbl);
+      ops++;
     }
-    void trim_from_cache(coll_t cid, const sobject_t& oid, __u64 off, size_t len) {
-      int op = OP_TRIMCACHE;
-      ops.push_back(op);
-      cids.push_back(cid);
-      oids.push_back(oid);
-      lengths.push_back(off);
-      lengths.push_back(len);
-      //len++;
+    void trim_from_cache(coll_t cid, const sobject_t& oid, __u64 off, __u64 len) {
+      __u32 op = OP_TRIMCACHE;
+       ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(oid, tbl);
+      ::encode(off, tbl);
+      ::encode(len, tbl);
+      ops++;
     }
     void truncate(coll_t cid, const sobject_t& oid, __u64 off) {
-      int op = OP_TRUNCATE;
-      ops.push_back(op);
-      cids.push_back(cid);
-      oids.push_back(oid);
-      lengths.push_back(off);
-      //len++;
-      //blen++;
+      __u32 op = OP_TRUNCATE;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(oid, tbl);
+      ::encode(off, tbl);
+      ops++;
     }
     void remove(coll_t cid, const sobject_t& oid) {
-      int op = OP_REMOVE;
-      ops.push_back(op);
-      cids.push_back(cid);
-      oids.push_back(oid);
-      //len++;
-      //blen++;
+      __u32 op = OP_REMOVE;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(oid, tbl);
+      ops++;
     }
     void setattr(coll_t cid, const sobject_t& oid, const char* name, const void* val, int len) {
       nstring n(name);
       bufferlist bl;
       bl.append((char*)val, len);
-      setattr(cid, oid, n, bl);
+      setattr(cid, oid, n, tbl);
     }
     void setattr(coll_t cid, const sobject_t& oid, const char* name, bufferlist& val) {
       nstring n(name);
       setattr(cid, oid, n, val);
     }
     void setattr(coll_t cid, const sobject_t& oid, nstring& s, bufferlist& val) {
-      int op = OP_SETATTR;
-      ops.push_back(op);
-      cids.push_back(cid);
-      oids.push_back(oid);
-      attrnames.push_back(nstring());
-      attrnames.back().swap(s);
-      bls.push_back(val);
-      //len++;
-      //blen++;
+      __u32 op = OP_SETATTR;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(oid, tbl);
+      ::encode(s, tbl);
+      ::encode(val, tbl);
+      ops++;
     }
     void setattrs(coll_t cid, const sobject_t& oid, map<nstring,bufferptr>& attrset) {
-      map<nstring,bufferptr> empty;
-      int op = OP_SETATTRS;
-      ops.push_back(op);
-      cids.push_back(cid);
-      oids.push_back(oid);
-      attrsets.push_back(empty);
-      attrsets.back().swap(attrset);
-      //len++;
-      //blen += 5 + attrset.size();     // HACK allowance for removing old attrs
+      __u32 op = OP_SETATTRS;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(oid, tbl);
+      ::encode(attrset, tbl);
+      ops++;
     }
     void rmattr(coll_t cid, const sobject_t& oid, const char *name) {
       nstring n(name);
       rmattr(cid, oid, n);
     }
     void rmattr(coll_t cid, const sobject_t& oid, nstring& s) {
-      int op = OP_RMATTR;
-      ops.push_back(op);
-      cids.push_back(cid);
-      oids.push_back(oid);
-      attrnames.push_back(nstring());
-      attrnames.back().swap(s);
-      //len++;
-      //blen++;
+      __u32 op = OP_RMATTR;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(oid, tbl);
+      ::encode(s, tbl);
+      ops++;
     }
     void rmattrs(coll_t cid, const sobject_t& oid) {
-      int op = OP_RMATTRS;
-      ops.push_back(op);
-      cids.push_back(cid);
-      oids.push_back(oid);
+      __u32 op = OP_RMATTR;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(oid, tbl);
+      ops++;
     }
     void clone(coll_t cid, const sobject_t& oid, sobject_t noid) {
-      int op = OP_CLONE;
-      ops.push_back(op);
-      cids.push_back(cid);
-      oids.push_back(oid);
-      oids.push_back(noid);
-      //len++;
-      //blen += 5;
+      __u32 op = OP_CLONE;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(oid, tbl);
+      ::encode(noid, tbl);
+      ops++;
     }
     void clone_range(coll_t cid, const sobject_t& oid, sobject_t noid, __u64 off, __u64 len) {
-      int op = OP_CLONERANGE;
-      ops.push_back(op);
-      cids.push_back(cid);
-      oids.push_back(oid);
-      oids.push_back(noid);
-      lengths.push_back(off);
-      lengths.push_back(len);
-      //len++;
-      //blen += 5;
+      __u32 op = OP_CLONE;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(oid, tbl);
+      ::encode(noid, tbl);
+      ::encode(off, tbl);
+      ::encode(len, tbl);
+      ops++;
     }
     void create_collection(coll_t cid) {
-      int op = OP_MKCOLL;
-      ops.push_back(op);
-      cids.push_back(cid);
-      //len++;
-      //blen++;
+      __u32 op = OP_MKCOLL;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ops++;
     }
     void remove_collection(coll_t cid) {
-      int op = OP_RMCOLL;
-      ops.push_back(op);
-      cids.push_back(cid);
-      //len++;
-      //blen++;
+      __u32 op = OP_RMCOLL;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ops++;
     }
     void collection_add(coll_t cid, coll_t ocid, const sobject_t& oid) {
-      int op = OP_COLL_ADD;
-      ops.push_back(op);
-      cids.push_back(cid);
-      cids.push_back(ocid);
-      oids.push_back(oid);
-      //len++;
-      //blen++;
+      __u32 op = OP_COLL_ADD;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(ocid, tbl);
+      ::encode(oid, tbl);
+      ops++;
     }
     void collection_remove(coll_t cid, const sobject_t& oid) {
-      int op = OP_COLL_REMOVE;
-      ops.push_back(op);
-      cids.push_back(cid);
-      oids.push_back(oid);
-      //len++;
-      //blen++;
-   }
+      __u32 op = OP_COLL_REMOVE;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(oid, tbl);
+      ops++;
+    }
     void collection_setattr(coll_t cid, const char* name, const void* val, int len) {
       bufferlist bl;
       bl.append((char*)val, len);
-      collection_setattr(cid, name, bl);
+      collection_setattr(cid, name, tbl);
     }
     void collection_setattr(coll_t cid, const char* name, bufferlist& val) {
       nstring n(name);
       collection_setattr(cid, n, val);
     }
     void collection_setattr(coll_t cid, nstring& name, bufferlist& val) {
-      int op = OP_COLL_SETATTR;
-      ops.push_back(op);
-      cids.push_back(cid);
-      attrnames.push_back(nstring());
-      attrnames.back().swap(name);
-      bls.push_back(val);
-      //len++;
-      //blen++;
+      __u32 op = OP_COLL_SETATTR;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(name, tbl);
+      ::encode(val, tbl);
+      ops++;
     }
 
     void collection_rmattr(coll_t cid, const char* name) {
@@ -359,64 +391,67 @@ public:
       collection_rmattr(cid, n);
     }
     void collection_rmattr(coll_t cid, nstring& name) {
-      int op = OP_COLL_RMATTR;
-      ops.push_back(op);
-      cids.push_back(cid);
-      attrnames.push_back(nstring());
-      attrnames.back().swap(name);
-      //len++;
-      //blen++;
+      __u32 op = OP_COLL_RMATTR;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(name, tbl);
+      ops++;
     }
     void collection_setattrs(coll_t cid, map<nstring,bufferptr>& aset) {
-      int op = OP_COLL_SETATTRS;
-      ops.push_back(op);
-      cids.push_back(cid);
-      attrsets.push_back(aset);
-      //len++;
-      //blen += 5 + aset.size();
+      __u32 op = OP_COLL_SETATTRS;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(aset, tbl);
+      ops++;
     }
 
 
     // etc.
     Transaction() :
-      //len(0),
-      opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0) {}
-    Transaction(bufferlist::iterator &p) : 
-      //len(0),
-      opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0)
-    { decode(p); }
-    Transaction(bufferlist &bl) : 
-      //len(0),
-      opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0) { 
-      bufferlist::iterator p = bl.begin();
-      decode(p); 
+      ops(0), bytes(0),
+      old(false), opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0) { }
+    Transaction(bufferlist::iterator &dp) :
+      ops(0), bytes(0),
+      old(false), opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0) {
+      decode(dp);
+    }
+    Transaction(bufferlist &nbl) :
+      ops(0), bytes(0),
+      old(false), opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0) {
+      bufferlist::iterator dp = nbl.begin();
+      decode(dp); 
     }
 
     void encode(bufferlist& bl) const {
-      __u8 struct_v = 1;
+      __u8 struct_v = 2;
       ::encode(struct_v, bl);
       ::encode(ops, bl);
-      ::encode(bls, bl);
-      ::encode(oids, bl);
-      ::encode(cids, bl);
-      ::encode(lengths, bl);
-      ::encode(attrnames, bl);
-      ::encode(attrsets, bl);
+      ::encode(bytes, bl);
+      ::encode(tbl, bl);
     }
     void decode(bufferlist::iterator &bl) {
       __u8 struct_v;
       ::decode(struct_v, bl);
-      ::decode(ops, bl);
-      ::decode(bls, bl);
-      ::decode(oids, bl);
-      ::decode(cids, bl);
-      ::decode(lengths, bl);
-      ::decode(attrnames, bl);
-      /*for (vector<nstring>::iterator p = attrnames2.begin();
-	   p != attrnames2.end();
-	   ++p)
-	   attrnames.push_back((*p).c_str());*/
-      ::decode(attrsets, bl);
+      if (struct_v == 1) {
+	// old <= v0.19 format
+	old = true;
+	::decode(opvec, bl);
+	::decode(bls, bl);
+	::decode(oids, bl);
+	::decode(cids, bl);
+	::decode(lengths, bl);
+	::decode(attrnames, bl);
+	/*for (vector<nstring>::iterator p = attrnames2.begin();
+          p != attrnames2.end();
+          ++p)
+          attrnames.push_back((*p).c_str());*/
+	::decode(attrsets, bl);
+      } else {
+	assert(struct_v == 2);
+	::decode(ops, bl);
+	::decode(bytes, bl);
+	::decode(tbl, bl);
+      }
     }
   };
 
