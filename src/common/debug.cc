@@ -7,6 +7,7 @@
 
 #include "ceph_ver.h"
 
+#include <errno.h>
 #include <fstream>
 #include <iostream>
 using namespace std;
@@ -18,11 +19,11 @@ using namespace std;
 Mutex _dout_lock("_dout_lock", false, false /* no lockdep */);  
 ostream *_dout = &std::cout;
 ostream *_derr = &std::cerr;
-char _dout_dir[1000] = {0};
-char _dout_symlink_dir[1000] = {0};
-char _dout_file[1000] = {0};
-char _dout_path[1000] = {0};
-char _dout_symlink_path[1000] = {0};
+char _dout_dir[PATH_MAX] = {0};
+char _dout_symlink_dir[PATH_MAX] = {0};
+char _dout_file[PATH_MAX] = {0};
+char _dout_path[PATH_MAX] = {0};
+char _dout_symlink_path[PATH_MAX] = {0};
 char *_dout_symlink_target = 0;   // _dout_path or _dout_file
 bool _dout_is_open = false;
 bool _dout_need_open = true;
@@ -41,7 +42,8 @@ void _dout_open_log()
     if (g_conf.log_dir[0] == '/') 
       strcpy(_dout_dir, g_conf.log_dir);
     else {
-      getcwd(_dout_dir, sizeof(_dout_dir));
+      char *c = getcwd(_dout_dir, sizeof(_dout_dir));
+      assert(c);
       strncat(_dout_dir, "/", sizeof(_dout_dir));
       strncat(_dout_dir, g_conf.log_dir, sizeof(_dout_dir));
     }
@@ -52,7 +54,8 @@ void _dout_open_log()
     if (g_conf.log_sym_dir[0] == '/') 
       strcpy(_dout_symlink_dir, g_conf.log_sym_dir);
     else {
-      getcwd(_dout_symlink_dir, sizeof(_dout_symlink_dir));
+      char *c = getcwd(_dout_symlink_dir, sizeof(_dout_symlink_dir));
+      assert(c);
       strncat(_dout_symlink_dir, "/", sizeof(_dout_symlink_dir));
       strncat(_dout_symlink_dir, g_conf.log_sym_dir, sizeof(_dout_symlink_dir));
     }
@@ -86,7 +89,7 @@ void _dout_open_log()
 int _dout_rename_output_file()  // after calling daemon()
 {
   if (g_conf.log_dir && !g_conf.log_to_stdout) {
-    char oldpath[1000];
+    char oldpath[PATH_MAX];
     char hostname[80];
     gethostname(hostname, 79);
 
@@ -99,7 +102,12 @@ int _dout_rename_output_file()  // after calling daemon()
     if (_dout_symlink_path[0]) {
       // fix symlink
       ::unlink(_dout_symlink_path);
-      ::symlink(_dout_symlink_target, _dout_symlink_path);
+      int r = ::symlink(_dout_symlink_target, _dout_symlink_path);
+      if (r) {
+	char buf[80];
+	dout(0) << "---- failed to symlink " << _dout_symlink_target << " from " << _dout_symlink_path
+		<< ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+      }
     }
   }
   return 0;
@@ -135,9 +143,15 @@ int _dout_create_courtesy_output_symlink(const char *type, __s64 n)
       n--;
     }
 
-    ::symlink(_dout_symlink_target, _dout_symlink_path);
-    dout(0) << "---- created symlink " << _dout_symlink_path
-	    << " -> " << _dout_symlink_target << " ----" << dendl;
+    int r = ::symlink(_dout_symlink_target, _dout_symlink_path);
+    if (r) {
+      char buf[80];
+      dout(0) << "---- failed to symlink " << _dout_symlink_target << " from " << _dout_symlink_path
+	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    } else {
+      dout(0) << "---- created symlink " << _dout_symlink_path
+	      << " -> " << _dout_symlink_target << " ----" << dendl;
+    }
   }
   return 0;
 }
