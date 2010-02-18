@@ -538,7 +538,7 @@ int FileStore::mount()
 
     dout(0) << "mount found snaps " << snaps << dendl;
   }
-  if (g_conf.filestore_btrfs_snap) {
+  if (btrfs && g_conf.filestore_btrfs_snap) {
     if (snaps.empty()) {
       dout(0) << "mount WARNING: no consistent snaps found, store may be in inconsistent state" << dendl;
     } else if (!btrfs) {
@@ -1466,7 +1466,7 @@ void FileStore::sync_entry()
       sprintf(s, "%lld\n", (long long unsigned)cp);
       ::pwrite(op_fd, s, strlen(s), 0);
 
-      bool do_snap = g_conf.filestore_btrfs_snap;
+      bool do_snap = btrfs && g_conf.filestore_btrfs_snap;
 
       if (do_snap) {
 	btrfs_ioctl_vol_args snapargs;
