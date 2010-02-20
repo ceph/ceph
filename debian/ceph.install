@@ -11,7 +11,7 @@ usr/bin/cosd
 usr/bin/mkmonfs
 usr/bin/cauthtool
 usr/bin/rados
-usr/sbin/mount.ceph
+sbin/mount.ceph
 usr/sbin/mkcephfs
 usr/lib/ceph/ceph_common.sh
 etc/ceph/sample.ceph.conf
