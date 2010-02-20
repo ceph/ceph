@@ -44,7 +44,7 @@ osdmaptool_LDADD = libcrush.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
 mount_ceph_SOURCES = mount/mount.ceph.c
-sbin_PROGRAMS += mount.ceph
+noinst_PROGRAMS = mount.ceph
 
 
 core: cmon cosd cmds mkmonfs ceph cconf monmaptool osdmaptool crushtool
@@ -260,6 +260,8 @@ EXTRA_DIST = verify-mds-journal.sh vstart.sh stop.sh \
 	     crun ceph_common.sh init-ceph.in mkcephfs.in make_version
 
 install-data-local:
+	mkdir -p $(DESTDIR)/sbin
+	$(install_sh_SCRIPT) -m 0755 mount.ceph $(DESTDIR)/sbin/mount.ceph
 	mkdir -p $(DESTDIR)$(sbindir)/ceph
 	$(install_sh_SCRIPT) -m 0755 mkcephfs $(DESTDIR)$(sbindir)/mkcephfs
 	mkdir -p $(DESTDIR)$(libdir)/ceph

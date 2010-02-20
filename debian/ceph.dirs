@@ -1,5 +1,7 @@
+sbin
 usr/bin
-var/log/ceph
-var/log/ceph/stat
+usr/sbin
 etc/ceph
 usr/share/doc/ceph
+var/log/ceph
+var/log/ceph/stat
