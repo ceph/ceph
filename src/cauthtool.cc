@@ -165,11 +165,10 @@ int main(int argc, const char **argv)
       cerr << "can't open " << import_keyring << ": " << strerror(-r) << std::endl;
       exit(1);
     }
-  } else {
+  } else if (!caps_fn) {
     cerr << "no command specified" << std::endl;
     usage();
   }
-
 
   if (caps_fn) {
     ConfFile *cf = new ConfFile(caps_fn);
