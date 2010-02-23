@@ -1050,9 +1050,19 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
         __u32 seq = oi.truncate_seq;
         if (seq && (seq > op.extent.truncate_seq) &&
             (op.extent.offset + op.extent.length > oi.size)) {
-	  op.extent.length =  (op.extent.offset > oi.size ? 0 : oi.size - op.extent.offset);
+	  // old write, arrived after trimtrunc
+	  op.extent.length = (op.extent.offset > oi.size ? 0 : oi.size - op.extent.offset);
+	  dout(10) << " old truncate_seq " << op.extent.truncate_seq << " < current " << seq
+		   << ", adjusting write length to " << op.extent.length << dendl;
         }
-
+	if (op.extent.truncate_seq > seq) {
+	  // write arrives before trimtrunc
+	  dout(10) << " truncate_seq " << op.extent.truncate_seq << " > current " << seq
+		   << ", truncating to " << op.extent.truncate_size << dendl;
+	  t.truncate(coll_t::build_pg_coll(info.pgid), soid, op.extent.truncate_size);
+	  oi.truncate_seq = op.extent.truncate_seq;
+	  oi.truncate_size = op.extent.truncate_size;
+	}
         if (op.extent.length) {
 	  bufferlist nbl;
 	  bp.copy(op.extent.length, nbl);
@@ -1077,9 +1087,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	info.stats.num_wr++;
 	info.stats.num_wr_kb += SHIFT_ROUND_UP(op.extent.length, 10);
 	ssc->snapset.head_exists = true;
-
-	if (!seq)
-		oi.truncate_seq = op.extent.truncate_seq;
       }
       break;
       
@@ -1138,10 +1145,26 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       }
       break;
       
+    case CEPH_OSD_OP_TRIMTRUNC:
     case CEPH_OSD_OP_TRUNCATE:
       { // truncate
-	if (!ctx->obs->exists)
-	  t.touch(coll_t::build_pg_coll(info.pgid), soid);
+	if (!ctx->obs->exists) {
+	  dout(10) << " object dne, truncate is a no-op" << dendl;
+	  break;
+	}
+
+	if (op.extent.truncate_seq) {
+	  if (op.extent.truncate_seq <= oi.truncate_seq) {
+	    dout(10) << " truncate seq " << op.extent.truncate_seq << " <= current " << oi.truncate_seq
+		     << ", no-op" << dendl;
+	    break; // old
+	  }
+	  oi.truncate_seq = op.extent.truncate_seq;
+	  oi.truncate_size = op.extent.truncate_size;
+	  dout(10) << " truncate seq " << op.extent.truncate_seq << " > current " << oi.truncate_seq
+		   << ", truncating" << dendl;
+	}
+
 	t.truncate(coll_t::build_pg_coll(info.pgid), soid, op.extent.offset);
 	if (ssc->snapset.clones.size()) {
 	  snapid_t newest = *ssc->snapset.clones.rbegin();
@@ -1188,7 +1211,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	info.stats.num_wr++;
       }
       break;
-    
+
 
       // -- object attrs --
       
@@ -1239,31 +1262,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       t.start_sync();
       break;
 
-    case CEPH_OSD_OP_TRIMTRUNC:
-      if (ctx->obs->exists) {
-	__u32 old_seq = oi.truncate_seq;
-	
-	if (op.extent.truncate_seq > old_seq) {
-	  // do the truncate/delete.
-	  vector<OSDOp> nops(1);
-	  OSDOp& newop = nops[0];
-	  newop.op.op = CEPH_OSD_OP_TRUNCATE;
-	  newop.op.extent.offset = op.extent.truncate_size;
-          newop.data = osd_op.data;
-	  dout(10) << " seq " << op.extent.truncate_seq << " > old_seq " << old_seq
-		   << ", truncating with " << newop << dendl;
-	  do_osd_ops(ctx, nops, odata);
-
-	  // remember!
-	  oi.truncate_seq = op.extent.truncate_seq;
-	  oi.truncate_size = op.extent.truncate_size;
-	} else {
-	  dout(10) << " seq " << op.extent.truncate_seq << " > old_seq " << old_seq
-		   << " already truncated" << dendl;
-	  // object was already truncated, no-op.
-	}
-      }
-      break;
 
 
       // -- trivial map --
