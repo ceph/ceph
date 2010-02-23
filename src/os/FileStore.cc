@@ -961,7 +961,11 @@ unsigned FileStore::_do_transaction(Transaction& t)
     int op = t.get_op();
     switch (op) {
     case Transaction::OP_TOUCH:
-      _touch(t.get_cid(), t.get_oid());
+      {
+	coll_t cid = t.get_cid();
+	sobject_t oid = t.get_oid();
+	_touch(cid, oid);
+      }
       break;
       
     case Transaction::OP_WRITE:
