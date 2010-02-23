@@ -978,7 +978,9 @@ protected:
   void purge_stray(CDentry *dn);
   void _purge_stray_purged(CDentry *dn);
   void _purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls);
+  void _purge_stray_logged_truncate(CDentry *dn, LogSegment *ls);
   friend class C_MDC_PurgeStrayLogged;
+  friend class C_MDC_PurgeStrayLoggedTruncate;
   friend class C_MDC_PurgeStrayPurged;
   void reintegrate_stray(CDentry *dn, CDentry *rlink);
   void migrate_stray(CDentry *dn, int src, int dest);

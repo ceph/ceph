@@ -5317,7 +5317,8 @@ void MDCache::remove_client_cap(CInode *in, client_t client)
 
   if (in->is_auth()) {
     // make sure we clear out the client byte range
-    if (in->get_projected_inode()->client_ranges.count(client))
+    if (in->get_projected_inode()->client_ranges.count(client) &&
+	!(in->inode.nlink == 0 && !in->is_any_caps()))    // unless it's unlink + stray
       mds->locker->check_inode_max_size(in);
   } else {
     mds->locker->request_inode_file_caps(in);
@@ -6940,39 +6941,67 @@ public:
     cache->_purge_stray_logged(dn, pdv, ls);
   }
 };
+class C_MDC_PurgeStrayLoggedTruncate : public Context {
+  MDCache *cache;
+  CDentry *dn;
+  LogSegment *ls;
+public:
+  C_MDC_PurgeStrayLoggedTruncate(MDCache *c, CDentry *d, LogSegment *s) : 
+    cache(c), dn(d), ls(s) { }
+  void finish(int r) {
+    cache->_purge_stray_logged_truncate(dn, ls);
+  }
+};
 
 void MDCache::_purge_stray_purged(CDentry *dn)
 {
-  dout(10) << "_purge_stray_purged " << *dn << dendl;
-
   CInode *in = dn->get_projected_linkage()->get_inode();
+  dout(10) << "_purge_stray_purged " << *dn << " " << *in << dendl;
 
-  // kill dentry.
-  version_t pdv = dn->pre_dirty();
+  if (in->get_num_ref() == (int)in->is_dirty()) {
+    // kill dentry.
+    version_t pdv = dn->pre_dirty();
+    
+    EUpdate *le = new EUpdate(mds->mdlog, "purge_stray");
+    mds->mdlog->start_entry(le);
+    
+    le->metablob.add_dir_context(dn->dir);
+    le->metablob.add_null_dentry(dn, true);
+    le->metablob.add_destroyed_inode(in->ino());
 
-  EUpdate *le = new EUpdate(mds->mdlog, "purge_stray");
-  mds->mdlog->start_entry(le);
+    mds->mdlog->submit_entry(le, new C_MDC_PurgeStrayLogged(this, dn, pdv, mds->mdlog->get_current_segment()));
+  } else {
+    // new refs.. just truncate to 0
+    EUpdate *le = new EUpdate(mds->mdlog, "purge_stray truncate");
+    mds->mdlog->start_entry(le);
+    
+    inode_t *pi = in->project_inode();
+    pi->size = 0;
+    pi->client_ranges.clear();
+    pi->truncate_size = 0;
+    pi->truncate_from = 0;
+    pi->version = in->pre_dirty();
 
-  le->metablob.add_dir_context(dn->dir);
-  le->metablob.add_null_dentry(dn, true);
-  le->metablob.add_destroyed_inode(in->ino());
+    le->metablob.add_dir_context(dn->dir);
+    le->metablob.add_primary_dentry(dn, true, in);
 
-  mds->mdlog->submit_entry(le, new C_MDC_PurgeStrayLogged(this, dn, pdv, mds->mdlog->get_current_segment()));
+    mds->mdlog->submit_entry(le, new C_MDC_PurgeStrayLoggedTruncate(this, dn, mds->mdlog->get_current_segment()));
+  }
 }
 
 void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
 {
-  dout(10) << "_purge_stray_logged " << *dn << " " << *dn->get_projected_linkage()->get_inode() << dendl;
+  CInode *in = dn->get_projected_linkage()->get_inode();
+  dout(10) << "_purge_stray_logged " << *dn << " " << *in << dendl;
 
   dn->state_clear(CDentry::STATE_PURGING);
   dn->put(CDentry::PIN_PURGING);
 
+  assert(!in->state_test(CInode::STATE_RECOVERING));
+
   // unlink and remove dentry
-  CInode *in = dn->get_projected_linkage()->get_inode();
   if (in->is_dirty())
     in->mark_clean();
-  if (in->state_test(CInode::STATE_RECOVERING))
-    unqueue_file_recover(in);
   if (dn->is_dirty())
     dn->mark_clean();
   remove_inode(in);
@@ -6980,6 +7009,19 @@ void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
 
   dn->dir->mark_dirty(pdv, ls);
   touch_dentry_bottom(dn);  // drop dn as quickly as possible.
+}
+
+void MDCache::_purge_stray_logged_truncate(CDentry *dn, LogSegment *ls)
+{
+  CInode *in = dn->get_projected_linkage()->get_inode();
+  dout(10) << "_purge_stray_logged_truncate " << *dn << " " << *in << dendl;
+
+  dn->state_clear(CDentry::STATE_PURGING);
+  dn->put(CDentry::PIN_PURGING);
+
+  in->pop_and_dirty_projected_inode(ls);
+
+  eval_stray(dn);
 }
 
 

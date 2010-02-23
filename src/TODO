@@ -83,26 +83,6 @@ cp: writing `/c/ceph2.2/bin/gs-gpl': Bad file descriptor
 
 ?- kclient: socket creation
 
-- mds file purge should truncate in place, or remove from namespace before purge.  otherwise new ref can appear before inode is destroyed.
-mds/MDCache.cc: In function 'void MDCache::remove_inode(CInode*)':
-mds/MDCache.cc:217: FAILED assert(o->get_num_ref() == 0)
- 1: /tmp/cmds.20091211.084324(_Z18__ceph_assert_failPKcS0_iS0_+0x34) [0x9656ea]
- 2: /tmp/cmds.20091211.084324(_ZN7MDCache12remove_inodeEP6CInode+0x1ad) [0x7af283]
- 3: /tmp/cmds.20091211.084324(_ZN7MDCache19_purge_stray_loggedEP7CDentrymP10LogSegment+0x115) [0x7af3b5]
- 4: /tmp/cmds.20091211.084324(_ZN22C_MDC_PurgeStrayLogged6finishEi+0x34) [0x83286e]
- 5: /tmp/cmds.20091211.084324(_Z15finish_contextsRSt4listIP7ContextSaIS1_EEi+0x130) [0x736d96]
- 6: /tmp/cmds.20091211.084324(_ZN9Journaler13_finish_flushEil7utime_tb+0x873) [0x915f4d]
- 7: /tmp/cmds.20091211.084324(_ZN9Journaler7C_Flush6finishEi+0x43) [0x91d5eb]
- 8: /tmp/cmds.20091211.084324(_ZN8Objecter19handle_osd_op_replyEP11MOSDOpReply+0xcf5) [0x8e7415]
- 9: /tmp/cmds.20091211.084324(_ZN3MDS9_dispatchEP7Message+0x1f04) [0x715dda]
- 10: /tmp/cmds.20091211.084324(_ZN3MDS11ms_dispatchEP7Message+0x2f) [0x716dc1]
- 11: /tmp/cmds.20091211.084324(_ZN9Messenger19ms_deliver_dispatchEP7Message+0x54) [0x70a658]
- 12: /tmp/cmds.20091211.084324(_ZN15SimpleMessenger8Endpoint14dispatch_entryEv+0x4df) [0x6f78af]
- 13: /tmp/cmds.20091211.084324(_ZN15SimpleMessenger8Endpoint14DispatchThread5entryEv+0x19) [0x70ce77]
- 14: /tmp/cmds.20091211.084324(_ZN6Thread11_entry_funcEPv+0x20) [0x704b0c]
- 15: /lib/libpthread.so.0 [0x7f3ea5bf2fc7]
- 16: /lib/libc.so.6(clone+0x6d) [0x7f3ea4e355ad]
-
 - snaprealm thing
 ceph3:~# find /c
 /c
