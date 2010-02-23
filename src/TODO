@@ -249,7 +249,6 @@ repair
 - mds scrubbing
 
 kclient
-- replace radix tree in monc with rbtree on statfs requests
 - ENOMEM
   - message pools
   - sockets?  (this can actual generates a lockdep warning :/)
@@ -257,7 +256,6 @@ kclient
 - statlite
 - audit/combine/rework/whatever invalidate, writeback threads and associated invariants
 - add cap to release if we get fouled up in fill_inode et al?
-- make caps reservations per-client
 - fix up ESTALE handling
 - don't retry on ENOMEM on non-nofail requests in kick_requests
 - make cap import/export more efficient?
