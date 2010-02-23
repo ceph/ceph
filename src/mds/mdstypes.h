@@ -1254,6 +1254,8 @@ protected:
       if (c > 1)
 	out << "*" << c;
     }
+#else
+    out << " nref=" << ref;
 #endif
   }
 
