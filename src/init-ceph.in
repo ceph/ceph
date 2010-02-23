@@ -152,7 +152,7 @@ done
 verify_conf
 
 command=$1
-shift
+[ -n "$*" ] && shift
 
 get_name_list "$@"
 
