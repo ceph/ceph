@@ -112,10 +112,13 @@ struct osd_info_t {
 WRITE_CLASS_ENCODER(osd_info_t)
 
 inline ostream& operator<<(ostream& out, const osd_info_t& info) {
-  return out << "up_from " << info.up_from
-	     << " up_thru " << info.up_thru
-	     << " down_at " << info.down_at
-	     << " last_clean_interval " << info.last_clean_first << "-" << info.last_clean_last;
+  out << "up_from " << info.up_from
+      << " up_thru " << info.up_thru
+      << " down_at " << info.down_at
+      << " last_clean_interval " << info.last_clean_first << "-" << info.last_clean_last;
+  if (info.lost_at)
+    out << " lost_at " << info.lost_at;
+  return out;
 }
 
 
