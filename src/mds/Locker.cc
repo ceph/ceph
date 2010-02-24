@@ -2926,7 +2926,7 @@ void Locker::mark_updated_scatterlock(ScatterLock *lock)
  * we need to lock|scatter in order to push fnode changes into the
  * inode.dirstat.
  */
-void Locker::scatter_nudge(ScatterLock *lock, Context *c)
+void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
 {
   CInode *p = (CInode *)lock->get_parent();
 
@@ -2955,7 +2955,9 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c)
       lock->add_waiter(SimpleLock::WAIT_STABLE, c);
     if (lock->is_stable()) {
       // can we do it now?
-      if (lock->can_wrlock(-1)) {
+      //  (only if we're not replicated.. if we are, we really do need
+      //   to nudge the lock state!)
+      if (!forcelockchange && lock->can_wrlock(-1)) {
 	dout(10) << "scatter_nudge auth, propagating " << *lock << " on " << *p << dendl;
 	scatter_writebehind(lock);
 	return;
@@ -3568,7 +3570,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     if (lock->get_parent()->is_auth()) {
       dout(7) << "handle_file_lock trying nudge on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
-      scatter_nudge(lock, 0);
+      scatter_nudge(lock, 0, true);
       mds->mdlog->flush();
     } else {
       dout(7) << "handle_file_lock IGNORING nudge on non-auth " << *lock
