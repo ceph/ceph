@@ -141,8 +141,12 @@ void SessionMap::_save_finish(version_t v)
 void SessionMap::encode(bufferlist& bl)
 {
   ::encode(version, bl);
+
+  // this is a meaningless upper bound, because we don't include all
+  // sessions below.  it can be ignored by decode().
   __u32 n = session_map.size();
   ::encode(n, bl);
+
   for (hash_map<entity_name_t,Session*>::iterator p = session_map.begin(); 
        p != session_map.end(); 
        ++p) 
@@ -159,9 +163,12 @@ void SessionMap::decode(bufferlist::iterator& p)
   utime_t now = g_clock.now();
 
   ::decode(version, p);
+
+  // this is a meaningless upper bound.  can be ignored.
   __u32 n;
   ::decode(n, p);
-  while (n--) {
+
+  while (n-- && !p.end()) {
     Session *s = new Session;
     s->decode(p);
     session_map[s->inst.name] = s;
