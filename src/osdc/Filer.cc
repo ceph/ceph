@@ -210,6 +210,91 @@ void Filer::_probed(Probe *probe, const object_t& oid, __u64 size, utime_t mtime
 }
 
 
+// -----------------------
+
+struct PurgeRange {
+  inodeno_t ino;
+  ceph_file_layout layout;
+  SnapContext snapc;
+  __u64 first, num;
+  utime_t mtime;
+  int flags;
+  Context *oncommit;
+  int uncommitted;
+};
+
+int Filer::purge_range(inodeno_t ino,
+		       ceph_file_layout *layout,
+		       const SnapContext& snapc,
+		       __u64 first_obj, __u64 num_obj,
+		       utime_t mtime,
+		       int flags,
+		       Context *oncommit) 
+{
+  assert(num_obj > 0);
+
+  // single object?  easy!
+  if (num_obj == 1) {
+    object_t oid = file_object_t(ino, first_obj);
+    ceph_object_layout ol = objecter->osdmap->file_to_object_layout(oid, *layout);
+    objecter->remove(oid, ol, snapc, mtime, flags, NULL, oncommit);
+    return 0;
+  }
+
+  // lots!  let's do this in pieces.
+  PurgeRange *pr = new PurgeRange;
+  pr->ino = ino;
+  pr->layout = *layout;
+  pr->snapc = snapc;
+  pr->first = first_obj;
+  pr->num = num_obj;
+  pr->mtime = mtime;
+  pr->flags = flags;
+  pr->oncommit = oncommit;
+  pr->uncommitted = 0;
+
+  _do_purge_range(pr, 0);
+  return 0;
+}
+
+struct C_PurgeRange : public Context {
+  Filer *filer;
+  PurgeRange *pr;
+  C_PurgeRange(Filer *f, PurgeRange *p) : filer(f), pr(p) {}
+  void finish(int r) {
+    filer->_do_purge_range(pr, 1);
+  }
+};
+
+void Filer::_do_purge_range(PurgeRange *pr, int fin)
+{
+  pr->uncommitted -= fin;
+  dout(10) << "_do_purge_range " << pr->ino << " objects " << pr->first << "~" << pr->num
+	   << " uncommitted " << pr->uncommitted << dendl;
+
+  if (pr->num == 0 && pr->uncommitted == 0) {
+    pr->oncommit->finish(0);
+    delete pr->oncommit;
+    delete pr;
+    return;
+  }
+
+  int max = 10 - pr->uncommitted;
+  while (pr->num > 0 && max > 0) {
+    object_t oid = file_object_t(pr->ino, pr->first);
+    ceph_object_layout ol = objecter->osdmap->file_to_object_layout(oid, pr->layout);
+    objecter->remove(oid, ol, pr->snapc, pr->mtime, pr->flags,
+		     NULL, new C_PurgeRange(this, pr));
+    pr->uncommitted++;
+    pr->first++;
+    pr->num--;
+    max--;
+  }
+}
+
+
+// -----------------------
+
 void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
                             __u64 offset, __u64 len,
                             vector<ObjectExtent>& extents)

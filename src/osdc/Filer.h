@@ -240,34 +240,15 @@ class Filer {
     return 0;
   }
 
-  int remove(inodeno_t ino,
-	     ceph_file_layout *layout,
-	     const SnapContext& snapc,
-	     __u64 offset,
-	     __u64 len,
-	     utime_t mtime,
-	     int flags,
-	     Context *onack,
-	     Context *oncommit) {
-    vector<ObjectExtent> extents;
-    file_to_extents(ino, layout, offset, len, extents);
-    if (extents.size() == 1) {
-      objecter->remove(extents[0].oid, extents[0].layout,
-		       snapc, mtime, flags, onack, oncommit);
-    } else {
-      C_Gather *gack = 0, *gcom = 0;
-      if (onack)
-	gack = new C_Gather(onack);
-      if (oncommit)
-	gcom = new C_Gather(oncommit);
-      for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++)
-	objecter->remove(p->oid, p->layout,
-			 snapc, mtime, flags,
-			 gack ? gack->new_sub():0,
-			 gcom ? gcom->new_sub():0);
-    }
-    return 0;
-  }
+  // purge range of ino.### objects
+  int purge_range(inodeno_t ino,
+		  ceph_file_layout *layout,
+		  const SnapContext& snapc,
+		  __u64 first_obj, __u64 num_obj,
+		  utime_t mtime,
+		  int flags,
+		  Context *oncommit);
+  void _do_purge_range(class PurgeRange *pr, int fin);
 
   /*
    * probe 

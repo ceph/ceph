@@ -782,8 +782,10 @@ public:
 
 void Journaler::trim()
 {
+  __u64 period = layout.fl_stripe_count * layout.fl_object_size;
+
   __s64 trim_to = last_committed.expire_pos;
-  trim_to -= trim_to % (layout.fl_stripe_count * layout.fl_object_size);
+  trim_to -= trim_to % period;
   dout(10) << "trim last_commited head was " << last_committed
 	   << ", can trim to " << trim_to
 	   << dendl;
@@ -806,11 +808,13 @@ void Journaler::trim()
 	   << ", trimmed/trimming/expire are " 
 	   << trimmed_pos << "/" << trimming_pos << "/" << expire_pos
 	   << dendl;
-  
+
+  // delete range of objects
+  __u64 first = trimming_pos / period;
+  __u64 num = (trim_to - trimming_pos) / period;
   SnapContext snapc;
-  filer.remove(ino, &layout, snapc,
-	       trimming_pos, trim_to-trimming_pos, g_clock.now(), 0, 
-	       NULL, new C_Trim(this, trim_to));
+  filer.purge_range(ino, &layout, snapc, first, num, g_clock.now(), 0, 
+		    new C_Trim(this, trim_to));
   trimming_pos = trim_to;  
 }
 

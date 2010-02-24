@@ -6920,12 +6920,14 @@ void MDCache::purge_stray(CDentry *dn)
     assert(in->last == CEPH_NOSNAP);
   }
 
+  __u64 period = in->inode.layout.fl_object_size * in->inode.layout.fl_stripe_count;
   __u64 to = MAX(in->inode.size, in->inode.get_max_size());
-  dout(10) << "purge_stray 0~" << to << " snapc " << snapc << " on " << *in << dendl;
+  __u64 num = (to + period - 1) / period;
+  dout(10) << "purge_stray 0~" << to << " objects 0~" << num << " snapc " << snapc << " on " << *in << dendl;
   if (to)
-    mds->filer->remove(in->inode.ino, &in->inode.layout, *snapc,
-		       0, to, g_clock.now(), 0,
-		       0, new C_MDC_PurgeStrayPurged(this, dn));
+    mds->filer->purge_range(in->inode.ino, &in->inode.layout, *snapc,
+			    0, num, g_clock.now(), 0,
+			    new C_MDC_PurgeStrayPurged(this, dn));
   else
     _purge_stray_purged(dn);
 }
