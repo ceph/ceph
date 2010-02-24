@@ -106,18 +106,23 @@ static inline ostream& operator<<(ostream& out, const EntityName& n) {
 
 struct EntityAuth {
   CryptoKey key;
+  __le64 uid;
   map<string, bufferlist> caps;
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
     ::encode(struct_v, bl);
     ::encode(key, bl);
+    ::encode(uid, bl);
     ::encode(caps, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
     ::decode(key, bl);
+    if (struct_v >= 2)
+      ::decode(uid, bl);
+    else uid = -1;
     ::decode(caps, bl);
   }
 };
