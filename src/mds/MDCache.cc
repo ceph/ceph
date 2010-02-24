@@ -2666,7 +2666,8 @@ void MDCache::recalc_auth_bits()
 {
   dout(7) << "recalc_auth_bits" << dendl;
 
-  if (mds->whoami != mds->mdsmap->get_root())
+  root->inode_auth.first = mds->mdsmap->get_root();
+  if (mds->whoami != root->inode_auth.first)
     root->state_clear(CInode::STATE_AUTH);
 
   set<CInode*> subtree_inodes;
