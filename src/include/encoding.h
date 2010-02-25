@@ -39,7 +39,6 @@ inline void decode_raw(T& t, bufferlist::iterator &p)
 
 WRITE_RAW_ENCODER(__u8)
 WRITE_RAW_ENCODER(__s8)
-WRITE_RAW_ENCODER(bool)
 WRITE_RAW_ENCODER(char)
 WRITE_RAW_ENCODER(__le64)
 WRITE_RAW_ENCODER(__le32)
@@ -49,6 +48,15 @@ WRITE_RAW_ENCODER(__le16)
 WRITE_RAW_ENCODER(float)
 WRITE_RAW_ENCODER(double)
 
+inline void encode(const bool &v, bufferlist& bl) {
+  __u8 vv = v;
+  encode_raw(vv, bl);
+}
+inline void decode(bool &v, bufferlist::iterator& p) {
+  __u8 vv;
+  decode_raw(vv, p);
+  v = vv;
+}
 
 
 // -----------------------------------
