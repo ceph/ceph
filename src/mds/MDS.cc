@@ -1057,6 +1057,13 @@ void MDS::rejoin_done()
   mdcache->show_subtrees();
   mdcache->show_cache();
 
+  // funny case: is our cache empty?  no subtrees?
+  if (!mdcache->is_subtrees()) {
+    dout(1) << " empty cache, no subtrees, leaving cluster" << dendl;
+    request_state(MDSMap::STATE_STOPPED);
+    return;
+  }
+
   if (replay_queue.empty())
     request_state(MDSMap::STATE_ACTIVE);
   else
