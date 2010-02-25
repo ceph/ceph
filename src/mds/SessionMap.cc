@@ -145,12 +145,13 @@ void SessionMap::_save_finish(version_t v)
 
 void SessionMap::encode(bufferlist& bl)
 {
-  ::encode(version, bl);
+  __u64 pre = -1;     // for 0.19 compatibility; we forgot an encoding prefix.
+  ::encode(pre, bl);
 
-  // this is a meaningless upper bound, because we don't include all
-  // sessions below.  it can be ignored by decode().
-  __u32 n = session_map.size();
-  ::encode(n, bl);
+  __u8 struct_v = 2;
+  ::encode(struct_v, bl);
+
+  ::encode(version, bl);
 
   for (hash_map<entity_name_t,Session*>::iterator p = session_map.begin(); 
        p != session_map.end(); 
@@ -159,25 +160,54 @@ void SessionMap::encode(bufferlist& bl)
 	p->second->is_closing() ||
 	p->second->is_stale() ||
 	p->second->is_stale_purging() ||
-	p->second->is_stale_closing())
+	p->second->is_stale_closing()) {
+      ::encode(p->first, bl);
       p->second->encode(bl);
+    }
 }
 
 void SessionMap::decode(bufferlist::iterator& p)
 {
   utime_t now = g_clock.now();
+  __u64 pre;
+  ::decode(pre, p);
+  if (version == (__u64)-1) {
+    __u8 struct_v;
+    ::decode(struct_v, p);
+    assert(struct_v == 2);
 
-  ::decode(version, p);
+    while (!p.end()) {
+      entity_inst_t inst;
+      ::decode(inst.name, p);
+      Session *s = get_or_add_open_session(inst);
+      s->decode(p);
+    }
 
-  // this is a meaningless upper bound.  can be ignored.
-  __u32 n;
-  ::decode(n, p);
+  } else {
+    // --- old format ----
+    version = pre;
 
-  while (n-- && !p.end()) {
-    Session *s = new Session;
-    s->decode(p);
-    session_map[s->inst.name] = s;
-    set_state(s, Session::STATE_OPEN);
-    s->last_cap_renew = now;
+    // this is a meaningless upper bound.  can be ignored.
+    __u32 n;
+    ::decode(n, p);
+    
+    while (n-- && !p.end()) {
+      bufferlist::iterator p2 = p;
+      Session *s = new Session;
+      s->decode(p);
+      if (session_map.count(s->inst.name)) {
+	// eager client connected too fast!  aie.
+	dout(10) << " already had session for " << s->inst.name << ", recovering" << dendl;
+	entity_name_t n = s->inst.name;
+	delete s;
+	s = session_map[s->inst.name];
+	p = p2;
+	s->decode(p);
+      } else {
+	session_map[s->inst.name] = s;
+      }
+      set_state(s, Session::STATE_OPEN);
+      s->last_cap_renew = now;
+    }
   }
 }
