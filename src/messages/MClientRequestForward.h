@@ -26,6 +26,7 @@ class MClientRequestForward : public Message {
   MClientRequestForward(tid_t t, int dm, int nf, bool cmr) : 
     Message(CEPH_MSG_CLIENT_REQUEST_FORWARD),
     dest_mds(dm), num_fwd(nf), client_must_resend(cmr) {
+    assert(client_must_resend);
     header.tid = t;
   }
 
@@ -33,10 +34,10 @@ class MClientRequestForward : public Message {
   int get_num_fwd() { return num_fwd; }
   bool must_resend() { return client_must_resend; }
 
-  const char *get_type_name() { return "cfwd"; }
+  const char *get_type_name() { return "client_request_forward"; }
   void print(ostream& o) {
     o << "client_request_forward(" << get_tid()
-      << " to " << dest_mds
+      << " to mds" << dest_mds
       << " num_fwd=" << num_fwd
       << (client_must_resend ? " client_must_resend":"")
       << ")";
