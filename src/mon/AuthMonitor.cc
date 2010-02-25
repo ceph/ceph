@@ -319,10 +319,10 @@ uint64_t AuthMonitor::assign_global_id(MAuth *m, bool should_increase_max)
   uint64_t next_global_id = last_allocated_id + 1;
 
   if (next_global_id < max_global_id) {
-    int reminder = next_global_id % total_mon;
-    if (reminder)
-      reminder = total_mon - reminder;
-    next_global_id += reminder + mon->whoami;
+    int remainder = next_global_id % total_mon;
+    if (remainder)
+      remainder = total_mon - remainder;
+    next_global_id += remainder + mon->whoami;
     dout(10) << "next_global_id should be " << next_global_id << dendl;
   }
 
