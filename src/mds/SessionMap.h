@@ -226,9 +226,11 @@ public:
     return 0;
   }
   Session* get_or_add_open_session(entity_inst_t i) {
+    Session *s;
     if (session_map.count(i.name))
-      return session_map[i.name];
-    Session *s = session_map[i.name] = new Session;
+      s = session_map[i.name];
+    else
+      s = session_map[i.name] = new Session;
     s->inst = i;
     set_state(s, Session::STATE_OPEN);
     s->last_cap_renew = g_clock.now();
