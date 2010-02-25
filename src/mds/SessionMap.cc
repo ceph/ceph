@@ -26,12 +26,16 @@
 
 void SessionMap::dump()
 {
-  hash<entity_name_t> H;
-  dout(0) << "dump" << dendl;
+  dout(10) << "dump" << dendl;
   for (hash_map<entity_name_t,Session*>::iterator p = session_map.begin();
        p != session_map.end();
        ++p) 
-    dout(0) << p->first << " " << p->second << " hash " << H(p->first) << " addr " << (void*)&p->first << dendl;
+    dout(10) << p->first << " " << p->second
+	     << " state " << p->second->get_state_name()
+	     << " completed " << p->second->completed_requests
+	     << " prealloc_inos " << p->second->prealloc_inos
+	     << " used_ions " << p->second->used_inos
+	     << dendl;
 }
 
 
@@ -74,6 +78,7 @@ void SessionMap::load(Context *onload)
 void SessionMap::_load_finish(int r, bufferlist &bl)
 { 
   bufferlist::iterator blp = bl.begin();
+  dump();
   decode(blp);  // note: this sets last_cap_renew = now()
   dout(10) << "_load_finish v " << version 
 	   << ", " << session_map.size() << " sessions, "

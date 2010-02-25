@@ -164,7 +164,7 @@ Session *Server::get_session(Message *m)
 {
   Session *session = (Session *)m->get_connection()->get_priv();
   if (session) {
-    dout(20) << "get_session have " << session << " " << session->inst << " state " << session->get_state() << dendl;
+    dout(20) << "get_session have " << session << " " << session->inst << " state " << session->get_state_name() << dendl;
     session->put();  // not carry ref
   } else {
     dout(20) << "get_session dne for " << m->get_source_inst() << dendl;
@@ -214,7 +214,7 @@ void Server::handle_client_session(MClientSession *m)
       mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->get_seq()), 
 				   session->inst);
     } else {
-      dout(10) << "ignoring renewcaps on non open|stale session (" << session->get_state() << ")" << dendl;
+      dout(10) << "ignoring renewcaps on non open|stale session (" << session->get_state_name() << ")" << dendl;
     }
     break;
     

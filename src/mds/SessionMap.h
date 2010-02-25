@@ -48,6 +48,20 @@ public:
   static const int STATE_STALE_CLOSING = 6;
   static const int STATE_CLOSED = 7;
 
+  const char *get_state_name(int s) {
+    switch (s) {
+    case STATE_NEW: return "new";
+    case STATE_OPENING: return "opening";
+    case STATE_OPEN: return "open";
+    case STATE_CLOSING: return "closing";
+    case STATE_STALE: return "stale";
+    case STATE_STALE_PURGING: return "stale_purging";
+    case STATE_STALE_CLOSING: return "stale_closing";
+    case STATE_CLOSED: return "closed";
+    default: return "???";
+    }
+  }
+
 private:
   int state;
   __u64 state_seq;
@@ -90,6 +104,7 @@ public:
   client_t get_client() { return client_t(inst.name.num()); }
 
   int get_state() { return state; }
+  const char *get_state_name() { return get_state_name(state); }
   __u64 get_state_seq() { return state_seq; }
   bool is_new() { return state == STATE_NEW; }
   bool is_opening() { return state == STATE_OPENING; }
