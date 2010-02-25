@@ -4994,6 +4994,15 @@ void MDCache::trim_non_auth()
     }
   }
 
+  // move everything in the pintail to the top bit of the lru.
+  lru.lru_touch_entire_pintail();
+
+  // unpin all subtrees
+  for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
+       p != subtrees.end();
+       p++) 
+    p->first->put(CDir::PIN_SUBTREETEMP);
+
   if (lru.lru_get_size() == 0) {
     // root, stray, etc.?
     hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
@@ -5007,25 +5016,18 @@ void MDCache::trim_non_auth()
 	for (list<CDir*>::iterator p = ls.begin();
 	     p != ls.end();
 	     ++p) {
-	  assert((*p)->get_num_ref() == 0);
+	  dout(0) << " ... " << **p << dendl;
+	  assert((*p)->get_num_ref() == 1);  // SUBTREE
 	  remove_subtree((*p));
 	  in->close_dirfrag((*p)->dirfrag().frag);
 	}
+	dout(0) << " ... " << *in << dendl;
 	assert(in->get_num_ref() == 0);
 	remove_inode(in);
       }
       p = next;
     }
   }
-
-  // move everything in the pintail to the top bit of the lru.
-  lru.lru_touch_entire_pintail();
-
-  // unpin all subtrees
-  for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
-       p != subtrees.end();
-       p++) 
-    p->first->put(CDir::PIN_SUBTREETEMP);
 
   show_subtrees();
 }
