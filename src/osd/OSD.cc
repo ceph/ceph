@@ -1339,6 +1339,8 @@ void OSD::tick()
 
   map_lock.put_read();
 
+  logclient.send_log();
+
   timer.add_event_after(1.0, new C_Tick(this));
 
   // only do waiters if dispatch() isn't currently running.  (if it is,
