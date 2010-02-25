@@ -882,6 +882,33 @@ void PG::build_prior()
        past_intervals.begin()->first > info.history.last_epoch_started))
     generate_past_intervals();
   
+  // see if i have ever started since joining the pg.  this is important only
+  // if we want to exclude lost osds.
+  set<int> started_since_joining;
+  for (vector<int>::iterator q = acting.begin(); q != acting.end(); q++) {
+    int o = *q;
+    
+    for (map<epoch_t,Interval>::reverse_iterator p = past_intervals.rbegin();
+	 p != past_intervals.rend();
+	 p++) {
+      Interval &interval = p->second;
+      if (interval.last < info.history.last_epoch_started)
+	break;  // we don't care
+      if (!interval.maybe_went_rw)
+	continue;
+      bool in = false;
+      for (vector<int>::iterator q = interval.acting.begin(); q != interval.acting.end(); q++)
+	if (*q == o)
+	  in = true;
+      if (in)
+	started_since_joining.insert(o);
+      else
+	break;
+    }
+  }
+
+  dout(10) << "build_prior " << started_since_joining << " have started since joining this pg" << dendl;
+
   for (map<epoch_t,Interval>::reverse_iterator p = past_intervals.rbegin();
        p != past_intervals.rend();
        p++) {
@@ -931,9 +958,19 @@ void PG::build_prior()
 	// did any osds survive _this_ interval?
 	any_survived = true;
       } else if (pinfo.lost_at > interval.first) {
-	dout(10) << "build_prior  prior osd" << o
-		 << " is down, but marked lost at " << pinfo.lost_at << dendl;
 	prior_set_down.insert(o);
+	if (started_since_joining.size()) {
+	  dout(10) << "build_prior  prior osd" << o
+		   << " is down, but marked lost at " << pinfo.lost_at
+		   << ", and " << started_since_joining << " have started since joining pg"
+		   << dendl;
+	} else {
+	  dout(10) << "build_prior  prior osd" << o
+		   << " is down, but marked lost at " << pinfo.lost_at
+		   << ", and NO acting osds have started since joining pg, so i may not have any pg state :/"
+		   << dendl;
+	  need_down++;
+	}
       } else {
 	dout(10) << "build_prior  prior osd" << o
 		 << " is down" << dendl;
