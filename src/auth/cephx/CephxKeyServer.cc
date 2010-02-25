@@ -108,7 +108,7 @@ bool KeyServerData::get_caps(EntityName& name, string& type, AuthCapsInfo& caps_
   if (capsiter != iter->second.caps.end()) {
     caps_info.caps = capsiter->second;
   }
-
+  caps_info.auth_uid = iter->second.auth_uid;
   return true;
 }
 

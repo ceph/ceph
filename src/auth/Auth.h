@@ -106,14 +106,14 @@ static inline ostream& operator<<(ostream& out, const EntityName& n) {
 
 struct EntityAuth {
   CryptoKey key;
-  __le64 uid;
+  __u64 auth_uid;
   map<string, bufferlist> caps;
 
   void encode(bufferlist& bl) const {
     __u8 struct_v = 2;
     ::encode(struct_v, bl);
     ::encode(key, bl);
-    ::encode(uid, bl);
+    ::encode(auth_uid, bl);
     ::encode(caps, bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -121,8 +121,8 @@ struct EntityAuth {
     ::decode(struct_v, bl);
     ::decode(key, bl);
     if (struct_v >= 2)
-      ::decode(uid, bl);
-    else uid = -1;
+      ::decode(auth_uid, bl);
+    else auth_uid = -1;
     ::decode(caps, bl);
   }
 };
@@ -134,15 +134,17 @@ static inline ostream& operator<<(ostream& out, const EntityAuth& a) {
 
 struct AuthCapsInfo {
   bool allow_all;
+  __u64 auth_uid;
   bufferlist caps;
 
   AuthCapsInfo() : allow_all(false) {}
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
     ::encode(struct_v, bl);
     __u8 a = (__u8)allow_all;
     ::encode(a, bl);
+    ::encode(auth_uid, bl);
     ::encode(caps, bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -151,6 +153,9 @@ struct AuthCapsInfo {
     __u8 a;
     ::decode(a, bl);
     allow_all = (bool)a;
+    if (struct_v >= 2)
+      ::decode(auth_uid, bl);
+    else auth_uid = -1;
     ::decode(caps, bl);
   }
 };
