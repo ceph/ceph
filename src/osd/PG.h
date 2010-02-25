@@ -312,6 +312,24 @@ public:
       return head.version == 0 && head.epoch == 0;
     }
 
+    list<Entry>::iterator find_entry(eversion_t v) {
+      int fromhead = head.version - v.version;
+      int fromtail = v.version - tail.version;
+      list<Entry>::iterator p;
+      if (fromhead < fromtail) {
+	p = log.end();
+	p--;
+	while (p->version > v)
+	  p--;
+	return p;
+      } else {
+	p = log.begin();
+	while (p->version < v)
+	  p++;
+	return p;
+      }      
+    }
+
     void encode(bufferlist& bl) const {
       __u8 struct_v = 1;
       ::encode(struct_v, bl);
@@ -775,7 +793,7 @@ public:
     for (unsigned i=1; i<acting.size(); i++) {
       if (peer_last_complete_ondisk.count(acting[i]) == 0)
 	return false;   // we don't have complete info
-      eversion_t a =peer_last_complete_ondisk[acting[i]];
+      eversion_t a = peer_last_complete_ondisk[acting[i]];
       if (a < min)
 	min = a;
     }
@@ -791,6 +809,8 @@ public:
   bool merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe);
   void merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from);
   void search_for_missing(Log &olog, Missing &omissing, int fromosd);
+
+  void check_for_lost_objects();
   
   bool build_backlog_map(map<eversion_t,Log::Entry>& omap);
   void assemble_backlog(map<eversion_t,Log::Entry>& omap);

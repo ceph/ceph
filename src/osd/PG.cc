@@ -1330,16 +1330,22 @@ void PG::peer(ObjectStore::Transaction& t, list<Context*>& tfin,
       return;
     }
     
-    dout(10) << (missing.num_missing() - missing_loc.size())
-	     << " objects are still lost, waiting+hoping for a notify from someone else!" << dendl;
-    dout(20) << "  lost: ";
-    for (map<sobject_t,Missing::item>::iterator p = missing.missing.begin();
-	 p != missing.missing.end();
-	 p++) 
-      if (missing_loc.count(p->first) == 0)
-	*_dout << " " << p->first;
-    *_dout << dendl;
-    return;
+    // hmm, could these objects be permanently lost?
+    check_for_lost_objects();
+
+    // still lost?
+    if (missing.num_missing() > missing_loc.size()) {
+      dout(10) << (missing.num_missing() - missing_loc.size())
+	       << " objects are still lost, waiting+hoping for a notify from someone else!" << dendl;
+      dout(20) << "  lost: ";
+      for (map<sobject_t,Missing::item>::iterator p = missing.missing.begin();
+	   p != missing.missing.end();
+	   p++) 
+	if (missing_loc.count(p->first) == 0)
+	  *_dout << " " << p->first;
+      *_dout << dendl;
+      return;
+    }
   }
 
   // sanity check
@@ -1382,6 +1388,135 @@ void PG::peer(ObjectStore::Transaction& t, list<Context*>& tfin,
     finish_recovery(t, tfin);
 }
 
+
+void PG::check_for_lost_objects()
+{
+  dout(10) << "check_for_lost_objects" << dendl;
+  
+  /*
+   * see if any prior_set_down osds are lost, and if so whether that
+   * means any lost objects are also (permanently) lost.
+   */
+  dout(10) << " prior_set_down " << prior_set_down << dendl;
+  if (prior_set_down.empty())
+    return;
+  
+  bool all_lost = true;
+  for (set<int>::iterator q = prior_set_down.begin();
+       q != prior_set_down.end();
+       q++) {
+    int o = *q;
+    if (!osd->osdmap->exists(o)) {
+      dout(10) << "  osd" << o << " dne (and presumably lost)" << dendl;
+      continue;
+    }
+    const osd_info_t& pinfo = osd->osdmap->get_info(o);
+    if (pinfo.lost_at > pinfo.up_from) {
+      dout(10) << "  osd" << o << " lost" << dendl;
+      continue;
+    }
+    all_lost = false;
+  }
+
+  if (all_lost) {
+    dout(10) << " all prior_set_down osds " << prior_set_down << " are lost" << dendl;
+
+    dout(10) << "log before:\n";
+    log.print(*_dout);
+    *_dout << dendl;
+
+    eversion_t oldest_lost = info.last_update;
+    int lost = 0;
+    
+    map<sobject_t,Missing::item>::iterator p = missing.missing.begin();
+    while (p != missing.missing.end()) {
+      if (missing_loc.count(p->first) == 0) {
+	dout(10) << "    " << p->first << " " << p->second.need << " is permanently lost" << dendl;
+	
+	eversion_t v = p->second.need;
+
+	list<Log::Entry>::iterator lp = log.find_entry(v);
+	eversion_t prior = lp->prior_version;
+	dout(10) << " log entry is " << *lp << dendl;
+
+	if (prior != eversion_t() &&
+	    prior != p->second.have) {
+	  dout(10) << " prior version is " << prior << ", but we only have " << p->second.have << dendl;
+	  p++;
+	  continue;
+	}
+
+	stringstream ss;
+	ss << "lost object " << p->first << " " << v << " in " << info.pgid;
+	osd->logclient.log(LOG_ERROR, ss);
+
+	// remove from our log
+	eversion_t prev_entry = log.tail;
+	if (lp != log.log.begin()) {
+	  lp--;
+	  prev_entry = lp->version;
+	  lp++;
+	}
+	dout(10) << " prior object version " << prior << ", prev_entry " << prev_entry << dendl;
+
+	if (v == info.last_update)
+	  log.head = info.last_update = prev_entry;
+	if (v == info.last_complete)
+	  info.last_complete = prev_entry;
+	log.log.erase(lp);
+	lost++;
+
+	if (prev_entry < oldest_lost)
+	  oldest_lost = prev_entry;
+
+	// remove from peer_missing
+	for (map<int,Missing>::iterator q = peer_missing.begin();
+	     q != peer_missing.end();
+	     q++) {
+	  if (q->second.missing.count(p->first) &&
+	      q->second.missing[p->first].need == v) {
+	    if (q->second.missing[p->first].have == prior) {
+	      dout(10) << "  peer osd" << q->first << " no longer missing at all" << dendl;
+	      q->second.missing.erase(p->first);
+	      q->second.rmissing.erase(v);
+	    } else {
+	      dout(10) << "  peer osd" << q->first << " now missing prior " << prior << dendl;
+	      q->second.missing[p->first].need = prior;
+	      q->second.missing[p->first].have = eversion_t(); // a lie!
+	    }
+	  }
+	  if (peer_info[q->first].last_update == v)
+	    peer_info[q->first].last_update = prev_entry;
+	  if (peer_info[q->first].last_complete == v)
+	    peer_info[q->first].last_complete = prev_entry;
+
+	  dout(10) << " osd" << q->first << " info now " << peer_info[q->first] << dendl;
+	  dout(10) << " osd" << q->first << " missing now " << peer_missing[q->first] << dendl;
+	  dout(20) << " osd" << q->first << " missing now " << peer_missing[q->first].missing << dendl;
+	}
+	
+	// remove from my missing
+	missing.rmissing.erase(v);
+	missing.missing.erase(p++);
+	continue;
+      }
+      p++;
+    }
+
+    if (lost) {
+      dout(10) << lost << " objects lost, reindexing log" << dendl;
+      log.index();
+    }
+
+    dout(10) << "log after:\n";
+    log.print(*_dout);
+    *_dout << dendl;
+    dout(10) << "missing now " << missing << dendl;
+    dout(20) << "missing now " << missing.missing << dendl;
+
+    //assert(0);
+  }
+}
 
 void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 		  map<int, MOSDPGInfo*> *activator_map)
