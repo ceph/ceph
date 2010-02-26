@@ -22,6 +22,8 @@
 
 #include <errno.h>
 
+#define CEPH_AUTH_UID_DEFAULT (__u64) -1
+
 class Cond;
 
 struct EntityName {
@@ -109,6 +111,8 @@ struct EntityAuth {
   __u64 auth_uid;
   map<string, bufferlist> caps;
 
+  EntityAuth() : key(), auth_uid(CEPH_AUTH_UID_DEFAULT), caps() {}
+
   void encode(bufferlist& bl) const {
     __u8 struct_v = 2;
     ::encode(struct_v, bl);
@@ -122,7 +126,7 @@ struct EntityAuth {
     ::decode(key, bl);
     if (struct_v >= 2)
       ::decode(auth_uid, bl);
-    else auth_uid = -1;
+    else auth_uid = CEPH_AUTH_UID_DEFAULT;
     ::decode(caps, bl);
   }
 };
@@ -155,7 +159,7 @@ struct AuthCapsInfo {
     allow_all = (bool)a;
     if (struct_v >= 2)
       ::decode(auth_uid, bl);
-    else auth_uid = -1;
+    else auth_uid = CEPH_AUTH_UID_DEFAULT;
     ::decode(caps, bl);
   }
 };
