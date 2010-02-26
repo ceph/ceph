@@ -464,17 +464,17 @@ public:
   };
 
 
-  virtual unsigned apply_transaction(Transaction& t, Context *onjournal=0, Context *ondisk=0) = 0;
-  virtual unsigned apply_transactions(list<Transaction*>& tls, Context *onjournal=0, Context *ondisk=0) = 0;
+  virtual unsigned apply_transaction(Transaction& t, Context *ondisk=0) = 0;
+  virtual unsigned apply_transactions(list<Transaction*>& tls, Context *ondisk=0) = 0;
 
   virtual int queue_transaction(Transaction* t) = 0;
-  virtual int queue_transaction(Transaction *t, Context *onreadable, Context *onjournal=0, Context *ondisk=0) {
+  virtual int queue_transaction(Transaction *t, Context *onreadable, Context *ondisk=0) {
     list<Transaction*> tls;
     tls.push_back(t);
-    return queue_transactions(tls, onreadable, onjournal, ondisk);
+    return queue_transactions(tls, onreadable, ondisk);
   }
   virtual int queue_transactions(list<Transaction*>& tls, Context *onreadable,
-				 Context *onjournal=0, Context *ondisk=0) = 0;
+				 Context *ondisk=0) = 0;
 
 
 

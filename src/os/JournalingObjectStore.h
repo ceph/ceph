@@ -41,7 +41,7 @@ protected:
   int journal_replay(__u64 fs_op_seq);
 
   // --
-  __u64 op_apply_start(__u64 op, Context *ondisk);
+  __u64 op_apply_start(__u64 op);
   void op_apply_finish();
   __u64 op_journal_start(__u64 op);
   void op_journal_finish();

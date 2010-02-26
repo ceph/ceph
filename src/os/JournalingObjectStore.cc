@@ -88,7 +88,7 @@ int JournalingObjectStore::journal_replay(__u64 fs_op_seq)
 
 // ------------------------------------
 
-__u64 JournalingObjectStore::op_apply_start(__u64 op, Context *ondisk) 
+__u64 JournalingObjectStore::op_apply_start(__u64 op) 
 {
   lock.Lock();
   while (blocked) {
@@ -100,9 +100,6 @@ __u64 JournalingObjectStore::op_apply_start(__u64 op, Context *ondisk)
   if (!op)
     op = ++op_seq;
   dout(10) << "op_apply_start " << op << dendl;
-
-  if (ondisk)
-    commit_waiters[op].push_back(ondisk);
 
   lock.Unlock();
   return op;

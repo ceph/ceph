@@ -89,7 +89,7 @@ class FileStore : public JournalingObjectStore {
   struct Op {
     __u64 op;
     list<Transaction*> tls;
-    Context *onreadable, *oncommit;
+    Context *onreadable;
     __u64 ops, bytes;
   };
   deque<Op*> op_queue;
@@ -136,9 +136,9 @@ class FileStore : public JournalingObjectStore {
 
   void _do_op(Op *o);
   void _finish_op(Op *o);
-  void queue_op(__u64 op, list<Transaction*>& tls, Context *onreadable, Context *ondisk);
+  void queue_op(__u64 op, list<Transaction*>& tls, Context *onreadable);
   void _journaled_ahead(__u64 op, list<Transaction*> &tls,
-			Context *onreadable,	Context *onjournal, Context *ondisk);
+			Context *onreadable, Context *ondisk);
   friend class C_JournaledAhead;
 
   // flusher thread
@@ -187,15 +187,14 @@ class FileStore : public JournalingObjectStore {
   int statfs(struct statfs *buf);
 
   int do_transactions(list<Transaction*> &tls, __u64 op_seq);
-  unsigned apply_transaction(Transaction& t, Context *onjournal=0, Context *ondisk=0);
-  unsigned apply_transactions(list<Transaction*>& tls, Context *onjournal=0, Context *ondisk=0);
+  unsigned apply_transaction(Transaction& t, Context *ondisk=0);
+  unsigned apply_transactions(list<Transaction*>& tls, Context *ondisk=0);
   int _transaction_start(__u64 bytes, __u64 ops);
   void _transaction_finish(int id);
   unsigned _do_transaction(Transaction& t);
 
   int queue_transaction(Transaction* t);
-  int queue_transactions(list<Transaction*>& tls, Context *onreadable,
-			  Context *onjournal=0, Context *ondisk=0);
+  int queue_transactions(list<Transaction*>& tls, Context *onreadable, Context *ondisk=0);
 
   // ------------------
   // objects
