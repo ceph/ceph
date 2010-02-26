@@ -41,10 +41,8 @@ class Context {
 inline void finish_contexts(std::list<Context*>& finished, 
                             int result = 0)
 {
-  using std::cout;
-  using std::endl;
-  
-  if (finished.empty()) return;
+  if (finished.empty())
+    return;
 
   list<Context*> ls;
   ls.swap(finished); // swap out of place to avoid weird loops
@@ -63,10 +61,8 @@ inline void finish_contexts(std::list<Context*>& finished,
 inline void finish_contexts(std::vector<Context*>& finished, 
                             int result = 0)
 {
-  using std::cout;
-  using std::endl;
-  
-  if (finished.empty()) return;
+  if (finished.empty())
+    return;
 
   vector<Context*> ls;
   ls.swap(finished); // swap out of place to avoid weird loops
