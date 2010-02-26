@@ -93,7 +93,7 @@ int main(int argc, const char **argv, const char *envp[])
   messenger->bind();
   g_conf.daemonize = false; // not us!
   messenger->start();
-  messenger->register_entity(entity_name_t::ADMIN());
+  messenger->register_entity(entity_name_t::CLIENT());
   messenger->add_dispatcher_head(&dispatcher);
 
   inodeno_t ino = MDS_INO_LOG_OFFSET + mds;

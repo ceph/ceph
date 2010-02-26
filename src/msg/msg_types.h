@@ -30,7 +30,6 @@ public:
   static const int TYPE_MDS = CEPH_ENTITY_TYPE_MDS;
   static const int TYPE_OSD = CEPH_ENTITY_TYPE_OSD;
   static const int TYPE_CLIENT = CEPH_ENTITY_TYPE_CLIENT;
-  static const int TYPE_ADMIN = CEPH_ENTITY_TYPE_ADMIN;
 
   static const int NEW = -1;
 
@@ -45,7 +44,6 @@ public:
   static entity_name_t MDS(int i=NEW) { return entity_name_t(TYPE_MDS, i); }
   static entity_name_t OSD(int i=NEW) { return entity_name_t(TYPE_OSD, i); }
   static entity_name_t CLIENT(int i=NEW) { return entity_name_t(TYPE_CLIENT, i); }
-  static entity_name_t ADMIN(int i=NEW) { return entity_name_t(TYPE_ADMIN, i); }
   
   __s64 num() const { return _num; }
   int type() const { return _type; }
@@ -59,7 +57,6 @@ public:
   bool is_mds() const { return type() == TYPE_MDS; }
   bool is_osd() const { return type() == TYPE_OSD; }
   bool is_mon() const { return type() == TYPE_MON; }
-  bool is_admin() const { return type() == TYPE_ADMIN; }
 
   operator ceph_entity_name() const {
     ceph_entity_name n = { _type, init_le64(_num) };

@@ -10,7 +10,6 @@ const char *ceph_entity_type_name(int type)
 	case CEPH_ENTITY_TYPE_OSD: return "osd";
 	case CEPH_ENTITY_TYPE_MON: return "mon";
 	case CEPH_ENTITY_TYPE_CLIENT: return "client";
-	case CEPH_ENTITY_TYPE_ADMIN: return "admin";
 	case CEPH_ENTITY_TYPE_AUTH: return "auth";
 	default: return "unknown";
 	}

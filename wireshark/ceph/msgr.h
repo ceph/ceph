@@ -50,7 +50,6 @@ struct ceph_entity_name {
 #define CEPH_ENTITY_TYPE_MDS    2
 #define CEPH_ENTITY_TYPE_OSD    3
 #define CEPH_ENTITY_TYPE_CLIENT 4
-#define CEPH_ENTITY_TYPE_ADMIN  5
 
 /*
  * entity_addr -- network address
