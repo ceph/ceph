@@ -74,7 +74,28 @@ int main(int argc, const char **argv)
     cerr << me << ": must specify filename" << std::endl;
     usage();
   }
+  if (!(gen_key ||
+	add_key ||
+	list ||
+	caps_fn ||
+	print_key ||
+	create_keyring ||
+	import_keyring)) {
+    cerr << "no command specified" << std::endl;
+    usage();
+  }
+  if (gen_key && add_key) {
+    cerr << "can't both gen_key and add_key" << std::endl;
+    usage();
+  }	
+  if (caps_fn || add_key || gen_key || print_key) {
+    if (!name || !(*name)) {
+      cerr << "must specify entity name" << std::endl;
+      usage();
+    }
+  }
 
+  // keyring --------
   bool modified = false;
   KeyRing keyring;
   string s = name;
@@ -82,13 +103,6 @@ int main(int argc, const char **argv)
   if (name[0] && !ename.from_str(s)) {
     cerr << "'" << s << "' is not a valid entity name" << std::endl;
     exit(1);
-  }
-
-  if (caps_fn) {
-    if (!name || !(*name)) {
-      cerr << "can't specify caps without name" << std::endl;
-      exit(1);
-    }
   }
 
   bufferlist bl;
@@ -112,39 +126,8 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (gen_key) {
-    EntityAuth eauth;
-    eauth.key.create(CEPH_CRYPTO_AES);
-    keyring.add(ename, eauth);
-    modified = true;
-  } else if (add_key) {
-    if (!name) {
-      cerr << "must speicfy a name to add a key" << std::endl;
-      exit(1);
-    }
-    EntityAuth eauth;
-    string ekey(add_key);
-    try {
-      eauth.key.decode_base64(ekey);
-    } catch (buffer::error *err) {
-      cerr << "can't decode key '" << add_key << "'" << std::endl;
-      exit(1);
-    }
-    keyring.add(ename, eauth);    
-    modified = true;
-    cout << "added entity " << ename << " auth " << eauth << std::endl;  
-  } else if (list) {
-    keyring.print(cout);
-  } else if (print_key) {
-    CryptoKey key;
-    if (keyring.get_secret(ename, key)) {
-      string a;
-      key.encode_base64(a);
-      cout << a << std::endl;
-    } else {
-      cerr << "entity " << ename << " not found" << std::endl;
-    }
-  } else if (import_keyring) {
+  // write commands
+  if (import_keyring) {
     KeyRing other;
     bufferlist obl;
     int r = obl.read_file(import_keyring);
@@ -165,11 +148,30 @@ int main(int argc, const char **argv)
       cerr << "can't open " << import_keyring << ": " << strerror(-r) << std::endl;
       exit(1);
     }
-  } else if (!caps_fn) {
-    cerr << "no command specified" << std::endl;
-    usage();
   }
-
+  if (gen_key) {
+    EntityAuth eauth;
+    eauth.key.create(CEPH_CRYPTO_AES);
+    keyring.add(ename, eauth);
+    modified = true;
+  }
+  if (add_key) {
+    if (!name) {
+      cerr << "must speicfy a name to add a key" << std::endl;
+      exit(1);
+    }
+    EntityAuth eauth;
+    string ekey(add_key);
+    try {
+      eauth.key.decode_base64(ekey);
+    } catch (buffer::error *err) {
+      cerr << "can't decode key '" << add_key << "'" << std::endl;
+      exit(1);
+    }
+    keyring.add(ename, eauth);    
+    modified = true;
+    cout << "added entity " << ename << " auth " << eauth << std::endl;  
+  }
   if (caps_fn) {
     ConfFile *cf = new ConfFile(caps_fn);
     if (!cf->parse()) {
@@ -193,6 +195,22 @@ int main(int argc, const char **argv)
     modified = true;
   }
 
+  // read commands
+  if (list) {
+    keyring.print(cout);
+  }
+  if (print_key) {
+    CryptoKey key;
+    if (keyring.get_secret(ename, key)) {
+      string a;
+      key.encode_base64(a);
+      cout << a << std::endl;
+    } else {
+      cerr << "entity " << ename << " not found" << std::endl;
+    }
+  }
+
+  // write result?
   if (modified) {
     bufferlist bl;
     ::encode(keyring, bl);
