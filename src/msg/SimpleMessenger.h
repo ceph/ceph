@@ -134,6 +134,10 @@ private:
     __u64 out_seq;
     __u64 in_seq, in_seq_acked;
     
+    int get_required_bits(); /* get bits this Messenger requires
+			      * the peer to support */
+    int get_supported_bits(); /* get bits this Messenger expects
+			       * the peer to support */
     int accept();   // server handshake
     int connect();  // client handshake
     void reader();

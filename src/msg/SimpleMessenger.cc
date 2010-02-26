@@ -505,7 +505,71 @@ static int get_proto_version(int my_type, int peer_type, bool connect)
   return 0;
 }
 
+int SimpleMessenger::Pipe::get_required_bits()
+{
+  int my_reqs = 0;
+  int peer_reqs = 0;
+  switch(messenger->my_type) {
+  case CEPH_ENTITY_TYPE_OSD: my_reqs = CEPH_FEATURE_REQUIRED_OSD;
+    break;
+  case CEPH_ENTITY_TYPE_MDS: my_reqs = CEPH_FEATURE_REQUIRED_MDS;
+    break;
+  case CEPH_ENTITY_TYPE_MON: my_reqs = CEPH_FEATURE_REQUIRED_MON;
+    break;
+  case CEPH_ENTITY_TYPE_CLIENT: my_reqs = CEPH_FEATURE_REQUIRED_CLIENT;
+    break;
+  default: dout(0) << "I have no/unexpected type: "
+		   << messenger->my_type << dendl;
+    //die somehow?
+  }
+  switch(peer_type) {
+  case CEPH_ENTITY_TYPE_OSD: peer_reqs = CEPH_FEATURE_REQUIRED_OSD;
+    break;
+  case CEPH_ENTITY_TYPE_MDS: peer_reqs = CEPH_FEATURE_REQUIRED_MDS;
+    break;
+  case CEPH_ENTITY_TYPE_MON: peer_reqs = CEPH_FEATURE_REQUIRED_MON;
+    break;
+  case CEPH_ENTITY_TYPE_CLIENT: peer_reqs = CEPH_FEATURE_REQUIRED_CLIENT;
+    break;
+  default: dout(0) << "Peer has no/unexpected type: "
+		   <<peer_type << dendl;
+    //die somewhow?
+  }
+  return my_reqs & peer_reqs; // only need those required by both
+}
 
+int SimpleMessenger::Pipe::get_supported_bits()
+{
+  int my_sup = 0;
+  int peer_sup = 0;
+  switch(messenger->my_type) {
+  case CEPH_ENTITY_TYPE_OSD: my_sup = CEPH_FEATURE_SUPPORTED_OSD;
+    break;
+  case CEPH_ENTITY_TYPE_MDS: my_sup = CEPH_FEATURE_SUPPORTED_MDS;
+    break;
+  case CEPH_ENTITY_TYPE_MON: my_sup = CEPH_FEATURE_SUPPORTED_MON;
+    break;
+  case CEPH_ENTITY_TYPE_CLIENT: my_sup = CEPH_FEATURE_SUPPORTED_CLIENT;
+    break;
+  default: dout(0) << "I have no/unexpected type: " 
+		   << messenger->my_type << dendl;
+    //die somehow?
+  }
+  switch(peer_type) {
+  case CEPH_ENTITY_TYPE_OSD: peer_sup = CEPH_FEATURE_SUPPORTED_OSD;
+    break;
+  case CEPH_ENTITY_TYPE_MDS: peer_sup = CEPH_FEATURE_SUPPORTED_MDS;
+    break;
+  case CEPH_ENTITY_TYPE_MON: peer_sup = CEPH_FEATURE_SUPPORTED_MON;
+    break;
+  case CEPH_ENTITY_TYPE_CLIENT: peer_sup = CEPH_FEATURE_SUPPORTED_CLIENT;
+    break;
+  default: dout(0) << "Peer has no/unexpected type: "
+		   << peer_type << dendl;
+    //die somewhow?
+  }
+  return my_sup & peer_sup; // only need those required by both
+}
 int SimpleMessenger::Pipe::accept()
 {
   dout(10) << "accept" << dendl;
@@ -642,7 +706,7 @@ int SimpleMessenger::Pipe::accept()
       goto reply;
     }
 
-    feat_missing = CEPH_FEATURE_REQUIRED & ~(__u64)connect.features;
+    feat_missing = get_required_bits() & ~(__u64)connect.features;
     if (feat_missing) {
       dout(1) << "peer missing required features " << std::hex << feat_missing << std::dec << dendl;
       reply.tag = CEPH_MSGR_TAG_FEATURES;
@@ -774,7 +838,7 @@ int SimpleMessenger::Pipe::accept()
     assert(0);    
 
   reply:
-    reply.features = ((__u64)connect.features & CEPH_FEATURE_SUPPORTED) | CEPH_FEATURE_REQUIRED;
+    reply.features = ((__u64)connect.features & get_supported_bits()) | get_required_bits();
     reply.authorizer_len = authorizer_reply.length();
     rc = tcp_write(sd, (char*)&reply, sizeof(reply));
     if (rc < 0)
@@ -813,7 +877,7 @@ int SimpleMessenger::Pipe::accept()
 
   // send READY reply
   reply.tag = CEPH_MSGR_TAG_READY;
-  reply.features = CEPH_FEATURE_SUPPORTED;
+  reply.features = get_supported_bits();
   reply.global_seq = messenger->get_global_seq();
   reply.connect_seq = connect_seq;
   reply.flags = 0;
@@ -992,7 +1056,7 @@ int SimpleMessenger::Pipe::connect()
     bufferlist authorizer_reply;
 
     ceph_msg_connect connect;
-    connect.features = CEPH_FEATURE_SUPPORTED;
+    connect.features = get_supported_bits();
     connect.host_type = messenger->my_type;
     connect.global_seq = gseq;
     connect.connect_seq = cseq;
@@ -1067,7 +1131,7 @@ int SimpleMessenger::Pipe::connect()
     if (reply.tag == CEPH_MSGR_TAG_FEATURES) {
       dout(0) << "connect protocol feature mismatch, my " << std::hex
 	      << connect.features << " < peer " << reply.features
-	      << " missing " << (reply.features & ~CEPH_FEATURE_SUPPORTED)
+	      << " missing " << (reply.features & ~get_supported_bits())
 	      << std::dec << dendl;
       goto fail_locked;
     }
@@ -1117,7 +1181,7 @@ int SimpleMessenger::Pipe::connect()
     }
 
     if (reply.tag == CEPH_MSGR_TAG_READY) {
-      __u64 feat_missing = CEPH_FEATURE_REQUIRED & ~(__u64)reply.features;
+      __u64 feat_missing = get_required_bits() & ~(__u64)reply.features;
       if (feat_missing) {
 	dout(1) << "missing required features " << std::hex << feat_missing << std::dec << dendl;
 	goto fail_locked;
