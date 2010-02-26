@@ -69,4 +69,14 @@ class Finisher {
 	       finisher_stop(false), finisher_running(false), finisher_thread(this) {}
 };
 
+class C_OnFinisher : public Context {
+  Context *con;
+  Finisher *fin;
+public:
+  C_OnFinisher(Context *c, Finisher *f) : con(c), fin(f) {}
+  void finish(int r) {
+    fin->queue(con, r);
+  }
+};
+
 #endif
