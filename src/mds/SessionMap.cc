@@ -171,10 +171,12 @@ void SessionMap::decode(bufferlist::iterator& p)
   utime_t now = g_clock.now();
   __u64 pre;
   ::decode(pre, p);
-  if (version == (__u64)-1) {
+  if (pre == (__u64)-1) {
     __u8 struct_v;
     ::decode(struct_v, p);
     assert(struct_v == 2);
+
+    ::decode(version, p);
 
     while (!p.end()) {
       entity_inst_t inst;
