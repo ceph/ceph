@@ -16,20 +16,21 @@
 #define __MMDSLoadTargets_H
 
 #include "msg/Message.h"
+#include "messages/PaxosServiceMessage.h"
 #include "include/types.h"
 
 #include <map>
 using std::map;
 
-class MMDSLoadTargets : public Message {
+class MMDSLoadTargets : public PaxosServiceMessage {
  public:
   __u64 global_id;
   set<int32_t> targets;
 
-  MMDSLoadTargets() : Message(MSG_MDS_OFFLOAD_TARGETS) {}
+  MMDSLoadTargets() : PaxosServiceMessage(MSG_MDS_OFFLOAD_TARGETS, 0) {}
 
   MMDSLoadTargets(__u64 g, set<int32_t>& mds_targets) :
-    Message(MSG_MDS_OFFLOAD_TARGETS),
+    PaxosServiceMessage(MSG_MDS_OFFLOAD_TARGETS, 0),
     global_id(g), targets(mds_targets) {}
 
   const char* get_type_name() { return "mds_load_targets"; }
@@ -39,11 +40,13 @@ class MMDSLoadTargets : public Message {
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(global_id, p);
     ::decode(targets, p);
   }
 
   void encode_payload() {
+    paxos_encode();
     ::encode(global_id, payload);
     ::encode(targets, payload);
   }
