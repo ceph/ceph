@@ -23,6 +23,9 @@
 
 #define OSD_POOL_CAP_ALL (OSD_POOL_CAP_R | OSD_POOL_CAP_W | OSD_POOL_CAP_X)
 
+//this needs to match Auth.h
+#define CEPH_AUTH_UID_DEFAULT (__u64) -1
+
 typedef __u8 rwx_t;
 
 static inline ostream& operator<<(ostream& out, rwx_t p) {
@@ -50,14 +53,17 @@ struct OSDCaps {
   map<int, OSDPoolCap> pools_map;
   rwx_t default_action;
   bool allow_all;
+  __u64 auth_uid;
 
   bool get_next_token(string s, size_t& pos, string& token);
   bool is_rwx(string& token, rwx_t& cap_val);
   
-  OSDCaps() : default_action(0), allow_all(false) {}
+  OSDCaps() : default_action(0), allow_all(false),
+	      auth_uid(CEPH_AUTH_UID_DEFAULT) {}
   bool parse(bufferlist::iterator& iter);
-  int get_pool_cap(int pool_id);
+  int get_pool_cap(int pool_id, __u64 uid = CEPH_AUTH_UID_DEFAULT);
   void set_allow_all(bool allow) { allow_all = allow; }
+  void set_auth_uid(__u64 uid) { auth_uid = uid; }
 };
 
 static inline ostream& operator<<(ostream& out, const OSDCaps& c) {
