@@ -523,6 +523,13 @@ protected:
       rm->pg->sub_op_modify_commit(rm);
     }
   };
+  struct C_OSD_OndiskWriteUnlock : public Context {
+    ObjectContext *obc;
+    C_OSD_OndiskWriteUnlock(ObjectContext *o) : obc(o) {}
+    void finish(int r) {
+      obc->ondisk_write_unlock();
+    }
+  };
   struct C_OSD_WrotePushedObject : public Context {
     ReplicatedPG *pg;
     ObjectStore::Transaction *t;
