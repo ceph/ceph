@@ -468,13 +468,14 @@ public:
   virtual unsigned apply_transactions(list<Transaction*>& tls, Context *ondisk=0) = 0;
 
   virtual int queue_transaction(Transaction* t) = 0;
-  virtual int queue_transaction(Transaction *t, Context *onreadable, Context *ondisk=0) {
+  virtual int queue_transaction(Transaction *t, Context *onreadable, Context *ondisk=0,
+				Context *onreadable_sync=0) {
     list<Transaction*> tls;
     tls.push_back(t);
-    return queue_transactions(tls, onreadable, ondisk);
+    return queue_transactions(tls, onreadable, ondisk, onreadable_sync);
   }
-  virtual int queue_transactions(list<Transaction*>& tls, Context *onreadable,
-				 Context *ondisk=0) = 0;
+  virtual int queue_transactions(list<Transaction*>& tls, Context *onreadable, Context *ondisk=0,
+				 Context *onreadable_sync=0) = 0;
 
 
 

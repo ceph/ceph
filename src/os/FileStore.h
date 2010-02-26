@@ -89,7 +89,7 @@ class FileStore : public JournalingObjectStore {
   struct Op {
     __u64 op;
     list<Transaction*> tls;
-    Context *onreadable;
+    Context *onreadable, *onreadable_sync;
     __u64 ops, bytes;
   };
   deque<Op*> op_queue;
@@ -97,7 +97,7 @@ class FileStore : public JournalingObjectStore {
   Cond op_throttle_cond;
   Finisher op_finisher;
   __u64 next_finish;
-  map<__u64, Context*> finish_queue;
+  map<__u64, pair<Context*,Context*> > finish_queue;
 
   ThreadPool op_tp;
   struct OpWQ : public ThreadPool::WorkQueue<Op> {
@@ -136,9 +136,9 @@ class FileStore : public JournalingObjectStore {
 
   void _do_op(Op *o);
   void _finish_op(Op *o);
-  void queue_op(__u64 op, list<Transaction*>& tls, Context *onreadable);
+  void queue_op(__u64 op, list<Transaction*>& tls, Context *onreadable, Context *onreadable_sync);
   void _journaled_ahead(__u64 op, list<Transaction*> &tls,
-			Context *onreadable, Context *ondisk);
+			Context *onreadable, Context *ondisk, Context *onreadable_sync);
   friend class C_JournaledAhead;
 
   // flusher thread
@@ -194,7 +194,8 @@ class FileStore : public JournalingObjectStore {
   unsigned _do_transaction(Transaction& t);
 
   int queue_transaction(Transaction* t);
-  int queue_transactions(list<Transaction*>& tls, Context *onreadable, Context *ondisk=0);
+  int queue_transactions(list<Transaction*>& tls, Context *onreadable, Context *ondisk=0,
+			 Context *onreadable_sync=0);
 
   // ------------------
   // objects
