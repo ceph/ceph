@@ -133,7 +133,10 @@ struct EntityAuth {
 WRITE_CLASS_ENCODER(EntityAuth)
 
 static inline ostream& operator<<(ostream& out, const EntityAuth& a) {
-  return out << "auth(key=" << a.key << " with " << a.caps.size() << " caps)";
+  out << "auth(key=" << a.key;
+  if (a.auth_uid != CEPH_AUTH_UID_DEFAULT)
+    out << " uid=" << a.auth_uid;
+  return out << " with " << a.caps.size() << " caps)";
 }
 
 struct AuthCapsInfo {
@@ -141,7 +144,7 @@ struct AuthCapsInfo {
   __u64 auth_uid;
   bufferlist caps;
 
-  AuthCapsInfo() : allow_all(false) {}
+  AuthCapsInfo() : allow_all(false), auth_uid(CEPH_AUTH_UID_DEFAULT){}
 
   void encode(bufferlist& bl) const {
     __u8 struct_v = 2;

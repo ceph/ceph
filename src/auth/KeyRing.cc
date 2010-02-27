@@ -67,7 +67,7 @@ void KeyRing::print(ostream& out)
   for (map<EntityName, EntityAuth>::iterator p = keys.begin();
        p != keys.end();
        ++p) {
-    out << p->first << std::endl;
+    out << p->first << "\t" << p->second.auth_uid << std::endl;
     out << "\tkey: " << p->second.key << std::endl;
 
     for (map<string, bufferlist>::iterator q = p->second.caps.begin();
