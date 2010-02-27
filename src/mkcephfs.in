@@ -139,7 +139,7 @@ if echo $what | grep -q mon0 ; then
 	mds = "allow"
 EOF
     [ -e "$monkeyring" ] && rm -f $monkeyring
-    $BINDIR/cauthtool --create-keyring --gen-key --name=client.admin --caps=/tmp/admin_caps.$$ $adminkeyring
+    $BINDIR/cauthtool --create-keyring --gen-key --name=client.admin --set-uid=0 --caps=/tmp/admin_caps.$$ $adminkeyring
     rm -f /tmp/admin_caps.$$
 
     # mon keyring (for monitor)
