@@ -60,9 +60,9 @@ filestore
   - need an osdmap cache layer?
 
 bugs
-- dbench 1, restart mds (may take a few times), dbench will error out.
-
+- wget mismatch with multiple mds?
 - rm -r failure (on kernel tree)
+- dbench 1, restart mds (may take a few times), dbench will error out.
 
 ?- bonnie++ -u root -d /mnt/ceph/ -s 0 -n 1
 (03:35:29 PM) Isteriat: Using uid:0, gid:0.
@@ -73,7 +73,6 @@ bugs
 - osd pg split breaks if not all osds are up...
 
 - mds recovery flag set on inode that didn't get recovered??
-- mds memory leak (after some combo of client failures, mds restarts+reconnects?)
 - osd pg split breaks if not all osds are up...
 - mislinked directory?  (cpusr.sh, mv /c/* /c/t, more cpusr, ls /c/t)
 
