@@ -27,3 +27,4 @@ depcomp
 install-sh
 missing
 src/ceph_ver.h
+release
