@@ -94,7 +94,14 @@ class FileStore : public JournalingObjectStore {
     Context *onreadable, *onreadable_sync;
     __u64 ops, bytes;
   };
-  deque<Op*> op_queue;
+  struct OpSequencer {
+    Sequencer *parent;
+    list<Op*> q;
+    Mutex lock;
+    OpSequencer() : lock("FileStore::OpSequencer::lock", false, false) {}
+  };
+  Sequencer default_osr;
+  deque<OpSequencer*> op_queue;
   __u64 op_queue_len, op_queue_bytes;
   Cond op_throttle_cond;
   Finisher op_finisher;
@@ -102,44 +109,44 @@ class FileStore : public JournalingObjectStore {
   map<__u64, pair<Context*,Context*> > finish_queue;
 
   ThreadPool op_tp;
-  struct OpWQ : public ThreadPool::WorkQueue<Op> {
+  struct OpWQ : public ThreadPool::WorkQueue<OpSequencer> {
     FileStore *store;
-    OpWQ(FileStore *fs, ThreadPool *tp) : ThreadPool::WorkQueue<Op>("FileStore::OpWQ", tp), store(fs) {}
+    OpWQ(FileStore *fs, ThreadPool *tp) : ThreadPool::WorkQueue<OpSequencer>("FileStore::OpWQ", tp), store(fs) {}
 
-    bool _enqueue(Op *o) {
-      store->op_queue.push_back(o);
+    bool _enqueue(OpSequencer *osr) {
+      store->op_queue.push_back(osr);
       store->op_queue_len++;
-      store->op_queue_bytes += o->bytes;
+      store->op_queue_bytes += osr->q.back()->bytes;
       return true;
     }
-    void _dequeue(Op *o) {
+    void _dequeue(OpSequencer *o) {
       assert(0);
     }
     bool _empty() {
       return store->op_queue.empty();
     }
-    Op *_dequeue() {
+    OpSequencer *_dequeue() {
       if (store->op_queue.empty())
 	return NULL;
-      Op *o = store->op_queue.front();
+      OpSequencer *osr = store->op_queue.front();
       store->op_queue.pop_front();
-      return o;
+      return osr;
     }
-    void _process(Op *o) {
-      store->_do_op(o);
+    void _process(OpSequencer *osr) {
+      store->_do_op(osr);
     }
-    void _process_finish(Op *o) {
-      store->_finish_op(o);
+    void _process_finish(OpSequencer *osr) {
+      store->_finish_op(osr);
     }
     void _clear() {
       assert(store->op_queue.empty());
     }
   } op_wq;
 
-  void _do_op(Op *o);
-  void _finish_op(Op *o);
-  void queue_op(__u64 op, list<Transaction*>& tls, Context *onreadable, Context *onreadable_sync);
-  void _journaled_ahead(__u64 op, list<Transaction*> &tls,
+  void _do_op(OpSequencer *o);
+  void _finish_op(OpSequencer *o);
+  void queue_op(Sequencer *osr, __u64 op, list<Transaction*>& tls, Context *onreadable, Context *onreadable_sync);
+  void _journaled_ahead(Sequencer *osr, __u64 op, list<Transaction*> &tls,
 			Context *onreadable, Context *ondisk, Context *onreadable_sync);
   friend class C_JournaledAhead;
 
@@ -195,8 +202,8 @@ class FileStore : public JournalingObjectStore {
   void _transaction_finish(int id);
   unsigned _do_transaction(Transaction& t);
 
-  int queue_transaction(Transaction* t);
-  int queue_transactions(list<Transaction*>& tls, Context *onreadable, Context *ondisk=0,
+  int queue_transaction(Sequencer *osr, Transaction* t);
+  int queue_transactions(Sequencer *osr, list<Transaction*>& tls, Context *onreadable, Context *ondisk=0,
 			 Context *onreadable_sync=0);
 
   // ------------------

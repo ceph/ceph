@@ -651,7 +651,7 @@ int FileStore::umount()
 
 /// -----------------------------
 
-void FileStore::queue_op(__u64 op_seq, list<Transaction*>& tls, Context *onreadable, Context *onreadable_sync)
+void FileStore::queue_op(Sequencer *posr, __u64 op_seq, list<Transaction*>& tls, Context *onreadable, Context *onreadable_sync)
 {
   __u64 bytes = 0, ops = 0;
   for (list<Transaction*>::iterator p = tls.begin();
@@ -674,6 +674,21 @@ void FileStore::queue_op(__u64 op_seq, list<Transaction*>& tls, Context *onreada
   o->bytes = bytes;
 
   op_tp.lock();
+
+  OpSequencer *osr;
+  if (!posr)
+    posr = &default_osr;
+  if (posr->p) {
+    osr = (OpSequencer *)posr->p;
+    dout(10) << "queue_op existing osr " << osr << "/" << osr->parent << " w/ q " << osr->q << dendl;
+  } else {
+    osr = new OpSequencer;
+    osr->parent = posr;
+    posr->p = (void *)osr;
+    dout(10) << "queue_op new osr " << osr << "/" << osr->parent << dendl;
+  }
+  osr->q.push_back(o);
+
   while ((g_conf.filestore_queue_max_ops && op_queue_len >= (unsigned)g_conf.filestore_queue_max_ops) ||
 	 (g_conf.filestore_queue_max_bytes && op_queue_bytes >= (unsigned)g_conf.filestore_queue_max_bytes)) {
     dout(2) << "queue_op " << o << " throttle: "
@@ -684,12 +699,15 @@ void FileStore::queue_op(__u64 op_seq, list<Transaction*>& tls, Context *onreada
   op_tp.unlock();
 
   dout(10) << "queue_op " << o << " seq " << op_seq << " " << bytes << " bytes" << dendl;
-  op_wq.queue(o);
+  op_wq.queue(osr);
 }
 
-void FileStore::_do_op(Op *o)
+void FileStore::_do_op(OpSequencer *osr)
 {
-  dout(10) << "_do_op " << o << " " << o->op << " start" << dendl;
+  osr->lock.Lock();
+  Op *o = osr->q.front();
+
+  dout(10) << "_do_op " << o << " " << o->op << " osr " << osr << "/" << osr->parent << " start" << dendl;
   op_apply_start(o->op);
   int r = do_transactions(o->tls, o->op);
   op_apply_finish();
@@ -701,8 +719,21 @@ void FileStore::_do_op(Op *o)
   */
 }
 
-void FileStore::_finish_op(Op *o)
+void FileStore::_finish_op(OpSequencer *osr)
 {
+  Op *o = osr->q.front();
+  osr->q.pop_front();
+  
+  if (osr->q.empty()) {
+    dout(10) << "_finish_op last op " << o << " on osr " << osr << "/" << osr->parent << dendl;
+    osr->parent->p = NULL;
+    osr->lock.Unlock();  // locked in _do_op
+    delete osr;
+  } else {
+    dout(10) << "_finish_op on osr " << osr << "/" << osr->parent << " q now " << osr->q << dendl;
+    osr->lock.Unlock();  // locked in _do_op
+  }
+
   // called with tp lock held
   op_queue_len--;
   op_queue_bytes -= o->bytes;
@@ -743,27 +774,28 @@ void FileStore::_finish_op(Op *o)
 
 struct C_JournaledAhead : public Context {
   FileStore *fs;
+  ObjectStore::Sequencer *osr;
   __u64 op;
   list<ObjectStore::Transaction*> tls;
   Context *onreadable, *onreadable_sync;
   Context *ondisk;
 
-  C_JournaledAhead(FileStore *f, __u64 o, list<ObjectStore::Transaction*>& t,
+  C_JournaledAhead(FileStore *f, ObjectStore::Sequencer *os, __u64 o, list<ObjectStore::Transaction*>& t,
 		   Context *onr, Context *ond, Context *onrsync) :
-    fs(f), op(o), tls(t), onreadable(onr), onreadable_sync(onrsync), ondisk(ond) { }
+    fs(f), osr(os), op(o), tls(t), onreadable(onr), onreadable_sync(onrsync), ondisk(ond) { }
   void finish(int r) {
-    fs->_journaled_ahead(op, tls, onreadable, ondisk, onreadable_sync);
+    fs->_journaled_ahead(osr, op, tls, onreadable, ondisk, onreadable_sync);
   }
 };
 
-int FileStore::queue_transaction(Transaction *t)
+int FileStore::queue_transaction(Sequencer *osr, Transaction *t)
 {
   list<Transaction*> tls;
   tls.push_back(t);
-  return queue_transactions(tls, new C_DeleteTransaction(t));
+  return queue_transactions(osr, tls, new C_DeleteTransaction(t));
 }
 
-int FileStore::queue_transactions(list<Transaction*> &tls,
+int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
 				  Context *onreadable, Context *ondisk,
 				  Context *onreadable_sync)
 {
@@ -778,7 +810,7 @@ int FileStore::queue_transactions(list<Transaction*> &tls,
       journal_transactions(tls, op, ondisk);
       
       // queue inside journal lock, to preserve ordering
-      queue_op(op, tls, onreadable, onreadable_sync);
+      queue_op(osr, op, tls, onreadable, onreadable_sync);
       
       op_journal_finish();
       return 0;
@@ -787,7 +819,7 @@ int FileStore::queue_transactions(list<Transaction*> &tls,
       __u64 op = op_journal_start(0);
       dout(10) << "queue_transactions (writeahead) " << op << " " << tls << dendl;
       journal_transactions(tls, op,
-			   new C_JournaledAhead(this, op, tls, onreadable, ondisk, onreadable_sync));
+			   new C_JournaledAhead(this, osr, op, tls, onreadable, ondisk, onreadable_sync));
       op_journal_finish();
       return 0;
     }
@@ -817,14 +849,14 @@ int FileStore::queue_transactions(list<Transaction*> &tls,
   return r;
 }
 
-void FileStore::_journaled_ahead(__u64 op,
+void FileStore::_journaled_ahead(Sequencer *osr, __u64 op,
 				 list<Transaction*> &tls,
 				 Context *onreadable, Context *ondisk,
 				 Context *onreadable_sync)
 {
   dout(10) << "_journaled_ahead " << op << " " << tls << dendl;
   // this should queue in order because the journal does it's completions in order.
-  queue_op(op, tls, onreadable, onreadable_sync);
+  queue_op(osr, op, tls, onreadable, onreadable_sync);
 
   // do ondisk completions async, to prevent any onreadable_sync completions
   // getting blocked behind an ondisk completion.
@@ -885,7 +917,7 @@ unsigned FileStore::apply_transactions(list<Transaction*> &tls,
     C_SafeCond *onreadable = new C_SafeCond(&my_lock, &my_cond, &done, &r);
 
     dout(10) << "apply queued" << dendl;
-    queue_transactions(tls, onreadable, ondisk);
+    queue_transactions(NULL, tls, onreadable, ondisk);
     
     my_lock.Lock();
     while (!done)

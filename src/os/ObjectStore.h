@@ -73,6 +73,14 @@ public:
     map<int,int> free_extent_dist_sum;     // powers of two
   };
   
+
+  struct Sequencer {
+    void *p;
+    Sequencer() : p(NULL) {}
+    ~Sequencer() {
+      assert(p == NULL);
+    }
+  };
   
 
   /*********************************
@@ -467,14 +475,14 @@ public:
   virtual unsigned apply_transaction(Transaction& t, Context *ondisk=0) = 0;
   virtual unsigned apply_transactions(list<Transaction*>& tls, Context *ondisk=0) = 0;
 
-  virtual int queue_transaction(Transaction* t) = 0;
-  virtual int queue_transaction(Transaction *t, Context *onreadable, Context *ondisk=0,
+  virtual int queue_transaction(Sequencer *osr, Transaction* t) = 0;
+  virtual int queue_transaction(Sequencer *osr, Transaction *t, Context *onreadable, Context *ondisk=0,
 				Context *onreadable_sync=0) {
     list<Transaction*> tls;
     tls.push_back(t);
-    return queue_transactions(tls, onreadable, ondisk, onreadable_sync);
+    return queue_transactions(osr, tls, onreadable, ondisk, onreadable_sync);
   }
-  virtual int queue_transactions(list<Transaction*>& tls, Context *onreadable, Context *ondisk=0,
+  virtual int queue_transactions(Sequencer *osr, list<Transaction*>& tls, Context *onreadable, Context *ondisk=0,
 				 Context *onreadable_sync=0) = 0;
 
 
