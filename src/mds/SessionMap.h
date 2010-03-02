@@ -225,14 +225,13 @@ public:
       return session_map[w];
     return 0;
   }
-  Session* get_or_add_open_session(entity_inst_t i) {
+  Session* get_or_add_session(entity_inst_t i) {
     Session *s;
     if (session_map.count(i.name))
       s = session_map[i.name];
     else
       s = session_map[i.name] = new Session;
     s->inst = i;
-    set_state(s, Session::STATE_OPEN);
     s->last_cap_renew = g_clock.now();
     return s;
   }
@@ -288,8 +287,10 @@ public:
   void open_sessions(map<client_t,entity_inst_t>& client_map) {
     for (map<client_t,entity_inst_t>::iterator p = client_map.begin(); 
 	 p != client_map.end(); 
-	 ++p)
-      get_or_add_open_session(p->second);
+	 ++p) {
+      Session *s = get_or_add_session(p->second);
+      set_state(s, Session::STATE_OPEN);
+    }
     version++;
   }
 

@@ -709,7 +709,9 @@ void ESession::replay(MDS *mds)
     mds->sessionmap.projected = ++mds->sessionmap.version;
     assert(mds->sessionmap.version == cmapv);
     if (open) {
-      Session *session = mds->sessionmap.get_or_add_open_session(client_inst);
+      Session *session = mds->sessionmap.get_or_add_session(client_inst);
+      if (session->is_new())
+	mds->sessionmap.set_state(session, Session::STATE_OPEN);
       dout(10) << "session " << session << " state " << session->get_state() << dendl;
     } else {
       Session *session = mds->sessionmap.get_session(client_inst.name);

@@ -313,8 +313,9 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm)
 	   << " on " << cm.size() << " clients"
 	   << dendl;
   for (map<client_t,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
-    Session *session = mds->sessionmap.get_or_add_open_session(p->second);
-    if (session->is_closed() || session->is_closing())
+    Session *session = mds->sessionmap.get_or_add_session(p->second);
+    if (session->is_new() ||
+	session->is_closed() || session->is_closing())
       mds->sessionmap.set_state(session, Session::STATE_OPENING);
     mds->sessionmap.touch_session(session);
   }
