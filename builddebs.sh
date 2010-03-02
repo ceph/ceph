@@ -40,6 +40,6 @@ do
     [ "$dist" = "squeeze" ] && dvers="$dvers~bpo60+1"
     [ "$dist" = "lenny" ] && dvers="$dvers~bpo50+1"
     echo lintian checks for $dvers
-    lintian release/$vers/*$dvers*.deb
+    lintian --allow-root release/$vers/*$dvers*.deb
 done
 
