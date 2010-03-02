@@ -823,10 +823,11 @@ void FileStore::_journaled_ahead(__u64 op,
   dout(10) << "_journaled_ahead " << op << " " << tls << dendl;
   // this should queue in order because the journal does it's completions in order.
   queue_op(op, tls, onreadable, onreadable_sync);
-  if (ondisk) {
-    ondisk->finish(0);
-    delete ondisk;
-  }
+
+  // do ondisk completions async, to prevent any onreadable_sync completions
+  // getting blocked behind an ondisk completion.
+  if (ondisk)
+    op_finisher.queue(ondisk);
 }
 
 int FileStore::do_transactions(list<Transaction*> &tls, __u64 op_seq)
