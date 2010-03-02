@@ -1146,6 +1146,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       break;
       
     case CEPH_OSD_OP_TRIMTRUNC:
+      op.extent.offset = op.extent.truncate_size;
+      // falling through
+
     case CEPH_OSD_OP_TRUNCATE:
       { // truncate
 	if (!ctx->obs->exists) {
@@ -1154,15 +1157,16 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	}
 
 	if (op.extent.truncate_seq) {
+	  assert(op.extent.offset == op.extent.truncate_size);
 	  if (op.extent.truncate_seq <= oi.truncate_seq) {
 	    dout(10) << " truncate seq " << op.extent.truncate_seq << " <= current " << oi.truncate_seq
 		     << ", no-op" << dendl;
 	    break; // old
 	  }
-	  oi.truncate_seq = op.extent.truncate_seq;
-	  oi.truncate_size = op.extent.truncate_size;
 	  dout(10) << " truncate seq " << op.extent.truncate_seq << " > current " << oi.truncate_seq
 		   << ", truncating" << dendl;
+	  oi.truncate_seq = op.extent.truncate_seq;
+	  oi.truncate_size = op.extent.truncate_size;
 	}
 
 	t.truncate(coll_t::build_pg_coll(info.pgid), soid, op.extent.offset);
