@@ -1581,7 +1581,8 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
 			      snapid_t snapid)
 {
   int client = session->inst.name.num();
-
+  assert(snapid);
+  
   bool valid = true;
 
   // do not issue caps if inode differs from readdir snaprealm
@@ -1596,7 +1597,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   map<string, bufferptr> *pxattrs = 0;
 
-  if (snapid && is_multiversion()) {
+  if (snapid != CEPH_NOSNAP && is_multiversion()) {
 
     // for now at least, old_inodes is only defined/valid on the auth
     if (!is_auth())
@@ -1620,7 +1621,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
   struct ceph_mds_reply_inode e;
   memset(&e, 0, sizeof(e));
   e.ino = oi->ino;
-  e.snapid = snapid ? (__u64)snapid:CEPH_NOSNAP;  // 0 -> NOSNAP
+  e.snapid = snapid;  // 0 -> NOSNAP
   e.rdev = oi->rdev;
 
   // "fake" a version that is old (stable) version, +1 if projected.
