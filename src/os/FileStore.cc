@@ -601,6 +601,7 @@ int FileStore::mount()
   op_tp.start();
   flusher_thread.create();
   op_finisher.start();
+  ondisk_finisher.start();
 
   if (journal && g_conf.filestore_journal_writeahead)
     journal->set_wait_on_full(true);
@@ -629,6 +630,7 @@ int FileStore::umount()
   journal_stop();
 
   op_finisher.stop();
+  ondisk_finisher.stop();
 
   ::close(fsid_fd);
   ::close(op_fd);
@@ -826,8 +828,10 @@ void FileStore::_journaled_ahead(__u64 op,
 
   // do ondisk completions async, to prevent any onreadable_sync completions
   // getting blocked behind an ondisk completion.
-  if (ondisk)
-    op_finisher.queue(ondisk);
+  if (ondisk) {
+    dout(10) << " queueing ondisk " << ondisk << dendl;
+    ondisk_finisher.queue(ondisk);
+  }
 }
 
 int FileStore::do_transactions(list<Transaction*> &tls, __u64 op_seq)
@@ -1634,9 +1638,12 @@ void FileStore::flush()
   if (g_conf.filestore_journal_writeahead) {
     if (journal)
       journal->flush();
+    dout(10) << "flush draining ondisk finisher" << dendl;
+    ondisk_finisher.wait_for_empty();
   }
 
   _flush_op_queue();
+  dout(10) << "flush complete" << dendl;
 }
 
 /*

@@ -58,6 +58,8 @@ class FileStore : public JournalingObjectStore {
   FakeCollections collections;
   bool fake_collections;
   
+  Finisher ondisk_finisher;
+
   // helper fns
   void append_oname(const sobject_t &oid, char *s, int len);
   //void get_oname(sobject_t oid, char *s);
