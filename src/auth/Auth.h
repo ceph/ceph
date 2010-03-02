@@ -178,6 +178,7 @@ struct AuthTicket {
   uint64_t global_id; /* global instance id */
   utime_t created, renew_after, expires;
   AuthCapsInfo caps;
+  __u64 auth_uid;
   __u32 flags;
 
   AuthTicket() : global_id(0), flags(0) {}

@@ -39,6 +39,7 @@ bool cephx_build_service_ticket_blob(CephXSessionAuthInfo& info, CephXTicketBlob
   CephXServiceTicketInfo ticket_info;
   ticket_info.session_key = info.session_key;
   ticket_info.ticket = info.ticket;
+  ticket_info.ticket.auth_uid = info.ticket.auth_uid;
   ticket_info.ticket.caps = info.ticket.caps;
 
   dout(10) << "build_service_ticket service " << ceph_entity_type_name(info.service_id)
