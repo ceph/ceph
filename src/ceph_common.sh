@@ -2,7 +2,9 @@
 
 CCONF="$BINDIR/cconf"
 
-conf=$ETCDIR"/ceph.conf"
+default_conf=$ETCDIR"/ceph.conf"
+conf=$default_conf
+
 hostname=`hostname | cut -d . -f 1`
 
 figure_dirs() {
@@ -19,8 +21,13 @@ figure_dirs() {
 
 verify_conf() {
     # make sure ceph.conf exists
+    
     if [ ! -e $conf ]; then
-	echo "$0: ceph conf $conf not found"
+	if [ "$conf" = "$default_conf" ]; then
+	    echo "$0: ceph conf $conf not found; system is not configured."
+	    exit 0
+	fi
+	echo "$0: ceph conf $conf not found!"
 	usage_exit
     fi
 }
