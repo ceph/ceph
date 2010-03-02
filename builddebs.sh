@@ -2,6 +2,8 @@
 
 set -e
 
+basedir=~/debian-base
+
 vers=$1
 [ -z "$vers" ] && echo specify version && exit 1
 
@@ -9,12 +11,12 @@ vers=$1
 
 for dist in sid squeeze lenny
 do
-    if [ -e ~/debian/$dist.tgz ]; then
+    if [ -e $basedir/$dist.tgz ]; then
 	echo updating $dist base.tgz
-	pbuilder update --basetgz ~/debian/$dist.tgz --distribution $dist
+	pbuilder update --basetgz $basedir/$dist.tgz --distribution $dist
     else
 	echo building $dist base.tgz
-	pbuilder create --basetgz ~/debian/$dist.tgz --distribution $dist
+	pbuilder create --basetgz $basedir/$dist.tgz --distribution $dist
     fi
 
     dvers="$vers-1"
@@ -23,7 +25,7 @@ do
     echo debian vers $dvers
 
     echo building debs for $dist
-    pbuilder build --basetgz ~/debian/$dist.tgz --distribution $dist \
+    pbuilder build --basetgz $basedir/$dist.tgz --distribution $dist \
 	--buildresult release/$vers \
 	--debbuildopts -j`grep -c processor /proc/cpuinfo` \
 	release/$vers/ceph_$dvers.dsc
