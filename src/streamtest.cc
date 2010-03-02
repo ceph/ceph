@@ -144,7 +144,7 @@ int main(int argc, const char **argv)
     set_start(pos, g_clock.now());
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     t->write(coll_t(), poid, pos, bytes, bl);
-    fs->queue_transaction(t, new C_Ack(pos), new C_Commit(pos));
+    fs->queue_transaction(NULL, t, new C_Ack(pos), new C_Commit(pos));
     pos += bytes;
 
     throttle();

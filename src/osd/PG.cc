@@ -1803,7 +1803,7 @@ void PG::_finish_recovery(Context *c)
       drop_backlog();
       write_info(*t);
       write_log(*t);
-      int tr = osd->store->queue_transaction(t);
+      int tr = osd->store->queue_transaction(&osr, t);
       assert(tr == 0);
     }
   } else {
@@ -2255,7 +2255,7 @@ void PG::read_log(ObjectStore *store)
 	::encode(oi, bl);
 	ObjectStore::Transaction *t = new ObjectStore::Transaction;
 	t->setattr(coll_t::build_pg_coll(info.pgid), i->soid, OI_ATTR, bl);
-	int tr = osd->store->queue_transaction(t);
+	int tr = osd->store->queue_transaction(&osr, t);
 	assert(tr == 0);
 
 	stringstream ss;

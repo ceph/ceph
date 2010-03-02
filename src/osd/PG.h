@@ -760,6 +760,9 @@ public:
   bool pg_stats_valid;
   pg_stat_t pg_stats_stable;
 
+  // for ordering writes
+  ObjectStore::Sequencer osr;
+
   void update_stats();
   void clear_stats();
 

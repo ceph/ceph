@@ -835,7 +835,7 @@ bool ReplicatedPG::snap_trimmer()
 	t->setattr(coll_t::build_pg_coll(info.pgid), snapoid, SS_ATTR, bl);
       }
 
-      int tr = osd->store->queue_transaction(t);
+      int tr = osd->store->queue_transaction(&osr, t);
       assert(tr == 0);
 
       // give other threads a chance at this pg
@@ -849,7 +849,7 @@ bool ReplicatedPG::snap_trimmer()
     snap_collections.erase(sn);
     write_info(*t);
     t->remove_collection(c);
-    int tr = osd->store->queue_transaction(t);
+    int tr = osd->store->queue_transaction(&osr, t);
     assert(tr == 0);
  
     info.snap_trimq.erase(sn);
@@ -860,7 +860,7 @@ bool ReplicatedPG::snap_trimmer()
 
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   write_info(*t);
-  int tr = osd->store->queue_transaction(t);
+  int tr = osd->store->queue_transaction(&osr, t);
   assert(tr == 0);
   unlock();
   return true;
@@ -1773,7 +1773,7 @@ void ReplicatedPG::apply_repop(RepGather *repop)
   Context *oncommit = new C_OSD_OpCommit(this, repop);
   Context *onapplied = new C_OSD_OpApplied(this, repop);
   Context *onapplied_sync = new C_OSD_OndiskWriteUnlock(repop->obc);
-  int r = osd->store->queue_transactions(repop->tls, onapplied, oncommit, onapplied_sync);
+  int r = osd->store->queue_transactions(&osr, repop->tls, onapplied, oncommit, onapplied_sync);
   if (r) {
     dout(-10) << "apply_repop  queue_transactions returned " << r << " on " << *repop << dendl;
     assert(0);
@@ -2444,7 +2444,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   
   Context *oncommit = new C_OSD_RepModifyCommit(rm);
   Context *onapply = new C_OSD_RepModifyApply(rm);
-  int r = osd->store->queue_transactions(rm->tls, onapply, oncommit);
+  int r = osd->store->queue_transactions(&osr, rm->tls, onapply, oncommit);
   if (r) {
     derr(0) << "error applying transaction: r = " << r << dendl;
     assert(0);
@@ -3146,7 +3146,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
   // apply to disk!
   write_info(*t);
-  int r = osd->store->queue_transaction(t,
+  int r = osd->store->queue_transaction(&osr, t,
 					onreadable,
 					new C_OSD_Commit(this, info.history.same_acting_since,
 							 info.last_complete),
@@ -3380,7 +3380,7 @@ int ReplicatedPG::recover_primary(int max)
 	    put_object_context(headobc);
 
 	    // XXX: track objectcontext!
-	    int tr = osd->store->queue_transaction(t);
+	    int tr = osd->store->queue_transaction(&osr, t);
 	    assert(tr == 0);
 	    missing.got(latest->soid, latest->version);
 	    missing_loc.erase(latest->soid);
@@ -3429,7 +3429,7 @@ int ReplicatedPG::recover_primary(int max)
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     C_Contexts *fin = new C_Contexts;
     finish_recovery(*t, fin->contexts);
-    int tr = osd->store->queue_transaction(t, new ObjectStore::C_DeleteTransaction(t), fin);
+    int tr = osd->store->queue_transaction(&osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(tr == 0);
   } else {
     dout(-10) << "recover_primary primary now complete, starting peer recovery" << dendl;
@@ -3494,7 +3494,7 @@ int ReplicatedPG::recover_replicas(int max)
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     C_Contexts *fin = new C_Contexts;
     finish_recovery(*t, fin->contexts);
-    int tr = osd->store->queue_transaction(t, new ObjectStore::C_DeleteTransaction(t), fin);
+    int tr = osd->store->queue_transaction(&osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(tr == 0);
   } else {
     dout(10) << "recover_replicas not all uptodate, acting " << acting << ", uptodate " << uptodate_set << dendl;

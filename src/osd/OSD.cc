@@ -181,7 +181,7 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
     for (int i=0; i<1000; i++) {
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       t->write(meta_coll, sobject_t(oid, 0), i*bl.length(), bl.length(), bl);
-      store->queue_transaction(t);
+      store->queue_transaction(NULL, t);
     }
     store->sync();
     utime_t end = g_clock.now();
@@ -2052,7 +2052,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(10) << "handle_osd_map got full map epoch " << p->first << dendl;
     ObjectStore::Transaction *ft = new ObjectStore::Transaction;
     ft->write(meta_coll, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
-    int r = store->queue_transaction(ft);
+    int r = store->queue_transaction(NULL, ft);
     assert(r == 0);
 
     if (p->first > superblock.newest_map)
@@ -2079,7 +2079,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(10) << "handle_osd_map got incremental map epoch " << p->first << dendl;
     ObjectStore::Transaction *ft = new ObjectStore::Transaction;
     ft->write(meta_coll, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
-    int r = store->queue_transaction(ft);
+    int r = store->queue_transaction(NULL, ft);
     assert(r == 0);
 
     if (p->first > superblock.newest_map)
@@ -2818,7 +2818,7 @@ void OSD::kick_pg_split_queue()
       pg->unlock();
       created++;
     }
-    int tr = store->queue_transaction(t, new ObjectStore::C_DeleteTransaction(t), fin);
+    int tr = store->queue_transaction(NULL, t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(tr == 0);
 
     // remove from queue
@@ -3035,7 +3035,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
     pg->unlock();
   }
 
-  int tr = store->queue_transaction(t, new ObjectStore::C_DeleteTransaction(t), fin);
+  int tr = store->queue_transaction(NULL, t, new ObjectStore::C_DeleteTransaction(t), fin);
   assert(tr == 0);
 
   do_queries(query_map);
@@ -3211,7 +3211,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     pg->unlock();
   }
   
-  int tr = store->queue_transaction(t, new ObjectStore::C_DeleteTransaction(t), fin);
+  int tr = store->queue_transaction(NULL, t, new ObjectStore::C_DeleteTransaction(t), fin);
   assert(tr == 0);
 
   do_queries(query_map);
@@ -3323,7 +3323,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     }
   }
 
-  int tr = store->queue_transaction(t, new ObjectStore::C_DeleteTransaction(t), fin);
+  int tr = store->queue_transaction(NULL, t, new ObjectStore::C_DeleteTransaction(t), fin);
   assert(tr == 0);
 
   pg->unlock();
@@ -3402,7 +3402,7 @@ void OSD::handle_pg_trim(MOSDPGTrim *m)
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       pg->trim(*t, m->trim_to);
       pg->write_info(*t);
-      int tr = store->queue_transaction(t, new ObjectStore::C_DeleteTransaction(t));
+      int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t));
       assert(tr == 0);
     }
     pg->unlock();
@@ -3474,7 +3474,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       pg->info.history = history;
       pg->write_info(*t);
       pg->write_log(*t);
-      int tr = store->queue_transaction(t);
+      int tr = store->queue_transaction(&pg->osr, t);
       assert(tr == 0);
       created++;
 
@@ -3611,7 +3611,7 @@ void OSD::_remove_pg(PG *pg)
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     pg->write_info(*t);
     t->remove(meta_coll, pg->log_oid);
-    int tr = store->queue_transaction(t);
+    int tr = store->queue_transaction(&pg->osr, t);
     assert(tr == 0);
   }
 
@@ -3632,7 +3632,7 @@ void OSD::_remove_pg(PG *pg)
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       t->remove(coll_t::build_snap_pg_coll(pgid, *p), *q);
       t->remove(coll_t::build_pg_coll(pgid), *q);          // we may hit this twice, but it's harmless
-      int tr = store->queue_transaction(t);
+      int tr = store->queue_transaction(&pg->osr, t);
       assert(tr == 0);
 
       if ((++n & 0xff) == 0) {
@@ -3657,7 +3657,7 @@ void OSD::_remove_pg(PG *pg)
        p++) {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     t->remove(coll_t::build_pg_coll(pgid), *p);
-    int tr = store->queue_transaction(t);
+    int tr = store->queue_transaction(&pg->osr, t);
     assert(tr == 0);
 
     if ((++n & 0xff) == 0) {
@@ -3690,7 +3690,7 @@ void OSD::_remove_pg(PG *pg)
 
   {
     rmt->remove_collection(coll_t::build_pg_coll(pgid));
-    int tr = store->queue_transaction(rmt);
+    int tr = store->queue_transaction(NULL, rmt);
     assert(tr == 0);
   }
   
@@ -3794,7 +3794,7 @@ void OSD::generate_backlog(PG *pg)
       pg->write_info(*t);
     if (pg->dirty_log)
       pg->write_log(*t);
-    int tr = store->queue_transaction(t, new ObjectStore::C_DeleteTransaction(t), fin);
+    int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(tr == 0);
   }
 
@@ -3841,7 +3841,7 @@ void OSD::activate_pg(pg_t pgid, utime_t activate_at)
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       C_Contexts *fin = new C_Contexts;
       pg->activate(*t, fin->contexts);
-      int tr = store->queue_transaction(t, new ObjectStore::C_DeleteTransaction(t), fin);
+      int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
       assert(tr == 0);
     }
     pg->unlock();
