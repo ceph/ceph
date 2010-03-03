@@ -325,6 +325,13 @@ int FileStore::mkfs()
 
 int FileStore::mkjournal()
 {
+  // read fsid
+  char fn[PATH_MAX];
+  snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
+  int fd = ::open(fn, O_RDONLY, 0644);
+  ::read(fd, &fsid, sizeof(fsid));
+  ::close(fd);
+
   open_journal();
   if (journal) {
     int err = journal->create();
