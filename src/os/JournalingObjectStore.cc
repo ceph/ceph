@@ -152,16 +152,16 @@ bool JournalingObjectStore::commit_start()
     assert(commit_waiters.empty());
     return false;
   }
-  dout(10) << "commit_start" << dendl;
+  committing_seq = op_seq;
+  dout(10) << "commit_start committing " << committing_seq << ", blocked" << dendl;
   return true;
 }
 
 void JournalingObjectStore::commit_started() 
 {
   Mutex::Locker l(lock);
-  dout(10) << "commit_started" << dendl;
   // allow new ops. (underlying fs should now be committing all prior ops)
-  committing_seq = op_seq;
+  dout(10) << "commit_started committing " << committing_seq << ", unblocking" << dendl;
   blocked = false;
   cond.Signal();
 }
@@ -169,7 +169,7 @@ void JournalingObjectStore::commit_started()
 void JournalingObjectStore::commit_finish()
 {
   Mutex::Locker l(lock);
-  dout(10) << "commit_finish" << dendl;
+  dout(10) << "commit_finish thru " << committing_seq << dendl;
   
   if (journal)
     journal->committed_thru(committing_seq);
