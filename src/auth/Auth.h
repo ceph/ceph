@@ -22,8 +22,6 @@
 
 #include <errno.h>
 
-#define CEPH_AUTH_UID_DEFAULT (__u64) -1
-
 class Cond;
 
 struct EntityName {
@@ -108,50 +106,38 @@ static inline ostream& operator<<(ostream& out, const EntityName& n) {
 
 struct EntityAuth {
   CryptoKey key;
-  __u64 auth_uid;
   map<string, bufferlist> caps;
 
-  EntityAuth() : key(), auth_uid(CEPH_AUTH_UID_DEFAULT), caps() {}
-
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 2;
+    __u8 struct_v = 1;
     ::encode(struct_v, bl);
     ::encode(key, bl);
-    ::encode(auth_uid, bl);
     ::encode(caps, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
     ::decode(key, bl);
-    if (struct_v >= 2)
-      ::decode(auth_uid, bl);
-    else auth_uid = CEPH_AUTH_UID_DEFAULT;
     ::decode(caps, bl);
   }
 };
 WRITE_CLASS_ENCODER(EntityAuth)
 
 static inline ostream& operator<<(ostream& out, const EntityAuth& a) {
-  out << "auth(key=" << a.key;
-  if (a.auth_uid != CEPH_AUTH_UID_DEFAULT)
-    out << " uid=" << a.auth_uid;
-  return out << " with " << a.caps.size() << " caps)";
+  return out << "auth(key=" << a.key << " with " << a.caps.size() << " caps)";
 }
 
 struct AuthCapsInfo {
   bool allow_all;
-  __u64 auth_uid;
   bufferlist caps;
 
-  AuthCapsInfo() : allow_all(false), auth_uid(CEPH_AUTH_UID_DEFAULT){}
+  AuthCapsInfo() : allow_all(false) {}
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 2;
+    __u8 struct_v = 1;
     ::encode(struct_v, bl);
     __u8 a = (__u8)allow_all;
     ::encode(a, bl);
-    ::encode(auth_uid, bl);
     ::encode(caps, bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -160,9 +146,6 @@ struct AuthCapsInfo {
     __u8 a;
     ::decode(a, bl);
     allow_all = (bool)a;
-    if (struct_v >= 2)
-      ::decode(auth_uid, bl);
-    else auth_uid = CEPH_AUTH_UID_DEFAULT;
     ::decode(caps, bl);
   }
 };
@@ -178,7 +161,6 @@ struct AuthTicket {
   uint64_t global_id; /* global instance id */
   utime_t created, renew_after, expires;
   AuthCapsInfo caps;
-  __u64 auth_uid;
   __u32 flags;
 
   AuthTicket() : global_id(0), flags(0) {}

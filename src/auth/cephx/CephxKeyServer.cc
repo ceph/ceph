@@ -103,14 +103,12 @@ bool KeyServerData::get_caps(EntityName& name, string& type, AuthCapsInfo& caps_
   if (iter == secrets.end())
     return false;
 
-  dout(0) << "get_caps: auth_uid=" << iter->second.auth_uid << dendl;
-  caps_info.auth_uid = iter->second.auth_uid;
-
   dout(0) << "get_secret: num of caps=" << iter->second.caps.size() << dendl;
   map<string, bufferlist>::iterator capsiter = iter->second.caps.find(type);
   if (capsiter != iter->second.caps.end()) {
     caps_info.caps = capsiter->second;
   }
+
   return true;
 }
 

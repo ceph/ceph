@@ -24,7 +24,7 @@ using namespace std;
 
 void usage()
 {
-  cout << " usage: [--create-keyring] [--gen-key --set-uid=x] [--name=<name>] [--caps=<filename>] [--list] [--print-key] <filename>" << std::endl;
+  cout << " usage: [--create-keyring] [--gen-key] [--name=<name>] [--caps=<filename>] [--list] [--print-key] <filename>" << std::endl;
   exit(1);
 }
 
@@ -47,7 +47,6 @@ int main(int argc, const char **argv)
   const char *name = "";
   const char *caps_fn = NULL;
   const char *import_keyring = NULL;
-  __u64 auth_uid = 0;
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("gen-key", 'g')) {
@@ -66,8 +65,6 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&create_keyring, OPT_BOOL);
     } else if (CONF_ARG_EQ("import-keyring", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&import_keyring, OPT_STR);
-    } else if (CONF_ARG_EQ("set-uid", 'u')) {
-      CONF_SAFE_SET_ARG_VAL(&auth_uid, OPT_LONGLONG);
     } else if (!fn) {
       fn = args[i];
     } else 
@@ -155,8 +152,6 @@ int main(int argc, const char **argv)
   if (gen_key) {
     EntityAuth eauth;
     eauth.key.create(CEPH_CRYPTO_AES);
-    if (auth_uid)
-      eauth.auth_uid = (__u64)auth_uid;
     keyring.add(ename, eauth);
     modified = true;
   }

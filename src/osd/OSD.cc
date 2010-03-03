@@ -1711,7 +1711,6 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
     }
 
     s->caps.set_allow_all(caps_info.allow_all);
-    s->caps.set_auth_uid(caps_info.auth_uid);
  
     if (caps_info.caps.length() > 0) {
       bufferlist::iterator iter = caps_info.caps.begin();
