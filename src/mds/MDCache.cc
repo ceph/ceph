@@ -2033,7 +2033,8 @@ void MDCache::resolve_start()
     // it owns, so that anything beyond its bounds get left as
     // unknown.
     CDir *rootdir = root->get_dirfrag(frag_t());
-    adjust_subtree_auth(rootdir, CDIR_AUTH_UNKNOWN);
+    if (rootdir)
+      adjust_subtree_auth(rootdir, CDIR_AUTH_UNKNOWN);
   }
 
   set<int> who;
