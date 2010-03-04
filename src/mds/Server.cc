@@ -470,6 +470,7 @@ void Server::reconnect_clients()
   
   reconnect_start = g_clock.now();
   dout(1) << "reconnect_clients -- " << client_reconnect_gather.size() << " sessions" << dendl;
+  mds->sessionmap.dump();
 }
 
 void Server::handle_client_reconnect(MClientReconnect *m)
@@ -520,7 +521,19 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     mdlog->flush();
   } else {
     
-    ss << "reconnect by " << session->inst << " after " << delay;
+    if (session->is_new()) {
+      dout(10) << " session is new, will make best effort to reconnect " 
+	       << m->get_source_inst() << dendl;
+      mds->sessionmap.set_state(session, Session::STATE_OPENING);
+      version_t pv = ++mds->sessionmap.projected;
+      __u64 sseq = session->get_state_seq();
+      mdlog->start_submit_entry(new ESession(session->inst, true, pv),
+				new C_MDS_session_finish(mds, session, sseq, true, pv));
+      mdlog->flush();
+      ss << "reconnect by new " << session->inst << " after " << delay;
+    } else {
+      ss << "reconnect by " << session->inst << " after " << delay;
+    }
     mds->logclient.log(LOG_DEBUG, ss);
 
     // snaprealms
