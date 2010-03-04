@@ -463,7 +463,7 @@ int compile_crush_file(const char *infn, CrushWrapper &crush)
     int pos = cpos - p->first;
     cerr << infn << ":" << line //<< ":" << (pos+1)
 	 << " error: parse error at '" << line_val[line].substr(pos) << "'" << std::endl;
-    return 1;
+    return -1;
   }
 
   //cout << "parsing succeeded\n";
