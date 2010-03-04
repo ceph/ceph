@@ -37,6 +37,7 @@ class MonCaps {
   string text;
   rwx_t default_action;
   map<int, MonServiceCap> services_map;
+  __u64 auth_uid;
   bool get_next_token(string s, size_t& pos, string& token);
   bool is_rwx(string& token, rwx_t& cap_val);
   int get_service_id(string& token);

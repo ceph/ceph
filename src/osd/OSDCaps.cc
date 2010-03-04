@@ -99,7 +99,10 @@ do { \
 } while (0)
 
       if (get_next_token(s, pos, token)) {
-        if (token.compare("=") == 0) {
+	if (token.compare("auth_uid") == 0) {
+	  get_next_token(s, pos, token);
+	  auth_uid = strtol(token.c_str(), NULL, 10);
+        } else if (token.compare("=") == 0) {
           ASSERT_STATE(any_cmd);
           got_eq = true;
         } else if (token.compare("allow") == 0) {
