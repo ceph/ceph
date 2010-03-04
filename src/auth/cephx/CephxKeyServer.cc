@@ -105,8 +105,24 @@ bool KeyServerData::get_caps(EntityName& name, string& type, AuthCapsInfo& caps_
 
   dout(0) << "get_secret: num of caps=" << iter->second.caps.size() << dendl;
   map<string, bufferlist>::iterator capsiter = iter->second.caps.find(type);
-  if (capsiter != iter->second.caps.end()) {
-    caps_info.caps = capsiter->second;
+  if (capsiter != iter->second.caps.end()) { //there are caps
+    bufferlist caps_bl = capsiter->second;
+    map<string, bufferlist>::iterator uid_iter =
+      iter->second.caps.find("auth_uid");
+    if (uid_iter != iter->second.caps.end()) {
+      dout(0) << "also has a uid, concatenating" << dendl;
+      string caps_string;
+      bufferlist::iterator caps_bl_iter = caps_bl.begin();
+      ::decode(caps_string, caps_bl_iter);
+      string auth_string;
+      bufferlist::iterator auth_uid_iter = uid_iter->second.begin();
+      ::decode(auth_string, auth_uid_iter);
+      caps_string.append("; auth_uid ").append(auth_string);
+      caps_bl.clear();
+      ::encode(caps_string, caps_bl);
+      dout(0) << "providing caps: " << caps_string << dendl;
+    }
+    caps_info.caps = caps_bl;
   }
 
   return true;
