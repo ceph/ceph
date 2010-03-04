@@ -1694,7 +1694,11 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
   int r = mdcache->path_traverse(mdr, 0, refpath, &mdr->dn[n], &mdr->in[n], MDS_TRAVERSE_FORWARD);
   if (r > 0) return false; // delayed
   if (r < 0) {  // error
-    reply_request(mdr, r);
+    if (r == -ENOENT && n == 0) {
+      reply_request(mdr, r, NULL, mdr->dn[n][mdr->dn[n].size()-1]);
+    } else {
+      reply_request(mdr, r);
+    }
     return 0;
   }
   CInode *ref = mdr->in[n];
