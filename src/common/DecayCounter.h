@@ -32,7 +32,6 @@
 class DecayCounter {
  protected:
 public:
-  double half_life;
   double k;             // k = ln(.5)/half_life
   double val;           // value
   double delta;         // delta since last decay
@@ -42,9 +41,8 @@ public:
  public:
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
     ::encode(struct_v, bl);
-    ::encode(half_life, bl);
     ::encode(k, bl);
     ::encode(val, bl);
     ::encode(delta, bl);
@@ -53,7 +51,10 @@ public:
   void decode(bufferlist::iterator &p) {
     __u8 struct_v;
     ::decode(struct_v, p);
-    ::decode(half_life, p);
+    if (struct_v < 2) {
+      double half_life;
+      ::decode(half_life, p);
+    }
     ::decode(k, p);
     ::decode(val, p);
     ::decode(delta, p);
@@ -122,7 +123,6 @@ public:
    */
 
   void set_halflife(double hl) {
-    half_life = hl;
     k = log(.5) / hl;
   }
 
