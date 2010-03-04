@@ -543,6 +543,7 @@ void FileJournal::do_write(bufferlist& bl)
 #ifdef DARWIN
     ::fsync(fd);
 #else
+# ifdef HAVE_SYNC_FILE_RANGE
     if (is_bdev) {
       if (split) {
 	::sync_file_range(fd, header.max_size - split, split, SYNC_FILE_RANGE_WAIT_BEFORE|SYNC_FILE_RANGE_WRITE);
@@ -554,6 +555,7 @@ void FileJournal::do_write(bufferlist& bl)
 			  SYNC_FILE_RANGE_WAIT_BEFORE|SYNC_FILE_RANGE_WRITE|SYNC_FILE_RANGE_WAIT_AFTER);
       }
     } else
+# endif
       ::fdatasync(fd);
 #endif
   }
