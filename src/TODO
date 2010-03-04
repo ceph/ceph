@@ -61,24 +61,9 @@ filestore
 
 bugs
 - mds prepare_force_open_sessions, then import aborts.. session is still OPENING but no client_session is sent...
-- multimds: untar kernel, control-z, sync
 - wget mismatch with multiple mds?
 - rm -r failure (on kernel tree)
 - dbench 1, restart mds (may take a few times), dbench will error out.
-
-- cfuse crash on 'cat >> mnt/foo'
-client/Client.cc: In function 'Inode* Client::_ll_get_inode(vinodeno_t)':
-client/Client.cc:5047: FAILED assert(inode_map.count(vino))
- 1: (Client::_ll_get_inode(vinodeno_t)+0x46) [0x60a268]
- 2: (Client::ll_getattr(vinodeno_t, stat*, int, int)+0x15c) [0x62ab66]
- 3: ./cfuse [0x6050f7]
- 4: /usr/lib/libfuse.so.2 [0x7f532b02e0a2]
- 5: (fuse_session_loop()+0x7a) [0x7f532b02aeba]
- 6: (ceph_fuse_ll_main(Client*, int, char const**)+0x24a) [0x60373c]
- 7: (main()+0x279) [0x5e0a14]
- 8: (__libc_start_main()+0xfd) [0x7f5329f81abd]
- 9: (std::ios_base::Init::~Init()+0x49) [0x5e0659]
- NOTE: a copy of the executable, or `objdump -rdS <executable>` is needed to interpret this.
 
 ?- bonnie++ -u root -d /mnt/ceph/ -s 0 -n 1
 (03:35:29 PM) Isteriat: Using uid:0, gid:0.
