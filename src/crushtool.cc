@@ -705,7 +705,7 @@ int main(int argc, const char **argv)
     } else if (CONF_ARG_EQ("cinfn", 'c')) {
       CONF_SAFE_SET_ARG_VAL(&cinfn, OPT_STR);
     } else if (CONF_ARG_EQ("verbose", 'v')) {
-      CONF_SAFE_SET_ARG_VAL(&verbose, OPT_BOOL);
+      verbose++;
     } else if (CONF_ARG_EQ("build", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&build, OPT_BOOL);
     } else if (CONF_ARG_EQ("num_osds", '\0')) {
