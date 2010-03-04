@@ -44,7 +44,7 @@ int CephxServiceHandler::start_session(EntityName& name, bufferlist::iterator& i
   return CEPH_AUTH_CEPHX;
 }
 
-int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps)
+int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps, __u64 *auid)
 {
   int ret = 0;
 
@@ -106,6 +106,8 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       info.ticket.global_id = global_id;
       info.ticket.auid = eauth.auid;
       info.validity += g_conf.auth_mon_ticket_ttl;
+
+      if (auid) *auid = eauth.auid;
 
       key_server->generate_secret(session_key);
 

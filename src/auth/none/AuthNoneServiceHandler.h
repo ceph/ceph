@@ -28,7 +28,7 @@ public:
     caps.allow_all = true;
     return CEPH_AUTH_NONE;
   }
-  int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps) {
+  int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps, __u64 *auid = NULL) {
     assert(0);  // shouldn't get called
     return 0;
   }

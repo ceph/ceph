@@ -26,7 +26,8 @@ struct AuthAuthorizeHandler {
   virtual ~AuthAuthorizeHandler() {}
   virtual bool verify_authorizer(KeyStore *keys,
 				 bufferlist& authorizer_data, bufferlist& authorizer_reply,
-                                 EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info) = 0;
+                                 EntityName& entity_name, uint64_t& global_id,
+				 AuthCapsInfo& caps_info, __u64 *auid = NULL) = 0;
 };
 
 extern AuthAuthorizeHandler *get_authorize_handler(int protocol);

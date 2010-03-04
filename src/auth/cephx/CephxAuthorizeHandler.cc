@@ -7,7 +7,7 @@
 
 bool CephxAuthorizeHandler::verify_authorizer(KeyStore *keys,
 					      bufferlist& authorizer_data, bufferlist& authorizer_reply,
-                                              EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info)
+                                              EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info, __u64 *auid)
 {
   bufferlist::iterator iter = authorizer_data.begin();
 
@@ -25,6 +25,7 @@ bool CephxAuthorizeHandler::verify_authorizer(KeyStore *keys,
     caps_info = auth_ticket_info.ticket.caps;
     entity_name = auth_ticket_info.ticket.name;
     global_id = auth_ticket_info.ticket.global_id;
+    if (auid) *auid = auth_ticket_info.ticket.auid;
   }
 
   return isvalid;
