@@ -83,6 +83,7 @@ struct KeyServerData {
   bool get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret, uint64_t& secret_id);
   bool get_service_secret(uint32_t service_id, CryptoKey& secret, uint64_t& secret_id);
   bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret);
+  bool get_auth(EntityName& name, EntityAuth& auth);
   bool get_secret(EntityName& name, CryptoKey& secret);
   bool get_caps(EntityName& name, string& type, AuthCapsInfo& caps);
 
@@ -178,6 +179,7 @@ public:
   bool generate_secret(CryptoKey& secret);
 
   bool get_secret(EntityName& name, CryptoKey& secret);
+  bool get_auth(EntityName& name, EntityAuth& auth);
   bool get_caps(EntityName& name, string& type, AuthCapsInfo& caps);
   bool get_active_rotating_secret(EntityName& name, CryptoKey& secret);
   int start_server();

@@ -22,6 +22,8 @@
 
 #include <errno.h>
 
+#define CEPH_AUTH_UID_DEFAULT (__u64) -1
+
 class Cond;
 
 struct EntityName {
@@ -105,18 +107,25 @@ static inline ostream& operator<<(ostream& out, const EntityName& n) {
 
 
 struct EntityAuth {
+  __u64 auid;
   CryptoKey key;
   map<string, bufferlist> caps;
 
+  EntityAuth() : auid(CEPH_AUTH_UID_DEFAULT) {}
+
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
     ::encode(struct_v, bl);
+    ::encode(auid, bl);
     ::encode(key, bl);
     ::encode(caps, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
+    if (struct_v >= 2)
+      ::decode(auid, bl);
+    else auid = CEPH_AUTH_UID_DEFAULT;
     ::decode(key, bl);
     ::decode(caps, bl);
   }
@@ -124,7 +133,7 @@ struct EntityAuth {
 WRITE_CLASS_ENCODER(EntityAuth)
 
 static inline ostream& operator<<(ostream& out, const EntityAuth& a) {
-  return out << "auth(key=" << a.key << " with " << a.caps.size() << " caps)";
+  return out << "auth(auid = " << a.auid << " key=" << a.key << " with " << a.caps.size() << " caps)";
 }
 
 struct AuthCapsInfo {
@@ -159,11 +168,12 @@ WRITE_CLASS_ENCODER(AuthCapsInfo)
 struct AuthTicket {
   EntityName name;
   uint64_t global_id; /* global instance id */
+  uint64_t auid;
   utime_t created, renew_after, expires;
   AuthCapsInfo caps;
   __u32 flags;
 
-  AuthTicket() : global_id(0), flags(0) {}
+  AuthTicket() : global_id(0), auid(CEPH_AUTH_UID_DEFAULT), flags(0){}
 
   void init_timestamps(utime_t now, double ttl) {
     created = now;
@@ -174,20 +184,24 @@ struct AuthTicket {
   }
 
   void encode(bufferlist& bl) const {
-    __u8 v = 1;
-    ::encode(v, bl);
+    __u8 struct_v = 2;
+    ::encode(struct_v, bl);
     ::encode(name, bl);
     ::encode(global_id, bl);
+    ::encode(auid, bl);
     ::encode(created, bl);
     ::encode(expires, bl);
     ::encode(caps, bl);
     ::encode(flags, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    __u8 v;
-    ::decode(v, bl);
+    __u8 struct_v;
+    ::decode(struct_v, bl);
     ::decode(name, bl);
     ::decode(global_id, bl);
+    if (struct_v >= 2)
+      ::decode(auid, bl);
+    else auid = CEPH_AUTH_UID_DEFAULT;
     ::decode(created, bl);
     ::decode(expires, bl);
     ::decode(caps, bl);

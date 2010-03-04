@@ -82,15 +82,19 @@ bool KeyServerData::get_service_secret(uint32_t service_id, uint64_t secret_id, 
 
   return true;
 }
-
-bool KeyServerData::get_secret(EntityName& name, CryptoKey& secret)
-{
+bool KeyServerData::get_auth(EntityName& name, EntityAuth& auth) {
   map<EntityName, EntityAuth>::iterator iter = secrets.find(name);
   if (iter == secrets.end())
     return false;
+  auth = iter->second;
+  return true;
+}
 
+bool KeyServerData::get_secret(EntityName& name, CryptoKey& secret) {
+  map<EntityName, EntityAuth>::iterator iter = secrets.find(name);
+  if (iter == secrets.end())
+    return false;
   secret = iter->second.key;
-
   return true;
 }
 
@@ -194,8 +198,13 @@ int KeyServer::_rotate_secret(uint32_t service_id)
 bool KeyServer::get_secret(EntityName& name, CryptoKey& secret)
 {
   Mutex::Locker l(lock);
-
   return data.get_secret(name, secret);
+}
+
+bool KeyServer::get_auth(EntityName& name, EntityAuth& auth)
+{
+  Mutex::Locker l(lock);
+  return data.get_auth(name, auth);
 }
 
 bool KeyServer::get_caps(EntityName& name, string& type, AuthCapsInfo& caps_info)

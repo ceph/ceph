@@ -88,8 +88,8 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       CephXSessionAuthInfo info;
       bool should_enc_ticket = false;
 
-      CryptoKey principal_secret;
-      if (key_server->get_secret(entity_name, principal_secret) < 0) {
+      EntityAuth eauth;
+      if (key_server->get_auth(entity_name, eauth) < 0) {
 	ret = -EPERM;
 	break;
       }
@@ -104,6 +104,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       info.ticket.init_timestamps(g_clock.now(), g_conf.auth_mon_ticket_ttl);
       info.ticket.name = entity_name;
       info.ticket.global_id = global_id;
+      info.ticket.auid = eauth.auid;
       info.validity += g_conf.auth_mon_ticket_ttl;
 
       key_server->generate_secret(session_key);
@@ -120,7 +121,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       info_vec.push_back(info);
 
       build_cephx_response_header(cephx_header.request_type, 0, result_bl);
-      if (!cephx_build_service_ticket_reply(principal_secret, info_vec, should_enc_ticket, old_ticket_info.session_key, result_bl)) {
+      if (!cephx_build_service_ticket_reply(eauth.key, info_vec, should_enc_ticket, old_ticket_info.session_key, result_bl)) {
         ret = -EIO;
         break;
       }
