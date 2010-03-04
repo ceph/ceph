@@ -777,7 +777,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   mds->logger->inc(l_mds_reply);
   double lat = g_clock.now() - mdr->client_request->get_recv_stamp();
   mds->logger->favg(l_mds_replyl, lat);
-  dout(0) << "lat " << lat << dendl;
+  dout(20) << "lat " << lat << dendl;
 }
 
 /*
