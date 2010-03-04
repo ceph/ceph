@@ -1325,12 +1325,16 @@ int FileStore::_write(coll_t cid, const sobject_t& oid,
       derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     }
 
+#ifdef HAVE_SYNC_FILE_RANGE
     if (!g_conf.filestore_flusher ||
 	!queue_flusher(fd, offset, len)) {
       if (g_conf.filestore_sync_flush)
 	::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
       ::close(fd);
     }
+#else
+    ::close(fd);
+#endif
     r = did;
   }
 
@@ -1491,6 +1495,7 @@ void FileStore::flusher_entry()
   dout(20) << "flusher_entry start" << dendl;
   while (true) {
     if (!flusher_queue.empty()) {
+#ifdef HAVE_SYNC_FILE_RANGE
       list<__u64> q;
       q.swap(flusher_queue);
 
@@ -1516,6 +1521,7 @@ void FileStore::flusher_entry()
       }
       lock.Lock();
       flusher_queue_len -= num;   // they're definitely closed, forget
+#endif
     } else {
       if (stop)
 	break;
