@@ -380,7 +380,7 @@ void Locker::drop_rdlocks(Mutation *mut)
 
 // generics
 
-void Locker::eval_gather(SimpleLock *lock, bool first, bool *need_issue)
+void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue)
 {
   dout(10) << "eval_gather " << *lock << " on " << *lock->get_parent() << dendl;
   assert(!lock->is_stable());
@@ -391,6 +391,8 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *need_issue)
   bool caps = lock->get_cap_shift();
   if (lock->get_type() != CEPH_LOCK_DN)
     in = (CInode *)lock->get_parent();
+
+  bool need_issue = false;
 
   int loner_issued = 0, other_issued = 0, xlocker_issued = 0;
   if (caps) {
@@ -407,7 +409,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *need_issue)
     if (first && ((~lock->gcaps_allowed(CAP_ANY, next) & other_issued) ||
 		  (~lock->gcaps_allowed(CAP_LONER, next) & loner_issued) ||
 		  (~lock->gcaps_allowed(CAP_XLOCKER, next) & xlocker_issued)))
-      *need_issue = true;
+      need_issue = true;
   }
 
   if (!lock->is_gathering() &&
@@ -530,24 +532,27 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *need_issue)
       dout(10) << "  trying to drop loner" << dendl;
       if (in->try_drop_loner()) {
 	dout(10) << "  dropped loner" << dendl;
-	if (need_issue)
-	  *need_issue = true;
+	need_issue = true;
       }
     }
 
     lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD|SimpleLock::WAIT_XLOCK);
     
-    if (caps) {
-      if (need_issue)
-	*need_issue = true;
-      else
-	issue_caps(in);
-    }
+    if (caps)
+      need_issue = true;
 
     if (lock->get_parent()->is_auth() &&
 	lock->is_stable())
-      eval(lock, need_issue);
+      eval(lock, &need_issue);
   }
+
+  if (need_issue) {
+    if (pneed_issue)
+      *pneed_issue = true;
+    else
+      issue_caps(in);
+  }
+
 }
 
 bool Locker::eval(CInode *in, int mask)
