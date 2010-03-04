@@ -379,6 +379,28 @@ const char *infn = "stdin";
 
 ////////////////////////////////////////////////////////////////////////////
 
+string consolidate_whitespace(string in)
+{
+  string out;
+
+  bool white = false;
+  for (unsigned p=0; p<in.length(); p++) {
+    if (in[p] == ' ' || in[p] == '\t') {
+      if (white)
+	continue;
+      white = true;
+    } else {
+      if (white) {
+	if (out.length()) out += " ";
+	white = false;
+      }
+      out += in[p];
+    }
+  }
+  if (verbose > 3)
+    cout << " \"" << in << "\" -> \"" << out << "\"" << std::endl;
+  return out;
+}
 
 int compile_crush_file(const char *infn, CrushWrapper &crush)
 { 
@@ -409,10 +431,17 @@ int compile_crush_file(const char *infn, CrushWrapper &crush)
     
     if (verbose>1) cout << line << ": " << str << std::endl;
 
-    if (big.length()) big += " ";
+    // work around spirit crankiness by removing extraneous
+    // whitespace.  there is probably a more elegant solution, but
+    // this only broke with the latest spirit (with the switchover to
+    // "classic"), i don't want to spend too much time figuring it
+    // out.
+    string stripped = consolidate_whitespace(str);
+    if (stripped.length() && big.length() && big[big.length()-1] != ' ') big += " ";
+
     line_pos[big.length()] = line;
     line++;
-    big += str;
+    big += stripped;
   }
   
   if (verbose > 2) cout << "whole file is: \"" << big << "\"" << std::endl;
