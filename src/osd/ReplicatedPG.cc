@@ -675,7 +675,7 @@ void ReplicatedPG::log_op_stats(const sobject_t& soid, OpContext *ctx)
 	
     if (is_primary() &&
 	g_conf.osd_balance_reads)
-      stat_object_temp_rd[soid].hit(now);  // hit temp.
+      stat_object_temp_rd[soid].hit(now, osd->decayrate);  // hit temp.
   } else {
     osd->logger->inc(l_osd_c_wr);
     osd->logger->inc(l_osd_c_wrb, ctx->indata.length());

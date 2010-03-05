@@ -672,15 +672,15 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
     f->set_version(get_version());
 
     f->pop_me = pop_me;
-    f->pop_me *= fac;
+    f->pop_me.scale(fac);
 
     // FIXME; this is an approximation
     f->pop_nested = pop_nested;
-    f->pop_nested *= fac;
+    f->pop_nested.scale(fac);
     f->pop_auth_subtree = pop_auth_subtree;
-    f->pop_auth_subtree *= fac;
+    f->pop_auth_subtree.scale(fac);
     f->pop_auth_subtree_nested = pop_auth_subtree_nested;
-    f->pop_auth_subtree_nested *= fac;
+    f->pop_auth_subtree_nested.scale(fac);
 
     dout(10) << " subfrag " << *p << " " << *f << dendl;
     subfrags[n++] = f;
@@ -1743,14 +1743,14 @@ void CDir::encode_export(bufferlist& bl)
 
 void CDir::finish_export(utime_t now)
 {
-  pop_auth_subtree_nested -= pop_auth_subtree;
+  pop_auth_subtree_nested.sub(now, cache->decayrate, pop_auth_subtree);
   pop_me.zero(now);
   pop_auth_subtree.zero(now);
   put(PIN_TEMPEXPORTING);
   dirty_old_rstat.clear();
 }
 
-void CDir::decode_import(bufferlist::iterator& blp)
+void CDir::decode_import(bufferlist::iterator& blp, utime_t now)
 {
   ::decode(first, blp);
   ::decode(fnode, blp);
@@ -1769,7 +1769,7 @@ void CDir::decode_import(bufferlist::iterator& blp)
 
   ::decode(pop_me, blp);
   ::decode(pop_auth_subtree, blp);
-  pop_auth_subtree_nested += pop_auth_subtree;
+  pop_auth_subtree_nested.add(now, cache->decayrate, pop_auth_subtree);
 
   ::decode(dir_rep_by, blp);
   ::decode(replica_map, blp);

@@ -445,6 +445,8 @@ class MDCache {
   CInode *stray;                           // my stray dir
 
 public:
+  DecayRate decayrate;
+
   int num_inodes_with_caps;
   int num_caps;
 

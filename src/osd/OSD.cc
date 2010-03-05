@@ -326,7 +326,8 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, c
   heartbeat_messenger(hbm),
   heartbeat_thread(this),
   heartbeat_dispatcher(this),
-  stat_oprate(5.0),
+  decayrate(5.0),
+  stat_oprate(),
   peer_stat_lock("OSD::peer_stat_lock"),
   read_latency_calc(g_conf.osd_max_opq<1 ? 1:g_conf.osd_max_opq),
   qlen_calc(3),
@@ -984,7 +985,7 @@ void OSD::_refresh_my_stat(utime_t now)
       pending_ops > 2*my_stat.qlen) {
 
     now.encode_timeval(&my_stat.stamp);
-    my_stat.oprate = stat_oprate.get(now);
+    my_stat.oprate = stat_oprate.get(now, decayrate);
 
     //read_latency_calc.set_size( 20 );  // hrm.
 
@@ -4076,7 +4077,7 @@ void OSD::handle_op(MOSDOp *op)
   PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid):0;
 
   // update qlen stats
-  stat_oprate.hit(now);
+  stat_oprate.hit(now, decayrate);
   stat_ops++;
   stat_qlen += pending_ops;
 

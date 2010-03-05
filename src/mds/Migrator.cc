@@ -818,6 +818,7 @@ void Migrator::export_go_synced(CDir *dir)
 {  
   assert(export_peer.count(dir));
   int dest = export_peer[dir];
+  utime_t now = g_clock.now();
   dout(7) << "export_go_synced " << *dir << " to " << dest << dendl;
 
   cache->show_subtrees();
@@ -832,11 +833,10 @@ void Migrator::export_go_synced(CDir *dir)
   cache->adjust_subtree_auth(dir, dest, mds->get_nodeid());
 
   // take away the popularity we're sending.
-  mds->balancer->subtract_export(dir);
+  mds->balancer->subtract_export(dir, now);
   
   // fill export message with cache data
   MExportDir *req = new MExportDir(dir->dirfrag());
-  utime_t now = g_clock.now();
   map<client_t,entity_inst_t> exported_client_map;
   int num_exported_inodes = encode_export_dir(req->export_data,
 					      dir,   // recur start point
@@ -1663,7 +1663,8 @@ void Migrator::handle_export_dir(MExportDir *m)
   assert (g_conf.mds_kill_import_at != 5);
   CDir *dir = cache->get_dirfrag(m->dirfrag);
   assert(dir);
-
+  
+  utime_t now = g_clock.now();
   int oldauth = m->get_source().num();
   dout(7) << "handle_export_dir importing " << *dir << " from " << oldauth << dendl;
   assert(dir->is_auth() == false);
@@ -1699,7 +1700,8 @@ void Migrator::handle_export_dir(MExportDir *m)
 			le,
 			mds->mdlog->get_current_segment(),
 			import_caps[dir],
-			import_updated_scatterlocks[dir]);
+			import_updated_scatterlocks[dir],
+			now);
   }
   dout(10) << " " << m->bounds.size() << " imported bounds" << dendl;
   
@@ -1712,7 +1714,7 @@ void Migrator::handle_export_dir(MExportDir *m)
     le->metablob.add_dir(*it, false);  // note that parent metadata is already in the event
 
   // adjust popularity
-  mds->balancer->add_import(dir);
+  mds->balancer->add_import(dir, now);
 
   dout(7) << "handle_export_dir did " << *dir << dendl;
 
@@ -2101,7 +2103,7 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
 				EImportStart *le,
 				LogSegment *ls,
 				map<CInode*, map<client_t,Capability::Export> >& cap_imports,
-				list<ScatterLock*>& updated_scatterlocks)
+				list<ScatterLock*>& updated_scatterlocks, utime_t now)
 {
   // set up dir
   dirfrag_t df;
@@ -2115,7 +2117,7 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
   dout(7) << "decode_import_dir " << *dir << dendl;
 
   // assimilate state
-  dir->decode_import(blp);
+  dir->decode_import(blp, now);
 
   // mark  (may already be marked from get_or_open_dir() above)
   if (!dir->is_auth())

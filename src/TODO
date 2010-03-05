@@ -77,12 +77,6 @@ bugs
 - osd pg split breaks if not all osds are up...
 - mislinked directory?  (cpusr.sh, mv /c/* /c/t, more cpusr, ls /c/t)
 
-?- kclient: after reconnect,
-cp: writing `/c/ceph2.2/bin/gs-gpl': Bad file descriptor
-  - need to somehow wake up unreconnected caps?   hrm!!
-
-?- kclient: socket creation
-
 - snaprealm thing
 ceph3:~# find /c
 /c

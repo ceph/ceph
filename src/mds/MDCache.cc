@@ -131,6 +131,8 @@ MDCache::MDCache(MDS *m)
   lru.lru_set_max(g_conf.mds_cache_size);
   lru.lru_set_midpoint(g_conf.mds_cache_mid);
 
+  decayrate.set_halflife(g_conf.mds_decay_halflife);
+
   did_shutdown_log_cap = false;
 }
 
@@ -707,9 +709,10 @@ void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth, bool do_eval)
 
     // adjust recursive pop counters
     if (dir->is_auth()) {
+      utime_t now = g_clock.now();
       CDir *p = dir->get_parent_dir();
       while (p) {
-	p->pop_auth_subtree -= dir->pop_auth_subtree;
+	p->pop_auth_subtree.sub(now, decayrate, dir->pop_auth_subtree);
 	if (p->is_subtree_root()) break;
 	p = p->inode->get_parent_dir();
       }
@@ -781,9 +784,10 @@ void MDCache::try_subtree_merge_at(CDir *dir)
 
     // adjust popularity?
     if (dir->is_auth()) {
+      utime_t now = g_clock.now();
       CDir *p = dir->get_parent_dir();
       while (p) {
-	p->pop_auth_subtree += dir->pop_auth_subtree;
+	p->pop_auth_subtree.add(now, decayrate, dir->pop_auth_subtree);
 	if (p->is_subtree_root()) break;
 	p = p->inode->get_parent_dir();
       }

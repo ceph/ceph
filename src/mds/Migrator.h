@@ -242,7 +242,7 @@ public:
 			EImportStart *le, 
 			LogSegment *ls,
 			map<CInode*, map<client_t,Capability::Export> >& cap_imports,
-			list<ScatterLock*>& updated_scatterlocks);
+			list<ScatterLock*>& updated_scatterlocks, utime_t now);
 
 public:
   void import_reverse(CDir *dir);

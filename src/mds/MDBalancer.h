@@ -83,7 +83,7 @@ public:
     beat_epoch(0),
     last_epoch_under(0), last_epoch_over(0) { }
   
-  mds_load_t get_load();
+  mds_load_t get_load(utime_t);
 
   int proc_message(Message *m);
   
@@ -109,8 +109,8 @@ public:
                     set<CDir*>& already_exporting);
 
 
-  void subtract_export(class CDir *ex);
-  void add_import(class CDir *im);
+  void subtract_export(class CDir *ex, utime_t now);
+  void add_import(class CDir *im, utime_t now);
 
   void hit_inode(utime_t now, class CInode *in, int type, int who=-1);
   void hit_dir(utime_t now, class CDir *dir, int type, int who, double amount=1.0);

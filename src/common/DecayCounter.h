@@ -29,10 +29,22 @@
  *
  */
 
+class DecayRate {
+  double k;             // k = ln(.5)/half_life
+
+  friend class DecayCounter;
+
+public:
+  DecayRate() : k(0) {}
+  DecayRate(double hl) { set_halflife(hl); }
+  void set_halflife(double hl) {
+    k = log(.5) / hl;
+  }    
+};
+
 class DecayCounter {
  protected:
 public:
-  double k;             // k = ln(.5)/half_life
   double val;           // value
   double delta;         // delta since last decay
   double vel;           // recent velocity
@@ -41,9 +53,8 @@ public:
  public:
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 2;
+    __u8 struct_v = 3;
     ::encode(struct_v, bl);
-    ::encode(k, bl);
     ::encode(val, bl);
     ::encode(delta, bl);
     ::encode(vel, bl);
@@ -55,18 +66,16 @@ public:
       double half_life;
       ::decode(half_life, p);
     }
-    ::decode(k, p);
+    if (struct_v < 3) {
+      double k;
+      ::decode(k, p);
+    }
     ::decode(val, p);
     ::decode(delta, p);
     ::decode(vel, p);
   }
 
   DecayCounter() : val(0), delta(0), vel(0) {
-    set_halflife( g_conf.mds_decay_halflife );
-    reset();
-  }
-  DecayCounter(double hl) : val(0), delta(0), vel(0) {
-    set_halflife( hl );
     reset();
   }
 
@@ -74,12 +83,8 @@ public:
    * reading
    */
 
-  double get() {
-    return get(g_clock.now());
-  }
-
-  double get(utime_t now) {
-    decay(now);
+  double get(utime_t now, const DecayRate& rate) {
+    decay(now, rate);
     return val;
   }
 
@@ -99,8 +104,8 @@ public:
    * adjusting
    */
 
-  double hit(utime_t now, double v = 1.0) {
-    decay(now);
+  double hit(utime_t now, const DecayRate& rate, double v = 1.0) {
+    decay(now, rate);
     delta += v;
     return val+delta;
   }
@@ -108,8 +113,8 @@ public:
   void adjust(double a) {
     val += a;
   }
-  void adjust(utime_t now, double a) {
-    decay(now);
+  void adjust(utime_t now, const DecayRate& rate, double a) {
+    decay(now, rate);
     val += a;
   }
   void scale(double f) {
@@ -122,10 +127,6 @@ public:
    * decay etc.
    */
 
-  void set_halflife(double hl) {
-    k = log(.5) / hl;
-  }
-
   void reset() {
     reset(g_clock.now());
   }
@@ -134,18 +135,18 @@ public:
     val = delta = 0;
   }
   
-  void decay(utime_t now) {
+  void decay(utime_t now, const DecayRate &rate) {
     utime_t el = now;
     el -= last_decay;
 
     if (el.sec() >= 1) {
       // calculate new value
-      double newval = (val+delta) * exp((double)el * k);
+      double newval = (val+delta) * exp((double)el * rate.k);
       if (newval < .01) newval = 0.0;
       
       // calculate velocity approx
       vel += (newval - val) * (double)el;
-      vel *= exp((double)el * k);
+      vel *= exp((double)el * rate.k);
       
       val = newval;
       delta = 0;

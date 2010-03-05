@@ -238,6 +238,7 @@ public:
 
 private:
   // -- stats --
+  DecayRate decayrate;
   DecayCounter stat_oprate;
   int stat_ops;  // ops since last heartbeat
   int stat_rd_ops;

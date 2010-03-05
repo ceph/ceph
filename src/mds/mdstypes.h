@@ -849,21 +849,21 @@ public:
     assert(t < NUM);
     return vec[t]; 
   }
-  void adjust(utime_t now, double d) {
+  void adjust(utime_t now, const DecayRate& rate, double d) {
     for (int i=0; i<NUM; i++) 
-      vec[i].adjust(now, d);
+      vec[i].adjust(now, rate, d);
   }
   void zero(utime_t now) {
     for (int i=0; i<NUM; i++) 
       vec[i].reset(now);
   }
-  double meta_load(utime_t now) {
+  double meta_load(utime_t now, const DecayRate& rate) {
     return 
-      1*vec[META_POP_IRD].get(now) + 
-      2*vec[META_POP_IWR].get(now) +
-      1*vec[META_POP_READDIR].get(now) +
-      2*vec[META_POP_FETCH].get(now) +
-      4*vec[META_POP_STORE].get(now);
+      1*vec[META_POP_IRD].get(now, rate) + 
+      2*vec[META_POP_IWR].get(now, rate) +
+      1*vec[META_POP_READDIR].get(now, rate) +
+      2*vec[META_POP_FETCH].get(now, rate) +
+      4*vec[META_POP_STORE].get(now, rate);
   }
   double meta_load() {
     return 
@@ -873,39 +873,30 @@ public:
       2*vec[META_POP_FETCH].get_last() +
       4*vec[META_POP_STORE].get_last();
   }
+
+  void add(utime_t now, DecayRate& rate, dirfrag_load_vec_t& r) {
+    for (int i=0; i<dirfrag_load_vec_t::NUM; i++)
+      vec[i].adjust(r.vec[i].get(now, rate));
+  }
+  void sub(utime_t now, DecayRate& rate, dirfrag_load_vec_t& r) {
+    for (int i=0; i<dirfrag_load_vec_t::NUM; i++)
+      vec[i].adjust(-r.vec[i].get(now, rate));
+  }
+  void scale(double f) {
+    for (int i=0; i<dirfrag_load_vec_t::NUM; i++)
+      vec[i].scale(f);
+  }
 };
 
 WRITE_CLASS_ENCODER(dirfrag_load_vec_t)
 
-inline dirfrag_load_vec_t& operator+=(dirfrag_load_vec_t& l, dirfrag_load_vec_t& r)
-{
-  utime_t now = g_clock.now();
-  for (int i=0; i<dirfrag_load_vec_t::NUM; i++)
-    l.vec[i].adjust(r.vec[i].get(now));
-  return l;
-}
-
-inline dirfrag_load_vec_t& operator-=(dirfrag_load_vec_t& l, dirfrag_load_vec_t& r)
-{
-  utime_t now = g_clock.now();
-  for (int i=0; i<dirfrag_load_vec_t::NUM; i++)
-    l.vec[i].adjust(-r.vec[i].get(now));
-  return l;
-}
-
-inline dirfrag_load_vec_t& operator*=(dirfrag_load_vec_t& l, double f)
-{
-  for (int i=0; i<dirfrag_load_vec_t::NUM; i++)
-    l.vec[i].scale(f);
-  return l;
-}
-
-
 inline ostream& operator<<(ostream& out, dirfrag_load_vec_t& dl)
 {
+  // ugliness!
   utime_t now = g_clock.now();
-  return out << "[" << dl.vec[0].get(now) << "," << dl.vec[1].get(now) 
-	     << " " << dl.meta_load(now)
+  DecayRate rate(g_conf.mds_decay_halflife);
+  return out << "[" << dl.vec[0].get(now, rate) << "," << dl.vec[1].get(now, rate) 
+	     << " " << dl.meta_load(now, rate)
 	     << "]";
 }
 
@@ -996,10 +987,11 @@ public:
 
 public:
   load_spread_t() : p(0), n(0) { 
-    for (int i=0; i<MAX; i++) last[i] = -1;
+    for (int i=0; i<MAX; i++)
+      last[i] = -1;
   } 
 
-  double hit(utime_t now, int who) {
+  double hit(utime_t now, const DecayRate& rate, int who) {
     for (int i=0; i<n; i++)
       if (last[i] == who) 
 	return count.get_last();
@@ -1011,10 +1003,10 @@ public:
 
     if (p == MAX) p = 0;
 
-    return count.hit(now);
+    return count.hit(now, rate);
   }
-  double get(utime_t now) {
-    return count.get(now);
+  double get(utime_t now, const DecayRate& rate) {
+    return count.get(now, rate);
   }
 };
 

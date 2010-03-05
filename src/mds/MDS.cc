@@ -449,7 +449,8 @@ void MDS::tick()
   }
 
   // log
-  mds_load_t load = balancer->get_load();
+  utime_t now = g_clock.now();
+  mds_load_t load = balancer->get_load(now);
   
   if (logger) {
     req_rate = logger->get(l_mds_req);

@@ -140,7 +140,7 @@ double mds_load_t::mds_load()
   return 0;
 }
 
-mds_load_t MDBalancer::get_load()
+mds_load_t MDBalancer::get_load(utime_t now)
 {
   mds_load_t load;
 
@@ -150,8 +150,8 @@ mds_load_t MDBalancer::get_load()
     for (list<CDir*>::iterator p = ls.begin();
 	 p != ls.end();
 	 p++) {
-      load.auth += (*p)->pop_auth_subtree_nested;
-      load.all += (*p)->pop_nested;
+      load.auth.add(now, mds->mdcache->decayrate, (*p)->pop_auth_subtree_nested);
+      load.all.add(now, mds->mdcache->decayrate, (*p)->pop_nested);
     }
   } else {
     dout(20) << "get_load no root, no load" << dendl;
@@ -182,7 +182,7 @@ void MDBalancer::send_heartbeat()
     beat_epoch++;
 
   // my load
-  mds_load_t load = get_load();
+  mds_load_t load = get_load(now);
   mds_load[ mds->get_nodeid() ] = load;
 
   // import_map -- how much do i import from whom
@@ -196,7 +196,7 @@ void MDBalancer::send_heartbeat()
     int from = im->inode->authority().first;
     if (from == mds->get_nodeid()) continue;
     if (im->get_inode()->is_stray()) continue;
-    import_map[from] += im->pop_auth_subtree.meta_load(now);
+    import_map[from] += im->pop_auth_subtree.meta_load(now, mds->mdcache->decayrate);
   }
   mds_import_map[ mds->get_nodeid() ] = import_map;
   
@@ -359,7 +359,7 @@ void MDBalancer::prep_rebalance(int beat)
     // rescale!  turn my mds_load back into meta_load units
     double load_fac = 1.0;
     if (mds_load[whoami].mds_load() > 0) {
-      double metald = mds_load[whoami].auth.meta_load(rebalance_time);
+      double metald = mds_load[whoami].auth.meta_load(rebalance_time, mds->mdcache->decayrate);
       double mdsld = mds_load[whoami].mds_load();
       load_fac = metald / mdsld;
       dout(7) << " load_fac is " << load_fac 
@@ -530,7 +530,7 @@ void MDBalancer::try_rebalance()
       CDir *im = *it;
       if (im->get_inode()->is_stray()) continue;
 
-      double pop = im->pop_auth_subtree.meta_load(rebalance_time);
+      double pop = im->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
       if (g_conf.mds_bal_idle_threshold > 0 &&
 	  pop < g_conf.mds_bal_idle_threshold &&
 	  im->inode != mds->mdcache->get_root() &&
@@ -597,7 +597,7 @@ void MDBalancer::try_rebalance()
         
 	  if (dir->inode->is_root()) continue;
 	  if (dir->is_freezing() || dir->is_frozen()) continue;  // export pbly already in progress
-	  double pop = dir->pop_auth_subtree.meta_load(rebalance_time);
+	  double pop = dir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
 	  assert(dir->inode->authority().first == target);  // cuz that's how i put it in the map, dummy
         
 	  if (pop <= amount-have) {
@@ -665,7 +665,7 @@ void MDBalancer::try_rebalance()
 	dout(-5) << "   - exporting " 
 		 << (*it)->pop_auth_subtree
 		 << " "
-		 << (*it)->pop_auth_subtree.meta_load(rebalance_time) 
+		 << (*it)->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate) 
 		 << " to mds" << target 
 		 << " " << **it 
 		 << dendl;
@@ -729,7 +729,7 @@ void MDBalancer::find_exports(CDir *dir,
   list<CDir*> bigger_rep, bigger_unrep;
   multimap<double, CDir*> smaller;
 
-  double dir_pop = dir->pop_auth_subtree.meta_load(rebalance_time);
+  double dir_pop = dir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
   dout(7) << " find_exports in " << dir_pop << " " << *dir << " need " << need << " (" << needmin << " - " << needmax << ")" << dendl;
 
   double subdir_sum = 0;
@@ -752,7 +752,7 @@ void MDBalancer::find_exports(CDir *dir,
       if (subdir->is_frozen()) continue;  // can't export this right now!
       
       // how popular?
-      double pop = subdir->pop_auth_subtree.meta_load(rebalance_time);
+      double pop = subdir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
       subdir_sum += pop;
       dout(15) << "   subdir pop " << pop << " " << *subdir << dendl;
 
@@ -833,7 +833,7 @@ void MDBalancer::find_exports(CDir *dir,
 void MDBalancer::hit_inode(utime_t now, CInode *in, int type, int who)
 {
   // hit inode
-  in->pop.get(type).hit(now);
+  in->pop.get(type).hit(now, mds->mdcache->decayrate);
 
   if (in->get_parent_dn())
     hit_dir(now, in->get_parent_dn()->get_dir(), type, who);
@@ -892,15 +892,15 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
   
   // replicate?
   if (type == META_POP_IRD && who >= 0) {
-    dir->pop_spread.hit(now, who);
+    dir->pop_spread.hit(now, mds->mdcache->decayrate, who);
   }
 
   double rd_adj = 0;
   if (type == META_POP_IRD &&
       dir->last_popularity_sample < last_sample) {
-    float dir_pop = dir->pop_auth_subtree.get(type).get(now);    // hmm??
+    float dir_pop = dir->pop_auth_subtree.get(type).get(now, mds->mdcache->decayrate);    // hmm??
     dir->last_popularity_sample = last_sample;
-    float pop_sp = dir->pop_spread.get(now);
+    float pop_sp = dir->pop_spread.get(now, mds->mdcache->decayrate);
     dir_pop += pop_sp * 10;
 
     //if (dir->ino() == inodeno_t(0x10000000002))
@@ -917,7 +917,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
       if (!dir->is_rep() &&
 	  dir_pop >= g_conf.mds_bal_replicate_threshold) {
 	// replicate
-	float rdp = dir->pop_me.get(META_POP_IRD).get(now);
+	float rdp = dir->pop_me.get(META_POP_IRD).get(now, mds->mdcache->decayrate);
 	rd_adj = rdp / mds->get_mds_map()->get_num_mds() - rdp; 
 	rd_adj /= 2.0;  // temper somewhat
 	
@@ -950,18 +950,18 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
   while (1) {
     dir->pop_nested.get(type).hit(now, amount);
     if (rd_adj != 0.0) 
-      dir->pop_nested.get(META_POP_IRD).adjust(now, rd_adj);
+      dir->pop_nested.get(META_POP_IRD).adjust(now, mds->mdcache->decayrate, rd_adj);
     
     if (hit_subtree) {
       dir->pop_auth_subtree.get(type).hit(now, amount);
       if (rd_adj != 0.0) 
-	dir->pop_auth_subtree.get(META_POP_IRD).adjust(now, rd_adj);
+	dir->pop_auth_subtree.get(META_POP_IRD).adjust(now, mds->mdcache->decayrate, rd_adj);
     }
 
     if (hit_subtree_nested) {
-      dir->pop_auth_subtree_nested.get(type).hit(now, amount);
+      dir->pop_auth_subtree_nested.get(type).hit(now, mds->mdcache->decayrate, amount);
       if (rd_adj != 0.0) 
-	dir->pop_auth_subtree_nested.get(META_POP_IRD).adjust(now, rd_adj);
+	dir->pop_auth_subtree_nested.get(META_POP_IRD).adjust(now, mds->mdcache->decayrate, rd_adj);
     }  
     
     if (dir->is_subtree_root()) 
@@ -981,7 +981,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
  * NOTE: call me _after_ forcing *dir into a subtree root,
  *       but _before_ doing the encode_export_dirs.
  */
-void MDBalancer::subtract_export(CDir *dir)
+void MDBalancer::subtract_export(CDir *dir, utime_t now)
 {
   dirfrag_load_vec_t subload = dir->pop_auth_subtree;
 
@@ -989,13 +989,13 @@ void MDBalancer::subtract_export(CDir *dir)
     dir = dir->inode->get_parent_dir();
     if (!dir) break;
     
-    dir->pop_nested -= subload;
-    dir->pop_auth_subtree_nested -= subload;
+    dir->pop_nested.sub(now, mds->mdcache->decayrate, subload);
+    dir->pop_auth_subtree_nested.sub(now, mds->mdcache->decayrate, subload);
   }
 }
     
 
-void MDBalancer::add_import(CDir *dir)
+void MDBalancer::add_import(CDir *dir, utime_t now)
 {
   dirfrag_load_vec_t subload = dir->pop_auth_subtree;
   
@@ -1003,8 +1003,8 @@ void MDBalancer::add_import(CDir *dir)
     dir = dir->inode->get_parent_dir();
     if (!dir) break;
     
-    dir->pop_nested += subload;
-    dir->pop_auth_subtree_nested += subload;
+    dir->pop_nested.add(now, mds->mdcache->decayrate, subload);
+    dir->pop_auth_subtree_nested.add(now, mds->mdcache->decayrate, subload);
   } 
 }
 
@@ -1057,10 +1057,10 @@ void MDBalancer::dump_pop_map()
 	   ++p) {
 	CDir *dir = *p;
 
-	myfile << (int)dir->pop_me.meta_load(now) << "\t";
-	myfile << (int)dir->pop_nested.meta_load(now) << "\t";
-	myfile << (int)dir->pop_auth_subtree.meta_load(now) << "\t";
-	myfile << (int)dir->pop_auth_subtree_nested.meta_load(now) << "\t";
+	myfile << (int)dir->pop_me.meta_load(now, mds->mdcache->decayrate) << "\t";
+	myfile << (int)dir->pop_nested.meta_load(now, mds->mdcache->decayrate) << "\t";
+	myfile << (int)dir->pop_auth_subtree.meta_load(now, mds->mdcache->decayrate) << "\t";
+	myfile << (int)dir->pop_auth_subtree_nested.meta_load(now, mds->mdcache->decayrate) << "\t";
 
 	// filename last
 	string p;
