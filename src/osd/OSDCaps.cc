@@ -176,7 +176,7 @@ int OSDCaps::get_pool_cap(int pool_id, __u64 uid)
     cap |= c.allow;
     cap &= ~c.deny;
   } else if (	uid != CEPH_AUTH_UID_DEFAULT
-	     && uid == auth_uid) {
+	     && uid == auid) {
     //the owner has full access unless they've removed some by setting
     //new caps
     cap = OSD_POOL_CAP_ALL;

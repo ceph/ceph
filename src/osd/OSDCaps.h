@@ -53,17 +53,17 @@ struct OSDCaps {
   map<int, OSDPoolCap> pools_map;
   rwx_t default_action;
   bool allow_all;
-  __u64 auth_uid;
+  __u64 auid;
 
   bool get_next_token(string s, size_t& pos, string& token);
   bool is_rwx(string& token, rwx_t& cap_val);
   
   OSDCaps() : default_action(0), allow_all(false),
-	      auth_uid(CEPH_AUTH_UID_DEFAULT) {}
+	      auid(CEPH_AUTH_UID_DEFAULT) {}
   bool parse(bufferlist::iterator& iter);
   int get_pool_cap(int pool_id, __u64 uid = CEPH_AUTH_UID_DEFAULT);
   void set_allow_all(bool allow) { allow_all = allow; }
-  void set_auth_uid(__u64 uid) { auth_uid = uid; }
+  void set_auid(__u64 uid) { auid = uid; }
 };
 
 static inline ostream& operator<<(ostream& out, const OSDCaps& c) {
