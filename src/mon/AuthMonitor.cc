@@ -416,13 +416,14 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
   }
 
   try {
+    __u64 auid;
     if (start) {
       // new session
       proto = s->auth_handler->start_session(entity_name, indata, response_bl, caps_info);
       ret = 0;
     } else {
       // request
-      ret = s->auth_handler->handle_request(indata, response_bl, s->global_id, caps_info);
+      ret = s->auth_handler->handle_request(indata, response_bl, s->global_id, caps_info, &auid);
     }
     if (ret == -EIO) {
       paxos->wait_for_active(new C_RetryMessage(this, m));
@@ -432,6 +433,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
     if (caps_info.caps.length()) {
       bufferlist::iterator iter = caps_info.caps.begin();
       s->caps.parse(iter);
+      s->caps.set_auid(auid);
     }
   } catch (buffer::error *err) {
     ret = -EINVAL;
