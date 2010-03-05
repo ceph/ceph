@@ -1691,11 +1691,12 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
   AuthCapsInfo caps_info;
   EntityName name;
   uint64_t global_id;
+  __u64 auid;
 
   isvalid = authorize_handler->verify_authorizer(monc->rotating_secrets,
-						 authorizer_data, authorizer_reply, name, global_id, caps_info);
+						 authorizer_data, authorizer_reply, name, global_id, caps_info, &auid);
 
-  dout(10) << "OSD::ms_verify_authorizer name=" << name << dendl;
+  dout(10) << "OSD::ms_verify_authorizer name=" << name << " auid=" << auid << dendl;
 
   if (isvalid) {
     Session *s = (Session *)con->get_priv();
@@ -1711,6 +1712,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
     }
 
     s->caps.set_allow_all(caps_info.allow_all);
+    s->caps.set_auid(auid);
  
     if (caps_info.caps.length() > 0) {
       bufferlist::iterator iter = caps_info.caps.begin();
