@@ -382,6 +382,17 @@ void MDS::send_message_client(Message *m, entity_inst_t clientinst)
 
 int MDS::init()
 {
+  dout(10) << sizeof(CInode) << "\tCInode" << dendl;
+  dout(10) << sizeof(CDentry) << "\tCDentry" << dendl;
+  dout(10) << sizeof(CDir) << "\tCDir " << dendl;
+  dout(10) << sizeof(Capability) << "\tCapability " << dendl;
+  dout(10) << sizeof(inode_t) << "\tinode_t " << dendl;
+  dout(10) << sizeof(nest_info_t) << "\tnest_info_t " << dendl;
+  dout(10) << sizeof(frag_info_t) << "\tfrag_info_t " << dendl;
+  dout(10) << sizeof(fnode_t) << "\tfnode_t " << dendl;
+  dout(10) << sizeof(SimpleLock) << "\tSimpleLock " << dendl;
+  dout(10) << sizeof(ScatterLock) << "\tScatterLock " << dendl;
+
   messenger->add_dispatcher_tail(this);
   messenger->add_dispatcher_head(&logclient);
 
