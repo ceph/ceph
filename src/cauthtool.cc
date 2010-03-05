@@ -24,7 +24,7 @@ using namespace std;
 
 void usage()
 {
-  cout << " usage: [--create-keyring] [--gen-key [--set-uid=x]] [--name=<name>] [--caps=<filename>] [--list] [--print-key] <filename>" << std::endl;
+  cout << " usage: [--create-keyring] [--gen-key] [--name=<name>] [--caps=<filename>] [--list] [--print-key] <filename>" << std::endl;
   exit(1);
 }
 
@@ -47,7 +47,6 @@ int main(int argc, const char **argv)
   const char *name = "";
   const char *caps_fn = NULL;
   const char *import_keyring = NULL;
-  const char *auth_uid_string = NULL;
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("gen-key", 'g')) {
@@ -66,8 +65,6 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&create_keyring, OPT_BOOL);
     } else if (CONF_ARG_EQ("import-keyring", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&import_keyring, OPT_STR);
-    } else if (CONF_ARG_EQ("set-uid", 'u')) {
-      CONF_SAFE_SET_ARG_VAL(&auth_uid_string, OPT_STR);
     } else if (!fn) {
       fn = args[i];
     } else 
@@ -160,7 +157,7 @@ int main(int argc, const char **argv)
   }
   if (add_key) {
     if (!name) {
-      cerr << "must specify a name to add a key" << std::endl;
+      cerr << "must speicfy a name to add a key" << std::endl;
       exit(1);
     }
     EntityAuth eauth;
@@ -196,14 +193,6 @@ int main(int argc, const char **argv)
     }
     keyring.set_caps(ename, caps);
     modified = true;
-  }
-  if (auth_uid_string) { //better add it!
-    EntityAuth auth;
-    keyring.get_auth(ename, auth); //if there's nothing caps will be left blank
-    bufferlist bl;
-    ::encode(auth_uid_string, bl);
-    auth.caps[string("auth_uid")] = bl;
-    keyring.set_caps(ename, auth.caps);
   }
 
   // read commands
