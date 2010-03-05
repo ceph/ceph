@@ -68,6 +68,7 @@ void KeyRing::print(ostream& out)
        p != keys.end();
        ++p) {
     out << p->first << std::endl;
+    out << "\tauid: " << p->second.auid << std::endl;
     out << "\tkey: " << p->second.key << std::endl;
 
     for (map<string, bufferlist>::iterator q = p->second.caps.begin();
