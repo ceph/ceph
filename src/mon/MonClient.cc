@@ -543,15 +543,19 @@ int MonClient::wait_auth_rotating(double timeout)
   utime_t until = g_clock.now();
   until += timeout;
 
-  if (auth->get_protocol() == CEPH_AUTH_NONE) {
+  if (auth->get_protocol() == CEPH_AUTH_NONE)
     return 0;
-  }
   
   if (!rotating_secrets)
     return 0;
 
   while (auth_principal_needs_rotating_keys(entity_name) &&
 	 rotating_secrets->need_new_secrets()) {
+    utime_t now = g_clock.now();
+    if (now >= until) {
+      dout(0) << "wait_auth_rotating timed out after " << timeout << dendl;
+      return -ETIMEDOUT;
+    }
     dout(10) << "wait_auth_rotating waiting (until " << until << ")" << dendl;
     auth_cond.WaitUntil(monc_lock, until);
   }
