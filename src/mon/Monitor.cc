@@ -997,8 +997,7 @@ bool Monitor::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool
   }
 
   CephXTicketBlob blob;
-  ret = cephx_build_service_ticket_blob(info, blob);
-  if (ret < 0)
+  if (!cephx_build_service_ticket_blob(info, blob))
     return false;
   bufferlist ticket_data;
   ::encode(blob, ticket_data);
