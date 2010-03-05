@@ -356,8 +356,7 @@ int KeyServer::_build_session_auth_info(uint32_t service_id, CephXServiceTicketI
 					CephXSessionAuthInfo& info)
 {
   info.service_id = service_id;
-  info.ticket.name = auth_ticket_info.ticket.name;
-  info.ticket.global_id = auth_ticket_info.ticket.global_id;
+  info.ticket = auth_ticket_info.ticket;
   info.ticket.init_timestamps(g_clock.now(), g_conf.auth_service_ticket_ttl);
 
   generate_secret(info.session_key);
