@@ -83,6 +83,7 @@ int main(int argc, const char **argv)
 	add_key ||
 	list ||
 	caps_fn ||
+	set_auid ||
 	print_key ||
 	create_keyring ||
 	import_keyring)) {
@@ -93,7 +94,7 @@ int main(int argc, const char **argv)
     cerr << "can't both gen_key and add_key" << std::endl;
     usage();
   }	
-  if (caps_fn || add_key || gen_key || print_key) {
+  if (caps_fn || add_key || gen_key || print_key || set_auid) {
     if (!name || !(*name)) {
       cerr << "must specify entity name" << std::endl;
       usage();
