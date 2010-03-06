@@ -22,8 +22,6 @@
 
 #include <errno.h>
 
-#define CEPH_AUTH_UID_DEFAULT (__u64) -1
-
 class Cond;
 
 struct EntityName {

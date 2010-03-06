@@ -23,9 +23,6 @@
 
 #define OSD_POOL_CAP_ALL (OSD_POOL_CAP_R | OSD_POOL_CAP_W | OSD_POOL_CAP_X)
 
-//this needs to match Auth.h
-#define CEPH_AUTH_UID_DEFAULT (__u64) -1
-
 typedef __u8 rwx_t;
 
 static inline ostream& operator<<(ostream& out, rwx_t p) {
