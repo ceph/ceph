@@ -1386,3 +1386,13 @@ void OSDMonitor::_pool_op(MPoolOp *m, int replyCode, epoch_t epoch)
   mon->send_reply(m, reply);
   delete m;
 }
+
+//for now, this just checks against allow_all, auid equaling caps.auid,
+//or auid being default public
+bool OSDMonitor::check_privileges(__u64 auid, MonCaps& caps, int req_perm)
+{
+  if (caps.allow_all) return true;
+  if (CEPH_AUTH_UID_DEFAULT == auid) return true;
+  if (auid == caps.auid) return true;
+  return false;
+}
