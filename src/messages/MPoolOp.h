@@ -46,12 +46,21 @@ public:
   int pool;
   string name;
   int op;
+  __u64 auid;
 
   MPoolOp() : PaxosServiceMessage(MSG_POOLOP, 0) {}
   MPoolOp(const ceph_fsid_t& f, tid_t t, int p, string& n, int o, version_t v) :
-    PaxosServiceMessage(MSG_POOLOP, v), fsid(f), pool(p), name(n), op(o) {
+    PaxosServiceMessage(MSG_POOLOP, v), fsid(f), pool(p), name(n), op(o),
+    auid(0) {
     set_tid(t);
   }
+  MPoolOp(const ceph_fsid_t& f, tid_t t, int p, string& n,
+	  int o, __u64 uid, version_t v) :
+    PaxosServiceMessage(MSG_POOLOP, v), fsid(f), pool(p), name(n), op(o),
+    auid(auid) {
+    set_tid(t);
+  }
+
 
   const char *get_type_name() { return "poolop"; }
   void print(ostream& out) {
