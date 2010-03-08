@@ -417,25 +417,24 @@ int FileStore::_detect_fs()
   int fd = ::open(basedir.c_str(), O_RDONLY);
   if (fd < 0)
     return -errno;
-  int r = ::ioctl(fd, BTRFS_IOC_TRANS_START);
-  if (r == 0) {
-    dout(0) << "mount btrfs TRANS_START ioctl is supported" << dendl;
-    ::ioctl(fd, BTRFS_IOC_TRANS_END);
+
+  struct statfs st;
+  int r = ::fstatfs(fd, &st);
+  if (r == 0 && st.f_type == 0x9123683E) {
+    dout(0) << "mount detected btrfs" << dendl;      
+    btrfs = true;
 
     // clone_range?
-    btrfs = 2;
     int r = _do_clone_range(fsid_fd, -1, 0, 1);
     if (r == -EBADF) {
       dout(0) << "mount btrfs CLONE_RANGE ioctl is supported" << dendl;
+      btrfs_clone_range = true;
     } else {
       dout(0) << "mount btrfs CLONE_RANGE ioctl is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
-      btrfs = 1;
     }
-    dout(0) << "mount detected btrfs" << dendl;      
   } else {
-    dout(0) << "mount btrfs TRANS_START ioctl is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
     dout(0) << "mount did NOT detect btrfs" << dendl;
-    btrfs = 0;
+    btrfs = false;
   }
   ::close(fd);
   return 0;
@@ -1405,7 +1404,7 @@ int FileStore::_do_clone_range(int from, int to, __u64 off, __u64 len)
   dout(20) << "_do_clone_range " << off << "~" << len << dendl;
   int r = 0;
   
-  if (btrfs >= 2) {
+  if (btrfs_clone_range) {
     btrfs_ioctl_clone_range_args a;
     a.src_fd = from;
     a.src_offset = off;

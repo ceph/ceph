@@ -43,8 +43,9 @@ class FileStore : public JournalingObjectStore {
   char current_op_seq_fn[PATH_MAX];
   __u64 fsid;
   
-  int btrfs;
+  bool btrfs;
   bool btrfs_trans_start_end;
+  bool btrfs_clone_range;
   int fsid_fd, op_fd;
 
   int basedir_fd, current_fd;
@@ -170,7 +171,7 @@ class FileStore : public JournalingObjectStore {
  public:
   FileStore(const char *base, const char *jdev = 0) : 
     basedir(base), journalpath(jdev ? jdev:""),
-    btrfs(false), btrfs_trans_start_end(false),
+    btrfs(false), btrfs_trans_start_end(false), btrfs_clone_range(false),
     fsid_fd(-1), op_fd(-1),
     attrs(this), fake_attrs(false), 
     collections(this), fake_collections(false),
