@@ -6,7 +6,7 @@ cd t
 tar jxvf ../linux*
 cd linux*
 make defconfig
-make
+make -j`grep -c processor /proc/cpuinfo`
 cd ..
 rm -r linux*
 cd ..
