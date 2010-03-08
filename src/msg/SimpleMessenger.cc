@@ -18,7 +18,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <signal.h>
 #include <sys/socket.h>
 #include <netinet/tcp.h>
 #include <sys/uio.h>
@@ -57,11 +56,6 @@ static ostream& _prefix(SimpleMessenger *messenger) {
 /********************************************
  * Accepter
  */
-
-void noop_signal_handler(int s)
-{
-  //dout(0) << "blah_handler got " << s << dendl;
-}
 
 int SimpleMessenger::Accepter::bind(int64_t force_nonce)
 {
@@ -151,14 +145,6 @@ int SimpleMessenger::Accepter::start()
 {
   dout(1) << "accepter.start" << dendl;
 
-  // set a harmless handle for SIGUSR1 (we'll use it to stop the accepter)
-  struct sigaction sa;
-  memset(&sa, 0, sizeof(sa));
-  sa.sa_handler = noop_signal_handler;
-  sa.sa_flags = 0;
-  sigemptyset(&sa.sa_mask);
-  sigaction(SIGUSR1, &sa, NULL);
-
   // start thread
   create();
 
@@ -169,26 +155,24 @@ void *SimpleMessenger::Accepter::entry()
 {
   dout(10) << "accepter starting" << dendl;
   
-  fd_set fds;
   int errors = 0;
-
-  sigset_t sigmask, sigempty;
-  sigemptyset(&sigmask);
-  sigaddset(&sigmask, SIGUSR1);
-  sigemptyset(&sigempty);
-
-  // block SIGUSR1
-  pthread_sigmask(SIG_BLOCK, &sigmask, NULL);
 
   char buf[80];
 
+  struct pollfd pfd;
+  pfd.fd = listen_sd;
+  pfd.events = POLLIN | POLLERR | POLLNVAL | POLLHUP;
   while (!done) {
-    FD_ZERO(&fds);
-    FD_SET(listen_sd, &fds);
-    dout(20) << "accepter calling select" << dendl;
-    int r = ::pselect(listen_sd+1, &fds, 0, &fds, 0, &sigempty);  // unblock SIGUSR1 inside select()
-    dout(20) << "accepter select got " << r << dendl;
-    
+    dout(20) << "accepter calling poll" << dendl;
+    int r = poll(&pfd, 1, -1);
+    if (r < 0)
+      break;
+    dout(20) << "accepter poll got " << r << dendl;
+
+    if (pfd.revents & (POLLERR | POLLNVAL | POLLHUP))
+      break;
+
+    dout(10) << "pfd.revents=" << pfd.revents << dendl;
     if (done) break;
 
     // accept
@@ -227,9 +211,6 @@ void *SimpleMessenger::Accepter::entry()
     }
   }
 
-  // unblock SIGUSR1
-  pthread_sigmask(SIG_UNBLOCK, &sigmask, NULL);
-
   dout(20) << "accepter closing" << dendl;
   // don't close socket, in case we start up again?  blech.
   if (listen_sd >= 0) {
@@ -244,8 +225,12 @@ void *SimpleMessenger::Accepter::entry()
 void SimpleMessenger::Accepter::stop()
 {
   done = true;
-  dout(10) << "stop sending SIGUSR1" << dendl;
-  this->kill(SIGUSR1);
+  dout(10) << "stop accepter" << dendl;
+  if (listen_sd) {
+    ::shutdown(listen_sd, SHUT_RDWR);
+    ::close(listen_sd);
+    listen_sd = -1;
+  }
   join();
   done = false;
 }
@@ -852,9 +837,7 @@ int SimpleMessenger::Pipe::accept()
   
  replace:
   dout(10) << "accept replacing " << existing << dendl;
-  existing->state = STATE_CLOSED;
-  existing->cond.Signal();
-  existing->reader_thread.kill(SIGUSR2);
+  existing->stop();
   existing->unregister_pipe();
     
   // steal queue and out_seq
@@ -1427,13 +1410,10 @@ void SimpleMessenger::Pipe::stop()
   state = STATE_CLOSED;
   cond.Signal();
   if (sd >= 0) {
+    ::shutdown(sd, SHUT_RDWR);
     ::close(sd);
     sd = -1;
   }
-  if (reader_running)
-    reader_thread.kill(SIGUSR2);
-  if (writer_running)
-    writer_thread.kill(SIGUSR2);
 }
 
 
@@ -2203,15 +2183,6 @@ int SimpleMessenger::start(bool nodaemon)
   // some debug hackery?
   if (g_conf.kill_after) 
     g_timer.add_event_after(g_conf.kill_after, new C_Die);
-
-  // set noop handlers for SIGUSR2, SIGPIPE
-  struct sigaction sa;
-  memset(&sa, 0, sizeof(sa));
-  sa.sa_handler = noop_signal_handler;
-  sa.sa_flags = 0;
-  sigemptyset(&sa.sa_mask);
-  sigaction(SIGUSR2, &sa, NULL);
-  sigaction(SIGPIPE, &sa, NULL);  // mask SIGPIPE too.  FIXME: i'm quite certain this is a roundabout way to do that.
 
   // go!
   if (did_bind)

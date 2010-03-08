@@ -216,7 +216,6 @@ private:
       assert(!reader_joining);
       reader_joining = true;
       cond.Signal();
-      reader_thread.kill(SIGUSR2);
       pipe_lock.Unlock();
       reader_thread.join();
       pipe_lock.Lock();
