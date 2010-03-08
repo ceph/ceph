@@ -1003,7 +1003,19 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     return false;
 }
 
-int OSDMonitor::prepare_new_pool(string& name)
+int OSDMonitor::prepare_new_pool(MPoolOp *m)
+{
+  //check permissions for the auid, then pass off to next function
+  Session * session = (Session *) m->get_connection()->get_priv();
+  if (m->auid) {
+    if(check_privileges(m->auid, session->caps, MON_CAP_W)) {
+      prepare_new_pool(m->name, m->auid);
+    } else return -EPERM;
+  } else prepare_new_pool(m->name, session->caps.auid);
+  return 0;
+}
+
+int OSDMonitor::prepare_new_pool(string& name, __u64 auid)
 {
   if (osdmap.name_pool.count(name)) {
     return -EEXIST;
@@ -1019,6 +1031,7 @@ int OSDMonitor::prepare_new_pool(string& name)
   pending_inc.new_pools[pool].v.lpg_num = 0;
   pending_inc.new_pools[pool].v.lpgp_num = 0;
   pending_inc.new_pools[pool].v.last_change = pending_inc.epoch;
+  pending_inc.new_pools[pool].v.auid = auid;
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
@@ -1367,8 +1380,12 @@ bool OSDMonitor::prepare_pool_op (MPoolOp *m)
 
 bool OSDMonitor::prepare_pool_op_create (MPoolOp *m)
 {
-  int err = prepare_new_pool(m->name);
-  paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, err, pending_inc.epoch));
+  int err = prepare_new_pool(m);
+  if (!err) {
+    paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, err, pending_inc.epoch));
+  } else {
+    _pool_op(m, err, pending_inc.epoch);
+  }
   return true;
 }
 
