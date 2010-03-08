@@ -543,10 +543,12 @@ void MDS::handle_mds_beacon(MMDSBeacon *m)
 	   beacon_seq_stamp.begin()->first <= seq)
       beacon_seq_stamp.erase(beacon_seq_stamp.begin());
 
+    utime_t now = g_clock.now();
     if (laggy &&
-	g_clock.now() - beacon_last_acked_stamp < g_conf.mds_beacon_grace) {
+	now - beacon_last_acked_stamp < g_conf.mds_beacon_grace) {
       dout(1) << " clearing laggy flag" << dendl;
       laggy = false;
+      laggy_until = now;
       queue_waiters(waiting_for_nolaggy);
     }
     

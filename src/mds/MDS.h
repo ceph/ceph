@@ -257,8 +257,10 @@ class MDS : public Dispatcher {
   map<version_t,utime_t>  beacon_seq_stamp;         // seq # -> time sent
   utime_t                 beacon_last_acked_stamp;  // last time we sent a beacon that got acked
   bool laggy;
+  utime_t laggy_until;
 
   bool is_laggy() { return laggy; }
+  utime_t get_laggy_until() { return laggy_until; }
 
   class C_MDS_BeaconSender : public Context {
     MDS *mds;
