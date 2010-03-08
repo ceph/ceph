@@ -129,7 +129,7 @@ public:
   int get_pool_stats(std::vector<string>& ls, map<string,rados_pool_stat_t>& result);
   int get_fs_stats( rados_statfs_t& result );
 
-  int create_pool(string& name);
+  int create_pool(string& name, __u64 auid=0);
   int delete_pool(const rados_pool_t& pool);
 
   int list(PoolCtx& pool, int max_entries, std::list<object_t>& entries,
@@ -532,7 +532,7 @@ int RadosClient::snap_remove( const rados_pool_t pool, const char *snapName)
   return reply;
 }
 
-int RadosClient::create_pool(string& name)
+int RadosClient::create_pool(string& name, __u64 auid)
 {
   int reply;
 
@@ -541,7 +541,7 @@ int RadosClient::create_pool(string& name)
   bool done;
   lock.Lock();
   objecter->create_pool(name,
-			new C_SafeCond(&mylock, &cond, &done, &reply));
+			new C_SafeCond(&mylock, &cond, &done, &reply), auid);
   lock.Unlock();
 
   mylock.Lock();
@@ -1082,12 +1082,12 @@ int Rados::get_pool_stats(std::vector<string>& v, std::map<string,rados_pool_sta
   return client->get_pool_stats(v, result);
 }
 
-int Rados::create_pool(const char *name)
+int Rados::create_pool(const char *name, __u64 auid)
 {
   string str(name);
   if (!client)
     return -EINVAL;
-  return client->create_pool(str);
+  return client->create_pool(str, auid);
 }
 
 int Rados::delete_pool(const rados_pool_t& pool)
@@ -1448,6 +1448,12 @@ extern "C" int rados_create_pool(const char *name)
 {
   string sname(name);
   return radosp->create_pool(sname);
+}
+
+extern "C" int rados_create_pool_with_auid(const char *name, __u64 auid)
+{
+  string sname(name);
+  return radosp->create_pool(sname, auid);
 }
 
 extern "C" int rados_delete_pool(const rados_pool_t pool)

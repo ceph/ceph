@@ -679,7 +679,7 @@ int Objecter::delete_pool_snap(int pool, string& snapName, Context *onfinish) {
   return 0;
 }
 
-int Objecter::create_pool(string& name, Context *onfinish) {
+int Objecter::create_pool(string& name, Context *onfinish, __u64 auid) {
   dout(10) << "create_pool name=" << name << dendl;
   PoolOp *op = new PoolOp;
   if (!op)
@@ -690,6 +690,7 @@ int Objecter::create_pool(string& name, Context *onfinish) {
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_CREATE;
   op_pool[op->tid] = op;
+  if (auid) op->auid = auid;
 
   pool_op_submit(op);
 

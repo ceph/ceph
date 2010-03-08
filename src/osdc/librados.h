@@ -53,6 +53,7 @@ void rados_pool_close_ctx(rados_list_ctx_t *ctx);
 int rados_pool_list_next(rados_pool_t pool, const char **entry, rados_list_ctx_t *ctx);
 
 int rados_create_pool(const char *name);
+int rados_create_pool_with_auid(const char *name, __u64 auid);
 int rados_delete_pool(const rados_pool_t pool);
 
 /* snapshots */
@@ -132,7 +133,7 @@ public:
 		     std::map<std::string,rados_pool_stat_t>& stats);
   int get_fs_stats(rados_statfs_t& result);
 
-  int create_pool(const char *name);
+  int create_pool(const char *name, __u64 auid=0);
   int delete_pool(const rados_pool_t& pool);
 
   int snap_create(const rados_pool_t pool, const char *snapname);
