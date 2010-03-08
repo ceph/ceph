@@ -60,10 +60,79 @@ filestore
   - need an osdmap cache layer?
 
 bugs
+- be lenient about timing out clients if we are laggy ourselves
 - mds prepare_force_open_sessions, then import aborts.. session is still OPENING but no client_session is sent...
 - wget mismatch with multiple mds?
 - rm -r failure (on kernel tree)
 - dbench 1, restart mds (may take a few times), dbench will error out.
+
+- 
+[17608.696906] ------------[ cut here ]------------
+[17608.701761] WARNING: at lib/kref.c:43 kref_get+0x23/0x2a()
+[17608.707584] Hardware name: PDSMi
+[17608.711056] Modules linked in: aes_x86_64 aes_generic ceph fan ac battery ehci_hcd container uhci_hcd thermal button processor
+        
+[17608.723268] Pid: 19594, comm: sync Not tainted 2.6.32-rc2 #12
+[17608.729255] Call Trace:
+[17608.731835]  [<ffffffff81252a6d>] ? kref_get+0x23/0x2a
+[17608.737209]  [<ffffffff81044f9a>] warn_slowpath_common+0x77/0x8f
+[17608.743457]  [<ffffffff81044fc1>] warn_slowpath_null+0xf/0x11
+[17608.749395]  [<ffffffff81252a6d>] kref_get+0x23/0x2a
+[17608.754634]  [<ffffffffa006e9be>] ceph_mdsc_sync+0xd7/0x305 [ceph]
+[17608.761061]  [<ffffffff8145d8b6>] ? mutex_unlock+0x9/0xb
+[17608.766618]  [<ffffffffa0078bf3>] ? ceph_osdc_sync+0xe7/0x173 [ceph]
+[17608.773199]  [<ffffffffa004d906>] ceph_syncfs+0x4e/0xc8 [ceph]
+[17608.779235]  [<ffffffff810f6084>] __sync_filesystem+0x5e/0x72
+[17608.785195]  [<ffffffff810f6142>] sync_filesystems+0xaa/0x101
+[17608.791122]  [<ffffffff810f61e0>] sys_sync+0x12/0x2e
+[17608.796331]  [<ffffffff8100baeb>] system_call_fastpath+0x16/0x1b
+[17608.802560] ---[ end trace 36481c4089b3d493 ]---
+[17608.807461] BUG: unable to handle kernel paging request at 0000001200000635
+[17608.811372] IP: [<ffffffff81252a2c>] kref_put+0x31/0x4f
+[17608.811372] PGD 11c7c8067 PUD 0 
+[17608.811372] Oops: 0002 [#1] PREEMPT SMP 
+[17608.811372] last sysfs file: /sys/kernel/uevent_seqnum
+[17608.811372] CPU 0 
+[17608.811372] Modules linked in: aes_x86_64 aes_generic ceph fan ac battery ehci_hcd container uhci_hcd thermal button processor
+        
+[17608.811372] Pid: 19594, comm: sync Tainted: G        W  2.6.32-rc2 #12 PDSMi
+[17608.811372] RIP: 0010:[<ffffffff81252a2c>]  [<ffffffff81252a2c>] kref_put+0x31/0x4f
+[17608.811372] RSP: 0018:ffff8801137f5e28  EFLAGS: 00010206
+[17608.811372] RAX: 0000001200000495 RBX: 0000001200000635 RCX: 0000000000000000
+[17608.811372] RDX: 0000000000000000 RSI: 0000000000000040 RDI: 0000001200000635
+[17608.811372] RBP: ffff8801137f5e38 R08: 0000000000000000 R09: ffff8801137f5e28
+[17608.811372] R10: ffff8801137f5e38 R11: ffffffff8145c5ad R12: ffffffffa00675ae
+[17608.811372] R13: ffff880119d02508 R14: ffff880119d02510 R15: 0000000000055fad
+[17608.811372] FS:  00007fadcfcd96e0(0000) GS:ffff88002f000000(0000) knlGS:0000000000000000
+[17608.811372] CS:  0010 DS: 0000 ES: 0000 CR0: 000000008005003b
+[17608.811372] CR2: 0000001200000635 CR3: 00000001136cd000 CR4: 00000000000006f0
+[17608.811372] DR0: 0000000000000000 DR1: 0000000000000000 DR2: 0000000000000000
+[17608.811372] DR3: 0000000000000000 DR6: 00000000ffff0ff0 DR7: 0000000000000400
+        
+[17608.811372] Process sync (pid: 19594, threadinfo ffff8801137f4000, task ffff88011bf70480)
+[17608.811372] Stack:
+[17608.811372]  ffff880103726e18 ffff880103726c00 ffff8801137f5e58 ffffffffa00733f1
+[17608.811372] <0> ffff880103726e18 ffffffffa00733a2 ffff8801137f5e78 ffffffff81252a3e
+[17608.811372] <0> 0000000000000000 ffff880103726c00 ffff8801137f5ef8 ffffffffa006ea19
+[17608.811372] Call Trace:
+[17608.811372]  [<ffffffffa00733f1>] ceph_mdsc_release_request+0x4f/0x12a [ceph]
+[17608.811372]  [<ffffffffa00733a2>] ? ceph_mdsc_release_request+0x0/0x12a [ceph]
+[17608.811372]  [<ffffffff81252a3e>] kref_put+0x43/0x4f
+[17608.811372]  [<ffffffffa006ea19>] ceph_mdsc_sync+0x132/0x305 [ceph]
+[17608.811372]  [<ffffffff8145d8b6>] ? mutex_unlock+0x9/0xb
+[17608.811372]  [<ffffffffa0078bf3>] ? ceph_osdc_sync+0xe7/0x173 [ceph]
+[17608.811372]  [<ffffffffa004d906>] ceph_syncfs+0x4e/0xc8 [ceph]
+[17608.811372]  [<ffffffff810f6084>] __sync_filesystem+0x5e/0x72
+[17608.811372]  [<ffffffff810f6142>] sync_filesystems+0xaa/0x101
+[17608.811372]  [<ffffffff810f61e0>] sys_sync+0x12/0x2e
+        
+[17608.811372]  [<ffffffff8100baeb>] system_call_fastpath+0x16/0x1b
+[17608.811372] Code: 49 89 f4 4d 85 e4 be 40 00 00 00 53 48 89 fb 74 0e 49 81 fc 2d 09 0d 81 75 11 be 41 00 00 00 48 c7 c7 62 f8 5c 81 e8 86 25 df ff <f0> ff 0b 0f 94 c0 31 d2 84 c0 74 0b 48 89 df 41 ff d4 ba 01 00 
+[17608.811372] RIP  [<ffffffff81252a2c>] kref_put+0x31/0x4f
+[17608.811372]  RSP <ffff8801137f5e28>
+[17608.811372] CR2: 0000001200000635
+[17609.074355] ---[ end trace 36481c4089b3d494 ]---
+
 
 ?- bonnie++ -u root -d /mnt/ceph/ -s 0 -n 1
 (03:35:29 PM) Isteriat: Using uid:0, gid:0.
