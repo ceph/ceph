@@ -715,7 +715,8 @@ int Objecter::delete_pool(int pool, Context *onfinish) {
 void Objecter::pool_op_submit(PoolOp *op) {
   dout(10) << "pool_op_submit " << op->tid << dendl;
   monc->send_mon_message(new MPoolOp(monc->get_fsid(), op->tid, op->pool,
-				       op->name, op->pool_op, last_seen_version));
+				     op->name, op->pool_op,
+				     op->auid, last_seen_version));
   op->last_submit = g_clock.now();
 }
 

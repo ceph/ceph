@@ -342,8 +342,11 @@ public:
     Context *onfinish;
     int pool_op;
     int* replyCode;
+    __u64 auid;
 
     utime_t last_submit;
+    PoolOp() : tid(0), pool(0), onfinish(0), pool_op(0),
+	       replyCode(0), auid(0) {}
   };
 
 
