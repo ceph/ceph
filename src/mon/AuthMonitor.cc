@@ -434,7 +434,9 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
       bufferlist::iterator iter = caps_info.caps.begin();
       s->caps.parse(iter);
       s->caps.set_auid(auid);
-    }
+      //HACK:
+      if (entity_name->name.compare("admin") == 0)
+	s->caps.allow_all = true;    }
   } catch (buffer::error *err) {
     ret = -EINVAL;
     dout(0) << "caught error when trying to handle auth request, probably malformed request" << dendl;
