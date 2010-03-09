@@ -62,9 +62,23 @@ filestore
 bugs
 - be lenient about timing out clients if we are laggy ourselves
 - mds prepare_force_open_sessions, then import aborts.. session is still OPENING but no client_session is sent...
-- wget mismatch with multiple mds?
 - rm -r failure (on kernel tree)
 - dbench 1, restart mds (may take a few times), dbench will error out.
+
+- multi-mds, dbench 10, null dn is migrated, linked on new node, but remains null on old mds.  a little later we crash when we unlink due to the discrepancy.
+mds/MDCache.cc: In function 'void MDCache::handle_dentry_unlink(MDentryUnlink*)':
+mds/MDCache.cc:8057: FAILED assert(dnl->is_remote())
+ 1: (MDCache::handle_dentry_unlink(MDentryUnlink*)+0x4b2) [0x7e86da]
+ 2: (MDCache::dispatch(Message*)+0xc4) [0x7ef2c6]
+ 3: (MDS::_dispatch(Message*)+0xfb8) [0x72b60a]
+ 4: (MDS::ms_dispatch(Message*)+0x2f) [0x72d515]
+ 5: (Messenger::ms_deliver_dispatch(Message*)+0x55) [0x7201ed]
+ 6: (SimpleMessenger::dispatch_entry()+0x4f4) [0x70cd54]
+ 7: (SimpleMessenger::DispatchThread::entry()+0x29) [0x708dcd]
+ 8: (Thread::_entry_func(void*)+0x20) [0x71a363]
+ 9: /lib/libpthread.so.0 [0x7f1044bb673a]
+ 10: (clone()+0x6d) [0x7f1043de16dd]
+ NOTE: a copy of the executable, or `objdump -rdS <executable>` is needed to interpret this.
 
 - 
 [17608.696906] ------------[ cut here ]------------
