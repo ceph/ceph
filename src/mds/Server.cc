@@ -3817,6 +3817,8 @@ void Server::_unlink_local_finish(MDRequest *mdr,
     dout(7) << "_unlink_local_finish sending MDentryUnlink to mds" << it->first << dendl;
     MDentryUnlink *unlink = new MDentryUnlink(dn->get_dir()->dirfrag(), dn->name);
     if (straydn) {
+      mdcache->replicate_dir(straydn->get_dir()->inode->get_parent_dn()->get_dir(), it->first, unlink->straybl);
+      mdcache->replicate_dentry(straydn->get_dir()->inode->get_parent_dn(), it->first, unlink->straybl);
       mdcache->replicate_inode(straydn->get_dir()->inode, it->first, unlink->straybl);
       mdcache->replicate_dir(straydn->get_dir(), it->first, unlink->straybl);
       mdcache->replicate_dentry(straydn, it->first, unlink->straybl);
