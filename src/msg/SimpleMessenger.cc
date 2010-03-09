@@ -2082,15 +2082,6 @@ int SimpleMessenger::bind(int64_t force_nonce)
   return accepter.bind(force_nonce);
 }
 
-
-class C_Die : public Context {
-public:
-  void finish(int) {
-    cerr << "die" << std::endl;
-    exit(1);
-  }
-};
-
 static void write_pid_file(int pid)
 {
   if (!g_conf.pid_file)
@@ -2179,10 +2170,6 @@ int SimpleMessenger::start(bool nodaemon)
   } else if (g_daemon) {
     write_pid_file(getpid());
   }
-
-  // some debug hackery?
-  //if (g_conf.kill_after) 
-  //qg_timer.add_event_after(g_conf.kill_after, new C_Die);
 
   // go!
   if (did_bind)
