@@ -45,11 +45,14 @@ struct MonCaps {
   __u64 auid;
 public:
   MonCaps() : default_action(0), allow_all(false) {}
-  const string& get_str() { return text; }
+  const string& get_str() const { return text; }
   bool parse(bufferlist::iterator& iter);
   rwx_t get_caps(int service);
   void set_allow_all(bool allow) { allow_all = allow; }
   void set_auid(__u64 uid) { auid = uid; }
 };
 
+inline ostream& operator<<(ostream& out, const MonCaps& m) {
+  return out << m.get_str();
+}
 #endif
