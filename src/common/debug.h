@@ -23,6 +23,7 @@ extern bool _dout_is_open;
 extern void _dout_open_log();
 extern int _dout_rename_output_file();  // after calling daemon()
 extern int _dout_create_courtesy_output_symlink(const char *type, __s64 n);
+extern int _dout_create_courtesy_output_symlink(const char *name);
 
 static inline void _dout_check_log() {
   _dout_lock.Lock();

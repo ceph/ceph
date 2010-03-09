@@ -396,6 +396,10 @@ int MDS::init()
   messenger->add_dispatcher_tail(this);
   messenger->add_dispatcher_head(&logclient);
 
+  char name[30];
+  snprintf(name, sizeof(name), "mds.%s", g_conf.id);
+  _dout_create_courtesy_output_symlink(name);
+
   // get monmap
   monc->set_messenger(messenger);
 

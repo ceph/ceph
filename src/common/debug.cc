@@ -115,11 +115,18 @@ int _dout_rename_output_file()  // after calling daemon()
 
 int _dout_create_courtesy_output_symlink(const char *type, __s64 n)
 {
+  char name[20];
+  snprintf(name, sizeof(name), "%s%lld", type, (unsigned long long)n);
+  return _dout_create_courtesy_output_symlink(name);
+}
+
+int _dout_create_courtesy_output_symlink(const char *name)
+{
   if (g_conf.log_dir && !g_conf.log_to_stdout) {
     if (_dout_need_open)
       _dout_open_log();
 
-    snprintf(_dout_symlink_path, sizeof(_dout_symlink_path), "%s/%s%lld", _dout_symlink_dir, type, (long long)n);
+    snprintf(_dout_symlink_path, sizeof(_dout_symlink_path), "%s/%s", _dout_symlink_dir, name);
 
     // rotate out old symlink
     int n = 0;
