@@ -421,6 +421,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
       // new session
       proto = s->auth_handler->start_session(entity_name, indata, response_bl, caps_info);
       ret = 0;
+      s->caps.set_allow_all(caps_info.allow_all);
     } else {
       // request
       ret = s->auth_handler->handle_request(indata, response_bl, s->global_id, caps_info, &auid);
@@ -429,7 +430,6 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
       paxos->wait_for_active(new C_RetryMessage(this, m));
       goto done;
     }
-    s->caps.set_allow_all(caps_info.allow_all);
     if (caps_info.caps.length()) {
       bufferlist::iterator iter = caps_info.caps.begin();
       s->caps.parse(iter);
