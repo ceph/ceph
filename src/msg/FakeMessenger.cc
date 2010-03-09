@@ -126,7 +126,6 @@ int fakemessenger_do_loop()
   fakemessenger_do_loop_2();
   lock.Unlock();
 
-  g_timer.shutdown();
   return 0;
 }
 

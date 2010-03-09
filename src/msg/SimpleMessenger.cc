@@ -2181,8 +2181,8 @@ int SimpleMessenger::start(bool nodaemon)
   }
 
   // some debug hackery?
-  if (g_conf.kill_after) 
-    g_timer.add_event_after(g_conf.kill_after, new C_Die);
+  //if (g_conf.kill_after) 
+  //qg_timer.add_event_after(g_conf.kill_after, new C_Die);
 
   // go!
   if (did_bind)

@@ -133,11 +133,11 @@ class Timer {
 
 
 /*
- * SafeTimer is a wrapper around the raw Timer (or rather, g_timer, it's global
- * instantiation) that protects event execution with an existing mutex.  It 
- * provides for, among other things, reliable event cancellation on class
- * destruction.  The caller just needs to cancel each event (or cancel_all()),
- * and then call join() to ensure any concurrently exectuting events (in other
+ * SafeTimer is a wrapper around the a Timer that protects event
+ * execution with an existing mutex.  It provides for, among other
+ * things, reliable event cancellation on class destruction.  The
+ * caller just needs to cancel each event (or cancel_all()), and then
+ * call join() to ensure any concurrently exectuting events (in other
  * threads) get flushed.
  */
 class SafeTimer : public Timer {
@@ -169,9 +169,6 @@ public:
   int get_num_canceled() { return canceled.size(); }
 };
 
-
-// single global instance
-extern Timer g_timer;
 
 
 

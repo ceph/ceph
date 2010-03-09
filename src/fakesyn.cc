@@ -82,8 +82,8 @@ int main(int argc, const char **argv)
   assert(nargs.empty());
 
 
-  if (g_conf.kill_after) 
-    g_timer.add_event_after(g_conf.kill_after, new C_Die);
+  //if (g_conf.kill_after) 
+  //g_timer.add_event_after(g_conf.kill_after, new C_Die);
 
   if (g_conf.clock_tare) g_clock.tare();
 

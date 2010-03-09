@@ -143,7 +143,6 @@ int main(int argc, const char **argv)
        << " " << ((g_conf.osd_journal && g_conf.osd_journal[0]) ? g_conf.osd_journal:"(no journal)")
        << std::endl;
 
-  g_timer.shutdown();
   messenger->register_entity(entity_name_t::OSD(whoami));
   if (!messenger)
     return 1;

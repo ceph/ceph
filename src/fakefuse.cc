@@ -53,7 +53,7 @@ class C_Test2 : public Context {
 public:
   void finish(int r) {
     cout << "C_Test2->finish(" << r << ")" << std::endl;
-    g_timer.add_event_after(2, new C_Test);
+    //g_timer.add_event_after(2, new C_Test);
   }
 };
 

@@ -31,10 +31,6 @@
 #include <sys/time.h>
 #include <math.h>
 
-// single global instance
-Timer      g_timer;
-
-
 
 /**** thread solution *****/
 
