@@ -56,7 +56,12 @@ class Thread {
   }
   int create() {
     _num_threads.inc();
-    int r = pthread_create( &thread_id, NULL, _entry_func, (void*)this );
+    // mask signals in child's thread
+    sigset_t newmask, oldmask;
+    sigfillset(&newmask);
+    pthread_sigmask(SIG_BLOCK, &newmask, &oldmask);
+    int r = pthread_create(&thread_id, NULL, _entry_func, (void*)this);
+    pthread_sigmask(SIG_SETMASK, &oldmask, 0);
     generic_dout(10) << "thread " << thread_id << " start" << dendl;
     return r;
   }
