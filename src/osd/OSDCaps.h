@@ -36,18 +36,19 @@ static inline ostream& operator<<(ostream& out, rwx_t p) {
 }
 
 
-struct OSDPoolCap {
+struct OSDCap {
   rwx_t allow;
   rwx_t deny;
-  OSDPoolCap() : allow(0), deny(0) {}
+  OSDCap() : allow(0), deny(0) {}
 };
 
-static inline ostream& operator<<(ostream& out, const OSDPoolCap& pc) {
+static inline ostream& operator<<(ostream& out, const OSDCap& pc) {
   return out << "(allow " << pc.allow << ", deny " << pc.deny << ")";
 }
 
 struct OSDCaps {
-  map<int, OSDPoolCap> pools_map;
+  map<int, OSDCap> pools_map;
+  map<int, OSDCap> auid_map;
   rwx_t default_action;
   bool allow_all;
   __u64 auid;

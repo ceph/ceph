@@ -72,6 +72,7 @@ bool OSDCaps::parse(bufferlist::iterator& iter)
     bool op_allow = false;
     bool op_deny = false;
     bool cmd_pool = false;
+    bool cmd_uid = false;
     bool any_cmd = false;
     bool got_eq = false;
     list<int> num_list;
@@ -83,6 +84,7 @@ bool OSDCaps::parse(bufferlist::iterator& iter)
         op_allow = false;
         op_deny = false;
         cmd_pool = false;
+	cmd_uid = false;
         any_cmd = false;
         got_eq = false;
         last_is_comma = false;
@@ -110,9 +112,13 @@ do { \
           op_deny = true;
         } else if ((token.compare("pools") == 0) ||
                    (token.compare("pool") == 0)) {
-          ASSERT_STATE(op_allow || op_deny);
+          ASSERT_STATE(!cmd_uid && (op_allow || op_deny));
           cmd_pool = true;
           any_cmd = true;
+	} else if (token.compare("uid") == 0) {
+	  ASSERT_STATE(!cmd_pool && (op_allow || op_deny));
+	  any_cmd = true;
+	  cmd_uid = true;
         } else if (is_rwx(token, cap_val)) {
           ASSERT_STATE(op_allow || op_deny);
         } else if (token.compare(";") != 0) {
@@ -130,8 +136,10 @@ do { \
           if (got_eq) {
             ASSERT_STATE(num_list.size() > 0);
             list<int>::iterator iter;
+	    map<int, OSDCap>& working_map = pools_map;
+	    if (cmd_uid) working_map = auid_map;
             for (iter = num_list.begin(); iter != num_list.end(); ++iter) {
-              OSDPoolCap& cap = pools_map[*iter];
+              OSDCap& cap = working_map[*iter];
               if (op_allow) {
                 cap.allow |= cap_val;
               } else {
@@ -155,7 +163,7 @@ do { \
   }
 
   generic_dout(0) << "default=" << (int)default_action << dendl;
-  map<int, OSDPoolCap>::iterator it;
+  map<int, OSDCap>::iterator it;
   for (it = pools_map.begin(); it != pools_map.end(); ++it) {
     generic_dout(0) << it->first << " -> (" << (int)it->second.allow << "." << (int)it->second.deny << ")" << dendl;
   }
@@ -170,9 +178,9 @@ int OSDCaps::get_pool_cap(int pool_id, __u64 uid)
   if (allow_all)
     return OSD_POOL_CAP_ALL;
 
-  map<int, OSDPoolCap>::iterator iter = pools_map.find(pool_id);
+  map<int, OSDCap>::iterator iter = pools_map.find(pool_id);
   if (iter != pools_map.end()) {
-    OSDPoolCap& c = iter->second;
+    OSDCap& c = iter->second;
     cap |= c.allow;
     cap &= ~c.deny;
   } else if (	uid != CEPH_AUTH_UID_DEFAULT
