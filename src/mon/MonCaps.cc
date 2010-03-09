@@ -99,8 +99,10 @@ bool MonCaps::parse(bufferlist::iterator& iter)
     bool op_deny = false;
     bool cmd_service = false;
     bool any_cmd = false;
+    bool cmd_uid = false;
     bool got_eq = false;
     list<int> services_list;
+    list<int> uid_list;
     bool last_is_comma = false;
     rwx_t cap_val = 0;
 
@@ -109,12 +111,14 @@ bool MonCaps::parse(bufferlist::iterator& iter)
         op_allow = false;
         op_deny = false;
         cmd_service = false;
+	cmd_uid = false;
         any_cmd = false;
         got_eq = false;
         last_is_comma = false;
         cap_val = 0;
         init = false;
         services_list.clear();
+	uid_list.clear();
       }
 
 #define ASSERT_STATE(x) \
@@ -139,7 +143,11 @@ do { \
           ASSERT_STATE(op_allow || op_deny);
           cmd_service = true;
           any_cmd = true;
-        } else if (is_rwx(token, cap_val)) {
+	} else if (token.compare("uid") == 0) {
+	  ASSERT_STATE(op_allow || op_deny);
+	  any_cmd = true;
+	  cmd_uid = true;
+	} else if (is_rwx(token, cap_val)) {
           ASSERT_STATE(op_allow || op_deny);
         } else if (token.compare(";") != 0) {
           ASSERT_STATE(got_eq);
@@ -147,27 +155,40 @@ do { \
             ASSERT_STATE(!last_is_comma);
           } else {
             last_is_comma = false;
-            int service = get_service_id(token);
-            if (service >= 0) {
-              services_list.push_back(service);
-            } else {
-              generic_dout(0) << "error parsing caps at pos=" << pos << ", unknown service_name: " << token << dendl;
-            }
+	    int service = get_service_id(token);
+            if (service != -EINVAL) {
+	      if (service >= 0) {
+		services_list.push_back(service);
+	      } else {
+		generic_dout(0) << "error parsing caps at pos=" << pos << ", unknown service_name: " << token << dendl;
+	      }
+	    } else { //must be a uid
+	      uid_list.push_back(strtoul(token.c_str(), NULL, 10));
+	    }
           }
         }
 
         if (token.compare(";") == 0 || pos >= s.size()) {
           if (got_eq) {
-            ASSERT_STATE(services_list.size() > 0);
+            ASSERT_STATE((services_list.size() > 0) ||
+			 (uid_list.size() > 0));
             list<int>::iterator iter;
             for (iter = services_list.begin(); iter != services_list.end(); ++iter) {
-              MonServiceCap& cap = services_map[*iter];
+              MonCap& cap = services_map[*iter];
               if (op_allow) {
                 cap.allow |= cap_val;
               } else {
                 cap.deny |= cap_val;
               }
             }
+	    for (iter = uid_list.begin(); iter != uid_list.end(); ++iter) {
+	      MonCap& cap = pool_auid_map[*iter];
+	      if (op_allow) {
+		cap.allow |= cap_val;
+	      } else {
+		cap.deny |= cap_val;
+	      }
+	    }
           } else {
             if (op_allow) {
               default_action |= cap_val;
@@ -185,7 +206,7 @@ do { \
   }
 
   generic_dout(0) << "default=" << (int)default_action << dendl;
-  map<int, MonServiceCap>::iterator it;
+  map<int, MonCap>::iterator it;
   for (it = services_map.begin(); it != services_map.end(); ++it) {
     generic_dout(0) << it->first << " -> (" << (int)it->second.allow << "." << (int)it->second.deny << ")" << dendl;
   }
@@ -199,9 +220,9 @@ rwx_t MonCaps::get_caps(int service)
     return MON_CAP_ALL;
 
   int caps = default_action;
-  map<int, MonServiceCap>::iterator it = services_map.find(service);
+  map<int, MonCap>::iterator it = services_map.find(service);
   if (it != services_map.end()) {
-    MonServiceCap& sc = it->second;
+    MonCap& sc = it->second;
     caps |= sc.allow;
     caps &= ~sc.deny;
     

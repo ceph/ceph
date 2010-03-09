@@ -27,16 +27,17 @@
 
 typedef __u8 rwx_t;
 
-struct MonServiceCap {
+struct MonCap {
   rwx_t allow;
   rwx_t deny;
-  MonServiceCap() : allow(0), deny(0) {}
+  MonCap() : allow(0), deny(0) {}
 };
 
 struct MonCaps {
   string text;
   rwx_t default_action;
-  map<int, MonServiceCap> services_map;
+  map<int, MonCap> services_map;
+  map<int, MonCap> pool_auid_map;
   bool get_next_token(string s, size_t& pos, string& token);
   bool is_rwx(string& token, rwx_t& cap_val);
   int get_service_id(string& token);
