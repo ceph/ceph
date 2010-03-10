@@ -233,3 +233,26 @@ rwx_t MonCaps::get_caps(int service)
   return caps;
 }
 
+/* general strategy:
+ * if they specify an auid, make sure they are allowed to behave
+ * as that user (for r/w/x as needed by req_perms).
+ * Then, make sure they have the correct cap on the requested service.
+ * If any test fails, return false. If they all pass, success!
+ *
+ * Note that this means auid permissions are NOT very su-like. It gives
+ * you access to their data with the rwx that they specify, but you
+ * only get as much access as they allow you AND you have on your own data.
+ *
+ */
+bool MonCaps::check_privileges(int service, int req_perms, __u64 req_auid)
+{
+  if (allow_all) return true; //you're an admin, do anything!
+  if (req_auid != CEPH_AUTH_UID_DEFAULT && req_auid != auid) {
+    if (!pool_auid_map.count(req_auid)) return false;
+    MonCap& auid_cap = pool_auid_map[req_auid];
+    if ((auid_cap.allow & req_perms) != req_perms) return false;
+  }
+  int service_caps = get_caps(service);
+  if ((service_caps & req_perms) != req_perms) return false;
+  return true;
+}

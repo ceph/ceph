@@ -48,6 +48,8 @@ public:
   const string& get_str() const { return text; }
   bool parse(bufferlist::iterator& iter);
   rwx_t get_caps(int service);
+  bool check_privileges(int service, int req_perm,
+			__u64 auid=CEPH_AUTH_UID_DEFAULT);
   void set_allow_all(bool allow) { allow_all = allow; }
   void set_auid(__u64 uid) { auid = uid; }
 };
