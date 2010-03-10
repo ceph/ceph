@@ -50,6 +50,9 @@ tar zxf ../../ceph-$vers.tar.gz
 [ "$vers" != "$finalvers" ] && mv ceph-$vers ceph-$finalvers
 tar zcf ceph_$finalvers.orig.tar.gz ceph-$finalvers
 
+# add debian dir
+cp -a ../../debian ceph-$finalvers
+
 for dist in sid squeeze lenny
 do
     echo building $dist dsc

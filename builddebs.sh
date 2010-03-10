@@ -11,6 +11,8 @@ vers=$1
 
 for dist in sid squeeze lenny
 do
+    pbuilder --clean
+
     if [ -e $basedir/$dist.tgz ]; then
 	echo updating $dist base.tgz
 	pbuilder update --basetgz $basedir/$dist.tgz --distribution $dist
