@@ -93,9 +93,6 @@ private:
   int prepare_new_pool(MPoolOp *m);
   void _pool_op(MPoolOp *m, int replyCode, epoch_t epoch);
 
-  //check that the provided caps allow the given action in auid's name 
-  bool check_privileges(__u64 auid, MonCaps& caps, int req_perm);
-
   struct C_Booted : public Context {
     OSDMonitor *cmon;
     MOSDBoot *m;
