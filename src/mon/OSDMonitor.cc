@@ -1008,10 +1008,14 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
   //check permissions for the auid, then pass off to next function
   Session * session = (Session *) m->get_connection()->get_priv();
   if (m->auid) {
-    if(check_privileges(m->auid, session->caps, MON_CAP_W)) {
+    if(session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W, m->auid)) {
       prepare_new_pool(m->name, m->auid);
     } else return -EPERM;
-  } else prepare_new_pool(m->name, session->caps.auid);
+  } else {
+    if (session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W)) {
+      prepare_new_pool(m->name, session->caps.auid);
+    } else return -EPERM;
+  }
   return 0;
 }
 
