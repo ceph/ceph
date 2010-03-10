@@ -101,7 +101,10 @@ do { \
 } while (0)
 
       if (get_next_token(s, pos, token)) {
-        if (token.compare("=") == 0) {
+	if (token.compare("*") == 0) { //allow all operations 
+	  ASSERT_STATE(op_allow);
+	  allow_all = true;
+	} else if (token.compare("=") == 0) {
           ASSERT_STATE(any_cmd);
           got_eq = true;
         } else if (token.compare("allow") == 0) {
