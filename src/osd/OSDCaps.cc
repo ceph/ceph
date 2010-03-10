@@ -191,6 +191,11 @@ int OSDCaps::get_pool_cap(int pool_id, __u64 uid)
     //the owner has full access unless they've removed some by setting
     //new caps
     cap = OSD_POOL_CAP_ALL;
+  } else if ((iter = auid_map.find(uid)) != pools_map.end()) {
+    //if the owner is granted permissions on the pool owner's auid, grant them
+    OSDCap& auid_cap = iter->second;
+    cap |= auid_cap.allow;
+    cap &= ~auid_cap.deny;
   }
 
   return cap;
