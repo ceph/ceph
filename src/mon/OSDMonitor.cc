@@ -1332,6 +1332,8 @@ bool OSDMonitor::preprocess_pool_op ( MPoolOp *m) {
     return false;
   case POOL_OP_DELETE: //can't delete except on master
     return false;
+  case POOL_OP_AUID_CHANGE:
+    return false; //can't change except on master
   default:
     assert(0);
     break;
@@ -1356,6 +1358,8 @@ bool OSDMonitor::prepare_pool_op (MPoolOp *m)
     return prepare_pool_op_create(m);
   } else if (m->op == POOL_OP_DELETE) {
     return prepare_pool_op_delete(m);
+  } else if (m->op == POOL_OP_AUID_CHANGE) {
+    return prepare_pool_op_auid(m);
   }
   const pg_pool_t *p = osdmap.get_pg_pool(m->pool);
   pg_pool_t* pp = 0;
@@ -1397,6 +1401,26 @@ bool OSDMonitor::prepare_pool_op_delete (MPoolOp *m)
 {
   pending_inc.old_pools.insert(m->pool);
   paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, 0, pending_inc.epoch));
+  return true;
+}
+
+bool OSDMonitor::prepare_pool_op_auid (MPoolOp *m)
+{
+  Session * session = (Session *) m->get_connection()->get_priv();
+  //check that current user can write to new auid
+  if(session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W, m->auid)) {
+    //check that current user can write to old auid
+    int old_auid = osdmap.get_pg_pool(m->pool)->v.auid;
+    if(session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W, old_auid)) {
+      //update pg_pool_t with new auid
+      pending_inc.new_pools[m->pool] = *(osdmap.get_pg_pool(m->pool));
+      pending_inc.new_pools[m->pool].v.auid = m->auid;
+      paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, 0, pending_inc.epoch));
+      return true;
+    }
+  }
+  //if it gets here it failed a permissions check
+  _pool_op(m, -EPERM, pending_inc.epoch);
   return true;
 }
 

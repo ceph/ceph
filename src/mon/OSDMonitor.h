@@ -89,8 +89,10 @@ private:
   bool prepare_pool_op (MPoolOp *m);
   bool prepare_pool_op_create (MPoolOp *m);
   bool prepare_pool_op_delete(MPoolOp *m);
+  bool prepare_pool_op_auid(MPoolOp *m);
   int prepare_new_pool(string& name, __u64 auid = CEPH_AUTH_UID_DEFAULT);
   int prepare_new_pool(MPoolOp *m);
+
   void _pool_op(MPoolOp *m, int replyCode, epoch_t epoch);
 
   struct C_Booted : public Context {

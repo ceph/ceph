@@ -23,6 +23,7 @@ enum {
   POOL_OP_DELETE,
   POOL_OP_CREATE_SNAP,
   POOL_OP_DELETE_SNAP,
+  POOL_OP_AUID_CHANGE
 };
 
 static const char *get_pool_op_name(int op) {
@@ -33,9 +34,11 @@ static const char *get_pool_op_name(int op) {
     return "delete pool";
   case POOL_OP_CREATE_SNAP:
     return "create snap";
-   case POOL_OP_DELETE_SNAP:
+  case POOL_OP_DELETE_SNAP:
     return "delete snap";
-   default:
+  case POOL_OP_AUID_CHANGE:
+    return "change auid";
+  default:
     return "unknown";
   }
 }
