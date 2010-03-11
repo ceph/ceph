@@ -47,8 +47,8 @@ boost::pool<> CDir::pool(sizeof(CDir));
 
 ostream& operator<<(ostream& out, CDir& dir)
 {
-  filepath path;
-  dir.get_inode()->make_path(path);
+  string path;
+  dir.get_inode()->make_path_string(path);
   out << "[dir " << dir.dirfrag() << " " << path << "/"
       << " [" << dir.first << ",head]";
   if (dir.is_auth()) {

@@ -98,7 +98,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   for (xlist<CInode*>::iterator p = dirty_inodes.begin(); !p.end(); ++p) {
     dout(20) << " dirty_inode " << **p << dendl;
     assert((*p)->is_auth());
-    if ((*p)->is_root()) {
+    if ((*p)->is_base()) {
       if (!gather) gather = new C_Gather;
       (*p)->store(gather->new_sub());
     } else
@@ -396,23 +396,19 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       // hmm.  do i have the inode?
       CInode *diri = mds->mdcache->get_inode((*lp).ino);
       if (!diri) {
-	/*if ((*lp).ino == MDS_INO_ROOT) {
-	  diri = mds->mdcache->create_root_inode();
-	  dout(10) << "EMetaBlob.replay created root " << *diri << dendl;
-	} else if (MDS_INO_IS_STRAY((*lp).ino)) {
-	  int whose = (*lp).ino - MDS_INO_STRAY_OFFSET;
-	  diri = mds->mdcache->create_stray_inode(whose);
-	  dout(10) << "EMetaBlob.replay created stray " << *diri << dendl;
-	  } else */
-	{
+	if (MDS_INO_IS_BASE(lp->ino)) {
+	  diri = mds->mdcache->create_system_inode(lp->ino, S_IFDIR|0755);
+	  dout(10) << "EMetaBlob.replay created base " << *diri << dendl;
+	} else {
 	  dout(0) << "EMetaBlob.replay missing dir ino  " << (*lp).ino << dendl;
 	  assert(0);
 	}
       }
+
       // create the dirfrag
       dir = diri->get_or_open_dirfrag(mds->mdcache, (*lp).frag);
 
-      if ((*lp).ino == MDS_INO_ROOT) 
+      if (MDS_INO_IS_BASE(lp->ino))
 	mds->mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNKNOWN);
 
       dout(10) << "EMetaBlob.replay added dir " << *dir << dendl;  

@@ -2823,7 +2823,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   dout(10) << "scatter_writebehind " << in->inode.mtime << " on " << *lock << " on " << *in << dendl;
 
   // hack:
-  if (in->is_root()) {
+  if (in->is_base()) {
     dout(10) << "scatter_writebehind just clearing updated flag for base inode " << *in << dendl;
     lock->clear_dirty();
     if (!lock->is_stable())
@@ -2895,7 +2895,7 @@ void Locker::scatter_eval(ScatterLock *lock, bool *need_issue)
   }
 
   CInode *in = (CInode*)lock->get_parent();
-  if (!in->has_subtree_root_dirfrag() || in->is_root()) {
+  if (!in->has_subtree_root_dirfrag() || in->is_base()) {
     // i _should_ be sync.
     if (!lock->is_wrlocked() &&
 	!lock->is_xlocked() &&

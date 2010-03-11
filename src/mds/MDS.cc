@@ -872,11 +872,15 @@ void MDS::boot_create()
   // start with a fresh journal
   dout(10) << "boot_create creating fresh journal" << dendl;
   mdlog->create(fin->new_sub());
-  
+  mdlog->start_new_segment(fin->new_sub());
+
   if (whoami == mdsmap->get_root()) {
     dout(3) << "boot_create creating fresh hierarchy" << dendl;
     mdcache->create_empty_hierarchy(fin);
   }
+
+  dout(3) << "boot_create creating mydir hierarchy" << dendl;
+  mdcache->create_mydir_hierarchy(fin);
 
   // fixme: fake out inotable (reset, pretend loaded)
   dout(10) << "boot_create creating fresh inotable table" << dendl;

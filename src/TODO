@@ -65,6 +65,9 @@ bugs
 - rm -r failure (on kernel tree)
 - dbench 1, restart mds (may take a few times), dbench will error out.
 
+- multi-mds: the stray dir should be it's own root/base (with /.ceph/mds$n/stray a remote dentry?)
+  ...otherwise mds X can't always push a stray replica to Y and have it fully linked into the hierarchical cache
+
 - multi-mds, dbench 10, null dn is migrated, linked on new node, but remains null on old mds.  a little later we crash when we unlink due to the discrepancy.
 mds/MDCache.cc: In function 'void MDCache::handle_dentry_unlink(MDentryUnlink*)':
 mds/MDCache.cc:8057: FAILED assert(dnl->is_remote())

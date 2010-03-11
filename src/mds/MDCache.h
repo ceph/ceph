@@ -443,6 +443,7 @@ class MDCache {
   CInode *root;                            // root inode
   CInode *myin;                            // .ceph/mds%d dir
   CInode *stray;                           // my stray dir
+  set<CInode*> base_inodes;
 
 public:
   DecayRate decayrate;
@@ -803,7 +804,7 @@ public:
 
   // root inode
   CInode *get_root() { return root; }
-  CInode *get_stray() { return stray; }
+  CInode *get_myin() { return myin; }
 
   // cache
   void set_cache_size(size_t max) { lru.lru_set_max(max); }
@@ -915,6 +916,7 @@ public:
   CInode *create_root_inode();
 
   void create_empty_hierarchy(C_Gather *gather);
+  void create_mydir_hierarchy(C_Gather *gather);
 
   bool is_open() { return open; }
   void wait_for_open(Context *c) {

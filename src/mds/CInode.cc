@@ -475,6 +475,11 @@ void CInode::make_path_string(string& s, bool force, CDentry *use_parent)
   else if (is_root()) {
     s = "";  // root
   } 
+  else if (is_mdsdir()) {
+    char t[30];
+    sprintf(t, "~mds%d", (int)ino() - MDS_INO_MDSDIR_OFFSET);
+    s = t;
+  }
   else {
     char n[20];
     snprintf(n, sizeof(n), "#%llx", (unsigned long long)(ino()));
@@ -514,7 +519,7 @@ void CInode::make_anchor_trace(vector<Anchor>& trace)
   if (get_projected_parent_dn())
     get_projected_parent_dn()->make_anchor_trace(trace, this);
   else 
-    assert(is_root() || is_stray());
+    assert(is_base());
 }
 
 void CInode::name_stray_dentry(string& dname)
@@ -585,7 +590,7 @@ version_t CInode::pre_dirty()
     pv = get_projected_parent_dn()->pre_dirty(get_projected_version());
     dout(10) << "pre_dirty " << pv << " (current v " << inode.version << ")" << dendl;
   } else {
-    assert(is_root());
+    assert(is_base());
     pv = get_projected_version() + 1;
   }
   return pv;
@@ -659,7 +664,7 @@ struct C_Inode_Stored : public Context {
 void CInode::store(Context *fin)
 {
   dout(10) << "store " << get_version() << dendl;
-  assert(is_root());
+  assert(is_base());
 
   bufferlist bl;
   nstring magic = CEPH_FS_ONDISK_MAGIC;

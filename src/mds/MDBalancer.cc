@@ -274,7 +274,7 @@ void MDBalancer::export_empties()
 	dir->is_frozen()) 
       continue;
     
-    if (!dir->inode->is_root() && dir->get_num_head_items() == 0) 
+    if (!dir->inode->is_base() && dir->get_num_head_items() == 0) 
       mds->mdcache->migrator->export_empty_import(dir);
   }
 }
@@ -595,7 +595,7 @@ void MDBalancer::try_rebalance()
 	  dout(5) << "considering " << *dir << " from " << (*p.first).first << dendl;
 	  multimap<int,CDir*>::iterator plast = p.first++;
         
-	  if (dir->inode->is_root()) continue;
+	  if (dir->inode->is_base()) continue;
 	  if (dir->is_freezing() || dir->is_frozen()) continue;  // export pbly already in progress
 	  double pop = dir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
 	  assert(dir->inode->authority().first == target);  // cuz that's how i put it in the map, dummy
@@ -625,7 +625,7 @@ void MDBalancer::try_rebalance()
 	     import != import_pop_map.end();
 	     import++) {
 	  CDir *imp = (*import).second;
-	  if (imp->inode->is_root()) continue;
+	  if (imp->inode->is_base()) continue;
       
 	  double pop = (*import).first;
 	  if (pop < amount-have || pop < MIN_REEXPORT) {
@@ -878,7 +878,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
   // hit modify counter, if this was a modify
   if (//g_conf.num_mds > 2 &&             // FIXME >2 thing
       g_conf.mds_bal_frag &&
-      !dir->inode->is_root() &&        // not root (for now at least)
+      !dir->inode->is_base() &&        // not root/base (for now at least)
       dir->is_auth() &&
       
       ((g_conf.mds_bal_split_size > 0 &&

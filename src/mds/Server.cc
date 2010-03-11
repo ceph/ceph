@@ -1772,7 +1772,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
   }
 
   CInode *diri = dir->get_inode();
-  if (diri->ino() < MDS_INO_SYSTEM_BASE && !diri->is_root()) {
+  if (diri->is_system() && !diri->is_root()) {
     reply_request(mdr, -EROFS);
     return 0;
   }
@@ -1926,7 +1926,7 @@ void Server::handle_client_lookup_parent(MDRequest *mdr)
     reply_request(mdr, -ESTALE);
     return;
   }
-  if (in->is_root()) {
+  if (in->is_base()) {
     reply_request(mdr, -EINVAL);
     return;
   }
@@ -2492,7 +2492,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
     reply_request(mdr, -EINVAL);
     return;
   }
-  if (cur->ino() < MDS_INO_SYSTEM_BASE && !cur->is_root()) {
+  if (cur->ino() < MDS_INO_SYSTEM_BASE && !cur->is_base()) {
     reply_request(mdr, -EPERM);
     return;
   }
@@ -2645,7 +2645,7 @@ void Server::handle_client_setlayout(MDRequest *mdr)
   CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
   if (!cur) return;
 
-  if (mdr->snapid != CEPH_NOSNAP || cur->is_root()) {
+  if (mdr->snapid != CEPH_NOSNAP || cur->is_base()) {
     reply_request(mdr, -EINVAL);   // for now
     return;
   }
@@ -2731,7 +2731,7 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
   if (!cur) return;
 
-  if (mdr->snapid != CEPH_NOSNAP || cur->is_root()) {
+  if (mdr->snapid != CEPH_NOSNAP || cur->is_base()) {
     reply_request(mdr, -EINVAL);   // for now
     return;
   }
@@ -2787,7 +2787,7 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
   if (!cur) return;
 
-  if (mdr->snapid != CEPH_NOSNAP || cur->is_root()) {
+  if (mdr->snapid != CEPH_NOSNAP || cur->is_base()) {
     reply_request(mdr, -EINVAL);   // for now
     return;
   }
@@ -3817,6 +3817,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
     dout(7) << "_unlink_local_finish sending MDentryUnlink to mds" << it->first << dendl;
     MDentryUnlink *unlink = new MDentryUnlink(dn->get_dir()->dirfrag(), dn->name);
     if (straydn) {
+      mdcache->replicate_inode(mds->mdcache->get_myin(), it->first, unlink->straybl);
       mdcache->replicate_dir(straydn->get_dir()->inode->get_parent_dn()->get_dir(), it->first, unlink->straybl);
       mdcache->replicate_dentry(straydn->get_dir()->inode->get_parent_dn(), it->first, unlink->straybl);
       mdcache->replicate_inode(straydn->get_dir()->inode, it->first, unlink->straybl);

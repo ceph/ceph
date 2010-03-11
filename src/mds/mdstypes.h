@@ -46,10 +46,12 @@ using namespace std;
 
 #define MDS_INO_SYSTEM_BASE       (10*MAX_MDS)
 
-#define MDS_INO_STRAY(x) (MDS_INO_STRAY_OFFSET+((unsigned)x))
-#define MDS_INO_IS_STRAY(i) ((i) >= MDS_INO_STRAY_OFFSET && (i) < MDS_INO_STRAY_OFFSET+MAX_MDS)
+#define MDS_INO_STRAY(x)  (MDS_INO_STRAY_OFFSET+((unsigned)x))
 #define MDS_INO_MDSDIR(x) (MDS_INO_MDSDIR_OFFSET+((unsigned)x))
-#define MDS_INO_IS_MDSDIR(i) ((i) >= MDS_INO_MDSDIR_OFFSET && (i) < MDS_INO_MDSDIR_OFFSET+MAX_MDS)
+
+#define MDS_INO_IS_STRAY(i)  ((i) >= MDS_INO_STRAY_OFFSET  && (i) < (MDS_INO_STRAY_OFFSET+MAX_MDS))
+#define MDS_INO_IS_MDSDIR(i) ((i) >= MDS_INO_MDSDIR_OFFSET && (i) < (MDS_INO_MDSDIR_OFFSET+MAX_MDS))
+#define MDS_INO_IS_BASE(i)   (MDS_INO_ROOT == (i) || MDS_INO_IS_MDSDIR(i))
 
 #define MDS_TRAVERSE_FORWARD       1
 #define MDS_TRAVERSE_DISCOVER      2    // skips permissions checks etc.

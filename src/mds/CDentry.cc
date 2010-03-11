@@ -219,7 +219,7 @@ void CDentry::make_path_string(string& s)
 void CDentry::make_path(filepath& fp)
 {
   assert(dir);
-  if (dir->inode->is_root())
+  if (dir->inode->is_base())
     fp = filepath(dir->inode->ino());               // base case
   else if (dir->inode->get_parent_dn())
     dir->inode->get_parent_dn()->make_path(fp);  // recurse
