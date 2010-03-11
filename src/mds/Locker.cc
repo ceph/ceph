@@ -510,6 +510,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue)
       case LOCK_EXCL_SYNC:
       case LOCK_LOCK_SYNC:
       case LOCK_MIX_SYNC:
+      case LOCK_XLOCKDONE:
 	if (in->is_replicated()) {
 	  bufferlist softdata;
 	  lock->encode_locked_state(softdata);
