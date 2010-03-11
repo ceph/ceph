@@ -27,8 +27,8 @@ public:
   xlist<ScatterLock*>::item xlistitem_updated;
   utime_t update_stamp;
 
-  ScatterLock(MDSCacheObject *o, int t) : 
-    SimpleLock(o, t),
+  ScatterLock(MDSCacheObject *o, LockType *lt) : 
+    SimpleLock(o, lt),
     dirty(false), flushing(false), scatter_wanted(false),
     xlistitem_updated(this) {}
   ~ScatterLock() {
@@ -58,7 +58,7 @@ public:
       flushing = false;
       if (!dirty) {
 	parent->put(MDSCacheObject::PIN_DIRTYSCATTERED);
-	parent->clear_dirty_scattered(type);
+	parent->clear_dirty_scattered(get_type());
       }
     }
   }

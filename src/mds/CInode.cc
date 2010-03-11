@@ -46,6 +46,14 @@
 boost::pool<> CInode::pool(sizeof(CInode));
 boost::pool<> Capability::pool(sizeof(Capability));
 
+LockType CInode::versionlock_type(CEPH_LOCK_IVERSION);
+LockType CInode::authlock_type(CEPH_LOCK_IAUTH);
+LockType CInode::linklock_type(CEPH_LOCK_ILINK);
+LockType CInode::dirfragtreelock_type(CEPH_LOCK_IDFT);
+LockType CInode::filelock_type(CEPH_LOCK_IFILE);
+LockType CInode::xattrlock_type(CEPH_LOCK_IXATTR);
+LockType CInode::snaplock_type(CEPH_LOCK_ISNAP);
+LockType CInode::nestlock_type(CEPH_LOCK_INEST);
 
 //int cinode_pins[CINODE_NUM_PINS];  // counts
 ostream& CInode::print_db_line_prefix(ostream& out)

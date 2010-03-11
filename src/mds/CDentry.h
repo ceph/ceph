@@ -149,6 +149,8 @@ protected:
 
 public:
   // lock
+  static LockType lock_type;
+
   SimpleLock lock;
 
  public:
@@ -161,7 +163,7 @@ public:
     version(0), projected_version(0),
     xlist_dirty(this),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
-    lock(this, CEPH_LOCK_DN) {
+    lock(this, &lock_type) {
     g_num_dn++;
     g_num_dna++;
   }
@@ -173,7 +175,7 @@ public:
     version(0), projected_version(0),
     xlist_dirty(this),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
-    lock(this, CEPH_LOCK_DN) {
+    lock(this, &lock_type) {
     g_num_dn++;
     g_num_dna++;
     linkage.remote_ino = ino;

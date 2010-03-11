@@ -413,17 +413,17 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue)
   }
 
   if (!lock->is_gathering() &&
-      (lock->sm->states[next].can_rdlock || !lock->is_rdlocked()) &&
-      (lock->sm->states[next].can_wrlock || !lock->is_wrlocked()) &&
-      (lock->sm->states[next].can_xlock || !lock->is_xlocked()) &&
-      (lock->sm->states[next].can_lease || !lock->is_leased()) &&
+      (lock->get_sm()->states[next].can_rdlock || !lock->is_rdlocked()) &&
+      (lock->get_sm()->states[next].can_wrlock || !lock->is_wrlocked()) &&
+      (lock->get_sm()->states[next].can_xlock || !lock->is_xlocked()) &&
+      (lock->get_sm()->states[next].can_lease || !lock->is_leased()) &&
       (!caps || ((~lock->gcaps_allowed(CAP_ANY, next) & other_issued) == 0 &&
 		 (~lock->gcaps_allowed(CAP_LONER, next) & loner_issued) == 0 &&
 		 (~lock->gcaps_allowed(CAP_XLOCKER, next) & xlocker_issued) == 0))) {
     dout(7) << "eval_gather finished gather on " << *lock
 	    << " on " << *lock->get_parent() << dendl;
 
-    if (lock->sm == &sm_filelock) {
+    if (lock->get_sm() == &sm_filelock) {
       if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
 	dout(7) << "eval_gather finished gather, but need to recover" << dendl;
 	mds->mdcache->queue_file_recover(in);
@@ -678,7 +678,7 @@ bool Locker::_rdlock_kick(SimpleLock *lock)
   // kick the lock
   if (lock->is_stable() &&
       lock->get_parent()->is_auth()) {
-    if (lock->sm == &sm_scatterlock) {
+    if (lock->get_sm() == &sm_scatterlock) {
       if (lock->get_parent()->is_replicated())
 	scatter_tempsync((ScatterLock*)lock);
       else
@@ -905,7 +905,7 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
     return false;
   } else {
     // replica
-    assert(lock->sm->can_remote_xlock);
+    assert(lock->get_sm()->can_remote_xlock);
     assert(!mut->slave_request);
     
     // wait for single auth
@@ -946,7 +946,7 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
 
   // remote xlock?
   if (!lock->get_parent()->is_auth()) {
-    assert(lock->sm->can_remote_xlock);
+    assert(lock->get_sm()->can_remote_xlock);
 
     // tell auth
     dout(7) << "xlock_finish releasing remote xlock on " << *lock->get_parent()  << dendl;
@@ -2682,7 +2682,7 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
 
   int gather = 0;
   if (lock->get_parent()->is_replicated() &&
-      lock->sm->states[old_state].replica_state != LOCK_LOCK) {  // replica may already be LOCK
+      lock->get_sm()->states[old_state].replica_state != LOCK_LOCK) {  // replica may already be LOCK
     gather++;
     send_lock_message(lock, LOCK_AC_LOCK);
     lock->init_gather();
@@ -3394,7 +3394,7 @@ void Locker::file_recover(ScatterLock *lock)
   int gather = 0;
   
   if (in->is_replicated() &&
-      lock->sm->states[oldstate].replica_state != LOCK_LOCK) {
+      lock->get_sm()->states[oldstate].replica_state != LOCK_LOCK) {
     send_lock_message(lock, LOCK_AC_LOCK);
     lock->init_gather();
     gather++;

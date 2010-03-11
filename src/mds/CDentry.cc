@@ -38,6 +38,8 @@ ostream& CDentry::print_db_line_prefix(ostream& out)
 
 boost::pool<> CDentry::pool(sizeof(CDentry));
 
+LockType CDentry::lock_type(CEPH_LOCK_DN);
+
 
 // CDentry
 

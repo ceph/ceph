@@ -320,14 +320,14 @@ private:
     xlist_dirty_dirfrag_dirfragtree(this), 
     auth_pins(0), nested_auth_pins(0),
     nested_anchors(0),
-    versionlock(this, CEPH_LOCK_IVERSION),
-    authlock(this, CEPH_LOCK_IAUTH),
-    linklock(this, CEPH_LOCK_ILINK),
-    dirfragtreelock(this, CEPH_LOCK_IDFT),
-    filelock(this, CEPH_LOCK_IFILE),
-    xattrlock(this, CEPH_LOCK_IXATTR),
-    snaplock(this, CEPH_LOCK_ISNAP),
-    nestlock(this, CEPH_LOCK_INEST),
+    versionlock(this, &versionlock_type),
+    authlock(this, &authlock_type),
+    linklock(this, &linklock_type),
+    dirfragtreelock(this, &dirfragtreelock_type),
+    filelock(this, &filelock_type),
+    xattrlock(this, &xattrlock_type),
+    snaplock(this, &snaplock_type),
+    nestlock(this, &nestlock_type),
     loner_cap(-1), want_loner_cap(-1)
   {
     g_num_ino++;
@@ -488,6 +488,15 @@ private:
 
   // -- locks --
 public:
+  static LockType versionlock_type;
+  static LockType authlock_type;
+  static LockType linklock_type;
+  static LockType dirfragtreelock_type;
+  static LockType filelock_type;
+  static LockType xattrlock_type;
+  static LockType snaplock_type;
+  static LockType nestlock_type;
+
   LocalLock  versionlock;
   SimpleLock authlock;
   SimpleLock linklock;
