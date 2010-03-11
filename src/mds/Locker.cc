@@ -1759,7 +1759,8 @@ void Locker::handle_client_caps(MClientCaps *m)
       if (m->get_op() == CEPH_CAP_OP_DROP)
 	can_issue = false;
       
-      if (_do_cap_update(in, cap, m->get_dirty(), follows, m, ack)) {
+      if (in->is_auth() &&
+	  _do_cap_update(in, cap, m->get_dirty(), follows, m, ack)) {
 	// updated, cap msg is delayed
 	cap->inc_suppress();
 	eval(in, CEPH_CAP_LOCKS);
