@@ -27,7 +27,9 @@ do
     echo debian vers $dvers
 
     echo building debs for $dist
-    pbuilder build --basetgz $basedir/$dist.tgz --distribution $dist \
+    pbuilder build \
+	--binary-arch \
+	--basetgz $basedir/$dist.tgz --distribution $dist \
 	--buildresult release/$vers \
 	--debbuildopts -j`grep -c processor /proc/cpuinfo` \
 	release/$vers/ceph_$dvers.dsc
