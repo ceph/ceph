@@ -1,3 +1,11 @@
+/**
+ * All operations via the rados gateway are carried out by
+ * small classes known as RGWOps. This class contains a req_state
+ * and each possible command is a subclass of this with a defined
+ * execute() method that does whatever the subclass name implies.
+ * These subclasses must be further subclassed (by interface type)
+ * to provide additional virtual methods such as send_response or get_params.
+ */
 #ifndef __RGW_OP_H
 #define __RGW_OP_H
 
@@ -10,11 +18,19 @@ using namespace std;
 
 struct req_state;
 
+/** Get the HTTP request metadata */
 extern void get_request_metadata(struct req_state *s, map<nstring, bufferlist>& attrs);
+/**
+ * Get the ACL for an object off of disk. If you hold the req_state, use next
+ * method.
+ */
 extern int read_acls(RGWAccessControlPolicy *policy, string& bucket, string& object);
+/** Get the ACL needed for a request off of disk.*/
 extern int read_acls(struct req_state *s, bool only_bucket = false);
 
-
+/**
+ * Provide the base class for all ops.
+ */
 class RGWOp {
 protected:
   struct req_state *s;

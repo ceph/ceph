@@ -40,6 +40,13 @@ public:
   };
 };
 
+/**
+ * Represents a block of XML.
+ * Give the class an XML blob, and it will parse the blob into
+ * an attr_name->value map.
+ * This really ought to be an abstract class or something; it
+ * shouldn't be the startpoint for any parsing. Look at RGWXMLParser for that.
+ */
 class XMLObj
 {
   int refcount;
@@ -426,6 +433,10 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWAccessControlPolicy)
 
+/**
+ * Interfaces with the webserver's XML handling code
+ * to parse it in a way that makes sense for the rgw.
+ */
 class RGWXMLParser : public XMLObj
 {
   XML_Parser p;

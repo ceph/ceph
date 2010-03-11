@@ -43,6 +43,13 @@ done:
   return r;
 }
 
+/**
+ * Get the HTTP request metadata out of the req_state as a
+ * map(<attr_name, attr_contents>, where attr_name is RGW_ATTR_PREFIX.HTTP_NAME)
+ * s: The request state
+ * attrs: will be filled up with attrs mapped as <attr_name, attr_contents>
+ *
+ */
 void get_request_metadata(struct req_state *s, map<nstring, bufferlist>& attrs)
 {
   map<string, string>::iterator iter;
@@ -61,6 +68,13 @@ void get_request_metadata(struct req_state *s, map<nstring, bufferlist>& attrs)
   }
 }
 
+/**
+ * Get the AccessControlPolicy for an object off of disk.
+ * policy: must point to a valid RGWACL, and will be filled upon return.
+ * bucket: name of the bucket containing the object.
+ * object: name of the object to get the ACL for.
+ * Returns: 0 on success, -ERR# otherwise.
+ */
 int read_acls(RGWAccessControlPolicy *policy, string& bucket, string& object)
 {
   bufferlist bl;
@@ -80,6 +94,12 @@ int read_acls(RGWAccessControlPolicy *policy, string& bucket, string& object)
   return ret;
 }
 
+/**
+ * Get the AccessControlPolicy for a bucket or object off of disk.
+ * s: The req_state to draw information from.
+ * only_bucket: If true, reads the bucket ACL rather than the object ACL.
+ * Returns: 0 on success, -ERR# otherwise.
+ */
 int read_acls(struct req_state *s, bool only_bucket)
 {
   int ret = 0;

@@ -38,6 +38,9 @@ using namespace std;
    FCGX_FPrintF(stream, format, __VA_ARGS__); \
 } while (0)
 
+/*
+ * ?get the canonical amazon-style header for something?
+ */
 static void get_canon_amz_hdr(struct req_state *s, string& dest)
 {
   dest = "";
@@ -50,6 +53,9 @@ static void get_canon_amz_hdr(struct req_state *s, string& dest)
   }
 }
 
+/*
+ * ?get the canonical representation of the object's location
+ */
 static void get_canon_resource(struct req_state *s, string& dest)
 {
   if (s->host_bucket) {
@@ -66,6 +72,10 @@ static void get_canon_resource(struct req_state *s, string& dest)
   }
 }
 
+/*
+ * get the header authentication  information required to
+ * compute a request's signature
+ */
 static void get_auth_header(struct req_state *s, string& dest, bool qsr)
 {
   dest = "";
@@ -105,6 +115,9 @@ static void get_auth_header(struct req_state *s, string& dest, bool qsr)
   dest.append(canon_resource);
 }
 
+/*
+ * calculate the sha1 value of a given msg and key
+ */
 static void calc_hmac_sha1(const char *key, int key_len,
                            const char *msg, int msg_len,
                            char *dest, int *len) /* dest should be large enough to hold result */
@@ -118,6 +131,10 @@ static void calc_hmac_sha1(const char *key, int key_len,
   cerr << "hmac=" << hex_str << std::endl;
 }
 
+/*
+ * verify that a signed request comes from the keyholder
+ * by checking the signature against our locally-computed version
+ */
 static bool verify_signature(struct req_state *s)
 {
   bool qsr = false;
@@ -188,6 +205,9 @@ static bool verify_signature(struct req_state *s)
 
 static sighandler_t sighandler;
 
+/*
+ * ?print out the C++ errors to log in case it fails
+ */
 static void godown(int signum)
 {
   BackTrace bt(0);
@@ -196,6 +216,9 @@ static void godown(int signum)
   signal(SIGSEGV, sighandler);
 }
 
+/*
+ * start up the RADOS connection and then handle HTTP messages as they come in
+ */
 int main(int argc, char *argv[])
 {
   struct req_state s;
