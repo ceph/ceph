@@ -498,7 +498,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue)
       case LOCK_TSYN_MIX:
       case LOCK_SYNC_MIX:
       case LOCK_EXCL_MIX:
-	if (in->is_replicated()) {
+	if (lock->get_parent()->is_replicated()) {
 	  bufferlist softdata;
 	  lock->encode_locked_state(softdata);
 	  send_lock_message(lock, LOCK_AC_MIX, softdata);
@@ -511,7 +511,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue)
       case LOCK_LOCK_SYNC:
       case LOCK_MIX_SYNC:
       case LOCK_XLOCKDONE:
-	if (in->is_replicated()) {
+	if (lock->get_parent()->is_replicated()) {
 	  bufferlist softdata;
 	  lock->encode_locked_state(softdata);
 	  send_lock_message(lock, LOCK_AC_SYNC, softdata);
