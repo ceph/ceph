@@ -1791,7 +1791,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
     }
 
     // readable?
-    if (dn && !dn->lock.can_read(client) && dn->lock.get_xlocked_by() != mdr) {
+    if (dn && !dn->lock.can_read(client) && dn->lock.get_xlock_by() != mdr) {
       dout(10) << "waiting on xlocked dentry " << *dn << dendl;
       dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
       return 0;

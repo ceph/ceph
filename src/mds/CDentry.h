@@ -234,7 +234,7 @@ public:
 
   bool use_projected(client_t client, Mutation *mut) {
     return lock.can_read_projected(client) || 
-      lock.get_xlocked_by() == mut;
+      lock.get_xlock_by() == mut;
   }
   linkage_t *get_linkage(client_t client, Mutation *mut) {
     return use_projected(client, mut) ? get_projected_linkage() : get_linkage();

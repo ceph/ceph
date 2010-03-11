@@ -109,6 +109,8 @@ long g_num_dirs = 0;
 long g_num_dns = 0;
 long g_num_caps = 0;
 
+set<int> SimpleLock::empty_gather_set;
+
 
 MDCache::MDCache(MDS *m)
 {
@@ -5847,7 +5849,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 
     if (dnl &&
 	dn->lock.is_xlocked() &&
-	dn->lock.get_xlocked_by() != mdr &&
+	dn->lock.get_xlock_by() != mdr &&
 	!dn->lock.can_read(client) &&
 	(dnl->is_null() || forward)) {
       dout(10) << "traverse: xlocked dentry at " << *dn << dendl;

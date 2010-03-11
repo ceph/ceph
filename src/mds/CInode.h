@@ -587,10 +587,10 @@ public:
     if (loner_cap >= 0 && loner_cap != want_loner_cap)
       return false;
     loner_cap = want_loner_cap;
-    authlock.excl_client = loner_cap;
-    filelock.excl_client = loner_cap;
-    linklock.excl_client = loner_cap;
-    xattrlock.excl_client = loner_cap;
+    authlock.set_excl_client(loner_cap);
+    filelock.set_excl_client(loner_cap);
+    linklock.set_excl_client(loner_cap);
+    xattrlock.set_excl_client(loner_cap);
     return true;
   }
   bool try_drop_loner() {
@@ -602,10 +602,10 @@ public:
     if (!cap ||
 	(cap->issued() & ~other_allowed) == 0) {
       loner_cap = -1;
-      authlock.excl_client = -1;
-      filelock.excl_client = -1;
-      linklock.excl_client = -1;
-      xattrlock.excl_client = -1;
+      authlock.set_excl_client(-1);
+      filelock.set_excl_client(-1);
+      linklock.set_excl_client(-1);
+      xattrlock.set_excl_client(-1);
       return true;
     }
     return false;
