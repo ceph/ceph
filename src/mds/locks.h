@@ -34,7 +34,7 @@ struct sm_t {
 extern struct sm_t sm_simplelock;
 extern struct sm_t sm_filelock;
 extern struct sm_t sm_scatterlock;
-
+extern struct sm_t sm_locallock;
 
 
 

@@ -66,6 +66,9 @@ struct LockType {
     case CEPH_LOCK_IFILE:
       sm = &sm_filelock;
       break;
+    case CEPH_LOCK_IVERSION:
+      sm = &sm_locallock;
+      break;
     default:
       sm = 0;
     }
@@ -252,7 +255,7 @@ public:
   }
 
   bool is_stable() {
-    return !get_sm() || get_sm()->states[state].next == 0;
+    return get_sm()->states[state].next == 0;
   }
   int get_next_state() {
     return get_sm()->states[state].next;
