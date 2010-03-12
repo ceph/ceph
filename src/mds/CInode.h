@@ -19,6 +19,7 @@
 
 #include "config.h"
 #include "include/dlist.h"
+#include "include/elist.h"
 #include "include/types.h"
 #include "include/lru.h"
 
@@ -270,14 +271,14 @@ protected:
 
 
   // LogSegment dlists i (may) belong to
-  dlist<CInode*>::item dlist_dirty;
 public:
-  dlist<CInode*>::item dlist_caps;
-  dlist<CInode*>::item dlist_open_file;
-  dlist<CInode*>::item dlist_renamed_file;
-  dlist<CInode*>::item dlist_dirty_dirfrag_dir;
-  dlist<CInode*>::item dlist_dirty_dirfrag_nest;
-  dlist<CInode*>::item dlist_dirty_dirfrag_dirfragtree;
+  elist<CInode*>::item dlist_dirty;
+  elist<CInode*>::item dlist_caps;
+  elist<CInode*>::item dlist_open_file;
+  elist<CInode*>::item dlist_renamed_file;
+  elist<CInode*>::item dlist_dirty_dirfrag_dir;
+  elist<CInode*>::item dlist_dirty_dirfrag_nest;
+  elist<CInode*>::item dlist_dirty_dirfrag_dirfragtree;
 
 private:
   // auth pin

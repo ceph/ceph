@@ -256,7 +256,7 @@ enum {
 struct MDRequest : public Mutation {
   int ref;
   Session *session;
-  dlist<MDRequest*>::item session_request_item;  // if not on list, op is aborted.
+  elist<MDRequest*>::item session_request_item;  // if not on list, op is aborted.
 
   // -- i am a client (master) request
   MClientRequest *client_request; // client request (if any)
@@ -408,9 +408,9 @@ struct MDRequest : public Mutation {
 struct MDSlaveUpdate {
   int origop;
   bufferlist rollback;
-  dlist<MDSlaveUpdate*>::item dlistitem;
+  elist<MDSlaveUpdate*>::item dlistitem;
   Context *waiter;
-  MDSlaveUpdate(int oo, bufferlist &rbl, dlist<MDSlaveUpdate*> &list) :
+  MDSlaveUpdate(int oo, bufferlist &rbl, elist<MDSlaveUpdate*> &list) :
     origop(oo),
     dlistitem(this),
     waiter(0) {

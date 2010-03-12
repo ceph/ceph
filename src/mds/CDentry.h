@@ -24,7 +24,7 @@ using namespace std;
 #include "include/types.h"
 #include "include/buffer.h"
 #include "include/lru.h"
-#include "include/dlist.h"
+#include "include/elist.h"
 #include "include/filepath.h"
 #include "include/nstring.h"
 #include "mdstypes.h"
@@ -132,8 +132,10 @@ protected:
   version_t version;  // dir version when last touched.
   version_t projected_version;  // what it will be when i unlock/commit.
 
-  dlist<CDentry*>::item dlist_dirty;
+public:
+  elist<CDentry*>::item dlist_dirty;
 
+protected:
   int auth_pins, nested_auth_pins;
 #ifdef MDS_AUTHPIN_SET
   multiset<void*> auth_pin_set;

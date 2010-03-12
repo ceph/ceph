@@ -23,13 +23,14 @@ using __gnu_cxx::hash_map;
 
 #include "include/Context.h"
 #include "include/xlist.h"
-#include "include/dlist.h"
+#include "include/elist.h"
 #include "include/interval_set.h"
 #include "mdstypes.h"
 
 class CInode;
 class MDRequest;
 
+#include "CInode.h"
 #include "Capability.h"
 #include "msg/Message.h"
 
@@ -71,7 +72,7 @@ public:
   entity_inst_t inst;
   xlist<Session*>::item session_list_item;
 
-  dlist<MDRequest*> requests;
+  elist<MDRequest*> requests;
 
   interval_set<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
   interval_set<inodeno_t> prealloc_inos;   // preallocated, ready to use.
@@ -157,6 +158,7 @@ public:
   Session() : 
     state(STATE_NEW), state_seq(0),
     session_list_item(this),
+    requests(0),  // member_offset passed to front() manually
     cap_push_seq(0) { }
   ~Session() {
     assert(!session_list_item.is_on_xlist());

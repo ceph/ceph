@@ -16,9 +16,13 @@
 #define __LOGSEGMENT_H
 
 #include "include/dlist.h"
+#include "include/elist.h"
 #include "include/interval_set.h"
 #include "include/Context.h"
 #include "mdstypes.h"
+#include "CInode.h"
+#include "CDentry.h"
+#include "CDir.h"
 
 #include <ext/hash_set>
 using __gnu_cxx::hash_set;
@@ -36,18 +40,18 @@ class LogSegment {
   loff_t trimmable_at;
 
   // dirty items
-  dlist<CDir*>    dirty_dirfrags, new_dirfrags;
-  dlist<CInode*>  dirty_inodes;
-  dlist<CDentry*> dirty_dentries;
+  elist<CDir*>    dirty_dirfrags, new_dirfrags;
+  elist<CInode*>  dirty_inodes;
+  elist<CDentry*> dirty_dentries;
 
-  dlist<CInode*>  open_files;
-  dlist<CInode*>  renamed_files;
-  dlist<CInode*>  dirty_dirfrag_dir;
-  dlist<CInode*>  dirty_dirfrag_nest;
-  dlist<CInode*>  dirty_dirfrag_dirfragtree;
+  elist<CInode*>  open_files;
+  elist<CInode*>  renamed_files;
+  elist<CInode*>  dirty_dirfrag_dir;
+  elist<CInode*>  dirty_dirfrag_nest;
+  elist<CInode*>  dirty_dirfrag_dirfragtree;
 
-  dlist<MDSlaveUpdate*> slave_updates;
-
+  elist<MDSlaveUpdate*> slave_updates;
+  
   set<CInode*> truncating_inodes;
 
   map<int, hash_set<version_t> > pending_commit_tids;  // mdstable
@@ -65,8 +69,19 @@ class LogSegment {
   C_Gather *try_to_expire(MDS *mds);
 
   // cons
-  LogSegment(loff_t off) : offset(off), end(off), num_events(0), trimmable_at(0),
-			   inotablev(0), sessionmapv(0)
+  LogSegment(loff_t off) :
+    offset(off), end(off), num_events(0), trimmable_at(0),
+    dirty_dirfrags(member_offset(CDir, dlist_dirty)),
+    new_dirfrags(member_offset(CDir, dlist_new)),
+    dirty_inodes(member_offset(CInode, dlist_dirty)),
+    dirty_dentries(member_offset(CDentry, dlist_dirty)),
+    open_files(member_offset(CInode, dlist_open_file)),
+    renamed_files(member_offset(CInode, dlist_renamed_file)),
+    dirty_dirfrag_dir(member_offset(CInode, dlist_dirty_dirfrag_dir)),
+    dirty_dirfrag_nest(member_offset(CInode, dlist_dirty_dirfrag_nest)),
+    dirty_dirfrag_dirfragtree(member_offset(CInode, dlist_dirty_dirfrag_dirfragtree)),
+    slave_updates(0), // passed to begin() manually
+    inotablev(0), sessionmapv(0)
   { }
 };
 

@@ -4045,7 +4045,7 @@ void MDCache::clean_open_file_lists()
        p++) {
     LogSegment *ls = p->second;
     
-    dlist<CInode*>::iterator q = ls->open_files.begin();
+    elist<CInode*>::iterator q = ls->open_files.begin(member_offset(CInode, dlist_open_file));
     while (!q.end()) {
       CInode *in = *q;
       ++q;
@@ -6373,7 +6373,7 @@ void MDCache::request_forward(MDRequest *mdr, int who, int port)
 void MDCache::dispatch_request(MDRequest *mdr)
 {
   if (mdr->client_request) {
-    if (!mdr->session_request_item.is_on_dlist()) {
+    if (!mdr->session_request_item.is_on_list()) {
       dout(10) << "request " << *mdr << " is canceled" << dendl;
       return;
     }
@@ -6725,7 +6725,8 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop)
 
   if (snapop == CEPH_SNAP_OP_SPLIT) {
     // notify clients of update|split
-    for (dlist<CInode*>::iterator p = in->snaprealm->inodes_with_caps.begin(); !p.end(); ++p)
+    for (elist<CInode*>::iterator p = in->snaprealm->inodes_with_caps.begin(member_offset(CInode, dlist_caps));
+	 !p.end(); ++p)
       split_inos.push_back((*p)->ino());
     
     for (set<SnapRealm*>::iterator p = in->snaprealm->open_children.begin();

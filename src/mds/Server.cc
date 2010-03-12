@@ -285,7 +285,9 @@ void Server::_session_logged(Session *session, __u64 state_seq, bool open, versi
       dn->remove_client_lease(r, r->mask, mds->locker);
     }
     while (!session->requests.empty()) {
-      mdcache->request_kill(session->requests.front());
+      MDRequest *mdr = session->requests.front(member_offset(MDRequest,
+							     session_request_item));
+      mdcache->request_kill(mdr);
     }
     
     if (piv) {
@@ -2110,7 +2112,7 @@ void Server::handle_client_open(MDRequest *mdr)
     mds->locker->check_inode_max_size(cur);
 
   // make sure this inode gets into the journal
-  if (!cur->dlist_open_file.is_on_dlist()) {
+  if (!cur->dlist_open_file.is_on_list()) {
     LogSegment *ls = mds->mdlog->get_current_segment();
     EOpen *le = new EOpen(mds->mdlog);
     mdlog->start_entry(le);

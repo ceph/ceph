@@ -80,22 +80,22 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   dout(6) << "LogSegment(" << offset << ").try_to_expire" << dendl;
 
   // commit dirs
-  for (dlist<CDir*>::iterator p = new_dirfrags.begin(); !p.end(); ++p) {
+  for (elist<CDir*>::iterator p = new_dirfrags.begin(); !p.end(); ++p) {
     dout(20) << " new_dirfrag " << **p << dendl;
     assert((*p)->is_auth());
     commit.insert(*p);
   }
-  for (dlist<CDir*>::iterator p = dirty_dirfrags.begin(); !p.end(); ++p) {
+  for (elist<CDir*>::iterator p = dirty_dirfrags.begin(); !p.end(); ++p) {
     dout(20) << " dirty_dirfrag " << **p << dendl;
     assert((*p)->is_auth());
     commit.insert(*p);
   }
-  for (dlist<CDentry*>::iterator p = dirty_dentries.begin(); !p.end(); ++p) {
+  for (elist<CDentry*>::iterator p = dirty_dentries.begin(); !p.end(); ++p) {
     dout(20) << " dirty_dentry " << **p << dendl;
     assert((*p)->is_auth());
     commit.insert((*p)->get_dir());
   }
-  for (dlist<CInode*>::iterator p = dirty_inodes.begin(); !p.end(); ++p) {
+  for (elist<CInode*>::iterator p = dirty_inodes.begin(); !p.end(); ++p) {
     dout(20) << " dirty_inode " << **p << dendl;
     assert((*p)->is_auth());
     if ((*p)->is_root()) {
@@ -133,19 +133,19 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   }
 
   // nudge scatterlocks
-  for (dlist<CInode*>::iterator p = dirty_dirfrag_dir.begin(); !p.end(); ++p) {
+  for (elist<CInode*>::iterator p = dirty_dirfrag_dir.begin(); !p.end(); ++p) {
     CInode *in = *p;
     dout(10) << "try_to_expire waiting for dirlock flush on " << *in << dendl;
     if (!gather) gather = new C_Gather;
     mds->locker->scatter_nudge(&in->filelock, gather->new_sub());
   }
-  for (dlist<CInode*>::iterator p = dirty_dirfrag_dirfragtree.begin(); !p.end(); ++p) {
+  for (elist<CInode*>::iterator p = dirty_dirfrag_dirfragtree.begin(); !p.end(); ++p) {
     CInode *in = *p;
     dout(10) << "try_to_expire waiting for dirfragtreelock flush on " << *in << dendl;
     if (!gather) gather = new C_Gather;
     mds->locker->scatter_nudge(&in->dirfragtreelock, gather->new_sub());
   }
-  for (dlist<CInode*>::iterator p = dirty_dirfrag_nest.begin(); !p.end(); ++p) {
+  for (elist<CInode*>::iterator p = dirty_dirfrag_nest.begin(); !p.end(); ++p) {
     CInode *in = *p;
     dout(10) << "try_to_expire waiting for nest flush on " << *in << dendl;
     if (!gather) gather = new C_Gather;
@@ -158,7 +158,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     EOpen *le = 0;
     LogSegment *ls = mds->mdlog->get_current_segment();
     assert(ls != this);
-    dlist<CInode*>::iterator p = open_files.begin();
+    elist<CInode*>::iterator p = open_files.begin(member_offset(CInode, dlist_open_file));
     while (!p.end()) {
       CInode *in = *p;
       ++p;
@@ -198,7 +198,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   }
 
   // parent pointers on renamed dirs
-  for (dlist<CInode*>::iterator p = renamed_files.begin(); !p.end(); ++p) {
+  for (elist<CInode*>::iterator p = renamed_files.begin(); !p.end(); ++p) {
     CInode *in = *p;
     dout(10) << "try_to_expire waiting for dir parent pointer update on " << *in << dendl;
     assert(in->state_test(CInode::STATE_DIRTYPARENT));
@@ -207,7 +207,9 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   }
 
   // slave updates
-  for (dlist<MDSlaveUpdate*>::iterator p = slave_updates.begin(); !p.end(); ++p) {
+  for (elist<MDSlaveUpdate*>::iterator p = slave_updates.begin(member_offset(MDSlaveUpdate,
+									     dlistitem));
+       !p.end(); ++p) {
     MDSlaveUpdate *su = *p;
     dout(10) << "try_to_expire waiting on slave update " << su << dendl;
     assert(su->waiter == 0);

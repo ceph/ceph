@@ -1601,13 +1601,13 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
 
   CInode *cur = cap->get_inode();
   if (cap->wanted() == 0) {
-    if (cur->dlist_open_file.is_on_dlist() &&
+    if (cur->dlist_open_file.is_on_list() &&
 	!cur->is_any_caps_wanted()) {
       dout(10) << " removing unwanted file from open file list " << *cur << dendl;
       cur->dlist_open_file.remove_myself();
     }
   } else {
-    if (!cur->dlist_open_file.is_on_dlist()) {
+    if (!cur->dlist_open_file.is_on_list()) {
       dout(10) << " adding to open file list " << *cur << dendl;
       LogSegment *ls = mds->mdlog->get_current_segment();
       EOpen *le = new EOpen(mds->mdlog);
