@@ -2912,14 +2912,15 @@ void Locker::scatter_eval(ScatterLock *lock, bool *need_issue)
 void Locker::mark_updated_scatterlock(ScatterLock *lock)
 {
   lock->mark_dirty();
-  if (lock->xlistitem_updated.is_on_xlist()) {
+  if (lock->get_updated_item()->is_on_xlist()) {
     dout(10) << "mark_updated_scatterlock " << *lock
-	     << " - already on list since " << lock->update_stamp << dendl;
+	     << " - already on list since " << lock->get_update_stamp() << dendl;
   } else {
-    updated_scatterlocks.push_back(&lock->xlistitem_updated);
-    lock->update_stamp = g_clock.now();
+    updated_scatterlocks.push_back(lock->get_updated_item());
+    utime_t now = g_clock.now();
+    lock->set_update_stamp(now);
     dout(10) << "mark_updated_scatterlock " << *lock
-	     << " - added at " << lock->update_stamp << dendl;
+	     << " - added at " << now << dendl;
   }
 }
 
@@ -2941,7 +2942,7 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
       p->add_waiter(MDSCacheObject::WAIT_UNFREEZE, c);
     else
       // just requeue.  not ideal.. starvation prone..
-      updated_scatterlocks.push_back(&lock->xlistitem_updated);
+      updated_scatterlocks.push_back(lock->get_updated_item());
     return;
   }
 
@@ -2951,7 +2952,7 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
       p->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, c);
     else
       // just requeue.  not ideal.. starvation prone..
-      updated_scatterlocks.push_back(&lock->xlistitem_updated);
+      updated_scatterlocks.push_back(lock->get_updated_item());
     return;
   }
 
@@ -3008,7 +3009,7 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
       lock->add_waiter(SimpleLock::WAIT_STABLE, c);
 
     // also, requeue, in case we had wrong auth or something
-    updated_scatterlocks.push_back(&lock->xlistitem_updated);
+    updated_scatterlocks.push_back(lock->get_updated_item());
   }
 }
 
@@ -3030,7 +3031,7 @@ void Locker::scatter_tick()
 	       << *lock << " " << *lock->get_parent() << dendl;
       continue;
     }
-    if (now - lock->update_stamp < g_conf.mds_scatter_nudge_interval)
+    if (now - lock->get_update_stamp() < g_conf.mds_scatter_nudge_interval)
       break;
     updated_scatterlocks.pop_front();
     scatter_nudge(lock, 0);

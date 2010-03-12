@@ -19,44 +19,88 @@
 #include "SimpleLock.h"
 
 class ScatterLock : public SimpleLock {
-  bool dirty, flushing;
-  bool scatter_wanted;
-  utime_t last_scatter;
+  struct more_bits_t {
+    bool dirty, flushing;
+    bool scatter_wanted;
+    utime_t last_scatter;
+    xlist<ScatterLock*>::item xlistitem_updated;
+    utime_t update_stamp;
+
+    more_bits_t(ScatterLock *lock) :
+      dirty(false), flushing(false), scatter_wanted(false),
+      xlistitem_updated(lock)
+    {}
+
+    bool empty() {
+      return dirty == false &&
+	flushing == false &&
+	scatter_wanted == false &&
+	!xlistitem_updated.is_on_xlist();
+    }
+  };
+  more_bits_t *_more;
+
+  bool have_more() { return _more ? true : false; }
+  void try_clear_more() {
+    if (_more && _more->empty()) {
+      delete _more;
+      _more = NULL;
+    }
+  }
+  more_bits_t *more() {
+    if (!_more)
+      _more = new more_bits_t(this);
+    return _more;
+  }
 
 public:
-  xlist<ScatterLock*>::item xlistitem_updated;
-  utime_t update_stamp;
-
   ScatterLock(MDSCacheObject *o, LockType *lt) : 
-    SimpleLock(o, lt),
-    dirty(false), flushing(false), scatter_wanted(false),
-    xlistitem_updated(this) {}
+    SimpleLock(o, lt), _more(NULL)
+  {}
   ~ScatterLock() {
-    xlistitem_updated.remove_myself();   // FIXME this should happen sooner, i think...
+    if (_more) {
+      _more->xlistitem_updated.remove_myself();   // FIXME this should happen sooner, i think...
+      delete _more;
+    }
   }
 
-  void set_scatter_wanted() { scatter_wanted = true; }
-  void clear_scatter_wanted() { scatter_wanted = false; }
-  bool get_scatter_wanted() { return scatter_wanted; }
+  xlist<ScatterLock*>::item *get_updated_item() { return &more()->xlistitem_updated; }
+  utime_t get_update_stamp() { return more()->update_stamp; }
+  void set_update_stamp(utime_t t) { more()->update_stamp = t; }
 
-  bool is_updated() {
-    return dirty;
+  void set_scatter_wanted() {
+    more()->scatter_wanted = true;
   }
+  void clear_scatter_wanted() {
+    if (have_more())
+      _more->scatter_wanted = false;
+  }
+  bool get_scatter_wanted() {
+    return have_more() ? _more->scatter_wanted : false; 
+  }
+
+  bool is_dirty() {
+    return have_more() ? _more->dirty : false;
+  }
+  bool is_flushing() {
+    return have_more() ? _more->flushing : false;
+  }
+
   void mark_dirty() { 
-    if (!dirty) {
-      if (!flushing) 
+    if (!more()->dirty) {
+      if (!_more->flushing) 
 	parent->get(MDSCacheObject::PIN_DIRTYSCATTERED);
-      dirty = true;
+      _more->dirty = true;
     }
   }
   void start_flush() {
-    flushing |= dirty;
-    dirty = false;
+    more()->flushing |= more()->dirty;
+    more()->dirty = false;
   }
   void finish_flush() {
-    if (flushing) {
-      flushing = false;
-      if (!dirty) {
+    if (more()->flushing) {
+      _more->flushing = false;
+      if (!_more->dirty) {
 	parent->put(MDSCacheObject::PIN_DIRTYSCATTERED);
 	parent->clear_dirty_scattered(get_type());
       }
@@ -67,8 +111,8 @@ public:
     finish_flush();
   }
   
-  void set_last_scatter(utime_t t) { last_scatter = t; }
-  utime_t get_last_scatter() { return last_scatter; }
+  void set_last_scatter(utime_t t) { more()->last_scatter = t; }
+  utime_t get_last_scatter() { return more()->last_scatter; }
 
   void infer_state_from_strong_rejoin(int rstate, bool locktoo) {
     if (rstate == LOCK_MIX || 
@@ -83,9 +127,9 @@ public:
   void print(ostream& out) {
     out << "(";
     _print(out);
-    if (dirty)
+    if (is_dirty())
       out << " dirty";
-    if (flushing)
+    if (is_flushing())
       out << " flushing";
     out << ")";
   }
