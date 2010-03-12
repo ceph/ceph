@@ -66,8 +66,7 @@ ostream& operator<<(ostream& out, CDir& dir)
     out << " rep@" << a.first;
     if (a.second != CDIR_AUTH_UNKNOWN)
       out << "," << a.second;
-    if (dir.get_replica_nonce() > 1)
-      out << "." << dir.get_replica_nonce();
+    out << "." << dir.get_replica_nonce();
   }
 
   if (dir.is_rep()) out << " REP";

@@ -5109,7 +5109,6 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 		<< " with old nonce " << nonce
 		<< " (current " << in->get_replica_nonce(from) << "), dropping" 
 		<< dendl;
-	assert(in->get_replica_nonce(from) > nonce);
       }
     }
     
@@ -5139,7 +5138,6 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	dout(7) << " dir expire on " << *dir << " from mds" << from 
 		<< " with old nonce " << nonce << " (current " << dir->get_replica_nonce(from)
 		<< "), dropping" << dendl;
-	assert(dir->get_replica_nonce(from) > nonce);
       }
     }
     
@@ -5186,7 +5184,6 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	  dout(7) << "  dentry_expire on " << *dn << " from mds" << from
 		  << " with old nonce " << nonce << " (current " << dn->get_replica_nonce(from)
 		  << "), dropping" << dendl;
-	  assert(dn->get_replica_nonce(from) > nonce);
 	}
       }
     }

@@ -84,7 +84,6 @@ ostream& operator<<(ostream& out, CInode& in)
     if (a.second != CDIR_AUTH_UNKNOWN)
       out << "," << a.second;
     out << "." << in.get_replica_nonce();
-    assert(in.get_replica_nonce() >= 0);
   }
 
   if (in.is_symlink())

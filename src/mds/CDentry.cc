@@ -66,7 +66,6 @@ ostream& operator<<(ostream& out, CDentry& dn)
   } else {
     out << " rep@" << dn.authority();
     out << "." << dn.get_replica_nonce();
-    assert(dn.get_replica_nonce() >= 0);
   }
 
   if (dn.get_linkage()->is_null()) out << " NULL";
