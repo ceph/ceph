@@ -95,11 +95,11 @@ public:
 
   void pop_front() {
     assert(!empty());
-    _head->_next->remove_myself();
+    _head._next->remove_myself();
   }
   void pop_back() {
     assert(!empty());
-    _head->_prev->remove_myself();
+    _head._prev->remove_myself();
   }
 
   class iterator {
