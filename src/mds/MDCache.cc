@@ -5408,19 +5408,24 @@ bool MDCache::shutdown_pass()
          it != subtrees.end();
          it++) {
       CDir *dir = it->first;
-      if (dir->get_inode()->is_stray()) continue;
-      if (dir->is_frozen() || dir->is_freezing()) continue;
-      if (!dir->is_full_dir_auth()) continue;
+      if (dir->get_inode()->is_mdsdir())
+	continue;
+      if (dir->is_frozen() || dir->is_freezing())
+	continue;
+      if (!dir->is_full_dir_auth())
+	continue;
       ls.push_back(dir);
     }
     int max = 5; // throttle shutdown exports.. hack!
     for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
       CDir *dir = *p;
       int dest = dir->get_inode()->authority().first;
-      if (dest > 0 && !mds->mdsmap->is_active(dest)) dest = 0;
+      if (dest > 0 && !mds->mdsmap->is_active(dest))
+	dest = 0;
       dout(7) << "sending " << *dir << " back to mds" << dest << dendl;
       migrator->export_dir(dir, dest);
-      if (--max == 0) break;
+      if (--max == 0)
+	break;
     }
   }
 
@@ -5429,6 +5434,15 @@ bool MDCache::shutdown_pass()
     return false;
   }
 
+  // make mydir subtree go away
+  if (myin) {
+    CDir *mydir = myin->get_dirfrag(frag_t());
+    if (mydir && mydir->is_subtree_root()) {
+      adjust_subtree_auth(mydir, CDIR_AUTH_UNKNOWN);
+      remove_subtree(mydir);
+    }
+  }
+  
   // subtrees map not empty yet?
   if (!subtrees.empty()) {
     dout(7) << "still have " << num_subtrees() << " subtrees" << dendl;
@@ -5491,6 +5505,8 @@ bool MDCache::shutdown_export_strays()
   if (mds->get_nodeid() == 0) return true;
   if (!stray) return true;
   
+  dout(10) << "shutdown_export_strays" << dendl;
+
   bool done = true;
   static set<inodeno_t> exported_strays;
   list<CDir*> dfs;
@@ -5517,6 +5533,8 @@ bool MDCache::shutdown_export_strays()
       if (exported_strays.count(dnl->get_inode()->ino()) == 0) {
 	exported_strays.insert(dnl->get_inode()->ino());
 	migrate_stray(dn, mds->get_nodeid(), 0);  // send to root!
+      } else {
+	dout(10) << "already exporting " << *dn << dendl;
       }
     }
   }

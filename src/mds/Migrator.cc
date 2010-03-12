@@ -561,9 +561,7 @@ void Migrator::export_dir(CDir *dir, int dest)
     dout(7) << "cluster degraded, no exports for now" << dendl;
     return;
   }
-  if (dir->inode->is_system() &&
-      !(MDS_INO_IS_MDSDIR(dir->ino()) && (int)dir->ino() - MDS_INO_MDSDIR_OFFSET == dest) &&
-      !(dir->ino() == MDS_INO_MDSDIR(mds->whoami) && mds->is_stopping())) {
+  if (dir->inode->is_base()) {
     dout(7) << "i won't export root|stray" << dendl;
     //assert(0);
     return;
