@@ -18,7 +18,7 @@ do
 	pbuilder update --basetgz $basedir/$dist.tgz --distribution $dist
     else
 	echo building $dist base.tgz
-	pbuilder create --basetgz $basedir/$dist.tgz --distribution $dist
+	pbuilder create --basetgz $basedir/$dist.tgz --distribution $dist --mirror http://http.us.debian.org/debian
     fi
 
     dvers="$vers-1"
