@@ -550,7 +550,7 @@ protected:
 
   void pg_stat_queue_enqueue(PG *pg) {
     pg_stat_queue_lock.Lock();
-    if (pg->is_primary() && !pg->stat_queue_item.is_on_xlist()) {
+    if (pg->is_primary() && !pg->stat_queue_item.is_on_list()) {
       pg->get();
       pg_stat_queue.push_back(&pg->stat_queue_item);
     }
@@ -627,7 +627,7 @@ protected:
       return osd->backlog_queue.empty();
     }
     bool _enqueue(PG *pg) {
-      if (!pg->backlog_item.is_on_xlist()) {
+      if (!pg->backlog_item.is_on_list()) {
 	pg->get();
 	osd->backlog_queue.push_back(&pg->backlog_item);
 	return true;
@@ -678,7 +678,7 @@ protected:
       return osd->recovery_queue.empty();
     }
     bool _enqueue(PG *pg) {
-      if (!pg->recovery_item.is_on_xlist()) {
+      if (!pg->recovery_item.is_on_list()) {
 	pg->get();
 	osd->recovery_queue.push_back(&pg->recovery_item);
 
@@ -752,7 +752,7 @@ protected:
       return osd->snap_trim_queue.empty();
     }
     bool _enqueue(PG *pg) {
-      if (pg->snap_trim_item.is_on_xlist())
+      if (pg->snap_trim_item.is_on_list())
 	return false;
       osd->snap_trim_queue.push_back(&pg->snap_trim_item);
       return true;
@@ -787,7 +787,7 @@ protected:
       return osd->scrub_queue.empty();
     }
     bool _enqueue(PG *pg) {
-      if (pg->scrub_item.is_on_xlist())
+      if (pg->scrub_item.is_on_list())
 	return false;
       pg->get();
       osd->scrub_queue.push_back(&pg->scrub_item);
@@ -828,7 +828,7 @@ protected:
       return osd->remove_queue.empty();
     }
     bool _enqueue(PG *pg) {
-      if (pg->remove_item.is_on_xlist())
+      if (pg->remove_item.is_on_list())
 	return false;
       pg->get();
       osd->remove_queue.push_back(&pg->remove_item);

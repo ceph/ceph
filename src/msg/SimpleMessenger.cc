@@ -1263,7 +1263,7 @@ void SimpleMessenger::Pipe::discard_queue()
   for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
        i != queue_items.end();
        ++i) {
-    if ((list_on = i->second->get_xlist())) { //if in round-robin
+    if ((list_on = i->second->get_list())) { //if in round-robin
       i->second->remove_myself(); //take off
       if (list_on->empty()) //if round-robin queue is empty
 	q.queued_pipes.erase(i->first); //remove from map

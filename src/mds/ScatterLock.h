@@ -35,7 +35,7 @@ class ScatterLock : public SimpleLock {
       return dirty == false &&
 	flushing == false &&
 	scatter_wanted == false &&
-	!xlistitem_updated.is_on_xlist();
+	!xlistitem_updated.is_on_list();
     }
   };
   more_bits_t *_more;

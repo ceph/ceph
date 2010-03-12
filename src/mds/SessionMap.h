@@ -161,7 +161,7 @@ public:
     requests(0),  // member_offset passed to front() manually
     cap_push_seq(0) { }
   ~Session() {
-    assert(!session_list_item.is_on_xlist());
+    assert(!session_list_item.is_on_list());
   }
 
   void clear() {
@@ -251,7 +251,7 @@ public:
     s->put();
   }
   void touch_session(Session *session) {
-    if (session->session_list_item.is_on_xlist()) {
+    if (session->session_list_item.is_on_list()) {
       by_state[session->state].push_back(&session->session_list_item);
       session->last_cap_renew = g_clock.now();
     } else {

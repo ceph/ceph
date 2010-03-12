@@ -1306,7 +1306,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
       // clone to oldin
       client_t client = p->first;
       Capability *newcap = oldin->add_client_cap(client, 0, in->containing_realm);
-      cap->session_caps_item.get_xlist()->push_back(&newcap->session_caps_item);
+      cap->session_caps_item.get_list()->push_back(&newcap->session_caps_item);
       newcap->issue(cap->issued());
       newcap->set_last_issue_stamp(cap->get_last_issue_stamp());
       newcap->client_follows = cap->client_follows;
