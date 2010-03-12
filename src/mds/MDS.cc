@@ -382,6 +382,7 @@ void MDS::send_message_client(Message *m, entity_inst_t clientinst)
 
 int MDS::init()
 {
+  dout(10) << sizeof(xlist<void*>::item) << "\txlist<>::item" << dendl;
   dout(10) << sizeof(CInode) << "\tCInode" << dendl;
   dout(10) << sizeof(CDentry) << "\tCDentry" << dendl;
   dout(10) << sizeof(CDir) << "\tCDir " << dendl;
