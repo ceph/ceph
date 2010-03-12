@@ -64,6 +64,7 @@
 #include "messages/MInodeFileCaps.h"
 
 #include "messages/MLock.h"
+#include "messages/MDentryLink.h"
 #include "messages/MDentryUnlink.h"
 
 #include "messages/MClientRequest.h"
@@ -5642,6 +5643,9 @@ void MDCache::dispatch(Message *m)
 
 
 
+  case MSG_MDS_DENTRYLINK:
+    handle_dentry_link((MDentryLink*)m);
+    break;
   case MSG_MDS_DENTRYUNLINK:
     handle_dentry_unlink((MDentryUnlink*)m);
     break;
@@ -7999,17 +8003,99 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 
 
 
+// LINK
+
+void MDCache::send_dentry_link(CDentry *dn)
+{
+  dout(7) << "send_dentry_link " << *dn << dendl;
+
+  for (map<int,int>::iterator p = dn->replicas_begin(); 
+       p != dn->replicas_end(); 
+       p++) {
+    if (mds->mdsmap->get_state(p->first) < MDSMap::STATE_REJOIN) 
+      continue;
+    CDentry::linkage_t *dnl = dn->get_linkage();
+    MDentryLink *m = new MDentryLink(dn->get_dir()->dirfrag(), dn->name,
+				     dnl->is_primary());
+    if (dnl->is_primary()) {
+      dout(10) << "  primary " << *dnl->get_inode() << dendl;
+      replicate_inode(dnl->get_inode(), p->first, m->bl);
+    } else if (dnl->is_remote()) {
+      inodeno_t ino = dnl->get_remote_ino();
+      __u8 d_type = dnl->get_remote_d_type();
+      dout(10) << "  remote " << ino << " " << d_type << dendl;
+      ::encode(ino, m->bl);
+      ::encode(d_type, m->bl);
+    } else
+      assert(0);   // aie, bad caller!
+    mds->send_message_mds(m, p->first);
+  }
+}
+
+void MDCache::handle_dentry_link(MDentryLink *m)
+{
+  CDir *dir = get_dirfrag(m->get_dirfrag());
+  assert(dir);
+  CDentry *dn = dir->lookup(m->get_dn());
+  assert(dn);
+
+  dout(7) << "handle_dentry_link on " << *dn << dendl;
+  CDentry::linkage_t *dnl = dn->get_linkage();
+
+  assert(!dn->is_auth());
+  assert(dnl->is_null());
+
+  bufferlist::iterator p = m->bl.begin();
+  list<Context*> finished;
+  
+  if (m->get_is_primary()) {
+    // primary link.
+    add_replica_inode(p, dn, finished);
+  } else {
+    // remote link, easy enough.
+    inodeno_t ino;
+    __u8 d_type;
+    ::decode(ino, p);
+    ::decode(d_type, p);
+    dir->link_remote_inode(dn, ino, d_type);
+  }
+  
+  if (!finished.empty())
+    mds->queue_waiters(finished);
+
+  delete m;
+  return;
+}
+
 
 // UNLINK
+
+void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn)
+{
+  dout(10) << "send_dentry_unlink " << *dn << dendl;
+  // share unlink news with replicas
+  for (map<int,int>::iterator it = dn->replicas_begin();
+       it != dn->replicas_end();
+       it++) {
+    MDentryUnlink *unlink = new MDentryUnlink(dn->get_dir()->dirfrag(), dn->name);
+    if (straydn) {
+      replicate_inode(get_myin(), it->first, unlink->straybl);
+      replicate_dir(straydn->get_dir()->inode->get_parent_dn()->get_dir(), it->first, unlink->straybl);
+      replicate_dentry(straydn->get_dir()->inode->get_parent_dn(), it->first, unlink->straybl);
+      replicate_inode(straydn->get_dir()->inode, it->first, unlink->straybl);
+      replicate_dir(straydn->get_dir(), it->first, unlink->straybl);
+      replicate_dentry(straydn, it->first, unlink->straybl);
+    }
+    mds->send_message_mds(unlink, it->first);
+  }
+}
 
 void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 {
   CDir *dir = get_dirfrag(m->get_dirfrag());
-
   if (!dir) {
     dout(7) << "handle_dentry_unlink don't have dirfrag " << m->get_dirfrag() << dendl;
-  }
-  else {
+  } else {
     CDentry *dn = dir->lookup(m->get_dn());
     if (!dn) {
       dout(7) << "handle_dentry_unlink don't have dentry " << *dir << " dn " << m->get_dn() << dendl;

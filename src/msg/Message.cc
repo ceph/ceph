@@ -112,6 +112,7 @@ using namespace std;
 
 
 #include "messages/MDentryUnlink.h"
+#include "messages/MDentryLink.h"
 
 #include "messages/MHeartbeat.h"
 
@@ -461,7 +462,10 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 
 
   case MSG_MDS_DENTRYUNLINK:
-    m = new MDentryUnlink();
+    m = new MDentryUnlink;
+    break;
+  case MSG_MDS_DENTRYLINK:
+    m = new MDentryLink;
     break;
 
   case MSG_MDS_HEARTBEAT:

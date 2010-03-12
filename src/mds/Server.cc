@@ -2158,6 +2158,8 @@ public:
 
     mdr->apply();
 
+    mds->mdcache->send_dentry_link(dn);
+
     mds->server->reply_request(mdr, 0);
   }
 };
@@ -2865,6 +2867,9 @@ public:
 
     mdr->apply();
 
+    mds->mdcache->send_dentry_link(dn);
+
+
     // hit pop
     mds->balancer->hit_inode(mdr->now, newi, META_POP_IWR);
     //mds->balancer->hit_dir(mdr->now, dn->get_dir(), META_POP_DWR);
@@ -3165,6 +3170,8 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
 
   mdr->apply();
   
+  mds->mdcache->send_dentry_link(dn);
+
   // bump target popularity
   mds->balancer->hit_inode(mdr->now, targeti, META_POP_IWR);
   //mds->balancer->hit_dir(mdr->now, dn->get_dir(), META_POP_DWR);
@@ -3283,6 +3290,8 @@ void Server::_link_remote_finish(MDRequest *mdr, bool inc,
   }
 
   mdr->apply();
+
+  mds->mdcache->send_dentry_link(dn);
   
   // commit anchor update?
   if (mdr->more()->dst_reanchor_atid) 
@@ -3810,22 +3819,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   dn->mark_dirty(dnpv, mdr->ls);  
   mdr->apply();
   
-  // share unlink news with replicas
-  for (map<int,int>::iterator it = dn->replicas_begin();
-       it != dn->replicas_end();
-       it++) {
-    dout(7) << "_unlink_local_finish sending MDentryUnlink to mds" << it->first << dendl;
-    MDentryUnlink *unlink = new MDentryUnlink(dn->get_dir()->dirfrag(), dn->name);
-    if (straydn) {
-      mdcache->replicate_inode(mds->mdcache->get_myin(), it->first, unlink->straybl);
-      mdcache->replicate_dir(straydn->get_dir()->inode->get_parent_dn()->get_dir(), it->first, unlink->straybl);
-      mdcache->replicate_dentry(straydn->get_dir()->inode->get_parent_dn(), it->first, unlink->straybl);
-      mdcache->replicate_inode(straydn->get_dir()->inode, it->first, unlink->straybl);
-      mdcache->replicate_dir(straydn->get_dir(), it->first, unlink->straybl);
-      mdcache->replicate_dentry(straydn, it->first, unlink->straybl);
-    }
-    mds->send_message_mds(unlink, it->first);
-  }
+  mds->mdcache->send_dentry_unlink(dn, straydn);
   
   // commit anchor update?
   if (mdr->more()->dst_reanchor_atid) 

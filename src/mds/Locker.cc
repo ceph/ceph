@@ -2397,19 +2397,6 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
     lock->decode_locked_state(m->get_data());
     lock->set_state(LOCK_SYNC);
     lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
-
-    // special case: trim replica no-longer-null dentry?
-    if (lock->get_type() == CEPH_LOCK_DN) {
-      CDentry *dn = (CDentry*)lock->get_parent();
-      if (dn->get_linkage()->is_null() && m->get_data().length() > 0) {
-	dout(10) << "handle_simple_lock replica dentry null -> non-null, must trim " 
-		 << *dn << dendl;
-	assert(dn->get_num_ref() == 0);
-	map<int, MCacheExpire*> expiremap;
-	mdcache->trim_dentry(dn, expiremap);
-	mdcache->send_expire_messages(expiremap);
-      }
-    }
     break;
     
   case LOCK_AC_LOCK:

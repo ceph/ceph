@@ -49,6 +49,7 @@ class MDiscover;
 class MDiscoverReply;
 class MCacheExpire;
 class MDirUpdate;
+class MDentryLink;
 class MDentryUnlink;
 class MLock;
 
@@ -1023,8 +1024,12 @@ public:
   CInode *add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<Context*>& finished);
   CDentry *add_replica_stray(bufferlist &bl, int from);
 
-protected:
   // -- namespace --
+public:
+  void send_dentry_link(CDentry *dn);
+  void send_dentry_unlink(CDentry *dn, CDentry *straydn);
+protected:
+  void handle_dentry_link(MDentryLink *m);
   void handle_dentry_unlink(MDentryUnlink *m);
 
 
