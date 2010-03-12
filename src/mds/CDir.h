@@ -167,7 +167,7 @@ protected:
   version_t projected_version;
   list<fnode_t*> projected_fnode;
 
-  xlist<CDir*>::item xlist_dirty, xlist_new;
+  dlist<CDir*>::item dlist_dirty, dlist_new;
 
 
 public:

@@ -166,7 +166,7 @@ void CDentry::_mark_dirty(LogSegment *ls)
     assert(ls);
   }
   if (ls) 
-    ls->dirty_dentries.push_back(&xlist_dirty);
+    ls->dirty_dentries.push_back(&dlist_dirty);
 }
 
 void CDentry::mark_dirty(version_t pv, LogSegment *ls) 
@@ -194,7 +194,7 @@ void CDentry::mark_clean()
   dir->dec_num_dirty();
   put(PIN_DIRTY);
   
-  xlist_dirty.remove_myself();
+  dlist_dirty.remove_myself();
 
   if (state_test(STATE_NEW)) 
     state_clear(STATE_NEW);

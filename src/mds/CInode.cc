@@ -540,7 +540,7 @@ Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm 
       containing_realm = conrealm;
     else
       containing_realm = find_snaprealm();
-    containing_realm->inodes_with_caps.push_back(&xlist_caps);
+    containing_realm->inodes_with_caps.push_back(&dlist_caps);
   }
 
   mdcache->num_caps++;
@@ -574,9 +574,9 @@ void CInode::remove_client_cap(client_t client)
   client_caps.erase(client);
   if (client_caps.empty()) {
     put(PIN_CAPS);
-    xlist_caps.remove_myself();
+    dlist_caps.remove_myself();
     containing_realm = NULL;
-    xlist_open_file.remove_myself();  // unpin logsegment
+    dlist_open_file.remove_myself();  // unpin logsegment
     mdcache->num_inodes_with_caps--;
   }
   mdcache->num_caps--;
@@ -608,7 +608,7 @@ void CInode::_mark_dirty(LogSegment *ls)
   
   // move myself to this segment's dirty list
   if (ls) 
-    ls->dirty_inodes.push_back(&xlist_dirty);
+    ls->dirty_inodes.push_back(&dlist_dirty);
 }
 
 void CInode::mark_dirty(version_t pv, LogSegment *ls) {
@@ -644,7 +644,7 @@ void CInode::mark_clean()
     put(PIN_DIRTY);
     
     // remove myself from ls dirty list
-    xlist_dirty.remove_myself();
+    dlist_dirty.remove_myself();
   }
 }    
 
@@ -807,7 +807,7 @@ void CInode::_stored_parent(version_t v, Context *fin)
 {
   if (v == inode.last_renamed_version) {
     dout(10) << "stored_parent committed v" << v << ", removing from list" << dendl;
-    xlist_renamed_file.remove_myself();
+    dlist_renamed_file.remove_myself();
     state_clear(STATE_DIRTYPARENT);
   } else {
     dout(10) << "stored_parent committed v" << v << " < " << inode.last_renamed_version
@@ -1156,15 +1156,15 @@ void CInode::clear_dirty_scattered(int type)
   dout(10) << "clear_dirty_scattered " << type << " on " << *this << dendl;
   switch (type) {
   case CEPH_LOCK_IFILE:
-    xlist_dirty_dirfrag_dir.remove_myself();
+    dlist_dirty_dirfrag_dir.remove_myself();
     break;
 
   case CEPH_LOCK_INEST:
-    xlist_dirty_dirfrag_nest.remove_myself();
+    dlist_dirty_dirfrag_nest.remove_myself();
     break;
 
   case CEPH_LOCK_IDFT:
-    xlist_dirty_dirfrag_dirfragtree.remove_myself();
+    dlist_dirty_dirfrag_dirfragtree.remove_myself();
     break;
 
   default:

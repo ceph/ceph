@@ -206,7 +206,7 @@ void MDCache::remove_inode(CInode *o)
   if (o->is_dirty())
     o->mark_clean();
 
-  o->xlist_open_file.remove_myself();
+  o->dlist_open_file.remove_myself();
 
   // remove from inode map
   inode_map.erase(o->vino());    
@@ -1798,7 +1798,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     if (stop) {
       dout(10) << "predirty_journal_parents stop.  marking nestlock on " << *pin << dendl;
       mds->locker->mark_updated_scatterlock(&pin->nestlock);
-      mut->ls->dirty_dirfrag_nest.push_back(&pin->xlist_dirty_dirfrag_nest);
+      mut->ls->dirty_dirfrag_nest.push_back(&pin->dlist_dirty_dirfrag_nest);
       mut->add_updated_lock(&pin->nestlock);
       break;
     }
@@ -4045,13 +4045,13 @@ void MDCache::clean_open_file_lists()
        p++) {
     LogSegment *ls = p->second;
     
-    xlist<CInode*>::iterator q = ls->open_files.begin();
+    dlist<CInode*>::iterator q = ls->open_files.begin();
     while (!q.end()) {
       CInode *in = *q;
       ++q;
       if (!in->is_any_caps_wanted()) {
 	dout(10) << " unlisting unwanted/capless inode " << *in << dendl;
-	in->xlist_open_file.remove_myself();
+	in->dlist_open_file.remove_myself();
       }
     }
   }
@@ -6373,7 +6373,7 @@ void MDCache::request_forward(MDRequest *mdr, int who, int port)
 void MDCache::dispatch_request(MDRequest *mdr)
 {
   if (mdr->client_request) {
-    if (!mdr->session_request_item.is_on_xlist()) {
+    if (!mdr->session_request_item.is_on_dlist()) {
       dout(10) << "request " << *mdr << " is canceled" << dendl;
       return;
     }
@@ -6725,7 +6725,7 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop)
 
   if (snapop == CEPH_SNAP_OP_SPLIT) {
     // notify clients of update|split
-    for (xlist<CInode*>::iterator p = in->snaprealm->inodes_with_caps.begin(); !p.end(); ++p)
+    for (dlist<CInode*>::iterator p = in->snaprealm->inodes_with_caps.begin(); !p.end(); ++p)
       split_inos.push_back((*p)->ino());
     
     for (set<SnapRealm*>::iterator p = in->snaprealm->open_children.begin();
@@ -8381,17 +8381,17 @@ void MDCache::fragment_stored(MDRequest *mdr)
 
   // dft lock
   mds->locker->mark_updated_scatterlock(&diri->dirfragtreelock);
-  mdr->ls->dirty_dirfrag_dirfragtree.push_back(&diri->xlist_dirty_dirfrag_dirfragtree);
+  mdr->ls->dirty_dirfrag_dirfragtree.push_back(&diri->dlist_dirty_dirfrag_dirfragtree);
   mdr->add_updated_lock(&diri->dirfragtreelock);
 
   // filelock
   mds->locker->mark_updated_scatterlock(&diri->filelock);
-  mdr->ls->dirty_dirfrag_dir.push_back(&diri->xlist_dirty_dirfrag_dir);
+  mdr->ls->dirty_dirfrag_dir.push_back(&diri->dlist_dirty_dirfrag_dir);
   mdr->add_updated_lock(&diri->filelock);
 
   // dirlock
   mds->locker->mark_updated_scatterlock(&diri->nestlock);
-  mdr->ls->dirty_dirfrag_nest.push_back(&diri->xlist_dirty_dirfrag_nest);
+  mdr->ls->dirty_dirfrag_nest.push_back(&diri->dlist_dirty_dirfrag_nest);
   mdr->add_updated_lock(&diri->nestlock);
 
   // journal new dirfrag fragstats for each new fragment.

@@ -23,6 +23,7 @@ using __gnu_cxx::hash_map;
 
 #include "include/Context.h"
 #include "include/xlist.h"
+#include "include/dlist.h"
 #include "include/interval_set.h"
 #include "mdstypes.h"
 
@@ -70,7 +71,7 @@ public:
   entity_inst_t inst;
   xlist<Session*>::item session_list_item;
 
-  xlist<MDRequest*> requests;
+  dlist<MDRequest*> requests;
 
   interval_set<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
   interval_set<inodeno_t> prealloc_inos;   // preallocated, ready to use.

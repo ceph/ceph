@@ -1523,7 +1523,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     eo->add_ino(in->ino());
     metablob = &eo->metablob;
     le = eo;
-    mut->ls->open_files.push_back(&in->xlist_open_file);
+    mut->ls->open_files.push_back(&in->dlist_open_file);
   } else {
     EUpdate *eu = new EUpdate(mds->mdlog, "check_inode_max_size");
     metablob = &eu->metablob;
@@ -1601,19 +1601,19 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
 
   CInode *cur = cap->get_inode();
   if (cap->wanted() == 0) {
-    if (cur->xlist_open_file.is_on_xlist() &&
+    if (cur->dlist_open_file.is_on_dlist() &&
 	!cur->is_any_caps_wanted()) {
       dout(10) << " removing unwanted file from open file list " << *cur << dendl;
-      cur->xlist_open_file.remove_myself();
+      cur->dlist_open_file.remove_myself();
     }
   } else {
-    if (!cur->xlist_open_file.is_on_xlist()) {
+    if (!cur->dlist_open_file.is_on_dlist()) {
       dout(10) << " adding to open file list " << *cur << dendl;
       LogSegment *ls = mds->mdlog->get_current_segment();
       EOpen *le = new EOpen(mds->mdlog);
       mds->mdlog->start_entry(le);
       le->add_clean_inode(cur);
-      ls->open_files.push_back(&cur->xlist_open_file);
+      ls->open_files.push_back(&cur->dlist_open_file);
       mds->mdlog->submit_entry(le);
     }
   }

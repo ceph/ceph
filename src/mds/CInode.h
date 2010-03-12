@@ -18,6 +18,7 @@
 #define __CINODE_H
 
 #include "config.h"
+#include "include/dlist.h"
 #include "include/types.h"
 #include "include/lru.h"
 
@@ -268,15 +269,15 @@ protected:
   utime_t               replica_caps_wanted_keep_until;
 
 
-  // LogSegment xlists i (may) belong to
-  xlist<CInode*>::item xlist_dirty;
+  // LogSegment dlists i (may) belong to
+  dlist<CInode*>::item dlist_dirty;
 public:
-  xlist<CInode*>::item xlist_caps;
-  xlist<CInode*>::item xlist_open_file;
-  xlist<CInode*>::item xlist_renamed_file;
-  xlist<CInode*>::item xlist_dirty_dirfrag_dir;
-  xlist<CInode*>::item xlist_dirty_dirfrag_nest;
-  xlist<CInode*>::item xlist_dirty_dirfrag_dirfragtree;
+  dlist<CInode*>::item dlist_caps;
+  dlist<CInode*>::item dlist_open_file;
+  dlist<CInode*>::item dlist_renamed_file;
+  dlist<CInode*>::item dlist_dirty_dirfrag_dir;
+  dlist<CInode*>::item dlist_dirty_dirfrag_nest;
+  dlist<CInode*>::item dlist_dirty_dirfrag_dirfragtree;
 
 private:
   // auth pin
@@ -314,10 +315,10 @@ private:
     parent(0),
     inode_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
-    xlist_dirty(this), xlist_caps(this), xlist_open_file(this), xlist_renamed_file(this), 
-    xlist_dirty_dirfrag_dir(this), 
-    xlist_dirty_dirfrag_nest(this), 
-    xlist_dirty_dirfrag_dirfragtree(this), 
+    dlist_dirty(this), dlist_caps(this), dlist_open_file(this), dlist_renamed_file(this), 
+    dlist_dirty_dirfrag_dir(this), 
+    dlist_dirty_dirfrag_nest(this), 
+    dlist_dirty_dirfrag_dirfragtree(this), 
     auth_pins(0), nested_auth_pins(0),
     nested_anchors(0),
     versionlock(this, &versionlock_type),
@@ -687,8 +688,8 @@ public:
       containing_realm->remove_cap(q->first, q->second);
       realm->add_cap(q->first, q->second);
     }
-    xlist_caps.remove_myself();
-    realm->inodes_with_caps.push_back(&xlist_caps);
+    dlist_caps.remove_myself();
+    realm->inodes_with_caps.push_back(&dlist_caps);
     containing_realm = realm;
   }
 
