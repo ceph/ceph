@@ -49,7 +49,6 @@ public:
  */
 class XMLObj
 {
-  int refcount;
   XMLObj *parent;
   string type;
 protected:
@@ -57,7 +56,6 @@ protected:
   multimap<string, XMLObj *> children;
   map<string, string> attr_map;
 public:
-  XMLObj() : refcount(0) {}
   virtual ~XMLObj() { }
   void xml_start(XMLObj *parent, const char *el, const char **attr) {
     this->parent = parent;
