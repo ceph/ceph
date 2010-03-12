@@ -24,7 +24,7 @@ public:
     
     item(T i) : _item(i), _prev(this), _next(this) {}
     ~item() { 
-      assert(!is_on_dlist());
+      assert(!is_on_list());
     }
     // no copying!
     item(const item& other);
@@ -32,7 +32,8 @@ public:
 
     
     bool empty() { return _prev == this; }
-    bool is_on_dlist() { return !empty(); }
+    bool is_on_list() { return !empty(); }
+
     bool remove_myself() {
       if (_next == this) {
 	assert(_prev == this);
