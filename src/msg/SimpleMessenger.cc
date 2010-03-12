@@ -1265,7 +1265,7 @@ void SimpleMessenger::Pipe::discard_queue()
        ++i) {
     if ((list_on = i->second->get_xlist())) { //if in round-robin
       i->second->remove_myself(); //take off
-      if (!list_on->size()) //if round-robin queue is empty
+      if (list_on->empty()) //if round-robin queue is empty
 	q.queued_pipes.erase(i->first); //remove from map
     }
   }

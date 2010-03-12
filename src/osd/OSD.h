@@ -627,7 +627,7 @@ protected:
       return osd->backlog_queue.empty();
     }
     bool _enqueue(PG *pg) {
-      if (!pg->backlog_item.get_xlist()) {
+      if (!pg->backlog_item.is_on_xlist()) {
 	pg->get();
 	osd->backlog_queue.push_back(&pg->backlog_item);
 	return true;
@@ -678,7 +678,7 @@ protected:
       return osd->recovery_queue.empty();
     }
     bool _enqueue(PG *pg) {
-      if (!pg->recovery_item.get_xlist()) {
+      if (!pg->recovery_item.is_on_xlist()) {
 	pg->get();
 	osd->recovery_queue.push_back(&pg->recovery_item);
 
