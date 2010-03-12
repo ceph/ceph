@@ -413,17 +413,17 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue)
   }
 
   if (!lock->is_gathering() &&
-      (lock->sm->states[next].can_rdlock || !lock->is_rdlocked()) &&
-      (lock->sm->states[next].can_wrlock || !lock->is_wrlocked()) &&
-      (lock->sm->states[next].can_xlock || !lock->is_xlocked()) &&
-      (lock->sm->states[next].can_lease || !lock->is_leased()) &&
+      (lock->get_sm()->states[next].can_rdlock || !lock->is_rdlocked()) &&
+      (lock->get_sm()->states[next].can_wrlock || !lock->is_wrlocked()) &&
+      (lock->get_sm()->states[next].can_xlock || !lock->is_xlocked()) &&
+      (lock->get_sm()->states[next].can_lease || !lock->is_leased()) &&
       (!caps || ((~lock->gcaps_allowed(CAP_ANY, next) & other_issued) == 0 &&
 		 (~lock->gcaps_allowed(CAP_LONER, next) & loner_issued) == 0 &&
 		 (~lock->gcaps_allowed(CAP_XLOCKER, next) & xlocker_issued) == 0))) {
     dout(7) << "eval_gather finished gather on " << *lock
 	    << " on " << *lock->get_parent() << dendl;
 
-    if (lock->sm == &sm_filelock) {
+    if (lock->get_sm() == &sm_filelock) {
       if (in->state_test(CInode::STATE_NEEDSRECOVER)) {
 	dout(7) << "eval_gather finished gather, but need to recover" << dendl;
 	mds->mdcache->queue_file_recover(in);
@@ -678,7 +678,7 @@ bool Locker::_rdlock_kick(SimpleLock *lock)
   // kick the lock
   if (lock->is_stable() &&
       lock->get_parent()->is_auth()) {
-    if (lock->sm == &sm_scatterlock) {
+    if (lock->get_sm() == &sm_scatterlock) {
       if (lock->get_parent()->is_replicated())
 	scatter_tempsync((ScatterLock*)lock);
       else
@@ -905,7 +905,7 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
     return false;
   } else {
     // replica
-    assert(lock->sm->can_remote_xlock);
+    assert(lock->get_sm()->can_remote_xlock);
     assert(!mut->slave_request);
     
     // wait for single auth
@@ -946,7 +946,7 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
 
   // remote xlock?
   if (!lock->get_parent()->is_auth()) {
-    assert(lock->sm->can_remote_xlock);
+    assert(lock->get_sm()->can_remote_xlock);
 
     // tell auth
     dout(7) << "xlock_finish releasing remote xlock on " << *lock->get_parent()  << dendl;
@@ -1523,7 +1523,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     eo->add_ino(in->ino());
     metablob = &eo->metablob;
     le = eo;
-    mut->ls->open_files.push_back(&in->xlist_open_file);
+    mut->ls->open_files.push_back(&in->dlist_open_file);
   } else {
     EUpdate *eu = new EUpdate(mds->mdlog, "check_inode_max_size");
     metablob = &eu->metablob;
@@ -1601,19 +1601,19 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
 
   CInode *cur = cap->get_inode();
   if (cap->wanted() == 0) {
-    if (cur->xlist_open_file.is_on_xlist() &&
+    if (cur->dlist_open_file.is_on_dlist() &&
 	!cur->is_any_caps_wanted()) {
       dout(10) << " removing unwanted file from open file list " << *cur << dendl;
-      cur->xlist_open_file.remove_myself();
+      cur->dlist_open_file.remove_myself();
     }
   } else {
-    if (!cur->xlist_open_file.is_on_xlist()) {
+    if (!cur->dlist_open_file.is_on_dlist()) {
       dout(10) << " adding to open file list " << *cur << dendl;
       LogSegment *ls = mds->mdlog->get_current_segment();
       EOpen *le = new EOpen(mds->mdlog);
       mds->mdlog->start_entry(le);
       le->add_clean_inode(cur);
-      ls->open_files.push_back(&cur->xlist_open_file);
+      ls->open_files.push_back(&cur->dlist_open_file);
       mds->mdlog->submit_entry(le);
     }
   }
@@ -2682,7 +2682,7 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
 
   int gather = 0;
   if (lock->get_parent()->is_replicated() &&
-      lock->sm->states[old_state].replica_state != LOCK_LOCK) {  // replica may already be LOCK
+      lock->get_sm()->states[old_state].replica_state != LOCK_LOCK) {  // replica may already be LOCK
     gather++;
     send_lock_message(lock, LOCK_AC_LOCK);
     lock->init_gather();
@@ -2912,14 +2912,15 @@ void Locker::scatter_eval(ScatterLock *lock, bool *need_issue)
 void Locker::mark_updated_scatterlock(ScatterLock *lock)
 {
   lock->mark_dirty();
-  if (lock->xlistitem_updated.is_on_xlist()) {
+  if (lock->get_updated_item()->is_on_xlist()) {
     dout(10) << "mark_updated_scatterlock " << *lock
-	     << " - already on list since " << lock->update_stamp << dendl;
+	     << " - already on list since " << lock->get_update_stamp() << dendl;
   } else {
-    updated_scatterlocks.push_back(&lock->xlistitem_updated);
-    lock->update_stamp = g_clock.now();
+    updated_scatterlocks.push_back(lock->get_updated_item());
+    utime_t now = g_clock.now();
+    lock->set_update_stamp(now);
     dout(10) << "mark_updated_scatterlock " << *lock
-	     << " - added at " << lock->update_stamp << dendl;
+	     << " - added at " << now << dendl;
   }
 }
 
@@ -2941,7 +2942,7 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
       p->add_waiter(MDSCacheObject::WAIT_UNFREEZE, c);
     else
       // just requeue.  not ideal.. starvation prone..
-      updated_scatterlocks.push_back(&lock->xlistitem_updated);
+      updated_scatterlocks.push_back(lock->get_updated_item());
     return;
   }
 
@@ -2951,7 +2952,7 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
       p->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, c);
     else
       // just requeue.  not ideal.. starvation prone..
-      updated_scatterlocks.push_back(&lock->xlistitem_updated);
+      updated_scatterlocks.push_back(lock->get_updated_item());
     return;
   }
 
@@ -3008,7 +3009,7 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
       lock->add_waiter(SimpleLock::WAIT_STABLE, c);
 
     // also, requeue, in case we had wrong auth or something
-    updated_scatterlocks.push_back(&lock->xlistitem_updated);
+    updated_scatterlocks.push_back(lock->get_updated_item());
   }
 }
 
@@ -3030,7 +3031,7 @@ void Locker::scatter_tick()
 	       << *lock << " " << *lock->get_parent() << dendl;
       continue;
     }
-    if (now - lock->update_stamp < g_conf.mds_scatter_nudge_interval)
+    if (now - lock->get_update_stamp() < g_conf.mds_scatter_nudge_interval)
       break;
     updated_scatterlocks.pop_front();
     scatter_nudge(lock, 0);
@@ -3394,7 +3395,7 @@ void Locker::file_recover(ScatterLock *lock)
   int gather = 0;
   
   if (in->is_replicated() &&
-      lock->sm->states[oldstate].replica_state != LOCK_LOCK) {
+      lock->get_sm()->states[oldstate].replica_state != LOCK_LOCK) {
     send_lock_message(lock, LOCK_AC_LOCK);
     lock->init_gather();
     gather++;

@@ -15,7 +15,7 @@
 #ifndef __LOGSEGMENT_H
 #define __LOGSEGMENT_H
 
-#include "include/xlist.h"
+#include "include/dlist.h"
 #include "include/interval_set.h"
 #include "include/Context.h"
 #include "mdstypes.h"
@@ -36,17 +36,17 @@ class LogSegment {
   loff_t trimmable_at;
 
   // dirty items
-  xlist<CDir*>    dirty_dirfrags, new_dirfrags;
-  xlist<CInode*>  dirty_inodes;
-  xlist<CDentry*> dirty_dentries;
+  dlist<CDir*>    dirty_dirfrags, new_dirfrags;
+  dlist<CInode*>  dirty_inodes;
+  dlist<CDentry*> dirty_dentries;
 
-  xlist<CInode*>  open_files;
-  xlist<CInode*>  renamed_files;
-  xlist<CInode*>  dirty_dirfrag_dir;
-  xlist<CInode*>  dirty_dirfrag_nest;
-  xlist<CInode*>  dirty_dirfrag_dirfragtree;
+  dlist<CInode*>  open_files;
+  dlist<CInode*>  renamed_files;
+  dlist<CInode*>  dirty_dirfrag_dir;
+  dlist<CInode*>  dirty_dirfrag_nest;
+  dlist<CInode*>  dirty_dirfrag_dirfragtree;
 
-  xlist<MDSlaveUpdate*> slave_updates;
+  dlist<MDSlaveUpdate*> slave_updates;
 
   set<CInode*> truncating_inodes;
 

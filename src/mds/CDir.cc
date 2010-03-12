@@ -66,8 +66,7 @@ ostream& operator<<(ostream& out, CDir& dir)
     out << " rep@" << a.first;
     if (a.second != CDIR_AUTH_UNKNOWN)
       out << "," << a.second;
-    if (dir.get_replica_nonce() > 1)
-      out << "." << dir.get_replica_nonce();
+    out << "." << dir.get_replica_nonce();
   }
 
   if (dir.is_rep()) out << " REP";
@@ -149,7 +148,7 @@ ostream& CDir::print_db_line_prefix(ostream& out)
 // CDir
 
 CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
-  xlist_dirty(this), xlist_new(this)
+  dlist_dirty(this), dlist_new(this)
 {
   g_num_dir++;
   g_num_dira++;
@@ -947,17 +946,17 @@ void CDir::_mark_dirty(LogSegment *ls)
     dout(10) << "mark_dirty (already dirty) " << *this << " version " << get_version() << dendl;
   }
   if (ls) {
-    ls->dirty_dirfrags.push_back(&xlist_dirty);
+    ls->dirty_dirfrags.push_back(&dlist_dirty);
 
     // if i've never committed, i need to be before _any_ mention of me is trimmed from the journal.
-    if (committed_version == 0 && !xlist_new.is_on_xlist())
-      ls->new_dirfrags.push_back(&xlist_dirty);
+    if (committed_version == 0 && !dlist_new.is_on_dlist())
+      ls->new_dirfrags.push_back(&dlist_dirty);
   }
 }
 
 void CDir::mark_new(LogSegment *ls)
 {
-  ls->new_dirfrags.push_back(&xlist_new);
+  ls->new_dirfrags.push_back(&dlist_new);
 }
 
 void CDir::mark_clean()
@@ -967,8 +966,8 @@ void CDir::mark_clean()
     state_clear(STATE_DIRTY);
     put(PIN_DIRTY);
 
-    xlist_dirty.remove_myself();
-    xlist_new.remove_myself();
+    dlist_dirty.remove_myself();
+    dlist_new.remove_myself();
   }
 }
 
@@ -1640,7 +1639,7 @@ void CDir::_committed(version_t v, version_t lrv)
   if (get_frag() == frag_t() &&     // only counts on first frag
       inode->state_test(CInode::STATE_DIRTYPARENT) &&
       lrv == inode->inode.last_renamed_version) {
-    inode->xlist_renamed_file.remove_myself();
+    inode->dlist_renamed_file.remove_myself();
     inode->state_clear(CInode::STATE_DIRTYPARENT);
     dout(10) << "_committed  stored parent pointer, removed from renamed_files list " << *inode << dendl;
   }

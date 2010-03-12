@@ -17,6 +17,7 @@
 
 #include "mdstypes.h"
 #include "include/xlist.h"
+#include "include/dlist.h"
 
 /*
  * generic snap descriptor.
@@ -143,7 +144,7 @@ struct SnapRealm {
 
   bufferlist cached_snap_trace;
 
-  xlist<CInode*> inodes_with_caps;             // for efficient realm splits
+  dlist<CInode*> inodes_with_caps;             // for efficient realm splits
   map<client_t, xlist<Capability*> > client_caps;   // to identify clients who need snap notifications
 
   SnapRealm(MDCache *c, CInode *in) : 

@@ -18,6 +18,7 @@
 #define __CINODE_H
 
 #include "config.h"
+#include "include/dlist.h"
 #include "include/types.h"
 #include "include/lru.h"
 
@@ -268,15 +269,15 @@ protected:
   utime_t               replica_caps_wanted_keep_until;
 
 
-  // LogSegment xlists i (may) belong to
-  xlist<CInode*>::item xlist_dirty;
+  // LogSegment dlists i (may) belong to
+  dlist<CInode*>::item dlist_dirty;
 public:
-  xlist<CInode*>::item xlist_caps;
-  xlist<CInode*>::item xlist_open_file;
-  xlist<CInode*>::item xlist_renamed_file;
-  xlist<CInode*>::item xlist_dirty_dirfrag_dir;
-  xlist<CInode*>::item xlist_dirty_dirfrag_nest;
-  xlist<CInode*>::item xlist_dirty_dirfrag_dirfragtree;
+  dlist<CInode*>::item dlist_caps;
+  dlist<CInode*>::item dlist_open_file;
+  dlist<CInode*>::item dlist_renamed_file;
+  dlist<CInode*>::item dlist_dirty_dirfrag_dir;
+  dlist<CInode*>::item dlist_dirty_dirfrag_nest;
+  dlist<CInode*>::item dlist_dirty_dirfrag_dirfragtree;
 
 private:
   // auth pin
@@ -314,20 +315,20 @@ private:
     parent(0),
     inode_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
-    xlist_dirty(this), xlist_caps(this), xlist_open_file(this), xlist_renamed_file(this), 
-    xlist_dirty_dirfrag_dir(this), 
-    xlist_dirty_dirfrag_nest(this), 
-    xlist_dirty_dirfrag_dirfragtree(this), 
+    dlist_dirty(this), dlist_caps(this), dlist_open_file(this), dlist_renamed_file(this), 
+    dlist_dirty_dirfrag_dir(this), 
+    dlist_dirty_dirfrag_nest(this), 
+    dlist_dirty_dirfrag_dirfragtree(this), 
     auth_pins(0), nested_auth_pins(0),
     nested_anchors(0),
-    versionlock(this, CEPH_LOCK_IVERSION),
-    authlock(this, CEPH_LOCK_IAUTH),
-    linklock(this, CEPH_LOCK_ILINK),
-    dirfragtreelock(this, CEPH_LOCK_IDFT),
-    filelock(this, CEPH_LOCK_IFILE),
-    xattrlock(this, CEPH_LOCK_IXATTR),
-    snaplock(this, CEPH_LOCK_ISNAP),
-    nestlock(this, CEPH_LOCK_INEST),
+    versionlock(this, &versionlock_type),
+    authlock(this, &authlock_type),
+    linklock(this, &linklock_type),
+    dirfragtreelock(this, &dirfragtreelock_type),
+    filelock(this, &filelock_type),
+    xattrlock(this, &xattrlock_type),
+    snaplock(this, &snaplock_type),
+    nestlock(this, &nestlock_type),
     loner_cap(-1), want_loner_cap(-1)
   {
     g_num_ino++;
@@ -488,6 +489,15 @@ private:
 
   // -- locks --
 public:
+  static LockType versionlock_type;
+  static LockType authlock_type;
+  static LockType linklock_type;
+  static LockType dirfragtreelock_type;
+  static LockType filelock_type;
+  static LockType xattrlock_type;
+  static LockType snaplock_type;
+  static LockType nestlock_type;
+
   LocalLock  versionlock;
   SimpleLock authlock;
   SimpleLock linklock;
@@ -578,10 +588,10 @@ public:
     if (loner_cap >= 0 && loner_cap != want_loner_cap)
       return false;
     loner_cap = want_loner_cap;
-    authlock.excl_client = loner_cap;
-    filelock.excl_client = loner_cap;
-    linklock.excl_client = loner_cap;
-    xattrlock.excl_client = loner_cap;
+    authlock.set_excl_client(loner_cap);
+    filelock.set_excl_client(loner_cap);
+    linklock.set_excl_client(loner_cap);
+    xattrlock.set_excl_client(loner_cap);
     return true;
   }
   bool try_drop_loner() {
@@ -593,10 +603,10 @@ public:
     if (!cap ||
 	(cap->issued() & ~other_allowed) == 0) {
       loner_cap = -1;
-      authlock.excl_client = -1;
-      filelock.excl_client = -1;
-      linklock.excl_client = -1;
-      xattrlock.excl_client = -1;
+      authlock.set_excl_client(-1);
+      filelock.set_excl_client(-1);
+      linklock.set_excl_client(-1);
+      xattrlock.set_excl_client(-1);
       return true;
     }
     return false;
@@ -678,8 +688,8 @@ public:
       containing_realm->remove_cap(q->first, q->second);
       realm->add_cap(q->first, q->second);
     }
-    xlist_caps.remove_myself();
-    realm->inodes_with_caps.push_back(&xlist_caps);
+    dlist_caps.remove_myself();
+    realm->inodes_with_caps.push_back(&dlist_caps);
     containing_realm = realm;
   }
 
