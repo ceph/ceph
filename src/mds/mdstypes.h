@@ -23,7 +23,7 @@ using namespace std;
 #define CEPH_FS_ONDISK_MAGIC "ceph fs volume v011"
 
 
-#define MDS_REF_SET      // define me for improved debug output, sanity checking
+//#define MDS_REF_SET      // define me for improved debug output, sanity checking
 //#define MDS_AUTHPIN_SET  // define me for debugging auth pin leaks
 //#define MDS_VERIFY_FRAGSTAT    // do do (slow) sanity checking on frags
 
@@ -1174,7 +1174,7 @@ class MDSCacheObject {
   // --------------------------------------------
   // pins
 protected:
-  int      ref;       // reference count
+  __s16      ref;       // reference count
 #ifdef MDS_REF_SET
   multiset<int> ref_set;
 #endif
@@ -1263,8 +1263,8 @@ protected:
   // --------------------------------------------
   // replication (across mds cluster)
  protected:
+  __s16        replica_nonce; // [replica] defined on replica
   map<int,int> replica_map;   // [auth] mds -> nonce
-  int          replica_nonce; // [replica] defined on replica
 
  public:
   bool is_replicated() { return !replica_map.empty(); }
