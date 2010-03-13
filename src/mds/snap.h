@@ -224,10 +224,10 @@ struct SnapRealm {
   void join(SnapRealm *child);
 
   void add_cap(client_t client, Capability *cap) {
-    client_caps[client].push_back(&cap->snaprealm_caps_item);
+    client_caps[client].push_back(&cap->item_snaprealm_caps);
   }
   void remove_cap(client_t client, Capability *cap) {
-    cap->snaprealm_caps_item.remove_myself();
+    cap->item_snaprealm_caps.remove_myself();
     if (client_caps[client].empty())
       client_caps.erase(client);
   }

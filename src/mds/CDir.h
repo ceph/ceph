@@ -168,7 +168,7 @@ protected:
   list<fnode_t*> projected_fnode;
 
 public:
-  elist<CDir*>::item dlist_dirty, dlist_new;
+  elist<CDir*>::item item_dirty, item_new;
 
 
 public:

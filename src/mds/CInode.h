@@ -272,13 +272,13 @@ protected:
 
   // LogSegment dlists i (may) belong to
 public:
-  elist<CInode*>::item dlist_dirty;
-  elist<CInode*>::item dlist_caps;
-  elist<CInode*>::item dlist_open_file;
-  elist<CInode*>::item dlist_renamed_file;
-  elist<CInode*>::item dlist_dirty_dirfrag_dir;
-  elist<CInode*>::item dlist_dirty_dirfrag_nest;
-  elist<CInode*>::item dlist_dirty_dirfrag_dirfragtree;
+  elist<CInode*>::item item_dirty;
+  elist<CInode*>::item item_caps;
+  elist<CInode*>::item item_open_file;
+  elist<CInode*>::item item_renamed_file;
+  elist<CInode*>::item item_dirty_dirfrag_dir;
+  elist<CInode*>::item item_dirty_dirfrag_nest;
+  elist<CInode*>::item item_dirty_dirfrag_dirfragtree;
 
 private:
   // auth pin
@@ -316,10 +316,10 @@ private:
     parent(0),
     inode_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
-    dlist_dirty(this), dlist_caps(this), dlist_open_file(this), dlist_renamed_file(this), 
-    dlist_dirty_dirfrag_dir(this), 
-    dlist_dirty_dirfrag_nest(this), 
-    dlist_dirty_dirfrag_dirfragtree(this), 
+    item_dirty(this), item_caps(this), item_open_file(this), item_renamed_file(this), 
+    item_dirty_dirfrag_dir(this), 
+    item_dirty_dirfrag_nest(this), 
+    item_dirty_dirfrag_dirfragtree(this), 
     auth_pins(0), nested_auth_pins(0),
     nested_anchors(0),
     versionlock(this, &versionlock_type),
@@ -689,8 +689,8 @@ public:
       containing_realm->remove_cap(q->first, q->second);
       realm->add_cap(q->first, q->second);
     }
-    dlist_caps.remove_myself();
-    realm->inodes_with_caps.push_back(&dlist_caps);
+    item_caps.remove_myself();
+    realm->inodes_with_caps.push_back(&item_caps);
     containing_realm = realm;
   }
 

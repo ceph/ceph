@@ -133,7 +133,7 @@ protected:
   version_t projected_version;  // what it will be when i unlock/commit.
 
 public:
-  elist<CDentry*>::item dlist_dirty;
+  elist<CDentry*>::item item_dirty;
 
 protected:
   int auth_pins, nested_auth_pins;
@@ -163,7 +163,7 @@ public:
     first(f), last(l),
     dir(0),
     version(0), projected_version(0),
-    dlist_dirty(this),
+    item_dirty(this),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
     lock(this, &lock_type) {
     g_num_dn++;
@@ -175,7 +175,7 @@ public:
     first(f), last(l),
     dir(0),
     version(0), projected_version(0),
-    dlist_dirty(this),
+    item_dirty(this),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
     lock(this, &lock_type) {
     g_num_dn++;

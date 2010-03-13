@@ -158,7 +158,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     EOpen *le = 0;
     LogSegment *ls = mds->mdlog->get_current_segment();
     assert(ls != this);
-    elist<CInode*>::iterator p = open_files.begin(member_offset(CInode, dlist_open_file));
+    elist<CInode*>::iterator p = open_files.begin(member_offset(CInode, item_open_file));
     while (!p.end()) {
       CInode *in = *p;
       ++p;
@@ -170,11 +170,11 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 	    mds->mdlog->start_entry(le);
 	  }
 	  le->add_clean_inode(in);
-	  ls->open_files.push_back(&in->dlist_open_file);
+	  ls->open_files.push_back(&in->item_open_file);
 	} else {
 	  // drop inodes that aren't wanted
 	  dout(20) << "try_to_expire not requeueing and delisting unwanted file " << *in << dendl;
-	  in->dlist_open_file.remove_myself();
+	  in->item_open_file.remove_myself();
 	}
       } else {
 	/*
@@ -187,7 +187,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 	 * make it easier to miss subtle problems.
 	 */
 	dout(20) << "try_to_expire not requeueing and delisting capless file " << *in << dendl;
-	in->dlist_open_file.remove_myself();
+	in->item_open_file.remove_myself();
       }
     }
     if (le) {
@@ -208,7 +208,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 
   // slave updates
   for (elist<MDSlaveUpdate*>::iterator p = slave_updates.begin(member_offset(MDSlaveUpdate,
-									     dlistitem));
+									     item));
        !p.end(); ++p) {
     MDSlaveUpdate *su = *p;
     dout(10) << "try_to_expire waiting on slave update " << su << dendl;
@@ -431,7 +431,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	  !(dir->fnode.fragstat == dir->fnode.accounted_fragstat)) {
 	dout(10) << "EMetaBlob.replay      dirty nestinfo on " << *dir << dendl;
 	mds->locker->mark_updated_scatterlock(&dir->inode->nestlock);
-	logseg->dirty_dirfrag_nest.push_back(&dir->inode->dlist_dirty_dirfrag_nest);
+	logseg->dirty_dirfrag_nest.push_back(&dir->inode->item_dirty_dirfrag_nest);
       } else {
 	dout(10) << "EMetaBlob.replay      clean nestinfo on " << *dir << dendl;
       }
@@ -580,7 +580,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     CInode *in = mds->mdcache->get_inode(opened_ino);
     assert(in);
     dout(10) << "EMetaBlob.replay noting opened inode " << *in << dendl;
-    logseg->open_files.push_back(&in->dlist_open_file);
+    logseg->open_files.push_back(&in->item_open_file);
   }
 
   // allocated_inos
@@ -896,7 +896,7 @@ void EOpen::replay(MDS *mds)
        p++) {
     CInode *in = mds->mdcache->get_inode(*p);
     assert(in); 
-    _segment->open_files.push_back(&in->dlist_open_file);
+    _segment->open_files.push_back(&in->item_open_file);
   }
 }
 

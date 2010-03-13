@@ -378,7 +378,7 @@ void SnapRealm::split_at(SnapRealm *child)
   }
 
   // split inodes_with_caps
-  elist<CInode*>::iterator p = inodes_with_caps.begin(member_offset(CInode, dlist_caps));
+  elist<CInode*>::iterator p = inodes_with_caps.begin(member_offset(CInode, item_caps));
   while (!p.end()) {
     CInode *in = *p;
     ++p;

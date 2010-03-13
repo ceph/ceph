@@ -225,9 +225,8 @@ public:
   snapid_t client_follows;
   version_t client_xattr_version;
   
-  xlist<Capability*>::item session_caps_item;
-
-  xlist<Capability*>::item snaprealm_caps_item;
+  xlist<Capability*>::item item_session_caps;
+  xlist<Capability*>::item item_snaprealm_caps;
 
   Capability(CInode *i, __u64 id, client_t c) : 
     inode(i), client(c),
@@ -238,7 +237,7 @@ public:
     mseq(0),
     suppress(0), stale(false),
     client_follows(0), client_xattr_version(0),
-    session_caps_item(this), snaprealm_caps_item(this) {
+    item_session_caps(this), item_snaprealm_caps(this) {
     g_num_cap++;
     g_num_capa++;
   }

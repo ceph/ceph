@@ -71,15 +71,15 @@ class LogSegment {
   // cons
   LogSegment(loff_t off) :
     offset(off), end(off), num_events(0), trimmable_at(0),
-    dirty_dirfrags(member_offset(CDir, dlist_dirty)),
-    new_dirfrags(member_offset(CDir, dlist_new)),
-    dirty_inodes(member_offset(CInode, dlist_dirty)),
-    dirty_dentries(member_offset(CDentry, dlist_dirty)),
-    open_files(member_offset(CInode, dlist_open_file)),
-    renamed_files(member_offset(CInode, dlist_renamed_file)),
-    dirty_dirfrag_dir(member_offset(CInode, dlist_dirty_dirfrag_dir)),
-    dirty_dirfrag_nest(member_offset(CInode, dlist_dirty_dirfrag_nest)),
-    dirty_dirfrag_dirfragtree(member_offset(CInode, dlist_dirty_dirfrag_dirfragtree)),
+    dirty_dirfrags(member_offset(CDir, item_dirty)),
+    new_dirfrags(member_offset(CDir, item_new)),
+    dirty_inodes(member_offset(CInode, item_dirty)),
+    dirty_dentries(member_offset(CDentry, item_dirty)),
+    open_files(member_offset(CInode, item_open_file)),
+    renamed_files(member_offset(CInode, item_renamed_file)),
+    dirty_dirfrag_dir(member_offset(CInode, item_dirty_dirfrag_dir)),
+    dirty_dirfrag_nest(member_offset(CInode, item_dirty_dirfrag_nest)),
+    dirty_dirfrag_dirfragtree(member_offset(CInode, item_dirty_dirfrag_dirfragtree)),
     slave_updates(0), // passed to begin() manually
     inotablev(0), sessionmapv(0)
   { }
