@@ -53,7 +53,7 @@ struct Session : public RefCountedObject {
   ~Session() {
     generic_dout(0) << "~Session " << this << dendl;
     // we should have been removed before we get destructed; see SessionMap::remove_session()
-    assert(!item.is_on_xlist());
+    assert(!item.is_on_list());
     assert(sub_map.empty());
     delete auth_handler;
   }

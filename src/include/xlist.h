@@ -25,7 +25,7 @@ public:
     
     item(T i) : _item(i), _prev(0), _next(0), _list(0) {}
     ~item() { 
-      assert(!is_on_xlist());
+      assert(!is_on_list());
       //remove_myself();
     }
     // no copying!
@@ -33,8 +33,8 @@ public:
     const item& operator= (const item& right);
 
     
-    xlist* get_xlist() { return _list; }
-    bool is_on_xlist() { return _list ? true:false; }
+    xlist* get_list() { return _list; }
+    bool is_on_list() { return _list ? true:false; }
     bool remove_myself() {
       if (_list) {
 	_list->remove(this);

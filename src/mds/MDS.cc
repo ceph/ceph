@@ -384,17 +384,17 @@ int MDS::init()
 {
   dout(10) << sizeof(MDSCacheObject) << "\tMDSCacheObject" << dendl;
   dout(10) << sizeof(CInode) << "\tCInode" << dendl;
-  dout(10) << sizeof(dlist<void*>::item) << "\t dlist<>::item   *7=" << 7*sizeof(dlist<void*>::item) << dendl;
+  dout(10) << sizeof(elist<void*>::item) << "\t elist<>::item   *7=" << 7*sizeof(elist<void*>::item) << dendl;
   dout(10) << sizeof(inode_t) << "\t inode_t " << dendl;
   dout(10) << sizeof(nest_info_t) << "\t  nest_info_t " << dendl;
   dout(10) << sizeof(frag_info_t) << "\t  frag_info_t " << dendl;
   dout(10) << sizeof(SimpleLock) << "\t SimpleLock   *5=" << 5*sizeof(SimpleLock) << dendl;
   dout(10) << sizeof(ScatterLock) << "\t ScatterLock  *3=" << 3*sizeof(ScatterLock) << dendl;
   dout(10) << sizeof(CDentry) << "\tCDentry" << dendl;
-  dout(10) << sizeof(dlist<void*>::item) << "\t dlist<>::item" << dendl;
+  dout(10) << sizeof(elist<void*>::item) << "\t elist<>::item" << dendl;
   dout(10) << sizeof(SimpleLock) << "\t SimpleLock" << dendl;
   dout(10) << sizeof(CDir) << "\tCDir " << dendl;
-  dout(10) << sizeof(dlist<void*>::item) << "\t dlist<>::item   *2=" << 2*sizeof(dlist<void*>::item) << dendl;
+  dout(10) << sizeof(elist<void*>::item) << "\t elist<>::item   *2=" << 2*sizeof(elist<void*>::item) << dendl;
   dout(10) << sizeof(fnode_t) << "\t fnode_t " << dendl;
   dout(10) << sizeof(nest_info_t) << "\t  nest_info_t *2" << dendl;
   dout(10) << sizeof(frag_info_t) << "\t  frag_info_t *2" << dendl;

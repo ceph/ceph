@@ -12,17 +12,29 @@
  * 
  */
 
-#ifndef __DLIST_H
-#define __DLIST_H
+#ifndef __ELIST_H
+#define __ELIST_H
+
+/*
+ * elist: embedded list.
+ *
+ * requirements:
+ *   - elist<T>::item be embedded in the parent class
+ *   - items are _always_ added to the list via the same elist<T>::item at the same
+ *     fixed offset in the class.
+ *   - begin(), front(), back() methods take the member offset as an argument for traversal.
+ *
+ */
+
+#define member_offset(cls, member) ((size_t)(&((cls*)1)->member) - 1)
 
 template<typename T>
-class dlist {
+class elist {
 public:
   struct item {
-    T _item;
     item *_prev, *_next;
     
-    item(T i) : _item(i), _prev(this), _next(this) {}
+    item(T i=0) : _prev(this), _next(this) {}
     ~item() { 
       assert(!is_on_list());
     }
@@ -59,14 +71,20 @@ public:
       _prev->_next = other;
       _prev = other;
     }
+
+    T get_item(size_t offset) {
+      assert(offset);
+      return (T)(((char *)this) - offset); 
+    }
   };
 
 private:
   item _head;
+  size_t item_offset;
 
 public:
-  dlist() : _head(NULL) {}
-  ~dlist() { 
+  elist(size_t o) : _head(NULL), item_offset(o) {}
+  ~elist() { 
     assert(_head.empty());
   }
 
@@ -90,8 +108,14 @@ public:
     _head.insert_before(item);
   }
 
-  T front() { return (T)_head._next->_item; }
-  T back() { return (T)_head._prev->_item; }
+  T front(size_t o=0) {
+    assert(!_head.empty());
+    return _head._next->get_item(o ? o : item_offset);
+  }
+  T back(size_t o=0) {
+    assert(!_head.empty());
+    return _head._prev->get_item(o ? o : item_offset);
+  }
 
   void pop_front() {
     assert(!empty());
@@ -102,21 +126,59 @@ public:
     _head._prev->remove_myself();
   }
 
-  class iterator {
-  private:
-    item *cur;
-  public:
-    iterator(item *i = 0) : cur(i) {}
-    T operator*() { return (T)cur->_item; }
-    iterator& operator++() {
-      assert(cur);
-      cur = cur->_next;
-      return *this;
-    }
-    bool end() { return cur->_item == 0; }
+  enum mode_t {
+    MAGIC, CURRENT, CACHE_NEXT
   };
 
-  iterator begin() { return iterator(_head._next); }
+  class iterator {
+  private:
+    item *head;
+    item *cur, *next;
+    size_t item_offset;
+    mode_t mode;
+  public:
+    iterator(item *h, size_t o, mode_t m) :
+      head(h), cur(h->_next), next(cur->_next), item_offset(o),
+      mode(m) {
+      assert(item_offset > 0);
+    }
+    T operator*() {
+      return cur->get_item(item_offset);
+    }
+    iterator& operator++() {
+      assert(cur);
+      assert(cur != head);
+      if (mode == MAGIC) {
+	// if 'cur' appears to be valid, use that.  otherwise,
+	// use cached 'next'.
+	// this is a bit magic, and probably a bad idea... :/
+	if (cur->empty())
+	  cur = next;
+	else
+	  cur = cur->_next;
+      } else if (mode == CURRENT)
+	cur = cur->_next;
+      else if (mode == CACHE_NEXT)
+	cur = next;
+      else
+	assert(0);
+      next = cur->_next;
+      return *this;
+    }
+    bool end() {
+      return cur == head;
+    }
+  };
+
+  iterator begin(size_t o=0) {
+    return iterator(&_head, o ? o : item_offset, MAGIC);
+  }
+  iterator begin_use_current(size_t o=0) {
+    return iterator(&_head, o ? o : item_offset, CURRENT);
+  }
+  iterator begin_cache_next(size_t o=0) {
+    return iterator(&_head, o ? o : item_offset, CACHE_NEXT);
+  }
 };
 
 

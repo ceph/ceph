@@ -1042,13 +1042,13 @@ struct ClientLease {
 
   ceph_seq_t seq;
   utime_t ttl;
-  xlist<ClientLease*>::item session_lease_item; // per-session list
-  xlist<ClientLease*>::item lease_item;         // global list
+  xlist<ClientLease*>::item item_session_lease; // per-session list
+  xlist<ClientLease*>::item item_lease;         // global list
 
   ClientLease(client_t c, MDSCacheObject *p) : 
     client(c), mask(0), parent(p), seq(0),
-    session_lease_item(this),
-    lease_item(this) { }
+    item_session_lease(this),
+    item_lease(this) { }
 };
 
 
