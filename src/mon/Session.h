@@ -126,4 +126,12 @@ struct SessionMap {
   }
 };
 
+inline ostream& operator<<(ostream& out, const Session *s)
+{
+  out << "Session: " << s->inst << " is "
+      << (s->closed ? "closed" : "open");
+  out << s->caps;
+  return out;
+}
+
 #endif

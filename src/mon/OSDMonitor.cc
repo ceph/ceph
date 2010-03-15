@@ -1007,6 +1007,7 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
 {
   //check permissions for the auid, then pass off to next function
   Session * session = (Session *) m->get_connection()->get_priv();
+  dout(10) << "prepare_new_pool from Session " << std::endl << session << dendl;
   if (m->auid) {
     if(session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W, m->auid)) {
       return prepare_new_pool(m->name, m->auid);
