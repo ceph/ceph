@@ -950,7 +950,7 @@ void CDir::_mark_dirty(LogSegment *ls)
 
     // if i've never committed, i need to be before _any_ mention of me is trimmed from the journal.
     if (committed_version == 0 && !item_new.is_on_list())
-      ls->new_dirfrags.push_back(&item_dirty);
+      ls->new_dirfrags.push_back(&item_new);
   }
 }
 
