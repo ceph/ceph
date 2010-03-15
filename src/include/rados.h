@@ -98,7 +98,7 @@ struct ceph_pg_pool {
 	__le64 snap_seq;          /* seq for per-pool snapshot */
 	__le32 snap_epoch;        /* epoch of last snap */
 	__le32 num_snaps;
-	__le32 num_removed_snap_intervals;
+	__le32 num_removed_snap_intervals; /* if non-empty, NO per-pool snaps */
 	__le64 auid;               /* who owns the pg */
 } __attribute__ ((packed));
 
