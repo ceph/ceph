@@ -8,11 +8,14 @@ class PaxosServiceMessage : public Message {
   version_t version;
   __s16 session_mon;
   __u64 session_mon_tid;
+  MonCaps *caps;
   
  PaxosServiceMessage() : Message(MSG_PAXOS),
-			 version(0), session_mon(-1), session_mon_tid(0) { }
-  PaxosServiceMessage(int type, version_t v) : Message(type),
-					       version(v), session_mon(-1), session_mon_tid(0) { }
+    version(0), session_mon(-1), session_mon_tid(0),
+    caps(NULL) { }
+ PaxosServiceMessage(int type, version_t v) : Message(type),
+    version(v), session_mon(-1),
+    session_mon_tid(0), caps(NULL) { }
 
   void paxos_encode() {
     ::encode(version, payload);
