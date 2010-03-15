@@ -181,12 +181,14 @@ private:
     return _unstable;
   }
   void clear_more() {
-    assert(_unstable->empty());
-    delete _unstable;
-    _unstable = NULL;
+    if (_unstable) {
+      assert(_unstable->empty());
+      delete _unstable;
+      _unstable = NULL;
+    }
   }
   void try_clear_more() {
-    if (_unstable->empty()) {
+    if (_unstable && _unstable->empty()) {
       delete _unstable;
       _unstable = NULL;
     }
