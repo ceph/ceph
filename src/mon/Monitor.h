@@ -212,6 +212,7 @@ public:
 			    bool& isvalid);
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con) {}
+  void paxos_dispatch(PaxosService *p, Message *m);
 
  public:
   Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map);

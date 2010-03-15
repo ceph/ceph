@@ -608,26 +608,26 @@ do { \
     case MSG_OSD_PGTEMP:
       ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_OSD);
       ALLOW_CAPS(PAXOS_OSDMAP, MON_CAP_R);
-      paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
+      paxos_dispatch(paxos_service[PAXOS_OSDMAP], m);
       break;
 
     case MSG_REMOVE_SNAPS:
       ALLOW_CAPS(PAXOS_OSDMAP, MON_CAP_RW);
-      paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
+      paxos_dispatch(paxos_service[PAXOS_OSDMAP], m);
       break;
 
       // MDSs
     case MSG_MDS_BEACON:
     case MSG_MDS_OFFLOAD_TARGETS:
       ALLOW_CAPS(PAXOS_MDSMAP, MON_CAP_RW);
-      paxos_service[PAXOS_MDSMAP]->dispatch((PaxosServiceMessage*)m);
+      paxos_dispatch(paxos_service[PAXOS_MDSMAP], m);
       break;
 
       // auth
     case MSG_MON_GLOBAL_ID:
     case CEPH_MSG_AUTH:
       /* no need to check caps here */
-      paxos_service[PAXOS_AUTH]->dispatch((PaxosServiceMessage*)m);
+      paxos_dispatch(paxos_service[PAXOS_AUTH], m);
       break;
 
       // pg
@@ -635,18 +635,18 @@ do { \
     case MSG_PGSTATS:
     case MSG_GETPOOLSTATS:
       ALLOW_CAPS(PAXOS_PGMAP, MON_CAP_R);
-      paxos_service[PAXOS_PGMAP]->dispatch((PaxosServiceMessage*)m);
+      paxos_dispatch(paxos_service[PAXOS_PGMAP], m);
       break;
 
     case MSG_POOLOP:
       ALLOW_CAPS(PAXOS_OSDMAP, MON_CAP_RX);
-      paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
+      paxos_dispatch(paxos_service[PAXOS_OSDMAP], m);
       break;
 
       // log
     case MSG_LOG:
       ALLOW_CAPS(PAXOS_LOG, MON_CAP_RW);
-      paxos_service[PAXOS_LOG]->dispatch((PaxosServiceMessage*)m);
+      paxos_dispatch(paxos_service[PAXOS_LOG], m);
       break;
 
       // paxos
@@ -704,6 +704,16 @@ out:
   lock.Unlock();
 
   return ret;
+}
+
+void Monitor::paxos_dispatch(PaxosService *p, Message *message)
+{
+ PaxosServiceMessage *m = (PaxosServiceMessage*)message;
+  if (!m->caps) {
+    Session *s = (Session *) m->get_connection()->get_priv();
+    m->caps = &s->caps;
+  }
+  p->dispatch(m);
 }
 
 void Monitor::handle_subscribe(MMonSubscribe *m)
