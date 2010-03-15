@@ -1009,7 +1009,7 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
   Session * session = (Session *) m->get_connection()->get_priv();
   if (m->auid) {
     if(session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W, m->auid)) {
-      prepare_new_pool(m->name, m->auid);
+      return prepare_new_pool(m->name, m->auid);
     } else {
       dout(5) << "attempt to create new pool without sufficient auid privileges!"
 	      << *m << dendl;
@@ -1017,14 +1017,14 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
     }
   } else {
     if (session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W)) {
-      prepare_new_pool(m->name, session->caps.auid);
+      return prepare_new_pool(m->name, session->caps.auid);
     } else {
       dout(5) << "attempt to create new pool without sufficient caps!"
 	      << *m << dendl;
       return -EPERM;
     }
   }
-  return 0;
+  return -1; //can't get here!
 }
 
 int OSDMonitor::prepare_new_pool(string& name, __u64 auid)
@@ -1362,7 +1362,7 @@ bool OSDMonitor::preprocess_pool_op_create ( MPoolOp *m)
 
 bool OSDMonitor::prepare_pool_op (MPoolOp *m)
 {
-  dout(10) << "prepare_pool_op " << m << dendl;
+  dout(10) << "prepare_pool_op " << *m << dendl;
   if (m->op == POOL_OP_CREATE) {
     return prepare_pool_op_create(m);
   } else if (m->op == POOL_OP_DELETE) {
