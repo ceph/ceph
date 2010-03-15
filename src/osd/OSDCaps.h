@@ -10,6 +10,12 @@
  * License version 2.1, as published by the Free Software 
  * Foundation.  See file COPYING.
  * 
+ * OSDCaps: Hold the capabilities associated with a single authenticated 
+ * user key. These are specified by text strings of the form
+ * "allow r" (which allows reading anything on the OSD)
+ * "allow rwx auid foo[,bar,baz]" (which allows full access to listed auids)
+ *  "allow rwx pool foo[,bar,baz]" (which allows full access to listed pools)
+ * "allow *" (which allows full access to EVERYTHING)
  */
 
 #ifndef __CEPH_OSDCAPS_H

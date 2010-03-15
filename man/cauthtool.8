@@ -39,10 +39,10 @@ will set the capabilities associated with a given key.
 .SH CAPS FILE FORMAT
 The caps file format consists of zero or more key/value pairs.  The key is the name of the Ceph
 subsystem (osd, mds, mon).  The value is a comma separated list of allow, deny clauses with a permission
-specifier containing one or more of \fIrwx\fP, for read, write, and execute permission.  For
+specifier containing one or more of \fIrwx\fP, for read, write, and execute permission.  If you want to declare the key an administrator (with full privileges on everything), use the shorthand 'subsystem = "allow *"'. For
 example,
 .IP
-osd = "allow rwx [pool foo]"  # can read, write, and execute objects
+osd = "allow rwx [pool foo] [auid bar]"  # can read, write, and execute objects
 .IP
 mds = "allow"      # can access mds server
 .IP
@@ -57,6 +57,8 @@ A client mounting the file system with minimal permissions would need caps like
 mds = "allow"
 .IP
 osd = "allow rw pool data"
+.IP
+mon = "allow r"
 .PP
 .SH EXAMPLE
 To create a new keyring containing a key for \fIclient.foo\fP:

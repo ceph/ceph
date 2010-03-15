@@ -10,6 +10,13 @@
  * License version 2.1, as published by the Free Software 
  * Foundation.  See file COPYING.
  * 
+ * MonCaps: Hold the capabilities associated with a single authenticated 
+ * user key. These are specified by text strings of the form
+ * "allow r" (which allows reading of the cluster state)
+ * "allow rwx auid foo[,bar,baz]" (which allows full access to listed auids)
+ * "allow rw service_name" (which allows reading and writing to the named
+ *                          service type)
+ * "allow *" (which allows full access to EVERYTHING)
  */
 
 #ifndef __MONCAPS_H
