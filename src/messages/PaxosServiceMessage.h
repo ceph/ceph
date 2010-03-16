@@ -3,6 +3,8 @@
 
 #include "msg/Message.h"
 
+class MonCaps;
+
 class PaxosServiceMessage : public Message {
  public:
   version_t version;
