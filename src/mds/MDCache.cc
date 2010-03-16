@@ -2009,13 +2009,14 @@ void MDCache::resolve_start()
       adjust_subtree_auth(rootdir, CDIR_AUTH_UNKNOWN);
   }
 
-  set<int> who;
+  /*set<int> who;
   mds->mdsmap->get_mds_set(who, MDSMap::STATE_RESOLVE);
   mds->mdsmap->get_mds_set(who, MDSMap::STATE_REJOIN);
   mds->mdsmap->get_mds_set(who, MDSMap::STATE_CLIENTREPLAY);
   mds->mdsmap->get_mds_set(who, MDSMap::STATE_ACTIVE);
   mds->mdsmap->get_mds_set(who, MDSMap::STATE_STOPPING);
-  for (set<int>::iterator p = who.begin(); p != who.end(); ++p) {
+  */
+  for (set<int>::iterator p = wants_resolve.begin(); p != wants_resolve.end(); ++p) {
     if (*p == mds->whoami)
       continue;
     send_resolve(*p);  // now.
