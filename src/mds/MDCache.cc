@@ -5924,12 +5924,15 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	  if (dn) {
 	    dout(20) << " had null " << *dn << dendl;
 	    assert(dnl->is_null());
-	  } else {
+	  } else if (!curdir->is_frozen()) {
 	    // create a null dentry
 	    dn = curdir->add_null_dentry(path[depth]);
 	    dout(20) << " added null " << *dn << dendl;
+	  } else {
+	    dout(20) << " not adding null to frozen dir " << dendl;
 	  }
-	  pdnvec->push_back(dn);
+	  if (dn)
+	    pdnvec->push_back(dn);
 	}
         return -ENOENT;
       } else {
