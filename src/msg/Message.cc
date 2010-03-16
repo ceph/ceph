@@ -36,6 +36,7 @@ using namespace std;
 #include "messages/MPing.h"
 
 #include "messages/MRoute.h"
+#include "messages/MForward.h"
 
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDAlive.h"
@@ -241,6 +242,9 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     break;
   case MSG_ROUTE:
     m = new MRoute;
+    break;
+  case MSG_FORWARD:
+    m = new MForward;
     break;
     
   case CEPH_MSG_MON_MAP:

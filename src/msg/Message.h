@@ -42,6 +42,7 @@
 #define MSG_POOLOPREPLY            48
 
 #define MSG_ROUTE                  47
+#define MSG_FORWARD                46
 
 #define MSG_PAXOS                  40
 
