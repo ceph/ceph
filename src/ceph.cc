@@ -44,7 +44,7 @@ extern "C" {
 
 Mutex lock("ceph.cc lock");
 Cond cond;
-Messenger *messenger = 0;
+SimpleMessenger *messenger = 0;
 SafeTimer timer(lock);
 MonClient mc;
 
@@ -77,11 +77,12 @@ Context *resend_event = 0;
 #include "messages/MMonObserveNotify.h"
 
 int observe = 0;
+bool one_shot = false;
 static PGMap pgmap;
 static MDSMap mdsmap;
 static OSDMap osdmap;
 
-static set<int> registered;
+static set<int> registered, seen;
 
 version_t map_ver[PAXOS_NUM];
 
@@ -112,7 +113,7 @@ void handle_notify(MMonObserveNotify *notify)
 
   if (map_ver[notify->machine_id] >= notify->ver)
     return;
-  
+
   switch (notify->machine_id) {
   case PAXOS_PGMAP:
     {
@@ -225,6 +226,12 @@ void handle_notify(MMonObserveNotify *notify)
   }
 
   map_ver[notify->machine_id] = notify->ver;
+
+  // have we seen them all?
+  seen.insert(notify->machine_id);
+  if (one_shot && seen.size() == PAXOS_NUM) {
+    messenger->shutdown();
+  }  
 
   delete notify;
 }
@@ -426,10 +433,12 @@ void usage()
   cerr << "   -i infile\n";
   cerr << "   -o outfile\n";
   cerr << "        specify input or output file (for certain commands)\n";
+  cerr << "   -s or --status\n";
+  cerr << "        print current system status\n";
   cerr << "   -w or --watch\n";
-  cerr << "        watch mds, osd, pg status changes in real time (push)\n";
+  cerr << "        watch system status changes in real time (push)\n";
   cerr << "   -p or --poll\n";
-  cerr << "        watch mds, osd, pg status changes in real time (poll)\n";
+  cerr << "        watch system status changes in real time (poll)\n";
   generic_client_usage();
 }
 
@@ -597,6 +606,9 @@ int main(int argc, const char **argv, const char *envp[])
 	::close(fd);
 	cout << "read " << st.st_size << " bytes from " << args[i] << std::endl;
       }
+    } else if (CONF_ARG_EQ("status", 's')) {
+      CONF_SAFE_SET_ARG_VAL(&observe, OPT_BOOL);
+      one_shot = true;
     } else if (CONF_ARG_EQ("watch", 'w')) {
       CONF_SAFE_SET_ARG_VAL(&observe, OPT_BOOL);
     } else if (CONF_ARG_EQ("poll", 'p')) {
@@ -626,7 +638,7 @@ int main(int argc, const char **argv, const char *envp[])
     return -1;
   
   // start up network
-  SimpleMessenger *messenger = new SimpleMessenger();
+  messenger = new SimpleMessenger();
   messenger->register_entity(entity_name_t::CLIENT());
   messenger->add_dispatcher_head(&dispatcher);
 
