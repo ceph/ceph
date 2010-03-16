@@ -85,10 +85,10 @@ struct sm_state_t filelock[LOCK_MAX] = {
     [LOCK_MIX_SYNC]  = { LOCK_SYNC, false, LOCK_MIX,  0,    0,   0,   0,   0,   0,   CEPH_CAP_GRD,0,0,CEPH_CAP_GRD },
     [LOCK_MIX_SYNC2] = { LOCK_SYNC, false, 0,         0,    0,   0,   0,   0,   0,   CEPH_CAP_GRD,0,0,CEPH_CAP_GRD },
     
-    [LOCK_LOCK]      = { 0,         false, LOCK_LOCK, AUTH, 0,   0,   AUTH,0,   0,   CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,0,0 },
-    [LOCK_SYNC_LOCK] = { LOCK_LOCK, false, LOCK_LOCK, AUTH, 0,   0,   0,   0,   0,   CEPH_CAP_GCACHE,0,0,CEPH_CAP_GCACHE },
+    [LOCK_LOCK]      = { 0,         false, LOCK_LOCK, AUTH, 0,   FW,  AUTH,0,   0,   CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,0,0 },
+    [LOCK_SYNC_LOCK] = { LOCK_LOCK, false, LOCK_LOCK, AUTH, 0,   FW,  0,   0,   0,   CEPH_CAP_GCACHE,0,0,CEPH_CAP_GCACHE },
     [LOCK_EXCL_LOCK] = { LOCK_LOCK, false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,0,CEPH_CAP_GCACHE },
-    [LOCK_MIX_LOCK]  = { LOCK_LOCK, false, LOCK_LOCK, AUTH, 0,   0,   0,   0,   0,   0,0,0,0 },
+    [LOCK_MIX_LOCK]  = { LOCK_LOCK, false, LOCK_LOCK, AUTH, 0,   FW,  0,   0,   0,   0,0,0,0 },
 
     [LOCK_PREXLOCK]  = { LOCK_SYNC, false, LOCK_LOCK, 0,    XCL, 0,   0,   0,   ANY, CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,0,0 },
     [LOCK_XLOCK]     = { LOCK_SYNC, false, LOCK_LOCK, 0,    XCL, 0,   0,   0,   0,   CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,0,0 },
@@ -96,7 +96,7 @@ struct sm_state_t filelock[LOCK_MAX] = {
     [LOCK_LOCK_XLOCK]= { LOCK_PREXLOCK,false,LOCK_LOCK,0,   XCL, 0,   0,   0,   XCL, CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,0,0 },
 
     [LOCK_MIX]       = { 0,         false, LOCK_MIX,  0,    0,   FW,  ANY, 0,   0,   CEPH_CAP_GRD|CEPH_CAP_GWR,0,0,CEPH_CAP_GRD },
-    [LOCK_SYNC_MIX]  = { LOCK_MIX,  false, LOCK_MIX,  ANY,  0,   0,   0,   0,   0,   CEPH_CAP_GRD,0,0,CEPH_CAP_GRD },
+    [LOCK_SYNC_MIX]  = { LOCK_MIX,  false, LOCK_MIX,  ANY,  0,   FW,  0,   0,   0,   CEPH_CAP_GRD,0,0,CEPH_CAP_GRD },
     [LOCK_SYNC_MIX2] = { LOCK_MIX,  false, 0,         ANY,  0,   0,   0,   0,   0,   CEPH_CAP_GRD,0,0,CEPH_CAP_GRD },
     [LOCK_EXCL_MIX]  = { LOCK_MIX,  true,  LOCK_LOCK, 0,    0,   0,   XCL, 0,   0,   0,CEPH_CAP_GRD|CEPH_CAP_GWR,0,0 },
     
