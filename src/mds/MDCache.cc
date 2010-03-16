@@ -7816,8 +7816,7 @@ CDir *MDCache::add_replica_dir(bufferlist::iterator& p, CInode *diri, int from,
     // is this a dir_auth delegation boundary?
     if (from != diri->authority().first ||
 	diri->is_ambiguous_auth() ||
-	diri->ino() == MDS_INO_ROOT ||
-	MDS_INO_IS_STRAY(diri->ino()))
+	diri->is_base())
       adjust_subtree_auth(dir, from);
     
     dout(7) << "add_replica_dir added " << *dir << " nonce " << dir->replica_nonce << dendl;
