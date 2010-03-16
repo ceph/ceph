@@ -483,19 +483,17 @@ public:
       more()->gather_set.swap(g);
   }
   void encode_state_for_replica(bufferlist& bl) const {
-    __u32 s = get_replica_state();
+    __s16 s = get_replica_state();
     ::encode(s, bl);
   }
   void decode_state(bufferlist::iterator& p, bool is_new=true) {
+    __s16 s;
+    ::decode(s, p);
     if (is_new)
-      ::decode(state, p);
-    else {
-      __s32 blah;
-      ::decode(blah, p);
-    }
+      state = s;
   }
   void decode_state_rejoin(bufferlist::iterator& p, list<Context*>& waiters) {
-    __s32 s;
+    __s16 s;
     ::decode(s, p);
     set_state_rejoin(s, waiters);
   }
