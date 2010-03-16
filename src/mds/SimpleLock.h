@@ -158,6 +158,7 @@ private:
 
     bool empty() {
       return
+	gather_set.empty() &&
 	num_wrlock == 0 &&
 	num_xlock == 0 &&
 	xlock_by == NULL &&
