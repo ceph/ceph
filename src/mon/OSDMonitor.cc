@@ -1006,10 +1006,10 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 int OSDMonitor::prepare_new_pool(MPoolOp *m)
 {
   //check permissions for the auid, then pass off to next function
-  dout(10) << "prepare_new_pool from Session " << std::endl
-	   << ((Session *) m->get_connection()->get_priv()) << dendl;
+  Session * session = (Session *) m->get_connection()->get_priv();
+  dout(10) << "prepare_new_pool from Session " << std::endl << session << dendl;
   if (m->auid) {
-    if(m->caps->check_privileges(PAXOS_OSDMAP, MON_CAP_W, m->auid)) {
+    if(session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W, m->auid)) {
       return prepare_new_pool(m->name, m->auid);
     } else {
       dout(5) << "attempt to create new pool without sufficient auid privileges!"
@@ -1017,8 +1017,8 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
       return -EPERM;
     }
   } else {
-    if (m->caps->check_privileges(PAXOS_OSDMAP, MON_CAP_W)) {
-      return prepare_new_pool(m->name, m->caps->auid);
+    if (session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W)) {
+      return prepare_new_pool(m->name, session->caps.auid);
     } else {
       dout(5) << "attempt to create new pool without sufficient caps!"
 	      << *m << dendl;
@@ -1416,11 +1416,12 @@ bool OSDMonitor::prepare_pool_op_delete (MPoolOp *m)
 
 bool OSDMonitor::prepare_pool_op_auid (MPoolOp *m)
 {
+  Session * session = (Session *) m->get_connection()->get_priv();
   //check that current user can write to new auid
-  if(m->caps->check_privileges(PAXOS_OSDMAP, MON_CAP_W, m->auid)) {
+  if(session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W, m->auid)) {
     //check that current user can write to old auid
     int old_auid = osdmap.get_pg_pool(m->pool)->v.auid;
-    if(m->caps->check_privileges(PAXOS_OSDMAP, MON_CAP_W, old_auid)) {
+    if(session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W, old_auid)) {
       //update pg_pool_t with new auid
       pending_inc.new_pools[m->pool] = *(osdmap.get_pg_pool(m->pool));
       pending_inc.new_pools[m->pool].v.auid = m->auid;
