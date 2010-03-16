@@ -267,86 +267,23 @@ static void send_observe_requests()
 
 
 
-// watch (poll)
-int watch = 0;
-enum { OSD, MON, MDS, CLIENT, LAST };
-int which = 0;
-int same = 0;
-const char *prefix[4] = { "mds", "osd", "pg", "client" };
-map<string,string> status;
 
 int lines = 0;
 
-// refresh every second
-void get_status(bool newmon=false);
-
-struct C_Refresh : public Context {
-  void finish(int r) {
-    get_status(true);
-  }
-};
-
-Context *event = 0;
-
-void get_status(bool newmon)
-{
-  vector<string> vcmd(2);
-  vcmd[0] = prefix[which];
-  vcmd[1] = "stat";
-  
-  MMonCommand *m = new MMonCommand(mc.monmap.fsid, last_seen_version);
-  m->cmd.swap(vcmd);
-  mc.send_mon_message(m);
-
-  event = new C_Refresh;
-  timer.add_event_after(.2, event);
-}
-
 void handle_ack(MMonCommandAck *ack)
 {
-  if (watch) {
-    lock.Lock();
-
-    which++;
-    which = which % LAST;
-
-    if (ack->version > last_seen_version)
-      last_seen_version = ack->version;
-
-    string w = ack->cmd[0];
-    if (ack->rs != status[w]) {
-      status[w] = ack->rs;
-      generic_dout(0) << w << " " << status[w] << dendl;
-      lines++;
-
-      if (lines > 20) {
-	generic_dout(0) << dendl;
-	for (map<string,string>::iterator p = status.begin(); p != status.end(); p++)
-	  generic_dout(0) << p->first << " " << p->second << dendl;
-	generic_dout(0) << dendl;	
-	lines = 0;
-      }
-
-      if (event)
-	timer.cancel_event(event);
-      get_status();
-    }
-    
-    lock.Unlock();
-  } else {
-    lock.Lock();
-    reply = true;
-    reply_from = ack->get_source_inst();
-    reply_rs = ack->rs;
-    reply_rc = ack->r;
-    reply_bl = ack->get_data();
-    cond.Signal();
-    if (resend_event) {
-      timer.cancel_event(resend_event);
-      resend_event = 0;
-    }
-    lock.Unlock();
+  lock.Lock();
+  reply = true;
+  reply_from = ack->get_source_inst();
+  reply_rs = ack->rs;
+  reply_rc = ack->r;
+  reply_bl = ack->get_data();
+  cond.Signal();
+  if (resend_event) {
+    timer.cancel_event(resend_event);
+    resend_event = 0;
   }
+  lock.Unlock();
   delete ack;
 }
 
@@ -437,8 +374,6 @@ void usage()
   cerr << "        print current system status\n";
   cerr << "   -w or --watch\n";
   cerr << "        watch system status changes in real time (push)\n";
-  cerr << "   -p or --poll\n";
-  cerr << "        watch system status changes in real time (poll)\n";
   generic_client_usage();
 }
 
@@ -611,8 +546,6 @@ int main(int argc, const char **argv, const char *envp[])
       one_shot = true;
     } else if (CONF_ARG_EQ("watch", 'w')) {
       CONF_SAFE_SET_ARG_VAL(&observe, OPT_BOOL);
-    } else if (CONF_ARG_EQ("poll", 'p')) {
-      CONF_SAFE_SET_ARG_VAL(&watch, OPT_BOOL);
     } else if (CONF_ARG_EQ("help", 'h')) {
       usage();
     } else if (args[i][0] == '-' && nargs.empty()) {
@@ -625,12 +558,10 @@ int main(int argc, const char **argv, const char *envp[])
   // build command
   vector<string> vcmd;
   string cmd;
-  if (!watch) {
-    for (unsigned i=0; i<nargs.size(); i++) {
-      if (i) cmd += " ";
-      cmd += nargs[i];
-      vcmd.push_back(string(nargs[i]));
-    }
+  for (unsigned i=0; i<nargs.size(); i++) {
+    if (i) cmd += " ";
+    cmd += nargs[i];
+    vcmd.push_back(string(nargs[i]));
   }
 
   // get monmap
@@ -656,17 +587,11 @@ int main(int argc, const char **argv, const char *envp[])
     return -1;
   }
 
-  if (watch) {
-    lock.Lock();
-    get_status();
-    lock.Unlock();
-  }
   if (observe) {
     lock.Lock();
     send_observe_requests();
     lock.Unlock();
-  }
-  if (!watch && !observe) {
+  } else {
     if (vcmd.size()) {
       
       string rs;
