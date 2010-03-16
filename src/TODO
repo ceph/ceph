@@ -68,22 +68,14 @@ bugs
 - multi-mds: the stray dir should be it's own root/base (with /.ceph/mds$n/stray a remote dentry?)
   ...otherwise mds X can't always push a stray replica to Y and have it fully linked into the hierarchical cache
 
-- multi-mds, dbench 10, null dn is migrated, linked on new node, but remains null on old mds.  a little later we crash when we unlink due to the discrepancy.
-mds/MDCache.cc: In function 'void MDCache::handle_dentry_unlink(MDentryUnlink*)':
-mds/MDCache.cc:8057: FAILED assert(dnl->is_remote())
- 1: (MDCache::handle_dentry_unlink(MDentryUnlink*)+0x4b2) [0x7e86da]
- 2: (MDCache::dispatch(Message*)+0xc4) [0x7ef2c6]
- 3: (MDS::_dispatch(Message*)+0xfb8) [0x72b60a]
- 4: (MDS::ms_dispatch(Message*)+0x2f) [0x72d515]
- 5: (Messenger::ms_deliver_dispatch(Message*)+0x55) [0x7201ed]
- 6: (SimpleMessenger::dispatch_entry()+0x4f4) [0x70cd54]
- 7: (SimpleMessenger::DispatchThread::entry()+0x29) [0x708dcd]
- 8: (Thread::_entry_func(void*)+0x20) [0x71a363]
- 9: /lib/libpthread.so.0 [0x7f1044bb673a]
- 10: (clone()+0x6d) [0x7f1043de16dd]
- NOTE: a copy of the executable, or `objdump -rdS <executable>` is needed to interpret this.
+- kclient: osd_client hangs with
+353201  osd-1   0.0     1000010c642.00000000            write
+353202  osd-1   0.0     1000013e654.00000000            write
+353203  osd-1   0.0     1000013e656.00000000            write
+353204  osd-1   0.0     1000013e657.00000000            write
+353205  osd-1   0.0     1000013e657.00000001            write
 
-- 
+- kclient: moonbeamer gets this with iozone -a...
 [17608.696906] ------------[ cut here ]------------
 [17608.701761] WARNING: at lib/kref.c:43 kref_get+0x23/0x2a()
 [17608.707584] Hardware name: PDSMi
