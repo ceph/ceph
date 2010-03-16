@@ -653,6 +653,8 @@ protected:
   void maybe_resolve_finish();
   void disambiguate_imports();
   void recalc_auth_bits();
+  void trim_unlinked_inodes();
+  void remove_inode_recursive(CInode *in);
 public:
   void add_rollback(metareqid_t reqid) {
     need_resolve_rollback.insert(reqid);

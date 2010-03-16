@@ -2426,6 +2426,7 @@ void MDCache::maybe_resolve_finish()
     dout(10) << "maybe_resolve_finish got all resolves+resolve_acks, done." << dendl;
     disambiguate_imports();
     if (mds->is_resolve()) {
+      trim_unlinked_inodes();
       recalc_auth_bits();
       trim_non_auth(); 
       mds->resolve_done();
@@ -2631,6 +2632,49 @@ void MDCache::finish_ambiguous_import(dirfrag_t df)
   try_subtree_merge(dir);
 }
 
+void MDCache::remove_inode_recursive(CInode *in)
+{
+  dout(10) << "remove_inode_resurcive " << *in << dendl;
+  list<CDir*> ls;
+  in->get_dirfrags(ls);
+  for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
+    CDir *subdir = *p;
+
+    dout(10) << " removing dirfrag " << subdir << dendl;
+    CDir::map_t::iterator p = subdir->items.begin();
+    while (p != subdir->items.end()) {
+      CDentry *dn = p->second;
+      ++p;
+      CDentry::linkage_t *dnl = dn->get_linkage();
+      if (dnl->is_primary()) {
+	CInode *in = dnl->get_inode();
+	subdir->unlink_inode(dn);
+	remove_inode_recursive(in);
+      }
+      subdir->remove_dentry(dn);
+    }
+    
+    if (subdir->is_subtree_root()) 
+      remove_subtree(subdir);
+    in->close_dirfrag(subdir->dirfrag().frag);
+  }
+  remove_inode(in);
+}
+
+void MDCache::trim_unlinked_inodes()
+{
+  dout(7) << "trim_unlinked_inodes" << dendl;
+
+  hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
+  while (p != inode_map.end()) {
+    CInode *in = p->second;
+    ++p;
+    if (in->get_parent_dn() == NULL && !in->is_base()) {
+      dout(7) << " trimming unlinked " << *in << dendl;
+      remove_inode_recursive(in);
+    }
+  }
+}
 
 /** recalc_auth_bits()
  * once subtree auth is disambiguated, we need to adjust all the 
