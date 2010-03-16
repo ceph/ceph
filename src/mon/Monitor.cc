@@ -34,6 +34,7 @@
 #include "messages/MMonPaxos.h"
 #include "messages/MClass.h"
 #include "messages/MRoute.h"
+#include "messages/MForward.h"
 
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
@@ -346,25 +347,41 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     rr->tid = ++routed_request_tid;
 
     dout(10) << "forward_request " << rr->tid << " request " << *req << dendl;
+    MForward* forward = new MForward(req);
 
-    encode_message(req, rr->request_bl);
+    dout(10) << " noting that i mon" << whoami << " own this requests's session" << dendl;
+    //set forwarding variables; clear payload so it re-encodes properly
+    req->session_mon = whoami;
+    req->session_mon_tid = rr->tid;
+    req->clear_payload();
+    forward->set_priority(req->get_priority());
+    //of course, the need to forward does give it an effectively lower priority
+    
+    //encode forward message and insert into routed_requests
+    encode_message(forward, rr->request_bl);
     rr->session = (Session *)session->get();
     routed_requests[rr->tid] = rr;
 
     session->routed_request_tids.insert(rr->tid);
     
-    dout(10) << " noting that i mon" << whoami << " own this requests's session" << dendl;
-    req->session_mon = whoami;
-    req->session_mon_tid = rr->tid;
-    req->clear_payload();
-    
-    messenger->forward_message(req, monmap->get_inst(mon));
+    messenger->forward_message(forward, monmap->get_inst(mon));
   } else {
     dout(10) << "forward_request no session for request " << *req << dendl;
     delete req;
   }
   if (session)
     session->put();
+}
+
+//extract the original message and put it into the regular dispatch function
+void Monitor::handle_forward(MForward *m)
+{
+  dout(10) << "received forwarded message from " << m->msg->get_source_inst()
+	   << " via " << m->get_source_inst() << dendl;
+  PaxosServiceMessage *req = m->msg;
+  ms_dispatch(req);
+  m->msg = NULL;
+  delete m;
 }
 
 void Monitor::try_send_message(Message *m, entity_inst_t to)
@@ -691,6 +708,11 @@ do { \
     case MSG_CLASS:
       ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_OSD);
       handle_class((MClass *)m);
+      break;
+
+    case MSG_FORWARD:
+      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
+      handle_forward((MForward *)m);
       break;
 
     default:

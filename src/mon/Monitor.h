@@ -50,6 +50,7 @@ class MMonSubscribe;
 class MClass;
 class MAuthRotating;
 class MRoute;
+class MForward;
 
 #define COMPAT_SET_LOC "feature_set"
 
@@ -173,6 +174,7 @@ public:
   map<__u64, RoutedRequest*> routed_requests;
   
   void forward_request_leader(PaxosServiceMessage *req);
+  void handle_forward(MForward *m);
   void try_send_message(Message *m, entity_inst_t to);
   void send_reply(PaxosServiceMessage *req, Message *reply, entity_inst_t to);
   void send_reply(PaxosServiceMessage *req, Message *reply) {
