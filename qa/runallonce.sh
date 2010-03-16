@@ -15,6 +15,7 @@ for test in `cd $basedir/workunits && ls | grep .sh`
 do
   echo "------ running test $test ------"
   pwd
+  [ -d $test ] && rm -r $test
   mkdir -p $test
   mkdir -p `dirname $logdir/$test.log`
   test -e $logdir/$test.log && rm $logdir/$test.log
