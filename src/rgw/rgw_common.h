@@ -16,7 +16,7 @@ using namespace std;
 
 #define RGW_ATTR_ACL		RGW_ATTR_PREFIX "acl"
 #define RGW_ATTR_ETAG    	RGW_ATTR_PREFIX "etag"
-#define RGW_ATTR_BUCKETS		RGW_ATTR_PREFIX "buckets"
+#define RGW_ATTR_BUCKETS	RGW_ATTR_PREFIX "buckets"
 #define RGW_ATTR_META_PREFIX	RGW_ATTR_PREFIX "x-amz-meta-"
 #define RGW_ATTR_CONTENT_TYPE	RGW_ATTR_PREFIX "content_type"
 
@@ -24,6 +24,7 @@ using namespace std;
 
 typedef void *RGWAccessHandle;
 
+/** Store error returns for output at a different point in the program */
 struct rgw_err {
   const char *num;
   const char *code;
@@ -32,6 +33,7 @@ struct rgw_err {
   rgw_err() : num(NULL), code(NULL), message(NULL) {}
 };
 
+/* Helper class used for XMLArgs parsing */
 class NameVal
 {
    string str;
@@ -46,6 +48,7 @@ class NameVal
     string& get_val() { return val; }
 };
 
+/** Stores the XML arguments associated with the HTTP request in req_state*/
 class XMLArgs
 {
   string str, empty_str;
@@ -54,10 +57,14 @@ class XMLArgs
  public:
    XMLArgs() {}
    XMLArgs(string s) : str(s) {}
+   /** Set the arguments; as received */
    void set(string s) { val_map.clear(); sub_resource.clear(); str = s; }
+   /** parse the received arguments */
    int parse();
+   /** Get the value for a specific argument parameter */
    string& get(string& name);
    string& get(const char *name);
+   /** see if a parameter is contained in this XMLArgs */
    bool exists(const char *name) {
      map<string, string>::iterator iter = val_map.find(name);
      return (iter != val_map.end());
@@ -116,7 +123,7 @@ struct RGWUserInfo
 };
 WRITE_CLASS_ENCODER(RGWUserInfo)
 
-
+/** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
    struct fcgx_state *fcgx;
    http_op op;
@@ -156,6 +163,7 @@ struct req_state {
    req_state() : acl(NULL) {}
 };
 
+/** Store basic data on an object */
 struct RGWObjEnt {
   std::string name;
   size_t size;
@@ -194,9 +202,15 @@ static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
   }
 }
 
+/** */
 extern int parse_time(const char *time_str, time_t *time);
+/** Check if a user has a permission on that ACL */
 extern bool verify_permission(RGWAccessControlPolicy *policy, string& uid, int perm);
+/** Check if the req_state's user has the necessary permissions
+ * to do the requested action */
 extern bool verify_permission(struct req_state *s, int perm);
+/** Convert an input URL into a sane object name
+ * by converting %-escaped strings into characters, etc*/
 extern bool url_decode(string& src_str, string& dest_str);
 
 

@@ -46,9 +46,40 @@ extern "C" {
 #define CAP_LONER   1
 #define CAP_XLOCKER 2
 
+struct LockType {
+  int type;
+  sm_t *sm;
+
+  LockType(int t) : type(t) {
+    switch (type) {
+    case CEPH_LOCK_DN:
+    case CEPH_LOCK_IAUTH:
+    case CEPH_LOCK_ILINK:
+    case CEPH_LOCK_IXATTR:
+    case CEPH_LOCK_ISNAP:
+      sm = &sm_simplelock;
+      break;
+    case CEPH_LOCK_IDFT:
+    case CEPH_LOCK_INEST:
+      sm = &sm_scatterlock;
+      break;
+    case CEPH_LOCK_IFILE:
+      sm = &sm_filelock;
+      break;
+    case CEPH_LOCK_IVERSION:
+      sm = &sm_locallock;
+      break;
+    default:
+      sm = 0;
+    }
+  }
+
+};
+
 
 class SimpleLock {
 public:
+  LockType *type;
   
   virtual const char *get_state_name(int n) {
     switch (n) {
@@ -105,15 +136,90 @@ public:
   static const __u64 WAIT_ALL         = ((1<<WAIT_BITS)-1);
 
 
-  sm_t *sm;
-
 protected:
   // parent (what i lock)
   MDSCacheObject *parent;
-  int type;
+
+  // lock state
+  __s16 state;
+
+private:
+  __s16 num_rdlock;
+  __s32 num_client_lease;
+
+  struct unstable_bits_t {
+    set<__s32> gather_set;  // auth+rep.  >= 0 is mds, < 0 is client
+
+    // local state
+    int num_wrlock, num_xlock;
+    Mutation *xlock_by;
+    client_t xlock_by_client;
+    client_t excl_client;
+
+    bool empty() {
+      return
+	num_wrlock == 0 &&
+	num_xlock == 0 &&
+	xlock_by == NULL &&
+	xlock_by_client == -1 &&
+	excl_client == -1;
+    }
+
+    unstable_bits_t() : num_wrlock(0),
+			num_xlock(0),
+			xlock_by(NULL),
+			xlock_by_client(-1),
+			excl_client(-1) {}
+  };
+
+  mutable unstable_bits_t *_unstable;
+
+  bool have_more() const { return _unstable ? true : false; }
+  unstable_bits_t *more() const {
+    if (!_unstable)
+      _unstable = new unstable_bits_t;
+    return _unstable;
+  }
+  void clear_more() {
+    if (_unstable) {
+      assert(_unstable->empty());
+      delete _unstable;
+      _unstable = NULL;
+    }
+  }
+  void try_clear_more() {
+    if (_unstable && _unstable->empty()) {
+      delete _unstable;
+      _unstable = NULL;
+    }
+  }
+
+public:
+
+  void set_excl_client(client_t c) { more()->excl_client = c; }
+  client_t get_excl_client() { return have_more() ? more()->excl_client : -1; }
+
+
+
+  SimpleLock(MDSCacheObject *o, LockType *lt) :
+    type(lt),
+    parent(o), 
+    state(LOCK_SYNC),
+    num_rdlock(0),
+    num_client_lease(0),
+    _unstable(NULL)
+  {}
+  virtual ~SimpleLock() {
+    delete _unstable;
+  }
+
+  // parent
+  MDSCacheObject *get_parent() { return parent; }
+  int get_type() { return type->type; }
+  const sm_t* get_sm() const { return type->sm; }
 
   int get_wait_shift() {
-    switch (type) {
+    switch (get_type()) {
     case CEPH_LOCK_DN:       return 8;
     case CEPH_LOCK_IAUTH:    return 5 +   SimpleLock::WAIT_BITS;
     case CEPH_LOCK_ILINK:    return 5 +   SimpleLock::WAIT_BITS;
@@ -128,52 +234,8 @@ protected:
     }
   }
 
-  // lock state
-  __s32 state;
-  set<__s32> gather_set;  // auth+rep.  >= 0 is mds, < 0 is client
-  int num_client_lease;
-
-  // local state
-  int num_rdlock, num_wrlock, num_xlock;
-  Mutation *xlock_by;
-  client_t xlock_by_client;
-public:
-  client_t excl_client;
-
-
-public:
-  SimpleLock(MDSCacheObject *o, int t) :
-    parent(o), type(t),
-    state(LOCK_SYNC), num_client_lease(0),
-    num_rdlock(0), num_wrlock(0), num_xlock(0),
-    xlock_by(0), xlock_by_client(-1), excl_client(-1) {
-    switch (type) {
-    case CEPH_LOCK_DN:
-    case CEPH_LOCK_IAUTH:
-    case CEPH_LOCK_ILINK:
-    case CEPH_LOCK_IXATTR:
-    case CEPH_LOCK_ISNAP:
-      sm = &sm_simplelock;
-      break;
-    case CEPH_LOCK_IDFT:
-    case CEPH_LOCK_INEST:
-      sm = &sm_scatterlock;
-      break;
-    case CEPH_LOCK_IFILE:
-      sm = &sm_filelock;
-      break;
-    default:
-      sm = 0;
-    }
-  }
-  virtual ~SimpleLock() {}
-
-  // parent
-  MDSCacheObject *get_parent() { return parent; }
-  int get_type() { return type; }
-
   int get_cap_shift() {
-    switch (type) {
+    switch (get_type()) {
     case CEPH_LOCK_IAUTH: return CEPH_CAP_SAUTH;
     case CEPH_LOCK_ILINK: return CEPH_CAP_SLINK;
     case CEPH_LOCK_IFILE: return CEPH_CAP_SFILE;
@@ -182,7 +244,7 @@ public:
     }
   }
   int get_cap_mask() {
-    switch (type) {
+    switch (get_type()) {
     case CEPH_LOCK_IFILE: return 0xffff;
     default: return 0x3;
     }
@@ -191,13 +253,13 @@ public:
   struct ptr_lt {
     bool operator()(const SimpleLock* l, const SimpleLock* r) const {
       // first sort by object type (dn < inode)
-      if ((l->type>CEPH_LOCK_DN) <  (r->type>CEPH_LOCK_DN)) return true;
-      if ((l->type>CEPH_LOCK_DN) == (r->type>CEPH_LOCK_DN)) {
+      if ((l->type->type>CEPH_LOCK_DN) <  (r->type->type>CEPH_LOCK_DN)) return true;
+      if ((l->type->type>CEPH_LOCK_DN) == (r->type->type>CEPH_LOCK_DN)) {
 	// then sort by object
 	if (l->parent->is_lt(r->parent)) return true;
 	if (l->parent == r->parent) {
 	  // then sort by (inode) lock type
-	  if (l->type < r->type) return true;
+	  if (l->type->type < r->type->type) return true;
 	}
       }
       return false;
@@ -205,10 +267,10 @@ public:
   };
 
   void decode_locked_state(bufferlist& bl) {
-    parent->decode_lock_state(type, bl);
+    parent->decode_lock_state(type->type, bl);
   }
   void encode_locked_state(bufferlist& bl) {
-    parent->encode_lock_state(type, bl);
+    parent->encode_lock_state(type->type, bl);
   }
   void finish_waiters(__u64 mask, int r=0) {
     parent->finish_waiting(mask << get_wait_shift(), r);
@@ -243,33 +305,36 @@ public:
   }
 
   bool is_stable() {
-    return !sm || sm->states[state].next == 0;
+    return get_sm()->states[state].next == 0;
   }
   int get_next_state() {
-    return sm->states[state].next;
+    return get_sm()->states[state].next;
   }
 
   bool fw_rdlock_to_auth() {
-    return sm->states[state].can_rdlock == FW;
+    return get_sm()->states[state].can_rdlock == FW;
   }
 
   // gather set
-  const set<int>& get_gather_set() { return gather_set; }
+  static set<int> empty_gather_set;
+  const set<int>& get_gather_set() { return have_more() ? more()->gather_set : empty_gather_set; }
   void init_gather() {
     for (map<int,int>::const_iterator p = parent->replicas_begin(); 
 	 p != parent->replicas_end(); 
 	 ++p)
-      gather_set.insert(p->first);
+      more()->gather_set.insert(p->first);
   }
-  bool is_gathering() { return !gather_set.empty(); }
+  bool is_gathering() { return have_more() && !more()->gather_set.empty(); }
   bool is_gathering(int i) {
-    return gather_set.count(i);
+    return have_more() && more()->gather_set.count(i);
   }
   void clear_gather() {
-    gather_set.clear();
+    if (have_more())
+      more()->gather_set.clear();
   }
   void remove_gather(int i) {
-    gather_set.erase(i);
+    if (have_more())
+      more()->gather_set.erase(i);
   }
 
 
@@ -279,47 +344,49 @@ public:
 
   // can_*
   bool can_lease(client_t client) {
-    return sm->states[state].can_lease == ANY ||
-      (sm->states[state].can_lease == AUTH && parent->is_auth()) ||
-      (sm->states[state].can_lease == XCL && client >= 0 && xlock_by_client == client);
+    return get_sm()->states[state].can_lease == ANY ||
+      (get_sm()->states[state].can_lease == AUTH && parent->is_auth()) ||
+      (get_sm()->states[state].can_lease == XCL && client >= 0 && get_xlock_by_client() == client);
   }
   bool can_read(client_t client) {
-    return sm->states[state].can_read == ANY ||
-      (sm->states[state].can_read == AUTH && parent->is_auth()) ||
-      (sm->states[state].can_read == XCL && client >= 0 && xlock_by_client == client);
+    return get_sm()->states[state].can_read == ANY ||
+      (get_sm()->states[state].can_read == AUTH && parent->is_auth()) ||
+      (get_sm()->states[state].can_read == XCL && client >= 0 && get_xlock_by_client() == client);
   }
   bool can_read_projected(client_t client) {
-    return sm->states[state].can_read_projected == ANY ||
-      (sm->states[state].can_read_projected == AUTH && parent->is_auth()) ||
-      (sm->states[state].can_read_projected == XCL && client >= 0 && xlock_by_client == client);
+    return get_sm()->states[state].can_read_projected == ANY ||
+      (get_sm()->states[state].can_read_projected == AUTH && parent->is_auth()) ||
+      (get_sm()->states[state].can_read_projected == XCL && client >= 0 && get_xlock_by_client() == client);
   }
   bool can_rdlock(client_t client) {
-    return sm->states[state].can_rdlock == ANY ||
-      (sm->states[state].can_rdlock == AUTH && parent->is_auth()) ||
-      (sm->states[state].can_rdlock == XCL && client >= 0 && xlock_by_client == client);
+    return get_sm()->states[state].can_rdlock == ANY ||
+      (get_sm()->states[state].can_rdlock == AUTH && parent->is_auth()) ||
+      (get_sm()->states[state].can_rdlock == XCL && client >= 0 && get_xlock_by_client() == client);
   }
   bool can_wrlock(client_t client) {
-    return sm->states[state].can_wrlock == ANY ||
-      (sm->states[state].can_wrlock == AUTH && parent->is_auth()) ||
-      (sm->states[state].can_wrlock == XCL && client >= 0 && (xlock_by_client == client ||
-							      excl_client == client));
+    return get_sm()->states[state].can_wrlock == ANY ||
+      (get_sm()->states[state].can_wrlock == AUTH && parent->is_auth()) ||
+      (get_sm()->states[state].can_wrlock == XCL && client >= 0 && (get_xlock_by_client() == client ||
+								    get_excl_client() == client));
   }
   bool can_xlock(client_t client) {
-    return sm->states[state].can_xlock == ANY ||
-      (sm->states[state].can_xlock == AUTH && parent->is_auth()) ||
-      (sm->states[state].can_xlock == XCL && client >= 0 && xlock_by_client == client);
+    return get_sm()->states[state].can_xlock == ANY ||
+      (get_sm()->states[state].can_xlock == AUTH && parent->is_auth()) ||
+      (get_sm()->states[state].can_xlock == XCL && client >= 0 && get_xlock_by_client() == client);
   }
 
   // rdlock
   bool is_rdlocked() { return num_rdlock > 0; }
   int get_rdlock() { 
-    if (!num_rdlock) parent->get(MDSCacheObject::PIN_LOCK);
+    if (!num_rdlock)
+      parent->get(MDSCacheObject::PIN_LOCK);
     return ++num_rdlock; 
   }
   int put_rdlock() {
     assert(num_rdlock>0);
     --num_rdlock;
-    if (num_rdlock == 0) parent->put(MDSCacheObject::PIN_LOCK);
+    if (num_rdlock == 0)
+      parent->put(MDSCacheObject::PIN_LOCK);
     return num_rdlock;
   }
   int get_num_rdlocks() { return num_rdlock; }
@@ -327,46 +394,54 @@ public:
   // wrlock
   void get_wrlock(bool force=false) {
     //assert(can_wrlock() || force);
-    if (num_wrlock == 0) parent->get(MDSCacheObject::PIN_LOCK);
-    ++num_wrlock;
+    if (more()->num_wrlock == 0)
+      parent->get(MDSCacheObject::PIN_LOCK);
+    ++more()->num_wrlock;
   }
   void put_wrlock() {
-    --num_wrlock;
-    if (num_wrlock == 0) parent->put(MDSCacheObject::PIN_LOCK);
+    --more()->num_wrlock;
+    if (more()->num_wrlock == 0) {
+      parent->put(MDSCacheObject::PIN_LOCK);
+      try_clear_more();
+    }
   }
-  bool is_wrlocked() { return num_wrlock > 0; }
-  int get_num_wrlocks() { return num_wrlock; }
+  bool is_wrlocked() { return have_more() && more()->num_wrlock > 0; }
+  int get_num_wrlocks() { return have_more() ? more()->num_wrlock : 0; }
 
   // xlock
   void get_xlock(Mutation *who, client_t client) { 
-    assert(xlock_by == 0);
+    assert(get_xlock_by() == 0);
     assert(state == LOCK_XLOCK);
     parent->get(MDSCacheObject::PIN_LOCK);
-    num_xlock++;
-    xlock_by = who; 
-    xlock_by_client = client;
+    more()->num_xlock++;
+    more()->xlock_by = who; 
+    more()->xlock_by_client = client;
   }
   void set_xlock_done() {
-    assert(xlock_by);
+    assert(more()->xlock_by);
     assert(state == LOCK_XLOCK);
     state = LOCK_XLOCKDONE;
-    xlock_by = 0;
+    more()->xlock_by = 0;
   }
   void put_xlock() {
     assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE);
-    --num_xlock;
+    --more()->num_xlock;
     parent->put(MDSCacheObject::PIN_LOCK);
-    if (num_xlock == 0) {
-      xlock_by = 0;
-      xlock_by_client = -1;
+    if (more()->num_xlock == 0) {
+      more()->xlock_by = 0;
+      more()->xlock_by_client = -1;
+      try_clear_more();
     }
   }
-  bool is_xlocked() { return num_xlock > 0; }
-  int get_num_xlocks() { return num_xlock; }
-  bool is_xlocked_by_client(client_t c) {
-    return xlock_by_client == c;
+  bool is_xlocked() { return have_more() && more()->num_xlock > 0; }
+  int get_num_xlocks() { return have_more() ? more()->num_xlock : 0; }
+  client_t get_xlock_by_client() {
+    return have_more() ? more()->xlock_by_client : -1;
   }
-  Mutation *get_xlocked_by() { return xlock_by; }
+  bool is_xlocked_by_client(client_t c) {
+    return have_more() ? more()->xlock_by_client == c : false;
+  }
+  Mutation *get_xlock_by() { return have_more() ? more()->xlock_by : NULL; }
   
   // lease
   void get_client_lease() {
@@ -375,6 +450,9 @@ public:
   void put_client_lease() {
     assert(num_client_lease > 0);
     num_client_lease--;
+    if (num_client_lease == 0) {
+      try_clear_more();
+    }
   }
   bool is_leased() { return num_client_lease > 0; }
   int get_num_client_lease() {
@@ -390,13 +468,19 @@ public:
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
     ::encode(state, bl);
-    ::encode(gather_set, bl);
+    if (have_more())
+      ::encode(more()->gather_set, bl);
+    else
+      ::encode(empty_gather_set, bl);
   }
   void decode(bufferlist::iterator& p) {
     __u8 struct_v;
     ::decode(struct_v, p);
     ::decode(state, p);
-    ::decode(gather_set, p);
+    set<int> g;
+    ::decode(g, p);
+    if (!g.empty())
+      more()->gather_set.swap(g);
   }
   void encode_state_for_replica(bufferlist& bl) const {
     __u32 s = get_replica_state();
@@ -419,39 +503,39 @@ public:
 
   // caps
   bool is_loner_mode() {
-    return sm->states[state].loner;
+    return get_sm()->states[state].loner;
   }
   int gcaps_allowed_ever() {
-    return parent->is_auth() ? sm->allowed_ever_auth : sm->allowed_ever_replica;
+    return parent->is_auth() ? get_sm()->allowed_ever_auth : get_sm()->allowed_ever_replica;
   }
   int gcaps_allowed(int who, int s=-1) {
     if (s < 0) s = state;
     if (parent->is_auth()) {
-      if (xlock_by_client >= 0 && who == CAP_XLOCKER)
-	return sm->states[s].xlocker_caps;
+      if (get_xlock_by_client() >= 0 && who == CAP_XLOCKER)
+	return get_sm()->states[s].xlocker_caps;
       else if (is_loner_mode() && who == CAP_ANY)
-	return sm->states[s].caps;
+	return get_sm()->states[s].caps;
       else 
-	return sm->states[s].loner_caps | sm->states[s].caps;  // loner always gets more
+	return get_sm()->states[s].loner_caps | get_sm()->states[s].caps;  // loner always gets more
     } else 
-      return sm->states[s].replica_caps;
+      return get_sm()->states[s].replica_caps;
   }
   int gcaps_careful() {
-    if (num_wrlock)
-      return sm->careful;
+    if (get_num_wrlocks())
+      return get_sm()->careful;
     return 0;
   }
 
 
   int gcaps_xlocker_mask(client_t client) {
-    if (client == xlock_by_client)
-      return type == CEPH_LOCK_IFILE ? 0xffff : (CEPH_CAP_GSHARED|CEPH_CAP_GEXCL);
+    if (client == get_xlock_by_client())
+      return type->type == CEPH_LOCK_IFILE ? 0xffff : (CEPH_CAP_GSHARED|CEPH_CAP_GEXCL);
     return 0;
   }
 
   // simplelock specifics
   int get_replica_state() const {
-    return sm->states[state].replica_state;
+    return get_sm()->states[state].replica_state;
   }
   void export_twiddle() {
     clear_gather();
@@ -500,8 +584,8 @@ public:
       out << " w=" << get_num_wrlocks();
     if (is_xlocked()) {
       out << " x=" << get_num_xlocks();
-      if (get_xlocked_by())
-	out << " by " << get_xlocked_by();
+      if (get_xlock_by())
+	out << " by " << get_xlock_by();
     }
     /*if (is_stable())
       out << " stable";

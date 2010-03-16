@@ -140,6 +140,8 @@ struct CephXTicketBlob {
   uint64_t secret_id;
   bufferlist blob;
 
+  CephXTicketBlob() : secret_id(0) {}
+
   void encode(bufferlist& bl) const {
      __u8 struct_v = 1;
     ::encode(struct_v, bl);

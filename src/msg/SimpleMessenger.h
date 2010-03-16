@@ -188,7 +188,7 @@ private:
       for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
 	   i != queue_items.end();
 	   ++i) {
-	if (i->second->is_on_xlist())
+	if (i->second->is_on_list())
 	  i->second->remove_myself();
 	delete i->second;
       }

@@ -46,6 +46,14 @@
 boost::pool<> CInode::pool(sizeof(CInode));
 boost::pool<> Capability::pool(sizeof(Capability));
 
+LockType CInode::versionlock_type(CEPH_LOCK_IVERSION);
+LockType CInode::authlock_type(CEPH_LOCK_IAUTH);
+LockType CInode::linklock_type(CEPH_LOCK_ILINK);
+LockType CInode::dirfragtreelock_type(CEPH_LOCK_IDFT);
+LockType CInode::filelock_type(CEPH_LOCK_IFILE);
+LockType CInode::xattrlock_type(CEPH_LOCK_IXATTR);
+LockType CInode::snaplock_type(CEPH_LOCK_ISNAP);
+LockType CInode::nestlock_type(CEPH_LOCK_INEST);
 
 //int cinode_pins[CINODE_NUM_PINS];  // counts
 ostream& CInode::print_db_line_prefix(ostream& out)
@@ -76,7 +84,6 @@ ostream& operator<<(ostream& out, CInode& in)
     if (a.second != CDIR_AUTH_UNKNOWN)
       out << "," << a.second;
     out << "." << in.get_replica_nonce();
-    assert(in.get_replica_nonce() >= 0);
   }
 
   if (in.is_symlink())
@@ -538,7 +545,7 @@ Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm 
       containing_realm = conrealm;
     else
       containing_realm = find_snaprealm();
-    containing_realm->inodes_with_caps.push_back(&xlist_caps);
+    containing_realm->inodes_with_caps.push_back(&item_caps);
   }
 
   mdcache->num_caps++;
@@ -562,7 +569,7 @@ void CInode::remove_client_cap(client_t client)
   assert(client_caps.count(client) == 1);
   Capability *cap = client_caps[client];
   
-  cap->session_caps_item.remove_myself();
+  cap->item_session_caps.remove_myself();
   containing_realm->remove_cap(client, cap);
   
   if (client == loner_cap)
@@ -572,9 +579,9 @@ void CInode::remove_client_cap(client_t client)
   client_caps.erase(client);
   if (client_caps.empty()) {
     put(PIN_CAPS);
-    xlist_caps.remove_myself();
+    item_caps.remove_myself();
     containing_realm = NULL;
-    xlist_open_file.remove_myself();  // unpin logsegment
+    item_open_file.remove_myself();  // unpin logsegment
     mdcache->num_inodes_with_caps--;
   }
   mdcache->num_caps--;
@@ -606,7 +613,7 @@ void CInode::_mark_dirty(LogSegment *ls)
   
   // move myself to this segment's dirty list
   if (ls) 
-    ls->dirty_inodes.push_back(&xlist_dirty);
+    ls->dirty_inodes.push_back(&item_dirty);
 }
 
 void CInode::mark_dirty(version_t pv, LogSegment *ls) {
@@ -642,7 +649,7 @@ void CInode::mark_clean()
     put(PIN_DIRTY);
     
     // remove myself from ls dirty list
-    xlist_dirty.remove_myself();
+    item_dirty.remove_myself();
   }
 }    
 
@@ -805,7 +812,7 @@ void CInode::_stored_parent(version_t v, Context *fin)
 {
   if (v == inode.last_renamed_version) {
     dout(10) << "stored_parent committed v" << v << ", removing from list" << dendl;
-    xlist_renamed_file.remove_myself();
+    item_renamed_file.remove_myself();
     state_clear(STATE_DIRTYPARENT);
   } else {
     dout(10) << "stored_parent committed v" << v << " < " << inode.last_renamed_version
@@ -1154,15 +1161,15 @@ void CInode::clear_dirty_scattered(int type)
   dout(10) << "clear_dirty_scattered " << type << " on " << *this << dendl;
   switch (type) {
   case CEPH_LOCK_IFILE:
-    xlist_dirty_dirfrag_dir.remove_myself();
+    item_dirty_dirfrag_dir.remove_myself();
     break;
 
   case CEPH_LOCK_INEST:
-    xlist_dirty_dirfrag_nest.remove_myself();
+    item_dirty_dirfrag_nest.remove_myself();
     break;
 
   case CEPH_LOCK_IDFT:
-    xlist_dirty_dirfrag_dirfragtree.remove_myself();
+    item_dirty_dirfrag_dirfragtree.remove_myself();
     break;
 
   default:

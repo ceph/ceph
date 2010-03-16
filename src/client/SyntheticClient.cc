@@ -306,8 +306,10 @@ int SyntheticClient::run()
   dout(15) << "initing" << dendl;
   client->init();
   dout(15) << "mounting" << dendl;
-  if (client->mount() < 0) {
-    dout(0) << "failed to mount" << dendl;
+  int err = client->mount();
+  if (err < 0) {
+    char buf[80];
+    dout(0) << "failed to mount: " << strerror_r(-err, buf, sizeof(buf)) << dendl;
     client->shutdown();
     return -1;
   }

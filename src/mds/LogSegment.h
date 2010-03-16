@@ -15,10 +15,14 @@
 #ifndef __LOGSEGMENT_H
 #define __LOGSEGMENT_H
 
-#include "include/xlist.h"
+#include "include/dlist.h"
+#include "include/elist.h"
 #include "include/interval_set.h"
 #include "include/Context.h"
 #include "mdstypes.h"
+#include "CInode.h"
+#include "CDentry.h"
+#include "CDir.h"
 
 #include <ext/hash_set>
 using __gnu_cxx::hash_set;
@@ -36,18 +40,18 @@ class LogSegment {
   loff_t trimmable_at;
 
   // dirty items
-  xlist<CDir*>    dirty_dirfrags, new_dirfrags;
-  xlist<CInode*>  dirty_inodes;
-  xlist<CDentry*> dirty_dentries;
+  elist<CDir*>    dirty_dirfrags, new_dirfrags;
+  elist<CInode*>  dirty_inodes;
+  elist<CDentry*> dirty_dentries;
 
-  xlist<CInode*>  open_files;
-  xlist<CInode*>  renamed_files;
-  xlist<CInode*>  dirty_dirfrag_dir;
-  xlist<CInode*>  dirty_dirfrag_nest;
-  xlist<CInode*>  dirty_dirfrag_dirfragtree;
+  elist<CInode*>  open_files;
+  elist<CInode*>  renamed_files;
+  elist<CInode*>  dirty_dirfrag_dir;
+  elist<CInode*>  dirty_dirfrag_nest;
+  elist<CInode*>  dirty_dirfrag_dirfragtree;
 
-  xlist<MDSlaveUpdate*> slave_updates;
-
+  elist<MDSlaveUpdate*> slave_updates;
+  
   set<CInode*> truncating_inodes;
 
   map<int, hash_set<version_t> > pending_commit_tids;  // mdstable
@@ -65,8 +69,19 @@ class LogSegment {
   C_Gather *try_to_expire(MDS *mds);
 
   // cons
-  LogSegment(loff_t off) : offset(off), end(off), num_events(0), trimmable_at(0),
-			   inotablev(0), sessionmapv(0)
+  LogSegment(loff_t off) :
+    offset(off), end(off), num_events(0), trimmable_at(0),
+    dirty_dirfrags(member_offset(CDir, item_dirty)),
+    new_dirfrags(member_offset(CDir, item_new)),
+    dirty_inodes(member_offset(CInode, item_dirty)),
+    dirty_dentries(member_offset(CDentry, item_dirty)),
+    open_files(member_offset(CInode, item_open_file)),
+    renamed_files(member_offset(CInode, item_renamed_file)),
+    dirty_dirfrag_dir(member_offset(CInode, item_dirty_dirfrag_dir)),
+    dirty_dirfrag_nest(member_offset(CInode, item_dirty_dirfrag_nest)),
+    dirty_dirfrag_dirfragtree(member_offset(CInode, item_dirty_dirfrag_dirfragtree)),
+    slave_updates(0), // passed to begin() manually
+    inotablev(0), sessionmapv(0)
   { }
 };
 

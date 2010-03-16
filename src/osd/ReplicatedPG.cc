@@ -1073,7 +1073,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	if (ssc->snapset.clones.size()) {
 	  snapid_t newest = *ssc->snapset.clones.rbegin();
 	  interval_set<__u64> ch;
-	  ch.insert(op.extent.offset, op.extent.length);
+	  if (op.extent.length)
+	    ch.insert(op.extent.offset, op.extent.length);
 	  ch.intersection_of(ssc->snapset.clone_overlap[newest]);
 	  ssc->snapset.clone_overlap[newest].subtract(ch);
 	  add_interval_usage(ch, info.stats);
@@ -1603,7 +1604,8 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     info.stats.num_object_clones++;
     ssc->snapset.clones.push_back(coid.snap);
     ssc->snapset.clone_size[coid.snap] = ctx->obs->oi.size;
-    ssc->snapset.clone_overlap[coid.snap].insert(0, ctx->obs->oi.size);
+    if (ctx->obs->oi.size)
+      ssc->snapset.clone_overlap[coid.snap].insert(0, ctx->obs->oi.size);
     
     // log clone
     dout(10) << " cloning v " << oi.version
@@ -2759,7 +2761,8 @@ void ReplicatedPG::push_to_replica(const sobject_t& soid, int peer)
 	       << ", pushing " << soid << " attrs as a clone op" << dendl;
       interval_set<__u64> data_subset;
       map<sobject_t, interval_set<__u64> > clone_subsets;
-      clone_subsets[head].insert(0, st.st_size);
+      if (st.st_size)
+	clone_subsets[head].insert(0, st.st_size);
       push(soid, peer, data_subset, clone_subsets);
       return;
     }

@@ -21,6 +21,10 @@ static Rados *rados = NULL;
 static string root_bucket(ROOT_BUCKET);
 static rados_pool_t root_pool;
 
+/** 
+ * Initialize the RADOS instance and prepare to do other ops
+ * Returns 0 on success, -ERR# on failure.
+ */
 int RGWRados::initialize(int argc, char *argv[])
 {
   rados = new Rados();
@@ -36,6 +40,10 @@ int RGWRados::initialize(int argc, char *argv[])
   return ret;
 }
 
+/**
+ * Open the pool used as root for this gateway
+ * Returns: 0 on success, -ERR# otherwise.
+ */
 int RGWRados::open_root_pool(rados_pool_t *pool)
 {
   int r = rados->open_pool(root_bucket.c_str(), pool);
@@ -57,6 +65,12 @@ public:
   RGWRadosListState() : pos(0) {}
 };
 
+/**
+ * set up a bucket listing.
+ * id is ignored
+ * handle is filled in.
+ * Returns 0 on success, -ERR# otherwise.
+ */
 int RGWRados::list_buckets_init(std::string& id, RGWAccessHandle *handle)
 {
   RGWRadosListState *state = new RGWRadosListState();
@@ -73,6 +87,13 @@ int RGWRados::list_buckets_init(std::string& id, RGWAccessHandle *handle)
   return 0;
 }
 
+/** 
+ * get the next bucket in the listing.
+ * id is ignored
+ * obj is filled in,
+ * handle is updated.
+ * returns 0 on success, -ERR# otherwise.
+ */
 int RGWRados::list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle *handle)
 {
   RGWRadosListState *state = (RGWRadosListState *)*handle;
@@ -95,7 +116,20 @@ static int open_pool(string& bucket, rados_pool_t *pool)
 {
   return rados->open_pool(bucket.c_str(), pool);
 }
-
+/** 
+ * get listing of the objects in a bucket.
+ * id: ignored.
+ * bucket: bucket to list contents of
+ * max: maximum number of results to return
+ * prefix: only return results that match this prefix
+ * delim: do not include results that match this string.
+ *     Any skipped results will have the matching portion of their name
+ *     inserted in common_prefixes with a "true" mark.
+ * marker: if filled in, begin the listing with this object.
+ * result: the objects are put in here.
+ * common_prefixes: if delim is filled in, any matching prefixes are placed
+ *     here.
+ */
 int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, string& delim,
                           string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes)
 {
@@ -170,7 +204,10 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
   return count;
 }
 
-
+/**
+ * create a bucket with name bucket and the given list of attrs
+ * returns 0 on success, -ERR# otherwise.
+ */
 int RGWRados::create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs)
 {
   object_t bucket_oid(bucket.c_str());
@@ -198,6 +235,17 @@ int RGWRados::create_bucket(std::string& id, std::string& bucket, map<nstring, b
   return ret;
 }
 
+/**
+ * Write/overwrite an object to the bucket storage.
+ * id: ignored
+ * bucket: the bucket to store the object in
+ * obj: the object name/key
+ * data: the object contents/value
+ * size: the amount of data to write (data must be this long)
+ * mtime: if non-NULL, writes the given mtime to the bucket storage
+ * attrs: all the given attrs are written to bucket storage for the given object
+ * Returns: 0 on success, -ERR# otherwise.
+ */
 int RGWRados::put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
                   time_t *mtime,
                   map<nstring, bufferlist>& attrs)
@@ -236,7 +284,19 @@ int RGWRados::put_obj(std::string& id, std::string& bucket, std::string& obj, co
 
   return 0;
 }
-
+/**
+ * Copy an object.
+ * id: unused (well, it's passed to put_obj)
+ * dest_bucket: the bucket to copy into
+ * dest_obj: the object to copy into
+ * src_bucket: the bucket to copy from
+ * src_obj: the object to copy from
+ * mod_ptr, unmod_ptr, if_match, if_nomatch: as used in get_obj
+ * attrs: these are placed on the new object IN ADDITION to
+ *    (or overwriting) any attrs copied from the original object
+ * err: stores any errors resulting from the get of the original object
+ * Returns: 0 on success, -ERR# otherwise.
+ */
 int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
                std::string& src_bucket, std::string& src_obj,
                time_t *mtime,
@@ -271,7 +331,12 @@ int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& d
   return ret;
 }
 
-
+/**
+ * Delete a bucket.
+ * id: unused
+ * bucket: the name of the bucket to delete
+ * Returns 0 on success, -ERR# otherwise.
+ */
 int RGWRados::delete_bucket(std::string& id, std::string& bucket)
 {
   rados_pool_t pool;
@@ -284,7 +349,13 @@ int RGWRados::delete_bucket(std::string& id, std::string& bucket)
   return 0;
 }
 
-
+/**
+ * Delete an object.
+ * id: unused
+ * bucket: name of the bucket storing the object
+ * obj: name of the object to delete
+ * Returns: 0 on success, -ERR# otherwise.
+ */
 int RGWRados::delete_obj(std::string& id, std::string& bucket, std::string& obj)
 {
   rados_pool_t pool;
@@ -302,6 +373,14 @@ int RGWRados::delete_obj(std::string& id, std::string& bucket, std::string& obj)
   return 0;
 }
 
+/**
+ * Get the attributes for an object.
+ * bucket: name of the bucket holding the object.
+ * obj: name of the object
+ * name: name of the attr to retrieve
+ * dest: bufferlist to store the result in
+ * Returns: 0 on success, -ERR# otherwise.
+ */
 int RGWRados::get_attr(std::string& bucket, std::string& obj,
                        const char *name, bufferlist& dest)
 {
@@ -327,6 +406,14 @@ int RGWRados::get_attr(std::string& bucket, std::string& obj,
   return 0;
 }
 
+/**
+ * Set an attr on an object.
+ * bucket: name of the bucket holding the object
+ * obj: name of the object to set the attr on
+ * name: the attr to set
+ * bl: the contents of the attr
+ * Returns: 0 on success, -ERR# otherwise.
+ */
 int RGWRados::set_attr(std::string& bucket, std::string& obj,
                        const char *name, bufferlist& bl)
 {
@@ -345,6 +432,29 @@ int RGWRados::set_attr(std::string& bucket, std::string& obj,
   return 0;
 }
 
+/**
+ * Get data about an object out of RADOS and into memory.
+ * bucket: name of the bucket the object is in.
+ * obj: name/key of the object to read
+ * data: if get_data==true, this pointer will be set
+ *    to an address containing the object's data/value
+ * ofs: the offset of the object to read from
+ * end: the point in the object to stop reading
+ * attrs: if non-NULL, the pointed-to map will contain
+ *    all the attrs of the object when this function returns
+ * mod_ptr: if non-NULL, compares the object's mtime to *mod_ptr,
+ *    and if mtime is smaller it fails.
+ * unmod_ptr: if non-NULL, compares the object's mtime to *unmod_ptr,
+ *    and if mtime is >= it fails.
+ * if_match/nomatch: if non-NULL, compares the object's etag attr
+ *    to the string and, if it doesn't/does match, fails out.
+ * get_data: if true, the object's data/value will be read out, otherwise not
+ * err: Many errors will result in this structure being filled
+ *    with extra informatin on the error.
+ * Returns: -ERR# on failure, otherwise
+ *          (if get_data==true) length of read data,
+ *          (if get_data==false) length of the object
+ */
 int RGWRados::get_obj(std::string& bucket, std::string& obj, 
             char **data, off_t ofs, off_t end,
             map<nstring, bufferlist> *attrs,

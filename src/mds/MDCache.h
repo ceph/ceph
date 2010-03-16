@@ -257,7 +257,7 @@ enum {
 struct MDRequest : public Mutation {
   int ref;
   Session *session;
-  xlist<MDRequest*>::item session_request_item;  // if not on list, op is aborted.
+  elist<MDRequest*>::item item_session_request;  // if not on list, op is aborted.
 
   // -- i am a client (master) request
   MClientRequest *client_request; // client request (if any)
@@ -334,7 +334,7 @@ struct MDRequest : public Mutation {
   // ---------------------------------------------------
   MDRequest() : 
     ref(1),
-    session(0), session_request_item(this),
+    session(0), item_session_request(this),
     client_request(0), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
     slave_request(0),
@@ -345,7 +345,7 @@ struct MDRequest : public Mutation {
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     Mutation(ri),
     ref(1),
-    session(0), session_request_item(this),
+    session(0), item_session_request(this),
     client_request(req), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
     slave_request(0),
@@ -356,7 +356,7 @@ struct MDRequest : public Mutation {
   MDRequest(metareqid_t ri, int by) : 
     Mutation(ri, by),
     ref(1),
-    session(0), session_request_item(this),
+    session(0), item_session_request(this),
     client_request(0), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
     slave_request(0),
@@ -409,14 +409,14 @@ struct MDRequest : public Mutation {
 struct MDSlaveUpdate {
   int origop;
   bufferlist rollback;
-  xlist<MDSlaveUpdate*>::item xlistitem;
+  elist<MDSlaveUpdate*>::item item;
   Context *waiter;
-  MDSlaveUpdate(int oo, bufferlist &rbl, xlist<MDSlaveUpdate*> &list) :
+  MDSlaveUpdate(int oo, bufferlist &rbl, elist<MDSlaveUpdate*> &list) :
     origop(oo),
-    xlistitem(this),
+    item(this),
     waiter(0) {
     rollback.claim(rbl);
-    list.push_back(&xlistitem);
+    list.push_back(&item);
   }
   ~MDSlaveUpdate() {
     if (waiter) waiter->finish(0);
@@ -463,7 +463,7 @@ protected:
   xlist<ClientLease*> client_leases[client_lease_pools];
 public:
   void touch_client_lease(ClientLease *r, int pool, utime_t ttl) {
-    client_leases[pool].push_back(&r->lease_item);
+    client_leases[pool].push_back(&r->item_lease);
     r->ttl = ttl;
   }
 

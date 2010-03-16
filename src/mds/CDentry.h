@@ -24,7 +24,7 @@ using namespace std;
 #include "include/types.h"
 #include "include/buffer.h"
 #include "include/lru.h"
-#include "include/xlist.h"
+#include "include/elist.h"
 #include "include/filepath.h"
 #include "include/nstring.h"
 #include "mdstypes.h"
@@ -132,8 +132,10 @@ protected:
   version_t version;  // dir version when last touched.
   version_t projected_version;  // what it will be when i unlock/commit.
 
-  xlist<CDentry*>::item xlist_dirty;
+public:
+  elist<CDentry*>::item item_dirty;
 
+protected:
   int auth_pins, nested_auth_pins;
 #ifdef MDS_AUTHPIN_SET
   multiset<void*> auth_pin_set;
@@ -149,6 +151,8 @@ protected:
 
 public:
   // lock
+  static LockType lock_type;
+
   SimpleLock lock;
 
  public:
@@ -159,9 +163,9 @@ public:
     first(f), last(l),
     dir(0),
     version(0), projected_version(0),
-    xlist_dirty(this),
+    item_dirty(this),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
-    lock(this, CEPH_LOCK_DN) {
+    lock(this, &lock_type) {
     g_num_dn++;
     g_num_dna++;
   }
@@ -171,9 +175,9 @@ public:
     first(f), last(l),
     dir(0),
     version(0), projected_version(0),
-    xlist_dirty(this),
+    item_dirty(this),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
-    lock(this, CEPH_LOCK_DN) {
+    lock(this, &lock_type) {
     g_num_dn++;
     g_num_dna++;
     linkage.remote_ino = ino;
@@ -232,7 +236,7 @@ public:
 
   bool use_projected(client_t client, Mutation *mut) {
     return lock.can_read_projected(client) || 
-      lock.get_xlocked_by() == mut;
+      lock.get_xlock_by() == mut;
   }
   linkage_t *get_linkage(client_t client, Mutation *mut) {
     return use_projected(client, mut) ? get_projected_linkage() : get_linkage();

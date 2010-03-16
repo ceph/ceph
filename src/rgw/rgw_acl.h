@@ -40,9 +40,15 @@ public:
   };
 };
 
+/**
+ * Represents a block of XML.
+ * Give the class an XML blob, and it will parse the blob into
+ * an attr_name->value map.
+ * This really ought to be an abstract class or something; it
+ * shouldn't be the startpoint for any parsing. Look at RGWXMLParser for that.
+ */
 class XMLObj
 {
-  int refcount;
   XMLObj *parent;
   string type;
 protected:
@@ -50,7 +56,6 @@ protected:
   multimap<string, XMLObj *> children;
   map<string, string> attr_map;
 public:
-  XMLObj() : refcount(0) {}
   virtual ~XMLObj() { }
   void xml_start(XMLObj *parent, const char *el, const char **attr) {
     this->parent = parent;
@@ -426,6 +431,10 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWAccessControlPolicy)
 
+/**
+ * Interfaces with the webserver's XML handling code
+ * to parse it in a way that makes sense for the rgw.
+ */
 class RGWXMLParser : public XMLObj
 {
   XML_Parser p;

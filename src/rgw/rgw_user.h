@@ -10,9 +10,12 @@ using namespace std;
 
 #define USER_INFO_BUCKET_NAME ".users"
 #define USER_INFO_EMAIL_BUCKET_NAME ".users.email"
-
 #define RGW_USER_ANON_ID "anonymous"
 
+/**
+ * A string wrapper that includes encode/decode functions
+ * for easily accessing a UID in all forms
+ */
 struct RGWUID
 {
   string user_id;
@@ -25,11 +28,29 @@ struct RGWUID
 };
 WRITE_CLASS_ENCODER(RGWUID)
 
+/**
+ * Get the info for a user out of storage.
+ * Returns: 0 on success, -ERR# on failure
+ */
 extern int rgw_get_user_info(string user_id, RGWUserInfo& info);
+/**
+ * Get the anonymous (ie, unauthenticated) user info.
+ */
 extern void rgw_get_anon_user(RGWUserInfo& info);
+/**
+ * Save the given user information to storage.
+ * Returns: 0 on success, -ERR# on failure.
+ */
 extern int rgw_store_user_info(RGWUserInfo& info);
+/**
+ * Given an email, finds the user_id associated with it.
+ * returns: 0 on success, -ERR# on failure (including nonexistence)
+ */
 extern int rgw_get_uid_by_email(string& email, string& user_id);
 
+/**
+ * Store a list of the user's buckets, with associated functinos.
+ */
 class RGWUserBuckets
 {
   map<string, RGWObjEnt> buckets;
@@ -42,17 +63,25 @@ public:
   void decode(bufferlist::iterator& bl) {
     ::decode(buckets, bl);
   }
-
+  /**
+   * Check if the user owns a bucket by the given name.
+   */
   bool owns(string& name) {
     map<string, RGWObjEnt>::iterator iter;
     iter = buckets.find(name);
     return (iter != buckets.end());
   }
 
+  /**
+   * Add a (created) bucket to the user's bucket list.
+   */
   void add(RGWObjEnt& bucket) {
     buckets[bucket.name] = bucket;
   }
 
+  /**
+   * Remove a bucket from the user's list by name.
+   */
   void remove(string& name) {
     map<string, RGWObjEnt>::iterator iter;
     iter = buckets.find(name);
@@ -61,11 +90,23 @@ public:
     }
   }
 
+  /**
+   * Get the user's buckets as a map.
+   */
   map<string, RGWObjEnt>& get_buckets() { return buckets; }
 };
 WRITE_CLASS_ENCODER(RGWUserBuckets)
 
+/**
+ * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
+ * Returns: 0 on success, -ERR# on failure.
+ */
 extern int rgw_get_user_buckets(string user_id, RGWUserBuckets& buckets);
+/**
+ * Store the set of buckets associated with a user.
+ * This completely overwrites any previously-stored list, so be careful!
+ * Returns 0 on success, -ERR# otherwise.
+ */
 extern int rgw_put_user_buckets(string user_id, RGWUserBuckets& buckets);
 
 #endif

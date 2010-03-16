@@ -285,7 +285,9 @@ void Server::_session_logged(Session *session, __u64 state_seq, bool open, versi
       dn->remove_client_lease(r, r->mask, mds->locker);
     }
     while (!session->requests.empty()) {
-      mdcache->request_kill(session->requests.front());
+      MDRequest *mdr = session->requests.front(member_offset(MDRequest,
+							     item_session_request));
+      mdcache->request_kill(mdr);
     }
     
     if (piv) {
@@ -1021,7 +1023,7 @@ void Server::handle_client_request(MClientRequest *req)
     return;
   if (session) {
     mdr->session = session;
-    session->requests.push_back(&mdr->session_request_item);
+    session->requests.push_back(&mdr->item_session_request);
   }
 
   // process embedded cap releases?
@@ -1694,7 +1696,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
   int r = mdcache->path_traverse(mdr, 0, refpath, &mdr->dn[n], &mdr->in[n], MDS_TRAVERSE_FORWARD);
   if (r > 0) return false; // delayed
   if (r < 0) {  // error
-    if (r == -ENOENT && n == 0) {
+    if (r == -ENOENT && n == 0 && mdr->dn[n].size()) {
       reply_request(mdr, r, NULL, mdr->dn[n][mdr->dn[n].size()-1]);
     } else {
       reply_request(mdr, r);
@@ -1791,7 +1793,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
     }
 
     // readable?
-    if (dn && !dn->lock.can_read(client) && dn->lock.get_xlocked_by() != mdr) {
+    if (dn && !dn->lock.can_read(client) && dn->lock.get_xlock_by() != mdr) {
       dout(10) << "waiting on xlocked dentry " << *dn << dendl;
       dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
       return 0;
@@ -2110,12 +2112,12 @@ void Server::handle_client_open(MDRequest *mdr)
     mds->locker->check_inode_max_size(cur);
 
   // make sure this inode gets into the journal
-  if (!cur->xlist_open_file.is_on_xlist()) {
+  if (!cur->item_open_file.is_on_list()) {
     LogSegment *ls = mds->mdlog->get_current_segment();
     EOpen *le = new EOpen(mds->mdlog);
     mdlog->start_entry(le);
     le->add_clean_inode(cur);
-    ls->open_files.push_back(&cur->xlist_open_file);
+    ls->open_files.push_back(&cur->item_open_file);
     mds->mdlog->submit_entry(le);
   }
   
@@ -2257,7 +2259,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   // make sure this inode gets into the journal
   le->metablob.add_opened_ino(in->ino());
   LogSegment *ls = mds->mdlog->get_current_segment();
-  ls->open_files.push_back(&in->xlist_open_file);
+  ls->open_files.push_back(&in->item_open_file);
 
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in, follows);
   journal_and_reply(mdr, in, dn, le, fin);
@@ -2633,7 +2635,7 @@ void Server::handle_client_opent(MDRequest *mdr, int cmode)
   // make sure ino gets into the journal
   le->metablob.add_opened_ino(in->ino());
   LogSegment *ls = mds->mdlog->get_current_segment();
-  ls->open_files.push_back(&in->xlist_open_file);
+  ls->open_files.push_back(&in->item_open_file);
   
   journal_and_reply(mdr, in, 0, le, new C_MDS_inode_update_finish(mds, mdr, in, true));
 }
@@ -2992,7 +2994,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   // make sure this inode gets into the journal
   le->metablob.add_opened_ino(newi->ino());
   LogSegment *ls = mds->mdlog->get_current_segment();
-  ls->open_files.push_back(&newi->xlist_open_file);
+  ls->open_files.push_back(&newi->item_open_file);
 
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
@@ -4641,7 +4643,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 
       
       if (desti->is_dir()) {
-	mdr->ls->renamed_files.push_back(&desti->xlist_renamed_file);
+	mdr->ls->renamed_files.push_back(&desti->item_renamed_file);
 	desti->state_set(CInode::STATE_DIRTYPARENT);
 	dout(10) << "added dir to logsegment renamed_files list " << *desti << dendl;
       }

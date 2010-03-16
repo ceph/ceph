@@ -38,6 +38,8 @@ ostream& CDentry::print_db_line_prefix(ostream& out)
 
 boost::pool<> CDentry::pool(sizeof(CDentry));
 
+LockType CDentry::lock_type(CEPH_LOCK_DN);
+
 
 // CDentry
 
@@ -64,7 +66,6 @@ ostream& operator<<(ostream& out, CDentry& dn)
   } else {
     out << " rep@" << dn.authority();
     out << "." << dn.get_replica_nonce();
-    assert(dn.get_replica_nonce() >= 0);
   }
 
   if (dn.get_linkage()->is_null()) out << " NULL";
@@ -165,7 +166,7 @@ void CDentry::_mark_dirty(LogSegment *ls)
     assert(ls);
   }
   if (ls) 
-    ls->dirty_dentries.push_back(&xlist_dirty);
+    ls->dirty_dentries.push_back(&item_dirty);
 }
 
 void CDentry::mark_dirty(version_t pv, LogSegment *ls) 
@@ -193,7 +194,7 @@ void CDentry::mark_clean()
   dir->dec_num_dirty();
   put(PIN_DIRTY);
   
-  xlist_dirty.remove_myself();
+  item_dirty.remove_myself();
 
   if (state_test(STATE_NEW)) 
     state_clear(STATE_NEW);
@@ -564,8 +565,8 @@ int CDentry::remove_client_lease(ClientLease *l, int mask, Locker *locker)
   if (rc == 0) {
     dout(20) << "removing lease for client" << l->client << dendl;
     client_lease_map.erase(l->client);
-    l->lease_item.remove_myself();
-    l->session_lease_item.remove_myself();
+    l->item_lease.remove_myself();
+    l->item_session_lease.remove_myself();
     delete l;
     if (client_lease_map.empty())
       put(PIN_CLIENTLEASE);

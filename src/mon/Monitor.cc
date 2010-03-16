@@ -414,7 +414,7 @@ void Monitor::handle_route(MRoute *m)
   } else {
     dout(10) << " don't have routed request tid " << m->session_mon_tid
 	     << ", trying to send anyway" << dendl;
-    messenger->send_message(m->msg, m->dest);
+    messenger->lazy_send_message(m->msg, m->dest);
     m->msg = NULL;
   }
   delete m;

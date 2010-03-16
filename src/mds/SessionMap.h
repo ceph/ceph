@@ -23,12 +23,14 @@ using __gnu_cxx::hash_map;
 
 #include "include/Context.h"
 #include "include/xlist.h"
+#include "include/elist.h"
 #include "include/interval_set.h"
 #include "mdstypes.h"
 
 class CInode;
 class MDRequest;
 
+#include "CInode.h"
 #include "Capability.h"
 #include "msg/Message.h"
 
@@ -68,9 +70,9 @@ private:
   friend class SessionMap;
 public:
   entity_inst_t inst;
-  xlist<Session*>::item session_list_item;
+  xlist<Session*>::item item_session_list;
 
-  xlist<MDRequest*> requests;
+  elist<MDRequest*> requests;
 
   interval_set<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
   interval_set<inodeno_t> prealloc_inos;   // preallocated, ready to use.
@@ -128,10 +130,10 @@ public:
   version_t get_push_seq() const { return cap_push_seq; }
 
   void add_cap(Capability *cap) {
-    caps.push_back(&cap->session_caps_item);
+    caps.push_back(&cap->item_session_caps);
   }
   void touch_lease(ClientLease *r) {
-    leases.push_back(&r->session_lease_item);
+    leases.push_back(&r->item_session_lease);
   }
 
   // -- completed requests --
@@ -155,10 +157,11 @@ public:
 
   Session() : 
     state(STATE_NEW), state_seq(0),
-    session_list_item(this),
+    item_session_list(this),
+    requests(0),  // member_offset passed to front() manually
     cap_push_seq(0) { }
   ~Session() {
-    assert(!session_list_item.is_on_xlist());
+    assert(!item_session_list.is_on_list());
   }
 
   void clear() {
@@ -238,18 +241,18 @@ public:
   void add_session(Session *s) {
     assert(session_map.count(s->inst.name) == 0);
     session_map[s->inst.name] = s;
-    by_state[s->state].push_back(&s->session_list_item);
+    by_state[s->state].push_back(&s->item_session_list);
     s->get();
   }
   void remove_session(Session *s) {
     s->trim_completed_requests(0);
-    s->session_list_item.remove_myself();
+    s->item_session_list.remove_myself();
     session_map.erase(s->inst.name);
     s->put();
   }
   void touch_session(Session *session) {
-    if (session->session_list_item.is_on_xlist()) {
-      by_state[session->state].push_back(&session->session_list_item);
+    if (session->item_session_list.is_on_list()) {
+      by_state[session->state].push_back(&session->item_session_list);
       session->last_cap_renew = g_clock.now();
     } else {
       assert(0);  // hrm, should happen?
@@ -263,7 +266,7 @@ public:
     if (session->state != s) {
       session->state = s;
       session->state_seq++;
-      by_state[s].push_back(&session->session_list_item);
+      by_state[s].push_back(&session->item_session_list);
     }
     return session->state_seq;
   }

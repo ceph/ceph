@@ -527,6 +527,8 @@ noinst_HEADERS = \
         include/types.h\
         include/uofs.h\
         include/utime.h\
+        include/dlist.h\
+        include/elist.h\
         include/xlist.h\
 	mds/locks.c\
 	mds/locks.h\

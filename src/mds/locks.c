@@ -131,3 +131,16 @@ struct sm_t sm_filelock = {
 	.can_remote_xlock = 0,
 };
 
+
+struct sm_state_t locallock[LOCK_MAX] = {
+                      // stable     loner  rep state  r     rp   rd   wr   l    x    caps(any,loner,xlocker,replica)
+    [LOCK_LOCK]      = { 0,         false, LOCK_LOCK, ANY,  0,   ANY, 0,   ANY, 0,   0,0,0,0 },
+};
+
+struct sm_t sm_locallock = {
+  .states = locallock,
+  .allowed_ever_auth = 0,
+  .allowed_ever_replica = 0,
+  .careful = 0,
+  .can_remote_xlock = 0,
+};
