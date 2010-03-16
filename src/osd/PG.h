@@ -255,6 +255,8 @@ public:
       bool is_backlog() const { return op == BACKLOG; }
       bool is_update() const { return is_clone() || is_modify() || is_backlog(); }
 
+      bool reqid_is_indexed() const { return op != BACKLOG && op != CLONE; }
+
       void encode(bufferlist &bl) const {
 	__u8 struct_v = 1;
 	::encode(struct_v, bl);
@@ -401,7 +403,7 @@ public:
       if (objects.count(e.soid) == 0 || 
           objects[e.soid]->version < e.version)
         objects[e.soid] = &e;
-      if (e.op != Entry::BACKLOG)
+      if (e.reqid_is_indexed())
 	caller_ops.insert(e.reqid);
     }
     void unindex() {
@@ -410,10 +412,12 @@ public:
     }
     void unindex(Entry& e) {
       // NOTE: this only works if we remove from the _tail_ of the log!
-      assert(e.op == Entry::BACKLOG || caller_ops.count(e.reqid));
       if (objects.count(e.soid) && objects[e.soid]->version == e.version)
         objects.erase(e.soid);
-      caller_ops.erase(e.reqid);
+      if (e.reqid_is_indexed()) {
+	assert(caller_ops.count(e.reqid));
+	caller_ops.erase(e.reqid);
+      }
     }
 
 
