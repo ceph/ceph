@@ -379,6 +379,9 @@ void Monitor::handle_forward(MForward *m)
   dout(10) << "received forwarded message from " << m->msg->get_source_inst()
 	   << " via " << m->get_source_inst() << dendl;
   PaxosServiceMessage *req = m->msg;
+  //set the Connection to be the one it came in on so we don't
+  //deref bad memory later
+  req->set_connection(m->get_connection()->get());
   ms_dispatch(req, false);
   m->msg = NULL;
   delete m;
