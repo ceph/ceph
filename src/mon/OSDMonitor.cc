@@ -1013,7 +1013,8 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
       return prepare_new_pool(m->name, m->auid);
     } else {
       dout(5) << "attempt to create new pool without sufficient auid privileges!"
-	      << *m << dendl;
+	      << "message: " << *m  << std::endl
+	      << "caps: " << *m->caps << dendl;
       return -EPERM;
     }
   } else {
@@ -1021,7 +1022,8 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
       return prepare_new_pool(m->name, m->caps->auid);
     } else {
       dout(5) << "attempt to create new pool without sufficient caps!"
-	      << *m << dendl;
+	      << "message: " << *m  << std::endl
+	      << "caps: " << *m->caps << dendl;
       return -EPERM;
     }
   }

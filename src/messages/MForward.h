@@ -62,7 +62,11 @@ struct MForward : public Message {
     ::decode(client_caps, p);
     msg = (PaxosServiceMessage *)decode_message(p);
     if (has_caps) msg->caps = &client_caps;
-    else msg->caps = NULL;
+    else {
+      msg->caps = NULL;
+      generic_dout(10) << "Decoding MForward without any caps!" << dendl;
+    }
+    generic_dout(20) << "MForward decoded! " << *msg << client_caps << dendl;
   }
 
   const char *get_type_name() { return "forward"; }
