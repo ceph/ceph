@@ -210,7 +210,9 @@ public:
   //ms_dispatch handles a lot of logic and we want to reuse it
   //on forwarded messages, so we let it be non-locking as well
   bool ms_dispatch(Message *m, bool do_lock=true);
-  bool ms_dispatch(Message *m) { ms_dispatch(m, true); }
+  bool ms_dispatch(Message *m) { return ms_dispatch(m, true); }
+  //fill in caps field if possible
+  void fill_caps(Message *m);
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
   bool ms_verify_authorizer(Connection *con, int peer_type,
 			    int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,

@@ -608,6 +608,7 @@ do { \
         reply_command((MMonCommand *)m, -EACCES, rs, 0);
         EXIT_NOT_ADMIN;
       }
+      fill_caps(m);
       handle_command((MMonCommand*)m);
       break;
 
@@ -625,11 +626,13 @@ do { \
     case MSG_OSD_PGTEMP:
       ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_OSD);
       ALLOW_CAPS(PAXOS_OSDMAP, MON_CAP_R);
+      fill_caps(m);
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
     case MSG_REMOVE_SNAPS:
       ALLOW_CAPS(PAXOS_OSDMAP, MON_CAP_RW);
+      fill_caps(m);
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
@@ -637,6 +640,7 @@ do { \
     case MSG_MDS_BEACON:
     case MSG_MDS_OFFLOAD_TARGETS:
       ALLOW_CAPS(PAXOS_MDSMAP, MON_CAP_RW);
+      fill_caps(m);
       paxos_service[PAXOS_MDSMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
@@ -644,6 +648,7 @@ do { \
     case MSG_MON_GLOBAL_ID:
     case CEPH_MSG_AUTH:
       /* no need to check caps here */
+      fill_caps(m);
       paxos_service[PAXOS_AUTH]->dispatch((PaxosServiceMessage*)m);
       break;
 
@@ -652,17 +657,20 @@ do { \
     case MSG_PGSTATS:
     case MSG_GETPOOLSTATS:
       ALLOW_CAPS(PAXOS_PGMAP, MON_CAP_R);
+      fill_caps(m);
       paxos_service[PAXOS_PGMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
     case MSG_POOLOP:
       ALLOW_CAPS(PAXOS_OSDMAP, MON_CAP_RX);
+      fill_caps(m);
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
       // log
     case MSG_LOG:
       ALLOW_CAPS(PAXOS_LOG, MON_CAP_RW);
+      fill_caps(m);
       paxos_service[PAXOS_LOG]->dispatch((PaxosServiceMessage*)m);
       break;
 
@@ -696,6 +704,7 @@ do { \
       if (IS_NOT_ADMIN) {
         EXIT_NOT_ADMIN;
       }
+      fill_caps(m);
       handle_observe((MMonObserve *)m);
       break;
 
@@ -726,6 +735,18 @@ out:
   if (do_lock) lock.Unlock();
 
   return ret;
+}
+
+//if we can, fill in the PaxosServiceMessage's caps field.
+void Monitor::fill_caps(Message *m)
+{
+  PaxosServiceMessage *msg = (PaxosServiceMessage *) m;
+  if (msg->caps) return; //already filled in!
+  Session *s = NULL;
+  if (m->get_connection()) {
+    s = (Session *) m->get_connection()->get_priv();
+  }
+  if (s) msg->caps = &s->caps;
 }
 
 void Monitor::handle_subscribe(MMonSubscribe *m)
