@@ -60,20 +60,27 @@ filestore
   - need an osdmap cache layer?
 
 bugs
+- kclient: looping osd connection failures
+[ 3974.417106] ceph: osd11 10.3.14.138:6800 connection failed
+[ 3974.423295] ceph: osd11 10.3.14.138:6800 connection failed
+[ 3974.429709] ceph: osd11 10.3.14.138:6800 connection failed
+[ 3974.437863] ceph: osd11 10.3.14.138:6800 connection failed
+[ 3974.451780] ceph: osd11 10.3.14.138:6800 connection failed
+[ 3974.472879] ceph: osd11 10.3.14.138:6800 connection failed
+[ 3974.479061] ceph: osd11 10.3.14.138:6800 connection failed
+[ 3974.485138] ceph: osd11 10.3.14.138:6800 connection failed
+[ 3974.491235] ceph: osd11 10.3.14.138:6800 connection failed
+[ 3974.499103] ceph: osd11 10.3.14.138:6800 connection failed
+[ 3974.508805] ceph: osd11 10.3.14.138:6800 connection failed
+[ 3974.517429] ceph: osd11 10.3.14.138:6800 connection failed
+[ 3974.585106] ceph: osd11 10.3.14.138:6800 connection failed
+  ... crash some osds, then restart them ...?
+
+
 - be lenient about timing out clients if we are laggy ourselves
 - mds prepare_force_open_sessions, then import aborts.. session is still OPENING but no client_session is sent...
 - rm -r failure (on kernel tree)
 - dbench 1, restart mds (may take a few times), dbench will error out.
-
-- multi-mds: the stray dir should be it's own root/base (with /.ceph/mds$n/stray a remote dentry?)
-  ...otherwise mds X can't always push a stray replica to Y and have it fully linked into the hierarchical cache
-
-- kclient: osd_client hangs with
-353201  osd-1   0.0     1000010c642.00000000            write
-353202  osd-1   0.0     1000013e654.00000000            write
-353203  osd-1   0.0     1000013e656.00000000            write
-353204  osd-1   0.0     1000013e657.00000000            write
-353205  osd-1   0.0     1000013e657.00000001            write
 
 - kclient: moonbeamer gets this with iozone -a...
 [17608.696906] ------------[ cut here ]------------
