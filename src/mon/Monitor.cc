@@ -642,6 +642,7 @@ do { \
       // MDSs
     case MSG_MDS_BEACON:
     case MSG_MDS_OFFLOAD_TARGETS:
+      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MDS);
       ALLOW_CAPS(PAXOS_MDSMAP, MON_CAP_RW);
       fill_caps(m);
       paxos_service[PAXOS_MDSMAP]->dispatch((PaxosServiceMessage*)m);
