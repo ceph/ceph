@@ -748,8 +748,11 @@ void Monitor::fill_caps(Message *m)
   Session *s = NULL;
   if (m->get_connection()) {
     s = (Session *) m->get_connection()->get_priv();
+    if (s) {
+      msg->caps = &s->caps;
+      s->put();
+    }
   }
-  if (s) msg->caps = &s->caps;
 }
 
 void Monitor::handle_subscribe(MMonSubscribe *m)

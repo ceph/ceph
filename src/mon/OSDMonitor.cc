@@ -1006,8 +1006,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 int OSDMonitor::prepare_new_pool(MPoolOp *m)
 {
   //check permissions for the auid, then pass off to next function
-  dout(10) << "prepare_new_pool from Session " << std::endl
-	   << ((Session *) m->get_connection()->get_priv()) << dendl;
+  dout(10) << "prepare_new_pool from "
+	   << (m->get_connection()) << dendl;
   if (m->auid) {
     if(m->caps->check_privileges(PAXOS_OSDMAP, MON_CAP_W, m->auid)) {
       return prepare_new_pool(m->name, m->auid);
