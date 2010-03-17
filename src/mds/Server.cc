@@ -521,7 +521,10 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     mdlog->start_submit_entry(new ESession(session->inst, false, pv),
 			      new C_MDS_session_finish(mds, session, sseq, false, pv));
     mdlog->flush();
+    // no need to respond to client: they're telling us they have no session
   } else {
+    // notify client of success with an OPEN
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), m->get_source_inst());
     
     if (session->is_new()) {
       dout(10) << " session is new, will make best effort to reconnect " 
