@@ -170,6 +170,17 @@ for name in $what; do
 
     check_host || continue
 
+    get_conf pid_file "/var/run/ceph/$type.$id.pid" "pid file"
+    [ -n "$pid_file" ] && mkdir -p `dirname $pid_file`
+
+    # start, and already running?  (do this check early to avoid unnecessary work!)
+    if [ "$command" = "start" ]; then
+	if daemon_is_running $name c$type $pid_file; then
+	    echo "Starting Ceph $name on $host...already running"
+	    continue
+	fi
+    fi
+
     # binary?
     binary="$BINDIR/c$type"
     if [ "$command" = "start" ]; then
@@ -200,9 +211,6 @@ for name in $what; do
 	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
     fi
 
-    get_conf pid_file "/var/run/ceph/$type.$id.pid" "pid file"
-    [ -n "$pid_file" ] && mkdir -p `dirname $pid_file`
-
     case "$command" in
 	start)
             # build final command
@@ -228,19 +236,14 @@ for name in $what; do
 		echo Mounting Btrfs on $host:$btrfs_path
 		do_root_cmd "modprobe btrfs ; btrfsctl -a ; egrep -q '^[^ ]+ $btrfs_path' /proc/mounts || mount -t btrfs $btrfs_opt $first_dev $btrfs_path"
 	    fi
-	    echo -n Starting Ceph $name on $host...
-	    if daemon_is_running $name c$type $pid_file; then
-		echo already running
-	    else
-		echo
-		get_conf pre_start_eval "" "pre start eval"
-		[ -n "$pre_start_eval" ] && $pre_start_eval
-		get_conf pre_start "" "pre start command"
-		get_conf post_start "" "post start command"
-		[ -n "$pre_start" ] && do_cmd "$pre_start"
-		do_cmd "$cmd" $runarg
-		[ -n "$post_start" ] && do_cmd "$post_start"
-	    fi
+	    echo Starting Ceph $name on $host...
+	    get_conf pre_start_eval "" "pre start eval"
+	    [ -n "$pre_start_eval" ] && $pre_start_eval
+	    get_conf pre_start "" "pre start command"
+	    get_conf post_start "" "post start command"
+	    [ -n "$pre_start" ] && do_cmd "$pre_start"
+	    do_cmd "$cmd" $runarg
+	    [ -n "$post_start" ] && do_cmd "$post_start"
 	    ;;
 	
 	stop)
