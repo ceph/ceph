@@ -379,7 +379,7 @@ void Monitor::handle_forward(MForward *m)
   dout(10) << "received forwarded message from " << m->msg->get_source_inst()
 	   << " via " << m->get_source_inst() << dendl;
   PaxosServiceMessage *req = m->msg;
-  ms_dispatch(req);
+  ms_dispatch(req, false);
   m->msg = NULL;
   delete m;
 }
@@ -513,10 +513,10 @@ void Monitor::stop_cluster()
 }
 
 
-bool Monitor::ms_dispatch(Message *m)
+bool Monitor::ms_dispatch(Message *m, bool do_lock)
 {
   bool ret = true;
-  lock.Lock();
+  if (do_lock) lock.Lock();
 
   Connection *connection = m->get_connection();
   Session *s = NULL;
@@ -723,7 +723,7 @@ out:
   if (s) {
     s->put();
   }
-  lock.Unlock();
+  if (do_lock) lock.Unlock();
 
   return ret;
 }
