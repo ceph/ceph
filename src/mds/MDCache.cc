@@ -730,7 +730,7 @@ void MDCache::try_subtree_merge_at(CDir *dir)
 
   // merge with parent?
   CDir *parent = dir;  
-  if (dir->ino() != MDS_INO_ROOT)
+  if (!dir->inode->is_base())
     parent = get_subtree_root(dir->get_parent_dir());
   
   if (parent != dir &&                              // we have a parent,
@@ -7365,15 +7365,15 @@ void MDCache::handle_discover(MDiscover *dis)
 
     cur = root;
   }
-  else if (dis->get_base_ino() == MDS_INO_STRAY(whoami)) {
+  else if (dis->get_base_ino() == MDS_INO_MDSDIR(whoami)) {
     // wants root
     dout(7) << "handle_discover from mds" << from
-	    << " wants stray + " << dis->get_want().get_path()
+	    << " wants mdsdir + " << dis->get_want().get_path()
 	    << " snap " << snapid
 	    << dendl;
     reply->starts_with = MDiscoverReply::INODE;
-    replicate_inode(stray, from, reply->trace);
-    dout(10) << "added stray " << *stray << dendl;
+    replicate_inode(myin, from, reply->trace);
+    dout(10) << "added mdsdir " << *myin << dendl;
 
     cur = stray;
   }
@@ -7424,7 +7424,7 @@ void MDCache::handle_discover(MDiscover *dis)
     } else {
       // requester explicity specified the frag
       fg = dis->get_base_dir_frag();
-      assert(dis->wants_base_dir() || dis->get_want_ino() || dis->get_base_ino() == MDS_INO_ROOT);
+      assert(dis->wants_base_dir() || dis->get_want_ino() || MDS_INO_IS_BASE(dis->get_base_ino()));
     }
     CDir *curdir = cur->get_dirfrag(fg);
 
@@ -7880,6 +7880,8 @@ CInode *MDCache::add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<Co
     add_inode(in);
     if (in->ino() == MDS_INO_ROOT)
       in->inode_auth.first = 0;
+    else if (in->is_mdsdir())
+      in->inode_auth.first = in->ino() - MDS_INO_MDSDIR_OFFSET;
     dout(10) << "add_replica_inode added " << *in << dendl;
     if (dn) {
       assert(dn->get_linkage()->is_null());
@@ -8720,6 +8722,8 @@ void MDCache::show_subtrees(int dbl)
 
     if (dir->ino() == MDS_INO_ROOT)
       assert(dir->inode == root);
+    if (dir->ino() == MDS_INO_MDSDIR(mds->get_nodeid()))
+      assert(dir->inode == myin);
     if (dir->ino() == MDS_INO_STRAY(mds->get_nodeid()))
       assert(dir->inode == stray);
 

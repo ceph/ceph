@@ -52,7 +52,7 @@ bool AnchorServer::add(inodeno_t ino, inodeno_t dirino, __u32 dn_hash)
   //dout(17) << "add " << ino << " dirfrag " << dirfrag << dendl;
   
   // parent should be there
-  assert(dirino == MDS_INO_ROOT ||     // base case,
+  assert(MDS_INO_IS_BASE(dirino) ||     // base case,
          anchor_map.count(dirino));   // or have it
   
   if (anchor_map.count(ino) == 0) {
@@ -242,7 +242,7 @@ void AnchorServer::handle_query(MMDSTableRequest *req)
     dout(10) << "handle_lookup  adding " << anchor << dendl;
     trace.insert(trace.begin(), anchor);  // lame FIXME
     
-    if (anchor.dirino == MDS_INO_ROOT)
+    if (MDS_INO_IS_BASE(anchor.dirino))
       break;
     curino = anchor.dirino;
   }
