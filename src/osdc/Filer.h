@@ -202,7 +202,7 @@ class Filer {
 	ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
 	ops[0].op.extent.truncate_size = p->offset;
 	ops[0].op.extent.truncate_seq = truncate_seq;
-	objecter->_modify(extents[0].oid, p->layout, ops, mtime, snapc, flags,
+	objecter->_modify(p->oid, p->layout, ops, mtime, snapc, flags,
 			  gack ? gack->new_sub():0,
 			  gcom ? gcom->new_sub():0);
       }
