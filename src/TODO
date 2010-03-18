@@ -42,8 +42,8 @@ v0.19
 - debian: packaging fixes
 
 v0.20
-
 - new filestore, journaling
+
 - multiple mds fixes
 
 - qa: snap test.  maybe walk through 2.6.* kernel trees?
@@ -60,8 +60,6 @@ filestore
   - need an osdmap cache layer?
 
 bugs
-- mds: resolve problems.  restart all 3 mds's a few times (after vstart + a partial untar) and they won't come back up.
-
 - kclient: looping osd connection failures
 [ 3974.417106] ceph: osd11 10.3.14.138:6800 connection failed
 [ 3974.423295] ceph: osd11 10.3.14.138:6800 connection failed
