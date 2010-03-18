@@ -117,15 +117,19 @@ private:
   std::set<int> waitfor;
   int num;
   bool any;  /* if true, OR, otherwise, AND */
+  bool activated;
 
   bool sub_finish(void *sub, int num, int r) {
     assert(waitfor.count(num));
     waitfor.erase(num);
 
-    //generic_dout(0) << this << ".sub_finish(r=" << r << ") " << sub << " " << num << " of " << waitfor << dendl;
+    //generic_dout(0) << "C_Gather " << this << ".sub_finish(r=" << r << ") " << sub << " " << num << " of " << waitfor << dendl;
 
     if (r < 0 && result == 0)
       result = r;
+
+    if (!activated)
+      return false;  // no finisher set yet, ignore.
 
     if (any && onfinish) {
       onfinish->finish(result);
@@ -163,23 +167,25 @@ private:
   };
 
 public:
-  C_Gather(Context *f=0, bool an=false) : result(0), onfinish(f), num(0), any(an) {
-    //cout << "C_Gather new " << this << endl;
+  C_Gather(Context *f=0, bool an=false) : result(0), onfinish(f), num(0), any(an),
+					  activated(onfinish ? true : false) {
+    //generic_dout(0) << "C_Gather " << this << ".new" << dendl;
   }
   ~C_Gather() {
-    //cout << "C_Gather delete " << this << endl;
+    //generic_dout(0) << "C_Gather " << this << ".delete" << dendl;
     assert(!onfinish);
   }
 
   void set_finisher(Context *c) {
     assert(!onfinish);
     onfinish = c;
+    activated = true;
   }
   Context *new_sub() {
     num++;
     waitfor.insert(num);
     Context *s = new C_GatherSub(this, num);
-    //generic_dout(0) << this << ".new_sub " << num << " " << s << dendl;
+    //generic_dout(0) << "C_Gather " << this << ".new_sub " << num << " " << s << dendl;
     return s;
   }
   void rm_sub(int n) {
