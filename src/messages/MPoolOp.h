@@ -60,14 +60,16 @@ public:
   MPoolOp(const ceph_fsid_t& f, tid_t t, int p, string& n,
 	  int o, __u64 uid, version_t v) :
     PaxosServiceMessage(MSG_POOLOP, v), fsid(f), pool(p), name(n), op(o),
-    auid(auid) {
+    auid(uid) {
     set_tid(t);
   }
 
 
   const char *get_type_name() { return "poolop"; }
   void print(ostream& out) {
-    out << "poolop(" << get_pool_op_name(op) << " " << get_tid() << " " << name << " v" << version << ")";
+    out << "poolop(" << get_pool_op_name(op) << ",pool " << pool
+	<< ",auid " << auid
+	<< ", tid" << get_tid() << " " << name << " v" << version << ")";
   }
 
   void encode_payload() {
@@ -76,6 +78,7 @@ public:
     ::encode(pool, payload);
     ::encode(name, payload);
     ::encode(op, payload);
+    ::encode(auid, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -84,6 +87,7 @@ public:
     ::decode(pool, p);
     ::decode(name, p);
     ::decode(op, p);
+    ::decode(auid, p);
   }
 };
 
