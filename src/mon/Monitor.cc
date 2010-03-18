@@ -778,11 +778,11 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
       reply = true;
     session_map.add_update_sub(s, p->first, p->second.have, p->second.onetime);
     if (p->first == "mdsmap") {
-      if ((int)s->caps.get_caps(PAXOS_MDSMAP) & (MON_CAP_R)) {
+      if ((int)s->caps.check_privileges(PAXOS_MDSMAP, MON_CAP_R)) {
         mdsmon()->check_sub(s->sub_map["mdsmap"]);
       }
     } else if (p->first == "osdmap") {
-      if ((int)s->caps.get_caps(PAXOS_OSDMAP) & (MON_CAP_R)) {
+      if ((int)s->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_R)) {
         osdmon()->check_sub(s->sub_map["osdmap"]);
       }
     } else if (p->first == "monmap") {
