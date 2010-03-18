@@ -382,7 +382,7 @@ void Monitor::handle_forward(MForward *m)
   //set the Connection to be the one it came in on so we don't
   //deref bad memory later
   req->set_connection(m->get_connection()->get());
-  ms_dispatch(req, false);
+  _ms_dispatch(req);
   m->msg = NULL;
   delete m;
 }
@@ -516,10 +516,9 @@ void Monitor::stop_cluster()
 }
 
 
-bool Monitor::ms_dispatch(Message *m, bool do_lock)
+bool Monitor::_ms_dispatch(Message *m)
 {
   bool ret = true;
-  if (do_lock) lock.Lock();
 
   Connection *connection = m->get_connection();
   Session *s = NULL;
@@ -736,7 +735,6 @@ out:
   if (s) {
     s->put();
   }
-  if (do_lock) lock.Unlock();
 
   return ret;
 }

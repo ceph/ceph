@@ -208,9 +208,14 @@ public:
 
  private:
   //ms_dispatch handles a lot of logic and we want to reuse it
-  //on forwarded messages, so we let it be non-locking as well
-  bool ms_dispatch(Message *m, bool do_lock=true);
-  bool ms_dispatch(Message *m) { return ms_dispatch(m, true); }
+  //on forwarded messages, so we create a non-locking version for this class
+  bool _ms_dispatch(Message *m);
+  bool ms_dispatch(Message *m) {
+    lock.Lock();
+    bool ret = _ms_dispatch(m);
+    lock.Unlock();
+    return ret;
+  }
   //fill in caps field if possible
   void fill_caps(Message *m);
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
