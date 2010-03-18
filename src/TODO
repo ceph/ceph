@@ -60,6 +60,8 @@ filestore
   - need an osdmap cache layer?
 
 bugs
+- mds: resolve problems.  restart all 3 mds's a few times (after vstart + a partial untar) and they won't come back up.
+
 - kclient: looping osd connection failures
 [ 3974.417106] ceph: osd11 10.3.14.138:6800 connection failed
 [ 3974.423295] ceph: osd11 10.3.14.138:6800 connection failed
@@ -76,6 +78,7 @@ bugs
 [ 3974.585106] ceph: osd11 10.3.14.138:6800 connection failed
   ... crash some osds, then restart them ...?
 
+- kclient: mds reconnect on after mds kicks us off
 
 - be lenient about timing out clients if we are laggy ourselves
 - mds prepare_force_open_sessions, then import aborts.. session is still OPENING but no client_session is sent...
