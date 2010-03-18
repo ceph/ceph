@@ -275,9 +275,14 @@ int main(int argc, const char **argv)
   }
 
   else if (strcmp(nargs[0], "mkpool") == 0) {
+    int auid = 0;
     if (nargs.size() < 2)
       usage();
-    ret = rados.create_pool(nargs[1]);
+    if (nargs.size() > 2) {
+      auid = strtol(nargs[2], 0, 10);
+      cerr << "setting auid:" << auid << std::endl;
+    }
+    ret = rados.create_pool(nargs[1], auid);
     if (ret < 0) {
       cerr << "error creating pool " << nargs[1] << ": "
 	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
