@@ -480,6 +480,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   dout(7) << "handle_client_reconnect " << m->get_source() << dendl;
   int from = m->get_source().num();
   Session *session = get_session(m);
+  assert(session);
 
   if (!mds->is_reconnect() && mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) {
     dout(10) << " we're almost in reconnect state (mdsmap delivery race?); waiting" << dendl;
@@ -492,7 +493,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   delay -= reconnect_start;
   dout(10) << " reconnect_start " << reconnect_start << " delay " << delay << dendl;
 
-  if (!mds->is_reconnect() || !session || session->is_closed()) {
+  if (!mds->is_reconnect() || session->is_closed()) {
     if (!mds->is_reconnect()) {
       // XXX maybe in the future we can do better than this?
       dout(1) << " no longer in reconnect state, ignoring reconnect, sending close" << dendl;
