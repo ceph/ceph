@@ -1,6 +1,6 @@
 #!/bin/bash
 wget http://ceph.newdream.net/qa/pjd.tgz
-tar zxvf pjd*
+tar zxvf pjd*.tgz
 cd pjd*
 make
 cd ..
