@@ -32,7 +32,8 @@ public:
   const char *get_type_name() { return "poolopreply"; }
 
   void print(ostream& out) {
-    out << "poolopreply(" << get_tid() << " v" << version << ")";
+    out << "poolopreply(reply:" << strerror(-replyCode) << ", "
+	<< get_tid() << " v" << version << ")";
   }
 
   void encode_payload() {

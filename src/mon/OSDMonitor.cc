@@ -1404,6 +1404,7 @@ bool OSDMonitor::prepare_pool_op_create (MPoolOp *m)
   if (!err) {
     paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, err, pending_inc.epoch));
   } else {
+    dout(10) << "prepare_new_pool returned err " << strerror(-err) << dendl;
     _pool_op(m, err, pending_inc.epoch);
   }
   return true;
@@ -1437,6 +1438,7 @@ bool OSDMonitor::prepare_pool_op_auid (MPoolOp *m)
 
 void OSDMonitor::_pool_op(MPoolOp *m, int replyCode, epoch_t epoch)
 {
+  dout(20) << "_pool_op returning with replyCode " << replyCode << dendl;
   MPoolOpReply *reply = new MPoolOpReply(m->fsid, m->get_tid(),
 					 replyCode, epoch, mon->get_epoch());
   mon->send_reply(m, reply);
