@@ -665,7 +665,7 @@ do { \
       break;
 
     case MSG_POOLOP:
-      ALLOW_CAPS(PAXOS_OSDMAP, MON_CAP_RX);
+      ALLOW_CAPS(PAXOS_OSDMAP, MON_CAP_RW);
       fill_caps(m);
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
