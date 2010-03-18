@@ -366,7 +366,7 @@ public:
   map<tid_t,StatfsOp*>      op_statfs;
   map<tid_t,PoolOp*>        op_pool;
 
-  map<epoch_t,list<Context*> > waiting_for_map;
+  map<epoch_t,list< pair<Context*, int> > > waiting_for_map;
 
   /**
    * track pending ops by pg
@@ -442,9 +442,9 @@ private:
   int get_client_incarnation() const { return client_inc; }
   void set_client_incarnation(int inc) { client_inc = inc; }
 
-  void wait_for_new_map(Context *c, epoch_t epoch) {
+  void wait_for_new_map(Context *c, epoch_t epoch, int replyCode=0) {
     maybe_request_map();
-    waiting_for_map[epoch].push_back(c);
+    waiting_for_map[epoch].push_back(pair<Context *, int>(c, replyCode));
   }
 
   // mid-level helpers

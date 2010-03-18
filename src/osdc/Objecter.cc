@@ -190,10 +190,17 @@ void Objecter::handle_osd_map(MOSDMap *m)
   if (osdmap->test_flag(CEPH_OSDMAP_FULL) & CEPH_OSDMAP_FULL)
     maybe_request_map();
   
-  map<epoch_t,list<Context*> >::iterator p = waiting_for_map.begin();
+  //finish any Contexts that were waiting on a map update
+  map<epoch_t,list< pair< Context*, int > > >::iterator p =
+    waiting_for_map.begin();
   while (p != waiting_for_map.end() &&
 	 p->first <= osdmap->get_epoch()) {
-    finish_contexts(p->second);
+    //go through the list and call the onfinish methods
+    for (list<pair<Context*, int> >::iterator i = p->second.begin();
+	 i != p->second.end(); ++i) {
+      i->first->finish(i->second);
+      delete i->first;
+    }
     waiting_for_map.erase(p++);
   }
 
@@ -731,7 +738,7 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m) {
       last_seen_version = m->version;
     if (osdmap->get_epoch() < m->epoch) {
       dout(20) << "waiting for client to reach epoch " << m->epoch << " before calling back" << dendl;
-      wait_for_new_map(op->onfinish, m->epoch);
+      wait_for_new_map(op->onfinish, m->epoch, m->replyCode);
     }
     else {
       op->onfinish->finish(m->replyCode);
