@@ -535,10 +535,21 @@ int FileStore::_detect_fs()
     if (btrfs_wait_sync) {
       // async snap creation?
       struct btrfs_ioctl_vol_args volargs;
-      volargs.fd = fd;
+      volargs.fd = 0;
       strcpy(volargs.name, "async_snap_test");
       volargs.transid = 0;
       volargs.reserved = 0;
+
+      // remove old one, first
+      struct stat st;
+      if (::fstatat(fd, volargs.name, &st, 0) == 0) {
+	dout(0) << "mount btrfs removing old async_snap_test" << dendl;
+	r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &volargs);
+	if (r != 0)
+	  dout(0) << "mount  failed to remove old async_snap_test: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+      }
+
+      volargs.fd = fd;
       r = ::ioctl(fd, BTRFS_IOC_SNAP_CREATE_ASYNC, &volargs);
       dout(0) << "mount btrfs SNAP_CREATE_ASYNC got " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
       if (r == 0 || errno == EEXIST) {
