@@ -690,7 +690,7 @@ int Objecter::create_pool(string& name, Context *onfinish, __u64 auid) {
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_CREATE;
   op_pool[op->tid] = op;
-  if (auid) op->auid = auid;
+  op->auid = auid;
 
   pool_op_submit(op);
 
