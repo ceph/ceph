@@ -258,6 +258,11 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
 
+  if (!m->caps->check_privileges(PAXOS_MONMAP, MON_CAP_ALL)) {
+    string rs="Access denied";
+    reply_command((MMonCommand *)m, -EACCES, rs, 0);
+  }
+
   dout(0) << "handle_command " << *m << dendl;
   bufferlist rdata;
   string rs;
@@ -603,11 +608,6 @@ do { \
       break;
 
     case MSG_MON_COMMAND:
-      if (IS_NOT_ADMIN) {
-        string rs="Access denied";
-        reply_command((MMonCommand *)m, -EACCES, rs, 0);
-        EXIT_NOT_ADMIN;
-      }
       fill_caps(m);
       handle_command((MMonCommand*)m);
       break;
