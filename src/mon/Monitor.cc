@@ -622,8 +622,6 @@ do { \
       // OSDs
     case MSG_OSD_FAILURE:
     case MSG_OSD_BOOT:
-    case MSG_OSD_IN:
-    case MSG_OSD_OUT:
     case MSG_OSD_ALIVE:
     case MSG_OSD_PGTEMP:
       ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_OSD);

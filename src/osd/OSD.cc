@@ -48,8 +48,6 @@
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDBoot.h"
-#include "messages/MOSDIn.h"
-#include "messages/MOSDOut.h"
 #include "messages/MOSDPGTemp.h"
 
 #include "messages/MOSDMap.h"
