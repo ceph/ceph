@@ -2946,44 +2946,47 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
   }
 
   if (p->is_auth()) {
-    if (c)
-      lock->add_waiter(SimpleLock::WAIT_STABLE, c);
-    if (lock->is_stable()) {
-      // can we do it now?
-      //  (only if we're not replicated.. if we are, we really do need
-      //   to nudge the lock state!)
-      if (!forcelockchange && lock->can_wrlock(-1)) {
-	dout(10) << "scatter_nudge auth, propagating " << *lock << " on " << *p << dendl;
-	scatter_writebehind(lock);
+    while (true) {
+      if (lock->is_stable()) {
+	// can we do it now?
+	//  (only if we're not replicated.. if we are, we really do need
+	//   to nudge the lock state!)
+	if (!forcelockchange && lock->can_wrlock(-1)) {
+	  dout(10) << "scatter_nudge auth, propagating " << *lock << " on " << *p << dendl;
+	  scatter_writebehind(lock);
+	  return;
+	}
+
+	// adjust lock state
+	dout(10) << "scatter_nudge auth, scatter/unscattering " << *lock << " on " << *p << dendl;
+	switch (lock->get_type()) {
+	case CEPH_LOCK_IFILE:
+	  if (p->is_replicated() && lock->get_state() != LOCK_MIX)
+	    file_mixed((ScatterLock*)lock);
+	  else if (lock->get_state() != LOCK_LOCK)
+	    simple_lock((ScatterLock*)lock);
+	  else
+	    simple_sync((ScatterLock*)lock);
+	  break;
+	  
+	case CEPH_LOCK_IDFT:
+	case CEPH_LOCK_INEST:
+	  if (p->is_replicated() && lock->get_state() != LOCK_MIX)
+	    file_mixed(lock);
+	  else if (lock->get_state() != LOCK_LOCK)
+	    simple_lock(lock);
+	  else
+	    simple_sync(lock);
+	  break;
+	default:
+	  assert(0);
+	}
+      } else {
+	dout(10) << "scatter_nudge auth, waiting for stable " << *lock << " on " << *p << dendl;
+	if (c)
+	  lock->add_waiter(SimpleLock::WAIT_STABLE, c);
 	return;
       }
-
-      // adjust lock state
-      dout(10) << "scatter_nudge auth, scatter/unscattering " << *lock << " on " << *p << dendl;
-      switch (lock->get_type()) {
-      case CEPH_LOCK_IFILE:
-	if (p->is_replicated() && lock->get_state() != LOCK_MIX)
-	  file_mixed((ScatterLock*)lock);
-	else if (lock->get_state() != LOCK_LOCK)
-	  simple_lock((ScatterLock*)lock);
-	else
-	  simple_sync((ScatterLock*)lock);
-	break;
-
-      case CEPH_LOCK_IDFT:
-      case CEPH_LOCK_INEST:
-	if (p->is_replicated() && lock->get_state() != LOCK_MIX)
-	  file_mixed(lock);
-	else if (lock->get_state() != LOCK_LOCK)
-	  simple_lock(lock);
-	else
-	  simple_sync(lock);
-	break;
-      default:
-	assert(0);
-      }
-    } else {
-      dout(10) << "scatter_nudge auth, waiting for stable " << *lock << " on " << *p << dendl;
     }
   } else {
     dout(10) << "scatter_nudge replica, requesting scatter/unscatter of " 
