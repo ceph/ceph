@@ -602,7 +602,7 @@ void Migrator::export_dir(CDir *dir, int dest)
   // send ExportDirDiscover (ask target)
   filepath path;
   dir->inode->make_path(path);
-  mds->send_message_mds(new MExportDirDiscover(path, dir->dirfrag()), dest);
+  mds->send_message_mds(new MExportDirDiscover(mds->get_nodeid(), path, dir->dirfrag()), dest);
   assert(g_conf.mds_kill_export_at != 2);
 
   // start the freeze, but hold it up with an auth_pin.
@@ -1400,7 +1400,8 @@ void Migrator::export_finish(CDir *dir)
 
 void Migrator::handle_export_discover(MExportDirDiscover *m)
 {
-  assert(m->get_source().num() != mds->get_nodeid());
+  int from = m->get_source_mds();
+  assert(from != mds->get_nodeid());
 
   dout(7) << "handle_export_discover on " << m->get_path() << dendl;
 
@@ -1411,7 +1412,7 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
   if (!m->started) {
     m->started = true;
     import_state[df] = IMPORT_DISCOVERING;
-    import_peer[df] = m->get_source().num();
+    import_peer[df] = from;
   }
 
   // am i retrying after ancient path_traverse results?
