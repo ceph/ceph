@@ -348,6 +348,12 @@ void MDS::forward_message_mds(Message *m, int mds)
     }
   }
 
+  // these are the only types of messages we should be 'forwarding'; they
+  // explicitly encode their source mds, which gets clobbered when we resend
+  // them here.
+  assert(m->get_type() == MSG_MDS_DIRUPDATE ||
+	 m->get_type() == MSG_MDS_EXPORTDIRDISCOVER);
+
   // send mdsmap first?
   if (peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
     messenger->send_message(new MMDSMap(monc->get_fsid(), mdsmap), 
@@ -355,7 +361,7 @@ void MDS::forward_message_mds(Message *m, int mds)
     peer_mdsmap_epoch[mds] = mdsmap->get_epoch();
   }
 
-  messenger->forward_message(m, mdsmap->get_inst(mds));
+  messenger->send_message(m, mdsmap->get_inst(mds));
 }
 
 
