@@ -396,26 +396,6 @@ int SimpleMessenger::send_message(Message *m, const entity_inst_t& dest)
   return 0;
 }
 
-int SimpleMessenger::forward_message(Message *m, const entity_inst_t& dest)
-{
-  // set envelope
-  m->get_header().src = get_myinst();
-
-  if (!m->get_priority()) m->set_priority(get_default_send_priority());
- 
-  dout(1) << "**> " << dest.name << " " << dest.addr
-          << " -- " << *m
-    	  << " -- ?+" << m->get_data().length()
-	  << " " << m 
-          << dendl;
-
-  submit_message(m, dest);
-
-  return 0;
-}
-
-
-
 int SimpleMessenger::lazy_send_message(Message *m, const entity_inst_t& dest)
 {
   // set envelope

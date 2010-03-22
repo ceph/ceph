@@ -463,7 +463,6 @@ private:
   void suicide();
   void prepare_dest(const entity_inst_t& inst);
   int send_message(Message *m, const entity_inst_t& dest);
-  int forward_message(Message *m, const entity_inst_t& dest);
   int lazy_send_message(Message *m, const entity_inst_t& dest);
   /***********************/
 
