@@ -296,6 +296,13 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
     goto didit;
   }
 
+  //check permissions
+  if (!m->caps->check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
+    dout(0) << "got MOSDFailure from entity with insufficient caps "
+	    << *m->caps << dendl;
+    goto didit;
+  }
+
   /*
    * FIXME
    * this whole thing needs a rework of some sort.  we shouldn't
@@ -381,6 +388,14 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
 {
   if (ceph_fsid_compare(&m->sb.fsid, &mon->monmap->fsid)) {
     dout(0) << "preprocess_boot on fsid " << m->sb.fsid << " != " << mon->monmap->fsid << dendl;
+    delete m;
+    return true;
+  }
+
+  //check permissions, ignore if failed (no response expected)
+  if (!m->caps->check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
+    dout(0) << "got preprocess_boot message from entity with insufficient caps"
+	    << *m->caps << dendl;
     delete m;
     return true;
   }
@@ -488,6 +503,12 @@ void OSDMonitor::_booted(MOSDBoot *m, bool logit)
 
 bool OSDMonitor::preprocess_alive(MOSDAlive *m)
 {
+  //check permissions, ignore if failed
+  if (!m->caps->check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
+    dout(0) << "attempt to send MOSDAlive from entity with insufficient privileges:"
+	    << *m->caps << dendl;
+    return true;
+  }
   int from = m->get_orig_source().num();
   if (osdmap.is_up(from) &&
       osdmap.get_inst(from) == m->get_orig_source_inst() &&
@@ -534,6 +555,12 @@ bool OSDMonitor::preprocess_pgtemp(MOSDPGTemp *m)
 {
   dout(10) << "preprocess_pgtemp " << *m << dendl;
 
+  //check caps
+  if (!m->caps->check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
+    dout(0) << "attempt to send MOSDPGTemp from entity with insufficient caps "
+	    << *m->caps << dendl;
+    return true;
+  }
   vector<int> empty;
   for (map<pg_t,vector<int> >::iterator p = m->pg_temp.begin(); p != m->pg_temp.end(); p++) {
     dout(20) << " " << p->first

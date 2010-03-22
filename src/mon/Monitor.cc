@@ -603,7 +603,6 @@ do { \
 
       // misc
     case CEPH_MSG_MON_GET_MAP:
-      /* public.. no need for checks */
       handle_mon_get_map((MMonGetMap*)m);
       break;
 
@@ -622,8 +621,6 @@ do { \
     case MSG_OSD_BOOT:
     case MSG_OSD_ALIVE:
     case MSG_OSD_PGTEMP:
-      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_OSD);
-      ALLOW_CAPS(PAXOS_OSDMAP, MON_CAP_R);
       fill_caps(m);
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
