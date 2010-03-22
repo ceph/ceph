@@ -663,7 +663,6 @@ do { \
 
       // log
     case MSG_LOG:
-      ALLOW_CAPS(PAXOS_LOG, MON_CAP_RW);
       fill_caps(m);
       paxos_service[PAXOS_LOG]->dispatch((PaxosServiceMessage*)m);
       break;
