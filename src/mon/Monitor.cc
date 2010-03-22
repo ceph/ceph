@@ -456,7 +456,7 @@ void Monitor::resend_routed_requests()
     req->session_mon = whoami;
     req->session_mon_tid = rr->tid;
     req->clear_payload();
-    messenger->forward_message(req, monmap->get_inst(mon));
+    messenger->send_message(req, monmap->get_inst(mon));
   }  
 }
 
