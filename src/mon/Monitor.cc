@@ -626,7 +626,6 @@ do { \
       break;
 
     case MSG_REMOVE_SNAPS:
-      ALLOW_CAPS(PAXOS_OSDMAP, MON_CAP_RW);
       fill_caps(m);
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;

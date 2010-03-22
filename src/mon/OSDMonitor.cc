@@ -595,7 +595,14 @@ bool OSDMonitor::prepare_pgtemp(MOSDPGTemp *m)
 bool OSDMonitor::preprocess_remove_snaps(MRemoveSnaps *m)
 {
   dout(7) << "preprocess_remove_snaps " << *m << dendl;
-  
+
+  //check privilege, ignore if failed
+  if (!m->caps->check_privileges(PAXOS_OSDMAP, MON_CAP_RW)) {
+    dout(0) << "got preprocess_remove_snaps from entity with insufficient caps "
+	    << *m->caps << dendl;
+    delete m;
+    return true;
+  }
   for (map<int, vector<snapid_t> >::iterator q = m->snaps.begin();
        q != m->snaps.end();
        q++) {
