@@ -725,7 +725,6 @@ do { \
       break;
 
     case MSG_CLASS:
-      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_OSD);
       handle_class((MClass *)m);
       break;
 
@@ -999,6 +998,12 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 
 void Monitor::handle_class(MClass *m)
 {
+  if (!m->caps->check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
+    dout(0) << "MClass received from entity without sufficient privileges "
+	    << m->caps << dendl;
+    delete m;
+    return;
+  }
   switch (m->action) {
     case CLASS_SET:
     case CLASS_GET:
@@ -1006,6 +1011,7 @@ void Monitor::handle_class(MClass *m)
       break;
     case CLASS_RESPONSE:
       dout(0) << "got a class response (" << *m << ") ???" << dendl;
+      delete m;
       break;
     default:
       dout(0) << "got an unknown class message (" << *m << ") ???" << dendl;
