@@ -487,6 +487,16 @@ void Monitor::remove_session(Session *s)
 void Monitor::handle_observe(MMonObserve *m)
 {
   dout(10) << "handle_observe " << *m << " from " << m->get_source_inst() << dendl;
+  //check that there are perms. Send a response back if they aren't sufficient,
+  //and delete the message (if it's not deleted for us, which happens when
+  //we own the connection to the requested observer).
+  if (!m->caps->check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+    bool delete_m = false;
+    if (m->session_mon) delete_m = true;
+    send_reply(m, m);
+    if (delete_m) delete m;
+    return;
+  }
   if (m->machine_id >= PAXOS_NUM) {
     dout(0) << "register_observer: bad monitor id: " << m->machine_id << dendl;
   } else {
@@ -699,9 +709,6 @@ do { \
       break;
 
     case MSG_MON_OBSERVE:
-      if (IS_NOT_ADMIN) {
-        EXIT_NOT_ADMIN;
-      }
       fill_caps(m);
       handle_observe((MMonObserve *)m);
       break;
