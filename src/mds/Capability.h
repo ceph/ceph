@@ -183,7 +183,7 @@ public:
   }
   void _calc_issued() {
     _issued = _pending;
-    for (list<revoke_info>::iterator p = _revokes.begin(); p != _revokes.end(); p++)
+    for (list<revoke_info>::iterator p = _revokes.begin(); p != _revokes.end(); ++p)
       _issued |= p->before;
   }
   void confirm_receipt(ceph_seq_t seq, unsigned caps) {

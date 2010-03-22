@@ -387,7 +387,7 @@ struct inode_t {
     __u64 max = 0;
       for (map<client_t,byte_range_t>::const_iterator p = client_ranges.begin();
 	   p != client_ranges.end();
-	   p++)
+	   ++p)
 	if (p->second.last > max)
 	  max = p->second.last;
       return max;
@@ -398,7 +398,7 @@ struct inode_t {
     } else {
       for (map<client_t,byte_range_t>::iterator p = client_ranges.begin();
 	   p != client_ranges.end();
-	   p++)
+	   ++p)
 	p->second.last = new_max;
     }
   }
@@ -1327,7 +1327,7 @@ protected:
     }
     for (multimap<__u64,Context*>::iterator p = waiting.lower_bound(min);
 	 p != waiting.end();
-	 p++) {
+	 ++p) {
       if (p->first & mask) return true;
       if (p->first > mask) return false;
     }

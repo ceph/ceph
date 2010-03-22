@@ -220,7 +220,7 @@ public:
     unsigned n = 0;
     for (map<__u64,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
-	 p++)
+	 ++p)
       if (p->second.state == state) ++n;
     return n;
   }
@@ -234,7 +234,7 @@ public:
   void get_up_mds_set(set<int>& s) {
     for (map<int32_t,__u64>::const_iterator p = up.begin();
 	 p != up.end();
-	 p++)
+	 ++p)
       s.insert(p->first);
   }
   void get_active_mds_set(set<int>& s) {
@@ -244,7 +244,7 @@ public:
     s = failed;
   }
   int get_failed() {
-    if (failed.size()) return *failed.begin();
+    if (!failed.empty()) return *failed.begin();
     return -1;
   }
   void get_stopped_mds_set(set<int>& s) {
@@ -254,14 +254,14 @@ public:
     s = failed;
     for (map<__u64,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
-	 p++)
+	 ++p)
       if (p->second.state >= STATE_REPLAY && p->second.state <= STATE_STOPPING)
 	s.insert(p->second.rank);
   }
   void get_mds_set(set<int>& s, int state) {
     for (map<__u64,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
-	 p++)
+	 ++p)
       if (p->second.state == state)
 	s.insert(p->second.rank);
   } 
@@ -278,7 +278,7 @@ public:
   __u64 find_standby_for(int mds, string& name) {
     for (map<__u64,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
-	 p++) {
+	 ++p) {
       if (p->second.rank == -1 &&
 	  (p->second.standby_for_rank == mds ||
 	   p->second.standby_for_name == name) &&
@@ -289,7 +289,7 @@ public:
     }
     for (map<__u64,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
-	 p++) {
+	 ++p) {
       if (p->second.rank == -1 &&
 	  p->second.standby_for_rank < 0 &&
 	  p->second.standby_for_name.length() == 0 &&
