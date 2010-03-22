@@ -207,6 +207,12 @@ void PGMonitor::committed()
 
 void PGMonitor::handle_statfs(MStatfs *statfs)
 {
+  //check caps
+  if(!statfs->caps->check_privileges(PAXOS_PGMAP, MON_CAP_R)) {
+    dout(0) << "MStatfs received from entity with insufficient privileges "
+	    << *statfs->caps << dendl;
+    goto out;
+  }
   MStatfsReply *reply;
 
   dout(10) << "handle_statfs " << *statfs << " from " << statfs->get_orig_source() << dendl;
@@ -233,8 +239,13 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
 
 bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
 {
-  dout(10) << "preprocess_getpoolstats " << *m << dendl;
   MGetPoolStatsReply *reply;
+
+  if (!m->caps->check_privileges(PAXOS_PGMAP, MON_CAP_R)) {
+    dout(0) << "MGetPoolStats received from entity with insufficient caps "
+	    << *m->caps << dendl;
+    goto out;
+  }
 
   if (ceph_fsid_compare(&m->fsid, &mon->monmap->fsid)) {
     dout(0) << "preprocess_getpoolstats on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
@@ -267,6 +278,12 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
 {
   int from = stats->get_orig_source().num();
 
+  //check caps
+  if (!stats->caps->check_privileges(PAXOS_PGMAP, MON_CAP_R)) {
+    dout(0) << "MPGStats received from entity with insufficient privileges "
+	    << *stats->caps << dendl;
+    goto out;
+  }
   // first, just see if they need a new osdmap.  but 
   // only if they've had the map for a while.
   if (stats->had_map_for > 30.0 && 
@@ -294,7 +311,7 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
        p++)
     ack->pg_stat[p->first] = p->second.reported;
   mon->send_reply(stats, ack);
-
+ out:
   delete stats;
   return true;
 }

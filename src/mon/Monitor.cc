@@ -649,7 +649,6 @@ do { \
     case CEPH_MSG_STATFS:
     case MSG_PGSTATS:
     case MSG_GETPOOLSTATS:
-      ALLOW_CAPS(PAXOS_PGMAP, MON_CAP_R);
       fill_caps(m);
       paxos_service[PAXOS_PGMAP]->dispatch((PaxosServiceMessage*)m);
       break;
