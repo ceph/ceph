@@ -364,7 +364,7 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
 
     session->routed_request_tids.insert(rr->tid);
     
-    messenger->forward_message(forward, monmap->get_inst(mon));
+    messenger->send_message(forward, monmap->get_inst(mon));
   } else {
     dout(10) << "forward_request no session for request " << *req << dendl;
     delete req;
@@ -450,7 +450,7 @@ void Monitor::resend_routed_requests()
     RoutedRequest *rr = p->second;
 
     bufferlist::iterator q = rr->request_bl.begin();
-    PaxosServiceMessage *req = (PaxosServiceMessage *)decode_message(q);
+    PaxosServiceMessage *req = (MForward *)decode_message(q);
 
     dout(10) << " resend to mon" << mon << " tid " << rr->tid << " " << *req << dendl;
     req->session_mon = whoami;
