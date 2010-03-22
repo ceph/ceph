@@ -407,6 +407,14 @@ void Server::find_idle_sessions()
   // autoclose
   cutoff = now;
   cutoff -= g_conf.mds_session_autoclose;
+
+  // don't kick clients if we've been laggy
+  if (mds->laggy_until > cutoff) {
+    dout(10) << " laggy_until " << mds->laggy_until << " > cutoff " << cutoff
+	     << ", not kicking any clients to be safe" << dendl;
+    return;
+  }
+
   while (1) {
     Session *session = mds->sessionmap.get_oldest_session(Session::STATE_STALE);
     if (!session) break;
