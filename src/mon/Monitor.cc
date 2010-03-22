@@ -715,7 +715,12 @@ do { \
 
       // elector messages
     case MSG_MON_ELECTION:
-      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
+      //check privileges here for simplicity
+      if (s &&
+	  !s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+	dout(0) << "MMonElection received from entity without enough caps!"
+		<< s->caps << dendl;
+      }
       elector.dispatch(m);
       break;
 
