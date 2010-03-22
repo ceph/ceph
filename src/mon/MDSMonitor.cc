@@ -158,6 +158,13 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   version_t seq = m->get_seq();
   MDSMap::mds_info_t info;
 
+  //check privileges, ignore if fails
+  if ( !m->caps->check_privileges(PAXOS_MDSMAP, MON_CAP_X)) {
+    dout(0) << "received MMDSBeacon from entity with insufficient privileges "
+	    << *m->caps << dendl;
+    goto out;
+  }
+
   if (ceph_fsid_compare(&m->get_fsid(), &mon->monmap->fsid)) {
     dout(0) << "preprocess_beacon on fsid " << m->get_fsid() << " != " << mon->monmap->fsid << dendl;
     goto out;
@@ -240,6 +247,14 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 bool MDSMonitor::preprocess_offload_targets(MMDSLoadTargets* m)
 {
   dout(10) << "preprocess_offload_targets " << *m << " from " << m->get_orig_source() << dendl;
+
+  //check privileges, ignore message if fails
+  if(!m->caps->check_privileges(PAXOS_MDSMAP, MON_CAP_X)) {
+    dout(0) << "got MMDSLoadTargets from entity with insufficient caps "
+	    << *m->caps << dendl;
+    return true;
+  }
+
   __u64 gid = m->global_id;
   if (mdsmap.mds_info.count(gid) &&
       m->targets == mdsmap.mds_info[gid].export_targets)
