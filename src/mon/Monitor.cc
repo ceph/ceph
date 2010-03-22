@@ -670,7 +670,12 @@ do { \
       // paxos
     case MSG_MON_PAXOS:
       {
-        ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
+	if (!src_is_mon && 
+	    !s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+	  //can't send these!
+	  delete m;
+	  break;
+	}
 
 	MMonPaxos *pm = (MMonPaxos*)m;
 
