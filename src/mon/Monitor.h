@@ -218,6 +218,8 @@ public:
   }
   //fill in caps field if possible
   void fill_caps(Message *m);
+  //mon_caps is used for un-connected messages from monitors
+  MonCaps * mon_caps;
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
   bool ms_verify_authorizer(Connection *con, int peer_type,
 			    int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,

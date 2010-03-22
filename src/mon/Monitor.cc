@@ -104,6 +104,9 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   paxos_service[PAXOS_LOG] = new LogMonitor(this, add_paxos(PAXOS_LOG));
   paxos_service[PAXOS_CLASS] = new ClassMonitor(this, add_paxos(PAXOS_CLASS));
   paxos_service[PAXOS_AUTH] = new AuthMonitor(this, add_paxos(PAXOS_AUTH));
+
+  mon_caps = new MonCaps();
+  mon_caps->set_allow_all(true);
 }
 
 Paxos *Monitor::add_paxos(int type)
@@ -132,7 +135,7 @@ Monitor::~Monitor()
   while (!session_map.sessions.empty()) {
     session_map.remove_session(session_map.sessions.front());
   }
-
+  delete mon_caps;
 }
 
 void Monitor::init()
@@ -740,6 +743,8 @@ void Monitor::fill_caps(Message *m)
       msg->caps = &s->caps;
       s->put();
     }
+  } else { //it has to be a monitor if the Connection's not set
+    msg->caps = mon_caps;
   }
 }
 
