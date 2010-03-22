@@ -450,11 +450,9 @@ void Monitor::resend_routed_requests()
     RoutedRequest *rr = p->second;
 
     bufferlist::iterator q = rr->request_bl.begin();
-    PaxosServiceMessage *req = (MForward *)decode_message(q);
+    MForward *req = (MForward *)decode_message(q);
 
-    dout(10) << " resend to mon" << mon << " tid " << rr->tid << " " << *req << dendl;
-    req->session_mon = whoami;
-    req->session_mon_tid = rr->tid;
+    dout(10) << " resend to mon" << mon << " tid " << rr->tid << " " << *req->msg << dendl;
     req->clear_payload();
     messenger->send_message(req, monmap->get_inst(mon));
   }  
