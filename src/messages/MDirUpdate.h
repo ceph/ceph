@@ -19,6 +19,7 @@
 #include "msg/Message.h"
 
 class MDirUpdate : public Message {
+  int32_t from_mds;
   dirfrag_t dirfrag;
   int32_t dir_rep;
   int32_t discover;
@@ -26,6 +27,7 @@ class MDirUpdate : public Message {
   filepath path;
 
  public:
+  int get_source_mds() { return from_mds; }
   dirfrag_t get_dirfrag() { return dirfrag; }
   int get_dir_rep() { return dir_rep; }
   set<int>& get_dir_rep_by() { return dir_rep_by; } 
@@ -37,12 +39,14 @@ class MDirUpdate : public Message {
   }
 
   MDirUpdate() {}
-  MDirUpdate(dirfrag_t dirfrag,
+  MDirUpdate(int f, 
+	     dirfrag_t dirfrag,
              int dir_rep,
              set<int>& dir_rep_by,
              filepath& path,
              bool discover = false) :
     Message(MSG_MDS_DIRUPDATE) {
+    this->from_mds = f;
     this->dirfrag = dirfrag;
     this->dir_rep = dir_rep;
     this->dir_rep_by = dir_rep_by;
@@ -56,6 +60,7 @@ class MDirUpdate : public Message {
 
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    ::decode(from_mds, p);
     ::decode(dirfrag, p);
     ::decode(dir_rep, p);
     ::decode(discover, p);
@@ -64,6 +69,7 @@ class MDirUpdate : public Message {
   }
 
   virtual void encode_payload() {
+    ::encode(from_mds, payload);
     ::encode(dirfrag, payload);
     ::encode(dir_rep, payload);
     ::encode(discover, payload);

@@ -7992,7 +7992,8 @@ int MDCache::send_dir_updates(CDir *dir, bool bcast)
     //if (*it == except) continue;
     dout(7) << "sending dir_update on " << *dir << " to " << *it << dendl;
 
-    mds->send_message_mds(new MDirUpdate(dir->dirfrag(),
+    mds->send_message_mds(new MDirUpdate(mds->get_nodeid(),
+					 dir->dirfrag(),
 					 dir->dir_rep,
 					 dir->dir_rep_by,
 					 path,
