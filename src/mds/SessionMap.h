@@ -44,16 +44,15 @@ class Session : public RefCountedObject {
 public:
   /*
                     
-        <deleted> <-- closed <------------+--------+
-             ^         |                  |        |
-             |         v                  |        |
-          killing <-- opening  <---+      |        |
-             ^         |   |       |      |        |
-             |         v   |       |      |        |
-           stale <--> open --> closing ---+        |
-             |          ^| |    |                  |
-             |          |v v    v                  |
-             +--------> importing <----------------+
+        <deleted> <-- closed <------------+
+             ^         |                  |
+             |         v                  |
+          killing <-- opening <----+      |
+             ^         |           |      |
+             |         v           |      |
+           stale <--> open --> closing ---+
+
+    + additional dimension of 'importing' (with counter)
 
   */
   static const int STATE_CLOSED = 0;
@@ -62,7 +61,6 @@ public:
   static const int STATE_CLOSING = 3;   // journaling close
   static const int STATE_STALE = 4;
   static const int STATE_KILLING = 5;
-  static const int STATE_IMPORTING = 6;
 
   const char *get_state_name(int s) {
     switch (s) {
@@ -72,7 +70,6 @@ public:
     case STATE_CLOSING: return "closing";
     case STATE_STALE: return "stale";
     case STATE_KILLING: return "killing";
-    case STATE_IMPORTING: return "importing";
     default: return "???";
     }
   }
@@ -80,6 +77,7 @@ public:
 private:
   int state;
   __u64 state_seq;
+  int importing_count;
   friend class SessionMap;
 public:
   entity_inst_t inst;
@@ -128,6 +126,15 @@ public:
   bool is_stale() { return state == STATE_STALE; }
   bool is_killing() { return state == STATE_KILLING; }
 
+  void inc_importing() {
+    ++importing_count;
+  }
+  void dec_importing() {
+    assert(importing_count);
+    --importing_count;
+  }
+  bool is_importing() { return importing_count > 0; }
+
   // -- caps --
 private:
   version_t cap_push_seq;        // cap push seq #
@@ -167,7 +174,7 @@ public:
 
 
   Session() : 
-    state(STATE_CLOSED), state_seq(0),
+    state(STATE_CLOSED), state_seq(0), importing_count(0),
     item_session_list(this),
     requests(0),  // member_offset passed to front() manually
     cap_push_seq(0) { }

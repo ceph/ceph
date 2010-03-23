@@ -305,6 +305,7 @@ struct MDRequest : public Mutation {
     bool was_link_merge;
 
     map<client_t,entity_inst_t> imported_client_map;
+    map<client_t,__u64> sseq_map;
     map<CInode*, map<client_t,Capability::Export> > cap_imports;
     
     // for snaps

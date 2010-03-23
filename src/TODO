@@ -60,7 +60,6 @@ filestore
   - need an osdmap cache layer?
 
 bugs
-- mds prepare_force_open_sessions, then import aborts.. session is still OPENING but no client_session is sent...
 - rm -r failure (on kernel tree)
 - dbench 1, restart mds (may take a few times), dbench will error out.
 
