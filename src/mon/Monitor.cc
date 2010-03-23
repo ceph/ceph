@@ -597,36 +597,6 @@ bool Monitor::_ms_dispatch(Message *m)
   if (s)
     dout(20) << " caps " << s->caps.get_str() << dendl;
 
-#define ALLOW_CAPS(service_id, allow_caps) \
-do { \
-  if (src_is_mon) \
-    break; \
-  if (s && ((int)s->caps.get_caps(service_id) & (allow_caps)) != (allow_caps)) { \
-    dout(0) << "filtered out request due to caps " \
-           << " allowing=" << #allow_caps << " message=" << *m << dendl; \
-    delete m; \
-    goto out; \
-  } \
-} while (0)
-
-#define ALLOW_MESSAGES_FROM(peers) \
-do { \
-  if (connection && (connection->get_peer_type() & (peers | CEPH_ENTITY_TYPE_MON)) == 0) { \
-    dout(0) << "filtered out request, peer=" << connection->get_peer_type() \
-           << " allowing=" << #peers << " message=" << *m << dendl; \
-    delete m; \
-    goto out; \
-  } \
-} while (0)
-
-#define EXIT_NOT_ADMIN \
-  if (connection) \
-    dout(0) << "filtered out request (not admin), peer=" << connection->get_peer_type() \
-	    << " entity_name=" << entity_name.to_str() << dendl;	\
-  goto out; 
-
-#define IS_NOT_ADMIN (!src_is_mon) && (!entity_name.is_admin())
-
   {
     switch (m->get_type()) {
       
