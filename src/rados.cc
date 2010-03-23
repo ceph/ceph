@@ -44,8 +44,9 @@ void usage()
   cerr << "   put objname -- write object\n";
   cerr << "   rm objname  -- remove object\n";
   cerr << "   ls          -- list objects in pool\n\n";
+  cerr << "   chown 123   -- change the pool owner to auid 123";
 
-  cerr << "   mkpool foo  -- create pool 'foo'\n";
+  cerr << "   mkpool foo [123]  -- create pool 'foo' [with auid 123]\n";
   cerr << "   rmpool foo  -- remove pool 'foo'\n";
   cerr << "   lssnap      -- list snaps\n";
   cerr << "   mksnap foo  -- create snap 'foo'\n";
@@ -217,6 +218,18 @@ int main(int argc, const char **argv)
     }
     if (!stdout)
       delete outstream;
+  }
+  else if (strcmp(nargs[0], "chown") == 0) {
+    if (!pool || nargs.size() < 2)
+      usage();
+
+    __u64 new_auid = strtol(nargs[1], 0, 10);
+    ret = rados.change_pool_auid(p, new_auid);
+    if (ret < 0) {
+      cerr << "error changing auid on pool " << pool << ':'
+	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+    } else cerr << "changed auid on pool " << pool
+		<< " to " << new_auid << std::endl;
   }
   else if (strcmp(nargs[0], "get") == 0) {
     if (!pool || nargs.size() < 3)
