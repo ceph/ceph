@@ -260,7 +260,7 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
 bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
 {
   int from = stats->get_orig_source().num();
-
+  MPGStatsAck *ack;
   //check caps
   if (!stats->caps->check_privileges(PAXOS_PGMAP, MON_CAP_R)) {
     dout(0) << "MPGStats received from entity with insufficient privileges "
@@ -288,7 +288,7 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
   }
   
   dout(10) << " message contains no new osd|pg stats" << dendl;
-  MPGStatsAck *ack = new MPGStatsAck;
+  ack = new MPGStatsAck;
   for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
        p != stats->pg_stat.end();
        p++)
