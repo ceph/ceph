@@ -403,6 +403,7 @@ private:
     __u32 nonce = add_replica(who);
     ::encode(nonce, bl);
     ::encode(first, bl);
+    ::encode(fnode, bl);
     ::encode(dir_rep, bl);
     ::encode(dir_rep_by, bl);
   }
@@ -411,6 +412,7 @@ private:
     ::decode(nonce, p);
     replica_nonce = nonce;
     ::decode(first, p);
+    ::decode(fnode, p);
     ::decode(dir_rep, p);
     ::decode(dir_rep_by, p);
   }
