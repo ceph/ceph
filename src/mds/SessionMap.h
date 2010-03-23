@@ -48,12 +48,12 @@ public:
              ^         |                  |        |
              |         v                  |        |
           killing <-- opening  <---+      |        |
-             ^         |           |      |        |
-             |         v           |      |        |
+             ^         |   |       |      |        |
+             |         v   |       |      |        |
            stale <--> open --> closing ---+        |
-                       ^                           |
-                       |                           |
-                      importing <------------------+
+             |          ^| |    |                  |
+             |          |v v    v                  |
+             +--------> importing <----------------+
 
   */
   static const int STATE_CLOSED = 0;
