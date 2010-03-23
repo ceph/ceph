@@ -582,6 +582,10 @@ bool Monitor::_ms_dispatch(Message *m)
 	// do anything.
 	s->until = g_clock.now();
 	s->until += g_conf.mon_subscribe_interval;
+      } else {
+	//HACK: This isn't really all the secure, is it?
+	reuse_caps = false;
+	s->caps = *mon_caps;
       }
       if (reuse_caps)
         s->caps = caps;
