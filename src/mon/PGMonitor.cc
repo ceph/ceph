@@ -59,23 +59,6 @@ void PGMonitor::tick()
 
   update_from_paxos();
   dout(10) << pg_map << dendl;
-
-  if (!mon->is_leader()) return; 
-
-  /*
-  // magic incantation that Sage told me
-
-
-  // Is it the nth second? If not, do nothing.
-  const int N = 10; //magic number! codify somewhere later
-  utime_t now = g_clock.now();
-  if (now % N) != 0 return;
-
-  if (mon->osdmon->paxos->is_readable()) {
-    // safely use mon->osdmon->osdmap
-  }
-  */
-
 }
 
 void PGMonitor::create_initial(bufferlist& bl)
