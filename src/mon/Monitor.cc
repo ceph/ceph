@@ -387,11 +387,22 @@ void Monitor::handle_forward(MForward *m)
   dout(10) << "received forwarded message from " << m->msg->get_source_inst()
 	   << " via " << m->get_source_inst() << dendl;
   PaxosServiceMessage *req = m->msg;
+  //check caps!
+  Session *session = (Session *)m->get_connection()->get_priv();
+  if (session &&
+      !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+    dout(0) << "forward from entity with insufficient caps! " 
+	    << session->caps << dendl;
+    goto out;
+  }
   //set the Connection to be the one it came in on so we don't
   //deref bad memory later
   req->set_connection(m->get_connection()->get());
   _ms_dispatch(req);
   m->msg = NULL;
+
+ out:
+  if (session) session->put();
   delete m;
 }
 
@@ -729,7 +740,6 @@ do { \
       break;
 
     case MSG_FORWARD:
-      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
       handle_forward((MForward *)m);
       break;
 
