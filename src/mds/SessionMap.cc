@@ -159,8 +159,7 @@ void SessionMap::encode(bufferlist& bl)
     if (p->second->is_open() ||
 	p->second->is_closing() ||
 	p->second->is_stale() ||
-	p->second->is_stale_purging() ||
-	p->second->is_stale_closing()) {
+	p->second->is_killing()) {
       ::encode(p->first, bl);
       p->second->encode(bl);
     }

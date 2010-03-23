@@ -43,17 +43,20 @@ class Session : public RefCountedObject {
   // -- state etc --
 public:
   /*
+   +-----------------------------------+
+   |                                   |
+  closed <---------------------+       |
+   |                           |       |
+   v                           |       |
+  opening  <---+               |       |
+   |           |               |       |
+   v           |               |       |
+  open --> closing ------------+       |
+   |^                                  |
+   v|                                  v
+  stale -> killing --------------> <deleted>
 
-  closed <---------------------+
-   |                           |
-   v                           |
-  opening  <---+               |
-   |           |               |
-   v           |               |
-  open --> closing ------------+
-   |^                          
-   v|                          
-  stale -> stale_purging --> stale_closing  --> <deleted>
+  (closed) -> importing -> (opening or open or <deleted>)
 
   */
   static const int STATE_CLOSED = 0;
@@ -61,8 +64,7 @@ public:
   static const int STATE_OPEN = 2;
   static const int STATE_CLOSING = 3;   // journaling close
   static const int STATE_STALE = 4;
-  static const int STATE_STALE_PURGING = 5;
-  static const int STATE_STALE_CLOSING = 6;
+  static const int STATE_KILLING = 5;
 
   const char *get_state_name(int s) {
     switch (s) {
@@ -71,8 +73,7 @@ public:
     case STATE_OPEN: return "open";
     case STATE_CLOSING: return "closing";
     case STATE_STALE: return "stale";
-    case STATE_STALE_PURGING: return "stale_purging";
-    case STATE_STALE_CLOSING: return "stale_closing";
+    case STATE_KILLING: return "killing";
     default: return "???";
     }
   }
@@ -126,8 +127,7 @@ public:
   bool is_open() { return state == STATE_OPEN; }
   bool is_closing() { return state == STATE_CLOSING; }
   bool is_stale() { return state == STATE_STALE; }
-  bool is_stale_purging() { return state == STATE_STALE_PURGING; }
-  bool is_stale_closing() { return state == STATE_STALE_CLOSING; }
+  bool is_killing() { return state == STATE_KILLING; }
 
   // -- caps --
 private:

@@ -71,7 +71,6 @@ public:
   void handle_client_session(class MClientSession *m);
   void _session_logged(Session *session, __u64 state_seq, 
 		       bool open, version_t pv, interval_set<inodeno_t>& inos,version_t piv);
-  void _finish_session_purge(Session *);
   version_t prepare_force_open_sessions(map<client_t,entity_inst_t> &cm);
   void finish_force_open_sessions(map<client_t,entity_inst_t> &cm);
   void terminate_sessions();
