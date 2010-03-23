@@ -4037,7 +4037,9 @@ void OSD::handle_op(MOSDOp *op)
   int pool = pgid.pool();
   int perm = caps.get_pool_cap(pool, osdmap->get_pg_pool(pool)->v.auid);
 
-  dout(10) << "request for pool=" << pool << " perm=" << perm
+  dout(10) << "request for pool=" << pool << " owner="
+	   << osdmap->get_pg_pool(pool)->v.auid
+	   << " perm=" << perm
 	   << " may_read=" << op->may_read() << " may_write=" << op->may_write()
 	   << " may_exec=" << op->may_exec() << dendl;
 
