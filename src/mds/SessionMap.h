@@ -47,7 +47,7 @@ public:
         <deleted> <-- closed <------------+--------+
              ^         |                  |        |
              |         v                  |        |
-           killing    opening  <---+      |        |
+          killing <-- opening  <---+      |        |
              ^         |           |      |        |
              |         v           |      |        |
            stale <--> open --> closing ---+        |

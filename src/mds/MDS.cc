@@ -619,13 +619,12 @@ void MDS::handle_command(MMonCommand *m)
       mdcache->dump_cache();
   }
   else if (m->cmd[0] == "session" && m->cmd[1] == "kill") {
-    Session *session = sessionmap.
-      get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
-				strtol(m->cmd[2].c_str(), 0, 10)));
-    if (session) {
-      dout(20) << "killing session " << session << dendl;
-      server->end_session(session);
-    } else dout(15) << "session " << session << " not in sessionmap!" << dendl;
+    Session *session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
+							    strtol(m->cmd[2].c_str(), 0, 10)));
+    if (session)
+      server->kill_session(session);
+    else
+      dout(15) << "session " << session << " not in sessionmap!" << dendl;
   } else if (m->cmd[0] == "issue_caps") {
     long inum = strtol(m->cmd[1].c_str(), 0, 10);
     CInode * ino = mdcache->get_inode(inodeno_t(inum));

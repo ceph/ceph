@@ -75,7 +75,7 @@ public:
   void finish_force_open_sessions(map<client_t,entity_inst_t> &cm);
   void terminate_sessions();
   void find_idle_sessions();
-  void end_session (Session *session);
+  void kill_session(Session *session);
   void reconnect_clients();
   void handle_client_reconnect(class MClientReconnect *m);
   //void process_reconnect_cap(CInode *in, int from, ceph_mds_cap_reconnect& capinfo);

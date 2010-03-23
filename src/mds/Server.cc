@@ -426,7 +426,8 @@ void Server::find_idle_sessions()
 
   while (1) {
     Session *session = mds->sessionmap.get_oldest_session(Session::STATE_STALE);
-    if (!session) break;
+    if (!session)
+      break;
     assert(session->is_stale());
     if (session->last_cap_renew >= cutoff) {
       dout(20) << "oldest stale session is " << session->inst << " and sufficiently new (" 
@@ -441,18 +442,27 @@ void Server::find_idle_sessions()
     mds->logclient.log(LOG_INFO, ss);
 
     dout(10) << "autoclosing stale session " << session->inst << " last " << session->last_cap_renew << dendl;
-    end_session(session);
+    kill_session(session);
   }
 }
 
-void Server::end_session(Session *session)
+void Server::kill_session(Session *session)
 {
-  assert(session);
-  __u64 sseq = mds->sessionmap.set_state(session, Session::STATE_KILLING);
-  version_t pv = ++mds->sessionmap.projected;
-  mdlog->start_submit_entry(new ESession(session->inst, false, pv),
-			    new C_MDS_session_finish(mds, session, sseq, false, pv));
-  mdlog->flush();
+  if (session->is_opening() ||
+      session->is_open() ||
+      session->is_stale()) {
+    dout(10) << "kill_session " << session << dendl;
+    __u64 sseq = mds->sessionmap.set_state(session, Session::STATE_KILLING);
+    version_t pv = ++mds->sessionmap.projected;
+    mdlog->start_submit_entry(new ESession(session->inst, false, pv),
+			      new C_MDS_session_finish(mds, session, sseq, false, pv));
+    mdlog->flush();
+  } else {
+    dout(10) << "kill_session already closing/killing " << session << dendl;
+    assert(session->is_closing() || 
+	   session->is_closed() || 
+	   session->is_killing());
+  }
 }
 
 void Server::reconnect_clients()
