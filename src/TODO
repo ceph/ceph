@@ -60,6 +60,8 @@ filestore
   - need an osdmap cache layer?
 
 bugs
+- mds: rdlock forwards to auth on inode file lock, leading to an infinite forward loop if dirfrag is a subtree on another node.
+
 - rm -r failure (on kernel tree)
 - dbench 1, restart mds (may take a few times), dbench will error out.
 
