@@ -7368,7 +7368,7 @@ void MDCache::handle_discover(MDiscover *dis)
     replicate_inode(myin, from, reply->trace);
     dout(10) << "added mdsdir " << *myin << dendl;
 
-    cur = stray;
+    cur = myin;
   }
   else {
     // there's a base inode
