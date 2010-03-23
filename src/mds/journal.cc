@@ -709,12 +709,12 @@ void ESession::replay(MDS *mds)
     assert(mds->sessionmap.version == cmapv);
     if (open) {
       Session *session = mds->sessionmap.get_or_add_session(client_inst);
-      if (session->is_new())
+      if (session->is_closed())
 	mds->sessionmap.set_state(session, Session::STATE_OPEN);
       dout(10) << "session " << session << " state " << session->get_state() << dendl;
     } else {
       Session *session = mds->sessionmap.get_session(client_inst.name);
-      if (session)
+      if (session->is_closed())
 	mds->sessionmap.remove_session(session);
     }
   }

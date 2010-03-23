@@ -1559,12 +1559,15 @@ bool MDS::ms_handle_reset(Connection *con)
     objecter->ms_handle_reset(con);
   } else if (con->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT) {
     Session *session = (Session *)con->get_priv();
-    if (!session || session->is_closed() || session->is_new())
-      messenger->mark_down(con->get_peer_addr());
-    if (session->is_new())
-      sessionmap.remove_session(session);
-    if (session)
+    if (session) {
+      if (session->is_closed()) {
+	messenger->mark_down(con->get_peer_addr());
+	sessionmap.remove_session(session);
+      }
       session->put();
+    } else {
+      messenger->mark_down(con->get_peer_addr());
+    }
   }
   return false;
 }
@@ -1597,6 +1600,7 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
 						  authorizer_data, authorizer_reply, name, global_id, caps_info);
 
   if (is_valid) {
+    // wire up a Session* to this connection, and add it to the session map
     entity_name_t n(con->get_peer_type(), global_id);
     Session *s = sessionmap.get_session(n);
     if (!s) {

@@ -193,8 +193,6 @@ void Server::handle_client_session(MClientSession *m)
       dout(10) << "already open|opening, dropping this req" << dendl;
       return;
     }
-    if (session->is_closed())
-      mds->sessionmap.add_session(session);
     sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
     mds->sessionmap.touch_session(session);
     pv = ++mds->sessionmap.projected;
@@ -295,13 +293,16 @@ void Server::_session_logged(Session *session, __u64 state_seq, bool open, versi
       assert(mds->inotable->get_version() == piv);
     }
 
-    if (session->is_closing())
+    if (session->is_closing()) {
+      // reset session
       mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), session->inst);
-    else if (session->is_stale_closing())
-      mds->messenger->mark_down(session->inst.addr); // kill connection
-    mds->sessionmap.set_state(session, Session::STATE_CLOSED);
-    session->clear();
-    mds->sessionmap.remove_session(session);
+      mds->sessionmap.set_state(session, Session::STATE_CLOSED);
+      session->clear();
+    } else if (session->is_stale_closing()) {
+      // destroy session, close connection
+      mds->messenger->mark_down(session->inst.addr); 
+      mds->sessionmap.remove_session(session);
+    }
   } else {
     assert(0);
   }
@@ -316,8 +317,7 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm)
 	   << dendl;
   for (map<client_t,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
     Session *session = mds->sessionmap.get_or_add_session(p->second);
-    if (session->is_new() ||
-	session->is_closed() || session->is_closing())
+    if (session->is_closed() || session->is_closing())
       mds->sessionmap.set_state(session, Session::STATE_OPENING);
     mds->sessionmap.touch_session(session);
   }
@@ -535,8 +535,8 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     // notify client of success with an OPEN
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), m->get_source_inst());
     
-    if (session->is_new()) {
-      dout(10) << " session is new, will make best effort to reconnect " 
+    if (session->is_closed()) {
+      dout(10) << " session is closed, will make best effort to reconnect " 
 	       << m->get_source_inst() << dendl;
       mds->sessionmap.set_state(session, Session::STATE_OPENING);
       version_t pv = ++mds->sessionmap.projected;

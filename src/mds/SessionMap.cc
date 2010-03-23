@@ -182,7 +182,7 @@ void SessionMap::decode(bufferlist::iterator& p)
       entity_inst_t inst;
       ::decode(inst.name, p);
       Session *s = get_or_add_session(inst);
-      if (s->is_new())
+      if (s->is_closed())
 	set_state(s, Session::STATE_OPEN);
       s->decode(p);
     }
