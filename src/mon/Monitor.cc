@@ -440,6 +440,15 @@ void Monitor::send_reply(PaxosServiceMessage *req, Message *reply, entity_inst_t
 
 void Monitor::handle_route(MRoute *m)
 {
+  Session *session = (Session *)m->get_connection()->get_priv();
+  //check privileges
+  if (session && !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+    dout(0) << "MRoute received from entity without appropriate perms! "
+	    << dendl;
+    session->put();
+    delete m;
+    return;
+  }
   dout(10) << "handle_route " << *m->msg << " to " << m->dest << dendl;
   
   // look it up
@@ -457,6 +466,7 @@ void Monitor::handle_route(MRoute *m)
     m->msg = NULL;
   }
   delete m;
+  if (session) session->put();
 }
 
 void Monitor::resend_routed_requests()
@@ -621,7 +631,6 @@ do { \
     switch (m->get_type()) {
       
     case MSG_ROUTE:
-      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
       handle_route((MRoute*)m);
       break;
 
