@@ -419,7 +419,10 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue)
       (lock->get_sm()->states[next].can_lease || !lock->is_leased()) &&
       (!caps || ((~lock->gcaps_allowed(CAP_ANY, next) & other_issued) == 0 &&
 		 (~lock->gcaps_allowed(CAP_LONER, next) & loner_issued) == 0 &&
-		 (~lock->gcaps_allowed(CAP_XLOCKER, next) & xlocker_issued) == 0))) {
+		 (~lock->gcaps_allowed(CAP_XLOCKER, next) & xlocker_issued) == 0)) &&
+      lock->get_state() != LOCK_SYNC_MIX2 &&  // these states need an explicit trigger from the auth mds
+      lock->get_state() != LOCK_MIX_SYNC2
+      ) {
     dout(7) << "eval_gather finished gather on " << *lock
 	    << " on " << *lock->get_parent() << dendl;
 
