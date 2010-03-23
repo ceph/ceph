@@ -4317,12 +4317,12 @@ void MDCache::rejoin_send_acks()
       ack[r->first]->add_inode_base(root);
       ack[r->first]->add_inode_locks(root, r->second);
     }
-  if (stray)
-    for (map<int,int>::iterator r = stray->replicas_begin();
-	 r != stray->replicas_end();
+  if (myin)
+    for (map<int,int>::iterator r = myin->replicas_begin();
+	 r != myin->replicas_end();
 	 ++r) {
-      ack[r->first]->add_inode_base(stray);
-      ack[r->first]->add_inode_locks(stray, r->second);
+      ack[r->first]->add_inode_base(myin);
+      ack[r->first]->add_inode_locks(myin, r->second);
     }
 
   // include inode base for any inodes whose scatterlocks may have updated
