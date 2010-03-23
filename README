@@ -5,22 +5,13 @@ Please see http://ceph.newdream.net/ for current info.
 
 ----
 
-To build the Linux kernel client,
-
-$ cd src/kernel
-$ make
-or
-$ make KERNELDIR=/path/to/linux
-$ insmod ceph.ko
-$ mount -t ceph 1.2.3.4:/ /mnt/ceph
-...
-
-----
-
 To build the server daemons, and FUSE client,
 
 $ ./autogen.sh
 $ ./configure
+
+$ make
+ or
 $ cd src
 $ make
 
@@ -35,7 +26,7 @@ daemons:
          information.
  cosd -- storage daemon.  stores objects on a given block device.
  cmds -- metadata daemon.  handles file system namespace.
- cmonctl -- send commands to the monitor cluster.
+ ceph -- send management commands to the monitor cluster.
 
 userland clients:
  cfuse -- fuse client.
@@ -46,13 +37,7 @@ tools:
  monmaptool -- create/edit mon map
  osdmaptool -- create/edit osd map 
  crushtool -- create/edit crush map
- dupstore -- duplicate an osd object store (offline)
 
-development/debugging:
- fakesyn -- simulator with synthetic workload
- fakefuse -- simulator that mounts with fuse
-
-----
-
-see also src/README
-
+scripts:
+ mkcephfs -- cluster mkfs tool
+ init-ceph -- init.d start/stop script
