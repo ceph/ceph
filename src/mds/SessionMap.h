@@ -43,20 +43,17 @@ class Session : public RefCountedObject {
   // -- state etc --
 public:
   /*
-   +-----------------------------------+
-   |                                   |
-  closed <---------------------+       |
-   |                           |       |
-   v                           |       |
-  opening  <---+               |       |
-   |           |               |       |
-   v           |               |       |
-  open --> closing ------------+       |
-   |^                                  |
-   v|                                  v
-  stale -> killing --------------> <deleted>
-
-  (closed) -> importing -> (opening or open or <deleted>)
+                    
+        <deleted> <-- closed <------------+--------+
+             ^         |                  |        |
+             |         v                  |        |
+           killing    opening  <---+      |        |
+             ^         |           |      |        |
+             |         v           |      |        |
+           stale <--> open --> closing ---+        |
+                       ^                           |
+                       |                           |
+                      importing <------------------+
 
   */
   static const int STATE_CLOSED = 0;
@@ -65,6 +62,7 @@ public:
   static const int STATE_CLOSING = 3;   // journaling close
   static const int STATE_STALE = 4;
   static const int STATE_KILLING = 5;
+  static const int STATE_IMPORTING = 6;
 
   const char *get_state_name(int s) {
     switch (s) {
@@ -74,6 +72,7 @@ public:
     case STATE_CLOSING: return "closing";
     case STATE_STALE: return "stale";
     case STATE_KILLING: return "killing";
+    case STATE_IMPORTING: return "importing";
     default: return "???";
     }
   }
