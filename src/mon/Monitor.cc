@@ -726,7 +726,6 @@ bool Monitor::_ms_dispatch(Message *m)
       ret = false;
     }
   }
-out:
   if (s) {
     s->put();
   }
