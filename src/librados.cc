@@ -131,6 +131,7 @@ public:
 
   int create_pool(string& name, __u64 auid=0);
   int delete_pool(const rados_pool_t& pool);
+  int change_pool_auid(const rados_pool_t& pool, __u64 auid);
 
   int list(PoolCtx& pool, int max_entries, std::list<object_t>& entries,
 			Objecter::ListContext *context);
@@ -562,6 +563,34 @@ int RadosClient::delete_pool(const rados_pool_t& pool)
   bool done;
   lock.Lock();
   objecter->delete_pool(poolID, new C_SafeCond(&mylock, &cond, &done, &reply));
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done) cond.Wait(mylock);
+  mylock.Unlock();
+  return reply;
+}
+
+/**
+ * Attempt to change a pool's associated auid "owner." Requires that you
+ * have write permission on both the current and new auid.
+ * pool: reference to the pool to change.
+ * auid: the auid you wish the pool to have.
+ * Returns: 0 on success, or -ERROR# on failure.
+ */
+int RadosClient::change_pool_auid(const rados_pool_t& pool, __u64 auid)
+{
+  int reply;
+
+  int poolID = ((PoolCtx *)pool)->poolid;
+
+  Mutex mylock("RadosClient::change_pool_auid::mylock");
+  Cond cond;
+  bool done;
+  lock.Lock();
+  objecter->change_pool_auid(poolID,
+			     new C_SafeCond(&mylock, &cond, &done, &reply),
+			     auid);
   lock.Unlock();
 
   mylock.Lock();
@@ -1096,6 +1125,12 @@ int Rados::delete_pool(const rados_pool_t& pool)
   return client->delete_pool(pool);
 }
 
+int Rados::change_pool_auid(const rados_pool_t& pool, __u64 auid)
+{
+  if (!client) return -EINVAL;
+  return client->change_pool_auid(pool, auid);
+}
+
 int Rados::get_fs_stats(rados_statfs_t& result) {
   if(!client) return -EINVAL;
   return client->get_fs_stats(result);
@@ -1460,6 +1495,12 @@ extern "C" int rados_delete_pool(const rados_pool_t pool)
 {
   return radosp->delete_pool(pool);
 }
+
+extern "C" int rados_change_pool_auid(const rados_pool_t pool, __u64 auid)
+{
+  return radosp->change_pool_auid(pool, auid);
+}
+
 // snaps
 
 extern "C" int rados_snap_create(const rados_pool_t pool, const char *snapname)

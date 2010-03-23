@@ -55,6 +55,7 @@ int rados_pool_list_next(rados_pool_t pool, const char **entry, rados_list_ctx_t
 int rados_create_pool(const char *name);
 int rados_create_pool_with_auid(const char *name, __u64 auid);
 int rados_delete_pool(const rados_pool_t pool);
+int rados_change_pool_auid(const rados_pool_t pool, __u64 auid);
 
 /* snapshots */
 int rados_snap_create(const rados_pool_t pool, const char *snapname);
@@ -135,6 +136,7 @@ public:
 
   int create_pool(const char *name, __u64 auid=0);
   int delete_pool(const rados_pool_t& pool);
+  int change_pool_auid(const rados_pool_t& pool, __u64 auid);
 
   int snap_create(const rados_pool_t pool, const char *snapname);
   int snap_remove(const rados_pool_t pool, const char *snapname);
