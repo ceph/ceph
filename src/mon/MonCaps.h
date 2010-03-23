@@ -17,6 +17,12 @@
  * "allow rw service_name" (which allows reading and writing to the named
  *                          service type)
  * "allow *" (which allows full access to EVERYTHING)
+ *
+ * When the monitor is checking permissions, besides the obvious read and write
+ * it generally equates having an execute permission with being of the
+ * associated type. So, in instances where it only wants to receive a
+ * certain kind of message from OSDs, it will require a MON_CAP_X on
+ * PAXOS_OSDMAP.
  */
 
 #ifndef __MONCAPS_H
