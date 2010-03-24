@@ -109,6 +109,7 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
 
   mon_caps = new MonCaps();
   mon_caps->set_allow_all(true);
+  mon_caps->text = "allow *";
 }
 
 Paxos *Monitor::add_paxos(int type)
@@ -570,6 +571,7 @@ bool Monitor::_ms_dispatch(Message *m)
   bool src_is_mon;
 
   if (connection) {
+    dout(20) << "have connection" << dendl;
     s = (MonSession *)connection->get_priv();
     if (s && s->closed) {
       caps = s->caps;
@@ -578,19 +580,23 @@ bool Monitor::_ms_dispatch(Message *m)
       s = NULL;
     }
     if (!s) {
+      dout(10) << "do not have session, making new one" << dendl;
       s = session_map.new_session(m->get_source_inst());
       m->get_connection()->set_priv(s->get());
       dout(10) << "ms_dispatch new session " << s << " for " << s->inst << dendl;
 
-      if (!s->inst.name.is_mon()) {
+      if (m->get_connection()->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
+	dout(10) << "setting timeout on session" << dendl;
 	// set an initial timeout here, so we will trim this session even if they don't
 	// do anything.
 	s->until = g_clock.now();
 	s->until += g_conf.mon_subscribe_interval;
       } else {
-	//HACK: This isn't really all the secure, is it?
+	//give it monitor caps; the peer type has been authenticated
 	reuse_caps = false;
-	s->caps = *mon_caps;
+	dout(5) << "setting monitor caps on this connection" << dendl;
+	if (!s->caps.allow_all) //but no need to repeatedly copy
+	  s->caps = *mon_caps;
       }
       if (reuse_caps)
         s->caps = caps;
