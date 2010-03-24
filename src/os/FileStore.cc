@@ -64,7 +64,7 @@
 
 #define DOUT_SUBSYS filestore
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << std::hex << pthread_self() << std::dec << " filestore(" << basedir << ") "
+#define dout_prefix *_dout << dbeginl << "filestore(" << basedir << ") "
 
 #include "include/buffer.h"
 

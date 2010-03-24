@@ -25,7 +25,7 @@
 
 #define DOUT_SUBSYS journal
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << std::hex << pthread_self() << std::dec << " journal "
+#define dout_prefix *_dout << dbeginl << "journal "
 
 
 int FileJournal::_open(bool forwrite, bool create)

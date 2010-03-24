@@ -36,7 +36,7 @@ static inline void _dout_begin_line() {
   _dout_lock.Lock();
   if (_dout_need_open)
     _dout_open_log();
-  *_dout << g_clock.now() << " ";
+  *_dout << g_clock.now() << " " << std::hex << pthread_self() << std::dec << " ";
 }
 static void _dout_begin_line_static() {
   _dout_begin_line();
