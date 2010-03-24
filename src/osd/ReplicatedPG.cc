@@ -1310,7 +1310,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       break;
 
     case CEPH_OSD_OP_TMAPUP:
-      {
+      if (bp.end()) {
+	dout(10) << "tmapup is a no-op" << dendl;
+      } else {
 	// read the whole object
 	bufferlist ibl;
 	vector<OSDOp> nops(1);
