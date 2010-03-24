@@ -69,7 +69,8 @@ struct MonCaps {
   bool allow_all;
   __u64 auid;
 public:
-  MonCaps() : default_action(0), allow_all(false) {}
+  MonCaps() : text(), default_action(0),
+	      allow_all(false), auid(CEPH_AUTH_UID_DEFAULT) {}
   const string& get_str() const { return text; }
   bool parse(bufferlist::iterator& iter);
   rwx_t get_caps(int service);
