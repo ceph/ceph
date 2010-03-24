@@ -94,8 +94,8 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   elector(this, w),
   mon_epoch(0), 
   leader(0),
-
-  paxos(PAXOS_NUM), paxos_service(PAXOS_NUM)
+  paxos(PAXOS_NUM), paxos_service(PAXOS_NUM),
+  routed_request_tid(0)
 {
   paxos_service[PAXOS_MDSMAP] = new MDSMonitor(this, add_paxos(PAXOS_MDSMAP));
   paxos_service[PAXOS_MONMAP] = new MonmapMonitor(this, add_paxos(PAXOS_MONMAP));
