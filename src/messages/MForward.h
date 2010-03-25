@@ -55,6 +55,7 @@ struct MForward : public Message {
     ::decode(client, p);
     ::decode(client_caps, p);
     msg = (PaxosServiceMessage *)decode_message(p);
+    msg->set_orig_source_inst(client);
   }
 
   const char *get_type_name() { return "forward"; }

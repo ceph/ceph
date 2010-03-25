@@ -220,15 +220,18 @@ protected:
   Connection *connection;
 
   friend class Messenger;
+
+  bool _forwarded;
+  entity_inst_t _orig_source_inst;
   
 public:
   atomic_t nref;
 
-  Message() : connection(NULL), nref(0) {
+  Message() : connection(NULL), _forwarded(false), nref(0) {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
   };
-  Message(int t) : connection(NULL), nref(0) {
+  Message(int t) : connection(NULL), _forwarded(false), nref(0) {
     memset(&header, 0, sizeof(header));
     header.type = t;
     header.version = 1;
@@ -313,10 +316,21 @@ public:
   entity_addr_t get_source_addr() { return entity_addr_t(header.src.addr); }
   void set_source_inst(entity_inst_t& inst) { header.src = inst; }
 
-  entity_inst_t get_orig_source_inst() { return entity_inst_t(header.orig_src); }
-  entity_name_t get_orig_source() { return entity_name_t(header.orig_src.name); }
-  entity_addr_t get_orig_source_addr() { return entity_addr_t(header.orig_src.addr); }
-  void set_orig_source_inst(entity_inst_t &i) { header.orig_src = i; }
+  entity_inst_t get_orig_source_inst() {
+    if (_forwarded)
+      return _orig_source_inst;
+    return get_source_inst();
+  }
+  entity_name_t get_orig_source() {
+    return get_orig_source_inst().name;
+  }
+  entity_addr_t get_orig_source_addr() {
+    return get_orig_source_inst().addr;
+  }
+  void set_orig_source_inst(entity_inst_t& i) {
+    _forwarded = true;
+    _orig_source_inst = i;
+  }
 
   // virtual bits
   virtual void decode_payload() = 0;
