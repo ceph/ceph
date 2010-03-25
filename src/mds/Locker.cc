@@ -2813,15 +2813,6 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   CInode *in = (CInode*)lock->get_parent();
   dout(10) << "scatter_writebehind " << in->inode.mtime << " on " << *lock << " on " << *in << dendl;
 
-  // hack:
-  if (in->is_base()) {
-    dout(10) << "scatter_writebehind just clearing updated flag for base inode " << *in << dendl;
-    lock->clear_dirty();
-    if (!lock->is_stable())
-      eval_gather(lock);
-    return;
-  }
-
   // journal
   Mutation *mut = new Mutation;
   mut->ls = mds->mdlog->get_current_segment();
