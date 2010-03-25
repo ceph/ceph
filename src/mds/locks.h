@@ -30,6 +30,7 @@ struct sm_t {
 #define AUTH 2 // auth only
 #define XCL  3 // auth or exclusive client
 #define FW   4 // fw to auth, if replica
+#define REQ  5 // req state change from auth, if replica
 
 extern struct sm_t sm_simplelock;
 extern struct sm_t sm_filelock;
@@ -102,6 +103,7 @@ extern struct sm_t sm_locallock;
 #define LOCK_AC_REQSCATTER   7
 #define LOCK_AC_REQUNSCATTER 8
 #define LOCK_AC_NUDGE        9
+#define LOCK_AC_REQRDLOCK   10
 
 #define LOCK_AC_FOR_REPLICA(a)  ((a) < 0)
 #define LOCK_AC_FOR_AUTH(a)     ((a) > 0)
@@ -120,6 +122,7 @@ static inline const char *get_lock_action_name(int a) {
   case LOCK_AC_REQSCATTER: return "reqscatter";
   case LOCK_AC_REQUNSCATTER: return "requnscatter";
   case LOCK_AC_NUDGE: return "nudge";
+  case LOCK_AC_REQRDLOCK: return "reqrdlock";
   default: return "???";
   }
 }
