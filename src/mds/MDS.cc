@@ -324,7 +324,7 @@ void MDS::forward_message_mds(Message *m, int mds)
 
   // client request?
   if (m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
-      ((MClientRequest*)m)->get_orig_source().is_client()) {
+      ((MClientRequest*)m)->get_source().is_client()) {
     MClientRequest *creq = (MClientRequest*)m;
     creq->inc_num_fwd();    // inc forward counter
 
@@ -340,7 +340,7 @@ void MDS::forward_message_mds(Message *m, int mds)
     // tell the client where it should go
     messenger->send_message(new MClientRequestForward(creq->get_tid(), mds, creq->get_num_fwd(),
 						      client_must_resend),
-			    creq->get_orig_source_inst());
+			    creq->get_source_inst());
     
     if (client_must_resend) {
       delete m;

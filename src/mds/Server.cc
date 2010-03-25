@@ -100,7 +100,7 @@ void Server::dispatch(Message *m)
 
   // active?
   if (!mds->is_active() && 
-      !(mds->is_stopping() && m->get_orig_source().is_mds())) {
+      !(mds->is_stopping() && m->get_source().is_mds())) {
     if ((mds->is_reconnect() || mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) &&
 	m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
 	((MClientRequest*)m)->is_replay()) {
@@ -752,7 +752,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   }
 
   MClientRequest *req = mdr->client_request;
-  entity_inst_t client_inst = req->get_orig_source_inst();
+  entity_inst_t client_inst = req->get_source_inst();
   if (client_inst.name.is_mds())
     return;
 
@@ -824,7 +824,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   bool is_replay = mdr->client_request->is_replay();
   bool did_early_reply = mdr->did_early_reply;
   Session *session = mdr->session;
-  entity_inst_t client_inst = req->get_orig_source_inst();
+  entity_inst_t client_inst = req->get_source_inst();
   int dentry_wanted = req->get_dentry_wanted();
 
   if (!did_early_reply && !is_replay) {
@@ -986,10 +986,10 @@ void Server::handle_client_request(MClientRequest *req)
 
   // active session?
   Session *session = 0;
-  if (req->get_orig_source().is_client()) {
+  if (req->get_source().is_client()) {
     session = get_session(req);
     if (!session) {
-      dout(5) << "no session for " << req->get_orig_source() << ", dropping" << dendl;
+      dout(5) << "no session for " << req->get_source() << ", dropping" << dendl;
       delete req;
       return;
     }
@@ -1014,7 +1014,7 @@ void Server::handle_client_request(MClientRequest *req)
     assert(session);
     if (session->have_completed_request(req->get_reqid().tid)) {
       dout(5) << "already completed " << req->get_reqid() << dendl;
-      mds->messenger->send_message(new MClientReply(req, 0), req->get_orig_source_inst());
+      mds->messenger->send_message(new MClientReply(req, 0), req->get_source_inst());
 
       if (req->is_replay())
 	mds->queue_one_replay();
@@ -1571,7 +1571,7 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino, u
   if (useino && useino != in->inode.ino) {
     dout(0) << "WARNING: client specified " << useino << " and i allocated " << in->inode.ino << dendl;
     stringstream ss;
-    ss << mdr->client_request->get_orig_source() << " specified ino " << useino
+    ss << mdr->client_request->get_source() << " specified ino " << useino
        << " but mds" << mds->whoami << " allocated " << in->inode.ino;
     mds->logclient.log(LOG_ERROR, ss);
     //assert(0); // just for now.
@@ -1630,7 +1630,7 @@ void Server::journal_allocated_inos(MDRequest *mdr, EMetaBlob *blob)
   blob->set_ino_alloc(mdr->alloc_ino,
 		      mdr->used_prealloc_ino,
 		      mdr->prealloc_inos,
-		      mdr->client_request->get_orig_source(),
+		      mdr->client_request->get_source(),
 		      mds->sessionmap.projected,
 		      mds->inotable->get_projected_version());
 }
@@ -1923,7 +1923,7 @@ void Server::handle_client_stat(MDRequest *mdr)
     return;
 
   mds->balancer->hit_inode(g_clock.now(), ref, META_POP_IRD,
-			   mdr->client_request->get_orig_source().num());
+			   mdr->client_request->get_source().num());
 
   // reply
   dout(10) << "reply to stat on " << *req << dendl;
@@ -2107,12 +2107,12 @@ void Server::handle_client_open(MDRequest *mdr)
       Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session, 0, req->is_replay());
       if (cap)
 	dout(12) << "open issued caps " << ccap_string(cap->pending())
-		 << " for " << req->get_orig_source()
+		 << " for " << req->get_source()
 		 << " on " << *cur << dendl;
     } else {
       int caps = ceph_caps_for_mode(cmode);
       dout(12) << "open issued IMMUTABLE SNAP caps " << ccap_string(caps)
-	       << " for " << req->get_orig_source()
+	       << " for " << req->get_source()
 	       << " snapid " << mdr->snapid
 	       << " on " << *cur << dendl;
       mdr->snap_caps = caps;
@@ -2140,7 +2140,7 @@ void Server::handle_client_open(MDRequest *mdr)
     mds->balancer->hit_inode(mdr->now, cur, META_POP_IWR);
   else
     mds->balancer->hit_inode(mdr->now, cur, META_POP_IRD, 
-			     mdr->client_request->get_orig_source().num());
+			     mdr->client_request->get_source().num());
 
   CDentry *dn = 0;
   if (req->get_dentry_wanted()) {
@@ -2282,7 +2282,7 @@ void Server::handle_client_openc(MDRequest *mdr)
 void Server::handle_client_readdir(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  client_t client = req->get_orig_source().num();
+  client_t client = req->get_source().num();
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   CInode *diri = rdlock_path_pin_ref(mdr, 0, rdlocks, false);
   if (!diri) return;
