@@ -124,7 +124,7 @@ Monitor::~Monitor()
     delete *p;
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     delete *p;
-  //clean out SessionMap's subscriptions
+  //clean out MonSessionMap's subscriptions
   for (map<nstring, xlist<Subscription*> >::iterator i
 	 = session_map.subs.begin();
        i != session_map.subs.end();
@@ -133,7 +133,7 @@ Monitor::~Monitor()
       session_map.remove_sub(i->second.front());
     }
   }
-  //clean out SessionMap's sessions
+  //clean out MonSessionMap's sessions
   while (!session_map.sessions.empty()) {
     session_map.remove_session(session_map.sessions.front());
   }
@@ -263,7 +263,7 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
 
-  if (!m->caps->check_privileges(PAXOS_MONMAP, MON_CAP_ALL)) {
+  if (!m->get_session()->caps.check_privileges(PAXOS_MONMAP, MON_CAP_ALL)) {
     string rs="Access denied";
     reply_command((MMonCommand *)m, -EACCES, rs, 0);
   }
@@ -346,9 +346,9 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
 void Monitor::forward_request_leader(PaxosServiceMessage *req)
 {
   int mon = get_leader();
-  Session *session = 0;
+  MonSession *session = 0;
   if (req->get_connection())
-    session = (Session *)req->get_connection()->get_priv();
+    session = (MonSession *)req->get_connection()->get_priv();
   if (req->session_mon >= 0) {
     dout(10) << "forward_request won't double fwd request " << *req << dendl;
     delete req;
@@ -367,7 +367,7 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     
     //encode forward message and insert into routed_requests
     encode_message(req, rr->request_bl);
-    rr->session = (Session *)session->get();
+    rr->session = (MonSession *)session->get();
     routed_requests[rr->tid] = rr;
 
     session->routed_request_tids.insert(rr->tid);
@@ -388,7 +388,7 @@ void Monitor::handle_forward(MForward *m)
 {
   dout(10) << "received forwarded message from " << m->msg->get_source_inst()
 	   << " via " << m->get_source_inst() << dendl;
-  Session *session = (Session *)m->get_connection()->get_priv();
+  MonSession *session = (MonSession *)m->get_connection()->get_priv();
   assert(session);
 
   if (!session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
@@ -396,7 +396,7 @@ void Monitor::handle_forward(MForward *m)
 	    << session->caps << dendl;
   } else {
 
-    Session *s = new Session(m->msg->get_source_inst());
+    MonSession *s = new MonSession(m->msg->get_source_inst());
     s->caps = m->client_caps;
     Connection *c = new Connection;
     c->set_priv(s);
@@ -444,7 +444,7 @@ void Monitor::send_reply(PaxosServiceMessage *req, Message *reply, entity_inst_t
 
 void Monitor::handle_route(MRoute *m)
 {
-  Session *session = (Session *)m->get_connection()->get_priv();
+  MonSession *session = (MonSession *)m->get_connection()->get_priv();
   //check privileges
   if (session && !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
     dout(0) << "MRoute received from entity without appropriate perms! "
@@ -492,7 +492,7 @@ void Monitor::resend_routed_requests()
   }  
 }
 
-void Monitor::remove_session(Session *s)
+void Monitor::remove_session(MonSession *s)
 {
   dout(10) << "remove_session " << s << " " << s->inst << dendl;
   assert(!s->closed);
@@ -516,7 +516,7 @@ void Monitor::handle_observe(MMonObserve *m)
   //check that there are perms. Send a response back if they aren't sufficient,
   //and delete the message (if it's not deleted for us, which happens when
   //we own the connection to the requested observer).
-  if (!m->caps->check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+  if (!m->get_session()->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
     bool delete_m = false;
     if (m->session_mon) delete_m = true;
     send_reply(m, m);
@@ -563,14 +563,14 @@ bool Monitor::_ms_dispatch(Message *m)
   bool ret = true;
 
   Connection *connection = m->get_connection();
-  Session *s = NULL;
+  MonSession *s = NULL;
   bool reuse_caps = false;
   MonCaps caps;
   EntityName entity_name;
   bool src_is_mon;
 
   if (connection) {
-    s = (Session *)connection->get_priv();
+    s = (MonSession *)connection->get_priv();
     if (s && s->closed) {
       caps = s->caps;
       reuse_caps = true;
@@ -619,7 +619,6 @@ bool Monitor::_ms_dispatch(Message *m)
       break;
 
     case MSG_MON_COMMAND:
-      fill_caps(m);
       handle_command((MMonCommand*)m);
       break;
 
@@ -633,19 +632,16 @@ bool Monitor::_ms_dispatch(Message *m)
     case MSG_OSD_BOOT:
     case MSG_OSD_ALIVE:
     case MSG_OSD_PGTEMP:
-      fill_caps(m);
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
     case MSG_REMOVE_SNAPS:
-      fill_caps(m);
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
       // MDSs
     case MSG_MDS_BEACON:
     case MSG_MDS_OFFLOAD_TARGETS:
-      fill_caps(m);
       paxos_service[PAXOS_MDSMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
@@ -653,7 +649,6 @@ bool Monitor::_ms_dispatch(Message *m)
     case MSG_MON_GLOBAL_ID:
     case CEPH_MSG_AUTH:
       /* no need to check caps here */
-      fill_caps(m);
       paxos_service[PAXOS_AUTH]->dispatch((PaxosServiceMessage*)m);
       break;
 
@@ -661,18 +656,15 @@ bool Monitor::_ms_dispatch(Message *m)
     case CEPH_MSG_STATFS:
     case MSG_PGSTATS:
     case MSG_GETPOOLSTATS:
-      fill_caps(m);
       paxos_service[PAXOS_PGMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
     case MSG_POOLOP:
-      fill_caps(m);
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
       // log
     case MSG_LOG:
-      fill_caps(m);
       paxos_service[PAXOS_LOG]->dispatch((PaxosServiceMessage*)m);
       break;
 
@@ -708,7 +700,6 @@ bool Monitor::_ms_dispatch(Message *m)
       break;
 
     case MSG_MON_OBSERVE:
-      fill_caps(m);
       handle_observe((MMonObserve *)m);
       break;
 
@@ -742,30 +733,13 @@ bool Monitor::_ms_dispatch(Message *m)
   return ret;
 }
 
-//if we can, fill in the PaxosServiceMessage's caps field.
-void Monitor::fill_caps(Message *m)
-{
-  PaxosServiceMessage *msg = (PaxosServiceMessage *) m;
-  if (msg->caps) return; //already filled in!
-  Session *s = NULL;
-  if (m->get_connection()) {
-    s = (Session *) m->get_connection()->get_priv();
-    if (s) {
-      msg->caps = &s->caps;
-      s->put();
-    }
-  } else { //it has to be a monitor if the Connection's not set
-    msg->caps = mon_caps;
-  }
-}
-
 void Monitor::handle_subscribe(MMonSubscribe *m)
 {
   dout(10) << "handle_subscribe " << *m << dendl;
   
   bool reply = false;
 
-  Session *s = (Session *)m->get_connection()->get_priv();
+  MonSession *s = (MonSession *)m->get_connection()->get_priv();
   if (!s) {
     dout(10) << " no session, dropping" << dendl;
     delete m;
@@ -809,7 +783,7 @@ bool Monitor::ms_handle_reset(Connection *con)
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
     return false;
 
-  Session *s = (Session *)con->get_priv();
+  MonSession *s = (MonSession *)con->get_priv();
   if (!s)
     return false;
 
@@ -909,9 +883,9 @@ void Monitor::tick()
   
   // trim sessions
   utime_t now = g_clock.now();
-  xlist<Session*>::iterator p = session_map.sessions.begin();
+  xlist<MonSession*>::iterator p = session_map.sessions.begin();
   while (!p.end()) {
-    Session *s = *p;
+    MonSession *s = *p;
     ++p;
     
     // don't trim monitors
@@ -995,9 +969,9 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 
 void Monitor::handle_class(MClass *m)
 {
-  if (!m->caps->check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
+  if (!m->get_session()->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
     dout(0) << "MClass received from entity without sufficient privileges "
-	    << m->caps << dendl;
+	    << m->get_session()->caps << dendl;
     delete m;
     return;
   }

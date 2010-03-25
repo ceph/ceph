@@ -140,7 +140,7 @@ public:
 
 
   // -- sessions --
-  SessionMap session_map;
+  MonSessionMap session_map;
 
   void check_subs();
   void check_sub(Subscription *sub);
@@ -163,7 +163,7 @@ public:
   struct RoutedRequest {
     __u64 tid;
     bufferlist request_bl;
-    Session *session;
+    MonSession *session;
 
     ~RoutedRequest() {
       if (session)
@@ -181,7 +181,7 @@ public:
     send_reply(req, reply, req->get_orig_source_inst());
   }
   void resend_routed_requests();
-  void remove_session(Session *s);
+  void remove_session(MonSession *s);
 
   void inject_args(const entity_inst_t& inst, string& args, version_t version) {
     vector<string> a(1);
@@ -216,8 +216,6 @@ public:
     lock.Unlock();
     return ret;
   }
-  //fill in caps field if possible
-  void fill_caps(Message *m);
   //mon_caps is used for un-connected messages from monitors
   MonCaps * mon_caps;
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);

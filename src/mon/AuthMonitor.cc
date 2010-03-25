@@ -354,7 +354,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
 {
   dout(0) << "prep_auth() blob_size=" << m->get_auth_payload().length() << dendl;
 
-  Session *s = (Session *)m->get_connection()->get_priv();
+  MonSession *s = (MonSession *)m->get_connection()->get_priv();
   if (!s) {
     dout(10) << "no session, dropping" << dendl;
     delete m;

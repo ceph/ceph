@@ -27,21 +27,13 @@ struct MForward : public Message {
   PaxosServiceMessage *msg;
   entity_inst_t client;
   MonCaps client_caps;
-  bool has_caps;
   
-  MForward() : Message(MSG_FORWARD), msg(NULL), has_caps(false) {}
+  MForward() : Message(MSG_FORWARD), msg(NULL) {}
   //the message needs to have caps filled in!
   MForward(PaxosServiceMessage *m) :
     Message(MSG_FORWARD), msg(m) {
     client = m->get_source_inst();
-    if (m->caps) {
-      client_caps = *m->caps;
-      has_caps = true;
-    } else {
-      has_caps = false;
-      generic_dout(10) << "creating MForward without caps on message " 
-		       << m << dendl;
-    }
+    client_caps = m->get_session()->caps;
   }
 
   ~MForward() {
@@ -50,7 +42,6 @@ struct MForward : public Message {
   
   void encode_payload() {
     ::encode(client, payload);
-    ::encode(has_caps, payload);
     ::encode(client_caps, payload);
     encode_message(msg, payload);
   }
@@ -58,15 +49,8 @@ struct MForward : public Message {
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(client, p);
-    ::decode(has_caps, p);
     ::decode(client_caps, p);
     msg = (PaxosServiceMessage *)decode_message(p);
-    if (has_caps) msg->caps = &client_caps;
-    else {
-      msg->caps = NULL;
-      generic_dout(10) << "Decoding MForward without any caps!" << dendl;
-    }
-    generic_dout(20) << "MForward decoded! " << *msg << client_caps << dendl;
   }
 
   const char *get_type_name() { return "forward"; }

@@ -230,9 +230,9 @@ bool LogMonitor::preprocess_log(MLog *m)
 {
   dout(10) << "preprocess_log " << *m << " from " << m->get_orig_source() << dendl;
 
-  if (!m->caps->check_privileges(PAXOS_LOG, MON_CAP_X)) {
+  if (!m->get_session()->caps.check_privileges(PAXOS_LOG, MON_CAP_X)) {
     dout(0) << "Received MLog from entity with insufficient privileges "
-	    << m->caps << dendl;
+	    << m->get_session()->caps << dendl;
     return true; //no reply expected
   }
   

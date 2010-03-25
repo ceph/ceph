@@ -46,8 +46,8 @@ class PaxosServiceMessage : public Message {
    * very long-lived -- it will still only last as long as the Session would
    * normally.
    */
-  Session *get_session() {
-    Session *session = (Session *)get_connection()->get_priv();
+  MonSession *get_session() {
+    MonSession *session = (MonSession *)get_connection()->get_priv();
     session->put();
     return session;
   }
