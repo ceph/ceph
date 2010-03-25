@@ -487,7 +487,7 @@ void Monitor::resend_routed_requests()
     PaxosServiceMessage *req = (PaxosServiceMessage *)decode_message(q);
 
     dout(10) << " resend to mon" << mon << " tid " << rr->tid << " " << *req << dendl;
-    MForward *forward = new MForward(req);
+    MForward *forward = new MForward(req, rr->session->caps);
     forward->set_priority(req->get_priority());
     messenger->send_message(forward, monmap->get_inst(mon));
   }  

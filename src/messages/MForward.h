@@ -35,6 +35,10 @@ struct MForward : public Message {
     client = m->get_source_inst();
     client_caps = m->get_session()->caps;
   }
+  MForward(PaxosServiceMessage *m, MonCaps caps) :
+    Message(MSG_FORWARD), msg(m), client_caps(caps) {
+    client = m->get_source_inst();
+  }
 
   ~MForward() {
     delete msg;
