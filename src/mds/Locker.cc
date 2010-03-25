@@ -2957,6 +2957,8 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
 	if (!forcelockchange && lock->can_wrlock(-1)) {
 	  dout(10) << "scatter_nudge auth, propagating " << *lock << " on " << *p << dendl;
 	  scatter_writebehind(lock);
+	  if (c)
+	    lock->add_waiter(SimpleLock::WAIT_STABLE, c);
 	  return;
 	}
 
