@@ -1700,11 +1700,6 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
     Session *s = (Session *)con->get_priv();
     if (!s) {
       s = new Session;
-      if (!s) {
-        dout(0) << "ouch.. out of memory, can't open session" << dendl;
-        isvalid = false;
-        return false;
-      }
       con->set_priv(s->get());
       dout(10) << " new session " << s << dendl;
     }
