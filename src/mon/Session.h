@@ -22,23 +22,23 @@
 
 #include "MonCaps.h"
 
-struct Session;
+struct MonSession;
 
 struct Subscription {
-  Session *session;
+  MonSession *session;
   nstring type;
   xlist<Subscription*>::item type_item;
   version_t last;
   bool onetime;
   
-  Subscription(Session *s, const nstring& t) : session(s), type(t), type_item(this) {};
+  Subscription(MonSession *s, const nstring& t) : session(s), type(t), type_item(this) {};
 };
 
-struct Session : public RefCountedObject {
+struct MonSession : public RefCountedObject {
   entity_inst_t inst;
   utime_t until;
   bool closed;
-  xlist<Session*>::item item;
+  xlist<MonSession*>::item item;
   set<__u64> routed_request_tids;
   MonCaps caps;
   uint64_t global_id;
@@ -48,11 +48,11 @@ struct Session : public RefCountedObject {
 
   AuthServiceHandler *auth_handler;
 
-  Session(entity_inst_t i) : inst(i), closed(false), item(this),
+  MonSession(entity_inst_t i) : inst(i), closed(false), item(this),
 			     global_id(0), notified_global_id(0), auth_handler(NULL) {}
-  ~Session() {
-    generic_dout(0) << "~Session " << this << dendl;
-    // we should have been removed before we get destructed; see SessionMap::remove_session()
+  ~MonSession() {
+    generic_dout(0) << "~MonSession " << this << dendl;
+    // we should have been removed before we get destructed; see MonSessionMap::remove_session()
     assert(!item.is_on_list());
     assert(sub_map.empty());
     delete auth_handler;
@@ -60,19 +60,19 @@ struct Session : public RefCountedObject {
 };
 
 
-struct SessionMap {
-  xlist<Session*> sessions;
+struct MonSessionMap {
+  xlist<MonSession*> sessions;
   map<nstring, xlist<Subscription*> > subs;
-  multimap<int, Session*> by_osd;
+  multimap<int, MonSession*> by_osd;
 
-  void remove_session(Session *s) {
+  void remove_session(MonSession *s) {
     assert(!s->closed);
     for (map<nstring,Subscription*>::iterator p = s->sub_map.begin(); p != s->sub_map.end(); ++p)
       p->second->type_item.remove_myself();
     s->sub_map.clear();
     s->item.remove_myself();
     if (s->inst.name.is_osd()) {
-      for (multimap<int,Session*>::iterator p = by_osd.find(s->inst.name.num());
+      for (multimap<int,MonSession*>::iterator p = by_osd.find(s->inst.name.num());
 	   p->first == s->inst.name.num();
 	   p++)
 	if (p->second == s) {
@@ -84,29 +84,29 @@ struct SessionMap {
     s->put();
   }
 
-  Session *new_session(entity_inst_t i) {
-    Session *s = new Session(i);
+  MonSession *new_session(entity_inst_t i) {
+    MonSession *s = new MonSession(i);
     sessions.push_back(&s->item);
     if (i.name.is_osd())
-      by_osd.insert(pair<int,Session*>(i.name.num(), s));
+      by_osd.insert(pair<int,MonSession*>(i.name.num(), s));
     s->get();  // caller gets a ref
     return s;
   }
   
-  Session *get_random_osd_session() {
+  MonSession *get_random_osd_session() {
     // ok, this isn't actually random, but close enough.
     if (by_osd.empty())
       return 0;
     int n = by_osd.rbegin()->first + 1;
     int r = rand() % n;
-    multimap<int,Session*>::iterator p = by_osd.lower_bound(r);
+    multimap<int,MonSession*>::iterator p = by_osd.lower_bound(r);
     if (p == by_osd.end())
       p--;
     return p->second;
   }
 
 
-  void add_update_sub(Session *s, const nstring& what, version_t have, bool onetime) {
+  void add_update_sub(MonSession *s, const nstring& what, version_t have, bool onetime) {
     Subscription *sub = 0;
     if (s->sub_map.count(what)) {
       sub = s->sub_map[what];
@@ -126,9 +126,9 @@ struct SessionMap {
   }
 };
 
-inline ostream& operator<<(ostream& out, const Session *s)
+inline ostream& operator<<(ostream& out, const MonSession *s)
 {
-  out << "Session: " << s->inst << " is "
+  out << "MonSession: " << s->inst << " is "
       << (s->closed ? "closed" : "open");
   out << s->caps;
   return out;
