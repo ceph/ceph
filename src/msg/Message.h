@@ -320,7 +320,7 @@ public:
     return entity_inst_t(get_source(), get_source_addr());
   }
   entity_name_t get_source() {
-    return entity_name_t(header.src.name);
+    return entity_name_t(header.src);
   }
   entity_addr_t get_source_addr() {
     if (connection)
