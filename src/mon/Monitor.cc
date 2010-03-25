@@ -54,6 +54,8 @@
 
 #include "osd/OSDMap.h"
 
+#include "auth/AuthSupported.h"
+
 #include "config.h"
 
 #define DOUT_SUBSYS mon
@@ -1015,52 +1017,48 @@ void Monitor::handle_class(MClass *m)
   }
 }
 
-bool Monitor::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
+bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, bool force_new)
 {
-  CephXServiceTicketInfo auth_ticket_info;
+  dout(10) << "ms_get_authorizer for " << ceph_entity_type_name(service_id) << dendl;
 
+  // we only connect to other monitors; every else connects to us.
+  if (service_id != CEPH_ENTITY_TYPE_MON)
+    return false;
+
+  CephXServiceTicketInfo auth_ticket_info;
   CephXSessionAuthInfo info;
   int ret;
-  uint32_t service_id = dest_type;
+  EntityName name;
+  name.entity_type = CEPH_ENTITY_TYPE_MON;
 
+  auth_ticket_info.ticket.name = name;
   auth_ticket_info.ticket.global_id = 0;
 
-  dout(0) << "ms_get_authorizer service_id=" << service_id << dendl;
+  CryptoKey secret;
+  if (!key_server.get_secret(name, secret)) {
+    dout(0) << " couldn't get secret for mon service" << dendl;
+    stringstream ss;
+    key_server.list_secrets(ss);
+    dout(0) << ss.str() << dendl;
+    return false;
+  }
 
-  if (service_id != CEPH_ENTITY_TYPE_MON) {
-    ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info);
-    if (ret < 0) {
-      return false;
-    }
-  } else {
-    EntityName name;
-    name.entity_type = CEPH_ENTITY_TYPE_MON;
-
-    CryptoKey secret;
-    if (!key_server.get_secret(name, secret)) {
-      dout(0) << "couldn't get secret for mon service!" << dendl;
-      stringstream ss;
-      key_server.list_secrets(ss);
-      dout(0) << ss.str() << dendl;
-      return false;
-    }
-    /* mon to mon authentication uses the private monitor shared key and not the
-       rotating key */
-    ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info, secret, (uint64_t)-1);
-    if (ret < 0) {
-      return false;
-    }
-    dout(0) << "built session auth_info for use with mon" << dendl;
-
+  /* mon to mon authentication uses the private monitor shared key and not the
+     rotating key */
+  ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info, secret, (uint64_t)-1);
+  if (ret < 0) {
+    dout(0) << "ms_get_authorizer failed to build session auth_info for use with mon ret " << ret << dendl;
+    return false;
   }
 
   CephXTicketBlob blob;
-  if (!cephx_build_service_ticket_blob(info, blob))
+  if (!cephx_build_service_ticket_blob(info, blob)) {
+    dout(0) << "ms_get_authorizer failed to build service ticket use with mon" << dendl;
     return false;
+  }
   bufferlist ticket_data;
   ::encode(blob, ticket_data);
 
-  dout(0) << "built service ticket" << dendl;
   bufferlist::iterator iter = ticket_data.begin();
   CephXTicketHandler handler;
   ::decode(handler.ticket, iter);
@@ -1077,29 +1075,32 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
 				   int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
 				   bool& isvalid)
 {
-  dout(0) << "Monitor::verify_authorizer start" << dendl;
+  dout(10) << "ms_verify_authorizer " << con->get_peer_addr()
+	   << " " << ceph_entity_type_name(peer_type)
+	   << " protocol " << protocol << dendl;
 
-  if (protocol == CEPH_AUTH_NONE) {
+  if (peer_type == CEPH_ENTITY_TYPE_MON &&
+      is_supported_auth(CEPH_AUTH_CEPHX)) {
+    // monitor, and cephx is enabled
+    isvalid = false;
+    if (protocol == CEPH_AUTH_CEPHX) {
+      bufferlist::iterator iter = authorizer_data.begin();
+      CephXServiceTicketInfo auth_ticket_info;
+      
+      if (authorizer_data.length()) {
+	int ret = cephx_verify_authorizer(&key_server, iter, auth_ticket_info, authorizer_reply);
+	if (ret >= 0)
+	  isvalid = true;
+	else
+	  dout(0) << "ms_verify_authorizer bad authorizer from mon " << con->get_peer_addr() << dendl;
+      }
+    } else {
+      dout(0) << "ms_verify_authorizer cephx enabled, but no authorizer (required for mon)" << dendl;
+    }
+  } else {
+    // who cares.
     isvalid = true;
-    return true;
   }
-
-  if (protocol != CEPH_AUTH_CEPHX)
-    return false;
-
-  bufferlist::iterator iter = authorizer_data.begin();
-  CephXServiceTicketInfo auth_ticket_info;
-
-  isvalid = true;
-
-  if (!authorizer_data.length())
-    return true; /* we're not picky */
-
-  int ret = cephx_verify_authorizer(&key_server, iter, auth_ticket_info, authorizer_reply);
-  dout(0) << "Monitor::verify_authorizer returns " << ret << dendl;
-
-  isvalid = (ret >= 0);
-
   return true;
 };
 
