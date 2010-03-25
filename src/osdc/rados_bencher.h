@@ -9,6 +9,10 @@
  * License version 2.1, as published by the Free Software 
  * Foundation.  See file COPYING.
  * 
+ * Series of functions to test your rados installation. Notice
+ * that this code is not terribly robust -- for instance, if you
+ * try and bench on a pool you don't have permission to access
+ * it will just loop forever.
  */
 #include "osdc/librados.h"
 #include "config.h"
@@ -57,10 +61,6 @@ int aio_bench(Rados& rados, rados_pool_t pool, int operation,
   char* contentsChars = new char[op_size];
   int r = 0;
 
-  //set up the pool
-  r = rados.open_pool("data",&pool);
-  //cout << "open pool result = " << r << " pool = " << pool << std::endl;
-  
   //get data from previous write run, if available
   if (operation != OP_WRITE) {
     bufferlist object_data;
