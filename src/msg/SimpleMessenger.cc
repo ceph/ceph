@@ -848,6 +848,9 @@ int SimpleMessenger::Pipe::accept()
   if (policy.lossy)
     reply.flags = reply.flags | CEPH_MSG_CONNECT_LOSSY;
 
+  connection_state->set_features((int)reply.features & (int)connect.features);
+  dout(10) << "accept features " << connection_state->get_features() << dendl;
+
   // ok!
   register_pipe();
   messenger->lock.Unlock();
@@ -1157,7 +1160,9 @@ int SimpleMessenger::Pipe::connect()
       connect_seq = cseq + 1;
       assert(connect_seq == reply.connect_seq);
       backoff = utime_t();
-      dout(20) << "connect success " << connect_seq << ", lossy = " << policy.lossy << dendl;
+      connection_state->set_features((unsigned)reply.features & (unsigned)connect.features);
+      dout(20) << "connect success " << connect_seq << ", lossy = " << policy.lossy
+	       << ", features " << connection_state->get_features() << dendl;
       
       if (!messenger->destination_stopped) {
 	Connection * cstate = connection_state->get();

@@ -163,9 +163,10 @@ struct Connection : public RefCountedObject {
   RefCountedObject *priv;
   int peer_type;
   entity_addr_t peer_addr;
+  unsigned features;
 
 public:
-  Connection() : nref(1), lock("Connection::lock"), priv(NULL), peer_type(-1) {}
+  Connection() : nref(1), lock("Connection::lock"), priv(NULL), peer_type(-1), features(0) {}
   ~Connection() {
     //generic_dout(0) << "~Connection " << this << dendl;
     if (priv) {
@@ -202,6 +203,10 @@ public:
   const entity_addr_t& get_peer_addr() { return peer_addr; }
   void set_peer_addr(const entity_addr_t& a) { peer_addr = a; }
 
+  int get_features() const { return features; }
+  bool has_feature(int f) const { return features & f; }
+  void set_features(unsigned f) { features = f; }
+  void set_feature(unsigned f) { features |= f; }
 };
 
 
