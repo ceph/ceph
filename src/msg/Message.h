@@ -311,11 +311,19 @@ public:
   void set_priority(__s16 p) { header.priority = p; }
 
   // source/dest
-  entity_inst_t get_source_inst() { return entity_inst_t(header.src); }
-  entity_name_t get_source() { return entity_name_t(header.src.name); }
-  entity_addr_t get_source_addr() { return entity_addr_t(header.src.addr); }
-  void set_source_inst(entity_inst_t& inst) { header.src = inst; }
+  entity_inst_t get_source_inst() {
+    return entity_inst_t(get_source(), get_source_addr());
+  }
+  entity_name_t get_source() {
+    return entity_name_t(header.src.name);
+  }
+  entity_addr_t get_source_addr() {
+    if (connection)
+      return connection->get_peer_addr();
+    return entity_addr_t();
+  }
 
+  // forwarded?
   entity_inst_t get_orig_source_inst() {
     if (_forwarded)
       return _orig_source_inst;
