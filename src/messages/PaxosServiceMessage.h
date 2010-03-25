@@ -2,8 +2,7 @@
 #define __PAXOSSERVICEMESSAGE_H
 
 #include "msg/Message.h"
-
-class MonCaps;
+#include "mon/Session.h"
 
 class PaxosServiceMessage : public Message {
  public:
@@ -37,6 +36,20 @@ class PaxosServiceMessage : public Message {
     assert(0);
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
+  }
+
+  /** 
+   * These messages are only used by the monitors and clients,
+   * and the client doesn't care, so we're creating a monitor-specific
+   * function here. Note that this function explicitly exists to bypass
+   * the normal ref-counting, so don't expect the returned pointer to be
+   * very long-lived -- it will still only last as long as the Session would
+   * normally.
+   */
+  Session *get_session() {
+    Session *session = (Session *)get_connection()->get_priv();
+    session->put();
+    return session;
   }
   
   const char *get_type_name() { return "PaxosServiceMessage"; }
