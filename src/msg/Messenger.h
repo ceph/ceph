@@ -97,7 +97,7 @@ protected:
       if ((*p)->ms_dispatch(m))
 	return;
     generic_dout(0) << "unhandled message " << m << " " << *m
-		    << " from " << m->get_orig_source_inst()
+		    << " from " << m->get_source_inst()
 		    << dendl;
     assert(0);
   }
