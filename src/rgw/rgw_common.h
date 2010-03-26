@@ -1,3 +1,17 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2009 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software 
+ * Foundation.  See file COPYING.
+ * 
+ */
+
 #ifndef __RGW_COMMON_H
 #define __RGW_COMMON_H
 
@@ -20,7 +34,8 @@ using namespace std;
 #define RGW_ATTR_META_PREFIX	RGW_ATTR_PREFIX "x-amz-meta-"
 #define RGW_ATTR_CONTENT_TYPE	RGW_ATTR_PREFIX "content_type"
 
-#define USER_INFO_VER 1
+#define USER_INFO_VER 2
+#define CEPH_AUTH_UID_DEFAULT (__u64) -1
 
 typedef void *RGWAccessHandle;
 
@@ -92,14 +107,18 @@ class RGWAccessControlPolicy;
 
 struct RGWUserInfo
 {
+  __u64 auid;
   string user_id;
   string secret_key;
   string display_name;
   string user_email;
 
+  RGWUserInfo() : auid(0) {}
+
   void encode(bufferlist& bl) const {
      __u32 ver = USER_INFO_VER;
      ::encode(ver, bl);
+     ::encode(auid, bl);
      ::encode(user_id, bl);
      ::encode(secret_key, bl);
      ::encode(display_name, bl);
@@ -108,6 +127,8 @@ struct RGWUserInfo
   void decode(bufferlist::iterator& bl) {
      __u32 ver;
     ::decode(ver, bl);
+     if (ver >= 2) ::decode(auid, bl);
+     else auid = CEPH_AUTH_UID_DEFAULT;
     ::decode(user_id, bl);
     ::decode(secret_key, bl);
     ::decode(display_name, bl);
@@ -119,6 +140,7 @@ struct RGWUserInfo
     secret_key.clear();
     display_name.clear();
     user_email.clear();
+    auid = CEPH_AUTH_UID_DEFAULT;
   }
 };
 WRITE_CLASS_ENCODER(RGWUserInfo)
