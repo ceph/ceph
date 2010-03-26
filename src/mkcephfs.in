@@ -195,16 +195,24 @@ for name in $what; do
 
     if [ "$type" = "mon" ]; then
 	if [ -n "$ssh" ]; then
-	    scp -q $monkeyring $user@$host:$tmpkeyring
+	    if [ -n "$user" ]; then
+		scp -q $monkeyring $user@$host:$tmpkeyring
+	    else
+		scp -q $monkeyring $host:$tmpkeyring
+	    fi
 	else
 	    cp -a $monkeyring $tmpkeyring
-	    chown $user $tmpkeyring
+	    [ -n "$user" ] && chown $user $tmpkeyring
 	fi
 	get_conf mon_data "" "mon data"
 	do_cmd "$BINDIR/mkmonfs --clobber --mon-data $mon_data -i $num --monmap $monmap --osdmap $osdmap -k $tmpkeyring ; rm -f $tmpkeyring"
 
 	if [ -n "$ssh" ]; then
-	    scp -p $adminkeyring $user@$host:$mon_data/admin_keyring.bin
+	    if [ -n "$user" ]; then
+		scp -p $adminkeyring $user@$host:$mon_data/admin_keyring.bin
+	    else
+		scp -p $adminkeyring $host:$mon_data/admin_keyring.bin
+	    fi
 	else
 	    cp -av $adminkeyring $mon_data/admin_keyring.bin
 	fi
@@ -232,7 +240,11 @@ for name in $what; do
 
 	if [ -n "$keyring" ]; then
 	    if [ -n "$ssh" ]; then
-		scp /tmp/keyring.osd.$id $user@$host:$keyring
+		if [ -n "$user" ]; then
+		    scp /tmp/keyring.osd.$id $user@$host:$keyring
+		else
+		    scp /tmp/keyring.osd.$id $host:$keyring
+		fi
 	    else
 		cp -v /tmp/keyring.osd.$id $keyring
 	    fi
@@ -246,7 +258,11 @@ for name in $what; do
 	get_conf keyring "" "keyring"
 	if [ -n "$keyring" ]; then
 	    if [ -n "$ssh" ]; then
-		scp /tmp/keyring.mds.$id $user@$host:$keyring
+		if [ -n "$user" ]; then
+		    scp /tmp/keyring.mds.$id $user@$host:$keyring
+		else
+		    scp /tmp/keyring.mds.$id $host:$keyring
+		fi
 	    else
 		cp -v /tmp/keyring.mds.$id $keyring
 	    fi
