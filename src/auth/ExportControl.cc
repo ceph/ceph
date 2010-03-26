@@ -44,7 +44,7 @@ class Subnet
   
   void parse(const char *str);
 public:
-  Subnet(const char *str) {
+  Subnet(const char *str) : orig_str(NULL) {
     valid = false;
     parse(str);
   }
@@ -155,14 +155,6 @@ public:
   GroupEntry(Subnet *subnet);
   GroupEntry(GroupEntry *);
   ~GroupEntry() {
-    for (vector<Subnet*>::iterator p = subnets.begin();
-	 p != subnets.end();
-	 p++)
-      delete *p;
-    for (vector<GroupEntry*>::iterator p = groups.begin();
-	 p != groups.end();
-	 p++)
-      delete *p;
   }
 
   void parse_addr_line(const char *str);
