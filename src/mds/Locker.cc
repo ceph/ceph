@@ -722,7 +722,8 @@ bool Locker::rdlock_try(SimpleLock *lock, client_t client, Context *con)
 
   // wait!
   dout(7) << "rdlock_try waiting on " << *lock << " on " << *lock->get_parent() << dendl;
-  if (con) lock->add_waiter(SimpleLock::WAIT_RD, con);
+  if (con)
+    lock->add_waiter(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_RD, con);
   return false;
 }
 
@@ -754,7 +755,7 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut)
 
   // wait!
   int wait_on;
-  if (lock->get_parent()->is_auth())
+  if (lock->get_parent()->is_auth() && lock->is_stable())
     wait_on = SimpleLock::WAIT_RD;
   else
     wait_on = SimpleLock::WAIT_STABLE;  // REQRDLOCK is ignored if lock is unstable, so we need to retry.
