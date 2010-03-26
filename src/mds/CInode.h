@@ -80,7 +80,7 @@ public:
   static const int PIN_BATCHOPENJOURNAL = 9;
   static const int PIN_SCATTERED =        10;
   static const int PIN_STICKYDIRS =       11;
-  static const int PIN_PURGING =         -12;	
+  //static const int PIN_PURGING =         -12;	
   static const int PIN_FREEZING =         13;
   static const int PIN_FROZEN =           14;
   static const int PIN_IMPORTINGCAPS =    15;
@@ -101,7 +101,7 @@ public:
     case PIN_BATCHOPENJOURNAL: return "batchopenjournal";
     case PIN_SCATTERED: return "scattered";
     case PIN_STICKYDIRS: return "stickydirs";
-    case PIN_PURGING: return "purging";
+      //case PIN_PURGING: return "purging";
     case PIN_FREEZING: return "freezing";
     case PIN_FROZEN: return "frozen";
     case PIN_IMPORTINGCAPS: return "importingcaps";
