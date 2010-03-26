@@ -17,3 +17,12 @@ buckets:
 ui_email_bucket: hold objects named by email and containing encoded RGWUIDs
 ui_bucket: holds objects named by user_id and containing encoded RGWUserInfos
 root_bucket: holds objects corresponding to the other buckets, with ACLs in their attrs.
+
+Observed schema:
+buckets:
+.rgw -- contains: .users -- empty
+     		  .users.email -- empty
+		  johnny1 -- bucket name -- empty
+.users -- contains: anonymous -- empty
+       	  	    bucket for each user id -- contains binary, key, binary, secret key, binary, user name, binary, user email
+.users.email -- contains bucket for each user email -- contains binary, then user id
