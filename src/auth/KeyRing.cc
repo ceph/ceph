@@ -41,8 +41,12 @@ bool KeyRing::load(const char *filename_list)
   for (list<string>::iterator p = ls.begin(); p != ls.end(); p++) {
     // subst in home dir?
     size_t pos = p->find("~/");
-    if (pos != string::npos)
-      p->replace(pos, 1, getenv("HOME"));
+    if (pos != string::npos) {
+      const char *home = getenv("HOME");
+      if (home)
+	p->replace(pos, 1, getenv("HOME"));
+      else break; //skip, we couldn't correct it
+    }
 
     if (bl.read_file(p->c_str(), true) == 0) {
       loaded = true;
