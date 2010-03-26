@@ -44,19 +44,17 @@ int main(int argc, const char **argv)
   bool list = false;
   bool print_key = false;
   bool create_keyring = false;
-  const char *name = "";
   const char *caps_fn = NULL;
   const char *import_keyring = NULL;
   bool set_auid = false;
   __u64 auid = CEPH_AUTH_UID_DEFAULT;
+  const char *name = g_conf.name;
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("gen-key", 'g')) {
       CONF_SAFE_SET_ARG_VAL(&gen_key, OPT_BOOL);
     } else if (CONF_ARG_EQ("add-key", 'a')) {
       CONF_SAFE_SET_ARG_VAL(&add_key, OPT_STR);
-    } else if (CONF_ARG_EQ("name", 'n')) {
-      CONF_SAFE_SET_ARG_VAL(&name, OPT_STR);
     } else if (CONF_ARG_EQ("list", 'l')) {
       CONF_SAFE_SET_ARG_VAL(&list, OPT_BOOL);
     } else if (CONF_ARG_EQ("caps", '\0')) {

@@ -1005,9 +1005,9 @@ void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon,
     } else if (isdaemon && CONF_ARG_EQ("foreground", 'f')) {
       g_conf.daemonize = false;
       g_conf.log_to_stdout = false;
-    } else if (isdaemon && CONF_ARG_EQ("id", 'i')) {
+    } else if (isdaemon && (CONF_ARG_EQ("id", 'i') || CONF_ARG_EQ("name", 'n'))) {
       CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
-    } else if (!isdaemon && CONF_ARG_EQ("id", 'I')) {
+    } else if (!isdaemon && (CONF_ARG_EQ("id", 'I') || CONF_ARG_EQ("name", 'n'))) {
       CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
     } else {
       nargs.push_back(args[i]);
@@ -1018,15 +1018,24 @@ void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon,
 
   if (module_type) {
     g_conf.type = strdup(module_type);
-
     if (g_conf.id) {
-	int len = strlen(module_type) + strlen(g_conf.id) + 2;
-  	g_conf.name = (char *)malloc(len);
-	snprintf(g_conf.name, len, "%s.%s", g_conf.type, g_conf.id);
-	g_conf.alt_name = (char *)malloc(len - 1);
-	snprintf(g_conf.alt_name, len - 1, "%s%s", module_type, g_conf.id);
+      // is it "type.name"?
+      const char *dot = strchr(g_conf.id, '.');
+      if (dot) {
+	int tlen = dot - g_conf.id;
+	g_conf.type = (char *)malloc(tlen + 1);
+	memcpy(g_conf.type, g_conf.id, tlen);
+	g_conf.type[tlen] = 0;
+	g_conf.id = strdup(dot + 1);
+      }
+      
+      int len = strlen(g_conf.type) + strlen(g_conf.id) + 2;
+      g_conf.name = (char *)malloc(len);
+      snprintf(g_conf.name, len, "%s.%s", g_conf.type, g_conf.id);
+      g_conf.alt_name = (char *)malloc(len - 1);
+      snprintf(g_conf.alt_name, len - 1, "%s%s", module_type, g_conf.id);
     } else {
-	g_conf.name = g_conf.type;
+      g_conf.name = g_conf.type;
     }
   }
   g_conf.entity_name = new EntityName;
