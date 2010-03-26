@@ -227,8 +227,9 @@ int main(int argc, char **argv)
     if (user_email)
       info.user_email = user_email;
 
-    if (rgw_store_user_info(info) < 0) {
-      cerr << "error storing user info" << std::endl;
+    int err;
+    if ((err = rgw_store_user_info(info)) < 0) {
+      cerr << "error storing user info" << strerror(-err) << std::endl;
     } else {
       cout << "User ID: " << info.user_id << std::endl;
       cout << "Secret Key: " << info.secret_key << std::endl;
