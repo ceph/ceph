@@ -227,6 +227,7 @@ int main(int argc, char *argv[])
 
   if (!RGWAccess::init_storage_provider("rados", argc, argv)) {
     cerr << "couldn't init storage provider" << std::endl;
+    return 5; //EIO
   }
 
   sighandler = signal(SIGSEGV, godown);
