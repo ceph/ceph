@@ -59,23 +59,6 @@ void PGMonitor::tick()
 
   update_from_paxos();
   dout(10) << pg_map << dendl;
-
-  if (!mon->is_leader()) return; 
-
-  /*
-  // magic incantation that Sage told me
-
-
-  // Is it the nth second? If not, do nothing.
-  const int N = 10; //magic number! codify somewhere later
-  utime_t now = g_clock.now();
-  if (now % N) != 0 return;
-
-  if (mon->osdmon->paxos->is_readable()) {
-    // safely use mon->osdmon->osdmap
-  }
-  */
-
 }
 
 void PGMonitor::create_initial(bufferlist& bl)
@@ -207,6 +190,12 @@ void PGMonitor::committed()
 
 void PGMonitor::handle_statfs(MStatfs *statfs)
 {
+  //check caps
+  if(!statfs->get_session()->caps.check_privileges(PAXOS_PGMAP, MON_CAP_R)) {
+    dout(0) << "MStatfs received from entity with insufficient privileges "
+	    << statfs->get_session()->caps << dendl;
+    goto out;
+  }
   MStatfsReply *reply;
 
   dout(10) << "handle_statfs " << *statfs << " from " << statfs->get_orig_source() << dendl;
@@ -233,8 +222,13 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
 
 bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
 {
-  dout(10) << "preprocess_getpoolstats " << *m << dendl;
   MGetPoolStatsReply *reply;
+
+  if (!m->get_session()->caps.check_privileges(PAXOS_PGMAP, MON_CAP_R)) {
+    dout(0) << "MGetPoolStats received from entity with insufficient caps "
+	    << m->get_session()->caps << dendl;
+    goto out;
+  }
 
   if (ceph_fsid_compare(&m->fsid, &mon->monmap->fsid)) {
     dout(0) << "preprocess_getpoolstats on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
@@ -266,7 +260,13 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
 bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
 {
   int from = stats->get_orig_source().num();
-
+  MPGStatsAck *ack;
+  //check caps
+  if (!stats->get_session()->caps.check_privileges(PAXOS_PGMAP, MON_CAP_R)) {
+    dout(0) << "MPGStats received from entity with insufficient privileges "
+	    << stats->get_session()->caps << dendl;
+    goto out;
+  }
   // first, just see if they need a new osdmap.  but 
   // only if they've had the map for a while.
   if (stats->had_map_for > 30.0 && 
@@ -288,13 +288,13 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
   }
   
   dout(10) << " message contains no new osd|pg stats" << dendl;
-  MPGStatsAck *ack = new MPGStatsAck;
+  ack = new MPGStatsAck;
   for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
        p != stats->pg_stat.end();
        p++)
     ack->pg_stat[p->first] = p->second.reported;
   mon->send_reply(stats, ack);
-
+ out:
   delete stats;
   return true;
 }

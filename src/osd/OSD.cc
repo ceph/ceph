@@ -97,8 +97,7 @@
 #define dout_prefix _prefix(*_dout, whoami, osdmap)
 
 static ostream& _prefix(ostream& out, int whoami, OSDMap *osdmap) {
-  return out << dbeginl << std::hex << pthread_self() << std::dec
-	     << " osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " ";
+  return out << dbeginl << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " ";
 }
 
 
@@ -1701,11 +1700,6 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
     Session *s = (Session *)con->get_priv();
     if (!s) {
       s = new Session;
-      if (!s) {
-        dout(0) << "ouch.. out of memory, can't open session" << dendl;
-        isvalid = false;
-        return false;
-      }
       con->set_priv(s->get());
       dout(10) << " new session " << s << dendl;
     }
@@ -4043,7 +4037,9 @@ void OSD::handle_op(MOSDOp *op)
   int pool = pgid.pool();
   int perm = caps.get_pool_cap(pool, osdmap->get_pg_pool(pool)->v.auid);
 
-  dout(10) << "request for pool=" << pool << " perm=" << perm
+  dout(10) << "request for pool=" << pool << " owner="
+	   << osdmap->get_pg_pool(pool)->v.auid
+	   << " perm=" << perm
 	   << " may_read=" << op->may_read() << " may_write=" << op->may_write()
 	   << " may_exec=" << op->may_exec() << dendl;
 

@@ -54,6 +54,8 @@
 
 #include "osd/OSDMap.h"
 
+#include "auth/AuthSupported.h"
+
 #include "config.h"
 
 #define DOUT_SUBSYS mon
@@ -94,8 +96,8 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   elector(this, w),
   mon_epoch(0), 
   leader(0),
-
-  paxos(PAXOS_NUM), paxos_service(PAXOS_NUM)
+  paxos(PAXOS_NUM), paxos_service(PAXOS_NUM),
+  routed_request_tid(0)
 {
   paxos_service[PAXOS_MDSMAP] = new MDSMonitor(this, add_paxos(PAXOS_MDSMAP));
   paxos_service[PAXOS_MONMAP] = new MonmapMonitor(this, add_paxos(PAXOS_MONMAP));
@@ -104,6 +106,10 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   paxos_service[PAXOS_LOG] = new LogMonitor(this, add_paxos(PAXOS_LOG));
   paxos_service[PAXOS_CLASS] = new ClassMonitor(this, add_paxos(PAXOS_CLASS));
   paxos_service[PAXOS_AUTH] = new AuthMonitor(this, add_paxos(PAXOS_AUTH));
+
+  mon_caps = new MonCaps();
+  mon_caps->set_allow_all(true);
+  mon_caps->text = "allow *";
 }
 
 Paxos *Monitor::add_paxos(int type)
@@ -119,7 +125,7 @@ Monitor::~Monitor()
     delete *p;
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     delete *p;
-  //clean out SessionMap's subscriptions
+  //clean out MonSessionMap's subscriptions
   for (map<nstring, xlist<Subscription*> >::iterator i
 	 = session_map.subs.begin();
        i != session_map.subs.end();
@@ -128,11 +134,11 @@ Monitor::~Monitor()
       session_map.remove_sub(i->second.front());
     }
   }
-  //clean out SessionMap's sessions
+  //clean out MonSessionMap's sessions
   while (!session_map.sessions.empty()) {
     session_map.remove_session(session_map.sessions.front());
   }
-
+  delete mon_caps;
 }
 
 void Monitor::init()
@@ -258,6 +264,11 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
 
+  if (!m->get_session()->caps.check_privileges(PAXOS_MONMAP, MON_CAP_ALL)) {
+    string rs="Access denied";
+    reply_command((MMonCommand *)m, -EACCES, rs, 0);
+  }
+
   dout(0) << "handle_command " << *m << dendl;
   bufferlist rdata;
   string rs;
@@ -336,9 +347,9 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
 void Monitor::forward_request_leader(PaxosServiceMessage *req)
 {
   int mon = get_leader();
-  Session *session = 0;
+  MonSession *session = 0;
   if (req->get_connection())
-    session = (Session *)req->get_connection()->get_priv();
+    session = (MonSession *)req->get_connection()->get_priv();
   if (req->session_mon >= 0) {
     dout(10) << "forward_request won't double fwd request " << *req << dendl;
     delete req;
@@ -347,23 +358,23 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     rr->tid = ++routed_request_tid;
 
     dout(10) << "forward_request " << rr->tid << " request " << *req << dendl;
-    MForward* forward = new MForward(req);
 
     dout(10) << " noting that i mon" << whoami << " own this requests's session" << dendl;
     //set forwarding variables; clear payload so it re-encodes properly
     req->session_mon = whoami;
     req->session_mon_tid = rr->tid;
     req->clear_payload();
-    forward->set_priority(req->get_priority());
     //of course, the need to forward does give it an effectively lower priority
     
     //encode forward message and insert into routed_requests
-    encode_message(forward, rr->request_bl);
-    rr->session = (Session *)session->get();
+    encode_message(req, rr->request_bl);
+    rr->session = (MonSession *)session->get();
     routed_requests[rr->tid] = rr;
 
     session->routed_request_tids.insert(rr->tid);
     
+    MForward *forward = new MForward(req);
+    forward->set_priority(req->get_priority());
     messenger->send_message(forward, monmap->get_inst(mon));
   } else {
     dout(10) << "forward_request no session for request " << *req << dendl;
@@ -378,12 +389,25 @@ void Monitor::handle_forward(MForward *m)
 {
   dout(10) << "received forwarded message from " << m->msg->get_source_inst()
 	   << " via " << m->get_source_inst() << dendl;
-  PaxosServiceMessage *req = m->msg;
-  //set the Connection to be the one it came in on so we don't
-  //deref bad memory later
-  req->set_connection(m->get_connection()->get());
-  _ms_dispatch(req);
-  m->msg = NULL;
+  MonSession *session = (MonSession *)m->get_connection()->get_priv();
+  assert(session);
+
+  if (!session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+    dout(0) << "forward from entity with insufficient caps! " 
+	    << session->caps << dendl;
+  } else {
+
+    MonSession *s = new MonSession(m->msg->get_source_inst());
+    s->caps = m->client_caps;
+    Connection *c = new Connection;
+    c->set_priv(s);
+
+    PaxosServiceMessage *req = m->msg;
+    m->msg = NULL;  // so ~MForward doesn't delete it
+    req->set_connection(c);
+    _ms_dispatch(req);
+  }
+  session->put();
   delete m;
 }
 
@@ -421,6 +445,15 @@ void Monitor::send_reply(PaxosServiceMessage *req, Message *reply, entity_inst_t
 
 void Monitor::handle_route(MRoute *m)
 {
+  MonSession *session = (MonSession *)m->get_connection()->get_priv();
+  //check privileges
+  if (session && !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+    dout(0) << "MRoute received from entity without appropriate perms! "
+	    << dendl;
+    session->put();
+    delete m;
+    return;
+  }
   dout(10) << "handle_route " << *m->msg << " to " << m->dest << dendl;
   
   // look it up
@@ -438,6 +471,7 @@ void Monitor::handle_route(MRoute *m)
     m->msg = NULL;
   }
   delete m;
+  if (session) session->put();
 }
 
 void Monitor::resend_routed_requests()
@@ -450,15 +484,16 @@ void Monitor::resend_routed_requests()
     RoutedRequest *rr = p->second;
 
     bufferlist::iterator q = rr->request_bl.begin();
-    MForward *req = (MForward *)decode_message(q);
+    PaxosServiceMessage *req = (PaxosServiceMessage *)decode_message(q);
 
-    dout(10) << " resend to mon" << mon << " tid " << rr->tid << " " << *req->msg << dendl;
-    req->clear_payload();
-    messenger->send_message(req, monmap->get_inst(mon));
+    dout(10) << " resend to mon" << mon << " tid " << rr->tid << " " << *req << dendl;
+    MForward *forward = new MForward(req, rr->session->caps);
+    forward->set_priority(req->get_priority());
+    messenger->send_message(forward, monmap->get_inst(mon));
   }  
 }
 
-void Monitor::remove_session(Session *s)
+void Monitor::remove_session(MonSession *s)
 {
   dout(10) << "remove_session " << s << " " << s->inst << dendl;
   assert(!s->closed);
@@ -479,6 +514,16 @@ void Monitor::remove_session(Session *s)
 void Monitor::handle_observe(MMonObserve *m)
 {
   dout(10) << "handle_observe " << *m << " from " << m->get_source_inst() << dendl;
+  //check that there are perms. Send a response back if they aren't sufficient,
+  //and delete the message (if it's not deleted for us, which happens when
+  //we own the connection to the requested observer).
+  if (!m->get_session()->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+    bool delete_m = false;
+    if (m->session_mon) delete_m = true;
+    send_reply(m, m);
+    if (delete_m) delete m;
+    return;
+  }
   if (m->machine_id >= PAXOS_NUM) {
     dout(0) << "register_observer: bad monitor id: " << m->machine_id << dendl;
   } else {
@@ -519,14 +564,15 @@ bool Monitor::_ms_dispatch(Message *m)
   bool ret = true;
 
   Connection *connection = m->get_connection();
-  Session *s = NULL;
+  MonSession *s = NULL;
   bool reuse_caps = false;
   MonCaps caps;
   EntityName entity_name;
   bool src_is_mon;
 
   if (connection) {
-    s = (Session *)connection->get_priv();
+    dout(20) << "have connection" << dendl;
+    s = (MonSession *)connection->get_priv();
     if (s && s->closed) {
       caps = s->caps;
       reuse_caps = true;
@@ -534,15 +580,23 @@ bool Monitor::_ms_dispatch(Message *m)
       s = NULL;
     }
     if (!s) {
+      dout(10) << "do not have session, making new one" << dendl;
       s = session_map.new_session(m->get_source_inst());
       m->get_connection()->set_priv(s->get());
       dout(10) << "ms_dispatch new session " << s << " for " << s->inst << dendl;
 
-      if (!s->inst.name.is_mon()) {
+      if (m->get_connection()->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
+	dout(10) << "setting timeout on session" << dendl;
 	// set an initial timeout here, so we will trim this session even if they don't
 	// do anything.
 	s->until = g_clock.now();
 	s->until += g_conf.mon_subscribe_interval;
+      } else {
+	//give it monitor caps; the peer type has been authenticated
+	reuse_caps = false;
+	dout(5) << "setting monitor caps on this connection" << dendl;
+	if (!s->caps.allow_all) //but no need to repeatedly copy
+	  s->caps = *mon_caps;
       }
       if (reuse_caps)
         s->caps = caps;
@@ -558,57 +612,19 @@ bool Monitor::_ms_dispatch(Message *m)
   if (s)
     dout(20) << " caps " << s->caps.get_str() << dendl;
 
-#define ALLOW_CAPS(service_id, allow_caps) \
-do { \
-  if (src_is_mon) \
-    break; \
-  if (s && ((int)s->caps.get_caps(service_id) & (allow_caps)) != (allow_caps)) { \
-    dout(0) << "filtered out request due to caps " \
-           << " allowing=" << #allow_caps << " message=" << *m << dendl; \
-    delete m; \
-    goto out; \
-  } \
-} while (0)
-
-#define ALLOW_MESSAGES_FROM(peers) \
-do { \
-  if (connection && (connection->get_peer_type() & (peers | CEPH_ENTITY_TYPE_MON)) == 0) { \
-    dout(0) << "filtered out request, peer=" << connection->get_peer_type() \
-           << " allowing=" << #peers << " message=" << *m << dendl; \
-    delete m; \
-    goto out; \
-  } \
-} while (0)
-
-#define EXIT_NOT_ADMIN \
-  if (connection) \
-    dout(0) << "filtered out request (not admin), peer=" << connection->get_peer_type() \
-	    << " entity_name=" << entity_name.to_str() << dendl;	\
-  goto out; 
-
-#define IS_NOT_ADMIN (!src_is_mon) && (!entity_name.is_admin())
-
   {
     switch (m->get_type()) {
       
     case MSG_ROUTE:
-      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
       handle_route((MRoute*)m);
       break;
 
       // misc
     case CEPH_MSG_MON_GET_MAP:
-      /* public.. no need for checks */
       handle_mon_get_map((MMonGetMap*)m);
       break;
 
     case MSG_MON_COMMAND:
-      if (IS_NOT_ADMIN) {
-        string rs="Access denied";
-        reply_command((MMonCommand *)m, -EACCES, rs, 0);
-        EXIT_NOT_ADMIN;
-      }
-      fill_caps(m);
       handle_command((MMonCommand*)m);
       break;
 
@@ -622,24 +638,16 @@ do { \
     case MSG_OSD_BOOT:
     case MSG_OSD_ALIVE:
     case MSG_OSD_PGTEMP:
-      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_OSD);
-      ALLOW_CAPS(PAXOS_OSDMAP, MON_CAP_R);
-      fill_caps(m);
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
     case MSG_REMOVE_SNAPS:
-      ALLOW_CAPS(PAXOS_OSDMAP, MON_CAP_RW);
-      fill_caps(m);
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
       // MDSs
     case MSG_MDS_BEACON:
     case MSG_MDS_OFFLOAD_TARGETS:
-      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MDS);
-      ALLOW_CAPS(PAXOS_MDSMAP, MON_CAP_RW);
-      fill_caps(m);
       paxos_service[PAXOS_MDSMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
@@ -647,7 +655,6 @@ do { \
     case MSG_MON_GLOBAL_ID:
     case CEPH_MSG_AUTH:
       /* no need to check caps here */
-      fill_caps(m);
       paxos_service[PAXOS_AUTH]->dispatch((PaxosServiceMessage*)m);
       break;
 
@@ -655,28 +662,27 @@ do { \
     case CEPH_MSG_STATFS:
     case MSG_PGSTATS:
     case MSG_GETPOOLSTATS:
-      ALLOW_CAPS(PAXOS_PGMAP, MON_CAP_R);
-      fill_caps(m);
       paxos_service[PAXOS_PGMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
     case MSG_POOLOP:
-      ALLOW_CAPS(PAXOS_OSDMAP, MON_CAP_RW);
-      fill_caps(m);
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
       // log
     case MSG_LOG:
-      ALLOW_CAPS(PAXOS_LOG, MON_CAP_RW);
-      fill_caps(m);
       paxos_service[PAXOS_LOG]->dispatch((PaxosServiceMessage*)m);
       break;
 
       // paxos
     case MSG_MON_PAXOS:
       {
-        ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
+	if (!src_is_mon && 
+	    !s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+	  //can't send these!
+	  delete m;
+	  break;
+	}
 
 	MMonPaxos *pm = (MMonPaxos*)m;
 
@@ -700,26 +706,25 @@ do { \
       break;
 
     case MSG_MON_OBSERVE:
-      if (IS_NOT_ADMIN) {
-        EXIT_NOT_ADMIN;
-      }
-      fill_caps(m);
       handle_observe((MMonObserve *)m);
       break;
 
       // elector messages
     case MSG_MON_ELECTION:
-      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
+      //check privileges here for simplicity
+      if (s &&
+	  !s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+	dout(0) << "MMonElection received from entity without enough caps!"
+		<< s->caps << dendl;
+      }
       elector.dispatch(m);
       break;
 
     case MSG_CLASS:
-      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_OSD);
       handle_class((MClass *)m);
       break;
 
     case MSG_FORWARD:
-      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
       handle_forward((MForward *)m);
       break;
 
@@ -727,27 +732,11 @@ do { \
       ret = false;
     }
   }
-out:
   if (s) {
     s->put();
   }
 
   return ret;
-}
-
-//if we can, fill in the PaxosServiceMessage's caps field.
-void Monitor::fill_caps(Message *m)
-{
-  PaxosServiceMessage *msg = (PaxosServiceMessage *) m;
-  if (msg->caps) return; //already filled in!
-  Session *s = NULL;
-  if (m->get_connection()) {
-    s = (Session *) m->get_connection()->get_priv();
-    if (s) {
-      msg->caps = &s->caps;
-      s->put();
-    }
-  }
 }
 
 void Monitor::handle_subscribe(MMonSubscribe *m)
@@ -756,7 +745,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   
   bool reply = false;
 
-  Session *s = (Session *)m->get_connection()->get_priv();
+  MonSession *s = (MonSession *)m->get_connection()->get_priv();
   if (!s) {
     dout(10) << " no session, dropping" << dendl;
     delete m;
@@ -800,7 +789,7 @@ bool Monitor::ms_handle_reset(Connection *con)
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
     return false;
 
-  Session *s = (Session *)con->get_priv();
+  MonSession *s = (MonSession *)con->get_priv();
   if (!s)
     return false;
 
@@ -900,9 +889,9 @@ void Monitor::tick()
   
   // trim sessions
   utime_t now = g_clock.now();
-  xlist<Session*>::iterator p = session_map.sessions.begin();
+  xlist<MonSession*>::iterator p = session_map.sessions.begin();
   while (!p.end()) {
-    Session *s = *p;
+    MonSession *s = *p;
     ++p;
     
     // don't trim monitors
@@ -986,6 +975,12 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 
 void Monitor::handle_class(MClass *m)
 {
+  if (!m->get_session()->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
+    dout(0) << "MClass received from entity without sufficient privileges "
+	    << m->get_session()->caps << dendl;
+    delete m;
+    return;
+  }
   switch (m->action) {
     case CLASS_SET:
     case CLASS_GET:
@@ -993,6 +988,7 @@ void Monitor::handle_class(MClass *m)
       break;
     case CLASS_RESPONSE:
       dout(0) << "got a class response (" << *m << ") ???" << dendl;
+      delete m;
       break;
     default:
       dout(0) << "got an unknown class message (" << *m << ") ???" << dendl;
@@ -1001,52 +997,48 @@ void Monitor::handle_class(MClass *m)
   }
 }
 
-bool Monitor::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
+bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, bool force_new)
 {
-  CephXServiceTicketInfo auth_ticket_info;
+  dout(10) << "ms_get_authorizer for " << ceph_entity_type_name(service_id) << dendl;
 
+  // we only connect to other monitors; every else connects to us.
+  if (service_id != CEPH_ENTITY_TYPE_MON)
+    return false;
+
+  CephXServiceTicketInfo auth_ticket_info;
   CephXSessionAuthInfo info;
   int ret;
-  uint32_t service_id = dest_type;
+  EntityName name;
+  name.entity_type = CEPH_ENTITY_TYPE_MON;
 
+  auth_ticket_info.ticket.name = name;
   auth_ticket_info.ticket.global_id = 0;
 
-  dout(0) << "ms_get_authorizer service_id=" << service_id << dendl;
+  CryptoKey secret;
+  if (!key_server.get_secret(name, secret)) {
+    dout(0) << " couldn't get secret for mon service" << dendl;
+    stringstream ss;
+    key_server.list_secrets(ss);
+    dout(0) << ss.str() << dendl;
+    return false;
+  }
 
-  if (service_id != CEPH_ENTITY_TYPE_MON) {
-    ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info);
-    if (ret < 0) {
-      return false;
-    }
-  } else {
-    EntityName name;
-    name.entity_type = CEPH_ENTITY_TYPE_MON;
-
-    CryptoKey secret;
-    if (!key_server.get_secret(name, secret)) {
-      dout(0) << "couldn't get secret for mon service!" << dendl;
-      stringstream ss;
-      key_server.list_secrets(ss);
-      dout(0) << ss.str() << dendl;
-      return false;
-    }
-    /* mon to mon authentication uses the private monitor shared key and not the
-       rotating key */
-    ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info, secret, (uint64_t)-1);
-    if (ret < 0) {
-      return false;
-    }
-    dout(0) << "built session auth_info for use with mon" << dendl;
-
+  /* mon to mon authentication uses the private monitor shared key and not the
+     rotating key */
+  ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info, secret, (uint64_t)-1);
+  if (ret < 0) {
+    dout(0) << "ms_get_authorizer failed to build session auth_info for use with mon ret " << ret << dendl;
+    return false;
   }
 
   CephXTicketBlob blob;
-  if (!cephx_build_service_ticket_blob(info, blob))
+  if (!cephx_build_service_ticket_blob(info, blob)) {
+    dout(0) << "ms_get_authorizer failed to build service ticket use with mon" << dendl;
     return false;
+  }
   bufferlist ticket_data;
   ::encode(blob, ticket_data);
 
-  dout(0) << "built service ticket" << dendl;
   bufferlist::iterator iter = ticket_data.begin();
   CephXTicketHandler handler;
   ::decode(handler.ticket, iter);
@@ -1063,29 +1055,32 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
 				   int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
 				   bool& isvalid)
 {
-  dout(0) << "Monitor::verify_authorizer start" << dendl;
+  dout(10) << "ms_verify_authorizer " << con->get_peer_addr()
+	   << " " << ceph_entity_type_name(peer_type)
+	   << " protocol " << protocol << dendl;
 
-  if (protocol == CEPH_AUTH_NONE) {
+  if (peer_type == CEPH_ENTITY_TYPE_MON &&
+      is_supported_auth(CEPH_AUTH_CEPHX)) {
+    // monitor, and cephx is enabled
+    isvalid = false;
+    if (protocol == CEPH_AUTH_CEPHX) {
+      bufferlist::iterator iter = authorizer_data.begin();
+      CephXServiceTicketInfo auth_ticket_info;
+      
+      if (authorizer_data.length()) {
+	int ret = cephx_verify_authorizer(&key_server, iter, auth_ticket_info, authorizer_reply);
+	if (ret >= 0)
+	  isvalid = true;
+	else
+	  dout(0) << "ms_verify_authorizer bad authorizer from mon " << con->get_peer_addr() << dendl;
+      }
+    } else {
+      dout(0) << "ms_verify_authorizer cephx enabled, but no authorizer (required for mon)" << dendl;
+    }
+  } else {
+    // who cares.
     isvalid = true;
-    return true;
   }
-
-  if (protocol != CEPH_AUTH_CEPHX)
-    return false;
-
-  bufferlist::iterator iter = authorizer_data.begin();
-  CephXServiceTicketInfo auth_ticket_info;
-
-  isvalid = true;
-
-  if (!authorizer_data.length())
-    return true; /* we're not picky */
-
-  int ret = cephx_verify_authorizer(&key_server, iter, auth_ticket_info, authorizer_reply);
-  dout(0) << "Monitor::verify_authorizer returns " << ret << dendl;
-
-  isvalid = (ret >= 0);
-
   return true;
 };
 

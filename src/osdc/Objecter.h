@@ -675,6 +675,7 @@ public:
 
   int create_pool(string& name, Context *onfinish, __u64 auid=0);
   int delete_pool(int pool, Context *onfinish);
+  int change_pool_auid(int pool, Context *onfinish, __u64 auid);
 
   void handle_pool_op_reply(MPoolOpReply *m);
 

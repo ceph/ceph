@@ -424,7 +424,10 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue)
       (lock->get_sm()->states[next].can_lease || !lock->is_leased()) &&
       (!caps || ((~lock->gcaps_allowed(CAP_ANY, next) & other_issued) == 0 &&
 		 (~lock->gcaps_allowed(CAP_LONER, next) & loner_issued) == 0 &&
-		 (~lock->gcaps_allowed(CAP_XLOCKER, next) & xlocker_issued) == 0))) {
+		 (~lock->gcaps_allowed(CAP_XLOCKER, next) & xlocker_issued) == 0)) &&
+      lock->get_state() != LOCK_SYNC_MIX2 &&  // these states need an explicit trigger from the auth mds
+      lock->get_state() != LOCK_MIX_SYNC2
+      ) {
     dout(7) << "eval_gather finished gather on " << *lock
 	    << " on " << *lock->get_parent() << dendl;
 
@@ -2828,15 +2831,6 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   CInode *in = (CInode*)lock->get_parent();
   dout(10) << "scatter_writebehind " << in->inode.mtime << " on " << *lock << " on " << *in << dendl;
 
-  // hack:
-  if (in->is_base()) {
-    dout(10) << "scatter_writebehind just clearing updated flag for base inode " << *in << dendl;
-    lock->clear_dirty();
-    if (!lock->is_stable())
-      eval_gather(lock);
-    return;
-  }
-
   // journal
   Mutation *mut = new Mutation;
   mut->ls = mds->mdlog->get_current_segment();
@@ -2972,6 +2966,8 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
 	if (!forcelockchange && lock->can_wrlock(-1)) {
 	  dout(10) << "scatter_nudge auth, propagating " << *lock << " on " << *p << dendl;
 	  scatter_writebehind(lock);
+	  if (c)
+	    lock->add_waiter(SimpleLock::WAIT_STABLE, c);
 	  return;
 	}
 

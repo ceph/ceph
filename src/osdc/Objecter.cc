@@ -720,6 +720,30 @@ int Objecter::delete_pool(int pool, Context *onfinish) {
   return 0;
 }
 
+/**
+ * change the auid owner of a pool by contacting the monitor.
+ * This requires the current connection to have write permissions
+ * on both the pool's current auid and the new (parameter) auid.
+ * Uses the standard Context callback when done.
+ */
+int Objecter::change_pool_auid(int pool, Context *onfinish, __u64 auid)
+{
+  dout(10) << "change_pool_auid " << pool << " to " << auid << dendl;
+  PoolOp *op = new PoolOp;
+  if (!op) return -ENOMEM;
+  op->tid = ++last_tid;
+  op->pool = pool;
+  op->name = "change_pool_auid";
+  op->onfinish = onfinish;
+  op->pool_op = POOL_OP_AUID_CHANGE;
+  op->auid = auid;
+  op_pool[op->tid] = op;
+
+  pool_op_submit(op);
+
+  return 0;
+}
+
 void Objecter::pool_op_submit(PoolOp *op) {
   dout(10) << "pool_op_submit " << op->tid << dendl;
   monc->send_mon_message(new MPoolOp(monc->get_fsid(), op->tid, op->pool,

@@ -1,15 +1,6 @@
-A few helper scripts:
+Ceph - a scalable distributed file system
+-----------------------------------------
 
-mkcephfs.sh -- initialize a new, empty ceph filesystem (by creating a
-               fresh monfs)
+Source files go here.
 
-mkfs.sh     -- same, but also initialize empty object stores.  assumes
-               all osds are on the same node, with dev/osd# for storage.
-
-stop.sh     -- stop/kill all daemons.
-
-restart.sh  -- stop everything, then restart everything.  (does not mkfs.)
-
-startnew.sh -- stop everything, initialize new ceph fs, and start it.
-               assumes everything is on one node.  for ease of testing.
-
+See ../README.

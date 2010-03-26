@@ -354,6 +354,8 @@ private:
 
     Pipe *local_pipe;
     void local_delivery(Message *m, int priority) {
+      if ((unsigned long)m > 10)
+	m->set_connection(local_pipe->connection_state->get());
       local_pipe->queue_received(m, priority);
     }
 
@@ -365,6 +367,8 @@ private:
     }
     
     void local_delivery(Message *m) {
+      if ((unsigned long)m > 10)
+	m->set_connection(local_pipe->connection_state->get());
       local_pipe->queue_received(m);
     }
 

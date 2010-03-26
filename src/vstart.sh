@@ -281,7 +281,7 @@ EOF
 		fi
 
 	        [ "$cephx" -eq 1 ] && $SUDO $CEPH_BIN/cauthtool --create-keyring --gen-key --name=mon. $keyring_fn
-	        [ "$cephx" -eq 1 ] && $SUDO $CEPH_BIN/cauthtool --create-keyring --gen-key --name=client.admin --set-uid=0 --caps=$admin_caps $keyring_fn
+	        [ "$cephx" -eq 1 ] && $SUDO $CEPH_BIN/cauthtool --gen-key --name=client.admin --set-uid=0 --caps=$admin_caps $keyring_fn
 
 		# build a fresh fs monmap, mon fs
 		str="$CEPH_BIN/monmaptool --create --clobber"

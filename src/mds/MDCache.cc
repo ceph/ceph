@@ -6886,6 +6886,9 @@ void MDCache::eval_stray(CDentry *dn)
     if (dn->state_test(CDentry::STATE_PURGING)) return;  // already purging
     if (in->state_test(CInode::STATE_NEEDSRECOVER) ||
 	in->state_test(CInode::STATE_RECOVERING)) return;  // don't mess with file size probing
+    if (in->get_num_ref() > (int)in->is_dirty() ||
+	dn->get_num_ref() > (int)dn->is_dirty())
+      return;                                            // stray dn or inode pins
     purge_stray(dn);
   }
   else if (in->inode.nlink == 1) {
@@ -7012,7 +7015,8 @@ void MDCache::_purge_stray_purged(CDentry *dn)
   CInode *in = dn->get_projected_linkage()->get_inode();
   dout(10) << "_purge_stray_purged " << *dn << " " << *in << dendl;
 
-  if (in->get_num_ref() == (int)in->is_dirty()) {
+  if (in->get_num_ref() == (int)in->is_dirty() &&
+      dn->get_num_ref() == (int)dn->is_dirty()) {
     // kill dentry.
     version_t pdv = dn->pre_dirty();
     

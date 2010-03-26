@@ -5,7 +5,7 @@
 #include "common/debug.h"
 #define DOUT_SUBSYS finisher
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << std::hex << pthread_self() << std::dec << " finisher(" << this << ") "
+#define dout_prefix *_dout << dbeginl << "finisher(" << this << ") "
 
 void Finisher::start()
 {

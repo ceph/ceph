@@ -38,7 +38,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(this, osd->whoami, osd->osdmap)
 static ostream& _prefix(PG *pg, int whoami, OSDMap *osdmap) {
-  return *_dout << dbeginl << std::hex << pthread_self() << std::dec << " osd" << whoami
+  return *_dout << dbeginl << "osd" << whoami
 		<< " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
 }
 
@@ -1310,7 +1310,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       break;
 
     case CEPH_OSD_OP_TMAPUP:
-      {
+      if (bp.end()) {
+	dout(10) << "tmapup is a no-op" << dendl;
+      } else {
 	// read the whole object
 	bufferlist ibl;
 	vector<OSDOp> nops(1);

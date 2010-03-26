@@ -64,7 +64,7 @@
 
 #define DOUT_SUBSYS filestore
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << std::hex << pthread_self() << std::dec << " filestore(" << basedir << ") "
+#define dout_prefix *_dout << dbeginl << "filestore(" << basedir << ") "
 
 #include "include/buffer.h"
 
@@ -686,7 +686,7 @@ void FileStore::queue_op(Sequencer *posr, __u64 op_seq, list<Transaction*>& tls,
     posr = &default_osr;
   if (posr->p) {
     osr = (OpSequencer *)posr->p;
-    dout(10) << "queue_op existing osr " << osr << "/" << osr->parent << " w/ q " << osr->q << dendl;
+    dout(10) << "queue_op existing osr " << osr << "/" << osr->parent << dendl; //<< " w/ q " << osr->q << dendl;
   } else {
     osr = new OpSequencer;
     osr->parent = posr;
@@ -736,7 +736,7 @@ void FileStore::_finish_op(OpSequencer *osr)
     osr->lock.Unlock();  // locked in _do_op
     delete osr;
   } else {
-    dout(10) << "_finish_op on osr " << osr << "/" << osr->parent << " q now " << osr->q << dendl;
+    dout(10) << "_finish_op on osr " << osr << "/" << osr->parent << dendl; // << " q now " << osr->q << dendl;
     osr->lock.Unlock();  // locked in _do_op
   }
 

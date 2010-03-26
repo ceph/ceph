@@ -17,6 +17,12 @@
  * "allow rw service_name" (which allows reading and writing to the named
  *                          service type)
  * "allow *" (which allows full access to EVERYTHING)
+ *
+ * When the monitor is checking permissions, besides the obvious read and write
+ * it generally equates having an execute permission with being of the
+ * associated type. So, in instances where it only wants to receive a
+ * certain kind of message from OSDs, it will require a MON_CAP_X on
+ * PAXOS_OSDMAP.
  */
 
 #ifndef __MONCAPS_H
@@ -63,7 +69,8 @@ struct MonCaps {
   bool allow_all;
   __u64 auid;
 public:
-  MonCaps() : default_action(0), allow_all(false) {}
+  MonCaps() : text(), default_action(0),
+	      allow_all(false), auid(CEPH_AUTH_UID_DEFAULT) {}
   const string& get_str() const { return text; }
   bool parse(bufferlist::iterator& iter);
   rwx_t get_caps(int service);

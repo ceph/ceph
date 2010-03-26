@@ -63,7 +63,7 @@ using namespace std;
 
 #define DOUT_SUBSYS client
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << std::hex << pthread_self() << std::dec << " client" << whoami << " "
+#define dout_prefix *_dout << dbeginl << "client" << whoami << " "
 
 #define  tout       if (g_conf.client_trace) traceout
 

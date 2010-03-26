@@ -38,20 +38,23 @@ typedef struct subnet_addr {
 
 class Subnet
 {
-	subnet_addr_t subnet;
-	bool valid;
-	char *orig_str;
-
-	void parse(const char *str);
+  subnet_addr_t subnet;
+  bool valid;
+  char *orig_str;
+  
+  void parse(const char *str);
 public:
-	Subnet(const char *str) {
-		valid = false;
-		parse(str);
-	}
+  Subnet(const char *str) {
+    valid = false;
+    parse(str);
+  }
+  ~Subnet() {
+    free(orig_str);
+  }
 
-	bool is_valid() { return valid; }
-	bool contains(entity_addr_t *addr);
-	subnet_addr_t& get_subnet() { return subnet; }
+  bool is_valid() { return valid; }
+  bool contains(entity_addr_t *addr);
+  subnet_addr_t& get_subnet() { return subnet; }
 };
 
 #define GET_IP(addr) (addr)->in4_addr().sin_addr.s_addr
@@ -140,24 +143,35 @@ static GroupsManager groups_mgr;
 #define GROUP_DEFINED_RDONLY 0x1
 
 class GroupEntry {
-	vector<Subnet *> subnets;
-	vector<GroupEntry *> groups;
-	int flags;
-	bool readonly;
-
-	void parse_single_addr(const char *str);
-	void initialize();
+  vector<Subnet *> subnets;
+  vector<GroupEntry *> groups;
+  int flags;
+  bool readonly;
+  
+  void parse_single_addr(const char *str);
+  void initialize();
 public:
-	GroupEntry() { initialize(); }
-	GroupEntry(Subnet *subnet);
-	GroupEntry(GroupEntry *);
-	void parse_addr_line(const char *str);
-	bool get_readonly() { return readonly; }
-	void set_readonly(bool ro) { flags |= GROUP_DEFINED_RDONLY; readonly = ro; }
-	void init(ConfFile *cf, const char *section, const char *options);
-	bool contains(entity_addr_t *addr);
-	GroupEntry *get_properties(entity_addr_t *addr);
-	bool is_valid();
+  GroupEntry() { initialize(); }
+  GroupEntry(Subnet *subnet);
+  GroupEntry(GroupEntry *);
+  ~GroupEntry() {
+    for (vector<Subnet*>::iterator p = subnets.begin();
+	 p != subnets.end();
+	 p++)
+      delete *p;
+    for (vector<GroupEntry*>::iterator p = groups.begin();
+	 p != groups.end();
+	 p++)
+      delete *p;
+  }
+
+  void parse_addr_line(const char *str);
+  bool get_readonly() { return readonly; }
+  void set_readonly(bool ro) { flags |= GROUP_DEFINED_RDONLY; readonly = ro; }
+  void init(ConfFile *cf, const char *section, const char *options);
+  bool contains(entity_addr_t *addr);
+  GroupEntry *get_properties(entity_addr_t *addr);
+  bool is_valid();
 };
 
 void GroupEntry::initialize()
@@ -316,6 +330,7 @@ GroupEntry *GroupsManager::get_group(const char *name)
 		/* no options --> group_name = name, create a new
 		   one and exit */
 		group = new GroupEntry(subnet);
+		subnet = NULL;
 		groups_map[strdup(group_name)] = group;
 		goto done;
 	}
@@ -323,6 +338,7 @@ GroupEntry *GroupsManager::get_group(const char *name)
 	iter = groups_map.find(group_name);
 	if (iter == groups_map.end() ) {
 		orig_group = new GroupEntry(subnet);
+		subnet = NULL;
 		groups_map[strdup(group_name)] = orig_group;
 	} else {
 		orig_group = iter->second;
@@ -335,7 +351,7 @@ GroupEntry *GroupsManager::get_group(const char *name)
 
 done:
 	free(orig_tmp);
-
+	delete subnet;
 	return group;
 }
 
@@ -414,7 +430,7 @@ ExportAddrEntry::~ExportAddrEntry()
 
 bool ExportAddrEntry::is_authorized(entity_addr_t *addr)
 {
-	GroupEntry *props;
+	GroupEntry *props = NULL;
 	bool ret;
 
 	if (!group)
