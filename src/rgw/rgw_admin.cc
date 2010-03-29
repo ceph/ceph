@@ -75,47 +75,6 @@ int gen_rand_alphanumeric(char *dest, int size) /* size should be the required s
   return 0;
 }
 
-#if 0
-static int rebuild_policy(RGWAccessControlPolicy& src, RGWAccessControlPolicy& dest)
-{
-  ACLOwner *owner = (ACLOwner *)src.find_first("Owner");
-  if (!owner)
-    return -EINVAL;
-
-  RGWUserInfo owner_info;
-  if (rgw_get_user_info(owner->get_id(), owner_info) < 0) {
-    cerr << "owner info does not exist" << std::endl;
-    return -EINVAL;
-  }
-  ACLOwner& new_owner = dest.get_owner();
-  new_owner.set_id(owner->get_id());
-  new_owner.set_name(owner_info.display_name);
-
-  RGWAccessControlList& src_acl = src.get_acl();
-  RGWAccessControlList& acl = dest.get_acl();
-
-  XMLObjIter iter = src_acl.find("Grant");
-  ACLGrant *src_grant = (ACLGrant *)iter.get_next();
-  while (src_grant) {
-    string id = src_grant->get_id();
-    
-    RGWUserInfo grant_user;
-    if (rgw_get_user_info(id, grant_user) < 0) {
-      cerr << "grant user does not exist:" << id << std::endl;
-    } else {
-      ACLGrant new_grant;
-      ACLPermission& perm = src_grant->get_permission();
-      new_grant.set_canon(id, grant_user.display_name, perm.get_permissions());
-      cerr << "new grant: " << id << ":" << grant_user.display_name << std::endl;
-      acl.add_grant(&new_grant);
-    }
-    src_grant = (ACLGrant *)iter.get_next();
-  }
-
-  return 0; 
-}
-#endif
-
 int main(int argc, char **argv) 
 {
   DEFINE_CONF_VARS(usage);
