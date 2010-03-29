@@ -173,6 +173,7 @@ int main(int argc, char **argv)
   store = RGWAccess::init_storage_provider("rados", argc, argv);
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
+    return 5; //EIO
   }
 
 
