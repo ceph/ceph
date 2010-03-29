@@ -785,7 +785,9 @@ public:
   void unqueue_file_recover(CInode *in);
   void _queued_file_recover_cow(CInode *in, Mutation *mut);
   void _queue_file_recover(CInode *in);
-  void identify_files_to_recover();
+  void identify_files_to_recover(vector<CInode*>& recover_q, vector<CInode*>& check_q);
+  void start_files_to_recover(vector<CInode*>& recover_q, vector<CInode*>& check_q);
+
   void do_file_recover();
   void _recovered(CInode *in, int r, __u64 size, utime_t mtime);
 

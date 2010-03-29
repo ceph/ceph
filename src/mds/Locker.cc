@@ -3401,17 +3401,18 @@ void Locker::file_recover(ScatterLock *lock)
   assert(in->is_auth());
   assert(lock->is_stable());
 
-  int oldstate = lock->get_state();
-  lock->set_state(LOCK_PRE_SCAN);
+  assert(lock->get_state() == LOCK_PRE_SCAN); // only called from MDCache::start_files_to_recover()
 
   int gather = 0;
   
-  if (in->is_replicated() &&
+  /*
+  if (in->is_replicated()
       lock->get_sm()->states[oldstate].replica_state != LOCK_LOCK) {
     send_lock_message(lock, LOCK_AC_LOCK);
     lock->init_gather();
     gather++;
   }
+  */
   if (in->issued_caps_need_gather(lock)) {
     issue_caps(in);
     gather++;

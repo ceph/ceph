@@ -3889,8 +3889,11 @@ void MDCache::rejoin_gather_finish()
   
   process_imported_caps();
   process_reconnected_caps();
-  identify_files_to_recover();
+
+  vector<CInode*> recover_q, check_q;
+  identify_files_to_recover(recover_q, check_q);
   rejoin_send_acks();
+  start_files_to_recover(recover_q, check_q);
   
   // signal completion of fetches, rejoin_gather_finish, etc.
   assert(rejoin_ack_gather.count(mds->whoami));
@@ -4444,10 +4447,9 @@ void MDCache::unqueue_file_recover(CInode *in)
  * called after recovery to recover file sizes for previously opened (for write)
  * files.  that is, those where max_size > size.
  */
-void MDCache::identify_files_to_recover()
+void MDCache::identify_files_to_recover(vector<CInode*>& recover_q, vector<CInode*>& check_q)
 {
   dout(10) << "identify_files_to_recover" << dendl;
-  vector<CInode*> q;  // put inodes in list first: queue_file_discover modifies inode_map
   for (hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
        p != inode_map.end();
        ++p) {
@@ -4467,13 +4469,26 @@ void MDCache::identify_files_to_recover()
       }
     }
 
-    if (recover) 
-      q.push_back(in);
-    else
-      mds->locker->check_inode_max_size(in);
+    if (recover) {
+      in->filelock.set_state(LOCK_PRE_SCAN);
+      recover_q.push_back(in);
+    } else {
+      check_q.push_back(in);
+    }
   }
-  for (vector<CInode*>::iterator p = q.begin(); p != q.end(); p++)
-    mds->locker->file_recover(&(*p)->filelock);
+}
+
+void MDCache::start_files_to_recover(vector<CInode*>& recover_q, vector<CInode*>& check_q)
+{
+  for (vector<CInode*>::iterator p = check_q.begin(); p != check_q.end(); p++) {
+    CInode *in = *p;
+    in->filelock.set_state(LOCK_LOCK);
+    mds->locker->check_inode_max_size(in);
+  }
+  for (vector<CInode*>::iterator p = recover_q.begin(); p != recover_q.end(); p++) {
+    CInode *in = *p;
+    mds->locker->file_recover(&in->filelock);
+  }
 }
 
 struct C_MDC_Recover : public Context {
