@@ -28,7 +28,8 @@ public:
    * create a bucket with name bucket and the given list of attrs
    * returns 0 on success, -ERR# otherwise.
    */
-  int create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs);
+  int create_bucket(std::string& id, std::string& bucket, map<nstring,
+		    bufferlist>& attrs, __u64 auid=0);
 
   /** Write/overwrite an object to the bucket storage. */
   int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
@@ -52,7 +53,7 @@ public:
 
   /** Get the attributes for an object.*/
   int get_attr(std::string& bucket, std::string& obj,
-               const char *name, bufferlist& dest);
+               const char *name, bufferlist& dest, __u64 auid=0);
 
   /** Set an attr on an object. */
   int set_attr(std::string& bucket, std::string& obj,

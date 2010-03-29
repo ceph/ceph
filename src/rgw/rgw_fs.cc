@@ -145,7 +145,7 @@ int RGWFS::list_objects(string& id, string& bucket, int max, string& prefix, str
 }
 
 
-int RGWFS::create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs)
+int RGWFS::create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs, __u64 auid)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1;
   char buf[len];

@@ -13,7 +13,7 @@ public:
   int list_objects(std::string& id, std::string& bucket, int max, std::string& prefix, std::string& delim,
                    std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes);
 
-  int create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs);
+  int create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs, __u64 auid=0);
   int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
               time_t *mtime,
                map<nstring, bufferlist>& attrs);

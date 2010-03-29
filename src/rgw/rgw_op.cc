@@ -215,7 +215,8 @@ void RGWCreateBucket::execute()
 
   attrs[RGW_ATTR_ACL] = aclbl;
 
-  ret = rgwstore->create_bucket(s->user.user_id, s->bucket_str, attrs);
+  ret = rgwstore->create_bucket(s->user.user_id, s->bucket_str, attrs,
+				s->user.auid);
 
   if (ret == 0) {
     RGWUserBuckets buckets;

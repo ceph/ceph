@@ -206,9 +206,10 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
 
 /**
  * create a bucket with name bucket and the given list of attrs
+ * if auid is set, it sets the auid of the underlying rados pool
  * returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs)
+int RGWRados::create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs, __u64 auid)
 {
   object_t bucket_oid(bucket.c_str());
 
@@ -230,7 +231,7 @@ int RGWRados::create_bucket(std::string& id, std::string& bucket, map<nstring, b
     }
   }
 
-  ret = rados->create_pool(bucket.c_str());
+  ret = rados->create_pool(bucket.c_str(), auid);
 
   return ret;
 }
