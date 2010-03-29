@@ -23,7 +23,8 @@ void usage()
 {
   cerr << "usage: rgw_admin <--user-gen | --user-modify | --read-policy | --list-buckets > [options...]" << std::endl;
   cerr << "options:" << std::endl;
-  cerr << "   --uid=<id>" << std::endl;
+  cerr << "   --uid=<id> (S3 uid)" << std::endl;
+  cerr << "   --auth_uid=<auid> (librados uid)" << std::endl;
   cerr << "   --key=<key>" << std::endl;
   cerr << "   --email=<email>" << std::endl;
   cerr << "   --display-name=<name>" << std::endl;
@@ -134,6 +135,7 @@ int main(int argc, char **argv)
   bool read_policy = false;
   bool list_buckets = false;
   int actions = 0 ;
+  __u64 auid = 0;
   RGWUserInfo info;
   RGWAccess *store;
 
@@ -160,6 +162,8 @@ int main(int argc, char **argv)
       CONF_SAFE_SET_ARG_VAL(&bucket, OPT_STR);
     } else if (CONF_ARG_EQ("object", 'o')) {
       CONF_SAFE_SET_ARG_VAL(&object, OPT_STR);
+    } else if (CONF_ARG_EQ("auth_uid", 'a')) {
+      CONF_SAFE_SET_ARG_VAL(&auid, OPT_LONGLONG);
     } else {
       cerr << "unrecognized arg " << args[i] << std::endl;
       ARGS_USAGE();
@@ -226,6 +230,8 @@ int main(int argc, char **argv)
       info.display_name = display_name;
     if (user_email)
       info.user_email = user_email;
+    if (auid)
+      info.auid = auid;
 
     int err;
     if ((err = rgw_store_user_info(info)) < 0) {
