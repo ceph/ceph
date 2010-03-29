@@ -1530,8 +1530,8 @@ void CInode::open_snaprealm(bool nosplit)
     if (parent) {
       dout(10) << "open_snaprealm " << snaprealm
 	       << " parent is " << parent
-	       << " siblings are " << parent->open_children
 	       << dendl;
+      dout(30) << " siblings are " << parent->open_children << dendl;
       snaprealm->parent = parent;
       if (!nosplit && 
 	  is_dir() &&
