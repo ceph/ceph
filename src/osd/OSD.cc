@@ -4264,7 +4264,7 @@ void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
 {
   if (op->get_map_epoch() < up_epoch) {
     dout(3) << "replica op reply from before up" << dendl;
-    delete op;
+    op->put();
     return;
   }
 
@@ -4282,7 +4282,7 @@ void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
 		      (Session*)op->get_connection()->get_priv());
   if (!_have_pg(pgid)) {
     // hmm.
-    delete op;
+    op->put();
     return;
   } 
 

@@ -2366,7 +2366,7 @@ void PG::sub_op_scrub_reply(MOSDSubOpReply *op)
   if (op->map_epoch < info.history.same_acting_since) {
     dout(10) << "sub_op_scrub discarding old sub_op from "
 	     << op->map_epoch << " < " << info.history.same_acting_since << dendl;
-    delete op;
+    op->put();
     return;
   }
 
@@ -2381,7 +2381,7 @@ void PG::sub_op_scrub_reply(MOSDSubOpReply *op)
     kick();
   }
 
-  delete op;
+  op->put();
 }
 
 

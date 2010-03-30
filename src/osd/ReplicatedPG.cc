@@ -2524,7 +2524,7 @@ void ReplicatedPG::sub_op_modify_reply(MOSDSubOpReply *r)
 	      r->get_last_complete_ondisk());
   }
 
-  delete r;
+  r->put();
 }
 
 
@@ -2907,7 +2907,7 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
 	       << pushing[soid] << dendl;
     }
   }
-  delete reply;
+  reply->put();
 }
 
 
