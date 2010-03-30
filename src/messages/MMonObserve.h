@@ -30,7 +30,10 @@ class MMonObserve : public PaxosServiceMessage {
   MMonObserve(ceph_fsid_t &f, int mid, version_t v) : 
     PaxosServiceMessage(MSG_MON_OBSERVE, v),
     fsid(f), machine_id(mid), ver(v) { }
+private:
+  ~MMonObserve() {}
   
+public:
   const char *get_type_name() { return "mon_observe"; }
   void print(ostream& o) {
     o << "observe(" << machine_id << " v" << ver << ")";
