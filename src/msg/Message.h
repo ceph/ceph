@@ -163,9 +163,10 @@ struct Connection : public RefCountedObject {
   RefCountedObject *priv;
   int peer_type;
   entity_addr_t peer_addr;
+  unsigned features;
 
 public:
-  Connection() : nref(1), lock("Connection::lock"), priv(NULL), peer_type(-1) {}
+  Connection() : nref(1), lock("Connection::lock"), priv(NULL), peer_type(-1), features(0) {}
   ~Connection() {
     //generic_dout(0) << "~Connection " << this << dendl;
     if (priv) {
@@ -202,6 +203,10 @@ public:
   const entity_addr_t& get_peer_addr() { return peer_addr; }
   void set_peer_addr(const entity_addr_t& a) { peer_addr = a; }
 
+  int get_features() const { return features; }
+  bool has_feature(int f) const { return features & f; }
+  void set_features(unsigned f) { features = f; }
+  void set_feature(unsigned f) { features |= f; }
 };
 
 
@@ -220,15 +225,18 @@ protected:
   Connection *connection;
 
   friend class Messenger;
+
+  bool _forwarded;
+  entity_inst_t _orig_source_inst;
   
 public:
   atomic_t nref;
 
-  Message() : connection(NULL), nref(0) {
+  Message() : connection(NULL), _forwarded(false), nref(0) {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
   };
-  Message(int t) : connection(NULL), nref(0) {
+  Message(int t) : connection(NULL), _forwarded(false), nref(0) {
     memset(&header, 0, sizeof(header));
     header.type = t;
     header.version = 1;
@@ -308,15 +316,34 @@ public:
   void set_priority(__s16 p) { header.priority = p; }
 
   // source/dest
-  entity_inst_t get_source_inst() { return entity_inst_t(header.src); }
-  entity_name_t get_source() { return entity_name_t(header.src.name); }
-  entity_addr_t get_source_addr() { return entity_addr_t(header.src.addr); }
-  void set_source_inst(entity_inst_t& inst) { header.src = inst; }
+  entity_inst_t get_source_inst() {
+    return entity_inst_t(get_source(), get_source_addr());
+  }
+  entity_name_t get_source() {
+    return entity_name_t(header.src);
+  }
+  entity_addr_t get_source_addr() {
+    if (connection)
+      return connection->get_peer_addr();
+    return entity_addr_t();
+  }
 
-  entity_inst_t get_orig_source_inst() { return entity_inst_t(header.orig_src); }
-  entity_name_t get_orig_source() { return entity_name_t(header.orig_src.name); }
-  entity_addr_t get_orig_source_addr() { return entity_addr_t(header.orig_src.addr); }
-  void set_orig_source_inst(entity_inst_t &i) { header.orig_src = i; }
+  // forwarded?
+  entity_inst_t get_orig_source_inst() {
+    if (_forwarded)
+      return _orig_source_inst;
+    return get_source_inst();
+  }
+  entity_name_t get_orig_source() {
+    return get_orig_source_inst().name;
+  }
+  entity_addr_t get_orig_source_addr() {
+    return get_orig_source_inst().addr;
+  }
+  void set_orig_source_inst(entity_inst_t& i) {
+    _forwarded = true;
+    _orig_source_inst = i;
+  }
 
   // virtual bits
   virtual void decode_payload() = 0;

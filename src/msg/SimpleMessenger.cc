@@ -380,8 +380,7 @@ void SimpleMessenger::prepare_dest(const entity_inst_t& inst)
 int SimpleMessenger::send_message(Message *m, const entity_inst_t& dest)
 {
   // set envelope
-  m->get_header().src = get_myinst();
-  m->get_header().orig_src = m->get_header().src;
+  m->get_header().src = get_myname();
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
@@ -399,8 +398,7 @@ int SimpleMessenger::send_message(Message *m, const entity_inst_t& dest)
 int SimpleMessenger::lazy_send_message(Message *m, const entity_inst_t& dest)
 {
   // set envelope
-  m->get_header().src = get_myinst();
-  m->get_header().orig_src = m->get_header().src;
+  m->get_header().src = get_myname();
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
@@ -848,6 +846,9 @@ int SimpleMessenger::Pipe::accept()
   if (policy.lossy)
     reply.flags = reply.flags | CEPH_MSG_CONNECT_LOSSY;
 
+  connection_state->set_features((int)reply.features & (int)connect.features);
+  dout(10) << "accept features " << connection_state->get_features() << dendl;
+
   // ok!
   register_pipe();
   messenger->lock.Unlock();
@@ -1157,7 +1158,9 @@ int SimpleMessenger::Pipe::connect()
       connect_seq = cseq + 1;
       assert(connect_seq == reply.connect_seq);
       backoff = utime_t();
-      dout(20) << "connect success " << connect_seq << ", lossy = " << policy.lossy << dendl;
+      connection_state->set_features((unsigned)reply.features & (unsigned)connect.features);
+      dout(20) << "connect success " << connect_seq << ", lossy = " << policy.lossy
+	       << ", features " << connection_state->get_features() << dendl;
       
       if (!messenger->destination_stopped) {
 	Connection * cstate = connection_state->get();
@@ -1679,31 +1682,35 @@ Message *SimpleMessenger::Pipe::read_message()
   
   ceph_msg_header header; 
   ceph_msg_footer footer;
-
-  if (tcp_read( sd, (char*)&header, sizeof(header) ) < 0)
-    return 0;
+  __u32 header_crc;
+  
+  if (connection_state->has_feature(CEPH_FEATURE_NOSRCADDR)) {
+    if (tcp_read( sd, (char*)&header, sizeof(header) ) < 0)
+      return 0;
+    header_crc = crc32c_le(0, (unsigned char *)&header, sizeof(header) - sizeof(header.crc));
+  } else {
+    ceph_msg_header_old oldheader;
+    if (tcp_read( sd, (char*)&oldheader, sizeof(oldheader) ) < 0)
+      return 0;
+    // this is fugly
+    memcpy(&header, &oldheader, sizeof(header));
+    header.src = oldheader.src.name;
+    header.reserved = oldheader.reserved;
+    header.crc = oldheader.crc;
+    header_crc = crc32c_le(0, (unsigned char *)&oldheader, sizeof(oldheader) - sizeof(oldheader.crc));
+  }
 
   dout(20) << "reader got envelope type=" << header.type
-           << " src " << header.src
+           << " src " << entity_name_t(header.src)
            << " front=" << header.front_len
 	   << " data=" << header.data_len
 	   << " off " << header.data_off
            << dendl;
 
   // verify header crc
-  __u32 header_crc = crc32c_le(0, (unsigned char *)&header, sizeof(header) - sizeof(header.crc));
   if (header_crc != header.crc) {
     dout(0) << "reader got bad header crc " << header_crc << " != " << header.crc << dendl;
     return 0;
-  }
-
-  // ok, now it's safe to change the header..
-  // munge source address?
-  entity_addr_t srcaddr = header.src.addr;
-  if (srcaddr.is_blank_addr()) {
-    dout(10) << "reader munging src addr " << header.src << " to be " << peer_addr << dendl;
-    ceph_entity_addr enc_peer_addr = peer_addr;
-    header.orig_src.addr.in_addr = header.src.addr.in_addr = enc_peer_addr.in_addr;    
   }
 
   // read front
@@ -1775,7 +1782,7 @@ Message *SimpleMessenger::Pipe::read_message()
   dout(10) << "aborted = " << aborted << dendl;
   if (aborted) {
     dout(0) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
-	    << " byte message from " << header.src << ".. ABORTED" << dendl;
+	    << " byte message.. ABORTED" << dendl;
     // MEH FIXME 
     Message *m = new MGenericMessage(CEPH_MSG_PING);
     header.type = CEPH_MSG_PING;
@@ -1784,7 +1791,7 @@ Message *SimpleMessenger::Pipe::read_message()
   }
 
   dout(20) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
-	   << " byte message from " << header.src << dendl;
+	   << " byte message" << dendl;
   return decode_message(header, footer, front, middle, data);
 }
 
@@ -1949,10 +1956,25 @@ int SimpleMessenger::Pipe::write_message(Message *m)
   msg.msg_iovlen++;
 
   // send envelope
-  msgvec[msg.msg_iovlen].iov_base = (char*)&header;
-  msgvec[msg.msg_iovlen].iov_len = sizeof(header);
-  msglen += sizeof(header);
-  msg.msg_iovlen++;
+  ceph_msg_header_old oldheader;
+  if (connection_state->has_feature(CEPH_FEATURE_NOSRCADDR)) {
+    msgvec[msg.msg_iovlen].iov_base = (char*)&header;
+    msgvec[msg.msg_iovlen].iov_len = sizeof(header);
+    msglen += sizeof(header);
+    msg.msg_iovlen++;
+  } else {
+    memcpy(&oldheader, &header, sizeof(header));
+    oldheader.src.name = header.src;
+    oldheader.src.addr = connection_state->get_peer_addr();
+    oldheader.orig_src = oldheader.src;
+    oldheader.reserved = header.reserved;
+    oldheader.crc = crc32c_le(0, (unsigned char*)&oldheader,
+			      sizeof(oldheader) - sizeof(oldheader.crc));
+    msgvec[msg.msg_iovlen].iov_base = (char*)&oldheader;
+    msgvec[msg.msg_iovlen].iov_len = sizeof(oldheader);
+    msglen += sizeof(oldheader);
+    msg.msg_iovlen++;
+  }
 
   // payload (front+data)
   list<bufferptr>::const_iterator pb = blist.buffers().begin();
