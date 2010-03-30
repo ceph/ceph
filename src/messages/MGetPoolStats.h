@@ -30,6 +30,10 @@ public:
     set_tid(t);
   }
 
+private:
+  ~MGetPoolStats() {}
+
+public:
   const char *get_type_name() { return "getpoolstats"; }
   void print(ostream& out) {
     out << "getpoolstats(" << get_tid() << " " << pools << " v" << version << ")";
