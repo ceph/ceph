@@ -1125,14 +1125,14 @@ void OSD::handle_osd_ping(MOSDPing *m)
 
   if (!is_active()) {
     dout(10) << "handle_osd_ping - not active" << dendl;
-    delete m;
+    m->put();
     return;
   }
 
   if (ceph_fsid_compare(&superblock.fsid, &m->fsid)) {
     dout(20) << "handle_osd_ping from " << m->get_source()
 	     << " bad fsid " << m->fsid << " != " << superblock.fsid << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -1171,7 +1171,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
     map_lock.put_read();
 
   heartbeat_lock.Unlock();
-  delete m;
+  m->put();
 }
 
 void OSD::heartbeat_entry()
@@ -3974,14 +3974,14 @@ void OSD::reply_op_error(MOSDOp *op, int err)
 {
   MOSDOpReply *reply = new MOSDOpReply(op, err, osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
   messenger->send_message(reply, op->get_orig_source_inst());
-  delete op;
+  op->put();
 }
 
 void OSD::handle_misdirected_op(PG *pg, MOSDOp *op)
 {
   if (op->get_map_epoch() < pg->info.history.same_primary_since) {
     dout(7) << *pg << " changed after " << op->get_map_epoch() << ", dropping" << dendl;
-    delete op;
+    op->put();
   } else {
     dout(7) << *pg << " misdirected op in " << op->get_map_epoch() << dendl;
     stringstream ss;

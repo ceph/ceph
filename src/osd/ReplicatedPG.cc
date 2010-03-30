@@ -444,7 +444,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
   reply->set_data(outdata);
   reply->set_result(result);
   osd->messenger->send_message(reply, op->get_orig_source_inst());
-  delete op;
+  op->put();
 }
 
 void ReplicatedPG::calc_trim_to()
@@ -602,7 +602,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
       reply->get_header().data_off = ctx->data_off;
       reply->set_result(result);
       osd->messenger->send_message(reply, op->get_orig_source_inst());
-      delete op;
+      op->put();
       delete ctx;
       put_object_context(obc);
       return;
