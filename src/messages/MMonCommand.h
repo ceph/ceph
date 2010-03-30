@@ -29,7 +29,11 @@ class MMonCommand : public PaxosServiceMessage {
   MMonCommand(ceph_fsid_t &f, version_t version) : 
     PaxosServiceMessage(MSG_MON_COMMAND, version),
     fsid(f) { }
-  
+
+private:
+  ~MMonCommand() {}
+
+public:  
   const char *get_type_name() { return "mon_command"; }
   void print(ostream& o) {
     o << "mon_command(";
