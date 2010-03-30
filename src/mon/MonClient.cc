@@ -220,7 +220,7 @@ void MonClient::handle_monmap(MMonMap *m)
     _finish_hunting();
 
   monc_lock.Unlock();
-  delete m;
+  m->put();
 }
 
 // ----------------------
