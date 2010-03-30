@@ -822,7 +822,7 @@ void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
     dout(10) << "unknown request " << tid << dendl;
   } 
   dout(10) << "done" << dendl;
-  delete m;
+  m->put();
 }
 
 
