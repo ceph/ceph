@@ -518,7 +518,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     ss << " after " << delay << " (allowed interval " << g_conf.mds_reconnect_timeout << ")";
     mds->logclient.log(LOG_INFO, ss);
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_source_inst());
-    delete m;
+    m->put();
     return;
   }
 
@@ -624,7 +624,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   if (client_reconnect_gather.empty())
     reconnect_gather_finish();
 
-  delete m;
+  m->put();
 }
 
 
