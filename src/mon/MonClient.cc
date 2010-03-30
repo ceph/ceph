@@ -301,7 +301,7 @@ void MonClient::handle_auth(MAuthReply *m)
       delete auth;
       auth = get_auth_client_handler(m->protocol, rotating_secrets);
       if (!auth) {
-	delete m;
+	m->put();
 	return;
       }
       auth->set_want_keys(want_keys);
@@ -320,7 +320,7 @@ void MonClient::handle_auth(MAuthReply *m)
   }
 
   int ret = auth->handle_response(m->result, p);
-  delete m;
+  m->put();
 
   if (ret == -EAGAIN) {
     MAuth *m = new MAuth;
