@@ -350,7 +350,7 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
   return false;
 
  didit:
-  delete m;
+  m->put();
   return true;
 }
 
