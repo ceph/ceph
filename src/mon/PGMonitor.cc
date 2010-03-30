@@ -217,7 +217,7 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   // reply
   mon->send_reply(statfs, reply);
  out:
-  delete statfs;
+  statfs->put();
 }
 
 bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
