@@ -408,7 +408,7 @@ void Monitor::handle_forward(MForward *m)
     _ms_dispatch(req);
   }
   session->put();
-  delete m;
+  m->put();
 }
 
 void Monitor::try_send_message(Message *m, entity_inst_t to)
