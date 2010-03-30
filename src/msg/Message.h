@@ -244,12 +244,13 @@ public:
     header.data_off = 0;
     memset(&footer, 0, sizeof(footer));
   }
+protected:
   virtual ~Message() { 
     assert(nref.test() == 0);
     if (connection)
       connection->put();
   }
-
+public:
   Message *get() {
     //int r = 
     nref.inc();
