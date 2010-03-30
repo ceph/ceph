@@ -842,7 +842,7 @@ void Monitor::handle_mon_get_map(MMonGetMap *m)
 {
   dout(10) << "handle_mon_get_map" << dendl;
   send_latest_monmap(m->get_orig_source_inst());
-  delete m;
+  m->put();
 }
 
 
