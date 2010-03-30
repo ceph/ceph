@@ -96,7 +96,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
   if (ceph_fsid_compare(&m->fsid, &monc->get_fsid())) {
     dout(0) << "handle_osd_map fsid " << m->fsid << " != " << monc->get_fsid() << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -204,7 +204,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
     waiting_for_map.erase(p++);
   }
 
-  delete m;
+  m->put();
 
   monc->sub_got("osdmap", osdmap->get_epoch());
 }
