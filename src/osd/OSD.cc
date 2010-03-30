@@ -3338,7 +3338,7 @@ void OSD::handle_pg_log(MOSDPGLog *m)
   if (created)
     update_heartbeat_peers();
 
-  delete m;
+  m->put();
 }
 
 void OSD::handle_pg_info(MOSDPGInfo *m)
