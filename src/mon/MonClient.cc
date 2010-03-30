@@ -486,7 +486,7 @@ void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
     dout(10) << "handle_subscribe_ack sent " << sub_renew_sent << ", ignoring" << dendl;
   }
 
-  delete m;
+  m->put();
 }
 
 int MonClient::_check_auth_tickets()
