@@ -3533,7 +3533,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
   
   do_notifies(notify_list);   
 
-  delete m;
+  m->put();
 
   if (created)
     update_heartbeat_peers();
