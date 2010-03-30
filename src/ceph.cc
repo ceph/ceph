@@ -107,7 +107,7 @@ void handle_notify(MMonObserveNotify *notify)
   
   if (ceph_fsid_compare(&notify->fsid, &mc.monmap.fsid)) {
     dout(0) << notify->get_source_inst() << " notify fsid " << notify->fsid << " != " << mc.monmap.fsid << dendl;
-    delete notify;
+    notify->put();
     return;
   }
 
@@ -233,7 +233,7 @@ void handle_notify(MMonObserveNotify *notify)
     messenger->shutdown();
   }  
 
-  delete notify;
+  notify->put();
 }
 
 static void send_observe_requests();
