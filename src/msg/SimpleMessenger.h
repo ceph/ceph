@@ -525,6 +525,7 @@ public:
   int send_keepalive(const entity_inst_t& addr);
 
   void learned_addr(entity_addr_t peer_addr_for_me);
+  void init_local_pipe();
 
   void set_default_policy(Policy p) {
     default_policy = p;

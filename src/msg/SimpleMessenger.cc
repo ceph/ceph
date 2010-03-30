@@ -136,6 +136,8 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
       messenger->ms_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
   }
 
+  messenger->init_local_pipe();
+
   dout(1) << "accepter.bind ms_addr is " << messenger->ms_addr << " need_addr=" << messenger->need_addr << dendl;
   messenger->did_bind = true;
   return 0;
@@ -2430,5 +2432,12 @@ void SimpleMessenger::learned_addr(entity_addr_t peer_addr_for_me)
   ms_addr.set_port(port);
   dout(1) << "learned my addr " << ms_addr << dendl;
   need_addr = false;
+  init_local_pipe();
   lock.Unlock();
+}
+
+void SimpleMessenger::init_local_pipe()
+{
+  dispatch_queue.local_pipe->connection_state->peer_addr = messenger->ms_addr;
+  dispatch_queue.local_pipe->connection_state->peer_type = messenger->my_type;
 }
