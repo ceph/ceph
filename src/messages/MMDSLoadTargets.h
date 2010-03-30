@@ -32,7 +32,10 @@ class MMDSLoadTargets : public PaxosServiceMessage {
   MMDSLoadTargets(__u64 g, set<int32_t>& mds_targets) :
     PaxosServiceMessage(MSG_MDS_OFFLOAD_TARGETS, 0),
     global_id(g), targets(mds_targets) {}
+private:
+  ~MMDSLoadTargets() {}
 
+public:
   const char* get_type_name() { return "mds_load_targets"; }
   void print(ostream& o) {
     o << "mds_load_targets(" << global_id << " " << targets << ")";
