@@ -35,7 +35,10 @@ class MOSDPGQuery : public Message {
     epoch(e) {
     pg_list.swap(ls);
   }
-  
+private:
+  ~MOSDPGQuery() {}
+
+public:  
   const char *get_type_name() { return "PGq"; }
 
   void encode_payload() {
