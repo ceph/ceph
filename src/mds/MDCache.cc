@@ -3460,12 +3460,14 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
     CDir *dir = get_dirfrag(p->first);
     if (!dir) {
       CInode *in = get_inode(p->first.ino);
-      if (!in) in = rejoin_invent_inode(p->first.ino, CEPH_NOSNAP);
+      if (!in)
+	in = rejoin_invent_inode(p->first.ino, CEPH_NOSNAP);
       if (!in->is_dir()) {
 	assert(in->state_test(CInode::STATE_REJOINUNDEF));
 	in->inode.mode = S_IFDIR;
       }
       dir = in->get_or_open_dirfrag(this, p->first.frag);
+      dout(10) << " invented " << *dir << dendl;
     } else {
       dout(10) << " have " << *dir << dendl;
     }
