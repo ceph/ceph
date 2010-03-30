@@ -6332,7 +6332,7 @@ MDRequest *MDCache::request_start(MClientRequest *req)
       request_cleanup(mdr);
     } else {
       dout(10) << "request_start already processing " << *mdr << ", dropping new msg" << dendl;
-      delete req;
+      req->put();
       return 0;
     }
   }

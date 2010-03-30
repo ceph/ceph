@@ -990,13 +990,13 @@ void Server::handle_client_request(MClientRequest *req)
     session = get_session(req);
     if (!session) {
       dout(5) << "no session for " << req->get_source() << ", dropping" << dendl;
-      delete req;
+      req->put();
       return;
     }
     if (session->is_closed() || session->is_closing() || session->is_stale_purging() ||
 	session->is_stale_closing()) {
       dout(5) << "session closed|closing|stale_purging|stale_closing, dropping" << dendl;
-      delete req;
+      req->put();
       return;
     }
   }
@@ -1019,7 +1019,7 @@ void Server::handle_client_request(MClientRequest *req)
       if (req->is_replay())
 	mds->queue_one_replay();
 
-      delete req;
+      req->put();
       return;
     }
   }
