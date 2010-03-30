@@ -28,6 +28,10 @@ public:
     set_tid(t);
   }
 
+private:
+  ~MGetPoolStatsReply() {}
+
+public:
   const char *get_type_name() { return "getpoolstats"; }
   void print(ostream& out) {
     out << "getpoolstatsreply(" << get_tid() << " v" << version <<  ")";
