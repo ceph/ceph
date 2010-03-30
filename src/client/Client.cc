@@ -938,7 +938,7 @@ int Client::make_request(MetaRequest *request,
   int r = reply->get_result();
   if (pdirbl)
     pdirbl->claim(reply->get_dir_bl());
-  delete reply;
+  reply->put();
   return r;
 }
 
@@ -1175,7 +1175,7 @@ void Client::handle_client_reply(MClientReply *reply)
   if (mds_requests.count(tid) == 0) {
     dout(10) << "handle_client_reply no pending request on tid " << tid
 	     << " safe is:" << is_safe << dendl;
-    delete reply;
+    reply->put();
     return;
   }
 
@@ -1191,7 +1191,7 @@ void Client::handle_client_reply(MClientReply *reply)
     //duplicate response
     dout(0) << "got a duplicate reply on tid " << tid << " from mds "
 	    << mds_num << " safe:" << is_safe << dendl;
-    delete reply;
+    reply->put();
     return;
   }
   

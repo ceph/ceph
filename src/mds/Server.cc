@@ -847,7 +847,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 
   // reply at all?
   if (client_inst.name.is_mds()) {
-    delete reply;   // mds doesn't need a reply
+    reply->put();   // mds doesn't need a reply
     reply = 0;
   } else {
     // send reply.
