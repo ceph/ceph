@@ -2400,7 +2400,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
   
   maybe_resolve_finish();
 
-  delete m;
+  m->put();
 }
 
 void MDCache::maybe_resolve_finish()
