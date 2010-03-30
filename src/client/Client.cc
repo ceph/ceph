@@ -1497,7 +1497,7 @@ void Client::handle_lease(MClientLease *m)
   messenger->send_message(new MClientLease(CEPH_MDS_LEASE_RELEASE, seq,
 					   m->get_mask(), m->get_ino(), m->get_first(), m->get_last(), m->dname),
 			  m->get_source_inst());
-  delete m;
+  m->put();
 }
 
 

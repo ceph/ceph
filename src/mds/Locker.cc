@@ -2114,7 +2114,7 @@ void Locker::handle_client_lease(MClientLease *m)
   CInode *in = mdcache->get_inode(m->get_ino(), m->get_last());
   if (!in) {
     dout(7) << "handle_client_lease don't have ino " << m->get_ino() << "." << m->get_last() << dendl;
-    delete m;
+    m->put();
     return;
   }
   CDentry *dn = 0;
@@ -2126,7 +2126,7 @@ void Locker::handle_client_lease(MClientLease *m)
     dn = dir->lookup(m->dname);
   if (!dn) {
     dout(7) << "handle_client_lease don't have dn " << m->get_ino() << " " << m->dname << dendl;
-    delete m;
+    m->put();
     return;
   }
   dout(10) << " on " << *dn << dendl;
@@ -2135,7 +2135,7 @@ void Locker::handle_client_lease(MClientLease *m)
   ClientLease *l = dn->get_client_lease(client);
   if (!l) {
     dout(7) << "handle_client_lease didn't have lease for client" << client << " of " << *dn << dendl;
-    delete m;
+    m->put();
     return;
   } 
 
@@ -2151,7 +2151,7 @@ void Locker::handle_client_lease(MClientLease *m)
       int left = dn->remove_client_lease(l, l->mask, this);
       dout(10) << " remaining mask is " << left << " on " << *dn << dendl;
     }
-    delete m;
+    m->put();
     break;
 
   case CEPH_MDS_LEASE_RENEW:
