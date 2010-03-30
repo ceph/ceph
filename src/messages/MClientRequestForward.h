@@ -29,7 +29,10 @@ class MClientRequestForward : public Message {
     assert(client_must_resend);
     header.tid = t;
   }
+private:
+  ~MClientRequestForward() {}
 
+public:
   int get_dest_mds() { return dest_mds; }
   int get_num_fwd() { return num_fwd; }
   bool must_resend() { return client_must_resend; }
