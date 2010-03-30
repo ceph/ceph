@@ -122,7 +122,7 @@ void Server::dispatch(Message *m)
   switch (m->get_type()) {
   case CEPH_MSG_CLIENT_SESSION:
     handle_client_session((MClientSession*)m);
-    delete m;
+    m->put();
     return;
   case CEPH_MSG_CLIENT_REQUEST:
     handle_client_request((MClientRequest*)m);

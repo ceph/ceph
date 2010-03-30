@@ -1275,7 +1275,7 @@ void SimpleMessenger::Pipe::discard_queue()
   out_q.clear();
   for (map<int,list<Message*> >::iterator p = in_q.begin(); p != in_q.end(); p++)
     for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++)
-      delete *r;
+      (*r)->put();
   in_q.clear();
   in_qlen = 0;
 }
@@ -1488,7 +1488,7 @@ void SimpleMessenger::Pipe::reader()
 	dout(-10) << "reader got old message "
 		  << m->get_seq() << " <= " << in_seq << " " << m << " " << *m
 		  << ", discarding" << dendl;
-	delete m;
+	m->put();
 	continue;
       }
       in_seq++;
@@ -1499,7 +1499,7 @@ void SimpleMessenger::Pipe::reader()
 	derr(0) << "reader got bad seq " << m->get_seq() << " expected " << in_seq
 		<< " for " << *m << " from " << m->get_source() << dendl;
 	assert(in_seq == m->get_seq()); // for now!
-	delete m;
+	m->put();
 	fault(false, true);
 	continue;
       }
@@ -2272,7 +2272,7 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
       } else {
         derr(0) << "submit_message " << *m << " " << dest_addr << " local but no local endpoint, dropping." << dendl;
         assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
-	delete m;
+        m->put();
       }
     }
     else {
@@ -2297,7 +2297,7 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
       if (!pipe) {
 	if (lazy) {
 	  dout(20) << "submit_message " << *m << " remote, " << dest_addr << ", lazy, dropping." << dendl;
-	  delete m;
+	  m->put();
 	} else {
 	  dout(20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
 	  // not connected.

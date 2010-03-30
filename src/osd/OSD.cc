@@ -1632,7 +1632,7 @@ bool OSD::heartbeat_dispatch(Message *m)
     
   case CEPH_MSG_PING:
     dout(10) << "ping from " << m->get_source() << dendl;
-    delete m;
+    m->put();
     break;
 
   case MSG_OSD_PING:
@@ -1751,7 +1751,7 @@ do { \
   if (m->get_connection() && (m->get_connection()->get_peer_type() & (peers)) == 0) { \
     dout(0) << "filtered out request, peer=" << m->get_connection()->get_peer_type() \
            << " allowing=" << #peers << " message=" << *m << dendl; \
-    delete m; \
+    m->put();							    \
     return; \
   } \
   check_from = true; \
@@ -1766,7 +1766,7 @@ do { \
   case CEPH_MSG_PING:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_ANY);
     dout(10) << "ping from " << m->get_source() << dendl;
-    delete m;
+    m->put();
     break;
 
     // -- don't need OSDMap --
@@ -1781,7 +1781,7 @@ do { \
   case CEPH_MSG_SHUTDOWN:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
     shutdown();
-    delete m;
+    m->put();
     break;
 
   case MSG_PGSTATSACK:
@@ -2662,7 +2662,7 @@ bool OSD::require_current_map(Message *m, epoch_t ep)
   // older map?
   if (ep < osdmap->get_epoch()) {
     dout(7) << "require_current_map epoch " << ep << " < " << osdmap->get_epoch() << dendl;
-    delete m;   // discard and ignore.
+    m->put();   // discard and ignore.
     return false;
   }
 
@@ -2695,7 +2695,7 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
 
   if (epoch < up_epoch) {
     dout(7) << "from pre-up epoch " << epoch << " < " << up_epoch << dendl;
-    delete m;
+    m->put();
     return false;
   }
 
@@ -2706,7 +2706,7 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
 	osdmap->get_addr(from) != m->get_source_inst().addr) {
       dout(-7) << "from dead osd" << from << ", dropping, sharing map" << dendl;
       send_incremental_map(epoch, m->get_source_inst(), true);
-      delete m;
+      m->put();
       return false;
     }
   }

@@ -34,7 +34,7 @@ struct MRoute : public Message {
     msg = decode_message(p);
   }
   ~MRoute() {
-    delete msg;
+    if (msg) msg->put();
   }
 
   void decode_payload() {

@@ -343,7 +343,7 @@ void MDS::forward_message_mds(Message *m, int mds)
 			    creq->get_source_inst());
     
     if (client_must_resend) {
-      delete m;
+      m->put();
       return; 
     }
   }
@@ -1277,7 +1277,7 @@ do { \
   if (m->get_connection() && (m->get_connection()->get_peer_type() & (peers)) == 0) { \
     dout(0) << __FILE__ << "." << __LINE__ << ": filtered out request, peer=" << m->get_connection()->get_peer_type() \
            << " allowing=" << #peers << " message=" << *m << dendl; \
-    delete m; \
+    m->put();							    \
     return true; \
   } \
   check_from = true; \
@@ -1300,7 +1300,7 @@ do { \
       } else {
 	dout(5) << "got " << *m << " from down/old/bad/imposter mds " << m->get_source()
 		<< ", dropping" << dendl;
-	delete m;
+	m->put();
 	return true;
       }
     }
@@ -1310,7 +1310,7 @@ do { \
 
   case CEPH_MSG_MON_MAP:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
-    delete m;
+    m->put();
     break;
 
     // MDS

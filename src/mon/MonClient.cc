@@ -376,7 +376,7 @@ void MonClient::_reopen_session()
 
   // throw out old queued messages
   while (!waiting_for_session.empty()) {
-    delete waiting_for_session.front();
+    waiting_for_session.front()->put();
     waiting_for_session.pop_front();
   }
 

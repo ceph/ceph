@@ -680,7 +680,7 @@ bool Monitor::_ms_dispatch(Message *m)
 	if (!src_is_mon && 
 	    !s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
 	  //can't send these!
-	  delete m;
+	  m->put();
 	  break;
 	}
 
