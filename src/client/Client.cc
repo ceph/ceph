@@ -1141,7 +1141,7 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
 
   if (mds_requests.count(tid) == 0) {
     dout(10) << "handle_client_request_forward no pending request on tid " << tid << dendl;
-    delete fwd;
+    fwd->put();
     return;
   }
 
@@ -1164,7 +1164,7 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
   request->resend_mds = fwd->get_dest_mds();
   request->caller_cond->Signal();
 
-  delete fwd;
+  fwd->put();
 }
 
 void Client::handle_client_reply(MClientReply *reply)
