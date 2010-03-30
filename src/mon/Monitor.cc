@@ -451,7 +451,7 @@ void Monitor::handle_route(MRoute *m)
     dout(0) << "MRoute received from entity without appropriate perms! "
 	    << dendl;
     session->put();
-    delete m;
+    m->put();
     return;
   }
   dout(10) << "handle_route " << *m->msg << " to " << m->dest << dendl;
@@ -470,7 +470,7 @@ void Monitor::handle_route(MRoute *m)
     messenger->lazy_send_message(m->msg, m->dest);
     m->msg = NULL;
   }
-  delete m;
+  m->put();
   if (session) session->put();
 }
 
