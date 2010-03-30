@@ -1536,7 +1536,7 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
 
   pg_stat_queue_lock.Unlock();
 
-  delete ack;
+  ack->put();
 }
 
 void OSD::handle_command(MMonCommand *m)
