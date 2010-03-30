@@ -100,7 +100,7 @@ void LogClient::handle_log_ack(MLogAck *m)
     dout(10) << " logged " << log_queue.front() << dendl;
     log_queue.pop_front();
   }
-  delete m;
+  m->put();
 }
 
 bool LogClient::ms_dispatch(Message *m)
