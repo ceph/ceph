@@ -251,7 +251,7 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
   mon->send_reply(m, reply);
 
  out:
-  delete m;
+  m->put();
 
   return true;
 }
