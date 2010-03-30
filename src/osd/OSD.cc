@@ -1878,7 +1878,7 @@ void OSD::handle_scrub(MOSDScrub *m)
   
   if (ceph_fsid_compare(&m->fsid, &monc->get_fsid())) {
     dout(0) << "handle_scrub fsid " << m->fsid << " != " << monc->get_fsid() << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -1913,7 +1913,7 @@ void OSD::handle_scrub(MOSDScrub *m)
       }
   }
   
-  delete m;
+  m->put();
 }
 
 
