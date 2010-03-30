@@ -64,7 +64,10 @@ public:
     set_tid(t);
   }
 
+private:
+  ~MPoolOp() {}
 
+public:
   const char *get_type_name() { return "poolop"; }
   void print(ostream& out) {
     out << "poolop(" << get_pool_op_name(op) << ",pool " << pool
