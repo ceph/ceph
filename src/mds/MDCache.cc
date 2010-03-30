@@ -8033,7 +8033,7 @@ void MDCache::handle_dir_update(MDirUpdate *m)
       return;
     }
 
-    delete m;
+    m->put();
     return;
   }
 
@@ -8043,7 +8043,7 @@ void MDCache::handle_dir_update(MDirUpdate *m)
   dir->dir_rep_by = m->get_dir_rep_by();
   
   // done
-  delete m;
+  m->put();
 }
 
 
