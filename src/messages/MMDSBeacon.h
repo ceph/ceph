@@ -37,7 +37,10 @@ class MMDSBeacon : public PaxosServiceMessage {
     PaxosServiceMessage(MSG_MDS_BEACON, les), 
     fsid(f), global_id(g), name(n), state(st), seq(se),
     standby_for_rank(-1) { }
+private:
+  ~MMDSBeacon() {}
 
+public:
   ceph_fsid_t& get_fsid() { return fsid; }
   __u64 get_global_id() { return global_id; }
   string& get_name() { return name; }
