@@ -1471,5 +1471,5 @@ void OSDMonitor::_pool_op(MPoolOp *m, int replyCode, epoch_t epoch)
   MPoolOpReply *reply = new MPoolOpReply(m->fsid, m->get_tid(),
 					 replyCode, epoch, mon->get_epoch());
   mon->send_reply(m, reply);
-  delete m;
+  m->put();
 }
