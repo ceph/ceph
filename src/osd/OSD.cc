@@ -3574,7 +3574,7 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
     }
     pg->unlock();
   }
-  delete m;
+  m->put();
 }
 
 
