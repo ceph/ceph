@@ -3403,7 +3403,7 @@ void OSD::handle_pg_trim(MOSDPGTrim *m)
   }
 
  out:
-  delete m;
+  m->put();
 }
 
 
