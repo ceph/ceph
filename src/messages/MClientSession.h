@@ -41,7 +41,10 @@ public:
     head.seq = 0;
     st.encode_timeval(&head.stamp);
   }
+private:
+  ~MClientSession() {}
 
+public:
   const char *get_type_name() { return "client_session"; }
   void print(ostream& out) {
     out << "client_session(" << ceph_session_op_name(get_op());
