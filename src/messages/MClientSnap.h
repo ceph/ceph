@@ -30,7 +30,10 @@ struct MClientSnap : public Message {
     memset(&head, 0, sizeof(head));
     head.op = o;
   }
-  
+private:
+  ~MClientSnap() {}
+
+public:  
   const char *get_type_name() { return "client_snap"; }
   void print(ostream& out) {
     out << "client_snap(" << ceph_snap_op_name(head.op);
