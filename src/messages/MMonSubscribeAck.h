@@ -27,8 +27,10 @@ struct MMonSubscribeAck : public Message {
   }
   MMonSubscribeAck(ceph_fsid& f, int i) : Message(CEPH_MSG_MON_SUBSCRIBE_ACK),
 					  interval(i), fsid(f) { }
+private:
+  ~MMonSubscribeAck() {}
 
-  
+public:
   const char *get_type_name() { return "mon_subscribe_ack"; }
   void print(ostream& o) {
     o << "mon_subscribe_ack(" << interval << "s)";
