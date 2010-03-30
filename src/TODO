@@ -180,6 +180,60 @@ bugs
 [ 1615.946963]  [<ffffffff810209af>] do_page_fault+0x1f3/0x278
 [ 1615.946963]  [<ffffffff814281ff>] page_fault+0x1f/0x30
 
+- kclient: dcache bug
+[ 2793.947421] ------------[ cut here ]------------
+[ 2793.950108] kernel BUG at fs/dcache.c:1887!
+[ 2793.950108] invalid opcode: 0000 [#1] PREEMPT SMP 
+[ 2793.950108] last sysfs file: /sys/kernel/uevent_seqnum
+[ 2793.950108] CPU 0 
+[ 2793.950108] Modules linked in: aes_x86_64 aes_generic ceph fan ac battery container ehci_hcd uhci_hcd button thermal processor
+[ 2793.950108] 
+[ 2793.950108] Pid: 2818, comm: ceph-msgr/0 Not tainted 2.6.34-rc2 #23 PDSMi+/PDSMi
+[ 2793.950108] RIP: 0010:[<ffffffff810c0d50>]  [<ffffffff810c0d50>] d_materialise_unique+0x2f3/0x307
+[ 2793.950108] RSP: 0018:ffff88011a2b99a0  EFLAGS: 00010246
+[ 2793.950108] RAX: ffff88011a2b9fd8 RBX: ffff88004c976070 RCX: ffff88004c9760f0
+[ 2793.950108] RDX: 0000000000008f8e RSI: ffffffff81682340 RDI: ffff88011e3488c8
+[ 2793.950108] RBP: ffff88011a2b99d0 R08: 0000000000000002 R09: 0000000000000000
+[ 2793.950108] R10: 0000000000000000 R11: ffff88011cac4280 R12: ffff88004c9c6650
+[ 2793.950108] R13: ffff88001e7444d0 R14: ffff88011e3488c8 R15: ffff88001e7444d0
+[ 2793.950108] FS:  0000000000000000(0000) GS:ffff880002600000(0000) knlGS:0000000000000000
+[ 2793.950108] CS:  0010 DS: 0000 ES: 0000 CR0: 000000008005003b
+[ 2793.950108] CR2: 00002b6b6acae004 CR3: 00000000df8c6000 CR4: 00000000000006f0
+[ 2793.950108] DR0: 0000000000000000 DR1: 0000000000000000 DR2: 0000000000000000
+[ 2793.950108] DR3: 0000000000000000 DR6: 00000000ffff0ff0 DR7: 0000000000000400
+[ 2793.950108] Process ceph-msgr/0 (pid: 2818, threadinfo ffff88011a2b8000, task ffff88011cac4280)
+[ 2793.950108] Stack:
+[ 2793.950108]  ffff88004c9c6650 ffff88004c9c6650 ffff88004c9c6650 fffffffffffffffe
+[ 2793.950108] <0> ffff88011e3488c8 ffff88001e7444d0 ffff88011a2b9a40 ffffffffa004ed84
+[ 2793.950108] <0> ffff88011e3488c8 ffff88001e7444d0 ffff88011a2b9a40 ffffffffa004fb3f
+[ 2793.950108] Call Trace:
+[ 2793.950108]  [<ffffffffa004ed84>] splice_dentry+0x89/0x21b [ceph]
+[ 2793.950108]  [<ffffffffa004fb3f>] ? ceph_get_inode+0x2e/0x12f [ceph]
+[ 2793.950108]  [<ffffffffa0050988>] ceph_fill_trace+0x3bd/0x9a0 [ceph]
+[ 2793.950108]  [<ffffffffa006309a>] ? __cleanup_empty_realms+0x61/0x6a [ceph]
+[ 2793.950108]  [<ffffffffa0070c07>] ? dispatch+0xb41/0x1461 [ceph]
+[ 2793.950108]  [<ffffffffa0070c69>] dispatch+0xba3/0x1461 [ceph]
+[ 2793.950108]  [<ffffffff810a754b>] ? poison_obj+0x27/0x32
+[ 2793.950108]  [<ffffffff81057f41>] ? trace_hardirqs_on+0xd/0xf
+[ 2793.950108]  [<ffffffffa0068568>] try_read+0xebf/0x158f [ceph]
+[ 2793.950108]  [<ffffffff81057f41>] ? trace_hardirqs_on+0xd/0xf
+[ 2793.950108]  [<ffffffff81424e17>] ? schedule+0x672/0x698
+[ 2793.950108]  [<ffffffffa006a5ae>] con_work+0x11a/0x6bc [ceph]
+[ 2793.950108]  [<ffffffff8104774e>] worker_thread+0x1e8/0x2fa
+[ 2793.950108]  [<ffffffff810476f5>] ? worker_thread+0x18f/0x2fa
+[ 2793.950108]  [<ffffffffa006a494>] ? con_work+0x0/0x6bc [ceph]
+[ 2793.950108]  [<ffffffff8104a7dc>] ? autoremove_wake_function+0x0/0x38
+[ 2793.950108]  [<ffffffff81047566>] ? worker_thread+0x0/0x2fa
+[ 2793.950108]  [<ffffffff8104a4aa>] kthread+0x7d/0x85
+[ 2793.950108]  [<ffffffff81003794>] kernel_thread_helper+0x4/0x10
+[ 2793.950108]  [<ffffffff81427fc0>] ? restore_args+0x0/0x30
+[ 2793.950108]  [<ffffffff8104a42d>] ? kthread+0x0/0x85
+[ 2793.950108]  [<ffffffff81003790>] ? kernel_thread_helper+0x0/0x10
+[ 2793.950108] Code: 39 eb 75 10 48 8b 75 d0 48 89 df 31 db e8 47 6f 12 00 eb 1b 48 8b 7d d0 e8 c0 06 00 00 eb 10 48 c7 c7 40 23 68 81 e8 61 6f 36 00 <0f> 0b eb fe 41 5e 48 89 d8 5b 41 5c 41 5d 41 5e 41 5f c9 c3 55 
+[ 2793.950108] RIP  [<ffffffff810c0d50>] d_materialise_unique+0x2f3/0x307
+[ 2793.950108]  RSP <ffff88011a2b99a0>
+[ 2794.275464] ---[ end trace e39f19630a44d9a2 ]---
+
 - kclient: moonbeamer gets this with iozone -a...
 [17608.696906] ------------[ cut here ]------------
 [17608.701761] WARNING: at lib/kref.c:43 kref_get+0x23/0x2a()
