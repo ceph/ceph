@@ -25,7 +25,10 @@ public:
   MMonMap(bufferlist &bl) : Message(CEPH_MSG_MON_MAP) { 
     monmapbl.claim(bl);
   }
+private:
+  ~MMonMap() {}
 
+public:
   const char *get_type_name() { return "mon_map"; }
 
   void encode_payload() { 
