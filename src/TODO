@@ -60,9 +60,7 @@ filestore
   - need an osdmap cache layer?
 
 bugs
-- mds states
-  - closing -> opening transition
-- mds prepare_force_open_sessions, then import aborts.. session is still OPENING but no client_session is sent...
+- mds rejoin: invented dirfrags (MDCache.cc:3469) have version=0; subsequent modification of dentries/inodes predirty a bad (small) version #.
 - rm -r failure (on kernel tree)
 - dbench 1, restart mds (may take a few times), dbench will error out.
 

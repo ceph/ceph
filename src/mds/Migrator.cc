@@ -1648,12 +1648,13 @@ class C_MDS_ImportDirLoggedStart : public Context {
   int from;
 public:
   map<client_t,entity_inst_t> imported_client_map;
+  map<client_t,__u64> sseqmap;
 
   C_MDS_ImportDirLoggedStart(Migrator *m, CDir *d, int f) :
     migrator(m), dir(d), from(f) {
   }
   void finish(int r) {
-    migrator->import_logged_start(dir, from, imported_client_map);
+    migrator->import_logged_start(dir, from, imported_client_map, sseqmap);
   }
 };
 
@@ -1686,7 +1687,7 @@ void Migrator::handle_export_dir(MExportDir *m)
   bufferlist::iterator cmp = m->client_map.begin();
   ::decode(onlogged->imported_client_map, cmp);
   assert(cmp.end());
-  le->cmapv = mds->server->prepare_force_open_sessions(onlogged->imported_client_map);
+  le->cmapv = mds->server->prepare_force_open_sessions(onlogged->imported_client_map, onlogged->sseqmap);
   le->client_map.claim(m->client_map);
 
   bufferlist::iterator blp = m->export_data.begin();
@@ -1910,7 +1911,8 @@ void Migrator::import_reverse_final(CDir *dir)
 
 
 void Migrator::import_logged_start(CDir *dir, int from,
-				   map<client_t,entity_inst_t>& imported_client_map)
+				   map<client_t,entity_inst_t>& imported_client_map,
+				   map<client_t,__u64>& sseqmap)
 {
   dout(7) << "import_logged " << *dir << dendl;
 
@@ -1920,7 +1922,7 @@ void Migrator::import_logged_start(CDir *dir, int from,
   assert (g_conf.mds_kill_import_at != 7);
 
   // force open client sessions and finish cap import
-  mds->server->finish_force_open_sessions(imported_client_map);
+  mds->server->finish_force_open_sessions(imported_client_map, sseqmap);
   
   for (map<CInode*, map<client_t,Capability::Export> >::iterator p = import_caps[dir].begin();
        p != import_caps[dir].end();
@@ -2307,10 +2309,12 @@ class C_M_LoggedImportCaps : public Context {
   int from;
 public:
   map<CInode*, map<client_t,Capability::Export> > cap_imports;
+  map<client_t,entity_inst_t> client_map;
+  map<client_t,__u64> sseqmap;
 
   C_M_LoggedImportCaps(Migrator *m, CInode *i, int f) : migrator(m), in(i), from(f) {}
   void finish(int r) {
-    migrator->logged_import_caps(in, from, cap_imports);
+    migrator->logged_import_caps(in, from, cap_imports, client_map, sseqmap);
   }  
 };
 
@@ -2326,6 +2330,8 @@ void Migrator::handle_export_caps(MExportCaps *ex)
    */
 
   C_M_LoggedImportCaps *finish = new C_M_LoggedImportCaps(this, in, ex->get_source().num());
+  finish->client_map.swap(ex->client_map);
+
   ESessions *le = new ESessions(++mds->sessionmap.projected);
   mds->mdlog->start_entry(le);
 
@@ -2335,8 +2341,8 @@ void Migrator::handle_export_caps(MExportCaps *ex)
   assert(!finish->cap_imports.empty());   // thus, inode is pinned.
   
   // journal open client sessions
-  mds->server->prepare_force_open_sessions(ex->client_map);
-  le->client_map.swap(ex->client_map);
+  mds->server->prepare_force_open_sessions(finish->client_map, finish->sseqmap);
+  le->client_map = finish->client_map;
   
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_safe(finish);
@@ -2348,9 +2354,15 @@ void Migrator::handle_export_caps(MExportCaps *ex)
 
 void Migrator::logged_import_caps(CInode *in, 
 				  int from,
-				  map<CInode*, map<client_t,Capability::Export> >& cap_imports) 
+				  map<CInode*, map<client_t,Capability::Export> >& cap_imports,
+				  map<client_t,entity_inst_t>& client_map,
+				  map<client_t,__u64>& sseqmap) 
 {
   dout(10) << "logged_import_caps on " << *in << dendl;
+
+  // force open client sessions and finish cap import
+  mds->server->finish_force_open_sessions(client_map, sseqmap);
+
   assert(cap_imports.count(in));
   finish_import_inode_caps(in, from, cap_imports[in]);  
 

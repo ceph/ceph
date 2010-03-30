@@ -1530,8 +1530,8 @@ void CInode::open_snaprealm(bool nosplit)
     if (parent) {
       dout(10) << "open_snaprealm " << snaprealm
 	       << " parent is " << parent
-	       << " siblings are " << parent->open_children
 	       << dendl;
+      dout(30) << " siblings are " << parent->open_children << dendl;
       snaprealm->parent = parent;
       if (!nosplit && 
 	  is_dir() &&
@@ -1920,7 +1920,7 @@ void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waite
 
 void CInode::encode_export(bufferlist& bl)
 {
-  __u8 struct_v = 1;
+  __u8 struct_v = 2;
   ::encode(struct_v, bl);
   _encode_base(bl);
 
@@ -1930,6 +1930,24 @@ void CInode::encode_export(bufferlist& bl)
   ::encode(pop, bl);
 
   ::encode(replica_map, bl);
+
+  // include scatterlock info for any bounding CDirs
+  bufferlist bounding;
+  if (inode.is_dir())
+    for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+	 p != dirfrags.end();
+	 ++p) {
+      CDir *dir = p->second;
+      if (dir->state_test(CDir::STATE_EXPORTBOUND)) {
+	::encode(p->first, bounding);
+	::encode(dir->fnode.fragstat, bounding);
+	::encode(dir->fnode.accounted_fragstat, bounding);
+	::encode(dir->fnode.rstat, bounding);
+	::encode(dir->fnode.accounted_rstat, bounding);
+	dout(10) << " encoded fragstat/rstat info for " << *dir << dendl;
+      }
+    }
+  ::encode(bounding, bl);
 
   _encode_locks_full(bl);
   get(PIN_TEMPEXPORTING);
@@ -1963,7 +1981,36 @@ void CInode::decode_import(bufferlist::iterator& p,
   ::decode(pop, p);
 
   ::decode(replica_map, p);
-  if (!replica_map.empty()) get(PIN_REPLICATED);
+  if (!replica_map.empty())
+    get(PIN_REPLICATED);
+
+  if (struct_v >= 2) {
+    // decode fragstat info on bounding cdirs
+    bufferlist bounding;
+    ::decode(bounding, p);
+    bufferlist::iterator q = bounding.begin();
+    while (!q.end()) {
+      frag_t fg;
+      ::decode(fg, q);
+      CDir *dir = get_dirfrag(fg);
+      assert(dir);  // we should have all bounds open
+      if (!dir->is_auth()) {
+	::decode(dir->fnode.fragstat, q);
+	::decode(dir->fnode.accounted_fragstat, q);
+	::decode(dir->fnode.rstat, q);
+	::decode(dir->fnode.accounted_rstat, q);
+	dout(10) << " took fragstat/rstat info for " << *dir << dendl;
+      } else {
+	dout(10) << " skipped fragstat/rstat info for " << *dir << dendl;
+	frag_info_t f;
+	nest_info_t n;
+	::decode(f, q);
+	::decode(f, q);
+	::decode(n, q);
+	::decode(n, q);
+      }
+    }
+  }
 
   _decode_locks_full(p);
 }

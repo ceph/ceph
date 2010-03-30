@@ -1176,7 +1176,7 @@ class MDSCacheObject {
   // --------------------------------------------
   // pins
 protected:
-  __s16      ref;       // reference count
+  __s32      ref;       // reference count
 #ifdef MDS_REF_SET
   multiset<int> ref_set;
 #endif

@@ -189,12 +189,15 @@ void Server::handle_client_session(MClientSession *m)
   __u64 sseq = 0;
   switch (m->get_op()) {
   case CEPH_SESSION_REQUEST_OPEN:
-    if (session->is_opening() || session->is_open()) {
-      dout(10) << "already open|opening, dropping this req" << dendl;
+    if (session->is_opening() ||
+	session->is_open() ||
+	session->is_stale() ||
+	session->is_killing()) {
+      dout(10) << "currently open|opening|stale|killing, dropping this req" << dendl;
       return;
     }
-    if (session->is_closed())
-      mds->sessionmap.add_session(session);
+    assert(session->is_closed() ||
+	   session->is_closing());
     sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
     mds->sessionmap.touch_session(session);
     pv = ++mds->sessionmap.projected;
@@ -204,8 +207,8 @@ void Server::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_REQUEST_RENEWCAPS:
-    if (session->is_open() || session->is_stale()) {
-      assert(session->is_stale() || session->is_open());
+    if (session->is_open() ||
+	session->is_stale()) {
       mds->sessionmap.touch_session(session);
       if (session->is_stale()) {
 	mds->sessionmap.set_state(session, Session::STATE_OPEN);
@@ -220,10 +223,19 @@ void Server::handle_client_session(MClientSession *m)
     
   case CEPH_SESSION_REQUEST_CLOSE:
     {
-      if (session->is_closed() || session->is_closing()) {
-	dout(10) << "already closed|closing, dropping this req" << dendl;
+      if (session->is_closed() || 
+	  session->is_closing() ||
+	  session->is_killing()) {
+	dout(10) << "already closed|closing|killing, dropping this req" << dendl;
 	return;
       }
+      if (session->is_importing()) {
+	dout(10) << "ignoring close req on importing session" << dendl;
+	return;
+      }
+      assert(session->is_open() || 
+	     session->is_stale() || 
+	     session->is_opening());
       if (m->get_seq() < session->get_push_seq()) {
 	dout(10) << "old push seq " << m->get_seq() << " < " << session->get_push_seq() 
 		 << ", dropping" << dendl;
@@ -231,7 +243,7 @@ void Server::handle_client_session(MClientSession *m)
       }
       if (m->get_seq() != session->get_push_seq()) {
 	dout(0) << "old push seq " << m->get_seq() << " != " << session->get_push_seq() 
-		 << ", BUGGY!" << dendl;
+		<< ", BUGGY!" << dendl;
 	assert(0);
       }
       sseq = mds->sessionmap.set_state(session, Session::STATE_CLOSING);
@@ -256,7 +268,8 @@ void Server::handle_client_session(MClientSession *m)
   }
 }
 
-void Server::_session_logged(Session *session, __u64 state_seq, bool open, version_t pv, interval_set<inodeno_t>& inos, version_t piv)
+void Server::_session_logged(Session *session, __u64 state_seq, bool open, version_t pv,
+			     interval_set<inodeno_t>& inos, version_t piv)
 {
   dout(10) << "_session_logged " << session->inst << " state_seq " << state_seq << " " << (open ? "open":"close")
 	   << " " << pv << dendl;
@@ -270,7 +283,8 @@ void Server::_session_logged(Session *session, __u64 state_seq, bool open, versi
     assert(session->is_opening());
     mds->sessionmap.set_state(session, Session::STATE_OPEN);
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), session->inst);
-  } else if (session->is_closing() || session->is_stale_closing()) {
+  } else if (session->is_closing() ||
+	     session->is_killing()) {
     // kill any lingering capabilities, leases, requests
     while (!session->caps.empty()) {
       Capability *cap = session->caps.front();
@@ -295,20 +309,26 @@ void Server::_session_logged(Session *session, __u64 state_seq, bool open, versi
       assert(mds->inotable->get_version() == piv);
     }
 
-    if (session->is_closing())
+    if (session->is_closing()) {
+      // reset session
       mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), session->inst);
-    else if (session->is_stale_closing())
-      mds->messenger->mark_down(session->inst.addr); // kill connection
-    mds->sessionmap.set_state(session, Session::STATE_CLOSED);
-    session->clear();
-    mds->sessionmap.remove_session(session);
+      mds->sessionmap.set_state(session, Session::STATE_CLOSED);
+      session->clear();
+    } else if (session->is_killing()) {
+      // destroy session, close connection
+      mds->messenger->mark_down(session->inst.addr); 
+      mds->sessionmap.remove_session(session);
+    } else {
+      assert(0);
+    }
   } else {
     assert(0);
   }
   mds->sessionmap.version++;  // noop
 }
 
-version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm)
+version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
+					      map<client_t,__u64>& sseqmap)
 {
   version_t pv = ++mds->sessionmap.projected;
   dout(10) << "prepare_force_open_sessions " << pv 
@@ -316,15 +336,22 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm)
 	   << dendl;
   for (map<client_t,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
     Session *session = mds->sessionmap.get_or_add_session(p->second);
-    if (session->is_new() ||
-	session->is_closed() || session->is_closing())
-      mds->sessionmap.set_state(session, Session::STATE_OPENING);
+    if (session->is_closed() || 
+	session->is_closing() ||
+	session->is_killing())
+      sseqmap[p->first] = mds->sessionmap.set_state(session, Session::STATE_OPENING);
+    else
+      assert(session->is_open() ||
+	     session->is_opening() ||
+	     session->is_stale());
+    session->inc_importing();
     mds->sessionmap.touch_session(session);
   }
   return pv;
 }
 
-void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm)
+void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
+					map<client_t,__u64>& sseqmap)
 {
   /*
    * FIXME: need to carefully consider the race conditions between a
@@ -336,11 +363,21 @@ void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm)
   for (map<client_t,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
     Session *session = mds->sessionmap.get_session(p->second.name);
     assert(session);
-    if (session->is_opening()) {
-      dout(10) << "force_open_sessions opening " << session->inst << dendl;
-      mds->sessionmap.set_state(session, Session::STATE_OPEN);
-      mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), session->inst);
+    
+    if (sseqmap.count(p->first)) {
+      __u64 sseq = sseqmap[p->first];
+      if (session->get_state_seq() != sseq) {
+	dout(10) << "force_open_sessions skipping changed " << session->inst << dendl;
+      } else {
+	dout(10) << "force_open_sessions opened " << session->inst << dendl;
+	mds->sessionmap.set_state(session, Session::STATE_OPEN);
+	mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), session->inst);
+      }
+    } else {
+      dout(10) << "force_open_sessions skipping already-open " << session->inst << dendl;
+      assert(session->is_open() || session->is_stale());
     }
+    session->dec_importing();
   }
   mds->sessionmap.version++;
 }
@@ -357,7 +394,9 @@ void Server::terminate_sessions()
        p != sessions.end();
        ++p) {
     Session *session = *p;
-    if (session->is_closing() || session->is_closed())
+    if (session->is_closing() ||
+	session->is_killing() ||
+	session->is_closed())
       continue;
     __u64 sseq = mds->sessionmap.set_state(session, Session::STATE_CLOSING);
     version_t pv = ++mds->sessionmap.projected;
@@ -367,15 +406,6 @@ void Server::terminate_sessions()
   }
 }
 
-
-struct C_MDS_session_purged : public Context {
-  Server *server;
-  Session *session;
-  C_MDS_session_purged(Server *s, Session *ss) : server(s), session(ss) {}
-  void finish(int r) {
-    server->_finish_session_purge(session);
-  }
-};
 
 void Server::find_idle_sessions()
 {
@@ -417,14 +447,19 @@ void Server::find_idle_sessions()
 
   while (1) {
     Session *session = mds->sessionmap.get_oldest_session(Session::STATE_STALE);
-    if (!session) break;
+    if (!session)
+      break;
+    if (session->is_importing()) {
+      dout(10) << "stopping at importing session " << session->inst << dendl;
+      break;
+    }
     assert(session->is_stale());
     if (session->last_cap_renew >= cutoff) {
       dout(20) << "oldest stale session is " << session->inst << " and sufficiently new (" 
 	       << session->last_cap_renew << ")" << dendl;
       break;
     }
-
+    
     stringstream ss;
     utime_t age = now;
     age -= session->last_cap_renew;
@@ -432,39 +467,30 @@ void Server::find_idle_sessions()
     mds->logclient.log(LOG_INFO, ss);
 
     dout(10) << "autoclosing stale session " << session->inst << " last " << session->last_cap_renew << dendl;
-    end_session(session);
+    kill_session(session);
   }
 }
 
-void Server::end_session(Session *session)
+void Server::kill_session(Session *session)
 {
-  assert(session);
-  mds->sessionmap.set_state(session, Session::STATE_STALE_PURGING);
-  if (session->prealloc_inos.empty()) {
-    _finish_session_purge(session);
+  if ((session->is_opening() ||
+       session->is_open() ||
+       session->is_stale()) &&
+      !session->is_importing()) {
+    dout(10) << "kill_session " << session << dendl;
+    __u64 sseq = mds->sessionmap.set_state(session, Session::STATE_KILLING);
+    version_t pv = ++mds->sessionmap.projected;
+    mdlog->start_submit_entry(new ESession(session->inst, false, pv),
+			      new C_MDS_session_finish(mds, session, sseq, false, pv));
+    mdlog->flush();
   } else {
-    C_Gather *fin = new C_Gather(new C_MDS_session_purged(this, session));
-    for (map<inodeno_t,inodeno_t>::iterator p = session->prealloc_inos.m.begin();
-	 p != session->prealloc_inos.m.end();
-	 p++) {
-      inodeno_t last = p->first + p->second;
-      for (inodeno_t i = p->first; i < last; i = i + 1)
-	mds->mdcache->purge_prealloc_ino(i, fin->new_sub());
-    }
+    dout(10) << "kill_session importing or already closing/killing " << session << dendl;
+    assert(session->is_closing() || 
+	   session->is_closed() || 
+	   session->is_killing() ||
+	   session->is_importing());
   }
 }
-
-void Server::_finish_session_purge(Session *session)
-{
-  dout(10) << "_finish_session_purge " << session->inst << dendl;
-  assert(session->is_stale_purging());
-  __u64 sseq = mds->sessionmap.set_state(session, Session::STATE_STALE_CLOSING);
-  version_t pv = ++mds->sessionmap.projected;
-  mdlog->start_submit_entry(new ESession(session->inst, false, pv),
-			    new C_MDS_session_finish(mds, session, sseq, false, pv));
-  mdlog->flush();
-}
-
 
 void Server::reconnect_clients()
 {
@@ -535,8 +561,8 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     // notify client of success with an OPEN
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), m->get_source_inst());
     
-    if (session->is_new()) {
-      dout(10) << " session is new, will make best effort to reconnect " 
+    if (session->is_closed()) {
+      dout(10) << " session is closed, will make best effort to reconnect " 
 	       << m->get_source_inst() << dendl;
       mds->sessionmap.set_state(session, Session::STATE_OPENING);
       version_t pv = ++mds->sessionmap.projected;
@@ -993,9 +1019,10 @@ void Server::handle_client_request(MClientRequest *req)
       delete req;
       return;
     }
-    if (session->is_closed() || session->is_closing() || session->is_stale_purging() ||
-	session->is_stale_closing()) {
-      dout(5) << "session closed|closing|stale_purging|stale_closing, dropping" << dendl;
+    if (session->is_closed() ||
+	session->is_closing() ||
+	session->is_killing()) {
+      dout(5) << "session closed|closing|killing, dropping" << dendl;
       delete req;
       return;
     }
@@ -4343,7 +4370,7 @@ version_t Server::_rename_prepare_import(MDRequest *mdr, CDentry *srcdn, bufferl
   // imported caps
   ::decode(mdr->more()->imported_client_map, blp);
   ::encode(mdr->more()->imported_client_map, *client_map_bl);
-  prepare_force_open_sessions(mdr->more()->imported_client_map);
+  prepare_force_open_sessions(mdr->more()->imported_client_map, mdr->more()->sseq_map);
 
   list<ScatterLock*> updated_scatterlocks;  // we clear_updated explicitly below
   mdcache->migrator->decode_import_inode(srcdn, blp, 
@@ -4640,7 +4667,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       assert(mdr->more()->inode_import.length() > 0);
       
       // finish cap imports
-      finish_force_open_sessions(mdr->more()->imported_client_map);
+      finish_force_open_sessions(mdr->more()->imported_client_map, mdr->more()->sseq_map);
       if (mdr->more()->cap_imports.count(destdnl->get_inode()))
 	mds->mdcache->migrator->finish_import_inode_caps(destdnl->get_inode(), srcdn->authority().first, 
 							 mdr->more()->cap_imports[destdnl->get_inode()]);

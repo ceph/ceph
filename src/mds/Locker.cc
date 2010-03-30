@@ -200,6 +200,11 @@ bool Locker::acquire_locks(MDRequest *mdr,
     sorted.insert(*p);
     if ((*p)->get_parent()->is_auth())
       mustpin.insert(*p);
+    else if ((*p)->get_type() == CEPH_LOCK_IFILE &&
+	     !(*p)->get_parent()->is_auth() && !(*p)->can_rdlock(client)) { // we might have to request an rdlock
+      dout(15) << " will also auth_pin " << *(*p)->get_parent() << " in case we need to request a rdlock" << dendl;
+      mustpin.insert(*p);
+    }
   }
 
  
@@ -680,16 +685,24 @@ void Locker::eval(SimpleLock *lock, bool *need_issue)
 bool Locker::_rdlock_kick(SimpleLock *lock)
 {
   // kick the lock
-  if (lock->is_stable() &&
-      lock->get_parent()->is_auth()) {
-    if (lock->get_sm() == &sm_scatterlock) {
-      if (lock->get_parent()->is_replicated())
-	scatter_tempsync((ScatterLock*)lock);
-      else
+  if (lock->is_stable()) {
+    if (lock->get_parent()->is_auth()) {
+      if (lock->get_sm() == &sm_scatterlock) {
+	if (lock->get_parent()->is_replicated())
+	  scatter_tempsync((ScatterLock*)lock);
+	else
+	  simple_sync(lock);
+      } else 
 	simple_sync(lock);
-    } else 
-      simple_sync(lock);
-    return true;
+      return true;
+    } else {
+      // request rdlock state change from auth
+      int auth = lock->get_parent()->authority().first;
+      dout(10) << "requesting rdlock from auth on " 
+	       << *lock << " on " << *lock->get_parent() << dendl;
+      mds->send_message_mds(new MLock(lock, LOCK_AC_REQRDLOCK, mds->get_nodeid()), auth);
+      return false;
+    }
   }
   return false;
 }
@@ -709,7 +722,8 @@ bool Locker::rdlock_try(SimpleLock *lock, client_t client, Context *con)
 
   // wait!
   dout(7) << "rdlock_try waiting on " << *lock << " on " << *lock->get_parent() << dendl;
-  if (con) lock->add_waiter(SimpleLock::WAIT_RD, con);
+  if (con)
+    lock->add_waiter(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_RD, con);
   return false;
 }
 
@@ -740,8 +754,13 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut)
   }
 
   // wait!
+  int wait_on;
+  if (lock->get_parent()->is_auth() && lock->is_stable())
+    wait_on = SimpleLock::WAIT_RD;
+  else
+    wait_on = SimpleLock::WAIT_STABLE;  // REQRDLOCK is ignored if lock is unstable, so we need to retry.
   dout(7) << "rdlock_start waiting on " << *lock << " on " << *lock->get_parent() << dendl;
-  lock->add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mut));
+  lock->add_waiter(wait_on, new C_MDS_RetryRequest(mdcache, mut));
   nudge_log(lock);
   return false;
 }
@@ -1482,6 +1501,11 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
 	   << " update_size " << update_size
 	   << " on " << *in << dendl;
 
+  if (in->is_frozen()) {
+    dout(10) << "check_inode_max_size frozen, waiting on " << *in << dendl;
+    in->add_waiter(CInode::WAIT_UNFREEZE, new C_MDL_CheckMaxSize(this, in));
+    return false;
+  }
   if (!force_wrlock && !in->filelock.can_wrlock(in->get_loner())) {
     // lock?
     if (in->filelock.is_stable()) {
@@ -3377,17 +3401,18 @@ void Locker::file_recover(ScatterLock *lock)
   assert(in->is_auth());
   assert(lock->is_stable());
 
-  int oldstate = lock->get_state();
-  lock->set_state(LOCK_PRE_SCAN);
+  assert(lock->get_state() == LOCK_PRE_SCAN); // only called from MDCache::start_files_to_recover()
 
   int gather = 0;
   
-  if (in->is_replicated() &&
+  /*
+  if (in->is_replicated()
       lock->get_sm()->states[oldstate].replica_state != LOCK_LOCK) {
     send_lock_message(lock, LOCK_AC_LOCK);
     lock->init_gather();
     gather++;
   }
+  */
   if (in->issued_caps_need_gather(lock)) {
     issue_caps(in);
     gather++;
@@ -3560,6 +3585,19 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     }
     break;
 
+  case LOCK_AC_REQRDLOCK:
+    if (lock->is_stable()) {
+      dout(7) << "handle_file_lock got rdlock request on " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+      assert(in->is_auth()); // replica auth pinned if they're doing this!
+      simple_sync(lock);
+    } else {
+      dout(7) << "handle_file_lock ignoring rdlock request on " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+      // replica will retry.
+    }
+    break;
+
   case LOCK_AC_NUDGE:
     if (lock->get_parent()->is_auth()) {
       dout(7) << "handle_file_lock trying nudge on " << *lock
@@ -3571,7 +3609,6 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
 	      << " on " << *lock->get_parent() << dendl;
     }    
     break;
-
 
   default:
     assert(0);

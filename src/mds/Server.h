@@ -71,12 +71,13 @@ public:
   void handle_client_session(class MClientSession *m);
   void _session_logged(Session *session, __u64 state_seq, 
 		       bool open, version_t pv, interval_set<inodeno_t>& inos,version_t piv);
-  void _finish_session_purge(Session *);
-  version_t prepare_force_open_sessions(map<client_t,entity_inst_t> &cm);
-  void finish_force_open_sessions(map<client_t,entity_inst_t> &cm);
+  version_t prepare_force_open_sessions(map<client_t,entity_inst_t> &cm,
+					map<client_t,__u64>& sseqmap);
+  void finish_force_open_sessions(map<client_t,entity_inst_t> &cm,
+					map<client_t,__u64>& sseqmap);
   void terminate_sessions();
   void find_idle_sessions();
-  void end_session (Session *session);
+  void kill_session(Session *session);
   void reconnect_clients();
   void handle_client_reconnect(class MClientReconnect *m);
   //void process_reconnect_cap(CInode *in, int from, ceph_mds_cap_reconnect& capinfo);

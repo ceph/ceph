@@ -159,8 +159,7 @@ void SessionMap::encode(bufferlist& bl)
     if (p->second->is_open() ||
 	p->second->is_closing() ||
 	p->second->is_stale() ||
-	p->second->is_stale_purging() ||
-	p->second->is_stale_closing()) {
+	p->second->is_killing()) {
       ::encode(p->first, bl);
       p->second->encode(bl);
     }
@@ -182,7 +181,7 @@ void SessionMap::decode(bufferlist::iterator& p)
       entity_inst_t inst;
       ::decode(inst.name, p);
       Session *s = get_or_add_session(inst);
-      if (s->is_new())
+      if (s->is_closed())
 	set_state(s, Session::STATE_OPEN);
       s->decode(p);
     }

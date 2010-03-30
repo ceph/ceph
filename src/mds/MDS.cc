@@ -619,13 +619,12 @@ void MDS::handle_command(MMonCommand *m)
       mdcache->dump_cache();
   }
   else if (m->cmd[0] == "session" && m->cmd[1] == "kill") {
-    Session *session = sessionmap.
-      get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
-				strtol(m->cmd[2].c_str(), 0, 10)));
-    if (session) {
-      dout(20) << "killing session " << session << dendl;
-      server->end_session(session);
-    } else dout(15) << "session " << session << " not in sessionmap!" << dendl;
+    Session *session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
+							    strtol(m->cmd[2].c_str(), 0, 10)));
+    if (session)
+      server->kill_session(session);
+    else
+      dout(15) << "session " << session << " not in sessionmap!" << dendl;
   } else if (m->cmd[0] == "issue_caps") {
     long inum = strtol(m->cmd[1].c_str(), 0, 10);
     CInode * ino = mdcache->get_inode(inodeno_t(inum));
@@ -1559,12 +1558,15 @@ bool MDS::ms_handle_reset(Connection *con)
     objecter->ms_handle_reset(con);
   } else if (con->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT) {
     Session *session = (Session *)con->get_priv();
-    if (!session || session->is_closed() || session->is_new())
-      messenger->mark_down(con->get_peer_addr());
-    if (session->is_new())
-      sessionmap.remove_session(session);
-    if (session)
+    if (session) {
+      if (session->is_closed()) {
+	messenger->mark_down(con->get_peer_addr());
+	sessionmap.remove_session(session);
+      }
       session->put();
+    } else {
+      messenger->mark_down(con->get_peer_addr());
+    }
   }
   return false;
 }
@@ -1597,6 +1599,7 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
 						  authorizer_data, authorizer_reply, name, global_id, caps_info);
 
   if (is_valid) {
+    // wire up a Session* to this connection, and add it to the session map
     entity_name_t n(con->get_peer_type(), global_id);
     Session *s = sessionmap.get_session(n);
     if (!s) {

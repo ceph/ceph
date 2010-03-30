@@ -34,6 +34,7 @@ class MDRequest;
 #include "Capability.h"
 #include "msg/Message.h"
 
+
 /* 
  * session
  */
@@ -41,25 +42,34 @@ class MDRequest;
 class Session : public RefCountedObject {
   // -- state etc --
 public:
-  static const int STATE_NEW = 0;
+  /*
+                    
+        <deleted> <-- closed <------------+
+             ^         |                  |
+             |         v                  |
+          killing <-- opening <----+      |
+             ^         |           |      |
+             |         v           |      |
+           stale <--> open --> closing ---+
+
+    + additional dimension of 'importing' (with counter)
+
+  */
+  static const int STATE_CLOSED = 0;
   static const int STATE_OPENING = 1;   // journaling open
   static const int STATE_OPEN = 2;
   static const int STATE_CLOSING = 3;   // journaling close
   static const int STATE_STALE = 4;
-  static const int STATE_STALE_PURGING = 5;
-  static const int STATE_STALE_CLOSING = 6;
-  static const int STATE_CLOSED = 7;
+  static const int STATE_KILLING = 5;
 
   const char *get_state_name(int s) {
     switch (s) {
-    case STATE_NEW: return "new";
+    case STATE_CLOSED: return "closed";
     case STATE_OPENING: return "opening";
     case STATE_OPEN: return "open";
     case STATE_CLOSING: return "closing";
     case STATE_STALE: return "stale";
-    case STATE_STALE_PURGING: return "stale_purging";
-    case STATE_STALE_CLOSING: return "stale_closing";
-    case STATE_CLOSED: return "closed";
+    case STATE_KILLING: return "killing";
     default: return "???";
     }
   }
@@ -67,6 +77,7 @@ public:
 private:
   int state;
   __u64 state_seq;
+  int importing_count;
   friend class SessionMap;
 public:
   entity_inst_t inst;
@@ -108,14 +119,21 @@ public:
   int get_state() { return state; }
   const char *get_state_name() { return get_state_name(state); }
   __u64 get_state_seq() { return state_seq; }
-  bool is_new() { return state == STATE_NEW; }
+  bool is_closed() { return state == STATE_CLOSED; }
   bool is_opening() { return state == STATE_OPENING; }
   bool is_open() { return state == STATE_OPEN; }
   bool is_closing() { return state == STATE_CLOSING; }
   bool is_stale() { return state == STATE_STALE; }
-  bool is_stale_purging() { return state == STATE_STALE_PURGING; }
-  bool is_stale_closing() { return state == STATE_STALE_CLOSING; }
-  bool is_closed() { return state == STATE_CLOSED; }
+  bool is_killing() { return state == STATE_KILLING; }
+
+  void inc_importing() {
+    ++importing_count;
+  }
+  void dec_importing() {
+    assert(importing_count);
+    --importing_count;
+  }
+  bool is_importing() { return importing_count > 0; }
 
   // -- caps --
 private:
@@ -156,7 +174,7 @@ public:
 
 
   Session() : 
-    state(STATE_NEW), state_seq(0),
+    state(STATE_CLOSED), state_seq(0), importing_count(0),
     item_session_list(this),
     requests(0),  // member_offset passed to front() manually
     cap_push_seq(0) { }
