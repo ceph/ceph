@@ -33,7 +33,10 @@ public:
   MOSDPGLog(version_t mv, PG::Info& i) :
     Message(MSG_OSD_PG_LOG),
     epoch(mv), info(i) { }
+private:
+  ~MOSDPGLog() {}
 
+public:
   const char *get_type_name() { return "PGlog"; }
   void print(ostream& out) {
     out << "pg_log(" << info.pgid << " e" << epoch << ")";
