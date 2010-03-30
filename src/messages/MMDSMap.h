@@ -60,7 +60,10 @@ class MMDSMap : public Message {
     epoch = mm->get_epoch();
     mm->encode(encoded);
   }
+private:
+  ~MMDSMap() {}
 
+public:
   const char *get_type_name() { return "mdsmap"; }
   void print(ostream& out) {
     out << "mdsmap(e " << epoch << ")";
