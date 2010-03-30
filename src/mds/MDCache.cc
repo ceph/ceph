@@ -2504,7 +2504,7 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
   if (mds->is_resolve()) 
     maybe_resolve_finish();
 
-  delete ack;
+  ack->put();
 }
 
 
@@ -3071,7 +3071,7 @@ void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
   default: 
     assert(0);
   }
-  delete m;
+  m->put();
 }
 
 
