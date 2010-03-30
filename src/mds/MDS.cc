@@ -664,7 +664,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   if (epoch <= mdsmap->get_epoch()) {
     dout(5) << " old map epoch " << epoch << " <= " << mdsmap->get_epoch() 
 	    << ", discarding" << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -841,7 +841,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   balancer->try_rebalance();
 
  out:
-  delete m;
+  m->put();
   delete oldmap;
 }
 

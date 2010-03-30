@@ -1313,7 +1313,7 @@ void Client::handle_mds_map(MMDSMap* m)
   if (m->get_epoch() < mdsmap->get_epoch()) {
     dout(1) << "handle_mds_map epoch " << m->get_epoch() << " is older than our "
 	    << mdsmap->get_epoch() << dendl;
-    delete m;
+    m->put();
     return;
   }  
 
@@ -1353,7 +1353,7 @@ void Client::handle_mds_map(MMDSMap* m)
   signal_cond_list(ls);
 
   delete oldmap;
-  delete m;
+  m->put();
 
   monclient->sub_got("mdsmap", mdsmap->get_epoch());
 }
