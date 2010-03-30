@@ -600,7 +600,7 @@ bool OSDMonitor::preprocess_remove_snaps(MRemoveSnaps *m)
   if (!m->get_session()->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_RW)) {
     dout(0) << "got preprocess_remove_snaps from entity with insufficient caps "
 	    << m->get_session()->caps << dendl;
-    delete m;
+    m->put();
     return true;
   }
   for (map<int, vector<snapid_t> >::iterator q = m->snaps.begin();
@@ -619,7 +619,7 @@ bool OSDMonitor::preprocess_remove_snaps(MRemoveSnaps *m)
 	return false;
     }
   }
-  delete m;
+  m->put();
   return true;
 }
 
@@ -652,7 +652,7 @@ bool OSDMonitor::prepare_remove_snaps(MRemoveSnaps *m)
     }
   }
 
-  delete m;
+  m->put();
   return true;
 }
 
