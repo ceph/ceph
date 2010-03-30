@@ -53,7 +53,7 @@ public:
 
   /** Get the attributes for an object.*/
   int get_attr(std::string& bucket, std::string& obj,
-               const char *name, bufferlist& dest, __u64 auid=0);
+               const char *name, bufferlist& dest);
 
   /** Set an attr on an object. */
   int set_attr(std::string& bucket, std::string& obj,
