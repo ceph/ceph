@@ -85,7 +85,8 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
     break;
 
   case TABLESERVER_OP_ACK:
-    if (pending_commit.count(tid)) {
+    if (pending_commit.count(tid) &&
+	pending_commit[tid]->pending_commit_tids[table].count(tid)) {
       dout(10) << "got ack on tid " << tid << ", logging" << dendl;
       
       assert(g_conf.mds_kill_mdstable_at != 7);
@@ -175,9 +176,10 @@ void MDSTableClient::got_journaled_agree(version_t tid, LogSegment *ls)
 void MDSTableClient::got_journaled_ack(version_t tid)
 {
   dout(10) << "got_journaled_ack " << tid << dendl;
-  if (pending_commit.count(tid))
+  if (pending_commit.count(tid)) {
     pending_commit[tid]->pending_commit_tids[table].erase(tid);
-  pending_commit.erase(tid);
+    pending_commit.erase(tid);
+  }
 }
 
 void MDSTableClient::finish_recovery()
