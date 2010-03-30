@@ -2434,7 +2434,7 @@ void Client::handle_snap(MClientSnap *m)
     put_snap_realm(realm);
   }
 
-  delete m;
+  m->put();
 }
 
 void Client::handle_caps(MClientCaps *m)

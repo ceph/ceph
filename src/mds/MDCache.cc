@@ -4031,7 +4031,7 @@ void MDCache::send_snaps(map<client_t,MClientSnap*>& splits)
       mds->send_message_client(p->second, session->inst);
     } else {
       dout(10) << " no session for client" << p->first << dendl;
-      delete p->second;
+      p->second->put();
     }
   }
   splits.clear();
