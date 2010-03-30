@@ -1647,7 +1647,7 @@ void Locker::handle_client_caps(MClientCaps *m)
   CInode *head_in = mdcache->get_inode(m->get_ino());
   if (!head_in) {
     dout(7) << "handle_client_caps on unknown ino " << m->get_ino() << ", dropping" << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -1664,7 +1664,7 @@ void Locker::handle_client_caps(MClientCaps *m)
     cap = in->get_client_cap(client);
   if (!cap) {
     dout(7) << "handle_client_caps no cap for client" << client << " on " << *in << dendl;
-    delete m;
+    m->put();
     return;
   }  
   assert(cap);
@@ -1682,7 +1682,7 @@ void Locker::handle_client_caps(MClientCaps *m)
   if (ceph_seq_cmp(m->get_mseq(), cap->get_mseq()) < 0) {
     dout(7) << "handle_client_caps mseq " << m->get_mseq() << " < " << cap->get_mseq()
 	    << ", dropping" << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -1793,7 +1793,7 @@ void Locker::handle_client_caps(MClientCaps *m)
   }
   
  out:
-  delete m;
+  m->put();
 }
 
 void Locker::process_cap_update(MDRequest *mdr, client_t client,

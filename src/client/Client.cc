@@ -2450,7 +2450,7 @@ void Client::handle_caps(MClientCaps *m)
   if (inode_map.count(vino)) in = inode_map[vino];
   if (!in) {
     dout(5) << "handle_caps don't have vino " << vino << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -2462,7 +2462,7 @@ void Client::handle_caps(MClientCaps *m)
 
   if (in->caps.count(mds) == 0) {
     dout(5) << "handle_caps don't have " << *in << " cap on mds" << mds << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -2474,7 +2474,7 @@ void Client::handle_caps(MClientCaps *m)
   case CEPH_CAP_OP_GRANT: return handle_cap_grant(in, mds, cap, m);
   case CEPH_CAP_OP_FLUSH_ACK: return handle_cap_flush_ack(in, mds, cap, m);
   default:
-    delete m;
+    m->put();
   }
 }
 
@@ -2502,7 +2502,7 @@ void Client::handle_cap_import(Inode *in, MClientCaps *m)
 	    << ", keeping exporting_issued " << ccap_string(in->exporting_issued) 
 	    << " mseq " << in->exporting_mseq << " by mds" << in->exporting_mds << dendl;
   }
-  delete m;
+  m->put();
 }
 
 void Client::handle_cap_export(Inode *in, MClientCaps *m)
@@ -2539,7 +2539,7 @@ void Client::handle_cap_export(Inode *in, MClientCaps *m)
 
   remove_cap(in, mds);
 
-  delete m;
+  m->put();
 }
 
 void Client::handle_cap_trunc(Inode *in, MClientCaps *m)
@@ -2562,7 +2562,7 @@ void Client::handle_cap_trunc(Inode *in, MClientCaps *m)
   }
   
   in->reported_size = in->size = m->get_size(); 
-  delete m;
+  m->put();
 }
 
 void Client::handle_cap_flush_ack(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
@@ -2599,7 +2599,7 @@ void Client::handle_cap_flush_ack(Inode *in, int mds, InodeCap *cap, MClientCaps
     }
   }
   
-  delete m;
+  m->put();
 }
 
 
@@ -2624,7 +2624,7 @@ void Client::handle_cap_flushsnap_ack(Inode *in, MClientCaps *m)
     // we may not have it if we send multiple FLUSHSNAP requests and (got multiple FLUSHEDSNAPs back)
   }
     
-  delete m;
+  m->put();
 }
 
 
@@ -2706,7 +2706,7 @@ void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
   if (new_caps)
     signal_cond_list(in->waitfor_caps);
 
-  delete m;
+  m->put();
 }
 
 
