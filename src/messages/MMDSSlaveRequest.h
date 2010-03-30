@@ -106,6 +106,10 @@ public:
   MMDSSlaveRequest(metareqid_t ri, int o) : 
     Message(MSG_MDS_SLAVE_REQUEST),
     reqid(ri), op(o) { }
+private:
+  ~MMDSSlaveRequest() {}
+
+public:
   void encode_payload() {
     ::encode(reqid, payload);
     ::encode(op, payload);
