@@ -1220,7 +1220,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
     }
 
     // done with reply.
-    delete m;
+    m->put();
     return;
 
   } else {
@@ -1232,7 +1232,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       if (mdr->slave_to_mds != from) {   // may not even be a slave! (e.g. forward race)
 	dout(10) << "local request " << *mdr << " not slave to mds" << from
 		 << ", ignoring " << *m << dendl;
-	delete m;
+	m->put();
 	return;
       }
     } else {
@@ -1240,7 +1240,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       if (m->get_op() == MMDSSlaveRequest::OP_FINISH) {
 	dout(10) << "missing slave request for " << m->get_reqid() 
 		 << " OP_FINISH, must have lost race with a forward" << dendl;
-	delete m;
+	m->put();
 	return;
       }
       mdr = mdcache->request_start_slave(m->get_reqid(), m->get_source().num());
@@ -1298,7 +1298,7 @@ void Server::dispatch_slave_request(MDRequest *mdr)
       }
 
       // done.
-      delete mdr->slave_request;
+      mdr->slave_request->put();
       mdr->slave_request = 0;
     }
     break;
@@ -1311,7 +1311,7 @@ void Server::dispatch_slave_request(MDRequest *mdr)
       mds->locker->xlock_finish(lock, mdr);
       
       // done.  no ack necessary.
-      delete mdr->slave_request;
+      mdr->slave_request->put();
       mdr->slave_request = 0;
     }
     break;
@@ -1409,7 +1409,7 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
   mds->send_message_mds(reply, mdr->slave_to_mds);
   
   // clean up this request
-  delete mdr->slave_request;
+  mdr->slave_request->put();
   mdr->slave_request = 0;
   return;
 }
@@ -3446,7 +3446,7 @@ void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti)
   mdr->more()->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti);
 
   // done.
-  delete mdr->slave_request;
+  mdr->slave_request->put();
   mdr->slave_request = 0;
 }
 
@@ -4804,7 +4804,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
       MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEPREPACK);
       reply->witnesses.swap(srcdnrep);
       mds->send_message_mds(reply, mdr->slave_to_mds);
-      delete mdr->slave_request;
+      mdr->slave_request->put();
       mdr->slave_request = 0;
       return;	
     }
@@ -4921,7 +4921,7 @@ void Server::_logged_slave_rename(MDRequest *mdr,
     mds->balancer->hit_inode(mdr->now, destdnl->get_inode(), META_POP_IWR);
 
   // done.
-  delete mdr->slave_request;
+  mdr->slave_request->put();
   mdr->slave_request = 0;
 }
 

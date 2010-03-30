@@ -366,7 +366,7 @@ struct MDRequest : public Mutation {
   }
   ~MDRequest() {
     client_request->put();
-    delete slave_request;
+    slave_request->put();
     delete _more;
   }
 
