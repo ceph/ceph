@@ -2101,7 +2101,7 @@ void Locker::handle_client_cap_release(MClientCapRelease *m)
     mdcache->remove_client_cap(in, client);
   }
 
-  delete m;
+  m->put();
 }
 
 void Locker::handle_client_lease(MClientLease *m)
