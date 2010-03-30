@@ -352,7 +352,7 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     session = (MonSession *)req->get_connection()->get_priv();
   if (req->session_mon >= 0) {
     dout(10) << "forward_request won't double fwd request " << *req << dendl;
-    delete req;
+    req->put();
   } else if (session && !session->closed) {
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
@@ -378,7 +378,7 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     messenger->send_message(forward, monmap->get_inst(mon));
   } else {
     dout(10) << "forward_request no session for request " << *req << dendl;
-    delete req;
+    req->put();
   }
   if (session)
     session->put();

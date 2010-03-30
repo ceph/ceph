@@ -41,7 +41,7 @@ struct MForward : public Message {
   }
 
   ~MForward() {
-    delete msg;
+    if (msg) msg->put();
   }
   
   void encode_payload() {

@@ -86,7 +86,7 @@ bool MonmapMonitor::preprocess_query(PaxosServiceMessage *m)
     return preprocess_command((MMonCommand*)m);
   default:
     assert(0);
-    delete m;
+    m->put();
     return true;
   }
 }
@@ -151,7 +151,7 @@ bool MonmapMonitor::prepare_update(PaxosServiceMessage *m)
     return prepare_command((MMonCommand*)m);
   default:
     assert(0);
-    delete m;
+    m->put();
   }
 
   return false;

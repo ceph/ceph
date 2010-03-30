@@ -201,7 +201,7 @@ bool LogMonitor::preprocess_query(PaxosServiceMessage *m)
 
   default:
     assert(0);
-    delete m;
+    m->put();
     return true;
   }
 }
@@ -216,7 +216,7 @@ bool LogMonitor::prepare_update(PaxosServiceMessage *m)
     return prepare_log((MLog*)m);
   default:
     assert(0);
-    delete m;
+    m->put();
     return false;
   }
 }

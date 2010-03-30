@@ -192,7 +192,7 @@ bool ClassMonitor::preprocess_query(PaxosServiceMessage *m)
 
   default:
     assert(0);
-    delete m;
+    m->put();
     return true;
   }
 }
@@ -207,7 +207,7 @@ bool ClassMonitor::prepare_update(PaxosServiceMessage *m)
     return prepare_class((MClass*)m);
   default:
     assert(0);
-    delete m;
+    m->put();
     return false;
   }
 }

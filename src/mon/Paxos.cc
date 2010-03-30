@@ -769,7 +769,7 @@ void Paxos::dispatch(PaxosServiceMessage *m)
   // election in progress?
   if (mon->is_starting()) {
     dout(5) << "election in progress, dropping " << *m << dendl;
-    delete m;
+    m->put();
     return;    
   }
 

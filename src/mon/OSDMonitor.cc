@@ -218,7 +218,7 @@ bool OSDMonitor::preprocess_query(PaxosServiceMessage *m)
     
   default:
     assert(0);
-    delete m;
+    m->put();
     return true;
   }
 }
@@ -249,7 +249,7 @@ bool OSDMonitor::prepare_update(PaxosServiceMessage *m)
 
   default:
     assert(0);
-    delete m;
+    m->put();
   }
 
   return false;
@@ -672,7 +672,7 @@ void OSDMonitor::send_to_waiting()
       if (from <= osdmap.get_epoch()) {
 	while (!p->second.empty()) {
 	  send_incremental(p->second.front(), from);
-	  delete p->second.front();
+	  p->second.front()->put();
 	  p->second.pop_front();
 	}
       } else {
@@ -683,7 +683,7 @@ void OSDMonitor::send_to_waiting()
     } else {
       while (!p->second.empty()) {
 	send_full(p->second.front());
-	delete p->second.front();
+	p->second.front()->put();
 	p->second.pop_front();
       }
     }
@@ -701,7 +701,7 @@ void OSDMonitor::send_latest(PaxosServiceMessage *m, epoch_t start)
       send_full(m);
     else
       send_incremental(m, start);
-    delete m;
+    m->put();
   } else {
     dout(5) << "send_latest to " << m->get_orig_source_inst()
 	    << " start " << start << " later" << dendl;

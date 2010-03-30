@@ -161,7 +161,7 @@ bool PGMonitor::preprocess_query(PaxosServiceMessage *m)
 
   default:
     assert(0);
-    delete m;
+    m->put();
     return true;
   }
 }
@@ -178,7 +178,7 @@ bool PGMonitor::prepare_update(PaxosServiceMessage *m)
 
   default:
     assert(0);
-    delete m;
+    m->put();
     return false;
   }
 }

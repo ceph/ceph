@@ -135,7 +135,7 @@ bool MDSMonitor::preprocess_query(PaxosServiceMessage *m)
 
   default:
     assert(0);
-    delete m;
+    m->put();
     return true;
   }
 }
@@ -280,7 +280,7 @@ bool MDSMonitor::prepare_update(PaxosServiceMessage *m)
   
   default:
     assert(0);
-    delete m;
+    m->put();
   }
 
   return true;
