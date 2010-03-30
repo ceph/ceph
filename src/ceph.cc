@@ -95,7 +95,7 @@ void handle_observe(MMonObserve *observe)
   lock.Lock();
   registered.insert(observe->machine_id);  
   lock.Unlock();
-  delete observe;
+  observe->put();
 }
 
 void handle_notify(MMonObserveNotify *notify)

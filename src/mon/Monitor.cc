@@ -521,7 +521,7 @@ void Monitor::handle_observe(MMonObserve *m)
     bool delete_m = false;
     if (m->session_mon) delete_m = true;
     send_reply(m, m);
-    if (delete_m) delete m;
+    if (delete_m) m->put();
     return;
   }
   if (m->machine_id >= PAXOS_NUM) {
