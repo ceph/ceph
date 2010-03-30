@@ -97,7 +97,10 @@ public:
     head.flags = flags;
   }
   MOSDOp() : rmw_flags(0) {}
+private:
+  ~MOSDOp() {}
 
+public:
   void set_layout(const ceph_object_layout& l) { head.layout = l; }
   void set_version(eversion_t v) { head.reassert_version = v; }
   void set_mtime(utime_t mt) { head.mtime = mt; }
