@@ -332,7 +332,7 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
   MMonCommandAck *reply = new MMonCommandAck(m->cmd, rc, rs, version);
   reply->set_data(rdata);
   send_reply(m, reply);
-  delete m;
+  m->put();
 }
 
 

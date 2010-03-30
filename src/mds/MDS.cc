@@ -643,7 +643,7 @@ void MDS::handle_command(MMonCommand *m)
       dout(20) << "try_eval(" << inum << ", " << mask << ")" << dendl;
     } else dout(15) << "inode " << inum << " not in mdcache!" << dendl;
   } else dout(0) << "unrecognized command! " << m->cmd << dendl;
-  delete m;
+  m->put();
 }
 
 void MDS::handle_mds_map(MMDSMap *m)

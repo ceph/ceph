@@ -1546,7 +1546,7 @@ void OSD::handle_command(MMonCommand *m)
     parse_config_option_string(m->cmd[1]);
   else 
     dout(0) << "unrecognized command! " << m->cmd << dendl;
-  delete m;
+  m->put();
 }
 
 
