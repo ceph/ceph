@@ -79,7 +79,10 @@ class MDiscover : public Message {
     want_ino(want_ino_),
     want_base_dir(want_base_dir_),
     want_xlocked(false) { }
+private:
+  ~MDiscover() {}
 
+public:
   const char *get_type_name() { return "Dis"; }
   void print(ostream &out) {
     out << "discover(" << base_ino << "." << base_dir_frag
