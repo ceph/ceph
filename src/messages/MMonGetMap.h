@@ -22,7 +22,10 @@
 class MMonGetMap : public Message {
  public:
   MMonGetMap() : Message(CEPH_MSG_MON_GET_MAP) { }
+private:
+  ~MMonGetMap() {}
 
+public:
   const char *get_type_name() { return "mon_getmap"; }
   
   void encode_payload() { }
