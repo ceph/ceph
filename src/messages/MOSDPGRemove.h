@@ -33,7 +33,10 @@ class MOSDPGRemove : public Message {
     this->epoch = e;
     pg_list.swap(l);
   }
-  
+private:
+  ~MOSDPGRemove() {}
+
+public:  
   const char *get_type_name() { return "PGrm"; }
 
   void encode_payload() {
