@@ -1779,7 +1779,7 @@ do { \
 
     // osd
   case CEPH_MSG_SHUTDOWN:
-    ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
+    ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
     shutdown();
     delete m;
     break;
