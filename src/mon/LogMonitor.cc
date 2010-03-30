@@ -256,7 +256,7 @@ bool LogMonitor::prepare_log(MLog *m)
 
   if (ceph_fsid_compare(&m->fsid, &mon->monmap->fsid)) {
     dout(0) << "handle_log on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
-    delete m;
+    m->put();
     return false;
   }
 
@@ -278,7 +278,7 @@ void LogMonitor::_updated_log(MLog *m)
 {
   dout(7) << "_updated_log for " << m->get_orig_source_inst() << dendl;
   mon->send_reply(m, new MLogAck(m->fsid, m->entries.rbegin()->seq));
-  delete m;
+  m->put();
 }
 
 
