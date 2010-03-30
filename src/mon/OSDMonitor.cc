@@ -388,7 +388,7 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
 {
   if (ceph_fsid_compare(&m->sb.fsid, &mon->monmap->fsid)) {
     dout(0) << "preprocess_boot on fsid " << m->sb.fsid << " != " << mon->monmap->fsid << dendl;
-    delete m;
+    m->put();
     return true;
   }
 
@@ -396,7 +396,7 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
   if (!m->get_session()->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
     dout(0) << "got preprocess_boot message from entity with insufficient caps"
 	    << m->get_session()->caps << dendl;
-    delete m;
+    m->put();
     return true;
   }
 
@@ -427,7 +427,7 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
   // does this osd exist?
   if (!osdmap.exists(from)) {
     dout(1) << "boot from non-existent osd" << from << ", increase max_osd?" << dendl;
-    delete m;
+    m->put();
     return false;
   }
 
