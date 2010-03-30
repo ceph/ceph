@@ -49,7 +49,10 @@ struct MClientLease : public Message {
     h.first = sf;
     h.last = sl;
   }
+private:
+  ~MClientLease() {}
 
+public:
   const char *get_type_name() { return "client_lease"; }
   void print(ostream& out) {
     out << "client_lease(a=" << ceph_lease_op_name(get_action())
