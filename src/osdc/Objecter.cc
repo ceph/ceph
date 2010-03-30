@@ -473,7 +473,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     dout(7) << "handle_osd_op_reply " << tid
 	    << (m->is_ondisk() ? " ondisk":(m->is_onnvram() ? " onnvram":" ack"))
 	    << " ... stray" << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -491,7 +491,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   // ignore?
   if (pg.acker() != m->get_source().num()) {
     dout(7) << " ignoring ack|commit from non-acker" << dendl;
-    delete m;
+    m->put();
     return;
   }
   
@@ -504,7 +504,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     if (op->oncommit)
       num_uncommitted--;
     op_submit(op);
-    delete m;
+    m->put();
     return;
   }
 
@@ -555,7 +555,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     delete oncommit;
   }
 
-  delete m;
+  m->put();
 }
 
 
