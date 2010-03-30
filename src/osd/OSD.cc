@@ -3038,7 +3038,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
   kick_pg_split_queue();
   if (to_peer.size())
     update_heartbeat_peers();
-  delete m;
+  m->put();
 }
 
 
@@ -3362,7 +3362,7 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
   if (created)
     update_heartbeat_peers();
 
-  delete m;
+  m->put();
 }
 
 void OSD::handle_pg_trim(MOSDPGTrim *m)
