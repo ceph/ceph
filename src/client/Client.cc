@@ -1106,7 +1106,7 @@ void Client::handle_client_session(MClientSession *m)
   signal_cond_list(waiting_for_session[from]);
   waiting_for_session.erase(from);
 
-  delete m;
+  m->put();
 }
 
 void Client::send_request(MetaRequest *request, int mds)

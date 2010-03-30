@@ -182,7 +182,7 @@ void Server::handle_client_session(MClientSession *m)
 
   if (!session) {
     dout(0) << " ignoring sessionless msg " << *m << dendl;
-    delete m;
+    m->put();
     return;
   }
 
