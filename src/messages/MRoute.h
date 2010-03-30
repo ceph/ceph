@@ -33,10 +33,12 @@ struct MRoute : public Message {
     bufferlist::iterator p = bl.begin();
     msg = decode_message(p);
   }
+private:
   ~MRoute() {
     if (msg) msg->put();
   }
 
+public:
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(session_mon_tid, p);
