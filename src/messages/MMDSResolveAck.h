@@ -26,7 +26,10 @@ class MMDSResolveAck : public Message {
   vector<metareqid_t> abort;
 
   MMDSResolveAck() : Message(MSG_MDS_RESOLVEACK) {}
+private:
+  ~MMDSResolveAck() {}
 
+public:
   const char *get_type_name() { return "resolve_ack"; }
   /*void print(ostream& out) {
     out << "resolve_ack.size()
