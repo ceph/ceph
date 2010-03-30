@@ -39,11 +39,12 @@ struct MForward : public Message {
     Message(MSG_FORWARD), msg(m), client_caps(caps) {
     client = m->get_source_inst();
   }
-
+private:
   ~MForward() {
     if (msg) msg->put();
   }
-  
+
+public:
   void encode_payload() {
     ::encode(client, payload);
     ::encode(client_caps, payload);
