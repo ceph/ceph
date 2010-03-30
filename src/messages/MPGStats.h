@@ -30,6 +30,10 @@ public:
   MPGStats(ceph_fsid_t& f, epoch_t e, utime_t had) : 
     PaxosServiceMessage(MSG_PGSTATS, e), fsid(f), epoch(e), had_map_for(had) {}
 
+private:
+  ~MPGStats() {};
+
+public:
   const char *get_type_name() { return "pg_stats"; }
   void print(ostream& out) {
     out << "pg_stats(" << pg_stat.size() << " pgs v " << version << ")";
