@@ -690,7 +690,7 @@ bool Monitor::_ms_dispatch(Message *m)
 	if (pm->epoch > mon_epoch) 
 	  call_election();
 	if (pm->epoch != mon_epoch) {
-	  delete pm;
+	  pm->put();
 	  break;
 	}
 
