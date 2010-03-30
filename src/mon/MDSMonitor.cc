@@ -240,7 +240,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   
   // done
  out:
-  delete m;
+  m->put();
   return true;
 }
 
@@ -377,7 +377,7 @@ void MDSMonitor::_updated(MMDSBeacon *m)
     mon->send_reply(m, new MMDSMap(mon->monmap->fsid, &mdsmap));
   }
 
-  delete m;
+  m->put();
 }
 
 

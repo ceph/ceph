@@ -573,7 +573,7 @@ void MDS::handle_mds_beacon(MMDSBeacon *m)
     reset_beacon_killer();
   }
 
-  delete m;
+  m->put();
 }
 
 void MDS::reset_beacon_killer()
