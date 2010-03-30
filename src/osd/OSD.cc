@@ -1973,7 +1973,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   assert(osd_lock.is_locked());
   if (ceph_fsid_compare(&m->fsid, &monc->get_fsid())) {
     dout(0) << "handle_osd_map fsid " << m->fsid << " != " << monc->get_fsid() << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -2258,7 +2258,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   //if (osdmap->get_epoch() == 1) store->sync();     // in case of early death, blah
 
-  delete m;
+  m->put();
 
 
   if (is_booting())
@@ -3216,7 +3216,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
   if (created)
     update_heartbeat_peers();
 
-  delete m;
+  m->put();
 }
 
 
