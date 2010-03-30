@@ -2474,7 +2474,7 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
   unlock();
   if (done) {
     delete rm->ctx;
-    delete rm->op;
+    rm->op->put();
     delete rm;
     put();
   }
@@ -2502,7 +2502,7 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
   unlock();
   if (done) {
     delete rm->ctx;
-    delete rm->op;
+    rm->op->put();
     delete rm;
     put();
   }
@@ -2927,7 +2927,7 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
   assert(!is_primary());  // we should be a replica or stray.
 
   push(soid, op->get_source().num(), op->data_subset, op->clone_subsets);
-  delete op;
+  op->put();
 }
 
 
@@ -3029,7 +3029,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       dout(10) << "sub_op_push need " << data_needed << ", got " << data_subset << dendl;
       if (!data_needed.subset_of(data_subset)) {
 	dout(0) << " we did not get enough of " << soid << " object data" << dendl;
-	delete op;
+	op->put();
 	return;
       }
 
@@ -3211,7 +3211,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     */
   }
 
-  delete op;  // at the end... soid is a ref to op->soid!
+  op->put();  // at the end... soid is a ref to op->soid!
 }
 
 

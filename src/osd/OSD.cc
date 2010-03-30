@@ -4215,7 +4215,7 @@ void OSD::handle_sub_op(MOSDSubOp *op)
   dout(10) << "handle_sub_op " << *op << " epoch " << op->map_epoch << dendl;
   if (op->map_epoch < up_epoch) {
     dout(3) << "replica op from before up" << dendl;
-    delete op;
+    op->put();
     return;
   }
 
@@ -4234,7 +4234,7 @@ void OSD::handle_sub_op(MOSDSubOp *op)
 
   if (!_have_pg(pgid)) {
     // hmm.
-    delete op;
+    op->put();
     return;
   } 
 
@@ -4249,7 +4249,7 @@ void OSD::handle_sub_op(MOSDSubOp *op)
 	     << " after " << op->map_epoch 
 	     << ", dropping" << dendl;
     pg->unlock();
-    delete op;
+    op->put();
     return;
   }
 
