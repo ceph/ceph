@@ -181,7 +181,7 @@ void Elector::handle_propose(MMonElection *m)
       mon->call_election(false);//start();
     } else {
       dout(5) << " ignoring old propose" << dendl;
-      delete m;
+      m->put();
       return;
     }
   }
@@ -208,7 +208,7 @@ void Elector::handle_propose(MMonElection *m)
     }
   }
   
-  delete m;
+  m->put();
 }
  
 void Elector::handle_ack(MMonElection *m)
@@ -221,7 +221,7 @@ void Elector::handle_ack(MMonElection *m)
     dout(5) << "woah, that's a newer epoch, i must have rebooted.  bumping and re-starting!" << dendl;
     bump_epoch(m->epoch);
     mon->call_election(false);//start();
-    delete m;
+    m->put();
     return;
   }
   assert(m->epoch == epoch);
@@ -241,7 +241,7 @@ void Elector::handle_ack(MMonElection *m)
     assert(leader_acked >= 0);
   }
   
-  delete m;
+  m->put();
 }
 
 
@@ -258,7 +258,7 @@ void Elector::handle_victory(MMonElection *m)
     dout(5) << "woah, that's a funny epoch, i must have rebooted.  bumping and re-starting!" << dendl;
     bump_epoch(m->epoch);
     mon->call_election(true);//start();
-    delete m;
+    m->put();
     return;
   }
 
@@ -269,7 +269,7 @@ void Elector::handle_victory(MMonElection *m)
   
   // cancel my timer
   cancel_timer();	
-  delete m;
+  m->put();
 }
 
 
@@ -311,7 +311,7 @@ void Elector::dispatch(Message *m)
 
       if (em->epoch < epoch) {
 	dout(5) << "old epoch, dropping" << dendl;
-	delete em;
+	em->put();
 	break;
       }
 
