@@ -748,7 +748,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   MonSession *s = (MonSession *)m->get_connection()->get_priv();
   if (!s) {
     dout(10) << " no session, dropping" << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -780,7 +780,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
 			    m->get_source_inst());
 
   s->put();
-  delete m;
+  m->put();
 }
 
 bool Monitor::ms_handle_reset(Connection *con)
