@@ -532,7 +532,7 @@ int MonClient::_check_auth_rotating()
   if (auth->build_rotating_request(m->auth_payload)) {
     _send_mon_message(m);
   } else {
-    delete m;
+    m->put();
   }
   return 0;
 }

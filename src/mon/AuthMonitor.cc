@@ -357,7 +357,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
   MonSession *s = (MonSession *)m->get_connection()->get_priv();
   if (!s) {
     dout(10) << "no session, dropping" << dendl;
-    delete m;
+    m->put();
     return true;
   }
 
