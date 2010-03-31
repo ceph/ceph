@@ -1154,7 +1154,7 @@ void Migrator::handle_export_ack(MExportDirAck *m)
   mds->mdlog->flush();
   assert (g_conf.mds_kill_export_at != 10);
   
-  delete m;
+  m->put();
 }
 
 
