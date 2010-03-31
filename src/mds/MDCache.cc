@@ -8188,7 +8188,7 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
     }
   }
 
-  delete m;
+  m->put();
   return;
 }
 
