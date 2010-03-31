@@ -8609,7 +8609,7 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
     mds->queue_waiters(waiters);
   }
 
-  delete notify;
+  notify->put();
 }
 
 
