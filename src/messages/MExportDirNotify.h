@@ -36,7 +36,10 @@ class MExportDirNotify : public Message {
   MExportDirNotify(dirfrag_t i, bool a, pair<__s32,__s32> oa, pair<__s32,__s32> na) :
     Message(MSG_MDS_EXPORTDIRNOTIFY),
     base(i), ack(a), old_auth(oa), new_auth(na) { }
-  
+private:
+  ~MExportDirNotify() {}
+
+public:
   const char *get_type_name() { return "ExNot"; }
   void print(ostream& o) {
     o << "export_notify(" << base;
