@@ -35,7 +35,10 @@ class MMDSFragmentNotify : public Message {
   MMDSFragmentNotify(inodeno_t i, frag_t bf, int b) :
 	Message(MSG_MDS_FRAGMENTNOTIFY),
     ino(i), basefrag(bf), bits(b) { }
-  
+private:
+  ~MMDSFragmentNotify() {}
+
+public:  
   const char *get_type_name() { return "fragment_notify"; }
   void print(ostream& o) {
     o << "fragment_notify(" << ino << "#" << basefrag
