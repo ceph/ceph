@@ -987,7 +987,7 @@ CDir *MDCache::get_subtree_root(CDir *dir)
   while (true) {
     if (dir->is_subtree_root()) 
       return dir;
-    dir = dir->get_inode()->get_projected_parent_dn()->get_dir(); //get_parent_dir();
+    dir = dir->get_inode()->get_parent_dir();
     if (!dir) 
       return 0;             // none
   }
