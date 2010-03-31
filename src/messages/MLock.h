@@ -23,21 +23,21 @@ class MLock : public Message {
   int32_t     action;  // action type
   int32_t     asker;  // who is initiating this request
   metareqid_t reqid;  // for remote lock requests
-
+  
   __u16      lock_type;  // lock object type
   MDSCacheObjectInfo object_info;  
   
   bufferlist lockdata;  // and possibly some data
-
- public:
+  
+public:
   bufferlist& get_data() { return lockdata; }
   int get_asker() { return asker; }
   int get_action() { return action; }
   metareqid_t get_reqid() { return reqid; }
-
+  
   int get_lock_type() { return lock_type; }
   MDSCacheObjectInfo &get_object_info() { return object_info; }
-
+  
   MLock() {}
   MLock(int ac, int as) :
     Message(MSG_MDS_LOCK),
@@ -55,6 +55,10 @@ class MLock : public Message {
     lock->get_parent()->set_object_info(object_info);
     lockdata.claim(bl);
   }
+private:
+  ~MLock() {}
+  
+public:
   const char *get_type_name() { return "ILock"; }
   void print(ostream& out) {
     out << "lock(a=" << get_lock_action_name(action)
