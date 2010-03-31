@@ -4553,16 +4553,6 @@ void Server::_rename_prepare(MDRequest *mdr,
   mdcache->journal_cow_dentry(mdr, metablob, srcdn, CEPH_NOSNAP, 0, srcdnl);
   metablob->add_null_dentry(srcdn, true);
 
-  // new subtree?
-  if (srcdnl->is_primary() &&
-      srcdnl->get_inode()->is_dir()) {
-    list<CDir*> ls;
-    srcdnl->get_inode()->get_nested_dirfrags(ls);
-    int auth = srcdn->authority().first;
-    for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) 
-      mdcache->adjust_subtree_auth(*p, auth, auth, false);
-  }
-
   // do inode updates in journal, even if we aren't auth (hmm, is this necessary?)
   if (!silent) {
     if (ji && !pi) {
