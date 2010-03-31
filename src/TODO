@@ -59,6 +59,8 @@ filestore
 - convert apply_transaction calls in handle_map to queue?
   - need an osdmap cache layer?
 
+clients need to handle MClassAck, or anybody using that will die
+
 bugs
 - mds states
   - closing -> opening transition
