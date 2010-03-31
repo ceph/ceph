@@ -301,7 +301,6 @@ private:
       pipe_lock.Unlock();
     }    
     void _send(Message *m) {
-      m->get();
       out_q[m->get_priority()].push_back(m);
       cond.Signal();
     }

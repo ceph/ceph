@@ -231,11 +231,11 @@ protected:
 public:
   atomic_t nref;
 
-  Message() : connection(NULL), _forwarded(false), nref(0) {
+  Message() : connection(NULL), _forwarded(false), nref(1) {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
   };
-  Message(int t) : connection(NULL), _forwarded(false), nref(0) {
+  Message(int t) : connection(NULL), _forwarded(false), nref(1) {
     memset(&header, 0, sizeof(header));
     header.type = t;
     header.version = 1;
