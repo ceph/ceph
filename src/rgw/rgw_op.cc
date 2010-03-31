@@ -561,7 +561,6 @@ static int rebuild_policy(RGWAccessControlPolicy& src, RGWAccessControlPolicy& d
         }
       }
     default:
-      /* FIXME: implement email based grant */
       break;
     }
     if (grant_ok) {
@@ -626,8 +625,6 @@ void RGWPutACLs::execute()
   cerr << "new_policy: ";
   new_policy.to_xml(cerr);
   cerr << std::endl;
-
-  /* FIXME: make some checks around checks and fix policy */
 
   new_policy.encode(bl);
   ret = rgwstore->set_attr(s->bucket_str, s->object_str,

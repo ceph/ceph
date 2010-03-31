@@ -308,7 +308,6 @@ int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& d
                map<nstring, bufferlist>& attrs,  /* in/out */
                struct rgw_err *err)
 {
- /* FIXME! this should use a special rados->copy() method */
   int ret;
   char *data;
 
