@@ -7470,7 +7470,7 @@ void MDCache::handle_discover(MDiscover *dis)
       if (reply->is_empty()) {
 	dout(7) << *curdir << " is frozen, empty reply, waiting" << dendl;
 	curdir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
-	delete reply;
+	reply->put();
 	return;
       } else {
 	dout(7) << *curdir << " is frozen, non-empty reply, stopping" << dendl;
@@ -7563,7 +7563,7 @@ void MDCache::handle_discover(MDiscover *dis)
       } else {
 	dout(7) << "handle_discover blocking on xlocked " << *dn << dendl;
 	dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryMessage(mds, dis));
-	delete reply;
+	reply->put();
 	return;
       }
     }
@@ -7575,7 +7575,7 @@ void MDCache::handle_discover(MDiscover *dis)
       } else if (reply->is_empty()) {
 	dout(7) << *dnl->get_inode() << " is frozen, empty reply, waiting" << dendl;
 	dnl->get_inode()->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
-	delete reply;
+	reply->put();
 	return;
       } else {
 	dout(7) << *dnl->get_inode() << " is frozen, non-empty reply, stopping" << dendl;
@@ -7608,7 +7608,7 @@ void MDCache::handle_discover(MDiscover *dis)
   dout(7) << "handle_discover sending result back to asker mds" << from << dendl;
   mds->send_message_mds(reply, from);
 
-  delete dis;
+  dis->put();
 }
 
 
@@ -7775,7 +7775,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   mds->queue_waiters(finished);
 
   // done
-  delete m;
+  m->put();
 }
 
 
