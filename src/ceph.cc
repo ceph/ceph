@@ -284,7 +284,7 @@ void handle_ack(MMonCommandAck *ack)
     resend_event = 0;
   }
   lock.Unlock();
-  delete ack;
+  ack->put();
 }
 
 void send_command()
