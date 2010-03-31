@@ -636,7 +636,7 @@ void Migrator::handle_export_discover_ack(MExportDirDiscoverAck *m)
     assert(g_conf.mds_kill_export_at != 3);
   }
   
-  delete m;  // done
+  m->put();  // done
 }
 
 void Migrator::export_frozen(CDir *dir)
