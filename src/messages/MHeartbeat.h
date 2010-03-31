@@ -38,7 +38,10 @@ class MHeartbeat : public Message {
     this->load = load;
     this->beat = beat;
   }
+private:
+  ~MHeartbeat() {}
 
+public:
   const char *get_type_name() { return "HB"; }
 
   void encode_payload() {
