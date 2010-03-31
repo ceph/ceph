@@ -1313,7 +1313,7 @@ void Migrator::handle_export_notify_ack(MExportDirNotifyAck *m)
     }
   }
 
-  delete m;
+  m->put();
 }
 
 
