@@ -576,7 +576,6 @@ void RGWPutACLs::execute()
 {
   bufferlist bl;
 
-  char *data = NULL;
   RGWAccessControlPolicy *policy;
   RGWXMLParser parser;
   RGWAccessControlPolicy new_policy;
