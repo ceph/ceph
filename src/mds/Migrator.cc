@@ -1943,7 +1943,7 @@ void Migrator::handle_export_finish(MExportDirFinish *m)
   assert(dir);
   dout(7) << "handle_export_finish on " << *dir << dendl;
   import_finish(dir);
-  delete m;
+  m->put();
 }
 
 void Migrator::import_finish(CDir *dir) 
