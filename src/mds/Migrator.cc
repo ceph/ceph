@@ -1732,7 +1732,7 @@ void Migrator::handle_export_dir(MExportDir *m)
     mds->logger->inc(l_mds_iim, num_imported_inodes);
   }
 
-  delete m;
+  m->put();
 }
 
 
