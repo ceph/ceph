@@ -30,6 +30,10 @@ class MExportDirNotifyAck : public Message {
     Message(MSG_MDS_EXPORTDIRNOTIFYACK) {
     this->dirfrag = dirfrag;
   }
+private:
+  ~MExportDirNotifyAck() {}
+
+public:
   const char *get_type_name() { return "ExNotA"; }
   void print(ostream& o) {
     o << "export_notify_ack(" << dirfrag << ")";
