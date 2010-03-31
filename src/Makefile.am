@@ -608,8 +608,6 @@ noinst_HEADERS = \
         messages/MExportDirNotifyAck.h\
         messages/MExportDirPrep.h\
         messages/MExportDirPrepAck.h\
-        messages/MExportDirWarning.h\
-        messages/MExportDirWarningAck.h\
         messages/MGenericMessage.h\
         messages/MGetPoolStats.h\
         messages/MGetPoolStatsReply.h\
