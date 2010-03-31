@@ -28,7 +28,10 @@ class MExportDirWarningAck : public Message {
   MExportDirWarningAck(inodeno_t i) : 
     Message(MSG_MDS_EXPORTDIRWARNINGACK),
     ino(i) {}
+private:
+  ~MExportDirWarningAck() {}
 
+public:
   const char *get_type_name() { return "ExWAck"; }
 
   void encode_payload() {
