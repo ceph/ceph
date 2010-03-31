@@ -1486,7 +1486,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
        import_state[m->get_dirfrag()] != IMPORT_PREPPING) ||
       import_peer[m->get_dirfrag()] != oldauth) {
     dout(10) << "handle_export_prep import has aborted, dropping" << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -1635,7 +1635,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   import_state[dir->dirfrag()] = IMPORT_PREPPED;
   assert(g_conf.mds_kill_import_at != 4);
   // done 
-  delete m;
+  m->put();
 
 }
 
