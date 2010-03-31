@@ -192,6 +192,8 @@ void SnapRealm::check_cache()
   cached_seq = seq;
   build_snap_set(cached_snaps, cached_seq, cached_last_created, cached_last_destroyed,
 		 0, CEPH_NOSNAP);
+
+  cached_snap_trace.clear();
   build_snap_trace(cached_snap_trace);
   
   dout(10) << "check_cache rebuilt " << cached_snaps
