@@ -35,7 +35,10 @@ class MDentryLink : public Message {
     dirfrag(df),
     dn(n),
     is_primary(p) {}
+private:
+  ~MDentryLink() {}
 
+public:
   const char *get_type_name() { return "dentry_link";}
   void print(ostream& o) {
     o << "dentry_link(" << dirfrag << " " << dn << ")";
