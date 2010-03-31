@@ -3,6 +3,7 @@
 echo 1 > file1
 echo 2 > file2
 echo 3 > file3
+[ -e file4 ] && rm file4
 mkdir .snap/snap1
 echo 4 > file4
 now=`ls`
