@@ -202,7 +202,7 @@ void SnapServer::handle_query(MMDSTableRequest *req)
   mds->send_message_mds(reply, req->get_source().num());
 
   */
-  delete req;
+  req->put();
 }
 
 

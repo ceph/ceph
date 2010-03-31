@@ -253,7 +253,7 @@ void AnchorServer::handle_query(MMDSTableRequest *req)
   ::encode(trace, reply->bl);
   mds->send_message_mds(reply, req->get_source().num());
 
-  delete req;
+  req->put();
 }
 
 
