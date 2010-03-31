@@ -8110,7 +8110,7 @@ void MDCache::handle_dentry_link(MDentryLink *m)
   if (!finished.empty())
     mds->queue_waiters(finished);
 
-  delete m;
+  m->put();
   return;
 }
 
