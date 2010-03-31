@@ -738,8 +738,6 @@ bool ReplicatedPG::snap_trimmer()
     coll_t c = coll_t::build_snap_pg_coll(info.pgid, sn);
     vector<sobject_t> ls;
     osd->store->collection_list(c, ls);
-    if (ls.size() != info.stats.num_objects)
-      dout(10) << " WARNING: " << ls.size() << " != num_objects " << info.stats.num_objects << dendl;
 
     dout(10) << "snap_trimmer collection " << c << " has " << ls.size() << " items" << dendl;
 
@@ -759,7 +757,7 @@ bool ReplicatedPG::snap_trimmer()
       SnapSet& snapset = ssc->snapset;
       vector<snapid_t>& snaps = coi.snaps;
 
-      dout(10) << coid << " old snapset " << snapset << dendl;
+      dout(10) << coid << " snaps " << snaps << " old snapset " << snapset << dendl;
 
       // remove snaps
       vector<snapid_t> newsnaps;
