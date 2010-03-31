@@ -1419,7 +1419,7 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
   if (import_state.count(df) == 0 &&
       import_state[df] != IMPORT_DISCOVERING) {
     dout(7) << "hmm import_state is off, i must be obsolete lookup" << dendl;
-    delete m;
+    m->put();
     return;
   }
 
