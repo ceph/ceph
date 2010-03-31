@@ -2255,8 +2255,9 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
 {
   const entity_addr_t& dest_addr = dest.addr;
 
-  assert(m->nref.test() == 0);
-
+  assert(m->nref.test() == 1); //this is just to make sure that a changeset
+  //is working properly; if you start using the refcounting more and have multiple
+  //people hanging on to a message, ditch the assert!
   // lookup
   entity_addr_t dest_proc_addr = dest_addr;
 

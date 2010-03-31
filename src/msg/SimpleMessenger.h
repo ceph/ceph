@@ -265,7 +265,10 @@ private:
     
     void queue_received(Message *m) {
       m->set_recv_stamp(g_clock.now());
-      assert(m->nref.test() == 0);
+      assert(m->nref.test() == 1); //this is just to make sure that a changeset
+      //is working properly; if you start using the refcounting more and have multiple
+      //people hanging on to a message, ditch the assert!
+
       queue_received(m, m->get_priority());
     }
 
