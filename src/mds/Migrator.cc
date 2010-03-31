@@ -2297,7 +2297,7 @@ void Migrator::handle_export_caps_ack(MExportCapsAck *ack)
 	   << dendl;
   
   finish_export_inode_caps(in);
-  delete ack;
+  ack->put();
 }
 
 
