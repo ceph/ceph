@@ -4452,7 +4452,7 @@ void OSD::handle_class(MClass *m)
   default:
     assert(0);
   }
-  delete m;
+  m->put();
 }
 
 void OSD::send_class_request(const char *cname, ClassVersion& version)

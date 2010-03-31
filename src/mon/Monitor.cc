@@ -978,7 +978,7 @@ void Monitor::handle_class(MClass *m)
   if (!m->get_session()->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
     dout(0) << "MClass received from entity without sufficient privileges "
 	    << m->get_session()->caps << dendl;
-    delete m;
+    m->put();
     return;
   }
   switch (m->action) {
@@ -988,7 +988,7 @@ void Monitor::handle_class(MClass *m)
       break;
     case CLASS_RESPONSE:
       dout(0) << "got a class response (" << *m << ") ???" << dendl;
-      delete m;
+      m->put();
       break;
     default:
       dout(0) << "got an unknown class message (" << *m << ") ???" << dendl;

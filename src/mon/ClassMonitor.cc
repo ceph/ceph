@@ -241,7 +241,7 @@ bool ClassMonitor::prepare_class(MClass *m)
 
   if (ceph_fsid_compare(&m->fsid, &mon->monmap->fsid)) {
     dout(0) << "handle_class on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
-    delete m;
+    m->put();
     return false;
   }
   deque<ClassImpl>::iterator impl_iter = m->impl.begin();
@@ -268,7 +268,7 @@ void ClassMonitor::_updated_class(MClass *m)
   dout(7) << "_updated_class for " << m->get_orig_source_inst() << dendl;
   ClassImpl impl = *(m->impl.rbegin());
   mon->send_reply(m, new MClassAck(m->fsid, impl.seq));
-  delete m;
+  m->put();
 }
 
 void ClassMonitor::class_usage(stringstream& ss)
@@ -492,6 +492,6 @@ void ClassMonitor::handle_request(MClass *m)
   }
   reply->action = CLASS_RESPONSE;
   mon->send_reply(m, reply);
-  delete m;
+  m->put();
 }
 
