@@ -64,6 +64,8 @@ bugs
 - rm -r failure (on kernel tree)
 - dbench 1, restart mds (may take a few times), dbench will error out.
 
+- kclient: need to mark dirty pages on snap, so that they get redirtied under new snapc
+
 - kclient lockdep warning
 [ 1615.328733] =======================================================
 [ 1615.331050] [ INFO: possible circular locking dependency detected ]
