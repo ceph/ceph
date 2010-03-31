@@ -93,7 +93,6 @@
 #define MSG_MDS_DENTRYUNLINK       0x208
 #define MSG_MDS_FRAGMENTNOTIFY     0x209
 #define MSG_MDS_OFFLOAD_TARGETS    0x20a
-#define MSG_MDS_OFFLOAD_COMPLETE   0x20b
 #define MSG_MDS_DENTRYLINK         0x20c
 
 #define MSG_MDS_LOCK               0x300
