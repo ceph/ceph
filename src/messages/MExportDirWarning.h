@@ -30,7 +30,10 @@ class MExportDirWarning : public Message {
   MExportDirWarning(inodeno_t i, int nda) : 
     Message(MSG_MDS_EXPORTDIRWARNING),
     ino(i), new_dir_auth(nda) {}
+private:
+  ~MExportDirWarning() {}
 
+public:
   const char *get_type_name() { return "ExW"; }
 
   void encode_payload() {
