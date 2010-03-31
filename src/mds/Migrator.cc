@@ -748,7 +748,7 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
       export_state[dir] != EXPORT_PREPPING) {
     // export must have aborted.  
     dout(7) << "export must have aborted" << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -787,7 +787,7 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
     export_go(dir);  // start export.
     
   // done.
-  delete m;
+  m->put();
 }
 
 
