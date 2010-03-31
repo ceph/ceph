@@ -2256,7 +2256,7 @@ void Migrator::handle_export_notify(MExportDirNotify *m)
     dout(7) << "handle_export_notify no ack requested" << dendl;
   }
   
-  delete m;
+  m->put();
 }
 
 
