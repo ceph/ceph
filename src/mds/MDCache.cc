@@ -5052,7 +5052,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
   dout(7) << "cache_expire from mds" << from << dendl;
 
   if (mds->get_state() < MDSMap::STATE_REJOIN) {
-    delete m;
+    m->put();
     return;
   }
 
@@ -5197,7 +5197,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 
 
   // done
-  delete m;
+  m->put();
 }
 
 void MDCache::process_delayed_expire(CDir *dir)
@@ -5216,7 +5216,7 @@ void MDCache::discard_delayed_expire(CDir *dir)
   for (map<int,MCacheExpire*>::iterator p = delayed_expire[dir].begin();
        p != delayed_expire[dir].end();
        ++p) 
-    delete p->second;
+    p->second->put();
   delayed_expire.erase(dir);  
 }
 
