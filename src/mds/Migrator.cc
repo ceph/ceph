@@ -1471,7 +1471,7 @@ void Migrator::handle_export_cancel(MExportDirCancel *m)
   import_state.erase(m->get_dirfrag());
   import_peer.erase(m->get_dirfrag());
 
-  delete m;
+  m->put();
 }
 
 
