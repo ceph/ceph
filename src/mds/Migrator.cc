@@ -2342,7 +2342,7 @@ void Migrator::handle_export_caps(MExportCaps *ex)
   mds->mdlog->wait_for_safe(finish);
   mds->mdlog->flush();
 
-  delete ex;
+  ex->put();
 }
 
 
