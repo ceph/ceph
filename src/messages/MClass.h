@@ -44,7 +44,10 @@ public:
   MClass(const ceph_fsid_t& f, version_t l) : PaxosServiceMessage(MSG_CLASS, 0), fsid(f), last(l) {}
   MClass(const ceph_fsid_t& f, version_t l, version_t paxos_version) :
     PaxosServiceMessage(MSG_CLASS, paxos_version), fsid(f), last(l) {}
+private:
+  ~MClass() {}
 
+public:
   const char *get_type_name() { return "class"; }
   void print(ostream& out) {
     out << "class(";
