@@ -27,7 +27,11 @@ class MExportDirFinish : public Message {
   MExportDirFinish(dirfrag_t dirfrag) :
     Message(MSG_MDS_EXPORTDIRFINISH) {
     this->dirfrag = dirfrag;
-  }  
+  }
+private:
+  ~MExportDirFinish() {}
+
+public:
   const char *get_type_name() { return "ExFin"; }
   void print(ostream& o) {
     o << "export_finish(" << dirfrag << ")";
