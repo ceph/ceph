@@ -486,10 +486,11 @@ void RGWGetACLs::execute()
     return;
   }
 
-  int ret = read_acls(s);
+  ret = read_acls(s);
 
   if (ret < 0) {
-    /* FIXME */
+    send_response();
+    return;
   }
 
   stringstream ss;

@@ -368,6 +368,7 @@ void RGWCopyObj_REST::send_response()
 
 void RGWGetACLs_REST::send_response()
 {
+  if (ret) dump_errno(s, ret);
   end_header(s, "application/xml");
   dump_start_xml(s);
   FCGX_PutStr(acls.c_str(), acls.size(), s->fcgx->out); 
