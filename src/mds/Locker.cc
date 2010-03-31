@@ -2341,7 +2341,7 @@ void Locker::handle_lock(MLock *m)
   SimpleLock *lock = get_lock(m->get_lock_type(), m->get_object_info());
   if (!lock) {
     dout(10) << "don't have object " << m->get_object_info() << ", must have trimmed, dropping" << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -2388,7 +2388,7 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
     if (lock->get_parent()->is_rejoining()) {
       dout(7) << "handle_simple_lock still rejoining " << *lock->get_parent()
 	      << ", dropping " << *m << dendl;
-      delete m;
+      m->put();
       return;
     }
   }
@@ -2440,7 +2440,7 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
 
   }
 
-  delete m;
+  m->put();
 }
 
 /* unused, currently.
@@ -3412,7 +3412,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     if (in->is_rejoining()) {
       dout(7) << "handle_file_lock still rejoining " << *in
 	      << ", dropping " << *m << dendl;
-      delete m;
+      m->put();
       return;
     }
   }
@@ -3577,7 +3577,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     assert(0);
   }  
   
-  delete m;
+  m->put();
 }
 
 
