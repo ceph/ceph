@@ -1405,7 +1405,7 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
   if (mds->is_rejoin() &&
       in->is_rejoining()) {
     dout(7) << "handle_inode_file_caps still rejoining " << *in << ", dropping " << *m << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -1418,7 +1418,7 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
     in->mds_caps_wanted.erase(m->get_from());
 
   try_eval(in, CEPH_CAP_LOCKS);
-  delete m;
+  m->put();
 }
 
 
