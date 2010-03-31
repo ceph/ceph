@@ -28,7 +28,10 @@ class MExportDirPrepAck : public Message {
   MExportDirPrepAck(dirfrag_t df) :
     Message(MSG_MDS_EXPORTDIRPREPACK),
     dirfrag(df) { }
-  
+private:
+  ~MExportDirPrepAck() {}
+
+public:  
   const char *get_type_name() { return "ExPAck"; }
   void print(ostream& o) {
     o << "export_prep_ack(" << dirfrag << ")";
