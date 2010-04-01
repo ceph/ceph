@@ -3399,8 +3399,7 @@ void Locker::file_recover(ScatterLock *lock)
   dout(7) << "file_recover " << *lock << " on " << *in << dendl;
 
   assert(in->is_auth());
-  assert(lock->is_stable());
-
+  //assert(lock->is_stable());
   assert(lock->get_state() == LOCK_PRE_SCAN); // only called from MDCache::start_files_to_recover()
 
   int gather = 0;
