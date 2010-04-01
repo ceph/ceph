@@ -525,6 +525,30 @@ void CDir::remove_null_dentries() {
 }
 
 
+bool CDir::try_trim_snap_dentry(CDentry *dn, const set<snapid_t>& snaps)
+{
+  assert(dn->last != CEPH_NOSNAP);
+  set<snapid_t>::const_iterator p = snaps.lower_bound(dn->first);
+  CDentry::linkage_t *dnl= dn->get_linkage();
+  CInode *in = 0;
+  if (dnl->is_primary())
+    in = dnl->get_inode();
+  if ((p == snaps.end() || *p > dn->last) &&
+      (!in || in->get_num_ref() == in->is_dirty())) {
+    dout(10) << " purging snapped " << *dn << dendl;
+    if (in && in->is_dirty())
+      in->mark_clean();
+    remove_dentry(dn);
+    if (in) {
+      dout(10) << " purging snapped " << *in << dendl;
+      cache->remove_inode(in);
+    }
+    return true;
+  }
+  return false;
+}
+
+
 void CDir::purge_stale_snap_data(const set<snapid_t>& snaps)
 {
   dout(10) << "purge_stale_snap_data " << snaps << dendl;
@@ -537,14 +561,7 @@ void CDir::purge_stale_snap_data(const set<snapid_t>& snaps)
     if (dn->last == CEPH_NOSNAP)
       continue;
 
-    set<snapid_t>::const_iterator p = snaps.lower_bound(dn->first);
-    if (p == snaps.end() ||
-	*p > dn->last) {
-      dout(10) << " purging " << *dn << dendl;
-      if (dn->get_linkage()->is_primary() && dn->get_linkage()->get_inode()->is_dirty())
-	dn->get_linkage()->get_inode()->mark_clean();
-      remove_dentry(dn);
-    }
+    try_trim_snap_dentry(dn, snaps);
   }
 }
 

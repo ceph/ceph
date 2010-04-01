@@ -2400,13 +2400,9 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
     if (dnl->is_null())
       continue;
-    if (snaps && dn->last != CEPH_NOSNAP) {
-      set<snapid_t>::const_iterator p = snaps->lower_bound(dn->first);
-      if (p == snaps->end() || *p > dn->last) {
-	dir->remove_dentry(dn);
+    if (snaps && dn->last != CEPH_NOSNAP)
+      if (dir->try_trim_snap_dentry(dn, *snaps))
 	continue;
-      }
-    }
     if (dn->last < snapid || dn->first > snapid)
       continue;
 
