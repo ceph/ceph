@@ -1669,6 +1669,9 @@ void CDir::_committed(version_t v, version_t lrv)
   // _all_ commits done?
   if (committing_version == committed_version) 
     state_clear(CDir::STATE_COMMITTING);
+
+  // _any_ commit, even if we've been redirtied, means we're no longer new.
+  item_new.remove_myself();
   
   // dir clean?
   if (committed_version == get_version()) 
