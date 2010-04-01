@@ -759,17 +759,12 @@ bool ReplicatedPG::snap_trimmer()
 
       dout(10) << coid << " snaps " << snaps << " old snapset " << snapset << dendl;
 
-      // remove snaps
+      // trim clone's snaps
       vector<snapid_t> newsnaps;
       for (unsigned i=0; i<snaps.size(); i++)
 	if (!osd->_lookup_pool(info.pgid.pool())->info.is_removed_snap(snaps[i]))
 	  newsnaps.push_back(snaps[i]);
-	else {
-	  vector<snapid_t>::iterator q = snapset.snaps.begin();
-	  while (*q != snaps[i])
-	    q++;  // it should be in there
-	  snapset.snaps.erase(q);
-	}
+
       if (newsnaps.empty()) {
 	// remove clone
 	dout(10) << coid << " snaps " << snaps << " -> " << newsnaps << " ... deleting" << dendl;
@@ -1621,7 +1616,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   // update snapset with latest snap context
   ssc->snapset.seq = snapc.seq;
   ssc->snapset.snaps = snapc.snaps;
-  dout(20) << "make_writeable " << soid << " done" << dendl;
+  dout(20) << "make_writeable " << soid << " done, snapset=" << ssc->snapset << dendl;
 }
 
 
