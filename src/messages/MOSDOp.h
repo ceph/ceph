@@ -211,7 +211,7 @@ public:
     out << " " << pg_t(head.layout.ol_pgid);
     if (is_retry_attempt()) out << " RETRY";
     if (!snaps.empty())
-      out << " snaps=" << snaps;
+      out << " snapc " << get_snap_seq() << "=" << snaps;
     out << ")";
   }
 };
