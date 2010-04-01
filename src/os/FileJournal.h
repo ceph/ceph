@@ -120,9 +120,9 @@ private:
   void stop_writer();
   void write_thread_entry();
 
-  bool check_for_full(__u64 seq, off64_t pos, off64_t size);
-  void prepare_multi_write(bufferlist& bl, __u64& orig_ops, __u64& orig_bytse);
-  bool prepare_single_write(bufferlist& bl, off64_t& queue_pos, __u64& orig_bytes);
+  int check_for_full(__u64 seq, off64_t pos, off64_t size);
+  int prepare_multi_write(bufferlist& bl, __u64& orig_ops, __u64& orig_bytee);
+  int prepare_single_write(bufferlist& bl, off64_t& queue_pos, __u64& orig_ops, __u64& orig_bytes);
   void do_write(bufferlist& bl);
 
   void write_bl(off64_t& pos, bufferlist& bl);
