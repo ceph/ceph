@@ -836,6 +836,7 @@ int SimpleMessenger::Pipe::accept()
   // open
   connect_seq = connect.connect_seq + 1;
   peer_global_seq = connect.global_seq;
+  state = STATE_OPEN;
   dout(10) << "accept success, connect_seq = " << connect_seq << ", sending READY" << dendl;
 
   // send READY reply
