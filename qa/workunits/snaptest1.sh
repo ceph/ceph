@@ -13,3 +13,11 @@ if [ "$now" = "$then" ]; then
     echo live and snap contents are identical?
     false
 fi
+
+# do it again
+echo 1 > file1
+echo 2 > file2
+echo 3 > file3
+mkdir .snap/snap1
+echo 4 > file4
+rmdir .snap/snap1
