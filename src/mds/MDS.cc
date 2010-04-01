@@ -1271,6 +1271,8 @@ bool MDS::_dispatch(Message *m)
 {
   bool check_from = false;
 
+  utime_t req_start = g_clock.now();
+
 #define ALLOW_MESSAGES_FROM(peers) \
 do { \
   if (m->get_connection() && (m->get_connection()->get_peer_type() & (peers)) == 0) { \
@@ -1441,6 +1443,16 @@ do { \
 	clientreplay_done();
     }
   }
+
+  utime_t duration = g_clock.now();
+  duration -= req_start;
+  if (duration > g_conf.mds_session_timeout / 2) {
+    dout(0) << " dispatch took " << duration << " > " << g_conf.mds_tick_interval
+	    << " seconds, setting laggy flag" << dendl;
+    laggy = true;
+    return true;
+  }
+
 
   // hack: thrash exports
   static utime_t start;
