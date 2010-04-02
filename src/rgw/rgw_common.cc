@@ -122,7 +122,12 @@ bool url_decode(string& src_str, string& dest_str)
 
   while (*src) {
     if (*src != '%') {
-      dest[pos++] = *src++;
+      if (*src != '+') {
+	dest[pos++] = *src++;
+      } else {
+	dest[pos++] = ' ';
+	++src;
+      }
     } else {
       src++;
       char c1 = hex_to_num(*src++);
