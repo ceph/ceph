@@ -47,7 +47,10 @@ extern int rgw_store_user_info(RGWUserInfo& info);
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_uid_by_email(string& email, string& user_id);
-
+/**
+ * Given an RGWUserInfo, deletes the user and its bucket ACLs.
+ */
+extern int rgw_delete_user(RGWUserInfo& user);
 /**
  * Store a list of the user's buckets, with associated functinos.
  */

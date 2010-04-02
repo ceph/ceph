@@ -16,7 +16,7 @@ using namespace std;
 
 static Rados *rados = NULL;
 
-#define ROOT_BUCKET ".rgw"
+#define ROOT_BUCKET ".rgw" //keep this synced to rgw_user.cc::root_bucket!
 
 static string root_bucket(ROOT_BUCKET);
 static rados_pool_t root_pool;

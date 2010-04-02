@@ -75,6 +75,9 @@ int gen_rand_alphanumeric(char *dest, int size) /* size should be the required s
   return 0;
 }
 
+
+
+
 int main(int argc, char **argv) 
 {
   DEFINE_CONF_VARS(usage);
@@ -93,6 +96,7 @@ int main(int argc, char **argv)
   bool mod_user = false;
   bool read_policy = false;
   bool list_buckets = false;
+  bool delete_user = false;
   int actions = 0 ;
   __u64 auid = 0;
   RGWUserInfo info;
@@ -123,6 +127,8 @@ int main(int argc, char **argv)
       CONF_SAFE_SET_ARG_VAL(&object, OPT_STR);
     } else if (CONF_ARG_EQ("auth_uid", 'a')) {
       CONF_SAFE_SET_ARG_VAL(&auid, OPT_LONGLONG);
+    } else if (CONF_ARG_EQ("delete_user", 'd')) {
+      delete_user = true;
     } else {
       cerr << "unrecognized arg " << args[i] << std::endl;
       ARGS_USAGE();
@@ -256,10 +262,13 @@ int main(int argc, char **argv)
     }
   }
 
+  if (delete_user) {
+    ++actions;
+    rgw_delete_user(info);
+  }
+
   if (!actions)
     ARGS_USAGE();
 
   return 0;
 }
-
-

@@ -13,6 +13,7 @@ using namespace std;
 
 static string ui_bucket = USER_INFO_BUCKET_NAME;
 static string ui_email_bucket = USER_INFO_EMAIL_BUCKET_NAME;
+static string root_bucket = ".rgw"; //keep this synced to rgw_rados.cc::ROOT_BUCKET!
 
 /**
  * Get the info for a user out of storage.
@@ -147,4 +148,25 @@ int rgw_put_user_buckets(string user_id, RGWUserBuckets& buckets)
   int ret = rgwstore->set_attr(ui_bucket, user_id, RGW_ATTR_BUCKETS, bl);
 
   return ret;
+}
+
+/**
+ * delete a user's presence from the RGW system.
+ * First remove their bucket ACLs, then delete them
+ * from the user and user email pools. This leaves the pools
+ * themselves alone, as well as any ACLs embedded in object xattrs.
+ */
+int rgw_delete_user(RGWUserInfo& info) {
+  RGWUserBuckets user_buckets;
+  rgw_get_user_buckets(info.user_id, user_buckets);
+  map<string, RGWObjEnt>& buckets = user_buckets.get_buckets();
+  for (map<string, RGWObjEnt>::iterator i = buckets.begin();
+       i != buckets.end();
+       ++i) {
+    string bucket_name = i->first;
+    rgwstore->delete_obj(info.user_id, root_bucket, bucket_name);
+  }
+  rgwstore->delete_obj(info.user_id, ui_bucket, info.user_id);
+  rgwstore->delete_obj(info.user_id, ui_email_bucket, info.user_email);
+  return 0;
 }
