@@ -243,8 +243,6 @@ bugs
 
 - osd pg split breaks if not all osds are up...
 
-- osd pg split breaks if not all osds are up...
-
 
 filestore performance notes
 - write ordering options
@@ -294,8 +292,6 @@ filestore performance notes
   - rmw: rmw must block on prior fs writes.
   * JourningObjectStore interface needs work?
 
-- separate reads/writes into separate op queues?
-- 
 
 
 greg
@@ -305,7 +301,6 @@ greg
 
 later
 - document on-wire protocol
-- authentication
 - client reconnect after long eviction; and slow delayed reconnect
 - repair
 - mds security enforcement
@@ -327,9 +322,7 @@ rados
 - perl swig wrapper
 - 'rados call foo.bar'?
 - merge pgs
-- destroy pg_pools
 - autosize pg_pools?
-- security
 
 repair
 - namespace reconstruction tool
@@ -346,6 +339,7 @@ repair
 
 kclient
 - mdsc: preallocate reply(ies?)
+- mdsc: mempool for cap writeback?
 - osdc: combine request, request+reply messages into single pool.
 - ENOMEM
   - message pools
@@ -364,26 +358,21 @@ kclient
 - inotify for updates from other clients?
 
 vfs issues
-- real_lookup() race:
-  1- hash lookup find no dentry
-  2- real_lookup() takes dir i_mutex, but then finds a dentry
-  3- drops mutex, then calld d_revalidate.  if that fails, we return ENOENT (instead of looping?)
-- vfs_rename_dir()
 - a getattr mask would be really nice
 
 filestore
 - make min sync interval self-tuning (ala xfs, ext3?)
 - get file csum?
+- clonerange writeahead journal data into objects?
 
 btrfs
 - clone compressed inline extents
 - ioctl to pull out data csum?
 
 osd
+- separate reads/writes into separate op queues?
 - gracefully handle ENOSPC
 - gracefully handle EIO?
-- client session object
-  - track client's osdmap; and only share latest osdmap with them once!
 - what to do with lost objects.. continue peering?
 - segregate backlog from log ondisk?
 - preserve pg logs on disk for longer period
@@ -434,7 +423,6 @@ mon
 - don't allow lpg_num expansion and osd addition at the same time?
 - how to shrink cluster?
 - how to tell osd to cleanly shut down
-- mds injectargs N should take mds# or id.  * should bcast to standy mds's.
 - paxos need to clean up old states.
   - default: simple max of (state count, min age), so that we have at least N hours of history, say?
   - osd map: trim only old maps < oldest "in" osd up_from
@@ -443,8 +431,7 @@ osdmon
 - monitor needs to monitor some osds...
 
 pgmon
-/- include osd vector with pg state
-  - check for orphan pgs
+- check for orphan pgs
 - monitor pg states, notify on out?
 - watch osd utilization; adjust overload in cluster map
 
