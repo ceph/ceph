@@ -409,7 +409,7 @@ void Server::terminate_sessions()
 
 void Server::find_idle_sessions()
 {
-  dout(10) << "find_idle_sessions" << dendl;
+  dout(10) << "find_idle_sessions.  laggy until " << mds->laggy_until << dendl;
   
   // timeout/stale
   //  (caps go stale, lease die)
@@ -527,21 +527,12 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   delay -= reconnect_start;
   dout(10) << " reconnect_start " << reconnect_start << " delay " << delay << dendl;
 
-  if (!mds->is_reconnect() || session->is_closed()) {
-    if (!mds->is_reconnect()) {
-      // XXX maybe in the future we can do better than this?
-      dout(1) << " no longer in reconnect state, ignoring reconnect, sending close" << dendl;
-      ss << "denied reconnect attempt (mds is " << ceph_mds_state_name(mds->get_state())
-	 << ") from " << m->get_source_inst();
-    } else if (!session) {
-      dout(1) << " no session for " << m->get_source() << ", ignoring reconnect, sending close" << dendl;
-      ss << "denied reconnect attempt from " << m->get_source_inst() << " (no session)";
-    } else if (session->is_closed()) {
-      dout(1) << " no session for " << m->get_source() << ", ignoring reconnect, sending close" << dendl;
-      ss << "denied reconnect attempt from " << m->get_source_inst() << " (session closed)";
-    } else
-      assert(0);
-    ss << " after " << delay << " (allowed interval " << g_conf.mds_reconnect_timeout << ")";
+  if (!mds->is_reconnect()) {
+    // XXX maybe in the future we can do better than this?
+    dout(1) << " no longer in reconnect state, ignoring reconnect, sending close" << dendl;
+    ss << "denied reconnect attempt (mds is " << ceph_mds_state_name(mds->get_state())
+       << ") from " << m->get_source_inst()
+       << " after " << delay << " (allowed interval " << g_conf.mds_reconnect_timeout << ")";
     mds->logclient.log(LOG_INFO, ss);
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_source_inst());
     delete m;
