@@ -13,7 +13,7 @@ cd $testdir
 
 while true
 do
-    for test in `cd $basedir/workunits && ls | grep .sh`
+    for test in `cd $basedir/workunits && ls | grep .sh | $basedir/../src/script/permute`
     do
 	echo "------ running test $test ------"
 	pwd
