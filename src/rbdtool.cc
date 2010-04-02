@@ -99,7 +99,7 @@ int main(int argc, const char **argv)
   if (!opt_create)
     usage();
 
-  bufferlist bl, bl2;
+  bufferlist bl;
 
   string obj_str(objname);
   string objmd_str = obj_str;
@@ -126,13 +126,6 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  uint32_t data = 0;
-  bl2.append((const char *)&data, sizeof(data));
-  r = rados.write(pool, oid, size - sizeof(data), bl2, bl2.length());
-  if (r < 0) {
-    cerr << "error writing object data (err=" << r << ")" << std::endl;
-    exit(1);
-  }
   rados.close_pool(pool);
   rados.shutdown(); 
 
