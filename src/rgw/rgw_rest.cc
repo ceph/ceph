@@ -412,7 +412,8 @@ void init_entities_from_header(struct req_state *s)
   int pos = h.find("s3.");
 
   if (pos > 0) {
-    s->bucket_str = h.substr(0, pos-1);
+    string encoded_bucket = h.substr(0, pos-1);
+    url_decode(encoded_bucket, s->bucket_str);
     s->bucket = s->bucket_str.c_str();
     s->host_bucket = s->bucket;
   } else {
@@ -450,16 +451,17 @@ void init_entities_from_header(struct req_state *s)
   }
 
   if (!s->bucket) {
-    s->bucket_str = first;
+    url_decode(first, s->bucket_str);
     s->bucket = s->bucket_str.c_str();
   } else {
-    s->object_str = req;
+    url_decode(req, s->object_str);
     s->object = s->object_str.c_str();
     return;
   }
 
   if (pos >= 0) {
-    s->object_str = req.substr(pos+1);
+    string encoded_obj_str = req.substr(pos+1);
+    url_decode(encoded_obj_str, s->object_str);
 
     if (s->object_str.size() > 0) {
       s->object = s->object_str.c_str();
