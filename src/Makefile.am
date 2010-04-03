@@ -284,6 +284,7 @@ ceph_ver.h : $(all_sources) .make_last_ver
 	./make_version
 
 ceph_ver.c : ceph_ver.h
+debug.cc : ceph_ver.h
 
 
 
