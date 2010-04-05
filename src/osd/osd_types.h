@@ -725,6 +725,7 @@ inline ostream& operator<<(ostream& out, const pg_pool_t& p) {
       << " lpg_num " << p.get_lpg_num()
       << " lpgp_num " << p.get_lpgp_num()
       << " last_change " << p.get_last_change()
+      << " owner " << p.v.auid
       << ")";
   return out;
 }
