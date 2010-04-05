@@ -1415,16 +1415,9 @@ void CDir::_commit_full(ObjectOperation& m, const set<snapid_t> *snaps)
     if (dn->linkage.is_null()) 
       continue;  // skip negative entries
 
-    if (snaps && dn->last != CEPH_NOSNAP) {
-      set<snapid_t>::const_iterator p = snaps->lower_bound(dn->first);
-      if (p == snaps->end() || *p > dn->last) {
-	dout(10) << " purging " << *dn << dendl;
-	if (dn->linkage.is_primary() && dn->linkage.get_inode()->is_dirty())
-	  dn->linkage.get_inode()->mark_clean();
-	remove_dentry(dn);
-	continue;
-      }
-    }
+    if (snaps && dn->last != CEPH_NOSNAP &&
+	try_trim_snap_dentry(dn, *snaps))
+      continue;
     
     n++;
 
@@ -1464,10 +1457,6 @@ void CDir::_commit_partial(ObjectOperation& m, const set<snapid_t> *snaps)
     if (snaps && dn->last != CEPH_NOSNAP) {
       set<snapid_t>::const_iterator p = snaps->lower_bound(dn->first);
       if (p == snaps->end() || *p > dn->last) {
-	dout(10) << " purging " << *dn << dendl;
-	if (dn->linkage.is_primary() && dn->linkage.get_inode()->is_dirty())
-	  dn->linkage.get_inode()->mark_clean();
-
 	dout(10) << " rm " << dn->name << " " << *dn << dendl;
 	finalbl.append(CEPH_OSD_TMAP_RM);
 	dn->key().encode(finalbl);
