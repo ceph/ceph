@@ -356,11 +356,11 @@ private:
   vector<inodeno_t> destroyed_inodes;
 
   // idempotent op(s)
-  list<metareqid_t> client_reqs;
+  list<pair<metareqid_t,__u64> > client_reqs;
 
  public:
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
     ::encode(struct_v, bl);
     ::encode(lump_order, bl);
     ::encode(lump_map, bl);
@@ -403,7 +403,16 @@ private:
     ::decode(truncate_start, bl);
     ::decode(truncate_finish, bl);
     ::decode(destroyed_inodes, bl);
-    ::decode(client_reqs, bl);
+    if (struct_v >= 2) 
+      ::decode(client_reqs, bl);
+    else {
+      list<metareqid_t> r;
+      ::decode(r, bl);
+      while (!r.empty()) {
+	client_reqs.push_back(pair<metareqid_t,__u64>(r.front(), 0));
+	r.pop_front();
+      }
+    }
   }
 
 
@@ -427,8 +436,8 @@ private:
     }
   }
 
-  void add_client_req(metareqid_t r) {
-    client_reqs.push_back(r);
+  void add_client_req(metareqid_t r, __u64 tid=0) {
+    client_reqs.push_back(pair<metareqid_t,__u64>(r, tid));
   }
 
   void add_table_transaction(int table, version_t tid) {

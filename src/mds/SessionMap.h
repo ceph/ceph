@@ -330,10 +330,12 @@ public:
     Session *session = get_session(rid.name);
     return session && session->have_completed_request(rid.tid);
   }
-  void add_completed_request(metareqid_t rid) {
+  void add_completed_request(metareqid_t rid, tid_t tid=0) {
     Session *session = get_session(rid.name);
     assert(session);
     session->add_completed_request(rid.tid);
+    if (tid)
+      session->trim_completed_requests(tid);
   }
   void trim_completed_requests(entity_name_t c, tid_t tid) {
     Session *session = get_session(c);

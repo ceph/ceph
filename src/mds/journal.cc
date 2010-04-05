@@ -673,13 +673,13 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
   }
 
   // client requests
-  for (list<metareqid_t>::iterator p = client_reqs.begin();
+  for (list<pair<metareqid_t, __u64> >::iterator p = client_reqs.begin();
        p != client_reqs.end();
        ++p)
-    if (p->name.is_client()) {
-      dout(10) << "EMetaBlob.replay request " << *p << dendl;
-      if (mds->sessionmap.have_session(p->name))
-	mds->sessionmap.add_completed_request(*p);
+    if (p->first.name.is_client()) {
+      dout(10) << "EMetaBlob.replay request " << p->first << " " << p->second << dendl;
+      if (mds->sessionmap.have_session(p->first.name))
+	mds->sessionmap.add_completed_request(p->first, p->second);
     }
 
 

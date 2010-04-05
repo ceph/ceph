@@ -2276,7 +2276,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "openc");
   mdlog->start_entry(le);
-  le->metablob.add_client_req(req->get_reqid());
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, in);
@@ -2608,7 +2608,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
   pi->ctime = now;
 
   // log + wait
-  le->metablob.add_client_req(req->get_reqid());
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   
@@ -2649,7 +2649,7 @@ void Server::handle_client_opent(MDRequest *mdr, int cmode)
   EUpdate *le = new EUpdate(mdlog, "open_truncate");
   mdlog->start_entry(le);
   le->metablob.add_truncate_start(in->ino());
-  le->metablob.add_client_req(mdr->reqid);
+  le->metablob.add_client_req(mdr->reqid, mdr->client_request->get_oldest_client_tid());
 
   mdcache->predirty_journal_parents(mdr, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, in);
@@ -2720,7 +2720,7 @@ void Server::handle_client_setlayout(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "setlayout");
   mdlog->start_entry(le);
-  le->metablob.add_client_req(req->get_reqid());
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   
@@ -2802,7 +2802,7 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "setxattr");
   mdlog->start_entry(le);
-  le->metablob.add_client_req(req->get_reqid());
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_cow_inode(mdr, &le->metablob, cur);
   le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, 0, 0, px);
@@ -2847,7 +2847,7 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "removexattr");
   mdlog->start_entry(le);
-  le->metablob.add_client_req(req->get_reqid());
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_cow_inode(mdr, &le->metablob, cur);
   le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, 0, 0, px);
@@ -2944,7 +2944,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "mknod");
   mdlog->start_entry(le);
-  le->metablob.add_client_req(req->get_reqid());
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   journal_allocated_inos(mdr, &le->metablob);
   
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(),
@@ -2997,7 +2997,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "mkdir");
   mdlog->start_entry(le);
-  le->metablob.add_client_req(req->get_reqid());
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
@@ -3061,7 +3061,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "symlink");
   mdlog->start_entry(le);
-  le->metablob.add_client_req(req->get_reqid());
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
@@ -3172,7 +3172,7 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   // log + wait
   EUpdate *le = new EUpdate(mdlog, "link_local");
   mdlog->start_entry(le);
-  le->metablob.add_client_req(mdr->reqid);
+  le->metablob.add_client_req(mdr->reqid, mdr->client_request->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, 1);      // new dn
   mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, 0, PREDIRTY_PRIMARY);           // targeti
   le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type());  // new remote
@@ -3262,7 +3262,7 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, inc ? "link_remote":"unlink_remote");
   mdlog->start_entry(le);
-  le->metablob.add_client_req(mdr->reqid);
+  le->metablob.add_client_req(mdr->reqid, mdr->client_request->get_oldest_client_tid());
   if (!mdr->more()->slaves.empty()) {
     dout(20) << " noting uncommitted_slaves " << mdr->more()->slaves << dendl;
     le->reqid = mdr->reqid;
@@ -3765,7 +3765,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   // prepare log entry
   EUpdate *le = new EUpdate(mdlog, "unlink_local");
   mdlog->start_entry(le);
-  le->metablob.add_client_req(mdr->reqid);
+  le->metablob.add_client_req(mdr->reqid, mdr->client_request->get_oldest_client_tid());
 
   if (straydn) {
     assert(dnl->is_primary());
@@ -4253,7 +4253,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "rename");
   mdlog->start_entry(le);
-  le->metablob.add_client_req(mdr->reqid);
+  le->metablob.add_client_req(mdr->reqid, mdr->client_request->get_oldest_client_tid());
   if (!mdr->more()->slaves.empty()) {
     dout(20) << " noting uncommitted_slaves " << mdr->more()->slaves << dendl;
     
@@ -5438,7 +5438,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "mksnap");
   mdlog->start_entry(le);
 
-  le->metablob.add_client_req(req->get_reqid());
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   le->metablob.add_table_transaction(TABLE_SNAP, stid);
   mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_cow_inode(mdr, &le->metablob, diri);
@@ -5584,7 +5584,7 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
   EUpdate *le = new EUpdate(mdlog, "rmsnap");
   mdlog->start_entry(le);
 
-  le->metablob.add_client_req(req->get_reqid());
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   le->metablob.add_table_transaction(TABLE_SNAP, stid);
   mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_cow_inode(mdr, &le->metablob, diri);
