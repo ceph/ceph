@@ -1018,7 +1018,20 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  ss << "osd" << osd << " is not up";
       }
     }
-
+    else if (m->cmd[1] == "lspools") {
+      __u64 uid_pools = 0;
+      if (m->cmd.size() > 2) {
+	uid_pools = strtol(m->cmd[2].c_str(), NULL, 10);
+      }
+      for (map<int, pg_pool_t>::iterator p = osdmap.pools.begin();
+	   p !=osdmap.pools.end();
+	   ++p) {
+	if (!uid_pools || p->second.v.auid == uid_pools) {
+	  ss << p->first << ' ' << osdmap.pool_name[p->first] << ',';
+	}
+      }
+      r = 0;
+    }
   }
   if (r != -1) {
     string rs;
