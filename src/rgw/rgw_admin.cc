@@ -178,12 +178,17 @@ int main(int argc, char **argv)
       secret_key = secret_key_buf;
     }
     if (!user_id) {
-      ret = gen_rand_alphanumeric(public_id_buf, sizeof(public_id_buf));
-      if (ret < 0) {
-        cerr << "aborting" << std::endl;
-        exit(1);
-      }
-      user_id = public_id_buf;
+      RGWUserInfo duplicate_check;
+      string duplicate_check_id;
+      do {
+	ret = gen_rand_alphanumeric(public_id_buf, sizeof(public_id_buf));
+	if (ret < 0) {
+	  cerr << "aborting" << std::endl;
+	  exit(1);
+	}
+	user_id = public_id_buf;
+	duplicate_check_id = user_id;
+      } while (!rgw_get_user_info(duplicate_check_id, duplicate_check));
     }
   }
 
