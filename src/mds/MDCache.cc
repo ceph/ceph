@@ -5254,11 +5254,7 @@ void MDCache::inode_remove_replica(CInode *in, int from)
   if (in->nestlock.remove_replica(from)) mds->locker->eval_gather(&in->nestlock);
 
   // trim?
-  if (in->inode.nlink == 0 &&
-      in->get_parent_dn() &&
-      in->get_parent_dn()->get_dir()->get_inode()->is_stray() &&
-      !in->is_any_caps())
-    eval_stray(in->get_parent_dn());
+  maybe_eval_stray(in);
 }
 
 void MDCache::dentry_remove_replica(CDentry *dn, int from)
@@ -5356,16 +5352,7 @@ void MDCache::remove_client_cap(CInode *in, client_t client)
   
   mds->locker->eval(in, CEPH_CAP_LOCKS);
 
-  // unlinked stray?  may need to purge (e.g., after all caps are released)
-  if (in->inode.nlink == 0 &&
-      in->get_parent_dn() &&
-      in->get_parent_dn()->get_dir()->get_inode()->is_stray() &&
-      !in->is_any_caps()) {
-    if (!in->is_auth())
-      touch_dentry_bottom(in->get_parent_dn());  // move to bottom of lru so that we trim quickly!
-    else if (!in->is_replicated())
-      eval_stray(in->get_parent_dn());
-  }
+  maybe_eval_stray(in);
 }
 
 
@@ -6879,7 +6866,14 @@ void MDCache::eval_stray(CDentry *dn)
   CInode *in = dnl->get_inode();
   assert(in);
 
-  if (!dn->is_auth()) return;  // has to be mine
+  assert(dn->get_dir()->get_inode()->is_stray());
+
+  if (!dn->is_auth()) {
+    // has to be mine
+    // move to bottom of lru so that we trim quickly!
+    touch_dentry_bottom(dn);
+    return;
+  }
 
   // purge?
   if (in->inode.nlink == 0) {

@@ -984,6 +984,16 @@ public:
 public:
   void eval_stray(CDentry *dn);
   void eval_remote(CDentry *dn);
+
+  void maybe_eval_stray(CInode *in) {
+    if (in->inode.nlink > 0 || in->is_base())
+      return;
+    CDentry *dn = in->get_projected_parent_dn();
+    if (dn->get_projected_linkage()->is_primary() &&
+	dn->get_dir()->get_inode()->is_stray() &&
+	!dn->is_replicated())
+      eval_stray(dn);
+  }
 protected:
   void purge_stray(CDentry *dn);
   void _purge_stray_purged(CDentry *dn);
