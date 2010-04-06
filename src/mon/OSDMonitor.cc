@@ -582,9 +582,11 @@ bool OSDMonitor::preprocess_pgtemp(MOSDPGTemp *m)
 
 bool OSDMonitor::prepare_pgtemp(MOSDPGTemp *m)
 {
+  int from = m->get_orig_source().num();
   dout(7) << "prepare_pgtemp e" << m->map_epoch << " from " << m->get_orig_source_inst() << dendl;
   for (map<pg_t,vector<int> >::iterator p = m->pg_temp.begin(); p != m->pg_temp.end(); p++)
     pending_inc.new_pg_temp[p->first] = p->second;
+  pending_inc.new_up_thru[from] = m->map_epoch;   // set up_thru too, so the osd doesn't have to ask again
   paxos->wait_for_commit(new C_ReplyMap(this, m, m->map_epoch));
   return true;
 }
