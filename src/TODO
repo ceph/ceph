@@ -390,6 +390,8 @@ uclient
 - hadoop: clean up assert usage
 
 mds
+- special case commit of stray dir to avoid having to commit, re-commit strays?
+  - once we commit one stray, we have to re-commit later to remove it, which means we commit other new ones.
 - put inode dirty fields into dirty_bits_t to reduce per-inode memory footprint
 - don't sync log on every clientreplay request?
 - pass issued, wanted into eval(lock) when eval() already has it?  (and otherwise optimize eval paths..)
