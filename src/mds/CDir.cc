@@ -1641,6 +1641,8 @@ void CDir::_committed(version_t v, version_t lrv)
   dout(10) << "_committed v " << v << " (last renamed " << lrv << ") on " << *this << dendl;
   assert(is_auth());
 
+  bool stray = inode->is_stray();
+
   // did we update the parent pointer too?
   if (get_frag() == frag_t() &&     // only counts on first frag
       inode->state_test(CInode::STATE_DIRTYPARENT) &&
@@ -1672,16 +1674,6 @@ void CDir::_committed(version_t v, version_t lrv)
     CDentry *dn = it->second;
     it++;
     
-    // dentry
-    if (committed_version >= dn->get_version()) {
-      if (dn->is_dirty()) {
-	dout(15) << " dir " << committed_version << " >= dn " << dn->get_version() << " now clean " << *dn << dendl;
-	dn->mark_clean();
-      } 
-    } else {
-      dout(15) << " dir " << committed_version << " < dn " << dn->get_version() << " still dirty " << *dn << dendl;
-    }
-
     // inode?
     if (dn->linkage.is_primary()) {
       CInode *in = dn->linkage.get_inode();
@@ -1697,6 +1689,22 @@ void CDir::_committed(version_t v, version_t lrv)
 	dout(15) << " dir " << committed_version << " < inode " << in->get_version() << " still dirty " << *in << dendl;
 	assert(in->is_dirty() || in->last < CEPH_NOSNAP);  // special case for cow snap items (not predirtied)
       }
+    }
+
+    // dentry
+    if (committed_version >= dn->get_version()) {
+      if (dn->is_dirty()) {
+	dout(15) << " dir " << committed_version << " >= dn " << dn->get_version() << " now clean " << *dn << dendl;
+	dn->mark_clean();
+
+	// drop clean null stray dentries immediately
+	if (stray && 
+	    dn->get_num_ref() == 0 &&
+	    dn->get_linkage()->is_null())
+	  remove_dentry(dn);
+      } 
+    } else {
+      dout(15) << " dir " << committed_version << " < dn " << dn->get_version() << " still dirty " << *dn << dendl;
     }
   }
 
