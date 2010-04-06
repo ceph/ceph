@@ -3306,20 +3306,14 @@ void Server::_link_remote_finish(MDRequest *mdr, bool inc,
     // unlink main dentry
     dn->get_dir()->unlink_inode(dn);
     dn->mark_dirty(dn->get_projected_version(), mdr->ls);  // dirty old dentry
-
-    // share unlink news with replicas
-    for (map<int,int>::iterator it = dn->replicas_begin();
-	 it != dn->replicas_end();
-	 it++) {
-      dout(7) << "_link_remote_finish sending MDentryUnlink to mds" << it->first << dendl;
-      MDentryUnlink *unlink = new MDentryUnlink(dn->get_dir()->dirfrag(), dn->name);
-      mds->send_message_mds(unlink, it->first);
-    }
   }
 
   mdr->apply();
 
-  mds->mdcache->send_dentry_link(dn);
+  if (inc)
+    mds->mdcache->send_dentry_link(dn);
+  else
+    mds->mdcache->send_dentry_unlink(dn, NULL);
   
   // commit anchor update?
   if (mdr->more()->dst_reanchor_atid) 
