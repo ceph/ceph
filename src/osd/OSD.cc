@@ -225,6 +225,8 @@ int OSD::read_meta(const char *base, const char *file, char *val, size_t vallen)
 
   snprintf(fn, sizeof(fn), "%s/%s", base, file);
   fd = ::open(fn, O_RDONLY);
+  if (fd < 0)
+    return -1;
   len = ::read(fd, val, vallen);
   ::close(fd);
   if (len > 0 && len < (int)vallen)
