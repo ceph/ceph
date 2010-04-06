@@ -578,9 +578,10 @@ CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
   CDir *straydir = stray->get_or_open_dirfrag(this, fg);
   
   CDentry *straydn = straydir->lookup(straydname);
-  if (!straydn)
+  if (!straydn) {
     straydn = straydir->add_null_dentry(straydname);
-  else
+    straydn->mark_new();
+  } else 
     assert(straydn->get_projected_linkage()->is_null());
 
   return straydn;
@@ -7051,7 +7052,8 @@ void MDCache::_purge_stray_purged(CDentry *dn)
       dn->get_num_ref() == (int)dn->is_dirty() + !!in->get_num_ref() + 1/*PIN_PURGING*/) {
     // kill dentry.
     version_t pdv = dn->pre_dirty();
-    
+    dn->push_projected_linkage(); // NULL
+
     EUpdate *le = new EUpdate(mds->mdlog, "purge_stray");
     mds->mdlog->start_entry(le);
     
@@ -7081,7 +7083,7 @@ void MDCache::_purge_stray_purged(CDentry *dn)
 
 void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
 {
-  CInode *in = dn->get_projected_linkage()->get_inode();
+  CInode *in = dn->get_linkage()->get_inode();
   dout(10) << "_purge_stray_logged " << *dn << " " << *in << dendl;
 
   dn->state_clear(CDentry::STATE_PURGING);
@@ -7089,16 +7091,24 @@ void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
 
   assert(!in->state_test(CInode::STATE_RECOVERING));
 
-  // unlink and remove dentry
+  // unlink
+  assert(dn->get_projected_linkage()->is_null());
+  dn->dir->unlink_inode(dn);
+  dn->pop_projected_linkage();
+  dn->mark_dirty(pdv, ls);
+
+  // drop inode
   if (in->is_dirty())
     in->mark_clean();
-  if (dn->is_dirty())
-    dn->mark_clean();
   remove_inode(in);
-  assert(dn->get_projected_linkage()->is_null());
 
-  dn->dir->mark_dirty(pdv, ls);
-  touch_dentry_bottom(dn);  // drop dn as quickly as possible.
+  // drop dentry?
+  if (dn->is_new()) {
+    dout(20) << " dn is new, removing" << dendl;
+    dn->mark_clean();
+    dn->dir->remove_dentry(dn);
+  } else
+    touch_dentry_bottom(dn);  // drop dn as quickly as possible.
 }
 
 void MDCache::_purge_stray_logged_truncate(CDentry *dn, LogSegment *ls)

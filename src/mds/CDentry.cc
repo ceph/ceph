@@ -196,8 +196,7 @@ void CDentry::mark_clean()
   
   item_dirty.remove_myself();
 
-  if (state_test(STATE_NEW)) 
-    state_clear(STATE_NEW);
+  clear_new();
 }    
 
 void CDentry::mark_new() 
