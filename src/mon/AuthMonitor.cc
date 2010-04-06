@@ -493,6 +493,25 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
 	ss << "exported master keyring";
 	r = 0;
       }
+    }
+    else if (m->cmd[1] == "get") {
+      KeyRing keyring;
+      EntityName entity;
+      if(!entity.from_str(m->cmd[2])) {
+	ss << "failed to identify entity name from " << m->cmd[2];
+	r = -ENOENT;
+      } else {
+	EntityAuth entity_auth;
+	if(!mon->key_server.get_auth(entity, entity_auth)) {
+	  ss << "failed to find " << m->cmd[2] << " in keyring";
+	  r = -ENOENT;
+	} else {
+	  keyring.add(entity, entity_auth);
+	  ::encode(keyring, rdata);
+	  ss << "exported keyring for " << m->cmd[2];
+	  r = 0;
+	}
+      }
     } else {
       auth_usage(ss);
       r = -EINVAL;
