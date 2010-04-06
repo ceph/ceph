@@ -3836,6 +3836,8 @@ void Server::_unlink_local_finish(MDRequest *mdr,
     straydnl->get_inode()->snaprealm->add_past_parent(oldparent);
     if (isnew)
       mdcache->do_realm_invalidate_and_update_notify(straydnl->get_inode(), CEPH_SNAP_OP_SPLIT);
+
+    mdcache->touch_dentry_bottom(straydn);
   }
 
   dn->mark_dirty(dnpv, mdr->ls);  
@@ -4594,6 +4596,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 	if (isnew)
 	  mdcache->do_realm_invalidate_and_update_notify(straydnl->get_inode(), CEPH_SNAP_OP_SPLIT);
       }
+
+      mdcache->touch_dentry_bottom(straydn);  // drop dn as quickly as possible.
 
     } else {
       destdn->get_dir()->unlink_inode(destdn);
