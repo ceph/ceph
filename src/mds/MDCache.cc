@@ -6892,14 +6892,35 @@ void MDCache::eval_stray(CDentry *dn)
 	}
       }
     }
-    if (dn->is_replicated() || dn->is_any_leases() || in->is_any_caps()) return;  // wait
-    if (!in->dirfrags.empty()) return;  // wait for dirs to close/trim
-    if (dn->state_test(CDentry::STATE_PURGING)) return;  // already purging
+    if (dn->is_replicated()) {
+      dout(20) << " replicated" << dendl;
+      return;
+    }
+    if (dn->is_any_leases() || in->is_any_caps()) {
+      dout(20) << " caps | leases" << dendl;
+      return;  // wait
+    }
+    if (!in->dirfrags.empty()) {
+      dout(20) << " open dirfrags" << dendl;
+      return;  // wait for dirs to close/trim
+    }
+    if (dn->state_test(CDentry::STATE_PURGING)) {
+      dout(20) << " already purging" << dendl;
+      return;  // already purging
+    }
     if (in->state_test(CInode::STATE_NEEDSRECOVER) ||
-	in->state_test(CInode::STATE_RECOVERING)) return;  // don't mess with file size probing
-    if (in->get_num_ref() > (int)in->is_dirty() ||
-	dn->get_num_ref() > (int)dn->is_dirty())
-      return;                                            // stray dn or inode pins
+	in->state_test(CInode::STATE_RECOVERING)) {
+      dout(20) << " pending recovery" << dendl;
+      return;  // don't mess with file size probing
+    }
+    if (in->get_num_ref() > (int)in->is_dirty()) {
+      dout(20) << " too many inode refs" << dendl;
+      return;
+    }
+    if (dn->get_num_ref() > (int)dn->is_dirty() + !!in->get_num_ref()) {
+      dout(20) << " too many dn refs" << dendl;
+      return;
+    }
     purge_stray(dn);
   }
   else if (in->inode.nlink == 1) {
@@ -7027,7 +7048,7 @@ void MDCache::_purge_stray_purged(CDentry *dn)
   dout(10) << "_purge_stray_purged " << *dn << " " << *in << dendl;
 
   if (in->get_num_ref() == (int)in->is_dirty() &&
-      dn->get_num_ref() == (int)dn->is_dirty()) {
+      dn->get_num_ref() == (int)dn->is_dirty() + !!in->get_num_ref() + 1/*PIN_PURGING*/) {
     // kill dentry.
     version_t pdv = dn->pre_dirty();
     
