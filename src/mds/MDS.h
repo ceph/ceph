@@ -258,6 +258,7 @@ class MDS : public Dispatcher {
   utime_t                 beacon_last_acked_stamp;  // last time we sent a beacon that got acked
   bool laggy;
   utime_t laggy_until;
+  utime_t last_tick;
 
   bool is_laggy() { return laggy; }
   utime_t get_laggy_until() { return laggy_until; }

@@ -438,6 +438,7 @@ int MDS::init()
 
   // schedule tick
   reset_tick();
+  last_tick = g_clock.now();
 
   mds_lock.Unlock();
   return 0;
@@ -464,8 +465,18 @@ void MDS::tick()
 
   logclient.send_log();
 
+  utime_t now = g_clock.now();
+  utime_t delay = now;
+  delay -= last_tick;
+  if (delay > g_conf.mds_session_timeout / 2) {
+    dout(0) << " last tick was " << delay << " > " << g_conf.mds_tick_interval
+	    << " seconds ago, laggy_until " << laggy_until
+	    << ", setting laggy flag" << dendl;
+    laggy = true;
+  }  
   if (laggy)
     return;
+  last_tick = now;
 
   // make sure mds log flushes, trims periodically
   mdlog->flush();
@@ -478,7 +489,6 @@ void MDS::tick()
   }
 
   // log
-  utime_t now = g_clock.now();
   mds_load_t load = balancer->get_load(now);
   
   if (logger) {
@@ -569,6 +579,7 @@ void MDS::handle_mds_beacon(MMDSBeacon *m)
       dout(1) << " clearing laggy flag" << dendl;
       laggy = false;
       laggy_until = now;
+      last_tick = now;    // so that tick() will start up again
       queue_waiters(waiting_for_nolaggy);
     }
     
