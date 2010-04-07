@@ -11,6 +11,7 @@ usr/bin/cosd
 usr/bin/mkmonfs
 usr/bin/cauthtool
 usr/bin/rados
+usr/bin/rbdtool
 sbin/mount.ceph
 usr/sbin/mkcephfs
 usr/lib/ceph/ceph_common.sh
@@ -30,3 +31,4 @@ usr/share/man/man8/ceph.8
 usr/share/man/man8/mount.ceph.8
 usr/share/man/man8/cauthtool.8
 usr/share/man/man8/rados.8
+usr/share/man/man8/rbdtool.8
