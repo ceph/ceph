@@ -522,6 +522,7 @@ noinst_HEADERS = \
         include/page.h\
         include/rangeset.h\
 	include/rados.h\
+	include/rbd_types.h\
         include/statlite.h\
 	include/str_list.h\
         include/triple.h\
