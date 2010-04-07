@@ -30,13 +30,13 @@
 
 void usage()
 {
-  cout << " usage: [--create <image name> --pool=<name> --size=size]" << std::endl;
+  cout << " usage: [--create <image name> --size <size in MB>] [--delete <img name>] [-p|--pool=<name>]" << std::endl;
   exit(1);
 }
 
 
 static void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
-			    size_t size)
+			    size_t size, int order)
 {
   memset(&ondisk, 0, sizeof(ondisk));
 
@@ -45,11 +45,23 @@ static void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
   memcpy(&ondisk.version, rbd_version, sizeof(rbd_version));
 
   ondisk.image_size = size;
-  ondisk.obj_order = RBD_DEFAULT_OBJ_ORDER;
+  if (order)
+    ondisk.obj_order = order;
+  else
+    ondisk.obj_order = RBD_DEFAULT_OBJ_ORDER;
   ondisk.crypt_type = RBD_CRYPT_NONE;
   ondisk.comp_type = RBD_COMP_NONE;
   ondisk.snap_seq = 0;
   ondisk.snap_count = 0;
+}
+
+void print_header(char *imgname, rbd_obj_header_ondisk *header)
+{
+  cout << "rbd image '" << imgname << "':\n"
+       << "\tsize " << kb_t(header->image_size >> 10) << " in "
+       << (header->image_size >> header->obj_order) << " objects\n"
+       << "\torder " << (int)header->obj_order << " (" << kb_t(1 << (header->obj_order-10)) << " objects)"
+       << std::endl;
 }
 
 int main(int argc, const char **argv) 
@@ -60,9 +72,10 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   common_init(args, "rbdtool", false, true);
 
-  bool opt_create = false;
+  bool opt_create = false, opt_delete = false;
   char *poolname;
-  size_t size;
+  __u64 size = 0;
+  int order = 0;
   char *imgname;
 
 
@@ -76,20 +89,23 @@ int main(int argc, const char **argv)
     if (CONF_ARG_EQ("create", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
       opt_create = true;
+    } else if (CONF_ARG_EQ("delete", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
+      opt_delete = true;
     } else if (CONF_ARG_EQ("pool", 'p')) {
       CONF_SAFE_SET_ARG_VAL(&poolname, OPT_STR);
     } else if (CONF_ARG_EQ("object", 'n')) {
       CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
     } else if (CONF_ARG_EQ("size", 's')) {
       CONF_SAFE_SET_ARG_VAL(&size, OPT_LONGLONG);
+    } else if (CONF_ARG_EQ("order", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&order, OPT_INT);
     } else 
       usage();
   }
 
-  if (!opt_create)
+  if (!opt_create && !opt_delete)
     usage();
-
-  bufferlist bl;
 
   string imgmd_str = imgname;
   imgmd_str += RBD_SUFFIX;
@@ -102,22 +118,67 @@ int main(int argc, const char **argv)
     cerr << "error opening pool (err=" << r << ")" << std::endl;
     exit(1);
   }
-  struct rbd_obj_header_ondisk header;
-  init_rbd_header(header, size);
 
-  bl.append((const char *)&header, sizeof(header));
+  if (opt_create) {
+    if (!size) {
+      cerr << "must specify size in MB to create an rbd image" << std::endl;
+      usage();
+      exit(1);
+    }
+    if (order && (order < 12 || order > 25)) {
+      cerr << "order must be between 12 (4 KB) and 25 (32 MB)" << std::endl;
+      usage();
+      exit(1);
+    }
+    size <<= 20; // MB -> bytes
 
-  r = rados.write(pool, md_oid, 0, bl, bl.length());
-  if (r < 0) {
-    cerr << "error writing header (err=" << r << ")" << std::endl;
-    exit(1);
+    struct rbd_obj_header_ondisk header;
+    init_rbd_header(header, size, order);
+    
+    bufferlist bl;
+    bl.append((const char *)&header, sizeof(header));
+    
+    print_header(imgname, &header);
+    cout << "creating rbd image..." << std::endl;
+    r = rados.write(pool, md_oid, 0, bl, bl.length());
+    if (r < 0) {
+      cerr << "error writing header (err=" << r << ")" << std::endl;
+      exit(1);
+    }
   }
+  if (opt_delete) {
+    struct rbd_obj_header_ondisk header;
+    bufferlist bl;
+    r = rados.read(pool, md_oid, 0, bl, sizeof(header));
+    if (r < 0) {
+      cerr << "error reading header " << md_oid << std::endl;
+      exit(1);
+    }
+    bufferlist::iterator p = bl.begin();
+    p.copy(sizeof(header), (char *)&header);
+    __u64 size = header.image_size;
+    __u64 numseg = size >> header.obj_order;
+    print_header(imgname, &header);
+
+    cout << "removing data..." << std::endl;
+    for (__u64 i=0; i<numseg; i++) {
+      char o[RBD_MAX_SEG_NAME_SIZE];
+      sprintf(o, "%s.%012llx", imgname, (unsigned long long)i);
+      object_t oid(o);
+      rados.remove(pool, oid);
+      if ((i & 127) == 0) {
+	cout << "\r\t" << i << "/" << numseg;
+	cout.flush();
+      }
+    }
+    cout << "\rremoving header..." << std::endl;
+    rados.remove(pool, md_oid);
+  }
+
+  cout << "done." << std::endl;
 
   rados.close_pool(pool);
   rados.shutdown(); 
-
-  cout << "created rbd object" << std::endl;
-
   return 0;
 }
 
