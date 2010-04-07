@@ -7,6 +7,7 @@ rbdtool \- manage rados block device (RBD) images
 [ \fB\-p\fP | \fB\-\-pool\fI pool\fR ]
 [ \fB\-\-create\fI imgname\fR [ \fB\-s\fI sizeinmb\fR ] ]
 [ \fB\-\-delete\fI imgname\fR ]
+[ \fB\-\-list\fR ]
 
 .SH DESCRIPTION
 .B rbdtool
@@ -19,8 +20,11 @@ The size of the objects the image is striped over must be a power of two.
 \fB\-p\fI pool\fR, \fB\-\-pool \fIpool\fR
 Interact with the given \fIpool\fP.  Required by most commands.
 .TP
+\fB\-\-list\fP
+will list all rbd images listed in the \fIrbd_directory\fR object.
+.TP
 \fB\-\-create \fIimgname\fP
-will create a new rbd image file.  You must also specify the size via \fB\-\-size\fR.
+will create a new rbd image.  You must also specify the size via \fB\-\-size\fR.
 .TP
 \fB\-\-size \fIsize_in_mb\fP
 specifies the size (in megabytes) of the new rbd image.
@@ -53,3 +57,4 @@ is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
 http://ceph.newdream.net/wiki for more information.
 .SH SEE ALSO
 .BR ceph (8), rados (8)
+src/

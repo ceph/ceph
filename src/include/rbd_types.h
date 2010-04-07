@@ -12,6 +12,7 @@
  */
 
 #define RBD_SUFFIX	 	".rbd"
+#define RBD_DIRECTORY           "rbd_directory"
 
 #define RBD_DEFAULT_OBJ_ORDER	22   /* 4MB */
 
