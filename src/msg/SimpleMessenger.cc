@@ -1312,7 +1312,6 @@ void SimpleMessenger::Pipe::fault(bool onconnect, bool onread)
   // lossy channel?
   if (policy.lossy) {
     dout(10) << "fault on lossy channel, failing" << dendl;
-    was_session_reset();
     fail();
     return;
   }
