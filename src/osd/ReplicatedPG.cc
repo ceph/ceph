@@ -1261,11 +1261,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       break;
 
 
-
       // -- trivial map --
     case CEPH_OSD_OP_TMAPGET:
       {
-	// write it
 	vector<OSDOp> nops(1);
 	OSDOp& newop = nops[0];
 	newop.op.op = CEPH_OSD_OP_READ;
@@ -1383,8 +1381,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	} else {
 	  // header
 	  bufferlist header;
+	  __u32 nkeys = 0;
 	  if (ibl.length()) {
 	    ::decode(header, ip);
+	    ::decode(nkeys, ip);
 	  }
 	  dout(10) << "tmapup header " << header.length() << dendl;
 
@@ -1393,14 +1393,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	    ::decode(header, bp);
 	    changed = true;
 	    dout(10) << "tmapup new header " << header.length() << dendl;
-	  } else 
-	    ++bp;
+	  }
 	  
 	  ::encode(header, obl);
 
-	  // key count
-	  __u32 nkeys;
-	  ::decode(nkeys, ip);
 	  dout(20) << "tmapup initial nkeys " << nkeys << dendl;
 
 	  // update keys
