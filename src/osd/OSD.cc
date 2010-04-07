@@ -2254,6 +2254,10 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   map_lock.put_write();
 
+  osd_lock.Unlock();
+  store->flush();
+  osd_lock.Lock();
+
   op_tp.unpause();
   recovery_tp.unpause();
   disk_tp.unpause();
