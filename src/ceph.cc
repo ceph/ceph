@@ -100,6 +100,8 @@ void handle_observe(MMonObserve *observe)
 
 void handle_notify(MMonObserveNotify *notify)
 {
+  utime_t now = g_clock.now();
+
   dout(1) << notify->get_source() << " -> " << get_paxos_name(notify->machine_id)
 	  << " v" << notify->ver
 	  << (notify->is_latest ? " (latest)" : "")
@@ -125,13 +127,13 @@ void handle_notify(MMonObserveNotify *notify)
 	inc.decode(p);
 	pgmap.apply_incremental(inc);
       }
-      dout(0) << "    pg " << pgmap << dendl;
+      cout << now << "    pg " << pgmap << std::endl;
       break;
     }
 
   case PAXOS_MDSMAP:
     mdsmap.decode(notify->bl);
-    dout(0) << "   mds " << mdsmap << dendl;
+    cout << now << "   mds " << mdsmap << std::endl;
     break;
 
   case PAXOS_OSDMAP:
@@ -142,7 +144,7 @@ void handle_notify(MMonObserveNotify *notify)
 	OSDMap::Incremental inc(notify->bl);
 	osdmap.apply_incremental(inc);
       }
-      dout(0) << "   osd " << osdmap << dendl;
+      cout << now << "   osd " << osdmap << std::endl;
     }
     break;
 
@@ -154,14 +156,14 @@ void handle_notify(MMonObserveNotify *notify)
 	::decode(summary, p);
 	// show last log message
 	if (!summary.tail.empty())
-	  dout(0) << "   log " << summary.tail.back() << dendl;
+	  cout << now << "   log " << summary.tail.back() << std::endl;
       } else {
 	LogEntry le;
 	__u8 v;
 	::decode(v, p);
 	while (!p.end()) {
 	  le.decode(p);
-	  dout(0) << "   log " << le << dendl;
+	  cout << now << "   log " << le << std::endl;
 	}
       }
       break;
@@ -180,7 +182,7 @@ void handle_notify(MMonObserveNotify *notify)
           tClassVersionMap::iterator iter = map.begin();
 
           if (iter != map.end())
-	    dout(0) << "   class " <<  iter->second << dendl;
+	    cout << now << "   class " <<  iter->second << std::endl;
 	}
       } else {
 	ClassInfo info;
@@ -188,7 +190,7 @@ void handle_notify(MMonObserveNotify *notify)
 	::decode(v, p);
 	while (!p.end()) {
           info.decode(p);
-	  dout(0) << "   class " << info << dendl;
+	  cout << now << "   class " << info << std::endl;
 	}
       }
       break;
@@ -201,12 +203,12 @@ void handle_notify(MMonObserveNotify *notify)
       if (notify->is_latest) {
 	KeyServerData data;
 	::decode(data, p);
-	dout(0) << "   auth " << dendl;
+	cout << now << "   auth " << std::endl;
       } else {
 	while (!p.end()) {
 	  AuthMonitor::Incremental inc;
           inc.decode(p);
-	  dout(0) << "   auth " << inc.name.to_str() << dendl;
+	  cout << now << "   auth " << inc.name.to_str() << std::endl;
 	}
       }
 #endif
@@ -217,12 +219,12 @@ void handle_notify(MMonObserveNotify *notify)
   case PAXOS_MONMAP:
     {
       mc.monmap.decode(notify->bl);
-      dout(0) << "   mon " << mc.monmap << dendl;
+      cout << now << "   mon " << mc.monmap << std::endl;
     }
     break;
 
   default:
-    dout(0) << "  ignoring unknown machine id " << notify->machine_id << dendl;
+    cout << now << "  ignoring unknown machine id " << notify->machine_id << std::endl;
   }
 
   map_ver[notify->machine_id] = notify->ver;
@@ -293,7 +295,7 @@ void send_command()
   m->cmd = pending_cmd;
   m->get_data() = pending_bl;
 
-  generic_dout(0) << "mon" << " <- " << pending_cmd << dendl;
+  cout << g_clock.now() << " mon" << " <- " << pending_cmd << std::endl;
   mc.send_mon_message(m);
 }
 
@@ -349,9 +351,10 @@ int do_command(vector<string>& cmd, bufferlist& bl, string& rs, bufferlist& rbl)
 
   rs = rs;
   rbl = reply_bl;
-  generic_dout(0) << reply_from.name << " -> '"
-		  << reply_rs << "' (" << reply_rc << ")"
-		  << dendl;
+  cout << g_clock.now() << " "
+       << reply_from.name << " -> '"
+       << reply_rs << "' (" << reply_rc << ")"
+       << std::endl;
 
   return reply_rc;
 }
@@ -606,9 +609,9 @@ int main(int argc, const char **argv, const char *envp[])
 	  } else {
 	    odata.write_file(outfile);
 	  }
-	  generic_dout(0) << "wrote " << len << " byte payload to " << outfile << dendl;
+	  cout << g_clock.now() << " wrote " << len << " byte payload to " << outfile << std::endl;
 	} else {
-	  generic_dout(0) << "got " << len << " byte payload, discarding (specify -o <outfile)" << dendl;
+	  cout << g_clock.now() << " got " << len << " byte payload, discarding (specify -o <outfile)" << std::endl;
 	}
       }
     } else {
