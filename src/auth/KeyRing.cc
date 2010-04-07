@@ -62,7 +62,7 @@ bool KeyRing::load(const char *filename_list)
   bufferlist::iterator p = bl.begin();
   decode(p);
 
-  dout(1) << "loaded key file " << filename << dendl;
+  dout(2) << "loaded key file " << filename << dendl;
   return true;
 }
 
