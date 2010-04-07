@@ -9,6 +9,8 @@
  */
 
 int tcp_read(int sd, char *buf, int len) {
+  if (sd < 0)
+    return -1;
   struct pollfd pfd;
   pfd.fd = sd;
   pfd.events = POLLIN | POLLHUP | POLLRDHUP | POLLNVAL | POLLERR;
@@ -39,6 +41,8 @@ int tcp_read(int sd, char *buf, int len) {
 }
 
 int tcp_write(int sd, const char *buf, int len) {
+  if (sd < 0)
+    return -1;
   struct pollfd pfd;
   pfd.fd = sd;
   pfd.events = POLLOUT | POLLHUP | POLLRDHUP | POLLNVAL | POLLERR;
