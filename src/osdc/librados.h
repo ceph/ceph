@@ -120,13 +120,15 @@ public:
   int getxattrs(rados_pool_t pool, const object_t& oid, map<nstring, bufferlist>& attrset);
   int stat(rados_pool_t pool, const object_t& oid, __u64 *psize, time_t *pmtime);
 
+  int tmap_update(rados_pool_t pool, const object_t& oid, bufferlist& cmdbl);
+  
   int exec(rados_pool_t pool, const object_t& oid, const char *cls, const char *method,
-             bufferlist& inbl, bufferlist& outbl);
+	   bufferlist& inbl, bufferlist& outbl);
 
   struct ListCtx {
-   void *ctx;
-   ListCtx() : ctx(NULL) {}
- };
+    void *ctx;
+    ListCtx() : ctx(NULL) {}
+  };
 
   int list(rados_pool_t pool, int max, std::list<object_t>& entries, Rados::ListCtx& ctx);
   int list_pools(std::vector<std::string>& v);

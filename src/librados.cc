@@ -119,6 +119,7 @@ public:
   int remove(PoolCtx& pool, const object_t& oid);
   int stat(PoolCtx& pool, const object_t& oid, __u64 *psize, time_t *pmtime);
 
+  int tmap_update(PoolCtx& pool, const object_t& oid, bufferlist& cmdbl);
   int exec(PoolCtx& pool, const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
 
   int getxattr(PoolCtx& pool, const object_t& oid, const char *name, bufferlist& bl);
@@ -875,6 +876,35 @@ int RadosClient::remove(PoolCtx& pool, const object_t& oid)
   return r;
 }
 
+int RadosClient::tmap_update(PoolCtx& pool, const object_t& oid, bufferlist& cmdbl)
+{
+  utime_t ut = g_clock.now();
+
+  Mutex mylock("RadosClient::tmap_update::mylock");
+  Cond cond;
+  bool done;
+  int r;
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+
+  bufferlist outbl;
+
+  lock.Lock();
+  SnapContext snapc;
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  ObjectOperation wr;
+  wr.tmap_update(cmdbl);
+  objecter->mutate(oid, layout, wr, snapc, ut, 0, onack, NULL);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  return r;
+}
+
+
 int RadosClient::exec(PoolCtx& pool, const object_t& oid, const char *cls, const char *method,
 		      bufferlist& inbl, bufferlist& outbl)
 {
@@ -1224,6 +1254,12 @@ int Rados::stat(rados_pool_t pool, const object_t& oid, __u64 *psize, time_t *pm
   return client->stat(*(RadosClient::PoolCtx *)pool, oid, psize, pmtime);
 }
 
+int Rados::tmap_update(rados_pool_t pool, const object_t& oid, bufferlist& cmdbl)
+{
+  if (!client)
+    return -EINVAL;
+  return client->tmap_update(*(RadosClient::PoolCtx *)pool, oid, cmdbl);
+}
 int Rados::exec(rados_pool_t pool, const object_t& oid, const char *cls, const char *method,
 		bufferlist& inbl, bufferlist& outbl)
 {
