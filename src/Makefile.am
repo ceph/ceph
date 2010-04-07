@@ -162,7 +162,9 @@ testradospp_SOURCES = testradospp.cc
 testradospp_LDADD = librados.la -lpthread -lm -lcrypto
 radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la -lpthread -lm -lcrypto
-bin_PROGRAMS += testrados testradospp radosacl
+rbdtool_SOURCES = rbdtool.cc
+rbdtool_LDADD = librados.la -lpthread -lm -lcrypto
+bin_PROGRAMS += testrados testradospp radosacl rbdtool
 
 if WITH_RADOSGW
 libradosgw_a_SOURCES = \
@@ -521,6 +523,7 @@ noinst_HEADERS = \
         include/page.h\
         include/rangeset.h\
 	include/rados.h\
+	include/rbd_types.h\
         include/statlite.h\
 	include/str_list.h\
         include/triple.h\

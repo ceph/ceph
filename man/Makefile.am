@@ -18,4 +18,5 @@ dist_man_MANS = \
 	radosgw.8 \
 	radosgw_admin.8 \
 	cauthtool.8 \
-	rados.8
+	rados.8 \
+	rbdtool.8
