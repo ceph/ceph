@@ -19,6 +19,8 @@
 #include "byteorder.h"
 #include "buffer.h"
 
+using namespace ceph;
+
 // --------------------------------------
 // base types
 
@@ -91,6 +93,30 @@ WRITE_INTTYPE_ENCODER(s16, le16)
   inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
 
 
+// string
+inline void encode(const std::string& s, bufferlist& bl) 
+{
+  __u32 len = s.length();
+  encode(len, bl);
+  bl.append(s.data(), len);
+}
+inline void decode(std::string& s, bufferlist::iterator& p)
+{
+  __u32 len;
+  decode(len, p);
+  s.clear();
+  p.copy(len, s);
+}
+
+// const char* (encode only, string compatible)
+inline void encode(const char *s, bufferlist& bl) 
+{
+  __u32 len = strlen(s);
+  encode(len, bl);
+  bl.append(s, len);
+}
+
+
 // array
 template<class A>
 inline void encode_array_nohead(const A a[], int n, bufferlist &bl)
@@ -105,6 +131,75 @@ inline void decode_array_nohead(A a[], int n, bufferlist::iterator &p)
     decode(a[n], p);
 }
 
+
+
+// -----------------------------
+// buffers
+
+// bufferptr (encapsulated)
+inline void encode(const buffer::ptr& bp, bufferlist& bl) 
+{
+  __u32 len = bp.length();
+  encode(len, bl);
+  if (len)
+    bl.append(bp);
+}
+inline void decode(buffer::ptr& bp, bufferlist::iterator& p)
+{
+  __u32 len;
+  decode(len, p);
+
+  bufferlist s;
+  p.copy(len, s);
+
+  if (len) {
+    if (s.buffers().size() == 1)
+      bp = s.buffers().front();
+    else
+      bp = buffer::copy(s.c_str(), s.length());
+  }
+}
+
+// bufferlist (encapsulated)
+inline void encode(const bufferlist& s, bufferlist& bl) 
+{
+  __u32 len = s.length();
+  encode(len, bl);
+  bl.append(s);
+}
+inline void encode_destructively(bufferlist& s, bufferlist& bl) 
+{
+  __u32 len = s.length();
+  encode(len, bl);
+  bl.claim_append(s);
+}
+inline void decode(bufferlist& s, bufferlist::iterator& p)
+{
+  __u32 len;
+  decode(len, p);
+  s.clear();
+  p.copy(len, s);
+}
+
+inline void encode_nohead(const bufferlist& s, bufferlist& bl) 
+{
+  bl.append(s);
+}
+inline void decode_nohead(int len, bufferlist& s, bufferlist::iterator& p)
+{
+  s.clear();
+  p.copy(len, s);
+}
+
+
+// full bl decoder
+template<class T>
+inline void decode(T o, bufferlist& bl)
+{
+  bufferlist::iterator p = bl.begin();
+  decode(o, p);
+  assert(p.end());
+}
 
 
 // -----------------------------
@@ -422,97 +517,5 @@ inline void decode(__gnu_cxx::hash_set<T>& m, bufferlist::iterator& p)
   }
 }
 
-// string
-inline void encode(const std::string& s, bufferlist& bl) 
-{
-  __u32 len = s.length();
-  encode(len, bl);
-  bl.append(s.data(), len);
-}
-inline void decode(std::string& s, bufferlist::iterator& p)
-{
-  __u32 len;
-  decode(len, p);
-  s.clear();
-  p.copy(len, s);
-}
-
-// const char* (encode only, string compatible)
-inline void encode(const char *s, bufferlist& bl) 
-{
-  __u32 len = strlen(s);
-  encode(len, bl);
-  bl.append(s, len);
-}
-
-
-
-// -----------------------------
-// buffers
-
-// bufferptr (encapsulated)
-inline void encode(const buffer::ptr& bp, bufferlist& bl) 
-{
-  __u32 len = bp.length();
-  encode(len, bl);
-  if (len)
-    bl.append(bp);
-}
-inline void decode(buffer::ptr& bp, bufferlist::iterator& p)
-{
-  __u32 len;
-  decode(len, p);
-
-  bufferlist s;
-  p.copy(len, s);
-
-  if (len) {
-    if (s.buffers().size() == 1)
-      bp = s.buffers().front();
-    else
-      bp = buffer::copy(s.c_str(), s.length());
-  }
-}
-
-// bufferlist (encapsulated)
-inline void encode(const bufferlist& s, bufferlist& bl) 
-{
-  __u32 len = s.length();
-  encode(len, bl);
-  bl.append(s);
-}
-inline void encode_destructively(bufferlist& s, bufferlist& bl) 
-{
-  __u32 len = s.length();
-  encode(len, bl);
-  bl.claim_append(s);
-}
-inline void decode(bufferlist& s, bufferlist::iterator& p)
-{
-  __u32 len;
-  decode(len, p);
-  s.clear();
-  p.copy(len, s);
-}
-
-inline void encode_nohead(const bufferlist& s, bufferlist& bl) 
-{
-  bl.append(s);
-}
-inline void decode_nohead(int len, bufferlist& s, bufferlist::iterator& p)
-{
-  s.clear();
-  p.copy(len, s);
-}
-
-
-// full bl decoder
-template<class T>
-inline void decode(T o, bufferlist& bl)
-{
-  bufferlist::iterator p = bl.begin();
-  decode(o, p);
-  assert(p.end());
-}
 
 #endif

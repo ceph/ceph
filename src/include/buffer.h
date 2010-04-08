@@ -58,7 +58,6 @@ using std::string;
 #include "crc32c.h"
 #include "assert.h"
 
-extern atomic_t buffer_total_alloc;
 
 //#define BUFFER_DEBUG
 
@@ -71,6 +70,10 @@ extern Spinlock buffer_lock;
 # define bdout if (0) { cout
 # define bendl std::endl; }
 #endif
+
+namespace ceph {
+
+extern atomic_t buffer_total_alloc;
 
 class buffer {
   /*
@@ -1203,6 +1206,8 @@ inline std::ostream& operator<<(std::ostream& out, const buffer::list& bl) {
 inline ostream& operator<<(ostream& out, buffer::error& e)
 {
   return out << e.what();
+}
+
 }
 
 #endif

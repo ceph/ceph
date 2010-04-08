@@ -20,9 +20,10 @@
 #include <errno.h>
 #include <fstream>
 
+namespace ceph {
+
 Spinlock buffer_lock("buffer_lock");
 atomic_t buffer_total_alloc;
-
 
 void buffer::list::encode_base64(buffer::list& o)
 {
@@ -126,4 +127,6 @@ void buffer::list::hexdump(std::ostream &out) const
     out << std::dec << std::endl;
   }
   out.unsetf(std::ios::right);
+}
+
 }
