@@ -272,7 +272,7 @@ install-data-local:
 	mkdir -p $(DESTDIR)$(includedir)/ceph
 	$(install_sh_SCRIPT) -m 0644 client/libceph.h $(DESTDIR)$(includedir)/ceph/libceph.h
 	mkdir -p $(DESTDIR)$(includedir)/rados
-	$(install_sh_SCRIPT) -m 0644 osdc/librados.h $(DESTDIR)$(includedir)/rados/librados.h
+	$(install_sh_SCRIPT) -m 0644 include/librados.h $(DESTDIR)$(includedir)/rados/librados.h
 	mkdir -p $(DESTDIR)$(includedir)/crush
 	$(install_sh_SCRIPT) -m 0644 crush/hash.h $(DESTDIR)$(includedir)/crush/hash.h
 	$(install_sh_SCRIPT) -m 0644 crush/crush.h $(DESTDIR)$(includedir)/crush/crush.h
@@ -517,6 +517,7 @@ noinst_HEADERS = \
         include/intarith.h\
         include/interval_set.h\
         include/inttypes.h\
+	include/librados.h\
         include/lru.h\
 	include/msgr.h\
         include/nstring.h\
@@ -722,7 +723,6 @@ noinst_HEADERS = \
         osd/RAID4PG.h\
         osd/ReplicatedPG.h\
         osd/osd_types.h\
-	osdc/librados.h\
 	osdc/rados_bencher.h\
         osdc/Blinker.h\
         osdc/Filer.h\

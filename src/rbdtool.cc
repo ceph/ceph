@@ -15,7 +15,7 @@
 #include "config.h"
 
 #include "common/common_init.h"
-#include "osdc/librados.h"
+#include "include/librados.h"
 #include "include/byteorder.h"
 
 

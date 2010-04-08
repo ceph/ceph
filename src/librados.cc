@@ -37,7 +37,7 @@ using namespace std;
 
 #include "osdc/Objecter.h"
 
-#include "osdc/librados.h"
+#include "include/librados.h"
 
 #define RADOS_LIST_MAX_ENTRIES 1024
 #define DOUT_SUBSYS rados

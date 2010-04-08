@@ -1,7 +1,7 @@
 #ifndef __RGWRADOS_H
 #define __RGWRADOS_H
 
-#include "osdc/librados.h"
+#include "include/librados.h"
 #include "rgw_access.h"
 
 
