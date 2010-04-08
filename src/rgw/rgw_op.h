@@ -19,7 +19,7 @@ using namespace std;
 struct req_state;
 
 /** Get the HTTP request metadata */
-extern void get_request_metadata(struct req_state *s, map<nstring, bufferlist>& attrs);
+extern void get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs);
 /**
  * Get the ACL for an object off of disk. If you hold the req_state, use next
  * method.
@@ -56,7 +56,7 @@ protected:
   time_t unmod_time;
   time_t *mod_ptr;
   time_t *unmod_ptr;
-  map<nstring, bufferlist> attrs;
+  map<string, bufferlist> attrs;
   char *data;
   int ret;
   struct rgw_err err;
@@ -219,7 +219,7 @@ protected:
   time_t *mod_ptr;
   time_t *unmod_ptr;
   int ret;
-  map<nstring, bufferlist> attrs;
+  map<string, bufferlist> attrs;
   struct rgw_err err;
   string src_bucket;
   string src_object;

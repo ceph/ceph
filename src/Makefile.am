@@ -272,7 +272,12 @@ install-data-local:
 	mkdir -p $(DESTDIR)$(includedir)/ceph
 	$(install_sh_SCRIPT) -m 0644 client/libceph.h $(DESTDIR)$(includedir)/ceph/libceph.h
 	mkdir -p $(DESTDIR)$(includedir)/rados
-	$(install_sh_SCRIPT) -m 0644 osdc/librados.h $(DESTDIR)$(includedir)/rados/librados.h
+	$(install_sh_SCRIPT) -m 0644 include/librados.h $(DESTDIR)$(includedir)/rados/librados.h
+	$(install_sh_SCRIPT) -m 0644 include/librados.hpp $(DESTDIR)$(includedir)/rados/librados.hpp
+	$(install_sh_SCRIPT) -m 0644 include/buffer.h $(DESTDIR)$(includedir)/rados/buffer.h
+	$(install_sh_SCRIPT) -m 0644 include/atomic.h $(DESTDIR)$(includedir)/rados/atomic.h
+	$(install_sh_SCRIPT) -m 0644 include/page.h $(DESTDIR)$(includedir)/rados/page.h
+	$(install_sh_SCRIPT) -m 0644 include/crc32c.h $(DESTDIR)$(includedir)/rados/crc32c.h
 	mkdir -p $(DESTDIR)$(includedir)/crush
 	$(install_sh_SCRIPT) -m 0644 crush/hash.h $(DESTDIR)$(includedir)/crush/hash.h
 	$(install_sh_SCRIPT) -m 0644 crush/crush.h $(DESTDIR)$(includedir)/crush/crush.h
@@ -344,6 +349,7 @@ libcommon_files = \
 	include/ceph_strings.cc \
 	include/ceph_frag.cc \
 	config.cc \
+	common/page.cc \
 	common/lockdep.cc
 
 libcrush_a_SOURCES = \
@@ -473,7 +479,6 @@ noinst_HEADERS = \
         common/Mutex.h\
         common/RWLock.h\
         common/Semaphore.h\
-	common/Spinlock.h\
         common/Thread.h\
         common/Throttle.h\
         common/Timer.h\
@@ -495,6 +500,7 @@ noinst_HEADERS = \
 	include/CompatSet.h\
         include/Distribution.h\
 	include/LogEntry.h\
+	include/Spinlock.h\
 	include/assert.h\
         include/atomic.h\
         include/bitmapper.h\
@@ -516,6 +522,8 @@ noinst_HEADERS = \
         include/intarith.h\
         include/interval_set.h\
         include/inttypes.h\
+	include/librados.h\
+	include/librados.hpp\
         include/lru.h\
 	include/msgr.h\
         include/nstring.h\
@@ -721,7 +729,6 @@ noinst_HEADERS = \
         osd/RAID4PG.h\
         osd/ReplicatedPG.h\
         osd/osd_types.h\
-	osdc/librados.h\
 	osdc/rados_bencher.h\
         osdc/Blinker.h\
         osdc/Filer.h\

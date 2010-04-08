@@ -15,7 +15,8 @@
 #include "config.h"
 
 #include "common/common_init.h"
-#include "osdc/librados.h"
+#include "include/librados.hpp"
+using namespace librados;
 #include "include/byteorder.h"
 
 
@@ -109,12 +110,11 @@ int main(int argc, const char **argv)
   if (!opt_create && !opt_delete && !opt_list)
     usage();
 
-  string imgmd_str = imgname;
-  imgmd_str += RBD_SUFFIX;
-  object_t md_oid(imgmd_str.c_str());
-  object_t dir_oid(RBD_DIRECTORY);
+  string md_oid = imgname;
+  md_oid += RBD_SUFFIX;
+  string dir_oid = RBD_DIRECTORY;
 
-  rados_pool_t pool;
+  pool_t pool;
 
   int r = rados.open_pool(poolname, &pool);
   if (r < 0) {
@@ -203,7 +203,7 @@ int main(int argc, const char **argv)
       for (__u64 i=0; i<numseg; i++) {
 	char o[RBD_MAX_SEG_NAME_SIZE];
 	sprintf(o, "%s.%012llx", imgname, (unsigned long long)i);
-	object_t oid(o);
+	string oid = o;
 	rados.remove(pool, oid);
 	if ((i & 127) == 0) {
 	  cout << "\r\t" << i << "/" << numseg;

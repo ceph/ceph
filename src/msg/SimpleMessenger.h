@@ -26,7 +26,7 @@ using namespace std;
 using namespace __gnu_cxx;
 
 #include "common/Mutex.h"
-#include "common/Spinlock.h"
+#include "include/Spinlock.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
 
@@ -265,7 +265,7 @@ private:
     
     void queue_received(Message *m) {
       m->set_recv_stamp(g_clock.now());
-      assert(m->nref.test() == 0);
+      assert(m->nref.read() == 0);
       queue_received(m, m->get_priority());
     }
 

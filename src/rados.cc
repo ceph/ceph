@@ -13,8 +13,11 @@
  */
 
 #include "include/types.h"
+
+#include "include/librados.hpp"
+using namespace librados;
+
 #include "osdc/rados_bencher.h"
-#include "osdc/librados.h"
 
 #include "config.h"
 #include "common/common_init.h"
@@ -91,7 +94,7 @@ int main(int argc, const char **argv)
   int op_size = 1 << 22;
 
   const char *snapname = 0;
-  rados_snap_t snapid = CEPH_NOSNAP;
+  snap_t snapid = CEPH_NOSNAP;
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("pool", 'p')) {
@@ -127,7 +130,7 @@ int main(int argc, const char **argv)
   char buf[80];
 
   // open pool?
-  rados_pool_t p;
+  pool_t p;
   if (pool) {
     ret = rados.open_pool(pool, &p);
     if (ret < 0) {
@@ -157,34 +160,34 @@ int main(int argc, const char **argv)
 
   // list pools?
   if (strcmp(nargs[0], "lspools") == 0) {
-    vector<string> vec;
+    list<string> vec;
     rados.list_pools(vec);
-    for (vector<string>::iterator i = vec.begin(); i != vec.end(); ++i)
+    for (list<string>::iterator i = vec.begin(); i != vec.end(); ++i)
       cout << *i << std::endl;
   }
   else if (strcmp(nargs[0], "df") == 0) {
     // pools
-    vector<string> vec;
+    list<string> vec;
     rados.list_pools(vec);
     
-    map<string,rados_pool_stat_t> stats;
+    map<string,pool_stat_t> stats;
     rados.get_pool_stats(vec, stats);
 
     printf("%-15s %12s %12s %12s %12s %12s %12s %12s %12s\n",
 	   "pool name", "KB", "objects", "clones", "degraded", "rd", "rd KB", "wr", "wr KB");
-    for (map<string,rados_pool_stat_t>::iterator i = stats.begin(); i != stats.end(); ++i) {
+    for (map<string,pool_stat_t>::iterator i = stats.begin(); i != stats.end(); ++i) {
       printf("%-15s %12lld %12lld %12lld %12lld %12lld %12lld %12lld %12lld\n",
 	     i->first.c_str(),
-	     i->second.num_kb,
-	     i->second.num_objects,
-	     i->second.num_object_clones,
-	     i->second.num_objects_degraded,
-	     i->second.num_rd, i->second.num_rd_kb,
-	     i->second.num_wr, i->second.num_wr_kb);
+	     (long long)i->second.num_kb,
+	     (long long)i->second.num_objects,
+	     (long long)i->second.num_object_clones,
+	     (long long)i->second.num_objects_degraded,
+	     (long long)i->second.num_rd, (long long)i->second.num_rd_kb,
+	     (long long)i->second.num_wr, (long long)i->second.num_wr_kb);
     }
 
     // total
-    rados_statfs_t tstats;
+    statfs_t tstats;
     rados.get_fs_stats(tstats);
     printf("  total used    %12lld %12lld\n", (long long unsigned)tstats.kb_used,
 	   (long long unsigned)tstats.num_objects);
@@ -205,7 +208,7 @@ int main(int argc, const char **argv)
 
     Rados::ListCtx ctx;
     while (1) {
-      list<object_t> vec;
+      list<string> vec;
       ret = rados.list(p, 1 << 10, vec, ctx);
       if (ret < 0) {
 	cerr << "got error: " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
@@ -214,8 +217,8 @@ int main(int argc, const char **argv)
       if (vec.empty())
 	break;
 
-      for (list<object_t>::iterator iter = vec.begin(); iter != vec.end(); ++iter)
-	*outstream << iter->name << std::endl;
+      for (list<string>::iterator iter = vec.begin(); iter != vec.end(); ++iter)
+	*outstream << *iter << std::endl;
     }
     if (!stdout)
       delete outstream;
@@ -235,7 +238,7 @@ int main(int argc, const char **argv)
   else if (strcmp(nargs[0], "get") == 0) {
     if (!pool || nargs.size() < 3)
       usage();
-    object_t oid(nargs[1]);
+    string oid(nargs[1]);
     ret = rados.read(p, oid, 0, outdata, 0);
     if (ret < 0) {
       cerr << "error reading " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
@@ -254,7 +257,7 @@ int main(int argc, const char **argv)
     if (!pool || nargs.size() < 3)
       usage();
 
-    object_t oid(nargs[1]);
+    string oid(nargs[1]);
 
     if (strcmp(nargs[2], "-") == 0) {
       char buf[256];
@@ -280,7 +283,7 @@ int main(int argc, const char **argv)
   else if (strcmp(nargs[0], "rm") == 0) {
     if (!pool || nargs.size() < 2)
       usage();
-    object_t oid(nargs[1]);
+    string oid(nargs[1]);
     ret = rados.remove(p, oid);
     if (ret < 0) {
       cerr << "error removing " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
@@ -320,9 +323,9 @@ int main(int argc, const char **argv)
     if (!pool || nargs.size() != 1)
       usage();
 
-    vector<rados_snap_t> snaps;
+    vector<snap_t> snaps;
     rados.snap_list(p, &snaps);
-    for (vector<rados_snap_t>::iterator i = snaps.begin();
+    for (vector<snap_t>::iterator i = snaps.begin();
 	 i != snaps.end();
 	 i++) {
       string s;

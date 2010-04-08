@@ -1,7 +1,7 @@
 #ifndef __RGWRADOS_H
 #define __RGWRADOS_H
 
-#include "osdc/librados.h"
+#include "include/librados.h"
 #include "rgw_access.h"
 
 
@@ -28,13 +28,12 @@ public:
    * create a bucket with name bucket and the given list of attrs
    * returns 0 on success, -ERR# otherwise.
    */
-  int create_bucket(std::string& id, std::string& bucket, map<nstring,
-		    bufferlist>& attrs, __u64 auid=0);
+  int create_bucket(std::string& id, std::string& bucket, map<std::string,bufferlist>& attrs, __u64 auid=0);
 
   /** Write/overwrite an object to the bucket storage. */
   int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
               time_t *mtime,
-              map<nstring, bufferlist>& attrs);
+              map<std::string, bufferlist>& attrs);
   /** Copy an object, with many extra options */
   int copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
                std::string& src_bucket, std::string& src_obj,
@@ -43,7 +42,7 @@ public:
                const time_t *unmod_ptr,
                const char *if_match,
                const char *if_nomatch,
-               map<nstring, bufferlist>& attrs,
+               map<std::string, bufferlist>& attrs,
                struct rgw_err *err);
   /** delete a bucket*/
   int delete_bucket(std::string& id, std::string& bucket);
@@ -62,7 +61,7 @@ public:
   /** Get data about an object out of RADOS and into memory. */
   int get_obj(std::string& bucket, std::string& obj, 
             char **data, off_t ofs, off_t end,
-            map<nstring, bufferlist> *attrs,
+            map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
             const time_t *unmod_ptr,
             const char *if_match,

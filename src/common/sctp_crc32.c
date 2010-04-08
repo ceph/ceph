@@ -592,7 +592,7 @@ sctp_crc32c_sb8_64_bit(uint32_t crc,
  *
  *		none
  */
-uint32_t
+static uint32_t
 update_crc32(uint32_t crc32c,
     unsigned char const *buffer,
     unsigned int length)
@@ -676,7 +676,7 @@ uint32_t sctp_crc_c[256] = {
 
 #define SCTP_CRC32C(c,d) (c=(c>>8)^sctp_crc_c[(c^(d))&0xFF])
 
-uint32_t
+static uint32_t
 old_update_crc32(uint32_t crc32c,
     unsigned char const *buffer,
     unsigned int length)
@@ -690,7 +690,7 @@ old_update_crc32(uint32_t crc32c,
 }
 
 
-uint32_t
+static uint32_t
 sctp_csum_finalize(uint32_t crc32c)
 {
 	uint32_t result;
@@ -723,7 +723,7 @@ sctp_csum_finalize(uint32_t crc32c)
 	return (crc32c);
 }
 
-uint32_t crc32c_le(uint32_t crc, unsigned char const *data, unsigned length)
+uint32_t ceph_crc32c_le(uint32_t crc, unsigned char const *data, unsigned length)
 {
 	return update_crc32(crc, data, length);
 }

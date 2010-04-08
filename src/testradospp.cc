@@ -13,7 +13,9 @@
  */
 
 #include "include/types.h"
-#include "osdc/librados.h"
+#include "include/librados.hpp"
+
+using namespace librados;
 
 #include <iostream>
 
@@ -48,9 +50,9 @@ int main(int argc, const char **argv)
   snprintf(buf, 128, "%s", ctime(&tm));
   bl.append(buf, strlen(buf));
 
-  object_t oid("bar");
+  const char *oid = "bar";
 
-  rados_pool_t pool;
+  pool_t pool;
 
   int r = rados.open_pool("data", &pool);
   cout << "open pool result = " << r << " pool = " << pool << std::endl;
@@ -95,21 +97,21 @@ int main(int argc, const char **argv)
   Rados::ListCtx ctx;
   int entries;
   do {
-    list<object_t> vec;
+    list<string> vec;
     r = rados.list(pool, 2, vec, ctx);
     entries = vec.size();
     cout << "list result=" << r << " entries=" << entries << std::endl;
-    list<object_t>::iterator iter;
+    list<string>::iterator iter;
     for (iter = vec.begin(); iter != vec.end(); ++iter) {
       cout << *iter << std::endl;
     }
   } while (entries);
 
 
-  map<nstring, bufferlist> attrset;
+  map<string, bufferlist> attrset;
   rados.getxattrs(pool, oid, attrset);
 
-  map<nstring, bufferlist>::iterator it;
+  map<string, bufferlist>::iterator it;
   for (it = attrset.begin(); it != attrset.end(); ++it) {
     cout << "xattr: " << it->first << std::endl;
   }

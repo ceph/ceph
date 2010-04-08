@@ -6,6 +6,8 @@
 
 #include "BackTrace.h"
 
+namespace ceph {
+
 void BackTrace::print(std::ostream& out)
 {
   for (size_t i = skip; i < size; i++) {
@@ -51,3 +53,4 @@ void BackTrace::print(std::ostream& out)
   }
 };
 
+}

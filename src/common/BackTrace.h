@@ -4,6 +4,8 @@
 #include <execinfo.h>
 #include <stdlib.h>
 
+namespace ceph {
+
 struct BackTrace {
   const static int max = 100;
 
@@ -22,5 +24,7 @@ struct BackTrace {
 
   void print(std::ostream& out);
 };
+
+}
 
 #endif

@@ -4025,7 +4025,7 @@ void OSD::handle_op(MOSDOp *op)
   else
     pgid = osdmap->raw_pg_to_pg(op->get_pg());
 
-  logger->set(l_osd_buf, buffer_total_alloc.test());
+  logger->set(l_osd_buf, buffer_total_alloc.read());
 
   utime_t now = g_clock.now();
 

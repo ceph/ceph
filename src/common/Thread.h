@@ -46,7 +46,7 @@ class Thread {
   bool is_started() { return thread_id != 0; }
   bool am_self() { return (pthread_self() == thread_id); }
 
-  static int get_num_threads() { return _num_threads.test(); }
+  static int get_num_threads() { return _num_threads.read(); }
 
   int kill(int signal) {
     if (thread_id)

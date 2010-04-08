@@ -19,11 +19,15 @@
 # include "acconfig.h"
 #endif
 
+
+
 #ifdef WITH_CCGNU
 /*
  * use commonc++ library AtomicCounter.
  */
 # include "cc++/thread.h"
+
+namespace ceph {
 
 class atomic_t {
   mutable ost::AtomicCounter nref;    // mutable for const-ness of operator<<
@@ -36,11 +40,15 @@ public:
   void sub(int i) { nref -= i; }
 };
 
+}
+
 #else
 /*
  * crappy slow implementation that uses a pthreads spinlock.
  */
-#include "common/Spinlock.h"
+#include "Spinlock.h"
+
+namespace ceph {
 
 class atomic_t {
   Spinlock lock;
@@ -72,10 +80,12 @@ public:
     nref -= d;
     lock.unlock();
   }
-  int test() const {
+  int read() const {
     return nref;
   }
 };
+
+}
 
 #endif
 

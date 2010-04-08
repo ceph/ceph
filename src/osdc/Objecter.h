@@ -319,7 +319,7 @@ public:
   
   struct PoolStatOp {
     tid_t tid;
-    vector<string> pools;
+    list<string> pools;
 
     map<string,pool_stat_t> *pool_stats;
     Context *onfinish;
@@ -685,7 +685,7 @@ private:
   void poolstat_submit(PoolStatOp *op);
 public:
   void handle_get_pool_stats_reply(MGetPoolStatsReply *m);
-  void get_pool_stats(vector<string>& pools, map<string,pool_stat_t> *result,
+  void get_pool_stats(list<string>& pools, map<string,pool_stat_t> *result,
 		      Context *onfinish);
 
   // ---------------------------

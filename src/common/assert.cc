@@ -6,6 +6,8 @@
 
 #include "common/tls.h"
 
+namespace ceph {
+
 void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *func)
 {
   BackTrace *bt = new BackTrace(2);
@@ -37,4 +39,6 @@ void __ceph_assert_fail(const char *assertion, const char *file, int line, const
 void __ceph_assert_warn(const char *assertion, const char *file, int line, const char *func)
 {
   *_dout << "WARNING: assert(" << assertion << ") at: " << file << ":" << line << ": " << func << "()" << std::endl;
+}
+
 }

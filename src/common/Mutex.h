@@ -21,6 +21,7 @@
 
 #define LOCKDEP
 
+using namespace ceph;
 
 class Mutex {
 private:

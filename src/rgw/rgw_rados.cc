@@ -4,7 +4,8 @@
 #include "rgw_access.h"
 #include "rgw_rados.h"
 
-#include "osdc/librados.h"
+#include "include/librados.hpp"
+using namespace librados;
 
 #include <string>
 #include <iostream>
@@ -14,7 +15,7 @@
 
 using namespace std;
 
-static Rados *rados = NULL;
+Rados *rados = NULL;
 
 #define ROOT_BUCKET ".rgw" //keep this synced to rgw_user.cc::root_bucket!
 
@@ -60,8 +61,8 @@ int RGWRados::open_root_pool(rados_pool_t *pool)
 
 class RGWRadosListState {
 public:
-  vector<string> list;
-  unsigned int pos;
+  std::list<string> list;
+  std::list<string>::iterator pos;
   RGWRadosListState() : pos(0) {}
 };
 
@@ -98,14 +99,13 @@ int RGWRados::list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle
 {
   RGWRadosListState *state = (RGWRadosListState *)*handle;
 
-  if (state->pos == state->list.size()) {
+  if (state->pos == state->list.end()) {
     delete state;
     return -ENOENT;
   }
 
-
-
-  obj.name = state->list[state->pos++];
+  obj.name = *state->pos;
+  state->pos++;
 
   /* FIXME: should read mtime/size vals for bucket */
 
@@ -131,10 +131,10 @@ static int open_pool(string& bucket, rados_pool_t *pool)
  *     here.
  */
 int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, string& delim,
-                          string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes)
+			   string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes)
 {
   rados_pool_t pool;
-  map<string, object_t> dir_map;
+  set<string> dir_set;
 
   int r = rados->open_pool(bucket.c_str(), &pool);
   if (r < 0)
@@ -145,37 +145,34 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
 #define MAX_ENTRIES 1000
 
   do {
-    list<object_t> entries;
+    list<string> entries;
     r = rados->list(pool, MAX_ENTRIES, entries, ctx);
     if (r < 0)
       return r;
 
-    list<object_t>::iterator iter;
-    for (iter = entries.begin(); iter != entries.end(); ++iter) {
-      string name = iter->name.c_str();
-
+    for (list<string>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
       if (prefix.empty() ||
-          (name.compare(0, prefix.size(), prefix) == 0)) {
-        dir_map[name] = *iter;
+          (iter->compare(0, prefix.size(), prefix) == 0)) {
+        dir_set.insert(*iter);
       }
     }
   } while (r);
 
-  map<string, object_t>::iterator map_iter;
+  set<string>::iterator p;
   if (!marker.empty())
-    map_iter = dir_map.lower_bound(marker);
+    p = dir_set.lower_bound(marker);
   else
-    map_iter = dir_map.begin();
+    p = dir_set.begin();
 
   if (max < 0) {
-    max = dir_map.size();
+    max = dir_set.size();
   }
 
   result.clear();
   int i, count = 0;
-  for (i=0; i<max && map_iter != dir_map.end(); i++, ++map_iter) {
+  for (i=0; i<max && p != dir_set.end(); i++, ++p) {
     RGWObjEnt obj;
-    obj.name = map_iter->first;
+    obj.name = *p;
 
     if (!delim.empty()) {
       int delim_pos = obj.name.find(delim, prefix.size());
@@ -187,13 +184,13 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
     }
 
     __u64 s;
-    if (rados->stat(pool, map_iter->second, &s, &obj.mtime) < 0)
+    if (rados->stat(pool, *p, &s, &obj.mtime) < 0)
       continue;
     obj.size = s;
 
     bufferlist bl; 
     obj.etag[0] = '\0';
-    if (rados->getxattr(pool, map_iter->second, RGW_ATTR_ETAG, bl) >= 0) {
+    if (rados->getxattr(pool, *p, RGW_ATTR_ETAG, bl) >= 0) {
       strncpy(obj.etag, bl.c_str(), sizeof(obj.etag));
       obj.etag[sizeof(obj.etag)-1] = '\0';
     }
@@ -209,21 +206,19 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
  * if auid is set, it sets the auid of the underlying rados pool
  * returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs, __u64 auid)
+int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, __u64 auid)
 {
-  object_t bucket_oid(bucket.c_str());
-
-  int ret = rados->create(root_pool, bucket_oid, true);
+  int ret = rados->create(root_pool, bucket, true);
   if (ret < 0)
     return ret;
 
-  map<nstring, bufferlist>::iterator iter;
+  map<string, bufferlist>::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-    nstring name = iter->first;
+    string name = iter->first;
     bufferlist& bl = iter->second;
     
     if (bl.length()) {
-      ret = rados->setxattr(root_pool, bucket_oid, name.c_str(), bl);
+      ret = rados->setxattr(root_pool, bucket, name.c_str(), bl);
       if (ret < 0) {
         delete_bucket(id, bucket);
         return ret;
@@ -247,9 +242,9 @@ int RGWRados::create_bucket(std::string& id, std::string& bucket, map<nstring, b
  * attrs: all the given attrs are written to bucket storage for the given object
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
+int RGWRados::put_obj(std::string& id, std::string& bucket, std::string& oid, const char *data, size_t size,
                   time_t *mtime,
-                  map<nstring, bufferlist>& attrs)
+                  map<string, bufferlist>& attrs)
 {
   rados_pool_t pool;
 
@@ -257,11 +252,9 @@ int RGWRados::put_obj(std::string& id, std::string& bucket, std::string& obj, co
   if (r < 0)
     return r;
 
-  object_t oid(obj.c_str());
-
-  map<nstring, bufferlist>::iterator iter;
+  map<string, bufferlist>::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-    nstring name = iter->first;
+    const string& name = iter->first;
     bufferlist& bl = iter->second;
 
     if (bl.length()) {
@@ -305,7 +298,7 @@ int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& d
                const time_t *unmod_ptr,
                const char *if_match,
                const char *if_nomatch,
-               map<nstring, bufferlist>& attrs,  /* in/out */
+               map<string, bufferlist>& attrs,  /* in/out */
                struct rgw_err *err)
 {
   int ret;
@@ -313,14 +306,14 @@ int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& d
 
   cerr << "copy " << src_bucket << ":" << src_obj << " => " << dest_bucket << ":" << dest_obj << std::endl;
 
-  map<nstring, bufferlist> attrset;
+  map<string, bufferlist> attrset;
   ret = get_obj(src_bucket, src_obj, &data, 0, -1, &attrset,
                 mod_ptr, unmod_ptr, if_match, if_nomatch, true, err);
 
   if (ret < 0)
     return ret;
 
-  map<nstring, bufferlist>::iterator iter;
+  map<string, bufferlist>::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
     attrset[iter->first] = iter->second;
   }
@@ -356,15 +349,13 @@ int RGWRados::delete_bucket(std::string& id, std::string& bucket)
  * obj: name of the object to delete
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::delete_obj(std::string& id, std::string& bucket, std::string& obj)
+int RGWRados::delete_obj(std::string& id, std::string& bucket, std::string& oid)
 {
   rados_pool_t pool;
 
   int r = open_pool(bucket, &pool);
   if (r < 0)
     return r;
-
-  object_t oid(obj.c_str());
 
   r = rados->remove(pool, oid);
   if (r < 0)
@@ -397,8 +388,7 @@ int RGWRados::get_attr(std::string& bucket, std::string& obj,
   if (r < 0)
     return r;
 
-  object_t oid(actual_obj.c_str());
-  r = rados->getxattr(pool, oid, name, dest);
+  r = rados->getxattr(pool, actual_obj, name, dest);
 
   if (r < 0)
     return r;
@@ -414,7 +404,7 @@ int RGWRados::get_attr(std::string& bucket, std::string& obj,
  * bl: the contents of the attr
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::set_attr(std::string& bucket, std::string& obj,
+int RGWRados::set_attr(std::string& bucket, std::string& oid,
                        const char *name, bufferlist& bl)
 {
   rados_pool_t pool;
@@ -423,7 +413,6 @@ int RGWRados::set_attr(std::string& bucket, std::string& obj,
   if (r < 0)
     return r;
 
-  object_t oid(obj.c_str());
   r = rados->setxattr(pool, oid, name, bl);
 
   if (r < 0)
@@ -455,9 +444,9 @@ int RGWRados::set_attr(std::string& bucket, std::string& obj,
  *          (if get_data==true) length of read data,
  *          (if get_data==false) length of the object
  */
-int RGWRados::get_obj(std::string& bucket, std::string& obj, 
+int RGWRados::get_obj(std::string& bucket, std::string& oid, 
             char **data, off_t ofs, off_t end,
-            map<nstring, bufferlist> *attrs,
+            map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
             const time_t *unmod_ptr,
             const char *if_match,
@@ -472,13 +461,11 @@ int RGWRados::get_obj(std::string& bucket, std::string& obj,
   bufferlist bl;
 
   rados_pool_t pool;
-  map<nstring, bufferlist>::iterator iter;
+  map<string, bufferlist>::iterator iter;
 
   r = open_pool(bucket, &pool);
   if (r < 0)
     return r;
-
-  object_t oid(obj.c_str());
 
   r = rados->stat(pool, oid, &size, &mtime);
   if (r < 0)
@@ -511,7 +498,7 @@ int RGWRados::get_obj(std::string& bucket, std::string& obj,
     }
   }
   if (if_match || if_nomatch) {
-    r = get_attr(bucket, obj, RGW_ATTR_ETAG, etag);
+    r = get_attr(bucket, oid, RGW_ATTR_ETAG, etag);
     if (r < 0)
       goto done;
 

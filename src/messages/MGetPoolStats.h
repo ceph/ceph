@@ -21,10 +21,10 @@
 class MGetPoolStats : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;
-  vector<string> pools;
+  list<string> pools;
 
   MGetPoolStats() : PaxosServiceMessage(MSG_GETPOOLSTATS, 0) {}
-  MGetPoolStats(const ceph_fsid_t& f, tid_t t, vector<string>& ls, version_t l) :
+  MGetPoolStats(const ceph_fsid_t& f, tid_t t, list<string>& ls, version_t l) :
     PaxosServiceMessage(MSG_GETPOOLSTATS, l),
     fsid(f), pools(ls) {
     set_tid(t);

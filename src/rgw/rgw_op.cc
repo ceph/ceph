@@ -50,7 +50,7 @@ done:
  * attrs: will be filled up with attrs mapped as <attr_name, attr_contents>
  *
  */
-void get_request_metadata(struct req_state *s, map<nstring, bufferlist>& attrs)
+void get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs)
 {
   map<string, string>::iterator iter;
   for (iter = s->x_amz_map.begin(); iter != s->x_amz_map.end(); ++iter) {
@@ -203,7 +203,7 @@ done:
 void RGWCreateBucket::execute()
 {
   RGWAccessControlPolicy policy;
-  map<nstring, bufferlist> attrs;
+  map<string, bufferlist> attrs;
   bufferlist aclbl;
 
   bool pol_ret = policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
@@ -331,7 +331,7 @@ void RGWPutObj::execute()
     policy.encode(aclbl);
 
     string md5_str(calc_md5);
-    map<nstring, bufferlist> attrs;
+    map<string, bufferlist> attrs;
     bufferlist bl;
     bl.append(md5_str.c_str(), md5_str.size() + 1);
     attrs[RGW_ATTR_ETAG] = bl;
@@ -395,7 +395,7 @@ int RGWCopyObj::init_common()
   RGWAccessControlPolicy dest_policy;
   bool ret;
   bufferlist aclbl;
-  map<nstring, bufferlist> attrs;
+  map<string, bufferlist> attrs;
   bufferlist bl;
   RGWAccessControlPolicy src_policy;
   string empty_str;

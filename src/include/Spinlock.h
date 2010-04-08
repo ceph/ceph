@@ -18,6 +18,8 @@
 #include <pthread.h>
 #include "include/assert.h"
 
+namespace ceph {
+
 //#define SPINLOCK_LOCKDEP
 
 #ifdef SPINLOCK_LOCKDEP
@@ -120,5 +122,6 @@ public:
   };
 };
 
+}
 
 #endif
