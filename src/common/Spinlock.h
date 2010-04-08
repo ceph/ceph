@@ -17,9 +17,12 @@
 
 #include <pthread.h>
 #include "include/assert.h"
-#include "lockdep.h"
 
 //#define SPINLOCK_LOCKDEP
+
+#ifdef SPINLOCK_LOCKDEP
+# include "lockdep.h"
+#endif
 
 class Spinlock {
 private:
