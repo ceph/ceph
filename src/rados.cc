@@ -12,6 +12,7 @@
  * 
  */
 
+#include "include/types.h"
 #include "osdc/rados_bencher.h"
 #include "osdc/librados.h"
 

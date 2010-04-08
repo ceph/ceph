@@ -12,6 +12,7 @@
  * 
  */
 
+#include "include/types.h"
 #include "osdc/librados.h"
 
 #include <iostream>

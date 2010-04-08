@@ -2,19 +2,12 @@
 #define __LIBRADOS_H
 
 #ifdef __cplusplus
-
-#include "include/types.h"
-
 extern "C" {
 #endif
 
 #include <netinet/in.h>
 #include <linux/types.h>
 #include <string.h>
-#include <stdbool.h>
-
-#include "include/msgr.h"
-#include "include/rados.h"
 
 /* initialization */
 int rados_initialize(int argc, const char **argv); /* arguments are optional */
@@ -92,6 +85,9 @@ int rados_aio_read(rados_pool_t pool, const char *oid, off_t off, char *buf, siz
 
 #ifdef __cplusplus
 }
+
+#include "include/types.h"
+#include <stdbool.h>
 
 class RadosClient;
 
