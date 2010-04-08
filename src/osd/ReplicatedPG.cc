@@ -3072,7 +3072,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 	 q != p->second.m.end(); 
 	 q++) {
       dout(15) << " clone_range " << p->first << " " << q->first << "~" << q->second << dendl;
-      t->clone_range(coll_t::build_pg_coll(info.pgid), soid, p->first, q->first, q->second);
+      t->clone_range(coll_t::build_pg_coll(info.pgid), p->first, soid, q->first, q->second);
     }
   for (map<__u64,__u64>::iterator p = data_subset.m.begin();
        p != data_subset.m.end(); 
