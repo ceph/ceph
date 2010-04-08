@@ -65,7 +65,7 @@ using std::string;
 //#define BUFFER_DEBUG
 
 #ifdef BUFFER_DEBUG
-#include "common/Spinlock.h"
+#include "Spinlock.h"
 extern Spinlock buffer_lock;
 # define bdout { buffer_lock.lock(); cout
 # define bendl std::endl; buffer_lock.unlock(); }

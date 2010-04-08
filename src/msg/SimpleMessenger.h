@@ -26,7 +26,7 @@ using namespace std;
 using namespace __gnu_cxx;
 
 #include "common/Mutex.h"
-#include "common/Spinlock.h"
+#include "include/Spinlock.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
 

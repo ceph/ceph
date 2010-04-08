@@ -474,7 +474,6 @@ noinst_HEADERS = \
         common/Mutex.h\
         common/RWLock.h\
         common/Semaphore.h\
-	common/Spinlock.h\
         common/Thread.h\
         common/Throttle.h\
         common/Timer.h\
@@ -496,6 +495,7 @@ noinst_HEADERS = \
 	include/CompatSet.h\
         include/Distribution.h\
 	include/LogEntry.h\
+	include/Spinlock.h\
 	include/assert.h\
         include/atomic.h\
         include/bitmapper.h\
