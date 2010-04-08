@@ -291,7 +291,7 @@ public:
   utime_t get_recv_stamp() { return recv_stamp; }
 
   void calc_header_crc() {
-    header.crc = crc32c_le(0, (unsigned char*)&header,
+    header.crc = ceph_crc32c_le(0, (unsigned char*)&header,
 			   sizeof(header) - sizeof(header.crc));
   }
   void calc_front_crc() {
