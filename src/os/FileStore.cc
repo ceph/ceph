@@ -433,6 +433,36 @@ int FileStore::_detect_fs()
       btrfs_clone_range = false;
       dout(0) << "mount btrfs CLONE_RANGE ioctl is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
     }
+
+    // snap_create and snap_destroy?
+    struct btrfs_ioctl_vol_args volargs;
+    volargs.fd = fd;
+    strcpy(volargs.name, "sync_snap_test");
+    r = ::ioctl(fd, BTRFS_IOC_SNAP_CREATE, &volargs);
+    if (r == 0 || errno == EEXIST) {
+      dout(0) << "mount btrfs SNAP_CREATE is supported" << dendl;
+      btrfs_snap_create = true;
+
+      r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &volargs);
+      if (r == 0) {
+	dout(0) << "mount btrfs SNAP_DESTROY is supported" << dendl;
+	btrfs_snap_destroy = true;
+      } else {
+	dout(0) << "mount btrfs SNAP_DESTROY failed: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+      }
+    } else {
+      dout(0) << "mount btrfs SNAP_CREATE failed: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+    }
+
+    if (g_conf.filestore_btrfs_snap && !btrfs_snap_destroy) {
+      dout(0) << "mount btrfs snaps enabled, but no SNAP_DESTROY ioctl (from kernel 2.6.32+)" << dendl;
+      cerr << TEXT_RED
+	   << " ** ERROR: 'filestore btrfs snap' is enabled (for safe transactions, rollback),\n"
+	   << "           but btrfs does not support the SNAP_DESTROY ioctl (added in\n"
+	   << "           Linux 2.6.32).\n"
+	   << TEXT_NORMAL;
+      return -ENOTTY;
+    }
   } else {
     dout(0) << "mount did NOT detect btrfs" << dendl;
     btrfs = false;
@@ -1625,10 +1655,11 @@ void FileStore::sync_entry()
 	  snaps.pop_front();
 	  dout(10) << "removing snap '" << snapargs.name << "'" << dendl;
 	  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_DESTROY, &snapargs);
-	  char buf[100];
-	  dout(20) << "snap destroyed '" << snapargs.name << "' got " << r
-		  << " " << strerror_r(r < 0 ? errno : 0, buf, sizeof(buf)) << dendl;
-	  assert(r == 0);
+	  if (r) {
+	    char buf[100];
+	    dout(20) << "unable to destroy snap '" << snapargs.name << "' got " << r
+		     << " " << strerror_r(r < 0 ? errno : 0, buf, sizeof(buf)) << dendl;
+	  }
 	}
       }
 
