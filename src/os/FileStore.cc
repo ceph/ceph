@@ -593,7 +593,10 @@ int FileStore::mount()
 	char s[PATH_MAX];
 	snprintf(s, sizeof(s), "%s/current.remove.me.%d", basedir.c_str(), rand());
 	r = ::rename(current_fn, s);
-	assert(r == 0);
+	if (r) {
+	  dout(0) << "error renaming old current subvol: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+	  return -errno;
+	}
       }
       assert(r == 0);
       
