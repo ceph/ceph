@@ -273,6 +273,11 @@ install-data-local:
 	$(install_sh_SCRIPT) -m 0644 client/libceph.h $(DESTDIR)$(includedir)/ceph/libceph.h
 	mkdir -p $(DESTDIR)$(includedir)/rados
 	$(install_sh_SCRIPT) -m 0644 include/librados.h $(DESTDIR)$(includedir)/rados/librados.h
+	$(install_sh_SCRIPT) -m 0644 include/librados.hpp $(DESTDIR)$(includedir)/rados/librados.hpp
+	$(install_sh_SCRIPT) -m 0644 include/buffer.h $(DESTDIR)$(includedir)/rados/buffer.h
+	$(install_sh_SCRIPT) -m 0644 include/atomic.h $(DESTDIR)$(includedir)/rados/atomic.h
+	$(install_sh_SCRIPT) -m 0644 include/page.h $(DESTDIR)$(includedir)/rados/page.h
+	$(install_sh_SCRIPT) -m 0644 include/crc32c.h $(DESTDIR)$(includedir)/rados/crc32c.h
 	mkdir -p $(DESTDIR)$(includedir)/crush
 	$(install_sh_SCRIPT) -m 0644 crush/hash.h $(DESTDIR)$(includedir)/crush/hash.h
 	$(install_sh_SCRIPT) -m 0644 crush/crush.h $(DESTDIR)$(includedir)/crush/crush.h
