@@ -1377,11 +1377,15 @@ bool OSDMonitor::preprocess_pool_op ( MPoolOp *m) {
       return true;
     }
     return false; //this message needs to go through preparation
+  case POOL_OP_CREATE_UNMANAGED_SNAP:
+    return false; //gotta go through the leader and allocate a unique snap_id
   case POOL_OP_DELETE_SNAP:
     if (!snap_exists) {
       _pool_op(m, -ENOENT, pending_inc.epoch);
       return true; //done with this message
     }
+    return false;
+  case POOL_OP_DELETE_UNMANAGED_SNAP:
     return false;
   case POOL_OP_DELETE: //can't delete except on master
     return false;
@@ -1417,6 +1421,7 @@ bool OSDMonitor::prepare_pool_op (MPoolOp *m)
   }
   const pg_pool_t *p = osdmap.get_pg_pool(m->pool);
   pg_pool_t* pp = 0;
+  int64_t rc = 0;
   //if the pool isn't already in the update, add it
   if (!pending_inc.new_pools.count(m->pool))
     pending_inc.new_pools[m->pool] = *p;
@@ -1427,16 +1432,21 @@ bool OSDMonitor::prepare_pool_op (MPoolOp *m)
     pp->add_snap(m->name.c_str(), g_clock.now());
     dout(10) << "create snap in pool " << m->pool << " " << m->name << " seq " << pp->get_snap_epoch() << dendl;
     break;
+  case POOL_OP_CREATE_UNMANAGED_SNAP:
+    rc = pp->add_unmanaged_snap();
+    break;
   case POOL_OP_DELETE_SNAP:
     pp->remove_snap(pp->snap_exists(m->name.c_str()));
     break;
+  case POOL_OP_DELETE_UNMANAGED_SNAP:
+    pp->remove_unmanaged_snap(m->snapid);
    default:
     assert(0);
     break;
   }
   pp->set_snap_epoch(pending_inc.epoch);
 
-  paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, 0, pending_inc.epoch));
+  paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, rc, pending_inc.epoch));
   return true;
 }
 
