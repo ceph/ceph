@@ -669,7 +669,8 @@ int Objecter::create_pool_snap(int pool, string& snapName, Context *onfinish) {
   return 0;
 }
 
-int Objecter::delete_pool_snap(int pool, string& snapName, Context *onfinish) {
+int Objecter::delete_pool_snap(int pool, string& snapName, Context *onfinish)
+{
   dout(10) << "delete_pool_snap; pool: " << pool << "; snap: " << snapName << dendl;
   PoolOp *op = new PoolOp;
   if (!op)
@@ -686,7 +687,8 @@ int Objecter::delete_pool_snap(int pool, string& snapName, Context *onfinish) {
   return 0;
 }
 
-int Objecter::create_pool(string& name, Context *onfinish, __u64 auid) {
+int Objecter::create_pool(string& name, Context *onfinish, __u64 auid)
+{
   dout(10) << "create_pool name=" << name << dendl;
   PoolOp *op = new PoolOp;
   if (!op)
@@ -704,8 +706,10 @@ int Objecter::create_pool(string& name, Context *onfinish, __u64 auid) {
   return 0;
 }
 
-int Objecter::delete_pool(int pool, Context *onfinish) {
+int Objecter::delete_pool(int pool, Context *onfinish)
+{
   dout(10) << "delete_pool " << pool << dendl;
+
   PoolOp *op = new PoolOp;
   if (!op) return -ENOMEM;
   op->tid = ++last_tid;
