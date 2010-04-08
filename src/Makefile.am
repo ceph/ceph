@@ -344,6 +344,7 @@ libcommon_files = \
 	include/ceph_strings.cc \
 	include/ceph_frag.cc \
 	config.cc \
+	common/page.cc \
 	common/lockdep.cc
 
 libcrush_a_SOURCES = \

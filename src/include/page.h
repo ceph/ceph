@@ -1,19 +1,21 @@
 #ifndef __CEPH_PAGE_H
 #define __CEPH_PAGE_H
 
-// these are in config.cc
-extern unsigned _page_size;
-extern unsigned long _page_mask;
-extern unsigned _page_shift;
+namespace ceph {
+  // these are in common/page.cc
+  extern unsigned _page_size;
+  extern unsigned long _page_mask;
+  extern unsigned _page_shift;
+}
 
-#define PAGE_SIZE _page_size
-#define PAGE_MASK _page_mask
-#define PAGE_SHIFT _page_shift
-
-/*
-#define PAGE_SIZE 4096
-#define PAGE_MASK (~(4095))
-#define PAGE_SHIFT 12
-*/
+#ifndef PAGE_SIZE
+#define PAGE_SIZE ceph::_page_size
+#endif
+#ifndef PAGE_MASK
+#define PAGE_MASK ceph::_page_mask
+#endif
+#ifndef PAGE_SHIFT
+#define PAGE_SHIFT ceph::_page_shift
+#endif
 
 #endif
