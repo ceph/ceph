@@ -646,15 +646,30 @@ struct pg_pool_t {
     return 0;
   }
   void add_snap(const char *n, utime_t stamp) {
+    assert(removed_snaps.empty());
     snapid_t s = get_snap_seq() + 1;
     v.snap_seq = s;
     snaps[s].snapid = s;
     snaps[s].name = n;
     snaps[s].stamp = stamp;
   }
+  __u64 add_unmanaged_snap() {
+    assert(snaps.empty());
+    if (removed_snaps.empty()) {
+      removed_snaps.insert(snapid_t(1));
+      v.snap_seq = 1;
+    }
+    v.snap_seq = v.snap_seq + 1;
+    return v.snap_seq;
+  }
   void remove_snap(snapid_t s) {
     assert(snaps.count(s));
     snaps.erase(s);
+    v.snap_seq = v.snap_seq + 1;
+  }
+  void remove_unmanaged_snap(snapid_t s) {
+    assert(snaps.empty());
+    removed_snaps.insert(s);
     v.snap_seq = v.snap_seq + 1;
   }
 
