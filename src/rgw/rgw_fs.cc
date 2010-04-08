@@ -145,7 +145,7 @@ int RGWFS::list_objects(string& id, string& bucket, int max, string& prefix, str
 }
 
 
-int RGWFS::create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs, __u64 auid)
+int RGWFS::create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, __u64 auid)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1;
   char buf[len];
@@ -154,9 +154,9 @@ int RGWFS::create_bucket(std::string& id, std::string& bucket, map<nstring, buff
   if (mkdir(buf, 0755) < 0)
     return -errno;
 
-  map<nstring, bufferlist>::iterator iter;
+  map<std::string, bufferlist>::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-    nstring name = iter->first;
+    const string& name = iter->first;
     bufferlist& bl = iter->second;
     
     if (bl.length()) {
@@ -174,7 +174,7 @@ int RGWFS::create_bucket(std::string& id, std::string& bucket, map<nstring, buff
 
 int RGWFS::put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
                   time_t *mtime,
-                  map<nstring, bufferlist>& attrs)
+                  map<string, bufferlist>& attrs)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
   char buf[len];
@@ -186,9 +186,9 @@ int RGWFS::put_obj(std::string& id, std::string& bucket, std::string& obj, const
     return -errno;
 
   int r;
-  map<nstring, bufferlist>::iterator iter;
+  map<string, bufferlist>::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-    nstring name = iter->first;
+    const string& name = iter->first;
     bufferlist& bl = iter->second;
     
     if (bl.length()) {
@@ -235,25 +235,25 @@ int RGWFS::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest
                const time_t *unmod_ptr,
                const char *if_match,
                const char *if_nomatch,
-               map<nstring, bufferlist>& attrs,
+               map<string, bufferlist>& attrs,
                struct rgw_err *err)
 {
   int ret;
   char *data;
 
-  map<nstring, bufferlist> attrset;
+  map<string, bufferlist> attrset;
   ret = get_obj(src_bucket, src_obj, &data, 0, -1, &attrset,
                 mod_ptr, unmod_ptr, if_match, if_nomatch, true, err);
   if (ret < 0)
     return ret;
 
-  map<nstring, bufferlist>::iterator iter;
+  map<string, bufferlist>::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
     attrset[iter->first] = iter->second;
   }
   attrs = attrset;
 
-  ret =  put_obj(id, dest_bucket, dest_obj, data, ret, mtime, attrs);
+  ret = put_obj(id, dest_bucket, dest_obj, data, ret, mtime, attrs);
 
   return ret;
 }
@@ -377,7 +377,7 @@ int RGWFS::set_attr(std::string& bucket, std::string& obj,
 
 int RGWFS::get_obj(std::string& bucket, std::string& obj, 
             char **data, off_t ofs, off_t end,
-            map<nstring, bufferlist> *attrs,
+            map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
             const time_t *unmod_ptr,
             const char *if_match,

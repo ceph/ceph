@@ -205,7 +205,7 @@ int main(int argc, const char **argv)
 
     Rados::ListCtx ctx;
     while (1) {
-      list<object_t> vec;
+      list<string> vec;
       ret = rados.list(p, 1 << 10, vec, ctx);
       if (ret < 0) {
 	cerr << "got error: " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
@@ -214,8 +214,8 @@ int main(int argc, const char **argv)
       if (vec.empty())
 	break;
 
-      for (list<object_t>::iterator iter = vec.begin(); iter != vec.end(); ++iter)
-	*outstream << iter->name << std::endl;
+      for (list<string>::iterator iter = vec.begin(); iter != vec.end(); ++iter)
+	*outstream << *iter << std::endl;
     }
     if (!stdout)
       delete outstream;
@@ -235,7 +235,7 @@ int main(int argc, const char **argv)
   else if (strcmp(nargs[0], "get") == 0) {
     if (!pool || nargs.size() < 3)
       usage();
-    object_t oid(nargs[1]);
+    string oid(nargs[1]);
     ret = rados.read(p, oid, 0, outdata, 0);
     if (ret < 0) {
       cerr << "error reading " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
@@ -254,7 +254,7 @@ int main(int argc, const char **argv)
     if (!pool || nargs.size() < 3)
       usage();
 
-    object_t oid(nargs[1]);
+    string oid(nargs[1]);
 
     if (strcmp(nargs[2], "-") == 0) {
       char buf[256];
@@ -280,7 +280,7 @@ int main(int argc, const char **argv)
   else if (strcmp(nargs[0], "rm") == 0) {
     if (!pool || nargs.size() < 2)
       usage();
-    object_t oid(nargs[1]);
+    string oid(nargs[1]);
     ret = rados.remove(p, oid);
     if (ret < 0) {
       cerr << "error removing " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;

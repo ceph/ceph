@@ -124,7 +124,7 @@ public:
 
   int getxattr(PoolCtx& pool, const object_t& oid, const char *name, bufferlist& bl);
   int setxattr(PoolCtx& pool, const object_t& oid, const char *name, bufferlist& bl);
-  int getxattrs(PoolCtx& pool, const object_t& oid, map<nstring, bufferlist>& attrset);
+  int getxattrs(PoolCtx& pool, const object_t& oid, map<string, bufferlist>& attrset);
 
   int list_pools(std::vector<string>& ls);
   int get_pool_stats(std::vector<string>& ls, map<string,rados_pool_stat_t>& result);
@@ -1063,7 +1063,7 @@ int RadosClient::setxattr(PoolCtx& pool, const object_t& oid, const char *name, 
   return bl.length();
 }
 
-int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<nstring, bufferlist>& attrset)
+int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<std::string, bufferlist>& attrset)
 {
   utime_t ut = g_clock.now();
 
@@ -1080,10 +1080,15 @@ int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<nstring, buff
 
   lock.Lock();
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  map<nstring, bufferlist> aset;
   objecter->getxattrs(oid, layout, pool.snap_seq,
-                  attrset,
-		  0, onack);
+		      aset,
+		      0, onack);
   lock.Unlock();
+
+  attrset.clear();
+  for (map<nstring,bufferlist>::iterator p = aset.begin(); p != aset.end(); p++)
+    attrset[p->first.c_str()] = p->second;
 
   mylock.Lock();
   while (!done)
@@ -1166,7 +1171,7 @@ int Rados::get_fs_stats(rados_statfs_t& result) {
   return client->get_fs_stats(result);
 }
 
-int Rados::list(rados_pool_t pool, int max, std::list<object_t>& entries, Rados::ListCtx& ctx)
+int Rados::list(rados_pool_t pool, int max, std::list<string>& entries, Rados::ListCtx& ctx)
 {
   if (!client)
     return -EINVAL;
@@ -1179,93 +1184,100 @@ int Rados::list(rados_pool_t pool, int max, std::list<object_t>& entries, Rados:
   }
 
   op = (Objecter::ListContext *) ctx.ctx;
-  return client->list(*(RadosClient::PoolCtx *)pool, max, entries, op);
+  std::list<object_t> e;
+  int r = client->list(*(RadosClient::PoolCtx *)pool, max, e, op);
+  while (!e.empty()) {
+    entries.push_back(e.front().name.c_str());
+    e.pop_front();
+  }
+  return r;
 }
 
-int Rados::create(rados_pool_t pool, const object_t& oid, bool exclusive)
+int Rados::create(rados_pool_t pool, const string& o, bool exclusive)
 {
   if (!client)
     return -EINVAL;
-
+  object_t oid(o);
   return client->create(*(RadosClient::PoolCtx *)pool, oid, exclusive);
 }
 
-int Rados::write(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len)
+int Rados::write(rados_pool_t pool, const string& o, off_t off, bufferlist& bl, size_t len)
 {
   if (!client)
     return -EINVAL;
-
+  object_t oid(o);
   return client->write(*(RadosClient::PoolCtx *)pool, oid, off, bl, len);
 }
 
-int Rados::write_full(rados_pool_t pool, const object_t& oid, bufferlist& bl)
+int Rados::write_full(rados_pool_t pool, const string& o, bufferlist& bl)
 {
   if (!client)
     return -EINVAL;
-
+  object_t oid(o);
   return client->write_full(*(RadosClient::PoolCtx *)pool, oid, bl);
 }
 
-int Rados::remove(rados_pool_t pool, const object_t& oid)
+int Rados::remove(rados_pool_t pool, const string& o)
 {
   if (!client)
     return -EINVAL;
-
+  object_t oid(o);
   return client->remove(*(RadosClient::PoolCtx *)pool, oid);
 }
 
-int Rados::read(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len)
+int Rados::read(rados_pool_t pool, const string& o, off_t off, bufferlist& bl, size_t len)
 {
   if (!client)
     return -EINVAL;
-
+  object_t oid(o);
   return client->read(*(RadosClient::PoolCtx *)pool, oid, off, bl, len);
 }
 
-int Rados::getxattr(rados_pool_t pool, const object_t& oid, const char *name, bufferlist& bl)
+int Rados::getxattr(rados_pool_t pool, const string& o, const char *name, bufferlist& bl)
 {
   if (!client)
     return -EINVAL;
-
+  object_t oid(o);
   return client->getxattr(*(RadosClient::PoolCtx *)pool, oid, name, bl);
 }
 
-int Rados::getxattrs(rados_pool_t pool, const object_t& oid, map<nstring, bufferlist>& attrset)
+int Rados::getxattrs(rados_pool_t pool, const string& o, map<std::string, bufferlist>& attrset)
 {
   if (!client)
     return -EINVAL;
-
+  object_t oid(o);
   return client->getxattrs(*(RadosClient::PoolCtx *)pool, oid, attrset);
 }
 
-int Rados::setxattr(rados_pool_t pool, const object_t& oid, const char *name, bufferlist& bl)
+int Rados::setxattr(rados_pool_t pool, const string& o, const char *name, bufferlist& bl)
 {
   if (!client)
     return -EINVAL;
-
+  object_t oid(o);
   return client->setxattr(*(RadosClient::PoolCtx *)pool, oid, name, bl);
 }
 
-int Rados::stat(rados_pool_t pool, const object_t& oid, __u64 *psize, time_t *pmtime)
+int Rados::stat(rados_pool_t pool, const string& o, __u64 *psize, time_t *pmtime)
 {
   if (!client)
     return -EINVAL;
-
+  object_t oid(o);
   return client->stat(*(RadosClient::PoolCtx *)pool, oid, psize, pmtime);
 }
 
-int Rados::tmap_update(rados_pool_t pool, const object_t& oid, bufferlist& cmdbl)
+int Rados::tmap_update(rados_pool_t pool, const string& o, bufferlist& cmdbl)
 {
   if (!client)
     return -EINVAL;
+  object_t oid(o);
   return client->tmap_update(*(RadosClient::PoolCtx *)pool, oid, cmdbl);
 }
-int Rados::exec(rados_pool_t pool, const object_t& oid, const char *cls, const char *method,
+int Rados::exec(rados_pool_t pool, const string& o, const char *cls, const char *method,
 		bufferlist& inbl, bufferlist& outbl)
 {
   if (!client)
     return -EINVAL;
-
+  object_t oid(o);
   return client->exec(*(RadosClient::PoolCtx *)pool, oid, cls, method, inbl, outbl);
 }
 
@@ -1343,7 +1355,7 @@ int Rados::snap_get_stamp(rados_pool_t pool, rados_snap_t snapid, time_t *t)
 }
 
 // AIO
-int Rados::aio_read(rados_pool_t pool, const object_t& oid, off_t off, bufferlist *pbl, size_t len,
+int Rados::aio_read(rados_pool_t pool, const string& oid, off_t off, bufferlist *pbl, size_t len,
 		    Rados::AioCompletion **pc)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
@@ -1355,7 +1367,7 @@ int Rados::aio_read(rados_pool_t pool, const object_t& oid, off_t off, bufferlis
   return r;
 }
 
-int Rados::aio_write(rados_pool_t pool, const object_t& oid, off_t off, const bufferlist& bl, size_t len,
+int Rados::aio_write(rados_pool_t pool, const string& oid, off_t off, const bufferlist& bl, size_t len,
 		     AioCompletion **pc)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;

@@ -136,7 +136,7 @@ int main(int argc, const char **argv)
   snprintf(buf, 128, "%s", ctime(&tm));
   bl.append(buf, strlen(buf));
 
-  object_t oid("bar");
+  const char *oid = "bar";
 
   rados_pool_t pool;
   int r = rados.open_pool("data", &pool);

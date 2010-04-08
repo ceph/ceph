@@ -40,12 +40,12 @@ public:
                            std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes) = 0;
 
   /** Create a new bucket*/
-  virtual int create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs, __u64 auid=0) = 0;
+  virtual int create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, __u64 auid=0) = 0;
   /** write an object to the storage device in the appropriate pool
     with the given stats */
   virtual int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
                       time_t *mtime,
-                      map<nstring, bufferlist>& attrs) = 0;
+                      map<std::string, bufferlist>& attrs) = 0;
   /**
    * Copy an object.
    * id: unused (well, it's passed to put_obj)
@@ -66,7 +66,7 @@ public:
                       const time_t *unmod_ptr,
                       const char *if_match,
                       const char *if_nomatch,
-                      map<nstring, bufferlist>& attrs,
+		       map<std::string, bufferlist>& attrs,
                       struct rgw_err *err) = 0;
   /**
    * Delete a bucket.
@@ -109,14 +109,14 @@ public:
  *          (if get_data==false) length of the object
  */
   virtual int get_obj(std::string& bucket, std::string& obj, 
-            char **data, off_t ofs, off_t end,
-            map<nstring, bufferlist> *attrs,
-            const time_t *mod_ptr,
-            const time_t *unmod_ptr,
-            const char *if_match,
-            const char *if_nomatch,
-            bool get_data,
-            struct rgw_err *err) = 0;
+		      char **data, off_t ofs, off_t end,
+		      map<std::string, bufferlist> *attrs,
+		      const time_t *mod_ptr,
+		      const time_t *unmod_ptr,
+		      const char *if_match,
+		      const char *if_nomatch,
+		      bool get_data,
+		      struct rgw_err *err) = 0;
 
   /**
    * Get the attributes for an object.

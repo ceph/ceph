@@ -13,10 +13,10 @@ public:
   int list_objects(std::string& id, std::string& bucket, int max, std::string& prefix, std::string& delim,
                    std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes);
 
-  int create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs, __u64 auid=0);
+  int create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, __u64 auid=0);
   int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
               time_t *mtime,
-               map<nstring, bufferlist>& attrs);
+	      map<std::string, bufferlist>& attrs);
   int copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
                std::string& src_bucket, std::string& src_obj,
                time_t *mtime,
@@ -24,7 +24,7 @@ public:
                const time_t *unmod_ptr,
                const char *if_match,
                const char *if_nomatch,
-               map<nstring, bufferlist>& attrs,
+               map<std::string, bufferlist>& attrs,
                struct rgw_err *err);
   int delete_bucket(std::string& id, std::string& bucket);
   int delete_obj(std::string& id, std::string& bucket, std::string& obj);
@@ -38,7 +38,7 @@ public:
 
  int get_obj(std::string& bucket, std::string& obj, 
             char **data, off_t ofs, off_t end,
-            map<nstring, bufferlist> *attrs,
+	     map<std::string, bufferlist> *attrs,
             const time_t *mod_ptr,
             const time_t *unmod_ptr,
             const char *if_match,

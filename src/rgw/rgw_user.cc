@@ -58,7 +58,7 @@ int rgw_store_user_info(RGWUserInfo& info)
   const char *data = bl.c_str();
   string md5;
   int ret;
-  map<nstring,bufferlist> attrs;
+  map<string,bufferlist> attrs;
 
   ret = rgwstore->put_obj(info.user_id, ui_bucket, info.user_id, data, bl.length(), NULL, attrs);
 
@@ -80,7 +80,7 @@ int rgw_store_user_info(RGWUserInfo& info)
   ui.encode(uid_bl);
   ret = rgwstore->put_obj(info.user_id, ui_email_bucket, info.user_email, uid_bl.c_str(), uid_bl.length(), NULL, attrs);
   if (ret == -ENOENT) {
-    map<nstring, bufferlist> attrs;
+    map<string, bufferlist> attrs;
     ret = rgwstore->create_bucket(info.user_id, ui_email_bucket, attrs);
     if (ret >= 0)
       ret = rgwstore->put_obj(info.user_id, ui_email_bucket, info.user_email, uid_bl.c_str(), uid_bl.length(), NULL, attrs);

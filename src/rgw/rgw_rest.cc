@@ -202,7 +202,7 @@ int RGWGetObj_REST::send_response()
     dump_content_length(s, len);
   }
   if (!ret) {
-    map<nstring, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
+    map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
     if (iter != attrs.end()) {
       bufferlist& bl = iter->second;
       if (bl.length()) {
@@ -354,7 +354,7 @@ void RGWCopyObj_REST::send_response()
   if (ret == 0) {
     open_section(s, "CopyObjectResult");
     dump_time(s, "LastModified", &mtime);
-    map<nstring, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
+    map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
     if (iter != attrs.end()) {
       bufferlist& bl = iter->second;
       if (bl.length()) {

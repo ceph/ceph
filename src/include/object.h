@@ -33,6 +33,7 @@ struct object_t {
   nstring name;
 
   object_t(const char *s = 0) : name(s) {}
+  object_t(const string& s) : name(s) {}
   void swap(object_t& o) {
     name.swap(o.name);
   }

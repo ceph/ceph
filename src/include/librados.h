@@ -104,21 +104,21 @@ public:
 
   void set_snap(rados_pool_t pool, __u64 seq);
 
-  int create(rados_pool_t pool, const object_t& oid, bool exclusive);
+  int create(rados_pool_t pool, const std::string& oid, bool exclusive);
 
-  int write(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
-  int write_full(rados_pool_t pool, const object_t& oid, bufferlist& bl);
-  int read(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
-  int remove(rados_pool_t pool, const object_t& oid);
+  int write(rados_pool_t pool, const std::string& oid, off_t off, bufferlist& bl, size_t len);
+  int write_full(rados_pool_t pool, const std::string& oid, bufferlist& bl);
+  int read(rados_pool_t pool, const std::string& oid, off_t off, bufferlist& bl, size_t len);
+  int remove(rados_pool_t pool, const std::string& oid);
 
-  int getxattr(rados_pool_t pool, const object_t& oid, const char *name, bufferlist& bl);
-  int setxattr(rados_pool_t pool, const object_t& oid, const char *name, bufferlist& bl);
-  int getxattrs(rados_pool_t pool, const object_t& oid, map<nstring, bufferlist>& attrset);
-  int stat(rados_pool_t pool, const object_t& oid, __u64 *psize, time_t *pmtime);
+  int getxattr(rados_pool_t pool, const std::string& oid, const char *name, bufferlist& bl);
+  int setxattr(rados_pool_t pool, const std::string& oid, const char *name, bufferlist& bl);
+  int getxattrs(rados_pool_t pool, const std::string& oid, map<std::string, bufferlist>& attrset);
+  int stat(rados_pool_t pool, const std::string& oid, __u64 *psize, time_t *pmtime);
 
-  int tmap_update(rados_pool_t pool, const object_t& oid, bufferlist& cmdbl);
+  int tmap_update(rados_pool_t pool, const std::string& oid, bufferlist& cmdbl);
   
-  int exec(rados_pool_t pool, const object_t& oid, const char *cls, const char *method,
+  int exec(rados_pool_t pool, const std::string& oid, const char *cls, const char *method,
 	   bufferlist& inbl, bufferlist& outbl);
 
   struct ListCtx {
@@ -126,7 +126,7 @@ public:
     ListCtx() : ctx(NULL) {}
   };
 
-  int list(rados_pool_t pool, int max, std::list<object_t>& entries, Rados::ListCtx& ctx);
+  int list(rados_pool_t pool, int max, std::list<std::string>& entries, Rados::ListCtx& ctx);
   int list_pools(std::vector<std::string>& v);
   int get_pool_stats(std::vector<std::string>& v,
 		     std::map<std::string,rados_pool_stat_t>& stats);
@@ -156,9 +156,9 @@ public:
     void release();
   };
 
-  int aio_read(rados_pool_t pool, const object_t& oid, off_t off, bufferlist *pbl, size_t len,
+  int aio_read(rados_pool_t pool, const std::string& oid, off_t off, bufferlist *pbl, size_t len,
 	       AioCompletion **pc);
-  int aio_write(rados_pool_t pool, const object_t& oid, off_t off, const bufferlist& bl, size_t len,
+  int aio_write(rados_pool_t pool, const std::string& oid, off_t off, const bufferlist& bl, size_t len,
 		AioCompletion **pc);
 
 };
