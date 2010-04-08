@@ -56,7 +56,10 @@ using std::string;
 #include "atomic.h"
 #include "page.h"
 #include "crc32c.h"
-#include "assert.h"
+
+#ifndef assert
+# include <assert.h>
+#endif
 
 
 //#define BUFFER_DEBUG
