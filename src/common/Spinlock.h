@@ -18,6 +18,8 @@
 #include <pthread.h>
 #include "include/assert.h"
 
+using namespace ceph;
+
 //#define SPINLOCK_LOCKDEP
 
 #ifdef SPINLOCK_LOCKDEP

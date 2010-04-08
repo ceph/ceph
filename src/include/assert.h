@@ -6,6 +6,8 @@
 
 #ifdef __cplusplus
 
+namespace ceph {
+
 class BackTrace;
 
 struct FailedAssertion {
@@ -71,6 +73,10 @@ extern void __ceph_assert_warn(const char *assertion, const char *file, int line
 #define assert_protocol(expr)	assert(expr)
 #define assert_disk(expr)	assert(expr)
 */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
 
