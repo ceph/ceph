@@ -58,14 +58,13 @@ using std::string;
 #include "crc32c.h"
 #include "assert.h"
 
-#include "common/Spinlock.h"
-
 extern atomic_t buffer_total_alloc;
-extern Spinlock buffer_lock;
 
 //#define BUFFER_DEBUG
 
 #ifdef BUFFER_DEBUG
+#include "common/Spinlock.h"
+extern Spinlock buffer_lock;
 # define bdout { buffer_lock.lock(); cout
 # define bendl std::endl; buffer_lock.unlock(); }
 #else
