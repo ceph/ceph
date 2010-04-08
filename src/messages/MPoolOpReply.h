@@ -22,7 +22,6 @@ public:
   int replyCode;
   epoch_t epoch;
 
-
   MPoolOpReply() : PaxosServiceMessage(MSG_POOLOPREPLY, 0) {}
   MPoolOpReply( ceph_fsid_t& f, tid_t t, int rc, int e, version_t v) :
     PaxosServiceMessage(MSG_POOLOPREPLY, v), fsid(f), replyCode(rc), epoch(e) {
