@@ -86,7 +86,6 @@ int rados_aio_read(rados_pool_t pool, const char *oid, off_t off, char *buf, siz
 #ifdef __cplusplus
 }
 
-#include "include/types.h"
 #include <stdbool.h>
 
 class RadosClient;
@@ -103,7 +102,7 @@ public:
   int open_pool(const char *name, rados_pool_t *pool);
   int close_pool(rados_pool_t pool);
 
-  void set_snap(rados_pool_t pool, snapid_t seq);
+  void set_snap(rados_pool_t pool, __u64 seq);
 
   int create(rados_pool_t pool, const object_t& oid, bool exclusive);
 

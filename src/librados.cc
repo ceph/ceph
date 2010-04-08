@@ -1303,7 +1303,7 @@ int Rados::snap_remove(const rados_pool_t pool, const char *snapname) {
 }
 
 
-void Rados::set_snap(rados_pool_t pool, snapid_t seq)
+void Rados::set_snap(rados_pool_t pool, __u64 seq)
 {
   if (!client)
     return;
