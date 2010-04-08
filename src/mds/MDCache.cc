@@ -5312,7 +5312,7 @@ void MDCache::check_memory_usage()
 	   << ", heap " << last.get_heap()
 	   << ", malloc " << last.malloc << " mmap " << last.mmap
 	   << ", baseline " << baseline.get_heap()
-	   << ", buffers " << (buffer_total_alloc.test() >> 10)
+	   << ", buffers " << (buffer_total_alloc.read() >> 10)
 	   << ", max " << g_conf.mds_mem_max
 	   << ", " << num_inodes_with_caps << " / " << inode_map.size() << " inodes have caps"
 	   << ", " << num_caps << " caps, " << caps_per_inode << " caps per inode"

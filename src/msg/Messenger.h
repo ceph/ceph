@@ -158,7 +158,7 @@ protected:
 protected:
   //destruction should be handled via destroy()
   virtual ~Messenger() {
-    assert(nref.test() == 0);
+    assert(nref.read() == 0);
   }
 };
 

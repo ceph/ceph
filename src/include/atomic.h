@@ -72,7 +72,7 @@ public:
     nref -= d;
     lock.unlock();
   }
-  int test() const {
+  int read() const {
     return nref;
   }
 };

@@ -156,16 +156,16 @@ private:
       else
 	data = 0;
       inc_total_alloc(len);
-      bdout << "raw_char alloc " << (void *)data << " " << l << " " << buffer_total_alloc.test() << bendl;
+      bdout << "raw_char alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
     }
     raw_char(unsigned l, char *b) : raw(b, l) {
       inc_total_alloc(len);
-      bdout << "raw_char alloc " << (void *)data << " " << l << " " << buffer_total_alloc.test() << bendl;
+      bdout << "raw_char alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
     }
     ~raw_char() {
       delete[] data;
       dec_total_alloc(len);      
-      bdout << "raw_char free " << (void *)data << " " << buffer_total_alloc.test() << bendl;
+      bdout << "raw_char free " << (void *)data << " " << buffer_total_alloc.read() << bendl;
     }
     raw* clone_empty() {
       return new raw_char(len);
@@ -180,16 +180,16 @@ private:
       else
 	data = 0;
       inc_total_alloc(len);
-      bdout << "raw_malloc alloc " << (void *)data << " " << l << " " << buffer_total_alloc.test() << bendl;
+      bdout << "raw_malloc alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
     }
     raw_malloc(unsigned l, char *b) : raw(b, l) {
       inc_total_alloc(len);
-      bdout << "raw_malloc alloc " << (void *)data << " " << l << " " << buffer_total_alloc.test() << bendl;
+      bdout << "raw_malloc alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
     }
     ~raw_malloc() {
       free(data);
       dec_total_alloc(len);      
-      bdout << "raw_malloc free " << (void *)data << " " << buffer_total_alloc.test() << bendl;
+      bdout << "raw_malloc free " << (void *)data << " " << buffer_total_alloc.read() << bendl;
     }
     raw* clone_empty() {
       return new raw_malloc(len);
@@ -213,12 +213,12 @@ private:
       if (!data)
 	throw new bad_alloc;
       inc_total_alloc(len);
-      bdout << "raw_mmap alloc " << (void *)data << " " << l << " " << buffer_total_alloc.test() << bendl;
+      bdout << "raw_mmap alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
     }
     ~raw_mmap_pages() {
       ::munmap(data, len);
       dec_total_alloc(len);
-      bdout << "raw_mmap free " << (void *)data << " " << buffer_total_alloc.test() << bendl;
+      bdout << "raw_mmap free " << (void *)data << " " << buffer_total_alloc.read() << bendl;
     }
     raw* clone_empty() {
       return new raw_mmap_pages(len);
@@ -239,12 +239,12 @@ private:
       if (!data)
 	throw new bad_alloc;
       inc_total_alloc(len);
-      bdout << "raw_posix_aligned alloc " << (void *)data << " " << l << " " << buffer_total_alloc.test() << bendl;
+      bdout << "raw_posix_aligned alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
     }
     ~raw_posix_aligned() {
       ::free((void*)data);
       dec_total_alloc(len);
-      bdout << "raw_posix_aligned free " << (void *)data << " " << buffer_total_alloc.test() << bendl;
+      bdout << "raw_posix_aligned free " << (void *)data << " " << buffer_total_alloc.read() << bendl;
     }
     raw* clone_empty() {
       return new raw_posix_aligned(len);
@@ -377,7 +377,7 @@ public:
       _raw = newraw;
     }
     bool do_cow() {
-      if (_raw->nref.test() > 1) {
+      if (_raw->nref.read() > 1) {
 	//std::cout << "doing cow on " << _raw << " len " << _len << std::endl;
 	clone_in_place();
 	return true;
@@ -441,7 +441,7 @@ public:
 
     const char *raw_c_str() const { assert(_raw); return _raw->data; }
     unsigned raw_length() const { assert(_raw); return _raw->len; }
-    int raw_nref() const { assert(_raw); return _raw->nref.test(); }
+    int raw_nref() const { assert(_raw); return _raw->nref.read(); }
 
     void copy_out(unsigned o, unsigned l, char *dest) const {
       assert(_raw);
@@ -1178,7 +1178,7 @@ inline bool operator<=(bufferlist& l, bufferlist& r) {
 
 
 inline std::ostream& operator<<(std::ostream& out, const buffer::raw &r) {
-  return out << "buffer::raw(" << (void*)r.data << " len " << r.len << " nref " << r.nref.test() << ")";
+  return out << "buffer::raw(" << (void*)r.data << " len " << r.len << " nref " << r.nref.read() << ")";
 }
 
 inline std::ostream& operator<<(std::ostream& out, const buffer::ptr& bp) {

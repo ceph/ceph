@@ -245,7 +245,7 @@ public:
     memset(&footer, 0, sizeof(footer));
   }
   virtual ~Message() { 
-    assert(nref.test() == 0);
+    assert(nref.read() == 0);
     if (connection)
       connection->put();
   }

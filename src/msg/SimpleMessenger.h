@@ -265,7 +265,7 @@ private:
     
     void queue_received(Message *m) {
       m->set_recv_stamp(g_clock.now());
-      assert(m->nref.test() == 0);
+      assert(m->nref.read() == 0);
       queue_received(m, m->get_priority());
     }
 

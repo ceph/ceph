@@ -2257,7 +2257,7 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
 {
   const entity_addr_t& dest_addr = dest.addr;
 
-  assert(m->nref.test() == 0);
+  assert(m->nref.read() == 0);
 
   // lookup
   entity_addr_t dest_proc_addr = dest_addr;
