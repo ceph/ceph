@@ -668,6 +668,22 @@ int Objecter::create_pool_snap(int pool, string& snapName, Context *onfinish) {
   return 0;
 }
 
+int Objecter::allocate_selfmanaged_snap(int pool, Context *onfinish)
+{
+  dout(10) << "allocate_selfmanaged_snap; pool: " << pool << dendl;
+  PoolOp *op = new PoolOp;
+  if (!op) return -ENOMEM;
+  op->tid = ++last_tid;
+  op->pool = pool;
+  op->onfinish = onfinish;
+  op->pool_op = POOL_OP_CREATE_UNMANAGED_SNAP;
+  op_pool[op->tid] = op;
+
+  pool_op_submit(op);
+
+  return 0;
+}
+
 int Objecter::delete_pool_snap(int pool, string& snapName, Context *onfinish)
 {
   dout(10) << "delete_pool_snap; pool: " << pool << "; snap: " << snapName << dendl;
@@ -679,6 +695,24 @@ int Objecter::delete_pool_snap(int pool, string& snapName, Context *onfinish)
   op->name = snapName;
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_DELETE_SNAP;
+  op_pool[op->tid] = op;
+  
+  pool_op_submit(op);
+  
+  return 0;
+}
+
+int Objecter::delete_selfmanaged_snap(int pool, snapid_t snap,
+				      Context *onfinish) {
+  dout(10) << "delete_selfmanaged_snap; pool: " << pool << "; snap: " 
+	   << snap << dendl;
+  PoolOp *op = new PoolOp;
+  if (!op) return -ENOMEM;
+  op->tid = ++last_tid;
+  op->pool = pool;
+  op->onfinish = onfinish;
+  op->pool_op = POOL_OP_DELETE_UNMANAGED_SNAP;
+  op->snapid = snap;
   op_pool[op->tid] = op;
 
   pool_op_submit(op);
@@ -749,9 +783,11 @@ int Objecter::change_pool_auid(int pool, Context *onfinish, __u64 auid)
 
 void Objecter::pool_op_submit(PoolOp *op) {
   dout(10) << "pool_op_submit " << op->tid << dendl;
-  monc->send_mon_message(new MPoolOp(monc->get_fsid(), op->tid, op->pool,
-				     op->name, op->pool_op,
-				     op->auid, last_seen_version));
+  MPoolOp *m = new MPoolOp(monc->get_fsid(), op->tid, op->pool,
+			   op->name, op->pool_op,
+			   op->auid, last_seen_version);
+  if (op->snapid) m->snapid = op->snapid;
+  monc->send_mon_message(m);
   op->last_submit = g_clock.now();
 }
 
