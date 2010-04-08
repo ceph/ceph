@@ -49,6 +49,7 @@ class FileStore : public JournalingObjectStore {
   bool btrfs_snap_create;
   bool btrfs_snap_destroy;
   bool btrfs_snap_create_async;
+  bool btrfs_snap_destroy_async;
   bool btrfs_wait_sync;
   int fsid_fd, op_fd;
 
@@ -178,6 +179,7 @@ class FileStore : public JournalingObjectStore {
     btrfs_snap_create(false),
     btrfs_snap_destroy(false),
     btrfs_snap_create_async(false),
+    btrfs_snap_destroy_async(false),
     btrfs_wait_sync(false),
     fsid_fd(-1), op_fd(-1),
     attrs(this), fake_attrs(false), 

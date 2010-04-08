@@ -558,9 +558,17 @@ int FileStore::_detect_fs()
       
 	// clean up
 	volargs.fd = 0;
-	r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &volargs);
-	if (r != 0) {
-	  dout(0) << "mount btrfs SNAP_DESTROY failed: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+	r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY_ASYNC, &volargs);
+	if (r == 0) {
+	  dout(0) << "mount btrfs SNAP_DESTROY_ASYNC is supported" << dendl;
+	  btrfs_snap_destroy_async = true;
+	} else {
+	  dout(0) << "mount btrfs SNAP_DESTROY_ASYNC is NOT supported: "
+		  << strerror_r(-r, buf, sizeof(buf)) << dendl;
+	  r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &volargs);
+	  if (r != 0) {
+	    dout(0) << "mount btrfs SNAP_DESTROY failed: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+	  }
 	}
       } else {
 	dout(0) << "mount btrfs SNAP_CREATE_ASYNC is NOT supported: "
@@ -690,7 +698,9 @@ int FileStore::mount()
       // drop current
       snapargs.fd = 0;
       strcpy(snapargs.name, "current");
-      int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_DESTROY, &snapargs);
+      int r = ::ioctl(basedir_fd,
+		      btrfs_snap_destroy_async ? BTRFS_IOC_SNAP_DESTROY_ASYNC:BTRFS_IOC_SNAP_DESTROY,
+		      &snapargs);
       if (r) {
 	char buf[80];
 	dout(0) << "error removing old current subvol: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
