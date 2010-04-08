@@ -676,6 +676,7 @@ uint32_t sctp_crc_c[256] = {
 
 #define SCTP_CRC32C(c,d) (c=(c>>8)^sctp_crc_c[(c^(d))&0xFF])
 
+#if 0
 static uint32_t
 old_update_crc32(uint32_t crc32c,
     unsigned char const *buffer,
@@ -722,6 +723,7 @@ sctp_csum_finalize(uint32_t crc32c)
 #endif
 	return (crc32c);
 }
+#endif
 
 uint32_t ceph_crc32c_le(uint32_t crc, unsigned char const *data, unsigned length)
 {
