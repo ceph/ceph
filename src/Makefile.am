@@ -518,6 +518,7 @@ noinst_HEADERS = \
         include/interval_set.h\
         include/inttypes.h\
 	include/librados.h\
+	include/librados.hpp\
         include/lru.h\
 	include/msgr.h\
         include/nstring.h\

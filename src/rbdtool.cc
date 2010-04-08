@@ -15,7 +15,8 @@
 #include "config.h"
 
 #include "common/common_init.h"
-#include "include/librados.h"
+#include "include/librados.hpp"
+using namespace librados;
 #include "include/byteorder.h"
 
 
@@ -113,7 +114,7 @@ int main(int argc, const char **argv)
   md_oid += RBD_SUFFIX;
   string dir_oid = RBD_DIRECTORY;
 
-  rados_pool_t pool;
+  pool_t pool;
 
   int r = rados.open_pool(poolname, &pool);
   if (r < 0) {

@@ -237,7 +237,7 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
   
   reply = new MGetPoolStatsReply(m->fsid, m->get_tid(), paxos->get_version());
 
-  for (vector<string>::iterator p = m->pools.begin();
+  for (list<string>::iterator p = m->pools.begin();
        p != m->pools.end();
        p++) {
     int poolid = mon->osdmon()->osdmap.lookup_pg_pool_name(p->c_str());

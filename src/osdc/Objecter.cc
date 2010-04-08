@@ -781,7 +781,7 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m) {
 
 // pool stats
 
-void Objecter::get_pool_stats(vector<string>& pools, map<string,pool_stat_t> *result,
+void Objecter::get_pool_stats(list<string>& pools, map<string,pool_stat_t> *result,
 			      Context *onfinish)
 {
   dout(10) << "get_pool_stats " << pools << dendl;

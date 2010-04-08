@@ -4,7 +4,8 @@
 #include "rgw_access.h"
 #include "rgw_rados.h"
 
-#include "include/librados.h"
+#include "include/librados.hpp"
+using namespace librados;
 
 #include <string>
 #include <iostream>
@@ -14,7 +15,7 @@
 
 using namespace std;
 
-static Rados *rados = NULL;
+Rados *rados = NULL;
 
 #define ROOT_BUCKET ".rgw" //keep this synced to rgw_user.cc::root_bucket!
 
@@ -60,8 +61,8 @@ int RGWRados::open_root_pool(rados_pool_t *pool)
 
 class RGWRadosListState {
 public:
-  vector<string> list;
-  unsigned int pos;
+  std::list<string> list;
+  std::list<string>::iterator pos;
   RGWRadosListState() : pos(0) {}
 };
 
@@ -98,14 +99,13 @@ int RGWRados::list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle
 {
   RGWRadosListState *state = (RGWRadosListState *)*handle;
 
-  if (state->pos == state->list.size()) {
+  if (state->pos == state->list.end()) {
     delete state;
     return -ENOENT;
   }
 
-
-
-  obj.name = state->list[state->pos++];
+  obj.name = *state->pos;
+  state->pos++;
 
   /* FIXME: should read mtime/size vals for bucket */
 

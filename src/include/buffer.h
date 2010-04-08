@@ -15,6 +15,8 @@
 #ifndef __BUFFER_H
 #define __BUFFER_H
 
+#include <linux/types.h>
+
 #ifndef _XOPEN_SOURCE
 # define _XOPEN_SOURCE 600
 #endif
@@ -67,10 +69,10 @@ using std::string;
 #ifdef BUFFER_DEBUG
 #include "Spinlock.h"
 extern Spinlock buffer_lock;
-# define bdout { buffer_lock.lock(); cout
+# define bdout { buffer_lock.lock(); std::cout
 # define bendl std::endl; buffer_lock.unlock(); }
 #else
-# define bdout if (0) { cout
+# define bdout if (0) { std::cout
 # define bendl std::endl; }
 #endif
 
@@ -1206,7 +1208,7 @@ inline std::ostream& operator<<(std::ostream& out, const buffer::list& bl) {
   return out;
 }
 
-inline ostream& operator<<(ostream& out, buffer::error& e)
+inline std::ostream& operator<<(std::ostream& out, buffer::error& e)
 {
   return out << e.what();
 }

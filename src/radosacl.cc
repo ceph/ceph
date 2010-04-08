@@ -13,7 +13,8 @@
  */
 
 #include "include/types.h"
-#include "include/librados.h"
+#include "include/librados.hpp"
+using namespace librados;
 
 #include <iostream>
 
@@ -138,7 +139,7 @@ int main(int argc, const char **argv)
 
   const char *oid = "bar";
 
-  rados_pool_t pool;
+  pool_t pool;
   int r = rados.open_pool("data", &pool);
   cout << "open pool result = " << r << " pool = " << pool << std::endl;
 
