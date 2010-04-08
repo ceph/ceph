@@ -749,7 +749,7 @@ PGPool* OSD::_get_pool(int id)
     p->info = *pi;
     p->snapc = pi->get_snap_context();
 
-    pi->build_removed_snaps(p->removed_snaps);
+    pi->build_removed_snaps(p->cached_removed_snaps);
   }
   dout(10) << "_get_pool " << p->id << " " << p->num_pg << " -> " << (p->num_pg+1) << dendl;
   p->num_pg++;
@@ -2181,8 +2181,8 @@ void OSD::handle_osd_map(MOSDMap *m)
       if (pi->get_snap_epoch() == cur+1) {
 	PGPool *pool = p->second;
 	pi->build_removed_snaps(pool->newly_removed_snaps);
-	pool->newly_removed_snaps.subtract(pool->removed_snaps);
-	dout(10) << " pool " << p->first << " removed_snaps " << pool->removed_snaps
+	pool->newly_removed_snaps.subtract(pool->cached_removed_snaps);
+	dout(10) << " pool " << p->first << " removed_snaps " << pool->cached_removed_snaps
 		 << ", newly so are " << pool->newly_removed_snaps << ")"
 		 << dendl;
 	pool->info = *pi;
