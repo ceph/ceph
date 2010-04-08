@@ -492,7 +492,7 @@ int RadosClient::snap_create( const rados_pool_t pool, const char *snapName)
   return reply;
 }
 
-int RadosClient::snap_remove( const rados_pool_t pool, const char *snapName)
+int RadosClient::snap_remove(const rados_pool_t pool, const char *snapName)
 {
   int reply;
   int poolID = ((PoolCtx *)pool)->poolid;

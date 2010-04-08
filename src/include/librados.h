@@ -17,17 +17,17 @@ typedef void *rados_list_ctx_t;
 
 /* pools */
 typedef void *rados_pool_t;
-typedef long long unsigned rados_snap_t;
+typedef __u64 rados_snap_t;
 
 struct rados_pool_stat_t {
-  long long unsigned num_bytes;    // in bytes
-  long long unsigned num_kb;       // in KB
-  long long unsigned num_objects;
-  long long unsigned num_object_clones;
-  long long unsigned num_object_copies;  // num_objects * num_replicas
-  long long unsigned num_objects_missing_on_primary;
-  long long unsigned num_objects_degraded;
-  long long unsigned num_rd, num_rd_kb,num_wr, num_wr_kb;
+  __u64 num_bytes;    // in bytes
+  __u64 num_kb;       // in KB
+  __u64 num_objects;
+  __u64 num_object_clones;
+  __u64 num_object_copies;  // num_objects * num_replicas
+  __u64 num_objects_missing_on_primary;
+  __u64 num_objects_degraded;
+  __u64 num_rd, num_rd_kb,num_wr, num_wr_kb;
 };
 
 struct rados_statfs_t {
@@ -37,7 +37,9 @@ struct rados_statfs_t {
 
 int rados_open_pool(const char *name, rados_pool_t *pool);
 int rados_close_pool(rados_pool_t pool);
+
 void rados_set_snap(rados_pool_t pool, rados_snap_t snap);
+
   /* After creating a new rados_list_ctx_t, call this to initialize it*/
 void rados_pool_init_ctx(rados_list_ctx_t *ctx);
   /* Once you've finished with a rados_list_ctx_t, call before you dump it*/
@@ -57,12 +59,16 @@ int rados_snap_list(rados_pool_t pool, rados_snap_t *snaps, int maxlen);
 int rados_snap_lookup(rados_pool_t pool, const char *name, rados_snap_t *id);
 int rados_snap_get_name(rados_pool_t pool, rados_snap_t id, char *name, int maxlen);
 
-/* read/write objects */
+/* sync io */
 int rados_write(rados_pool_t pool, const char *oid, off_t off, const char *buf, size_t len);
 int rados_read(rados_pool_t pool, const char *oid, off_t off, char *buf, size_t len);
 int rados_remove(rados_pool_t pool, const char *oid);
+
+/* attrs */
 int rados_getxattr(rados_pool_t pool, const char *o, const char *name, char *buf, size_t len);
 int rados_setxattr(rados_pool_t pool, const char *o, const char *name, const char *buf, size_t len);
+
+/* misc */
 int rados_stat(rados_pool_t pool, const char *o, __u64 *psize, time_t *pmtime);
 int rados_tmap_update(rados_pool_t pool, const char *o, const char *cmdbuf, size_t cmdbuflen);
 int rados_exec(rados_pool_t pool, const char *oid, const char *cls, const char *method,
@@ -79,9 +85,12 @@ int rados_aio_is_complete(rados_completion_t c);
 int rados_aio_is_safe(rados_completion_t c);
 int rados_aio_get_return_value(rados_completion_t c);
 void rados_aio_release(rados_completion_t c);
-
-int rados_aio_write(rados_pool_t pool, const char *oid, off_t off, const char *buf, size_t len, rados_completion_t *completion);
-int rados_aio_read(rados_pool_t pool, const char *oid, off_t off, char *buf, size_t len, rados_completion_t *completion);
+int rados_aio_write(rados_pool_t pool, const char *oid,
+		    off_t off, const char *buf, size_t len,
+		    rados_completion_t *completion);
+int rados_aio_read(rados_pool_t pool, const char *oid,
+		   off_t off, char *buf, size_t len,
+		   rados_completion_t *completion);
 
 #ifdef __cplusplus
 }
