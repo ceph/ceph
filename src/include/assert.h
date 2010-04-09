@@ -2,7 +2,6 @@
 #define __CEPH_ASSERT_H
 
 #include <features.h>
-#include "common/tls.h"
 
 #ifdef __cplusplus
 

@@ -16,7 +16,7 @@
 #define __SPINLOCK_H
 
 #include <pthread.h>
-#include "include/assert.h"
+#include "assert.h"
 
 namespace ceph {
 
