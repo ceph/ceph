@@ -145,7 +145,6 @@ int MonClient::get_monmap_privately()
   
   int attempt = 10;
   int i = 0;
-  srand(getpid());
   
   dout(10) << "have " << monmap.epoch << dendl;
   
@@ -235,6 +234,8 @@ void MonClient::init()
   Mutex::Locker l(monc_lock);
   timer.add_event_after(10.0, new C_Tick(this));
 
+  // seed rng so we choose a different monitor each time
+  srand(getpid());
 
   auth_supported.clear();
   string str = g_conf.supported_auth;
