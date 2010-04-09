@@ -653,9 +653,10 @@ struct pg_pool_t {
     snaps[s].name = n;
     snaps[s].stamp = stamp;
   }
+#define EINVAL 22
   __u64 add_unmanaged_snap() {
-    assert(snaps.empty());
     if (removed_snaps.empty()) {
+      if (!snaps.empty()) return -EINVAL; //already has pool snaps
       removed_snaps.insert(snapid_t(1));
       v.snap_seq = 1;
     }
@@ -667,10 +668,11 @@ struct pg_pool_t {
     snaps.erase(s);
     v.snap_seq = v.snap_seq + 1;
   }
-  void remove_unmanaged_snap(snapid_t s) {
-    assert(snaps.empty());
+  int remove_unmanaged_snap(snapid_t s) {
+    if (!snaps.empty()) return -EINVAL; //has pool snaps, not unmanaged!
     removed_snaps.insert(s);
     v.snap_seq = v.snap_seq + 1;
+    return 0;
   }
 
   SnapContext get_snap_context() const {

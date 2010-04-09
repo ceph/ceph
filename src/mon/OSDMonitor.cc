@@ -1439,7 +1439,7 @@ bool OSDMonitor::prepare_pool_op (MPoolOp *m)
     pp->remove_snap(pp->snap_exists(m->name.c_str()));
     break;
   case POOL_OP_DELETE_UNMANAGED_SNAP:
-    pp->remove_unmanaged_snap(m->snapid);
+    rc = pp->remove_unmanaged_snap(m->snapid);
    default:
     assert(0);
     break;
