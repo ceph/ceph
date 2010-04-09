@@ -2,7 +2,6 @@
 #define __LIBRADOS_HPP
 
 #include <stdbool.h>
-#include <linux/types.h>
 #include <string>
 #include <list>
 #include <map>
