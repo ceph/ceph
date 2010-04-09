@@ -1631,8 +1631,7 @@ extern "C" int rados_snap_remove(const rados_pool_t pool, const char *snapname)
   return radosp->snap_remove(ctx, snapname);
 }
 
-extern "C" __u64 rados_selfmanaged_snap_create(const rados_pool_t pool,
-					     const char *snapname)
+extern "C" __u64 rados_selfmanaged_snap_create(const rados_pool_t pool)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   return radosp->selfmanaged_snap_create(ctx);
