@@ -179,6 +179,7 @@ public:
 
       ::encode(new_max_osd, bl);
       ::encode(new_pools, bl);
+      ::encode(new_pool_names, bl);
       ::encode(old_pools, bl);
       ::encode(new_up, bl);
       ::encode(new_down, bl);
@@ -186,8 +187,9 @@ public:
       ::encode(new_pg_temp, bl);
 
       // extended
+      __u16 ev = CEPH_OSDMAP_INC_VERSION_EXT;
+      ::encode(ev, bl);
       ::encode(new_hb_up, bl);
-      ::encode(new_pool_names, bl);
       ::encode(new_up_thru, bl);
       ::encode(new_last_clean_interval, bl);
       ::encode(new_lost, bl);
@@ -209,15 +211,21 @@ public:
 
       ::decode(new_max_osd, p);
       ::decode(new_pools, p);
+      if (v >= 5)
+	::decode(new_pool_names, p);
       ::decode(old_pools, p);
       ::decode(new_up, p);
       ::decode(new_down, p);
       ::decode(new_weight, p);
       ::decode(new_pg_temp, p);
-      
+
       // extended
+      __u16 ev = 0;
+      if (v >= 5)
+	::decode(ev, p);
       ::decode(new_hb_up, p);
-      ::decode(new_pool_names, p);
+      if (v < 5)
+	::decode(new_pool_names, p);
       ::decode(new_up_thru, p);
       ::decode(new_last_clean_interval, p);
       ::decode(new_lost, p);
@@ -255,7 +263,7 @@ private:
   map<pg_t,vector<int> > pg_temp;  // temp pg mapping (e.g. while we rebuild)
 
   map<int,pg_pool_t> pools;
-  map<int,nstring> pool_name;
+  map<int32_t,nstring> pool_name;
   map<nstring,int> name_pool;
 
   hash_map<entity_addr_t,utime_t> blacklist;
@@ -576,6 +584,7 @@ private:
     ::encode(modified, bl);
 
     ::encode(pools, bl);
+    ::encode(pool_name, bl);
     ::encode(pool_max, bl);
 
     ::encode(flags, bl);
@@ -593,9 +602,10 @@ private:
     ::encode(cbl, bl);
 
     // extended
+    __u16 ev = CEPH_OSDMAP_VERSION_EXT;
+    ::encode(ev, bl);
     ::encode(osd_hb_addr, bl);
     ::encode(osd_info, bl);
-    ::encode(pool_name, bl);
     ::encode(blacklist, bl);
   }
   
@@ -615,6 +625,8 @@ private:
       ::decode(max_pools, p);
     }
     ::decode(pools, p);
+    if (v >= 5)
+      ::decode(pool_name, p);
     if (v >= 4)
       ::decode(pool_max, p);
     else
@@ -635,14 +647,20 @@ private:
     crush.decode(cblp);
 
     // extended
+    __u16 ev = 0;
+    if (v >= 5)
+      ::decode(ev, p);
     ::decode(osd_hb_addr, p);
     ::decode(osd_info, p);
-    ::decode(pool_name, p);
+    if (v < 5)
+      ::decode(pool_name, p);
+   
+    ::decode(blacklist, p);
+
+    // index pool names
     name_pool.clear();
     for (map<int,nstring>::iterator i = pool_name.begin(); i != pool_name.end(); i++)
       name_pool[i->second] = i->first;
-   
-    ::decode(blacklist, p);
   }
  
 
