@@ -340,7 +340,7 @@ public:
       ops++;
     }
     void clone_range(coll_t cid, const sobject_t& oid, sobject_t noid, __u64 off, __u64 len) {
-      __u32 op = OP_CLONE;
+      __u32 op = OP_CLONERANGE;
       ::encode(op, tbl);
       ::encode(cid, tbl);
       ::encode(oid, tbl);
