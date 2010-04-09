@@ -1422,6 +1422,8 @@ bool OSDMonitor::prepare_pool_op (MPoolOp *m)
   const pg_pool_t *p = osdmap.get_pg_pool(m->pool);
   pg_pool_t* pp = 0;
   int rc = 0;
+  bufferlist *blp = NULL;
+  __u64 snapid(0);
   //if the pool isn't already in the update, add it
   if (!pending_inc.new_pools.count(m->pool))
     pending_inc.new_pools[m->pool] = *p;
@@ -1433,8 +1435,9 @@ bool OSDMonitor::prepare_pool_op (MPoolOp *m)
     dout(10) << "create snap in pool " << m->pool << " " << m->name << " seq " << pp->get_snap_epoch() << dendl;
     break;
   case POOL_OP_CREATE_UNMANAGED_SNAP:
-    __u64 snapid(0);
+    blp = new bufferlist();
     rc = pp->add_unmanaged_snap(snapid);
+    ::encode(snapid, *blp);
     break;
   case POOL_OP_DELETE_SNAP:
     pp->remove_snap(pp->snap_exists(m->name.c_str()));
@@ -1447,7 +1450,7 @@ bool OSDMonitor::prepare_pool_op (MPoolOp *m)
   }
   pp->set_snap_epoch(pending_inc.epoch);
 
-  paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, rc, pending_inc.epoch));
+  paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, rc, pending_inc.epoch, blp));
   return true;
 }
 
@@ -1491,11 +1494,11 @@ bool OSDMonitor::prepare_pool_op_auid (MPoolOp *m)
   return true;
 }
 
-void OSDMonitor::_pool_op(MPoolOp *m, int replyCode, epoch_t epoch)
+void OSDMonitor::_pool_op(MPoolOp *m, int replyCode, epoch_t epoch, bufferlist *blp)
 {
   dout(20) << "_pool_op returning with replyCode " << replyCode << dendl;
   MPoolOpReply *reply = new MPoolOpReply(m->fsid, m->get_tid(),
-					 replyCode, epoch, mon->get_epoch());
+					 replyCode, epoch, mon->get_epoch(), blp);
   mon->send_reply(m, reply);
   delete m;
 }
