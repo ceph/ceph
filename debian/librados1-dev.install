@@ -7,3 +7,5 @@
 /usr/include/rados/atomic.h
 /usr/include/rados/page.h
 /usr/include/rados/crc32c.h
+/usr/include/rados/Spinlock.h
+/usr/include/rados/assert.h

@@ -278,6 +278,8 @@ install-data-local:
 	$(install_sh_SCRIPT) -m 0644 include/atomic.h $(DESTDIR)$(includedir)/rados/atomic.h
 	$(install_sh_SCRIPT) -m 0644 include/page.h $(DESTDIR)$(includedir)/rados/page.h
 	$(install_sh_SCRIPT) -m 0644 include/crc32c.h $(DESTDIR)$(includedir)/rados/crc32c.h
+	$(install_sh_SCRIPT) -m 0644 include/Spinlock.h $(DESTDIR)$(includedir)/rados/Spinlock.h
+	$(install_sh_SCRIPT) -m 0644 include/assert.h $(DESTDIR)$(includedir)/rados/assert.h
 	mkdir -p $(DESTDIR)$(includedir)/crush
 	$(install_sh_SCRIPT) -m 0644 crush/hash.h $(DESTDIR)$(includedir)/crush/hash.h
 	$(install_sh_SCRIPT) -m 0644 crush/crush.h $(DESTDIR)$(includedir)/crush/crush.h
