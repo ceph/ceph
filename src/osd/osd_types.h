@@ -629,6 +629,7 @@ struct pg_pool_t {
    */
   void build_removed_snaps(interval_set<snapid_t>& rs) const {
     if (removed_snaps.empty()) {
+      rs.clear();
       for (snapid_t s = 1; s <= get_snap_seq(); s = s + 1)
 	if (snaps.count(s) == 0)
 	  rs.insert(s);
