@@ -495,7 +495,7 @@ int RadosClient::snap_create( const rados_pool_t pool, const char *snapName)
 
 __u64 RadosClient::selfmanaged_snap_create(rados_pool_t pool)
 {
-  int64_t reply;
+  int reply;
   int poolID = ((PoolCtx *)pool)->poolid;
 
   Mutex mylock("RadosClient::selfmanaged_snap_create::mylock");
@@ -535,7 +535,7 @@ int RadosClient::snap_remove(const rados_pool_t pool, const char *snapName)
 
 int RadosClient::selfmanaged_snap_remove(rados_pool_t pool, __u64 snapid)
 {
-  int64_t reply;
+  int reply;
   int poolID = ((PoolCtx *)pool)->poolid;
 
   Mutex mylock("RadosClient::selfmanaged_snap_remove::mylock");
