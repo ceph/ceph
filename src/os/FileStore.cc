@@ -1140,8 +1140,8 @@ unsigned FileStore::_do_transaction(Transaction& t)
     case Transaction::OP_CLONE:
       {
 	coll_t cid = t.get_cid();
-	const sobject_t& oid = t.get_oid();
-	const sobject_t& noid = t.get_oid();
+	sobject_t oid = t.get_oid();
+	sobject_t noid = t.get_oid();
 	_clone(cid, oid, noid);
       }
       break;
@@ -1149,8 +1149,8 @@ unsigned FileStore::_do_transaction(Transaction& t)
     case Transaction::OP_CLONERANGE:
       {
 	coll_t cid = t.get_cid();
-	const sobject_t& oid = t.get_oid();
-	const sobject_t& noid = t.get_oid();
+	sobject_t oid = t.get_oid();
+	sobject_t noid = t.get_oid();
  	__u64 off = t.get_length();
 	__u64 len = t.get_length();
 	_clone_range(cid, oid, noid, off, len);
