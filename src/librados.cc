@@ -135,8 +135,7 @@ public:
   int delete_pool(const rados_pool_t& pool);
   int change_pool_auid(const rados_pool_t& pool, unsigned long long auid);
 
-  int list(PoolCtx& pool, int max_entries, std::list<object_t>& entries,
-			Objecter::ListContext *context);
+  int list(Objecter::ListContext *context, int max_entries);
 
   // --- aio ---
   struct AioCompletion {
@@ -630,7 +629,8 @@ int RadosClient::snap_get_stamp(PoolCtx *pool, __u64 snapid, time_t *t)
 
 // IO
 
-int RadosClient::list(PoolCtx& pool, int max_entries, std::list<object_t>& entries, Objecter::ListContext *context) {
+int RadosClient::list(Objecter::ListContext *context, int max_entries)
+{
   Cond cond;
   bool done;
   int r = 0;
@@ -640,10 +640,8 @@ int RadosClient::list(PoolCtx& pool, int max_entries, std::list<object_t>& entri
   if (context->at_end)
     return 0;
 
-  context->pool_id = pool.poolid;
-  context->pool_snap_seq = pool.snap_seq;
-  context->entries = &entries;
   context->max_entries = max_entries;
+
   lock.Lock();
   objecter->list_objects(context, new C_SafeCond(&mylock, &cond, &done, &r));
   lock.Unlock();
@@ -1178,27 +1176,37 @@ int Rados::get_fs_stats(statfs_t& result)
   return r;
 }
 
-int Rados::list(rados_pool_t pool, int max, std::list<string>& entries, Rados::ListCtx& ctx)
+int Rados::list_objects_open(pool_t pool, Rados::ListCtx *ctx)
+{
+  RadosClient::PoolCtx *p = (RadosClient::PoolCtx *)pool;
+  Objecter::ListContext *h = new Objecter::ListContext;
+  h->pool_id = p->poolid;
+  h->pool_snap_seq = p->snap_seq;
+  ctx->ctx = (void *)h;
+  return 0;
+}
+
+int Rados::list_objects_more(Rados::ListCtx ctx, int max, std::list<string>& entries)
 {
   if (!client)
     return -EINVAL;
 
-  Objecter::ListContext *op;
-  if (!ctx.ctx) {
-    ctx.ctx = new Objecter::ListContext();
-    if (!ctx.ctx)
-      return -ENOMEM;
-  }
-
-  op = (Objecter::ListContext *) ctx.ctx;
-  std::list<object_t> e;
-  int r = ((RadosClient *)client)->list(*(RadosClient::PoolCtx *)pool, max, e, op);
-  while (!e.empty()) {
-    entries.push_back(e.front().name.c_str());
-    e.pop_front();
+  Objecter::ListContext *h = (Objecter::ListContext *)ctx.ctx;
+  h->list.clear();
+  int r = ((RadosClient *)client)->list(h, max);
+  while (!h->list.empty()) {
+    entries.push_back(h->list.front().name.c_str());
+    h->list.pop_front();
   }
   return r;
 }
+
+void Rados::list_objects_close(Rados::ListCtx ctx)
+{
+  Objecter::ListContext *h = (Objecter::ListContext *)ctx.ctx;
+  delete h;
+}
+
 
 int Rados::create(rados_pool_t pool, const string& o, bool exclusive)
 {
@@ -1668,51 +1676,42 @@ extern "C" int rados_exec(rados_pool_t pool, const char *o, const char *cls, con
   }
   return ret;
 }
-extern "C" void rados_pool_init_ctx(rados_list_ctx_t *ctx)
-{
-  *ctx = NULL;
-}
 
-extern "C" void rados_pool_close_ctx(rados_list_ctx_t *ctx)
-{
-  if (*ctx) {
-    Objecter::ListContext *op = (Objecter::ListContext *)*ctx;
-    delete op;
-    *ctx = NULL;
-  }
-}
+/* list objects */
 
-extern "C" int rados_pool_list_next(rados_pool_t pool, const char **entry, rados_list_ctx_t *listctx)
+extern "C" int rados_list_objects_open(rados_pool_t pool, rados_list_ctx_t *listh)
 {
-  int ret;
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  Objecter::ListContext *h = new Objecter::ListContext;
+  h->pool_id = ctx->poolid;
+  h->pool_snap_seq = ctx->snap_seq;
+  *listh = (void *)h;
+  return 0;
+}
 
-  if (!*listctx) {
-    *listctx = new Objecter::ListContext;
-    if (!*listctx)
-      return -ENOMEM;
-  }
+extern "C" void rados_list_objects_close(rados_list_ctx_t ctx)
+{
+  Objecter::ListContext *op = (Objecter::ListContext *)ctx;
+  delete op;
+}
 
+extern "C" int rados_list_objects_next(rados_list_ctx_t listctx, const char **entry)
+{
+  Objecter::ListContext *h = (Objecter::ListContext *)listctx;
+  int ret;
 
-  Objecter::ListContext *op = (Objecter::ListContext *)*listctx;
-
-  //if the list is non-empty, this method has been called before
-  if(!op->list.empty())
-    //so let's kill the previously-returned object
-    op->list.pop_front();
-
-  if (op->list.empty()) {
-    op->list.clear();
-    ret = radosp->list(*ctx, RADOS_LIST_MAX_ENTRIES, op->list, op);
-    if (!op->list.size()) {
-      delete op;
-      *listctx = NULL;
+  // if the list is non-empty, this method has been called before
+  if (!h->list.empty())
+    // so let's kill the previously-returned object
+    h->list.pop_front();
+  
+  if (h->list.empty()) {
+    ret = radosp->list(h, RADOS_LIST_MAX_ENTRIES);
+    if (!h->list.size())
       return -ENOENT;
-    }
   }
 
-  *entry = op->list.front().name.c_str();
-
+  *entry = h->list.front().name.c_str();
   return 0;
 }
 

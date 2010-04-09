@@ -207,9 +207,10 @@ int main(int argc, const char **argv)
       outstream = new ofstream(nargs[1]);
 
     Rados::ListCtx ctx;
+    rados.list_objects_open(p, &ctx);
     while (1) {
       list<string> vec;
-      ret = rados.list(p, 1 << 10, vec, ctx);
+      ret = rados.list_objects_more(ctx, 1 << 10, vec);
       if (ret < 0) {
 	cerr << "got error: " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
 	goto out;
@@ -220,6 +221,7 @@ int main(int argc, const char **argv)
       for (list<string>::iterator iter = vec.begin(); iter != vec.end(); ++iter)
 	*outstream << *iter << std::endl;
     }
+    rados.list_objects_close(ctx);
     if (!stdout)
       delete outstream;
   }

@@ -49,6 +49,7 @@ v0.20
 - mds: many clustered mds fixes
 - auth: many auth_x cleanups, fixes, improvements
 - kclient: many bug fixes
+- librados: some cleanup, c++ api now usable
 
 v0.21
 

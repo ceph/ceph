@@ -565,7 +565,6 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
   dout(20) << "pool_id " << list_context->pool_id
 	   << "\npool_snap_seq " << list_context->pool_snap_seq
 	   << "\nmax_entries " << list_context->max_entries
-	   << "\n&entries " << list_context->entries
 	   << "\nlist_context " << list_context
 	   << "\nonfinish " << onfinish
 	   << "\nlist_context->current_pg" << list_context->current_pg
@@ -620,7 +619,7 @@ void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *f
 	   << ", response.entries " << response.entries << dendl;
   if (response_size) {
     dout(20) << "got a response with objects, proceeding" << dendl;
-    list_context->entries->merge(response.entries);
+    list_context->list.merge(response.entries);
     list_context->max_entries -= response_size;
     dout(20) << "cleaning up and exiting" << dendl;
     if (!list_context->max_entries) {

@@ -35,14 +35,6 @@ int main(int argc, const char **argv)
   r = rados_open_pool("foo", &pool);
   printf("rados_open_pool = %d, pool = %p\n", r, pool);
 
-  /* list objects */
-  rados_list_ctx_t pctx;
-  rados_pool_init_ctx(&pctx);
-  const char *poolname;
-  while (rados_pool_list_next(pool, &poolname, &pctx) == 0)
-    printf("rados_pool_list_next got object '%s'\n", poolname);
-  rados_pool_close_ctx(&pctx);
-
   /* snapshots */
   r = rados_snap_create(pool, "snap1");
   printf("rados_snap_create snap1 = %d\n", r);
@@ -108,15 +100,15 @@ int main(int argc, const char **argv)
 
   rados_read(pool, "../b/bb_bb_bb\\foo\\bar", 0, buf2, 128);
 
+  /* list objects */
+  rados_list_ctx_t h;
+  r = rados_list_objects_open(pool, &h);
+  printf("rados_list_objects_open = %d, h = %p\n", r, h);
+  const char *poolname;
+  while (rados_list_objects_next(h, &poolname) == 0)
+    printf("rados_list_objects_next got object '%s'\n", poolname);
+  rados_list_objects_close(h);
 
-  const char *entry;
-  rados_list_ctx_t ctx;
-  rados_pool_init_ctx(&ctx);
-  while (rados_pool_list_next(pool, &entry, &ctx) >= 0) {
-    printf("list entry: %s\n", entry);
-  }
-  rados_pool_close_ctx(&ctx);
-  
   /* delete a pool */
   r = rados_delete_pool(pool);
   printf("rados_delete_pool = %d\n", r);  

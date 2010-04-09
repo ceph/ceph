@@ -289,15 +289,11 @@ public:
     int pool_id;
     int pool_snap_seq;
     int max_entries;
-    std::list<object_t> *entries;
-
-    //silly list for the C interface
     std::list<object_t> list;
 
     ListContext() : current_pg(0), cookie(0), starting_pg_num(0),
 		    at_end(false), pool_id(0),
-		    pool_snap_seq(0), max_entries(0),
-		    entries(NULL) {}
+		    pool_snap_seq(0), max_entries(0) {}
   };
 
   struct C_List : public Context {

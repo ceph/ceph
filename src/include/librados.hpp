@@ -69,12 +69,15 @@ public:
   int exec(pool_t pool, const std::string& oid, const char *cls, const char *method,
 	   bufferlist& inbl, bufferlist& outbl);
 
+  /* listing objects */
   struct ListCtx {
     void *ctx;
     ListCtx() : ctx(NULL) {}
   };
+  int list_objects_open(pool_t pool, Rados::ListCtx *ctx);
+  int list_objects_more(Rados::ListCtx ctx, int max, std::list<std::string>& entries);
+  void list_objects_close(Rados::ListCtx ctx);
 
-  int list(pool_t pool, int max, std::list<std::string>& entries, Rados::ListCtx& ctx);
   int list_pools(std::list<std::string>& v);
   int get_pool_stats(std::list<std::string>& v,
 		     std::map<std::string,pool_stat_t>& stats);

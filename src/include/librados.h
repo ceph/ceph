@@ -13,10 +13,9 @@ extern "C" {
 int rados_initialize(int argc, const char **argv); /* arguments are optional */
 void rados_deinitialize();
 
-typedef void *rados_list_ctx_t;
-
 /* pools */
 typedef void *rados_pool_t;
+typedef void *rados_list_ctx_t;
 typedef __u64 rados_snap_t;
 
 struct rados_pool_stat_t {
@@ -40,17 +39,16 @@ int rados_close_pool(rados_pool_t pool);
 
 void rados_set_snap(rados_pool_t pool, rados_snap_t snap);
 
-  /* After creating a new rados_list_ctx_t, call this to initialize it*/
-void rados_pool_init_ctx(rados_list_ctx_t *ctx);
-  /* Once you've finished with a rados_list_ctx_t, call before you dump it*/
-void rados_pool_close_ctx(rados_list_ctx_t *ctx);
-  /* Given a rados_list_ctx_t and its pool, get the next object in sequence*/
-int rados_pool_list_next(rados_pool_t pool, const char **entry, rados_list_ctx_t *ctx);
-
 int rados_create_pool(const char *name);
 int rados_create_pool_with_auid(const char *name, __u64 auid);
 int rados_delete_pool(const rados_pool_t pool);
 int rados_change_pool_auid(const rados_pool_t pool, __u64 auid);
+
+/* objects */
+int rados_list_objects_open(rados_pool_t pool, rados_list_ctx_t *ctx);
+int rados_list_objects_next(rados_list_ctx_t ctx, const char **entry);
+void rados_list_objects_close(rados_list_ctx_t ctx);
+
 
 /* snapshots */
 int rados_snap_create(const rados_pool_t pool, const char *snapname);

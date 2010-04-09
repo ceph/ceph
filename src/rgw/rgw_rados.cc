@@ -141,12 +141,12 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
     return r;
 
 
-  Rados::ListCtx ctx;
 #define MAX_ENTRIES 1000
-
+  Rados::ListCtx ctx;
+  rados->list_objects_open(pool, &ctx);
   do {
     list<string> entries;
-    r = rados->list(pool, MAX_ENTRIES, entries, ctx);
+    r = rados->list_objects_more(ctx, MAX_ENTRIES, entries);
     if (r < 0)
       return r;
 
@@ -157,6 +157,7 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
       }
     }
   } while (r);
+  rados->list_objects_close(ctx);
 
   set<string>::iterator p;
   if (!marker.empty())
