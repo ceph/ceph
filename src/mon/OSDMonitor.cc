@@ -1421,7 +1421,7 @@ bool OSDMonitor::prepare_pool_op (MPoolOp *m)
   }
   const pg_pool_t *p = osdmap.get_pg_pool(m->pool);
   pg_pool_t* pp = 0;
-  int64_t rc = 0;
+  int rc = 0;
   //if the pool isn't already in the update, add it
   if (!pending_inc.new_pools.count(m->pool))
     pending_inc.new_pools[m->pool] = *p;
@@ -1433,7 +1433,8 @@ bool OSDMonitor::prepare_pool_op (MPoolOp *m)
     dout(10) << "create snap in pool " << m->pool << " " << m->name << " seq " << pp->get_snap_epoch() << dendl;
     break;
   case POOL_OP_CREATE_UNMANAGED_SNAP:
-    rc = pp->add_unmanaged_snap();
+    __u64 snapid(0);
+    rc = pp->add_unmanaged_snap(snapid);
     break;
   case POOL_OP_DELETE_SNAP:
     pp->remove_snap(pp->snap_exists(m->name.c_str()));

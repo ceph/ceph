@@ -654,14 +654,14 @@ struct pg_pool_t {
     snaps[s].stamp = stamp;
   }
 #define EINVAL 22
-  __u64 add_unmanaged_snap() {
+  int add_unmanaged_snap(__u64& snapid) {
     if (removed_snaps.empty()) {
       if (!snaps.empty()) return -EINVAL; //already has pool snaps
       removed_snaps.insert(snapid_t(1));
       v.snap_seq = 1;
     }
-    v.snap_seq = v.snap_seq + 1;
-    return v.snap_seq;
+    snapid = v.snap_seq = v.snap_seq + 1;
+    return 0;
   }
   void remove_snap(snapid_t s) {
     assert(snaps.count(s));
