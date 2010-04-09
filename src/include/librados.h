@@ -36,6 +36,7 @@ struct rados_statfs_t {
 
 int rados_open_pool(const char *name, rados_pool_t *pool);
 int rados_close_pool(rados_pool_t pool);
+int rados_lookup_pool(const char *name);
 
 void rados_set_snap(rados_pool_t pool, rados_snap_t snap);
 

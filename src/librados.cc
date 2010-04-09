@@ -1296,6 +1296,11 @@ int Rados::exec(rados_pool_t pool, const string& o, const char *cls, const char 
   return ((RadosClient *)client)->exec(*(RadosClient::PoolCtx *)pool, oid, cls, method, inbl, outbl);
 }
 
+int Rados::lookup_pool(const char *name)
+{
+  return ((RadosClient *)client)->lookup_pool(name);
+}
+
 int Rados::open_pool(const char *name, rados_pool_t *pool)
 {
   int poolid = ((RadosClient *)client)->lookup_pool(name);
@@ -1483,6 +1488,11 @@ extern "C" void rados_deinitialize()
   }
 
   rados_init_mutex.Unlock();
+}
+
+extern "C" int rados_lookup_pool(const char *name)
+{
+  return radosp->lookup_pool(name);
 }
 
 extern "C" int rados_open_pool(const char *name, rados_pool_t *pool)

@@ -48,6 +48,7 @@ public:
 
   int open_pool(const char *name, pool_t *pool);
   int close_pool(pool_t pool);
+  int lookup_pool(const char *name);
 
   void set_snap(pool_t pool, snap_t seq);
 
