@@ -1621,6 +1621,7 @@ bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
     }
   }
 
+  session->put();
   return shared;
 }
 
@@ -4111,6 +4112,7 @@ void OSD::handle_op(MOSDOp *op)
   }
 
   OSDCaps& caps = session->caps;
+  session->put();
   int pool = pgid.pool();
   int perm = caps.get_pool_cap(pool, osdmap->get_pg_pool(pool)->v.auid);
 
