@@ -16,6 +16,10 @@
  * "allow rwx auid foo[,bar,baz]" (which allows full access to listed auids)
  *  "allow rwx pool foo[,bar,baz]" (which allows full access to listed pools)
  * "allow *" (which allows full access to EVERYTHING)
+ *
+ * The OSD assumes that anyone with * caps is an admin and has full
+ * message permissions. This means that only the monitor and the OSDs
+ * should get *
  */
 
 #ifndef __CEPH_OSDCAPS_H
@@ -57,6 +61,7 @@ struct OSDCaps {
   map<int, OSDCap> auid_map;
   rwx_t default_action;
   bool allow_all;
+  int peer_type;
   __u64 auid;
 
   bool get_next_token(string s, size_t& pos, string& token);
@@ -66,7 +71,11 @@ struct OSDCaps {
 	      auid(CEPH_AUTH_UID_DEFAULT) {}
   bool parse(bufferlist::iterator& iter);
   int get_pool_cap(int pool_id, __u64 uid = CEPH_AUTH_UID_DEFAULT);
+  bool is_mon() { return CEPH_ENTITY_TYPE_MON == peer_type; }
+  bool is_osd() { return CEPH_ENTITY_TYPE_OSD == peer_type; }
+  bool is_mds() { return CEPH_ENTITY_TYPE_MDS == peer_type; }
   void set_allow_all(bool allow) { allow_all = allow; }
+  void set_peer_type (int pt) { peer_type = pt; }
   void set_auid(__u64 uid) { auid = uid; }
 };
 
