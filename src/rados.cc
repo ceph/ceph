@@ -313,13 +313,17 @@ int main(int argc, const char **argv)
     if (nargs.size() < 2)
       usage();
     rados_pool_t rm_me;
-    rados.open_pool(nargs[1], &rm_me);
-    ret = rados.delete_pool(rm_me);
-    if (ret < 0) {
-      cerr << "error deleting pool " << nargs[1] << ": "
-	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+    ret = rados.open_pool(nargs[1], &rm_me);
+    if (ret >= 0) {
+      ret = rados.delete_pool(rm_me);
+      if (ret < 0) {
+	cerr << "error deleting pool " << nargs[1] << ": "
+	     << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      }
+      cout << "successfully deleted pool " << nargs[1] << std::endl;
+    } else { //error
+      cerr << "pool " << nargs[1] << " does not exist" << std::endl;
     }
-    cout << "successfully deleted pool " << nargs[1] << std::endl;
   }
   else if (strcmp(nargs[0], "lssnap") == 0) {
     if (!pool || nargs.size() != 1)
