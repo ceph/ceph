@@ -1366,7 +1366,13 @@ bool OSDMonitor::preprocess_pool_op ( MPoolOp *m) {
   bool snap_exists = false;
   pg_pool_t *pp = 0;
   if (pending_inc.new_pools.count(m->pool)) pp = &pending_inc.new_pools[m->pool];
-  //check if the snapname exists
+  //check if the snap and snapname exists
+  if (!osdmap.get_pg_pool(m->pool)) {
+    //uh-oh, bad pool num!
+    dout(0) << "attempt to delete non-existent pool id " << m->pool << dendl;
+    _pool_op(m, -ENODATA, pending_inc.epoch);
+    return true;
+  }
   if ((osdmap.get_pg_pool(m->pool)->snap_exists(m->name.c_str())) ||
       (pp && pp->snap_exists(m->name.c_str()))) snap_exists = true;
 
