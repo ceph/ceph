@@ -110,7 +110,7 @@ public:
   int snap_get_name(PoolCtx *pool, __u64 snapid, std::string *s);
   int snap_get_stamp(PoolCtx *pool, __u64 snapid, time_t *t);
   int snap_create(const rados_pool_t pool, const char* snapname);
-  __u64 selfmanaged_snap_create(rados_pool_t pool);
+  int selfmanaged_snap_create(rados_pool_t pool, __u64 *snapid);
   int snap_remove(const rados_pool_t pool, const char* snapname);
   int selfmanaged_snap_remove(rados_pool_t pool, __u64 snapid);
 
@@ -493,23 +493,27 @@ int RadosClient::snap_create( const rados_pool_t pool, const char *snapName)
   return reply;
 }
 
-__u64 RadosClient::selfmanaged_snap_create(rados_pool_t pool)
+int RadosClient::selfmanaged_snap_create(rados_pool_t pool, __u64 *snapid)
 {
   int reply;
+  bufferlist * blp;
   int poolID = ((PoolCtx *)pool)->poolid;
 
   Mutex mylock("RadosClient::selfmanaged_snap_create::mylock");
   Cond cond;
   bool done;
   lock.Lock();
-  objecter->allocate_selfmanaged_snap(poolID,
+  objecter->allocate_selfmanaged_snap(poolID, &blp,
 				      new C_SafeCond(&mylock, &cond, &done, &reply));
   lock.Unlock();
 
   mylock.Lock();
   while (!done) cond.Wait(mylock);
   mylock.Unlock();
-  return (__u64)reply;
+  bufferlist::iterator p = blp->begin();
+  ::decode(*snapid, p);
+  delete blp;
+  return reply;
 }
 
 int RadosClient::snap_remove(const rados_pool_t pool, const char *snapName)
@@ -1369,10 +1373,10 @@ int Rados::snap_remove(const rados_pool_t pool, const char *snapname) {
   return ((RadosClient *)client)->snap_remove(pool, snapname);
 }
 
-__u64 Rados::selfmanaged_snap_create(const rados_pool_t pool)
+int Rados::selfmanaged_snap_create(const rados_pool_t pool, __u64 *snapid)
 {
   if (!client) return -EINVAL;
-  return ((RadosClient *)client)->selfmanaged_snap_create(pool);
+  return ((RadosClient *)client)->selfmanaged_snap_create(pool, snapid);
 }
 
 int Rados::selfmanaged_snap_remove(const rados_pool_t pool,
@@ -1631,10 +1635,11 @@ extern "C" int rados_snap_remove(const rados_pool_t pool, const char *snapname)
   return radosp->snap_remove(ctx, snapname);
 }
 
-extern "C" __u64 rados_selfmanaged_snap_create(const rados_pool_t pool)
+extern "C" int rados_selfmanaged_snap_create(const rados_pool_t pool,
+					     __u64 *snapid)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
-  return radosp->selfmanaged_snap_create(ctx);
+  return radosp->selfmanaged_snap_create(ctx, snapid);
 }
 
 extern "C" int rados_selfmanaged_snap_remove(const rados_pool_t pool,

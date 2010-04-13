@@ -89,7 +89,7 @@ public:
 
   int snap_create(const pool_t pool, const char *snapname);
   //check that your snapshot ID isn't -EINVAL
-  __u64 selfmanaged_snap_create(const pool_t pool);
+  int selfmanaged_snap_create(const pool_t pool, __u64 *snapid);
   int snap_remove(const pool_t pool, const char *snapname);
   int selfmanaged_snap_remove(const pool_t pool, __u64 snapid);
   int snap_list(pool_t pool, std::vector<snap_t> *snaps);
