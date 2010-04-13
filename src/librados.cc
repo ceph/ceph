@@ -493,26 +493,25 @@ int RadosClient::snap_create( const rados_pool_t pool, const char *snapName)
   return reply;
 }
 
-int RadosClient::selfmanaged_snap_create(rados_pool_t pool, __u64 *snapid)
+int RadosClient::selfmanaged_snap_create(rados_pool_t pool, __u64 *psnapid)
 {
   int reply;
-  bufferlist * blp;
   int poolID = ((PoolCtx *)pool)->poolid;
 
   Mutex mylock("RadosClient::selfmanaged_snap_create::mylock");
   Cond cond;
   bool done;
   lock.Lock();
-  objecter->allocate_selfmanaged_snap(poolID, &blp,
+  snapid_t snapid;
+  objecter->allocate_selfmanaged_snap(poolID, &snapid,
 				      new C_SafeCond(&mylock, &cond, &done, &reply));
   lock.Unlock();
 
   mylock.Lock();
   while (!done) cond.Wait(mylock);
   mylock.Unlock();
-  bufferlist::iterator p = blp->begin();
-  ::decode(*snapid, p);
-  delete blp;
+  if (reply == 0)
+    *psnapid = snapid;
   return reply;
 }
 
