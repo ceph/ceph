@@ -195,6 +195,14 @@ public:
   };
 
 private:
+  inline bool message_from_mon(Message *m) {
+    Session *session = (Session *)m->get_connection()->get_priv();
+    if (!session) return true; //this must be an outgoing connection we opened
+    bool ret = session->caps.is_mon();
+    session->put();
+    return ret;
+  }
+
   // -- heartbeat --
   Mutex heartbeat_lock;
   Cond heartbeat_cond;
