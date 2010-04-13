@@ -668,7 +668,8 @@ int Objecter::create_pool_snap(int pool, string& snapName, Context *onfinish) {
   return 0;
 }
 
-int Objecter::allocate_selfmanaged_snap(int pool, Context *onfinish)
+int Objecter::allocate_selfmanaged_snap(int pool, bufferlist **blp,
+					Context *onfinish)
 {
   dout(10) << "allocate_selfmanaged_snap; pool: " << pool << dendl;
   PoolOp *op = new PoolOp;
@@ -677,6 +678,7 @@ int Objecter::allocate_selfmanaged_snap(int pool, Context *onfinish)
   op->pool = pool;
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_CREATE_UNMANAGED_SNAP;
+  op->blp = blp;
   op_pool[op->tid] = op;
 
   pool_op_submit(op);
@@ -791,12 +793,23 @@ void Objecter::pool_op_submit(PoolOp *op) {
   op->last_submit = g_clock.now();
 }
 
+/**
+ * Handle a reply to a PoolOp message. Check that we sent the message
+ * and give the caller responsibility for the returned bufferlist.
+ * Then either call the finisher or stash the PoolOp, depending on if we
+ * have a new enough map.
+ * Lastly, clean up the message and PoolOp.
+ */
 void Objecter::handle_pool_op_reply(MPoolOpReply *m) {
   dout(10) << "handle_pool_op_reply " << *m << dendl;
   tid_t tid = m->get_tid();
   if (op_pool.count(tid)) {
     PoolOp *op = op_pool[tid];
     dout(10) << "have request " << tid << " at " << op << " Op: " << get_pool_op_name(op->pool_op) << dendl;
+    if (op->blp) {
+      *(op->blp) = m->response_data;
+      m->response_data = NULL;
+    }
     if (m->version > last_seen_version)
       last_seen_version = m->version;
     if (osdmap->get_epoch() < m->epoch) {

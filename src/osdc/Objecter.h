@@ -340,10 +340,11 @@ public:
     int* replyCode;
     __u64 auid;
     snapid_t snapid;
+    bufferlist **blp;
 
     utime_t last_submit;
     PoolOp() : tid(0), pool(0), onfinish(0), pool_op(0),
-	       replyCode(0), auid(0), snapid(0) {}
+	       replyCode(0), auid(0), snapid(0), blp(NULL) {}
   };
 
 
@@ -668,7 +669,7 @@ private:
   void pool_op_submit(PoolOp *op);
 public:
   int create_pool_snap(int pool, string& snapName, Context *onfinish);
-  int allocate_selfmanaged_snap(int pool, Context *onfinish);
+  int allocate_selfmanaged_snap(int pool, bufferlist **blp, Context *onfinish);
   int delete_pool_snap(int pool, string& snapName, Context *onfinish);
   int delete_selfmanaged_snap(int pool, snapid_t snap, Context *onfinish);
 
