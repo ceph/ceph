@@ -406,19 +406,22 @@ void init_entities_from_header(struct req_state *s)
   s->object = NULL;
   s->object_str = "";
 
-  string h(s->host);
-
-  cerr << "host=" << s->host << std::endl;
-  int pos = h.find("s3.");
-
-  if (pos > 0) {
-    string encoded_bucket = h.substr(0, pos-1);
-    url_decode(encoded_bucket, s->bucket_str);
-    s->bucket = s->bucket_str.c_str();
-    s->host_bucket = s->bucket;
-  } else {
-    s->host_bucket = NULL;
-  }
+  int pos;
+  if (s->host) {
+    string h(s->host);
+    
+    cerr << "host=" << s->host << std::endl;
+    pos = h.find("s3.");
+    
+    if (pos > 0) {
+      string encoded_bucket = h.substr(0, pos-1);
+      url_decode(encoded_bucket, s->bucket_str);
+      s->bucket = s->bucket_str.c_str();
+      s->host_bucket = s->bucket;
+    } else {
+      s->host_bucket = NULL;
+    }
+  } else s->host_bucket = NULL;
 
   const char *req_name = s->path_name;
   const char *p;
