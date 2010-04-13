@@ -4382,6 +4382,7 @@ struct C_MDC_QueuedCow : public Context {
 void MDCache::queue_file_recover(CInode *in)
 {
   dout(10) << "queue_file_recover " << *in << dendl;
+  assert(in->is_auth());
 
   // cow?
   SnapRealm *realm = in->find_snaprealm();
@@ -4432,6 +4433,7 @@ void MDCache::_queued_file_recover_cow(CInode *in, Mutation *mut)
 void MDCache::_queue_file_recover(CInode *in)
 {
   dout(15) << "_queue_file_recover " << *in << dendl;
+  assert(in->is_auth());
   in->state_clear(CInode::STATE_NEEDSRECOVER);
   in->state_set(CInode::STATE_RECOVERING);
   in->auth_pin(this);

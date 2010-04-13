@@ -920,7 +920,7 @@ void Migrator::finish_export_inode_caps(CInode *in)
 				     cap->get_mseq());
     mds->send_message_client(m, it->first);
   }
-  in->clear_client_caps();
+  in->clear_client_caps_after_export();
 }
 
 void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& finished)

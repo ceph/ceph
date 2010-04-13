@@ -714,7 +714,7 @@ public:
     inode.atime = MAX(inode.atime, utime_t(icr.atime));
     return cap;
   }
-  void clear_client_caps() {
+  void clear_client_caps_after_export() {
     while (!client_caps.empty())
       remove_client_cap(client_caps.begin()->first);
   }

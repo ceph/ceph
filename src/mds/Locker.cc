@@ -1281,7 +1281,8 @@ void Locker::revoke_stale_caps(Session *session)
       dout(10) << " revoking " << ccap_string(issued) << " on " << *in << dendl;      
       cap->revoke();
 
-      if (in->inode.client_ranges.count(client))
+      if (in->is_auth() &&
+	  in->inode.client_ranges.count(client))
 	in->state_set(CInode::STATE_NEEDSRECOVER);
 
       if (!in->filelock.is_stable()) eval_gather(&in->filelock);
