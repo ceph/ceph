@@ -762,7 +762,7 @@ bool ReplicatedPG::snap_trimmer()
       // trim clone's snaps
       vector<snapid_t> newsnaps;
       for (unsigned i=0; i<snaps.size(); i++)
-	if (!osd->_lookup_pool(info.pgid.pool())->info.is_removed_snap(snaps[i]))
+	if (!pool->info.is_removed_snap(snaps[i]))
 	  newsnaps.push_back(snaps[i]);
 
       if (newsnaps.empty()) {
