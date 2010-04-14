@@ -199,6 +199,11 @@ public:
 
   int get_peer_type() { return peer_type; }
   void set_peer_type(int t) { peer_type = t; }
+  
+  bool peer_is_mon() { return peer_type == CEPH_ENTITY_TYPE_MON; }
+  bool peer_is_mds() { return peer_type == CEPH_ENTITY_TYPE_MDS; }
+  bool peer_is_osd() { return peer_type == CEPH_ENTITY_TYPE_OSD; }
+  bool peer_is_client() { return peer_type == CEPH_ENTITY_TYPE_CLIENT; }
 
   const entity_addr_t& get_peer_addr() { return peer_addr; }
   void set_peer_addr(const entity_addr_t& a) { peer_addr = a; }

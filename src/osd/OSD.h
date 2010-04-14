@@ -195,14 +195,6 @@ public:
   };
 
 private:
-  inline bool message_from_mon(Message *m) {
-    Session *session = (Session *)m->get_connection()->get_priv();
-    if (!session) return true; //this must be an outgoing connection we opened
-    bool ret = session->caps.is_mon();
-    session->put();
-    return ret;
-  }
-
   // -- heartbeat --
   Mutex heartbeat_lock;
   Cond heartbeat_cond;
@@ -602,6 +594,9 @@ protected:
   void do_queries(map< int, map<pg_t,PG::Query> >& query_map);
   void do_infos(map<int, MOSDPGInfo*>& info_map);
   void repeer(PG *pg, map< int, map<pg_t,PG::Query> >& query_map);
+
+  bool require_mon_peer(Message *m);
+  bool require_osd_peer(Message *m);
 
   bool require_current_map(Message *m, epoch_t v);
   bool require_same_or_newer_map(Message *m, epoch_t e);

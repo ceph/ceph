@@ -1507,12 +1507,9 @@ void OSD::send_pg_stats()
 void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
 {
   dout(10) << "handle_pg_stats_ack " << dendl;
-  if (!message_from_mon(ack)) {
-    dout(0) << "handle_pg_stats_ack received from non-osd connection "
-	    << ack->get_connection() << dendl;
-    delete ack;
+
+  if (!require_mon_peer(ack))
     return;
-  }
 
   pg_stat_queue_lock.Lock();
 
@@ -1549,12 +1546,9 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
 
 void OSD::handle_command(MMonCommand *m)
 {
-  if (!message_from_mon(m)) {
-    dout(0) << "handle_command received from non-mon connection "
-	    << m->get_connection() << dendl;
-    delete m;
+  if (!require_mon_peer(m))
     return;
-  }
+
   dout(20) << "handle_command args: " << m->cmd << dendl;
   if (m->cmd[0] == "injectargs")
     parse_config_option_string(m->cmd[1]);
@@ -1866,12 +1860,8 @@ void OSD::_dispatch(Message *m)
 void OSD::handle_scrub(MOSDScrub *m)
 {
   dout(10) << "handle_scrub " << *m << dendl;
-  if (!message_from_mon(m)) {
-    dout(0) << "handle_scrub received from non-mon connection "
-	    << m->get_connection() << dendl;
-    delete m;
+  if (!require_mon_peer(m))
     return;
-  }
   if (ceph_fsid_compare(&m->fsid, &monc->get_fsid())) {
     dout(0) << "handle_scrub fsid " << m->fsid << " != " << monc->get_fsid() << dendl;
     delete m;
@@ -2664,7 +2654,27 @@ bool OSD::get_inc_map(epoch_t e, OSDMap::Incremental &inc)
 
 
 
+bool OSD::require_mon_peer(Message *m)
+{
+  if (!m->get_connection()->peer_is_mon()) {
+    dout(0) << "require_mon_peer received from non-mon " << m->get_connection()->get_peer_addr()
+	    << " " << *m << dendl;
+    delete m;
+    return false;
+  }
+  return true;
+}
 
+bool OSD::require_osd_peer(Message *m)
+{
+  if (!m->get_connection()->peer_is_osd()) {
+    dout(0) << "require_osd_peer received from non-osd " << m->get_connection()->get_peer_addr()
+	    << " " << *m << dendl;
+    delete m;
+    return false;
+  }
+  return true;
+}
 
 bool OSD::require_current_map(Message *m, epoch_t ep) 
 {
@@ -2944,12 +2954,9 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
 void OSD::handle_pg_create(MOSDPGCreate *m)
 {
   dout(10) << "handle_pg_create " << *m << dendl;
-  if (!message_from_mon(m)) {
-    dout(0) << "handle_pg_create received from non-mon connection "
-	    << m->get_connection() << dendl;
-    delete m;
+  if (!require_mon_peer(m))
     return;
-  }
+
   if (!require_same_or_newer_map(m, m->epoch)) return;
 
   map< int, map<pg_t,PG::Query> > query_map;
@@ -3115,15 +3122,10 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 {
   dout(7) << "handle_pg_notify from " << m->get_source() << dendl;
   int from = m->get_source().num();
-  Session *session = (Session *)m->get_connection()->get_priv();
-  if (!session || !session->caps.is_osd()) {
-    dout(0) << "handle_pg_notify received from non-osd connection "
-	    << m->get_connection() << dendl;
-    delete m;
-    session->put();
+
+  if (!require_osd_peer(m))
     return;
-  }
-  session->put();
+
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
   // look for unknown PGs i'm primary for
@@ -3354,15 +3356,8 @@ void OSD::handle_pg_log(MOSDPGLog *m)
 {
   dout(7) << "handle_pg_log " << *m << " from " << m->get_source() << dendl;
 
-  Session *session = (Session *)m->get_connection()->get_priv();
-  if (!session || !session->caps.is_osd()) {
-    dout(0) << "handle_scrub received from non-osd connection "
-	    << m->get_connection() << dendl;
-    delete m;
-    session->put();
+  if (!require_osd_peer(m))
     return;
-  }
-  session->put();
 
   int from = m->get_source().num();
   int created = 0;
@@ -3380,15 +3375,9 @@ void OSD::handle_pg_log(MOSDPGLog *m)
 void OSD::handle_pg_info(MOSDPGInfo *m)
 {
   dout(7) << "handle_pg_info " << *m << " from " << m->get_source() << dendl;
-  Session *session = (Session *)m->get_connection()->get_priv();
-  if (!session || !session->caps.is_osd()) {
-    dout(0) << "handle_scrub received from non-osd connection "
-	    << m->get_connection() << dendl;
-    delete m;
-    session->put();
+
+  if (!require_osd_peer(m))
     return;
-  }
-  session->put();
 
   int from = m->get_source().num();
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
@@ -3414,15 +3403,8 @@ void OSD::handle_pg_trim(MOSDPGTrim *m)
 {
   dout(7) << "handle_pg_trim " << *m << " from " << m->get_source() << dendl;
 
-  Session *session = (Session *)m->get_connection()->get_priv();
-  if (!session || !session->caps.is_osd()) {
-    dout(0) << "handle_scrub received from non-osd connection "
-	    << m->get_connection() << dendl;
-    delete m;
-    session->put();
+  if (!require_osd_peer(m))
     return;
-  }
-  session->put();
 
   int from = m->get_source().num();
   if (!require_same_or_newer_map(m, m->epoch)) return;
@@ -3469,15 +3451,9 @@ void OSD::handle_pg_trim(MOSDPGTrim *m)
 void OSD::handle_pg_query(MOSDPGQuery *m) 
 {
   assert(osd_lock.is_locked());
-  Session *session = (Session *)m->get_connection()->get_priv();
-  if (!session || !session->caps.is_osd()) {
-    dout(0) << "handle_scrub received from non-osd connection "
-	    << m->get_connection() << dendl;
-    delete m;
-    session->put();
+
+  if (!require_osd_peer(m))
     return;
-  }
-  session->put();
 
   dout(7) << "handle_pg_query from " << m->get_source() << " epoch " << m->get_epoch() << dendl;
   int from = m->get_source().num();
@@ -3607,15 +3583,9 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 void OSD::handle_pg_remove(MOSDPGRemove *m)
 {
   assert(osd_lock.is_locked());
-  Session *session = (Session *)m->get_connection()->get_priv();
-  if (!session || !session->caps.is_osd()) {
-    dout(0) << "handle_scrub received from non-osd connection "
-	    << m->get_connection() << dendl;
-    delete m;
-    session->put();
+
+  if (!require_osd_peer(m))
     return;
-  }
-  session->put();
 
   dout(7) << "handle_pg_remove from " << m->get_source() << " on "
 	  << m->pg_list.size() << " pgs" << dendl;
@@ -4293,15 +4263,8 @@ void OSD::handle_sub_op(MOSDSubOp *op)
     return;
   }
 
-  Session *session = (Session *)op->get_connection()->get_priv();
-  if (!session || !session->caps.is_osd()) {
-    dout(0) << "handle_scrub received from non-osd connection "
-	    << op->get_connection() << dendl;
-    delete op;
-    session->put();
+  if (!require_osd_peer(op))
     return;
-  }
-  session->put();
 
   // must be a rep op.
   assert(op->get_source().is_osd());
@@ -4352,15 +4315,8 @@ void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
     return;
   }
 
-  Session *session = (Session *)op->get_connection()->get_priv();
-  if (!session || !session->caps.is_osd()) {
-    dout(0) << "handle_scrub received from non-osd connection "
-	    << op->get_connection() << dendl;
-    delete op;
-    session->put();
+  if (!require_osd_peer(op))
     return;
-  }
-  session->put();
 
   // must be a rep op.
   assert(op->get_source().is_osd());
@@ -4535,12 +4491,9 @@ void OSD::got_class(const nstring& cname)
 
 void OSD::handle_class(MClass *m)
 {
-  if (!message_from_mon(m)) {
-    dout(0) << "handle_class received from non-mon connection "
-	    << m->get_connection() << dendl;
-    delete m;
+  if (!require_mon_peer(m))
     return;
-  }
+
   Mutex::Locker l(class_lock);
   dout(0) << "handle_class action=" << m->action << dendl;
 
