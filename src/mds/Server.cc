@@ -849,7 +849,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
     mds->logger->inc(l_mds_reply);
     double lat = g_clock.now() - mdr->client_request->get_recv_stamp();
     mds->logger->favg(l_mds_replyl, lat);
-    dout(0) << "lat " << lat << dendl;
+    dout(20) << "lat " << lat << dendl;
     
     if (tracei)
       mdr->cap_releases.erase(tracei->vino());
