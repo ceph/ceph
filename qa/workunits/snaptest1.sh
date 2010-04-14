@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 echo 1 > file1
 echo 2 > file2
 echo 3 > file3
