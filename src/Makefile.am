@@ -246,9 +246,14 @@ BUILT_SOURCES += init-ceph mkcephfs
 INCLUDES = 
 LDADD =
 
+
 AM_CXXFLAGS = -Wall -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic
 AM_CFLAGS = -Wall -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic
 AM_LDFLAGS =
+
+if WITH_LIBATOMIC
+AM_LDFLAGS += -latomic_ops
+endif
 
 noinst_LIBRARIES = \
 	libcommon.a libcrush.a \

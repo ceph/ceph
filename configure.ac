@@ -96,6 +96,25 @@ AS_IF([test "x$with_hadoop" != xno],
              ])])
 AM_CONDITIONAL(WITH_HADOOPCLIENT, [test "$HAVE_JNI" = "1"])
 
+#libatomic-ops? You want it!
+AC_ARG_WITH([libatomic-ops],
+            [AS_HELP_STRING([--with-libatomic-ops],
+	    [use libatomic-ops to build Ceph's atomic_t type])],
+            [],
+            [with_libatomic_ops=check])
+AS_IF([test "x$with_libatomic_ops" != xno],
+	    [AC_CHECK_HEADER([atomic_ops.h],
+             [HAVE_ATOMIC_OPS=1],
+             [if test "x$with_libatomic_ops" != xcheck; then
+                 AC_MSG_FAILURE(
+                   [--with-libatomic-ops was given but atomic_ops.h not found])
+               fi
+             ])])
+AS_IF([test "$HAVE_ATOMIC_OPS" = "1"],
+	AC_DEFINE([HAVE_ATOMIC_OPS], [1], [Defined if you have atomic_ops]),
+	AC_MSG_FAILURE([]))
+AM_CONDITIONAL(WITH_LIBATOMIC, [test "$HAVE_ATOMIC_OPS" = "1"])
+
 # newsyn?  requires mpi.
 #AC_ARG_WITH([newsyn],
 #            [AS_HELP_STRING([--with-newsyn], [build newsyn target requires mpi])],
