@@ -508,7 +508,7 @@ protected:
   hash_map<pg_t, create_pg_info> creating_pgs;
   map<pg_t, set<pg_t> > pg_split_ready;  // children ready to be split to, by parent
 
-  PG *try_create_pg(pg_t pgid, ObjectStore::Transaction& t);
+  bool can_create_pg(pg_t pgid);
   void handle_pg_create(class MOSDPGCreate *m);
 
   void kick_pg_split_queue();

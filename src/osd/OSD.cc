@@ -2730,27 +2730,25 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
 // pg creation
 
 
-PG *OSD::try_create_pg(pg_t pgid, ObjectStore::Transaction& t)
+bool OSD::can_create_pg(pg_t pgid)
 {
   assert(creating_pgs.count(pgid));
 
   // priors empty?
   if (!creating_pgs[pgid].prior.empty()) {
-    dout(10) << "try_create_pg " << pgid
+    dout(10) << "can_create_pg " << pgid
 	     << " - waiting for priors " << creating_pgs[pgid].prior << dendl;
-    return 0;
+    return false;
   }
 
   if (creating_pgs[pgid].split_bits) {
-    dout(10) << "try_create_pg " << pgid << " - queueing for split" << dendl;
+    dout(10) << "can_create_pg " << pgid << " - queueing for split" << dendl;
     pg_split_ready[creating_pgs[pgid].parent].insert(pgid); 
-    return 0;
+    return false;
   }
 
-  dout(10) << "try_create_pg " << pgid << " - creating now" << dendl;
-  PG *pg = _create_lock_new_pg(pgid, creating_pgs[pgid].acting, t);
-  creating_pgs.erase(pgid);
-  return pg;
+  dout(10) << "can_create_pg " << pgid << " - can create now" << dendl;
+  return true;
 }
 
 
@@ -2820,6 +2818,7 @@ void OSD::kick_pg_split_queue()
       pg->unlock();
       created++;
     }
+
     int tr = store->queue_transaction(NULL, t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(tr == 0);
 
@@ -2955,9 +2954,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
   map< int, map<pg_t,PG::Query> > query_map;
   map<int, MOSDPGInfo*> info_map;
 
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  C_Contexts *fin = new C_Contexts;
-  vector<PG*> to_peer;
+  int num_created = 0;
 
   for (map<pg_t,MOSDPGCreate::create_rec>::iterator p = m->mkpg.begin();
        p != m->mkpg.end();
@@ -3026,30 +3023,30 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
       if (osdmap->is_up(*p))
 	query_map[*p][pgid] = PG::Query(PG::Query::INFO, history);
     
-    PG *pg = try_create_pg(pgid, *t);
-    if (pg) {
-      to_peer.push_back(pg);
+    if (can_create_pg(pgid)) {
+      ObjectStore::Transaction *t = new ObjectStore::Transaction;
+      C_Contexts *fin = new C_Contexts;
+
+      PG *pg = _create_lock_new_pg(pgid, creating_pgs[pgid].acting, *t);
+      creating_pgs.erase(pgid);
+
+      wake_pg_waiters(pg->info.pgid);
+      pg->peer(*t, fin->contexts, query_map, &info_map);
+      pg->update_stats();
+
+      int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
+      assert(tr == 0);
+
       pg->unlock();
+      num_created++;
     }
   }
-
-  for (vector<PG*>::iterator p = to_peer.begin(); p != to_peer.end(); p++) {
-    PG *pg = *p;
-    pg->lock();
-    wake_pg_waiters(pg->info.pgid);
-    pg->peer(*t, fin->contexts, query_map, &info_map);
-    pg->update_stats();
-    pg->unlock();
-  }
-
-  int tr = store->queue_transaction(NULL, t, new ObjectStore::C_DeleteTransaction(t), fin);
-  assert(tr == 0);
 
   do_queries(query_map);
   do_infos(info_map);
 
   kick_pg_split_queue();
-  if (to_peer.size())
+  if (num_created)
     update_heartbeat_peers();
   delete m;
 }
@@ -3128,9 +3125,6 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
   session->put();
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  C_Contexts *fin = new C_Contexts;
-  
   // look for unknown PGs i'm primary for
   map< int, map<pg_t,PG::Query> > query_map;
   map<int, MOSDPGInfo*> info_map;
@@ -3142,6 +3136,9 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     pg_t pgid = it->pgid;
     PG *pg = 0;
 
+    ObjectStore::Transaction *t;
+    C_Contexts *fin;
+  
     if (!_have_pg(pgid)) {
       // same primary?
       vector<int> up, acting;
@@ -3160,14 +3157,15 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       assert(role == 0);  // otherwise, probably bug in project_pg_history.
       
       // DNE on source?
+      bool create = false;
       if (it->dne()) {  
 	// is there a creation pending on this pg?
 	if (creating_pgs.count(pgid)) {
 	  creating_pgs[pgid].prior.erase(from);
 
-	  pg = try_create_pg(pgid, *t);
-	  if (!pg) 
+	  if (!can_create_pg(pgid))
 	    continue;
+	  create = true;
 	} else {
 	  dout(10) << "handle_pg_notify pg " << pgid
 		   << " DNE on source, but creation probe, ignoring" << dendl;
@@ -3177,7 +3175,12 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       creating_pgs.erase(pgid);
 
       // ok, create PG locally using provided Info and History
-      if (!pg) {
+      t = new ObjectStore::Transaction;
+      fin = new C_Contexts;
+      if (create) {
+	pg = _create_lock_new_pg(pgid, creating_pgs[pgid].acting, *t);
+	creating_pgs.erase(pgid);
+      } else {
 	pg = _create_lock_pg(pgid, *t);
 	pg->acting.swap(acting);
 	pg->up.swap(up);
@@ -3203,6 +3206,8 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
         pg->unlock();
         continue;
       }
+      t = new ObjectStore::Transaction;
+      fin = new C_Contexts;
     }
 
     if (pg->peer_info.count(from) &&
@@ -3223,12 +3228,11 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       pg->peer(*t, fin->contexts, query_map, &info_map);
       pg->update_stats();
     }
+    int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
+    assert(tr == 0);
     pg->unlock();
   }
   
-  int tr = store->queue_transaction(NULL, t, new ObjectStore::C_DeleteTransaction(t), fin);
-  assert(tr == 0);
-
   do_queries(query_map);
   do_infos(info_map);
   
