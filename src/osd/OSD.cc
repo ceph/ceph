@@ -3342,7 +3342,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     }
   }
 
-  int tr = store->queue_transaction(NULL, t, new ObjectStore::C_DeleteTransaction(t), fin);
+  int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
   assert(tr == 0);
 
   pg->unlock();
