@@ -1615,7 +1615,8 @@ bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
     }
   }
 
-  session->put();
+  if (session)
+    session->put();
   return shared;
 }
 
