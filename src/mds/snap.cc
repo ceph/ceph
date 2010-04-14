@@ -362,6 +362,16 @@ void SnapRealm::split_at(SnapRealm *child)
   dout(10) << "split_at " << *child 
 	   << " on " << *child->inode << dendl;
 
+  if (!child->inode->is_dir()) {
+    // it's not a dir:
+    //  - no open children.
+    //  - only need to move this child's inode's caps.
+    child->inode->move_to_containing_realm(child);
+    return;
+  }
+
+  // it's a dir.
+
   // split open_children
   dout(10) << " open_children are " << open_children << dendl;
   for (set<SnapRealm*>::iterator p = open_children.begin();

@@ -1533,9 +1533,7 @@ void CInode::open_snaprealm(bool nosplit)
 	       << dendl;
       dout(30) << " siblings are " << parent->open_children << dendl;
       snaprealm->parent = parent;
-      if (!nosplit && 
-	  is_dir() &&
-	  !get_parent_dir()->get_inode()->is_stray())  // optimization
+      if (!nosplit)
 	parent->split_at(snaprealm);
       parent->open_children.insert(snaprealm);
     }
