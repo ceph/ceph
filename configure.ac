@@ -96,27 +96,6 @@ AS_IF([test "x$with_hadoop" != xno],
              ])])
 AM_CONDITIONAL(WITH_HADOOPCLIENT, [test "$HAVE_JNI" = "1"])
 
-# CommonC++?
-AC_ARG_WITH([ccgnu],
-            [AS_HELP_STRING([--with-ccgnu],
-              [use CommonC++ library for fast thread-safe reference counting])],
-            [],
-            [with_ccgnu=check])
-LIBCCGNU2=
-AS_IF([test "x$with_ccgnu" == xyes],
-	    [AC_CHECK_LIB([ccgnu2], [main],
-             [AC_SUBST([LIBCCGNU2], ["-lccgnu2"])
-              AC_DEFINE([WITH_CCGNU], [1],
-                        [Define if you have ccgnu])
-	      LIBS="-lccgnu2 -ldl $LIBS"
-             ],
-             [if test "x$with_ccgnu" != xcheck; then
-                 AC_MSG_FAILURE(
-                   [--with-ccgnu was given but test failed])
-               fi
-             ], [-ldl])])
-AM_CONDITIONAL(WITH_CCGNU, test "WITH_CCGNU" = "1")
-
 # newsyn?  requires mpi.
 #AC_ARG_WITH([newsyn],
 #            [AS_HELP_STRING([--with-newsyn], [build newsyn target requires mpi])],

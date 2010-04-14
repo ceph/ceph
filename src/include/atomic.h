@@ -19,30 +19,6 @@
 # include "acconfig.h"
 #endif
 
-
-
-#ifdef WITH_CCGNU
-/*
- * use commonc++ library AtomicCounter.
- */
-# include "cc++/thread.h"
-
-namespace ceph {
-
-class atomic_t {
-  mutable ost::AtomicCounter nref;    // mutable for const-ness of operator<<
-public:
-  atomic_t(int i=0) : nref(i) {}
-  void inc() { ++nref; }
-  int dec() { return --nref; }
-  int test() const { return nref; }
-  void add(int i) { nref += i; }
-  void sub(int i) { nref -= i; }
-};
-
-}
-
-#else
 /*
  * crappy slow implementation that uses a pthreads spinlock.
  */
@@ -86,7 +62,4 @@ public:
 };
 
 }
-
-#endif
-
 #endif
