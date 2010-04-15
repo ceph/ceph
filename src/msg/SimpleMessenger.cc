@@ -2258,8 +2258,6 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
   assert(m->nref.test() == 1); //this is just to make sure that a changeset
   //is working properly; if you start using the refcounting more and have multiple
   //people hanging on to a message, ditch the assert!
-  // lookup
-  entity_addr_t dest_proc_addr = dest_addr;
 
 
   lock.Lock();
@@ -2279,9 +2277,9 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
     else {
       // remote.
       Pipe *pipe = 0;
-      if (rank_pipe.count( dest_proc_addr )) {
+      if (rank_pipe.count( dest_addr )) {
         // connected?
-        pipe = rank_pipe[ dest_proc_addr ];
+        pipe = rank_pipe[ dest_addr ];
 	pipe->pipe_lock.Lock();
 	if (pipe->state == Pipe::STATE_CLOSED) {
 	  dout(20) << "submit_message " << *m << " remote, " << dest_addr << ", ignoring old closed pipe." << dendl;
@@ -2302,7 +2300,7 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
 	} else {
 	  dout(20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
 	  // not connected.
-	  pipe = connect_rank(dest_proc_addr, dest.name.type());
+	  pipe = connect_rank(dest_addr, dest.name.type());
 	  pipe->send(m);
 	}
       }
