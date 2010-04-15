@@ -526,7 +526,12 @@ public:
 
   bool register_entity(entity_name_t addr);
 
-  void submit_message(Message *m, const entity_inst_t& addr, bool lazy=false);  
+  void submit_message(Message *m, const entity_inst_t& addr, bool lazy=false) {
+    submit_message(m, NULL, addr.addr, addr.name.type(), lazy);
+  }
+  void submit_message(Message *m, Pipe **ppipe, const entity_addr_t& dest_addr,
+		      int dest_type, bool lazy=false);
+		      
   int send_keepalive(const entity_inst_t& addr);
 
   void learned_addr(entity_addr_t peer_addr_for_me);

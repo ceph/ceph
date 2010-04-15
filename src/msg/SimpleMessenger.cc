@@ -2251,10 +2251,10 @@ bool SimpleMessenger::register_entity(entity_name_t name)
   return true;
 }
 
-void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool lazy)
+void SimpleMessenger::submit_message(Message *m, Pipe **ppipe,
+				     const entity_addr_t& dest_addr
+				     int dest_type, bool lazy)
 {
-  const entity_addr_t& dest_addr = dest.addr;
-
   assert(m->nref.test() == 1); //this is just to make sure that a changeset
   //is working properly; if you start using the refcounting more and have multiple
   //people hanging on to a message, ditch the assert!
@@ -2300,7 +2300,7 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
 	} else {
 	  dout(20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
 	  // not connected.
-	  pipe = connect_rank(dest_addr, dest.name.type());
+	  pipe = connect_rank(dest_addr, dest_type);
 	  pipe->send(m);
 	}
       }
