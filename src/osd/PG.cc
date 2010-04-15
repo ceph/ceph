@@ -2354,7 +2354,7 @@ void PG::sub_op_scrub(MOSDSubOp *op)
 
   MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK); 
   ::encode(map, reply->get_data());
-  osd->messenger->send_message(reply, op->get_source_inst());
+  osd->messenger->send_message(reply, op->get_connection());
 
   op->put();
 }
