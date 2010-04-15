@@ -1005,6 +1005,9 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
   if (service_id != CEPH_ENTITY_TYPE_MON)
     return false;
 
+  if (!is_supported_auth(CEPH_AUTH_CEPHX))
+    return false;
+
   CephXServiceTicketInfo auth_ticket_info;
   CephXSessionAuthInfo info;
   int ret;
