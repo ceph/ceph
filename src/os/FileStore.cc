@@ -1622,10 +1622,12 @@ void FileStore::sync_entry()
 	snprintf(snapargs.name, sizeof(snapargs.name), COMMIT_SNAP_ITEM, (long long unsigned)cp);
 	dout(10) << "taking snap '" << snapargs.name << "'" << dendl;
 	int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &snapargs);
-	char buf[100];
-	dout(20) << "snap create '" << snapargs.name << "' got " << r
-		<< " " << strerror_r(r < 0 ? errno : 0, buf, sizeof(buf)) << dendl;
-	assert(r == 0);
+	if (r) {
+	  char buf[100];
+	  dout(0) << "snap create '" << snapargs.name << "' got " << r
+		  << " " << strerror_r(r < 0 ? errno : 0, buf, sizeof(buf)) << dendl;
+	  assert(r == 0);
+	}
 	snaps.push_back(cp);
       }
 
