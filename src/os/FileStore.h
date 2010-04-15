@@ -195,6 +195,7 @@ class FileStore : public JournalingObjectStore {
   bool test_mount_in_use();
   int mount();
   int umount();
+  int wipe_subvol(const char *s);
   int mkfs();
   int mkjournal();
 

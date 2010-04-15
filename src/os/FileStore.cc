@@ -244,6 +244,28 @@ int FileStore::open_journal()
   return 0;
 }
 
+int FileStore::wipe_subvol(const char *s)
+{
+  struct btrfs_ioctl_vol_args volargs;
+  memset(&volargs, 0, sizeof(volargs));
+  strcpy(volargs.name, s);
+  int fd = ::open(basedir.c_str(), O_RDONLY);
+  if (fd < 0)
+    return fd;
+  int r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &volargs);
+  ::close(fd);
+  if (r == 0) {
+    dout(0) << "mkfs  removed old subvol " << s << dendl;
+    return r;
+  }
+
+  dout(0) << "mkfs  removing old directory " << s << dendl;
+  char cmd[PATH_MAX];
+  snprintf(cmd, sizeof(cmd), "rm -r %s/%s", basedir.c_str(), s);
+  system(cmd);
+  return 0;
+}
+
 int FileStore::mkfs()
 {
   char cmd[PATH_MAX];
@@ -262,12 +284,37 @@ int FileStore::mkfs()
     return -EBUSY;
 
   // wipe
-  snprintf(cmd, sizeof(cmd), "test -d %s && ( test -d %s/current && rm -r %s/current/* %s/fsid || rm -r %s/* ) ; mkdir -p %s",
-	  basedir.c_str(), basedir.c_str(), basedir.c_str(), basedir.c_str(), basedir.c_str(), basedir.c_str());
+  DIR *dir = ::opendir(basedir.c_str());
+  if (!dir)
+    return -errno;
+  struct dirent sde, *de;
+  while (::readdir_r(dir, &sde, &de) == 0) {
+    if (!de)
+      break;
+    if (strcmp(de->d_name, ".") == 0 ||
+	strcmp(de->d_name, "..") == 0)
+      continue;
+    long long unsigned c;
+    int r;
+    if (sscanf(de->d_name, COMMIT_SNAP_ITEM, &c) == 1) {
+      r = wipe_subvol(de->d_name);
+    } else if (strcmp(de->d_name, "current") == 0) {
+      r = wipe_subvol("current");
+    } else {
+      char path[PATH_MAX];
+      snprintf(path, sizeof(path), "%s/%s", basedir.c_str(), de->d_name);
+      r = ::unlink(path);
+      dout(0) << "mkfs  removing old file " << de->d_name << dendl;
+    }
+    if (r < 0) {
+      char buf[100];
+      dout(0) << "problem wiping out " << de->d_name << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+      return -errno;
+    }
+  }
+  ::closedir(dir);
+ 
   
-  dout(5) << "wipe: " << cmd << dendl;
-  system(cmd);
-
   // fsid
   srand(time(0) + getpid());
   fsid = rand();
