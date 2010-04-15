@@ -395,6 +395,24 @@ int SimpleMessenger::send_message(Message *m, const entity_inst_t& dest)
   return 0;
 }
 
+int SimpleMessenger::send_message(Message *m, Connection *con)
+{
+  //set envelope
+  m->get_header().src = get_myname();
+
+  if (!m->get_priority()) m->set_priority(get_default_send_priority());
+
+
+  dout(1) << "--> " << con->get_peer_addr() << " -- " << *m
+	  << " -- ?+" << m->get_data().length()
+	  << " " << m
+	  << dendl;
+
+  submit_message(m, (Pipe **)&con->pipe, con->get_peer_addr(),
+		 con->get_peer_type());
+  return 0;
+}
+
 int SimpleMessenger::lazy_send_message(Message *m, const entity_inst_t& dest)
 {
   // set envelope
@@ -411,6 +429,25 @@ int SimpleMessenger::lazy_send_message(Message *m, const entity_inst_t& dest)
 
   submit_message(m, dest, true);
 
+  return 0;
+}
+
+int SimpleMessenger::lazy_send_message(Message *m, Connection *con)
+{
+  //set envelope
+  m->get_header().src = get_myname();
+
+  if (!m->get_priority()) m->set_priority(get_default_send_priority());
+
+
+  dout(1) << "lazy "
+	  << "--> " << con->get_peer_addr() << " -- " << *m
+	  << " -- ?+" << m->get_data().length()
+	  << " " << m
+	  << dendl;
+
+  submit_message(m, (Pipe **)&con->pipe, con->get_peer_addr(),
+		 con->get_peer_type(), true);
   return 0;
 }
 
