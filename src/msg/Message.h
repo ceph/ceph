@@ -163,9 +163,10 @@ struct Connection : public RefCountedObject {
   int peer_type;
   entity_addr_t peer_addr;
   unsigned features;
+  void *pipe;
 
 public:
-  Connection() : nref(1), lock("Connection::lock"), priv(NULL), peer_type(-1), features(0) {}
+  Connection() : nref(1), lock("Connection::lock"), priv(NULL), peer_type(-1), features(0), pipe(NULL) {}
   ~Connection() {
     //generic_dout(0) << "~Connection " << this << dendl;
     if (priv) {

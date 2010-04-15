@@ -183,7 +183,9 @@ private:
       in_qlen(0), keepalive(false),
       connect_seq(0), peer_global_seq(0),
       out_seq(0), in_seq(0), in_seq_acked(0),
-      reader_thread(this), writer_thread(this) { }
+      reader_thread(this), writer_thread(this) {
+      connection_state->pipe = this;
+    }
     ~Pipe() {
       for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
 	   i != queue_items.end();
@@ -194,6 +196,7 @@ private:
       }
       assert(out_q.empty());
       assert(sent.empty());
+      connection_state->pipe = NULL;
       connection_state->put();
     }
 
