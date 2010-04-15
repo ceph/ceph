@@ -212,7 +212,7 @@ void Server::handle_client_session(MClientSession *m)
 	mds->locker->resume_stale_caps(session);
       }
       mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->get_seq()), 
-				   session->inst);
+				   m->get_connection());
     } else {
       dout(10) << "ignoring renewcaps on non open|stale session (" << session->get_state_name() << ")" << dendl;
     }
@@ -517,7 +517,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       assert(0);
     ss << " after " << delay << " (allowed interval " << g_conf.mds_reconnect_timeout << ")";
     mds->logclient.log(LOG_INFO, ss);
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_source_inst());
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_connection());
     m->put();
     return;
   }
@@ -533,7 +533,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     // no need to respond to client: they're telling us they have no session
   } else {
     // notify client of success with an OPEN
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), m->get_source_inst());
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), m->get_connection());
     
     if (session->is_new()) {
       dout(10) << " session is new, will make best effort to reconnect " 
@@ -784,7 +784,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 		   mdr->client_request->get_dentry_wanted());
   }
 
-  messenger->send_message(reply, client_inst);
+  messenger->send_message(reply, req->get_connection());
 
   mdr->did_early_reply = true;
 
@@ -863,7 +863,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
     }
 
     reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
-    messenger->send_message(reply, client_inst);
+    messenger->send_message(reply, req->get_connection());
   }
   
   // take a closer look at tracei, if it happens to be a remote link
@@ -1014,7 +1014,7 @@ void Server::handle_client_request(MClientRequest *req)
     assert(session);
     if (session->have_completed_request(req->get_reqid().tid)) {
       dout(5) << "already completed " << req->get_reqid() << dendl;
-      mds->messenger->send_message(new MClientReply(req, 0), req->get_source_inst());
+      mds->messenger->send_message(new MClientReply(req, 0), req->get_connection());
 
       if (req->is_replay())
 	mds->queue_one_replay();
