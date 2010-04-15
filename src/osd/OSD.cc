@@ -3500,31 +3500,31 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 	dout(10) << *pg << " requested info+missing+backlog - queueing for backlog" << dendl;
 	queue_generate_backlog(pg);
       } else {
-	MOSDPGLog *m = new MOSDPGLog(osdmap->get_epoch(), pg->info);
-	m->missing = pg->missing;
+	MOSDPGLog *mlog = new MOSDPGLog(osdmap->get_epoch(), pg->info);
+	mlog->missing = pg->missing;
 	
 	// primary -> other, when building master log
 	if (it->second.type == PG::Query::LOG) {
 	  dout(10) << *pg << " sending info+missing+log since " << it->second.since
 		   << dendl;
-	  m->log.copy_after(pg->log, it->second.since);
+	  mlog->log.copy_after(pg->log, it->second.since);
 	}
 	
 	if (it->second.type == PG::Query::BACKLOG) {
 	  dout(10) << *pg << " sending info+missing+backlog" << dendl;
 	  assert(pg->log.backlog);
-	  m->log = pg->log;
+	  mlog->log = pg->log;
 	} 
 	else if (it->second.type == PG::Query::FULLLOG) {
 	  dout(10) << *pg << " sending info+missing+full log" << dendl;
-	  m->log.copy_non_backlog(pg->log);
+	  mlog->log.copy_non_backlog(pg->log);
 	}
 	
-	dout(10) << *pg << " sending " << m->log << " " << m->missing << dendl;
+	dout(10) << *pg << " sending " << mlog->log << " " << mlog->missing << dendl;
 	//m->log.print(cout);
 	
 	_share_map_outgoing(osdmap->get_inst(from));
-	messenger->send_message(m, osdmap->get_inst(from));
+	messenger->send_message(mlog, m->get_connection());
       }
     }    
 
@@ -3973,7 +3973,10 @@ void OSD::defer_recovery(PG *pg)
 void OSD::reply_op_error(MOSDOp *op, int err)
 {
   MOSDOpReply *reply = new MOSDOpReply(op, err, osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
-  messenger->send_message(reply, op->get_orig_source_inst());
+  if (op->get_connection()->get_peer_type() != CEPH_ENTITY_TYPE_OSD)
+    messenger->send_message(reply, op->get_connection());
+  else
+    messenger->send_message(reply, op->get_orig_source_inst());
   op->put();
 }
 
