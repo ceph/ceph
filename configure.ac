@@ -148,9 +148,8 @@ AC_CHECK_HEADER([openssl/md5.h],
 AC_CHECK_HEADERS([sys/xattr.h arpa/inet.h netdb.h netinet/in.h sys/file.h sys/ioctl.h sys/mount.h sys/param.h sys/socket.h sys/statvfs.h sys/time.h sys/vfs.h syslog.h utime.h])
 
 # sync_file_range
-AC_DEFINE([HAVE_SYNC_FILE_RANGE], [], [sync_file_range(2) is supported])
 AC_CHECK_FUNC([sync_file_range],
-	[AC_DEFINE([HAVE_SYNC_FILE_RANGE])],
+	[AC_DEFINE([HAVE_SYNC_FILE_RANGE], [], [sync_file_range(2) is supported])],
 	[])
 
 # Checks for typedefs, structures, and compiler characteristics.
