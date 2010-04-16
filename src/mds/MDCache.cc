@@ -3233,7 +3233,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     }
 
     rejoin_scour_survivor_replicas(from, ack);
-    mds->send_message(ack, get_connection());
+    mds->send_message(ack, weak->get_connection());
   } else {
     // done?
     assert(rejoin_gather.count(from));

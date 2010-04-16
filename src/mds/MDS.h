@@ -333,10 +333,7 @@ class MDS : public Dispatcher {
 
   void send_message_client(Message *m, client_t client);
   void send_message_client(Message *m, entity_inst_t clientinst);
-
-  void send_message(Message *m, Connection *c) { 
-    messenger->send_message(m, c);
-  }
+  void send_message(Message *m, Connection *c);
 
   // start up, shutdown
   int init();

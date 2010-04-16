@@ -303,6 +303,9 @@ MDSTableServer *MDS::get_table_server(int t)
 
 
 
+void MDS::send_message(Message *m, Connection *c) { 
+  messenger->send_message(m, c);
+}
 
 
 void MDS::send_message_mds(Message *m, int mds)
