@@ -2311,7 +2311,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
 	ack->add_abort(*p);      
       }
     }
-    mds->send_message_mds(ack, from);
+    mds->send_message(ack, m->get_connection());
   }
 
   // am i a surviving ambiguous importer?
@@ -3233,7 +3233,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     }
 
     rejoin_scour_survivor_replicas(from, ack);
-    mds->send_message_mds(ack, from);
+    mds->send_message(ack, get_connection());
   } else {
     // done?
     assert(rejoin_gather.count(from));
@@ -3601,7 +3601,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
   // send missing?
   if (missing) {
     // we expect a FULL soon.
-    mds->send_message_mds(missing, from);
+    mds->send_message(missing, strong->get_connection());
   } else {
     // done?
     assert(rejoin_gather.count(from));
@@ -3756,7 +3756,7 @@ void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *missing)
     full->add_inode_base(in);
   }
 
-  mds->send_message_mds(full, missing->get_source().num());
+  mds->send_message(full, missing->get_connection());
 }
 
 void MDCache::handle_cache_rejoin_full(MMDSCacheRejoin *full)
@@ -5930,7 +5930,9 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	    replicate_dentry(dn, from, reply->trace);
 	    if (dnl->is_primary())
 	      replicate_inode(in, from, reply->trace);
-	    mds->send_message_mds(reply, req->get_source().num());
+	    if (req->get_source() != req->get_orig_source())
+	      mds->send_message_mds(reply, req->get_source().num());
+	    else mds->send_message(reply->req->get_connnection());
 	  }
 	}
       }

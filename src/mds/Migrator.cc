@@ -1629,7 +1629,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   
   // ok!
   dout(7) << " sending export_prep_ack on " << *dir << dendl;
-  mds->send_message_mds(new MExportDirPrepAck(dir->dirfrag()), m->get_source().num());
+  mds->send_message(new MExportDirPrepAck(dir->dirfrag()), m->get_connection());
   
   // note new state
   import_state[dir->dirfrag()] = IMPORT_PREPPED;

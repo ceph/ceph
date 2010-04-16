@@ -605,7 +605,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	fake_inode.ino = p->first;
 	MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0, 0, 0);
 	//stale->head.migrate_seq = 0; // FIXME ******
-	mds->send_message_client(stale, m->get_source_inst());
+	mds->send_message(stale, m->get_connection());
 
 	// add to cap export list.
 	mdcache->rejoin_export_caps(p->first, from, p->second);
@@ -1286,7 +1286,7 @@ void Server::dispatch_slave_request(MDRequest *mdr)
 	MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_XLOCKACK);
 	r->set_lock_type(lock->get_type());
 	lock->get_parent()->set_object_info(r->get_object_info());
-	mds->send_message_mds(r, mdr->slave_request->get_source().num());
+	mds->send_message(r, mdr->slave_request->get_connection());
       } else {
 	if (lock) {
 	  dout(10) << "not auth for remote xlock attempt, dropping on " 

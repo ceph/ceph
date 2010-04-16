@@ -1709,7 +1709,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       }
       if (!_do_cap_update(in, cap, m->get_dirty(), follows, m, ack)) {
 	if (ack)
-	  mds->send_message_client(ack, client);
+	  mds->send_message(ack, m->get_connection());
 	eval_cap_gather(in);
       }
 
@@ -1774,7 +1774,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       } else {
 	// no update, ack now.
 	if (ack)
-	  mds->send_message_client(ack, client);
+	  mds->send_message(ack, m->get_connection());
       
 	bool did_issue = eval(in, CEPH_CAP_LOCKS);
 	if (!did_issue && (cap->wanted() & ~cap->pending()))
@@ -2168,7 +2168,7 @@ void Locker::handle_client_lease(MClientLease *m)
       now += mdcache->client_lease_durations[pool];
       mdcache->touch_client_lease(l, pool, now);
       
-      mds->send_message_client(m, client);
+      mds->send_message(m, m->get_connection());
     }
     break;
 
@@ -2416,7 +2416,7 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
     } else {
       // update lock and reply
       lock->set_state(LOCK_LOCK);
-      mds->send_message_mds(new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid()), from);
+      mds->send_message(new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid()), m->get_connection());
     }
     break;
 
