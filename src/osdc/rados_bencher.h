@@ -145,7 +145,7 @@ int write_bench(Rados& rados, rados_pool_t pool,
   dataLock.Unlock();
   for (int i = 0; i<concurrentios; ++i) {
     start_times[i] = g_clock.now();
-    r = rados.aio_write(pool, name[i], 0, *contents[i], data->object_size, &completions[i]);
+    r = rados.aio_write(pool, name[i], 0, *contents[i], data->object_size, completions[i]);
     if (r < 0) { //naughty, doesn't clean up heap
 	dataLock.Unlock();
 	return -5; //EIO
@@ -196,7 +196,7 @@ int write_bench(Rados& rados, rados_pool_t pool,
     //write new stuff to rados, then delete old stuff
     //and save locations of new stuff for later deletion
     start_times[slot] = g_clock.now();
-    r = rados.aio_write(pool, newName, 0, *newContents, data->object_size, &completions[slot]);
+    r = rados.aio_write(pool, newName, 0, *newContents, data->object_size, completions[slot]);
     if (r < 0) //naughty; doesn't clean up heap space.
       return r;
     dataLock.Lock();
@@ -305,7 +305,7 @@ int seq_read_bench(Rados& rados, rados_pool_t pool, int seconds_to_run,
   //start initial reads
   for (int i = 0; i < concurrentios; ++i) {
     start_times[i] = g_clock.now();
-    r = rados.aio_read(pool, name[i], 0, contents[i], data->object_size, &completions[i]);
+    r = rados.aio_read(pool, name[i], 0, contents[i], data->object_size, completions[i]);
     if (r < 0) { //naughty, doesn't clean up heap -- oh, or handle the print thread!
       cerr << "r = " << r << std::endl;
       dataLock.Unlock();
@@ -352,7 +352,7 @@ int seq_read_bench(Rados& rados, rados_pool_t pool, int seconds_to_run,
     //start new read and check data if requested
     start_times[slot] = g_clock.now();
     contents[slot] = new bufferlist();
-    r = rados.aio_read(pool, newName, 0, contents[slot], data->object_size, &completions[slot]);
+    r = rados.aio_read(pool, newName, 0, contents[slot], data->object_size, completions[slot]);
     if (r < 0)
       return r;
     dataLock.Lock();

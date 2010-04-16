@@ -77,6 +77,7 @@ int rados_exec(rados_pool_t pool, const char *oid, const char *cls, const char *
 typedef void *rados_completion_t;
 typedef void (*rados_callback_t)(rados_completion_t cb, void *arg);
 
+int rados_aio_create_completion(rados_callback_t, void *arg, rados_completion_t *pc);
 int rados_aio_set_callback(rados_completion_t c, rados_callback_t, void *arg);
 int rados_aio_wait_for_complete(rados_completion_t c);
 int rados_aio_wait_for_safe(rados_completion_t c);
@@ -86,10 +87,10 @@ int rados_aio_get_return_value(rados_completion_t c);
 void rados_aio_release(rados_completion_t c);
 int rados_aio_write(rados_pool_t pool, const char *oid,
 		    off_t off, const char *buf, size_t len,
-		    rados_completion_t *completion);
+		    rados_completion_t completion);
 int rados_aio_read(rados_pool_t pool, const char *oid,
 		   off_t off, char *buf, size_t len,
-		   rados_completion_t *completion);
+		   rados_completion_t completion);
 
 #ifdef __cplusplus
 }

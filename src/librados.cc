@@ -282,13 +282,20 @@ public:
   };
 
   int aio_read(PoolCtx& pool, object_t oid, off_t off, bufferlist *pbl, size_t len,
-	       AioCompletion **pc);
+	       AioCompletion *c);
   int aio_read(PoolCtx& pool, object_t oid, off_t off, char *buf, size_t len,
-	       AioCompletion **pc);
+	       AioCompletion *c);
 
   int aio_write(PoolCtx& pool, object_t oid, off_t off, const bufferlist& bl, size_t len,
-		AioCompletion **pc);
+		AioCompletion *c);
 
+  int create_completion(rados_callback_t cb, void *cba, AioCompletion **pc) {
+    *pc = new AioCompletion;
+    if (!pc)
+      return -ENOMEM;
+    (*pc)->set_callback(cb, cba);
+    return 0;
+  }
 };
 
 bool RadosClient::init()
@@ -771,10 +778,9 @@ int RadosClient::write_full(PoolCtx& pool, const object_t& oid, bufferlist& bl)
 }
 
 int RadosClient::aio_read(PoolCtx& pool, const object_t oid, off_t off, bufferlist *pbl, size_t len,
-			  AioCompletion **pc)
+			  AioCompletion *c)
 {
  
-  AioCompletion *c = new AioCompletion;
   Context *onack = new C_aio_Ack(c);
 
   c->pbl = pbl;
@@ -785,13 +791,11 @@ int RadosClient::aio_read(PoolCtx& pool, const object_t oid, off_t off, bufferli
 		 off, len, pool.snap_seq, &c->bl, 0,
 		  onack);
 
-  *pc = c;
   return 0;
 }
 int RadosClient::aio_read(PoolCtx& pool, const object_t oid, off_t off, char *buf, size_t len,
-			  AioCompletion **pc)
+			  AioCompletion *c)
 {
-  AioCompletion *c = new AioCompletion;
   Context *onack = new C_aio_Ack(c);
 
   c->buf = buf;
@@ -803,17 +807,15 @@ int RadosClient::aio_read(PoolCtx& pool, const object_t oid, off_t off, char *bu
 		 off, len, pool.snap_seq, &c->bl, 0,
 		  onack);
 
-  *pc = c;
   return 0;
 }
 
 int RadosClient::aio_write(PoolCtx& pool, const object_t oid, off_t off, const bufferlist& bl, size_t len,
-			   AioCompletion **pc)
+			   AioCompletion *c)
 {
   SnapContext snapc;
   utime_t ut = g_clock.now();
 
-  AioCompletion *c = new AioCompletion;
   Context *onack = new C_aio_Ack(c);
   Context *onsafe = new C_aio_Safe(c);
 
@@ -823,7 +825,6 @@ int RadosClient::aio_write(PoolCtx& pool, const object_t oid, off_t off, const b
 		  off, len, pool.snapc, bl, ut, 0,
 		  onack, onsafe);
 
-  *pc = c;
   return 0;
 }
 
@@ -1376,27 +1377,35 @@ int Rados::snap_get_stamp(rados_pool_t pool, snap_t snapid, time_t *t)
 
 // AIO
 int Rados::aio_read(rados_pool_t pool, const string& oid, off_t off, bufferlist *pbl, size_t len,
-		    Rados::AioCompletion **pc)
+		    Rados::AioCompletion *c)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
-  RadosClient::AioCompletion *c;
-  int r = ((RadosClient *)client)->aio_read(*ctx, oid, off, pbl, len, &c);
-  if (r >= 0) {
-    *pc = new AioCompletion((void *)c);
-  }
+  RadosClient::AioCompletion *pc = (RadosClient::AioCompletion *)c->pc;
+  int r = ((RadosClient *)client)->aio_read(*ctx, oid, off, pbl, len, pc);
   return r;
 }
 
 int Rados::aio_write(rados_pool_t pool, const string& oid, off_t off, const bufferlist& bl, size_t len,
-		     AioCompletion **pc)
+		     AioCompletion *c)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
-  RadosClient::AioCompletion *c;
-  int r = ((RadosClient *)client)->aio_write(*ctx, oid, off, bl, len, &c);
-  if (r >= 0) {
-    *pc = new AioCompletion((void *)c);
-  }
+  RadosClient::AioCompletion *pc = (RadosClient::AioCompletion *)c->pc;
+  int r = ((RadosClient *)client)->aio_write(*ctx, oid, off, bl, len, pc);
   return r;
+}
+
+int Rados::create_completion(callback_t cb, void *cba, AioCompletion **pc)
+{
+  RadosClient::AioCompletion *c;
+  int r = ((RadosClient *)client)->create_completion(cb, cba, &c);
+  if (r < 0)
+    return r;
+
+  *pc = new AioCompletion(c);
+  if (!pc)
+    return -ENOMEM;
+
+  return 0;
 }
 
 int Rados::AioCompletion::set_callback(rados_callback_t cb, void *cba)
@@ -1730,9 +1739,9 @@ extern "C" int rados_list_objects_next(rados_list_ctx_t listctx, const char **en
 // -------------------------
 // aio
 
-extern "C" int rados_aio_set_callback(rados_completion_t c, rados_callback_t cb, void *cba)
+extern "C" int rados_aio_create_completion(rados_callback_t cb, void *cba, rados_completion_t *pc)
 {
-  return ((RadosClient::AioCompletion *)c)->set_callback(cb, cba);
+  return radosp->create_completion(cb, cba, (RadosClient::AioCompletion **)pc);
 }
 
 extern "C" int rados_aio_wait_for_complete(rados_completion_t c)
@@ -1767,21 +1776,21 @@ extern "C" void rados_aio_release(rados_completion_t c)
 
 extern "C" int rados_aio_read(rados_pool_t pool, const char *o,
 			       off_t off, char *buf, size_t len,
-			       rados_completion_t *completion)
+			       rados_completion_t completion)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   object_t oid(o);
-  return radosp->aio_read(*ctx, oid, off, buf, len, (RadosClient::AioCompletion**)completion);
+  return radosp->aio_read(*ctx, oid, off, buf, len, (RadosClient::AioCompletion*)completion);
 }
 
 extern "C" int rados_aio_write(rados_pool_t pool, const char *o,
 			       off_t off, const char *buf, size_t len,
-			       rados_completion_t *completion)
+			       rados_completion_t completion)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   object_t oid(o);
   bufferlist bl;
   bl.append(buf, len);
-  return radosp->aio_write(*ctx, oid, off, bl, len, (RadosClient::AioCompletion**)completion);
+  return radosp->aio_write(*ctx, oid, off, bl, len, (RadosClient::AioCompletion*)completion);
 }
 

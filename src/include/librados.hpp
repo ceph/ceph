@@ -108,10 +108,10 @@ public:
   };
 
   int aio_read(pool_t pool, const std::string& oid, off_t off, bufferlist *pbl, size_t len,
-	       AioCompletion **pc);
+	       AioCompletion *c);
   int aio_write(pool_t pool, const std::string& oid, off_t off, const bufferlist& bl, size_t len,
-		AioCompletion **pc);
-
+		AioCompletion *c);
+  int create_completion(callback_t cb, void *cba, AioCompletion **pc);
 };
 
 }
