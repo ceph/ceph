@@ -7151,8 +7151,7 @@ void MDCache::discover_base_ino(inodeno_t want_ino,
   dout(7) << "discover_base_ino " << want_ino << " from mds" << from << dendl;
   if (waiting_for_base_ino[from].count(want_ino) == 0) {
     filepath want_path;
-    MDiscover *dis = new MDiscover(mds->get_nodeid(),
-				   want_ino,
+    MDiscover *dis = new MDiscover(want_ino,
 				   CEPH_NOSNAP,
 				   want_path,
 				   false);
@@ -7175,8 +7174,7 @@ void MDCache::discover_dir_frag(CInode *base,
 
   if (!base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) {    // this is overly conservative
     filepath want_path;
-    MDiscover *dis = new MDiscover(mds->get_nodeid(),
-				   base->ino(),
+    MDiscover *dis = new MDiscover(base->ino(),
 				   CEPH_NOSNAP,
 				   want_path,
 				   true);  // need the base dir open
@@ -7210,8 +7208,7 @@ void MDCache::discover_path(CInode *base,
   } 
 
   if (!base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) {    // this is overly conservative
-    MDiscover *dis = new MDiscover(mds->get_nodeid(),
-				   base->ino(),
+    MDiscover *dis = new MDiscover(base->ino(),
 				   snap,
 				   want_path,
 				   true,        // we want the base dir; we are relative to ino.
@@ -7243,8 +7240,7 @@ void MDCache::discover_path(CDir *base,
   }
 
   if (!base->is_waiting_for_dentry(want_path[0].c_str(), snap) || !onfinish) {
-    MDiscover *dis = new MDiscover(mds->get_nodeid(),
-				   base->ino(),
+    MDiscover *dis = new MDiscover(base->ino(),
 				   snap,
 				   want_path,
 				   false,   // no base dir; we are relative to dir
@@ -7275,8 +7271,7 @@ void MDCache::discover_ino(CDir *base,
   } 
 
   if (!base->is_waiting_for_ino(want_ino)) {
-    MDiscover *dis = new MDiscover(mds->get_nodeid(),
-				   base->dirfrag(),
+    MDiscover *dis = new MDiscover(base->dirfrag(),
 				   CEPH_NOSNAP,
 				   want_ino,
 				   want_xlocked);
@@ -7330,7 +7325,7 @@ void MDCache::kick_discovers(int who)
 void MDCache::handle_discover(MDiscover *dis) 
 {
   int whoami = mds->get_nodeid();
-  int from = dis->get_asker();
+  int from = dis->get_source_inst().name._num;
 
   assert(from != whoami);
 
