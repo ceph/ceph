@@ -7603,7 +7603,7 @@ void MDCache::handle_discover(MDiscover *dis)
   // how did we do?
   assert(!reply->is_empty());
   dout(7) << "handle_discover sending result back to asker mds" << from << dendl;
-  mds->send_message_mds(reply, from);
+  mds->send_message(reply, dis->get_connection());
 
   dis->put();
 }
