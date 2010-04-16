@@ -4082,6 +4082,25 @@ void Server::handle_client_rename(MDRequest *mdr)
     dout(10) << "straydn is " << *straydn << dendl;
   }
 
+  // -- prepare witness list --
+  /*
+   * NOTE: we use _all_ replicas as witnesses.
+   * this probably isn't totally necessary (esp for file renames),
+   * but if/when we change that, we have to make sure rejoin is
+   * sufficiently robust to handle strong rejoins from survivors
+   * with totally wrong dentry->inode linkage.
+   * (currently, it can ignore rename effects, because the resolve
+   * stage will sort them out.)
+   */
+  set<int> witnesses = mdr->more()->extra_witnesses;
+  if (srcdn->is_auth())
+    srcdn->list_replicas(witnesses);
+  else
+    witnesses.insert(srcdn->authority().first);
+  destdn->list_replicas(witnesses);
+  dout(10) << " witnesses " << witnesses << ", have " << mdr->more()->witnessed << dendl;
+
+
   // -- locks --
 
   // straydn?
@@ -4090,12 +4109,20 @@ void Server::handle_client_rename(MDRequest *mdr)
     wrlocks.insert(&straydn->get_dir()->inode->nestlock);
   }
 
+  // xlock versionlock on srci if there are any witnesses
+  //  replicas can't see projected dentry linkages, and will get confused
+  //  if we try to pipeline things.
+  if (!witnesses.empty())
+    xlocks.insert(&srci->versionlock);
+
+  /*
   // xlock versionlock on srci if remote?
   //  this ensures it gets safely remotely auth_pinned, avoiding deadlock;
   //  strictly speaking, having the slave node freeze the inode is 
   //  otherwise sufficient for avoiding conflicts with inode locks, etc.
-  if (!srcdn->is_auth() && srcdnl->is_primary())
-    xlocks.insert(&srci->versionlock);
+  if (!srcdn->is_auth() && srcdnl->is_primary())  // xlock versionlock on srci if there are any witnesses
+      xlocks.insert(&srci->versionlock);
+  */
 
   // we need to update srci's ctime.  xlock its least contended lock to do that...
   xlocks.insert(&srci->linklock);
@@ -4159,22 +4186,6 @@ void Server::handle_client_rename(MDRequest *mdr)
     mdr->now = g_clock.real_now();
 
   // -- prepare witnesses --
-  /*
-   * NOTE: we use _all_ replicas as witnesses.
-   * this probably isn't totally necessary (esp for file renames),
-   * but if/when we change that, we have to make sure rejoin is
-   * sufficiently robust to handle strong rejoins from survivors
-   * with totally wrong dentry->inode linkage.
-   * (currently, it can ignore rename effects, because the resolve
-   * stage will sort them out.)
-   */
-  set<int> witnesses = mdr->more()->extra_witnesses;
-  if (srcdn->is_auth())
-    srcdn->list_replicas(witnesses);
-  else
-    witnesses.insert(srcdn->authority().first);
-  destdn->list_replicas(witnesses);
-  dout(10) << " witnesses " << witnesses << ", have " << mdr->more()->witnessed << dendl;
 
   // do srcdn auth last
   int last = -1;
