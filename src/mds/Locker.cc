@@ -1036,7 +1036,7 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t 
   mut->apply();
   
   if (ack)
-    mds->send_message_client(ack, client);
+    mds->send_message_client_counted(ack, client);
 
   drop_locks(mut);
   mut->cleanup();
@@ -1222,7 +1222,7 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
 					 cap->get_mseq());
 	in->encode_cap_message(m, cap);
 
-	mds->send_message_client(m, it->first);
+	mds->send_message_client_counted(m, it->first);
       }
     }
 
@@ -1248,7 +1248,7 @@ void Locker::issue_truncate(CInode *in)
 				     cap->pending(), cap->wanted(), 0,
 				     cap->get_mseq());
     in->encode_cap_message(m, cap);			     
-    mds->send_message_client(m, it->first);
+    mds->send_message_client_counted(m, it->first);
   }
 
   // should we increase max_size?
@@ -1579,7 +1579,7 @@ void Locker::share_inode_max_size(CInode *in)
 				       cap->pending(), cap->wanted(), 0,
 				       cap->get_mseq());
       in->encode_cap_message(m, cap);
-      mds->send_message_client(m, client);
+      mds->send_message_client_counted(m, client);
     }
   }
 }
@@ -1709,7 +1709,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       }
       if (!_do_cap_update(in, cap, m->get_dirty(), follows, m, ack)) {
 	if (ack)
-	  mds->send_message_client(ack, m->get_connection());
+	  mds->send_message_client_counted(ack, m->get_connection());
 	eval_cap_gather(in);
       }
 
@@ -1774,7 +1774,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       } else {
 	// no update, ack now.
 	if (ack)
-	  mds->send_message_client(ack, m->get_connection());
+	  mds->send_message_client_counted(ack, m->get_connection());
       
 	bool did_issue = eval(in, CEPH_CAP_LOCKS);
 	if (!did_issue && (cap->wanted() & ~cap->pending()))
@@ -2168,7 +2168,7 @@ void Locker::handle_client_lease(MClientLease *m)
       now += mdcache->client_lease_durations[pool];
       mdcache->touch_client_lease(l, pool, now);
       
-      mds->send_message_client(m, m->get_connection());
+      mds->send_message_client_counted(m, m->get_connection());
     }
     break;
 
@@ -2262,7 +2262,7 @@ void Locker::revoke_client_leases(SimpleLock *lock)
     
     // i should also revoke the dir ICONTENT lease, if they have it!
     CInode *diri = dn->get_dir()->get_inode();
-    mds->send_message_client(new MClientLease(CEPH_MDS_LEASE_REVOKE, l->seq,
+    mds->send_message_client_counted(new MClientLease(CEPH_MDS_LEASE_REVOKE, l->seq,
 					      mask,
 					      diri->ino(),
 					      diri->first, CEPH_NOSNAP,

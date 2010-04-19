@@ -918,7 +918,7 @@ void Migrator::finish_export_inode_caps(CInode *in)
 				     cap->get_cap_id(), cap->get_last_seq(), 
 				     cap->pending(), cap->wanted(), 0,
 				     cap->get_mseq());
-    mds->send_message_client(m, it->first);
+    mds->send_message_client_counted(m, it->first);
   }
   in->clear_client_caps();
 }

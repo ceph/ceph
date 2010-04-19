@@ -369,29 +369,29 @@ void MDS::forward_message_mds(Message *m, int mds)
 
 
 
-void MDS::send_message_client(Message *m, client_t client)
+void MDS::send_message_client_counted(Message *m, client_t client)
 {
   if (sessionmap.have_session(entity_name_t::CLIENT(client.v))) {
     version_t seq = sessionmap.inc_push_seq(client);
-    dout(10) << "send_message_client client" << client << " seq " << seq << " " << *m << dendl;
+    dout(10) << "send_message_client_counted client" << client << " seq " << seq << " " << *m << dendl;
     messenger->send_message(m, sessionmap.get_session(entity_name_t::CLIENT(client.v))->inst);
   } else {
-    dout(10) << "send_message_client no session for client" << client << " " << *m << dendl;
+    dout(10) << "send_message_client_counted no session for client" << client << " " << *m << dendl;
   }
 }
 
-void MDS::send_message_client(Message *m, entity_inst_t clientinst)
+void MDS::send_message_client_counted(Message *m, entity_inst_t clientinst)
 {
   version_t seq = sessionmap.inc_push_seq(clientinst.name.num());
-  dout(10) << "send_message_client " << clientinst.name << " seq " << seq << " " << *m << dendl;
+  dout(10) << "send_message_client_counted " << clientinst.name << " seq " << seq << " " << *m << dendl;
   messenger->send_message(m, clientinst);
 }
 
-void MDS::send_message_client(Message *m, Connection *con)
+void MDS::send_message_client_counted(Message *m, Connection *con)
 {
   Session *session = (Session *)con->get_priv();
   version_t seq = session->inc_push_seq();
-  dout(10) << "send_message_client " << session->inst.name << " seq "
+  dout(10) << "send_message_client_counted " << session->inst.name << " seq "
 	   << seq << " " << *m << dendl;
   messenger->send_message(m, con);
 }
