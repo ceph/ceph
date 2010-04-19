@@ -4109,20 +4109,22 @@ void Server::handle_client_rename(MDRequest *mdr)
     wrlocks.insert(&straydn->get_dir()->inode->nestlock);
   }
 
-  // xlock versionlock on srci if there are any witnesses
-  //  replicas can't see projected dentry linkages, and will get confused
-  //  if we try to pipeline things.
-  if (!witnesses.empty())
-    xlocks.insert(&srci->versionlock);
-
-  /*
   // xlock versionlock on srci if remote?
   //  this ensures it gets safely remotely auth_pinned, avoiding deadlock;
   //  strictly speaking, having the slave node freeze the inode is 
   //  otherwise sufficient for avoiding conflicts with inode locks, etc.
   if (!srcdn->is_auth() && srcdnl->is_primary())  // xlock versionlock on srci if there are any witnesses
       xlocks.insert(&srci->versionlock);
-  */
+
+  // xlock versionlock on dentries if there are witnesses.
+  //  replicas can't see projected dentry linkages, and will get
+  //  confused if we try to pipeline things.
+  if (!witnesses.empty()) {
+    if (srcdn->is_projected())
+      xlocks.insert(&srcdn->versionlock);
+    if (destdn->is_projected())
+      xlocks.insert(&destdn->versionlock);
+  }
 
   // we need to update srci's ctime.  xlock its least contended lock to do that...
   xlocks.insert(&srci->linklock);
