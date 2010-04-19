@@ -224,9 +224,10 @@ extern const char *ceph_mds_state_name(int s);
  *  - a few of these are internal to the mds
  */
 #define CEPH_LOCK_DN          1
-#define CEPH_LOCK_ISNAP       2
+#define CEPH_LOCK_DVERSION    2
 #define CEPH_LOCK_IVERSION    4     /* mds internal */
 #define CEPH_LOCK_IFILE       8     /* mds internal */
+#define CEPH_LOCK_ISNAP       16
 #define CEPH_LOCK_IAUTH       32
 #define CEPH_LOCK_ILINK       64
 #define CEPH_LOCK_IDFT        128   /* dir frag tree */

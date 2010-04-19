@@ -164,6 +164,18 @@ bool Locker::acquire_locks(MDRequest *mdr,
     sorted.insert(*p);
 
     // augment xlock with a versionlock?
+    if ((*p)->get_type() == CEPH_LOCK_DN) {
+      CDentry *dn = (CDentry*)(*p)->get_parent();
+      if (mdr->is_master()) {
+	// master.  wrlock versionlock so we can pipeline dentry updates to journal.
+	wrlocks.insert(&dn->versionlock);
+      } else {
+	// slave.  exclusively lock the dentry version (i.e. block other journal updates).
+	// this makes rollback safe.
+	xlocks.insert(&dn->versionlock);
+	sorted.insert(&dn->versionlock);
+      }
+    }
     if ((*p)->get_type() > CEPH_LOCK_IVERSION) {
       // inode version lock?
       CInode *in = (CInode*)(*p)->get_parent();
@@ -799,7 +811,8 @@ void Locker::rdlock_finish(SimpleLock *lock, Mutation *mut)
 
 void Locker::wrlock_force(SimpleLock *lock, Mutation *mut)
 {
-  if (lock->get_type() == CEPH_LOCK_IVERSION)
+  if (lock->get_type() == CEPH_LOCK_IVERSION ||
+      lock->get_type() == CEPH_LOCK_DVERSION)
     return local_wrlock_grab((LocalLock*)lock, mut);
 
   dout(7) << "wrlock_force  on " << *lock
@@ -811,7 +824,8 @@ void Locker::wrlock_force(SimpleLock *lock, Mutation *mut)
 
 bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
 {
-  if (lock->get_type() == CEPH_LOCK_IVERSION)
+  if (lock->get_type() == CEPH_LOCK_IVERSION ||
+      lock->get_type() == CEPH_LOCK_DVERSION)
     return local_wrlock_start((LocalLock*)lock, mut);
 
   dout(10) << "wrlock_start " << *lock << " on " << *lock->get_parent() << dendl;
@@ -872,7 +886,8 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
 
 void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut)
 {
-  if (lock->get_type() == CEPH_LOCK_IVERSION)
+  if (lock->get_type() == CEPH_LOCK_IVERSION ||
+      lock->get_type() == CEPH_LOCK_DVERSION)
     return local_wrlock_finish((LocalLock*)lock, mut);
 
   dout(7) << "wrlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
@@ -896,7 +911,8 @@ void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut)
 
 bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
 {
-  if (lock->get_type() == CEPH_LOCK_IVERSION)
+  if (lock->get_type() == CEPH_LOCK_IVERSION ||
+      lock->get_type() == CEPH_LOCK_DVERSION)
     return local_xlock_start((LocalLock*)lock, mut);
 
   dout(7) << "xlock_start on " << *lock << " on " << *lock->get_parent() << dendl;
@@ -954,7 +970,8 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
 
 void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
 {
-  if (lock->get_type() == CEPH_LOCK_IVERSION)
+  if (lock->get_type() == CEPH_LOCK_IVERSION ||
+      lock->get_type() == CEPH_LOCK_DVERSION)
     return local_xlock_finish((LocalLock*)lock, mut);
 
   dout(10) << "xlock_finish on " << *lock << " " << *lock->get_parent() << dendl;
