@@ -2152,7 +2152,6 @@ void Locker::handle_client_lease(MClientLease *m)
     return;
   }
   CDentry *dn = 0;
-  assert(m->get_mask() & CEPH_LOCK_DN);
 
   frag_t fg = in->pick_dirfrag(m->dname);
   CDir *dir = in->get_dirfrag(fg);
@@ -2180,10 +2179,9 @@ void Locker::handle_client_lease(MClientLease *m)
       dout(7) << "handle_client_lease release - seq " << l->seq << " != provided " << m->get_seq() << dendl;
     } else {
       dout(7) << "handle_client_lease client" << client
-	      << " release mask " << m->get_mask()
 	      << " on " << *dn << dendl;
-      int left = dn->remove_client_lease(l, l->mask, this);
-      dout(10) << " remaining mask is " << left << " on " << *dn << dendl;
+      int left = dn->remove_client_lease(l, CEPH_LOCK_DN, this);
+      dout(10) << " release remaining mask is " << left << " on " << *dn << dendl;
     }
     delete m;
     break;
@@ -2191,8 +2189,7 @@ void Locker::handle_client_lease(MClientLease *m)
   case CEPH_MDS_LEASE_RENEW:
     {
       dout(7) << "handle_client_lease client" << client
-	      << " renew mask " << m->get_mask()
-	      << " on " << *dn << dendl;
+	      << " renew on " << *dn << dendl;
       int pool = 1;   // fixme.. do something smart!
       m->h.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
       m->h.seq = ++l->seq;
@@ -2218,7 +2215,7 @@ void Locker::_issue_client_lease(CDentry *dn, int mask, int pool, client_t clien
 				 bufferlist &bl, utime_t now, Session *session)
 {
   LeaseStat e;
-  e.mask = mask;
+  e.mask = 1;
 
   if (mask) {
     ClientLease *l = dn->add_client_lease(client, mask);
@@ -2292,7 +2289,7 @@ void Locker::revoke_client_leases(SimpleLock *lock)
     assert(lock->get_type() == CEPH_LOCK_DN);
 
     CDentry *dn = (CDentry*)lock->get_parent();
-    int mask = CEPH_LOCK_DN;
+    int mask = 1;
     
     // i should also revoke the dir ICONTENT lease, if they have it!
     CInode *diri = dn->get_dir()->get_inode();
