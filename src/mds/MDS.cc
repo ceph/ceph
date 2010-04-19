@@ -387,7 +387,14 @@ void MDS::send_message_client(Message *m, entity_inst_t clientinst)
   messenger->send_message(m, clientinst);
 }
 
-
+void MDS::send_message_client(Message *m, Connection *con)
+{
+  Session *session = (Session *)con->get_priv();
+  version_t seq = session->inc_push_seq();
+  dout(10) << "send_message_client " << session->inst.name << " seq "
+	   << seq << " " << *m << dendl;
+  messenger->send_message(m, con);
+}
 
 int MDS::init()
 {
