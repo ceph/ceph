@@ -758,6 +758,7 @@ bool ReplicatedPG::snap_trimmer()
       vector<snapid_t>& snaps = coi.snaps;
 
       dout(10) << coid << " snaps " << snaps << " old snapset " << snapset << dendl;
+      assert(snapset.seq);
 
       // trim clone's snaps
       vector<snapid_t> newsnaps;
@@ -2205,7 +2206,7 @@ ReplicatedPG::SnapSetContext *ReplicatedPG::get_snapset_context(const object_t& 
     if (r < 0) {
       // try _snapset
       sobject_t snapdir(oid, CEPH_SNAPDIR);
-      int r = osd->store->getattr(coll_t::build_pg_coll(info.pgid), snapdir, SS_ATTR, bv);
+      r = osd->store->getattr(coll_t::build_pg_coll(info.pgid), snapdir, SS_ATTR, bv);
       if (r < 0 && !can_create)
 	return NULL;
     }
