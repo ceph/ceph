@@ -20,15 +20,25 @@ figure_dirs() {
 }
 
 verify_conf() {
-    # make sure ceph.conf exists
-    
-    if [ ! -e $conf ]; then
-	if [ "$conf" = "$default_conf" ]; then
-	    echo "$0: ceph conf $conf not found; system is not configured."
-	    exit 0
+    # fetch conf?
+    if [ -x "$ETCDIR/fetch_config" ] && [ "$conf" = "$default_conf" ]; then
+	conf="/tmp/fetched.ceph.conf.$$"
+	echo "[$ETCDIR/fetch_config $conf]"
+	if $ETCDIR/fetch_config $conf && [ -e $conf ]; then true ; else
+	    echo "$0: failed to fetch config with '$ETCDIR/fetch_config $conf'"
+	    exit 1
 	fi
-	echo "$0: ceph conf $conf not found!"
-	usage_exit
+	# yay!
+    else
+        # make sure ceph.conf exists
+	if [ ! -e $conf ]; then
+	    if [ "$conf" = "$default_conf" ]; then
+		echo "$0: ceph conf $conf not found; system is not configured."
+		exit 0
+	    fi
+	    echo "$0: ceph conf $conf not found!"
+	    usage_exit
+	fi
     fi
 }
 

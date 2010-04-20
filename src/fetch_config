@@ -1,0 +1,20 @@
+#!/bin/sh
+conf="$1"
+
+## fetch ceph.conf from some remote location and save it to $conf.
+##
+## make sure this script is executable (chmod +x fetch_config)
+
+##
+## examples:
+##
+
+## from a locally accessible file
+# cp /path/to/ceph.conf $conf
+
+## from a URL:
+# wget -q -O $conf http://somewhere.com/some/ceph.conf 
+
+## via scp
+# scp -i /path/to/id_dsa user@host:/path/to/ceph.conf $conf
+

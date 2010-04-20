@@ -269,6 +269,7 @@ install-data-local:
 	$(install_sh_SCRIPT) -m 0755 ceph_common.sh $(DESTDIR)$(libdir)/ceph/ceph_common.sh
 	mkdir -p $(DESTDIR)$(sysconfdir)/ceph
 	$(install_sh_SCRIPT) -m 0600 sample.ceph.conf $(DESTDIR)$(sysconfdir)/ceph/sample.ceph.conf
+	$(install_sh_SCRIPT) -m 0755 fetch_config $(DESTDIR)$(sysconfdir)/ceph/sample.fetch_config
 	mkdir -p $(DESTDIR)$(includedir)/ceph
 	$(install_sh_SCRIPT) -m 0644 client/libceph.h $(DESTDIR)$(includedir)/ceph/libceph.h
 	mkdir -p $(DESTDIR)$(includedir)/rados
@@ -497,6 +498,7 @@ noinst_HEADERS = \
         crush/mapper.h\
         crush/sample.txt\
         crush/types.h\
+	fetch_config\
 	include/ClassLibrary.h\
         include/Context.h\
 	include/CompatSet.h\

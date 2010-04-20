@@ -38,7 +38,7 @@ install: build
 	$(MAKE) DESTDIR=$(CURDIR) install
 
 	mkdir -p etc/ceph
-	cp src/sample.ceph.conf etc/ceph
+	mv usr/etc/ceph/* etc/ceph
 
 
 # Add here commands to install the package into debian/testpack.
