@@ -334,6 +334,12 @@ inline bool operator==(const byte_range_t& l, const byte_range_t& r) {
   return l.first == r.first && l.last == r.last;
 }
 
+struct ceph_lock_state_t {
+  multimap<__u64, ceph_filelock> held_locks; //current locks
+  multimap<__u64, ceph_filelock> waiting_locks; //locks waiting for other locks
+  //both of the above are keyed by starting offset
+};
+
 struct inode_t {
   // base (immutable)
   inodeno_t ino;

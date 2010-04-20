@@ -301,6 +301,8 @@ enum {
 	CEPH_MDS_OP_RMXATTR    = 0x01106,
 	CEPH_MDS_OP_SETLAYOUT  = 0x01107,
 	CEPH_MDS_OP_SETATTR    = 0x01108,
+	CEPH_MDS_OP_SETFILELOCK= 0x01109,
+	CEPH_MDS_OP_GETFILELOCK= 0x00110,
 
 	CEPH_MDS_OP_MKNOD      = 0x01201,
 	CEPH_MDS_OP_LINK       = 0x01202,
@@ -371,6 +373,15 @@ union ceph_mds_request_args {
 	struct {
 		struct ceph_file_layout layout;
 	} __attribute__ ((packed)) setlayout;
+	struct {
+		__u8 rule; /* currently fcntl or flock */
+		__u8 type; /* shared, exclusive, remove*/
+		int pid; /* process id requesting the lock */
+		__u64 pid_namespace;
+		__u64 start; /* initial location to lock */
+		__u64 length; /* num bytes to lock from start */
+		bool wait; /* will caller wait for lock to become available? */
+	} __attribute__ ((packed)) filelock_change;
 } __attribute__ ((packed));
 
 #define CEPH_MDS_FLAG_REPLAY        1  /* this is a replayed op */
@@ -463,6 +474,22 @@ struct ceph_mds_reply_dirfrag {
 	__le32 auth;            /* auth mds, if this is a delegation point */
 	__le32 ndist;           /* number of mds' this is replicated on */
 	__le32 dist[];
+} __attribute__ ((packed));
+
+#define CEPH_LOCK_FCNTL    1
+#define CEPH_LOCK_FLOCK    2
+
+#define CEPH_LOCK_SHARED   1
+#define CEPH_LOCK_EXCL     2
+#define CEPH_LOCK_UNLOCK   3
+
+struct ceph_filelock {
+	__u64 start;/* file offset to start lock at */
+	__u64 length; /* num bytes to lock; 0 for all following start */
+	__s64 client; /* which client holds the lock */
+	int pid; /* process id holding the lock on the client */
+	__u64 pid_namespace;
+	__u8 type; /* shared lock, exclusive lock, or unlock */
 } __attribute__ ((packed));
 
 /* file access modes */
