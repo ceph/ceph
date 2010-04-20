@@ -366,7 +366,7 @@ void SnapRealm::split_at(SnapRealm *child)
     // it's not a dir:
     //  - no open children.
     //  - only need to move this child's inode's caps.
-    child->inode->move_to_containing_realm(child);
+    child->inode->move_to_realm(child);
     return;
   }
 
@@ -409,7 +409,7 @@ void SnapRealm::split_at(SnapRealm *child)
     }
     if (under_child) {
       dout(20) << " child gets " << *in << dendl;
-      in->move_to_containing_realm(child);
+      in->move_to_realm(child);
     } else {
       dout(20) << "    keeping " << *in << dendl;
     }

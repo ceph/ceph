@@ -683,18 +683,7 @@ public:
 
   Capability *add_client_cap(client_t client, Session *session, SnapRealm *conrealm=0);
   void remove_client_cap(client_t client);
-
-  void move_to_containing_realm(SnapRealm *realm) {
-    for (map<client_t,Capability*>::iterator q = client_caps.begin();
-	 q != client_caps.end();
-	 q++) {
-      containing_realm->remove_cap(q->first, q->second);
-      realm->add_cap(q->first, q->second);
-    }
-    item_caps.remove_myself();
-    realm->inodes_with_caps.push_back(&item_caps);
-    containing_realm = realm;
-  }
+  void move_to_realm(SnapRealm *realm);
 
   Capability *reconnect_cap(client_t client, ceph_mds_cap_reconnect& icr, Session *session) {
     Capability *cap = get_client_cap(client);
