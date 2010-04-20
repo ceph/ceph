@@ -804,6 +804,7 @@ void MDCache::subtree_merge_writebehind_finish(CInode *in, Mutation *mut)
   in->pop_and_dirty_projected_inode(mut->ls);
 
   mut->apply();
+  mds->locker->drop_locks(mut);
   mut->cleanup();
   delete mut;
 
@@ -4687,6 +4688,8 @@ void MDCache::truncate_inode_logged(CInode *in, Mutation *mut)
 {
   dout(10) << "truncate_inode_logged " << *in << dendl;
   mut->apply();
+  mds->locker->drop_locks(mut);
+  mut->cleanup();
   delete mut;
 
   in->put(CInode::PIN_TRUNCATING);
@@ -6821,6 +6824,7 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in
   // apply
   in->pop_and_dirty_projected_inode(mut->ls);
   mut->apply();
+  mds->locker->drop_locks(mut);
   mut->cleanup();
   delete mut;
 
