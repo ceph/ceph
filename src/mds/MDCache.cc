@@ -1310,7 +1310,7 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
     CInode *in = dnl->get_inode();
 
     if (follows == CEPH_NOSNAP)
-      follows = in->find_snaprealm()->get_newest_snap();
+      follows = in->find_snaprealm()->get_newest_seq();
 
     if (in->get_projected_parent_dn() != dn &&
 	follows+1 > dn->first) {
@@ -1335,7 +1335,7 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
 
   } else {
     if (follows == CEPH_NOSNAP)
-      follows = dn->dir->inode->find_snaprealm()->get_newest_snap();
+      follows = dn->dir->inode->find_snaprealm()->get_newest_seq();
     
     // already cloned?
     if (follows < dn->first) {
@@ -1701,7 +1701,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       
       snapid_t follows = cfollows;
       if (follows == CEPH_NOSNAP)
-	follows = prealm->get_newest_snap();
+	follows = prealm->get_newest_seq();
       
       snapid_t first = follows+1;
       if (cur->first > first)

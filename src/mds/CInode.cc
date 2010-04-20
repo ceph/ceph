@@ -1496,7 +1496,7 @@ old_inode_t& CInode::cow_old_inode(snapid_t follows, inode_t *pi)
 
 void CInode::pre_cow_old_inode()
 {
-  snapid_t follows = find_snaprealm()->get_newest_snap();
+  snapid_t follows = find_snaprealm()->get_newest_seq();
   if (first <= follows)
     cow_old_inode(follows, get_projected_inode());
 }

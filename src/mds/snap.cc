@@ -462,7 +462,7 @@ void SnapRealm::build_snap_trace(bufferlist& snapbl)
 void SnapRealm::project_past_parent(SnapRealm *newparent, bufferlist& snapbl)
 {
   snapid_t newlast = newparent->get_last_created();
-  snapid_t oldlast = parent->get_newest_snap();
+  snapid_t oldlast = parent->get_newest_seq();
   snapid_t first = current_parent_since;
 
   if (oldlast >= current_parent_since) {
@@ -484,7 +484,7 @@ void SnapRealm::project_past_parent(SnapRealm *newparent, bufferlist& snapbl)
 void SnapRealm::add_past_parent(SnapRealm *oldparent)
 {
   snapid_t newlast = parent->get_last_created();
-  snapid_t oldlast = oldparent->get_newest_snap();
+  snapid_t oldlast = oldparent->get_newest_seq();
   snapid_t first = current_parent_since;
   
   if (oldlast >= current_parent_since) {
