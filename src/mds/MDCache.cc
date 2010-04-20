@@ -1312,7 +1312,8 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
     if (follows == CEPH_NOSNAP)
       follows = in->find_snaprealm()->get_newest_snap();
 
-    if (in->get_projected_parent_dn() != dn) {
+    if (in->get_projected_parent_dn() != dn &&
+	follows+1 > dn->first) {
       snapid_t oldfirst = dn->first;
       dn->first = follows+1;
       CDentry *olddn = dn->dir->add_remote_dentry(dn->name, in->ino(),  in->d_type(),
