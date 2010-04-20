@@ -548,8 +548,10 @@ int OSD::init()
   // tick
   timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Tick(this));
 
-  signal(SIGTERM, handle_signal);
-  signal(SIGINT, handle_signal);
+  if (false) {
+    signal(SIGTERM, handle_signal);
+    signal(SIGINT, handle_signal);
+  }
 #if 0
   int ret = monc->start_auth_rotating(ename, KEY_ROTATE_TIME);
   if (ret < 0) {
