@@ -102,12 +102,12 @@ bool KeyServerData::get_caps(EntityName& name, string& type, AuthCapsInfo& caps_
 {
   caps_info.allow_all = false;
 
-  dout(0) << "get_caps: name=" << name.to_str() << dendl;
+  dout(10) << "get_caps: name=" << name.to_str() << dendl;
   map<EntityName, EntityAuth>::iterator iter = secrets.find(name);
   if (iter == secrets.end())
     return false;
 
-  dout(0) << "get_secret: num of caps=" << iter->second.caps.size() << dendl;
+  dout(10) << "get_secret: num of caps=" << iter->second.caps.size() << dendl;
   map<string, bufferlist>::iterator capsiter = iter->second.caps.find(type);
   if (capsiter != iter->second.caps.end()) {
     caps_info.caps = capsiter->second;

@@ -33,11 +33,11 @@ void RotatingKeyRing::set_secrets(RotatingSecrets& s)
 
 void RotatingKeyRing::dump_rotating()
 {
-  dout(0) << "dump_rotating:" << dendl;
+  dout(10) << "dump_rotating:" << dendl;
   for (map<uint64_t, ExpiringCryptoKey>::iterator iter = secrets.secrets.begin();
        iter != secrets.secrets.end();
        ++iter)
-    dout(0) << " id " << iter->first << " " << iter->second << dendl;
+    dout(10) << " id " << iter->first << " " << iter->second << dendl;
 }
 
 bool RotatingKeyRing::get_secret(EntityName& name, CryptoKey& secret)
