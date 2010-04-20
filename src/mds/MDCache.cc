@@ -1311,14 +1311,6 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
     if (follows == CEPH_NOSNAP)
       follows = in->find_snaprealm()->get_newest_snap();
 
-    // already cloned?
-    if (follows < in->first) {
-      dout(10) << "journal_cow_dentry follows " << follows << " < first on " << *in << dendl;
-      return;
-    }
-
-    in->cow_old_inode(follows, in->get_previous_projected_inode());
-
     if (in->get_projected_parent_dn() != dn) {
       snapid_t oldfirst = dn->first;
       dn->first = follows+1;
@@ -1330,6 +1322,15 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
 
       // FIXME: adjust link count here?  hmm.
     }
+
+    // already cloned?
+    if (follows < in->first) {
+      dout(10) << "journal_cow_dentry follows " << follows << " < first on " << *in << dendl;
+      return;
+    }
+
+    in->cow_old_inode(follows, in->get_previous_projected_inode());
+
   } else {
     if (follows == CEPH_NOSNAP)
       follows = dn->dir->inode->find_snaprealm()->get_newest_snap();
