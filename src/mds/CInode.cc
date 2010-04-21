@@ -546,6 +546,7 @@ Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm 
     else
       containing_realm = find_snaprealm();
     containing_realm->inodes_with_caps.push_back(&item_caps);
+    dout(10) << "add_client_cap first cap, joining realm " << *containing_realm << dendl;
   }
 
   mdcache->num_caps++;
@@ -578,6 +579,7 @@ void CInode::remove_client_cap(client_t client)
   delete cap;
   client_caps.erase(client);
   if (client_caps.empty()) {
+    dout(10) << "remove_client_cap last cap, leaving realm " << *containing_realm << dendl;
     put(PIN_CAPS);
     item_caps.remove_myself();
     containing_realm = NULL;
@@ -587,7 +589,20 @@ void CInode::remove_client_cap(client_t client)
   mdcache->num_caps--;
 }
 
-
+void CInode::move_to_realm(SnapRealm *realm)
+{
+  dout(10) << "move_to_realm joining realm " << *realm
+	   << ", leaving realm " << *containing_realm << dendl;
+  for (map<client_t,Capability*>::iterator q = client_caps.begin();
+       q != client_caps.end();
+       q++) {
+    containing_realm->remove_cap(q->first, q->second);
+    realm->add_cap(q->first, q->second);
+  }
+  item_caps.remove_myself();
+  realm->inodes_with_caps.push_back(&item_caps);
+  containing_realm = realm;
+}
 
 
 version_t CInode::pre_dirty()
@@ -1481,7 +1496,7 @@ old_inode_t& CInode::cow_old_inode(snapid_t follows, inode_t *pi)
 
 void CInode::pre_cow_old_inode()
 {
-  snapid_t follows = find_snaprealm()->get_newest_snap();
+  snapid_t follows = find_snaprealm()->get_newest_seq();
   if (first <= follows)
     cow_old_inode(follows, get_projected_inode());
 }

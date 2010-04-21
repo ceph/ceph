@@ -366,7 +366,7 @@ void SnapRealm::split_at(SnapRealm *child)
     // it's not a dir:
     //  - no open children.
     //  - only need to move this child's inode's caps.
-    child->inode->move_to_containing_realm(child);
+    child->inode->move_to_realm(child);
     return;
   }
 
@@ -409,7 +409,7 @@ void SnapRealm::split_at(SnapRealm *child)
     }
     if (under_child) {
       dout(20) << " child gets " << *in << dendl;
-      in->move_to_containing_realm(child);
+      in->move_to_realm(child);
     } else {
       dout(20) << "    keeping " << *in << dendl;
     }
@@ -462,7 +462,7 @@ void SnapRealm::build_snap_trace(bufferlist& snapbl)
 void SnapRealm::project_past_parent(SnapRealm *newparent, bufferlist& snapbl)
 {
   snapid_t newlast = newparent->get_last_created();
-  snapid_t oldlast = parent->get_newest_snap();
+  snapid_t oldlast = parent->get_newest_seq();
   snapid_t first = current_parent_since;
 
   if (oldlast >= current_parent_since) {
@@ -484,7 +484,7 @@ void SnapRealm::project_past_parent(SnapRealm *newparent, bufferlist& snapbl)
 void SnapRealm::add_past_parent(SnapRealm *oldparent)
 {
   snapid_t newlast = parent->get_last_created();
-  snapid_t oldlast = oldparent->get_newest_snap();
+  snapid_t oldlast = oldparent->get_newest_seq();
   snapid_t first = current_parent_since;
   
   if (oldlast >= current_parent_since) {
