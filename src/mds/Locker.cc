@@ -821,10 +821,6 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
     
   CInode *in = (CInode *)lock->get_parent();
   client_t client = mut->get_client();
-  Capability *cap = 0;
-  if (client >= 0)
-    cap = in->get_client_cap(client);
-
   
   while (1) {
     // wrlock?
