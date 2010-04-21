@@ -49,7 +49,7 @@ static ExportControl *ec = NULL;
 
 static void fini_g_conf();
 
-const char *g_default_id = "guest";
+const char *g_default_id = "admin";
 
 void ceph_set_default_id(const char *id)
 {
