@@ -32,6 +32,7 @@ inline const char *get_lock_type_name(int t) {
   case CEPH_LOCK_IXATTR: return "ixattr";
   case CEPH_LOCK_ISNAP: return "isnap";
   case CEPH_LOCK_INO: return "ino";
+  case CEPH_LOCK_IFLOCK: return "iflock";
   default: assert(0); return 0;
   }
 }
@@ -58,6 +59,7 @@ struct LockType {
     case CEPH_LOCK_ILINK:
     case CEPH_LOCK_IXATTR:
     case CEPH_LOCK_ISNAP:
+    case CEPH_LOCK_IFLOCK:
       sm = &sm_simplelock;
       break;
     case CEPH_LOCK_IDFT:
