@@ -70,9 +70,9 @@ static void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
 void print_header(char *imgname, rbd_obj_header_ondisk *header)
 {
   cout << "rbd image '" << imgname << "':\n"
-       << "\tsize " << kb_t(header->image_size >> 10) << " in "
+       << "\tsize " << prettybyte_t(header->image_size) << " in "
        << (header->image_size >> header->obj_order) << " objects\n"
-       << "\torder " << (int)header->obj_order << " (" << kb_t(1 << (header->obj_order-10)) << " objects)"
+       << "\torder " << (int)header->obj_order << " (" << prettybyte_t(1 << (header->obj_order)) << " objects)"
        << std::endl;
 }
 
@@ -82,7 +82,7 @@ void trim_image(const char *imgname, rbd_obj_header_ondisk *header, __u64 newsiz
   __u64 numseg = size >> header->obj_order;
   __u64 start = newsize >> header->obj_order;
 
-  cout << "trimming device data from " << numseg << " to " << start << " objects..." << std::endl;
+  cout << "trimming image data from " << numseg << " to " << start << " objects..." << std::endl;
   for (__u64 i=start; i<numseg; i++) {
     char o[RBD_MAX_SEG_NAME_SIZE];
     sprintf(o, "%s.%012llx", imgname, (unsigned long long)i);

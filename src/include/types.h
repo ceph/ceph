@@ -398,6 +398,28 @@ inline ostream& operator<<(ostream& out, const ceph_fsid& f) {
   return out << b;
 }
 
+struct prettybyte_t {
+  uint64_t v;
+  prettybyte_t(uint64_t _v) : v(_v) {}
+};
+
+inline ostream& operator<<(ostream& out, const prettybyte_t& b)
+{
+  __u64 bump_after = 100;
+  if (b.v > bump_after << 60)
+    return out << (b.v >> 60) << " EB";    
+  if (b.v > bump_after << 50)
+    return out << (b.v >> 50) << " PB";    
+  if (b.v > bump_after << 40)
+    return out << (b.v >> 40) << " TB";    
+  if (b.v > bump_after << 30)
+    return out << (b.v >> 30) << " GB";    
+  if (b.v > bump_after << 20)
+    return out << (b.v >> 20) << " MB";    
+  if (b.v > bump_after << 10)
+    return out << (b.v >> 10) << " KB";
+  return out << b.v << " bytes";
+}
 
 struct kb_t {
   uint64_t v;
