@@ -28,10 +28,21 @@ using namespace librados;
 
 #include "include/rbd_types.h"
 
+Rados rados;
+pool_t pool;
 
 void usage()
 {
-  cout << " usage: [--list] [--create <image name> --size <size in MB>] [--delete <img name>] [-p|--pool=<name>]" << std::endl;
+  cout << "usage: rbdtool [-n <auth user>] [-p|--pool <name>] <cmd>\n"
+       << "where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:\n"
+       << "\t--list    list rbd images\n"
+       << "\t--info    show information about image size, striping, etc.\n"
+       << "\t--create <image name> --size <size in MB>\n"
+       << "\t          create an image\n"
+       << "\t--resize <image name> --size <new size in MB>\n"
+       << "\t          resize (expand or contract) image\n"
+       << "\t--delete <image name>\n"
+       << "\t          delete an image" << std::endl;
   exit(1);
 }
 
@@ -65,6 +76,25 @@ void print_header(char *imgname, rbd_obj_header_ondisk *header)
        << std::endl;
 }
 
+void trim_image(const char *imgname, rbd_obj_header_ondisk *header, __u64 newsize)
+{
+  __u64 size = header->image_size;
+  __u64 numseg = size >> header->obj_order;
+  __u64 start = newsize >> header->obj_order;
+
+  cout << "trimming device data from " << numseg << " to " << start << " objects..." << std::endl;
+  for (__u64 i=start; i<numseg; i++) {
+    char o[RBD_MAX_SEG_NAME_SIZE];
+    sprintf(o, "%s.%012llx", imgname, (unsigned long long)i);
+    string oid = o;
+    rados.remove(pool, oid);
+    if ((i & 127) == 0) {
+      cout << "\r\t" << i << "/" << numseg;
+      cout.flush();
+    }
+  }
+}
+
 int main(int argc, const char **argv) 
 {
   vector<const char*> args;
@@ -73,18 +103,11 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   common_init(args, "rbdtool", false, true);
 
-  bool opt_create = false, opt_delete = false, opt_list = false;
-  char *poolname;
+  bool opt_create = false, opt_delete = false, opt_list = false, opt_info = false, opt_resize = false;
+  char *poolname = (char *)"rbd";
   __u64 size = 0;
   int order = 0;
   char *imgname;
-
-
-  Rados rados;
-  if (rados.initialize(argc, argv) < 0) {
-     cerr << "couldn't initialize rados!" << std::endl;
-     exit(1);
-  }
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("list", '\0')) {
@@ -95,26 +118,37 @@ int main(int argc, const char **argv)
     } else if (CONF_ARG_EQ("delete", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
       opt_delete = true;
+    } else if (CONF_ARG_EQ("resize", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
+      opt_resize = true;
+    } else if (CONF_ARG_EQ("info", 'i')) {
+      CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
+      opt_info = true;
     } else if (CONF_ARG_EQ("pool", 'p')) {
       CONF_SAFE_SET_ARG_VAL(&poolname, OPT_STR);
     } else if (CONF_ARG_EQ("object", 'n')) {
       CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
     } else if (CONF_ARG_EQ("size", 's')) {
       CONF_SAFE_SET_ARG_VAL(&size, OPT_LONGLONG);
+      size <<= 20; // MB -> bytes
     } else if (CONF_ARG_EQ("order", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&order, OPT_INT);
     } else 
       usage();
   }
 
-  if (!opt_create && !opt_delete && !opt_list)
+  if (!opt_create && !opt_delete && !opt_list && !opt_info && !opt_resize)
     usage();
+
+
+  if (rados.initialize(argc, argv) < 0) {
+     cerr << "couldn't initialize rados!" << std::endl;
+     exit(1);
+  }
 
   string md_oid = imgname;
   md_oid += RBD_SUFFIX;
   string dir_oid = RBD_DIRECTORY;
-
-  pool_t pool;
 
   int r = rados.open_pool(poolname, &pool);
   if (r < 0) {
@@ -137,7 +171,7 @@ int main(int argc, const char **argv)
     for (map<nstring,bufferlist>::iterator q = m.begin(); q != m.end(); q++)
       cout << q->first << std::endl;
   }
-  if (opt_create) {
+  else if (opt_create) {
     if (!size) {
       cerr << "must specify size in MB to create an rbd image" << std::endl;
       usage();
@@ -148,7 +182,6 @@ int main(int argc, const char **argv)
       usage();
       exit(1);
     }
-    size <<= 20; // MB -> bytes
 
     // make sure it doesn't already exist
     r = rados.stat(pool, md_oid, NULL, NULL);
@@ -185,46 +218,72 @@ int main(int argc, const char **argv)
     }
     cout << "done." << std::endl;
   }
-  if (opt_delete) {
+  else if (opt_info || opt_delete || opt_resize) {
+    // read header
     struct rbd_obj_header_ondisk header;
     bufferlist bl;
     r = rados.read(pool, md_oid, 0, bl, sizeof(header));
     if (r < 0) {
       cerr << "error reading header " << md_oid << ": " << strerror(-r) << std::endl;
-      exit(1);
     } else {
       bufferlist::iterator p = bl.begin();
       p.copy(sizeof(header), (char *)&header);
-      __u64 size = header.image_size;
-      __u64 numseg = size >> header.obj_order;
-      print_header(imgname, &header);
+    }
+
+    if (opt_delete) {
+      if (r >= 0) {
+	print_header(imgname, &header);
+	trim_image(imgname, &header, 0);
+	cout << "\rremoving header..." << std::endl;
+	rados.remove(pool, md_oid);
+      }
+	
+      cout << "removing rbd image to directory..." << std::endl;
+      bufferlist cmdbl;
+      __u8 c = CEPH_OSD_TMAP_RM;
+      ::encode(c, cmdbl);
+      ::encode(imgname, cmdbl);
+      r = rados.tmap_update(pool, dir_oid, cmdbl);
+      if (r < 0) {
+	cerr << "error removing img from directory: " << strerror(-r)<< std::endl;
+	exit(1);
+      }
+    } else {
+      if (r < 0)
+	exit(1);
       
-      cout << "removing data..." << std::endl;
-      for (__u64 i=0; i<numseg; i++) {
-	char o[RBD_MAX_SEG_NAME_SIZE];
-	sprintf(o, "%s.%012llx", imgname, (unsigned long long)i);
-	string oid = o;
-	rados.remove(pool, oid);
-	if ((i & 127) == 0) {
-	  cout << "\r\t" << i << "/" << numseg;
-	  cout.flush();
+      if (opt_info) {
+	print_header(imgname, &header);
+      }
+
+      if (opt_resize) {
+	// trim
+	if (size == header.image_size) {
+	  cout << "no change in size (" << size << " -> " << header.image_size << ")" << std::endl;
+	  print_header(imgname, &header);
+	} else {
+	  if (size > header.image_size) {
+	    cout << "expanding image " << size << " -> " << header.image_size << " objects" << std::endl;
+	    header.image_size = size;
+	  } else {
+	    cout << "shrinking image " << size << " -> " << header.image_size << " objects" << std::endl;
+	    trim_image(imgname, &header, size);
+	    header.image_size = size;
+	  }
+	  print_header(imgname, &header);
+
+	  // rewrite header
+	  bufferlist bl;
+	  bl.append((const char *)&header, sizeof(header));
+	  r = rados.write(pool, md_oid, 0, bl, bl.length());
+	  if (r < 0) {
+	    cerr << "error writing header: " << strerror(-r) << std::endl;
+	    exit(1);
+	  }
 	}
       }
-      cout << "\rremoving header..." << std::endl;
-      rados.remove(pool, md_oid);
     }
-
-    cout << "removing rbd image to directory..." << std::endl;
-    bufferlist cmdbl;
-    __u8 c = CEPH_OSD_TMAP_RM;
-    ::encode(c, cmdbl);
-    ::encode(imgname, cmdbl);
-    r = rados.tmap_update(pool, dir_oid, cmdbl);
-    if (r < 0) {
-      cerr << "error removing img from directory: " << strerror(-r)<< std::endl;
-      exit(1);
-    }
-
+      
     cout << "done." << std::endl;
   }
 
