@@ -107,6 +107,7 @@ enum {
   CEPH_DATA_RULE,
   CEPH_METADATA_RULE,
   CEPH_CASDATA_RULE,
+  CEPH_RBD_RULE,
 };
 
 //#define CEPH_POOL(poolset, size) (((poolset) << 8) + (size))

@@ -100,6 +100,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
   rulesets[CEPH_DATA_RULE] = "data";
   rulesets[CEPH_METADATA_RULE] = "metadata";
   rulesets[CEPH_CASDATA_RULE] = "casdata";
+  rulesets[CEPH_RBD_RULE] = "rbd";
   
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
     int pool = ++pool_max;
