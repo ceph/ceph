@@ -55,20 +55,20 @@ public:
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(pool, payload);
-    ::encode(name, payload);
     ::encode(op, payload);
     ::encode(auid, payload);
     ::encode(snapid, payload);
+    ::encode(name, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);
     ::decode(pool, p);
-    ::decode(name, p);
     ::decode(op, p);
     ::decode(auid, p);
     ::decode(snapid, p);
+    ::decode(name, p);
   }
 };
 
