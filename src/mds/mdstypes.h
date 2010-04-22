@@ -338,6 +338,107 @@ struct ceph_lock_state_t {
   multimap<__u64, ceph_filelock> held_locks; //current locks
   multimap<__u64, ceph_filelock> waiting_locks; //locks waiting for other locks
   //both of the above are keyed by starting offset
+
+  /*
+   * Try to set a new lock. If it's blocked and wait_on_fail is true,
+   * add the lock to waiting_locks.
+   * The lock needs to be of type CEPH_LOCK_EXCL or CEPH_LOCK_SHARED.
+   *
+   * Returns true if set, false if not set.
+   */
+  bool add_lock(ceph_filelock& new_lock, bool wait_on_fail) {
+  }
+
+  /*
+   * Remove one lock described in old_lock. This may involve splitting a
+   * previous lock or making a previous lock smaller.
+   */
+  void remove_lock(ceph_filelock old_lock) {
+    
+  }
+private:
+  //get last lock prior to start position
+  multimap<__u64, ceph_filelock>::iterator
+  get_lower_bound(__u64 start, multimap<__u64, ceph_filelock>& lock_map) {
+    multimap<__u64, ceph_filelock>::iterator lower_bound =
+      lock_map.lower_bound(start);
+    if ((lower_bound->first != start)
+	&& (start != 0)
+	&& (lower_bound != lock_map.begin())) --lower_bound;
+    return lower_bound;
+  }
+
+  //get latest-starting lock that goes over the byte "end"
+  multimap<__u64, ceph_filelock>::iterator
+  get_last_before(__u64 end, multimap<__u64, ceph_filelock>& lock_map) {
+    multimap<__u64, ceph_filelock>::iterator last =
+      lock_map.upper_bound(end);
+    if (last != lock_map.begin()) --last;
+    return last;
+  }
+
+  /*
+   * See if an iterator's lock covers any of the same bounds as a given range
+   * Rules: locks cover "length" bytes from "start", so the last covered
+   * byte is at start + length - 1.
+   * If the length is 0, the lock covers from "start" to the end of the file.
+   */
+  bool share_space(multimap<__u64, ceph_filelock>::iterator& iter,
+		   __u64 start, __u64 end) {
+    return ((iter->first > start && iter->first < end) ||
+	    ((iter->first < start) &&
+	     (((iter->first + iter->second.length - 1) > start) ||
+	      (0 == iter->second.length))));
+  }
+  bool share_space(multimap<__u64, ceph_filelock>::iterator& iter,
+		   ceph_filelock& lock) {
+    return share_space(iter, lock.start, lock.start+lock.length-1);
+  }
+  
+  /*
+   *get a list of all locks overlapping with the given lock's range
+   * lock: the lock to compare with.
+   * overlaps: an empty list, to be filled.
+   * Returns: true if at least one lock overlaps.
+   */
+  bool get_overlapping_locks(ceph_filelock& lock,
+			     list<ceph_filelock*>& overlaps) {
+    multimap<__u64, ceph_filelock>::iterator iter =
+      get_last_before(lock.start + lock.length - 1, held_locks);
+    bool cont = true;
+    do {
+      if (share_space(iter, lock)) {
+	overlaps.push_front(&iter->second);
+      }
+      if ((iter->first < lock.start) && (CEPH_LOCK_EXCL == iter->second.type)) {
+	//can't be any more overlapping locks or they'd interfere with this one
+	cont = false;
+      } else if (held_locks.begin() == iter) cont = false;
+      else --iter;
+    } while (cont);
+    return !overlaps.empty();
+  }
+
+  /*
+   * split a list of locks up by whether they're owned by same
+   * process as given lock
+   * owner: the owning lock
+   * locks: the list of locks (obtained from get_overlapping_locks, probably)
+   *        Will have all locks owned by owner removed
+   * owned_locks: an empty list, to be filled with the locks owned by owner
+   */
+  void split_by_owner(ceph_filelock& owner, list<ceph_filelock*>& locks,
+		       list<ceph_filelock*>& owned_locks) {
+    list<ceph_filelock*>::iterator iter = locks.begin();
+    while (iter != locks.end()) {
+      if ((*iter)->client == owner.client &&
+	  (*iter)->pid_namespace == owner.pid_namespace &&
+	  (*iter)->pid == owner.pid) {
+	owned_locks.push_back(*iter);
+	iter = locks.erase(iter);
+      } else ++iter;
+    }
+  }
 };
 
 struct inode_t {
