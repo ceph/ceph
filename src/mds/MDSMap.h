@@ -394,7 +394,7 @@ public:
 
 
   void encode(bufferlist& bl) const {
-    __u16 v = 1;
+    __u16 v = 2;
     ::encode(v, bl);
     ::encode(epoch, bl);
     ::encode(client_epoch, bl);
@@ -409,6 +409,8 @@ public:
     ::encode(cas_pg_pool, bl);
 
     // kclient ignores everything from here
+    __u16 ev = 2;
+    ::encode(ev, bl);
     ::encode(metadata_pg_pool, bl);
     ::encode(created, bl);
     ::encode(modified, bl);
@@ -435,6 +437,9 @@ public:
     ::decode(cas_pg_pool, p);
 
     // kclient ignores everything from here
+    __u16 ev = 1;
+    if (v > 1)
+      ::decode(ev, p);
     ::decode(metadata_pg_pool, p);
     ::decode(created, p);
     ::decode(modified, p);
