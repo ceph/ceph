@@ -40,6 +40,7 @@ int main(int argc, const char **argv)
 
   const char *fn = 0;
   bool gen_key = false;
+  bool gen_print_key = false;
   const char *add_key = 0;
   bool list = false;
   bool print_key = false;
@@ -53,6 +54,8 @@ int main(int argc, const char **argv)
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("gen-key", 'g')) {
       CONF_SAFE_SET_ARG_VAL(&gen_key, OPT_BOOL);
+    } else if (CONF_ARG_EQ("gen-print-key", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&gen_print_key, OPT_BOOL);
     } else if (CONF_ARG_EQ("add-key", 'a')) {
       CONF_SAFE_SET_ARG_VAL(&add_key, OPT_STR);
     } else if (CONF_ARG_EQ("list", 'l')) {
@@ -73,11 +76,12 @@ int main(int argc, const char **argv)
     } else 
       usage();
   }
-  if (!fn) {
+  if (!fn && !gen_print_key) {
     cerr << me << ": must specify filename" << std::endl;
     usage();
   }
   if (!(gen_key ||
+	gen_print_key ||
 	add_key ||
 	list ||
 	caps_fn ||
@@ -97,6 +101,13 @@ int main(int argc, const char **argv)
       cerr << "must specify entity name" << std::endl;
       usage();
     }
+  }
+
+  if (gen_print_key) {
+    CryptoKey key;
+    key.create(CEPH_CRYPTO_AES);
+    cout << key << std::endl;    
+    return 0;
   }
 
   // keyring --------
