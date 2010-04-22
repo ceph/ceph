@@ -1554,8 +1554,10 @@ void SimpleMessenger::Pipe::writer()
     dout(10) << "writer: state = " << state << " policy.server=" << policy.server << dendl;
 
     // standby?
-    if (is_queued() && state == STATE_STANDBY && !policy.server)
+    if (is_queued() && state == STATE_STANDBY && !policy.server) {
+      connect_seq++;
       state = STATE_CONNECTING;
+    }
 
     // connect?
     if (state == STATE_CONNECTING) {
