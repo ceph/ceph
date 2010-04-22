@@ -342,6 +342,8 @@ static struct config_option config_optionsp[] = {
 	OPTION(debug_tp, 0, OPT_INT, 0),
 	OPTION(debug_auth, 0, OPT_INT, 1),
 	OPTION(debug_finisher, 0, OPT_INT, 1),
+	OPTION(key, 0, OPT_STR, ""),
+	OPTION(keyfile, 'K', OPT_STR, ""),
 	OPTION(keyring, 'k', OPT_STR, "~/.ceph/keyring.bin, /etc/ceph/keyring.bin, .ceph_keyring"),
 	OPTION(supported_auth, 0, OPT_STR, "none"),
 	OPTION(clock_lock, 0, OPT_BOOL, false),

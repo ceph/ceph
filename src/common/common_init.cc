@@ -34,6 +34,32 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool d
 
   if (init_keys && is_supported_auth(CEPH_AUTH_CEPHX)) {
     g_keyring.load(g_conf.keyring);
+
+    if (strlen(g_conf.key)) {
+      string k = g_conf.key;
+      EntityAuth ea;
+      ea.key.decode_base64(k);
+      g_keyring.add(*g_conf.entity_name, ea);
+    } else if (strlen(g_conf.keyfile)) {
+      char buf[100];
+      int fd = ::open(g_conf.keyfile, O_RDONLY);
+      if (fd < 0) {
+	cerr << "unable to open " << g_conf.keyfile << ": " << strerror(errno) << std::endl;
+	exit(1);
+      }
+      int len = ::read(fd, buf, sizeof(buf));
+      if (len < 0) {
+	cerr << "unable to read key from " << g_conf.keyfile << ": " << strerror(errno) << std::endl;
+	exit(1);
+      }
+      ::close(fd);
+
+      buf[len] = 0;
+      string k = buf;
+      EntityAuth ea;
+      ea.key.decode_base64(k);
+      g_keyring.add(*g_conf.entity_name, ea);
+    }
   }
 }
 

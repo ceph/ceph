@@ -113,6 +113,8 @@ struct md_config_t {
   bool clock_tare;
 
   // auth
+  char *key;
+  char *keyfile;
   char *keyring;
   char *supported_auth;
 
