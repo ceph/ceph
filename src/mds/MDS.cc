@@ -691,6 +691,17 @@ void MDS::handle_mds_map(MMDSMap *m)
 
   monc->sub_got("mdsmap", mdsmap->get_epoch());
 
+  // verify compatset
+  dout(10) << "     my compat " << mdsmap_compat << dendl;
+  dout(10) << " mdsmap compat " << mdsmap->compat << dendl;
+  if (!mdsmap_compat.writeable(mdsmap->compat)) {
+    dout(0) << "handle_mds_map mdsmap compatset " << mdsmap->compat
+	    << " not writeable with daemon features " << mdsmap_compat
+	    << ", killing myself" << dendl;
+    suicide();
+    goto out;
+  }
+
   // see who i am
   addr = messenger->get_myaddr();
   whoami = mdsmap->get_rank_gid(monc->get_global_id());
