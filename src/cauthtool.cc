@@ -214,9 +214,7 @@ int main(int argc, const char **argv)
   if (print_key) {
     CryptoKey key;
     if (keyring.get_secret(ename, key)) {
-      string a;
-      key.encode_base64(a);
-      cout << a << std::endl;
+      cout << key << std::endl;
     } else {
       cerr << "entity " << ename << " not found" << std::endl;
     }

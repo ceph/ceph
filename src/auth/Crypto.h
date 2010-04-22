@@ -45,13 +45,14 @@ public:
     secret.c_str();   // make sure it's a single buffer!
   }
 
+  int get_type() const { return type; }
   utime_t get_created() const { return created; }
   void print(ostream& out) const;
 
   int set_secret(int type, bufferptr& s);
   bufferptr& get_secret() { return secret; }
 
-  void encode_base64(string& s) {
+  void encode_base64(string& s) const {
     bufferlist bl;
     encode(bl);
     bufferlist e;
@@ -80,7 +81,7 @@ WRITE_CLASS_ENCODER(CryptoKey);
 static inline ostream& operator<<(ostream& out, const CryptoKey& k)
 {
   k.print(out);
-  return out << " (" << k.get_created() << ")";
+  return out;
 }
 
 

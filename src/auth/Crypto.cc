@@ -286,10 +286,9 @@ int CryptoKey::decrypt(const bufferlist& in, bufferlist& out)
 
 void CryptoKey::print(ostream &out) const
 {
-  char foo[secret.length() * 2];
-  int r = ceph_armor(foo, secret.c_str(), secret.c_str() + secret.length());
-  foo[r] = 0;
-  out << foo;
+  string a;
+  encode_base64(a);
+  out << a;
 }
 
 void CryptoKey::to_str(string& s)
