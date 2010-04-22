@@ -622,6 +622,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   // issue replica writes
   tid_t rep_tid = osd->get_tid();
   RepGather *repop = new_repop(ctx, obc, noop, rep_tid);
+  repop->v = ctx->at_version;
 
   // note: repop now owns ctx AND ctx->op
 
@@ -1930,7 +1931,11 @@ void ReplicatedPG::eval_repop(RepGather *repop)
     dout(10) << " removing " << *repop << dendl;
     assert(!repop_queue.empty());
     dout(20) << "   q front is " << *repop_queue.front() << dendl; 
-    assert(repop_queue.front() == repop);
+    if (repop_queue.front() != repop) {
+      dout(0) << " removing " << *repop << dendl;
+      dout(0) << "   q front is " << *repop_queue.front() << dendl; 
+      assert(repop_queue.front() == repop);
+    }
     repop_queue.pop_front();
     repop_map.erase(repop->rep_tid);
     repop->put();

@@ -317,6 +317,8 @@ public:
     xlist<RepGather*>::item queue_item;
     int nref;
 
+    eversion_t v;
+
     OpContext *ctx;
     ObjectContext *obc;
 
@@ -611,6 +613,7 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
   out << "repgather(" << &repop
       << (repop.applying ? " applying" : "")
       << (repop.applied ? " applied" : "")
+      << " " << repop.v
       << " rep_tid=" << repop.rep_tid 
       << " wfack=" << repop.waitfor_ack
     //<< " wfnvram=" << repop.waitfor_nvram
