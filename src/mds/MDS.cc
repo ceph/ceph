@@ -71,11 +71,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << dbeginl << "mds" << whoami << '.' << incarnation << ' '
 
-const char *ceph_mds_feature_compat[ceph_mds_feature_compat_size] = {};
-const char *ceph_mds_feature_ro_compat[ceph_mds_feature_ro_compat_size]=
-  {};
-const char *ceph_mds_feature_incompat[ceph_mds_feature_incompat_size] =
-  { CEPH_MDS_FEATURE_INCOMPAT_BASE };
+
 
 
 // cons/des

@@ -27,6 +27,8 @@ using namespace std;
 
 #include "config.h"
 
+#include "include/CompatSet.h"
+
 /*
 
  boot  --> standby, creating, or starting.
@@ -50,6 +52,11 @@ using namespace std;
 
 */
 
+
+extern CompatSet mdsmap_compat;
+extern CompatSet mdsmap_compat_base; // pre v0.20
+
+#define MDS_FEATURE_INCOMPAT_BASE CompatSet::Feature(1, "base v0.20")
 
 class MDSMap {
 public:
@@ -164,6 +171,9 @@ protected:
   set<int32_t> failed, stopped; // which roles are failed or stopped
   map<int32_t,__u64> up;        // who is in those roles
   map<__u64,mds_info_t> mds_info;
+
+public:
+  CompatSet compat;
 
   friend class MDSMonitor;
 
@@ -409,8 +419,9 @@ public:
     ::encode(cas_pg_pool, bl);
 
     // kclient ignores everything from here
-    __u16 ev = 2;
+    __u16 ev = 3;
     ::encode(ev, bl);
+    ::encode(compat, bl);
     ::encode(metadata_pg_pool, bl);
     ::encode(created, bl);
     ::encode(modified, bl);
@@ -438,8 +449,12 @@ public:
 
     // kclient ignores everything from here
     __u16 ev = 1;
-    if (v > 1)
+    if (v >= 2)
       ::decode(ev, p);
+    if (ev >= 3)
+      ::decode(compat, p);
+    else
+      compat = mdsmap_compat_base;
     ::decode(metadata_pg_pool, p);
     ::decode(created, p);
     ::decode(modified, p);

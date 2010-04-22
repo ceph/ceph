@@ -18,6 +18,43 @@
 #include <sstream>
 using std::stringstream;
 
+
+// features
+
+const struct CompatSet::Feature feature_compat[] = {
+  END_FEATURE
+};
+const struct CompatSet::Feature feature_incompat[] = {
+  MDS_FEATURE_INCOMPAT_BASE,
+  END_FEATURE
+};
+const struct CompatSet::Feature feature_ro_compat[] = {
+  END_FEATURE
+};
+
+CompatSet mdsmap_compat(feature_compat,
+			feature_ro_compat,
+			feature_incompat);
+
+// base (pre v0.20)
+const struct CompatSet::Feature feature_compat_base[] = {
+  END_FEATURE
+};
+const struct CompatSet::Feature feature_incompat_base[] = {
+  MDS_FEATURE_INCOMPAT_BASE,
+  END_FEATURE
+};
+const struct CompatSet::Feature feature_ro_compat_base[] = {
+  END_FEATURE
+};
+
+CompatSet mdsmap_compat_base(feature_compat_base,
+			     feature_ro_compat_base,
+			     feature_incompat_base);
+
+
+// ----
+
 void MDSMap::print(ostream& out) 
 {
   out << "epoch " << epoch << std::endl;
@@ -29,6 +66,7 @@ void MDSMap::print(ostream& out)
   out << "session_timeout " << session_timeout << "\n"
       << "session_autoclose " << session_autoclose << "\n";
 
+  out << "\ncompat " << compat << std::endl;
   out << "\nmax_mds " << max_mds << std::endl;
 
   set<int> upset;

@@ -58,9 +58,12 @@ struct CompatSet {
   CompatSet(const Feature _compat[], const Feature _ro_compat[], const Feature _incompat[]) :
     compat(), ro_compat(), incompat()
   {
-    for (int i = 0; _compat[i].id != 0; ++i) compat.insert(_compat[i]);
-    for (int j = 0; _ro_compat[j].id !=0; ++j) ro_compat.insert(_ro_compat[j]);
-    for (int k = 0; _incompat[k].id != 0; ++k) incompat.insert(_incompat[k]);
+    for (int i = 0; _compat[i].id != 0; ++i)
+      compat.insert(_compat[i]);
+    for (int j = 0; _ro_compat[j].id != 0; ++j)
+      ro_compat.insert(_ro_compat[j]);
+    for (int k = 0; _incompat[k].id != 0; ++k)
+      incompat.insert(_incompat[k]);
   }
 
   CompatSet() : compat(), ro_compat(), incompat() { }
@@ -142,4 +145,18 @@ struct CompatSet {
     incompat.decode(bl);
   }
 };
+WRITE_CLASS_ENCODER(CompatSet)
+
+inline ostream& operator<<(ostream& out, const CompatSet::FeatureSet& fs)
+{
+  return out << fs.names;
+}
+
+inline ostream& operator<<(ostream& out, const CompatSet& compat)
+{
+  return out << "compat=" << compat.compat
+	     << ",rocompat=" << compat.ro_compat
+	     << ",incompat=" << compat.incompat;
+}
+
 #endif

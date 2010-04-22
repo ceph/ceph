@@ -56,7 +56,6 @@ void MDSMonitor::print_map(MDSMap &m, int dbl)
 
 
 // service methods
-
 void MDSMonitor::create_initial(bufferlist& bl)
 {
   dout(10) << "create_initial" << dendl;
@@ -65,6 +64,7 @@ void MDSMonitor::create_initial(bufferlist& bl)
   pending_mdsmap.data_pg_pools.push_back(CEPH_DATA_RULE);
   pending_mdsmap.metadata_pg_pool = CEPH_METADATA_RULE;
   pending_mdsmap.cas_pg_pool = CEPH_CASDATA_RULE;
+  pending_mdsmap.compat = mdsmap_compat;
   print_map(pending_mdsmap);
 }
 
