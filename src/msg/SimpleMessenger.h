@@ -474,7 +474,10 @@ private:
   int send_message(Message *m, const entity_inst_t& dest);
   int send_message(Message *m, Connection *con);
   int lazy_send_message(Message *m, const entity_inst_t& dest);
-  int lazy_send_message(Message *m, Connection *con);
+  int lazy_send_message(Message *m, Connection *con) {
+    return send_message(m, con);
+  }
+
   /***********************/
 
 private:
@@ -528,11 +531,8 @@ public:
 
   bool register_entity(entity_name_t addr);
 
-  void submit_message(Message *m, const entity_inst_t& addr, bool lazy=false) {
-    submit_message(m, NULL, addr.addr, addr.name.type(), lazy);
-  }
-  void submit_message(Message *m, Pipe **ppipe, const entity_addr_t& dest_addr,
-		      int dest_type, bool lazy=false);
+  void submit_message(Message *m, const entity_addr_t& addr, int dest_type, bool lazy);
+  void submit_message(Message *m, Pipe *pipe);
 		      
   int send_keepalive(const entity_inst_t& addr);
 
