@@ -700,18 +700,19 @@ int OSD::read_superblock()
   ::decode(superblock, p);
 
   dout(10) << "read_superblock " << superblock << dendl;
-
   if (osd_compat.compare(superblock.compat_features) < 0) {
-    dout(5) << "The disk uses features unsupported by the executable." << dendl;
+    dout(0) << "The disk uses features unsupported by the executable." << dendl;
+    dout(0) << " ondisk features " << superblock.compat_features << dendl;
+    dout(0) << " daemon features " << osd_compat << dendl;
+
     if (osd_compat.writeable(superblock.compat_features)) {
-      dout(5) << "it is still writeable, though. Missing features:" << dendl;
+      dout(0) << "it is still writeable, though. Missing features:" << dendl;
       CompatSet diff = osd_compat.unsupported(superblock.compat_features);
-      //NEEDS_ITER
+      return -EOPNOTSUPP;
     }
     else {
       dout(0) << "Cannot write to disk! Missing features:" << dendl;
       CompatSet diff = osd_compat.unsupported(superblock.compat_features);
-      //NEEDS_ITER
       return -EOPNOTSUPP;
     }
   }
