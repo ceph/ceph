@@ -65,6 +65,7 @@ static void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
   ondisk.comp_type = RBD_COMP_NONE;
   ondisk.snap_seq = 0;
   ondisk.snap_count = 0;
+  ondisk.snap_names_len = 0;
 }
 
 void print_header(char *imgname, rbd_obj_header_ondisk *header)
