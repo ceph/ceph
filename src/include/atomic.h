@@ -20,28 +20,33 @@
 #endif
 
 
-
-#ifdef WITH_CCGNU
-/*
- * use commonc++ library AtomicCounter.
- */
-# include "cc++/thread.h"
-
+#ifdef HAVE_ATOMIC_OPS
+//libatomic_ops implementation
+#include <atomic_ops.h>
 namespace ceph {
 
 class atomic_t {
-  mutable ost::AtomicCounter nref;    // mutable for const-ness of operator<<
+  AO_t val;
 public:
-  atomic_t(int i=0) : nref(i) {}
-  void inc() { ++nref; }
-  int dec() { return --nref; }
-  int test() const { return nref; }
-  void add(int i) { nref += i; }
-  void sub(int i) { nref -= i; }
+  atomic_t(AO_t i=0) : val(i) {}
+  void inc() {
+    AO_fetch_and_add1(&val);
+  }
+  AO_t dec() {
+    return AO_fetch_and_sub1_write(&val) - 1;
+  }
+  void add(AO_t add_me) {
+    AO_fetch_and_add(&val, add_me);
+  }
+  void sub(int sub_me) {
+    int sub = 0 - sub_me;
+    AO_fetch_and_add_write(&val, (AO_t)sub);
+  }
+  AO_t read() const {
+    return AO_load_full(&val);
+  }
 };
-
 }
-
 #else
 /*
  * crappy slow implementation that uses a pthreads spinlock.
@@ -86,7 +91,5 @@ public:
 };
 
 }
-
 #endif
-
 #endif

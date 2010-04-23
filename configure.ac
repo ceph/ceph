@@ -96,26 +96,24 @@ AS_IF([test "x$with_hadoop" != xno],
              ])])
 AM_CONDITIONAL(WITH_HADOOPCLIENT, [test "$HAVE_JNI" = "1"])
 
-# CommonC++?
-AC_ARG_WITH([ccgnu],
-            [AS_HELP_STRING([--with-ccgnu],
-              [use CommonC++ library for fast thread-safe reference counting])],
+#libatomic-ops? You want it!
+AC_ARG_WITH([libatomic-ops],
+            [AS_HELP_STRING([--with-libatomic-ops],
+	    [use libatomic-ops to build Ceph's atomic_t type])],
             [],
-            [with_ccgnu=check])
-LIBCCGNU2=
-AS_IF([test "x$with_ccgnu" == xyes],
-	    [AC_CHECK_LIB([ccgnu2], [main],
-             [AC_SUBST([LIBCCGNU2], ["-lccgnu2"])
-              AC_DEFINE([WITH_CCGNU], [1],
-                        [Define if you have ccgnu])
-	      LIBS="-lccgnu2 -ldl $LIBS"
-             ],
-             [if test "x$with_ccgnu" != xcheck; then
+            [with_libatomic_ops=check])
+AS_IF([test "x$with_libatomic_ops" != xno],
+	    [AC_CHECK_HEADER([atomic_ops.h],
+             [HAVE_ATOMIC_OPS=1],
+             [if test "x$with_libatomic_ops" != xcheck; then
                  AC_MSG_FAILURE(
-                   [--with-ccgnu was given but test failed])
+                   [--with-libatomic-ops was given but atomic_ops.h not found])
                fi
-             ], [-ldl])])
-AM_CONDITIONAL(WITH_CCGNU, test "WITH_CCGNU" = "1")
+             ])])
+AS_IF([test "$HAVE_ATOMIC_OPS" = "1"],
+	AC_DEFINE([HAVE_ATOMIC_OPS], [1], [Defined if you have atomic_ops]),
+	AC_MSG_FAILURE([]))
+AM_CONDITIONAL(WITH_LIBATOMIC, [test "$HAVE_ATOMIC_OPS" = "1"])
 
 # newsyn?  requires mpi.
 #AC_ARG_WITH([newsyn],

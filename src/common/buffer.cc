@@ -16,6 +16,7 @@
 #include "config.h"
 #include "include/types.h"
 #include "armor.h"
+#include "include/Spinlock.h"
 
 #include <errno.h>
 #include <fstream>
