@@ -1,8 +1,5 @@
 
 - ensure debian package builds
-
- $ ./build_upload_debian_packages.sh unstable amd64
-
 - adjust version in configure.ac
 - adjust version in src/include/ceph_fs.h
 - add entry to debian/changelog, with proper version

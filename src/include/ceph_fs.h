@@ -19,8 +19,8 @@
  * Ceph release version
  */
 #define CEPH_VERSION_MAJOR 0
-#define CEPH_VERSION_MINOR 19
-#define CEPH_VERSION_PATCH 1
+#define CEPH_VERSION_MINOR 20
+#define CEPH_VERSION_PATCH 0
 
 #define _CEPH_STRINGIFY(x) #x
 #define CEPH_STRINGIFY(x) _CEPH_STRINGIFY(x)

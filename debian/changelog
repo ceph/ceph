@@ -1,3 +1,16 @@
+ceph (0.20-1) unstable; urgency=low
+
+  * osd: new journaling infrastructure
+  * msgr: wire protocol improvements
+  * mds: reduced memory utilization (still more to do!)
+  * mds: many single mds fixes
+  * mds: many clustered mds fixes
+  * auth: many auth_x cleanups, fixes, improvements
+  * kclient: many bug fixes
+  * librados: some cleanup, c++ api now usable
+
+ -- Sage Weil <sage@newdream.net>  Fri, 23 Apr 2010 12:10:04 -0800
+
 ceph (0.19.1-1) unstable; urgency=low
 
   * init-ceph: don't fail when /bin/sh is dash
