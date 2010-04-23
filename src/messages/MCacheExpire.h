@@ -49,7 +49,10 @@ public:
   MCacheExpire(int f) : 
     Message(MSG_MDS_CACHEEXPIRE),
     from(f) { }
+private:
+  ~MCacheExpire() {}
 
+public:
   virtual const char *get_type_name() { return "cache_expire";}
   
   void add_inode(dirfrag_t r, vinodeno_t vino, int nonce) {

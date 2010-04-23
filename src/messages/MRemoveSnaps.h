@@ -26,7 +26,10 @@ struct MRemoveSnaps : public PaxosServiceMessage {
     PaxosServiceMessage(MSG_REMOVE_SNAPS, 0) {
     snaps.swap(s);
   }
+private:
+  ~MRemoveSnaps() {}
 
+public:
   const char *get_type_name() { return "remove_snaps"; }
   void print(ostream& out) {
     out << "remove_snaps(" << snaps << " v" << version << ")";

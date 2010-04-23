@@ -27,7 +27,10 @@ class MClientCapRelease : public Message {
     Message(CEPH_MSG_CLIENT_CAPRELEASE) {
     memset(&head, 0, sizeof(head));
   }
+private:
+  ~MClientCapRelease() {}
 
+public:
   const char *get_type_name() { return "client_cap_release";}
   void print(ostream& out) {
     out << "client_cap_release(" << head.num << ")";

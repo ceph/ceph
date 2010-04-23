@@ -48,7 +48,10 @@ struct MOSDPGCreate : public Message {
   MOSDPGCreate(epoch_t e) :
     Message(MSG_OSD_PG_CREATE),
     epoch(e) { }
-  
+private:
+  ~MOSDPGCreate() {}
+
+public:  
   const char *get_type_name() { return "pg_create"; }
 
   void encode_payload() {

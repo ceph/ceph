@@ -82,7 +82,10 @@ public:
     memset(&head, 0, sizeof(head));
     head.op = op;
   }
+private:
+  ~MClientRequest() {}
 
+public:
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
   epoch_t get_mdsmap_epoch() { return head.mdsmap_epoch; }
 

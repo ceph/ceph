@@ -1055,7 +1055,7 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t 
   mut->apply();
   
   if (ack)
-    mds->send_message_client(ack, client);
+    mds->send_message_client_counted(ack, client);
 
   drop_locks(mut);
   mut->cleanup();
@@ -1233,7 +1233,7 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
 					 cap->get_mseq());
 	in->encode_cap_message(m, cap);
 
-	mds->send_message_client(m, it->first);
+	mds->send_message_client_counted(m, it->first);
       }
     }
 
@@ -1259,7 +1259,7 @@ void Locker::issue_truncate(CInode *in)
 				     cap->pending(), cap->wanted(), 0,
 				     cap->get_mseq());
     in->encode_cap_message(m, cap);			     
-    mds->send_message_client(m, it->first);
+    mds->send_message_client_counted(m, it->first);
   }
 
   // should we increase max_size?
@@ -1417,7 +1417,7 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
   if (mds->is_rejoin() &&
       in->is_rejoining()) {
     dout(7) << "handle_inode_file_caps still rejoining " << *in << ", dropping " << *m << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -1430,7 +1430,7 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
     in->mds_caps_wanted.erase(m->get_from());
 
   try_eval(in, CEPH_CAP_LOCKS);
-  delete m;
+  m->put();
 }
 
 
@@ -1596,7 +1596,7 @@ void Locker::share_inode_max_size(CInode *in)
 				       cap->pending(), cap->wanted(), 0,
 				       cap->get_mseq());
       in->encode_cap_message(m, cap);
-      mds->send_message_client(m, client);
+      mds->send_message_client_counted(m, client);
     }
   }
 }
@@ -1664,7 +1664,7 @@ void Locker::handle_client_caps(MClientCaps *m)
   CInode *head_in = mdcache->get_inode(m->get_ino());
   if (!head_in) {
     dout(7) << "handle_client_caps on unknown ino " << m->get_ino() << ", dropping" << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -1681,7 +1681,7 @@ void Locker::handle_client_caps(MClientCaps *m)
     cap = in->get_client_cap(client);
   if (!cap) {
     dout(7) << "handle_client_caps no cap for client" << client << " on " << *in << dendl;
-    delete m;
+    m->put();
     return;
   }  
   assert(cap);
@@ -1699,7 +1699,7 @@ void Locker::handle_client_caps(MClientCaps *m)
   if (ceph_seq_cmp(m->get_mseq(), cap->get_mseq()) < 0) {
     dout(7) << "handle_client_caps mseq " << m->get_mseq() << " < " << cap->get_mseq()
 	    << ", dropping" << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -1726,7 +1726,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       }
       if (!_do_cap_update(in, cap, m->get_dirty(), follows, m, ack)) {
 	if (ack)
-	  mds->send_message_client(ack, client);
+	  mds->send_message_client_counted(ack, m->get_connection());
 	eval_cap_gather(in);
       }
 
@@ -1791,7 +1791,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       } else {
 	// no update, ack now.
 	if (ack)
-	  mds->send_message_client(ack, client);
+	  mds->send_message_client_counted(ack, m->get_connection());
       
 	bool did_issue = eval(in, CEPH_CAP_LOCKS);
 	if (!did_issue && (cap->wanted() & ~cap->pending()))
@@ -1810,7 +1810,7 @@ void Locker::handle_client_caps(MClientCaps *m)
   }
   
  out:
-  delete m;
+  m->put();
 }
 
 void Locker::process_cap_update(MDRequest *mdr, client_t client,
@@ -2118,7 +2118,7 @@ void Locker::handle_client_cap_release(MClientCapRelease *m)
     mdcache->remove_client_cap(in, client);
   }
 
-  delete m;
+  m->put();
 }
 
 void Locker::handle_client_lease(MClientLease *m)
@@ -2131,7 +2131,7 @@ void Locker::handle_client_lease(MClientLease *m)
   CInode *in = mdcache->get_inode(m->get_ino(), m->get_last());
   if (!in) {
     dout(7) << "handle_client_lease don't have ino " << m->get_ino() << "." << m->get_last() << dendl;
-    delete m;
+    m->put();
     return;
   }
   CDentry *dn = 0;
@@ -2143,7 +2143,7 @@ void Locker::handle_client_lease(MClientLease *m)
     dn = dir->lookup(m->dname);
   if (!dn) {
     dout(7) << "handle_client_lease don't have dn " << m->get_ino() << " " << m->dname << dendl;
-    delete m;
+    m->put();
     return;
   }
   dout(10) << " on " << *dn << dendl;
@@ -2152,7 +2152,7 @@ void Locker::handle_client_lease(MClientLease *m)
   ClientLease *l = dn->get_client_lease(client);
   if (!l) {
     dout(7) << "handle_client_lease didn't have lease for client" << client << " of " << *dn << dendl;
-    delete m;
+    m->put();
     return;
   } 
 
@@ -2168,7 +2168,7 @@ void Locker::handle_client_lease(MClientLease *m)
       int left = dn->remove_client_lease(l, l->mask, this);
       dout(10) << " remaining mask is " << left << " on " << *dn << dendl;
     }
-    delete m;
+    m->put();
     break;
 
   case CEPH_MDS_LEASE_RENEW:
@@ -2185,7 +2185,7 @@ void Locker::handle_client_lease(MClientLease *m)
       now += mdcache->client_lease_durations[pool];
       mdcache->touch_client_lease(l, pool, now);
       
-      mds->send_message_client(m, client);
+      mds->send_message_client_counted(m, m->get_connection());
     }
     break;
 
@@ -2279,7 +2279,7 @@ void Locker::revoke_client_leases(SimpleLock *lock)
     
     // i should also revoke the dir ICONTENT lease, if they have it!
     CInode *diri = dn->get_dir()->get_inode();
-    mds->send_message_client(new MClientLease(CEPH_MDS_LEASE_REVOKE, l->seq,
+    mds->send_message_client_counted(new MClientLease(CEPH_MDS_LEASE_REVOKE, l->seq,
 					      mask,
 					      diri->ino(),
 					      diri->first, CEPH_NOSNAP,
@@ -2358,7 +2358,7 @@ void Locker::handle_lock(MLock *m)
   SimpleLock *lock = get_lock(m->get_lock_type(), m->get_object_info());
   if (!lock) {
     dout(10) << "don't have object " << m->get_object_info() << ", must have trimmed, dropping" << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -2405,7 +2405,7 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
     if (lock->get_parent()->is_rejoining()) {
       dout(7) << "handle_simple_lock still rejoining " << *lock->get_parent()
 	      << ", dropping " << *m << dendl;
-      delete m;
+      m->put();
       return;
     }
   }
@@ -2433,7 +2433,7 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
     } else {
       // update lock and reply
       lock->set_state(LOCK_LOCK);
-      mds->send_message_mds(new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid()), from);
+      mds->send_message(new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid()), m->get_connection());
     }
     break;
 
@@ -2457,7 +2457,7 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
 
   }
 
-  delete m;
+  m->put();
 }
 
 /* unused, currently.
@@ -3429,7 +3429,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     if (in->is_rejoining()) {
       dout(7) << "handle_file_lock still rejoining " << *in
 	      << ", dropping " << *m << dendl;
-      delete m;
+      m->put();
       return;
     }
   }
@@ -3606,7 +3606,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     assert(0);
   }  
   
-  delete m;
+  m->put();
 }
 
 

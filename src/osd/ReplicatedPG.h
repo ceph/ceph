@@ -381,7 +381,7 @@ public:
       assert(nref > 0);
       if (--nref == 0) {
 	assert(!obc);
-	delete ctx->op;
+	ctx->op->put();
 	delete ctx;
 	delete this;
 	//generic_dout(0) << "deleting " << this << dendl;

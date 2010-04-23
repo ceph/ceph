@@ -32,7 +32,10 @@ class MDentryUnlink : public Message {
     Message(MSG_MDS_DENTRYUNLINK),
     dirfrag(df),
     dn(n) {}
+private:
+  ~MDentryUnlink() {}
 
+public:
   const char *get_type_name() { return "dentry_unlink";}
   void print(ostream& o) {
     o << "dentry_unlink(" << dirfrag << " " << dn << ")";

@@ -332,7 +332,7 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
   MMonCommandAck *reply = new MMonCommandAck(m->cmd, rc, rs, version);
   reply->set_data(rdata);
   send_reply(m, reply);
-  delete m;
+  m->put();
 }
 
 
@@ -352,7 +352,7 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     session = (MonSession *)req->get_connection()->get_priv();
   if (req->session_mon >= 0) {
     dout(10) << "forward_request won't double fwd request " << *req << dendl;
-    delete req;
+    req->put();
   } else if (session && !session->closed) {
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
@@ -378,7 +378,7 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     messenger->send_message(forward, monmap->get_inst(mon));
   } else {
     dout(10) << "forward_request no session for request " << *req << dendl;
-    delete req;
+    req->put();
   }
   if (session)
     session->put();
@@ -408,7 +408,7 @@ void Monitor::handle_forward(MForward *m)
     _ms_dispatch(req);
   }
   session->put();
-  delete m;
+  m->put();
 }
 
 void Monitor::try_send_message(Message *m, entity_inst_t to)
@@ -451,7 +451,7 @@ void Monitor::handle_route(MRoute *m)
     dout(0) << "MRoute received from entity without appropriate perms! "
 	    << dendl;
     session->put();
-    delete m;
+    m->put();
     return;
   }
   dout(10) << "handle_route " << *m->msg << " to " << m->dest << dendl;
@@ -470,7 +470,7 @@ void Monitor::handle_route(MRoute *m)
     messenger->lazy_send_message(m->msg, m->dest);
     m->msg = NULL;
   }
-  delete m;
+  m->put();
   if (session) session->put();
 }
 
@@ -521,7 +521,7 @@ void Monitor::handle_observe(MMonObserve *m)
     bool delete_m = false;
     if (m->session_mon) delete_m = true;
     send_reply(m, m);
-    if (delete_m) delete m;
+    if (delete_m) m->put();
     return;
   }
   if (m->machine_id >= PAXOS_NUM) {
@@ -680,7 +680,7 @@ bool Monitor::_ms_dispatch(Message *m)
 	if (!src_is_mon && 
 	    !s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
 	  //can't send these!
-	  delete m;
+	  m->put();
 	  break;
 	}
 
@@ -690,7 +690,7 @@ bool Monitor::_ms_dispatch(Message *m)
 	if (pm->epoch > mon_epoch) 
 	  call_election();
 	if (pm->epoch != mon_epoch) {
-	  delete pm;
+	  pm->put();
 	  break;
 	}
 
@@ -748,7 +748,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   MonSession *s = (MonSession *)m->get_connection()->get_priv();
   if (!s) {
     dout(10) << " no session, dropping" << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -780,7 +780,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
 			    m->get_source_inst());
 
   s->put();
-  delete m;
+  m->put();
 }
 
 bool Monitor::ms_handle_reset(Connection *con)
@@ -842,7 +842,7 @@ void Monitor::handle_mon_get_map(MMonGetMap *m)
 {
   dout(10) << "handle_mon_get_map" << dendl;
   send_latest_monmap(m->get_orig_source_inst());
-  delete m;
+  m->put();
 }
 
 
@@ -978,7 +978,7 @@ void Monitor::handle_class(MClass *m)
   if (!m->get_session()->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
     dout(0) << "MClass received from entity without sufficient privileges "
 	    << m->get_session()->caps << dendl;
-    delete m;
+    m->put();
     return;
   }
   switch (m->action) {
@@ -988,7 +988,7 @@ void Monitor::handle_class(MClass *m)
       break;
     case CLASS_RESPONSE:
       dout(0) << "got a class response (" << *m << ") ???" << dendl;
-      delete m;
+      m->put();
       break;
     default:
       dout(0) << "got an unknown class message (" << *m << ") ???" << dendl;

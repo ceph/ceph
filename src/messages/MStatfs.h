@@ -29,6 +29,10 @@ public:
     set_tid(t);
   }
 
+private:
+  ~MStatfs() {}
+
+public:
   const char *get_type_name() { return "statfs"; }
   void print(ostream& out) {
     out << "statfs(" << get_tid() << " v" << version << ")";

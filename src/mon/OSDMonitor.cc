@@ -218,7 +218,7 @@ bool OSDMonitor::preprocess_query(PaxosServiceMessage *m)
     
   default:
     assert(0);
-    delete m;
+    m->put();
     return true;
   }
 }
@@ -249,7 +249,7 @@ bool OSDMonitor::prepare_update(PaxosServiceMessage *m)
 
   default:
     assert(0);
-    delete m;
+    m->put();
   }
 
   return false;
@@ -350,7 +350,7 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
   return false;
 
  didit:
-  delete m;
+  m->put();
   return true;
 }
 
@@ -388,7 +388,7 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
 {
   if (ceph_fsid_compare(&m->sb.fsid, &mon->monmap->fsid)) {
     dout(0) << "preprocess_boot on fsid " << m->sb.fsid << " != " << mon->monmap->fsid << dendl;
-    delete m;
+    m->put();
     return true;
   }
 
@@ -396,7 +396,7 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
   if (!m->get_session()->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
     dout(0) << "got preprocess_boot message from entity with insufficient caps"
 	    << m->get_session()->caps << dendl;
-    delete m;
+    m->put();
     return true;
   }
 
@@ -427,7 +427,7 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
   // does this osd exist?
   if (!osdmap.exists(from)) {
     dout(1) << "boot from non-existent osd" << from << ", increase max_osd?" << dendl;
-    delete m;
+    m->put();
     return false;
   }
 
@@ -602,7 +602,7 @@ bool OSDMonitor::preprocess_remove_snaps(MRemoveSnaps *m)
   if (!m->get_session()->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_RW)) {
     dout(0) << "got preprocess_remove_snaps from entity with insufficient caps "
 	    << m->get_session()->caps << dendl;
-    delete m;
+    m->put();
     return true;
   }
   for (map<int, vector<snapid_t> >::iterator q = m->snaps.begin();
@@ -621,7 +621,7 @@ bool OSDMonitor::preprocess_remove_snaps(MRemoveSnaps *m)
 	return false;
     }
   }
-  delete m;
+  m->put();
   return true;
 }
 
@@ -654,7 +654,7 @@ bool OSDMonitor::prepare_remove_snaps(MRemoveSnaps *m)
     }
   }
 
-  delete m;
+  m->put();
   return true;
 }
 
@@ -674,7 +674,7 @@ void OSDMonitor::send_to_waiting()
       if (from <= osdmap.get_epoch()) {
 	while (!p->second.empty()) {
 	  send_incremental(p->second.front(), from);
-	  delete p->second.front();
+	  p->second.front()->put();
 	  p->second.pop_front();
 	}
       } else {
@@ -685,7 +685,7 @@ void OSDMonitor::send_to_waiting()
     } else {
       while (!p->second.empty()) {
 	send_full(p->second.front());
-	delete p->second.front();
+	p->second.front()->put();
 	p->second.pop_front();
       }
     }
@@ -703,7 +703,7 @@ void OSDMonitor::send_latest(PaxosServiceMessage *m, epoch_t start)
       send_full(m);
     else
       send_incremental(m, start);
-    delete m;
+    m->put();
   } else {
     dout(5) << "send_latest to " << m->get_orig_source_inst()
 	    << " start " << start << " later" << dendl;
@@ -1492,5 +1492,5 @@ void OSDMonitor::_pool_op(MPoolOp *m, int replyCode, epoch_t epoch)
   MPoolOpReply *reply = new MPoolOpReply(m->fsid, m->get_tid(),
 					 replyCode, epoch, mon->get_epoch());
   mon->send_reply(m, reply);
-  delete m;
+  m->put();
 }

@@ -24,7 +24,10 @@ public:
   
   MLogAck() : Message(MSG_LOGACK) {}
   MLogAck(ceph_fsid_t& f, version_t l) : Message(MSG_LOGACK), fsid(f), last(l) {}
+private:
+  ~MLogAck() {}
 
+public:
   const char *get_type_name() { return "log_ack"; }
   void print(ostream& out) {
     out << "log(last " << last << ")";

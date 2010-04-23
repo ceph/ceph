@@ -29,7 +29,10 @@ class MOSDFailure : public PaxosServiceMessage {
   MOSDFailure(const ceph_fsid_t &fs, entity_inst_t f, epoch_t e) : 
     PaxosServiceMessage(MSG_OSD_FAILURE, e),
     fsid(fs), failed(f), epoch(e) {}
- 
+private:
+  ~MOSDFailure() {}
+
+public: 
   entity_inst_t get_failed() { return failed; }
   epoch_t get_epoch() { return epoch; }
 

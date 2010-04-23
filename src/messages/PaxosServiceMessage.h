@@ -14,7 +14,10 @@ class PaxosServiceMessage : public Message {
 			 version(0), session_mon(-1), session_mon_tid(0) { }
   PaxosServiceMessage(int type, version_t v) : Message(type),
 					       version(v), session_mon(-1), session_mon_tid(0) { }
+ protected:
+  ~PaxosServiceMessage() {}
 
+ public:
   void paxos_encode() {
     ::encode(version, payload);
     ::encode(session_mon, payload);

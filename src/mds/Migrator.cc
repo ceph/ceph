@@ -636,7 +636,7 @@ void Migrator::handle_export_discover_ack(MExportDirDiscoverAck *m)
     assert(g_conf.mds_kill_export_at != 3);
   }
   
-  delete m;  // done
+  m->put();  // done
 }
 
 void Migrator::export_frozen(CDir *dir)
@@ -748,7 +748,7 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
       export_state[dir] != EXPORT_PREPPING) {
     // export must have aborted.  
     dout(7) << "export must have aborted" << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -787,7 +787,7 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
     export_go(dir);  // start export.
     
   // done.
-  delete m;
+  m->put();
 }
 
 
@@ -918,7 +918,7 @@ void Migrator::finish_export_inode_caps(CInode *in)
 				     cap->get_cap_id(), cap->get_last_seq(), 
 				     cap->pending(), cap->wanted(), 0,
 				     cap->get_mseq());
-    mds->send_message_client(m, it->first);
+    mds->send_message_client_counted(m, it->first);
   }
   in->clear_client_caps_after_export();
 }
@@ -1154,7 +1154,7 @@ void Migrator::handle_export_ack(MExportDirAck *m)
   mds->mdlog->flush();
   assert (g_conf.mds_kill_export_at != 10);
   
-  delete m;
+  m->put();
 }
 
 
@@ -1313,7 +1313,7 @@ void Migrator::handle_export_notify_ack(MExportDirNotifyAck *m)
     }
   }
 
-  delete m;
+  m->put();
 }
 
 
@@ -1419,7 +1419,7 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
   if (import_state.count(df) == 0 &&
       import_state[df] != IMPORT_DISCOVERING) {
     dout(7) << "hmm import_state is off, i must be obsolete lookup" << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -1471,7 +1471,7 @@ void Migrator::handle_export_cancel(MExportDirCancel *m)
   import_state.erase(m->get_dirfrag());
   import_peer.erase(m->get_dirfrag());
 
-  delete m;
+  m->put();
 }
 
 
@@ -1486,7 +1486,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
        import_state[m->get_dirfrag()] != IMPORT_PREPPING) ||
       import_peer[m->get_dirfrag()] != oldauth) {
     dout(10) << "handle_export_prep import has aborted, dropping" << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -1629,13 +1629,13 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   
   // ok!
   dout(7) << " sending export_prep_ack on " << *dir << dendl;
-  mds->send_message_mds(new MExportDirPrepAck(dir->dirfrag()), m->get_source().num());
+  mds->send_message(new MExportDirPrepAck(dir->dirfrag()), m->get_connection());
   
   // note new state
   import_state[dir->dirfrag()] = IMPORT_PREPPED;
   assert(g_conf.mds_kill_import_at != 4);
   // done 
-  delete m;
+  m->put();
 
 }
 
@@ -1733,7 +1733,7 @@ void Migrator::handle_export_dir(MExportDir *m)
     mds->logger->inc(l_mds_iim, num_imported_inodes);
   }
 
-  delete m;
+  m->put();
 }
 
 
@@ -1945,7 +1945,7 @@ void Migrator::handle_export_finish(MExportDirFinish *m)
   assert(dir);
   dout(7) << "handle_export_finish on " << *dir << dendl;
   import_finish(dir);
-  delete m;
+  m->put();
 }
 
 void Migrator::import_finish(CDir *dir) 
@@ -2258,7 +2258,7 @@ void Migrator::handle_export_notify(MExportDirNotify *m)
     dout(7) << "handle_export_notify no ack requested" << dendl;
   }
   
-  delete m;
+  m->put();
 }
 
 
@@ -2299,7 +2299,7 @@ void Migrator::handle_export_caps_ack(MExportCapsAck *ack)
 	   << dendl;
   
   finish_export_inode_caps(in);
-  delete ack;
+  ack->put();
 }
 
 
@@ -2348,7 +2348,7 @@ void Migrator::handle_export_caps(MExportCaps *ex)
   mds->mdlog->wait_for_safe(finish);
   mds->mdlog->flush();
 
-  delete ex;
+  ex->put();
 }
 
 

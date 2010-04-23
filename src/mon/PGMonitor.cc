@@ -161,7 +161,7 @@ bool PGMonitor::preprocess_query(PaxosServiceMessage *m)
 
   default:
     assert(0);
-    delete m;
+    m->put();
     return true;
   }
 }
@@ -178,7 +178,7 @@ bool PGMonitor::prepare_update(PaxosServiceMessage *m)
 
   default:
     assert(0);
-    delete m;
+    m->put();
     return false;
   }
 }
@@ -217,7 +217,7 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   // reply
   mon->send_reply(statfs, reply);
  out:
-  delete statfs;
+  statfs->put();
 }
 
 bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
@@ -251,7 +251,7 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
   mon->send_reply(m, reply);
 
  out:
-  delete m;
+  m->put();
 
   return true;
 }
@@ -295,7 +295,7 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
     ack->pg_stat[p->first] = p->second.reported;
   mon->send_reply(stats, ack);
  out:
-  delete stats;
+  stats->put();
   return true;
 }
 
@@ -306,14 +306,14 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
 
   if (ceph_fsid_compare(&stats->fsid, &mon->monmap->fsid)) {
     dout(0) << "handle_statfs on fsid " << stats->fsid << " != " << mon->monmap->fsid << dendl;
-    delete stats;
+    stats->put();
     return false;
   }
   if (!stats->get_orig_source().is_osd() ||
       !mon->osdmon()->osdmap.is_up(from) ||
       stats->get_orig_source_inst() != mon->osdmon()->osdmap.get_inst(from)) {
     dout(1) << " ignoring stats from non-active osd" << dendl;
-    delete stats;
+    stats->put();
     return false;
   }
       
@@ -391,7 +391,7 @@ void PGMonitor::_updated_stats(MPGStats *req, MPGStatsAck *ack)
 {
   dout(7) << "_updated_stats for " << req->get_orig_source_inst() << dendl;
   mon->send_reply(req, ack);
-  delete req;
+  req->put();
 }
 
 

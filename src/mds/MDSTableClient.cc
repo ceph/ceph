@@ -106,7 +106,7 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
     assert(0);
   }
 
-  delete m;
+  m->put();
 }
 
 

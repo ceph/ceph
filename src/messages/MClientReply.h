@@ -199,6 +199,10 @@ public:
     head.result = result;
     head.safe = 1;
   }
+private:
+  ~MClientReply() {}
+
+public:
   const char *get_type_name() { return "creply"; }
   void print(ostream& o) {
     o << "client_reply(???:" << get_tid();

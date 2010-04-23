@@ -26,7 +26,10 @@ class MExportDirAck : public Message {
   MExportDirAck() {}
   MExportDirAck(dirfrag_t i) :
     Message(MSG_MDS_EXPORTDIRACK), dirfrag(i) { }
+private:
+  ~MExportDirAck() {}
 
+public:
   const char *get_type_name() { return "ExAck"; }
     void print(ostream& o) {
     o << "export_ack(" << dirfrag << ")";

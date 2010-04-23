@@ -277,7 +277,7 @@ bool AuthMonitor::preprocess_query(PaxosServiceMessage *m)
 
   default:
     assert(0);
-    delete m;
+    m->put();
     return true;
   }
 }
@@ -294,7 +294,7 @@ bool AuthMonitor::prepare_update(PaxosServiceMessage *m)
     return prep_auth((MAuth *)m, true);
   default:
     assert(0);
-    delete m;
+    m->put();
     return false;
   }
 }
@@ -357,7 +357,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
   MonSession *s = (MonSession *)m->get_connection()->get_priv();
   if (!s) {
     dout(10) << "no session, dropping" << dendl;
-    delete m;
+    m->put();
     return true;
   }
 

@@ -53,6 +53,10 @@ class MDirUpdate : public Message {
     if (discover) this->discover = 5;
     this->path = path;
   }
+private:
+  ~MDirUpdate() {}
+
+public:
   const char *get_type_name() { return "dir_update"; }
   void print(ostream& out) {
     out << "dir_update(" << get_dirfrag() << ")";

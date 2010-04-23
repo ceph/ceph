@@ -100,7 +100,10 @@ class MClientCaps : public Message {
     head.cap_id = id;
     head.migrate_seq = mseq;
   }
+private:
+  ~MClientCaps() {}
 
+public:
   const char *get_type_name() { return "Cfcap";}
   void print(ostream& out) {
     out << "client_caps(" << ceph_cap_op_name(head.op)

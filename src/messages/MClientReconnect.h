@@ -26,7 +26,10 @@ public:
 
   MClientReconnect() : Message(CEPH_MSG_CLIENT_RECONNECT),
 		       closed(false) { }
+private:
+  ~MClientReconnect() {}
 
+public:
   const char *get_type_name() { return "client_reconnect"; }
   void print(ostream& out) {
     out << "client_reconnect("

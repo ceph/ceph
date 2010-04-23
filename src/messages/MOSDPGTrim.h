@@ -29,7 +29,10 @@ public:
   MOSDPGTrim(version_t mv, pg_t p, eversion_t tt) :
     Message(MSG_OSD_PG_TRIM),
     epoch(mv), pgid(p), trim_to(tt) { }
+private:
+  ~MOSDPGTrim() {}
 
+public:
   const char *get_type_name() { return "pg_trim"; }
   void print(ostream& out) {
     out << "pg_trim(" << pgid << " to " << trim_to << " e" << epoch << ")";

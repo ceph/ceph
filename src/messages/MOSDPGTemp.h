@@ -26,7 +26,10 @@ class MOSDPGTemp : public PaxosServiceMessage {
 
   MOSDPGTemp(epoch_t e) : PaxosServiceMessage(MSG_OSD_PGTEMP, e), map_epoch(e) { }
   MOSDPGTemp() : PaxosServiceMessage(MSG_OSD_PGTEMP, 0) {}
+private:
+  ~MOSDPGTemp() {}
 
+public:
   void encode_payload() {
     paxos_encode();
     ::encode(map_epoch, payload);

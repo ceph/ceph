@@ -32,7 +32,10 @@ struct MAuthReply : public Message {
     if (bl)
       result_bl = *bl;
   }
+private:
+  ~MAuthReply() {}
 
+public:
   const char *get_type_name() { return "auth_reply"; }
   void print(ostream& o) {
     char buf[80];

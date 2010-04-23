@@ -28,8 +28,10 @@ class MMonObserveNotify : public PaxosServiceMessage {
   MMonObserveNotify() : PaxosServiceMessage(MSG_MON_OBSERVE_NOTIFY, 0) {}
   MMonObserveNotify(ceph_fsid_t& f, int id, bufferlist& b, version_t v, bool l) :
     PaxosServiceMessage(MSG_MON_OBSERVE_NOTIFY, v), fsid(f), machine_id(id), bl(b), ver(v), is_latest(l) {}
-    
-  
+private:
+  ~MMonObserveNotify() {}
+
+public:  
   const char *get_type_name() { return "mon_observe_notify"; }
   void print(ostream& o) {
     o << "mon_observe_notify(v" << ver << " " << bl.length() << " bytes";

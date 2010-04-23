@@ -122,7 +122,7 @@ void Server::dispatch(Message *m)
   switch (m->get_type()) {
   case CEPH_MSG_CLIENT_SESSION:
     handle_client_session((MClientSession*)m);
-    delete m;
+    m->put();
     return;
   case CEPH_MSG_CLIENT_REQUEST:
     handle_client_request((MClientRequest*)m);
@@ -182,7 +182,7 @@ void Server::handle_client_session(MClientSession *m)
 
   if (!session) {
     dout(0) << " ignoring sessionless msg " << *m << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -215,7 +215,7 @@ void Server::handle_client_session(MClientSession *m)
 	mds->locker->resume_stale_caps(session);
       }
       mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->get_seq()), 
-				   session->inst);
+				   m->get_connection());
     } else {
       dout(10) << "ignoring renewcaps on non open|stale session (" << session->get_state_name() << ")" << dendl;
     }
@@ -534,8 +534,8 @@ void Server::handle_client_reconnect(MClientReconnect *m)
        << ") from " << m->get_source_inst()
        << " after " << delay << " (allowed interval " << g_conf.mds_reconnect_timeout << ")";
     mds->logclient.log(LOG_INFO, ss);
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_source_inst());
-    delete m;
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_connection());
+    m->put();
     return;
   }
 
@@ -550,7 +550,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     // no need to respond to client: they're telling us they have no session
   } else {
     // notify client of success with an OPEN
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), m->get_source_inst());
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), m->get_connection());
     
     if (session->is_closed()) {
       dout(10) << " session is closed, will make best effort to reconnect " 
@@ -622,7 +622,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	fake_inode.ino = p->first;
 	MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0, 0, 0);
 	//stale->head.migrate_seq = 0; // FIXME ******
-	mds->send_message_client(stale, m->get_source_inst());
+	mds->send_message_client_counted(stale, m->get_connection());
 
 	// add to cap export list.
 	mdcache->rejoin_export_caps(p->first, from, p->second);
@@ -641,7 +641,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   if (client_reconnect_gather.empty())
     reconnect_gather_finish();
 
-  delete m;
+  m->put();
 }
 
 
@@ -801,7 +801,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 		   mdr->client_request->get_dentry_wanted());
   }
 
-  messenger->send_message(reply, client_inst);
+  messenger->send_message(reply, req->get_connection());
 
   mdr->did_early_reply = true;
 
@@ -864,7 +864,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 
   // reply at all?
   if (client_inst.name.is_mds()) {
-    delete reply;   // mds doesn't need a reply
+    reply->put();   // mds doesn't need a reply
     reply = 0;
   } else {
     // send reply.
@@ -880,7 +880,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
     }
 
     reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
-    messenger->send_message(reply, client_inst);
+    messenger->send_message(reply, req->get_connection());
   }
   
   // take a closer look at tracei, if it happens to be a remote link
@@ -1007,14 +1007,14 @@ void Server::handle_client_request(MClientRequest *req)
     session = get_session(req);
     if (!session) {
       dout(5) << "no session for " << req->get_source() << ", dropping" << dendl;
-      delete req;
+      req->put();
       return;
     }
     if (session->is_closed() ||
 	session->is_closing() ||
 	session->is_killing()) {
       dout(5) << "session closed|closing|killing, dropping" << dendl;
-      delete req;
+      req->put();
       return;
     }
   }
@@ -1032,12 +1032,12 @@ void Server::handle_client_request(MClientRequest *req)
     assert(session);
     if (session->have_completed_request(req->get_reqid().tid)) {
       dout(5) << "already completed " << req->get_reqid() << dendl;
-      mds->messenger->send_message(new MClientReply(req, 0), req->get_source_inst());
+      mds->messenger->send_message(new MClientReply(req, 0), req->get_connection());
 
       if (req->is_replay())
 	mds->queue_one_replay();
 
-      delete req;
+      req->put();
       return;
     }
   }
@@ -1238,7 +1238,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
     }
 
     // done with reply.
-    delete m;
+    m->put();
     return;
 
   } else {
@@ -1250,7 +1250,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       if (mdr->slave_to_mds != from) {   // may not even be a slave! (e.g. forward race)
 	dout(10) << "local request " << *mdr << " not slave to mds" << from
 		 << ", ignoring " << *m << dendl;
-	delete m;
+	m->put();
 	return;
       }
     } else {
@@ -1258,7 +1258,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       if (m->get_op() == MMDSSlaveRequest::OP_FINISH) {
 	dout(10) << "missing slave request for " << m->get_reqid() 
 		 << " OP_FINISH, must have lost race with a forward" << dendl;
-	delete m;
+	m->put();
 	return;
       }
       mdr = mdcache->request_start_slave(m->get_reqid(), m->get_source().num());
@@ -1304,7 +1304,7 @@ void Server::dispatch_slave_request(MDRequest *mdr)
 	MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_XLOCKACK);
 	r->set_lock_type(lock->get_type());
 	lock->get_parent()->set_object_info(r->get_object_info());
-	mds->send_message_mds(r, mdr->slave_request->get_source().num());
+	mds->send_message(r, mdr->slave_request->get_connection());
       } else {
 	if (lock) {
 	  dout(10) << "not auth for remote xlock attempt, dropping on " 
@@ -1316,7 +1316,7 @@ void Server::dispatch_slave_request(MDRequest *mdr)
       }
 
       // done.
-      delete mdr->slave_request;
+      mdr->slave_request->put();
       mdr->slave_request = 0;
     }
     break;
@@ -1329,7 +1329,7 @@ void Server::dispatch_slave_request(MDRequest *mdr)
       mds->locker->xlock_finish(lock, mdr);
       
       // done.  no ack necessary.
-      delete mdr->slave_request;
+      mdr->slave_request->put();
       mdr->slave_request = 0;
     }
     break;
@@ -1427,7 +1427,7 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
   mds->send_message_mds(reply, mdr->slave_to_mds);
   
   // clean up this request
-  delete mdr->slave_request;
+  mdr->slave_request->put();
   mdr->slave_request = 0;
   return;
 }
@@ -3454,7 +3454,7 @@ void Server::_logged_slave_link(MDRequest *mdr, CInode *targeti)
   mdr->more()->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti);
 
   // done.
-  delete mdr->slave_request;
+  mdr->slave_request->put();
   mdr->slave_request = 0;
 }
 
@@ -4817,7 +4817,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
       MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, MMDSSlaveRequest::OP_RENAMEPREPACK);
       reply->witnesses.swap(srcdnrep);
       mds->send_message_mds(reply, mdr->slave_to_mds);
-      delete mdr->slave_request;
+      mdr->slave_request->put();
       mdr->slave_request = 0;
       return;	
     }
@@ -4934,7 +4934,7 @@ void Server::_logged_slave_rename(MDRequest *mdr,
     mds->balancer->hit_inode(mdr->now, destdnl->get_inode(), META_POP_IWR);
 
   // done.
-  delete mdr->slave_request;
+  mdr->slave_request->put();
   mdr->slave_request = 0;
 }
 

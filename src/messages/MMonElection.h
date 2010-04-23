@@ -46,7 +46,10 @@ public:
     op(o), epoch(e) {
     m->encode(monmap_bl);
   }
-  
+private:
+  ~MMonElection() {}
+
+public:  
   const char *get_type_name() { return "election"; }
   void print(ostream& out) {
     out << "election(" << get_opname(op) << " " << epoch << ")";

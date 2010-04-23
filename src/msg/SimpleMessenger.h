@@ -183,7 +183,9 @@ private:
       in_qlen(0), keepalive(false),
       connect_seq(0), peer_global_seq(0),
       out_seq(0), in_seq(0), in_seq_acked(0),
-      reader_thread(this), writer_thread(this) { }
+      reader_thread(this), writer_thread(this) {
+      connection_state->pipe = this;
+    }
     ~Pipe() {
       for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
 	   i != queue_items.end();
@@ -194,6 +196,7 @@ private:
       }
       assert(out_q.empty());
       assert(sent.empty());
+      connection_state->pipe = NULL;
       connection_state->put();
     }
 
@@ -265,7 +268,12 @@ private:
     
     void queue_received(Message *m) {
       m->set_recv_stamp(g_clock.now());
-      assert(m->nref.read() == 0);
+
+      // this is just to make sure that a changeset is working
+      // properly; if you start using the refcounting more and have
+      // multiple people hanging on to a message, ditch the assert!
+      assert(m->nref.read() == 1); 
+
       queue_received(m, m->get_priority());
     }
 
@@ -301,7 +309,6 @@ private:
       pipe_lock.Unlock();
     }    
     void _send(Message *m) {
-      m->get();
       out_q[m->get_priority()].push_back(m);
       cond.Signal();
     }
@@ -467,7 +474,12 @@ private:
   void suicide();
   void prepare_dest(const entity_inst_t& inst);
   int send_message(Message *m, const entity_inst_t& dest);
+  int send_message(Message *m, Connection *con);
   int lazy_send_message(Message *m, const entity_inst_t& dest);
+  int lazy_send_message(Message *m, Connection *con) {
+    return send_message(m, con);
+  }
+
   /***********************/
 
 private:
@@ -521,7 +533,9 @@ public:
 
   bool register_entity(entity_name_t addr);
 
-  void submit_message(Message *m, const entity_inst_t& addr, bool lazy=false);  
+  void submit_message(Message *m, const entity_addr_t& addr, int dest_type, bool lazy);
+  void submit_message(Message *m, Pipe *pipe);
+		      
   int send_keepalive(const entity_inst_t& addr);
 
   void learned_addr(entity_addr_t peer_addr_for_me);

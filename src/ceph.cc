@@ -95,7 +95,7 @@ void handle_observe(MMonObserve *observe)
   lock.Lock();
   registered.insert(observe->machine_id);  
   lock.Unlock();
-  delete observe;
+  observe->put();
 }
 
 void handle_notify(MMonObserveNotify *notify)
@@ -109,7 +109,7 @@ void handle_notify(MMonObserveNotify *notify)
   
   if (ceph_fsid_compare(&notify->fsid, &mc.monmap.fsid)) {
     dout(0) << notify->get_source_inst() << " notify fsid " << notify->fsid << " != " << mc.monmap.fsid << dendl;
-    delete notify;
+    notify->put();
     return;
   }
 
@@ -235,7 +235,7 @@ void handle_notify(MMonObserveNotify *notify)
     messenger->shutdown();
   }  
 
-  delete notify;
+  notify->put();
 }
 
 static void send_observe_requests();
@@ -286,7 +286,7 @@ void handle_ack(MMonCommandAck *ack)
     resend_event = 0;
   }
   lock.Unlock();
-  delete ack;
+  ack->put();
 }
 
 void send_command()
@@ -313,7 +313,7 @@ class Admin : public Dispatcher {
       handle_observe((MMonObserve *)m);
       break;
     case CEPH_MSG_MON_MAP:
-      delete m;
+      m->put();
       break;
     default:
       return false;

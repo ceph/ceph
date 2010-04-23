@@ -66,7 +66,7 @@ void MDSTableServer::_prepare_logged(MMDSTableRequest *req, version_t tid)
   MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_AGREE, req->reqid, tid);
   reply->bl = req->bl;
   mds->send_message_mds(reply, req->get_source().num());
-  delete req;
+  req->put();
 }
 
 
@@ -109,7 +109,7 @@ void MDSTableServer::_commit_logged(MMDSTableRequest *req)
 
   MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_ACK, req->reqid, req->get_tid());
   mds->send_message_mds(reply, req->get_source().num());
-  delete req;
+  req->put();
 }
 
 // ROLLBACK
@@ -121,7 +121,7 @@ void MDSTableServer::handle_rollback(MMDSTableRequest *req)
   _note_rollback(req->get_tid());
   mds->mdlog->start_submit_entry(new ETableServer(table, TABLESERVER_OP_ROLLBACK, 0, -1, 
 						  req->get_tid(), version));
-  delete req;
+  req->put();
 }
 
 

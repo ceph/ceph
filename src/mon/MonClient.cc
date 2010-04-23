@@ -219,7 +219,7 @@ void MonClient::handle_monmap(MMonMap *m)
     _finish_hunting();
 
   monc_lock.Unlock();
-  delete m;
+  m->put();
 }
 
 // ----------------------
@@ -302,7 +302,7 @@ void MonClient::handle_auth(MAuthReply *m)
       delete auth;
       auth = get_auth_client_handler(m->protocol, rotating_secrets);
       if (!auth) {
-	delete m;
+	m->put();
 	return;
       }
       auth->set_want_keys(want_keys);
@@ -321,7 +321,7 @@ void MonClient::handle_auth(MAuthReply *m)
   }
 
   int ret = auth->handle_response(m->result, p);
-  delete m;
+  m->put();
 
   if (ret == -EAGAIN) {
     MAuth *m = new MAuth;
@@ -377,7 +377,7 @@ void MonClient::_reopen_session()
 
   // throw out old queued messages
   while (!waiting_for_session.empty()) {
-    delete waiting_for_session.front();
+    waiting_for_session.front()->put();
     waiting_for_session.pop_front();
   }
 
@@ -487,7 +487,7 @@ void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
     dout(10) << "handle_subscribe_ack sent " << sub_renew_sent << ", ignoring" << dendl;
   }
 
-  delete m;
+  m->put();
 }
 
 int MonClient::_check_auth_tickets()
@@ -533,7 +533,7 @@ int MonClient::_check_auth_rotating()
   if (auth->build_rotating_request(m->auth_payload)) {
     _send_mon_message(m);
   } else {
-    delete m;
+    m->put();
   }
   return 0;
 }

@@ -2315,7 +2315,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
 	ack->add_abort(*p);      
       }
     }
-    mds->send_message_mds(ack, from);
+    mds->send_message(ack, m->get_connection());
   }
 
   // am i a surviving ambiguous importer?
@@ -2404,7 +2404,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
   
   maybe_resolve_finish();
 
-  delete m;
+  m->put();
 }
 
 void MDCache::maybe_resolve_finish()
@@ -2508,7 +2508,7 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
   if (mds->is_resolve()) 
     maybe_resolve_finish();
 
-  delete ack;
+  ack->put();
 }
 
 
@@ -3075,7 +3075,7 @@ void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
   default: 
     assert(0);
   }
-  delete m;
+  m->put();
 }
 
 
@@ -3237,7 +3237,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     }
 
     rejoin_scour_survivor_replicas(from, ack);
-    mds->send_message_mds(ack, from);
+    mds->send_message(ack, weak->get_connection());
   } else {
     // done?
     assert(rejoin_gather.count(from));
@@ -3607,7 +3607,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
   // send missing?
   if (missing) {
     // we expect a FULL soon.
-    mds->send_message_mds(missing, from);
+    mds->send_message(missing, strong->get_connection());
   } else {
     // done?
     assert(rejoin_gather.count(from));
@@ -3762,7 +3762,7 @@ void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *missing)
     full->add_inode_base(in);
   }
 
-  mds->send_message_mds(full, missing->get_source().num());
+  mds->send_message(full, missing->get_connection());
 }
 
 void MDCache::handle_cache_rejoin_full(MMDSCacheRejoin *full)
@@ -4037,10 +4037,10 @@ void MDCache::send_snaps(map<client_t,MClientSnap*>& splits)
 	       << " split " << p->second->head.split
 	       << " inos " << p->second->split_inos
 	       << dendl;
-      mds->send_message_client(p->second, session->inst);
+      mds->send_message_client_counted(p->second, session->inst);
     } else {
       dout(10) << " no session for client" << p->first << dendl;
-      delete p->second;
+      p->second->put();
     }
   }
   splits.clear();
@@ -4124,7 +4124,7 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap)
 					cap->get_mseq());
     in->encode_cap_message(reap, cap);
     realm->build_snap_trace(reap->snapbl);
-    mds->send_message_client(reap, session->inst);
+    mds->send_message_client_counted(reap, session->inst);
   } else {
     dout(10) << "do_cap_import missing past snap parents, delaying " << session->inst.name << " mseq "
 	     << cap->get_mseq() << " on " << *in << dendl;
@@ -4238,7 +4238,7 @@ void MDCache::finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snap
     if (session) {
       MClientSnap *snap = new MClientSnap(CEPH_SNAP_OP_UPDATE);
       realm->build_snap_trace(snap->bl);
-      mds->send_message_client(snap, session->inst);
+      mds->send_message_client_counted(snap, session->inst);
     } else {
       dout(10) << " ...or not, no session for this client!" << dendl;
     }
@@ -5077,7 +5077,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
   dout(7) << "cache_expire from mds" << from << dendl;
 
   if (mds->get_state() < MDSMap::STATE_REJOIN) {
-    delete m;
+    m->put();
     return;
   }
 
@@ -5222,7 +5222,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 
 
   // done
-  delete m;
+  m->put();
 }
 
 void MDCache::process_delayed_expire(CDir *dir)
@@ -5241,7 +5241,7 @@ void MDCache::discard_delayed_expire(CDir *dir)
   for (map<int,MCacheExpire*>::iterator p = delayed_expire[dir].begin();
        p != delayed_expire[dir].end();
        ++p) 
-    delete p->second;
+    p->second->put();
   delayed_expire.erase(dir);  
 }
 
@@ -5942,7 +5942,9 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	    replicate_dentry(dn, from, reply->trace);
 	    if (dnl->is_primary())
 	      replicate_inode(in, from, reply->trace);
-	    mds->send_message_mds(reply, req->get_source().num());
+	    if (req->get_source() != req->get_orig_source())
+	      mds->send_message_mds(reply, req->get_source().num());
+	    else mds->send_message(reply->req->get_connnection());
 	  }
 	}
       }
@@ -6344,7 +6346,7 @@ MDRequest *MDCache::request_start(MClientRequest *req)
       request_cleanup(mdr);
     } else {
       dout(10) << "request_start already processing " << *mdr << ", dropping new msg" << dendl;
-      delete req;
+      req->put();
       return 0;
     }
   }
@@ -7200,8 +7202,7 @@ void MDCache::discover_base_ino(inodeno_t want_ino,
   dout(7) << "discover_base_ino " << want_ino << " from mds" << from << dendl;
   if (waiting_for_base_ino[from].count(want_ino) == 0) {
     filepath want_path;
-    MDiscover *dis = new MDiscover(mds->get_nodeid(),
-				   want_ino,
+    MDiscover *dis = new MDiscover(want_ino,
 				   CEPH_NOSNAP,
 				   want_path,
 				   false);
@@ -7224,8 +7225,7 @@ void MDCache::discover_dir_frag(CInode *base,
 
   if (!base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) {    // this is overly conservative
     filepath want_path;
-    MDiscover *dis = new MDiscover(mds->get_nodeid(),
-				   base->ino(),
+    MDiscover *dis = new MDiscover(base->ino(),
 				   CEPH_NOSNAP,
 				   want_path,
 				   true);  // need the base dir open
@@ -7259,8 +7259,7 @@ void MDCache::discover_path(CInode *base,
   } 
 
   if (!base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) {    // this is overly conservative
-    MDiscover *dis = new MDiscover(mds->get_nodeid(),
-				   base->ino(),
+    MDiscover *dis = new MDiscover(base->ino(),
 				   snap,
 				   want_path,
 				   true,        // we want the base dir; we are relative to ino.
@@ -7292,8 +7291,7 @@ void MDCache::discover_path(CDir *base,
   }
 
   if (!base->is_waiting_for_dentry(want_path[0].c_str(), snap) || !onfinish) {
-    MDiscover *dis = new MDiscover(mds->get_nodeid(),
-				   base->ino(),
+    MDiscover *dis = new MDiscover(base->ino(),
 				   snap,
 				   want_path,
 				   false,   // no base dir; we are relative to dir
@@ -7324,8 +7322,7 @@ void MDCache::discover_ino(CDir *base,
   } 
 
   if (!base->is_waiting_for_ino(want_ino)) {
-    MDiscover *dis = new MDiscover(mds->get_nodeid(),
-				   base->dirfrag(),
+    MDiscover *dis = new MDiscover(base->dirfrag(),
 				   CEPH_NOSNAP,
 				   want_ino,
 				   want_xlocked);
@@ -7379,7 +7376,7 @@ void MDCache::kick_discovers(int who)
 void MDCache::handle_discover(MDiscover *dis) 
 {
   int whoami = mds->get_nodeid();
-  int from = dis->get_asker();
+  int from = dis->get_source_inst().name._num;
 
   assert(from != whoami);
 
@@ -7521,7 +7518,7 @@ void MDCache::handle_discover(MDiscover *dis)
       if (reply->is_empty()) {
 	dout(7) << *curdir << " is frozen, empty reply, waiting" << dendl;
 	curdir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
-	delete reply;
+	reply->put();
 	return;
       } else {
 	dout(7) << *curdir << " is frozen, non-empty reply, stopping" << dendl;
@@ -7614,7 +7611,7 @@ void MDCache::handle_discover(MDiscover *dis)
       } else {
 	dout(7) << "handle_discover blocking on xlocked " << *dn << dendl;
 	dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryMessage(mds, dis));
-	delete reply;
+	reply->put();
 	return;
       }
     }
@@ -7626,7 +7623,7 @@ void MDCache::handle_discover(MDiscover *dis)
       } else if (reply->is_empty()) {
 	dout(7) << *dnl->get_inode() << " is frozen, empty reply, waiting" << dendl;
 	dnl->get_inode()->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
-	delete reply;
+	reply->put();
 	return;
       } else {
 	dout(7) << *dnl->get_inode() << " is frozen, non-empty reply, stopping" << dendl;
@@ -7657,9 +7654,9 @@ void MDCache::handle_discover(MDiscover *dis)
   // how did we do?
   assert(!reply->is_empty());
   dout(7) << "handle_discover sending result back to asker mds" << from << dendl;
-  mds->send_message_mds(reply, from);
+  mds->send_message(reply, dis->get_connection());
 
-  delete dis;
+  dis->put();
 }
 
 
@@ -7826,7 +7823,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   mds->queue_waiters(finished);
 
   // done
-  delete m;
+  m->put();
 }
 
 
@@ -8084,7 +8081,7 @@ void MDCache::handle_dir_update(MDirUpdate *m)
       return;
     }
 
-    delete m;
+    m->put();
     return;
   }
 
@@ -8094,7 +8091,7 @@ void MDCache::handle_dir_update(MDirUpdate *m)
   dir->dir_rep_by = m->get_dir_rep_by();
   
   // done
-  delete m;
+  m->put();
 }
 
 
@@ -8161,7 +8158,7 @@ void MDCache::handle_dentry_link(MDentryLink *m)
   if (!finished.empty())
     mds->queue_waiters(finished);
 
-  delete m;
+  m->put();
   return;
 }
 
@@ -8239,7 +8236,7 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
     }
   }
 
-  delete m;
+  m->put();
   return;
 }
 
@@ -8660,7 +8657,7 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
     mds->queue_waiters(waiters);
   }
 
-  delete notify;
+  notify->put();
 }
 
 

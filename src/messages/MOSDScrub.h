@@ -34,7 +34,10 @@ struct MOSDScrub : public Message {
   MOSDScrub(ceph_fsid_t& f, vector<pg_t>& pgs, bool r) :
     Message(MSG_OSD_SCRUB),
     fsid(f), scrub_pgs(pgs), repair(r) {}
+private:
+  ~MOSDScrub() {}
 
+public:
   const char *get_type_name() { return "scrub"; }
   void print(ostream& out) {
     out << "scrub(";

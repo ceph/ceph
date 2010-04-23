@@ -31,7 +31,10 @@ class MOSDPing : public Message {
   MOSDPing(ceph_fsid_t& f, epoch_t e, epoch_t pe, osd_peer_stat_t& ps, bool a=false) : 
     Message(MSG_OSD_PING), fsid(f), map_epoch(e), peer_as_of_epoch(pe), ack(a), peer_stat(ps) { }
   MOSDPing() {}
+private:
+  ~MOSDPing() {}
 
+public:
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);

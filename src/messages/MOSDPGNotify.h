@@ -37,7 +37,10 @@ class MOSDPGNotify : public Message {
     this->epoch = e;
     pg_list.swap(l);
   }
-  
+private:
+  ~MOSDPGNotify() {}
+
+public:  
   const char *get_type_name() { return "PGnot"; }
 
   void encode_payload() {

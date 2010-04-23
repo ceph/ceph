@@ -26,7 +26,10 @@ public:
   MLog() : PaxosServiceMessage(MSG_LOG, 0) {}
   MLog(ceph_fsid_t& f, deque<LogEntry>& e) : PaxosServiceMessage(MSG_LOG, 0), fsid(f), entries(e) { }
   MLog(ceph_fsid_t& f) : PaxosServiceMessage(MSG_LOG, 0), fsid(f) {}
+private:
+  ~MLog() {}
 
+public:
   const char *get_type_name() { return "log"; }
   void print(ostream& out) {
     out << "log(";

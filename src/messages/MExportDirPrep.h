@@ -44,8 +44,10 @@ public:
     Message(MSG_MDS_EXPORTDIRPREP),
     dirfrag(df),
     b_did_assim(false) { }
+private:
+  ~MExportDirPrep() {}
 
-
+public:
   const char *get_type_name() { return "ExP"; }
   void print(ostream& o) {
     o << "export_prep(" << dirfrag << ")";

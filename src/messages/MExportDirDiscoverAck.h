@@ -32,7 +32,10 @@ class MExportDirDiscoverAck : public Message {
     Message(MSG_MDS_EXPORTDIRDISCOVERACK),
     dirfrag(df),
     success(s) { }
+private:
+  ~MExportDirDiscoverAck() {}
 
+public:
   const char *get_type_name() { return "ExDisA"; }
   void print(ostream& o) {
     o << "export_discover_ack(" << dirfrag;

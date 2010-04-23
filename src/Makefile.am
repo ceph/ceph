@@ -624,8 +624,6 @@ noinst_HEADERS = \
         messages/MExportDirNotifyAck.h\
         messages/MExportDirPrep.h\
         messages/MExportDirPrepAck.h\
-        messages/MExportDirWarning.h\
-        messages/MExportDirWarningAck.h\
         messages/MGenericMessage.h\
         messages/MGetPoolStats.h\
         messages/MGetPoolStatsReply.h\
@@ -635,7 +633,6 @@ noinst_HEADERS = \
 	messages/MLog.h\
 	messages/MLogAck.h\
         messages/MMDSBeacon.h\
-        messages/MMDSBoot.h\
         messages/MMDSCacheRejoin.h\
 	messages/MMDSLoadTargets.h\
         messages/MMDSFragmentNotify.h\

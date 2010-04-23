@@ -2345,7 +2345,7 @@ void PG::sub_op_scrub(MOSDSubOp *op)
   if (op->map_epoch < info.history.same_acting_since) {
     dout(10) << "sub_op_scrub discarding old sub_op from "
 	     << op->map_epoch << " < " << info.history.same_acting_since << dendl;
-    delete op;
+    op->put();
     return;
   }
 
@@ -2354,9 +2354,9 @@ void PG::sub_op_scrub(MOSDSubOp *op)
 
   MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK); 
   ::encode(map, reply->get_data());
-  osd->messenger->send_message(reply, op->get_source_inst());
+  osd->messenger->send_message(reply, op->get_connection());
 
-  delete op;
+  op->put();
 }
 
 void PG::sub_op_scrub_reply(MOSDSubOpReply *op)
@@ -2366,7 +2366,7 @@ void PG::sub_op_scrub_reply(MOSDSubOpReply *op)
   if (op->map_epoch < info.history.same_acting_since) {
     dout(10) << "sub_op_scrub discarding old sub_op from "
 	     << op->map_epoch << " < " << info.history.same_acting_since << dendl;
-    delete op;
+    op->put();
     return;
   }
 
@@ -2381,7 +2381,7 @@ void PG::sub_op_scrub_reply(MOSDSubOpReply *op)
     kick();
   }
 
-  delete op;
+  op->put();
 }
 
 

@@ -443,8 +443,13 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 				       CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK); 
   reply->set_data(outdata);
   reply->set_result(result);
-  osd->messenger->send_message(reply, op->get_orig_source_inst());
-  delete op;
+  //if the message came from an OSD, it needs to go back to originator,
+  //but if the connection ISN't an OSD that connection is the originator
+  if (op->get_connection()->get_peer_type() != CEPH_ENTITY_TYPE_OSD)
+    osd->messenger->send_message(reply, op->get_connection());
+  else
+    osd->messenger->send_message(reply, op->get_orig_source_inst());
+  op->put();
 }
 
 void ReplicatedPG::calc_trim_to()
@@ -601,8 +606,13 @@ void ReplicatedPG::do_op(MOSDOp *op)
       reply->set_data(ctx->outdata);
       reply->get_header().data_off = ctx->data_off;
       reply->set_result(result);
-      osd->messenger->send_message(reply, op->get_orig_source_inst());
-      delete op;
+      //if the message came from an OSD, it needs to go back to originator,
+      //but if the connection ISN't an OSD that connection is the originator
+      if (op->get_connection()->get_peer_type() != CEPH_ENTITY_TYPE_OSD)
+	osd->messenger->send_message(reply, op->get_connection());
+      else
+	osd->messenger->send_message(reply, op->get_orig_source_inst());
+      op->put();
       delete ctx;
       put_object_context(obc);
       return;
@@ -1892,7 +1902,12 @@ void ReplicatedPG::eval_repop(RepGather *repop)
     // send commit.
     MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ONDISK);
     dout(10) << " sending commit on " << *repop << " " << reply << dendl;
-    osd->messenger->send_message(reply, op->get_orig_source_inst());
+    //if the message came from an OSD, it needs to go back to originator,
+    //but if the connection ISN't an OSD that connection is the originator
+    if (op->get_connection()->get_peer_type() != CEPH_ENTITY_TYPE_OSD)
+      osd->messenger->send_message(reply, op->get_connection());
+    else
+      osd->messenger->send_message(reply, op->get_orig_source_inst());
     repop->sent_disk = true;
   }
 
@@ -1914,7 +1929,12 @@ void ReplicatedPG::eval_repop(RepGather *repop)
       // send ack
       MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
       dout(10) << " sending ack on " << *repop << " " << reply << dendl;
-      osd->messenger->send_message(reply, op->get_orig_source_inst());
+      //if the message came from an OSD, it needs to go back to originator,
+      //but if the connection ISN't an OSD that connection is the originator
+      if (op->get_connection()->get_peer_type() != CEPH_ENTITY_TYPE_OSD)
+	osd->messenger->send_message(reply, op->get_connection());
+      else
+	osd->messenger->send_message(reply, op->get_orig_source_inst());
       repop->sent_ack = true;
     }
 
@@ -2468,7 +2488,7 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
   unlock();
   if (done) {
     delete rm->ctx;
-    delete rm->op;
+    rm->op->put();
     delete rm;
     put();
   }
@@ -2496,7 +2516,7 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
   unlock();
   if (done) {
     delete rm->ctx;
-    delete rm->op;
+    rm->op->put();
     delete rm;
     put();
   }
@@ -2518,7 +2538,7 @@ void ReplicatedPG::sub_op_modify_reply(MOSDSubOpReply *r)
 	      r->get_last_complete_ondisk());
   }
 
-  delete r;
+  r->put();
 }
 
 
@@ -2901,7 +2921,7 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
 	       << pushing[soid] << dendl;
     }
   }
-  delete reply;
+  reply->put();
 }
 
 
@@ -2921,7 +2941,7 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
   assert(!is_primary());  // we should be a replica or stray.
 
   push(soid, op->get_source().num(), op->data_subset, op->clone_subsets);
-  delete op;
+  op->put();
 }
 
 
@@ -3023,7 +3043,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       dout(10) << "sub_op_push need " << data_needed << ", got " << data_subset << dendl;
       if (!data_needed.subset_of(data_subset)) {
 	dout(0) << " we did not get enough of " << soid << " object data" << dendl;
-	delete op;
+	op->put();
 	return;
       }
 
@@ -3188,7 +3208,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   } else {
     // ack if i'm a replica and being pushed to.
     MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK); 
-    osd->messenger->send_message(reply, op->get_source_inst());
+    osd->messenger->send_message(reply, op->get_connection());
   }
 
   // kick waiters
@@ -3205,7 +3225,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     */
   }
 
-  delete op;  // at the end... soid is a ref to op->soid!
+  op->put();  // at the end... soid is a ref to op->soid!
 }
 
 

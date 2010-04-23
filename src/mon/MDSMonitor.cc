@@ -135,7 +135,7 @@ bool MDSMonitor::preprocess_query(PaxosServiceMessage *m)
 
   default:
     assert(0);
-    delete m;
+    m->put();
     return true;
   }
 }
@@ -240,7 +240,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   
   // done
  out:
-  delete m;
+  m->put();
   return true;
 }
 
@@ -280,7 +280,7 @@ bool MDSMonitor::prepare_update(PaxosServiceMessage *m)
   
   default:
     assert(0);
-    delete m;
+    m->put();
   }
 
   return true;
@@ -377,7 +377,7 @@ void MDSMonitor::_updated(MMDSBeacon *m)
     mon->send_reply(m, new MMDSMap(mon->monmap->fsid, &mdsmap));
   }
 
-  delete m;
+  m->put();
 }
 
 

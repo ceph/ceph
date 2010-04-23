@@ -938,7 +938,7 @@ int Client::make_request(MetaRequest *request,
   int r = reply->get_result();
   if (pdirbl)
     pdirbl->claim(reply->get_dir_bl());
-  delete reply;
+  reply->put();
   return r;
 }
 
@@ -1106,7 +1106,7 @@ void Client::handle_client_session(MClientSession *m)
   signal_cond_list(waiting_for_session[from]);
   waiting_for_session.erase(from);
 
-  delete m;
+  m->put();
 }
 
 void Client::send_request(MetaRequest *request, int mds)
@@ -1141,7 +1141,7 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
 
   if (mds_requests.count(tid) == 0) {
     dout(10) << "handle_client_request_forward no pending request on tid " << tid << dendl;
-    delete fwd;
+    fwd->put();
     return;
   }
 
@@ -1164,7 +1164,7 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
   request->resend_mds = fwd->get_dest_mds();
   request->caller_cond->Signal();
 
-  delete fwd;
+  fwd->put();
 }
 
 void Client::handle_client_reply(MClientReply *reply)
@@ -1175,7 +1175,7 @@ void Client::handle_client_reply(MClientReply *reply)
   if (mds_requests.count(tid) == 0) {
     dout(10) << "handle_client_reply no pending request on tid " << tid
 	     << " safe is:" << is_safe << dendl;
-    delete reply;
+    reply->put();
     return;
   }
 
@@ -1191,7 +1191,7 @@ void Client::handle_client_reply(MClientReply *reply)
     //duplicate response
     dout(0) << "got a duplicate reply on tid " << tid << " from mds "
 	    << mds_num << " safe:" << is_safe << dendl;
-    delete reply;
+    reply->put();
     return;
   }
   
@@ -1313,7 +1313,7 @@ void Client::handle_mds_map(MMDSMap* m)
   if (m->get_epoch() < mdsmap->get_epoch()) {
     dout(1) << "handle_mds_map epoch " << m->get_epoch() << " is older than our "
 	    << mdsmap->get_epoch() << dendl;
-    delete m;
+    m->put();
     return;
   }  
 
@@ -1353,7 +1353,7 @@ void Client::handle_mds_map(MMDSMap* m)
   signal_cond_list(ls);
 
   delete oldmap;
-  delete m;
+  m->put();
 
   monclient->sub_got("mdsmap", mdsmap->get_epoch());
 }
@@ -1497,7 +1497,7 @@ void Client::handle_lease(MClientLease *m)
   messenger->send_message(new MClientLease(CEPH_MDS_LEASE_RELEASE, seq,
 					   m->get_mask(), m->get_ino(), m->get_first(), m->get_last(), m->dname),
 			  m->get_source_inst());
-  delete m;
+  m->put();
 }
 
 
@@ -2434,7 +2434,7 @@ void Client::handle_snap(MClientSnap *m)
     put_snap_realm(realm);
   }
 
-  delete m;
+  m->put();
 }
 
 void Client::handle_caps(MClientCaps *m)
@@ -2450,7 +2450,7 @@ void Client::handle_caps(MClientCaps *m)
   if (inode_map.count(vino)) in = inode_map[vino];
   if (!in) {
     dout(5) << "handle_caps don't have vino " << vino << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -2462,7 +2462,7 @@ void Client::handle_caps(MClientCaps *m)
 
   if (in->caps.count(mds) == 0) {
     dout(5) << "handle_caps don't have " << *in << " cap on mds" << mds << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -2474,7 +2474,7 @@ void Client::handle_caps(MClientCaps *m)
   case CEPH_CAP_OP_GRANT: return handle_cap_grant(in, mds, cap, m);
   case CEPH_CAP_OP_FLUSH_ACK: return handle_cap_flush_ack(in, mds, cap, m);
   default:
-    delete m;
+    m->put();
   }
 }
 
@@ -2502,7 +2502,7 @@ void Client::handle_cap_import(Inode *in, MClientCaps *m)
 	    << ", keeping exporting_issued " << ccap_string(in->exporting_issued) 
 	    << " mseq " << in->exporting_mseq << " by mds" << in->exporting_mds << dendl;
   }
-  delete m;
+  m->put();
 }
 
 void Client::handle_cap_export(Inode *in, MClientCaps *m)
@@ -2539,7 +2539,7 @@ void Client::handle_cap_export(Inode *in, MClientCaps *m)
 
   remove_cap(in, mds);
 
-  delete m;
+  m->put();
 }
 
 void Client::handle_cap_trunc(Inode *in, MClientCaps *m)
@@ -2562,7 +2562,7 @@ void Client::handle_cap_trunc(Inode *in, MClientCaps *m)
   }
   
   in->reported_size = in->size = m->get_size(); 
-  delete m;
+  m->put();
 }
 
 void Client::handle_cap_flush_ack(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
@@ -2599,7 +2599,7 @@ void Client::handle_cap_flush_ack(Inode *in, int mds, InodeCap *cap, MClientCaps
     }
   }
   
-  delete m;
+  m->put();
 }
 
 
@@ -2624,7 +2624,7 @@ void Client::handle_cap_flushsnap_ack(Inode *in, MClientCaps *m)
     // we may not have it if we send multiple FLUSHSNAP requests and (got multiple FLUSHEDSNAPs back)
   }
     
-  delete m;
+  m->put();
 }
 
 
@@ -2706,7 +2706,7 @@ void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
   if (new_caps)
     signal_cond_list(in->waitfor_caps);
 
-  delete m;
+  m->put();
 }
 
 

@@ -53,7 +53,7 @@ class Admin : public Dispatcher {
     cond.Signal();
     lock.Unlock();
 
-    delete m;
+    m->put();
     return true;
   }
 

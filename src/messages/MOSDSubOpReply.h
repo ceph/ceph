@@ -120,7 +120,10 @@ public:
     set_tid(req->get_tid());
   }
   MOSDSubOpReply() {}
+private:
+  ~MOSDSubOpReply() {}
 
+public:
   const char *get_type_name() { return "osd_op_reply"; }
   
   void print(ostream& out) {

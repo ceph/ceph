@@ -28,8 +28,10 @@ public:
 
   MClassAck(ceph_fsid_t& f, version_t l, version_t paxos_version) :
     PaxosServiceMessage(MSG_CLASS_ACK, paxos_version), fsid(f), last(l) {}
+private:
+  ~MClassAck() {}
 
-
+public:
   const char *get_type_name() { return "class_ack"; }
   void print(ostream& out) {
     out << "class(last " << last << ")";

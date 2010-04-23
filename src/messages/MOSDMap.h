@@ -52,8 +52,10 @@ class MOSDMap : public Message {
     if (oc)
       oc->encode(maps[oc->get_epoch()]);
   }
+private:
+  ~MOSDMap() {}
 
-
+public:
   // marshalling
   void decode_payload() {
     bufferlist::iterator p = payload.begin();

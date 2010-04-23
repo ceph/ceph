@@ -31,6 +31,10 @@ class MExportDir : public Message {
     Message(MSG_MDS_EXPORTDIR),
     dirfrag(df) {
   }
+private:
+  ~MExportDir() {}
+
+public:
   const char *get_type_name() { return "Ex"; }
   void print(ostream& o) {
     o << "export(" << dirfrag << ")";

@@ -1130,14 +1130,14 @@ void OSD::handle_osd_ping(MOSDPing *m)
 
   if (!is_active()) {
     dout(10) << "handle_osd_ping - not active" << dendl;
-    delete m;
+    m->put();
     return;
   }
 
   if (ceph_fsid_compare(&superblock.fsid, &m->fsid)) {
     dout(20) << "handle_osd_ping from " << m->get_source()
 	     << " bad fsid " << m->fsid << " != " << superblock.fsid << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -1176,7 +1176,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
     map_lock.put_read();
 
   heartbeat_lock.Unlock();
-  delete m;
+  m->put();
 }
 
 void OSD::heartbeat_entry()
@@ -1544,7 +1544,7 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
 
   pg_stat_queue_lock.Unlock();
 
-  delete ack;
+  ack->put();
 }
 
 void OSD::handle_command(MMonCommand *m)
@@ -1557,7 +1557,7 @@ void OSD::handle_command(MMonCommand *m)
     parse_config_option_string(m->cmd[1]);
   else 
     dout(0) << "unrecognized command! " << m->cmd << dendl;
-  delete m;
+  m->put();
 }
 
 
@@ -1645,7 +1645,7 @@ bool OSD::heartbeat_dispatch(Message *m)
     
   case CEPH_MSG_PING:
     dout(10) << "ping from " << m->get_source() << dendl;
-    delete m;
+    m->put();
     break;
 
   case MSG_OSD_PING:
@@ -1766,7 +1766,7 @@ void OSD::_dispatch(Message *m)
     // -- don't need lock -- 
   case CEPH_MSG_PING:
     dout(10) << "ping from " << m->get_source() << dendl;
-    delete m;
+    m->put();
     break;
 
     // -- don't need OSDMap --
@@ -1784,8 +1784,9 @@ void OSD::_dispatch(Message *m)
 	session->caps.is_osd()) shutdown();
     else dout(0) << "shutdown message from connection with insufficient privs!"
 		 << m->get_connection() << dendl;
-    delete m;
-    if (session) session->put();
+    m->put();
+    if (session)
+      session->put();
     break;
 
   case MSG_PGSTATSACK:
@@ -1867,7 +1868,7 @@ void OSD::handle_scrub(MOSDScrub *m)
     return;
   if (ceph_fsid_compare(&m->fsid, &monc->get_fsid())) {
     dout(0) << "handle_scrub fsid " << m->fsid << " != " << monc->get_fsid() << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -1902,7 +1903,7 @@ void OSD::handle_scrub(MOSDScrub *m)
       }
   }
   
-  delete m;
+  m->put();
 }
 
 
@@ -1962,14 +1963,14 @@ void OSD::handle_osd_map(MOSDMap *m)
   assert(osd_lock.is_locked());
   if (ceph_fsid_compare(&m->fsid, &monc->get_fsid())) {
     dout(0) << "handle_osd_map fsid " << m->fsid << " != " << monc->get_fsid() << dendl;
-    delete m;
+    m->put();
     return;
   }
 
   Session *session = (Session *)m->get_connection()->get_priv();
   if (session && !(session->caps.is_mon() || session->caps.is_osd())) {
     //not enough perms!
-    delete m;
+    m->put();
     session->put();
     return;
   }
@@ -2260,7 +2261,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   //if (osdmap->get_epoch() == 1) store->sync();     // in case of early death, blah
 
-  delete m;
+  m->put();
 
 
   if (is_booting())
@@ -2662,7 +2663,7 @@ bool OSD::require_mon_peer(Message *m)
   if (!m->get_connection()->peer_is_mon()) {
     dout(0) << "require_mon_peer received from non-mon " << m->get_connection()->get_peer_addr()
 	    << " " << *m << dendl;
-    delete m;
+    m->put();
     return false;
   }
   return true;
@@ -2673,7 +2674,7 @@ bool OSD::require_osd_peer(Message *m)
   if (!m->get_connection()->peer_is_osd()) {
     dout(0) << "require_osd_peer received from non-osd " << m->get_connection()->get_peer_addr()
 	    << " " << *m << dendl;
-    delete m;
+    m->put();
     return false;
   }
   return true;
@@ -2684,7 +2685,7 @@ bool OSD::require_current_map(Message *m, epoch_t ep)
   // older map?
   if (ep < osdmap->get_epoch()) {
     dout(7) << "require_current_map epoch " << ep << " < " << osdmap->get_epoch() << dendl;
-    delete m;   // discard and ignore.
+    m->put();   // discard and ignore.
     return false;
   }
 
@@ -2717,7 +2718,7 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
 
   if (epoch < up_epoch) {
     dout(7) << "from pre-up epoch " << epoch << " < " << up_epoch << dendl;
-    delete m;
+    m->put();
     return false;
   }
 
@@ -2728,7 +2729,7 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
 	osdmap->get_addr(from) != m->get_source_inst().addr) {
       dout(-7) << "from dead osd" << from << ", dropping, sharing map" << dendl;
       send_incremental_map(epoch, m->get_source_inst(), true);
-      delete m;
+      m->put();
       return false;
     }
   }
@@ -3059,7 +3060,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
   kick_pg_split_queue();
   if (num_created)
     update_heartbeat_peers();
-  delete m;
+  m->put();
 }
 
 
@@ -3247,7 +3248,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
   if (created)
     update_heartbeat_peers();
 
-  delete m;
+  m->put();
 }
 
 
@@ -3372,7 +3373,7 @@ void OSD::handle_pg_log(MOSDPGLog *m)
   if (created)
     update_heartbeat_peers();
 
-  delete m;
+  m->put();
 }
 
 void OSD::handle_pg_info(MOSDPGInfo *m)
@@ -3399,7 +3400,7 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
   if (created)
     update_heartbeat_peers();
 
-  delete m;
+  m->put();
 }
 
 void OSD::handle_pg_trim(MOSDPGTrim *m)
@@ -3443,7 +3444,7 @@ void OSD::handle_pg_trim(MOSDPGTrim *m)
   }
 
  out:
-  delete m;
+  m->put();
 }
 
 
@@ -3543,31 +3544,31 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 	dout(10) << *pg << " requested info+missing+backlog - queueing for backlog" << dendl;
 	queue_generate_backlog(pg);
       } else {
-	MOSDPGLog *m = new MOSDPGLog(osdmap->get_epoch(), pg->info);
-	m->missing = pg->missing;
+	MOSDPGLog *mlog = new MOSDPGLog(osdmap->get_epoch(), pg->info);
+	mlog->missing = pg->missing;
 	
 	// primary -> other, when building master log
 	if (it->second.type == PG::Query::LOG) {
 	  dout(10) << *pg << " sending info+missing+log since " << it->second.since
 		   << dendl;
-	  m->log.copy_after(pg->log, it->second.since);
+	  mlog->log.copy_after(pg->log, it->second.since);
 	}
 	
 	if (it->second.type == PG::Query::BACKLOG) {
 	  dout(10) << *pg << " sending info+missing+backlog" << dendl;
 	  assert(pg->log.backlog);
-	  m->log = pg->log;
+	  mlog->log = pg->log;
 	} 
 	else if (it->second.type == PG::Query::FULLLOG) {
 	  dout(10) << *pg << " sending info+missing+full log" << dendl;
-	  m->log.copy_non_backlog(pg->log);
+	  mlog->log.copy_non_backlog(pg->log);
 	}
 	
-	dout(10) << *pg << " sending " << m->log << " " << m->missing << dendl;
+	dout(10) << *pg << " sending " << mlog->log << " " << mlog->missing << dendl;
 	//m->log.print(cout);
 	
 	_share_map_outgoing(osdmap->get_inst(from));
-	messenger->send_message(m, osdmap->get_inst(from));
+	messenger->send_message(mlog, m->get_connection());
       }
     }    
 
@@ -3576,7 +3577,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
   
   do_notifies(notify_list);   
 
-  delete m;
+  m->put();
 
   if (created)
     update_heartbeat_peers();
@@ -3620,7 +3621,7 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
     }
     pg->unlock();
   }
-  delete m;
+  m->put();
 }
 
 
@@ -4019,15 +4020,18 @@ void OSD::defer_recovery(PG *pg)
 void OSD::reply_op_error(MOSDOp *op, int err)
 {
   MOSDOpReply *reply = new MOSDOpReply(op, err, osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
-  messenger->send_message(reply, op->get_orig_source_inst());
-  delete op;
+  if (op->get_connection()->get_peer_type() != CEPH_ENTITY_TYPE_OSD)
+    messenger->send_message(reply, op->get_connection());
+  else
+    messenger->send_message(reply, op->get_orig_source_inst());
+  op->put();
 }
 
 void OSD::handle_misdirected_op(PG *pg, MOSDOp *op)
 {
   if (op->get_map_epoch() < pg->info.history.same_primary_since) {
     dout(7) << *pg << " changed after " << op->get_map_epoch() << ", dropping" << dendl;
-    delete op;
+    op->put();
   } else {
     dout(7) << *pg << " misdirected op in " << op->get_map_epoch() << dendl;
     stringstream ss;
@@ -4262,7 +4266,7 @@ void OSD::handle_sub_op(MOSDSubOp *op)
   dout(10) << "handle_sub_op " << *op << " epoch " << op->map_epoch << dendl;
   if (op->map_epoch < up_epoch) {
     dout(3) << "replica op from before up" << dendl;
-    delete op;
+    op->put();
     return;
   }
 
@@ -4284,7 +4288,7 @@ void OSD::handle_sub_op(MOSDSubOp *op)
 
   if (!_have_pg(pgid)) {
     // hmm.
-    delete op;
+    op->put();
     return;
   } 
 
@@ -4299,7 +4303,7 @@ void OSD::handle_sub_op(MOSDSubOp *op)
 	     << " after " << op->map_epoch 
 	     << ", dropping" << dendl;
     pg->unlock();
-    delete op;
+    op->put();
     return;
   }
 
@@ -4314,7 +4318,7 @@ void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
 {
   if (op->get_map_epoch() < up_epoch) {
     dout(3) << "replica op reply from before up" << dendl;
-    delete op;
+    op->put();
     return;
   }
 
@@ -4335,7 +4339,7 @@ void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
 		      (Session*)op->get_connection()->get_priv());
   if (!_have_pg(pgid)) {
     // hmm.
-    delete op;
+    op->put();
     return;
   } 
 
@@ -4508,7 +4512,7 @@ void OSD::handle_class(MClass *m)
   default:
     assert(0);
   }
-  delete m;
+  m->put();
 }
 
 void OSD::send_class_request(const char *cname, ClassVersion& version)

@@ -23,7 +23,10 @@
 class MPing : public Message {
  public:
   MPing() : Message(CEPH_MSG_PING) {}
+private:
+  ~MPing() {}
 
+public:
   void decode_payload() { }
   void encode_payload() { }
   const char *get_type_name() { return "ping"; }

@@ -299,6 +299,9 @@ MDSTableServer *MDS::get_table_server(int t)
 
 
 
+void MDS::send_message(Message *m, Connection *c) { 
+  messenger->send_message(m, c);
+}
 
 
 void MDS::send_message_mds(Message *m, int mds)
@@ -339,7 +342,7 @@ void MDS::forward_message_mds(Message *m, int mds)
 			    creq->get_source_inst());
     
     if (client_must_resend) {
-      delete m;
+      m->put();
       return; 
     }
   }
@@ -362,25 +365,32 @@ void MDS::forward_message_mds(Message *m, int mds)
 
 
 
-void MDS::send_message_client(Message *m, client_t client)
+void MDS::send_message_client_counted(Message *m, client_t client)
 {
   if (sessionmap.have_session(entity_name_t::CLIENT(client.v))) {
     version_t seq = sessionmap.inc_push_seq(client);
-    dout(10) << "send_message_client client" << client << " seq " << seq << " " << *m << dendl;
+    dout(10) << "send_message_client_counted client" << client << " seq " << seq << " " << *m << dendl;
     messenger->send_message(m, sessionmap.get_session(entity_name_t::CLIENT(client.v))->inst);
   } else {
-    dout(10) << "send_message_client no session for client" << client << " " << *m << dendl;
+    dout(10) << "send_message_client_counted no session for client" << client << " " << *m << dendl;
   }
 }
 
-void MDS::send_message_client(Message *m, entity_inst_t clientinst)
+void MDS::send_message_client_counted(Message *m, entity_inst_t clientinst)
 {
   version_t seq = sessionmap.inc_push_seq(clientinst.name.num());
-  dout(10) << "send_message_client " << clientinst.name << " seq " << seq << " " << *m << dendl;
+  dout(10) << "send_message_client_counted " << clientinst.name << " seq " << seq << " " << *m << dendl;
   messenger->send_message(m, clientinst);
 }
 
-
+void MDS::send_message_client_counted(Message *m, Connection *con)
+{
+  Session *session = (Session *)con->get_priv();
+  version_t seq = session->inc_push_seq();
+  dout(10) << "send_message_client_counted " << session->inst.name << " seq "
+	   << seq << " " << *m << dendl;
+  messenger->send_message(m, con);
+}
 
 int MDS::init()
 {
@@ -585,7 +595,7 @@ void MDS::handle_mds_beacon(MMDSBeacon *m)
 	     << " seq " << m->get_seq() << " dne" << dendl;
   }
 
-  delete m;
+  m->put();
 }
 
 void MDS::reset_beacon_killer()
@@ -654,7 +664,7 @@ void MDS::handle_command(MMonCommand *m)
       dout(20) << "try_eval(" << inum << ", " << mask << ")" << dendl;
     } else dout(15) << "inode " << inum << " not in mdcache!" << dendl;
   } else dout(0) << "unrecognized command! " << m->cmd << dendl;
-  delete m;
+  m->put();
 }
 
 void MDS::handle_mds_map(MMDSMap *m)
@@ -675,7 +685,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   if (epoch <= mdsmap->get_epoch()) {
     dout(5) << " old map epoch " << epoch << " <= " << mdsmap->get_epoch() 
 	    << ", discarding" << dendl;
-    delete m;
+    m->put();
     return;
   }
 
@@ -863,7 +873,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   balancer->try_rebalance();
 
  out:
-  delete m;
+  m->put();
   delete oldmap;
 }
 
@@ -1301,7 +1311,7 @@ do { \
   if (m->get_connection() && (m->get_connection()->get_peer_type() & (peers)) == 0) { \
     dout(0) << __FILE__ << "." << __LINE__ << ": filtered out request, peer=" << m->get_connection()->get_peer_type() \
            << " allowing=" << #peers << " message=" << *m << dendl; \
-    delete m; \
+    m->put();							    \
     return true; \
   } \
   check_from = true; \
@@ -1324,7 +1334,7 @@ do { \
       } else {
 	dout(5) << "got " << *m << " from down/old/bad/imposter mds " << m->get_source()
 		<< ", dropping" << dendl;
-	delete m;
+	m->put();
 	return true;
       }
     }
@@ -1334,7 +1344,7 @@ do { \
 
   case CEPH_MSG_MON_MAP:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
-    delete m;
+    m->put();
     break;
 
     // MDS

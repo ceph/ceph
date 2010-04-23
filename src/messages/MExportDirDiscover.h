@@ -41,6 +41,10 @@ class MExportDirDiscover : public Message {
     path(p),
     started(false)
   { }
+private:
+  ~MExportDirDiscover() {}
+
+public:
   const char *get_type_name() { return "ExDis"; }
   void print(ostream& o) {
     o << "export_discover(" << dirfrag << " " << path << ")";

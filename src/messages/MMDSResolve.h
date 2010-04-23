@@ -26,7 +26,10 @@ class MMDSResolve : public Message {
   vector<metareqid_t> slave_requests;
 
   MMDSResolve() : Message(MSG_MDS_RESOLVE) {}
+private:
+  ~MMDSResolve() {}
 
+public:
   const char *get_type_name() { return "mds_resolve"; }
 
   void print(ostream& out) {

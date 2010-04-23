@@ -30,12 +30,14 @@ class MInodeFileCaps : public Message {
   // from auth
   MInodeFileCaps(inodeno_t ino, int from, int caps) :
     Message(MSG_MDS_INODEFILECAPS) {
-
     this->ino = ino;
     this->from = from;
     this->caps = caps;
   }
+private:
+  ~MInodeFileCaps() {}
 
+public:
   const char *get_type_name() { return "Icap";}
   
   void encode_payload() {

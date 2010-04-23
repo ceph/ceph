@@ -32,7 +32,10 @@ class MMDSTableRequest : public Message {
     table(tab), op(o), reqid(r) {
     set_tid(v);
   }
-  
+private:
+  ~MMDSTableRequest() {}
+
+public:  
   virtual const char *get_type_name() { return "mds_table_request"; }
   void print(ostream& o) {
     o << "mds_table_request(" << get_mdstable_name(table)

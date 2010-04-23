@@ -93,7 +93,6 @@
 #define MSG_MDS_DENTRYUNLINK       0x208
 #define MSG_MDS_FRAGMENTNOTIFY     0x209
 #define MSG_MDS_OFFLOAD_TARGETS    0x20a
-#define MSG_MDS_OFFLOAD_COMPLETE   0x20b
 #define MSG_MDS_DENTRYLINK         0x20c
 
 #define MSG_MDS_LOCK               0x300
@@ -164,9 +163,10 @@ struct Connection : public RefCountedObject {
   int peer_type;
   entity_addr_t peer_addr;
   unsigned features;
+  void *pipe;
 
 public:
-  Connection() : nref(1), lock("Connection::lock"), priv(NULL), peer_type(-1), features(0) {}
+  Connection() : nref(1), lock("Connection::lock"), priv(NULL), peer_type(-1), features(0), pipe(NULL) {}
   ~Connection() {
     //generic_dout(0) << "~Connection " << this << dendl;
     if (priv) {
@@ -237,11 +237,11 @@ protected:
 public:
   atomic_t nref;
 
-  Message() : connection(NULL), _forwarded(false), nref(0) {
+  Message() : connection(NULL), _forwarded(false), nref(1) {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
   };
-  Message(int t) : connection(NULL), _forwarded(false), nref(0) {
+  Message(int t) : connection(NULL), _forwarded(false), nref(1) {
     memset(&header, 0, sizeof(header));
     header.type = t;
     header.version = 1;
@@ -249,12 +249,13 @@ public:
     header.data_off = 0;
     memset(&footer, 0, sizeof(footer));
   }
+protected:
   virtual ~Message() { 
     assert(nref.read() == 0);
     if (connection)
       connection->put();
   }
-
+public:
   Message *get() {
     //int r = 
     nref.inc();

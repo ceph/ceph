@@ -25,7 +25,10 @@ class MOSDAlive : public PaxosServiceMessage {
 
   MOSDAlive(epoch_t e) : PaxosServiceMessage(MSG_OSD_ALIVE, e), map_epoch(e) { }
   MOSDAlive() : PaxosServiceMessage(MSG_OSD_ALIVE, 0) {}
+private:
+  ~MOSDAlive() {}
 
+public:
   void encode_payload() {
     paxos_encode();
     ::encode(map_epoch, payload);

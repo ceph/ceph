@@ -27,7 +27,10 @@ class MExportCaps : public Message {
 
   MExportCaps() :
     Message(MSG_MDS_EXPORTCAPS) {}
+private:
+  ~MExportCaps() {}
 
+public:
   const char *get_type_name() { return "export_caps"; }
   void print(ostream& o) {
     o << "export_caps(" << ino << ")";

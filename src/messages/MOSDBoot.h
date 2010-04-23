@@ -30,7 +30,10 @@ class MOSDBoot : public PaxosServiceMessage {
     PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch),
     sb(s), hb_addr(hb_addr_ref) {
   }
+private:
+  ~MOSDBoot() {}
 
+public:
   const char *get_type_name() { return "osd_boot"; }
   void print(ostream& out) {
     out << "osd_boot(osd" << sb.whoami << " v" << version << ")";

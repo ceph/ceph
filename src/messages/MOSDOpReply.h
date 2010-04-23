@@ -75,8 +75,10 @@ public:
     head.reassert_version = req->head.reassert_version;
   }
   MOSDOpReply() {}
+private:
+  ~MOSDOpReply() {}
 
-
+public:
   // marshalling
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();

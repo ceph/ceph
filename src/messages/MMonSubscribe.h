@@ -21,7 +21,10 @@ struct MMonSubscribe : public Message {
   map<nstring, ceph_mon_subscribe_item> what;
   
   MMonSubscribe() : Message(CEPH_MSG_MON_SUBSCRIBE) {}
-  
+private:
+  ~MMonSubscribe() {}
+
+public:  
   void sub_onetime(const char *w, version_t have) {
     what[w].onetime = true;
     what[w].have = have;

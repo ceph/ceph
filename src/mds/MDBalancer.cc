@@ -256,7 +256,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
   }
   
   // done
-  delete m;
+  m->put();
 }
 
 

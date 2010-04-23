@@ -98,8 +98,6 @@ using namespace std;
 #include "messages/MExportDirCancel.h"
 #include "messages/MExportDirPrep.h"
 #include "messages/MExportDirPrepAck.h"
-#include "messages/MExportDirWarning.h"
-#include "messages/MExportDirWarningAck.h"
 #include "messages/MExportDir.h"
 #include "messages/MExportDirAck.h"
 #include "messages/MExportDirNotify.h"
@@ -124,6 +122,7 @@ using namespace std;
 #include "messages/MLock.h"
 
 #include "messages/MClass.h"
+#include "messages/MClassAck.h"
 
 #include "config.h"
 
@@ -441,14 +440,6 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     m = new MExportDirPrepAck();
     break;
 
-  case MSG_MDS_EXPORTDIRWARNING:
-    m = new MExportDirWarning;
-    break;
-  case MSG_MDS_EXPORTDIRWARNINGACK:
-    m = new MExportDirWarningAck;
-    break;
-
-    
   case MSG_MDS_EXPORTCAPS:
     m = new MExportCaps;
     break;
@@ -498,6 +489,10 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 
   case MSG_CLASS:
     m = new MClass();
+    break;
+
+  case MSG_CLASS_ACK:
+    m = new MClassAck();
     break;
 
   default:

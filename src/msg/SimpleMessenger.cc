@@ -392,8 +392,23 @@ int SimpleMessenger::send_message(Message *m, const entity_inst_t& dest)
 	  << " " << m 
 	  << dendl;
 
-  submit_message(m, dest);
+  submit_message(m, dest.addr, dest.name.type(), false);
+  return 0;
+}
 
+int SimpleMessenger::send_message(Message *m, Connection *con)
+{
+  //set envelope
+  m->get_header().src = get_myname();
+
+  if (!m->get_priority()) m->set_priority(get_default_send_priority());
+
+  dout(1) << "--> " << con->get_peer_addr() << " -- " << *m
+	  << " -- ?+" << m->get_data().length()
+	  << " " << m
+	  << dendl;
+
+  submit_message(m, (SimpleMessenger::Pipe *)con->pipe);
   return 0;
 }
 
@@ -411,8 +426,7 @@ int SimpleMessenger::lazy_send_message(Message *m, const entity_inst_t& dest)
 	  << " " << m 
           << dendl;
 
-  submit_message(m, dest, true);
-
+  submit_message(m, dest.addr, dest.name.type(), true);
   return 0;
 }
 
@@ -1278,7 +1292,7 @@ void SimpleMessenger::Pipe::discard_queue()
   out_q.clear();
   for (map<int,list<Message*> >::iterator p = in_q.begin(); p != in_q.end(); p++)
     for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++)
-      delete *r;
+      (*r)->put();
   in_q.clear();
   in_qlen = 0;
 }
@@ -1490,7 +1504,7 @@ void SimpleMessenger::Pipe::reader()
 	dout(-10) << "reader got old message "
 		  << m->get_seq() << " <= " << in_seq << " " << m << " " << *m
 		  << ", discarding" << dendl;
-	delete m;
+	m->put();
 	continue;
       }
       in_seq++;
@@ -1501,7 +1515,7 @@ void SimpleMessenger::Pipe::reader()
 	derr(0) << "reader got bad seq " << m->get_seq() << " expected " << in_seq
 		<< " for " << *m << " from " << m->get_source() << dendl;
 	assert(in_seq == m->get_seq()); // for now!
-	delete m;
+	m->put();
 	fault(false, true);
 	continue;
       }
@@ -2255,15 +2269,30 @@ bool SimpleMessenger::register_entity(entity_name_t name)
   return true;
 }
 
-void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool lazy)
+void SimpleMessenger::submit_message(Message *m, Pipe *pipe)
+{ 
+  lock.Lock();
+  {
+    pipe->pipe_lock.Lock();
+    if (pipe->state == Pipe::STATE_CLOSED) {
+      dout(20) << "submit_message " << *m << " ignoring closed pipe " << pipe->peer_addr << dendl;
+      pipe->unregister_pipe();
+      pipe->pipe_lock.Unlock();
+      m->put();
+    } else {
+      dout(20) << "submit_message " << *m << " remote " << pipe->peer_addr << dendl;
+      pipe->_send(m);
+      pipe->pipe_lock.Unlock();
+    }
+  }
+  lock.Unlock();
+}
+
+void SimpleMessenger::submit_message(Message *m, const entity_addr_t& dest_addr, int dest_type, bool lazy)
 {
-  const entity_addr_t& dest_addr = dest.addr;
-
-  assert(m->nref.read() == 0);
-
-  // lookup
-  entity_addr_t dest_proc_addr = dest_addr;
-
+  assert(m->nref.test() == 1); //this is just to make sure that a changeset
+  //is working properly; if you start using the refcounting more and have multiple
+  //people hanging on to a message, ditch the assert!
 
   lock.Lock();
   {
@@ -2276,24 +2305,22 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
       } else {
         derr(0) << "submit_message " << *m << " " << dest_addr << " local but no local endpoint, dropping." << dendl;
         assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
-	delete m;
+        m->put();
       }
-    }
-    else {
-      // remote.
+    } else {
+      // remote pipe.
       Pipe *pipe = 0;
-      if (rank_pipe.count( dest_proc_addr )) {
-        // connected?
-        pipe = rank_pipe[ dest_proc_addr ];
+      if (rank_pipe.count(dest_addr)) {
+	pipe = rank_pipe[ dest_addr ];
 	pipe->pipe_lock.Lock();
 	if (pipe->state == Pipe::STATE_CLOSED) {
-	  dout(20) << "submit_message " << *m << " remote, " << dest_addr << ", ignoring old closed pipe." << dendl;
+	  dout(20) << "submit_message " << *m << " remote, " << dest_addr << ", ignoring closed pipe." << dendl;
 	  pipe->unregister_pipe();
 	  pipe->pipe_lock.Unlock();
 	  pipe = 0;
 	} else {
 	  dout(20) << "submit_message " << *m << " remote, " << dest_addr << ", have pipe." << dendl;
-
+	  
 	  pipe->_send(m);
 	  pipe->pipe_lock.Unlock();
 	}
@@ -2301,11 +2328,11 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
       if (!pipe) {
 	if (lazy) {
 	  dout(20) << "submit_message " << *m << " remote, " << dest_addr << ", lazy, dropping." << dendl;
-	  delete m;
+	  m->put();
 	} else {
 	  dout(20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
 	  // not connected.
-	  pipe = connect_rank(dest_proc_addr, dest.name.type());
+	  pipe = connect_rank(dest_addr, dest_type);
 	  pipe->send(m);
 	}
       }

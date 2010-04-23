@@ -174,7 +174,7 @@ void Paxos::handle_collect(MMonPaxos *collect)
 
   // send reply
   mon->messenger->send_message(last, collect->get_source_inst());
-  delete collect;
+  collect->put();
 }
 
 
@@ -185,7 +185,7 @@ void Paxos::handle_last(MMonPaxos *last)
 
   if (!mon->is_leader()) {
     dout(10) << "not leader, dropping" << dendl;
-    delete last;
+    last->put();
     return;
   }
 
@@ -287,7 +287,7 @@ void Paxos::handle_last(MMonPaxos *last)
     dout(10) << "old pn, ignoring" << dendl;
   }
 
-  delete last;
+  last->put();
 }
 
 void Paxos::collect_timeout()
@@ -363,7 +363,7 @@ void Paxos::handle_begin(MMonPaxos *begin)
   // can we accept this?
   if (begin->pn < accepted_pn) {
     dout(10) << " we accepted a higher pn " << accepted_pn << ", ignoring" << dendl;
-    delete begin;
+    begin->put();
     return;
   }
   assert(begin->pn == accepted_pn);
@@ -384,7 +384,7 @@ void Paxos::handle_begin(MMonPaxos *begin)
   accept->last_committed = last_committed;
   mon->messenger->send_message(accept, begin->get_source_inst());
   
-  delete begin;
+  begin->put();
 }
 
 // leader
@@ -396,13 +396,13 @@ void Paxos::handle_accept(MMonPaxos *accept)
   if (accept->pn != accepted_pn) {
     // we accepted a higher pn, from some other leader
     dout(10) << " we accepted a higher pn " << accepted_pn << ", ignoring" << dendl;
-    delete accept;
+    accept->put();
     return;
   }
   if (last_committed > 0 &&
       accept->last_committed < last_committed-1) {
     dout(10) << " this is from an old round, ignoring" << dendl;
-    delete accept;
+    accept->put();
     return;
   }
   assert(accept->last_committed == last_committed ||   // not committed
@@ -488,7 +488,7 @@ void Paxos::handle_commit(MMonPaxos *commit)
   if (!mon->is_peon()) {
     dout(10) << "not a peon, dropping" << dendl;
     assert(0);
-    delete commit;
+    commit->put();
     return;
   }
 
@@ -508,7 +508,7 @@ void Paxos::handle_commit(MMonPaxos *commit)
     mon->store->sync();
   mon->store->put_int(last_committed, machine_name, "last_committed");
   
-  delete commit;
+  commit->put();
 
   finish_contexts(waiting_for_commit);
 }
@@ -561,7 +561,7 @@ void Paxos::handle_lease(MMonPaxos *lease)
   if (!mon->is_peon() ||
       last_committed != lease->last_committed) {
     dout(10) << "handle_lease i'm not a peon, or they're not the leader, or the last_committed doesn't match, dropping" << dendl;
-    delete lease;
+    lease->put();
     return;
   }
 
@@ -595,7 +595,7 @@ void Paxos::handle_lease(MMonPaxos *lease)
   if (is_readable())
     finish_contexts(waiting_for_readable);
 
-  delete lease;
+  lease->put();
 }
 
 void Paxos::handle_lease_ack(MMonPaxos *ack)
@@ -625,7 +625,7 @@ void Paxos::handle_lease_ack(MMonPaxos *ack)
 	     << " dup (lagging!), ignoring" << dendl;
   }
   
-  delete ack;
+  ack->put();
 }
 
 void Paxos::lease_ack_timeout()
@@ -769,7 +769,7 @@ void Paxos::dispatch(PaxosServiceMessage *m)
   // election in progress?
   if (mon->is_starting()) {
     dout(5) << "election in progress, dropping " << *m << dendl;
-    delete m;
+    m->put();
     return;    
   }
 

@@ -24,7 +24,10 @@ struct MAuth : public PaxosServiceMessage {
   /* if protocol == 0, then auth_payload is a set<__u32> listing protocols the client supports */
 
   MAuth() : PaxosServiceMessage(CEPH_MSG_AUTH, 0), protocol(0) { }
+private:
+  ~MAuth() {}
 
+public:
   const char *get_type_name() { return "auth"; }
   void print(ostream& out) {
     out << "auth(proto " << protocol << " " << auth_payload.length() << " bytes)";

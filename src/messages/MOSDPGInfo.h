@@ -30,7 +30,10 @@ public:
   MOSDPGInfo(version_t mv) :
     Message(MSG_OSD_PG_INFO),
     epoch(mv) { }
+private:
+  ~MOSDPGInfo() {}
 
+public:
   const char *get_type_name() { return "pg_info"; }
   void print(ostream& out) {
     out << "pg_info(" << pg_info.size() << " pgs e" << epoch << ")";
