@@ -347,6 +347,41 @@ struct ceph_lock_state_t {
    * Returns true if set, false if not set.
    */
   bool add_lock(ceph_filelock& new_lock, bool wait_on_fail) {
+    list<ceph_filelock*> overlapping_locks, self_overlapping_locks;
+    //first, get any overlapping locks and split them into owned-by-us and not
+    if(get_overlapping_locks(new_lock, overlapping_locks)) {
+      split_by_owner(new_lock, overlapping_locks, self_overlapping_locks);
+    }
+    if (!overlapping_locks.empty()) { //overlapping locks owned by others :(
+      if (CEPH_LOCK_EXCL == new_lock.type) {
+	//can't set, we want an exclusive
+	if (wait_on_fail) {
+	  waiting_locks.
+	    insert(pair<__u64, ceph_filelock>(new_lock.start, new_lock));
+	}
+	return false;
+      } else { //shared lock, check for any exclusive locks blocking us
+	if (contains_exclusive_lock(overlapping_locks)) { //blocked :(
+	  if (wait_on_fail) {
+	    waiting_locks.
+	      insert(pair<__u64, ceph_filelock>(new_lock.start, new_lock));
+	  }
+	  return false;
+	} else {
+	  //yay, we can insert a shared lock
+	  adjust_locks(self_overlapping_locks, new_lock);
+	  held_locks.
+	    insert(pair<__u64, ceph_filelock>(new_lock.start, new_lock));
+	  return true;
+	}
+      }
+    } else { //no overlapping locks except our own
+      adjust_locks(self_overlapping_locks, new_lock);
+      held_locks.insert(pair<__u64, ceph_filelock>(new_lock.start, new_lock));
+      return true;
+    }
+    assert(0); //shouldn't get here
+    return false;
   }
 
   /*
@@ -438,6 +473,15 @@ private:
 	iter = locks.erase(iter);
       } else ++iter;
     }
+  }
+
+  bool contains_exclusive_lock(list<ceph_filelock*>& locks) {
+    for (list<ceph_filelock*>::iterator iter = locks.begin();
+	 iter != locks.end();
+	 ++iter) {
+      if (CEPH_LOCK_EXCL == (*iter)->type) return true;
+    }
+    return false;
   }
 };
 
