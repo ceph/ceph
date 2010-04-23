@@ -1434,17 +1434,29 @@ bool OSDMonitor::prepare_pool_op (MPoolOp *m)
     pp->add_snap(m->name.c_str(), g_clock.now());
     dout(10) << "create snap in pool " << m->pool << " " << m->name << " seq " << pp->get_snap_epoch() << dendl;
     break;
-  case POOL_OP_CREATE_UNMANAGED_SNAP:
-    blp = new bufferlist();
-    rc = pp->add_unmanaged_snap(snapid);
-    ::encode(snapid, *blp);
-    break;
+
   case POOL_OP_DELETE_SNAP:
     pp->remove_snap(pp->snap_exists(m->name.c_str()));
     break;
+
+  case POOL_OP_CREATE_UNMANAGED_SNAP:
+    if (pp->snaps.empty()) {
+      blp = new bufferlist();
+      pp->add_unmanaged_snap(snapid);
+      ::encode(snapid, *blp);
+    } else {
+      rc = -EINVAL;
+    }
+    break;
+
   case POOL_OP_DELETE_UNMANAGED_SNAP:
-    rc = pp->remove_unmanaged_snap(m->snapid);
-   default:
+    if (pp->snaps.empty())
+      pp->remove_unmanaged_snap(m->snapid);
+    else
+      rc = -EINVAL;
+    break;
+
+  default:
     assert(0);
     break;
   }
