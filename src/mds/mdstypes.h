@@ -392,6 +392,104 @@ struct ceph_lock_state_t {
     
   }
 private:
+  /**
+   * Adjust old locks owned by a single process so that process can set
+   * a new lock of different type. Handle any changes needed to the old locks
+   * (and the new lock) so that once the new lock is inserted into the 
+   * held_locks list the process has a coherent, non-fragmented set of lock
+   * ranges. Make sure any overlapping locks are combined, trimmed, and removed
+   * as needed.
+   * This function should only be called once you know the lock will be
+   * inserted, as it DOES adjust new_lock. You can call this function
+   * on an empty list, in which case it does nothing.
+   * This function does not remove elements from the list, so regard the list
+   * as bad information following function invocation.
+   *
+   * new_lock: The new lock the process has requested.
+   * old_locks: list of all locks currently held by same
+   *    client/process that overlap new_lock.
+   */
+  void adjust_locks(list<ceph_filelock*> old_locks, ceph_filelock& new_lock) {
+    bool new_lock_to_end = (0 == new_lock.length);
+    bool old_lock_to_end;
+    __u64 new_lock_start = new_lock.start;
+    __u64 new_lock_end = new_lock.start + new_lock.length - 1;
+    __u64 old_lock_start, old_lock_end;
+    ceph_filelock *old_lock;
+    for (list<ceph_filelock*>::iterator iter = old_locks.begin();
+	 iter != old_locks.end();
+	 ++iter) {
+      old_lock = *iter;
+      old_lock_to_end = (0 == old_lock->length);
+      old_lock_start = old_lock->start;
+      old_lock_end = old_lock->start + old_lock->length - 1;
+      new_lock_start = new_lock.start;
+      new_lock_end = new_lock.start + new_lock.length - 1;
+      if (new_lock_to_end || old_lock_to_end) {
+	//special code path to deal with a length set at 0
+	if (old_lock->type == new_lock.type) {
+	  //just unify them in new lock, remove old lock
+	  new_lock.start = (new_lock_start < old_lock_start) ? new_lock_start :
+	    old_lock_start;
+	  new_lock.length = 0;
+	  held_locks.erase(find_specific_elem(old_lock, held_locks));
+	} else { //not same type, have to keep any remains of old lock around
+	  if (new_lock_to_end) {
+	    if (old_lock_start < new_lock_start) {
+	      old_lock->length = new_lock_start - old_lock_start;
+	    } else {
+	      held_locks.erase(find_specific_elem(old_lock, held_locks));
+	    }
+	  } else { //old lock extends past end of new lock
+	    ceph_filelock appended_lock = *old_lock;
+	    appended_lock.start = new_lock_end + 1;
+	    held_locks.insert(pair<__u64, ceph_filelock>
+			      (appended_lock.start, appended_lock));
+	    if (old_lock_start < new_lock_start) {
+	      old_lock->length = new_lock_start - old_lock_start;
+	    } else held_locks.erase(find_specific_elem(old_lock, held_locks));
+	  }
+	}
+      } else {
+	if (old_lock->type == new_lock.type) { //just merge them!
+	  new_lock.start = (old_lock_start < new_lock_start ) ? old_lock_start :
+	    new_lock_start;
+	  int new_end = (new_lock_end > old_lock_end) ? new_lock_end :
+	    old_lock_end;
+	  new_lock.length = new_end - new_lock.start + 1;
+	  held_locks.erase(find_specific_elem(old_lock, held_locks));
+	} else { //we'll have to update sizes and maybe make new locks
+	  if (old_lock_end > new_lock_end) { //add extra lock after new_lock
+	    ceph_filelock appended_lock = *old_lock;
+	    appended_lock.start = new_lock_end + 1;
+	    appended_lock.length = old_lock_end - appended_lock.start;
+	    held_locks.insert(pair<__u64, ceph_filelock>
+			      (appended_lock.start, appended_lock));
+	  }
+	  if (old_lock_start < new_lock_start) {
+	    old_lock->length = new_lock_start - old_lock_start;
+	  } else { //old_lock starts inside new_lock, so remove it
+	    //if it extended past new_lock_end it's been replaced
+	    held_locks.erase(find_specific_elem(old_lock, held_locks));
+	  }
+	}
+      }
+    }
+  }
+
+  //obviously, this is a skeleton for compilation purposes.
+  multimap<__u64, ceph_filelock>::iterator
+  find_specific_elem(ceph_filelock *elem, multimap<__u64, ceph_filelock>& map) {
+    multimap<__u64, ceph_filelock>::iterator iter = map.find(elem->start);
+    while (iter != map.end()) {
+      if (memcmp(&iter->second, elem, sizeof(ceph_filelock)) == 0) return iter;
+      if (iter->first != elem->start) return map.end();
+      ++iter;
+    }
+    assert(0);//shouldn't get here
+    return map.end();
+  }
+
   //get last lock prior to start position
   multimap<__u64, ceph_filelock>::iterator
   get_lower_bound(__u64 start, multimap<__u64, ceph_filelock>& lock_map) {
