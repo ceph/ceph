@@ -2290,9 +2290,10 @@ void SimpleMessenger::submit_message(Message *m, Pipe *pipe)
 
 void SimpleMessenger::submit_message(Message *m, const entity_addr_t& dest_addr, int dest_type, bool lazy)
 {
-  assert(m->nref.test() == 1); //this is just to make sure that a changeset
-  //is working properly; if you start using the refcounting more and have multiple
-  //people hanging on to a message, ditch the assert!
+  // this is just to make sure that a changeset is working properly;
+  // if you start using the refcounting more and have multiple people
+  // hanging on to a message, ditch the assert!
+  assert(m->nref.read() == 1);
 
   lock.Lock();
   {
