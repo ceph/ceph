@@ -6761,7 +6761,7 @@ void MDCache::snaprealm_create(MDRequest *mdr, CInode *in)
 }
 
 
-void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop)
+void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool nosend)
 {
   dout(10) << "do_realm_invalidate_and_update_notify " << *in->snaprealm << " " << *in << dendl;
 
@@ -6797,7 +6797,7 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop)
 	 p != realm->client_caps.end();
 	 p++) {
       assert(!p->second.empty());
-      if (updates.count(p->first) == 0) {
+      if (!nosend && updates.count(p->first) == 0) {
 	MClientSnap *update = new MClientSnap(snapop);
 	update->head.split = in->ino();
 	update->split_inos = split_inos;
@@ -6815,7 +6815,8 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop)
       q.push_back(*p);
   }
 
-  send_snaps(updates);
+  if (!nosend)
+    send_snaps(updates);
 }
 
 void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in)
