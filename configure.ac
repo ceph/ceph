@@ -111,8 +111,8 @@ AS_IF([test "x$with_libatomic_ops" != xno],
                fi
              ])])
 AS_IF([test "$HAVE_ATOMIC_OPS" = "1"],
-	AC_DEFINE([HAVE_ATOMIC_OPS], [1], [Defined if you have atomic_ops]),
-	AC_MSG_FAILURE([]))
+	[],
+	AC_DEFINE([NO_ATOMIC_OPS], [1], [Defined if you don't have atomic_ops]))
 AM_CONDITIONAL(WITH_LIBATOMIC, [test "$HAVE_ATOMIC_OPS" = "1"])
 
 # newsyn?  requires mpi.

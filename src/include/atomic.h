@@ -20,7 +20,7 @@
 #endif
 
 
-#ifdef HAVE_ATOMIC_OPS
+#ifndef NO_ATOMIC_OPS
 //libatomic_ops implementation
 #include <atomic_ops.h>
 namespace ceph {
