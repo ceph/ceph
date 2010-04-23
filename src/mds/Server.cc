@@ -857,10 +857,15 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
       mdr->cap_releases.erase(tracedn->get_dir()->get_inode()->vino());
   }
 
+  // note client connection to direct my reply
+  Connection *client_con = req->get_connection();
+  client_con->get();
+
   // clean up request, drop locks, etc.
   // do this before replying, so that we can issue leases
   mdcache->request_finish(mdr);
   mdr = 0;
+  req = 0;
 
   // reply at all?
   if (client_inst.name.is_mds()) {
@@ -880,8 +885,9 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
     }
 
     reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
-    messenger->send_message(reply, req->get_connection());
+    messenger->send_message(reply, client_con);
   }
+  client_con->put();
   
   // take a closer look at tracei, if it happens to be a remote link
   if (tracei && 
