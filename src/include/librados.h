@@ -53,7 +53,6 @@ void rados_list_objects_close(rados_list_ctx_t ctx);
 /* snapshots */
 int rados_snap_create(const rados_pool_t pool, const char *snapname);
 int rados_snap_remove(const rados_pool_t pool, const char *snapname);
-//check that your snapshot ID isn't -EINVAL
 int rados_selfmanaged_snap_create(const rados_pool_t pool, __u64 *snapid);
 int rados_selfmanaged_snap_remove(const rados_pool_t pool, __u64 snapid);
 int rados_snap_list(rados_pool_t pool, rados_snap_t *snaps, int maxlen);

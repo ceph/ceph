@@ -88,7 +88,6 @@ public:
   int change_pool_auid(const pool_t& pool, __u64 auid);
 
   int snap_create(const pool_t pool, const char *snapname);
-  //check that your snapshot ID isn't -EINVAL
   int selfmanaged_snap_create(const pool_t pool, __u64 *snapid);
   int snap_remove(const pool_t pool, const char *snapname);
   int selfmanaged_snap_remove(const pool_t pool, __u64 snapid);
