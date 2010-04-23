@@ -668,6 +668,39 @@ int Objecter::create_pool_snap(int pool, string& snapName, Context *onfinish) {
   return 0;
 }
 
+struct C_SelfmanagedSnap : public Context {
+  bufferlist bl;
+  snapid_t *psnapid;
+  Context *fin;
+  C_SelfmanagedSnap(snapid_t *ps, Context *f) : psnapid(ps), fin(f) {}
+  void finish(int r) {
+    if (r == 0) {
+      bufferlist::iterator p = bl.begin();
+      ::decode(*psnapid, p);
+    }
+    fin->finish(r);
+    delete fin;
+  }
+};
+
+int Objecter::allocate_selfmanaged_snap(int pool, snapid_t *psnapid,
+					Context *onfinish)
+{
+  dout(10) << "allocate_selfmanaged_snap; pool: " << pool << dendl;
+  PoolOp *op = new PoolOp;
+  if (!op) return -ENOMEM;
+  op->tid = ++last_tid;
+  op->pool = pool;
+  C_SelfmanagedSnap *fin = new C_SelfmanagedSnap(psnapid, onfinish);
+  op->onfinish = fin;
+  op->blp = &fin->bl;
+  op->pool_op = POOL_OP_CREATE_UNMANAGED_SNAP;
+  op_pool[op->tid] = op;
+
+  pool_op_submit(op);
+  return 0;
+}
+
 int Objecter::delete_pool_snap(int pool, string& snapName, Context *onfinish)
 {
   dout(10) << "delete_pool_snap; pool: " << pool << "; snap: " << snapName << dendl;
@@ -679,6 +712,24 @@ int Objecter::delete_pool_snap(int pool, string& snapName, Context *onfinish)
   op->name = snapName;
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_DELETE_SNAP;
+  op_pool[op->tid] = op;
+  
+  pool_op_submit(op);
+  
+  return 0;
+}
+
+int Objecter::delete_selfmanaged_snap(int pool, snapid_t snap,
+				      Context *onfinish) {
+  dout(10) << "delete_selfmanaged_snap; pool: " << pool << "; snap: " 
+	   << snap << dendl;
+  PoolOp *op = new PoolOp;
+  if (!op) return -ENOMEM;
+  op->tid = ++last_tid;
+  op->pool = pool;
+  op->onfinish = onfinish;
+  op->pool_op = POOL_OP_DELETE_UNMANAGED_SNAP;
+  op->snapid = snap;
   op_pool[op->tid] = op;
 
   pool_op_submit(op);
@@ -749,18 +800,32 @@ int Objecter::change_pool_auid(int pool, Context *onfinish, __u64 auid)
 
 void Objecter::pool_op_submit(PoolOp *op) {
   dout(10) << "pool_op_submit " << op->tid << dendl;
-  monc->send_mon_message(new MPoolOp(monc->get_fsid(), op->tid, op->pool,
-				     op->name, op->pool_op,
-				     op->auid, last_seen_version));
+  MPoolOp *m = new MPoolOp(monc->get_fsid(), op->tid, op->pool,
+			   op->name, op->pool_op,
+			   op->auid, last_seen_version);
+  if (op->snapid) m->snapid = op->snapid;
+  monc->send_mon_message(m);
   op->last_submit = g_clock.now();
 }
 
-void Objecter::handle_pool_op_reply(MPoolOpReply *m) {
+/**
+ * Handle a reply to a PoolOp message. Check that we sent the message
+ * and give the caller responsibility for the returned bufferlist.
+ * Then either call the finisher or stash the PoolOp, depending on if we
+ * have a new enough map.
+ * Lastly, clean up the message and PoolOp.
+ */
+void Objecter::handle_pool_op_reply(MPoolOpReply *m)
+{
   dout(10) << "handle_pool_op_reply " << *m << dendl;
   tid_t tid = m->get_tid();
   if (op_pool.count(tid)) {
     PoolOp *op = op_pool[tid];
     dout(10) << "have request " << tid << " at " << op << " Op: " << get_pool_op_name(op->pool_op) << dendl;
+    if (op->blp) {
+      op->blp->claim(*m->response_data);
+      m->response_data = NULL;
+    }
     if (m->version > last_seen_version)
       last_seen_version = m->version;
     if (osdmap->get_epoch() < m->epoch) {

@@ -88,7 +88,9 @@ public:
   int change_pool_auid(const pool_t& pool, __u64 auid);
 
   int snap_create(const pool_t pool, const char *snapname);
+  int selfmanaged_snap_create(const pool_t pool, __u64 *snapid);
   int snap_remove(const pool_t pool, const char *snapname);
+  int selfmanaged_snap_remove(const pool_t pool, __u64 snapid);
   int snap_list(pool_t pool, std::vector<snap_t> *snaps);
   int snap_get_name(pool_t pool, snap_t snap, std::string *name);
   int snap_get_stamp(pool_t pool, snap_t snap, time_t *t);

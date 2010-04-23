@@ -23,6 +23,8 @@ enum {
   POOL_OP_DELETE,
   POOL_OP_CREATE_SNAP,
   POOL_OP_DELETE_SNAP,
+  POOL_OP_CREATE_UNMANAGED_SNAP,
+  POOL_OP_DELETE_UNMANAGED_SNAP,
   POOL_OP_AUID_CHANGE
 };
 
@@ -50,17 +52,18 @@ public:
   string name;
   int op;
   __u64 auid;
+  snapid_t snapid;
 
   MPoolOp() : PaxosServiceMessage(MSG_POOLOP, 0) {}
   MPoolOp(const ceph_fsid_t& f, tid_t t, int p, string& n, int o, version_t v) :
     PaxosServiceMessage(MSG_POOLOP, v), fsid(f), pool(p), name(n), op(o),
-    auid(0) {
+    auid(0), snapid(0) {
     set_tid(t);
   }
   MPoolOp(const ceph_fsid_t& f, tid_t t, int p, string& n,
 	  int o, __u64 uid, version_t v) :
     PaxosServiceMessage(MSG_POOLOP, v), fsid(f), pool(p), name(n), op(o),
-    auid(uid) {
+    auid(uid), snapid(0) {
     set_tid(t);
   }
 
@@ -82,6 +85,7 @@ public:
     ::encode(name, payload);
     ::encode(op, payload);
     ::encode(auid, payload);
+    ::encode(snapid, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -91,6 +95,7 @@ public:
     ::decode(name, p);
     ::decode(op, p);
     ::decode(auid, p);
+    ::decode(snapid, p);
   }
 };
 
