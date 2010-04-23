@@ -59,7 +59,7 @@ using std::string;
 #include "page.h"
 #include "crc32c.h"
 
-#ifndef assert
+#ifndef __CEPH__
 # include <assert.h>
 #endif
 
