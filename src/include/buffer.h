@@ -52,9 +52,6 @@ void	*valloc(size_t);
 #include <string>
 #include <exception>
 
-using std::istream;
-using std::string;
-
 #include "atomic.h"
 #include "page.h"
 #include "crc32c.h"
@@ -935,7 +932,7 @@ public:
 	append_buffer.set_length(0);   // unused, so far.
       }
     }
-    void append(const string& s) {
+    void append(const std::string& s) {
       append(s.data(), s.length());
     }
     void append(const ptr& bp) {
@@ -965,9 +962,9 @@ public:
 	   ++p) 
 	_buffers.push_back(*p);
     }
-    void append(istream& in) {
+    void append(std::istream& in) {
       while (!in.eof()) {
-	string s;
+	std::string s;
 	getline(in, s);
 	append(s.c_str(), s.length());
 	append("\n", 1);
