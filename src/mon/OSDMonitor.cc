@@ -1419,12 +1419,33 @@ bool OSDMonitor::prepare_pool_op (MPoolOp *m)
   } else if (m->op == POOL_OP_AUID_CHANGE) {
     return prepare_pool_op_auid(m);
   }
+
+  // pool snaps vs unmanaged snaps are mutually exclusive
   const pg_pool_t *p = osdmap.get_pg_pool(m->pool);
-  pg_pool_t* pp = 0;
   int rc = 0;
+  switch (m->op) {
+  case POOL_OP_CREATE_SNAP:
+  case POOL_OP_DELETE_SNAP:
+    if (!p->removed_snaps.empty())
+      rc = -EINVAL;
+    break;
+
+  case POOL_OP_CREATE_UNMANAGED_SNAP:
+  case POOL_OP_DELETE_UNMANAGED_SNAP:
+    if (!p->snaps.empty())
+      rc = -EINVAL;
+    break;
+  }
+  if (rc) {
+    _pool_op(m, rc, 0);
+    return false;
+  }
+
+  pg_pool_t* pp = 0;
   bufferlist *blp = NULL;
   __u64 snapid(0);
-  //if the pool isn't already in the update, add it
+
+  // if the pool isn't already in the update, add it
   if (!pending_inc.new_pools.count(m->pool))
     pending_inc.new_pools[m->pool] = *p;
   pp = &pending_inc.new_pools[m->pool];
@@ -1440,20 +1461,13 @@ bool OSDMonitor::prepare_pool_op (MPoolOp *m)
     break;
 
   case POOL_OP_CREATE_UNMANAGED_SNAP:
-    if (pp->snaps.empty()) {
-      blp = new bufferlist();
-      pp->add_unmanaged_snap(snapid);
-      ::encode(snapid, *blp);
-    } else {
-      rc = -EINVAL;
-    }
+    blp = new bufferlist();
+    pp->add_unmanaged_snap(snapid);
+    ::encode(snapid, *blp);
     break;
 
   case POOL_OP_DELETE_UNMANAGED_SNAP:
-    if (pp->snaps.empty())
-      pp->remove_unmanaged_snap(m->snapid);
-    else
-      rc = -EINVAL;
+    pp->remove_unmanaged_snap(m->snapid);
     break;
 
   default:
@@ -1462,7 +1476,7 @@ bool OSDMonitor::prepare_pool_op (MPoolOp *m)
   }
   pp->set_snap_epoch(pending_inc.epoch);
 
-  paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, rc, pending_inc.epoch, blp));
+  paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, 0, pending_inc.epoch, blp));
   return true;
 }
 
