@@ -80,7 +80,7 @@ void Objecter::dispatch(Message *m)
     handle_fs_stats_reply((MStatfsReply*)m);
     break;
 
-  case MSG_POOLOPREPLY:
+  case CEPH_MSG_POOLOP_REPLY:
     handle_pool_op_reply((MPoolOpReply*)m);
     break;
 
@@ -821,7 +821,7 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
   tid_t tid = m->get_tid();
   if (op_pool.count(tid)) {
     PoolOp *op = op_pool[tid];
-    dout(10) << "have request " << tid << " at " << op << " Op: " << get_pool_op_name(op->pool_op) << dendl;
+    dout(10) << "have request " << tid << " at " << op << " Op: " << ceph_pool_op_name(op->pool_op) << dendl;
     if (op->blp) {
       op->blp->claim(*m->response_data);
       m->response_data = NULL;

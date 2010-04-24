@@ -38,8 +38,8 @@
 
 #define MSG_MON_GLOBAL_ID          60
 
-#define MSG_POOLOP                 49
-#define MSG_POOLOPREPLY            48
+// #define MSG_POOLOP                 49
+// #define MSG_POOLOPREPLY            48
 
 #define MSG_ROUTE                  47
 #define MSG_FORWARD                46

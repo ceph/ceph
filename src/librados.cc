@@ -422,7 +422,7 @@ bool RadosClient::_dispatch(Message *m)
     objecter->handle_fs_stats_reply((MStatfsReply*)m);
     break;
 
-  case MSG_POOLOPREPLY:
+  case CEPH_MSG_POOLOP_REPLY:
     objecter->handle_pool_op_reply((MPoolOpReply*)m);
     break;
   default:

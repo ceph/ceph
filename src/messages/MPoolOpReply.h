@@ -19,22 +19,22 @@
 class MPoolOpReply : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;
-  int replyCode;
+  __u32 replyCode;
   epoch_t epoch;
   bufferlist *response_data;
 
   //Once you pass in a response_data pointer it becomes the responsibility
   // of the Message. Don't delete it! (This reduces memory copies.)
-  MPoolOpReply() : PaxosServiceMessage(MSG_POOLOPREPLY, 0), response_data(NULL)
+  MPoolOpReply() : PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, 0), response_data(NULL)
   {}
   MPoolOpReply( ceph_fsid_t& f, tid_t t, int rc, int e, version_t v) :
-    PaxosServiceMessage(MSG_POOLOPREPLY, v), fsid(f), replyCode(rc),
+    PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, v), fsid(f), replyCode(rc),
     epoch(e), response_data(NULL) {
     set_tid(t);
   }
   MPoolOpReply( ceph_fsid_t& f, tid_t t, int rc, int e, version_t v,
 		bufferlist *blp) :
-    PaxosServiceMessage(MSG_POOLOPREPLY, v), fsid(f), replyCode(rc),
+    PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, v), fsid(f), replyCode(rc),
     epoch(e), response_data(blp) {
     set_tid(t);
   }

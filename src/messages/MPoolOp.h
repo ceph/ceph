@@ -18,51 +18,24 @@
 #include "messages/PaxosServiceMessage.h"
 
 
-enum {
-  POOL_OP_CREATE,
-  POOL_OP_DELETE,
-  POOL_OP_CREATE_SNAP,
-  POOL_OP_DELETE_SNAP,
-  POOL_OP_CREATE_UNMANAGED_SNAP,
-  POOL_OP_DELETE_UNMANAGED_SNAP,
-  POOL_OP_AUID_CHANGE
-};
-
-static const char *get_pool_op_name(int op) {
-  switch (op) {
-  case POOL_OP_CREATE:
-    return "create pool";
-  case POOL_OP_DELETE:
-    return "delete pool";
-  case POOL_OP_CREATE_SNAP:
-    return "create snap";
-  case POOL_OP_DELETE_SNAP:
-    return "delete snap";
-  case POOL_OP_AUID_CHANGE:
-    return "change auid";
-  default:
-    return "unknown";
-  }
-}
-
 class MPoolOp : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;
-  int pool;
+  __u32 pool;
   string name;
-  int op;
+  __u32 op;
   __u64 auid;
   snapid_t snapid;
 
-  MPoolOp() : PaxosServiceMessage(MSG_POOLOP, 0) {}
+  MPoolOp() : PaxosServiceMessage(CEPH_MSG_POOLOP, 0) {}
   MPoolOp(const ceph_fsid_t& f, tid_t t, int p, string& n, int o, version_t v) :
-    PaxosServiceMessage(MSG_POOLOP, v), fsid(f), pool(p), name(n), op(o),
+    PaxosServiceMessage(CEPH_MSG_POOLOP, v), fsid(f), pool(p), name(n), op(o),
     auid(0), snapid(0) {
     set_tid(t);
   }
   MPoolOp(const ceph_fsid_t& f, tid_t t, int p, string& n,
 	  int o, __u64 uid, version_t v) :
-    PaxosServiceMessage(MSG_POOLOP, v), fsid(f), pool(p), name(n), op(o),
+    PaxosServiceMessage(CEPH_MSG_POOLOP, v), fsid(f), pool(p), name(n), op(o),
     auid(uid), snapid(0) {
     set_tid(t);
   }
@@ -73,7 +46,7 @@ private:
 public:
   const char *get_type_name() { return "poolop"; }
   void print(ostream& out) {
-    out << "poolop(" << get_pool_op_name(op) << ",pool " << pool
+    out << "poolop(" << ceph_pool_op_name(op) << ",pool " << pool
 	<< ",auid " << auid
 	<< ", tid" << get_tid() << " " << name << " v" << version << ")";
   }

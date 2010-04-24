@@ -201,10 +201,10 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
   case MSG_GETPOOLSTATSREPLY:
     m = new MGetPoolStatsReply;
     break;
-  case MSG_POOLOP:
+  case CEPH_MSG_POOLOP:
     m = new MPoolOp;
     break;
-  case MSG_POOLOPREPLY:
+  case CEPH_MSG_POOLOP_REPLY:
     m = new MPoolOpReply;
     break;
   case MSG_MON_COMMAND:

@@ -210,7 +210,7 @@ bool OSDMonitor::preprocess_query(PaxosServiceMessage *m)
   case MSG_OSD_PGTEMP:
     return preprocess_pgtemp((MOSDPGTemp*)m);
 
-  case MSG_POOLOP:
+  case CEPH_MSG_POOLOP:
     return preprocess_pool_op((MPoolOp*)m);
 
   case MSG_REMOVE_SNAPS:
@@ -241,7 +241,7 @@ bool OSDMonitor::prepare_update(PaxosServiceMessage *m)
   case MSG_MON_COMMAND:
     return prepare_command((MMonCommand*)m);
     
-  case MSG_POOLOP:
+  case CEPH_MSG_POOLOP:
     return prepare_pool_op((MPoolOp*)m);
 
   case MSG_REMOVE_SNAPS:
