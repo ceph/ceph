@@ -385,12 +385,56 @@ struct ceph_lock_state_t {
   }
 
   /*
-   * Remove one lock described in old_lock. This may involve splitting a
+   * Remove lock(s) described in old_lock. This may involve splitting a
    * previous lock or making a previous lock smaller.
    */
-  void remove_lock(ceph_filelock old_lock) {
-    
+  void remove_lock(ceph_filelock removal_lock) {
+    list<ceph_filelock*> overlapping_locks, self_overlapping_locks,
+      crossed_waiting_locks;
+    if (get_overlapping_locks(removal_lock, overlapping_locks)) {
+      split_by_owner(removal_lock, overlapping_locks, self_overlapping_locks);
+    } else dout(0) << "attempt to remove lock at " << removal_lock.start
+		   << " but no locks there!" << dendl;
+    bool remove_to_end = (0 == removal_lock.length);
+    bool old_lock_to_end;
+    __u64 removal_start = removal_lock.start;
+    __u64 removal_end = removal_start + removal_lock.length - 1;
+    __u64 old_lock_end;
+    ceph_filelock *old_lock;
+
+    for (list<ceph_filelock*>::iterator iter = self_overlapping_locks.begin();
+	 iter != self_overlapping_locks.end();
+	 ++iter) {
+      old_lock = *iter;
+      old_lock_to_end = (0 == old_lock->length);
+      old_lock_end = old_lock->start + old_lock->length - 1;
+      if (remove_to_end) {
+	if (old_lock->start < removal_start) {
+	  old_lock->length = removal_start - old_lock->start;
+	} else held_locks.erase(find_specific_elem(old_lock, held_locks));
+      } else if (old_lock_to_end) {
+	ceph_filelock append_lock = *old_lock;
+	append_lock.start = removal_end+1;
+	held_locks.insert(pair<__u64, ceph_filelock>
+			  (append_lock.start, append_lock));
+	if (old_lock->start >= removal_start) {
+	  held_locks.erase(find_specific_elem(old_lock, held_locks));
+	} else old_lock->length = removal_start - old_lock->start;
+      } else {
+	if (old_lock_end  > removal_end) {
+	  ceph_filelock append_lock = *old_lock;
+	  append_lock.start = removal_end + 1;
+	  append_lock.length = old_lock_end - append_lock.start;
+	  held_locks.insert(pair<__u64, ceph_filelock>
+			    (append_lock.start, append_lock));
+	}
+	if (old_lock->start < removal_start) {
+	  old_lock->length = removal_start - old_lock->start;
+	} else held_locks.erase(find_specific_elem(old_lock, held_locks));
+      }
+    }
   }
+
 private:
   /**
    * Adjust old locks owned by a single process so that process can set
