@@ -363,10 +363,16 @@ void SnapRealm::split_at(SnapRealm *child)
 	   << " on " << *child->inode << dendl;
 
   if (!child->inode->is_dir()) {
-    // it's not a dir:
-    //  - no open children.
-    //  - only need to move this child's inode's caps.
-    child->inode->move_to_realm(child);
+    if (child->inode->containing_realm) {
+      // it's not a dir:
+      //  - no open children.
+      //  - only need to move this child's inode's caps.
+      child->inode->move_to_realm(child);
+    } else {
+      // no caps, nothing to move/split.
+      dout(20) << " split no-op, no caps to move on file " << *child->inode << dendl;
+      assert(!child->inode->is_any_caps());
+    }
     return;
   }
 
