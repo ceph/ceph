@@ -388,7 +388,8 @@ struct ceph_lock_state_t {
    * Remove lock(s) described in old_lock. This may involve splitting a
    * previous lock or making a previous lock smaller.
    */
-  void remove_lock(ceph_filelock removal_lock) {
+  void remove_lock(ceph_filelock removal_lock,
+		   list<ceph_filelock>& activated_locks) {
     list<ceph_filelock*> overlapping_locks, self_overlapping_locks,
       crossed_waiting_locks;
     if (get_overlapping_locks(removal_lock, overlapping_locks)) {
@@ -431,6 +432,27 @@ struct ceph_lock_state_t {
 	if (old_lock->start < removal_start) {
 	  old_lock->length = removal_start - old_lock->start;
 	} else held_locks.erase(find_specific_elem(old_lock, held_locks));
+      }
+    }
+
+    /* okay, we've removed the locks, but removing them might allow some
+     * other waiting locks to come through */
+    if (get_waiting_overlaps(removal_lock, crossed_waiting_locks)) {
+      /*let's do this the SUPER lazy way for now. Should work out something
+	that's slightly less slow and wasteful, though.
+	1) Remove lock from waiting_locks.
+	2) attempt to insert lock via add_lock
+	3) Add to success list if we get back "true"
+
+	In the future, should probably set this up to detect some
+	guaranteed blocks and do fewer map lookups.
+       */
+      for (list<ceph_filelock*>::iterator iter = crossed_waiting_locks.begin();
+	   iter != crossed_waiting_locks.end();
+	   ++iter) {
+	ceph_filelock cur_lock = *(*iter);
+	waiting_locks.erase(find_specific_elem(*iter, waiting_locks));
+	if(add_lock(cur_lock, true)) activated_locks.push_back(cur_lock);
       }
     }
   }
