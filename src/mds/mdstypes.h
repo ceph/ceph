@@ -582,8 +582,8 @@ private:
 			     list<ceph_filelock*>& overlaps) {
     multimap<__u64, ceph_filelock>::iterator iter =
       get_last_before(lock.start + lock.length - 1, held_locks);
-    bool cont = true;
-    do {
+    bool cont = iter != held_locks.end();
+    while(cont) {
       if (share_space(iter, lock)) {
 	overlaps.push_front(&iter->second);
       }
@@ -592,7 +592,26 @@ private:
 	cont = false;
       } else if (held_locks.begin() == iter) cont = false;
       else --iter;
-    } while (cont);
+    }
+    return !overlaps.empty();
+  }
+
+  /**
+   * Get a list of all waiting locks that overlap with the given lock's range.
+   * lock: specifies the range to compare with
+   * overlaps: an empty list, to be filled
+   * Returns: true if at least one waiting_lock overlaps
+   */
+  bool get_waiting_overlaps(ceph_filelock& lock,
+			    list<ceph_filelock*>& overlaps) {
+    multimap<__u64, ceph_filelock>::iterator iter =
+      get_last_before(lock.start + lock.length - 1, waiting_locks);
+    bool cont = iter != held_locks.end();
+    while(cont) {
+      if (share_space(iter, lock)) overlaps.push_front(&iter->second);
+      if (held_locks.begin() == iter) cont = false;
+      --iter;
+    }
     return !overlaps.empty();
   }
 
