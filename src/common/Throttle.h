@@ -5,27 +5,33 @@
 #include "Cond.h"
 
 class Throttle {
-  __u64 count, want, max;
+  __u64 count, max, waiting;
   Mutex lock;
   Cond cond;
   
 public:
-  Throttle(__u64 m = 0) : count(0), max(m),
+  Throttle(__u64 m = 0) : count(0), max(m), waiting(0),
 			  lock("Throttle::lock") {}
 
 private:
   void _reset_max(__u64 m) {
-    if (m) {
-      if (m < max)
-	cond.SignalAll();
-      max = m;
-    }
+    if (m < max)
+      cond.SignalOne();
+    max = m;
   }
   bool _wait(__u64 c) {
     bool waited = false;
-    while (max && count + c > max) {
-      waited = true;
-      cond.Wait(lock);
+    if (max && count + c > max) {    
+      waiting += c;
+      while (max && count + c > max) {
+	waited = true;
+	cond.Wait(lock);
+      }
+      waiting -= c;
+
+      // wake up the next guy
+      if (waiting)
+	cond.SignalOne();
     }
     return waited;
   }
@@ -38,7 +44,8 @@ public:
 
   bool wait(__u64 m = 0) {
     Mutex::Locker l(lock);
-    _reset_max(m);
+    if (m)
+      _reset_max(m);
     return _wait(0);
   }
 
@@ -50,7 +57,8 @@ public:
 
   bool get(__u64 c = 1, __u64 m = 0) {
     Mutex::Locker l(lock);
-    _reset_max(m);
+    if (m)
+      _reset_max(m);
     bool waited = _wait(c);
     count += c;
     return waited;
@@ -58,7 +66,7 @@ public:
 
   __u64 put(__u64 c = 1) {
     Mutex::Locker l(lock);
-    cond.SignalAll();
+    cond.SignalOne();
     count -= c;
     return count;
   }
