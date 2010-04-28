@@ -42,6 +42,8 @@ public:
     return count;
   }
 
+  __u64 get_max() { return max; }
+
   bool wait(__u64 m = 0) {
     Mutex::Locker l(lock);
     if (m)
