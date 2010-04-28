@@ -2271,6 +2271,11 @@ bool SimpleMessenger::register_entity(entity_name_t name)
 
 void SimpleMessenger::submit_message(Message *m, Pipe *pipe)
 { 
+  if (!pipe) {
+    m->put();
+    return;
+  }
+
   lock.Lock();
   {
     pipe->pipe_lock.Lock();
