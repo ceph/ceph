@@ -1448,6 +1448,7 @@ public:
 void Locker::calc_new_client_ranges(CInode *in, __u64 size, map<client_t,byte_range_t>& new_ranges)
 {
   inode_t *latest = in->get_projected_inode();
+  __u64 ms = ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment());
 
   // increase ranges as appropriate.
   // shrink to 0 if no WR|BUFFER caps issued.
@@ -1456,11 +1457,11 @@ void Locker::calc_new_client_ranges(CInode *in, __u64 size, map<client_t,byte_ra
        p++) {
     if ((p->second->issued() | p->second->wanted()) & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
       new_ranges[p->first].first = 0;
-      if (latest->client_ranges.count(p->first))
-	new_ranges[p->first].last = MAX(ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment()),
-					latest->client_ranges[p->first].last);
-      else
-	new_ranges[p->first].last = ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment());
+      if (latest->client_ranges.count(p->first)) {
+	__u64 last = latest->client_ranges[p->first].last;
+	new_ranges[p->first].last = MAX(ms, last);
+      } else
+	new_ranges[p->first].last = ms;
     }
   }
 

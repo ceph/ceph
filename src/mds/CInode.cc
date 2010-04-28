@@ -1827,8 +1827,9 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
   m->head.time_warp_seq = i->time_warp_seq;
 
   // max_size is min of projected, actual.
-  m->head.max_size = MIN(oi->client_ranges.count(client) ? oi->client_ranges[client].last : 0,
-			 pi->client_ranges.count(client) ? pi->client_ranges[client].last : 0);
+  __u64 oldms = oi->client_ranges.count(client) ? oi->client_ranges[client].last : 0;
+  __u64 newms = pi->client_ranges.count(client) ? pi->client_ranges[client].last : 0;
+  m->head.max_size = MIN(oldms, newms);
 
   i = pauth ? pi:oi;
   m->head.mode = i->mode;

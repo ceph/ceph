@@ -7019,7 +7019,8 @@ void MDCache::purge_stray(CDentry *dn)
   }
 
   __u64 period = in->inode.layout.fl_object_size * in->inode.layout.fl_stripe_count;
-  __u64 to = MAX(in->inode.size, in->inode.get_max_size());
+  __u64 cur_max_size = in->inode.get_max_size();
+  __u64 to = MAX(in->inode.size, cur_max_size);
   __u64 num = (to + period - 1) / period;
   dout(10) << "purge_stray 0~" << to << " objects 0~" << num << " snapc " << snapc << " on " << *in << dendl;
   if (to)
