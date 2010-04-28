@@ -2495,7 +2495,9 @@ void Server::handle_client_readdir(MDRequest *mdr)
 	   << " complete=" << (int)complete
 	   << dendl;
   MClientReply *reply = new MClientReply(req, 0);
-  reply->set_dir_bl(dirbl);
+  reply->set_extra_bl(dirbl);
+  dout(10) << "reply to " << *req << " readdir num=" << numfiles << " end=" << (int)end
+	   << " complete=" << (int)complete << dendl;
 
   // bump popularity.  NOTE: this doesn't quite capture it.
   mds->balancer->hit_dir(g_clock.now(), dir, META_POP_IRD, -1, numfiles);
@@ -5464,7 +5466,7 @@ void Server::handle_client_lssnap(MDRequest *mdr)
   dirbl.claim_append(dnbl);
   
   MClientReply *reply = new MClientReply(req);
-  reply->set_dir_bl(dirbl);
+  reply->set_extra_bl(dirbl);
   reply_request(mdr, reply, diri);
 }
 

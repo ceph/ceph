@@ -688,7 +688,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
   // insert readdir results too
 
   // the rest?
-  p = reply->get_dir_bl().begin();
+  p = reply->get_extra_bl().begin();
   if (!p.end()) {
     // only open dir if we're actually adding stuff to it!
     Dir *dir = in->open_dir();
@@ -932,7 +932,7 @@ int Client::make_request(MetaRequest *request,
 
   int r = reply->get_result();
   if (pdirbl)
-    pdirbl->claim(reply->get_dir_bl());
+    pdirbl->claim(reply->get_extra_bl());
   reply->put();
   return r;
 }
