@@ -753,8 +753,11 @@ void CDir::merge(int bits, list<Context*>& waiters, bool replay)
     // merge replica map
     for (map<int,int>::iterator p = dir->replica_map.begin();
 	 p != dir->replica_map.end();
-	 ++p) 
-      replica_map[p->first] = MAX(replica_map[p->first], p->second);
+	 ++p) {
+      int cur = replica_map[p->first];
+      if (p->second > cur)
+	replica_map[p->first] = p->second;
+    }
     
     // merge state
     state_set(dir->get_state() & MASK_STATE_FRAGMENT_KEPT);
