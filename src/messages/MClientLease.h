@@ -20,7 +20,7 @@
 
 struct MClientLease : public Message {
   struct ceph_mds_lease h;
-  nstring dname;
+  string dname;
   
   int get_action() { return h.action; }
   ceph_seq_t get_seq() { return h.seq; }
@@ -39,7 +39,7 @@ struct MClientLease : public Message {
     h.first = sf;
     h.last = sl;
   }
-  MClientLease(int ac, ceph_seq_t seq, int m, __u64 i, __u64 sf, __u64 sl, const nstring& d) :
+  MClientLease(int ac, ceph_seq_t seq, int m, __u64 i, __u64 sf, __u64 sl, const string& d) :
     Message(CEPH_MSG_CLIENT_LEASE),
     dname(d) {
     h.action = ac;

@@ -124,7 +124,7 @@ class FakeAttrs {
   
   class FakeAttrSet {
   public:
-    map<nstring, bufferptr> attrs;
+    map<string, bufferptr> attrs;
     
     int getattr(const char *name, void *value, size_t size) {
       string n = name;
@@ -153,11 +153,11 @@ class FakeAttrs {
       }
       return -1;
     }
-    int getattrs(map<nstring,bufferptr>& aset) {
+    int getattrs(map<string,bufferptr>& aset) {
       aset = attrs;
       return 0;
     }
-    int setattrs(map<nstring,bufferptr>& aset) {
+    int setattrs(map<string,bufferptr>& aset) {
       attrs = aset;
       return 0;
     }
@@ -200,7 +200,7 @@ class FakeAttrs {
     faker_lock.Unlock();
     return r;
   }
-  int setattrs(coll_t cid, sobject_t oid, map<nstring,bufferptr>& aset) {
+  int setattrs(coll_t cid, sobject_t oid, map<string,bufferptr>& aset) {
     faker_lock.Lock();
     int r = fakeoattrs[oid].setattrs(aset);
     faker_lock.Unlock();
@@ -219,7 +219,7 @@ class FakeAttrs {
     faker_lock.Unlock();
     return r;
   }
-  int getattrs(coll_t cid, sobject_t oid, map<nstring,bufferptr>& aset) {
+  int getattrs(coll_t cid, sobject_t oid, map<string,bufferptr>& aset) {
     faker_lock.Lock();
     int r = fakeoattrs[oid].getattrs(aset);
     faker_lock.Unlock();
@@ -250,13 +250,13 @@ class FakeAttrs {
     faker_lock.Unlock();
     return r;
   }
-  int collection_setattrs(coll_t cid, map<nstring,bufferptr>& aset) {
+  int collection_setattrs(coll_t cid, map<string,bufferptr>& aset) {
     faker_lock.Lock();
     int r = fakecattrs[cid].setattrs(aset);
     faker_lock.Unlock();
     return r;
   }
-  int collection_getattrs(coll_t cid, map<nstring,bufferptr>& aset) {
+  int collection_getattrs(coll_t cid, map<string,bufferptr>& aset) {
     faker_lock.Lock();
     int r = fakecattrs[cid].getattrs(aset);
     faker_lock.Unlock();

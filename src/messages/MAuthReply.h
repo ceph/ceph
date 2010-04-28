@@ -21,11 +21,11 @@ struct MAuthReply : public Message {
   __u32 protocol;
   __s32 result;
   __u64 global_id;      // if zero, meaningless
-  cstring result_msg;
+  string result_msg;
   bufferlist result_bl;
 
   MAuthReply() : Message(CEPH_MSG_AUTH_REPLY), protocol(0), result(0) {}
-  MAuthReply(__u32 p, bufferlist *bl = NULL, int r = 0, __u64 gid=0, const char *msg = 0) :
+  MAuthReply(__u32 p, bufferlist *bl = NULL, int r = 0, __u64 gid=0, const char *msg = "") :
     Message(CEPH_MSG_AUTH_REPLY),
     protocol(p), result(r), global_id(gid),
     result_msg(msg) {

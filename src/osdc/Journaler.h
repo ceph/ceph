@@ -68,7 +68,7 @@ public:
     __s64 expire_pos;
     __s64 read_pos;
     __s64 write_pos;
-    nstring magic;
+    string magic;
     ceph_file_layout layout;
 
     Header(const char *m=0) :

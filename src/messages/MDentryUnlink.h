@@ -18,17 +18,17 @@
 
 class MDentryUnlink : public Message {
   dirfrag_t dirfrag;
-  nstring dn;
+  string dn;
 
  public:
   dirfrag_t get_dirfrag() { return dirfrag; }
-  nstring& get_dn() { return dn; }
+  string& get_dn() { return dn; }
 
   bufferlist straybl;
 
   MDentryUnlink() :
     Message(MSG_MDS_DENTRYUNLINK) { }
-  MDentryUnlink(dirfrag_t df, nstring& n) :
+  MDentryUnlink(dirfrag_t df, string& n) :
     Message(MSG_MDS_DENTRYUNLINK),
     dirfrag(df),
     dn(n) {}

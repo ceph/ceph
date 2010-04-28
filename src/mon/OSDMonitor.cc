@@ -760,7 +760,7 @@ void OSDMonitor::blacklist(entity_addr_t a, utime_t until)
 
 void OSDMonitor::check_subs()
 {
-  nstring type = "osdmap";
+  string type = "osdmap";
   xlist<Subscription*>::iterator p = mon->session_map.subs[type].begin();
   while (!p.end()) {
     Subscription *sub = *p;

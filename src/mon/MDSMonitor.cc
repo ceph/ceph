@@ -575,7 +575,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 
 void MDSMonitor::check_subs()
 {
-  nstring type = "mdsmap";
+  string type = "mdsmap";
   xlist<Subscription*>::iterator p = mon->session_map.subs[type].begin();
   while (!p.end()) {
     Subscription *sub = *p;

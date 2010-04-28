@@ -265,9 +265,9 @@ public:
 
   struct C_GetAttrs : public Context {
     bufferlist bl;
-    map<nstring,bufferlist>& attrset;
+    map<string,bufferlist>& attrset;
     Context *fin;
-    C_GetAttrs(map<nstring, bufferlist>& set, Context *c) : attrset(set), fin(c) {}
+    C_GetAttrs(map<string, bufferlist>& set, Context *c) : attrset(set), fin(c) {}
     void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
@@ -526,7 +526,7 @@ private:
   }
 
   tid_t getxattrs(const object_t& oid, ceph_object_layout ol, snapid_t snap,
-             map<nstring,bufferlist>& attrset,
+             map<string,bufferlist>& attrset,
 	     int flags, Context *onfinish) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_GETXATTRS;

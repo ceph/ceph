@@ -171,7 +171,7 @@ public:
   void process_cap_update(MDRequest *mdr, client_t client,
 			  inodeno_t ino, __u64 cap_id, int caps, int wanted,
 			  int seq, int issue_seq, int mseq,
-			  const nstring& dname);
+			  const string& dname);
   void kick_cap_releases(MDRequest *mdr);
 
  protected:

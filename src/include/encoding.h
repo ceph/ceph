@@ -108,6 +108,16 @@ inline void decode(std::string& s, bufferlist::iterator& p)
   p.copy(len, s);
 }
 
+inline void encode_nohead(const std::string& s, bufferlist& bl)
+{
+  bl.append(s.data(), s.length());
+}
+inline void decode_nohead(int len, std::string& s, bufferlist::iterator& p)
+{
+  s.clear();
+  p.copy(len, s);
+}
+
 // const char* (encode only, string compatible)
 inline void encode(const char *s, bufferlist& bl) 
 {
@@ -270,28 +280,6 @@ inline void encode(const std::list<T>& ls, bufferlist& bl)
 }
 template<class T>
 inline void decode(std::list<T>& ls, bufferlist::iterator& p)
-{
-  __u32 n;
-  decode(n, p);
-  ls.clear();
-  while (n--) {
-    T v;
-    decode(v, p);
-    ls.push_back(v);
-  }
-}
-
-// deque
-template<class T>
-inline void encode(const std::deque<T>& ls, bufferlist& bl)
-{
-  __u32 n = ls.size();
-  encode(n, bl);
-  for (typename std::deque<T>::const_iterator p = ls.begin(); p != ls.end(); ++p)
-    encode(*p, bl);
-}
-template<class T>
-inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
 {
   __u32 n;
   decode(n, p);
@@ -514,6 +502,28 @@ inline void decode(__gnu_cxx::hash_set<T>& m, bufferlist::iterator& p)
     T k;
     decode(k, p);
     m.insert(k);
+  }
+}
+
+// deque
+template<class T>
+inline void encode(const std::deque<T>& ls, bufferlist& bl)
+{
+  __u32 n = ls.size();
+  encode(n, bl);
+  for (typename std::deque<T>::const_iterator p = ls.begin(); p != ls.end(); ++p)
+    encode(*p, bl);
+}
+template<class T>
+inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  ls.clear();
+  while (n--) {
+    T v;
+    decode(v, p);
+    ls.push_back(v);
   }
 }
 

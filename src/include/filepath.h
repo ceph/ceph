@@ -31,7 +31,6 @@ using namespace std;
 
 #include "buffer.h"
 #include "encoding.h"
-#include "nstring.h"
 
 class filepath {
   inodeno_t ino;   // base inode.  ino=0 implies pure relative path.
@@ -160,10 +159,6 @@ class filepath {
       path += "/";
     path += s;
     bits.push_back(s);
-  }
-  void push_dentry(const nstring &ns) {
-    string s = ns.c_str();
-    push_dentry(s);
   }
   void push_dentry(const char *cs) {
     string s = cs;

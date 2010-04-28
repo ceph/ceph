@@ -329,7 +329,7 @@ void MDCache::create_mydir_hierarchy(C_Gather *gather)
   // stray dir
   CInode *stray = create_system_inode(MDS_INO_STRAY(mds->whoami), S_IFDIR);
   CDir *straydir = stray->get_or_open_dirfrag(this, frag_t());
-  nstring name("stray");
+  string name("stray");
   mydir->add_primary_dentry(name, stray);
   stray->inode.dirstat = straydir->fnode.fragstat;
   stray->inode.accounted_rstat = stray->inode.rstat;
@@ -527,7 +527,7 @@ void MDCache::populate_mydir()
   }    
 
   // open or create stray
-  nstring strayname("stray");
+  string strayname("stray");
   CDentry *straydn = mydir->lookup(strayname);
   if (!straydn || !straydn->get_linkage()->get_inode()) {
     _create_system_file(mydir, strayname.c_str(), create_system_inode(MDS_INO_STRAY(mds->whoami), S_IFDIR),
@@ -538,7 +538,7 @@ void MDCache::populate_mydir()
   assert(stray);
 
   // open or create journal file
-  nstring jname("journal");
+  string jname("journal");
   CDentry *jdn = mydir->lookup(jname);
   if (!jdn || !jdn->get_linkage()->get_inode()) {
     _create_system_file(mydir, jname.c_str(), create_system_inode(MDS_INO_LOG_OFFSET + mds->whoami, S_IFREG),
@@ -5173,7 +5173,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
     }
     
     // DENTRIES
-    for (map<dirfrag_t, map<pair<nstring,snapid_t>,int> >::iterator pd = p->second.dentries.begin();
+    for (map<dirfrag_t, map<pair<string,snapid_t>,int> >::iterator pd = p->second.dentries.begin();
 	 pd != p->second.dentries.end();
 	 ++pd) {
       dout(10) << " dn expires in dir " << pd->first << dendl;
@@ -5188,7 +5188,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	assert(dir->is_auth());
       }
       
-      for (map<pair<nstring,snapid_t>,int>::iterator p = pd->second.begin();
+      for (map<pair<string,snapid_t>,int>::iterator p = pd->second.begin();
 	   p != pd->second.end();
 	   ++p) {
 	int nonce = p->second;
@@ -7890,7 +7890,7 @@ CDir *MDCache::forge_replica_dir(CInode *diri, frag_t fg, int from)
 
 CDentry *MDCache::add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<Context*>& finished)
 {
-  nstring name;
+  string name;
   snapid_t last;
   ::decode(name, p);
   ::decode(last, p);

@@ -18,19 +18,19 @@
 
 class MDentryLink : public Message {
   dirfrag_t dirfrag;
-  nstring dn;
+  string dn;
   bool is_primary;
 
  public:
   dirfrag_t get_dirfrag() { return dirfrag; }
-  nstring& get_dn() { return dn; }
+  string& get_dn() { return dn; }
   bool get_is_primary() { return is_primary; }
 
   bufferlist bl;
 
   MDentryLink() :
     Message(MSG_MDS_DENTRYLINK) { }
-  MDentryLink(dirfrag_t df, nstring& n, bool p) :
+  MDentryLink(dirfrag_t df, string& n, bool p) :
     Message(MSG_MDS_DENTRYLINK),
     dirfrag(df),
     dn(n),

@@ -18,8 +18,6 @@
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
 
-#include "include/nstring.h"
-
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
 #include "common/ConfUtils.h"

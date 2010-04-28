@@ -2357,7 +2357,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
   snapid_t snapid = mdr->snapid;
 
-  nstring offset_str = req->get_path2();
+  string offset_str = req->get_path2();
   const char *offset = offset_str.length() ? offset_str.c_str() : 0;
 
   dout(10) << "snapid " << snapid << " offset '" << offset_str << "'" << dendl;

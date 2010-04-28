@@ -245,13 +245,13 @@ public:
   void add_weak_primary_dentry(dirfrag_t df, const string& dname, snapid_t first, snapid_t last, inodeno_t ino) {
     weak[df][string_snap_t(dname, last)] = dn_weak(first, ino);
   }
-  void add_strong_dentry(dirfrag_t df, const nstring& dname, snapid_t first, snapid_t last, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int ls) {
+  void add_strong_dentry(dirfrag_t df, const string& dname, snapid_t first, snapid_t last, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int ls) {
     strong_dentries[df][string_snap_t(dname, last)] = dn_strong(first, pi, ri, rdt, n, ls);
   }
-  void add_dentry_authpin(dirfrag_t df, const nstring& dname, snapid_t last, const metareqid_t& ri) {
+  void add_dentry_authpin(dirfrag_t df, const string& dname, snapid_t last, const metareqid_t& ri) {
     authpinned_dentries[df][string_snap_t(dname, last)] = ri;
   }
-  void add_dentry_xlock(dirfrag_t df, const nstring& dname, snapid_t last, const metareqid_t& ri) {
+  void add_dentry_xlock(dirfrag_t df, const string& dname, snapid_t last, const metareqid_t& ri) {
     xlocked_dentries[df][string_snap_t(dname, last)] = ri;
   }
 

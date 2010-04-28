@@ -111,7 +111,7 @@ int main(int argc, const char **argv)
     exit(0);
   }
 
-  nstring magic;
+  string magic;
   ceph_fsid_t fsid;
   int w;
   int r = OSD::peek_meta(g_conf.osd_data, magic, fsid, w);

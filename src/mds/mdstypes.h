@@ -16,7 +16,6 @@ using namespace std;
 
 #include "include/frag.h"
 #include "include/xlist.h"
-#include "include/nstring.h"
 
 #include <boost/pool/pool.hpp>
 
@@ -585,15 +584,15 @@ struct dentry_key_t {
     bl.append("_", 1);
     bl.append(b);
   }
-  static void decode_helper(bufferlist::iterator& bl, nstring& nm, snapid_t& sn) {
-    nstring foo;
+  static void decode_helper(bufferlist::iterator& bl, string& nm, snapid_t& sn) {
+    string foo;
     ::decode(foo, bl);
 
     int i = foo.length()-1;
     while (foo[i] != '_' && i)
       i--;
     assert(i);
-    if (i+5 == foo.length() &&
+    if (i+5 == (int)foo.length() &&
 	foo[i+1] == 'h' &&
 	foo[i+2] == 'e' &&
 	foo[i+3] == 'a' &&
@@ -606,7 +605,7 @@ struct dentry_key_t {
       sscanf(foo.c_str() + i + 1, "%llx", &x);
       sn = x;
     }  
-    nm = nstring(i, foo.c_str());
+    nm = string(foo.c_str(), i);
   }
 };
 
@@ -627,14 +626,13 @@ inline bool operator<(const dentry_key_t& k1, const dentry_key_t& k2)
 
 
 /*
- * string_snap_t is a simple (nstring, snapid_t) pair
+ * string_snap_t is a simple (string, snapid_t) pair
  */
 struct string_snap_t {
-  nstring name;
+  string name;
   snapid_t snapid;
   string_snap_t() {}
   string_snap_t(const string& n, snapid_t s) : name(n), snapid(s) {}
-  string_snap_t(const nstring& n, snapid_t s) : name(n), snapid(s) {}
   string_snap_t(const char *n, snapid_t s) : name(n), snapid(s) {}
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
@@ -1068,7 +1066,7 @@ class MDSCacheObjectInfo {
 public:
   inodeno_t ino;
   dirfrag_t dirfrag;
-  nstring dname;
+  string dname;
   snapid_t snapid;
 
   MDSCacheObjectInfo() : ino(0) {}

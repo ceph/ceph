@@ -229,7 +229,7 @@ private:
   int stickydir_ref;
 
 public:
-  frag_t pick_dirfrag(const nstring &dn);
+  frag_t pick_dirfrag(const string &dn);
   bool has_dirfrags() { return !dirfrags.empty(); }
   CDir* get_dirfrag(frag_t fg) {
     if (dirfrags.count(fg)) {

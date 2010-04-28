@@ -1812,7 +1812,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 void Locker::process_cap_update(MDRequest *mdr, client_t client,
 				inodeno_t ino, __u64 cap_id, int caps, int wanted,
 				int seq, int issue_seq, int mseq,
-				const nstring& dname)
+				const string& dname)
 {
   CInode *in = mdcache->get_inode(ino);
   if (!in)

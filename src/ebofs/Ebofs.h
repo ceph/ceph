@@ -274,12 +274,12 @@ protected:
 
   // object attr
   int setattr(coll_t cid, pobject_t oid, const char *name, const void *value, size_t size, Context *onsafe=0);
-  int setattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr>& attrset, Context *onsafe=0);
+  int setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& attrset, Context *onsafe=0);
   int getattr(coll_t cid, pobject_t oid, const char *name, void *value, size_t size);
   int getattr(coll_t cid, pobject_t oid, const char *name, bufferptr& bp);
-  int getattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr> &aset);
+  int getattrs(coll_t cid, pobject_t oid, map<string,bufferptr> &aset);
   int rmattr(coll_t cid, pobject_t oid, const char *name, Context *onsafe=0);
-  int listattr(coll_t cid, pobject_t oid, vector<nstring>& attrs);
+  int listattr(coll_t cid, pobject_t oid, vector<string>& attrs);
 
   int get_object_collections(coll_t cid, pobject_t oid, set<coll_t>& ls);
 
@@ -296,12 +296,12 @@ protected:
   int collection_list(coll_t c, vector<pobject_t>& o);
   
   int collection_setattr(coll_t cid, const char *name, const void *value, size_t size, Context *onsafe);
-  int collection_setattrs(coll_t cid, map<nstring,bufferptr> &aset);
+  int collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
   int collection_getattr(coll_t cid, const char *name, void *value, size_t size);
   int collection_getattr(coll_t cid, const char *name, bufferlist& bl);
-  int collection_getattrs(coll_t cid, map<nstring,bufferptr> &aset);
+  int collection_getattrs(coll_t cid, map<string,bufferptr> &aset);
   int collection_rmattr(coll_t cid, const char *name, Context *onsafe);
-  int collection_listattr(coll_t oid, vector<nstring>& attrs);
+  int collection_listattr(coll_t oid, vector<string>& attrs);
   
   // maps
   int map_lookup(pobject_t o, bufferlist& key, bufferlist& val);
@@ -330,7 +330,7 @@ private:
   int _stat(pobject_t oid, struct stat *st);
   int _getattr(pobject_t oid, const char *name, void *value, size_t size);
   int _getattr(pobject_t oid, const char *name, bufferptr& bp);
-  int _getattrs(pobject_t oid, map<nstring,bufferptr> &aset);
+  int _getattrs(pobject_t oid, map<string,bufferptr> &aset);
   int _get_object_collections(pobject_t oid, set<coll_t>& ls);
 
   bool _write_will_block();
@@ -343,7 +343,7 @@ private:
   int _clone(coll_t cid, pobject_t from, pobject_t to);
   int _clone_range(coll_t cid, pobject_t from, pobject_t to, __u64 off, __u64 len);
   int _setattr(pobject_t oid, const char *name, const void *value, size_t size);
-  int _setattrs(pobject_t oid, map<nstring,bufferptr>& attrset);
+  int _setattrs(pobject_t oid, map<string,bufferptr>& attrset);
   int _rmattr(pobject_t oid, const char *name);
   bool _collection_exists(coll_t c);
   int _collection_list(coll_t c, vector<pobject_t>& o);
@@ -351,9 +351,9 @@ private:
   int _destroy_collection(coll_t c);
   int _collection_add(coll_t c, pobject_t o);
   int _collection_remove(coll_t c, pobject_t o);
-  int _collection_getattrs(coll_t oid, map<nstring,bufferptr> &aset);
+  int _collection_getattrs(coll_t oid, map<string,bufferptr> &aset);
   int _collection_setattr(coll_t oid, const char *name, const void *value, size_t size);
-  int _collection_setattrs(coll_t oid, map<nstring,bufferptr> &aset);
+  int _collection_setattrs(coll_t oid, map<string,bufferptr> &aset);
   int _collection_rmattr(coll_t cid, const char *name);
 
   

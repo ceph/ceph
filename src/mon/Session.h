@@ -26,12 +26,12 @@ struct MonSession;
 
 struct Subscription {
   MonSession *session;
-  nstring type;
+  string type;
   xlist<Subscription*>::item type_item;
   version_t last;
   bool onetime;
   
-  Subscription(MonSession *s, const nstring& t) : session(s), type(t), type_item(this) {};
+  Subscription(MonSession *s, const string& t) : session(s), type(t), type_item(this) {};
 };
 
 struct MonSession : public RefCountedObject {
@@ -44,7 +44,7 @@ struct MonSession : public RefCountedObject {
   uint64_t global_id;
   uint64_t notified_global_id;
 
-  map<nstring, Subscription*> sub_map;
+  map<string, Subscription*> sub_map;
 
   AuthServiceHandler *auth_handler;
 
@@ -62,12 +62,12 @@ struct MonSession : public RefCountedObject {
 
 struct MonSessionMap {
   xlist<MonSession*> sessions;
-  map<nstring, xlist<Subscription*> > subs;
+  map<string, xlist<Subscription*> > subs;
   multimap<int, MonSession*> by_osd;
 
   void remove_session(MonSession *s) {
     assert(!s->closed);
-    for (map<nstring,Subscription*>::iterator p = s->sub_map.begin(); p != s->sub_map.end(); ++p)
+    for (map<string,Subscription*>::iterator p = s->sub_map.begin(); p != s->sub_map.end(); ++p)
       p->second->type_item.remove_myself();
     s->sub_map.clear();
     s->item.remove_myself();
@@ -106,7 +106,7 @@ struct MonSessionMap {
   }
 
 
-  void add_update_sub(MonSession *s, const nstring& what, version_t have, bool onetime) {
+  void add_update_sub(MonSession *s, const string& what, version_t have, bool onetime) {
     Subscription *sub = 0;
     if (s->sub_map.count(what)) {
       sub = s->sub_map[what];

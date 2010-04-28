@@ -151,7 +151,7 @@ public:
     // incremental
     int32_t new_max_osd;
     map<int32_t,pg_pool_t> new_pools;
-    map<int32_t,nstring> new_pool_names;
+    map<int32_t,string> new_pool_names;
     set<int32_t> old_pools;
     map<int32_t,entity_addr_t> new_up;
     map<int32_t,uint8_t> new_down;
@@ -263,8 +263,8 @@ private:
   map<pg_t,vector<int> > pg_temp;  // temp pg mapping (e.g. while we rebuild)
 
   map<int,pg_pool_t> pools;
-  map<int32_t,nstring> pool_name;
-  map<nstring,int> name_pool;
+  map<int32_t,string> pool_name;
+  map<string,int> name_pool;
 
   hash_map<entity_addr_t,utime_t> blacklist;
 
@@ -497,7 +497,7 @@ private:
       pools[p->first] = p->second;
       pools[p->first].v.last_change = epoch;
     }
-    for (map<int32_t,nstring>::iterator p = inc.new_pool_names.begin();
+    for (map<int32_t,string>::iterator p = inc.new_pool_names.begin();
 	 p != inc.new_pool_names.end();
 	 p++) {
       pool_name[p->first] = p->second;
@@ -659,7 +659,7 @@ private:
 
     // index pool names
     name_pool.clear();
-    for (map<int,nstring>::iterator i = pool_name.begin(); i != pool_name.end(); i++)
+    for (map<int,string>::iterator i = pool_name.begin(); i != pool_name.end(); i++)
       name_pool[i->second] = i->first;
   }
  

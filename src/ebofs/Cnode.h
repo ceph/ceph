@@ -36,7 +36,7 @@ class Cnode : public LRUObject
   extent_t cnode_loc;
   epoch_t last_alloc_epoch;
 
-  map<nstring,bufferptr> attr;
+  map<string,bufferptr> attr;
 
  public:
   Cnode(coll_t cid) : ref(0), dirty(false), coll_id(cid), last_alloc_epoch(0) {
@@ -75,7 +75,7 @@ class Cnode : public LRUObject
 
   int get_attr_bytes() {
     int s = 0;
-    for (map<nstring, bufferptr>::iterator i = attr.begin();
+    for (map<string, bufferptr>::iterator i = attr.begin();
          i != attr.end();
          i++) {
       s += i->first.length() + 1;

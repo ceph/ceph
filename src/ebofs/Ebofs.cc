@@ -830,7 +830,7 @@ csum_t Ebofs::encode_onode(Onode *on, bufferlist& bl, unsigned& off)
   }    
   
   // attr
-  for (map<nstring, bufferptr>::iterator i = on->attr.begin();
+  for (map<string, bufferptr>::iterator i = on->attr.begin();
        i != on->attr.end();
        i++) {
     bl.copy_in(off, i->first.length()+1, i->first.c_str());
@@ -1180,7 +1180,7 @@ csum_t Ebofs::encode_cnode(Cnode *cn, bufferlist& bl, unsigned& off)
   off += sizeof(ec);
   
   // attr
-  for (map<nstring, bufferptr>::iterator i = cn->attr.begin();
+  for (map<string, bufferptr>::iterator i = cn->attr.begin();
        i != cn->attr.end();
        i++) {
     bl.copy_in(off, i->first.length()+1, i->first.c_str());
@@ -2586,7 +2586,7 @@ unsigned Ebofs::_apply_transaction(Transaction& t)
       {
 	coll_t cid = t.get_cid();
         pobject_t oid = t.get_oid();
-        map<nstring,bufferptr>& attrset = t.get_attrset();
+        map<string,bufferptr>& attrset = t.get_attrset();
         if (_setattrs(oid, attrset) < 0) {
           dout(7) << "apply_transaction fail on _setattrs" << dendl;
           r &= bit;
@@ -3212,7 +3212,7 @@ int Ebofs::_setattr(pobject_t oid, const char *name, const void *value, size_t s
   Onode *on = get_onode(oid);
   if (!on) return -ENOENT;
 
-  nstring n(name);
+  string n(name);
   on->attr[n] = buffer::copy((char*)value, size);
   dirty_onode(on);
   put_onode(on);
@@ -3245,7 +3245,7 @@ int Ebofs::setattr(coll_t cid, pobject_t oid, const char *name, const void *valu
   return r;
 }
 
-int Ebofs::_setattrs(pobject_t oid, map<nstring,bufferptr>& attrset)
+int Ebofs::_setattrs(pobject_t oid, map<string,bufferptr>& attrset)
 {
   dout(8) << "setattrs " << oid << dendl;
 
@@ -3258,7 +3258,7 @@ int Ebofs::_setattrs(pobject_t oid, map<nstring,bufferptr>& attrset)
   return 0;
 }
 
-int Ebofs::setattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr>& attrset, Context *onsafe)
+int Ebofs::setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& attrset, Context *onsafe)
 {
   ebofs_lock.Lock();
   int r = _setattrs(oid, attrset);
@@ -3357,7 +3357,7 @@ int Ebofs::_getattr(pobject_t oid, const char *name, bufferptr& bp)
   return r;
 }
 
-int Ebofs::getattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr> &aset)
+int Ebofs::getattrs(coll_t cid, pobject_t oid, map<string,bufferptr> &aset)
 {
   ebofs_lock.Lock();
   int r = _getattrs(oid, aset);
@@ -3365,7 +3365,7 @@ int Ebofs::getattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr> &aset)
   return r;
 }
 
-int Ebofs::_getattrs(pobject_t oid, map<nstring,bufferptr> &aset)
+int Ebofs::_getattrs(pobject_t oid, map<string,bufferptr> &aset)
 {
   dout(8) << "_getattrs " << oid << dendl;
 
@@ -3416,7 +3416,7 @@ int Ebofs::rmattr(coll_t cid, pobject_t oid, const char *name, Context *onsafe)
   return r;
 }
 
-int Ebofs::listattr(coll_t cid, pobject_t oid, vector<nstring>& attrs)
+int Ebofs::listattr(coll_t cid, pobject_t oid, vector<string>& attrs)
 {
   ebofs_lock.Lock();
   dout(8) << "listattr " << oid << dendl;
@@ -3428,7 +3428,7 @@ int Ebofs::listattr(coll_t cid, pobject_t oid, vector<nstring>& attrs)
   }
 
   attrs.clear();
-  for (map<nstring,bufferptr>::iterator i = on->attr.begin();
+  for (map<string,bufferptr>::iterator i = on->attr.begin();
        i != on->attr.end();
        i++) {
     attrs.push_back(i->first);
@@ -3820,7 +3820,7 @@ int Ebofs::collection_getattr(coll_t cid, const char *name, bufferlist& bl)
   return r;
 }
 
-int Ebofs::collection_getattrs(coll_t cid, map<nstring,bufferptr> &aset)
+int Ebofs::collection_getattrs(coll_t cid, map<string,bufferptr> &aset)
 {
   ebofs_lock.Lock();
   int r = _collection_getattrs(cid, aset);
@@ -3828,7 +3828,7 @@ int Ebofs::collection_getattrs(coll_t cid, map<nstring,bufferptr> &aset)
   return r;
 }
 
-int Ebofs::_collection_getattrs(coll_t cid, map<nstring,bufferptr> &aset)
+int Ebofs::_collection_getattrs(coll_t cid, map<string,bufferptr> &aset)
 {
   dout(8) << "_collection_getattrs " << cid << dendl;
 
@@ -3839,7 +3839,7 @@ int Ebofs::_collection_getattrs(coll_t cid, map<nstring,bufferptr> &aset)
   return 0;
 }
 
-int Ebofs::collection_setattrs(coll_t cid, map<nstring,bufferptr> &aset)
+int Ebofs::collection_setattrs(coll_t cid, map<string,bufferptr> &aset)
 {
   ebofs_lock.Lock();
   int r = _collection_setattrs(cid, aset);
@@ -3847,7 +3847,7 @@ int Ebofs::collection_setattrs(coll_t cid, map<nstring,bufferptr> &aset)
   return r;
 }
 
-int Ebofs::_collection_setattrs(coll_t cid, map<nstring,bufferptr> &aset)
+int Ebofs::_collection_setattrs(coll_t cid, map<string,bufferptr> &aset)
 {
   dout(8) << "_collection_setattrs " << cid << dendl;
   
@@ -3900,7 +3900,7 @@ int Ebofs::collection_rmattr(coll_t cid, const char *name, Context *onsafe)
   return 0;
 }
 
-int Ebofs::collection_listattr(coll_t cid, vector<nstring>& attrs)
+int Ebofs::collection_listattr(coll_t cid, vector<string>& attrs)
 {
   ebofs_lock.Lock();
   dout(10) << "collection_listattr " << hex << cid << dec << dendl;
@@ -3912,7 +3912,7 @@ int Ebofs::collection_listattr(coll_t cid, vector<nstring>& attrs)
   }
 
   attrs.clear();
-  for (map<nstring,bufferptr>::iterator i = cn->attr.begin();
+  for (map<string,bufferptr>::iterator i = cn->attr.begin();
        i != cn->attr.end();
        i++) {
     attrs.push_back(i->first);

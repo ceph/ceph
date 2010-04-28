@@ -21,7 +21,6 @@
 #include "include/types.h"
 #include "include/CompatSet.h"
 #include "include/interval_set.h"
-#include "include/nstring.h"
 
 
 
@@ -526,7 +525,7 @@ static inline std::string pg_state_string(int state) {
 struct pool_snap_info_t {
   snapid_t snapid;
   utime_t stamp;
-  nstring name;
+  string name;
 
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
@@ -1080,7 +1079,7 @@ public:
     ::decode(v, bl);
 
     if (v < 3) {
-      nstring magic;
+      string magic;
       ::decode(magic, bl);
     }
     ::decode(fsid, bl);
@@ -1250,7 +1249,7 @@ struct ScrubMap {
   struct object {
     sobject_t poid;
     __u64 size;
-    map<nstring,bufferptr> attrs;
+    map<string,bufferptr> attrs;
 
     void encode(bufferlist& bl) const {
       __u8 struct_v = 1;
@@ -1270,7 +1269,7 @@ struct ScrubMap {
   WRITE_CLASS_ENCODER(object)
 
   vector<object> objects;
-  map<nstring,bufferptr> attrs;
+  map<string,bufferptr> attrs;
   bufferlist logbl;
 
   void encode(bufferlist& bl) const {
