@@ -199,4 +199,3 @@ AC_CONFIG_FILES([Makefile
 	ceph.spec])
 AC_OUTPUT
 
-AM_INIT_AUTOMAKE
