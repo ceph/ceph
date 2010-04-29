@@ -1038,6 +1038,17 @@ void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon,
     cf = NULL;
   }
 
+  // do post_process substitutions
+  int len = sizeof(config_optionsp)/sizeof(config_option);
+  for (int i = 0; i<len; i++) {
+    config_option *opt = &config_optionsp[i];
+    if (opt->type == OPT_STR && opt->val_ptr) {
+      if (*(char**)opt->val_ptr) {
+	*(char **)opt->val_ptr = conf_post_process_val(*(char **)opt->val_ptr);
+      }
+    }
+  }
+
   // open new conf
   string fn = g_conf.conf;
   list<string> ls;
