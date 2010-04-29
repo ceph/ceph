@@ -334,10 +334,11 @@ inline bool operator==(const byte_range_t& l, const byte_range_t& r) {
   return l.first == r.first && l.last == r.last;
 }
 
+
 struct ceph_lock_state_t {
-  multimap<__u64, ceph_filelock> held_locks; //current locks
-  multimap<__u64, ceph_filelock> waiting_locks; //locks waiting for other locks
-  //both of the above are keyed by starting offset
+  multimap<__u64, ceph_filelock> held_locks;    // current locks
+  multimap<__u64, ceph_filelock> waiting_locks; // locks waiting for other locks
+  // both of the above are keyed by starting offset
 
   /*
    * Try to set a new lock. If it's blocked and wait_on_fail is true,
@@ -348,7 +349,7 @@ struct ceph_lock_state_t {
    */
   bool add_lock(ceph_filelock& new_lock, bool wait_on_fail) {
     list<ceph_filelock*> overlapping_locks, self_overlapping_locks;
-    //first, get any overlapping locks and split them into owned-by-us and not
+    // first, get any overlapping locks and split them into owned-by-us and not
     if(get_overlapping_locks(new_lock, overlapping_locks)) {
       split_by_owner(new_lock, overlapping_locks, self_overlapping_locks);
     }

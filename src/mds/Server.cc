@@ -2558,16 +2558,20 @@ void Server::handle_client_file_setlock(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  //get the inode to operate on, and set up any locks needed for that
+
+  // get the inode to operate on, and set up any locks needed for that
   CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
-  if (!cur) return;
-  wrlocks.insert(&cur->flocklock);
+  if (!cur)
+    return;
+
+  xlocks.insert(&cur->flocklock);
   /* acquire_locks will return true if it gets the locks. If it fails,
      it will redeliver this request at a later date, so drop the request.
    */
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks)) return;
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
 
-  //copy the lock change into a ceph_filelock so we can store/apply it
+  // copy the lock change into a ceph_filelock so we can store/apply it
   ceph_filelock set_lock;
   set_lock.start = req->head.args.filelock_change.start;
   set_lock.length = req->head.args.filelock_change.length;
@@ -2577,8 +2581,9 @@ void Server::handle_client_file_setlock(MDRequest *mdr)
   bool will_wait = req->head.args.filelock_change.wait;
 
   ceph_lock_state_t *lock_state = NULL;
-  //get the appropriate lock state
-  switch(req->head.args.filelock_change.rule) {
+
+  // get the appropriate lock state
+  switch (req->head.args.filelock_change.rule) {
   case CEPH_LOCK_FLOCK:
     lock_state = &cur->flock_locks;
     break;
@@ -2601,13 +2606,15 @@ void Server::handle_client_file_setlock(MDRequest *mdr)
      * will be sent when the lock comes up again in rotation by the MDS.
      * It's a cheap hack, but it's easy to code. */
   } else {
-    if (lock_state->add_lock(set_lock, will_wait)) { //lock set successfully
+    if (lock_state->add_lock(set_lock, will_wait)) {
+      // lock set successfully
       reply_request(mdr, 0);
-    } else { //couldn't set lock right now
-      if (!will_wait) reply_request(mdr, -1);
-      else {
+    } else {
+      // couldn't set lock right now
+      if (!will_wait)
+	reply_request(mdr, -1);
+      else
 	cur->add_waiter(CInode::WAIT_FLOCK, new C_MDS_RetryRequest(mdcache, mdr));
-      }
     }
   }
 }
@@ -2616,15 +2623,20 @@ void Server::handle_client_file_readlock(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  //get the inode to operate on, and set up any locks needed for that
+
+  // get the inode to operate on, and set up any locks needed for that
   CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
-  if (!cur) return;
+  if (!cur)
+    return;
+
   /* acquire_locks will return true if it gets the locks. If it fails,
      it will redeliver this request at a later date, so drop the request.
   */
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks)) return;
+  rdlocks.insert(&cur->flocklock);
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
   
-  //copy the lock change into a ceph_filelock so we can store/apply it
+  // copy the lock change into a ceph_filelock so we can store/apply it
   ceph_filelock checking_lock;
   checking_lock.start = req->head.args.filelock_change.start;
   checking_lock.length = req->head.args.filelock_change.length;
@@ -2632,9 +2644,9 @@ void Server::handle_client_file_readlock(MDRequest *mdr)
   checking_lock.pid = req->head.args.filelock_change.pid;
   checking_lock.type = req->head.args.filelock_change.type;
 
+  // get the appropriate lock state
   ceph_lock_state_t *lock_state = NULL;
-  //get the appropriate lock state
-  switch(req->head.args.filelock_change.rule) {
+  switch (req->head.args.filelock_change.rule) {
   case CEPH_LOCK_FLOCK:
     lock_state = &cur->flock_locks;
     break;
