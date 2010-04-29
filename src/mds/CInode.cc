@@ -575,6 +575,15 @@ void CInode::remove_client_cap(client_t client)
     mdcache->num_inodes_with_caps--;
   }
   mdcache->num_caps--;
+
+  //clean up advisory locks
+  bool fcntl_removed = fcntl_locks.remove_all_from(client);
+  bool flock_removed = flock_locks.remove_all_from(client);
+  if (fcntl_removed || flock_removed) {
+    list<Context*> waiters;
+    take_waiting(CInode::WAIT_FLOCK, waiters);
+    mdcache->mds->queue_waiters(waiters);
+  }
 }
 
 void CInode::move_to_realm(SnapRealm *realm)

@@ -2605,6 +2605,9 @@ void Server::handle_client_file_setlock(MDRequest *mdr)
     /* For now we're ignoring the activated locks because their responses
      * will be sent when the lock comes up again in rotation by the MDS.
      * It's a cheap hack, but it's easy to code. */
+    list<Context*> waiters;
+    cur->take_waiting(CInode::WAIT_FLOCK, waiters);
+    mds->queue_waiters(waiters);
   } else {
     if (lock_state->add_lock(set_lock, will_wait)) {
       // lock set successfully
