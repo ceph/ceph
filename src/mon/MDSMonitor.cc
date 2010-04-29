@@ -158,10 +158,13 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   version_t seq = m->get_seq();
   MDSMap::mds_info_t info;
 
-  //check privileges, ignore if fails
-  if ( !m->get_session()->caps.check_privileges(PAXOS_MDSMAP, MON_CAP_X)) {
-    dout(0) << "received MMDSBeacon from entity with insufficient privileges "
-	    << m->get_session()->caps << dendl;
+  // check privileges, ignore if fails
+  MonSession *session = m->get_session();
+  if (!session)
+    goto out;
+  if (!session->caps.check_privileges(PAXOS_MDSMAP, MON_CAP_X)) {
+    dout(0) << "preprocess_beason got MMDSBeacon from entity with insufficient privileges "
+	    << session->caps << dendl;
     goto out;
   }
 
@@ -247,19 +250,28 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 bool MDSMonitor::preprocess_offload_targets(MMDSLoadTargets* m)
 {
   dout(10) << "preprocess_offload_targets " << *m << " from " << m->get_orig_source() << dendl;
-
-  //check privileges, ignore message if fails
-  if(!m->get_session()->caps.check_privileges(PAXOS_MDSMAP, MON_CAP_X)) {
-    dout(0) << "got MMDSLoadTargets from entity with insufficient caps "
-	    << m->get_session()->caps << dendl;
-    return true;
+  __u64 gid;
+  
+  // check privileges, ignore message if fails
+  MonSession *session = m->get_session();
+  if (!session)
+    goto done;
+  if (!session->caps.check_privileges(PAXOS_MDSMAP, MON_CAP_X)) {
+    dout(0) << "preprocess_offload_targets got MMDSLoadTargets from entity with insufficient caps "
+	    << session->caps << dendl;
+    goto done;
   }
 
-  __u64 gid = m->global_id;
+  gid = m->global_id;
   if (mdsmap.mds_info.count(gid) &&
       m->targets == mdsmap.mds_info[gid].export_targets)
-    return true;
+    goto done;
+
   return false;
+
+ done:
+  m->put();
+  return true;
 }
 
 
