@@ -81,6 +81,13 @@ int buffer::list::write_file(const char *fn, int mode)
     cerr << "can't write " << fn << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
     return -errno;
   }
+  int err = write_fd(fd);
+  ::close(fd);
+  return err;
+}
+
+int buffer::list::write_fd(int fd)
+{
   for (std::list<ptr>::const_iterator it = _buffers.begin(); 
        it != _buffers.end(); 
        it++) {
@@ -88,17 +95,16 @@ int buffer::list::write_file(const char *fn, int mode)
     int left = it->length();
     while (left > 0) {
       int r = ::write(fd, c, left);
-      if (r < 0) {
-	::close(fd);
+      if (r < 0)
 	return -errno;
-      }
       c += r;
       left -= r;
     }
   }
-  ::close(fd);
   return 0;
 }
+
+
 
 void buffer::list::hexdump(std::ostream &out) const
 {
