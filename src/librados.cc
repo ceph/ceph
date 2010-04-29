@@ -444,13 +444,12 @@ int RadosClient::list_pools(std::list<string>& v)
 
 int RadosClient::get_pool_stats(std::list<string>& pools, map<string,pool_stat_t>& result)
 {
-  map<string,pool_stat_t> r;
   Mutex mylock("RadosClient::get_pool_stats::mylock");
   Cond cond;
   bool done;
 
   lock.Lock();
-  objecter->get_pool_stats(pools, &r, new C_SafeCond(&mylock, &cond, &done));
+  objecter->get_pool_stats(pools, &result, new C_SafeCond(&mylock, &cond, &done));
   lock.Unlock();
   
   mylock.Lock();
