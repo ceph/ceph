@@ -666,7 +666,18 @@ private:
     }
     return false;
   }
+
+public:
+  void encode(bufferlist& bl) const {
+    ::encode(held_locks, bl);
+    ::encode(waiting_locks, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(held_locks, bl);
+    ::decode(waiting_locks, bl);
+  }
 };
+WRITE_CLASS_ENCODER(ceph_lock_state_t)
 
 struct inode_t {
   // base (immutable)
