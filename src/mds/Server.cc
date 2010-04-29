@@ -2660,7 +2660,7 @@ void Server::handle_client_file_readlock(MDRequest *mdr)
 	    << ", dropping request!" << dendl;
     return;
   }
-  lock_state->add_lock(checking_lock, false, false);
+  lock_state->look_for_lock(checking_lock);
 
   bufferlist lock_bl;
   ::encode(lock_state, lock_bl);

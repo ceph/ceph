@@ -385,6 +385,28 @@ struct ceph_lock_state_t {
     return false;
   }
 
+  void look_for_lock(ceph_filelock& testing_lock) {
+    list<ceph_filelock*> overlapping_locks, self_overlapping_locks;
+    if (get_overlapping_locks(testing_lock, overlapping_locks)) {
+      split_by_owner(testing_lock, overlapping_locks, self_overlapping_locks);
+    }
+    if (!overlapping_locks.empty()) { //somebody else owns overlapping lock
+      if (CEPH_LOCK_EXCL == testing_lock.type) { //any lock blocks it
+	testing_lock = *(*overlapping_locks.begin());
+      } else {
+	ceph_filelock *blocking_lock;
+	if ((blocking_lock = contains_exclusive_lock(overlapping_locks))) {
+	  testing_lock = *blocking_lock;
+	} else { //nothing blocking!
+	  testing_lock.type = CEPH_LOCK_UNLOCK;
+	}
+      }
+      return;
+    }
+    //if we get here, only our own locks block
+    testing_lock.type = CEPH_LOCK_UNLOCK;
+  }
+
   /*
    * Remove lock(s) described in old_lock. This may involve splitting a
    * previous lock or making a previous lock smaller.
@@ -659,13 +681,13 @@ private:
     }
   }
 
-  bool contains_exclusive_lock(list<ceph_filelock*>& locks) {
+  ceph_filelock *contains_exclusive_lock(list<ceph_filelock*>& locks) {
     for (list<ceph_filelock*>::iterator iter = locks.begin();
 	 iter != locks.end();
 	 ++iter) {
-      if (CEPH_LOCK_EXCL == (*iter)->type) return true;
+      if (CEPH_LOCK_EXCL == (*iter)->type) return *iter;
     }
-    return false;
+    return NULL;
   }
 
 public:
