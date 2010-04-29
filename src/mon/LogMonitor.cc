@@ -229,14 +229,17 @@ void LogMonitor::committed()
 bool LogMonitor::preprocess_log(MLog *m)
 {
   dout(10) << "preprocess_log " << *m << " from " << m->get_orig_source() << dendl;
+  int num_new = 0;
 
-  if (!m->get_session()->caps.check_privileges(PAXOS_LOG, MON_CAP_X)) {
-    dout(0) << "Received MLog from entity with insufficient privileges "
-	    << m->get_session()->caps << dendl;
-    return true; //no reply expected
+  MonSession *session = m->get_session();
+  if (!session)
+    goto done;
+  if (!session->caps.check_privileges(PAXOS_LOG, MON_CAP_X)) {
+    dout(0) << "preprocess_log got MLog from entity with insufficient privileges "
+	    << session->caps << dendl;
+    goto done;
   }
   
-  int num_new = 0;
   for (deque<LogEntry>::iterator p = m->entries.begin();
        p != m->entries.end();
        p++) {
@@ -245,9 +248,14 @@ bool LogMonitor::preprocess_log(MLog *m)
   }
   if (!num_new) {
     dout(10) << "  nothing new" << dendl;
-    return true;
+    goto done;
   }
+
   return false;
+
+ done:
+  delete m;
+  return true;
 }
 
 bool LogMonitor::prepare_log(MLog *m) 

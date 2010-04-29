@@ -264,9 +264,12 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
 
-  if (!m->get_session()->caps.check_privileges(PAXOS_MONMAP, MON_CAP_ALL)) {
-    string rs="Access denied";
-    reply_command((MMonCommand *)m, -EACCES, rs, 0);
+  MonSession *session = m->get_session();
+  if (!session ||
+      !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_ALL)) {
+    string rs = "Access denied";
+    reply_command(m, -EACCES, rs, 0);
+    return;
   }
 
   dout(0) << "handle_command " << *m << dendl;
@@ -514,14 +517,17 @@ void Monitor::remove_session(MonSession *s)
 void Monitor::handle_observe(MMonObserve *m)
 {
   dout(10) << "handle_observe " << *m << " from " << m->get_source_inst() << dendl;
-  //check that there are perms. Send a response back if they aren't sufficient,
-  //and delete the message (if it's not deleted for us, which happens when
-  //we own the connection to the requested observer).
-  if (!m->get_session()->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+  // check that there are perms. Send a response back if they aren't sufficient,
+  // and delete the message (if it's not deleted for us, which happens when
+  // we own the connection to the requested observer).
+  MonSession *session = m->get_session();
+  if (!session || !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
     bool delete_m = false;
-    if (m->session_mon) delete_m = true;
+    if (m->session_mon)
+      delete_m = true;
     send_reply(m, m);
-    if (delete_m) delete m;
+    if (delete_m)
+      delete m;
     return;
   }
   if (m->machine_id >= PAXOS_NUM) {
@@ -975,26 +981,32 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 
 void Monitor::handle_class(MClass *m)
 {
-  if (!m->get_session()->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
+  MonSession *session = m->get_session();
+  if (!session)
+    goto done;
+  if (!session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
     dout(0) << "MClass received from entity without sufficient privileges "
-	    << m->get_session()->caps << dendl;
-    delete m;
-    return;
+	    << session->caps << dendl;
+    goto done;
   }
+
   switch (m->action) {
     case CLASS_SET:
     case CLASS_GET:
       classmon()->handle_request(m);
-      break;
+      return;
+
     case CLASS_RESPONSE:
       dout(0) << "got a class response (" << *m << ") ???" << dendl;
-      delete m;
       break;
+
     default:
       dout(0) << "got an unknown class message (" << *m << ") ???" << dendl;
-      assert(0);
       break;
   }
+
+ done:
+  delete m;
 }
 
 bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, bool force_new)

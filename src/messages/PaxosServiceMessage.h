@@ -48,7 +48,8 @@ class PaxosServiceMessage : public Message {
    */
   MonSession *get_session() {
     MonSession *session = (MonSession *)get_connection()->get_priv();
-    session->put();
+    if (session)
+      session->put();
     return session;
   }
   

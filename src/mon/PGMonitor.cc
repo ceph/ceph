@@ -190,10 +190,13 @@ void PGMonitor::committed()
 
 void PGMonitor::handle_statfs(MStatfs *statfs)
 {
-  //check caps
-  if(!statfs->get_session()->caps.check_privileges(PAXOS_PGMAP, MON_CAP_R)) {
+  // check caps
+  MonSession *session = statfs->get_session();
+  if (!session)
+    goto out;
+  if (!session->caps.check_privileges(PAXOS_PGMAP, MON_CAP_R)) {
     dout(0) << "MStatfs received from entity with insufficient privileges "
-	    << statfs->get_session()->caps << dendl;
+	    << session->caps << dendl;
     goto out;
   }
   MStatfsReply *reply;
@@ -224,9 +227,12 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
 {
   MGetPoolStatsReply *reply;
 
-  if (!m->get_session()->caps.check_privileges(PAXOS_PGMAP, MON_CAP_R)) {
+  MonSession *session = m->get_session();
+  if (!session)
+    goto out;
+  if (!session->caps.check_privileges(PAXOS_PGMAP, MON_CAP_R)) {
     dout(0) << "MGetPoolStats received from entity with insufficient caps "
-	    << m->get_session()->caps << dendl;
+	    << session->caps << dendl;
     goto out;
   }
 
@@ -252,7 +258,6 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
 
  out:
   delete m;
-
   return true;
 }
 
@@ -261,12 +266,17 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
 {
   int from = stats->get_orig_source().num();
   MPGStatsAck *ack;
-  //check caps
-  if (!stats->get_session()->caps.check_privileges(PAXOS_PGMAP, MON_CAP_R)) {
+
+  // check caps
+  MonSession *session = stats->get_session();
+  if (!session)
+    goto out;
+  if (!session->caps.check_privileges(PAXOS_PGMAP, MON_CAP_R)) {
     dout(0) << "MPGStats received from entity with insufficient privileges "
-	    << stats->get_session()->caps << dendl;
+	    << session->caps << dendl;
     goto out;
   }
+
   // first, just see if they need a new osdmap.  but 
   // only if they've had the map for a while.
   if (stats->had_map_for > 30.0 && 
