@@ -1137,6 +1137,7 @@ public:
     void hexdump(std::ostream &out) const;
     int read_file(const char *fn, bool silent=false);
     int write_file(const char *fn, int mode=0644);
+    int write_fd(int fd);
     __u32 crc32c(__u32 crc) {
       for (std::list<ptr>::const_iterator it = _buffers.begin(); 
 	   it != _buffers.end(); 

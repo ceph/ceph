@@ -261,20 +261,7 @@ int MonitorStore::write_bl_ss(bufferlist& bl, const char *a, const char *b, bool
   }
   assert(fd >= 0);
   
-  // write data
-  for (list<bufferptr>::const_iterator it = bl.buffers().begin();
-       it != bl.buffers().end();
-       it++)  {
-    int r = ::write(fd, it->c_str(), it->length());
-    if (r != (int)it->length())
-      derr(0) << "put_bl_ss ::write() returned " << r << " not " << it->length() << dendl;
-    if (r < 0) {
-      char buf[80];
-      derr(0) << "put_bl_ss ::write() errored out, errno is " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-      err = -errno;
-      break;
-    }
-  }
+  err = bl.write_fd(fd);
 
   if (sync && !err)
     ::fsync(fd);
