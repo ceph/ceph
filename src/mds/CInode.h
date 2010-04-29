@@ -137,6 +137,7 @@ public:
   static const uint64_t WAIT_UNANCHORED  = (1<<2);
   static const uint64_t WAIT_FROZEN      = (1<<3);
   static const uint64_t WAIT_TRUNC       = (1<<4);
+  static const uint64_t WAIT_FLOCK       = (1<<5);
   
   static const uint64_t WAIT_ANY_MASK	= (uint64_t)(-1);
 
@@ -272,6 +273,8 @@ protected:
   int                   replica_caps_wanted; // [replica] what i've requested from auth
   utime_t               replica_caps_wanted_keep_until;
 
+  ceph_lock_state_t fcntl_locks;
+  ceph_lock_state_t flock_locks;
 
   // LogSegment dlists i (may) belong to
 public:

@@ -1122,6 +1122,14 @@ void Server::dispatch_client_request(MDRequest *mdr)
     handle_client_readdir(mdr);
     break;
 
+  case CEPH_MDS_OP_SETFILELOCK:
+    handle_client_file_setlock(mdr);
+    break;
+
+  case CEPH_MDS_OP_GETFILELOCK:
+    handle_client_file_readlock(mdr);
+    break;
+
     // funky.
   case CEPH_MDS_OP_CREATE:
     if (req->get_retry_attempt() &&
@@ -2546,6 +2554,109 @@ public:
   }
 };
 
+void Server::handle_client_file_setlock(MDRequest *mdr)
+{
+  MClientRequest *req = mdr->client_request;
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  //get the inode to operate on, and set up any locks needed for that
+  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  if (!cur) return;
+  wrlocks.insert(&cur->flocklock);
+  /* acquire_locks will return true if it gets the locks. If it fails,
+     it will redeliver this request at a later date, so drop the request.
+   */
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks)) return;
+
+  //copy the lock change into a ceph_filelock so we can store/apply it
+  ceph_filelock set_lock;
+  set_lock.start = req->head.args.filelock_change.start;
+  set_lock.length = req->head.args.filelock_change.length;
+  set_lock.client = req->get_orig_source().num();
+  set_lock.pid = req->head.args.filelock_change.pid;
+  set_lock.type = req->head.args.filelock_change.type;
+  bool will_wait = req->head.args.filelock_change.wait;
+
+  ceph_lock_state_t *lock_state = NULL;
+  //get the appropriate lock state
+  switch(req->head.args.filelock_change.rule) {
+  case CEPH_LOCK_FLOCK:
+    lock_state = &cur->flock_locks;
+    break;
+
+  case CEPH_LOCK_FCNTL:
+    lock_state = &cur->fcntl_locks;
+    break;
+
+  default:
+    dout(0) << "got unknown lock type " << set_lock.type
+	    << ", dropping request!" << dendl;
+    return;
+  }
+
+  if (CEPH_LOCK_UNLOCK == set_lock.type) {
+    list<ceph_filelock> activated_locks;
+    lock_state->remove_lock(set_lock, activated_locks);
+    reply_request(mdr, 0);
+    /* For now we're ignoring the activated locks because their responses
+     * will be sent when the lock comes up again in rotation by the MDS.
+     * It's a cheap hack, but it's easy to code. */
+  } else {
+    if (lock_state->add_lock(set_lock, will_wait)) { //lock set successfully
+      reply_request(mdr, 0);
+    } else { //couldn't set lock right now
+      if (!will_wait) reply_request(mdr, -1);
+      else {
+	cur->add_waiter(CInode::WAIT_FLOCK, new C_MDS_RetryRequest(mdcache, mdr));
+      }
+    }
+  }
+}
+
+void Server::handle_client_file_readlock(MDRequest *mdr)
+{
+  MClientRequest *req = mdr->client_request;
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  //get the inode to operate on, and set up any locks needed for that
+  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  if (!cur) return;
+  /* acquire_locks will return true if it gets the locks. If it fails,
+     it will redeliver this request at a later date, so drop the request.
+  */
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks)) return;
+  
+  //copy the lock change into a ceph_filelock so we can store/apply it
+  ceph_filelock checking_lock;
+  checking_lock.start = req->head.args.filelock_change.start;
+  checking_lock.length = req->head.args.filelock_change.length;
+  checking_lock.client = req->get_orig_source().num();
+  checking_lock.pid = req->head.args.filelock_change.pid;
+  checking_lock.type = req->head.args.filelock_change.type;
+
+  ceph_lock_state_t *lock_state = NULL;
+  //get the appropriate lock state
+  switch(req->head.args.filelock_change.rule) {
+  case CEPH_LOCK_FLOCK:
+    lock_state = &cur->flock_locks;
+    break;
+
+  case CEPH_LOCK_FCNTL:
+    lock_state = &cur->fcntl_locks;
+    break;
+
+  default:
+    dout(0) << "got unknown lock type " << checking_lock.type
+	    << ", dropping request!" << dendl;
+    return;
+  }
+  lock_state->add_lock(checking_lock, false, false);
+
+  bufferlist lock_bl;
+  ::encode(lock_state, lock_bl);
+
+  MClientReply *reply = new MClientReply(req);
+  reply->set_extra_bl(lock_bl);
+  reply_request(mdr, reply);
+}
 
 void Server::handle_client_setattr(MDRequest *mdr)
 {
