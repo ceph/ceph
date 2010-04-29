@@ -376,11 +376,11 @@ union ceph_mds_request_args {
 	struct {
 		__u8 rule; /* currently fcntl or flock */
 		__u8 type; /* shared, exclusive, remove*/
-		int pid; /* process id requesting the lock */
+		__u64 pid; /* process id requesting the lock */
 		__u64 pid_namespace;
 		__u64 start; /* initial location to lock */
 		__u64 length; /* num bytes to lock from start */
-		bool wait; /* will caller wait for lock to become available? */
+		__u8 wait; /* will caller wait for lock to become available? */
 	} __attribute__ ((packed)) filelock_change;
 } __attribute__ ((packed));
 
@@ -487,7 +487,7 @@ struct ceph_filelock {
 	__u64 start;/* file offset to start lock at */
 	__u64 length; /* num bytes to lock; 0 for all following start */
 	__s64 client; /* which client holds the lock */
-	int pid; /* process id holding the lock on the client */
+	__u64 pid; /* process id holding the lock on the client */
 	__u64 pid_namespace;
 	__u8 type; /* shared lock, exclusive lock, or unlock */
 } __attribute__ ((packed));
