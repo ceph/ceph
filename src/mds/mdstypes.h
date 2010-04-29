@@ -339,6 +339,8 @@ struct ceph_lock_state_t {
   multimap<__u64, ceph_filelock> held_locks;    // current locks
   multimap<__u64, ceph_filelock> waiting_locks; // locks waiting for other locks
   // both of the above are keyed by starting offset
+  map<client_t, int> client_held_lock_counts;
+  map<client_t, int> client_waiting_lock_counts;
 
   /*
    * Try to set a new lock. If it's blocked and wait_on_fail is true,
@@ -348,6 +350,7 @@ struct ceph_lock_state_t {
    * Returns true if set, false if not set.
    */
   bool add_lock(ceph_filelock& new_lock, bool wait_on_fail) {
+    bool ret = false;
     list<ceph_filelock*> overlapping_locks, self_overlapping_locks;
     // first, get any overlapping locks and split them into owned-by-us and not
     if(get_overlapping_locks(new_lock, overlapping_locks)) {
@@ -360,29 +363,30 @@ struct ceph_lock_state_t {
 	  waiting_locks.
 	    insert(pair<__u64, ceph_filelock>(new_lock.start, new_lock));
 	}
-	return false;
+	ret = false;
       } else { //shared lock, check for any exclusive locks blocking us
 	if (contains_exclusive_lock(overlapping_locks)) { //blocked :(
 	  if (wait_on_fail) {
 	    waiting_locks.
 	      insert(pair<__u64, ceph_filelock>(new_lock.start, new_lock));
 	  }
-	  return false;
+	  ret = false;
 	} else {
 	  //yay, we can insert a shared lock
 	  adjust_locks(self_overlapping_locks, new_lock);
 	  held_locks.
 	    insert(pair<__u64, ceph_filelock>(new_lock.start, new_lock));
-	  return true;
+	  ret = true;
 	}
       }
     } else { //no overlapping locks except our own
       adjust_locks(self_overlapping_locks, new_lock);
       held_locks.insert(pair<__u64, ceph_filelock>(new_lock.start, new_lock));
-      return true;
+      ret = true;
     }
-    assert(0); //shouldn't get here
-    return false;
+    if (ret) ++client_held_lock_counts[new_lock.client];
+    else if (wait_on_fail) ++client_waiting_lock_counts[new_lock.client];
+    return ret;
   }
 
   void look_for_lock(ceph_filelock& testing_lock) {
@@ -435,14 +439,19 @@ struct ceph_lock_state_t {
       if (remove_to_end) {
 	if (old_lock->start < removal_start) {
 	  old_lock->length = removal_start - old_lock->start;
-	} else held_locks.erase(find_specific_elem(old_lock, held_locks));
+	} else {
+	  held_locks.erase(find_specific_elem(old_lock, held_locks));
+	  --client_held_lock_counts[old_lock->client];
+	}
       } else if (old_lock_to_end) {
 	ceph_filelock append_lock = *old_lock;
 	append_lock.start = removal_end+1;
 	held_locks.insert(pair<__u64, ceph_filelock>
 			  (append_lock.start, append_lock));
+	++client_held_lock_counts[old_lock->client];
 	if (old_lock->start >= removal_start) {
 	  held_locks.erase(find_specific_elem(old_lock, held_locks));
+	  --client_held_lock_counts[old_lock->client];
 	} else old_lock->length = removal_start - old_lock->start;
       } else {
 	if (old_lock_end  > removal_end) {
@@ -451,10 +460,14 @@ struct ceph_lock_state_t {
 	  append_lock.length = old_lock_end - append_lock.start;
 	  held_locks.insert(pair<__u64, ceph_filelock>
 			    (append_lock.start, append_lock));
+	  ++client_held_lock_counts[old_lock->client];
 	}
 	if (old_lock->start < removal_start) {
 	  old_lock->length = removal_start - old_lock->start;
-	} else held_locks.erase(find_specific_elem(old_lock, held_locks));
+	} else {
+	  held_locks.erase(find_specific_elem(old_lock, held_locks));
+	  --client_held_lock_counts[old_lock->client];
+	}
       }
     }
 
@@ -475,6 +488,7 @@ struct ceph_lock_state_t {
 	   ++iter) {
 	ceph_filelock cur_lock = *(*iter);
 	waiting_locks.erase(find_specific_elem(*iter, waiting_locks));
+	--client_waiting_lock_counts[cur_lock.client];
 	if(add_lock(cur_lock, true)) activated_locks.push_back(cur_lock);
       }
     }
@@ -522,21 +536,27 @@ private:
 	    old_lock_start;
 	  new_lock.length = 0;
 	  held_locks.erase(find_specific_elem(old_lock, held_locks));
+	  --client_held_lock_counts[old_lock->client];
 	} else { //not same type, have to keep any remains of old lock around
 	  if (new_lock_to_end) {
 	    if (old_lock_start < new_lock_start) {
 	      old_lock->length = new_lock_start - old_lock_start;
 	    } else {
 	      held_locks.erase(find_specific_elem(old_lock, held_locks));
+	      --client_held_lock_counts[old_lock->client];
 	    }
 	  } else { //old lock extends past end of new lock
 	    ceph_filelock appended_lock = *old_lock;
 	    appended_lock.start = new_lock_end + 1;
 	    held_locks.insert(pair<__u64, ceph_filelock>
 			      (appended_lock.start, appended_lock));
+	    ++client_held_lock_counts[old_lock->client];
 	    if (old_lock_start < new_lock_start) {
 	      old_lock->length = new_lock_start - old_lock_start;
-	    } else held_locks.erase(find_specific_elem(old_lock, held_locks));
+	    } else {
+	      held_locks.erase(find_specific_elem(old_lock, held_locks));
+	      --client_held_lock_counts[old_lock->client];
+	    }
 	  }
 	}
       } else {
@@ -547,6 +567,7 @@ private:
 	    old_lock_end;
 	  new_lock.length = new_end - new_lock.start + 1;
 	  held_locks.erase(find_specific_elem(old_lock, held_locks));
+	  --client_held_lock_counts[old_lock->client];
 	} else { //we'll have to update sizes and maybe make new locks
 	  if (old_lock_end > new_lock_end) { //add extra lock after new_lock
 	    ceph_filelock appended_lock = *old_lock;
@@ -554,12 +575,14 @@ private:
 	    appended_lock.length = old_lock_end - appended_lock.start;
 	    held_locks.insert(pair<__u64, ceph_filelock>
 			      (appended_lock.start, appended_lock));
+	    ++client_held_lock_counts[old_lock->client];
 	  }
 	  if (old_lock_start < new_lock_start) {
 	    old_lock->length = new_lock_start - old_lock_start;
 	  } else { //old_lock starts inside new_lock, so remove it
 	    //if it extended past new_lock_end it's been replaced
 	    held_locks.erase(find_specific_elem(old_lock, held_locks));
+	    --client_held_lock_counts[old_lock->client];
 	  }
 	}
       }
