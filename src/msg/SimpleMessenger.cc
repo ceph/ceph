@@ -2088,21 +2088,7 @@ int SimpleMessenger::bind(int64_t force_nonce)
   return accepter.bind(force_nonce);
 }
 
-static void write_pid_file(int pid)
-{
-  if (!g_conf.pid_file)
-    return;
-
-  int fd = ::open(g_conf.pid_file, O_CREAT|O_TRUNC|O_WRONLY, 0644);
-  if (fd >= 0) {
-    char buf[20];
-    int len = snprintf(buf, sizeof(buf), "%d\n", pid);
-    ::write(fd, buf, len);
-    ::close(fd);
-  }
-}
-
-static void remove_pid_file()
+static void remove_pid_file(int signal = 0)
 {
   if (!g_conf.pid_file)
     return;
@@ -2117,10 +2103,27 @@ static void remove_pid_file()
 
     if (a == getpid())
       ::unlink(g_conf.pid_file);
-    else
+    else if (!signal)
       generic_dout(0) << "strange, pid file " << g_conf.pid_file 
 	      << " has " << a << ", not expected " << getpid()
 	      << dendl;
+  }
+}
+
+static void write_pid_file(int pid)
+{
+  if (!g_conf.pid_file)
+    return;
+
+  int fd = ::open(g_conf.pid_file, O_CREAT|O_TRUNC|O_WRONLY, 0644);
+  if (fd >= 0) {
+    char buf[20];
+    int len = snprintf(buf, sizeof(buf), "%d\n", pid);
+    ::write(fd, buf, len);
+    ::close(fd);
+
+    signal(SIGTERM, remove_pid_file);
+    signal(SIGINT, remove_pid_file);
   }
 }
 
