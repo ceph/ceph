@@ -2110,6 +2110,13 @@ static void remove_pid_file(int signal = 0)
   }
 }
 
+static void handle_signal(int sig)
+{
+  remove_pid_file(sig);
+  signal(sig, SIG_DFL);
+  kill(getpid(), sig);
+}
+
 static void write_pid_file(int pid)
 {
   if (!g_conf.pid_file)
@@ -2122,8 +2129,8 @@ static void write_pid_file(int pid)
     ::write(fd, buf, len);
     ::close(fd);
 
-    signal(SIGTERM, remove_pid_file);
-    signal(SIGINT, remove_pid_file);
+    signal(SIGTERM, handle_signal);
+    signal(SIGINT, handle_signal);
   }
 }
 
