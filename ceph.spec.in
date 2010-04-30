@@ -1,7 +1,7 @@
 Name:          ceph
 Version:       @VERSION@
 Release:       4%{?dist}
-Summary:       User space components of the CEPH file system
+Summary:       User space components of the Ceph file system
 License:       LGPLv2
 Group:         System Environment/Base
 URL:           http://ceph.newdream.net/
@@ -10,31 +10,31 @@ Source:        http://ceph.newdream.net/download/%{name}-%{version}.tar.gz
 Patch0:        ceph-init-fix.patch
 BuildRequires: fuse-devel, libtool, libtool-ltdl-devel, boost-devel, 
 BuildRequires: libedit-devel, fuse-devel, git, perl, perl-devel, gdbm,
-BuildRequires: openssl-devel, java-devel
+BuildRequires: openssl-devel, libatomic_ops
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 Requires(post): chkconfig
 Requires(preun): chkconfig
 Requires(preun): initscripts
 
 %description
-CEPH is a distributed network file system designed to provide excellent
+Ceph is a distributed network file system designed to provide excellent
 performance, reliability, and scalability.
 
 %package       fuse
-Summary:       CEPH fuse-based client
+Summary:       Ceph fuse-based client
 Group:         System Environment/Base
 Requires:      %{name} = %{version}-%{release}
 BuildRequires: fuse-devel
 %description   fuse
-FUSE based client for CEPH distributed network file system
+FUSE based client for Ceph distributed network file system
 
 %package     devel
-Summary:     CEPH headers
+Summary:     Ceph headers
 Group:       Development/Libraries
 License:     LGPLv2
 Requires:    %{name} = %{version}-%{release}
 %description devel
-This package contains the headers needed to develop programs that use CEPH.
+This package contains the headers needed to develop programs that use Ceph.
 
 %prep
 %setup -q
@@ -43,10 +43,6 @@ chmod 0644 src/common/Mutex.h
 
 %build
 ./autogen.sh
-for i in -I/usr/lib/jvm/java/include{,/linux}; do
- java_inc="$java_inc $i"
-done
-%configure CPPFLAGS="$java_inc"
 make CFLAGS="$RPM_OPT_FLAGS"
 
 %install
@@ -91,28 +87,17 @@ fi
 %{_bindir}/cmds
 %{_bindir}/cosd
 %{_bindir}/mkmonfs
-%{_bindir}/dumpjournal
-%{_bindir}/dupstore
 %{_bindir}/rados
-%{_bindir}/radosacl
-%{_bindir}/streamtest
-%{_bindir}/test_ioctls
-%{_bindir}/test_trans
-%{_bindir}/testceph
-%{_bindir}/testcrypto
-%{_bindir}/testkeys
-%{_bindir}/testmsgr
-%{_bindir}/testrados
-%{_bindir}/testradospp
+%{_bindir}/rbdtool
 %{_initddir}/ceph
 %{_libdir}/libceph.so.*
 %{_libdir}/libcrush.so.*
 %{_libdir}/librados.so.*
-%{_libdir}/libhadoopcephfs.so.*
 %{_sbindir}/mkcephfs
 /sbin/mount.ceph
 %{_libdir}/ceph
 %config(noreplace) %{_sysconfdir}/ceph/sample.ceph.conf
+%config(noreplace) %{_sysconfdir}/ceph/sample.fetch_config
 %{_mandir}/man8/cmon.8*
 %{_mandir}/man8/cmds.8*
 %{_mandir}/man8/cosd.8*
@@ -129,6 +114,7 @@ fi
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw_admin.8*
 %{_mandir}/man8/rados.8*
+%{_mandir}/man8/rbdtool.8*
 %{_mandir}/man8/cauthtool.8*
 
 %files fuse
@@ -146,12 +132,25 @@ fi
 %{_includedir}/crush/mapper.h
 %{_includedir}/crush/types.h
 %{_includedir}/rados/librados.h
+%{_includedir}/rados/librados.hpp
+%{_includedir}/rados/buffer.h
+%{_includedir}/rados/atomic.h
+%{_includedir}/rados/page.h
+%{_includedir}/rados/crc32c.h
+%{_includedir}/rados/Spinlock.h
+%{_includedir}/rados/assert.h
 %{_libdir}/libceph.so
 %{_libdir}/libcrush.so
 %{_libdir}/librados.so
-%{_libdir}/libhadoopcephfs.so
 
 %changelog
+* Fri Apr 30 2010 Sage Weil <sage@newdream.net> 0.19.1-5
+- Remove java deps (no need to build hadoop by default)
+- Include all required librados helpers
+- Include fetch_config sample
+- Include rbdtool
+- Remove misc debugging, test binaries
+
 * Thu Apr 30 2010 Josef Bacik <josef@toxicpanda.com> 0.19.1-4
 - Add java-devel and java tricks to get hadoop to build
 
