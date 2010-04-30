@@ -26,6 +26,6 @@ do
 
     for f in release/$vers/ceph_${dvers}_*.changes
     do
-	reprepro -b $repo -C $component --ignore=wrongdistribution include $dist $f
+	reprepro --ask-passphrase -b $repo -C $component --ignore=wrongdistribution include $dist $f
     done
 done
