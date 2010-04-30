@@ -678,8 +678,12 @@ int FileStore::mount()
   // journal
   open_journal();
   r = journal_replay(initial_op_seq);
-  if (r == -EINVAL) {
-    dout(0) << "mount got EINVAL on journal open, not mounting" << dendl;
+  if (r < 0) {
+    char buf[40];
+    dout(0) << "mount failed to open journal " << journalpath << ": "
+	    << strerror_r(-r, buf, sizeof(buf)) << dendl;
+    cerr << "mount failed to open journal " << journalpath << ": "
+	 << strerror_r(-r, buf, sizeof(buf)) << std::endl;
     return r;
   }
   journal_start();
