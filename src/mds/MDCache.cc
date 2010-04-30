@@ -4794,9 +4794,12 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
   assert(dir);
   
   CDir *con = get_subtree_root(dir);
-  assert(con);
-  
-  dout(12) << " in container " << *con << dendl;
+  if (con)
+    dout(12) << " in container " << *con << dendl;
+  else {
+    dout(12) << " no container; under a not-yet-linked dir" << dendl;
+    assert(dn->is_auth());
+  }
 
   // notify dentry authority?
   if (!dn->is_auth()) {
