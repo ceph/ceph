@@ -13,7 +13,7 @@ do
 	if head -1 release/$vers/$f | grep -q 'BEGIN PGP SIGNED MESSAGE' ; then
 	    echo already signed $f
 	else
-	    debsign release/$vers/$f
+	    debsign -k288995c8 release/$vers/$f
 	fi
     fi
 done
