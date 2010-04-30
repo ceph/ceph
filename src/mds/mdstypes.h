@@ -494,6 +494,20 @@ struct ceph_lock_state_t {
     }
   }
 
+  bool remove_all_from (client_t client) {
+    bool cleared_any = false;
+    if (client_held_lock_counts.count(client)) {
+      remove_all_from(client, held_locks);
+      client_held_lock_counts[client] = 0;
+      cleared_any = true;
+    }
+    if (client_waiting_lock_counts.count(client)) {
+      remove_all_from(client, waiting_locks);
+      client_waiting_lock_counts[client] = 0;
+    }
+    return cleared_any;
+  }
+
 private:
   /**
    * Adjust old locks owned by a single process so that process can set
@@ -586,6 +600,16 @@ private:
 	  }
 	}
       }
+    }
+  }
+
+  //this won't reset the counter map value, do that yourself
+  void remove_all_from(client_t client, multimap<__u64, ceph_filelock>& locks) {
+    multimap<__u64, ceph_filelock>::iterator iter = locks.begin();
+    while (iter != locks.end()) {
+      if (iter->second.client == client) {
+	locks.erase(iter++);
+      } else ++iter;
     }
   }
 
