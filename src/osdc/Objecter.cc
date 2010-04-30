@@ -340,7 +340,8 @@ void Objecter::tick()
        i++) {
     if (!i->second.active_tids.empty() &&
 	i->second.last < cutoff) {
-      dout(1) << " pg " << i->first << " is laggy: " << i->second.active_tids << dendl;
+      dout(1) << " pg " << i->first << " on " << i->second.acting
+	      << " is laggy: " << i->second.active_tids << dendl;
       maybe_request_map();
       //break;
 
