@@ -69,10 +69,8 @@ void MDSMap::print(ostream& out)
   out << "\ncompat " << compat << std::endl;
   out << "\nmax_mds " << max_mds << std::endl;
 
-  set<int> upset;
-  get_up_mds_set(upset);
   out << "in <" << in << ">\n"
-      << "up <" << upset << ">\n"
+      << "up <" << up << ">\n"
       << "failed <" << failed << ">\n"
       << "stopped <" << stopped << ">\n";
 

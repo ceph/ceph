@@ -720,13 +720,16 @@ void MDSMonitor::tick()
 	default:
 	  assert(0);
 	}
-	si.rank = info.rank;
-	info.state_seq = seq;
-	if (si.state > 0) {
-	  si.inc = ++pending_mdsmap.inc[info.rank];
-	  pending_mdsmap.up[info.rank] = sgid;
-	  pending_mdsmap.last_failure = pending_mdsmap.epoch;
 
+	info.state_seq = seq;
+	si.rank = info.rank;
+	si.inc = ++pending_mdsmap.inc[info.rank];
+	pending_mdsmap.up[info.rank] = sgid;
+	if (si.state > 0)
+	  pending_mdsmap.last_failure = pending_mdsmap.epoch;
+	if (si.state > 0 ||
+	    si.state == MDSMap::STATE_CREATING ||
+	    si.state == MDSMap::STATE_STARTING) {
 	  // blacklist laggy mds
 	  utime_t until = now;
 	  until += g_conf.mds_blacklist_interval;
