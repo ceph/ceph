@@ -798,48 +798,45 @@ private:
   }
 
   // pg -> (up osd list)
-  int pg_to_acting_osds(pg_t pg,
-                        vector<int>& osds) {         // list of osd addr's
-    // get rush list
-    vector<int> raw;
-
-    map<pg_t,vector<int> >::iterator p = pg_temp.find(pg);
-    if (p != pg_temp.end())
-      raw = p->second;      
-    else
-      pg_to_osds(pg, raw);
-    
-    osds.clear();
-    for (unsigned i=0; i<raw.size(); i++) {
-      if (!exists(raw[i]) || is_down(raw[i])) continue;
-      osds.push_back( raw[i] );
-    }
-    return osds.size();
-  }
-
-  void pg_to_up_acting_osds(pg_t pg, vector<int>& up, vector<int>& acting) {
-    // get rush list
-    vector<int> raw;
-    pg_to_osds(pg, raw);
-
+  void raw_to_up_osds(pg_t pg, vector<int>& raw, vector<int>& up) {
     up.clear();
     for (unsigned i=0; i<raw.size(); i++) {
-      if (!exists(raw[i]) || is_down(raw[i])) continue;
+      if (!exists(raw[i]) || is_down(raw[i])) 
+	continue;
       up.push_back(raw[i]);
     }
-    
+  }
+  
+  bool raw_to_temp_osds(pg_t pg, vector<int>& raw, vector<int>& temp) {
     map<pg_t,vector<int> >::iterator p = pg_temp.find(pg);
     if (p != pg_temp.end()) {
-      raw = p->second;
-      acting.clear();
-      for (unsigned i=0; i<raw.size(); i++) {
-	if (!exists(raw[i]) || is_down(raw[i])) continue;
-	acting.push_back(raw[i]);
+      temp.clear();
+      for (unsigned i=0; i<p->second.size(); i++) {
+	if (!exists(p->second[i]) || is_down(p->second[i]))
+	  continue;
+	temp.push_back(p->second[i]);
       }
-    } else
-      acting = up;
+      return true;
+    }
+    return false;
   }
 
+  int pg_to_acting_osds(pg_t pg, vector<int>& acting) {         // list of osd addr's
+    vector<int> raw;
+    pg_to_osds(pg, raw);
+    if (!raw_to_temp_osds(pg, raw, acting))
+      raw_to_up_osds(pg, raw, acting);
+    return acting.size();
+  }
+
+
+  void pg_to_up_acting_osds(pg_t pg, vector<int>& up, vector<int>& acting) {
+    vector<int> raw;
+    pg_to_osds(pg, raw);
+    raw_to_up_osds(pg, raw, up);
+    if (!raw_to_temp_osds(pg, raw, acting))
+      acting = up;
+  }
 
   int lookup_pg_pool_name(const char *name) {
     if (name_pool.count(name))
