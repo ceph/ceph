@@ -252,7 +252,7 @@ public:
   }
   int get_cap_mask() {
     switch (get_type()) {
-    case CEPH_LOCK_IFILE: return 0xffff;
+    case CEPH_LOCK_IFILE: return 0xf;
     default: return 0x3;
     }
   }
@@ -543,7 +543,7 @@ public:
 
   int gcaps_xlocker_mask(client_t client) {
     if (client == get_xlock_by_client())
-      return type->type == CEPH_LOCK_IFILE ? 0xffff : (CEPH_CAP_GSHARED|CEPH_CAP_GEXCL);
+      return type->type == CEPH_LOCK_IFILE ? 0xf : (CEPH_CAP_GSHARED|CEPH_CAP_GEXCL);
     return 0;
   }
 
