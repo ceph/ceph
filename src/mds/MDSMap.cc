@@ -69,7 +69,7 @@ void MDSMap::print(ostream& out)
   out << "\ncompat " << compat << std::endl;
   out << "\nmax_mds " << max_mds << std::endl;
 
-  out << "in <" << in << ">\n"
+  out << "in " << in << "\n"
       << "up <" << up << ">\n"
       << "failed <" << failed << ">\n"
       << "stopped <" << stopped << ">\n";
