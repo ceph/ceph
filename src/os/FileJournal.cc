@@ -53,18 +53,19 @@ int FileJournal::_open(bool forwrite, bool create)
   // get size
   struct stat st;
   int r = ::fstat(fd, &st);
+  if (create && ((r < 0 && errno == ENOENT) ||
+		 (r == 0 && st.st_size < (g_conf.osd_journal_size << 20)))) {
+    __u64 newsize = g_conf.osd_journal_size << 20;
+    dout(10) << "_open extending to " << newsize << " bytes" << dendl;
+    r = ::ftruncate(fd, newsize);
+    if (r < 0)
+      return -errno;
+    r = ::fstat(fd, &st);
+  }
   if (r < 0)
     return -errno;
   max_size = st.st_size;
   block_size = st.st_blksize;
-
-  if (create && max_size < (g_conf.osd_journal_size << 20)) {
-    __u64 newsize = g_conf.osd_journal_size << 20;
-    dout(10) << "_open extending to " << newsize << " bytes" << dendl;
-    r = ::ftruncate(fd, newsize);
-    if (r == 0)
-      max_size = newsize;
-  }
 
   if (max_size == 0) {
     // hmm, is this a raw block device?
