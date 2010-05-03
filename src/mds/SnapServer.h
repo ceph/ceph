@@ -29,7 +29,7 @@ protected:
   map<int, set<snapid_t> > need_to_purge;
   
   map<version_t, SnapInfo> pending_create;
-  map<version_t, snapid_t> pending_destroy;
+  map<version_t, pair<snapid_t,snapid_t> > pending_destroy; // (removed_snap, seq)
   set<version_t>           pending_noop;
 
   version_t last_checked_osdmap;
@@ -40,7 +40,7 @@ public:
     
   void reset_state();
   void encode_server_state(bufferlist& bl) {
-    __u8 v = 1;
+    __u8 v = 2;
     ::encode(v, bl);
     ::encode(last_snap, bl);
     ::encode(snaps, bl);
@@ -56,7 +56,14 @@ public:
     ::decode(snaps, bl);
     ::decode(need_to_purge, bl);
     ::decode(pending_create, bl);
-    ::decode(pending_destroy, bl);
+    if (v >= 2)
+      ::decode(pending_destroy, bl);
+    else {
+      map<version_t, snapid_t> t;
+      ::decode(t, bl);
+      for (map<version_t, snapid_t>::iterator p = t.begin(); p != t.end(); p++)
+	pending_destroy[p->first].first = p->second; 
+    } 
     ::decode(pending_noop, bl);
   }
 

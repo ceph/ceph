@@ -75,12 +75,14 @@ void SnapServer::_prepare(bufferlist &bl, __u64 reqid, int bymds)
       ::decode(ino, p);    // not used, currently.
       ::decode(snapid, p);
       version++;
-      pending_destroy[version] = snapid;
-      dout(10) << "prepare v" << version << " destroy " << snapid << dendl;
 
       // bump last_snap... we use it as a version value on the snaprealm.
-      bl.clear();
       ++last_snap;
+
+      pending_destroy[version] = pair<snapid_t,snapid_t>(snapid, last_snap);
+      dout(10) << "prepare v" << version << " destroy " << snapid << " seq " << last_snap << dendl;
+
+      bl.clear();
       ::encode(last_snap, bl);
     }
     break;
@@ -107,14 +109,17 @@ void SnapServer::_commit(version_t tid)
   } 
 
   else if (pending_destroy.count(tid)) {
-    snapid_t sn = pending_destroy[tid];
-    dout(7) << "commit " << tid << " destroy " << sn << dendl;
+    snapid_t sn = pending_destroy[tid].first;
+    snapid_t seq = pending_destroy[tid].second;
+    dout(7) << "commit " << tid << " destroy " << sn << " seq " << seq << dendl;
     snaps.erase(sn);
 
     for (vector<__u32>::const_iterator p = mds->mdsmap->get_data_pg_pools().begin();
 	 p != mds->mdsmap->get_data_pg_pools().end();
-	 p++)
+	 p++) {
       need_to_purge[*p].insert(sn);
+      need_to_purge[*p].insert(seq);
+    }
 
     pending_destroy.erase(tid);
   }
