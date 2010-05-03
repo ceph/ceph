@@ -6542,6 +6542,27 @@ public:
   }
 };
 
+void MDCache::anchor_create_prep_locks(MDRequest *mdr, CInode *in,
+				       set<SimpleLock*>& rdlocks, set<SimpleLock*>& xlocks)
+{
+  dout(10) << "anchor_create_prep_locks " << *in << dendl;
+
+  if (in->is_anchored()) {
+    // caller may have already xlocked it.. if so, that will suffice!
+    if (xlocks.count(&in->linklock) == 0)
+      rdlocks.insert(&in->linklock);
+  } else {
+    xlocks.insert(&in->linklock);
+
+    // path components too!
+    CDentry *dn = in->get_projected_parent_dn();
+    while (dn) {
+      rdlocks.insert(&dn->lock);
+      dn = dn->get_dir()->get_inode()->get_parent_dn();
+    }
+  }
+}
+
 void MDCache::anchor_create(MDRequest *mdr, CInode *in, Context *onfinish)
 {
   assert(in->is_auth());
@@ -6553,22 +6574,6 @@ void MDCache::anchor_create(MDRequest *mdr, CInode *in, Context *onfinish)
     dout(7) << "anchor_create not authpinnable, waiting on " << *in << dendl;
     in->add_waiter(CInode::WAIT_UNFREEZE, onfinish);
     return;
-  }
-
-  // rdlock path
-  set<SimpleLock*> rdlocks = mdr->rdlocks;
-  set<SimpleLock*> wrlocks = mdr->wrlocks;
-  set<SimpleLock*> xlocks = mdr->xlocks;
-  xlocks.insert(&in->linklock);
-
-  CDentry *dn = in->get_parent_dn();
-  while (dn) {
-    rdlocks.insert(&dn->lock);
-    dn = dn->get_dir()->get_inode()->get_parent_dn();
-  }
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks)) {
-   dout(7) << "anchor_create waiting for locks  " << *in << dendl;
-   return;
   }
 
   // wait

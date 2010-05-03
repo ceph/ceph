@@ -3106,6 +3106,10 @@ void Server::handle_client_link(MDRequest *mdr)
   }
   
   xlocks.insert(&targeti->linklock);
+
+  // take any locks needed for anchor creation/verification
+  mds->mdcache->anchor_create_prep_locks(mdr, targeti, rdlocks, xlocks);
+
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
@@ -3375,6 +3379,17 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
 
   // anchor?
   if (mdr->slave_request->get_op() == MMDSSlaveRequest::OP_LINKPREP) {
+    
+    set<SimpleLock*> rdlocks = mdr->rdlocks;
+    set<SimpleLock*> wrlocks = mdr->wrlocks;
+    set<SimpleLock*> xlocks = mdr->xlocks;
+
+    // take any locks needed for anchor creation/verification
+    mds->mdcache->anchor_create_prep_locks(mdr, targeti, rdlocks, xlocks);
+
+    if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+      return;
+
     if (targeti->is_anchored()) {
       dout(7) << "target anchored already (nlink=" << targeti->inode.nlink << "), sweet" << dendl;
     } 
@@ -4143,6 +4158,9 @@ void Server::handle_client_rename(MDRequest *mdr)
     xlocks.insert(&srci->snaplock);  // FIXME: an auth bcast could be sufficient?
   else
     rdlocks.insert(&srci->snaplock);
+
+  // take any locks needed for anchor creation/verification
+  mds->mdcache->anchor_create_prep_locks(mdr, srci, rdlocks, xlocks);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
