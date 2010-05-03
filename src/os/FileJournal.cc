@@ -53,7 +53,8 @@ int FileJournal::_open(bool forwrite, bool create)
   // get size
   struct stat st;
   int r = ::fstat(fd, &st);
-  assert(r == 0);
+  if (r < 0)
+    return -errno;
   max_size = st.st_size;
   block_size = st.st_blksize;
 
@@ -71,17 +72,17 @@ int FileJournal::_open(bool forwrite, bool create)
     // ioctl block device
     uint64_t bytes;
     r = ::ioctl(fd, BLKGETSIZE64, &bytes);
-    assert(r == 0);
     max_size = bytes;
 #else
 # ifdef BLKGETSIZE
     // hrm, try the 32 bit ioctl?
     unsigned long sectors = 0;
     r = ioctl(fd, BLKGETSIZE, &sectors);
-    assert(r == 0);
     max_size = sectors * 512ULL;
 # endif
 #endif
+    if (r < 0)
+      return -errno;
     is_bdev = true;
   }
 
@@ -145,7 +146,8 @@ int FileJournal::create()
   dout(2) << "create " << fn << dendl;
 
   int err = _open(true, true);
-  if (err < 0) return err;
+  if (err < 0)
+    return err;
 
   // write empty header
   memset(&header, 0, sizeof(header));
@@ -183,7 +185,8 @@ int FileJournal::open(__u64 next_seq)
   dout(2) << "open " << fn << " next_seq " << next_seq << dendl;
 
   int err = _open(false);
-  if (err < 0) return err;
+  if (err < 0) 
+    return err;
 
   // assume writeable, unless...
   read_pos = 0;
