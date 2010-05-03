@@ -1515,7 +1515,8 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
   pp->set_snap_epoch(pending_inc.epoch);
 
   paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, 0, pending_inc.epoch, blp));
-  return true;
+  propose_pending();
+  return false;
 }
 
 bool OSDMonitor::prepare_pool_op_create(MPoolOp *m)
