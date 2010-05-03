@@ -969,6 +969,8 @@ public:
   
   // -- anchors --
 public:
+  void anchor_create_prep_locks(MDRequest *mdr, CInode *in, set<SimpleLock*>& rdlocks,
+				set<SimpleLock*>& xlocks);
   void anchor_create(MDRequest *mdr, CInode *in, Context *onfinish);
   void anchor_destroy(CInode *in, Context *onfinish);
 protected:
