@@ -844,7 +844,7 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
     dout(10) << "unknown request " << tid << dendl;
   }
   dout(10) << "done" << dendl;
-  delete m;
+  m->put();
 }
 
 
@@ -932,7 +932,7 @@ void Objecter::handle_fs_stats_reply(MStatfsReply *m) {
     dout(10) << "unknown request " << tid << dendl;
   }
   dout(10) << "done" << dendl;
-  delete m;
+  m->put();
 }
 
 
