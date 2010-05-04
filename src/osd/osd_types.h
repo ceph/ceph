@@ -671,6 +671,7 @@ struct pg_pool_t {
     assert(snaps.empty());
     removed_snaps.insert(s);
     v.snap_seq = v.snap_seq + 1;
+    removed_snaps.insert(get_snap_seq());
   }
 
   SnapContext get_snap_context() const {
