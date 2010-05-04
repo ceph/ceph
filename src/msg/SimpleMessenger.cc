@@ -2261,6 +2261,8 @@ bool SimpleMessenger::register_entity(entity_name_t name)
 
   dout(10) << "register_entity " << name << " at " << get_myaddr() << dendl;
 
+  messenger->init_local_pipe();
+
   lock.Unlock();
   return true;
 }
