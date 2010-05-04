@@ -29,6 +29,7 @@ using namespace __gnu_cxx;
 #include "include/Spinlock.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
+#include "common/Throttle.h"
 
 #include "Messenger.h"
 #include "Message.h"
@@ -420,6 +421,7 @@ private:
   Cond  wait_cond;  // for wait()
   bool started;
   bool did_bind;
+  Throttle message_throttler;
 
   // where i listen
   bool need_addr;
@@ -503,7 +505,8 @@ public:
   SimpleMessenger() :
     Messenger(entity_name_t()),
     accepter(this),
-    lock("SimpleMessenger::lock"), started(false), did_bind(false), need_addr(true),
+    lock("SimpleMessenger::lock"), started(false), did_bind(false),
+    message_throttler(g_conf.ms_waiting_message_bytes), need_addr(true),
     destination_stopped(true), my_type(-1),
     global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
     dispatch_thread(this), messenger(this) {

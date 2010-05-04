@@ -135,6 +135,7 @@ struct md_config_t {
   bool ms_die_on_failure;
   bool ms_nocrc;
   bool ms_die_on_bad_msg;
+  __u64 ms_waiting_message_bytes;
 
   // mon
   const char *mon_data;

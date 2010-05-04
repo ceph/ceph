@@ -286,7 +286,7 @@ void SimpleMessenger::dispatch_entry()
       dispatch_queue.qlen_lock.unlock();
 
       pipe->pipe_lock.Unlock(); // done with the pipe's message queue now
-      {
+       {
 	if ((long)m == DispatchQueue::D_BAD_REMOTE_RESET) {
 	  dispatch_queue.lock.Lock();
 	  Connection *con = dispatch_queue.remote_reset_q.front();
@@ -309,6 +309,8 @@ void SimpleMessenger::dispatch_entry()
 	  ms_deliver_handle_reset(con);
 	  con->put();
 	} else {
+	  ceph_msg_header& header = m->get_header();
+	  int msize = header.front_len + header.middle_len + header.data_len;
 	  dout(1) << "<== " << m->get_source_inst()
 		  << " " << m->get_seq()
 		  << " ==== " << *m
@@ -319,6 +321,7 @@ void SimpleMessenger::dispatch_entry()
 		  << " " << m 
 		  << dendl;
 	  ms_deliver_dispatch(m);
+	  message_throttler.put(msize);
 	  dout(20) << "done calling dispatch on " << m << dendl;
 	}
       }
@@ -1730,7 +1733,11 @@ Message *SimpleMessenger::Pipe::read_message()
     dout(0) << "reader got bad header crc " << header_crc << " != " << header.crc << dendl;
     return 0;
   }
-
+  dout(1) << "getting message bytes now, currently using "
+	   << messenger->message_throttler.get_current() << "/"
+	   << messenger->message_throttler.get_max() << dendl;
+  messenger->message_throttler.get(header.front_len  +
+				   header.middle_len + header.data_len);
   // read front
   bufferlist front;
   int front_len = header.front_len;
