@@ -781,7 +781,8 @@ int SimpleMessenger::Pipe::accept()
 	  dout(10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
 		   << " == " << connect.connect_seq << ", sending WAIT" << dendl;
 	  assert(peer_addr > messenger->ms_addr);
-	  assert(existing->state == STATE_CONNECTING); // this will win
+	  assert(existing->state == STATE_CONNECTING ||
+		 existing->state == STATE_OPEN); // this will win
 	  reply.tag = CEPH_MSGR_TAG_WAIT;
 	  existing->pipe_lock.Unlock();
 	  messenger->lock.Unlock();
