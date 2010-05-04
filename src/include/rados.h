@@ -207,6 +207,7 @@ enum {
 	/* read */
 	CEPH_OSD_OP_GETXATTR  = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_ATTR | 1,
 	CEPH_OSD_OP_GETXATTRS = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_ATTR | 2,
+	CEPH_OSD_OP_CMPXATTR  = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_ATTR | 3,
 
 	/* write */
 	CEPH_OSD_OP_SETXATTR  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_ATTR | 1,
@@ -304,6 +305,21 @@ enum {
 #define EOLDSNAPC    ERESTART  /* ORDERSNAP flag set; writer has old snapc*/
 #define EBLACKLISTED ESHUTDOWN /* blacklisted */
 
+/* xattr comparison */
+enum {
+	CEPH_OSD_CMPXATTR_OP_EQ  = 1,
+	CEPH_OSD_CMPXATTR_OP_NE  = 2,
+	CEPH_OSD_CMPXATTR_OP_GT  = 3,
+	CEPH_OSD_CMPXATTR_OP_GTE = 4,
+	CEPH_OSD_CMPXATTR_OP_LT  = 5,
+	CEPH_OSD_CMPXATTR_OP_LTE = 6
+};
+
+enum {
+	CEPH_OSD_CMPXATTR_MODE_STRING = 1,
+	CEPH_OSD_CMPXATTR_MODE_U64    = 2
+};
+
 /*
  * an individual object operation.  each may be accompanied by some data
  * payload
@@ -320,6 +336,8 @@ struct ceph_osd_op {
 		struct {
 			__le32 name_len;
 			__le32 value_len;
+			__u8 cmp_op;       /* CEPH_OSD_CMPXATTR_OP_* */
+			__u8 cmp_mode;     /* CEPH_OSD_CMPXATTR_MODE_* */
 		} __attribute__ ((packed)) xattr;
 		struct {
 			__u8 class_len;
