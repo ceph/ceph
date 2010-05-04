@@ -43,6 +43,7 @@ chmod 0644 src/common/Mutex.h
 
 %build
 ./autogen.sh
+%{configure}
 make CFLAGS="$RPM_OPT_FLAGS"
 
 %install
