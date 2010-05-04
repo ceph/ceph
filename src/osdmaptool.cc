@@ -66,7 +66,9 @@ int main(int argc, const char **argv)
   bool test_crush = false;
 
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("print", 'p')) {
+    if (CONF_ARG_EQ("help", 'h')) {
+      usage();
+    } else if (CONF_ARG_EQ("print", 'p')) {
       CONF_SAFE_SET_ARG_VAL(&print, OPT_BOOL);
     } else if (CONF_ARG_EQ("createsimple", '\0')) {
       createsimple = true;
@@ -107,7 +109,8 @@ int main(int argc, const char **argv)
   int r = 0;
   if (!(createsimple && clobber)) {
     r = bl.read_file(fn);
-    osdmap.decode(bl);
+    if (r >= 0)
+      osdmap.decode(bl);
   }
   char buf[80];
   if (!createsimple && r < 0) {
