@@ -145,7 +145,7 @@ public:
     bool released;
     bool ack, safe;
 
-    rados_callback_t callback;
+    rados_callback_t callback_complete, callback_safe;
     void *callback_arg;
 
     // for read
@@ -155,13 +155,20 @@ public:
 
     AioCompletion() : lock("RadosClient::AioCompletion::lock"),
 		      ref(1), rval(0), released(false), ack(false), safe(false), 
-		      callback(0), callback_arg(0),
+		      callback_complete(0), callback_safe(0), callback_arg(0),
 		      pbl(0), buf(0), maxlen(0) { }
 
-    int set_callback(rados_callback_t cb, void *cba) {
+    int set_complete_callback(void *cb_arg, rados_callback_t cb) {
       lock.Lock();
-      callback = cb;
-      callback_arg = cba;
+      callback_complete = cb;
+      callback_arg = cb_arg;
+      lock.Unlock();
+      return 0;
+    }
+    int set_safe_callback(void *cb_arg, rados_callback_t cb) {
+      lock.Lock();
+      callback_safe = cb;
+      callback_arg = cb_arg;
       lock.Unlock();
       return 0;
     }
@@ -240,11 +247,11 @@ public:
 	*c->pbl = c->bl;
       }
 
-      if (c->callback) {
-	rados_callback_t cb = c->callback;
-	void *cba = c->callback_arg;
+      if (c->callback_complete) {
+	rados_callback_t cb = c->callback_complete;
+	void *cb_arg = c->callback_arg;
 	c->lock.Unlock();
-	cb(c, cba);
+	cb(c, cb_arg);
 	c->lock.Lock();
       }
 
@@ -266,11 +273,11 @@ public:
       c->safe = true;
       c->cond.Signal();
 
-      if (c->callback) {
-	rados_callback_t cb = c->callback;
-	void *cba = c->callback_arg;
+      if (c->callback_safe) {
+	rados_callback_t cb = c->callback_safe;
+	void *cb_arg = c->callback_arg;
 	c->lock.Unlock();
-	cb(c, cba);
+	cb(c, cb_arg);
 	c->lock.Lock();
       }
 
@@ -292,9 +299,12 @@ public:
   AioCompletion *aio_create_completion() {
     return new AioCompletion;
   }
-  AioCompletion *aio_create_completion(rados_callback_t cb, void *cba) {
+  AioCompletion *aio_create_completion(void *cb_arg, rados_callback_t cb_complete, rados_callback_t cb_safe) {
     AioCompletion *c = new AioCompletion;
-    c->set_callback(cb, cba);
+    if (cb_complete)
+      c->set_complete_callback(cb_arg, cb_complete);
+    if (cb_safe)
+      c->set_safe_callback(cb_arg, cb_safe);
     return c;
   }
 };
@@ -1400,16 +1410,21 @@ Rados::AioCompletion *Rados::aio_create_completion()
   return new AioCompletion(c);
 }
 
-Rados::AioCompletion *Rados::aio_create_completion(callback_t cb, void *cba)
+Rados::AioCompletion *Rados::aio_create_completion(void *cb_arg, callback_t cb_complete, callback_t cb_safe)
 {
-  RadosClient::AioCompletion *c = ((RadosClient *)client)->aio_create_completion(cb, cba);
+  RadosClient::AioCompletion *c = ((RadosClient *)client)->aio_create_completion(cb_arg, cb_complete, cb_safe);
   return new AioCompletion(c);
 }
 
-int Rados::AioCompletion::set_callback(rados_callback_t cb, void *cba)
+int Rados::AioCompletion::set_complete_callback(void *cb_arg, rados_callback_t cb)
 {
   RadosClient::AioCompletion *c = (RadosClient::AioCompletion *)pc;
-  return c->set_callback(cb, cba);
+  return c->set_complete_callback(cb_arg, cb);
+}
+int Rados::AioCompletion::set_safe_callback(void *cb_arg, rados_callback_t cb)
+{
+  RadosClient::AioCompletion *c = (RadosClient::AioCompletion *)pc;
+  return c->set_safe_callback(cb_arg, cb);
 }
 int Rados::AioCompletion::wait_for_complete()
 {
@@ -1737,9 +1752,10 @@ extern "C" int rados_list_objects_next(rados_list_ctx_t listctx, const char **en
 // -------------------------
 // aio
 
-extern "C" int rados_aio_create_completion(rados_callback_t cb, void *cba, rados_completion_t *pc)
+extern "C" int rados_aio_create_completion(void *cb_arg, rados_callback_t cb_complete, rados_callback_t cb_safe,
+					   rados_completion_t *pc)
 {
-  *pc = radosp->aio_create_completion(cb, cba);
+  *pc = radosp->aio_create_completion(cb_arg, cb_complete, cb_safe);
   return 0;
 }
 
