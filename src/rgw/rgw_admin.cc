@@ -115,7 +115,7 @@ int main(int argc, char **argv)
       list_buckets = true;
     } else if (CONF_ARG_EQ("uid", 'i')) {
       CONF_SAFE_SET_ARG_VAL(&user_id, OPT_STR);
-    } else if (CONF_ARG_EQ("key", 'k')) {
+    } else if (CONF_ARG_EQ("secret", 's')) {
       CONF_SAFE_SET_ARG_VAL(&secret_key, OPT_STR);
     } else if (CONF_ARG_EQ("email", 'e')) {
       CONF_SAFE_SET_ARG_VAL(&user_email, OPT_STR);
