@@ -8,7 +8,7 @@ echo vers $vers
 repo=$1
 force=$2
 
-[ -z "$repo" ] && echo stable or unstable && exit 1
+[ -z "$repo" ] && echo stable or testing or unstable && exit 1
 
 if git diff --quiet ; then
     echo repository is clean
@@ -30,11 +30,16 @@ gitver=`grep GIT_VER ceph_ver.h | awk '{print $3}' | cut -c 1-8`
 echo gitver $gitver
 cd ..
 
-if [ "$repo" = "unstable" ]; then
+if [ "$repo" = "testing" ]; then
     versuffix=`date "+%Y%m%d%H%M"`
-    finalvers="${vers}git${versuffix}-$gitver"
+    finalvers="${vers}-testing${versuffix}-$gitver"
 else
-    finalvers="$vers"
+    if [ "$repo" = "unstable" ]; then
+	versuffix=`date "+%Y%m%d%H%M"`
+	finalvers="${vers}-unstable${versuffix}-$gitver"
+    else
+	finalvers="$vers"
+    fi
 fi
 
 echo final vers $finalvers
