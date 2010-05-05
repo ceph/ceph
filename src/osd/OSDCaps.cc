@@ -125,9 +125,10 @@ do { \
         } else if (is_rwx(token, cap_val)) {
           ASSERT_STATE(op_allow || op_deny);
         } else if (token.compare(";") != 0) {
-          ASSERT_STATE(got_eq);
+	  ASSERT_STATE(got_eq);
           if (token.compare(",") == 0) {
             ASSERT_STATE(!last_is_comma);
+	    last_is_comma = true;
           } else {
             last_is_comma = false;
             int num = strtol(token.c_str(), NULL, 10);
@@ -139,10 +140,10 @@ do { \
           if (got_eq) {
             ASSERT_STATE(num_list.size() > 0);
             list<int>::iterator iter;
-	    map<int, OSDCap>& working_map = pools_map;
-	    if (cmd_uid) working_map = auid_map;
+	    map<int, OSDCap> *working_map = &pools_map;
+	    if (cmd_uid) working_map = &auid_map;
             for (iter = num_list.begin(); iter != num_list.end(); ++iter) {
-              OSDCap& cap = working_map[*iter];
+              OSDCap& cap = (*working_map)[*iter];
               if (op_allow) {
                 cap.allow |= cap_val;
               } else {
