@@ -100,7 +100,8 @@ public:
   struct AioCompletion {
     void *pc;
     AioCompletion(void *_pc) : pc(_pc) {}
-    int set_callback(callback_t cb, void *cba);
+    int set_complete_callback(void *cb_arg, callback_t cb);
+    int set_safe_callback(void *cb_arg, callback_t cb);
     int wait_for_complete();
     int wait_for_safe();
     bool is_complete();
@@ -114,7 +115,7 @@ public:
   int aio_write(pool_t pool, const std::string& oid, off_t off, const bufferlist& bl, size_t len,
 		AioCompletion *c);
   AioCompletion *aio_create_completion();
-  AioCompletion *aio_create_completion(callback_t cb, void *cba);
+  AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete, callback_t cb_safe);
 };
 
 }
