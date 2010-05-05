@@ -8,10 +8,14 @@ vers=$1
 [ -z "$vers" ] && echo specify version && exit 1
 [ ! -d "release/$vers" ] && echo missing release/$vers && exit 1
 
-if echo $vers | grep -q git ; then
-    component="ceph-unstable"
+if echo $vers | grep -q testing ; then
+    component="ceph-testing"
 else
-    component="ceph-stable"
+    if echo $vers | grep -q unstable ; then
+	component="ceph-unstable"
+    else
+	component="ceph-stable"
+    fi
 fi
 
 echo vers $vers
