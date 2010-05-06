@@ -2400,6 +2400,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     pg->state_clear(PG_STATE_DOWN);
     pg->state_clear(PG_STATE_PEERING);  // we'll need to restart peering
     pg->state_clear(PG_STATE_DEGRADED);
+    pg->state_clear(PG_STATE_REPLAY);
 
     if (pg->is_primary()) {
       if (osdmap->get_pg_size(pg->info.pgid) != pg->acting.size())
@@ -2477,7 +2478,6 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 	if (role == 0) {
 	  // i am (still) primary. but my replica set changed.
 	  pg->state_clear(PG_STATE_CLEAN);
-	  pg->state_clear(PG_STATE_REPLAY);
 	  
 	  dout(10) << *pg << " " << oldacting << " -> " << pg->acting
 		   << ", replicas changed" << dendl;

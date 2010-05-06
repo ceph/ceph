@@ -1103,8 +1103,8 @@ inline ostream& operator<<(ostream& out, const PG& pg)
     if (lost)
       out << " l=" << lost;
   }
-  if (pg.info.snap_trimq.size())
-    out << " snaptrimq=" << pg.info.snap_trimq;
+  //if (pg.info.snap_trimq.size())
+  //out << " snaptrimq=" << pg.info.snap_trimq;
 
   if (pg.deleting)
     out << " DELETING";
