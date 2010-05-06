@@ -212,9 +212,9 @@ void Logger::_flush(bool reset)
       if (vals[i] > 0) {
 	double avg = (fvals[i] / (double)vals[i]);
 	double var = 0.0;
-	if (g_conf.logger_calc_variance) {
-	  __s64 n = vals[i];
-	  for (vector<double>::iterator p = vals_to_avg[i].begin(); n--; ++p) 
+	if (g_conf.logger_calc_variance &&
+	    (unsigned)vals[i] == vals_to_avg[i].size()) {
+	  for (vector<double>::iterator p = vals_to_avg[i].begin(); p != vals_to_avg[i].end(); ++p) 
 	    var += (avg - *p) * (avg - *p);
 	}
 	char s[256];
