@@ -74,7 +74,7 @@ void OSDMap::print(ostream& out)
 void OSDMap::print_summary(ostream& out)
 {
   out << "e" << get_epoch() << ": "
-      << get_max_osd() << " osds: "
+      << get_num_osds() << " osds: "
       << get_num_up_osds() << " up, " 
       << get_num_in_osds() << " in";
   if (blacklist.size())

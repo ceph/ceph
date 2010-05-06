@@ -254,6 +254,7 @@ private:
 
   uint32_t flags;
 
+  int num_osd;         // not saved
   int32_t max_osd;
   vector<uint8_t> osd_state;
   vector<entity_addr_t> osd_addr;
@@ -279,7 +280,7 @@ private:
   OSDMap() : epoch(0), 
 	     pool_max(-1),
 	     flags(0),
-	     max_osd(0) { 
+	     num_osd(0), max_osd(0) { 
     memset(&fsid, 0, sizeof(fsid));
   }
 
@@ -313,14 +314,27 @@ private:
     int o = max_osd;
     max_osd = m;
     osd_state.resize(m);
-    osd_info.resize(m);
     osd_weight.resize(m);
     for (; o<max_osd; o++) {
       osd_state[o] = 0;
       osd_weight[o] = CEPH_OSD_OUT;
     }
+    osd_info.resize(m);
     osd_addr.resize(m);
     osd_hb_addr.resize(m);
+
+    calc_num_osds();
+  }
+
+  int get_num_osds() {
+    return num_osd;
+  }
+  int calc_num_osds() {
+    num_osd = 0;
+    for (int i=0; i<max_osd; i++)
+      if (osd_state[i] & CEPH_OSD_EXISTS)
+	num_osd++;
+    return num_osd;
   }
 
   void get_all_osds(set<int32_t>& ls) { 
@@ -331,14 +345,14 @@ private:
   int get_num_up_osds() {
     int n = 0;
     for (int i=0; i<max_osd; i++)
-      if (//osd_state[i] & CEPH_OSD_EXISTS &&
+      if (osd_state[i] & CEPH_OSD_EXISTS &&
 	  osd_state[i] & CEPH_OSD_UP) n++;
     return n;
   }
   int get_num_in_osds() {
     int n = 0;
     for (int i=0; i<max_osd; i++)
-      if (//osd_state[i] & CEPH_OSD_EXISTS &&
+      if (osd_state[i] & CEPH_OSD_EXISTS &&
 	  get_weight(i) != CEPH_OSD_OUT) n++;
     return n;
   }
@@ -362,6 +376,8 @@ private:
   void set_weight(int o, unsigned w) {
     assert(o < max_osd);
     osd_weight[o] = w;
+    if (w)
+      osd_state[o] |= CEPH_OSD_EXISTS;
   }
   unsigned get_weight(int o) {
     assert(o < max_osd);
@@ -382,7 +398,7 @@ private:
 
 
 
-  bool exists(int osd) { return osd < max_osd/* && osd_state[osd] & CEPH_OSD_EXISTS*/; }
+  bool exists(int osd) { return osd < max_osd && (osd_state[osd] & CEPH_OSD_EXISTS); }
   bool is_up(int osd) { return exists(osd) && osd_state[osd] & CEPH_OSD_UP; }
   bool is_down(int osd) { assert(exists(osd)); return !is_up(osd); }
   bool is_out(int osd) { return !exists(osd) || get_weight(osd) == CEPH_OSD_OUT; }
@@ -521,7 +537,7 @@ private:
     for (map<int32_t,entity_addr_t>::iterator i = inc.new_up.begin();
          i != inc.new_up.end();
          i++) {
-      osd_state[i->first] |= CEPH_OSD_UP;
+      osd_state[i->first] |= CEPH_OSD_EXISTS | CEPH_OSD_UP;
       osd_addr[i->first] = i->second;
       if (inc.new_hb_up.empty()) {
 	//this is a backward-compatibility hack
@@ -661,6 +677,8 @@ private:
     name_pool.clear();
     for (map<int,nstring>::iterator i = pool_name.begin(); i != pool_name.end(); i++)
       name_pool[i->second] = i->first;
+    
+    calc_num_osds();
   }
  
 
