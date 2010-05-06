@@ -66,13 +66,12 @@ void MDSMap::print(ostream& out)
   out << "session_timeout " << session_timeout << "\n"
       << "session_autoclose " << session_autoclose << "\n";
 
-  out << "\ncompat " << compat << std::endl;
-  out << "\nmax_mds " << max_mds << std::endl;
-
-  out << "in " << in << "\n"
-      << "up <" << up << ">\n"
-      << "failed <" << failed << ">\n"
-      << "stopped <" << stopped << ">\n";
+  out << "\ncompat\t" << compat << std::endl;
+  out << "\nmax_mds\t" << max_mds << std::endl;
+  out << "in\t" << in << "\n"
+      << "up\t" << up << "\n"
+      << "failed\t" << failed << "\n"
+      << "stopped\t" << stopped << "\n";
 
   multimap< pair<unsigned,unsigned>, __u64 > foo;
   for (map<__u64,mds_info_t>::iterator p = mds_info.begin();
@@ -85,7 +84,7 @@ void MDSMap::print(ostream& out)
        p++) {
     mds_info_t& info = mds_info[p->second];
     
-    out << p->second << ": "
+    out << p->second << ":\t"
 	<< info.addr
 	<< " '" << info.name << "'"
 	<< " mds" << info.rank
