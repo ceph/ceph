@@ -434,8 +434,8 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
   int from = m->get_orig_source().num();
   
   // does this osd exist?
-  if (!osdmap.exists(from)) {
-    dout(1) << "boot from non-existent osd" << from << ", increase max_osd?" << dendl;
+  if (from >= osdmap.get_max_osd()) {
+    dout(1) << "boot from osd" << from << " >= max_osd " << osdmap.get_max_osd() << dendl;
     m->put();
     return false;
   }

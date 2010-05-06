@@ -119,7 +119,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
   build_simple_crush_map(crush, rulesets, num_osd, num_dom);
 
   for (int i=0; i<num_osd; i++) {
-    set_state(i, CEPH_OSD_EXISTS);
+    set_state(i, 0);
     set_weight(i, CEPH_OSD_OUT);
   }
   
@@ -128,7 +128,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
 
     // add mds local osds, but don't put them in the crush mapping func
     for (int i=0; i<mds_local_osd; i++) {
-      set_state(i+num_osd, CEPH_OSD_EXISTS);
+      set_state(i+num_osd, 0);
       set_weight(i+num_osd, CEPH_OSD_OUT);
     }
   }
