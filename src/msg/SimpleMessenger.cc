@@ -1446,7 +1446,7 @@ void SimpleMessenger::Pipe::reader()
     // open ...
     if (tag == CEPH_MSGR_TAG_ACK) {
       dout(20) << "reader got ACK" << dendl;
-      __le64 seq;
+      ceph_le64 seq;
       int rc = tcp_read( sd, (char*)&seq, sizeof(seq));
       pipe_lock.Lock();
       if (rc < 0) {
@@ -1884,7 +1884,7 @@ int SimpleMessenger::Pipe::write_ack(__u64 seq)
   dout(10) << "write_ack " << seq << dendl;
 
   char c = CEPH_MSGR_TAG_ACK;
-  __le64 s;
+  ceph_le64 s;
   s = seq;
 
   struct msghdr msg;

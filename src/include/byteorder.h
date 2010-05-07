@@ -48,15 +48,15 @@ static __inline__ __u64 swab64(__u64 val)
 
 
 #define MAKE_LE_CLASS(bits)						\
-  struct __le##bits {							\
+  struct ceph_le##bits {							\
     __u##bits v;							\
-    __le##bits &operator=(__u##bits nv) {				\
+    ceph_le##bits &operator=(__u##bits nv) {				\
       v = mswab##bits(nv);						\
       return *this;							\
     }									\
     operator __u##bits() const { return mswab##bits(v); }		\
   } __attribute__ ((packed));						\
-  static inline bool operator==(__le##bits a, __le##bits b) {		\
+  static inline bool operator==(ceph_le##bits a, ceph_le##bits b) {		\
     return a.v == b.v;							\
   }
   

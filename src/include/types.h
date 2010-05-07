@@ -16,15 +16,26 @@
 #define __CEPH_TYPES_H
 
 // this is needed for ceph_fs to compile in userland
-#include <netinet/in.h>
-#define _LINUX_TYPES_H /* we don't want linux/types.h's __u32, __le32, etc. */
 #include "inttypes.h"
 #include "byteorder.h"
+
+#include <netinet/in.h>
 #include <fcntl.h>
 #include <string.h>
 
+// <macro hackery>
+// temporarily remap __le* to ceph_le* for benefit of shared kernel/userland headers
+#define __le16 ceph_le16
+#define __le32 ceph_le32
+#define __le64 ceph_le64
 #include "ceph_fs.h"
 #include "ceph_frag.h"
+#include "rbd_types.h"
+#undef __le16
+#undef __le32
+#undef __le64
+// </macro hackery>
+
 
 #define _BACKWARD_BACKWARD_WARNING_H   /* make gcc 4.3 shut up about hash_*. */
 
