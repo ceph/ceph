@@ -26,13 +26,14 @@ using namespace std;
 using namespace __gnu_cxx;
 
 #include "hash.h"
-#include "nstring.h"
 #include "encoding.h"
+#include "ceph_hash.h"
 
 struct object_t {
-  nstring name;
+  string name;
 
-  object_t(const char *s = 0) : name(s) {}
+  object_t() {}
+  object_t(const char *s) : name(s) {}
   object_t(const string& s) : name(s) {}
   void swap(object_t& o) {
     name.swap(o.name);
@@ -72,7 +73,7 @@ inline ostream& operator<<(ostream& out, const object_t& o) {
 namespace __gnu_cxx {
   template<> struct hash<object_t> {
     size_t operator()(const object_t& r) const { 
-      //static hash<nstring> H;
+      //static hash<string> H;
       //return H(r.name);
       return ceph_str_hash_linux(r.name.c_str(), r.name.length());
     }

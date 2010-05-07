@@ -26,7 +26,7 @@ public:
   struct realm {
     map<vinodeno_t, __s32> inodes;
     map<dirfrag_t, __s32> dirs;
-    map<dirfrag_t, map<pair<nstring,snapid_t>,__s32> > dentries;
+    map<dirfrag_t, map<pair<string,snapid_t>,__s32> > dentries;
 
     void encode(bufferlist &bl) const {
       ::encode(inodes, bl);
@@ -61,8 +61,8 @@ public:
   void add_dir(dirfrag_t r, dirfrag_t df, int nonce) {
     realms[r].dirs[df] = nonce;
   }
-  void add_dentry(dirfrag_t r, dirfrag_t df, const nstring& dn, snapid_t last, int nonce) {
-    realms[r].dentries[df][pair<nstring,snapid_t>(dn,last)] = nonce;
+  void add_dentry(dirfrag_t r, dirfrag_t df, const string& dn, snapid_t last, int nonce) {
+    realms[r].dentries[df][pair<string,snapid_t>(dn,last)] = nonce;
   }
 
   void add_realm(dirfrag_t df, realm& r) {

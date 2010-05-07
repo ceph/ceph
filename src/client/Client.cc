@@ -219,7 +219,7 @@ void Client::dump_inode(Inode *in, set<Inode*>& did)
   if (in->dir) {
     dout(1) << "  dir size " << in->dir->dentries.size() << dendl;
     //for (hash_map<const char*, Dentry*, hash<const char*>, eqstr>::iterator it = in->dir->dentries.begin();
-    for (hash_map<nstring, Dentry*>::iterator it = in->dir->dentries.begin();
+    for (hash_map<string, Dentry*>::iterator it = in->dir->dentries.begin();
          it != in->dir->dentries.end();
          it++) {
       dout(1) << "    dn " << it->first << " ref " << it->second->ref << dendl;

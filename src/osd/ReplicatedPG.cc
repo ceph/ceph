@@ -1014,9 +1014,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
     case CEPH_OSD_OP_GETXATTR:
       {
-	nstring name(op.xattr.name_len + 1);
-	name[0] = '_';
-	bp.copy(op.xattr.name_len, name.data()+1);
+	string aname;
+	bp.copy(op.xattr.name_len, aname);
+	string name = "_" + aname;
 	int r = osd->store->getattr(coll_t::build_pg_coll(info.pgid), soid, name.c_str(), odata);
 	if (r >= 0) {
 	  op.xattr.value_len = r;
@@ -1029,10 +1029,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
    case CEPH_OSD_OP_GETXATTRS:
       {
-	map<nstring,bufferptr> attrset;
+	map<string,bufferptr> attrset;
         result = osd->store->getattrs(coll_t::build_pg_coll(info.pgid), soid, attrset, true);
-        map<nstring, bufferptr>::iterator iter;
-        map<nstring, bufferlist> newattrs;
+        map<string, bufferptr>::iterator iter;
+        map<string, bufferlist> newattrs;
         for (iter = attrset.begin(); iter != attrset.end(); ++iter) {
            bufferlist bl;
            bl.append(iter->second);
@@ -1229,9 +1229,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       {
 	if (!ctx->obs->exists)
 	  t.touch(coll_t::build_pg_coll(info.pgid), soid);
-	nstring name(op.xattr.name_len + 1);
-	name[0] = '_';
-	bp.copy(op.xattr.name_len, name.data()+1);
+	string aname;
+	bp.copy(op.xattr.name_len, aname);
+	string name = "_" + aname;
 	bufferlist bl;
 	bp.copy(op.xattr.value_len, bl);
 	if (!ctx->obs->exists)  // create object if it doesn't yet exist.
@@ -1244,9 +1244,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
     case CEPH_OSD_OP_RMXATTR:
       {
-	nstring name(op.xattr.name_len + 1);
-	name[0] = '_';
-	bp.copy(op.xattr.name_len, name.data()+1);
+	string aname;
+	bp.copy(op.xattr.name_len, aname);
+	string name = "_" + aname;
 	t.rmattr(coll_t::build_pg_coll(info.pgid), soid, name);
  	info.stats.num_wr++;
       }
@@ -1294,7 +1294,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	// verify
 	if (0) {
 	  bufferlist header;
-	  map<nstring, bufferlist> m;
+	  map<string, bufferlist> m;
 	  ::decode(header, bp);
 	  ::decode(m, bp);
 	  assert(bp.end());
@@ -1341,7 +1341,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	if (0) {
 	  // parse
 	  bufferlist header;
-	  map<nstring, bufferlist> m;
+	  map<string, bufferlist> m;
 	  //ibl.hexdump(*_dout);
 	  if (ibl.length()) {
 	    ::decode(header, ip);
@@ -1353,7 +1353,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  // do the update(s)
 	  while (!bp.end()) {
 	    __u8 op;
-	    nstring key;
+	    string key;
 	    ::decode(op, bp);
 	    
 	    switch (op) {
@@ -1413,7 +1413,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
 	  // update keys
 	  bufferlist newkeydata;
-	  nstring nextkey;
+	  string nextkey;
 	  bufferlist nextval;
 	  bool have_next = false;
 	  if (!ip.end()) {
@@ -1423,7 +1423,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  }
 	  while (!bp.end()) {
 	    __u8 op;
-	    nstring key;
+	    string key;
 	    ::decode(op, bp);
 	    ::decode(key, bp);
 	    
@@ -2830,7 +2830,7 @@ void ReplicatedPG::push(const sobject_t& soid, int peer,
 {
   // read data+attrs
   bufferlist bl;
-  map<nstring,bufferptr> attrset;
+  map<string,bufferptr> attrset;
   uint64_t size;
 
   if (data_subset.size() || clone_subsets.size()) {

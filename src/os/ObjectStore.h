@@ -19,7 +19,6 @@
 #include "include/types.h"
 #include "include/Context.h"
 #include "include/buffer.h"
-#include "include/nstring.h"
 
 #include "include/Distribution.h"
 
@@ -35,6 +34,7 @@
 
 #include <vector>
 using std::vector;
+using std::string;
 
 #ifndef MIN
 # define MIN(a,b) ((a) < (b) ? (a):(b))
@@ -129,8 +129,8 @@ public:
     // for these guys, just use a pointer.
     // but, decode to a full value, and create pointers to that.
     //vector<const char*> attrnames;
-    vector<nstring> attrnames;
-    vector<map<nstring,bufferptr> > attrsets;
+    vector<string> attrnames;
+    deque<map<std::string,bufferptr> > attrsets;
 
     unsigned opp, blp, oidp, cidp, lengthp, attrnamep, attrsetp;
 
@@ -218,7 +218,7 @@ public:
       ::decode(s, p);
       return s;
     }
-    void get_attrset(map<nstring,bufferptr>& aset) {
+    void get_attrset(map<string,bufferptr>& aset) {
       if (old) {
 	aset = attrsets[attrsetp++];
 	return;
@@ -286,16 +286,16 @@ public:
       ops++;
     }
     void setattr(coll_t cid, const sobject_t& oid, const char* name, const void* val, int len) {
-      nstring n(name);
+      string n(name);
       bufferlist bl;
       bl.append((char*)val, len);
       setattr(cid, oid, n, tbl);
     }
     void setattr(coll_t cid, const sobject_t& oid, const char* name, bufferlist& val) {
-      nstring n(name);
+      string n(name);
       setattr(cid, oid, n, val);
     }
-    void setattr(coll_t cid, const sobject_t& oid, nstring& s, bufferlist& val) {
+    void setattr(coll_t cid, const sobject_t& oid, string& s, bufferlist& val) {
       __u32 op = OP_SETATTR;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -304,7 +304,7 @@ public:
       ::encode(val, tbl);
       ops++;
     }
-    void setattrs(coll_t cid, const sobject_t& oid, map<nstring,bufferptr>& attrset) {
+    void setattrs(coll_t cid, const sobject_t& oid, map<string,bufferptr>& attrset) {
       __u32 op = OP_SETATTRS;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -313,10 +313,10 @@ public:
       ops++;
     }
     void rmattr(coll_t cid, const sobject_t& oid, const char *name) {
-      nstring n(name);
+      string n(name);
       rmattr(cid, oid, n);
     }
-    void rmattr(coll_t cid, const sobject_t& oid, nstring& s) {
+    void rmattr(coll_t cid, const sobject_t& oid, string& s) {
       __u32 op = OP_RMATTR;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -382,10 +382,10 @@ public:
       collection_setattr(cid, name, tbl);
     }
     void collection_setattr(coll_t cid, const char* name, bufferlist& val) {
-      nstring n(name);
+      string n(name);
       collection_setattr(cid, n, val);
     }
-    void collection_setattr(coll_t cid, nstring& name, bufferlist& val) {
+    void collection_setattr(coll_t cid, string& name, bufferlist& val) {
       __u32 op = OP_COLL_SETATTR;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -395,17 +395,17 @@ public:
     }
 
     void collection_rmattr(coll_t cid, const char* name) {
-      nstring n(name);
+      string n(name);
       collection_rmattr(cid, n);
     }
-    void collection_rmattr(coll_t cid, nstring& name) {
+    void collection_rmattr(coll_t cid, string& name) {
       __u32 op = OP_COLL_RMATTR;
       ::encode(op, tbl);
       ::encode(cid, tbl);
       ::encode(name, tbl);
       ops++;
     }
-    void collection_setattrs(coll_t cid, map<nstring,bufferptr>& aset) {
+    void collection_setattrs(coll_t cid, map<string,bufferptr>& aset) {
       __u32 op = OP_COLL_SETATTRS;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -449,7 +449,7 @@ public:
 	::decode(cids, bl);
 	::decode(lengths, bl);
 	::decode(attrnames, bl);
-	/*for (vector<nstring>::iterator p = attrnames2.begin();
+	/*for (vector<string>::iterator p = attrnames2.begin();
           p != attrnames2.end();
           ++p)
           attrnames.push_back((*p).c_str());*/
@@ -530,7 +530,7 @@ public:
       value.push_back(bp);
     return r;
   }
-  virtual int getattrs(coll_t cid, const sobject_t& oid, map<nstring,bufferptr>& aset, bool user_only = false) {return 0;};
+  virtual int getattrs(coll_t cid, const sobject_t& oid, map<string,bufferptr>& aset, bool user_only = false) {return 0;};
 
   /*
   virtual int _setattr(coll_t cid, sobject_t oid, const char *name, const void *value, size_t size) = 0;
@@ -550,7 +550,7 @@ public:
   virtual int collection_getattr(coll_t cid, const char *name,
                                  void *value, size_t size) = 0;
   virtual int collection_getattr(coll_t cid, const char *name, bufferlist& bl) = 0;
-  virtual int collection_getattrs(coll_t cid, map<nstring,bufferptr> &aset) = 0;
+  virtual int collection_getattrs(coll_t cid, map<string,bufferptr> &aset) = 0;
   virtual bool collection_empty(coll_t c) = 0;
   virtual int collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>& o, int count, collection_list_handle_t *handle) = 0;
   virtual int collection_list(coll_t c, vector<sobject_t>& o) = 0;

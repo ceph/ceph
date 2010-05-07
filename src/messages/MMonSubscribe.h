@@ -18,7 +18,7 @@
 #include "msg/Message.h"
 
 struct MMonSubscribe : public Message {
-  map<nstring, ceph_mon_subscribe_item> what;
+  map<string, ceph_mon_subscribe_item> what;
   
   MMonSubscribe() : Message(CEPH_MSG_MON_SUBSCRIBE) {}
 private:

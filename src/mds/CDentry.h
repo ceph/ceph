@@ -26,7 +26,6 @@ using namespace std;
 #include "include/lru.h"
 #include "include/elist.h"
 #include "include/filepath.h"
-#include "include/nstring.h"
 #include "mdstypes.h"
 
 #include "SimpleLock.h"
@@ -91,7 +90,7 @@ public:
   }
 
 public:
-  nstring name;
+  string name;
   snapid_t first, last;
 
   dentry_key_t key() { 
@@ -157,7 +156,7 @@ public:
 
  public:
   // cons
-  CDentry(const nstring& n, 
+  CDentry(const string& n, 
 	  snapid_t f, snapid_t l) :
     name(n),
     first(f), last(l),
@@ -169,7 +168,7 @@ public:
     g_num_dn++;
     g_num_dna++;
   }
-  CDentry(const nstring& n, inodeno_t ino, unsigned char dt,
+  CDentry(const string& n, inodeno_t ino, unsigned char dt,
 	  snapid_t f, snapid_t l) :
     name(n),
     first(f), last(l),
@@ -190,7 +189,7 @@ public:
 
 
   CDir *get_dir() const { return dir; }
-  const nstring& get_name() const { return name; }
+  const string& get_name() const { return name; }
 
   /*
   CInode *get_inode() const { return linkage.inode; }

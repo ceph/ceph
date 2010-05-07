@@ -2627,7 +2627,7 @@ void PG::scrub()
 	  peerok = ok = false;
 	  num_bad++;
 	}
-	for (map<nstring,bufferptr>::iterator q = po->attrs.begin(); q != po->attrs.end(); q++) {
+	for (map<string,bufferptr>::iterator q = po->attrs.begin(); q != po->attrs.end(); q++) {
 	  if (p[i]->attrs.count(q->first)) {
 	    if (q->second.cmp(p[i]->attrs[q->first])) {
 	      dout(0) << "scrub osd" << acting[i] << " " << po->poid

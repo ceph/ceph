@@ -173,10 +173,10 @@ int main(int argc, const char **argv)
     }
     bufferlist::iterator p = bl.begin();
     bufferlist header;
-    map<nstring,bufferlist> m;
+    map<string,bufferlist> m;
     ::decode(header, p);
     ::decode(m, p);
-    for (map<nstring,bufferlist>::iterator q = m.begin(); q != m.end(); q++)
+    for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); q++)
       cout << q->first << std::endl;
   }
   else if (opt_create) {

@@ -17,8 +17,6 @@
 
 #include <stdlib.h>
 
-#include "include/nstring.h"
-
 #include "../CInode.h"
 #include "../CDir.h"
 #include "../CDentry.h"
@@ -50,7 +48,7 @@ public:
   /* fullbit - a regular dentry + inode
    */
   struct fullbit {
-    nstring  dn;         // dentry
+    string  dn;         // dentry
     snapid_t dnfirst, dnlast;
     version_t dnv;
     inode_t inode;      // if it's not
@@ -62,7 +60,7 @@ public:
 
     bufferlist _enc;
 
-    fullbit(const nstring& d, snapid_t df, snapid_t dl, 
+    fullbit(const string& d, snapid_t df, snapid_t dl, 
 	    version_t v, inode_t& i, fragtree_t &dft, 
 	    map<string,bufferptr> &xa, const string& sym, bufferlist &sbl, bool dr) :
       //dn(d), dnfirst(df), dnlast(dl), dnv(v), 
@@ -135,7 +133,7 @@ public:
   /* remotebit - a dentry + remote inode link (i.e. just an ino)
    */
   struct remotebit {
-    nstring dn;
+    string dn;
     snapid_t dnfirst, dnlast;
     version_t dnv;
     inodeno_t ino;
@@ -144,7 +142,7 @@ public:
 
     bufferlist _enc;
 
-    remotebit(const nstring& d, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
+    remotebit(const string& d, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
       //dn(d), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), dirty(dr) { }
       _enc(256) {
       ::encode(d, _enc);
@@ -196,14 +194,14 @@ public:
    * nullbit - a null dentry
    */
   struct nullbit {
-    nstring dn;
+    string dn;
     snapid_t dnfirst, dnlast;
     version_t dnv;
     bool dirty;
 
     bufferlist _enc;
 
-    nullbit(const nstring& d, snapid_t df, snapid_t dl, version_t v, bool dr) : 
+    nullbit(const string& d, snapid_t df, snapid_t dl, version_t v, bool dr) : 
       //dn(d), dnfirst(df), dnlast(dl), dnv(v), dirty(dr) { }
       _enc(128) {
       ::encode(d, _enc);
@@ -600,7 +598,7 @@ private:
     else
       in->encode_snap_blob(snapbl);
 
-    nstring empty;
+    string empty;
     delete root;
     root = new fullbit(empty,
 		       in->first, in->last,

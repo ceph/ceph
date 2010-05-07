@@ -52,10 +52,10 @@ public:
 
   struct Release {
     mutable ceph_mds_request_release item;
-    nstring dname;
+    string dname;
 
     Release() : item(), dname() {}
-    Release(const ceph_mds_request_release& rel, nstring name) :
+    Release(const ceph_mds_request_release& rel, string name) :
       item(rel), dname(name) {}
 
     void encode(bufferlist& bl) const {

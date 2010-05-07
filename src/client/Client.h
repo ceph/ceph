@@ -250,7 +250,7 @@ class Dentry : public LRUObject {
 class Dir {
  public:
   Inode    *parent_inode;  // my inode
-  hash_map<nstring, Dentry*> dentries;
+  hash_map<string, Dentry*> dentries;
   uint64_t release_count;
 
   Dir(Inode* in) : release_count(0) { parent_inode = in; }

@@ -30,7 +30,6 @@ using namespace std;
 #include "msg/SimpleMessenger.h"
 
 #include "include/CompatSet.h"
-#include "include/nstring.h"
 
 #include "common/Timer.h"
 #include "common/common_init.h"
@@ -97,7 +96,7 @@ int main(int argc, const char **argv)
 
   bufferlist magicbl;
   store.get_bl_ss(magicbl, "magic", 0);
-  nstring magic(magicbl.length()-1, magicbl.c_str());  // ignore trailing \n
+  string magic(magicbl.c_str(), magicbl.length()-1);  // ignore trailing \n
   if (strcmp(magic.c_str(), CEPH_MON_ONDISK_MAGIC)) {
     cerr << "mon fs magic '" << magic << "' != current '" << CEPH_MON_ONDISK_MAGIC << "'" << std::endl;
     exit(1);

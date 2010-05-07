@@ -218,7 +218,7 @@ CDentry *CDir::lookup(const char *name, snapid_t snap)
  * linking fun
  */
 
-CDentry* CDir::add_null_dentry(const nstring& dname,
+CDentry* CDir::add_null_dentry(const string& dname,
 			       snapid_t first, snapid_t last)
 {
   // foreign
@@ -254,7 +254,7 @@ CDentry* CDir::add_null_dentry(const nstring& dname,
 }
 
 
-CDentry* CDir::add_primary_dentry(const nstring& dname, CInode *in,
+CDentry* CDir::add_primary_dentry(const string& dname, CInode *in,
 				  snapid_t first, snapid_t last) 
 {
   // primary
@@ -289,7 +289,7 @@ CDentry* CDir::add_primary_dentry(const nstring& dname, CInode *in,
   return dn;
 }
 
-CDentry* CDir::add_remote_dentry(const nstring& dname, inodeno_t ino, unsigned char d_type,
+CDentry* CDir::add_remote_dentry(const string& dname, inodeno_t ino, unsigned char d_type,
 				 snapid_t first, snapid_t last) 
 {
   // foreign
@@ -780,7 +780,7 @@ void CDir::merge(int bits, list<Context*>& waiters, bool replay)
  * WAITING
  */
 
-void CDir::add_dentry_waiter(const nstring& dname, snapid_t snapid, Context *c) 
+void CDir::add_dentry_waiter(const string& dname, snapid_t snapid, Context *c) 
 {
   if (waiting_on_dentry.empty())
     get(PIN_DNWAITER);
@@ -790,7 +790,7 @@ void CDir::add_dentry_waiter(const nstring& dname, snapid_t snapid, Context *c)
 	   << " " << c << " on " << *this << dendl;
 }
 
-void CDir::take_dentry_waiting(const nstring& dname, snapid_t first, snapid_t last,
+void CDir::take_dentry_waiting(const string& dname, snapid_t first, snapid_t last,
 			       list<Context*>& ls)
 {
   if (waiting_on_dentry.empty())
@@ -889,7 +889,7 @@ void CDir::take_waiting(uint64_t mask, list<Context*>& ls)
     map<string_snap_t, list<Context*> >::iterator it = 
       waiting_on_dentry.begin(); 
     while (it != waiting_on_dentry.end()) {
-      nstring name = it->first.name;
+      string name = it->first.name;
       snapid_t snap = it->first.snapid;
       it++;
       take_dentry_waiting(name, snap, snap, ls);
@@ -1156,7 +1156,7 @@ void CDir::_fetched(bufferlist &bl)
     loff_t dn_offset = p.get_off() - baseoff;
 
     // dname
-    nstring dname;
+    string dname;
     snapid_t first, last;
     dentry_key_t::decode_helper(p, dname, last);
     

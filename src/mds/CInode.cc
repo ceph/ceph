@@ -241,7 +241,7 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
 
 // dirfrags
 
-frag_t CInode::pick_dirfrag(const nstring& dn)
+frag_t CInode::pick_dirfrag(const string& dn)
 {
   if (dirfragtree.empty())
     return frag_t();          // avoid the string hash if we can.
@@ -689,7 +689,7 @@ void CInode::store(Context *fin)
   assert(is_base());
 
   bufferlist bl;
-  nstring magic = CEPH_FS_ONDISK_MAGIC;
+  string magic = CEPH_FS_ONDISK_MAGIC;
   ::encode(magic, bl);
   encode_store(bl);
 
@@ -752,7 +752,7 @@ void CInode::_fetched(bufferlist& bl, Context *fin)
 {
   dout(10) << "_fetched" << dendl;
   bufferlist::iterator p = bl.begin();
-  nstring magic;
+  string magic;
   ::decode(magic, p);
   dout(10) << " magic is '" << magic << "' (expecting '" << CEPH_FS_ONDISK_MAGIC << "')" << dendl;
   if (magic != CEPH_FS_ONDISK_MAGIC) {

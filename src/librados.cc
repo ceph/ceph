@@ -1111,14 +1111,14 @@ int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<std::string, 
 
   lock.Lock();
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
-  map<nstring, bufferlist> aset;
+  map<string, bufferlist> aset;
   objecter->getxattrs(oid, layout, pool.snap_seq,
 		      aset,
 		      0, onack);
   lock.Unlock();
 
   attrset.clear();
-  for (map<nstring,bufferlist>::iterator p = aset.begin(); p != aset.end(); p++)
+  for (map<string,bufferlist>::iterator p = aset.begin(); p != aset.end(); p++)
     attrset[p->first.c_str()] = p->second;
 
   mylock.Lock();

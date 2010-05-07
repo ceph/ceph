@@ -68,10 +68,10 @@ public:
     int64_t expire_pos;
     int64_t read_pos;
     int64_t write_pos;
-    nstring magic;
+    string magic;
     ceph_file_layout layout;
 
-    Header(const char *m=0) :
+    Header(const char *m="") :
       trimmed_pos(0), expire_pos(0), read_pos(0), write_pos(0),
       magic(m) { }
 

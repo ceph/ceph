@@ -126,7 +126,7 @@ Monitor::~Monitor()
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     delete *p;
   //clean out MonSessionMap's subscriptions
-  for (map<nstring, xlist<Subscription*> >::iterator i
+  for (map<string, xlist<Subscription*> >::iterator i
 	 = session_map.subs.begin();
        i != session_map.subs.end();
        ++i) {
@@ -760,7 +760,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
 
   s->until = g_clock.now();
   s->until += g_conf.mon_subscribe_interval;
-  for (map<nstring,ceph_mon_subscribe_item>::iterator p = m->what.begin();
+  for (map<string,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();
        p++) {
     if (!p->second.onetime)
@@ -813,7 +813,7 @@ bool Monitor::ms_handle_reset(Connection *con)
 
 void Monitor::check_subs()
 {
-  nstring type = "monmap";
+  string type = "monmap";
   xlist<Subscription*>::iterator p = session_map.subs[type].begin();
   while (!p.end()) {
     Subscription *sub = *p;

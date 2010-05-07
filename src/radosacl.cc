@@ -103,7 +103,7 @@ void ObjectACLs::set_acl(ACLID& id, ACLFlags flags)
 
 class ACLEntity
 {
-  nstring name;
+  string name;
   map<ACLID, ACLEntity> groups;
 };
 

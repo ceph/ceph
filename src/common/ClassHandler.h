@@ -52,15 +52,15 @@ public:
     ClassVersion version;
     time_t timeout;
     ClassImpl impl;
-    nstring name;
+    string name;
     OSD *osd;
     ClassHandler *handler;
     void *handle;
     bool registered;
-    map<nstring, ClassMethod> methods_map;
+    map<string, ClassMethod> methods_map;
 
-    map<nstring, ClassData *> dependencies; /* our dependencies */
-    map<nstring, ClassData *> missing_dependencies; /* only missing dependencies */
+    map<string, ClassData *> dependencies; /* our dependencies */
+    map<string, ClassData *> missing_dependencies; /* only missing dependencies */
     list<ClassData *> dependents;          /* classes that depend on us */
 
     bool has_missing_deps() { return (missing_dependencies.size() > 0); }
@@ -81,16 +81,16 @@ public:
     bool cache_timed_out();
   };
   Mutex mutex;
-  map<nstring, ClassData> classes;
+  map<string, ClassData> classes;
 
-  ClassData& get_obj(const nstring& cname);
+  ClassData& get_obj(const string& cname);
 
-  void load_class(const nstring& cname);
+  void load_class(const string& cname);
   void _load_class(ClassData &data);
 
   ClassHandler(OSD *_osd) : osd(_osd), mutex("ClassHandler") {}
 
-  ClassData *get_class(const nstring& cname, ClassVersion& version);
+  ClassData *get_class(const string& cname, ClassVersion& version);
   void resend_class_requests();
 
   void handle_class(MClass *m);
@@ -98,7 +98,7 @@ public:
   ClassData *register_class(const char *cname);
   void unregister_class(ClassData *cls);
 
-  int get_method_flags(const nstring& cname, const nstring& mname);
+  int get_method_flags(const string& cname, const string& mname);
 };
 
 

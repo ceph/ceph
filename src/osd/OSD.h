@@ -444,12 +444,12 @@ private:
 protected:
   // -- classes --
   Mutex class_lock;
-  map<nstring, map<pg_t, list<Message*> > > waiting_for_missing_class;
+  map<string, map<pg_t, list<Message*> > > waiting_for_missing_class;
 
-  int get_class(const nstring& cname, ClassVersion& version, pg_t pgid, Message *m, ClassHandler::ClassData **cls);
+  int get_class(const string& cname, ClassVersion& version, pg_t pgid, Message *m, ClassHandler::ClassData **cls);
   void handle_class(MClass *m);
 public:
-  void got_class(const nstring& cname);
+  void got_class(const string& cname);
   void send_class_request(const char *n, ClassVersion& version);
 
 protected:
@@ -884,7 +884,7 @@ private:
   static int read_meta(const char *base, const char *file, char *val, size_t vallen);
   static int write_meta(const char *base, ceph_fsid_t& fsid, int whoami);
 public:
-  static int peek_meta(const char *dev, nstring& magic, ceph_fsid_t& fsid, int& whoami);
+  static int peek_meta(const char *dev, string& magic, ceph_fsid_t& fsid, int& whoami);
   
 
   // startup/shutdown

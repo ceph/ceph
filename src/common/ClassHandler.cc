@@ -56,7 +56,7 @@ done:
   return;
 }
 
-void ClassHandler::load_class(const nstring& cname)
+void ClassHandler::load_class(const string& cname)
 {
   ClassData& cls = get_obj(cname);
   if (&cls == &null_cls_data) {
@@ -68,10 +68,10 @@ void ClassHandler::load_class(const nstring& cname)
   cls.mutex->Unlock();
 }
 
-ClassHandler::ClassData& ClassHandler::get_obj(const nstring& cname)
+ClassHandler::ClassData& ClassHandler::get_obj(const string& cname)
 {
   Mutex::Locker locker(mutex);
-  map<nstring, ClassData>::iterator iter = classes.find(cname);
+  map<string, ClassData>::iterator iter = classes.find(cname);
   if (iter == classes.end()) {
     ClassData& cls = classes[cname];
     cls.mutex = new Mutex("ClassData");
@@ -89,7 +89,7 @@ ClassHandler::ClassData& ClassHandler::get_obj(const nstring& cname)
   return iter->second;
 }
 
-ClassHandler::ClassData *ClassHandler::get_class(const nstring& cname, ClassVersion& version)
+ClassHandler::ClassData *ClassHandler::get_class(const string& cname, ClassVersion& version)
 {
   ClassHandler::ClassData *ret = NULL;
   ClassData *class_data = &get_obj(cname);
@@ -160,7 +160,7 @@ void ClassHandler::handle_class(MClass *m)
 
 void ClassHandler::resend_class_requests()
 {
-  for (map<nstring,ClassData>::iterator p = classes.begin(); p != classes.end(); p++) {
+  for (map<string,ClassData>::iterator p = classes.begin(); p != classes.end(); p++) {
     dout(20) << "resending class request "<< p->first.c_str() << " v" << p->second.version << dendl;
     osd->send_class_request(p->first.c_str(), p->second.version);
   }
@@ -237,7 +237,7 @@ bool ClassHandler::ClassData::_add_dependency(cls_deps_t *dep)
     dout(0) << "couldn't get class dep object, out of memory?" << dendl;
     return false;
   }
-  map<nstring, ClassData *>::iterator iter = missing_dependencies.find(dep->name);
+  map<string, ClassData *>::iterator iter = missing_dependencies.find(dep->name);
   dependencies[dep->name] = &cls_dep;
   dout(0) << "adding dependency " << dep->name << dendl;
 
@@ -264,7 +264,7 @@ bool ClassHandler::ClassData::_add_dependency(cls_deps_t *dep)
 void ClassHandler::ClassData::satisfy_dependency(ClassData *cls)
 {
   Mutex::Locker lock(*mutex);
-  map<nstring, ClassData *>::iterator iter = missing_dependencies.find(cls->name);
+  map<string, ClassData *>::iterator iter = missing_dependencies.find(cls->name);
 
   if (iter != missing_dependencies.end()) {
     dout(0) << "satisfied dependency name=" << name << " dep=" << cls->name << dendl;
@@ -317,7 +317,7 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::register_cxx_method(const ch
 ClassHandler::ClassMethod *ClassHandler::ClassData::get_method(const char *mname)
 {
   Mutex::Locker lock(*mutex);
-  map<nstring, ClassHandler::ClassMethod>::iterator iter = methods_map.find(mname);
+  map<string, ClassHandler::ClassMethod>::iterator iter = methods_map.find(mname);
 
   if (iter == methods_map.end())
     return NULL;
@@ -328,7 +328,7 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::get_method(const char *mname
 void ClassHandler::ClassData::unregister_method(ClassHandler::ClassMethod *method)
 {
  /* no need for locking, called under the class_init mutex */
-   map<nstring, ClassMethod>::iterator iter;
+   map<string, ClassMethod>::iterator iter;
 
    iter = methods_map.find(method->name);
    if (iter == methods_map.end())
@@ -388,7 +388,7 @@ int ClassHandler::ClassMethod::exec(cls_method_context_t ctx, bufferlist& indata
   return ret;
 }
 
-int ClassHandler::get_method_flags(const nstring& cname, const nstring& mname)
+int ClassHandler::get_method_flags(const string& cname, const string& mname)
 {
   ClassData& cls = get_obj(cname);
   if (&cls == &null_cls_data)

@@ -114,17 +114,17 @@ public:
 
   // mon subscriptions
 private:
-  map<nstring,ceph_mon_subscribe_item> sub_have;  // my subs, and current versions
+  map<string,ceph_mon_subscribe_item> sub_have;  // my subs, and current versions
   utime_t sub_renew_sent, sub_renew_after;
 
   void _renew_subs();
   void handle_subscribe_ack(MMonSubscribeAck* m);
 
-  void _sub_want(nstring what, version_t have) {
+  void _sub_want(string what, version_t have) {
     sub_have[what].have = have;
     sub_have[what].onetime = false;
   }
-  bool _sub_want_onetime(nstring what, version_t have) {
+  bool _sub_want_onetime(string what, version_t have) {
     if (sub_have.count(what) == 0) {
       sub_have[what].have = have;
       sub_have[what].onetime = true;
@@ -133,7 +133,7 @@ private:
       sub_have[what].have = have;
     return false;
   }
-  void _sub_got(nstring what, version_t have) {
+  void _sub_got(string what, version_t have) {
     if (sub_have.count(what)) {
       if (sub_have[what].onetime)
 	sub_have.erase(what);
@@ -150,15 +150,15 @@ public:
     Mutex::Locker l(monc_lock);
     _renew_subs();
   }
-  void sub_want(nstring what, version_t have) {
+  void sub_want(string what, version_t have) {
     Mutex::Locker l(monc_lock);
     _sub_want(what, have);
   }
-  bool sub_want_onetime(nstring what, version_t have) {
+  bool sub_want_onetime(string what, version_t have) {
     Mutex::Locker l(monc_lock);
     return _sub_want_onetime(what, have);
   }
-  void sub_got(nstring what, version_t have) {
+  void sub_got(string what, version_t have) {
     Mutex::Locker l(monc_lock);
     _sub_got(what, have);
   }

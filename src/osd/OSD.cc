@@ -257,7 +257,7 @@ int OSD::write_meta(const char *base, ceph_fsid_t& fsid, int whoami)
   return 0;
 }
 
-int OSD::peek_meta(const char *dev, nstring& magic, ceph_fsid_t& fsid, int& whoami)
+int OSD::peek_meta(const char *dev, string& magic, ceph_fsid_t& fsid, int& whoami)
 {
   char val[80] = { 0 };
 
@@ -4460,7 +4460,7 @@ void OSD::wait_for_no_ops()
 
 // --------------------------------
 
-int OSD::get_class(const nstring& cname, ClassVersion& version, pg_t pgid, Message *m, ClassHandler::ClassData **cls)
+int OSD::get_class(const string& cname, ClassVersion& version, pg_t pgid, Message *m, ClassHandler::ClassData **cls)
 {
   Mutex::Locker l(class_lock);
   dout(10) << "wait_for_missing_class '" << cname << "' by " << pgid << dendl;
@@ -4483,7 +4483,7 @@ int OSD::get_class(const nstring& cname, ClassVersion& version, pg_t pgid, Messa
   return -EAGAIN;
 }
 
-void OSD::got_class(const nstring& cname)
+void OSD::got_class(const string& cname)
 {
   // no lock.. this is an upcall from handle_class
   dout(10) << "got_class '" << cname << "'" << dendl;

@@ -299,7 +299,7 @@ protected:
 
   // -- dentries and inodes --
  public:
-  CDentry* lookup_exact_snap(const nstring& dname, snapid_t last) {
+  CDentry* lookup_exact_snap(const string& dname, snapid_t last) {
     map_t::iterator p = items.find(dentry_key_t(last, dname.c_str()));
     if (p == items.end())
       return NULL;
@@ -308,16 +308,13 @@ protected:
   CDentry* lookup(const string& n, snapid_t snap=CEPH_NOSNAP) {
     return lookup(n.c_str(), snap);
   }
-  CDentry* lookup(const nstring& ns, snapid_t snap=CEPH_NOSNAP) {
-    return lookup(ns.c_str(), snap);
-  }
   CDentry* lookup(const char *n, snapid_t snap=CEPH_NOSNAP);
 
-  CDentry* add_null_dentry(const nstring& dname, 
+  CDentry* add_null_dentry(const string& dname, 
 			   snapid_t first=2, snapid_t last=CEPH_NOSNAP);
-  CDentry* add_primary_dentry(const nstring& dname, CInode *in, 
+  CDentry* add_primary_dentry(const string& dname, CInode *in, 
 			      snapid_t first=2, snapid_t last=CEPH_NOSNAP);
-  CDentry* add_remote_dentry(const nstring& dname, inodeno_t ino, unsigned char d_type, 
+  CDentry* add_remote_dentry(const string& dname, inodeno_t ino, unsigned char d_type, 
 			     snapid_t first=2, snapid_t last=CEPH_NOSNAP);
   void remove_dentry( CDentry *dn );         // delete dentry
   void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);
@@ -483,8 +480,8 @@ public:
   bool is_waiting_for_dentry(const char *dname, snapid_t snap) {
     return waiting_on_dentry.count(string_snap_t(dname, snap));
   }
-  void add_dentry_waiter(const nstring& dentry, snapid_t snap, Context *c);
-  void take_dentry_waiting(const nstring& dentry, snapid_t first, snapid_t last, list<Context*>& ls);
+  void add_dentry_waiter(const string& dentry, snapid_t snap, Context *c);
+  void take_dentry_waiting(const string& dentry, snapid_t first, snapid_t last, list<Context*>& ls);
 
   bool is_waiting_for_ino(inodeno_t ino) {
     return waiting_on_ino.count(ino);
