@@ -2075,7 +2075,6 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const sobject_t& s
     if (r >= 0) {
       obc->obs.oi.decode(bv);
       obc->obs.exists = true;
-      assert(!obc->obs.ssc || obc->obs.ssc->snapset.head_exists);
     } else {
       obc->obs.exists = false;
     }
