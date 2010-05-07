@@ -43,7 +43,7 @@ chmod 0644 src/common/Mutex.h
 
 %build
 ./autogen.sh
-%{configure}
+%{configure} --without-hadoop --without-debug
 make CFLAGS="$RPM_OPT_FLAGS"
 
 %install
