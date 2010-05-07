@@ -205,10 +205,11 @@ inline std::ostream& operator<<(std::ostream& out, const utime_t& t)
     out << std::setw(2) << (bdt.tm_year-100)  // 2007 -> '07'
 	<< '.' << std::setw(2) << (bdt.tm_mon+1)
 	<< '.' << std::setw(2) << bdt.tm_mday
-	<< ' '
+	<< '_'
 	<< std::setw(2) << bdt.tm_hour
 	<< ':' << std::setw(2) << bdt.tm_min
 	<< ':' << std::setw(2) << bdt.tm_sec;
+    //	<< '_' << bdt.tm_zone;
   }
   out << ".";
   out << std::setw(6) << t.usec();
