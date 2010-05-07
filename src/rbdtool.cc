@@ -96,6 +96,13 @@ void trim_image(const char *imgname, rbd_obj_header_ondisk *header, __u64 newsiz
   }
 }
 
+static void err_exit(pool_t pool)
+{
+  rados.close_pool(pool);
+  rados.shutdown();
+  exit(1);
+}
+
 int main(int argc, const char **argv) 
 {
   vector<const char*> args;
@@ -154,15 +161,15 @@ int main(int argc, const char **argv)
   int r = rados.open_pool(poolname, &pool);
   if (r < 0) {
     cerr << "error opening pool (err=" << r << ")" << std::endl;
-    exit(1);
+    err_exit(pool);
   }
 
   if (opt_list) {
     bufferlist bl;
     r = rados.read(pool, dir_oid, 0, bl, 0);
     if (r < 0) {
-      cerr << "error reading rbd directory object " << dir_oid << ": " << strerror(-r) << std::endl;
-      exit(1);
+      cerr << "pool " << poolname << " doesn't contain rbd images" << std::endl;
+      err_exit(pool);
     }
     bufferlist::iterator p = bl.begin();
     bufferlist header;
@@ -176,19 +183,19 @@ int main(int argc, const char **argv)
     if (!size) {
       cerr << "must specify size in MB to create an rbd image" << std::endl;
       usage();
-      exit(1);
+      err_exit(pool);
     }
     if (order && (order < 12 || order > 25)) {
       cerr << "order must be between 12 (4 KB) and 25 (32 MB)" << std::endl;
       usage();
-      exit(1);
+      err_exit(pool);
     }
 
     // make sure it doesn't already exist
     r = rados.stat(pool, md_oid, NULL, NULL);
     if (r == 0) {
       cerr << "rbd image header " << md_oid << " already exists" << std::endl;
-      exit(1);
+      err_exit(pool);
     }
 
     struct rbd_obj_header_ondisk header;
@@ -208,14 +215,14 @@ int main(int argc, const char **argv)
     r = rados.tmap_update(pool, dir_oid, cmdbl);
     if (r < 0) {
       cerr << "error adding img to directory: " << strerror(-r)<< std::endl;
-      exit(1);
+      err_exit(pool);
     }
 
     cout << "creating rbd image..." << std::endl;
     r = rados.write(pool, md_oid, 0, bl, bl.length());
     if (r < 0) {
       cerr << "error writing header: " << strerror(-r) << std::endl;
-      exit(1);
+      err_exit(pool);
     }
     cout << "done." << std::endl;
   }
@@ -247,11 +254,11 @@ int main(int argc, const char **argv)
       r = rados.tmap_update(pool, dir_oid, cmdbl);
       if (r < 0) {
 	cerr << "error removing img from directory: " << strerror(-r)<< std::endl;
-	exit(1);
+	err_exit(pool);
       }
     } else {
       if (r < 0)
-	exit(1);
+	err_exit(pool);
       
       if (opt_info) {
 	print_header(imgname, &header);
@@ -279,7 +286,7 @@ int main(int argc, const char **argv)
 	  r = rados.write(pool, md_oid, 0, bl, bl.length());
 	  if (r < 0) {
 	    cerr << "error writing header: " << strerror(-r) << std::endl;
-	    exit(1);
+	    err_exit(pool);
 	  }
 	}
       }
