@@ -1915,8 +1915,10 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	change_max = true;
 	new_max = ROUND_UP_TO((m->get_max_size()+1) << 1, latest->get_layout_size_increment());
       } else {
-	//new_max = ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment());
 	new_max = calc_bounding(size * 2);
+	if (new_max < latest->get_layout_size_increment())
+	  new_max = latest->get_layout_size_increment();
+
 	if (new_max > old_max)
 	  change_max = true;
 	else
