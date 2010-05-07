@@ -15,22 +15,9 @@
 #ifndef __UTIME_H
 #define __UTIME_H
 
-// this is needed for ceph_fs to compile in userland
-#include <netinet/in.h>
-#define _LINUX_TYPES_H /* we don't want linux/types.h's __u32, __le32, etc. */
-#include "inttypes.h"
-#include "byteorder.h"
-#include <fcntl.h>
-#include <string.h>
-
-#include "ceph_fs.h"
-
 #include <math.h>
 #include <sys/time.h>
 #include <time.h>
-
-#include "buffer.h"
-#include "encoding.h"
 
 // --------
 // utime_t

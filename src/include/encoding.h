@@ -42,9 +42,9 @@ inline void decode_raw(T& t, bufferlist::iterator &p)
 WRITE_RAW_ENCODER(__u8)
 WRITE_RAW_ENCODER(__s8)
 WRITE_RAW_ENCODER(char)
-WRITE_RAW_ENCODER(__le64)
-WRITE_RAW_ENCODER(__le32)
-WRITE_RAW_ENCODER(__le16)
+WRITE_RAW_ENCODER(ceph_le64)
+WRITE_RAW_ENCODER(ceph_le32)
+WRITE_RAW_ENCODER(ceph_le16)
 
 // FIXME: we need to choose some portable floating point encoding here
 WRITE_RAW_ENCODER(float)

@@ -1495,7 +1495,7 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
 
   dn->key().encode(bl);
 
-  __le32 plen = init_le32(0);
+  ceph_le32 plen = init_le32(0);
   unsigned plen_off = bl.length();
   ::encode(plen, bl);
 
@@ -1541,7 +1541,7 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
   
   plen = bl.length() - plen_off - sizeof(__u32);
 
-  __le32 eplen;
+  ceph_le32 eplen;
   eplen = plen;
   bl.copy_in(plen_off, sizeof(eplen), (char*)&eplen);
 }
