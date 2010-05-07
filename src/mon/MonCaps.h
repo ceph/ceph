@@ -67,7 +67,7 @@ struct MonCaps {
   bool is_rwx(string& token, rwx_t& cap_val);
   int get_service_id(string& token);
   bool allow_all;
-  __u64 auid;
+  uint64_t auid;
 public:
   MonCaps() : text(), default_action(0),
 	      allow_all(false), auid(CEPH_AUTH_UID_DEFAULT) {}
@@ -75,9 +75,9 @@ public:
   bool parse(bufferlist::iterator& iter);
   rwx_t get_caps(int service);
   bool check_privileges(int service, int req_perm,
-			__u64 auid=CEPH_AUTH_UID_DEFAULT);
+			uint64_t auid=CEPH_AUTH_UID_DEFAULT);
   void set_allow_all(bool allow) { allow_all = allow; }
-  void set_auid(__u64 uid) { auid = uid; }
+  void set_auid(uint64_t uid) { auid = uid; }
 
   void encode(bufferlist& bl) const {
     ::encode(text, bl);

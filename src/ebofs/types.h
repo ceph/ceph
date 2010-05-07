@@ -69,9 +69,9 @@ struct ebofs_onode {
 
   extent_t onode_loc;       /* this is actually the block we live in */
   pobject_t object_id;    /* for kicks */
-  __u64 readonly;  
+  uint64_t readonly;  
 
-  __s64 object_size;     /* file size in bytes.  should this be 64-bit? */
+  int64_t object_size;     /* file size in bytes.  should this be 64-bit? */
   __u32 alloc_blocks;   // allocated
   csum_t data_csum;
   
@@ -105,7 +105,7 @@ static inline ostream& operator<<(ostream& out, const ebofs_inode_ptr& ptr) {
 
 // tree/set nodes
 //typedef int    nodeid_t;
-typedef __s64 nodeid_t;     // actually, a block number.  FIXME.
+typedef int64_t nodeid_t;     // actually, a block number.  FIXME.
 
 static const unsigned EBOFS_NODE_BLOCKS = 1;
 static const unsigned EBOFS_NODE_BYTES = EBOFS_NODE_BLOCKS * EBOFS_BLOCK_SIZE;
@@ -124,8 +124,8 @@ struct ebofs_nodepool {
 
 struct ebofs_node_ptr {
   nodeid_t nodeid;
-  //__u64 start[EBOFS_NODE_DUP];
-  //__u64 length;
+  //uint64_t start[EBOFS_NODE_DUP];
+  //uint64_t length;
   csum_t csum;
 } __attribute__ ((packed));
 
@@ -139,17 +139,17 @@ struct ebofs_table {
 // super
 typedef uint64_t version_t;
 
-static const __u64 EBOFS_MAGIC = 0x000EB0F5;
+static const uint64_t EBOFS_MAGIC = 0x000EB0F5;
 
 static const int EBOFS_NUM_FREE_BUCKETS = 5;   /* see alloc.h for bucket constraints */
 static const int EBOFS_FREE_BUCKET_BITS = 2;
 
 struct ebofs_super {
-  __u64 s_magic;
-  __u64 fsid;   /* _ebofs_ fsid, mind you, not ceph_fsid_t. */
+  uint64_t s_magic;
+  uint64_t fsid;   /* _ebofs_ fsid, mind you, not ceph_fsid_t. */
 
   epoch_t epoch;             // version of this superblock.
-  __u64 op_seq;              // seq # of last operation we _did_ apply+commit to the store.
+  uint64_t op_seq;              // seq # of last operation we _did_ apply+commit to the store.
 
   uint64_t num_blocks;        /* # blocks in filesystem */
 

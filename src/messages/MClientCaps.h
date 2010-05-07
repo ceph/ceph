@@ -33,12 +33,12 @@ class MClientCaps : public Message {
 
   inodeno_t get_ino() { return inodeno_t(head.ino); }
   inodeno_t get_realm() { return inodeno_t(head.realm); }
-  __u64 get_cap_id() { return head.cap_id; }
+  uint64_t get_cap_id() { return head.cap_id; }
 
-  __u64 get_size() { return head.size;  }
-  __u64 get_max_size() { return head.max_size;  }
+  uint64_t get_size() { return head.size;  }
+  uint64_t get_max_size() { return head.max_size;  }
   __u32 get_truncate_seq() { return head.truncate_seq; }
-  __u64 get_truncate_size() { return head.truncate_size; }
+  uint64_t get_truncate_size() { return head.truncate_size; }
   utime_t get_ctime() { return utime_t(head.ctime); }
   utime_t get_mtime() { return utime_t(head.mtime); }
   utime_t get_atime() { return utime_t(head.atime); }
@@ -49,8 +49,8 @@ class MClientCaps : public Message {
   int       get_migrate_seq() { return head.migrate_seq; }
   int       get_op() { return head.op; }
 
-  __u64 get_client_tid() { return get_tid(); }
-  void set_client_tid(__u64 s) { set_tid(s); }
+  uint64_t get_client_tid() { return get_tid(); }
+  void set_client_tid(uint64_t s) { set_tid(s); }
 
   snapid_t get_snap_follows() { return snapid_t(head.snap_follows); }
   void set_snap_follows(snapid_t s) { head.snap_follows = s; }
@@ -58,7 +58,7 @@ class MClientCaps : public Message {
   void set_caps(int c) { head.caps = c; }
   void set_wanted(int w) { head.wanted = w; }
 
-  void set_max_size(__u64 ms) { head.max_size = ms; }
+  void set_max_size(uint64_t ms) { head.max_size = ms; }
 
   void set_migrate_seq(unsigned m) { head.migrate_seq = m; }
   void set_op(int o) { head.op = o; }
@@ -71,7 +71,7 @@ class MClientCaps : public Message {
   MClientCaps(int op,
 	      inodeno_t ino,
 	      inodeno_t realm,
-	      __u64 id,
+	      uint64_t id,
 	      long seq,
 	      int caps,
 	      int wanted,
@@ -91,7 +91,7 @@ class MClientCaps : public Message {
   }
   MClientCaps(int op,
 	      inodeno_t ino, inodeno_t realm,
-	      __u64 id, int mseq) :
+	      uint64_t id, int mseq) :
     Message(CEPH_MSG_CLIENT_CAPS) {
     memset(&head, 0, sizeof(head));
     head.op = op;

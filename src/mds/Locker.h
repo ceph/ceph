@@ -169,7 +169,7 @@ public:
 
   // caps
   void process_cap_update(MDRequest *mdr, client_t client,
-			  inodeno_t ino, __u64 cap_id, int caps, int wanted,
+			  inodeno_t ino, uint64_t cap_id, int caps, int wanted,
 			  int seq, int issue_seq, int mseq,
 			  const nstring& dname);
   void kick_cap_releases(MDRequest *mdr);
@@ -226,8 +226,8 @@ protected:
   void file_update_finish(CInode *in, Mutation *mut, bool share, client_t client, Capability *cap,
 			  MClientCaps *ack);
 public:
-  void calc_new_client_ranges(CInode *in, __u64 size, map<client_t,byte_range_t>& new_ranges);
-  bool check_inode_max_size(CInode *in, bool force_wrlock=false, bool update_size=false, __u64 newsize=0,
+  void calc_new_client_ranges(CInode *in, uint64_t size, map<client_t,byte_range_t>& new_ranges);
+  bool check_inode_max_size(CInode *in, bool force_wrlock=false, bool update_size=false, uint64_t newsize=0,
 			    utime_t mtime=utime_t());
   void share_inode_max_size(CInode *in);
 

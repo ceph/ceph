@@ -35,7 +35,7 @@ using namespace std;
 #define RGW_ATTR_CONTENT_TYPE	RGW_ATTR_PREFIX "content_type"
 
 #define USER_INFO_VER 2
-#define CEPH_AUTH_UID_DEFAULT (__u64) -1
+#define CEPH_AUTH_UID_DEFAULT (uint64_t) -1
 
 typedef void *RGWAccessHandle;
 
@@ -107,7 +107,7 @@ class RGWAccessControlPolicy;
 
 struct RGWUserInfo
 {
-  __u64 auid;
+  uint64_t auid;
   string user_id;
   string secret_key;
   string display_name;
@@ -195,7 +195,7 @@ struct RGWObjEnt {
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
-    __u64 s = size;
+    uint64_t s = size;
     __u32 mt = mtime;
     ::encode(name, bl);
     ::encode(s, bl);
@@ -205,7 +205,7 @@ struct RGWObjEnt {
     __u8 struct_v;
     ::decode(struct_v, bl);
     __u32 mt;
-    __u64 s;
+    uint64_t s;
     ::decode(name, bl);
     ::decode(s, bl);
     ::decode(mt, bl);

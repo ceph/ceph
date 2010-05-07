@@ -27,7 +27,7 @@ public:
    * pending mutation state in the table.
    */
   struct _pending {
-    __u64 reqid;
+    uint64_t reqid;
     __s32 mds;
     version_t tid;
     void encode(bufferlist& bl) const {
@@ -77,20 +77,20 @@ private:
 
  public:
   virtual void handle_query(MMDSTableRequest *m) = 0;
-  virtual void _prepare(bufferlist &bl, __u64 reqid, int bymds) = 0;
+  virtual void _prepare(bufferlist &bl, uint64_t reqid, int bymds) = 0;
   virtual void _commit(version_t tid) = 0;
   virtual void _rollback(version_t tid) = 0;
   virtual void _server_update(bufferlist& bl) { assert(0); }
 
-  void _note_prepare(int mds, __u64 reqid) {
+  void _note_prepare(int mds, uint64_t reqid) {
     pending_for_mds[version].mds = mds;
     pending_for_mds[version].reqid = reqid;
     pending_for_mds[version].tid = version;
   }
-  void _note_commit(__u64 tid) {
+  void _note_commit(uint64_t tid) {
     pending_for_mds.erase(tid);
   }
-  void _note_rollback(__u64 tid) {
+  void _note_rollback(uint64_t tid) {
     pending_for_mds.erase(tid);
   }
   

@@ -312,8 +312,8 @@ public:
   int get_type() { return header.type; }
   void set_type(int t) { header.type = t; }
 
-  __u64 get_tid() { return header.tid; }
-  void set_tid(__u64 t) { header.tid = t; }
+  uint64_t get_tid() { return header.tid; }
+  void set_tid(uint64_t t) { header.tid = t; }
 
   unsigned get_seq() { return header.seq; }
   void set_seq(unsigned s) { header.seq = s; }

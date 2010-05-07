@@ -21,14 +21,14 @@
 #include "include/encoding.h"
 
 struct MRoute : public Message {
-  __u64 session_mon_tid;
+  uint64_t session_mon_tid;
   Message *msg;
   entity_inst_t dest;
   
   MRoute() : Message(MSG_ROUTE), msg(NULL) {}
-  MRoute(__u64 t, Message *m, entity_inst_t i) :
+  MRoute(uint64_t t, Message *m, entity_inst_t i) :
     Message(MSG_ROUTE), session_mon_tid(t), msg(m), dest(i) {}
-  MRoute(__u64 t, bufferlist bl, entity_inst_t i) :
+  MRoute(uint64_t t, bufferlist bl, entity_inst_t i) :
     Message(MSG_ROUTE), session_mon_tid(t), dest(i) {
     bufferlist::iterator p = bl.begin();
     msg = decode_message(p);

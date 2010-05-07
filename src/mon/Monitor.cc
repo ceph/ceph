@@ -481,7 +481,7 @@ void Monitor::resend_routed_requests()
 {
   dout(10) << "resend_routed_requests" << dendl;
   int mon = get_leader();
-  for (map<__u64, RoutedRequest*>::iterator p = routed_requests.begin();
+  for (map<uint64_t, RoutedRequest*>::iterator p = routed_requests.begin();
        p != routed_requests.end();
        p++) {
     RoutedRequest *rr = p->second;
@@ -500,7 +500,7 @@ void Monitor::remove_session(MonSession *s)
 {
   dout(10) << "remove_session " << s << " " << s->inst << dendl;
   assert(!s->closed);
-  for (set<__u64>::iterator p = s->routed_request_tids.begin();
+  for (set<uint64_t>::iterator p = s->routed_request_tids.begin();
        p != s->routed_request_tids.end();
        p++) {
     if (routed_requests.count(*p)) {

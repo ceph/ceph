@@ -1052,7 +1052,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       }
     }
     else if (m->cmd[1] == "lspools") {
-      __u64 uid_pools = 0;
+      uint64_t uid_pools = 0;
       if (m->cmd.size() > 2) {
 	uid_pools = strtol(m->cmd[2].c_str(), NULL, 10);
       }
@@ -1087,7 +1087,7 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
     return prepare_new_pool(m->name, session->caps.auid);
 }
 
-int OSDMonitor::prepare_new_pool(string& name, __u64 auid)
+int OSDMonitor::prepare_new_pool(string& name, uint64_t auid)
 {
   if (osdmap.name_pool.count(name)) {
     return -EEXIST;
@@ -1481,7 +1481,7 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
 
   pg_pool_t* pp = 0;
   bufferlist *blp = NULL;
-  __u64 snapid(0);
+  uint64_t snapid(0);
 
   // if the pool isn't already in the update, add it
   if (!pending_inc.new_pools.count(m->pool))

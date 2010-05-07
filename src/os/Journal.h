@@ -22,19 +22,19 @@
 
 class Journal {
 protected:
-  __u64 fsid;
+  uint64_t fsid;
   Finisher *finisher;
   Cond *do_sync_cond;
   bool wait_on_full;
 
 public:
-  Journal(__u64 f, Finisher *fin, Cond *c=0) : fsid(f), finisher(fin),
+  Journal(uint64_t f, Finisher *fin, Cond *c=0) : fsid(f), finisher(fin),
 					       do_sync_cond(c),
 					       wait_on_full(false) { }
   virtual ~Journal() { }
 
   virtual int create() = 0;
-  virtual int open(__u64 last_seq) = 0;
+  virtual int open(uint64_t last_seq) = 0;
   virtual void close() = 0;
 
   virtual void flush() = 0;
@@ -45,9 +45,9 @@ public:
   // writes
   virtual bool is_writeable() = 0;
   virtual void make_writeable() = 0;
-  virtual void submit_entry(__u64 seq, bufferlist& e, Context *oncommit) = 0;
-  virtual void committed_thru(__u64 seq) = 0;
-  virtual bool read_entry(bufferlist& bl, __u64 &seq) = 0;
+  virtual void submit_entry(uint64_t seq, bufferlist& e, Context *oncommit) = 0;
+  virtual void committed_thru(uint64_t seq) = 0;
+  virtual bool read_entry(bufferlist& bl, uint64_t &seq) = 0;
 
   // reads/recovery
   

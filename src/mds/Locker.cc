@@ -1445,10 +1445,10 @@ public:
 };
 
 
-void Locker::calc_new_client_ranges(CInode *in, __u64 size, map<client_t,byte_range_t>& new_ranges)
+void Locker::calc_new_client_ranges(CInode *in, uint64_t size, map<client_t,byte_range_t>& new_ranges)
 {
   inode_t *latest = in->get_projected_inode();
-  __u64 ms = ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment());
+  uint64_t ms = ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment());
 
   // increase ranges as appropriate.
   // shrink to 0 if no WR|BUFFER caps issued.
@@ -1458,7 +1458,7 @@ void Locker::calc_new_client_ranges(CInode *in, __u64 size, map<client_t,byte_ra
     if ((p->second->issued() | p->second->wanted()) & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
       new_ranges[p->first].first = 0;
       if (latest->client_ranges.count(p->first)) {
-	__u64 last = latest->client_ranges[p->first].last;
+	uint64_t last = latest->client_ranges[p->first].last;
 	new_ranges[p->first].last = MAX(ms, last);
       } else
 	new_ranges[p->first].last = ms;
@@ -1468,13 +1468,13 @@ void Locker::calc_new_client_ranges(CInode *in, __u64 size, map<client_t,byte_ra
 }
 
 bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
-				  bool update_size, __u64 new_size, utime_t new_mtime)
+				  bool update_size, uint64_t new_size, utime_t new_mtime)
 {
   assert(in->is_auth());
 
   inode_t *latest = in->get_projected_inode();
   map<client_t,byte_range_t> new_ranges;
-  __u64 size = latest->size;
+  uint64_t size = latest->size;
   if (update_size)
     size = new_size;
   bool new_max = false;
@@ -1811,7 +1811,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 }
 
 void Locker::process_cap_update(MDRequest *mdr, client_t client,
-				inodeno_t ino, __u64 cap_id, int caps, int wanted,
+				inodeno_t ino, uint64_t cap_id, int caps, int wanted,
 				int seq, int issue_seq, int mseq,
 				const nstring& dname)
 {
@@ -1873,7 +1873,7 @@ void Locker::kick_cap_releases(MDRequest *mdr)
 }
 
 
-static __u64 calc_bounding(__u64 t)
+static uint64_t calc_bounding(uint64_t t)
 {
   t |= t >> 1;
   t |= t >> 2;
@@ -1902,7 +1902,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   inode_t *latest = in->get_projected_inode();
 
   // increase or zero max_size?
-  __u64 size = m->get_size();
+  uint64_t size = m->get_size();
   bool change_max = false;
   uint64_t old_max = latest->client_ranges.count(client) ? latest->client_ranges[client].last : 0;
   uint64_t new_max = old_max;
@@ -2082,7 +2082,7 @@ void Locker::handle_client_cap_release(MClientCapRelease *m)
   dout(10) << "handle_client_cap_release " << *m << dendl;
 
   for (vector<ceph_mds_cap_item>::iterator p = m->caps.begin(); p != m->caps.end(); p++) {
-    inodeno_t ino((__u64)p->ino);
+    inodeno_t ino((uint64_t)p->ino);
     CInode *in = mdcache->get_inode(ino);
     if (!in) {
       dout(10) << " missing ino " << ino << dendl;

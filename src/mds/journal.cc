@@ -648,7 +648,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     assert(in);
     mds->mdcache->add_recovered_truncate(in, logseg);
   }
-  for (map<inodeno_t,__u64>::iterator p = truncate_finish.begin();
+  for (map<inodeno_t,uint64_t>::iterator p = truncate_finish.begin();
        p != truncate_finish.end();
        p++) {
     LogSegment *ls = mds->mdlog->get_segment(p->second);
@@ -673,7 +673,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
   }
 
   // client requests
-  for (list<pair<metareqid_t, __u64> >::iterator p = client_reqs.begin();
+  for (list<pair<metareqid_t, uint64_t> >::iterator p = client_reqs.begin();
        p != client_reqs.end();
        ++p)
     if (p->first.name.is_client()) {

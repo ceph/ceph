@@ -84,7 +84,7 @@ public:
   static const int STATE_STOPPING  =  CEPH_MDS_STATE_STOPPING; // up, exporting metadata (-> standby or out)
   
   struct mds_info_t {
-    __u64 global_id;
+    uint64_t global_id;
     string name;
     int32_t rank;
     int32_t inc;
@@ -149,7 +149,7 @@ protected:
 
   __u32 session_timeout;
   __u32 session_autoclose;
-  __u64 max_file_size;
+  uint64_t max_file_size;
 
   vector<__u32> data_pg_pools;  // file data pg_pools available to clients (via an ioctl).  first is the default.
   __u32 cas_pg_pool;            // where CAS objects go
@@ -169,8 +169,8 @@ protected:
   set<int32_t> in;              // currently defined cluster
   map<int32_t,int32_t> inc;     // most recent incarnation.
   set<int32_t> failed, stopped; // which roles are failed or stopped
-  map<int32_t,__u64> up;        // who is in those roles
-  map<__u64,mds_info_t> mds_info;
+  map<int32_t,uint64_t> up;        // who is in those roles
+  map<uint64_t,mds_info_t> mds_info;
 
 public:
   CompatSet compat;
@@ -189,7 +189,7 @@ public:
   utime_t get_session_timeout() {
     return utime_t(session_timeout,0);
   }
-  __u64 get_max_filesize() { return max_file_size; }
+  uint64_t get_max_filesize() { return max_file_size; }
   
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
@@ -212,8 +212,8 @@ public:
   __u32 get_cas_pg_pool() const { return cas_pg_pool; }
   __u32 get_metadata_pg_pool() const { return metadata_pg_pool; }
 
-  const map<__u64,mds_info_t>& get_mds_info() { return mds_info; }
-  const mds_info_t& get_mds_info_gid(__u64 gid) {
+  const map<uint64_t,mds_info_t>& get_mds_info() { return mds_info; }
+  const mds_info_t& get_mds_info_gid(uint64_t gid) {
     assert(mds_info.count(gid));
     return mds_info[gid];
   }
@@ -228,7 +228,7 @@ public:
   }
   unsigned get_num_mds(int state) {
     unsigned n = 0;
-    for (map<__u64,mds_info_t>::const_iterator p = mds_info.begin();
+    for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p)
       if (p->second.state == state) ++n;
@@ -242,7 +242,7 @@ public:
     s = in;
   }
   void get_up_mds_set(set<int>& s) {
-    for (map<int32_t,__u64>::const_iterator p = up.begin();
+    for (map<int32_t,uint64_t>::const_iterator p = up.begin();
 	 p != up.end();
 	 ++p)
       s.insert(p->first);
@@ -262,14 +262,14 @@ public:
   }
   void get_recovery_mds_set(set<int>& s) {
     s = failed;
-    for (map<__u64,mds_info_t>::const_iterator p = mds_info.begin();
+    for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p)
       if (p->second.state >= STATE_REPLAY && p->second.state <= STATE_STOPPING)
 	s.insert(p->second.rank);
   }
   void get_mds_set(set<int>& s, int state) {
-    for (map<__u64,mds_info_t>::const_iterator p = mds_info.begin();
+    for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p)
       if (p->second.state == state)
@@ -279,14 +279,14 @@ public:
   int get_random_up_mds() {
     if (up.empty())
       return -1;
-    map<int32_t,__u64>::iterator p = up.begin();
+    map<int32_t,uint64_t>::iterator p = up.begin();
     for (int n = rand() % up.size(); n; n--)
       p++;
     return p->first;
   }
 
-  __u64 find_standby_for(int mds, string& name) {
-    for (map<__u64,mds_info_t>::const_iterator p = mds_info.begin();
+  uint64_t find_standby_for(int mds, string& name) {
+    for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p) {
       if (p->second.rank == -1 &&
@@ -297,7 +297,7 @@ public:
 	return p->first;
       }
     }
-    for (map<__u64,mds_info_t>::const_iterator p = mds_info.begin();
+    for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p) {
       if (p->second.rank == -1 &&
@@ -321,13 +321,13 @@ public:
   bool is_stopped(int m)    { return stopped.count(m); }
 
   bool is_dne(int m)      { return in.count(m) == 0; }
-  bool is_dne_gid(__u64 gid)      { return mds_info.count(gid) == 0; }
+  bool is_dne_gid(uint64_t gid)      { return mds_info.count(gid) == 0; }
 
   int get_state(int m) { return up.count(m) ? mds_info[up[m]].state : 0; }
-  int get_state_gid(__u64 gid) { return mds_info.count(gid) ? mds_info[gid].state : 0; }
+  int get_state_gid(uint64_t gid) { return mds_info.count(gid) ? mds_info[gid].state : 0; }
 
   mds_info_t& get_info(int m) { assert(up.count(m)); return mds_info[up[m]]; }
-  mds_info_t& get_info_gid(__u64 gid) { assert(mds_info.count(gid)); return mds_info[gid]; }
+  mds_info_t& get_info_gid(uint64_t gid) { assert(mds_info.count(gid)); return mds_info[gid]; }
 
   bool is_boot(int m)  { return get_state(m) == STATE_BOOT; }
   bool is_creating(int m) { return get_state(m) == STATE_CREATING; }
@@ -341,7 +341,7 @@ public:
   bool is_stopping(int m) { return get_state(m) == STATE_STOPPING; }
   bool is_clientreplay_or_active_or_stopping(int m)   { return is_clientreplay(m) || is_active(m) || is_stopping(m); }
 
-  bool is_laggy_gid(__u64 gid) { return mds_info.count(gid) && mds_info[gid].laggy(); }
+  bool is_laggy_gid(uint64_t gid) { return mds_info.count(gid) && mds_info[gid].laggy(); }
 
 
   // cluster states
@@ -389,7 +389,7 @@ public:
     return false;
   }
   
-  int get_rank_gid(__u64 gid) {
+  int get_rank_gid(uint64_t gid) {
     if (mds_info.count(gid))
       return mds_info[gid].rank;
     return -1;

@@ -77,7 +77,7 @@ public:
 class Journaler::C_ProbeEnd : public Context {
   Journaler *ls;
 public:
-  __s64 end;
+  int64_t end;
   C_ProbeEnd(Journaler *l) : ls(l), end(-1) {}
   void finish(int r) {
     ls->_finish_probe_end(r, end);
@@ -146,10 +146,10 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   state = STATE_PROBING;
   C_ProbeEnd *fin = new C_ProbeEnd(this);
   filer.probe(ino, &layout, CEPH_NOSNAP,
-	      h.write_pos, (__u64 *)&fin->end, 0, true, 0, fin);
+	      h.write_pos, (uint64_t *)&fin->end, 0, true, 0, fin);
 }
 
-void Journaler::_finish_probe_end(int r, __s64 end)
+void Journaler::_finish_probe_end(int r, int64_t end)
 {
   assert(state == STATE_PROBING);
   
@@ -228,15 +228,15 @@ void Journaler::_finish_write_head(Header &wrote, Context *oncommit)
 
 class Journaler::C_Flush : public Context {
   Journaler *ls;
-  __s64 start;
+  int64_t start;
   utime_t stamp;
   bool safe;
 public:
-  C_Flush(Journaler *l, __s64 s, utime_t st, bool sa) : ls(l), start(s), stamp(st), safe(sa) {}
+  C_Flush(Journaler *l, int64_t s, utime_t st, bool sa) : ls(l), start(s), stamp(st), safe(sa) {}
   void finish(int r) { ls->_finish_flush(r, start, stamp, safe); }
 };
 
-void Journaler::_finish_flush(int r, __s64 start, utime_t stamp, bool safe)
+void Journaler::_finish_flush(int r, int64_t start, utime_t stamp, bool safe)
 {
   assert(r>=0);
 
@@ -309,17 +309,17 @@ void Journaler::_finish_flush(int r, __s64 start, utime_t stamp, bool safe)
 }
 
 
-__s64 Journaler::append_entry(bufferlist& bl)
+int64_t Journaler::append_entry(bufferlist& bl)
 {
   uint32_t s = bl.length();
 
   if (!g_conf.journaler_allow_split_entries) {
     // will we span a stripe boundary?
     int p = layout.fl_stripe_unit;
-    if (write_pos / p != (write_pos + (__s64)(bl.length() + sizeof(s))) / p) {
+    if (write_pos / p != (write_pos + (int64_t)(bl.length() + sizeof(s))) / p) {
       // yes.
       // move write_pos forward.
-      __s64 owp = write_pos;
+      int64_t owp = write_pos;
       write_pos += p;
       write_pos -= (write_pos % p);
       
@@ -568,7 +568,7 @@ void Journaler::_finish_read(int r)
  * then discover we need even more for an especially large entry.
  * i don't think that circumstance will arise particularly often.
  */
-void Journaler::_issue_read(__s64 len)
+void Journaler::_issue_read(int64_t len)
 {
   // make sure we're fully flushed
   _do_flush();
@@ -612,7 +612,7 @@ void Journaler::_issue_read(__s64 len)
 void Journaler::_prefetch()
 {
   // prefetch?
-  __s64 left = requested_pos - read_pos;
+  int64_t left = requested_pos - read_pos;
   if (left <= prefetch_from &&      // should read more,
       !_is_reading() &&             // and not reading anything right now
       write_pos > requested_pos) {  // there's something more to read...
@@ -696,7 +696,7 @@ bool Journaler::is_readable()
   // start reading some more?
   if (!_is_reading()) {
     if (s)
-      fetch_len = MAX(fetch_len, (__s64)(sizeof(s)+s-read_buf.length())); 
+      fetch_len = MAX(fetch_len, (int64_t)(sizeof(s)+s-read_buf.length())); 
     _issue_read(fetch_len);
   }
 
@@ -710,7 +710,7 @@ bool Journaler::truncate_tail_junk(Context *c)
     return true;
   }
 
-  __s64 len = junk_tail_pos - write_pos;
+  int64_t len = junk_tail_pos - write_pos;
   dout(10) << "truncate_tail_junk " << write_pos << "~" << len << dendl;
   SnapContext snapc;
   filer.zero(ino, &layout, snapc, write_pos, len, g_clock.now(), 0, NULL, c);
@@ -772,9 +772,9 @@ void Journaler::wait_for_readable(Context *onreadable)
 
 class Journaler::C_Trim : public Context {
   Journaler *ls;
-  __s64 to;
+  int64_t to;
 public:
-  C_Trim(Journaler *l, __s64 t) : ls(l), to(t) {}
+  C_Trim(Journaler *l, int64_t t) : ls(l), to(t) {}
   void finish(int r) {
     ls->_trim_finish(r, to);
   }
@@ -782,9 +782,9 @@ public:
 
 void Journaler::trim()
 {
-  __u64 period = layout.fl_stripe_count * layout.fl_object_size;
+  uint64_t period = layout.fl_stripe_count * layout.fl_object_size;
 
-  __s64 trim_to = last_committed.expire_pos;
+  int64_t trim_to = last_committed.expire_pos;
   trim_to -= trim_to % period;
   dout(10) << "trim last_commited head was " << last_committed
 	   << ", can trim to " << trim_to
@@ -810,15 +810,15 @@ void Journaler::trim()
 	   << dendl;
 
   // delete range of objects
-  __u64 first = trimming_pos / period;
-  __u64 num = (trim_to - trimming_pos) / period;
+  uint64_t first = trimming_pos / period;
+  uint64_t num = (trim_to - trimming_pos) / period;
   SnapContext snapc;
   filer.purge_range(ino, &layout, snapc, first, num, g_clock.now(), 0, 
 		    new C_Trim(this, trim_to));
   trimming_pos = trim_to;  
 }
 
-void Journaler::_trim_finish(int r, __s64 to)
+void Journaler::_trim_finish(int r, int64_t to)
 {
   dout(10) << "_trim_finish trimmed_pos was " << trimmed_pos
 	   << ", trimmed/trimming/expire now "

@@ -21,8 +21,8 @@
 
 class JournalingObjectStore : public ObjectStore {
 protected:
-  __u64 op_seq, applied_seq;
-  __u64 committing_seq, committed_seq;
+  uint64_t op_seq, applied_seq;
+  uint64_t committing_seq, committed_seq;
   map<version_t, vector<Context*> > commit_waiters;
 
   int open_ops;
@@ -38,16 +38,16 @@ protected:
 protected:
   void journal_start();
   void journal_stop();
-  int journal_replay(__u64 fs_op_seq);
+  int journal_replay(uint64_t fs_op_seq);
 
   // --
-  __u64 op_apply_start(__u64 op);
+  uint64_t op_apply_start(uint64_t op);
   void op_apply_finish();
-  __u64 op_journal_start(__u64 op);
+  uint64_t op_journal_start(uint64_t op);
   void op_journal_finish();
 
-  void journal_transaction(ObjectStore::Transaction& t, __u64 op, Context *onjournal);
-  void journal_transactions(list<ObjectStore::Transaction*>& tls, __u64 op, Context *onjournal);
+  void journal_transaction(ObjectStore::Transaction& t, uint64_t op, Context *onjournal);
+  void journal_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op, Context *onjournal);
 
   bool commit_start();
   void commit_started();  // allow new ops (underlying fs should now be committing all prior ops)

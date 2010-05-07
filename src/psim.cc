@@ -61,7 +61,7 @@ int main(int argc, char **argv)
     }
   }
 
-  __u64 avg = 0;
+  uint64_t avg = 0;
   for (int i=0; i<n; i++) {
     cout << "osd" << i << "\t" << count[i] << std::endl;
     avg += count[i];

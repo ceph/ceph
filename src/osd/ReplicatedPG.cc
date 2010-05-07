@@ -389,7 +389,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
         dout(10) << " pgls pg=" << op->get_pg() << dendl;
 	// read into a buffer
         PGLSResponse response;
-        response.handle = (collection_list_handle_t)(__u64)(p->op.pgls.cookie);
+        response.handle = (collection_list_handle_t)(uint64_t)(p->op.pgls.cookie);
         vector<sobject_t> sentries;
 	result = osd->store->collection_list_partial(coll_t::build_pg_coll(info.pgid), snapid,
 						     sentries, p->op.pgls.count,
@@ -577,7 +577,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   // note some basic context for op replication that prepare_transaction may clobber
   eversion_t old_last_update = ctx->at_version;
   bool old_exists = obc->obs.exists;
-  __u64 old_size = obc->obs.oi.size;
+  uint64_t old_size = obc->obs.oi.size;
   eversion_t old_version = obc->obs.oi.version;
 
   // we are acker.
@@ -794,7 +794,7 @@ bool ReplicatedPG::snap_trimmer()
 	if (p != snapset.clones.begin()) {
 	  // not the oldest... merge overlap into next older clone
 	  vector<snapid_t>::iterator n = p - 1;
-	  interval_set<__u64> keep;
+	  interval_set<uint64_t> keep;
 	  keep.union_of(snapset.clone_overlap[*n], snapset.clone_overlap[*p]);
 	  add_interval_usage(keep, info.stats);  // not deallocated
  	  snapset.clone_overlap[*n].intersection_of(snapset.clone_overlap[*p]);
@@ -1004,7 +1004,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	memset(&st, 0, sizeof(st));
 	result = osd->store->stat(coll_t::build_pg_coll(info.pgid), soid, &st);
 	if (result >= 0) {
-	  __u64 size = st.st_size;
+	  uint64_t size = st.st_size;
 	  ::encode(size, odata);
 	  ::encode(oi.mtime, odata);
 	}
@@ -1077,7 +1077,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
         }
 	if (ssc->snapset.clones.size()) {
 	  snapid_t newest = *ssc->snapset.clones.rbegin();
-	  interval_set<__u64> ch;
+	  interval_set<uint64_t> ch;
 	  if (op.extent.length)
 	    ch.insert(op.extent.offset, op.extent.length);
 	  ch.intersection_of(ssc->snapset.clone_overlap[newest]);
@@ -1085,7 +1085,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  add_interval_usage(ch, info.stats);
 	}
 	if (op.extent.length && (op.extent.offset + op.extent.length > oi.size)) {
-	  __u64 new_size = op.extent.offset + op.extent.length;
+	  uint64_t new_size = op.extent.offset + op.extent.length;
 	  info.stats.num_bytes += new_size - oi.size;
 	  info.stats.num_kb += SHIFT_ROUND_UP(new_size, 10) - SHIFT_ROUND_UP(oi.size, 10);
 	  oi.size = new_size;
@@ -1129,7 +1129,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	t.zero(coll_t::build_pg_coll(info.pgid), soid, op.extent.offset, op.extent.length);
 	if (ssc->snapset.clones.size()) {
 	  snapid_t newest = *ssc->snapset.clones.rbegin();
-	  interval_set<__u64> ch;
+	  interval_set<uint64_t> ch;
 	  ch.insert(op.extent.offset, op.extent.length);
 	  ch.intersection_of(ssc->snapset.clone_overlap[newest]);
 	  ssc->snapset.clone_overlap[newest].subtract(ch);
@@ -1178,13 +1178,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	t.truncate(coll_t::build_pg_coll(info.pgid), soid, op.extent.offset);
 	if (ssc->snapset.clones.size()) {
 	  snapid_t newest = *ssc->snapset.clones.rbegin();
-	  interval_set<__u64> trim;
+	  interval_set<uint64_t> trim;
 	  if (oi.size > op.extent.offset) {
 	    trim.insert(op.extent.offset, oi.size-op.extent.offset);
 	    trim.intersection_of(ssc->snapset.clone_overlap[newest]);
 	    add_interval_usage(trim, info.stats);
 	  }
-	  interval_set<__u64> keep;
+	  interval_set<uint64_t> keep;
 	  if (op.extent.offset)
 	    keep.insert(0, op.extent.offset);
 	  ssc->snapset.clone_overlap[newest].intersection_of(keep);
@@ -1628,9 +1628,9 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
 }
 
 
-void ReplicatedPG::add_interval_usage(interval_set<__u64>& s, pg_stat_t& stats)
+void ReplicatedPG::add_interval_usage(interval_set<uint64_t>& s, pg_stat_t& stats)
 {
-  for (map<__u64,__u64>::iterator p = s.m.begin(); p != s.m.end(); p++) {
+  for (map<uint64_t,uint64_t>::iterator p = s.m.begin(); p != s.m.end(); p++) {
     stats.num_bytes += p->second;
     stats.num_kb += SHIFT_ROUND_UP(p->first+p->second, 10) - (p->first >> 10);
   }
@@ -1964,7 +1964,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 
 
 void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now,
-			       bool old_exists, __u64 old_size, eversion_t old_version)
+			       bool old_exists, uint64_t old_size, eversion_t old_version)
 {
   const sobject_t& soid = repop->ctx->obs->oi.soid;
   dout(7) << " issue_repop rep_tid " << repop->rep_tid
@@ -2553,8 +2553,8 @@ void ReplicatedPG::sub_op_modify_reply(MOSDSubOpReply *r)
 
 void ReplicatedPG::calc_head_subsets(SnapSet& snapset, const sobject_t& head,
 				     Missing& missing,
-				     interval_set<__u64>& data_subset,
-				     map<sobject_t, interval_set<__u64> >& clone_subsets)
+				     interval_set<uint64_t>& data_subset,
+				     map<sobject_t, interval_set<uint64_t> >& clone_subsets)
 {
   dout(10) << "calc_head_subsets " << head
 	   << " clone_overlap " << snapset.clone_overlap << dendl;
@@ -2562,8 +2562,8 @@ void ReplicatedPG::calc_head_subsets(SnapSet& snapset, const sobject_t& head,
   struct stat st;
   osd->store->stat(coll_t::build_pg_coll(info.pgid), head, &st);
 
-  interval_set<__u64> cloning;
-  interval_set<__u64> prev;
+  interval_set<uint64_t> cloning;
+  interval_set<uint64_t> prev;
   if (st.st_size)
     prev.insert(0, st.st_size);    
   
@@ -2594,13 +2594,13 @@ void ReplicatedPG::calc_head_subsets(SnapSet& snapset, const sobject_t& head,
 
 void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const sobject_t& soid,
 				      Missing& missing,
-				      interval_set<__u64>& data_subset,
-				      map<sobject_t, interval_set<__u64> >& clone_subsets)
+				      interval_set<uint64_t>& data_subset,
+				      map<sobject_t, interval_set<uint64_t> >& clone_subsets)
 {
   dout(10) << "calc_clone_subsets " << soid
 	   << " clone_overlap " << snapset.clone_overlap << dendl;
 
-  __u64 size = snapset.clone_size[soid.snap];
+  uint64_t size = snapset.clone_size[soid.snap];
 
   unsigned i;
   for (i=0; i < snapset.clones.size(); i++)
@@ -2608,8 +2608,8 @@ void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const sobject_t& soid,
       break;
 
   // any overlap with next older clone?
-  interval_set<__u64> cloning;
-  interval_set<__u64> prev;
+  interval_set<uint64_t> cloning;
+  interval_set<uint64_t> prev;
   if (size)
     prev.insert(0, size);    
   for (int j=i-1; j>=0; j--) {
@@ -2628,7 +2628,7 @@ void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const sobject_t& soid,
   }
   
   // overlap with next newest?
-  interval_set<__u64> next;
+  interval_set<uint64_t> next;
   if (size)
     next.insert(0, size);    
   for (unsigned j=i+1; j<snapset.clones.size(); j++) {
@@ -2683,8 +2683,8 @@ bool ReplicatedPG::pull(const sobject_t& soid)
   if (fromosd < 0)
     return false;
 
-  map<sobject_t, interval_set<__u64> > clone_subsets;
-  interval_set<__u64> data_subset;
+  map<sobject_t, interval_set<uint64_t> > clone_subsets;
+  interval_set<uint64_t> data_subset;
 
   // is this a snapped object?  if so, consult the snapset.. we may not need the entire object!
   if (soid.snap && soid.snap < CEPH_NOSNAP) {
@@ -2757,8 +2757,8 @@ void ReplicatedPG::push_to_replica(const sobject_t& soid, int peer)
   int r = osd->store->stat(coll_t::build_pg_coll(info.pgid), soid, &st);
   assert(r == 0);
   
-  map<sobject_t, interval_set<__u64> > clone_subsets;
-  interval_set<__u64> data_subset;
+  map<sobject_t, interval_set<uint64_t> > clone_subsets;
+  interval_set<uint64_t> data_subset;
 
   bufferlist bv;
   r = osd->store->getattr(coll_t::build_pg_coll(info.pgid), soid, OI_ATTR, bv);
@@ -2774,8 +2774,8 @@ void ReplicatedPG::push_to_replica(const sobject_t& soid, int peer)
       dout(10) << "push_to_replica osd" << peer << " has correct old " << head
 	       << " v" << oi.prior_version 
 	       << ", pushing " << soid << " attrs as a clone op" << dendl;
-      interval_set<__u64> data_subset;
-      map<sobject_t, interval_set<__u64> > clone_subsets;
+      interval_set<uint64_t> data_subset;
+      map<sobject_t, interval_set<uint64_t> > clone_subsets;
       if (st.st_size)
 	clone_subsets[head].insert(0, st.st_size);
       push(soid, peer, data_subset, clone_subsets);
@@ -2819,19 +2819,19 @@ void ReplicatedPG::push_to_replica(const sobject_t& soid, int peer)
  */
 void ReplicatedPG::push(const sobject_t& soid, int peer)
 {
-  interval_set<__u64> subset;
-  map<sobject_t, interval_set<__u64> > clone_subsets;
+  interval_set<uint64_t> subset;
+  map<sobject_t, interval_set<uint64_t> > clone_subsets;
   push(soid, peer, subset, clone_subsets);
 }
 
 void ReplicatedPG::push(const sobject_t& soid, int peer, 
-			interval_set<__u64> &data_subset,
-			map<sobject_t, interval_set<__u64> >& clone_subsets)
+			interval_set<uint64_t> &data_subset,
+			map<sobject_t, interval_set<uint64_t> >& clone_subsets)
 {
   // read data+attrs
   bufferlist bl;
   map<nstring,bufferptr> attrset;
-  __u64 size;
+  uint64_t size;
 
   if (data_subset.size() || clone_subsets.size()) {
     struct stat st;
@@ -2839,7 +2839,7 @@ void ReplicatedPG::push(const sobject_t& soid, int peer,
     assert(r == 0);
     size = st.st_size;
 
-    for (map<__u64,__u64>::iterator p = data_subset.m.begin();
+    for (map<uint64_t,uint64_t>::iterator p = data_subset.m.begin();
 	 p != data_subset.m.end();
 	 p++) {
       bufferlist bit;
@@ -3010,8 +3010,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 	  << " data len " << op->get_data().length()
           << dendl;
 
-  interval_set<__u64> data_subset;
-  map<sobject_t, interval_set<__u64> > clone_subsets;
+  interval_set<uint64_t> data_subset;
+  map<sobject_t, interval_set<uint64_t> > clone_subsets;
 
   bufferlist data;
   data.claim(op->get_data());
@@ -3035,7 +3035,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
       clone_subsets.clear();   // forget what pusher said; recalculate cloning.
 
-      interval_set<__u64> data_needed;
+      interval_set<uint64_t> data_needed;
       calc_clone_subsets(ssc->snapset, soid, missing, data_needed, clone_subsets);
       put_snapset_context(ssc);
       
@@ -3048,22 +3048,22 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
       // did we get more data than we need?
       if (!data_subset.subset_of(data_needed)) {
-	interval_set<__u64> extra = data_subset;
+	interval_set<uint64_t> extra = data_subset;
 	extra.subtract(data_needed);
 	dout(10) << " we got some extra: " << extra << dendl;
 
 	bufferlist result;
 	int off = 0;
-	for (map<__u64,__u64>::iterator p = data_subset.m.begin();
+	for (map<uint64_t,uint64_t>::iterator p = data_subset.m.begin();
 	     p != data_subset.m.end();
 	     p++) {
-	  interval_set<__u64> x;
+	  interval_set<uint64_t> x;
 	  x.insert(p->first, p->second);
 	  x.intersection_of(data_needed);
 	  dout(20) << " data_subset object extent " << p->first << "~" << p->second << " need " << x << dendl;
 	  if (!x.empty()) {
-	    __u64 first = x.m.begin()->first;
-	    __u64 len = x.m.begin()->second;
+	    uint64_t first = x.m.begin()->first;
+	    uint64_t len = x.m.begin()->second;
 	    bufferlist sub;
 	    int boff = off + (first - p->first);
 	    dout(20) << "   keeping buffer extent " << boff << "~" << len << dendl;
@@ -3088,17 +3088,17 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   t->remove(coll_t::build_pg_coll(info.pgid), soid);  // in case old version exists
 
-  __u64 boff = 0;
-  for (map<sobject_t, interval_set<__u64> >::iterator p = clone_subsets.begin();
+  uint64_t boff = 0;
+  for (map<sobject_t, interval_set<uint64_t> >::iterator p = clone_subsets.begin();
        p != clone_subsets.end();
        p++)
-    for (map<__u64,__u64>::iterator q = p->second.m.begin();
+    for (map<uint64_t,uint64_t>::iterator q = p->second.m.begin();
 	 q != p->second.m.end(); 
 	 q++) {
       dout(15) << " clone_range " << p->first << " " << q->first << "~" << q->second << dendl;
       t->clone_range(coll_t::build_pg_coll(info.pgid), p->first, soid, q->first, q->second);
     }
-  for (map<__u64,__u64>::iterator p = data_subset.m.begin();
+  for (map<uint64_t,uint64_t>::iterator p = data_subset.m.begin();
        p != data_subset.m.end(); 
        p++) {
     bufferlist bit;
@@ -3654,10 +3654,10 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 	curclone = snapset.clones.size()-1;
 
       // subtract off any clone overlap
-      for (map<snapid_t,interval_set<__u64> >::iterator q = snapset.clone_overlap.begin();
+      for (map<snapid_t,interval_set<uint64_t> >::iterator q = snapset.clone_overlap.begin();
 	   q != snapset.clone_overlap.end();
 	   q++) {
-	for (map<__u64,__u64>::iterator r = q->second.m.begin();
+	for (map<uint64_t,uint64_t>::iterator r = q->second.m.begin();
 	     r != q->second.m.end();
 	     r++) {
 	  stat.num_bytes -= r->second;

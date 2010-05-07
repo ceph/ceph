@@ -55,7 +55,7 @@ public:
   void set_caps(EntityName& name, map<string, bufferlist>& caps) {
     keys[name].caps = caps;
   }
-  void set_uid(EntityName& ename, __u64 auid) {
+  void set_uid(EntityName& ename, uint64_t auid) {
     keys[ename].auid = auid;
   }
   void import(KeyRing& other);

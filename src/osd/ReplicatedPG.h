@@ -406,7 +406,7 @@ protected:
   void op_commit(RepGather *repop);
   void eval_repop(RepGather*);
   void issue_repop(RepGather *repop, int dest, utime_t now,
-		   bool old_exists, __u64 old_size, eversion_t old_version);
+		   bool old_exists, uint64_t old_size, eversion_t old_version);
   RepGather *new_repop(OpContext *ctx, ObjectContext *obc, bool noop, tid_t rep_tid);
   void repop_ack(RepGather *repop,
                  int result, int ack_type,
@@ -464,15 +464,15 @@ protected:
 
   void calc_head_subsets(SnapSet& snapset, const sobject_t& head,
 			 Missing& missing,
-			 interval_set<__u64>& data_subset,
-			 map<sobject_t, interval_set<__u64> >& clone_subsets);
+			 interval_set<uint64_t>& data_subset,
+			 map<sobject_t, interval_set<uint64_t> >& clone_subsets);
   void calc_clone_subsets(SnapSet& snapset, const sobject_t& poid, Missing& missing,
-			  interval_set<__u64>& data_subset,
-			  map<sobject_t, interval_set<__u64> >& clone_subsets);
+			  interval_set<uint64_t>& data_subset,
+			  map<sobject_t, interval_set<uint64_t> >& clone_subsets);
   void push_to_replica(const sobject_t& oid, int dest);
   void push(const sobject_t& oid, int dest);
-  void push(const sobject_t& oid, int dest, interval_set<__u64>& data_subset, 
-	    map<sobject_t, interval_set<__u64> >& clone_subsets);
+  void push(const sobject_t& oid, int dest, interval_set<uint64_t>& data_subset, 
+	    map<sobject_t, interval_set<uint64_t> >& clone_subsets);
   bool pull(const sobject_t& oid);
 
 
@@ -483,7 +483,7 @@ protected:
 		   object_info_t *poi);
   void make_writeable(OpContext *ctx);
   void log_op_stats(const sobject_t &soid, OpContext *ctx);
-  void add_interval_usage(interval_set<__u64>& s, pg_stat_t& st);  
+  void add_interval_usage(interval_set<uint64_t>& s, pg_stat_t& st);  
 
   int prepare_transaction(OpContext *ctx);
   void log_op(vector<Log::Entry>& log, eversion_t trim_to, ObjectStore::Transaction& t);

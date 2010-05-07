@@ -77,8 +77,8 @@ public:
   extent_t onode_loc;
   epoch_t last_alloc_epoch; // epoch i last allocated for
 
-  __u64 object_size;
-  __u64 alloc_blocks, last_block;
+  uint64_t object_size;
+  uint64_t alloc_blocks, last_block;
   csum_t data_csum;
   bool readonly;
 
@@ -87,7 +87,7 @@ public:
   map<nstring, bufferptr> attr;
 
   map<block_t, ExtentCsum>   extent_map;
-  interval_set<__u64> bad_byte_extents;
+  interval_set<uint64_t> bad_byte_extents;
 
   interval_set<block_t> uncommitted;
 

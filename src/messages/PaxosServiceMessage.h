@@ -8,7 +8,7 @@ class PaxosServiceMessage : public Message {
  public:
   version_t version;
   __s16 session_mon;
-  __u64 session_mon_tid;
+  uint64_t session_mon_tid;
   
  PaxosServiceMessage() : Message(MSG_PAXOS),
 			 version(0), session_mon(-1), session_mon_tid(0) { }

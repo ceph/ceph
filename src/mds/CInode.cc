@@ -791,7 +791,7 @@ void CInode::encode_parent_mutation(ObjectOperation& m)
   CDentry *pdn = get_parent_dn();
   if (pdn) {
     bufferlist parent(32 + pdn->name.length());
-    __u64 ino = pdn->get_dir()->get_inode()->ino();
+    uint64_t ino = pdn->get_dir()->get_inode()->ino();
     __u8 v = 1;
     ::encode(v, parent);
     ::encode(inode.version, parent);
@@ -1317,7 +1317,7 @@ bool CInode::is_freezing()
   return false;
 }
 
-void CInode::add_waiter(__u64 tag, Context *c) 
+void CInode::add_waiter(uint64_t tag, Context *c) 
 {
   dout(10) << "add_waiter tag " << tag 
 	   << " !ambig " << !state_test(STATE_AMBIGUOUSAUTH)
@@ -1827,8 +1827,8 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
   m->head.time_warp_seq = i->time_warp_seq;
 
   // max_size is min of projected, actual.
-  __u64 oldms = oi->client_ranges.count(client) ? oi->client_ranges[client].last : 0;
-  __u64 newms = pi->client_ranges.count(client) ? pi->client_ranges[client].last : 0;
+  uint64_t oldms = oi->client_ranges.count(client) ? oi->client_ranges[client].last : 0;
+  uint64_t newms = pi->client_ranges.count(client) ? pi->client_ranges[client].last : 0;
   m->head.max_size = MIN(oldms, newms);
 
   i = pauth ? pi:oi;

@@ -163,7 +163,7 @@ public:
     return segments.empty() ? 0:segments.rbegin()->second; 
   }
 
-  LogSegment *get_segment(__u64 off) {
+  LogSegment *get_segment(uint64_t off) {
     if (segments.count(off))
       return segments[off];
     return NULL;

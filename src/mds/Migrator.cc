@@ -1648,7 +1648,7 @@ class C_MDS_ImportDirLoggedStart : public Context {
   int from;
 public:
   map<client_t,entity_inst_t> imported_client_map;
-  map<client_t,__u64> sseqmap;
+  map<client_t,uint64_t> sseqmap;
 
   C_MDS_ImportDirLoggedStart(Migrator *m, CDir *d, int f) :
     migrator(m), dir(d), from(f) {
@@ -1912,7 +1912,7 @@ void Migrator::import_reverse_final(CDir *dir)
 
 void Migrator::import_logged_start(CDir *dir, int from,
 				   map<client_t,entity_inst_t>& imported_client_map,
-				   map<client_t,__u64>& sseqmap)
+				   map<client_t,uint64_t>& sseqmap)
 {
   dout(7) << "import_logged " << *dir << dendl;
 
@@ -2310,7 +2310,7 @@ class C_M_LoggedImportCaps : public Context {
 public:
   map<CInode*, map<client_t,Capability::Export> > cap_imports;
   map<client_t,entity_inst_t> client_map;
-  map<client_t,__u64> sseqmap;
+  map<client_t,uint64_t> sseqmap;
 
   C_M_LoggedImportCaps(Migrator *m, CInode *i, int f) : migrator(m), in(i), from(f) {}
   void finish(int r) {
@@ -2356,7 +2356,7 @@ void Migrator::logged_import_caps(CInode *in,
 				  int from,
 				  map<CInode*, map<client_t,Capability::Export> >& cap_imports,
 				  map<client_t,entity_inst_t>& client_map,
-				  map<client_t,__u64>& sseqmap) 
+				  map<client_t,uint64_t>& sseqmap) 
 {
   dout(10) << "logged_import_caps on " << *in << dendl;
 

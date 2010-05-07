@@ -76,7 +76,7 @@ public:
 
 private:
   int state;
-  __u64 state_seq;
+  uint64_t state_seq;
   int importing_count;
   friend class SessionMap;
 public:
@@ -118,7 +118,7 @@ public:
 
   int get_state() { return state; }
   const char *get_state_name() { return get_state_name(state); }
-  __u64 get_state_seq() { return state_seq; }
+  uint64_t get_state_seq() { return state_seq; }
   bool is_closed() { return state == STATE_CLOSED; }
   bool is_opening() { return state == STATE_OPENING; }
   bool is_open() { return state == STATE_OPEN; }
@@ -280,7 +280,7 @@ public:
     if (by_state[state].empty()) return 0;
     return by_state[state].front();
   }
-  __u64 set_state(Session *session, int s) {
+  uint64_t set_state(Session *session, int s) {
     if (session->state != s) {
       session->state = s;
       session->state_seq++;

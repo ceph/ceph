@@ -253,7 +253,7 @@ protected:
   void import_notify_abort(CDir *dir, set<CDir*>& bounds);
   void import_logged_start(CDir *dir, int from,
 			   map<client_t,entity_inst_t> &imported_client_map,
-			   map<client_t,__u64>& sseqmap);
+			   map<client_t,uint64_t>& sseqmap);
   void handle_export_finish(MExportDirFinish *m);
 public:
   void import_finish(CDir *dir);
@@ -264,7 +264,7 @@ protected:
 			  int from,
 			  map<CInode*, map<client_t,Capability::Export> >& cap_imports,
 			  map<client_t,entity_inst_t>& client_map,
-			  map<client_t,__u64>& sseqmap);
+			  map<client_t,uint64_t>& sseqmap);
 
 
   friend class C_MDS_ImportDirLoggedStart;

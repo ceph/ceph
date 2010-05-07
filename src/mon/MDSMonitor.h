@@ -89,9 +89,9 @@ class MDSMonitor : public PaxosService {
   // beacons
   struct beacon_info_t {
     utime_t stamp;
-    __u64 seq;
+    uint64_t seq;
   };
-  map<__u64, beacon_info_t> last_beacon;
+  map<uint64_t, beacon_info_t> last_beacon;
 
 public:
   MDSMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }

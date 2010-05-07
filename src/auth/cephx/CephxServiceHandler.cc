@@ -44,7 +44,7 @@ int CephxServiceHandler::start_session(EntityName& name, bufferlist::iterator& i
   return CEPH_AUTH_CEPHX;
 }
 
-int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps, __u64 *auid)
+int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps, uint64_t *auid)
 {
   int ret = 0;
 
@@ -72,7 +72,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 	break;
       }      
 
-      __u64 expected_key;
+      uint64_t expected_key;
       cephx_calc_client_server_challenge(secret, server_challenge, req.client_challenge, &expected_key);
 
       dout(20) << " checking key: req.key=" << hex << req.key

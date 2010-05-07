@@ -55,7 +55,7 @@ class BufferHead : public LRUObject {
   ioh_t     tx_ioh;         // 
   block_t   tx_block;
 
-  map<__u64, bufferlist>     partial;   // partial dirty content overlayed onto incoming data
+  map<uint64_t, bufferlist>     partial;   // partial dirty content overlayed onto incoming data
 
   map<block_t, list<Context*> > waitfor_read;
   
@@ -173,8 +173,8 @@ class BufferHead : public LRUObject {
     shadows.clear();
   }
 
-  void copy_partial_substr(__u64 start, __u64 end, bufferlist& bl) {
-    map<__u64, bufferlist>::iterator i = partial.begin();
+  void copy_partial_substr(uint64_t start, uint64_t end, bufferlist& bl) {
+    map<uint64_t, bufferlist>::iterator i = partial.begin();
     
     // skip first bits (fully to left)
     while ((i->first + i->second.length() < start) &&
@@ -188,7 +188,7 @@ class BufferHead : public LRUObject {
     unsigned bhlen = MIN(end-start, i->second.length());
     bl.substr_of( i->second, bhoff, bhlen );
 
-    __u64 pos = i->first + i->second.length();
+    uint64_t pos = i->first + i->second.length();
     
     // have continuous to end?
     for (i++; i != partial.end(); i++) {
@@ -212,8 +212,8 @@ class BufferHead : public LRUObject {
     assert(bl.length() == (unsigned)(end-start));
   }
 
-  bool have_partial_range(__u64 start, __u64 end) {
-    map<__u64, bufferlist>::iterator i = partial.begin();
+  bool have_partial_range(uint64_t start, uint64_t end) {
+    map<uint64_t, bufferlist>::iterator i = partial.begin();
 
     // skip first bits (fully to left)
     while ((i->first + i->second.length() < start) &&
@@ -223,7 +223,7 @@ class BufferHead : public LRUObject {
 
     // have start?
     if (i->first > start) return false;
-    __u64 pos = i->first + i->second.length();
+    uint64_t pos = i->first + i->second.length();
 
     // have continuous to end?
     for (i++; i != partial.end(); i++) {
@@ -238,12 +238,12 @@ class BufferHead : public LRUObject {
     return false;
   }
 
-  bool partial_is_complete(__u64 size) {
+  bool partial_is_complete(uint64_t size) {
     return have_partial_range( 0, MIN(size, EBOFS_BLOCK_SIZE) );
   }
 
   void apply_partial();
-  void add_partial(__u64 off, bufferlist& p);
+  void add_partial(uint64_t off, bufferlist& p);
 
   void take_read_waiters(list<Context*>& finished) {
     for (map<block_t,list<Context*> >::iterator p = waitfor_read.begin();
@@ -455,13 +455,13 @@ class BufferCache {
   Cond  flush_cond;
   int   stat_waiter;
 
-  __u64 stat_all;
-  __u64 stat_clean, stat_corrupt;
-  __u64 stat_dirty;
-  __u64 stat_rx;
-  __u64 stat_tx;
-  __u64 stat_partial;
-  __u64 stat_missing;
+  uint64_t stat_all;
+  uint64_t stat_clean, stat_corrupt;
+  uint64_t stat_dirty;
+  uint64_t stat_rx;
+  uint64_t stat_tx;
+  uint64_t stat_partial;
+  uint64_t stat_missing;
   
   int partial_reads;
 
@@ -480,11 +480,11 @@ class BufferCache {
     {}
 
 
-  __u64 get_size() {
+  uint64_t get_size() {
     assert(stat_clean+stat_dirty+stat_rx+stat_tx+stat_partial+stat_corrupt+stat_missing == stat_all);
     return stat_all;
   }
-  __u64 get_trimmable() {
+  uint64_t get_trimmable() {
     return stat_clean+stat_corrupt;
   }
 
@@ -559,11 +559,11 @@ class BufferCache {
     }
     stat_all -= bh->length();
   }
-  __u64 get_stat_tx() { return stat_tx; }
-  __u64 get_stat_rx() { return stat_rx; }
-  __u64 get_stat_dirty() { return stat_dirty; }
-  __u64 get_stat_clean() { return stat_clean; }
-  __u64 get_stat_partial() { return stat_partial; }
+  uint64_t get_stat_tx() { return stat_tx; }
+  uint64_t get_stat_rx() { return stat_rx; }
+  uint64_t get_stat_dirty() { return stat_dirty; }
+  uint64_t get_stat_clean() { return stat_clean; }
+  uint64_t get_stat_partial() { return stat_partial; }
 
   
   map<version_t, int> &get_unflushed(int what) {

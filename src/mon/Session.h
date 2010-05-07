@@ -39,7 +39,7 @@ struct MonSession : public RefCountedObject {
   utime_t until;
   bool closed;
   xlist<MonSession*>::item item;
-  set<__u64> routed_request_tids;
+  set<uint64_t> routed_request_tids;
   MonCaps caps;
   uint64_t global_id;
   uint64_t notified_global_id;

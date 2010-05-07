@@ -4502,7 +4502,7 @@ void MDCache::start_files_to_recover(vector<CInode*>& recover_q, vector<CInode*>
 struct C_MDC_Recover : public Context {
   MDCache *mdc;
   CInode *in;
-  __u64 size;
+  uint64_t size;
   utime_t mtime;
   C_MDC_Recover(MDCache *m, CInode *i) : mdc(m), in(i), size(0) {}
   void finish(int r) {
@@ -4551,7 +4551,7 @@ void MDCache::do_file_recover()
   }
 }
 
-void MDCache::_recovered(CInode *in, int r, __u64 size, utime_t mtime)
+void MDCache::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
 {
   dout(10) << "_recovered r=" << r << " size=" << in->inode.size << " mtime=" << in->inode.mtime
 	   << " for " << *in << dendl;
@@ -7026,10 +7026,10 @@ void MDCache::purge_stray(CDentry *dn)
     assert(in->last == CEPH_NOSNAP);
   }
 
-  __u64 period = in->inode.layout.fl_object_size * in->inode.layout.fl_stripe_count;
-  __u64 cur_max_size = in->inode.get_max_size();
-  __u64 to = MAX(in->inode.size, cur_max_size);
-  __u64 num = (to + period - 1) / period;
+  uint64_t period = in->inode.layout.fl_object_size * in->inode.layout.fl_stripe_count;
+  uint64_t cur_max_size = in->inode.get_max_size();
+  uint64_t to = MAX(in->inode.size, cur_max_size);
+  uint64_t num = (to + period - 1) / period;
   dout(10) << "purge_stray 0~" << to << " objects 0~" << num << " snapc " << snapc << " on " << *in << dendl;
   if (to)
     mds->filer->purge_range(in->inode.ino, &in->inode.layout, *snapc,

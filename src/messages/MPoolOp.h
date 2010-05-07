@@ -24,7 +24,7 @@ public:
   __u32 pool;
   string name;
   __u32 op;
-  __u64 auid;
+  uint64_t auid;
   snapid_t snapid;
 
   MPoolOp() : PaxosServiceMessage(CEPH_MSG_POOLOP, 0) {}
@@ -34,7 +34,7 @@ public:
     set_tid(t);
   }
   MPoolOp(const ceph_fsid_t& f, tid_t t, int p, string& n,
-	  int o, __u64 uid, version_t v) :
+	  int o, uint64_t uid, version_t v) :
     PaxosServiceMessage(CEPH_MSG_POOLOP, v), fsid(f), pool(p), name(n), op(o),
     auid(uid), snapid(0) {
     set_tid(t);

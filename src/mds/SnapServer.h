@@ -68,7 +68,7 @@ public:
   }
 
   // server bits
-  void _prepare(bufferlist &bl, __u64 reqid, int bymds);
+  void _prepare(bufferlist &bl, uint64_t reqid, int bymds);
   bool _is_prepared(version_t tid);
   void _commit(version_t tid);
   void _rollback(version_t tid);

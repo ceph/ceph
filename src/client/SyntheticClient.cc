@@ -1361,7 +1361,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       object_t oid = file_object_t(oh, ol);
       lock.Lock();
       ceph_object_layout layout = client->osdmap->make_object_layout(oid, CEPH_CASDATA_RULE);
-      __u64 size;
+      uint64_t size;
       utime_t mtime;
       client->objecter->stat(oid, layout, CEPH_NOSNAP, &size, &mtime, 0, new C_SafeCond(&lock, &cond, &ack));
       while (!ack) cond.Wait(lock);
@@ -1936,7 +1936,7 @@ int SyntheticClient::write_file(string& fn, int size, loff_t wrsize)   // size i
   
   utime_t from = g_clock.now();
   utime_t start = from;
-  __u64 bytes = 0, total = 0;
+  uint64_t bytes = 0, total = 0;
 
 
   for (loff_t i=0; i<chunks; i++) {
@@ -2044,7 +2044,7 @@ int SyntheticClient::read_file(string& fn, int size, int rdsize, bool ignoreprin
 
   utime_t from = g_clock.now();
   utime_t start = from;
-  __u64 bytes = 0, total = 0;
+  uint64_t bytes = 0, total = 0;
 
   for (unsigned i=0; i<chunks; i++) {
     if (time_to_stop()) break;
@@ -3314,7 +3314,7 @@ int SyntheticClient::chunk_file(string &filename)
 
   struct stat st;
   client->fstat(fd, &st);
-  __u64 size = st.st_size;
+  uint64_t size = st.st_size;
   dout(0) << "file " << filename << " size is " << size << dendl;
 
   Filer *filer = client->filer;
@@ -3324,7 +3324,7 @@ int SyntheticClient::chunk_file(string &filename)
   inode.ino = st.st_ino;
   client->describe_layout(fd, &inode.layout);
 
-  __u64 pos = 0;
+  uint64_t pos = 0;
   bufferlist from_before;
   while (pos < size) {
     int get = MIN(size-pos, 1048576);

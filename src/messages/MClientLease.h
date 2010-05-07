@@ -30,7 +30,7 @@ struct MClientLease : public Message {
   snapid_t get_last() { return snapid_t(h.last); }
 
   MClientLease() : Message(CEPH_MSG_CLIENT_LEASE) {}
-  MClientLease(int ac, ceph_seq_t seq, int m, __u64 i, __u64 sf, __u64 sl) :
+  MClientLease(int ac, ceph_seq_t seq, int m, uint64_t i, uint64_t sf, uint64_t sl) :
     Message(CEPH_MSG_CLIENT_LEASE) {
     h.action = ac;
     h.seq = seq;
@@ -39,7 +39,7 @@ struct MClientLease : public Message {
     h.first = sf;
     h.last = sl;
   }
-  MClientLease(int ac, ceph_seq_t seq, int m, __u64 i, __u64 sf, __u64 sl, const nstring& d) :
+  MClientLease(int ac, ceph_seq_t seq, int m, uint64_t i, uint64_t sf, uint64_t sl, const nstring& d) :
     Message(CEPH_MSG_CLIENT_LEASE),
     dname(d) {
     h.action = ac;

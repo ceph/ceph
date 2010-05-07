@@ -65,22 +65,22 @@ inline void decode(bool &v, bufferlist::iterator& p) {
 // int types
 
 #define WRITE_INTTYPE_ENCODER(type, etype)				\
-  inline void encode(__##type v, bufferlist& bl) {			\
+  inline void encode(type v, bufferlist& bl) {			\
     __##etype e = init_##etype(v);					\
     encode_raw(e, bl);							\
   }									\
-  inline void decode(__##type &v, bufferlist::iterator& p) {		\
+  inline void decode(type &v, bufferlist::iterator& p) {		\
     __##etype e;							\
     decode_raw(e, p);							\
     v = e;								\
   }
 
-WRITE_INTTYPE_ENCODER(u64, le64)
-WRITE_INTTYPE_ENCODER(s64, le64)
-WRITE_INTTYPE_ENCODER(u32, le32)
-WRITE_INTTYPE_ENCODER(s32, le32)
-WRITE_INTTYPE_ENCODER(u16, le16)
-WRITE_INTTYPE_ENCODER(s16, le16)
+WRITE_INTTYPE_ENCODER(uint64_t, le64)
+WRITE_INTTYPE_ENCODER(int64_t, le64)
+WRITE_INTTYPE_ENCODER(uint32_t, le32)
+WRITE_INTTYPE_ENCODER(int32_t, le32)
+WRITE_INTTYPE_ENCODER(uint16_t, le16)
+WRITE_INTTYPE_ENCODER(int16_t, le16)
 
 
 

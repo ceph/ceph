@@ -113,7 +113,7 @@ int _dout_rename_output_file()  // after calling daemon()
   return 0;
 }
 
-int _dout_create_courtesy_output_symlink(const char *type, __s64 n)
+int _dout_create_courtesy_output_symlink(const char *type, int64_t n)
 {
   char name[20];
   snprintf(name, sizeof(name), "%s%lld", type, (unsigned long long)n);

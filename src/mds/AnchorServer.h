@@ -56,7 +56,7 @@ class AnchorServer : public MDSTableServer {
   void dump();
 
   // server bits
-  void _prepare(bufferlist &bl, __u64 reqid, int bymds);
+  void _prepare(bufferlist &bl, uint64_t reqid, int bymds);
   void _commit(version_t tid);
   void _rollback(version_t tid);
   void handle_query(MMDSTableRequest *m);

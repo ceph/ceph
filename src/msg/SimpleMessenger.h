@@ -132,8 +132,8 @@ private:
     bool keepalive;
     
     __u32 connect_seq, peer_global_seq;
-    __u64 out_seq;
-    __u64 in_seq, in_seq_acked;
+    uint64_t out_seq;
+    uint64_t in_seq, in_seq_acked;
     
     int get_required_bits(); /* get bits this Messenger requires
 			      * the peer to support */
@@ -148,7 +148,7 @@ private:
     Message *read_message();
     int write_message(Message *m);
     int do_sendmsg(int sd, struct msghdr *msg, int len, bool more=false);
-    int write_ack(__u64 s);
+    int write_ack(uint64_t s);
     int write_keepalive();
 
     void fault(bool silent=false, bool reader=false);

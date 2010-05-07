@@ -10,7 +10,7 @@
 
 
 
-int cephx_calc_client_server_challenge(CryptoKey& secret, __u64 server_challenge, __u64 client_challenge, __u64 *key)
+int cephx_calc_client_server_challenge(CryptoKey& secret, uint64_t server_challenge, uint64_t client_challenge, uint64_t *key)
 {
   CephXChallengeBlob b;
   b.server_challenge = server_challenge;
@@ -21,7 +21,7 @@ int cephx_calc_client_server_challenge(CryptoKey& secret, __u64 server_challenge
   if (ret < 0)
     return ret;
 
-  __u64 k = 0;
+  uint64_t k = 0;
   const uint64_t *p = (const uint64_t *)enc.c_str();
   for (int pos = 0; pos + sizeof(k) <= enc.length(); pos+=sizeof(k), p++)
     k ^= *p;
@@ -264,7 +264,7 @@ CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id)
 {
   CephXAuthorizer *a = new CephXAuthorizer;
   a->session_key = session_key;
-  a->nonce = ((__u64)rand() << 32) + rand();
+  a->nonce = ((uint64_t)rand() << 32) + rand();
 
   __u8 authorizer_v = 1;
   ::encode(authorizer_v, a->bl);
@@ -434,7 +434,7 @@ bool CephXAuthorizer::verify_reply(bufferlist::iterator& indata)
     return false;
   }
 
-  __u64 expect = nonce + 1;
+  uint64_t expect = nonce + 1;
   if (expect != reply.nonce_plus_one) {
     dout(0) << "verify_authorizer_reply bad nonce got " << reply.nonce_plus_one << " expected " << expect
 	    << " sent " << nonce << dendl;

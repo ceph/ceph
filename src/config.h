@@ -135,7 +135,7 @@ struct md_config_t {
   bool ms_die_on_failure;
   bool ms_nocrc;
   bool ms_die_on_bad_msg;
-  __u64 ms_waiting_message_bytes;
+  uint64_t ms_waiting_message_bytes;
 
   // mon
   const char *mon_data;
@@ -205,7 +205,7 @@ struct md_config_t {
   long long unsigned journaler_batch_max;
   
   // mds
-  __u64 mds_max_file_size;
+  uint64_t mds_max_file_size;
   int   mds_cache_size;
   float mds_cache_mid;
   int   mds_mem_max;

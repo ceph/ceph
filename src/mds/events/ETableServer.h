@@ -24,14 +24,14 @@
 struct ETableServer : public LogEvent {
   __u16 table;
   __s16 op;
-  __u64 reqid;
+  uint64_t reqid;
   __s32 bymds;
   bufferlist mutation;
   version_t tid;
   version_t version;
 
   ETableServer() : LogEvent(EVENT_TABLESERVER) { }
-  ETableServer(int t, int o, __u64 ri, int m, version_t ti, version_t v) :
+  ETableServer(int t, int o, uint64_t ri, int m, version_t ti, version_t v) :
     LogEvent(EVENT_TABLESERVER),
     table(t), op(o), reqid(ri), bymds(m), tid(ti), version(v) { }
 

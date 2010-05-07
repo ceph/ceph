@@ -23,11 +23,11 @@ class MMDSTableRequest : public Message {
  public:
   __u16 table;
   __s16 op;
-  __u64 reqid;
+  uint64_t reqid;
   bufferlist bl;
 
   MMDSTableRequest() {}
-  MMDSTableRequest(int tab, int o, __u64 r, version_t v=0) : 
+  MMDSTableRequest(int tab, int o, uint64_t r, version_t v=0) : 
     Message(MSG_MDS_TABLE_REQUEST),
     table(tab), op(o), reqid(r) {
     set_tid(v);

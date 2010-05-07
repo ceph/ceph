@@ -50,7 +50,7 @@ protected:
   bool         mounted, unmounting, dirty;
   bool         readonly;
   version_t    super_epoch;
-  __u64        op_seq;
+  uint64_t        op_seq;
   bool         commit_starting;
   bool         commit_thread_started;
   Cond         commit_cond;   // to wake up the commit thread
@@ -174,7 +174,7 @@ protected:
 
   version_t trigger_commit();
   void commit_bc_wait(version_t epoch);
-  void trim_bc(__s64 max = -1);
+  void trim_bc(int64_t max = -1);
 
  public:
   void kick_idle();
@@ -191,7 +191,7 @@ protected:
 
 
  protected:
-  int check_partial_edges(Onode *on, __u64 off, __u64 len, 
+  int check_partial_edges(Onode *on, uint64_t off, uint64_t len, 
 			  bool &partial_head, bool &partial_tail);
 
   void alloc_write(Onode *on, 
@@ -199,9 +199,9 @@ protected:
                    interval_set<block_t>& alloc,
                    block_t& old_bfirst, block_t& old_blast,
 		   csum_t& old_csum_first, csum_t& old_csum_last);
-  int apply_write(Onode *on, __u64 off, __u64 len, const bufferlist& bl);
-  int apply_zero(Onode *on, __u64 off, size_t len);
-  int attempt_read(Onode *on, __u64 off, size_t len, bufferlist& bl, 
+  int apply_write(Onode *on, uint64_t off, uint64_t len, const bufferlist& bl);
+  int apply_zero(Onode *on, uint64_t off, size_t len);
+  int attempt_read(Onode *on, uint64_t off, size_t len, bufferlist& bl, 
 		   Cond *will_wait_on, bool *will_wait_on_bool);
 
   Finisher finisher;
@@ -259,15 +259,15 @@ protected:
   // object interface
   bool exists(coll_t cid, pobject_t);
   int stat(coll_t cid, pobject_t, struct stat*);
-  int read(coll_t cid, pobject_t, __u64 off, size_t len, bufferlist& bl);
-  int is_cached(coll_t cid, pobject_t oid, __u64 off, size_t len);
+  int read(coll_t cid, pobject_t, uint64_t off, size_t len, bufferlist& bl);
+  int is_cached(coll_t cid, pobject_t oid, uint64_t off, size_t len);
 
-  int write(coll_t cid, pobject_t oid, __u64 off, size_t len, const bufferlist& bl, Context *onsafe);
-  int zero(coll_t cid, pobject_t oid, __u64 off, size_t len, Context *onsafe);
-  int truncate(coll_t cid, pobject_t oid, __u64 size, Context *onsafe=0);
+  int write(coll_t cid, pobject_t oid, uint64_t off, size_t len, const bufferlist& bl, Context *onsafe);
+  int zero(coll_t cid, pobject_t oid, uint64_t off, size_t len, Context *onsafe);
+  int truncate(coll_t cid, pobject_t oid, uint64_t size, Context *onsafe=0);
   int remove(coll_t cid, pobject_t oid, Context *onsafe=0);
   bool write_will_block();
-  void trim_from_cache(coll_t cid, pobject_t oid, __u64 off, size_t len);
+  void trim_from_cache(coll_t cid, pobject_t oid, uint64_t off, size_t len);
 
   int rename(pobject_t from, pobject_t to);
   int clone(coll_t cid, pobject_t from, pobject_t to, Context *onsafe);
@@ -325,8 +325,8 @@ private:
   // private interface -- use if caller already holds lock
   unsigned _apply_transaction(Transaction& t);
 
-  int _read(pobject_t oid, __u64 off, size_t len, bufferlist& bl);
-  int _is_cached(pobject_t oid, __u64 off, size_t len);
+  int _read(pobject_t oid, uint64_t off, size_t len, bufferlist& bl);
+  int _is_cached(pobject_t oid, uint64_t off, size_t len);
   int _stat(pobject_t oid, struct stat *st);
   int _getattr(pobject_t oid, const char *name, void *value, size_t size);
   int _getattr(pobject_t oid, const char *name, bufferptr& bp);
@@ -335,13 +335,13 @@ private:
 
   bool _write_will_block();
   int _touch(coll_t cid, pobject_t oid);
-  int _write(coll_t cid, pobject_t oid, __u64 off, size_t len, const bufferlist& bl);
-  void _trim_from_cache(pobject_t oid, __u64 off, size_t len);
-  int _truncate(coll_t cid, pobject_t oid, __u64 size);
-  int _zero(coll_t cid, pobject_t oid, __u64 offset, size_t length);
+  int _write(coll_t cid, pobject_t oid, uint64_t off, size_t len, const bufferlist& bl);
+  void _trim_from_cache(pobject_t oid, uint64_t off, size_t len);
+  int _truncate(coll_t cid, pobject_t oid, uint64_t size);
+  int _zero(coll_t cid, pobject_t oid, uint64_t offset, size_t length);
   int _remove(coll_t cid, pobject_t oid);
   int _clone(coll_t cid, pobject_t from, pobject_t to);
-  int _clone_range(coll_t cid, pobject_t from, pobject_t to, __u64 off, __u64 len);
+  int _clone_range(coll_t cid, pobject_t from, pobject_t to, uint64_t off, uint64_t len);
   int _setattr(pobject_t oid, const char *name, const void *value, size_t size);
   int _setattrs(pobject_t oid, map<nstring,bufferptr>& attrset);
   int _rmattr(pobject_t oid, const char *name);

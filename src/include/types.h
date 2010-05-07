@@ -240,8 +240,8 @@ WRITE_RAW_ENCODER(ceph_mon_statfs_reply)
 // some basic types
 
 // NOTE: these must match ceph_fs.h typedefs
-typedef __u64 tid_t;         // transaction id
-typedef __u64 version_t;
+typedef uint64_t tid_t;         // transaction id
+typedef uint64_t version_t;
 typedef __u32 epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 years)
 
 #define O_LAZY 01000000
@@ -252,9 +252,9 @@ typedef struct ceph_fsid ceph_fsid_t;
 // identify individual mount clients by 64bit value
 
 struct client_t {
-  __s64 v;
+  int64_t v;
 
-  client_t(__s64 _v = -2) : v(_v) {}
+  client_t(int64_t _v = -2) : v(_v) {}
   
   void encode(bufferlist& bl) const {
     ::encode(v, bl);
@@ -272,8 +272,8 @@ static inline bool operator<=(const client_t& l, const client_t& r) { return l.v
 static inline bool operator>(const client_t& l, const client_t& r) { return l.v > r.v; }
 static inline bool operator>=(const client_t& l, const client_t& r) { return l.v >= r.v; }
 
-static inline bool operator>=(const client_t& l, __s64 o) { return l.v >= o; }
-static inline bool operator<(const client_t& l, __s64 o) { return l.v < o; }
+static inline bool operator>=(const client_t& l, int64_t o) { return l.v >= o; }
+static inline bool operator<(const client_t& l, int64_t o) { return l.v < o; }
 
 inline ostream& operator<<(ostream& out, const client_t& c) {
   return out << c.v;
@@ -284,7 +284,7 @@ inline ostream& operator<<(ostream& out, const client_t& c) {
 // --------------------------------------
 // ino
 
-typedef __u64 _inodeno_t;
+typedef uint64_t _inodeno_t;
 
 struct inodeno_t {
   _inodeno_t val;
@@ -416,7 +416,7 @@ struct prettybyte_t {
 
 inline ostream& operator<<(ostream& out, const prettybyte_t& b)
 {
-  __u64 bump_after = 100;
+  uint64_t bump_after = 100;
   if (b.v > bump_after << 60)
     return out << (b.v >> 60) << " EB";    
   if (b.v > bump_after << 50)
@@ -439,7 +439,7 @@ struct kb_t {
 
 inline ostream& operator<<(ostream& out, const kb_t& kb)
 {
-  __u64 bump_after = 100;
+  uint64_t bump_after = 100;
   if (kb.v > bump_after << 40)
     return out << (kb.v >> 40) << " PB";    
   if (kb.v > bump_after << 30)

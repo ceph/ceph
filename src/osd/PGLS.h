@@ -10,11 +10,11 @@ struct PGLSResponse {
   list<object_t> entries;
 
   void encode(bufferlist& bl) const {
-    ::encode((__u64)handle, bl);
+    ::encode((uint64_t)handle, bl);
     ::encode(entries, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    __u64 tmp;
+    uint64_t tmp;
     ::decode(tmp, bl);
     handle = (collection_list_handle_t)tmp;
     ::decode(entries, bl);

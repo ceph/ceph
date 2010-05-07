@@ -184,7 +184,7 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
       }
     }
 
-    __u64 s;
+    uint64_t s;
     if (rados->stat(pool, *p, &s, &obj.mtime) < 0)
       continue;
     obj.size = s;
@@ -207,7 +207,7 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
  * if auid is set, it sets the auid of the underlying rados pool
  * returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, __u64 auid)
+int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, uint64_t auid)
 {
   int ret = rados->create(root_pool, bucket, true);
   if (ret < 0)
@@ -456,7 +456,7 @@ int RGWRados::get_obj(std::string& bucket, std::string& oid,
             struct rgw_err *err)
 {
   int r = -EINVAL;
-  __u64 size, len;
+  uint64_t size, len;
   bufferlist etag;
   time_t mtime;
   bufferlist bl;

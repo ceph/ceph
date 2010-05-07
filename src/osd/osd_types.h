@@ -654,7 +654,7 @@ struct pg_pool_t {
     snaps[s].name = n;
     snaps[s].stamp = stamp;
   }
-  void add_unmanaged_snap(__u64& snapid) {
+  void add_unmanaged_snap(uint64_t& snapid) {
     if (removed_snaps.empty()) {
       assert(snaps.empty());
       removed_snaps.insert(snapid_t(1));
@@ -765,18 +765,18 @@ struct pg_stat_t {
   eversion_t last_scrub;
   utime_t last_scrub_stamp;
 
-  __u64 num_bytes;    // in bytes
-  __u64 num_kb;       // in KB
-  __u64 num_objects;
-  __u64 num_object_clones;
-  __u64 num_object_copies;  // num_objects * num_replicas
-  __u64 num_objects_missing_on_primary;
-  __u64 num_objects_degraded;
-  __u64 log_size;
-  __u64 ondisk_log_size;    // >= active_log_size
+  uint64_t num_bytes;    // in bytes
+  uint64_t num_kb;       // in KB
+  uint64_t num_objects;
+  uint64_t num_object_clones;
+  uint64_t num_object_copies;  // num_objects * num_replicas
+  uint64_t num_objects_missing_on_primary;
+  uint64_t num_objects_degraded;
+  uint64_t log_size;
+  uint64_t ondisk_log_size;    // >= active_log_size
 
-  __u64 num_rd, num_rd_kb;
-  __u64 num_wr, num_wr_kb;
+  uint64_t num_rd, num_rd_kb;
+  uint64_t num_wr, num_wr_kb;
   
   vector<int> up, acting;
 
@@ -890,17 +890,17 @@ WRITE_CLASS_ENCODER(pg_stat_t)
  * summation over an entire pool
  */
 struct pool_stat_t {
-  __u64 num_bytes;    // in bytes
-  __u64 num_kb;       // in KB
-  __u64 num_objects;
-  __u64 num_object_clones;
-  __u64 num_object_copies;  // num_objects * num_replicas
-  __u64 num_objects_missing_on_primary;
-  __u64 num_objects_degraded;
-  __u64 log_size;
-  __u64 ondisk_log_size;    // >= active_log_size
-  __u64 num_rd, num_rd_kb;
-  __u64 num_wr, num_wr_kb;
+  uint64_t num_bytes;    // in bytes
+  uint64_t num_kb;       // in KB
+  uint64_t num_objects;
+  uint64_t num_object_clones;
+  uint64_t num_object_copies;  // num_objects * num_replicas
+  uint64_t num_objects_missing_on_primary;
+  uint64_t num_objects_degraded;
+  uint64_t log_size;
+  uint64_t ondisk_log_size;    // >= active_log_size
+  uint64_t num_rd, num_rd_kb;
+  uint64_t num_wr, num_wr_kb;
 
   pool_stat_t() : num_bytes(0), num_kb(0), 
 		  num_objects(0), num_object_clones(0), num_object_copies(0),
@@ -1113,7 +1113,7 @@ inline ostream& operator<<(ostream& out, OSDSuperblock& sb)
 
 // -------
 
-WRITE_CLASS_ENCODER(interval_set<__u64>)
+WRITE_CLASS_ENCODER(interval_set<uint64_t>)
 
 
 
@@ -1128,8 +1128,8 @@ struct SnapSet {
   bool head_exists;
   vector<snapid_t> snaps;    // ascending
   vector<snapid_t> clones;   // ascending
-  map<snapid_t, interval_set<__u64> > clone_overlap;  // overlap w/ next newest
-  map<snapid_t, __u64> clone_size;
+  map<snapid_t, interval_set<uint64_t> > clone_overlap;  // overlap w/ next newest
+  map<snapid_t, uint64_t> clone_size;
 
   SnapSet() : head_exists(false) {}
   SnapSet(bufferlist& bl) {
@@ -1177,13 +1177,13 @@ struct object_info_t {
   eversion_t version, prior_version;
   osd_reqid_t last_reqid;
 
-  __u64 size;
+  uint64_t size;
   utime_t mtime;
 
   osd_reqid_t wrlock_by;   // [head]
   vector<snapid_t> snaps;  // [clone]
 
-  __u64 truncate_seq, truncate_size;
+  uint64_t truncate_seq, truncate_size;
 
   void encode(bufferlist& bl) const {
     const __u8 v = 1;
@@ -1250,7 +1250,7 @@ inline ostream& operator<<(ostream& out, const object_info_t& oi) {
 struct ScrubMap {
   struct object {
     sobject_t poid;
-    __u64 size;
+    uint64_t size;
     map<nstring,bufferptr> attrs;
 
     void encode(bufferlist& bl) const {
@@ -1314,12 +1314,12 @@ inline ostream& operator<<(ostream& out, const OSDOp& op) {
       break;
     case CEPH_OSD_OP_MASKTRUNC:
     case CEPH_OSD_OP_TRIMTRUNC:
-      out << " " << op.op.extent.truncate_seq << "@" << (__s64)op.op.extent.truncate_size;
+      out << " " << op.op.extent.truncate_seq << "@" << (int64_t)op.op.extent.truncate_size;
       break;
     default:
       out << " " << op.op.extent.offset << "~" << op.op.extent.length;
       if (op.op.extent.truncate_seq)
-	out << " [" << op.op.extent.truncate_seq << "@" << (__s64)op.op.extent.truncate_size << "]";
+	out << " [" << op.op.extent.truncate_seq << "@" << (int64_t)op.op.extent.truncate_size << "]";
     }
   } else if (ceph_osd_op_type_attr(op.op.op)) {
     // xattr name

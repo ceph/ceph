@@ -48,7 +48,7 @@ int main(int argc, const char **argv)
   const char *caps_fn = NULL;
   const char *import_keyring = NULL;
   bool set_auid = false;
-  __u64 auid = CEPH_AUTH_UID_DEFAULT;
+  uint64_t auid = CEPH_AUTH_UID_DEFAULT;
   const char *name = g_conf.name;
 
   FOR_EACH_ARG(args) {

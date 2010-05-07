@@ -22,16 +22,16 @@
 struct CompatSet {
 
   struct Feature {
-    __u64 id;
+    uint64_t id;
     string name;
 
-    Feature(__u64 _id, const char *_name) : id(_id), name(_name) {}
-    Feature(__u64 _id, string& _name) : id(_id), name(_name) {}
+    Feature(uint64_t _id, const char *_name) : id(_id), name(_name) {}
+    Feature(uint64_t _id, string& _name) : id(_id), name(_name) {}
   };
 
   struct FeatureSet {
-    __u64 mask;
-    map <__u64,string> names;
+    uint64_t mask;
+    map <uint64_t,string> names;
 
     FeatureSet() : mask(0), names() {}
     void insert(Feature f) {
@@ -109,11 +109,11 @@ struct CompatSet {
    */
   CompatSet unsupported(CompatSet& other) {
     CompatSet diff;
-    __u64 other_compat =
+    uint64_t other_compat =
       ((other.compat.mask ^ compat.mask) & other.compat.mask);
-    __u64 other_ro_compat =
+    uint64_t other_ro_compat =
       ((other.ro_compat.mask ^ ro_compat.mask) & other.ro_compat.mask);
-    __u64 other_incompat =
+    uint64_t other_incompat =
       ((other.incompat.mask ^ incompat.mask) & other.incompat.mask);
     for (int i = 0; i < 64; ++i) {
       int mask = 1 << i;

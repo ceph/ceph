@@ -82,7 +82,7 @@ public:
   // -- wait --
   //static const int WAIT_LOCK_OFFSET = 8;
 
-  void add_waiter(__u64 tag, Context *c);
+  void add_waiter(uint64_t tag, Context *c);
 
   static const int EXPORT_NONCE = 1;
 

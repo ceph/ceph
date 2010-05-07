@@ -91,7 +91,7 @@
 
 // initial server -> client challenge
 struct CephXServerChallenge {
-  __u64 server_challenge;
+  uint64_t server_challenge;
 
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
@@ -160,8 +160,8 @@ WRITE_CLASS_ENCODER(CephXTicketBlob);
 
 // client -> server response to challenge
 struct CephXAuthenticate {
-  __u64 client_challenge;
-  __u64 key;
+  uint64_t client_challenge;
+  uint64_t key;
   CephXTicketBlob old_ticket;
 
   void encode(bufferlist& bl) const {
@@ -182,7 +182,7 @@ struct CephXAuthenticate {
 WRITE_CLASS_ENCODER(CephXAuthenticate)
 
 struct CephXChallengeBlob {
-  __u64 server_challenge, client_challenge;
+  uint64_t server_challenge, client_challenge;
   
   void encode(bufferlist& bl) const {
     ::encode(server_challenge, bl);
@@ -195,8 +195,8 @@ struct CephXChallengeBlob {
 };
 WRITE_CLASS_ENCODER(CephXChallengeBlob)
 
-int cephx_calc_client_server_challenge(CryptoKey& secret, __u64 server_challenge, __u64 client_challenge,
-				       __u64 *key);
+int cephx_calc_client_server_challenge(CryptoKey& secret, uint64_t server_challenge, uint64_t client_challenge,
+				       uint64_t *key);
 
 
 /*
@@ -245,7 +245,7 @@ WRITE_CLASS_ENCODER(CephXServiceTicketRequest);
  */
 
 struct CephXAuthorizeReply {
-  __u64 nonce_plus_one;
+  uint64_t nonce_plus_one;
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
@@ -261,7 +261,7 @@ WRITE_CLASS_ENCODER(CephXAuthorizeReply);
 
 
 struct CephXAuthorizer : public AuthAuthorizer {
-  __u64 nonce;
+  uint64_t nonce;
   CryptoKey session_key;
 
   CephXAuthorizer() : AuthAuthorizer(CEPH_AUTH_CEPHX) {}
@@ -362,7 +362,7 @@ struct CephXServiceTicketInfo {
 WRITE_CLASS_ENCODER(CephXServiceTicketInfo);
 
 struct CephXAuthorize {
-  __u64 nonce;
+  uint64_t nonce;
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);

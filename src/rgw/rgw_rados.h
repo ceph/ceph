@@ -28,7 +28,7 @@ public:
    * create a bucket with name bucket and the given list of attrs
    * returns 0 on success, -ERR# otherwise.
    */
-  int create_bucket(std::string& id, std::string& bucket, map<std::string,bufferlist>& attrs, __u64 auid=0);
+  int create_bucket(std::string& id, std::string& bucket, map<std::string,bufferlist>& attrs, uint64_t auid=0);
 
   /** Write/overwrite an object to the bucket storage. */
   int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,

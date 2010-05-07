@@ -98,7 +98,7 @@ int main(int argc, char **argv)
   bool list_buckets = false;
   bool delete_user = false;
   int actions = 0 ;
-  __u64 auid = 0;
+  uint64_t auid = 0;
   RGWUserInfo info;
   RGWAccess *store;
 

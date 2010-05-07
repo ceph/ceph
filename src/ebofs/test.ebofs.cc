@@ -22,7 +22,7 @@ bool stop = false;
 
 char fingerprint_byte_at(int pos, int seed)
 {
-  __u64 big = ((pos & ~7) / 133) ^ seed;
+  uint64_t big = ((pos & ~7) / 133) ^ seed;
   return ((char*)&big)[pos & 7];
 }
 
@@ -42,8 +42,8 @@ public:
       pobject_t oid;
       oid.oid.ino = (rand() % 1000) + 0x10000000;
       coll_t cid = rand() % 50;
-      __u64 off = rand() % 10000;//0;//rand() % 1000000;
-      __u64 len = 1+rand() % 100000;
+      uint64_t off = rand() % 10000;//0;//rand() % 1000000;
+      uint64_t len = 1+rand() % 100000;
       const char *a = "one";
       if (rand() % 2) a = "two";
       int l = 3;//rand() % 10;

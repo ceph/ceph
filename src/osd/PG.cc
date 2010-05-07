@@ -1998,9 +1998,9 @@ void PG::write_log(ObjectStore::Transaction& t)
   for (list<Log::Entry>::iterator p = log.log.begin();
        p != log.log.end();
        p++) {
-    __u64 startoff = bl.length();
+    uint64_t startoff = bl.length();
     ::encode(*p, bl);
-    __u64 endoff = bl.length();
+    uint64_t endoff = bl.length();
     if (startoff / 4096 != endoff / 4096) {
       // we reached a new block. *p was the last entry with bytes in previous block
       ondisklog.block_map[startoff] = p->version;
@@ -2043,7 +2043,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
 {
   dout(15) << "trim_ondisk_log_to v " << v << dendl;
 
-  map<__u64,eversion_t>::iterator p = ondisklog.block_map.begin();
+  map<uint64_t,eversion_t>::iterator p = ondisklog.block_map.begin();
   while (p != ondisklog.block_map.end()) {
     //dout(15) << "    " << p->first << " -> " << p->second << dendl;
     p++;
@@ -2058,7 +2058,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
     return;  // can't trim anything!
   
   // we can trim!
-  __u64 trim = p->first;
+  uint64_t trim = p->first;
   dout(10) << "  " << ondisklog.tail << "~" << ondisklog.length()
 	   << " -> " << trim << "~" << (ondisklog.head-trim)
 	   << dendl;
@@ -2160,7 +2160,7 @@ void PG::read_log(ObjectStore *store)
     eversion_t last;
     bool reorder = false;
     while (!p.end()) {
-      __u64 pos = ondisklog.tail + p.get_off();
+      uint64_t pos = ondisklog.tail + p.get_off();
       ::decode(e, p);
       dout(20) << "read_log " << pos << " " << e << dendl;
 
@@ -2185,7 +2185,7 @@ void PG::read_log(ObjectStore *store)
 	osd->get_logclient()->log(LOG_ERROR, ss);
       }
       
-      __u64 endpos = ondisklog.tail + p.get_off();
+      uint64_t endpos = ondisklog.tail + p.get_off();
       if (endpos / 4096 != pos / 4096)
 	ondisklog.block_map[pos] = e.version;  // last event in prior block
       log.log.push_back(e);

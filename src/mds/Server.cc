@@ -144,15 +144,15 @@ void Server::dispatch(Message *m)
 class C_MDS_session_finish : public Context {
   MDS *mds;
   Session *session;
-  __u64 state_seq;
+  uint64_t state_seq;
   bool open;
   version_t cmapv;
   interval_set<inodeno_t> inos;
   version_t inotablev;
 public:
-  C_MDS_session_finish(MDS *m, Session *se, __u64 sseq, bool s, version_t mv) :
+  C_MDS_session_finish(MDS *m, Session *se, uint64_t sseq, bool s, version_t mv) :
     mds(m), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0) { }
-  C_MDS_session_finish(MDS *m, Session *se, __u64 sseq, bool s, version_t mv, interval_set<inodeno_t>& i, version_t iv) :
+  C_MDS_session_finish(MDS *m, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t>& i, version_t iv) :
     mds(m), session(se), state_seq(sseq), open(s), cmapv(mv), inos(i), inotablev(iv) { }
   void finish(int r) {
     assert(r == 0);
@@ -186,7 +186,7 @@ void Server::handle_client_session(MClientSession *m)
     return;
   }
 
-  __u64 sseq = 0;
+  uint64_t sseq = 0;
   switch (m->get_op()) {
   case CEPH_SESSION_REQUEST_OPEN:
     if (session->is_opening() ||
@@ -268,7 +268,7 @@ void Server::handle_client_session(MClientSession *m)
   }
 }
 
-void Server::_session_logged(Session *session, __u64 state_seq, bool open, version_t pv,
+void Server::_session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
 			     interval_set<inodeno_t>& inos, version_t piv)
 {
   dout(10) << "_session_logged " << session->inst << " state_seq " << state_seq << " " << (open ? "open":"close")
@@ -328,7 +328,7 @@ void Server::_session_logged(Session *session, __u64 state_seq, bool open, versi
 }
 
 version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
-					      map<client_t,__u64>& sseqmap)
+					      map<client_t,uint64_t>& sseqmap)
 {
   version_t pv = ++mds->sessionmap.projected;
   dout(10) << "prepare_force_open_sessions " << pv 
@@ -351,7 +351,7 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
 }
 
 void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
-					map<client_t,__u64>& sseqmap)
+					map<client_t,uint64_t>& sseqmap)
 {
   /*
    * FIXME: need to carefully consider the race conditions between a
@@ -365,7 +365,7 @@ void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
     assert(session);
     
     if (sseqmap.count(p->first)) {
-      __u64 sseq = sseqmap[p->first];
+      uint64_t sseq = sseqmap[p->first];
       if (session->get_state_seq() != sseq) {
 	dout(10) << "force_open_sessions skipping changed " << session->inst << dendl;
       } else {
@@ -398,7 +398,7 @@ void Server::terminate_sessions()
 	session->is_killing() ||
 	session->is_closed())
       continue;
-    __u64 sseq = mds->sessionmap.set_state(session, Session::STATE_CLOSING);
+    uint64_t sseq = mds->sessionmap.set_state(session, Session::STATE_CLOSING);
     version_t pv = ++mds->sessionmap.projected;
     mdlog->start_submit_entry(new ESession(session->inst, false, pv),
 			      new C_MDS_session_finish(mds, session, sseq, false, pv));
@@ -478,7 +478,7 @@ void Server::kill_session(Session *session)
        session->is_stale()) &&
       !session->is_importing()) {
     dout(10) << "kill_session " << session << dendl;
-    __u64 sseq = mds->sessionmap.set_state(session, Session::STATE_KILLING);
+    uint64_t sseq = mds->sessionmap.set_state(session, Session::STATE_KILLING);
     version_t pv = ++mds->sessionmap.projected;
     mdlog->start_submit_entry(new ESession(session->inst, false, pv),
 			      new C_MDS_session_finish(mds, session, sseq, false, pv));
@@ -543,7 +543,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     dout(7) << " client had no session, removing from session map" << dendl;
     assert(session);  // ?
     version_t pv = ++mds->sessionmap.projected;
-    __u64 sseq = session->get_state_seq();
+    uint64_t sseq = session->get_state_seq();
     mdlog->start_submit_entry(new ESession(session->inst, false, pv),
 			      new C_MDS_session_finish(mds, session, sseq, false, pv));
     mdlog->flush();
@@ -557,7 +557,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	       << m->get_source_inst() << dendl;
       mds->sessionmap.set_state(session, Session::STATE_OPENING);
       version_t pv = ++mds->sessionmap.projected;
-      __u64 sseq = session->get_state_seq();
+      uint64_t sseq = session->get_state_seq();
       mdlog->start_submit_entry(new ESession(session->inst, true, pv),
 				new C_MDS_session_finish(mds, session, sseq, true, pv));
       mdlog->flush();
@@ -610,7 +610,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	continue;
       }
       
-      filepath path(p->second.path, (__u64)p->second.capinfo.pathbase);
+      filepath path(p->second.path, (uint64_t)p->second.capinfo.pathbase);
       if ((in && !in->is_auth()) ||
 	  !mds->mdcache->path_is_mine(path)) {
 	// not mine.
@@ -1071,7 +1071,7 @@ void Server::handle_client_request(MClientRequest *req)
 	 p != req->releases.end();
 	 p++)
       mds->locker->process_cap_update(mdr, client,
-				      inodeno_t((__u64)p->item.ino), p->item.cap_id,
+				      inodeno_t((uint64_t)p->item.ino), p->item.cap_id,
 				      p->item.caps, p->item.wanted,
 				      p->item.seq, 
 				      p->item.issue_seq, 
@@ -2549,7 +2549,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
   // trunc from bigger -> smaller?
   inode_t *pi = cur->get_projected_inode();
 
-  __u64 old_size = MAX(pi->size, req->head.args.setattr.old_size);
+  uint64_t old_size = MAX(pi->size, req->head.args.setattr.old_size);
   bool truncating_smaller = false;
   if (mask & CEPH_SETATTR_SIZE) {
     truncating_smaller = req->head.args.setattr.size < old_size;

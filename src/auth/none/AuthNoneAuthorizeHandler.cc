@@ -6,7 +6,7 @@
 bool AuthNoneAuthorizeHandler::verify_authorizer(KeyStore *keys,
 						 bufferlist& authorizer_data, bufferlist& authorizer_reply,
 						 EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info,
-__u64 *auid)
+uint64_t *auid)
 {
   bufferlist::iterator iter = authorizer_data.begin();
 
