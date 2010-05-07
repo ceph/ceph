@@ -43,11 +43,11 @@ int main(int argc, const char **argv)
   for (i=0; i<r; i++) {
     char name[100];
     rados_snap_get_name(pool, snaps[i], name, sizeof(name));
-    printf("rados_snap_list got snap %lld %s\n", snaps[i], name);
+    printf("rados_snap_list got snap %lld %s\n", (long long)snaps[i], name);
   }
   rados_snap_t snapid;
   r = rados_snap_lookup(pool, "snap1", &snapid);
-  printf("rados_snap_lookup snap1 got %lld, result %d\n", snapid, r);
+  printf("rados_snap_lookup snap1 got %lld, result %d\n", (long long)snapid, r);
   r = rados_snap_remove(pool, "snap1");
   printf("rados_snap_remove snap1 = %d\n", r);
 
@@ -73,10 +73,10 @@ int main(int argc, const char **argv)
   if (memcmp(val, "bar", 3))
     printf("*** attr value mismatch ***\n");
 
-  __u64 size;
+  uint64_t size;
   time_t mtime;
   r = rados_stat(pool, oid, &size, &mtime);
-  printf("rados_stat size = %lld mtime = %d = %d\n", size, (int)mtime, r);
+  printf("rados_stat size = %lld mtime = %d = %d\n", (long long)size, (int)mtime, r);
 
   /* tmap */
 
