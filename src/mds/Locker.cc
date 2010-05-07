@@ -1732,7 +1732,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       }
 
       // remove cap _after_ do_cap_update() (which takes the Capability*)
-      if (in->last <= follows) {
+      if (in->last < CEPH_NOSNAP) {
 	dout(10) << "  flushsnap releasing cloned cap" << dendl;
 	in->remove_client_cap(client);
       } else {
