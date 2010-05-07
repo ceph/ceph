@@ -35,7 +35,6 @@ using namespace std;
 #define RGW_ATTR_CONTENT_TYPE	RGW_ATTR_PREFIX "content_type"
 
 #define USER_INFO_VER 2
-#define CEPH_AUTH_UID_DEFAULT (uint64_t) -1
 
 typedef void *RGWAccessHandle;
 
