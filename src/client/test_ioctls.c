@@ -40,7 +40,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	printf("layout:\n stripe_unit %lld\n stripe_count %lld\n object_size %lld\n data_pool %lld\npreferred osd %lld\n",
-	       l.stripe_unit, l.stripe_count, l.object_size, l.data_pool, l.preferred_osd);
+	       (long long)l.stripe_unit, (long long)l.stripe_count, (long long)l.object_size, (long long)l.data_pool, (long long)l.preferred_osd);
 
 	/* dataloc */
 	dl.file_offset = atoll(argv[2]);
@@ -51,15 +51,15 @@ int main(int argc, char **argv)
 	}
 
 	printf("dataloc:\n");
-	printf(" file_offset %lld (of object start)\n", dl.file_offset);
+	printf(" file_offset %lld (of object start)\n", (long long)dl.file_offset);
 	printf(" object '%s'\n object_offset %lld\n object_size %lld object_no %lld\n",
-	       dl.object_name, dl.object_offset, dl.object_size, dl.object_no);
+	       dl.object_name, (long long)dl.object_offset, (long long)dl.object_size, (long long)dl.object_no);
 	printf(" block_offset %lld\n block_size %lld\n",
-	       dl.block_offset, dl.block_size);
+	       (long long)dl.block_offset, (long long)dl.block_size);
 
 	char buf[80];
 	getnameinfo((struct sockaddr *)&dl.osd_addr, sizeof(dl.osd_addr), buf, sizeof(buf), 0, 0, NI_NUMERICHOST);
-	printf(" osd%lld %s\n", dl.osd, buf);
+	printf(" osd%lld %s\n", (long long)dl.osd, buf);
 
 	return 0;	
 }
