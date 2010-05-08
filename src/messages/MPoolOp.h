@@ -52,6 +52,7 @@ public:
   }
 
   void encode_payload() {
+    header.version = 2;
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(pool, payload);
@@ -65,10 +66,13 @@ public:
     paxos_decode(p);
     ::decode(fsid, p);
     ::decode(pool, p);
+    if (header.version < 2)
+      ::decode(name, p);
     ::decode(op, p);
     ::decode(auid, p);
     ::decode(snapid, p);
-    ::decode(name, p);
+    if (header.version >= 2)
+      ::decode(name, p);
   }
 };
 
