@@ -307,6 +307,7 @@ enum {
 
 /* xattr comparison */
 enum {
+	CEPH_OSD_CMPXATTR_OP_NOP = 0,
 	CEPH_OSD_CMPXATTR_OP_EQ  = 1,
 	CEPH_OSD_CMPXATTR_OP_NE  = 2,
 	CEPH_OSD_CMPXATTR_OP_GT  = 3,

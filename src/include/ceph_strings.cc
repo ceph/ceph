@@ -44,6 +44,7 @@ const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_SETXATTRS: return "setxattrs";
 	case CEPH_OSD_OP_RESETXATTRS: return "resetxattrs";
 	case CEPH_OSD_OP_RMXATTR: return "rmxattr";
+	case CEPH_OSD_OP_CMPXATTR: return "cmpxattr";
 
 	case CEPH_OSD_OP_PULL: return "pull";
 	case CEPH_OSD_OP_PUSH: return "push";
