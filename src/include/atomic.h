@@ -43,7 +43,10 @@ public:
     AO_fetch_and_add_write(&val, (AO_t)sub);
   }
   AO_t read() const {
-    return AO_load_full(&val);
+    // cast away const on the pointer.  this is only needed to build
+    // on lenny, but not newer debians, so the atomic_ops.h got fixed
+    // at some point.  this hack can go away someday...
+    return AO_load_full((AO_t *)&val);  
   }
 };
 }
