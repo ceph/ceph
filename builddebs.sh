@@ -7,7 +7,7 @@ basedir=~/debian-base
 vers=$1
 [ -z "$vers" ] && echo specify version && exit 1
 
-./pull.sh $vers gz dsc
+#./pull.sh $vers gz dsc
 
 for dist in sid squeeze lenny
 do
