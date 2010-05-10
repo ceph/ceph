@@ -5,7 +5,7 @@ set -e
 vers=$1
 [ -z "$vers" ] && echo specify version && exit 1
 
-./pull.sh $vers dsc changes
+#./pull.sh $vers dsc changes
 
 for f in `cd release/$vers ; ls *.{dsc,changes}`
 do
