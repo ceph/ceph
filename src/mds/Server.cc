@@ -2580,6 +2580,8 @@ void Server::handle_client_file_setlock(MDRequest *mdr)
   set_lock.type = req->head.args.filelock_change.type;
   bool will_wait = req->head.args.filelock_change.wait;
 
+  dout(0) << "handle_client_file_setlock: " << set_lock << dendl;
+
   ceph_lock_state_t *lock_state = NULL;
 
   // get the appropriate lock state
@@ -2598,7 +2600,9 @@ void Server::handle_client_file_setlock(MDRequest *mdr)
     return;
   }
 
+  dout(0) << "state prior to lock change: " << *lock_state << dendl;;
   if (CEPH_LOCK_UNLOCK == set_lock.type) {
+    dout(0) << "got unlock" << dendl;
     list<ceph_filelock> activated_locks;
     lock_state->remove_lock(set_lock, activated_locks);
     reply_request(mdr, 0);
@@ -2609,17 +2613,23 @@ void Server::handle_client_file_setlock(MDRequest *mdr)
     cur->take_waiting(CInode::WAIT_FLOCK, waiters);
     mds->queue_waiters(waiters);
   } else {
+    dout(0) << "got lock" << dendl;
     if (lock_state->add_lock(set_lock, will_wait)) {
       // lock set successfully
+      dout(0) << "it succeeded" << dendl;
       reply_request(mdr, 0);
     } else {
+      dout(0) << "it failed on this attempt" << dendl;
       // couldn't set lock right now
       if (!will_wait)
 	reply_request(mdr, -1);
-      else
+      else {
+	dout(0) << "but it's a wait" << dendl;
 	cur->add_waiter(CInode::WAIT_FLOCK, new C_MDS_RetryRequest(mdcache, mdr));
+      }
     }
   }
+  dout(0) << "state after lock change: " << *lock_state << dendl;
 }
 
 void Server::handle_client_file_readlock(MDRequest *mdr)

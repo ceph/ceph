@@ -211,7 +211,23 @@ public:
 
 };
 
-
-
+inline ostream& operator<<(ostream& out, ceph_lock_state_t& l) {
+  out << "ceph_lock_state_t. held_locks.size()=" << l.held_locks.size()
+      << ", waiting_locks.size()=" << l.waiting_locks.size()
+      << ", client_held_lock_counts -- " << l.client_held_lock_counts
+      << "\n client_waiting_lock_counts -- " << l.client_waiting_lock_counts
+      << "\n held_locks -- ";
+    for (multimap<uint64_t, ceph_filelock>::iterator iter = l.held_locks.begin();
+	 iter != l.held_locks.end();
+	 ++iter)
+      out << iter->second;
+    out << "\n waiting_locks -- ";
+    for (multimap<uint64_t, ceph_filelock>::iterator iter =l.waiting_locks.begin();
+	 iter != l.waiting_locks.end();
+	 ++iter)
+      out << iter->second << "\n";
+    out << std::endl;
+  return out;
+}
 
 #endif

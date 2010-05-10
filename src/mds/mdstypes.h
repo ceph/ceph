@@ -334,6 +334,13 @@ inline bool operator==(const byte_range_t& l, const byte_range_t& r) {
   return l.first == r.first && l.last == r.last;
 }
 
+inline ostream& operator<<(ostream& out, ceph_filelock& l) {
+  out << "start: " << l.start << ", length: " << l.length
+      << ", client: " << l.client << ", pid: " << l.pid
+      << ", type: " << (int)l.type
+      << std::endl;
+  return out;
+}
 
 struct ceph_lock_state_t {
   multimap<__u64, ceph_filelock> held_locks;    // current locks
@@ -586,7 +593,7 @@ private:
 	  if (old_lock_end > new_lock_end) { //add extra lock after new_lock
 	    ceph_filelock appended_lock = *old_lock;
 	    appended_lock.start = new_lock_end + 1;
-	    appended_lock.length = old_lock_end - appended_lock.start;
+	    appended_lock.length = old_lock_end - appended_lock.start + 1;
 	    held_locks.insert(pair<__u64, ceph_filelock>
 			      (appended_lock.start, appended_lock));
 	    ++client_held_lock_counts[old_lock->client];
@@ -634,6 +641,10 @@ private:
     if ((lower_bound->first != start)
 	&& (start != 0)
 	&& (lower_bound != lock_map.begin())) --lower_bound;
+    if (lock_map.end() == lower_bound)
+      dout(0) << "get_lower_bound returning end()" << dendl;
+    else dout(0) << "get_lower_bound returning iterator pointing to "
+		 << lower_bound->second << dendl;
     return lower_bound;
   }
 
@@ -643,6 +654,10 @@ private:
     multimap<__u64, ceph_filelock>::iterator last =
       lock_map.upper_bound(end);
     if (last != lock_map.begin()) --last;
+    if (lock_map.end() == last)
+      dout(0) << "get_last_before returning end()" << dendl;
+    else dout(0) << "get_last_before returning iterator pointing to "
+		 << last->second << dendl;
     return last;
   }
 
@@ -654,10 +669,13 @@ private:
    */
   bool share_space(multimap<__u64, ceph_filelock>::iterator& iter,
 		   __u64 start, __u64 end) {
-    return ((iter->first > start && iter->first < end) ||
-	    ((iter->first < start) &&
-	     (((iter->first + iter->second.length - 1) > start) ||
-	      (0 == iter->second.length))));
+    bool ret = ((iter->first >= start && iter->first <= end) ||
+		((iter->first < start) &&
+		 (((iter->first + iter->second.length - 1) >= start) ||
+		  (0 == iter->second.length))));
+    dout(0) << "share_space got start: " << start << ", end: " << end
+	    << ", lock: " << iter->second << ", returning " << ret << dendl;
+    return ret;
   }
   bool share_space(multimap<__u64, ceph_filelock>::iterator& iter,
 		   ceph_filelock& lock) {
@@ -672,6 +690,7 @@ private:
    */
   bool get_overlapping_locks(ceph_filelock& lock,
 			     list<ceph_filelock*>& overlaps) {
+    dout(0) << "get_overlapping_locks" << dendl;
     multimap<__u64, ceph_filelock>::iterator iter =
       get_last_before(lock.start + lock.length - 1, held_locks);
     bool cont = iter != held_locks.end();
@@ -696,9 +715,10 @@ private:
    */
   bool get_waiting_overlaps(ceph_filelock& lock,
 			    list<ceph_filelock*>& overlaps) {
+    dout(0) << "get_waiting_overlaps" << dendl;
     multimap<__u64, ceph_filelock>::iterator iter =
       get_last_before(lock.start + lock.length - 1, waiting_locks);
-    bool cont = iter != held_locks.end();
+    bool cont = iter != waiting_locks.end();
     while(cont) {
       if (share_space(iter, lock)) overlaps.push_front(&iter->second);
       if (held_locks.begin() == iter) cont = false;
