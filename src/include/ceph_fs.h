@@ -481,7 +481,7 @@ struct ceph_mds_reply_dirfrag {
 
 #define CEPH_LOCK_SHARED   1
 #define CEPH_LOCK_EXCL     2
-#define CEPH_LOCK_UNLOCK   3
+#define CEPH_LOCK_UNLOCK   4
 
 struct ceph_filelock {
 	__u64 start;/* file offset to start lock at */
@@ -491,6 +491,7 @@ struct ceph_filelock {
 	__u64 pid_namespace;
 	__u8 type; /* shared lock, exclusive lock, or unlock */
 } __attribute__ ((packed));
+
 
 /* file access modes */
 #define CEPH_FILE_MODE_PIN        0
