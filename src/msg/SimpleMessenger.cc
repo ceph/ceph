@@ -1734,7 +1734,7 @@ Message *SimpleMessenger::Pipe::read_message()
     dout(0) << "reader got bad header crc " << header_crc << " != " << header.crc << dendl;
     return 0;
   }
-  dout(1) << "getting message bytes now, currently using "
+  dout(10) << "getting message bytes now, currently using "
 	   << messenger->message_throttler.get_current() << "/"
 	   << messenger->message_throttler.get_max() << dendl;
   messenger->message_throttler.get(header.front_len  +
