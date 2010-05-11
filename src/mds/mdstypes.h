@@ -343,8 +343,8 @@ inline ostream& operator<<(ostream& out, ceph_filelock& l) {
 }
 
 struct ceph_lock_state_t {
-  multimap<__u64, ceph_filelock> held_locks;    // current locks
-  multimap<__u64, ceph_filelock> waiting_locks; // locks waiting for other locks
+  multimap<uint64_t, ceph_filelock> held_locks;    // current locks
+  multimap<uint64_t, ceph_filelock> waiting_locks; // locks waiting for other locks
   // both of the above are keyed by starting offset
   map<client_t, int> client_held_lock_counts;
   map<client_t, int> client_waiting_lock_counts;
@@ -369,27 +369,27 @@ struct ceph_lock_state_t {
 	//can't set, we want an exclusive
 	if (wait_on_fail) {
 	  waiting_locks.
-	    insert(pair<__u64, ceph_filelock>(new_lock.start, new_lock));
+	    insert(pair<uint64_t, ceph_filelock>(new_lock.start, new_lock));
 	}
 	ret = false;
       } else { //shared lock, check for any exclusive locks blocking us
 	if (contains_exclusive_lock(overlapping_locks)) { //blocked :(
 	  if (wait_on_fail) {
 	    waiting_locks.
-	      insert(pair<__u64, ceph_filelock>(new_lock.start, new_lock));
+	      insert(pair<uint64_t, ceph_filelock>(new_lock.start, new_lock));
 	  }
 	  ret = false;
 	} else {
 	  //yay, we can insert a shared lock
 	  adjust_locks(self_overlapping_locks, new_lock, neighbor_locks);
 	  held_locks.
-	    insert(pair<__u64, ceph_filelock>(new_lock.start, new_lock));
+	    insert(pair<uint64_t, ceph_filelock>(new_lock.start, new_lock));
 	  ret = true;
 	}
       }
     } else { //no overlapping locks except our own
       adjust_locks(self_overlapping_locks, new_lock, neighbor_locks);
-      held_locks.insert(pair<__u64, ceph_filelock>(new_lock.start, new_lock));
+      held_locks.insert(pair<uint64_t, ceph_filelock>(new_lock.start, new_lock));
       ret = true;
     }
     if (ret) ++client_held_lock_counts[new_lock.client];
@@ -433,9 +433,9 @@ struct ceph_lock_state_t {
 		   << " but no locks there!" << dendl;
     bool remove_to_end = (0 == removal_lock.length);
     bool old_lock_to_end;
-    __u64 removal_start = removal_lock.start;
-    __u64 removal_end = removal_start + removal_lock.length - 1;
-    __u64 old_lock_end;
+    uint64_t removal_start = removal_lock.start;
+    uint64_t removal_end = removal_start + removal_lock.length - 1;
+    uint64_t old_lock_end;
     __s64 old_lock_client = 0;
     ceph_filelock *old_lock;
 
@@ -456,7 +456,7 @@ struct ceph_lock_state_t {
       } else if (old_lock_to_end) {
 	ceph_filelock append_lock = *old_lock;
 	append_lock.start = removal_end+1;
-	held_locks.insert(pair<__u64, ceph_filelock>
+	held_locks.insert(pair<uint64_t, ceph_filelock>
 			  (append_lock.start, append_lock));
 	++client_held_lock_counts[old_lock->client];
 	if (old_lock->start >= removal_start) {
@@ -468,7 +468,7 @@ struct ceph_lock_state_t {
 	  ceph_filelock append_lock = *old_lock;
 	  append_lock.start = removal_end + 1;
 	  append_lock.length = old_lock_end - append_lock.start;
-	  held_locks.insert(pair<__u64, ceph_filelock>
+	  held_locks.insert(pair<uint64_t, ceph_filelock>
 			    (append_lock.start, append_lock));
 	  ++client_held_lock_counts[old_lock->client];
 	}
@@ -546,9 +546,9 @@ private:
 		    list<ceph_filelock*> neighbor_locks) {
     bool new_lock_to_end = (0 == new_lock.length);
     bool old_lock_to_end;
-    __u64 new_lock_start = new_lock.start;
-    __u64 new_lock_end = new_lock.start + new_lock.length - 1;
-    __u64 old_lock_start, old_lock_end;
+    uint64_t new_lock_start = new_lock.start;
+    uint64_t new_lock_end = new_lock.start + new_lock.length - 1;
+    uint64_t old_lock_start, old_lock_end;
     __s64 old_lock_client = 0;
     ceph_filelock *old_lock;
     for (list<ceph_filelock*>::iterator iter = old_locks.begin();
@@ -581,7 +581,7 @@ private:
 	  } else { //old lock extends past end of new lock
 	    ceph_filelock appended_lock = *old_lock;
 	    appended_lock.start = new_lock_end + 1;
-	    held_locks.insert(pair<__u64, ceph_filelock>
+	    held_locks.insert(pair<uint64_t, ceph_filelock>
 			      (appended_lock.start, appended_lock));
 	    ++client_held_lock_counts[old_lock->client];
 	    if (old_lock_start < new_lock_start) {
@@ -606,7 +606,7 @@ private:
 	    ceph_filelock appended_lock = *old_lock;
 	    appended_lock.start = new_lock_end + 1;
 	    appended_lock.length = old_lock_end - appended_lock.start + 1;
-	    held_locks.insert(pair<__u64, ceph_filelock>
+	    held_locks.insert(pair<uint64_t, ceph_filelock>
 			      (appended_lock.start, appended_lock));
 	    ++client_held_lock_counts[old_lock->client];
 	  }
@@ -660,8 +660,8 @@ private:
   }
 
   //this won't reset the counter map value, do that yourself
-  void remove_all_from(client_t client, multimap<__u64, ceph_filelock>& locks) {
-    multimap<__u64, ceph_filelock>::iterator iter = locks.begin();
+  void remove_all_from(client_t client, multimap<uint64_t, ceph_filelock>& locks) {
+    multimap<uint64_t, ceph_filelock>::iterator iter = locks.begin();
     while (iter != locks.end()) {
       if (iter->second.client == client) {
 	locks.erase(iter++);
@@ -670,9 +670,9 @@ private:
   }
 
   //obviously, this is a skeleton for compilation purposes.
-  multimap<__u64, ceph_filelock>::iterator
-  find_specific_elem(ceph_filelock *elem, multimap<__u64, ceph_filelock>& map) {
-    multimap<__u64, ceph_filelock>::iterator iter = map.find(elem->start);
+  multimap<uint64_t, ceph_filelock>::iterator
+  find_specific_elem(ceph_filelock *elem, multimap<uint64_t, ceph_filelock>& map) {
+    multimap<uint64_t, ceph_filelock>::iterator iter = map.find(elem->start);
     while (iter != map.end()) {
       if (memcmp(&iter->second, elem, sizeof(ceph_filelock)) == 0) return iter;
       if (iter->first != elem->start) return map.end();
@@ -683,9 +683,9 @@ private:
   }
 
   //get last lock prior to start position
-  multimap<__u64, ceph_filelock>::iterator
-  get_lower_bound(__u64 start, multimap<__u64, ceph_filelock>& lock_map) {
-    multimap<__u64, ceph_filelock>::iterator lower_bound =
+  multimap<uint64_t, ceph_filelock>::iterator
+  get_lower_bound(uint64_t start, multimap<uint64_t, ceph_filelock>& lock_map) {
+    multimap<uint64_t, ceph_filelock>::iterator lower_bound =
       lock_map.lower_bound(start);
     if ((lower_bound->first != start)
 	&& (start != 0)
@@ -698,9 +698,9 @@ private:
   }
 
   //get latest-starting lock that goes over the byte "end"
-  multimap<__u64, ceph_filelock>::iterator
-  get_last_before(__u64 end, multimap<__u64, ceph_filelock>& lock_map) {
-    multimap<__u64, ceph_filelock>::iterator last =
+  multimap<uint64_t, ceph_filelock>::iterator
+  get_last_before(uint64_t end, multimap<uint64_t, ceph_filelock>& lock_map) {
+    multimap<uint64_t, ceph_filelock>::iterator last =
       lock_map.upper_bound(end);
     if (last != lock_map.begin()) --last;
     if (lock_map.end() == last)
@@ -716,8 +716,8 @@ private:
    * byte is at start + length - 1.
    * If the length is 0, the lock covers from "start" to the end of the file.
    */
-  bool share_space(multimap<__u64, ceph_filelock>::iterator& iter,
-		   __u64 start, __u64 end) {
+  bool share_space(multimap<uint64_t, ceph_filelock>::iterator& iter,
+		   uint64_t start, uint64_t end) {
     bool ret = ((iter->first >= start && iter->first <= end) ||
 		((iter->first < start) &&
 		 (((iter->first + iter->second.length - 1) >= start) ||
@@ -726,7 +726,7 @@ private:
 	    << ", lock: " << iter->second << ", returning " << ret << dendl;
     return ret;
   }
-  bool share_space(multimap<__u64, ceph_filelock>::iterator& iter,
+  bool share_space(multimap<uint64_t, ceph_filelock>::iterator& iter,
 		   ceph_filelock& lock) {
     return share_space(iter, lock.start, lock.start+lock.length-1);
   }
@@ -747,7 +747,7 @@ private:
     --neighbor_check_lock.start;
     if (neighbor_check_lock.length) neighbor_check_lock.length += 2;
     //find the last held lock starting at the point after lock
-    multimap<__u64, ceph_filelock>::iterator iter =
+    multimap<uint64_t, ceph_filelock>::iterator iter =
       get_last_before(lock.start + lock.length, held_locks);
     bool cont = iter != held_locks.end();
     while(cont) {
@@ -782,7 +782,7 @@ private:
   bool get_waiting_overlaps(ceph_filelock& lock,
 			    list<ceph_filelock*>& overlaps) {
     dout(0) << "get_waiting_overlaps" << dendl;
-    multimap<__u64, ceph_filelock>::iterator iter =
+    multimap<uint64_t, ceph_filelock>::iterator iter =
       get_last_before(lock.start + lock.length - 1, waiting_locks);
     bool cont = iter != waiting_locks.end();
     while(cont) {
