@@ -1337,7 +1337,8 @@ void Client::handle_mds_map(MMDSMap* m)
     } else if (oldstate == newstate)
       continue;  // no change
     
-    if (newstate == MDSMap::STATE_RECONNECT)
+    if (newstate == MDSMap::STATE_RECONNECT &&
+	mds_sessions.count(p->first))
       send_reconnect(p->first);
 
     if (oldstate < MDSMap::STATE_ACTIVE &&
@@ -1364,56 +1365,53 @@ void Client::send_reconnect(int mds)
 
   MClientReconnect *m = new MClientReconnect;
 
-  if (mds_sessions.count(mds)) {
-    // i have an open session.
-    hash_set<inodeno_t> did_snaprealm;
-    for (hash_map<vinodeno_t, Inode*>::iterator p = inode_map.begin();
-	 p != inode_map.end();
-	 p++) {
-      Inode *in = p->second;
-      if (in->caps.count(mds)) {
-	dout(10) << " caps on " << p->first
-		 << " " << ccap_string(in->caps[mds]->issued)
-		 << " wants " << ccap_string(in->caps_wanted())
-		 << dendl;
-	filepath path;
-	in->make_long_path(path);
-	dout(10) << "    path " << path << dendl;
+  assert(mds_sessions.count(mds));
 
-	in->caps[mds]->seq = 0;  // reset seq.
-	in->caps[mds]->issue_seq = 0;  // reset seq.
-	m->add_cap(p->first.ino, 
-		   in->caps[mds]->cap_id,
-		   path.get_ino(), path.get_path(),   // ino
-		   in->caps_wanted(), // wanted
-		   in->caps[mds]->issued,     // issued
-		   in->size, in->mtime, in->atime, in->snaprealm->ino);
+  // i have an open session.
+  hash_set<inodeno_t> did_snaprealm;
+  for (hash_map<vinodeno_t, Inode*>::iterator p = inode_map.begin();
+       p != inode_map.end();
+       p++) {
+    Inode *in = p->second;
+    if (in->caps.count(mds)) {
+      dout(10) << " caps on " << p->first
+	       << " " << ccap_string(in->caps[mds]->issued)
+	       << " wants " << ccap_string(in->caps_wanted())
+	       << dendl;
+      filepath path;
+      in->make_long_path(path);
+      dout(10) << "    path " << path << dendl;
 
-	if (did_snaprealm.count(in->snaprealm->ino) == 0) {
-	  dout(10) << " snaprealm " << *in->snaprealm << dendl;
-	  m->add_snaprealm(in->snaprealm->ino, in->snaprealm->seq, in->snaprealm->parent);
-	  did_snaprealm.insert(in->snaprealm->ino);
-	}	
-      }
-      if (in->exporting_mds == mds) {
-	dout(10) << " clearing exporting_caps on " << p->first << dendl;
-	in->exporting_mds = -1;
-	in->exporting_issued = 0;
-	in->exporting_mseq = 0;
-      }
+      in->caps[mds]->seq = 0;  // reset seq.
+      in->caps[mds]->issue_seq = 0;  // reset seq.
+      m->add_cap(p->first.ino, 
+		 in->caps[mds]->cap_id,
+		 path.get_ino(), path.get_path(),   // ino
+		 in->caps_wanted(), // wanted
+		 in->caps[mds]->issued,     // issued
+		 in->size, in->mtime, in->atime, in->snaprealm->ino);
+
+      if (did_snaprealm.count(in->snaprealm->ino) == 0) {
+	dout(10) << " snaprealm " << *in->snaprealm << dendl;
+	m->add_snaprealm(in->snaprealm->ino, in->snaprealm->seq, in->snaprealm->parent);
+	did_snaprealm.insert(in->snaprealm->ino);
+      }	
     }
-
-    // reset my cap seq number
-    mds_sessions[mds].seq = 0;
-
-    //connect to the mds' offload targets
-    connect_mds_targets(mds);
-    //make sure unsafe requests get saved
-    resend_unsafe_requests(mds);
-  } else {
-    dout(10) << " i had no session with this mds" << dendl;
-    m->closed = true;
+    if (in->exporting_mds == mds) {
+      dout(10) << " clearing exporting_caps on " << p->first << dendl;
+      in->exporting_mds = -1;
+      in->exporting_issued = 0;
+      in->exporting_mseq = 0;
+    }
   }
+  
+  // reset my cap seq number
+  mds_sessions[mds].seq = 0;
+  
+  //connect to the mds' offload targets
+  connect_mds_targets(mds);
+  //make sure unsafe requests get saved
+  resend_unsafe_requests(mds);
 
   messenger->send_message(m, mdsmap->get_inst(mds));
 }

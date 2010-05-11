@@ -539,100 +539,89 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     return;
   }
 
-  if (m->closed) {
-    dout(7) << " client had no session, removing from session map" << dendl;
-    assert(session);  // ?
+  // notify client of success with an OPEN
+  mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), m->get_connection());
+    
+  if (session->is_closed()) {
+    dout(10) << " session is closed, will make best effort to reconnect " 
+	     << m->get_source_inst() << dendl;
+    mds->sessionmap.set_state(session, Session::STATE_OPENING);
     version_t pv = ++mds->sessionmap.projected;
     uint64_t sseq = session->get_state_seq();
-    mdlog->start_submit_entry(new ESession(session->inst, false, pv),
-			      new C_MDS_session_finish(mds, session, sseq, false, pv));
+    mdlog->start_submit_entry(new ESession(session->inst, true, pv),
+			      new C_MDS_session_finish(mds, session, sseq, true, pv));
     mdlog->flush();
-    // no need to respond to client: they're telling us they have no session
+    ss << "reconnect by new " << session->inst << " after " << delay;
   } else {
-    // notify client of success with an OPEN
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_OPEN), m->get_connection());
-    
-    if (session->is_closed()) {
-      dout(10) << " session is closed, will make best effort to reconnect " 
-	       << m->get_source_inst() << dendl;
-      mds->sessionmap.set_state(session, Session::STATE_OPENING);
-      version_t pv = ++mds->sessionmap.projected;
-      uint64_t sseq = session->get_state_seq();
-      mdlog->start_submit_entry(new ESession(session->inst, true, pv),
-				new C_MDS_session_finish(mds, session, sseq, true, pv));
-      mdlog->flush();
-      ss << "reconnect by new " << session->inst << " after " << delay;
-    } else {
-      ss << "reconnect by " << session->inst << " after " << delay;
-    }
-    mds->logclient.log(LOG_DEBUG, ss);
-
-    // snaprealms
-    for (vector<ceph_mds_snaprealm_reconnect>::iterator p = m->realms.begin();
-	 p != m->realms.end();
-	 p++) {
-      CInode *in = mdcache->get_inode(inodeno_t(p->ino));
-      if (in && in->state_test(CInode::STATE_PURGING))
-	continue;
-      if (in) {
-	assert(in->snaprealm);
-	if (in->snaprealm->have_past_parents_open()) {
-	  dout(15) << "open snaprealm (w/ past parents) on " << *in << dendl;
-	  mdcache->finish_snaprealm_reconnect(from, in->snaprealm, snapid_t(p->seq));
-	} else {
-	  dout(15) << "open snaprealm (w/o past parents) on " << *in << dendl;
-	  mdcache->add_reconnected_snaprealm(from, inodeno_t(p->ino), snapid_t(p->seq));
-	}
+    ss << "reconnect by " << session->inst << " after " << delay;
+  }
+  mds->logclient.log(LOG_DEBUG, ss);
+  
+  // snaprealms
+  for (vector<ceph_mds_snaprealm_reconnect>::iterator p = m->realms.begin();
+       p != m->realms.end();
+       p++) {
+    CInode *in = mdcache->get_inode(inodeno_t(p->ino));
+    if (in && in->state_test(CInode::STATE_PURGING))
+      continue;
+    if (in) {
+      assert(in->snaprealm);
+      if (in->snaprealm->have_past_parents_open()) {
+	dout(15) << "open snaprealm (w/ past parents) on " << *in << dendl;
+	mdcache->finish_snaprealm_reconnect(from, in->snaprealm, snapid_t(p->seq));
       } else {
-	dout(15) << "open snaprealm (w/o inode) on " << inodeno_t(p->ino)
-		 << " seq " << p->seq << dendl;
+	dout(15) << "open snaprealm (w/o past parents) on " << *in << dendl;
 	mdcache->add_reconnected_snaprealm(from, inodeno_t(p->ino), snapid_t(p->seq));
       }
+    } else {
+      dout(15) << "open snaprealm (w/o inode) on " << inodeno_t(p->ino)
+	       << " seq " << p->seq << dendl;
+      mdcache->add_reconnected_snaprealm(from, inodeno_t(p->ino), snapid_t(p->seq));
     }
+  }
 
-    // caps
-    for (map<inodeno_t, cap_reconnect_t>::iterator p = m->caps.begin();
-	 p != m->caps.end();
-	 ++p) {
-      // make sure our last_cap_id is MAX over all issued caps
-      if (p->second.capinfo.cap_id > mdcache->last_cap_id)
-	mdcache->last_cap_id = p->second.capinfo.cap_id;
-
-      CInode *in = mdcache->get_inode(p->first);
-      if (in && in->state_test(CInode::STATE_PURGING))
-	continue;
-      if (in && in->is_auth()) {
-	// we recovered it, and it's ours.  take note.
-	dout(15) << "open cap realm " << inodeno_t(p->second.capinfo.snaprealm)
-		 << " on " << *in << dendl;
-	in->reconnect_cap(from, p->second.capinfo, session);
-	mds->mdcache->add_reconnected_cap(in, from, inodeno_t(p->second.capinfo.snaprealm));
-	continue;
-      }
+  // caps
+  for (map<inodeno_t, cap_reconnect_t>::iterator p = m->caps.begin();
+       p != m->caps.end();
+       ++p) {
+    // make sure our last_cap_id is MAX over all issued caps
+    if (p->second.capinfo.cap_id > mdcache->last_cap_id)
+      mdcache->last_cap_id = p->second.capinfo.cap_id;
+    
+    CInode *in = mdcache->get_inode(p->first);
+    if (in && in->state_test(CInode::STATE_PURGING))
+      continue;
+    if (in && in->is_auth()) {
+      // we recovered it, and it's ours.  take note.
+      dout(15) << "open cap realm " << inodeno_t(p->second.capinfo.snaprealm)
+	       << " on " << *in << dendl;
+      in->reconnect_cap(from, p->second.capinfo, session);
+      mds->mdcache->add_reconnected_cap(in, from, inodeno_t(p->second.capinfo.snaprealm));
+      continue;
+    }
       
-      filepath path(p->second.path, (uint64_t)p->second.capinfo.pathbase);
-      if ((in && !in->is_auth()) ||
-	  !mds->mdcache->path_is_mine(path)) {
-	// not mine.
-	dout(0) << "non-auth " << p->first << " " << path
-		<< ", will pass off to authority" << dendl;
-	
-	// mark client caps stale.
-	inode_t fake_inode;
-	fake_inode.ino = p->first;
-	MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0, 0, 0);
-	//stale->head.migrate_seq = 0; // FIXME ******
-	mds->send_message_client_counted(stale, m->get_connection());
+    filepath path(p->second.path, (uint64_t)p->second.capinfo.pathbase);
+    if ((in && !in->is_auth()) ||
+	!mds->mdcache->path_is_mine(path)) {
+      // not mine.
+      dout(0) << "non-auth " << p->first << " " << path
+	      << ", will pass off to authority" << dendl;
+      
+      // mark client caps stale.
+      inode_t fake_inode;
+      fake_inode.ino = p->first;
+      MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0, 0, 0);
+      //stale->head.migrate_seq = 0; // FIXME ******
+      mds->send_message_client_counted(stale, m->get_connection());
 
-	// add to cap export list.
-	mdcache->rejoin_export_caps(p->first, from, p->second);
-      } else {
-	// mine.  fetch later.
-	dout(0) << "missing " << p->first << " " << path
-		<< " (mine), will load later" << dendl;
-	mdcache->rejoin_recovered_caps(p->first, from, p->second, 
-				       -1);  // "from" me.
-      }
+      // add to cap export list.
+      mdcache->rejoin_export_caps(p->first, from, p->second);
+    } else {
+      // mine.  fetch later.
+      dout(0) << "missing " << p->first << " " << path
+	      << " (mine), will load later" << dendl;
+      mdcache->rejoin_recovered_caps(p->first, from, p->second, 
+				     -1);  // "from" me.
     }
   }
 
