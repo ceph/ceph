@@ -378,7 +378,7 @@ struct inode_t {
 
   bool is_truncating() const { return (truncate_pending > 0); }
 
-  int64_t get_layout_size_increment() {
+  uint64_t get_layout_size_increment() {
     return layout.fl_object_size * layout.fl_stripe_count;
   }
 
