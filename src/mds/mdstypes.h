@@ -476,6 +476,9 @@ struct ceph_lock_state_t {
 	  --client_held_lock_counts[old_lock->client];
 	}
       }
+      if (!client_held_lock_counts.count(old_lock->client)) {
+	client_held_lock_counts.erase(old_lock->client);
+      }
     }
 
     /* okay, we've removed the locks, but removing them might allow some
@@ -496,6 +499,9 @@ struct ceph_lock_state_t {
 	ceph_filelock cur_lock = *(*iter);
 	waiting_locks.erase(find_specific_elem(*iter, waiting_locks));
 	--client_waiting_lock_counts[cur_lock.client];
+	if (!client_waiting_lock_counts.count(cur_lock.client)) {
+	  client_waiting_lock_counts.erase(cur_lock.client);
+	}
 	if(add_lock(cur_lock, true)) activated_locks.push_back(cur_lock);
       }
     }
@@ -505,12 +511,12 @@ struct ceph_lock_state_t {
     bool cleared_any = false;
     if (client_held_lock_counts.count(client)) {
       remove_all_from(client, held_locks);
-      client_held_lock_counts[client] = 0;
+      client_held_lock_counts.erase(client);
       cleared_any = true;
     }
     if (client_waiting_lock_counts.count(client)) {
       remove_all_from(client, waiting_locks);
-      client_waiting_lock_counts[client] = 0;
+      client_waiting_lock_counts.erase(client);
     }
     return cleared_any;
   }
@@ -606,6 +612,9 @@ private:
 	    --client_held_lock_counts[old_lock->client];
 	  }
 	}
+      }
+      if (!client_held_lock_counts.count(old_lock->client)) {
+	client_held_lock_counts.erase(old_lock->client);
       }
     }
   }
