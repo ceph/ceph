@@ -1611,7 +1611,7 @@ void SimpleMessenger::Pipe::writer()
 
       // send ack?
       if (in_seq > in_seq_acked) {
-	int send_seq = in_seq;
+	uint64_t send_seq = in_seq;
 	pipe_lock.Unlock();
 	int rc = write_ack(send_seq);
 	pipe_lock.Lock();
