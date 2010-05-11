@@ -892,12 +892,12 @@ int ReplicatedPG::do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr)
     return (v1 < v2);
   case CEPH_OSD_CMPXATTR_OP_LTE:
     return (v1 <= v2);
+  default:
+    return -EINVAL;
   }
-
-  assert(0);
 }
 
-int ReplicatedPG::do_xattr_cmp_str(int op, nstring& v1s, bufferlist& xattr)
+int ReplicatedPG::do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr)
 {
   const char *v1, *v2;
   v1 = v1s.data();
@@ -919,9 +919,9 @@ int ReplicatedPG::do_xattr_cmp_str(int op, nstring& v1s, bufferlist& xattr)
     return (strcmp(v1, v2) < 0);
   case CEPH_OSD_CMPXATTR_OP_LTE:
     return (strcmp(v1, v2) <= 0);
+  default:
+    return -EINVAL;
   }
-
-  assert(0);
 }
 
 
@@ -1099,52 +1099,55 @@ dout(0) << "osd_op.data.length=" << osd_op.data.length() << dendl;
         odata.claim_append(bl);
       }
       break;
-
-   case CEPH_OSD_OP_CMPXATTR:
+      
+    case CEPH_OSD_OP_CMPXATTR:
       {
 	dout(0) << "CEPH_OSD_OP_CMPXATTR" << dendl;
-        nstring name(op.xattr.name_len + 1);
-        nstring val(op.xattr.value_len + 1);
-	__u64 u64val;
-
-	name[0] = '_';
-	bp.copy(op.xattr.name_len, name.data()+1);
-
-        bufferlist xattr;
-
-	int result = osd->store->getattr(coll_t::build_pg_coll(info.pgid), soid, name.c_str(), xattr);
+	string aname;
+	bp.copy(op.xattr.name_len, aname);
+	string name = "_" + aname;
+	
+	bufferlist xattr;
+	result = osd->store->getattr(coll_t::build_pg_coll(info.pgid), soid, name.c_str(), xattr);
 	if (result < 0 && result != -EEXIST && result !=-ENODATA)
-          break;
-
-	result = 0;
+	  break;
+	
 	switch (op.xattr.cmp_mode) {
 	case CEPH_OSD_CMPXATTR_MODE_STRING:
-        {
-	  bp.copy(op.xattr.value_len, val.data());
-	  val[op.xattr.value_len] = 0; /* just making sure that we're null terminated */
-	  dout(0) << "CEPH_OSD_OP_CMPXATTR name=" << name << " val=" << val << " op=" << (int)op.xattr.cmp_op << " mode=" << (int)op.xattr.cmp_mode << dendl;
-          __u32 len;
-          int r = do_xattr_cmp_str(op.xattr.cmp_op, val, xattr);
-          op.xattr.value_len = len;
-          if (!r)
-            result = -ECANCELED;
-        }
-        break;
-        case CEPH_OSD_CMPXATTR_MODE_U64:
-          ::decode(u64val, bp);
-          dout(0) << "CEPH_OSD_OP_CMPXATTR name=" << name << " val=" << u64val << " op=" << (int)op.xattr.cmp_op << " mode=" << (int)op.xattr.cmp_mode << dendl;
-          int r = do_xattr_cmp_u64(op.xattr.cmp_op, u64val, xattr);
-          if (!r) {
-            dout(0) << "comparison returned false" << dendl;
-            result = -ECANCELED;
-          } else {
-            dout(0) << "comparison returned true" << dendl;
-          }
-        break;
-	}
-	if (result)
-		break;
+	  {
+	    string val;
+	    bp.copy(op.xattr.value_len, val);
+	    dout(10) << "CEPH_OSD_OP_CMPXATTR name=" << name << " val=" << val
+		     << " op=" << (int)op.xattr.cmp_op << " mode=" << (int)op.xattr.cmp_mode << dendl;
+	    result = do_xattr_cmp_str(op.xattr.cmp_op, val, xattr);
+	  }
+	  break;
 
+        case CEPH_OSD_CMPXATTR_MODE_U64:
+	  {
+	    uint64_t u64val;
+	    ::decode(u64val, bp);
+	    dout(10) << "CEPH_OSD_OP_CMPXATTR name=" << name << " val=" << u64val
+		     << " op=" << (int)op.xattr.cmp_op << " mode=" << (int)op.xattr.cmp_mode << dendl;
+	    result = do_xattr_cmp_u64(op.xattr.cmp_op, u64val, xattr);
+	  }
+	  break;
+
+	default:
+	  result = -EINVAL;
+	}
+
+	if (!result) {
+	  dout(0) << "comparison returned false" << dendl;
+	  result = -ECANCELED;
+	  break;
+	}
+	if (result < 0) {
+	  dout(0) << "comparison returned " << result << " " << strerror(-result) << dendl;
+	  break;
+	}
+
+	dout(0) << "comparison returned true" << dendl;
 	info.stats.num_rd++;
       }
       break;

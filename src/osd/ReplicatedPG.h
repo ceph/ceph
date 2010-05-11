@@ -566,7 +566,7 @@ protected:
 
   void calc_trim_to();
   int do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr);
-  int do_xattr_cmp_str(int op, nstring& v1s, bufferlist& xattr);
+  int do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr);
 
 public:
   ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid) : 
