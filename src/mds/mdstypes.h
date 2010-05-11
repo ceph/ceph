@@ -729,7 +729,8 @@ namespace __gnu_cxx {
 // cap info for client reconnect
 struct cap_reconnect_t {
   string path;
-  ceph_mds_cap_reconnect capinfo;
+  mutable ceph_mds_cap_reconnect capinfo;
+  bufferlist flockbl;
 
   cap_reconnect_t() {}
   cap_reconnect_t(uint64_t cap_id, inodeno_t pino, const string& p, int w, int i, inodeno_t sr) : 
@@ -743,6 +744,57 @@ struct cap_reconnect_t {
 
   void encode(bufferlist& bl) const {
     ::encode(path, bl);
+    capinfo.flock_len = flockbl.length();
+    ::encode(capinfo, bl);
+    ::encode_nohead(flockbl, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(path, bl);
+    ::decode(capinfo, bl);
+    ::decode_nohead(capinfo.flock_len, flockbl, bl);
+  }
+};
+WRITE_CLASS_ENCODER(cap_reconnect_t)
+
+
+// compat for pre-FLOCK feature
+struct old_ceph_mds_cap_reconnect {
+	__le64 cap_id;
+	__le32 wanted;
+	__le32 issued;
+  __le64 old_size;
+  struct ceph_timespec old_mtime, old_atime;
+	__le64 snaprealm;
+	__le64 pathbase;        /* base ino for our path to this ino */
+} __attribute__ ((packed));
+WRITE_RAW_ENCODER(old_ceph_mds_cap_reconnect)
+
+struct old_cap_reconnect_t {
+  string path;
+  old_ceph_mds_cap_reconnect capinfo;
+
+  const old_cap_reconnect_t& operator=(const cap_reconnect_t& n) {
+    path = n.path;
+    capinfo.cap_id = n.capinfo.cap_id;
+    capinfo.wanted = n.capinfo.wanted;
+    capinfo.issued = n.capinfo.issued;
+    capinfo.snaprealm = n.capinfo.snaprealm;
+    capinfo.pathbase = n.capinfo.pathbase;
+    return *this;
+  }
+  operator cap_reconnect_t() {
+    cap_reconnect_t n;
+    n.path = path;
+    n.capinfo.cap_id = capinfo.cap_id;
+    n.capinfo.wanted = capinfo.wanted;
+    n.capinfo.issued = capinfo.issued;
+    n.capinfo.snaprealm = capinfo.snaprealm;
+    n.capinfo.pathbase = capinfo.pathbase;
+    return n;
+  }
+
+  void encode(bufferlist& bl) const {
+    ::encode(path, bl);
     ::encode(capinfo, bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -750,8 +802,7 @@ struct cap_reconnect_t {
     ::decode(capinfo, bl);
   }
 };
-WRITE_CLASS_ENCODER(cap_reconnect_t)
-
+WRITE_CLASS_ENCODER(old_cap_reconnect_t)
 
 
 // ================================================================
