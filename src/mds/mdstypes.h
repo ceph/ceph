@@ -436,6 +436,7 @@ struct ceph_lock_state_t {
     __u64 removal_start = removal_lock.start;
     __u64 removal_end = removal_start + removal_lock.length - 1;
     __u64 old_lock_end;
+    __s64 old_lock_client = 0;
     ceph_filelock *old_lock;
 
     for (list<ceph_filelock*>::iterator iter = self_overlapping_locks.begin();
@@ -444,12 +445,13 @@ struct ceph_lock_state_t {
       old_lock = *iter;
       old_lock_to_end = (0 == old_lock->length);
       old_lock_end = old_lock->start + old_lock->length - 1;
+      old_lock_client = old_lock->client;
       if (remove_to_end) {
 	if (old_lock->start < removal_start) {
 	  old_lock->length = removal_start - old_lock->start;
 	} else {
 	  held_locks.erase(find_specific_elem(old_lock, held_locks));
-	  --client_held_lock_counts[old_lock->client];
+	  --client_held_lock_counts[old_lock_client];
 	}
       } else if (old_lock_to_end) {
 	ceph_filelock append_lock = *old_lock;
@@ -459,7 +461,7 @@ struct ceph_lock_state_t {
 	++client_held_lock_counts[old_lock->client];
 	if (old_lock->start >= removal_start) {
 	  held_locks.erase(find_specific_elem(old_lock, held_locks));
-	  --client_held_lock_counts[old_lock->client];
+	  --client_held_lock_counts[old_lock_client];
 	} else old_lock->length = removal_start - old_lock->start;
       } else {
 	if (old_lock_end  > removal_end) {
@@ -474,11 +476,11 @@ struct ceph_lock_state_t {
 	  old_lock->length = removal_start - old_lock->start;
 	} else {
 	  held_locks.erase(find_specific_elem(old_lock, held_locks));
-	  --client_held_lock_counts[old_lock->client];
+	  --client_held_lock_counts[old_lock_client];
 	}
       }
-      if (!client_held_lock_counts.count(old_lock->client)) {
-	client_held_lock_counts.erase(old_lock->client);
+      if (!client_held_lock_counts[old_lock_client]) {
+	client_held_lock_counts.erase(old_lock_client);
       }
     }
 
@@ -547,6 +549,7 @@ private:
     __u64 new_lock_start = new_lock.start;
     __u64 new_lock_end = new_lock.start + new_lock.length - 1;
     __u64 old_lock_start, old_lock_end;
+    __s64 old_lock_client = 0;
     ceph_filelock *old_lock;
     for (list<ceph_filelock*>::iterator iter = old_locks.begin();
 	 iter != old_locks.end();
@@ -557,6 +560,7 @@ private:
       old_lock_end = old_lock->start + old_lock->length - 1;
       new_lock_start = new_lock.start;
       new_lock_end = new_lock.start + new_lock.length - 1;
+      old_lock_client = old_lock->client;
       if (new_lock_to_end || old_lock_to_end) {
 	//special code path to deal with a length set at 0
 	if (old_lock->type == new_lock.type) {
@@ -565,14 +569,14 @@ private:
 	    old_lock_start;
 	  new_lock.length = 0;
 	  held_locks.erase(find_specific_elem(old_lock, held_locks));
-	  --client_held_lock_counts[old_lock->client];
+	  --client_held_lock_counts[old_lock_client];
 	} else { //not same type, have to keep any remains of old lock around
 	  if (new_lock_to_end) {
 	    if (old_lock_start < new_lock_start) {
 	      old_lock->length = new_lock_start - old_lock_start;
 	    } else {
 	      held_locks.erase(find_specific_elem(old_lock, held_locks));
-	      --client_held_lock_counts[old_lock->client];
+	      --client_held_lock_counts[old_lock_client];
 	    }
 	  } else { //old lock extends past end of new lock
 	    ceph_filelock appended_lock = *old_lock;
@@ -584,7 +588,7 @@ private:
 	      old_lock->length = new_lock_start - old_lock_start;
 	    } else {
 	      held_locks.erase(find_specific_elem(old_lock, held_locks));
-	      --client_held_lock_counts[old_lock->client];
+	      --client_held_lock_counts[old_lock_client];
 	    }
 	  }
 	}
@@ -596,7 +600,7 @@ private:
 	    old_lock_end;
 	  new_lock.length = new_end - new_lock.start + 1;
 	  held_locks.erase(find_specific_elem(old_lock, held_locks));
-	  --client_held_lock_counts[old_lock->client];
+	  --client_held_lock_counts[old_lock_client];
 	} else { //we'll have to update sizes and maybe make new locks
 	  if (old_lock_end > new_lock_end) { //add extra lock after new_lock
 	    ceph_filelock appended_lock = *old_lock;
@@ -611,12 +615,12 @@ private:
 	  } else { //old_lock starts inside new_lock, so remove it
 	    //if it extended past new_lock_end it's been replaced
 	    held_locks.erase(find_specific_elem(old_lock, held_locks));
-	    --client_held_lock_counts[old_lock->client];
+	    --client_held_lock_counts[old_lock_client];
 	  }
 	}
       }
-      if (!client_held_lock_counts.count(old_lock->client)) {
-	client_held_lock_counts.erase(old_lock->client);
+      if (!client_held_lock_counts[old_lock_client]) {
+	client_held_lock_counts.erase(old_lock_client);
       }
     }
 
@@ -625,6 +629,7 @@ private:
 	 iter != neighbor_locks.end();
 	 ++iter) {
       old_lock = *iter;
+      old_lock_client = old_lock->client;
       /* because if it's a neibhoring lock there can't be any self-overlapping
 	 locks that covered it */
       if (old_lock->type == new_lock.type) { //merge them
@@ -646,6 +651,10 @@ private:
 	  }
 	}
 	held_locks.erase(find_specific_elem(old_lock, held_locks));
+	--client_held_lock_counts[old_lock_client];
+      }
+      if (!client_held_lock_counts[old_lock_client]) {
+	client_held_lock_counts.erase(old_lock_client);
       }
     }
   }
