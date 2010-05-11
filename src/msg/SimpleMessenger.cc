@@ -1641,6 +1641,9 @@ void SimpleMessenger::Pipe::writer()
 
         dout(20) << "writer encoding " << m->get_seq() << " " << m << " " << *m << dendl;
 
+	// associate message with Connection (for benefit of encode_payload)
+	m->set_connection(connection_state->get());
+
 	// encode and copy out of *m
 	m->encode();
 

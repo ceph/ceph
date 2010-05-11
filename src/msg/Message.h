@@ -272,7 +272,11 @@ public:
   }
 
   Connection *get_connection() { return connection; }
-  void set_connection(Connection *c) { connection = c; }
+  void set_connection(Connection *c) {
+    if (connection)
+      connection->put();
+    connection = c;
+  }
  
   ceph_msg_header &get_header() { return header; }
   void set_header(const ceph_msg_header &e) { header = e; }
