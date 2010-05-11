@@ -1926,6 +1926,7 @@ int SimpleMessenger::Pipe::write_message(Message *m)
 {
   ceph_msg_header& header = m->get_header();
   ceph_msg_footer& footer = m->get_footer();
+  int ret;
 
   // get envelope, buffers
   header.front_len = m->get_payload().length();
@@ -1943,7 +1944,7 @@ int SimpleMessenger::Pipe::write_message(Message *m)
   // set up msghdr and iovecs
   struct msghdr msg;
   memset(&msg, 0, sizeof(msg));
-  struct iovec msgvec[3 + blist.buffers().size()];  // conservative upper bound
+  struct iovec *msgvec = new iovec[3 + blist.buffers().size()];  // conservative upper bound
   msg.msg_iov = msgvec;
   int msglen = 0;
   
@@ -1984,7 +1985,8 @@ int SimpleMessenger::Pipe::write_message(Message *m)
   while (left > 0) {
     int donow = MIN(left, (int)pb->length()-b_off);
     if (donow == 0) {
-      dout(0) << "donow = " << donow << " left " << left << " pb->length " << pb->length() << " b_off " << b_off << dendl;
+      dout(0) << "donow = " << donow << " left " << left << " pb->length " << pb->length()
+	      << " b_off " << b_off << dendl;
     }
     assert(donow > 0);
     dout(30) << " bl_pos " << bl_pos << " b_off " << b_off
@@ -1995,7 +1997,7 @@ int SimpleMessenger::Pipe::write_message(Message *m)
     
     if (msg.msg_iovlen >= IOV_MAX-2) {
       if (do_sendmsg(sd, &msg, msglen, true)) 
-	return -1;	
+	goto fail;
       
       // and restart the iov
       msg.msg_iov = msgvec;
@@ -2012,7 +2014,8 @@ int SimpleMessenger::Pipe::write_message(Message *m)
     assert(left >= 0);
     b_off += donow;
     bl_pos += donow;
-    if (left == 0) break;
+    if (left == 0)
+      break;
     while (b_off == (int)pb->length()) {
       pb++;
       b_off = 0;
@@ -2028,9 +2031,17 @@ int SimpleMessenger::Pipe::write_message(Message *m)
 
   // send
   if (do_sendmsg(sd, &msg, msglen)) 
-    return -1;	
+    goto fail;
 
-  return 0;
+  ret = 0;
+
+ out:
+  delete[] msgvec;
+  return ret;
+
+ fail:
+  ret = -1;
+  goto out;
 }
 
 
