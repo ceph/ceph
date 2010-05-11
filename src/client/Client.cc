@@ -1420,7 +1420,7 @@ void Client::send_reconnect(int mds)
 		 path.get_ino(), path.get_path(),   // ino
 		 in->caps_wanted(), // wanted
 		 in->caps[mds]->issued,     // issued
-		 in->size, in->mtime, in->atime, in->snaprealm->ino);
+		 in->snaprealm->ino);
 
       if (did_snaprealm.count(in->snaprealm->ino) == 0) {
 	dout(10) << " snaprealm " << *in->snaprealm << dendl;
