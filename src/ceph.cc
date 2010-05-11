@@ -590,6 +590,8 @@ int main(int argc, const char **argv, const char *envp[])
     return -1;
   }
 
+  int ret = 0;
+
   if (observe) {
     lock.Lock();
     send_observe_requests();
@@ -599,7 +601,7 @@ int main(int argc, const char **argv, const char *envp[])
       
       string rs;
       bufferlist odata;
-      do_command(vcmd, indata, rs, odata);
+      ret = do_command(vcmd, indata, rs, odata);
       
       int len = odata.length();
       if (len) {
@@ -626,6 +628,6 @@ int main(int argc, const char **argv, const char *envp[])
   // wait for messenger to finish
   messenger->wait();
   messenger->destroy();
-  return 0;
+  return ret;
 }
 
