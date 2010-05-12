@@ -254,7 +254,6 @@ int main(int argc, const char **argv)
       generic_dout(0) << "wrote " << outdata.length() << " byte payload to " << nargs[2] << dendl;
     }
   }
-
   else if (strcmp(nargs[0], "put") == 0) {
     if (!pool || nargs.size() < 3)
       usage();
@@ -291,6 +290,33 @@ int main(int argc, const char **argv)
       cerr << "error removing " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       goto out;
     }
+  }
+
+  else if (strcmp(nargs[0], "tmap") == 0) {
+    if (nargs.size() < 3)
+      usage();
+    if (strcmp(nargs[1], "dump") == 0) {
+      string oid(nargs[2]);
+      ret = rados.read(p, oid, 0, outdata, 0);
+      if (ret < 0) {
+	cerr << "error reading " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+	goto out;
+      }
+      bufferlist::iterator p = outdata.begin();
+      bufferlist header;
+      map<string, bufferlist> kv;
+      ::decode(header, p);
+      ::decode_head(kv, p);
+      cout << "header (" << header.length() << " bytes):\n";
+      header.hexdump(cout);
+      cout << "\n";
+      cout << kv.size() << " keys\n";
+      for (map<string,bufferlist>::iterator q = kv.begin(); q != kv.end(); q++) {
+	cout << "key '" << q->first << "' (" << q->second.length() << " bytes):\n";
+	q->second.hexdump(cout);
+	cout << "\n";
+      }
+    }    
   }
 
   else if (strcmp(nargs[0], "mkpool") == 0) {
