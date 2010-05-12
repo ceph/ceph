@@ -950,7 +950,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
     // modify?
     bool is_modify;
     string cname, mname;
-dout(0) << "osd_op.data.length=" << osd_op.data.length() << dendl;
     bufferlist::iterator bp = osd_op.data.begin();
     switch (op.op) {
     case CEPH_OSD_OP_CALL:
@@ -1106,6 +1105,7 @@ dout(0) << "osd_op.data.length=" << osd_op.data.length() << dendl;
 	string aname;
 	bp.copy(op.xattr.name_len, aname);
 	string name = "_" + aname;
+	name[op.xattr.name_len + 1] = 0;
 	
 	bufferlist xattr;
 	result = osd->store->getattr(coll_t::build_pg_coll(info.pgid), soid, name.c_str(), xattr);
@@ -1117,6 +1117,7 @@ dout(0) << "osd_op.data.length=" << osd_op.data.length() << dendl;
 	  {
 	    string val;
 	    bp.copy(op.xattr.value_len, val);
+	    val[op.xattr.value_len] = 0;
 	    dout(10) << "CEPH_OSD_OP_CMPXATTR name=" << name << " val=" << val
 		     << " op=" << (int)op.xattr.cmp_op << " mode=" << (int)op.xattr.cmp_mode << dendl;
 	    result = do_xattr_cmp_str(op.xattr.cmp_op, val, xattr);
