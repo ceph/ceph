@@ -100,7 +100,7 @@ int ceph_file_layout_is_valid(const struct ceph_file_layout *layout);
 #define CEPH_AUTH_NONE	 	0x1
 #define CEPH_AUTH_CEPHX	 	0x2
 
-#define CEPH_AUTH_UID_DEFAULT (__u64) -1
+#define CEPH_AUTH_UID_DEFAULT ((__u64) -1)
 
 
 /*********************************************
