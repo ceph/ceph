@@ -1985,6 +1985,28 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     }
   }
 
+  if (dirty & CEPH_CAP_FLOCK_EXCL) {
+    int num_locks;
+    bufferlist::iterator bli = m->flockbl.begin();
+    ::decode(num_locks, bli);
+    for ( int i=0; i < num_locks; ++i) {
+      ceph_filelock decoded_lock;
+      ::decode(decoded_lock, bli);
+      in->fcntl_locks.held_locks.
+	insert(pair<__u64, ceph_filelock>(decoded_lock.start, decoded_lock));
+      ++in->fcntl_locks.client_held_lock_counts[decoded_lock.client];
+    }
+    ::decode(num_locks, bli);
+    for ( int i=0; i < num_locks; ++i) {
+      ceph_filelock decoded_lock;
+      ::decode(decoded_lock, bli);
+      in->flock_locks.held_locks.
+	insert(pair<__u64, ceph_filelock>(decoded_lock.start, decoded_lock));
+      ++in->flock_locks.client_held_lock_counts[decoded_lock.client];
+    }
+  }
+  dirty &= ~(CEPH_CAP_FLOCK_SHARED|CEPH_CAP_FLOCK_EXCL);
+
   if (!dirty && !change_max)
     return false;
 
