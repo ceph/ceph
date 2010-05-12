@@ -358,8 +358,8 @@ struct ceph_lock_state_t {
    */
   bool add_lock(ceph_filelock& new_lock, bool wait_on_fail) {
     bool ret = false;
-    list<ceph_filelock*> overlapping_locks, self_overlapping_locks,
-      neighbor_locks;
+    list<multimap<uint64_t, ceph_filelock>::iterator>
+      overlapping_locks, self_overlapping_locks, neighbor_locks;
     // first, get any overlapping locks and split them into owned-by-us and not
     if(get_overlapping_locks(new_lock, overlapping_locks, &neighbor_locks)) {
       split_by_owner(new_lock, overlapping_locks, self_overlapping_locks);
@@ -389,7 +389,8 @@ struct ceph_lock_state_t {
       }
     } else { //no overlapping locks except our own
       adjust_locks(self_overlapping_locks, new_lock, neighbor_locks);
-      held_locks.insert(pair<uint64_t, ceph_filelock>(new_lock.start, new_lock));
+      held_locks.insert(pair<uint64_t, ceph_filelock>
+			(new_lock.start, new_lock));
       ret = true;
     }
     if (ret) ++client_held_lock_counts[new_lock.client];
@@ -398,13 +399,14 @@ struct ceph_lock_state_t {
   }
 
   void look_for_lock(ceph_filelock& testing_lock) {
-    list<ceph_filelock*> overlapping_locks, self_overlapping_locks;
+    list<multimap<uint64_t, ceph_filelock>::iterator> overlapping_locks,
+      self_overlapping_locks;
     if (get_overlapping_locks(testing_lock, overlapping_locks)) {
       split_by_owner(testing_lock, overlapping_locks, self_overlapping_locks);
     }
     if (!overlapping_locks.empty()) { //somebody else owns overlapping lock
       if (CEPH_LOCK_EXCL == testing_lock.type) { //any lock blocks it
-	testing_lock = *(*overlapping_locks.begin());
+	testing_lock = (*overlapping_locks.begin())->second;
       } else {
 	ceph_filelock *blocking_lock;
 	if ((blocking_lock = contains_exclusive_lock(overlapping_locks))) {
@@ -425,8 +427,8 @@ struct ceph_lock_state_t {
    */
   void remove_lock(ceph_filelock removal_lock,
 		   list<ceph_filelock>& activated_locks) {
-    list<ceph_filelock*> overlapping_locks, self_overlapping_locks,
-      crossed_waiting_locks;
+    list<multimap<uint64_t, ceph_filelock>::iterator> overlapping_locks,
+      self_overlapping_locks, crossed_waiting_locks;
     if (get_overlapping_locks(removal_lock, overlapping_locks)) {
       split_by_owner(removal_lock, overlapping_locks, self_overlapping_locks);
     } else dout(0) << "attempt to remove lock at " << removal_lock.start
@@ -439,10 +441,11 @@ struct ceph_lock_state_t {
     __s64 old_lock_client = 0;
     ceph_filelock *old_lock;
 
-    for (list<ceph_filelock*>::iterator iter = self_overlapping_locks.begin();
+    for (list<multimap<uint64_t, ceph_filelock>::iterator>::iterator
+	   iter = self_overlapping_locks.begin();
 	 iter != self_overlapping_locks.end();
 	 ++iter) {
-      old_lock = *iter;
+      old_lock = &(*iter)->second;
       old_lock_to_end = (0 == old_lock->length);
       old_lock_end = old_lock->start + old_lock->length - 1;
       old_lock_client = old_lock->client;
@@ -450,7 +453,7 @@ struct ceph_lock_state_t {
 	if (old_lock->start < removal_start) {
 	  old_lock->length = removal_start - old_lock->start;
 	} else {
-	  held_locks.erase(find_specific_elem(old_lock, held_locks));
+	  held_locks.erase(*iter);
 	  --client_held_lock_counts[old_lock_client];
 	}
       } else if (old_lock_to_end) {
@@ -460,7 +463,7 @@ struct ceph_lock_state_t {
 			  (append_lock.start, append_lock));
 	++client_held_lock_counts[old_lock->client];
 	if (old_lock->start >= removal_start) {
-	  held_locks.erase(find_specific_elem(old_lock, held_locks));
+	  held_locks.erase(*iter);
 	  --client_held_lock_counts[old_lock_client];
 	} else old_lock->length = removal_start - old_lock->start;
       } else {
@@ -475,7 +478,7 @@ struct ceph_lock_state_t {
 	if (old_lock->start < removal_start) {
 	  old_lock->length = removal_start - old_lock->start;
 	} else {
-	  held_locks.erase(find_specific_elem(old_lock, held_locks));
+	  held_locks.erase(*iter);
 	  --client_held_lock_counts[old_lock_client];
 	}
       }
@@ -496,11 +499,12 @@ struct ceph_lock_state_t {
 	In the future, should probably set this up to detect some
 	guaranteed blocks and do fewer map lookups.
        */
-      for (list<ceph_filelock*>::iterator iter = crossed_waiting_locks.begin();
+      for (list<multimap<uint64_t, ceph_filelock>::iterator>::iterator
+	     iter = crossed_waiting_locks.begin();
 	   iter != crossed_waiting_locks.end();
 	   ++iter) {
-	ceph_filelock cur_lock = *(*iter);
-	waiting_locks.erase(find_specific_elem(*iter, waiting_locks));
+	ceph_filelock cur_lock = (*iter)->second;
+	waiting_locks.erase(*iter);
 	--client_waiting_lock_counts[cur_lock.client];
 	if (!client_waiting_lock_counts.count(cur_lock.client)) {
 	  client_waiting_lock_counts.erase(cur_lock.client);
@@ -542,8 +546,10 @@ private:
    * old_locks: list of all locks currently held by same
    *    client/process that overlap new_lock.
    */
-  void adjust_locks(list<ceph_filelock*> old_locks, ceph_filelock& new_lock,
-		    list<ceph_filelock*> neighbor_locks) {
+  void adjust_locks(list<multimap<uint64_t, ceph_filelock>::iterator> old_locks,
+		    ceph_filelock& new_lock,
+		    list<multimap<uint64_t, ceph_filelock>::iterator>
+		    neighbor_locks) {
     bool new_lock_to_end = (0 == new_lock.length);
     bool old_lock_to_end;
     uint64_t new_lock_start = new_lock.start;
@@ -551,10 +557,11 @@ private:
     uint64_t old_lock_start, old_lock_end;
     __s64 old_lock_client = 0;
     ceph_filelock *old_lock;
-    for (list<ceph_filelock*>::iterator iter = old_locks.begin();
+    for (list<multimap<uint64_t, ceph_filelock>::iterator>::iterator
+	   iter = old_locks.begin();
 	 iter != old_locks.end();
 	 ++iter) {
-      old_lock = *iter;
+      old_lock = &(*iter)->second;
       old_lock_to_end = (0 == old_lock->length);
       old_lock_start = old_lock->start;
       old_lock_end = old_lock->start + old_lock->length - 1;
@@ -568,14 +575,14 @@ private:
 	  new_lock.start = (new_lock_start < old_lock_start) ? new_lock_start :
 	    old_lock_start;
 	  new_lock.length = 0;
-	  held_locks.erase(find_specific_elem(old_lock, held_locks));
+	  held_locks.erase(*iter);
 	  --client_held_lock_counts[old_lock_client];
 	} else { //not same type, have to keep any remains of old lock around
 	  if (new_lock_to_end) {
 	    if (old_lock_start < new_lock_start) {
 	      old_lock->length = new_lock_start - old_lock_start;
 	    } else {
-	      held_locks.erase(find_specific_elem(old_lock, held_locks));
+	      held_locks.erase(*iter);
 	      --client_held_lock_counts[old_lock_client];
 	    }
 	  } else { //old lock extends past end of new lock
@@ -587,7 +594,7 @@ private:
 	    if (old_lock_start < new_lock_start) {
 	      old_lock->length = new_lock_start - old_lock_start;
 	    } else {
-	      held_locks.erase(find_specific_elem(old_lock, held_locks));
+	      held_locks.erase(*iter);
 	      --client_held_lock_counts[old_lock_client];
 	    }
 	  }
@@ -599,7 +606,7 @@ private:
 	  int new_end = (new_lock_end > old_lock_end) ? new_lock_end :
 	    old_lock_end;
 	  new_lock.length = new_end - new_lock.start + 1;
-	  held_locks.erase(find_specific_elem(old_lock, held_locks));
+	  held_locks.erase(*iter);
 	  --client_held_lock_counts[old_lock_client];
 	} else { //we'll have to update sizes and maybe make new locks
 	  if (old_lock_end > new_lock_end) { //add extra lock after new_lock
@@ -614,7 +621,7 @@ private:
 	    old_lock->length = new_lock_start - old_lock_start;
 	  } else { //old_lock starts inside new_lock, so remove it
 	    //if it extended past new_lock_end it's been replaced
-	    held_locks.erase(find_specific_elem(old_lock, held_locks));
+	    held_locks.erase(*iter);
 	    --client_held_lock_counts[old_lock_client];
 	  }
 	}
@@ -625,10 +632,11 @@ private:
     }
 
     //make sure to coalesce neighboring locks
-    for (list<ceph_filelock*>::iterator iter = neighbor_locks.begin();
+    for (list<multimap<uint64_t, ceph_filelock>::iterator>::iterator
+	   iter = neighbor_locks.begin();
 	 iter != neighbor_locks.end();
 	 ++iter) {
-      old_lock = *iter;
+      old_lock = &(*iter)->second;
       old_lock_client = old_lock->client;
       /* because if it's a neibhoring lock there can't be any self-overlapping
 	 locks that covered it */
@@ -650,7 +658,7 @@ private:
 	    new_lock.length += old_lock->length;
 	  }
 	}
-	held_locks.erase(find_specific_elem(old_lock, held_locks));
+	held_locks.erase(*iter);
 	--client_held_lock_counts[old_lock_client];
       }
       if (!client_held_lock_counts[old_lock_client]) {
@@ -667,19 +675,6 @@ private:
 	locks.erase(iter++);
       } else ++iter;
     }
-  }
-
-  //obviously, this is a skeleton for compilation purposes.
-  multimap<uint64_t, ceph_filelock>::iterator
-  find_specific_elem(ceph_filelock *elem, multimap<uint64_t, ceph_filelock>& map) {
-    multimap<uint64_t, ceph_filelock>::iterator iter = map.find(elem->start);
-    while (iter != map.end()) {
-      if (memcmp(&iter->second, elem, sizeof(ceph_filelock)) == 0) return iter;
-      if (iter->first != elem->start) return map.end();
-      ++iter;
-    }
-    assert(0);//shouldn't get here
-    return map.end();
   }
 
   //get last lock prior to start position
@@ -738,8 +733,8 @@ private:
    * Returns: true if at least one lock overlaps.
    */
   bool get_overlapping_locks(ceph_filelock& lock,
-			     list<ceph_filelock*>& overlaps,
-			     list<ceph_filelock*>* self_neighbors) {
+			     list<multimap<uint64_t, ceph_filelock>::iterator> & overlaps,
+			     list<multimap<uint64_t, ceph_filelock>::iterator> *self_neighbors) {
     dout(0) << "get_overlapping_locks" << dendl;
     // create a lock starting one earlier and ending one later
     // to check for neighbors
@@ -752,12 +747,12 @@ private:
     bool cont = iter != held_locks.end();
     while(cont) {
       if (share_space(iter, lock)) {
-	overlaps.push_front(&iter->second);
+	overlaps.push_front(iter);
       } else if (self_neighbors &&
 		 (neighbor_check_lock.client == iter->second.client) &&
 		 (neighbor_check_lock.pid == iter->second.pid) &&
 		 share_space(iter, neighbor_check_lock)) {
-	self_neighbors->push_front(&iter->second);
+	self_neighbors->push_front(iter);
       }
       if ((iter->first < lock.start) && (CEPH_LOCK_EXCL == iter->second.type)) {
 	//can't be any more overlapping locks or they'd interfere with this one
@@ -767,9 +762,9 @@ private:
     }
     return !overlaps.empty();
   }
-
+  
   bool get_overlapping_locks(ceph_filelock& lock,
-			     list<ceph_filelock*>& overlaps) {
+			     list<multimap<uint64_t, ceph_filelock>::iterator>& overlaps) {
     return get_overlapping_locks(lock, overlaps, NULL);
   }
 
@@ -780,13 +775,14 @@ private:
    * Returns: true if at least one waiting_lock overlaps
    */
   bool get_waiting_overlaps(ceph_filelock& lock,
-			    list<ceph_filelock*>& overlaps) {
+			    list<multimap<uint64_t, ceph_filelock>::iterator>&
+			    overlaps) {
     dout(0) << "get_waiting_overlaps" << dendl;
     multimap<uint64_t, ceph_filelock>::iterator iter =
       get_last_before(lock.start + lock.length - 1, waiting_locks);
     bool cont = iter != waiting_locks.end();
     while(cont) {
-      if (share_space(iter, lock)) overlaps.push_front(&iter->second);
+      if (share_space(iter, lock)) overlaps.push_front(iter);
       if (held_locks.begin() == iter) cont = false;
       --iter;
     }
@@ -801,24 +797,27 @@ private:
    *        Will have all locks owned by owner removed
    * owned_locks: an empty list, to be filled with the locks owned by owner
    */
-  void split_by_owner(ceph_filelock& owner, list<ceph_filelock*>& locks,
-		       list<ceph_filelock*>& owned_locks) {
-    list<ceph_filelock*>::iterator iter = locks.begin();
+  void split_by_owner(ceph_filelock& owner,
+		      list<multimap<uint64_t, ceph_filelock>::iterator> & locks,
+		      list<multimap<uint64_t, ceph_filelock>::iterator> & owned_locks) {
+    list<multimap<uint64_t, ceph_filelock>::iterator>::iterator
+      iter = locks.begin();
     while (iter != locks.end()) {
-      if ((*iter)->client == owner.client &&
-	  (*iter)->pid_namespace == owner.pid_namespace &&
-	  (*iter)->pid == owner.pid) {
+      if ((*iter)->second.client == owner.client &&
+	  (*iter)->second.pid_namespace == owner.pid_namespace &&
+	  (*iter)->second.pid == owner.pid) {
 	owned_locks.push_back(*iter);
 	iter = locks.erase(iter);
       } else ++iter;
     }
   }
 
-  ceph_filelock *contains_exclusive_lock(list<ceph_filelock*>& locks) {
-    for (list<ceph_filelock*>::iterator iter = locks.begin();
+  ceph_filelock *contains_exclusive_lock(list<multimap<uint64_t, ceph_filelock>::iterator>& locks) {
+    for (list<multimap<uint64_t, ceph_filelock>::iterator>::iterator
+	   iter = locks.begin();
 	 iter != locks.end();
 	 ++iter) {
-      if (CEPH_LOCK_EXCL == (*iter)->type) return *iter;
+      if (CEPH_LOCK_EXCL == (*iter)->second.type) return &(*iter)->second;
     }
     return NULL;
   }
