@@ -3134,6 +3134,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     register_object_context(obc);
     obc->ondisk_write_lock();
     
+    obc->obs.exists = true;
     obc->obs.oi.decode(oibl);
 
     onreadable = new C_OSD_WrotePushedObject(this, t, obc);
