@@ -306,7 +306,7 @@ int main(int argc, const char **argv)
       bufferlist header;
       map<string, bufferlist> kv;
       ::decode(header, p);
-      ::decode_head(kv, p);
+      ::decode(kv, p);
       cout << "header (" << header.length() << " bytes):\n";
       header.hexdump(cout);
       cout << "\n";
