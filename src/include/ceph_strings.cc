@@ -175,7 +175,8 @@ const char *ceph_snap_op_name(int o)
 	return "???";
 }
 
-const char *ceph_pool_op_name(int op) {
+const char *ceph_pool_op_name(int op)
+{
   switch (op) {
   case POOL_OP_CREATE:
     return "create pool";
