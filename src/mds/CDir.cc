@@ -1327,7 +1327,11 @@ void CDir::_fetched(bufferlist &bl)
       }
     }
   }
-  assert(p.end());
+  if (!p.end()) {
+    stringstream ss;
+    ss << "dir " << dirfrag() << " has " << bl.length() - p.get_off() << " extra bytes";
+    cache->mds->logclient.log(LOG_WARN, ss);
+  }
 
   //cache->mds->logger->inc("newin", num_new_inodes_loaded);
   //hack_num_accessed = 0;
