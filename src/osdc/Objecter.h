@@ -188,7 +188,9 @@ class Objecter {
 
   void maybe_request_map();
 
-  version_t last_seen_version;
+  version_t last_seen_osdmap_version;
+  version_t last_seen_pgmap_version;
+
   Mutex &client_lock;
   SafeTimer timer;
   
@@ -410,7 +412,8 @@ public:
     messenger(m), monc(mc), osdmap(om),
     last_tid(0), client_inc(-1),
     num_unacked(0), num_uncommitted(0),
-    last_seen_version(0),
+    last_seen_osdmap_version(0),
+    last_seen_pgmap_version(0),
     client_lock(l), timer(l)
   { }
   ~Objecter() { }
