@@ -1525,7 +1525,7 @@ void OSDMonitor::_pool_op(MPoolOp *m, int replyCode, epoch_t epoch)
 {
   dout(20) << "_pool_op returning with replyCode " << replyCode << dendl;
   MPoolOpReply *reply = new MPoolOpReply(m->fsid, m->get_tid(),
-					 replyCode, epoch, mon->get_epoch());
+					 replyCode, epoch, paxos->get_version());
   mon->send_reply(m, reply);
   delete m;
 }
