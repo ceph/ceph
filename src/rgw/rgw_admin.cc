@@ -31,6 +31,7 @@ void usage()
   cerr << "   --bucket=<bucket>" << std::endl;
   cerr << "   --object=<object>" << std::endl;
   generic_usage();
+  exit(1);
 }
 
 int gen_rand_base64(char *dest, int size) /* size should be the required string size + 1 */
