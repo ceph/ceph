@@ -1986,7 +1986,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   }
 
   if (dirty & CEPH_CAP_FLOCK_EXCL) {
-    int num_locks;
+    int32_t num_locks;
     bufferlist::iterator bli = m->flockbl.begin();
     ::decode(num_locks, bli);
     for ( int i=0; i < num_locks; ++i) {
