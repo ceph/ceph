@@ -85,10 +85,11 @@ public:
 
   struct PoolCtx {
     int poolid;
+    string name;
     snapid_t snap_seq;
     SnapContext snapc;
 
-    PoolCtx(int pid, snapid_t s = CEPH_NOSNAP) : poolid(pid), snap_seq(s) {}
+    PoolCtx(int pid, const char *n, snapid_t s = CEPH_NOSNAP) : poolid(pid), name(n), snap_seq(s) {}
 
     void set_snap(snapid_t s) {
       if (!s)
@@ -1359,7 +1360,7 @@ int Rados::open_pool(const char *name, rados_pool_t *pool)
 {
   int poolid = ((RadosClient *)client)->lookup_pool(name);
   if (poolid >= 0) {
-    RadosClient::PoolCtx *ctx = new RadosClient::PoolCtx(poolid, CEPH_NOSNAP);
+    RadosClient::PoolCtx *ctx = new RadosClient::PoolCtx(poolid, name, CEPH_NOSNAP);
     if (!ctx)
       return -ENOMEM;
 
@@ -1575,7 +1576,7 @@ extern "C" int rados_open_pool(const char *name, rados_pool_t *pool)
 {
   int poolid = radosp->lookup_pool(name);
   if (poolid >= 0) {
-    RadosClient::PoolCtx *ctx = new RadosClient::PoolCtx(poolid, CEPH_NOSNAP);
+    RadosClient::PoolCtx *ctx = new RadosClient::PoolCtx(poolid, name, CEPH_NOSNAP);
     if (!ctx)
       return -ENOMEM;
     *pool = ctx;
@@ -1590,6 +1591,33 @@ extern "C" int rados_close_pool(rados_pool_t pool)
   delete ctx;
   return 0;
 }
+
+extern "C" int rados_stat_pool(rados_pool_t pool, struct rados_pool_stat_t *stats)
+{
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  list<string> ls;
+  ls.push_back(ctx->name);
+  map<string, ::pool_stat_t> rawresult;
+
+  int err = radosp->get_pool_stats(ls, rawresult);
+  if (err)
+    return err;
+
+  ::pool_stat_t& r = rawresult[ctx->name];
+  stats->num_kb = r.num_kb;
+  stats->num_bytes = r.num_bytes;
+  stats->num_objects = r.num_objects;
+  stats->num_object_clones = r.num_object_clones;
+  stats->num_object_copies = r.num_object_copies;
+  stats->num_objects_missing_on_primary = r.num_objects_missing_on_primary;
+  stats->num_objects_degraded = r.num_objects_degraded;
+  stats->num_rd = r.num_rd;
+  stats->num_rd_kb = r.num_rd_kb;
+  stats->num_wr = r.num_wr;
+  stats->num_wr_kb = r.num_wr_kb;
+  return 0;
+}
+
 
 extern "C" void rados_set_snap(rados_pool_t pool, rados_snap_t seq)
 {

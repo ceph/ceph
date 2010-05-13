@@ -38,6 +38,8 @@ int rados_open_pool(const char *name, rados_pool_t *pool);
 int rados_close_pool(rados_pool_t pool);
 int rados_lookup_pool(const char *name);
 
+int rados_stat_pool(rados_pool_t pool, struct rados_pool_stat_t *stats);
+
 void rados_set_snap(rados_pool_t pool, rados_snap_t snap);
 
 int rados_create_pool(const char *name);
