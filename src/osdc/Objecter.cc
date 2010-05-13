@@ -803,7 +803,7 @@ void Objecter::pool_op_submit(PoolOp *op) {
   dout(10) << "pool_op_submit " << op->tid << dendl;
   MPoolOp *m = new MPoolOp(monc->get_fsid(), op->tid, op->pool,
 			   op->name, op->pool_op,
-			   op->auid, last_seen_version);
+			   op->auid, last_seen_osdmap_version);
   if (op->snapid) m->snapid = op->snapid;
   monc->send_mon_message(m);
   op->last_submit = g_clock.now();
@@ -827,9 +827,9 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
       op->blp->claim(*m->response_data);
       m->response_data = NULL;
     }
-    if (m->version > last_seen_version)
-      last_seen_version = m->version;
-    if (osdmap->get_epoch() < m->epoch) {
+    if (m->version > last_seen_osdmap_version)
+      last_seen_osdmap_version = m->version;
+    if (m->replyCode == 0 && osdmap->get_epoch() < m->epoch) {
       dout(20) << "waiting for client to reach epoch " << m->epoch << " before calling back" << dendl;
       wait_for_new_map(op->onfinish, m->epoch, m->replyCode);
     }
@@ -868,7 +868,7 @@ void Objecter::get_pool_stats(list<string>& pools, map<string,pool_stat_t> *resu
 void Objecter::poolstat_submit(PoolStatOp *op)
 {
   dout(10) << "poolstat_submit " << op->tid << dendl;
-  monc->send_mon_message(new MGetPoolStats(monc->get_fsid(), op->tid, op->pools, last_seen_version));
+  monc->send_mon_message(new MGetPoolStats(monc->get_fsid(), op->tid, op->pools, last_seen_pgmap_version));
   op->last_submit = g_clock.now();
 }
 
@@ -881,8 +881,8 @@ void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
     PoolStatOp *op = op_poolstat[tid];
     dout(10) << "have request " << tid << " at " << op << dendl;
     *op->pool_stats = m->pool_stats;
-    if (m->version > last_seen_version)
-      last_seen_version = m->version;
+    if (m->version > last_seen_pgmap_version)
+      last_seen_pgmap_version = m->version;
     op->onfinish->finish(0);
     delete op->onfinish;
     op_poolstat.erase(tid);
@@ -910,7 +910,7 @@ void Objecter::get_fs_stats(ceph_statfs& result, Context *onfinish) {
 void Objecter::fs_stats_submit(StatfsOp *op)
 {
   dout(10) << "fs_stats_submit" << op->tid << dendl;
-  monc->send_mon_message(new MStatfs(monc->get_fsid(), op->tid, last_seen_version));
+  monc->send_mon_message(new MStatfs(monc->get_fsid(), op->tid, last_seen_pgmap_version));
   op->last_submit = g_clock.now();
 }
 
@@ -922,8 +922,8 @@ void Objecter::handle_fs_stats_reply(MStatfsReply *m) {
     StatfsOp *op = op_statfs[tid];
     dout(10) << "have request " << tid << " at " << op << dendl;
     *(op->stats) = m->h.st;
-    if (m->h.version > last_seen_version)
-      last_seen_version = m->h.version;
+    if (m->h.version > last_seen_pgmap_version)
+      last_seen_pgmap_version = m->h.version;
     op->onfinish->finish(0);
     delete op->onfinish;
     op_statfs.erase(tid);
