@@ -209,7 +209,7 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   }
 
   // fill out stfs
-  reply = new MStatfsReply(mon->monmap->fsid, statfs->get_tid(), mon->get_epoch());
+  reply = new MStatfsReply(mon->monmap->fsid, statfs->get_tid(), paxos->get_version());
 
   // these are in KB.
   reply->h.st.kb = pg_map.osd_sum.kb;
