@@ -1985,7 +1985,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     }
   }
 
-  if (dirty & CEPH_CAP_FLOCK_EXCL) {
+  if (m->flockbl.length()) {
     int32_t num_locks;
     bufferlist::iterator bli = m->flockbl.begin();
     ::decode(num_locks, bli);
@@ -2005,7 +2005,6 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
       ++in->flock_locks.client_held_lock_counts[decoded_lock.client];
     }
   }
-  dirty &= ~(CEPH_CAP_FLOCK_SHARED|CEPH_CAP_FLOCK_EXCL);
 
   if (!dirty && !change_max)
     return false;
