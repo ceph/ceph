@@ -35,6 +35,11 @@ int main(int argc, const char **argv)
   r = rados_open_pool("foo", &pool);
   printf("rados_open_pool = %d, pool = %p\n", r, pool);
 
+  /* stat */
+  struct rados_pool_stat_t st;
+  r = rados_stat_pool(pool, &st);
+  printf("rados_stat_pool = %d, %lld KB, %lld objects\n", r, (long long)st.num_kb, (long long)st.num_objects);
+
   /* snapshots */
   r = rados_snap_create(pool, "snap1");
   printf("rados_snap_create snap1 = %d\n", r);
@@ -89,8 +94,10 @@ int main(int argc, const char **argv)
 
   /* aio */
   rados_completion_t a, b;
-  rados_aio_write(pool, "a", 0, buf, 100, &a);
-  rados_aio_write(pool, "../b/bb_bb_bb\\foo\\bar", 0, buf, 100, &b);
+  rados_aio_create_completion(0, 0, 0, &a);
+  rados_aio_create_completion(0, 0, 0, &b);
+  rados_aio_write(pool, "a", 0, buf, 100, a);
+  rados_aio_write(pool, "../b/bb_bb_bb\\foo\\bar", 0, buf, 100, b);
   rados_aio_wait_for_safe(a);
   printf("a safe\n");
   rados_aio_wait_for_safe(b);
@@ -108,6 +115,10 @@ int main(int argc, const char **argv)
   while (rados_list_objects_next(h, &poolname) == 0)
     printf("rados_list_objects_next got object '%s'\n", poolname);
   rados_list_objects_close(h);
+
+  /* stat */
+  r = rados_stat_pool(pool, &st);
+  printf("rados_stat_pool = %d, %lld KB, %lld objects\n", r, (long long)st.num_kb, (long long)st.num_objects);
 
   /* delete a pool */
   r = rados_delete_pool(pool);
