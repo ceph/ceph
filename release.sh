@@ -74,7 +74,7 @@ do
 
     if [ -n "$comment" ]; then
 	cd ceph-$finalvers
-	DEBEMAIL="sage@newdream.net" dch -b -v "$dvers" "$comment"
+	DEBEMAIL="sage@newdream.net" dch -D $dist --force-distribution -b -v "$dvers" "$comment"
 	cd ..
     fi
 
