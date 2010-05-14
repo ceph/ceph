@@ -1,3 +1,13 @@
+ceph (0.20.1-1) unstable; urgency=low
+
+  * osd: fix journal initialization bugs
+  * librados: fix aio callbacks
+  * osd: misc bug fixes
+  * mds: misc hangs
+  * msgr: some fixes 
+
+ -- Sage Weil <sage@newdream.net>  Fri, 14 May 2010 13:09:44 -0700
+
 ceph (0.20-1) unstable; urgency=low
 
   * osd: new journaling infrastructure
