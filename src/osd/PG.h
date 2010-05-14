@@ -255,7 +255,7 @@ public:
       bool is_backlog() const { return op == BACKLOG; }
       bool is_update() const { return is_clone() || is_modify() || is_backlog(); }
 
-      bool reqid_is_indexed() const { return op != BACKLOG && op != CLONE; }
+      bool reqid_is_indexed() const { return op != BACKLOG && op != CLONE && soid.snap != CEPH_SNAPDIR; }
 
       void encode(bufferlist &bl) const {
 	__u8 struct_v = 1;

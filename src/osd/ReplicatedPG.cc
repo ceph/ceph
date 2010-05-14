@@ -1770,6 +1770,13 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   ::encode(ctx->obs->ssc->snapset, bss);
   assert(ctx->obs->exists == ctx->obs->ssc->snapset.head_exists);
 
+  // append to log
+  int logopcode = Log::Entry::MODIFY;
+  if (!ctx->obs->exists)
+    logopcode = Log::Entry::DELETE;
+  ctx->log.push_back(Log::Entry(logopcode, soid, ctx->at_version, old_version,
+				ctx->reqid, ctx->mtime));
+
   if (ctx->obs->exists) {
     poi->version = ctx->at_version;
     poi->prior_version = old_version;
@@ -1791,24 +1798,43 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     if (!head_existed) {
       // if we logically recreated the head, remove old _snapdir object
       sobject_t snapoid(soid.oid, CEPH_SNAPDIR);
-      ctx->op_t.remove(coll_t::build_pg_coll(info.pgid), snapoid);
-      dout(10) << " removing old " << snapoid << dendl;
+
+      ctx->snapset_obc = get_object_context(snapoid, false);
+      if (ctx->snapset_obc && ctx->snapset_obc->obs.exists) {
+	ctx->op_t.remove(coll_t::build_pg_coll(info.pgid), snapoid);
+	dout(10) << " removing old " << snapoid << dendl;
+
+	ctx->at_version.version++;
+	ctx->log.push_back(Log::Entry(Log::Entry::DELETE, snapoid, ctx->at_version, old_version,
+				      ctx->reqid, ctx->mtime));
+
+	ctx->snapset_obc->obs.exists = false;
+	register_object_context(ctx->snapset_obc);
+      }
     }
   } else if (ctx->obs->ssc->snapset.clones.size()) {
     // save snapset on _snap
     sobject_t snapoid(soid.oid, CEPH_SNAPDIR);
     dout(10) << " final snapset " << ctx->obs->ssc->snapset
 	     << " in " << snapoid << dendl;
+    ctx->at_version.version++;
+    ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, snapoid, ctx->at_version, old_version,
+				  ctx->reqid, ctx->mtime));
+
+    ctx->snapset_obc = get_object_context(snapoid, true);
+    ctx->snapset_obc->obs.exists = true;
+    ctx->snapset_obc->obs.oi.version = ctx->at_version;
+    ctx->snapset_obc->obs.oi.last_reqid = ctx->reqid;
+    ctx->snapset_obc->obs.oi.mtime = ctx->mtime;
+    register_object_context(ctx->snapset_obc);
+
+    bufferlist bv(sizeof(*poi));
+    ::encode(ctx->snapset_obc->obs.oi, bv);
     ctx->op_t.touch(coll_t::build_pg_coll(info.pgid), snapoid);
+    ctx->op_t.setattr(coll_t::build_pg_coll(info.pgid), snapoid, OI_ATTR, bv);
     ctx->op_t.setattr(coll_t::build_pg_coll(info.pgid), snapoid, SS_ATTR, bss);
   }
 
-  // append to log
-  int logopcode = Log::Entry::MODIFY;
-  if (!ctx->obs->exists)
-    logopcode = Log::Entry::DELETE;
-  ctx->log.push_back(Log::Entry(logopcode, soid, ctx->at_version, old_version,
-				ctx->reqid, ctx->mtime));
   return result;
 }
 
@@ -1914,6 +1940,10 @@ void ReplicatedPG::op_applied(RepGather *repop)
   if (repop->ctx->clone_obc) {
     put_object_context(repop->ctx->clone_obc);
     repop->ctx->clone_obc = 0;
+  }
+  if (repop->ctx->snapset_obc) {
+    put_object_context(repop->ctx->snapset_obc);
+    repop->ctx->snapset_obc = 0;
   }
 
   dout(10) << "op_applied mode was " << mode << dendl;
