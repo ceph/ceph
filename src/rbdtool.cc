@@ -115,7 +115,8 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   common_init(args, "rbdtool", false, true);
 
-  bool opt_create = false, opt_delete = false, opt_list = false, opt_info = false, opt_resize = false;
+  bool opt_create = false, opt_delete = false, opt_list = false, opt_info = false, opt_resize = false,
+       opt_list_snaps = false;
   char *poolname = (char *)"rbd";
   uint64_t size = 0;
   int order = 0;
@@ -136,6 +137,9 @@ int main(int argc, const char **argv)
     } else if (CONF_ARG_EQ("info", 'i')) {
       CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
       opt_info = true;
+    } else if (CONF_ARG_EQ("list-snaps", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
+      opt_list_snaps = true;
     } else if (CONF_ARG_EQ("pool", 'p')) {
       CONF_SAFE_SET_ARG_VAL(&poolname, OPT_STR);
     } else if (CONF_ARG_EQ("object", 'n')) {
@@ -149,7 +153,8 @@ int main(int argc, const char **argv)
       usage();
   }
 
-  if (!opt_create && !opt_delete && !opt_list && !opt_info && !opt_resize)
+  if (!opt_create && !opt_delete && !opt_list && !opt_info && !opt_resize &&
+      !opt_list_snaps)
     usage();
 
 
@@ -182,8 +187,7 @@ int main(int argc, const char **argv)
     ::decode(m, p);
     for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); q++)
       cout << q->first << std::endl;
-  }
-  else if (opt_create) {
+  } else if (opt_create) {
     if (!size) {
       cerr << "must specify size in MB to create an rbd image" << std::endl;
       usage();
@@ -229,8 +233,7 @@ int main(int argc, const char **argv)
       err_exit(pool);
     }
     cout << "done." << std::endl;
-  }
-  else if (opt_info || opt_delete || opt_resize) {
+  } else if (opt_info || opt_delete || opt_resize) {
     // read header
     struct rbd_obj_header_ondisk header;
     bufferlist bl;
@@ -297,6 +300,19 @@ int main(int argc, const char **argv)
     }
       
     cout << "done." << std::endl;
+  } else if (opt_list_snaps) {
+    bufferlist bl, bl2;
+    char *s;
+    r = rados.exec(pool, md_oid, "rbd", "snap_list", bl, bl2);
+
+    if (r < 0) {
+      cerr << "list_snaps failed: " << strerror(-r) << std::endl;
+      err_exit(pool);
+    }
+
+    s = bl2.c_str();
+    for (int i=0; i<r; i++, s += strlen(s) + 1)
+      cout << s << std::endl;
   }
 
   rados.close_pool(pool);
