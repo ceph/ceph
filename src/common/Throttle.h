@@ -19,14 +19,20 @@ private:
       cond.SignalOne();
     max = m;
   }
+  bool _should_wait(uint64_t c) {
+    return
+      max &&
+      ((c < max && count + c > max) ||   // normally stay under max
+       (c >= max && count > max));       // except for large c
+  }
   bool _wait(uint64_t c) {
     bool waited = false;
-    if (max && count + c > max) {    
+    if (_should_wait(c)) {
       waiting += c;
-      while (max && count + c > max) {
+      do {
 	waited = true;
 	cond.Wait(lock);
-      }
+      } while (_should_wait(c));
       waiting -= c;
 
       // wake up the next guy
