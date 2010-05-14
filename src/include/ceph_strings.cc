@@ -177,22 +177,14 @@ const char *ceph_snap_op_name(int o)
 
 const char *ceph_pool_op_name(int op)
 {
-  switch (op) {
-  case POOL_OP_CREATE:
-    return "create pool";
-  case POOL_OP_DELETE:
-    return "delete pool";
-  case POOL_OP_AUID_CHANGE:
-    return "change auid";
-  case POOL_OP_CREATE_SNAP:
-    return "create snap";
-  case POOL_OP_DELETE_SNAP:
-    return "delete snap";
-  case POOL_OP_CREATE_UNMANAGED_SNAP:
-    return "create unmanaged snap";
-  case POOL_OP_DELETE_UNMANAGED_SNAP:
-    return "delete unmanaged snap";
-  default:
-    return "unknown";
-  }
+	switch (op) {
+	case POOL_OP_CREATE: return "create";
+	case POOL_OP_DELETE: return "delete";
+	case POOL_OP_AUID_CHANGE: return "auid change";
+	case POOL_OP_CREATE_SNAP: return "create snap";
+	case POOL_OP_DELETE_SNAP: return "delete snap";
+	case POOL_OP_CREATE_UNMANAGED_SNAP: return "create unmanaged snap";
+	case POOL_OP_DELETE_UNMANAGED_SNAP: return "delete unmanaged snap";
+	}
+	return "???";
 }
