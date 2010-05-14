@@ -1601,9 +1601,9 @@ void CInode::decode_snap_blob(bufferlist& snapbl)
 }
 
 
-bool CInode::encode_inodestat(bufferlist& bl, Session *session,
+int CInode::encode_inodestat(bufferlist& bl, Session *session,
 			      SnapRealm *realm,
-			      snapid_t snapid)
+			      snapid_t snapid, unsigned max_bytes)
 {
   int client = session->inst.name.num();
   assert(snapid);
@@ -1709,7 +1709,40 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
   i = pxattr ? pi:oi;
   bool had_latest_xattrs = cap && (cap->issued() & CEPH_CAP_XATTR_SHARED) &&
     cap->client_xattr_version == i->xattr_version;
+
+  // xattr
+  bufferlist xbl;
+  e.xattr_version = i->xattr_version;
+  if (!had_latest_xattrs && cap) {
+    if (!pxattrs)
+      pxattrs = pxattr ? get_projected_xattrs() : &xattrs;
+    ::encode(*pxattrs, xbl);
+  }
   
+  bufferlist splits;
+  for (map<frag_t,int32_t>::iterator p = dirfragtree._splits.begin();
+       p != dirfragtree._splits.end();
+       p++) {
+    ::encode(p->first, bl);
+    ::encode(p->second, bl);
+  }
+
+  // do we have room?
+  if (max_bytes) {
+    unsigned bytes = sizeof(e);
+    bytes += sizeof(__u32);
+    for (map<frag_t,int32_t>::iterator p = dirfragtree._splits.begin();
+	 p != dirfragtree._splits.end();
+	 p++)
+      bytes += sizeof(p->first) + sizeof(p->second);
+    bytes += sizeof(__u32) + symlink.length();
+    bytes += sizeof(__u32) + xbl.length();
+
+    if (bytes > max_bytes)
+      return -ENOSPC;
+  }
+
+
   // encode caps
   if (snapid != CEPH_NOSNAP) {
     /*
@@ -1768,20 +1801,14 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
 	   << " seq " << e.cap.seq
 	   << " mseq " << e.cap.mseq << dendl;
 
-  // xattr
-  bufferlist xbl;
-  e.xattr_version = i->xattr_version;
-  if (!had_latest_xattrs &&
-      cap &&
-      (cap->pending() & CEPH_CAP_XATTR_SHARED)) {
-    
-    if (!pxattrs)
-      pxattrs = pxattr ? get_projected_xattrs() : &xattrs;
-
-    ::encode(*pxattrs, xbl);
-    if (cap)
+  // include those xattrs?
+  if (xbl.length()) {
+    if (cap && (cap->pending() & CEPH_CAP_XATTR_SHARED)) {
+      dout(10) << "including xattrs version " << i->xattr_version << dendl;
       cap->client_xattr_version = i->xattr_version;
-    dout(10) << "including xattrs version " << i->xattr_version << dendl;
+    } else {
+      xbl.clear(); // no xattrs
+    }
   }
 
   // encode

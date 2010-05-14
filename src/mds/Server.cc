@@ -2371,7 +2371,19 @@ void Server::handle_client_readdir(MDRequest *mdr)
   unsigned max = req->head.args.readdir.max_entries;
   if (!max)
     max = dir->get_num_any();  // whatever, something big.
+  unsigned max_bytes = req->head.args.readdir.max_bytes;
+  if (!max_bytes)
+    max_bytes = 512 << 10;  // 512 KB?
 
+  // start final blob
+  bufferlist dirbl;
+  dir->encode_dirstat(dirbl, mds->get_nodeid());
+
+  // count bytes available.
+  //  this isn't perfect, but we should capture the main variable/unbounded size items!
+  int front_bytes = dirbl.length() + sizeof(__u32) + sizeof(__u8)*2;
+  int bytes_left = max_bytes - front_bytes;
+  bytes_left -= realm->get_snap_trace().length();
 
   __u32 numfiles = 0;
   while (it != dir->end() && numfiles < max) {
@@ -2423,6 +2435,13 @@ void Server::handle_client_readdir(MDRequest *mdr)
     }
     assert(in);
 
+    if ((int)(dnbl.length() + dn->name.length() + sizeof(__u32) + sizeof(LeaseStat)) > bytes_left) {
+      dout(10) << " ran out of room, stopping at " << dnbl.length() << " < " << bytes_left << dendl;
+      break;
+    }
+    
+    unsigned start_len = dnbl.length();
+
     // dentry
     dout(12) << "including    dn " << *dn << dendl;
     ::encode(dn->name, dnbl);
@@ -2430,8 +2449,16 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
     // inode
     dout(12) << "including inode " << *in << dendl;
-    bool valid = in->encode_inodestat(dnbl, mdr->session, realm, snapid);
-    assert(valid);
+    int r = in->encode_inodestat(dnbl, mdr->session, realm, snapid, bytes_left - (int)dnbl.length());
+    if (r < 0) {
+      // chop off dn->name, lease
+      dout(10) << " ran out of room, stopping at " << start_len << " < " << bytes_left << dendl;
+      bufferlist keep;
+      keep.substr_of(dnbl, 0, start_len);
+      dnbl.swap(keep);
+      break;
+    }
+    assert(r >= 0);
     numfiles++;
 
     // touch dn
@@ -2440,10 +2467,8 @@ void Server::handle_client_readdir(MDRequest *mdr)
   
   __u8 end = (it == dir->end());
   __u8 complete = (end && !offset);  // FIXME: what purpose does this serve
-
-  // final blob
-  bufferlist dirbl;
-  dir->encode_dirstat(dirbl, mds->get_nodeid());
+  
+  // finish final blob
   ::encode(numfiles, dirbl);
   ::encode(end, dirbl);
   ::encode(complete, dirbl);
@@ -2453,10 +2478,13 @@ void Server::handle_client_readdir(MDRequest *mdr)
     dir->log_mark_dirty();
 
   // yay, reply
+  dout(10) << "reply to " << *req << " readdir num=" << numfiles
+	   << " bytes=" << dirbl.length()
+	   << " end=" << (int)end
+	   << " complete=" << (int)complete
+	   << dendl;
   MClientReply *reply = new MClientReply(req, 0);
   reply->set_dir_bl(dirbl);
-  dout(10) << "reply to " << *req << " readdir num=" << numfiles << " end=" << (int)end
-	   << " complete=" << (int)complete << dendl;
 
   // bump popularity.  NOTE: this doesn't quite capture it.
   mds->balancer->hit_dir(g_clock.now(), dir, META_POP_IRD, -1, numfiles);
