@@ -1034,6 +1034,8 @@ void PG::clear_primary_state()
   min_last_complete_ondisk = eversion_t();
   stray_purged.clear();
 
+  snap_trimq.clear();
+
   finish_sync_event = 0;  // so that _finish_recvoery doesn't go off in another thread
 
   missing_loc.clear();
@@ -1043,6 +1045,7 @@ void PG::clear_primary_state()
 
   peer_scrub_map.clear();
   osd->recovery_wq.dequeue(this);
+  osd->snap_trim_wq.dequeue(this);
 }
 
 bool PG::choose_acting(int newest_update_osd)
@@ -1597,10 +1600,14 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   write_info(t);
   write_log(t);
 
-  // clean up stray objects, snaps
+  // clean up stray objects
   clean_up_local(t); 
 
-  if (!info.snap_trimq.empty())
+  // initialize snap_trimq
+  snap_trimq = pool->cached_removed_snaps;
+  snap_trimq.subtract(info.purged_snaps);
+  dout(10) << "activate - snap_trimq " << snap_trimq << dendl;
+  if (!snap_trimq.empty())
     queue_snap_trim();
 
   // init complete pointer

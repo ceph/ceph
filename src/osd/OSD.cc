@@ -2334,13 +2334,13 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     pg->lock();
 
     // adjust removed_snaps?
-    if (!pg->pool->newly_removed_snaps.empty()) {
+    if (pg->is_active() &&
+	!pg->pool->newly_removed_snaps.empty()) {
       for (map<snapid_t,snapid_t>::iterator p = pg->pool->newly_removed_snaps.m.begin();
 	   p != pg->pool->newly_removed_snaps.m.end();
 	   p++)
-	for (snapid_t t = 0; t < p->second; ++t)
-	  pg->info.snap_trimq.insert(p->first + t);
-      dout(10) << *pg << " snap_trimq now " << pg->info.snap_trimq << dendl;
+	pg->snap_trimq.insert(p->first, p->second);
+      dout(10) << *pg << " snap_trimq now " << pg->snap_trimq << dendl;
       pg->dirty_info = true;
     }
     
@@ -2523,8 +2523,9 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
       continue;
     }
     if (pg->is_active()) {
-      // update started counter
-      if (!pg->info.snap_trimq.empty())
+      // i am active
+      if (pg->is_primary() &&
+	  !pg->snap_trimq.empty())
 	pg->queue_snap_trim();
     }
     else if (pg->is_primary() &&
@@ -2942,8 +2943,9 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
     child->info.last_complete = parent->info.last_complete;
     child->info.log_tail =  parent->log.tail;
     child->info.log_backlog = parent->log.backlog;
-    child->info.snap_trimq = parent->info.snap_trimq;
     child->info.history.last_epoch_split = osdmap->get_epoch();
+
+    child->snap_trimq = parent->snap_trimq;
 
     dout(20) << " child " << p->first << " log now ";
     child->log.print(*_dout);

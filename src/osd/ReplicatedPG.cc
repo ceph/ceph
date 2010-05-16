@@ -743,9 +743,10 @@ bool ReplicatedPG::snap_trimmer()
   lock();
   dout(10) << "snap_trimmer start" << dendl;
 
-  while (info.snap_trimq.size() &&
+  while (snap_trimq.size() &&
+	 is_primary() &&
 	 is_active()) {
-    snapid_t sn = *info.snap_trimq.begin();
+    snapid_t sn = snap_trimq.start();
     coll_t c = coll_t::build_snap_pg_coll(info.pgid, sn);
     vector<sobject_t> ls;
     osd->store->collection_list(c, ls);
@@ -857,7 +858,7 @@ bool ReplicatedPG::snap_trimmer()
     int tr = osd->store->queue_transaction(&osr, t);
     assert(tr == 0);
  
-    info.snap_trimq.erase(sn);
+    snap_trimq.erase(sn);
   }  
 
   // done
