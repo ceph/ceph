@@ -783,7 +783,7 @@ private:
     bool cont = iter != waiting_locks.end();
     while(cont) {
       if (share_space(iter, lock)) overlaps.push_front(iter);
-      if (held_locks.begin() == iter) cont = false;
+      if (waiting_locks.begin() == iter) cont = false;
       --iter;
     }
     return !overlaps.empty();
