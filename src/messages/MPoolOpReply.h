@@ -67,7 +67,7 @@ public:
     ::decode(has_response_data, p);
     if (has_response_data) {
       response_data = new bufferlist();
-      ::decode(*response_data, payload);
+      ::decode(*response_data, p);
     } else response_data = NULL;
   }
 };
