@@ -83,17 +83,6 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  // whoami?
-  if (!store.exists_bl_ss("whoami")) {
-    cerr << "mon fs missing 'whoami'.. did you run mkcephfs?" << std::endl;
-    exit(1);
-  }
-  int w = store.get_int("whoami");
-  if (w != whoami) {
-    cerr << "monitor data is for mon" << w << ", but you said i was mon" << whoami << std::endl;
-    exit(1);
-  }
-
   bufferlist magicbl;
   store.get_bl_ss(magicbl, "magic", 0);
   string magic(magicbl.c_str(), magicbl.length()-1);  // ignore trailing \n

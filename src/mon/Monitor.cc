@@ -944,8 +944,6 @@ int Monitor::mkfs(bufferlist& osdmapbl)
     exit(1);
   }
   
-  store->put_int(whoami, "whoami", 0);
-
   bufferlist magicbl;
   magicbl.append(CEPH_MON_ONDISK_MAGIC);
   magicbl.append("\n");
