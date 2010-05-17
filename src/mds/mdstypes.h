@@ -506,7 +506,7 @@ struct ceph_lock_state_t {
 	ceph_filelock cur_lock = (*iter)->second;
 	waiting_locks.erase(*iter);
 	--client_waiting_lock_counts[cur_lock.client];
-	if (!client_waiting_lock_counts.count(cur_lock.client)) {
+	if (!client_waiting_lock_counts[cur_lock.client]) {
 	  client_waiting_lock_counts.erase(cur_lock.client);
 	}
 	if(add_lock(cur_lock, true)) activated_locks.push_back(cur_lock);
