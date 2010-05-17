@@ -2568,8 +2568,10 @@ void Server::handle_client_file_setlock(MDRequest *mdr)
   /* acquire_locks will return true if it gets the locks. If it fails,
      it will redeliver this request at a later date, so drop the request.
    */
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks)) {
+    dout(0) << "handle_client_file_setlock could not get locks!" << dendl;
     return;
+  }
 
   // copy the lock change into a ceph_filelock so we can store/apply it
   ceph_filelock set_lock;
@@ -2577,6 +2579,7 @@ void Server::handle_client_file_setlock(MDRequest *mdr)
   set_lock.length = req->head.args.filelock_change.length;
   set_lock.client = req->get_orig_source().num();
   set_lock.pid = req->head.args.filelock_change.pid;
+  set_lock.pid_namespace = req->head.args.filelock_change.pid_namespace;
   set_lock.type = req->head.args.filelock_change.type;
   bool will_wait = req->head.args.filelock_change.wait;
 
@@ -2648,8 +2651,10 @@ void Server::handle_client_file_readlock(MDRequest *mdr)
      it will redeliver this request at a later date, so drop the request.
   */
   rdlocks.insert(&cur->flocklock);
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks)) {
+    dout(0) << "handle_client_file_readlock could not get locks!" << dendl;
     return;
+  }
   
   // copy the lock change into a ceph_filelock so we can store/apply it
   ceph_filelock checking_lock;

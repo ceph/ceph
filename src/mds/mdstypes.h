@@ -357,16 +357,20 @@ struct ceph_lock_state_t {
    * Returns true if set, false if not set.
    */
   bool add_lock(ceph_filelock& new_lock, bool wait_on_fail) {
+    dout(0) << "add_lock " << new_lock << dendl;
     bool ret = false;
     list<multimap<uint64_t, ceph_filelock>::iterator>
       overlapping_locks, self_overlapping_locks, neighbor_locks;
     // first, get any overlapping locks and split them into owned-by-us and not
     if(get_overlapping_locks(new_lock, overlapping_locks, &neighbor_locks)) {
+      dout(0) << "got overlapping lock, splitting by owner" << dendl;
       split_by_owner(new_lock, overlapping_locks, self_overlapping_locks);
     }
     if (!overlapping_locks.empty()) { //overlapping locks owned by others :(
       if (CEPH_LOCK_EXCL == new_lock.type) {
 	//can't set, we want an exclusive
+	dout(0) << "overlapping lock, and this lock is exclusive, can't set"
+		<< dendl;
 	if (wait_on_fail) {
 	  waiting_locks.
 	    insert(pair<uint64_t, ceph_filelock>(new_lock.start, new_lock));
@@ -374,6 +378,7 @@ struct ceph_lock_state_t {
 	ret = false;
       } else { //shared lock, check for any exclusive locks blocking us
 	if (contains_exclusive_lock(overlapping_locks)) { //blocked :(
+	  dout(0) << " blocked by exclusive lock in overlapping_locks" << dendl;
 	  if (wait_on_fail) {
 	    waiting_locks.
 	      insert(pair<uint64_t, ceph_filelock>(new_lock.start, new_lock));
@@ -381,6 +386,7 @@ struct ceph_lock_state_t {
 	  ret = false;
 	} else {
 	  //yay, we can insert a shared lock
+	  dout(0) << "inserting shared lock" << dendl;
 	  adjust_locks(self_overlapping_locks, new_lock, neighbor_locks);
 	  held_locks.
 	    insert(pair<uint64_t, ceph_filelock>(new_lock.start, new_lock));
@@ -389,6 +395,7 @@ struct ceph_lock_state_t {
       }
     } else { //no overlapping locks except our own
       adjust_locks(self_overlapping_locks, new_lock, neighbor_locks);
+      dout(0) << "no conflicts, inserting " << new_lock << dendl;
       held_locks.insert(pair<uint64_t, ceph_filelock>
 			(new_lock.start, new_lock));
       ret = true;
@@ -545,11 +552,14 @@ private:
    * new_lock: The new lock the process has requested.
    * old_locks: list of all locks currently held by same
    *    client/process that overlap new_lock.
+   * neighbor_locks: locks owned by same process that neighbor new_lock on
+   *    left or right side.
    */
   void adjust_locks(list<multimap<uint64_t, ceph_filelock>::iterator> old_locks,
 		    ceph_filelock& new_lock,
 		    list<multimap<uint64_t, ceph_filelock>::iterator>
 		    neighbor_locks) {
+    dout(0) << "adjust_locks" << dendl;
     bool new_lock_to_end = (0 == new_lock.length);
     bool old_lock_to_end;
     uint64_t new_lock_start = new_lock.start;
@@ -562,6 +572,7 @@ private:
 	 iter != old_locks.end();
 	 ++iter) {
       old_lock = &(*iter)->second;
+      dout(0) << "adjusting lock: " << *old_lock << dendl;
       old_lock_to_end = (0 == old_lock->length);
       old_lock_start = old_lock->start;
       old_lock_end = old_lock->start + old_lock->length - 1;
@@ -570,14 +581,17 @@ private:
       old_lock_client = old_lock->client;
       if (new_lock_to_end || old_lock_to_end) {
 	//special code path to deal with a length set at 0
+	dout(0) << "one lock extends forever" << dendl;
 	if (old_lock->type == new_lock.type) {
 	  //just unify them in new lock, remove old lock
+	  dout(0) << "same lock type, unifying" << dendl;
 	  new_lock.start = (new_lock_start < old_lock_start) ? new_lock_start :
 	    old_lock_start;
 	  new_lock.length = 0;
 	  held_locks.erase(*iter);
 	  --client_held_lock_counts[old_lock_client];
 	} else { //not same type, have to keep any remains of old lock around
+	  dout(0) << "shrinking old lock" << dendl;
 	  if (new_lock_to_end) {
 	    if (old_lock_start < new_lock_start) {
 	      old_lock->length = new_lock_start - old_lock_start;
@@ -601,14 +615,17 @@ private:
 	}
       } else {
 	if (old_lock->type == new_lock.type) { //just merge them!
+	  dout(0) << "merging locks, they're the same type" << dendl;
 	  new_lock.start = (old_lock_start < new_lock_start ) ? old_lock_start :
 	    new_lock_start;
 	  int new_end = (new_lock_end > old_lock_end) ? new_lock_end :
 	    old_lock_end;
 	  new_lock.length = new_end - new_lock.start + 1;
+	  dout(0) << "erasing lock " << (*iter)->second << dendl;
 	  held_locks.erase(*iter);
 	  --client_held_lock_counts[old_lock_client];
 	} else { //we'll have to update sizes and maybe make new locks
+	  dout(0) << "locks aren't same type, changing sizes" << dendl;
 	  if (old_lock_end > new_lock_end) { //add extra lock after new_lock
 	    ceph_filelock appended_lock = *old_lock;
 	    appended_lock.start = new_lock_end + 1;
@@ -638,6 +655,7 @@ private:
 	 ++iter) {
       old_lock = &(*iter)->second;
       old_lock_client = old_lock->client;
+      dout(0) << "lock to coalesce: " << *old_lock << dendl;
       /* because if it's a neibhoring lock there can't be any self-overlapping
 	 locks that covered it */
       if (old_lock->type == new_lock.type) { //merge them

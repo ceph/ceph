@@ -183,6 +183,7 @@ public:
       out << "rule " << (int)head.args.filelock_change.rule
 	  << ", type " << (int)head.args.filelock_change.type
 	  << ", pid " << head.args.filelock_change.pid
+	  << ", pid_ns " << head.args.filelock_change.pid_namespace
 	  << ", start " << head.args.filelock_change.start
 	  << ", length " << head.args.filelock_change.length
 	  << ", wait " << (int)head.args.filelock_change.wait;
