@@ -2625,6 +2625,8 @@ void Server::handle_client_file_setlock(MDRequest *mdr)
 	reply_request(mdr, -1);
       else {
 	dout(0) << "but it's a wait" << dendl;
+	mds->locker->drop_locks(mdr);
+	mdr->drop_local_auth_pins();
 	cur->add_waiter(CInode::WAIT_FLOCK, new C_MDS_RetryRequest(mdcache, mdr));
       }
     }
