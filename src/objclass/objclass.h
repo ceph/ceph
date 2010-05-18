@@ -18,6 +18,9 @@ int __cls_name__## name = 0;
 #define CLS_METHOD_WR	0x2
 
 
+#define CLS_LOG(fmt, ...) \
+	cls_log("<cls> %s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__)
+
 typedef void *cls_handle_t;
 typedef void *cls_method_handle_t;
 typedef void *cls_method_context_t;
