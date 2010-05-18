@@ -243,7 +243,6 @@ init-ceph mkcephfs: init-ceph.in mkcephfs.in Makefile
 BUILT_SOURCES += init-ceph mkcephfs
 
 ##
-INCLUDES = 
 LDADD =
 
 

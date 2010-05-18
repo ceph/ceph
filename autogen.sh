@@ -4,5 +4,5 @@ aclocal #-I m4
 libtoolize --force --copy
 autoconf
 autoheader
-automake -a --add-missing
+automake -a --add-missing -Wall
 exit
