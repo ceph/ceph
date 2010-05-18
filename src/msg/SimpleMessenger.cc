@@ -1349,7 +1349,6 @@ void SimpleMessenger::Pipe::fault(bool onconnect, bool onread)
   } 
 
 
-  utime_t now = g_clock.now();
   if (state != STATE_CONNECTING) {
     if (!onconnect)
       dout(0) << "fault initiating reconnect" << dendl;
