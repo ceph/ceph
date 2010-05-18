@@ -102,6 +102,8 @@ int main(int argc, const char **argv)
   const char *oid2 = "jjj10.rbd";
   r = rados.exec(pool, oid2, "rbd", "snap_list", bl, bl2);
   cout << "snap_list result=" << r << std::endl;
+  r = rados.exec(pool, oid2, "rbd", "snap_add", bl, bl2);
+  cout << "snap_add result=" << r << std::endl;
 
   if (r > 0) {
     char *s = bl2.c_str();

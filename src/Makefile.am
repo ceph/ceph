@@ -210,6 +210,10 @@ libcls_acl.so: cls_acl.cc
 	${CXX} -I. -fPIC -shared -g -o libcls_acl.so cls_acl.cc
 BUILT_SOURCES += libcls_acl.so
 
+libcls_rbd.so: cls_rbd.cc
+	${CXX} -I. -fPIC -shared -g -o libcls_rbd.so cls_rbd.cc
+BUILT_SOURCES += libcls_rbd.so
+
 
 ## hadoop client
 if WITH_HADOOPCLIENT

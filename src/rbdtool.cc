@@ -33,7 +33,7 @@ pool_t pool;
 
 void usage()
 {
-  cout << "usage: rbdtool [-n <auth user>] [-p|--pool <name>] <cmd>\n"
+  cout << "usage: rbdtool [-n <auth user>] [-p|--pool <name>] [-n|--object <imagename>] <cmd>\n"
        << "where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:\n"
        << "\t--list    list rbd images\n"
        << "\t--info    show information about image size, striping, etc.\n"
@@ -42,8 +42,11 @@ void usage()
        << "\t--resize <image name> --size <new size in MB>\n"
        << "\t          resize (expand or contract) image\n"
        << "\t--delete <image name>\n"
-       << "\t          delete an image" << std::endl;
-  exit(1);
+       << "\t          delete an image\n"
+       << "\t--list-snaps <image name>\n"
+       << "\t          dump list of specific image snapshots"
+       << "\t--add-snap <snap name>\n"
+       << "\t          create a snapshot for the spacified image" << std::endl;
 }
 
 
@@ -116,11 +119,11 @@ int main(int argc, const char **argv)
   common_init(args, "rbdtool", false, true);
 
   bool opt_create = false, opt_delete = false, opt_list = false, opt_info = false, opt_resize = false,
-       opt_list_snaps = false;
+       opt_list_snaps = false, opt_add_snap = false;
   char *poolname = (char *)"rbd";
   uint64_t size = 0;
   int order = 0;
-  char *imgname;
+  char *imgname = NULL, *snapname = NULL;
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("list", '\0')) {
@@ -140,6 +143,9 @@ int main(int argc, const char **argv)
     } else if (CONF_ARG_EQ("list-snaps", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
       opt_list_snaps = true;
+    } else if (CONF_ARG_EQ("add-snap", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&snapname, OPT_STR);
+      opt_add_snap = true;
     } else if (CONF_ARG_EQ("pool", 'p')) {
       CONF_SAFE_SET_ARG_VAL(&poolname, OPT_STR);
     } else if (CONF_ARG_EQ("object", 'n')) {
@@ -154,9 +160,15 @@ int main(int argc, const char **argv)
   }
 
   if (!opt_create && !opt_delete && !opt_list && !opt_info && !opt_resize &&
-      !opt_list_snaps)
+      !opt_list_snaps && !opt_add_snap) {
     usage();
+    exit(1);
+  }
 
+  if (!imgname) {
+    usage();
+    exit(1);
+  }
 
   if (rados.initialize(argc, argv) < 0) {
      cerr << "couldn't initialize rados!" << std::endl;
@@ -302,17 +314,49 @@ int main(int argc, const char **argv)
     cout << "done." << std::endl;
   } else if (opt_list_snaps) {
     bufferlist bl, bl2;
-    char *s;
-    r = rados.exec(pool, md_oid, "rbd", "snap_list", bl, bl2);
+    if (!imgname) {
+      usage();
+      err_exit(pool);
+    }
 
+    r = rados.exec(pool, md_oid, "rbd", "snap_list", bl, bl2);
     if (r < 0) {
       cerr << "list_snaps failed: " << strerror(-r) << std::endl;
       err_exit(pool);
     }
 
-    s = bl2.c_str();
-    for (int i=0; i<r; i++, s += strlen(s) + 1)
-      cout << s << std::endl;
+    uint32_t num_snaps;
+    bufferlist::iterator iter = bl2.begin();
+    ::decode(num_snaps, iter);
+    for (uint32_t i=0; i < num_snaps; i++) {
+      uint64_t id, image_size;
+      string s;
+      ::decode(id, iter);
+      ::decode(image_size, iter);
+      ::decode(s, iter);
+      cout << id << "\t" << s << "\t" << image_size << std::endl;
+    }
+  } else if (opt_add_snap) {
+    bufferlist bl, bl2;
+    uint64_t snap_id;
+    if (!imgname || !snapname) {
+      usage();
+      err_exit(pool);
+    }
+    r = rados.selfmanaged_snap_create(pool, &snap_id);
+    if (r < 0) {
+      cerr << "failed to create snap id: " << strerror(-r) << std::endl;
+      err_exit(pool);
+    }
+
+    ::encode(snapname, bl);
+    ::encode(snap_id, bl);
+
+    r = rados.exec(pool, md_oid, "rbd", "snap_add", bl, bl2);
+    if (r < 0) {
+      cerr << "list_snaps failed: " << strerror(-r) << std::endl;
+      err_exit(pool);
+    }
   }
 
   rados.close_pool(pool);
