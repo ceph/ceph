@@ -575,7 +575,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   utime_t now = g_clock.now();
 
   // note some basic context for op replication that prepare_transaction may clobber
-  eversion_t old_last_update = ctx->at_version;
+  eversion_t old_last_update = log.head;
   bool old_exists = obc->obs.exists;
   uint64_t old_size = obc->obs.oi.size;
   eversion_t old_version = obc->obs.oi.version;
