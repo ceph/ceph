@@ -87,6 +87,7 @@ public:
   //void process_reconnect_cap(CInode *in, int from, ceph_mds_cap_reconnect& capinfo);
   void reconnect_gather_finish();
   void reconnect_tick();
+  void recover_filelocks(CInode *in, bufferlist locks, int64_t client);
 
   void recall_client_state(float ratio);
 

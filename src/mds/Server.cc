@@ -602,6 +602,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	       << " on " << *in << dendl;
       in->reconnect_cap(from, p->second.capinfo, session);
       mds->mdcache->add_reconnected_cap(in, from, inodeno_t(p->second.capinfo.snaprealm));
+      recover_filelocks(in, p->second.flockbl, m->get_orig_source().num());
       continue;
     }
       
@@ -662,6 +663,29 @@ void Server::reconnect_tick()
     }
     client_reconnect_gather.clear();
     reconnect_gather_finish();
+  }
+}
+
+void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
+{
+  int numlocks;
+  ceph_filelock lock;
+  bufferlist::iterator p = locks.begin();
+  ::decode(numlocks, p);
+  for (int i = 0; i < numlocks; ++i) {
+    ::decode(lock, p);
+    lock.client = client;
+    in->fcntl_locks.held_locks.insert(pair<uint64_t, ceph_filelock>
+				      (lock.start, lock));
+    ++in->fcntl_locks.client_held_lock_counts[client];
+  }
+  ::decode(numlocks, p);
+  for (int i = 0; i < numlocks; ++i) {
+    ::decode(lock, p);
+    lock.client = client;
+    in->flock_locks.held_locks.insert(pair<uint64_t, ceph_filelock>
+				      (lock.start, lock));
+    ++in->flock_locks.client_held_lock_counts[client];
   }
 }
 
