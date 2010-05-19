@@ -52,6 +52,7 @@ void usage()
 
   cerr << "   mkpool foo [123]  -- create pool 'foo' [with auid 123]\n";
   cerr << "   rmpool foo  -- remove pool 'foo'\n";
+  cerr << "   mkpool foo  -- create the pool 'foo'\n";
   cerr << "   lssnap      -- list snaps\n";
   cerr << "   mksnap foo  -- create snap 'foo'\n";
   cerr << "   rmsnap foo  -- remove snap 'foo'\n\n";
