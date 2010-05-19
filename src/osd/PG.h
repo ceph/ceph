@@ -261,7 +261,7 @@ public:
       bool is_update() const { return is_clone() || is_modify() || is_backlog(); }
 
       bool reqid_is_indexed() const {
-	return reqid.tid && op != BACKLOG && op != CLONE && soid.snap != CEPH_SNAPDIR;
+	return reqid != osd_reqid_t() && op != BACKLOG && op != CLONE;
       }
 
       void encode(bufferlist &bl) const {

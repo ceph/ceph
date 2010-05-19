@@ -1861,7 +1861,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
 	ctx->at_version.version++;
 	ctx->log.push_back(Log::Entry(Log::Entry::DELETE, snapoid, ctx->at_version, old_version,
-				      ctx->reqid, ctx->mtime));
+				      osd_reqid_t(), ctx->mtime));
 
 	ctx->snapset_obc->obs.exists = false;
 	register_object_context(ctx->snapset_obc);
@@ -1874,7 +1874,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 	     << " in " << snapoid << dendl;
     ctx->at_version.version++;
     ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, snapoid, ctx->at_version, old_version,
-				  ctx->reqid, ctx->mtime));
+				  osd_reqid_t(), ctx->mtime));
 
     ctx->snapset_obc = get_object_context(snapoid, true);
     ctx->snapset_obc->obs.exists = true;
