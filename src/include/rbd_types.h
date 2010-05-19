@@ -24,7 +24,7 @@
 
 static const char rbd_text[] = "<<< Rados Block Device Image >>>\n";
 static const char rbd_signature[] = "RBD";
-static const char rbd_version[] = "001.001";
+static const char rbd_version[] = "001.002";
 
 struct rbd_obj_snap_ondisk {
 	__le64 id;
@@ -39,7 +39,7 @@ struct rbd_obj_header_ondisk {
 	__u8 obj_order;
 	__u8 crypt_type;
 	__u8 comp_type;
-	__le32 snap_seq;
+	__le64 snap_seq;
 	__le32 snap_count;
 	__le64 snap_names_len;
 	struct rbd_obj_snap_ondisk snaps[0];
