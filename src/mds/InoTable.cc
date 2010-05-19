@@ -37,7 +37,7 @@ void InoTable::reset_state()
   //#endif
   free.insert(start, end);
 
-  projected_free.m = free.m;
+  projected_free = free;
 }
 
 inodeno_t InoTable::project_alloc_id(inodeno_t id) 
