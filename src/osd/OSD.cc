@@ -2172,17 +2172,17 @@ void OSD::handle_osd_map(MOSDMap *m)
     for (map<int, PGPool*>::iterator p = pool_map.begin();
 	 p != pool_map.end();
 	 p++) {
-      const pg_pool_t* pi = osdmap->get_pg_pool(p->first);
-      if (NULL == pi) {
-	dout(10) << " pool " << p->first
-		 << " appears to have been deleted" << dendl;
+      const pg_pool_t *pi = osdmap->get_pg_pool(p->first);
+      if (pi == NULL) {
+	dout(10) << " pool " << p->first << " appears to have been deleted" << dendl;
 	continue;
       }
       if (pi->get_snap_epoch() == cur+1) {
 	PGPool *pool = p->second;
 	pi->build_removed_snaps(pool->newly_removed_snaps);
 	pool->newly_removed_snaps.subtract(pool->cached_removed_snaps);
-	dout(10) << " pool " << p->first << " removed_snaps " << pool->cached_removed_snaps
+	pool->cached_removed_snaps.union_of(pool->newly_removed_snaps);
+	dout(10) << "   pool " << p->first << " removed_snaps " << pool->cached_removed_snaps
 		 << ", newly so are " << pool->newly_removed_snaps << ")"
 		 << dendl;
 	pool->info = *pi;
@@ -2336,10 +2336,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     // adjust removed_snaps?
     if (pg->is_active() &&
 	!pg->pool->newly_removed_snaps.empty()) {
-      for (map<snapid_t,snapid_t>::iterator p = pg->pool->newly_removed_snaps.m.begin();
-	   p != pg->pool->newly_removed_snaps.m.end();
-	   p++)
-	pg->snap_trimq.insert(p->first, p->second);
+      pg->snap_trimq.union_of(pg->pool->newly_removed_snaps);
       dout(10) << *pg << " snap_trimq now " << pg->snap_trimq << dendl;
       pg->dirty_info = true;
     }

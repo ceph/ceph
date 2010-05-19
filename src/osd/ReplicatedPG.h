@@ -406,8 +406,8 @@ protected:
   void op_applied(RepGather *repop);
   void op_commit(RepGather *repop);
   void eval_repop(RepGather*);
-  void issue_repop(RepGather *repop, int dest, utime_t now,
-		   bool old_exists, uint64_t old_size, eversion_t old_version);
+  void issue_repop(RepGather *repop, utime_t now,
+		   eversion_t old_last_update, bool old_exists, uint64_t old_size, eversion_t old_version);
   RepGather *new_repop(OpContext *ctx, ObjectContext *obc, bool noop, tid_t rep_tid);
   void repop_ack(RepGather *repop,
                  int result, int ack_type,
