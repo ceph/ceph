@@ -892,6 +892,9 @@ bool ReplicatedPG::snap_trimmer()
       lock();
     }
 
+    // adjust pg info
+    info.purged_snaps.insert(sn);
+    
     // remove snap collection
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     dout(10) << "removing snap " << sn << " collection " << c << dendl;
@@ -902,6 +905,14 @@ bool ReplicatedPG::snap_trimmer()
     assert(tr == 0);
  
     snap_trimq.erase(sn);
+
+    // share new PG::Info with replicas
+    for (unsigned i=1; i<acting.size(); i++) {
+      int peer = acting[i];
+      MOSDPGInfo *m = new MOSDPGInfo(osd->osdmap->get_epoch());
+      m->pg_info.push_back(info);
+      osd->messenger->send_message(m, osd->osdmap->get_inst(peer));
+    }
   }  
 
   // done

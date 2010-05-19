@@ -3346,6 +3346,21 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 	// just update our stats
 	dout(10) << *pg << " writing updated stats" << dendl;
 	pg->info.stats = info.stats;
+
+	// did a snap just get purged?
+	interval_set<snapid_t> p = info.purged_snaps;
+	p.subtract(pg->info.purged_snaps);
+	if (!p.empty()) {
+	  dout(10) << " purged_snaps " << pg->info.purged_snaps
+		   << " -> " << info.purged_snaps
+		   << " removed " << p << dendl;
+	  snapid_t sn = p.start();
+	  coll_t c = coll_t::build_snap_pg_coll(info.pgid, sn);
+	  t->remove_collection(c);
+
+	  pg->info.purged_snaps = info.purged_snaps;
+	}
+
 	pg->write_info(*t);
       }
     }
