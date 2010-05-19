@@ -224,7 +224,7 @@ for name in $what; do
 	get_conf btrfs_path "$osd_data" "btrfs path"  # mount point defaults so osd data
 	get_conf btrfs_devs "" "btrfs devs"
 	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
-	get_conf btrfs_opt "flushoncommit" "btrfs options"
+	get_conf btrfs_opt "noatime" "btrfs options"
 	[ -n "$btrfs_opt" ] && btrfs_opt="-o $btrfs_opt"
 	
 	do_cmd "test -d $osd_data || mkdir -p $osd_data"

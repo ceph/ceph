@@ -230,7 +230,7 @@ for name in $what; do
 	    
 	    if [ $dobtrfs -eq 1 ] && [ -n "$btrfs_devs" ]; then
 		get_conf pre_mount "true" "pre mount command"
-		get_conf btrfs_opt "flushoncommit,noatime" "btrfs options"
+		get_conf btrfs_opt "noatime" "btrfs options"
 		[ -n "$btrfs_opt" ] && btrfs_opt="-o $btrfs_opt"
 		[ -n "$pre_mount" ] && do_cmd "$pre_mount"
 		echo Mounting Btrfs on $host:$btrfs_path
