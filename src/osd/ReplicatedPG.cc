@@ -817,7 +817,7 @@ bool ReplicatedPG::snap_trimmer()
 	snapset.clone_size.erase(last);
 	
 	ctx->log.push_back(Log::Entry(Log::Entry::DELETE, coid, ctx->at_version, ctx->obs->oi.version,
-				      ctx->reqid, ctx->mtime));
+				      osd_reqid_t(), ctx->mtime));
 	ctx->at_version.version++;
       } else {
 	// save adjusted snaps for this object
@@ -838,7 +838,7 @@ bool ReplicatedPG::snap_trimmer()
 	}	      
 
 	ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, coid, ctx->at_version, ctx->obs->oi.version,
-				      ctx->reqid, ctx->mtime));
+				      osd_reqid_t(), ctx->mtime));
 	ctx->at_version.version++;
       }
 
@@ -851,7 +851,7 @@ bool ReplicatedPG::snap_trimmer()
       if (snapset.clones.empty() && !snapset.head_exists) {
 	dout(10) << coid << " removing " << snapoid << dendl;
 	ctx->log.push_back(Log::Entry(Log::Entry::DELETE, snapoid, ctx->at_version, 
-				      ctx->snapset_obc->obs.oi.version, ctx->reqid, ctx->mtime));
+				      ctx->snapset_obc->obs.oi.version, osd_reqid_t(), ctx->mtime));
 	ctx->snapset_obc->obs.exists = false;
 
 	t->remove(coll_t::build_pg_coll(info.pgid), snapoid);
@@ -860,7 +860,7 @@ bool ReplicatedPG::snap_trimmer()
       } else {
 	dout(10) << coid << " updating snapset on " << snapoid << dendl;
 	ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, snapoid, ctx->at_version, 
-				      ctx->snapset_obc->obs.oi.version, ctx->reqid, ctx->mtime));
+				      ctx->snapset_obc->obs.oi.version, osd_reqid_t(), ctx->mtime));
 
 	ctx->snapset_obc->obs.oi.prior_version = ctx->snapset_obc->obs.oi.version;
 	ctx->snapset_obc->obs.oi.version = ctx->at_version;
