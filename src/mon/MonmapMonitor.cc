@@ -109,19 +109,16 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
       ss << "got latest monmap";
     }
     else if (m->cmd[1] == "injectargs" && m->cmd.size() == 4) {
-      vector<string> args(2);
-      args[0] = "_injectargs";
-      args[1] = m->cmd[3];
       if (m->cmd[2] == "*") {
 	for (unsigned i=0; i<mon->monmap->size(); i++)
-	  mon->inject_args(mon->monmap->get_inst(i), args, 0);
+	  mon->inject_args(mon->monmap->get_inst(i), m->cmd[3]);
 	r = 0;
 	ss << "ok bcast";
       } else {
 	errno = 0;
 	int who = strtol(m->cmd[2].c_str(), 0, 10);
 	if (!errno && who >= 0) {
-	  mon->inject_args(mon->monmap->get_inst(who), args, 0);
+	  mon->inject_args(mon->monmap->get_inst(who), m->cmd[3]);
 	  r = 0;
 	  ss << "ok";
 	} else 
