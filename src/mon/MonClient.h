@@ -171,7 +171,7 @@ public:
     messenger(NULL), cur_mon(-1),
     monc_lock("MonClient::monc_lock"),
     timer(monc_lock),
-    hunting(false),
+    hunting(true),
     want_monmap(true),
     want_keys(0), global_id(0),
     authenticate_err(0),
