@@ -9,6 +9,10 @@ extern "C" {
 #include <linux/types.h>
 #include <string.h>
 
+#ifndef CEPH_OSD_TMAP_SET
+#define CEPH_OSD_TMAP_SET 's'
+#endif
+
 /* initialization */
 int rados_initialize(int argc, const char **argv); /* arguments are optional */
 void rados_deinitialize();
