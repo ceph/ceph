@@ -183,14 +183,9 @@ public:
   void resend_routed_requests();
   void remove_session(MonSession *s);
 
-  void inject_args(const entity_inst_t& inst, string& args, version_t version) {
-    vector<string> a(1);
-    a[0] = args;
-    inject_args(inst, a, version);
-  }
-  void inject_args(const entity_inst_t& inst, vector<string>& args, version_t version);  
-void send_command(const entity_inst_t& inst,
-			   const vector<string>& com, version_t version);
+  void inject_args(const entity_inst_t& inst, string& args);
+  void send_command(const entity_inst_t& inst,
+		    const vector<string>& com, version_t version);
 
 public:
   struct C_Command : public Context {

@@ -306,6 +306,7 @@ void Monitor::handle_command(MMonCommand *m)
     }
 
     if (m->cmd[0] == "_injectargs") {
+      dout(0) << "parsing injected options '" << m->cmd[1] << "'" << dendl;
       parse_config_option_string(m->cmd[1]);
       return;
     } 
@@ -539,12 +540,21 @@ void Monitor::handle_observe(MMonObserve *m)
 }
 
 
-void Monitor::inject_args(const entity_inst_t& inst, vector<string>& args, version_t version)
+void Monitor::inject_args(const entity_inst_t& inst, string& args)
 {
   dout(10) << "inject_args " << inst << " " << args << dendl;
-  vector<string> new_args = args;
-  new_args.insert(new_args.begin(), "injectargs");
-  send_command(inst, new_args, version);
+
+  if (inst.name.is_mon()) {
+    MMonCommand *c = new MMonCommand(monmap->fsid, 0);
+    c->cmd.push_back("_injectargs");
+    c->cmd.push_back(args);
+    messenger->send_message(c, inst);
+  } else {
+    vector<string> v;
+    v.push_back("injectargs");
+    v.push_back(args);
+    send_command(inst, v, 0);
+  }
 }
 
 void Monitor::send_command(const entity_inst_t& inst,
