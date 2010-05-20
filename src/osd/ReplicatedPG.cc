@@ -894,7 +894,9 @@ bool ReplicatedPG::snap_trimmer()
 
     // adjust pg info
     info.purged_snaps.insert(sn);
-    
+    snap_trimq.erase(sn);
+    dout(10) << "purged_snaps now " << info.purged_snaps << ", snap_trimq now " << snap_trimq << dendl;
+ 
     // remove snap collection
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     dout(10) << "removing snap " << sn << " collection " << c << dendl;
@@ -904,8 +906,6 @@ bool ReplicatedPG::snap_trimmer()
     int tr = osd->store->queue_transaction(&osr, t);
     assert(tr == 0);
  
-    snap_trimq.erase(sn);
-
     // share new PG::Info with replicas
     for (unsigned i=1; i<acting.size(); i++) {
       int peer = acting[i];
