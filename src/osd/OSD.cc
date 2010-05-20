@@ -142,9 +142,11 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
   if (!store)
     return -ENOENT;
   int err = store->mkfs();    
-  if (err < 0) return err;
+  if (err < 0)
+    return err;
   err = store->mount();
-  if (err < 0) return err;
+  if (err < 0)
+    return err;
     
   OSDSuperblock sb;
   sb.fsid = fsid;
@@ -202,6 +204,28 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
   store->umount();
   delete store;
   return r;
+}
+
+int OSD::mkjournal(const char *dev, const char *jdev)
+{
+  ObjectStore *store = create_object_store(dev, jdev);
+  if (!store)
+    return -ENOENT;
+  return store->mkjournal();
+}
+
+int OSD::flushjournal(const char *dev, const char *jdev)
+{
+  ObjectStore *store = create_object_store(dev, jdev);
+  if (!store)
+    return -ENOENT;
+  int err = store->mount();
+  if (!err) {
+    store->sync_and_flush();
+    store->umount();
+  }
+  delete store;
+  return err;
 }
 
 
@@ -302,7 +326,7 @@ int OSD::peek_meta(const char *dev, string& magic, ceph_fsid_t& fsid, int& whoam
 
 // cons/des
 
-OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, const char *jdev, bool newjournal) : 
+OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, const char *jdev) : 
   osd_lock("OSD::osd_lock"),
   timer(osd_lock),
   messenger(m),
@@ -312,7 +336,7 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, c
   logclient(messenger, &mc->monmap),
   whoami(id),
   dev_path(dev), journal_path(jdev),
-  mknewjournal(newjournal), dispatch_running(false),
+  dispatch_running(false),
   osd_compat(ceph_osd_feature_compat,
 	     ceph_osd_feature_ro_compat,
 	     ceph_osd_feature_incompat),
@@ -416,14 +440,6 @@ int OSD::init()
   // mount.
   dout(2) << "mounting " << dev_path << " " << (journal_path ? journal_path : "(no journal)") << dendl;
   assert(store);  // call pre_init() first!
-
-  if (mknewjournal) {
-    int r = store->mkjournal();
-    if (r < 0) {
-      dout(0) << " unable to create new jouranl" << dendl;
-      return r;
-    }
-  }
 
   int r = store->mount();
   if (r < 0) {

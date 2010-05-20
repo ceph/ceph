@@ -111,7 +111,6 @@ protected:
 
   int whoami;
   const char *dev_path, *journal_path;
-  bool mknewjournal;
 
   class C_Tick : public Context {
     OSD *osd;
@@ -871,13 +870,16 @@ protected:
   void ms_handle_remote_reset(Connection *con) {}
 
  public:
-  OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev = 0, const char *jdev = 0, bool newjournal=false);
+  OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc,
+      const char *dev = 0, const char *jdev = 0);
   ~OSD();
 
   // static bits
   static int find_osd_dev(char *result, int whoami);
   static ObjectStore *create_object_store(const char *dev, const char *jdev);
   static int mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami);
+  static int mkjournal(const char *dev, const char *jdev);
+  static int flushjournal(const char *dev, const char *jdev);
 
 private:
   static int write_meta(const char *base, const char *file, const char *val, size_t vallen);

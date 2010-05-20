@@ -65,11 +65,14 @@ int main(int argc, const char **argv)
   // osd specific args
   bool mkfs = false;
   bool mkjournal = false;
+  bool flushjournal = false;
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("mkfs", '\0')) {
       mkfs = true;
     } else if (CONF_ARG_EQ("mkjournal", '\0')) {
       mkjournal = true;
+    } else if (CONF_ARG_EQ("flush-journal", '\0')) {
+      flushjournal = true;
     } else {
       cerr << "unrecognized arg " << args[i] << std::endl;
       ARGS_USAGE();
@@ -104,13 +107,43 @@ int main(int argc, const char **argv)
 
     int err = OSD::mkfs(g_conf.osd_data, g_conf.osd_journal, mc.monmap.fsid, whoami);
     if (err < 0) {
-      cerr << "error creating empty object store in " << g_conf.osd_data << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
+      cerr << "error creating empty object store in " << g_conf.osd_data
+	   << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
       exit(1);
     }
-    cout << "created object store for osd" << whoami << " fsid " << mc.monmap.fsid << " on " << g_conf.osd_data << std::endl;
+    cout << "created object store " << g_conf.osd_data;
+    if (g_conf.osd_journal)
+      cout << " journal " << g_conf.osd_journal;
+    cout << " for osd" << whoami << " fsid " << mc.monmap.fsid << std::endl;
     exit(0);
   }
-
+  if (mkjournal) {
+    int err = OSD::mkjournal(g_conf.osd_data, g_conf.osd_journal);
+    if (err < 0) {
+      cerr << "error creating fresh journal " << g_conf.osd_journal
+	   << " for object store " << g_conf.osd_data
+	   << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
+      exit(1);
+    }
+    cout << "created new journal " << g_conf.osd_journal
+	 << " for object store " << g_conf.osd_data
+	 << std::endl;
+    exit(0);
+  }
+  if (flushjournal) {
+    int err = OSD::flushjournal(g_conf.osd_data, g_conf.osd_journal);
+    if (err < 0) {
+      cerr << "error flushing journal " << g_conf.osd_journal
+	   << " for object store " << g_conf.osd_data
+	   << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
+      exit(1);
+    }
+    cout << "flushed journal " << g_conf.osd_journal
+	 << " for object store " << g_conf.osd_data
+	 << std::endl;
+    exit(0);
+  }
+  
   string magic;
   ceph_fsid_t fsid;
   int w;
@@ -155,7 +188,7 @@ int main(int argc, const char **argv)
   messenger->set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless_peer());
 
 
-  OSD *osd = new OSD(whoami, messenger, messenger_hb, &mc, g_conf.osd_data, g_conf.osd_journal, mkjournal);
+  OSD *osd = new OSD(whoami, messenger, messenger_hb, &mc, g_conf.osd_data, g_conf.osd_journal);
 
   int err = osd->pre_init();
   if (err < 0) {
