@@ -91,7 +91,7 @@ public:
     eversion_t log_tail;     // oldest log entry.
     bool       log_backlog;    // do we store a complete log?
 
-    set<snapid_t> snap_trimq; // snaps we need to trim
+    interval_set<snapid_t> purged_snaps;
 
     pg_stat_t stats;
 
@@ -147,7 +147,7 @@ public:
     bool dne() const { return history.epoch_created == 0; }
 
     void encode(bufferlist &bl) const {
-      __u8 v = 21;
+      __u8 v = 22;
       ::encode(v, bl);
 
       ::encode(pgid, bl);
@@ -157,7 +157,7 @@ public:
       ::encode(log_backlog, bl);
       ::encode(stats, bl);
       history.encode(bl);
-      ::encode(snap_trimq, bl);
+      ::encode(purged_snaps, bl);
     }
     void decode(bufferlist::iterator &bl) {
       __u8 v;
@@ -170,7 +170,12 @@ public:
       ::decode(log_backlog, bl);
       ::decode(stats, bl);
       history.decode(bl);
-      ::decode(snap_trimq, bl);
+      if (v >= 22)
+	::decode(purged_snaps, bl);
+      else {
+	set<snapid_t> snap_trimq;
+	::decode(snap_trimq, bl);
+      }
     }
   };
   //WRITE_CLASS_ENCODER(Info::History)
@@ -255,7 +260,9 @@ public:
       bool is_backlog() const { return op == BACKLOG; }
       bool is_update() const { return is_clone() || is_modify() || is_backlog(); }
 
-      bool reqid_is_indexed() const { return op != BACKLOG && op != CLONE; }
+      bool reqid_is_indexed() const {
+	return reqid != osd_reqid_t() && op != BACKLOG && op != CLONE;
+      }
 
       void encode(bufferlist &bl) const {
 	__u8 struct_v = 1;
@@ -704,6 +711,8 @@ public:
   set<snapid_t> snap_collections;
   map<epoch_t,Interval> past_intervals;
 
+  interval_set<snapid_t> snap_trimq;
+
   xlist<PG*>::item recovery_item, backlog_item, scrub_item, snap_trim_item, remove_item, stat_queue_item;
   int recovery_ops_active;
 #ifdef DEBUG_RECOVERY_OIDS
@@ -1103,8 +1112,8 @@ inline ostream& operator<<(ostream& out, const PG& pg)
     if (lost)
       out << " l=" << lost;
   }
-  //if (pg.info.snap_trimq.size())
-  //out << " snaptrimq=" << pg.info.snap_trimq;
+  if (pg.snap_trimq.size())
+    out << " snaptrimq=" << pg.snap_trimq;
 
   if (pg.deleting)
     out << " DELETING";

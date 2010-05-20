@@ -34,7 +34,7 @@ template<typename T>
 class interval_set {
  public:
   map<T,T> m;   // map start -> len  
-  uint64_t _size;
+  int64_t _size;
   
   interval_set() : _size(0) {}
 
@@ -86,7 +86,7 @@ class interval_set {
   
  public:
   bool operator==(const interval_set& other) const {
-    return m == other.m;
+    return _size == other._size && m == other.m;
   }
 
   int size() const {
@@ -239,6 +239,7 @@ class interval_set {
     typename map<T,T>::iterator p = find_inc_m(start);
 
     _size -= len;
+    assert(_size >= 0);
 
     assert(p != m.end());
     assert(p->first <= start);
@@ -310,6 +311,7 @@ class interval_set {
 
     // a
     m = a.m;
+    _size = a._size;
 
     // - (a*b)
     interval_set ab;

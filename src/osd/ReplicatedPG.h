@@ -295,6 +295,7 @@ public:
     vector<PG::Log::Entry> log;
 
     ObjectContext *clone_obc;    // if we created a clone
+    ObjectContext *snapset_obc;  // if we created/deleted a snapdir
 
     int data_off;        // FIXME: we may want to kill this msgr hint off at some point!
 
@@ -303,7 +304,7 @@ public:
     OpContext(Message *_op, osd_reqid_t _reqid, vector<OSDOp>& _ops, bufferlist& _data,
 	      ObjectState *_obs, ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), indata(_data), obs(_obs),
-      clone_obc(0), data_off(0), pg(_pg) {}
+      clone_obc(0), snapset_obc(0), data_off(0), pg(_pg) {}
     ~OpContext() {
       assert(!clone_obc);
     }
@@ -405,8 +406,8 @@ protected:
   void op_applied(RepGather *repop);
   void op_commit(RepGather *repop);
   void eval_repop(RepGather*);
-  void issue_repop(RepGather *repop, int dest, utime_t now,
-		   bool old_exists, uint64_t old_size, eversion_t old_version);
+  void issue_repop(RepGather *repop, utime_t now,
+		   eversion_t old_last_update, bool old_exists, uint64_t old_size, eversion_t old_version);
   RepGather *new_repop(OpContext *ctx, ObjectContext *obc, bool noop, tid_t rep_tid);
   void repop_ack(RepGather *repop,
                  int result, int ack_type,

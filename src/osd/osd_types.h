@@ -618,17 +618,31 @@ struct pg_pool_t {
     lpgp_num_mask = (1 << calc_bits_of(v.lpgp_num-1)) - 1;
   }
 
+  /*
+   * we have two snap modes:
+   *  - pool global snaps
+   *    - snap existence/non-existence defined by snaps[] and snap_seq
+   *  - user managed snaps
+   *    - removal governed by removed_snaps
+   *
+   * we know which mode we're using based on whether removed_snaps is empty.
+   */
+  bool is_pool_snaps_mode() const {
+    return removed_snaps.empty();
+  }
+
   bool is_removed_snap(snapid_t s) const {
-    if (snaps.size())
-      return snaps.count(s) == 0;
-    return s <= get_snap_seq() && removed_snaps.contains(s);
+    if (is_pool_snaps_mode())
+      return s <= get_snap_seq() && snaps.count(s) == 0;
+    else
+      return removed_snaps.contains(s);
   }
   /*
    * build set of known-removed sets from either pool snaps or
    * explicit removed_snaps set.
    */
   void build_removed_snaps(interval_set<snapid_t>& rs) const {
-    if (removed_snaps.empty()) {
+    if (is_pool_snaps_mode()) {
       rs.clear();
       for (snapid_t s = 1; s <= get_snap_seq(); s = s + 1)
 	if (snaps.count(s) == 0)
