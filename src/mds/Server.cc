@@ -3733,6 +3733,18 @@ void Server::handle_client_unlink(MDRequest *mdr)
     rdlocks.insert(&in->filelock);   // to verify it's empty
   mds->locker->include_snap_rdlocks(rdlocks, dnl->get_inode());
 
+  // if we unlink a snapped multiversion inode and are creating a
+  // remote link to it, it must be anchored.  this mirrors the logic
+  // in MDCache::journal_cow_dentry().
+  bool need_snap_dentry = 
+    dnl->is_primary() &&
+    in->is_multiversion() &&
+    in->find_snaprealm()->get_newest_seq() + 1 > dn->first;
+  if (need_snap_dentry) {
+    dout(10) << " i need to be anchored because i am multiversion and will get a remote cow dentry" << dendl;
+    mds->mdcache->anchor_create_prep_locks(mdr, in, rdlocks, xlocks);
+  }
+
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
@@ -3748,10 +3760,17 @@ void Server::handle_client_unlink(MDRequest *mdr)
   if (mdr->now == utime_t())
     mdr->now = g_clock.real_now();
 
+  // NOTE: this is non-optimal.  we create an anchor at the old
+  // location, and then change it.  we can do better, but it's more
+  // complicated.  this is fine for now.
+  if (need_snap_dentry && !in->is_anchored()) {
+    mdcache->anchor_create(mdr, in, new C_MDS_RetryRequest(mdcache, mdr));
+    return;
+  }
+
   // get stray dn ready?
   if (dnl->is_primary()) {
-    if (!mdr->more()->dst_reanchor_atid &&
-	dnl->get_inode()->is_anchored()) {
+    if (!mdr->more()->dst_reanchor_atid && in->is_anchored()) {
       dout(10) << "reanchoring to stray " << *dnl->get_inode() << dendl;
       vector<Anchor> trace;
       straydn->make_anchor_trace(trace, dnl->get_inode());
