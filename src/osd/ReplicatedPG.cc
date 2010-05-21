@@ -1363,24 +1363,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       break;
     
     case CEPH_OSD_OP_DELETE:
-      { // delete
-	if (ctx->obs->exists)
-	  t.remove(coll_t::build_pg_coll(info.pgid), soid);  // no clones, delete!
-	if (ssc->snapset.clones.size()) {
-	  snapid_t newest = *ssc->snapset.clones.rbegin();
-	  add_interval_usage(ssc->snapset.clone_overlap[newest], info.stats);
-	  ssc->snapset.clone_overlap.erase(newest);  // ok, redundant.
-	}
-	if (ctx->obs->exists) {
-	  info.stats.num_objects--;
-	  info.stats.num_bytes -= oi.size;
-	  info.stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
-	  oi.size = 0;
-	  ssc->snapset.head_exists = false;
-	  ctx->obs->exists = false;
-	}      
-	info.stats.num_wr++;
-      }
+      _delete_head(ctx);
       break;
 
 
@@ -1692,6 +1675,31 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       break;
   }
   return result;
+}
+
+inline void ReplicatedPG::_delete_head(OpContext *ctx)
+{
+  SnapSetContext *ssc = ctx->obs->ssc;
+  object_info_t& oi = ctx->obs->oi;
+  const sobject_t& soid = oi.soid;
+  ObjectStore::Transaction& t = ctx->op_t;
+
+  if (ctx->obs->exists)
+    t.remove(coll_t::build_pg_coll(info.pgid), soid);
+  if (ssc->snapset.clones.size()) {
+    snapid_t newest = *ssc->snapset.clones.rbegin();
+    add_interval_usage(ssc->snapset.clone_overlap[newest], info.stats);
+    ssc->snapset.clone_overlap.erase(newest);  // ok, redundant.
+  }
+  if (ctx->obs->exists) {
+    info.stats.num_objects--;
+    info.stats.num_bytes -= oi.size;
+    info.stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
+    oi.size = 0;
+    ssc->snapset.head_exists = false;
+    ctx->obs->exists = false;
+  }      
+  info.stats.num_wr++;
 }
 
 
