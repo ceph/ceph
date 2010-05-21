@@ -117,7 +117,8 @@ public:
   void journal_allocated_inos(MDRequest *mdr, EMetaBlob *blob);
   void apply_allocated_inos(MDRequest *mdr);
 
-  CInode* rdlock_path_pin_ref(MDRequest *mdr, int n, set<SimpleLock*>& rdlocks, bool want_auth);
+  CInode* rdlock_path_pin_ref(MDRequest *mdr, int n, set<SimpleLock*>& rdlocks, bool want_auth,
+			      bool no_want_auth=false);
   CDentry* rdlock_path_xlock_dentry(MDRequest *mdr, int n, set<SimpleLock*>& rdlocks, set<SimpleLock*>& wrlocks, 
 				    set<SimpleLock*>& xlocks, bool okexist, bool mustexist, bool alwaysxlock);
 

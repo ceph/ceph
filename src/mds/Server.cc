@@ -1707,7 +1707,9 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
 
 CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
 				    set<SimpleLock*> &rdlocks,
-				    bool want_auth)
+				    bool want_auth,
+				    bool no_want_auth)  /* for readdir, who doesn't want auth _even_if_ it's
+							   a snapped dir */
 {
   MClientRequest *req = mdr->client_request;
   const filepath& refpath = n ? req->get_filepath2() : req->get_filepath();
@@ -1732,7 +1734,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
   dout(10) << "ref is " << *ref << dendl;
 
   // fw to inode auth?
-  if (mdr->snapid != CEPH_NOSNAP)
+  if (mdr->snapid != CEPH_NOSNAP && !no_want_auth)
     want_auth = true;
 
   if (want_auth) {
@@ -2297,7 +2299,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   MClientRequest *req = mdr->client_request;
   client_t client = req->get_source().num();
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CInode *diri = rdlock_path_pin_ref(mdr, 0, rdlocks, false);
+  CInode *diri = rdlock_path_pin_ref(mdr, 0, rdlocks, false, true);
   if (!diri) return;
 
   // it's a directory, right?
