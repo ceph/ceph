@@ -10,7 +10,9 @@ extern "C" {
 #include <string.h>
 
 #ifndef CEPH_OSD_TMAP_SET
+#define CEPH_OSD_TMAP_HDR 'h'
 #define CEPH_OSD_TMAP_SET 's'
+#define CEPH_OSD_TMAP_RM  'r'
 #endif
 
 /* initialization */

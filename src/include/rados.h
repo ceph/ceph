@@ -272,6 +272,10 @@ static inline int ceph_osd_op_mode_modify(int op)
 	return (op & CEPH_OSD_OP_MODE) == CEPH_OSD_OP_MODE_WR;
 }
 
+/*
+ * note that the following tmap stuff is also defined in the ceph librados.h
+ * any modification here needs to be updated there
+ */
 #define CEPH_OSD_TMAP_HDR 'h'
 #define CEPH_OSD_TMAP_SET 's'
 #define CEPH_OSD_TMAP_RM  'r'
