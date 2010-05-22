@@ -645,7 +645,8 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
       Dentry *dn = NULL;
       if (diri->dir && diri->dir->dentries.count(dname)) {
 	dn = diri->dir->dentries[dname];
-	unlink(dn, false);
+	if (dn->inode)
+	  unlink(dn, false);
       }
     }
   } else if (reply->head.op == CEPH_MDS_OP_LOOKUPSNAP ||
@@ -669,7 +670,8 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
       Dentry *dn = NULL;
       if (diri->dir && diri->dir->dentries.count(dname)) {
 	dn = diri->dir->dentries[dname];
-	unlink(dn, false);
+	if (dn->inode)
+	  unlink(dn, false);
       }
     }
   }
