@@ -294,15 +294,14 @@ int FileStore::mkfs()
     if (strcmp(de->d_name, ".") == 0 ||
 	strcmp(de->d_name, "..") == 0)
       continue;
-    long long unsigned c;
-    int r;
-    if (sscanf(de->d_name, COMMIT_SNAP_ITEM, &c) == 1) {
+
+    char path[PATH_MAX];
+    snprintf(path, sizeof(path), "%s/%s", basedir.c_str(), de->d_name);
+    struct stat st;
+    int r = ::stat(path, &st);
+    if (S_ISDIR(st.st_mode)) 
       r = wipe_subvol(de->d_name);
-    } else if (strcmp(de->d_name, "current") == 0) {
-      r = wipe_subvol("current");
-    } else {
-      char path[PATH_MAX];
-      snprintf(path, sizeof(path), "%s/%s", basedir.c_str(), de->d_name);
+    else {
       r = ::unlink(path);
       dout(0) << "mkfs  removing old file " << de->d_name << dendl;
     }
