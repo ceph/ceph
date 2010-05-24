@@ -8,7 +8,6 @@ usr/bin/crun
 usr/bin/cmon
 usr/bin/cmds
 usr/bin/cosd
-usr/bin/mkmonfs
 usr/bin/cauthtool
 usr/bin/rados
 usr/bin/rbdtool

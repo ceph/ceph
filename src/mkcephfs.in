@@ -205,7 +205,7 @@ for name in $what; do
 	    [ -n "$user" ] && chown $user $tmpkeyring
 	fi
 	get_conf mon_data "" "mon data"
-	do_cmd "$BINDIR/mkmonfs --clobber --mon-data $mon_data -i $num --monmap $monmap --osdmap $osdmap -k $tmpkeyring ; rm -f $tmpkeyring"
+	do_cmd "$BINDIR/cmon --mkfs -i $num --monmap $monmap --osdmap $osdmap -k $tmpkeyring ; rm -f $tmpkeyring"
 
 	if [ -n "$ssh" ]; then
 	    if [ -n "$user" ]; then
