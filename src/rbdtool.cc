@@ -57,13 +57,12 @@ static void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
   memcpy(&ondisk.version, rbd_version, sizeof(rbd_version));
 
   ondisk.image_size = size;
-  ondisk.flags = 0;
   if (order)
-    ondisk.flags = order << RBD_FLAGS_ORDER_SHIFT;
+    ondisk.options.order = order;
   else
-    ondisk.flags = RBD_DEFAULT_OBJ_ORDER;
-  ondisk.flags = ondisk.flags | (RBD_CRYPT_NONE << RBD_FLAGS_CRYPT_TYPE_SHIFT) |
-                 (RBD_COMP_NONE << RBD_FLAGS_COMP_TYPE_SHIFT);
+    ondisk.options.order = RBD_DEFAULT_OBJ_ORDER;
+  ondisk.options.crypt_type = RBD_CRYPT_NONE;
+  ondisk.options.comp_type = RBD_COMP_NONE;
   ondisk.snap_seq = 0;
   ondisk.snap_count = 0;
   ondisk.reserved = 0;
@@ -72,7 +71,7 @@ static void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
 
 void print_header(char *imgname, rbd_obj_header_ondisk *header)
 {
-  int obj_order = rbd_get_obj_order(header->flags);
+  int obj_order = header->options.order;
   cout << "rbd image '" << imgname << "':\n"
        << "\tsize " << prettybyte_t(header->image_size) << " in "
        << (header->image_size >> obj_order) << " objects\n"
@@ -84,7 +83,7 @@ void print_header(char *imgname, rbd_obj_header_ondisk *header)
 void trim_image(const char *imgname, rbd_obj_header_ondisk *header, uint64_t newsize)
 {
   uint64_t size = header->image_size;
-  int obj_order = rbd_get_obj_order(header->flags);
+  int obj_order = header->options.order;
   uint64_t numseg = size >> obj_order;
   uint64_t start = newsize >> obj_order;
 
