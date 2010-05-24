@@ -497,7 +497,6 @@ void MDBalancer::prep_rebalance(int beat)
       }
     }
   }
-  send_targets_message();
   try_rebalance();
 }
 
@@ -505,23 +504,14 @@ void MDBalancer::prep_rebalance(int beat)
 
 void MDBalancer::try_rebalance()
 {
-  if (!targets_safe()) {
-    //can't rebalance until it has all our targets!
-    dout(10) << "MDBalancer::try_rebalance can't rebalance when mds is missing some of our targets! Resending targets message" << dendl;
-    send_targets_message();
+  if (!check_targets())
     return;
-  }
 
   if (g_conf.mds_thrash_exports) {
     dout(5) << "mds_thrash is on; not performing standard rebalance operation!"
 	    << dendl;
     return;
-  }
-
-  // if the MDSMap has old targets we don't want...
-  if (mds->mdsmap->get_mds_info(mds->whoami).export_targets.size() != my_targets.size()) {
-    send_targets_message();
-  }
+  } 
   
   // make a sorted list of my imports
   map<double,CDir*>    import_pop_map;
@@ -682,34 +672,63 @@ void MDBalancer::try_rebalance()
   show_imports();
 }
 
-inline void MDBalancer::send_targets_message()
-{
-  set<int32_t> targets;
-  for (map<int, double>::iterator i = my_targets.begin();
-       i != my_targets.end();
-       ++i)
-    targets.insert(i->first);
-  MMDSLoadTargets* m = new MMDSLoadTargets(mds->monc->get_global_id(), targets);
-  mds->monc->send_mon_message(m);
-}
 
 /* returns true if all my_target MDS are in the MDSMap.
  */
-bool MDBalancer::targets_safe() {
-  //get MonMap's idea of my_targets
-  const set<int32_t>& map_targets = 
-    mds->mdsmap->get_mds_info(mds->whoami).export_targets;
-  //check if the current MonMap has all our targets
+bool MDBalancer::check_targets()
+{
+  // get MonMap's idea of my_targets
+  const set<int32_t>& map_targets = mds->mdsmap->get_mds_info(mds->whoami).export_targets;
+
+  bool send = false;
+  bool ok = true;
+
+  // make sure map targets are in the old_prev_targets map
+  for (set<int32_t>::iterator p = map_targets.begin(); p != map_targets.end(); p++) {
+    if (old_prev_targets.count(*p) == 0)
+      old_prev_targets[*p] = 0;
+    if (my_targets.count(*p) == 0)
+      old_prev_targets[*p]++;
+  }
+
+  // check if the current MonMap has all our targets
+  set<int32_t> need_targets;
   for (map<int,double>::iterator i = my_targets.begin();
        i != my_targets.end();
        ++i) {
+    need_targets.insert(i->first);
+    old_prev_targets[i->first] = 0;
+
     if (!map_targets.count(i->first)) {
-      dout(20) << "At least one target mds (" << i->first
-	       << ") not in MDSMap" << dendl;
-      return false;
+      dout(20) << " target mds" << i->first << " not in map's export_targets" << dendl;
+      send = true;
+      ok = false;
     }
   }
-  return true;
+
+  set<int32_t> want_targets = need_targets;
+  map<int32_t, int>::iterator p = old_prev_targets.begin();
+  while (p != old_prev_targets.end()) {
+    if (map_targets.count(p->first) == 0 &&
+	need_targets.count(p->first) == 0) {
+      old_prev_targets.erase(p++);
+      continue;
+    }
+    dout(20) << " target mds" << p->first << " has been non-target for " << p->second << dendl;
+    if (p->second < g_conf.mds_bal_target_removal_min)
+      want_targets.insert(p->first);
+    if (p->second >= g_conf.mds_bal_target_removal_max)
+      send = true;
+    p++;
+  }
+
+  dout(10) << "check_targets have " << map_targets << " need " << need_targets << " want " << want_targets << dendl;
+
+  if (send) {
+    MMDSLoadTargets* m = new MMDSLoadTargets(mds->monc->get_global_id(), want_targets);
+    mds->monc->send_mon_message(m);
+  }
+  return ok;
 }
 
 void MDBalancer::find_exports(CDir *dir, 
