@@ -1843,11 +1843,17 @@ void Locker::process_cap_update(MDRequest *mdr, client_t client,
     CDir *dir = in->get_dirfrag(fg);
     if (dir) {
       CDentry *dn = dir->lookup(dname);
-      ClientLease *l = dn->get_client_lease(client);
-      if (l) {
-	dout(10) << " removing lease on " << *dn << dendl;
-	dn->remove_client_lease(l, l->mask, this);
-      }
+      if (dn) {
+	ClientLease *l = dn->get_client_lease(client);
+	if (l) {
+	  dout(10) << " removing lease on " << *dn << dendl;
+	  dn->remove_client_lease(l, l->mask, this);
+	}
+      } else {
+	stringstream ss;
+	ss << "client" << client << " released lease on dn " << dir->dirfrag() << "/" << dname << " which dne";
+	mds->logclient.log(LOG_WARN, ss);
+     }
     }
   }
 }
