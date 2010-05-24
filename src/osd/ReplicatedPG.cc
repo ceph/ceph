@@ -99,7 +99,6 @@ void ReplicatedPG::wait_for_missing_object(const sobject_t& soid, Message *m)
 	    << ", pulling"
 	    << dendl;
     pull(soid);
-    start_recovery_op(soid);
   }
   waiting_for_missing_object[soid].push_back(m);
 }
@@ -2720,6 +2719,8 @@ bool ReplicatedPG::pull(const sobject_t& soid)
   assert(pulling.count(soid) == 0);
   pulling[soid].first = v;
   pulling[soid].second = fromosd;
+
+  start_recovery_op(soid);
   return true;
 }
 
@@ -3389,7 +3390,6 @@ int ReplicatedPG::recover_primary(int max)
 	
 	if (pull(soid)) {
 	  ++started;
-	  start_recovery_op(soid);
 	} else
 	  ++skipped;
 	if (started >= max)
