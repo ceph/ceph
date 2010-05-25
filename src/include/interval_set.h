@@ -298,7 +298,7 @@ class interval_set {
   }
   void intersection_of(const interval_set& b) {
     interval_set a;
-    a.m.swap(m);
+    swap(a);
     intersection_of(a, b);
   }
 
@@ -324,7 +324,7 @@ class interval_set {
   }
   void union_of(const interval_set &b) {
     interval_set a;
-    a.m.swap(m);
+    swap(a);    
     union_of(a, b);
   }
 
