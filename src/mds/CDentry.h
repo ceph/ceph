@@ -29,6 +29,7 @@ using namespace std;
 #include "mdstypes.h"
 
 #include "SimpleLock.h"
+#include "LocalLock.h"
 
 class CInode;
 class CDir;
@@ -151,8 +152,10 @@ protected:
 public:
   // lock
   static LockType lock_type;
+  static LockType versionlock_type;
 
   SimpleLock lock;
+  LocalLock versionlock;
 
  public:
   // cons
@@ -164,7 +167,8 @@ public:
     version(0), projected_version(0),
     item_dirty(this),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
-    lock(this, &lock_type) {
+    lock(this, &lock_type),
+    versionlock(this, &versionlock_type) {
     g_num_dn++;
     g_num_dna++;
   }
@@ -176,7 +180,8 @@ public:
     version(0), projected_version(0),
     item_dirty(this),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
-    lock(this, &lock_type) {
+    lock(this, &lock_type),
+    versionlock(this, &versionlock_type) {
     g_num_dn++;
     g_num_dna++;
     linkage.remote_ino = ino;
