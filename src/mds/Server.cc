@@ -2403,8 +2403,10 @@ void Server::handle_client_readdir(MDRequest *mdr)
     if (snaps && dn->last != CEPH_NOSNAP)
       if (dir->try_trim_snap_dentry(dn, *snaps))
 	continue;
-    if (dn->last < snapid || dn->first > snapid)
+    if (dn->last < snapid || dn->first > snapid) {
+      dout(20) << "skipping non-overlapping snap " << *dn << dendl;
       continue;
+    }
 
     if (offset && strcmp(dn->get_name().c_str(), offset) <= 0)
       continue;
@@ -3953,8 +3955,10 @@ bool Server::_dir_is_nonempty(MDRequest *mdr, CInode *in)
 
     // does the frag _look_ empty?
     if (dir->inode->get_projected_inode()->dirstat.size() > 0) {	
-      dout(10) << "dir_is_nonempty still " << dir->get_num_head_items() 
-	       << " cached items in frag " << *dir << dendl;
+      dout(10) << "dir_is_nonempty projected dir size still "
+	       << dir->inode->get_projected_inode()->dirstat.size()
+	       << " on " << *dir->inode
+	       << dendl;
       reply_request(mdr, -ENOTEMPTY);
       return true;
     }
