@@ -615,6 +615,17 @@ private:
     o->snapc = snapc;
     return op_submit(o);
   }
+  tid_t rollback_object(const object_t& oid, ceph_object_layout ol,
+		 const SnapContext& snapc, snapid_t snapid,
+		 utime_t mtime, Context *onack, Context *oncommit) {
+    vector<OSDOp> ops(1);
+    ops[0].op.op = CEPH_OSD_OP_ROLLBACK;
+    ops[0].op.snap.snapid = snapid;
+    Op *o = new Op(oid, ol, ops, 0, onack, oncommit);
+    o->mtime = mtime;
+    o->snapc = snapc;
+    return op_submit(o);
+  }
   tid_t create(const object_t& oid, ceph_object_layout ol, 
 	     const SnapContext& snapc, utime_t mtime,
              int global_flags, int create_flags,
