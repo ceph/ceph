@@ -343,7 +343,7 @@ public:
 
 
 
-  virtual bool is_updated() { return false; }
+  virtual bool is_dirty() { return false; }
 
 
   // can_*
