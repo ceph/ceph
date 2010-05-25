@@ -2049,7 +2049,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
   
   // clear if dirtyscattered, since we're going to journal this
   //  but not until we _actually_ finish the import...
-  if (in->filelock.is_updated()) {
+  if (in->filelock.is_dirty()) {
     updated_scatterlocks.push_back(&in->filelock);
     mds->locker->mark_updated_scatterlock(&in->filelock);
   }

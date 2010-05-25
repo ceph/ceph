@@ -495,7 +495,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue)
     } else {
       // auth
 
-      if (lock->is_updated()) {
+      if (lock->is_dirty()) {
 	scatter_writebehind((ScatterLock*)lock);
 	mds->mdlog->flush();
 	return;
@@ -842,7 +842,7 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
       if (want_scatter)
 	file_mixed((ScatterLock*)lock);
       else {
-	if (nowait && lock->is_updated())
+	if (nowait && lock->is_dirty())
 	  return false;   // don't do nested lock, as that may scatter_writebehind in simple_lock!
 	simple_lock(lock);
       }
@@ -2598,7 +2598,7 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
       gather++;
     }
     
-    if (!gather && lock->is_updated()) {
+    if (!gather && lock->is_dirty()) {
       lock->get_parent()->auth_pin(lock);
       scatter_writebehind((ScatterLock*)lock);
       mds->mdlog->flush();
@@ -2722,7 +2722,7 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
     gather++;
   }
 
-  if (!gather && lock->is_updated()) {
+  if (!gather && lock->is_dirty()) {
     lock->get_parent()->auth_pin(lock);
     scatter_writebehind((ScatterLock*)lock);
     mds->mdlog->flush();
@@ -3033,7 +3033,7 @@ void Locker::scatter_tick()
 
     if (n-- == 0) break;  // scatter_nudge() may requeue; avoid looping
     
-    if (!lock->is_updated()) {
+    if (!lock->is_dirty()) {
       updated_scatterlocks.pop_front();
       dout(10) << " removing from updated_scatterlocks " 
 	       << *lock << " " << *lock->get_parent() << dendl;
