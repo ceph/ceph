@@ -123,7 +123,7 @@ case $1 in
 	    docrun=0
 	    ;;
     -m )
-	    [ "$2" == "" ] && usage_exit
+	    [ "$2" = "" ] && usage_exit
 	    options="$options $1"
 	    shift
 	    MON_ADDR=$1
@@ -135,7 +135,7 @@ case $1 in
 	    dobtrfs=0
 	    ;;
     --conf | -c)
-	    [ "$2" == "" ] && usage_exit
+	    [ "$2" = "" ] && usage_exit
 	    options="$options $1"
 	    shift
 	    conf=$1
