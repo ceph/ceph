@@ -135,15 +135,15 @@ public:
 
 
   // -- wait masks --
-  static const __u64 WAIT_DENTRY       = (1<<0);  // wait for item to be in cache
-  static const __u64 WAIT_COMPLETE     = (1<<1);  // wait for complete dir contents
-  static const __u64 WAIT_FROZEN       = (1<<2);  // auth pins removed
+  static const uint64_t WAIT_DENTRY       = (1<<0);  // wait for item to be in cache
+  static const uint64_t WAIT_COMPLETE     = (1<<1);  // wait for complete dir contents
+  static const uint64_t WAIT_FROZEN       = (1<<2);  // auth pins removed
 
   static const int WAIT_DNLOCK_OFFSET = 4;
 
-  static const __u64 WAIT_ANY_MASK  = (0xffffffff);
-  static const __u64 WAIT_ATFREEZEROOT = (WAIT_UNFREEZE);
-  static const __u64 WAIT_ATSUBTREEROOT = (WAIT_SINGLEAUTH);
+  static const uint64_t WAIT_ANY_MASK  = (0xffffffff);
+  static const uint64_t WAIT_ATFREEZEROOT = (WAIT_UNFREEZE);
+  static const uint64_t WAIT_ATSUBTREEROOT = (WAIT_SINGLEAUTH);
 
 
 
@@ -494,9 +494,9 @@ public:
 
   void take_sub_waiting(list<Context*>& ls);  // dentry or ino
 
-  void add_waiter(__u64 mask, Context *c);
-  void take_waiting(__u64 mask, list<Context*>& ls);  // may include dentry waiters
-  void finish_waiting(__u64 mask, int result = 0);    // ditto
+  void add_waiter(uint64_t mask, Context *c);
+  void take_waiting(uint64_t mask, list<Context*>& ls);  // may include dentry waiters
+  void finish_waiting(uint64_t mask, int result = 0);    // ditto
   
 
   // -- import/export --

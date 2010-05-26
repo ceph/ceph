@@ -59,7 +59,7 @@ int FileJournal::_open(bool forwrite, bool create)
   block_size = st.st_blksize;
 
   if (create && max_size < (g_conf.osd_journal_size << 20)) {
-    __u64 newsize = g_conf.osd_journal_size << 20;
+    uint64_t newsize = g_conf.osd_journal_size << 20;
     dout(10) << "_open extending to " << newsize << " bytes" << dendl;
     r = ::ftruncate(fd, newsize);
     if (r == 0)
@@ -180,7 +180,7 @@ int FileJournal::create()
   return 0;
 }
 
-int FileJournal::open(__u64 next_seq)
+int FileJournal::open(uint64_t next_seq)
 {
   dout(2) << "open " << fn << " next_seq " << next_seq << dendl;
 
@@ -227,7 +227,7 @@ int FileJournal::open(__u64 next_seq)
 
   // find next entry
   read_pos = header.start;
-  __u64 seq = 0;
+  uint64_t seq = 0;
   while (1) {
     bufferlist bl;
     off64_t old_pos = read_pos;
@@ -324,7 +324,7 @@ bufferptr FileJournal::prepare_header()
 
 
 
-int FileJournal::check_for_full(__u64 seq, off64_t pos, off64_t size)
+int FileJournal::check_for_full(uint64_t seq, off64_t pos, off64_t size)
 {
   // already full?
   if (full_commit_seq || full_restart_seq)
@@ -377,7 +377,7 @@ int FileJournal::check_for_full(__u64 seq, off64_t pos, off64_t size)
   return -ENOSPC;
 }
 
-int FileJournal::prepare_multi_write(bufferlist& bl, __u64& orig_ops, __u64& orig_bytes)
+int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_t& orig_bytes)
 {
   // gather queued writes
   off64_t queue_pos = write_pos;
@@ -415,10 +415,10 @@ int FileJournal::prepare_multi_write(bufferlist& bl, __u64& orig_ops, __u64& ori
   return 0;
 }
 
-int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, __u64& orig_ops, __u64& orig_bytes)
+int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64_t& orig_ops, uint64_t& orig_bytes)
 {
   // grab next item
-  __u64 seq = writeq.front().seq;
+  uint64_t seq = writeq.front().seq;
   bufferlist &ebl = writeq.front().bl;
   off64_t base_size = 2*sizeof(entry_header_t) + ebl.length();
   off64_t size = ROUND_UP_TO(base_size, header.alignment);
@@ -458,7 +458,7 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, __u64&
 
   // pop from writeq
   writeq.pop_front();
-  journalq.push_back(pair<__u64,off64_t>(seq, queue_pos));
+  journalq.push_back(pair<uint64_t,off64_t>(seq, queue_pos));
 
   queue_pos += size;
   if (queue_pos > header.max_size)
@@ -622,8 +622,8 @@ void FileJournal::write_thread_entry()
       continue;
     }
     
-    __u64 orig_ops = 0;
-    __u64 orig_bytes = 0;
+    uint64_t orig_ops = 0;
+    uint64_t orig_bytes = 0;
 
     bufferlist bl;
     int r = prepare_multi_write(bl, orig_ops, orig_bytes);
@@ -636,8 +636,8 @@ void FileJournal::write_thread_entry()
     assert(r == 0);
     do_write(bl);
     
-    __u64 new_ops = throttle_ops.put(orig_ops);
-    __u64 new_bytes = throttle_bytes.put(orig_bytes);
+    uint64_t new_ops = throttle_ops.put(orig_ops);
+    uint64_t new_bytes = throttle_bytes.put(orig_bytes);
     dout(10) << "write_thread throttle finished " << orig_ops << " ops and " 
 	     << orig_bytes << " bytes, now "
 	     << new_ops << " ops and " << new_bytes << " bytes"
@@ -649,7 +649,7 @@ void FileJournal::write_thread_entry()
 }
 
 
-void FileJournal::submit_entry(__u64 seq, bufferlist& e, Context *oncommit)
+void FileJournal::submit_entry(uint64_t seq, bufferlist& e, Context *oncommit)
 {
   Mutex::Locker locker(write_lock);  // ** lock **
 
@@ -682,7 +682,7 @@ void FileJournal::submit_entry(__u64 seq, bufferlist& e, Context *oncommit)
 }
 
 
-void FileJournal::committed_thru(__u64 seq)
+void FileJournal::committed_thru(uint64_t seq)
 {
   Mutex::Locker locker(write_lock);
 
@@ -786,7 +786,7 @@ void FileJournal::wrap_read_bl(off64_t& pos, int64_t olen, bufferlist& bl)
   }
 }
 
-bool FileJournal::read_entry(bufferlist& bl, __u64& seq)
+bool FileJournal::read_entry(bufferlist& bl, uint64_t& seq)
 {
   if (!read_pos) {
     dout(2) << "read_entry -- not readable" << dendl;
@@ -843,7 +843,7 @@ bool FileJournal::read_entry(bufferlist& bl, __u64& seq)
 
   // ok!
   seq = h->seq;
-  journalq.push_back(pair<__u64,off64_t>(h->seq, read_pos));
+  journalq.push_back(pair<uint64_t,off64_t>(h->seq, read_pos));
 
   read_pos = pos;
   assert(read_pos % header.alignment == 0);

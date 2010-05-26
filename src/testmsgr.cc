@@ -41,7 +41,7 @@ Messenger *messenger = 0;
 Mutex lock("mylock");
 Cond cond;
 
-__u64 received = 0;
+uint64_t received = 0;
 
 class Admin : public Dispatcher {
   bool ms_dispatch(Message *m) {
@@ -102,7 +102,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     isend = 100;
 
   lock.Lock();
-  __u64 sent = 0;
+  uint64_t sent = 0;
   while (1) {
     while (received + isend <= sent) {
       //cerr << "wait r " << received << " s " << sent << " is " << isend << std::endl;

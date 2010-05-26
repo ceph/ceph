@@ -24,12 +24,12 @@ using std::map;
 
 class MMDSLoadTargets : public PaxosServiceMessage {
  public:
-  __u64 global_id;
+  uint64_t global_id;
   set<int32_t> targets;
 
   MMDSLoadTargets() : PaxosServiceMessage(MSG_MDS_OFFLOAD_TARGETS, 0) {}
 
-  MMDSLoadTargets(__u64 g, set<int32_t>& mds_targets) :
+  MMDSLoadTargets(uint64_t g, set<int32_t>& mds_targets) :
     PaxosServiceMessage(MSG_MDS_OFFLOAD_TARGETS, 0),
     global_id(g), targets(mds_targets) {}
 

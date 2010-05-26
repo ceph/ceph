@@ -69,12 +69,12 @@ public:
 
   Session *get_session(Message *m);
   void handle_client_session(class MClientSession *m);
-  void _session_logged(Session *session, __u64 state_seq, 
+  void _session_logged(Session *session, uint64_t state_seq, 
 		       bool open, version_t pv, interval_set<inodeno_t>& inos,version_t piv);
   version_t prepare_force_open_sessions(map<client_t,entity_inst_t> &cm,
-					map<client_t,__u64>& sseqmap);
+					map<client_t,uint64_t>& sseqmap);
   void finish_force_open_sessions(map<client_t,entity_inst_t> &cm,
-					map<client_t,__u64>& sseqmap);
+					map<client_t,uint64_t>& sseqmap);
   void terminate_sessions();
   void find_idle_sessions();
   void kill_session(Session *session);

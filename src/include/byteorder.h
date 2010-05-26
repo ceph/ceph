@@ -20,7 +20,7 @@ static __inline__ __u32 swab32(__u32 val)
 	  ((val << 8)  & 0xff0000) | 
 	  ((val << 24)));
 }
-static __inline__ __u64 swab64(__u64 val) 
+static __inline__ uint64_t swab64(uint64_t val) 
 {
   return (( val >> 56) |
 	  ((val >> 40) & 0xff00ull) |
@@ -74,7 +74,7 @@ MAKE_LE_CLASS(16)
 #define cpu_to_le32(x) (x)
 #define cpu_to_le16(x) (x)
   */
-#define le64_to_cpu(x) ((__u64)x)
+#define le64_to_cpu(x) ((uint64_t)x)
 #define le32_to_cpu(x) ((__u32)x)
 #define le16_to_cpu(x) ((__u16)x)
 

@@ -48,7 +48,7 @@ class Filer {
     ceph_file_layout layout;
     snapid_t snapid;
 
-    __u64 *psize;
+    uint64_t *psize;
     utime_t *pmtime;
 
     int flags;
@@ -58,9 +58,9 @@ class Filer {
     Context *onfinish;
     
     vector<ObjectExtent> probing;
-    __u64 probing_off, probing_len;
+    uint64_t probing_off, probing_len;
     
-    map<object_t, __u64> known_size;
+    map<object_t, uint64_t> known_size;
     utime_t max_mtime;
 
     map<object_t, tid_t> ops;
@@ -69,7 +69,7 @@ class Filer {
     bool found_size;
 
     Probe(inodeno_t i, ceph_file_layout &l, snapid_t sn,
-	  __u64 f, __u64 *e, utime_t *m, int fl, bool fw, Context *c) : 
+	  uint64_t f, uint64_t *e, utime_t *m, int fl, bool fw, Context *c) : 
       ino(i), layout(l), snapid(sn),
       psize(e), pmtime(m), flags(fl), fwd(fw), onfinish(c),
       probing_off(f), probing_len(0),
@@ -79,7 +79,7 @@ class Filer {
   class C_Probe;
 
   void _probe(Probe *p);
-  void _probed(Probe *p, const object_t& oid, __u64 size, utime_t mtime);
+  void _probed(Probe *p, const object_t& oid, uint64_t size, utime_t mtime);
 
  public:
   Filer(Objecter *o) : objecter(o) {}
@@ -97,7 +97,7 @@ class Filer {
    * ranges in objects on (primary) osds)
    */
   void file_to_extents(inodeno_t ino, ceph_file_layout *layout,
-		       __u64 offset, __u64 len,
+		       uint64_t offset, uint64_t len,
 		       vector<ObjectExtent>& extents);
 
 
@@ -108,8 +108,8 @@ class Filer {
   int read(inodeno_t ino,
 	   ceph_file_layout *layout,
 	   snapid_t snap,
-           __u64 offset, 
-           __u64 len, 
+           uint64_t offset, 
+           uint64_t len, 
            bufferlist *bl,   // ptr to data
 	   int flags,
            Context *onfinish) {
@@ -123,11 +123,11 @@ class Filer {
   int read_trunc(inodeno_t ino,
 	   ceph_file_layout *layout,
 	   snapid_t snap,
-           __u64 offset, 
-           __u64 len, 
+           uint64_t offset, 
+           uint64_t len, 
            bufferlist *bl,   // ptr to data
 	   int flags,
-	   __u64 truncate_size,
+	   uint64_t truncate_size,
 	   __u32 truncate_seq,
            Context *onfinish) {
     assert(snap);  // (until there is a non-NOSNAP write)
@@ -141,8 +141,8 @@ class Filer {
   int write(inodeno_t ino,
 	    ceph_file_layout *layout,
 	    const SnapContext& snapc,
-	    __u64 offset, 
-            __u64 len, 
+	    uint64_t offset, 
+            uint64_t len, 
             bufferlist& bl,
 	    utime_t mtime,
             int flags, 
@@ -157,12 +157,12 @@ class Filer {
   int write_trunc(inodeno_t ino,
 	    ceph_file_layout *layout,
 	    const SnapContext& snapc,
-	    __u64 offset, 
-            __u64 len, 
+	    uint64_t offset, 
+            uint64_t len, 
             bufferlist& bl,
 	    utime_t mtime,
             int flags, 
-	   __u64 truncate_size,
+	   uint64_t truncate_size,
 	   __u32 truncate_seq,
             Context *onack,
             Context *oncommit) {
@@ -176,8 +176,8 @@ class Filer {
   int truncate(inodeno_t ino,
 	       ceph_file_layout *layout,
 	       const SnapContext& snapc,
-	       __u64 offset,
-	       __u64 len,
+	       uint64_t offset,
+	       uint64_t len,
 	       __u32 truncate_seq,
 	       utime_t mtime,
 	       int flags,
@@ -213,8 +213,8 @@ class Filer {
   int zero(inodeno_t ino,
 	   ceph_file_layout *layout,
 	   const SnapContext& snapc,
-	   __u64 offset,
-           __u64 len,
+	   uint64_t offset,
+           uint64_t len,
 	   utime_t mtime,
 	   int flags,
            Context *onack,
@@ -244,7 +244,7 @@ class Filer {
   int purge_range(inodeno_t ino,
 		  ceph_file_layout *layout,
 		  const SnapContext& snapc,
-		  __u64 first_obj, __u64 num_obj,
+		  uint64_t first_obj, uint64_t num_obj,
 		  utime_t mtime,
 		  int flags,
 		  Context *oncommit);
@@ -258,8 +258,8 @@ class Filer {
   int probe(inodeno_t ino,
 	    ceph_file_layout *layout,
 	    snapid_t snapid,
-	    __u64 start_from,
-	    __u64 *end,
+	    uint64_t start_from,
+	    uint64_t *end,
 	    utime_t *mtime,
 	    bool fwd,
 	    int flags,

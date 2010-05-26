@@ -33,11 +33,11 @@ public:
   struct header_t {
     __u32 version;
     __u32 flags;
-    __u64 fsid;
+    uint64_t fsid;
     __u32 block_size;
     __u32 alignment;
-    __s64 max_size;   // max size of journal ring buffer
-    __s64 start;      // offset of first entry
+    int64_t max_size;   // max size of journal ring buffer
+    int64_t start;      // offset of first entry
 
     header_t() : version(1), flags(0), fsid(0), block_size(0), alignment(0), max_size(0), start(0) {}
 
@@ -78,27 +78,27 @@ private:
   off64_t write_pos;      // byte where the next entry to be written will go
   off64_t read_pos;       // 
 
-  __u64 last_committed_seq;
+  uint64_t last_committed_seq;
 
-  __u64 full_commit_seq;  // don't write, wait for this seq to commit
-  __u64 full_restart_seq; // start writing again with this seq
+  uint64_t full_commit_seq;  // don't write, wait for this seq to commit
+  uint64_t full_restart_seq; // start writing again with this seq
 
   int fd;
 
   // in journal
-  deque<pair<__u64, off64_t> > journalq;  // track seq offsets, so we can trim later.
+  deque<pair<uint64_t, off64_t> > journalq;  // track seq offsets, so we can trim later.
 
   // currently being journaled and awaiting callback.
   //  or, awaiting callback bc journal was full.
-  deque<__u64> writing_seq;
+  deque<uint64_t> writing_seq;
   deque<Context*> writing_fin;
 
   // waiting to be journaled
   struct write_item {
-    __u64 seq;
+    uint64_t seq;
     bufferlist bl;
     Context *fin;
-    write_item(__u64 s, bufferlist& b, Context *f) : seq(s), fin(f) { bl.claim(b); }
+    write_item(uint64_t s, bufferlist& b, Context *f) : seq(s), fin(f) { bl.claim(b); }
   };
   deque<write_item> writeq;
   
@@ -120,9 +120,9 @@ private:
   void stop_writer();
   void write_thread_entry();
 
-  int check_for_full(__u64 seq, off64_t pos, off64_t size);
-  int prepare_multi_write(bufferlist& bl, __u64& orig_ops, __u64& orig_bytee);
-  int prepare_single_write(bufferlist& bl, off64_t& queue_pos, __u64& orig_ops, __u64& orig_bytes);
+  int check_for_full(uint64_t seq, off64_t pos, off64_t size);
+  int prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_t& orig_bytee);
+  int prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64_t& orig_ops, uint64_t& orig_bytes);
   void do_write(bufferlist& bl);
 
   void write_bl(off64_t& pos, bufferlist& bl);
@@ -143,7 +143,7 @@ private:
   }
 
  public:
-  FileJournal(__u64 fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false) : 
+  FileJournal(uint64_t fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false) : 
     Journal(fsid, fin, sync_cond), fn(f),
     zero_buf(NULL),
     max_size(0), block_size(0),
@@ -161,7 +161,7 @@ private:
   }
 
   int create();
-  int open(__u64 last_seq);
+  int open(uint64_t last_seq);
   void close();
 
   void flush();
@@ -174,14 +174,14 @@ private:
   void make_writeable();
 
   // writes
-  void submit_entry(__u64 seq, bufferlist& bl, Context *oncommit);  // submit an item
-  void committed_thru(__u64 seq);
+  void submit_entry(uint64_t seq, bufferlist& bl, Context *oncommit);  // submit an item
+  void committed_thru(uint64_t seq);
   bool is_full();
 
   void set_wait_on_full(bool b) { wait_on_full = b; }
 
   // reads
-  bool read_entry(bufferlist& bl, __u64& seq);
+  bool read_entry(bufferlist& bl, uint64_t& seq);
 };
 
 #endif

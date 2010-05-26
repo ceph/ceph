@@ -42,7 +42,7 @@ public:
   bool noop;
 
   bool old_exists;
-  __u64 old_size;
+  uint64_t old_size;
   eversion_t old_version;
 
   SnapSet snapset;
@@ -61,8 +61,8 @@ public:
 
   map<nstring,bufferptr> attrset;
 
-  interval_set<__u64> data_subset;
-  map<sobject_t, interval_set<__u64> > clone_subsets;
+  interval_set<uint64_t> data_subset;
+  map<sobject_t, interval_set<uint64_t> > clone_subsets;
 
  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();

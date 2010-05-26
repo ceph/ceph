@@ -416,7 +416,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
   }
 
   try {
-    __u64 auid;
+    uint64_t auid;
     if (start) {
       // new session
       proto = s->auth_handler->start_session(entity_name, indata, response_bl, caps_info);

@@ -40,7 +40,7 @@ public:
                            std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes) = 0;
 
   /** Create a new bucket*/
-  virtual int create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, __u64 auid=0) = 0;
+  virtual int create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, uint64_t auid=0) = 0;
   /** write an object to the storage device in the appropriate pool
     with the given stats */
   virtual int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,

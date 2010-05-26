@@ -25,7 +25,7 @@
 #define DOUT_SUBSYS mds
 #undef dout_prefix
 #define dout_prefix _prefix(mdcache->mds->get_nodeid(), inode, seq, this)
-static ostream& _prefix(int whoami, CInode *inode, __u64 seq, SnapRealm *realm) {
+static ostream& _prefix(int whoami, CInode *inode, uint64_t seq, SnapRealm *realm) {
   return *_dout << dbeginl
 		<< " mds" << whoami
 		<< ".cache.snaprealm(" << inode->ino()

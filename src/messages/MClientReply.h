@@ -101,7 +101,7 @@ struct InodeStat {
   unsigned mode, uid, gid, nlink, rdev;
   loff_t size, max_size;
   version_t truncate_seq;
-  __u64 truncate_size;
+  uint64_t truncate_size;
   utime_t ctime, mtime, atime;
   version_t time_warp_seq;
 

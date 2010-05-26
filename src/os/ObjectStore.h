@@ -40,7 +40,7 @@ using std::vector;
 # define MIN(a,b) ((a) < (b) ? (a):(b))
 #endif
 
-typedef __u64 collection_list_handle_t;
+typedef uint64_t collection_list_handle_t;
 
 /*
  * low-level interface to the local OSD file system
@@ -114,7 +114,7 @@ public:
     static const int OP_RMATTRS =      28;  // cid, oid
 
   private:
-    __u64 ops, bytes;
+    uint64_t ops, bytes;
     bufferlist tbl;
     bufferlist::iterator p;
 
@@ -135,9 +135,9 @@ public:
     unsigned opp, blp, oidp, cidp, lengthp, attrnamep, attrsetp;
 
   public:
-    __u64 get_num_bytes() {
+    uint64_t get_num_bytes() {
       if (old) {
-	__u64 s = 16384 +
+	uint64_t s = 16384 +
 	  (opvec.size() + oids.size() + cids.size() + lengths.size()) * 4096;
 	for (vector<bufferlist>::iterator p = bls.begin(); p != bls.end(); p++)
 	  s += bls.size() + 4096;
@@ -200,12 +200,12 @@ public:
       ::decode(c, p);
       return c;
     }
-    __u64 get_length() {
+    uint64_t get_length() {
       if (old)
 	return lengths[lengthp++];
       if (p.get_off() == 0)
 	p = tbl.begin();
-      __u64 len;
+      uint64_t len;
       ::decode(len, p);
       return len;
     }
@@ -242,7 +242,7 @@ public:
       ::encode(oid, tbl);
       ops++;
     }
-    void write(coll_t cid, const sobject_t& oid, __u64 off, __u64 len, const bufferlist& data) {
+    void write(coll_t cid, const sobject_t& oid, uint64_t off, uint64_t len, const bufferlist& data) {
       __u32 op = OP_WRITE;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -252,7 +252,7 @@ public:
       ::encode(data, tbl);
       ops++;
     }
-    void zero(coll_t cid, const sobject_t& oid, __u64 off, __u64 len) {
+    void zero(coll_t cid, const sobject_t& oid, uint64_t off, uint64_t len) {
       __u32 op = OP_ZERO;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -261,7 +261,7 @@ public:
       ::encode(len, tbl);
       ops++;
     }
-    void trim_from_cache(coll_t cid, const sobject_t& oid, __u64 off, __u64 len) {
+    void trim_from_cache(coll_t cid, const sobject_t& oid, uint64_t off, uint64_t len) {
       __u32 op = OP_TRIMCACHE;
        ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -270,7 +270,7 @@ public:
       ::encode(len, tbl);
       ops++;
     }
-    void truncate(coll_t cid, const sobject_t& oid, __u64 off) {
+    void truncate(coll_t cid, const sobject_t& oid, uint64_t off) {
       __u32 op = OP_TRUNCATE;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -339,7 +339,7 @@ public:
       ::encode(noid, tbl);
       ops++;
     }
-    void clone_range(coll_t cid, const sobject_t& oid, sobject_t noid, __u64 off, __u64 len) {
+    void clone_range(coll_t cid, const sobject_t& oid, sobject_t noid, uint64_t off, uint64_t len) {
       __u32 op = OP_CLONERANGE;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -503,13 +503,13 @@ public:
   // objects
   virtual bool exists(coll_t cid, const sobject_t& oid) = 0;                   // useful?
   virtual int stat(coll_t cid, const sobject_t& oid, struct stat *st) = 0;     // struct stat?
-  virtual int read(coll_t cid, const sobject_t& oid, __u64 offset, size_t len, bufferlist& bl) = 0;
+  virtual int read(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) = 0;
 
   /*
   virtual int _remove(coll_t cid, sobject_t oid) = 0;
-  virtual int _truncate(coll_t cid, sobject_t oid, __u64 size) = 0;
-  virtual int _write(coll_t cid, sobject_t oid, __u64 offset, size_t len, const bufferlist& bl) = 0;
-  virtual int _zero(coll_t cid, sobject_t oid, __u64 offset, size_t len) {
+  virtual int _truncate(coll_t cid, sobject_t oid, uint64_t size) = 0;
+  virtual int _write(coll_t cid, sobject_t oid, uint64_t offset, size_t len, const bufferlist& bl) = 0;
+  virtual int _zero(coll_t cid, sobject_t oid, uint64_t offset, size_t len) {
     // write zeros.. yuck!
     bufferptr bp(len);
     bufferlist bl;
@@ -518,8 +518,8 @@ public:
   }
   */
 
-  virtual void trim_from_cache(coll_t cid, const sobject_t& oid, __u64 offset, size_t len) = 0; //{ }
-  virtual int is_cached(coll_t cid, const sobject_t& oid, __u64 offset, size_t len) = 0;  //{ return -1; }
+  virtual void trim_from_cache(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len) = 0; //{ }
+  virtual int is_cached(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len) = 0;  //{ return -1; }
 
   virtual int getattr(coll_t cid, const sobject_t& oid, const char *name, void *value, size_t size) = 0;
   virtual int getattr(coll_t cid, const sobject_t& oid, const char *name, bufferptr& value) = 0;

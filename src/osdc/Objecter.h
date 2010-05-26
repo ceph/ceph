@@ -55,7 +55,7 @@ struct ObjectOperation {
     ops.resize(s+1);
     ops[s].op.op = op;
   }
-  void add_data(int op, __u64 off, __u64 len, bufferlist& bl) {
+  void add_data(int op, uint64_t off, uint64_t len, bufferlist& bl) {
     int s = ops.size();
     ops.resize(s+1);
     ops[s].op.op = op;
@@ -84,7 +84,7 @@ struct ObjectOperation {
     ops[s].data.append(method, ops[s].op.cls.method_len);
     ops[s].data.append(indata);
   }
-  void add_pgls(int op, __u64 count, __u64 cookie) {
+  void add_pgls(int op, uint64_t count, uint64_t cookie) {
     int s = ops.size();
     ops.resize(s+1);
     ops[s].op.op = op;
@@ -95,23 +95,23 @@ struct ObjectOperation {
   // ------
 
   // pg
-  void pg_ls(__u64 count, __u64 cookie) {
+  void pg_ls(uint64_t count, uint64_t cookie) {
     add_pgls(CEPH_OSD_OP_PGLS, count, cookie);
     flags |= CEPH_OSD_FLAG_PGOP;
   }
 
   // object data
-  void read(__u64 off, __u64 len) {
+  void read(uint64_t off, uint64_t len) {
     bufferlist bl;
     add_data(CEPH_OSD_OP_READ, off, len, bl);
   }
-  void write(__u64 off, __u64 len, bufferlist& bl) {
+  void write(uint64_t off, uint64_t len, bufferlist& bl) {
     add_data(CEPH_OSD_OP_WRITE, off, len, bl);
   }
   void write_full(bufferlist& bl) {
     add_data(CEPH_OSD_OP_WRITEFULL, 0, bl.length(), bl);
   }
-  void zero(__u64 off, __u64 len) {
+  void zero(uint64_t off, uint64_t len) {
     bufferlist bl;
     add_data(CEPH_OSD_OP_ZERO, off, len, bl);
   }
@@ -243,15 +243,15 @@ public:
 
   struct C_Stat : public Context {
     bufferlist bl;
-    __u64 *psize;
+    uint64_t *psize;
     utime_t *pmtime;
     Context *fin;
-    C_Stat(__u64 *ps, utime_t *pm, Context *c) :
+    C_Stat(uint64_t *ps, utime_t *pm, Context *c) :
       psize(ps), pmtime(pm), fin(c) {}
     void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
-	__u64 s;
+	uint64_t s;
 	utime_t m;
 	::decode(s, p);
 	::decode(m, p);
@@ -284,7 +284,7 @@ public:
   // Pools and statistics 
   struct ListContext {
     int current_pg;
-    __u64 cookie;
+    uint64_t cookie;
     int starting_pg_num;
     bool at_end;
 
@@ -340,7 +340,7 @@ public:
     Context *onfinish;
     int pool_op;
     int* replyCode;
-    __u64 auid;
+    uint64_t auid;
 
     utime_t last_submit;
     PoolOp() : tid(0), pool(0), onfinish(0), pool_op(0),
@@ -470,7 +470,7 @@ private:
 
   // high-level helpers
   tid_t stat(const object_t& oid, ceph_object_layout ol, snapid_t snap,
-	     __u64 *psize, utime_t *pmtime, int flags, 
+	     uint64_t *psize, utime_t *pmtime, int flags, 
 	     Context *onfinish) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_STAT;
@@ -482,7 +482,7 @@ private:
   }
 
   tid_t read(const object_t& oid, ceph_object_layout ol, 
-	     __u64 off, __u64 len, snapid_t snap, bufferlist *pbl, int flags,
+	     uint64_t off, uint64_t len, snapid_t snap, bufferlist *pbl, int flags,
 	     Context *onfinish) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_READ;
@@ -496,8 +496,8 @@ private:
     return op_submit(o);
   }
   tid_t read_trunc(const object_t& oid, ceph_object_layout ol, 
-	     __u64 off, __u64 len, snapid_t snap, bufferlist *pbl, int flags,
-	     __u64 trunc_size, __u32 trunc_seq,
+	     uint64_t off, uint64_t len, snapid_t snap, bufferlist *pbl, int flags,
+	     uint64_t trunc_size, __u32 trunc_seq,
 	     Context *onfinish) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_READ;
@@ -555,7 +555,7 @@ private:
     return op_submit(o);
   }
   tid_t write(const object_t& oid, ceph_object_layout ol,
-	      __u64 off, __u64 len, const SnapContext& snapc, const bufferlist &bl,
+	      uint64_t off, uint64_t len, const SnapContext& snapc, const bufferlist &bl,
 	      utime_t mtime, int flags,
               Context *onack, Context *oncommit) {
     vector<OSDOp> ops(1);
@@ -571,9 +571,9 @@ private:
     return op_submit(o);
   }
   tid_t write_trunc(const object_t& oid, ceph_object_layout ol,
-	      __u64 off, __u64 len, const SnapContext& snapc, const bufferlist &bl,
+	      uint64_t off, uint64_t len, const SnapContext& snapc, const bufferlist &bl,
 	      utime_t mtime, int flags,
-	     __u64 trunc_size, __u32 trunc_seq,
+	     uint64_t trunc_size, __u32 trunc_seq,
               Context *onack, Context *oncommit) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_WRITE;
@@ -601,7 +601,7 @@ private:
     return op_submit(o);
   }
   tid_t zero(const object_t& oid, ceph_object_layout ol, 
-	     __u64 off, __u64 len, const SnapContext& snapc, utime_t mtime, int flags,
+	     uint64_t off, uint64_t len, const SnapContext& snapc, utime_t mtime, int flags,
              Context *onack, Context *oncommit) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_ZERO;
@@ -672,9 +672,9 @@ public:
   int create_pool_snap(int pool, string& snapName, Context *onfinish);
   int delete_pool_snap(int pool, string& snapName, Context *onfinish);
 
-  int create_pool(string& name, Context *onfinish, __u64 auid=0);
+  int create_pool(string& name, Context *onfinish, uint64_t auid=0);
   int delete_pool(int pool, Context *onfinish);
-  int change_pool_auid(int pool, Context *onfinish, __u64 auid);
+  int change_pool_auid(int pool, Context *onfinish, uint64_t auid);
 
   void handle_pool_op_reply(MPoolOpReply *m);
 
@@ -719,7 +719,7 @@ public:
   };
 
   void sg_read_trunc(vector<ObjectExtent>& extents, snapid_t snap, bufferlist *bl, int flags,
-		__u64 trunc_size, __u32 trunc_seq, Context *onfinish) {
+		uint64_t trunc_size, __u32 trunc_seq, Context *onfinish) {
     if (extents.size() == 1) {
       read_trunc(extents[0].oid, extents[0].layout, extents[0].offset, extents[0].length,
 	   snap, bl, flags, trunc_size, trunc_seq, onfinish);
@@ -740,7 +740,7 @@ public:
   }
 
   void sg_write_trunc(vector<ObjectExtent>& extents, const SnapContext& snapc, const bufferlist& bl, utime_t mtime,
-		int flags, __u64 trunc_size, __u32 trunc_seq,
+		int flags, uint64_t trunc_size, __u32 trunc_seq,
 		Context *onack, Context *oncommit) {
     if (extents.size() == 1) {
       write_trunc(extents[0].oid, extents[0].layout, extents[0].offset, extents[0].length,

@@ -62,7 +62,7 @@ struct OSDCaps {
   rwx_t default_action;
   bool allow_all;
   int peer_type;
-  __u64 auid;
+  uint64_t auid;
 
   bool get_next_token(string s, size_t& pos, string& token);
   bool is_rwx(string& token, rwx_t& cap_val);
@@ -70,13 +70,13 @@ struct OSDCaps {
   OSDCaps() : default_action(0), allow_all(false),
 	      auid(CEPH_AUTH_UID_DEFAULT) {}
   bool parse(bufferlist::iterator& iter);
-  int get_pool_cap(int pool_id, __u64 uid = CEPH_AUTH_UID_DEFAULT);
+  int get_pool_cap(int pool_id, uint64_t uid = CEPH_AUTH_UID_DEFAULT);
   bool is_mon() { return CEPH_ENTITY_TYPE_MON == peer_type; }
   bool is_osd() { return CEPH_ENTITY_TYPE_OSD == peer_type; }
   bool is_mds() { return CEPH_ENTITY_TYPE_MDS == peer_type; }
   void set_allow_all(bool allow) { allow_all = allow; }
   void set_peer_type (int pt) { peer_type = pt; }
-  void set_auid(__u64 uid) { auid = uid; }
+  void set_auid(uint64_t uid) { auid = uid; }
 };
 
 static inline ostream& operator<<(ostream& out, const OSDCaps& c) {

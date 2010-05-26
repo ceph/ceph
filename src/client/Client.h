@@ -95,7 +95,7 @@ class Inode;
 class Dentry;
 
 struct MetaRequest {
-  __u64 tid;
+  uint64_t tid;
   ceph_mds_request_head head;
   filepath path, path2;
   bufferlist data;
@@ -200,9 +200,9 @@ struct MetaRequest {
 
 struct MDSSession {
   version_t seq;
-  __u64 cap_gen;
+  uint64_t cap_gen;
   utime_t cap_ttl, last_cap_renew_request;
-  __u64 cap_renew_seq;
+  uint64_t cap_renew_seq;
   int num_caps;
   entity_inst_t inst;
   bool closing;
@@ -231,7 +231,7 @@ class Dentry : public LRUObject {
   int     ref;                       // 1 if there's a dir beneath me.
   int lease_mds;
   utime_t lease_ttl;
-  __u64 lease_gen;
+  uint64_t lease_gen;
   ceph_seq_t lease_seq;
   int cap_shared_gen;
   
@@ -251,7 +251,7 @@ class Dir {
  public:
   Inode    *parent_inode;  // my inode
   hash_map<nstring, Dentry*> dentries;
-  __u64 release_count;
+  uint64_t release_count;
 
   Dir(Inode* in) : release_count(0) { parent_inode = in; }
 
@@ -305,11 +305,11 @@ struct InodeCap {
   Inode *inode;
   xlist<InodeCap*>::item cap_item;
 
-  __u64 cap_id;
+  uint64_t cap_id;
   unsigned issued;
   unsigned implemented;
   unsigned wanted;   // as known to mds.
-  __u64 seq, issue_seq;
+  uint64_t seq, issue_seq;
   __u32 mseq;  // migration seq
   __u32 gen;
 
@@ -321,11 +321,11 @@ struct CapSnap {
   //snapid_t follows;  // map key
   SnapContext context;
   int issued, dirty;
-  __u64 size;
+  uint64_t size;
   utime_t ctime, mtime, atime;
   version_t time_warp_seq;
   bool writing, dirty_data;
-  __u64 flush_tid;
+  uint64_t flush_tid;
   CapSnap() : issued(0), dirty(0), size(0), time_warp_seq(0), writing(false), dirty_data(false), flush_tid(0) {}
 };
 
@@ -360,7 +360,7 @@ class Inode {
   utime_t    atime;   // file data access time.
   uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
 
-  __u64 max_size;  // max size we can write to
+  uint64_t max_size;  // max size we can write to
 
   // dirfrag, recursive accountin
   frag_info_t dirstat;
@@ -385,7 +385,7 @@ class Inode {
   map<int,InodeCap*> caps;            // mds -> InodeCap
   InodeCap *auth_cap;
   unsigned dirty_caps, flushing_caps;
-  __u64 flushing_cap_seq;
+  uint64_t flushing_cap_seq;
   __u16 flushing_cap_tid[CEPH_CAP_BITS];
   int shared_gen, cache_gen;
   int snap_caps, snap_cap_refs;
@@ -407,7 +407,7 @@ class Inode {
 
   ObjectCacher::ObjectSet oset;
 
-  __u64     reported_size, wanted_max_size, requested_max_size;
+  uint64_t     reported_size, wanted_max_size, requested_max_size;
 
   int       ref;      // ref count. 1 for each dentry, fh that links to me.
   int       ll_ref;   // separate ref count for ll client
@@ -753,7 +753,7 @@ class Client : public Dispatcher {
 
     Inode *inode;
     int64_t offset;   // high bits: frag_t, low bits: an offset
-    __u64 release_count;
+    uint64_t release_count;
     map<frag_t, vector<DirEntry> > buffer;
 
     DirResult(Inode *in) : inode(in), offset(0), release_count(0) { 
@@ -1105,7 +1105,7 @@ protected:
 
   // file caps
   void check_cap_issue(Inode *in, InodeCap *cap, unsigned issued);
-  void add_update_cap(Inode *in, int mds, __u64 cap_id,
+  void add_update_cap(Inode *in, int mds, uint64_t cap_id,
 		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
 		      int flags);
   void remove_cap(Inode *in, int mds);
@@ -1129,12 +1129,12 @@ protected:
   void handle_cap_flushsnap_ack(Inode *in, class MClientCaps *m);
   void handle_cap_grant(Inode *in, int mds, InodeCap *cap, class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
-  void send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain, int flush, __u64 tid);
+  void send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain, int flush, uint64_t tid);
   void check_caps(Inode *in, bool is_delayed);
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
   void flush_snaps(Inode *in);
-  void wait_sync_caps(__u64 want);
+  void wait_sync_caps(uint64_t want);
   void queue_cap_snap(Inode *in, snapid_t seq=0);
   void finish_cap_snap(Inode *in, CapSnap *capsnap, int used);
   void _flushed_cap_snap(Inode *in, snapid_t seq);
@@ -1155,8 +1155,8 @@ protected:
 
   Inode* insert_trace(MetaRequest *request, utime_t ttl, int mds);
   void update_inode_file_bits(Inode *in,
-			      __u64 truncate_seq, __u64 truncate_size, __u64 size,
-			      __u64 time_warp_seq, utime_t ctime, utime_t mtime, utime_t atime,
+			      uint64_t truncate_seq, uint64_t truncate_size, uint64_t size,
+			      uint64_t time_warp_seq, utime_t ctime, utime_t mtime, utime_t atime,
 			      int issued);
   Inode *add_update_inode(InodeStat *st, utime_t ttl, int mds);
   void insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
@@ -1182,8 +1182,8 @@ private:
 
   Fh *_create_fh(Inode *in, int flags, int cmode);
 
-  int _read_sync(Fh *f, __u64 off, __u64 len, bufferlist *bl);
-  int _read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl);
+  int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
+  int _read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl);
 
   // internal interface
   //   call these with client_lock held!
@@ -1207,8 +1207,8 @@ private:
   int _create(Inode *in, const char *name, int flags, mode_t mode, Inode **inp, Fh **fhp, int uid=-1, int gid=-1);
   int _release(Fh *fh);
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
-  int _read(Fh *fh, __s64 offset, __u64 size, bufferlist *bl);
-  int _write(Fh *fh, __s64 offset, __u64 size, const char *buf);
+  int _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
+  int _write(Fh *fh, int64_t offset, uint64_t size, const char *buf);
   int _flush(Fh *fh);
   int _fsync(Fh *fh, bool syncdataonly);
   int _sync_fs();
@@ -1285,7 +1285,7 @@ public:
   int fstat(int fd, struct stat *stbuf);
 
   int sync_fs();
-  __s64 drop_caches();
+  int64_t drop_caches();
 
   // hpc lazyio
   int lazyio_propogate(int fd, loff_t offset, size_t count);

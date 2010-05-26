@@ -244,7 +244,7 @@ rwx_t MonCaps::get_caps(int service)
  * only get as much access as they allow you AND you have on your own data.
  *
  */
-bool MonCaps::check_privileges(int service, int req_perms, __u64 req_auid)
+bool MonCaps::check_privileges(int service, int req_perms, uint64_t req_auid)
 {
   if (allow_all) return true; //you're an admin, do anything!
   if (req_auid != CEPH_AUTH_UID_DEFAULT && req_auid != auid) {

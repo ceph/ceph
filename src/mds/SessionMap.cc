@@ -145,7 +145,7 @@ void SessionMap::_save_finish(version_t v)
 
 void SessionMap::encode(bufferlist& bl)
 {
-  __u64 pre = -1;     // for 0.19 compatibility; we forgot an encoding prefix.
+  uint64_t pre = -1;     // for 0.19 compatibility; we forgot an encoding prefix.
   ::encode(pre, bl);
 
   __u8 struct_v = 2;
@@ -168,9 +168,9 @@ void SessionMap::encode(bufferlist& bl)
 void SessionMap::decode(bufferlist::iterator& p)
 {
   utime_t now = g_clock.now();
-  __u64 pre;
+  uint64_t pre;
   ::decode(pre, p);
-  if (pre == (__u64)-1) {
+  if (pre == (uint64_t)-1) {
     __u8 struct_v;
     ::decode(struct_v, p);
     assert(struct_v == 2);

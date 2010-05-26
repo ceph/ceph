@@ -23,7 +23,7 @@
 
 class MMDSBeacon : public PaxosServiceMessage {
   ceph_fsid_t fsid;
-  __u64 global_id;
+  uint64_t global_id;
   string name;
 
   __u32 state;
@@ -33,13 +33,13 @@ class MMDSBeacon : public PaxosServiceMessage {
 
  public:
   MMDSBeacon() : PaxosServiceMessage(MSG_MDS_BEACON, 0) {}
-  MMDSBeacon(const ceph_fsid_t &f, __u64 g, string& n, epoch_t les, int st, version_t se) : 
+  MMDSBeacon(const ceph_fsid_t &f, uint64_t g, string& n, epoch_t les, int st, version_t se) : 
     PaxosServiceMessage(MSG_MDS_BEACON, les), 
     fsid(f), global_id(g), name(n), state(st), seq(se),
     standby_for_rank(-1) { }
 
   ceph_fsid_t& get_fsid() { return fsid; }
-  __u64 get_global_id() { return global_id; }
+  uint64_t get_global_id() { return global_id; }
   string& get_name() { return name; }
   epoch_t get_last_epoch_seen() { return version; }
   int get_state() { return state; }

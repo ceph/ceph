@@ -26,14 +26,14 @@
 
 /* this should be 4k */
 struct btrfs_ioctl_vol_args {
-	__s64 fd;
+	int64_t fd;
 	char name[BTRFS_PATH_NAME_MAX + 1];
 };
 
 struct btrfs_ioctl_clone_range_args {
-  __s64 src_fd;
-  __u64 src_offset, src_length;
-  __u64 dest_offset;
+  int64_t src_fd;
+  uint64_t src_offset, src_length;
+  uint64_t dest_offset;
 };
 
 #define BTRFS_IOC_SNAP_CREATE _IOW(BTRFS_IOCTL_MAGIC, 1, \

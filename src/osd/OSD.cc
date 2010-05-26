@@ -1702,7 +1702,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
   AuthCapsInfo caps_info;
   EntityName name;
   uint64_t global_id;
-  __u64 auid;
+  uint64_t auid;
 
   isvalid = authorize_handler->verify_authorizer(monc->rotating_secrets,
 						 authorizer_data, authorizer_reply, name, global_id, caps_info, &auid);

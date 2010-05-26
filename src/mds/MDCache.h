@@ -305,7 +305,7 @@ struct MDRequest : public Mutation {
     bool was_link_merge;
 
     map<client_t,entity_inst_t> imported_client_map;
-    map<client_t,__u64> sseq_map;
+    map<client_t,uint64_t> sseq_map;
     map<CInode*, map<client_t,Capability::Export> > cap_imports;
     
     // for snaps
@@ -469,7 +469,7 @@ public:
   }
 
   // -- client caps --
-  __u64              last_cap_id;
+  uint64_t              last_cap_id;
   
   void remove_client_cap(CInode *in, client_t client);
 
@@ -723,7 +723,7 @@ public:
   void rejoin_recovered_caps(inodeno_t ino, client_t client, cap_reconnect_t& icr, 
 			     int frommds=-1) {
     cap_imports[ino][client][frommds] = icr.capinfo;
-    cap_import_paths[ino] = filepath(icr.path, (__u64)icr.capinfo.pathbase);
+    cap_import_paths[ino] = filepath(icr.path, (uint64_t)icr.capinfo.pathbase);
   }
   ceph_mds_cap_reconnect *get_replay_cap_reconnect(inodeno_t ino, client_t client) {
     if (cap_imports.count(ino) &&
@@ -789,7 +789,7 @@ public:
   void start_files_to_recover(vector<CInode*>& recover_q, vector<CInode*>& check_q);
 
   void do_file_recover();
-  void _recovered(CInode *in, int r, __u64 size, utime_t mtime);
+  void _recovered(CInode *in, int r, uint64_t size, utime_t mtime);
 
   void purge_prealloc_ino(inodeno_t ino, Context *fin);
 

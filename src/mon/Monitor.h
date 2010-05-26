@@ -161,7 +161,7 @@ public:
 
   // request routing
   struct RoutedRequest {
-    __u64 tid;
+    uint64_t tid;
     bufferlist request_bl;
     MonSession *session;
 
@@ -170,8 +170,8 @@ public:
 	session->put();
     }
   };
-  __u64 routed_request_tid;
-  map<__u64, RoutedRequest*> routed_requests;
+  uint64_t routed_request_tid;
+  map<uint64_t, RoutedRequest*> routed_requests;
   
   void forward_request_leader(PaxosServiceMessage *req);
   void handle_forward(MForward *m);

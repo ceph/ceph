@@ -23,7 +23,7 @@
 class entity_name_t {
 public:
   __u8 _type;
-  __s64 _num;
+  int64_t _num;
 
 public:
   static const int TYPE_MON = CEPH_ENTITY_TYPE_MON;
@@ -35,7 +35,7 @@ public:
 
   // cons
   entity_name_t() : _type(0), _num(0) { }
-  entity_name_t(int t, __s64 n) : _type(t), _num(n) { }
+  entity_name_t(int t, int64_t n) : _type(t), _num(n) { }
   entity_name_t(const ceph_entity_name &n) : 
     _type(n.type), _num(n.num) { }
 
@@ -45,7 +45,7 @@ public:
   static entity_name_t OSD(int i=NEW) { return entity_name_t(TYPE_OSD, i); }
   static entity_name_t CLIENT(int i=NEW) { return entity_name_t(TYPE_CLIENT, i); }
   
-  __s64 num() const { return _num; }
+  int64_t num() const { return _num; }
   int type() const { return _type; }
   const char *type_str() const {
     return ceph_entity_type_name(type());

@@ -335,9 +335,9 @@ void Client::trim_cache()
 
 
 void Client::update_inode_file_bits(Inode *in,
-				    __u64 truncate_seq, __u64 truncate_size,
-				    __u64 size,
-				    __u64 time_warp_seq, utime_t ctime,
+				    uint64_t truncate_seq, uint64_t truncate_size,
+				    uint64_t size,
+				    uint64_t time_warp_seq, utime_t ctime,
 				    utime_t mtime,
 				    utime_t atime,
 				    int issued)
@@ -1669,7 +1669,7 @@ void Client::cap_delay_requeue(Inode *in)
 }
 
 void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain, int flush,
-		      __u64 tid)
+		      uint64_t tid)
 {
   int held = cap->issued | cap->implemented;
   int revoking = cap->implemented & ~cap->issued;
@@ -1736,7 +1736,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
   unsigned wanted = in->caps_wanted();
   unsigned used = in->caps_used();
   int flush = 0;
-  __u64 flush_tid = 0;
+  uint64_t flush_tid = 0;
 
   int retain = wanted | CEPH_CAP_PIN;
   if (!unmounting) {
@@ -2030,7 +2030,7 @@ void Client::check_cap_issue(Inode *in, InodeCap *cap, unsigned issued)
   }
 }
 
-void Client::add_update_cap(Inode *in, int mds, __u64 cap_id,
+void Client::add_update_cap(Inode *in, int mds, uint64_t cap_id,
 			    unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
 			    int flags)
 {
@@ -2181,7 +2181,7 @@ void Client::flush_caps()
     check_caps(in, true);
   }
 }
-void Client::wait_sync_caps(__u64 want)
+void Client::wait_sync_caps(uint64_t want)
 {
  retry:
   dout(10) << "wait_sync_caps want " << want << " (last is " << last_flush_seq << ", "
@@ -2973,7 +2973,7 @@ void Client::renew_caps()
 void Client::renew_caps(const int mds) {
   dout(10) << "renew_caps mds" << mds << dendl;
   mds_sessions[mds].last_cap_renew_request = g_clock.now();
-  __u64 seq = ++mds_sessions[mds].cap_renew_seq;
+  uint64_t seq = ++mds_sessions[mds].cap_renew_seq;
   messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_RENEWCAPS, seq),
 			  mdsmap->get_inst(mds));
 
@@ -4262,7 +4262,7 @@ int Client::read(int fd, char *buf, loff_t size, loff_t offset)
   return r;
 }
 
-int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
+int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 {
   Inode *in = f->inode;
 
@@ -4309,7 +4309,7 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
   return r;
 }
 
-int Client::_read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl)
+int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
 {
   Inode *in = f->inode;
   bool readahead = true;
@@ -4398,10 +4398,10 @@ int Client::_read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl)
   return r;
 }
 
-int Client::_read_sync(Fh *f, __u64 off, __u64 len, bufferlist *bl)
+int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
 {
   Inode *in = f->inode;
-  __u64 pos = off;
+  uint64_t pos = off;
   int left = len;
   int read = 0;
 
@@ -4513,9 +4513,9 @@ int Client::write(int fd, const char *buf, loff_t size, loff_t offset)
 }
 
 
-int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
+int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
 {
-  if ((__u64)(offset+size) > mdsmap->get_max_filesize()) //too large!
+  if ((uint64_t)(offset+size) > mdsmap->get_max_filesize()) //too large!
     return -EFBIG;
 
   if (osdmap->test_flag(CEPH_OSDMAP_FULL))
@@ -4553,7 +4553,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
   bufferlist bl;
   bl.push_back( bp );
 
-  __u64 endoff = offset + size;
+  uint64_t endoff = offset + size;
   int got;
   int r = get_caps(in, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &got, endoff);
   if (r < 0)
@@ -4604,7 +4604,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     client_logger->favg(l_c_wrlat,(double)lat);
     
   // assume success for now.  FIXME.
-  __u64 totalwritten = size;
+  uint64_t totalwritten = size;
   
   // extend file?
   if (totalwritten + offset > in->size) {
@@ -4835,7 +4835,7 @@ int Client::sync_fs()
   return _sync_fs();
 }
 
-__s64 Client::drop_caches()
+int64_t Client::drop_caches()
 {
   Mutex::Locker l(client_lock);
   return objectcacher->release_all();

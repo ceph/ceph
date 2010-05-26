@@ -351,12 +351,12 @@ private:
 
   // inodes i've truncated
   list<inodeno_t> truncate_start;        // start truncate 
-  map<inodeno_t,__u64> truncate_finish;  // finished truncate (started in segment blah)
+  map<inodeno_t,uint64_t> truncate_finish;  // finished truncate (started in segment blah)
 
   vector<inodeno_t> destroyed_inodes;
 
   // idempotent op(s)
-  list<pair<metareqid_t,__u64> > client_reqs;
+  list<pair<metareqid_t,uint64_t> > client_reqs;
 
  public:
   void encode(bufferlist& bl) const {
@@ -409,7 +409,7 @@ private:
       list<metareqid_t> r;
       ::decode(r, bl);
       while (!r.empty()) {
-	client_reqs.push_back(pair<metareqid_t,__u64>(r.front(), 0));
+	client_reqs.push_back(pair<metareqid_t,uint64_t>(r.front(), 0));
 	r.pop_front();
       }
     }
@@ -436,8 +436,8 @@ private:
     }
   }
 
-  void add_client_req(metareqid_t r, __u64 tid=0) {
-    client_reqs.push_back(pair<metareqid_t,__u64>(r, tid));
+  void add_client_req(metareqid_t r, uint64_t tid=0) {
+    client_reqs.push_back(pair<metareqid_t,uint64_t>(r, tid));
   }
 
   void add_table_transaction(int table, version_t tid) {
@@ -465,7 +465,7 @@ private:
   void add_truncate_start(inodeno_t ino) {
     truncate_start.push_back(ino);
   }
-  void add_truncate_finish(inodeno_t ino, __u64 segoff) {
+  void add_truncate_finish(inodeno_t ino, uint64_t segoff) {
     truncate_finish[ino] = segoff;
   }
 

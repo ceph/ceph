@@ -26,7 +26,7 @@ void JournalingObjectStore::journal_stop()
   }
 }
 
-int JournalingObjectStore::journal_replay(__u64 fs_op_seq)
+int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
 {
   dout(10) << "journal_replay fs op_seq " << fs_op_seq << dendl;
   op_seq = fs_op_seq;
@@ -47,7 +47,7 @@ int JournalingObjectStore::journal_replay(__u64 fs_op_seq)
   int count = 0;
   while (1) {
     bufferlist bl;
-    __u64 seq = op_seq + 1;
+    uint64_t seq = op_seq + 1;
     if (!journal->read_entry(bl, seq)) {
       dout(3) << "journal_replay: end of journal, done." << dendl;
       break;
@@ -88,7 +88,7 @@ int JournalingObjectStore::journal_replay(__u64 fs_op_seq)
 
 // ------------------------------------
 
-__u64 JournalingObjectStore::op_apply_start(__u64 op) 
+uint64_t JournalingObjectStore::op_apply_start(uint64_t op) 
 {
   lock.Lock();
   while (blocked) {
@@ -114,7 +114,7 @@ void JournalingObjectStore::op_apply_finish()
   lock.Unlock();
 }
 
-__u64 JournalingObjectStore::op_journal_start(__u64 op)
+uint64_t JournalingObjectStore::op_journal_start(uint64_t op)
 {
   journal_lock.Lock();
   if (!op) {
@@ -183,7 +183,7 @@ void JournalingObjectStore::commit_finish()
   }
 }
 
-void JournalingObjectStore::journal_transaction(ObjectStore::Transaction& t, __u64 op,
+void JournalingObjectStore::journal_transaction(ObjectStore::Transaction& t, uint64_t op,
 						Context *onjournal)
 {
   Mutex::Locker l(lock);
@@ -196,7 +196,7 @@ void JournalingObjectStore::journal_transaction(ObjectStore::Transaction& t, __u
     commit_waiters[op].push_back(onjournal);
 }
 
-void JournalingObjectStore::journal_transactions(list<ObjectStore::Transaction*>& tls, __u64 op,
+void JournalingObjectStore::journal_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op,
 						 Context *onjournal)
 {
   Mutex::Locker l(lock);

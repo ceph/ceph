@@ -129,13 +129,13 @@ public:
   static const int STATE_DIRTYPARENT =  (1<<14);
 
   // -- waiters --
-  static const __u64 WAIT_DIR         = (1<<0);
-  static const __u64 WAIT_ANCHORED    = (1<<1);
-  static const __u64 WAIT_UNANCHORED  = (1<<2);
-  static const __u64 WAIT_FROZEN      = (1<<3);
-  static const __u64 WAIT_TRUNC       = (1<<4);
+  static const uint64_t WAIT_DIR         = (1<<0);
+  static const uint64_t WAIT_ANCHORED    = (1<<1);
+  static const uint64_t WAIT_UNANCHORED  = (1<<2);
+  static const uint64_t WAIT_FROZEN      = (1<<3);
+  static const uint64_t WAIT_TRUNC       = (1<<4);
   
-  static const __u64 WAIT_ANY_MASK	= (__u64)(-1);
+  static const uint64_t WAIT_ANY_MASK	= (uint64_t)(-1);
 
   // misc
   static const int EXPORT_NONCE = 1; // nonce given to replicas created by export
@@ -462,7 +462,7 @@ private:
 
 
   // -- waiting --
-  void add_waiter(__u64 tag, Context *c);
+  void add_waiter(uint64_t tag, Context *c);
 
 
   // -- encode/decode helpers --

@@ -34,7 +34,7 @@ public:
 	<< caps.size() << " caps)";
   }
 
-  void add_cap(inodeno_t ino, __u64 cap_id, inodeno_t pathbase, const string& path,
+  void add_cap(inodeno_t ino, uint64_t cap_id, inodeno_t pathbase, const string& path,
 	       int wanted, int issued,
 	       loff_t sz, utime_t mt, utime_t at,
 	       inodeno_t sr) {

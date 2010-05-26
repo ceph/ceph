@@ -8,7 +8,7 @@ object_t calc_cas_name(bufferlist &bl)
 }
 
 
-void find_rabin_markers(bufferlist &bl, __u64 bloff, list<__u64> &chunks_offsets)
+void find_rabin_markers(bufferlist &bl, uint64_t bloff, list<uint64_t> &chunks_offsets)
 {
   
   

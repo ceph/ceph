@@ -113,7 +113,7 @@ void AnchorServer::dec(inodeno_t ino)
 
 // server
 
-void AnchorServer::_prepare(bufferlist &bl, __u64 reqid, int bymds)
+void AnchorServer::_prepare(bufferlist &bl, uint64_t reqid, int bymds)
 {
   bufferlist::iterator p = bl.begin();
   __u32 what;

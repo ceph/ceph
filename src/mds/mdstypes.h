@@ -108,12 +108,12 @@ struct frag_info_t {
 
   // this frag
   utime_t mtime;
-  __s64 nfiles;        // files
-  __s64 nsubdirs;      // subdirs
+  int64_t nfiles;        // files
+  int64_t nsubdirs;      // subdirs
 
   frag_info_t() : version(0), nfiles(0), nsubdirs(0) {}
 
-  __s64 size() const { return nfiles + nsubdirs; }
+  int64_t size() const { return nfiles + nsubdirs; }
 
   void zero() {
     *this = frag_info_t();
@@ -168,13 +168,13 @@ struct nest_info_t {
 
   // this frag + children
   utime_t rctime;
-  __s64 rbytes;
-  __s64 rfiles;
-  __s64 rsubdirs;
-  __s64 rsize() const { return rfiles + rsubdirs; }
+  int64_t rbytes;
+  int64_t rfiles;
+  int64_t rsubdirs;
+  int64_t rsize() const { return rfiles + rsubdirs; }
 
-  __s64 ranchors;  // for dirstat, includes inode's anchored flag.
-  __s64 rsnaprealms;
+  int64_t ranchors;  // for dirstat, includes inode's anchored flag.
+  int64_t rsnaprealms;
 
   nest_info_t() : version(0),
 		  rbytes(0), rfiles(0), rsubdirs(0),
@@ -301,7 +301,7 @@ inline ostream& operator<<(ostream &out, const vinodeno_t &vino) {
 
 
 struct byte_range_t {
-  __u64 first, last;    // interval client can write to
+  uint64_t first, last;    // interval client can write to
 
   void encode(bufferlist &bl) const {
     ::encode(first, bl);
@@ -383,8 +383,8 @@ struct inode_t {
     return layout.fl_object_size * layout.fl_stripe_count;
   }
 
-  __u64 get_max_size() const {
-    __u64 max = 0;
+  uint64_t get_max_size() const {
+    uint64_t max = 0;
       for (map<client_t,byte_range_t>::const_iterator p = client_ranges.begin();
 	   p != client_ranges.end();
 	   ++p)
@@ -392,7 +392,7 @@ struct inode_t {
 	  max = p->second.last;
       return max;
   }
-  void set_max_size(__u64 new_max) {
+  void set_max_size(uint64_t new_max) {
     if (new_max == 0) {
       client_ranges.clear();
     } else {
@@ -668,7 +668,7 @@ inline ostream& operator<<(ostream& out, const string_snap_t &k)
 
 struct metareqid_t {
   entity_name_t name;
-  __u64 tid;
+  uint64_t tid;
   metareqid_t() : tid(0) {}
   metareqid_t(entity_name_t n, tid_t t) : name(n), tid(t) {}
 };
@@ -721,7 +721,7 @@ struct cap_reconnect_t {
   ceph_mds_cap_reconnect capinfo;
 
   cap_reconnect_t() {}
-  cap_reconnect_t(__u64 cap_id, inodeno_t pino, const string& p, int w, int i, uint64_t sz, utime_t mt, utime_t at, inodeno_t sr) : 
+  cap_reconnect_t(uint64_t cap_id, inodeno_t pino, const string& p, int w, int i, uint64_t sz, utime_t mt, utime_t at, inodeno_t sr) : 
     path(p) {
     capinfo.cap_id = cap_id;
     capinfo.wanted = w;
@@ -1130,8 +1130,8 @@ class MDSCacheObject {
   const static int STATE_REJOINING = (1<<28);  // replica has not joined w/ primary copy
 
   // -- wait --
-  const static __u64 WAIT_SINGLEAUTH  = (1ull<<60);
-  const static __u64 WAIT_UNFREEZE    = (1ull<<59); // pka AUTHPINNABLE
+  const static uint64_t WAIT_SINGLEAUTH  = (1ull<<60);
+  const static uint64_t WAIT_UNFREEZE    = (1ull<<59); // pka AUTHPINNABLE
 
 
   // ============================================
@@ -1316,16 +1316,16 @@ protected:
   // ---------------------------------------------
   // waiting
  protected:
-  multimap<__u64, Context*>  waiting;
+  multimap<uint64_t, Context*>  waiting;
 
  public:
-  bool is_waiter_for(__u64 mask, __u64 min=0) {
+  bool is_waiter_for(uint64_t mask, uint64_t min=0) {
     if (!min) {
       min = mask;
       while (min & (min-1))  // if more than one bit is set
 	min &= min-1;        //  clear LSB
     }
-    for (multimap<__u64,Context*>::iterator p = waiting.lower_bound(min);
+    for (multimap<uint64_t,Context*>::iterator p = waiting.lower_bound(min);
 	 p != waiting.end();
 	 ++p) {
       if (p->first & mask) return true;
@@ -1333,19 +1333,19 @@ protected:
     }
     return false;
   }
-  virtual void add_waiter(__u64 mask, Context *c) {
+  virtual void add_waiter(uint64_t mask, Context *c) {
     if (waiting.empty())
       get(PIN_WAITER);
-    waiting.insert(pair<__u64,Context*>(mask, c));
+    waiting.insert(pair<uint64_t,Context*>(mask, c));
     pdout(10,g_conf.debug_mds) << (mdsco_db_line_prefix(this)) 
 			       << "add_waiter " << hex << mask << dec << " " << c
 			       << " on " << *this
 			       << dendl;
     
   }
-  virtual void take_waiting(__u64 mask, list<Context*>& ls) {
+  virtual void take_waiting(uint64_t mask, list<Context*>& ls) {
     if (waiting.empty()) return;
-    multimap<__u64,Context*>::iterator it = waiting.begin();
+    multimap<uint64_t,Context*>::iterator it = waiting.begin();
     while (it != waiting.end()) {
       if (it->first & mask) {
 	ls.push_back(it->second);
@@ -1366,7 +1366,7 @@ protected:
     if (waiting.empty())
       put(PIN_WAITER);
   }
-  void finish_waiting(__u64 mask, int result = 0) {
+  void finish_waiting(uint64_t mask, int result = 0) {
     list<Context*> finished;
     take_waiting(mask, finished);
     finish_contexts(finished, result);
@@ -1380,9 +1380,9 @@ protected:
   virtual void set_object_info(MDSCacheObjectInfo &info) { assert(0); }
   virtual void encode_lock_state(int type, bufferlist& bl) { assert(0); }
   virtual void decode_lock_state(int type, bufferlist& bl) { assert(0); }
-  virtual void finish_lock_waiters(int type, __u64 mask, int r=0) { assert(0); }
-  virtual void add_lock_waiter(int type, __u64 mask, Context *c) { assert(0); }
-  virtual bool is_lock_waiting(int type, __u64 mask) { assert(0); return false; }
+  virtual void finish_lock_waiters(int type, uint64_t mask, int r=0) { assert(0); }
+  virtual void add_lock_waiter(int type, uint64_t mask, Context *c) { assert(0); }
+  virtual bool is_lock_waiting(int type, uint64_t mask) { assert(0); return false; }
 
   virtual void clear_dirty_scattered(int type) { assert(0); }
   virtual void finish_scatter_gather_update(int type) { }

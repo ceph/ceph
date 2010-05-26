@@ -41,7 +41,7 @@ class FileStore : public JournalingObjectStore {
   string basedir, journalpath;
   char current_fn[PATH_MAX];
   char current_op_seq_fn[PATH_MAX];
-  __u64 fsid;
+  uint64_t fsid;
   
   bool btrfs;
   bool btrfs_trans_start_end;
@@ -51,7 +51,7 @@ class FileStore : public JournalingObjectStore {
   int fsid_fd, op_fd;
 
   int basedir_fd, current_fd;
-  deque<__u64> snaps;
+  deque<uint64_t> snaps;
 
   // fake attrs?
   FakeAttrs attrs;
@@ -76,7 +76,7 @@ class FileStore : public JournalingObjectStore {
   // sync thread
   Mutex lock;
   Cond sync_cond;
-  __u64 sync_epoch;
+  uint64_t sync_epoch;
   bool stop;
   void sync_entry();
   struct SyncThread : public Thread {
@@ -92,10 +92,10 @@ class FileStore : public JournalingObjectStore {
 
   // -- op workqueue --
   struct Op {
-    __u64 op;
+    uint64_t op;
     list<Transaction*> tls;
     Context *onreadable, *onreadable_sync;
-    __u64 ops, bytes;
+    uint64_t ops, bytes;
   };
   struct OpSequencer {
     Sequencer *parent;
@@ -105,11 +105,11 @@ class FileStore : public JournalingObjectStore {
   };
   Sequencer default_osr;
   deque<OpSequencer*> op_queue;
-  __u64 op_queue_len, op_queue_bytes;
+  uint64_t op_queue_len, op_queue_bytes;
   Cond op_throttle_cond;
   Finisher op_finisher;
-  __u64 next_finish;
-  map<__u64, pair<Context*,Context*> > finish_queue;
+  uint64_t next_finish;
+  map<uint64_t, pair<Context*,Context*> > finish_queue;
 
   ThreadPool op_tp;
   struct OpWQ : public ThreadPool::WorkQueue<OpSequencer> {
@@ -148,14 +148,14 @@ class FileStore : public JournalingObjectStore {
 
   void _do_op(OpSequencer *o);
   void _finish_op(OpSequencer *o);
-  void queue_op(Sequencer *osr, __u64 op, list<Transaction*>& tls, Context *onreadable, Context *onreadable_sync);
-  void _journaled_ahead(Sequencer *osr, __u64 op, list<Transaction*> &tls,
+  void queue_op(Sequencer *osr, uint64_t op, list<Transaction*>& tls, Context *onreadable, Context *onreadable_sync);
+  void _journaled_ahead(Sequencer *osr, uint64_t op, list<Transaction*> &tls,
 			Context *onreadable, Context *ondisk, Context *onreadable_sync);
   friend class C_JournaledAhead;
 
   // flusher thread
   Cond flusher_cond;
-  list<__u64> flusher_queue;
+  list<uint64_t> flusher_queue;
   int flusher_queue_len;
   void flusher_entry();
   struct FlusherThread : public Thread {
@@ -166,7 +166,7 @@ class FileStore : public JournalingObjectStore {
       return 0;
     }
   } flusher_thread;
-  bool queue_flusher(int fd, __u64 off, __u64 len);
+  bool queue_flusher(int fd, uint64_t off, uint64_t len);
 
   int open_journal();
 
@@ -201,10 +201,10 @@ class FileStore : public JournalingObjectStore {
 
   int statfs(struct statfs *buf);
 
-  int do_transactions(list<Transaction*> &tls, __u64 op_seq);
+  int do_transactions(list<Transaction*> &tls, uint64_t op_seq);
   unsigned apply_transaction(Transaction& t, Context *ondisk=0);
   unsigned apply_transactions(list<Transaction*>& tls, Context *ondisk=0);
-  int _transaction_start(__u64 bytes, __u64 ops);
+  int _transaction_start(uint64_t bytes, uint64_t ops);
   void _transaction_finish(int id);
   unsigned _do_transaction(Transaction& t);
 
@@ -219,15 +219,15 @@ class FileStore : public JournalingObjectStore {
   }
   bool exists(coll_t cid, const sobject_t& oid);
   int stat(coll_t cid, const sobject_t& oid, struct stat *st);
-  int read(coll_t cid, const sobject_t& oid, __u64 offset, size_t len, bufferlist& bl);
+  int read(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
 
   int _touch(coll_t cid, const sobject_t& oid);
-  int _write(coll_t cid, const sobject_t& oid, __u64 offset, size_t len, const bufferlist& bl);
-  int _zero(coll_t cid, const sobject_t& oid, __u64 offset, size_t len);
-  int _truncate(coll_t cid, const sobject_t& oid, __u64 size);
+  int _write(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len, const bufferlist& bl);
+  int _zero(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len);
+  int _truncate(coll_t cid, const sobject_t& oid, uint64_t size);
   int _clone(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid);
-  int _clone_range(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid, __u64 off, __u64 len);
-  int _do_clone_range(int from, int to, __u64 off, __u64 len);
+  int _clone_range(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid, uint64_t off, uint64_t len);
+  int _do_clone_range(int from, int to, uint64_t off, uint64_t len);
   int _remove(coll_t cid, const sobject_t& oid);
 
   void _start_sync();
@@ -272,8 +272,8 @@ class FileStore : public JournalingObjectStore {
   int _collection_add(coll_t c, coll_t ocid, const sobject_t& o);
   int _collection_remove(coll_t c, const sobject_t& o);
 
-  void trim_from_cache(coll_t cid, const sobject_t& oid, __u64 offset, size_t len) {}
-  int is_cached(coll_t cid, const sobject_t& oid, __u64 offset, size_t len) { return -1; }
+  void trim_from_cache(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len) {}
+  int is_cached(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len) { return -1; }
 };
 
 #endif

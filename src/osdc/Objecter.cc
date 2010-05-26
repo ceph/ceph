@@ -613,7 +613,7 @@ void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *f
   bufferlist::iterator iter = bl->begin();
   PGLSResponse response;
   ::decode(response, iter);
-  list_context->cookie = (__u64)response.handle;
+  list_context->cookie = (uint64_t)response.handle;
 
   int response_size = response.entries.size();
   dout(20) << "response.entries.size " << response_size
@@ -687,7 +687,7 @@ int Objecter::delete_pool_snap(int pool, string& snapName, Context *onfinish)
   return 0;
 }
 
-int Objecter::create_pool(string& name, Context *onfinish, __u64 auid)
+int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid)
 {
   dout(10) << "create_pool name=" << name << dendl;
   PoolOp *op = new PoolOp;
@@ -730,7 +730,7 @@ int Objecter::delete_pool(int pool, Context *onfinish)
  * on both the pool's current auid and the new (parameter) auid.
  * Uses the standard Context callback when done.
  */
-int Objecter::change_pool_auid(int pool, Context *onfinish, __u64 auid)
+int Objecter::change_pool_auid(int pool, Context *onfinish, uint64_t auid)
 {
   dout(10) << "change_pool_auid " << pool << " to " << auid << dendl;
   PoolOp *op = new PoolOp;
@@ -877,7 +877,7 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents, vector<bufferlist>
 			       bufferlist *bl, Context *onfinish)
 {
   // all done
-  __u64 bytes_read = 0;
+  uint64_t bytes_read = 0;
   
   dout(15) << "_sg_read_finish" << dendl;
 
@@ -891,7 +891,7 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents, vector<bufferlist>
      */
     
     // map extents back into buffer
-    map<__u64, bufferlist*> by_off;  // buffer offset -> bufferlist
+    map<uint64_t, bufferlist*> by_off;  // buffer offset -> bufferlist
     
     // for each object extent...
     vector<bufferlist>::iterator bit = resultbl.begin();
@@ -943,11 +943,11 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents, vector<bufferlist>
     }
     
     // sort and string bits together
-    for (map<__u64, bufferlist*>::iterator it = by_off.begin();
+    for (map<uint64_t, bufferlist*>::iterator it = by_off.begin();
 	 it != by_off.end();
 	 it++) {
       assert(it->second->length());
-      if (it->first < (__u64)bytes_read) {
+      if (it->first < (uint64_t)bytes_read) {
 	dout(21) << "  concat buffer frag off " << it->first << " len " << it->second->length() << dendl;
 	bl->claim_append(*(it->second));
       } else {

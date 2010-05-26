@@ -81,10 +81,10 @@ namespace __gnu_cxx {
 
 
 struct file_object_t {
-  __u64 ino, bno;
+  uint64_t ino, bno;
   mutable char buf[33];
 
-  file_object_t(__u64 i=0, __u64 b=0) : ino(i), bno(b) {
+  file_object_t(uint64_t i=0, uint64_t b=0) : ino(i), bno(b) {
     buf[0] = 0;
   }
   
@@ -105,11 +105,11 @@ struct file_object_t {
 // snaps
 
 struct snapid_t {
-  __u64 val;
-  snapid_t(__u64 v=0) : val(v) {}
+  uint64_t val;
+  snapid_t(uint64_t v=0) : val(v) {}
   snapid_t operator+=(snapid_t o) { val += o.val; return *this; }
   snapid_t operator++() { ++val; return *this; }
-  operator __u64() const { return val; }  
+  operator uint64_t() const { return val; }  
 };
 
 inline void encode(snapid_t i, bufferlist &bl) { encode(i.val, bl); }

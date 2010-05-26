@@ -43,7 +43,7 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
   assert(m->table == table);
 
   version_t tid = m->get_tid();
-  __u64 reqid = m->reqid;
+  uint64_t reqid = m->reqid;
 
   switch (m->op) {
   case TABLESERVER_OP_QUERY_REPLY:
@@ -133,7 +133,7 @@ void MDSTableClient::_logged_ack(version_t tid)
 void MDSTableClient::_prepare(bufferlist& mutation, version_t *ptid, bufferlist *pbl,
 			      Context *onfinish)
 {
-  __u64 reqid = ++last_reqid;
+  uint64_t reqid = ++last_reqid;
   dout(10) << "_prepare " << reqid << dendl;
 
   // send message
@@ -209,7 +209,7 @@ void MDSTableClient::handle_mds_recovery(int who)
   resend_queries();
   
   // prepares.
-  for (map<__u64, _pending_prepare>::iterator p = pending_prepare.begin();
+  for (map<uint64_t, _pending_prepare>::iterator p = pending_prepare.begin();
        p != pending_prepare.end();
        p++) {
     dout(10) << "resending " << p->first << dendl;

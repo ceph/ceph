@@ -111,9 +111,9 @@ int main(int argc, const char **argv, const char *envp[])
     cond.Wait(lock);
   lock.Unlock();
   
-  __u64 start = journaler->get_read_pos();
-  __u64 end = journaler->get_write_pos();
-  __u64 len = end-start;
+  uint64_t start = journaler->get_read_pos();
+  uint64_t end = journaler->get_write_pos();
+  uint64_t len = end-start;
   cout << "journal is " << start << "~" << len << std::endl;
 
   Filer filer(objecter);

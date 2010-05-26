@@ -57,12 +57,6 @@ template<> struct rjhash<uint64_t> {
   }
 };
 
-template<> struct rjhash<__u64> {
-  inline size_t operator()(const __u64 x) const {
-    return rjhash64(x);
-  }
-};
-
 #if defined(__CYGWIN__) || defined(DARWIN)
 template<> struct rjhash<size_t> {
   inline size_t operator()(const size_t x) const {

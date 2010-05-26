@@ -19,12 +19,12 @@
 
 #define DOUT_SUBSYS ebofs
 
-void do_apply_partial(bufferlist& bl, map<__u64, bufferlist>& pm) 
+void do_apply_partial(bufferlist& bl, map<uint64_t, bufferlist>& pm) 
 {
   assert(bl.length() == (unsigned)EBOFS_BLOCK_SIZE);
   //assert(partial_is_complete());
   //cout << "apply_partial" << std::endl;
-  for (map<__u64, bufferlist>::iterator i = pm.begin();
+  for (map<uint64_t, bufferlist>::iterator i = pm.begin();
        i != pm.end();
        i++) {
     //cout << "do_apply_partial at " << i->first << "~" << i->second.length() << std::endl;
@@ -41,7 +41,7 @@ void do_apply_partial(bufferlist& bl, map<__u64, bufferlist>& pm)
 #define dout_prefix *_dout << dbeginl << "ebofs." << *this << "."
 
 
-void BufferHead::add_partial(__u64 off, bufferlist& p) 
+void BufferHead::add_partial(uint64_t off, bufferlist& p) 
 {
   unsigned len = p.length();
   assert(len <= (unsigned)EBOFS_BLOCK_SIZE);
@@ -49,7 +49,7 @@ void BufferHead::add_partial(__u64 off, bufferlist& p)
   assert(off + len <= EBOFS_BLOCK_SIZE);
   
   // trim any existing that overlaps
-  map<__u64, bufferlist>::iterator i = partial.begin();
+  map<uint64_t, bufferlist>::iterator i = partial.begin();
   while (i != partial.end()) {
     // is [off,off+len)...
     // past i?
@@ -80,7 +80,7 @@ void BufferHead::add_partial(__u64 off, bufferlist& p)
     // overlap head of i?
     if (off <= i->first && off+len < i->first + i->second.length()) {
       // move i (make new tail).
-      __u64 tailoff = off+len;
+      uint64_t tailoff = off+len;
       unsigned trim = tailoff - i->first;
       partial[tailoff].substr_of(i->second, trim, i->second.length()-trim);
       partial.erase(i++);   // should now be at tailoff
@@ -224,9 +224,9 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
       assert(exv[0].start != 0);
       block_t cur_block = exv[0].start;
       
-      __u64 off_in_bl = (bh->start() - start) * EBOFS_BLOCK_SIZE;
+      uint64_t off_in_bl = (bh->start() - start) * EBOFS_BLOCK_SIZE;
       assert(off_in_bl >= 0);
-      __u64 len_in_bl = bh->length() * EBOFS_BLOCK_SIZE;
+      uint64_t len_in_bl = bh->length() * EBOFS_BLOCK_SIZE;
 
       // verify csum
       csum_t want = *bh->oc->on->get_extent_csum_ptr(bh->start(), 1);
@@ -239,16 +239,16 @@ void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist
 	*bh->oc->on->get_extent_csum_ptr(bh->start(), 1) = got;
 	bh->oc->on->data_csum += got - want;
 	
-	interval_set<__u64> bad;
+	interval_set<uint64_t> bad;
 	bad.insert(bh->start()*EBOFS_BLOCK_SIZE, EBOFS_BLOCK_SIZE);
 	bh->oc->on->bad_byte_extents.union_of(bad);
 
-	interval_set<__u64> over;
-	for (map<__u64,bufferlist>::iterator q = bh->partial.begin();
+	interval_set<uint64_t> over;
+	for (map<uint64_t,bufferlist>::iterator q = bh->partial.begin();
 	     q != bh->partial.end();
 	     q++)
 	  over.insert(bh->start()*EBOFS_BLOCK_SIZE+q->first, q->second.length());
-	interval_set<__u64> new_over;
+	interval_set<uint64_t> new_over;
 	new_over.intersection_of(over, bh->oc->on->bad_byte_extents);
 	bh->oc->on->bad_byte_extents.subtract(new_over);
       }

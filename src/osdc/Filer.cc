@@ -36,7 +36,7 @@ public:
   Filer *filer;
   Probe *probe;
   object_t oid;
-  __u64 size;
+  uint64_t size;
   utime_t mtime;
   C_Probe(Filer *f, Probe *p, object_t o) : filer(f), probe(p), oid(o), size(0) {}
   void finish(int r) {
@@ -47,8 +47,8 @@ public:
 int Filer::probe(inodeno_t ino,
 		 ceph_file_layout *layout,
 		 snapid_t snapid,
-		 __u64 start_from,
-		 __u64 *end,           // LB, when !fwd
+		 uint64_t start_from,
+		 uint64_t *end,           // LB, when !fwd
 		 utime_t *pmtime,
 		 bool fwd,
 		 int flags,
@@ -64,7 +64,7 @@ int Filer::probe(inodeno_t ino,
   Probe *probe = new Probe(ino, *layout, snapid, start_from, end, pmtime, flags, fwd, onfinish);
   
   // period (bytes before we jump unto a new set of object(s))
-  __u64 period = layout->fl_stripe_count * layout->fl_object_size;
+  uint64_t period = layout->fl_stripe_count * layout->fl_object_size;
   
   // start with 1+ periods.
   probe->probing_len = period;
@@ -104,7 +104,7 @@ void Filer::_probe(Probe *probe)
   }
 }
 
-void Filer::_probed(Probe *probe, const object_t& oid, __u64 size, utime_t mtime)
+void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mtime)
 {
   dout(10) << "_probed " << probe->ino << " object " << oid
 	   << " has size " << size << " mtime " << mtime << dendl;
@@ -120,7 +120,7 @@ void Filer::_probed(Probe *probe, const object_t& oid, __u64 size, utime_t mtime
     return;  // waiting for more!
 
   // analyze!
-  __u64 end = 0;
+  uint64_t end = 0;
 
   if (!probe->fwd) {
     // reverse
@@ -135,7 +135,7 @@ void Filer::_probed(Probe *probe, const object_t& oid, __u64 size, utime_t mtime
   for (vector<ObjectExtent>::iterator p = probe->probing.begin();
        p != probe->probing.end();
        p++) {
-    __u64 shouldbe = p->length + p->offset;
+    uint64_t shouldbe = p->length + p->offset;
     dout(10) << "_probed  " << probe->ino << " object " << hex << p->oid << dec
 	     << " should be " << shouldbe
 	     << ", actual is " << probe->known_size[p->oid]
@@ -156,11 +156,11 @@ void Filer::_probed(Probe *probe, const object_t& oid, __u64 size, utime_t mtime
       
       // aha, we found the end!
       // calc offset into buffer_extent to get distance from probe->from.
-      __u64 oleft = probe->known_size[p->oid] - p->offset;
+      uint64_t oleft = probe->known_size[p->oid] - p->offset;
       for (map<__u32,__u32>::iterator i = p->buffer_extents.begin();
 	   i != p->buffer_extents.end();
 	   i++) {
-	if (oleft <= (__u64)i->second) {
+	if (oleft <= (uint64_t)i->second) {
 	  end = probe->probing_off + i->first + oleft;
 	  dout(10) << "_probed  end is in buffer_extent " << i->first << "~" << i->second << " off " << oleft 
 		   << ", from was " << probe->probing_off << ", end is " << end 
@@ -183,7 +183,7 @@ void Filer::_probed(Probe *probe, const object_t& oid, __u64 size, utime_t mtime
     // keep probing!
     dout(10) << "_probed probing further" << dendl;
 
-    __u64 period = probe->layout.fl_stripe_count * probe->layout.fl_object_size;
+    uint64_t period = probe->layout.fl_stripe_count * probe->layout.fl_object_size;
     if (probe->fwd) {
       probe->probing_off += probe->probing_len;
       assert(probe->probing_off % period == 0);
@@ -216,7 +216,7 @@ struct PurgeRange {
   inodeno_t ino;
   ceph_file_layout layout;
   SnapContext snapc;
-  __u64 first, num;
+  uint64_t first, num;
   utime_t mtime;
   int flags;
   Context *oncommit;
@@ -226,7 +226,7 @@ struct PurgeRange {
 int Filer::purge_range(inodeno_t ino,
 		       ceph_file_layout *layout,
 		       const SnapContext& snapc,
-		       __u64 first_obj, __u64 num_obj,
+		       uint64_t first_obj, uint64_t num_obj,
 		       utime_t mtime,
 		       int flags,
 		       Context *oncommit) 
@@ -296,7 +296,7 @@ void Filer::_do_purge_range(PurgeRange *pr, int fin)
 // -----------------------
 
 void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
-                            __u64 offset, __u64 len,
+                            uint64_t offset, uint64_t len,
                             vector<ObjectExtent>& extents)
 {
   dout(10) << "file_to_extents " << offset << "~" << len 
@@ -314,18 +314,18 @@ void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
   __u32 su = layout->fl_stripe_unit;
   __u32 stripe_count = layout->fl_stripe_count;
   assert(object_size >= su);
-  __u64 stripes_per_object = object_size / su;
+  uint64_t stripes_per_object = object_size / su;
   dout(20) << " stripes_per_object " << stripes_per_object << dendl;
 
-  __u64 cur = offset;
-  __u64 left = len;
+  uint64_t cur = offset;
+  uint64_t left = len;
   while (left > 0) {
     // layout into objects
-    __u64 blockno = cur / su;          // which block
-    __u64 stripeno = blockno / stripe_count;    // which horizontal stripe        (Y)
-    __u64 stripepos = blockno % stripe_count;   // which object in the object set (X)
-    __u64 objectsetno = stripeno / stripes_per_object;       // which object set
-    __u64 objectno = objectsetno * stripe_count + stripepos;  // object id
+    uint64_t blockno = cur / su;          // which block
+    uint64_t stripeno = blockno / stripe_count;    // which horizontal stripe        (Y)
+    uint64_t stripepos = blockno % stripe_count;   // which object in the object set (X)
+    uint64_t objectsetno = stripeno / stripes_per_object;       // which object set
+    uint64_t objectno = objectsetno * stripe_count + stripepos;  // object id
     
     // find oid, extent
     ObjectExtent *ex = 0;
@@ -339,18 +339,18 @@ void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
     }
     
     // map range into object
-    __u64 block_start = (stripeno % stripes_per_object)*su;
-    __u64 block_off = cur % su;
-    __u64 max = su - block_off;
+    uint64_t block_start = (stripeno % stripes_per_object)*su;
+    uint64_t block_off = cur % su;
+    uint64_t max = su - block_off;
     
-    __u64 x_offset = block_start + block_off;
-    __u64 x_len;
+    uint64_t x_offset = block_start + block_off;
+    uint64_t x_len;
     if (left > max)
       x_len = max;
     else
       x_len = left;
     
-    if (ex->offset + (__u64)ex->length == x_offset) {
+    if (ex->offset + (uint64_t)ex->length == x_offset) {
       // add to extent
       ex->length += x_len;
     } else {

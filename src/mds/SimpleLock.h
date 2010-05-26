@@ -127,13 +127,13 @@ public:
 
 
   // waiting
-  static const __u64 WAIT_RD          = (1<<0);  // to read
-  static const __u64 WAIT_WR          = (1<<1);  // to write
-  static const __u64 WAIT_XLOCK       = (1<<2);  // to xlock   (** dup)
-  static const __u64 WAIT_STABLE      = (1<<2);  // for a stable state
-  static const __u64 WAIT_REMOTEXLOCK = (1<<3);  // for a remote xlock
+  static const uint64_t WAIT_RD          = (1<<0);  // to read
+  static const uint64_t WAIT_WR          = (1<<1);  // to write
+  static const uint64_t WAIT_XLOCK       = (1<<2);  // to xlock   (** dup)
+  static const uint64_t WAIT_STABLE      = (1<<2);  // for a stable state
+  static const uint64_t WAIT_REMOTEXLOCK = (1<<3);  // for a remote xlock
   static const int WAIT_BITS        = 4;
-  static const __u64 WAIT_ALL         = ((1<<WAIT_BITS)-1);
+  static const uint64_t WAIT_ALL         = ((1<<WAIT_BITS)-1);
 
 
 protected:
@@ -273,16 +273,16 @@ public:
   void encode_locked_state(bufferlist& bl) {
     parent->encode_lock_state(type->type, bl);
   }
-  void finish_waiters(__u64 mask, int r=0) {
+  void finish_waiters(uint64_t mask, int r=0) {
     parent->finish_waiting(mask << get_wait_shift(), r);
   }
-  void take_waiting(__u64 mask, list<Context*>& ls) {
+  void take_waiting(uint64_t mask, list<Context*>& ls) {
     parent->take_waiting(mask << get_wait_shift(), ls);
   }
-  void add_waiter(__u64 mask, Context *c) {
+  void add_waiter(uint64_t mask, Context *c) {
     parent->add_waiter(mask << get_wait_shift(), c);
   }
-  bool is_waiter_for(__u64 mask) {
+  bool is_waiter_for(uint64_t mask) {
     return parent->is_waiter_for(mask << get_wait_shift());
   }
   

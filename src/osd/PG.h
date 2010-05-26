@@ -458,13 +458,13 @@ public:
   class OndiskLog {
   public:
     // ok
-    __u64 tail;                     // first byte of log. 
-    __u64 head;                        // byte following end of log.
-    map<__u64,eversion_t> block_map;  // offset->version of _last_ entry with _any_ bytes in each block
+    uint64_t tail;                     // first byte of log. 
+    uint64_t head;                        // byte following end of log.
+    map<uint64_t,eversion_t> block_map;  // offset->version of _last_ entry with _any_ bytes in each block
 
     OndiskLog() : tail(0), head(0) {}
 
-    __u64 length() { return head - tail; }
+    uint64_t length() { return head - tail; }
     bool trim_to(eversion_t v, ObjectStore::Transaction& t);
 
     void encode(bufferlist& bl) const {

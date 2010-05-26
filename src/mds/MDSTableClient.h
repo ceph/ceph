@@ -28,7 +28,7 @@ protected:
   MDS *mds;
   int table;
 
-  __u64 last_reqid;
+  uint64_t last_reqid;
 
   // prepares
   struct _pending_prepare {
@@ -40,7 +40,7 @@ protected:
     _pending_prepare() : onfinish(0), ptid(0), pbl(0) {}
   };
 
-  map<__u64, _pending_prepare> pending_prepare;
+  map<uint64_t, _pending_prepare> pending_prepare;
 
   // pending commits
   map<version_t, LogSegment*> pending_commit;

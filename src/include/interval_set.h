@@ -34,7 +34,7 @@ template<typename T>
 class interval_set {
  public:
   map<T,T> m;   // map start -> len  
-  __u64 _size;
+  uint64_t _size;
   
   interval_set() : _size(0) {}
 

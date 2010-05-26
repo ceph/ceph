@@ -191,7 +191,7 @@ do { \
  * on the pool, check if you're the pool owner and grant full.
  * Otherwise, you get nothing.
  */
-int OSDCaps::get_pool_cap(int pool_id, __u64 uid)
+int OSDCaps::get_pool_cap(int pool_id, uint64_t uid)
 {
   if (allow_all)
     return OSD_POOL_CAP_ALL;

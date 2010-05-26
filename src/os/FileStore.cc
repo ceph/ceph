@@ -626,7 +626,7 @@ int FileStore::mount()
     } else if (!btrfs) {
       dout(0) << "mount WARNING: not btrfs, store may be in inconsistent state" << dendl;
     } else {
-      __u64 cp = snaps.back();
+      uint64_t cp = snaps.back();
       btrfs_ioctl_vol_args snapargs;
 
       // drop current
@@ -665,7 +665,7 @@ int FileStore::mount()
   op_fd = ::open(current_op_seq_fn, O_CREAT|O_RDWR, 0644);
   assert(op_fd >= 0);
 
-  __u64 initial_op_seq = 0;
+  uint64_t initial_op_seq = 0;
   {
     char s[40];
     int l = ::read(op_fd, s, sizeof(s));
@@ -740,9 +740,9 @@ int FileStore::umount()
 
 /// -----------------------------
 
-void FileStore::queue_op(Sequencer *posr, __u64 op_seq, list<Transaction*>& tls, Context *onreadable, Context *onreadable_sync)
+void FileStore::queue_op(Sequencer *posr, uint64_t op_seq, list<Transaction*>& tls, Context *onreadable, Context *onreadable_sync)
 {
-  __u64 bytes = 0, ops = 0;
+  uint64_t bytes = 0, ops = 0;
   for (list<Transaction*>::iterator p = tls.begin();
        p != tls.end();
        p++) {
@@ -864,12 +864,12 @@ void FileStore::_finish_op(OpSequencer *osr)
 struct C_JournaledAhead : public Context {
   FileStore *fs;
   ObjectStore::Sequencer *osr;
-  __u64 op;
+  uint64_t op;
   list<ObjectStore::Transaction*> tls;
   Context *onreadable, *onreadable_sync;
   Context *ondisk;
 
-  C_JournaledAhead(FileStore *f, ObjectStore::Sequencer *os, __u64 o, list<ObjectStore::Transaction*>& t,
+  C_JournaledAhead(FileStore *f, ObjectStore::Sequencer *os, uint64_t o, list<ObjectStore::Transaction*>& t,
 		   Context *onr, Context *ond, Context *onrsync) :
     fs(f), osr(os), op(o), tls(t), onreadable(onr), onreadable_sync(onrsync), ondisk(ond) { }
   void finish(int r) {
@@ -893,7 +893,7 @@ int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
 
       journal->throttle();
 
-      __u64 op = op_journal_start(0);
+      uint64_t op = op_journal_start(0);
       dout(10) << "queue_transactions (parallel) " << op << " " << tls << dendl;
       
       journal_transactions(tls, op, ondisk);
@@ -905,7 +905,7 @@ int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
       return 0;
     }
     else if (g_conf.filestore_journal_writeahead) {
-      __u64 op = op_journal_start(0);
+      uint64_t op = op_journal_start(0);
       dout(10) << "queue_transactions (writeahead) " << op << " " << tls << dendl;
       journal_transactions(tls, op,
 			   new C_JournaledAhead(this, osr, op, tls, onreadable, ondisk, onreadable_sync));
@@ -914,7 +914,7 @@ int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
     }
   }
 
-  __u64 op_seq = op_apply_start(0);
+  uint64_t op_seq = op_apply_start(0);
   dout(10) << "queue_transactions (trailing journal) " << op_seq << " " << tls << dendl;
   int r = do_transactions(tls, op_seq);
   op_apply_finish();
@@ -938,7 +938,7 @@ int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
   return r;
 }
 
-void FileStore::_journaled_ahead(Sequencer *osr, __u64 op,
+void FileStore::_journaled_ahead(Sequencer *osr, uint64_t op,
 				 list<Transaction*> &tls,
 				 Context *onreadable, Context *ondisk,
 				 Context *onreadable_sync)
@@ -955,11 +955,11 @@ void FileStore::_journaled_ahead(Sequencer *osr, __u64 op,
   }
 }
 
-int FileStore::do_transactions(list<Transaction*> &tls, __u64 op_seq)
+int FileStore::do_transactions(list<Transaction*> &tls, uint64_t op_seq)
 {
   int r = 0;
 
-  __u64 bytes = 0, ops = 0;
+  uint64_t bytes = 0, ops = 0;
   for (list<Transaction*>::iterator p = tls.begin();
        p != tls.end();
        p++) {
@@ -1014,7 +1014,7 @@ unsigned FileStore::apply_transactions(list<Transaction*> &tls,
     my_lock.Unlock();
     dout(10) << "apply done r = " << r << dendl;
   } else {
-    __u64 op_seq = op_apply_start(0);
+    uint64_t op_seq = op_apply_start(0);
     r = do_transactions(tls, op_seq);
     op_apply_finish();
 
@@ -1032,7 +1032,7 @@ unsigned FileStore::apply_transactions(list<Transaction*> &tls,
 
 // btrfs transaction start/end interface
 
-int FileStore::_transaction_start(__u64 bytes, __u64 ops)
+int FileStore::_transaction_start(uint64_t bytes, uint64_t ops)
 {
 #ifdef DARWIN
   return 0;
@@ -1104,8 +1104,8 @@ unsigned FileStore::_do_transaction(Transaction& t)
       {
 	coll_t cid = t.get_cid();
 	sobject_t oid = t.get_oid();
-	__u64 off = t.get_length();
-	__u64 len = t.get_length();
+	uint64_t off = t.get_length();
+	uint64_t len = t.get_length();
 	bufferlist bl;
 	t.get_bl(bl);
 	_write(cid, oid, off, len, bl);
@@ -1116,8 +1116,8 @@ unsigned FileStore::_do_transaction(Transaction& t)
       {
 	coll_t cid = t.get_cid();
 	sobject_t oid = t.get_oid();
-	__u64 off = t.get_length();
-	__u64 len = t.get_length();
+	uint64_t off = t.get_length();
+	uint64_t len = t.get_length();
 	_zero(cid, oid, off, len);
       }
       break;
@@ -1126,8 +1126,8 @@ unsigned FileStore::_do_transaction(Transaction& t)
       {
 	coll_t cid = t.get_cid();
 	sobject_t oid = t.get_oid();
-	__u64 off = t.get_length();
-	__u64 len = t.get_length();
+	uint64_t off = t.get_length();
+	uint64_t len = t.get_length();
 	trim_from_cache(cid, oid, off, len);
       }
       break;
@@ -1136,7 +1136,7 @@ unsigned FileStore::_do_transaction(Transaction& t)
       {
 	coll_t cid = t.get_cid();
 	sobject_t oid = t.get_oid();
-	__u64 off = t.get_length();
+	uint64_t off = t.get_length();
 	_truncate(cid, oid, off);
       }
       break;
@@ -1201,8 +1201,8 @@ unsigned FileStore::_do_transaction(Transaction& t)
 	coll_t cid = t.get_cid();
 	sobject_t oid = t.get_oid();
 	sobject_t noid = t.get_oid();
- 	__u64 off = t.get_length();
-	__u64 len = t.get_length();
+ 	uint64_t off = t.get_length();
+	uint64_t len = t.get_length();
 	_clone_range(cid, oid, noid, off, len);
       }
       break;
@@ -1295,7 +1295,7 @@ int FileStore::stat(coll_t cid, const sobject_t& oid, struct stat *st)
 }
 
 int FileStore::read(coll_t cid, const sobject_t& oid, 
-                    __u64 offset, size_t len,
+                    uint64_t offset, size_t len,
                     bufferlist& bl) {
   char fn[PATH_MAX];
   get_coname(cid, oid, fn, sizeof(fn));
@@ -1309,7 +1309,7 @@ int FileStore::read(coll_t cid, const sobject_t& oid,
     dout(10) << "read couldn't open " << fn << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     r = -errno;
   } else {
-    __u64 actual = ::lseek64(fd, offset, SEEK_SET);
+    uint64_t actual = ::lseek64(fd, offset, SEEK_SET);
     size_t got = 0;
     
     if (len == 0) {
@@ -1344,7 +1344,7 @@ int FileStore::_remove(coll_t cid, const sobject_t& oid)
   return r;
 }
 
-int FileStore::_truncate(coll_t cid, const sobject_t& oid, __u64 size)
+int FileStore::_truncate(coll_t cid, const sobject_t& oid, uint64_t size)
 {
   char fn[PATH_MAX];
   get_coname(cid, oid, fn, sizeof(fn));
@@ -1376,7 +1376,7 @@ int FileStore::_touch(coll_t cid, const sobject_t& oid)
 }
 
 int FileStore::_write(coll_t cid, const sobject_t& oid, 
-                     __u64 offset, size_t len,
+                     uint64_t offset, size_t len,
                      const bufferlist& bl)
 {
   char fn[PATH_MAX];
@@ -1394,7 +1394,7 @@ int FileStore::_write(coll_t cid, const sobject_t& oid,
   } else {
     
     // seek
-    __u64 actual = ::lseek64(fd, offset, SEEK_SET);
+    uint64_t actual = ::lseek64(fd, offset, SEEK_SET);
     int did = 0;
     assert(actual == offset);
     
@@ -1431,7 +1431,7 @@ int FileStore::_write(coll_t cid, const sobject_t& oid,
   return r;
 }
 
-int FileStore::_zero(coll_t cid, const sobject_t& oid, __u64 offset, size_t len)
+int FileStore::_zero(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len)
 {
   // write zeros.. yuck!
   bufferptr bp(len);
@@ -1482,7 +1482,7 @@ int FileStore::_clone(coll_t cid, const sobject_t& oldoid, const sobject_t& newo
   return 0;
 }
 
-int FileStore::_do_clone_range(int from, int to, __u64 off, __u64 len)
+int FileStore::_do_clone_range(int from, int to, uint64_t off, uint64_t len)
 {
   dout(20) << "_do_clone_range " << off << "~" << len << dendl;
   int r = 0;
@@ -1522,7 +1522,7 @@ int FileStore::_do_clone_range(int from, int to, __u64 off, __u64 len)
   return r;
 }
 
-int FileStore::_clone_range(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid, __u64 off, __u64 len)
+int FileStore::_clone_range(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid, uint64_t off, uint64_t len)
 {
   char ofn[PATH_MAX], nfn[PATH_MAX];
   get_coname(cid, oldoid, ofn, sizeof(ofn));
@@ -1552,7 +1552,7 @@ int FileStore::_clone_range(coll_t cid, const sobject_t& oldoid, const sobject_t
 }
 
 
-bool FileStore::queue_flusher(int fd, __u64 off, __u64 len)
+bool FileStore::queue_flusher(int fd, uint64_t off, uint64_t len)
 {
   bool queued;
   lock.Lock();
@@ -1585,20 +1585,20 @@ void FileStore::flusher_entry()
   while (true) {
     if (!flusher_queue.empty()) {
 #ifdef HAVE_SYNC_FILE_RANGE
-      list<__u64> q;
+      list<uint64_t> q;
       q.swap(flusher_queue);
 
       int num = flusher_queue_len;  // see how many we're taking, here
 
       lock.Unlock();
       while (!q.empty()) {
-	__u64 ep = q.front();
+	uint64_t ep = q.front();
 	q.pop_front();
 	int fd = q.front();
 	q.pop_front();
-	__u64 off = q.front();
+	uint64_t off = q.front();
 	q.pop_front();
-	__u64 len = q.front();
+	uint64_t len = q.front();
 	q.pop_front();
 	if (!stop && ep == sync_epoch) {
 	  dout(10) << "flusher_entry flushing+closing " << fd << " ep " << ep << dendl;
@@ -1654,7 +1654,7 @@ void FileStore::sync_entry()
     
     if (commit_start()) {
       utime_t start = g_clock.now();
-      __u64 cp = op_seq;
+      uint64_t cp = op_seq;
 
       // make flusher stop flushing previously queued stuff
       sync_epoch++;

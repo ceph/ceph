@@ -77,14 +77,14 @@ void print_header(char *imgname, rbd_obj_header_ondisk *header)
        << std::endl;
 }
 
-void trim_image(const char *imgname, rbd_obj_header_ondisk *header, __u64 newsize)
+void trim_image(const char *imgname, rbd_obj_header_ondisk *header, uint64_t newsize)
 {
-  __u64 size = header->image_size;
-  __u64 numseg = size >> header->obj_order;
-  __u64 start = newsize >> header->obj_order;
+  uint64_t size = header->image_size;
+  uint64_t numseg = size >> header->obj_order;
+  uint64_t start = newsize >> header->obj_order;
 
   cout << "trimming image data from " << numseg << " to " << start << " objects..." << std::endl;
-  for (__u64 i=start; i<numseg; i++) {
+  for (uint64_t i=start; i<numseg; i++) {
     char o[RBD_MAX_SEG_NAME_SIZE];
     sprintf(o, "%s.%012llx", imgname, (unsigned long long)i);
     string oid = o;
@@ -113,7 +113,7 @@ int main(int argc, const char **argv)
 
   bool opt_create = false, opt_delete = false, opt_list = false, opt_info = false, opt_resize = false;
   char *poolname = (char *)"rbd";
-  __u64 size = 0;
+  uint64_t size = 0;
   int order = 0;
   char *imgname;
 

@@ -16,22 +16,22 @@ void rados_deinitialize();
 /* pools */
 typedef void *rados_pool_t;
 typedef void *rados_list_ctx_t;
-typedef __u64 rados_snap_t;
+typedef uint64_t rados_snap_t;
 
 struct rados_pool_stat_t {
-  __u64 num_bytes;    // in bytes
-  __u64 num_kb;       // in KB
-  __u64 num_objects;
-  __u64 num_object_clones;
-  __u64 num_object_copies;  // num_objects * num_replicas
-  __u64 num_objects_missing_on_primary;
-  __u64 num_objects_degraded;
-  __u64 num_rd, num_rd_kb,num_wr, num_wr_kb;
+  uint64_t num_bytes;    // in bytes
+  uint64_t num_kb;       // in KB
+  uint64_t num_objects;
+  uint64_t num_object_clones;
+  uint64_t num_object_copies;  // num_objects * num_replicas
+  uint64_t num_objects_missing_on_primary;
+  uint64_t num_objects_degraded;
+  uint64_t num_rd, num_rd_kb,num_wr, num_wr_kb;
 };
 
 struct rados_statfs_t {
-  __u64 kb, kb_used, kb_avail;
-  __u64 num_objects;
+  uint64_t kb, kb_used, kb_avail;
+  uint64_t num_objects;
 };
 
 int rados_open_pool(const char *name, rados_pool_t *pool);
@@ -41,9 +41,9 @@ int rados_lookup_pool(const char *name);
 void rados_set_snap(rados_pool_t pool, rados_snap_t snap);
 
 int rados_create_pool(const char *name);
-int rados_create_pool_with_auid(const char *name, __u64 auid);
+int rados_create_pool_with_auid(const char *name, uint64_t auid);
 int rados_delete_pool(const rados_pool_t pool);
-int rados_change_pool_auid(const rados_pool_t pool, __u64 auid);
+int rados_change_pool_auid(const rados_pool_t pool, uint64_t auid);
 
 /* objects */
 int rados_list_objects_open(rados_pool_t pool, rados_list_ctx_t *ctx);
@@ -68,7 +68,7 @@ int rados_getxattr(rados_pool_t pool, const char *o, const char *name, char *buf
 int rados_setxattr(rados_pool_t pool, const char *o, const char *name, const char *buf, size_t len);
 
 /* misc */
-int rados_stat(rados_pool_t pool, const char *o, __u64 *psize, time_t *pmtime);
+int rados_stat(rados_pool_t pool, const char *o, uint64_t *psize, time_t *pmtime);
 int rados_tmap_update(rados_pool_t pool, const char *o, const char *cmdbuf, size_t cmdbuflen);
 int rados_exec(rados_pool_t pool, const char *oid, const char *cls, const char *method,
 	       const char *in_buf, size_t in_len, char *buf, size_t out_len);

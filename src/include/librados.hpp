@@ -14,23 +14,23 @@ namespace librados {
 
   typedef void *list_ctx_t;
   typedef void *pool_t;
-  typedef __u64 snap_t;
-  typedef __u64 auid_t;
+  typedef uint64_t snap_t;
+  typedef uint64_t auid_t;
 
   struct statfs_t {
-    __u64 kb, kb_used, kb_avail;
-    __u64 num_objects;
+    uint64_t kb, kb_used, kb_avail;
+    uint64_t num_objects;
   };
 
   struct pool_stat_t {
-    __u64 num_bytes;    // in bytes
-    __u64 num_kb;       // in KB
-    __u64 num_objects;
-    __u64 num_object_clones;
-    __u64 num_object_copies;  // num_objects * num_replicas
-    __u64 num_objects_missing_on_primary;
-    __u64 num_objects_degraded;
-    __u64 num_rd, num_rd_kb, num_wr, num_wr_kb;
+    uint64_t num_bytes;    // in bytes
+    uint64_t num_kb;       // in KB
+    uint64_t num_objects;
+    uint64_t num_object_clones;
+    uint64_t num_object_copies;  // num_objects * num_replicas
+    uint64_t num_objects_missing_on_primary;
+    uint64_t num_objects_degraded;
+    uint64_t num_rd, num_rd_kb, num_wr, num_wr_kb;
   };
 
   typedef void *completion_t;
@@ -62,7 +62,7 @@ public:
   int getxattr(pool_t pool, const std::string& oid, const char *name, bufferlist& bl);
   int setxattr(pool_t pool, const std::string& oid, const char *name, bufferlist& bl);
   int getxattrs(pool_t pool, const std::string& oid, std::map<std::string, bufferlist>& attrset);
-  int stat(pool_t pool, const std::string& oid, __u64 *psize, time_t *pmtime);
+  int stat(pool_t pool, const std::string& oid, uint64_t *psize, time_t *pmtime);
 
   int tmap_update(pool_t pool, const std::string& oid, bufferlist& cmdbl);
   
@@ -83,9 +83,9 @@ public:
 		     std::map<std::string,pool_stat_t>& stats);
   int get_fs_stats(statfs_t& result);
 
-  int create_pool(const char *name, __u64 auid=0);
+  int create_pool(const char *name, uint64_t auid=0);
   int delete_pool(const pool_t& pool);
-  int change_pool_auid(const pool_t& pool, __u64 auid);
+  int change_pool_auid(const pool_t& pool, uint64_t auid);
 
   int snap_create(const pool_t pool, const char *snapname);
   int snap_remove(const pool_t pool, const char *snapname);

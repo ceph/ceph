@@ -29,10 +29,10 @@ typedef enum {
 struct LogEntryKey {
   entity_inst_t who;
   utime_t stamp;
-  __u64 seq;
+  uint64_t seq;
 
   LogEntryKey() {}
-  LogEntryKey(entity_inst_t w, utime_t t, __u64 s) : who(w), stamp(t), seq(s) {}
+  LogEntryKey(entity_inst_t w, utime_t t, uint64_t s) : who(w), stamp(t), seq(s) {}
 
   void encode(bufferlist& bl) const {
     ::encode(who, bl);
@@ -54,7 +54,7 @@ static inline bool operator==(const LogEntryKey& l, const LogEntryKey& r) {
 struct LogEntry {
   entity_inst_t who;
   utime_t stamp;
-  __u64 seq;
+  uint64_t seq;
   log_type type;
   string msg;
 

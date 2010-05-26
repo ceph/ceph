@@ -31,17 +31,17 @@ static Client *client;
 
 Mutex stag_lock("fuse_ll.cc stag_lock");
 int last_stag = 0;
-hash_map<__u64,int> snap_stag_map;
-hash_map<int,__u64> stag_snap_map;
+hash_map<uint64_t,int> snap_stag_map;
+hash_map<int,uint64_t> stag_snap_map;
 
 #define FINO_INO(x) ((x) & ((1ull<<48)-1ull))
 #define FINO_STAG(x) ((x) >> 48)
 #define MAKE_FINO(i,s) ((i) | ((s) << 48))
 
-static __u64 fino_snap(__u64 fino)
+static uint64_t fino_snap(uint64_t fino)
 {
   Mutex::Locker l(stag_lock);
-  __u64 stag = FINO_STAG(fino);
+  uint64_t stag = FINO_STAG(fino);
   assert(stag_snap_map.count(stag));
   return stag_snap_map[stag];
 }
@@ -53,10 +53,10 @@ static vinodeno_t fino_vino(inodeno_t fino)
 }
 
 
-static __u64 make_fake_ino(inodeno_t ino, snapid_t snapid)
+static uint64_t make_fake_ino(inodeno_t ino, snapid_t snapid)
 {
   Mutex::Locker l(stag_lock);
-  __u64 stag;
+  uint64_t stag;
   if (snap_stag_map.count(snapid) == 0) {
     stag = ++last_stag;
     snap_stag_map[snapid] = stag;
@@ -359,7 +359,7 @@ static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
   struct stat st;
   memset(&st, 0, sizeof(st));
 
-  __u64 snap = fino_snap(ino);
+  uint64_t snap = fino_snap(ino);
 
   while (1) {
     int r = client->readdir_r(dirp, &de);

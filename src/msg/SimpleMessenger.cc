@@ -622,7 +622,7 @@ int SimpleMessenger::Pipe::accept()
   bufferptr bp;
   bufferlist authorizer, authorizer_reply;
   bool authorizer_valid;
-  __u64 feat_missing;
+  uint64_t feat_missing;
 
   // this should roughly mirror pseudocode at
   //  http://ceph.newdream.net/wiki/Messaging_protocol
@@ -671,7 +671,7 @@ int SimpleMessenger::Pipe::accept()
       goto reply;
     }
 
-    feat_missing = get_required_bits() & ~(__u64)connect.features;
+    feat_missing = get_required_bits() & ~(uint64_t)connect.features;
     if (feat_missing) {
       dout(1) << "peer missing required features " << std::hex << feat_missing << std::dec << dendl;
       reply.tag = CEPH_MSGR_TAG_FEATURES;
@@ -803,7 +803,7 @@ int SimpleMessenger::Pipe::accept()
     assert(0);    
 
   reply:
-    reply.features = ((__u64)connect.features & get_supported_bits()) | get_required_bits();
+    reply.features = ((uint64_t)connect.features & get_supported_bits()) | get_required_bits();
     reply.authorizer_len = authorizer_reply.length();
     rc = tcp_write(sd, (char*)&reply, sizeof(reply));
     if (rc < 0)
@@ -1148,7 +1148,7 @@ int SimpleMessenger::Pipe::connect()
     }
 
     if (reply.tag == CEPH_MSGR_TAG_READY) {
-      __u64 feat_missing = get_required_bits() & ~(__u64)reply.features;
+      uint64_t feat_missing = get_required_bits() & ~(uint64_t)reply.features;
       if (feat_missing) {
 	dout(1) << "missing required features " << std::hex << feat_missing << std::dec << dendl;
 	goto fail_locked;
@@ -1879,7 +1879,7 @@ int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len, bool 
 }
 
 
-int SimpleMessenger::Pipe::write_ack(__u64 seq)
+int SimpleMessenger::Pipe::write_ack(uint64_t seq)
 {
   dout(10) << "write_ack " << seq << dendl;
 

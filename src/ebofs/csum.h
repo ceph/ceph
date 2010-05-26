@@ -15,19 +15,19 @@
 #ifndef __EBOFS_CSUM_H
 #define __EBOFS_CSUM_H
 
-typedef __u64 csum_t;
+typedef uint64_t csum_t;
 
 /*
  * physically and logically aligned buffer.  yay.
  */
-inline __u64 calc_csum(const char *start, int len) {
+inline uint64_t calc_csum(const char *start, int len) {
   // must be 64-bit aligned
   assert(((unsigned long)start & 7) == 0); 
   assert((len & 7) == 0);
   
-  __u64 *p = (__u64*)start;
-  __u64 *end = (__u64*)(start + len);
-  __u64 csum = 0;
+  uint64_t *p = (uint64_t*)start;
+  uint64_t *end = (uint64_t*)(start + len);
+  uint64_t csum = 0;
   while (p < end) {
     csum += *p;
     p++;
@@ -39,13 +39,13 @@ inline __u64 calc_csum(const char *start, int len) {
  * arbitrarily aligned buffer.  buffer alignment must match logical alignment.
  * i.e., buffer content is aligned, but has non-aligned boundaries.
  */
-inline __u64 calc_csum_unaligned(const char *start, int len) {
+inline uint64_t calc_csum_unaligned(const char *start, int len) {
   const char *end = start + len;
-  __u64 csum = 0;
+  uint64_t csum = 0;
   
   // front
   while (start < end && (unsigned long)start & 7) {
-    csum += (__u64)(*start) << (8*(8 - ((unsigned long)start & 7)));
+    csum += (uint64_t)(*start) << (8*(8 - ((unsigned long)start & 7)));
     start++;
   }
   if (start == end) 
@@ -54,13 +54,13 @@ inline __u64 calc_csum_unaligned(const char *start, int len) {
   // middle, aligned
   const char *fastend = end - 7;
   while (start < fastend) {
-    csum += *(__u64*)start;
-    start += sizeof(__u64);
+    csum += *(uint64_t*)start;
+    start += sizeof(uint64_t);
   }
 
   // tail
   while (start < end) {
-    csum += (__u64)(*start) << (8*(8 - ((unsigned long)start & 7)));
+    csum += (uint64_t)(*start) << (8*(8 - ((unsigned long)start & 7)));
     start++;
   }
   return csum;
@@ -70,16 +70,16 @@ inline __u64 calc_csum_unaligned(const char *start, int len) {
 /*
  * arbitrarily aligned buffer, with arbitrary logical alignment
  */
-inline __u64 calc_csum_realign(const char *start, int len, int off) {
+inline uint64_t calc_csum_realign(const char *start, int len, int off) {
   const char *end = start + len;
-  __u64 csum = 0;
+  uint64_t csum = 0;
   
   if (((unsigned long)start & 7) == ((unsigned long)off & 7))
     return calc_csum_unaligned(start, len);     // lucky us, start and off alignment matches.
 
   // do it the slow way.  yucky!
   while (start < end) {
-    csum += (__u64)(*start) << (8*(8 - (off & 7)));
+    csum += (uint64_t)(*start) << (8*(8 - (off & 7)));
     start++; off++;
   }
   return csum;  

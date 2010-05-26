@@ -105,7 +105,7 @@ static inline ostream& operator<<(ostream& out, const EntityName& n) {
 
 
 struct EntityAuth {
-  __u64 auid;
+  uint64_t auid;
   CryptoKey key;
   map<string, bufferlist> caps;
 

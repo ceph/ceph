@@ -103,14 +103,14 @@ public:
   void set_mtime(utime_t mt) { head.mtime = mt; }
 
   // ops
-  void add_simple_op(int o, __u64 off, __u64 len) {
+  void add_simple_op(int o, uint64_t off, uint64_t len) {
     OSDOp osd_op;
     osd_op.op.op = o;
     osd_op.op.extent.offset = off;
     osd_op.op.extent.length = len;
     ops.push_back(osd_op);
   }
-  void write(__u64 off, __u64 len, bufferlist& bl) {
+  void write(uint64_t off, uint64_t len, bufferlist& bl) {
     add_simple_op(CEPH_OSD_OP_WRITE, off, len);
     data.claim(bl);
     header.data_off = off;
@@ -120,17 +120,17 @@ public:
     data.claim(bl);
     header.data_off = 0;
   }
-  void zero(__u64 off, __u64 len) {
+  void zero(uint64_t off, uint64_t len) {
     add_simple_op(CEPH_OSD_OP_ZERO, off, len);
   }
-  void truncate(__u64 off) {
+  void truncate(uint64_t off) {
     add_simple_op(CEPH_OSD_OP_TRUNCATE, off, 0);
   }
   void remove() {
     add_simple_op(CEPH_OSD_OP_DELETE, 0, 0);
   }
 
-  void read(__u64 off, __u64 len) {
+  void read(uint64_t off, uint64_t len) {
     add_simple_op(CEPH_OSD_OP_READ, off, len);
   }
   void stat() {
@@ -205,7 +205,7 @@ public:
       out << "w";
 #endif
     if (head.snapid != CEPH_NOSNAP)
-      out << "@" << snapid_t((__u64)head.snapid);
+      out << "@" << snapid_t((uint64_t)head.snapid);
 
     out << " " << ops;
     out << " " << pg_t(head.layout.ol_pgid);

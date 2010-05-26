@@ -229,7 +229,7 @@ int main(int argc, const char **argv)
     if (!pool || nargs.size() < 2)
       usage();
 
-    __u64 new_auid = strtol(nargs[1], 0, 10);
+    uint64_t new_auid = strtol(nargs[1], 0, 10);
     ret = rados.change_pool_auid(p, new_auid);
     if (ret < 0) {
       cerr << "error changing auid on pool " << pool << ':'

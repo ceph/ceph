@@ -71,8 +71,8 @@ int main(int argc, const char **argv)
       
 
       pobject_t oid(0, 0, object_t(1,2));
-      __u64 pos = 0;
-      __u64 sz = 16;
+      uint64_t pos = 0;
+      uint64_t sz = 16;
 
       bufferlist bl;
       bl.append(crap, sz);
@@ -173,7 +173,7 @@ int main(int argc, const char **argv)
 
 
       char *p = bl.c_str();
-      __u64 o = 0;
+      uint64_t o = 0;
       for (int i=0; i<n; i++) {
         cout << "write at " << o << std::endl;
         for (int j=0;j<l;j++) 
@@ -214,7 +214,7 @@ int main(int argc, const char **argv)
 
       utime_t start = g_clock.now();
 
-      for (__u64 m=0; m<megs; m++) {
+      for (uint64_t m=0; m<megs; m++) {
         //if (m%100 == 0)
           cout << m << " / " << megs << std::endl;
         fs.write(10, bl.length(), 1024LL*1024LL*m, bl, (Context*)0);
@@ -254,7 +254,7 @@ int main(int argc, const char **argv)
       if (1) {
         srand(0);
         for (int i=0; i<10000; i++) {
-          __u64 off = rand() % 1000000;
+          uint64_t off = rand() % 1000000;
           size_t len = 1+rand() % 10000;
           cout << std::endl << i << " writing bit at " << off << " len " << len << std::endl;
           fs.write(10, len, off, bl, (Context*)0);
@@ -263,7 +263,7 @@ int main(int argc, const char **argv)
         }
         fs.remove(10);
         for (int i=0; i<100; i++) {
-          __u64 off = rand() % 1000000;
+          uint64_t off = rand() % 1000000;
           size_t len = 1+rand() % 10000;
           cout << std::endl << i << " writing bit at " << off << " len " << len << std::endl;
           fs.write(10, len, off, bl, (Context*)0);
@@ -275,7 +275,7 @@ int main(int argc, const char **argv)
       if (0) {
         // sequential write
         srand(0);
-        __u64 off = 0;
+        uint64_t off = 0;
         for (int i=0; i<10000; i++) {
           size_t len = 1024*1024;//1+rand() % 10000;
           cout << std::endl << i << " writing bit at " << off << " len " << len << std::endl;
@@ -291,7 +291,7 @@ int main(int argc, const char **argv)
         srand(0);
         for (int i=0; i<100; i++) {
           bufferlist bl;
-          __u64 off = rand() % 1000000;
+          uint64_t off = rand() % 1000000;
           size_t len = rand() % 1000;
           cout << std::endl << "read bit at " << off << " len " << len << std::endl;
           int r = fs.read(10, len, off, bl);
@@ -310,7 +310,7 @@ int main(int argc, const char **argv)
         srand(0);
         for (int i=0; i<100; i++) {
           bufferlist bl;
-          __u64 off = rand() % 1000000;
+          uint64_t off = rand() % 1000000;
           size_t len = 100;
           cout << std::endl << "read bit at " << off << " len " << len << std::endl;
           int r = fs.read(10, len, off, bl);
@@ -327,7 +327,7 @@ int main(int argc, const char **argv)
         // write on empty cache
         srand(0);
         for (int i=0; i<100; i++) {
-          __u64 off = rand() % 1000000;
+          uint64_t off = rand() % 1000000;
           size_t len = 100;
           cout << std::endl <<  "writing bit at " << off << " len " << len << std::endl;
           fs.write(10, len, off, bl, (Context*)0);
