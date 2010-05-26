@@ -75,12 +75,16 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   messenger->start();
 
+  int r;
+
   // start client
   client->init();
     
   // start up fuse
   // use my argc, argv (make sure you pass a mount point!)
-  client->mount();
+  r = client->mount();
+  if (r < 0)
+    goto out_shutdown;
 
   _dout_create_courtesy_output_symlink("client", client->get_nodeid().v);
   cout << "starting fuse" << std::endl;
@@ -95,13 +99,14 @@ int main(int argc, const char **argv, const char *envp[]) {
   cout << "fuse finished, unmounting ceph" << std::endl;
   client->unmount();
   cout << "unmounted" << std::endl;
+
+ out_shutdown:
   client->shutdown();
-  
   delete client;
   
   // wait for messenger to finish
   messenger->wait();
   
-  return 0;
+  return r;
 }
 
