@@ -83,7 +83,7 @@ public:
 		     std::map<std::string,pool_stat_t>& stats);
   int get_fs_stats(statfs_t& result);
 
-  int create_pool(const char *name, uint64_t auid=0);
+  int create_pool(const char *name, uint64_t auid=0, __u8 crush_rule=0);
   int delete_pool(const pool_t& pool);
   int change_pool_auid(const pool_t& pool, uint64_t auid);
 

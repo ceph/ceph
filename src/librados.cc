@@ -134,7 +134,7 @@ public:
   int get_pool_stats(std::list<string>& ls, map<string,pool_stat_t>& result);
   int get_fs_stats(ceph_statfs& result);
 
-  int create_pool(string& name, unsigned long long auid=0);
+  int create_pool(string& name, unsigned long long auid=0, __u8 crush_rule=0);
   int delete_pool(const rados_pool_t& pool);
   int change_pool_auid(const rados_pool_t& pool, unsigned long long auid);
 
@@ -573,7 +573,8 @@ int RadosClient::selfmanaged_snap_remove(rados_pool_t pool, uint64_t snapid)
   return (int)reply;
 }
 
-int RadosClient::create_pool(string& name, unsigned long long auid)
+int RadosClient::create_pool(string& name, unsigned long long auid,
+			     __u8 crush_rule)
 {
   int reply;
 
@@ -582,7 +583,8 @@ int RadosClient::create_pool(string& name, unsigned long long auid)
   bool done;
   lock.Lock();
   objecter->create_pool(name,
-			new C_SafeCond(&mylock, &cond, &done, &reply), auid);
+			new C_SafeCond(&mylock, &cond, &done, &reply),
+			auid, crush_rule);
   lock.Unlock();
 
   mylock.Lock();
@@ -1198,12 +1200,12 @@ int Rados::get_pool_stats(std::list<string>& v, std::map<string,pool_stat_t>& re
   return r;
 }
 
-int Rados::create_pool(const char *name, uint64_t auid)
+int Rados::create_pool(const char *name, uint64_t auid, __u8 crush_rule)
 {
   string str(name);
   if (!client)
     return -EINVAL;
-  return ((RadosClient *)client)->create_pool(str, auid);
+  return ((RadosClient *)client)->create_pool(str, auid, crush_rule);
 }
 
 int Rados::delete_pool(const rados_pool_t& pool)
@@ -1668,6 +1670,20 @@ extern "C" int rados_create_pool_with_auid(const char *name, uint64_t auid)
 {
   string sname(name);
   return radosp->create_pool(sname, auid);
+}
+
+extern "C" int rados_create_pool_with_crush_rule(const char *name,
+						 __u8 crush_rule)
+{
+  string sname(name);
+  return radosp->create_pool(sname, 0, crush_rule);
+}
+
+extern "C" int rados_create_pool_with_all(const char *name, uint64_t auid,
+					  __u8 crush_rule)
+{
+  string sname(name);
+  return radosp->create_pool(sname, auid, crush_rule);
 }
 
 extern "C" int rados_delete_pool(const rados_pool_t pool)

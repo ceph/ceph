@@ -50,6 +50,9 @@ void rados_set_snap(rados_pool_t pool, rados_snap_t snap);
 
 int rados_create_pool(const char *name);
 int rados_create_pool_with_auid(const char *name, uint64_t auid);
+int rados_create_pool_with_crush_rule(const char *name, __u8 crush_rule);
+int rados_create_pool_with_all(const char *name, uint64_t auid,
+			       __u8 crush_rule);
 int rados_delete_pool(const rados_pool_t pool);
 int rados_change_pool_auid(const rados_pool_t pool, uint64_t auid);
 
