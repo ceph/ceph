@@ -572,10 +572,13 @@ void Paxos::handle_lease(MMonPaxos *lease)
   if (lease_expire < lease->lease_timestamp) {
     lease_expire = lease->lease_timestamp;
     if (g_clock.now() > lease_expire) {
-      dout(0) << "lease_expire " << lease_expire
+      stringstream ss;
+      ss << "lease_expire " << lease_expire
 	      << " is in the past (current time " << g_clock.now()
 	      << "). Clocks not synchronized or connection is very laggy"
-	      << dendl;
+	      << std::endl;
+      dout(0) << ss << dendl;
+      mon->get_logclient()->log(LOG_WARN, ss);
     }
   }
   
@@ -634,16 +637,25 @@ void Paxos::handle_lease_ack(MMonPaxos *ack)
     dout(10) << "handle_lease_ack from " << ack->get_source() 
 	     << " dup (lagging!), ignoring" << dendl;
   }
-  if (ack->lease_timestamp > g_clock.now())
-    dout(0) << "lease_ack from follower mon" << from
-	    << " was sent from future time " << ack->lease_timestamp
-	    << "! Clocks not synchronized." << dendl;
-  if (ack->lease_timestamp < (lease_expire - g_conf.mon_lease))
-    dout(0) << "lease_ack from follower sent at time("
-	    << ack->lease_timestamp << "), before lease extend was sent ("
-	    << lease_expire - g_conf.mon_lease
-	    << ")! Clocks not synchronized." << dendl;
-  
+  stringstream ss;
+  bool warn = false;
+  if (ack->lease_timestamp > g_clock.now()) {
+    ss << "lease_ack from follower mon" << from
+       << " was sent from future time " << ack->lease_timestamp
+       << "! Clocks not synchronized." << std::endl;
+    warn = true;
+  }
+  else if (ack->lease_timestamp < (lease_expire - g_conf.mon_lease)) {
+    ss << "lease_ack from follower sent at time("
+       << ack->lease_timestamp << "), before lease extend was sent ("
+       << lease_expire - g_conf.mon_lease
+       << ")! Clocks not synchronized." << std::endl;
+    warn = true;
+  }
+  if (warn) {
+    dout(0) << ss << dendl;
+    mon->get_logclient()->log(LOG_WARN, ss);
+  }
   ack->put();
 }
 
