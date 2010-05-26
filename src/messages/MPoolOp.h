@@ -26,17 +26,18 @@ public:
   __u32 op;
   uint64_t auid;
   snapid_t snapid;
+  __u8 crush_rule;
 
   MPoolOp() : PaxosServiceMessage(CEPH_MSG_POOLOP, 0) {}
   MPoolOp(const ceph_fsid_t& f, tid_t t, int p, string& n, int o, version_t v) :
     PaxosServiceMessage(CEPH_MSG_POOLOP, v), fsid(f), pool(p), name(n), op(o),
-    auid(0), snapid(0) {
+    auid(0), snapid(0), crush_rule(0) {
     set_tid(t);
   }
   MPoolOp(const ceph_fsid_t& f, tid_t t, int p, string& n,
 	  int o, uint64_t uid, version_t v) :
     PaxosServiceMessage(CEPH_MSG_POOLOP, v), fsid(f), pool(p), name(n), op(o),
-    auid(uid), snapid(0) {
+    auid(uid), snapid(0), crush_rule(0) {
     set_tid(t);
   }
 
@@ -52,7 +53,9 @@ public:
   }
 
   void encode_payload() {
-    header.version = 2;
+    if (crush_rule)
+      header.version = 3;
+    else header.version = 2;
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(pool, payload);
@@ -60,6 +63,7 @@ public:
     ::encode(auid, payload);
     ::encode(snapid, payload);
     ::encode(name, payload);
+    ::encode(crush_rule, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -73,6 +77,9 @@ public:
     ::decode(snapid, p);
     if (header.version >= 2)
       ::decode(name, p);
+    if (header.version >= 3)
+      ::decode(crush_rule, p);
+    else crush_rule = 0;
   }
 };
 

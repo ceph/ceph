@@ -1084,10 +1084,10 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
   if (m->auid)
     return prepare_new_pool(m->name, m->auid);
   else
-    return prepare_new_pool(m->name, session->caps.auid);
+    return prepare_new_pool(m->name, session->caps.auid, m->crush_rule);
 }
 
-int OSDMonitor::prepare_new_pool(string& name, uint64_t auid)
+int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, __u8 crush_rule)
 {
   if (osdmap.name_pool.count(name)) {
     return -EEXIST;
@@ -1097,7 +1097,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid)
   int pool = ++pending_inc.new_pool_max;
   pending_inc.new_pools[pool].v.type = CEPH_PG_TYPE_REP;
   pending_inc.new_pools[pool].v.size = 2;
-  pending_inc.new_pools[pool].v.crush_ruleset = 0;
+  pending_inc.new_pools[pool].v.crush_ruleset = crush_rule;
   pending_inc.new_pools[pool].v.pg_num = 8;
   pending_inc.new_pools[pool].v.pgp_num = 8;
   pending_inc.new_pools[pool].v.lpg_num = 0;
