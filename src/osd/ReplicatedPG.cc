@@ -1761,7 +1761,7 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 	    ++iter) {
 	overlaps.intersection_of(iter->second);
       }
-      ssc->snapset.clone_overlap[new_head.snap] = overlaps;
+      ssc->snapset.clone_overlap[*ssc->snapset.clones.rbegin()] = overlaps;
     }
   }
 }
