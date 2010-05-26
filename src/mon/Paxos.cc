@@ -536,7 +536,7 @@ void Paxos::extend_lease()
     if (*p == whoami) continue;
     MMonPaxos *lease = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE, machine_id);
     lease->last_committed = last_committed;
-    lease->lease_expire = lease_expire;
+    lease->lease_timestamp = lease_expire;
     lease->first_committed = first_committed;
     mon->messenger->send_message(lease, mon->monmap->get_inst(*p));
   }
@@ -569,8 +569,15 @@ void Paxos::handle_lease(MMonPaxos *lease)
   }
 
   // extend lease
-  if (lease_expire < lease->lease_expire) 
-    lease_expire = lease->lease_expire;
+  if (lease_expire < lease->lease_timestamp) {
+    lease_expire = lease->lease_timestamp;
+    if (g_clock.now() > lease_expire) {
+      dout(0) << "lease_expire " << lease_expire
+	      << " is in the past (current time " << g_clock.now()
+	      << "). Clocks not synchronized or connection is very laggy"
+	      << dendl;
+    }
+  }
   
   state = STATE_ACTIVE;
   
@@ -581,7 +588,7 @@ void Paxos::handle_lease(MMonPaxos *lease)
   MMonPaxos *ack = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE_ACK, machine_id);
   ack->last_committed = last_committed;
   ack->first_committed = first_committed;
-  ack->lease_expire = lease_expire;
+  ack->lease_timestamp = g_clock.now();
   mon->messenger->send_message(ack, lease->get_source_inst());
 
   // (re)set timeout event.
@@ -627,6 +634,15 @@ void Paxos::handle_lease_ack(MMonPaxos *ack)
     dout(10) << "handle_lease_ack from " << ack->get_source() 
 	     << " dup (lagging!), ignoring" << dendl;
   }
+  if (ack->lease_timestamp > g_clock.now())
+    dout(0) << "lease_ack from follower mon" << from
+	    << " was sent from future time " << ack->lease_timestamp
+	    << "! Clocks not synchronized." << dendl;
+  if (ack->lease_timestamp < (lease_expire - g_conf.mon_lease))
+    dout(0) << "lease_ack from follower sent at time("
+	    << ack->lease_timestamp << "), before lease extend was sent ("
+	    << lease_expire - g_conf.mon_lease
+	    << ")! Clocks not synchronized." << dendl;
   
   ack->put();
 }

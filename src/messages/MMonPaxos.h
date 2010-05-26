@@ -51,7 +51,7 @@ class MMonPaxos : public Message {
   version_t pn_from;         // i promise to accept after
   version_t pn;              // with with proposal
   version_t uncommitted_pn;     // previous pn, if we are a LAST with an uncommitted value
-  utime_t lease_expire;
+  utime_t lease_timestamp;
 
   version_t latest_version;
   bufferlist latest_value;
@@ -92,7 +92,7 @@ public:
     ::encode(pn_from, payload);
     ::encode(pn, payload);
     ::encode(uncommitted_pn, payload);
-    ::encode(lease_expire, payload);
+    ::encode(lease_timestamp, payload);
     ::encode(latest_version, payload);
     ::encode(latest_value, payload);
     ::encode(values, payload);
@@ -107,7 +107,7 @@ public:
     ::decode(pn_from, p);   
     ::decode(pn, p);   
     ::decode(uncommitted_pn, p);
-    ::decode(lease_expire, p);
+    ::decode(lease_timestamp, p);
     ::decode(latest_version, p);
     ::decode(latest_value, p);
     ::decode(values, p);
