@@ -738,7 +738,8 @@ int Objecter::delete_selfmanaged_snap(int pool, snapid_t snap,
   return 0;
 }
 
-int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid)
+int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid,
+			  __u8 crush_rule)
 {
   dout(10) << "create_pool name=" << name << dendl;
   PoolOp *op = new PoolOp;
@@ -751,6 +752,7 @@ int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid)
   op->pool_op = POOL_OP_CREATE;
   op_pool[op->tid] = op;
   op->auid = auid;
+  op->crush_rule = crush_rule;
 
   pool_op_submit(op);
 
@@ -805,6 +807,7 @@ void Objecter::pool_op_submit(PoolOp *op) {
 			   op->name, op->pool_op,
 			   op->auid, last_seen_osdmap_version);
   if (op->snapid) m->snapid = op->snapid;
+  if (op->crush_rule) m->crush_rule = op->crush_rule;
   monc->send_mon_message(m);
   op->last_submit = g_clock.now();
 }
