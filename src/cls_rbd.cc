@@ -20,6 +20,7 @@ CLS_NAME(rbd)
 cls_handle_t h_class;
 cls_method_handle_t h_snapshots_list;
 cls_method_handle_t h_snapshot_add;
+cls_method_handle_t h_snapshot_revert;
 
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {
@@ -164,6 +165,79 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+int snapshot_revert(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist bl;
+  struct rbd_obj_header_ondisk *header;
+  bufferlist newbl;
+  bufferptr header_bp(sizeof(*header));
+  struct rbd_obj_snap_ondisk *new_snaps;
+
+  int rc = snap_read_header(hctx, bl);
+  if (rc < 0)
+    return rc;
+
+  header = (struct rbd_obj_header_ondisk *)bl.c_str();
+
+  int snaps_id_ofs = sizeof(*header);
+  int len = snaps_id_ofs;
+  int names_ofs = snaps_id_ofs + sizeof(*new_snaps) * header->snap_count;
+  const char *snap_name;
+  const char *snap_names = ((char *)header) + names_ofs;
+  const char *end = snap_names + header->snap_names_len;
+  bufferlist::iterator iter = in->begin();
+  string s;
+  uint64_t snap_id;
+  int i;
+  bool found = false;
+  struct rbd_obj_snap_ondisk snap;
+
+  try {
+    ::decode(s, iter);
+  } catch (buffer::error *err) {
+    return -EINVAL;
+  }
+  snap_name = s.c_str();
+
+  for (i = 0; snap_names < end; i++) {
+    if (strcmp(snap_names, snap_name) == 0) {
+      snap = header->snaps[i];
+      found = true;
+      break;
+    }
+    snap_names += strlen(snap_names);
+  }
+  if (!found)
+    return -ENOENT;
+
+  header->image_size = snap.image_size;
+  header->snap_seq = header->snap_seq + 1;
+
+  snap_names += strlen(snap_names);
+  i++;
+
+  header->snap_count = header->snap_count - i;
+  bufferptr new_names_bp(end - snap_names);
+  bufferptr new_snaps_bp(sizeof(header->snaps[0]) * header->snap_count);
+
+  memcpy(header_bp.c_str(), header, sizeof(*header));
+  if (header->snap_count) {
+    char *new_snap_names;
+    memcpy(new_snaps_bp.c_str(), header->snaps + i, sizeof(header->snaps[0]) * header->snap_count);
+    memcpy(new_names_bp.c_str(), snap_names, end - snap_names);
+    newbl.push_back(new_snaps_bp);
+    newbl.push_back(new_names_bp);
+  }
+
+  rc = cls_cxx_write(hctx, 0, len, &newbl);
+  if (rc < 0)
+    return rc;
+
+  ::encode(snap.id, *out);
+
+  return 0;
+}
+
 void class_init()
 {
   CLS_LOG("Loaded rbd class!");
@@ -171,6 +245,7 @@ void class_init()
   cls_register("rbd", &h_class);
   cls_register_cxx_method(h_class, "snap_list", CLS_METHOD_RD, snapshots_list, &h_snapshots_list);
   cls_register_cxx_method(h_class, "snap_add", CLS_METHOD_RD | CLS_METHOD_WR, snapshot_add, &h_snapshot_add);
+  cls_register_cxx_method(h_class, "snap_revert", CLS_METHOD_RD | CLS_METHOD_WR, snapshot_revert, &h_snapshot_revert);
 
   return;
 }
