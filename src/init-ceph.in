@@ -1,5 +1,6 @@
 #!/bin/sh
 # Start/stop ceph daemons
+# chkconfig: 2345 60 80
 
 ### BEGIN INIT INFO
 # Provides:          ceph
@@ -26,6 +27,13 @@ else
     else
 	ETCDIR=@sysconfdir@/ceph
     fi
+fi
+
+# do lockfile, if RH
+if [ -d /var/lock/subsys ]; then
+    lockfile=/var/lock/subsys/ceph
+else
+    lockfile=
 fi
 
 usage_exit() {
@@ -244,6 +252,7 @@ for name in $what; do
 	    [ -n "$pre_start" ] && do_cmd "$pre_start"
 	    do_cmd "$cmd" $runarg
 	    [ -n "$post_start" ] && do_cmd "$post_start"
+	    [ -n "$lockfile"] && [ "$?" = 0 ] && touch $lockfile
 	    ;;
 	
 	stop)
@@ -252,19 +261,27 @@ for name in $what; do
 	    [ -n "$pre_stop" ] && do_cmd "$pre_stop"
 	    stop_daemon $name c$type $pid_file
 	    [ -n "$post_stop" ] && do_cmd "$post_stop"
+	    [ -n "$lockfile"] && [ "$?" = 0 ] && rm -f $lockfile
 	    ;;
 
+	status)
+	    pid=`cat $pid_file`
+	    ps $pid &> /dev/null
+	    exit $?
+	    ;;
 	forcestop)
 	    get_conf pre_forcestop "" "pre forcestop command"
 	    get_conf post_forcestop "" "post forcestop command"
 	    [ -n "$pre_forcestop" ] && do_cmd "$pre_forcestop"
 	    stop_daemon $name c$type $pid_file -9
 	    [ -n "$post_forcestop" ] && do_cmd "$post_forcestop"
+	    [ -n "$lockfile"] && [ "$?" = 0 ] && rm -f $lockfile
 	    ;;
 	    
 	killall)
 	    echo "killall c$type on $host"
 	    do_cmd "pkill ^c$type || true"
+	    [ -n "$lockfile"] && [ "$?" = 0 ] && rm -f $lockfile
 	    ;;
 	
 	force-reload | reload)
