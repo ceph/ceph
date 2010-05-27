@@ -144,9 +144,11 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
   crush.set_type_name(2, "pool");
 
   int minrep = g_conf.osd_min_rep;
+  int maxrep = g_conf.osd_max_rep;
+  assert(maxrep >= minrep);
   int ndom = num_dom;
   if (!ndom)
-    ndom = MAX(g_conf.osd_max_rep, g_conf.osd_max_raid_width);
+    ndom = MAX(maxrep, g_conf.osd_max_raid_width);
   if (ndom > 1 &&
       num_osd >= ndom*3 &&
       num_osd > 8) {
@@ -188,7 +190,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
     // rules
     for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
       int ruleset = p->first;
-      crush_rule *rule = crush_make_rule(3, ruleset, CEPH_PG_TYPE_REP, minrep, g_conf.osd_max_rep);
+      crush_rule *rule = crush_make_rule(3, ruleset, CEPH_PG_TYPE_REP, minrep, maxrep);
       crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
       crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_LEAF_FIRSTN, CRUSH_CHOOSE_N, 1); // choose N domains
       crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
@@ -213,7 +215,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
     // replication
     for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
       int ruleset = p->first;
-      crush_rule *rule = crush_make_rule(3, ruleset, CEPH_PG_TYPE_REP, g_conf.osd_min_rep, g_conf.osd_max_rep);
+      crush_rule *rule = crush_make_rule(3, ruleset, CEPH_PG_TYPE_REP, g_conf.osd_min_rep, maxrep);
       crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
       crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, CRUSH_CHOOSE_N, 0);
       crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
