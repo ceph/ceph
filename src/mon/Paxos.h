@@ -248,6 +248,10 @@ public:
   void leader_init();
   void peon_init();
 
+  void share_state(MMonPaxos *m, version_t first_committed, version_t last_committed);
+  void store_state(MMonPaxos *m);
+
+
   // -- service interface --
   void wait_for_active(Context *c) {
     waiting_for_active.push_back(c);

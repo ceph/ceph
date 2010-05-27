@@ -43,17 +43,32 @@ void usage()
   cerr << "usage: cmon -i monid [--mon-data=pathtodata] [flags]" << std::endl;
   cerr << "  --debug_mon n\n";
   cerr << "        debug monitor level (e.g. 10)\n";
+  cerr << "  --mkfs\n";
+  cerr << "        build fresh monitor fs\n";
   generic_server_usage();
 }
 
 int main(int argc, const char **argv) 
 {
   int err;
+  DEFINE_CONF_VARS(usage);
+
+  bool mkfs = false;
+  const char *osdmapfn = 0;
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
   common_init(args, "mon", true, true);
+
+  FOR_EACH_ARG(args) {
+    if (CONF_ARG_EQ("mkfs", '\0')) {
+      mkfs = true;
+    } else if (CONF_ARG_EQ("osdmap", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&osdmapfn, OPT_STR);
+    } else
+      usage();
+  }
 
   // whoami
   char *end;
@@ -68,6 +83,42 @@ int main(int argc, const char **argv)
     usage();
   }
 
+  // -- mkfs --
+  if (mkfs) {
+    if (!g_conf.monmap || !osdmapfn)
+      usage();
+
+    // make sure it doesn't already exist
+        /*
+    struct stat st;
+    if (::lstat(g_conf.mon_data, &st) == 0) {
+      cerr << "monfs dir " << g_conf.mon_data << " already exists; remove it first" << std::endl;
+      usage();
+    }
+	*/
+
+    // load monmap
+    bufferlist monmapbl, osdmapbl;
+    int err = monmapbl.read_file(g_conf.monmap);
+    if (err < 0)
+      exit(1);
+    MonMap monmap;
+    monmap.decode(monmapbl);
+    
+    err = osdmapbl.read_file(osdmapfn);
+    if (err < 0)
+      exit(1);
+
+    // go
+    MonitorStore store(g_conf.mon_data);
+    Monitor mon(whoami, &store, 0, &monmap);
+    mon.mkfs(osdmapbl);
+    cout << argv[0] << ": created monfs at " << g_conf.mon_data 
+	 << " for mon" << whoami
+	 << std::endl;
+    return 0;
+  }
+
   if (g_conf.clock_tare) g_clock.tare();
 
   CompatSet mon_features(ceph_mon_feature_compat,
@@ -80,17 +131,6 @@ int main(int argc, const char **argv)
   if (err < 0) {
     char buf[80];
     cerr << "problem opening monitor store in " << g_conf.mon_data << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
-    exit(1);
-  }
-
-  // whoami?
-  if (!store.exists_bl_ss("whoami")) {
-    cerr << "mon fs missing 'whoami'.. did you run mkcephfs?" << std::endl;
-    exit(1);
-  }
-  int w = store.get_int("whoami");
-  if (w != whoami) {
-    cerr << "monitor data is for mon" << w << ", but you said i was mon" << whoami << std::endl;
     exit(1);
   }
 

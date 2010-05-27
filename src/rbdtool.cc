@@ -58,30 +58,34 @@ static void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
 
   ondisk.image_size = size;
   if (order)
-    ondisk.obj_order = order;
+    ondisk.options.order = order;
   else
-    ondisk.obj_order = RBD_DEFAULT_OBJ_ORDER;
-  ondisk.crypt_type = RBD_CRYPT_NONE;
-  ondisk.comp_type = RBD_COMP_NONE;
+    ondisk.options.order = RBD_DEFAULT_OBJ_ORDER;
+  ondisk.options.crypt_type = RBD_CRYPT_NONE;
+  ondisk.options.comp_type = RBD_COMP_NONE;
   ondisk.snap_seq = 0;
   ondisk.snap_count = 0;
+  ondisk.reserved = 0;
   ondisk.snap_names_len = 0;
 }
 
 void print_header(char *imgname, rbd_obj_header_ondisk *header)
 {
+  int obj_order = header->options.order;
   cout << "rbd image '" << imgname << "':\n"
        << "\tsize " << prettybyte_t(header->image_size) << " in "
-       << (header->image_size >> header->obj_order) << " objects\n"
-       << "\torder " << (int)header->obj_order << " (" << prettybyte_t(1 << (header->obj_order)) << " objects)"
+       << (header->image_size >> obj_order) << " objects\n"
+       << "\torder " << obj_order
+       << " (" << prettybyte_t(1 << obj_order) << " objects)"
        << std::endl;
 }
 
 void trim_image(const char *imgname, rbd_obj_header_ondisk *header, uint64_t newsize)
 {
   uint64_t size = header->image_size;
-  uint64_t numseg = size >> header->obj_order;
-  uint64_t start = newsize >> header->obj_order;
+  int obj_order = header->options.order;
+  uint64_t numseg = size >> obj_order;
+  uint64_t start = newsize >> obj_order;
 
   cout << "trimming image data from " << numseg << " to " << start << " objects..." << std::endl;
   for (uint64_t i=start; i<numseg; i++) {

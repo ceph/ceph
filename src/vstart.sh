@@ -302,7 +302,7 @@ EOF
 
 		for f in `seq 0 $((CEPH_NUM_MON-1))`
 		do
-		    cmd="$CEPH_BIN/mkmonfs -c $conf --clobber --mon-data=dev/mon$f -i $f --monmap=$monmap_fn --osdmap=$osdmap_fn"
+		    cmd="$CEPH_BIN/cmon --mkfs -c $conf -i $f --monmap=$monmap_fn --osdmap=$osdmap_fn"
 		    [ "$cephx" -eq 1 ] && cmd="$cmd --keyring=$keyring_fn"
 		    echo $cmd
 		    $cmd

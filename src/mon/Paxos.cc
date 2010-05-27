@@ -91,6 +91,7 @@ void Paxos::collect(version_t oldpn)
     
     MMonPaxos *collect = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COLLECT, machine_id);
     collect->last_committed = last_committed;
+    collect->first_committed = first_committed;
     collect->pn = accepted_pn;
     mon->messenger->send_message(collect, mon->monmap->get_inst(*p));
   }
@@ -114,6 +115,7 @@ void Paxos::handle_collect(MMonPaxos *collect)
   // reply
   MMonPaxos *last = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LAST, machine_id);
   last->last_committed = last_committed;
+  last->first_committed = first_committed;
   
   // do we have an accepted but uncommitted value?
   //  (it'll be at last_committed+1)
@@ -144,37 +146,78 @@ void Paxos::handle_collect(MMonPaxos *collect)
   last->pn_from = accepted_pn_from;
 
   // and share whatever data we have
-  if (collect->last_committed < last_committed) {
-    bufferlist bl;
-    version_t l = get_latest(bl);
-    assert(l <= last_committed);
-
-    version_t v = collect->last_committed;
-
-    // start with a stashed full copy?
-    /* hmm.
-    if (l > v + 10) {
-      last->latest_value.claim(bl);
-      last->latest_version = l;
-      v = l;
-    }
-    */
-
-    // include (remaining) incrementals
-    for (v++;
-	 v <= last_committed;
-	 v++) {
-      if (mon->store->exists_bl_sn(machine_name, v)) {
-	mon->store->get_bl_sn(last->values[v], machine_name, v);
-	dout(10) << " sharing " << v << " (" 
-		 << last->values[v].length() << " bytes)" << dendl;
-      }
-    }
-  }
+  if (collect->last_committed < last_committed)
+    share_state(last, collect->first_committed, collect->last_committed);
 
   // send reply
   mon->messenger->send_message(last, collect->get_source_inst());
   collect->put();
+}
+
+void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed, version_t peer_last_committed)
+{
+  assert(peer_last_committed < last_committed);
+
+  dout(10) << "share_state peer has fc " << peer_first_committed << " lc " << peer_last_committed << dendl;
+  version_t v = peer_last_committed;
+    
+  // start with a stashed full copy?
+  if (peer_last_committed < first_committed) {
+    bufferlist bl;
+    version_t l = get_latest(bl);
+    assert(l <= last_committed);
+    dout(10) << "share_state starting with latest " << l << " (" << bl.length() << " bytes)" << dendl;
+    m->latest_value.claim(bl);
+    m->latest_version = l;
+    v = l;
+  }
+
+  // include (remaining) incrementals
+  for (v++;
+       v <= last_committed;
+       v++) {
+    if (mon->store->exists_bl_sn(machine_name, v)) {
+      mon->store->get_bl_sn(m->values[v], machine_name, v);
+      dout(10) << " sharing " << v << " (" 
+	       << m->values[v].length() << " bytes)" << dendl;
+    }
+  }
+}
+
+void Paxos::store_state(MMonPaxos *m)
+{
+  bool big_sync = m->values.size() > 5;
+
+  // stash?
+  if (m->latest_version && m->latest_version > last_committed) {
+    dout(10) << "store_state got stash version " << m->latest_version << ", zapping old states" << dendl;
+    stash_latest(m->latest_version, m->latest_value);
+
+    while (first_committed <= last_committed) {
+      dout(10) << "store_state trim " << first_committed << dendl;
+      mon->store->erase_sn(machine_name, first_committed);
+      first_committed++;
+    }
+    last_committed = m->latest_version;
+    first_committed = last_committed;
+    mon->store->put_int(first_committed, machine_name, "first_committed");
+  }
+
+  for (map<version_t,bufferlist>::iterator p = m->values.begin();
+       p != m->values.end();
+       ++p) {
+    if (p->first <= last_committed)
+      continue;
+    if (p->first > last_committed + 1)
+      break;
+    last_committed = p->first;
+    dout(10) << "store_state got " << last_committed << " (" << p->second.length() << " bytes)" << dendl;
+    mon->store->put_bl_sn(p->second, machine_name, last_committed, !big_sync);
+  }
+
+  mon->store->put_int(last_committed, machine_name, "last_committed");
+  if (big_sync)
+    mon->store->sync();
 }
 
 
@@ -194,40 +237,13 @@ void Paxos::handle_last(MMonPaxos *last)
     // share committed values
     dout(10) << "sending commit to " << last->get_source() << dendl;
     MMonPaxos *commit = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COMMIT, machine_id);
-    for (version_t v = last->last_committed+1;
-	 v <= last_committed;
-	 v++) {
-      mon->store->get_bl_sn(commit->values[v], machine_name, v);
-      dout(10) << " sharing " << v << " (" 
-	       << commit->values[v].length() << " bytes)" << dendl;
-    }
+    share_state(commit, last->first_committed, last->last_committed);
     commit->last_committed = last_committed;
     mon->messenger->send_message(commit, last->get_source_inst());
   }
 
   // did we receive a committed value?
-  if (last->last_committed > last_committed) {
-    /* hmm.
-    if (last->latest_version) {
-      last_committed = last->latest_value;
-      dout(10) << "stashing latest full value " << last_committed << dendl;
-      stash_latest(last_committed, last->latest_value);
-    }
-    */
-    bool big_sync = last->last_committed - last_committed > 5;
-    for (version_t v = last_committed+1;
-	 v <= last->last_committed;
-	 v++) {
-      mon->store->put_bl_sn(last->values[v], machine_name, v, !big_sync);
-      dout(10) << "committing " << v << " " 
-	       << last->values[v].length() << " bytes" << dendl;
-    }
-    if (big_sync)
-      mon->store->sync();
-    last_committed = last->last_committed;
-    mon->store->put_int(last_committed, machine_name, "last_committed");
-    dout(10) << "last_committed now " << last_committed << dendl;
-  }
+  store_state(last);
       
   // do they accept your pn?
   if (last->pn > accepted_pn) {
@@ -481,6 +497,8 @@ void Paxos::commit()
 }
 
 
+
+
 void Paxos::handle_commit(MMonPaxos *commit)
 {
   dout(10) << "handle_commit on " << commit->last_committed << dendl;
@@ -492,21 +510,7 @@ void Paxos::handle_commit(MMonPaxos *commit)
     return;
   }
 
-  // commit locally.
-  bool big_sync = commit->values.size() > 2;
-  for (map<version_t,bufferlist>::iterator p = commit->values.begin();
-       p != commit->values.end();
-       ++p) {
-    assert(p->first <= last_committed+1);
-    if (p->first == last_committed+1) {
-      last_committed = p->first;
-      dout(10) << " storing " << last_committed << " (" << p->second.length() << " bytes)" << dendl;
-      mon->store->put_bl_sn(p->second, machine_name, last_committed, !big_sync);
-    }
-  }
-  if (big_sync)
-    mon->store->sync();
-  mon->store->put_int(last_committed, machine_name, "last_committed");
+  store_state(commit);
   
   commit->put();
 
@@ -532,9 +536,8 @@ void Paxos::extend_lease()
     if (*p == whoami) continue;
     MMonPaxos *lease = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE, machine_id);
     lease->last_committed = last_committed;
-    lease->lease_expire = lease_expire;
-    if (mon->is_full_quorum())
-      lease->first_committed = first_committed;
+    lease->lease_timestamp = lease_expire;
+    lease->first_committed = first_committed;
     mon->messenger->send_message(lease, mon->monmap->get_inst(*p));
   }
 
@@ -566,8 +569,18 @@ void Paxos::handle_lease(MMonPaxos *lease)
   }
 
   // extend lease
-  if (lease_expire < lease->lease_expire) 
-    lease_expire = lease->lease_expire;
+  if (lease_expire < lease->lease_timestamp) {
+    lease_expire = lease->lease_timestamp;
+    if (g_clock.now() > lease_expire) {
+      stringstream ss;
+      ss << "lease_expire " << lease_expire
+	      << " is in the past (current time " << g_clock.now()
+	      << "). Clocks not synchronized or connection is very laggy"
+	      << std::endl;
+      dout(0) << ss << dendl;
+      mon->get_logclient()->log(LOG_WARN, ss);
+    }
+  }
   
   state = STATE_ACTIVE;
   
@@ -578,7 +591,7 @@ void Paxos::handle_lease(MMonPaxos *lease)
   MMonPaxos *ack = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE_ACK, machine_id);
   ack->last_committed = last_committed;
   ack->first_committed = first_committed;
-  ack->lease_expire = lease_expire;
+  ack->lease_timestamp = g_clock.now();
   mon->messenger->send_message(ack, lease->get_source_inst());
 
   // (re)set timeout event.
@@ -624,7 +637,25 @@ void Paxos::handle_lease_ack(MMonPaxos *ack)
     dout(10) << "handle_lease_ack from " << ack->get_source() 
 	     << " dup (lagging!), ignoring" << dendl;
   }
-  
+  stringstream ss;
+  bool warn = false;
+  if (ack->lease_timestamp > g_clock.now()) {
+    ss << "lease_ack from follower mon" << from
+       << " was sent from future time " << ack->lease_timestamp
+       << "! Clocks not synchronized." << std::endl;
+    warn = true;
+  }
+  else if (ack->lease_timestamp < (lease_expire - g_conf.mon_lease)) {
+    ss << "lease_ack from follower sent at time("
+       << ack->lease_timestamp << "), before lease extend was sent ("
+       << lease_expire - g_conf.mon_lease
+       << ")! Clocks not synchronized." << std::endl;
+    warn = true;
+  }
+  if (warn) {
+    dout(0) << ss << dendl;
+    mon->get_logclient()->log(LOG_WARN, ss);
+  }
   ack->put();
 }
 

@@ -986,14 +986,14 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       if (m->cmd[2] == "*") {
 	for (int i=0; i<osdmap.get_max_osd(); i++)
 	  if (osdmap.is_up(i))
-	    mon->inject_args(osdmap.get_inst(i), m->cmd[3], paxos->get_version());
+	    mon->inject_args(osdmap.get_inst(i), m->cmd[3]);
 	r = 0;
 	ss << "ok bcast";
       } else {
 	errno = 0;
 	int who = strtol(m->cmd[2].c_str(), 0, 10);
 	if (!errno && who >= 0 && osdmap.is_up(who)) {
-	  mon->inject_args(osdmap.get_inst(who), m->cmd[3], paxos->get_version());
+	  mon->inject_args(osdmap.get_inst(who), m->cmd[3]);
 	  r = 0;
 	  ss << "ok";
 	} else 
@@ -1084,10 +1084,10 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
   if (m->auid)
     return prepare_new_pool(m->name, m->auid);
   else
-    return prepare_new_pool(m->name, session->caps.auid);
+    return prepare_new_pool(m->name, session->caps.auid, m->crush_rule);
 }
 
-int OSDMonitor::prepare_new_pool(string& name, uint64_t auid)
+int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, __u8 crush_rule)
 {
   if (osdmap.name_pool.count(name)) {
     return -EEXIST;
@@ -1097,7 +1097,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid)
   int pool = ++pending_inc.new_pool_max;
   pending_inc.new_pools[pool].v.type = CEPH_PG_TYPE_REP;
   pending_inc.new_pools[pool].v.size = 2;
-  pending_inc.new_pools[pool].v.crush_ruleset = 0;
+  pending_inc.new_pools[pool].v.crush_ruleset = crush_rule;
   pending_inc.new_pools[pool].v.pg_num = 8;
   pending_inc.new_pools[pool].v.pgp_num = 8;
   pending_inc.new_pools[pool].v.lpg_num = 0;

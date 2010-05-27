@@ -48,9 +48,10 @@ void usage()
   cerr << "   put objname -- write object\n";
   cerr << "   rm objname  -- remove object\n";
   cerr << "   ls          -- list objects in pool\n\n";
-  cerr << "   chown 123   -- change the pool owner to auid 123";
+  cerr << "   chown 123   -- change the pool owner to auid 123\n";
 
-  cerr << "   mkpool foo [123]  -- create pool 'foo' [with auid 123]\n";
+  cerr << "   mkpool foo [123[ 4]]  -- create pool 'foo'\n"
+       << "                         [with auid 123[and using crush rule 4]]\n";
   cerr << "   rmpool foo  -- remove pool 'foo'\n";
   cerr << "   lssnap      -- list snaps\n";
   cerr << "   mksnap foo  -- create snap 'foo'\n";
@@ -321,13 +322,18 @@ int main(int argc, const char **argv)
 
   else if (strcmp(nargs[0], "mkpool") == 0) {
     int auid = 0;
+    __u8 crush_rule = 0;
     if (nargs.size() < 2)
       usage();
     if (nargs.size() > 2) {
       auid = strtol(nargs[2], 0, 10);
       cerr << "setting auid:" << auid << std::endl;
+      if (nargs.size() > 3) {
+	crush_rule = (__u8)strtol(nargs[3], 0, 10);
+	cerr << "using crush rule " << (int)crush_rule << std::endl;
+      }
     }
-    ret = rados.create_pool(nargs[1], auid);
+    ret = rados.create_pool(nargs[1], auid, crush_rule);
     if (ret < 0) {
       cerr << "error creating pool " << nargs[1] << ": "
 	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;

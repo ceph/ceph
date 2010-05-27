@@ -720,10 +720,15 @@ public:
     if (is_dir())
       return CEPH_CAP_PIN | CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_SHARED;  // but not, say, FILE_RD|WR|WRBUFFER
     else
-      return CEPH_CAP_ANY;
+      return CEPH_CAP_ANY & ~CEPH_CAP_FILE_LAZYIO;
   }
   int get_caps_allowed_ever() {
-    return get_caps_liked() & 
+    int allowed;
+    if (is_dir())
+      allowed = CEPH_CAP_PIN | CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_SHARED;
+    else
+      allowed = CEPH_CAP_ANY;
+    return allowed & 
       (CEPH_CAP_PIN |
        (filelock.gcaps_allowed_ever() << filelock.get_cap_shift()) |
        (authlock.gcaps_allowed_ever() << authlock.get_cap_shift()) |

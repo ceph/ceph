@@ -205,7 +205,7 @@ for name in $what; do
 	    [ -n "$user" ] && chown $user $tmpkeyring
 	fi
 	get_conf mon_data "" "mon data"
-	do_cmd "$BINDIR/mkmonfs --clobber --mon-data $mon_data -i $num --monmap $monmap --osdmap $osdmap -k $tmpkeyring ; rm -f $tmpkeyring"
+	do_cmd "$BINDIR/cmon --mkfs -i $num --monmap $monmap --osdmap $osdmap -k $tmpkeyring ; rm -f $tmpkeyring"
 
 	if [ -n "$ssh" ]; then
 	    if [ -n "$user" ]; then
@@ -224,7 +224,7 @@ for name in $what; do
 	get_conf btrfs_path "$osd_data" "btrfs path"  # mount point defaults so osd data
 	get_conf btrfs_devs "" "btrfs devs"
 	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
-	get_conf btrfs_opt "flushoncommit" "btrfs options"
+	get_conf btrfs_opt "noatime" "btrfs options"
 	[ -n "$btrfs_opt" ] && btrfs_opt="-o $btrfs_opt"
 	
 	do_cmd "test -d $osd_data || mkdir -p $osd_data"

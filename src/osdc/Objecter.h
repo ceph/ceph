@@ -340,12 +340,13 @@ public:
     Context *onfinish;
     int pool_op;
     uint64_t auid;
+    __u8 crush_rule;
     snapid_t snapid;
     bufferlist *blp;
 
     utime_t last_submit;
     PoolOp() : tid(0), pool(0), onfinish(0), pool_op(0),
-	       auid(0), snapid(0), blp(NULL) {}
+	       auid(0), crush_rule(0), snapid(0), blp(NULL) {}
   };
 
 
@@ -676,7 +677,8 @@ public:
   int delete_pool_snap(int pool, string& snapName, Context *onfinish);
   int delete_selfmanaged_snap(int pool, snapid_t snap, Context *onfinish);
 
-  int create_pool(string& name, Context *onfinish, uint64_t auid=0);
+  int create_pool(string& name, Context *onfinish, uint64_t auid=0,
+		  __u8 crush_rule=0);
   int delete_pool(int pool, Context *onfinish);
   int change_pool_auid(int pool, Context *onfinish, uint64_t auid);
 

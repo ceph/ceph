@@ -4,6 +4,7 @@ rados \- rados object storage utility
 .SH SYNOPSIS
 .B rados
 [ \fB\-m\fI monaddr\fR ]
+[ mkpool  | rmpool \fI foo]
 [ \fB\-p\fP | \fB\-\-pool\fI pool\fR ]
 [ \fB\-s\fP | \fB\-\-snap\fI snap\fR ]
 [ \fB\-i\fI infile\fR ]
@@ -44,6 +45,12 @@ List object pools
 \fBdf\fI
 Show utilization statistics, including disk usage (bytes) and object counts, over the entire system
 and broken down by pool.
+.TP
+\fBmkpool\fI foo
+Create a pool with name foo.
+.TP
+\fBrmpool\fI foo
+Delete the pool foo (and all its data)
 .SH POOL SPECIFIC COMMANDS
 .TP
 \fBget \fIname\fP \fIoutfile\fP

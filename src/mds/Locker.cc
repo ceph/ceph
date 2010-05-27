@@ -164,6 +164,18 @@ bool Locker::acquire_locks(MDRequest *mdr,
     sorted.insert(*p);
 
     // augment xlock with a versionlock?
+    if ((*p)->get_type() == CEPH_LOCK_DN) {
+      CDentry *dn = (CDentry*)(*p)->get_parent();
+      if (mdr->is_master()) {
+	// master.  wrlock versionlock so we can pipeline dentry updates to journal.
+	wrlocks.insert(&dn->versionlock);
+      } else {
+	// slave.  exclusively lock the dentry version (i.e. block other journal updates).
+	// this makes rollback safe.
+	xlocks.insert(&dn->versionlock);
+	sorted.insert(&dn->versionlock);
+      }
+    }
     if ((*p)->get_type() > CEPH_LOCK_IVERSION) {
       // inode version lock?
       CInode *in = (CInode*)(*p)->get_parent();
@@ -495,7 +507,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue)
     } else {
       // auth
 
-      if (lock->is_updated()) {
+      if (lock->is_dirty()) {
 	scatter_writebehind((ScatterLock*)lock);
 	mds->mdlog->flush();
 	return;
@@ -799,7 +811,8 @@ void Locker::rdlock_finish(SimpleLock *lock, Mutation *mut)
 
 void Locker::wrlock_force(SimpleLock *lock, Mutation *mut)
 {
-  if (lock->get_type() == CEPH_LOCK_IVERSION)
+  if (lock->get_type() == CEPH_LOCK_IVERSION ||
+      lock->get_type() == CEPH_LOCK_DVERSION)
     return local_wrlock_grab((LocalLock*)lock, mut);
 
   dout(7) << "wrlock_force  on " << *lock
@@ -811,7 +824,8 @@ void Locker::wrlock_force(SimpleLock *lock, Mutation *mut)
 
 bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
 {
-  if (lock->get_type() == CEPH_LOCK_IVERSION)
+  if (lock->get_type() == CEPH_LOCK_IVERSION ||
+      lock->get_type() == CEPH_LOCK_DVERSION)
     return local_wrlock_start((LocalLock*)lock, mut);
 
   dout(10) << "wrlock_start " << *lock << " on " << *lock->get_parent() << dendl;
@@ -838,7 +852,7 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
       if (want_scatter)
 	file_mixed((ScatterLock*)lock);
       else {
-	if (nowait && lock->is_updated())
+	if (nowait && lock->is_dirty())
 	  return false;   // don't do nested lock, as that may scatter_writebehind in simple_lock!
 	simple_lock(lock);
       }
@@ -868,7 +882,8 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
 
 void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut)
 {
-  if (lock->get_type() == CEPH_LOCK_IVERSION)
+  if (lock->get_type() == CEPH_LOCK_IVERSION ||
+      lock->get_type() == CEPH_LOCK_DVERSION)
     return local_wrlock_finish((LocalLock*)lock, mut);
 
   dout(7) << "wrlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
@@ -892,7 +907,8 @@ void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut)
 
 bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
 {
-  if (lock->get_type() == CEPH_LOCK_IVERSION)
+  if (lock->get_type() == CEPH_LOCK_IVERSION ||
+      lock->get_type() == CEPH_LOCK_DVERSION)
     return local_xlock_start((LocalLock*)lock, mut);
 
   dout(7) << "xlock_start on " << *lock << " on " << *lock->get_parent() << dendl;
@@ -950,7 +966,8 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
 
 void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
 {
-  if (lock->get_type() == CEPH_LOCK_IVERSION)
+  if (lock->get_type() == CEPH_LOCK_IVERSION ||
+      lock->get_type() == CEPH_LOCK_DVERSION)
     return local_xlock_finish((LocalLock*)lock, mut);
 
   dout(10) << "xlock_finish on " << *lock << " " << *lock->get_parent() << dendl;
@@ -1843,11 +1860,17 @@ void Locker::process_cap_update(MDRequest *mdr, client_t client,
     CDir *dir = in->get_dirfrag(fg);
     if (dir) {
       CDentry *dn = dir->lookup(dname);
-      ClientLease *l = dn->get_client_lease(client);
-      if (l) {
-	dout(10) << " removing lease on " << *dn << dendl;
-	dn->remove_client_lease(l, l->mask, this);
-      }
+      if (dn) {
+	ClientLease *l = dn->get_client_lease(client);
+	if (l) {
+	  dout(10) << " removing lease on " << *dn << dendl;
+	  dn->remove_client_lease(l, l->mask, this);
+	}
+      } else {
+	stringstream ss;
+	ss << "client" << client << " released lease on dn " << dir->dirfrag() << "/" << dname << " which dne";
+	mds->logclient.log(LOG_WARN, ss);
+     }
     }
   }
 }
@@ -2134,7 +2157,6 @@ void Locker::handle_client_lease(MClientLease *m)
     return;
   }
   CDentry *dn = 0;
-  assert(m->get_mask() & CEPH_LOCK_DN);
 
   frag_t fg = in->pick_dirfrag(m->dname);
   CDir *dir = in->get_dirfrag(fg);
@@ -2162,10 +2184,9 @@ void Locker::handle_client_lease(MClientLease *m)
       dout(7) << "handle_client_lease release - seq " << l->seq << " != provided " << m->get_seq() << dendl;
     } else {
       dout(7) << "handle_client_lease client" << client
-	      << " release mask " << m->get_mask()
 	      << " on " << *dn << dendl;
-      int left = dn->remove_client_lease(l, l->mask, this);
-      dout(10) << " remaining mask is " << left << " on " << *dn << dendl;
+      int left = dn->remove_client_lease(l, CEPH_LOCK_DN, this);
+      dout(10) << " release remaining mask is " << left << " on " << *dn << dendl;
     }
     m->put();
     break;
@@ -2173,8 +2194,7 @@ void Locker::handle_client_lease(MClientLease *m)
   case CEPH_MDS_LEASE_RENEW:
     {
       dout(7) << "handle_client_lease client" << client
-	      << " renew mask " << m->get_mask()
-	      << " on " << *dn << dendl;
+	      << " renew on " << *dn << dendl;
       int pool = 1;   // fixme.. do something smart!
       m->h.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
       m->h.seq = ++l->seq;
@@ -2200,7 +2220,7 @@ void Locker::_issue_client_lease(CDentry *dn, int mask, int pool, client_t clien
 				 bufferlist &bl, utime_t now, Session *session)
 {
   LeaseStat e;
-  e.mask = mask;
+  e.mask = 1;
 
   if (mask) {
     ClientLease *l = dn->add_client_lease(client, mask);
@@ -2274,7 +2294,7 @@ void Locker::revoke_client_leases(SimpleLock *lock)
     assert(lock->get_type() == CEPH_LOCK_DN);
 
     CDentry *dn = (CDentry*)lock->get_parent();
-    int mask = CEPH_LOCK_DN;
+    int mask = 1;
     
     // i should also revoke the dir ICONTENT lease, if they have it!
     CInode *diri = dn->get_dir()->get_inode();
@@ -2594,7 +2614,7 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
       gather++;
     }
     
-    if (!gather && lock->is_updated()) {
+    if (!gather && lock->is_dirty()) {
       lock->get_parent()->auth_pin(lock);
       scatter_writebehind((ScatterLock*)lock);
       mds->mdlog->flush();
@@ -2718,7 +2738,7 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
     gather++;
   }
 
-  if (!gather && lock->is_updated()) {
+  if (!gather && lock->is_dirty()) {
     lock->get_parent()->auth_pin(lock);
     scatter_writebehind((ScatterLock*)lock);
     mds->mdlog->flush();
@@ -3029,7 +3049,7 @@ void Locker::scatter_tick()
 
     if (n-- == 0) break;  // scatter_nudge() may requeue; avoid looping
     
-    if (!lock->is_updated()) {
+    if (!lock->is_dirty()) {
       updated_scatterlocks.pop_front();
       dout(10) << " removing from updated_scatterlocks " 
 	       << *lock << " " << *lock->get_parent() << dendl;

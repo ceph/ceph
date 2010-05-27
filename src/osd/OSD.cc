@@ -142,9 +142,11 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
   if (!store)
     return -ENOENT;
   int err = store->mkfs();    
-  if (err < 0) return err;
+  if (err < 0)
+    return err;
   err = store->mount();
-  if (err < 0) return err;
+  if (err < 0)
+    return err;
     
   OSDSuperblock sb;
   sb.fsid = fsid;
@@ -202,6 +204,28 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
   store->umount();
   delete store;
   return r;
+}
+
+int OSD::mkjournal(const char *dev, const char *jdev)
+{
+  ObjectStore *store = create_object_store(dev, jdev);
+  if (!store)
+    return -ENOENT;
+  return store->mkjournal();
+}
+
+int OSD::flushjournal(const char *dev, const char *jdev)
+{
+  ObjectStore *store = create_object_store(dev, jdev);
+  if (!store)
+    return -ENOENT;
+  int err = store->mount();
+  if (!err) {
+    store->sync_and_flush();
+    store->umount();
+  }
+  delete store;
+  return err;
 }
 
 
@@ -302,7 +326,7 @@ int OSD::peek_meta(const char *dev, string& magic, ceph_fsid_t& fsid, int& whoam
 
 // cons/des
 
-OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, const char *jdev, bool newjournal) : 
+OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, const char *jdev) : 
   osd_lock("OSD::osd_lock"),
   timer(osd_lock),
   messenger(m),
@@ -312,7 +336,7 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, c
   logclient(messenger, &mc->monmap),
   whoami(id),
   dev_path(dev), journal_path(jdev),
-  mknewjournal(newjournal), dispatch_running(false),
+  dispatch_running(false),
   osd_compat(ceph_osd_feature_compat,
 	     ceph_osd_feature_ro_compat,
 	     ceph_osd_feature_incompat),
@@ -416,14 +440,6 @@ int OSD::init()
   // mount.
   dout(2) << "mounting " << dev_path << " " << (journal_path ? journal_path : "(no journal)") << dendl;
   assert(store);  // call pre_init() first!
-
-  if (mknewjournal) {
-    int r = store->mkjournal();
-    if (r < 0) {
-      dout(0) << " unable to create new jouranl" << dendl;
-      return r;
-    }
-  }
 
   int r = store->mount();
   if (r < 0) {
@@ -2172,17 +2188,17 @@ void OSD::handle_osd_map(MOSDMap *m)
     for (map<int, PGPool*>::iterator p = pool_map.begin();
 	 p != pool_map.end();
 	 p++) {
-      const pg_pool_t* pi = osdmap->get_pg_pool(p->first);
-      if (NULL == pi) {
-	dout(10) << " pool " << p->first
-		 << " appears to have been deleted" << dendl;
+      const pg_pool_t *pi = osdmap->get_pg_pool(p->first);
+      if (pi == NULL) {
+	dout(10) << " pool " << p->first << " appears to have been deleted" << dendl;
 	continue;
       }
       if (pi->get_snap_epoch() == cur+1) {
 	PGPool *pool = p->second;
 	pi->build_removed_snaps(pool->newly_removed_snaps);
 	pool->newly_removed_snaps.subtract(pool->cached_removed_snaps);
-	dout(10) << " pool " << p->first << " removed_snaps " << pool->cached_removed_snaps
+	pool->cached_removed_snaps.union_of(pool->newly_removed_snaps);
+	dout(10) << "   pool " << p->first << " removed_snaps " << pool->cached_removed_snaps
 		 << ", newly so are " << pool->newly_removed_snaps << ")"
 		 << dendl;
 	pool->info = *pi;
@@ -2334,13 +2350,10 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     pg->lock();
 
     // adjust removed_snaps?
-    if (!pg->pool->newly_removed_snaps.empty()) {
-      for (map<snapid_t,snapid_t>::iterator p = pg->pool->newly_removed_snaps.m.begin();
-	   p != pg->pool->newly_removed_snaps.m.end();
-	   p++)
-	for (snapid_t t = 0; t < p->second; ++t)
-	  pg->info.snap_trimq.insert(p->first + t);
-      dout(10) << *pg << " snap_trimq now " << pg->info.snap_trimq << dendl;
+    if (pg->is_active() &&
+	!pg->pool->newly_removed_snaps.empty()) {
+      pg->snap_trimq.union_of(pg->pool->newly_removed_snaps);
+      dout(10) << *pg << " snap_trimq now " << pg->snap_trimq << dendl;
       pg->dirty_info = true;
     }
     
@@ -2523,8 +2536,9 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
       continue;
     }
     if (pg->is_active()) {
-      // update started counter
-      if (!pg->info.snap_trimq.empty())
+      // i am active
+      if (pg->is_primary() &&
+	  !pg->snap_trimq.empty())
 	pg->queue_snap_trim();
     }
     else if (pg->is_primary() &&
@@ -2942,8 +2956,9 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
     child->info.last_complete = parent->info.last_complete;
     child->info.log_tail =  parent->log.tail;
     child->info.log_backlog = parent->log.backlog;
-    child->info.snap_trimq = parent->info.snap_trimq;
     child->info.history.last_epoch_split = osdmap->get_epoch();
+
+    child->snap_trimq = parent->snap_trimq;
 
     dout(20) << " child " << p->first << " log now ";
     child->log.print(*_dout);
@@ -3347,6 +3362,21 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 	// just update our stats
 	dout(10) << *pg << " writing updated stats" << dendl;
 	pg->info.stats = info.stats;
+
+	// did a snap just get purged?
+	interval_set<snapid_t> p = info.purged_snaps;
+	p.subtract(pg->info.purged_snaps);
+	if (!p.empty()) {
+	  dout(10) << " purged_snaps " << pg->info.purged_snaps
+		   << " -> " << info.purged_snaps
+		   << " removed " << p << dendl;
+	  snapid_t sn = p.start();
+	  coll_t c = coll_t::build_snap_pg_coll(info.pgid, sn);
+	  t->remove_collection(c);
+
+	  pg->info.purged_snaps = info.purged_snaps;
+	}
+
 	pg->write_info(*t);
       }
     }
@@ -4207,8 +4237,14 @@ void OSD::handle_op(MOSDOp *op)
       // snap read.  hrm.
       // are we missing a revision that we might need?
       // let's get them all.
-      for (unsigned i=0; i<op->get_snaps().size(); i++) {
-	sobject_t soid(op->get_oid(), op->get_snaps()[i]);
+      sobject_t soid(op->get_oid(), CEPH_NOSNAP);
+      for (int i=-2; i<(int)op->get_snaps().size(); i++) {
+	if (i >= 0)
+	  soid.snap = op->get_snaps()[i];
+	else if (i == -1)
+	  soid.snap = CEPH_NOSNAP;
+	else
+	  soid.snap = CEPH_SNAPDIR;
 	if (pg->is_missing_object(soid)) {
 	  dout(10) << "handle_op _may_ need missing rev " << soid << ", pulling" << dendl;
 	  pg->wait_for_missing_object(soid, op);

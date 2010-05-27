@@ -1707,7 +1707,9 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
 
 CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
 				    set<SimpleLock*> &rdlocks,
-				    bool want_auth)
+				    bool want_auth,
+				    bool no_want_auth)  /* for readdir, who doesn't want auth _even_if_ it's
+							   a snapped dir */
 {
   MClientRequest *req = mdr->client_request;
   const filepath& refpath = n ? req->get_filepath2() : req->get_filepath();
@@ -1732,7 +1734,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
   dout(10) << "ref is " << *ref << dendl;
 
   // fw to inode auth?
-  if (mdr->snapid != CEPH_NOSNAP)
+  if (mdr->snapid != CEPH_NOSNAP && !no_want_auth)
     want_auth = true;
 
   if (want_auth) {
@@ -2297,7 +2299,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   MClientRequest *req = mdr->client_request;
   client_t client = req->get_source().num();
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CInode *diri = rdlock_path_pin_ref(mdr, 0, rdlocks, false);
+  CInode *diri = rdlock_path_pin_ref(mdr, 0, rdlocks, false, true);
   if (!diri) return;
 
   // it's a directory, right?
@@ -2401,8 +2403,10 @@ void Server::handle_client_readdir(MDRequest *mdr)
     if (snaps && dn->last != CEPH_NOSNAP)
       if (dir->try_trim_snap_dentry(dn, *snaps))
 	continue;
-    if (dn->last < snapid || dn->first > snapid)
+    if (dn->last < snapid || dn->first > snapid) {
+      dout(20) << "skipping non-overlapping snap " << *dn << dendl;
       continue;
+    }
 
     if (offset && strcmp(dn->get_name().c_str(), offset) <= 0)
       continue;
@@ -3731,6 +3735,18 @@ void Server::handle_client_unlink(MDRequest *mdr)
     rdlocks.insert(&in->filelock);   // to verify it's empty
   mds->locker->include_snap_rdlocks(rdlocks, dnl->get_inode());
 
+  // if we unlink a snapped multiversion inode and are creating a
+  // remote link to it, it must be anchored.  this mirrors the logic
+  // in MDCache::journal_cow_dentry().
+  bool need_snap_dentry = 
+    dnl->is_primary() &&
+    in->is_multiversion() &&
+    in->find_snaprealm()->get_newest_seq() + 1 > dn->first;
+  if (need_snap_dentry) {
+    dout(10) << " i need to be anchored because i am multiversion and will get a remote cow dentry" << dendl;
+    mds->mdcache->anchor_create_prep_locks(mdr, in, rdlocks, xlocks);
+  }
+
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
@@ -3746,10 +3762,17 @@ void Server::handle_client_unlink(MDRequest *mdr)
   if (mdr->now == utime_t())
     mdr->now = g_clock.real_now();
 
+  // NOTE: this is non-optimal.  we create an anchor at the old
+  // location, and then change it.  we can do better, but it's more
+  // complicated.  this is fine for now.
+  if (need_snap_dentry && !in->is_anchored()) {
+    mdcache->anchor_create(mdr, in, new C_MDS_RetryRequest(mdcache, mdr));
+    return;
+  }
+
   // get stray dn ready?
   if (dnl->is_primary()) {
-    if (!mdr->more()->dst_reanchor_atid &&
-	dnl->get_inode()->is_anchored()) {
+    if (!mdr->more()->dst_reanchor_atid && in->is_anchored()) {
       dout(10) << "reanchoring to stray " << *dnl->get_inode() << dendl;
       vector<Anchor> trace;
       straydn->make_anchor_trace(trace, dnl->get_inode());
@@ -3932,8 +3955,10 @@ bool Server::_dir_is_nonempty(MDRequest *mdr, CInode *in)
 
     // does the frag _look_ empty?
     if (dir->inode->get_projected_inode()->dirstat.size() > 0) {	
-      dout(10) << "dir_is_nonempty still " << dir->get_num_head_items() 
-	       << " cached items in frag " << *dir << dendl;
+      dout(10) << "dir_is_nonempty projected dir size still "
+	       << dir->inode->get_projected_inode()->dirstat.size()
+	       << " on " << *dir->inode
+	       << dendl;
       reply_request(mdr, -ENOTEMPTY);
       return true;
     }
@@ -4147,20 +4172,22 @@ void Server::handle_client_rename(MDRequest *mdr)
     wrlocks.insert(&straydn->get_dir()->inode->nestlock);
   }
 
-  // xlock versionlock on srci if there are any witnesses
-  //  replicas can't see projected dentry linkages, and will get confused
-  //  if we try to pipeline things.
-  if (!witnesses.empty())
-    xlocks.insert(&srci->versionlock);
-
-  /*
   // xlock versionlock on srci if remote?
   //  this ensures it gets safely remotely auth_pinned, avoiding deadlock;
   //  strictly speaking, having the slave node freeze the inode is 
   //  otherwise sufficient for avoiding conflicts with inode locks, etc.
   if (!srcdn->is_auth() && srcdnl->is_primary())  // xlock versionlock on srci if there are any witnesses
       xlocks.insert(&srci->versionlock);
-  */
+
+  // xlock versionlock on dentries if there are witnesses.
+  //  replicas can't see projected dentry linkages, and will get
+  //  confused if we try to pipeline things.
+  if (!witnesses.empty()) {
+    if (srcdn->is_projected())
+      xlocks.insert(&srcdn->versionlock);
+    if (destdn->is_projected())
+      xlocks.insert(&destdn->versionlock);
+  }
 
   // we need to update srci's ctime.  xlock its least contended lock to do that...
   xlocks.insert(&srci->linklock);

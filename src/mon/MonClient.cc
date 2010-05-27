@@ -363,7 +363,16 @@ void MonClient::_pick_new_mon()
 {
   if (cur_mon >= 0)
     messenger->mark_down(monmap.get_inst(cur_mon).addr);
-  cur_mon = rand() % monmap.size();
+
+  if (cur_mon >= 0 && monmap.size() > 1) {
+    // pick a _different_ mon
+    int n = rand() % (monmap.size() - 1);
+    if (n >= cur_mon)
+      n++;
+    cur_mon = n;
+  } else {
+    cur_mon = rand() % monmap.size();
+  }
   dout(10) << "_pick_new_mon picked mon" << cur_mon << dendl;
 }
 

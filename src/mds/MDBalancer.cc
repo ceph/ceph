@@ -497,7 +497,6 @@ void MDBalancer::prep_rebalance(int beat)
       }
     }
   }
-  send_targets_message();
   try_rebalance();
 }
 
@@ -505,60 +504,56 @@ void MDBalancer::prep_rebalance(int beat)
 
 void MDBalancer::try_rebalance()
 {
-  if (!targets_safe()) {
-    //can't rebalance until it has all our targets!
-    dout(10) << "MDBalancer::try_rebalance can't rebalance when mds is missing some of our targets! Resending targets message" << dendl;
-    send_targets_message();
+  if (!check_targets())
     return;
-  }
 
-  if (!g_conf.mds_thrash_exports) {
-    //if the MDSMap has old targets we don't want...
-    if (mds->mdsmap->get_mds_info(mds->whoami).
-	export_targets.size() != my_targets.size())
-      send_targets_message();
+  if (g_conf.mds_thrash_exports) {
+    dout(5) << "mds_thrash is on; not performing standard rebalance operation!"
+	    << dendl;
+    return;
+  } 
   
-    // make a sorted list of my imports
-    map<double,CDir*>    import_pop_map;
-    multimap<int,CDir*>  import_from_map;
-    set<CDir*> fullauthsubs;
+  // make a sorted list of my imports
+  map<double,CDir*>    import_pop_map;
+  multimap<int,CDir*>  import_from_map;
+  set<CDir*> fullauthsubs;
 
-    mds->mdcache->get_fullauth_subtrees(fullauthsubs);
-    for (set<CDir*>::iterator it = fullauthsubs.begin();
-	 it != fullauthsubs.end();
-	 it++) {
-      CDir *im = *it;
-      if (im->get_inode()->is_stray()) continue;
-
-      double pop = im->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
-      if (g_conf.mds_bal_idle_threshold > 0 &&
-	  pop < g_conf.mds_bal_idle_threshold &&
-	  im->inode != mds->mdcache->get_root() &&
-	  im->inode->authority().first != mds->get_nodeid()) {
-	dout(-5) << " exporting idle (" << pop << ") import " << *im
-		 << " back to mds" << im->inode->authority().first
-		 << dendl;
-	mds->mdcache->migrator->export_dir_nicely(im, im->inode->authority().first);
-	continue;
-      }
-
-      import_pop_map[ pop ] = im;
-      int from = im->inode->authority().first;
-      dout(15) << "  map: i imported " << *im << " from " << from << dendl;
-      import_from_map.insert(pair<int,CDir*>(from, im));
+  mds->mdcache->get_fullauth_subtrees(fullauthsubs);
+  for (set<CDir*>::iterator it = fullauthsubs.begin();
+       it != fullauthsubs.end();
+       it++) {
+    CDir *im = *it;
+    if (im->get_inode()->is_stray()) continue;
+    
+    double pop = im->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
+    if (g_conf.mds_bal_idle_threshold > 0 &&
+	pop < g_conf.mds_bal_idle_threshold &&
+	im->inode != mds->mdcache->get_root() &&
+	im->inode->authority().first != mds->get_nodeid()) {
+      dout(-5) << " exporting idle (" << pop << ") import " << *im
+	       << " back to mds" << im->inode->authority().first
+	       << dendl;
+      mds->mdcache->migrator->export_dir_nicely(im, im->inode->authority().first);
+      continue;
     }
+    
+    import_pop_map[ pop ] = im;
+    int from = im->inode->authority().first;
+    dout(15) << "  map: i imported " << *im << " from " << from << dendl;
+    import_from_map.insert(pair<int,CDir*>(from, im));
+  }
   
 
 
-    // do my exports!
-    set<CDir*> already_exporting;
-    double total_sent = 0;
-    double total_goal = 0;
+  // do my exports!
+  set<CDir*> already_exporting;
+  double total_sent = 0;
+  double total_goal = 0;
 
-    for (map<int,double>::iterator it = my_targets.begin();
-	 it != my_targets.end();
-	 it++) {
-
+  for (map<int,double>::iterator it = my_targets.begin();
+       it != my_targets.end();
+       it++) {
+    
       /*
 	double fac = 1.0;
 	if (false && total_goal > 0 && total_sent > 0) {
@@ -569,147 +564,171 @@ void MDBalancer::try_rebalance()
 	fac = .9 - .4 * ((float)g_conf.num_mds / 128.0);  // hack magic fixme
       */
     
-      int target = (*it).first;
-      double amount = (*it).second;
-      total_goal += amount;
+    int target = (*it).first;
+    double amount = (*it).second;
+    total_goal += amount;
 
-      if (amount < MIN_OFFLOAD) continue;
-      if (amount / target_load < .2) continue;
+    if (amount < MIN_OFFLOAD) continue;
+    if (amount / target_load < .2) continue;
 
-      dout(5) << "want to send " << amount << " to mds" << target 
-	//<< " .. " << (*it).second << " * " << load_fac 
-	      << " -> " << amount
-	      << dendl;//" .. fudge is " << fudge << dendl;
-      double have = 0;
+    dout(5) << "want to send " << amount << " to mds" << target 
+      //<< " .. " << (*it).second << " * " << load_fac 
+	    << " -> " << amount
+	    << dendl;//" .. fudge is " << fudge << dendl;
+    double have = 0;
 
     
-      show_imports();
+    show_imports();
 
-      // search imports from target
-      if (import_from_map.count(target)) {
-	dout(5) << " aha, looking through imports from target mds" << target << dendl;
-	pair<multimap<int,CDir*>::iterator, multimap<int,CDir*>::iterator> p =
-	  import_from_map.equal_range(target);
-	while (p.first != p.second) {
-	  CDir *dir = (*p.first).second;
-	  dout(5) << "considering " << *dir << " from " << (*p.first).first << dendl;
-	  multimap<int,CDir*>::iterator plast = p.first++;
+    // search imports from target
+    if (import_from_map.count(target)) {
+      dout(5) << " aha, looking through imports from target mds" << target << dendl;
+      pair<multimap<int,CDir*>::iterator, multimap<int,CDir*>::iterator> p =
+	import_from_map.equal_range(target);
+      while (p.first != p.second) {
+	CDir *dir = (*p.first).second;
+	dout(5) << "considering " << *dir << " from " << (*p.first).first << dendl;
+	multimap<int,CDir*>::iterator plast = p.first++;
         
-	  if (dir->inode->is_base()) continue;
-	  if (dir->is_freezing() || dir->is_frozen()) continue;  // export pbly already in progress
-	  double pop = dir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
-	  assert(dir->inode->authority().first == target);  // cuz that's how i put it in the map, dummy
+	if (dir->inode->is_base()) continue;
+	if (dir->is_freezing() || dir->is_frozen()) continue;  // export pbly already in progress
+	double pop = dir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
+	assert(dir->inode->authority().first == target);  // cuz that's how i put it in the map, dummy
         
-	  if (pop <= amount-have) {
-	    dout(-5) << "reexporting " << *dir 
-		     << " pop " << pop 
-		     << " back to mds" << target << dendl;
-	    mds->mdcache->migrator->export_dir_nicely(dir, target);
-	    have += pop;
-	    import_from_map.erase(plast);
-	    import_pop_map.erase(pop);
-	  } else {
-	    dout(5) << "can't reexport " << *dir << ", too big " << pop << dendl;
-	  }
-	  if (amount-have < MIN_OFFLOAD) break;
+	if (pop <= amount-have) {
+	  dout(-5) << "reexporting " << *dir 
+		   << " pop " << pop 
+		   << " back to mds" << target << dendl;
+	  mds->mdcache->migrator->export_dir_nicely(dir, target);
+	  have += pop;
+	  import_from_map.erase(plast);
+	  import_pop_map.erase(pop);
+	} else {
+	  dout(5) << "can't reexport " << *dir << ", too big " << pop << dendl;
 	}
-      }
-      if (amount-have < MIN_OFFLOAD) {
-	total_sent += have;
-	continue;
-      }
-    
-      // any other imports
-      if (false)
-	for (map<double,CDir*>::iterator import = import_pop_map.begin();
-	     import != import_pop_map.end();
-	     import++) {
-	  CDir *imp = (*import).second;
-	  if (imp->inode->is_base()) continue;
-      
-	  double pop = (*import).first;
-	  if (pop < amount-have || pop < MIN_REEXPORT) {
-	    dout(-5) << "reexporting " << *imp 
-		     << " pop " << pop 
-		     << " back to mds" << imp->inode->authority()
-		     << dendl;
-	    have += pop;
-	    mds->mdcache->migrator->export_dir_nicely(imp, imp->inode->authority().first);
-	  }
-	  if (amount-have < MIN_OFFLOAD) break;
-	}
-      if (amount-have < MIN_OFFLOAD) {
-	//fudge = amount-have;
-	total_sent += have;
-	continue;
-      }
-
-      // okay, search for fragments of my workload
-      set<CDir*> candidates;
-      mds->mdcache->get_fullauth_subtrees(candidates);
-
-      list<CDir*> exports;
-    
-      for (set<CDir*>::iterator pot = candidates.begin();
-	   pot != candidates.end();
-	   pot++) {
-	if ((*pot)->get_inode()->is_stray()) continue;
-	find_exports(*pot, amount, exports, have, already_exporting);
-	if (have > amount-MIN_OFFLOAD) 
-	  break;
-      }
-      //fudge = amount - have;
-      total_sent += have;
-    
-      for (list<CDir*>::iterator it = exports.begin(); it != exports.end(); it++) {
-	dout(-5) << "   - exporting " 
-		 << (*it)->pop_auth_subtree
-		 << " "
-		 << (*it)->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate) 
-		 << " to mds" << target 
-		 << " " << **it 
-		 << dendl;
-	mds->mdcache->migrator->export_dir_nicely(*it, target);
+	if (amount-have < MIN_OFFLOAD) break;
       }
     }
+    if (amount-have < MIN_OFFLOAD) {
+      total_sent += have;
+      continue;
+    }
+    
+    // any other imports
+    if (false)
+      for (map<double,CDir*>::iterator import = import_pop_map.begin();
+	   import != import_pop_map.end();
+	   import++) {
+	CDir *imp = (*import).second;
+	if (imp->inode->is_base()) continue;
+	
+	double pop = (*import).first;
+	if (pop < amount-have || pop < MIN_REEXPORT) {
+	  dout(-5) << "reexporting " << *imp 
+		   << " pop " << pop 
+		   << " back to mds" << imp->inode->authority()
+		   << dendl;
+	  have += pop;
+	  mds->mdcache->migrator->export_dir_nicely(imp, imp->inode->authority().first);
+	}
+	if (amount-have < MIN_OFFLOAD) break;
+      }
+    if (amount-have < MIN_OFFLOAD) {
+      //fudge = amount-have;
+      total_sent += have;
+      continue;
+    }
 
-    dout(5) << "rebalance done" << dendl;
-    show_imports();
+    // okay, search for fragments of my workload
+    set<CDir*> candidates;
+    mds->mdcache->get_fullauth_subtrees(candidates);
+    
+    list<CDir*> exports;
+    
+    for (set<CDir*>::iterator pot = candidates.begin();
+	 pot != candidates.end();
+	 pot++) {
+      if ((*pot)->get_inode()->is_stray()) continue;
+      find_exports(*pot, amount, exports, have, already_exporting);
+      if (have > amount-MIN_OFFLOAD) 
+	break;
+    }
+    //fudge = amount - have;
+    total_sent += have;
+    
+    for (list<CDir*>::iterator it = exports.begin(); it != exports.end(); it++) {
+      dout(-5) << "   - exporting " 
+	       << (*it)->pop_auth_subtree
+	       << " "
+	       << (*it)->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate) 
+	       << " to mds" << target 
+	       << " " << **it 
+	       << dendl;
+      mds->mdcache->migrator->export_dir_nicely(*it, target);
+    }
   }
-  else {
-    dout(5) << "mds_thrash is on; not performing standard rebalance operation!"
-	    << dendl;
-  }
+  
+  dout(5) << "rebalance done" << dendl;
+  show_imports();
 }
 
-inline void MDBalancer::send_targets_message()
-{
-  set<int32_t> targets;
-  for (map<int, double>::iterator i = my_targets.begin();
-       i != my_targets.end();
-       ++i)
-    targets.insert(i->first);
-  MMDSLoadTargets* m = new MMDSLoadTargets(mds->monc->get_global_id(), targets);
-  mds->monc->send_mon_message(m);
-}
 
 /* returns true if all my_target MDS are in the MDSMap.
  */
-bool MDBalancer::targets_safe() {
-  //get MonMap's idea of my_targets
-  const set<int32_t>& map_targets = 
-    mds->mdsmap->get_mds_info(mds->whoami).export_targets;
-  //check if the current MonMap has all our targets
+bool MDBalancer::check_targets()
+{
+  // get MonMap's idea of my_targets
+  const set<int32_t>& map_targets = mds->mdsmap->get_mds_info(mds->whoami).export_targets;
+
+  bool send = false;
+  bool ok = true;
+
+  // make sure map targets are in the old_prev_targets map
+  for (set<int32_t>::iterator p = map_targets.begin(); p != map_targets.end(); p++) {
+    if (old_prev_targets.count(*p) == 0)
+      old_prev_targets[*p] = 0;
+    if (my_targets.count(*p) == 0)
+      old_prev_targets[*p]++;
+  }
+
+  // check if the current MonMap has all our targets
+  set<int32_t> need_targets;
   for (map<int,double>::iterator i = my_targets.begin();
        i != my_targets.end();
        ++i) {
+    need_targets.insert(i->first);
+    old_prev_targets[i->first] = 0;
+
     if (!map_targets.count(i->first)) {
-      dout(20) << "At least one target mds (" << i->first
-	       << ") not in MDSMap" << dendl;
-      return false;
+      dout(20) << " target mds" << i->first << " not in map's export_targets" << dendl;
+      send = true;
+      ok = false;
     }
   }
-  return true;
+
+  set<int32_t> want_targets = need_targets;
+  map<int32_t, int>::iterator p = old_prev_targets.begin();
+  while (p != old_prev_targets.end()) {
+    if (map_targets.count(p->first) == 0 &&
+	need_targets.count(p->first) == 0) {
+      old_prev_targets.erase(p++);
+      continue;
+    }
+    dout(20) << " target mds" << p->first << " has been non-target for " << p->second << dendl;
+    if (p->second < g_conf.mds_bal_target_removal_min)
+      want_targets.insert(p->first);
+    if (p->second >= g_conf.mds_bal_target_removal_max)
+      send = true;
+    p++;
+  }
+
+  dout(10) << "check_targets have " << map_targets << " need " << need_targets << " want " << want_targets << dendl;
+
+  if (send) {
+    MMDSLoadTargets* m = new MMDSLoadTargets(mds->monc->get_global_id(), want_targets);
+    mds->monc->send_mon_message(m);
+  }
+  return ok;
 }
 
 void MDBalancer::find_exports(CDir *dir, 

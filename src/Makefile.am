@@ -27,13 +27,11 @@ bin_PROGRAMS += cmds
 # admin tools
 ceph_SOURCES = ceph.cc msg/SimpleMessenger.cc
 ceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm -lcrypto
-mkmonfs_SOURCES = mkmonfs.cc
-mkmonfs_LDADD = libmon.a libcrush.a libcommon.a -lpthread -lm -lcrypto
 cconf_SOURCES = cconf.cc
 cconf_LDADD = libcommon.a -lpthread -lm -lcrypto
 cauthtool_SOURCES = cauthtool.cc
 cauthtool_LDADD = libcommon.a -lpthread -lm -lcrypto
-bin_PROGRAMS += ceph mkmonfs cconf cauthtool
+bin_PROGRAMS += ceph cconf cauthtool
 
 monmaptool_SOURCES = monmaptool.cc
 monmaptool_LDADD = libcommon.a -lpthread -lm -lcrypto
@@ -47,7 +45,7 @@ mount_ceph_SOURCES = mount/mount.ceph.c
 noinst_PROGRAMS = mount.ceph
 
 
-core: cmon cosd cmds mkmonfs ceph cconf monmaptool osdmaptool crushtool
+core: cmon cosd cmds ceph cconf monmaptool osdmaptool crushtool
 
 
 dumpjournal_SOURCES = dumpjournal.cc msg/SimpleMessenger.cc
@@ -750,7 +748,7 @@ noinst_HEADERS = \
 	rgw/rgw_user.h\
 	sample.ceph.conf
 
-all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(mkmonfs_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
+all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
 	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
 	$(dumpjournal_SOURCES) $(cosd_SOURCES) $(dupstore_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
 	$(testmsgr_SOURCES) $(cfuse_SOURCES) $(fakefuse_SOURCES) $(psim_SOURCES) \

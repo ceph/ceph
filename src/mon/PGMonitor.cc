@@ -119,7 +119,6 @@ bool PGMonitor::update_from_paxos()
   }
 
   if (mon->is_leader() &&
-      mon->is_full_quorum() &&
       paxosv > 10)
     paxos->trim_to(paxosv - 10);
 

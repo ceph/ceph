@@ -22,6 +22,7 @@
 inline const char *get_lock_type_name(int t) {
   switch (t) {
   case CEPH_LOCK_DN: return "dn";
+  case CEPH_LOCK_DVERSION: return "dversion";
   case CEPH_LOCK_IVERSION: return "iversion";
   case CEPH_LOCK_IFILE: return "ifile";
   case CEPH_LOCK_IAUTH: return "iauth";
@@ -343,7 +344,7 @@ public:
 
 
 
-  virtual bool is_updated() { return false; }
+  virtual bool is_dirty() { return false; }
 
 
   // can_*
