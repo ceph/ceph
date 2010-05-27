@@ -81,6 +81,7 @@ private:
   friend class SessionMap;
 public:
   entity_inst_t inst;
+  Connection *connection;
   xlist<Session*>::item item_session_list;
 
   elist<MDRequest*> requests;
@@ -175,7 +176,7 @@ public:
 
   Session() : 
     state(STATE_CLOSED), state_seq(0), importing_count(0),
-    item_session_list(this),
+    connection(NULL), item_session_list(this),
     requests(0),  // member_offset passed to front() manually
     cap_push_seq(0) { }
   ~Session() {

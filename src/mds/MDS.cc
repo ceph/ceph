@@ -1653,6 +1653,7 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
       s->inst.name = n;
       dout(10) << " new session " << s << " for " << s->inst << dendl;
       con->set_priv(s);
+      s->connection = con;
       sessionmap.add_session(s);
     } else {
       dout(10) << " existing session " << s << " for " << s->inst << dendl;
