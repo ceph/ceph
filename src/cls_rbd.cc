@@ -205,7 +205,7 @@ int snapshot_revert(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       found = true;
       break;
     }
-    snap_names += strlen(snap_names);
+    snap_names += strlen(snap_names) + 1;
   }
   if (!found)
     return -ENOENT;
@@ -213,14 +213,17 @@ int snapshot_revert(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   header->image_size = snap.image_size;
   header->snap_seq = header->snap_seq + 1;
 
-  snap_names += strlen(snap_names);
+  snap_names += strlen(snap_names) + 1;
   i++;
 
   header->snap_count = header->snap_count - i;
+  CLS_LOG("snap_count=%d\n", header->snap_count);
   bufferptr new_names_bp(end - snap_names);
   bufferptr new_snaps_bp(sizeof(header->snaps[0]) * header->snap_count);
 
   memcpy(header_bp.c_str(), header, sizeof(*header));
+  newbl.push_back(header_bp);
+
   if (header->snap_count) {
     char *new_snap_names;
     memcpy(new_snaps_bp.c_str(), header->snaps + i, sizeof(header->snaps[0]) * header->snap_count);
@@ -229,7 +232,7 @@ int snapshot_revert(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     newbl.push_back(new_names_bp);
   }
 
-  rc = cls_cxx_write(hctx, 0, len, &newbl);
+  rc = cls_cxx_write(hctx, 0, newbl.length(), &newbl);
   if (rc < 0)
     return rc;
 
