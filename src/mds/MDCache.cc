@@ -4124,7 +4124,7 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap)
 					cap->get_mseq());
     in->encode_cap_message(reap, cap);
     realm->build_snap_trace(reap->snapbl);
-    mds->send_message_client_counted(reap, session->connection);
+    mds->send_message_client_counted(reap, session->inst);
   } else {
     dout(10) << "do_cap_import missing past snap parents, delaying " << session->inst.name << " mseq "
 	     << cap->get_mseq() << " on " << *in << dendl;
