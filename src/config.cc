@@ -293,6 +293,7 @@ struct config_option {
          &g_conf.name, STRINGIFY(def_val), type, schar }
 
 static struct config_option config_optionsp[] = {
+	OPTION(host, 0, OPT_STR, "localhost"),
 	OPTION(num_mon, 0, OPT_INT, 1),
 	OPTION(num_mds, 0, OPT_INT, 1),
 	OPTION(num_osd, 0, OPT_INT, 4),
@@ -819,6 +820,8 @@ static const char *var_val(char *var_name)
 		return g_conf.id;
 	if (strcmp(var_name, "name")==0)
 		return g_conf.name;
+	if (strcmp(var_name, "host")==0)
+	  return g_conf.host;
 
 	return "";
 }

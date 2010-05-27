@@ -45,6 +45,7 @@ struct md_config_t {
   char *id;
   char *name;
   char *alt_name;
+  char *host;
 
   int num_mon;
   int num_mds;
