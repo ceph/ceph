@@ -1,3 +1,16 @@
+ceph (0.20.2-1) unstable; urgency=low
+
+  * ppc64: build fixes
+  * cfuse: fail on mount errors
+  * mds: misc clustering fixes
+  * init-ceph: behave with ksh
+  * monc: improved hunting
+  * uclient/cfuse: fix crash on rename
+  * initscripts: drop old 'flushoncommit' btrfs mount option
+  * filestore: improve mkfs cleanup of old data
+
+ -- Sage Weil <sage@newdream.net>  Wed, 26 May 2010 17:37:43 -0700
+
 ceph (0.20.1-1) unstable; urgency=low
 
   * osd: fix journal initialization bugs
