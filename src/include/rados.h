@@ -356,7 +356,7 @@ struct ceph_osd_op {
 			__le64 cookie, count;
 		} __attribute__ ((packed)) pgls;
 	        struct {
-		        __u64 snapid;
+		        __le64 snapid;
 	        } __attribute__ ((packed)) snap;
 	};
 	__le32 payload_len;
