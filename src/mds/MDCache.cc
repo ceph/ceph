@@ -6659,11 +6659,13 @@ void MDCache::_anchor_prepared(CInode *in, version_t atid, bool add)
   if (add) {
     pi->anchored = true;
     pi->rstat.ranchors++;
-    in->parent->adjust_nested_anchors(1);
+    if (in->parent)
+      in->parent->adjust_nested_anchors(1);
   } else {
     pi->anchored = false;
     pi->rstat.ranchors--;
-    in->parent->adjust_nested_anchors(-1);
+    if (in->parent)
+      in->parent->adjust_nested_anchors(-1);
   }
   pi->version = in->pre_dirty();
 
