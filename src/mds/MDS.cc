@@ -887,7 +887,8 @@ void MDS::bcast_mds_map()
   for (set<Session*>::const_iterator p = clients.begin();
        p != clients.end();
        ++p) 
-    messenger->send_message(new MMDSMap(monc->get_fsid(), mdsmap), (*p)->inst);
+    messenger->send_message(new MMDSMap(monc->get_fsid(), mdsmap),
+			    (*p)->connection);
   last_client_mdsmap_bcast = mdsmap->get_epoch();
 }
 

@@ -4037,7 +4037,7 @@ void MDCache::send_snaps(map<client_t,MClientSnap*>& splits)
 	       << " split " << p->second->head.split
 	       << " inos " << p->second->split_inos
 	       << dendl;
-      mds->send_message_client_counted(p->second, session->inst);
+      mds->send_message_client_counted(p->second, session->connection);
     } else {
       dout(10) << " no session for client" << p->first << dendl;
       p->second->put();
@@ -4124,7 +4124,7 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap)
 					cap->get_mseq());
     in->encode_cap_message(reap, cap);
     realm->build_snap_trace(reap->snapbl);
-    mds->send_message_client_counted(reap, session->inst);
+    mds->send_message_client_counted(reap, session->connection);
   } else {
     dout(10) << "do_cap_import missing past snap parents, delaying " << session->inst.name << " mseq "
 	     << cap->get_mseq() << " on " << *in << dendl;
@@ -4238,7 +4238,7 @@ void MDCache::finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snap
     if (session) {
       MClientSnap *snap = new MClientSnap(CEPH_SNAP_OP_UPDATE);
       realm->build_snap_trace(snap->bl);
-      mds->send_message_client_counted(snap, session->inst);
+      mds->send_message_client_counted(snap, session->connection);
     } else {
       dout(10) << " ...or not, no session for this client!" << dendl;
     }

@@ -311,7 +311,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
 
     if (session->is_closing()) {
       // reset session
-      mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), session->inst);
+      mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), session->connection);
       mds->sessionmap.set_state(session, Session::STATE_CLOSED);
       session->clear();
     } else if (session->is_killing()) {
@@ -431,7 +431,7 @@ void Server::find_idle_sessions()
     mds->locker->revoke_stale_caps(session);
     mds->locker->remove_stale_leases(session);
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_STALE, session->get_push_seq()),
-				 session->inst);
+				 session->connection);
   }
 
   // autoclose
@@ -690,7 +690,7 @@ void Server::recall_client_state(float ratio)
 	newlim = max_caps_per_client;
       MClientSession *m = new MClientSession(CEPH_SESSION_RECALL_STATE);
       m->head.max_caps = newlim;
-      mds->messenger->send_message(m, session->inst);
+      mds->messenger->send_message(m, session->connection);
     }
   }
  
