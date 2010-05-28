@@ -33,7 +33,7 @@ fi
 if [ -d /var/lock/subsys ]; then
     lockfile=/var/lock/subsys/ceph
 else
-    lockfile=
+    lockfile=""
 fi
 
 usage_exit() {
@@ -252,7 +252,7 @@ for name in $what; do
 	    [ -n "$pre_start" ] && do_cmd "$pre_start"
 	    do_cmd "$cmd" $runarg
 	    [ -n "$post_start" ] && do_cmd "$post_start"
-	    [ -n "$lockfile"] && [ "$?" = 0 ] && touch $lockfile
+	    [ -n "$lockfile" ] && [ "$?" = 0 ] && touch $lockfile
 	    ;;
 	
 	stop)
@@ -261,7 +261,7 @@ for name in $what; do
 	    [ -n "$pre_stop" ] && do_cmd "$pre_stop"
 	    stop_daemon $name c$type $pid_file
 	    [ -n "$post_stop" ] && do_cmd "$post_stop"
-	    [ -n "$lockfile"] && [ "$?" = 0 ] && rm -f $lockfile
+	    [ -n "$lockfile" ] && [ "$?" = 0 ] && rm -f $lockfile
 	    ;;
 
 	status)
@@ -275,13 +275,13 @@ for name in $what; do
 	    [ -n "$pre_forcestop" ] && do_cmd "$pre_forcestop"
 	    stop_daemon $name c$type $pid_file -9
 	    [ -n "$post_forcestop" ] && do_cmd "$post_forcestop"
-	    [ -n "$lockfile"] && [ "$?" = 0 ] && rm -f $lockfile
+	    [ -n "$lockfile" ] && [ "$?" = 0 ] && rm -f $lockfile
 	    ;;
 	    
 	killall)
 	    echo "killall c$type on $host"
 	    do_cmd "pkill ^c$type || true"
-	    [ -n "$lockfile"] && [ "$?" = 0 ] && rm -f $lockfile
+	    [ -n "$lockfile" ] && [ "$?" = 0 ] && rm -f $lockfile
 	    ;;
 	
 	force-reload | reload)
