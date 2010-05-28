@@ -207,8 +207,10 @@ int snapshot_revert(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     }
     snap_names += strlen(snap_names) + 1;
   }
-  if (!found)
+  if (!found) {
+    CLS_LOG("couldn't find snap %s\n",snap_name);
     return -ENOENT;
+  }
 
   header->image_size = snap.image_size;
   header->snap_seq = header->snap_seq + 1;
@@ -217,7 +219,6 @@ int snapshot_revert(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   i++;
 
   header->snap_count = header->snap_count - i;
-  CLS_LOG("snap_count=%d\n", header->snap_count);
   bufferptr new_names_bp(end - snap_names);
   bufferptr new_snaps_bp(sizeof(header->snaps[0]) * header->snap_count);
 
@@ -238,7 +239,7 @@ int snapshot_revert(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   ::encode(snap.id, *out);
 
-  return 0;
+  return out->length();
 }
 
 void class_init()
