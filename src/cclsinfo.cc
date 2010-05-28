@@ -47,7 +47,6 @@ int main(int argc, const char **argv)
   DEFINE_CONF_VARS(usage);
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  common_init(args, "cclsinfo", false, true);
 
   bool opt_name = false, opt_ver = false, opt_arch = false;
   const char *fname = NULL;
@@ -58,7 +57,7 @@ int main(int argc, const char **argv)
     } else if (CONF_ARG_EQ("arch", 'a')) {
       CONF_SAFE_SET_ARG_VAL(&opt_arch, OPT_BOOL);
     } else if (CONF_ARG_EQ("ver", 'v')) {
-      CONF_SAFE_SET_ARG_VAL(&opt_arch, OPT_BOOL);
+      CONF_SAFE_SET_ARG_VAL(&opt_ver, OPT_BOOL);
     } else  {
       if (fname)
         usage();
