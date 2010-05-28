@@ -52,9 +52,9 @@ static void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
 {
   memset(&ondisk, 0, sizeof(ondisk));
 
-  memcpy(&ondisk.text, rbd_text, sizeof(rbd_text));
-  memcpy(&ondisk.signature, rbd_signature, sizeof(rbd_signature));
-  memcpy(&ondisk.version, rbd_version, sizeof(rbd_version));
+  memcpy(&ondisk.text, RBD_HEADER_TEXT, sizeof(RBD_HEADER_TEXT));
+  memcpy(&ondisk.signature, RBD_HEADER_SIGNATURE, sizeof(RBD_HEADER_SIGNATURE));
+  memcpy(&ondisk.version, RBD_HEADER_VERSION, sizeof(RBD_HEADER_VERSION));
 
   ondisk.image_size = size;
   if (order)

@@ -1,3 +1,15 @@
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2010 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+ */
+
 #ifndef _FS_CEPH_RBD
 #define _FS_CEPH_RBD
 
@@ -6,7 +18,7 @@
 /*
  * rbd image 'foo' consists of objects
  *   foo.rbd      - image metadata
- *   foo.00000000 
+ *   foo.00000000
  *   foo.00000001
  *   ...          - data
  */
@@ -22,9 +34,9 @@
 #define RBD_COMP_NONE		0
 #define RBD_CRYPT_NONE		0
 
-static const char rbd_text[] = "<<< Rados Block Device Image >>>\n";
-static const char rbd_signature[] = "RBD";
-static const char rbd_version[] = "001.004";
+#define RBD_HEADER_TEXT		"<<< Rados Block Device Image >>>\n"
+#define RBD_HEADER_SIGNATURE	"RBD"
+#define RBD_HEADER_VERSION	"001.004"
 
 struct rbd_obj_snap_ondisk {
 	__le64 id;
