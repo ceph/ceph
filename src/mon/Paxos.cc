@@ -206,7 +206,7 @@ void Paxos::store_state(MMonPaxos *m)
   }
 
   for (map<version_t,bufferlist>::iterator p = m->values.begin();
-       p != m->values.end();
+       p->first <= m->last_committed;
        ++p) {
     if (p->first <= last_committed)
       continue;
