@@ -162,7 +162,9 @@ radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la -lpthread -lm -lcrypto
 rbdtool_SOURCES = rbdtool.cc
 rbdtool_LDADD = librados.la -lpthread -lm -lcrypto
-bin_PROGRAMS += testrados testradospp radosacl rbdtool
+cclsinfo_SOURCES = cclsinfo.cc
+cclsinfo_LDADD = librados.la -lpthread -lm -lcrypto
+bin_PROGRAMS += testrados testradospp radosacl rbdtool cclsinfo
 
 if WITH_RADOSGW
 libradosgw_a_SOURCES = \
