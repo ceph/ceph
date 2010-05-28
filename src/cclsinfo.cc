@@ -76,7 +76,7 @@ int main(int argc, const char **argv)
 
   void *handle = dlopen(fname, RTLD_LAZY);
   if (!handle) {
-    perror("dlopen");
+    cerr << "dlopen error: " << dlerror << std::endl;
     exit(1);
   }
 
