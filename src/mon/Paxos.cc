@@ -206,7 +206,7 @@ void Paxos::store_state(MMonPaxos *m)
   }
 
   for (map<version_t,bufferlist>::iterator p = m->values.begin();
-       p->first <= m->last_committed;
+       p != m->values.end() && p->first <= m->last_committed;
        ++p) {
     if (p->first <= last_committed)
       continue;
@@ -489,6 +489,7 @@ void Paxos::commit()
     MMonPaxos *commit = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COMMIT, machine_id);
     commit->values[last_committed] = new_value;
     commit->pn = accepted_pn;
+    commit->last_committed = last_committed;
     
     mon->messenger->send_message(commit, mon->monmap->get_inst(*p));
   }
