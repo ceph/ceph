@@ -1713,7 +1713,7 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
   ObjectStore::Transaction& t = ctx->op_t;
 
   ObjectContext *rollback_to;
-  int ret=find_object_context(soid.oid, op.snap.snapid, &rollback_to, false);
+  int ret=find_object_context(soid.oid, (uint64_t)op.snap.snapid, &rollback_to, false);
   sobject_t& rollback_to_sobject = rollback_to->obs.oi.soid;
   if (ret) {
     if (-ENOENT == ret) {
@@ -1754,7 +1754,7 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       ssc->snapset.head_exists = true;
 
       map<snapid_t, interval_set<uint64_t> >::iterator iter =
-	ssc->snapset.clone_overlap.lower_bound(op.snap.snapid);
+	ssc->snapset.clone_overlap.lower_bound((uint64_t)op.snap.snapid);
       interval_set<uint64_t> overlaps = iter->second;
       for ( ;
 	    iter != ssc->snapset.clone_overlap.end();
