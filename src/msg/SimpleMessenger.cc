@@ -72,6 +72,8 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
     char buf[80];
     derr(0) << "accepter.bind unable to create socket: "
 	    << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    cerr << "accepter.bind unable to create socket: "
+	 << strerror_r(errno, buf, sizeof(buf)) << std::endl;
     return -errno;
   }
   opened_socket();
@@ -88,6 +90,8 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
       char buf[80];
       derr(0) << "accepter.bind unable to bind to " << g_my_addr.ss_addr()
 	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+      cerr << "accepter.bind unable to bind to " << g_my_addr.ss_addr()
+	   << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
       return -errno;
     }
   } else {
@@ -103,6 +107,9 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
       derr(0) << "accepter.bind unable to bind to " << g_my_addr.ss_addr()
 	      << " on any port in range " << CEPH_PORT_START << "-" << CEPH_PORT_LAST
 	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+      cerr << "accepter.bind unable to bind to " << g_my_addr.ss_addr()
+	   << " on any port in range " << CEPH_PORT_START << "-" << CEPH_PORT_LAST
+	   << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
       return -errno;
     }
   }
@@ -119,6 +126,8 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
     char buf[80];
     derr(0) << "accepter.bind unable to listen on " << g_my_addr.ss_addr()
 	    << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    cerr << "accepter.bind unable to listen on " << g_my_addr.ss_addr()
+	 << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
     return -errno;
   }
   
