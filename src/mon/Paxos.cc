@@ -117,18 +117,6 @@ void Paxos::handle_collect(MMonPaxos *collect)
   last->last_committed = last_committed;
   last->first_committed = first_committed;
   
-  // do we have an accepted but uncommitted value?
-  //  (it'll be at last_committed+1)
-  bufferlist bl;
-  if (mon->store->exists_bl_sn(machine_name, last_committed+1)) {
-    mon->store->get_bl_sn(bl, machine_name, last_committed+1);
-    assert(bl.length() > 0);
-    dout(10) << " sharing our accepted but uncommitted value for " << last_committed+1 
-	     << " (" << bl.length() << " bytes)" << dendl;
-    last->values[last_committed+1] = bl;
-    last->uncommitted_pn = accepted_pn;
-  }
-
   // can we accept this pn?
   if (collect->pn > accepted_pn) {
     // ok, accept it
@@ -145,9 +133,21 @@ void Paxos::handle_collect(MMonPaxos *collect)
   last->pn = accepted_pn;
   last->pn_from = accepted_pn_from;
 
-  // and share whatever data we have
+  // share whatever committed values we have
   if (collect->last_committed < last_committed)
     share_state(last, collect->first_committed, collect->last_committed);
+
+  // do we have an accepted but uncommitted value?
+  //  (it'll be at last_committed+1)
+  bufferlist bl;
+  if (mon->store->exists_bl_sn(machine_name, last_committed+1)) {
+    mon->store->get_bl_sn(bl, machine_name, last_committed+1);
+    assert(bl.length() > 0);
+    dout(10) << " sharing our accepted but uncommitted value for " << last_committed+1 
+	     << " (" << bl.length() << " bytes)" << dendl;
+    last->values[last_committed+1] = bl;
+    last->uncommitted_pn = accepted_pn;
+  }
 
   // send reply
   mon->messenger->send_message(last, collect->get_source_inst());
