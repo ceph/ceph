@@ -182,6 +182,8 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed, version_t 
 	       << m->values[v].length() << " bytes)" << dendl;
     }
   }
+
+  m->last_committed = last_committed;
 }
 
 void Paxos::store_state(MMonPaxos *m)
@@ -238,7 +240,6 @@ void Paxos::handle_last(MMonPaxos *last)
     dout(10) << "sending commit to " << last->get_source() << dendl;
     MMonPaxos *commit = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COMMIT, machine_id);
     share_state(commit, last->first_committed, last->last_committed);
-    commit->last_committed = last_committed;
     mon->messenger->send_message(commit, last->get_source_inst());
   }
 
