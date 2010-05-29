@@ -239,7 +239,7 @@ int snapshot_revert(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return out->length();
 }
 
-void class_init()
+void __cls_init()
 {
   CLS_LOG("Loaded rbd class!");
 

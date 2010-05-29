@@ -212,9 +212,16 @@ libcls_acl.so: cls_acl.cc
 	${CXX} -I. -fPIC -shared -g -o libcls_acl.so cls_acl.cc
 BUILT_SOURCES += libcls_acl.so
 
-libcls_rbd.so: cls_rbd.cc
-	${CXX} -I. -fPIC -shared -g -o libcls_rbd.so cls_rbd.cc
-BUILT_SOURCES += libcls_rbd.so
+# libcls_rbd.so: cls_rbd.cc
+# 	${CXX} -I. -fPIC -shared -g -o libcls_rbd.so cls_rbd.cc
+# BUILT_SOURCES += libcls_rbd.so
+libcls_rbd_la_SOURCES = \
+	cls_rbd.cc
+libcls_rbd_la_CFLAGS = ${AM_CFLAGS}
+libcls_rbd_la_CXXFLAGS= ${AM_CXXFLAGS}
+# libcls_rbd_LIBADD =
+libcls_rbd_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '.*__cls_.*' -lpthread
+lib_LTLIBRARIES += libcls_rbd.la
 
 
 ## hadoop client
