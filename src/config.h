@@ -145,6 +145,7 @@ struct md_config_t {
   int mon_osd_down_out_interval;
   float mon_lease;
   float mon_lease_renew_interval;
+  float mon_lease_wiggle_room;
   float mon_lease_ack_timeout;
   float mon_lease_timeout;
   float mon_accept_timeout;

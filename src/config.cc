@@ -363,6 +363,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mon_lease, 0, OPT_FLOAT, 5),  		    // lease interval
 	OPTION(mon_lease_renew_interval, 0, OPT_FLOAT, 3), // on leader, to renew the lease
 	OPTION(mon_lease_ack_timeout, 0, OPT_FLOAT, 10.0), // on leader, if lease isn't acked by all peons
+	OPTION(mon_lease_wiggle_room, 0, OPT_FLOAT, .001), // wiggle room for lease arithmetic to count as "same time"
 	OPTION(mon_lease_timeout, 0, OPT_FLOAT, 10.0),     // on peon, if lease isn't extended
 	OPTION(mon_accept_timeout, 0, OPT_FLOAT, 10.0),    // on leader, if paxos update isn't accepted
 	OPTION(mon_stop_on_last_unmount, 0, OPT_BOOL, false),
