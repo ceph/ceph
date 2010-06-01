@@ -6000,6 +6000,15 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       // dirfrag/dentry is not mine.
       pair<int,int> dauth = curdir->authority();
 
+      if (onfail == MDS_TRAVERSE_FORWARD &&
+	  snapid && mdr->client_request &&
+	  (int)depth < mdr->client_request->get_retry_attempt()) {
+	dout(7) << "traverse: snap " << snapid << " and depth " << depth
+		<< " < retry " << mdr->client_request->get_retry_attempt()
+		<< ", discovering instead of forwarding" << dendl;
+	onfail = MDS_TRAVERSE_DISCOVER;
+      }
+
       if ((onfail == MDS_TRAVERSE_DISCOVER ||
            onfail == MDS_TRAVERSE_DISCOVERXLOCK)) {
 	dout(7) << "traverse: discover from " << path[depth] << " from " << *curdir << dendl;
