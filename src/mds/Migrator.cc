@@ -2164,7 +2164,7 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
     ::decode(dname, blp);
     ::decode(last, blp);
     
-    CDentry *dn = dir->lookup(dname, last);
+    CDentry *dn = dir->lookup_exact_snap(dname, last);
     if (!dn)
       dn = dir->add_null_dentry(dname, 1, last);
     
