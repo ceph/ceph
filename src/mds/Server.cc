@@ -3882,9 +3882,10 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   dn->pop_projected_linkage();
 
   // relink as stray?  (i.e. was primary link?)
+  CDentry::linkage_t *straydnl = 0;
   if (straydn) {
     dout(20) << " straydn is " << *straydn << dendl;
-    CDentry::linkage_t *straydnl = straydn->pop_projected_linkage();
+    straydnl = straydn->pop_projected_linkage();
     
     SnapRealm *oldparent = dn->get_dir()->inode->find_snaprealm();
     
@@ -3906,6 +3907,10 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   
   mds->mdcache->send_dentry_unlink(dn, straydn);
   
+  // update subtree map?
+  if (straydn && straydnl->get_inode()->is_dir()) 
+    mdcache->adjust_subtree_after_rename(straydnl->get_inode(), dn->get_dir());
+
   // commit anchor update?
   if (mdr->more()->dst_reanchor_atid) 
     mds->anchorclient->commit(mdr->more()->dst_reanchor_atid, mdr->ls);

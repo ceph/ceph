@@ -8238,6 +8238,10 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 	assert(straydn);
 	straydn->dir->link_primary_inode(straydn, in);
 
+	// update subtree map?
+	if (in->is_dir()) 
+	  adjust_subtree_after_rename(in, dir);
+
 	// send caps to auth (if we're not already)
 	if (in->is_any_caps() &&
 	    !in->state_test(CInode::STATE_EXPORTINGCAPS))
