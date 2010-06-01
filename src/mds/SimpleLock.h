@@ -67,6 +67,7 @@ struct LockType {
     case CEPH_LOCK_IFILE:
       sm = &sm_filelock;
       break;
+    case CEPH_LOCK_DVERSION:
     case CEPH_LOCK_IVERSION:
       sm = &sm_locallock;
       break;
