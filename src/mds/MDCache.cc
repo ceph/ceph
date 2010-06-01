@@ -2683,9 +2683,11 @@ void MDCache::recalc_auth_bits()
 {
   dout(7) << "recalc_auth_bits" << dendl;
 
-  root->inode_auth.first = mds->mdsmap->get_root();
-  if (mds->whoami != root->inode_auth.first)
-    root->state_clear(CInode::STATE_AUTH);
+  if (root) {
+    root->inode_auth.first = mds->mdsmap->get_root();
+    if (mds->whoami != root->inode_auth.first)
+      root->state_clear(CInode::STATE_AUTH);
+  }
 
   set<CInode*> subtree_inodes;
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
@@ -3705,7 +3707,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 
   // inodes
   p = ack->inode_locks.begin();
-  dout(10) << "inode_locks len " << ack->inode_locks.length() << " is " << ack->inode_locks << dendl;
+  //dout(10) << "inode_locks len " << ack->inode_locks.length() << " is " << ack->inode_locks << dendl;
   while (!p.end()) {
     dout(10) << " p pos is " << p.get_off() << dendl;
     inodeno_t ino;
