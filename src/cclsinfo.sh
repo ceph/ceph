@@ -19,7 +19,7 @@ usage_exit() {
 }
 
 err_exit() {
-	echo $*
+	echo "Error: $*"
 	exit 1
 }
 
@@ -59,6 +59,7 @@ fi
 if [ $show_name -eq 1 ]; then
 	raw_name=`nm $fname | grep __cls_name__`
 	name=`echo $raw_name | sed 's/.*cls_name__//g'`
+	[ "$name" == "" ] && err_exit "Could not detect class name"
 	s=$name
 	c=" "
 fi
@@ -66,13 +67,17 @@ fi
 if [ $show_ver -eq 1 ]; then
 	raw_ver=`nm $fname | grep __cls_ver__`
 	ver=`echo $raw_ver | sed 's/.*cls_ver__//g; s/_/./g'`
+	[ "$name" == "" ] && err_exit "Could not detect class version"
 	s=$s$c$ver
 	c=" "
 fi
 
 if [ $show_arch -eq 1 ]; then
-	raw_arch=`file -L $fname | awk '{print $7}'`
-	arch=`echo $raw_arch | sed 's/,//g'`
+	raw_arch=`readelf -h $fname | grep Machine`
+	arch=""
+	[ `grep -c 386` -gt 0 ] && arch="i386"
+	[ `grep -c 86-64` -gt 0 ] && arch="x86-64"
+	[ "$name" == "" ] && err_exit "unknown file architecture"
 	s=$s$c$arch
 	c=" "
 fi
