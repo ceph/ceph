@@ -4101,8 +4101,12 @@ void MDCache::try_reconnect_cap(CInode *in, Session *session)
 	     << " on " << *in << dendl;
     remove_replay_cap_reconnect(in->ino(), client);
 
-    in->choose_lock_states();
-    dout(15) << " chose lock states on " << *in << dendl;
+    if (in->is_replicated()) {
+      mds->locker->try_eval(in, CEPH_CAP_LOCKS);
+    } else {
+      in->choose_lock_states();
+      dout(15) << " chose lock states on " << *in << dendl;
+    }
   }
 }
 
