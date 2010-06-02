@@ -663,6 +663,20 @@ void MDS::handle_command(MMonCommand *m)
       locker->try_eval(ino, mask);
       dout(20) << "try_eval(" << inum << ", " << mask << ")" << dendl;
     } else dout(15) << "inode " << inum << " not in mdcache!" << dendl;
+  } else if (m->cmd[0] == "export_dir") {
+    if (m->cmd.size() == 3) {
+      filepath fp(m->cmd[1].c_str());
+      int target = atoi(m->cmd[2].c_str());
+      if (target != whoami && mdsmap->is_up(target) && mdsmap->is_in(target)) {
+	CInode *in = mdcache->cache_traverse(fp);
+	if (in) {
+	  CDir *dir = in->get_dirfrag(frag_t());
+	  if (dir) {
+	    mdcache->migrator->export_dir(dir, target);
+	  } else dout(0) << "bad migrate_dir path dirfrag frag_t()" << dendl;
+	} else dout(0) << "bad migrate_dir path" << dendl;
+      } else dout(0) << "bad migrate_dir target syntax" << dendl;
+    } else dout(0) << "bad migrate_dir syntax" << dendl;
   } else dout(0) << "unrecognized command! " << m->cmd << dendl;
   m->put();
 }
