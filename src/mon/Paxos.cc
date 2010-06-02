@@ -651,10 +651,12 @@ void Paxos::handle_lease_ack(MMonPaxos *ack)
     double diff = (double)ack->lease_timestamp -
       (((double)lease_expire) - g_conf.mon_lease);
     double abs = diff > 0 ? diff : -diff;
-    if ((diff > 0) && (abs > g_conf.mon_lease_wiggle_room)) {
+    if ((diff < 0) && (abs > g_conf.mon_lease_wiggle_room)) {
+      utime_t send_time;
+      send_time.set_from_double(lease_expire - g_conf.mon_lease);
       ss << "lease_ack from follower sent at time("
 	 << ack->lease_timestamp << "), before lease extend was sent ("
-	 << lease_expire - g_conf.mon_lease
+	 << send_time
 	 << ")! Clocks not synchronized." << std::endl;
       warn = true;
     }
