@@ -162,7 +162,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
   if (m->cmd.size() > 1) {
     if (m->cmd.size() == 3 && m->cmd[1] == "add") {
       entity_addr_t addr;
-      parse_ip_port(m->cmd[2].c_str(), addr);
+      addr.parse(m->cmd[2].c_str());
       bufferlist rdata;
       if (pending_map.contains(addr)) {
 	err = -EEXIST;

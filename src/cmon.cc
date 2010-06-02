@@ -195,7 +195,7 @@ int main(int argc, const char **argv)
   char *mon_addr_str;
 
   if (conf_read_key(NULL, "mon addr", OPT_STR, &mon_addr_str, NULL) &&
-      parse_ip_port(mon_addr_str, conf_addr, NULL) &&
+      conf_addr.parse(mon_addr_str) &&
       ipaddr != conf_addr)
     cerr << "WARNING: 'mon addr' config option does not match monmap file" << std::endl
 	 << "         continuing with monmap configuration" << std::endl;

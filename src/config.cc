@@ -26,7 +26,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <signal.h>
-#include <arpa/inet.h>
 
 // for tstring stringtable
 #include "include/tstring.h"
@@ -171,66 +170,6 @@ void vec_to_argv(std::vector<const char*>& args,
     argv[argc++] = args[i];
 }
 
-bool parse_ip_port(const char *s, entity_addr_t& a, const char **end)
-{
-  memset(&a, 0, sizeof(a));
-
-  const char *p = s;
-
-  bool braces = false;
-  int v = 0;
-  if (*p == '{') {
-    p++;
-    braces = true;
-    v = 6;
-  }
-  
-  char buf[32];
-  char *o = buf;
-
-  while (o < buf + sizeof(buf) &&
-	 *p && ((*p == '.') ||
-		(v == 6 && *p == ':') ||
-		(*p >= '0' && *p <= '9') ||
-		(*p >= 'a' && *p <= 'f') ||
-		(*p >= 'A' && *p <= 'F'))) {
-    if (*p == ':')
-      v = 6;
-    if (*p == '.')
-      v = 4;
-    *o++ = *p++;
-  }
-  *o = 0;
-  //cout << "buf is '" << buf << "'" << std::endl;
-
-  // ipv4?
-  struct in_addr a4;
-  struct in6_addr a6;
-  if (inet_pton(AF_INET, buf, &a4)) {
-    a.addr4.sin_addr.s_addr = a4.s_addr;
-    a.addr.ss_family = AF_INET;
-  } else if (inet_pton(AF_INET6, buf, &a6)) {
-    a.addr.ss_family = AF_INET6;
-    memcpy(&a.addr6.sin6_addr, &a6, sizeof(a6));
-  } else {
-    //cout << "couldn't parse '" << buf << "'" << std::endl;
-  }
-
-  if (braces) {
-    if (*p != '}')
-      return false;
-    p++;
-  }
-
-  //cout << "p is " << *p << std::endl;
-  if (*p == ':') {
-    // parse a port, too!
-    p++;
-    int port = atoi(p);
-    a.set_port(port);
-  }
-  return true;
-}
 
 bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec)
 {
@@ -238,7 +177,7 @@ bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec)
   const char *end = p + strlen(p);
   while (p < end) {
     entity_addr_t a;
-    if (!parse_ip_port(p, a, &p))
+    if (!a.parse(p, &p))
       return false;
     vec.push_back(a);
   }
@@ -1008,7 +947,7 @@ void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon,
     } else if (CONF_ARG_EQ("show_conf", 'S')) {
       show_config = true;
     } else if (isdaemon && CONF_ARG_EQ("bind", 0)) {
-      assert_warn(parse_ip_port(args[++i], g_my_addr));
+      g_my_addr.parse(args[++i]);
     } else if (isdaemon && CONF_ARG_EQ("nodaemon", 'D')) {
       g_conf.daemonize = false;
       g_conf.log_to_stdout = true;

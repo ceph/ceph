@@ -223,6 +223,8 @@ struct entity_addr_t {
     }
   }
 
+  bool parse(const char *s, const char **end = 0);
+
   void encode(bufferlist& bl) const {
     ::encode(type, bl);
     ::encode(nonce, bl);

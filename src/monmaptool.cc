@@ -60,7 +60,7 @@ int main(int argc, const char **argv)
       if (++i >= args.size())
 	usage();
       entity_addr_t addr;
-      if (!parse_ip_port(args[i], addr)) {
+      if (!addr.parse(args[i])) {
 	cerr << me << ": invalid ip:port '" << args[i] << "'" << std::endl;
 	return -1;
       }
