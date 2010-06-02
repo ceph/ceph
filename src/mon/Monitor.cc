@@ -934,7 +934,7 @@ void Monitor::tick()
  * this is the closest thing to a traditional 'mkfs' for ceph.
  * initialize the monitor state machines to their initial values.
  */
-int Monitor::mkfs(bufferlist& osdmapbl)
+int Monitor::mkfs(bufferlist& osdmapbl, bufferlist& classbl)
 {
   // create it
   int err = store->mkfs();
@@ -969,6 +969,8 @@ int Monitor::mkfs(bufferlist& osdmapbl)
       svc->create_initial(osdmapbl);
     else if (svc->paxos->machine_id == PAXOS_MONMAP)
       svc->create_initial(monmapbl);
+    else if (svc->paxos->machine_id == PAXOS_CLASS)
+      svc->create_initial(classbl);
     else
       svc->create_initial(bl);
     // commit to paxos

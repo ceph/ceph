@@ -55,6 +55,8 @@ int main(int argc, const char **argv)
 
   bool mkfs = false;
   const char *osdmapfn = 0;
+  const char *classfn = 0;
+  const char *classinfo = 0;
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -66,6 +68,10 @@ int main(int argc, const char **argv)
       mkfs = true;
     } else if (CONF_ARG_EQ("osdmap", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&osdmapfn, OPT_STR);
+    } else if (CONF_ARG_EQ("class-info", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&classinfo, OPT_STR);
+    } else if (CONF_ARG_EQ("class-file", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&classfn, OPT_STR);
     } else
       usage();
   }
@@ -98,7 +104,7 @@ int main(int argc, const char **argv)
 	*/
 
     // load monmap
-    bufferlist monmapbl, osdmapbl;
+    bufferlist monmapbl, osdmapbl, classbl;
     int err = monmapbl.read_file(g_conf.monmap);
     if (err < 0)
       exit(1);
@@ -109,10 +115,29 @@ int main(int argc, const char **argv)
     if (err < 0)
       exit(1);
 
+    // class?
+    if ((classfn != NULL) ^ (classinfo != NULL)) {
+      cerr << "bad class arguments" << std::endl;
+      exit(1);
+    }
+
+    if (classfn && classinfo) {
+      bufferlist classbin;
+      string str;
+      int err = classbin.read_file(classfn);
+      if (err < 0) {
+        cerr << "error reading " << classfn << std::endl;
+        exit(1);
+      }
+      str = classinfo;
+      ::encode(str, classbl);
+      ::encode(classbin, classbl);
+    }
+
     // go
     MonitorStore store(g_conf.mon_data);
     Monitor mon(whoami, &store, 0, &monmap);
-    mon.mkfs(osdmapbl);
+    mon.mkfs(osdmapbl, classbl);
     cout << argv[0] << ": created monfs at " << g_conf.mon_data 
 	 << " for mon" << whoami
 	 << std::endl;
