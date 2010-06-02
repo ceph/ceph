@@ -26,6 +26,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <arpa/inet.h>
 
 // for tstring stringtable
 #include "include/tstring.h"
@@ -172,47 +173,62 @@ void vec_to_argv(std::vector<const char*>& args,
 
 bool parse_ip_port(const char *s, entity_addr_t& a, const char **end)
 {
-  int count = 0; // digit count
-  int off = 0;
-
   memset(&a, 0, sizeof(a));
 
-  while (1) {
-    // parse the #.
-    int val = 0;
-    int numdigits = 0;
-    
-    while (*s >= '0' && *s <= '9') {
-      int digit = *s - '0';
-      //cout << "digit " << digit << endl;
-      val *= 10;
-      val += digit;
-      numdigits++;
-      s++; off++;
-    }
+  const char *p = s;
 
-    if (numdigits == 0) {
-      cerr << "no digits at off " << off << std::endl;
-      return false;           // no digits
-    }
-    if (count < 3 && *s != '.') {
-      cerr << "should be period at " << off << std::endl;
-      return false;   // should have 3 periods
-    }
-    s++; off++;
-
-    if (count <= 3)
-      a.set_in4_quad(count, val);
-    else 
-      a.set_port(val);
-    
-    count++;
-    if (count == 4 && *(s-1) != ':') break;
-    if (count == 5) break;  
+  bool braces = false;
+  int v = 0;
+  if (*p == '{') {
+    p++;
+    braces = true;
+    v = 6;
   }
-  if (end)
-    *end = s;
   
+  char buf[32];
+  char *o = buf;
+
+  while (o < buf + sizeof(buf) &&
+	 *p && ((*p == '.') ||
+		(v == 6 && *p == ':') ||
+		(*p >= '0' && *p <= '9') ||
+		(*p >= 'a' && *p <= 'f') ||
+		(*p >= 'A' && *p <= 'F'))) {
+    if (*p == ':')
+      v = 6;
+    if (*p == '.')
+      v = 4;
+    *o++ = *p++;
+  }
+  *o = 0;
+  //cout << "buf is '" << buf << "'" << std::endl;
+
+  // ipv4?
+  struct in_addr a4;
+  struct in6_addr a6;
+  if (inet_pton(AF_INET, buf, &a4)) {
+    a.addr4.sin_addr.s_addr = a4.s_addr;
+    a.addr.ss_family = AF_INET;
+  } else if (inet_pton(AF_INET6, buf, &a6)) {
+    a.addr.ss_family = AF_INET6;
+    memcpy(&a.addr6.sin6_addr, &a6, sizeof(a6));
+  } else {
+    //cout << "couldn't parse '" << buf << "'" << std::endl;
+  }
+
+  if (braces) {
+    if (*p != '}')
+      return false;
+    p++;
+  }
+
+  //cout << "p is " << *p << std::endl;
+  if (*p == ':') {
+    // parse a port, too!
+    p++;
+    int port = atoi(p);
+    a.set_port(port);
+  }
   return true;
 }
 
