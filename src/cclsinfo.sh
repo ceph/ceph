@@ -67,7 +67,7 @@ fi
 if [ $show_ver -eq 1 ]; then
 	raw_ver=`nm $fname | grep __cls_ver__`
 	ver=`echo $raw_ver | sed 's/.*cls_ver__//g; s/_/./g'`
-	[ "$name" == "" ] && err_exit "Could not detect class version"
+	[ "$ver" == "" ] && err_exit "Could not detect class version"
 	s=$s$c$ver
 	c=" "
 fi
@@ -75,9 +75,9 @@ fi
 if [ $show_arch -eq 1 ]; then
 	raw_arch=`readelf -h $fname | grep Machine`
 	arch=""
-	[ `grep -c 386` -gt 0 ] && arch="i386"
-	[ `grep -c 86-64` -gt 0 ] && arch="x86-64"
-	[ "$name" == "" ] && err_exit "unknown file architecture"
+	[ `echo $raw_arch | grep -c 386` -gt 0 ] && arch="i386"
+	[ `echo $raw_arch | grep -c 86-64` -gt 0 ] && arch="x86-64"
+	[ "$arch" == "" ] && err_exit "unknown file architecture"
 	s=$s$c$arch
 	c=" "
 fi

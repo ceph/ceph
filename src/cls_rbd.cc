@@ -21,7 +21,7 @@ cls_method_handle_t h_snapshot_revert;
 
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {
-  int snap_count = 0;
+  unsigned snap_count = 0;
   uint64_t snap_names_len = 0;
   int rc;
   struct rbd_obj_header_ondisk *header;
@@ -71,7 +71,7 @@ int snapshots_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   ::encode(header->snap_count, *out);
 
-  for (int i = 0; i < header->snap_count; i++) {
+  for (unsigned i = 0; i < header->snap_count; i++) {
     string s = name;
     ::encode(header->snaps[i].id, *out);
     ::encode(header->snaps[i].image_size, *out);
@@ -177,14 +177,12 @@ int snapshot_revert(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   header = (struct rbd_obj_header_ondisk *)bl.c_str();
 
   int snaps_id_ofs = sizeof(*header);
-  int len = snaps_id_ofs;
   int names_ofs = snaps_id_ofs + sizeof(*new_snaps) * header->snap_count;
   const char *snap_name;
   const char *snap_names = ((char *)header) + names_ofs;
   const char *end = snap_names + header->snap_names_len;
   bufferlist::iterator iter = in->begin();
   string s;
-  uint64_t snap_id;
   int i;
   bool found = false;
   struct rbd_obj_snap_ondisk snap;
@@ -223,7 +221,6 @@ int snapshot_revert(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   newbl.push_back(header_bp);
 
   if (header->snap_count) {
-    char *new_snap_names;
     memcpy(new_snaps_bp.c_str(), header->snaps + i, sizeof(header->snaps[0]) * header->snap_count);
     memcpy(new_names_bp.c_str(), snap_names, end - snap_names);
     newbl.push_back(new_snaps_bp);
