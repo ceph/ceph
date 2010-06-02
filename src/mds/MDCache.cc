@@ -6094,6 +6094,35 @@ bool MDCache::path_is_mine(filepath& path)
   return cur->is_auth();
 }
 
+CInode *MDCache::cache_traverse(const filepath& fp)
+{
+  dout(10) << "cache_traverse " << fp << dendl;
+
+  CInode *in;
+  if (fp.get_ino())
+    in = get_inode(fp.get_ino());
+  else
+    in = root;
+  if (!in)
+    return NULL;
+
+  for (unsigned i = 0; i < fp.depth(); i++) {
+    const string& dname = fp[i];
+    frag_t fg = in->pick_dirfrag(dname);
+    dout(20) << " " << i << " " << dname << " frag " << fg << " from " << *in << dendl;
+    CDir *curdir = in->get_dirfrag(fg);
+    if (!curdir)
+      return NULL;
+    CDentry *dn = curdir->lookup(dname, CEPH_NOSNAP);
+    if (!dn)
+      return NULL;
+    in = dn->get_linkage()->get_inode();
+    if (!in)
+      return NULL;
+  }
+  dout(10) << " got " << *in << dendl;
+  return in;
+}
 
 
 /**
