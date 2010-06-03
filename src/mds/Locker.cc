@@ -3015,6 +3015,15 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
 	default:
 	  assert(0);
 	}
+	if (lock->is_stable()) {
+	  dout(10) << "scatter_nudge oh, stable again already." << dendl;
+	  // this should only realy happen when called via
+	  // handle_file_lock due to AC_NUDGE, because the rest of the
+	  // time we are replicated or have dirty data and won't get
+	  // called.  bailing here avoids an infinite loop.
+	  assert(!c); 
+	  break;
+	}
       } else {
 	dout(10) << "scatter_nudge auth, waiting for stable " << *lock << " on " << *p << dendl;
 	if (c)
@@ -3612,14 +3621,17 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     break;
 
   case LOCK_AC_NUDGE:
-    if (lock->get_parent()->is_auth()) {
+    if (!lock->get_parent()->is_auth()) {
+      dout(7) << "handle_file_lock IGNORING nudge on non-auth " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+    } else if (!lock->get_parent()->is_replicated()) {
+      dout(7) << "handle_file_lock IGNORING nudge on non-replicated " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+    } else {
       dout(7) << "handle_file_lock trying nudge on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
       scatter_nudge(lock, 0, true);
       mds->mdlog->flush();
-    } else {
-      dout(7) << "handle_file_lock IGNORING nudge on non-auth " << *lock
-	      << " on " << *lock->get_parent() << dendl;
     }    
     break;
 
