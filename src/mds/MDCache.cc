@@ -1274,19 +1274,22 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
   for (map<client_t,Capability*>::iterator p = in->client_caps.begin();
       p != in->client_caps.end();
       p++) {
+    client_t client = p->first;
     Capability *cap = p->second;
     if ((cap->issued() & CEPH_CAP_ANY_WR) &&
-	cap->client_follows < last) {
+	cap->client_follows == oldin->first) {
       // clone to oldin
-      client_t client = p->first;
       Capability *newcap = oldin->add_client_cap(client, 0, in->containing_realm);
       cap->item_session_caps.get_list()->push_back(&newcap->item_session_caps);
       newcap->issue(cap->issued());
       newcap->set_last_issue_stamp(cap->get_last_issue_stamp());
       newcap->client_follows = cap->client_follows;
       dout(10) << " cloning client" << client << " wr cap " << cap
+	       << " follows " << cap->client_follows
 	       << " to " << newcap << " on cloned inode" << dendl;
       cap->client_follows = last;
+    } else {
+      dout(10) << " not cloning client" << client << " cap follows " << cap->client_follows << dendl;
     }
   }
   if (oldin->is_any_caps())
