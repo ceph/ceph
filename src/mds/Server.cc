@@ -5462,15 +5462,9 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   mds->locker->include_snap_rdlocks(rdlocks, diri);
   rdlocks.erase(&diri->snaplock);
   xlocks.insert(&diri->snaplock);
-  if (!diri->is_anchored()) {
-    // we need to anchor... get these locks up front!
-    CDentry *dn = diri->get_parent_dn();
-    while (dn) {
-      rdlocks.insert(&dn->lock);
-      dn = dn->get_dir()->get_inode()->get_parent_dn();
-    }
-    xlocks.insert(&diri->linklock); 
-  }
+
+  // we need to anchor... get these locks up front!
+  mds->mdcache->anchor_create_prep_locks(mdr, diri, rdlocks, xlocks);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -5489,6 +5483,12 @@ void Server::handle_client_mksnap(MDRequest *mdr)
 
   if (mdr->now == utime_t())
     mdr->now = g_clock.now();
+
+  // anchor
+  if (!diri->is_anchored()) {
+    mdcache->anchor_create(mdr, diri, new C_MDS_RetryRequest(mdcache, mdr));
+    return;
+  }
 
   // allocate a snapid
   if (!mdr->more()->stid) {

@@ -124,6 +124,8 @@ ostream& operator<<(ostream& out, CInode& in)
     out << " s=" << in.inode.size;
     out << " nl=" << in.inode.nlink;
   }
+  if (in.is_anchored())
+    out << " anc";
 
   out << " rb=" << in.inode.rstat.rbytes;
   if (in.inode.rstat.rbytes != in.inode.accounted_rstat.rbytes)
