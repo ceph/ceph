@@ -977,7 +977,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
   if (!is_auth() && newfirst != first) {
     dout(10) << "decode_lock_state first " << first << " -> " << newfirst << dendl;
     assert(newfirst > first);
-    if (parent) {
+    if (!is_multiversion() && parent) {
       assert(parent->first == first);
       parent->first = newfirst;
     }
