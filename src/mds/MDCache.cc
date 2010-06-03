@@ -8287,6 +8287,11 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 	assert(straydn);
 	straydn->dir->link_primary_inode(straydn, in);
 
+	// in->first is lazily updated on replica; drag it forward so
+	// that we always keep it in sync with the dnq
+	assert(straydn->first >= in->first);
+	in->first = straydn->first;
+
 	// update subtree map?
 	if (in->is_dir()) 
 	  adjust_subtree_after_rename(in, dir);
