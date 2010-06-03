@@ -694,7 +694,7 @@ protected:
   set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
 
   map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> > cap_exports; // ino -> client -> capex
-  map<inodeno_t,string> cap_export_paths;
+  map<inodeno_t,filepath> cap_export_paths;
 
   map<inodeno_t,map<client_t,map<int,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
   map<inodeno_t,filepath> cap_import_paths;
@@ -722,7 +722,7 @@ public:
   void rejoin_send_rejoins();
   void rejoin_export_caps(inodeno_t ino, client_t client, cap_reconnect_t& icr) {
     cap_exports[ino][client] = icr.capinfo;
-    cap_export_paths[ino] = icr.path;
+    cap_export_paths[ino] = filepath(icr.path, (uint64_t)icr.capinfo.pathbase);
   }
   void rejoin_recovered_caps(inodeno_t ino, client_t client, cap_reconnect_t& icr, 
 			     int frommds=-1) {
