@@ -485,6 +485,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   bool can_create = op->may_write();
   int r = find_object_context(op->get_oid(), op->get_snapid(), &obc, can_create);
   if (r) {
+    assert(r != -EAGAIN);
     osd->reply_op_error(op, r);
     return;
   }    
