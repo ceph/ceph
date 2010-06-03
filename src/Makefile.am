@@ -162,9 +162,7 @@ radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la -lpthread -lm -lcrypto
 rbdtool_SOURCES = rbdtool.cc
 rbdtool_LDADD = librados.la -lpthread -lm -lcrypto
-cclsinfo_SOURCES = cclsinfo.cc
-cclsinfo_LDADD = librados.la -lpthread -lm -lcrypto
-bin_PROGRAMS += testrados testradospp radosacl rbdtool cclsinfo
+bin_PROGRAMS += testrados testradospp radosacl rbdtool
 
 if WITH_RADOSGW
 libradosgw_a_SOURCES = \
@@ -244,14 +242,14 @@ editpaths = sed \
 	-e 's|@datadir[@]|$(pkgdatadir)|g' \
 	-e 's|@prefix[@]|$(prefix)|g'
 
-init-ceph mkcephfs: init-ceph.in mkcephfs.in Makefile
+init-ceph mkcephfs cclass: init-ceph.in mkcephfs.in Makefile cclass.in
 	rm -f $@ $@.tmp
 	$(editpaths) '$(srcdir)/$@.in' >$@.tmp
 	chmod +x $@.tmp
 	chmod a-w $@.tmp
 	mv $@.tmp $@
 
-BUILT_SOURCES += init-ceph mkcephfs
+BUILT_SOURCES += init-ceph mkcephfs cclass
 
 ##
 LDADD =
@@ -277,6 +275,8 @@ EXTRA_DIST = verify-mds-journal.sh vstart.sh stop.sh \
 	     crun ceph_common.sh init-ceph.in mkcephfs.in make_version
 
 install-data-local:
+	$(install_sh_SCRIPT) -m 0755 cclass $(DESTDIR)$(bindir)/cclass
+	$(install_sh_SCRIPT) -m 0755 cclsinfo $(DESTDIR)$(bindir)/cclsinfo
 	sh -c "if [ \"$(sbindir)\" = \"/usr/sbin\" ]; then mkdir -p $(DESTDIR)/sbin ; $(install_sh_SCRIPT) -m 0755 mount.ceph $(DESTDIR)/sbin/mount.ceph ; else mkdir -p $(DESTDIR)$(sbindir) ; $(install_sh_SCRIPT) -m 0755 mount.ceph $(DESTDIR)$(sbindir)/mount.ceph ; fi"
 	mkdir -p $(DESTDIR)$(sbindir)/ceph
 	$(install_sh_SCRIPT) -m 0755 mkcephfs $(DESTDIR)$(sbindir)/mkcephfs
