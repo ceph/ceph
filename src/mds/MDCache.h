@@ -703,6 +703,8 @@ protected:
   set<CInode*> rejoin_undef_inodes;
   set<CInode*> rejoin_potential_updated_scatterlocks;
 
+  vector<CInode*> rejoin_recover_q, rejoin_check_q;
+
   void rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin);
   void handle_cache_rejoin(MMDSCacheRejoin *m);
   void handle_cache_rejoin_weak(MMDSCacheRejoin *m);
@@ -768,6 +770,7 @@ public:
 
   void do_cap_import(Session *session, CInode *in, Capability *cap);
   void do_delayed_cap_imports();
+  void check_realm_past_parents();
   void open_snap_parents();
 
   void reissue_all_caps();

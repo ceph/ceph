@@ -3899,9 +3899,8 @@ void MDCache::rejoin_gather_finish()
   process_reconnected_caps();
 
   vector<CInode*> recover_q, check_q;
-  identify_files_to_recover(recover_q, check_q);
+  identify_files_to_recover(rejoin_recover_q, rejoin_check_q);
   rejoin_send_acks();
-  start_files_to_recover(recover_q, check_q);
   
   // signal completion of fetches, rejoin_gather_finish, etc.
   assert(rejoin_ack_gather.count(mds->whoami));
@@ -3947,6 +3946,25 @@ void MDCache::process_imported_caps()
   }
 }
 
+void MDCache::check_realm_past_parents()
+{
+  // are this realm's parents fully open?
+  if (realm->have_past_parents_open()) {
+    dout(10) << " have past snap parents for realm " << *realm 
+	     << " on " << *realm->inode << dendl;
+  } else {
+    if (!missing_snap_parents.count(realm->inode)) {
+      dout(10) << " MISSING past snap parents for realm " << *realm
+	       << " on " << *realm->inode << dendl;
+      realm->inode->get(CInode::PIN_OPENINGSNAPPARENTS);
+      missing_snap_parents[realm->inode].size();   // just to get it into the map!
+    } else {
+      dout(10) << " (already) MISSING past snap parents for realm " << *realm 
+	       << " on " << *realm->inode << dendl;
+    }
+  }
+}
+
 /*
  * choose lock states based on reconnected caps
  */
@@ -3967,21 +3985,7 @@ void MDCache::process_reconnected_caps()
 
     SnapRealm *realm = in->find_snaprealm();
 
-    // are this realm's parents fully open?
-    if (realm->have_past_parents_open()) {
-      dout(10) << " have past snap parents for realm " << *realm 
-	       << " on " << *realm->inode << dendl;
-    } else {
-      if (!missing_snap_parents.count(realm->inode)) {
-	dout(10) << " MISSING past snap parents for realm " << *realm
-		 << " on " << *realm->inode << dendl;
-	realm->inode->get(CInode::PIN_OPENINGSNAPPARENTS);
-	missing_snap_parents[realm->inode].size();   // just to get it into the map!
-      } else {
-	dout(10) << " (already) MISSING past snap parents for realm " << *realm 
-		 << " on " << *realm->inode << dendl;
-      }
-    }
+    check_realm_past_parents(realm);
 
     // also, make sure client's cap is in the correct snaprealm.
     for (map<client_t,inodeno_t>::iterator q = p->second.begin();
@@ -4230,6 +4234,7 @@ void MDCache::open_snap_parents()
     assert(reconnected_snaprealms.empty());
     dout(10) << "open_snap_parents - all open" << dendl;
     do_delayed_cap_imports();
+    start_files_to_recover(rejoin_recover_q, rejoin_check_q);
   }
 }
 
@@ -4486,6 +4491,10 @@ void MDCache::identify_files_to_recover(vector<CInode*>& recover_q, vector<CInod
     if (recover) {
       in->filelock.set_state(LOCK_PRE_SCAN);
       recover_q.push_back(in);
+      
+      // make sure past parents are open/get opened
+      SnapRealm *realm = in->find_snaprealm();
+      check_realm_past_parents(realm);
     } else {
       check_q.push_back(in);
     }
