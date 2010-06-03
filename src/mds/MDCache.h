@@ -944,7 +944,7 @@ public:
   void _create_system_file(CDir *dir, const char *name, CInode *in, Context *fin);
   void _create_system_file_finish(Mutation *mut, CDentry *dn, Context *fin);
 
-  void open_foreign_stray(int who, Context *c);
+  void open_foreign_mdsdir(inodeno_t ino, Context *c);
   CDentry *get_or_create_stray_dentry(CInode *in);
 
   Context *_get_waiter(MDRequest *mdr, Message *req);

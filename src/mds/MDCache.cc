@@ -560,15 +560,10 @@ void MDCache::populate_mydir()
   mds->queue_waiters(waiting_for_open);
 }
 
-void MDCache::open_foreign_stray(int who, Context *c)
+void MDCache::open_foreign_mdsdir(inodeno_t ino, Context *fin)
 {
-  inodeno_t ino = MDS_INO_STRAY(who);
-  dout(10) << "open_foreign_stray mds" << who << " " << ino << dendl;
-  assert(!have_inode(ino));
-
-  discover_base_ino(ino, c, who);
+  discover_base_ino(ino, fin, ino & (MAX_MDS-1));
 }
-
 
 CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
 {
@@ -5788,8 +5783,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   dout(7) << "traverse: opening base ino " << path.get_ino() << " snap " << snapid << dendl;
   CInode *cur = get_inode(path.get_ino());
   if (cur == NULL) {
-    if (MDS_INO_IS_STRAY(path.get_ino())) 
-      open_foreign_stray(path.get_ino() - MDS_INO_STRAY_OFFSET, _get_waiter(mdr, req));
+    if (MDS_INO_IS_MDSDIR(path.get_ino())) 
+      open_foreign_mdsdir(path.get_ino(), _get_waiter(mdr, req));
     else {
       //assert(0);  // hrm.. broken
       return -ESTALE;
@@ -6271,9 +6266,8 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
       in = get_inode(anchortrace[i].dirino);
       if (!in) {
 	dout(0) << "open_remote_ino_2 don't have dir inode " << anchortrace[i].dirino << dendl;
-	if (MDS_INO_IS_STRAY(anchortrace[i].dirino)) {
-	  int mds = anchortrace[i].dirino % MAX_MDS;
-	  open_foreign_stray(mds, onfinish);
+	if (MDS_INO_IS_MDSDIR(anchortrace[i].dirino)) {
+	  open_foreign_mdsdir(anchortrace[i].dirino, onfinish);
 	  return;
 	}
 	assert(in);  // hrm!
