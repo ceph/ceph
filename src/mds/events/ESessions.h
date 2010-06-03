@@ -29,7 +29,7 @@ public:
 
   ESessions() : LogEvent(EVENT_SESSION) { }
   ESessions(version_t v) :
-    LogEvent(EVENT_SESSION),
+    LogEvent(EVENT_SESSIONS),
     cmapv(v) {
   }
   
