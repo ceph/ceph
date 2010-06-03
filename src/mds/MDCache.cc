@@ -209,6 +209,10 @@ void MDCache::remove_inode(CInode *o)
   if (o->is_dirty())
     o->mark_clean();
 
+  o->filelock.clear_dirty();
+  o->nestlock.clear_dirty();
+  o->dirfragtreelock.clear_dirty();
+
   o->item_open_file.remove_myself();
 
   // remove from inode map
