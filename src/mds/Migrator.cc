@@ -876,6 +876,12 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state,
   dout(7) << "encode_export_inode " << *in << dendl;
   assert(!in->is_replica(mds->get_nodeid()));
 
+  // relax locks?
+  if (!in->is_replicated()) {
+    in->replicate_relax_locks();
+    dout(20) << " did replicate_relax_locks, now " << *in << dendl;
+  }
+
   ::encode(in->inode.ino, enc_state);
   ::encode(in->last, enc_state);
   in->encode_export(enc_state);
@@ -931,12 +937,9 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& fini
 
   finish_export_inode_caps(in);
 
-  // relax locks?
-  if (!in->is_replicated())
-    in->replicate_relax_locks();
-
   // clean
-  if (in->is_dirty()) in->mark_clean();
+  if (in->is_dirty())
+    in->mark_clean();
   
   // clear/unpin cached_by (we're no longer the authority)
   in->clear_replica_map();
