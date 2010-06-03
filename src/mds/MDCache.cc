@@ -7497,6 +7497,11 @@ void MDCache::handle_discover(MDiscover *dis)
   else {
     // there's a base inode
     cur = get_inode(dis->get_base_ino(), snapid);
+    if (!cur && snapid != CEPH_NOSNAP) {
+      cur = get_inode(dis->get_base_ino());
+      if (!cur->is_multiversion())
+	cur = NULL;  // nope!
+    }
     
     if (!cur) {
       dout(7) << "handle_discover mds" << from 
