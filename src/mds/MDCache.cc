@@ -2637,7 +2637,7 @@ void MDCache::finish_ambiguous_import(dirfrag_t df)
 
 void MDCache::remove_inode_recursive(CInode *in)
 {
-  dout(10) << "remove_inode_resurcive " << *in << dendl;
+  dout(10) << "remove_inode_recursive " << *in << dendl;
   list<CDir*> ls;
   in->get_dirfrags(ls);
   for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
@@ -2667,16 +2667,18 @@ void MDCache::remove_inode_recursive(CInode *in)
 void MDCache::trim_unlinked_inodes()
 {
   dout(7) << "trim_unlinked_inodes" << dendl;
-
-  hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
-  while (p != inode_map.end()) {
+  vector<CInode*> q;
+  for (hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
+       p != inode_map.end();
+       p++) {
     CInode *in = p->second;
-    ++p;
     if (in->get_parent_dn() == NULL && !in->is_base()) {
-      dout(7) << " trimming unlinked " << *in << dendl;
-      remove_inode_recursive(in);
+      dout(7) << " will trim from " << *in << dendl;
+      q.push_back(in);
     }
   }
+  for (vector<CInode*>::iterator p = q.begin(); p != q.end(); p++)
+    remove_inode_recursive(*p);
 }
 
 /** recalc_auth_bits()
