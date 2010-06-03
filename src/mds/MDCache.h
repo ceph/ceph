@@ -704,6 +704,7 @@ protected:
   set<CInode*> rejoin_potential_updated_scatterlocks;
 
   vector<CInode*> rejoin_recover_q, rejoin_check_q;
+  list<Context*> rejoin_waiters;
 
   void rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin);
   void handle_cache_rejoin(MMDSCacheRejoin *m);
@@ -770,7 +771,7 @@ public:
 
   void do_cap_import(Session *session, CInode *in, Capability *cap);
   void do_delayed_cap_imports();
-  void check_realm_past_parents();
+  void check_realm_past_parents(SnapRealm *realm);
   void open_snap_parents();
 
   void reissue_all_caps();

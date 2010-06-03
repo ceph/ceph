@@ -3634,8 +3634,6 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
   dout(7) << "handle_cache_rejoin_ack from " << ack->get_source() << dendl;
   int from = ack->get_source().num();
 
-  list<Context*> waiters;
-  
   // dirs
   for (map<dirfrag_t, MMDSCacheRejoin::dirfrag_strong>::iterator p = ack->strong_dirfrags.begin();
        p != ack->strong_dirfrags.end();
@@ -3689,7 +3687,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 	assert(0);  // uh oh.	
       }
       dn->set_replica_nonce(q->second.nonce);
-      dn->lock.set_state_rejoin(q->second.lock, waiters);
+      dn->lock.set_state_rejoin(q->second.lock, rejoin_waiters);
       dn->state_clear(CDentry::STATE_REJOINING);
       dout(10) << " got " << *dn << dendl;
     }
@@ -3729,7 +3727,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
     if (!in) continue;
     in->set_replica_nonce(nonce);
     bufferlist::iterator q = lockbl.begin();
-    in->_decode_locks_rejoin(q, waiters);
+    in->_decode_locks_rejoin(q, rejoin_waiters);
     in->state_clear(CInode::STATE_REJOINING);
     dout(10) << " got inode locks " << *in << dendl;
   }
@@ -3740,7 +3738,8 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
   if (mds->is_rejoin() && 
       rejoin_gather.empty() &&     // make sure we've gotten our FULL inodes, too.
       rejoin_ack_gather.empty()) {
-    mds->rejoin_done();
+    // finally, kickstart past snap parent opens
+    open_snap_parents();
   } else {
     dout(7) << "still need rejoin from (" << rejoin_gather << ")"
 	    << ", rejoin_ack from (" << rejoin_ack_gather << ")" << dendl;
@@ -3915,8 +3914,6 @@ void MDCache::rejoin_gather_finish()
   // did we already get our acks too?
   // this happens when the rejoin_gather has to wait on a MISSING/FULL exchange.
   if (rejoin_ack_gather.empty()) {
-    mds->rejoin_done();
-
     // finally, kickstart past snap parent opens
     open_snap_parents();
   }
@@ -3952,7 +3949,7 @@ void MDCache::process_imported_caps()
   }
 }
 
-void MDCache::check_realm_past_parents()
+void MDCache::check_realm_past_parents(SnapRealm *realm)
 {
   // are this realm's parents fully open?
   if (realm->have_past_parents_open()) {
@@ -4241,6 +4238,10 @@ void MDCache::open_snap_parents()
     dout(10) << "open_snap_parents - all open" << dendl;
     do_delayed_cap_imports();
     start_files_to_recover(rejoin_recover_q, rejoin_check_q);
+
+    mds->queue_waiters(rejoin_waiters);
+
+    mds->rejoin_done();
   }
 }
 
@@ -6260,7 +6261,8 @@ void MDCache::open_remote_ino_2(inodeno_t ino,
     // inode?
     dout(10) << " " << i << ": " << anchortrace[i-1] << dendl;
     in = get_inode(anchortrace[i-1].ino);
-    if (in) break;
+    if (in)
+      break;
     i--;
     if (!i) {
       in = get_inode(anchortrace[i].dirino);
@@ -7449,10 +7451,14 @@ void MDCache::handle_discover(MDiscover *dis)
 
   assert(from != whoami);
 
-  if (mds->get_state() < MDSMap::STATE_ACTIVE) {
-    dout(-7) << "discover_reply not yet active, delaying" << dendl;
-    mds->wait_for_active(new C_MDS_RetryMessage(mds, dis));
-    return;
+  if (mds->get_state() < MDSMap::STATE_CLIENTREPLAY) {
+    int from = dis->get_source().num();
+    if (mds->get_state() < MDSMap::STATE_REJOIN ||
+	rejoin_ack_gather.count(from)) {
+      dout(-7) << "discover_reply not yet active(|still rejoining), delaying" << dendl;
+      mds->wait_for_active(new C_MDS_RetryMessage(mds, dis));
+      return;
+    }
   }
 
 
