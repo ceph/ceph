@@ -4496,7 +4496,6 @@ void MDCache::start_files_to_recover(vector<CInode*>& recover_q, vector<CInode*>
 {
   for (vector<CInode*>::iterator p = check_q.begin(); p != check_q.end(); p++) {
     CInode *in = *p;
-    in->filelock.set_state(LOCK_LOCK);
     mds->locker->check_inode_max_size(in);
   }
   for (vector<CInode*>::iterator p = recover_q.begin(); p != recover_q.end(); p++) {

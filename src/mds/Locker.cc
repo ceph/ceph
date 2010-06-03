@@ -1501,8 +1501,10 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   if (latest->client_ranges != new_ranges)
     new_max = true;
 
-  if (!update_size && !new_max)
+  if (!update_size && !new_max) {
+    dout(20) << "check_inode_max_size no-op on " << *in << dendl;
     return false;
+  }
 
   dout(10) << "check_inode_max_size new_ranges " << new_ranges
 	   << " update_size " << update_size
