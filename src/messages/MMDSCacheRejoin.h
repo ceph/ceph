@@ -159,7 +159,7 @@ class MMDSCacheRejoin : public Message {
 
   // open
   bufferlist cap_export_bl;
-  map<inodeno_t,map<__s32, ceph_mds_cap_reconnect> > cap_exports;
+  map<inodeno_t,map<client_t, ceph_mds_cap_reconnect> > cap_exports;
   map<inodeno_t,filepath> cap_export_paths;
 
   // full
