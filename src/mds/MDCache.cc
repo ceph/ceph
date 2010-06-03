@@ -3114,12 +3114,12 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     ack = new MMDSCacheRejoin(MMDSCacheRejoin::OP_ACK);
 
     // check cap exports
-    for (map<inodeno_t,map<int,ceph_mds_cap_reconnect> >::iterator p = weak->cap_exports.begin();
+    for (map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> >::iterator p = weak->cap_exports.begin();
 	 p != weak->cap_exports.end();
 	 ++p) {
       CInode *in = get_inode(p->first);
       if (!in || !in->is_auth()) continue;
-      for (map<int,ceph_mds_cap_reconnect>::iterator q = p->second.begin();
+      for (map<client_t,ceph_mds_cap_reconnect>::iterator q = p->second.begin();
 	   q != p->second.end();
 	   ++q) {
 	dout(10) << " claiming cap import " << p->first << " client" << q->first << " on " << *in << dendl;
@@ -3130,7 +3130,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     assert(mds->is_rejoin());
 
     // check cap exports.
-    for (map<inodeno_t,map<int,ceph_mds_cap_reconnect> >::iterator p = weak->cap_exports.begin();
+    for (map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> >::iterator p = weak->cap_exports.begin();
 	 p != weak->cap_exports.end();
 	 ++p) {
       CInode *in = get_inode(p->first);
@@ -3144,7 +3144,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       }
       
       // note
-      for (map<int,ceph_mds_cap_reconnect>::iterator q = p->second.begin();
+      for (map<client_t,ceph_mds_cap_reconnect>::iterator q = p->second.begin();
 	   q != p->second.end();
 	   ++q) {
 	dout(10) << " claiming cap import " << p->first << " client" << q->first << dendl;
