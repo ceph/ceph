@@ -485,6 +485,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   bool can_create = op->may_write();
   int r = find_object_context(op->get_oid(), op->get_snapid(), &obc, can_create);
   if (r) {
+    assert(r != -EAGAIN);
     osd->reply_op_error(op, r);
     return;
   }    
@@ -716,7 +717,7 @@ void ReplicatedPG::do_sub_op_reply(MOSDSubOpReply *r)
 bool ReplicatedPG::snap_trimmer()
 {
   lock();
-  dout(10) << "snap_trimmer start" << dendl;
+  dout(10) << "snap_trimmer start, purged_snaps " << info.purged_snaps << dendl;
 
   while (snap_trimq.size() &&
 	 is_primary() &&

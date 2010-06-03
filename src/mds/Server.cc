@@ -813,8 +813,8 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 	   << " (" << strerror_r(-reply->get_result(), buf, sizeof(buf))
 	   << ") " << *req << dendl;
 
-  // note result code in session map?
-  if (req->is_write() && mdr->session)
+  // note successful request in session map?
+  if (req->is_write() && mdr->session && reply->get_result() == 0)
     mdr->session->add_completed_request(mdr->reqid.tid);
 
   // give any preallocated inos to the session
@@ -3882,9 +3882,10 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   dn->pop_projected_linkage();
 
   // relink as stray?  (i.e. was primary link?)
+  CDentry::linkage_t *straydnl = 0;
   if (straydn) {
     dout(20) << " straydn is " << *straydn << dendl;
-    CDentry::linkage_t *straydnl = straydn->pop_projected_linkage();
+    straydnl = straydn->pop_projected_linkage();
     
     SnapRealm *oldparent = dn->get_dir()->inode->find_snaprealm();
     
@@ -3906,6 +3907,10 @@ void Server::_unlink_local_finish(MDRequest *mdr,
   
   mds->mdcache->send_dentry_unlink(dn, straydn);
   
+  // update subtree map?
+  if (straydn && straydnl->get_inode()->is_dir()) 
+    mdcache->adjust_subtree_after_rename(straydnl->get_inode(), dn->get_dir());
+
   // commit anchor update?
   if (mdr->more()->dst_reanchor_atid) 
     mds->anchorclient->commit(mdr->more()->dst_reanchor_atid, mdr->ls);
@@ -5457,15 +5462,9 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   mds->locker->include_snap_rdlocks(rdlocks, diri);
   rdlocks.erase(&diri->snaplock);
   xlocks.insert(&diri->snaplock);
-  if (!diri->is_anchored()) {
-    // we need to anchor... get these locks up front!
-    CDentry *dn = diri->get_parent_dn();
-    while (dn) {
-      rdlocks.insert(&dn->lock);
-      dn = dn->get_dir()->get_inode()->get_parent_dn();
-    }
-    xlocks.insert(&diri->linklock); 
-  }
+
+  // we need to anchor... get these locks up front!
+  mds->mdcache->anchor_create_prep_locks(mdr, diri, rdlocks, xlocks);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -5484,6 +5483,12 @@ void Server::handle_client_mksnap(MDRequest *mdr)
 
   if (mdr->now == utime_t())
     mdr->now = g_clock.now();
+
+  // anchor
+  if (!diri->is_anchored()) {
+    mdcache->anchor_create(mdr, diri, new C_MDS_RetryRequest(mdcache, mdr));
+    return;
+  }
 
   // allocate a snapid
   if (!mdr->more()->stid) {

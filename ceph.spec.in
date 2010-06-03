@@ -7,10 +7,9 @@ Group:         System Environment/Base
 URL:           http://ceph.newdream.net/
 
 Source:        http://ceph.newdream.net/download/%{name}-%{version}.tar.gz
-Patch0:        ceph-init-fix.patch
 BuildRequires: fuse-devel, libtool, libtool-ltdl-devel, boost-devel, 
-BuildRequires: libedit-devel, fuse-devel, git, perl, perl-devel, gdbm,
-BuildRequires: openssl-devel, libatomic_ops
+BuildRequires: libedit-devel, fuse-devel, git, perl, gdbm,
+BuildRequires: openssl-devel, libatomic_ops-devel
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 Requires(post): chkconfig
 Requires(preun): chkconfig
@@ -38,8 +37,6 @@ This package contains the headers needed to develop programs that use Ceph.
 
 %prep
 %setup -q
-%patch0 -p1
-chmod 0644 src/common/Mutex.h
 
 %build
 ./autogen.sh

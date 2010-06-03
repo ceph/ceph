@@ -89,7 +89,7 @@ int MonClient::build_initial_monmap()
 	    break;
 	  
 	  entity_inst_t inst;
-	  if (!parse_ip_port(val, inst.addr)) {
+	  if (!inst.addr.parse(val)) {
 	    cerr << "unable to parse conf's addr for " << monname << " (" << val << ")" << std::endl;
 	    continue;
 	  }

@@ -1590,10 +1590,13 @@ loff_t ObjectCacher::release_set(ObjectSet *oset)
 
   dout(10) << "release_set " << oset << dendl;
 
+  xlist<Object*>::iterator q;
   for (xlist<Object*>::iterator p = oset->objects.begin();
-       !p.end(); ++p) {
+       !p.end(); ) {
+    q = p;
+    ++q;
     Object *ob = *p;
-    
+
     loff_t o_unclean = release(ob);
     unclean += o_unclean;
 
@@ -1601,7 +1604,7 @@ loff_t ObjectCacher::release_set(ObjectSet *oset)
       dout(10) << "release_set " << oset << " " << *ob 
                << " has " << o_unclean << " bytes left"
                << dendl;
-    
+    p = q;
   }
 
   if (unclean) {

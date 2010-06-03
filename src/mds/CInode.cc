@@ -124,6 +124,8 @@ ostream& operator<<(ostream& out, CInode& in)
     out << " s=" << in.inode.size;
     out << " nl=" << in.inode.nlink;
   }
+  if (in.is_anchored())
+    out << " anc";
 
   out << " rb=" << in.inode.rstat.rbytes;
   if (in.inode.rstat.rbytes != in.inode.accounted_rstat.rbytes)
@@ -975,6 +977,10 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
   if (!is_auth() && newfirst != first) {
     dout(10) << "decode_lock_state first " << first << " -> " << newfirst << dendl;
     assert(newfirst > first);
+    if (!is_multiversion() && parent) {
+      assert(parent->first == first);
+      parent->first = newfirst;
+    }
     first = newfirst;
   }
 

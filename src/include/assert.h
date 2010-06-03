@@ -3,6 +3,14 @@
 
 #include <features.h>
 
+/*
+ * atomic_ops.h includes the system assert.h, which will redefine
+ * 'assert' even if it's already been included.  so, make sure we
+ * include atomic_ops.h first so that we don't get an #include
+ * <assert.h> again later.
+ */
+#include "atomic_ops.h"
+
 #ifdef __cplusplus
 
 namespace ceph {
@@ -42,6 +50,15 @@ extern void __ceph_assert_fail(const char *assertion, const char *file, int line
   __attribute__ ((__noreturn__));
 extern void __ceph_assert_warn(const char *assertion, const char *file, int line, const char *function);
 
+// wipe any prior assert definition
+#ifdef assert
+# undef assert
+#endif
+
+#define ceph_assert(expr)							\
+  ((expr)								\
+   ? __CEPH_ASSERT_VOID_CAST (0)					\
+   : __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION))
 
 #define assert(expr)							\
   ((expr)								\

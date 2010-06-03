@@ -170,51 +170,6 @@ void vec_to_argv(std::vector<const char*>& args,
     argv[argc++] = args[i];
 }
 
-bool parse_ip_port(const char *s, entity_addr_t& a, const char **end)
-{
-  int count = 0; // digit count
-  int off = 0;
-
-  memset(&a, 0, sizeof(a));
-
-  while (1) {
-    // parse the #.
-    int val = 0;
-    int numdigits = 0;
-    
-    while (*s >= '0' && *s <= '9') {
-      int digit = *s - '0';
-      //cout << "digit " << digit << endl;
-      val *= 10;
-      val += digit;
-      numdigits++;
-      s++; off++;
-    }
-
-    if (numdigits == 0) {
-      cerr << "no digits at off " << off << std::endl;
-      return false;           // no digits
-    }
-    if (count < 3 && *s != '.') {
-      cerr << "should be period at " << off << std::endl;
-      return false;   // should have 3 periods
-    }
-    s++; off++;
-
-    if (count <= 3)
-      a.set_in4_quad(count, val);
-    else 
-      a.set_port(val);
-    
-    count++;
-    if (count == 4 && *(s-1) != ':') break;
-    if (count == 5) break;  
-  }
-  if (end)
-    *end = s;
-  
-  return true;
-}
 
 bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec)
 {
@@ -222,7 +177,7 @@ bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec)
   const char *end = p + strlen(p);
   while (p < end) {
     entity_addr_t a;
-    if (!parse_ip_port(p, a, &p))
+    if (!a.parse(p, &p))
       return false;
     vec.push_back(a);
   }
@@ -293,6 +248,7 @@ struct config_option {
          &g_conf.name, STRINGIFY(def_val), type, schar }
 
 static struct config_option config_optionsp[] = {
+	OPTION(host, 0, OPT_STR, "localhost"),
 	OPTION(num_mon, 0, OPT_INT, 1),
 	OPTION(num_mds, 0, OPT_INT, 1),
 	OPTION(num_osd, 0, OPT_INT, 4),
@@ -362,6 +318,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mon_lease, 0, OPT_FLOAT, 5),  		    // lease interval
 	OPTION(mon_lease_renew_interval, 0, OPT_FLOAT, 3), // on leader, to renew the lease
 	OPTION(mon_lease_ack_timeout, 0, OPT_FLOAT, 10.0), // on leader, if lease isn't acked by all peons
+	OPTION(mon_lease_wiggle_room, 0, OPT_FLOAT, .001), // wiggle room for lease arithmetic to count as "same time"
 	OPTION(mon_lease_timeout, 0, OPT_FLOAT, 10.0),     // on peon, if lease isn't extended
 	OPTION(mon_accept_timeout, 0, OPT_FLOAT, 10.0),    // on leader, if paxos update isn't accepted
 	OPTION(mon_stop_on_last_unmount, 0, OPT_BOOL, false),
@@ -819,6 +776,8 @@ static const char *var_val(char *var_name)
 		return g_conf.id;
 	if (strcmp(var_name, "name")==0)
 		return g_conf.name;
+	if (strcmp(var_name, "host")==0)
+	  return g_conf.host;
 
 	return "";
 }
@@ -988,7 +947,7 @@ void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon,
     } else if (CONF_ARG_EQ("show_conf", 'S')) {
       show_config = true;
     } else if (isdaemon && CONF_ARG_EQ("bind", 0)) {
-      assert_warn(parse_ip_port(args[++i], g_my_addr));
+      g_my_addr.parse(args[++i]);
     } else if (isdaemon && CONF_ARG_EQ("nodaemon", 'D')) {
       g_conf.daemonize = false;
       g_conf.log_to_stdout = true;

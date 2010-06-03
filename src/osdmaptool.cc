@@ -189,9 +189,10 @@ int main(int argc, const char **argv)
     }
     cout << " parsed '" << test_map_pg << "' -> " << pgid << std::endl;
 
-    vector<int> acting;
-    osdmap.pg_to_acting_osds(pgid, acting);
-    cout << pgid << " maps to " << acting << std::endl;
+    vector<int> raw, up, acting;
+    osdmap.pg_to_osds(pgid, raw);
+    osdmap.pg_to_up_acting_osds(pgid, up, acting);
+    cout << pgid << " raw " << raw << " up " << up << " acting " << acting << std::endl;
   }
   if (test_crush) {
     int pass = 0;

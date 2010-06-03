@@ -694,7 +694,7 @@ protected:
   set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
 
   map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> > cap_exports; // ino -> client -> capex
-  map<inodeno_t,string> cap_export_paths;
+  map<inodeno_t,filepath> cap_export_paths;
 
   map<inodeno_t,map<client_t,map<int,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
   map<inodeno_t,filepath> cap_import_paths;
@@ -702,6 +702,9 @@ protected:
   
   set<CInode*> rejoin_undef_inodes;
   set<CInode*> rejoin_potential_updated_scatterlocks;
+
+  vector<CInode*> rejoin_recover_q, rejoin_check_q;
+  list<Context*> rejoin_waiters;
 
   void rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin);
   void handle_cache_rejoin(MMDSCacheRejoin *m);
@@ -720,7 +723,7 @@ public:
   void rejoin_send_rejoins();
   void rejoin_export_caps(inodeno_t ino, client_t client, cap_reconnect_t& icr) {
     cap_exports[ino][client] = icr.capinfo;
-    cap_export_paths[ino] = icr.path;
+    cap_export_paths[ino] = filepath(icr.path, (uint64_t)icr.capinfo.pathbase);
   }
   void rejoin_recovered_caps(inodeno_t ino, client_t client, cap_reconnect_t& icr, 
 			     int frommds=-1) {
@@ -768,6 +771,7 @@ public:
 
   void do_cap_import(Session *session, CInode *in, Capability *cap);
   void do_delayed_cap_imports();
+  void check_realm_past_parents(SnapRealm *realm);
   void open_snap_parents();
 
   void reissue_all_caps();
@@ -951,6 +955,8 @@ public:
     filepath path(p, 1);
     return path_is_mine(path);
   }
+
+  CInode *cache_traverse(const filepath& path);
 
   void open_remote_dirfrag(CInode *diri, frag_t fg, Context *fin);
   CInode *get_dentry_inode(CDentry *dn, MDRequest *mdr, bool projected=false);

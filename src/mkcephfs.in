@@ -205,7 +205,7 @@ for name in $what; do
 	    [ -n "$user" ] && chown $user $tmpkeyring
 	fi
 	get_conf mon_data "" "mon data"
-	do_cmd "$BINDIR/cmon --mkfs -i $num --monmap $monmap --osdmap $osdmap -k $tmpkeyring ; rm -f $tmpkeyring"
+	do_cmd "$BINDIR/cmon -c $conf --mkfs -i $num --monmap $monmap --osdmap $osdmap -k $tmpkeyring ; rm -f $tmpkeyring"
 
 	if [ -n "$ssh" ]; then
 	    if [ -n "$user" ]; then
@@ -220,6 +220,7 @@ for name in $what; do
 
     if [ "$type" = "osd" ]; then
 	get_conf osd_data "" "osd data"
+	get_conf osd_journal "" "osd journal"
 	get_conf keyring "" "keyring"
 	get_conf btrfs_path "$osd_data" "btrfs path"  # mount point defaults so osd data
 	get_conf btrfs_devs "" "btrfs devs"
@@ -228,6 +229,7 @@ for name in $what; do
 	[ -n "$btrfs_opt" ] && btrfs_opt="-o $btrfs_opt"
 	
 	do_cmd "test -d $osd_data || mkdir -p $osd_data"
+	[ -n "$osd_journal" ] && do_cmd "test -d $osd_journal || mkdir -p `dirname $osd_journal`"
 
 	if [ $mkbtrfs -eq 1 ]; then
 	    get_conf osd_user "root" "user"

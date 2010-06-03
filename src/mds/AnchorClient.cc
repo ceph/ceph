@@ -39,22 +39,26 @@ void AnchorClient::handle_query_result(class MMDSTableRequest *m)
 
   bufferlist::iterator p = m->bl.begin();
   ::decode(ino, p);
+  ::decode(trace, p);
 
   assert(pending_lookup.count(ino));
-  ::decode(*pending_lookup[ino].trace, p);
-  Context *onfinish = pending_lookup[ino].onfinish;
+  list<_pending_lookup> ls;
+  ls.swap(pending_lookup[ino]);
   pending_lookup.erase(ino);
-  
-  if (onfinish) {
-    onfinish->finish(0);
-    delete onfinish;
+
+  for (list<_pending_lookup>::iterator q = ls.begin(); q != ls.end(); q++) {
+    *q->trace = trace;
+    if (q->onfinish) {
+      q->onfinish->finish(0);
+      delete q->onfinish;
+    }
   }
 }
 
 void AnchorClient::resend_queries()
 {
   // resend any pending lookups.
-  for (map<inodeno_t, _pending_lookup>::iterator p = pending_lookup.begin();
+  for (map<inodeno_t, list<_pending_lookup> >::iterator p = pending_lookup.begin();
        p != pending_lookup.end();
        p++) {
     dout(10) << "resending lookup on " << p->first << dendl;
@@ -64,11 +68,14 @@ void AnchorClient::resend_queries()
 
 void AnchorClient::lookup(inodeno_t ino, vector<Anchor>& trace, Context *onfinish)
 {
-  assert(pending_lookup.count(ino) == 0);
-  _pending_lookup& l = pending_lookup[ino];
+  _pending_lookup l;
   l.onfinish = onfinish;
   l.trace = &trace;
-  _lookup(ino);
+
+  bool isnew = (pending_lookup.count(ino) == 0);
+  pending_lookup[ino].push_back(l);
+  if (isnew)
+    _lookup(ino);
 }
 
 void AnchorClient::_lookup(inodeno_t ino)

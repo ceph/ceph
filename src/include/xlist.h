@@ -140,6 +140,7 @@ public:
     T operator*() { return (T)cur->_item; }
     iterator& operator++() {
       assert(cur);
+      assert(cur->_list);
       cur = cur->_next;
       return *this;
     }

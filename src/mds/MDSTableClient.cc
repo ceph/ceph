@@ -145,7 +145,17 @@ void MDSTableClient::_prepare(bufferlist& mutation, version_t *ptid, bufferlist 
   pending_prepare[reqid].pbl = pbl;
   pending_prepare[reqid].onfinish = onfinish;
 
-  mds->send_message_mds(req, mds->mdsmap->get_tableserver());
+  send_to_tableserver(req);
+}
+
+void MDSTableClient::send_to_tableserver(MMDSTableRequest *req)
+{
+  int ts = mds->mdsmap->get_tableserver();
+  if (mds->mdsmap->get_state(ts) >= MDSMap::STATE_ACTIVE)
+    mds->send_message_mds(req, ts);
+  else {
+    dout(10) << " deferring request to not-yet-active tableserver mds" << ts << dendl;
+  }
 }
 
 void MDSTableClient::commit(version_t tid, LogSegment *ls)
@@ -160,7 +170,7 @@ void MDSTableClient::commit(version_t tid, LogSegment *ls)
 
   // send message
   MMDSTableRequest *req = new MMDSTableRequest(table, TABLESERVER_OP_COMMIT, 0, tid);
-  mds->send_message_mds(req, mds->mdsmap->get_tableserver());
+  send_to_tableserver(req);
 }
 
 

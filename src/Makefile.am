@@ -326,6 +326,7 @@ libcommon_files = \
 	auth/RotatingKeyRing.cc \
 	common/LogClient.cc \
 	msg/Message.cc \
+	msg/msg_types.cc \
 	common/BackTrace.cc \
 	common/Logger.cc \
 	common/ClassLibrary.cc \
