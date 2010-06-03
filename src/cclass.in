@@ -28,6 +28,8 @@ usage=$usage"\t-L, --libdir <path>\n"
 usage=$usage"\t-l, --load\n"
 usage=$usage"\t-a, --load-all\n"
 usage=$usage"\t-c, --conf <ceph.conf>\n"
+usage=$usage"\t-o, --overwrite\n"
+usage=$usage"\t-e, --excl\n"
 
 conf=$ETCDIR/ceph.conf
 
@@ -52,6 +54,12 @@ case $1 in
 	    ;;
     -a | --load-all )
 	    load_all=1
+	    ;;
+    -o | --overwrite )
+	    load_opt="overwrite"
+	    ;;
+    -e | --excl )
+	    load_opt="excl"
 	    ;;
     -c | --conf )
 	    shift
