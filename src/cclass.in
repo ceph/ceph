@@ -24,9 +24,12 @@ load_opt="changed"
 
 usage="usage: $0 [option]... [cls_filename]\n"
 usage=$usage"options:\n"
-usage=$usage"\t-L, --libdir\n"
+usage=$usage"\t-L, --libdir <path>\n"
 usage=$usage"\t-l, --load\n"
 usage=$usage"\t-a, --load-all\n"
+usage=$usage"\t-c, --conf <ceph.conf>\n"
+
+conf=$ETCDIR/ceph.conf
 
 usage_exit() {
 	printf "$usage"
@@ -50,6 +53,10 @@ case $1 in
     -a | --load-all )
 	    load_all=1
 	    ;;
+    -c | --conf )
+	    shift
+	    conf=$1
+	    ;;
     * )
 	    [ "$fname" != "" ] && usage_exit
 	    fname=$1
@@ -64,7 +71,7 @@ done
 
 load() {
 	fn=$1
-	$BINDIR/ceph class add -i $fn `$BINDIR/cclsinfo $fn` $load_opt
+	$BINDIR/ceph -c $conf class add -i $fn `$BINDIR/cclsinfo $fn` $load_opt
 }
 
 load_all() {
