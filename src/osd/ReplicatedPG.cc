@@ -716,7 +716,7 @@ void ReplicatedPG::do_sub_op_reply(MOSDSubOpReply *r)
 bool ReplicatedPG::snap_trimmer()
 {
   lock();
-  dout(10) << "snap_trimmer start" << dendl;
+  dout(10) << "snap_trimmer start, purged_snaps " << info.purged_snaps << dendl;
 
   while (snap_trimq.size() &&
 	 is_primary() &&
