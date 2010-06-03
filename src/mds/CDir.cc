@@ -837,11 +837,14 @@ void CDir::take_ino_waiting(inodeno_t ino, list<Context*>& ls)
 void CDir::take_sub_waiting(list<Context*>& ls)
 {
   dout(10) << "take_sub_waiting" << dendl;
-  for (map<string_snap_t, list<Context*> >::iterator p = waiting_on_dentry.begin(); 
-       p != waiting_on_dentry.end();
-       ++p) 
-    ls.splice(ls.end(), p->second);
-  waiting_on_dentry.clear();
+  if (!waiting_on_dentry.empty()) {
+    for (map<string_snap_t, list<Context*> >::iterator p = waiting_on_dentry.begin(); 
+	 p != waiting_on_dentry.end();
+	 ++p) 
+      ls.splice(ls.end(), p->second);
+    waiting_on_dentry.clear();
+    put(PIN_DNWAITER);
+  }
   for (map<inodeno_t, list<Context*> >::iterator p = waiting_on_ino.begin(); 
        p != waiting_on_ino.end();
        ++p) 
