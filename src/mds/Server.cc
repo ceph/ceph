@@ -813,8 +813,8 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 	   << " (" << strerror_r(-reply->get_result(), buf, sizeof(buf))
 	   << ") " << *req << dendl;
 
-  // note result code in session map?
-  if (req->is_write() && mdr->session)
+  // note successful request in session map?
+  if (req->is_write() && mdr->session && reply->get_result() == 0)
     mdr->session->add_completed_request(mdr->reqid.tid);
 
   // give any preallocated inos to the session
