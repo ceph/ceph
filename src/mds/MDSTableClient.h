@@ -84,6 +84,7 @@ public:
   }
   void finish_recovery();                // called when i recover and go active
 
+  void send_to_tableserver(MMDSTableRequest *req);
 
   // child must implement
   virtual void resend_queries() = 0;
