@@ -42,13 +42,11 @@ void AnchorClient::handle_query_result(class MMDSTableRequest *m)
 
   assert(pending_lookup.count(ino));
   ::decode(*pending_lookup[ino].trace, p);
-  Context *onfinish = pending_lookup[ino].onfinish;
+  list<Context*> onfinish;
+  onfinish.swap(pending_lookup[ino].onfinish);
   pending_lookup.erase(ino);
   
-  if (onfinish) {
-    onfinish->finish(0);
-    delete onfinish;
-  }
+  finish_contexts(onfinish);
 }
 
 void AnchorClient::resend_queries()
@@ -64,11 +62,14 @@ void AnchorClient::resend_queries()
 
 void AnchorClient::lookup(inodeno_t ino, vector<Anchor>& trace, Context *onfinish)
 {
-  assert(pending_lookup.count(ino) == 0);
+  bool isnew = (pending_lookup.count(ino) == 0);
   _pending_lookup& l = pending_lookup[ino];
-  l.onfinish = onfinish;
-  l.trace = &trace;
-  _lookup(ino);
+  if (onfinish)
+    l.onfinish.push_back(onfinish);
+  if (isnew) {
+    l.trace = &trace;
+    _lookup(ino);
+  }
 }
 
 void AnchorClient::_lookup(inodeno_t ino)

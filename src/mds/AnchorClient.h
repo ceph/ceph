@@ -26,7 +26,7 @@ class AnchorClient : public MDSTableClient {
   // lookups
   struct _pending_lookup {
     vector<Anchor> *trace;
-    Context *onfinish;
+    list<Context*> onfinish;
   };
   map<inodeno_t, _pending_lookup> pending_lookup;
 
