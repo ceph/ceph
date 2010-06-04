@@ -337,9 +337,11 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
             // we want left bit (one splice)
             split(bh, cur + max);        // just split
           }
-          if (final) 
+          if (final) {
+	    oc->mark_dirty(bh);
+	    oc->mark_dirty(final);
             merge_left(final, bh);
-          else
+	  } else
             final = bh;
         }
         
