@@ -274,7 +274,9 @@ void MDBalancer::export_empties()
 	dir->is_frozen()) 
       continue;
     
-    if (!dir->inode->is_base() && dir->get_num_head_items() == 0) 
+    if (!dir->inode->is_base() &&
+	!dir->inode->is_stray() &&
+	dir->get_num_head_items() == 0) 
       mds->mdcache->migrator->export_empty_import(dir);
   }
 }
@@ -590,7 +592,9 @@ void MDBalancer::try_rebalance()
 	dout(5) << "considering " << *dir << " from " << (*p.first).first << dendl;
 	multimap<int,CDir*>::iterator plast = p.first++;
         
-	if (dir->inode->is_base()) continue;
+	if (dir->inode->is_base() ||
+	    dir->inode->is_stray())
+	  continue;
 	if (dir->is_freezing() || dir->is_frozen()) continue;  // export pbly already in progress
 	double pop = dir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
 	assert(dir->inode->authority().first == target);  // cuz that's how i put it in the map, dummy
@@ -620,7 +624,9 @@ void MDBalancer::try_rebalance()
 	   import != import_pop_map.end();
 	   import++) {
 	CDir *imp = (*import).second;
-	if (imp->inode->is_base()) continue;
+	if (imp->inode->is_base() ||
+	    imp->inode->is_stray())
+	  continue;
 	
 	double pop = (*import).first;
 	if (pop < amount-have || pop < MIN_REEXPORT) {
