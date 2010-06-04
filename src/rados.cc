@@ -429,7 +429,7 @@ int main(int argc, const char **argv)
       goto out;
     }
     cout << "rolled back pool " << pool
-	 << " to snapshot " << nargs[1] << std::endl;
+	 << " to snapshot " << nargs[2] << std::endl;
   }
   
   else if (strcmp(nargs[0], "bench") == 0) {
