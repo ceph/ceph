@@ -340,6 +340,8 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
           if (final) {
 	    oc->mark_dirty(bh);
 	    oc->mark_dirty(final);
+	    p--;  // move iterator back to final
+	    assert(p->second == final);
             merge_left(final, bh);
 	  } else
             final = bh;
