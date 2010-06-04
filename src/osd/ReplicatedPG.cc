@@ -1708,19 +1708,21 @@ inline void ReplicatedPG::_delete_head(OpContext *ctx)
 
 void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 {
-  dout(0) << "entering _rollback_to" << dendl;
   SnapSetContext *ssc = ctx->obs->ssc;
   const sobject_t& soid = ctx->obs->oi.soid;
   ObjectStore::Transaction& t = ctx->op_t;
+  snapid_t snapid = (uint64_t)op.snap.snapid;
+
+  dout(10) << "_rollback_to " << soid << " snapid " << snapid << dendl;
 
   ObjectContext *rollback_to;
-  int ret=find_object_context(soid.oid, (uint64_t)op.snap.snapid, &rollback_to, false);
+  int ret = find_object_context(soid.oid, snapid, &rollback_to, false);
   sobject_t& rollback_to_sobject = rollback_to->obs.oi.soid;
   if (ret) {
     if (-ENOENT == ret) {
       // there's no snapshot here, or there's no object.
       // if there's no snapshot, we delete the object; otherwise, do nothing.
-      dout(0) << "_rollback_to deleting head on " << soid.oid
+      dout(20) << "_rollback_to deleting head on " << soid.oid
 	       << " because got ENOENT on find_object_context" << dendl;
       _delete_head(ctx);
     } else if (-EAGAIN == ret) {
@@ -1735,15 +1737,15 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
   } else { //we got our context, let's use it to do the rollback!
     if (ctx->clone_obc &&
 	(ctx->clone_obc->obs.oi.prior_version == ctx->obs->oi.prior_version)) {
-      ; //just cloned the rollback target, we don't need to do anything!
-      dout(0) << "_rollback_to has no work thanks to make_writeable" << dendl;
+      // just cloned the rollback target, we don't need to do anything!
+      dout(10) << "_rollback_to has no work thanks to make_writeable" << dendl;
     }
     else {
       /* 1) Delete current head
        * 2) Clone correct snapshot into head
        * 3) Calculate clone_overlaps by following overlaps
        *    forward from rollback snapshot */
-      dout(0) << "_rollback_to deleting " << soid.oid
+      dout(10) << "_rollback_to deleting " << soid.oid
 	      << " and rolling back to old snap"
 	      << " because we don't have a fresh clone (known by: clone_obj="
 	      << ctx->clone_obc << " and clone_obc.obs.oi.prior_version="
@@ -1751,8 +1753,7 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 	      << " and ctx->obs.oi.prior_version="
 	      << ctx->obs->oi.prior_version
 	      << dendl;
-      sobject_t new_head = get_object_context(ctx->obs->oi.soid)
-	->obs.oi.soid;
+      sobject_t new_head = get_object_context(ctx->obs->oi.soid)->obs.oi.soid;
       
       _delete_head(ctx);
       ctx->obs->exists = true; //we're about to recreate it
@@ -1767,13 +1768,12 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       ssc->snapset.head_exists = true;
 
       map<snapid_t, interval_set<uint64_t> >::iterator iter =
-	ssc->snapset.clone_overlap.lower_bound((uint64_t)op.snap.snapid);
+	ssc->snapset.clone_overlap.lower_bound(snapid);
       interval_set<uint64_t> overlaps = iter->second;
       for ( ;
 	    iter != ssc->snapset.clone_overlap.end();
-	    ++iter) {
+	    ++iter)
 	overlaps.intersection_of(iter->second);
-      }
       ssc->snapset.clone_overlap[*ssc->snapset.clones.rbegin()] = overlaps;
     }
   }
