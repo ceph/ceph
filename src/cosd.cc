@@ -183,9 +183,12 @@ int main(int argc, const char **argv)
   if (!messenger_hb)
     return 1;
 
+  Throttle *client_throttler = new Throttle(g_conf.client_message_size_cap);
+
   messenger->set_default_policy(SimpleMessenger::Policy::stateless_server());
   messenger->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::client());
   messenger->set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless_peer());
+  messenger->set_policy(entity_name_t::TYPE_CLIENT, SimpleMessenger::Policy(true, true, client_throttler));
 
 
   OSD *osd = new OSD(whoami, messenger, messenger_hb, &mc, g_conf.osd_data, g_conf.osd_journal);
@@ -212,7 +215,7 @@ int main(int argc, const char **argv)
   delete osd;
   messenger->destroy();
   messenger_hb->destroy();
-
+  delete client_throttler;
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];
   snprintf(s, sizeof(s), "gmon/%d", getpid());

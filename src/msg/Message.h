@@ -129,6 +129,7 @@ using std::list;
 
 #include "include/types.h"
 #include "include/buffer.h"
+#include "common/Throttler.h"
 #include "msg_types.h"
 
 #include "common/debug.h"
@@ -228,6 +229,7 @@ protected:
   
   utime_t recv_stamp;
   Connection *connection;
+  Throttle *throttler;
 
   friend class Messenger;
 
@@ -240,6 +242,7 @@ public:
   Message() : connection(NULL), _forwarded(false), nref(1) {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
+    throttler = NULL;
   };
   Message(int t) : connection(NULL), _forwarded(false), nref(1) {
     memset(&header, 0, sizeof(header));
@@ -248,6 +251,7 @@ public:
     header.priority = 0;  // undef
     header.data_off = 0;
     memset(&footer, 0, sizeof(footer));
+    throttler = NULL;
   }
 protected:
   virtual ~Message() { 
@@ -283,11 +287,22 @@ public:
   void set_footer(const ceph_msg_footer &e) { footer = e; }
   ceph_msg_footer &get_footer() { return footer; }
 
-  void clear_payload() { payload.clear(); middle.clear(); }
+  void clear_payload() {
+    if (throttler) throttler->put(payload.length() + middle.length());
+    payload.clear();
+    middle.clear();
+  }
   bool empty_payload() { return payload.length() == 0; }
   bufferlist& get_payload() { return payload; }
-  void set_payload(bufferlist& bl) { payload.claim(bl); }
-  void copy_payload(const bufferlist& bl) { payload = bl; }
+  void set_payload(bufferlist& bl) {
+    if (throttler) throttler->put(payload.length());
+    payload.claim(bl);
+    if(throttler) throttler->take(payload.length());
+  }
+  void copy_payload(const bufferlist& bl) {
+    if(throttler) throttler->put(payload.length());
+    payload = bl;
+  }
 
   void set_middle(bufferlist& bl) { middle.claim(bl); }
   bufferlist& get_middle() { return middle; }
