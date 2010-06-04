@@ -1762,6 +1762,7 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 	      rollback_to_sobject, new_head);
       osd->store->getattrs(coll_t::build_pg_coll(info.pgid),
 			   rollback_to_sobject, attrs, false);
+      osd->filter_xattrs(attrs);
       t.setattrs(coll_t::build_pg_coll(info.pgid), new_head, attrs);
       ssc->snapset.head_exists = true;
 
