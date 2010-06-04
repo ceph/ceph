@@ -1828,7 +1828,7 @@ Message *SimpleMessenger::Pipe::read_message()
   dout(20) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
 	   << " byte message" << dendl;
   Message *message = decode_message(header, footer, front, middle, data);
-  message->throttler = policy->throttler;
+  message->set_throttler(policy.throttler);
   return message;
 }
 

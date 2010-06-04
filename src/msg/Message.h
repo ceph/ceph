@@ -281,6 +281,8 @@ public:
       connection->put();
     connection = c;
   }
+  void set_throttler(Throttle *t) { throttler = t; }
+  Throttle *get_throttler() { return throttler; }
  
   ceph_msg_header &get_header() { return header; }
   void set_header(const ceph_msg_header &e) { header = e; }
