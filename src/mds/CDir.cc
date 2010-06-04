@@ -534,6 +534,7 @@ bool CDir::try_trim_snap_dentry(CDentry *dn, const set<snapid_t>& snaps)
   if (dnl->is_primary())
     in = dnl->get_inode();
   if ((p == snaps.end() || *p > dn->last) &&
+      (dn->get_num_ref() == dn->is_dirty()) &&
       (!in || in->get_num_ref() == in->is_dirty())) {
     dout(10) << " purging snapped " << *dn << dendl;
     if (in && in->is_dirty())
