@@ -297,18 +297,22 @@ public:
   void set_payload(bufferlist& bl) {
     if (throttler) throttler->put(payload.length());
     payload.claim(bl);
-    if(throttler) throttler->take(payload.length());
-  }
-  void copy_payload(const bufferlist& bl) {
-    if(throttler) throttler->put(payload.length());
-    payload = bl;
+    if (throttler) throttler->take(payload.length());
   }
 
-  void set_middle(bufferlist& bl) { middle.claim(bl); }
+  void set_middle(bufferlist& bl) {
+    if (throttler) throttler->put(payload.length());
+    middle.claim(bl);
+    if (throttler) throttler->take(payload.length());
+  }
   bufferlist& get_middle() { return middle; }
 
-  void set_data(const bufferlist &d) { data = d; }
-  void copy_data(const bufferlist &d) { data = d; }
+  void set_data(const bufferlist &d) {
+    if (throttler) throttler->put(data.length());
+    data = d;
+    if (throttler) throttler->take(data.length());
+  }
+
   bufferlist& get_data() { return data; }
   off_t get_data_len() { return data.length(); }
 
