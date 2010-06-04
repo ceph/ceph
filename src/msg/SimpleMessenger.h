@@ -58,9 +58,6 @@ public:
     bool server;
     Throttle *throttler;
 
-    Policy(bool l=false, bool s=false) :
-      lossy(l), server(s), throttler(NULL) {}
-
     Policy(bool l=false, bool s=false, Throttle *t=NULL) :
       lossy(l), server(s), throttler(t) {}
 

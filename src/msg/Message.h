@@ -129,7 +129,7 @@ using std::list;
 
 #include "include/types.h"
 #include "include/buffer.h"
-#include "common/Throttler.h"
+#include "common/Throttle.h"
 #include "msg_types.h"
 
 #include "common/debug.h"
