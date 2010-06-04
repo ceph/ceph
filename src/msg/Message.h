@@ -258,6 +258,8 @@ protected:
     assert(nref.read() == 0);
     if (connection)
       connection->put();
+    if (throttler)
+      throttler->put(payload.length() + middle.length() + data.length());
   }
 public:
   Message *get() {
