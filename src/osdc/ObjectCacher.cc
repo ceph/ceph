@@ -197,8 +197,8 @@ int ObjectCacher::Object::map_read(OSDRead *rd,
       if (p == data.end()) {
         // rest is a miss.
         BufferHead *n = new BufferHead(this);
-        n->set_start( cur );
-        n->set_length( left );
+        n->set_start(cur);
+        n->set_length(left);
         oc->bh_add(this, n);
         missing[cur] = n;
         dout(20) << "map_read miss " << left << " left, " << *n << dendl;
@@ -303,14 +303,16 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
           oc->bh_add(this, final);
           dout(10) << "map_write adding trailing bh " << *final << dendl;
         } else {
-          final->set_length( final->length() + max );
+	  oc->bh_stat_sub(final);
+          final->set_length(final->length() + max);
+	  oc->bh_stat_add(final);
         }
         left -= max;
         cur += max;
         continue;
       }
       
-      dout(10) << "p is " << *p->second << dendl;
+      dout(10) << "cur is " << cur << ", p is " << *p->second << dendl;
 
       if (p->first <= cur) {
         BufferHead *bh = p->second;
@@ -359,7 +361,9 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
         loff_t glen = MIN(next - cur, max);
         dout(10) << "map_write gap " << cur << "~" << glen << dendl;
         if (final) {
-          final->set_length( final->length() + glen );
+	  oc->bh_stat_sub(final);
+          final->set_length(final->length() + glen);
+	  oc->bh_stat_add(final);
         } else {
           final = new BufferHead(this);
           final->set_start( cur );

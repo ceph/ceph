@@ -90,12 +90,12 @@ class ObjectCacher {
       last_write_tid(0) {}
   
     // extent
-    loff_t start() { return ex.start; }
+    loff_t start() const { return ex.start; }
     void set_start(loff_t s) { ex.start = s; }
-    loff_t length() { return ex.length; }
+    loff_t length() const { return ex.length; }
     void set_length(loff_t l) { ex.length = l; }
-    loff_t end() { return ex.start + ex.length; }
-    loff_t last() { return end() - 1; }
+    loff_t end() const { return ex.start + ex.length; }
+    loff_t last() const { return end() - 1; }
 
     // states
     void set_state(int s) {
@@ -103,7 +103,7 @@ class ObjectCacher {
       if (state == STATE_RX || state == STATE_TX) put();
       state = s;
     }
-    int get_state() { return state; }
+    int get_state() const { return state; }
     
     bool is_missing() { return state == STATE_MISSING; }
     bool is_dirty() { return state == STATE_DIRTY; }
@@ -320,6 +320,8 @@ class ObjectCacher {
   loff_t stat_rx;
   loff_t stat_tx;
   loff_t stat_missing;
+
+  void verify_stats() const;
 
   void bh_stat_add(BufferHead *bh) {
     switch (bh->get_state()) {
