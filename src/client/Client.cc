@@ -423,27 +423,29 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
       cwd = root;
       cwd->get();
     }
+
+    // immutable bits
+    in->ino = st->vino.ino;
+    in->snapid = st->vino.snapid;
+    in->rdev = st->rdev;
+    in->mode = st->mode & S_IFMT;
+    if (in->is_symlink())
+      in->symlink = st->symlink;
   }
 
-  //dout(12) << "update_inode mask " << lease->mask << " ttl " << ttl << dendl;
   dout(12) << "add_update_inode " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
+  if (!st->cap.caps)
+    return in;   // as with readdir returning indoes in different snaprealms (no caps!)
+
   int implemented = 0;
   int issued = in->caps_issued(&implemented) | in->caps_dirty();
   issued |= implemented;
 
-  if (st->cap.caps) {
-    if (in->snapid == CEPH_NOSNAP)
-      add_update_cap(in, mds, st->cap.cap_id, st->cap.caps, st->cap.seq, st->cap.mseq, inodeno_t(st->cap.realm), st->cap.flags);
-    else {
-      in->snap_caps |= st->cap.caps;
-    }
-  }
-  
-  assert(st->cap.caps & CEPH_CAP_PIN);   // right??
+  if (in->snapid == CEPH_NOSNAP)
+    add_update_cap(in, mds, st->cap.cap_id, st->cap.caps, st->cap.seq, st->cap.mseq, inodeno_t(st->cap.realm), st->cap.flags);
+  else
+    in->snap_caps |= st->cap.caps;
 
-  in->ino = st->vino.ino;
-  in->snapid = st->vino.snapid;
-  in->rdev = st->rdev;
   in->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
 
   if ((issued & CEPH_CAP_AUTH_EXCL) == 0) {
@@ -482,10 +484,6 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
     dout(10) << " marking I_COMPLETE on empty dir " << *in << dendl;
     in->flags |= I_COMPLETE;
   }
-
-  // symlink?
-  if (in->is_symlink())
-    in->symlink = st->symlink;
 
   return in;
 }
