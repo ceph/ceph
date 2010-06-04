@@ -323,8 +323,12 @@ class ObjectCacher {
 
   void bh_stat_add(BufferHead *bh) {
     switch (bh->get_state()) {
-    case BufferHead::STATE_MISSING: stat_missing += bh->length(); break;
-    case BufferHead::STATE_CLEAN: stat_clean += bh->length(); break;
+    case BufferHead::STATE_MISSING:
+      stat_missing += bh->length();
+      break;
+    case BufferHead::STATE_CLEAN:
+      stat_clean += bh->length();
+      break;
     case BufferHead::STATE_DIRTY: 
       stat_dirty += bh->length(); 
       bh->ob->oset->dirty_tx += bh->length();
@@ -333,14 +337,20 @@ class ObjectCacher {
       stat_tx += bh->length(); 
       bh->ob->oset->dirty_tx += bh->length();
       break;
-    case BufferHead::STATE_RX: stat_rx += bh->length(); break;
+    case BufferHead::STATE_RX:
+      stat_rx += bh->length();
+      break;
     }
     if (stat_waiter) stat_cond.Signal();
   }
   void bh_stat_sub(BufferHead *bh) {
     switch (bh->get_state()) {
-    case BufferHead::STATE_MISSING: stat_missing -= bh->length(); break;
-    case BufferHead::STATE_CLEAN: stat_clean -= bh->length(); break;
+    case BufferHead::STATE_MISSING:
+      stat_missing -= bh->length();
+      break;
+    case BufferHead::STATE_CLEAN: 
+      stat_clean -= bh->length();
+      break;
     case BufferHead::STATE_DIRTY: 
       stat_dirty -= bh->length(); 
       bh->ob->oset->dirty_tx -= bh->length();
@@ -349,7 +359,9 @@ class ObjectCacher {
       stat_tx -= bh->length(); 
       bh->ob->oset->dirty_tx -= bh->length();
       break;
-    case BufferHead::STATE_RX: stat_rx -= bh->length(); break;
+    case BufferHead::STATE_RX:
+      stat_rx -= bh->length();
+      break;
     }
   }
   loff_t get_stat_tx() { return stat_tx; }

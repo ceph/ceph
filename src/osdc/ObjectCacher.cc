@@ -77,7 +77,7 @@ void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
   dout(10) << "merge_left " << *left << " + " << *right << dendl;
   oc->bh_remove(this, right);
   oc->bh_stat_sub(left);
-  left->set_length( left->length() + right->length());
+  left->set_length(left->length() + right->length());
   oc->bh_stat_add(left);
 
   // data
