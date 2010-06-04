@@ -3813,6 +3813,10 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   dout(10) << "_unlink_local " << *dn << dendl;
 
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
+  CInode *in = dnl->get_inode();
+
+  SnapRealm *realm = in->find_snaprealm();
+  snapid_t follows = realm->get_newest_seq();
 
   // ok, let's do it.
   mdr->ls = mdlog->get_current_segment();
@@ -3824,40 +3828,41 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
 
   if (straydn) {
     assert(dnl->is_primary());
-    straydn->push_projected_linkage(dnl->get_inode());
+    straydn->push_projected_linkage(in);
+    straydn->first = follows + 1;
   }
 
   // the unlinked dentry
   dn->pre_dirty();
 
-  inode_t *pi = dnl->get_inode()->project_inode();
-  mdr->add_projected_inode(dnl->get_inode()); // do this _after_ my dn->pre_dirty().. we apply that one manually.
-  pi->version = dnl->get_inode()->pre_dirty();
+  inode_t *pi = in->project_inode();
+  mdr->add_projected_inode(in); // do this _after_ my dn->pre_dirty().. we apply that one manually.
+  pi->version = in->pre_dirty();
   pi->nlink--;
   pi->ctime = mdr->now;
 
   if (dnl->is_primary()) {
     // primary link.  add stray dentry.
     assert(straydn);
-    mdcache->predirty_journal_parents(mdr, &le->metablob, dnl->get_inode(), dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, -1);
-    mdcache->predirty_journal_parents(mdr, &le->metablob, dnl->get_inode(), straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+    mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, -1);
+    mdcache->predirty_journal_parents(mdr, &le->metablob, in, straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
 
     // project snaprealm, too
     bufferlist snapbl;
-    if (!dnl->get_inode()->snaprealm) {
-      dnl->get_inode()->open_snaprealm(true);   // don't do a split
-      dnl->get_inode()->snaprealm->project_past_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
-      dnl->get_inode()->close_snaprealm(true);  // or a matching join
+    if (!in->snaprealm) {
+      in->open_snaprealm(true);   // don't do a split
+      in->snaprealm->project_past_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
+      in->close_snaprealm(true);  // or a matching join
     } else
-      dnl->get_inode()->snaprealm->project_past_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
+      in->snaprealm->project_past_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
 
-    straydn->first = dnl->get_inode()->first;
-    le->metablob.add_primary_dentry(straydn, true, dnl->get_inode(), 0, &snapbl);
+    straydn->first = in->first;
+    le->metablob.add_primary_dentry(straydn, true, in, 0, &snapbl);
   } else {
     // remote link.  update remote inode.
-    mdcache->predirty_journal_parents(mdr, &le->metablob, dnl->get_inode(), dn->get_dir(), PREDIRTY_DIR, -1);
-    mdcache->predirty_journal_parents(mdr, &le->metablob, dnl->get_inode(), 0, PREDIRTY_PRIMARY);
-    mdcache->journal_dirty_inode(mdr, &le->metablob, dnl->get_inode());
+    mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_DIR, -1);
+    mdcache->predirty_journal_parents(mdr, &le->metablob, in, 0, PREDIRTY_PRIMARY);
+    mdcache->journal_dirty_inode(mdr, &le->metablob, in);
   }
 
   mdcache->journal_cow_dentry(mdr, &le->metablob, dn);
