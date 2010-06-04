@@ -1737,7 +1737,7 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     }
   } else { //we got our context, let's use it to do the rollback!
     if (ctx->clone_obc &&
-	(ctx->clone_obc->obs.oi.prior_version == ctx->obs->oi.prior_version)) {
+	(ctx->clone_obc->obs.oi.prior_version == ctx->obs->oi.version)) {
       // just cloned the rollback target, we don't need to do anything!
       dout(10) << "_rollback_to has no work thanks to make_writeable" << dendl;
     }
