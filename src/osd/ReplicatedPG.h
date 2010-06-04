@@ -583,7 +583,10 @@ public:
   bool snap_trimmer();
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 		 bufferlist& odata);
-
+private:
+  void _delete_head(OpContext *ctx);
+  void _rollback_to(OpContext *ctx, ceph_osd_op& op);
+public:
   bool same_for_read_since(epoch_t e);
   bool same_for_modify_since(epoch_t e);
   bool same_for_rep_modify_since(epoch_t e);

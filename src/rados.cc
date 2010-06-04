@@ -55,7 +55,8 @@ void usage()
   cerr << "   rmpool foo  -- remove pool 'foo'\n";
   cerr << "   lssnap      -- list snaps\n";
   cerr << "   mksnap foo  -- create snap 'foo'\n";
-  cerr << "   rmsnap foo  -- remove snap 'foo'\n\n";
+  cerr << "   rmsnap foo  -- remove snap 'foo'\n";
+  cerr << "   rollback foo bar -- roll back object foo to snap 'bar'\n\n";
 
   cerr << "   bench <seconds> write|seq|rand [-t concurrent_operations] [-b op_size]\n";
   cerr << "              default is 16 concurrent IOs and 4 MB op size\n\n";
@@ -415,6 +416,20 @@ int main(int argc, const char **argv)
       goto out;
     }
     cout << "removed pool " << pool << " snap " << nargs[1] << std::endl;
+  }
+
+  else if (strcmp(nargs[0], "rollback") == 0) {
+    if (!pool || nargs.size() < 3)
+      usage();
+
+    ret = rados.snap_rollback_object(p, nargs[1], nargs[2]);
+    if (ret < 0) {
+      cerr << "error rolling back pool " << pool << " to snapshot " << nargs[1] 
+	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      goto out;
+    }
+    cout << "rolled back pool " << pool
+	 << " to snapshot " << nargs[2] << std::endl;
   }
   
   else if (strcmp(nargs[0], "bench") == 0) {

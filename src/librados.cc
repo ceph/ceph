@@ -113,6 +113,8 @@ public:
   int snap_create(const rados_pool_t pool, const char* snapname);
   int selfmanaged_snap_create(rados_pool_t pool, uint64_t *snapid);
   int snap_remove(const rados_pool_t pool, const char* snapname);
+  int snap_rollback_object(const rados_pool_t pool, const object_t& oid,
+		    const char* snapname);
   int selfmanaged_snap_remove(rados_pool_t pool, uint64_t snapid);
 
   // io
@@ -550,6 +552,45 @@ int RadosClient::snap_remove(const rados_pool_t pool, const char *snapName)
 
   mylock.Lock();
   while(!done) cond.Wait(mylock);
+  mylock.Unlock();
+  return reply;
+}
+
+int RadosClient::snap_rollback_object(const rados_pool_t pool_,
+				      const object_t& oid, const char *snapName)
+{
+  int reply;
+  PoolCtx* pool = (PoolCtx *) pool_;
+  string sName(snapName);
+  ceph_object_layout layout = objecter->osdmap
+    ->make_object_layout(oid, pool->poolid);
+
+  snapid_t snap;
+  const map<int, pg_pool_t>& pools = objecter->osdmap->get_pools();
+  const pg_pool_t& pg_pool = pools.find(pool->poolid)->second;
+  map<snapid_t, pool_snap_info_t>::const_iterator p;
+  for (p = pg_pool.snaps.begin();
+       p != pg_pool.snaps.end();
+       ++p) {
+    if (p->second.name == snapName) {
+      snap = p->first;
+      break;
+    }
+  }
+  if (p == pg_pool.snaps.end()) return -ENOENT;
+
+  Mutex mylock("RadosClient::snap_rollback::mylock");
+  Cond cond;
+  bool done;
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &reply);
+
+  lock.Lock();
+  objecter->rollback_object(oid, layout, pool->snapc, snap,
+		     g_clock.now(), onack, NULL);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done) cond.Wait(mylock);
   mylock.Unlock();
   return reply;
 }
@@ -1391,6 +1432,12 @@ int Rados::snap_remove(const rados_pool_t pool, const char *snapname) {
   return ((RadosClient *)client)->snap_remove(pool, snapname);
 }
 
+int Rados::snap_rollback_object(const rados_pool_t pool, const object_t oid,
+				const char *snapname) {
+  if (!client) return -EINVAL;
+  return ((RadosClient *)client)->snap_rollback_object(pool, oid, snapname);
+}
+
 int Rados::selfmanaged_snap_create(const rados_pool_t pool, uint64_t *snapid)
 {
   if (!client) return -EINVAL;
@@ -1708,6 +1755,14 @@ extern "C" int rados_snap_remove(const rados_pool_t pool, const char *snapname)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   return radosp->snap_remove(ctx, snapname);
+}
+
+extern "C" int rados_snap_rollback_object(const rados_pool_t pool,
+					  const char *oid,
+					  const char *snapname)
+{
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  return radosp->snap_rollback_object(ctx, oid, snapname);
 }
 
 extern "C" int rados_selfmanaged_snap_create(const rados_pool_t pool,

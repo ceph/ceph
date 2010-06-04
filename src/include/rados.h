@@ -203,6 +203,7 @@ enum {
 	CEPH_OSD_OP_TMAPGET = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 12,
 
 	CEPH_OSD_OP_CREATE  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 13,
+	CEPH_OSD_OP_ROLLBACK= CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 14,
 
 	/** attrs **/
 	/* read */
@@ -354,6 +355,9 @@ struct ceph_osd_op {
 		struct {
 			__le64 cookie, count;
 		} __attribute__ ((packed)) pgls;
+	        struct {
+		        __le64 snapid;
+	        } __attribute__ ((packed)) snap;
 	};
 	__le32 payload_len;
 } __attribute__ ((packed));

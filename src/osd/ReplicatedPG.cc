@@ -1283,6 +1283,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       }
       break;
 
+    case CEPH_OSD_OP_ROLLBACK :
+      _rollback_to(ctx, op);
+      break;
+
     case CEPH_OSD_OP_ZERO:
       { // zero
 	assert(op.extent.length);
@@ -1364,24 +1368,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       break;
     
     case CEPH_OSD_OP_DELETE:
-      { // delete
-	if (ctx->obs->exists)
-	  t.remove(coll_t::build_pg_coll(info.pgid), soid);  // no clones, delete!
-	if (ssc->snapset.clones.size()) {
-	  snapid_t newest = *ssc->snapset.clones.rbegin();
-	  add_interval_usage(ssc->snapset.clone_overlap[newest], info.stats);
-	  ssc->snapset.clone_overlap.erase(newest);  // ok, redundant.
-	}
-	if (ctx->obs->exists) {
-	  info.stats.num_objects--;
-	  info.stats.num_bytes -= oi.size;
-	  info.stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
-	  oi.size = 0;
-	  ssc->snapset.head_exists = false;
-	  ctx->obs->exists = false;
-	}      
-	info.stats.num_wr++;
-      }
+      _delete_head(ctx);
       break;
 
 
@@ -1695,7 +1682,103 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
   return result;
 }
 
+inline void ReplicatedPG::_delete_head(OpContext *ctx)
+{
+  SnapSetContext *ssc = ctx->obs->ssc;
+  object_info_t& oi = ctx->obs->oi;
+  const sobject_t& soid = oi.soid;
+  ObjectStore::Transaction& t = ctx->op_t;
 
+  if (ctx->obs->exists)
+    t.remove(coll_t::build_pg_coll(info.pgid), soid);
+  if (ssc->snapset.clones.size()) {
+    snapid_t newest = *ssc->snapset.clones.rbegin();
+    add_interval_usage(ssc->snapset.clone_overlap[newest], info.stats);
+    ssc->snapset.clone_overlap.erase(newest);  // ok, redundant.
+  }
+  if (ctx->obs->exists) {
+    info.stats.num_objects--;
+    info.stats.num_bytes -= oi.size;
+    info.stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
+    oi.size = 0;
+    ssc->snapset.head_exists = false;
+    ctx->obs->exists = false;
+  }      
+  info.stats.num_wr++;
+}
+
+void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
+{
+  SnapSetContext *ssc = ctx->obs->ssc;
+  const sobject_t& soid = ctx->obs->oi.soid;
+  ObjectStore::Transaction& t = ctx->op_t;
+  snapid_t snapid = (uint64_t)op.snap.snapid;
+
+  dout(10) << "_rollback_to " << soid << " snapid " << snapid << dendl;
+
+  ObjectContext *rollback_to;
+  int ret = find_object_context(soid.oid, snapid, &rollback_to, false);
+  sobject_t& rollback_to_sobject = rollback_to->obs.oi.soid;
+  if (ret) {
+    if (-ENOENT == ret) {
+      // there's no snapshot here, or there's no object.
+      // if there's no snapshot, we delete the object; otherwise, do nothing.
+      dout(20) << "_rollback_to deleting head on " << soid.oid
+	       << " because got ENOENT on find_object_context" << dendl;
+      _delete_head(ctx);
+    } else if (-EAGAIN == ret) {
+      /* a different problem, like degraded pool
+       * with not-yet-restored object. We shouldn't have been able
+       * to get here; recovery should have completed first! */
+      assert(0);
+    } else {
+      // ummm....huh? It *can't* return anything else at time of writing.
+      assert(0);
+    }
+  } else { //we got our context, let's use it to do the rollback!
+    if (ctx->clone_obc &&
+	(ctx->clone_obc->obs.oi.prior_version == ctx->obs->oi.prior_version)) {
+      // just cloned the rollback target, we don't need to do anything!
+      dout(10) << "_rollback_to has no work thanks to make_writeable" << dendl;
+    }
+    else {
+      /* 1) Delete current head
+       * 2) Clone correct snapshot into head
+       * 3) Calculate clone_overlaps by following overlaps
+       *    forward from rollback snapshot */
+      dout(10) << "_rollback_to deleting " << soid.oid
+	      << " and rolling back to old snap"
+	      << " because we don't have a fresh clone (known by: clone_obj="
+	      << ctx->clone_obc << " and clone_obc.obs.oi.prior_version="
+	      << ctx->clone_obc->obs.oi.prior_version
+	      << " and ctx->obs.oi.prior_version="
+	      << ctx->obs->oi.prior_version
+	      << dendl;
+      sobject_t new_head = get_object_context(ctx->obs->oi.soid)->obs.oi.soid;
+      
+      _delete_head(ctx);
+      ctx->obs->exists = true; //we're about to recreate it
+      
+      map<string, bufferptr> attrs;
+      t.clone(coll_t::build_pg_coll(info.pgid),
+	      rollback_to_sobject, new_head);
+      osd->store->getattrs(coll_t::build_pg_coll(info.pgid),
+			   rollback_to_sobject, attrs, false);
+      osd->filter_xattrs(attrs);
+      t.setattrs(coll_t::build_pg_coll(info.pgid), new_head, attrs);
+      ssc->snapset.head_exists = true;
+
+      map<snapid_t, interval_set<uint64_t> >::iterator iter =
+	ssc->snapset.clone_overlap.lower_bound(snapid);
+      interval_set<uint64_t> overlaps = iter->second;
+      for ( ;
+	    iter != ssc->snapset.clone_overlap.end();
+	    ++iter)
+	overlaps.intersection_of(iter->second);
+      ssc->snapset.clone_overlap[*ssc->snapset.clones.rbegin()] = overlaps;
+    }
+  }
+}
 
 void ReplicatedPG::_make_clone(ObjectStore::Transaction& t,
 			       const sobject_t& head, const sobject_t& coid,
