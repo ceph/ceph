@@ -880,6 +880,15 @@ protected:
   static int mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami);
   static int mkjournal(const char *dev, const char *jdev);
   static int flushjournal(const char *dev, const char *jdev);
+  /* remove any non-user xattrs from a map of them */
+  void filter_xattrs(map<string, bufferptr>& attrs) {
+    for (map<string, bufferptr>::iterator iter = attrs.begin();
+	 iter != attrs.end();
+	 ++iter) {
+      if (('_' != iter->first.at(0)) || (iter->first.size() == 1))
+	attrs.erase(iter);
+    }
+  }
 
 private:
   static int write_meta(const char *base, const char *file, const char *val, size_t vallen);
