@@ -1704,8 +1704,13 @@ void ReplicatedPG::_make_clone(ObjectStore::Transaction& t,
   bufferlist bv;
   ::encode(*poi, bv);
 
+  map<string, bufferptr> attrs;
+  osd->store->getattrs(coll_t::build_pg_coll(info.pgid), head, attrs);
+  osd->filter_xattrs(attrs);
+
   t.clone(coll_t::build_pg_coll(info.pgid), head, coid);
   t.setattr(coll_t::build_pg_coll(info.pgid), coid, OI_ATTR, bv);
+  t.setattrs(coll_t::build_pg_coll(info.pgid), coid, attrs);
 }
 
 void ReplicatedPG::make_writeable(OpContext *ctx)
