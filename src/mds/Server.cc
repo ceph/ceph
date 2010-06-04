@@ -3856,7 +3856,6 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
     } else
       in->snaprealm->project_past_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
 
-    straydn->first = in->first;
     le->metablob.add_primary_dentry(straydn, true, in, 0, &snapbl);
   } else {
     // remote link.  update remote inode.
@@ -4582,7 +4581,7 @@ void Server::_rename_prepare(MDRequest *mdr,
 	destdnl->get_inode()->close_snaprealm(true);  // or a matching join
       } else
 	destdnl->get_inode()->snaprealm->project_past_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
-      straydn->first = destdnl->get_inode()->first;
+      straydn->first = destdnl->get_inode()->first;  // XXX hmm, is this right?
       tji = metablob->add_primary_dentry(straydn, true, destdnl->get_inode(), 0, &snapbl);
     } else if (destdnl->is_remote()) {
       metablob->add_dir_context(destdnl->get_inode()->get_parent_dir());
