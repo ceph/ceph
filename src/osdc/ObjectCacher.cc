@@ -313,6 +313,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
       }
       
       dout(10) << "cur is " << cur << ", p is " << *p->second << dendl;
+      //oc->verify_stats();
 
       if (p->first <= cur) {
         BufferHead *bh = p->second;
@@ -1007,6 +1008,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset)
 
   delete wr;
 
+  //verify_stats();
   trim();
   return 0;
 }
@@ -1734,4 +1736,53 @@ void ObjectCacher::kick_sync_readers(ObjectSet *oset)
 }
 
 
+
+void ObjectCacher::verify_stats() const
+{
+  dout(10) << "verify_stats" << dendl;
+
+  loff_t clean = 0, dirty = 0, rx = 0, tx = 0, missing = 0;
+
+  for (hash_map<sobject_t, Object*>::const_iterator p = objects.begin();
+       p != objects.end();
+       p++) {
+    Object *ob = p->second;
+    for (map<loff_t, BufferHead*>::const_iterator q = ob->data.begin();
+	 q != ob->data.end();
+	 q++) {
+      BufferHead *bh = q->second;
+      switch (bh->get_state()) {
+      case BufferHead::STATE_MISSING:
+	missing += bh->length();
+	break;
+      case BufferHead::STATE_CLEAN:
+	clean += bh->length();
+	break;
+      case BufferHead::STATE_DIRTY: 
+	dirty += bh->length(); 
+	break;
+      case BufferHead::STATE_TX: 
+	tx += bh->length(); 
+	break;
+      case BufferHead::STATE_RX:
+	rx += bh->length();
+	break;
+      default:
+	assert(0);
+      }
+    }
+  }
+
+  dout(10) << " clean " << clean
+	   << " rx " << rx 
+	   << " tx " << tx
+	   << " dirty " << dirty
+	   << " missing " << missing
+	   << dendl;
+  assert(clean == stat_clean);
+  assert(rx == stat_rx);
+  assert(tx == stat_tx);
+  assert(dirty == stat_dirty);
+  assert(missing == stat_missing);
+}
 
