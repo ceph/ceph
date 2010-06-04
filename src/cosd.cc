@@ -183,7 +183,7 @@ int main(int argc, const char **argv)
   if (!messenger_hb)
     return 1;
 
-  Throttle *client_throttler = new Throttle(g_conf.client_message_size_cap);
+  Throttle *client_throttler = new Throttle(g_conf.osd_client_message_size_cap);
 
   messenger->set_default_policy(SimpleMessenger::Policy::stateless_server());
   messenger->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::client());
