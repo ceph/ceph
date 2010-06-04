@@ -1980,7 +1980,7 @@ void ReplicatedPG::op_applied(RepGather *repop)
 
   // discard my reference to the buffer
   if (repop->ctx->op)
-    repop->ctx->op->get_data().clear();
+    repop->ctx->op->clear_data();
   
   repop->applying = false;
   repop->applied = true;
@@ -2205,7 +2205,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
       wr->old_version = old_version;
       wr->snapset = repop->obc->obs.ssc->snapset;
       wr->snapc = repop->ctx->snapc;
-      wr->get_data() = repop->ctx->op->get_data();   // _copy_ bufferlist
+      wr->set_data(repop->ctx->op->get_data());   // _copy_ bufferlist
     } else {
       // ship resulting transaction, log entries, and pg_stats
       ::encode(repop->ctx->op_t, wr->get_data());
@@ -3250,7 +3250,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   map<sobject_t, interval_set<uint64_t> > clone_subsets;
 
   bufferlist data;
-  data.claim(op->get_data());
+  op->claim_data(data);
 
   // we need this later, and it gets clobbered by t.setattrs()
   bufferlist oibl;

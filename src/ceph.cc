@@ -293,7 +293,7 @@ void send_command()
 {
   MMonCommand *m = new MMonCommand(mc.monmap.fsid, last_seen_version);
   m->cmd = pending_cmd;
-  m->get_data() = pending_bl;
+  m->set_data(pending_bl);
 
   cout << g_clock.now() << " mon" << " <- " << pending_cmd << std::endl;
   mc.send_mon_message(m);

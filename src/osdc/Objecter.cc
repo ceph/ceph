@@ -511,7 +511,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   // got data?
   if (op->outbl) {
-    op->outbl->claim(m->get_data());
+    m->claim_data(*op->outbl);
     op->outbl = 0;
   }
 

@@ -291,11 +291,23 @@ public:
   void set_footer(const ceph_msg_footer &e) { footer = e; }
   ceph_msg_footer &get_footer() { return footer; }
 
+  /*
+   * If you use get_[data, middle, payload] you shouldn't
+   * use it to change those bufferlists unless you KNOW
+   * there is no throttle being used. The other
+   * functions are throttling-aware as appropriate.
+   */
+
   void clear_payload() {
     if (throttler) throttler->put(payload.length() + middle.length());
     payload.clear();
     middle.clear();
   }
+  void clear_data() {
+    if (throttler) throttler->put(data.length());
+    data.clear();
+  }
+
   bool empty_payload() { return payload.length() == 0; }
   bufferlist& get_payload() { return payload; }
   void set_payload(bufferlist& bl) {
@@ -318,6 +330,10 @@ public:
   }
 
   bufferlist& get_data() { return data; }
+  void claim_data(bufferlist& bl) {
+    if (throttler) throttler->put(data.length());
+    bl.claim(data);
+  }
   off_t get_data_len() { return data.length(); }
 
   void set_recv_stamp(utime_t t) { recv_stamp = t; }
