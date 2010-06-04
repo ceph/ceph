@@ -884,9 +884,10 @@ protected:
   void filter_xattrs(map<string, bufferptr>& attrs) {
     for (map<string, bufferptr>::iterator iter = attrs.begin();
 	 iter != attrs.end();
-	 ++iter) {
+	 ) {
       if (('_' != iter->first.at(0)) || (iter->first.size() == 1))
-	attrs.erase(iter);
+	attrs.erase(iter++);
+      else ++iter;
     }
   }
 
