@@ -368,28 +368,34 @@ void MDS::forward_message_mds(Message *m, int mds)
 void MDS::send_message_client_counted(Message *m, client_t client)
 {
   if (sessionmap.have_session(entity_name_t::CLIENT(client.v))) {
-    version_t seq = sessionmap.inc_push_seq(client);
-    dout(10) << "send_message_client_counted client" << client << " seq " << seq << " " << *m << dendl;
-    messenger->send_message(m, sessionmap.get_session(entity_name_t::CLIENT(client.v))->inst);
+    send_message_client_counted(m, sessionmap.get_session(entity_name_t::CLIENT(client.v)));
   } else {
     dout(10) << "send_message_client_counted no session for client" << client << " " << *m << dendl;
   }
 }
 
-void MDS::send_message_client_counted(Message *m, entity_inst_t clientinst)
+void MDS::send_message_client_counted(Message *m, Connection *connection)
 {
-  version_t seq = sessionmap.inc_push_seq(clientinst.name.num());
-  dout(10) << "send_message_client_counted " << clientinst.name << " seq " << seq << " " << *m << dendl;
-  messenger->send_message(m, clientinst);
+  Session *session = (Session *)m->get_connection()->get_priv();
+  if (session) {
+    session->put();  // do not carry ref
+    send_message_client_counted(m, session);
+  } else {
+    dout(10) << "send_message_client_counted has no session for " << m->get_source_inst() << dendl;
+    // another Connection took over the Session
+  }
 }
 
-void MDS::send_message_client_counted(Message *m, Connection *con)
+void MDS::send_message_client_counted(Message *m, Session *session)
 {
-  Session *session = (Session *)con->get_priv();
   version_t seq = session->inc_push_seq();
   dout(10) << "send_message_client_counted " << session->inst.name << " seq "
 	   << seq << " " << *m << dendl;
-  messenger->send_message(m, con);
+  if (session->connection) {
+    messenger->send_message(m, session->connection);
+  } else {
+    messenger->send_message(m, session->inst);
+  }
 }
 
 int MDS::init()

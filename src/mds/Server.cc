@@ -164,7 +164,8 @@ Session *Server::get_session(Message *m)
 {
   Session *session = (Session *)m->get_connection()->get_priv();
   if (session) {
-    dout(20) << "get_session have " << session << " " << session->inst << " state " << session->get_state_name() << dendl;
+    dout(20) << "get_session have " << session << " " << session->inst
+	     << " state " << session->get_state_name() << dendl;
     session->put();  // not carry ref
   } else {
     dout(20) << "get_session dne for " << m->get_source_inst() << dendl;
@@ -612,7 +613,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       fake_inode.ino = p->first;
       MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0, 0, 0);
       //stale->head.migrate_seq = 0; // FIXME ******
-      mds->send_message_client_counted(stale, m->get_connection());
+      mds->send_message_client_counted(stale, session);
 
       // add to cap export list.
       mdcache->rejoin_export_caps(p->first, from, p->second);
