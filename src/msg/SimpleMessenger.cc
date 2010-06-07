@@ -330,7 +330,8 @@ void SimpleMessenger::dispatch_entry()
 		  << " " << m 
 		  << dendl;
 	  ms_deliver_dispatch(m);
-	  message_throttler.put(msize);
+	  if (msize > 0)
+	    message_throttler.put(msize);
 	  dout(20) << "done calling dispatch on " << m << dendl;
 	}
       }
