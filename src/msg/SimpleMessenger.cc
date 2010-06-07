@@ -1746,7 +1746,8 @@ Message *SimpleMessenger::Pipe::read_message()
 	   << messenger->message_throttler.get_max() << dendl;
   uint64_t message_size = header.front_len  + header.middle_len
     + header.data_len;
-  messenger->message_throttler.get(message_size);
+  if (message_size)
+    messenger->message_throttler.get(message_size);
   if (policy.throttler) policy.throttler->get(message_size);
 
   // read front
