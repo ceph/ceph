@@ -1695,6 +1695,8 @@ void Locker::handle_client_caps(MClientCaps *m)
   Capability *cap = 0;
   if (in) 
     cap = in->get_client_cap(client);
+  if (!cap)
+    cap = head_in->get_client_cap(client);
   if (!cap) {
     dout(7) << "handle_client_caps no cap for client" << client << " on " << *in << dendl;
     m->put();
@@ -1747,9 +1749,9 @@ void Locker::handle_client_caps(MClientCaps *m)
       }
 
       // remove cap _after_ do_cap_update() (which takes the Capability*)
-      if (in->last < CEPH_NOSNAP) {
+      if (cap->get_inode()->last < CEPH_NOSNAP) {
 	dout(10) << "  flushsnap releasing cloned cap" << dendl;
-	in->remove_client_cap(client);
+	cap->get_inode()->remove_client_cap(client);
       } else {
 	dout(10) << "  flushsnap NOT releasing live cap" << dendl;
       }      
