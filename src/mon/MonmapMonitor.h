@@ -67,6 +67,7 @@ class MonmapMonitor : public PaxosService {
 
  private:
   bufferlist monmap_bl;
+  void _update_whoami();
 };
 
 

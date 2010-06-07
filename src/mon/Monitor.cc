@@ -110,6 +110,7 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   mon_caps = new MonCaps();
   mon_caps->set_allow_all(true);
   mon_caps->text = "allow *";
+  myaddr = map->get_inst(w).addr;
 }
 
 Paxos *Monitor::add_paxos(int type)

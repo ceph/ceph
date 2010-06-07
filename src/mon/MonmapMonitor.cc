@@ -48,6 +48,7 @@ bool MonmapMonitor::update_from_paxos()
   dout(10) << "update_from_paxos paxosv " << paxosv
 	   << ", my v " << mon->monmap->epoch << dendl;
 
+  int original_map_size = mon->monmap->size();
   //read and decode
   monmap_bl.clear();
   bool success = paxos->read(paxosv, monmap_bl);
@@ -58,6 +59,20 @@ bool MonmapMonitor::update_from_paxos()
   //save the bufferlist version in the paxos instance as well
   paxos->stash_latest(paxosv, monmap_bl);
 
+  if (original_map_size != mon->monmap->size())
+  {
+    _update_whoami();
+
+    // call election?
+    if (mon->monmap->size() > 1) {
+      mon->call_election();
+    } else {
+      // we're standalone.
+      set<int> q;
+      q.insert(mon->whoami);
+      mon->win_election(1, q);
+    }
+  }
   return true;
 }
 
@@ -127,6 +142,8 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "add")
       return false;
+    else if (m->cmd[1] == "remove")
+      return false;
   }
 
   if (r != -1) {
@@ -177,6 +194,24 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "remove") {
+      entity_addr_t addr;
+      addr.parse(m->cmd[2].c_str());
+      bufferlist rdata;
+      if (!pending_map.contains(addr)) {
+        err = -ENOENT;
+        ss << "mon " << addr << " does not exist";
+        goto out;
+      }
+    
+      pending_map.remove(addr);
+      pending_map.last_changed = g_clock.now();
+      ss << "removed mon" << " at " << addr << ", there are now " << pending_map.size() << " monitors" ;
+      getline(ss, rs);
+      // send reply immediately in case we get removed
+      mon->reply_command(m, 0, rs, paxos->get_version());
+      return true;
+    }
     else
       ss << "unknown command " << m->cmd[1];
   } else
@@ -203,3 +238,34 @@ void MonmapMonitor::tick()
 {
   update_from_paxos();
 }
+
+void MonmapMonitor::_update_whoami()
+{
+  // first check if there is any change
+  if (mon->whoami < mon->monmap->size() && 
+      mon->monmap->get_inst(mon->whoami).addr == mon->myaddr) 
+  {
+    return;
+  }
+  
+  // then check backwards starting from min(whoami-1, size-1) since whoami only ever decreases
+  int i=(((int)mon->whoami)-1) < mon->monmap->size() ? (((int)mon->whoami)-1):(mon->monmap->size()-1);
+  for (; i>=0; i--)
+  {
+    if (mon->monmap->get_inst(i).addr == mon->myaddr)
+    {
+      dout(10) << "Changing whoami from " << mon->whoami << " to " << i << dendl;
+      mon->whoami = i;
+      mon->messenger->set_myname(entity_name_t::MON(i));
+      mon->logclient.set_mon(i);
+      return;
+    }
+  }
+  dout(0) << "Cannot find myself (mon" << mon->whoami << ", " << mon->myaddr << ") in new monmap! I must have been removed, shutting down." << dendl;
+  dout(10) << "Assuming temporary id=mon" << mon->monmap->size() << " for shutdown purposes" << dendl;
+  mon->messenger->set_myname(entity_name_t::MON(mon->monmap->size()));
+  mon->logclient.set_mon(mon->monmap->size());
+  mon->monmap->add(mon->myaddr);
+  mon->shutdown();
+}
+

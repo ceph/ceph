@@ -56,6 +56,7 @@ class LogClient : public Dispatcher {
   void send_log();
   void handle_log_ack(MLogAck *m);
   void set_synchronous(bool sync) { is_synchronous = sync; }
+  void set_mon(int mon_id) { mon = mon_id; }
 
   LogClient(Messenger *m, MonMap *mm) : 
     messenger(m), monmap(mm), mon(-1), is_synchronous(false),

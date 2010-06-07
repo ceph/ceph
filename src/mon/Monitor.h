@@ -58,6 +58,7 @@ class Monitor : public Dispatcher {
 public:
   // me
   int whoami;
+  entity_addr_t myaddr;
   Messenger *messenger;
   Mutex lock;
 
