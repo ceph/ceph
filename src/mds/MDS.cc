@@ -901,7 +901,8 @@ void MDS::bcast_mds_map()
   for (set<Session*>::const_iterator p = clients.begin();
        p != clients.end();
        ++p) 
-    messenger->send_message(new MMDSMap(monc->get_fsid(), mdsmap), (*p)->inst);
+    messenger->send_message(new MMDSMap(monc->get_fsid(), mdsmap),
+			    (*p)->connection);
   last_client_mdsmap_bcast = mdsmap->get_epoch();
 }
 
@@ -1667,6 +1668,7 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
       s->inst.name = n;
       dout(10) << " new session " << s << " for " << s->inst << dendl;
       con->set_priv(s);
+      s->connection = con;
       sessionmap.add_session(s);
     } else {
       dout(10) << " existing session " << s << " for " << s->inst << dendl;

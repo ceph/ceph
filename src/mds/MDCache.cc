@@ -4044,7 +4044,7 @@ void MDCache::send_snaps(map<client_t,MClientSnap*>& splits)
 	       << " split " << p->second->head.split
 	       << " inos " << p->second->split_inos
 	       << dendl;
-      mds->send_message_client_counted(p->second, session->inst);
+      mds->send_message_client_counted(p->second, session->connection);
     } else {
       dout(10) << " no session for client" << p->first << dendl;
       p->second->put();
@@ -4254,7 +4254,7 @@ void MDCache::finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snap
     if (session) {
       MClientSnap *snap = new MClientSnap(CEPH_SNAP_OP_UPDATE);
       realm->build_snap_trace(snap->bl);
-      mds->send_message_client_counted(snap, session->inst);
+      mds->send_message_client_counted(snap, session->connection);
     } else {
       dout(10) << " ...or not, no session for this client!" << dendl;
     }

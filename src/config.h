@@ -301,6 +301,8 @@ struct md_config_t {
   double osd_shed_reads_min_latency_diff;
   double osd_shed_reads_min_latency_ratio;
 
+  uint64_t osd_client_message_size_cap;
+
   bool  osd_immediate_read_from_cache;
   bool  osd_exclusive_caching;
   double osd_stat_refresh_interval;

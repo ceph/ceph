@@ -129,6 +129,7 @@ using std::list;
 
 #include "include/types.h"
 #include "include/buffer.h"
+#include "common/Throttle.h"
 #include "msg_types.h"
 
 #include "common/debug.h"
@@ -228,6 +229,7 @@ protected:
   
   utime_t recv_stamp;
   Connection *connection;
+  Throttle *throttler;
 
   friend class Messenger;
 
@@ -240,6 +242,7 @@ public:
   Message() : connection(NULL), _forwarded(false), nref(1) {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
+    throttler = NULL;
   };
   Message(int t) : connection(NULL), _forwarded(false), nref(1) {
     memset(&header, 0, sizeof(header));
@@ -248,12 +251,15 @@ public:
     header.priority = 0;  // undef
     header.data_off = 0;
     memset(&footer, 0, sizeof(footer));
+    throttler = NULL;
   }
 protected:
   virtual ~Message() { 
     assert(nref.read() == 0);
     if (connection)
       connection->put();
+    if (throttler)
+      throttler->put(payload.length() + middle.length() + data.length());
   }
 public:
   Message *get() {
@@ -277,24 +283,57 @@ public:
       connection->put();
     connection = c;
   }
+  void set_throttler(Throttle *t) { throttler = t; }
+  Throttle *get_throttler() { return throttler; }
  
   ceph_msg_header &get_header() { return header; }
   void set_header(const ceph_msg_header &e) { header = e; }
   void set_footer(const ceph_msg_footer &e) { footer = e; }
   ceph_msg_footer &get_footer() { return footer; }
 
-  void clear_payload() { payload.clear(); middle.clear(); }
+  /*
+   * If you use get_[data, middle, payload] you shouldn't
+   * use it to change those bufferlists unless you KNOW
+   * there is no throttle being used. The other
+   * functions are throttling-aware as appropriate.
+   */
+
+  void clear_payload() {
+    if (throttler) throttler->put(payload.length() + middle.length());
+    payload.clear();
+    middle.clear();
+  }
+  void clear_data() {
+    if (throttler) throttler->put(data.length());
+    data.clear();
+  }
+
   bool empty_payload() { return payload.length() == 0; }
   bufferlist& get_payload() { return payload; }
-  void set_payload(bufferlist& bl) { payload.claim(bl); }
-  void copy_payload(const bufferlist& bl) { payload = bl; }
+  void set_payload(bufferlist& bl) {
+    if (throttler) throttler->put(payload.length());
+    payload.claim(bl);
+    if (throttler) throttler->take(payload.length());
+  }
 
-  void set_middle(bufferlist& bl) { middle.claim(bl); }
+  void set_middle(bufferlist& bl) {
+    if (throttler) throttler->put(payload.length());
+    middle.claim(bl);
+    if (throttler) throttler->take(payload.length());
+  }
   bufferlist& get_middle() { return middle; }
 
-  void set_data(const bufferlist &d) { data = d; }
-  void copy_data(const bufferlist &d) { data = d; }
+  void set_data(const bufferlist &d) {
+    if (throttler) throttler->put(data.length());
+    data = d;
+    if (throttler) throttler->take(data.length());
+  }
+
   bufferlist& get_data() { return data; }
+  void claim_data(bufferlist& bl) {
+    if (throttler) throttler->put(data.length());
+    bl.claim(data);
+  }
   off_t get_data_len() { return data.length(); }
 
   void set_recv_stamp(utime_t t) { recv_stamp = t; }

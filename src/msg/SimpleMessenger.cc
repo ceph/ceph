@@ -1358,7 +1358,6 @@ void SimpleMessenger::Pipe::fault(bool onconnect, bool onread)
   } 
 
 
-  utime_t now = g_clock.now();
   if (state != STATE_CONNECTING) {
     if (!onconnect)
       dout(0) << "fault initiating reconnect" << dendl;
@@ -1744,8 +1743,11 @@ Message *SimpleMessenger::Pipe::read_message()
   dout(10) << "getting message bytes now, currently using "
 	   << messenger->message_throttler.get_current() << "/"
 	   << messenger->message_throttler.get_max() << dendl;
-  messenger->message_throttler.get(header.front_len  +
-				   header.middle_len + header.data_len);
+  uint64_t message_size = header.front_len  + header.middle_len
+    + header.data_len;
+  messenger->message_throttler.get(message_size);
+  if (policy.throttler) policy.throttler->get(message_size);
+
   // read front
   bufferlist front;
   int front_len = header.front_len;
@@ -1825,7 +1827,9 @@ Message *SimpleMessenger::Pipe::read_message()
 
   dout(20) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
 	   << " byte message" << dendl;
-  return decode_message(header, footer, front, middle, data);
+  Message *message = decode_message(header, footer, front, middle, data);
+  message->set_throttler(policy.throttler);
+  return message;
 }
 
 

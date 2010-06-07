@@ -56,14 +56,18 @@ public:
   struct Policy {
     bool lossy;
     bool server;
+    Throttle *throttler;
 
-    Policy(bool l=false, bool s=false) :
-      lossy(l), server(s) {}
+    Policy(bool l=false, bool s=false, Throttle *t=NULL) :
+      lossy(l), server(s), throttler(t) {}
+
+    Policy(Throttle *t) : lossy(false), server(false), throttler(t) {}
 
     static Policy stateful_server() { return Policy(false, true); }
     static Policy stateless_server() { return Policy(true, true); }
     static Policy lossless_peer() { return Policy(false, false); }
     static Policy client() { return Policy(false, false); }
+    static Policy client(Throttle *t) { return Policy(false, false, t); }
   };
 
 

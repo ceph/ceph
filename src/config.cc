@@ -440,6 +440,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_shed_reads_min_latency, 0, OPT_DOUBLE, .01),       // min local latency
 	OPTION(osd_shed_reads_min_latency_diff, 0, OPT_DOUBLE, .01),  // min latency difference
 	OPTION(osd_shed_reads_min_latency_ratio, 0, OPT_DOUBLE, 1.5),  // 1.2 == 20% higher than peer
+	OPTION(osd_client_message_size_cap, 0, OPT_LONGLONG, 500*1024L*1024L), // default to 200MB client data allowed in-memory
 	OPTION(osd_immediate_read_from_cache, 0, OPT_BOOL, false), // osds to read from the cache immediately?
 	OPTION(osd_exclusive_caching, 0, OPT_BOOL, true),         // replicas evict replicated writes
 	OPTION(osd_stat_refresh_interval, 0, OPT_DOUBLE, .5),
