@@ -410,7 +410,7 @@ bool MonClient::ms_handle_reset(Connection *con)
   Mutex::Locker lock(monc_lock);
 
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
-    if (con->get_peer_addr() != monmap.get_inst(cur_mon).addr) {
+    if (cur_mon < 0 || con->get_peer_addr() != monmap.get_inst(cur_mon).addr) {
       dout(10) << "ms_handle_reset stray mon " << con->get_peer_addr() << dendl;
       return true;
     } else {
