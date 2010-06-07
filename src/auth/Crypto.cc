@@ -212,7 +212,6 @@ int CryptoAES::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
   }
 
   EVP_CIPHER_CTX_free(ctx);
-  EVP_cleanup();
   return result;
 }
 
