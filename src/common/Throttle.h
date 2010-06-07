@@ -76,7 +76,7 @@ public:
     Mutex::Locker l(lock);
     cond.SignalOne();
     count -= c;
-    assert(c>=0); //if count goes negative, we failed somewhere!
+    assert(count >= 0); //if count goes negative, we failed somewhere!
     return count;
   }
 };
