@@ -68,7 +68,6 @@ class Paxos;
 // i am one state machine.
 class Paxos {
   Monitor *mon;
-  int whoami;
 
   // my state machine info
   int machine_id;
@@ -225,8 +224,8 @@ private:
   version_t get_new_proposal_number(version_t gt=0);
   
 public:
-  Paxos(Monitor *m, int w,
-	int mid) : mon(m), whoami(w), 
+  Paxos(Monitor *m,
+	int mid) : mon(m),
 		   machine_id(mid), 
 		   machine_name(get_paxos_name(mid)),
 		   state(STATE_RECOVERING),

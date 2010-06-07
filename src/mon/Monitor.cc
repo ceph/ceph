@@ -93,7 +93,7 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   
   state(STATE_STARTING), stopping(false),
   
-  elector(this, w),
+  elector(this),
   mon_epoch(0), 
   leader(0),
   paxos(PAXOS_NUM), paxos_service(PAXOS_NUM),
@@ -114,7 +114,7 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
 
 Paxos *Monitor::add_paxos(int type)
 {
-  Paxos *p = new Paxos(this, whoami, type);
+  Paxos *p = new Paxos(this, type);
   paxos[type] = p;
   return p;
 }
