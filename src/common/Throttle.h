@@ -81,11 +81,13 @@ public:
   }
 
   int64_t put(int64_t c = 1) {
-    assert(c > 0);
+    assert(c >= 0);
     Mutex::Locker l(lock);
-    cond.SignalOne();
-    count -= c;
-    assert(count >= 0); //if count goes negative, we failed somewhere!
+    if (c) {
+      cond.SignalOne();
+      count -= c;
+      assert(count >= 0); //if count goes negative, we failed somewhere!
+    }
     return count;
   }
 };
