@@ -443,6 +443,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
 reply:
   reply = new MAuthReply(proto, &response_bl, ret, s->global_id);
   mon->messenger->send_message(reply, m->get_orig_source_inst());
+  m->put();
 done:
   s->put();
   return true;
