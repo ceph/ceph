@@ -149,23 +149,24 @@ int CryptoAES::encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
   EVP_CIPHER_CTX_init(&ctx);
   EVP_EncryptInit_ex(&ctx, EVP_aes_128_cbc(), NULL, key, aes_iv);
 
+  bool ret = false;
   for (std::list<bufferptr>::const_iterator it = in.buffers().begin(); 
        it != in.buffers().end(); it++) {
     outlen = max_out - total_out;
     in_buf = (const unsigned char *)it->c_str();
-    if(!EVP_EncryptUpdate(&ctx, &outbuf[total_out], &outlen, in_buf, it->length())) {
-      return false;
-    }
+    if (!EVP_EncryptUpdate(&ctx, &outbuf[total_out], &outlen, in_buf, it->length()))
+      goto out;
     total_out += outlen;
   }
-  if(!EVP_EncryptFinal_ex(&ctx, outbuf + total_out, &outlen)) {
-    return false;
-  }
+  if (!EVP_EncryptFinal_ex(&ctx, outbuf + total_out, &outlen))
+    goto out;
   total_out += outlen;
 
   out.append((const char *)outbuf, total_out);
-
-  return true;
+  ret = true;
+ out:
+  EVP_CIPHER_CTX_cleanup(&ctx);
+  return ret;
 }
 
 int CryptoAES::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
