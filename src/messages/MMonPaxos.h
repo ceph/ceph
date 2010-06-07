@@ -52,6 +52,7 @@ class MMonPaxos : public Message {
   version_t pn;              // with with proposal
   version_t uncommitted_pn;     // previous pn, if we are a LAST with an uncommitted value
   utime_t lease_timestamp;
+  utime_t sent_timestamp;
 
   version_t latest_version;
   bufferlist latest_value;
@@ -64,7 +65,9 @@ class MMonPaxos : public Message {
     epoch(e),
     op(o), machine_id(mid),
     first_committed(0), last_committed(0), pn_from(0), pn(0), uncommitted_pn(0),
-    latest_version(0) { }
+    latest_version(0) {
+    sent_timestamp = g_clock.now();
+  }
 
 private:
   ~MMonPaxos() {}
@@ -84,6 +87,7 @@ public:
   }
 
   void encode_payload() {
+    header.version = 1;
     ::encode(epoch, payload);
     ::encode(op, payload);
     ::encode(machine_id, payload);
@@ -93,6 +97,7 @@ public:
     ::encode(pn, payload);
     ::encode(uncommitted_pn, payload);
     ::encode(lease_timestamp, payload);
+    ::encode(sent_timestamp, payload);
     ::encode(latest_version, payload);
     ::encode(latest_value, payload);
     ::encode(values, payload);
@@ -108,6 +113,8 @@ public:
     ::decode(pn, p);   
     ::decode(uncommitted_pn, p);
     ::decode(lease_timestamp, p);
+    if (header.version >= 1)
+      ::decode(sent_timestamp, p);
     ::decode(latest_version, p);
     ::decode(latest_value, p);
     ::decode(values, p);

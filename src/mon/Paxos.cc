@@ -570,18 +570,18 @@ void Paxos::handle_lease(MMonPaxos *lease)
     return;
   }
 
+  if (lease->sent_timestamp > g_clock.now() + g_conf.mon_lease_wiggle_room) {
+    stringstream ss;
+    ss << "lease_expire from mon" << lease->get_source().num()
+       << " was sent from future time " << lease->sent_timestamp
+       << ", clocks not synchronized"
+       << std::endl;
+    mon->get_logclient()->log(LOG_WARN, ss);
+  }
+
   // extend lease
   if (lease_expire < lease->lease_timestamp) {
     lease_expire = lease->lease_timestamp;
-    if (g_clock.now() > lease_expire) {
-      stringstream ss;
-      ss << "lease_expire " << lease_expire
-	      << " is in the past (current time " << g_clock.now()
-	      << "). Clocks not synchronized or connection is very laggy"
-	      << std::endl;
-      dout(0) << ss << dendl;
-      mon->get_logclient()->log(LOG_WARN, ss);
-    }
   }
   
   state = STATE_ACTIVE;
@@ -639,30 +639,12 @@ void Paxos::handle_lease_ack(MMonPaxos *ack)
     dout(10) << "handle_lease_ack from " << ack->get_source() 
 	     << " dup (lagging!), ignoring" << dendl;
   }
-  stringstream ss;
-  bool warn = false;
-  if (ack->lease_timestamp > g_clock.now()) {
-    ss << "lease_ack from follower mon" << from
-       << " was sent from future time " << ack->lease_timestamp
-       << "! Clocks not synchronized." << std::endl;
-    warn = true;
-  }
-  else {
-    double diff = (double)ack->lease_timestamp -
-      (((double)lease_expire) - g_conf.mon_lease);
-    double abs = diff > 0 ? diff : -diff;
-    if ((diff < 0) && (abs > g_conf.mon_lease_wiggle_room)) {
-      utime_t send_time;
-      send_time.set_from_double(lease_expire - g_conf.mon_lease);
-      ss << "lease_ack from follower sent at time("
-	 << ack->lease_timestamp << "), before lease extend was sent ("
-	 << send_time
-	 << ")! Clocks not synchronized." << std::endl;
-      warn = true;
-    }
-  }
-  if (warn) {
-    dout(0) << ss << dendl;
+
+  if (ack->sent_timestamp > g_clock.now() + g_conf.mon_lease_wiggle_room) {
+    stringstream ss;
+    ss << "lease_ack from mon" << from
+       << " was sent from future time " << ack->sent_timestamp
+       << ", clocks not synchronized." << std::endl;
     mon->get_logclient()->log(LOG_WARN, ss);
   }
   ack->put();
