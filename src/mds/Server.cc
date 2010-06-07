@@ -3696,8 +3696,12 @@ void Server::handle_client_unlink(MDRequest *mdr)
   if (in->is_dir()) {
     if (rmdir) {
       // do empty directory checks
-      if (_dir_is_nonempty(mdr, in))
+      if (_dir_is_nonempty(mdr, in)) {
+	dout(7) << "handle_client_unlink on dir " << *in
+		<< ", returning ENOTEMPTY" << dendl;
+	reply_request(mdr, -ENOTEMPTY);
 	return;
+      }
     } else {
       dout(7) << "handle_client_unlink on dir " << *in << ", returning error" << dendl;
       reply_request(mdr, -EISDIR);
@@ -3953,6 +3957,10 @@ bool Server::_dir_is_nonempty(MDRequest *mdr, CInode *in)
 {
   dout(10) << "dir_is_nonempty " << *in << dendl;
   assert(in->is_auth());
+
+  
+  if (in->snaprealm && in->snaprealm->snaps.size()) {
+    return true; //in a snapshot!
 
   list<frag_t> frags;
   in->dirfragtree.get_leaves(frags);
