@@ -1679,7 +1679,8 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
     } else {
       dout(10) << " existing session " << s << " for " << s->inst << dendl;
       con->set_priv(s->get());
-    }
+      s->connection = con;
+   }
 
     /*
     s->caps.set_allow_all(caps_info.allow_all);
