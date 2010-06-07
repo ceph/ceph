@@ -3473,8 +3473,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   Context *onreadable_sync = 0;
   if (is_primary()) {
     dout(10) << " setting up obc for " << soid << dendl;
-    ObjectContext *obc = 0;
-    find_object_context(soid.oid, soid.snap, &obc, true);
+    ObjectContext *obc = get_object_context(soid, true);
     register_object_context(obc);
     obc->ondisk_write_lock();
     
