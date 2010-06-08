@@ -176,36 +176,42 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
   string rs;
   int err = -EINVAL;
   if (m->cmd.size() > 1) {
-    if (m->cmd.size() == 3 && m->cmd[1] == "add") {
+    if (m->cmd.size() == 4 && m->cmd[1] == "add") {
+      string name = m->cmd[2];
       entity_addr_t addr;
-      addr.parse(m->cmd[2].c_str());
       bufferlist rdata;
-      if (pending_map.contains(addr)) {
+
+      if (!addr.parse(m->cmd[3].c_str())) {
+	err = -EINVAL;
+	ss << "addr " << m->cmd[3] << "does not parse";
+	goto out;
+      }
+      if (pending_map.contains(addr) ||
+	  pending_map.contains(name)) {
 	err = -EEXIST;
-	ss << "mon " << addr << " already exists";
+	ss << "mon " << name << " " << addr << " already exists";
 	goto out;
       }
 
-      pending_map.add(addr);
+      pending_map.add(name, addr);
       pending_map.last_changed = g_clock.now();
-      ss << "added mon" << (pending_map.size()-1) << " at " << addr;
+      ss << "added mon." << name << " at " << addr;
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     }
     else if (m->cmd.size() == 3 && m->cmd[1] == "remove") {
-      entity_addr_t addr;
-      addr.parse(m->cmd[2].c_str());
-      bufferlist rdata;
-      if (!pending_map.contains(addr)) {
+      string name = m->cmd[2];
+      if (!pending_map.contains(name)) {
         err = -ENOENT;
-        ss << "mon " << addr << " does not exist";
+        ss << "mon " << name << " does not exist";
         goto out;
       }
-    
-      pending_map.remove(addr);
+
+      entity_addr_t addr = pending_map.get_addr(name);
+      pending_map.remove(name);
       pending_map.last_changed = g_clock.now();
-      ss << "removed mon" << " at " << addr << ", there are now " << pending_map.size() << " monitors" ;
+      ss << "removed mon." << name << " at " << addr << ", there are now " << pending_map.size() << " monitors" ;
       getline(ss, rs);
       // send reply immediately in case we get removed
       mon->reply_command(m, 0, rs, paxos->get_version());
@@ -259,7 +265,7 @@ void MonmapMonitor::_update_whoami()
 	  << mon->myaddr << ") in new monmap! I must have been removed, shutting down." << dendl;
   dout(10) << "Assuming temporary id=mon" << mon->monmap->size() << " for shutdown purposes" << dendl;
   mon->messenger->set_myname(entity_name_t::MON(mon->monmap->size()));
-  mon->monmap->add(mon->myaddr);
+  mon->monmap->add(mon->name, mon->myaddr);
   mon->shutdown();
 }
 

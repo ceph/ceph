@@ -71,10 +71,9 @@ int main(int argc, const char **argv)
   }
 
   // whoami
-  char *end;
-  int whoami = strtol(g_conf.id, &end, 10);
-  if (*end || end == g_conf.id || whoami < 0) {
-    cerr << "must specify '-i #' where # is the mon number" << std::endl;
+  string name = g_conf.id;
+  if (name.length() == 0) {
+    cerr << "must specify '-i id' where id is the mon name" << std::endl;
     usage();
   }
 
@@ -111,10 +110,10 @@ int main(int argc, const char **argv)
 
     // go
     MonitorStore store(g_conf.mon_data);
-    Monitor mon(whoami, &store, 0, &monmap);
+    Monitor mon(name, &store, 0, &monmap);
     mon.mkfs(osdmapbl);
     cout << argv[0] << ": created monfs at " << g_conf.mon_data 
-	 << " for mon" << whoami
+	 << " for mon." << name
 	 << std::endl;
     return 0;
   }
@@ -185,42 +184,47 @@ int main(int argc, const char **argv)
     assert(v == monmap.get_epoch());
   }
 
-  if ((unsigned)whoami >= monmap.size() || whoami < 0) {
-    cerr << "mon" << whoami << " does not exist in monmap" << std::endl;
+  if (!monmap.contains(name)) {
+    cerr << "mon." << name << " does not exist in monmap" << std::endl;
     exit(1);
   }
 
-  entity_addr_t ipaddr = monmap.get_inst(whoami).addr;
+  entity_addr_t ipaddr = monmap.get_addr(name);
   entity_addr_t conf_addr;
   char *mon_addr_str;
 
   if (conf_read_key(NULL, "mon addr", OPT_STR, &mon_addr_str, NULL) &&
       conf_addr.parse(mon_addr_str) &&
       ipaddr != conf_addr)
-    cerr << "WARNING: 'mon addr' config option does not match monmap file" << std::endl
+    cerr << "WARNING: 'mon addr' config option " << conf_addr << " does not match monmap file" << std::endl
 	 << "         continuing with monmap configuration" << std::endl;
 
   // bind
   SimpleMessenger *messenger = new SimpleMessenger();
 
-  cout << "starting mon" << whoami 
-       << " at " << monmap.get_inst(whoami).addr
+  int rank = monmap.get_rank(name);
+
+  cout << "starting mon." << name << " rank " << rank
+       << " at " << monmap.get_addr(name)
        << " mon_data " << g_conf.mon_data
        << " fsid " << monmap.get_fsid()
        << std::endl;
-  g_my_addr = monmap.get_inst(whoami).addr;
+  g_my_addr = monmap.get_addr(name);
   err = messenger->bind();
   if (err < 0)
     return 1;
 
-  _dout_create_courtesy_output_symlink("mon", whoami);
-  
   // start monitor
-  messenger->register_entity(entity_name_t::MON(whoami));
+  messenger->register_entity(entity_name_t::MON(rank));
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
-  Monitor *mon = new Monitor(whoami, &store, messenger, &monmap);
+  Monitor *mon = new Monitor(name, &store, messenger, &monmap);
 
   messenger->start();  // may daemonize
+
+  char fullname[80];
+  snprintf(fullname, sizeof(fullname), "mon.%s", name.c_str());
+  _dout_create_courtesy_output_symlink(fullname);
+  _dout_create_courtesy_output_symlink("mon", rank);
 
   messenger->set_default_policy(SimpleMessenger::Policy::stateless_server());
   messenger->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossless_peer());

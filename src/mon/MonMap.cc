@@ -30,9 +30,8 @@ int MonMap::read(const char *fn)
 void MonMap::print_summary(ostream& out)
 {
   out << "e" << epoch << ": "
-      << mon_inst.size() << " mons at";
-  for (unsigned i = 0; i<mon_inst.size(); i++)
-    out << " " << mon_inst[i].addr;
+      << mon_addr.size() << " mons at "
+      << mon_addr;
 }
  
 void MonMap::print(ostream& out)
@@ -41,7 +40,9 @@ void MonMap::print(ostream& out)
   out << "fsid " << fsid << "\n";
   out << "last_changed " << last_changed << "\n";
   out << "created " << created << "\n";
-  for (unsigned i=0; i<mon_inst.size(); i++) {
-    out << "\t" << mon_inst[i] << "\n";
-  }
+  unsigned i = 0;
+  for (map<string,entity_addr_t>::iterator p = mon_addr.begin();
+       p != mon_addr.end();
+       p++)
+    out << "mon" << i++ << "\t" << p->second << "\t" << p->first << "\n";
 }

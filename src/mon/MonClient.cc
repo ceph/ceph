@@ -61,10 +61,10 @@ int MonClient::build_initial_monmap()
     vector<entity_addr_t> addrs;
     if (parse_ip_port_vec(g_conf.mon_host, addrs)) {
       for (unsigned i=0; i<addrs.size(); i++) {
-	entity_inst_t inst;
-	inst.name = entity_name_t::MON(i);
-	inst.addr = addrs[i];
-	monmap.add_mon(inst);
+	char n[2];
+	n[0] = 'a' + i;
+	n[1] = 0;
+	monmap.add(n, addrs[i]);
       }
       return 0;
     }
@@ -79,24 +79,24 @@ int MonClient::build_initial_monmap()
     for (list<string>::iterator p = ls.begin(); p != ls.end(); p++) {
       ConfFile c(p->c_str());
       if (c.parse()) {
-	static string monstr;
-	for (int i=0; i<15; i++) {
-	  char monname[20];
-	  char *val = 0;
-	  snprintf(monname, sizeof(monname), "mon%d", i);
-	  c.read(monname, "mon addr", &val, 0);
-	  if (!val || !val[0])
-	    break;
-	  
-	  entity_inst_t inst;
-	  if (!inst.addr.parse(val)) {
-	    cerr << "unable to parse conf's addr for " << monname << " (" << val << ")" << std::endl;
-	    continue;
+	for (list<ConfSection*>::const_iterator q = c.get_section_list().begin();
+	     q != c.get_section_list().end();
+	     q++) {
+	  const char *section = (*q)->get_name().c_str();
+	  if (strncmp(section, "mon.", 4) == 0) {
+	    const char *name = section + 4;
+	    char *val = 0;
+	    c.read(section, "mon addr", &val, 0);
+	    if (!val || !val[0])
+	      continue;
+	    entity_addr_t addr;
+	    if (!addr.parse(val)) {
+	      cerr << "unable to " << *p << " mon addr for " << section << " (" << val << ")" << std::endl;
+	      continue;
+	    }
+	    monmap.add(name, addr);
 	  }
-	  inst.name = entity_name_t::MON(monmap.mon_inst.size());
-	  monmap.add_mon(inst);
 	}
-	break;
       }
     }
     if (monmap.size())
@@ -146,9 +146,9 @@ int MonClient::get_monmap_privately()
   dout(10) << "have " << monmap.epoch << dendl;
   
   while (monmap.epoch == 0) {
-    cur_mon = rand() % monmap.mon_inst.size();
-    dout(10) << "querying " << monmap.mon_inst[cur_mon] << dendl;
-    messenger->send_message(new MMonGetMap, monmap.mon_inst[cur_mon]);
+    cur_mon = rand() % monmap.size();
+    dout(10) << "querying " << monmap.get_inst(cur_mon) << dendl;
+    messenger->send_message(new MMonGetMap, monmap.get_inst(cur_mon));
     
     if (--attempt == 0)
       break;
@@ -157,7 +157,7 @@ int MonClient::get_monmap_privately()
     map_cond.WaitInterval(monc_lock, interval);
 
     if (monmap.epoch == 0)
-      messenger->mark_down(monmap.mon_inst[cur_mon].addr);  // nope, clean that connection up
+      messenger->mark_down(monmap.get_inst(cur_mon).addr);  // nope, clean that connection up
   }
 
   if (temp_msgr) {
@@ -207,7 +207,7 @@ void MonClient::handle_monmap(MMonMap *m)
   monc_lock.Lock();
 
   assert(cur_mon >= 0);
-  entity_addr_t cur_mon_addr = monmap.get_inst(cur_mon).addr;
+  entity_addr_t cur_mon_addr = monmap.get_addr(cur_mon);
 
   bufferlist::iterator p = m->monmapbl.begin();
   ::decode(monmap, p);
@@ -220,10 +220,10 @@ void MonClient::handle_monmap(MMonMap *m)
   want_monmap = false;
 
   if (cur_mon >= (int)monmap.size() ||
-      monmap.get_inst(cur_mon).addr != cur_mon_addr) {
+      monmap.get_addr(cur_mon) != cur_mon_addr) {
     cur_mon = -1;
     for (unsigned i=0; i<monmap.size(); i++)
-      if (cur_mon_addr == monmap.get_inst(i).addr)
+      if (cur_mon_addr == monmap.get_addr(i))
       	cur_mon = i;
   }
   if (cur_mon >= 0)
@@ -368,7 +368,7 @@ void MonClient::_send_mon_message(Message *m, bool force)
 {
   assert(cur_mon >= 0);
   if (force || state == MC_STATE_HAVE_SESSION) {
-    messenger->send_message(m, monmap.mon_inst[cur_mon]);
+    messenger->send_message(m, monmap.get_inst(cur_mon));
   } else {
     waiting_for_session.push_back(m);
   }
@@ -377,7 +377,7 @@ void MonClient::_send_mon_message(Message *m, bool force)
 void MonClient::_pick_new_mon()
 {
   if (cur_mon >= 0)
-    messenger->mark_down(monmap.get_inst(cur_mon).addr);
+    messenger->mark_down(monmap.get_addr(cur_mon));
 
   if (cur_mon >= 0 && monmap.size() > 1) {
     // pick a _different_ mon
@@ -426,7 +426,7 @@ bool MonClient::ms_handle_reset(Connection *con)
   Mutex::Locker lock(monc_lock);
 
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
-    if (cur_mon < 0 || con->get_peer_addr() != monmap.get_inst(cur_mon).addr) {
+    if (cur_mon < 0 || con->get_peer_addr() != monmap.get_addr(cur_mon)) {
       dout(10) << "ms_handle_reset stray mon " << con->get_peer_addr() << dendl;
       return true;
     } else {
@@ -465,7 +465,7 @@ void MonClient::tick()
     if (now > sub_renew_after)
       _renew_subs();
 
-    messenger->send_keepalive(monmap.mon_inst[cur_mon]);
+    messenger->send_keepalive(monmap.get_inst(cur_mon));
   }
 
   if (auth)

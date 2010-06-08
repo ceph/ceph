@@ -206,13 +206,13 @@ public:
   entity_addr_t get_mon_addr(unsigned i) {
     Mutex::Locker l(monc_lock);
     if (i < monmap.size())
-      return monmap.mon_inst[i].addr;
+      return monmap.get_addr(i);
     return entity_addr_t();
   }
   entity_inst_t get_mon_inst(unsigned i) {
     Mutex::Locker l(monc_lock);
     if (i < monmap.size())
-      return monmap.mon_inst[i];
+      return monmap.get_inst(i);
     return entity_inst_t();
   }
   int get_num_mon() {

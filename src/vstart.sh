@@ -222,6 +222,20 @@ else
 fi
 
 
+MONS=""
+count=0
+for f in a b c d e f g h i j k l m n o p q r s t u v w x y z
+do
+    if [ -z "$MONS" ];
+    then
+	MONS="$f"
+    else
+	MONS="$MONS $f"
+    fi
+    count=$(($count + 1))
+    [ $count -eq $CEPH_NUM_MON ] && break;
+done
+
 
 if [ "$start_mon" -eq 1 ]; then
 	if [ "$new" -eq 1 ]; then
@@ -285,22 +299,24 @@ EOF
 
 		# build a fresh fs monmap, mon fs
 		str="$CEPH_BIN/monmaptool --create --clobber"
-		for f in `seq 0 $((CEPH_NUM_MON-1))`
+		count=0
+		for f in $MONS
 		do
-			str=$str" --add $IP:$(($CEPH_PORT+$f))"
+			str=$str" --add $f $IP:$(($CEPH_PORT+$count))"
 			if [ $overwrite_conf -eq 1 ]; then
 				cat <<EOF >> $conf
-[mon$f]
-        mon data = "dev/mon$f"
-        mon addr = $IP:$(($CEPH_PORT+$f))
+[mon.$f]
+        mon data = "dev/mon.$f"
+        mon addr = $IP:$(($CEPH_PORT+$count))
 EOF
 			fi
+			count=$(($count + 1))
 		done
 		str=$str" --print $monmap_fn"
 		echo $str
 		$str
 
-		for f in `seq 0 $((CEPH_NUM_MON-1))`
+		for f in $MONS
 		do
 		    cmd="$CEPH_BIN/cmon --mkfs -c $conf -i $f --monmap=$monmap_fn --osdmap=$osdmap_fn"
 		    [ "$cephx" -eq 1 ] && cmd="$cmd --keyring=$keyring_fn"
@@ -311,7 +327,8 @@ EOF
 
 	# start monitors
 	if [ "$start_mon" -ne 0 ]; then
-		for f in `seq 0 $((CEPH_NUM_MON-1))`; do
+		for f in $MONS
+		do
 		    run 'mon' $CEPH_BIN/cmon -i $f $ARGS $CMON_ARGS
 		done
 		sleep 1

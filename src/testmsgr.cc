@@ -72,8 +72,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   vec_to_argv(args, argc, argv);
 
-  int whoami = atoi(args[0]);
-  dout(0) << "i am mon" << whoami << dendl;
+  dout(0) << "i am mon " << args[0] << dendl;
 
   // get monmap
   MonClient mc;
@@ -81,7 +80,10 @@ int main(int argc, const char **argv, const char *envp[]) {
     return -1;
   
   // start up network
-  g_my_addr = mc.get_mon_addr(whoami);
+  int whoami = mc.monmap.get_rank(args[0]);
+  assert(whoami >= 0);
+  g_my_addr = mc.monmap.get_addr(whoami);
+
   SimpleMessenger *rank = new SimpleMessenger();
   int err = rank->bind();
   if (err < 0)

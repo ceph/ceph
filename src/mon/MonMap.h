@@ -25,9 +25,24 @@ class MonMap {
  public:
   epoch_t epoch;       // what epoch/version of the monmap
   ceph_fsid_t fsid;
-  vector<entity_inst_t> mon_inst;
+  map<string, entity_addr_t> mon_addr;
   utime_t last_changed;
   utime_t created;
+
+  vector<string> rank_name;
+  vector<entity_addr_t> rank_addr;
+  
+  void calc_ranks() {
+    rank_name.resize(mon_addr.size());
+    rank_addr.resize(mon_addr.size());
+    unsigned i = 0;
+    for (map<string,entity_addr_t>::iterator p = mon_addr.begin();
+	 p != mon_addr.end();
+	 p++, i++) {
+      rank_name[i] = p->first;
+      rank_addr[i] = p->second;
+    }
+  }
 
   MonMap() : epoch(0) {
     memset(&fsid, 0, sizeof(fsid));
@@ -37,50 +52,90 @@ class MonMap {
   ceph_fsid_t& get_fsid() { return fsid; }
 
   unsigned size() {
-    return mon_inst.size();
+    return mon_addr.size();
+  }
+
+  const string& pick_random_mon() {
+    unsigned n = rand() % mon_addr.size();
+    return rank_name[n];
+  }
+  const string& pick_random_mon_not(const string& butnot) {
+    unsigned n = rand() % mon_addr.size();
+    if (rank_name[n] == butnot && mon_addr.size() > 1) {
+      if (n)
+	n--;
+      else
+	n++;
+    }
+    return rank_name[n];
   }
 
   epoch_t get_epoch() { return epoch; }
 
-  void add_mon(entity_inst_t inst) {
-    mon_inst.push_back(inst);
+  void add(string name, entity_addr_t addr) {
+    assert(mon_addr.count(name) == 0);
+    mon_addr[name] = addr;
+    calc_ranks();
+  }
+  
+  void remove(string name) {
+    assert(mon_addr.count(name));
+    mon_addr.erase(name);
+    calc_ranks();
   }
 
-  void add(entity_addr_t a) {
-    entity_inst_t i;
-    i.addr = a;
-    i.name = entity_name_t::MON(mon_inst.size());
-    mon_inst.push_back(i);
+  bool contains(const string& name) {
+    return mon_addr.count(name);
   }
-  bool remove(entity_addr_t a) {
-    for (unsigned i=0; i<mon_inst.size(); i++) {
-      if (mon_inst[i].addr == a) {
-	for (; i < mon_inst.size()-1; i++) 
-	  mon_inst[i].addr = mon_inst[i+1].addr;
-	mon_inst.pop_back();
+
+  bool contains(entity_addr_t a) {
+    for (map<string,entity_addr_t>::iterator p = mon_addr.begin();
+	 p != mon_addr.end();
+	 p++)
+      if (p->second == a)
+	return true;
+    return false;
+  }
+
+  int get_rank(const string& n) {
+    for (unsigned i=0; i<rank_name.size(); i++)
+      if (rank_name[i] == n)
+	return i;
+    return -1;
+  }
+  bool get_addr_name(entity_addr_t a, string& name) {
+    for (map<string,entity_addr_t>::iterator p = mon_addr.begin();
+	 p != mon_addr.end();
+	 p++)
+      if (p->second == a) {
+	name = p->first;
 	return true;
       }
-    }
-    return false;
-  }
-  bool contains(entity_addr_t a) {
-    for (unsigned i=0; i<mon_inst.size(); i++)
-      if (mon_inst[i].addr == a) 
-	return true;
     return false;
   }
 
-  const entity_inst_t &get_inst(unsigned m) {
-    assert(m < mon_inst.size());
-    return mon_inst[m];
+  const entity_addr_t& get_addr(const string& n) {
+    assert(mon_addr.count(n));
+    return mon_addr[n];
+  }
+  const entity_addr_t& get_addr(unsigned m) {
+    assert(m < rank_addr.size());
+    return rank_addr[m];
+  }
+  entity_inst_t get_inst(unsigned m) {
+    assert(m < rank_addr.size());
+    entity_inst_t i;
+    i.addr = rank_addr[m];
+    i.name = entity_name_t::MON(m);
+    return i;
   }
 
   void encode(bufferlist& blist) {
-    __u16 v = 1;
+    __u16 v = 2;
     ::encode(v, blist);
     ::encode_raw(fsid, blist);
     ::encode(epoch, blist);
-    ::encode(mon_inst, blist);
+    ::encode(mon_addr, blist);
     ::encode(last_changed, blist);
     ::encode(created, blist);
   }  
@@ -93,11 +148,22 @@ class MonMap {
     ::decode(v, p);
     ::decode_raw(fsid, p);
     ::decode(epoch, p);
-    ::decode(mon_inst, p);
+    if (v == 1) {
+      vector<entity_inst_t> mon_inst;
+      ::decode(mon_inst, p);
+      for (unsigned i = 0; i < mon_inst.size(); i++) {
+	char n[2];
+	n[0] = 'a' + i;
+	n[1] = 0;
+	string name = n;
+	mon_addr[name] = mon_inst[i].addr;
+      }
+    } else
+      ::decode(mon_addr, p);
     ::decode(last_changed, p);
     ::decode(created, p);
+    calc_ranks();
   }
-
 
   void generate_fsid() {
     for (int i=0; i<16; i++)

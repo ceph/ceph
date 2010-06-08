@@ -82,8 +82,9 @@ const CompatSet::Feature ceph_mon_feature_ro_compat[] =
 const CompatSet::Feature ceph_mon_feature_incompat[] =
   { CEPH_MON_FEATURE_INCOMPAT_BASE , CompatSet::Feature(0, "")};
 
-Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
-  whoami(w), 
+Monitor::Monitor(string nm, MonitorStore *s, Messenger *m, MonMap *map) :
+  name(nm),
+  whoami(-1), 
   messenger(m),
   lock("Monitor::lock"),
   monmap(map),
@@ -99,6 +100,8 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   paxos(PAXOS_NUM), paxos_service(PAXOS_NUM),
   routed_request_tid(0)
 {
+  whoami = map->get_rank(name);
+
   paxos_service[PAXOS_MDSMAP] = new MDSMonitor(this, add_paxos(PAXOS_MDSMAP));
   paxos_service[PAXOS_MONMAP] = new MonmapMonitor(this, add_paxos(PAXOS_MONMAP));
   paxos_service[PAXOS_OSDMAP] = new OSDMonitor(this, add_paxos(PAXOS_OSDMAP));
@@ -110,7 +113,7 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   mon_caps = new MonCaps();
   mon_caps->set_allow_all(true);
   mon_caps->text = "allow *";
-  myaddr = map->get_inst(w).addr;
+  myaddr = map->get_addr(name);
 }
 
 Paxos *Monitor::add_paxos(int type)

@@ -45,7 +45,8 @@ int main(int argc, const char **argv)
   bool create = false;
   bool clobber = false;
   bool modified = false;
-  list<entity_addr_t> add, rm;
+  map<string,entity_addr_t> add;
+  list<string> rm;
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("print", '\0')) {
@@ -54,9 +55,10 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&create, OPT_BOOL);
     } else if (CONF_ARG_EQ("clobber", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&clobber, OPT_BOOL);
-    } else if (CONF_ARG_EQ("add", '\0') ||
-               CONF_ARG_EQ("rm", '\0')) {
-      bool is_add=CONF_ARG_EQ("add", '\0');
+    } else if (CONF_ARG_EQ("add", '\0')) {
+      if (++i >= args.size())
+	usage();
+      string name = args[i];
       if (++i >= args.size())
 	usage();
       entity_addr_t addr;
@@ -64,11 +66,13 @@ int main(int argc, const char **argv)
 	cerr << me << ": invalid ip:port '" << args[i] << "'" << std::endl;
 	return -1;
       }
-      //inst.name = entity_name_t::MON(monmap.size());
-      if (is_add)
-	add.push_back(addr);
-      else 
-	rm.push_back(addr);
+      add[name] = addr;
+      modified = true;
+    } else if (CONF_ARG_EQ("rm", '\0')) {
+      if (++i >= args.size())
+	usage();
+      string name = args[i];
+      rm.push_back(name);
       modified = true;
     } else if (!fn)
       fn = args[i];
@@ -105,14 +109,15 @@ int main(int argc, const char **argv)
     modified++;
   }
 
-  for (list<entity_addr_t>::iterator p = add.begin(); p != add.end(); p++)
-    monmap.add(*p);
-  for (list<entity_addr_t>::iterator p = rm.begin(); p != rm.end(); p++) {
+  for (map<string,entity_addr_t>::iterator p = add.begin(); p != add.end(); p++)
+    monmap.add(p->first, p->second);
+  for (list<string>::iterator p = rm.begin(); p != rm.end(); p++) {
     cout << me << ": removing " << *p << std::endl;
-    if (!monmap.remove(*p)) {
+    if (!monmap.contains(*p)) {
       cerr << me << ": map does not contain " << *p << std::endl;
       usage();
     }
+    monmap.remove(*p);
   }
 
   if (!print && !modified)

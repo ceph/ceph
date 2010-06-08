@@ -57,6 +57,7 @@ class MForward;
 class Monitor : public Dispatcher {
 public:
   // me
+  string name;
   int whoami;
   entity_addr_t myaddr;
   Messenger *messenger;
@@ -222,7 +223,7 @@ public:
   void ms_handle_remote_reset(Connection *con) {}
 
  public:
-  Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map);
+  Monitor(string nm, MonitorStore *s, Messenger *m, MonMap *map);
   ~Monitor();
 
   void init();
