@@ -6927,6 +6927,22 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in
 // -------------------------------------------------------------------------------
 // STRAYS
 
+void MDCache::scan_stray_dir()
+{
+  dout(10) << "scan_stray_dir" << dendl;
+  
+  list<CDir*> ls;
+  for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); p++) {
+    CDir *dir = *p;
+    for (CDir::map_t::iterator q = dir->items.begin(); q != dir->items.end(); q++) {
+      CDentry *dn = q->second;
+      CDentry::linkage_t *dnl = dn->get_projected_linkage();
+      if (dnl->is_primary())
+	maybe_eval_stray(dnl->get_inode());
+    }
+  }
+}
+
 struct C_MDC_EvalStray : public Context {
   MDCache *mdcache;
   CDentry *dn;

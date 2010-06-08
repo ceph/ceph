@@ -230,6 +230,7 @@ bool ClassMonitor::preprocess_class(MClass *m)
   }
   if (!num_new) {
     dout(10) << "  nothing new" << dendl;
+    m->put();
     return true;
   }
   return false;
@@ -440,8 +441,10 @@ void ClassMonitor::handle_request(MClass *m)
   dout(10) << "handle_request " << *m << " from " << m->get_orig_source() << dendl;
   MClass *reply = new MClass();
 
-  if (!reply)
+  if (!reply) {
+    m->put();
     return;
+  }
 
   deque<ClassImpl>::iterator impl_iter = m->impl.begin();
   deque<bool>::iterator add_iter = m->add.begin();

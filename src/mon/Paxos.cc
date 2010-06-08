@@ -455,6 +455,7 @@ void Paxos::handle_accept(MMonPaxos *accept)
     finish_contexts(waiting_for_readable);
     finish_contexts(waiting_for_writeable);
   }
+  accept->put();
 }
 
 void Paxos::accept_timeout()

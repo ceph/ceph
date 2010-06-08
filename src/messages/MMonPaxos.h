@@ -87,7 +87,8 @@ public:
   }
 
   void encode_payload() {
-    header.version = 1;
+    if (connection->has_feature(CEPH_FEATURE_MONCLOCKCHECK))
+      header.version = 1;
     ::encode(epoch, payload);
     ::encode(op, payload);
     ::encode(machine_id, payload);
@@ -97,7 +98,8 @@ public:
     ::encode(pn, payload);
     ::encode(uncommitted_pn, payload);
     ::encode(lease_timestamp, payload);
-    ::encode(sent_timestamp, payload);
+    if (connection->has_feature(CEPH_FEATURE_MONCLOCKCHECK))
+      ::encode(sent_timestamp, payload);
     ::encode(latest_version, payload);
     ::encode(latest_value, payload);
     ::encode(values, payload);

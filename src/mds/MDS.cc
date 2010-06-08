@@ -1180,6 +1180,7 @@ void MDS::active_start()
     mdcache->open_root();
 
   mdcache->clean_open_file_lists();
+  mdcache->scan_stray_dir();
   finish_contexts(waiting_for_replay);  // kick waiters
   finish_contexts(waiting_for_active);  // kick waiters
 }
