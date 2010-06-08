@@ -49,7 +49,7 @@ private:
 
   Messenger *messenger;
 
-  int cur_mon;
+  string cur_mon;
 
   EntityName entity_name;
 
@@ -168,7 +168,7 @@ public:
  public:
   MonClient(RotatingKeyRing *rkeys=0) :
     state(MC_STATE_NONE),
-    messenger(NULL), cur_mon(-1),
+    messenger(NULL),
     monc_lock("MonClient::monc_lock"),
     timer(monc_lock),
     hunting(true),

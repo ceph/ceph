@@ -122,6 +122,14 @@ class MonMap {
     assert(m < rank_addr.size());
     return rank_addr[m];
   }
+  entity_inst_t get_inst(const string& n) {
+    assert(mon_addr.count(n));
+    int m = get_rank(n);
+    entity_inst_t i;
+    i.addr = rank_addr[m];
+    i.name = entity_name_t::MON(m);
+    return i;
+  }
   entity_inst_t get_inst(unsigned m) {
     assert(m < rank_addr.size());
     entity_inst_t i;
