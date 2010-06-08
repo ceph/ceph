@@ -48,7 +48,7 @@ bool MonmapMonitor::update_from_paxos()
   dout(10) << "update_from_paxos paxosv " << paxosv
 	   << ", my v " << mon->monmap->epoch << dendl;
 
-  int original_map_size = mon->monmap->size();
+  unsigned original_map_size = mon->monmap->size();
   //read and decode
   monmap_bl.clear();
   bool success = paxos->read(paxosv, monmap_bl);
@@ -59,8 +59,7 @@ bool MonmapMonitor::update_from_paxos()
   //save the bufferlist version in the paxos instance as well
   paxos->stash_latest(paxosv, monmap_bl);
 
-  if (original_map_size != mon->monmap->size())
-  {
+  if (original_map_size != mon->monmap->size()) {
     _update_whoami();
 
     // call election?
@@ -242,25 +241,22 @@ void MonmapMonitor::tick()
 void MonmapMonitor::_update_whoami()
 {
   // first check if there is any change
-  if (mon->whoami < mon->monmap->size() && 
+  if (mon->whoami < (int)mon->monmap->size() && 
       mon->monmap->get_inst(mon->whoami).addr == mon->myaddr) 
-  {
     return;
-  }
   
   // then check backwards starting from min(whoami-1, size-1) since whoami only ever decreases
-  int i=(((int)mon->whoami)-1) < mon->monmap->size() ? (((int)mon->whoami)-1):(mon->monmap->size()-1);
-  for (; i>=0; i--)
-  {
-    if (mon->monmap->get_inst(i).addr == mon->myaddr)
-    {
+  
+  for (int i = MIN(mon->whoami - 1, (int)mon->monmap->size() - 1); i >= 0; i--) {
+    if (mon->monmap->get_inst(i).addr == mon->myaddr) {
       dout(10) << "Changing whoami from " << mon->whoami << " to " << i << dendl;
       mon->whoami = i;
       mon->messenger->set_myname(entity_name_t::MON(i));
       return;
     }
   }
-  dout(0) << "Cannot find myself (mon" << mon->whoami << ", " << mon->myaddr << ") in new monmap! I must have been removed, shutting down." << dendl;
+  dout(0) << "Cannot find myself (mon" << mon->whoami << ", "
+	  << mon->myaddr << ") in new monmap! I must have been removed, shutting down." << dendl;
   dout(10) << "Assuming temporary id=mon" << mon->monmap->size() << " for shutdown purposes" << dendl;
   mon->messenger->set_myname(entity_name_t::MON(mon->monmap->size()));
   mon->monmap->add(mon->myaddr);
