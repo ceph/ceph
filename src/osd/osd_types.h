@@ -1329,6 +1329,9 @@ inline ostream& operator<<(ostream& out, const OSDOp& op) {
     case CEPH_OSD_OP_TRIMTRUNC:
       out << " " << op.op.extent.truncate_seq << "@" << (int64_t)op.op.extent.truncate_size;
       break;
+    case CEPH_OSD_OP_ROLLBACK:
+      out << " " << snapid_t(op.op.snap.snapid);
+      break;
     default:
       out << " " << op.op.extent.offset << "~" << op.op.extent.length;
       if (op.op.extent.truncate_seq)
