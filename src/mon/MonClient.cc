@@ -142,20 +142,22 @@ int MonClient::get_monmap_privately()
   }
   
   int attempt = 10;
-  int i = 0;
   
   dout(10) << "have " << monmap.epoch << dendl;
   
   while (monmap.epoch == 0) {
-    i = rand() % monmap.mon_inst.size();
-    dout(10) << "querying " << monmap.mon_inst[i] << dendl;
-    messenger->send_message(new MMonGetMap, monmap.mon_inst[i]);
+    cur_mon = rand() % monmap.mon_inst.size();
+    dout(10) << "querying " << monmap.mon_inst[cur_mon] << dendl;
+    messenger->send_message(new MMonGetMap, monmap.mon_inst[cur_mon]);
     
     if (--attempt == 0)
       break;
     
     utime_t interval(1, 0);
     map_cond.WaitInterval(monc_lock, interval);
+
+    if (monmap.epoch == 0)
+      messenger->mark_down(monmap.mon_inst[cur_mon].addr);  // nope, clean that connection up
   }
 
   if (temp_msgr) {
@@ -168,6 +170,7 @@ int MonClient::get_monmap_privately()
   }
  
   hunting = true;  // reset this to true!
+  cur_mon = -1;
 
   if (monmap.epoch)
     return 0;
