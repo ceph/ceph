@@ -994,6 +994,7 @@ public:
 
   // -- stray --
 public:
+  void scan_stray_dir();
   void eval_stray(CDentry *dn);
   void eval_remote(CDentry *dn);
 
