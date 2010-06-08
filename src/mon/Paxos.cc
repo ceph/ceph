@@ -23,10 +23,10 @@
 
 #define DOUT_SUBSYS paxos
 #undef dout_prefix
-#define dout_prefix _prefix(mon, mon->whoami, machine_name, state, last_committed)
-static ostream& _prefix(Monitor *mon, int whoami, const char *machine_name, int state, version_t last_committed) {
+#define dout_prefix _prefix(mon, mon->name, mon->rank, machine_name, state, last_committed)
+static ostream& _prefix(Monitor *mon, const string& name, int rank, const char *machine_name, int state, version_t last_committed) {
   return *_dout << dbeginl
-		<< "mon" << whoami
+		<< "mon." << name << "@" << rank
 		<< (mon->is_starting() ?
 		    (const char*)"(starting)" :
 		    (mon->is_leader() ?
@@ -87,7 +87,7 @@ void Paxos::collect(version_t oldpn)
   for (set<int>::const_iterator p = mon->get_quorum().begin();
        p != mon->get_quorum().end();
        ++p) {
-    if (*p == mon->whoami) continue;
+    if (*p == mon->rank) continue;
     
     MMonPaxos *collect = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COLLECT, machine_id);
     collect->last_committed = last_committed;
@@ -336,7 +336,7 @@ void Paxos::begin(bufferlist& v)
   
   // accept it ourselves
   accepted.clear();
-  accepted.insert(mon->whoami);
+  accepted.insert(mon->rank);
   new_value = v;
   mon->store->put_bl_sn(new_value, machine_name, last_committed+1);
 
@@ -356,7 +356,7 @@ void Paxos::begin(bufferlist& v)
   for (set<int>::const_iterator p = mon->get_quorum().begin();
        p != mon->get_quorum().end();
        ++p) {
-    if (*p == mon->whoami) continue;
+    if (*p == mon->rank) continue;
     
     dout(10) << " sending begin to mon" << *p << dendl;
     MMonPaxos *begin = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_BEGIN, machine_id);
@@ -483,7 +483,7 @@ void Paxos::commit()
   for (set<int>::const_iterator p = mon->get_quorum().begin();
        p != mon->get_quorum().end();
        ++p) {
-    if (*p == mon->whoami) continue;
+    if (*p == mon->rank) continue;
 
     dout(10) << " sending commit to mon" << *p << dendl;
     MMonPaxos *commit = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COMMIT, machine_id);
@@ -527,7 +527,7 @@ void Paxos::extend_lease()
   lease_expire = g_clock.now();
   lease_expire += g_conf.mon_lease;
   acked_lease.clear();
-  acked_lease.insert(mon->whoami);
+  acked_lease.insert(mon->rank);
 
   dout(7) << "extend_lease now+" << g_conf.mon_lease << " (" << lease_expire << ")" << dendl;
 
@@ -535,7 +535,7 @@ void Paxos::extend_lease()
   for (set<int>::const_iterator p = mon->get_quorum().begin();
        p != mon->get_quorum().end();
        ++p) {
-    if (*p == mon->whoami) continue;
+    if (*p == mon->rank) continue;
     MMonPaxos *lease = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE, machine_id);
     lease->last_committed = last_committed;
     lease->lease_timestamp = lease_expire;
@@ -713,7 +713,7 @@ version_t Paxos::get_new_proposal_number(version_t gt)
   last_pn /= 100;
   last_pn++;
   last_pn *= 100;
-  last_pn += (version_t)mon->whoami;
+  last_pn += (version_t)mon->rank;
   
   // write
   mon->store->put_int(last_pn, machine_name, "last_pn");

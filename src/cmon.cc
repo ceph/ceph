@@ -224,7 +224,6 @@ int main(int argc, const char **argv)
   char fullname[80];
   snprintf(fullname, sizeof(fullname), "mon.%s", name.c_str());
   _dout_create_courtesy_output_symlink(fullname);
-  _dout_create_courtesy_output_symlink("mon", rank);
 
   messenger->set_default_policy(SimpleMessenger::Policy::stateless_server());
   messenger->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossless_peer());

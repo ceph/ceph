@@ -43,7 +43,7 @@
 #define dout_prefix _prefix(mon, pg_map)
 static ostream& _prefix(Monitor *mon, PGMap& pg_map) {
   return *_dout << dbeginl
-		<< "mon" << mon->whoami
+		<< "mon." << mon->name << "@" << mon->rank
 		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
 		<< ".pg v" << pg_map.version << " ";
 }

@@ -37,7 +37,7 @@
 #define dout_prefix _prefix(mon, mdsmap)
 static ostream& _prefix(Monitor *mon, MDSMap& mdsmap) {
   return *_dout << dbeginl
-		<< "mon" << mon->whoami 
+		<< "mon." << mon->name << "@" << mon->rank
 		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
 		<< ".mds e" << mdsmap.get_epoch() << " ";
 }

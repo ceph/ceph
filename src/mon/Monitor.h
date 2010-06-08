@@ -58,7 +58,7 @@ class Monitor : public Dispatcher {
 public:
   // me
   string name;
-  int whoami;
+  int rank;
   entity_addr_t myaddr;
   Messenger *messenger;
   Mutex lock;
@@ -117,6 +117,7 @@ public:
 
   void call_election(bool is_new=true);  // initiate election
   void win_election(epoch_t epoch, set<int>& q);         // end election (called by Elector)
+  void win_standalone_election();
   void lose_election(epoch_t epoch, set<int>& q, int l); // end election (called by Elector)
 
 

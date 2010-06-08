@@ -63,7 +63,7 @@
 #define dout_prefix _prefix(this)
 static ostream& _prefix(Monitor *mon) {
   return *_dout << dbeginl
-		<< "mon" << mon->whoami
+		<< "mon." << mon->name << "@" << mon->rank
 		<< (mon->is_starting() ?
 		    (const char*)"(starting)" : 
 		    (mon->is_leader() ?
@@ -84,7 +84,7 @@ const CompatSet::Feature ceph_mon_feature_incompat[] =
 
 Monitor::Monitor(string nm, MonitorStore *s, Messenger *m, MonMap *map) :
   name(nm),
-  whoami(-1), 
+  rank(-1), 
   messenger(m),
   lock("Monitor::lock"),
   monmap(map),
@@ -100,7 +100,7 @@ Monitor::Monitor(string nm, MonitorStore *s, Messenger *m, MonMap *map) :
   paxos(PAXOS_NUM), paxos_service(PAXOS_NUM),
   routed_request_tid(0)
 {
-  whoami = map->get_rank(name);
+  rank = map->get_rank(name);
 
   paxos_service[PAXOS_MDSMAP] = new MDSMonitor(this, add_paxos(PAXOS_MDSMAP));
   paxos_service[PAXOS_MONMAP] = new MonmapMonitor(this, add_paxos(PAXOS_MONMAP));
@@ -171,10 +171,7 @@ void Monitor::init()
   if (monmap->size() > 1) {
     call_election();
   } else {
-    // we're standalone.
-    set<int> q;
-    q.insert(whoami);
-    win_election(1, q);
+    win_standalone_election();
   }
   
   lock.Unlock();
@@ -202,11 +199,14 @@ void Monitor::shutdown()
 
 void Monitor::call_election(bool is_new)
 {
-  if (monmap->size() == 1) return;
+  if (monmap->size() == 1)
+    return;
+
+  rank = monmap->get_rank(name);
   
   if (is_new) {
     stringstream ss;
-    ss << "mon" << whoami << " calling new monitor election";
+    ss << "mon." << name << " calling new monitor election";
     logclient.log(LOG_INFO, ss);
   }
 
@@ -223,16 +223,26 @@ void Monitor::call_election(bool is_new)
   elector.call_election();
 }
 
+void Monitor::win_standalone_election()
+{
+  dout(1) << "win_standalone_election" << dendl;
+  rank = monmap->get_rank(name);
+  assert(rank == 0);
+  set<int> q;
+  q.insert(rank);
+  win_election(1, q);
+}
+
 void Monitor::win_election(epoch_t epoch, set<int>& active) 
 {
   state = STATE_LEADER;
-  leader = whoami;
+  leader = rank;
   mon_epoch = epoch;
   quorum = active;
   dout(10) << "win_election, epoch " << mon_epoch << " quorum is " << quorum << dendl;
 
   stringstream ss;
-  ss << "mon" << whoami << " won leader election with quorum " << quorum;
+  ss << "mon." << name << "@" << rank << " won leader election with quorum " << quorum;
   logclient.log(LOG_INFO, ss);
   
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
@@ -367,9 +377,9 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
 
     dout(10) << "forward_request " << rr->tid << " request " << *req << dendl;
 
-    dout(10) << " noting that i mon" << whoami << " own this requests's session" << dendl;
+    dout(10) << " noting that i mon" << rank << " own this requests's session" << dendl;
     //set forwarding variables; clear payload so it re-encodes properly
-    req->session_mon = whoami;
+    req->session_mon = rank;
     req->session_mon_tid = rr->tid;
     req->clear_payload();
     //of course, the need to forward does give it an effectively lower priority
@@ -429,7 +439,7 @@ void Monitor::try_send_message(Message *m, entity_inst_t to)
   messenger->send_message(m, to);
 
   for (int i=0; i<(int)monmap->size(); i++) {
-    if (i != whoami)
+    if (i != rank)
       messenger->send_message(new MRoute(0, bl, to),
 			      monmap->get_inst(i));
   }

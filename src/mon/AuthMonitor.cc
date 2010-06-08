@@ -39,7 +39,7 @@
 #define dout_prefix _prefix(mon, paxos->get_version())
 static ostream& _prefix(Monitor *mon, version_t v) {
   return *_dout << dbeginl
-		<< "mon" << mon->whoami
+		<< "mon." << mon->name << "@" << mon->rank
 		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
 		<< ".auth v" << v << " ";
 }
@@ -313,7 +313,7 @@ void AuthMonitor::election_finished()
 uint64_t AuthMonitor::assign_global_id(MAuth *m, bool should_increase_max)
 {
   int total_mon = mon->monmap->size();
-  dout(10) << "AuthMonitor::assign_global_id m=" << *m << " mon=" << mon->whoami << "/" << total_mon
+  dout(10) << "AuthMonitor::assign_global_id m=" << *m << " mon=" << mon->rank << "/" << total_mon
 	   << " last_allocated=" << last_allocated_id << " max_global_id=" <<  max_global_id << dendl;
 
   uint64_t next_global_id = last_allocated_id + 1;
@@ -322,7 +322,7 @@ uint64_t AuthMonitor::assign_global_id(MAuth *m, bool should_increase_max)
     int remainder = next_global_id % total_mon;
     if (remainder)
       remainder = total_mon - remainder;
-    next_global_id += remainder + mon->whoami;
+    next_global_id += remainder + mon->rank;
     dout(10) << "next_global_id should be " << next_global_id << dendl;
   }
 

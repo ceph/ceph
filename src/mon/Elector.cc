@@ -26,7 +26,7 @@
 #define dout_prefix _prefix(mon, epoch)
 static ostream& _prefix(Monitor *mon, epoch_t epoch) {
   return *_dout << dbeginl
-		<< "mon" << mon->whoami
+		<< "mon." << mon->name << "@" << mon->rank
 		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
 		<< ".elector(" << epoch << ") ";
 }
@@ -69,11 +69,11 @@ void Elector::start()
     bump_epoch(epoch+1);  // odd == election cycle
   start_stamp = g_clock.now();
   electing_me = true;
-  acked_me.insert(mon->whoami);
+  acked_me.insert(mon->rank);
   
   // bcast to everyone else
   for (unsigned i=0; i<mon->monmap->size(); ++i) {
-    if ((int)i == mon->whoami) continue;
+    if ((int)i == mon->rank) continue;
     mon->messenger->send_message(new MMonElection(MMonElection::OP_PROPOSE, epoch, mon->monmap),
 				 mon->monmap->get_inst(i));
   }
@@ -151,7 +151,7 @@ void Elector::victory()
   for (set<int>::iterator p = quorum.begin();
        p != quorum.end();
        ++p) {
-    if (*p == mon->whoami) continue;
+    if (*p == mon->rank) continue;
     MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, epoch, mon->monmap);
     m->quorum = quorum;
     mon->messenger->send_message(m, mon->monmap->get_inst(*p));
@@ -186,7 +186,7 @@ void Elector::handle_propose(MMonElection *m)
     }
   }
 
-  if (mon->whoami < from) {
+  if (mon->rank < from) {
     // i would win over them.
     if (leader_acked >= 0) {        // we already acked someone
       assert(leader_acked < from);  // and they still win, of course
@@ -250,7 +250,7 @@ void Elector::handle_victory(MMonElection *m)
   dout(5) << "handle_victory from " << m->get_source() << dendl;
   int from = m->get_source().num();
 
-  assert(from < mon->whoami);
+  assert(from < mon->rank);
   assert(m->epoch % 2 == 0);  
 
   // i should have seen this election if i'm getting the victory.

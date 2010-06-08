@@ -27,7 +27,7 @@
 #define dout_prefix _prefix(mon)
 static ostream& _prefix(Monitor *mon) {
   return *_dout << dbeginl
-		<< "mon" << mon->whoami
+		<< "mon." << mon->name << "@" << mon->rank
 		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
 		<< ".monmap v" << mon->monmap->epoch << " ";
 }
@@ -59,18 +59,25 @@ bool MonmapMonitor::update_from_paxos()
   //save the bufferlist version in the paxos instance as well
   paxos->stash_latest(paxosv, monmap_bl);
 
-  if (original_map_size != mon->monmap->size()) {
-    _update_whoami();
+  int rank = mon->monmap->get_rank(mon->name);
+  if (rank < 0) {
+    dout(10) << "Assuming temporary id=mon" << mon->monmap->size() << " for shutdown purposes" << dendl;
+    mon->messenger->set_myname(entity_name_t::MON(mon->monmap->size()));
+    mon->monmap->add(mon->name, mon->myaddr);
+    mon->shutdown();
+    return true;
+  }
 
-    // call election?
-    if (mon->monmap->size() > 1) {
-      mon->call_election();
-    } else {
-      // we're standalone.
-      set<int> q;
-      q.insert(mon->whoami);
-      mon->win_election(1, q);
-    }
+  if (rank != mon->rank) {
+    mon->messenger->set_myname(entity_name_t::MON(rank));
+    mon->rank = rank;
+  }
+
+  // call election?
+  if (mon->monmap->size() > 1) {
+    mon->call_election();
+  } else {
+    mon->win_standalone_election();
   }
   return true;
 }
@@ -242,30 +249,5 @@ void MonmapMonitor::committed()
 void MonmapMonitor::tick()
 {
   update_from_paxos();
-}
-
-void MonmapMonitor::_update_whoami()
-{
-  // first check if there is any change
-  if (mon->whoami < (int)mon->monmap->size() && 
-      mon->monmap->get_inst(mon->whoami).addr == mon->myaddr) 
-    return;
-  
-  // then check backwards starting from min(whoami-1, size-1) since whoami only ever decreases
-  
-  for (int i = MIN(mon->whoami - 1, (int)mon->monmap->size() - 1); i >= 0; i--) {
-    if (mon->monmap->get_inst(i).addr == mon->myaddr) {
-      dout(10) << "Changing whoami from " << mon->whoami << " to " << i << dendl;
-      mon->whoami = i;
-      mon->messenger->set_myname(entity_name_t::MON(i));
-      return;
-    }
-  }
-  dout(0) << "Cannot find myself (mon" << mon->whoami << ", "
-	  << mon->myaddr << ") in new monmap! I must have been removed, shutting down." << dendl;
-  dout(10) << "Assuming temporary id=mon" << mon->monmap->size() << " for shutdown purposes" << dendl;
-  mon->messenger->set_myname(entity_name_t::MON(mon->monmap->size()));
-  mon->monmap->add(mon->name, mon->myaddr);
-  mon->shutdown();
 }
 
