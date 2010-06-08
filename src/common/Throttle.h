@@ -62,7 +62,7 @@ public:
   }
 
   int64_t take(int64_t c = 1) {
-    assert(c > 0);
+    assert(c >= 0);
     Mutex::Locker l(lock);
     count += c;
     return count;
