@@ -409,6 +409,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
       delete s->auth_handler;
       s->auth_handler = NULL;
 
+      //we don't m->put() here because assign_global_id has queued it up
       if (mon->is_leader())
 	return false;
       return true;
@@ -648,5 +649,6 @@ bool AuthMonitor::prepare_global_id(MMonGlobalID *m)
   dout(10) << "AuthMonitor::prepare_global_id" << dendl;
   increase_max_global_id();
 
+  m->put();
   return true;
 }

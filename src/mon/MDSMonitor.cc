@@ -368,6 +368,7 @@ bool MDSMonitor::prepare_offload_targets(MMDSLoadTargets *m)
   } else {
     dout(10) << "prepare_offload_targets " << gid << " not in map" << dendl;
   }
+  m->put();
   return true;
 }
 
