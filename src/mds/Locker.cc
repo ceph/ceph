@@ -1334,8 +1334,10 @@ void Locker::resume_stale_caps(Session *session)
 void Locker::remove_stale_leases(Session *session)
 {
   dout(10) << "remove_stale_leases for " << session->inst.name << dendl;
-  for (xlist<ClientLease*>::iterator p = session->leases.begin(); !p.end(); ++p) {
+  xlist<ClientLease*>::iterator p = session->leases.begin();
+  while (!p.end()) {
     ClientLease *l = *p;
+    ++p;
     CDentry *parent = (CDentry*)l->parent;
     dout(15) << " removing lease for " << l->mask << " on " << *parent << dendl;
     parent->remove_client_lease(l, l->mask, this);
