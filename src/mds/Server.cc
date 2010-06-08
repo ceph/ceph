@@ -3959,7 +3959,7 @@ bool Server::_dir_is_nonempty(MDRequest *mdr, CInode *in)
   assert(in->is_auth());
 
   
-  if (in->snaprealm && in->snaprealm->snaps.size()) {
+  if (in->snaprealm && in->snaprealm->snaps.size())
     return true; //in a snapshot!
 
   list<frag_t> frags;
