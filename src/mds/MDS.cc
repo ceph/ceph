@@ -299,7 +299,9 @@ MDSTableServer *MDS::get_table_server(int t)
 
 
 
-void MDS::send_message(Message *m, Connection *c) { 
+void MDS::send_message(Message *m, Connection *c)
+{ 
+  assert(c);
   messenger->send_message(m, c);
 }
 
@@ -392,6 +394,16 @@ void MDS::send_message_client_counted(Message *m, Session *session)
   dout(10) << "send_message_client_counted " << session->inst.name << " seq "
 	   << seq << " " << *m << dendl;
   if (session->connection) {
+    messenger->send_message(m, session->connection);
+  } else {
+    messenger->send_message(m, session->inst);
+  }
+}
+
+void MDS::send_message_client(Message *m, Session *session)
+{
+  dout(10) << "send_message_client " << session->inst << " " << *m << dendl;
+ if (session->connection) {
     messenger->send_message(m, session->connection);
   } else {
     messenger->send_message(m, session->inst);

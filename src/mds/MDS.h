@@ -335,6 +335,7 @@ class MDS : public Dispatcher {
   void send_message_client_counted(Message *m, client_t client);
   void send_message_client_counted(Message *m, Session *session);
   void send_message_client_counted(Message *m, Connection *connection);
+  void send_message_client(Message *m, Session *session);
   void send_message(Message *m, Connection *c);
 
   // start up, shutdown
