@@ -203,6 +203,9 @@ void MonClient::handle_monmap(MMonMap *m)
   dout(10) << "handle_monmap " << *m << dendl;
   monc_lock.Lock();
 
+  assert(cur_mon >= 0);
+  entity_addr_t cur_mon_addr = monmap.get_inst(cur_mon).addr;
+
   bufferlist::iterator p = m->monmapbl.begin();
   ::decode(monmap, p);
 
@@ -213,8 +216,17 @@ void MonClient::handle_monmap(MMonMap *m)
   map_cond.Signal();
   want_monmap = false;
 
+  if (cur_mon >= (int)monmap.size() ||
+      monmap.get_inst(cur_mon).addr != cur_mon_addr) {
+    cur_mon = -1;
+    for (unsigned i=0; i<monmap.size(); i++)
+      if (cur_mon_addr == monmap.get_inst(i).addr)
+      	cur_mon = i;
+  }
   if (cur_mon >= 0)
     _finish_hunting();
+  else
+    _pick_new_mon();  // can't find the mon we were talking to (above)
 
   monc_lock.Unlock();
   m->put();
@@ -375,6 +387,7 @@ void MonClient::_pick_new_mon()
   }
   dout(10) << "_pick_new_mon picked mon" << cur_mon << dendl;
 }
+
 
 void MonClient::_reopen_session()
 {
