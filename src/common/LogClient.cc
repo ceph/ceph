@@ -22,6 +22,7 @@
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"
 #include "mon/MonMap.h"
+#include "mon/MonClient.h"
 
 #include <iostream>
 #include <errno.h>
@@ -79,15 +80,14 @@ void LogClient::_send_log()
     return;
   MLog *log = new MLog(monmap->get_fsid(), log_queue);
 
-  if (mon < 0) {
-    if (messenger->get_myname().is_mon())
-      mon = messenger->get_myname().num();  // if we are a monitor, queue for ourselves
-    else
-      mon = rand() % monmap->mon_inst.size();
+  if (monc) {
+    monc->send_mon_message(log);
+  } else {
+    // if we are a monitor, queue for ourselves
+    assert(messenger->get_myname().is_mon());
+    dout(10) << "send_log to self" << dendl;
+    messenger->send_message(log, messenger->get_myinst());
   }
-
-  dout(10) << "send_log to mon" << mon << dendl;
-  messenger->send_message(log, monmap->get_inst(mon));
 }
 
 void LogClient::handle_log_ack(MLogAck *m)

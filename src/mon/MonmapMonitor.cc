@@ -257,14 +257,12 @@ void MonmapMonitor::_update_whoami()
       dout(10) << "Changing whoami from " << mon->whoami << " to " << i << dendl;
       mon->whoami = i;
       mon->messenger->set_myname(entity_name_t::MON(i));
-      mon->logclient.set_mon(i);
       return;
     }
   }
   dout(0) << "Cannot find myself (mon" << mon->whoami << ", " << mon->myaddr << ") in new monmap! I must have been removed, shutting down." << dendl;
   dout(10) << "Assuming temporary id=mon" << mon->monmap->size() << " for shutdown purposes" << dendl;
   mon->messenger->set_myname(entity_name_t::MON(mon->monmap->size()));
-  mon->logclient.set_mon(mon->monmap->size());
   mon->monmap->add(mon->myaddr);
   mon->shutdown();
 }

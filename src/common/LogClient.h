@@ -26,12 +26,12 @@ class Messenger;
 class MLog;
 class MLogAck;
 class MonMap;
-
+class MonClient;
 
 class LogClient : public Dispatcher {
   Messenger *messenger;
   MonMap *monmap;
-  int mon;
+  MonClient *monc;
 
   bool ms_dispatch(Message *m);
   bool is_synchronous;
@@ -56,10 +56,9 @@ class LogClient : public Dispatcher {
   void send_log();
   void handle_log_ack(MLogAck *m);
   void set_synchronous(bool sync) { is_synchronous = sync; }
-  void set_mon(int mon_id) { mon = mon_id; }
 
-  LogClient(Messenger *m, MonMap *mm) : 
-    messenger(m), monmap(mm), mon(-1), is_synchronous(false),
+  LogClient(Messenger *m, MonMap *mm, MonClient *mc=0) : 
+    messenger(m), monmap(mm), monc(mc), is_synchronous(false),
     log_lock("LogClient::log_lock"), last_log(0) { }
 };
 

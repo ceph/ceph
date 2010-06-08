@@ -333,7 +333,7 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, c
   monc(mc),
   logger(NULL),
   store(NULL),
-  logclient(messenger, &mc->monmap),
+  logclient(messenger, &mc->monmap, mc),
   whoami(id),
   dev_path(dev), journal_path(jdev),
   dispatch_running(false),
