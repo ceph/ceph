@@ -1961,7 +1961,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     }
 
     if (change_max &&
-	!in->filelock.can_wrlock(client)) {
+	!in->filelock.can_wrlock(client) &&
+	!in->filelock.can_force_wrlock(client)) {
       dout(10) << " i want to change file_max, but lock won't allow it (yet)" << dendl;
       if (in->filelock.is_stable()) {
 	bool need_issue = false;
@@ -1976,7 +1977,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	  issue_caps(in);
 	cap->dec_suppress();
       }
-      if (!in->filelock.can_wrlock(client)) {
+      if (!in->filelock.can_wrlock(client) &&
+	  !in->filelock.can_force_wrlock(client)) {
 	in->filelock.add_waiter(SimpleLock::WAIT_STABLE, new C_MDL_CheckMaxSize(this, in));
 	change_max = false;
       }

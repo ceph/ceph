@@ -10,6 +10,7 @@ struct sm_state_t {
   char can_read_projected;
   char can_rdlock;
   char can_wrlock;
+  char can_force_wrlock;
   char can_lease;
   char can_xlock;
   int caps;

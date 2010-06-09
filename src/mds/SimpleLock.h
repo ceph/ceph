@@ -375,6 +375,12 @@ public:
       (get_sm()->states[state].can_wrlock == XCL && client >= 0 && (get_xlock_by_client() == client ||
 								    get_excl_client() == client));
   }
+  bool can_force_wrlock(client_t client) {
+    return get_sm()->states[state].can_force_wrlock == ANY ||
+      (get_sm()->states[state].can_force_wrlock == AUTH && parent->is_auth()) ||
+      (get_sm()->states[state].can_force_wrlock == XCL && client >= 0 && (get_xlock_by_client() == client ||
+									  get_excl_client() == client));
+  }
   bool can_xlock(client_t client) {
     return get_sm()->states[state].can_xlock == ANY ||
       (get_sm()->states[state].can_xlock == AUTH && parent->is_auth()) ||
