@@ -3239,7 +3239,12 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 
     if (pg->peer_info.count(from) &&
 	pg->peer_info[from].last_update == it->last_update) {
-      dout(10) << *pg << " got dup osd" << from << " info " << *it << dendl;
+      dout(10) << *pg << " got dup osd" << from << " info " << *it << ", identical to ours" << dendl;
+    } else if (pg->peer_info.count(from) &&
+	       pg->is_active()) {
+      dout(10) << *pg << " got dup osd" << from << " info " << *it
+	       << " but pg is active, keeping our info " << pg->peer_info[from]
+	       << dendl;
     } else {
       dout(10) << *pg << " got osd" << from << " info " << *it << dendl;
       pg->peer_info[from] = *it;
