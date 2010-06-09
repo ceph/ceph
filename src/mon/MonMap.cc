@@ -44,5 +44,5 @@ void MonMap::print(ostream& out)
   for (map<string,entity_addr_t>::iterator p = mon_addr.begin();
        p != mon_addr.end();
        p++)
-    out << "mon" << i++ << "\t" << p->second << "\t" << p->first << "\n";
+    out << i++ << ": " << p->second << " mon." << p->first << "\n";
 }

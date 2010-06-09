@@ -35,6 +35,7 @@ struct Subscription {
 };
 
 struct MonSession : public RefCountedObject {
+  Connection *con;
   entity_inst_t inst;
   utime_t until;
   bool closed;
@@ -48,9 +49,12 @@ struct MonSession : public RefCountedObject {
 
   AuthServiceHandler *auth_handler;
 
-  MonSession(entity_inst_t i) : inst(i), closed(false), item(this),
-			     global_id(0), notified_global_id(0), auth_handler(NULL) {}
+  MonSession(entity_inst_t i, Connection *c) :
+    con(c->get()), inst(i), closed(false), item(this),
+    global_id(0), notified_global_id(0), auth_handler(NULL) {}
   ~MonSession() {
+    if (con)
+      con->put();
     generic_dout(0) << "~MonSession " << this << dendl;
     // we should have been removed before we get destructed; see MonSessionMap::remove_session()
     assert(!item.is_on_list());
@@ -84,8 +88,8 @@ struct MonSessionMap {
     s->put();
   }
 
-  MonSession *new_session(entity_inst_t i) {
-    MonSession *s = new MonSession(i);
+  MonSession *new_session(entity_inst_t i, Connection *c) {
+    MonSession *s = new MonSession(i, c);
     sessions.push_back(&s->item);
     if (i.name.is_osd())
       by_osd.insert(pair<int,MonSession*>(i.name.num(), s));

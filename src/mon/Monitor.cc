@@ -415,9 +415,9 @@ void Monitor::handle_forward(MForward *m)
 	    << session->caps << dendl;
   } else {
 
-    MonSession *s = new MonSession(m->msg->get_source_inst());
-    s->caps = m->client_caps;
     Connection *c = new Connection;
+    MonSession *s = new MonSession(m->msg->get_source_inst(), c);
+    s->caps = m->client_caps;
     c->set_priv(s);
 
     PaxosServiceMessage *req = m->msg;
@@ -611,7 +611,7 @@ bool Monitor::_ms_dispatch(Message *m)
     }
     if (!s) {
       dout(10) << "do not have session, making new one" << dendl;
-      s = session_map.new_session(m->get_source_inst());
+      s = session_map.new_session(m->get_source_inst(), m->get_connection());
       m->get_connection()->set_priv(s->get());
       dout(10) << "ms_dispatch new session " << s << " for " << s->inst << dendl;
 
@@ -850,7 +850,7 @@ void Monitor::check_sub(Subscription *sub)
 {
   dout(0) << "check_sub monmap last " << sub->last << " have " << monmap->get_epoch() << dendl;
   if (sub->last < monmap->get_epoch()) {
-    send_latest_monmap(sub->session->inst);
+    send_latest_monmap(sub->session->con);
     if (sub->onetime)
       session_map.remove_sub(sub);
     else
@@ -861,17 +861,20 @@ void Monitor::check_sub(Subscription *sub)
 
 // -----
 
-void Monitor::send_latest_monmap(entity_inst_t i)
+void Monitor::send_latest_monmap(Connection *con)
 {
   bufferlist bl;
-  monmap->encode(bl);
-  messenger->send_message(new MMonMap(bl), i);
+  if (!con->has_feature(CEPH_FEATURE_MONNAMES))
+    monmap->encode_v1(bl);
+  else
+    monmap->encode(bl);
+  messenger->send_message(new MMonMap(bl), con);
 }
 
 void Monitor::handle_mon_get_map(MMonGetMap *m)
 {
   dout(10) << "handle_mon_get_map" << dendl;
-  send_latest_monmap(m->get_orig_source_inst());
+  send_latest_monmap(m->get_connection());
   m->put();
 }
 

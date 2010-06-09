@@ -146,7 +146,20 @@ class MonMap {
     ::encode(mon_addr, blist);
     ::encode(last_changed, blist);
     ::encode(created, blist);
-  }  
+  }
+  void encode_v1(bufferlist& blist) {
+    __u16 v = 1;
+    ::encode(v, blist);
+    ::encode_raw(fsid, blist);
+    ::encode(epoch, blist);
+    vector<entity_inst_t> mon_inst(mon_addr.size());
+    for (unsigned n = 0; n < mon_addr.size(); n++)
+      mon_inst[n] = get_inst(n);
+    ::encode(mon_inst, blist);
+    ::encode(last_changed, blist);
+    ::encode(created, blist);
+  }
+
   void decode(bufferlist& blist) {
     bufferlist::iterator p = blist.begin();
     decode(p);

@@ -48,7 +48,6 @@ bool MonmapMonitor::update_from_paxos()
   dout(10) << "update_from_paxos paxosv " << paxosv
 	   << ", my v " << mon->monmap->epoch << dendl;
 
-  unsigned original_map_size = mon->monmap->size();
   //read and decode
   monmap_bl.clear();
   bool success = paxos->read(paxosv, monmap_bl);
