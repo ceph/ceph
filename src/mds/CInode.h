@@ -83,7 +83,7 @@ public:
   //static const int PIN_PURGING =         -12;	
   static const int PIN_FREEZING =         13;
   static const int PIN_FROZEN =           14;
-  static const int PIN_IMPORTINGCAPS =    15;
+  static const int PIN_IMPORTINGCAPS =   -15;
   static const int PIN_PASTSNAPPARENT =  -16;
   static const int PIN_OPENINGSNAPPARENTS = 17;
   static const int PIN_TRUNCATING =       18;
