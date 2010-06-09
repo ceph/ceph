@@ -2193,18 +2193,20 @@ void OSD::handle_osd_map(MOSDMap *m)
 	dout(10) << " pool " << p->first << " appears to have been deleted" << dendl;
 	continue;
       }
+      PGPool *pool = p->second;
       if (pi->get_snap_epoch() == cur+1) {
-	PGPool *pool = p->second;
 	pi->build_removed_snaps(pool->newly_removed_snaps);
 	pool->newly_removed_snaps.subtract(pool->cached_removed_snaps);
 	pool->cached_removed_snaps.union_of(pool->newly_removed_snaps);
-	dout(10) << "   pool " << p->first << " removed_snaps " << pool->cached_removed_snaps
+	dout(10) << " pool " << p->first << " removed_snaps " << pool->cached_removed_snaps
 		 << ", newly so are " << pool->newly_removed_snaps << ")"
 		 << dendl;
 	pool->info = *pi;
 	pool->snapc = pi->get_snap_context();
       } else {
-	dout(10) << " pool " << p->first << " unchanged (snap_epoch = " << pi->get_snap_epoch() << ")" << dendl;
+	dout(10) << " pool " << p->first << " removed snaps " << pool->cached_removed_snaps
+		 << ", unchanged (snap_epoch = " << pi->get_snap_epoch() << ")" << dendl;
+	pool->newly_removed_snaps.clear();
       }
     }
 
