@@ -56,12 +56,12 @@ class MonMap {
   }
 
   const string& pick_random_mon() {
-    unsigned n = rand() % mon_addr.size();
+    unsigned n = rand() % rank_name.size();
     return rank_name[n];
   }
   const string& pick_random_mon_not(const string& butnot) {
-    unsigned n = rand() % mon_addr.size();
-    if (rank_name[n] == butnot && mon_addr.size() > 1) {
+    unsigned n = rand() % rank_name.size();
+    if (rank_name[n] == butnot && rank_name.size() > 1) {
       if (n)
 	n--;
       else
