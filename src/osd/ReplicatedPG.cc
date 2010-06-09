@@ -1019,8 +1019,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
     }
 
     // make writeable (i.e., clone if necessary)
-    if (is_modify)
+    if (is_modify) {
+      if (!ctx->snapc.is_valid())
+        return -EINVAL;
       make_writeable(ctx);
+  }
 
     // munge ZERO -> TRUNCATE?  (don't munge to DELETE or we risk hosing attributes)
     if (op.op == CEPH_OSD_OP_ZERO &&
