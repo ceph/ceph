@@ -382,10 +382,10 @@ struct SnapContext {
       // seq >= snaps[0]
       if (snaps[0] > seq)
 	return false;
-      // snaps is descending
+      // snaps[] is descending
       snapid_t t = snaps[0];
       for (unsigned i=1; i<snaps.size(); i++) {
-	if (snaps[i] >= t)
+	if (snaps[i] >= t || t == 0)
 	  return false;
 	t = snaps[i];
       }
