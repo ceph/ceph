@@ -264,7 +264,7 @@ for name in $what; do
 	    [ -n "$lockfile" ] && [ "$?" = 0 ] && rm -f $lockfile
 	    if [ $dobtrfs -eq 1 ] && [ -n "$btrfs_devs" ]; then
 		echo Unmounting Btrfs on $host:$btrfs_path
-		do_root_cmd "umount $btrfs_path"	
+		do_root_cmd "umount $btrfs_path || true"
 	    fi
 	    ;;
 
