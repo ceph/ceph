@@ -66,6 +66,7 @@ int main(int argc, const char **argv)
   bool mkfs = false;
   bool mkjournal = false;
   bool flushjournal = false;
+  char *dump_pg_log = 0;
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("mkfs", '\0')) {
       mkfs = true;
@@ -73,10 +74,34 @@ int main(int argc, const char **argv)
       mkjournal = true;
     } else if (CONF_ARG_EQ("flush-journal", '\0')) {
       flushjournal = true;
+    } else if (CONF_ARG_EQ("dump-pg-log", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&dump_pg_log, OPT_STR);
     } else {
       cerr << "unrecognized arg " << args[i] << std::endl;
       ARGS_USAGE();
     }
+  }
+
+  if (dump_pg_log) {
+    bufferlist bl;
+    int r = bl.read_file(dump_pg_log);
+    if (r >= 0) {
+      PG::Log::Entry e;
+      bufferlist::iterator p = bl.begin();
+      while (!p.end()) {
+	uint64_t pos = p.get_off();
+	try {
+	  ::decode(e, p);
+	}
+	catch (buffer::error *e) {
+	  cerr << "failed to decode LogEntry at offset " << pos << std::endl;
+	  return 1;
+	}
+	cout << pos << ":\t" << e << std::endl;
+      }
+    } else
+      cerr << "unable to open " << dump_pg_log << ": " << strerror(r) << std::endl;
+    return 0;
   }
 
   // whoami
