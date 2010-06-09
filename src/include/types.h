@@ -374,6 +374,25 @@ struct SnapContext {
   SnapContext() {}
   SnapContext(snapid_t s, vector<snapid_t>& v) : seq(s), snaps(v) {}    
 
+  bool is_valid() const {
+    // seq is a valid snapid
+    if (seq > CEPH_MAXSNAP)
+      return false;
+    if (!snaps.empty()) {
+      // seq >= snaps[0]
+      if (snaps[0] > seq)
+	return false;
+      // snaps is descending
+      snapid_t t = snaps[0];
+      for (unsigned i=1; i<snaps.size(); i++) {
+	if (snaps[i] >= t)
+	  return false;
+	t = snaps[i];
+      }
+    }
+    return true;
+  }
+
   void clear() {
     seq = 0;
     snaps.clear();
