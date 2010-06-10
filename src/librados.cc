@@ -124,6 +124,7 @@ public:
   int read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
   int remove(PoolCtx& pool, const object_t& oid);
   int stat(PoolCtx& pool, const object_t& oid, uint64_t *psize, time_t *pmtime);
+  int trunc(PoolCtx& pool, const object_t& oid, size_t size);
 
   int tmap_update(PoolCtx& pool, const object_t& oid, bufferlist& cmdbl);
   int exec(PoolCtx& pool, const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
@@ -972,6 +973,37 @@ int RadosClient::remove(PoolCtx& pool, const object_t& oid)
   return r;
 }
 
+int RadosClient::trunc(PoolCtx& pool, const object_t& oid, size_t size)
+{
+  utime_t ut = g_clock.now();
+
+  /* can't write to a snapshot */
+  if (pool.snap_seq != CEPH_NOSNAP)
+    return -EINVAL;
+
+  Mutex mylock("RadosClient::write_full::mylock");
+  Cond cond;
+  bool done;
+  int r;
+
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+
+  lock.Lock();
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  objecter->trunc(oid, layout,
+		  pool.snapc, ut, 0,
+		  size, 0,
+		  onack, NULL);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  return r;
+}
+
 int RadosClient::tmap_update(PoolCtx& pool, const object_t& oid, bufferlist& cmdbl)
 {
   utime_t ut = g_clock.now();
@@ -1351,6 +1383,14 @@ int Rados::write_full(rados_pool_t pool, const string& o, bufferlist& bl)
   return ((RadosClient *)client)->write_full(*(RadosClient::PoolCtx *)pool, oid, bl);
 }
 
+int Rados::trunc(rados_pool_t pool, const string& o, size_t size)
+{
+  if (!client)
+    return -EINVAL;
+  object_t oid(o);
+  return ((RadosClient *)client)->trunc(*(RadosClient::PoolCtx *)pool, oid, size);
+}
+
 int Rados::remove(rados_pool_t pool, const string& o)
 {
   if (!client)
@@ -1711,6 +1751,13 @@ extern "C" int rados_write_full(rados_pool_t pool, const char *o, off_t off, con
   bufferlist bl;
   bl.append(buf, len);
   return radosp->write_full(*ctx, oid, bl);
+}
+
+extern "C" int rados_trunc(rados_pool_t pool, const char *o, size_t size)
+{
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  object_t oid(o);
+  return radosp->trunc(*ctx, oid, size);
 }
 
 extern "C" int rados_remove(rados_pool_t pool, const char *o)

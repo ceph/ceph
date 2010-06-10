@@ -58,6 +58,7 @@ public:
   int write_full(pool_t pool, const std::string& oid, bufferlist& bl);
   int read(pool_t pool, const std::string& oid, off_t off, bufferlist& bl, size_t len);
   int remove(pool_t pool, const std::string& oid);
+  int trunc(pool_t pool, const std::string& oid, size_t size);
 
   int getxattr(pool_t pool, const std::string& oid, const char *name, bufferlist& bl);
   int setxattr(pool_t pool, const std::string& oid, const char *name, bufferlist& bl);

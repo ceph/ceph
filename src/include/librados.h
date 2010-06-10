@@ -78,6 +78,7 @@ int rados_write(rados_pool_t pool, const char *oid, off_t off, const char *buf, 
 int rados_write_full(rados_pool_t pool, const char *oid, off_t off, const char *buf, size_t len);
 int rados_read(rados_pool_t pool, const char *oid, off_t off, char *buf, size_t len);
 int rados_remove(rados_pool_t pool, const char *oid);
+int rados_trunc(rados_pool_t pool, const char *oid, size_t size);
 
 /* attrs */
 int rados_getxattr(rados_pool_t pool, const char *o, const char *name, char *buf, size_t len);
