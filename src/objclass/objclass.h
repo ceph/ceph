@@ -88,6 +88,7 @@ extern int cls_register_cxx_method(cls_handle_t hclass, const char *method, int 
 
 extern int cls_cxx_read(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
 extern int cls_cxx_write(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
+extern int cls_cxx_write_full(cls_method_context_t hctx, bufferlist *bl);
 extern int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
 extern int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid);
 

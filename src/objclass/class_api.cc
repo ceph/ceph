@@ -195,6 +195,18 @@ int cls_cxx_write(cls_method_context_t hctx, int ofs, int len, bufferlist *inbl)
   return (*pctx)->pg->do_osd_ops(*pctx, ops, outbl);
 }
 
+int cls_cxx_write_full(cls_method_context_t hctx, bufferlist *inbl)
+{
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
+  vector<OSDOp> ops(1);
+  ops[0].op.op = CEPH_OSD_OP_WRITEFULL;
+  ops[0].op.extent.offset = 0;
+  ops[0].op.extent.length = inbl->length();
+  ops[0].data = *inbl;
+  bufferlist outbl;
+  return (*pctx)->pg->do_osd_ops(*pctx, ops, outbl);
+}
+
 int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len, bufferlist *inbl)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
