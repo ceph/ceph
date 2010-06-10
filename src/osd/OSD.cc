@@ -2486,6 +2486,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     map_lock.put_write();
     char buf[80];
     dout(0) << "error writing map: " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+    m->put();
     shutdown();
     return;
   }
