@@ -4565,14 +4565,6 @@ void OSD::handle_op(MOSDOp *op)
   
   dout(10) << "handle_op " << *op << " in " << *pg << dendl;
 
-  /* turn this off for now.
-  // proprocess op? 
-  if (pg->preprocess_op(op, now)) {
-    pg->unlock();
-    return;
-  }
-  */
-
   if (!op->may_write()) {
     Mutex::Locker lock(peer_stat_lock);
     stat_rd_ops_in_queue++;
