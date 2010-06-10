@@ -323,7 +323,7 @@ GroupEntry *GroupsManager::get_group(const char *name)
 		   one and exit */
 		group = new GroupEntry(subnet);
 		subnet = NULL;
-		groups_map[strdup(group_name)] = group;
+		groups_map[group_name] = group;
 		goto done;
 	}
 
@@ -331,7 +331,7 @@ GroupEntry *GroupsManager::get_group(const char *name)
 	if (iter == groups_map.end() ) {
 		orig_group = new GroupEntry(subnet);
 		subnet = NULL;
-		groups_map[strdup(group_name)] = orig_group;
+		groups_map[group_name] = orig_group;
 	} else {
 		orig_group = iter->second;
 	}
