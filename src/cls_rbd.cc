@@ -142,7 +142,7 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   header->snap_count = header->snap_count + 1;
   header->snap_names_len = header->snap_names_len + snap_name_len + 1;
-  header->snap_seq = header->snap_seq + 1;
+  header->snap_seq = snap_id;
 
   new_snaps[0].id = snap_id;
   new_snaps[0].image_size = header->image_size;
