@@ -155,7 +155,7 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   newbl.push_back(new_snaps_bp);
   newbl.push_back(new_names_bp);
 
-  rc = cls_cxx_write(hctx, 0, len, &newbl);
+  rc = cls_cxx_write_full(hctx, &newbl);
   if (rc < 0)
     return rc;
 
@@ -227,7 +227,7 @@ int snapshot_revert(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     newbl.push_back(new_names_bp);
   }
 
-  rc = cls_cxx_write(hctx, 0, newbl.length(), &newbl);
+  rc = cls_cxx_write_full(hctx, &newbl);
   if (rc < 0)
     return rc;
 
