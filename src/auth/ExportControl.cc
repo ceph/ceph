@@ -127,6 +127,7 @@ void Subnet::parse(const char *str)
 	dout(30) << hex << GET_IP(&subnet.addr) << dec << dendl;
 
 	valid = true;
+	delete mask_str;
 }
 
 class GroupEntry;
