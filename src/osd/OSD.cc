@@ -2254,11 +2254,11 @@ void OSD::handle_osd_map(MOSDMap *m)
     pending_ops--;
     logger->set(l_osd_opq, pending_ops);
 
-    Message *m = pg->op_queue.back();
+    Message *mess = pg->op_queue.back();
     pg->op_queue.pop_back();
     pg->put();
-    dout(15) << " will requeue " << *m << dendl;
-    rq.push_front(m);
+    dout(15) << " will requeue " << *mess << dendl;
+    rq.push_front(mess);
   }
   op_wq.unlock();
   push_waiters(rq);
