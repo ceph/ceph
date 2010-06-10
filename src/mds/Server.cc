@@ -3976,7 +3976,6 @@ bool Server::_dir_is_nonempty(MDRequest *mdr, CInode *in)
 	       << dir->inode->get_projected_inode()->dirstat.size()
 	       << " on " << *dir->inode
 	       << dendl;
-      reply_request(mdr, -ENOTEMPTY);
       return true;
     }
 
@@ -4070,8 +4069,11 @@ void Server::handle_client_rename(MDRequest *mdr)
     }
 
     // non-empty dir?
-    if (oldin->is_dir() && _dir_is_nonempty(mdr, oldin))      
+    if (oldin->is_dir() && _dir_is_nonempty(mdr, oldin)) {
+      reply_request(mdr, -ENOTEMPTY);
       return;
+    }
+    return;
   }
 
   // -- some sanity checks --
