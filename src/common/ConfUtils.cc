@@ -341,7 +341,9 @@ int parse_line(char *line, ConfLine *parsed)
 			goto out;
 		case '[':
 			parsed->set_suffix(p);
-			return _parse_section(p, parsed);
+			ret = _parse_section(p, parsed);
+			free(dup);
+			return ret;
 	}
 
 	parsed->set_var(get_next_name(p, 1, &p), false);
