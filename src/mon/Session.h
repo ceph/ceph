@@ -78,8 +78,10 @@ struct MonSessionMap {
 
   void remove_session(MonSession *s) {
     assert(!s->closed);
-    for (map<string,Subscription*>::iterator p = s->sub_map.begin(); p != s->sub_map.end(); ++p)
+    for (map<string,Subscription*>::iterator p = s->sub_map.begin(); p != s->sub_map.end(); ++p) {
       p->second->type_item.remove_myself();
+      delete p->second;
+    }
     s->sub_map.clear();
     s->item.remove_myself();
     if (s->inst.name.is_osd()) {
