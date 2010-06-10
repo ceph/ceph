@@ -301,6 +301,9 @@ public:
   int aio_write(PoolCtx& pool, object_t oid, off_t off, const bufferlist& bl, size_t len,
 		AioCompletion *c);
 
+  int aio_write_full(PoolCtx& pool, object_t oid, const bufferlist& bl,
+		    AioCompletion *c);
+
   AioCompletion *aio_create_completion() {
     return new AioCompletion;
   }
@@ -920,6 +923,24 @@ int RadosClient::aio_write(PoolCtx& pool, const object_t oid, off_t off, const b
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
   objecter->write(oid, layout,
 		  off, len, pool.snapc, bl, ut, 0,
+		  onack, onsafe);
+
+  return 0;
+}
+
+int RadosClient::aio_write_full(PoolCtx& pool, const object_t oid, const bufferlist& bl,
+			       AioCompletion *c)
+{
+  SnapContext snapc;
+  utime_t ut = g_clock.now();
+
+  Context *onack = new C_aio_Ack(c);
+  Context *onsafe = new C_aio_Safe(c);
+
+  Mutex::Locker l(lock);
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  objecter->write_full(oid, layout,
+		  pool.snapc, bl, ut, 0,
 		  onack, onsafe);
 
   return 0;
@@ -1683,6 +1704,15 @@ extern "C" int rados_write(rados_pool_t pool, const char *o, off_t off, const ch
   return radosp->write(*ctx, oid, off, bl, len);
 }
 
+extern "C" int rados_write_full(rados_pool_t pool, const char *o, off_t off, const char *buf, size_t len)
+{
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  object_t oid(o);
+  bufferlist bl;
+  bl.append(buf, len);
+  return radosp->write_full(*ctx, oid, bl);
+}
+
 extern "C" int rados_remove(rados_pool_t pool, const char *o)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
@@ -1976,3 +2006,13 @@ extern "C" int rados_aio_write(rados_pool_t pool, const char *o,
   return radosp->aio_write(*ctx, oid, off, bl, len, (RadosClient::AioCompletion*)completion);
 }
 
+extern "C" int rados_aio_write_full(rados_pool_t pool, const char *o,
+			       off_t off, const char *buf, size_t len,
+			       rados_completion_t completion)
+{
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  object_t oid(o);
+  bufferlist bl;
+  bl.append(buf, len);
+  return radosp->aio_write_full(*ctx, oid, bl, (RadosClient::AioCompletion*)completion);
+}
