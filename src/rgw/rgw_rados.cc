@@ -267,7 +267,7 @@ int RGWRados::put_obj(std::string& id, std::string& bucket, std::string& oid, co
 
   bufferlist bl;
   bl.append(data, size);
-  r = rados->write(pool, oid, 0, bl, size);
+  r = rados->write_full(pool, oid, bl);
   if (r < 0)
     return r;
 
