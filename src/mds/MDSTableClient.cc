@@ -92,8 +92,9 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
       assert(g_conf.mds_kill_mdstable_at != 7);
       
       // remove from committing list
-      assert(pending_commit[tid]->pending_commit_tids[table].count(tid));
-      
+      pending_commit[tid]->pending_commit_tids[table].erase(tid);
+      pending_commit.erase(tid);
+
       // log ACK.
       mds->mdlog->start_submit_entry(new ETableClient(table, TABLESERVER_OP_ACK, tid),
 				     new C_LoggedAck(this, tid));
@@ -116,12 +117,6 @@ void MDSTableClient::_logged_ack(version_t tid)
 
   assert(g_conf.mds_kill_mdstable_at != 8);
 
-  assert(pending_commit.count(tid));
-  assert(pending_commit[tid]->pending_commit_tids[table].count(tid));
-  
-  pending_commit[tid]->pending_commit_tids[table].erase(tid);
-  pending_commit.erase(tid);
-  
   // kick any waiters (LogSegment trim)
   if (ack_waiters.count(tid)) {
     dout(15) << "kicking ack waiters on tid " << tid << dendl;
