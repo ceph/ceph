@@ -4073,7 +4073,6 @@ void Server::handle_client_rename(MDRequest *mdr)
       reply_request(mdr, -ENOTEMPTY);
       return;
     }
-    return;
   }
 
   // -- some sanity checks --
