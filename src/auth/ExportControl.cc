@@ -617,7 +617,7 @@ void ExportControl::load(ConfFile *conf)
 			free(allow_str);
 		}
 	}
-
+	delete allow_def;
 	free(orig_tmp_sec);
     } else if ((strncmp(GROUP_SEC_NAME, (*p)->get_name().c_str(), grp_len) == 0) ||
         (strncmp(CLIENT_SEC_NAME, (*p)->get_name().c_str(), client_len) == 0)) {
