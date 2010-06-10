@@ -126,7 +126,7 @@ libceph_la_SOURCES = \
 libceph_la_CFLAGS = ${AM_CFLAGS}
 libceph_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_la_LIBADD = libcrush.la
-libceph_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '^ceph_.*' -lpthread
+libceph_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '^ceph_.*' -lpthread -lssl
 lib_LTLIBRARIES += libceph.la
 
 testceph_SOURCES = client/testceph.cc
