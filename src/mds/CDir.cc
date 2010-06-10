@@ -1703,6 +1703,7 @@ void CDir::_committed(version_t v, version_t lrv)
 	// drop clean null stray dentries immediately
 	if (stray && 
 	    dn->get_num_ref() == 0 &&
+	    !dn->is_projected() &&
 	    dn->get_linkage()->is_null())
 	  remove_dentry(dn);
       } 
