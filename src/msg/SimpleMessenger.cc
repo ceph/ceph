@@ -1154,6 +1154,7 @@ int SimpleMessenger::Pipe::connect()
 	dout(20) << "connect starting reader" << dendl;
 	start_reader();
       }
+      delete authorizer;
       return 0;
     }
     
