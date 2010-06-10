@@ -91,11 +91,14 @@ int MonClient::build_initial_monmap()
 	      name++;
 	    char *val = 0;
 	    c.read(section, "mon addr", &val, 0);
-	    if (!val || !val[0])
+	    if (!val || !val[0]) {
+	      delete val;
 	      continue;
+	    }
 	    entity_addr_t addr;
 	    if (!addr.parse(val)) {
 	      cerr << "unable to " << *p << " mon addr for " << section << " (" << val << ")" << std::endl;
+	      delete val;
 	      continue;
 	    }
 	    monmap.add(name, addr);
