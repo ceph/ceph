@@ -43,12 +43,13 @@ int main(int argc, const char **argv)
   getchar();
 
   time_t tm;
-  bufferlist bl, bl2;
+  bufferlist bl, bl2, blf;
   char buf[128];
 
   time(&tm);
   snprintf(buf, 128, "%s", ctime(&tm));
   bl.append(buf, strlen(buf));
+  blf.append(buf, 16);
 
   const char *oid = "bar";
 
@@ -65,9 +66,9 @@ int main(int argc, const char **argv)
   cout << "rados.write returned " << r << std::endl;
   r = rados.write(pool, oid, 0, bl, bl.length() - 3);
   cout << "rados.write returned " << r << std::endl;
-  r = rados.write(pool, oid, 0, bl, bl.length() - 4);
-  cout << "rados.write returned " << r << std::endl;
-  r = rados.read(pool, oid, 0, bl, bl.length() - 4);
+  r = rados.write_full(pool, oid, blf);
+  cout << "rados.write_full returned " << r << std::endl;
+  r = rados.read(pool, oid, 0, bl, bl.length());
   cout << "rados.read returned " << r << std::endl;
   r = rados.exec(pool, oid, "crypto", "md5", bl, bl2);
   cout << "exec returned " << r <<  " buf size=" << bl2.length() << std::endl;
