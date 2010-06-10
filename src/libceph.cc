@@ -69,7 +69,10 @@ extern "C" void ceph_deinitialize()
   ceph_client_mutex.Lock();
   --client_initialized;
   if(!client_initialized) {
-    client->unmount();
+    if(client_mount) {
+      client_mount = 0;
+      client->unmount();
+    }
     client->shutdown();
     delete client;
     messenger->wait();
