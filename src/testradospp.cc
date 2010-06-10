@@ -70,6 +70,10 @@ int main(int argc, const char **argv)
   cout << "rados.write_full returned " << r << std::endl;
   r = rados.read(pool, oid, 0, bl, bl.length());
   cout << "rados.read returned " << r << std::endl;
+  r = rados.trunc(pool, oid, 8);
+  cout << "rados.trunc returned " << r << std::endl;
+  r = rados.read(pool, oid, 0, bl, bl.length());
+  cout << "rados.read returned " << r << std::endl;
   r = rados.exec(pool, oid, "crypto", "md5", bl, bl2);
   cout << "exec returned " << r <<  " buf size=" << bl2.length() << std::endl;
   const unsigned char *md5 = (const unsigned char *)bl2.c_str();
