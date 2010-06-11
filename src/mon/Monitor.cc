@@ -439,9 +439,11 @@ void Monitor::send_reply(PaxosServiceMessage *req, Message *reply, entity_inst_t
 	       << " for request " << *req << dendl;
       messenger->send_message(new MRoute(req->session_mon_tid, reply, to),
 			      monmap->get_inst(req->session_mon));
-    } else
+    } else {
       dout(2) << "send_reply mon" << req->session_mon << " dne, dropping reply " << *reply
 	      << " to " << *req << " for " << to << dendl;
+      reply->put();
+    }
   } else {
     messenger->send_message(reply, to);
   }
@@ -523,12 +525,7 @@ void Monitor::handle_observe(MMonObserve *m)
   // we own the connection to the requested observer).
   MonSession *session = m->get_session();
   if (!session || !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
-    bool delete_m = false;
-    if (m->session_mon)
-      delete_m = true;
     send_reply(m, m);
-    if (delete_m)
-      m->put();
     return;
   }
   if (m->machine_id >= PAXOS_NUM) {
