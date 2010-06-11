@@ -5694,27 +5694,12 @@ void MDCache::dispatch(Message *m)
     handle_cache_rejoin((MMDSCacheRejoin*)m);
     break;
 
-    /*
-  case MSG_MDS_JOIN:
-    handle_join((MJoin*)m);
-    break;
-  case MSG_MDS_JOINACK:
-    handle_join_ack((MJoinAck*)m);
-    break;
-    */
-
   case MSG_MDS_DISCOVER:
     handle_discover((MDiscover*)m);
     break;
   case MSG_MDS_DISCOVERREPLY:
     handle_discover_reply((MDiscoverReply*)m);
     break;
-
-    /*
-  case MSG_MDS_INODEUPDATE:
-    handle_inode_update((MInodeUpdate*)m);
-    break;
-    */
 
   case MSG_MDS_DIRUPDATE:
     handle_dir_update((MDirUpdate*)m);
@@ -8071,57 +8056,6 @@ CDentry *MDCache::add_replica_stray(bufferlist &bl, int from)
   mds->queue_waiters(finished);
   return straydn;
 }
-
-
-
-/*
-int MDCache::send_inode_updates(CInode *in)
-{
-  assert(in->is_auth());
-  for (set<int>::iterator it = in->cached_by_begin(); 
-       it != in->cached_by_end(); 
-       it++) {
-    dout(7) << "sending inode_update on " << *in << " to " << *it << dendl;
-    assert(*it != mds->get_nodeid());
-    mds->send_message_mds(new MInodeUpdate(in, in->get_cached_by_nonce(*it)), *it);
-  }
-
-  return 0;
-}
-
-
-void MDCache::handle_inode_update(MInodeUpdate *m)
-{
-  inodeno_t ino = m->get_ino();
-  CInode *in = get_inode(m->get_ino());
-  if (!in) {
-    //dout(7) << "inode_update on " << m->get_ino() << ", don't have it, ignoring" << dendl;
-    dout(7) << "inode_update on " << m->get_ino() << ", don't have it, sending expire" << dendl;
-    MCacheExpire *expire = new MCacheExpire(mds->get_nodeid());
-    expire->add_inode(m->get_ino(), m->get_nonce());
-    mds->send_message_mds(expire, m->get_source().num());
-    goto out;
-  }
-
-  if (in->is_auth()) {
-    dout(7) << "inode_update on " << *in << ", but i'm the authority!" << dendl;
-    assert(0); // this should never happen
-  }
-  
-  dout(7) << "inode_update on " << *in << dendl;
-
-  // update! NOTE dir_auth is unaffected by this.
-  in->decode_basic_state(m->get_payload());
-
- out:
-  // done
-  delete m;
-}
-*/
-
-
-
-
 
 
 int MDCache::send_dir_updates(CDir *dir, bool bcast)
