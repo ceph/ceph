@@ -491,6 +491,7 @@ protected:
   void log_op(vector<Log::Entry>& log, eversion_t trim_to, ObjectStore::Transaction& t);
   
   // pg on-disk content
+  void remove_object_with_snap_hardlinks(ObjectStore::Transaction& t, const sobject_t& soid);
   void clean_up_local(ObjectStore::Transaction& t);
 
   void _clear_recovery_state();

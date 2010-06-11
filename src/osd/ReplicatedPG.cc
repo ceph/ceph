@@ -3851,6 +3851,21 @@ int ReplicatedPG::recover_replicas(int max)
 }
 
 
+void ReplicatedPG::remove_object_with_snap_hardlinks(ObjectStore::Transaction& t, const sobject_t& soid)
+{
+  t.remove(coll_t::build_pg_coll(info.pgid), soid);
+  if (soid.snap < CEPH_MAXSNAP) {
+    bufferlist ba;
+    int r = osd->store->getattr(coll_t::build_pg_coll(info.pgid), soid, OI_ATTR, ba);
+    if (r >= 0) {
+      // grr, need first snap bound, too.
+      object_info_t oi(ba);
+      if (oi.snaps[0] != soid.snap)
+	t.remove(coll_t::build_snap_pg_coll(info.pgid, oi.snaps[0]), soid);
+      t.remove(coll_t::build_snap_pg_coll(info.pgid, soid.snap), soid);
+    }
+  }
+}
 
 /** clean_up_local
  * remove any objects that we're storing but shouldn't.
@@ -3890,7 +3905,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
         if (s.count(p->soid)) {
           dout(10) << " deleting " << p->soid
                    << " when " << p->version << dendl;
-          t.remove(coll_t::build_pg_coll(info.pgid), p->soid);
+	  remove_object_with_snap_hardlinks(t, p->soid);
         }
         s.erase(p->soid);
       } else {
@@ -3903,7 +3918,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
          i != s.end();
          i++) {
       dout(10) << " deleting stray " << *i << dendl;
-      t.remove(coll_t::build_pg_coll(info.pgid), *i);
+      remove_object_with_snap_hardlinks(t, *i);
     }
 
   } else {
@@ -3918,7 +3933,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
       if (p->is_delete()) {
         dout(10) << " deleting " << p->soid
                  << " when " << p->version << dendl;
-        t.remove(coll_t::build_pg_coll(info.pgid), p->soid);
+	remove_object_with_snap_hardlinks(t, p->soid);
       } else {
         // keep old(+missing) objects, just for kicks.
       }
