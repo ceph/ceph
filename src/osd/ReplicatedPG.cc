@@ -246,7 +246,8 @@ void ReplicatedPG::do_op(MOSDOp *op)
   bool can_create = op->may_write();
   int r = find_object_context(op->get_oid(), op->get_snapid(), &obc, can_create);
   if (r) {
-    assert(r != -EAGAIN);
+    assert(r != -EAGAIN); /* if we're doing an op, it's a write --
+			     don't write to snaps! */
     osd->reply_op_error(op, r);
     return;
   }    
@@ -360,8 +361,10 @@ void ReplicatedPG::do_op(MOSDOp *op)
       obc->ondisk_read_unlock();
     }
 
-    if (result == -EAGAIN)
+    if (result == -EAGAIN) { //must have referenced non-existent class
+      osd->reply_op_error(op, r);
       return;
+    }
 
     // prepare the reply
     ctx->reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), 0); 
@@ -2466,6 +2469,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
     derr(0) << "error applying transaction: r = " << r << dendl;
     assert(0);
   }
+  // op is cleaned up by oncommit/onapply when both are executed
 }
 
 void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
