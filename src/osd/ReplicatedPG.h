@@ -96,6 +96,7 @@ public:
     state_t state;
     int num_wr;
     list<Message*> waiting;
+    list<Cond*> waiting_cond;
     bool wake;
 
     AccessMode() : state(IDLE),

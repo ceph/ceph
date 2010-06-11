@@ -723,12 +723,6 @@ bool ReplicatedPG::snap_trimmer()
 	 is_primary() &&
 	 is_active()) {
 
-    entity_inst_t nobody;
-    if (!mode.try_write(nobody)) {
-      dout(10) << " can't write, hmm" << dendl;
-      assert(0);
-    }
-
     snapid_t sn = snap_trimq.start();
     coll_t c = coll_t::build_snap_pg_coll(info.pgid, sn);
     vector<sobject_t> ls;
@@ -738,6 +732,18 @@ bool ReplicatedPG::snap_trimmer()
 
     for (vector<sobject_t>::iterator p = ls.begin(); p != ls.end(); p++) {
       const sobject_t& coid = *p;
+
+      entity_inst_t nobody;
+      if (!mode.try_write(nobody)) {
+	dout(10) << " can't write, waiting" << dendl;
+	Cond cond;
+	mode.waiting_cond.push_back(&cond);
+	while (!mode.try_write(nobody))
+	  cond.Wait(_lock);
+	dout(10) << " done waiting" << dendl;
+	if (!is_primary() || !is_active())
+	  break;
+      }
 
       // load clone info
       bufferlist bl;
@@ -1023,7 +1029,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       if (!ctx->snapc.is_valid())
         return -EINVAL;
       make_writeable(ctx);
-  }
+    }
 
     // munge ZERO -> TRUNCATE?  (don't munge to DELETE or we risk hosing attributes)
     if (op.op == CEPH_OSD_OP_ZERO &&
@@ -2519,6 +2525,8 @@ void ReplicatedPG::put_object_context(ObjectContext *obc)
 
   if (mode.wake) {
     osd->take_waiters(mode.waiting);
+    for (list<Cond*>::iterator p = mode.waiting_cond.begin(); p != mode.waiting_cond.end(); p++)
+      (*p)->Signal();
     mode.wake = false;
   }
 
