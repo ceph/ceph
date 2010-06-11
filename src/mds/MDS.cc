@@ -84,7 +84,7 @@ MDS::MDS(const char *n, Messenger *m, MonClient *mc) :
   standby_replay_for(-1),
   messenger(m),
   monc(mc),
-  logclient(messenger, &mc->monmap),
+  logclient(messenger, &mc->monmap, mc),
   sessionmap(this) {
 
   last_tid = 0;
