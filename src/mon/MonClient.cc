@@ -212,7 +212,13 @@ void MonClient::handle_monmap(MMonMap *m)
   bufferlist::iterator p = m->monmapbl.begin();
   ::decode(monmap, p);
 
-  dout(10) << " got monmap " << monmap.epoch << dendl;
+  dout(10) << " got monmap " << monmap.epoch
+	   << ", mon." << cur_mon << " is now rank " << monmap.get_rank(cur_mon)
+	   << " at " << monmap.get_inst(cur_mon)
+	   << dendl;
+  dout(10) << "dump:\n";
+  monmap.print(*_dout);
+  *_dout << dendl;
 
   _sub_got("monmap", monmap.get_epoch());
 
