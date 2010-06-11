@@ -3582,7 +3582,7 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
     repop->aborted = true;
     repop_map.erase(repop->rep_tid);
 
-    if (requeue) {
+    if (requeue && repop->ctx->op) {
       dout(10) << " requeuing " << *repop->ctx->op << dendl;
       rq.push_back(repop->ctx->op);
       repop->ctx->op = 0;
