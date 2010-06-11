@@ -83,8 +83,10 @@ int MonClient::build_initial_monmap()
 	     q != c.get_section_list().end();
 	     q++) {
 	  const char *section = (*q)->get_name().c_str();
-	  if (strncmp(section, "mon.", 4) == 0) {
-	    const char *name = section + 4;
+	  if (strncmp(section, "mon", 3) == 0) {
+	    const char *name = section + 3;
+	    if (name[0] == '.')
+	      name++;
 	    char *val = 0;
 	    c.read(section, "mon addr", &val, 0);
 	    if (!val || !val[0])
