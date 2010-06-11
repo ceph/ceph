@@ -366,6 +366,7 @@ void MonClient::_send_mon_message(Message *m, bool force)
 {
   assert(!cur_mon.empty());
   if (force || state == MC_STATE_HAVE_SESSION) {
+    dout(10) << "_send_mon_message to mon." << cur_mon << " at " << monmap.get_inst(cur_mon) << dendl;
     messenger->send_message(m, monmap.get_inst(cur_mon));
   } else {
     waiting_for_session.push_back(m);

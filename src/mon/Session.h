@@ -49,12 +49,18 @@ struct MonSession : public RefCountedObject {
 
   AuthServiceHandler *auth_handler;
 
+  Connection *proxy_con;
+  uint64_t proxy_tid;
+
   MonSession(entity_inst_t i, Connection *c) :
     con(c->get()), inst(i), closed(false), item(this),
-    global_id(0), notified_global_id(0), auth_handler(NULL) {}
+    global_id(0), notified_global_id(0), auth_handler(NULL),
+    proxy_con(NULL), proxy_tid(0) {}
   ~MonSession() {
     if (con)
       con->put();
+    if (proxy_con)
+      proxy_con->put();
     generic_dout(0) << "~MonSession " << this << dendl;
     // we should have been removed before we get destructed; see MonSessionMap::remove_session()
     assert(!item.is_on_list());

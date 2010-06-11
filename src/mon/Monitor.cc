@@ -374,24 +374,14 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
   } else if (session && !session->closed) {
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
-
-    dout(10) << "forward_request " << rr->tid << " request " << *req << dendl;
-
-    dout(10) << " noting that i mon" << rank << " own this requests's session" << dendl;
-    //set forwarding variables; clear payload so it re-encodes properly
-    req->session_mon = rank;
-    req->session_mon_tid = rr->tid;
-    req->clear_payload();
-    //of course, the need to forward does give it an effectively lower priority
-    
-    //encode forward message and insert into routed_requests
     encode_message(req, rr->request_bl);
     rr->session = (MonSession *)session->get();
     routed_requests[rr->tid] = rr;
-
     session->routed_request_tids.insert(rr->tid);
     
-    MForward *forward = new MForward(req);
+    dout(10) << "forward_request " << rr->tid << " request " << *req << dendl;
+
+    MForward *forward = new MForward(rr->tid, req, rr->session->caps);
     forward->set_priority(req->get_priority());
     messenger->send_message(forward, monmap->get_inst(mon));
   } else {
@@ -414,15 +404,21 @@ void Monitor::handle_forward(MForward *m)
     dout(0) << "forward from entity with insufficient caps! " 
 	    << session->caps << dendl;
   } else {
-
     Connection *c = new Connection;
     MonSession *s = new MonSession(m->msg->get_source_inst(), c);
-    s->caps = m->client_caps;
     c->set_priv(s);
+
+    s->caps = m->client_caps;
+    s->proxy_con = m->get_connection()->get();
+    s->proxy_tid = m->tid;
 
     PaxosServiceMessage *req = m->msg;
     m->msg = NULL;  // so ~MForward doesn't delete it
     req->set_connection(c);
+
+    dout(10) << " got tid " << s->proxy_tid << " " << m << " " << *m
+	     << " from " << m->get_orig_source_inst() << dendl;
+
     _ms_dispatch(req);
   }
   session->put();
@@ -447,20 +443,22 @@ void Monitor::try_send_message(Message *m, entity_inst_t to)
 
 void Monitor::send_reply(PaxosServiceMessage *req, Message *reply, entity_inst_t to)
 {
-  if (req->session_mon >= 0) {
-    if (req->session_mon < (int)monmap->size()) {
-      dout(15) << "send_reply routing reply to " << to << " via mon" << req->session_mon
-	       << " for request " << *req << dendl;
-      messenger->send_message(new MRoute(req->session_mon_tid, reply, to),
-			      monmap->get_inst(req->session_mon));
-    } else {
-      dout(2) << "send_reply mon" << req->session_mon << " dne, dropping reply " << *reply
-	      << " to " << *req << " for " << to << dendl;
-      reply->put();
-    }
-  } else {
-    messenger->send_message(reply, to);
+  MonSession *session = (MonSession*)req->get_connection()->get_priv();
+  if (!session) {
+    dout(2) << "send_reply no session, dropping reply " << *reply
+	    << " to " << req << " " << *req << " for " << to << dendl;
+    reply->put();
+    return;
   }
+  if (session->proxy_con) {
+    dout(15) << "send_reply routing reply to " << to << " via mon" << req->session_mon
+	     << " for request " << *req << dendl;
+    messenger->send_message(new MRoute(session->proxy_tid, reply, to),
+			    session->proxy_con);    
+  } else {
+    messenger->send_message(reply, session->con);
+  }
+  session->put();
 }
 
 void Monitor::handle_route(MRoute *m)
@@ -507,7 +505,7 @@ void Monitor::resend_routed_requests()
     PaxosServiceMessage *req = (PaxosServiceMessage *)decode_message(q);
 
     dout(10) << " resend to mon" << mon << " tid " << rr->tid << " " << *req << dendl;
-    MForward *forward = new MForward(req, rr->session->caps);
+    MForward *forward = new MForward(rr->tid, req, rr->session->caps);
     forward->set_priority(req->get_priority());
     messenger->send_message(forward, monmap->get_inst(mon));
   }  

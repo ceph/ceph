@@ -24,19 +24,20 @@
 #include "include/encoding.h"
 
 struct MForward : public Message {
+  uint64_t tid;
   PaxosServiceMessage *msg;
   entity_inst_t client;
   MonCaps client_caps;
   
-  MForward() : Message(MSG_FORWARD), msg(NULL) {}
+  MForward() : Message(MSG_FORWARD), tid(0), msg(NULL) {}
   //the message needs to have caps filled in!
-  MForward(PaxosServiceMessage *m) :
-    Message(MSG_FORWARD), msg(m) {
+  MForward(uint64_t t, PaxosServiceMessage *m) :
+    Message(MSG_FORWARD), tid(t), msg(m) {
     client = m->get_source_inst();
     client_caps = m->get_session()->caps;
   }
-  MForward(PaxosServiceMessage *m, MonCaps caps) :
-    Message(MSG_FORWARD), msg(m), client_caps(caps) {
+  MForward(uint64_t t, PaxosServiceMessage *m, MonCaps caps) :
+    Message(MSG_FORWARD), tid(t), msg(m), client_caps(caps) {
     client = m->get_source_inst();
   }
 private:
@@ -46,6 +47,7 @@ private:
 
 public:
   void encode_payload() {
+    ::encode(tid, payload);
     ::encode(client, payload);
     ::encode(client_caps, payload);
     encode_message(msg, payload);
@@ -53,6 +55,7 @@ public:
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    ::decode(tid, p);
     ::decode(client, p);
     ::decode(client_caps, p);
     msg = (PaxosServiceMessage *)decode_message(p);
