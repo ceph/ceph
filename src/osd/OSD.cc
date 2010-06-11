@@ -2533,6 +2533,10 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
        it++) {
     PG *pg = it->second;
     pg->lock();
+
+    if (g_conf.osd_check_for_log_corruption)
+      pg->check_log_for_corruption(store);
+
     if (!osdmap->have_pg_pool(pg->info.pgid.pool())) {
       //pool is deleted!
       queue_pg_for_deletion(pg);

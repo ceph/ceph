@@ -339,6 +339,8 @@ struct md_config_t {
 
   bool osd_class_timeout;
 
+  bool osd_check_for_log_corruption;  // bleh
+
   // filestore
   bool filestore;
   double   filestore_max_sync_interval;

@@ -2276,6 +2276,74 @@ void PG::read_log(ObjectStore *store)
   dout(10) << "read_log done" << dendl;
 }
 
+bool PG::check_log_for_corruption(ObjectStore *store)
+{
+  OndiskLog bounds;
+  bufferlist blb;
+  store->collection_getattr(coll_t::build_pg_coll(info.pgid), "ondisklog", blb);
+  bufferlist::iterator p = blb.begin();
+  ::decode(bounds, p);
+
+  dout(10) << "check_log_for_corruption: tail " << bounds.tail << " head " << bounds.head
+	   << " block_map " << bounds.block_map << dendl;
+
+  stringstream ss;
+  ss << "CORRUPT pg " << info.pgid << " log: ";
+
+  bool ok = true;
+  uint64_t pos = 0;
+  if (bounds.head > 0) {
+    // read
+    struct stat st;
+    store->stat(meta_coll, log_oid, &st);
+    bufferlist bl;
+    store->read(meta_coll, log_oid, bounds.tail, bounds.length(), bl);
+    if (st.st_size != (int)bounds.head) {
+      ss << "mismatched bounds " << bounds.tail << ".." << bounds.head << " and file size " << st.st_size;
+      ok = false;
+    } else if (bl.length() < bounds.length()) {
+      dout(0) << " got " << bl.length() << " bytes, expected " 
+	      << bounds.tail << ".." << bounds.head << "="
+	      << bounds.length()
+	      << dendl;
+      ss << "short log, " << bl.length() << " bytes, expected " << bounds.length();
+      ok = false;
+    } else {
+      PG::Log::Entry e;
+      bufferlist::iterator p = bl.begin();
+      while (!p.end()) {
+	pos = bounds.tail + p.get_off();
+	try {
+	  ::decode(e, p);
+	}
+	catch (buffer::error *e) {
+	  dout(0) << "corrupt entry at " << pos << dendl;
+	  ss << "corrupt entry at offset " << pos;
+	  ok = false;
+	  break;
+	}
+	catch(std::bad_alloc a) {
+	  dout(0) << "corrupt entry at " << pos << dendl;
+	  ss << "corrupt entry at offset " << pos;
+	  ok = false;
+	  break;
+	}
+	dout(30) << " " << pos << " " << e << dendl;
+      }
+    }
+  }
+  if (!ok) {
+    stringstream f;
+    f << "/tmp/pglog_bad_" << info.pgid;
+    string filename;
+    getline(f, filename);
+    blb.write_file(filename.c_str(), 0644);
+    ss << ", saved to " << filename;
+    osd->logclient.log(LOG_ERROR, ss);
+  }
+  return ok;
+}
+
 
 
 void PG::read_state(ObjectStore *store)

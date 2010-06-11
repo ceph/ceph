@@ -944,6 +944,7 @@ public:
   void append_log(ObjectStore::Transaction &t, bufferlist& bl,
 		  eversion_t log_version);
   void read_log(ObjectStore *store);
+  bool check_log_for_corruption(ObjectStore *store);
   void trim(ObjectStore::Transaction& t, eversion_t v);
   void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
   void trim_peers();
