@@ -85,12 +85,17 @@ done
 
 [ -z "$conf" ] && usage_exit
 
+if [ $allhosts -eq 0 ]; then
+    echo mkcephfs currently requires -a|--allhosts to initialize the whole fs at once.
+    usage_exit
+fi
+
 verify_conf
 
 get_name_list "$@"
 
-# create the monmap if we're doing mon0
-if echo $what | grep -q mon0 ; then
+# do core fs initialization steps
+if true; then
     # first, make a list of monitors
     mons=`$CCONF -c $conf -l mon | egrep -v '^mon$' | sort`
     args=""
@@ -99,7 +104,7 @@ if echo $what | grep -q mon0 ; then
     for name in $mons; do
 	id=`echo $name | cut -c 4- | sed 's/\\.//'`
 	get_conf addr "" "mon addr"
-	args=$args" --add $addr"
+	args=$args" --add $id $addr"
     done
 
     # build monmap
@@ -117,13 +122,13 @@ if echo $what | grep -q mon0 ; then
     $BINDIR/osdmaptool --clobber --createsimple $numosd $osdmap || exit 1
 
     # import crush map?
-    get_conf crushmapsrc "$usecrushmapsrc" "crush map src" mon0 mon global
+    get_conf crushmapsrc "$usecrushmapsrc" "crush map src" mon global
     if [ -n "$crushmapsrc" ]; then
 	echo Compiling crush map from $crushmapsrc to $crushmap
 	crushmap="/tmp/crushmap.$$"
 	$BINDIR/crushtool -c $crushmapsrc -o $crushmap
     fi
-    get_conf crushmap "$usecrushmap" "crush map" mon0 mon global
+    get_conf crushmap "$usecrushmap" "crush map" mon global
     if [ -n "$crushmap" ]; then
 	echo Importing crush map from $crushmap
 	$BINDIR/osdmaptool --clobber --import-crush $crushmap $osdmap
@@ -205,7 +210,7 @@ for name in $what; do
 	    [ -n "$user" ] && chown $user $tmpkeyring
 	fi
 	get_conf mon_data "" "mon data"
-	do_cmd "$BINDIR/cmon -c $conf --mkfs -i $num --monmap $monmap --osdmap $osdmap -k $tmpkeyring ; rm -f $tmpkeyring"
+	do_cmd "$BINDIR/cmon -c $conf --mkfs -i $id --monmap $monmap --osdmap $osdmap -k $tmpkeyring ; rm -f $tmpkeyring"
 
 	if [ -n "$ssh" ]; then
 	    if [ -n "$user" ]; then
