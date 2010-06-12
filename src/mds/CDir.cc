@@ -280,6 +280,11 @@ CDentry* CDir::add_primary_dentry(const string& dname, CInode *in,
 
   link_inode_work(dn, in);
 
+  if (dn->last == CEPH_NOSNAP)
+    num_head_items++;
+  else
+    num_snap_items++;
+  
   dout(12) << "add_primary_dentry " << *dn << dendl;
 
   // pin?
@@ -333,18 +338,21 @@ void CDir::remove_dentry(CDentry *dn)
   // there should be no client leases at this point!
   assert(dn->client_lease_map.empty());
 
-  if (dn->get_linkage()->get_inode()) {
-    // detach inode and dentry
-    unlink_inode_work(dn);
-  } else {
-    // remove from null list
-    //assert(null_items.count(dn->name) == 1);
-    //null_items.erase(dn->name);
+  if (dn->get_linkage()->is_null()) {
     if (dn->last == CEPH_NOSNAP)
       num_head_null--;
     else
       num_snap_null--;
+  } else {
+    if (dn->last == CEPH_NOSNAP)
+      num_head_items--;
+    else
+      num_snap_items--;
   }
+
+  if (!dn->get_linkage()->is_null())
+    // detach inode and dentry
+    unlink_inode_work(dn);
   
   // remove from list
   assert(items.count(dn->key()) == 1);
@@ -395,10 +403,13 @@ void CDir::link_primary_inode(CDentry *dn, CInode *in)
 
   link_inode_work(dn, in);
   
-  if (dn->last == CEPH_NOSNAP)
+  if (dn->last == CEPH_NOSNAP) {
+    num_head_items++;
     num_head_null--;
-  else
+  } else {
+    num_snap_items++;
     num_snap_null--;
+  }
 
   assert(get_num_any() == items.size());
 }
@@ -408,11 +419,6 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
   assert(dn->get_linkage()->get_inode() == in);
   assert(in->get_parent_dn() == dn);
 
-  if (dn->last == CEPH_NOSNAP)
-    num_head_items++;
-  else
-    num_snap_items++;
-  
   // set inode version
   //in->inode.version = dn->get_version();
   
@@ -432,7 +438,7 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
     in->snaprealm->adjust_parent();
 }
 
-void CDir::unlink_inode( CDentry *dn )
+void CDir::unlink_inode(CDentry *dn)
 {
   if (dn->get_linkage()->is_remote()) {
     dout(12) << "unlink_inode " << *dn << dendl;
@@ -442,10 +448,13 @@ void CDir::unlink_inode( CDentry *dn )
 
   unlink_inode_work(dn);
 
-  if (dn->last == CEPH_NOSNAP)
+  if (dn->last == CEPH_NOSNAP) {
+    num_head_items--;
     num_head_null++;
-  else
+  } else {
+    num_snap_items--;
     num_snap_null++;
+  }
   assert(get_num_any() == items.size());
 }
 
@@ -501,11 +510,6 @@ void CDir::unlink_inode_work( CDentry *dn )
     in->remove_primary_parent(dn);
     dn->get_linkage()->inode = 0;
   }
-
-  if (dn->last == CEPH_NOSNAP)
-    num_head_items--;
-  else
-    num_snap_items--;
 }
 
 void CDir::remove_null_dentries() {
@@ -1440,6 +1444,7 @@ void CDir::_commit_full(ObjectOperation& m, const set<snapid_t> *snaps)
   ::encode(fnode, header);
   bufferlist finalbl;
   ::encode(header, finalbl);
+  assert(num_head_items + num_head_null + num_snap_items + num_snap_null == items.size());
   assert(n == (num_head_items + num_snap_items));
   ::encode(n, finalbl);
   finalbl.claim_append(bl);
