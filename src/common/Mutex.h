@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MUTEX_H
-#define __MUTEX_H
+#ifndef CEPH_MUTEX_H
+#define CEPH_MUTEX_H
 
 #include <pthread.h>
 #include "include/assert.h"

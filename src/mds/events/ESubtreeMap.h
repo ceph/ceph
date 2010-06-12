@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDS_ESUBTREEMAP_H
-#define __MDS_ESUBTREEMAP_H
+#ifndef CEPH_MDS_ESUBTREEMAP_H
+#define CEPH_MDS_ESUBTREEMAP_H
 
 #include "../LogEvent.h"
 #include "EMetaBlob.h"

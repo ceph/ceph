@@ -1,5 +1,5 @@
-#ifndef __COLOR_H
-#define __COLOR_H
+#ifndef CEPH_COLOR_H
+#define CEPH_COLOR_H
 
 #define TEXT_NORMAL	"\033[0m"
 #define TEXT_HAZARD	"\033[5;31m"

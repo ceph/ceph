@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __CLASSLIBRARY_H
-#define __CLASSLIBRARY_H
+#ifndef CEPH_CLASSLIBRARY_H
+#define CEPH_CLASSLIBRARY_H
 
 #include "include/types.h"
 #include "include/encoding.h"

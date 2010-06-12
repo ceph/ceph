@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __ESTRING_H
-#define __ESTRING_H
+#ifndef CEPH_ESTRING_H
+#define CEPH_ESTRING_H
 
 #include <stdlib.h>
 #include <string>

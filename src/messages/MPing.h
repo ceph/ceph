@@ -14,8 +14,8 @@
 
 
 
-#ifndef __MPING_H
-#define __MPING_H
+#ifndef CEPH_MPING_H
+#define CEPH_MPING_H
 
 #include "msg/Message.h"
 #include "include/encoding.h"

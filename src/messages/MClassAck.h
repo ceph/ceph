@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MCLASSACK_H
-#define __MCLASSACK_H
+#ifndef CEPH_MCLASSACK_H
+#define CEPH_MCLASSACK_H
 
 #include "include/ClassLibrary.h"
 

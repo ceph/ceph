@@ -1,5 +1,5 @@
-#ifndef FS_CEPH_IOCTL_H
-#define FS_CEPH_IOCTL_H
+#ifndef CEPH_FS_IOCTL_H
+#define CEPH_FS_IOCTL_H
 
 #include <linux/ioctl.h>
 #include <linux/types.h>

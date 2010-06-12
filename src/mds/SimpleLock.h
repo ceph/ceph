@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __SIMPLELOCK_H
-#define __SIMPLELOCK_H
+#ifndef CEPH_SIMPLELOCK_H
+#define CEPH_SIMPLELOCK_H
 
 // -- lock types --
 // see CEPH_LOCK_*

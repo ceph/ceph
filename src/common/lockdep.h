@@ -1,5 +1,5 @@
-#ifndef _CEPH_LOCKDEP_H
-#define _CEPH_LOCKDEP_H
+#ifndef CEPH_LOCKDEP_H
+#define CEPH_LOCKDEP_H
 
 extern int g_lockdep;
 

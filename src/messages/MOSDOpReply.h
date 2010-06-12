@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MOSDOPREPLY_H
-#define __MOSDOPREPLY_H
+#ifndef CEPH_MOSDOPREPLY_H
+#define CEPH_MOSDOPREPLY_H
 
 #include "msg/Message.h"
 

@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __COND_H
-#define __COND_H
+#ifndef CEPH_COND_H
+#define CEPH_COND_H
 
 #include <time.h>
 

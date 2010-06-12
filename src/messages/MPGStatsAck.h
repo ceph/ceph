@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MPGSTATSACK_H
-#define __MPGSTATSACK_H
+#ifndef CEPH_MPGSTATSACK_H
+#define CEPH_MPGSTATSACK_H
 
 #include "osd/osd_types.h"
 

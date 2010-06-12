@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MON_SESSION_H
-#define __MON_SESSION_H
+#ifndef CEPH_MON_SESSION_H
+#define CEPH_MON_SESSION_H
 
 #include "include/xlist.h"
 #include "msg/msg_types.h"

@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __BUFFER_H
-#define __BUFFER_H
+#ifndef CEPH_BUFFER_H
+#define CEPH_BUFFER_H
 
 #include <linux/types.h>
 

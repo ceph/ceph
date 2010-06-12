@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __CEPH_INTARITH_H
-#define __CEPH_INTARITH_H
+#ifndef CEPH_INTARITH_H
+#define CEPH_INTARITH_H
 
 #ifndef MIN
 # define MIN(a,b) ((a) < (b) ? (a):(b))

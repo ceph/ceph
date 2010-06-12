@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MDENTRYLINK_H
-#define __MDENTRYLINK_H
+#ifndef CEPH_MDENTRYLINK_H
+#define CEPH_MDENTRYLINK_H
 
 class MDentryLink : public Message {
   dirfrag_t dirfrag;

@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MGETPOOLSTATS_H
-#define __MGETPOOLSTATS_H
+#ifndef CEPH_MGETPOOLSTATS_H
+#define CEPH_MGETPOOLSTATS_H
 
 #include "messages/PaxosServiceMessage.h"
 

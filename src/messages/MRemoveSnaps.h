@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MREMOVESNAPS_H
-#define __MREMOVESNAPS_H
+#ifndef CEPH_MREMOVESNAPS_H
+#define CEPH_MREMOVESNAPS_H
 
 #include "messages/PaxosServiceMessage.h"
 

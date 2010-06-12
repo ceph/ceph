@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __OBJECTSTORE_H
-#define __OBJECTSTORE_H
+#ifndef CEPH_OBJECTSTORE_H
+#define CEPH_OBJECTSTORE_H
 
 #include "include/types.h"
 #include "include/Context.h"

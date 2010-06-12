@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __SCATTERLOCK_H
-#define __SCATTERLOCK_H
+#ifndef CEPH_SCATTERLOCK_H
+#define CEPH_SCATTERLOCK_H
 
 #include "SimpleLock.h"
 

@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __SIMPLEMESSENGER_H
-#define __SIMPLEMESSENGER_H
+#ifndef CEPH_SIMPLEMESSENGER_H
+#define CEPH_SIMPLEMESSENGER_H
 
 #include "include/types.h"
 #include "include/xlist.h"

@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MMDSRESOLVEACK_H
-#define __MMDSRESOLVEACK_H
+#ifndef CEPH_MMDSRESOLVEACK_H
+#define CEPH_MMDSRESOLVEACK_H
 
 #include "msg/Message.h"
 

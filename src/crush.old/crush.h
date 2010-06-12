@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __crush_CRUSH_H
-#define __crush_CRUSH_H
+#ifndef CEPH_crush_CRUSH_H
+#define CEPH_crush_CRUSH_H
 
 #include <iostream>
 #include <list>

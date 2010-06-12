@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MLOGACK_H
-#define __MLOGACK_H
+#ifndef CEPH_MLOGACK_H
+#define CEPH_MLOGACK_H
 
 #include "include/LogEntry.h"
 

@@ -1,5 +1,5 @@
-#ifndef __RGWRADOS_H
-#define __RGWRADOS_H
+#ifndef CEPH_RGWRADOS_H
+#define CEPH_RGWRADOS_H
 
 #include "include/librados.h"
 #include "rgw_access.h"

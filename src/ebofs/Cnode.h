@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __EBOFS_CNODE_H
-#define __EBOFS_CNODE_H
+#ifndef CEPH_EBOFS_CNODE_H
+#define CEPH_EBOFS_CNODE_H
 
 #include "Onode.h"
 

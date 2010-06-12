@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __FRAG_H
-#define __FRAG_H
+#ifndef CEPH_FRAG_H
+#define CEPH_FRAG_H
 
 #include <stdint.h>
 #include <map>

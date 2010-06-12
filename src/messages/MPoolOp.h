@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MPOOLOP_H
-#define __MPOOLOP_H
+#ifndef CEPH_MPOOLOP_H
+#define CEPH_MPOOLOP_H
 
 #include "messages/PaxosServiceMessage.h"
 

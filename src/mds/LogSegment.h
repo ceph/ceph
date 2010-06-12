@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __LOGSEGMENT_H
-#define __LOGSEGMENT_H
+#ifndef CEPH_LOGSEGMENT_H
+#define CEPH_LOGSEGMENT_H
 
 #include "include/dlist.h"
 #include "include/elist.h"

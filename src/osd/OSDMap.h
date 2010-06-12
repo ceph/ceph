@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __OSDMAP_H
-#define __OSDMAP_H
+#ifndef CEPH_OSDMAP_H
+#define CEPH_OSDMAP_H
 
 /*
  * describe properties of the OSD cluster.

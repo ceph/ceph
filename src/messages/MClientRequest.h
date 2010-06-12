@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MCLIENTREQUEST_H
-#define __MCLIENTREQUEST_H
+#ifndef CEPH_MCLIENTREQUEST_H
+#define CEPH_MCLIENTREQUEST_H
 
 /**
  *

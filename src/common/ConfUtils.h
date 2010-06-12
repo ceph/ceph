@@ -1,5 +1,5 @@
-#ifndef __CONFUTILS_H
-#define __CONFUTILS_H
+#ifndef CEPH_CONFUTILS_H
+#define CEPH_CONFUTILS_H
 
 
 #include <string.h>

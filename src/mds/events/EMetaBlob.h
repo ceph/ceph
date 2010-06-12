@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDS_EMETABLOB_H
-#define __MDS_EMETABLOB_H
+#ifndef CEPH_MDS_EMETABLOB_H
+#define CEPH_MDS_EMETABLOB_H
 
 #include <stdlib.h>
 

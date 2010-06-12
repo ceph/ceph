@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MGETPOOLSTATSREPLY_H
-#define __MGETPOOLSTATSREPLY_H
+#ifndef CEPH_MGETPOOLSTATSREPLY_H
+#define CEPH_MGETPOOLSTATSREPLY_H
 
 class MGetPoolStatsReply : public PaxosServiceMessage {
 public:

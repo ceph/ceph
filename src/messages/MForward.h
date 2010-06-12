@@ -16,8 +16,8 @@
  * checking.
  */
 
-#ifndef __MFORWARD_H
-#define __MFORWARD_H
+#ifndef CEPH_MFORWARD_H
+#define CEPH_MFORWARD_H
 
 #include "msg/Message.h"
 #include "mon/MonCaps.h"

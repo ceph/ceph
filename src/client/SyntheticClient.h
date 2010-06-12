@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __SYNTHETICCLIENT_H
-#define __SYNTHETICCLIENT_H
+#ifndef CEPH_SYNTHETICCLIENT_H
+#define CEPH_SYNTHETICCLIENT_H
 
 #include <pthread.h>
 

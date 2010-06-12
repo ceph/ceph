@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __EBOFS_ONODE_H
-#define __EBOFS_ONODE_H
+#ifndef CEPH_EBOFS_ONODE_H
+#define CEPH_EBOFS_ONODE_H
 
 #include "include/lru.h"
 

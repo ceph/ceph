@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MMONGETMAP_H
-#define __MMONGETMAP_H
+#ifndef CEPH_MMONGETMAP_H
+#define CEPH_MMONGETMAP_H
 
 #include "msg/Message.h"
 

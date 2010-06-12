@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MLOG_H
-#define __MLOG_H
+#ifndef CEPH_MLOG_H
+#define CEPH_MLOG_H
 
 #include "include/LogEntry.h"
 #include "messages/PaxosServiceMessage.h"

@@ -11,8 +11,8 @@
  * 
  */
 
-#ifndef __CRYPTO_H
-#define __CRYPTO_H
+#ifndef CEPH_CRYPTO_H
+#define CEPH_CRYPTO_H
 
 #include "include/types.h"
 

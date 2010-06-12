@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDSTABLECLIENT_H
-#define __MDSTABLECLIENT_H
+#ifndef CEPH_MDSTABLECLIENT_H
+#define CEPH_MDSTABLECLIENT_H
 
 #include "include/types.h"
 #include "include/Context.h"

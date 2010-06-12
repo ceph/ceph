@@ -1,5 +1,5 @@
-#ifndef __CEPH_ARMOR
-#define __CEPH_ARMOR
+#ifndef CEPH_ARMOR_H
+#define CEPH_ARMOR_H
 
 extern "C" {
 int ceph_armor(char *dst, const char *src, const char *end);

@@ -1,5 +1,5 @@
-#ifndef __CEPH_ASSERT_H
-#define __CEPH_ASSERT_H
+#ifndef CEPH_ASSERT_H
+#define CEPH_ASSERT_H
 
 #include <features.h>
 

@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MCLIENTREQUESTFORWARD_H
-#define __MCLIENTREQUESTFORWARD_H
+#ifndef CEPH_MCLIENTREQUESTFORWARD_H
+#define CEPH_MCLIENTREQUESTFORWARD_H
 
 class MClientRequestForward : public Message {
   int32_t dest_mds;

@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MCLIENTCAPRELEASE_H
-#define __MCLIENTCAPRELEASE_H
+#ifndef CEPH_MCLIENTCAPRELEASE_H
+#define CEPH_MCLIENTCAPRELEASE_H
 
 #include "msg/Message.h"
 

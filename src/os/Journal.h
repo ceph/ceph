@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __EBOFS_JOURNAL_H
-#define __EBOFS_JOURNAL_H
+#ifndef CEPH_EBOFS_JOURNAL_H
+#define CEPH_EBOFS_JOURNAL_H
 
 #include "include/buffer.h"
 #include "include/Context.h"

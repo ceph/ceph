@@ -1,6 +1,6 @@
 
-#ifndef __CEPH_MDS_LOCKS_H
-#define __CEPH_MDS_LOCKS_H
+#ifndef CEPH_MDS_LOCKS_H
+#define CEPH_MDS_LOCKS_H
 
 struct sm_state_t {
   int next;         // 0 if stable

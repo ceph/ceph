@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __INTERVAL_SET_H
-#define __INTERVAL_SET_H
+#ifndef CEPH_INTERVAL_SET_H
+#define CEPH_INTERVAL_SET_H
 
 #include <map>
 #include <ostream>

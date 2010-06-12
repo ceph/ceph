@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MOSDPGCREATE_H
-#define __MOSDPGCREATE_H
+#ifndef CEPH_MOSDPGCREATE_H
+#define CEPH_MOSDPGCREATE_H
 
 #include "msg/Message.h"
 

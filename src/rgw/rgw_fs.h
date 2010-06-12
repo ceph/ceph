@@ -1,5 +1,5 @@
-#ifndef __RGW_FS_H
-#define __RGW_FS_H
+#ifndef CEPH_RGW_FS_H
+#define CEPH_RGW_FS_H
 
 #include "rgw_access.h"
 

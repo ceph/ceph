@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MPGSTATS_H
-#define __MPGSTATS_H
+#ifndef CEPH_MPGSTATS_H
+#define CEPH_MPGSTATS_H
 
 #include "osd/osd_types.h"
 #include "messages/PaxosServiceMessage.h"

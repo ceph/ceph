@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDSTABLESERVER_H
-#define __MDSTABLESERVER_H
+#ifndef CEPH_MDSTABLESERVER_H
+#define CEPH_MDSTABLESERVER_H
 
 #include "MDSTable.h"
 

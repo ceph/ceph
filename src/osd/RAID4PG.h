@@ -11,8 +11,8 @@
  * 
  */
 
-#ifndef __RAID4PG_H
-#define __RAID4PG_H
+#ifndef CEPH_RAID4PG_H
+#define CEPH_RAID4PG_H
 
 
 #include "PG.h"

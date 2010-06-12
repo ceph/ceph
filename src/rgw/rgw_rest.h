@@ -1,5 +1,5 @@
-#ifndef __RGW_REST_H
-#define __RGW_REST_H
+#ifndef CEPH_RGW_REST_H
+#define CEPH_RGW_REST_H
 
 #include "rgw_op.h"
 

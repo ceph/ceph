@@ -1,5 +1,5 @@
-#ifndef __LIBRADOS_H
-#define __LIBRADOS_H
+#ifndef CEPH_LIBRADOS_H
+#define CEPH_LIBRADOS_H
 
 #ifdef __cplusplus
 extern "C" {

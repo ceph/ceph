@@ -1,5 +1,5 @@
-#ifndef _CEPH_BACKTRACE
-#define _CEPH_BACKTRACE
+#ifndef CEPH_BACKTRACE_H
+#define CEPH_BACKTRACE_H
 
 #include <execinfo.h>
 #include <stdlib.h>

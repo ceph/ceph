@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __LOGGER_H
-#define __LOGGER_H
+#ifndef CEPH_LOGGER_H
+#define CEPH_LOGGER_H
 
 #include "include/types.h"
 #include "Clock.h"

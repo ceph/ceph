@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MDENTRYUNLINK_H
-#define __MDENTRYUNLINK_H
+#ifndef CEPH_MDENTRYUNLINK_H
+#define CEPH_MDENTRYUNLINK_H
 
 class MDentryUnlink : public Message {
   dirfrag_t dirfrag;

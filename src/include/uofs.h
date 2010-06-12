@@ -19,8 +19,8 @@
  * user-level object-based file system
  */
  
- #ifndef _UOFS_H_
- #define _UOFS_H_
+ #ifndef CEPH_UOFS_H
+ #define CEPH_UOFS_H
 
  #include <sys/types.h>
  #include <unistd.h>

@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 
-#ifndef __CEPH_DEBUG_H
-#define __CEPH_DEBUG_H
+#ifndef CEPH_DEBUG_H
+#define CEPH_DEBUG_H
 
 #include "include/assert.h"
 #include "Mutex.h"

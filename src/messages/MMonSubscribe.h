@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MMONSUBSCRIBE_H
-#define __MMONSUBSCRIBE_H
+#ifndef CEPH_MMONSUBSCRIBE_H
+#define CEPH_MMONSUBSCRIBE_H
 
 #include "msg/Message.h"
 

@@ -14,8 +14,8 @@
 
 
 
-#ifndef __MOSDALIVE_H
-#define __MOSDALIVE_H
+#ifndef CEPH_MOSDALIVE_H
+#define CEPH_MOSDALIVE_H
 
 #include "messages/PaxosServiceMessage.h"
 

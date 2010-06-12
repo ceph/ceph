@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MOSDPGREMOVE_H
-#define __MOSDPGREMOVE_H
+#ifndef CEPH_MOSDPGREMOVE_H
+#define CEPH_MOSDPGREMOVE_H
 
 #include "msg/Message.h"
 

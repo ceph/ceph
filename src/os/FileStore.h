@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __FILESTORE_H
-#define __FILESTORE_H
+#ifndef CEPH_FILESTORE_H
+#define CEPH_FILESTORE_H
 
 #include "ObjectStore.h"
 #include "JournalingObjectStore.h"

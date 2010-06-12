@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __OBJECTER_H
-#define __OBJECTER_H
+#ifndef CEPH_OBJECTER_H
+#define CEPH_OBJECTER_H
 
 #include "include/types.h"
 #include "include/buffer.h"

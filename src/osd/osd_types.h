@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __OSD_TYPES_H
-#define __OSD_TYPES_H
+#ifndef CEPH_OSD_TYPES_H
+#define CEPH_OSD_TYPES_H
 
 #include <stdio.h>
 

@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __AUTHNONESERVICEHANDLER_H
-#define __AUTHNONESERVICEHANDLER_H
+#ifndef CEPH_AUTHNONESERVICEHANDLER_H
+#define CEPH_AUTHNONESERVICEHANDLER_H
 
 #include "../AuthServiceHandler.h"
 #include "../Auth.h"

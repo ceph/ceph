@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __PG_H
-#define __PG_H
+#ifndef CEPH_PG_H
+#define CEPH_PG_H
 
 
 #include "include/types.h"

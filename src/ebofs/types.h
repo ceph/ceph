@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __EBOFS_TYPES_H
-#define __EBOFS_TYPES_H
+#ifndef CEPH_EBOFS_TYPES_H
+#define CEPH_EBOFS_TYPES_H
 
 #include "include/buffer.h"
 #include "include/Context.h"

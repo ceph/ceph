@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDS_LOCKER_H
-#define __MDS_LOCKER_H
+#ifndef CEPH_MDS_LOCKER_H
+#define CEPH_MDS_LOCKER_H
 
 #include "include/types.h"
 

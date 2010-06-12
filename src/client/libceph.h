@@ -1,5 +1,5 @@
-#ifndef __LIBCEPH_H
-#define __LIBCEPH_H
+#ifndef CEPH_LIB_H
+#define CEPH_LIB_H
 #include <netinet/in.h>
 #include <sys/statvfs.h>
 #include <utime.h>

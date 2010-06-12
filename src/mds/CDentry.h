@@ -14,8 +14,8 @@
 
 
 
-#ifndef __CDENTRY_H
-#define __CDENTRY_H
+#ifndef CEPH_CDENTRY_H
+#define CEPH_CDENTRY_H
 
 #include <string>
 #include <set>

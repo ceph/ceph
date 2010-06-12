@@ -1,5 +1,5 @@
-#ifndef __OBJCLASS_H
-#define __OBJCLASS_H
+#ifndef CEPH_OBJCLASS_H
+#define CEPH_OBJCLASS_H
 
 #ifdef __cplusplus
 

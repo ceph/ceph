@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __OSD_H
-#define __OSD_H
+#ifndef CEPH_OSD_H
+#define CEPH_OSD_H
 
 #include "msg/Dispatcher.h"
 

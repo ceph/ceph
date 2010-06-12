@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDS_ETABLECLIENT_H
-#define __MDS_ETABLECLIENT_H
+#ifndef CEPH_MDS_ETABLECLIENT_H
+#define CEPH_MDS_ETABLECLIENT_H
 
 #include "config.h"
 #include "include/types.h"

@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __ANCHORSERVER_H
-#define __ANCHORSERVER_H
+#ifndef CEPH_ANCHORSERVER_H
+#define CEPH_ANCHORSERVER_H
 
 #include "MDSTableServer.h"
 #include "Anchor.h"

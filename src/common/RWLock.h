@@ -14,8 +14,8 @@
 
 
 
-#ifndef _RWLock_Posix_
-#define _RWLock_Posix_
+#ifndef CEPH_RWLock_Posix__H
+#define CEPH_RWLock_Posix__H
 
 #include <pthread.h>
 #include "lockdep.h"

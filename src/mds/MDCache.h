@@ -14,8 +14,8 @@
 
 
 
-#ifndef __MDCACHE_H
-#define __MDCACHE_H
+#ifndef CEPH_MDCACHE_H
+#define CEPH_MDCACHE_H
 
 #include "include/types.h"
 #include "include/filepath.h"

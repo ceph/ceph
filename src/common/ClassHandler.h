@@ -1,5 +1,5 @@
-#ifndef __CLASSHANDLER_H
-#define __CLASSHANDLER_H
+#ifndef CEPH_CLASSHANDLER_H
+#define CEPH_CLASSHANDLER_H
 
 #include "include/types.h"
 #include "include/ClassLibrary.h"

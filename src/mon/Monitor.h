@@ -20,8 +20,8 @@
  * Placement Group (PG) Monitor, Metadata Server (MDS) Monitor, and Client Monitor.
  */
 
-#ifndef __MONITOR_H
-#define __MONITOR_H
+#ifndef CEPH_MONITOR_H
+#define CEPH_MONITOR_H
 
 #include "include/types.h"
 #include "msg/Messenger.h"

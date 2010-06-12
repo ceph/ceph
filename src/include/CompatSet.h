@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __CEPH_COMPATSET_H
-#define __CEPH_COMPATSET_H
+#ifndef CEPH_COMPATSET_H
+#define CEPH_COMPATSET_H
 #include "include/buffer.h"
 #include <vector>
 

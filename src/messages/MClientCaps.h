@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MCLIENTCAPS_H
-#define __MCLIENTCAPS_H
+#ifndef CEPH_MCLIENTCAPS_H
+#define CEPH_MCLIENTCAPS_H
 
 #include "msg/Message.h"
 

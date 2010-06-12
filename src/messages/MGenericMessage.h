@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MGENERICMESSAGE_H
-#define __MGENERICMESSAGE_H
+#ifndef CEPH_MGENERICMESSAGE_H
+#define CEPH_MGENERICMESSAGE_H
 
 #include "msg/Message.h"
 

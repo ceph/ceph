@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __EIMPORTFINISH_H
-#define __EIMPORTFINISH_H
+#ifndef CEPH_EIMPORTFINISH_H
+#define CEPH_EIMPORTFINISH_H
 
 #include "config.h"
 #include "include/types.h"

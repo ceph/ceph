@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __ENCODING_H
-#define __ENCODING_H
+#ifndef CEPH_ENCODING_H
+#define CEPH_ENCODING_H
 
 #include "inttypes.h"
 #include "byteorder.h"

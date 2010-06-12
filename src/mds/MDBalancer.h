@@ -14,8 +14,8 @@
 
 
 
-#ifndef __MDBALANCER_H
-#define __MDBALANCER_H
+#ifndef CEPH_MDBALANCER_H
+#define CEPH_MDBALANCER_H
 
 #include <list>
 #include <map>

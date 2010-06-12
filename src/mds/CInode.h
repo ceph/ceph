@@ -14,8 +14,8 @@
 
 
 
-#ifndef __CINODE_H
-#define __CINODE_H
+#ifndef CEPH_CINODE_H
+#define CEPH_CINODE_H
 
 #include "config.h"
 #include "include/dlist.h"

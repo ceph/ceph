@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDS_ESLAVEUPDATE_H
-#define __MDS_ESLAVEUPDATE_H
+#ifndef CEPH_MDS_ESLAVEUPDATE_H
+#define CEPH_MDS_ESLAVEUPDATE_H
 
 #include "../LogEvent.h"
 #include "EMetaBlob.h"

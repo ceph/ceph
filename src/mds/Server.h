@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDS_SERVER_H
-#define __MDS_SERVER_H
+#ifndef CEPH_MDS_SERVER_H
+#define CEPH_MDS_SERVER_H
 
 #include "MDS.h"
 

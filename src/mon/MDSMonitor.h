@@ -15,8 +15,8 @@
 /* Metadata Server Monitor
  */
 
-#ifndef __MDSMONITOR_H
-#define __MDSMONITOR_H
+#ifndef CEPH_MDSMONITOR_H
+#define CEPH_MDSMONITOR_H
 
 #include <map>
 #include <set>

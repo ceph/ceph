@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __PAXOSSERVICE_H
-#define __PAXOSSERVICE_H
+#ifndef CEPH_PAXOSSERVICE_H
+#define CEPH_PAXOSSERVICE_H
 
 #include "messages/PaxosServiceMessage.h"
 #include "include/Context.h"

@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MEXPORTCAPSACK_H
-#define __MEXPORTCAPSACK_H
+#ifndef CEPH_MEXPORTCAPSACK_H
+#define CEPH_MEXPORTCAPSACK_H
 
 #include "msg/Message.h"
 

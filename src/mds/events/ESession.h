@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDS_ESESSION_H
-#define __MDS_ESESSION_H
+#ifndef CEPH_MDS_ESESSION_H
+#define CEPH_MDS_ESESSION_H
 
 #include "config.h"
 #include "include/types.h"

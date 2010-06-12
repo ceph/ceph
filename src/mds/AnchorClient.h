@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __ANCHORCLIENT_H
-#define __ANCHORCLIENT_H
+#ifndef CEPH_ANCHORCLIENT_H
+#define CEPH_ANCHORCLIENT_H
 
 #include "MDSTableClient.h"
 #include "Anchor.h"

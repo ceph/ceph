@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MEXPORTDIRPREP_H
-#define __MEXPORTDIRPREP_H
+#ifndef CEPH_MEXPORTDIRPREP_H
+#define CEPH_MEXPORTDIRPREP_H
 
 #include "msg/Message.h"
 #include "include/types.h"

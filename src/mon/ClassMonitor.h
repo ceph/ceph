@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __CLASSMONITOR_H
-#define __CLASSMONITOR_H
+#ifndef CEPH_CLASSMONITOR_H
+#define CEPH_CLASSMONITOR_H
 
 #include <map>
 #include <set>

@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MESSAGE_H
-#define __MESSAGE_H
+#ifndef CEPH_MESSAGE_H
+#define CEPH_MESSAGE_H
  
 /* public message types */
 #include "include/types.h"

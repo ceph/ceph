@@ -1,5 +1,5 @@
-#ifndef __COMMON_INIT_H
-#define __COMMON_INIT_H
+#ifndef CEPH_COMMON_INIT_H
+#define CEPH_COMMON_INIT_H
 
 #include <vector>
 

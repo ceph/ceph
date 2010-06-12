@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __TRIPLE_H
-#define __TRIPLE_H
+#ifndef CEPH_TRIPLE_H
+#define CEPH_TRIPLE_H
 
 template<class A, class B, class C>
 class triple {

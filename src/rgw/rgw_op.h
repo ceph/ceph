@@ -6,8 +6,8 @@
  * These subclasses must be further subclassed (by interface type)
  * to provide additional virtual methods such as send_response or get_params.
  */
-#ifndef __RGW_OP_H
-#define __RGW_OP_H
+#ifndef CEPH_RGW_OP_H
+#define CEPH_RGW_OP_H
 
 #include <string>
 

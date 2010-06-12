@@ -1,5 +1,5 @@
-#ifndef __RGW_ACL_H
-#define __RGW_ACL_H
+#ifndef CEPH_RGW_ACL_H
+#define CEPH_RGW_ACL_H
 
 #include <map>
 #include <string>

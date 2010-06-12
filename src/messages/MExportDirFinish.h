@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MEXPORTDIRFINISH_H
-#define __MEXPORTDIRFINISH_H
+#ifndef CEPH_MEXPORTDIRFINISH_H
+#define CEPH_MEXPORTDIRFINISH_H
 
 #include "msg/Message.h"
 

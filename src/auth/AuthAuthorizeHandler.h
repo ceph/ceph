@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __AUTHAUTHORIZEHANDLER_H
-#define __AUTHAUTHORIZEHANDLER_H
+#ifndef CEPH_AUTHAUTHORIZEHANDLER_H
+#define CEPH_AUTHAUTHORIZEHANDLER_H
 
 #include "include/types.h"
 #include "config.h"

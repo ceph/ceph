@@ -1,5 +1,5 @@
-#ifndef __TLS_H
-#define __TLS_H
+#ifndef CEPH_TLS_H
+#define CEPH_TLS_H
 
 struct TlsData {
   int disable_assert;

@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __DISPATCHER_H
-#define __DISPATCHER_H
+#ifndef CEPH_DISPATCHER_H
+#define CEPH_DISPATCHER_H
 
 #include "Message.h"
 #include "config.h"

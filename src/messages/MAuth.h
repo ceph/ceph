@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MAUTH_H
-#define __MAUTH_H
+#ifndef CEPH_MAUTH_H
+#define CEPH_MAUTH_H
 
 #include "messages/PaxosServiceMessage.h"
 

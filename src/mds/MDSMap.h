@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MDSMAP_H
-#define __MDSMAP_H
+#ifndef CEPH_MDSMAP_H
+#define CEPH_MDSMAP_H
 
 #include "include/types.h"
 #include "common/Clock.h"

@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __RGW_COMMON_H
-#define __RGW_COMMON_H
+#ifndef CEPH_RGW_COMMON_H
+#define CEPH_RGW_COMMON_H
 
 #include "fcgiapp.h"
 

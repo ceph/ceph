@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __crush_BUCKET_H
-#define __crush_BUCKET_H
+#ifndef CEPH_crush_BUCKET_H
+#define CEPH_crush_BUCKET_H
 
 #include "BinaryTree.h"
 #include "Hash.h"

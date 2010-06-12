@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDS_SESSIONMAP_H
-#define __MDS_SESSIONMAP_H
+#ifndef CEPH_MDS_SESSIONMAP_H
+#define CEPH_MDS_SESSIONMAP_H
 
 #include <set>
 using std::set;

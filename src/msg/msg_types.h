@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MSG_TYPES_H
-#define __MSG_TYPES_H
+#ifndef CEPH_MSG_TYPES_H
+#define CEPH_MSG_TYPES_H
 
 #include "include/types.h"
 #include "include/blobhash.h"

@@ -1,5 +1,5 @@
-#ifndef __EXPORTCONTROL_H
-#define __EXPORTCONTROL_H
+#ifndef CEPH_EXPORTCONTROL_H
+#define CEPH_EXPORTCONTROL_H
 
 #include <map>
 #include "config.h"

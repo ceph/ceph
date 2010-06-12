@@ -17,8 +17,8 @@
  * that are replicated by the same set of devices.
  */
 
-#ifndef __PGMONITOR_H
-#define __PGMONITOR_H
+#ifndef CEPH_PGMONITOR_H
+#define CEPH_PGMONITOR_H
 
 #include <map>
 #include <set>

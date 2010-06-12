@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __CEPH_MONCLIENT_H
-#define __CEPH_MONCLIENT_H
+#ifndef CEPH_MONCLIENT_H
+#define CEPH_MONCLIENT_H
 
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"

@@ -14,8 +14,8 @@
 
 
 
-#ifndef __FAKEMESSENGER_H
-#define __FAKEMESSENGER_H
+#ifndef CEPH_FAKEMESSENGER_H
+#define CEPH_FAKEMESSENGER_H
 
 #include "Messenger.h"
 #include "Dispatcher.h"

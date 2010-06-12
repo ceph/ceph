@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MOSDBOOT_H
-#define __MOSDBOOT_H
+#ifndef CEPH_MOSDBOOT_H
+#define CEPH_MOSDBOOT_H
 
 #include "messages/PaxosServiceMessage.h"
 

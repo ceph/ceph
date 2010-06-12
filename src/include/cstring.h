@@ -1,5 +1,5 @@
-#ifndef _CEPH_CSTRING_H
-#define _CEPH_CSTRING_H
+#ifndef CEPH_CSTRING_H
+#define CEPH_CSTRING_H
 
 /*
  * cstring - a simple string class

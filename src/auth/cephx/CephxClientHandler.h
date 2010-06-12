@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __CEPHXCLIENTHANDLER_H
-#define __CEPHXCLIENTHANDLER_H
+#ifndef CEPH_CEPHXCLIENTHANDLER_H
+#define CEPH_CEPHXCLIENTHANDLER_H
 
 #include "../AuthClientHandler.h"
 #include "CephxProtocol.h"

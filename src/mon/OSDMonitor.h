@@ -15,8 +15,8 @@
 /* Object Store Device (OSD) Monitor
  */
 
-#ifndef __OSDMONITOR_H
-#define __OSDMONITOR_H
+#ifndef CEPH_OSDMONITOR_H
+#define CEPH_OSDMONITOR_H
 
 #include <map>
 #include <set>

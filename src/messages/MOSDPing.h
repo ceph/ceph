@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MOSDPING_H
-#define __MOSDPING_H
+#ifndef CEPH_MOSDPING_H
+#define CEPH_MOSDPING_H
 
 #include "common/Clock.h"
 

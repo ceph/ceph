@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __CEPH_WORKQUEUE
-#define __CEPH_WORKQUEUE
+#ifndef CEPH_WORKQUEUE_H
+#define CEPH_WORKQUEUE_H
 
 #include "Mutex.h"
 #include "Cond.h"

@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __CLIENT_H
-#define __CLIENT_H
+#ifndef CEPH_CLIENT_H
+#define CEPH_CLIENT_H
 
 enum {
   l_c_first = 20000,

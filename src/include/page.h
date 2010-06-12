@@ -1,5 +1,5 @@
-#ifndef __CEPH_PAGE_H
-#define __CEPH_PAGE_H
+#ifndef CEPH_PAGE_H
+#define CEPH_PAGE_H
 
 namespace ceph {
   // these are in common/page.cc

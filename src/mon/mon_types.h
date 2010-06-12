@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MON_TYPES_H
-#define __MON_TYPES_H
+#ifndef CEPH_MON_TYPES_H
+#define CEPH_MON_TYPES_H
 
 #define PAXOS_PGMAP      0  // before osd, for pg kick to behave
 #define PAXOS_MDSMAP     1

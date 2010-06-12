@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MON_ELECTOR_H
-#define __MON_ELECTOR_H
+#ifndef CEPH_MON_ELECTOR_H
+#define CEPH_MON_ELECTOR_H
 
 #include <map>
 using namespace std;

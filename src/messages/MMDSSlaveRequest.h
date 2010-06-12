@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MMDSSLAVEREQUEST_H
-#define __MMDSSLAVEREQUEST_H
+#ifndef CEPH_MMDSSLAVEREQUEST_H
+#define CEPH_MMDSSLAVEREQUEST_H
 
 #include "msg/Message.h"
 #include "mds/mdstypes.h"

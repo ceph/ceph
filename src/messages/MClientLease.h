@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MCLIENTLEASE_H
-#define __MCLIENTLEASE_H
+#ifndef CEPH_MCLIENTLEASE_H
+#define CEPH_MCLIENTLEASE_H
 
 #include "msg/Message.h"
 

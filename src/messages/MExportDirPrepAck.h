@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MEXPORTDIRPREPACK_H
-#define __MEXPORTDIRPREPACK_H
+#ifndef CEPH_MEXPORTDIRPREPACK_H
+#define CEPH_MEXPORTDIRPREPACK_H
 
 #include "msg/Message.h"
 #include "include/types.h"

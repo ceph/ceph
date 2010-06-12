@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MOSDPGTRIM_H
-#define __MOSDPGTRIM_H
+#ifndef CEPH_MOSDPGTRIM_H
+#define CEPH_MOSDPGTRIM_H
 
 #include "msg/Message.h"
 

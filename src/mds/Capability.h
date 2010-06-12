@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __CAPABILITY_H
-#define __CAPABILITY_H
+#ifndef CEPH_CAPABILITY_H
+#define CEPH_CAPABILITY_H
 
 #include "include/buffer.h"
 #include "include/xlist.h"

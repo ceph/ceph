@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __LOGTYPE_H
-#define __LOGTYPE_H
+#ifndef CEPH_LOGTYPE_H
+#define CEPH_LOGTYPE_H
 
 #include "include/types.h"
 

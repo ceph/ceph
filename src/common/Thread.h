@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __THREAD_H
-#define __THREAD_H
+#ifndef CEPH_THREAD_H
+#define CEPH_THREAD_H
 
 #include <pthread.h>
 #include <signal.h>

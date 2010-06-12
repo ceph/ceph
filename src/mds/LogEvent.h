@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __LOGEVENT_H
-#define __LOGEVENT_H
+#ifndef CEPH_LOGEVENT_H
+#define CEPH_LOGEVENT_H
 
 #define EVENT_STRING       1
 

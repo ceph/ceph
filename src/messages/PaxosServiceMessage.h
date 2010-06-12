@@ -1,5 +1,5 @@
-#ifndef __PAXOSSERVICEMESSAGE_H
-#define __PAXOSSERVICEMESSAGE_H
+#ifndef CEPH_PAXOSSERVICEMESSAGE_H
+#define CEPH_PAXOSSERVICEMESSAGE_H
 
 #include "msg/Message.h"
 #include "mon/Session.h"

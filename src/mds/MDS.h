@@ -14,8 +14,8 @@
 
 
 
-#ifndef __MDS_H
-#define __MDS_H
+#ifndef CEPH_MDS_H
+#define CEPH_MDS_H
 
 #include "mdstypes.h"
 

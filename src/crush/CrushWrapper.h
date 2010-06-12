@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef __CRUSH_WRAPPER_H
-#define __CRUSH_WRAPPER_H
+#ifndef CEPH_CRUSH_WRAPPER_H
+#define CEPH_CRUSH_WRAPPER_H
 
 #define BUG_ON(x) assert(!(x))
 #include "include/types.h"

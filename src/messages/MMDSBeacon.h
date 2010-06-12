@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MMDSBEACON_H
-#define __MMDSBEACON_H
+#ifndef CEPH_MMDSBEACON_H
+#define CEPH_MMDSBEACON_H
 
 #include "messages/PaxosServiceMessage.h"
 

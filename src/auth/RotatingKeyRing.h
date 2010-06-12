@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __ROTATINGKEYRING_H
-#define __ROTATINGKEYRING_H
+#ifndef CEPH_ROTATINGKEYRING_H
+#define CEPH_ROTATINGKEYRING_H
 
 #include "config.h"
 

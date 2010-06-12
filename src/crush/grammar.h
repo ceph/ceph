@@ -12,8 +12,8 @@
  *
  */
 
-#ifndef __CRUSH_GRAMMAR_H
-#define __CRUSH_GRAMMAR_H
+#ifndef CEPH_CRUSH_GRAMMAR_H
+#define CEPH_CRUSH_GRAMMAR_H
 
 //#define BOOST_SPIRIT_DEBUG
 

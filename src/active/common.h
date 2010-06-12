@@ -1,5 +1,5 @@
-#ifndef COMMON_H
-#define COMMON_H
+#ifndef CEPH_COMMON_H
+#define CEPH_COMMON_H
 
 
 #include <sys/stat.h>

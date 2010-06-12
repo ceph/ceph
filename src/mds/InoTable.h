@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __INOTABLE_H
-#define __INOTABLE_H
+#ifndef CEPH_INOTABLE_H
+#define CEPH_INOTABLE_H
 
 #include "MDSTable.h"
 #include "include/interval_set.h"

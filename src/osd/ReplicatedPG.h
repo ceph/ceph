@@ -11,8 +11,8 @@
  * 
  */
 
-#ifndef __REPLICATEDPG_H
-#define __REPLICATEDPG_H
+#ifndef CEPH_REPLICATEDPG_H
+#define CEPH_REPLICATEDPG_H
 
 
 #include "PG.h"

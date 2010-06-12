@@ -22,8 +22,8 @@
  * should get *
  */
 
-#ifndef __CEPH_OSDCAPS_H
-#define __CEPH_OSDCAPS_H
+#ifndef CEPH_OSDCAPS_H
+#define CEPH_OSDCAPS_H
 
 #include "include/types.h"
 

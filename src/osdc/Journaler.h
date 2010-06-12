@@ -47,8 +47,8 @@
  *
  */
 
-#ifndef __JOURNALER_H
-#define __JOURNALER_H
+#ifndef CEPH_JOURNALER_H
+#define CEPH_JOURNALER_H
 
 #include "Objecter.h"
 #include "Filer.h"

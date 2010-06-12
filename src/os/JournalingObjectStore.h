@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __JOURNALINGOBJECTSTORE_H
-#define __JOURNALINGOBJECTSTORE_H
+#ifndef CEPH_JOURNALINGOBJECTSTORE_H
+#define CEPH_JOURNALINGOBJECTSTORE_H
 
 #include "ObjectStore.h"
 #include "Journal.h"

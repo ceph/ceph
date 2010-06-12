@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MCLIENTSESSION_H
-#define __MCLIENTSESSION_H
+#ifndef CEPH_MCLIENTSESSION_H
+#define CEPH_MCLIENTSESSION_H
 
 #include "msg/Message.h"
 

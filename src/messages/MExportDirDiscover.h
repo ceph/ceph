@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MEXPORTDIRDISCOVER_H
-#define __MEXPORTDIRDISCOVER_H
+#ifndef CEPH_MEXPORTDIRDISCOVER_H
+#define CEPH_MEXPORTDIRDISCOVER_H
 
 #include "msg/Message.h"
 #include "include/types.h"

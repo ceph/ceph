@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __ANCHOR_H
-#define __ANCHOR_H
+#ifndef CEPH_ANCHOR_H
+#define CEPH_ANCHOR_H
 
 #include <string>
 using std::string;

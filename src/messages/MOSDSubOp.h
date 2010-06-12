@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MOSDSUBOP_H
-#define __MOSDSUBOP_H
+#ifndef CEPH_MOSDSUBOP_H
+#define CEPH_MOSDSUBOP_H
 
 #include "msg/Message.h"
 #include "osd/osd_types.h"
