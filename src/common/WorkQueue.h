@@ -27,10 +27,10 @@ class ThreadPool {
   int _draining;
   Cond _wait_cond;
 
-  struct _WorkQueue {
+  struct WorkQueue_ {
     string name;
-    _WorkQueue(string n) : name(n) {}
-    virtual ~_WorkQueue() {}
+    WorkQueue_(string n) : name(n) {}
+    virtual ~WorkQueue_() {}
     virtual void _clear() = 0;
     virtual bool _empty() = 0;
     virtual void *_void_dequeue() = 0;
@@ -40,7 +40,7 @@ class ThreadPool {
 
 public:
   template<class T>
-  class WorkQueue : public _WorkQueue {
+  class WorkQueue : public WorkQueue_ {
     ThreadPool *pool;
     
     virtual bool _enqueue(T *) = 0;
@@ -60,7 +60,7 @@ public:
     }
 
   public:
-    WorkQueue(string n, ThreadPool *p) : _WorkQueue(n), pool(p) {
+    WorkQueue(string n, ThreadPool* p) : WorkQueue_(n), pool(p) {
       pool->add_work_queue(this);
     }
     ~WorkQueue() {
@@ -101,7 +101,7 @@ public:
   };
 
 private:
-  vector<_WorkQueue*> work_queues;
+  vector<WorkQueue_*> work_queues;
   int last_work_queue;
  
 
@@ -138,10 +138,10 @@ public:
       delete *p;
   }
   
-  void add_work_queue(_WorkQueue *wq) {
+  void add_work_queue(WorkQueue_* wq) {
     work_queues.push_back(wq);
   }
-  void remove_work_queue(_WorkQueue *wq) {
+  void remove_work_queue(WorkQueue_* wq) {
     unsigned i = 0;
     while (work_queues[i] != wq)
       i++;
@@ -182,7 +182,7 @@ public:
   void pause();
   void pause_new();
   void unpause();
-  void drain(_WorkQueue *wq = 0);
+  void drain(WorkQueue_* wq = 0);
 };
 
 
