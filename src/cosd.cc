@@ -132,8 +132,9 @@ int main(int argc, const char **argv)
 
     int err = OSD::mkfs(g_conf.osd_data, g_conf.osd_journal, mc.monmap.fsid, whoami);
     if (err < 0) {
-      cerr << "error creating empty object store in " << g_conf.osd_data
-	   << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
+      cerr << TEXT_RED << " ** " << TEXT_HAZARD << "ERROR: " << TEXT_RED
+           << "error creating empty object store in " << g_conf.osd_data
+	   << ": " << strerror_r(-err, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
       exit(1);
     }
     cout << "created object store " << g_conf.osd_data;
@@ -145,7 +146,8 @@ int main(int argc, const char **argv)
   if (mkjournal) {
     int err = OSD::mkjournal(g_conf.osd_data, g_conf.osd_journal);
     if (err < 0) {
-      cerr << "error creating fresh journal " << g_conf.osd_journal
+      cerr << TEXT_RED << " ** " << TEXT_HAZARD << "ERROR: " << TEXT_RED
+           << "error creating fresh journal " << g_conf.osd_journal
 	   << " for object store " << g_conf.osd_data
 	   << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
       exit(1);
@@ -158,7 +160,8 @@ int main(int argc, const char **argv)
   if (flushjournal) {
     int err = OSD::flushjournal(g_conf.osd_data, g_conf.osd_journal);
     if (err < 0) {
-      cerr << "error flushing journal " << g_conf.osd_journal
+      cerr << TEXT_RED << " ** " << TEXT_HAZARD << "ERROR: " << TEXT_RED
+           << "error flushing journal " << g_conf.osd_journal
 	   << " for object store " << g_conf.osd_data
 	   << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
       exit(1);
