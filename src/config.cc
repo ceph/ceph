@@ -748,7 +748,8 @@ static bool get_var(const char *str, int pos, char *var_name, int len, int *new_
 
   while (str[pos] &&
 	((bracket && str[pos] != '}') ||
-	 isalnum(str[pos]))) {
+	 isalnum(str[pos]) ||
+         str[pos] == '_')) {
 	var_name[out_pos] = str[pos];
 	
 	out_pos	++;
@@ -758,6 +759,7 @@ static bool get_var(const char *str, int pos, char *var_name, int len, int *new_
   }
 
   var_name[out_pos] = '\0';
+
 
   if (bracket && (str[pos] == '}'))
 	pos++;
@@ -769,6 +771,8 @@ static bool get_var(const char *str, int pos, char *var_name, int len, int *new_
 
 static const char *var_val(char *var_name)
 {
+	const char *val;
+
 	if (strcmp(var_name, "type")==0)
 		return g_conf.type;
 	if (strcmp(var_name, "id")==0)
@@ -778,9 +782,13 @@ static const char *var_val(char *var_name)
 	if (strcmp(var_name, "name")==0)
 		return g_conf.name;
 	if (strcmp(var_name, "host")==0)
-	  return g_conf.host;
+		return g_conf.host;
 
-	return "";
+	val = getenv(var_name);
+	if (!val)
+		val = "";
+
+	return val;
 }
 
 #define MAX_LINE 256
