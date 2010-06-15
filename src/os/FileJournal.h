@@ -114,7 +114,7 @@ private:
 
   int _open(bool wr, bool create=false);
   void print_header();
-  void read_header();
+  int read_header();
   bufferptr prepare_header();
   void start_writer();
   void stop_writer();

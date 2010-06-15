@@ -446,11 +446,12 @@ int OSD::init()
     dout(0) << " unable to mount object store" << dendl;
     return r;
   }
-  
+
   dout(2) << "boot" << dendl;
-  
+
   // read superblock
-  if (read_superblock() < 0) {
+  r = read_superblock();
+  if (r < 0) {
     dout(0) << " unable to read osd superblock" << dendl;
     store->umount();
     delete store;
@@ -458,7 +459,8 @@ int OSD::init()
   }
 
   class_handler = new ClassHandler(this);
-  assert(class_handler);
+  if (!class_handler)
+    return -ENOMEM;
   cls_initialize(this);
 
   // load up "current" osdmap

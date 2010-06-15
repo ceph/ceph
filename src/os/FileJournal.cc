@@ -194,7 +194,9 @@ int FileJournal::open(uint64_t next_seq)
   write_pos = get_top();
 
   // read header?
-  read_header();
+  err = read_header();
+  if (err < 0)
+    return err;
   dout(10) << "open header.fsid = " << header.fsid 
     //<< " vs expected fsid = " << fsid 
 	   << dendl;
@@ -295,7 +297,7 @@ void FileJournal::print_header()
   dout(10) << " write_pos " << write_pos << dendl;
 }
 
-void FileJournal::read_header()
+int FileJournal::read_header()
 {
   int r;
   dout(10) << "read_header" << dendl;
@@ -311,8 +313,11 @@ void FileJournal::read_header()
   if (r < 0) {
     char buf[80];
     dout(0) << "read_header error " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    return -errno;
   }
   print_header();
+
+  return 0;
 }
 
 bufferptr FileJournal::prepare_header()

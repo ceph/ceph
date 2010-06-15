@@ -224,7 +224,8 @@ int main(int argc, const char **argv)
   int err = osd->pre_init();
   if (err < 0) {
     char buf[80];
-    cerr << "error initializing osd: " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
+    cerr << TEXT_RED << " ** " << TEXT_HAZARD << "ERROR: " << TEXT_RED
+         << "initializing osd failed: " << strerror_r(-err, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
     return 1;
   }
 
@@ -233,7 +234,8 @@ int main(int argc, const char **argv)
 
   // start osd
   if (osd->init() < 0) {
-    cout << "error starting osd" << std::endl;
+    cerr << TEXT_RED << " ** " << TEXT_HAZARD << "ERROR: " << TEXT_RED
+         << "initializing osd failed: " << strerror_r(-err, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
     return 1;
   }
 
