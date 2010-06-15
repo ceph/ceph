@@ -795,6 +795,7 @@ char *conf_post_process_val(const char *val)
   size_t max_line = MAX_LINE;
 
   buf = (char *)malloc(max_line);
+  *buf = 0;
 
   while (val[i]) {
     if (val[i] == '$') {
