@@ -237,8 +237,7 @@ for name in $what; do
 	fi
 
 	[ -n "$ssh" ] && scp $monmap $host:$monmap
-	do_root_cmd "$BINDIR/cosd -c $conf --monmap $monmap -i $num --mkfs --osd-data $osd_data"
-	[ -n "$user" ] && do_root_cmd "chown -R $user $osd_data"
+	do_cmd "$BINDIR/cosd -c $conf --monmap $monmap -i $num --mkfs --osd-data $osd_data"
 
 	if [ -n "$keyring" ]; then
 	    if [ -n "$ssh" ]; then
