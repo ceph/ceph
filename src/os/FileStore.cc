@@ -683,6 +683,9 @@ int FileStore::mount()
 	    << strerror_r(-r, buf, sizeof(buf)) << dendl;
     cerr << "mount failed to open journal " << journalpath << ": "
 	 << strerror_r(-r, buf, sizeof(buf)) << std::endl;
+    if (r == -ENOTTY)
+      cerr << "maybe journal is not pointing to a block device and its size wasn't configured?" << std::endl;
+
     return r;
   }
   journal_start();
