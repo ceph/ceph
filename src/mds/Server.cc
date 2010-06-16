@@ -86,6 +86,7 @@ void Server::open_logger()
 }
 
 
+/* This function DOES put the passed message before returning*/
 void Server::dispatch(Message *m) 
 {
   switch (m->get_type()) {
@@ -169,6 +170,7 @@ Session *Server::get_session(Message *m)
   return session;
 }
 
+/* This function DOES put the passed message before returning*/
 void Server::handle_client_session(MClientSession *m)
 {
   version_t pv, piv = 0;
@@ -191,6 +193,7 @@ void Server::handle_client_session(MClientSession *m)
 	session->is_stale() ||
 	session->is_killing()) {
       dout(10) << "currently open|opening|stale|killing, dropping this req" << dendl;
+      m->put();
       return;
     }
     assert(session->is_closed() ||
@@ -224,10 +227,12 @@ void Server::handle_client_session(MClientSession *m)
 	  session->is_closing() ||
 	  session->is_killing()) {
 	dout(10) << "already closed|closing|killing, dropping this req" << dendl;
+	m->put();
 	return;
       }
       if (session->is_importing()) {
 	dout(10) << "ignoring close req on importing session" << dendl;
+	m->put();
 	return;
       }
       assert(session->is_open() || 
@@ -236,6 +241,7 @@ void Server::handle_client_session(MClientSession *m)
       if (m->get_seq() < session->get_push_seq()) {
 	dout(10) << "old push seq " << m->get_seq() << " < " << session->get_push_seq() 
 		 << ", dropping" << dendl;
+	m->put();
 	return;
       }
       if (m->get_seq() != session->get_push_seq()) {
@@ -263,6 +269,7 @@ void Server::handle_client_session(MClientSession *m)
   default:
     assert(0);
   }
+  m->put();
 }
 
 void Server::_session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
@@ -514,6 +521,7 @@ void Server::reconnect_clients()
   mds->sessionmap.dump();
 }
 
+/* This function DOES put the passed message before returning*/
 void Server::handle_client_reconnect(MClientReconnect *m)
 {
   dout(7) << "handle_client_reconnect " << m->get_source() << dendl;
@@ -1013,6 +1021,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
 
 /***
  * process a client request
+ * This function DOES put the passed message before returning
  */
 void Server::handle_client_request(MClientRequest *req)
 {
@@ -1213,6 +1222,7 @@ void Server::dispatch_client_request(MDRequest *mdr)
 // ---------------------------------------
 // SLAVE REQUESTS
 
+/* This function DOES put the passed message before returning*/
 void Server::handle_slave_request(MMDSSlaveRequest *m)
 {
   dout(4) << "handle_slave_request " << m->get_reqid() << " from " << m->get_source() << dendl;
@@ -1304,6 +1314,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
   }
 }
 
+/* This function DOES put the mdr->slave_request before returning*/
 void Server::dispatch_slave_request(MDRequest *mdr)
 {
   dout(7) << "dispatch_slave_request " << *mdr << " " << *mdr->slave_request << dendl;
@@ -1391,7 +1402,7 @@ void Server::dispatch_slave_request(MDRequest *mdr)
   }
 }
 
-
+/* This function DOES put the mdr->slave_request before returning*/
 void Server::handle_slave_auth_pin(MDRequest *mdr)
 {
   dout(10) << "handle_slave_auth_pin " << *mdr << dendl;
@@ -1466,6 +1477,7 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
   return;
 }
 
+/* This function DOES NOT put the passed ack before returning*/
 void Server::handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
 {
   dout(10) << "handle_slave_auth_pin_ack on " << *mdr << " " << *ack << dendl;
@@ -3576,6 +3588,7 @@ public:
   }
 };
 
+/* This function DOES put the mdr->slave_request before returning*/
 void Server::handle_slave_link_prep(MDRequest *mdr)
 {
   dout(10) << "handle_slave_link_prep " << *mdr 
@@ -3819,7 +3832,7 @@ void Server::_link_rollback_finish(Mutation *mut, MDRequest *mdr)
 }
 
 
-
+/* This function DOES NOT put the passed message before returning*/
 void Server::handle_slave_link_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m)
 {
   dout(10) << "handle_slave_link_prep_ack " << *mdr 
@@ -5024,6 +5037,7 @@ public:
   }
 };
 
+/* This function DOES put the mdr->slave_request before returning*/
 void Server::handle_slave_rename_prep(MDRequest *mdr)
 {
   dout(10) << "handle_slave_rename_prep " << *mdr 
@@ -5526,7 +5540,7 @@ void Server::_rename_rollback_finish(Mutation *mut, MDRequest *mdr, CInode *in, 
   delete mut;
 }
 
-
+/* This function DOES put the passed message before returning*/
 void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
 {
   dout(10) << "handle_slave_rename_prep_ack " << *mdr 
