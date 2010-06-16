@@ -2296,6 +2296,8 @@ void MDCache::set_recovery_set(set<int>& s)
  * is authoritative for which trees.  we expect to get an resolve
  * from _everyone_ in the recovery_set (the mds cluster at the time of
  * the first failure).
+ *
+ * This functions puts the passed message before returning
  */
 void MDCache::handle_resolve(MMDSResolve *m)
 {
@@ -2437,7 +2439,7 @@ void MDCache::maybe_resolve_finish()
   } 
 }
 
-
+/* This functions puts the passed message before returning */
 void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
 {
   dout(10) << "handle_resolve_ack " << *ack << " from " << ack->get_source() << dendl;
@@ -3054,6 +3056,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
  *
  * if i am active|stopping, 
  *  - remove source from replica list for everything not referenced here.
+ * This function puts the passed message before returning.
  */
 void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
 {
@@ -3099,6 +3102,7 @@ void MDCache::handle_cache_rejoin(MMDSCacheRejoin *m)
  *  - may have incorrect (out of date) dentry/inode linkage
  *  - may have deleted/purged inodes
  * and i may have to go to disk to get accurate inode contents.  yuck.
+ * This functions DOES NOT put the passed message before returning
  */
 void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 {
@@ -3442,7 +3446,7 @@ CInode *MDCache::rejoin_invent_inode(inodeno_t ino, snapid_t last)
   return in;
 }
 
-
+/* This functions DOES NOT put the passed message before returning */
 void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 {
   int from = strong->get_source().num();
@@ -3628,7 +3632,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
   }
 }
 
-
+/* This functions DOES NOT put the passed message before returning */
 void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 {
   dout(7) << "handle_cache_rejoin_ack from " << ack->get_source() << dendl;
@@ -3748,7 +3752,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 
 
 
-
+/* This functions DOES NOT put the passed message before returning */
 void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *missing)
 {
   dout(7) << "handle_cache_rejoin_missing from " << missing->get_source() << dendl;
@@ -3772,6 +3776,7 @@ void MDCache::handle_cache_rejoin_missing(MMDSCacheRejoin *missing)
   mds->send_message(full, missing->get_connection());
 }
 
+/* This function DOES NOT put the passed message before returning */
 void MDCache::handle_cache_rejoin_full(MMDSCacheRejoin *full)
 {
   dout(7) << "handle_cache_rejoin_full from " << full->get_source() << dendl;
@@ -5095,6 +5100,7 @@ void MDCache::trim_non_auth()
   show_subtrees();
 }
 
+/* This function DOES put the passed message before returning */
 void MDCache::handle_cache_expire(MCacheExpire *m)
 {
   int from = m->get_from();
@@ -5676,7 +5682,7 @@ bool MDCache::shutdown_export_caps()
 
 // ========= messaging ==============
 
-
+/* This function DOES put the passed message before returning */
 void MDCache::dispatch(Message *m)
 {
   switch (m->get_type()) {
@@ -5728,6 +5734,7 @@ void MDCache::dispatch(Message *m)
   default:
     dout(7) << "cache unknown message " << m->get_type() << dendl;
     assert(0);
+    m->put();
     break;
   }
 }
@@ -6392,7 +6399,7 @@ void MDCache::make_trace(vector<CDentry*>& trace, CInode *in)
   trace.push_back(dn);
 }
 
-
+/* This function takes over the reference to the passed Message */
 MDRequest *MDCache::request_start(MClientRequest *req)
 {
   // did we win a forward race against a slave?
@@ -7455,7 +7462,7 @@ void MDCache::kick_discovers(int who)
 }
 
 
-
+/* This function DOES put the passed message before returning */
 void MDCache::handle_discover(MDiscover *dis) 
 {
   int whoami = mds->get_nodeid();
@@ -7650,6 +7657,7 @@ void MDCache::handle_discover(MDiscover *dis)
 	if (reply->is_empty()) {
 	  // fetch and wait
 	  curdir->fetch(new C_MDS_RetryMessage(mds, dis));
+	  reply->put();
 	  return;
 	} else {
 	  // initiate fetch, but send what we have so far
@@ -7677,7 +7685,7 @@ void MDCache::handle_discover(MDiscover *dis)
 	  _create_mdsdir_dentry(curdir, from, t, new C_MDS_RetryMessage(mds, dis));
 	  //_create_system_file(curdir, t, create_system_inode(MDS_INO_MDSDIR(from), S_IFDIR),
 	  //new C_MDS_RetryMessage(mds, dis));
-	  delete reply;
+	  reply->put();
 	  return;
 	}
       }	
@@ -7751,13 +7759,13 @@ void MDCache::handle_discover(MDiscover *dis)
   dis->put();
 }
 
-
+/* This function DOES put the passed message before returning */
 void MDCache::handle_discover_reply(MDiscoverReply *m) 
 {
   /*
   if (mds->get_state() < MDSMap::STATE_ACTIVE) {
     dout(-7) << "discover_reply NOT ACTIVE YET" << dendl;
-    delete m;
+    m->put();
     return;
   }
   */
@@ -8097,7 +8105,7 @@ int MDCache::send_dir_updates(CDir *dir, bool bcast)
   return 0;
 }
 
-
+/* This function DOES put the passed message before returning */
 void MDCache::handle_dir_update(MDirUpdate *m)
 {
   CDir *dir = get_dirfrag(m->get_dirfrag());
@@ -8168,6 +8176,7 @@ void MDCache::send_dentry_link(CDentry *dn)
   }
 }
 
+/* This function DOES put the passed message before returning */
 void MDCache::handle_dentry_link(MDentryLink *m)
 {
   CDir *dir = get_dirfrag(m->get_dirfrag());
@@ -8226,6 +8235,7 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn)
   }
 }
 
+/* This function DOES put the passed message before returning */
 void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 {
   CDir *dir = get_dirfrag(m->get_dirfrag());
@@ -8687,7 +8697,7 @@ void MDCache::fragment_logged(MDRequest *mdr)
 }
 
 
-
+/* This function DOES put the passed message before returning */
 void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
 {
   dout(10) << "handle_fragment_notify " << *notify << " from " << notify->get_source() << dendl;
