@@ -105,11 +105,13 @@ int FileJournal::_open(bool forwrite, bool create)
 	    int on;
 	    if (sscanf(s, " write-caching =  %d", &on) == 1) {
 	      if (on) {
-		dout(0) << "WARNING: disk write cache is ON, journaling will not be reliable" << dendl;
+		dout(0) << "WARNING: disk write cache is ON; journaling will not be reliable" << dendl;
+		dout(0) << "         on kernels prior to 2.6.33 (recent kernels are safe)" << dendl;
 		dout(0) << "         disable with 'hdparm -W 0 " << fn << "'" << dendl;
 		cout << TEXT_RED
 		     << " ** WARNING: disk write cache is ON on " << fn << ".\n"
-		     << "    Journaling will not be reliable.  Disable write cache with\n"
+		     << "    Journaling will not be reliable on kernels prior to 2.6.33\n"
+		     << "    (recent kernels are safe).  You can disable the write cache with\n"
 		     << "    'hdparm -W 0 " << fn << "'"
 		     << TEXT_NORMAL
 		     << std::endl;
