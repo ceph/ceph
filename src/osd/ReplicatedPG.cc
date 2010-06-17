@@ -723,12 +723,6 @@ bool ReplicatedPG::snap_trimmer()
 	 is_primary() &&
 	 is_active()) {
 
-    entity_inst_t nobody;
-    if (!mode.try_write(nobody)) {
-      dout(10) << " can't write, hmm" << dendl;
-      assert(0);
-    }
-
     snapid_t sn = snap_trimq.start();
     coll_t c = coll_t::build_snap_pg_coll(info.pgid, sn);
     vector<sobject_t> ls;
@@ -738,6 +732,18 @@ bool ReplicatedPG::snap_trimmer()
 
     for (vector<sobject_t>::iterator p = ls.begin(); p != ls.end(); p++) {
       const sobject_t& coid = *p;
+
+      entity_inst_t nobody;
+      if (!mode.try_write(nobody)) {
+	dout(10) << " can't write, waiting" << dendl;
+	Cond cond;
+	mode.waiting_cond.push_back(&cond);
+	while (!mode.try_write(nobody))
+	  cond.Wait(_lock);
+	dout(10) << " done waiting" << dendl;
+	if (!is_primary() || !is_active())
+	  break;
+      }
 
       // load clone info
       bufferlist bl;
@@ -1023,7 +1029,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       if (!ctx->snapc.is_valid())
         return -EINVAL;
       make_writeable(ctx);
-  }
+    }
 
     // munge ZERO -> TRUNCATE?  (don't munge to DELETE or we risk hosing attributes)
     if (op.op == CEPH_OSD_OP_ZERO &&
@@ -2519,6 +2525,8 @@ void ReplicatedPG::put_object_context(ObjectContext *obc)
 
   if (mode.wake) {
     osd->take_waiters(mode.waiting);
+    for (list<Cond*>::iterator p = mode.waiting_cond.begin(); p != mode.waiting_cond.end(); p++)
+      (*p)->Signal();
     mode.wake = false;
   }
 
@@ -3574,7 +3582,7 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
     repop->aborted = true;
     repop_map.erase(repop->rep_tid);
 
-    if (requeue) {
+    if (requeue && repop->ctx->op) {
       dout(10) << " requeuing " << *repop->ctx->op << dendl;
       rq.push_back(repop->ctx->op);
       repop->ctx->op = 0;
@@ -3843,6 +3851,21 @@ int ReplicatedPG::recover_replicas(int max)
 }
 
 
+void ReplicatedPG::remove_object_with_snap_hardlinks(ObjectStore::Transaction& t, const sobject_t& soid)
+{
+  t.remove(coll_t::build_pg_coll(info.pgid), soid);
+  if (soid.snap < CEPH_MAXSNAP) {
+    bufferlist ba;
+    int r = osd->store->getattr(coll_t::build_pg_coll(info.pgid), soid, OI_ATTR, ba);
+    if (r >= 0) {
+      // grr, need first snap bound, too.
+      object_info_t oi(ba);
+      if (oi.snaps[0] != soid.snap)
+	t.remove(coll_t::build_snap_pg_coll(info.pgid, oi.snaps[0]), soid);
+      t.remove(coll_t::build_snap_pg_coll(info.pgid, soid.snap), soid);
+    }
+  }
+}
 
 /** clean_up_local
  * remove any objects that we're storing but shouldn't.
@@ -3882,7 +3905,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
         if (s.count(p->soid)) {
           dout(10) << " deleting " << p->soid
                    << " when " << p->version << dendl;
-          t.remove(coll_t::build_pg_coll(info.pgid), p->soid);
+	  remove_object_with_snap_hardlinks(t, p->soid);
         }
         s.erase(p->soid);
       } else {
@@ -3895,7 +3918,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
          i != s.end();
          i++) {
       dout(10) << " deleting stray " << *i << dendl;
-      t.remove(coll_t::build_pg_coll(info.pgid), *i);
+      remove_object_with_snap_hardlinks(t, *i);
     }
 
   } else {
@@ -3910,7 +3933,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
       if (p->is_delete()) {
         dout(10) << " deleting " << p->soid
                  << " when " << p->version << dendl;
-        t.remove(coll_t::build_pg_coll(info.pgid), p->soid);
+	remove_object_with_snap_hardlinks(t, p->soid);
       } else {
         // keep old(+missing) objects, just for kicks.
       }
