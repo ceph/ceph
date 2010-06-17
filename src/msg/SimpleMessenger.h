@@ -95,7 +95,7 @@ private:
   void sigint(int r);
 
   // pipe
-  class Pipe {
+  class Pipe : public RefCountedObject {
   public:
     SimpleMessenger *messenger;
     ostream& _pipe_prefix();
@@ -189,7 +189,7 @@ private:
       connect_seq(0), peer_global_seq(0),
       out_seq(0), in_seq(0), in_seq_acked(0),
       reader_thread(this), writer_thread(this) {
-      connection_state->pipe = this;
+      connection_state->pipe = get();
     }
     ~Pipe() {
       for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
@@ -201,7 +201,6 @@ private:
       }
       assert(out_q.empty());
       assert(sent.empty());
-      connection_state->pipe = NULL;
       connection_state->put();
     }
 

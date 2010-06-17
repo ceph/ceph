@@ -421,7 +421,11 @@ int SimpleMessenger::send_message(Message *m, Connection *con)
 	  << " " << m
 	  << dendl;
 
-  submit_message(m, (SimpleMessenger::Pipe *)con->pipe);
+  SimpleMessenger::Pipe *pipe = (SimpleMessenger::Pipe *)con->get_pipe();
+  if (pipe) {
+    submit_message(m, pipe);
+    pipe->put();
+  } // else we raced with reaper()
   return 0;
 }
 
@@ -2113,7 +2117,9 @@ void SimpleMessenger::reaper()
     p->join();
     dout(10) << "reaper reaped pipe " << p << " " << p->get_peer_addr() << dendl;
     assert(p->sd < 0);
-    delete p;
+    if (p->connection_state)
+      p->connection_state->clear_pipe();
+    p->put();
     dout(10) << "reaper deleted pipe " << p << dendl;
   }
 }

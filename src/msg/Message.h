@@ -146,12 +146,12 @@ struct RefCountedObject {
   virtual ~RefCountedObject() {}
   
   RefCountedObject *get() {
-    //generic_dout(0) << "RefCountedObject::get " << this << " " << nref.test() << " -> " << (nref.test() + 1) << dendl;
+    //generic_dout(0) << "RefCountedObject::get " << this << " " << nref.read() << " -> " << (nref.read() + 1) << dendl;
     nref.inc();
     return this;
   }
   void put() {
-    //generic_dout(0) << "RefCountedObject::put " << this << " " << nref.test() << " -> " << (nref.test() - 1) << dendl;
+    //generic_dout(0) << "RefCountedObject::put " << this << " " << nref.read() << " -> " << (nref.read() - 1) << dendl;
     if (nref.dec() == 0)
       delete this;
   }
@@ -164,7 +164,7 @@ struct Connection : public RefCountedObject {
   int peer_type;
   entity_addr_t peer_addr;
   unsigned features;
-  void *pipe;
+  RefCountedObject *pipe;
 
 public:
   Connection() : nref(1), lock("Connection::lock"), priv(NULL), peer_type(-1), features(0), pipe(NULL) {}
@@ -174,6 +174,8 @@ public:
       //generic_dout(0) << "~Connection " << this << " dropping priv " << priv << dendl;
       priv->put();
     }
+    if (pipe)
+      pipe->put();
   }
 
   Connection *get() {
@@ -196,6 +198,20 @@ public:
     if (priv)
       return priv->get();
     return NULL;
+  }
+
+  RefCountedObject *get_pipe() {
+    Mutex::Locker l(lock);
+    if (pipe)
+      return pipe->get();
+    return NULL;
+  }
+  void clear_pipe() {
+    Mutex::Locker l(lock);
+    if (pipe) {
+      pipe->put();
+      pipe = NULL;
+    }
   }
 
   int get_peer_type() { return peer_type; }
