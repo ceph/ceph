@@ -227,6 +227,11 @@ for name in $what; do
 	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
 	get_conf btrfs_opt "noatime" "btrfs options"
 	[ -n "$btrfs_opt" ] && btrfs_opt="-o $btrfs_opt"
+
+	if [ -n "$osd_journal" ] && echo "$btrfs_devs" | grep -q -w "$osd_journal" ; then
+	    echo "ERROR: osd journal device ($osd_journal) also used by btrfs devs ($btrfs_devs)"
+	    continue
+	fi
 	
 	do_cmd "test -d $osd_data || mkdir -p $osd_data"
 	[ -n "$osd_journal" ] && do_cmd "test -d $osd_journal || mkdir -p `dirname $osd_journal`"
