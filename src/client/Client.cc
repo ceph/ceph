@@ -1748,7 +1748,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
 	   << " is_delayed=" << is_delayed
 	   << dendl;
 
-  assert(in->snapid == CEPH_NOSNAP);
+  if (in->snapid != CEPH_NOSNAP) return; //snap caps last forever, can't write
   
   if (in->caps.empty())
     return;   // guard if at end of func
