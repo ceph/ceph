@@ -8,5 +8,6 @@ do
     bash -c "pushd . ; cd $bindir ; sleep 10 ; ./init-ceph -c $conf start mds ; popd" &
     touch $f
     ln $f $f.link
+    sleep 10
 done
 
