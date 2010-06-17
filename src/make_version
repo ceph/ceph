@@ -2,8 +2,8 @@
 
 
 print_all() {
-	echo "#ifndef __CEPH_VERSION_H"
-	echo "#define __CEPH_VERSION_H"
+	echo "#ifndef CEPH_VERSION_H"
+	echo "#define CEPH_VERSION_H"
 	echo
 	echo "#define CEPH_GIT_VER `git rev-parse HEAD 2>/dev/null`"
 	echo

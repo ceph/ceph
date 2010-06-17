@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __CEPH_TYPES_H
-#define __CEPH_TYPES_H
+#ifndef CEPH_TYPES_H
+#define CEPH_TYPES_H
 
 // this is needed for ceph_fs to compile in userland
 #include "inttypes.h"

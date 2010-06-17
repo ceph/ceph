@@ -10,8 +10,8 @@
  *
  */
 
-#ifndef _FS_CEPH_RBD
-#define _FS_CEPH_RBD
+#ifndef CEPH_RBD_TYPES_H
+#define CEPH_RBD_TYPES_H
 
 #include <linux/types.h>
 
