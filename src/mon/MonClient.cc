@@ -99,6 +99,7 @@ int MonClient::build_initial_monmap()
 	    monmap.add(name, addr);
 	  }
 	}
+        break;
       }
     }
     if (monmap.size())
