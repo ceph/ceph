@@ -708,7 +708,7 @@ int FileStore::umount()
 {
   dout(5) << "umount " << basedir << dendl;
   
-  sync();
+  start_sync();
 
   lock.Lock();
   stop = true;
@@ -1649,10 +1649,14 @@ void FileStore::sync_entry()
     if (woke < min_interval) {
       utime_t t = min_interval;
       t -= woke;
-      dout(20) << "sync_entry waiting for another " << t << " to reach min interval " << min_interval << dendl;
+      dout(20) << "sync_entry waiting for another " << t 
+	       << " to reach min interval " << min_interval << dendl;
       othercond.WaitInterval(lock, t);
     }
 
+    list<Context*> fin;
+  again:
+    fin.swap(sync_waiters);
     lock.Unlock();
     
     if (commit_start()) {
@@ -1725,7 +1729,12 @@ void FileStore::sync_entry()
     }
     
     lock.Lock();
-    
+    finish_contexts(fin, 0);
+    fin.clear();
+    if (!sync_waiters.empty()) {
+      dout(10) << "sync_entry more waiters, committing again" << dendl;
+      goto again;
+    }
   }
   lock.Unlock();
 }
@@ -1740,17 +1749,36 @@ void FileStore::_start_sync()
   }
 }
 
-void FileStore::sync()
+void FileStore::start_sync()
 {
   Mutex::Locker l(lock);
   sync_cond.Signal();
 }
 
-void FileStore::sync(Context *onsafe)
+void FileStore::start_sync(Context *onsafe)
 {
-  ObjectStore::Transaction t;
-  apply_transaction(t);
-  sync();
+  Mutex::Locker l(lock);
+  sync_waiters.push_back(onsafe);
+  sync_cond.Signal();
+  dout(10) << "start_sync" << dendl;
+}
+
+void FileStore::sync()
+{
+  Mutex l("FileStore::sync");
+  Cond c;
+  bool done;
+  C_SafeCond *fin = new C_SafeCond(&l, &c, &done);
+
+  start_sync(fin);
+
+  l.Lock();
+  while (!done) {
+    dout(10) << "sync waiting" << dendl;
+    c.Wait(l);
+  }
+  l.Unlock();
+  dout(10) << "sync done" << dendl;
 }
 
 void FileStore::_flush_op_queue()
