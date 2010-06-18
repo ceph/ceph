@@ -435,8 +435,10 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
   unsigned head_size = sizeof(entry_header_t);
   off64_t base_size = 2*head_size + ebl.length();
 
-  unsigned alignment = writeq.front().alignment; // we want to start ebl with this alignment
-  unsigned pre_pad = (alignment - head_size) & ~PAGE_MASK;
+  int alignment = writeq.front().alignment; // we want to start ebl with this alignment
+  unsigned pre_pad = 0;
+  if (alignment >= 0)
+    pre_pad = (alignment - head_size) & ~PAGE_MASK;
   off64_t size = ROUND_UP_TO(base_size + pre_pad, header.alignment);
   unsigned post_pad = size - base_size - pre_pad;
 
@@ -665,7 +667,7 @@ void FileJournal::write_thread_entry()
 }
 
 
-void FileJournal::submit_entry(uint64_t seq, bufferlist& e, unsigned alignment, Context *oncommit)
+void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment, Context *oncommit)
 {
   Mutex::Locker locker(write_lock);  // ** lock **
 
