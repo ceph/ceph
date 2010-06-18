@@ -379,6 +379,7 @@ struct md_config_t {
   int journal_max_write_entries;
   int journal_queue_max_ops;
   int journal_queue_max_bytes;
+  int journal_align_min_size;
 
   // block device
   bool  bdev_lock;

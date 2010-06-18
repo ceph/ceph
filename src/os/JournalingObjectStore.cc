@@ -191,7 +191,12 @@ void JournalingObjectStore::journal_transaction(ObjectStore::Transaction& t, uin
   if (journal && journal->is_writeable()) {
     bufferlist tbl;
     t.encode(tbl);
-    journal->submit_entry(op, tbl, t.get_data_alignment(), onjournal);
+
+    int alignment = -1;
+    if ((int)t.get_data_length() >= g_conf.journal_align_min_size)
+      alignment = t.get_data_alignment();
+
+    journal->submit_entry(op, tbl, alignment, onjournal);
   } else if (onjournal)
     commit_waiters[op].push_back(onjournal);
 }
@@ -207,7 +212,8 @@ void JournalingObjectStore::journal_transactions(list<ObjectStore::Transaction*>
     unsigned data_len = 0, data_align = 0;
     for (list<ObjectStore::Transaction*>::iterator p = tls.begin(); p != tls.end(); p++) {
       ObjectStore::Transaction *t = *p;
-      if (t->get_data_length() > data_len) {
+      if (t->get_data_length() > data_len &&
+	  (int)t->get_data_length() >= g_conf.journal_align_min_size) {
 	data_len = t->get_data_length();
 	data_align = (t->get_data_alignment() - tbl.length()) & ~PAGE_MASK;
       }
