@@ -743,7 +743,8 @@ int FileStore::umount()
 
 /// -----------------------------
 
-void FileStore::queue_op(Sequencer *posr, uint64_t op_seq, list<Transaction*>& tls, Context *onreadable, Context *onreadable_sync)
+void FileStore::queue_op(Sequencer *posr, uint64_t op_seq, list<Transaction*>& tls,
+			 Context *onreadable, Context *onreadable_sync)
 {
   uint64_t bytes = 0, ops = 0;
   for (list<Transaction*>::iterator p = tls.begin();
@@ -756,6 +757,11 @@ void FileStore::queue_op(Sequencer *posr, uint64_t op_seq, list<Transaction*>& t
   // initialize next_finish on first op
   if (next_finish == 0)
     next_finish = op_seq;
+
+  // mark apply start _now_, because we need to drain the entire apply
+  // queue during commit in order to put the store in a consistent
+  // state.
+  op_apply_start(op_seq);
 
   Op *o = new Op;
   o->op = op_seq;
@@ -800,7 +806,6 @@ void FileStore::_do_op(OpSequencer *osr)
   Op *o = osr->q.front();
 
   dout(10) << "_do_op " << o << " " << o->op << " osr " << osr << "/" << osr->parent << " start" << dendl;
-  op_apply_start(o->op);
   int r = do_transactions(o->tls, o->op);
   op_apply_finish(o->op);
   dout(10) << "_do_op " << o << " " << o->op << " r = " << r
