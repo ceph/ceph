@@ -1576,6 +1576,46 @@ void OSD::handle_command(MMonCommand *m)
   else if (m->cmd[0] == "stop") {
     dout(0) << "got shutdown" << dendl;
     shutdown();
+  } else if (m->cmd[0] == "bench") {
+    uint64_t count = 1 << 30;  // 1gb
+    uint64_t bsize = 4 << 20;
+    if (m->cmd.size() > 1)
+      bsize = atoll(m->cmd[1].c_str());
+    if (m->cmd.size() > 2)
+      count = atoll(m->cmd[2].c_str());
+    
+    bufferlist bl;
+    bufferptr bp(bsize);
+    bp.zero();
+    bl.push_back(bp);
+
+    ObjectStore::Transaction *cleanupt = new ObjectStore::Transaction;
+
+    store->sync_and_flush();
+    utime_t start = g_clock.now();
+    for (uint64_t pos = 0; pos < count; pos += bsize) {
+      char nm[30];
+      sprintf(nm, "disk_bw_test_%lld", (long long)pos);
+      object_t oid(nm);
+      sobject_t soid(oid, 0);
+      ObjectStore::Transaction *t = new ObjectStore::Transaction;
+      t->write(meta_coll, soid, 0, bsize, bl);
+      store->queue_transaction(NULL, t);
+      cleanupt->remove(meta_coll, soid);
+    }
+    store->sync_and_flush();
+    utime_t end = g_clock.now();
+
+    // clean up
+    store->queue_transaction(NULL, cleanupt);
+
+    stringstream ss;
+    uint64_t rate = (double)count / (end - start);
+    ss << "bench: wrote " << prettybyte_t(count) << " in blocks of " << prettybyte_t(bsize)
+       << " in " << (end-start)
+       << " sec at " << prettybyte_t(rate) << "/sec";
+    logclient.log(LOG_INFO, ss);    
+
   } else
     dout(0) << "unrecognized command! " << m->cmd << dendl;
   m->put();
