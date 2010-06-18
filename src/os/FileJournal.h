@@ -97,8 +97,12 @@ private:
   struct write_item {
     uint64_t seq;
     bufferlist bl;
+    unsigned alignment;
     Context *fin;
-    write_item(uint64_t s, bufferlist& b, Context *f) : seq(s), fin(f) { bl.claim(b); }
+    write_item(uint64_t s, bufferlist& b, unsigned al, Context *f) :
+      seq(s), alignment(al), fin(f) { 
+      bl.claim(b);
+    }
   };
   deque<write_item> writeq;
   
@@ -174,7 +178,7 @@ private:
   void make_writeable();
 
   // writes
-  void submit_entry(uint64_t seq, bufferlist& bl, Context *oncommit);  // submit an item
+  void submit_entry(uint64_t seq, bufferlist& bl, unsigned alignment, Context *oncommit);  // submit an item
   void committed_thru(uint64_t seq);
   bool is_full();
 

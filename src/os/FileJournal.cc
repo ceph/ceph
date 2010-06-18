@@ -432,8 +432,13 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
   // grab next item
   uint64_t seq = writeq.front().seq;
   bufferlist &ebl = writeq.front().bl;
-  off64_t base_size = 2*sizeof(entry_header_t) + ebl.length();
-  off64_t size = ROUND_UP_TO(base_size, header.alignment);
+  unsigned head_size = sizeof(entry_header_t);
+  off64_t base_size = 2*head_size + ebl.length();
+
+  unsigned alignment = writeq.front().alignment; // we want to start ebl with this alignment
+  unsigned pre_pad = (alignment - head_size) & ~PAGE_MASK;
+  off64_t size = ROUND_UP_TO(base_size + pre_pad, header.alignment);
+  unsigned post_pad = size - base_size - pre_pad;
 
   int r = check_for_full(seq, queue_pos, size);
   if (r < 0)
@@ -445,20 +450,27 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
   // add to write buffer
   dout(15) << "prepare_single_write " << orig_ops << " will write " << queue_pos << " : seq " << seq
 	   << " len " << ebl.length() << " -> " << size
+	   << " (head " << head_size << " pre_pad " << pre_pad
+	   << " ebl " << ebl.length() << " post_pad " << post_pad << " tail " << head_size << ")"
+	   << " (ebl alignment " << alignment << ")"
 	   << dendl;
     
   // add it this entry
   entry_header_t h;
   h.seq = seq;
-  h.pre_pad = 0;
+  h.pre_pad = pre_pad;
   h.len = ebl.length();
-  h.post_pad = size - base_size;
+  h.post_pad = post_pad;
   h.make_magic(queue_pos, header.fsid);
 
   bl.append((const char*)&h, sizeof(h));
+  if (pre_pad) {
+    bufferptr bp = buffer::create_static(pre_pad, zero_buf);
+    bl.push_back(bp);
+  }
   bl.claim_append(ebl);
   if (h.post_pad) {
-    bufferptr bp = buffer::create_static(h.post_pad, zero_buf);
+    bufferptr bp = buffer::create_static(post_pad, zero_buf);
     bl.push_back(bp);
   }
   bl.append((const char*)&h, sizeof(h));
@@ -483,8 +495,9 @@ void FileJournal::write_bl(off64_t& pos, bufferlist& bl)
 {
   // make sure this is a single, contiguous buffer
   if (directio && !bl.is_contiguous()) {
-    bl.rebuild();
+    bl.rebuild_page_aligned();
     assert((bl.length() & ~PAGE_MASK) == 0);
+    assert((pos & ~PAGE_MASK) == 0);
   }
 
   ::lseek64(fd, pos, SEEK_SET);
@@ -652,7 +665,7 @@ void FileJournal::write_thread_entry()
 }
 
 
-void FileJournal::submit_entry(uint64_t seq, bufferlist& e, Context *oncommit)
+void FileJournal::submit_entry(uint64_t seq, bufferlist& e, unsigned alignment, Context *oncommit)
 {
   Mutex::Locker locker(write_lock);  // ** lock **
 
@@ -671,7 +684,7 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, Context *oncommit)
     full_restart_seq = 0;
   }
   if (!full_commit_seq && !full_restart_seq) {
-    writeq.push_back(write_item(seq, e, oncommit));
+    writeq.push_back(write_item(seq, e, alignment, oncommit));
     write_cond.Signal(); // kick writer thread
   } else {
     // not journaling this.  restart writing no sooner than seq + 1.
