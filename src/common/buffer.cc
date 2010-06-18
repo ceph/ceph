@@ -43,6 +43,40 @@ void buffer::list::decode_base64(buffer::list& e)
   push_back(bp);
 }
 
+void buffer::list::rebuild_page_aligned()
+{
+  std::list<ptr>::iterator p = _buffers.begin();
+  while (p != _buffers.end()) {
+    // keep anything that's already page sized+aligned
+    if (p->is_page_aligned() && p->is_n_page_sized()) {
+      generic_dout(0) << " segment " << (void*)p->c_str()
+		      << " offset " << ((unsigned long)p->c_str() & ~PAGE_MASK)
+		      << " length " << p->length() << " " << (p->length() & ~PAGE_MASK) << " ok" << dendl;
+      p++;
+      continue;
+    }
+    
+    // consolidate unaligned items, until we get something that is sized+aligned
+    list unaligned;
+    unsigned offset = 0;
+    do {
+      generic_dout(0) << " segment " << (void*)p->c_str()
+		      << " offset " << ((unsigned long)p->c_str() & ~PAGE_MASK)
+		      << " length " << p->length() << " " << (p->length() & ~PAGE_MASK)
+		      << " overall offset " << offset << " " << (offset & ~PAGE_MASK)
+		      << " not ok" << dendl;
+      offset += p->length();
+      unaligned.push_back(*p);
+      _buffers.erase(p++);
+    } while (p != _buffers.end() &&
+	     (!p->is_page_aligned() ||
+	      !p->is_n_page_sized() ||
+	      (offset & ~PAGE_MASK)));
+    unaligned.rebuild();
+    _buffers.insert(p, unaligned._buffers.front());
+  }
+}
+  
 
 int buffer::list::read_file(const char *fn, bool silent)
 {
@@ -88,22 +122,67 @@ int buffer::list::write_file(const char *fn, int mode)
 
 int buffer::list::write_fd(int fd)
 {
-  for (std::list<ptr>::const_iterator it = _buffers.begin(); 
-       it != _buffers.end(); 
-       it++) {
-    const char *c = it->c_str();
-    int left = it->length();
-    while (left > 0) {
-      int r = ::write(fd, c, left);
-      if (r < 0)
-	return -errno;
-      c += r;
-      left -= r;
+  // write buffer piecewise
+  if (false) {
+    for (std::list<ptr>::const_iterator it = _buffers.begin(); 
+	 it != _buffers.end(); 
+	 it++) {
+      const char *c = it->c_str();
+      int left = it->length();
+      while (left > 0) {
+	int r = ::write(fd, c, left);
+	if (r < 0)
+	  return -errno;
+	c += r;
+	left -= r;
+      }
     }
+    return 0;
+  }
+
+  // use writev!
+  iovec iov[IOV_MAX];
+  int iovlen = 0;
+  ssize_t bytes = 0;
+
+  std::list<ptr>::const_iterator p = _buffers.begin(); 
+  while (true) {
+    iov[iovlen].iov_base = (void *)p->c_str();
+    iov[iovlen].iov_len = p->length();
+    bytes += p->length();
+    iovlen++;
+    p++;
+
+    if (iovlen == IOV_MAX-1 ||
+	p == _buffers.end()) {
+      iovec *start = iov;
+      int num = iovlen;
+      ssize_t wrote;
+    retry:
+      wrote = ::writev(fd, start, num);
+      if (wrote < 0)
+	return -errno;
+      if (wrote < bytes) {
+	// partial write, recover!
+	while ((size_t)wrote >= start[0].iov_len) {
+	  wrote -= start[0].iov_len;
+	  bytes -= start[0].iov_len;
+	  start++;
+	  num--;
+	}
+	if (wrote > 0) {
+	  start[0].iov_len -= wrote;
+	  start[0].iov_base = (char *)start[0].iov_base + wrote;
+	  bytes -= wrote;
+	}
+	goto retry;
+      }
+    }
+    if (p == _buffers.end())
+      break;
   }
   return 0;
 }
-
 
 
 void buffer::list::hexdump(std::ostream &out) const

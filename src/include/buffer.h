@@ -827,6 +827,7 @@ public:
       _buffers.clear();
       _buffers.push_back(nb);
     }
+    void rebuild_page_aligned();
 
 
     // sort-of-like-assignment-op
