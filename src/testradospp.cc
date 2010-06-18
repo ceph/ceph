@@ -99,6 +99,18 @@ int main(int argc, const char **argv)
   cout << "read result=" << bl2.c_str() << std::endl;
   cout << "size=" << size << std::endl;
 
+  const char *oid2 = "jjj10.rbd";
+  r = rados.exec(pool, oid2, "rbd", "snap_list", bl, bl2);
+  cout << "snap_list result=" << r << std::endl;
+  r = rados.exec(pool, oid2, "rbd", "snap_add", bl, bl2);
+  cout << "snap_add result=" << r << std::endl;
+
+  if (r > 0) {
+    char *s = bl2.c_str();
+    for (int i=0; i<r; i++, s += strlen(s) + 1)
+      cout << s << endl;
+  }
+
   Rados::ListCtx ctx;
   rados.list_objects_open(pool, &ctx);
   int entries;

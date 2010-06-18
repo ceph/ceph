@@ -82,10 +82,10 @@ bool ClassMonitor::store_impl(ClassInfo& info, ClassImpl& impl)
 
   snprintf(store_name, len, "%s.%s.%s", info.name.c_str(), info.version.str(), info.version.arch());
   dout(0) << "storing inc.impl length=" << impl.binary.length() << dendl;
-  mon->store->put_bl_ss(impl.binary, "class_impl", store_name);
   bufferlist bl;
+  ::encode(impl.binary, bl);
   ::encode(info, bl);
-  mon->store->append_bl_ss(bl, "class_impl", store_name);
+  mon->store->put_bl_ss(bl, "class_impl", store_name);
   dout(0) << "adding name=" << info.name << " version=" << info.version <<  " store_name=" << store_name << dendl;
 
   return true;
@@ -275,7 +275,7 @@ void ClassMonitor::_updated_class(MClass *m)
 void ClassMonitor::class_usage(stringstream& ss)
 {
   ss << "error: usage:" << std::endl;
-  ss << "              class <add | del> <name> <version> <arch> <--in-file=filename>" << std::endl;
+  ss << "              class <add | del> <name> <version> <arch> <--in-file=filename> [changed|overwrite|excl]" << std::endl;
   ss << "              class <activate> <name> <version>" << std::endl;
   ss << "              class <list>" << std::endl;
 }
@@ -317,6 +317,25 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
       string name = m->cmd[2];
       string ver = m->cmd[3];
       string arch = m->cmd[4];
+      string opt;
+
+      bool excl_opt = false;
+      bool overwrite_opt = false;
+      bool changed_opt;
+      if (m->cmd.size() >= 6) {
+        opt = m->cmd[5];
+        if (opt == "excl")
+          excl_opt = true;
+        else if (opt == "overwrite")
+          overwrite_opt = true; 
+        else if (opt == "changed")
+         changed_opt = true;
+        else {
+         ss << "invalid option: " << opt;
+         goto done;
+        }
+      } else
+        changed_opt = true;
 
       ClassImpl impl;
       impl.binary = m->get_data();
@@ -330,15 +349,55 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
       ClassVersionMap& map = list.library_map[name];
       ClassVersion cv(ver, arch);
       ClassInfo& info = map.m[cv];
-      dout(0) << "payload.length=" << m->get_data().length() << dendl;
-      info.name = name;
-      info.version = cv;
+
+      /* do we already have it? */
+      int len = name.length() + 16;
+      char store_name[len];
+      snprintf(store_name, len, "%s.%s.%s", name.c_str(), cv.str(), cv.arch());
+      bufferlist prev_bin;
+      bool should_store = true;
+      if (!overwrite_opt) {
+        bufferlist bl;
+
+        int bin_len = mon->store->get_bl_ss(bl, "class_impl", store_name);
+
+        if (bin_len > 0) {
+          bufferlist::iterator iter = bl.begin();
+          ::decode(prev_bin, iter);
+           /* check to see whether we should store it */
+          dout(0) << "class name exists" << dendl;
+          if (excl_opt) {
+            dout(0) << "excl flag, not overwriting" << dendl;
+            should_store = false;
+          } else if (changed_opt) {
+            if (prev_bin.length() == impl.binary.length() &&
+                memcmp(impl.binary.c_str(), prev_bin.c_str(), prev_bin.length()) == 0) {
+              dout(0) << "class content has not changed, not doing anything" << dendl;
+              should_store = false;
+            } else {
+              dout(0) << "class content changed, will keep newer version" << dendl;
+            }
+          }
+        }
+      }
+
       ClassLibraryIncremental inc;
-      dout(0) << "storing class " << name << " v" << info.version << dendl;
-      ::encode(impl, inc.impl);
-      ::encode(info, inc.info);
-      inc.op = CLASS_INC_ADD;
-      pending_list.add(info);
+      if (should_store) {
+        dout(0) << "payload.length=" << m->get_data().length() << dendl;
+        info.name = name;
+        info.version = cv;
+        dout(0) << "storing class " << name << " v" << info.version << dendl;
+        ::encode(impl, inc.impl);
+        ::encode(info, inc.info);
+        inc.op = CLASS_INC_ADD;
+        pending_list.add(info);
+      } else {
+        ClassImpl i;
+        ClassInfo l;
+        ::encode(i, inc.impl);
+        ::encode(l, inc.info);
+        inc.op = CLASS_INC_NOP;
+      }
       pending_class.insert(pair<utime_t,ClassLibraryIncremental>(impl.stamp, inc));
       ss << "updated";
       getline(ss, rs);
@@ -464,8 +523,11 @@ void ClassMonitor::handle_request(MClass *m)
         char store_name[len];
         dout(0) << "got CLASS_GET name=" << (*p).name << " ver=" << (*p).version << dendl;
         snprintf(store_name, len, "%s.%s.%s", (*p).name.c_str(), ver.str(), ver.arch());
-        bin_len = mon->store->get_bl_ss(impl.binary, "class_impl", store_name);
+        bufferlist bl;
+        bin_len = mon->store->get_bl_ss(bl, "class_impl", store_name);
         assert(bin_len > 0);
+        bufferlist::iterator iter = bl.begin();
+        ::decode(impl.binary, iter);
         dout(0) << "replying with name=" << (*p).name << " version=" << ver <<  " store_name=" << store_name << dendl;
         list.add((*p).name, ver);
         reply->add.push_back(true);

@@ -210,6 +210,17 @@ libcls_acl.so: cls_acl.cc
 	${CXX} -I. -fPIC -shared -g -o libcls_acl.so cls_acl.cc
 BUILT_SOURCES += libcls_acl.so
 
+# libcls_rbd.so: cls_rbd.cc
+# 	${CXX} -I. -fPIC -shared -g -o libcls_rbd.so cls_rbd.cc
+# BUILT_SOURCES += libcls_rbd.so
+libcls_rbd_la_SOURCES = \
+	cls_rbd.cc
+libcls_rbd_la_CFLAGS = ${AM_CFLAGS}
+libcls_rbd_la_CXXFLAGS= ${AM_CXXFLAGS}
+# libcls_rbd_LIBADD =
+libcls_rbd_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '.*__cls_.*' -lpthread
+lib_LTLIBRARIES += libcls_rbd.la
+
 
 ## hadoop client
 if WITH_HADOOPCLIENT
@@ -231,14 +242,14 @@ editpaths = sed \
 	-e 's|@datadir[@]|$(pkgdatadir)|g' \
 	-e 's|@prefix[@]|$(prefix)|g'
 
-init-ceph mkcephfs: init-ceph.in mkcephfs.in Makefile
+init-ceph mkcephfs cclass: init-ceph.in mkcephfs.in Makefile cclass.in
 	rm -f $@ $@.tmp
 	$(editpaths) '$(srcdir)/$@.in' >$@.tmp
 	chmod +x $@.tmp
 	chmod a-w $@.tmp
 	mv $@.tmp $@
 
-BUILT_SOURCES += init-ceph mkcephfs
+BUILT_SOURCES += init-ceph mkcephfs cclass
 
 ##
 LDADD =
@@ -264,6 +275,8 @@ EXTRA_DIST = verify-mds-journal.sh vstart.sh stop.sh \
 	     crun ceph_common.sh init-ceph.in mkcephfs.in make_version
 
 install-data-local:
+	$(install_sh_SCRIPT) -m 0755 cclass $(DESTDIR)$(bindir)/cclass
+	$(install_sh_SCRIPT) -m 0755 cclsinfo $(DESTDIR)$(bindir)/cclsinfo
 	sh -c "if [ \"$(sbindir)\" = \"/usr/sbin\" ]; then mkdir -p $(DESTDIR)/sbin ; $(install_sh_SCRIPT) -m 0755 mount.ceph $(DESTDIR)/sbin/mount.ceph ; else mkdir -p $(DESTDIR)$(sbindir) ; $(install_sh_SCRIPT) -m 0755 mount.ceph $(DESTDIR)$(sbindir)/mount.ceph ; fi"
 	mkdir -p $(DESTDIR)$(sbindir)/ceph
 	$(install_sh_SCRIPT) -m 0755 mkcephfs $(DESTDIR)$(sbindir)/mkcephfs

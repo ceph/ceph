@@ -221,7 +221,7 @@ void ClassHandler::ClassData::load()
 
 void ClassHandler::ClassData::init()
 {
-  void (*cls_init)() = (void (*)())dlsym(handle, "class_init");
+  void (*cls_init)() = (void (*)())dlsym(handle, "__cls_init");
 
   if (cls_init)
     cls_init();

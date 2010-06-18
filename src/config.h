@@ -450,6 +450,8 @@ ExportControl *conf_get_export_control();
 #define CONF_SET_ARG_VAL(dest, type) \
 	conf_set_conf_val(dest, type, CONF_NEXT_VAL)
 
+#define CONF_VAL args[i]
+
 #define CONF_SAFE_SET_ARG_VAL(dest, type) \
 	do { \
           if (type == OPT_BOOL) { \
