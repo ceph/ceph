@@ -49,9 +49,11 @@ void buffer::list::rebuild_page_aligned()
   while (p != _buffers.end()) {
     // keep anything that's already page sized+aligned
     if (p->is_page_aligned() && p->is_n_page_sized()) {
-      generic_dout(0) << " segment " << (void*)p->c_str()
+      /*generic_dout(0) << " segment " << (void*)p->c_str()
 		      << " offset " << ((unsigned long)p->c_str() & ~PAGE_MASK)
-		      << " length " << p->length() << " " << (p->length() & ~PAGE_MASK) << " ok" << dendl;
+		      << " length " << p->length()
+		      << " " << (p->length() & ~PAGE_MASK) << " ok" << dendl;
+      */
       p++;
       continue;
     }
@@ -60,11 +62,12 @@ void buffer::list::rebuild_page_aligned()
     list unaligned;
     unsigned offset = 0;
     do {
-      generic_dout(0) << " segment " << (void*)p->c_str()
+      /*generic_dout(0) << " segment " << (void*)p->c_str()
 		      << " offset " << ((unsigned long)p->c_str() & ~PAGE_MASK)
 		      << " length " << p->length() << " " << (p->length() & ~PAGE_MASK)
 		      << " overall offset " << offset << " " << (offset & ~PAGE_MASK)
 		      << " not ok" << dendl;
+      */
       offset += p->length();
       unaligned.push_back(*p);
       _buffers.erase(p++);
