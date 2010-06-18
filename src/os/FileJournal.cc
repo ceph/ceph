@@ -488,20 +488,11 @@ void FileJournal::write_bl(off64_t& pos, bufferlist& bl)
   }
 
   ::lseek64(fd, pos, SEEK_SET);
-
-  for (list<bufferptr>::const_iterator it = bl.buffers().begin();
-       it != bl.buffers().end();
-       it++) {
-    if ((*it).length() == 0)
-      continue;  // blank buffer.
-    int r = ::write(fd, (char*)(*it).c_str(), (*it).length());
-    if (r < 0) {
-      char buf[80];
-      derr(0) << "do_write failed with " << errno << " " << strerror_r(errno, buf, sizeof(buf)) 
-	      << " with " << (void*)(*it).c_str() << " len " << (*it).length()
-	      << dendl;
-    }
-    pos += (*it).length();
+  int err = bl.write_fd(fd);
+  if (err) {
+    char buf[80];
+    derr(0) << "write_bl failed with " << err << " " << strerror_r(-err, buf, sizeof(buf)) 
+	    << dendl;
   }
 }
 
