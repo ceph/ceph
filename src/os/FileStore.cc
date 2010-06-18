@@ -802,7 +802,7 @@ void FileStore::_do_op(OpSequencer *osr)
   dout(10) << "_do_op " << o << " " << o->op << " osr " << osr << "/" << osr->parent << " start" << dendl;
   op_apply_start(o->op);
   int r = do_transactions(o->tls, o->op);
-  op_apply_finish();
+  op_apply_finish(o->op);
   dout(10) << "_do_op " << o << " " << o->op << " r = " << r
 	   << ", finisher " << o->onreadable << " " << o->onreadable_sync << dendl;
   
@@ -920,7 +920,7 @@ int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
   uint64_t op_seq = op_apply_start(0);
   dout(10) << "queue_transactions (trailing journal) " << op_seq << " " << tls << dendl;
   int r = do_transactions(tls, op_seq);
-  op_apply_finish();
+  op_apply_finish(op_seq);
     
   if (r >= 0) {
     op_journal_start(op_seq);
@@ -1019,7 +1019,7 @@ unsigned FileStore::apply_transactions(list<Transaction*> &tls,
   } else {
     uint64_t op_seq = op_apply_start(0);
     r = do_transactions(tls, op_seq);
-    op_apply_finish();
+    op_apply_finish(op_seq);
 
     if (r >= 0) {
       op_journal_start(op_seq);
@@ -1661,7 +1661,7 @@ void FileStore::sync_entry()
     
     if (commit_start()) {
       utime_t start = g_clock.now();
-      uint64_t cp = op_seq;
+      uint64_t cp = committing_seq;
 
       // make flusher stop flushing previously queued stuff
       sync_epoch++;

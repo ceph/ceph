@@ -105,12 +105,19 @@ uint64_t JournalingObjectStore::op_apply_start(uint64_t op)
   return op;
 }
 
-void JournalingObjectStore::op_apply_finish() 
+void JournalingObjectStore::op_apply_finish(uint64_t op) 
 {
   dout(10) << "op_apply_finish" << dendl;
   lock.Lock();
   if (--open_ops == 0)
     cond.Signal();
+
+  // there can be multiple applies in flight; track the max value we
+  // note.  note that we can't _read_ this value and learn anything
+  // meaningful unless/until we've quiesced all in-flight applies.
+  if (op > applied_seq)
+    applied_seq = op;
+
   lock.Unlock();
 }
 
@@ -152,8 +159,12 @@ bool JournalingObjectStore::commit_start()
     assert(commit_waiters.empty());
     return false;
   }
-  committing_seq = op_seq;
-  dout(10) << "commit_start committing " << committing_seq << ", blocked" << dendl;
+
+  // we can _only_ read applied_seq here because open_ops == 0 (we've
+  // quiesced all in-flight applies).
+  committing_seq = applied_seq;
+
+  dout(10) << "commit_start committing " << committing_seq << ", still blocked" << dendl;
   return true;
 }
 
