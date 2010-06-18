@@ -230,7 +230,7 @@ public:
 
   void stop_cluster();
 
-  int mkfs(bufferlist& osdmapbl, bufferlist& classbl);
+  int mkfs(bufferlist& osdmapbl);
 
   LogClient *get_logclient() { return &logclient; }
 };

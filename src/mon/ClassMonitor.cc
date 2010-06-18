@@ -73,45 +73,6 @@ void ClassMonitor::create_initial(bufferlist& bl)
   ::encode(l, inc.info);
   inc.op = CLASS_INC_NOP;
   pending_class.insert(pair<utime_t,ClassLibraryIncremental>(i.stamp, inc));
-
-  bufferlist::iterator iter = bl.begin();
-  while (!iter.end()) {
-    ClassImpl impl;
-    ClassInfo info;
-    ClassLibraryIncremental incr;
-
-    string str;
-    ::decode(str, iter);
-    ::decode(impl.binary, iter);
-
-    char ver[str.length() + 1];
-    char *name;
-    char *ver_min;
-    char *ver_maj;
-    char *arch;
-
-    char classinfo[str.length() + 1];
-    strcpy(classinfo, str.c_str());
-
-    name = strtok(classinfo, ".");
-    ver_maj = strtok(NULL, ".");
-    ver_min = strtok(NULL, ".");
-    sprintf(ver, "%s.%s", ver_maj, ver_min);
-    arch = strtok(NULL, ".");
-
-    ClassVersion cv(ver, arch);
-
-    info.name = name;
-    info.version = cv;
-
-    impl.stamp = g_clock.now();
-
-    ::encode(impl, incr.impl);
-    ::encode(info, incr.info);
-    incr.op = CLASS_INC_ADD;
-
-    pending_class.insert(pair<utime_t,ClassLibraryIncremental>(impl.stamp, incr));
-  }
 }
 
 bool ClassMonitor::store_impl(ClassInfo& info, ClassImpl& impl)
@@ -157,42 +118,38 @@ bool ClassMonitor::update_from_paxos()
     assert(success);
 
     bufferlist::iterator p = bl.begin();
-
     __u8 v;
     ::decode(v, p);
-
-    while (!p.end()) {
-      ClassLibraryIncremental inc;
-      ::decode(inc, p);
-      ClassImpl impl;
-      ClassInfo info;
-      inc.decode_info(info);
-      switch (inc.op) {
-      case CLASS_INC_ADD:
-        inc.decode_impl(impl);
-        if (impl.binary.length() > 0) {
-          store_impl(info, impl);
-          list.add(info.name, info.version);
-        }
-        break;
-      case CLASS_INC_DEL:
-        list.remove(info.name, info.version);
-        break;
-      case CLASS_INC_ACTIVATE:
-        {
-          map<string, ClassVersionMap>::iterator mapiter = list.library_map.find(info.name);
-          if (mapiter == list.library_map.end()) {
-          } else {
-            ClassVersionMap& map = mapiter->second;
-            map.set_default(info.version.str());
-          }
-        }
-        break;
-      case CLASS_INC_NOP:
-        break;
-      default:
-        assert(0);
+    ClassLibraryIncremental inc;
+    ::decode(inc, p);
+    ClassImpl impl;
+    ClassInfo info;
+    inc.decode_info(info);
+    switch (inc.op) {
+    case CLASS_INC_ADD:
+      inc.decode_impl(impl);
+      if (impl.binary.length() > 0) {
+        store_impl(info, impl);
+        list.add(info.name, info.version);
       }
+      break;
+    case CLASS_INC_DEL:
+      list.remove(info.name, info.version);
+      break;
+    case CLASS_INC_ACTIVATE:
+      {
+        map<string, ClassVersionMap>::iterator mapiter = list.library_map.find(info.name);
+        if (mapiter == list.library_map.end()) {
+        } else {
+          ClassVersionMap& map = mapiter->second;
+          map.set_default(info.version.str());
+        }
+      }
+      break;
+    case CLASS_INC_NOP:
+      break;
+    default:
+      assert(0);
     }
 
     list.version++;
