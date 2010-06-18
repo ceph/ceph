@@ -20,6 +20,8 @@
 
 #include <errno.h>
 #include <fstream>
+#include <sys/uio.h>
+#include <limits.h>
 
 namespace ceph {
 
