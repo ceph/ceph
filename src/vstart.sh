@@ -315,8 +315,10 @@ EOF
 		    run 'mon' $CEPH_BIN/cmon -i $f $ARGS $CMON_ARGS
 		done
 		sleep 1
-		$CEPH_BIN/cclass -a
 	fi
+
+	# load classes
+	$CEPH_BIN/cclass -a
 fi
 
 #osd
