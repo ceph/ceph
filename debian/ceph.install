@@ -1,5 +1,6 @@
 usr/bin/ceph
 usr/bin/cconf
+usr/bin/cclass
 usr/bin/crushtool
 usr/bin/monmaptool
 usr/bin/osdmaptool
