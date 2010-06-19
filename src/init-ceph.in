@@ -109,7 +109,6 @@ debug=0
 monaddr=
 dobtrfs=1
 verbose=0
-start_class=
 
 while echo $1 | grep -q '^-'; do     # FIXME: why not '^-'?
 case $1 in
@@ -255,7 +254,6 @@ for name in $what; do
 	    do_cmd "$cmd" $runarg
 	    [ -n "$post_start" ] && do_cmd "$post_start"
 	    [ -n "$lockfile" ] && [ "$?" = 0 ] && touch $lockfile
-	    [ "$type" == "mon" ] && start_class="$start_class $name"
 	    ;;
 	
 	stop)
@@ -319,24 +317,5 @@ for name in $what; do
 	    ;;
     esac
 done
-
-if [ "$start_class" != "" ]; then
-    echo "Loading classes into monitors"
-    for name in $start_class; do
-	type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $item is 'mon1'
-	id=`echo $name | cut -c 4- | sed 's/\\.//'`
-	num=$id
-
-	check_host || continue
-
-	# conf file
-	if [ "$host" = "$hostname" ]; then
-	    cur_conf=$conf
-	else
-	    cur_conf="/tmp/ceph.conf.$$"
-	fi
-	do_cmd "$BINDIR/cclass -c $cur_conf -a"
-    done
-fi
 
 exit 0
