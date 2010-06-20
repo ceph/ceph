@@ -188,6 +188,7 @@ for name in $what; do
     check_host || continue
 
     if [ -n "$ssh" ] && ( echo $pushed_to | grep -v -q " $host " ); then
+	scp -q $conf $host:$conf
 	scp -q $osdmap $host:$osdmap
 	scp -q $monmap $host:$monmap
 	pushed_to="$pushed_to $host "
