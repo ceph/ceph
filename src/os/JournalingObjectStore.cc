@@ -30,6 +30,8 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
 {
   dout(10) << "journal_replay fs op_seq " << fs_op_seq << dendl;
   op_seq = fs_op_seq;
+  committed_seq = op_seq;
+  applied_seq = fs_op_seq;
 
   if (!journal)
     return 0;
@@ -78,6 +80,7 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
   }
 
   committed_seq = op_seq;
+  applied_seq = op_seq;
 
   // done reading, make writeable.
   journal->make_writeable();
