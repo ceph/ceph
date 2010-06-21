@@ -479,7 +479,7 @@ private:
     if (inc.epoch == 1)
       fsid = inc.fsid;
     else
-      if (ceph_fsid_compare(&inc.fsid, &fsid) == 0) {
+      if (ceph_fsid_compare(&inc.fsid, &fsid) != 0) {
 	return -EINVAL;
       }
     assert(inc.epoch == epoch+1);
