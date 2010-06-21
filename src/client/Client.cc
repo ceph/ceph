@@ -1851,21 +1851,24 @@ void Client::queue_cap_snap(Inode *in, snapid_t seq)
       in->cap_snaps.rbegin()->second.writing) {
     dout(10) << "queue_cap_snap already have pending cap_snap on " << *in << dendl;
     return;
-  }
-
-  in->get();
-  CapSnap *capsnap = &in->cap_snaps[seq];
-  capsnap->context = in->snaprealm->cached_snap_context;
-  capsnap->issued = in->caps_issued();
-  capsnap->dirty = in->caps_dirty();  // a bit conservative?
-  
-  capsnap->dirty_data = (used & CEPH_CAP_FILE_BUFFER);
-
-  if (used & CEPH_CAP_FILE_WR) {
-    dout(10) << "queue_cap_snap WR used on " << *in << dendl;
-    capsnap->writing = 1;
+  } else if (in->caps_dirty() ||
+            (used & CEPH_CAP_FILE_WR)) {
+    in->get();
+    CapSnap *capsnap = &in->cap_snaps[seq];
+    capsnap->context = in->snaprealm->cached_snap_context;
+    capsnap->issued = in->caps_issued();
+    capsnap->dirty = in->caps_dirty();  // a bit conservative?
+    
+    capsnap->dirty_data = (used & CEPH_CAP_FILE_BUFFER);
+    
+    if (used & CEPH_CAP_FILE_WR) {
+      dout(10) << "queue_cap_snap WR used on " << *in << dendl;
+      capsnap->writing = 1;
+    } else {
+      finish_cap_snap(in, capsnap, used);
+    }
   } else {
-    finish_cap_snap(in, capsnap, used);
+    dout(10) << "queue_cap_snap not dirty|writing on " << *in << dendl;
   }
 }
 
