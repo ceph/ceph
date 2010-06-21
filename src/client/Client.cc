@@ -764,7 +764,7 @@ int Client::choose_target_mds(MetaRequest *req)
       dout(0) << "hack: sending all requests to mds" << mds << dendl;
     }
   } else {
-    if (req->auth_is_best()) {
+    if (req->auth_is_best() || req->send_to_auth) {
       // pick the actual auth (as best we can)
       if (item) {
 	mds = item->authority();
@@ -1129,6 +1129,9 @@ void Client::send_request(MetaRequest *request, int mds)
   }
   request->mds = mds;
 
+  if (request->inode && request->inode->caps.count(mds))
+    request->sent_on_mseq = request->inode->caps[mds]->mseq;
+
   mds_sessions[mds].requests.push_back(&request->item);
 
   dout(10) << "send_request " << *r << " to mds" << mds << dendl;
@@ -1193,6 +1196,20 @@ void Client::handle_client_reply(MClientReply *reply)
 	    << mds_num << " safe:" << is_safe << dendl;
     reply->put();
     return;
+  }
+
+  if (-ESTALE == reply->get_result()) { //see if we can get to proper MDS
+    request->send_to_auth = true;
+    request->resend_mds = choose_target_mds(request);
+    if (request->resend_mds != request->mds) { //wasn't sent to auth, resend
+      send_request(request, request->resend_mds);
+      return;
+    } else if (request->inode->caps.count(request->resend_mds) &&
+	       request->sent_on_mseq != request->inode->caps[request->resend_mds]->mseq) {
+      //auth data out of date; send it again!
+      send_request(request, request->resend_mds);
+      return; 
+    }
   }
   
   int mds = reply->get_source().num();

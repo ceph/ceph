@@ -113,6 +113,8 @@ struct MetaRequest {
   utime_t  sent_stamp;
   int      mds;                // who i am asking
   int      resend_mds;         // someone wants you to (re)send the request here
+  bool     send_to_auth;       // must send to auth mds
+  __u32    sent_on_mseq;       // mseq at last submission of this request
   int      num_fwd;            // # of times i've been forwarded
   int      retry_attempt;
   int      ref;
@@ -140,7 +142,8 @@ struct MetaRequest {
     old_dentry_drop(0), old_dentry_unless(0),
     inode(NULL), old_inode(NULL),
     dentry(NULL), old_dentry(NULL),
-    mds(-1), resend_mds(-1), num_fwd(0), retry_attempt(0),
+    mds(-1), resend_mds(-1), send_to_auth(false), sent_on_mseq(0),
+    num_fwd(0), retry_attempt(0),
     ref(1), reply(0), 
     kick(false), got_safe(false), got_unsafe(false), item(this), unsafe_item(this),
     lock("MetaRequest lock"),
