@@ -199,10 +199,12 @@ int main(int argc, const char **argv)
   }
 
   else if (strcmp(nargs[0], "ls") == 0) {
-    if (!pool || nargs.size() < 2)
-      usage();
+    if (!pool) {
+      cerr << "pool name was not specified" << std::endl;
+      goto out;
+    }
 
-    bool stdout = (strcmp(nargs[1], "-") == 0);
+    bool stdout = (nargs.size() < 2) || (strcmp(nargs[1], "-") == 0);
     ostream *outstream;
     if(stdout)
       outstream = &cout;
