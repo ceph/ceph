@@ -2172,7 +2172,13 @@ void OSD::handle_osd_map(MOSDMap *m)
 
       bufferlist::iterator p = bl.begin();
       inc.decode(p);
-      osdmap->apply_incremental(inc);
+      if (osdmap->apply_incremental(inc)) {
+	//error out!
+	dout(0) << "ERROR: Got non-matching FSID from trusted source!" << dendl;
+	session->put();
+	m->put();
+	shutdown();
+      }
 
       // archive the full map
       bl.clear();
