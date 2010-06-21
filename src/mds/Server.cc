@@ -2082,7 +2082,7 @@ void Server::handle_client_open(MDRequest *mdr)
 	return;
       }
 
-      handle_client_opent(mdr, cmode);
+      do_open_truncate(mdr, cmode);
       return;
     }
   } else {
@@ -2648,13 +2648,13 @@ void Server::handle_client_setattr(MDRequest *mdr)
 }
 
 
-void Server::handle_client_opent(MDRequest *mdr, int cmode)
+void Server::do_open_truncate(MDRequest *mdr, int cmode)
 {
   CInode *in = mdr->in[0];
   client_t client = mdr->get_client();
   assert(in);
 
-  dout(10) << "handle_client_opent " << *in << dendl;
+  dout(10) << "do_open_truncate " << *in << dendl;
 
   // prepare
   inode_t *pi = in->project_inode();
