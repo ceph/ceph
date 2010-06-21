@@ -124,6 +124,7 @@ int main(int argc, const char **argv)
   uint64_t size = 0;
   int order = 0;
   char *imgname = NULL, *snapname = NULL;
+  string md_oid;
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("list", '\0')) {
@@ -165,7 +166,7 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  if (!imgname) {
+  if (!opt_list && !imgname) {
     usage();
     exit(1);
   }
@@ -175,8 +176,10 @@ int main(int argc, const char **argv)
      exit(1);
   }
 
-  string md_oid = imgname;
-  md_oid += RBD_SUFFIX;
+  if (!opt_list) {
+    md_oid = imgname;
+    md_oid += RBD_SUFFIX;
+  }
   string dir_oid = RBD_DIRECTORY;
 
   int r = rados.open_pool(poolname, &pool);
