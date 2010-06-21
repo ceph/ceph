@@ -2029,13 +2029,12 @@ void Server::handle_client_open(MDRequest *mdr)
   
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, need_auth);
-  if (!cur) return;
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+  if (!cur)
     return;
 
-
   // can only open a dir with mode FILE_MODE_PIN, at least for now.
-  if (cur->inode.is_dir()) cmode = CEPH_FILE_MODE_PIN;
+  if (cur->inode.is_dir())
+    cmode = CEPH_FILE_MODE_PIN;
 
   dout(10) << "open flags = " << flags
 	   << ", filemode = " << cmode
