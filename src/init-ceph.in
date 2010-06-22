@@ -40,6 +40,7 @@ usage_exit() {
     echo "usage: $0 [options] {start|stop|restart} [mon|osd|mds]..."
     printf "\t-c ceph.conf\n"
     printf "\t--valgrind\trun via valgrind\n"
+    printf "\t--hostname [hostname]\toverride hostname lookup\n"
     exit
 }
 
@@ -148,6 +149,12 @@ case $1 in
 	    shift
 	    conf=$1
 	    ;;
+    --hostname )
+	    [ "$2" = "" ] && usage_exit
+	    options="$options $1"
+	    shift
+	    hostname=$1
+            ;;
     *)
 	    echo unrecognized option \'$1\'
 	    usage_exit
