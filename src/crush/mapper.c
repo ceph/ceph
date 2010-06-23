@@ -426,6 +426,8 @@ reject:
 
 		dprintk("choose got %d\n", item);
 		out[outpos] = item;
+		if (out2)
+			out2[outpos] = item;
 		outpos++;
 	}
 
