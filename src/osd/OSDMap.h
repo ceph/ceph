@@ -398,7 +398,10 @@ private:
 
 
 
-  bool exists(int osd) { return osd < max_osd && (osd_state[osd] & CEPH_OSD_EXISTS); }
+  bool exists(int osd) {
+    //assert(osd >= 0);
+    return osd >= 0 && osd < max_osd && (osd_state[osd] & CEPH_OSD_EXISTS);
+  }
   bool is_up(int osd) { return exists(osd) && osd_state[osd] & CEPH_OSD_UP; }
   bool is_down(int osd) { return !exists(osd) || !is_up(osd); }
   bool is_out(int osd) { return !exists(osd) || get_weight(osd) == CEPH_OSD_OUT; }
