@@ -400,8 +400,8 @@ struct ceph_lock_state_t {
 			(new_lock.start, new_lock));
       ret = true;
     }
-    if (ret) ++client_held_lock_counts[new_lock.client];
-    else if (wait_on_fail) ++client_waiting_lock_counts[new_lock.client];
+    if (ret) ++client_held_lock_counts[(client_t)new_lock.client];
+    else if (wait_on_fail) ++client_waiting_lock_counts[(client_t)new_lock.client];
     return ret;
   }
 
@@ -473,7 +473,7 @@ struct ceph_lock_state_t {
 	append_lock.start = removal_end+1;
 	held_locks.insert(pair<uint64_t, ceph_filelock>
 			  (append_lock.start, append_lock));
-	++client_held_lock_counts[old_lock->client];
+	++client_held_lock_counts[(client_t)old_lock->client];
 	if (old_lock->start >= removal_start) {
 	  dout(15) << "erasing " << (*iter)->second << dendl;
 	  held_locks.erase(*iter);
@@ -486,7 +486,7 @@ struct ceph_lock_state_t {
 	  append_lock.length = old_lock_end - append_lock.start + 1;
 	  held_locks.insert(pair<uint64_t, ceph_filelock>
 			    (append_lock.start, append_lock));
-	  ++client_held_lock_counts[old_lock->client];
+	  ++client_held_lock_counts[(client_t)old_lock->client];
 	}
 	if (old_lock->start < removal_start) {
 	  old_lock->length = removal_start - old_lock->start;
@@ -519,9 +519,9 @@ struct ceph_lock_state_t {
 	   ++iter) {
 	ceph_filelock cur_lock = (*iter)->second;
 	waiting_locks.erase(*iter);
-	--client_waiting_lock_counts[cur_lock.client];
-	if (!client_waiting_lock_counts[cur_lock.client]) {
-	  client_waiting_lock_counts.erase(cur_lock.client);
+	--client_waiting_lock_counts[(client_t)cur_lock.client];
+	if (!client_waiting_lock_counts[(client_t)cur_lock.client]) {
+	  client_waiting_lock_counts.erase((client_t)cur_lock.client);
 	}
 	if(add_lock(cur_lock, true)) activated_locks.push_back(cur_lock);
       }
@@ -611,7 +611,7 @@ private:
 	    appended_lock.start = new_lock_end + 1;
 	    held_locks.insert(pair<uint64_t, ceph_filelock>
 			      (appended_lock.start, appended_lock));
-	    ++client_held_lock_counts[old_lock->client];
+	    ++client_held_lock_counts[(client_t)old_lock->client];
 	    if (old_lock_start < new_lock_start) {
 	      old_lock->length = new_lock_start - old_lock_start;
 	    } else {
@@ -639,7 +639,7 @@ private:
 	    appended_lock.length = old_lock_end - appended_lock.start + 1;
 	    held_locks.insert(pair<uint64_t, ceph_filelock>
 			      (appended_lock.start, appended_lock));
-	    ++client_held_lock_counts[old_lock->client];
+	    ++client_held_lock_counts[(client_t)old_lock->client];
 	  }
 	  if (old_lock_start < new_lock_start) {
 	    old_lock->length = new_lock_start - old_lock_start;
@@ -678,9 +678,9 @@ private:
 	} else {
 	  if (old_lock->start + old_lock->length == new_lock.start) {
 	    new_lock.start = old_lock->start;
-	    new_lock.length += old_lock->length;
+	    new_lock.length = old_lock->length + new_lock.length;
 	  } else if (new_lock.start + new_lock.length == old_lock->start) {
-	    new_lock.length += old_lock->length;
+	    new_lock.length = old_lock->length + new_lock.length;
 	  }
 	}
 	held_locks.erase(*iter);
@@ -696,7 +696,7 @@ private:
   void remove_all_from(client_t client, multimap<uint64_t, ceph_filelock>& locks) {
     multimap<uint64_t, ceph_filelock>::iterator iter = locks.begin();
     while (iter != locks.end()) {
-      if (iter->second.client == client) {
+      if ((client_t)iter->second.client == client) {
 	locks.erase(iter++);
       } else ++iter;
     }
@@ -764,8 +764,9 @@ private:
     // create a lock starting one earlier and ending one later
     // to check for neighbors
     ceph_filelock neighbor_check_lock = lock;
-    --neighbor_check_lock.start;
-    if (neighbor_check_lock.length) neighbor_check_lock.length += 2;
+    neighbor_check_lock.start = neighbor_check_lock.start - 1;
+    if (neighbor_check_lock.length)
+      neighbor_check_lock.length = neighbor_check_lock.length+ 2;
     //find the last held lock starting at the point after lock
     multimap<uint64_t, ceph_filelock>::iterator iter =
       get_last_before(lock.start + lock.length, held_locks);

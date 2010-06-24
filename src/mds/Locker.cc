@@ -1995,7 +1995,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
       ::decode(decoded_lock, bli);
       in->fcntl_locks.held_locks.
 	insert(pair<uint64_t, ceph_filelock>(decoded_lock.start, decoded_lock));
-      ++in->fcntl_locks.client_held_lock_counts[decoded_lock.client];
+      ++in->fcntl_locks.client_held_lock_counts[(client_t)(decoded_lock.client)];
     }
     ::decode(num_locks, bli);
     for ( int i=0; i < num_locks; ++i) {
@@ -2003,7 +2003,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
       ::decode(decoded_lock, bli);
       in->flock_locks.held_locks.
 	insert(pair<uint64_t, ceph_filelock>(decoded_lock.start, decoded_lock));
-      ++in->flock_locks.client_held_lock_counts[decoded_lock.client];
+      ++in->flock_locks.client_held_lock_counts[(client_t)(decoded_lock.client)];
     }
   }
 
