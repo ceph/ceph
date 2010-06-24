@@ -1,5 +1,5 @@
-#ifndef CEPH_FS_IOCTL_H
-#define CEPH_FS_IOCTL_H
+#ifndef FS_CEPH_IOCTL_H
+#define FS_CEPH_IOCTL_H
 
 #include <linux/ioctl.h>
 #include <linux/types.h>
@@ -38,11 +38,5 @@ struct ceph_ioctl_dataloc {
 				   struct ceph_ioctl_dataloc)
 
 #define CEPH_IOC_LAZYIO _IO(CEPH_IOCTL_MAGIC, 4)
-
-struct ceph_ioctl_invalidate_range {
-	__u64 offset, length;
-};
-#define CEPH_IOC_INVALIDATE_RANGE _IOW(CEPH_IOCTL_MAGIC, 5, \
-				       struct ceph_ioctl_invalidate_range)
 
 #endif
