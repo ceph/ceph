@@ -1732,8 +1732,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       dout(7) << " flushsnap follows " << follows
 	      << " client" << client << " on " << *in << dendl;
       // this cap now follows a later snap (i.e. the one initiating this flush, or later)
-      cap->client_follows = follows+1;
-      cap->confirm_receipt(cap->get_last_sent(), 0);
+      cap->client_follows = MAX(follows, in->first) + 1;
    
       // we can prepare the ack now, since this FLUSHEDSNAP is independent of any
       // other cap ops.  (except possibly duplicate FLUSHSNAP requests, but worst
