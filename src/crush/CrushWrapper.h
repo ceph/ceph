@@ -335,7 +335,10 @@ public:
   void do_rule(int rule, int x, vector<int>& out, int maxout, int forcefeed,
 	       vector<__u32>& weight) {
     int rawout[maxout];
-    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, forcefeed, &weight[0]);
+    int numrep = crush_do_rule(crush, rule, x, rawout, maxout,
+			       forcefeed, &weight[0]);
+    if (numrep < 0)
+      numrep = 0;   // e.g., when forcefed device dne.
     out.resize(numrep);
     for (int i=0; i<numrep; i++)
       out[i] = rawout[i];
