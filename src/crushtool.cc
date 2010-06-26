@@ -656,8 +656,20 @@ int decompile_crush(CrushWrapper &crush, ostream &out)
 
 void usage()
 {
-  cout << "usage: crushtool [-d map] [-c map.txt] [-o outfile [--clobber]] [--build --num_osd N layer1 ...]" << std::endl;
-  cout << "  (where each 'layer' is 'name (uniform|straw|list|tree) size')" << std::endl;
+  cout << "usage: crushtool ...\n";
+  cout << "   --decompile|-d map    decompile a crush map to source\n";
+  cout << "   --compile|-c map.txt  compile a map from source\n";
+  cout << "   [-o outfile [--clobber]]\n";
+  cout << "                         specify output for for (de)compilation\n";
+  cout << "   --build --num_osd N layer1 ...\n";
+  cout << "                         build a new map, where each 'layer' is\n";
+  cout << "                           'name (uniform|straw|list|tree) size'\n";
+  cout << "   --test mapfn          test a range of inputs on the map\n";
+  cout << "      [--min-x x] [--max-x x] [--x x]\n";
+  cout << "      [--min-rule r] [--max-rule r] [--rule r]\n";
+  cout << "      [--num-rep n]\n";
+  cout << "      [--weight|-w devno weight]\n";
+  cout << "                         where weight is 0 to 1.0\n";
   exit(1);
 }
 
@@ -685,31 +697,70 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
 
   const char *me = argv[0];
-  const char *cinfn = 0;
-  const char *dinfn = 0;
+  const char *infn = 0;
+  const char *srcfn = 0;
+  bool compile = false;
+  bool decompile = false;
+  bool test = false;
   const char *outfn = 0;
   bool clobber = false;
 
   int build = 0;
   int num_osds =0;
   vector<layer_t> layers;
+  int num_rep = 2;
+  int min_x = 0, max_x = 10000-1;
+  int min_rule = 0, max_rule = 1000;
+  map<int, int> device_weight;
   DEFINE_CONF_VARS(usage);
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("clobber", '\0')) {
       clobber = true;
-    } else if (CONF_ARG_EQ("dinfn", 'd')) {
-      CONF_SAFE_SET_ARG_VAL(&dinfn, OPT_STR);
+    } else if (CONF_ARG_EQ("decompile", 'd')) {
+      CONF_SAFE_SET_ARG_VAL(&infn, OPT_STR);
+      decompile = true;
     } else if (CONF_ARG_EQ("outfn", 'o')) {
       CONF_SAFE_SET_ARG_VAL(&outfn, OPT_STR);
-    } else if (CONF_ARG_EQ("cinfn", 'c')) {
-      CONF_SAFE_SET_ARG_VAL(&cinfn, OPT_STR);
+    } else if (CONF_ARG_EQ("compile", 'c')) {
+      CONF_SAFE_SET_ARG_VAL(&srcfn, OPT_STR);
+      compile = true;
+    } else if (CONF_ARG_EQ("test", 't')) {
+      CONF_SAFE_SET_ARG_VAL(&infn, OPT_STR);
+      test = true;
     } else if (CONF_ARG_EQ("verbose", 'v')) {
       verbose++;
     } else if (CONF_ARG_EQ("build", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&build, OPT_BOOL);
     } else if (CONF_ARG_EQ("num_osds", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&num_osds, OPT_INT);
+    } else if (CONF_ARG_EQ("num_rep", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&num_rep, OPT_INT);
+    } else if (CONF_ARG_EQ("max_x", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&max_x, OPT_INT);
+    } else if (CONF_ARG_EQ("min_x", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&min_x, OPT_INT);
+    } else if (CONF_ARG_EQ("x", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&min_x, OPT_INT);
+      max_x = min_x;
+    } else if (CONF_ARG_EQ("max_rule", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&max_rule, OPT_INT);
+    } else if (CONF_ARG_EQ("min_rule", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&min_rule, OPT_INT);
+    } else if (CONF_ARG_EQ("rule", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&min_rule, OPT_INT);
+      max_rule = min_rule;
+    } else if (CONF_ARG_EQ("weight", 'w')) {
+      int dev;
+      CONF_SAFE_SET_ARG_VAL(&dev, OPT_INT);
+      float f;
+      CONF_SAFE_SET_ARG_VAL(&f, OPT_FLOAT);
+      int w = f * (float)0x10000;
+      if (w < 0)
+	w = 0;
+      if (w > 0x10000)
+	w = 0x10000;
+      device_weight[dev] = w;
     } else if (!build)
       usage();
     else if (i + 3 <= args.size()) {
@@ -720,9 +771,9 @@ int main(int argc, const char **argv)
       layers.push_back(l);
     }      
   }
-  if ((cinfn?1:0) + (dinfn?1:0) + build > 1)
+  if (decompile + compile + build > 1)
     usage();
-  if (!cinfn && !dinfn && !build)
+  if (!compile && !decompile && !build && !test)
     usage();
 
   /*
@@ -733,17 +784,19 @@ int main(int argc, const char **argv)
 
   CrushWrapper crush;
 
-  if (dinfn) {
+  if (infn) {
     bufferlist bl;
-    int r = bl.read_file(dinfn);
+    int r = bl.read_file(infn);
     if (r < 0) {
       char buf[80];
-      cerr << me << ": error reading '" << dinfn << "': " << strerror_r(-r, buf, sizeof(buf)) << std::endl;
+      cerr << me << ": error reading '" << infn << "': " << strerror_r(-r, buf, sizeof(buf)) << std::endl;
       exit(1);
     }
     bufferlist::iterator p = bl.begin();
     crush.decode(p);
+  }
 
+  if (decompile) {
     if (outfn) {
       ofstream o;
       o.open(outfn, ios::out | ios::binary | ios::trunc);
@@ -756,15 +809,17 @@ int main(int argc, const char **argv)
     } else 
       decompile_crush(crush, cout);
   }
-  if (cinfn) {
+
+  if (compile) {
     crush.create();
-    int r = compile_crush_file(cinfn, crush);
+    int r = compile_crush_file(srcfn, crush);
     crush.finalize();
     if (r < 0) 
       exit(1);
     if (!outfn)
-      cout << me << " successfully compiled '" << cinfn << "'.  Use -o file to write it out." << std::endl;
+      cout << me << " successfully compiled '" << srcfn << "'.  Use -o file to write it out." << std::endl;
   }
+
   if (build) {
     if (layers.empty()) {
       cerr << me << ": must specify at least one layer" << std::endl;
@@ -872,7 +927,7 @@ int main(int argc, const char **argv)
     if (!outfn)
       cout << me << " successfully built map.  Use -o file to write it out." << std::endl;
   }
-  if (cinfn || build) {
+  if (compile || build) {
     if (outfn) {
       bufferlist bl;
       crush.encode(bl);
@@ -884,6 +939,40 @@ int main(int argc, const char **argv)
       }
       if (verbose)
 	cout << "wrote crush map to " << outfn << std::endl;
+    }
+  }
+
+  if (test) {
+
+    // all osds in
+    vector<__u32> weight;
+    for (int o = 0; o < crush.get_max_devices(); o++)
+      if (device_weight.count(o))
+	weight.push_back(device_weight[o]);
+      else
+	weight.push_back(0x10000);
+    cout << "devices weights (hex): " << hex << weight << dec << std::endl;
+
+    for (int r = min_rule; r < crush.get_max_rules() && r <= max_rule; r++) {
+      if (!crush.rule_exists(r)) {
+	cout << "rule " << r << " dne" << std::endl;
+	continue;
+      }
+      cout << "rule " << r << " (" << crush.get_rule_name(r) << "), x = " << min_x << ".." << max_x << std::endl;
+      vector<int> per(crush.get_max_devices());
+      map<int,int> sizes;
+      for (int x = min_x; x <= max_x; x++) {
+	vector<int> out;
+	crush.do_rule(r, x, out, num_rep, -1, weight);
+	//cout << "rule " << r << " x " << x << " " << out << std::endl;
+	for (unsigned i = 0; i < out.size(); i++)
+	  per[out[i]]++;
+	sizes[out.size()]++;
+      }
+      for (unsigned i = 0; i < per.size(); i++)
+	cout << " device " << i << ":\t" << per[i] << std::endl;
+      for (map<int,int>::iterator p = sizes.begin(); p != sizes.end(); p++)
+	cout << " num results " << p->first << ":\t" << p->second << std::endl;
     }
   }
 
