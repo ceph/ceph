@@ -1751,9 +1751,14 @@ Message *SimpleMessenger::Pipe::read_message()
   uint64_t message_size = header.front_len  + header.middle_len
     + header.data_len;
   if (message_size) {
-    messenger->message_throttler.get(message_size);
     if (policy.throttler)
       policy.throttler->get(message_size);
+
+    // throttle total bytes waiting for dispatch.  do this _after_ the
+    // policy throttle, as this one does not deadlock (unless dispatch
+    // blocks indefinitely, which it shouldn't).  in contrast, the
+    // policy throttle carries for the lifetime of the message.
+    messenger->message_throttler.get(message_size);
   }
 
   // read front
