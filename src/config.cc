@@ -310,7 +310,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(ms_die_on_failure, 0, OPT_BOOL, false),
 	OPTION(ms_nocrc, 0, OPT_BOOL, false),
 	OPTION(ms_die_on_bad_msg, 0, OPT_BOOL, false),
-	OPTION(ms_waiting_message_bytes, 0, OPT_INT, 104857600),
+	OPTION(ms_waiting_message_bytes, 0, OPT_INT, 100 << 20),
 	OPTION(mon_data, 0, OPT_STR, ""),
 	OPTION(mon_tick_interval, 0, OPT_INT, 5),
 	OPTION(mon_subscribe_interval, 0, OPT_DOUBLE, 300),
