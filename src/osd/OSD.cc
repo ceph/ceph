@@ -541,6 +541,7 @@ void OSD::reopen_logger()
     didit = true;
     osd_logtype.add_set(l_osd_opq, "opq");
     osd_logtype.add_inc(l_osd_op, "op");
+    osd_logtype.add_set(l_osd_opwip, "opwip");
     osd_logtype.add_inc(l_osd_c_rd, "c_rd");
     osd_logtype.add_inc(l_osd_c_rdb, "c_rdb");
     osd_logtype.add_inc(l_osd_c_wr, "c_wr");

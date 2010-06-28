@@ -49,6 +49,7 @@ enum {
   l_osd_first = 10000,
   l_osd_opq,
   l_osd_op,
+  l_osd_opwip,
   l_osd_c_rd,
   l_osd_c_rdb,
   l_osd_c_wr,
@@ -107,7 +108,6 @@ protected:
   ObjectStore *store;
 
   LogClient   logclient;
-
 
   int whoami;
   const char *dev_path, *journal_path;

@@ -2248,8 +2248,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
       assert(repop_queue.front() == repop);
     }
     repop_queue.pop_front();
-    repop_map.erase(repop->rep_tid);
-    repop->put();
+    remove_repop(repop);
   }
 }
 
@@ -2346,9 +2345,20 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContext *
   repop_map[repop->rep_tid] = repop;
   repop->get();
 
+  if (osd->logger)
+    osd->logger->set(l_osd_opwip, repop_map.size());
+
   return repop;
 }
  
+void ReplicatedPG::remove_repop(RepGather *repop)
+{
+  repop_map.erase(repop->rep_tid);
+  repop->put();
+
+  if (osd->logger)
+    osd->logger->set(l_osd_opwip, repop_map.size());
+}
 
 void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
 			     int fromosd, eversion_t peer_lcod)
@@ -3579,7 +3589,6 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
     if (!repop->applied && !repop->applying)
       apply_repop(repop);
     repop->aborted = true;
-    repop_map.erase(repop->rep_tid);
 
     if (requeue && repop->ctx->op) {
       dout(10) << " requeuing " << *repop->ctx->op << dendl;
@@ -3587,7 +3596,7 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
       repop->ctx->op = 0;
     }
 
-    repop->put();
+    remove_repop(repop);
   }
 
   if (requeue)

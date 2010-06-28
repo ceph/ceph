@@ -410,6 +410,7 @@ protected:
   void issue_repop(RepGather *repop, utime_t now,
 		   eversion_t old_last_update, bool old_exists, uint64_t old_size, eversion_t old_version);
   RepGather *new_repop(OpContext *ctx, ObjectContext *obc, bool noop, tid_t rep_tid);
+  void remove_repop(RepGather *repop);
   void repop_ack(RepGather *repop,
                  int result, int ack_type,
                  int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
