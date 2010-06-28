@@ -1694,14 +1694,7 @@ void SimpleMessenger::Pipe::unlock_maybe_reap()
 
     pipe_lock.Unlock();
 
-    // queue for reap
-    dout(10) << "unlock_maybe_reap queueing for reap" << dendl;
-    messenger->lock.Lock();
-    {
-      messenger->pipe_reap_queue.push_back(this);
-      messenger->wait_cond.Signal();
-    }
-    messenger->lock.Unlock();
+    messenger->queue_reap(this);
   } else {
     pipe_lock.Unlock();
   }
@@ -2103,6 +2096,18 @@ int SimpleMessenger::Pipe::write_message(Message *m)
 #define dout_prefix _prefix(this)
 
 
+void SimpleMessenger::reaper_entry()
+{
+  dout(10) << "reaper_entry start" << dendl;
+  lock.Lock();
+  while (!reaper_stop) {
+    reaper();
+    reaper_cond.Wait(lock);
+  }
+  lock.Unlock();
+  dout(10) << "reaper_entry done" << dendl;
+}
+
 /*
  * note: assumes lock is held
  */
@@ -2129,7 +2134,18 @@ void SimpleMessenger::reaper()
     p->put();
     dout(10) << "reaper deleted pipe " << p << dendl;
   }
+  dout(10) << "reaper done" << dendl;
 }
+
+void SimpleMessenger::queue_reap(Pipe *pipe)
+{
+  dout(10) << "queue_reap " << pipe << dendl;
+  lock.Lock();
+  pipe_reap_queue.push_back(pipe);
+  reaper_cond.Signal();
+  lock.Unlock();
+}
+
 
 
 int SimpleMessenger::bind(int64_t force_nonce)
@@ -2247,8 +2263,12 @@ int SimpleMessenger::start(bool nodaemon)
   }
 
   // go!
-  if (did_bind)
+  if (did_bind) {
     accepter.start();
+
+    reaper_started = true;
+    reaper_thread.create();
+  }
   return 0;
 }
 
@@ -2441,23 +2461,15 @@ int SimpleMessenger::send_keepalive(const entity_inst_t& dest)
 
 
 
-
-
 void SimpleMessenger::wait()
 {
   lock.Lock();
-  while (1) {
-    // reap dead pipes
-    reaper();
-
-    if (destination_stopped) {
-      dout(10) << "wait: everything stopped" << dendl;
-      break;   // everything stopped.
-    }
-
-    dout(10) << "wait: local_endpoint still active" << dendl;
+  while (!destination_stopped) {
+    dout(10) << "wait: still active" << dendl;
     wait_cond.Wait(lock);
+    dout(10) << "wait: woke up" << dendl;
   }
+  dout(10) << "wait: everything stopped" << dendl;
   lock.Unlock();
   
   // done!  clean up.
@@ -2465,6 +2477,16 @@ void SimpleMessenger::wait()
     dout(20) << "wait: stopping accepter thread" << dendl;
     accepter.stop();
     dout(20) << "wait: stopped accepter thread" << dendl;
+  }
+
+  if (reaper_started) {
+    dout(20) << "wait: stopping reaper thread" << dendl;
+    lock.Lock();
+    reaper_cond.Signal();
+    reaper_stop = true;
+    lock.Unlock();
+    reaper_thread.join();
+    dout(20) << "wait: stopped reaper thread" << dendl;
   }
 
   // close+reap all pipes
@@ -2483,7 +2505,7 @@ void SimpleMessenger::wait()
     reaper();
     dout(10) << "wait: waiting for pipes " << pipes << " to close" << dendl;
     while (!pipes.empty()) {
-      wait_cond.Wait(lock);
+      reaper_cond.Wait(lock);
       reaper();
     }
   }

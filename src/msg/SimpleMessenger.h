@@ -452,7 +452,25 @@ private:
 
   void mark_down(const entity_addr_t& addr);
 
+  // reaper
+  class ReaperThread : public Thread {
+    SimpleMessenger *messenger;
+  public:
+    ReaperThread(SimpleMessenger *m) : messenger(m) {}
+    void *entry() {
+      messenger->get();
+      messenger->reaper_entry();
+      messenger->put();
+      return 0;
+    }
+  } reaper_thread;
+
+  bool reaper_started, reaper_stop;
+  Cond reaper_cond;
+
+  void reaper_entry();
   void reaper();
+  void queue_reap(Pipe *pipe);
 
   Policy get_policy(int t) {
     if (policy_map.count(t))
@@ -512,6 +530,7 @@ public:
     message_throttler(g_conf.ms_waiting_message_bytes), need_addr(true),
     destination_stopped(true), my_type(-1),
     global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
+    reaper_thread(this), reaper_started(false), reaper_stop(false), 
     dispatch_thread(this), messenger(this) {
     // for local dmsg delivery
     dispatch_queue.local_pipe = new Pipe(this, Pipe::STATE_OPEN);
