@@ -425,6 +425,7 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
     }
   }
 
+  dout(20) << "prepare_multi_write queue_pos now " << queue_pos << dendl;
   //assert(write_pos + bl.length() == queue_pos);
   return 0;
 }
@@ -511,6 +512,7 @@ void FileJournal::write_bl(off64_t& pos, bufferlist& bl)
     derr(0) << "write_bl failed with " << err << " " << strerror_r(-err, buf, sizeof(buf)) 
 	    << dendl;
   }
+  pos += bl.length();
 }
 
 void FileJournal::do_write(bufferlist& bl)
