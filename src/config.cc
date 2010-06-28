@@ -500,7 +500,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(ebofs_verify_csum_on_read, 0, OPT_BOOL, true),
 	OPTION(journal_dio, 0, OPT_BOOL, true),
 	OPTION(journal_block_align, 0, OPT_BOOL, true),
-	OPTION(journal_max_write_bytes, 0, OPT_INT, 0),
+	OPTION(journal_max_write_bytes, 0, OPT_INT, 10 << 20),
 	OPTION(journal_max_write_entries, 0, OPT_INT, 100),
 	OPTION(journal_queue_max_ops, 0, OPT_INT, 500),
 	OPTION(journal_queue_max_bytes, 0, OPT_INT, 100 << 20),
