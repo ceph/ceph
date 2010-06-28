@@ -487,56 +487,7 @@ int OSD::init()
   }
     
   // log
-  static LogType osd_logtype(l_osd_first, l_osd_last);
-  char name[80];
-  snprintf(name, sizeof(name), "osd%d", whoami);
-  logger = new Logger(name, (LogType*)&osd_logtype);
-  osd_logtype.add_set(l_osd_opq, "opq");
-  osd_logtype.add_inc(l_osd_op, "op");
-  osd_logtype.add_inc(l_osd_c_rd, "c_rd");
-  osd_logtype.add_inc(l_osd_c_rdb, "c_rdb");
-  osd_logtype.add_inc(l_osd_c_wr, "c_wr");
-  osd_logtype.add_inc(l_osd_c_wrb,"c_wrb");
-  
-  osd_logtype.add_inc(l_osd_r_wr, "r_wr");
-  osd_logtype.add_inc(l_osd_r_wrb, "r_wrb");
-
-  osd_logtype.add_inc(l_osd_subop, "subop");
-
-  osd_logtype.add_inc(l_osd_rop, "rop");
-  osd_logtype.add_inc(l_osd_r_push, "r_push");
-  osd_logtype.add_inc(l_osd_r_pushb, "r_pushb");
-  osd_logtype.add_inc(l_osd_r_pull, "r_pull");
-  osd_logtype.add_inc(l_osd_r_pullb, "r_pullb");
-  
-  osd_logtype.add_set(l_osd_qlen, "qlen");
-  osd_logtype.add_set(l_osd_rqlen, "rqlen");
-  osd_logtype.add_set(l_osd_rdlat, "rdlat");
-  osd_logtype.add_set(l_osd_rdlatm, "rdlatm");
-  osd_logtype.add_set(l_osd_fshdin, "fshdin");
-  osd_logtype.add_set(l_osd_fshdout, "fshdout");
-  osd_logtype.add_inc(l_osd_shdout, "shdout");
-  osd_logtype.add_inc(l_osd_shdin, "shdin");
-
-  osd_logtype.add_set(l_osd_loadavg, "loadavg");
-
-  osd_logtype.add_inc(l_osd_rlsum, "rlsum");
-  osd_logtype.add_inc(l_osd_rlnum, "rlnum");
-
-  osd_logtype.add_set(l_osd_numpg, "numpg");
-  osd_logtype.add_set(l_osd_hbto, "hbto");
-  osd_logtype.add_set(l_osd_hbfrom, "hbfrom");
-  
-  osd_logtype.add_set(l_osd_buf, "buf");
-  
-  osd_logtype.add_inc(l_osd_map, "map");
-  osd_logtype.add_inc(l_osd_mapi, "mapi");
-  osd_logtype.add_inc(l_osd_mapidup, "mapidup");
-  osd_logtype.add_inc(l_osd_mapf, "mapf");
-  osd_logtype.add_inc(l_osd_mapfdup, "mapfdup");
-
-  osd_logtype.validate();
-
+  reopen_logger();
   
   // i'm ready!
   messenger->add_dispatcher_head(this);
@@ -580,6 +531,66 @@ int OSD::init()
 #endif
 
   return 0;
+}
+
+void OSD::reopen_logger()
+{
+  static LogType osd_logtype(l_osd_first, l_osd_last);
+  static bool didit = false;
+  if (!didit) {
+    didit = true;
+    osd_logtype.add_set(l_osd_opq, "opq");
+    osd_logtype.add_inc(l_osd_op, "op");
+    osd_logtype.add_inc(l_osd_c_rd, "c_rd");
+    osd_logtype.add_inc(l_osd_c_rdb, "c_rdb");
+    osd_logtype.add_inc(l_osd_c_wr, "c_wr");
+    osd_logtype.add_inc(l_osd_c_wrb,"c_wrb");
+  
+    osd_logtype.add_inc(l_osd_r_wr, "r_wr");
+    osd_logtype.add_inc(l_osd_r_wrb, "r_wrb");
+
+    osd_logtype.add_inc(l_osd_subop, "subop");
+
+    osd_logtype.add_inc(l_osd_rop, "rop");
+    osd_logtype.add_inc(l_osd_r_push, "r_push");
+    osd_logtype.add_inc(l_osd_r_pushb, "r_pushb");
+    osd_logtype.add_inc(l_osd_r_pull, "r_pull");
+    osd_logtype.add_inc(l_osd_r_pullb, "r_pullb");
+  
+    osd_logtype.add_set(l_osd_qlen, "qlen");
+    osd_logtype.add_set(l_osd_rqlen, "rqlen");
+    osd_logtype.add_set(l_osd_rdlat, "rdlat");
+    osd_logtype.add_set(l_osd_rdlatm, "rdlatm");
+    osd_logtype.add_set(l_osd_fshdin, "fshdin");
+    osd_logtype.add_set(l_osd_fshdout, "fshdout");
+    osd_logtype.add_inc(l_osd_shdout, "shdout");
+    osd_logtype.add_inc(l_osd_shdin, "shdin");
+
+    osd_logtype.add_set(l_osd_loadavg, "loadavg");
+
+    osd_logtype.add_inc(l_osd_rlsum, "rlsum");
+    osd_logtype.add_inc(l_osd_rlnum, "rlnum");
+
+    osd_logtype.add_set(l_osd_numpg, "numpg");
+    osd_logtype.add_set(l_osd_hbto, "hbto");
+    osd_logtype.add_set(l_osd_hbfrom, "hbfrom");
+  
+    osd_logtype.add_set(l_osd_buf, "buf");
+  
+    osd_logtype.add_inc(l_osd_map, "map");
+    osd_logtype.add_inc(l_osd_mapi, "mapi");
+    osd_logtype.add_inc(l_osd_mapidup, "mapidup");
+    osd_logtype.add_inc(l_osd_mapf, "mapf");
+    osd_logtype.add_inc(l_osd_mapfdup, "mapfdup");
+
+    osd_logtype.validate();
+  }
+
+  char name[80];
+  snprintf(name, sizeof(name), "osd%d", whoami);
+  Logger *old = logger;
+  logger = new Logger(name, (LogType*)&osd_logtype);
+  delete old;
 }
 
 int OSD::shutdown()
@@ -1615,7 +1626,9 @@ void OSD::handle_command(MMonCommand *m)
        << " in " << (end-start)
        << " sec at " << prettybyte_t(rate) << "/sec";
     logclient.log(LOG_INFO, ss);    
-
+    
+  } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reset") {
+    reopen_logger();
   } else
     dout(0) << "unrecognized command! " << m->cmd << dendl;
   m->put();

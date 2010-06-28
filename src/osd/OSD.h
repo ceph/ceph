@@ -123,8 +123,8 @@ protected:
 
   bool dispatch_running;
 
+  void reopen_logger();
   void tick();
-
   void _dispatch(Message *m);
 
 public:
