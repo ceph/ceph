@@ -716,77 +716,67 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
 int Client::choose_target_mds(MetaRequest *req) 
 {
   int mds = 0;
-    
+  __u32 hash = 0;
+  bool is_hash = false;
+
+  Inode *dir_inode = NULL;
+  InodeCap *cap = NULL;
+
   if (req->resend_mds >= 0) {
     mds = req->resend_mds;
     req->resend_mds = -1;
     dout(10) << "target resend_mds specified as mds" << mds << dendl;
-    return mds;
+    goto out;
   }
-  // find deepest known prefix
-  Inode *diri = root;   // the deepest known containing dir
-  Inode *item = 0;      // the actual item... if we know it
-  int missing_dn = -1;  // which dn we miss on (if we miss)
-  
-  unsigned depth = req->get_filepath().depth();
-  unsigned i;
-  for (i=0; i<depth; i++) {
-    // dir?
-    if (diri && diri->is_dir() && diri->dir) {
-      Dir *dir = diri->dir;
-      
-      // do we have the next dentry?
-      if (dir->dentries.count( req->get_filepath()[i] ) == 0) {
-	missing_dn = i;  // no.
-	break;
-      }
-      
-      dout(7) << " have path seg " << i << " on " << diri->authority() << " ino " << diri->ino << " " << req->get_filepath()[i] << dendl;
-      
-      if (i == depth-1) {  // last one!
-	item = dir->dentries[ req->get_filepath()[i] ]->inode;
-	break;
-      } 
-      
-      // continue..
-      diri = dir->dentries[ req->get_filepath()[i] ]->inode;
-      assert(diri);
+
+  if (g_conf.client_use_random_mds) goto random_mds;
+
+  if (req->inode) {
+    dir_inode = req->inode;
+  } else if (req->dentry) {
+    if (req->dentry->inode) {
+      dir_inode = req->dentry->inode;
     } else {
-      missing_dn = i;
-      break;
+      dir_inode = req->dentry->dir->parent_inode;
+      hash = ceph_str_hash_linux(req->dentry->name.data(),
+                                 req->dentry->name.length());
+      is_hash = true;
     }
   }
   
-  // pick mds
-  if (!diri || g_conf.client_use_random_mds) {
-    // no root info, pick a random MDS
-    mds = mdsmap->get_random_up_mds();
-    dout(10) << "random mds" << mds << dendl;
-    if (mds < 0) mds = 0;
-  } else {
-    if (req->auth_is_best() || req->send_to_auth) {
-      // pick the actual auth (as best we can)
-      if (item) {
-	mds = item->authority();
-      } else {
-	mds = diri->authority(req->get_filepath()[missing_dn]);
-      }
-    } else {
-      // balance our traffic!
-      mds = diri->pick_replica(mdsmap); // for the _inode_
-      dout(20) << "for " << req->get_filepath() << " diri " << diri->ino << " rep " 
-	      << diri->dir_contacts
-	      << " mds" << mds << dendl;
+  dout(20) << "choose_target_mds dir_inode" << dir_inode << " is_hash=" << is_hash
+           << " hash=" << hash << dendl;
+
+  if (!dir_inode) goto random_mds;
+
+  if (is_hash && S_ISDIR(dir_inode->mode) && !dir_inode->dirfragtree.empty()) {
+    if (dir_inode->dirfragtree.contains(hash)) {
+      mds = dir_inode->fragmap[dir_inode->dirfragtree[hash].value()];
+      dout(10) << "choose_target_mds from dirfragtree hash" << dendl;
+      goto out;
     }
   }
 
+  if (req->auth_is_best())
+    cap = dir_inode->auth_cap;
+  if (!cap && !dir_inode->caps.empty())
+    cap = dir_inode->caps.begin()->second;
+  if (!cap)
+    goto random_mds;
+  mds = cap->session->mds_num;
+  dout(10) << "choose_target_mds from caps" << dendl;
+
+  goto out;
+
+random_mds:
   if (mds < 0) {
     mds = mdsmap->get_random_up_mds();
     if (mds < 0) mds = 0; //why is this necessary?
     dout(10) << "did not get mds through better means, so chose random mds " << mds << dendl;
   }
+
+out:
   dout(20) << "mds is " << mds << dendl;
-  
   return mds;
 }
 
