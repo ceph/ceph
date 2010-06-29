@@ -170,17 +170,24 @@ int cls_read(cls_method_context_t hctx, int ofs, int len,
   memcpy(*outdata, odata.c_str(), odata.length());
   *outdatalen = odata.length();
 
-  return r;
+  if (r < 0)
+    return r;
+
+  return *outdatalen;
 }
 
 int cls_cxx_read(cls_method_context_t hctx, int ofs, int len, bufferlist *outbl)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
+  int ret;
   ops[0].op.op = CEPH_OSD_OP_READ;
   ops[0].op.extent.offset = ofs;
   ops[0].op.extent.length = len;
-  return (*pctx)->pg->do_osd_ops(*pctx, ops, *outbl);
+  ret = (*pctx)->pg->do_osd_ops(*pctx, ops, *outbl);
+  if (ret < 0)
+    return ret;
+  return outbl->length();
 }
 
 int cls_cxx_write(cls_method_context_t hctx, int ofs, int len, bufferlist *inbl)
