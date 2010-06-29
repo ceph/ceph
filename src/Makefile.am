@@ -242,7 +242,7 @@ editpaths = sed \
 	-e 's|@datadir[@]|$(pkgdatadir)|g' \
 	-e 's|@prefix[@]|$(prefix)|g'
 
-init-ceph mkcephfs cclass: init-ceph.in mkcephfs.in Makefile cclass.in
+init-ceph mkcephfs cclass: init-ceph.in mkcephfs.in cclass.in Makefile
 	rm -f $@ $@.tmp
 	$(editpaths) '$(srcdir)/$@.in' >$@.tmp
 	chmod +x $@.tmp
@@ -272,7 +272,7 @@ noinst_LIBRARIES +=  #libcephclient_so.a
 
 # extra bits
 EXTRA_DIST = verify-mds-journal.sh vstart.sh stop.sh \
-	     crun ceph_common.sh init-ceph.in mkcephfs.in make_version
+	     crun ceph_common.sh init-ceph.in mkcephfs.in cclass.in make_version
 
 install-data-local:
 	$(install_sh_SCRIPT) -m 0755 cclass $(DESTDIR)$(bindir)/cclass
