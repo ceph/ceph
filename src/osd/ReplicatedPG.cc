@@ -467,8 +467,6 @@ void ReplicatedPG::calc_trim_to()
  */
 void ReplicatedPG::do_op(MOSDOp *op) 
 {
-  osd->logger->inc(l_osd_op);
-
   if ((op->get_rmw_flags() & CEPH_OSD_FLAG_PGOP))
     return do_pg_op(op);
 
@@ -588,9 +586,6 @@ void ReplicatedPG::do_op(MOSDOp *op)
       obc->ondisk_read_unlock();
     }
 
-    if (result >= 0)
-      log_op_stats(soid, ctx);
-
     if (result == -EAGAIN)
       return;
 
@@ -602,6 +597,8 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
     // read or error?
     if (ctx->op_t.empty() || result < 0) {
+      log_op_stats(ctx);
+
       MOSDOpReply *reply = ctx->reply;
       ctx->reply = NULL;
       reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
@@ -638,7 +635,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
 }
 
 
-void ReplicatedPG::log_op_stats(const sobject_t& soid, OpContext *ctx)
+void ReplicatedPG::log_op_stats(OpContext *ctx)
 {
   osd->logger->inc(l_osd_op);
 
@@ -654,12 +651,14 @@ void ReplicatedPG::log_op_stats(const sobject_t& soid, OpContext *ctx)
     osd->stat_rd_ops_in_queue--;
     osd->read_latency_calc.add(diff);
 	
+    /*
     if (is_primary() &&
 	g_conf.osd_balance_reads)
       stat_object_temp_rd[soid].hit(now, osd->decayrate);  // hit temp.
+    */
   } else {
     osd->logger->inc(l_osd_c_wr);
-    osd->logger->inc(l_osd_c_wrb, ctx->indata.length());
+    osd->logger->inc(l_osd_c_wrb, ctx->bytes_written);
   }
 }
 
@@ -1903,6 +1902,8 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   if (result < 0 || ctx->op_t.empty())
     return result;  // error, or read op.
 
+  ctx->bytes_written = ctx->op_t.get_encoded_bytes();
+
   // finish and log the op.
   poi->version = ctx->at_version;
   
@@ -2182,17 +2183,22 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   
   if (op) {
     // disk?
-    if (repop->can_send_disk() && op->wants_ondisk()) {
-      // send commit.
-      MOSDOpReply *reply = repop->ctx->reply;
-      if (reply)
-	repop->ctx->reply = NULL;
-      else
-	reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), 0);
-      reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
-      dout(10) << " sending commit on " << *repop << " " << reply << dendl;
-      osd->messenger->send_message(reply, op->get_connection());
-      repop->sent_disk = true;
+    if (repop->can_send_disk()) {
+
+      log_op_stats(repop->ctx);
+      
+      if (op->wants_ondisk()) {
+	// send commit.
+	MOSDOpReply *reply = repop->ctx->reply;
+	if (reply)
+	  repop->ctx->reply = NULL;
+	else
+	  reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), 0);
+	reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+	dout(10) << " sending commit on " << *repop << " " << reply << dendl;
+	osd->messenger->send_message(reply, op->get_connection());
+	repop->sent_disk = true;
+      }
     }
 
     /*
@@ -2734,8 +2740,6 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   assert(!missing.is_missing(soid));
 
   int ackerosd = acting[0];
-  osd->logger->inc(l_osd_r_wr);
-  osd->logger->inc(l_osd_r_wrb, op->get_data().length());
   
   RepModify *rm = new RepModify;
   rm->pg = this;
@@ -2782,6 +2786,9 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       rm->tls.push_back(&rm->ctx->op_t);
       rm->tls.push_back(&rm->ctx->local_t);
     }
+
+    rm->bytes_written = rm->opt.get_encoded_bytes();
+
   } else {
     // just trim the log
     if (op->pg_trim_to != eversion_t()) {
@@ -2832,6 +2839,10 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
   dout(10) << "sub_op_modify_commit on op " << *rm->op
            << ", sending commit to osd" << rm->ackerosd
            << dendl;
+
+  osd->logger->inc(l_osd_r_wr);
+  osd->logger->inc(l_osd_r_wrb, rm->bytes_written);
+
   if (osd->osdmap->is_up(rm->ackerosd)) {
     last_complete_ondisk = rm->last_complete;
     MOSDSubOpReply *commit = new MOSDSubOpReply(rm->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ONDISK);

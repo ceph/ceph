@@ -136,6 +136,10 @@ public:
     unsigned opp, blp, oidp, cidp, lengthp, attrnamep, attrsetp;
 
   public:
+    uint64_t get_encoded_bytes() {
+      return 1 + 8 + 8 + 4 + 4 + 4 + 4 + tbl.length();
+    }
+
     uint64_t get_num_bytes() {
       if (old) {
 	uint64_t s = 16384 +

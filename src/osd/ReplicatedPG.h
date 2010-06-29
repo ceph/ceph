@@ -289,6 +289,8 @@ public:
 
     ObjectState *obs;
 
+    uint64_t bytes_written;
+
     utime_t mtime;
     SnapContext snapc;           // writer snap context
     eversion_t at_version;       // pg's current version pointer
@@ -308,6 +310,7 @@ public:
     OpContext(Message *_op, osd_reqid_t _reqid, vector<OSDOp>& _ops, bufferlist& _data,
 	      ObjectState *_obs, ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), indata(_data), obs(_obs),
+      bytes_written(0),
       clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) {}
     ~OpContext() {
       assert(!clone_obc);
@@ -490,7 +493,7 @@ protected:
 		   const sobject_t& head, const sobject_t& coid,
 		   object_info_t *poi);
   void make_writeable(OpContext *ctx);
-  void log_op_stats(const sobject_t &soid, OpContext *ctx);
+  void log_op_stats(OpContext *ctx);
   void add_interval_usage(interval_set<uint64_t>& s, pg_stat_t& st);  
 
   int prepare_transaction(OpContext *ctx);
@@ -515,10 +518,13 @@ protected:
     int ackerosd;
     eversion_t last_complete;
 
+    uint64_t bytes_written;
+
     ObjectStore::Transaction opt, localt;
     list<ObjectStore::Transaction*> tls;
     
-    RepModify() : pg(NULL), op(NULL), ctx(NULL), applied(false), committed(false), ackerosd(-1) {}
+    RepModify() : pg(NULL), op(NULL), ctx(NULL), applied(false), committed(false), ackerosd(-1),
+		  bytes_written(0) {}
   };
 
   struct C_OSD_RepModifyApply : public Context {
