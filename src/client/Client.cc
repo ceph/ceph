@@ -712,6 +712,12 @@ int Client::choose_target_mds(MetaRequest *req)
 {
   int mds = 0;
     
+  if (req->resend_mds >= 0) {
+    mds = req->resend_mds;
+    req->resend_mds = -1;
+    dout(10) << "target resend_mds specified as mds" << mds << dendl;
+    return mds;
+  }
   // find deepest known prefix
   Inode *diri = root;   // the deepest known containing dir
   Inode *item = 0;      // the actual item... if we know it
@@ -767,6 +773,12 @@ int Client::choose_target_mds(MetaRequest *req)
 	      << diri->dir_contacts
 	      << " mds" << mds << dendl;
     }
+  }
+
+  if (mds < 0) {
+    mds = mdsmap->get_random_up_mds();
+    if (mds < 0) mds = 0; //why is this necessary?
+    dout(10) << "did not get mds through better means, so chose random mds " << mds << dendl;
   }
   dout(20) << "mds is " << mds << dendl;
   
@@ -840,20 +852,7 @@ int Client::make_request(MetaRequest *request,
     // choose mds
     int mds;
     // force use of a particular mds?
-    if (request->resend_mds >= 0) {
-      mds = request->resend_mds;
-      request->resend_mds = -1;
-      dout(10) << "target resend_mds specified as mds" << mds << dendl;
-    } else {
-      mds = choose_target_mds(request);
-      if (mds >= 0) {
-	dout(10) << "chose target mds" << mds << " based on hierarchy" << dendl;
-      } else {
-	mds = mdsmap->get_random_up_mds();
-	if (mds < 0) mds = 0;  // hrm.
-	dout(10) << "chose random target mds" << mds << " for lack of anything better" << dendl;
-      }
-    }
+    mds = choose_target_mds(request);
     
     // open a session?
     if (mds_sessions.count(mds) == 0) {
