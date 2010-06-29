@@ -7,7 +7,7 @@ libdir=""
 
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
     BINDIR=.
-    LIBDIR=.
+    [ -e .libs ] && LIBDIR=.libs || LIBDIR=.
     ETCDIR=.
 else
     BINDIR=@bindir@
@@ -84,7 +84,7 @@ load() {
 
 load_all() {
 	all=`find $LIBDIR -name 'libcls_*.so'`;
-	if [ -z "$all" ]; then
+	if [ -n "$all" ]; then
 		for fn in $all; do
 			echo Loading class: $fn: `$BINDIR/cclsinfo $fn`
 			load $fn
