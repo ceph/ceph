@@ -372,7 +372,6 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 {
   dout(0) << "do_pg_op " << *op << dendl;
 
-  //bufferlist& indata = op->get_data();
   bufferlist outdata;
   int result = 0;
 
@@ -509,7 +508,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   dout(10) << "do_op mode now " << mode << dendl;
 
   const sobject_t& soid = obc->obs.oi.soid;
-  OpContext *ctx = new OpContext(op, op->get_reqid(), op->ops, op->get_data(),
+  OpContext *ctx = new OpContext(op, op->get_reqid(), op->ops,
 				 &obc->obs, this);
   bool noop = false;
 
@@ -759,10 +758,9 @@ bool ReplicatedPG::snap_trimmer()
       register_object_context(obc);
 
       vector<OSDOp> ops;
-      bufferlist data;
       tid_t rep_tid = osd->get_tid();
       osd_reqid_t reqid(osd->messenger->get_myname(), 0, rep_tid);
-      OpContext *ctx = new OpContext(NULL, reqid, ops, data, &obc->obs, this);
+      OpContext *ctx = new OpContext(NULL, reqid, ops, &obc->obs, this);
       ctx->mtime = g_clock.now();
 
       ctx->at_version.epoch = osd->osdmap->get_epoch();
@@ -2763,6 +2761,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
 
       rm->tls.push_back(&rm->opt);
       rm->tls.push_back(&rm->localt);
+
     } else {
       // do op
       ObjectState obs(op->poid);
@@ -2770,7 +2769,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       obs.oi.size = op->old_size;
       obs.exists = op->old_exists;
       
-      rm->ctx = new OpContext(op, op->reqid, op->ops, op->get_data(), &obs, this);
+      rm->ctx = new OpContext(op, op->reqid, op->ops, &obs, this);
       
       rm->ctx->mtime = op->mtime;
       rm->ctx->at_version = op->version;

@@ -284,7 +284,6 @@ public:
     Message *op;
     osd_reqid_t reqid;
     vector<OSDOp>& ops;
-    bufferlist& indata;
     bufferlist outdata;
 
     ObjectState *obs;
@@ -307,9 +306,9 @@ public:
 
     ReplicatedPG *pg;
 
-    OpContext(Message *_op, osd_reqid_t _reqid, vector<OSDOp>& _ops, bufferlist& _data,
+    OpContext(Message *_op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
 	      ObjectState *_obs, ReplicatedPG *_pg) :
-      op(_op), reqid(_reqid), ops(_ops), indata(_data), obs(_obs),
+      op(_op), reqid(_reqid), ops(_ops), obs(_obs),
       bytes_written(0),
       clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) {}
     ~OpContext() {
