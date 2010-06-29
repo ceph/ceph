@@ -1027,6 +1027,7 @@ void Client::handle_client_session(MClientSession *m)
 
   switch (m->get_op()) {
   case CEPH_SESSION_OPEN:
+    mds_sessions[from].mds_num = from;
     mds_sessions[from].seq = 0;
     mds_sessions[from].inst = m->get_source_inst();
     renew_caps(from);

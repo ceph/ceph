@@ -202,6 +202,7 @@ struct MetaRequest {
 
 
 struct MDSSession {
+  int mds_num;
   version_t seq;
   uint64_t cap_gen;
   utime_t cap_ttl, last_cap_renew_request;
@@ -218,7 +219,7 @@ struct MDSSession {
 
   MClientCapRelease *release;
   
-  MDSSession() : seq(0), cap_gen(0), cap_renew_seq(0), num_caps(0), 
+  MDSSession() : mds_num(-1), seq(0), cap_gen(0), cap_renew_seq(0), num_caps(0),
 		 closing(false), was_stale(false), release(NULL) {}
 };
 
