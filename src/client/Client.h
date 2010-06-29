@@ -617,15 +617,15 @@ class Inode {
  
   int authority(const string& dname) {
     if (!dirfragtree.empty()) {
-      __gnu_cxx::hash<string> H;
-      frag_t fg = dirfragtree[H(dname)];
+      __u32 H = ceph_str_hash_linux(dname.data(), dname.length());
+      frag_t fg = dirfragtree[H];
       while (fg != frag_t()) {
-	if (fragmap.count(fg) &&
-	    fragmap[fg] >= 0) {
-	  //cout << "picked frag ino " << inode.ino << " dname " << dname << " fg " << fg << " mds" << fragmap[fg] << std::endl;
-	  return fragmap[fg];
-	}
-	fg = frag_t(fg.value(), fg.bits()-1); // try more general...
+        if (fragmap.count(fg) &&
+            fragmap[fg] >= 0) {
+          //cout << "picked frag ino " << ino << " dname " << dname << " fg " << fg << " mds" << fragmap[fg] << std::endl;
+          return fragmap[fg];
+        }
+        fg = frag_t(fg.value(), fg.bits()-1); // try more general...
       }
     }
     return authority();
