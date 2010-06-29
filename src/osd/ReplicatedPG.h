@@ -18,6 +18,7 @@
 #include "PG.h"
 
 #include "messages/MOSDOp.h"
+#include "messages/MOSDOpReply.h"
 class MOSDSubOp;
 class MOSDSubOpReply;
 
@@ -300,14 +301,18 @@ public:
 
     int data_off;        // FIXME: we may want to kill this msgr hint off at some point!
 
+    MOSDOpReply *reply;
+
     ReplicatedPG *pg;
 
     OpContext(Message *_op, osd_reqid_t _reqid, vector<OSDOp>& _ops, bufferlist& _data,
 	      ObjectState *_obs, ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), indata(_data), obs(_obs),
-      clone_obc(0), snapset_obc(0), data_off(0), pg(_pg) {}
+      clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) {}
     ~OpContext() {
       assert(!clone_obc);
+      if (reply)
+	reply->put();
     }
   };
 

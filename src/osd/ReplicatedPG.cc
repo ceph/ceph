@@ -599,19 +599,18 @@ void ReplicatedPG::do_op(MOSDOp *op)
     if (result == -EAGAIN)
       return;
 
+    // prepare the reply
+    ctx->reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), 0); 
+    ctx->reply->set_data(ctx->outdata);
+    ctx->reply->get_header().data_off = ctx->data_off;
+    ctx->reply->set_result(result);
+
     // read or error?
     if (ctx->op_t.empty() || result < 0) {
-      MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(),
-					   CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK); 
-      reply->set_data(ctx->outdata);
-      reply->get_header().data_off = ctx->data_off;
-      reply->set_result(result);
-      //if the message came from an OSD, it needs to go back to originator,
-      //but if the connection ISN't an OSD that connection is the originator
-      if (op->get_connection()->get_peer_type() != CEPH_ENTITY_TYPE_OSD)
-	osd->messenger->send_message(reply, op->get_connection());
-      else
-	osd->messenger->send_message(reply, op->get_orig_source_inst());
+      MOSDOpReply *reply = ctx->reply;
+      ctx->reply = NULL;
+      reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+      osd->messenger->send_message(reply, op->get_connection());
       op->put();
       delete ctx;
       put_object_context(obc);
@@ -2190,14 +2189,14 @@ void ReplicatedPG::eval_repop(RepGather *repop)
     // disk?
     if (repop->can_send_disk() && op->wants_ondisk()) {
       // send commit.
-      MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ONDISK);
-      dout(10) << " sending commit on " << *repop << " " << reply << dendl;
-      //if the message came from an OSD, it needs to go back to originator,
-      //but if the connection ISN't an OSD that connection is the originator
-      if (op->get_connection()->get_peer_type() != CEPH_ENTITY_TYPE_OSD)
-	osd->messenger->send_message(reply, op->get_connection());
+      MOSDOpReply *reply = repop->ctx->reply;
+      if (reply)
+	repop->ctx->reply = NULL;
       else
-	osd->messenger->send_message(reply, op->get_orig_source_inst());
+	reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), 0);
+      reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+      dout(10) << " sending commit on " << *repop << " " << reply << dendl;
+      osd->messenger->send_message(reply, op->get_connection());
       repop->sent_disk = true;
     }
 
@@ -2217,14 +2216,14 @@ void ReplicatedPG::eval_repop(RepGather *repop)
     else if (repop->can_send_ack()) {
       if (op->wants_ack()) {
 	// send ack
-	MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
-	dout(10) << " sending ack on " << *repop << " " << reply << dendl;
-	//if the message came from an OSD, it needs to go back to originator,
-	//but if the connection ISN't an OSD that connection is the originator
-	if (op->get_connection()->get_peer_type() != CEPH_ENTITY_TYPE_OSD)
-	  osd->messenger->send_message(reply, op->get_connection());
+	MOSDOpReply *reply = repop->ctx->reply;
+	if (reply)
+	  repop->ctx->reply = NULL;
 	else
-	  osd->messenger->send_message(reply, op->get_orig_source_inst());
+	  reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), 0);
+	reply->add_flags(CEPH_OSD_FLAG_ACK);
+	dout(10) << " sending ack on " << *repop << " " << reply << dendl;
+	osd->messenger->send_message(reply, op->get_connection());
 	repop->sent_ack = true;
       }
 

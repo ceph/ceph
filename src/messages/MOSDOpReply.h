@@ -51,6 +51,8 @@ class MOSDOpReply : public Message {
   void set_result(int r) { head.result = r; }
   void set_version(eversion_t v) { head.reassert_version = v; }
 
+  void add_flags(int f) { head.flags = (int)head.flags | f; }
+
   // osdmap
   epoch_t get_map_epoch() { return head.osdmap_epoch; }
 
