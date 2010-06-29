@@ -558,7 +558,12 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
 {
   // auth
   dout(20) << "got dirfrag map for " << in->ino << " frag " << dst->frag << " to mds " << dst->auth << dendl;
-  in->fragmap[dst->frag] = dst->auth;
+  if (dst->auth >= 0) {
+    in->fragmap[dst->frag] = dst->auth;
+  } else {
+    in->fragmap.erase(dst->frag);
+  }
+  assert(in->dirfragtree.is_leaf(dst->frag));
 
   // replicated
   in->dir_replicated = !dst->dist.empty();  // FIXME that's just one frag!
