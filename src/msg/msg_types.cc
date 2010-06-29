@@ -45,6 +45,7 @@ bool entity_addr_t::parse(const char *s, const char **end)
     memcpy(&addr6.sin6_addr, &a6, sizeof(a6));
   } else {
     //cout << "couldn't parse '" << buf << "'" << std::endl;
+    return false;
   }
 
   if (braces) {
