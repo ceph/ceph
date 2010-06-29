@@ -752,11 +752,6 @@ int Client::choose_target_mds(MetaRequest *req)
     mds = mdsmap->get_random_up_mds();
     dout(10) << "random mds" << mds << dendl;
     if (mds < 0) mds = 0;
-
-    if (0) {
-      mds = 0;
-      dout(0) << "hack: sending all requests to mds" << mds << dendl;
-    }
   } else {
     if (req->auth_is_best() || req->send_to_auth) {
       // pick the actual auth (as best we can)
