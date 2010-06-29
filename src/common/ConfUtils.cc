@@ -597,6 +597,7 @@ bool ConfFile::_parse(char *filename, ConfSection **psection)
 	ConfSection *section = *psection;
 	int fd;
 	int max_line = MAX_LINE;
+	int eof = 0;
 
 	line = (char *)malloc(max_line);
 
@@ -609,11 +610,17 @@ bool ConfFile::_parse(char *filename, ConfSection **psection)
 	buf = (char *)malloc(BUF_SIZE);
 	do {
 		len = ::read(fd, buf, BUF_SIZE);
+		if (len < BUF_SIZE) {
+			eof = 1;
+			buf[len] = '\0';
+			len++;
+		}
 
 		for (i=0; i<len; i++) {
 			switch (buf[i]) {
 			case '\r' :
 				continue;
+			case '\0' :
 			case '\n' :
 				if (l > 0 && line[l-1] == '\\') {
 					l--;
@@ -650,7 +657,7 @@ bool ConfFile::_parse(char *filename, ConfSection **psection)
 				}
 			}
 		}
-	} while (len);
+	} while (!eof);
 
 	free(buf);
 
