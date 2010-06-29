@@ -132,8 +132,10 @@ int buffer::list::write_fd(int fd)
     for (std::list<ptr>::const_iterator it = _buffers.begin(); 
 	 it != _buffers.end(); 
 	 it++) {
-      const char *c = it->c_str();
       int left = it->length();
+      if (!left)
+        continue;
+      const char *c = it->c_str();
       while (left > 0) {
 	int r = ::write(fd, c, left);
 	if (r < 0)
