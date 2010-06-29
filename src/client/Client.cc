@@ -419,7 +419,6 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
     inode_map[st->vino] = in;
     if (in->ino == 1) {
       root = in;
-      root->dir_auth = 0;
       cwd = root;
       cwd->get();
     }
@@ -558,13 +557,8 @@ void Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dleas
 void Client::update_dir_dist(Inode *in, DirStat *dst)
 {
   // auth
-  in->dir_auth = -1;
-  if (dst->frag == frag_t()) {
-    in->dir_auth = dst->auth;
-  } else {
-    dout(20) << "got dirfrag map for " << in->ino << " frag " << dst->frag << " to mds " << dst->auth << dendl;
-    in->fragmap[dst->frag] = dst->auth;
-  }
+  dout(20) << "got dirfrag map for " << in->ino << " frag " << dst->frag << " to mds " << dst->auth << dendl;
+  in->fragmap[dst->frag] = dst->auth;
 
   // replicated
   in->dir_replicated = !dst->dist.empty();  // FIXME that's just one frag!
@@ -736,7 +730,7 @@ int Client::choose_target_mds(MetaRequest *req)
 	break;
       }
       
-      dout(7) << " have path seg " << i << " on " << diri->dir_auth << " ino " << diri->ino << " " << req->get_filepath()[i] << dendl;
+      dout(7) << " have path seg " << i << " on " << diri->authority() << " ino " << diri->ino << " " << req->get_filepath()[i] << dendl;
       
       if (i == depth-1) {  // last one!
 	item = dir->dentries[ req->get_filepath()[i] ]->inode;

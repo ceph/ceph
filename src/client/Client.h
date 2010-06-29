@@ -380,7 +380,6 @@ class Inode {
   unsigned flags;
 
   // about the dir (if this is one!)
-  int       dir_auth;
   set<int>  dir_contacts;
   bool      dir_hashed, dir_replicated;
 
@@ -485,7 +484,7 @@ class Inode {
     rdev(0), mode(0), uid(0), gid(0), nlink(0), size(0), truncate_seq(0), truncate_size(0),
     time_warp_seq(0), max_size(0), version(0), xattr_version(0),
     flags(0),
-    dir_auth(-1), dir_hashed(false), dir_replicated(false), auth_cap(NULL),
+    dir_hashed(false), dir_replicated(false), auth_cap(NULL),
     dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), shared_gen(0), cache_gen(0),
     snap_caps(0), snap_cap_refs(0),
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
@@ -633,10 +632,7 @@ class Inode {
   }
 
   int authority() {
-    if (dir_auth >= 0)
-      return dir_auth;
-
-    assert(dn);
+    if (!dn) return -1;
     return dn->dir->parent_inode->authority(dn->name);
   }
 
