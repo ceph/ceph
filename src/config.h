@@ -454,6 +454,7 @@ ExportControl *conf_get_export_control();
 
 #define CONF_SAFE_SET_ARG_VAL(dest, type) \
 	do { \
+          __isarg = i+1 < args.size(); \
           if (type == OPT_BOOL) { \
 		if (val_pos) { \
 			CONF_SET_ARG_VAL(dest, type); \
