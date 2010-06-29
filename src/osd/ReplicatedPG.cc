@@ -442,12 +442,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 				       CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK); 
   reply->set_data(outdata);
   reply->set_result(result);
-  //if the message came from an OSD, it needs to go back to originator,
-  //but if the connection ISN't an OSD that connection is the originator
-  if (op->get_connection()->get_peer_type() != CEPH_ENTITY_TYPE_OSD)
-    osd->messenger->send_message(reply, op->get_connection());
-  else
-    osd->messenger->send_message(reply, op->get_orig_source_inst());
+  osd->messenger->send_message(reply, op->get_connection());
   op->put();
 }
 

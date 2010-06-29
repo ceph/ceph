@@ -4134,10 +4134,7 @@ void OSD::defer_recovery(PG *pg)
 void OSD::reply_op_error(MOSDOp *op, int err)
 {
   MOSDOpReply *reply = new MOSDOpReply(op, err, osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
-  if (op->get_connection()->get_peer_type() != CEPH_ENTITY_TYPE_OSD)
-    messenger->send_message(reply, op->get_connection());
-  else
-    messenger->send_message(reply, op->get_orig_source_inst());
+  messenger->send_message(reply, op->get_connection());
   op->put();
 }
 
