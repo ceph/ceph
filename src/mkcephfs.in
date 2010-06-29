@@ -110,7 +110,7 @@ if echo $what | grep -q mon0 ; then
     # build osdmap
     osdmap="/tmp/osdmap.$$"
     if [ -z "$numosd" ]; then
-	maxosd=`$CCONF -c $conf -l osd | egrep -v '^osd$' | tail -1 | cut -c 4-`
+	maxosd=`$CCONF -c $conf -l osd | egrep -v '^osd$' | cut -c 4- | sort -n | tail -1`
 	numosd=$(($maxosd + 1))
 	echo max osd in $conf is $maxosd, num osd is $numosd
     fi
