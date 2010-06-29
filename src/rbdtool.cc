@@ -25,6 +25,7 @@ using namespace librados;
 #include <stdlib.h>
 #include <time.h>
 #include <sys/types.h>
+#include <errno.h>
 
 #include "include/rbd_types.h"
 
@@ -51,13 +52,17 @@ void usage()
 
 
 static void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
-			    size_t size, int order)
+			    size_t size, int order, uint64_t bid)
 {
+  uint32_t hi = bid >> 32;
+  uint32_t lo = bid & 0xFFFFFFFF;
   memset(&ondisk, 0, sizeof(ondisk));
 
   memcpy(&ondisk.text, RBD_HEADER_TEXT, sizeof(RBD_HEADER_TEXT));
   memcpy(&ondisk.signature, RBD_HEADER_SIGNATURE, sizeof(RBD_HEADER_SIGNATURE));
   memcpy(&ondisk.version, RBD_HEADER_VERSION, sizeof(RBD_HEADER_VERSION));
+
+  snprintf(ondisk.block_name, sizeof(ondisk.block_name), "rb.%08x.%08x", hi, lo);
 
   ondisk.image_size = size;
   if (order)
@@ -102,6 +107,63 @@ void trim_image(const char *imgname, rbd_obj_header_ondisk *header, uint64_t new
     }
   }
 }
+
+static int init_rbd_info(struct rbd_info *info)
+{
+  memset(info, 0, sizeof(*info));
+  return 0;
+}
+
+int read_rbd_info(pool_t pool, string& info_oid, struct rbd_info *info)
+{
+  int r;
+  bufferlist bl;
+
+  r = rados.read(pool, info_oid, 0, bl, sizeof(*info));
+  if (r < 0)
+    return r;
+  if (r == 0) {
+    return init_rbd_info(info);
+  }
+
+  if (r < (int)sizeof(*info))
+    return -EIO;
+
+  memcpy(info, bl.c_str(), r);
+  return 0;
+}
+
+static int touch_rbd_info(pool_t pool, string& info_oid)
+{
+  bufferlist bl;
+  int r = rados.write(pool, info_oid, 0, bl, 0);
+  if (r < 0)
+    return r;
+  return 0;
+}
+
+static int rbd_assign_bid(pool_t pool, string& info_oid, uint64_t *id)
+{
+  bufferlist bl, out;
+
+  *id = 0;
+
+  int r = touch_rbd_info(pool, info_oid);
+  if (r < 0)
+    return r;
+
+  r = rados.exec(pool, info_oid, "rbd", "assign_bid", bl, out);
+  if (r < 0)
+    return r;
+
+  cerr << "r=" << r << " out.length()=" << out.length() << std::endl;
+
+  bufferlist::iterator iter = out.begin();
+  ::decode(*id, iter);
+
+  return 0;
+}
+
 
 static void err_exit(pool_t pool)
 {
@@ -181,6 +243,7 @@ int main(int argc, const char **argv)
     md_oid += RBD_SUFFIX;
   }
   string dir_oid = RBD_DIRECTORY;
+  string dir_info_oid= RBD_INFO;
 
   int r = rados.open_pool(poolname, &pool);
   if (r < 0) {
@@ -221,8 +284,15 @@ int main(int argc, const char **argv)
       err_exit(pool);
     }
 
+    uint64_t bid;
+    r = rbd_assign_bid(pool, dir_info_oid, &bid);
+    if (r < 0) {
+      cerr << "failed assigning block id" << std::endl;
+      err_exit(pool);
+    }
+
     struct rbd_obj_header_ondisk header;
-    init_rbd_header(header, size, order);
+    init_rbd_header(header, size, order, bid);
     
     bufferlist bl;
     bl.append((const char *)&header, sizeof(header));
