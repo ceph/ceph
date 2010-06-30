@@ -2180,12 +2180,16 @@ void ReplicatedPG::eval_repop(RepGather *repop)
     apply_repop(repop);
   
   if (op) {
-    // disk?
-    if (repop->can_send_disk()) {
+
+    // an 'ondisk' reply implies 'ack'. so, prefer to send just one
+    // ondisk instead of ack followed by ondisk.
+
+    // ondisk?
+    if (repop->waitfor_disk.empty()) {
 
       log_op_stats(repop->ctx);
-      
-      if (op->wants_ondisk()) {
+
+      if (op->wants_ondisk() && !repop->sent_disk) {
 	// send commit.
 	MOSDOpReply *reply = repop->ctx->reply;
 	if (reply)
@@ -2199,21 +2203,9 @@ void ReplicatedPG::eval_repop(RepGather *repop)
       }
     }
 
-    /*
-    // nvram?
-    else if (repop->can_send_nvram()) {
-    if (op->wants_onnvram()) {
-    // send commit.
-    MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ONNVRAM);
-    dout(10) << " sending onnvram on " << *repop << " " << reply << dendl;
-    osd->messenger->send_message(reply, op->get_orig_source_inst());
-    repop->sent_nvram = true;
-    }
-    }*/
-
-    // ack?
-    else if (repop->can_send_ack()) {
-      if (op->wants_ack()) {
+    // applied?
+    if (repop->waitfor_ack.empty()) {
+      if (op->wants_ack() && !repop->sent_ack && !repop->sent_disk) {
 	// send ack
 	MOSDOpReply *reply = repop->ctx->reply;
 	if (reply)
@@ -2225,7 +2217,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	osd->messenger->send_message(reply, op->get_connection());
 	repop->sent_ack = true;
       }
-
+      
       utime_t now = g_clock.now();
       now -= repop->start;
       osd->logger->finc(l_osd_rlsum, now);
@@ -2234,7 +2226,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   }
 
   // done.
-  if (repop->can_delete()) {
+  if (repop->waitfor_ack.empty() && repop->waitfor_disk.empty()) {
     calc_min_last_complete_ondisk();
 
     dout(10) << " removing " << *repop << dendl;

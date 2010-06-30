@@ -362,27 +362,6 @@ public:
       sent_disk(false),
       pg_local_last_complete(lc) { }
 
-    bool can_send_ack() { 
-      return
-	!sent_ack && /*!sent_nvram && */!sent_disk &&
-	waitfor_ack.empty(); 
-    }
-    /*
-    bool can_send_nvram() { 
-      return
-	!sent_nvram && !sent_disk &&
-	waitfor_ack.empty() && waitfor_disk.empty(); 
-    }
-    */
-    bool can_send_disk() { 
-      return
-	!sent_disk &&
-	waitfor_disk.empty(); 
-    }
-    bool can_delete() { 
-      return waitfor_ack.empty() && /*waitfor_nvram.empty() &&*/ waitfor_disk.empty(); 
-    }
-
     void get() {
       nref++;
     }
