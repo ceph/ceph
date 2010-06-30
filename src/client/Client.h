@@ -434,23 +434,28 @@ class Inode {
       dn->dir->parent_inode->make_long_path(p);
       p.push_dentry(dn->name);
     } else if (snapdir_parent) {
-      snapdir_parent->make_path(p);
+      snapdir_parent->make_nosnap_relative_path(p);
       string empty;
       p.push_dentry(empty);
     } else
       p = filepath(ino);
   }
 
-  void make_path(filepath& p) {
+  /*
+   * make a filepath suitable for an mds request:
+   *  - if we are non-snapped/live, the ino is sufficient, e.g. #1234
+   *  - if we are snapped, make filepath relative to first non-snapped parent.
+   */
+  void make_nosnap_relative_path(filepath& p) {
     if (snapid == CEPH_NOSNAP) {
       p = filepath(ino);
     } else if (snapdir_parent) {
-      snapdir_parent->make_path(p);
+      snapdir_parent->make_nosnap_relative_path(p);
       string empty;
       p.push_dentry(empty);
     } else if (dn) {
       assert(dn->dir && dn->dir->parent_inode);
-      dn->dir->parent_inode->make_path(p);
+      dn->dir->parent_inode->make_nosnap_relative_path(p);
       p.push_dentry(dn->name);
     } else {
       p = filepath(ino);
@@ -860,6 +865,7 @@ public:
   int choose_target_mds(MetaRequest *req);
   void connect_mds_targets(int mds);
   void send_request(MetaRequest *request, int mds);
+  MClientRequest *build_client_request(MetaRequest *request);
   void kick_requests(int mds, bool signal);
   void handle_client_request_forward(MClientRequestForward *reply);
   void handle_client_reply(MClientReply *reply);
@@ -1216,7 +1222,6 @@ private:
   int _fsync(Fh *fh, bool syncdataonly);
   int _sync_fs();
 
-  MClientRequest* make_request_from_Meta(MetaRequest * request);
   int get_or_create(Inode *dir, const char* name,
 		    Dentry **pdn, bool expect_null=false);
 

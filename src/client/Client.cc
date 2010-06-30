@@ -942,36 +942,6 @@ int Client::make_request(MetaRequest *request,
   return r;
 }
 
-inline MClientRequest* Client::make_request_from_Meta(MetaRequest *request)
-{
-  MClientRequest *req = new MClientRequest(request->get_op());
-  req->set_tid(request->tid);
-  memcpy(&req->head, &request->head, sizeof(ceph_mds_request_head));
-  //if the filepath's haven't been set, set them!
-  if (request->path.empty()) {
-    if (request->inode)
-      request->inode->make_path(request->path);
-    else if (request->dentry) {
-      if (request->dentry->inode)
-	request->inode->make_path(request->path);
-      else if (request->dentry->dir) {
-	request->dentry->dir->parent_inode->make_path(request->path);
-	request->path.push_dentry(request->dentry->name);
-      }
-      else dout(1) << "Warning -- unable to construct a filepath!"
-		   << " No path, inode, or appropriately-endowed dentry given!"
-		   << dendl;
-    } else dout(1) << "Warning -- unable to construct a filepath!"
-		   << " No path, inode, or dentry given!"
-		   << dendl;
-  }
-  req->set_filepath(request->get_filepath());
-  req->set_filepath2(request->get_filepath2());
-  req->set_data(request->data);
-  req->set_retry_attempt(request->retry_attempt);
-  return req;
-}
-
 int Client::encode_inode_release(Inode *in, MClientRequest *req,
 			 int mds, int drop,
 			 int unless, int force)
@@ -1114,7 +1084,7 @@ void Client::send_request(MetaRequest *request, int mds)
   // make the request
   dout(10) << "send_request rebuilding request " << request->get_tid()
 	   << " for mds" << mds << dendl;
-  MClientRequest *r = make_request_from_Meta(request);
+  MClientRequest *r = build_client_request(request);
   if (request->dentry)
     r->set_dentry_wanted();
   if (request->got_unsafe)
@@ -1137,6 +1107,39 @@ void Client::send_request(MetaRequest *request, int mds)
   dout(10) << "send_request " << *r << " to mds" << mds << dendl;
   messenger->send_message(r, mdsmap->get_inst(mds));
 }
+
+MClientRequest* Client::build_client_request(MetaRequest *request)
+{
+  MClientRequest *req = new MClientRequest(request->get_op());
+  req->set_tid(request->tid);
+  memcpy(&req->head, &request->head, sizeof(ceph_mds_request_head));
+
+  // if the filepath's haven't been set, set them!
+  if (request->path.empty()) {
+    if (request->inode)
+      request->inode->make_nosnap_relative_path(request->path);
+    else if (request->dentry) {
+      if (request->dentry->inode)
+	request->inode->make_nosnap_relative_path(request->path);
+      else if (request->dentry->dir) {
+	request->dentry->dir->parent_inode->make_nosnap_relative_path(request->path);
+	request->path.push_dentry(request->dentry->name);
+      }
+      else dout(1) << "Warning -- unable to construct a filepath!"
+		   << " No path, inode, or appropriately-endowed dentry given!"
+		   << dendl;
+    } else dout(1) << "Warning -- unable to construct a filepath!"
+		   << " No path, inode, or dentry given!"
+		   << dendl;
+  }
+  req->set_filepath(request->get_filepath());
+  req->set_filepath2(request->get_filepath2());
+  req->set_data(request->data);
+  req->set_retry_attempt(request->retry_attempt);
+  return req;
+}
+
+
 
 void Client::handle_client_request_forward(MClientRequestForward *fwd)
 {
@@ -3010,7 +3013,7 @@ int Client::_do_lookup(Inode *dir, const char *name, Inode **target)
   int op = dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_LOOKUPSNAP : CEPH_MDS_OP_LOOKUP;
   MetaRequest *req = new MetaRequest(op);
   filepath path;
-  dir->make_path(path);
+  dir->make_nosnap_relative_path(path);
   path.push_dentry(name);
   req->set_filepath(path);
   req->head.args.getattr.mask = 0;
@@ -3389,7 +3392,7 @@ int Client::_getattr(Inode *in, int mask, int uid, int gid)
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
   filepath path;
-  in->make_path(path);
+  in->make_nosnap_relative_path(path);
   req->set_filepath(path);
   req->head.args.getattr.mask = mask;
   
@@ -3443,7 +3446,7 @@ int Client::_setattr(Inode *in, struct stat_precise *attr, int mask, int uid, in
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETATTR);
 
   filepath path;
-  in->make_path(path);
+  in->make_nosnap_relative_path(path);
   req->set_filepath(path);
 
   if (mask & CEPH_SETATTR_MODE) {
@@ -3805,7 +3808,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
 
   MetaRequest *req = new MetaRequest(op);
   filepath path;
-  diri->make_path(path);
+  diri->make_nosnap_relative_path(path);
   req->set_filepath(path); 
   req->head.args.readdir.frag = fg;
   
@@ -4126,7 +4129,7 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
   } else {
     MetaRequest *req = new MetaRequest(CEPH_MDS_OP_OPEN);
     filepath path;
-    in->make_path(path);
+    in->make_nosnap_relative_path(path);
     req->set_filepath(path); 
     req->head.args.open.flags = flags & ~O_CREAT;
     req->head.args.open.mode = mode;
@@ -5196,7 +5199,7 @@ int Client::_setxattr(Inode *in, const char *name, const void *value, size_t siz
 {
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETXATTR);
   filepath path;
-  in->make_path(path);
+  in->make_nosnap_relative_path(path);
   req->set_filepath(path);
   req->set_string2(name);
   req->head.args.setxattr.flags = flags;
@@ -5233,7 +5236,7 @@ int Client::_removexattr(Inode *in, const char *name, int uid, int gid)
 {
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_RMXATTR);
   filepath path;
-  in->make_path(path);
+  in->make_nosnap_relative_path(path);
   req->set_filepath(path);
   req->set_filepath2(name);
  
@@ -5290,7 +5293,7 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int ui
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_MKNOD);
 
   filepath path;
-  dir->make_path(path);
+  dir->make_nosnap_relative_path(path);
   path.push_dentry(name);
   req->set_filepath(path); 
   req->head.args.mknod.mode = mode;
@@ -5342,7 +5345,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_CREATE);
 
   filepath path;
-  dir->make_path(path);
+  dir->make_nosnap_relative_path(path);
   path.push_dentry(name);
   req->set_filepath(path); 
   req->head.args.open.flags = flags | O_CREAT;
@@ -5389,7 +5392,7 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid)
   MetaRequest *req = new MetaRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_MKSNAP:CEPH_MDS_OP_MKDIR);
 
   filepath path;
-  dir->make_path(path);
+  dir->make_nosnap_relative_path(path);
   path.push_dentry(name);
   req->set_filepath(path);
   req->head.args.mkdir.mode = mode;
@@ -5439,7 +5442,7 @@ int Client::_symlink(Inode *dir, const char *name, const char *target, int uid, 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SYMLINK);
 
   filepath path;
-  dir->make_path(path);
+  dir->make_nosnap_relative_path(path);
   path.push_dentry(name);
   req->set_filepath(path);
   req->set_string2(target); 
@@ -5485,7 +5488,7 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_UNLINK);
 
   filepath path;
-  dir->make_path(path);
+  dir->make_nosnap_relative_path(path);
   path.push_dentry(name);
   req->set_filepath(path);
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
@@ -5527,7 +5530,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
 {
   MetaRequest *req = new MetaRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_RMSNAP:CEPH_MDS_OP_RMDIR);
   filepath path;
-  dir->make_path(path);
+  dir->make_nosnap_relative_path(path);
   path.push_dentry(name);
   req->set_filepath(path);
 
@@ -5573,10 +5576,10 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_RENAME);
 
   filepath from;
-  fromdir->make_path(from);
+  fromdir->make_nosnap_relative_path(from);
   from.push_dentry(fromname);
   filepath to;
-  todir->make_path(to);
+  todir->make_nosnap_relative_path(to);
   to.push_dentry(toname);
   req->set_filepath(to);
   req->set_filepath2(from);
