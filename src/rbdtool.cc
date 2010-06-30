@@ -179,7 +179,7 @@ static int read_header(pool_t pool, string& md_oid, bufferlist& header)
 #define READ_SIZE 4096
   do {
     bufferlist bl;
-    int r = rados.read(pool, md_oid, 0, bl, READ_SIZE);
+    r = rados.read(pool, md_oid, 0, bl, READ_SIZE);
     if (r < 0)
       return r;
     header.claim_append(bl);
