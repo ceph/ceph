@@ -30,6 +30,7 @@
 #define RBD_DEFAULT_OBJ_ORDER	22   /* 4MB */
 
 #define RBD_MAX_OBJ_NAME_SIZE	96
+#define RBD_MAX_BLOCK_NAME_SIZE 24
 #define RBD_MAX_SEG_NAME_SIZE	128
 
 #define RBD_COMP_NONE		0
@@ -50,7 +51,7 @@ struct rbd_obj_snap_ondisk {
 
 struct rbd_obj_header_ondisk {
 	char text[40];
-	char block_name[24];
+	char block_name[RBD_MAX_BLOCK_NAME_SIZE];
 	char signature[4];
 	char version[8];
 	struct {
