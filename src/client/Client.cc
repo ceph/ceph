@@ -3000,6 +3000,7 @@ int Client::_do_lookup(Inode *dir, const char *name, Inode **target)
   dir->make_nosnap_relative_path(path);
   path.push_dentry(name);
   req->set_filepath(path);
+  req->inode = dir;
   req->head.args.getattr.mask = 0;
   dout(10) << "_lookup on " << path << dendl;
 
@@ -3378,6 +3379,7 @@ int Client::_getattr(Inode *in, int mask, int uid, int gid)
   filepath path;
   in->make_nosnap_relative_path(path);
   req->set_filepath(path);
+  req->inode = in;
   req->head.args.getattr.mask = mask;
   
   int res = make_request(req, uid, gid);
@@ -3432,35 +3434,31 @@ int Client::_setattr(Inode *in, struct stat_precise *attr, int mask, int uid, in
   filepath path;
   in->make_nosnap_relative_path(path);
   req->set_filepath(path);
+  req->inode = in;
 
   if (mask & CEPH_SETATTR_MODE) {
     req->head.args.setattr.mode = attr->st_mode;
     req->inode_drop |= CEPH_CAP_AUTH_SHARED;
-    req->inode = in;
   }
   if (mask & CEPH_SETATTR_UID) {
     req->head.args.setattr.uid = attr->st_uid;
     req->inode_drop |= CEPH_CAP_AUTH_SHARED;
-    req->inode = in;
   }
   if (mask & CEPH_SETATTR_GID) {
     req->head.args.setattr.gid = attr->st_gid;
     req->inode_drop |= CEPH_CAP_AUTH_SHARED;
-    req->inode = in;
   }
   if (mask & CEPH_SETATTR_MTIME) {
     req->head.args.setattr.mtime =
       utime_t(attr->st_mtime_sec, attr->st_mtime_micro);
     req->inode_drop |= CEPH_CAP_AUTH_SHARED | CEPH_CAP_FILE_RD |
       CEPH_CAP_FILE_WR;
-    req->inode = in;
   }
   if (mask & CEPH_SETATTR_ATIME) {
     req->head.args.setattr.atime =
       utime_t(attr->st_atime_sec, attr->st_atime_micro);
     req->inode_drop |= CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_RD |
       CEPH_CAP_FILE_WR;
-    req->inode = in;
   }
   if (mask & CEPH_SETATTR_SIZE) {
     if ((unsigned long)attr->st_size < mdsmap->get_max_filesize())
@@ -3471,7 +3469,6 @@ int Client::_setattr(Inode *in, struct stat_precise *attr, int mask, int uid, in
     }
     req->inode_drop |= CEPH_CAP_AUTH_SHARED | CEPH_CAP_FILE_RD |
       CEPH_CAP_FILE_WR;
-    req->inode = in;
   }
   req->head.args.setattr.mask = mask;
 
@@ -3794,6 +3791,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
   filepath path;
   diri->make_nosnap_relative_path(path);
   req->set_filepath(path); 
+  req->inode = diri;
   req->head.args.readdir.frag = fg;
   
   bufferlist dirbl;
@@ -4760,6 +4758,7 @@ void Client::getcwd(string& dir)
       MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPPARENT);
       filepath path(in->ino);
       req->set_filepath(path);
+      req->inode = in;
       int res = make_request(req, -1, -1);
       if (res < 0)
 	break;
@@ -5187,6 +5186,7 @@ int Client::_setxattr(Inode *in, const char *name, const void *value, size_t siz
   in->make_nosnap_relative_path(path);
   req->set_filepath(path);
   req->set_string2(name);
+  req->inode = in;
   req->head.args.setxattr.flags = flags;
 
   bufferlist bl;
@@ -5224,6 +5224,7 @@ int Client::_removexattr(Inode *in, const char *name, int uid, int gid)
   in->make_nosnap_relative_path(path);
   req->set_filepath(path);
   req->set_filepath2(name);
+  req->inode = in;
  
   int res = make_request(req, uid, gid);
 
@@ -5281,6 +5282,7 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int ui
   dir->make_nosnap_relative_path(path);
   path.push_dentry(name);
   req->set_filepath(path); 
+  req->inode = dir;
   req->head.args.mknod.mode = mode;
   req->head.args.mknod.rdev = rdev;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
@@ -5332,7 +5334,8 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   filepath path;
   dir->make_nosnap_relative_path(path);
   path.push_dentry(name);
-  req->set_filepath(path); 
+  req->set_filepath(path);
+  req->inode = dir;
   req->head.args.open.flags = flags | O_CREAT;
   req->head.args.open.mode = mode;
   
@@ -5380,6 +5383,7 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid)
   dir->make_nosnap_relative_path(path);
   path.push_dentry(name);
   req->set_filepath(path);
+  req->inode = dir;
   req->head.args.mkdir.mode = mode;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL; 
@@ -5430,6 +5434,7 @@ int Client::_symlink(Inode *dir, const char *name, const char *target, int uid, 
   dir->make_nosnap_relative_path(path);
   path.push_dentry(name);
   req->set_filepath(path);
+  req->inode = dir;
   req->set_string2(target); 
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
@@ -5476,6 +5481,7 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
   dir->make_nosnap_relative_path(path);
   path.push_dentry(name);
   req->set_filepath(path);
+  req->inode = dir;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
   req->inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
@@ -5567,6 +5573,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   todir->make_nosnap_relative_path(to);
   to.push_dentry(toname);
   req->set_filepath(to);
+  req->inode = fromdir;
   req->set_filepath2(from);
   req->old_dentry_drop = CEPH_CAP_FILE_SHARED;
   req->old_dentry_unless = CEPH_CAP_FILE_EXCL;
@@ -5621,6 +5628,7 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid)
   req->set_filepath(path);
   filepath existing(in->ino);
   req->set_filepath2(existing);
+  req->inode = in;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
