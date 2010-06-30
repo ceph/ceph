@@ -94,6 +94,9 @@ public:
   int snap_rollback_object(const pool_t pool, const object_t oid,
 			   const char *snapname);
   int selfmanaged_snap_remove(const pool_t pool, uint64_t snapid);
+  int selfmanaged_snap_rollback_object(const pool_t pool,
+                                const object_t oid,
+                                SnapContext& snapc, uint64_t snapid);
   int snap_list(pool_t pool, std::vector<snap_t> *snaps);
   int snap_get_name(pool_t pool, snap_t snap, std::string *name);
   int snap_get_stamp(pool_t pool, snap_t snap, time_t *t);

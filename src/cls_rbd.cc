@@ -11,7 +11,7 @@
 
 #include "include/rbd_types.h"
 
-CLS_VER(1,0)
+CLS_VER(1,1)
 CLS_NAME(rbd)
 
 cls_handle_t h_class;
@@ -70,6 +70,7 @@ int snapshots_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
          buf + sizeof(*header) + header->snap_count * sizeof(struct rbd_obj_snap_ondisk),
          header->snap_names_len);
 
+  ::encode(header->snap_seq, *out);
   ::encode(header->snap_count, *out);
 
   for (unsigned i = 0; i < header->snap_count; i++) {

@@ -34,7 +34,7 @@ pool_t pool;
 
 void usage()
 {
-  cout << "usage: rbdtool [-n <auth user>] [-p|--pool <name>] [-n|--object <imagename>] <cmd>\n"
+  cout << "usage: rbdtool [-n <auth user>] [-p|--pool <name>] [-o|--object <imagename>] <cmd>\n"
        << "where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:\n"
        << "\t--list    list rbd images\n"
        << "\t--info    show information about image size, striping, etc.\n"
@@ -47,8 +47,10 @@ void usage()
        << "\t--list-snaps <image name>\n"
        << "\t          dump list of specific image snapshots\n"
        << "\t--add-snap <snap name>\n"
-       << "\t          create a snapshot for the spacified image\n"
-       << "\t--rename <src name> <dst name>\n"
+       << "\t          create a snapshot for the specified image\n"
+       << "\t--rollback-snap <snap name>\n"
+       << "\t          rollback image head to specified snapshot\n"
+       << "\t--rename <dst name>\n"
        << "\t          rename rbd image\n";
 }
 
@@ -70,7 +72,7 @@ static void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
   memcpy(&ondisk.signature, RBD_HEADER_SIGNATURE, sizeof(RBD_HEADER_SIGNATURE));
   memcpy(&ondisk.version, RBD_HEADER_VERSION, sizeof(RBD_HEADER_VERSION));
 
-  snprintf(ondisk.block_name, sizeof(ondisk.block_name), "rb.%08x.%08x", hi, lo);
+  snprintf(ondisk.block_name, sizeof(ondisk.block_name), "rb.%x.%x", hi, lo);
 
   ondisk.image_size = size;
   if (order)
@@ -106,7 +108,7 @@ void trim_image(const char *imgname, rbd_obj_header_ondisk *header, uint64_t new
   cout << "trimming image data from " << numseg << " to " << start << " objects..." << std::endl;
   for (uint64_t i=start; i<numseg; i++) {
     char o[RBD_MAX_SEG_NAME_SIZE];
-    sprintf(o, "%s.%012llx", imgname, (unsigned long long)i);
+    sprintf(o, "%s.%012llx", header->block_name, (unsigned long long)i);
     string oid = o;
     rados.remove(pool, oid);
     if ((i & 127) == 0) {
@@ -164,8 +166,6 @@ static int rbd_assign_bid(pool_t pool, string& info_oid, uint64_t *id)
   if (r < 0)
     return r;
 
-  cerr << "r=" << r << " out.length()=" << out.length() << std::endl;
-
   bufferlist::iterator iter = out.begin();
   ::decode(*id, iter);
 
@@ -215,6 +215,25 @@ static int tmap_rm(pool_t pool, string& dir_oid, string& imgname)
   return rados.tmap_update(pool, dir_oid, cmdbl);
 }
 
+static int rollback_image(pool_t pool, struct rbd_obj_header_ondisk *header,
+                          SnapContext& snapc, uint64_t snapid)
+{
+  uint64_t size = header->image_size;
+  int obj_order = header->options.order;
+  uint64_t numseg = size >> obj_order;
+
+  for (uint64_t i=0; i<numseg; i++) {
+    char o[RBD_MAX_SEG_NAME_SIZE];
+    int r;
+    sprintf(o, "%s.%012llx", header->block_name, (unsigned long long)i);
+    string oid = o;
+    r = rados.selfmanaged_snap_rollback_object(pool, oid, snapc, snapid);
+    if (r < 0 && r != -ENOENT)
+      return r;
+  }
+  return 0;
+}
+
 static void err_exit(pool_t pool)
 {
   rados.close_pool(pool);
@@ -231,7 +250,7 @@ int main(int argc, const char **argv)
   common_init(args, "rbdtool", false, true);
 
   bool opt_create = false, opt_delete = false, opt_list = false, opt_info = false, opt_resize = false,
-       opt_list_snaps = false, opt_add_snap = false, opt_rename = false;
+       opt_list_snaps = false, opt_add_snap = false, opt_rollback_snap = false, opt_rename = false;
   char *poolname = (char *)"rbd";
   uint64_t size = 0;
   int order = 0;
@@ -259,9 +278,12 @@ int main(int argc, const char **argv)
     } else if (CONF_ARG_EQ("add-snap", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&snapname, OPT_STR);
       opt_add_snap = true;
+    } else if (CONF_ARG_EQ("rollback-snap", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&snapname, OPT_STR);
+      opt_rollback_snap = true;
     } else if (CONF_ARG_EQ("pool", 'p')) {
       CONF_SAFE_SET_ARG_VAL(&poolname, OPT_STR);
-    } else if (CONF_ARG_EQ("object", 'n')) {
+    } else if (CONF_ARG_EQ("object", 'o')) {
       CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
     } else if (CONF_ARG_EQ("size", 's')) {
       CONF_SAFE_SET_ARG_VAL(&size, OPT_LONGLONG);
@@ -270,14 +292,13 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&order, OPT_INT);
     } else if (CONF_ARG_EQ("rename", '\0')) {
       opt_rename = true;
-      CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
       CONF_SAFE_SET_ARG_VAL(&dstname, OPT_STR);
     } else 
       usage_exit();
   }
 
   if (!opt_create && !opt_delete && !opt_list && !opt_info && !opt_resize &&
-      !opt_list_snaps && !opt_add_snap && !opt_rename) {
+      !opt_list_snaps && !opt_add_snap && !opt_rollback_snap && !opt_rename) {
     usage_exit();
   }
 
@@ -483,7 +504,9 @@ int main(int argc, const char **argv)
     }
 
     uint32_t num_snaps;
+    uint64_t snap_seq;
     bufferlist::iterator iter = bl2.begin();
+    ::decode(snap_seq, iter);
     ::decode(num_snaps, iter);
     for (uint32_t i=0; i < num_snaps; i++) {
       uint64_t id, image_size;
@@ -512,6 +535,58 @@ int main(int argc, const char **argv)
     r = rados.exec(pool, md_oid, "rbd", "snap_add", bl, bl2);
     if (r < 0) {
       cerr << "list_snaps failed: " << strerror(-r) << std::endl;
+      err_exit(pool);
+    }
+  } else if (opt_rollback_snap) {
+    bufferlist bl, bl2;
+    if (!imgname) {
+      usage();
+      err_exit(pool);
+    }
+
+    r = rados.exec(pool, md_oid, "rbd", "snap_list", bl, bl2);
+    if (r < 0) {
+      cerr << "list_snaps failed: " << strerror(-r) << std::endl;
+      err_exit(pool);
+    }
+
+    uint32_t num_snaps;
+    bufferlist::iterator iter = bl2.begin();
+    SnapContext snapc;
+    ::decode(snapc.seq, iter);
+    ::decode(num_snaps, iter);
+    uint64_t snapid = 0;
+    for (uint32_t i=0; i < num_snaps; i++) {
+      uint64_t id, image_size;
+      string s;
+      ::decode(id, iter);
+      ::decode(image_size, iter);
+      ::decode(s, iter);
+      if (s.compare(snapname) == 0)
+        snapid = id;
+      snapc.snaps.push_back(id);
+    }
+    if (!snapid) {
+      cerr << "snapshot not found: " << snapname << std::endl;
+      err_exit(pool);
+    }
+
+    if (!snapc.is_valid()) {
+      cerr << "image snap context is invalid! can't rollback" << std::endl;
+      err_exit(pool);
+    }
+
+    struct rbd_obj_header_ondisk header;
+    bufferlist header_bl;
+    r = read_header(pool, md_oid, header_bl);
+    if (r < 0) {
+      cerr << "error reading header: " << md_oid << ": " << strerror(-r) << std::endl;
+      err_exit(pool);
+    }
+    memcpy(&header, header_bl.c_str(), sizeof(header));
+    r = rollback_image(pool, &header, snapc, snapid);
+    if (r < 0) {
+      cerr << "error during rollback: " << strerror(-r) << std::endl;
       err_exit(pool);
     }
   }
