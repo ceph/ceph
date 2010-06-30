@@ -498,9 +498,13 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
 
 void FileJournal::write_bl(off64_t& pos, bufferlist& bl)
 {
-  // make sure this is a single, contiguous buffer
-  if (directio && !bl.is_contiguous()) {
+  // make sure list segments are page aligned
+  if (directio && (!bl.is_page_aligned() ||
+		   !bl.is_n_page_sized())) {
     bl.rebuild_page_aligned();
+    if ((bl.length() & ~PAGE_MASK) != 0 ||
+	(pos & ~PAGE_MASK) != 0)
+      dout(0) << "rebuild_page_aligned failed, " << bl << dendl;
     assert((bl.length() & ~PAGE_MASK) == 0);
     assert((pos & ~PAGE_MASK) == 0);
   }
