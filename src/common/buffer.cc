@@ -154,10 +154,12 @@ int buffer::list::write_fd(int fd)
 
   std::list<ptr>::const_iterator p = _buffers.begin(); 
   while (true) {
-    iov[iovlen].iov_base = (void *)p->c_str();
-    iov[iovlen].iov_len = p->length();
-    bytes += p->length();
-    iovlen++;
+    if (p->length() > 0) {
+      iov[iovlen].iov_base = (void *)p->c_str();
+      iov[iovlen].iov_len = p->length();
+      bytes += p->length();
+      iovlen++;
+    }
     p++;
 
     if (iovlen == IOV_MAX-1 ||
