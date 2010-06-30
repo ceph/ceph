@@ -149,7 +149,7 @@ private:
     void writer();
     void unlock_maybe_reap();
 
-    Message *read_message();
+    int read_message(Message **pm);
     int write_message(Message *m);
     int do_sendmsg(int sd, struct msghdr *msg, int len, bool more=false);
     int write_ack(uint64_t s);
