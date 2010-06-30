@@ -153,7 +153,7 @@ int buffer::list::write_fd(int fd)
   ssize_t bytes = 0;
 
   std::list<ptr>::const_iterator p = _buffers.begin(); 
-  while (true) {
+  while (p != _buffers.end()) {
     if (p->length() > 0) {
       iov[iovlen].iov_base = (void *)p->c_str();
       iov[iovlen].iov_len = p->length();
@@ -187,8 +187,6 @@ int buffer::list::write_fd(int fd)
 	goto retry;
       }
     }
-    if (p == _buffers.end())
-      break;
   }
   return 0;
 }
