@@ -1506,7 +1506,8 @@ void SimpleMessenger::Pipe::reader()
       pipe_lock.Lock();
       
       if (!m) {
-	fault(false, true);
+	if (r < 0)
+	  fault(false, true);
 	continue;
       }
 
@@ -1832,10 +1833,6 @@ int SimpleMessenger::Pipe::read_message(Message **pm)
   if (aborted) {
     dout(0) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
 	    << " byte message.. ABORTED" << dendl;
-    // MEH FIXME 
-    *pm = new MGenericMessage(CEPH_MSG_PING);
-    header.type = CEPH_MSG_PING;
-    (*pm)->set_header(header);
     ret = 0;
     goto out_dethrottle;
   }
