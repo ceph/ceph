@@ -238,7 +238,7 @@ if [ "$start_mon" -eq 1 ]; then
 	log per instance = true
 	logger dir = log
 	chdir = ""
-	pid file = out/\$type\$id.pid
+	pid file = out/\$name.pid
 $extra_conf
 EOF
 			[ "$cephx" -eq 1 ] && cat<<EOF >> $conf
@@ -246,7 +246,6 @@ EOF
 EOF
 			cat <<EOF >> $conf
 [mds]
-	pid file = out/\$name.pid
 $CMDSDEBUG
 [osd]
 	filestore journal writeahead = 1
