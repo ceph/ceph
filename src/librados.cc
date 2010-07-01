@@ -1260,7 +1260,8 @@ int Rados::initialize(int argc, const char *argv[])
     argv_to_vec(argc, argv, args);
     env_to_vec(args);
   }
-  common_init(args, "librados", false, true);
+  common_set_defaults(false);
+  common_init(args, "librados", true);
 
   if (g_conf.clock_tare) g_clock.tare();
 
@@ -1654,7 +1655,8 @@ static void __rados_init(int argc, const char *argv[])
     argv_to_vec(argc, argv, args);
     env_to_vec(args);
   }
-  common_init(args, "librados", false, true);
+  common_set_defaults(false);
+  common_init(args, "librados", true);
 
   if (g_conf.clock_tare) g_clock.tare();
 }

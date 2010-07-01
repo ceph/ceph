@@ -69,7 +69,9 @@ int main(int argc, const char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  common_init(args, "fakefuse", false, false);
+
+  common_set_defaults(false);
+  common_init(args, "fakefuse", false);
 
   // start messenger thread
   fakemessenger_startthread();

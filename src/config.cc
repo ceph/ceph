@@ -939,7 +939,7 @@ bool is_bool_param(const char *param)
 	return ((strcasecmp(param, "true")==0) || (strcasecmp(param, "false")==0));
 }
 
-void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon, const char *module_type)
+void parse_startup_config_options(std::vector<const char*>& args, const char *module_type)
 {
   DEFINE_CONF_VARS(NULL);
   std::vector<const char *> nargs;
@@ -949,6 +949,8 @@ void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon,
     g_conf.id = (char *)g_default_id;
   if (!g_conf.type)
     g_conf.type = (char *)"";
+
+  bool isdaemon = g_conf.daemonize;
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("version", 'v')) {

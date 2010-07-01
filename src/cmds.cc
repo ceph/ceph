@@ -51,11 +51,8 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  g_conf.daemonize = true;
-  g_conf.logger = true;
-  g_conf.log_to_stdout = false;
-  
-  common_init(args, "mds", true, true);
+  common_set_defaults(true);
+  common_init(args, "mds", true);
 
   // mds specific args
   for (unsigned i=0; i<args.size(); i++) {

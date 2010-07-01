@@ -2286,8 +2286,6 @@ int SimpleMessenger::start(bool nodaemon)
     }
 
     dout_rename_output_file();
-  } else if (g_daemon) {
-    write_pid_file(getpid());
   }
 
   // go!

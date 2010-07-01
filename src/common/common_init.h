@@ -3,9 +3,9 @@
 
 #include <vector>
 
+void common_set_defaults(bool daemon);
 void common_init(std::vector<const char*>& args,
 		 const char *module_type,
-		 bool daemon,
                  bool init_keys);
 
 #endif

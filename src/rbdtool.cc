@@ -247,7 +247,9 @@ int main(int argc, const char **argv)
   DEFINE_CONF_VARS(usage_exit);
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  common_init(args, "rbdtool", false, true);
+
+  common_set_defaults(false);
+  common_init(args, "rbdtool", true);
 
   bool opt_create = false, opt_delete = false, opt_list = false, opt_info = false, opt_resize = false,
        opt_list_snaps = false, opt_add_snap = false, opt_rollback_snap = false, opt_rename = false;

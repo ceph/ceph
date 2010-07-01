@@ -59,11 +59,8 @@ int main(int argc, const char **argv)
     } 
   }
 
-  g_conf.daemonize = true;
-  g_conf.logger = true;
-  g_conf.log_to_stdout = false;
-
-  common_init(args, "osd", true, should_authenticate);
+  common_set_defaults(true);
+  common_init(args, "osd", should_authenticate);
 
   if (g_conf.clock_tare) g_clock.tare();
 

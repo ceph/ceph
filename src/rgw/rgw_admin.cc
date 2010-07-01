@@ -85,7 +85,9 @@ int main(int argc, char **argv)
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
-  common_init(args, "rgw", true, true);
+
+  common_set_defaults(true);
+  common_init(args, "rgw", true);
 
   const char *user_id = 0;
   const char *secret_key = 0;

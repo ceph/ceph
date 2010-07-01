@@ -34,7 +34,9 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  common_init(args, NULL, false, false);
+
+  common_set_defaults(false);
+  common_init(args, NULL, false);
 
   // args
   if (args.size() < 2) return -1;
