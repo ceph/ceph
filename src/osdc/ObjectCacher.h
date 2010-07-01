@@ -518,7 +518,6 @@ class ObjectCacher {
     flusher_stop(false), flusher_thread(this),
     stat_waiter(0),
     stat_clean(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0) {
-    flusher_thread.create();
   }
   ~ObjectCacher() {
     // we should be empty.
@@ -526,7 +525,12 @@ class ObjectCacher {
     assert(lru_rest.lru_get_size() == 0);
     assert(lru_dirty.lru_get_size() == 0);
     assert(dirty_bh.empty());
-    
+  }
+
+  void start() {
+    flusher_thread.create();
+  }
+  void stop() {
     assert(flusher_thread.is_started());
     lock.Lock();  // hmm.. watch out for deadlock!
     flusher_stop = true;

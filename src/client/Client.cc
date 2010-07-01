@@ -161,6 +161,8 @@ Client::Client(Messenger *m, MonClient *mc) : timer(client_lock), client_lock("C
 
 Client::~Client() 
 {
+  assert(!client_lock.is_locked());
+
   tear_down_cache();
 
   if (objectcacher) { 
@@ -255,6 +257,8 @@ void Client::init()
 {
   Mutex::Locker lock(client_lock);
 
+  objectcacher->start();
+
   // ok!
   messenger->add_dispatcher_head(this);
 
@@ -290,7 +294,12 @@ void Client::init()
 void Client::shutdown() 
 {
   dout(1) << "shutdown" << dendl;
+
+  objectcacher->stop();  // outside of client_lock! this does a join.
+
+  client_lock.Lock();
   objecter->shutdown();
+  client_lock.Unlock();
   monclient->shutdown();
   messenger->shutdown();
 }
