@@ -186,6 +186,8 @@ int buffer::list::write_fd(int fd)
 	}
 	goto retry;
       }
+      iovlen = 0;
+      bytes = 0;
     }
   }
   return 0;
