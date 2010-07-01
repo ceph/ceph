@@ -59,7 +59,8 @@ static inline ostream& operator<<(ostream& out, const OSDCap& pc) {
 struct OSDCaps {
   map<int, OSDCap> pools_map;
   map<int, OSDCap> auid_map;
-  rwx_t default_action;
+  rwx_t default_allow;
+  rwx_t default_deny;
   bool allow_all;
   int peer_type;
   uint64_t auid;
@@ -67,7 +68,7 @@ struct OSDCaps {
   bool get_next_token(string s, size_t& pos, string& token);
   bool is_rwx(string& token, rwx_t& cap_val);
   
-  OSDCaps() : default_action(0), allow_all(false),
+  OSDCaps() : default_allow(0), default_deny(0), allow_all(false),
 	      auid(CEPH_AUTH_UID_DEFAULT) {}
   bool parse(bufferlist::iterator& iter);
   int get_pool_cap(int pool_id, uint64_t uid = CEPH_AUTH_UID_DEFAULT);
@@ -80,7 +81,7 @@ struct OSDCaps {
 };
 
 static inline ostream& operator<<(ostream& out, const OSDCaps& c) {
-  return out << "osdcaps(pools=" << c.pools_map << " default=" << c.default_action << ")";
+  return out << "osdcaps(pools=" << c.pools_map << " default allow=" << c.default_allow << " default_deny=" << c.default_deny << ")";
 }
 
 #endif

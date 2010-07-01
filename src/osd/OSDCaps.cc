@@ -152,9 +152,9 @@ do { \
             }
           } else {
             if (op_allow) {
-              default_action |= cap_val;
+              default_allow |= cap_val;
             } else {
-              default_action &= ~cap_val;
+              default_deny |= cap_val;
             }
           }
           init = true;
@@ -166,7 +166,7 @@ do { \
     return false;
   }
 
-  generic_dout(0) << "default=" << (int)default_action << dendl;
+  generic_dout(0) << "default allow=" << (int)default_allow << " default_deny=" << (int) default_deny << dendl;
   map<int, OSDCap>::iterator it;
   for (it = pools_map.begin(); it != pools_map.end(); ++it) {
     generic_dout(0) << it->first << " -> (" << (int)it->second.allow << "." << (int)it->second.deny << ")" << dendl;
@@ -179,24 +179,22 @@ do { \
  * Get the caps given this OSDCaps object for a given pool id
  * and uid (the pool's owner).
  *
- * Basic strategy: You can never have more caps than the OSD
- * allows you. So, calculate the capabilities the pool owner
- * grants you, and then logical-AND these with your own caps.
+ * Basic strategy: chain of permissions: default allow -> auid
+ * -> pool -> default_deny.
  *
- * To check the granted caps, first see if you have caps on
+ * Starting with default allowed caps. Next check if you have caps on
  * the auid and apply, then apply any caps granted on the pool
  * (this lets users give out caps to their auid but keep one pool
  * private, for instance).
  * If these two steps haven't given you explicit caps
  * on the pool, check if you're the pool owner and grant full.
- * Otherwise, you get nothing.
  */
 int OSDCaps::get_pool_cap(int pool_id, uint64_t uid)
 {
   if (allow_all)
     return OSD_POOL_CAP_ALL;
 
-  int explicit_cap = 0; //explicitly granted caps
+  int explicit_cap = default_allow; //explicitly granted caps
   
   map<int, OSDCap>::iterator iter;
   //if the owner is granted permissions on the pool owner's auid, grant them
@@ -211,7 +209,7 @@ int OSDCaps::get_pool_cap(int pool_id, uint64_t uid)
     explicit_cap |= c.allow;
     explicit_cap &= ~c.deny;
   }
-  
+
   //owner gets full perms by default:
   if (uid != CEPH_AUTH_UID_DEFAULT
       && uid == auid
@@ -219,11 +217,8 @@ int OSDCaps::get_pool_cap(int pool_id, uint64_t uid)
     explicit_cap = OSD_POOL_CAP_ALL;
   }
 
-  //so now we've checked for explicitly granted perms, and we combine
-  //these with the perms the OSD allows this auid to determine what
-  //actions the auid can take on this pool.
-  int cap = explicit_cap & default_action;
-  
-  return cap;
+  explicit_cap &= ~default_deny;
+
+  return explicit_cap;
 }
 
