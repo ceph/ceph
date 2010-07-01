@@ -236,6 +236,7 @@ if [ "$start_mon" -eq 1 ]; then
 [global]
 	log dir = out
 	log per instance = true
+	log sym history = 100
 	logger dir = log
 	chdir = ""
 	pid file = out/\$name.pid

@@ -76,7 +76,7 @@ static int create_symlink(const char *from)
   return r;
 }
 
-static void rotate_file(const char *fn)
+static void rotate_file(const char *fn, int max)
 {
   // rotate out old
   int n = 0;
@@ -94,9 +94,14 @@ static void rotate_file(const char *fn)
       snprintf(a, sizeof(a), "%s.%lld", fn, (long long)n-1);
     else
       snprintf(a, sizeof(a), "%s", fn);
-    snprintf(b, sizeof(b), "%s.%lld", fn, (long long)n);
-    ::rename(a, b);
-    *_dout << "---- " << getpid() << " renamed " << a << " -> " << b << " ----" << std::endl;
+    if (n >= max) {
+      ::unlink(a);
+      *_dout << "---- " << getpid() << " removed " << a << " ----" << std::endl;
+    } else {
+      snprintf(b, sizeof(b), "%s.%lld", fn, (long long)n);
+      ::rename(a, b);
+      *_dout << "---- " << getpid() << " renamed " << a << " -> " << b << " ----" << std::endl;
+    }
     n--;
   }
 }
@@ -111,7 +116,7 @@ static int create_name_symlink()
     snprintf(_dout_name_symlink_path, sizeof(_dout_name_symlink_path),
 	     "%s/%s.%s", _dout_symlink_dir, g_conf.type, g_conf.id);
 
-    rotate_file(_dout_name_symlink_path);
+    rotate_file(_dout_name_symlink_path, g_conf.log_sym_history);
     r = create_symlink(_dout_rank_symlink_path);
   }
   return r;
