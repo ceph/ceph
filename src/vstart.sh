@@ -319,7 +319,7 @@ EOF
 	fi
 
 	# load classes
-	$CEPH_BIN/cclass -a
+	$CEPH_BIN/cclass -c $conf -a
 fi
 
 #osd
