@@ -284,12 +284,12 @@ void __cls_init()
   CLS_LOG("Loaded rbd class!");
 
   cls_register("rbd", &h_class);
-  cls_register_cxx_method(h_class, "snap_list", CLS_METHOD_RD, snapshots_list, &h_snapshots_list);
-  cls_register_cxx_method(h_class, "snap_add", CLS_METHOD_RD | CLS_METHOD_WR, snapshot_add, &h_snapshot_add);
-  cls_register_cxx_method(h_class, "snap_revert", CLS_METHOD_RD | CLS_METHOD_WR, snapshot_revert, &h_snapshot_revert);
+  cls_register_cxx_method(h_class, "snap_list", CLS_METHOD_RD | CLS_METHOD_PUBLIC, snapshots_list, &h_snapshots_list);
+  cls_register_cxx_method(h_class, "snap_add", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, snapshot_add, &h_snapshot_add);
+  cls_register_cxx_method(h_class, "snap_revert", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, snapshot_revert, &h_snapshot_revert);
 
   /* assign a unique block id for rbd blocks */
-  cls_register_cxx_method(h_class, "assign_bid", CLS_METHOD_RD | CLS_METHOD_WR, rbd_assign_bid, &h_assign_bid);
+  cls_register_cxx_method(h_class, "assign_bid", CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PUBLIC, rbd_assign_bid, &h_assign_bid);
 
   return;
 }

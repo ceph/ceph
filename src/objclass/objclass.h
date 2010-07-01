@@ -17,8 +17,9 @@ int __cls_ver_min = min;
 int __cls_name__## name = 0; \
 const char *__cls_name = #name;
 
-#define CLS_METHOD_RD	0x1
-#define CLS_METHOD_WR	0x2
+#define CLS_METHOD_RD		0x1
+#define CLS_METHOD_WR		0x2
+#define CLS_METHOD_PUBLIC	0x4
 
 
 #define CLS_LOG(fmt, ...) \

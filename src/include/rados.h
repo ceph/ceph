@@ -302,6 +302,7 @@ enum {
 	CEPH_OSD_FLAG_PARALLELEXEC = 512, /* execute op in parallel */
 	CEPH_OSD_FLAG_PGOP = 1024,      /* pg op, no object */
 	CEPH_OSD_FLAG_EXEC = 2048,      /* op may exec */
+	CEPH_OSD_FLAG_EXEC_PUBLIC = 4096, /* op may exec (public) */
 };
 
 enum {

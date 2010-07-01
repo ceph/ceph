@@ -4202,8 +4202,10 @@ void OSD::handle_op(MOSDOp *op)
   dout(10) << "request for pool=" << pool << " owner="
 	   << osdmap->get_pg_pool(pool)->v.auid
 	   << " perm=" << perm
-	   << " may_read=" << op->may_read() << " may_write=" << op->may_write()
-	   << " may_exec=" << op->may_exec() << dendl;
+	   << " may_read=" << op->may_read()
+           << " may_write=" << op->may_write()
+	   << " may_exec=" << op->may_exec()
+           << " require_exec_caps=" << op->require_exec_caps() << dendl;
 
   if (op->may_read()) {
     if (!(perm & OSD_POOL_CAP_R)) {
@@ -4221,7 +4223,7 @@ void OSD::handle_op(MOSDOp *op)
     }
   }
 
-  if (op->may_exec()) {
+  if (op->require_exec_caps()) {
     if (!(perm & OSD_POOL_CAP_X)) {
       dout(0) << "no EXEC permission to access pool " << pool << dendl;
       reply_op_error(op, -EPERM);
@@ -4650,7 +4652,7 @@ void OSD::init_op_flags(MOSDOp *op)
   vector<OSDOp>::iterator iter;
 
   // did client explicitly set either bit?
-  op->rmw_flags = op->get_flags() & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE|CEPH_OSD_FLAG_EXEC);
+  op->rmw_flags = op->get_flags() & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE|CEPH_OSD_FLAG_EXEC|CEPH_OSD_FLAG_EXEC_PUBLIC);
 
   // implicitly set bits based on op codes, called methods.
   for (iter = op->ops.begin(); iter != op->ops.end(); ++iter) {
@@ -4658,8 +4660,6 @@ void OSD::init_op_flags(MOSDOp *op)
       op->rmw_flags |= CEPH_OSD_FLAG_WRITE;
     if (iter->op.op & CEPH_OSD_OP_MODE_RD)
       op->rmw_flags |= CEPH_OSD_FLAG_READ;
-    if ((iter->op.op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_EXEC)
-      op->rmw_flags |= CEPH_OSD_FLAG_EXEC;
 
     // set PGOP flag if there are PG ops
     if (ceph_osd_op_type_pg(iter->op.op))
@@ -4669,18 +4669,25 @@ void OSD::init_op_flags(MOSDOp *op)
     case CEPH_OSD_OP_CALL:
       {
 	bufferlist::iterator bp = iter->data.begin();
-	int is_write, is_read;
+	int is_write, is_read, is_public;
 	string cname, mname;
 	bp.copy(iter->op.cls.class_len, cname);
 	bp.copy(iter->op.cls.method_len, mname);
-	is_read = class_handler->get_method_flags(cname, mname) & CLS_METHOD_RD;
-	is_write = class_handler->get_method_flags(cname, mname) & CLS_METHOD_WR;
+        int flags =  class_handler->get_method_flags(cname, mname);
+	is_read = flags & CLS_METHOD_RD;
+	is_write = flags & CLS_METHOD_WR;
+        is_public = flags & CLS_METHOD_PUBLIC;
+
 	dout(0) << "class " << cname << " method " << mname
 		<< " flags=" << (is_read ? "r" : "") << (is_write ? "w" : "") << dendl;
 	if (is_read)
 	  op->rmw_flags |= CEPH_OSD_FLAG_READ;
 	if (is_write)
 	  op->rmw_flags |= CEPH_OSD_FLAG_WRITE;
+        if (is_public)
+	  op->rmw_flags |= CEPH_OSD_FLAG_EXEC_PUBLIC;
+        else
+	  op->rmw_flags |= CEPH_OSD_FLAG_EXEC;
 	break;
       }
       
