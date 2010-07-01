@@ -65,7 +65,7 @@ int FileJournal::_open(bool forwrite, bool create)
   if (r < 0)
     return -errno;
   max_size = st.st_size;
-  block_size = st.st_blksize;
+  block_size = MAX(st.st_blksize, PAGE_SIZE);
 
   if (max_size == 0) {
     // hmm, is this a raw block device?
@@ -222,6 +222,11 @@ int FileJournal::open(uint64_t next_seq)
   if (header.alignment != block_size && directio) {
     derr(0) << "open journal alignment " << header.alignment << " does not match block size " 
 	    << block_size << " (required for direct_io journal mode)" << dendl;
+    err = -EINVAL;
+  }
+  if ((header.alignment % PAGE_SIZE) && directio) {
+    derr(0) << "open journal alignment " << header.alignment << " is not multiple of page size " << PAGE_SIZE
+	    << " (required for direct_io journal mode)" << dendl;
     err = -EINVAL;
   }
   if (err)
