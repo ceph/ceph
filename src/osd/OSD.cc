@@ -774,7 +774,7 @@ PGPool* OSD::_get_pool(int id)
 {
   PGPool *p = _lookup_pool(id);
   if (!p) {
-    p = new PGPool(id);
+    p = new PGPool(id, osdmap->get_pool_name(id));
     pool_map[id] = p;
     p->get();
     
