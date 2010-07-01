@@ -968,9 +968,11 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
     } else if (isdaemon && CONF_ARG_EQ("nodaemon", 'D')) {
       g_conf.daemonize = false;
       g_conf.log_to_stdout = true;
+      /*
     } else if (isdaemon && CONF_ARG_EQ("daemonize", 'd')) {
       g_conf.daemonize = true;
       g_conf.log_to_stdout = false;
+      */
     } else if (isdaemon && CONF_ARG_EQ("foreground", 'f')) {
       g_conf.daemonize = false;
       g_conf.log_to_stdout = false;
