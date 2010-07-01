@@ -54,15 +54,29 @@ class Thread {
     else
       return -EINVAL;
   }
-  int create() {
+  int create(size_t stacksize = 0) {
     _num_threads.inc();
     // mask signals in child's thread
     sigset_t newmask, oldmask;
     sigfillset(&newmask);
     pthread_sigmask(SIG_BLOCK, &newmask, &oldmask);
-    int r = pthread_create(&thread_id, NULL, _entry_func, (void*)this);
+    pthread_attr_t *thread_attr = NULL;
+    if (stacksize) {
+      thread_attr = (pthread_attr_t*) malloc(sizeof(pthread_attr_t));
+      pthread_attr_init(thread_attr);
+      pthread_attr_setstacksize(thread_attr, stacksize);
+    }
+    int r = pthread_create(&thread_id, thread_attr, _entry_func, (void*)this);
+    if (thread_attr) 
+      free(thread_attr);
     pthread_sigmask(SIG_SETMASK, &oldmask, 0);
-    generic_dout(10) << "thread " << thread_id << " start" << dendl;
+    if (r) {
+      char buf[80];
+      generic_derr(0) << "pthread_create failed with message: " << strerror_r(r, buf, sizeof(buf)) << dendl;
+      _num_threads.dec();
+    }
+    else
+      generic_dout(10) << "thread " << thread_id << " start" << dendl;
     return r;
   }
   int join(void **prval = 0) {
