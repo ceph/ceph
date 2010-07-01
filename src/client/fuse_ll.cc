@@ -422,8 +422,25 @@ static void ceph_ll_statfs(fuse_req_t req, fuse_ino_t ino)
     fuse_reply_err(req, -r);
 }
 
+int fd_on_success = 0;
+
+static void do_init(void *foo, fuse_conn_info *bar)
+{
+  if (fd_on_success) {
+    //cout << "fuse init signaling on fd " << fd_on_success << std::endl;
+    int r = 0;
+    ::write(fd_on_success, &r, sizeof(r));
+    //cout << "fuse init done signaling on fd " << fd_on_success << std::endl;
+
+    // close stdout, etc.
+    ::close(0);
+    ::close(1);
+    ::close(2);
+  }
+}
+
 static struct fuse_lowlevel_ops ceph_ll_oper = {
- init: 0,
+ init: do_init,
  destroy: 0,
  lookup: ceph_ll_lookup,
  forget: ceph_ll_forget,
@@ -459,9 +476,11 @@ static struct fuse_lowlevel_ops ceph_ll_oper = {
  bmap: 0
 };
 
-int ceph_fuse_ll_main(Client *c, int argc, const char *argv[])
+int ceph_fuse_ll_main(Client *c, int argc, const char *argv[], int fd)
 {
-  cout << "ceph_fuse_ll_main starting fuse on pid " << getpid() << std::endl;
+  //cout << "ceph_fuse_ll_main starting fuse on pid " << getpid() << std::endl;
+
+  fd_on_success = fd;
 
   client = c;
 
@@ -507,10 +526,13 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[])
       fuse_session_destroy(se);
     }
     fuse_unmount(mountpoint, ch);
+    err = 0;
+  } else {
+    err = -errno;
   }
   fuse_opt_free_args(&args);
   
-  cout << "ceph_fuse_ll_main done, err=" << err << std::endl;
-  return err ? 1 : 0;
+  //cout << "ceph_fuse_ll_main done, err=" << err << std::endl;
+  return err;
 }
 
