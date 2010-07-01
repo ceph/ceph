@@ -47,6 +47,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   common_set_defaults(false);
   g_conf.daemonize = true;
+  g_conf.log_per_instance = true;
   common_init(args, "cfuse", true);
 
   // args for fuse
