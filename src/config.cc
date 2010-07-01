@@ -975,7 +975,7 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
       */
     } else if (isdaemon && CONF_ARG_EQ("foreground", 'f')) {
       g_conf.daemonize = false;
-      g_conf.log_to_stdout = false;
+      //g_conf.log_to_stdout = false;
     } else if (isdaemon && (CONF_ARG_EQ("id", 'i') || CONF_ARG_EQ("name", 'n'))) {
       CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
     } else if (!isdaemon && (CONF_ARG_EQ("id", 'I') || CONF_ARG_EQ("name", 'n'))) {
