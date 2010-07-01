@@ -185,11 +185,13 @@ void handle_notify(MMonObserveNotify *notify)
 	    cout << now << "   class " <<  iter->second << std::endl;
 	}
       } else {
-	ClassInfo info;
 	__u8 v;
 	::decode(v, p);
 	while (!p.end()) {
-          info.decode(p);
+	  ClassLibraryIncremental inc;
+          ::decode(inc, p);
+	  ClassInfo info;
+	  inc.decode_info(info);
 	  cout << now << "   class " << info << std::endl;
 	}
       }
