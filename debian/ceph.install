@@ -34,3 +34,5 @@ usr/share/man/man8/mount.ceph.8
 usr/share/man/man8/cauthtool.8
 usr/share/man/man8/rados.8
 usr/share/man/man8/rbdtool.8
+usr/share/man/man8/cclass.8
+usr/share/man/man8/cclsinfo.8
