@@ -33,12 +33,12 @@ std::ofstream _dout_out;
 static void normalize_relative(const char *from, char *to, int tolen)
 {
   if (from[0] == '/') 
-    strcpy(to, from);
+    strncpy(to, from, tolen);
   else {
     char *c = getcwd(to, tolen);
     assert(c);
-    strncat(to, "/", sizeof(tolen));
-    strncat(to, from, sizeof(tolen));
+    strncat(to, "/", tolen);
+    strncat(to, from, tolen);
   }
 }
 
