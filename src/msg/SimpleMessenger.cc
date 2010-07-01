@@ -318,8 +318,9 @@ void SimpleMessenger::dispatch_entry()
 	  ms_deliver_handle_reset(con);
 	  con->put();
 	} else {
-	  ceph_msg_header& header = m->get_header();
-	  int msize = header.front_len + header.middle_len + header.data_len;
+	  uint64_t msize = m->get_dispatch_throttle_size();
+	  m->set_dispatch_throttle_size(0);  // clear it out, in case we requeue this message.
+
 	  dout(1) << "<== " << m->get_source_inst()
 		  << " " << m->get_seq()
 		  << " ==== " << *m
@@ -330,8 +331,9 @@ void SimpleMessenger::dispatch_entry()
 		  << " " << m 
 		  << dendl;
 	  ms_deliver_dispatch(m);
-	  if (msize > 0)
-	    message_throttler.put(msize);
+
+	  dispatch_throttle_release(msize);
+
 	  dout(20) << "done calling dispatch on " << m << dendl;
 	}
       }
@@ -1512,10 +1514,11 @@ void SimpleMessenger::Pipe::reader()
       }
 
       if (state == STATE_CLOSED ||
-	  state == STATE_CONNECTING)
+	  state == STATE_CONNECTING) {
+	messenger->dispatch_throttle_release(m->get_dispatch_throttle_size());
+	m->put();
 	continue;
-
-      m->set_connection(connection_state->get());
+      }
 
       // check received seq#.  if it is old, drop the message.  
       // note that incoming messages may skip ahead.  this is convenient for the client
@@ -1526,9 +1529,12 @@ void SimpleMessenger::Pipe::reader()
 	dout(-10) << "reader got old message "
 		  << m->get_seq() << " <= " << in_seq << " " << m << " " << *m
 		  << ", discarding" << dendl;
+	messenger->dispatch_throttle_release(m->get_dispatch_throttle_size());
 	m->put();
 	continue;
       }
+
+      m->set_connection(connection_state->get());
 
       // note last received message.
       in_seq = m->get_seq();
@@ -1761,9 +1767,9 @@ int SimpleMessenger::Pipe::read_message(Message **pm)
     // blocks indefinitely, which it shouldn't).  in contrast, the
     // policy throttle carries for the lifetime of the message.
     dout(10) << "reader wants " << message_size << " from dispatch throttler "
-	     << messenger->message_throttler.get_current() << "/"
-	     << messenger->message_throttler.get_max() << dendl;
-    messenger->message_throttler.get(message_size);
+	     << messenger->dispatch_throttler.get_current() << "/"
+	     << messenger->dispatch_throttler.get_max() << dendl;
+    messenger->dispatch_throttler.get(message_size);
   }
 
   // read front
@@ -1841,6 +1847,11 @@ int SimpleMessenger::Pipe::read_message(Message **pm)
 	   << " byte message" << dendl;
   message = decode_message(header, footer, front, middle, data);
   message->set_throttler(policy.throttler);
+
+  // store reservation size in message, so we don't get confused
+  // by messages entering the dispatch queue through other paths.
+  message->set_dispatch_throttle_size(message_size);
+
   *pm = message;
   return 0;
 
@@ -1848,24 +1859,16 @@ int SimpleMessenger::Pipe::read_message(Message **pm)
   // release bytes reserved from the throttlers on failure
   if (message_size) {
     if (policy.throttler) {
-      dout(10) << "reader releasing " << message_size << " from policy throttler "
+      dout(10) << "reader releasing " << message_size << " to policy throttler "
 	       << policy.throttler->get_current() << "/"
 	       << policy.throttler->get_max() << dendl;
       policy.throttler->put(message_size);
     }
 
-    // throttle total bytes waiting for dispatch.  do this _after_ the
-    // policy throttle, as this one does not deadlock (unless dispatch
-    // blocks indefinitely, which it shouldn't).  in contrast, the
-    // policy throttle carries for the lifetime of the message.
-    dout(10) << "reader releasing " << message_size << " from dispatch throttler "
-	     << messenger->message_throttler.get_current() << "/"
-	     << messenger->message_throttler.get_max() << dendl;
-    messenger->message_throttler.put(message_size);
+    messenger->dispatch_throttle_release(message_size);
   }
   return ret;
 }
-
 
 int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len, bool more)
 {
@@ -2123,6 +2126,15 @@ int SimpleMessenger::Pipe::write_message(Message *m)
 #undef dout_prefix
 #define dout_prefix _prefix(this)
 
+void SimpleMessenger::dispatch_throttle_release(uint64_t msize)
+{
+  if (msize) {
+    dout(10) << "dispatch_throttle_release " << msize << " to dispatch throttler "
+	    << messenger->dispatch_throttler.get_current() << "/"
+	    << messenger->dispatch_throttler.get_max() << dendl;
+    dispatch_throttler.put(msize);
+  }
+}
 
 void SimpleMessenger::reaper_entry()
 {

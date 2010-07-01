@@ -245,7 +245,17 @@ protected:
   
   utime_t recv_stamp;
   Connection *connection;
+
+  // release our size in bytes back to this throttler when our payload
+  // is adjusted or when we are destroyed.
   Throttle *throttler;
+
+  // keep track of how big this message was when we reserved space in
+  // the msgr dispatch_throttler, so that we can properly release it
+  // later.  this is necessary because messages can enter the dispatch
+  // queue locally (not via read_message()), and those are not
+  // currently throttled.
+  uint64_t dispatch_throttle_size;
 
   friend class Messenger;
 
@@ -255,12 +265,12 @@ protected:
 public:
   atomic_t nref;
 
-  Message() : connection(NULL), _forwarded(false), nref(1) {
+  Message() : connection(NULL), dispatch_throttle_size(0), _forwarded(false), nref(1) {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
     throttler = NULL;
   };
-  Message(int t) : connection(NULL), _forwarded(false), nref(1) {
+  Message(int t) : connection(NULL), dispatch_throttle_size(0), _forwarded(false), nref(1) {
     memset(&header, 0, sizeof(header));
     header.type = t;
     header.version = 1;
@@ -302,6 +312,9 @@ public:
   void set_throttler(Throttle *t) { throttler = t; }
   Throttle *get_throttler() { return throttler; }
  
+  void set_dispatch_throttle_size(uint64_t s) { dispatch_throttle_size = s; }
+  uint64_t get_dispatch_throttle_size() { return dispatch_throttle_size; }
+
   ceph_msg_header &get_header() { return header; }
   void set_header(const ceph_msg_header &e) { header = e; }
   void set_footer(const ceph_msg_footer &e) { footer = e; }

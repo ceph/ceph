@@ -418,13 +418,15 @@ private:
     }
   } dispatch_queue;
 
+  void dispatch_throttle_release(uint64_t msize);
+
   // SimpleMessenger stuff
  public:
   Mutex lock;
   Cond  wait_cond;  // for wait()
   bool started;
   bool did_bind;
-  Throttle message_throttler;
+  Throttle dispatch_throttler;
 
   // where i listen
   bool need_addr;
@@ -527,7 +529,7 @@ public:
     Messenger(entity_name_t()),
     accepter(this),
     lock("SimpleMessenger::lock"), started(false), did_bind(false),
-    message_throttler(g_conf.ms_waiting_message_bytes), need_addr(true),
+    dispatch_throttler(g_conf.ms_dispatch_throttle_bytes), need_addr(true),
     destination_stopped(true), my_type(-1),
     global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
     reaper_thread(this), reaper_started(false), reaper_stop(false), 
