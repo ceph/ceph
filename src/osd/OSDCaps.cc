@@ -4,6 +4,37 @@
 #include "config.h"
 
 
+
+void PoolsMap::dump()
+{
+  map<string, OSDCap>::iterator it;
+  for (it = pools_map.begin(); it != pools_map.end(); ++it) {
+    generic_dout(0) << it->first << " -> (" << (int)it->second.allow << "." << (int)it->second.deny << ")" << dendl;
+  }
+}
+
+void PoolsMap::apply_caps(string& name, int& cap)
+{
+  map<string, OSDCap>::iterator iter;
+
+  if ((iter = pools_map.find(name)) != pools_map.end()) {
+    OSDCap& c = iter->second;
+    cap |= c.allow;
+    cap &= ~c.deny;
+  }
+}
+
+void AuidMap::apply_caps(uint64_t uid, int& cap)
+{
+  map<uint64_t, OSDCap>::iterator iter;
+
+  if ((iter = auid_map.find(uid)) != auid_map.end()) {
+    OSDCap& auid_cap = iter->second;
+    cap |= auid_cap.allow;
+    cap &= ~auid_cap.deny;
+  }
+}
+
 bool OSDCaps::get_next_token(string s, size_t& pos, string& token)
 {
   int start = s.find_first_not_of(" \t", pos);
@@ -75,7 +106,7 @@ bool OSDCaps::parse(bufferlist::iterator& iter)
     bool cmd_uid = false;
     bool any_cmd = false;
     bool got_eq = false;
-    list<int> num_list;
+    list<string> name_list;
     bool last_is_comma = false;
     rwx_t cap_val = 0;
 
@@ -90,7 +121,7 @@ bool OSDCaps::parse(bufferlist::iterator& iter)
         last_is_comma = false;
         cap_val = 0;
         init = false;
-        num_list.clear();
+        name_list.clear();
       }
 
 #define ASSERT_STATE(x) \
@@ -131,19 +162,18 @@ do { \
 	    last_is_comma = true;
           } else {
             last_is_comma = false;
-            int num = strtol(token.c_str(), NULL, 10);
-            num_list.push_back(num);
+            name_list.push_back(token);
           }
         }
 
         if (token.compare(";") == 0 || pos >= s.size()) {
           if (got_eq) {
-            ASSERT_STATE(num_list.size() > 0);
-            list<int>::iterator iter;
-	    map<int, OSDCap> *working_map = &pools_map;
+            ASSERT_STATE(name_list.size() > 0);
+            list<string>::iterator iter;
+	    CapMap *working_map = &pools_map;
 	    if (cmd_uid) working_map = &auid_map;
-            for (iter = num_list.begin(); iter != num_list.end(); ++iter) {
-              OSDCap& cap = (*working_map)[*iter];
+            for (iter = name_list.begin(); iter != name_list.end(); ++iter) {
+              OSDCap& cap = working_map->get_cap(*iter);
               if (op_allow) {
                 cap.allow |= cap_val;
               } else {
@@ -167,11 +197,7 @@ do { \
   }
 
   generic_dout(0) << "default allow=" << (int)default_allow << " default_deny=" << (int) default_deny << dendl;
-  map<int, OSDCap>::iterator it;
-  for (it = pools_map.begin(); it != pools_map.end(); ++it) {
-    generic_dout(0) << it->first << " -> (" << (int)it->second.allow << "." << (int)it->second.deny << ")" << dendl;
-  }
-
+  pools_map.dump();
   return true;
 }
 
@@ -189,26 +215,18 @@ do { \
  * If these two steps haven't given you explicit caps
  * on the pool, check if you're the pool owner and grant full.
  */
-int OSDCaps::get_pool_cap(int pool_id, uint64_t uid)
+int OSDCaps::get_pool_cap(string& pool_name, uint64_t uid)
 {
   if (allow_all)
     return OSD_POOL_CAP_ALL;
 
   int explicit_cap = default_allow; //explicitly granted caps
   
-  map<int, OSDCap>::iterator iter;
   //if the owner is granted permissions on the pool owner's auid, grant them
-  if ((iter = auid_map.find(uid)) != pools_map.end()) {
-    OSDCap& auid_cap = iter->second;
-    explicit_cap |= auid_cap.allow;
-    explicit_cap &= ~auid_cap.deny;
-  }
+  auid_map.apply_caps(uid, explicit_cap);
+
   //check for explicitly granted caps and apply if needed
-  if ((iter = pools_map.find(pool_id)) != pools_map.end()) {
-    OSDCap& c = iter->second;
-    explicit_cap |= c.allow;
-    explicit_cap &= ~c.deny;
-  }
+  pools_map.apply_caps(pool_name, explicit_cap);
 
   //owner gets full perms by default:
   if (uid != CEPH_AUTH_UID_DEFAULT

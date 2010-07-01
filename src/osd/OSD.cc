@@ -4197,7 +4197,12 @@ void OSD::handle_op(MOSDOp *op)
   OSDCaps& caps = session->caps;
   session->put();
   int pool = pgid.pool();
-  int perm = caps.get_pool_cap(pool, osdmap->get_pg_pool(pool)->v.auid);
+
+  // get and lock *pg.
+  PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid):0;
+
+  string pool_name = pg->pool->name;
+  int perm = caps.get_pool_cap(pool_name, osdmap->get_pg_pool(pool)->v.auid);
 
   dout(10) << "request for pool=" << pool << " owner="
 	   << osdmap->get_pg_pool(pool)->v.auid
@@ -4207,32 +4212,22 @@ void OSD::handle_op(MOSDOp *op)
 	   << " may_exec=" << op->may_exec()
            << " require_exec_caps=" << op->require_exec_caps() << dendl;
 
-  if (op->may_read()) {
-    if (!(perm & OSD_POOL_CAP_R)) {
-      dout(0) << "no READ permission to access pool " << pool << dendl;
-      reply_op_error(op, -EPERM);
-      return;
-    }
+  int err = -EPERM;
+  if (op->may_read() && !(perm & OSD_POOL_CAP_R)) {
+    dout(0) << "no READ permission to access pool " << pool_name << dendl;
+  } else if (op->may_write() && !(perm & OSD_POOL_CAP_W)) {
+    dout(0) << "no WRITE permission to access pool " << pool_name << dendl;
+  } else if (op->require_exec_caps() && !(perm & OSD_POOL_CAP_X)) {
+    dout(0) << "no EXEC permission to access pool " << pool_name << dendl;
+  } else {
+    err = 0;
   }
 
-  if (op->may_write()) {
-    if (!(perm & OSD_POOL_CAP_W)) {
-      dout(0) << "no WRITE permission to access pool " << pool << dendl;
-      reply_op_error(op, -EPERM);
-      return;
-    }
+  if (err < 0) {
+    reply_op_error(op, err);
+    pg->unlock();
+    return;
   }
-
-  if (op->require_exec_caps()) {
-    if (!(perm & OSD_POOL_CAP_X)) {
-      dout(0) << "no EXEC permission to access pool " << pool << dendl;
-      reply_op_error(op, -EPERM);
-      return;
-    }
-  }
-
-  // get and lock *pg.
-  PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid):0;
 
   // update qlen stats
   stat_oprate.hit(now, decayrate);
