@@ -603,6 +603,9 @@ void FileJournal::do_write(bufferlist& bl)
 
   writing = false;
 
+  // wrap if we hit the end of the journal
+  if (pos == header.max_size)
+    pos = get_top();
   write_pos = pos;
   assert(write_pos % header.alignment == 0);
 

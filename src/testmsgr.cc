@@ -87,8 +87,6 @@ int main(int argc, const char **argv, const char *envp[]) {
   if (err < 0)
     return 1;
 
-  _dout_create_courtesy_output_symlink("mon", whoami);
-
   // start monitor
   rank->register_entity(entity_name_t::MON(whoami));
   messenger = rank;

@@ -261,9 +261,11 @@ static struct config_option config_optionsp[] = {
 	OPTION(logger_calc_variance, 0, OPT_BOOL, true),
 	OPTION(logger_subdir, 0, OPT_STR, 0),
 	OPTION(logger_dir, 0, OPT_STR, "/var/log/ceph/stat"),
-	OPTION(log_dir, 0, OPT_STR, "/var/log/ceph"),		// if daemonize == true
+	OPTION(log_file, 0, OPT_STR, 0),
+	OPTION(log_dir, 0, OPT_STR, "/var/log/ceph"),
 	OPTION(log_sym_dir, 0, OPT_STR, 0),
 	OPTION(log_to_stdout, 0, OPT_BOOL, true),
+	OPTION(log_per_instance, 0, OPT_BOOL, false),
 	OPTION(pid_file, 0, OPT_STR, "/var/run/ceph/$type.$id.pid"),
 	OPTION(conf, 'c', OPT_STR, "/etc/ceph/ceph.conf, ~/.ceph/config, ceph.conf"),
 	OPTION(chdir, 0, OPT_STR, "/"),

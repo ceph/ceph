@@ -65,9 +65,11 @@ struct md_config_t {
   const char *logger_subdir;
   const char *logger_dir;
 
+  const char *log_file;
   const char *log_dir;
   const char *log_sym_dir;
   bool log_to_stdout;
+  bool log_per_instance;
 
   const char *pid_file;
 

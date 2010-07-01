@@ -434,10 +434,6 @@ int MDS::init()
   messenger->add_dispatcher_tail(this);
   messenger->add_dispatcher_head(&logclient);
 
-  char name[30];
-  snprintf(name, sizeof(name), "mds.%s", g_conf.id);
-  _dout_create_courtesy_output_symlink(name);
-
   // get monmap
   monc->set_messenger(messenger);
 
@@ -780,7 +776,7 @@ void MDS::handle_mds_map(MMDSMap *m)
 
   // open logger?
   if (oldwhoami != whoami || !logger) {
-    _dout_create_courtesy_output_symlink("mds", whoami);
+    dout_create_rank_symlink(whoami);
     reopen_logger(mdsmap->get_created());   // adopt mds cluster timeline
   }
   

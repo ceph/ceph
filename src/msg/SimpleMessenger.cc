@@ -2285,7 +2285,7 @@ int SimpleMessenger::start(bool nodaemon)
       ::chdir(g_conf.chdir);
     }
 
-    _dout_rename_output_file();
+    dout_rename_output_file();
   } else if (g_daemon) {
     write_pid_file(getpid());
   }

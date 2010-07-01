@@ -86,7 +86,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   if (r < 0)
     goto out_shutdown;
 
-  _dout_create_courtesy_output_symlink("client", client->get_nodeid().v);
+  dout_create_rank_symlink(client->get_nodeid().v);
   cout << "starting fuse" << std::endl;
 
   //cerr << "starting fuse on pid " << getpid() << std::endl;

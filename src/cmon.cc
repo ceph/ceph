@@ -213,8 +213,6 @@ int main(int argc, const char **argv)
   if (err < 0)
     return 1;
 
-  _dout_create_courtesy_output_symlink("mon", whoami);
-  
   // start monitor
   messenger->register_entity(entity_name_t::MON(whoami));
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);

@@ -117,8 +117,6 @@ int main(int argc, const char **argv)
     usage();
   }
 
-  _dout_create_courtesy_output_symlink("osd", whoami);
-
   // get monmap
   RotatingKeyRing rkeys(CEPH_ENTITY_TYPE_OSD, &g_keyring);
   MonClient mc(&rkeys);
