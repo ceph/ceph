@@ -16,13 +16,6 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool d
   if (daemon) {
     cout << TEXT_YELLOW << " ** WARNING: Ceph is still under heavy development, and is only suitable for **" << TEXT_NORMAL << std::endl;
     cout << TEXT_YELLOW <<  " **          testing and review.  Do not trust it with important data.       **" << TEXT_NORMAL << std::endl;
-    
-    g_conf.daemonize = true;
-    g_conf.log_to_stdout = false;
-  } else {
-    g_conf.daemonize = false;
-    g_conf.log_to_stdout = true;
-    g_conf.logger = false;
   }
 
   parse_startup_config_options(args, daemon, module_type);

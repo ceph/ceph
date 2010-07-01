@@ -50,6 +50,11 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
+
+  g_conf.daemonize = true;
+  g_conf.logger = true;
+  g_conf.log_to_stdout = false;
+  
   common_init(args, "mds", true, true);
 
   // mds specific args

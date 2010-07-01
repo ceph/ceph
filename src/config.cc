@@ -256,7 +256,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(monmap, 'M', OPT_STR, 0),
 	OPTION(mon_host, 'm', OPT_STR, 0),
 	OPTION(daemonize, 'd', OPT_BOOL, false),
-	OPTION(logger, 0, OPT_BOOL, true),
+	OPTION(logger, 0, OPT_BOOL, false),
 	OPTION(logger_interval, 0, OPT_INT, 1),
 	OPTION(logger_calc_variance, 0, OPT_BOOL, true),
 	OPTION(logger_subdir, 0, OPT_STR, 0),
