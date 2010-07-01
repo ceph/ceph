@@ -62,12 +62,16 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   // bind to a socket
   dout(10) << "accepter.bind" << dendl;
   
-  // use whatever user specified (if anything)
-  sockaddr_in listen_addr = g_my_addr.in4_addr();
-  listen_addr.sin_family = AF_INET;
+  int family = g_conf.ms_bind_ipv6 ? AF_INET6 : AF_INET;
+  switch (g_my_addr.get_family()) {
+  case AF_INET:
+  case AF_INET6:
+    family = g_my_addr.get_family();
+    break;
+  }
 
   /* socket creation */
-  listen_sd = ::socket(AF_INET, SOCK_STREAM, 0);
+  listen_sd = ::socket(family, SOCK_STREAM, 0);
   if (listen_sd < 0) {
     char buf[80];
     derr(0) << "accepter.bind unable to create socket: "
@@ -78,14 +82,19 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   }
   opened_socket();
 
+  // reuse addr+port when possible
   int on = 1;
   ::setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-  
+
+  // use whatever user specified (if anything)
+  entity_addr_t listen_addr = g_my_addr;
+  listen_addr.set_family(family);
+
   /* bind to port */
   int rc;
-  if (listen_addr.sin_port) {
+  if (listen_addr.get_port()) {
     // specific port
-    rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
+    rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), sizeof(listen_addr.ss_addr()));
     if (rc < 0) {
       char buf[80];
       derr(0) << "accepter.bind unable to bind to " << g_my_addr.ss_addr()
@@ -97,8 +106,8 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   } else {
     // try a range of ports
     for (int port = CEPH_PORT_START; port <= CEPH_PORT_LAST; port++) {
-      listen_addr.sin_port = htons(port);
-      rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
+      listen_addr.set_port(port);
+      rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), sizeof(listen_addr.ss_addr()));
       if (rc == 0)
 	break;
     }
@@ -115,8 +124,8 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   }
 
   // what port did we get?
-  socklen_t llen = sizeof(listen_addr);
-  getsockname(listen_sd, (sockaddr*)&listen_addr, &llen);
+  socklen_t llen = sizeof(listen_addr.ss_addr());
+  getsockname(listen_sd, (sockaddr*)&listen_addr.ss_addr(), &llen);
   
   dout(10) << "accepter.bind bound to " << listen_addr << dendl;
 
@@ -138,7 +147,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
     messenger->need_addr = true;
 
   if (messenger->ms_addr.get_port() == 0) {
-    messenger->ms_addr.in4_addr() = listen_addr;
+    messenger->ms_addr = listen_addr;
     if (force_nonce >= 0)
       messenger->ms_addr.nonce = force_nonce;
     else
@@ -187,9 +196,9 @@ void *SimpleMessenger::Accepter::entry()
     if (done) break;
 
     // accept
-    struct sockaddr_in addr;
-    socklen_t slen = sizeof(addr);
-    int sd = ::accept(listen_sd, (sockaddr*)&addr, &slen);
+    entity_addr_t addr;
+    socklen_t slen = sizeof(addr.ss_addr());
+    int sd = ::accept(listen_sd, (sockaddr*)&addr.ss_addr(), &slen);
     if (sd >= 0) {
       errors = 0;
       opened_socket();
@@ -950,7 +959,7 @@ int SimpleMessenger::Pipe::connect()
   bufferlist addrbl, myaddrbl;
 
   // create socket?
-  sd = ::socket(AF_INET, SOCK_STREAM, 0);
+  sd = ::socket(peer_addr.get_family(), SOCK_STREAM, 0);
   if (sd < 0) {
     char buf[80];
     dout(-1) << "connect couldn't created socket " << strerror_r(errno, buf, sizeof(buf)) << dendl;

@@ -140,6 +140,7 @@ struct md_config_t {
   bool ms_nocrc;
   bool ms_die_on_bad_msg;
   uint64_t ms_dispatch_throttle_bytes;
+  bool ms_bind_ipv6;
 
   // mon
   const char *mon_data;

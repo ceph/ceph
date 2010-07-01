@@ -146,6 +146,13 @@ struct entity_addr_t {
 
   __u32 get_nonce() const { return nonce; }
   void set_nonce(__u32 n) { nonce = n; }
+
+  int get_family() const {
+    return addr.ss_family;
+  }
+  void set_family(int f) {
+    addr.ss_family = f;
+  }
   
   sockaddr_storage &ss_addr() {
     return addr;
