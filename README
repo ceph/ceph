@@ -33,7 +33,6 @@ userland clients:
  csyn -- synthetic workload generator client.
 
 tools:
- mkmonfs -- create a fresh monfs (for a new filesystem)
  monmaptool -- create/edit mon map
  osdmaptool -- create/edit osd map 
  crushtool -- create/edit crush map

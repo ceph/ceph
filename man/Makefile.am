@@ -5,7 +5,6 @@ dist_man_MANS = \
 	cmds.8 \
 	cmon.8 \
 	mkcephfs.8 \
-	mkmonfs.8 \
 	cfuse.8 \
 	csyn.8 \
 	crushtool.8 \
