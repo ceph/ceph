@@ -5,6 +5,10 @@
 #include <errno.h>
 #include <sys/mount.h>
 
+#ifndef MS_RELATIME
+# define MS_RELATIME (1<<21)
+#endif
+
 #define BUF_SIZE 128
 
 int verboseflag = 0;
@@ -177,29 +181,38 @@ static int parse_options(char ** optionsp, int * filesys_flags)
 
 		skip = 1;
 
-		if (strncmp(data, "nosuid", 6) == 0) {
+		if (strncmp(data, "ro", 2) == 0) {
+			*filesys_flags |= MS_RDONLY;
+		} else if (strncmp(data, "rw", 2) == 0) {
+			*filesys_flags &= ~MS_RDONLY;
+		} else if (strncmp(data, "nosuid", 6) == 0) {
 			*filesys_flags |= MS_NOSUID;
 		} else if (strncmp(data, "suid", 4) == 0) {
 			*filesys_flags &= ~MS_NOSUID;
-		} else if (strncmp(data, "nodev", 5) == 0) {
-			*filesys_flags |= MS_NODEV;
-		} else if ((strncmp(data, "nobrl", 5) == 0) || 
-			   (strncmp(data, "nolock", 6) == 0)) {
-			*filesys_flags &= ~MS_MANDLOCK;
 		} else if (strncmp(data, "dev", 3) == 0) {
 			*filesys_flags &= ~MS_NODEV;
+		} else if (strncmp(data, "nodev", 5) == 0) {
+			*filesys_flags |= MS_NODEV;
 		} else if (strncmp(data, "noexec", 6) == 0) {
 			*filesys_flags |= MS_NOEXEC;
 		} else if (strncmp(data, "exec", 4) == 0) {
 			*filesys_flags &= ~MS_NOEXEC;
-		} else if (strncmp(data, "ro", 2) == 0) {
-			*filesys_flags |= MS_RDONLY;
-		} else if (strncmp(data, "rw", 2) == 0) {
-			*filesys_flags &= ~MS_RDONLY;
-                } else if (strncmp(data, "remount", 7) == 0) {
-                        *filesys_flags |= MS_REMOUNT;
                 } else if (strncmp(data, "sync", 4) == 0) {
                         *filesys_flags |= MS_SYNCHRONOUS;
+                } else if (strncmp(data, "remount", 7) == 0) {
+                        *filesys_flags |= MS_REMOUNT;
+                } else if (strncmp(data, "mandlock", 8) == 0) {
+                        *filesys_flags |= MS_MANDLOCK;
+		} else if ((strncmp(data, "nobrl", 5) == 0) || 
+			   (strncmp(data, "nolock", 6) == 0)) {
+			*filesys_flags &= ~MS_MANDLOCK;
+		} else if (strncmp(data, "noatime", 7) == 0) {
+			*filesys_flags |= MS_NOATIME;
+		} else if (strncmp(data, "nodiratime", 10) == 0) {
+			*filesys_flags |= MS_NODIRATIME;
+		} else if (strncmp(data, "relatime", 8) == 0) {
+			*filesys_flags |= MS_RELATIME;
+
 		} else if (strncmp(data, "secretfile", 7) == 0) {
 			char *fn = value;
 			char *end = fn;
