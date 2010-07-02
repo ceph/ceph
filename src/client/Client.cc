@@ -5311,7 +5311,11 @@ int Client::ll_readlink(vinodeno_t vino, const char **value, int uid, int gid)
 
 int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int uid, int gid) 
 { 
-  dout(3) << "_mknod(" << dir->ino << " " << name << ", 0" << oct << mode << dec << ", " << rdev << ", uid " << uid << ", gid " << gid << ")" << dendl;
+  dout(3) << "_mknod(" << dir->ino << " " << name << ", 0" << oct << mode << dec << ", " << rdev
+	  << ", uid " << uid << ", gid " << gid << ")" << dendl;
+
+  if (strlen(name) > NAME_MAX)
+    return -ENAMETOOLONG;
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_MKNOD);
 
@@ -5366,6 +5370,9 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
 { 
   dout(3) << "_create(" << dir->ino << " " << name << ", 0" << oct << mode << dec << ")" << dendl;
   
+  if (strlen(name) > NAME_MAX)
+    return -ENAMETOOLONG;
+
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_CREATE);
 
   filepath path;
@@ -5414,6 +5421,12 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
 
 int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid)
 {
+  dout(3) << "_mkdir(" << dir->ino << " " << name << ", 0" << oct << mode << dec
+	  << ", uid " << uid << ", gid " << gid << ")" << dendl;
+
+  if (strlen(name) > NAME_MAX)
+    return -ENAMETOOLONG;
+
   MetaRequest *req = new MetaRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_MKSNAP:CEPH_MDS_OP_MKDIR);
 
   filepath path;
@@ -5465,6 +5478,12 @@ int Client::ll_mkdir(vinodeno_t parent, const char *name, mode_t mode, struct st
 
 int Client::_symlink(Inode *dir, const char *name, const char *target, int uid, int gid)
 {
+  dout(3) << "_symlink(" << dir->ino << " " << name << ", " << target
+	  << ", uid " << uid << ", gid " << gid << ")" << dendl;
+
+  if (strlen(name) > NAME_MAX)
+    return -ENAMETOOLONG;
+
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SYMLINK);
 
   filepath path;
@@ -5659,6 +5678,12 @@ int Client::ll_rename(vinodeno_t parent, const char *name, vinodeno_t newparent,
 
 int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid) 
 {
+  dout(3) << "_link(" << in->ino << " to " << dir->ino << " " << newname
+	  << " uid " << uid << " gid " << gid << ")" << dendl;
+
+  if (strlen(newname) > NAME_MAX)
+    return -ENAMETOOLONG;
+
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LINK);
 
   filepath path(newname, dir->ino);
