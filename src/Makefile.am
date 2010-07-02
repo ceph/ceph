@@ -44,33 +44,13 @@ bin_PROGRAMS += monmaptool crushtool osdmaptool
 mount_ceph_SOURCES = mount/mount.ceph.c
 noinst_PROGRAMS = mount.ceph
 
-
-core: cmon cosd cmds ceph cconf monmaptool osdmaptool crushtool
-
-
-dumpjournal_SOURCES = dumpjournal.cc msg/SimpleMessenger.cc
-dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a -lpthread -lm -lcrypto
-dupstore_SOURCES = dupstore.cc
-dupstore_LDADD = libos.a libcommon.a -lpthread -lm -lcrypto
-streamtest_SOURCES = streamtest.cc
-streamtest_LDADD = libos.a libcommon.a -lpthread -lm -lcrypto
-bin_PROGRAMS += dumpjournal dupstore streamtest
-
-test_trans_SOURCES = test_trans.cc
-test_trans_LDADD = libos.a libcommon.a -lpthread -lm -lcrypto
-bin_PROGRAMS += test_trans
-
 # synthetic client
 csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc
 csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += csyn
 
-testmsgr_SOURCES = testmsgr.cc msg/SimpleMessenger.cc
-testmsgr_LDADD = libcommon.a -lpthread -lm -lcrypto
-bin_PROGRAMS += testmsgr
+core: cmon cosd cmds ceph cconf monmaptool osdmaptool crushtool csyn
 
-test_ioctls_SOURCES = client/test_ioctls.c
-bin_PROGRAMS += test_ioctls
 
 # fuse targets?
 if WITH_FUSE
@@ -89,9 +69,30 @@ endif
 
 # debug targets?
 if WITH_DEBUG
+
 psim_SOURCES = psim.cc
 psim_LDADD = libcrush.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += psim
+
+testmsgr_SOURCES = testmsgr.cc msg/SimpleMessenger.cc
+testmsgr_LDADD = libcommon.a -lpthread -lm -lcrypto
+bin_PROGRAMS += testmsgr
+
+test_ioctls_SOURCES = client/test_ioctls.c
+bin_PROGRAMS += test_ioctls
+
+dumpjournal_SOURCES = dumpjournal.cc msg/SimpleMessenger.cc
+dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a -lpthread -lm -lcrypto
+dupstore_SOURCES = dupstore.cc
+dupstore_LDADD = libos.a libcommon.a -lpthread -lm -lcrypto
+streamtest_SOURCES = streamtest.cc
+streamtest_LDADD = libos.a libcommon.a -lpthread -lm -lcrypto
+bin_PROGRAMS += dumpjournal dupstore streamtest
+
+test_trans_SOURCES = test_trans.cc
+test_trans_LDADD = libos.a libcommon.a -lpthread -lm -lcrypto
+bin_PROGRAMS += test_trans
+
 
 #fakesyn_SOURCES = fakesyn.cc msg/FakeMessenger.cc
 #fakesyn_LDADD = libmon.a libmds.a libosd.a libos.a \
@@ -129,9 +130,11 @@ libceph_la_LIBADD = libcrush.la
 libceph_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '^ceph_.*' -lpthread -lssl
 lib_LTLIBRARIES += libceph.la
 
+if WITH_DEBUG
 testceph_SOURCES = client/testceph.cc
 testceph_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto
 bin_PROGRAMS += testceph
+endif
 
 # librados
 librados_SOURCES = \
@@ -154,10 +157,13 @@ rados_SOURCES = rados.cc
 rados_LDADD = librados.la -lpthread -lm -lcrypto
 bin_PROGRAMS += rados
 
+if WITH_DEBUG
 testrados_SOURCES = testrados.c
 testrados_LDADD = librados.la -lpthread -lm -lcrypto
 testradospp_SOURCES = testradospp.cc
 testradospp_LDADD = librados.la -lpthread -lm -lcrypto
+endif
+
 radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la -lpthread -lm -lcrypto
 rbdtool_SOURCES = rbdtool.cc
@@ -184,6 +190,7 @@ radosgw_admin_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat
 bin_PROGRAMS += radosgw radosgw_admin
 endif
 
+if WITH_DEBUG
 testcrypto_SOURCES = testcrypto.cc
 testcrypto_LDADD = libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += testcrypto
@@ -191,6 +198,9 @@ bin_PROGRAMS += testcrypto
 testkeys_SOURCES = testkeys.cc
 testkeys_LDADD = libmon.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += testkeys
+endif
+
+
 ## object classes
 
 # libtestclass.so: testclass.cc
