@@ -1041,6 +1041,7 @@ protected:
   void trim_caps(int mds, int max);
   void mark_caps_dirty(Inode *in, int caps);
   void flush_caps();
+  void flush_caps(Inode *in, int mds);
   void kick_flushing_caps(int mds);
   int get_caps(Inode *in, int need, int want, int *got, loff_t endoff);
 

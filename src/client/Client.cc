@@ -2199,6 +2199,21 @@ void Client::flush_caps()
     check_caps(in, true);
   }
 }
+
+void Client::flush_caps(Inode *in, int mds) {
+  dout(10) << "flush_caps(inode:" << in << ", mds" << mds << ")" << dendl;
+  InodeCap *cap = in->caps[mds];
+  int wanted = in->caps_wanted();
+  int flush = wanted | CEPH_CAP_PIN;
+  int flush_tid = ++in->last_flush_tid;
+  //set up flush tid stores
+  for (int i = 0; i < CEPH_CAP_BITS; ++i) {
+    if (flush & (1<<i))
+      in->flushing_cap_tid[i] = flush_tid;
+  }
+  send_cap(in, mds, cap, in->caps_used(), wanted, flush, in->dirty_caps, flush_tid);
+}
+
 void Client::wait_sync_caps(uint64_t want)
 {
  retry:
@@ -4695,21 +4710,34 @@ int Client::_fsync(Fh *f, bool syncdataonly)
   int r = 0;
 
   Inode *in = f->inode;
+  tid_t wait_on_flush = 0;
+  bool flushed_metadata = false;
 
   dout(3) << "_fsync(" << f << ", " << (syncdataonly ? "dataonly)":"data+metadata)") << dendl;
   
-  // metadata?
-  if (!syncdataonly)
-    dout(0) << "fsync - not syncing metadata yet.. implement me" << dendl;
-
   if (g_conf.client_oc)
     _flush(in);
   
+  if (!syncdataonly && (in->dirty_caps & ~CEPH_CAP_ANY_FILE_WR)) {
+    for (map<int, InodeCap*>::iterator iter = in->caps.begin(); iter != in->caps.end(); ++iter) {
+      if (iter->second->implemented & ~CEPH_CAP_ANY_FILE_WR) {
+        flush_caps(in, iter->first);
+      }
+    }
+    wait_on_flush = in->last_flush_tid;
+    flushed_metadata = true;
+4  } else dout(10) << "no metadata needs to commit" << dendl;
+
+
   while (in->cap_refs[CEPH_CAP_FILE_BUFFER] > 0) {
     dout(10) << "ino " << in->ino << " has " << in->cap_refs[CEPH_CAP_FILE_BUFFER]
 	     << " uncommitted, waiting" << dendl;
     wait_on_list(in->waitfor_commit);
-  }    
+  }
+
+  if (!flushed_metadata) wait_sync_caps(wait_on_flush); //this could wait longer than strictly necessary,
+                                                    //but on a sync the user can put up with it
+
   dout(10) << "ino " << in->ino << " has no uncommitted writes" << dendl;
 
   return r;
