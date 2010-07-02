@@ -315,6 +315,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(ms_die_on_bad_msg, 0, OPT_BOOL, false),
 	OPTION(ms_dispatch_throttle_bytes, 0, OPT_INT, 100 << 20),
 	OPTION(ms_bind_ipv6, 0, OPT_BOOL, false),
+        OPTION(ms_rwthread_stack_bytes, 0, OPT_INT, 1024 << 10),
 	OPTION(mon_data, 0, OPT_STR, ""),
 	OPTION(mon_tick_interval, 0, OPT_INT, 5),
 	OPTION(mon_subscribe_interval, 0, OPT_DOUBLE, 300),

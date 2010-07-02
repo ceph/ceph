@@ -212,13 +212,13 @@ private:
       assert(pipe_lock.is_locked());
       assert(!reader_running);
       reader_running = true;
-      reader_thread.create();
+      reader_thread.create(g_conf.ms_rwthread_stack_bytes);
     }
     void start_writer() {
       assert(pipe_lock.is_locked());
       assert(!writer_running);
       writer_running = true;
-      writer_thread.create();
+      writer_thread.create(g_conf.ms_rwthread_stack_bytes);
     }
     void join_reader() {
       if (!reader_running)
