@@ -5141,7 +5141,7 @@ int Client::ll_setattr(vinodeno_t vino, struct stat *attr, int mask, int uid, in
   if (res == 0)
     fill_stat(in, attr);
   dout(3) << "ll_setattr " << vino << " = " << res << dendl;
-  return 0;
+  return res;
 }
 
 
