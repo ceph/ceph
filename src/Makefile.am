@@ -305,11 +305,13 @@ install-data-local:
 .make_last_ver:
 	./make_version --check
 
-ceph_ver.h : $(all_sources) .make_last_ver
+ceph_ver.h: $(all_sources) .make_last_ver
 	./make_version
 
-ceph_ver.c : ceph_ver.h
-debug.cc : ceph_ver.h
+ceph_ver.c: ceph_ver.h
+common/debug.cc: ceph_ver.h
+config.cc: ceph_ver.h
+
 
 
 
