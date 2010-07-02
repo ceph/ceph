@@ -2,7 +2,8 @@ Ceph core
 ---------
 
 Sage Weil <sage@newdream.net>
-
+Yehuda Sadeh-Weinraub <yehudasa@gmail.com>
+Greg Farnum <gregf@hq.newdream.net>
 
 Kernel client
 -------------
@@ -10,4 +11,5 @@ Kernel client
 Sage Weil <sage@newdream.net>
 Patience Warnick <patience@newdream.net>
 Yehuda Sadeh-Weinraub <yehudasa@gmail.com>
+Greg Farnum <gregf@hq.newdream.net>
 
