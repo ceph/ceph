@@ -4840,13 +4840,13 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
   stbuf->f_bavail = stats.kb_avail/4;
   stbuf->f_files = stats.num_objects;
   //fill in rest to make Posix happy
-  stbuf->f_bsize = 4096;
-  stbuf->f_frsize = 4096;
+  stbuf->f_bsize = PAGE_SIZE;
+  stbuf->f_frsize = PAGE_SIZE;
   stbuf->f_ffree = -1;
   stbuf->f_favail = -1;
   stbuf->f_fsid = -1;       // ??
   stbuf->f_flag = 0;        // ??
-  stbuf->f_namemax = PAGE_SIZE;  // ??
+  stbuf->f_namemax = NAME_MAX;
 
   return rval;
 }
