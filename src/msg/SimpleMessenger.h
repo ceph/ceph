@@ -439,9 +439,29 @@ private:
   hash_map<entity_addr_t, Pipe*> rank_pipe;
  
   int my_type;
+
+
+  // --- policy ---
   Policy default_policy;
   map<int, Policy> policy_map; // entity_name_t::type -> Policy
 
+  Policy& get_policy(int t) {
+    if (policy_map.count(t))
+      return policy_map[t];
+    else
+      return default_policy;
+  }
+  void set_default_policy(Policy p) {
+    default_policy = p;
+  }
+  void set_policy(int type, Policy p) {
+    policy_map[type] = p;
+  }
+  void set_policy_throttler(int type, Throttle *t) {
+    get_policy(type).throttler = t;
+  }
+
+  // --- pipes ---
   set<Pipe*>      pipes;
   list<Pipe*>     pipe_reap_queue;
   
@@ -474,12 +494,6 @@ private:
   void reaper();
   void queue_reap(Pipe *pipe);
 
-  Policy get_policy(int t) {
-    if (policy_map.count(t))
-      return policy_map[t];
-    else
-      return default_policy;
-  }
 
   /***** Messenger-required functions  **********/
   void destroy() {
@@ -568,12 +582,6 @@ public:
   void learned_addr(entity_addr_t peer_addr_for_me);
   void init_local_pipe();
 
-  void set_default_policy(Policy p) {
-    default_policy = p;
-  }
-  void set_policy(int type, Policy p) {
-    policy_map[type] = p;
-  }
 } ;
 
 #endif
