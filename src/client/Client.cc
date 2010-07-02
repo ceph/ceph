@@ -4726,7 +4726,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
     }
     wait_on_flush = in->last_flush_tid;
     flushed_metadata = true;
-4  } else dout(10) << "no metadata needs to commit" << dendl;
+  } else dout(10) << "no metadata needs to commit" << dendl;
 
 
   while (in->cap_refs[CEPH_CAP_FILE_BUFFER] > 0) {
