@@ -5531,6 +5531,8 @@ int Client::ll_symlink(vinodeno_t parent, const char *name, const char *value, s
 
 int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
 {
+  dout(3) << "_unlink(" << dir->ino << " " << name << " uid " << uid << " gid " << gid << ")" << dendl;
+
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_UNLINK);
 
   filepath path;
@@ -5575,6 +5577,8 @@ int Client::ll_unlink(vinodeno_t vino, const char *name, int uid, int gid)
 
 int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
 {
+  dout(3) << "_rmdir(" << dir->ino << " " << name << " uid " << uid << " gid " << gid << ")" << dendl;
+
   MetaRequest *req = new MetaRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_RMSNAP:CEPH_MDS_OP_RMDIR);
   filepath path;
   dir->make_nosnap_relative_path(path);
@@ -5620,6 +5624,9 @@ int Client::ll_rmdir(vinodeno_t vino, const char *name, int uid, int gid)
 
 int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const char *toname, int uid, int gid)
 {
+  dout(3) << "_rmdir(" << fromdir->ino << " " << fromname << " to " << todir->ino << " " << toname
+	  << " uid " << uid << " gid " << gid << ")" << dendl;
+
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_RENAME);
 
   filepath from;
