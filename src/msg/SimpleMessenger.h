@@ -51,6 +51,9 @@ using namespace __gnu_cxx;
  * the destructor will lead to badness.
  */
 
+// default feature(s) everyone gets
+#define MSGR_FEATURES_SUPPORTED  CEPH_FEATURE_NOSRCADDR
+
 class SimpleMessenger : public Messenger {
 public:
   struct Policy {
@@ -58,16 +61,20 @@ public:
     bool server;
     Throttle *throttler;
 
-    Policy(bool l=false, bool s=false, Throttle *t=NULL) :
-      lossy(l), server(s), throttler(t) {}
+    uint64_t features_supported;
+    uint64_t features_required;
 
-    Policy(Throttle *t) : lossy(false), server(false), throttler(t) {}
+    Policy() :
+      lossy(false), server(false), throttler(NULL),
+      features_supported(MSGR_FEATURES_SUPPORTED), features_required(0) {}
+    Policy(bool l, bool s, uint64_t sup, uint64_t req) :
+      lossy(l), server(s), throttler(NULL),
+      features_supported(sup | MSGR_FEATURES_SUPPORTED), features_required(req) {}
 
-    static Policy stateful_server() { return Policy(false, true); }
-    static Policy stateless_server() { return Policy(true, true); }
-    static Policy lossless_peer() { return Policy(false, false); }
-    static Policy client() { return Policy(false, false); }
-    static Policy client(Throttle *t) { return Policy(false, false, t); }
+    static Policy stateful_server(uint64_t sup, uint64_t req) { return Policy(false, true, sup, req); }
+    static Policy stateless_server(uint64_t sup, uint64_t req) { return Policy(true, true, sup, req); }
+    static Policy lossless_peer(uint64_t sup, uint64_t req) { return Policy(false, false, sup, req); }
+    static Policy client(uint64_t sup, uint64_t req) { return Policy(false, false, sup, req); }
   };
 
 
@@ -139,10 +146,6 @@ private:
     uint64_t out_seq;
     uint64_t in_seq, in_seq_acked;
     
-    int get_required_bits(); /* get bits this Messenger requires
-			      * the peer to support */
-    int get_supported_bits(); /* get bits this Messenger expects
-			       * the peer to support */
     int accept();   // server handshake
     int connect();  // client handshake
     void reader();

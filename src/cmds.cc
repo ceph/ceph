@@ -83,8 +83,18 @@ int main(int argc, const char **argv)
   if (!messenger)
     return 1;
 
-  messenger->set_policy(entity_name_t::TYPE_CLIENT, SimpleMessenger::Policy::stateful_server());
-  messenger->set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossless_peer());
+  uint64_t supported =
+    CEPH_FEATURE_UID |
+    CEPH_FEATURE_NOSRCADDR;
+  messenger->set_default_policy(SimpleMessenger::Policy::client(supported, 0));
+  messenger->set_policy(entity_name_t::TYPE_MON,
+			SimpleMessenger::Policy::client(supported,
+							CEPH_FEATURE_UID));
+  messenger->set_policy(entity_name_t::TYPE_MDS,
+			SimpleMessenger::Policy::lossless_peer(supported,
+							       CEPH_FEATURE_UID));
+  messenger->set_policy(entity_name_t::TYPE_CLIENT,
+			SimpleMessenger::Policy::stateful_server(supported, 0));
 
   messenger->start();
   

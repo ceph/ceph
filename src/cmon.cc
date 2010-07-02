@@ -222,9 +222,14 @@ int main(int argc, const char **argv)
 
   messenger->start();  // may daemonize
 
-  messenger->set_default_policy(SimpleMessenger::Policy::stateless_server());
-  messenger->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossless_peer());
-
+  uint64_t supported =
+    CEPH_FEATURE_UID |
+    CEPH_FEATURE_NOSRCADDR |
+    CEPH_FEATURE_MONCLOCKCHECK;
+  messenger->set_default_policy(SimpleMessenger::Policy::stateless_server(supported, 0));
+  messenger->set_policy(entity_name_t::TYPE_MON,
+			SimpleMessenger::Policy::lossless_peer(supported,
+							       CEPH_FEATURE_UID));
   mon->init();
   messenger->wait();
 

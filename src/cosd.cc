@@ -213,10 +213,18 @@ int main(int argc, const char **argv)
 
   Throttle client_throttler(g_conf.osd_client_message_size_cap);
 
-  messenger->set_default_policy(SimpleMessenger::Policy::stateless_server());
-  messenger->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::client());
-  messenger->set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless_peer());
-  messenger->set_policy(entity_name_t::TYPE_CLIENT, SimpleMessenger::Policy::stateless_server());
+  uint64_t supported =
+    CEPH_FEATURE_UID | 
+    CEPH_FEATURE_NOSRCADDR;
+  messenger->set_default_policy(SimpleMessenger::Policy::stateless_server(supported, 0));
+  messenger->set_policy(entity_name_t::TYPE_MON,
+			SimpleMessenger::Policy::client(supported,
+							CEPH_FEATURE_UID));
+  messenger->set_policy(entity_name_t::TYPE_OSD,
+			SimpleMessenger::Policy::lossless_peer(supported,
+							       CEPH_FEATURE_UID));
+  messenger->set_policy(entity_name_t::TYPE_CLIENT,
+			SimpleMessenger::Policy::stateless_server(supported, 0));
   messenger->set_policy_throttler(entity_name_t::TYPE_CLIENT, &client_throttler);
 
 
