@@ -41,7 +41,7 @@ This package contains the headers needed to develop programs that use Ceph.
 %build
 ./autogen.sh
 %{configure} --without-hadoop --without-debug
-make CFLAGS="$RPM_OPT_FLAGS"
+make CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
 %install
 rm -rf $RPM_BUILD_ROOT
@@ -84,7 +84,6 @@ fi
 %{_bindir}/cmon
 %{_bindir}/cmds
 %{_bindir}/cosd
-%{_bindir}/mkmonfs
 %{_bindir}/rados
 %{_bindir}/rbdtool
 %{_initddir}/ceph
