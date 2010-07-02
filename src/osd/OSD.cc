@@ -774,7 +774,8 @@ PGPool* OSD::_get_pool(int id)
 {
   PGPool *p = _lookup_pool(id);
   if (!p) {
-    p = new PGPool(id, osdmap->get_pool_name(id));
+    p = new PGPool(id, osdmap->get_pool_name(id),
+		   osdmap->get_pg_pool(id)->v.auid );
     pool_map[id] = p;
     p->get();
     
@@ -2256,6 +2257,10 @@ void OSD::handle_osd_map(MOSDMap *m)
 	continue;
       }
       PGPool *pool = p->second;
+
+      // make sure auid stays up to date
+      pool->auid = pi->v.auid;
+
       if (pi->get_snap_epoch() == cur+1) {
 	pi->build_removed_snaps(pool->newly_removed_snaps);
 	pool->newly_removed_snaps.subtract(pool->cached_removed_snaps);
@@ -4200,12 +4205,17 @@ void OSD::handle_op(MOSDOp *op)
 
   // get and lock *pg.
   PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid):0;
+  if (!pg) {
+    dout(7) << "hit non-existent pg " << pgid 
+	    << ", waiting" << dendl;
+    waiting_for_pg[pgid].push_back(op);
+    return;
+  }
 
-  string pool_name = pg->pool->name;
-  int perm = caps.get_pool_cap(pool_name, osdmap->get_pg_pool(pool)->v.auid);
+  int perm = caps.get_pool_cap(pg->pool->name, pg->pool->auid);
 
-  dout(10) << "request for pool=" << pool << " owner="
-	   << osdmap->get_pg_pool(pool)->v.auid
+  dout(10) << "request for pool=" << pool << " (" << pg->pool->name
+	   << ") owner=" << pg->pool->auid
 	   << " perm=" << perm
 	   << " may_read=" << op->may_read()
            << " may_write=" << op->may_write()
@@ -4214,11 +4224,11 @@ void OSD::handle_op(MOSDOp *op)
 
   int err = -EPERM;
   if (op->may_read() && !(perm & OSD_POOL_CAP_R)) {
-    dout(0) << "no READ permission to access pool " << pool_name << dendl;
+    dout(0) << "no READ permission to access pool " << pg->pool->name << dendl;
   } else if (op->may_write() && !(perm & OSD_POOL_CAP_W)) {
-    dout(0) << "no WRITE permission to access pool " << pool_name << dendl;
+    dout(0) << "no WRITE permission to access pool " << pg->pool->name << dendl;
   } else if (op->require_exec_caps() && !(perm & OSD_POOL_CAP_X)) {
-    dout(0) << "no EXEC permission to access pool " << pool_name << dendl;
+    dout(0) << "no EXEC permission to access pool " << pg->pool->name << dendl;
   } else {
     err = 0;
   }
@@ -4245,15 +4255,7 @@ void OSD::handle_op(MOSDOp *op)
   // we don't need encoded payload anymore
   op->clear_payload();
 
-  // have pg?
-  if (!pg) {
-    dout(7) << "hit non-existent pg " 
-	    << pgid 
-	    << ", waiting" << dendl;
-    waiting_for_pg[pgid].push_back(op);
-    return;
-  }
-  
+ 
   // pg must be active.
   if (!pg->is_active()) {
     // replay?

@@ -51,6 +51,7 @@ struct PGPool {
   atomic_t nref;
   int num_pg;
   string name;
+  uint64_t auid;
 
   pg_pool_t info;      
   SnapContext snapc;   // the default pool snapc, ready to go.
@@ -58,7 +59,11 @@ struct PGPool {
   interval_set<snapid_t> cached_removed_snaps;      // current removed_snaps set
   interval_set<snapid_t> newly_removed_snaps;  // newly removed in the last epoch
 
-  PGPool(int i, const char *_name) : id(i), num_pg(0) { if (_name) name = _name; }
+  PGPool(int i, const char *_name, uint64_t au) :
+    id(i), num_pg(0), auid(au) {
+    if (_name)
+      name = _name;
+  }
 
   void get() { nref.inc(); }
   void put() {
