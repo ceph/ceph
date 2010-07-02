@@ -51,7 +51,9 @@ void usage()
        << "\t--rollback-snap <snap name>\n"
        << "\t          rollback image head to specified snapshot\n"
        << "\t--rename <dst name>\n"
-       << "\t          rename rbd image\n";
+       << "\t          rename rbd image\n"
+       << "\t--export <path>\n"
+       << "\t          export image to path\n";
 }
 
 void usage_exit()
@@ -98,18 +100,43 @@ void print_header(char *imgname, rbd_obj_header_ondisk *header)
        << std::endl;
 }
 
-void trim_image(const char *imgname, rbd_obj_header_ondisk *header, uint64_t newsize)
+static string get_block_oid(rbd_obj_header_ondisk *header, uint64_t num)
+{
+  char o[RBD_MAX_SEG_NAME_SIZE];
+  sprintf(o, "%s.%012llx", header->block_name, (unsigned long long)num);
+  return o;
+}
+
+static uint64_t get_max_block(rbd_obj_header_ondisk *header)
 {
   uint64_t size = header->image_size;
   int obj_order = header->options.order;
   uint64_t numseg = size >> obj_order;
-  uint64_t start = newsize >> obj_order;
+
+  return numseg;
+}
+
+static uint64_t get_block_size(rbd_obj_header_ondisk *header)
+{
+  return 1 << header->options.order;
+}
+
+static uint64_t get_block_num(rbd_obj_header_ondisk *header, uint64_t ofs)
+{
+  int obj_order = header->options.order;
+  uint64_t num = ofs >> obj_order;
+
+  return num;
+}
+
+void trim_image(const char *imgname, rbd_obj_header_ondisk *header, uint64_t newsize)
+{
+  uint64_t numseg = get_max_block(header);
+  uint64_t start = get_block_num(header, newsize);
 
   cout << "trimming image data from " << numseg << " to " << start << " objects..." << std::endl;
   for (uint64_t i=start; i<numseg; i++) {
-    char o[RBD_MAX_SEG_NAME_SIZE];
-    sprintf(o, "%s.%012llx", header->block_name, (unsigned long long)i);
-    string oid = o;
+    string oid = get_block_oid(header, i);
     rados.remove(pool, oid);
     if ((i & 127) == 0) {
       cout << "\r\t" << i << "/" << numseg;
@@ -173,7 +200,7 @@ static int rbd_assign_bid(pool_t pool, string& info_oid, uint64_t *id)
 }
 
 
-static int read_header(pool_t pool, string& md_oid, bufferlist& header)
+static int read_header_bl(pool_t pool, string& md_oid, bufferlist& header)
 {
   int r;
 #define READ_SIZE 4096
@@ -184,6 +211,19 @@ static int read_header(pool_t pool, string& md_oid, bufferlist& header)
       return r;
     header.claim_append(bl);
    } while (r == READ_SIZE);
+
+  return 0;
+}
+
+static int read_header(pool_t pool, string& md_oid, struct rbd_obj_header_ondisk *header)
+{
+  bufferlist header_bl;
+  int r = read_header_bl(pool, md_oid, header_bl);
+  if (r < 0)
+    return r;
+  if (header_bl.length() < (int)sizeof(*header))
+    return -EIO;
+  memcpy(header, header_bl.c_str(), sizeof(*header));
 
   return 0;
 }
@@ -218,21 +258,74 @@ static int tmap_rm(pool_t pool, string& dir_oid, string& imgname)
 static int rollback_image(pool_t pool, struct rbd_obj_header_ondisk *header,
                           SnapContext& snapc, uint64_t snapid)
 {
-  uint64_t size = header->image_size;
-  int obj_order = header->options.order;
-  uint64_t numseg = size >> obj_order;
+  uint64_t numseg = get_max_block(header);
 
-  for (uint64_t i=0; i<numseg; i++) {
-    char o[RBD_MAX_SEG_NAME_SIZE];
+  for (uint64_t i = 0; i < numseg; i++) {
     int r;
-    sprintf(o, "%s.%012llx", header->block_name, (unsigned long long)i);
-    string oid = o;
+    string oid = get_block_oid(header, i);
     r = rados.selfmanaged_snap_rollback_object(pool, oid, snapc, snapid);
     if (r < 0 && r != -ENOENT)
       return r;
   }
   return 0;
 }
+
+static int do_export(pool_t pool, string& md_oid, const char *path)
+{
+  struct rbd_obj_header_ondisk header;
+  int ret, r;
+
+  ret = read_header(pool, md_oid, &header);
+  if (ret < 0)
+    return ret;
+
+  uint64_t numseg = get_max_block(&header);
+  uint64_t block_size = get_block_size(&header);
+  int fd = open(path, O_WRONLY | O_CREAT, 0644);
+  uint64_t pos = 0;
+
+  if (fd < 0)
+    return -errno;
+
+  for (uint64_t i = 0; i < numseg; i++) {
+    bufferlist bl;
+    string oid = get_block_oid(&header, i);
+    r = rados.read(pool, oid, 0, bl, block_size);
+    if (r < 0 && r == -ENOENT)
+      r = 0;
+    if (r < 0) {
+      ret = r;
+      goto done;
+    }
+
+    if (bl.length()) {
+      ret = write(fd, bl.c_str(), bl.length());
+      if (ret < 0)
+        goto done;
+    }
+
+    pos += block_size;
+
+    if (bl.length() < block_size) {
+      ret = lseek(fd, pos, SEEK_SET);
+      if (ret < 0) {
+        ret = -errno;
+        cerr << "could not seek to pos " << pos << std::endl;
+        goto done;
+      }
+    }
+  }
+  r = ftruncate(fd, pos);
+  if (r < 0)
+    ret = -errno;
+
+  ret = 0;
+
+done:
+  close(fd);
+  return ret;
+}
+
 
 static void err_exit(pool_t pool)
 {
@@ -252,11 +345,12 @@ int main(int argc, const char **argv)
   common_init(args, "rbdtool", true);
 
   bool opt_create = false, opt_delete = false, opt_list = false, opt_info = false, opt_resize = false,
-       opt_list_snaps = false, opt_add_snap = false, opt_rollback_snap = false, opt_rename = false;
+       opt_list_snaps = false, opt_add_snap = false, opt_rollback_snap = false, opt_rename = false,
+       opt_export = false;
   char *poolname = (char *)"rbd";
   uint64_t size = 0;
   int order = 0;
-  char *imgname = NULL, *snapname = NULL, *dstname = NULL;
+  char *imgname = NULL, *snapname = NULL, *dstname = NULL, *path = NULL;
   string md_oid;
 
   FOR_EACH_ARG(args) {
@@ -295,12 +389,16 @@ int main(int argc, const char **argv)
     } else if (CONF_ARG_EQ("rename", '\0')) {
       opt_rename = true;
       CONF_SAFE_SET_ARG_VAL(&dstname, OPT_STR);
+    } else if (CONF_ARG_EQ("export", '\0')) {
+      opt_export = true;
+      CONF_SAFE_SET_ARG_VAL(&path, OPT_STR);
     } else 
       usage_exit();
   }
 
   if (!opt_create && !opt_delete && !opt_list && !opt_info && !opt_resize &&
-      !opt_list_snaps && !opt_add_snap && !opt_rollback_snap && !opt_rename) {
+      !opt_list_snaps && !opt_add_snap && !opt_rollback_snap && !opt_rename &&
+      !opt_export) {
     usage_exit();
   }
 
@@ -362,7 +460,6 @@ int main(int argc, const char **argv)
     uint64_t bid;
     r = rbd_assign_bid(pool, dir_info_oid, &bid);
     if (r < 0) {
-      cerr << "failed assigning block id" << std::endl;
       err_exit(pool);
     }
 
@@ -404,7 +501,7 @@ int main(int argc, const char **argv)
       err_exit(pool);
     }
     bufferlist header;
-    r = read_header(pool, md_oid, header);
+    r = read_header_bl(pool, md_oid, header);
     if (r < 0) {
       cerr << "error reading header: " << md_oid << ": " << strerror(-r) << std::endl;
       err_exit(pool);
@@ -429,13 +526,7 @@ int main(int argc, const char **argv)
       cerr << "warning: couldn't remove old metadata" << std::endl;
   } else if (opt_info || opt_delete || opt_resize) {
     struct rbd_obj_header_ondisk header;
-    bufferlist bl;
-    r = read_header(pool, md_oid, bl);
-    if (r < 0) {
-      cerr << "error reading header: " << md_oid << ": " << strerror(-r) << std::endl;
-      err_exit(pool);
-    }
-    memcpy(&header, bl.c_str(), sizeof(header));
+    r = read_header(pool, md_oid, &header);
 
     if (opt_delete) {
       if (r >= 0) {
@@ -579,16 +670,20 @@ int main(int argc, const char **argv)
     }
 
     struct rbd_obj_header_ondisk header;
-    bufferlist header_bl;
-    r = read_header(pool, md_oid, header_bl);
+    r = read_header(pool, md_oid, &header);
     if (r < 0) {
       cerr << "error reading header: " << md_oid << ": " << strerror(-r) << std::endl;
       err_exit(pool);
     }
-    memcpy(&header, header_bl.c_str(), sizeof(header));
     r = rollback_image(pool, &header, snapc, snapid);
     if (r < 0) {
       cerr << "error during rollback: " << strerror(-r) << std::endl;
+      err_exit(pool);
+    }
+  } else if (opt_export) {
+    r = do_export(pool, md_oid, path);
+    if (r < 0) {
+      cerr << "export error: " << strerror(-r) << std::endl;
       err_exit(pool);
     }
   }
