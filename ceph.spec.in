@@ -99,7 +99,6 @@ fi
 %{_mandir}/man8/cmds.8*
 %{_mandir}/man8/cosd.8*
 %{_mandir}/man8/mkcephfs.8*
-%{_mandir}/man8/mkmonfs.8*
 %{_mandir}/man8/crun.8*
 %{_mandir}/man8/csyn.8*
 %{_mandir}/man8/crushtool.8*
