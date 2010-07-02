@@ -2247,36 +2247,6 @@ void OSD::handle_osd_map(MOSDMap *m)
       break;
     }
 
-    // update pools
-    for (map<int, PGPool*>::iterator p = pool_map.begin();
-	 p != pool_map.end();
-	 p++) {
-      const pg_pool_t *pi = osdmap->get_pg_pool(p->first);
-      if (pi == NULL) {
-	dout(10) << " pool " << p->first << " appears to have been deleted" << dendl;
-	continue;
-      }
-      PGPool *pool = p->second;
-
-      // make sure auid stays up to date
-      pool->auid = pi->v.auid;
-
-      if (pi->get_snap_epoch() == cur+1) {
-	pi->build_removed_snaps(pool->newly_removed_snaps);
-	pool->newly_removed_snaps.subtract(pool->cached_removed_snaps);
-	pool->cached_removed_snaps.union_of(pool->newly_removed_snaps);
-	dout(10) << " pool " << p->first << " removed_snaps " << pool->cached_removed_snaps
-		 << ", newly so are " << pool->newly_removed_snaps << ")"
-		 << dendl;
-	pool->info = *pi;
-	pool->snapc = pi->get_snap_context();
-      } else {
-	dout(10) << " pool " << p->first << " removed snaps " << pool->cached_removed_snaps
-		 << ", unchanged (snap_epoch = " << pi->get_snap_epoch() << ")" << dendl;
-	pool->newly_removed_snaps.clear();
-      }
-    }
-
     cur++;
     superblock.current_epoch = cur;
     advance_map(t);
@@ -2379,6 +2349,37 @@ void OSD::advance_map(ObjectStore::Transaction& t)
       dout(10) << "boot_epoch is " << boot_epoch << dendl;
     }
   }
+
+  // update pools
+  for (map<int, PGPool*>::iterator p = pool_map.begin();
+       p != pool_map.end();
+       p++) {
+    const pg_pool_t *pi = osdmap->get_pg_pool(p->first);
+    if (pi == NULL) {
+      dout(10) << " pool " << p->first << " appears to have been deleted" << dendl;
+      continue;
+    }
+    PGPool *pool = p->second;
+    
+    // make sure auid stays up to date
+    pool->auid = pi->v.auid;
+    
+    if (pi->get_snap_epoch() == osdmap->get_epoch()) {
+      pi->build_removed_snaps(pool->newly_removed_snaps);
+      pool->newly_removed_snaps.subtract(pool->cached_removed_snaps);
+      pool->cached_removed_snaps.union_of(pool->newly_removed_snaps);
+      dout(10) << " pool " << p->first << " removed_snaps " << pool->cached_removed_snaps
+	       << ", newly so are " << pool->newly_removed_snaps << ")"
+	       << dendl;
+      pool->info = *pi;
+      pool->snapc = pi->get_snap_context();
+    } else {
+      dout(10) << " pool " << p->first << " removed snaps " << pool->cached_removed_snaps
+	       << ", unchanged (snap_epoch = " << pi->get_snap_epoch() << ")" << dendl;
+      pool->newly_removed_snaps.clear();
+    }
+  }
+
   
   // scan pg creations
   hash_map<pg_t, create_pg_info>::iterator n = creating_pgs.begin();
