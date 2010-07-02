@@ -89,7 +89,7 @@ static void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
   ondisk.snap_names_len = 0;
 }
 
-void print_header(char *imgname, rbd_obj_header_ondisk *header)
+static void print_header(const char *imgname, rbd_obj_header_ondisk *header)
 {
   int obj_order = header->options.order;
   cout << "rbd image '" << imgname << "':\n"
@@ -270,6 +270,282 @@ static int rollback_image(pool_t pool, struct rbd_obj_header_ondisk *header,
   return 0;
 }
 
+static int do_list(pool_t pool, const char *poolname, string& dir_oid)
+{
+  bufferlist bl;
+  int r = rados.read(pool, dir_oid, 0, bl, 0);
+  if (r < 0)
+    return r;
+
+  bufferlist::iterator p = bl.begin();
+  bufferlist header;
+  map<string,bufferlist> m;
+  ::decode(header, p);
+  ::decode(m, p);
+  for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); q++)
+    cout << q->first << std::endl;
+  return 0;
+}
+
+static int do_create(pool_t pool, string& dir_oid, string& dir_info_oid, string& md_oid,
+                     const char *imgname, uint64_t size, int order)
+{
+  // make sure it doesn't already exist
+  int r = rados.stat(pool, md_oid, NULL, NULL);
+  if (r == 0) {
+    cerr << "rbd image header " << md_oid << " already exists" << std::endl;
+    return -EEXIST;
+  }
+
+  uint64_t bid;
+  r = rbd_assign_bid(pool, dir_info_oid, &bid);
+  if (r < 0) {
+    cerr << "failed to assign a block name for image" << std::endl;
+    return r;
+  }
+
+  struct rbd_obj_header_ondisk header;
+  init_rbd_header(header, size, order, bid);
+
+  bufferlist bl;
+  bl.append((const char *)&header, sizeof(header));
+
+  print_header(imgname, &header);
+
+  cout << "adding rbd image to directory..." << std::endl;
+  bufferlist cmdbl, emptybl;
+  __u8 c = CEPH_OSD_TMAP_SET;
+  ::encode(c, cmdbl);
+  ::encode(imgname, cmdbl);
+  ::encode(emptybl, cmdbl);
+  r = rados.tmap_update(pool, dir_oid, cmdbl);
+  if (r < 0) {
+    cerr << "error adding img to directory: " << strerror(-r)<< std::endl;
+    return r;
+  }
+
+  cout << "creating rbd image..." << std::endl;
+  r = rados.write(pool, md_oid, 0, bl, bl.length());
+  if (r < 0) {
+    cerr << "error writing header: " << strerror(-r) << std::endl;
+    return r;
+  }
+
+  cout << "done." << std::endl;
+  return 0;
+}
+
+static int do_rename(pool_t pool, string& dir_oid, string& md_oid, const char *imgname, const char *dstname)
+{
+  string dst_md_oid = dstname;
+  dst_md_oid += RBD_SUFFIX;
+  string dstname_str = dstname;
+  string imgname_str = imgname;
+  int r = rados.stat(pool, dst_md_oid, NULL, NULL);
+  if (r == 0) {
+    cerr << "rbd image header " << dst_md_oid << " already exists" << std::endl;
+    return -EEXIST;
+  }
+  bufferlist header;
+  r = read_header_bl(pool, md_oid, header);
+  if (r < 0) {
+    cerr << "error reading header: " << md_oid << ": " << strerror(-r) << std::endl;
+    return r;
+  }
+  r = write_header(pool, dst_md_oid, header);
+  if (r < 0) {
+    cerr << "error writing header: " << dst_md_oid << ": " << strerror(-r) << std::endl;
+    return r;
+  }
+  r = tmap_set(pool, dir_oid, dstname_str);
+  if (r < 0) {
+    rados.remove(pool, dst_md_oid);
+    cerr << "can't add " << dst_md_oid << " to directory" << std::endl;
+    return r;
+  }
+  r = tmap_rm(pool, dir_oid, imgname_str);
+  if (r < 0)
+    cerr << "warning: couldn't remove old entry from directory (" << imgname_str << ")" << std::endl;
+
+  r = rados.remove(pool, md_oid);
+  if (r < 0)
+    cerr << "warning: couldn't remove old metadata" << std::endl;
+
+  return 0;
+}
+
+
+static int do_show_info(pool_t pool, string& md_oid, const char *imgname)
+{
+  struct rbd_obj_header_ondisk header;
+  int r = read_header(pool, md_oid, &header);
+  if (r < 0)
+    return r;
+
+  print_header(imgname, &header);
+  return 0;
+}
+
+static int do_delete(pool_t pool, string& dir_oid, string& md_oid, const char *imgname)
+{
+  struct rbd_obj_header_ondisk header;
+  int r = read_header(pool, md_oid, &header);
+  if (r >= 0) {
+    print_header(imgname, &header);
+    trim_image(imgname, &header, 0);
+    cout << "\rremoving header..." << std::endl;
+    rados.remove(pool, md_oid);
+  }
+
+  cout << "removing rbd image to directory..." << std::endl;
+  bufferlist cmdbl;
+  __u8 c = CEPH_OSD_TMAP_RM;
+  ::encode(c, cmdbl);
+  ::encode(imgname, cmdbl);
+  r = rados.tmap_update(pool, dir_oid, cmdbl);
+  if (r < 0) {
+    cerr << "error removing img from directory: " << strerror(-r)<< std::endl;
+    return r;
+  }
+
+  cout << "done." << std::endl;
+  return 0;
+}
+
+static int do_resize(pool_t pool, string& md_oid, const char *imgname, uint64_t size)
+{
+  struct rbd_obj_header_ondisk header;
+  int r = read_header(pool, md_oid, &header);
+  if (r < 0)
+    return r;
+
+  // trim
+  if (size == header.image_size) {
+    cout << "no change in size (" << size << " -> " << header.image_size << ")" << std::endl;
+    print_header(imgname, &header);
+    return 0;
+  }
+
+  if (size > header.image_size) {
+    cout << "expanding image " << size << " -> " << header.image_size << " objects" << std::endl;
+    header.image_size = size;
+  } else {
+    cout << "shrinking image " << size << " -> " << header.image_size << " objects" << std::endl;
+    trim_image(imgname, &header, size);
+    header.image_size = size;
+  }
+  print_header(imgname, &header);
+
+  // rewrite header
+  bufferlist bl;
+  bl.append((const char *)&header, sizeof(header));
+  r = rados.write(pool, md_oid, 0, bl, bl.length());
+  if (r < 0) {
+    cerr << "error writing header: " << strerror(-r) << std::endl;
+    return r;
+  }
+
+   cout << "done." << std::endl;
+   return 0;
+}
+
+static int do_list_snaps(pool_t pool, string& md_oid)
+{
+  bufferlist bl, bl2;
+
+  int r = rados.exec(pool, md_oid, "rbd", "snap_list", bl, bl2);
+  if (r < 0) {
+    cerr << "list_snaps failed: " << strerror(-r) << std::endl;
+    return r;
+  }
+
+  uint32_t num_snaps;
+  uint64_t snap_seq;
+  bufferlist::iterator iter = bl2.begin();
+  ::decode(snap_seq, iter);
+  ::decode(num_snaps, iter);
+  for (uint32_t i=0; i < num_snaps; i++) {
+    uint64_t id, image_size;
+    string s;
+    ::decode(id, iter);
+    ::decode(image_size, iter);
+    ::decode(s, iter);
+    cout << id << "\t" << s << "\t" << image_size << std::endl;
+  }
+  return 0;
+}
+
+static int do_add_snap(pool_t pool, string& md_oid, const char *snapname)
+{
+  bufferlist bl, bl2;
+  uint64_t snap_id;
+
+  int r = rados.selfmanaged_snap_create(pool, &snap_id);
+  if (r < 0) {
+    cerr << "failed to create snap id: " << strerror(-r) << std::endl;
+    return r;
+  }
+
+  ::encode(snapname, bl);
+  ::encode(snap_id, bl);
+
+  r = rados.exec(pool, md_oid, "rbd", "snap_add", bl, bl2);
+  if (r < 0) {
+    cerr << "rbd.snap_add execution failed failed: " << strerror(-r) << std::endl;
+    return r;
+  }
+
+  return 0;
+}
+
+static int do_rollback_snap(pool_t pool, string& md_oid, const char *snapname)
+{
+  bufferlist bl, bl2;
+
+  int r = rados.exec(pool, md_oid, "rbd", "snap_list", bl, bl2);
+  if (r < 0) {
+    cerr << "list_snaps failed: " << strerror(-r) << std::endl;
+    return r;
+  }
+
+  uint32_t num_snaps;
+  bufferlist::iterator iter = bl2.begin();
+  SnapContext snapc;
+  ::decode(snapc.seq, iter);
+  ::decode(num_snaps, iter);
+  uint64_t snapid = 0;
+  for (uint32_t i=0; i < num_snaps; i++) {
+    uint64_t id, image_size;
+    string s;
+    ::decode(id, iter);
+    ::decode(image_size, iter);
+    ::decode(s, iter);
+    if (s.compare(snapname) == 0)
+      snapid = id;
+    snapc.snaps.push_back(id);
+  }
+  if (!snapid) {
+    cerr << "snapshot not found: " << snapname << std::endl;
+    return -ENOENT;
+  }
+
+  if (!snapc.is_valid()) {
+    cerr << "image snap context is invalid! can't rollback" << std::endl;
+    return -EIO;
+  }
+
+  struct rbd_obj_header_ondisk header;
+  r = read_header(pool, md_oid, &header);
+  if (r < 0) {
+    cerr << "error reading header: " << md_oid << ": " << strerror(-r) << std::endl;
+    return r;
+  }
+  r = rollback_image(pool, &header, snapc, snapid);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
 static int do_export(pool_t pool, string& md_oid, const char *path)
 {
   struct rbd_obj_header_ondisk header;
@@ -326,6 +602,10 @@ done:
   return ret;
 }
 
+static int do_import(pool_t pool, string& md_oid, const char *path)
+{
+  return 0;
+}
 
 static void err_exit(pool_t pool)
 {
@@ -346,7 +626,7 @@ int main(int argc, const char **argv)
 
   bool opt_create = false, opt_delete = false, opt_list = false, opt_info = false, opt_resize = false,
        opt_list_snaps = false, opt_add_snap = false, opt_rollback_snap = false, opt_rename = false,
-       opt_export = false;
+       opt_export = false, opt_import = false;
   char *poolname = (char *)"rbd";
   uint64_t size = 0;
   int order = 0;
@@ -392,13 +672,16 @@ int main(int argc, const char **argv)
     } else if (CONF_ARG_EQ("export", '\0')) {
       opt_export = true;
       CONF_SAFE_SET_ARG_VAL(&path, OPT_STR);
+    } else if (CONF_ARG_EQ("import", '\0')) {
+      opt_import = true;
+      CONF_SAFE_SET_ARG_VAL(&path, OPT_STR);
     } else 
       usage_exit();
   }
 
   if (!opt_create && !opt_delete && !opt_list && !opt_info && !opt_resize &&
       !opt_list_snaps && !opt_add_snap && !opt_rollback_snap && !opt_rename &&
-      !opt_export) {
+      !opt_export && !opt_import) {
     usage_exit();
   }
 
@@ -425,19 +708,17 @@ int main(int argc, const char **argv)
   }
 
   if (opt_list) {
-    bufferlist bl;
-    r = rados.read(pool, dir_oid, 0, bl, 0);
+    r = do_list(pool, poolname, dir_oid);
     if (r < 0) {
-      cerr << "pool " << poolname << " doesn't contain rbd images" << std::endl;
+      switch (r) {
+      case -ENOENT:
+        cerr << "pool " << poolname << " doesn't contain rbd images" << std::endl;
+        break;
+      default:
+        cerr << "error: " << strerror(-r) << std::endl;
+      }
       err_exit(pool);
     }
-    bufferlist::iterator p = bl.begin();
-    bufferlist header;
-    map<string,bufferlist> m;
-    ::decode(header, p);
-    ::decode(m, p);
-    for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); q++)
-      cout << q->first << std::endl;
   } else if (opt_create) {
     if (!size) {
       cerr << "must specify size in MB to create an rbd image" << std::endl;
@@ -449,241 +730,75 @@ int main(int argc, const char **argv)
       usage();
       err_exit(pool);
     }
-
-    // make sure it doesn't already exist
-    r = rados.stat(pool, md_oid, NULL, NULL);
-    if (r == 0) {
-      cerr << "rbd image header " << md_oid << " already exists" << std::endl;
-      err_exit(pool);
-    }
-
-    uint64_t bid;
-    r = rbd_assign_bid(pool, dir_info_oid, &bid);
+    r = do_create(pool, dir_oid, dir_info_oid, md_oid, imgname, size, order);
     if (r < 0) {
+      cerr << "create error: " << strerror(-r) << std::endl;
       err_exit(pool);
     }
-
-    struct rbd_obj_header_ondisk header;
-    init_rbd_header(header, size, order, bid);
-    
-    bufferlist bl;
-    bl.append((const char *)&header, sizeof(header));
-    
-    print_header(imgname, &header);
-
-    cout << "adding rbd image to directory..." << std::endl;
-    bufferlist cmdbl, emptybl;
-    __u8 c = CEPH_OSD_TMAP_SET;
-    ::encode(c, cmdbl);
-    ::encode(imgname, cmdbl);
-    ::encode(emptybl, cmdbl);
-    r = rados.tmap_update(pool, dir_oid, cmdbl);
-    if (r < 0) {
-      cerr << "error adding img to directory: " << strerror(-r)<< std::endl;
-      err_exit(pool);
-    }
-
-    cout << "creating rbd image..." << std::endl;
-    r = rados.write(pool, md_oid, 0, bl, bl.length());
-    if (r < 0) {
-      cerr << "error writing header: " << strerror(-r) << std::endl;
-      err_exit(pool);
-    }
-    cout << "done." << std::endl;
   } else if (opt_rename) {
-    string dst_md_oid = dstname;
-    dst_md_oid += RBD_SUFFIX;
-    string dstname_str = dstname;
-    string imgname_str = imgname;
-    r = rados.stat(pool, dst_md_oid, NULL, NULL);
-    if (r == 0) {
-      cerr << "rbd image header " << dst_md_oid << " already exists" << std::endl;
-      err_exit(pool);
-    }
-    bufferlist header;
-    r = read_header_bl(pool, md_oid, header);
+    r = do_rename(pool, dir_oid, md_oid, imgname, dstname);
     if (r < 0) {
-      cerr << "error reading header: " << md_oid << ": " << strerror(-r) << std::endl;
+      cerr << "rename error: " << strerror(-r) << std::endl;
       err_exit(pool);
     }
-    r = write_header(pool, dst_md_oid, header);
+  } else if (opt_info) {
+    r = do_show_info(pool, md_oid, imgname);
     if (r < 0) {
-      cerr << "error writing header: " << dst_md_oid << ": " << strerror(-r) << std::endl;
+      cerr << "error: " << strerror(-r) << std::endl;
       err_exit(pool);
     }
-    r = tmap_set(pool, dir_oid, dstname_str);
+  } else if (opt_delete) {
+    r = do_delete(pool, dir_oid, md_oid, imgname);
     if (r < 0) {
-      rados.remove(pool, dst_md_oid);
-      cerr << "can't add " << dst_md_oid << " to directory" << std::endl;
+      cerr << "delete error: " << strerror(-r) << std::endl;
       err_exit(pool);
     }
-    r = tmap_rm(pool, dir_oid, imgname_str);
-    if (r < 0)
-      cerr << "warning: couldn't remove old entry from directory (" << imgname_str << ")" << std::endl;
-
-    r = rados.remove(pool, md_oid);
-    if (r < 0)
-      cerr << "warning: couldn't remove old metadata" << std::endl;
-  } else if (opt_info || opt_delete || opt_resize) {
-    struct rbd_obj_header_ondisk header;
-    r = read_header(pool, md_oid, &header);
-
-    if (opt_delete) {
-      if (r >= 0) {
-	print_header(imgname, &header);
-	trim_image(imgname, &header, 0);
-	cout << "\rremoving header..." << std::endl;
-	rados.remove(pool, md_oid);
-      }
-	
-      cout << "removing rbd image to directory..." << std::endl;
-      bufferlist cmdbl;
-      __u8 c = CEPH_OSD_TMAP_RM;
-      ::encode(c, cmdbl);
-      ::encode(imgname, cmdbl);
-      r = rados.tmap_update(pool, dir_oid, cmdbl);
-      if (r < 0) {
-	cerr << "error removing img from directory: " << strerror(-r)<< std::endl;
-	err_exit(pool);
-      }
-    } else { /* opt_info || opt_resize */
-      if (r < 0)
-	err_exit(pool);
-      
-      if (opt_info) {
-	print_header(imgname, &header);
-      }
-
-      if (opt_resize) {
-	// trim
-	if (size == header.image_size) {
-	  cout << "no change in size (" << size << " -> " << header.image_size << ")" << std::endl;
-	  print_header(imgname, &header);
-	} else {
-	  if (size > header.image_size) {
-	    cout << "expanding image " << size << " -> " << header.image_size << " objects" << std::endl;
-	    header.image_size = size;
-	  } else {
-	    cout << "shrinking image " << size << " -> " << header.image_size << " objects" << std::endl;
-	    trim_image(imgname, &header, size);
-	    header.image_size = size;
-	  }
-	  print_header(imgname, &header);
-
-	  // rewrite header
-	  bufferlist bl;
-	  bl.append((const char *)&header, sizeof(header));
-	  r = rados.write(pool, md_oid, 0, bl, bl.length());
-	  if (r < 0) {
-	    cerr << "error writing header: " << strerror(-r) << std::endl;
-	    err_exit(pool);
-	  }
-	}
-      }
+  } else if (opt_resize) {
+    r = do_resize(pool, md_oid, imgname, size);
+    if (r < 0) {
+      cerr << "resize error: " << strerror(-r) << std::endl;
+      err_exit(pool);
     }
-      
-    cout << "done." << std::endl;
   } else if (opt_list_snaps) {
-    bufferlist bl, bl2;
     if (!imgname) {
       usage();
       err_exit(pool);
     }
-
-    r = rados.exec(pool, md_oid, "rbd", "snap_list", bl, bl2);
+    r = do_list_snaps(pool, md_oid);
     if (r < 0) {
-      cerr << "list_snaps failed: " << strerror(-r) << std::endl;
+      cerr << "failed to list snapshots: " << strerror(-r) << std::endl;
       err_exit(pool);
     }
-
-    uint32_t num_snaps;
-    uint64_t snap_seq;
-    bufferlist::iterator iter = bl2.begin();
-    ::decode(snap_seq, iter);
-    ::decode(num_snaps, iter);
-    for (uint32_t i=0; i < num_snaps; i++) {
-      uint64_t id, image_size;
-      string s;
-      ::decode(id, iter);
-      ::decode(image_size, iter);
-      ::decode(s, iter);
-      cout << id << "\t" << s << "\t" << image_size << std::endl;
-    }
   } else if (opt_add_snap) {
-    bufferlist bl, bl2;
-    uint64_t snap_id;
     if (!imgname || !snapname) {
       usage();
       err_exit(pool);
     }
-    r = rados.selfmanaged_snap_create(pool, &snap_id);
+    r = do_add_snap(pool, md_oid, snapname);
     if (r < 0) {
-      cerr << "failed to create snap id: " << strerror(-r) << std::endl;
-      err_exit(pool);
-    }
-
-    ::encode(snapname, bl);
-    ::encode(snap_id, bl);
-
-    r = rados.exec(pool, md_oid, "rbd", "snap_add", bl, bl2);
-    if (r < 0) {
-      cerr << "list_snaps failed: " << strerror(-r) << std::endl;
+      cerr << "failed to create snapshot: " << strerror(-r) << std::endl;
       err_exit(pool);
     }
   } else if (opt_rollback_snap) {
-    bufferlist bl, bl2;
     if (!imgname) {
       usage();
       err_exit(pool);
     }
-
-    r = rados.exec(pool, md_oid, "rbd", "snap_list", bl, bl2);
+    r = do_rollback_snap(pool, md_oid, snapname);
     if (r < 0) {
-      cerr << "list_snaps failed: " << strerror(-r) << std::endl;
-      err_exit(pool);
-    }
-
-    uint32_t num_snaps;
-    bufferlist::iterator iter = bl2.begin();
-    SnapContext snapc;
-    ::decode(snapc.seq, iter);
-    ::decode(num_snaps, iter);
-    uint64_t snapid = 0;
-    for (uint32_t i=0; i < num_snaps; i++) {
-      uint64_t id, image_size;
-      string s;
-      ::decode(id, iter);
-      ::decode(image_size, iter);
-      ::decode(s, iter);
-      if (s.compare(snapname) == 0)
-        snapid = id;
-      snapc.snaps.push_back(id);
-    }
-    if (!snapid) {
-      cerr << "snapshot not found: " << snapname << std::endl;
-      err_exit(pool);
-    }
-
-    if (!snapc.is_valid()) {
-      cerr << "image snap context is invalid! can't rollback" << std::endl;
-      err_exit(pool);
-    }
-
-    struct rbd_obj_header_ondisk header;
-    r = read_header(pool, md_oid, &header);
-    if (r < 0) {
-      cerr << "error reading header: " << md_oid << ": " << strerror(-r) << std::endl;
-      err_exit(pool);
-    }
-    r = rollback_image(pool, &header, snapc, snapid);
-    if (r < 0) {
-      cerr << "error during rollback: " << strerror(-r) << std::endl;
+      cerr << "rollback failed: " << strerror(-r) << std::endl;
       err_exit(pool);
     }
   } else if (opt_export) {
     r = do_export(pool, md_oid, path);
     if (r < 0) {
       cerr << "export error: " << strerror(-r) << std::endl;
+      err_exit(pool);
+    }
+  } else if (opt_import) {
+    r = do_import(pool, md_oid, path);
+    if (r < 0) {
+      cerr << "import error: " << strerror(-r) << std::endl;
       err_exit(pool);
     }
   }
