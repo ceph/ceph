@@ -3049,7 +3049,12 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
       *target = dir->dn->dir->parent_inode;
     goto done;
   }
-    
+
+  if (dname.length() > NAME_MAX) {
+    r = -ENAMETOOLONG;
+    goto done;
+  }
+  
   if (dname == g_conf.client_snapdir &&
       dir->snapid == CEPH_NOSNAP) {
     *target = open_snapdir(dir);

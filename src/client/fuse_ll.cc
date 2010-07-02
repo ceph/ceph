@@ -72,15 +72,15 @@ static void ceph_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   struct fuse_entry_param fe;
-  int stmask;
+  int r;
 
   memset(&fe, 0, sizeof(fe));
-  stmask = client->ll_lookup(fino_vino(parent), name, &fe.attr, ctx->uid, ctx->gid);
-  if (stmask >= 0) {
+  r = client->ll_lookup(fino_vino(parent), name, &fe.attr, ctx->uid, ctx->gid);
+  if (r >= 0) {
     fe.ino = make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fuse_reply_entry(req, &fe);
   } else {
-    fuse_reply_err(req, ENOENT);
+    fuse_reply_err(req, -r);
   }
 }
 
