@@ -3423,6 +3423,20 @@ int Client::_setattr(Inode *in, struct stat_precise *attr, int mask, int uid, in
   dout(10) << "_setattr mask " << mask << " issued " << ccap_string(issued) << dendl;
 
   // make the change locally?
+
+  if (!mask) {
+    // caller just needs us to bump the ctime
+    in->ctime = g_clock.now();
+    if (issued & CEPH_CAP_AUTH_EXCL)
+      mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
+    else if (issued & CEPH_CAP_FILE_EXCL)
+      mark_caps_dirty(in, CEPH_CAP_FILE_EXCL);
+    else if (issued & CEPH_CAP_XATTR_EXCL)
+      mark_caps_dirty(in, CEPH_CAP_XATTR_EXCL);
+    else
+      mask |= CEPH_SETATTR_CTIME;
+  }
+
   if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
     if (mask & CEPH_SETATTR_MODE) {
       in->ctime = g_clock.now();
