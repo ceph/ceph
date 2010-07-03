@@ -195,7 +195,7 @@ int dout_create_rank_symlink(int64_t n)
 {
   Mutex::Locker l(_dout_lock);
   int r = 0;
-  if (log_to_file()) {
+  if (log_to_file() && !(g_conf.log_file && g_conf.log_file[0])) {
     if (_dout_need_open)
       _dout_open_log();
 
