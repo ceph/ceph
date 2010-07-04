@@ -162,13 +162,14 @@ testrados_SOURCES = testrados.c
 testrados_LDADD = librados.la -lpthread -lm -lcrypto
 testradospp_SOURCES = testradospp.cc
 testradospp_LDADD = librados.la -lpthread -lm -lcrypto
+bin_PROGRAMS += testrados testradospp
 endif
 
 radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la -lpthread -lm -lcrypto
 rbdtool_SOURCES = rbdtool.cc
 rbdtool_LDADD = librados.la -lpthread -lm -lcrypto
-bin_PROGRAMS += testrados testradospp radosacl rbdtool
+bin_PROGRAMS += radosacl rbdtool
 
 if WITH_RADOSGW
 libradosgw_a_SOURCES = \
