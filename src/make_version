@@ -1,31 +1,14 @@
 #!/bin/bash
 
+cur=`cat $1`
 
 print_all() {
 	echo "#ifndef CEPH_VERSION_H"
 	echo "#define CEPH_VERSION_H"
 	echo
-	echo "#define CEPH_GIT_VER `git rev-parse HEAD 2>/dev/null`"
+	echo "#define CEPH_GIT_VER $cur"
 	echo
 	echo "#endif"
 }
 
-write_last_ver() {
-	echo $git_ver > $dname/.make_last_ver
-}
-
-dname=`dirname $0`
-
-git_ver=`git rev-parse HEAD 2>/dev/null`
-
-[ -e $dname/.make_last_ver ] && \
-  [ -e $dname/ceph_ver.h ] && \
-  [ "$git_ver" == "`cat $dname/.make_last_ver`" ] && exit
-
-[ "$1" == "--check" ] && write_last_ver && exit
-
-
-print_all > $dname/ceph_ver.h
-
-write_last_ver
-
+print_all > $2

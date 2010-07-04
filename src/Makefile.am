@@ -313,16 +313,15 @@ install-data-local:
 	$(install_sh_SCRIPT) -m 0644 crush/types.h $(DESTDIR)$(includedir)/crush/types.h
 	$(install_sh_SCRIPT) -m 0644 crush/mapper.h $(DESTDIR)$(includedir)/crush/mapper.h
 
-.make_last_ver:
-	./make_version --check
-
-ceph_ver.h: $(all_sources) .make_last_ver
-	./make_version
+FORCE:
+.git_version: FORCE
+	./check_version .git_version
+ceph_ver.h: .git_version
+	./make_version .git_version ceph_ver.h
 
 ceph_ver.c: ceph_ver.h
-common/debug.cc: ceph_ver.h
+common/debug.cc: ceph_ver.h 
 config.cc: ceph_ver.h
-
 
 
 
