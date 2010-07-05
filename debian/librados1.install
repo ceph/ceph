@@ -1,2 +1,3 @@
 /usr/lib/librados.so.*
+/usr/lib/libcls_rbd.so.*
 
