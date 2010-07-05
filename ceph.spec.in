@@ -40,8 +40,8 @@ This package contains the headers needed to develop programs that use Ceph.
 
 %build
 ./autogen.sh
-%{configure} --without-hadoop --without-debug
-make CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
+%{configure} --without-hadoop 
+make -j$(getconf _NPROCESSORS_ONLN) CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
 %install
 rm -rf $RPM_BUILD_ROOT
@@ -75,6 +75,8 @@ fi
 %doc README COPYING
 %{_bindir}/ceph
 %{_bindir}/cconf
+%{_bindir}/cclass
+%{_bindir}/cclsinfo
 %{_bindir}/crushtool
 %{_bindir}/monmaptool
 %{_bindir}/osdmaptool
@@ -85,11 +87,13 @@ fi
 %{_bindir}/cmds
 %{_bindir}/cosd
 %{_bindir}/rados
+%{_bindir}/radosacl
 %{_bindir}/rbdtool
 %{_initrddir}/ceph
 %{_libdir}/libceph.so.*
 %{_libdir}/libcrush.so.*
 %{_libdir}/librados.so.*
+%{_libdir}/libcls_rbd.so.*
 %{_sbindir}/mkcephfs
 /sbin/mount.ceph
 %{_libdir}/ceph
@@ -112,6 +116,9 @@ fi
 %{_mandir}/man8/rados.8*
 %{_mandir}/man8/rbdtool.8*
 %{_mandir}/man8/cauthtool.8*
+%{_mandir}/man8/cclass.8.gz
+%{_mandir}/man8/cclsinfo.8.gz
+
 
 %files fuse
 %defattr(-,root,root,-)
@@ -138,6 +145,7 @@ fi
 %{_libdir}/libceph.so
 %{_libdir}/libcrush.so
 %{_libdir}/librados.so
+%{_libdir}/libcls_rbd.so
 
 %changelog
 * Fri Apr 30 2010 Sage Weil <sage@newdream.net> 0.19.1-5
