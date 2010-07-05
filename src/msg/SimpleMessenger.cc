@@ -2359,6 +2359,12 @@ void SimpleMessenger::submit_message(Message *m, const entity_addr_t& dest_addr,
   // hanging on to a message, ditch the assert!
   assert(m->nref.read() == 1);
 
+  if (dest_addr == entity_addr_t()) {
+    dout(0) << "submit_message message " << *m << " with empty dest " << dest_addr << dendl;
+    m->put();
+    return;
+  }
+
   lock.Lock();
   {
     // local?
