@@ -23,12 +23,8 @@ else
     echo "forcing."
 fi
 
-echo generating git version stamp
-cd src
-./make_version
-gitver=`grep GIT_VER ceph_ver.h | awk '{print $3}' | cut -c 1-8`
+gitver=`git rev-parse HEAD 2>/dev/null | cut -c 1-8`
 echo gitver $gitver
-cd ..
 
 if [ "$repo" = "testing" ]; then
     versuffix=`date "+%Y%m%d%H%M"`
