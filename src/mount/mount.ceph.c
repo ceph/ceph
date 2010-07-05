@@ -213,6 +213,11 @@ static int parse_options(char ** optionsp, int * filesys_flags)
 		} else if (strncmp(data, "relatime", 8) == 0) {
 			*filesys_flags |= MS_RELATIME;
 
+		} else if (strncmp(data, "noauto", 6) == 0) {
+			skip = 1;  /* ignore */
+		} else if (strncmp(data, "_netdev", 7) == 0) {
+			skip = 1;  /* ignore */
+
 		} else if (strncmp(data, "secretfile", 7) == 0) {
 			char *fn = value;
 			char *end = fn;
