@@ -883,7 +883,8 @@ void Paxos::update_observers()
     }
     ++iter;
     
-    if (observer->last_version == 0) {
+    if (observer->last_version == 0 ||
+	observer->last_version < first_committed) {
       ver = get_latest(bl);
       if (ver) {
 	dout(10) << " sending summary state v" << ver << " to " << observer->inst << dendl;
