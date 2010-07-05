@@ -120,7 +120,6 @@ struct md_config_t {
   char *key;
   char *keyfile;
   char *keyring;
-  char *supported_auth;
 
   // messenger
 
@@ -165,6 +164,7 @@ struct md_config_t {
   double paxos_observer_timeout;
 
   // auth
+  char *auth_supported;
   double auth_mon_ticket_ttl;
   double auth_service_ticket_ttl;
   int auth_nonce_len;

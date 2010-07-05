@@ -243,7 +243,7 @@ if [ "$start_mon" -eq 1 ]; then
 $extra_conf
 EOF
 			[ "$cephx" -eq 1 ] && cat<<EOF >> $conf
-        supported auth = cephx
+        auth supported = cephx
 EOF
 			cat <<EOF >> $conf
 [mds]

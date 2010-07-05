@@ -304,7 +304,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(key, 0, OPT_STR, ""),
 	OPTION(keyfile, 'K', OPT_STR, ""),
 	OPTION(keyring, 'k', OPT_STR, "~/.ceph/keyring.bin, /etc/ceph/keyring.bin, .ceph_keyring"),
-	OPTION(supported_auth, 0, OPT_STR, "none"),
 	OPTION(clock_lock, 0, OPT_BOOL, false),
 	OPTION(clock_tare, 0, OPT_BOOL, false),
 	OPTION(ms_tcp_nodelay, 0, OPT_BOOL, true),
@@ -334,6 +333,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mon_globalid_prealloc, 0, OPT_INT, 100),   // how many globalids to prealloc
 	OPTION(paxos_propose_interval, 0, OPT_DOUBLE, 1.0),  // gather updates for this long before proposing a map update
 	OPTION(paxos_observer_timeout, 0, OPT_DOUBLE, 5*60), // gather updates for this long before proposing a map update
+	OPTION(auth_supported, 0, OPT_STR, "none"),
 	OPTION(auth_mon_ticket_ttl, 0, OPT_DOUBLE, 60*60*12),
 	OPTION(auth_service_ticket_ttl, 0, OPT_DOUBLE, 60*60),
 	OPTION(auth_nonce_len, 0, OPT_INT, 16),

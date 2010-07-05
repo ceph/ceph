@@ -24,7 +24,7 @@ static map<int, bool> auth_supported;
 
 static void _init_supported(void)
 {
-  string str = g_conf.supported_auth;
+  string str = g_conf.auth_supported;
   list<string> sup_list;
   get_str_list(str, sup_list);
   for (list<string>::iterator iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
