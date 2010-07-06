@@ -457,9 +457,10 @@ ExportControl *conf_get_export_control();
 
 #define CONF_VAL args[i]
 
-#define CONF_SAFE_SET_ARG_VAL(dest, type) \
+#define CONF_SAFE_SET_ARG_VAL_USAGE(dest, type, show_usage) \
 	do { \
           __isarg = i+1 < args.size(); \
+          if (__isarg && !val_pos && args[i+1][0] == '-') __isarg = false; \
           if (type == OPT_BOOL) { \
 		if (val_pos) { \
 			CONF_SET_ARG_VAL(dest, type); \
@@ -467,9 +468,11 @@ ExportControl *conf_get_export_control();
 			conf_set_conf_val(dest, type, "true"); \
           } else if (__isarg || val_pos) { \
 		CONF_SET_ARG_VAL(dest, type); \
-	  } else if (args_usage) \
+	  } else if (show_usage && args_usage) \
 		args_usage(); \
 	} while (0)
+
+#define CONF_SAFE_SET_ARG_VAL(dest, type) CONF_SAFE_SET_ARG_VAL_USAGE(dest, type, true)
 
 #define CONF_SET_BOOL_ARG_VAL(dest) \
 	conf_set_conf_val(dest, OPT_BOOL, (val_pos ? &args[i][val_pos] : "true"))
