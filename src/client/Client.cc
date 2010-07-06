@@ -1034,11 +1034,17 @@ void Client::handle_client_session(MClientSession *m)
   MDSSession *mds_session = mds_sessions[from];
   switch (m->get_op()) {
   case CEPH_SESSION_OPEN:
-    mds_sessions[from] = mds_session = new MDSSession();
+    if (!mds_session)
+      mds_sessions[from] = mds_session = new MDSSession();
     mds_session->mds_num = from;
     mds_session->seq = 0;
     mds_session->inst = m->get_source_inst();
     renew_caps(from);
+    if (unmounting) {
+      mds_session->closing = true;
+      messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, mds_session->seq),
+                              mdsmap->get_inst(from));
+    }
     break;
 
   case CEPH_SESSION_CLOSE:
@@ -2926,9 +2932,11 @@ int Client::unmount()
        ++p) {
     dout(2) << "sending client_session close to mds" << p->first
 	    << " seq " << p->second->seq << dendl;
-    p->second->closing = true;
-    messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, p->second->seq),
-			    mdsmap->get_inst(p->first));
+    if (!p->second->closing) {
+      p->second->closing = true;
+      messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, p->second->seq),
+                              mdsmap->get_inst(p->first));
+    }
   }
 
   // wait for sessions to close
