@@ -756,7 +756,7 @@ public:
   client_t whoami;
 
   // mds sessions
-  map<int, MDSSession> mds_sessions;  // mds -> push seq
+  map<int, MDSSession*> mds_sessions;  // mds -> push seq
   map<int, list<Cond*> > waiting_for_session;
   list<Cond*> waiting_for_mdsmap;
 
