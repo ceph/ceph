@@ -8293,16 +8293,19 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 
       // straydn
       bufferlist::iterator p = m->straybl.begin();
-      list<Context*> finished;
-      int from = m->get_source().num();
-      CInode *mdsin = add_replica_inode(p, NULL, finished);
-      CDir *mdsdir = add_replica_dir(p, mdsin, from, finished);
-      CDentry *straydirdn = add_replica_dentry(p, mdsdir, finished);
-      CInode *strayin = add_replica_inode(p, straydirdn, finished);
-      CDir *straydir = add_replica_dir(p, strayin, from, finished);
-      CDentry *straydn = add_replica_dentry(p, straydir, finished);
-      if (!finished.empty())
-	mds->queue_waiters(finished);
+      CDentry *straydn = NULL;
+      if (!p.end()) {
+	list<Context*> finished;
+	int from = m->get_source().num();
+	CInode *mdsin = add_replica_inode(p, NULL, finished);
+	CDir *mdsdir = add_replica_dir(p, mdsin, from, finished);
+	CDentry *straydirdn = add_replica_dentry(p, mdsdir, finished);
+	CInode *strayin = add_replica_inode(p, straydirdn, finished);
+	CDir *straydir = add_replica_dir(p, strayin, from, finished);
+	straydn = add_replica_dentry(p, straydir, finished);
+	if (!finished.empty())
+	  mds->queue_waiters(finished);
+      }
 
       // open inode?
       if (dnl->is_primary()) {
