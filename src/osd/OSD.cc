@@ -539,18 +539,18 @@ void OSD::reopen_logger()
   static bool didit = false;
   if (!didit) {
     didit = true;
-    osd_logtype.add_set(l_osd_opq, "opq");
-    osd_logtype.add_inc(l_osd_op, "op");
-    osd_logtype.add_set(l_osd_opwip, "opwip");
-    osd_logtype.add_inc(l_osd_c_rd, "c_rd");
-    osd_logtype.add_inc(l_osd_c_rdb, "c_rdb");
-    osd_logtype.add_inc(l_osd_c_wr, "c_wr");
-    osd_logtype.add_inc(l_osd_c_wrb,"c_wrb");
+    osd_logtype.add_set(l_osd_opq, "opq");       // op queue length (waiting to be processed yet)
+    osd_logtype.add_inc(l_osd_op, "op");         // ops/sec
+    osd_logtype.add_set(l_osd_opwip, "opwip");   // ops currently being processed
+    osd_logtype.add_inc(l_osd_c_rd, "c_rd");     // client reads
+    osd_logtype.add_inc(l_osd_c_rdb, "c_rdb");   // client read bytes
+    osd_logtype.add_inc(l_osd_c_wr, "c_wr");     // client writes
+    osd_logtype.add_inc(l_osd_c_wrb,"c_wrb");    // client write bytes
   
-    osd_logtype.add_inc(l_osd_r_wr, "r_wr");
-    osd_logtype.add_inc(l_osd_r_wrb, "r_wrb");
+    osd_logtype.add_inc(l_osd_r_wr, "r_wr");     // replicated writes
+    osd_logtype.add_inc(l_osd_r_wrb, "r_wrb");   // replicated write bytes
 
-    osd_logtype.add_inc(l_osd_subop, "subop");
+    osd_logtype.add_inc(l_osd_subop, "subop");   // subops (replicated writes, recovery)
 
     osd_logtype.add_inc(l_osd_rop, "rop");
     osd_logtype.add_inc(l_osd_r_push, "r_push");
@@ -572,11 +572,11 @@ void OSD::reopen_logger()
     osd_logtype.add_inc(l_osd_rlsum, "rlsum");
     osd_logtype.add_inc(l_osd_rlnum, "rlnum");
 
-    osd_logtype.add_set(l_osd_numpg, "numpg");
-    osd_logtype.add_set(l_osd_hbto, "hbto");
-    osd_logtype.add_set(l_osd_hbfrom, "hbfrom");
+    osd_logtype.add_set(l_osd_numpg, "numpg");   // num pgs
+    osd_logtype.add_set(l_osd_hbto, "hbto");     // heartbeat peers we send to
+    osd_logtype.add_set(l_osd_hbfrom, "hbfrom"); // heartbeat peers we recv from
   
-    osd_logtype.add_set(l_osd_buf, "buf");
+    osd_logtype.add_set(l_osd_buf, "buf");       // total ceph::buffer bytes
   
     osd_logtype.add_inc(l_osd_map, "map");
     osd_logtype.add_inc(l_osd_mapi, "mapi");
