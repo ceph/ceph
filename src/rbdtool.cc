@@ -34,7 +34,7 @@ pool_t pool;
 
 void usage()
 {
-  cout << "usage: rbdtool [-n <auth user>] [-p|--pool <name>] [-o|--object <imagename>] <cmd>\n"
+  cout << "usage: rbdtool [-n <auth user>] [-p|--pool <name>] [-i|--image <imagename>] <cmd>\n"
        << "where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:\n"
        << "\t--list    list rbd images\n"
        << "\t--info    show information about image size, striping, etc.\n"
@@ -726,8 +726,8 @@ int main(int argc, const char **argv)
     } else if (CONF_ARG_EQ("resize", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
       opt_resize = true;
-    } else if (CONF_ARG_EQ("info", 'i')) {
-      CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
+    } else if (CONF_ARG_EQ("info", 'I')) {
+      CONF_SAFE_SET_ARG_VAL_USAGE(&imgname, OPT_STR, false);
       opt_info = true;
     } else if (CONF_ARG_EQ("list-snaps", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
@@ -740,7 +740,7 @@ int main(int argc, const char **argv)
       opt_rollback_snap = true;
     } else if (CONF_ARG_EQ("pool", 'p')) {
       CONF_SAFE_SET_ARG_VAL(&poolname, OPT_STR);
-    } else if (CONF_ARG_EQ("object", 'o')) {
+    } else if (CONF_ARG_EQ("image", 'i')) {
       CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
     } else if (CONF_ARG_EQ("size", 's')) {
       CONF_SAFE_SET_ARG_VAL(&size, OPT_LONGLONG);
