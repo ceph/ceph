@@ -47,6 +47,7 @@ int rados_lookup_pool(const char *name);
 int rados_stat_pool(rados_pool_t pool, struct rados_pool_stat_t *stats);
 
 void rados_set_snap(rados_pool_t pool, rados_snap_t snap);
+int rados_set_snap_context(rados_pool_t pool, rados_snap_t seq, rados_snap_t *snaps, int num_snaps);
 
 int rados_create_pool(const char *name);
 int rados_create_pool_with_auid(const char *name, uint64_t auid);

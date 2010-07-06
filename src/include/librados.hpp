@@ -51,6 +51,8 @@ public:
   int lookup_pool(const char *name);
 
   void set_snap(pool_t pool, snap_t seq);
+  int set_snap_context(pool_t pool, snap_t seq, vector<snap_t>& snaps);
+
 
   int create(pool_t pool, const std::string& oid, bool exclusive);
 

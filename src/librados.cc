@@ -96,6 +96,16 @@ public:
 	s = CEPH_NOSNAP;
       snap_seq = s;
     }
+
+    int set_snap_context(snapid_t seq, vector<snapid_t>& snaps) {
+      SnapContext n;
+      n.seq = seq;
+      n.snaps = snaps;
+      if (!n.is_valid())
+	return -EINVAL;
+      snapc = n;
+      return 0;
+    }
   };
 
   int lookup_pool(const char *name) {
@@ -1540,6 +1550,18 @@ void Rados::set_snap(rados_pool_t pool, snap_t seq)
   ctx->set_snap(seq);
 }
 
+int Rados::set_snap_context(rados_pool_t pool, snap_t seq, vector<snap_t>& snaps)
+{
+  if (!client)
+    return -EINVAL;
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  vector<snapid_t> snv;
+  snv.resize(snaps.size());
+  for (unsigned i=0; i<snaps.size(); i++)
+    snv[i] = snaps[i];
+  return ctx->set_snap_context(seq, snv);
+}
+
 int Rados::snap_list(rados_pool_t pool, vector<snap_t> *snaps)
 {
   if (!client)
@@ -1755,6 +1777,17 @@ extern "C" void rados_set_snap(rados_pool_t pool, rados_snap_t seq)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   ctx->set_snap((snapid_t)seq);
+}
+
+extern "C" int rados_set_snap_context(rados_pool_t pool, rados_snap_t seq,
+				       rados_snap_t *snaps, int num_snaps)
+{
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  vector<snapid_t> snv;
+  snv.resize(num_snaps);
+  for (int i=0; i<num_snaps; i++)
+    snv[i] = (snapid_t)snaps[i];
+  return ctx->set_snap_context((snapid_t)seq, snv);
 }
 
 extern "C" int rados_write(rados_pool_t pool, const char *o, off_t off, const char *buf, size_t len)
