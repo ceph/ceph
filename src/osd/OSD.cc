@@ -573,6 +573,9 @@ void OSD::reopen_logger()
     osd_logtype.add_inc(l_osd_rlnum, "rlnum");
 
     osd_logtype.add_set(l_osd_numpg, "numpg");   // num pgs
+    osd_logtype.add_set(l_osd_numpg_primary, "numpg_primary"); // num primary pgs
+    osd_logtype.add_set(l_osd_numpg_replica, "numpg_replica"); // num replica pgs
+    osd_logtype.add_set(l_osd_numpg_stray, "numpg_stray");   // num stray pgs
     osd_logtype.add_set(l_osd_hbto, "hbto");     // heartbeat peers we send to
     osd_logtype.add_set(l_osd_hbfrom, "hbfrom"); // heartbeat peers we recv from
   
@@ -2592,6 +2595,8 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
   map<int,MOSDPGInfo*> info_map;  // peer -> message
 
   epoch_t up_thru = osdmap->get_up_thru(whoami);
+  
+  int num_pg_primary = 0, num_pg_replica = 0, num_pg_stray = 0;
 
   // scan pg's
   for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
@@ -2599,6 +2604,13 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
        it++) {
     PG *pg = it->second;
     pg->lock();
+
+    if (pg->is_primary())
+      num_pg_primary++;
+    else if (pg->is_replica())
+      num_pg_replica++;
+    else
+      num_pg_stray++;
 
     if (g_conf.osd_check_for_log_corruption)
       pg->check_log_for_corruption(store);
@@ -2638,6 +2650,9 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
   do_infos(info_map);
 
   logger->set(l_osd_numpg, pg_map.size());
+  logger->set(l_osd_numpg_primary, num_pg_primary);
+  logger->set(l_osd_numpg_replica, num_pg_replica);
+  logger->set(l_osd_numpg_stray, num_pg_stray);
 
   wake_all_pg_waiters();   // the pg mapping may have shifted
 
