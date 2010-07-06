@@ -892,7 +892,10 @@ void EOpen::replay(MDS *mds)
        p != inos.end();
        p++) {
     CInode *in = mds->mdcache->get_inode(*p);
-    assert(in); 
+    if (!in) {
+      dout(0) << "EOpen.replay ino " << *p << " not in metablob" << dendl;
+      assert(in);
+    }
     _segment->open_files.push_back(&in->item_open_file);
   }
 }
