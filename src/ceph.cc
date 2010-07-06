@@ -536,7 +536,7 @@ int main(int argc, const char **argv, const char *envp[])
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("out_file", 'o')) {
       CONF_SAFE_SET_ARG_VAL(&outfile, OPT_STR);
-    } else if (CONF_ARG_EQ("in_data", 'i')) {
+    } else if (CONF_ARG_EQ("in_file", 'i')) {
       CONF_SAFE_SET_ARG_VAL(&fname, OPT_STR);
       int fd = ::open(fname, O_RDONLY);
       struct stat st;
