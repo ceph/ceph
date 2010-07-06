@@ -161,6 +161,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     elist<CInode*>::iterator p = open_files.begin(member_offset(CInode, item_open_file));
     while (!p.end()) {
       CInode *in = *p;
+      assert(in->last == CEPH_NOSNAP);
       ++p;
       if (in->is_any_caps()) {
 	if (in->is_any_caps_wanted()) {

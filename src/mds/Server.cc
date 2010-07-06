@@ -2138,7 +2138,7 @@ void Server::handle_client_open(MDRequest *mdr)
     mds->locker->check_inode_max_size(cur);
 
   // make sure this inode gets into the journal
-  if (!cur->item_open_file.is_on_list()) {
+  if (!cur->item_open_file.is_on_list() && cur->last == CEPH_NOSNAP) {
     LogSegment *ls = mds->mdlog->get_current_segment();
     EOpen *le = new EOpen(mds->mdlog);
     mdlog->start_entry(le);
