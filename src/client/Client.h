@@ -1019,6 +1019,7 @@ protected:
   void tear_down_cache();   
 
   client_t get_nodeid() { return whoami; }
+  inodeno_t get_root_ino() { return root->ino; }
 
   void init();
   void shutdown();
@@ -1145,7 +1146,7 @@ private:
 		    Dentry **pdn, bool expect_null=false);
 
 public:
-  int mount();
+  int mount(const char *mount_root = NULL);
   int unmount();
 
   // these shoud (more or less) mirror the actual system calls.

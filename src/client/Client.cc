@@ -426,7 +426,9 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
   else {
     in = new Inode(st->vino, &st->layout);
     inode_map[st->vino] = in;
-    if (in->ino == 1) {
+    bool new_root = false;
+    if (!root) {
+      new_root = true;
       root = in;
       cwd = root;
       cwd->get();
@@ -437,6 +439,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
     in->snapid = st->vino.snapid;
     in->rdev = st->rdev;
     in->mode = st->mode & S_IFMT;
+    if (new_root) dout(10) << "setting this inode as root! " << *in << "; ino: " << root->ino << "; snapid" << root->snapid << dendl;
     if (in->is_symlink())
       in->symlink = st->symlink;
   }
@@ -2748,7 +2751,7 @@ void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
 // -------------------
 // MOUNT
 
-int Client::mount()
+int Client::mount(const char *mount_root)
 {
   Mutex::Locker lock(client_lock);
 
@@ -2781,6 +2784,7 @@ int Client::mount()
   //  fuse assumes it's always there.
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
   filepath fp(CEPH_INO_ROOT);
+  if (mount_root) fp = filepath(mount_root);
   req->set_filepath(fp);
   req->head.args.getattr.mask = CEPH_STAT_CAP_INODE_ALL;
   int res = make_request(req, -1, -1);

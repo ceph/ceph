@@ -47,6 +47,9 @@ static uint64_t fino_snap(uint64_t fino)
 }
 static vinodeno_t fino_vino(inodeno_t fino)
 {
+  if (fino.val == 1) {
+    fino = inodeno_t(client->get_root_ino());
+  }
   vinodeno_t vino(FINO_INO(fino), fino_snap(fino));
   //cout << "fino_vino " << fino << " -> " << vino << std::endl;
   return vino;

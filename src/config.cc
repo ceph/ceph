@@ -351,6 +351,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(client_readahead_max_bytes, 0, OPT_LONGLONG, 0),  //8 * 1024*1024,
 	OPTION(client_readahead_max_periods, 0, OPT_LONGLONG, 4),  // as multiple of file layout period (object size * num stripes)
 	OPTION(client_snapdir, 0, OPT_STR, ".snap"),
+	OPTION(client_mountpoint, 'r', OPT_STR, "/"),
 	OPTION(fuse_direct_io, 0, OPT_INT, 0),
 	OPTION(fuse_ll, 0, OPT_BOOL, true),
 	OPTION(client_oc, 0, OPT_BOOL, true),

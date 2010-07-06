@@ -185,6 +185,7 @@ struct md_config_t {
   long long client_readahead_max_bytes;
   long long client_readahead_max_periods;
   const char *client_snapdir;
+  const char *client_mountpoint;
   int fuse_direct_io;
   bool fuse_ll;
 

@@ -105,7 +105,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     
     // start up fuse
     // use my argc, argv (make sure you pass a mount point!)
-    int r = client->mount();
+    int r = client->mount(g_conf.client_mountpoint);
     if (r < 0) {
       cerr << "cfuse[" << getpid() << "]: ceph mount failed with " << strerror(-r) << std::endl;
       goto out_shutdown;
