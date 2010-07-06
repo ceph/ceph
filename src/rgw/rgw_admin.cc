@@ -21,7 +21,7 @@ using namespace std;
 
 void usage() 
 {
-  cerr << "usage: rgw_admin <--user-gen | --user-modify | --read-policy | --list-buckets > [options...]" << std::endl;
+  cerr << "usage: radosgw_admin <--user-gen | --user-modify | --read-policy | --list-buckets > [options...]" << std::endl;
   cerr << "options:" << std::endl;
   cerr << "   --uid=<id> (S3 uid)" << std::endl;
   cerr << "   --auth_uid=<auid> (librados uid)" << std::endl;
