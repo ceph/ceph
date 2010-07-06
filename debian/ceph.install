@@ -16,6 +16,7 @@ usr/bin/rbdtool
 sbin/mount.ceph
 usr/sbin/mkcephfs
 usr/lib/ceph/ceph_common.sh
+usr/lib/rados-classes/*
 etc/ceph/sample.ceph.conf
 etc/ceph/sample.fetch_config
 usr/share/man/man8/cmon.8
