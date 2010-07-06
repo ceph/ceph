@@ -202,35 +202,25 @@ bin_PROGRAMS += testkeys
 endif
 
 
-## object classes
+## rados object classes
 
-# libtestclass.so: testclass.cc
-# 	${CXX} -fPIC -shared -g -o libtestclass.so testclass.cc
-# libbarclass.so: barclass.cc
-# 	${CXX} -fPIC -shared -g -o libbarclass.so barclass.cc
-# libfooclass.so: fooclass.cc
-# 	${CXX} -fPIC -shared -g -o libfooclass.so fooclass.cc
-# 
-#BUILT_SOURCES += libtestclass.so libfooclass.so libbarclass.so
+#libcls_crypto.so: cls_crypto.cc
+#	${CXX} -I. -fPIC -shared -g -o libcls_crypto.so -lcrypto cls_crypto.cc
+#BUILT_SOURCES += libcls_crypto.so
 
-libcls_crypto.so: cls_crypto.cc
-	${CXX} -I. -fPIC -shared -g -o libcls_crypto.so -lcrypto cls_crypto.cc
-BUILT_SOURCES += libcls_crypto.so
+#libcls_acl.so: cls_acl.cc
+#	${CXX} -I. -fPIC -shared -g -o libcls_acl.so cls_acl.cc
+#BUILT_SOURCES += libcls_acl.so
 
-libcls_acl.so: cls_acl.cc
-	${CXX} -I. -fPIC -shared -g -o libcls_acl.so cls_acl.cc
-BUILT_SOURCES += libcls_acl.so
-
-# libcls_rbd.so: cls_rbd.cc
-# 	${CXX} -I. -fPIC -shared -g -o libcls_rbd.so cls_rbd.cc
-# BUILT_SOURCES += libcls_rbd.so
+# rbd: rados block device class
 libcls_rbd_la_SOURCES = \
 	cls_rbd.cc
 libcls_rbd_la_CFLAGS = ${AM_CFLAGS}
 libcls_rbd_la_CXXFLAGS= ${AM_CXXFLAGS}
-# libcls_rbd_LIBADD =
 libcls_rbd_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '.*__cls_.*' -lpthread
-lib_LTLIBRARIES += libcls_rbd.la
+
+radoslibdir = $(libdir)/rados-classes
+radoslib_LTLIBRARIES = libcls_rbd.la
 
 
 ## hadoop client
