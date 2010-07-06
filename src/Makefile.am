@@ -213,8 +213,7 @@ endif
 #BUILT_SOURCES += libcls_acl.so
 
 # rbd: rados block device class
-libcls_rbd_la_SOURCES = \
-	cls_rbd.cc
+libcls_rbd_la_SOURCES = cls_rbd.cc
 libcls_rbd_la_CFLAGS = ${AM_CFLAGS}
 libcls_rbd_la_CXXFLAGS= ${AM_CXXFLAGS}
 libcls_rbd_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '.*__cls_.*' -lpthread
