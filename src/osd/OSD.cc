@@ -1023,6 +1023,26 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
 
 // -------------------------------------
 
+void OSD::update_osd_stat()
+{
+  // fill in osd stats too
+  struct statfs stbuf;
+  store->statfs(&stbuf);
+
+  osd_stat.kb = stbuf.f_blocks * stbuf.f_bsize / 1024;
+  osd_stat.kb_used = (stbuf.f_blocks - stbuf.f_bfree) * stbuf.f_bsize / 1024;
+  osd_stat.kb_avail = stbuf.f_bavail * stbuf.f_bsize / 1024;
+
+  osd_stat.hb_in.clear();
+  for (map<int,epoch_t>::iterator p = heartbeat_from.begin(); p != heartbeat_from.end(); p++)
+    osd_stat.hb_in.push_back(p->first);
+  osd_stat.hb_out.clear();
+  for (map<int,epoch_t>::iterator p = heartbeat_to.begin(); p != heartbeat_to.end(); p++)
+    osd_stat.hb_out.push_back(p->first);
+
+  dout(20) << "update_osd_stat " << osd_stat << dendl;
+}
+
 void OSD::_refresh_my_stat(utime_t now)
 {
   assert(peer_stat_lock.is_locked());
@@ -1031,6 +1051,8 @@ void OSD::_refresh_my_stat(utime_t now)
   if (now - my_stat.stamp > g_conf.osd_stat_refresh_interval ||
       pending_ops > 2*my_stat.qlen) {
 
+    update_osd_stat();
+
     now.encode_timeval(&my_stat.stamp);
     my_stat.oprate = stat_oprate.get(now, decayrate);
 
@@ -1038,7 +1060,8 @@ void OSD::_refresh_my_stat(utime_t now)
 
     // qlen
     my_stat.qlen = 0;
-    if (stat_ops) my_stat.qlen = (float)stat_qlen / (float)stat_ops;  //get_average();
+    if (stat_ops)
+      my_stat.qlen = (float)stat_qlen / (float)stat_ops;  //get_average();
 
     // rd ops shed in
     float frac_rd_ops_shed_in = 0;
@@ -1270,6 +1293,7 @@ void OSD::heartbeat()
   my_stat_on_peer.clear();
 
   dout(5) << "heartbeat: " << my_stat << dendl;
+  dout(5) << "heartbeat: " << osd_stat << dendl;
 
   //load_calc.set_size(stat_ops);
 
@@ -1504,6 +1528,10 @@ void OSD::send_pg_stats()
 
   dout(20) << "send_pg_stats" << dendl;
 
+  peer_stat_lock.Lock();
+  osd_stat_t cur_stat = osd_stat;
+  peer_stat_lock.Unlock();
+   
   pg_stat_queue_lock.Lock();
 
   if (osd_stat_updated || !pg_stat_queue.empty()) {
@@ -1513,7 +1541,9 @@ void OSD::send_pg_stats()
     
     utime_t had_for = g_clock.now();
     had_for -= had_map_since;
+
     MPGStats *m = new MPGStats(osdmap->get_fsid(), osdmap->get_epoch(), had_for);
+    m->osd_stat = cur_stat;
 
     xlist<PG*>::iterator p = pg_stat_queue.begin();
     while (!p.end()) {
@@ -1533,18 +1563,6 @@ void OSD::send_pg_stats()
       }
       pg->pg_stats_lock.Unlock();
     }
-    
-    // fill in osd stats too
-    struct statfs stbuf;
-    store->statfs(&stbuf);
-    m->osd_stat.kb = stbuf.f_blocks * stbuf.f_bsize / 1024;
-    m->osd_stat.kb_used = (stbuf.f_blocks - stbuf.f_bfree) * stbuf.f_bsize / 1024;
-    m->osd_stat.kb_avail = stbuf.f_bavail * stbuf.f_bsize / 1024;
-    for (map<int,epoch_t>::iterator p = heartbeat_from.begin(); p != heartbeat_from.end(); p++)
-      m->osd_stat.hb_in.push_back(p->first);
-    for (map<int,epoch_t>::iterator p = heartbeat_to.begin(); p != heartbeat_to.end(); p++)
-      m->osd_stat.hb_out.push_back(p->first);
-    dout(20) << " osd_stat " << m->osd_stat << dendl;
     
     monc->send_mon_message(m);
   }
@@ -2095,6 +2113,8 @@ void OSD::handle_osd_map(MOSDMap *m)
     PG *pg = op_queue.back();
     op_queue.pop_back();
     pending_ops--;
+    logger->set(l_osd_opq, pending_ops);
+
     Message *m = pg->op_queue.back();
     pg->op_queue.pop_back();
     pg->put();

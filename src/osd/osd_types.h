@@ -467,8 +467,9 @@ inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
 
 
 inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
-  return out << "osd_stat(" << (s.kb_used) << "/" << s.kb << " KB used, " 
-	     << s.kb_avail << " avail, "
+  return out << "osd_stat(" << kb_t(s.kb_used) << " used, "
+	     << kb_t(s.kb_avail) << " avail, "
+	     << kb_t(s.kb) << " total, "
 	     << "peers " << s.hb_in << "/" << s.hb_out << ")";
 }
 
@@ -998,23 +999,23 @@ WRITE_CLASS_ENCODER(pool_stat_t)
 
 
 struct osd_peer_stat_t {
-	struct ceph_timespec stamp;
-	float oprate;
-	float qlen;
-	float recent_qlen;
-	float read_latency;
-	float read_latency_mine;
-	float frac_rd_ops_shed_in;
-	float frac_rd_ops_shed_out;
+  struct ceph_timespec stamp;
+  float oprate;
+  float qlen;            // current
+  float recent_qlen;     // moving average
+  float read_latency;
+  float read_latency_mine;
+  float frac_rd_ops_shed_in;
+  float frac_rd_ops_shed_out;
 } __attribute__ ((packed));
 
 WRITE_RAW_ENCODER(osd_peer_stat_t)
 
 inline ostream& operator<<(ostream& out, const osd_peer_stat_t &stat) {
   return out << "stat(" << stat.stamp
-    //<< " oprate=" << stat.oprate
-    //	     << " qlen=" << stat.qlen 
-    //	     << " recent_qlen=" << stat.recent_qlen
+	     << " oprate=" << stat.oprate
+    	     << " qlen=" << stat.qlen 
+    	     << " recent_qlen=" << stat.recent_qlen
 	     << " rdlat=" << stat.read_latency_mine << " / " << stat.read_latency
 	     << " fshedin=" << stat.frac_rd_ops_shed_in
 	     << ")";

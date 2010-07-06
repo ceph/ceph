@@ -252,10 +252,12 @@ private:
   int stat_rd_ops_in_queue;  // in queue
 
   Mutex peer_stat_lock;
+  osd_stat_t osd_stat;
   osd_peer_stat_t my_stat;
   hash_map<int, osd_peer_stat_t, rjhash<uint32_t> > peer_stat;
   hash_map<int, osd_peer_stat_t, rjhash<uint32_t> > my_stat_on_peer;  // what the peer thinks of me
 
+  void update_osd_stat();
   void _refresh_my_stat(utime_t now);
   osd_peer_stat_t get_my_stat_for(utime_t now, int peer);
   void take_peer_stat(int peer, const osd_peer_stat_t& stat);
