@@ -35,7 +35,10 @@ SafeTimer logger_timer(logger_lock);
 Context *logger_event = 0;
 list<Logger*> logger_list;
 utime_t start;
-int last_flush; // in seconds since start
+int last_flush = 0; // in seconds since start
+
+bool logger_need_reopen = true;
+bool logger_need_reset = false;
 
 static void flush_all_loggers();
 static void stop();
@@ -56,26 +59,74 @@ public:
   }
 };
 
-void Logger::set_start(utime_t s)
+
+void logger_reopen_all()
 {
-  logger_lock.Lock();
+  logger_need_reopen = true;
+}
+
+void logger_reset_all()
+{
+  logger_need_reopen = true;
+  logger_need_reset = true;
+}
+
+void logger_start()
+{
+  Mutex::Locker l(logger_lock);
+  flush_all_loggers();
+}
+
+void logger_tare(utime_t s)
+{
+  Mutex::Locker l(logger_lock);
+
+  generic_dout(0) << "logger_tare " << s << dendl;
 
   start = s;
 
   utime_t fromstart = g_clock.now();
   if (fromstart < start) {
-    cerr << "set_start: logger time jumped backwards from " << start << " to " << fromstart << std::endl;
+    cerr << "logger_tare time jumped backwards from "
+	 << start << " to " << fromstart << std::endl;
     fromstart = start;
   }
   fromstart -= start;
   last_flush = fromstart.sec();
+}
 
-  logger_lock.Unlock();
+void logger_add(Logger *logger)
+{
+  Mutex::Locker l(logger_lock);
+
+  if (logger_list.empty()) {
+    if (start == utime_t())
+      start = g_clock.now();
+    last_flush = 0;
+  }
+  logger_list.push_back(logger);
+}
+
+void logger_remove(Logger *logger)
+{
+  Mutex::Locker l(logger_lock);
+
+  for (list<Logger*>::iterator p = logger_list.begin();
+       p != logger_list.end();
+       p++) {
+    if (*p == logger) {
+      logger_list.erase(p);
+      break;
+    }
+  }
 }
 
 static void flush_all_loggers()
 {
-  generic_dout(20) << "flush_all_loggers" << dendl;
+  generic_dout(0) << "flush_all_loggers" << dendl;
+
+  if (!g_conf.logger)
+    return;
 
   utime_t now = g_clock.now();
   utime_t fromstart = now;
@@ -90,11 +141,22 @@ static void flush_all_loggers()
   // do any catching up we need to
   bool twice = now_sec - last_flush >= 2 * g_conf.logger_interval;
  again:
-  generic_dout(20) << "fromstart " << fromstart << " last_flush " << last_flush << " flushing" << dendl;
+  generic_dout(0) << "fromstart " << fromstart << " last_flush " << last_flush << " flushing" << dendl;
+  
+  bool reopen = logger_need_reopen;
+  bool reset = logger_need_reset;
+
   for (list<Logger*>::iterator p = logger_list.begin();
        p != logger_list.end();
        ++p) 
     (*p)->_flush();
+  
+  // did full pass while true?
+  if (reopen && logger_need_reopen)
+    logger_need_reopen = false;
+  if (reset && logger_need_reset)
+    logger_need_reset = false;
+
   last_flush = now_sec - (now_sec % g_conf.logger_interval);
   if (twice) {
     twice = false;
@@ -105,7 +167,7 @@ static void flush_all_loggers()
   utime_t next;
   next.sec_ref() = start.sec() + last_flush + g_conf.logger_interval;
   next.usec_ref() = start.usec();
-  generic_dout(20) << "logger now=" << now
+  generic_dout(0) << "logger now=" << now
 		   << "  start=" << start 
 		   << "  next=" << next 
 		   << dendl;
@@ -122,15 +184,12 @@ static void stop()
 }
 
 
+
 // ---------
 
 void Logger::_open_log()
 {
-  Mutex::Locker l(logger_lock);
   struct stat st;
-
-  if (!g_conf.logger)
-    return;
 
   filename = "";
   if (g_conf.chdir && g_conf.chdir[0] && g_conf.logger_dir[0] != '/') {
@@ -155,26 +214,18 @@ void Logger::_open_log()
   }
   filename += name;
 
-  out.open(filename.c_str(), append ? ofstream::out|ofstream::app : ofstream::out);
+  generic_dout(0) << "Logger::_open " << filename << dendl;
+  if (out.is_open())
+    out.close();
+  out.open(filename.c_str(),
+	   (need_reset || logger_need_reset) ? ofstream::out : ofstream::out|ofstream::app);
   if (!out.is_open()) {
     generic_dout(0) << "failed to open '" << filename << "'" << dendl;
     return; // we fail
   }
 
   // success
-  open = true;
-
-  if (logger_list.empty()) {
-    // init logger
-    if (!g_conf.clock_tare)
-      start = g_clock.now();  // time 0!  otherwise g_clock does it for us.
-    
-    last_flush = 0;
-    
-    // call manually the first time; then it'll schedule itself.
-    flush_all_loggers();      
-  }
-  logger_list.push_back(this);
+  need_open = false;
 }
 
 
@@ -189,9 +240,37 @@ Logger::~Logger()
     logger_event = 0;       // stop the timer events.
 }
 
-
-void Logger::_flush(bool reset)
+void Logger::reopen()
 {
+  Mutex::Locker l(logger_lock);
+  need_open = true;
+}
+
+void Logger::reset()
+{
+  Mutex::Locker l(logger_lock);
+  need_open = true;
+  need_reset = true;
+}
+
+
+void Logger::_flush()
+{
+  if (need_open || logger_need_reopen)
+    _open_log();
+  if (need_reset || logger_need_reset) {
+    // reset the counters
+    for (int i=0; i<type->num_keys; i++) {
+      if (type->inc_keys[i]) {
+	this->vals[i] = 0;
+	this->fvals[i] = 0;
+      }
+    }
+    need_reset = false;
+  }
+
+  generic_dout(0) << "Logger::_flush on " << this << dendl;
+
   // header?
   wrote_header_last++;
   if (wrote_header_last > 10) {
@@ -232,23 +311,13 @@ void Logger::_flush(bool reset)
     }
   }
   out << std::endl;
-  
-  if (reset) {
-    // reset the counters
-    for (int i=0; i<type->num_keys; i++) {
-      if (type->inc_keys[i]) {
-	this->vals[i] = 0;
-	this->fvals[i] = 0;
-      }
-    }
-  }
 }
 
 
 
 int64_t Logger::inc(int key, int64_t v)
 {
-  if (!open || !g_conf.logger)
+  if (!g_conf.logger)
     return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
@@ -260,7 +329,7 @@ int64_t Logger::inc(int key, int64_t v)
 
 double Logger::finc(int key, double v)
 {
-  if (!open || !g_conf.logger)
+  if (!g_conf.logger)
     return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
@@ -272,7 +341,7 @@ double Logger::finc(int key, double v)
 
 int64_t Logger::set(int key, int64_t v)
 {
-  if (!open || !g_conf.logger)
+  if (!g_conf.logger)
     return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
@@ -285,7 +354,7 @@ int64_t Logger::set(int key, int64_t v)
 
 double Logger::fset(int key, double v)
 {
-  if (!open || !g_conf.logger)
+  if (!g_conf.logger)
     return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
@@ -297,7 +366,7 @@ double Logger::fset(int key, double v)
 
 double Logger::favg(int key, double v)
 {
-  if (!open || !g_conf.logger)
+  if (!g_conf.logger)
     return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
@@ -311,7 +380,7 @@ double Logger::favg(int key, double v)
 
 int64_t Logger::get(int key)
 {
-  if (!open || !g_conf.logger)
+  if (!g_conf.logger)
     return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);

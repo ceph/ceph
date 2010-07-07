@@ -18,6 +18,7 @@
 #include "include/types.h"
 
 #include "common/Clock.h"
+#include "common/Logger.h"
 
 #include <fstream>
 #include <stdlib.h>
@@ -207,6 +208,7 @@ void parse_config_option_string(string& s)
 void sighup_handler(int signum)
 {
   _dout_need_open = true;
+  logger_reopen_all();
 }
 
 #define _STR(x) #x

@@ -54,10 +54,11 @@ public:
     failed_reconnects(0) {
   }
   ~Server() {
+    logger_remove(logger);
     delete logger;
   }
 
-  void reopen_logger(utime_t start, bool append);
+  void open_logger();
 
   // message handler
   void dispatch(Message *m);

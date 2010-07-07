@@ -340,7 +340,8 @@ class MDS : public Dispatcher {
 
   // start up, shutdown
   int init();
-  void reopen_logger(utime_t start);
+
+  void open_logger();
 
   void bcast_mds_map();  // to mounted clients
 

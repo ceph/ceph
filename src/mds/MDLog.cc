@@ -40,18 +40,16 @@ LogType mdlog_logtype(l_mdl_first, l_mdl_last);
 MDLog::~MDLog()
 {
   if (journaler) { delete journaler; journaler = 0; }
-  if (logger) { delete logger; logger = 0; }
+  if (logger) {
+    logger_remove(logger);
+    delete logger;
+    logger = 0;
+  }
 }
 
 
-void MDLog::reopen_logger(utime_t start, bool append)
+void MDLog::open_logger()
 {
-  // logger
-  char name[80];
-  snprintf(name, sizeof(name), "mds%d.log", mds->get_nodeid());
-  logger = new Logger(name, &mdlog_logtype, append);
-  logger->set_start(start);
-
   static bool didit = false;
   if (!didit) {
     didit = true;
@@ -76,6 +74,11 @@ void MDLog::reopen_logger(utime_t start, bool append)
     mdlog_logtype.validate();
   }
 
+  // logger
+  char name[80];
+  snprintf(name, sizeof(name), "mds.%s.log", g_conf.id);
+  logger = new Logger(name, &mdlog_logtype);
+  logger_add(logger);
 }
 
 void MDLog::init_journaler()

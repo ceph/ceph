@@ -331,7 +331,7 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, c
   timer(osd_lock),
   messenger(m),
   monc(mc),
-  logger(NULL),
+  logger(NULL), logger_started(false),
   store(NULL),
   logclient(messenger, &mc->monmap, mc),
   whoami(id),
@@ -395,6 +395,7 @@ OSD::~OSD()
 {
   delete class_handler;
   delete osdmap;
+  logger_remove(logger);
   delete logger;
   delete store;
 }
@@ -485,10 +486,9 @@ int OSD::init()
     dout(0) << "wtf, superblock says osd" << superblock.whoami << " but i am osd" << whoami << dendl;
     return -EINVAL;
   }
+
+  open_logger();
     
-  // log
-  reopen_logger();
-  
   // i'm ready!
   messenger->add_dispatcher_head(this);
   messenger->add_dispatcher_head(&logclient);
@@ -533,8 +533,10 @@ int OSD::init()
   return 0;
 }
 
-void OSD::reopen_logger()
+void OSD::open_logger()
 {
+  dout(10) << "open_logger" << dendl;
+
   static LogType osd_logtype(l_osd_first, l_osd_last);
   static bool didit = false;
   if (!didit) {
@@ -591,10 +593,19 @@ void OSD::reopen_logger()
   }
 
   char name[80];
-  snprintf(name, sizeof(name), "osd%d", whoami);
-  Logger *old = logger;
+  snprintf(name, sizeof(name), "osd.%d.log", whoami);
   logger = new Logger(name, (LogType*)&osd_logtype);
-  delete old;
+  logger_add(logger);  
+
+  if (osdmap->get_epoch() > 0)
+    start_logger();
+}
+
+void OSD::start_logger()
+{
+  logger_tare(osdmap->get_created());
+  logger_start();
+  logger_started = true;
 }
 
 int OSD::shutdown()
@@ -1633,7 +1644,9 @@ void OSD::handle_command(MMonCommand *m)
     logclient.log(LOG_INFO, ss);    
     
   } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reset") {
-    reopen_logger();
+    logger_reset_all();
+  } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reopen") {
+    logger_reopen_all();
   } else
     dout(0) << "unrecognized command! " << m->cmd << dendl;
   m->put();
@@ -2053,7 +2066,8 @@ void OSD::handle_osd_map(MOSDMap *m)
     session->put();
     return;
   }
-  if(session) session->put();
+  if (session)
+    session->put();
 
   if (osdmap) {
     dout(3) << "handle_osd_map epochs [" 
@@ -2249,6 +2263,9 @@ void OSD::handle_osd_map(MOSDMap *m)
       monc->renew_subs();
       break;
     }
+
+    if (!logger_started)
+      start_logger();
 
     cur++;
     superblock.current_epoch = cur;

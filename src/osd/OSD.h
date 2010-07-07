@@ -108,6 +108,7 @@ protected:
   Messenger   *messenger; 
   MonClient   *monc;
   Logger      *logger;
+  bool         logger_started;
   ObjectStore *store;
 
   LogClient   logclient;
@@ -126,7 +127,8 @@ protected:
 
   bool dispatch_running;
 
-  void reopen_logger();
+  void open_logger();
+  void start_logger();
   void tick();
   void _dispatch(Message *m);
 

@@ -65,7 +65,7 @@ using namespace std;
 #define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".server "
 
 
-void Server::reopen_logger(utime_t start, bool append)
+void Server::open_logger()
 {
   static LogType mdserver_logtype(l_mdss_first, l_mdss_last);
   static bool didit = false;
@@ -79,14 +79,10 @@ void Server::reopen_logger(utime_t start, bool append)
     mdserver_logtype.validate();
   }
 
-  if (logger) 
-    delete logger;
-
-  // logger
   char name[80];
-  snprintf(name, sizeof(name), "mds%d.server", mds->get_nodeid());
-  logger = new Logger(name, &mdserver_logtype, append);
-  logger->set_start(start);
+  snprintf(name, sizeof(name), "mds.%s.server.log", g_conf.id);
+  logger = new Logger(name, &mdserver_logtype);
+  logger_add(logger);
 }
 
 

@@ -150,15 +150,22 @@ MDS::~MDS() {
   if (filer) { delete filer; filer = 0; }
   if (objecter) { delete objecter; objecter = 0; }
 
-  if (logger) { delete logger; logger = 0; }
-  delete mlogger;
+  if (logger) {
+    logger_remove(logger);
+    delete logger;
+    logger = 0;
+  }
+  if (mlogger) {
+    logger_remove(mlogger);
+    delete mlogger;
+  }
   
   if (messenger)
     messenger->destroy();
 }
 
 
-void MDS::reopen_logger(utime_t start)
+void MDS::open_logger()
 {
   static LogType mds_logtype(l_mds_first, l_mds_last);
   static LogType mdm_logtype(l_mdm_first, l_mdm_last);
@@ -249,28 +256,27 @@ void MDS::reopen_logger(utime_t start)
     mdm_logtype.validate();
   }
 
-  if (whoami < 0) return;
+  if (whoami < 0)
+    return;
 
-  // flush+close old log
-  delete logger;
-  delete mlogger;
+  dout(10) << "open_logger" << dendl;
 
-  // log
+  // open loggers
   char name[80];
-  snprintf(name, sizeof(name), "mds%d", whoami);
+  snprintf(name, sizeof(name), "mds.%s.log", g_conf.id);
+  logger = new Logger(name, (LogType*)&mds_logtype);
+  logger_add(logger);
 
-  bool append = mdsmap->get_inc(whoami) > 1;
+  snprintf(name, sizeof(name), "mds.%s.mem.log", g_conf.id);
+  mlogger = new Logger(name, (LogType*)&mdm_logtype);
+  logger_add(mlogger);
 
-  logger = new Logger(name, (LogType*)&mds_logtype, append);
-  logger->set_start(start);
+  mdlog->open_logger();
+  server->open_logger();
 
-  snprintf(name, sizeof(name), "mds%d.mem", whoami);
-  mlogger = new Logger(name, (LogType*)&mdm_logtype, append);
-
-  mdlog->reopen_logger(start, append);
-  server->reopen_logger(start, append);
+  logger_tare(mdsmap->get_created());
+  logger_start();
 }
-
 
 
 
@@ -459,6 +465,8 @@ int MDS::init()
   // schedule tick
   reset_tick();
   last_tick = g_clock.now();
+
+  open_logger();
 
   mds_lock.Unlock();
   return 0;
@@ -777,7 +785,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   // open logger?
   if (oldwhoami != whoami || !logger) {
     dout_create_rank_symlink(whoami);
-    reopen_logger(mdsmap->get_created());   // adopt mds cluster timeline
+    //open_logger();
   }
   
   if (oldwhoami != whoami) {
