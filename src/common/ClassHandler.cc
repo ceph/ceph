@@ -22,21 +22,19 @@ void ClassHandler::_load_class(ClassData &cls)
 {
   dout(10) << "load_class " << cls.name << dendl;
 
-  char *fname=strdup("/tmp/class-XXXXXX");
-  int fd = mkstemp(fname);
   cls_deps_t *(*cls_deps)();
 
-  for (list<bufferptr>::const_iterator it = cls.impl.binary.buffers().begin();
-       it != cls.impl.binary.buffers().end(); it++)
-    write(fd, it->c_str(), it->length());
+  char fname[80];
+  snprintf(fname, sizeof(fname), "%s/class-XXXXXX", g_conf.osd_class_tmp);
 
+  int fd = mkstemp(fname);
+  cls.impl.binary.write_fd(fd);
   close(fd);
 
   cls.handle = dlopen(fname, RTLD_NOW);
 
   if (!cls.handle) {
-    char buf[80];
-    dout(0) << "could not open class (dlopen failed) " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    dout(0) << "could not open class (dlopen failed): " << dlerror() << dendl;
     goto done;
   }
   cls_deps = (cls_deps_t *(*)())dlsym(cls.handle, "class_deps");
@@ -52,8 +50,6 @@ void ClassHandler::_load_class(ClassData &cls)
   cls.load();
 done:
   unlink(fname);
-  free(fname);
-
   return;
 }
 

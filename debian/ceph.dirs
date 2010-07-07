@@ -5,3 +5,4 @@ etc/ceph
 usr/share/doc/ceph
 var/log/ceph
 var/log/ceph/stat
+var/lib/ceph/tmp
