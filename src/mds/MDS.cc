@@ -256,9 +256,6 @@ void MDS::open_logger()
     mdm_logtype.validate();
   }
 
-  if (whoami < 0)
-    return;
-
   dout(10) << "open_logger" << dendl;
 
   // open loggers
@@ -782,11 +779,8 @@ void MDS::handle_mds_map(MMDSMap *m)
   assert(whoami >= 0);
   incarnation = mdsmap->get_inc(whoami);
 
-  // open logger?
-  if (oldwhoami != whoami || !logger) {
+  if (oldwhoami != whoami)
     dout_create_rank_symlink(whoami);
-    //open_logger();
-  }
   
   if (oldwhoami != whoami) {
     // update messenger.
