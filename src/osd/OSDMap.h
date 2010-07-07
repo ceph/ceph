@@ -153,7 +153,8 @@ public:
     map<int32_t,pg_pool_t> new_pools;
     map<int32_t,string> new_pool_names;
     set<int32_t> old_pools;
-    map<int32_t,entity_addr_t> new_up;
+    map<int32_t,entity_addr_t> new_up_client;
+    map<int32_t,entity_addr_t> new_up_internal;
     map<int32_t,uint8_t> new_down;
     map<int32_t,uint32_t> new_weight;
     map<pg_t,vector<int32_t> > new_pg_temp;     // [] to remove
@@ -181,7 +182,7 @@ public:
       ::encode(new_pools, bl);
       ::encode(new_pool_names, bl);
       ::encode(old_pools, bl);
-      ::encode(new_up, bl);
+      ::encode(new_up_client, bl);
       ::encode(new_down, bl);
       ::encode(new_weight, bl);
       ::encode(new_pg_temp, bl);
@@ -195,6 +196,7 @@ public:
       ::encode(new_lost, bl);
       ::encode(new_blacklist, bl);
       ::encode(old_blacklist, bl);
+      ::encode(new_up_internal, bl);
     }
     void decode(bufferlist::iterator &p) {
       // base
@@ -214,7 +216,7 @@ public:
       if (v >= 5)
 	::decode(new_pool_names, p);
       ::decode(old_pools, p);
-      ::decode(new_up, p);
+      ::decode(new_up_client, p);
       ::decode(new_down, p);
       ::decode(new_weight, p);
       ::decode(new_pg_temp, p);
@@ -231,6 +233,7 @@ public:
       ::decode(new_lost, p);
       ::decode(new_blacklist, p);
       ::decode(old_blacklist, p);
+      ::decode(new_up_internal, p);
     }
 
     Incremental(epoch_t e=0) :
@@ -539,8 +542,8 @@ private:
       osd_info[i->first].down_at = epoch;
       //cout << "epoch " << epoch << " down osd" << i->first << endl;
     }
-    for (map<int32_t,entity_addr_t>::iterator i = inc.new_up.begin();
-         i != inc.new_up.end();
+    for (map<int32_t,entity_addr_t>::iterator i = inc.new_up_client.begin();
+         i != inc.new_up_client.end();
          i++) {
       osd_state[i->first] |= CEPH_OSD_EXISTS | CEPH_OSD_UP;
       osd_addr[i->first] = i->second;

@@ -174,10 +174,10 @@ void OSDMonitor::encode_pending(bufferlist &bl)
        i++) {
     dout(2) << " osd" << i->first << " DOWN clean=" << (int)i->second << dendl;
   }
-  for (map<int32_t,entity_addr_t>::iterator i = pending_inc.new_up.begin();
-       i != pending_inc.new_up.end(); 
+  for (map<int32_t,entity_addr_t>::iterator i = pending_inc.new_up_client.begin();
+       i != pending_inc.new_up_client.end();
        i++) { 
-    dout(2) << " osd" << i->first << " UP " << i->second << dendl;
+    dout(2) << " osd" << i->first << " UP " << i->second << dendl; //FIXME: insert cluster addresses too
   }
   for (map<int32_t,uint32_t>::iterator i = pending_inc.new_weight.begin();
        i != pending_inc.new_weight.end();
@@ -472,14 +472,14 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     pending_inc.new_down[from] = false;
     
     paxos->wait_for_commit(new C_RetryMessage(this, m));
-  } else if (pending_inc.new_up.count(from)) {
+  } else if (pending_inc.new_up_client.count(from)) { //FIXME: should this be using new_up_client?
     // already prepared, just wait
     dout(7) << "prepare_boot already prepared, waiting on " << m->get_orig_source_addr() << dendl;
     paxos->wait_for_commit(new C_Booted(this, m, false));
   } else {
     // mark new guy up.
     down_pending_out.erase(from);  // if any
-    pending_inc.new_up[from] = m->get_orig_source_addr();
+    pending_inc.new_up_client[from] = m->get_orig_source_addr(); //FIXME: should this be using new_up_client?
     pending_inc.new_hb_up[from] = m->hb_addr;
     
     // mark in?

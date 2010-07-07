@@ -2313,8 +2313,8 @@ void OSD::handle_osd_map(MOSDMap *m)
         if (osd == whoami) continue;
 	note_down_osd(i->first);
       }
-      for (map<int32_t,entity_addr_t>::iterator i = inc.new_up.begin();
-           i != inc.new_up.end();
+      for (map<int32_t,entity_addr_t>::iterator i = inc.new_up_client.begin();
+           i != inc.new_up_client.end();
            i++) {
         if (i->first == whoami) continue;
 	note_up_osd(i->first);
