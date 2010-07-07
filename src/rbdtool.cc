@@ -55,6 +55,8 @@ void usage()
        << "\t--export <file>\n"
        << "\t          export image to file\n"
        << "\t--import <file>\n"
+       << "\t          import image from file\n"
+       << "\t--copy <file>\n"
        << "\t          import image from file\n";
 }
 
@@ -552,7 +554,8 @@ static int do_rollback_snap(pool_t pool, string& md_oid, const char *snapname)
 static int do_export(pool_t pool, string& md_oid, const char *path)
 {
   struct rbd_obj_header_ondisk header;
-  int ret, r;
+  int64_t ret;
+  int r;
 
   ret = read_header(pool, md_oid, &header);
   if (ret < 0)
@@ -577,20 +580,20 @@ static int do_export(pool_t pool, string& md_oid, const char *path)
       goto done;
     }
 
+    pos += block_size;
+
     if (bl.length()) {
       ret = write(fd, bl.c_str(), bl.length());
       if (ret < 0)
         goto done;
-    }
 
-    pos += block_size;
-
-    if (bl.length() < block_size) {
-      ret = lseek(fd, pos, SEEK_SET);
-      if (ret < 0) {
-        ret = -errno;
-        cerr << "could not seek to pos " << pos << std::endl;
-        goto done;
+      if (bl.length() < block_size) {
+        ret = lseek64(fd, pos, SEEK_SET);
+        if (ret < 0) {
+          ret = -errno;
+          cerr << "could not seek to pos " << pos << std::endl;
+          goto done;
+        }
       }
     }
   }
