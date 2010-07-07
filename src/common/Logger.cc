@@ -81,7 +81,7 @@ void logger_tare(utime_t s)
 {
   Mutex::Locker l(logger_lock);
 
-  generic_dout(0) << "logger_tare " << s << dendl;
+  generic_dout(10) << "logger_tare " << s << dendl;
 
   start = s;
 
@@ -123,7 +123,7 @@ void logger_remove(Logger *logger)
 
 static void flush_all_loggers()
 {
-  generic_dout(0) << "flush_all_loggers" << dendl;
+  generic_dout(20) << "flush_all_loggers" << dendl;
 
   if (!g_conf.logger)
     return;
@@ -141,7 +141,7 @@ static void flush_all_loggers()
   // do any catching up we need to
   bool twice = now_sec - last_flush >= 2 * g_conf.logger_interval;
  again:
-  generic_dout(0) << "fromstart " << fromstart << " last_flush " << last_flush << " flushing" << dendl;
+  generic_dout(20) << "fromstart " << fromstart << " last_flush " << last_flush << " flushing" << dendl;
   
   bool reopen = logger_need_reopen;
   bool reset = logger_need_reset;
@@ -167,7 +167,7 @@ static void flush_all_loggers()
   utime_t next;
   next.sec_ref() = start.sec() + last_flush + g_conf.logger_interval;
   next.usec_ref() = start.usec();
-  generic_dout(0) << "logger now=" << now
+  generic_dout(20) << "logger now=" << now
 		   << "  start=" << start 
 		   << "  next=" << next 
 		   << dendl;
@@ -214,13 +214,13 @@ void Logger::_open_log()
   }
   filename += name;
 
-  generic_dout(0) << "Logger::_open " << filename << dendl;
+  generic_dout(10) << "Logger::_open " << filename << dendl;
   if (out.is_open())
     out.close();
   out.open(filename.c_str(),
 	   (need_reset || logger_need_reset) ? ofstream::out : ofstream::out|ofstream::app);
   if (!out.is_open()) {
-    generic_dout(0) << "failed to open '" << filename << "'" << dendl;
+    generic_dout(10) << "failed to open '" << filename << "'" << dendl;
     return; // we fail
   }
 
@@ -269,7 +269,7 @@ void Logger::_flush()
     need_reset = false;
   }
 
-  generic_dout(0) << "Logger::_flush on " << this << dendl;
+  generic_dout(20) << "Logger::_flush on " << this << dendl;
 
   // header?
   wrote_header_last++;
