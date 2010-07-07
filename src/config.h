@@ -461,7 +461,9 @@ ExportControl *conf_get_export_control();
 #define CONF_SAFE_SET_ARG_VAL_USAGE(dest, type, show_usage) \
 	do { \
           __isarg = i+1 < args.size(); \
-          if (__isarg && !val_pos && args[i+1][0] == '-') __isarg = false; \
+          if (__isarg && !val_pos && \
+              args[i+1][0] == '-' && args[i+1][1] != '\0') \
+              __isarg = false; \
           if (type == OPT_BOOL) { \
 		if (val_pos) { \
 			CONF_SET_ARG_VAL(dest, type); \
