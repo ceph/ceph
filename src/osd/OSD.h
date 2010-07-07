@@ -105,7 +105,9 @@ protected:
   Mutex osd_lock;     // global lock
   SafeTimer timer;    // safe timer (osd_lock)
 
-  Messenger   *messenger; 
+  Messenger   *messenger;
+  Messenger   *cluster_messenger;
+  Messenger   *client_messenger;
   MonClient   *monc;
   Logger      *logger;
   bool         logger_started;
@@ -880,7 +882,9 @@ protected:
   void ms_handle_remote_reset(Connection *con) {}
 
  public:
-  OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc,
+  /* internal and external can point to the same messenger, they will still
+   * be cleaned up properly*/
+  OSD(int id, Messenger *internal, Messenger *external, Messenger *hbm, MonClient *mc,
       const char *dev = 0, const char *jdev = 0);
   ~OSD();
 

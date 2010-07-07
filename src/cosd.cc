@@ -224,7 +224,7 @@ int main(int argc, const char **argv)
   messenger->set_policy_throttler(entity_name_t::TYPE_CLIENT, &client_throttler);
 
 
-  OSD *osd = new OSD(whoami, messenger, messenger_hb, &mc, g_conf.osd_data, g_conf.osd_journal);
+  OSD *osd = new OSD(whoami, messenger, messenger, messenger_hb, &mc, g_conf.osd_data, g_conf.osd_journal);
 
   int err = osd->pre_init();
   if (err < 0) {

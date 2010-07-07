@@ -328,10 +328,12 @@ int OSD::peek_meta(const char *dev, string& magic, ceph_fsid_t& fsid, int& whoam
 
 // cons/des
 
-OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, const char *jdev) : 
+OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, Messenger *hbm, MonClient *mc, const char *dev, const char *jdev) :
   osd_lock("OSD::osd_lock"),
   timer(osd_lock),
-  messenger(m),
+  messenger(external_messenger),
+  cluster_messenger(internal_messenger),
+  client_messenger(external_messenger),
   monc(mc),
   logger(NULL), logger_started(false),
   store(NULL),
@@ -502,8 +504,12 @@ int OSD::init()
   open_logger();
     
   // i'm ready!
-  messenger->add_dispatcher_head(this);
-  messenger->add_dispatcher_head(&logclient);
+  client_messenger->add_dispatcher_head(this);
+  client_messenger->add_dispatcher_head(&logclient);
+  if (cluster_messenger != client_messenger) {
+    cluster_messenger->add_dispatcher_head(this);
+    cluster_messenger->add_dispatcher_head(&logclient);
+  }
 
   heartbeat_messenger->add_dispatcher_head(&heartbeat_dispatcher);
 
@@ -720,7 +726,8 @@ int OSD::shutdown()
   }
   pg_map.clear();
 
-  messenger->shutdown();
+  client_messenger->shutdown();
+  if (client_messenger != cluster_messenger) cluster_messenger->shutdown();
   if (heartbeat_messenger)
     heartbeat_messenger->shutdown();
 
