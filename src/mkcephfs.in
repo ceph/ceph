@@ -51,27 +51,27 @@ case $1 in
 	    mkbtrfs=1
 	    ;;
     --conf | -c)
-	    [ "$2" = "" ] && usage_exit
+	    [ -z "$2" ] && usage_exit
 	    shift
 	    conf=$1
 	    ;;
     --numosd)
-	    [ "$2" = "" ] && usage_exit
+	    [ -z "$2" ] && usage_exit
 	    shift
 	    numosd=$1
 	    ;;
     --crushmapsrc)
-	    [ "$2" = "" ] && usage_exit
+	    [ -z "$2" ] && usage_exit
 	    shift
 	    usecrushmapsrc=$1
 	    ;;
     --crushmap)
-	    [ "$2" = "" ] && usage_exit
+	    [ -z "$2" ] && usage_exit
 	    shift
 	    usecrushmap=$1
 	    ;;
     -k)
-	    [ "$2" = "" ] && usage_exit
+	    [ -z "$2" ] && usage_exit
 	    shift
 	    adminkeyring=$1
 	    ;;

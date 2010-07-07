@@ -150,7 +150,7 @@ case $1 in
 	    conf=$1
 	    ;;
     --hostname )
-	    [ "$2" = "" ] && usage_exit
+	    [ -z "$2" ] && usage_exit
 	    options="$options $1"
 	    shift
 	    hostname=$1

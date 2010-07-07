@@ -1,8 +1,8 @@
 #!/bin/sh
 
-[ "$CEPH_NUM_MON" = "" ] && CEPH_NUM_MON=3
-[ "$CEPH_NUM_OSD" = "" ] && CEPH_NUM_OSD=1
-[ "$CEPH_NUM_MDS" = "" ] && CEPH_NUM_MDS=3
+[ -z "$CEPH_NUM_MON" ] && CEPH_NUM_MON=3
+[ -z "$CEPH_NUM_OSD" ] && CEPH_NUM_OSD=1
+[ -z "$CEPH_NUM_MDS" ] && CEPH_NUM_MDS=3
 
 extra_conf=""
 new=0
@@ -53,22 +53,22 @@ case $1 in
 	    new=1
 	    ;;
     --valgrind )
-	    [ "$2" = "" ] && usage_exit
+	    [ -z "$2" ] && usage_exit
 	    valgrind=$2
 	    shift
 	    ;;
     --valgrind_mds )
-	    [ "$2" = "" ] && usage_exit
+	    [ -z "$2" ] && usage_exit
 	    valgrind_mds=$2
 	    shift
 	    ;;
     --valgrind_osd )
-	    [ "$2" = "" ] && usage_exit
+	    [ -z "$2" ] && usage_exit
 	    valgrind_osd=$2
 	    shift
 	    ;;
     --valgrind_mon )
-	    [ "$2" = "" ] && usage_exit
+	    [ -z "$2" ] && usage_exit
 	    valgrind_mon=$2
 	    shift
 	    ;;
@@ -91,7 +91,7 @@ case $1 in
 	    start_all=0
 	    ;;
     -m )
-	    [ "$2" = "" ] && usage_exit
+	    [ -z "$2" ] && usage_exit
 	    MON_ADDR=$2
 	    shift
 	    ;;
@@ -174,7 +174,7 @@ else
         mds log max segments = 2'
 fi
 
-if [ "$MON_ADDR" != "" ]; then
+if [ -n "$MON_ADDR" ]; then
 	CMON_ARGS=" -m "$MON_ADDR
 	COSD_ARGS=" -m "$MON_ADDR
 	CMDS_ARGS=" -m "$MON_ADDR
@@ -211,8 +211,8 @@ else
 fi
 echo "ip $IP"
 
-[ "$CEPH_BIN" = "" ] && CEPH_BIN=.
-[ "$CEPH_PORT" = "" ] && CEPH_PORT=6789
+[ -z "$CEPH_BIN" ] && CEPH_BIN=.
+[ -z "$CEPH_PORT" ] && CEPH_PORT=6789
 
 
 if [ "$cephx" -eq 1 ]; then

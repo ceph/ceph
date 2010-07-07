@@ -140,11 +140,11 @@ get_name_list() {
 
 
 get_val() {
-  [ "$2" != "" ] && export $1=$2 || export $1=`$CCONF -c $conf "$3" "$4" "$5"`
+  [ -n "$2" ] && export $1=$2 || export $1=`$CCONF -c $conf "$3" "$4" "$5"`
 }
 
 get_val_bool() {
-  if [ "$2" != "" ]; then
+  if [ -n "$2" ]; then
 	export $1=$2
   else
 	tmp=`$CCONF "$3" "$4" "$5"`

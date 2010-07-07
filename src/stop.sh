@@ -4,7 +4,7 @@ test -d dev/osd0/. && test -e dev/sudo && SUDO="sudo"
 
 do_killall() {
 	pg=`pgrep -f crun.*$1`
-	[ "$pg" != "" ] && kill $pg
+	[ -n "$pg" ] && kill $pg
 	$SUDO killall $1
 }
 

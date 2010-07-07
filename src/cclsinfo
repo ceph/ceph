@@ -38,7 +38,7 @@ case $1 in
 	    show_default=0
 	    ;;
     * )
-	    [ "$fname" != "" ] && usage_exit
+	    [ -n "$fname" ] && usage_exit
 	    fname=$1
 	    ;;
 
