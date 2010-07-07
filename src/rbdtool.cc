@@ -580,22 +580,19 @@ static int do_export(pool_t pool, string& md_oid, const char *path)
       goto done;
     }
 
-    pos += block_size;
-
     if (bl.length()) {
+      ret = lseek64(fd, pos, SEEK_SET);
+      if (ret < 0) {
+	ret = -errno;
+	cerr << "could not seek to pos " << pos << std::endl;
+	goto done;
+      }
       ret = write(fd, bl.c_str(), bl.length());
       if (ret < 0)
         goto done;
-
-      if (bl.length() < block_size) {
-        ret = lseek64(fd, pos, SEEK_SET);
-        if (ret < 0) {
-          ret = -errno;
-          cerr << "could not seek to pos " << pos << std::endl;
-          goto done;
-        }
-      }
     }
+
+    pos += block_size;
   }
   r = ftruncate(fd, header.image_size);
   if (r < 0)
