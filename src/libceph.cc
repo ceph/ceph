@@ -14,15 +14,18 @@
  * C interface
  */
 
-extern "C" const char *ceph_version(int *major, int *minor, int *patch)
+extern "C" const char *ceph_version(int *pmajor, int *pminor, int *ppatch)
 {
-  if (major)
-    *major = CEPH_VERSION_MAJOR;
-  if (minor)
-    *minor = CEPH_VERSION_MINOR;
-  if (patch)
-    *patch = CEPH_VERSION_PATCH;
-  return CEPH_VERSION;
+  int major, minor, patch;
+
+  sscanf(VERSION, "%d.%d.%d", &major, &minor, &patch);
+  if (pmajor)
+    *pmajor = major;
+  if (pminor)
+    *pminor = minor;
+  if (ppatch)
+    *ppatch = patch;
+  return VERSION;
 }
 
 static Mutex ceph_client_mutex("ceph_client");
