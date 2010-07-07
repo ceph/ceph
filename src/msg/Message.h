@@ -259,18 +259,15 @@ protected:
 
   friend class Messenger;
 
-  bool _forwarded;
-  entity_inst_t _orig_source_inst;
-  
 public:
   atomic_t nref;
 
-  Message() : connection(NULL), dispatch_throttle_size(0), _forwarded(false), nref(1) {
+  Message() : connection(NULL), dispatch_throttle_size(0), nref(1) {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
     throttler = NULL;
   };
-  Message(int t) : connection(NULL), dispatch_throttle_size(0), _forwarded(false), nref(1) {
+  Message(int t) : connection(NULL), dispatch_throttle_size(0), nref(1) {
     memset(&header, 0, sizeof(header));
     header.type = t;
     header.version = 1;
@@ -408,8 +405,6 @@ public:
 
   // forwarded?
   entity_inst_t get_orig_source_inst() {
-    if (_forwarded)
-      return _orig_source_inst;
     return get_source_inst();
   }
   entity_name_t get_orig_source() {
@@ -417,10 +412,6 @@ public:
   }
   entity_addr_t get_orig_source_addr() {
     return get_orig_source_inst().addr;
-  }
-  void set_orig_source_inst(entity_inst_t& i) {
-    _forwarded = true;
-    _orig_source_inst = i;
   }
 
   // virtual bits
