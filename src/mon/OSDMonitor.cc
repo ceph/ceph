@@ -1098,6 +1098,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, __u8 crush_rule)
   pending_inc.new_pools[pool].v.type = CEPH_PG_TYPE_REP;
   pending_inc.new_pools[pool].v.size = 2;
   pending_inc.new_pools[pool].v.crush_ruleset = crush_rule;
+  pending_inc.new_pools[pool].v.object_hash = CEPH_STR_HASH_RJENKINS;
   pending_inc.new_pools[pool].v.pg_num = 8;
   pending_inc.new_pools[pool].v.pgp_num = 8;
   pending_inc.new_pools[pool].v.lpg_num = 0;
