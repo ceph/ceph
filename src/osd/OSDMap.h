@@ -261,6 +261,7 @@ private:
   int32_t max_osd;
   vector<uint8_t> osd_state;
   vector<entity_addr_t> osd_addr;
+  vector<entity_addr_t> osd_cluster_addr;
   vector<entity_addr_t> osd_hb_addr;
   vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
   vector<osd_info_t> osd_info;
@@ -324,6 +325,7 @@ private:
     }
     osd_info.resize(m);
     osd_addr.resize(m);
+    osd_cluster_addr.resize(m);
     osd_hb_addr.resize(m);
 
     calc_num_osds();
@@ -412,7 +414,7 @@ private:
   
   int identify_osd(const entity_addr_t& addr) const {
     for (unsigned i=0; i<osd_addr.size(); i++)
-      if (osd_addr[i] == addr)
+      if ((osd_addr[i] == addr) || (osd_cluster_addr[i] == addr))
 	return i;
     return -1;
   }
@@ -421,7 +423,7 @@ private:
   }
   bool find_osd_on_ip(const entity_addr_t& ip) const {
     for (unsigned i=0; i<osd_addr.size(); i++)
-      if (osd_addr[i].is_same_host(ip))
+      if (osd_addr[i].is_same_host(ip) || osd_cluster_addr[i].is_same_host(ip))
 	return i;
     return -1;
   }
@@ -431,6 +433,11 @@ private:
   const entity_addr_t &get_addr(int osd) {
     assert(exists(osd));
     return osd_addr[osd];
+  }
+  const entity_addr_t &get_cluster_addr(int osd) {
+    assert(exists(osd));
+    if (osd_cluster_addr[osd] == entity_addr_t()) return get_addr(osd);
+    return osd_cluster_addr[osd];
   }
   const entity_addr_t &get_hb_addr(int osd) {
     assert(exists(osd));
@@ -448,6 +455,17 @@ private:
       return true;
     } 
     return false;
+  }
+  entity_inst_t get_cluster_inst(int osd) {
+    assert(exists(osd) && is_up(osd));
+    if(osd_cluster_addr[osd] == entity_addr_t()) return get_inst(osd);
+    return entity_inst_t(entity_name_t::OSD(osd), osd_cluster_addr[osd]);
+  }
+  bool get_cluster_inst(int osd, entity_inst_t& inst) {
+    bool exists = get_inst(osd, inst);
+    if (exists && (osd_cluster_addr[osd] != entity_addr_t()))
+        inst.addr = osd_cluster_addr[osd];
+    return exists;
   }
   entity_inst_t get_hb_inst(int osd) {
     assert(exists(osd));
@@ -542,6 +560,10 @@ private:
       osd_info[i->first].down_at = epoch;
       //cout << "epoch " << epoch << " down osd" << i->first << endl;
     }
+    for (map<int32_t,entity_addr_t>::iterator i = inc.new_up_internal.begin();
+        i != inc.new_up_internal.end();
+        ++i)
+      osd_cluster_addr[i->first] = i->second;
     for (map<int32_t,entity_addr_t>::iterator i = inc.new_up_client.begin();
          i != inc.new_up_client.end();
          i++) {
@@ -634,6 +656,7 @@ private:
     ::encode(osd_hb_addr, bl);
     ::encode(osd_info, bl);
     ::encode(blacklist, bl);
+    ::encode(osd_cluster_addr, bl);
   }
   
   void decode(bufferlist& bl) {
@@ -683,6 +706,8 @@ private:
       ::decode(pool_name, p);
    
     ::decode(blacklist, p);
+    if (v>=6)
+      ::decode(osd_cluster_addr, p);
 
     // index pool names
     name_pool.clear();
