@@ -391,7 +391,7 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
 //extract the original message and put it into the regular dispatch function
 void Monitor::handle_forward(MForward *m)
 {
-  dout(10) << "received forwarded message from " << m->msg->get_source_inst()
+  dout(10) << "received forwarded message from " << m->client
 	   << " via " << m->get_source_inst() << dendl;
   MonSession *session = (MonSession *)m->get_connection()->get_priv();
   assert(session);
@@ -401,14 +401,19 @@ void Monitor::handle_forward(MForward *m)
 	    << session->caps << dendl;
   } else {
 
-    MonSession *s = new MonSession(m->msg->get_source_inst());
+    MonSession *s = new MonSession(m->client);
     s->caps = m->client_caps;
     Connection *c = new Connection;
     c->set_priv(s);
+    c->set_peer_addr(m->client.addr);
+    c->set_peer_type(m->client.name.type());
 
     PaxosServiceMessage *req = m->msg;
     m->msg = NULL;  // so ~MForward doesn't delete it
     req->set_connection(c);
+
+    dout(10) << " mesg " << req << " from " << m->get_source_addr() << dendl;
+
     _ms_dispatch(req);
   }
   session->put();
