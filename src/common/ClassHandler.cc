@@ -35,7 +35,8 @@ void ClassHandler::_load_class(ClassData &cls)
   cls.handle = dlopen(fname, RTLD_NOW);
 
   if (!cls.handle) {
-    dout(0) << "could not open class (dlopen failed)" << dendl;
+    char buf[80];
+    dout(0) << "could not open class (dlopen failed) " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto done;
   }
   cls_deps = (cls_deps_t *(*)())dlsym(cls.handle, "class_deps");
