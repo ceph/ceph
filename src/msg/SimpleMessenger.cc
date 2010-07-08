@@ -1790,6 +1790,11 @@ int SimpleMessenger::Pipe::read_message(Message **pm)
   dout(20) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
 	   << " byte message" << dendl;
   message = decode_message(header, footer, front, middle, data);
+  if (!message) {
+    ret = -EINVAL;
+    goto out_dethrottle;
+  }
+
   message->set_throttler(policy.throttler);
 
   // store reservation size in message, so we don't get confused
