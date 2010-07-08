@@ -3,7 +3,9 @@
 set -e
 
 vers=$1
+[ -z "$vers" ] && [ -e .last_release ] && vers=`cat .last_release`
 [ -z "$vers" ] && echo specify version && exit 1
+echo version $vers
 
 #./pull.sh $vers dsc changes
 

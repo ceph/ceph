@@ -82,3 +82,6 @@ done
 rm -r ceph-$finalvers
 cp -a ceph_$finalvers.orig.tar.gz ceph-$finalvers.tar.gz
 echo finished release $finalvers
+
+cd ../..
+echo $finalvers > .last_release
