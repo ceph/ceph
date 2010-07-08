@@ -11,7 +11,7 @@ BuildRequires: fuse-devel, libtool, libtool-ltdl-devel, boost-devel,
 BuildRequires: libedit-devel, fuse-devel, git, perl, gdbm,
 BuildRequires: openssl-devel, libatomic_ops-devel
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
-Requires(post): chkconfig
+Requires(post): chkconfig, binutils
 Requires(preun): chkconfig
 Requires(preun): initscripts
 
