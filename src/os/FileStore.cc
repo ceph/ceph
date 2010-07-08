@@ -1393,48 +1393,48 @@ int FileStore::_write(coll_t cid, const sobject_t& oid,
   dout(15) << "write " << fn << " " << offset << "~" << len << dendl;
   int r;
 
+  int64_t actual;
+
   char buf[80];
   int flags = O_WRONLY|O_CREAT;
   int fd = ::open(fn, flags, 0644);
   if (fd < 0) {
     derr(0) << "write couldn't open " << fn << " flags " << flags << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     r = -errno;
-  } else {
+    goto out;
+  }
     
-    // seek
-    uint64_t actual = ::lseek64(fd, offset, SEEK_SET);
-    int did = 0;
-    assert(actual == offset);
-    
-    // write buffers
-    for (list<bufferptr>::const_iterator it = bl.buffers().begin();
-	 it != bl.buffers().end();
-	 it++) {
-      int r = ::write(fd, (char*)(*it).c_str(), (*it).length());
-      if (r > 0)
-	did += r;
-      else {
-	derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-      }
-    }
-    
-    if (did < 0) {
-      derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    }
-
-#ifdef HAVE_SYNC_FILE_RANGE
-    if (!g_conf.filestore_flusher ||
-	!queue_flusher(fd, offset, len)) {
-      if (g_conf.filestore_sync_flush)
-	::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
-      ::close(fd);
-    }
-#else
-    ::close(fd);
-#endif
-    r = did;
+  // seek
+  actual = ::lseek64(fd, offset, SEEK_SET);
+  if (actual < 0) {
+    dout(0) << "write lseek64 to " << offset << " failed: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    r = -errno;
+    goto out;
+  }
+  if (actual != (int64_t)offset) {
+    dout(0) << "write lseek64 to " << offset << " gave bad offset " << actual << dendl;
+    r = -EIO;
+    goto out;
   }
 
+  // write
+  r = bl.write_fd(fd);
+  if (r == 0)
+    r = bl.length();
+
+  // flush?
+#ifdef HAVE_SYNC_FILE_RANGE
+  if (!g_conf.filestore_flusher ||
+      !queue_flusher(fd, offset, len)) {
+    if (g_conf.filestore_sync_flush)
+      ::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
+    ::close(fd);
+  }
+#else
+  ::close(fd);
+#endif
+
+ out:
   dout(10) << "write " << fn << " " << offset << "~" << len << " = " << r << dendl;
   return r;
 }
