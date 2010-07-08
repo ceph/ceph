@@ -205,6 +205,9 @@ int main(int argc, const char **argv)
   SimpleMessenger *cluster_messenger = client_messenger;
   SimpleMessenger *messenger_hb = new SimpleMessenger();
 
+  if (!client_messenger || !messenger_hb)
+    return 1;
+
   entity_addr_t hb_addr;
 
   if (client_addr_set) {
@@ -216,6 +219,8 @@ int main(int argc, const char **argv)
 
   if (cluster_addr_set) {
     cluster_messenger = new SimpleMessenger();
+    if (!cluster_messenger)
+      return 1;
     cluster_messenger->bind(g_cluster_addr);
     hb_addr = g_cluster_addr;
     hb_addr.set_port(0);
@@ -230,11 +235,7 @@ int main(int argc, const char **argv)
        << std::endl;
 
   client_messenger->register_entity(entity_name_t::OSD(whoami));
-  if (!client_messenger)
-    return 1;
   messenger_hb->register_entity(entity_name_t::OSD(whoami));
-  if (!messenger_hb)
-    return 1;
 
   Throttle client_throttler(g_conf.osd_client_message_size_cap);
 
