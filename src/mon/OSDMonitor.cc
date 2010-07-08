@@ -482,6 +482,10 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     pending_inc.new_up_client[from] = m->get_orig_source_addr(); //FIXME: should this be using new_up_client?
     pending_inc.new_hb_up[from] = m->hb_addr;
     
+    if (!m->cluster_addr.is_blank_addr()) { //is there a cluster addr?
+      pending_inc.new_up_internal[from] = m->cluster_addr; //fill it in!
+    }
+
     // mark in?
     pending_inc.new_weight[from] = CEPH_OSD_IN;
 

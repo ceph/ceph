@@ -1527,7 +1527,10 @@ void OSD::send_boot()
     hb_addr = cluster_messenger->get_myaddr();
     hb_addr.set_port(port);
   }
-  monc->send_mon_message(new MOSDBoot(superblock, hb_addr));
+  MOSDBoot *mboot = new MOSDBoot(superblock, hb_addr);
+  if (cluster_messenger != client_messenger)
+    mboot->cluster_addr = cluster_messenger->get_myaddr();
+  monc->send_mon_message(mboot);
 }
 
 void OSD::queue_want_up_thru(epoch_t want)
