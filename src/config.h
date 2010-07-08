@@ -31,7 +31,8 @@ extern struct ceph_file_layout g_default_file_layout;
 
 #include "msg/msg_types.h"
 
-extern entity_addr_t g_my_addr;
+extern entity_addr_t g_public_addr;
+extern entity_addr_t g_cluster_addr;
 
 extern bool g_daemon;
 extern const char *g_default_id;

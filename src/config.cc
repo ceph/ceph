@@ -91,7 +91,8 @@ struct ceph_file_layout g_default_file_layout = {
 // fake osd failures: osd -> time
 std::map<entity_name_t,float> g_fake_kill_after;
 
-entity_addr_t g_my_addr;
+entity_addr_t g_public_addr;
+entity_addr_t g_cluster_addr;
 
 md_config_t g_conf;
 bool g_daemon = false;
@@ -978,7 +979,11 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
     } else if (CONF_ARG_EQ("show_conf", 'S')) {
       show_config = true;
     } else if (isdaemon && CONF_ARG_EQ("bind", 0)) {
-      g_my_addr.parse(args[++i]);
+      g_public_addr.parse(args[++i]);
+    } else if (CONF_ARG_EQ("public_addr", 0)) {
+      g_public_addr.parse(args[++i]);
+    } else if (CONF_ARG_EQ("cluster_addr", 0)) {
+      g_cluster_addr.parse(args[++i]);
     } else if (isdaemon && CONF_ARG_EQ("nodaemon", 'D')) {
       g_conf.daemonize = false;
       g_conf.log_to_stdout = true;
