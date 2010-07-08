@@ -820,6 +820,7 @@ PG *OSD::_open_lock_pg(pg_t pgid, bool no_lockdep_check)
 {
   assert(osd_lock.is_locked());
 
+  dout(10) << "_open_lock_pg " << pgid << dendl;
   PGPool *pool = _get_pool(pgid.pool());
 
   // create
@@ -3329,8 +3330,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       t = new ObjectStore::Transaction;
       fin = new C_Contexts;
       if (create) {
-	pg = _create_lock_new_pg(pgid, creating_pgs[pgid].acting, *t);
-	creating_pgs.erase(pgid);
+	pg = _create_lock_new_pg(pgid, acting, *t);
       } else {
 	pg = _create_lock_pg(pgid, *t);
 	pg->acting.swap(acting);
