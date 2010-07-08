@@ -708,6 +708,8 @@ private:
     ::decode(blacklist, p);
     if (v>=6)
       ::decode(osd_cluster_addr, p);
+    if (osd_cluster_addr.size() != osd_addr.size())
+      osd_cluster_addr.resize(osd_addr.size());
 
     // index pool names
     name_pool.clear();
