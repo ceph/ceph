@@ -1697,7 +1697,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       if (m) {
 	dout(10) << "activate peer osd" << peer << " sending " << m->log << " " << m->missing << dendl;
 	//m->log.print(cout);
-	osd->messenger->send_message(m, osd->osdmap->get_inst(peer));
+	osd->cluster_messenger->send_message(m, osd->osdmap->get_cluster_inst(peer));
       }
 
       // peer now has 
@@ -2097,9 +2097,9 @@ void PG::trim_peers()
   dout(10) << "trim_peers " << pg_trim_to << dendl;
   if (pg_trim_to != eversion_t()) {
     for (unsigned i=1; i<acting.size(); i++)
-      osd->messenger->send_message(new MOSDPGTrim(osd->osdmap->get_epoch(), info.pgid,
+      osd->cluster_messenger->send_message(new MOSDPGTrim(osd->osdmap->get_epoch(), info.pgid,
 						  pg_trim_to),
-				   osd->osdmap->get_inst(acting[i]));
+				   osd->osdmap->get_cluster_inst(acting[i]));
   }
 }
 
@@ -2444,7 +2444,7 @@ void PG::sub_op_scrub(MOSDSubOp *op)
 
   MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK); 
   ::encode(map, reply->get_data());
-  osd->messenger->send_message(reply, op->get_connection());
+  osd->cluster_messenger->send_message(reply, op->get_connection());
 
   op->put();
 }
@@ -2598,8 +2598,8 @@ void PG::scrub()
     MOSDSubOp *subop = new MOSDSubOp(reqid, info.pgid, poid, false, 0,
 				     osd->osdmap->get_epoch(), osd->get_tid(), v);
     subop->ops = scrub;
-    osd->messenger->send_message(subop, //new MOSDPGScrub(info.pgid, osd->osdmap->get_epoch()),
-				 osd->osdmap->get_inst(acting[i]));
+    osd->cluster_messenger->send_message(subop, //new MOSDPGScrub(info.pgid, osd->osdmap->get_epoch()),
+				 osd->osdmap->get_cluster_inst(acting[i]));
   }
   osd->map_lock.put_read();
 

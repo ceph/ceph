@@ -331,7 +331,6 @@ int OSD::peek_meta(const char *dev, string& magic, ceph_fsid_t& fsid, int& whoam
 OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, Messenger *hbm, MonClient *mc, const char *dev, const char *jdev) :
   osd_lock("OSD::osd_lock"),
   timer(osd_lock),
-  messenger(external_messenger),
   cluster_messenger(internal_messenger),
   client_messenger(external_messenger),
   monc(mc),

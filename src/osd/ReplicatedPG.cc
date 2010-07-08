@@ -164,7 +164,8 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 	int peer = acting[1];
 	dout(-10) << "preprocess_op fwd client read op to osd" << peer
 		  << " for " << op->get_orig_source() << " " << op->get_orig_source_inst() << dendl;
-	osd->messenger->forward_message(op, osd->osdmap->get_inst(peer));
+	osd->cluster_messenger->
+	  forward_message(op, osd->osdmap->get_cluster_inst(peer));
 	return true;
       }
     }
@@ -364,7 +365,8 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 		  << " " << op->get_reqid()
 		  << dendl;
 	op->set_peer_stat(osd->my_stat);
-	osd->messenger->forward_message(op, osd->osdmap->get_inst(shedto));
+	osd->cluster_messenger->
+	  forward_message(op, osd->osdmap->get_cluster_inst(shedto));
 	osd->stat_rd_ops_shed_out++;
 	osd->logger->inc(l_osd_shdout);
 	return true;
@@ -385,7 +387,8 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 	if (osd->store->getattr(info.pgid.to_coll(), soid, "balance-reads", &v, 1) < 0) {
 	  dout(-10) << "preprocess_op in-cache but no balance-reads on " << oid
 		    << ", fwd to primary" << dendl;
-	  osd->messenger->forward_message(op, osd->osdmap->get_inst(get_primary()));
+	  osd->cluster_messenger->
+	    forward_message(op, osd->osdmap->get_cluster_inst(get_primary()));
 	  return true;
 	}
       }
@@ -473,7 +476,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 				       CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK); 
   reply->set_data(outdata);
   reply->set_result(result);
-  osd->messenger->send_message(reply, op->get_connection());
+  osd->client_messenger->send_message(reply, op->get_connection());
   op->put();
 }
 
@@ -639,7 +642,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
       MOSDOpReply *reply = ctx->reply;
       ctx->reply = NULL;
       reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
-      osd->messenger->send_message(reply, op->get_connection());
+      osd->client_messenger->send_message(reply, op->get_connection());
       op->put();
       delete ctx;
       put_object_context(obc);
@@ -800,7 +803,7 @@ bool ReplicatedPG::snap_trimmer()
 
       vector<OSDOp> ops;
       tid_t rep_tid = osd->get_tid();
-      osd_reqid_t reqid(osd->messenger->get_myname(), 0, rep_tid);
+      osd_reqid_t reqid(osd->cluster_messenger->get_myname(), 0, rep_tid);
       OpContext *ctx = new OpContext(NULL, reqid, ops, &obc->obs, this);
       ctx->mtime = g_clock.now();
 
@@ -945,7 +948,8 @@ bool ReplicatedPG::snap_trimmer()
       int peer = acting[i];
       MOSDPGInfo *m = new MOSDPGInfo(osd->osdmap->get_epoch());
       m->pg_info.push_back(info);
-      osd->messenger->send_message(m, osd->osdmap->get_inst(peer));
+      osd->cluster_messenger->
+	send_message(m, osd->osdmap->get_cluster_inst(peer));
     }
   }  
 
@@ -2242,7 +2246,8 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	  reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), 0);
 	reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
 	dout(10) << " sending commit on " << *repop << " " << reply << dendl;
-	osd->messenger->send_message(reply, op->get_connection());
+	osd->cluster_messenger->
+	  send_message(reply, op->get_connection());
 	repop->sent_disk = true;
       }
     }
@@ -2258,7 +2263,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	  reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), 0);
 	reply->add_flags(CEPH_OSD_FLAG_ACK);
 	dout(10) << " sending ack on " << *repop << " " << reply << dendl;
-	osd->messenger->send_message(reply, op->get_connection());
+	osd->cluster_messenger->send_message(reply, op->get_connection());
 	repop->sent_ack = true;
       }
       
@@ -2329,7 +2334,8 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
     
     wr->pg_trim_to = pg_trim_to;
     wr->peer_stat = osd->get_my_stat_for(now, peer);
-    osd->messenger->send_message(wr, osd->osdmap->get_inst(peer));
+    osd->cluster_messenger->
+      send_message(wr, osd->osdmap->get_cluster_inst(peer));
 
     // keep peer_info up to date
     if (!repop->noop) {
@@ -2667,9 +2673,9 @@ void ReplicatedPG::put_snapset_context(SnapSetContext *ssc)
 		  << ", but they didn't know better, sharing" << dendl;
 	osd->my_stat_on_peer[from] = osd->my_stat;
 	/*
-	osd->messenger->send_message(new MOSDPing(osd->osdmap->get_fsid(), osd->osdmap->get_epoch(),
-						  osd->my_stat),
-				     osd->osdmap->get_inst(from));
+	osd->cluster_messenger->send_message(new MOSDPing(osd->osdmap->get_fsid(), osd->osdmap->get_epoch(),
+	osd->my_stat),
+	osd->osdmap->get_cluster_inst(from));
 	*/
       }
     } else {
@@ -2679,7 +2685,8 @@ void ReplicatedPG::put_snapset_context(SnapSetContext *ssc)
 	  osd->store->getattr(coll_t::build_pg_coll(info.pgid), soid, "balance-reads", &b, 1) < 0) {
 	dout(-10) << "read on replica, object " << soid 
 		  << " dne or no balance-reads, fw back to primary" << dendl;
-	osd->messenger->forward_message(op, osd->osdmap->get_inst(get_primary()));
+	osd->cluster_messenger->
+	  forward_message(op, osd->osdmap->get_cluster_inst(get_primary()));
 	return;
       }
     }
@@ -2845,7 +2852,8 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
     MOSDSubOpReply *ack = new MOSDSubOpReply(rm->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
     ack->set_peer_stat(osd->get_my_stat_for(g_clock.now(), rm->ackerosd));
     ack->set_priority(CEPH_MSG_PRIO_HIGH);
-    osd->messenger->send_message(ack, osd->osdmap->get_inst(rm->ackerosd));
+    osd->cluster_messenger->
+      send_message(ack, osd->osdmap->get_cluster_inst(rm->ackerosd));
   }
 
   rm->applied = true;
@@ -2877,7 +2885,8 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
     MOSDSubOpReply *commit = new MOSDSubOpReply(rm->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ONDISK);
     commit->set_last_complete_ondisk(rm->last_complete);
     commit->set_peer_stat(osd->get_my_stat_for(g_clock.now(), rm->ackerosd));
-    osd->messenger->send_message(commit, osd->osdmap->get_inst(rm->ackerosd));
+    osd->cluster_messenger->
+      send_message(commit, osd->osdmap->get_cluster_inst(rm->ackerosd));
   }
   
   rm->committed = true;
@@ -3137,7 +3146,8 @@ void ReplicatedPG::send_pull_op(const sobject_t& soid, eversion_t v, bool first,
   // do not include clone_subsets in pull request; we will recalculate this
   // when the object is pushed back.
   //subop->clone_subsets.swap(clone_subsets);
-  osd->messenger->send_message(subop, osd->osdmap->get_inst(fromosd));
+  osd->cluster_messenger->
+    send_message(subop, osd->osdmap->get_cluster_inst(fromosd));
 }
 
 
@@ -3299,7 +3309,8 @@ void ReplicatedPG::send_push_op(const sobject_t& soid, int peer,
   subop->old_size = size;
   subop->first = first;
   subop->complete = complete;
-  osd->messenger->send_message(subop, osd->osdmap->get_inst(peer));
+  osd->cluster_messenger->
+    send_message(subop, osd->osdmap->get_cluster_inst(peer));
 }
 
 void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
@@ -3413,9 +3424,10 @@ void ReplicatedPG::_committed(epoch_t same_since, eversion_t last_complete)
     if (last_complete_ondisk == info.last_update) {
       if (is_replica()) {
 	// we are fully up to date.  tell the primary!
-	osd->messenger->send_message(new MOSDPGTrim(osd->osdmap->get_epoch(), info.pgid,
-						    last_complete_ondisk),
-				     osd->osdmap->get_inst(get_primary()));
+	osd->cluster_messenger->
+	  send_message(new MOSDPGTrim(osd->osdmap->get_epoch(), info.pgid,
+				      last_complete_ondisk),
+		       osd->osdmap->get_cluster_inst(get_primary()));
       } else if (is_primary()) {
 	// we are the primary.  tell replicas to trim?
 	if (calc_min_last_complete_ondisk())
@@ -3719,7 +3731,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   } else {
     // ack if i'm a replica and being pushed to.
     MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK); 
-    osd->messenger->send_message(reply, op->get_connection());
+    osd->cluster_messenger->send_message(reply, op->get_connection());
   }
 
   if (complete) {
@@ -4287,7 +4299,8 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
       for (unsigned i=1; i<acting.size(); i++) {
 	MOSDPGInfo *m = new MOSDPGInfo(osd->osdmap->get_epoch());
 	m->pg_info.push_back(info);
-	osd->messenger->send_message(m, osd->osdmap->get_inst(acting[i]));
+	osd->cluster_messenger->
+	  send_message(m, osd->osdmap->get_cluster_inst(acting[i]));
       }
     }
   }

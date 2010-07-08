@@ -105,7 +105,6 @@ protected:
   Mutex osd_lock;     // global lock
   SafeTimer timer;    // safe timer (osd_lock)
 
-  Messenger   *messenger;
   Messenger   *cluster_messenger;
   Messenger   *client_messenger;
   MonClient   *monc;
