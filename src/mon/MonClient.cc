@@ -230,7 +230,7 @@ void MonClient::init()
   entity_name = *g_conf.entity_name;
   
   Mutex::Locker l(monc_lock);
-  timer.add_event_after(10.0, new C_Tick(this));
+  schedule_tick();
 
   // seed rng so we choose a different monitor each time
   srand(getpid());
@@ -455,7 +455,15 @@ void MonClient::tick()
   if (auth)
     auth->tick();
 
-  timer.add_event_after(10.0, new C_Tick(this));
+  schedule_tick();
+}
+
+void MonClient::schedule_tick()
+{
+  if (hunting)
+    timer.add_event_after(g_conf.mon_client_hunt_interval, new C_Tick(this));
+  else
+    timer.add_event_after(g_conf.mon_client_ping_interval, new C_Tick(this));
 }
 
 

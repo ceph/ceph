@@ -170,6 +170,9 @@ struct md_config_t {
   int auth_nonce_len;
   EntityName *entity_name;
 
+  double mon_client_hunt_interval;
+  double mon_client_ping_interval;
+
   // client
   int      client_cache_size;
   float    client_cache_mid;

@@ -80,6 +80,7 @@ private:
     }
   };
   void tick();
+  void schedule_tick();
 
   Cond auth_cond;
 
