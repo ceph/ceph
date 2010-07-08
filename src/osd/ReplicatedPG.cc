@@ -3438,8 +3438,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
        p++) {
     bufferlist bit;
     bit.substr_of(data, boff, p->second);
-    t->write(coll_t::build_pg_coll(info.pgid), soid, p->first, p->second, bit);
     dout(15) << " write " << p->first << "~" << p->second << dendl;
+    t->write(coll_t::build_pg_coll(info.pgid), soid, p->first, p->second, bit);
     boff += p->second;
   }
 
