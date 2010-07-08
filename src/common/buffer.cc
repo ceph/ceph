@@ -125,7 +125,7 @@ int buffer::list::write_file(const char *fn, int mode)
   return err;
 }
 
-int buffer::list::write_fd(int fd)
+int buffer::list::write_fd(int fd) const
 {
   // write buffer piecewise
   if (false) {
