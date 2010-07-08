@@ -57,16 +57,16 @@ static ostream& _prefix(SimpleMessenger *messenger) {
  * Accepter
  */
 
-int SimpleMessenger::Accepter::bind(int64_t force_nonce)
+int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_addr)
 {
   // bind to a socket
   dout(10) << "accepter.bind" << dendl;
   
   int family = g_conf.ms_bind_ipv6 ? AF_INET6 : AF_INET;
-  switch (g_my_addr.get_family()) {
+  switch (bind_addr.get_family()) {
   case AF_INET:
   case AF_INET6:
-    family = g_my_addr.get_family();
+    family = bind_addr.get_family();
     break;
   }
 
@@ -87,7 +87,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   ::setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
 
   // use whatever user specified (if anything)
-  entity_addr_t listen_addr = g_my_addr;
+  entity_addr_t listen_addr = bind_addr;
   listen_addr.set_family(family);
 
   /* bind to port */
@@ -97,9 +97,9 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
     rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), sizeof(listen_addr.ss_addr()));
     if (rc < 0) {
       char buf[80];
-      derr(0) << "accepter.bind unable to bind to " << g_my_addr.ss_addr()
+      derr(0) << "accepter.bind unable to bind to " << bind_addr.ss_addr()
 	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-      cerr << "accepter.bind unable to bind to " << g_my_addr.ss_addr()
+      cerr << "accepter.bind unable to bind to " << bind_addr.ss_addr()
 	   << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
       return -errno;
     }
@@ -113,10 +113,10 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
     }
     if (rc < 0) {
       char buf[80];
-      derr(0) << "accepter.bind unable to bind to " << g_my_addr.ss_addr()
+      derr(0) << "accepter.bind unable to bind to " << bind_addr.ss_addr()
 	      << " on any port in range " << CEPH_PORT_START << "-" << CEPH_PORT_LAST
 	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-      cerr << "accepter.bind unable to bind to " << g_my_addr.ss_addr()
+      cerr << "accepter.bind unable to bind to " << bind_addr.ss_addr()
 	   << " on any port in range " << CEPH_PORT_START << "-" << CEPH_PORT_LAST
 	   << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
       return -errno;
@@ -133,14 +133,14 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   rc = ::listen(listen_sd, 128);
   if (rc < 0) {
     char buf[80];
-    derr(0) << "accepter.bind unable to listen on " << g_my_addr.ss_addr()
+    derr(0) << "accepter.bind unable to listen on " << bind_addr.ss_addr()
 	    << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    cerr << "accepter.bind unable to listen on " << g_my_addr.ss_addr()
+    cerr << "accepter.bind unable to listen on " << bind_addr.ss_addr()
 	 << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
     return -errno;
   }
   
-  messenger->ms_addr = g_my_addr;
+  messenger->ms_addr = bind_addr;
   if (messenger->ms_addr != entity_addr_t())
     messenger->need_addr = false;
   else 
@@ -2137,7 +2137,7 @@ void SimpleMessenger::queue_reap(Pipe *pipe)
 
 
 
-int SimpleMessenger::bind(int64_t force_nonce)
+int SimpleMessenger::bind(entity_addr_t &bind_addr, int64_t force_nonce)
 {
   lock.Lock();
   if (started) {
@@ -2149,7 +2149,7 @@ int SimpleMessenger::bind(int64_t force_nonce)
   lock.Unlock();
 
   // bind to a socket
-  return accepter.bind(force_nonce);
+  return accepter.bind(force_nonce, bind_addr);
 }
 
 static void remove_pid_file(int signal = 0)
