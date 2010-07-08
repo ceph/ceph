@@ -81,20 +81,38 @@ char *mount_resolve_dest(char *orig_str)
 	while (tok) {
 		struct addrinfo hint;
 		struct addrinfo *res, *ores;
+		char *firstcolon, *lastcolon, *bracecolon;
 		int r;
+		int brackets = 0;
 
-		port_str = strchr(tok, ':');
-		if (port_str) {
+		firstcolon = strchr(tok, ':');
+		lastcolon = strrchr(tok, ':');
+		bracecolon = strstr(tok, "]:");
+
+		port_str = 0;
+		if (firstcolon && firstcolon == lastcolon) {
+			/* host:port or a.b.c.d:port */
+			*firstcolon = 0;
+			port_str = firstcolon + 1;
+		} else if (bracecolon) {
+			/* {ipv6addr}:port */
+			port_str = bracecolon + 1;
 			*port_str = 0;
 			port_str++;
-			if (!*port_str)
-				port_str = NULL;
 		}
+		if (port_str && !*port_str)
+			port_str = NULL;
+
+		if (*tok == '[' &&
+		    tok[strlen(tok)-1] == ']') {
+			tok[strlen(tok)-1] = 0;
+			tok++;
+			brackets = 1;
+		}			
 
 		/*printf("name '%s' port '%s'\n", tok, port_str);*/
 
 		memset(&hint, 0, sizeof(hint));
-		hint.ai_family = AF_INET;
 		hint.ai_socktype = SOCK_STREAM;
 		hint.ai_protocol = IPPROTO_TCP;
 
@@ -117,7 +135,13 @@ char *mount_resolve_dest(char *orig_str)
 			       host, port,
 			       res->ai_flags, res->ai_family, res->ai_socktype, res->ai_protocol,
 			       res->ai_canonname);*/
+			if (res->ai_family == AF_INET6)
+				brackets = 1;  /* always surround ipv6 addrs with brackets */
+			if (brackets)
+				pos = safe_cat(&new_str, &len, pos, "[");
 			pos = safe_cat(&new_str, &len, pos, host);
+			if (brackets)
+				pos = safe_cat(&new_str, &len, pos, "]");
 			if (port_str) {
 				pos = safe_cat(&new_str, &len, pos, ":");
 				pos = safe_cat(&new_str, &len, pos, port);
@@ -137,6 +161,7 @@ char *mount_resolve_dest(char *orig_str)
 	pos = safe_cat(&new_str, &len, pos, ":");
 	pos = safe_cat(&new_str, &len, pos, mount_path);
 
+	/*printf("new_str is '%s'\n", new_str);*/
 	return new_str;
 }
 
