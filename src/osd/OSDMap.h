@@ -560,10 +560,6 @@ private:
       osd_info[i->first].down_at = epoch;
       //cout << "epoch " << epoch << " down osd" << i->first << endl;
     }
-    for (map<int32_t,entity_addr_t>::iterator i = inc.new_up_internal.begin();
-        i != inc.new_up_internal.end();
-        ++i)
-      osd_cluster_addr[i->first] = i->second;
     for (map<int32_t,entity_addr_t>::iterator i = inc.new_up_client.begin();
          i != inc.new_up_client.end();
          i++) {
@@ -578,7 +574,12 @@ private:
       osd_info[i->first].up_from = epoch;
       //cout << "epoch " << epoch << " up osd" << i->first << " at " << i->second << "with hb addr" << osd_hb_addr[i->first] << std::endl;
     }
-
+    for (map<int32_t,entity_addr_t>::iterator i = inc.new_up_internal.begin();
+        i != inc.new_up_internal.end();
+        ++i)
+      osd_cluster_addr[i->first] = i->second;
+    if (osd_cluster_addr.size() != osd_addr.size())
+        osd_cluster_addr.resize(osd_addr.size());
     // info
     for (map<int32_t,epoch_t>::iterator i = inc.new_up_thru.begin();
          i != inc.new_up_thru.end();
