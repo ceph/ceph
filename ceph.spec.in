@@ -59,7 +59,7 @@ conjunction with any FastCGI capable web server.
 %if %{with_radosgw}
 %{configure} --without-hadoop --with-radosgw
 %else
-%{configure} --without-hadoop 
+%{configure} --without-hadoop --without-radosgw
 %endif
 make -j$(getconf _NPROCESSORS_ONLN) CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
