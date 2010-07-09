@@ -100,6 +100,7 @@ fi
 %{_libdir}/ceph
 %config(noreplace) %{_sysconfdir}/ceph/sample.ceph.conf
 %config(noreplace) %{_sysconfdir}/ceph/sample.fetch_config
+%config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %{_mandir}/man8/cmon.8*
 %{_mandir}/man8/cmds.8*
 %{_mandir}/man8/cosd.8*
