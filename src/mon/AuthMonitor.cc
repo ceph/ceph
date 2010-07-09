@@ -496,10 +496,10 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
 	r = 0;
       }
     }
-    else if (m->cmd[1] == "get") {
+    else if (m->cmd[1] == "get" && m->cmd.size() > 2) {
       KeyRing keyring;
       EntityName entity;
-      if(!entity.from_str(m->cmd[2])) {
+      if (!entity.from_str(m->cmd[2])) {
 	ss << "failed to identify entity name from " << m->cmd[2];
 	r = -ENOENT;
       } else {
