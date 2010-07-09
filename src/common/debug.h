@@ -29,7 +29,6 @@ static inline void dout_open_log() {
 }
 extern int dout_rename_output_file();  // after calling daemon()
 extern int dout_create_rank_symlink(int64_t n);
-extern int dout_create_name_symlink();          // noop if !log_per_instance
 
 static inline void _dout_check_log() {
   _dout_lock.Lock();

@@ -78,18 +78,17 @@ static int create_symlink(const char *from)
 
 static void rotate_file(const char *fn, int max)
 {
+  char a[200], b[200];
   // rotate out old
   int n = 0;
   while (1) {
-    char fn[200];
     struct stat st;
-    snprintf(fn, sizeof(fn), "%s.%lld", fn, (long long)n);
-    if (::stat(fn, &st) != 0)
+    snprintf(a, sizeof(a), "%s.%lld", fn, (long long)n);
+    if (::lstat(a, &st) != 0)
       break;
     n++;
   }
   while (n >= 0) {
-    char a[200], b[200];
     if (n)
       snprintf(a, sizeof(a), "%s.%lld", fn, (long long)n-1);
     else
@@ -110,14 +109,11 @@ static int create_name_symlink()
 {
   int r = 0;
   if (log_to_file() && g_conf.log_per_instance) {
-    if (_dout_need_open)
-      _dout_open_log();
-
     snprintf(_dout_name_symlink_path, sizeof(_dout_name_symlink_path),
 	     "%s/%s.%s", _dout_symlink_dir, g_conf.type, g_conf.id);
 
     rotate_file(_dout_name_symlink_path, g_conf.log_sym_history);
-    r = create_symlink(_dout_rank_symlink_path);
+    r = create_symlink(_dout_name_symlink_path);
   }
   return r;
 }
@@ -125,6 +121,8 @@ static int create_name_symlink()
 
 void _dout_open_log()
 {
+  bool need_symlink = false;
+
   // logging enabled?
   if (!log_to_file()) {
     _dout_need_open = false;
@@ -150,7 +148,7 @@ void _dout_open_log()
 
     build_log_paths();
 
-    create_name_symlink();
+    need_symlink = true;
   }
 
   _dout_out.close();
@@ -166,6 +164,9 @@ void _dout_open_log()
     *_dout << g_clock.now() << " --- " << getpid() << " opened log " << _dout_path << " ---" << std::endl;
   }
   *_dout << "ceph version " << VERSION << " (" << STRINGIFY(CEPH_GIT_VER) << ")" << std::endl;
+
+  if (need_symlink)
+    create_name_symlink();
 }
 
 int dout_rename_output_file()  // after calling daemon()
@@ -207,10 +208,5 @@ int dout_create_rank_symlink(int64_t n)
   return r;
 }
 
-int dout_create_name_symlink()
-{
-  Mutex::Locker l(_dout_lock);
-  return create_name_symlink();
-}
 
 
