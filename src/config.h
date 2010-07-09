@@ -31,9 +31,6 @@ extern struct ceph_file_layout g_default_file_layout;
 
 #include "msg/msg_types.h"
 
-extern entity_addr_t g_public_addr;
-extern entity_addr_t g_cluster_addr;
-
 extern bool g_daemon;
 extern const char *g_default_id;
 
@@ -132,6 +129,8 @@ struct md_config_t {
   bool tcp_multi_out;
   bool tcp_multi_dispatch;
   */
+  entity_addr_t public_addr;
+  entity_addr_t cluster_addr;
 
   bool ms_tcp_nodelay;
   double ms_initial_backoff;
@@ -427,7 +426,8 @@ struct md_config_t {
 extern md_config_t g_conf;     
 
 typedef enum {
-	OPT_NONE, OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL
+	OPT_NONE, OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL,
+	OPT_ADDR
 } opt_type_t;
 
 /**

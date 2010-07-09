@@ -211,7 +211,7 @@ int main(int argc, const char **argv)
        << " mon_data " << g_conf.mon_data
        << " fsid " << monmap.get_fsid()
        << std::endl;
-  g_public_addr = monmap.get_addr(name);
+  g_conf.public_addr = monmap.get_addr(name);
   err = messenger->bind();
   if (err < 0)
     return 1;

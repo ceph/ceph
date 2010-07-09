@@ -91,8 +91,6 @@ struct ceph_file_layout g_default_file_layout = {
 // fake osd failures: osd -> time
 std::map<entity_name_t,float> g_fake_kill_after;
 
-entity_addr_t g_public_addr;
-entity_addr_t g_cluster_addr;
 
 md_config_t g_conf;
 bool g_daemon = false;
@@ -233,6 +231,10 @@ struct config_option {
        { STRINGIFY(section), NULL, STRINGIFY(name), \
 	   &g_conf.name, def_val, 0, 0, type, schar }
 
+#define OPTION_OPT_ADDR(section, name, schar, type, def_val) \
+       { STRINGIFY(section), NULL, STRINGIFY(name), \
+	   &g_conf.name, def_val, 0, 0, type, schar }
+
 #define OPTION_OPT_LONGLONG(section, name, schar, type, def_val) \
        { STRINGIFY(section), NULL, STRINGIFY(name), \
 	   &g_conf.name, 0, def_val, 0, type, schar }
@@ -252,6 +254,8 @@ struct config_option {
 
 static struct config_option config_optionsp[] = {
 	OPTION(host, 0, OPT_STR, "localhost"),
+	OPTION(public_addr, 0, OPT_ADDR, ""),
+	OPTION(cluster_addr, 0, OPT_ADDR, ""),
 	OPTION(num_mon, 0, OPT_INT, 1),
 	OPTION(num_mds, 0, OPT_INT, 1),
 	OPTION(num_osd, 0, OPT_INT, 4),
@@ -564,6 +568,8 @@ bool conf_set_conf_val(void *field, opt_type_t type, const char *val)
   case OPT_DOUBLE:
     *(double *)field = strtod(val, NULL);
     break;
+  case OPT_ADDR:
+    ((entity_addr_t *)field)->parse(val);
   default:
     return false;
   }
@@ -596,6 +602,9 @@ bool conf_set_conf_val(void *field, opt_type_t type, const char *val, long long 
   case OPT_DOUBLE:
     *(double *)field = doubleval;
     break;
+  case OPT_ADDR:
+    ((entity_addr_t *)field)->parse(val);
+    break;
   default:
     return false;
   }
@@ -623,6 +632,9 @@ static bool conf_reset_val(void *field, opt_type_t type)
     break;
   case OPT_DOUBLE:
     *(double *)field = 0;
+    break;
+  case OPT_ADDR:
+    *(entity_addr_t *)field = entity_addr_t();
     break;
   default:
     return false;
@@ -913,6 +925,8 @@ int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const ch
     case OPT_DOUBLE:
       OPT_READ_TYPE(ret, section, key, double, out, def);
       break;
+    case OPT_ADDR:
+      OPT_READ_TYPE(ret, section, key, char *, out, def);
     default:
 	ret = 0;
         break;
@@ -979,11 +993,7 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
     } else if (CONF_ARG_EQ("show_conf", 'S')) {
       show_config = true;
     } else if (isdaemon && CONF_ARG_EQ("bind", 0)) {
-      g_public_addr.parse(args[++i]);
-    } else if (CONF_ARG_EQ("public_addr", 0)) {
-      g_public_addr.parse(args[++i]);
-    } else if (CONF_ARG_EQ("cluster_addr", 0)) {
-      g_cluster_addr.parse(args[++i]);
+      g_conf.public_addr.parse(args[++i]);
     } else if (isdaemon && CONF_ARG_EQ("nodaemon", 'D')) {
       g_conf.daemonize = false;
       g_conf.log_to_stdout = true;

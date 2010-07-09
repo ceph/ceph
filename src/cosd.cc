@@ -189,14 +189,14 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  bool client_addr_set = !g_public_addr.is_blank_addr();
-  bool cluster_addr_set = !g_cluster_addr.is_blank_addr();
+  bool client_addr_set = !g_conf.public_addr.is_blank_addr();
+  bool cluster_addr_set = !g_conf.cluster_addr.is_blank_addr();
 
   if (cluster_addr_set && !client_addr_set) {
     cerr << TEXT_RED << " ** "
          << "WARNING: set cluster address but not client address!" << " **\n"
          << "using cluster address for clients" << TEXT_NORMAL << std::endl;
-    g_public_addr = g_cluster_addr;
+    g_conf.public_addr = g_conf.cluster_addr;
     client_addr_set = true;
     cluster_addr_set = false;
   }
@@ -211,8 +211,8 @@ int main(int argc, const char **argv)
   entity_addr_t hb_addr;
 
   if (client_addr_set) {
-    client_messenger->bind(g_public_addr);
-    hb_addr = g_public_addr;
+    client_messenger->bind(g_conf.public_addr);
+    hb_addr = g_conf.public_addr;
     hb_addr.set_port(0);
   }
   else client_messenger->bind();
@@ -221,8 +221,8 @@ int main(int argc, const char **argv)
     cluster_messenger = new SimpleMessenger();
     if (!cluster_messenger)
       return 1;
-    cluster_messenger->bind(g_cluster_addr);
-    hb_addr = g_cluster_addr;
+    cluster_messenger->bind(g_conf.cluster_addr);
+    hb_addr = g_conf.cluster_addr;
     hb_addr.set_port(0);
   }
 

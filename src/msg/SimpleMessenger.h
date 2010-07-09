@@ -567,7 +567,7 @@ public:
   //void set_listen_addr(tcpaddr_t& a);
 
   int bind(entity_addr_t& bind_addr, int64_t force_nonce = -1);
-  int bind(int64_t force_nonce = -1) { return bind(g_public_addr, force_nonce); }
+  int bind(int64_t force_nonce = -1) { return bind(g_conf.public_addr, force_nonce); }
   int start(bool nodaemon = false);
   void wait();
 
