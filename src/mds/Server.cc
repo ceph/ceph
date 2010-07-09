@@ -379,6 +379,13 @@ void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
   mds->sessionmap.version++;
 }
 
+struct C_MDS_TerminatedSessions : public Context {
+  Server *server;
+  C_MDS_TerminatedSessions(Server *s) : server(s) {}
+  void finish(int r) {
+    server->terminating_sessions = false;
+  }
+};
 
 void Server::terminate_sessions()
 {
@@ -401,6 +408,8 @@ void Server::terminate_sessions()
 			      new C_MDS_session_finish(mds, session, sseq, false, pv));
     mdlog->flush();
   }
+
+  mdlog->wait_for_safe(new C_MDS_TerminatedSessions(this));
 }
 
 

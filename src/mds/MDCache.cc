@@ -5420,6 +5420,7 @@ void MDCache::shutdown_check()
   }
 }
 
+
 void MDCache::shutdown_start()
 {
   dout(2) << "shutdown_start" << dendl;
@@ -5442,6 +5443,14 @@ bool MDCache::shutdown_pass()
     show_subtrees();
     return true;
   }
+
+  // close out any sessions (and open files!) before we try to trim the log, etc.
+  if (!mds->server->terminating_sessions &&
+      mds->sessionmap.have_unclosed_sessions()) {
+    mds->server->terminate_sessions();
+    return false;
+  }
+
 
   // flush what we can from the log
   mds->mdlog->trim(0);

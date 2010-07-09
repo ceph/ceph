@@ -46,12 +46,15 @@ class Server {
 public:
   int failed_reconnects;
 
+  bool terminating_sessions;
+
   Server(MDS *m) : 
     mds(m), 
     mdcache(mds->mdcache), mdlog(mds->mdlog),
     messenger(mds->messenger),
     logger(0),
-    failed_reconnects(0) {
+    failed_reconnects(0),
+    terminating_sessions(false) {
   }
   ~Server() {
     logger_remove(logger);

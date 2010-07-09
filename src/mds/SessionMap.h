@@ -55,12 +55,14 @@ public:
     + additional dimension of 'importing' (with counter)
 
   */
-  static const int STATE_CLOSED = 0;
-  static const int STATE_OPENING = 1;   // journaling open
-  static const int STATE_OPEN = 2;
-  static const int STATE_CLOSING = 3;   // journaling close
-  static const int STATE_STALE = 4;
-  static const int STATE_KILLING = 5;
+  enum {
+    STATE_CLOSED = 0,
+    STATE_OPENING = 1,   // journaling open
+    STATE_OPEN = 2,
+    STATE_CLOSING = 3,   // journaling close
+    STATE_STALE = 4,
+    STATE_KILLING = 5
+  };
 
   const char *get_state_name(int s) {
     switch (s) {
@@ -239,6 +241,14 @@ public:
     
   // sessions
   bool empty() { return session_map.empty(); }
+  bool have_unclosed_sessions() {
+    return
+      !by_state[Session::STATE_OPENING].empty() ||
+      !by_state[Session::STATE_OPEN].empty() ||
+      !by_state[Session::STATE_CLOSING].empty() ||
+      !by_state[Session::STATE_STALE].empty() ||
+      !by_state[Session::STATE_KILLING].empty();
+  }
   bool have_session(entity_name_t w) {
     return session_map.count(w);
   }

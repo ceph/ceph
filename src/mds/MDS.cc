@@ -1249,11 +1249,7 @@ void MDS::stopping_start()
     suicide();
   }
 
-  // start cache shutdown
   mdcache->shutdown_start();
-  
-  // terminate client sessions
-  server->terminate_sessions();
 }
 
 void MDS::stopping_done()
