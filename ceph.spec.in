@@ -72,6 +72,7 @@ install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
 chmod 0644 $RPM_BUILD_ROOT%{_sysconfdir}/ceph/sample.ceph.conf
 install -m 0644 -D debian/ceph.logrotate $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -143,6 +144,7 @@ fi
 %{_mandir}/man8/cclsinfo.8.gz
 %dir %{_localstatedir}/lib/ceph/
 %dir %{_localstatedir}/lib/ceph/tmp/
+%dir %{_localstatedir}/log/ceph/
 
 %files fuse
 %defattr(-,root,root,-)
