@@ -1017,7 +1017,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   hash_map<int64_t, dir_result_t*>    open_dirs;
 
   hash_map<int64_t, Fh*> ll_files;
-  hash_map<int64_t, void*> ll_dirs;
+  hash_map<int64_t, dir_result_t*> ll_dirs;
   hash_map<uint64_t, int64_t> ll_inos;
 
   ll_inos[1] = 1; // root inode is known.
@@ -1317,7 +1317,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     } else if (strcmp(op, "ll_opendir") == 0) {
       int64_t i = t.get_int();
       int64_t r = t.get_int();
-      void *dirp;
+      dir_result_t *dirp;
       if (ll_inos.count(i) &&
 	  client->ll_opendir(vinodeno_t(ll_inos[i],CEPH_NOSNAP), &dirp) == 0)
 	ll_dirs[r] = dirp;
@@ -1497,7 +1497,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     dout(1) << "leftover ll_release " << fi->second << dendl;
     if (fi->second) client->ll_release(fi->second);
   }
-  for (hash_map<int64_t,void*>::iterator fi = ll_dirs.begin();
+  for (hash_map<int64_t,dir_result_t*>::iterator fi = ll_dirs.begin();
        fi != ll_dirs.end();
        ++fi) {
     dout(1) << "leftover ll_releasedir " << fi->second << dendl;

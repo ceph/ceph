@@ -202,7 +202,7 @@ static void fuse_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_inf
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   void *dirp;
-  int r = cfuse->client->ll_opendir(cfuse->fino_vino(ino), &dirp, ctx->uid, ctx->gid);
+  int r = cfuse->client->ll_opendir(cfuse->fino_vino(ino), (dir_result_t **) &dirp, ctx->uid, ctx->gid);
   if (r >= 0) {
     fi->fh = (long)dirp;
     fuse_reply_open(req, fi);

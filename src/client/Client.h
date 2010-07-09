@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 
@@ -23,6 +23,7 @@
 #include <set>
 #include <map>
 #include <fstream>
+#include <exception>
 using std::set;
 using std::map;
 using std::fstream;
@@ -201,7 +202,7 @@ class Client : public Dispatcher {
   CommandHook m_command_hook;
 
   // cluster descriptors
-  MDSMap *mdsmap; 
+  MDSMap *mdsmap;
   OSDMap *osdmap;
 
   SafeTimer timer;
@@ -350,6 +351,7 @@ protected:
 
   friend class C_Client_PutInode; // calls put_inode()
   friend class C_Client_CacheInvalidate;  // calls ino_invalidate_cb
+  friend class C_Block_Sync; // Calls block map and protected helpers
 
   //int get_cache_size() { return lru.lru_get_size(); }
   //void set_cache_size(int m) { lru.lru_set_max(m); }
@@ -694,6 +696,7 @@ public:
 
   // low-level interface
   int ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_walk(const char* name, struct stat *attr);
   bool ll_forget(vinodeno_t vino, int count);
   Inode *_ll_get_inode(vinodeno_t vino);
   int ll_getattr(vinodeno_t vino, struct stat *st, int uid = -1, int gid = -1);
@@ -702,8 +705,18 @@ public:
   int ll_setxattr(vinodeno_t vino, const char *name, const void *value, size_t size, int flags, int uid=-1, int gid=-1);
   int ll_removexattr(vinodeno_t vino, const char *name, int uid=-1, int gid=-1);
   int ll_listxattr(vinodeno_t vino, char *list, size_t size, int uid=-1, int gid=-1);
-  int ll_opendir(vinodeno_t vino, void **dirpp, int uid = -1, int gid = -1);
-  void ll_releasedir(void *dirp);
+  int ll_listxattr_chunks(vinodeno_t vino, char *names, size_t size,
+			  int *cookie, int *eol, int uid, int gid);
+  uint32_t ll_stripe_unit(vinodeno_t vino);
+  uint32_t ll_file_layout(vinodeno_t vino, ceph_file_layout *layout);
+  uint64_t ll_snap_seq(vinodeno_t vino);
+  int ll_get_stripe_osd(vinodeno_t vino, uint64_t blockno, ceph_file_layout* layout);
+  uint64_t ll_get_internal_offset(vinodeno_t vino, uint64_t blockno);
+  int ll_num_osds(void);
+  int ll_osdaddr(int osd, uint32_t *addr);
+  int ll_osdaddr(int osd, char* buf, size_t size);
+  int ll_opendir(vinodeno_t vino, dir_result_t **dirpp, int uid = -1, int gid = -1);
+  void ll_releasedir(dir_result_t *dirp);
   int ll_readlink(vinodeno_t vino, const char **value, int uid = -1, int gid = -1);
   int ll_mknod(vinodeno_t vino, const char *name, mode_t mode, dev_t rdev, struct stat *attr, int uid = -1, int gid = -1);
   int ll_mkdir(vinodeno_t vino, const char *name, mode_t mode, struct stat *attr, int uid = -1, int gid = -1);
@@ -715,12 +728,29 @@ public:
   int ll_open(vinodeno_t vino, int flags, Fh **fh, int uid = -1, int gid = -1);
   int ll_create(vinodeno_t parent, const char *name, mode_t mode, int flags, struct stat *attr, Fh **fh, int uid = -1, int gid = -1);
   int ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl);
+  int ll_read_block(vinodeno_t vino, uint64_t blockid,
+		    char *buf,
+		    uint64_t offset,
+		    uint64_t length,
+		    ceph_file_layout* layout);
+
+
+  map<uint64_t, pair<uint32_t, list<Cond*> > > outstanding_block_writes;
+  int ll_write_block(vinodeno_t vino, uint64_t blockid,
+		     char* buf, uint64_t offset,
+		     uint64_t length, ceph_file_layout* layout,
+		     uint64_t snapseq, uint32_t sync);
+  int ll_commit_blocks(vinodeno_t vino, uint64_t offset, uint64_t length);
   int ll_write(Fh *fh, loff_t off, loff_t len, const char *data);
+  loff_t ll_lseek(Fh *fh, loff_t offset, int whence);
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);
   int ll_release(Fh *fh);
   int ll_statfs(vinodeno_t vino, struct statvfs *stbuf);
-
+  int ll_connectable_x(vinodeno_t vino, uint64_t* parent_ino,
+		       uint32_t* parent_hash);
+  int ll_connectable_m(vinodeno_t* vino, uint64_t parent_ino,
+		       uint32_t parent_hash);
   void ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handle);
 
   void ll_register_getgroups_cb(client_getgroups_callback_t cb, void *handle);

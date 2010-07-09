@@ -960,3 +960,294 @@ extern "C" int ceph_get_pool_replication(struct ceph_mount_info *cmount, int poo
     return -ENOTCONN;
   return cmount->get_client()->get_pool_replication(pool_id);
 }
+/* Low-level exports */
+
+extern "C" int ceph_ll_lookup(struct ceph_mount_info *cmount,
+			      vinodeno_t parent, const char *name,
+			      struct stat *attr, int uid, int gid)
+{
+  return (cmount->get_client()->ll_lookup(parent, name, attr, uid, gid));
+}
+
+extern "C" int ceph_ll_forget(struct ceph_mount_info *cmount, vinodeno_t vino, int count)
+{
+  return (cmount->get_client()->ll_forget(vino, count));
+}
+
+extern "C" int ceph_ll_walk(struct ceph_mount_info *cmount, const char *name,
+			    struct stat *attr)
+{
+  return(cmount->get_client()->ll_walk(name, attr));
+}
+
+extern "C" int ceph_ll_getattr(struct ceph_mount_info *cmount,
+			       vinodeno_t vi, struct stat *attr,
+			       int uid, int gid)
+{
+  return (cmount->get_client()->ll_getattr(vi, attr, uid, gid));
+}
+
+extern "C" int ceph_ll_setattr(struct ceph_mount_info *cmount,
+			       vinodeno_t vi, struct stat *st,
+			       int mask, int uid, int gid)
+{
+  return (cmount->get_client()->ll_setattr(vi, st, mask, uid, gid));
+}
+
+extern "C" int ceph_ll_open(struct ceph_mount_info *cmount, vinodeno_t vi,
+			    int flags, Fh **filehandle, int uid, int gid)
+{
+  return (cmount->get_client()->ll_open(vi, flags, filehandle, uid, gid));
+}
+
+extern "C" int ceph_ll_read(struct ceph_mount_info *cmount, Fh* filehandle,
+			    int64_t off, uint64_t len, char* buf)
+{
+  bufferlist bl;
+  int r = 0;
+
+  r = cmount->get_client()->ll_read(filehandle, off, len, &bl);
+  if (r >= 0)
+    {
+      bl.copy(0, bl.length(), buf);
+      r = bl.length();
+    }
+  return r;
+}
+
+extern "C" int ceph_ll_read_block(struct ceph_mount_info *cmount,
+				  vinodeno_t vino, uint64_t blockid,
+				  char* buf, uint64_t offset,
+				  uint64_t length,
+				  struct ceph_file_layout* layout)
+{
+
+  return (cmount->get_client()->ll_read_block(vino, blockid, buf,
+					      offset, length, layout));
+}
+
+extern "C" int ceph_ll_write_block(struct ceph_mount_info *cmount,
+				   vinodeno_t vino, uint64_t blockid,
+				   char* buf, uint64_t offset,
+				   uint64_t length,
+				   struct ceph_file_layout* layout,
+				   uint64_t snapseq, uint32_t sync)
+{
+  return (cmount->get_client()->ll_write_block(vino, blockid, buf, offset,
+					       length, layout, snapseq, sync));
+}
+
+extern "C" int ceph_ll_commit_blocks(struct ceph_mount_info *cmount,
+				     vinodeno_t vino, uint64_t offset,
+				     uint64_t range)
+{
+  return (cmount->get_client()->ll_commit_blocks(vino, offset, range));
+}
+
+extern "C" int ceph_ll_fsync(struct ceph_mount_info *cmount,
+			     Fh *fh, int syncdataonly)
+{
+  return (cmount->get_client()->ll_fsync(fh, syncdataonly));
+}
+
+extern "C" loff_t ceph_ll_lseek(struct ceph_mount_info *cmount,
+				Fh* filehandle, loff_t offset, int whence)
+{
+  return (cmount->get_client()->ll_lseek(filehandle, offset, whence));
+}
+
+extern "C" int ceph_ll_write(struct ceph_mount_info *cmount,
+			     Fh* filehandle, int64_t off, uint64_t len,
+			     const char *data)
+{
+  return (cmount->get_client()->ll_write(filehandle, off, len, data));
+}
+
+extern "C" int ceph_ll_close(struct ceph_mount_info *cmount, Fh* filehandle)
+{
+  return (cmount->get_client()->ll_release(filehandle));
+}
+
+extern "C" int ceph_ll_create(struct ceph_mount_info *cmount,
+			      vinodeno_t parent, const char* name,
+			      mode_t mode, int flags,
+			      Fh **filehandle,
+			      struct stat *attr, int uid,
+			      int gid)
+{
+  return (cmount->get_client()->ll_create(parent, name, mode, flags, attr,
+					filehandle, uid, gid));
+}
+
+extern "C" int ceph_ll_mkdir(struct ceph_mount_info *cmount,
+			     vinodeno_t parent, const char *name,
+			     mode_t mode, struct stat *attr,
+			     int uid, int gid)
+{
+  return (cmount->get_client()->ll_mkdir(parent, name, mode, attr, uid, gid));
+}
+
+extern "C" int ceph_ll_link(struct ceph_mount_info *cmount,
+			    vinodeno_t obj, vinodeno_t newparrent,
+			    const char *name, struct stat *attr,
+			    int uid, int gid)
+{
+  return (cmount->get_client()->ll_link(obj, newparrent, name, attr, uid,
+				      gid));
+}
+
+extern "C" int ceph_ll_truncate(struct ceph_mount_info *cmount,
+				vinodeno_t obj, uint64_t length, int uid,
+				int gid)
+{
+  struct stat st;
+  st.st_size=length;
+
+  return(cmount->get_client()->ll_setattr(obj, &st, CEPH_SETATTR_SIZE, uid,
+					gid));
+}
+
+extern "C" int ceph_ll_opendir(struct ceph_mount_info *cmount,
+			       vinodeno_t vino,
+			       struct ceph_dir_result** dirpp,
+			       int uid, int gid)
+{
+  return (cmount->get_client()->ll_opendir(vino, (dir_result_t **)dirpp,
+					   uid, gid));
+}
+
+extern "C" int ceph_ll_releasedir(struct ceph_mount_info *cmount,
+				  ceph_dir_result* dir)
+{
+  (void) cmount->get_client()->ll_releasedir((dir_result_t*) dir);
+  return (0);
+}
+
+extern "C" int ceph_ll_rename(struct ceph_mount_info *cmount,
+			      vinodeno_t parent, const char *name,
+			      vinodeno_t newparent, const char *newname,
+			      int uid, int gid)
+{
+  return (cmount->get_client()->ll_rename(parent, name, newparent, newname,
+					uid, gid)); 
+}
+
+extern "C" int ceph_ll_unlink(struct ceph_mount_info *cmount,
+			      vinodeno_t vino, const char *name,
+			      int uid, int gid) 
+{
+  return (cmount->get_client()->ll_unlink(vino, name, uid, gid));
+}
+
+extern "C" int ceph_ll_statfs(struct ceph_mount_info *cmount,
+			      vinodeno_t vino, struct statvfs *stbuf)
+{
+  return (cmount->get_client()->ll_statfs(vino, stbuf));
+}
+
+extern "C" int ceph_ll_readlink(struct ceph_mount_info *cmount,
+				vinodeno_t vino, char **value, int uid,
+				int gid)
+{
+  return (cmount->get_client()->ll_readlink(vino, (const char**) value,
+					  uid, gid));
+}
+
+extern "C" int ceph_ll_symlink(struct ceph_mount_info *cmount,
+			       vinodeno_t parent, const char *name,
+			       const char *value, struct stat *attr,
+			       int uid, int gid)
+{
+  return (cmount->get_client()->ll_symlink(parent, name, value, attr, uid,
+					 gid));
+}
+
+extern "C" int ceph_ll_rmdir(struct ceph_mount_info *cmount,
+			     vinodeno_t vino, const char *name,
+			     int uid, int gid)
+{
+  return (cmount->get_client()->ll_rmdir(vino, name, uid, gid));
+}
+
+extern "C" int ceph_ll_getxattr(struct ceph_mount_info *cmount,
+				vinodeno_t vino, const char *name, void *value,
+				size_t size, int uid, int gid)
+{
+  return (cmount->get_client()->ll_getxattr(vino, name, value, size, uid,
+					  gid));
+}
+
+extern "C" int ceph_ll_setxattr(struct ceph_mount_info *cmount,
+				vinodeno_t vino, const char *name,
+				const void *value, size_t size,
+				int flags, int uid, int gid)
+{
+  return (cmount->get_client()->ll_setxattr(vino, name, value, size, flags,
+					  uid, gid));
+}
+
+extern "C" int ceph_ll_removexattr(struct ceph_mount_info *cmount,
+				   vinodeno_t vino, const char *name,
+				   int uid, int gid)
+{
+  return (cmount->get_client()->ll_removexattr(vino, name, uid, gid));
+}
+
+extern "C" uint32_t ceph_ll_stripe_unit(struct ceph_mount_info *cmount,
+					vinodeno_t vino)
+{
+  return (cmount->get_client()->ll_stripe_unit(vino));
+}
+
+extern "C" uint32_t ceph_ll_file_layout(struct ceph_mount_info *cmount,
+					vinodeno_t vino,
+					struct ceph_file_layout *layout)
+{
+  return (cmount->get_client()->ll_file_layout(vino, layout));
+}
+
+uint64_t ceph_ll_snap_seq(struct ceph_mount_info *cmount, vinodeno_t vino)
+{
+  return (cmount->get_client()->ll_snap_seq(vino));
+}
+
+extern "C" int ceph_ll_get_stripe_osd(struct ceph_mount_info *cmount,
+				      vinodeno_t vino, uint64_t blockno,
+				      struct ceph_file_layout* layout)
+{
+  return (cmount->get_client()->ll_get_stripe_osd(vino, blockno, layout));
+}
+
+extern "C" int ceph_ll_num_osds(struct ceph_mount_info *cmount)
+{
+  return (cmount->get_client()->ll_num_osds());
+}
+
+extern "C" int ceph_ll_osdaddr(struct ceph_mount_info *cmount,
+			       int osd, uint32_t *addr)
+{
+  return (cmount->get_client()->ll_osdaddr(osd, addr));
+}
+
+extern "C" uint64_t ceph_ll_get_internal_offset(struct ceph_mount_info *cmount,
+						vinodeno_t vino,
+						uint64_t blockno)
+{
+  return (cmount->get_client()->ll_get_internal_offset(vino, blockno));
+}
+
+extern "C" int ceph_ll_connectable_x(struct ceph_mount_info *cmount,
+				     vinodeno_t vino, uint64_t* parent_ino,
+				     uint32_t* parent_hash)
+{
+  return (cmount->get_client()->ll_connectable_x(vino, parent_ino,
+						 parent_hash));
+}
+
+extern "C" int ceph_ll_connectable_m(struct ceph_mount_info *cmount,
+				     vinodeno_t* vino, uint64_t parent_ino,
+				     uint32_t parent_hash)
+{
+  return (cmount->get_client()->ll_connectable_m(vino, parent_ino,
+						 parent_hash));
+}
