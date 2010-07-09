@@ -58,10 +58,12 @@ void usage()
        << "\t          rollback image head to specified snapshot\n"
        << "\t--rename <dst name>\n"
        << "\t          rename rbd image\n"
-       << "\t--export <file>\n"
+       << "\t--export <image name>\n"
        << "\t          export image to file\n"
        << "\t--import <file>\n"
        << "\t          import image from file\n"
+       << "\t--path <path name>\n"
+       << "\t          path name for import/export (if not specified)\n"
        << "\t--copy <dst name> --dest-pool <dst pool>\n"
        << "\t          copy image\n";
 }
@@ -621,6 +623,42 @@ done:
   return ret;
 }
 
+static const char *imgname_from_path(const char *path)
+{
+  const char *imgname;
+
+  imgname = strrchr(path, '/');
+  if (imgname)
+    imgname++;
+  else
+    imgname = path;
+
+  return imgname;
+}
+
+static void set_pool_image_name(const char *orig_pool, const char *orig_img,
+                                char **new_pool, char **new_img)
+{
+  const char *sep;
+
+  if (orig_pool)
+    return;
+
+  sep = strchr(orig_img, '/');
+  if (!sep) {
+    *new_pool= strdup("rbd");
+    *new_img = strdup(orig_img);
+    return;
+  }
+
+  *new_pool =  strdup(orig_img);
+  sep = strchr(*new_pool, '/');
+  assert (sep);
+
+  *(char *)sep = '\0';
+  *new_img = strdup(sep + 1);
+}
+
 static int do_import(pool_pair_t& pp, string& dir_oid, string& dir_info_oid,
                      const char *imgname, int order, const char *path)
 {
@@ -645,13 +683,8 @@ static int do_import(pool_pair_t& pp, string& dir_oid, string& dir_info_oid,
   }
   size = (uint64_t)stat_buf.st_size;
 
-  if (!imgname) {
-    imgname = strrchr(path, '/');
-    if (imgname)
-      imgname++;
-    else
-      imgname = path;
-  }
+  assert(imgname);
+
   md_oid = imgname;
   md_oid += RBD_SUFFIX;
 
@@ -733,10 +766,10 @@ int main(int argc, const char **argv)
   bool opt_create = false, opt_delete = false, opt_list = false, opt_info = false, opt_resize = false,
        opt_list_snaps = false, opt_add_snap = false, opt_rollback_snap = false, opt_rename = false,
        opt_export = false, opt_import = false;
-  char *poolname = (char *)"rbd";
+  char *poolname = NULL;
   uint64_t size = 0;
   int order = 0;
-  char *imgname = NULL, *snapname = NULL, *dstname = NULL, *path = NULL;
+  const char *imgname = NULL, *snapname = NULL, *dstname = NULL, *path = NULL;
   string md_oid;
 
   FOR_EACH_ARG(args) {
@@ -779,9 +812,11 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&dstname, OPT_STR);
     } else if (CONF_ARG_EQ("export", '\0')) {
       opt_export = true;
-      CONF_SAFE_SET_ARG_VAL(&path, OPT_STR);
+      CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
     } else if (CONF_ARG_EQ("import", '\0')) {
       opt_import = true;
+      CONF_SAFE_SET_ARG_VAL(&path, OPT_STR);
+    } else if (CONF_ARG_EQ("path", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&path, OPT_STR);
     } else 
       usage_exit();
@@ -796,8 +831,21 @@ int main(int argc, const char **argv)
   if ((opt_add_snap || opt_rollback_snap) && !snapname)
     usage_exit();
 
-  if (!opt_list && !opt_import && !imgname)
+  if (opt_export && !imgname)
     usage_exit();
+
+  if (opt_import && !imgname)
+    imgname = imgname_from_path(path);
+
+  if (!opt_list && !imgname)
+    usage_exit();
+
+  set_pool_image_name(poolname, imgname, (char **)&poolname, (char **)&imgname);
+
+  if (opt_export && !path)
+    path = imgname;
+
+  cerr << "pool=" << poolname << " img=" << imgname << std::endl;
 
   if (rados.initialize(argc, argv) < 0) {
      cerr << "couldn't initialize rados!" << std::endl;
