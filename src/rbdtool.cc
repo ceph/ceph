@@ -43,36 +43,29 @@ static string dir_info_oid = RBD_INFO;
 
 void usage()
 {
-  cout << "usage: rbdtool [-n <auth user>] [-p|--pool <name>] [-i|--image <imagename> [--snap <snapname>] <cmd>\n"
+  cout << "usage: rbdtool [-n <auth user>] [-i|--image <[pool/]name>] <cmd>\n"
        << "where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:\n"
-       << "\t--list    list rbd images\n"
-       << "\t--info    show information about image size, striping, etc.\n"
-       << "\t--create <image name> --size <size in MB>\n"
-       << "\t          create an image\n"
-       << "\t--resize <image name> --size <new size in MB>\n"
-       << "\t          resize (expand or contract) image\n"
-       << "\t--delete <image name>\n"
-       << "\t          delete an image\n"
-       << "\t--list-snaps <image name>\n"
-       << "\t          dump list of specific image snapshots\n"
-       << "\t--add-snap <snap name>\n"
-       << "\t          create a snapshot for the specified image\n"
-       << "\t--rollback-snap <snap name>\n"
-       << "\t          rollback image head to specified snapshot\n"
-       << "\t--rename <dst name>\n"
-       << "\t          rename rbd image\n"
-       << "\t--export <image name>\n"
-       << "\t          export image to file\n"
-       << "\t--import <file>\n"
-       << "\t          import image from file\n"
-       << "\t--path <path name>\n"
-       << "\t          path name for import/export (if not specified)\n"
-       << "\t--copy <image name> --dest <dest name>\n"
-       << "\t          copy image to dest\n"
-       << "\t--dest-pool <dst pool>\n"
-       << "\t          destination pool\n"
+       << "  -l,--list                    list rbd images\n"
+       << "  --info                       show information about image size, striping, etc.\n"
+       << "  --create [image name]        create an empty image (requires size param)\n"
+       << "  --resize [image name]        resize (expand or contract) image (requires size param)\n"
+       << "  --delete [image name]        delete an image\n"
+       << "  --list-snaps [image name]    dump list of image snapshots\n"
+       << "  --add-snap [snap name]       create a snapshot for the specified image\n"
+       << "  --rollback-snap [snap name]  rollback image head to specified snapshot\n"
+       << "  --rename <dst name>          rename rbd image\n"
+       << "  --export [image name]        export image to file\n"
+       << "  --import <file>              import image from file (dest defaults as the filename\n"
+       << "                               part of file)\n"
+       << "  --copy <image name>          copy image to dest\n"
        << "\n"
-       << "image name format: [pool/]name\n";
+       << "Other input options:\n"
+       << "  -p, --pool <pool>            source pool name\n"
+       << "  --dest <[pool/]name>         destination [pool and] image name\n"
+       << "  --snap <snapname>            specify snapshot name\n"
+       << "  --dest-pool <name>           destination pool name\n"
+       << "  --path <path name>           path name for import/export (if not specified)\n"
+       << "  --size <size in MB>          size parameter for create and resize commands\n";
 }
 
 void usage_exit()
@@ -671,7 +664,7 @@ static void set_pool_image_name(const char *orig_pool, const char *orig_img,
   *new_img = strdup(sep + 1);
 }
 
-static int do_import(pools_t& pp, const char *imgname, int order, const char *path)
+static int do_import(pool_t pool, const char *imgname, int order, const char *path)
 {
   int fd = open(path, O_RDONLY);
   int r;
@@ -699,7 +692,7 @@ static int do_import(pools_t& pp, const char *imgname, int order, const char *pa
   md_oid = imgname;
   md_oid += RBD_SUFFIX;
 
-  r = do_create(pp.md, md_oid, imgname, size, &order);
+  r = do_create(pool, md_oid, imgname, size, &order);
   if (r < 0) {
     cerr << "image creation failed" << std::endl;
     return r;
@@ -709,7 +702,7 @@ static int do_import(pools_t& pp, const char *imgname, int order, const char *pa
 
   /* FIXME: use fiemap to read sparse files */
   struct rbd_obj_header_ondisk header;
-  r = read_header(pp.md, md_oid, &header);
+  r = read_header(pool, md_oid, &header);
   if (r < 0) {
     cerr << "error reading header" << std::endl;
     return r;
@@ -733,7 +726,7 @@ static int do_import(pools_t& pp, const char *imgname, int order, const char *pa
       bufferlist bl;
       bl.append(p);
       string oid = get_block_oid(&header, i);
-      r = rados.write(pp.data, oid, 0, bl, len);
+      r = rados.write(pool, oid, 0, bl, len);
       if (r < 0) {
         cerr << "error writing to image block" << std::endl;
         return r;
@@ -839,22 +832,22 @@ int main(int argc, const char **argv)
   string md_oid;
 
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("list", '\0')) {
+    if (CONF_ARG_EQ("list", 'l')) {
       CONF_SAFE_SET_ARG_VAL(&opt_list, OPT_BOOL);
     } else if (CONF_ARG_EQ("create", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
+      CONF_SAFE_SET_ARG_VAL_USAGE(&imgname, OPT_STR, false);
       opt_create = true;
     } else if (CONF_ARG_EQ("delete", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
+      CONF_SAFE_SET_ARG_VAL_USAGE(&imgname, OPT_STR, false);
       opt_delete = true;
     } else if (CONF_ARG_EQ("resize", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
+      CONF_SAFE_SET_ARG_VAL_USAGE(&imgname, OPT_STR, false);
       opt_resize = true;
     } else if (CONF_ARG_EQ("info", 'I')) {
       CONF_SAFE_SET_ARG_VAL_USAGE(&imgname, OPT_STR, false);
       opt_info = true;
     } else if (CONF_ARG_EQ("list-snaps", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
+      CONF_SAFE_SET_ARG_VAL_USAGE(&imgname, OPT_STR, false);
       opt_list_snaps = true;
     } else if (CONF_ARG_EQ("add-snap", '\0')) {
       CONF_SAFE_SET_ARG_VAL_USAGE(&snapname, OPT_STR, false);
@@ -883,7 +876,7 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&destname, OPT_STR);
     } else if (CONF_ARG_EQ("export", '\0')) {
       opt_export = true;
-      CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
+      CONF_SAFE_SET_ARG_VAL_USAGE(&imgname, OPT_STR, false);
     } else if (CONF_ARG_EQ("import", '\0')) {
       opt_import = true;
       CONF_SAFE_SET_ARG_VAL(&path, OPT_STR);
@@ -901,20 +894,25 @@ int main(int argc, const char **argv)
   }
 
   if ((opt_add_snap || opt_rollback_snap) && !snapname) {
-    cerr << "snap name was not specified" << std::endl;
+    cerr << "error: snap name was not specified" << std::endl;
     usage_exit();
   }
 
   if (opt_export && !imgname) {
-    cerr << "image name was not specified" << std::endl;
+    cerr << "error: image name was not specified" << std::endl;
     usage_exit();
   }
 
-  if (opt_import && !imgname)
-    imgname = imgname_from_path(path);
+  if (opt_import && !path) {
+    cerr << "error: path was not specified" << std::endl;
+    usage_exit();
+  }
 
-  if (!opt_list && !imgname) {
-    cerr << "image name was not specified" << std::endl;
+  if (opt_import && !destname)
+    destname = imgname_from_path(path);
+
+  if (!opt_list && !opt_import && !imgname) {
+    cerr << "error: image name was not specified" << std::endl;
     usage_exit();
   }
 
@@ -928,12 +926,12 @@ int main(int argc, const char **argv)
     path = imgname;
 
   if (opt_copy && !destname ) {
-    cerr << "destination image name was not specified" << std::endl;
+    cerr << "error: destination image name was not specified" << std::endl;
     usage_exit();
   }
 
   if (rados.initialize(argc, argv) < 0) {
-     cerr << "couldn't initialize rados!" << std::endl;
+     cerr << "error: couldn't initialize rados!" << std::endl;
      exit(1);
   }
 
@@ -971,7 +969,7 @@ int main(int argc, const char **argv)
     rados.set_snap(pool, snapid);
   }
 
-  if (opt_copy) {
+  if (opt_copy || opt_import) {
     r = rados.open_pool(dest_poolname, &dest_pool);
     if (r < 0) {
       cerr << "error opening pool " << dest_poolname << " (err=" << r << ")" << std::endl;
@@ -1078,7 +1076,7 @@ int main(int argc, const char **argv)
       cerr << "pathname should be specified" << std::endl;
       err_exit(pp);
     }
-    r = do_import(pp, imgname, order, path);
+    r = do_import(pp.dest, destname, order, path);
     if (r < 0) {
       cerr << "import failed: " << strerror(-r) << std::endl;
       err_exit(pp);
