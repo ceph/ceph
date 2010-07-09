@@ -362,16 +362,16 @@ static int do_rename(pools_t& pp, string& md_oid, const char *imgname, const cha
   dst_md_oid += RBD_SUFFIX;
   string dstname_str = dstname;
   string imgname_str = imgname;
-  int r = rados.stat(pp.md, dst_md_oid, NULL, NULL);
-  if (r == 0) {
-    cerr << "rbd image header " << dst_md_oid << " already exists" << std::endl;
-    return -EEXIST;
-  }
   bufferlist header;
-  r = read_header_bl(pp.md, md_oid, header);
+  int r = read_header_bl(pp.md, md_oid, header);
   if (r < 0) {
     cerr << "error reading header: " << md_oid << ": " << strerror(-r) << std::endl;
     return r;
+  }
+  r = rados.stat(pp.md, dst_md_oid, NULL, NULL);
+  if (r == 0) {
+    cerr << "rbd image header " << dst_md_oid << " already exists" << std::endl;
+    return -EEXIST;
   }
   r = write_header(pp, dst_md_oid, header);
   if (r < 0) {
