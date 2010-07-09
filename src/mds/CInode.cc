@@ -1762,8 +1762,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
      * multiversion.
      */
     e.cap.caps = valid ? get_caps_allowed_by_type(CAP_ANY) : CEPH_STAT_CAP_INODE;
-    if (cap)
-      e.cap.caps = e.cap.caps & cap->issued();
+    if (last == CEPH_NOSNAP || is_any_caps())
+      e.cap.caps = e.cap.caps & get_caps_allowed_for_client(client);
     e.cap.seq = 0;
     e.cap.mseq = 0;
     e.cap.realm = 0;
