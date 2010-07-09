@@ -10,11 +10,11 @@ bool entity_addr_t::parse(const char *s, const char **end)
   memset(this, 0, sizeof(*this));
 
   const char *p = s;
-  bool braces = false;
+  bool brackets = false;
   bool ipv6 = false;
-  if (*p == '{') {
+  if (*p == '[') {
     p++;
-    braces = true;
+    brackets = true;
     ipv6 = true;
   }
   
@@ -48,8 +48,8 @@ bool entity_addr_t::parse(const char *s, const char **end)
     return false;
   }
 
-  if (braces) {
-    if (*p != '}')
+  if (brackets) {
+    if (*p != ']')
       return false;
     p++;
   }
