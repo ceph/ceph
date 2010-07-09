@@ -94,7 +94,7 @@ fi
 %{_libdir}/libceph.so.*
 %{_libdir}/libcrush.so.*
 %{_libdir}/librados.so.*
-%{_libdir}/libcls_rbd.so.*
+%{_libdir}/rados-classes/libcls_rbd.so.*
 %{_sbindir}/mkcephfs
 /sbin/mount.ceph
 %{_libdir}/ceph
@@ -146,7 +146,7 @@ fi
 %{_libdir}/libceph.so
 %{_libdir}/libcrush.so
 %{_libdir}/librados.so
-%{_libdir}/libcls_rbd.so
+%{_libdir}/rados-classes/libcls_rbd.so
 
 %changelog
 * Fri Apr 30 2010 Sage Weil <sage@newdream.net> 0.19.1-5
