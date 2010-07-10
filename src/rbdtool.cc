@@ -57,7 +57,7 @@ void usage()
        << "  --export [image name]        export image to file\n"
        << "  --import <file>              import image from file (dest defaults as the filename\n"
        << "                               part of file)\n"
-       << "  --copy <image name>          copy image to dest\n"
+       << "  --copy [image name]          copy image to dest\n"
        << "\n"
        << "Other input options:\n"
        << "  -p, --pool <pool>            source pool name\n"
@@ -541,14 +541,14 @@ static int do_get_snapc(pools_t& pp, string& md_oid, const char *snapname,
     snapc.snaps.push_back(id);
     snaps.push_back(id);
   }
-  if (!snapid) {
-    cerr << "snapshot not found: " << snapname << std::endl;
-    return -ENOENT;
-  }
 
   if (!snapc.is_valid()) {
     cerr << "image snap context is invalid! can't rollback" << std::endl;
     return -EIO;
+  }
+
+  if (!snapid) {
+    return -ENOENT;
   }
 
   return 0;
@@ -955,6 +955,12 @@ int main(int argc, const char **argv)
   pp.data = pool;
   if (snapname) {
     r = do_get_snapc(pp, md_oid, snapname, snapc, snaps, snapid);
+    if (r == -ENOENT) {
+      if (opt_add_snap)
+        r = 0;
+      else
+        cerr << "snapshot not found: " << snapname << std::endl;
+    }
     if (r < 0) {
       cerr << "error searching for snapshot: " << strerror(-r) << std::endl;
       err_exit(pp);
