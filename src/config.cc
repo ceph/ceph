@@ -926,7 +926,15 @@ int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const ch
       OPT_READ_TYPE(ret, section, key, double, out, def);
       break;
     case OPT_ADDR:
-      OPT_READ_TYPE(ret, section, key, char *, out, def);
+      ret = cf->read(section, key, &tmp, (char *)def);
+      if (*tmp == *((char *)def)) {
+          ret = 0;
+      }
+      else {
+        ret = 1;
+      }
+      ((entity_addr_t*)out)->parse(tmp);
+      break;
     default:
 	ret = 0;
         break;
