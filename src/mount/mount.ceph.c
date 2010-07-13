@@ -309,6 +309,7 @@ int main(int argc, char *argv[])
 	char **new_argv;
 	int flags = 0;
 	int options_pos = 0;
+	int retval = 0;
 
 	if (argc < 5)
 		exit(1);
@@ -335,6 +336,7 @@ int main(int argc, char *argv[])
 	block_signals(SIG_BLOCK);
 
 	if (mount(new_argv[1], new_argv[2], "ceph", flags, new_argv[options_pos])) {
+		retval = errno;
 		switch (errno) {
 		case ENODEV:
 			printf("mount error: ceph filesystem not supported by the system\n");
@@ -349,6 +351,6 @@ int main(int argc, char *argv[])
 	block_signals(SIG_UNBLOCK);
 
 	free(new_argv);	
-	exit(0);
+	exit(retval);
 }
 
