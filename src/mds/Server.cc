@@ -1072,6 +1072,7 @@ void Server::handle_client_request(MClientRequest *req)
 				      p->item.mseq, p->dname);
   }
 
+
   dispatch_client_request(mdr);
   return;
 }
@@ -2037,6 +2038,10 @@ void Server::handle_client_open(MDRequest *mdr)
   if (!cur)
     return;
 
+  if (mdr->snapid != CEPH_NOSNAP && mdr->client_request->is_write()) {
+    reply_request(mdr, -EROFS);
+    return;
+  }
   // can only open a dir with mode FILE_MODE_PIN, at least for now.
   if (cur->inode.is_dir())
     cmode = CEPH_FILE_MODE_PIN;
@@ -2219,6 +2224,10 @@ void Server::handle_client_openc(MDRequest *mdr)
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, !excl, false, false);
   if (!dn) return;
+  if (mdr->snapid != CEPH_NOSNAP) {
+    reply_request(mdr, -EROFS);
+    return;
+  }
   CInode *diri = dn->get_dir()->get_inode();
   rdlocks.insert(&diri->authlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
@@ -2544,7 +2553,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
   if (!cur) return;
 
   if (mdr->snapid != CEPH_NOSNAP) {
-    reply_request(mdr, -EINVAL);
+    reply_request(mdr, -EROFS);
     return;
   }
   if (cur->ino() < MDS_INO_SYSTEM_BASE && !cur->is_base()) {
@@ -2700,7 +2709,11 @@ void Server::handle_client_setlayout(MDRequest *mdr)
   CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
   if (!cur) return;
 
-  if (mdr->snapid != CEPH_NOSNAP || cur->is_base()) {
+  if (mdr->snapid != CEPH_NOSNAP) {
+    reply_request(mdr, -EROFS);
+    return;
+  }
+  if(cur->is_base()) {
     reply_request(mdr, -EINVAL);   // for now
     return;
   }
@@ -2786,7 +2799,11 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
   if (!cur) return;
 
-  if (mdr->snapid != CEPH_NOSNAP || cur->is_base()) {
+  if (mdr->snapid != CEPH_NOSNAP) {
+    reply_request(mdr, -EROFS);
+    return;
+  }
+    if (cur->is_base()) {
     reply_request(mdr, -EINVAL);   // for now
     return;
   }
@@ -2842,7 +2859,11 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
   if (!cur) return;
 
-  if (mdr->snapid != CEPH_NOSNAP || cur->is_base()) {
+  if (mdr->snapid != CEPH_NOSNAP) {
+    reply_request(mdr, -EROFS);
+    return;
+  }
+    if (cur->is_base()) {
     reply_request(mdr, -EINVAL);   // for now
     return;
   }
@@ -2941,6 +2962,10 @@ void Server::handle_client_mknod(MDRequest *mdr)
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false, false);
   if (!dn) return;
+  if (mdr->snapid != CEPH_NOSNAP) {
+    reply_request(mdr, -EROFS);
+    return;
+  }
   CInode *diri = dn->get_dir()->get_inode();
   rdlocks.insert(&diri->authlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
@@ -2989,6 +3014,10 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false, false);
   if (!dn) return;
+  if (mdr->snapid != CEPH_NOSNAP) {
+    reply_request(mdr, -EROFS);
+    return;
+  }
   CInode *diri = dn->get_dir()->get_inode();
   rdlocks.insert(&diri->authlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
@@ -3059,6 +3088,10 @@ void Server::handle_client_symlink(MDRequest *mdr)
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false, false);
   if (!dn) return;
+  if (mdr->snapid != CEPH_NOSNAP) {
+    reply_request(mdr, -EROFS);
+    return;
+  }
   CInode *diri = dn->get_dir()->get_inode();
   rdlocks.insert(&diri->authlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
@@ -3114,6 +3147,10 @@ void Server::handle_client_link(MDRequest *mdr)
   if (!dn) return;
   CInode *targeti = rdlock_path_pin_ref(mdr, 1, rdlocks, false);
   if (!targeti) return;
+  if (mdr->snapid != CEPH_NOSNAP) {
+    reply_request(mdr, -EROFS);
+    return;
+  }
 
   CDir *dir = dn->get_dir();
   dout(7) << "handle_client_link link " << dn->get_name() << " in " << *dir << dendl;
@@ -3672,6 +3709,11 @@ void Server::handle_client_unlink(MDRequest *mdr)
     reply_request(mdr, r);
     return;
   }
+  if (mdr->snapid != CEPH_NOSNAP) {
+    reply_request(mdr, -EROFS);
+    return;
+  }
+
   CDentry *dn = trace[trace.size()-1];
   assert(dn);
   if (!dn->is_auth()) {
@@ -4038,6 +4080,10 @@ void Server::handle_client_rename(MDRequest *mdr)
   CDentry *destdn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, true, false, true);
   if (!destdn) return;
   dout(10) << " destdn " << *destdn << dendl;
+  if (mdr->snapid != CEPH_NOSNAP) {
+    reply_request(mdr, -EROFS);
+    return;
+  }
   CDentry::linkage_t *destdnl = destdn->get_projected_linkage();
   CDir *destdir = destdn->get_dir();
   assert(destdir->is_auth());
@@ -4045,6 +4091,10 @@ void Server::handle_client_rename(MDRequest *mdr)
   CDentry *srcdn = rdlock_path_xlock_dentry(mdr, 1, rdlocks, wrlocks, xlocks, true, true, true);
   if (!srcdn) return;
   dout(10) << " srcdn " << *srcdn << dendl;
+  if (mdr->snapid != CEPH_NOSNAP) {
+    reply_request(mdr, -EROFS);
+    return;
+  }
   CDentry::linkage_t *srcdnl = srcdn->get_projected_linkage();
   CInode *srci = srcdnl->get_inode();
   dout(10) << " srci " << *srci << dendl;
