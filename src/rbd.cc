@@ -43,33 +43,38 @@ static string dir_info_oid = RBD_INFO;
 
 void usage()
 {
-  cout << "usage: rbdtool [-n <auth user>] [-i|--image <[pool/]name>] <cmd>\n"
+  cout << "usage: rbdtool [-n <auth user>] [OPTIONS] <cmd> ...\n"
        << "where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:\n"
-       << "  -l,--list                    list rbd images\n"
-       << "  --info                       show information about image size, striping, etc.\n"
-       << "  --create [image name]        create an empty image (requires size param)\n"
-       << "  --resize [image name]        resize (expand or contract) image (requires size param)\n"
-       << "  --delete [image name]        delete an image\n"
-       << "  --list-snaps [image name]    dump list of image snapshots\n"
-       << "  --add-snap [snap name]       create a snapshot for the specified image\n"
-       << "  --rollback-snap [snap name]  rollback image head to specified snapshot\n"
-       << "  --rename <dst name>          rename rbd image\n"
-       << "  --export [image name]        export image to file\n"
-       << "  --import <file>              import image from file (dest defaults as the filename\n"
-       << "                               part of file)\n"
-       << "  --copy [image name]          copy image to dest\n"
+       << "  <ls | list>                               list rbd images\n"
+       << "  info [image-name]                         show information about image size,\n"
+       << "                                            striping, etc.\n"
+       << "  create [image-name]                       create an empty image (requires size\n"
+       << "                                            param)\n"
+       << "  resize [image-name]                       resize (expand or contract) image\n"
+       << "                                            (requires size param)\n"
+       << "  rm [image-name]                           delete an image\n"
+       << "  export [image-name] [dest-path]           export image to file\n"
+       << "  import [path] [dst-image]                 import image from file (dest defaults\n"
+       << "                                            as the filename part of file)\n"
+       << "  <cp | copy> [src-image] [dest-image]      copy image to dest\n"
+       << "  <mv | rename> [src-image] [dest-image]    copy image to dest\n"
+       << "  snap ls [image-name]                      dump list of image snapshots\n"
+       << "  snap create <--snap=name> [image-name]    create a snapshot\n"
+       << "  snap rollback <--snap=name> [image-name]  rollback image head to snapshot\n"
        << "\n"
        << "Other input options:\n"
        << "  -p, --pool <pool>            source pool name\n"
-       << "  --dest <[pool/]name>         destination [pool and] image name\n"
+       << "  --image <image-name>         image name\n"
+       << "  --dest <name>                destination [pool and] image name\n"
        << "  --snap <snapname>            specify snapshot name\n"
        << "  --dest-pool <name>           destination pool name\n"
-       << "  --path <path name>           path name for import/export (if not specified)\n"
+       << "  --path <path-name>           path name for import/export (if not specified)\n"
        << "  --size <size in MB>          size parameter for create and resize commands\n";
 }
 
 void usage_exit()
 {
+  assert(1);
   usage();
   exit(1);
 }
@@ -806,6 +811,78 @@ static void err_exit(pools_t& pp)
   exit(1);
 }
 
+enum {
+  OPT_NO_CMD = 0,
+  OPT_LIST,
+  OPT_INFO,
+  OPT_CREATE,
+  OPT_RESIZE,
+  OPT_RM,
+  OPT_EXPORT,
+  OPT_IMPORT,
+  OPT_COPY,
+  OPT_RENAME,
+  OPT_SNAP_CREATE,
+  OPT_SNAP_ROLLBACK,
+  OPT_SNAP_LIST,
+};
+
+static int get_cmd(const char *cmd, bool *snapcmd)
+{
+  if (strcmp(cmd, "snap") == 0) {
+    if (*snapcmd)
+      return -EINVAL;
+    *snapcmd = true;
+    return 0;
+  }
+
+  if (!*snapcmd) {
+    if (strcmp(cmd, "ls") == 0 ||
+        strcmp(cmd, "list") == 0)
+      return OPT_LIST;
+    if (strcmp(cmd, "info") == 0)
+      return OPT_INFO;
+    if (strcmp(cmd, "create") == 0)
+      return OPT_CREATE;
+    if (strcmp(cmd, "resize") == 0)
+      return OPT_RESIZE;
+    if (strcmp(cmd, "rm") == 0)
+      return OPT_RM;
+    if (strcmp(cmd, "export") == 0)
+      return OPT_EXPORT;
+    if (strcmp(cmd, "import") == 0)
+      return OPT_IMPORT;
+    if (strcmp(cmd, "copy") == 0 ||
+        strcmp(cmd, "cp") == 0)
+      return OPT_COPY;
+    if (strcmp(cmd, "rename") == 0 ||
+        strcmp(cmd, "mv") == 0)
+      return OPT_RENAME;
+  } else {
+    if (strcmp(cmd, "create") == 0||
+        strcmp(cmd, "add") == 0)
+      return OPT_SNAP_CREATE;
+    if (strcmp(cmd, "rollback") == 0||
+        strcmp(cmd, "revert") == 0)
+      return OPT_SNAP_ROLLBACK;
+    if (strcmp(cmd, "ls") == 0||
+        strcmp(cmd, "list") == 0)
+      return OPT_SNAP_LIST;
+  }
+
+  return -EINVAL;
+}
+
+static void set_conf_param(const char *param, const char **var1, const char **var2)
+{
+  if (!*var1)
+    *var1 = param;
+  else if (var2 && !*var2)
+    *var2 = param;
+  else
+    usage_exit();
+}
+
 int main(int argc, const char **argv) 
 {
   vector<const char*> args;
@@ -819,46 +896,20 @@ int main(int argc, const char **argv)
   vector<snap_t> snaps;
   SnapContext snapc;
 
+  int opt_cmd = OPT_NO_CMD;
+
   common_set_defaults(false);
   common_init(args, "rbdtool", true);
 
-  bool opt_create = false, opt_delete = false, opt_list = false, opt_info = false, opt_resize = false,
-       opt_list_snaps = false, opt_add_snap = false, opt_rollback_snap = false, opt_rename = false,
-       opt_export = false, opt_import = false, opt_copy = false;
   char *poolname = NULL;
   uint64_t size = 0;
   int order = 0;
   const char *imgname = NULL, *snapname = NULL, *destname = NULL, *dest_poolname = NULL, *path = NULL;
   string md_oid;
+  bool is_snap_cmd = false;
 
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("list", 'l')) {
-      CONF_SAFE_SET_ARG_VAL(&opt_list, OPT_BOOL);
-    } else if (CONF_ARG_EQ("create", '\0')) {
-      CONF_SAFE_SET_ARG_VAL_USAGE(&imgname, OPT_STR, false);
-      opt_create = true;
-    } else if (CONF_ARG_EQ("delete", '\0')) {
-      CONF_SAFE_SET_ARG_VAL_USAGE(&imgname, OPT_STR, false);
-      opt_delete = true;
-    } else if (CONF_ARG_EQ("resize", '\0')) {
-      CONF_SAFE_SET_ARG_VAL_USAGE(&imgname, OPT_STR, false);
-      opt_resize = true;
-    } else if (CONF_ARG_EQ("info", 'I')) {
-      CONF_SAFE_SET_ARG_VAL_USAGE(&imgname, OPT_STR, false);
-      opt_info = true;
-    } else if (CONF_ARG_EQ("list-snaps", '\0')) {
-      CONF_SAFE_SET_ARG_VAL_USAGE(&imgname, OPT_STR, false);
-      opt_list_snaps = true;
-    } else if (CONF_ARG_EQ("add-snap", '\0')) {
-      CONF_SAFE_SET_ARG_VAL_USAGE(&snapname, OPT_STR, false);
-      opt_add_snap = true;
-    } else if (CONF_ARG_EQ("rollback-snap", '\0')) {
-      CONF_SAFE_SET_ARG_VAL_USAGE(&snapname, OPT_STR, false);
-      opt_rollback_snap = true;
-    } else if (CONF_ARG_EQ("copy", '\0')) {
-      CONF_SAFE_SET_ARG_VAL_USAGE(&imgname, OPT_STR, false);
-      opt_copy = true;
-    } else if (CONF_ARG_EQ("pool", 'p')) {
+    if (CONF_ARG_EQ("pool", 'p')) {
       CONF_SAFE_SET_ARG_VAL(&poolname, OPT_STR);
     } else if (CONF_ARG_EQ("dest-pool", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&dest_poolname, OPT_STR);
@@ -871,47 +922,67 @@ int main(int argc, const char **argv)
       size <<= 20; // MB -> bytes
     } else if (CONF_ARG_EQ("order", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&order, OPT_INT);
-    } else if (CONF_ARG_EQ("rename", '\0')) {
-      opt_rename = true;
-      CONF_SAFE_SET_ARG_VAL(&destname, OPT_STR);
-    } else if (CONF_ARG_EQ("export", '\0')) {
-      opt_export = true;
-      CONF_SAFE_SET_ARG_VAL_USAGE(&imgname, OPT_STR, false);
-    } else if (CONF_ARG_EQ("import", '\0')) {
-      opt_import = true;
-      CONF_SAFE_SET_ARG_VAL(&path, OPT_STR);
     } else if (CONF_ARG_EQ("path", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&path, OPT_STR);
     } else if (CONF_ARG_EQ("dest", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&destname, OPT_STR);
-    } else 
-      usage_exit();
+    } else {
+      if (!opt_cmd) {
+        opt_cmd = get_cmd(CONF_VAL, &is_snap_cmd);
+        if (opt_cmd < 0) {
+          cerr << "invalid command: " << CONF_VAL << std::endl;
+          usage_exit();
+        }
+      } else {
+        switch (opt_cmd) {
+          case OPT_LIST:
+            usage_exit();
+          case OPT_INFO:
+          case OPT_CREATE:
+          case OPT_RESIZE:
+          case OPT_RM:
+          case OPT_SNAP_CREATE:
+          case OPT_SNAP_ROLLBACK:
+          case OPT_SNAP_LIST:
+            set_conf_param(CONF_VAL, &imgname, NULL);
+            break;
+          case OPT_EXPORT:
+            set_conf_param(CONF_VAL, &imgname, &path);
+            break;
+          case OPT_IMPORT:
+            set_conf_param(CONF_VAL, &path, &destname);
+            break;
+          case OPT_COPY:
+          case OPT_RENAME:
+            set_conf_param(CONF_VAL, &imgname, &destname);
+            break;
+        }
+      }
+    }
+    //  usage_exit();
   }
-  if (!opt_create && !opt_delete && !opt_list && !opt_info && !opt_resize &&
-      !opt_list_snaps && !opt_add_snap && !opt_rollback_snap && !opt_rename &&
-      !opt_export && !opt_import && !opt_copy) {
+  if (!opt_cmd)
     usage_exit();
-  }
 
-  if ((opt_add_snap || opt_rollback_snap) && !snapname) {
+  if ((opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK) && !snapname) {
     cerr << "error: snap name was not specified" << std::endl;
     usage_exit();
   }
 
-  if (opt_export && !imgname) {
+  if (opt_cmd == OPT_EXPORT && !imgname) {
     cerr << "error: image name was not specified" << std::endl;
     usage_exit();
   }
 
-  if (opt_import && !path) {
+  if (opt_cmd == OPT_IMPORT && !path) {
     cerr << "error: path was not specified" << std::endl;
     usage_exit();
   }
 
-  if (opt_import && !destname)
+  if (opt_cmd == OPT_IMPORT && !destname)
     destname = imgname_from_path(path);
 
-  if (!opt_list && !opt_import && !imgname) {
+  if (opt_cmd != OPT_LIST && opt_cmd != OPT_IMPORT && !imgname) {
     cerr << "error: image name was not specified" << std::endl;
     usage_exit();
   }
@@ -922,10 +993,10 @@ int main(int argc, const char **argv)
   if (!dest_poolname)
     dest_poolname = poolname;
 
-  if (opt_export && !path)
+  if (opt_cmd == OPT_EXPORT && !path)
     path = imgname;
 
-  if (opt_copy && !destname ) {
+  if (opt_cmd == OPT_COPY && !destname ) {
     cerr << "error: destination image name was not specified" << std::endl;
     usage_exit();
   }
@@ -935,7 +1006,7 @@ int main(int argc, const char **argv)
      exit(1);
   }
 
-  if (!opt_list && !opt_import) {
+  if (opt_cmd != OPT_LIST && opt_cmd != OPT_IMPORT) {
     md_oid = imgname;
     md_oid += RBD_SUFFIX;
   }
@@ -956,7 +1027,7 @@ int main(int argc, const char **argv)
   if (snapname) {
     r = do_get_snapc(pp, md_oid, snapname, snapc, snaps, snapid);
     if (r == -ENOENT) {
-      if (opt_add_snap)
+      if (opt_cmd == OPT_SNAP_CREATE)
         r = 0;
       else
         cerr << "snapshot not found: " << snapname << std::endl;
@@ -975,7 +1046,7 @@ int main(int argc, const char **argv)
     rados.set_snap(pool, snapid);
   }
 
-  if (opt_copy || opt_import) {
+  if (opt_cmd == OPT_COPY || opt_cmd == OPT_IMPORT) {
     r = rados.open_pool(dest_poolname, &dest_pool);
     if (r < 0) {
       cerr << "error opening pool " << dest_poolname << " (err=" << r << ")" << std::endl;
@@ -984,7 +1055,7 @@ int main(int argc, const char **argv)
     pp.dest = dest_pool;
   }
 
-  if (opt_list) {
+  if (opt_cmd == OPT_LIST) {
     r = do_list(pp, poolname);
     if (r < 0) {
       switch (r) {
@@ -996,7 +1067,7 @@ int main(int argc, const char **argv)
       }
       err_exit(pp);
     }
-  } else if (opt_create) {
+  } else if (opt_cmd == OPT_CREATE) {
     if (!size) {
       cerr << "must specify size in MB to create an rbd image" << std::endl;
       usage();
@@ -1012,31 +1083,31 @@ int main(int argc, const char **argv)
       cerr << "create error: " << strerror(-r) << std::endl;
       err_exit(pp);
     }
-  } else if (opt_rename) {
+  } else if (opt_cmd == OPT_RENAME) {
     r = do_rename(pp, md_oid, imgname, destname);
     if (r < 0) {
       cerr << "rename error: " << strerror(-r) << std::endl;
       err_exit(pp);
     }
-  } else if (opt_info) {
+  } else if (opt_cmd == OPT_INFO) {
     r = do_show_info(pp, md_oid, imgname);
     if (r < 0) {
       cerr << "error: " << strerror(-r) << std::endl;
       err_exit(pp);
     }
-  } else if (opt_delete) {
+  } else if (opt_cmd == OPT_RM) {
     r = do_delete(pp, md_oid, imgname);
     if (r < 0) {
       cerr << "delete error: " << strerror(-r) << std::endl;
       err_exit(pp);
     }
-  } else if (opt_resize) {
+  } else if (opt_cmd == OPT_RESIZE) {
     r = do_resize(pp, md_oid, imgname, size);
     if (r < 0) {
       cerr << "resize error: " << strerror(-r) << std::endl;
       err_exit(pp);
     }
-  } else if (opt_list_snaps) {
+  } else if (opt_cmd == OPT_SNAP_LIST) {
     if (!imgname) {
       usage();
       err_exit(pp);
@@ -1046,7 +1117,7 @@ int main(int argc, const char **argv)
       cerr << "failed to list snapshots: " << strerror(-r) << std::endl;
       err_exit(pp);
     }
-  } else if (opt_add_snap) {
+  } else if (opt_cmd == OPT_SNAP_CREATE) {
     if (!imgname || !snapname) {
       usage();
       err_exit(pp);
@@ -1056,7 +1127,7 @@ int main(int argc, const char **argv)
       cerr << "failed to create snapshot: " << strerror(-r) << std::endl;
       err_exit(pp);
     }
-  } else if (opt_rollback_snap) {
+  } else if (opt_cmd == OPT_SNAP_ROLLBACK) {
     if (!imgname) {
       usage();
       err_exit(pp);
@@ -1067,7 +1138,7 @@ int main(int argc, const char **argv)
       usage();
       err_exit(pp);
     }
-  } else if (opt_export) {
+  } else if (opt_cmd == OPT_EXPORT) {
     if (!path) {
       cerr << "pathname should be specified" << std::endl;
       err_exit(pp);
@@ -1077,7 +1148,7 @@ int main(int argc, const char **argv)
       cerr << "export error: " << strerror(-r) << std::endl;
       err_exit(pp);
     }
-  } else if (opt_import) {
+  } else if (opt_cmd == OPT_IMPORT) {
      if (!path) {
       cerr << "pathname should be specified" << std::endl;
       err_exit(pp);
@@ -1087,7 +1158,7 @@ int main(int argc, const char **argv)
       cerr << "import failed: " << strerror(-r) << std::endl;
       err_exit(pp);
     }
-  } else if (opt_copy) {
+  } else if (opt_cmd == OPT_COPY) {
     r = do_copy(pp, imgname, destname);
     if (r < 0) {
       cerr << "copy failed: " << strerror(-r) << std::endl;

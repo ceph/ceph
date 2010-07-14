@@ -167,9 +167,9 @@ endif
 
 radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la -lpthread -lm -lcrypto
-rbdtool_SOURCES = rbdtool.cc
-rbdtool_LDADD = librados.la -lpthread -lm -lcrypto
-bin_PROGRAMS += radosacl rbdtool
+rbd_SOURCES = rbd.cc
+rbd_LDADD = librados.la -lpthread -lm -lcrypto
+bin_PROGRAMS += radosacl rbd
 
 if WITH_RADOSGW
 libradosgw_a_SOURCES = \
