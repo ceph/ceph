@@ -429,7 +429,7 @@ bool MonClient::ms_handle_reset(Connection *con)
 void MonClient::_finish_hunting()
 {
   if (hunting) {
-    dout(0) << "found mon" << cur_mon << dendl; 
+    dout(5) << "found mon" << cur_mon << dendl;
     hunting = false;
   }
 }
