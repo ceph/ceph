@@ -29,7 +29,7 @@
 
 
 // LOOKUPS
-
+/* This function DOES NOT put the passed message before returning */
 void AnchorClient::handle_query_result(class MMDSTableRequest *m)
 {
   dout(10) << "handle_anchor_reply " << *m << dendl;

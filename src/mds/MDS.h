@@ -389,7 +389,9 @@ class MDS : public Dispatcher {
 };
 
 
-
+/* This expects to be given a reference which it is responsible for.
+ * The finish function calls functions which
+ * will put the Message exactly once.*/
 class C_MDS_RetryMessage : public Context {
   Message *m;
   MDS *mds;
