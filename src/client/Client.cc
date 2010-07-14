@@ -3438,6 +3438,9 @@ int Client::_setattr(Inode *in, struct stat_precise *attr, int mask, int uid, in
 
   dout(10) << "_setattr mask " << mask << " issued " << ccap_string(issued) << dendl;
 
+  if (in->snapid != CEPH_NOSNAP) {
+    return -EROFS;
+  }
   // make the change locally?
 
   if (!mask) {
@@ -4161,6 +4164,11 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
   int cmode = ceph_flags_to_mode(flags);
   int want = ceph_caps_for_mode(cmode);
   int result = 0;
+
+  if (in->snapid != CEPH_NOSNAP &&
+      (mode & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND))) {
+    return -EROFS;
+  }
 
   in->get_open_ref(cmode);  // make note of pending open, since it effects _wanted_ caps.
 
@@ -5253,6 +5261,10 @@ int Client::ll_listxattr(vinodeno_t vino, char *names, size_t size, int uid, int
 int Client::_setxattr(Inode *in, const char *name, const void *value, size_t size, int flags,
 		      int uid, int gid)
 {
+  if (in->snapid != CEPH_NOSNAP) {
+    return -EROFS;
+  }
+
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETXATTR);
   filepath path;
   in->make_nosnap_relative_path(path);
@@ -5291,6 +5303,10 @@ int Client::ll_setxattr(vinodeno_t vino, const char *name, const void *value, si
 
 int Client::_removexattr(Inode *in, const char *name, int uid, int gid)
 {
+  if (in->snapid != CEPH_NOSNAP) {
+    return -EROFS;
+  }
+
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_RMXATTR);
   filepath path;
   in->make_nosnap_relative_path(path);
@@ -5352,6 +5368,10 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int ui
   if (strlen(name) > NAME_MAX)
     return -ENAMETOOLONG;
 
+  if (dir->snapid != CEPH_NOSNAP) {
+    return -EROFS;
+  }
+
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_MKNOD);
 
   filepath path;
@@ -5407,6 +5427,9 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   
   if (strlen(name) > NAME_MAX)
     return -ENAMETOOLONG;
+  if (dir->snapid != CEPH_NOSNAP) {
+    return -EROFS;
+  }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_CREATE);
 
@@ -5462,6 +5485,9 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid)
   if (strlen(name) > NAME_MAX)
     return -ENAMETOOLONG;
 
+  if (dir->snapid != CEPH_NOSNAP && dir->snapid != CEPH_SNAPDIR) {
+    return -EROFS;
+  }
   MetaRequest *req = new MetaRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_MKSNAP:CEPH_MDS_OP_MKDIR);
 
   filepath path;
@@ -5519,6 +5545,10 @@ int Client::_symlink(Inode *dir, const char *name, const char *target, int uid, 
   if (strlen(name) > NAME_MAX)
     return -ENAMETOOLONG;
 
+  if (dir->snapid != CEPH_NOSNAP) {
+    return -EROFS;
+  }
+
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SYMLINK);
 
   filepath path;
@@ -5568,6 +5598,10 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
 {
   dout(3) << "_unlink(" << dir->ino << " " << name << " uid " << uid << " gid " << gid << ")" << dendl;
 
+  if (dir->snapid != CEPH_NOSNAP) {
+    return -EROFS;
+  }
+
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_UNLINK);
 
   filepath path;
@@ -5613,6 +5647,10 @@ int Client::ll_unlink(vinodeno_t vino, const char *name, int uid, int gid)
 int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
 {
   dout(3) << "_rmdir(" << dir->ino << " " << name << " uid " << uid << " gid " << gid << ")" << dendl;
+
+  if (dir->snapid != CEPH_NOSNAP && dir->snapid != CEPH_SNAPDIR) {
+    return -EROFS;
+  }
 
   MetaRequest *req = new MetaRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_RMSNAP:CEPH_MDS_OP_RMDIR);
   filepath path;
@@ -5661,6 +5699,11 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
 {
   dout(3) << "_rmdir(" << fromdir->ino << " " << fromname << " to " << todir->ino << " " << toname
 	  << " uid " << uid << " gid " << gid << ")" << dendl;
+
+  if (fromdir->snapid != CEPH_NOSNAP ||
+      todir->snapid != CEPH_NOSNAP) {
+    return -EROFS;
+  }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_RENAME);
 
@@ -5725,6 +5768,10 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid)
 
   if (strlen(newname) > NAME_MAX)
     return -ENAMETOOLONG;
+
+  if (in->snapid != CEPH_NOSNAP || dir->snapid != CEPH_NOSNAP) {
+    return -EROFS;
+  }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LINK);
 
