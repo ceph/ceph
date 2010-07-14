@@ -738,7 +738,7 @@ void Server::recall_client_state(float ratio)
 /*******
  * some generic stuff for finishing off requests
  */
-
+/* This function takes responsibility for the passed mdr*/
 void Server::journal_and_reply(MDRequest *mdr, CInode *in, CDentry *dn, LogEvent *le, Context *fin)
 {
   dout(10) << "journal_and_reply tracei " << in << " tracedn " << dn << dendl;
@@ -772,7 +772,7 @@ void Server::journal_and_reply(MDRequest *mdr, CInode *in, CDentry *dn, LogEvent
 }
 
 /*
- * send generic response (just an error code)
+ * send generic response (just an error code), clean up mdr
  */
 void Server::reply_request(MDRequest *mdr, int r, CInode *tracei, CDentry *tracedn)
 {
@@ -841,6 +841,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 /*
  * send given reply
  * include a trace to tracei
+ * Clean up mdr
  */
 void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, CDentry *tracedn) 
 {
@@ -1111,7 +1112,7 @@ void Server::handle_client_request(MClientRequest *req)
   return;
 }
 
-
+/* This function takes responsibility for the passed mdr*/
 void Server::dispatch_client_request(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -1755,7 +1756,8 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
 }
 
 
-
+/* If this returns null, the request has been handled
+ * as appropriate: forwarded on, or the client's been replied to */
 CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
 				    set<SimpleLock*> &rdlocks,
 				    bool want_auth,
@@ -1916,6 +1918,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
  * @diri base indoe
  * @fg the exact frag we want
  * @mdr request
+ * Returns: the pointer, or NULL if it had to be delayed (but mdr is taken care of)
  */
 CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr)
 {
@@ -1997,6 +2000,7 @@ void Server::handle_client_stat(MDRequest *mdr)
 		req->get_op() == CEPH_MDS_OP_LOOKUP ? mdr->dn[0].back() : 0);
 }
 
+/* This function will clean up the passed mdr*/
 void Server::handle_client_lookup_parent(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -2021,7 +2025,7 @@ void Server::handle_client_lookup_parent(MDRequest *mdr)
   reply_request(mdr, 0, in, dn);  // reply
 }
 
-
+/* This function DOES clean up the mdr before returning*/
 void Server::handle_client_lookup_hash(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -2066,7 +2070,7 @@ void Server::handle_client_lookup_hash(MDRequest *mdr)
 }
 
 
-
+/* This function takes responsibility for the passed mdr*/
 void Server::handle_client_open(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -2231,7 +2235,7 @@ public:
   }
 };
 
-
+/* This function takes responsibility for the passed mdr*/
 void Server::handle_client_openc(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -2827,7 +2831,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
     mds->mdlog->flush();
 }
 
-
+/* Takes responsibility for mdr */
 void Server::do_open_truncate(MDRequest *mdr, int cmode)
 {
   CInode *in = mdr->in[0];
@@ -2875,7 +2879,7 @@ void Server::do_open_truncate(MDRequest *mdr, int cmode)
 }
 
 
-
+/* This function cleans up the passed mdr */
 void Server::handle_client_setlayout(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -3181,7 +3185,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
 
 
 // MKDIR
-
+/* This function takes responsibility for the passed mdr*/
 void Server::handle_client_mkdir(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -4236,6 +4240,8 @@ public:
  * all other nodes have also replciated destdn and straydn.  note that
  * destdn replicas need not also replicate srci.  this only works when 
  * destdn is master.
+ *
+ * This function takes responsibility for the passed mdr.
  */
 void Server::handle_client_rename(MDRequest *mdr)
 {
@@ -5582,7 +5588,7 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
 
 
 // snaps
-
+/* This function takes responsibility for the passed mdr*/
 void Server::handle_client_lssnap(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -5659,6 +5665,7 @@ struct C_MDS_mksnap_finish : public Context {
   }
 };
 
+/* This function takes responsibility for the passed mdr*/
 void Server::handle_client_mksnap(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -5831,6 +5838,7 @@ struct C_MDS_rmsnap_finish : public Context {
   }
 };
 
+/* This function takes responsibility for the passed mdr*/
 void Server::handle_client_rmsnap(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;

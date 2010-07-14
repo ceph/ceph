@@ -141,7 +141,8 @@ void Locker::include_snap_rdlocks(set<SimpleLock*>& rdlocks, CInode *in)
 }
 
 
-
+/* If this function returns false, the mdr has been placed
+ * on the appropriate wait list */
 bool Locker::acquire_locks(MDRequest *mdr,
 			   set<SimpleLock*> &rdlocks,
 			   set<SimpleLock*> &wrlocks,

@@ -5766,6 +5766,9 @@ Context *MDCache::_get_waiter(MDRequest *mdr, Message *req)
   }
 }
 
+/* Returns 0 on success, >0 if request has been put on hold or otherwise dealt with,
+ * <0 if there's been a failure the caller needs to clean up from.
+ */
 int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 			   const filepath& path,                   // what
                            vector<CDentry*> *pdnvec,         // result
@@ -6175,6 +6178,7 @@ void MDCache::open_remote_dirfrag(CInode *diri, frag_t approxfg, Context *fin)
  * @mdr current request
  *
  * will return inode for primary, or link up/open up remote link's inode as necessary.
+ * If it's not available right now, puts mdr on wait list and returns null.
  */
 CInode *MDCache::get_dentry_inode(CDentry *dn, MDRequest *mdr, bool projected)
 {
