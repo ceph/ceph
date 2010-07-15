@@ -66,8 +66,10 @@ private:
   // ...
   void send_to_waiting();     // send current map to waiters.
   void send_full(PaxosServiceMessage *m);
-  MOSDMap *build_incremental(epoch_t from);
+  MOSDMap *build_incremental(epoch_t from, epoch_t to);
   void send_incremental(PaxosServiceMessage *m, epoch_t since);
+  void send_incremental(epoch_t from, entity_inst_t& dest);
+
  
   bool preprocess_failure(class MOSDFailure *m);
   bool prepare_failure(class MOSDFailure *m);
