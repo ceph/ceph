@@ -5437,18 +5437,12 @@ void Server::handle_client_lssnap(MDRequest *mdr)
   map<snapid_t,SnapInfo*> infomap;
   realm->get_snap_info(infomap);
 
-  snapid_t oldest = diri->get_oldest_snap();
-  dout(10) << " oldest snap for this inode is " << oldest << dendl;
-
   utime_t now = g_clock.now();
   __u32 num = 0;
   bufferlist dnbl;
   for (map<snapid_t,SnapInfo*>::iterator p = infomap.begin();
        p != infomap.end();
        p++) {
-    if (p->first < oldest)
-      continue;
-
     dout(10) << p->first << " -> " << *p->second << dendl;
 
     // actual

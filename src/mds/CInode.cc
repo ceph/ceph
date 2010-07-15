@@ -1471,15 +1471,6 @@ pair<int,int> CInode::authority()
 
 // SNAP
 
-snapid_t CInode::get_oldest_snap()
-{
-  snapid_t t = CEPH_NOSNAP;
-  if (!old_inodes.empty())
-    t = old_inodes.begin()->second.first;
-  return MIN(t, first);
-}
-
-
 old_inode_t& CInode::cow_old_inode(snapid_t follows, inode_t *pi)
 {
   assert(follows >= first);
