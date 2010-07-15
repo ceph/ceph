@@ -514,7 +514,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
   if (op->may_write()) {
     // snap
-    if (pool->is_pool_snaps_mode()) {
+    if (pool->info.is_pool_snaps_mode()) {
       // use pool's snapc
       ctx->snapc = pool->snapc;
     } else {
