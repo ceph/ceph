@@ -2442,6 +2442,10 @@ int ReplicatedPG::find_object_context(const object_t& oid, snapid_t snapid,
       return -ENOENT;
     dout(10) << "find_object_context " << oid << " @" << snapid << dendl;
     *pobc = obc;
+
+    if (can_create && !obc->obs.ssc)
+      obc->obs.ssc = get_snapset_context(oid, true);
+
     return 0;
   }
 
