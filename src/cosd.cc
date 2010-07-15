@@ -254,6 +254,7 @@ int main(int argc, const char **argv)
   client_messenger->set_policy_throttler(entity_name_t::TYPE_CLIENT, &client_throttler);
 
   if (cluster_messenger != client_messenger) {
+    cluster_messenger->register_entity(entity_name_t::OSD(whoami));
     cluster_messenger->set_default_policy(SimpleMessenger::Policy::stateless_server(supported, 0));
     cluster_messenger->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::client(0,0));
     cluster_messenger->set_policy(entity_name_t::TYPE_OSD,
