@@ -483,6 +483,7 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     pending_inc.new_hb_up[from] = m->hb_addr;
     
     if (!m->cluster_addr.is_blank_addr()) { //is there a cluster addr?
+      dout(0) << "setting new_up_internal[" << from << "] to " << m->cluster_addr << dendl;
       pending_inc.new_up_internal[from] = m->cluster_addr; //fill it in!
     }
 

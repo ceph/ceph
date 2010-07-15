@@ -377,7 +377,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   scrub_wq(this, &disk_tp),
   remove_wq(this, &disk_tp)
 {
-  monc->set_messenger(cluster_messenger);
+  monc->set_messenger(client_messenger);
   
   osdmap = 0;
 
@@ -1528,8 +1528,11 @@ void OSD::send_boot()
     hb_addr.set_port(port);
   }
   MOSDBoot *mboot = new MOSDBoot(superblock, hb_addr);
-  if (cluster_messenger != client_messenger)
+  if (cluster_messenger != client_messenger) {
     mboot->cluster_addr = cluster_messenger->get_myaddr();
+    dout(0) << "setting MOSDBoot->cluster_addr to" << cluster_messenger->get_myaddr()
+            << " while client_messenger addr is " << client_messenger->get_myaddr() << dendl;
+  }
   monc->send_mon_message(mboot);
 }
 
@@ -3336,7 +3339,7 @@ void OSD::do_infos(map<int,MOSDPGInfo*>& info_map)
   for (map<int,MOSDPGInfo*>::iterator p = info_map.begin();
        p != info_map.end();
        ++p) 
-    cluster_messenger->send_message(p->second, osdmap->get_inst(p->first));
+    cluster_messenger->send_message(p->second, osdmap->get_cluster_inst(p->first));
   info_map.clear();
 }
 

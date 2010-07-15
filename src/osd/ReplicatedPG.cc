@@ -2246,7 +2246,8 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	  reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), 0);
 	reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
 	dout(10) << " sending commit on " << *repop << " " << reply << dendl;
-	osd->cluster_messenger->
+	assert(entity_name_t::TYPE_OSD != op->get_connection()->peer_type);
+	osd->client_messenger->
 	  send_message(reply, op->get_connection());
 	repop->sent_disk = true;
       }
@@ -3730,7 +3731,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
   } else {
     // ack if i'm a replica and being pushed to.
-    MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK); 
+    MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
+    assert(entity_name_t::TYPE_OSD == op->get_connection()->peer_type);
     osd->cluster_messenger->send_message(reply, op->get_connection());
   }
 
