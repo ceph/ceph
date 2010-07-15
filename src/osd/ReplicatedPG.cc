@@ -514,13 +514,13 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
   if (op->may_write()) {
     // snap
-    if (op->get_snap_seq()) {
+    if (pool->is_pool_snaps_mode()) {
+      // use pool's snapc
+      ctx->snapc = pool->snapc;
+    } else {
       // client specified snapc
       ctx->snapc.seq = op->get_snap_seq();
       ctx->snapc.snaps = op->get_snaps();
-    } else {
-      // use pool's snapc
-      ctx->snapc = pool->snapc;
     }
     if ((op->get_flags() & CEPH_OSD_FLAG_ORDERSNAP) &&
 	ctx->snapc.seq < obc->obs.ssc->snapset.seq) {
