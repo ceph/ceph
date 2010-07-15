@@ -19,27 +19,14 @@ inline ostream& operator<<(ostream& out, const sockaddr_storage &ss)
   getnameinfo((struct sockaddr *)&ss, sizeof(ss), buf, sizeof(buf),
 	      serv, sizeof(serv),
 	      NI_NUMERICHOST | NI_NUMERICSERV);
+  if (ss.ss_family == AF_INET6)
+    return out << '[' << buf << "]:" << serv;
   return out //<< ss.ss_family << ":"
 	     << buf << ':' << serv;
 }
 
-inline ostream& operator<<(ostream& out, const sockaddr_in &ss)
-{
-  char buf[NI_MAXHOST] = { 0 };
-  char serv[20] = { 0 };
-  getnameinfo((struct sockaddr *)&ss, sizeof(ss), buf, sizeof(buf),
-	      serv, sizeof(serv),
-	      NI_NUMERICHOST | NI_NUMERICSERV);
-  return out //<< ss.sin_family << ":"
-	     << buf << ':' << serv;
-}
-
-
 extern int tcp_read(int sd, char *buf, int len);
 extern int tcp_write(int sd, const char *buf, int len);
-
-
-extern int tcp_hostlookup(char *str, sockaddr_in& ta);
 
 inline bool operator==(const sockaddr_in& a, const sockaddr_in& b) {
   return strncmp((const char*)&a, (const char*)&b, sizeof(a)) == 0;
