@@ -219,12 +219,7 @@ struct entity_addr_t {
     case AF_INET:
       return addr4.sin_addr.s_addr == INADDR_ANY;
     case AF_INET6:
-      {
-	return addr6.sin6_addr.s6_addr32[0] == 0 &&
-	  addr6.sin6_addr.s6_addr32[1] == 0 &&
-	  addr6.sin6_addr.s6_addr32[2] == 0 &&
-	  addr6.sin6_addr.s6_addr32[3] == 0;
-      }
+      return memcmp(&addr6.sin6_addr, &in6addr_any, sizeof(in6addr_any)) == 0;
     default:
       return true;
     }
