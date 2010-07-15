@@ -62,7 +62,10 @@ private:
   static boost::pool<> pool;
 public:
   static void *operator new(size_t num_bytes) { 
-    return pool.malloc();
+    void *n = pool.malloc();
+    if (!n)
+      throw std::bad_alloc();
+    return n;
   }
   void operator delete(void *p) {
     pool.free(p);
