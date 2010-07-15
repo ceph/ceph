@@ -39,7 +39,7 @@ Specifies the object size expressed as a number of bits, such that the object si
 Specifies the snapshot name for the specific operation.
 .SH COMMANDS
 .TP
-\fBls\fP
+\fBls \fR[ \fIpool-name\fP ]
 Will list all rbd images listed in the \fIrbd_directory\fR object.
 .TP
 \fBinfo \fR[ \fIimage-name\fP ]
@@ -60,23 +60,29 @@ Deletes rbd image (including all data blocks)
 \fBexport \fR[ \fIimage-name\fP ] \fR[ \fIdest-path\fP ]
 Exports image to dest path.
 .TP
-\fBimport \fR[ \fI[path\fP ] \fR[ \fIdest-image\fP ]
+\fBimport \fR[ \fIpath\fP ] \fR[ \fIdest-image\fP ]
 Creates a new image and imports its data from path.
 .TP
-\fBcp \fR[ \fI[src-image\fP ] \fR[ \fIdest-image\fP ]
+\fBcp \fR[ \fIsrc-image\fP ] \fR[ \fIdest-image\fP ]
 Copies the content of a src-image into the newly created dest-image.
 .TP
-\fBmv \fR[ \fI[src-image\fP ] \fR[ \fIdest-image\fP ]
+\fBmv \fR[ \fIsrc-image\fP ] \fR[ \fIdest-image\fP ]
 Renames an image.
 .TP
-\fBsnap ls \fR[ \fI[image-name\fP ]
+\fBsnap ls \fR[ \fIimage-name\fP ]
 Dumps the list of snapshots inside a specific image.
 .TP
-\fBsnap create \fR[ \fI[image-name\fP ]
+\fBsnap create \fR[ \fIimage-name\fP ]
 Creates a new snapshot. Requires the snapshot name parameter specified.
 .TP
-\fBsnap rollback \fR[ \fI[image-name\fP ]
+\fBsnap rollback \fR[ \fIimage-name\fP ]
 Rollback image content to snapshot. This will iterate through the entire blocks array and update the data head content to the snapshotted version.
+.SH IMAGE NAME
+In addition to using the \fB\-\-pool\fR and the \fB\-\-snap\fR options, the image name can include both the pool name and the snapshot name. The image name format is as follows:
+.IP
+[\fIpool\fP/]image-name[@\fIsnap\fP]
+.PP
+Thus an image name that contains a slash character ('/') requires specifying the pool name explicitly.
 .SH EXAMPLES
 To create a new rbd image that is 100 GB:
 .IP
@@ -93,6 +99,12 @@ rbd create mypool/myimage --size 102400 --order 23
 To delete an rbd image (be careful!):
 .IP
 rbd rm mypool/myimage
+.PP
+.IP
+To create a new snapshot:
+.PP
+.IP
+rbd create mypool/myimage@mysnap
 .PP
 .SH AVAILABILITY
 .B rbd

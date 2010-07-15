@@ -45,7 +45,7 @@ void usage()
 {
   cout << "usage: rbdtool [-n <auth user>] [OPTIONS] <cmd> ...\n"
        << "where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:\n"
-       << "  <ls | list>                               list rbd images\n"
+       << "  <ls | list> [pool-name]                   list rbd images\n"
        << "  info [image-name]                         show information about image size,\n"
        << "                                            striping, etc.\n"
        << "  create [image-name]                       create an empty image (requires size\n"
@@ -641,8 +641,26 @@ static const char *imgname_from_path(const char *path)
   return imgname;
 }
 
+static void update_snap_name(char *imgname, char **snap)
+{
+  char *s;
+
+  s = strrchr(imgname, '@');
+  if (!s)
+    return;
+
+  *s = '\0';
+
+  if (!snap)
+    return;
+
+  s++;
+  if (*s)
+    *snap = s;
+}
+
 static void set_pool_image_name(const char *orig_pool, const char *orig_img,
-                                char **new_pool, char **new_img)
+                                char **new_pool, char **new_img, char **snap)
 {
   const char *sep;
 
@@ -658,7 +676,7 @@ static void set_pool_image_name(const char *orig_pool, const char *orig_img,
   if (!sep) {
     *new_pool= strdup("rbd");
     *new_img = strdup(orig_img);
-    return;
+    goto done_img;
   }
 
   *new_pool =  strdup(orig_img);
@@ -667,6 +685,9 @@ static void set_pool_image_name(const char *orig_pool, const char *orig_img,
 
   *(char *)sep = '\0';
   *new_img = strdup(sep + 1);
+
+done_img:
+  update_snap_name(*new_img, snap);
 }
 
 static int do_import(pool_t pool, const char *imgname, int order, const char *path)
@@ -901,7 +922,7 @@ int main(int argc, const char **argv)
   common_set_defaults(false);
   common_init(args, "rbdtool", true);
 
-  char *poolname = NULL;
+  const char *poolname = NULL;
   uint64_t size = 0;
   int order = 0;
   const char *imgname = NULL, *snapname = NULL, *destname = NULL, *dest_poolname = NULL, *path = NULL;
@@ -936,7 +957,8 @@ int main(int argc, const char **argv)
       } else {
         switch (opt_cmd) {
           case OPT_LIST:
-            usage_exit();
+            set_conf_param(CONF_VAL, &poolname, NULL);
+            break;
           case OPT_INFO:
           case OPT_CREATE:
           case OPT_RESIZE:
@@ -964,11 +986,6 @@ int main(int argc, const char **argv)
   if (!opt_cmd)
     usage_exit();
 
-  if ((opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK) && !snapname) {
-    cerr << "error: snap name was not specified" << std::endl;
-    usage_exit();
-  }
-
   if (opt_cmd == OPT_EXPORT && !imgname) {
     cerr << "error: image name was not specified" << std::endl;
     usage_exit();
@@ -987,8 +1004,13 @@ int main(int argc, const char **argv)
     usage_exit();
   }
 
-  set_pool_image_name(poolname, imgname, (char **)&poolname, (char **)&imgname);
-  set_pool_image_name(dest_poolname, destname, (char **)&dest_poolname, (char **)&destname);
+  set_pool_image_name(poolname, imgname, (char **)&poolname, (char **)&imgname, (char **)&snapname);
+  set_pool_image_name(dest_poolname, destname, (char **)&dest_poolname, (char **)&destname, NULL);
+
+  if ((opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK) && !snapname) {
+    cerr << "error: snap name was not specified" << std::endl;
+    usage_exit();
+  }
 
   if (!dest_poolname)
     dest_poolname = poolname;
