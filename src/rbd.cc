@@ -43,7 +43,7 @@ static string dir_info_oid = RBD_INFO;
 
 void usage()
 {
-  cout << "usage: rbdtool [-n <auth user>] [OPTIONS] <cmd> ...\n"
+  cout << "usage: rbd [-n <auth user>] [OPTIONS] <cmd> ...\n"
        << "where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:\n"
        << "  <ls | list> [pool-name]                   list rbd images\n"
        << "  info [image-name]                         show information about image size,\n"
@@ -920,7 +920,7 @@ int main(int argc, const char **argv)
   int opt_cmd = OPT_NO_CMD;
 
   common_set_defaults(false);
-  common_init(args, "rbdtool", true);
+  common_init(args, "rbd", true);
 
   const char *poolname = NULL;
   uint64_t size = 0;
