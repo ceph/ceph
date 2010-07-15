@@ -18,6 +18,6 @@ dist_man_MANS = \
 	radosgw_admin.8 \
 	cauthtool.8 \
 	rados.8 \
-	rbdtool.8 \
+	rbd.8 \
 	cclass.8 \
 	cclsinfo.8

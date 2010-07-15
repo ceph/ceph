@@ -1,0 +1,102 @@
+.TH RBDTOOL 8
+.SH NAME
+rbd \- manage rados block device (RBD) images
+.SH SYNOPSIS
+.B rbd
+[ \fB\-c\fI ceph.conf\fR ]
+[ \fB\-m\fI monaddr\fR ]
+[ \fB\-p\fP | \fB\-\-pool\fI pool\fR ]
+[ \fB\-\-size\fI size\fR ]
+[ \fB\-\-order\fI bits\fR ]
+[ \fIcommand ...\fR ]
+
+.SH DESCRIPTION
+.B rbd
+is a utility for manipulating rados block device (RBD) images, used by the Linux
+rbd driver and the rbd storage driver for Qemu/KVM.  RBD images are
+simple block devices that are striped over objects and stored in a RADOS object store.
+The size of the objects the image is striped over must be a power of two.
+.SH OPTIONS
+.TP
+\fB\-c\fI ceph.conf\fR, \fB\-\-conf \fIceph.conf\fR
+Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
+to determine monitor addresses during startup.
+.TP
+\fB\-m\fI monaddress[:port]\fR
+Connect to specified monitor (instead of looking through \fIceph.conf\fR).
+.TP
+\fB\-p\fI pool\fR, \fB\-\-pool \fIpool\fR
+Interact with the given \fIpool\fP.  Required by most commands.
+.SH PARAMETERS
+.TP
+\fB\-\-size \fIsize-in-mb\fP
+Specifies the size (in megabytes) of the new rbd image.
+.TP
+\fB\-\-order \fIbits\fP
+Specifies the object size expressed as a number of bits, such that the object size is 1 << \fIorder\fR. The default is 22 (4 MB).
+.TP
+\fB\-\-snap \fIsnap\fP
+Specifies the snapshot name for the specific operation.
+.SH COMMANDS
+.TP
+\fBls\fP
+Will list all rbd images listed in the \fIrbd_directory\fR object.
+.TP
+\fBinfo \fR[ \fIimage-name\fP ]
+Will dump information (such as size and order) about a specific rbd image.
+.TP
+\fBcreate \fR[ \fIimage-name\fP ]
+Will create a new rbd image.  You must also specify the size via \fB\-\-size\fR.
+.TP
+\fBresize \fR[ \fIimage-name\fP ]
+Resizes rbd image.  The size parameter also needs to be specified.
+.TP
+\fBrm \fR[ \fIimage-name\fP ]
+Deletes rbd image (including all data blocks)
+.TP
+\fBrm \fR[ \fIimage-name\fP ]
+Deletes rbd image (including all data blocks)
+.TP
+\fBexport \fR[ \fIimage-name\fP ] \fR[ \fIdest-path\fP ]
+Exports image to dest path.
+.TP
+\fBimport \fR[ \fI[path\fP ] \fR[ \fIdest-image\fP ]
+Creates a new image and imports its data from path.
+.TP
+\fBcp \fR[ \fI[src-image\fP ] \fR[ \fIdest-image\fP ]
+Copies the content of a src-image into the newly created dest-image.
+.TP
+\fBmv \fR[ \fI[src-image\fP ] \fR[ \fIdest-image\fP ]
+Renames an image.
+.TP
+\fBsnap ls \fR[ \fI[image-name\fP ]
+Dumps the list of snapshots inside a specific image.
+.TP
+\fBsnap create \fR[ \fI[image-name\fP ]
+Creates a new snapshot. Requires the snapshot name parameter specified.
+.TP
+\fBsnap rollback \fR[ \fI[image-name\fP ]
+Rollback image content to snapshot. This will iterate through the entire blocks array and update the data head content to the snapshotted version.
+.SH EXAMPLES
+To create a new rbd image that is 100 GB:
+.IP
+rbd -p mypool create myimage --size 102400
+.PP
+or alternatively
+.IP
+rbd create mypool/myimage --size 102400
+.PP
+To use a non-default object size (8 MB):
+.IP
+rbd create mypool/myimage --size 102400 --order 23
+.PP
+To delete an rbd image (be careful!):
+.IP
+rbd rm mypool/myimage
+.PP
+.SH AVAILABILITY
+.B rbd
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR ceph (8), rados (8)
