@@ -340,7 +340,8 @@ int RGWRados::delete_bucket(std::string& id, std::string& bucket)
 
   r = rados->delete_pool(pool);
   if (r < 0) return r;
-  return 0;
+  r = delete_obj(id, root_bucket, bucket);
+  return r;
 }
 
 /**
