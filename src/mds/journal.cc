@@ -439,6 +439,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     if (lump.is_complete())
       dir->mark_complete();
     
+    dout(10) << "EMetaBlob.replay updated dir " << *dir << dendl;  
+
     // decode bits
     lump._decode_bits();
 
