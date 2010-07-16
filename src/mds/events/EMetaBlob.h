@@ -540,8 +540,8 @@ private:
 				       in->symlink, snapbl,
 				       dirty));
     if (pi)
-      lump.get_dfull().front().inode = *pi;
-    return &lump.get_dfull().front().inode;
+      lump.get_dfull().back().inode = *pi;
+    return &lump.get_dfull().back().inode;
   }
 
   // convenience: primary or remote?  figure it out.
