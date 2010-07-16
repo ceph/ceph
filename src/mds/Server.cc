@@ -819,7 +819,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 	   << ") " << *req << dendl;
 
   // note successful request in session map?
-  if (req->is_write() && mdr->session && reply->get_result() == 0)
+  if (req->may_write() && mdr->session && reply->get_result() == 0)
     mdr->session->add_completed_request(mdr->reqid.tid);
 
   // give any preallocated inos to the session
@@ -2038,7 +2038,7 @@ void Server::handle_client_open(MDRequest *mdr)
   if (!cur)
     return;
 
-  if (mdr->snapid != CEPH_NOSNAP && mdr->client_request->is_write()) {
+  if (mdr->snapid != CEPH_NOSNAP && mdr->client_request->may_write()) {
     reply_request(mdr, -EROFS);
     return;
   }
