@@ -82,6 +82,7 @@ int RGWRados::list_buckets_init(std::string& id, RGWAccessHandle *handle)
   int r = rados->list_pools(state->list);
   if (r < 0)
     return r;
+  state->pos = state->list.begin();
 
   *handle = (RGWAccessHandle)state;
 
