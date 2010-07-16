@@ -1236,14 +1236,17 @@ int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<std::string, 
   lock.Unlock();
 
   attrset.clear();
-  for (map<string,bufferlist>::iterator p = aset.begin(); p != aset.end(); p++)
-    attrset[p->first.c_str()] = p->second;
+
 
   mylock.Lock();
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
 
+  for (map<string,bufferlist>::iterator p = aset.begin(); p != aset.end(); p++) {
+    cerr << p->first << std::endl;
+    attrset[p->first.c_str()] = p->second;
+  }
   return r;
 }
 
