@@ -477,16 +477,10 @@ private:
   void add_null_dentry(dirlump& lump, CDentry *dn, bool dirty) {
     // add the dir
     lump.nnull++;
-    if (dirty)
-      lump.get_dnull().push_front(nullbit(dn->get_name(), 
-					  dn->first, dn->last,
-					  dn->get_projected_version(), 
-					  dirty));
-    else
-      lump.get_dnull().push_back(nullbit(dn->get_name(), 
-					 dn->first, dn->last,
-					 dn->get_projected_version(), 
-					 dirty));
+    lump.get_dnull().push_back(nullbit(dn->get_name(), 
+				       dn->first, dn->last,
+				       dn->get_projected_version(), 
+				       dirty));
   }
 
   void add_remote_dentry(CDentry *dn, bool dirty) {
@@ -502,18 +496,11 @@ private:
       rdt = dn->get_projected_linkage()->get_remote_d_type();
     }
     lump.nremote++;
-    if (dirty)
-      lump.get_dremote().push_front(remotebit(dn->get_name(), 
-					      dn->first, dn->last,
-					      dn->get_projected_version(), 
-					      rino, rdt,
-					      dirty));
-    else
-      lump.get_dremote().push_back(remotebit(dn->get_name(), 
-					     dn->first, dn->last,
-					     dn->get_projected_version(), 
-					     rino, rdt,
-					     dirty));
+    lump.get_dremote().push_back(remotebit(dn->get_name(), 
+					   dn->first, dn->last,
+					   dn->get_projected_version(), 
+					   rino, rdt,
+					   dirty));
   }
 
   // return remote pointer to to-be-journaled inode
@@ -534,8 +521,10 @@ private:
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
     inode_t *pi = in->get_projected_inode();
-    if (!pdft) pdft = &in->dirfragtree;
-    if (!px) px = &in->xattrs;
+    if (!pdft)
+      pdft = &in->dirfragtree;
+    if (!px)
+      px = &in->xattrs;
 
     bufferlist snapbl;
     if (psnapbl)
@@ -544,25 +533,15 @@ private:
       in->encode_snap_blob(snapbl);
 
     lump.nfull++;
-    if (dirty) {
-      lump.get_dfull().push_front(fullbit(dn->get_name(), 
-					  dn->first, dn->last,
-					  dn->get_projected_version(), 
-					  *pi, *pdft, *px,
-					  in->symlink, snapbl,
-					  dirty));
-      if (pi) lump.get_dfull().front().inode = *pi;
-      return &lump.get_dfull().front().inode;
-    } else {
-      lump.get_dfull().push_back(fullbit(dn->get_name(), 
-					 dn->first, dn->last,
-					 dn->get_projected_version(),
-					  *pi, *pdft, *px,
-					 in->symlink, snapbl,
-					 dirty));
-      if (pi) lump.get_dfull().back().inode = *pi;
-      return &lump.get_dfull().back().inode;
-    }
+    lump.get_dfull().push_back(fullbit(dn->get_name(), 
+				       dn->first, dn->last,
+				       dn->get_projected_version(), 
+				       *pi, *pdft, *px,
+				       in->symlink, snapbl,
+				       dirty));
+    if (pi)
+      lump.get_dfull().front().inode = *pi;
+    return &lump.get_dfull().front().inode;
   }
 
   // convenience: primary or remote?  figure it out.
