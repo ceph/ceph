@@ -36,6 +36,12 @@ namespace librados {
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
 
+  struct SnapContext {
+    snapid_t seq;
+    vector<snapid_t> snaps;
+  };
+
+
 
 class Rados
 {
@@ -93,11 +99,11 @@ public:
   int snap_create(const pool_t pool, const char *snapname);
   int selfmanaged_snap_create(const pool_t pool, uint64_t *snapid);
   int snap_remove(const pool_t pool, const char *snapname);
-  int snap_rollback_object(const pool_t pool, const object_t oid,
+  int snap_rollback_object(const pool_t pool, const std::string& oid,
 			   const char *snapname);
   int selfmanaged_snap_remove(const pool_t pool, uint64_t snapid);
   int selfmanaged_snap_rollback_object(const pool_t pool,
-                                const object_t oid,
+                                const std::string& oid,
                                 SnapContext& snapc, uint64_t snapid);
   int snap_list(pool_t pool, std::vector<snap_t> *snaps);
   int snap_get_name(pool_t pool, snap_t snap, std::string *name);

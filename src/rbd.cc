@@ -274,14 +274,17 @@ static int tmap_rm(pools_t& pp, string& imgname)
 }
 
 static int rollback_image(pools_t& pp, struct rbd_obj_header_ondisk *header,
-                          SnapContext& snapc, uint64_t snapid)
+                          ::SnapContext& snapc, uint64_t snapid)
 {
   uint64_t numseg = get_max_block(header);
 
   for (uint64_t i = 0; i < numseg; i++) {
     int r;
     string oid = get_block_oid(header, i);
-    r = rados.selfmanaged_snap_rollback_object(pp.data, oid, snapc, snapid);
+    librados::SnapContext sn;
+    sn.seq = snapc.seq;
+    sn.snaps = snapc.snaps;
+    r = rados.selfmanaged_snap_rollback_object(pp.data, oid, sn, snapid);
     if (r < 0 && r != -ENOENT)
       return r;
   }
@@ -518,7 +521,7 @@ static int do_add_snap(pools_t& pp, string& md_oid, const char *snapname)
 }
 
 static int do_get_snapc(pools_t& pp, string& md_oid, const char *snapname,
-                        SnapContext& snapc, vector<snap_t>& snaps, uint64_t& snapid)
+                        ::SnapContext& snapc, vector<snap_t>& snaps, uint64_t& snapid)
 {
   bufferlist bl, bl2;
 
@@ -559,7 +562,7 @@ static int do_get_snapc(pools_t& pp, string& md_oid, const char *snapname,
   return 0;
 }
 
-static int do_rollback_snap(pools_t& pp, string& md_oid, SnapContext& snapc, uint64_t snapid)
+static int do_rollback_snap(pools_t& pp, string& md_oid, ::SnapContext& snapc, uint64_t snapid)
 {
   struct rbd_obj_header_ondisk header;
   int r = read_header(pp.md, md_oid, &header);
@@ -915,7 +918,7 @@ int main(int argc, const char **argv)
   pools_t pp = { 0, 0, 0 };
   snap_t snapid = 0;
   vector<snap_t> snaps;
-  SnapContext snapc;
+  ::SnapContext snapc;
 
   int opt_cmd = OPT_NO_CMD;
 

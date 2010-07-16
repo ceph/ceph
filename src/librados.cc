@@ -1515,7 +1515,7 @@ int Rados::snap_remove(const rados_pool_t pool, const char *snapname) {
   return ((RadosClient *)client)->snap_remove(pool, snapname);
 }
 
-int Rados::snap_rollback_object(const rados_pool_t pool, const object_t oid,
+int Rados::snap_rollback_object(const rados_pool_t pool, const std::string& oid,
 				const char *snapname) {
   if (!client) return -EINVAL;
   return ((RadosClient *)client)->snap_rollback_object(pool, oid, snapname);
@@ -1535,11 +1535,14 @@ int Rados::selfmanaged_snap_remove(const rados_pool_t pool,
 }
 
 int Rados::selfmanaged_snap_rollback_object(const rados_pool_t pool,
-                                const object_t oid,
+                                const std::string& oid,
                                 SnapContext& snapc, uint64_t snapid)
 {
+  ::SnapContext sn;
   if (!client) return -EINVAL;
-  return ((RadosClient *)client)->selfmanaged_snap_rollback_object(pool, oid, snapc, snapid);
+  sn.seq = snapc.seq;
+  sn.snaps = snapc.snaps;
+  return ((RadosClient *)client)->selfmanaged_snap_rollback_object(pool, oid, sn, snapid);
 }
 
 void Rados::set_snap(rados_pool_t pool, snap_t seq)
