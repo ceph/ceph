@@ -112,41 +112,24 @@ ostream& operator<<(ostream& out, CInode& in)
   if (in.is_freezing_inode()) out << " FREEZING=" << in.auth_pin_freeze_allowance;
   if (in.is_frozen_inode()) out << " FROZEN";
 
+  // anchors
+  if (in.is_anchored())
+    out << " anc";
   if (in.get_nested_anchors())
     out << " na=" << in.get_nested_anchors();
 
   if (in.inode.is_dir()) {
     out << " " << in.inode.dirstat;
-    out << " ds=" << in.inode.dirstat.size() << "=" 
-	<< in.inode.dirstat.nfiles << "+" << in.inode.dirstat.nsubdirs;
     //if (in.inode.dirstat.version > 10000) out << " BADDIRSTAT";
   } else {
     out << " s=" << in.inode.size;
     out << " nl=" << in.inode.nlink;
   }
-  if (in.is_anchored())
-    out << " anc";
 
-  out << " rb=" << in.inode.rstat.rbytes;
-  if (in.inode.rstat.rbytes != in.inode.accounted_rstat.rbytes)
-    out << "/" << in.inode.accounted_rstat.rbytes;
-  if (in.is_projected()) 
-    out << "(" << in.get_projected_inode()->rstat.rbytes
-	<< "/" << in.get_projected_inode()->accounted_rstat.rbytes << ")";
-
-  out << " rf=" << in.inode.rstat.rfiles;
-  if (in.inode.rstat.rfiles != in.inode.accounted_rstat.rfiles)
-    out << "/" << in.inode.accounted_rstat.rfiles;
-  if (in.is_projected()) 
-    out << "(" << in.get_projected_inode()->rstat.rfiles
-	<< "/" << in.get_projected_inode()->accounted_rstat.rfiles << ")";
-
-  out << " rd=" << in.inode.rstat.rsubdirs;
-  if (in.inode.rstat.rsubdirs != in.inode.accounted_rstat.rsubdirs)
-    out << "/" << in.inode.accounted_rstat.rsubdirs;
-  if (in.is_projected()) 
-    out << "(" << in.get_projected_inode()->rstat.rsubdirs
-	<< "/" << in.get_projected_inode()->accounted_rstat.rsubdirs << ")";
+  // rstat
+  out << " " << in.inode.rstat;
+  if (!(in.inode.rstat == in.inode.accounted_rstat))
+    out << "/" << in.inode.accounted_rstat;
 
   // locks
   out << " " << in.authlock;

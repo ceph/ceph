@@ -95,29 +95,20 @@ ostream& operator<<(ostream& out, CDir& dir)
   if (dir.state_test(CDir::STATE_EXPORTBOUND)) out << "|exportbound";
   if (dir.state_test(CDir::STATE_IMPORTBOUND)) out << "|importbound";
 
+  // fragstat
   out << " " << dir.fnode.fragstat;
-  //out << "/" << dir.fnode.accounted_fragstat;
-  out << " s=" << dir.fnode.fragstat.size() 
-      << "=" << dir.fnode.fragstat.nfiles
-      << "+" << dir.fnode.fragstat.nsubdirs;
-  out << " rb=" << dir.fnode.rstat.rbytes << "/" << dir.fnode.accounted_rstat.rbytes;
-  if (dir.is_projected())
-    out << "|" << dir.get_projected_fnode()->rstat.rbytes
-	<< "/" << dir.get_projected_fnode()->accounted_rstat.rbytes;
-  out << " rf=" << dir.fnode.rstat.rfiles << "/" << dir.fnode.accounted_rstat.rfiles;
-  if (dir.is_projected())
-    out << "|" << dir.get_projected_fnode()->rstat.rfiles
-	<< "/" << dir.get_projected_fnode()->accounted_rstat.rfiles;
-  out << " rd=" << dir.fnode.rstat.rsubdirs << "/" << dir.fnode.accounted_rstat.rsubdirs;
-  if (dir.is_projected())
-    out << "|" << dir.get_projected_fnode()->rstat.rsubdirs
-	<< "/" << dir.get_projected_fnode()->accounted_rstat.rsubdirs;
+  if (!(dir.fnode.fragstat == dir.fnode.accounted_fragstat))
+    out << "/" << dir.fnode.accounted_fragstat;
+  
+  // rstat
+  out << " " << dir.fnode.rstat;
+  if (!(dir.fnode.rstat == dir.fnode.accounted_rstat))
+    out << "/" << dir.fnode.accounted_rstat;
 
   out << " hs=" << dir.get_num_head_items() << "+" << dir.get_num_head_null();
   out << ",ss=" << dir.get_num_snap_items() << "+" << dir.get_num_snap_null();
   if (dir.get_num_dirty())
     out << " dirty=" << dir.get_num_dirty();
-
   
   if (dir.get_num_ref()) {
     out << " |";
