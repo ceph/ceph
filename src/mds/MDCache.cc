@@ -6167,6 +6167,8 @@ void MDCache::open_remote_dirfrag(CInode *diri, frag_t approxfg, Context *fin)
   } else {
     // mds is down or recovering.  forge a replica!
     forge_replica_dir(diri, approxfg, auth);
+    if (fin)
+      mds->queue_waiter(fin);
   }
 }
 
