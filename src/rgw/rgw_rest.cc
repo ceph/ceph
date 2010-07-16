@@ -198,7 +198,7 @@ int RGWGetObj_REST::send_response()
 {
   const char *content_type = NULL;
 
-  if (!get_data && !ret) {
+  if (get_data && !ret) {
     dump_content_length(s, len);
   }
   if (!ret) {
