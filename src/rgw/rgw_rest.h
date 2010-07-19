@@ -58,6 +58,7 @@ public:
   ~RGWPutObj_REST() {}
 
   int get_params();
+  int get_data();
   void send_response();
 };
 

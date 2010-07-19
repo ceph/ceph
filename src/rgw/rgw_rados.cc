@@ -614,6 +614,9 @@ int RGWRados::get_obj(void *handle,
   else
     len = end - ofs + 1;
 
+  if (len > RGW_MAX_CHUNK_SIZE)
+    len = RGW_MAX_CHUNK_SIZE;
+
   cout << "rados->read ofs=" << ofs << " len=" << len << std::endl;
   int r = rados->read(state->pool, oid, ofs, bl, len);
   cout << "rados->read r=" << r << std::endl;
@@ -623,7 +626,7 @@ int RGWRados::get_obj(void *handle,
     memcpy(*data, bl.c_str(), bl.length());
   }
 
-  if (r < 0 || !len || (ofs + len - 1 == end)) {
+  if (r < 0 || !len || ((off_t)(ofs + len - 1) == end)) {
     rados->close_pool(state->pool);
     delete state;
   }

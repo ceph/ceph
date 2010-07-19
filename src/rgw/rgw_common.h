@@ -36,6 +36,8 @@ using namespace std;
 
 #define USER_INFO_VER 2
 
+#define RGW_MAX_CHUNK_SIZE	(4*1024*1024)
+
 typedef void *RGWAccessHandle;
 
 /** Store error returns for output at a different point in the program */

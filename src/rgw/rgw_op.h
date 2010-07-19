@@ -169,6 +169,7 @@ class RGWPutObj : public RGWOp {
 protected:
   int ret;
   size_t len;
+  off_t ofs;
   char *data;
   struct rgw_err err;
   char *supplied_md5_b64;
@@ -181,12 +182,14 @@ public:
     RGWOp::init(s);
     ret = 0;
     len = 0;
+    ofs = 0;
     data = NULL;
     supplied_md5_b64 = NULL;
   }
   void execute();
 
   virtual int get_params() = 0;
+  virtual int get_data() = 0;
   virtual void send_response() = 0;
 };
 

@@ -317,7 +317,17 @@ void RGWDeleteBucket_REST::send_response()
 
 int RGWPutObj_REST::get_params()
 {
-  size_t cl = atoll(s->length);
+  supplied_md5_b64 = FCGX_GetParam("HTTP_CONTENT_MD5", s->fcgx->envp);
+
+  return 0;
+}
+
+int RGWPutObj_REST::get_data()
+{
+  size_t cl = atoll(s->length) - ofs;
+  if (cl > RGW_MAX_CHUNK_SIZE)
+    cl = RGW_MAX_CHUNK_SIZE;
+  len = 0;
   if (cl) {
     data = (char *)malloc(cl);
     if (!data)

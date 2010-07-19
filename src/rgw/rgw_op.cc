@@ -340,7 +340,18 @@ void RGWPutObj::execute()
     }
 
     MD5_Init(&c);
-    MD5_Update(&c, data, (unsigned long)len);
+    do {
+      get_data();
+      if (len > 0) {
+        MD5_Update(&c, data, (unsigned long)len);
+        ret = rgwstore->put_obj_data(s->user.user_id, s->bucket_str, s->object_str, data, ofs, len, NULL);
+        free(data);
+        if (ret < 0)
+          goto done;
+        ofs += len;
+      }
+    } while ( len > 0);
+
     MD5_Final(m, &c);
 
     buf_to_hex(m, MD5_DIGEST_LENGTH, calc_md5);
@@ -368,10 +379,9 @@ void RGWPutObj::execute()
 
     get_request_metadata(s, attrs);
 
-    ret = rgwstore->put_obj(s->user.user_id, s->bucket_str, s->object_str, data, len, NULL, attrs);
+    ret = rgwstore->put_obj_meta(s->user.user_id, s->bucket_str, s->object_str, NULL, attrs);
   }
 done:
-  free(data);
   send_response();
 }
 
