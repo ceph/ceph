@@ -238,6 +238,7 @@ struct coll_t {
   snapid_t snap;
 
   coll_t() : type(TYPE_META), snap(0) {}
+  coll_t(type_t t) : type(t), snap(0) {}
   coll_t(type_t t, pg_t p, snapid_t s) : type(t), pgid(p), snap(s) {}
   
   static coll_t build_pg_coll(pg_t p) {

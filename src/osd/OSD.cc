@@ -101,7 +101,8 @@ static ostream& _prefix(ostream& out, int whoami, OSDMap *osdmap) {
 }
 
 
-const coll_t meta_coll;
+const coll_t meta_coll(coll_t::TYPE_META);
+const coll_t temp_coll(coll_t::TYPE_TEMP);
 
 
 const struct CompatSet::Feature ceph_osd_feature_compat[] = {
@@ -200,6 +201,7 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
   ObjectStore::Transaction t;
   t.create_collection(meta_coll);
   t.write(meta_coll, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+  t.create_collection(temp_coll);
   int r = store->apply_transaction(t);
   store->umount();
   delete store;
