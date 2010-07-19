@@ -447,8 +447,15 @@ protected:
   hash_map<sobject_t, list<Message*> > waiting_for_unbalanced_reads;  // i.e. primary-lock
 
   
-  // push/pull
-  map<sobject_t, pair<eversion_t, int> > pulling;  // which objects are currently being pulled, and from where
+  // pull
+  struct pull_info_t {
+    eversion_t version;
+    int from;
+    interval_set<uint64_t> data_subset, data_subset_pulling;
+  };
+  map<sobject_t, pull_info_t> pulling;
+
+  // push
   map<sobject_t, set<int> > pushing;
 
   void calc_head_subsets(SnapSet& snapset, const sobject_t& head,
@@ -463,6 +470,7 @@ protected:
   void push(const sobject_t& oid, int dest, interval_set<uint64_t>& data_subset, 
 	    map<sobject_t, interval_set<uint64_t> >& clone_subsets);
   bool pull(const sobject_t& oid);
+  void send_pull_op(const sobject_t& soid, eversion_t v, const interval_set<uint64_t>& data_subset, int fromosd);
 
 
   // low level ops
