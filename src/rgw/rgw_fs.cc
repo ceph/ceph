@@ -172,9 +172,8 @@ int RGWFS::create_bucket(std::string& id, std::string& bucket, map<std::string, 
   return 0;
 }
 
-int RGWFS::put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
-                  time_t *mtime,
-                  map<string, bufferlist>& attrs)
+int RGWFS::put_obj_meta(std::string& id, std::string& bucket, std::string& obj,
+                  time_t *mtime, map<string, bufferlist>& attrs)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
   char buf[len];
@@ -193,31 +192,16 @@ int RGWFS::put_obj(std::string& id, std::string& bucket, std::string& obj, const
     
     if (bl.length()) {
       r = fsetxattr(fd, name.c_str(), bl.c_str(), bl.length(), 0);
-      if (r < 0) {
-        r = -errno;
-        close(fd);
-        return r;
-      }
+      if (r < 0)
+        goto done_err;
     }
-  }
-
-  r = write(fd, data, size);
-  if (r < 0) {
-    r = -errno;
-    close(fd);
-    unlink(buf);
-    return r;
   }
 
   if (mtime) {
     struct stat st;
     r = fstat(fd, &st);
-    if (r < 0) {
-      r = -errno;
-      close(fd);
-      unlink(buf);
-      return -errno;
-    }
+    if (r < 0)
+      goto done_err;
     *mtime = st.st_mtime;
   }
 
@@ -226,6 +210,53 @@ int RGWFS::put_obj(std::string& id, std::string& bucket, std::string& obj, const
     return -errno;
 
   return 0;
+done_err:
+  r = -errno;
+  close(fd);
+  unlink(buf);
+  return -errno;
+}
+
+int RGWFS::put_obj_data(std::string& id, std::string& bucket, std::string& obj, const char *data,
+                  off_t ofs, size_t size, time_t *mtime)
+{
+  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
+  char buf[len];
+  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
+  int fd;
+
+  fd = open(buf, O_CREAT | O_WRONLY, 0755);
+  if (fd < 0)
+    return -errno;
+
+  int r;
+
+  r = lseek(fd, ofs, SEEK_SET);
+  if (r < 0)
+    goto done_err;
+
+  r = write(fd, data, size);
+  if (r < 0)
+    goto done_err;
+
+  if (mtime) {
+    struct stat st;
+    r = fstat(fd, &st);
+    if (r < 0)
+      goto done_err;
+    *mtime = st.st_mtime;
+  }
+
+  r = close(fd);
+  if (r < 0)
+    return -errno;
+
+  return 0;
+done_err:
+  r = -errno;
+  close(fd);
+  unlink(buf);
+  return r;
 }
 
 int RGWFS::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
@@ -240,12 +271,21 @@ int RGWFS::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest
 {
   int ret;
   char *data;
+  void *handle;
+  off_t ofs = 0, end = -1;
 
   map<string, bufferlist> attrset;
-  ret = get_obj(src_bucket, src_obj, &data, 0, -1, &attrset,
-                mod_ptr, unmod_ptr, if_match, if_nomatch, true, err);
+  ret = prepare_get_obj(src_bucket, src_obj, 0, &end, &attrset, mod_ptr, unmod_ptr,
+                        if_match, if_nomatch, true, &handle, err);
   if (ret < 0)
     return ret;
+ 
+  do { 
+    ret = get_obj(handle, src_bucket, src_obj, &data, ofs, end);
+    if (ret < 0)
+      return ret;
+    ofs += ret;
+  } while (ofs <= end);
 
   map<string, bufferlist>::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
@@ -375,14 +415,15 @@ int RGWFS::set_attr(std::string& bucket, std::string& obj,
   return ret;
 }
 
-int RGWFS::get_obj(std::string& bucket, std::string& obj, 
-            char **data, off_t ofs, off_t end,
+int RGWFS::prepare_get_obj(std::string& bucket, std::string& obj, 
+            off_t ofs, off_t *end,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
             const time_t *unmod_ptr,
             const char *if_match,
             const char *if_nomatch,
             bool get_data,
+            void **handle,
             struct rgw_err *err)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
@@ -390,31 +431,43 @@ int RGWFS::get_obj(std::string& bucket, std::string& obj,
   int fd;
   struct stat st;
   int r = -EINVAL;
-  size_t max_len, pos;
+  size_t max_len;
   char *etag = NULL;
+  off_t size;
+
+
+  GetObjState *state = new GetObjState;
+  if (!state)
+    return -ENOMEM;
 
   snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
 
   fd = open(buf, O_RDONLY, 0755);
 
-  if (fd < 0)
-    return -errno;
+  if (fd < 0) {
+    r = -errno;
+    goto done_err;
+  }
+
+  state->fd = fd;
 
   r = fstat(fd, &st);
   if (r < 0)
     return -errno;
 
-  if (end < 0)
-    end = st.st_size - 1;
+  size = st.st_size;
 
-  max_len = end - ofs + 1;
+  if (*end < 0)
+    *end = size - 1;
+
+  max_len = *end + 1 - ofs;
 
   r = -ECANCELED;
   if (mod_ptr) {
     if (st.st_mtime < *mod_ptr) {
       err->num = "304";
       err->code = "PreconditionFailed";
-      goto done;
+      goto done_err;
     }
   }
 
@@ -422,13 +475,13 @@ int RGWFS::get_obj(std::string& bucket, std::string& obj,
     if (st.st_mtime >= *mod_ptr) {
       err->num = "412";
       err->code = "PreconditionFailed";
-      goto done;
+      goto done_err;
     }
   }
   if (if_match || if_nomatch) {
     r = get_attr(RGW_ATTR_ETAG, fd, &etag);
     if (r < 0)
-      goto done;
+      goto done_err;
  
     r = -ECANCELED;
     if (if_match) {
@@ -436,7 +489,7 @@ int RGWFS::get_obj(std::string& bucket, std::string& obj,
       if (strcmp(if_match, etag)) {
         err->num = "412";
         err->code = "PreconditionFailed";
-        goto done;
+        goto done_err;
       }
     }
 
@@ -445,48 +498,72 @@ int RGWFS::get_obj(std::string& bucket, std::string& obj,
       if (strcmp(if_nomatch, etag) == 0) {
         err->num = "412";
         err->code = "PreconditionFailed";
-        goto done;
+        goto done_err;
       }
     }
   }
+
+  free(etag);
 
   if (!get_data) {
     r = max_len;
     goto done;
   }
-  *data = (char *)malloc(max_len);
-  if (!*data) {
-    r = -ENOMEM;
-    goto done;
-  }
 
-  pos = 0;
-  while (pos < max_len) {
-    r = read(fd, (*data) + pos, max_len);
+  r = 0;
+done:
+  return r;
+
+done_err:
+  delete state;
+  if (fd >= 0)
+    close(fd);
+  return r;
+}
+
+int RGWFS::get_obj(void *handle, std::string& bucket, std::string& obj, 
+            char **data, off_t ofs, off_t end)
+{
+  uint64_t len;
+  bufferlist bl;
+  int r = 0;
+
+  GetObjState *state = (GetObjState *)handle;
+
+  if (end <= 0)
+    len = 0;
+  else
+    len = end - ofs + 1;
+  off_t pos = 0;
+
+  while (pos < (off_t)len) {
+    r = read(state->fd, (*data) + pos, len - pos);
     if (r > 0) {
       pos += r;
     } else {
       if (!r) {
-        cerr << "pos=" << pos << " r=" << r << " max_len=" << max_len << endl;
+        cerr << "pos=" << pos << " r=" << r << " len=" << len << endl;
         r = -EIO; /* should not happen as we validated file size earlier */
-        goto done;
+        break;
       }
       switch (errno) {
       case EINTR:
         break;
       default:
         r = -errno;
-        goto done;
+        break;
       }
     }
-  } 
+  }
 
-  r = max_len;
-done:
-  free(etag);
-  close(fd);  
+  if (r >= 0)
+    r = len;
+
+  if (r < 0 || !len || (off_t)(ofs + len - 1) == end) {
+    close(state->fd);
+    delete state;
+  }
 
   return r;
 }
-
 

@@ -117,6 +117,11 @@ static int open_pool(string& bucket, rados_pool_t *pool)
 {
   return rados->open_pool(bucket.c_str(), pool);
 }
+
+static int close_pool(rados_pool_t pool)
+{
+  return rados->close_pool(pool);
+}
 /** 
  * get listing of the objects in a bucket.
  * id: ignored.
@@ -244,9 +249,8 @@ int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::strin
  * attrs: all the given attrs are written to bucket storage for the given object
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::put_obj(std::string& id, std::string& bucket, std::string& oid, const char *data, size_t size,
-                  time_t *mtime,
-                  map<string, bufferlist>& attrs)
+int RGWRados::put_obj_meta(std::string& id, std::string& bucket, std::string& oid,
+                  time_t *mtime, map<string, bufferlist>& attrs)
 {
   rados_pool_t pool;
 
@@ -266,9 +270,40 @@ int RGWRados::put_obj(std::string& id, std::string& bucket, std::string& oid, co
     }
   }
 
+  if (mtime) {
+    r = rados->stat(pool, oid, NULL, mtime);
+    if (r < 0)
+      return r;
+  }
+
+  close_pool(pool);
+
+  return 0;
+}
+
+/**
+ * Write/overwrite an object to the bucket storage.
+ * id: ignored
+ * bucket: the bucket to store the object in
+ * obj: the object name/key
+ * data: the object contents/value
+ * size: the amount of data to write (data must be this long)
+ * mtime: if non-NULL, writes the given mtime to the bucket storage
+ * attrs: all the given attrs are written to bucket storage for the given object
+ * Returns: 0 on success, -ERR# otherwise.
+ */
+int RGWRados::put_obj_data(std::string& id, std::string& bucket, std::string& oid, const char *data, off_t ofs, size_t len,
+                  time_t *mtime)
+{
+  rados_pool_t pool;
+
+  int r = open_pool(bucket, &pool);
+  if (r < 0)
+    return r;
+
   bufferlist bl;
-  bl.append(data, size);
-  r = rados->write_full(pool, oid, bl);
+  bl.append(data, len);
+  r = rados->write(pool, oid, ofs, bl, len);
   if (r < 0)
     return r;
 
@@ -277,6 +312,8 @@ int RGWRados::put_obj(std::string& id, std::string& bucket, std::string& oid, co
     if (r < 0)
       return r;
   }
+
+  close_pool(pool);
 
   return 0;
 }
@@ -303,27 +340,46 @@ int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& d
                map<string, bufferlist>& attrs,  /* in/out */
                struct rgw_err *err)
 {
-  int ret;
+  int ret, r;
   char *data;
+  off_t ofs = 0, end = -1;
+  map<string, bufferlist>::iterator iter;
 
   cerr << "copy " << src_bucket << ":" << src_obj << " => " << dest_bucket << ":" << dest_obj << std::endl;
 
+  void *handle;
+
   map<string, bufferlist> attrset;
-  ret = get_obj(src_bucket, src_obj, &data, 0, -1, &attrset,
-                mod_ptr, unmod_ptr, if_match, if_nomatch, true, err);
+  ret = prepare_get_obj(src_bucket, src_obj, ofs, &end, &attrset,
+                mod_ptr, unmod_ptr, if_match, if_nomatch, true, &handle, err);
 
   if (ret < 0)
     return ret;
 
-  map<string, bufferlist>::iterator iter;
+  do {
+    ret = get_obj(&handle, src_bucket, src_obj, &data, ofs, end);
+    if (ret < 0)
+      return ret;
+
+    r = put_obj_data(id, dest_bucket, dest_obj, data, ofs, ret, NULL);
+    free(data);
+    if (r < 0)
+      goto done_err;
+
+    ofs += ret;
+  } while (ofs <= end);
+
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
     attrset[iter->first] = iter->second;
   }
   attrs = attrset;
 
-  ret =  put_obj(id, dest_bucket, dest_obj, data, ret, mtime, attrs);
+  ret = put_obj_meta(id, dest_bucket, dest_obj, mtime, attrs);
 
   return ret;
+done_err:
+  /* FIXME: need to free handle */
+  return r;
 }
 
 /**
@@ -447,40 +503,45 @@ int RGWRados::set_attr(std::string& bucket, std::string& oid,
  *          (if get_data==true) length of read data,
  *          (if get_data==false) length of the object
  */
-int RGWRados::get_obj(std::string& bucket, std::string& oid, 
-            char **data, off_t ofs, off_t end,
+int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid, 
+            off_t ofs, off_t *end,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
             const time_t *unmod_ptr,
             const char *if_match,
             const char *if_nomatch,
             bool get_data,
+            void **handle,
             struct rgw_err *err)
 {
   int r = -EINVAL;
-  uint64_t size, len;
+  uint64_t size;
   bufferlist etag;
   time_t mtime;
-  bufferlist bl;
 
-  rados_pool_t pool;
   map<string, bufferlist>::iterator iter;
 
-  r = open_pool(bucket, &pool);
-  if (r < 0)
-    return r;
+  GetObjState *state = new GetObjState;
+  if (!state)
+    return -ENOMEM;
 
-  r = rados->stat(pool, oid, &size, &mtime);
+  *handle = state;
+
+  r = open_pool(bucket, &state->pool);
   if (r < 0)
-    return r;
+    goto done_err;
+
+  r = rados->stat(state->pool, oid, &size, &mtime);
+  if (r < 0)
+    goto done_err;
 
   if (attrs) {
-    r = rados->getxattrs(pool, oid, *attrs);
+    r = rados->getxattrs(state->pool, oid, *attrs);
     for (iter = attrs->begin(); iter != attrs->end(); ++iter) {
       cerr << "xattr: " << iter->first << std::endl;
     }
     if (r < 0)
-      return r;
+      goto done_err;
   }
 
 
@@ -489,7 +550,7 @@ int RGWRados::get_obj(std::string& bucket, std::string& oid,
     if (mtime < *mod_ptr) {
       err->num = "304";
       err->code = "PreconditionFailed";
-      goto done;
+      goto done_err;
     }
   }
 
@@ -497,13 +558,13 @@ int RGWRados::get_obj(std::string& bucket, std::string& oid,
     if (mtime >= *mod_ptr) {
       err->num = "412";
       err->code = "PreconditionFailed";
-      goto done;
+      goto done_err;
     }
   }
   if (if_match || if_nomatch) {
     r = get_attr(bucket, oid, RGW_ATTR_ETAG, etag);
     if (r < 0)
-      goto done;
+      goto done_err;
 
     r = -ECANCELED;
     if (if_match) {
@@ -511,7 +572,7 @@ int RGWRados::get_obj(std::string& bucket, std::string& oid,
       if (strcmp(if_match, etag.c_str())) {
         err->num = "412";
         err->code = "PreconditionFailed";
-        goto done;
+        goto done_err;
       }
     }
 
@@ -520,15 +581,33 @@ int RGWRados::get_obj(std::string& bucket, std::string& oid,
       if (strcmp(if_nomatch, etag.c_str()) == 0) {
         err->num = "412";
         err->code = "PreconditionFailed";
-        goto done;
+        goto done_err;
       }
     }
   }
 
-  if (!get_data) {
-    r = size;
-    goto done;
-  }
+  if (*end < 0)
+    *end = size - 1;
+
+  if (!get_data)
+    return size;
+
+  return 0;
+
+done_err:
+  delete state;
+  *handle = NULL;
+  return r;
+}
+
+int RGWRados::get_obj(void *handle,
+            std::string& bucket, std::string& oid, 
+            char **data, off_t ofs, off_t end)
+{
+  uint64_t len;
+  bufferlist bl;
+
+  GetObjState *state = (GetObjState *)handle;
 
   if (end <= 0)
     len = 0;
@@ -536,18 +615,20 @@ int RGWRados::get_obj(std::string& bucket, std::string& oid,
     len = end - ofs + 1;
 
   cout << "rados->read ofs=" << ofs << " len=" << len << std::endl;
-  r = rados->read(pool, oid, ofs, bl, len);
+  int r = rados->read(state->pool, oid, ofs, bl, len);
   cout << "rados->read r=" << r << std::endl;
-  if (r < 0)
-    return r;
 
   if (r > 0) {
     *data = (char *)malloc(r);
     memcpy(*data, bl.c_str(), bl.length());
   }
 
-done:
+  if (r < 0 || !len || (ofs + len - 1 == end)) {
+    rados->close_pool(state->pool);
+    delete state;
+  }
 
   return r;
+
 }
 

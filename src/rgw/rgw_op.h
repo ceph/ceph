@@ -81,7 +81,7 @@ public:
   void execute();
 
   virtual int get_params() = 0;
-  virtual int send_response() = 0;
+  virtual int send_response(void *handle) = 0;
 };
 
 class RGWListBuckets : public RGWOp {

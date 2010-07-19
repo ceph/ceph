@@ -194,9 +194,12 @@ int RGWGetObj_REST::get_params()
   return 0;
 }
 
-int RGWGetObj_REST::send_response()
+int RGWGetObj_REST::send_response(void *handle)
 {
   const char *content_type = NULL;
+
+  if (sent_header)
+    goto send_data;
 
   if (get_data && !ret) {
     dump_content_length(s, len);
@@ -222,6 +225,10 @@ int RGWGetObj_REST::send_response()
   }
   dump_errno(s, ret, &err);
   end_header(s, content_type);
+
+  sent_header = true;
+
+send_data:
   if (get_data && !ret) {
     FCGX_PutStr(data, len, s->fcgx->out); 
   }

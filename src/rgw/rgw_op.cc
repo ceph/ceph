@@ -123,6 +123,8 @@ int read_acls(struct req_state *s, bool only_bucket)
 
 void RGWGetObj::execute()
 {
+  void *handle;
+
   if (!verify_permission(s, RGW_PERM_READ)) {
     ret = -EACCES;
     goto done;
@@ -134,13 +136,34 @@ void RGWGetObj::execute()
 
   init_common();
 
-  len = rgwstore->get_obj(s->bucket_str, s->object_str, &data, ofs, end, &attrs,
-                         mod_ptr, unmod_ptr, if_match, if_nomatch, get_data, &err);
-  if (len < 0)
+  len = rgwstore->prepare_get_obj(s->bucket_str, s->object_str, ofs, &end, &attrs, mod_ptr,
+                                  unmod_ptr, if_match, if_nomatch, get_data, &handle, &err);
+
+  if (len < 0) {
     ret = len;
+    goto done;
+  }
+
+  if (!get_data)
+    goto done;
+
+  while (ofs <= end) {
+    len = rgwstore->get_obj(handle, s->bucket_str, s->object_str, &data, ofs, end);
+    if (len < 0) {
+      ret = len;
+      goto done;
+    }
+
+    ofs += len;
+    send_response(handle);
+    free(data);
+  }
+
+  return;
 
 done:
-  send_response();
+  send_response(handle);
+  free(data);
 }
 
 int RGWGetObj::init_common()
