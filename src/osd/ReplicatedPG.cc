@@ -545,9 +545,6 @@ void ReplicatedPG::do_op(MOSDOp *op)
       ctx->at_version.version++;
       assert(ctx->at_version > info.last_update);
       assert(ctx->at_version > log.head);
-
-      // set version in op, for benefit of client and our eventual reply.  if !noop!
-      op->set_version(ctx->at_version);
     }
 
     ctx->mtime = op->get_mtime();
@@ -609,6 +606,9 @@ void ReplicatedPG::do_op(MOSDOp *op)
     }
 
     assert(op->may_write());
+
+    // set version in op, for benefit of client and our eventual reply.  if !noop!
+    op->set_version(ctx->at_version);
 
     // trim log?
     calc_trim_to();
