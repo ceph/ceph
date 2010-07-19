@@ -456,7 +456,12 @@ protected:
   map<sobject_t, pull_info_t> pulling;
 
   // push
-  map<sobject_t, set<int> > pushing;
+  struct push_info_t {
+    eversion_t version;
+    interval_set<uint64_t> data_subset;
+    map<sobject_t, interval_set<uint64_t> > clone_subsets;
+  };
+  map<sobject_t, map<int, push_info_t> > pushing;
 
   int recover_object_replicas(const sobject_t& soid);
   void calc_head_subsets(SnapSet& snapset, const sobject_t& head,
@@ -466,10 +471,17 @@ protected:
   void calc_clone_subsets(SnapSet& snapset, const sobject_t& poid, Missing& missing,
 			  interval_set<uint64_t>& data_subset,
 			  map<sobject_t, interval_set<uint64_t> >& clone_subsets);
-  void push_to_replica(const sobject_t& oid, int dest);
-  void push(const sobject_t& oid, int dest);
-  void push(const sobject_t& oid, int dest, interval_set<uint64_t>& data_subset, 
-	    map<sobject_t, interval_set<uint64_t> >& clone_subsets);
+  void push_to_replica(ObjectContext *obc, const sobject_t& oid, int dest);
+  void push_start(const sobject_t& oid, int dest);
+  void push_start(const sobject_t& soid, int peer,
+		  uint64_t size, eversion_t version,
+		  interval_set<uint64_t> &data_subset,
+		  map<sobject_t, interval_set<uint64_t> >& clone_subsets);
+  void send_push_op(const sobject_t& oid, int dest,
+		    uint64_t size,
+		    interval_set<uint64_t>& data_subset, 
+		    map<sobject_t, interval_set<uint64_t> >& clone_subsets);
+
   bool pull(const sobject_t& oid);
   void send_pull_op(const sobject_t& soid, eversion_t v, const interval_set<uint64_t>& data_subset, int fromosd);
 
