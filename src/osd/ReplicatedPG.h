@@ -458,6 +458,7 @@ protected:
   // push
   map<sobject_t, set<int> > pushing;
 
+  int recover_object_replicas(const sobject_t& soid);
   void calc_head_subsets(SnapSet& snapset, const sobject_t& head,
 			 Missing& missing,
 			 interval_set<uint64_t>& data_subset,
@@ -593,6 +594,9 @@ public:
 
   bool is_missing_object(const sobject_t& oid);
   void wait_for_missing_object(const sobject_t& oid, Message *op);
+
+  bool is_degraded_object(const sobject_t& oid);
+  void wait_for_degraded_object(const sobject_t& oid, Message *op);
 
   void on_osd_failure(int o);
   void on_acker_change();
