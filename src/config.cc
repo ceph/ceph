@@ -478,6 +478,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_preserve_trimmed_log, 0, OPT_BOOL, true),
 	OPTION(osd_recovery_delay_start, 0, OPT_FLOAT, 15),
 	OPTION(osd_recovery_max_active, 0, OPT_INT, 5),
+	OPTION(osd_recovery_max_chunk, 0, OPT_LONGLONG, 1<<20),  // max size of push chunk
 	OPTION(osd_auto_weight, 0, OPT_BOOL, false),
 	OPTION(osd_class_timeout, 0, OPT_FLOAT, 10.0),
 	OPTION(osd_class_tmp, 0, OPT_STR, "/var/lib/ceph/tmp"),
