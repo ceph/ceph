@@ -852,8 +852,6 @@ bool ReplicatedPG::snap_trimmer()
 	ctx->snapset_obc->obs.exists = false;
 
 	t->remove(coll_t::build_pg_coll(info.pgid), snapoid);
-
-	ctx->at_version.version++;
       } else {
 	dout(10) << coid << " updating snapset on " << snapoid << dendl;
 	ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, snapoid, ctx->at_version, 
@@ -869,8 +867,6 @@ bool ReplicatedPG::snap_trimmer()
 	bl.clear();
 	::encode(ctx->snapset_obc->obs.oi, bl);
 	t->setattr(coll_t::build_pg_coll(info.pgid), snapoid, OI_ATTR, bl);
-
-	ctx->at_version.version++;
       }
 
       log_op(ctx->log, eversion_t(), ctx->local_t);
