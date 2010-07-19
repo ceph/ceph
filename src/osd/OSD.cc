@@ -479,6 +479,8 @@ int OSD::init()
     osdmap->decode(bl);
   }
 
+  clear_temp();
+
   // load up pgs (as they previously existed)
   load_pgs();
   
@@ -774,6 +776,28 @@ int OSD::read_superblock()
 
 
 
+void OSD::clear_temp()
+{
+  dout(10) << "clear_temp" << dendl;
+
+  vector<sobject_t> objects;
+  store->collection_list(temp_coll, objects);
+
+  dout(10) << objects.size() << " objects" << dendl;
+  if (objects.empty())
+    return;
+
+  // delete them.
+  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  for (vector<sobject_t>::iterator p = objects.begin();
+       p != objects.end();
+       p++)
+    t->collection_remove(temp_coll, *p);
+  int r = store->queue_transaction(NULL, t);
+  assert(r == 0);
+  store->sync_and_flush();
+  dout(10) << "done" << dendl;
+}
 
 
 // ======================================================
