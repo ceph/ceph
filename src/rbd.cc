@@ -61,6 +61,7 @@ void usage()
        << "  snap ls [image-name]                      dump list of image snapshots\n"
        << "  snap create <--snap=name> [image-name]    create a snapshot\n"
        << "  snap rollback <--snap=name> [image-name]  rollback image head to snapshot\n"
+       << "  snap rm <--snap=name> [image-name]        deletes a snapshot\n"
        << "\n"
        << "Other input options:\n"
        << "  -p, --pool <pool>            source pool name\n"
@@ -520,6 +521,21 @@ static int do_add_snap(pools_t& pp, string& md_oid, const char *snapname)
   return 0;
 }
 
+static int do_rm_snap(pools_t& pp, string& md_oid, const char *snapname)
+{
+  bufferlist bl, bl2;
+
+  ::encode(snapname, bl);
+
+  int r = rados.exec(pp.md, md_oid, "rbd", "snap_remove", bl, bl2);
+  if (r < 0) {
+    cerr << "rbd.snap_remove execution failed failed: " << strerror(-r) << std::endl;
+    return r;
+  }
+
+  return 0;
+}
+
 static int do_get_snapc(pools_t& pp, string& md_oid, const char *snapname,
                         ::SnapContext& snapc, vector<snap_t>& snaps, uint64_t& snapid)
 {
@@ -575,6 +591,15 @@ static int do_rollback_snap(pools_t& pp, string& md_oid, ::SnapContext& snapc, u
     return r;
 
   return 0;
+}
+
+static int do_remove_snap(pools_t& pp, string& md_oid, const char *snapname,
+                          uint64_t snapid)
+{
+  int r = do_rm_snap(pp, md_oid, snapname);
+  r = rados.selfmanaged_snap_remove(pp.data, snapid);
+
+  return r;
 }
 
 static int do_export(pools_t& pp, string& md_oid, const char *path)
@@ -848,6 +873,7 @@ enum {
   OPT_RENAME,
   OPT_SNAP_CREATE,
   OPT_SNAP_ROLLBACK,
+  OPT_SNAP_REMOVE,
   OPT_SNAP_LIST,
 };
 
@@ -889,6 +915,9 @@ static int get_cmd(const char *cmd, bool *snapcmd)
     if (strcmp(cmd, "rollback") == 0||
         strcmp(cmd, "revert") == 0)
       return OPT_SNAP_ROLLBACK;
+    if (strcmp(cmd, "remove") == 0||
+        strcmp(cmd, "rm") == 0)
+      return OPT_SNAP_REMOVE;
     if (strcmp(cmd, "ls") == 0||
         strcmp(cmd, "list") == 0)
       return OPT_SNAP_LIST;
@@ -968,6 +997,7 @@ int main(int argc, const char **argv)
           case OPT_RM:
           case OPT_SNAP_CREATE:
           case OPT_SNAP_ROLLBACK:
+          case OPT_SNAP_REMOVE:
           case OPT_SNAP_LIST:
             set_conf_param(CONF_VAL, &imgname, NULL);
             break;
@@ -1010,7 +1040,8 @@ int main(int argc, const char **argv)
   set_pool_image_name(poolname, imgname, (char **)&poolname, (char **)&imgname, (char **)&snapname);
   set_pool_image_name(dest_poolname, destname, (char **)&dest_poolname, (char **)&destname, NULL);
 
-  if ((opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK) && !snapname) {
+  if ((opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
+       opt_cmd == OPT_SNAP_REMOVE) && !snapname) {
     cerr << "error: snap name was not specified" << std::endl;
     usage_exit();
   }
@@ -1158,6 +1189,17 @@ int main(int argc, const char **argv)
       err_exit(pp);
     }
     r = do_rollback_snap(pp, md_oid, snapc, snapid);
+    if (r < 0) {
+      cerr << "rollback failed: " << strerror(-r) << std::endl;
+      usage();
+      err_exit(pp);
+    }
+  } else if (opt_cmd == OPT_SNAP_REMOVE) {
+    if (!imgname) {
+      usage();
+      err_exit(pp);
+    }
+    r = do_remove_snap(pp, md_oid, snapname, snapid);
     if (r < 0) {
       cerr << "rollback failed: " << strerror(-r) << std::endl;
       usage();

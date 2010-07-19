@@ -77,6 +77,9 @@ Creates a new snapshot. Requires the snapshot name parameter specified.
 .TP
 \fBsnap rollback \fR[ \fIimage-name\fP ]
 Rollback image content to snapshot. This will iterate through the entire blocks array and update the data head content to the snapshotted version.
+.TP
+\fBsnap rm \fR[ \fIimage-name\fP ]
+Removes the specified snapshot.
 .SH IMAGE NAME
 In addition to using the \fB\-\-pool\fR and the \fB\-\-snap\fR options, the image name can include both the pool name and the snapshot name. The image name format is as follows:
 .IP
