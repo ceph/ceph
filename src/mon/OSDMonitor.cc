@@ -995,7 +995,12 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       ss << "max_osd = " << osdmap.get_max_osd() << " in epoch " << osdmap.get_epoch();
       r = 0;
     }
-    else if (m->cmd[1] == "injectargs" && m->cmd.size() == 4) {
+    else if (m->cmd[1] == "injectargs") {
+      if (m->cmd.size() != 4) {
+	r = -EINVAL;
+	ss << "usage: osd injectargs <who> <args>";
+	goto out;
+      }
       if (m->cmd[2] == "*") {
 	for (int i=0; i<osdmap.get_max_osd(); i++)
 	  if (osdmap.is_up(i))
@@ -1014,6 +1019,11 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       }
     }
     else if (m->cmd[1] == "tell") {
+      if (m->cmd.size() < 4) {
+	r = -EINVAL;
+	ss << "usage: osd tell <who> <what>";
+	goto out;
+      }
       m->cmd.erase(m->cmd.begin()); //take out first two args; don't need them
       m->cmd.erase(m->cmd.begin());
       if (m->cmd[0] == "*") {
@@ -1039,7 +1049,12 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	} else ss << "specify osd number or *";
       }
     }
-    else if ((m->cmd[1] == "scrub" || m->cmd[1] == "repair") && m->cmd.size() > 2) {
+    else if ((m->cmd[1] == "scrub" || m->cmd[1] == "repair")) {
+      if (m->cmd.size() <= 2) {
+	r = -EINVAL;
+	ss << "usage: osd [scrub|repair] <who>";
+	goto out;
+      }
       if (m->cmd[2] == "*") {
 	ss << "osds ";
 	int c = 0;
@@ -1079,6 +1094,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       r = 0;
     }
   }
+ out:
   if (r != -1) {
     string rs;
     getline(ss, rs);
