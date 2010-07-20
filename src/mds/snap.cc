@@ -37,7 +37,10 @@ ostream& operator<<(ostream& out, const SnapRealm& realm)
   out << "snaprealm(" << realm.inode->ino()
       << " seq " << realm.seq
       << " lc " << realm.last_created
-      << " snaps=" << realm.snaps;
+      << " cr " << realm.created;
+  if (realm.created != realm.current_parent_since)
+    out << " cps " << realm.current_parent_since;
+  out << " snaps=" << realm.snaps;
   if (realm.past_parents.size()) {
     out << " past_parents=(";
     for (map<snapid_t, snaplink_t>::const_iterator p = realm.past_parents.begin(); 

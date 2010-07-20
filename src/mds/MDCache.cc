@@ -6917,7 +6917,9 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in
   ::decode(seq, p);
 
   in->open_snaprealm();
-  in->snaprealm->seq = in->snaprealm->created = seq;
+  in->snaprealm->seq = seq;
+  in->snaprealm->created = seq;
+  in->snaprealm->current_parent_since = seq;
 
   do_realm_invalidate_and_update_notify(in, CEPH_SNAP_OP_SPLIT);
 

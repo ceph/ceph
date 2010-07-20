@@ -5587,6 +5587,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
     newrealm = true;
     diri->open_snaprealm(true);
     diri->snaprealm->created = snapid;
+    diri->snaprealm->current_parent_since = snapid;
   }
   snapid_t old_seq = diri->snaprealm->seq;
   snapid_t old_lc = diri->snaprealm->last_created;
@@ -5621,6 +5622,7 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
   if (!diri->snaprealm) {
     diri->open_snaprealm();
     diri->snaprealm->created = snapid;
+    diri->snaprealm->current_parent_since = snapid;
     op = CEPH_SNAP_OP_SPLIT;
   }
   diri->snaprealm->snaps[snapid] = info;
