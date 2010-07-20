@@ -1191,6 +1191,8 @@ void OSD::reset_heartbeat_peers()
   heartbeat_from_stamp.clear();
   heartbeat_inst.clear();
   heartbeat_lock.Unlock();
+
+  failure_queue.clear();
 }
 
 void OSD::handle_osd_ping(MOSDPing *m)
