@@ -1176,6 +1176,24 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     }
+    else if (m->cmd[1] == "pause") {
+      if (pending_inc.new_flags < 0)
+	pending_inc.new_flags = osdmap.get_flags();
+      pending_inc.new_flags |= CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR;
+      ss << "pause rd+wr";
+      getline(ss, rs);
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      return true;
+    }
+    else if (m->cmd[1] == "unpause") {
+      if (pending_inc.new_flags < 0)
+	pending_inc.new_flags = osdmap.get_flags();
+      pending_inc.new_flags &= ~(CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
+      ss << "unpause rd+wr";
+      getline(ss, rs);
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      return true;
+    }
     else if (m->cmd[1] == "down" && m->cmd.size() == 3) {
       long osd = strtol(m->cmd[2].c_str(), 0, 10);
       if (!osdmap.exists(osd)) {
