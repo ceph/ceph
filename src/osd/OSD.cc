@@ -4225,26 +4225,6 @@ void OSD::handle_op(MOSDOp *op)
     return;
   }
 
-  // share our map with sender, if they're old
-  _share_map_incoming(op->get_source_inst(), op->get_map_epoch(),
-		      (Session*) op->get_connection()->get_priv());
-
-  throttle_op_queue();
-
-  // calc actual pgid
-  pg_t pgid;
-  if (op->get_flags() & CEPH_OSD_FLAG_PGOP)
-    pgid = op->get_pg();
-  else
-    pgid = osdmap->raw_pg_to_pg(op->get_pg());
-
-  logger->set(l_osd_buf, buffer_total_alloc.read());
-
-  utime_t now = g_clock.now();
-
-  // set up op flags
-  init_op_flags(op);
-
   Session *session = (Session *)op->get_connection()->get_priv();
   if (!session) {
     dout(0) << "WARNING: no session for op" << dendl;
@@ -4254,7 +4234,27 @@ void OSD::handle_op(MOSDOp *op)
 
   OSDCaps& caps = session->caps;
   session->put();
+
+
+  // share our map with sender, if they're old
+  _share_map_incoming(op->get_source_inst(), op->get_map_epoch(),
+		      (Session *)op->get_connection()->get_priv());
+
+  // ...
+  throttle_op_queue();
+
+  logger->set(l_osd_buf, buffer_total_alloc.read());
+
+  utime_t now = g_clock.now();
+
+  init_op_flags(op);
+
+  // calc actual pgid
+  pg_t pgid = op->get_pg();
   int pool = pgid.pool();
+  if ((op->get_flags() & CEPH_OSD_FLAG_PGOP) == 0 &&
+      osdmap->have_pg_pool(pool))
+    pgid = osdmap->raw_pg_to_pg(pgid);
 
   // get and lock *pg.
   PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid):0;
@@ -4266,7 +4266,6 @@ void OSD::handle_op(MOSDOp *op)
   }
 
   int perm = caps.get_pool_cap(pg->pool->name, pg->pool->auid);
-
   dout(10) << "request for pool=" << pool << " (" << pg->pool->name
 	   << ") owner=" << pg->pool->auid
 	   << " perm=" << perm
