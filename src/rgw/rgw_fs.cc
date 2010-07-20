@@ -281,7 +281,7 @@ int RGWFS::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest
     return ret;
  
   do { 
-    ret = get_obj(handle, src_bucket, src_obj, &data, ofs, end);
+    ret = get_obj(&handle, src_bucket, src_obj, &data, ofs, end);
     if (ret < 0)
       return ret;
     ofs += ret;
@@ -521,14 +521,14 @@ done_err:
   return r;
 }
 
-int RGWFS::get_obj(void *handle, std::string& bucket, std::string& obj, 
+int RGWFS::get_obj(void **handle, std::string& bucket, std::string& obj, 
             char **data, off_t ofs, off_t end)
 {
   uint64_t len;
   bufferlist bl;
   int r = 0;
 
-  GetObjState *state = (GetObjState *)handle;
+  GetObjState *state = *(GetObjState **)handle;
 
   if (end <= 0)
     len = 0;
@@ -565,5 +565,15 @@ int RGWFS::get_obj(void *handle, std::string& bucket, std::string& obj,
   }
 
   return r;
+}
+
+void RGWFS::finish_get_obj(void **handle)
+{
+  if (*handle) {
+    GetObjState *state = *(GetObjState **)handle;
+    close(state->fd);
+    delete state;
+    *handle = NULL;
+  }
 }
 

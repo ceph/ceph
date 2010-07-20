@@ -376,9 +376,11 @@ int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& d
 
   ret = put_obj_meta(id, dest_bucket, dest_obj, mtime, attrs);
 
+  finish_get_obj(&handle);
+
   return ret;
 done_err:
-  /* FIXME: need to free handle */
+  finish_get_obj(&handle);
   return r;
 }
 
@@ -521,6 +523,8 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
 
   map<string, bufferlist>::iterator iter;
 
+  *handle = NULL;
+
   GetObjState *state = new GetObjState;
   if (!state)
     return -ENOMEM;
@@ -600,14 +604,14 @@ done_err:
   return r;
 }
 
-int RGWRados::get_obj(void *handle,
+int RGWRados::get_obj(void **handle,
             std::string& bucket, std::string& oid, 
             char **data, off_t ofs, off_t end)
 {
   uint64_t len;
   bufferlist bl;
 
-  GetObjState *state = (GetObjState *)handle;
+  GetObjState *state = *(GetObjState **)handle;
 
   if (end <= 0)
     len = 0;
@@ -629,9 +633,20 @@ int RGWRados::get_obj(void *handle,
   if (r < 0 || !len || ((off_t)(ofs + len - 1) == end)) {
     rados->close_pool(state->pool);
     delete state;
+    *handle = NULL;
   }
 
   return r;
 
+}
+
+void RGWRados::finish_get_obj(void **handle)
+{
+  if (*handle) {
+    GetObjState *state = *(GetObjState **)handle;
+    rados->close_pool(state->pool);
+    delete state;
+    *handle = NULL;
+  }
 }
 

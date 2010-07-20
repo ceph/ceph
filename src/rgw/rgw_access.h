@@ -129,8 +129,10 @@ public:
             void **handle,
             struct rgw_err *err) = 0;
 
-  virtual int get_obj(void *handle, std::string& bucket, std::string& oid, 
+  virtual int get_obj(void **handle, std::string& bucket, std::string& oid, 
             char **data, off_t ofs, off_t end) = 0;
+
+  virtual void finish_get_obj(void **handle) = 0;
 
   /**
    * Get the attributes for an object.

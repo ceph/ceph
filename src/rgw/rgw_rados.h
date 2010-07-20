@@ -79,8 +79,10 @@ public:
             void **handle,
             struct rgw_err *err);
 
-  int get_obj(void *handle, std::string& bucket, std::string& oid, 
+  int get_obj(void **handle, std::string& bucket, std::string& oid, 
             char **data, off_t ofs, off_t end);
+
+  void finish_get_obj(void **handle);
 };
 
 #endif
