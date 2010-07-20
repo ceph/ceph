@@ -704,7 +704,7 @@ public:
   int delete_selfmanaged_snap(int pool, snapid_t snap, Context *onfinish);
 
   int create_pool(string& name, Context *onfinish, uint64_t auid=0,
-		  __u8 crush_rule=0);
+		  int crush_rule=-1);
   int delete_pool(int pool, Context *onfinish);
   int change_pool_auid(int pool, Context *onfinish, uint64_t auid);
 

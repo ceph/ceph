@@ -739,7 +739,7 @@ int Objecter::delete_selfmanaged_snap(int pool, snapid_t snap,
 }
 
 int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid,
-			  __u8 crush_rule)
+			  int crush_rule)
 {
   dout(10) << "create_pool name=" << name << dendl;
   PoolOp *op = new PoolOp;
