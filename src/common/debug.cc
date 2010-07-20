@@ -153,7 +153,7 @@ void _dout_open_log()
 
   _dout_out.close();
   // only truncate if log_per_instance is set.
-  _dout_out.open(_dout_path, g_conf.log_per_instance ? (ios::trunc | ios::out) : (ios::out | ios::ate));
+  _dout_out.open(_dout_path, g_conf.log_per_instance ? (ios::trunc | ios::out) : (ios::out | ios::app));
   if (!_dout_out.is_open()) {
     std::cerr << "error opening output file " << _dout_path << std::endl;
     _dout = &std::cout;
