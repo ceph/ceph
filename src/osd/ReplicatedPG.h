@@ -484,7 +484,7 @@ protected:
 		    map<sobject_t, interval_set<uint64_t> >& clone_subsets);
 
   bool pull(const sobject_t& oid);
-  void send_pull_op(const sobject_t& soid, eversion_t v, const interval_set<uint64_t>& data_subset, int fromosd);
+  void send_pull_op(const sobject_t& soid, eversion_t v, bool first, const interval_set<uint64_t>& data_subset, int fromosd);
 
 
   // low level ops

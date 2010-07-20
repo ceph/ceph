@@ -3095,20 +3095,22 @@ bool ReplicatedPG::pull(const sobject_t& soid)
   p.data_subset = data_subset;
   p.data_subset_pulling = pullsub;
 
-  send_pull_op(soid, v, p.data_subset_pulling, fromosd);
+  send_pull_op(soid, v, true, p.data_subset_pulling, fromosd);
   
   start_recovery_op(soid);
   return true;
 }
 
-void ReplicatedPG::send_pull_op(const sobject_t& soid, eversion_t v,
+void ReplicatedPG::send_pull_op(const sobject_t& soid, eversion_t v, bool first,
 				const interval_set<uint64_t>& data_subset, int fromosd)
 {
   // send op
   osd_reqid_t rid;
   tid_t tid = osd->get_tid();
 
-  dout(10) << "send_pull_op " << soid << " " << v << " " << data_subset << " from osd" << fromosd
+  dout(10) << "send_pull_op " << soid << " " << v
+	   << " first=" << first
+	   << " data " << data_subset << " from osd" << fromosd
 	   << " tid " << tid << dendl;
 
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, soid, false, CEPH_OSD_FLAG_ACK,
@@ -3116,6 +3118,7 @@ void ReplicatedPG::send_pull_op(const sobject_t& soid, eversion_t v,
   subop->ops = vector<OSDOp>(1);
   subop->ops[0].op.op = CEPH_OSD_OP_PULL;
   subop->data_subset = data_subset;
+  subop->first = first;
   // do not include clone_subsets in pull request; we will recalculate this
   // when the object is pushed back.
   //subop->clone_subsets.swap(clone_subsets);
@@ -3309,8 +3312,8 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
     if (!complete) {
       // push more
       uint64_t from = pi->data_subset_pushing.end();
-      dout(10) << " pushing more, " << pi->data_subset << " from " << from << dendl;
       pi->data_subset_pushing.span_of(pi->data_subset, from, g_conf.osd_recovery_max_chunk);
+      dout(10) << " pushing more, " << pi->data_subset_pushing << " of " << pi->data_subset << dendl;
       complete = pi->data_subset.end() == pi->data_subset_pushing.end();
       send_push_op(soid, peer, pi->size, false, complete, pi->data_subset_pushing, pi->clone_subsets);
     } else {
@@ -3362,7 +3365,11 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
   assert(r == 0);
   uint64_t size = st.st_size;
 
-  send_push_op(soid, op->get_source().num(), size, op->first, op->complete, op->data_subset, op->clone_subsets);
+  bool complete = false;
+  if (!op->data_subset.empty() && op->data_subset.end() >= size)
+    complete = true;
+
+  send_push_op(soid, op->get_source().num(), size, op->first, complete, op->data_subset, op->clone_subsets);
   op->put();
 }
 
@@ -3524,6 +3531,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     } else {
       complete = pi->data_subset.end() == data_subset.end();
     }
+    assert(complete == op->complete);
   }
   dout(15) << " data_subset " << data_subset
 	   << " clone_subsets " << clone_subsets
@@ -3661,9 +3669,9 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 	uptodate_set.insert(osd->get_nodeid());
     } else {
       // pull more
-      dout(10) << " pulling more, " << pi->data_subset << " from " << data_subset.end() << dendl;
       pi->data_subset_pulling.span_of(pi->data_subset, data_subset.end(), g_conf.osd_recovery_max_chunk);
-      send_pull_op(soid, v, pi->data_subset_pulling, pi->from);
+      dout(10) << " pulling more, " << pi->data_subset_pulling << " of " << pi->data_subset << dendl;
+      send_pull_op(soid, v, false, pi->data_subset_pulling, pi->from);
     }
 
 
