@@ -457,8 +457,9 @@ protected:
 
   // push
   struct push_info_t {
+    uint64_t size;
     eversion_t version;
-    interval_set<uint64_t> data_subset;
+    interval_set<uint64_t> data_subset, data_subset_pushing;
     map<sobject_t, interval_set<uint64_t> > clone_subsets;
   };
   map<sobject_t, map<int, push_info_t> > pushing;
@@ -478,7 +479,7 @@ protected:
 		  interval_set<uint64_t> &data_subset,
 		  map<sobject_t, interval_set<uint64_t> >& clone_subsets);
   void send_push_op(const sobject_t& oid, int dest,
-		    uint64_t size,
+		    uint64_t size, bool first, bool complete,
 		    interval_set<uint64_t>& data_subset, 
 		    map<sobject_t, interval_set<uint64_t> >& clone_subsets);
 
