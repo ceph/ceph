@@ -326,6 +326,12 @@ struct md_config_t {
   int   osd_max_rep;
   int   osd_min_raid_width;
   int   osd_max_raid_width;
+
+  int osd_pool_default_crush_rule;
+  int osd_pool_default_size;
+  int osd_pool_default_pg_num;
+  int osd_pool_default_pgp_num;
+
   int   osd_op_threads;
   int   osd_max_opq;
   int   osd_disk_threads;

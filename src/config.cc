@@ -463,6 +463,10 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_max_rep, 0, OPT_INT, 10),
 	OPTION(osd_min_raid_width, 0, OPT_INT, 3),
 	OPTION(osd_max_raid_width, 0, OPT_INT, 2),
+	OPTION(osd_pool_default_crush_rule, 0, OPT_INT, 0),
+	OPTION(osd_pool_default_size, 0, OPT_INT, 2),
+	OPTION(osd_pool_default_pg_num, 0, OPT_INT, 8),
+	OPTION(osd_pool_default_pgp_num, 0, OPT_INT, 8),
 	OPTION(osd_op_threads, 0, OPT_INT, 2),    // 0 == no threading
 	OPTION(osd_max_opq, 0, OPT_INT, 10),
 	OPTION(osd_disk_threads, 0, OPT_INT, 1),

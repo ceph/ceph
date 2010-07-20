@@ -1125,14 +1125,15 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule)
     pending_inc.new_pool_max = osdmap.pool_max;
   int pool = ++pending_inc.new_pool_max;
   pending_inc.new_pools[pool].v.type = CEPH_PG_TYPE_REP;
-  pending_inc.new_pools[pool].v.size = 2; /* aie */
+
+  pending_inc.new_pools[pool].v.size = g_conf.osd_pool_default_size;
   if (crush_rule >= 0)
     pending_inc.new_pools[pool].v.crush_ruleset = crush_rule;
   else
-    pending_inc.new_pools[pool].v.crush_ruleset = 0; /* aie */
+    pending_inc.new_pools[pool].v.crush_ruleset = g_conf.osd_pool_default_crush_rule;
   pending_inc.new_pools[pool].v.object_hash = CEPH_STR_HASH_RJENKINS;
-  pending_inc.new_pools[pool].v.pg_num = 8;
-  pending_inc.new_pools[pool].v.pgp_num = 8;
+  pending_inc.new_pools[pool].v.pg_num = g_conf.osd_pool_default_pg_num;
+  pending_inc.new_pools[pool].v.pgp_num = g_conf.osd_pool_default_pgp_num;
   pending_inc.new_pools[pool].v.lpg_num = 0;
   pending_inc.new_pools[pool].v.lpgp_num = 0;
   pending_inc.new_pools[pool].v.last_change = pending_inc.epoch;
