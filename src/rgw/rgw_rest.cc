@@ -202,7 +202,7 @@ int RGWGetObj_REST::send_response(void *handle)
     goto send_data;
 
   if (get_data && !ret) {
-    dump_content_length(s, len);
+    dump_content_length(s, total_len);
   }
   if (!ret) {
     map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);

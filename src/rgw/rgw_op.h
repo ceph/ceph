@@ -50,7 +50,8 @@ protected:
   const char *if_match;
   const char *if_nomatch;
   off_t ofs;
-  off_t len;
+  size_t len;
+  size_t total_len;
   off_t end;
   time_t mod_time;
   time_t unmod_time;
@@ -71,9 +72,11 @@ public:
     RGWOp::init(s);
     ofs = 0;
     len = 0;
+    total_len = 0;
     end = -1;
     mod_ptr = NULL;
     unmod_ptr = NULL;
+    data = NULL;
   }
   void set_get_data(bool get_data) {
     this->get_data = get_data;

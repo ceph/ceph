@@ -111,7 +111,6 @@ public:
  *    and if mtime is >= it fails.
  * if_match/nomatch: if non-NULL, compares the object's etag attr
  *    to the string and, if it doesn't/does match, fails out.
- * get_data: if true, the object's data/value will be read out, otherwise not
  * err: Many errors will result in this structure being filled
  *    with extra informatin on the error.
  * Returns: -ERR# on failure, otherwise
@@ -125,7 +124,7 @@ public:
             const time_t *unmod_ptr,
             const char *if_match,
             const char *if_nomatch,
-            bool get_data,
+            size_t *total_size,
             void **handle,
             struct rgw_err *err) = 0;
 

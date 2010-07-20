@@ -343,6 +343,7 @@ int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& d
   int ret, r;
   char *data;
   off_t ofs = 0, end = -1;
+  size_t total_len;
   map<string, bufferlist>::iterator iter;
 
   cerr << "copy " << src_bucket << ":" << src_obj << " => " << dest_bucket << ":" << dest_obj << std::endl;
@@ -351,7 +352,7 @@ int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& d
 
   map<string, bufferlist> attrset;
   ret = prepare_get_obj(src_bucket, src_obj, ofs, &end, &attrset,
-                mod_ptr, unmod_ptr, if_match, if_nomatch, true, &handle, err);
+                mod_ptr, unmod_ptr, if_match, if_nomatch, &total_len, &handle, err);
 
   if (ret < 0)
     return ret;
@@ -512,7 +513,7 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
             const time_t *unmod_ptr,
             const char *if_match,
             const char *if_nomatch,
-            bool get_data,
+            size_t *total_size,
             void **handle,
             struct rgw_err *err)
 {
@@ -593,8 +594,7 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
   if (*end < 0)
     *end = size - 1;
 
-  if (!get_data)
-    return size;
+  *total_size = (ofs <= *end ? *end + 1 - ofs : 0);
 
   return 0;
 

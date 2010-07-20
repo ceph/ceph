@@ -27,9 +27,10 @@ int rgw_get_user_info(string user_id, RGWUserInfo& info)
   struct rgw_err err;
   void *handle;
   off_t ofs = 0, end = -1;
+  size_t total_len;
   bufferlist::iterator iter;
 
-  ret = rgwstore->prepare_get_obj(ui_bucket, user_id, ofs, &end, NULL, NULL, NULL, NULL, NULL, true, &handle, &err);
+  ret = rgwstore->prepare_get_obj(ui_bucket, user_id, ofs, &end, NULL, NULL, NULL, NULL, NULL, &total_len, &handle, &err);
   if (ret < 0)
     return ret;
   do {
@@ -117,9 +118,10 @@ int rgw_get_uid_by_email(string& email, string& user_id)
   void *handle;
   off_t ofs = 0, end = -1;
   bufferlist::iterator iter;
+  size_t total_len;
 
   ret = rgwstore->prepare_get_obj(ui_email_bucket, email, ofs, &end, NULL, NULL,
-                                  NULL, NULL, NULL, true, &handle, &err);
+                                  NULL, NULL, NULL, &total_len, &handle, &err);
   if (ret < 0)
     return ret;
   do {

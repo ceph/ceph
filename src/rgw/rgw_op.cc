@@ -14,7 +14,7 @@
 
 using namespace std;
 
-static int parse_range(const char *range, off_t ofs, off_t end)
+static int parse_range(const char *range, off_t& ofs, off_t& end)
 {
   int r = -ERANGE;
   string s(range);
@@ -32,8 +32,13 @@ static int parse_range(const char *range, off_t ofs, off_t end)
 
   ofs_str = s.substr(0, pos);
   end_str = s.substr(pos + 1);
-  ofs = atoll(ofs_str.c_str());
+  if (ofs_str.length())
+    ofs = atoll(ofs_str.c_str());
+
+ if (end_str.length())
   end = atoll(end_str.c_str());
+
+cout << "parse_range ofs=" << ofs << " end=" << end << std::endl;
 
   if (end < ofs)
     goto done;
@@ -135,27 +140,32 @@ void RGWGetObj::execute()
     goto done;
 
   init_common();
-
-  len = rgwstore->prepare_get_obj(s->bucket_str, s->object_str, ofs, &end, &attrs, mod_ptr,
-                                  unmod_ptr, if_match, if_nomatch, get_data, &handle, &err);
-
-  if (len < 0) {
-    ret = len;
+cout << __func__ << ":" << __LINE__ << ": ofs=" << ofs << std::endl;
+  ret = rgwstore->prepare_get_obj(s->bucket_str, s->object_str, ofs, &end, &attrs, mod_ptr,
+                                  unmod_ptr, if_match, if_nomatch, &total_len, &handle, &err);
+  if (ret < 0)
     goto done;
-  }
 
-  if (!get_data)
+cout << __func__ << ":" << __LINE__ << ": ofs=" << ofs << std::endl;
+
+  if (!get_data || ofs > end)
     goto done;
 
   while (ofs <= end) {
+cout << __func__ << ":" << __LINE__ << ": ofs=" << ofs << std::endl;
+
+cout << "RGWGetObj::execute():" << __LINE__ << ": len=" << len << std::endl;
     len = rgwstore->get_obj(&handle, s->bucket_str, s->object_str, &data, ofs, end);
     if (len < 0) {
       ret = len;
       goto done;
     }
+cout << "RGWGetObj::execute():" << __LINE__ << ": len=" << len << std::endl;
 
+cout << __func__ << ":" << __LINE__ << ": ofs=" << ofs << std::endl;
     ofs += len;
     send_response(handle);
+cout << "RGWGetObj::execute():" << __LINE__ << ": len=" << len << std::endl;
     free(data);
   }
 

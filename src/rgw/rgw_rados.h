@@ -75,7 +75,7 @@ public:
             const time_t *unmod_ptr,
             const char *if_match,
             const char *if_nomatch,
-            bool get_data,
+            size_t *total_size,
             void **handle,
             struct rgw_err *err);
 
