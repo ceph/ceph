@@ -25,7 +25,7 @@ int rgw_get_user_info(string user_id, RGWUserInfo& info)
   int ret;
   char *data;
   struct rgw_err err;
-  void *handle;
+  void *handle = NULL;
   off_t ofs = 0, end = -1;
   size_t total_len;
   bufferlist::iterator iter;
@@ -115,7 +115,7 @@ int rgw_get_uid_by_email(string& email, string& user_id)
   char *data;
   struct rgw_err err;
   RGWUID uid;
-  void *handle;
+  void *handle = NULL;
   off_t ofs = 0, end = -1;
   bufferlist::iterator iter;
   size_t total_len;

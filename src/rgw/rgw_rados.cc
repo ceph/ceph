@@ -348,7 +348,7 @@ int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& d
 
   cerr << "copy " << src_bucket << ":" << src_obj << " => " << dest_bucket << ":" << dest_obj << std::endl;
 
-  void *handle;
+  void *handle = NULL;
 
   map<string, bufferlist> attrset;
   ret = prepare_get_obj(src_bucket, src_obj, ofs, &end, &attrset,
