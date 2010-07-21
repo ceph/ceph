@@ -1,10 +1,69 @@
-This package was debianized by Sage Weil <sage@newdream.net> on
+This package was debianized for Ubuntu by Clint Byrum <clint@ubuntu.com> on
+Tue Jul 20 12:55:12 UTC 2010
+
+This package was originally debianized by Sage Weil <sage@newdream.net> on
 Mon, 28 Jan 2008 14:58:17 -0800.
+(see changelog.upstream)
 
 It was downloaded from <http://ceph.newdream.net/>.
 
 Upstream Author: Sage Weil <sage@newdream.net>
 
-Copyright: (c) 2004-2009 by Sage Weil <sage@newdream.net>
+Files: *
+Copyright: (c) 2004-2010 by Sage Weil <sage@newdream.net>
 
 License: LGPL2.1 (see /usr/share/common-licenses/LGPL-2.1)
+
+Files: src/client/fuse.cc
+Copyright: 
+    Copyright (C) 2001-2005  Miklos Szeredi <miklos@szeredi.hu>
+    Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+License: GPL
+
+Files: src/osbdb/OSBDB.h
+Copyright: Copyright (C) 2007 Casey Marshall <csm@soe.ucsc.edu>
+License: LGPL2.1
+
+Files: src/mount/canonicalize.c
+Copyright: Copyright (C) 1993 Rick Sladkey <jrs@world.std.com>
+License: LGPL2 or later
+
+Files: src/os/btrfs_ioctl.h
+Copyright: Copyright (C) 2007 Oracle.  All rights reserved.
+License: LGPL2
+
+Files: src/common/sctp_crc32.c: 
+Copyright:
+    Copyright (c) 2001-2007, by Cisco Systems, Inc. All rights reserved.
+    Copyright (c) 2004-2006 Intel Corporation - All Rights Reserved
+License:
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+ 
+  a) Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+ 
+  b) Redistributions in binary form must reproduce the above copyright
+     notice, this list of conditions and the following disclaimer in
+    the documentation and/or other materials provided with the distribution.
+ 
+  c) Neither the name of Cisco Systems, Inc. nor the names of its
+     contributors may be used to endorse or promote products derived
+     from this software without specific prior written permission.
+ 
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+  THE POSSIBILITY OF SUCH DAMAGE.
+
+Packaging:
+    Copyright (C) 2004-2009 by Sage Weil <sage@newdream.net>
+    Copyright (C) 2010 Canonical, Ltd.
+    Licensed under LGPL-2.1
