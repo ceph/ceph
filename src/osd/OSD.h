@@ -213,6 +213,7 @@ private:
   void update_heartbeat_peers();
   void reset_heartbeat_peers();
   void heartbeat();
+  void heartbeat_check();
   void heartbeat_entry();
 
   struct T_Heartbeat : public Thread {

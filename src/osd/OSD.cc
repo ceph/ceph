@@ -1264,6 +1264,27 @@ void OSD::heartbeat_entry()
   heartbeat_lock.Unlock();
 }
 
+void OSD::heartbeat_check()
+{
+  assert(heartbeat_lock.is_locked());
+  // we should also have map_lock rdlocked.
+
+  // check for incoming heartbeats (move me elsewhere?)
+  utime_t grace = g_clock.now();
+  grace -= g_conf.osd_heartbeat_grace;
+  for (map<int, epoch_t>::iterator p = heartbeat_from.begin();
+       p != heartbeat_from.end();
+       p++) {
+    if (heartbeat_from_stamp.count(p->first) &&
+	heartbeat_from_stamp[p->first] < grace) {
+      dout(0) << "heartbeat_check: no heartbeat from osd" << p->first
+	      << " since " << heartbeat_from_stamp[p->first]
+	      << " (cutoff " << grace << ")" << dendl;
+      queue_failure(p->first);
+    }
+  }
+}
+
 void OSD::heartbeat()
 {
   utime_t now = g_clock.now();
@@ -1318,36 +1339,22 @@ void OSD::heartbeat()
     }
   }
 
-  // check for incoming heartbeats (move me elsewhere?)
-  utime_t grace = now;
-  grace -= g_conf.osd_heartbeat_grace;
+  // request heartbeats?
   for (map<int, epoch_t>::iterator p = heartbeat_from.begin();
        p != heartbeat_from.end();
        p++) {
-    if (heartbeat_from_stamp.count(p->first)) {
-      if (!osdmap->is_up(p->first)) {
-	dout(10) << "not checking timeout on down osd" << p->first << dendl;
-      } else if (osdmap->get_hb_inst(p->first) != heartbeat_inst[p->first]) {
-	dout(10) << "not checking timeout on osd" << p->first
-		 << " hb inst " << heartbeat_inst[p->first]
-		 << " != map's " << osdmap->get_hb_inst(p->first)
-		 << dendl;
-      } else if (heartbeat_from_stamp[p->first] < grace) {
-	dout(0) << "no heartbeat from osd" << p->first
-		<< " since " << heartbeat_from_stamp[p->first]
-		<< " (cutoff " << grace << ")" << dendl;
-	queue_failure(p->first);
-      }
-    } else {
+    if (heartbeat_from_stamp.count(p->first) == 0) {
       // fake initial stamp.  and send them a ping so they know we expect it.
-      if (heartbeat_inst.count(p->first)) {
-	heartbeat_from_stamp[p->first] = now;  
-	Message *m = new MOSDPing(osdmap->get_fsid(), 0, heartbeat_epoch, my_stat, true);  // request ack
-	m->set_priority(CEPH_MSG_PRIO_HIGH);
-	heartbeat_messenger->send_message(m, heartbeat_inst[p->first]);
-      }
+      dout(10) << "requesting heartbeats from " << heartbeat_inst[p->first] << dendl;
+      heartbeat_from_stamp[p->first] = now;  
+      Message *m = new MOSDPing(osdmap->get_fsid(), 0, heartbeat_epoch, my_stat, true);  // request ack
+      m->set_priority(CEPH_MSG_PRIO_HIGH);
+      heartbeat_messenger->send_message(m, heartbeat_inst[p->first]);
     }
   }
+
+  if (map_locked)
+    heartbeat_check();
 
   if (logger) logger->set(l_osd_hbto, heartbeat_to.size());
   if (logger) logger->set(l_osd_hbfrom, heartbeat_from.size());
@@ -1388,6 +1395,10 @@ void OSD::tick()
   recovery_tp.kick();
   
   map_lock.get_read();
+
+  heartbeat_lock.Lock();
+  heartbeat_check();
+  heartbeat_lock.Unlock();
 
   check_replay_queue();
 
