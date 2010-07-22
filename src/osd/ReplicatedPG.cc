@@ -3445,10 +3445,13 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   bufferlist data;
   op->claim_data(data);
 
-  // we need this later, and it gets clobbered by t.setattrs()
+  // we need these later, and they get clobbered by t.setattrs()
   bufferlist oibl;
   if (op->attrset.count(OI_ATTR))
     oibl.push_back(op->attrset[OI_ATTR]);
+  bufferlist ssbl;
+  if (op->attrset.count(SS_ATTR))
+    ssbl.push_back(op->attrset[SS_ATTR]);
 
   // determine data/clone subsets
   data_subset = op->data_subset;
@@ -3632,6 +3635,13 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       obc->obs.exists = true;
       obc->obs.oi.decode(oibl);
       
+      // suck in snapset context?
+      SnapSetContext *ssc = obc->obs.ssc;
+      if (ssbl.length()) {
+	bufferlist::iterator sp = ssbl.begin();
+	ssc->snapset.decode(sp);
+      }
+
       onreadable = new C_OSD_WrotePushedObject(this, t, obc);
       onreadable_sync = new C_OSD_OndiskWriteUnlock(obc);
     } else {
