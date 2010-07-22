@@ -71,7 +71,7 @@ check_host() {
 	host=$hostname
     fi
 
-    echo "=== $name === "
+    echo "=== $type.$id === "
 
     return 0
 }
