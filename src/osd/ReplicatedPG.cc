@@ -3992,17 +3992,17 @@ int ReplicatedPG::recover_replicas(int max)
     dout(10) << " peer osd" << peer << " missing " << peer_missing[peer] << dendl;
     dout(20) << "   " << peer_missing[peer].missing << dendl;
 
-    if (peer_missing[peer].num_missing() == 0) 
-      continue;
-    
     // oldest first!
-    sobject_t soid = peer_missing[peer].rmissing.begin()->second;
-    eversion_t v = peer_missing[peer].rmissing.begin()->first;
-
-    started += recover_object_replicas(soid);
-
-    if (started >= max)
-      return started;
+    Missing &m = peer_missing[peer];
+    for (map<eversion_t, sobject_t>::iterator p = m.rmissing.begin();
+	   p != m.rmissing.end() && started < max;
+	   p++) {
+      sobject_t soid = p->second;
+      if (pushing.count(soid))
+	dout(10) << " already pushing " << soid << dendl;
+      else
+	started += recover_object_replicas(soid);
+    }
   }
   
   // nothing to do!
