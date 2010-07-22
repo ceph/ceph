@@ -349,6 +349,7 @@ struct md_config_t {
 
   float osd_recovery_delay_start;
   int osd_recovery_max_active;
+  uint64_t osd_recovery_max_chunk;
 
   bool osd_auto_weight;
 

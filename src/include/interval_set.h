@@ -336,6 +336,41 @@ class interval_set {
     return true;
   }  
 
+  /*
+   * build a subset of @other, starting at or after @start, and including
+   * @len worth of values, skipping holes.  e.g.,
+   *  span_of([5~10,20~5], 8, 5) -> [8~2,20~3]
+   */
+  void span_of(const interval_set &other, T start, T len) {
+    clear();
+    typename map<T,T>::const_iterator p = other.find_inc(start);
+    if (p == other.m.end())
+      return;
+    if (p->first < start) {
+      if (p->first + p->second < start)
+	return;
+      if (p->first + p->second < start + len) {
+	T howmuch = p->second - (start - p->first);
+	insert(start, howmuch);
+	len -= howmuch;
+	p++;
+      } else {
+	insert(start, len);
+	return;
+      }
+    }
+    while (p != other.m.end() && len > 0) {
+      if (p->second < len) {
+	insert(p->first, p->second);
+	len -= p->second;
+	p++;
+      } else {
+	insert(p->first, len);
+	return;
+      }
+    }
+  }
+
 };
 
 template<class T>

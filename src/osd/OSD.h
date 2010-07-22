@@ -520,6 +520,8 @@ protected:
 
   // -- boot --
   void send_boot();
+  
+  void clear_temp();
 
   // -- alive --
   epoch_t up_thru_wanted;

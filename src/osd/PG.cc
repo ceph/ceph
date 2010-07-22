@@ -2413,6 +2413,14 @@ bool PG::block_if_wrlocked(MOSDOp* op, object_info_t& oi)
   return false; //the object wasn't locked, so the operation can be handled right away
 }
 
+void PG::take_object_waiters(hash_map<sobject_t, list<Message*> >& m)
+{
+  for (hash_map<sobject_t, list<Message*> >::iterator it = m.begin();
+       it != m.end();
+       it++)
+    osd->take_waiters(it->second);
+  m.clear();
+}
 
 
 // ==========================================================================================

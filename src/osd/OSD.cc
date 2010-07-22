@@ -101,7 +101,8 @@ static ostream& _prefix(ostream& out, int whoami, OSDMap *osdmap) {
 }
 
 
-const coll_t meta_coll;
+const coll_t meta_coll(coll_t::TYPE_META);
+const coll_t temp_coll(coll_t::TYPE_TEMP);
 
 
 const struct CompatSet::Feature ceph_osd_feature_compat[] = {
@@ -200,6 +201,7 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
   ObjectStore::Transaction t;
   t.create_collection(meta_coll);
   t.write(meta_coll, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+  t.create_collection(temp_coll);
   int r = store->apply_transaction(t);
   store->umount();
   delete store;
@@ -476,6 +478,8 @@ int OSD::init()
     get_map_bl(superblock.current_epoch, bl);
     osdmap->decode(bl);
   }
+
+  clear_temp();
 
   // load up pgs (as they previously existed)
   load_pgs();
@@ -772,6 +776,28 @@ int OSD::read_superblock()
 
 
 
+void OSD::clear_temp()
+{
+  dout(10) << "clear_temp" << dendl;
+
+  vector<sobject_t> objects;
+  store->collection_list(temp_coll, objects);
+
+  dout(10) << objects.size() << " objects" << dendl;
+  if (objects.empty())
+    return;
+
+  // delete them.
+  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  for (vector<sobject_t>::iterator p = objects.begin();
+       p != objects.end();
+       p++)
+    t->collection_remove(temp_coll, *p);
+  int r = store->queue_transaction(NULL, t);
+  assert(r == 0);
+  store->sync_and_flush();
+  dout(10) << "done" << dendl;
+}
 
 
 // ======================================================
@@ -4386,11 +4412,17 @@ void OSD::handle_op(MOSDOp *op)
     }
   }
 
-  // missing object?
   if ((op->get_flags() & CEPH_OSD_FLAG_PGOP) == 0) {
+    // missing object?
     sobject_t head(op->get_oid(), CEPH_NOSNAP);
     if (pg->is_missing_object(head)) {
       pg->wait_for_missing_object(head, op);
+      pg->unlock();
+      return;
+    }
+
+    if (op->may_write() && pg->is_degraded_object(head)) {
+      pg->wait_for_degraded_object(head, op);
       pg->unlock();
       return;
     }

@@ -764,8 +764,10 @@ public:
   // pg waiters
   list<class Message*>            waiting_for_active;
   hash_map<sobject_t, 
-           list<class Message*> > waiting_for_missing_object;   
+           list<class Message*> > waiting_for_missing_object, waiting_for_degraded_object;   
   map<eversion_t,class MOSDOp*>   replay_queue;
+
+  void take_object_waiters(hash_map<sobject_t, list<Message*> >& m);
   
   hash_map<sobject_t, list<Message*> > waiting_for_wr_unlock; 
 
@@ -980,6 +982,9 @@ public:
   virtual bool is_write_in_progress() = 0;
   virtual bool is_missing_object(const sobject_t& oid) = 0;
   virtual void wait_for_missing_object(const sobject_t& oid, Message *op) = 0;
+
+  virtual bool is_degraded_object(const sobject_t& oid) = 0;
+  virtual void wait_for_degraded_object(const sobject_t& oid, Message *op) = 0;
 
   virtual void on_osd_failure(int osd) = 0;
   virtual void on_role_change() = 0;
