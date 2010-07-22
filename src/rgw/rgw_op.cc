@@ -156,8 +156,8 @@ void RGWGetObj::execute()
       goto done;
     }
 
-    ofs += len;
     send_response(handle);
+    ofs += len;
     free(data);
   }
 

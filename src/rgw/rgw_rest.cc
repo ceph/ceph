@@ -22,6 +22,7 @@ struct errno_http {
 
 static struct errno_http hterrs[] = {
     { 0, "200", "" },
+    { 206, "206", "" },
     { EINVAL, "400", "InvalidArgument" },
     { EACCES, "403", "AccessDenied" },
     { EPERM, "403", "AccessDenied" },
@@ -34,6 +35,7 @@ static struct errno_http hterrs[] = {
 
 void dump_errno(struct req_state *s, int err, struct rgw_err *rgwerr)
 {
+  int orig_err = err;
   const char *err_str;
   const char *code = (rgwerr ? rgwerr->code : NULL);
 
@@ -59,7 +61,7 @@ void dump_errno(struct req_state *s, int err, struct rgw_err *rgwerr)
   }
 
   dump_status(s, err_str);
-  if (err) {
+  if (orig_err < 0) {
     s->err_exist = true;
     s->err.code = code;
     s->err.message = (rgwerr ? rgwerr->message : NULL);
@@ -183,6 +185,12 @@ void abort_early(struct req_state *s, int err)
   end_header(s);
 }
 
+void dump_range(struct req_state *s, off_t ofs, off_t end)
+{
+    CGI_PRINTF(s->fcgx->out,"Accept-Ranges: bytes\n", "");
+    CGI_PRINTF(s->fcgx->out,"Content-Range: bytes %d-%d/%d\n", (int)ofs, (int)end, (int)end + 1);
+}
+
 int RGWGetObj_REST::get_params()
 {
   range_str = FCGX_GetParam("HTTP_RANGE", s->fcgx->envp);
@@ -202,6 +210,8 @@ int RGWGetObj_REST::send_response(void *handle)
     goto send_data;
 
   if (get_data && !ret) {
+    if (range_str)
+      dump_range(s, ofs, end);
     dump_content_length(s, total_len);
   }
   if (!ret) {
@@ -223,6 +233,11 @@ int RGWGetObj_REST::send_response(void *handle)
        }
     }
   }
+
+
+  if (range_str && !ret)
+    ret = 206; /* partial content */
+
   dump_errno(s, ret, &err);
   end_header(s, content_type);
 
