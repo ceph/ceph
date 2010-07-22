@@ -3040,6 +3040,7 @@ bool ReplicatedPG::pull(const sobject_t& soid)
 
   map<sobject_t, interval_set<uint64_t> > clone_subsets;
   interval_set<uint64_t> data_subset;
+  bool need_size = false;
 
   // is this a snapped object?  if so, consult the snapset.. we may not need the entire object!
   if (soid.snap && soid.snap < CEPH_NOSNAP) {
@@ -3076,6 +3077,7 @@ bool ReplicatedPG::pull(const sobject_t& soid)
   } else {
     // pulling head or unversioned object.
     // always pull the whole thing.
+    need_size = true;
     data_subset.insert(0, (uint64_t)-1);
   }
 
@@ -3090,6 +3092,7 @@ bool ReplicatedPG::pull(const sobject_t& soid)
   p.from = fromosd;
   p.data_subset = data_subset;
   p.data_subset_pulling = pullsub;
+  p.need_size = need_size;
 
   send_pull_op(soid, v, true, p.data_subset_pulling, fromosd);
   
@@ -3465,9 +3468,10 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     pi = &pulling[soid];
     
     // did we learn object size?
-    if (pi->data_subset.end() == (uint64_t)-1) {
+    if (pi->need_size) {
       dout(10) << " learned object size is " << op->old_size << dendl;
       pi->data_subset.erase(op->old_size, (uint64_t)-1 - op->old_size);
+      pi->need_size = false;
     }
 
     if (soid.snap && soid.snap < CEPH_NOSNAP) {

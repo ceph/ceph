@@ -451,6 +451,7 @@ protected:
   struct pull_info_t {
     eversion_t version;
     int from;
+    bool need_size;
     interval_set<uint64_t> data_subset, data_subset_pulling;
   };
   map<sobject_t, pull_info_t> pulling;
