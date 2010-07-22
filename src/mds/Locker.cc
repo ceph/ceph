@@ -3614,7 +3614,9 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     break;
 
   case LOCK_AC_REQRDLOCK:
-    if (lock->is_stable()) {
+    if (lock->get_parent()->is_auth() &&
+	lock->is_stable() &&
+	lock->get_state() != LOCK_SYNC) {
       dout(7) << "handle_file_lock got rdlock request on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
       assert(in->is_auth()); // replica auth pinned if they're doing this!
