@@ -481,6 +481,14 @@ int OSD::init()
 
   clear_temp();
 
+  // make sure (newish) temp dir exists
+  if (!store->collection_exists(coll_t(coll_t::TYPE_TEMP))) {
+    dout(10) << "creating temp pg dir" << dendl;
+    ObjectStore::Transaction t;
+    t.create_collection(coll_t(coll_t::TYPE_TEMP));
+    store->apply_transaction(t);
+  }
+
   // load up pgs (as they previously existed)
   load_pgs();
   
