@@ -132,8 +132,7 @@ int main(int argc, const char **argv)
 
     int err = OSD::mkfs(g_conf.osd_data, g_conf.osd_journal, mc.monmap.fsid, whoami);
     if (err < 0) {
-      cerr << TEXT_RED << " ** " << TEXT_HAZARD << "ERROR: " << TEXT_RED
-           << "error creating empty object store in " << g_conf.osd_data
+      cerr << TEXT_RED << " ** ERROR: error creating empty object store in " << g_conf.osd_data
 	   << ": " << strerror_r(-err, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
       exit(1);
     }
@@ -146,8 +145,7 @@ int main(int argc, const char **argv)
   if (mkjournal) {
     int err = OSD::mkjournal(g_conf.osd_data, g_conf.osd_journal);
     if (err < 0) {
-      cerr << TEXT_RED << " ** " << TEXT_HAZARD << "ERROR: " << TEXT_RED
-           << "error creating fresh journal " << g_conf.osd_journal
+      cerr << TEXT_RED << " ** ERROR: error creating fresh journal " << g_conf.osd_journal
 	   << " for object store " << g_conf.osd_data
 	   << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
       exit(1);
@@ -160,8 +158,7 @@ int main(int argc, const char **argv)
   if (flushjournal) {
     int err = OSD::flushjournal(g_conf.osd_data, g_conf.osd_journal);
     if (err < 0) {
-      cerr << TEXT_RED << " ** " << TEXT_HAZARD << "ERROR: " << TEXT_RED
-           << "error flushing journal " << g_conf.osd_journal
+      cerr << TEXT_RED << " ** ERROR: error flushing journal " << g_conf.osd_journal
 	   << " for object store " << g_conf.osd_data
 	   << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
       exit(1);
@@ -177,8 +174,7 @@ int main(int argc, const char **argv)
   int w;
   int r = OSD::peek_meta(g_conf.osd_data, magic, fsid, w);
   if (r < 0) {
-    cerr << TEXT_RED << " ** " << TEXT_HAZARD << "ERROR: " << TEXT_RED
-         << "unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror_r(-r, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
+    cerr << TEXT_RED << " ** ERROR: unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror_r(-r, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
     if (r == -ENOTSUP)
       cerr << TEXT_RED << " **        please verify that underlying storage supports xattrs" << TEXT_NORMAL << std::endl;
     derr(0) << "unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror_r(-r, buf, sizeof(buf)) << dendl;
@@ -233,8 +229,7 @@ int main(int argc, const char **argv)
   int err = osd->pre_init();
   if (err < 0) {
     char buf[80];
-    cerr << TEXT_RED << " ** " << TEXT_HAZARD << "ERROR: " << TEXT_RED
-         << "initializing osd failed: " << strerror_r(-err, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
+    cerr << TEXT_RED << " ** ERROR: initializing osd failed: " << strerror_r(-err, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
     return 1;
   }
 
@@ -243,8 +238,7 @@ int main(int argc, const char **argv)
 
   // start osd
   if (osd->init() < 0) {
-    cerr << TEXT_RED << " ** " << TEXT_HAZARD << "ERROR: " << TEXT_RED
-         << "initializing osd failed: " << strerror_r(-err, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
+    cerr << TEXT_RED << " ** ERROR: initializing osd failed: " << strerror_r(-err, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
     return 1;
   }
 
