@@ -64,7 +64,7 @@ Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: CRUSH placement algorithm
  CRUSH is a pseudo-random hash-like algorithm for mapping inputs to
  a changing hierarchy of devices without a centralized directory.  It was
- originally designed for mapping data objects to storage servesr, although it
+ originally designed for mapping data objects to storage servers, although it
  may be useful in other domains.  Because large systems are inherently
  dynamic, CRUSH is designed to facilitate the addition and removal of devices
  while minimizing unnecessary object movement.  The algorithm accommodates a
