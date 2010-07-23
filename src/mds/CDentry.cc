@@ -529,7 +529,7 @@ ClientLease *CDentry::add_client_lease(client_t c, int mask, Session *session)
   return l;
 }
 
-int CDentry::remove_client_lease(ClientLease *l, int mask, Locker *locker) 
+void CDentry::remove_client_lease(ClientLease *l, int mask, Locker *locker) 
 {
   assert(l->parent == this);
 
@@ -546,9 +546,7 @@ int CDentry::remove_client_lease(ClientLease *l, int mask, Locker *locker)
   }
 
   l->mask &= ~mask;
-  int rc = l->mask;
-
-  if (rc == 0) {
+  if (l->mask == 0) {
     dout(20) << "removing lease for client" << l->client << dendl;
     client_lease_map.erase(l->client);
     l->item_lease.remove_myself();
@@ -560,8 +558,6 @@ int CDentry::remove_client_lease(ClientLease *l, int mask, Locker *locker)
 
   if (gather)
     locker->eval_gather(&lock);
-   
-  return rc;
 }
 
 

@@ -2193,8 +2193,7 @@ void Locker::handle_client_lease(MClientLease *m)
     } else {
       dout(7) << "handle_client_lease client" << client
 	      << " on " << *dn << dendl;
-      int left = dn->remove_client_lease(l, CEPH_LOCK_DN, this);
-      dout(10) << " release remaining mask is " << left << " on " << *dn << dendl;
+      dn->remove_client_lease(l, CEPH_LOCK_DN, this);
     }
     m->put();
     break;

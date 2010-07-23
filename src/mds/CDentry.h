@@ -383,7 +383,7 @@ public:
   }
 
   ClientLease *add_client_lease(client_t c, int mask, Session *session);
-  int remove_client_lease(ClientLease *r, int mask, class Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
+  void remove_client_lease(ClientLease *r, int mask, class Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
   
 
   
