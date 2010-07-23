@@ -129,7 +129,7 @@ get_name_list() {
 		what="$what $all"
 		;;
 	    *)
-		if echo " $all " | egrep -v -q "( $type$id | $type.$id )"; then
+		if echo " " $all " " | egrep -v -q "( $type$id | $type.$id )"; then
 		    echo "$0: $type.$id not found ($conf defines \"$all\")"
 		    exit 1
 		fi
