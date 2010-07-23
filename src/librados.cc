@@ -1544,7 +1544,11 @@ int Rados::selfmanaged_snap_rollback_object(const rados_pool_t pool,
   ::SnapContext sn;
   if (!client) return -EINVAL;
   sn.seq = snapc.seq;
-  sn.snaps = snapc.snaps;
+  sn.snaps.clear();
+  vector<snap_t>::iterator iter = snapc.snaps.begin();
+  for (; iter != snapc.snaps.end(); ++iter) {
+    sn.snaps.push_back(*iter);
+  }
   return ((RadosClient *)client)->selfmanaged_snap_rollback_object(pool, oid, sn, snapid);
 }
 

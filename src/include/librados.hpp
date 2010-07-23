@@ -37,8 +37,8 @@ namespace librados {
   typedef void (*callback_t)(completion_t cb, void *arg);
 
   struct SnapContext {
-    snapid_t seq;
-    vector<snapid_t> snaps;
+    snap_t seq;
+    vector<snap_t> snaps;
   };
 
 

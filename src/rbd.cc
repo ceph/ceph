@@ -284,7 +284,11 @@ static int rollback_image(pools_t& pp, struct rbd_obj_header_ondisk *header,
     string oid = get_block_oid(header, i);
     librados::SnapContext sn;
     sn.seq = snapc.seq;
-    sn.snaps = snapc.snaps;
+    sn.snaps.clear();
+    vector<snapid_t>::iterator iter = snapc.snaps.begin();
+    for (; iter != snapc.snaps.end(); ++iter) {
+      sn.snaps.push_back(*iter);
+    }
     r = rados.selfmanaged_snap_rollback_object(pp.data, oid, sn, snapid);
     if (r < 0 && r != -ENOENT)
       return r;
