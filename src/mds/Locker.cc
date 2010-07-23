@@ -2265,7 +2265,7 @@ int Locker::issue_client_lease(CInode *in, client_t client,
 }
 */
 
-int Locker::issue_client_lease(CDentry *dn, client_t client,
+void Locker::issue_client_lease(CDentry *dn, client_t client,
 			       bufferlist &bl, utime_t now, Session *session)
 {
   int pool = 1;   // fixme.. do something smart!
@@ -2283,7 +2283,6 @@ int Locker::issue_client_lease(CDentry *dn, client_t client,
     mask |= 1;  // dentry lease.  always 1.
   
   _issue_client_lease(dn, mask, pool, client, bl, now, session);
-  return mask;
 }
 
 
