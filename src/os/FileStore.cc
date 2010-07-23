@@ -1298,8 +1298,10 @@ int FileStore::stat(coll_t cid, const sobject_t& oid, struct stat *st)
   char fn[PATH_MAX];
   get_coname(cid, oid, fn, sizeof(fn));
   int r = ::stat(fn, st);
+  if (r < 0)
+    r = -errno;
   dout(10) << "stat " << fn << " = " << r << dendl;
-  return r < 0 ? -errno:r;
+  return r;
 }
 
 int FileStore::read(coll_t cid, const sobject_t& oid, 
