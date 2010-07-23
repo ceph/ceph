@@ -2193,8 +2193,7 @@ void Locker::handle_client_lease(MClientLease *m)
     } else {
       dout(7) << "handle_client_lease client" << client
 	      << " on " << *dn << dendl;
-      int left = dn->remove_client_lease(l, CEPH_LOCK_DN, this);
-      dout(10) << " release remaining mask is " << left << " on " << *dn << dendl;
+      dn->remove_client_lease(l, CEPH_LOCK_DN, this);
     }
     m->put();
     break;
@@ -2228,10 +2227,10 @@ void Locker::_issue_client_lease(CDentry *dn, int mask, int pool, client_t clien
 				 bufferlist &bl, utime_t now, Session *session)
 {
   LeaseStat e;
-  e.mask = 1;
+  e.mask = mask;
 
   if (mask) {
-    ClientLease *l = dn->add_client_lease(client, mask);
+    ClientLease *l = dn->add_client_lease(client, mask, session);
     session->touch_lease(l);
 
     e.seq = ++l->seq;
@@ -2243,7 +2242,8 @@ void Locker::_issue_client_lease(CDentry *dn, int mask, int pool, client_t clien
 
   e.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
   ::encode(e, bl);
-  dout(20) << "_issue_client_lease mask " << e.mask << " dur " << e.duration_ms << "ms" << dendl;
+  dout(20) << "_issue_client_lease mask " << e.mask << " seq " << e.seq << " dur " << e.duration_ms << "ms "
+	   << " on " << *dn << dendl;
 }
   
 
@@ -2264,7 +2264,7 @@ int Locker::issue_client_lease(CInode *in, client_t client,
 }
 */
 
-int Locker::issue_client_lease(CDentry *dn, client_t client,
+void Locker::issue_client_lease(CDentry *dn, client_t client,
 			       bufferlist &bl, utime_t now, Session *session)
 {
   int pool = 1;   // fixme.. do something smart!
@@ -2279,10 +2279,9 @@ int Locker::issue_client_lease(CDentry *dn, client_t client,
       ((!diri->filelock.can_lease(client) &&
 	(diri->get_client_cap_pending(client) & (CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL)) == 0)) &&
       dn->lock.can_lease(client))
-    mask |= CEPH_LOCK_DN;
+    mask |= 1;  // dentry lease.  always 1.
   
   _issue_client_lease(dn, mask, pool, client, bl, now, session);
-  return mask;
 }
 
 

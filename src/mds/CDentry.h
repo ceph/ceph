@@ -41,6 +41,7 @@ class Anchor;
 class CDentry;
 class LogSegment;
 
+class Session;
 
 
 
@@ -381,8 +382,8 @@ public:
       return 0;
   }
 
-  ClientLease *add_client_lease(client_t c, int mask);
-  int remove_client_lease(ClientLease *r, int mask, class Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
+  ClientLease *add_client_lease(client_t c, int mask, Session *session);
+  void remove_client_lease(ClientLease *r, int mask, class Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
   
 
   

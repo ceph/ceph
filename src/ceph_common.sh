@@ -71,7 +71,7 @@ check_host() {
 	host=$hostname
     fi
 
-    echo "=== $name === "
+    echo "=== $type.$id === "
 
     return 0
 }
@@ -122,14 +122,15 @@ get_name_list() {
     what=""
     for f in "$orig"; do
 	type=`echo $f | cut -c 1-3`   # e.g. 'mon', if $item is 'mon1'
-	bit=`$CCONF -c $conf -l $type | egrep -v "^$type$"`
+	id=`echo $f | cut -c 4- | sed 's/\\.//'`
+	all=`$CCONF -c $conf -l $type | egrep -v "^$type$"`
 	case $f in
 	    mon | osd | mds)
-		what="$what $bit"
+		what="$what $all"
 		;;
 	    *)
-		if echo " " $bit " " | grep -v -q " $f "; then
-		    echo "$0: $type '$f' not found ($conf defines "$bit")"
+		if echo " $all " | egrep -v -q "( $type$id | $type.$id )"; then
+		    echo "$0: $type.$id not found ($conf defines \"$all\")"
 		    exit 1
 		fi
 		what="$what $f"

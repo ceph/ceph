@@ -480,6 +480,12 @@ public:
     uint64_t length() { return head - tail; }
     bool trim_to(eversion_t v, ObjectStore::Transaction& t);
 
+    void zero() {
+      tail = 0;
+      head = 0;
+      block_map.clear();
+    }
+
     void encode(bufferlist& bl) const {
       __u8 struct_v = 1;
       ::encode(struct_v, bl);

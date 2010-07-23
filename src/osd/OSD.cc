@@ -1160,8 +1160,8 @@ void OSD::update_heartbeat_peers()
 
   // filter heartbeat_from_stamp to only include osds that remain in
   // heartbeat_from.
-  map<int, utime_t> stamps;
-  stamps.swap(heartbeat_from_stamp);
+  map<int, utime_t> old_from_stamp;
+  old_from_stamp.swap(heartbeat_from_stamp);
 
   map<int, epoch_t> old_to, old_from;
   map<int, entity_inst_t> old_inst;
@@ -1178,8 +1178,11 @@ void OSD::update_heartbeat_peers()
     // replicas ping primary.
     if (pg->get_role() > 0) {
       assert(pg->acting.size() > 1);
-      heartbeat_to[pg->acting[0]] = osdmap->get_epoch();
-      heartbeat_inst[pg->acting[0]] = osdmap->get_hb_inst(pg->acting[0]);
+      int p = pg->acting[0];
+      heartbeat_to[p] = osdmap->get_epoch();
+      heartbeat_inst[p] = osdmap->get_hb_inst(p);
+      if (old_to.count(p) == 0 || old_inst[p] != heartbeat_inst[p])
+	dout(10) << "update_heartbeat_peers: new _to osd" << p << " " << heartbeat_inst[p] << dendl;
     }
     else if (pg->get_role() == 0) {
       assert(pg->acting[0] == whoami);
@@ -1188,8 +1191,13 @@ void OSD::update_heartbeat_peers()
 	assert(p != whoami);
 	heartbeat_from[p] = osdmap->get_epoch();
 	heartbeat_inst[p] = osdmap->get_hb_inst(p);
-	if (stamps.count(p) && old_from.count(p))  // have a stamp _AND_ i'm not new to the set
-	  heartbeat_from_stamp[p] = stamps[p];
+	if (old_from_stamp.count(p) && old_from.count(p) &&
+	    old_inst[p] == heartbeat_inst[p]) {
+	  // have a stamp _AND_ i'm not new to the set
+	  heartbeat_from_stamp[p] = old_from_stamp[p];
+	} else {
+	  dout(10) << "update_heartbeat_peers: new _from osd" << p << " " << heartbeat_inst[p] << dendl;
+	}
       }
     }
   }
@@ -1197,21 +1205,31 @@ void OSD::update_heartbeat_peers()
        p != old_to.end();
        p++) {
     if (p->second > osdmap->get_epoch()) {
-      dout(10) << " keeping newer _to peer " << old_inst[p->first] << " as of " << p->second << dendl;
+      dout(10) << "update_heartbeat_peers: keeping newer _to peer " << old_inst[p->first]
+	       << " as of " << p->second << dendl;
       heartbeat_to[p->first] = p->second;
       heartbeat_inst[p->first] = old_inst[p->first];
     } else if (p->second < osdmap->get_epoch() &&
 	       (!osdmap->is_up(p->first) ||
 		osdmap->get_hb_inst(p->first) != old_inst[p->first])) {
-      dout(10) << " marking down old _to peer " << old_inst[p->first] << " as of " << p->second << dendl;      
+      dout(10) << "update_heartbeat_peers: marking down old _to peer " << old_inst[p->first] 
+	       << " as of " << p->second << dendl;      
       heartbeat_messenger->mark_down(old_inst[p->first].addr);
     }
+  }
+  for (map<int,epoch_t>::iterator p = old_from.begin();
+       p != old_from.end();
+       p++) {
+    if (heartbeat_to.count(p->first) == 0 ||
+	heartbeat_inst[p->first] != old_inst[p->first])
+      dout(10) << "update_heartbeat_peers: dropped old _from osd" << p->first 
+	       << " " << old_inst[p->first] << dendl;
   }
 
   heartbeat_epoch = osdmap->get_epoch();
 
-  dout(10) << "hb   to: " << heartbeat_to << dendl;
-  dout(10) << "hb from: " << heartbeat_from << dendl;
+  dout(10) << "update_heartbeat_peers: hb   to: " << heartbeat_to << dendl;
+  dout(10) << "update_heartbeat_peers: hb from: " << heartbeat_from << dendl;
 
   heartbeat_lock.Unlock();
 }
@@ -1298,6 +1316,27 @@ void OSD::heartbeat_entry()
   heartbeat_lock.Unlock();
 }
 
+void OSD::heartbeat_check()
+{
+  assert(heartbeat_lock.is_locked());
+  // we should also have map_lock rdlocked.
+
+  // check for incoming heartbeats (move me elsewhere?)
+  utime_t grace = g_clock.now();
+  grace -= g_conf.osd_heartbeat_grace;
+  for (map<int, epoch_t>::iterator p = heartbeat_from.begin();
+       p != heartbeat_from.end();
+       p++) {
+    if (heartbeat_from_stamp.count(p->first) &&
+	heartbeat_from_stamp[p->first] < grace) {
+      dout(0) << "heartbeat_check: no heartbeat from osd" << p->first
+	      << " since " << heartbeat_from_stamp[p->first]
+	      << " (cutoff " << grace << ")" << dendl;
+      queue_failure(p->first);
+    }
+  }
+}
+
 void OSD::heartbeat()
 {
   utime_t now = g_clock.now();
@@ -1352,36 +1391,22 @@ void OSD::heartbeat()
     }
   }
 
-  // check for incoming heartbeats (move me elsewhere?)
-  utime_t grace = now;
-  grace -= g_conf.osd_heartbeat_grace;
+  // request heartbeats?
   for (map<int, epoch_t>::iterator p = heartbeat_from.begin();
        p != heartbeat_from.end();
        p++) {
-    if (heartbeat_from_stamp.count(p->first)) {
-      if (!osdmap->is_up(p->first)) {
-	dout(10) << "not checking timeout on down osd" << p->first << dendl;
-      } else if (osdmap->get_hb_inst(p->first) != heartbeat_inst[p->first]) {
-	dout(10) << "not checking timeout on osd" << p->first
-		 << " hb inst " << heartbeat_inst[p->first]
-		 << " != map's " << osdmap->get_hb_inst(p->first)
-		 << dendl;
-      } else if (heartbeat_from_stamp[p->first] < grace) {
-	dout(0) << "no heartbeat from osd" << p->first
-		<< " since " << heartbeat_from_stamp[p->first]
-		<< " (cutoff " << grace << ")" << dendl;
-	queue_failure(p->first);
-      }
-    } else {
+    if (heartbeat_from_stamp.count(p->first) == 0) {
       // fake initial stamp.  and send them a ping so they know we expect it.
-      if (heartbeat_inst.count(p->first)) {
-	heartbeat_from_stamp[p->first] = now;  
-	Message *m = new MOSDPing(osdmap->get_fsid(), 0, heartbeat_epoch, my_stat, true);  // request ack
-	m->set_priority(CEPH_MSG_PRIO_HIGH);
-	heartbeat_messenger->send_message(m, heartbeat_inst[p->first]);
-      }
+      dout(10) << "requesting heartbeats from " << heartbeat_inst[p->first] << dendl;
+      heartbeat_from_stamp[p->first] = now;  
+      Message *m = new MOSDPing(osdmap->get_fsid(), 0, heartbeat_epoch, my_stat, true);  // request ack
+      m->set_priority(CEPH_MSG_PRIO_HIGH);
+      heartbeat_messenger->send_message(m, heartbeat_inst[p->first]);
     }
   }
+
+  if (map_locked)
+    heartbeat_check();
 
   if (logger) logger->set(l_osd_hbto, heartbeat_to.size());
   if (logger) logger->set(l_osd_hbfrom, heartbeat_from.size());
@@ -1422,6 +1447,10 @@ void OSD::tick()
   recovery_tp.kick();
   
   map_lock.get_read();
+
+  heartbeat_lock.Lock();
+  heartbeat_check();
+  heartbeat_lock.Unlock();
 
   check_replay_queue();
 
@@ -3855,6 +3884,7 @@ void OSD::_remove_pg(PG *pg)
   // reset log, last_complete, in case deletion gets canceled
   pg->info.last_complete = eversion_t();
   pg->log.zero();
+  pg->ondisklog.zero();
 
   {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;

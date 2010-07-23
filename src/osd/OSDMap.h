@@ -591,6 +591,8 @@ private:
       bufferlist::iterator blp = inc.crush.begin();
       crush.decode(blp);
     }
+
+    calc_num_osds();
     return 0;
   }
 

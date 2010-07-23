@@ -503,7 +503,7 @@ void CDentry::decode_lock_state(int type, bufferlist& bl)
 }
 
 
-ClientLease *CDentry::add_client_lease(client_t c, int mask) 
+ClientLease *CDentry::add_client_lease(client_t c, int mask, Session *session) 
 {
   ClientLease *l;
   if (client_lease_map.count(c))
@@ -512,6 +512,7 @@ ClientLease *CDentry::add_client_lease(client_t c, int mask)
     if (client_lease_map.empty())
       get(PIN_CLIENTLEASE);
     l = client_lease_map[c] = new ClientLease(c, this);
+    l->seq = ++session->lease_seq;
   }
   
   int adding = ~l->mask & mask;
@@ -519,51 +520,33 @@ ClientLease *CDentry::add_client_lease(client_t c, int mask)
 	   << " -> " << adding
 	   << " ... now " << (l->mask | mask)
 	   << dendl;
-  int b = 0;
-  while (adding) {
-    if (adding & 1) {
-      SimpleLock *lock = get_lock(1 << b);
-      if (lock) {
-	lock->get_client_lease();
-	dout(20) << "get_client_lease on " << (1 << b) << " " << *lock << dendl;
-      }
-    }
-    b++;
-    adding = adding >> 1;
+  if (adding) {
+    lock.get_client_lease();
+    dout(20) << "get_client_lease on " << lock << dendl;
   }
   l->mask |= mask;
   
   return l;
 }
 
-int CDentry::remove_client_lease(ClientLease *l, int mask, Locker *locker) 
+void CDentry::remove_client_lease(ClientLease *l, int mask, Locker *locker) 
 {
   assert(l->parent == this);
 
-  list<SimpleLock*> to_gather;
+  bool gather = false;
 
   int removing = l->mask & mask;
   dout(20) << "had " << l->mask << " removing " << mask << " -> " << removing
 	   << " ... now " << (l->mask & ~mask) << dendl;
-  int b = 0;
-  while (removing) {
-    if (removing & 1) {
-      SimpleLock *lock = get_lock(1 << b);
-      if (lock) {
-	lock->put_client_lease();
-	dout(20) << "put_client_lease on " << (1 << b) << " " << *lock << dendl;
-	if (lock->get_num_client_lease() == 0 && !lock->is_stable())
-	  to_gather.push_back(lock);
-      }
-    }
-    b++;
-    removing = removing >> 1;
+  if (removing) {
+    lock.put_client_lease();
+    dout(20) << "put_client_lease on " << lock << dendl;
+    if (lock.get_num_client_lease() == 0 && !lock.is_stable())
+      gather = true;
   }
 
   l->mask &= ~mask;
-  int rc = l->mask;
-
-  if (rc == 0) {
+  if (l->mask == 0) {
     dout(20) << "removing lease for client" << l->client << dendl;
     client_lease_map.erase(l->client);
     l->item_lease.remove_myself();
@@ -573,13 +556,8 @@ int CDentry::remove_client_lease(ClientLease *l, int mask, Locker *locker)
       put(PIN_CLIENTLEASE);
   }
 
-  // do pending gathers.
-  while (!to_gather.empty()) {
-    locker->eval_gather(to_gather.front());
-    to_gather.pop_front();
-  }
-   
-  return rc;
+  if (gather)
+    locker->eval_gather(&lock);
 }
 
 

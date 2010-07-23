@@ -4055,15 +4055,16 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
     // be thorough.
     vector<sobject_t> ls;
     osd->store->collection_list(coll_t::build_pg_coll(info.pgid), ls);
-    if (ls.size() != info.stats.num_objects)
-      dout(10) << " WARNING: " << ls.size() << " != num_objects " << info.stats.num_objects << dendl;
 
-    set<sobject_t> s;
-    
+    set<sobject_t> s;   
     for (vector<sobject_t>::iterator i = ls.begin();
          i != ls.end();
-         i++) 
-      s.insert(*i);
+         i++)
+      if (i->snap == CEPH_NOSNAP)
+	s.insert(*i);
+
+    if (s.size() != info.stats.num_objects)
+      dout(10) << " WARNING: " << s.size() << " != num_objects " << info.stats.num_objects << dendl;
 
     set<sobject_t> did;
     for (list<Log::Entry>::reverse_iterator p = log.log.rbegin();

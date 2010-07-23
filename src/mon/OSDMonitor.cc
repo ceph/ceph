@@ -1356,6 +1356,11 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  return true;
 	}
       } else if (m->cmd[2] == "set") {
+	if (m->cmd.size() != 6) {
+	  err = -EINVAL;
+	  ss << "usage: osd pool set <poolname> <field> <value>";
+	  goto out;
+	}
 	int pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
 	if (pool < 0) {
 	  ss << "unrecognized pool '" << m->cmd[3] << "'";

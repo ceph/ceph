@@ -157,6 +157,9 @@ public:
     leases.push_back(&r->item_session_lease);
   }
 
+  // -- leases --
+  uint32_t lease_seq;
+
   // -- completed requests --
 private:
   set<tid_t> completed_requests;
@@ -180,7 +183,8 @@ public:
     state(STATE_CLOSED), state_seq(0), importing_count(0),
     connection(NULL), item_session_list(this),
     requests(0),  // member_offset passed to front() manually
-    cap_push_seq(0) { }
+    cap_push_seq(0),
+    lease_seq(0) { }
   ~Session() {
     assert(!item_session_list.is_on_list());
   }
