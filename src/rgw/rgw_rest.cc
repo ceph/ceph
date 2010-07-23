@@ -96,7 +96,7 @@ static void dump_etag(struct req_state *s, const char *etag)
 static void dump_last_modified(struct req_state *s, time_t t) {
 
   char timestr[TIME_BUF_SIZE];
-  struct tm *tmp = localtime(&t);
+  struct tm *tmp = gmtime(&t);
   if (tmp == NULL)
     return;
 
