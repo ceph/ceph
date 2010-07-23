@@ -1126,8 +1126,8 @@ void OSD::update_heartbeat_peers()
 
   // filter heartbeat_from_stamp to only include osds that remain in
   // heartbeat_from.
-  map<int, utime_t> stamps;
-  stamps.swap(heartbeat_from_stamp);
+  map<int, utime_t> old_from_stamp;
+  old_from_stamp.swap(heartbeat_from_stamp);
 
   map<int, epoch_t> old_to, old_from;
   map<int, entity_inst_t> old_inst;
@@ -1144,8 +1144,11 @@ void OSD::update_heartbeat_peers()
     // replicas ping primary.
     if (pg->get_role() > 0) {
       assert(pg->acting.size() > 1);
-      heartbeat_to[pg->acting[0]] = osdmap->get_epoch();
-      heartbeat_inst[pg->acting[0]] = osdmap->get_hb_inst(pg->acting[0]);
+      int p = pg->acting[0];
+      heartbeat_to[p] = osdmap->get_epoch();
+      heartbeat_inst[p] = osdmap->get_hb_inst(p);
+      if (old_to.count(p) == 0 || old_inst[p] != heartbeat_inst[p])
+	dout(10) << "update_heartbeat_peers: new _to osd" << p << " " << heartbeat_inst[p] << dendl;
     }
     else if (pg->get_role() == 0) {
       assert(pg->acting[0] == whoami);
@@ -1154,8 +1157,13 @@ void OSD::update_heartbeat_peers()
 	assert(p != whoami);
 	heartbeat_from[p] = osdmap->get_epoch();
 	heartbeat_inst[p] = osdmap->get_hb_inst(p);
-	if (stamps.count(p) && old_from.count(p))  // have a stamp _AND_ i'm not new to the set
-	  heartbeat_from_stamp[p] = stamps[p];
+	if (old_from_stamp.count(p) && old_from.count(p) &&
+	    old_inst[p] == heartbeat_inst[p]) {
+	  // have a stamp _AND_ i'm not new to the set
+	  heartbeat_from_stamp[p] = old_from_stamp[p];
+	} else {
+	  dout(10) << "update_heartbeat_peers: new _from osd" << p << " " << heartbeat_inst[p] << dendl;
+	}
       }
     }
   }
@@ -1163,21 +1171,31 @@ void OSD::update_heartbeat_peers()
        p != old_to.end();
        p++) {
     if (p->second > osdmap->get_epoch()) {
-      dout(10) << " keeping newer _to peer " << old_inst[p->first] << " as of " << p->second << dendl;
+      dout(10) << "update_heartbeat_peers: keeping newer _to peer " << old_inst[p->first]
+	       << " as of " << p->second << dendl;
       heartbeat_to[p->first] = p->second;
       heartbeat_inst[p->first] = old_inst[p->first];
     } else if (p->second < osdmap->get_epoch() &&
 	       (!osdmap->is_up(p->first) ||
 		osdmap->get_hb_inst(p->first) != old_inst[p->first])) {
-      dout(10) << " marking down old _to peer " << old_inst[p->first] << " as of " << p->second << dendl;      
+      dout(10) << "update_heartbeat_peers: marking down old _to peer " << old_inst[p->first] 
+	       << " as of " << p->second << dendl;      
       heartbeat_messenger->mark_down(old_inst[p->first].addr);
     }
+  }
+  for (map<int,epoch_t>::iterator p = old_from.begin();
+       p != old_from.end();
+       p++) {
+    if (heartbeat_to.count(p->first) == 0 ||
+	heartbeat_inst[p->first] != old_inst[p->first])
+      dout(10) << "update_heartbeat_peers: dropped old _from osd" << p->first 
+	       << " " << old_inst[p->first] << dendl;
   }
 
   heartbeat_epoch = osdmap->get_epoch();
 
-  dout(10) << "hb   to: " << heartbeat_to << dendl;
-  dout(10) << "hb from: " << heartbeat_from << dendl;
+  dout(10) << "update_heartbeat_peers: hb   to: " << heartbeat_to << dendl;
+  dout(10) << "update_heartbeat_peers: hb from: " << heartbeat_from << dendl;
 
   heartbeat_lock.Unlock();
 }
