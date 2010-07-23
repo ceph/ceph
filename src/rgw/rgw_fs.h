@@ -45,6 +45,7 @@ public:
 	    map<std::string, bufferlist> *attrs,
             const time_t *mod_ptr,
             const time_t *unmod_ptr,
+            time_t *lastmod,
             const char *if_match,
             const char *if_nomatch,
             size_t *size,

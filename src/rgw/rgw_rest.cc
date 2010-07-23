@@ -85,11 +85,25 @@ void close_section(struct req_state *s, const char *name)
 static void dump_content_length(struct req_state *s, int len)
 {
   CGI_PRINTF(s->fcgx->out, "Content-Length: %d\n", len);
+  CGI_PRINTF(s->fcgx->out, "Accept-Ranges: %s\n", "bytes");
 }
 
 static void dump_etag(struct req_state *s, const char *etag)
 {
   CGI_PRINTF(s->fcgx->out,"ETag: \"%s\"\n", etag);
+}
+
+static void dump_last_modified(struct req_state *s, time_t t) {
+
+  char timestr[TIME_BUF_SIZE];
+  struct tm *tmp = localtime(&t);
+  if (tmp == NULL)
+    return;
+
+  if (strftime(timestr, sizeof(timestr), "%a, %d %b %Y %H:%M:%S %Z", tmp) == 0)
+    return;
+
+  CGI_PRINTF(s->fcgx->out, "Last-Modified: %s\n", timestr);
 }
 
 void dump_value(struct req_state *s, const char *name, const char *fmt, ...)
@@ -116,7 +130,6 @@ static void dump_entry(struct req_state *s, const char *val)
 
 void dump_time(struct req_state *s, const char *name, time_t *t)
 {
-#define TIME_BUF_SIZE 128
   char buf[TIME_BUF_SIZE];
   struct tm *tmp = localtime(t);
   if (tmp == NULL)
@@ -187,7 +200,6 @@ void abort_early(struct req_state *s, int err)
 
 void dump_range(struct req_state *s, off_t ofs, off_t end)
 {
-    CGI_PRINTF(s->fcgx->out,"Accept-Ranges: bytes\n", "");
     CGI_PRINTF(s->fcgx->out,"Content-Range: bytes %d-%d/%d\n", (int)ofs, (int)end, (int)end + 1);
 }
 
@@ -209,11 +221,12 @@ int RGWGetObj_REST::send_response(void *handle)
   if (sent_header)
     goto send_data;
 
-  if (get_data && !ret) {
-    if (range_str)
-      dump_range(s, ofs, end);
-    dump_content_length(s, total_len);
-  }
+  if (range_str)
+    dump_range(s, ofs, end);
+
+  dump_content_length(s, total_len);
+  dump_last_modified(s, lastmod);
+
   if (!ret) {
     map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
     if (iter != attrs.end()) {
@@ -223,6 +236,7 @@ int RGWGetObj_REST::send_response(void *handle)
         dump_etag(s, etag);
       }
     }
+
     for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
        const char *name = iter->first.c_str();
        if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {

@@ -142,7 +142,7 @@ void RGWGetObj::execute()
   init_common();
 
   ret = rgwstore->prepare_get_obj(s->bucket_str, s->object_str, ofs, &end, &attrs, mod_ptr,
-                                  unmod_ptr, if_match, if_nomatch, &total_len, &handle, &err);
+                                  unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &handle, &err);
   if (ret < 0)
     goto done;
 

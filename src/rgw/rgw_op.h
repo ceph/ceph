@@ -54,6 +54,7 @@ protected:
   size_t total_len;
   off_t end;
   time_t mod_time;
+  time_t lastmod;
   time_t unmod_time;
   time_t *mod_ptr;
   time_t *unmod_ptr;

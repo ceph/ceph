@@ -274,9 +274,10 @@ int RGWFS::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest
   void *handle;
   off_t ofs = 0, end = -1;
   size_t total_len;
+  time_t lastmod;
 
   map<string, bufferlist> attrset;
-  ret = prepare_get_obj(src_bucket, src_obj, 0, &end, &attrset, mod_ptr, unmod_ptr,
+  ret = prepare_get_obj(src_bucket, src_obj, 0, &end, &attrset, mod_ptr, unmod_ptr, &lastmod,
                         if_match, if_nomatch, &total_len, &handle, err);
   if (ret < 0)
     return ret;
@@ -421,6 +422,7 @@ int RGWFS::prepare_get_obj(std::string& bucket, std::string& obj,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
             const time_t *unmod_ptr,
+            time_t *lastmod,
             const char *if_match,
             const char *if_nomatch,
             size_t *total_size,
