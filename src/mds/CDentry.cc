@@ -503,7 +503,7 @@ void CDentry::decode_lock_state(int type, bufferlist& bl)
 }
 
 
-ClientLease *CDentry::add_client_lease(client_t c, int mask) 
+ClientLease *CDentry::add_client_lease(client_t c, int mask, Session *session) 
 {
   ClientLease *l;
   if (client_lease_map.count(c))
@@ -512,6 +512,7 @@ ClientLease *CDentry::add_client_lease(client_t c, int mask)
     if (client_lease_map.empty())
       get(PIN_CLIENTLEASE);
     l = client_lease_map[c] = new ClientLease(c, this);
+    l->seq = ++session->lease_seq;
   }
   
   int adding = ~l->mask & mask;

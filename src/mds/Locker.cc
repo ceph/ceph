@@ -2231,7 +2231,7 @@ void Locker::_issue_client_lease(CDentry *dn, int mask, int pool, client_t clien
   e.mask = 1;
 
   if (mask) {
-    ClientLease *l = dn->add_client_lease(client, mask);
+    ClientLease *l = dn->add_client_lease(client, mask, session);
     session->touch_lease(l);
 
     e.seq = ++l->seq;
