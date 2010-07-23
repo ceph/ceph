@@ -469,7 +469,7 @@ int RGWFS::prepare_get_obj(std::string& bucket, std::string& obj,
   if (mod_ptr) {
     if (st.st_mtime < *mod_ptr) {
       err->num = "304";
-      err->code = "PreconditionFailed";
+      err->code = "NotModified";
       goto done_err;
     }
   }
