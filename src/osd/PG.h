@@ -375,7 +375,7 @@ public:
    */
   struct IndexedLog : public Log {
     hash_map<sobject_t,Entry*> objects;  // ptrs into log.  be careful!
-    hash_set<osd_reqid_t>      caller_ops;
+    hash_map<osd_reqid_t,Entry*> caller_ops;
 
     // recovery pointers
     list<Entry>::iterator complete_to;  // not inclusive of referenced item
@@ -400,6 +400,12 @@ public:
     bool logged_req(const osd_reqid_t &r) const {
       return caller_ops.count(r);
     }
+    eversion_t get_request_version(const osd_reqid_t &r) const {
+      hash_map<osd_reqid_t,Entry*>::const_iterator p = caller_ops.find(r);
+      if (p == caller_ops.end())
+	return eversion_t();
+      return p->second->version;    
+    }
 
     void index() {
       objects.clear();
@@ -408,7 +414,7 @@ public:
            i != log.end();
            i++) {
         objects[i->soid] = &(*i);
-        caller_ops.insert(i->reqid);
+        caller_ops[i->reqid] = &(*i);
       }
     }
 
@@ -417,7 +423,7 @@ public:
           objects[e.soid]->version < e.version)
         objects[e.soid] = &e;
       if (e.reqid_is_indexed())
-	caller_ops.insert(e.reqid);
+	caller_ops[e.reqid] = &e;
     }
     void unindex() {
       objects.clear();
@@ -454,7 +460,7 @@ public:
 
       // to our index
       objects[e.soid] = &(log.back());
-      caller_ops.insert(e.reqid);
+      caller_ops[e.reqid] = &(log.back());
     }
 
     void trim(ObjectStore::Transaction &t, eversion_t s);
