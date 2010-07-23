@@ -5435,7 +5435,7 @@ void Server::handle_client_lssnap(MDRequest *mdr)
 
   SnapRealm *realm = diri->find_snaprealm();
   map<snapid_t,SnapInfo*> infomap;
-  realm->get_snap_info(infomap);
+  realm->get_snap_info(infomap, diri->first);
 
   utime_t now = g_clock.now();
   __u32 num = 0;
