@@ -739,6 +739,7 @@ protected:
   int         state;   // see bit defns above
 
 public:
+  eversion_t  last_update_ondisk;    // last_update that has committed; ONLY DEFINED WHEN is_active()
   eversion_t  last_complete_ondisk;  // last_complete that has committed.
 
   // primary state
@@ -1087,6 +1088,10 @@ inline ostream& operator<<(ostream& out, const PG& pg)
     out << "/" << pg.acting;
   out << " r=" << pg.get_role();
   
+  if (pg.is_active() &&
+      pg.last_update_ondisk != pg.info.last_update)
+    out << " luod=" << pg.last_update_ondisk;
+
   if (pg.recovery_ops_active)
     out << " rops=" << pg.recovery_ops_active;
 

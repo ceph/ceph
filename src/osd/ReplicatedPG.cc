@@ -2179,6 +2179,7 @@ void ReplicatedPG::op_commit(RepGather *repop)
     dout(10) << "op_commit " << *repop << dendl;
     repop->waitfor_disk.erase(osd->get_nodeid());
     //repop->waitfor_nvram.erase(osd->get_nodeid());
+    last_update_ondisk = repop->v;
     last_complete_ondisk = repop->pg_local_last_complete;
     eval_repop(repop);
   }

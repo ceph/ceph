@@ -1034,6 +1034,8 @@ void PG::clear_primary_state()
   min_last_complete_ondisk = eversion_t();
   stray_purged.clear();
 
+  last_update_ondisk = eversion_t();
+
   snap_trimq.clear();
 
   finish_sync_event = 0;  // so that _finish_recvoery doesn't go off in another thread
@@ -1587,6 +1589,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   trim_past_intervals();
   
   if (role == 0) {    // primary state
+    last_update_ondisk = info.last_update;
     min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
   }
 
