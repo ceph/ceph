@@ -615,6 +615,8 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
   while (i != omap.end()) {
     Log::Entry& be = i->second;
 
+    dout(15) << " " << be << dendl;
+
     /*
      * we can skip an object if
      *  - is already in the log AND
@@ -625,11 +627,9 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
     if (log.objects.count(be.soid)) {
       Log::Entry *le = log.objects[be.soid];
       
-      assert(!le->is_delete());  // if it's a deletion, we are corrupt..
-
       // note the prior version
       if (le->prior_version == eversion_t() ||  // either new object, or
-	  le->prior_version >= log.tail) {    // prior_version also already in log
+	  le->prior_version >= log.tail) {      // prior_version also already in log
 	dout(15) << " skipping " << be << " (have " << *le << ")" << dendl;
       } else {
 	be.version = le->prior_version;
