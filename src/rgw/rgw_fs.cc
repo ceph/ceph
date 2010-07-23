@@ -508,7 +508,6 @@ int RGWFS::prepare_get_obj(std::string& bucket, std::string& obj,
 
   *total_size = (max_len > 0 ? max_len : 0);
   r = 0;
-done:
   return r;
 
 done_err:
