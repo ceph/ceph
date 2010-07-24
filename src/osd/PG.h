@@ -778,6 +778,7 @@ public:
   list<class Message*>            waiting_for_active;
   hash_map<sobject_t, 
            list<class Message*> > waiting_for_missing_object, waiting_for_degraded_object;   
+  map<eversion_t,list<Message*> > waiting_for_ondisk;
   map<eversion_t,class MOSDOp*>   replay_queue;
 
   void take_object_waiters(hash_map<sobject_t, list<Message*> >& m);
@@ -974,10 +975,6 @@ public:
   coll_t make_snap_collection(ObjectStore::Transaction& t, snapid_t sn);
 
   void queue_snap_trim();
-
-  bool is_dup(osd_reqid_t rid) {
-    return log.logged_req(rid);
-  }
 
 
 
