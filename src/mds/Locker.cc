@@ -2294,7 +2294,7 @@ void Locker::revoke_client_leases(SimpleLock *lock)
        p++) {
     ClientLease *l = p->second;
     
-    if ((l->mask & lock->get_type()) == 0)
+    if (l->mask == 0)
       continue;
     
     n++;
