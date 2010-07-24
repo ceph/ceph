@@ -4257,7 +4257,15 @@ void OSD::defer_recovery(PG *pg)
 
 void OSD::reply_op_error(MOSDOp *op, int err)
 {
-  MOSDOpReply *reply = new MOSDOpReply(op, err, osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
+  int flags;
+  if (err == 0)
+    // reply with whatever ack/safe flags the caller wanted
+    flags = op->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
+  else
+    // just ACK on error
+    flags = CEPH_OSD_FLAG_ACK;
+
+  MOSDOpReply *reply = new MOSDOpReply(op, err, osdmap->get_epoch(), flags);
   messenger->send_message(reply, op->get_connection());
   op->put();
 }
