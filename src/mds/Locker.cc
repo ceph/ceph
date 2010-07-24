@@ -1339,8 +1339,8 @@ void Locker::remove_stale_leases(Session *session)
     ClientLease *l = *p;
     ++p;
     CDentry *parent = (CDentry*)l->parent;
-    dout(15) << " removing lease for " << l->mask << " on " << *parent << dendl;
-    parent->remove_client_lease(l, l->mask, this);
+    dout(15) << " removing lease on " << *parent << dendl;
+    parent->remove_client_lease(l, this);
   }
 }
 
@@ -1870,7 +1870,7 @@ void Locker::process_cap_update(MDRequest *mdr, client_t client,
 	ClientLease *l = dn->get_client_lease(client);
 	if (l) {
 	  dout(10) << " removing lease on " << *dn << dendl;
-	  dn->remove_client_lease(l, l->mask, this);
+	  dn->remove_client_lease(l, this);
 	}
       } else {
 	stringstream ss;
@@ -2193,7 +2193,7 @@ void Locker::handle_client_lease(MClientLease *m)
     } else {
       dout(7) << "handle_client_lease client" << client
 	      << " on " << *dn << dendl;
-      dn->remove_client_lease(l, CEPH_LOCK_DN, this);
+      dn->remove_client_lease(l, this);
     }
     m->put();
     break;
@@ -2222,66 +2222,37 @@ void Locker::handle_client_lease(MClientLease *m)
 }
 
 
-
-void Locker::_issue_client_lease(CDentry *dn, int mask, int pool, client_t client,
-				 bufferlist &bl, utime_t now, Session *session)
-{
-  LeaseStat e;
-  e.mask = mask;
-
-  if (mask) {
-    ClientLease *l = dn->add_client_lease(client, mask, session);
-    session->touch_lease(l);
-
-    e.seq = ++l->seq;
-
-    now += mdcache->client_lease_durations[pool];
-    mdcache->touch_client_lease(l, pool, now);
-  } else
-    e.seq = 0;
-
-  e.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
-  ::encode(e, bl);
-  dout(20) << "_issue_client_lease mask " << e.mask << " seq " << e.seq << " dur " << e.duration_ms << "ms "
-	   << " on " << *dn << dendl;
-}
-  
-
-
-/*
-int Locker::issue_client_lease(CInode *in, client_t client, 
-			       bufferlist &bl, utime_t now, Session *session)
-{
-  int mask = CEPH_LOCK_INO;
-  int pool = 1;   // fixme.. do something smart!
-  if (in->authlock.can_lease()) mask |= CEPH_LOCK_IAUTH;
-  if (in->linklock.can_lease()) mask |= CEPH_LOCK_ILINK;
-  if (in->filelock.can_lease()) mask |= CEPH_LOCK_IFILE;
-  if (in->xattrlock.can_lease()) mask |= CEPH_LOCK_IXATTR;
-
-  _issue_client_lease(in, mask, pool, client, bl, now, session);
-  return mask;
-}
-*/
-
 void Locker::issue_client_lease(CDentry *dn, client_t client,
 			       bufferlist &bl, utime_t now, Session *session)
 {
   int pool = 1;   // fixme.. do something smart!
 
-  // is it necessary?
-  // -> dont issue per-dentry lease if a dir lease is possible, or
-  //    if the client is holding EXCL|RDCACHE caps.
-  int mask = 0;
-
   CInode *diri = dn->get_dir()->get_inode();
   if (!diri->is_stray() &&  // do not issue dn leases in stray dir!
       ((!diri->filelock.can_lease(client) &&
 	(diri->get_client_cap_pending(client) & (CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL)) == 0)) &&
-      dn->lock.can_lease(client))
-    mask |= 1;  // dentry lease.  always 1.
-  
-  _issue_client_lease(dn, mask, pool, client, bl, now, session);
+      dn->lock.can_lease(client)) {
+    // issue a dentry lease
+    ClientLease *l = dn->add_client_lease(client, session);
+    session->touch_lease(l);
+    
+    now += mdcache->client_lease_durations[pool];
+    mdcache->touch_client_lease(l, pool, now);
+
+    LeaseStat e;
+    e.mask = 1;
+    e.seq = ++l->seq;
+    e.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
+    ::encode(e, bl);
+    dout(20) << "issue_client_lease seq " << e.seq << " dur " << e.duration_ms << "ms "
+	     << " on " << *dn << dendl;
+  } else {
+    // null lease
+    LeaseStat e;
+    e.mask = 0;
+    ::encode(e, bl);
+    dout(20) << "issue_client_lease no/null lease on " << *dn << dendl;
+  }
 }
 
 
@@ -2293,9 +2264,6 @@ void Locker::revoke_client_leases(SimpleLock *lock)
        p != dn->client_lease_map.end();
        p++) {
     ClientLease *l = p->second;
-    
-    if (l->mask == 0)
-      continue;
     
     n++;
     assert(lock->get_type() == CEPH_LOCK_DN);

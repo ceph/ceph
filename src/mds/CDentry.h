@@ -374,16 +374,16 @@ public:
       return client_lease_map[c];
     return 0;
   }
-  int get_client_lease_mask(client_t c) {
+  bool have_client_lease(client_t c) {
     ClientLease *l = get_client_lease(c);
     if (l) 
-      return l->mask;
+      return true;
     else
-      return 0;
+      return false;
   }
 
-  ClientLease *add_client_lease(client_t c, int mask, Session *session);
-  void remove_client_lease(ClientLease *r, int mask, class Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
+  ClientLease *add_client_lease(client_t c, Session *session);
+  void remove_client_lease(ClientLease *r, class Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
   
 
   

@@ -293,7 +293,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       ClientLease *r = session->leases.front();
       CDentry *dn = (CDentry*)r->parent;
       dout(20) << " killing client lease of " << *dn << dendl;
-      dn->remove_client_lease(r, r->mask, mds->locker);
+      dn->remove_client_lease(r, mds->locker);
     }
     while (!session->requests.empty()) {
       MDRequest *mdr = session->requests.front(member_offset(MDRequest,

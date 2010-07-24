@@ -1050,7 +1050,6 @@ class MDSCacheObject;
  */
 struct ClientLease {
   client_t client;
-  int mask;                 // CEPH_STAT_MASK_*
   MDSCacheObject *parent;
 
   ceph_seq_t seq;
@@ -1059,7 +1058,7 @@ struct ClientLease {
   xlist<ClientLease*>::item item_lease;         // global list
 
   ClientLease(client_t c, MDSCacheObject *p) : 
-    client(c), mask(0), parent(p), seq(0),
+    client(c), parent(p), seq(0),
     item_session_lease(this),
     item_lease(this) { }
 };
