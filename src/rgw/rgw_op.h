@@ -34,11 +34,15 @@ extern int read_acls(struct req_state *s, bool only_bucket = false);
 class RGWOp {
 protected:
   struct req_state *s;
+  struct rgw_err err;
 public:
   RGWOp() {}
   ~RGWOp() {}
 
-  virtual void init(struct req_state *s) { this->s = s; }
+  virtual void init(struct req_state *s) {
+    this->s = s;
+    memset(&err, 0, sizeof(err));
+  }
   virtual void execute() = 0;
 };
 
@@ -61,7 +65,6 @@ protected:
   map<string, bufferlist> attrs;
   char *data;
   int ret;
-  struct rgw_err err;
   bool get_data;
 
   int init_common();
@@ -175,7 +178,6 @@ protected:
   size_t len;
   off_t ofs;
   char *data;
-  struct rgw_err err;
   char *supplied_md5_b64;
 
 public:
@@ -227,7 +229,6 @@ protected:
   time_t *unmod_ptr;
   int ret;
   map<string, bufferlist> attrs;
-  struct rgw_err err;
   string src_bucket;
   string src_object;
   time_t mtime;
@@ -250,7 +251,6 @@ public:
     unmod_ptr = NULL;
     ret = 0;
     attrs.clear();
-    memset(&err, 0, sizeof(err));
     src_bucket.clear();
     src_object.clear();
     mtime = 0;
