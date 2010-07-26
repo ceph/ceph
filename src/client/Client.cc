@@ -264,8 +264,8 @@ void Client::init()
 
   monclient->init();
   monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
-  monclient->sub_want("mdsmap", mdsmap->get_epoch());
-  monclient->sub_want_onetime("osdmap", 0);
+  monclient->sub_want("mdsmap", 0, 0);
+  monclient->sub_want("osdmap", 0, CEPH_SUBSCRIBE_ONETIME);
 
   // do logger crap only once per process.
   static bool did_init = false;

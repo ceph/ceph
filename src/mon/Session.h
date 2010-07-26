@@ -28,10 +28,11 @@ struct Subscription {
   MonSession *session;
   string type;
   xlist<Subscription*>::item type_item;
-  version_t last;
+  version_t next;
   bool onetime;
   
-  Subscription(MonSession *s, const string& t) : session(s), type(t), type_item(this) {};
+  Subscription(MonSession *s, const string& t) : session(s), type(t), type_item(this),
+						 next(0), onetime(false) {};
 };
 
 struct MonSession : public RefCountedObject {
@@ -106,7 +107,7 @@ struct MonSessionMap {
   }
 
 
-  void add_update_sub(MonSession *s, const string& what, version_t have, bool onetime) {
+  void add_update_sub(MonSession *s, const string& what, version_t start, bool onetime) {
     Subscription *sub = 0;
     if (s->sub_map.count(what)) {
       sub = s->sub_map[what];
@@ -115,7 +116,7 @@ struct MonSessionMap {
       s->sub_map[what] = sub;
       subs[what].push_back(&sub->type_item);
     }
-    sub->last = have;
+    sub->next = start;
     sub->onetime = onetime;
   }
 

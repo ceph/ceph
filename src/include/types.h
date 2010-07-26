@@ -472,7 +472,8 @@ inline ostream& operator<<(ostream& out, const kb_t& kb)
 
 inline ostream& operator<<(ostream& out, const ceph_mon_subscribe_item& i)
 {
-  return out << i.have << (i.onetime ? "" : "+");
+  return out << i.start
+	     << ((i.flags & CEPH_SUBSCRIBE_ONETIME) ? "" : "+");
 }
 
 #endif

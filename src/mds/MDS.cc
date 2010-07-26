@@ -456,7 +456,7 @@ int MDS::init()
 
   objecter->init();
 
-  monc->sub_want("mdsmap", 0);
+  monc->sub_want("mdsmap", 0, 0);
   monc->renew_subs();
 
   // schedule tick

@@ -510,8 +510,6 @@ int OSD::init()
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
   monc->init();
 
-  monc->sub_want("monmap", 0);
-
   osd_lock.Unlock();
 
   monc->authenticate();
@@ -1417,7 +1415,7 @@ void OSD::heartbeat()
     if (now - last_mon_heartbeat > g_conf.osd_mon_heartbeat_interval) {
       last_mon_heartbeat = now;
       dout(10) << "i have no heartbeat peers; checking mon for new map" << dendl;
-      monc->sub_want_onetime("osdmap", osdmap->get_epoch());
+      monc->sub_want("osdmap", osdmap->get_epoch() + 1, CEPH_SUBSCRIBE_ONETIME);
       monc->renew_subs();
     }
   }
@@ -2091,7 +2089,7 @@ void OSD::wait_for_new_map(Message *m)
 {
   // ask?
   if (waiting_for_osdmap.empty()) {
-    monc->sub_want_onetime("osdmap", osdmap->get_epoch());
+    monc->sub_want("osdmap", osdmap->get_epoch() + 1, CEPH_SUBSCRIBE_ONETIME);
     monc->renew_subs();
   }
   
@@ -2345,7 +2343,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
     else {
       dout(10) << "handle_osd_map missing epoch " << cur+1 << dendl;
-      monc->sub_want_onetime("osdmap", cur);
+      monc->sub_want("osdmap", cur+1, CEPH_SUBSCRIBE_ONETIME);
       monc->renew_subs();
       break;
     }

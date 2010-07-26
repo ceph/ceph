@@ -775,9 +775,13 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   for (map<string,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();
        p++) {
-    if (!p->second.onetime)
+    // if there are any non-onetime subscriptions, we need to reply to start the resubscribe timer
+    if ((p->second.flags & CEPH_SUBSCRIBE_ONETIME) == 0)
       reply = true;
-    session_map.add_update_sub(s, p->first, p->second.have, p->second.onetime);
+
+    session_map.add_update_sub(s, p->first, p->second.start, 
+			       p->second.flags & CEPH_SUBSCRIBE_ONETIME);
+
     if (p->first == "mdsmap") {
       if ((int)s->caps.check_privileges(PAXOS_MDSMAP, MON_CAP_R)) {
         mdsmon()->check_sub(s->sub_map["mdsmap"]);
@@ -836,13 +840,13 @@ void Monitor::check_subs()
 
 void Monitor::check_sub(Subscription *sub)
 {
-  dout(0) << "check_sub monmap last " << sub->last << " have " << monmap->get_epoch() << dendl;
-  if (sub->last < monmap->get_epoch()) {
+  dout(0) << "check_sub monmap next " << sub->next << " have " << monmap->get_epoch() << dendl;
+  if (sub->next <= monmap->get_epoch()) {
     send_latest_monmap(sub->session->inst);
     if (sub->onetime)
       session_map.remove_sub(sub);
     else
-      sub->last = monmap->get_epoch();
+      sub->next = monmap->get_epoch() + 1;
   }
 }
 

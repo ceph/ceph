@@ -115,7 +115,7 @@ int MonClient::get_monmap()
   dout(10) << "get_monmap" << dendl;
   Mutex::Locker l(monc_lock);
   
-  _sub_want("monmap", monmap.get_epoch());
+  _sub_want("monmap", 0, 0);
   if (cur_mon < 0)
     _reopen_session();
 
@@ -266,7 +266,7 @@ int MonClient::authenticate(double timeout)
     return 0;
   }
 
-  _sub_want("monmap", monmap.get_epoch());
+  _sub_want("monmap", monmap.get_epoch() ? monmap.get_epoch() + 1 : 0, 0);
   if (cur_mon < 0)
     _reopen_session();
 

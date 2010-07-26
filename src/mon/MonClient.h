@@ -121,25 +121,21 @@ private:
   void _renew_subs();
   void handle_subscribe_ack(MMonSubscribeAck* m);
 
-  void _sub_want(string what, version_t have) {
-    sub_have[what].have = have;
-    sub_have[what].onetime = false;
+  bool _sub_want(string what, version_t start, unsigned flags) {
+    if (sub_have.count(what) &&
+	sub_have[what].start == start &&
+	sub_have[what].flags == flags)
+      return false;
+    sub_have[what].start = start;
+    sub_have[what].flags = flags;
+    return true;
   }
-  bool _sub_want_onetime(string what, version_t have) {
-    if (sub_have.count(what) == 0) {
-      sub_have[what].have = have;
-      sub_have[what].onetime = true;
-      return true;
-    } else
-      sub_have[what].have = have;
-    return false;
-  }
-  void _sub_got(string what, version_t have) {
+  void _sub_got(string what, version_t got) {
     if (sub_have.count(what)) {
-      if (sub_have[what].onetime)
+      if (sub_have[what].flags & CEPH_SUBSCRIBE_ONETIME)
 	sub_have.erase(what);
       else
-	sub_have[what].have = have;
+	sub_have[what].start = got + 1;
     }
   }
 
@@ -151,13 +147,9 @@ public:
     Mutex::Locker l(monc_lock);
     _renew_subs();
   }
-  void sub_want(string what, version_t have) {
+  bool sub_want(string what, version_t start, unsigned flags) {
     Mutex::Locker l(monc_lock);
-    _sub_want(what, have);
-  }
-  bool sub_want_onetime(string what, version_t have) {
-    Mutex::Locker l(monc_lock);
-    return _sub_want_onetime(what, have);
+    return _sub_want(what, start, flags);
   }
   void sub_got(string what, version_t have) {
     Mutex::Locker l(monc_lock);

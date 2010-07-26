@@ -43,6 +43,7 @@
 #define CEPH_FEATURE_NOSRCADDR      (1<<1)
 #define CEPH_FEATURE_MONCLOCKCHECK  (1<<2)
 #define CEPH_FEATURE_FLOCK          (1<<3)
+#define CEPH_FEATURE_SUBSCRIBE2     (1<<4)
 
 
 /*
@@ -201,9 +202,11 @@ struct ceph_client_mount {
 	struct ceph_mon_request_header monhdr;
 } __attribute__ ((packed));
 
+#define CEPH_SUBSCRIBE_ONETIME    1  /* i want only 1 update after have */
+
 struct ceph_mon_subscribe_item {
-	__le64 have_version;	__le64 have;
-	__u8 onetime;
+	__le64 start;
+	__u8 flags;
 } __attribute__ ((packed));
 
 struct ceph_mon_subscribe_ack {

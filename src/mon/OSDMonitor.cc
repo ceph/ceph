@@ -816,16 +816,16 @@ void OSDMonitor::check_subs()
 
 void OSDMonitor::check_sub(Subscription *sub)
 {
-  if (sub->last < osdmap.get_epoch()) {
-    if (sub->last)
-      send_incremental(sub->last, sub->session->inst);
+  if (sub->next <= osdmap.get_epoch()) {
+    if (sub->next > 1)
+      send_incremental(sub->next - 1, sub->session->inst);
     else
       mon->messenger->send_message(new MOSDMap(mon->monmap->fsid, &osdmap),
 				   sub->session->inst);
     if (sub->onetime)
       mon->session_map.remove_sub(sub);
     else
-      sub->last = osdmap.get_epoch();
+      sub->next = osdmap.get_epoch() + 1;
   }
 }
 

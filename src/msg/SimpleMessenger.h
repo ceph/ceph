@@ -52,7 +52,7 @@ using namespace __gnu_cxx;
  */
 
 // default feature(s) everyone gets
-#define MSGR_FEATURES_SUPPORTED  CEPH_FEATURE_NOSRCADDR
+#define MSGR_FEATURES_SUPPORTED  CEPH_FEATURE_NOSRCADDR|CEPH_FEATURE_SUBSCRIBE2
 
 class SimpleMessenger : public Messenger {
 public:
@@ -66,10 +66,12 @@ public:
 
     Policy() :
       lossy(false), server(false), throttler(NULL),
-      features_supported(MSGR_FEATURES_SUPPORTED), features_required(0) {}
+      features_supported(MSGR_FEATURES_SUPPORTED),
+      features_required(0) {}
     Policy(bool l, bool s, uint64_t sup, uint64_t req) :
       lossy(l), server(s), throttler(NULL),
-      features_supported(sup | MSGR_FEATURES_SUPPORTED), features_required(req) {}
+      features_supported(sup | MSGR_FEATURES_SUPPORTED),
+      features_required(req) {}
 
     static Policy stateful_server(uint64_t sup, uint64_t req) { return Policy(false, true, sup, req); }
     static Policy stateless_server(uint64_t sup, uint64_t req) { return Policy(true, true, sup, req); }
