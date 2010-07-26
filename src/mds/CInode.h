@@ -166,6 +166,7 @@ public:
       inode.nlink > 1 || // there are remote links, possibly snapped, that will need to find me
       old_inodes.size(); // once multiversion, always multiversion.  until old_inodes gets cleaned out.
   }
+  snapid_t get_oldest_snap();
 
   loff_t last_journaled;       // log offset for the last time i was journaled
   //loff_t last_open_journaled;  // log offset for the last journaled EOpen
