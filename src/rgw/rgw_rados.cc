@@ -590,8 +590,8 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
     if (if_nomatch) {
       cerr << "etag=" << etag << " " << " if_nomatch=" << if_nomatch << endl;
       if (strcmp(if_nomatch, etag.c_str()) == 0) {
-        err->num = "412";
-        err->code = "PreconditionFailed";
+        err->num = "304";
+        err->code = "NotModified";
         goto done_err;
       }
     }
