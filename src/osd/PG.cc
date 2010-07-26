@@ -615,6 +615,8 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
   while (i != omap.end()) {
     Log::Entry& be = i->second;
 
+    dout(15) << " " << be << dendl;
+
     /*
      * we can skip an object if
      *  - is already in the log AND
@@ -625,11 +627,9 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
     if (log.objects.count(be.soid)) {
       Log::Entry *le = log.objects[be.soid];
       
-      assert(!le->is_delete());  // if it's a deletion, we are corrupt..
-
       // note the prior version
       if (le->prior_version == eversion_t() ||  // either new object, or
-	  le->prior_version >= log.tail) {    // prior_version also already in log
+	  le->prior_version >= log.tail) {      // prior_version also already in log
 	dout(15) << " skipping " << be << " (have " << *le << ")" << dendl;
       } else {
 	be.version = le->prior_version;
@@ -1033,6 +1033,8 @@ void PG::clear_primary_state()
   peer_last_complete_ondisk.clear();
   min_last_complete_ondisk = eversion_t();
   stray_purged.clear();
+
+  last_update_ondisk = eversion_t();
 
   snap_trimq.clear();
 
@@ -1587,6 +1589,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   trim_past_intervals();
   
   if (role == 0) {    // primary state
+    last_update_ondisk = info.last_update;
     min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
   }
 
@@ -2413,6 +2416,14 @@ bool PG::block_if_wrlocked(MOSDOp* op, object_info_t& oi)
   return false; //the object wasn't locked, so the operation can be handled right away
 }
 
+void PG::take_object_waiters(hash_map<sobject_t, list<Message*> >& m)
+{
+  for (hash_map<sobject_t, list<Message*> >::iterator it = m.begin();
+       it != m.end();
+       it++)
+    osd->take_waiters(it->second);
+  m.clear();
+}
 
 
 // ==========================================================================================

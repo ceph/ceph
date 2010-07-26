@@ -447,10 +447,25 @@ protected:
   hash_map<sobject_t, list<Message*> > waiting_for_unbalanced_reads;  // i.e. primary-lock
 
   
-  // push/pull
-  map<sobject_t, pair<eversion_t, int> > pulling;  // which objects are currently being pulled, and from where
-  map<sobject_t, set<int> > pushing;
+  // pull
+  struct pull_info_t {
+    eversion_t version;
+    int from;
+    bool need_size;
+    interval_set<uint64_t> data_subset, data_subset_pulling;
+  };
+  map<sobject_t, pull_info_t> pulling;
 
+  // push
+  struct push_info_t {
+    uint64_t size;
+    eversion_t version;
+    interval_set<uint64_t> data_subset, data_subset_pushing;
+    map<sobject_t, interval_set<uint64_t> > clone_subsets;
+  };
+  map<sobject_t, map<int, push_info_t> > pushing;
+
+  int recover_object_replicas(const sobject_t& soid);
   void calc_head_subsets(SnapSet& snapset, const sobject_t& head,
 			 Missing& missing,
 			 interval_set<uint64_t>& data_subset,
@@ -458,11 +473,19 @@ protected:
   void calc_clone_subsets(SnapSet& snapset, const sobject_t& poid, Missing& missing,
 			  interval_set<uint64_t>& data_subset,
 			  map<sobject_t, interval_set<uint64_t> >& clone_subsets);
-  void push_to_replica(const sobject_t& oid, int dest);
-  void push(const sobject_t& oid, int dest);
-  void push(const sobject_t& oid, int dest, interval_set<uint64_t>& data_subset, 
-	    map<sobject_t, interval_set<uint64_t> >& clone_subsets);
+  void push_to_replica(ObjectContext *obc, const sobject_t& oid, int dest);
+  void push_start(const sobject_t& oid, int dest);
+  void push_start(const sobject_t& soid, int peer,
+		  uint64_t size, eversion_t version,
+		  interval_set<uint64_t> &data_subset,
+		  map<sobject_t, interval_set<uint64_t> >& clone_subsets);
+  void send_push_op(const sobject_t& oid, int dest,
+		    uint64_t size, bool first, bool complete,
+		    interval_set<uint64_t>& data_subset, 
+		    map<sobject_t, interval_set<uint64_t> >& clone_subsets);
+
   bool pull(const sobject_t& oid);
+  void send_pull_op(const sobject_t& soid, eversion_t v, bool first, const interval_set<uint64_t>& data_subset, int fromosd);
 
 
   // low level ops
@@ -585,6 +608,9 @@ public:
 
   bool is_missing_object(const sobject_t& oid);
   void wait_for_missing_object(const sobject_t& oid, Message *op);
+
+  bool is_degraded_object(const sobject_t& oid);
+  void wait_for_degraded_object(const sobject_t& oid, Message *op);
 
   void on_osd_failure(int o);
   void on_acker_change();

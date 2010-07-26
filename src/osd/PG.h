@@ -375,7 +375,7 @@ public:
    */
   struct IndexedLog : public Log {
     hash_map<sobject_t,Entry*> objects;  // ptrs into log.  be careful!
-    hash_set<osd_reqid_t>      caller_ops;
+    hash_map<osd_reqid_t,Entry*> caller_ops;
 
     // recovery pointers
     list<Entry>::iterator complete_to;  // not inclusive of referenced item
@@ -400,6 +400,12 @@ public:
     bool logged_req(const osd_reqid_t &r) const {
       return caller_ops.count(r);
     }
+    eversion_t get_request_version(const osd_reqid_t &r) const {
+      hash_map<osd_reqid_t,Entry*>::const_iterator p = caller_ops.find(r);
+      if (p == caller_ops.end())
+	return eversion_t();
+      return p->second->version;    
+    }
 
     void index() {
       objects.clear();
@@ -408,7 +414,7 @@ public:
            i != log.end();
            i++) {
         objects[i->soid] = &(*i);
-        caller_ops.insert(i->reqid);
+        caller_ops[i->reqid] = &(*i);
       }
     }
 
@@ -417,7 +423,7 @@ public:
           objects[e.soid]->version < e.version)
         objects[e.soid] = &e;
       if (e.reqid_is_indexed())
-	caller_ops.insert(e.reqid);
+	caller_ops[e.reqid] = &e;
     }
     void unindex() {
       objects.clear();
@@ -454,7 +460,7 @@ public:
 
       // to our index
       objects[e.soid] = &(log.back());
-      caller_ops.insert(e.reqid);
+      caller_ops[e.reqid] = &(log.back());
     }
 
     void trim(ObjectStore::Transaction &t, eversion_t s);
@@ -739,6 +745,7 @@ protected:
   int         state;   // see bit defns above
 
 public:
+  eversion_t  last_update_ondisk;    // last_update that has committed; ONLY DEFINED WHEN is_active()
   eversion_t  last_complete_ondisk;  // last_complete that has committed.
 
   // primary state
@@ -770,8 +777,11 @@ public:
   // pg waiters
   list<class Message*>            waiting_for_active;
   hash_map<sobject_t, 
-           list<class Message*> > waiting_for_missing_object;   
+           list<class Message*> > waiting_for_missing_object, waiting_for_degraded_object;   
+  map<eversion_t,list<Message*> > waiting_for_ondisk;
   map<eversion_t,class MOSDOp*>   replay_queue;
+
+  void take_object_waiters(hash_map<sobject_t, list<Message*> >& m);
   
   hash_map<sobject_t, list<Message*> > waiting_for_wr_unlock; 
 
@@ -966,10 +976,6 @@ public:
 
   void queue_snap_trim();
 
-  bool is_dup(osd_reqid_t rid) {
-    return log.logged_req(rid);
-  }
-
 
 
   // abstract bits
@@ -986,6 +992,9 @@ public:
   virtual bool is_write_in_progress() = 0;
   virtual bool is_missing_object(const sobject_t& oid) = 0;
   virtual void wait_for_missing_object(const sobject_t& oid, Message *op) = 0;
+
+  virtual bool is_degraded_object(const sobject_t& oid) = 0;
+  virtual void wait_for_degraded_object(const sobject_t& oid, Message *op) = 0;
 
   virtual void on_osd_failure(int osd) = 0;
   virtual void on_role_change() = 0;
@@ -1082,6 +1091,10 @@ inline ostream& operator<<(ostream& out, const PG& pg)
     out << "/" << pg.acting;
   out << " r=" << pg.get_role();
   
+  if (pg.is_active() &&
+      pg.last_update_ondisk != pg.info.last_update)
+    out << " luod=" << pg.last_update_ondisk;
+
   if (pg.recovery_ops_active)
     out << " rops=" << pg.recovery_ops_active;
 
