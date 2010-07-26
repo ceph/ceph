@@ -523,6 +523,7 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
   uint64_t size;
   bufferlist etag;
   time_t mtime;
+  time_t ctime;
 
   map<string, bufferlist>::iterator iter;
 
@@ -551,10 +552,13 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
       goto done_err;
   }
 
+  /* Convert all times go GMT to make them compatible */
+  ctime = mktime(gmtime(&mtime));
 
   r = -ECANCELED;
   if (mod_ptr) {
-    if (mtime < *mod_ptr) {
+    cout << "mod_ptr: " << *mod_ptr << " ctime: " << ctime << endl;
+    if (ctime < *mod_ptr) {
       err->num = "304";
       err->code = "NotModified";
       goto done_err;
@@ -562,7 +566,7 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
   }
 
   if (unmod_ptr) {
-    if (mtime >= *mod_ptr) {
+    if (ctime > *mod_ptr) {
       err->num = "412";
       err->code = "PreconditionFailed";
       goto done_err;

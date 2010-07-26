@@ -7,7 +7,7 @@ int parse_time(const char *time_str, time_t *time)
 {
   struct tm tm;
   memset(&tm, 0, sizeof(struct tm));
-  if (!strptime(time_str, "%a, %d %b %Y %H:%M:%S GMT", &tm))
+  if (!strptime(time_str, "%a, %d %b %Y %H:%M:%S %Z", &tm))
     return -EINVAL;
 
   *time = mktime(&tm);
