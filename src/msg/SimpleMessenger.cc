@@ -2341,7 +2341,10 @@ void SimpleMessenger::submit_message(Message *m, Pipe *pipe)
   }
 
   lock.Lock();
-  {
+  if (pipe == dispatch_queue.local_pipe) {
+    dout(20) << "submit_message " << *m << " local" << dendl;
+    dispatch_queue.local_delivery(m, m->get_priority());
+  } else {
     pipe->pipe_lock.Lock();
     if (pipe->state == Pipe::STATE_CLOSED) {
       dout(20) << "submit_message " << *m << " ignoring closed pipe " << pipe->peer_addr << dendl;
