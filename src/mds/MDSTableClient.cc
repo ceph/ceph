@@ -146,7 +146,7 @@ void MDSTableClient::_prepare(bufferlist& mutation, version_t *ptid, bufferlist 
 void MDSTableClient::send_to_tableserver(MMDSTableRequest *req)
 {
   int ts = mds->mdsmap->get_tableserver();
-  if (mds->mdsmap->get_state(ts) >= MDSMap::STATE_ACTIVE)
+  if (mds->mdsmap->get_state(ts) >= MDSMap::STATE_CLIENTREPLAY)
     mds->send_message_mds(req, ts);
   else {
     dout(10) << " deferring request to not-yet-active tableserver mds" << ts << dendl;
