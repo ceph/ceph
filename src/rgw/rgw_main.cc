@@ -203,17 +203,24 @@ static bool verify_signature(struct req_state *s)
   return (auth_sign.compare(b64) == 0);
 }
 
-static sighandler_t sighandler;
+static sighandler_t sighandler_segv;
+static sighandler_t sighandler_usr1;
 
 /*
  * ?print out the C++ errors to log in case it fails
  */
-static void godown(int signum)
+static void sigsegv_handler(int signum)
 {
   BackTrace bt(0);
   bt.print(cerr);
 
-  signal(SIGSEGV, sighandler);
+  signal(SIGSEGV, sighandler_segv);
+}
+
+static void godown_handler(int signum)
+{
+  FCGX_ShutdownPending();
+  signal(SIGUSR1, sighandler_usr1);
 }
 
 /*
@@ -230,7 +237,8 @@ int main(int argc, char *argv[])
     return 5; //EIO
   }
 
-  sighandler = signal(SIGSEGV, godown);
+  sighandler_segv = signal(SIGSEGV, sigsegv_handler);
+  sighandler_usr1 = signal(SIGUSR1, godown_handler);
 
   while (FCGX_Accept(&fcgx.in, &fcgx.out, &fcgx.err, &fcgx.envp) >= 0) 
   {
