@@ -2250,6 +2250,8 @@ void Locker::issue_client_lease(CDentry *dn, client_t client,
     // null lease
     LeaseStat e;
     e.mask = 0;
+    e.seq = 0;
+    e.duration_ms = 0;
     ::encode(e, bl);
     dout(20) << "issue_client_lease no/null lease on " << *dn << dendl;
   }
