@@ -1194,8 +1194,7 @@ void Client::handle_client_reply(MClientReply *reply)
   int mds_num = reply->get_source().num();
   MetaRequest *request = mds_requests[tid];
   assert(request);
-  
-  
+    
   if ((request->got_unsafe && !is_safe)
       || (request->got_safe && is_safe)) {
     //duplicate response
@@ -1214,9 +1213,11 @@ void Client::handle_client_reply(MClientReply *reply)
       dout(20) << "but it wasn't sent to auth, resending" << dendl;
       send_request(request, request->resend_mds);
       return;
-    } else if (!request->inode) dout(10) << "Got ESTALE on request without inode!" << dendl; //do nothing
-    else if (request->inode->caps.count(request->resend_mds) &&
-	     request->sent_on_mseq != request->inode->caps[request->resend_mds]->mseq) {
+    }
+    if (!request->inode) {
+      dout(10) << "Got ESTALE on request without inode!" << dendl; //do nothing
+    } else if (request->inode->caps.count(request->resend_mds) &&
+	       request->sent_on_mseq != request->inode->caps[request->resend_mds]->mseq) {
       //auth data out of date; send it again!
       dout(20) << "auth data out of date, sending again" << dendl;
       send_request(request, request->resend_mds);
@@ -1251,7 +1252,7 @@ void Client::handle_client_reply(MClientReply *reply)
     // the filesystem change is committed to disk
     request->got_safe = true;
     if (request->got_unsafe) {
-      //we're done, clean up
+      // we're done, clean up
       request->item.remove_myself();
       request->unsafe_item.remove_myself();
       mds_requests.erase(tid);
@@ -2838,7 +2839,7 @@ int Client::unmount()
   dout(2) << "unmounting" << dendl;
   unmounting = true;
 
-  while(!mds_requests.empty()) {
+  while (!mds_requests.empty()) {
     dout(10) << "waiting on " << mds_requests.size() << " requests" << dendl;
     mount_cond.Wait(client_lock);
   }
