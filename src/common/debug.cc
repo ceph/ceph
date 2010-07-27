@@ -108,7 +108,7 @@ static void rotate_file(const char *fn, int max)
 static int create_name_symlink()
 {
   int r = 0;
-  if (log_to_file() && g_conf.log_per_instance) {
+  if (log_to_file() && g_conf.log_per_instance && !(g_conf.log_file && g_conf.log_file[0])) {
     snprintf(_dout_name_symlink_path, sizeof(_dout_name_symlink_path),
 	     "%s/%s.%s", _dout_symlink_dir, g_conf.type, g_conf.id);
 
