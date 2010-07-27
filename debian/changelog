@@ -1,3 +1,26 @@
+ceph (0.21-1) unstable; urgency=low
+
+  * improved logging infrastructure
+  * log rotation
+  * mkfs improvements
+  * rbd tool, class (rados block device)
+  * mds: return ENOTEMPTY when removing directory with snapshots
+  * mds: lazy io support
+  * msgr: send messages directly to connection handle (w/o looking up
+    destination address)
+  * faster atomic via libatomic-ops
+  * cfuse now stable
+  * mon: recovery improvements (e.g., when one mon is down for a long time)
+  * mon: warn on monitor clock drift
+  * osd: large object support 
+  * osd: heartbeat fixes
+  * osd: journaling fixes, improvements (bugs, better use of direct io)
+  * osd: snapshot rollback op (for rbd)
+  * radosgw fixes, improvements
+  * many memory leak fixes
+
+ -- Sage Weil <sage@newdream.net>  Tue, 27 Jul 2010 12:35:09 -0700
+
 ceph (0.20.2-1) unstable; urgency=low
 
   * Initial release (Closes: #506040)
