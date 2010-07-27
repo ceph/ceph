@@ -217,6 +217,7 @@ int RGWGetObj_REST::get_params()
 int RGWGetObj_REST::send_response(void *handle)
 {
   const char *content_type = NULL;
+  int orig_ret = ret;
 
   if (sent_header)
     goto send_data;
@@ -248,7 +249,6 @@ int RGWGetObj_REST::send_response(void *handle)
     }
   }
 
-
   if (range_str && !ret)
     ret = 206; /* partial content */
 
@@ -258,7 +258,7 @@ int RGWGetObj_REST::send_response(void *handle)
   sent_header = true;
 
 send_data:
-  if (get_data && !ret) {
+  if (get_data && !orig_ret) {
     FCGX_PutStr(data, len, s->fcgx->out); 
   }
 
