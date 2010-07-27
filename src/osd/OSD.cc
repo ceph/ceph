@@ -2382,10 +2382,15 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   if (osdmap->get_epoch() > 0 &&
+      state != STATE_BOOTING &&
       (!osdmap->exists(whoami) || 
        (!osdmap->is_up(whoami) && osdmap->get_addr(whoami) == messenger->get_myaddr()))) {
     dout(0) << "map says i am down.  switching to boot state." << dendl;
     //shutdown();
+
+    stringstream ss;
+    ss << "map e" << osdmap->get_epoch() << " wrongly marked me down";
+    logclient.log(LOG_WARN, ss);
 
     state = STATE_BOOTING;
     up_epoch = 0;
