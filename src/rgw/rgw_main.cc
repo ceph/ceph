@@ -205,6 +205,7 @@ static bool verify_signature(struct req_state *s)
 
 static sighandler_t sighandler_segv;
 static sighandler_t sighandler_usr1;
+static sighandler_t sighandler_alrm;
 
 /*
  * ?print out the C++ errors to log in case it fails
@@ -214,13 +215,19 @@ static void sigsegv_handler(int signum)
   BackTrace bt(0);
   bt.print(cerr);
 
-  signal(SIGSEGV, sighandler_segv);
+  signal(signum, sighandler_segv);
 }
 
 static void godown_handler(int signum)
 {
   FCGX_ShutdownPending();
-  signal(SIGUSR1, sighandler_usr1);
+  signal(signum, sighandler_usr1);
+  alarm(5);
+}
+
+static void godown_alarm(int signum)
+{
+  _exit(0);
 }
 
 /*
@@ -239,6 +246,7 @@ int main(int argc, char *argv[])
 
   sighandler_segv = signal(SIGSEGV, sigsegv_handler);
   sighandler_usr1 = signal(SIGUSR1, godown_handler);
+  sighandler_alrm = signal(SIGALRM, godown_alarm);
 
   while (FCGX_Accept(&fcgx.in, &fcgx.out, &fcgx.err, &fcgx.envp) >= 0) 
   {
