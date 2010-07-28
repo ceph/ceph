@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if [ ! -d ../.git ]; then
+    echo "not updating .git_version (no ../.git)"
+    exit 0
+fi
+
 dname=`dirname $0`
 cur=`git rev-parse HEAD 2>/dev/null`
 [ -e $1 ] && old=`cat $1`
