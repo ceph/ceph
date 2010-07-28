@@ -9,6 +9,7 @@ if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
     BINDIR=.
     [ -e .libs ] && LIBDIR=.libs || LIBDIR=.
     ETCDIR=.
+    libdir=$LIBDIR
 else
     BINDIR=@bindir@
     LIBDIR=@libdir@
@@ -18,6 +19,7 @@ else
     else
 	ETCDIR=@sysconfdir@/ceph
     fi
+    libdir="$LIBDIR/rados-classes"
 fi
 
 load_opt="changed"
@@ -42,8 +44,6 @@ err_exit() {
 	echo "Error: $*"
 	exit 1
 }
-
-libdir="$LIBDIR/rados-classes"
 
 while [ $# -ge 1 ]; do
 case $1 in
