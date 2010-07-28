@@ -1244,7 +1244,7 @@ int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<std::string, 
   mylock.Unlock();
 
   for (map<string,bufferlist>::iterator p = aset.begin(); p != aset.end(); p++) {
-    cerr << p->first << std::endl;
+    dout(10) << "RadosClient::getxattrs: xattr=" << p->first << dendl;
     attrset[p->first.c_str()] = p->second;
   }
   return r;
