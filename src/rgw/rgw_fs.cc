@@ -370,7 +370,7 @@ int RGWFS::get_attr(const char *name, const char *path, char **attr)
     case ERANGE:
       break;
     default:
-      cerr << "getxattr on " << path << " returned" << -errno << std::endl;
+      RGW_LOG(20) << "getxattr on " << path << " returned" << -errno << endl;
       return -errno;
     }
     len *= 2;
@@ -412,7 +412,7 @@ int RGWFS::set_attr(std::string& bucket, std::string& obj,
   r = setxattr(buf, name, bl.c_str(), bl.length(), 0);
 
   int ret = (r < 0 ? -errno : 0);
-  cerr << "setxattr: path=" << buf << " ret=" << ret << std::endl;
+  RGW_LOG(20) << "setxattr: path=" << buf << " ret=" << ret << endl;
 
   return ret;
 }
@@ -475,7 +475,7 @@ int RGWFS::prepare_get_obj(std::string& bucket, std::string& obj,
   }
 
   if (unmod_ptr) {
-    if (st.st_mtime >= *mod_ptr) {
+    if (st.st_mtime >= *unmod_ptr) {
       err->num = "412";
       err->code = "PreconditionFailed";
       goto done_err;
@@ -488,7 +488,7 @@ int RGWFS::prepare_get_obj(std::string& bucket, std::string& obj,
  
     r = -ECANCELED;
     if (if_match) {
-      cerr << "etag=" << etag << " " << " if_match=" << if_match << endl;
+      RGW_LOG(10) << "ETag: " << etag << " " << " If-Match: " << if_match << endl;
       if (strcmp(if_match, etag)) {
         err->num = "412";
         err->code = "PreconditionFailed";
@@ -497,7 +497,7 @@ int RGWFS::prepare_get_obj(std::string& bucket, std::string& obj,
     }
 
     if (if_nomatch) {
-      cerr << "etag=" << etag << " " << " if_nomatch=" << if_nomatch << endl;
+      RGW_LOG(10) << "ETag: " << etag << " " << " If_NoMatch: " << if_nomatch << endl;
       if (strcmp(if_nomatch, etag) == 0) {
         err->num = "412";
         err->code = "PreconditionFailed";
@@ -540,7 +540,7 @@ int RGWFS::get_obj(void **handle, std::string& bucket, std::string& obj,
       pos += r;
     } else {
       if (!r) {
-        cerr << "pos=" << pos << " r=" << r << " len=" << len << endl;
+        RGW_LOG(20) << "pos=" << pos << " r=" << r << " len=" << len << endl;
         r = -EIO; /* should not happen as we validated file size earlier */
         break;
       }

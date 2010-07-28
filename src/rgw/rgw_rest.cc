@@ -5,7 +5,6 @@
 #include "rgw_rest.h"
 
 #define CGI_PRINTF(stream, format, ...) do { \
-   fprintf(stderr, format, __VA_ARGS__); \
    FCGX_FPrintF(stream, format, __VA_ARGS__); \
 } while (0)
 
@@ -455,8 +454,8 @@ void init_entities_from_header(struct req_state *s)
   int pos;
   if (s->host) {
     string h(s->host);
-    
-    cerr << "host=" << s->host << std::endl;
+
+    RGW_LOG(10) << "host=" << s->host << endl;
     pos = h.find("s3.");
     
     if (pos > 0) {
@@ -559,7 +558,7 @@ static void init_auth_info(struct req_state *s)
   for (int i=0; (p = s->fcgx->envp[i]); ++i) {
 #define HTTP_X_AMZ "HTTP_X_AMZ"
     if (strncmp(p, HTTP_X_AMZ, sizeof(HTTP_X_AMZ) - 1) == 0) {
-      cerr << "amz>> " << p << std::endl;
+      RGW_LOG(10) << "amz>> " << p << endl;
       const char *amz = p+5; /* skip the HTTP_ part */
       const char *eq = strchr(amz, '=');
       if (!eq) /* shouldn't happen! */
@@ -592,7 +591,7 @@ static void init_auth_info(struct req_state *s)
   }
   map<string, string>::iterator iter;
   for (iter = s->x_amz_map.begin(); iter != s->x_amz_map.end(); ++iter) {
-    cerr << "x>> " << iter->first << ":" << iter->second << std::endl;
+    RGW_LOG(10) << "x>> " << iter->first << ":" << iter->second << endl;
   }
 }
 
@@ -623,7 +622,7 @@ void RGWHandler_REST::provider_init_state()
     s->op = OP_UNKNOWN;
 
   init_entities_from_header(s);
-  cerr << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket ? s->bucket : "<NULL>") << std::endl;
+  RGW_LOG(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket ? s->bucket : "<NULL>") << endl;
 
   init_auth_info(s);
 

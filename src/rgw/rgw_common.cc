@@ -3,6 +3,9 @@
 #include "rgw_common.h"
 #include "rgw_acl.h"
 
+/* Loglevel of the gateway */
+int rgw_log_level = 0;
+
 int parse_time(const char *time_str, time_t *time)
 {
   struct tm tm;
@@ -29,7 +32,7 @@ int NameVal::parse()
     val = str.substr(delim_pos + 1);
   }
 
-  cout << "parsed: name=" << name << " val=" << val << std::endl;
+  RGW_LOG(10) << "parsed: name=" << name << " val=" << val << endl;
   return ret; 
 }
 
@@ -115,7 +118,7 @@ static char hex_to_num(char c)
 
 bool url_decode(string& src_str, string& dest_str)
 {
-  cerr << "in url_decode with " << src_str << std::endl;
+  RGW_LOG(10) << "in url_decode with " << src_str << endl;
   const char *src = src_str.c_str();
   char dest[src_str.size()];
   int pos = 0;

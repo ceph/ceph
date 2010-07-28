@@ -347,7 +347,7 @@ int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& d
   time_t lastmod;
   map<string, bufferlist>::iterator iter;
 
-  cerr << "copy " << src_bucket << ":" << src_obj << " => " << dest_bucket << ":" << dest_obj << std::endl;
+  RGW_LOG(5) << "Copy object " << src_bucket << ":" << src_obj << " => " << dest_bucket << ":" << dest_obj << endl;
 
   void *handle = NULL;
 
@@ -545,8 +545,10 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
 
   if (attrs) {
     r = rados->getxattrs(state->pool, oid, *attrs);
-    for (iter = attrs->begin(); iter != attrs->end(); ++iter) {
-      cerr << "xattr: " << iter->first << std::endl;
+    if (rgw_log_level >= 20) {
+      for (iter = attrs->begin(); iter != attrs->end(); ++iter) {
+        RGW_LOG(20) << "Read xattr: " << iter->first << endl;
+      }
     }
     if (r < 0)
       goto done_err;
@@ -557,7 +559,7 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
 
   r = -ECANCELED;
   if (mod_ptr) {
-    cout << "mod_ptr: " << *mod_ptr << " ctime: " << ctime << endl;
+    RGW_LOG(10) << "If-Modified-Since: " << *mod_ptr << " Last-Modified: " << ctime << endl;
     if (ctime < *mod_ptr) {
       err->num = "304";
       err->code = "NotModified";
@@ -566,7 +568,8 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
   }
 
   if (unmod_ptr) {
-    if (ctime > *mod_ptr) {
+    RGW_LOG(10) << "If-UnModified-Since: " << *unmod_ptr << " Last-Modified: " << ctime << endl;
+    if (ctime > *unmod_ptr) {
       err->num = "412";
       err->code = "PreconditionFailed";
       goto done_err;
@@ -579,7 +582,7 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
 
     r = -ECANCELED;
     if (if_match) {
-      cerr << "etag=" << etag << " " << " if_match=" << if_match << endl;
+      RGW_LOG(10) << "ETag: " << etag.c_str() << " " << " If-Match: " << if_match << endl;
       if (strcmp(if_match, etag.c_str())) {
         err->num = "412";
         err->code = "PreconditionFailed";
@@ -588,7 +591,7 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
     }
 
     if (if_nomatch) {
-      cerr << "etag=" << etag << " " << " if_nomatch=" << if_nomatch << endl;
+      RGW_LOG(10) << "ETag: " << etag.c_str() << " " << " If-NoMatch: " << if_nomatch << endl;
       if (strcmp(if_nomatch, etag.c_str()) == 0) {
         err->num = "304";
         err->code = "NotModified";
@@ -628,9 +631,9 @@ int RGWRados::get_obj(void **handle,
   if (len > RGW_MAX_CHUNK_SIZE)
     len = RGW_MAX_CHUNK_SIZE;
 
-  cout << "rados->read ofs=" << ofs << " len=" << len << std::endl;
+  RGW_LOG(20) << "rados->read ofs=" << ofs << " len=" << len << endl;
   int r = rados->read(state->pool, oid, ofs, bl, len);
-  cout << "rados->read r=" << r << std::endl;
+  RGW_LOG(20) << "rados->read r=" << r << endl;
 
   if (r > 0) {
     *data = (char *)malloc(r);

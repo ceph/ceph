@@ -35,10 +35,10 @@ static int parse_range(const char *range, off_t& ofs, off_t& end)
   if (ofs_str.length())
     ofs = atoll(ofs_str.c_str());
 
- if (end_str.length())
+  if (end_str.length())
   end = atoll(end_str.c_str());
 
-cout << "parse_range ofs=" << ofs << " end=" << end << std::endl;
+  RGW_LOG(10) << "parse_range ofs=" << ofs << " end=" << end << endl;
 
   if (end < ofs)
     goto done;
@@ -62,7 +62,7 @@ void get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs)
     string name = iter->first;
 #define X_AMZ_META "x-amz-meta"
     if (name.find(X_AMZ_META) == 0) {
-      cerr << "x>> " << iter->first << ":" << iter->second << std::endl;
+      RGW_LOG(10) << "x>> " << iter->first << ":" << iter->second << endl;
       string& val = iter->second;
       bufferlist bl;
       bl.append(val.c_str(), val.size() + 1);
@@ -92,7 +92,11 @@ int read_acls(RGWAccessControlPolicy *policy, string& bucket, string& object)
     if (ret >= 0) {
       bufferlist::iterator iter = bl.begin();
       policy->decode(iter);
-      policy->to_xml(cerr);
+      if (rgw_log_level >= 15) {
+        RGW_LOG(15) << "Read AccessControlPolicy" << endl;
+        policy->to_xml(cerr);
+        RGW_LOG(15) << endl;
+      }
     }
   }
 
@@ -197,7 +201,7 @@ void RGWListBuckets::execute()
   if (ret < 0) {
     /* hmm.. something wrong here.. the user was authenticated, so it
        should exist, just try to recreate */
-    cerr << "WARNING: failed on rgw_get_user_buckets uid=" << s->user.user_id << std::endl;
+    RGW_LOG(10) << "WARNING: failed on rgw_get_user_buckets uid=" << s->user.user_id << endl;
     rgw_put_user_buckets(s->user.user_id, buckets);
     ret = 0;
   }
@@ -261,7 +265,7 @@ void RGWCreateBucket::execute()
       ret = rgw_put_user_buckets(s->user.user_id, buckets);
       break;
     default:
-      cerr << "rgw_get_user_buckets returned " << ret << std::endl;
+      RGW_LOG(10) << "rgw_get_user_buckets returned " << ret << endl;
       break;
     }
   }
@@ -328,10 +332,10 @@ void RGWPutObj::execute()
     unsigned char m[MD5_DIGEST_LENGTH];
 
     if (supplied_md5_b64) {
-      cerr << "supplied_md5_b64=" << supplied_md5_b64 << std::endl;
+      RGW_LOG(15) << "supplied_md5_b64=" << supplied_md5_b64 << endl;
       int ret = decode_base64(supplied_md5_b64, strlen(supplied_md5_b64),
                                  supplied_md5_bin, sizeof(supplied_md5_bin));
-      cerr << "decode_base64 ret=" << ret << std::endl;
+      RGW_LOG(15) << "decode_base64 ret=" << ret << endl;
       if (ret != MD5_DIGEST_LENGTH) {
         err.code = "InvalidDigest";
         ret = -EINVAL;
@@ -339,7 +343,7 @@ void RGWPutObj::execute()
       }
 
       buf_to_hex((const unsigned char *)supplied_md5_bin, MD5_DIGEST_LENGTH, supplied_md5);
-      cerr << "supplied_md5=" << supplied_md5 << std::endl;
+      RGW_LOG(15) << "supplied_md5=" << supplied_md5 << endl;
     }
 
     MD5_Init(&c);
@@ -406,7 +410,7 @@ static bool parse_copy_source(const char *src, string& bucket, string& object)
   url_decode(url_src, dec_src);
   src = dec_src.c_str();
 
-  cerr << "decoded src=" << src << std::endl;
+  RGW_LOG(15) << "decoded src=" << src << endl;
 
   if (*src == '/') ++src;
 
@@ -544,7 +548,7 @@ static int rebuild_policy(RGWAccessControlPolicy& src, RGWAccessControlPolicy& d
 
   RGWUserInfo owner_info;
   if (rgw_get_user_info(owner->get_id(), owner_info) < 0) {
-    cerr << "owner info does not exist" << std::endl;
+    RGW_LOG(10) << "owner info does not exist" << endl;
     return -EINVAL;
   }
   ACLOwner& new_owner = dest.get_owner();
@@ -565,9 +569,9 @@ static int rebuild_policy(RGWAccessControlPolicy& src, RGWAccessControlPolicy& d
     case ACL_TYPE_EMAIL_USER:
       {
         string email = src_grant->get_id();
-        cerr << "grant user email=" << email << std::endl;
+        RGW_LOG(10) << "grant user email=" << email << endl;
         if (rgw_get_uid_by_email(email, id) < 0) {
-          cerr << "grant user email not found or other error" << std::endl;
+          RGW_LOG(10) << "grant user email not found or other error" << endl;
           break;
         }
       }
@@ -578,12 +582,12 @@ static int rebuild_policy(RGWAccessControlPolicy& src, RGWAccessControlPolicy& d
     
         RGWUserInfo grant_user;
         if (rgw_get_user_info(id, grant_user) < 0) {
-          cerr << "grant user does not exist:" << id << std::endl;
+          RGW_LOG(10) << "grant user does not exist:" << id << endl;
         } else {
           ACLPermission& perm = src_grant->get_permission();
           new_grant.set_canon(id, grant_user.display_name, perm.get_permissions());
           grant_ok = true;
-          cerr << "new grant: " << new_grant.get_id() << ":" << grant_user.display_name << std::endl;
+          RGW_LOG(10) << "new grant: " << new_grant.get_id() << ":" << grant_user.display_name << endl;
         }
       }
       break;
@@ -594,7 +598,7 @@ static int rebuild_policy(RGWAccessControlPolicy& src, RGWAccessControlPolicy& d
             group.compare(RGW_URI_AUTH_USERS) == 0) {
           new_grant = *src_grant;
           grant_ok = true;
-          cerr << "new grant: " << new_grant.get_id() << std::endl;
+          RGW_LOG(10) << "new grant: " << new_grant.get_id() << endl;
         }
       }
     default:
@@ -640,7 +644,7 @@ void RGWPutACLs::execute()
   if (get_params() < 0)
     goto done;
 
-  cerr << "read data=" << data << " len=" << len << std::endl;
+  RGW_LOG(15) << "read data=" << data << " len=" << len << endl;
 
   if (!parser.parse(data, len, 1)) {
     ret = -EACCES;
@@ -651,16 +655,21 @@ void RGWPutACLs::execute()
     ret = -EINVAL;
     goto done;
   }
-  policy->to_xml(cerr);
-  cerr << std::endl;
+  if (rgw_log_level >= 15) {
+    RGW_LOG(15) << "Old AccessControlPolicy" << endl;
+    policy->to_xml(cerr);
+    RGW_LOG(15) << endl;
+  }
 
   ret = rebuild_policy(*policy, new_policy);
   if (ret < 0)
     goto done;
 
-  cerr << "new_policy: ";
-  new_policy.to_xml(cerr);
-  cerr << std::endl;
+  if (rgw_log_level >= 15) {
+    RGW_LOG(15) << "New AccessControlPolicy" << endl;
+    new_policy.to_xml(cerr);
+    RGW_LOG(15) << endl;
+  }
 
   new_policy.encode(bl);
   ret = rgwstore->set_attr(s->bucket_str, s->object_str,
@@ -678,9 +687,20 @@ void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
 {
   this->s = s;
 
-  char *p;
-  for (int i=0; (p = fcgx->envp[i]); ++i) {
-    cerr << p << std::endl;
+  /* Retrieve the loglevel from the CGI envirioment (if set) */
+  const char *cgi_env_level = FCGX_GetParam("RGW_LOG_LEVEL", fcgx->envp);
+  if (cgi_env_level != NULL) {
+    int level = atoi(cgi_env_level);
+    if (level > 0) {
+      rgw_log_level = level;
+    }
+  }
+
+  if (rgw_log_level >= 20) {
+    char *p;
+    for (int i=0; (p = fcgx->envp[i]); ++i) {
+      RGW_LOG(20) << p << endl;
+    }
   }
   s->fcgx = fcgx;
   s->content_started = false;
@@ -701,7 +721,7 @@ int RGWHandler::do_read_permissions(bool only_bucket)
   int ret = read_acls(s, only_bucket);
 
   if (ret < 0)
-    cerr << "read_permissions on " << s->bucket_str << ":" <<s->object_str << " only_bucket=" << only_bucket << " ret=" << ret << std::endl;
+    RGW_LOG(10) << "read_permissions on " << s->bucket_str << ":" <<s->object_str << " only_bucket=" << only_bucket << " ret=" << ret << endl;
 
   return ret;
 }

@@ -14,6 +14,7 @@
 
 #include "fcgiapp.h"
 
+#include "rgw_common.h"
 #include "rgw_access.h"
 #include "rgw_acl.h"
 #include "rgw_user.h"
@@ -32,15 +33,14 @@
 
 using namespace std;
 
-
 #define CGI_PRINTF(stream, format, ...) do { \
-   fprintf(stderr, format, __VA_ARGS__); \
    FCGX_FPrintF(stream, format, __VA_ARGS__); \
 } while (0)
 
 /*
  * ?get the canonical amazon-style header for something?
  */
+
 static void get_canon_amz_hdr(struct req_state *s, string& dest)
 {
   dest = "";
@@ -128,7 +128,7 @@ static void calc_hmac_sha1(const char *key, int key_len,
 
   buf_to_hex(result, *len, hex_str);
 
-  cerr << "hmac=" << hex_str << std::endl;
+  RGW_LOG(15) << "hmac=" << hex_str << endl;
 }
 
 /*
@@ -173,7 +173,7 @@ static bool verify_signature(struct req_state *s)
 
   /* first get the user info */
   if (rgw_get_user_info(auth_id, s->user) < 0) {
-    cerr << "error reading user info, uid=" << auth_id << " can't authenticate" << std::endl;
+    RGW_LOG(5) << "error reading user info, uid=" << auth_id << " can't authenticate" << endl;
     return false;
   }
 
@@ -181,7 +181,7 @@ static bool verify_signature(struct req_state *s)
    
   string auth_hdr;
   get_auth_header(s, auth_hdr, qsr);
-  cerr << "auth_hdr:" << std::endl << auth_hdr << std::endl;
+  RGW_LOG(10) << "auth_hdr:" << endl << auth_hdr << endl;
 
   const char *key = s->user.secret_key.c_str();
   int key_len = strlen(key);
@@ -193,13 +193,13 @@ static bool verify_signature(struct req_state *s)
   char b64[64]; /* 64 is really enough */
   int ret = encode_base64(hmac_sha1, len, b64, sizeof(b64));
   if (ret < 0) {
-    cerr << "encode_base64 failed" << std::endl;
+    RGW_LOG(10) << "encode_base64 failed" << endl;
     return false;
   }
 
-  cerr << "b64=" << b64 << std::endl;
-  cerr << "auth_sign=" << auth_sign << std::endl;
-  cerr << "compare=" << auth_sign.compare(b64) << std::endl;
+  RGW_LOG(15) << "b64=" << b64 << endl;
+  RGW_LOG(15) << "auth_sign=" << auth_sign << endl;
+  RGW_LOG(15) << "compare=" << auth_sign.compare(b64) << endl;
   return (auth_sign.compare(b64) == 0);
 }
 
@@ -240,7 +240,7 @@ int main(int argc, char *argv[])
   RGWHandler_REST rgwhandler;
 
   if (!RGWAccess::init_storage_provider("rados", argc, argv)) {
-    cerr << "couldn't init storage provider" << std::endl;
+    cerr << "Couldn't init storage provider (RADOS)" << endl;
     return 5; //EIO
   }
 
@@ -258,14 +258,14 @@ int main(int argc, char *argv[])
       case -ENOENT:
         break;
       default:
-        cerr << "could not read acls" << " ret=" << ret << std::endl;
+        RGW_LOG(10) << "could not read acls" << " ret=" << ret << endl;
         abort_early(&s, -EPERM);
         continue;
       }
     }
     ret = verify_signature(&s);
     if (!ret) {
-      cerr << "signature DOESN'T match" << std::endl;
+      RGW_LOG(10) << "signature DOESN'T match" << endl;
       abort_early(&s, -EPERM);
       continue;
     }

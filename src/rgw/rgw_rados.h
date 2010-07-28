@@ -3,7 +3,7 @@
 
 #include "include/librados.h"
 #include "rgw_access.h"
-
+#include "rgw_common.h"
 
 class RGWRados  : public RGWAccess
 {
