@@ -48,6 +48,10 @@ mkdir -p release/$finalvers
 cd release/$finalvers
 
 tar zxf ../../ceph-$vers.tar.gz 
+
+# note git version in the tarball
+echo $gitver > ceph-$vers/src/.git_version
+
 [ "$vers" != "$finalvers" ] && mv ceph-$vers ceph-$finalvers
 tar zcf ceph_$finalvers.orig.tar.gz ceph-$finalvers
 
