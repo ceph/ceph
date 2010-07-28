@@ -1516,19 +1516,32 @@ int FileStore::_do_clone_range(int from, int to, uint64_t off, uint64_t len)
   while (pos < end) {
     int l = MIN(end-pos, buflen);
     r = ::read(from, buf, l);
+    dout(25) << "  read from " << from << "~" << l << " got " << r << dendl;
     if (r < 0)
       break;
-    int op = 0;
-    while (op < l) {
-      int r2 = ::write(to, buf+op, l-op);
-      
-      if (r2 < 0) { r = r2; break; }
-      op += r2;	  
+    if (r == 0) {
+      // hrm, bad source range, wtf.
+      dout(0) << "_do_clone_range got short read result at " << from << " of " << from << "~" << len << dendl;
+      r = -ERANGE;
+      break;
     }
-    if (r < 0) break;
+    int op = 0;
+    while (op < r) {
+      int r2 = ::write(to, buf+op, r-op);
+      dout(25) << " write to " << to << "~" << (r-op) << " got " << r2 << dendl;      
+      if (r2 < 0) {
+	r = r2;
+	break;
+      }
+      op += r2;
+    }
+    if (r < 0)
+      break;
     pos += r;
   }
-
+  if (r < 0)
+    r = -errno;
+  dout(20) << "_do_clone_range " << off << "~" << len << " = " << r << dendl;
   return r;
 }
 
