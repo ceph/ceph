@@ -78,7 +78,7 @@ do
 	cd ..
     fi
 
-    dpkg-source -b ceph-*
+    dpkg-source -b ceph-$finalvers
 
 #    cd ..
 done
