@@ -367,6 +367,7 @@ struct md_config_t {
   const char  *filestore_dev;
   bool filestore_btrfs_trans;
   bool filestore_btrfs_snap;
+  bool filestore_btrfs_clone_range;
   bool filestore_flusher;
   int filestore_flusher_max_fds;
   bool filestore_sync_flush;

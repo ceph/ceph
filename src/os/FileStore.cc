@@ -471,13 +471,17 @@ int FileStore::_detect_fs()
     btrfs = true;
 
     // clone_range?
-    btrfs_clone_range = true;
-    int r = _do_clone_range(fsid_fd, -1, 0, 1);
-    if (r == -EBADF) {
-      dout(0) << "mount btrfs CLONE_RANGE ioctl is supported" << dendl;
+    if (g_conf.filestore_btrfs_clone_range) {
+      btrfs_clone_range = true;
+      int r = _do_clone_range(fsid_fd, -1, 0, 1);
+      if (r == -EBADF) {
+	dout(0) << "mount btrfs CLONE_RANGE ioctl is supported" << dendl;
+      } else {
+	btrfs_clone_range = false;
+	dout(0) << "mount btrfs CLONE_RANGE ioctl is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+      }
     } else {
-      btrfs_clone_range = false;
-      dout(0) << "mount btrfs CLONE_RANGE ioctl is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+      dout(0) << "mount btrfs CLONE_RANGE ioctl is DISABLED via 'filestore btrfs clone range' option" << dendl;
     }
 
     // snap_create and snap_destroy?
