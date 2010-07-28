@@ -569,12 +569,18 @@ bool PGMonitor::register_new_pgs()
   int removed = 0;
   for (set<pg_t>::iterator p = pg_map.creating_pgs.begin();
        p != pg_map.creating_pgs.end();
-       p++)
+       p++) {
     if (p->preferred() >= max) {
       dout(20) << " removing creating_pg " << *p << " because preferred >= max osd or crush device" << dendl;
       pending_inc.pg_remove.insert(*p);
       removed++;
     }
+    if (NULL == mon->osdmon()->osdmap.get_pg_pool(p->pool())) {
+      dout(20) << " removing creating_pg " << *p << " because containing pool deleted" << dendl;
+      pending_inc.pg_remove.insert(*p);
+      ++removed;
+    }
+  }
 
   dout(10) << "register_new_pgs registered " << created << " new pgs, removed "
 	   << removed << " uncreated pgs" << dendl;
