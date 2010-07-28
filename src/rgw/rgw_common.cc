@@ -4,7 +4,7 @@
 #include "rgw_acl.h"
 
 /* Loglevel of the gateway */
-int rgw_log_level = 0;
+int rgw_log_level = 20;
 
 int parse_time(const char *time_str, time_t *time)
 {
