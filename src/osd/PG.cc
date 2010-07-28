@@ -339,7 +339,6 @@ void PG::merge_log(ObjectStore::Transaction& t,
     } else {
       // primary should have requested our backlog during peer().
     }
-    assert(log.backlog || log.head == eversion_t());
 
     hash_map<sobject_t, Log::Entry*> old_objects;
     old_objects.swap(log.objects);
