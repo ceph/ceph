@@ -73,6 +73,7 @@ chmod 0644 $RPM_BUILD_ROOT%{_sysconfdir}/ceph/sample.ceph.conf
 install -m 0644 -D debian/ceph.logrotate $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/stat
 
 %clean
 rm -rf $RPM_BUILD_ROOT
