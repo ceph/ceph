@@ -174,7 +174,7 @@ class MonMap {
       ::decode(mon_inst, p);
       for (unsigned i = 0; i < mon_inst.size(); i++) {
 	char n[2];
-	n[0] = 'a' + i;
+	n[0] = '0' + i;
 	n[1] = 0;
 	string name = n;
 	mon_addr[name] = mon_inst[i].addr;
