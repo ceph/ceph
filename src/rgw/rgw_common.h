@@ -26,8 +26,6 @@
 
 using namespace std;
 
-#define SERVER_NAME "RGWFS"
-
 #define RGW_ATTR_PREFIX  "user.rgw."
 
 #define RGW_ATTR_ACL		RGW_ATTR_PREFIX "acl"
