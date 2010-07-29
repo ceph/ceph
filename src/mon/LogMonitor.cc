@@ -170,7 +170,7 @@ bool LogMonitor::update_from_paxos()
 
 
   // trim
-  int max = 500;
+  unsigned max = 500;
   if (mon->is_leader() && paxosv > max)
     paxos->trim_to(paxosv - max);
 
