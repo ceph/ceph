@@ -1779,7 +1779,7 @@ bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
   // does peer have old map?
   if (inst.name.is_osd() &&
       osdmap->is_up(inst.name.num()) &&
-      (osdmap->get_inst(inst.name.num()) == inst ||
+      (osdmap->get_cluster_inst(inst.name.num()) == inst ||
        osdmap->get_hb_inst(inst.name.num()) == inst)) {
     // remember
     if (peer_map_epoch[inst.name] < epoch) {
@@ -1791,7 +1791,7 @@ bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
     if (peer_map_epoch[inst.name] < osdmap->get_epoch()) {
       dout(10) << inst.name << " has old map " << epoch << " < " << osdmap->get_epoch() << dendl;
       peer_map_epoch[inst.name] = osdmap->get_epoch();  // so we don't send it again.
-      send_incremental_map(epoch, osdmap->get_inst(inst.name.num()));
+      send_incremental_map(epoch, osdmap->get_cluster_inst(inst.name.num()));
       shared = true;
     }
   }
