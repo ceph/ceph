@@ -52,7 +52,10 @@ using namespace __gnu_cxx;
  */
 
 // default feature(s) everyone gets
-#define MSGR_FEATURES_SUPPORTED  CEPH_FEATURE_NOSRCADDR|CEPH_FEATURE_SUBSCRIBE2
+#define MSGR_FEATURES_SUPPORTED  \
+  CEPH_FEATURE_NOSRCADDR |	 \
+  CEPH_FEATURE_SUBSCRIBE2 |	 \
+  CEPH_FEATURE_MONNAMES
 
 class SimpleMessenger : public Messenger {
 public:
