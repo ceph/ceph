@@ -337,7 +337,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   logger(NULL), logger_started(false),
   store(NULL),
   map_in_progress(false),
-  logclient(cluster_messenger, &mc->monmap, mc),
+  logclient(client_messenger, &mc->monmap, mc),
   whoami(id),
   dev_path(dev), journal_path(jdev),
   dispatch_running(false),
@@ -511,7 +511,6 @@ int OSD::init()
   client_messenger->add_dispatcher_head(&logclient);
   if (cluster_messenger != client_messenger) {
     cluster_messenger->add_dispatcher_head(this);
-    cluster_messenger->add_dispatcher_head(&logclient);
   }
 
   heartbeat_messenger->add_dispatcher_head(&heartbeat_dispatcher);
