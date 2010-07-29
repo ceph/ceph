@@ -23,12 +23,8 @@ else
     echo "forcing."
 fi
 
-echo generating git version stamp
-cd src
-./make_version
-gitver=`grep GIT_VER ceph_ver.h | awk '{print $3}' | cut -c 1-8`
+gitver=`git rev-parse HEAD 2>/dev/null | cut -c 1-8`
 echo gitver $gitver
-cd ..
 
 if [ "$repo" = "testing" ]; then
     versuffix=`date "+%Y%m%d%H%M"`
@@ -52,6 +48,10 @@ mkdir -p release/$finalvers
 cd release/$finalvers
 
 tar zxf ../../ceph-$vers.tar.gz 
+
+# note git version in the tarball
+echo $gitver > ceph-$vers/src/.git_version
+
 [ "$vers" != "$finalvers" ] && mv ceph-$vers ceph-$finalvers
 tar zcf ceph_$finalvers.orig.tar.gz ceph-$finalvers
 
@@ -78,7 +78,7 @@ do
 	cd ..
     fi
 
-    dpkg-source -b ceph-*
+    dpkg-source -b ceph-$finalvers
 
 #    cd ..
 done
@@ -86,3 +86,6 @@ done
 rm -r ceph-$finalvers
 cp -a ceph_$finalvers.orig.tar.gz ceph-$finalvers.tar.gz
 echo finished release $finalvers
+
+cd ../..
+echo $finalvers > .last_release

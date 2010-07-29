@@ -95,29 +95,20 @@ ostream& operator<<(ostream& out, CDir& dir)
   if (dir.state_test(CDir::STATE_EXPORTBOUND)) out << "|exportbound";
   if (dir.state_test(CDir::STATE_IMPORTBOUND)) out << "|importbound";
 
+  // fragstat
   out << " " << dir.fnode.fragstat;
-  //out << "/" << dir.fnode.accounted_fragstat;
-  out << " s=" << dir.fnode.fragstat.size() 
-      << "=" << dir.fnode.fragstat.nfiles
-      << "+" << dir.fnode.fragstat.nsubdirs;
-  out << " rb=" << dir.fnode.rstat.rbytes << "/" << dir.fnode.accounted_rstat.rbytes;
-  if (dir.is_projected())
-    out << "|" << dir.get_projected_fnode()->rstat.rbytes
-	<< "/" << dir.get_projected_fnode()->accounted_rstat.rbytes;
-  out << " rf=" << dir.fnode.rstat.rfiles << "/" << dir.fnode.accounted_rstat.rfiles;
-  if (dir.is_projected())
-    out << "|" << dir.get_projected_fnode()->rstat.rfiles
-	<< "/" << dir.get_projected_fnode()->accounted_rstat.rfiles;
-  out << " rd=" << dir.fnode.rstat.rsubdirs << "/" << dir.fnode.accounted_rstat.rsubdirs;
-  if (dir.is_projected())
-    out << "|" << dir.get_projected_fnode()->rstat.rsubdirs
-	<< "/" << dir.get_projected_fnode()->accounted_rstat.rsubdirs;
+  if (!(dir.fnode.fragstat == dir.fnode.accounted_fragstat))
+    out << "/" << dir.fnode.accounted_fragstat;
+  
+  // rstat
+  out << " " << dir.fnode.rstat;
+  if (!(dir.fnode.rstat == dir.fnode.accounted_rstat))
+    out << "/" << dir.fnode.accounted_rstat;
 
   out << " hs=" << dir.get_num_head_items() << "+" << dir.get_num_head_null();
   out << ",ss=" << dir.get_num_snap_items() << "+" << dir.get_num_snap_null();
   if (dir.get_num_dirty())
     out << " dirty=" << dir.get_num_dirty();
-
   
   if (dir.get_num_ref()) {
     out << " |";
@@ -280,6 +271,11 @@ CDentry* CDir::add_primary_dentry(const string& dname, CInode *in,
 
   link_inode_work(dn, in);
 
+  if (dn->last == CEPH_NOSNAP)
+    num_head_items++;
+  else
+    num_snap_items++;
+  
   dout(12) << "add_primary_dentry " << *dn << dendl;
 
   // pin?
@@ -333,18 +329,21 @@ void CDir::remove_dentry(CDentry *dn)
   // there should be no client leases at this point!
   assert(dn->client_lease_map.empty());
 
-  if (dn->get_linkage()->get_inode()) {
-    // detach inode and dentry
-    unlink_inode_work(dn);
-  } else {
-    // remove from null list
-    //assert(null_items.count(dn->name) == 1);
-    //null_items.erase(dn->name);
+  if (dn->get_linkage()->is_null()) {
     if (dn->last == CEPH_NOSNAP)
       num_head_null--;
     else
       num_snap_null--;
+  } else {
+    if (dn->last == CEPH_NOSNAP)
+      num_head_items--;
+    else
+      num_snap_items--;
   }
+
+  if (!dn->get_linkage()->is_null())
+    // detach inode and dentry
+    unlink_inode_work(dn);
   
   // remove from list
   assert(items.count(dn->key()) == 1);
@@ -395,10 +394,13 @@ void CDir::link_primary_inode(CDentry *dn, CInode *in)
 
   link_inode_work(dn, in);
   
-  if (dn->last == CEPH_NOSNAP)
+  if (dn->last == CEPH_NOSNAP) {
+    num_head_items++;
     num_head_null--;
-  else
+  } else {
+    num_snap_items++;
     num_snap_null--;
+  }
 
   assert(get_num_any() == items.size());
 }
@@ -408,11 +410,6 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
   assert(dn->get_linkage()->get_inode() == in);
   assert(in->get_parent_dn() == dn);
 
-  if (dn->last == CEPH_NOSNAP)
-    num_head_items++;
-  else
-    num_snap_items++;
-  
   // set inode version
   //in->inode.version = dn->get_version();
   
@@ -432,7 +429,7 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
     in->snaprealm->adjust_parent();
 }
 
-void CDir::unlink_inode( CDentry *dn )
+void CDir::unlink_inode(CDentry *dn)
 {
   if (dn->get_linkage()->is_remote()) {
     dout(12) << "unlink_inode " << *dn << dendl;
@@ -442,10 +439,13 @@ void CDir::unlink_inode( CDentry *dn )
 
   unlink_inode_work(dn);
 
-  if (dn->last == CEPH_NOSNAP)
+  if (dn->last == CEPH_NOSNAP) {
+    num_head_items--;
     num_head_null++;
-  else
+  } else {
+    num_snap_items--;
     num_snap_null++;
+  }
   assert(get_num_any() == items.size());
 }
 
@@ -501,11 +501,6 @@ void CDir::unlink_inode_work( CDentry *dn )
     in->remove_primary_parent(dn);
     dn->get_linkage()->inode = 0;
   }
-
-  if (dn->last == CEPH_NOSNAP)
-    num_head_items--;
-  else
-    num_snap_items--;
 }
 
 void CDir::remove_null_dentries() {
@@ -1440,6 +1435,7 @@ void CDir::_commit_full(ObjectOperation& m, const set<snapid_t> *snaps)
   ::encode(fnode, header);
   bufferlist finalbl;
   ::encode(header, finalbl);
+  assert(num_head_items + num_head_null + num_snap_items + num_snap_null == items.size());
   assert(n == (num_head_items + num_snap_items));
   ::encode(n, finalbl);
   finalbl.claim_append(bl);
@@ -1465,17 +1461,9 @@ void CDir::_commit_partial(ObjectOperation& m, const set<snapid_t> *snaps)
     CDentry *dn = p->second;
     p++;
     
-    if (snaps && dn->last != CEPH_NOSNAP) {
-      set<snapid_t>::const_iterator p = snaps->lower_bound(dn->first);
-      if (p == snaps->end() || *p > dn->last) {
-	dout(10) << " rm " << dn->name << " " << *dn << dendl;
-	finalbl.append(CEPH_OSD_TMAP_RM);
-	dn->key().encode(finalbl);
-
-	remove_dentry(dn);
-	continue;
-      }
-    }
+    if (snaps && dn->last != CEPH_NOSNAP &&
+	try_trim_snap_dentry(dn, *snaps))
+      continue;
 
     if (!dn->is_dirty())
       continue;  // skip clean dentries
@@ -1711,6 +1699,7 @@ void CDir::_committed(version_t v, version_t lrv)
 	// drop clean null stray dentries immediately
 	if (stray && 
 	    dn->get_num_ref() == 0 &&
+	    !dn->is_projected() &&
 	    dn->get_linkage()->is_null())
 	  remove_dentry(dn);
       } 

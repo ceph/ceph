@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDS_ETABLESERVER_H
-#define __MDS_ETABLESERVER_H
+#ifndef CEPH_MDS_ETABLESERVER_H
+#define CEPH_MDS_ETABLESERVER_H
 
 #include "config.h"
 #include "include/types.h"

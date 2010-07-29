@@ -1,5 +1,5 @@
-#ifndef __PGLS_H
-#define __PGLS_H
+#ifndef CEPH_PGLS_H
+#define CEPH_PGLS_H
 
 
 #include "include/types.h"

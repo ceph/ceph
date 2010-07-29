@@ -5,7 +5,6 @@
 #include "rgw_rest.h"
 
 #define CGI_PRINTF(stream, format, ...) do { \
-   fprintf(stderr, format, __VA_ARGS__); \
    FCGX_FPrintF(stream, format, __VA_ARGS__); \
 } while (0)
 
@@ -22,6 +21,7 @@ struct errno_http {
 
 static struct errno_http hterrs[] = {
     { 0, "200", "" },
+    { 206, "206", "" },
     { EINVAL, "400", "InvalidArgument" },
     { EACCES, "403", "AccessDenied" },
     { EPERM, "403", "AccessDenied" },
@@ -34,6 +34,7 @@ static struct errno_http hterrs[] = {
 
 void dump_errno(struct req_state *s, int err, struct rgw_err *rgwerr)
 {
+  int orig_err = err;
   const char *err_str;
   const char *code = (rgwerr ? rgwerr->code : NULL);
 
@@ -59,7 +60,7 @@ void dump_errno(struct req_state *s, int err, struct rgw_err *rgwerr)
   }
 
   dump_status(s, err_str);
-  if (err) {
+  if (orig_err < 0) {
     s->err_exist = true;
     s->err.code = code;
     s->err.message = (rgwerr ? rgwerr->message : NULL);
@@ -83,11 +84,25 @@ void close_section(struct req_state *s, const char *name)
 static void dump_content_length(struct req_state *s, int len)
 {
   CGI_PRINTF(s->fcgx->out, "Content-Length: %d\n", len);
+  CGI_PRINTF(s->fcgx->out, "Accept-Ranges: %s\n", "bytes");
 }
 
 static void dump_etag(struct req_state *s, const char *etag)
 {
   CGI_PRINTF(s->fcgx->out,"ETag: \"%s\"\n", etag);
+}
+
+static void dump_last_modified(struct req_state *s, time_t t) {
+
+  char timestr[TIME_BUF_SIZE];
+  struct tm *tmp = gmtime(&t);
+  if (tmp == NULL)
+    return;
+
+  if (strftime(timestr, sizeof(timestr), "%a, %d %b %Y %H:%M:%S %Z", tmp) == 0)
+    return;
+
+  CGI_PRINTF(s->fcgx->out, "Last-Modified: %s\n", timestr);
 }
 
 void dump_value(struct req_state *s, const char *name, const char *fmt, ...)
@@ -114,7 +129,6 @@ static void dump_entry(struct req_state *s, const char *val)
 
 void dump_time(struct req_state *s, const char *name, time_t *t)
 {
-#define TIME_BUF_SIZE 128
   char buf[TIME_BUF_SIZE];
   struct tm *tmp = localtime(t);
   if (tmp == NULL)
@@ -183,6 +197,11 @@ void abort_early(struct req_state *s, int err)
   end_header(s);
 }
 
+void dump_range(struct req_state *s, off_t ofs, off_t end)
+{
+    CGI_PRINTF(s->fcgx->out,"Content-Range: bytes %d-%d/%d\n", (int)ofs, (int)end, (int)end + 1);
+}
+
 int RGWGetObj_REST::get_params()
 {
   range_str = FCGX_GetParam("HTTP_RANGE", s->fcgx->envp);
@@ -194,13 +213,20 @@ int RGWGetObj_REST::get_params()
   return 0;
 }
 
-int RGWGetObj_REST::send_response()
+int RGWGetObj_REST::send_response(void *handle)
 {
   const char *content_type = NULL;
+  int orig_ret = ret;
 
-  if (!get_data && !ret) {
-    dump_content_length(s, len);
-  }
+  if (sent_header)
+    goto send_data;
+
+  if (range_str)
+    dump_range(s, ofs, end);
+
+  dump_content_length(s, total_len);
+  dump_last_modified(s, lastmod);
+
   if (!ret) {
     map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
     if (iter != attrs.end()) {
@@ -210,6 +236,7 @@ int RGWGetObj_REST::send_response()
         dump_etag(s, etag);
       }
     }
+
     for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
        const char *name = iter->first.c_str();
        if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
@@ -220,9 +247,17 @@ int RGWGetObj_REST::send_response()
        }
     }
   }
+
+  if (range_str && !ret)
+    ret = 206; /* partial content */
+
   dump_errno(s, ret, &err);
   end_header(s, content_type);
-  if (get_data && !ret) {
+
+  sent_header = true;
+
+send_data:
+  if (get_data && !orig_ret) {
     FCGX_PutStr(data, len, s->fcgx->out); 
   }
 
@@ -310,7 +345,17 @@ void RGWDeleteBucket_REST::send_response()
 
 int RGWPutObj_REST::get_params()
 {
-  size_t cl = atoll(s->length);
+  supplied_md5_b64 = FCGX_GetParam("HTTP_CONTENT_MD5", s->fcgx->envp);
+
+  return 0;
+}
+
+int RGWPutObj_REST::get_data()
+{
+  size_t cl = atoll(s->length) - ofs;
+  if (cl > RGW_MAX_CHUNK_SIZE)
+    cl = RGW_MAX_CHUNK_SIZE;
+  len = 0;
   if (cl) {
     data = (char *)malloc(cl);
     if (!data)
@@ -409,8 +454,8 @@ void init_entities_from_header(struct req_state *s)
   int pos;
   if (s->host) {
     string h(s->host);
-    
-    cerr << "host=" << s->host << std::endl;
+
+    RGW_LOG(10) << "host=" << s->host << endl;
     pos = h.find("s3.");
     
     if (pos > 0) {
@@ -513,7 +558,7 @@ static void init_auth_info(struct req_state *s)
   for (int i=0; (p = s->fcgx->envp[i]); ++i) {
 #define HTTP_X_AMZ "HTTP_X_AMZ"
     if (strncmp(p, HTTP_X_AMZ, sizeof(HTTP_X_AMZ) - 1) == 0) {
-      cerr << "amz>> " << p << std::endl;
+      RGW_LOG(10) << "amz>> " << p << endl;
       const char *amz = p+5; /* skip the HTTP_ part */
       const char *eq = strchr(amz, '=');
       if (!eq) /* shouldn't happen! */
@@ -546,7 +591,7 @@ static void init_auth_info(struct req_state *s)
   }
   map<string, string>::iterator iter;
   for (iter = s->x_amz_map.begin(); iter != s->x_amz_map.end(); ++iter) {
-    cerr << "x>> " << iter->first << ":" << iter->second << std::endl;
+    RGW_LOG(10) << "x>> " << iter->first << ":" << iter->second << endl;
   }
 }
 
@@ -577,7 +622,7 @@ void RGWHandler_REST::provider_init_state()
     s->op = OP_UNKNOWN;
 
   init_entities_from_header(s);
-  cerr << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket ? s->bucket : "<NULL>") << std::endl;
+  RGW_LOG(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket ? s->bucket : "<NULL>") << endl;
 
   init_auth_info(s);
 

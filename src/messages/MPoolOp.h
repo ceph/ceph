@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MPOOLOP_H
-#define __MPOOLOP_H
+#ifndef CEPH_MPOOLOP_H
+#define CEPH_MPOOLOP_H
 
 #include "messages/PaxosServiceMessage.h"
 
@@ -26,7 +26,7 @@ public:
   __u32 op;
   uint64_t auid;
   snapid_t snapid;
-  __u8 crush_rule;
+  __s16 crush_rule;
 
   MPoolOp() : PaxosServiceMessage(CEPH_MSG_POOLOP, 0) {}
   MPoolOp(const ceph_fsid_t& f, tid_t t, int p, string& n, int o, version_t v) :
@@ -53,9 +53,7 @@ public:
   }
 
   void encode_payload() {
-    if (crush_rule)
-      header.version = 3;
-    else header.version = 2;
+    header.version = 4;
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(pool, payload);
@@ -63,6 +61,8 @@ public:
     ::encode(auid, payload);
     ::encode(snapid, payload);
     ::encode(name, payload);
+    __u8 pad = 0;
+    ::encode(pad, payload);  /* for v3->v4 encoding change */
     ::encode(crush_rule, payload);
   }
   void decode_payload() {
@@ -77,9 +77,16 @@ public:
     ::decode(snapid, p);
     if (header.version >= 2)
       ::decode(name, p);
-    if (header.version >= 3)
-      ::decode(crush_rule, p);
-    else crush_rule = 0;
+
+    if (header.version >= 3) {
+      __u8 pad;
+      ::decode(pad, p);
+      if (header.version >= 4)
+	::decode(crush_rule, p);
+      else
+	crush_rule = pad;
+    } else
+      crush_rule = -1;
   }
 };
 

@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __AUTHNONECLIENTHANDLER_H
-#define __AUTHNONECLIENTHANDLER_H
+#ifndef CEPH_AUTHNONECLIENTHANDLER_H
+#define CEPH_AUTHNONECLIENTHANDLER_H
 
 #include "../AuthClientHandler.h"
 #include "AuthNoneProtocol.h"

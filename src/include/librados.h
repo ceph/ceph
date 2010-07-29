@@ -1,5 +1,5 @@
-#ifndef __LIBRADOS_H
-#define __LIBRADOS_H
+#ifndef CEPH_LIBRADOS_H
+#define CEPH_LIBRADOS_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -47,6 +47,7 @@ int rados_lookup_pool(const char *name);
 int rados_stat_pool(rados_pool_t pool, struct rados_pool_stat_t *stats);
 
 void rados_set_snap(rados_pool_t pool, rados_snap_t snap);
+int rados_set_snap_context(rados_pool_t pool, rados_snap_t seq, rados_snap_t *snaps, int num_snaps);
 
 int rados_create_pool(const char *name);
 int rados_create_pool_with_auid(const char *name, uint64_t auid);
@@ -75,8 +76,10 @@ int rados_snap_get_name(rados_pool_t pool, rados_snap_t id, char *name, int maxl
 
 /* sync io */
 int rados_write(rados_pool_t pool, const char *oid, off_t off, const char *buf, size_t len);
+int rados_write_full(rados_pool_t pool, const char *oid, off_t off, const char *buf, size_t len);
 int rados_read(rados_pool_t pool, const char *oid, off_t off, char *buf, size_t len);
 int rados_remove(rados_pool_t pool, const char *oid);
+int rados_trunc(rados_pool_t pool, const char *oid, size_t size);
 
 /* attrs */
 int rados_getxattr(rados_pool_t pool, const char *o, const char *name, char *buf, size_t len);
@@ -103,6 +106,9 @@ void rados_aio_release(rados_completion_t c);
 int rados_aio_write(rados_pool_t pool, const char *oid,
 		    off_t off, const char *buf, size_t len,
 		    rados_completion_t completion);
+int rados_aio_write_full(rados_pool_t pool, const char *oid,
+			 off_t off, const char *buf, size_t len,
+			 rados_completion_t completion);
 int rados_aio_read(rados_pool_t pool, const char *oid,
 		   off_t off, char *buf, size_t len,
 		   rados_completion_t completion);

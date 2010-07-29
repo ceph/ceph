@@ -1,7 +1,7 @@
 
 
-#ifndef __CEPH_CAS_H
-#define __CEPH_CAS_H
+#ifndef CEPH_CAS_H
+#define CEPH_CAS_H
 
 #include "include/object.h"
 

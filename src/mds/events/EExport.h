@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __EEXPORT_H
-#define __EEXPORT_H
+#ifndef CEPH_EEXPORT_H
+#define CEPH_EEXPORT_H
 
 #include "config.h"
 #include "include/types.h"

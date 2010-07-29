@@ -118,7 +118,7 @@ int MonClient::get_monmap()
   dout(10) << "get_monmap" << dendl;
   Mutex::Locker l(monc_lock);
   
-  _sub_want("monmap", monmap.get_epoch());
+  _sub_want("monmap", 0, 0);
   if (cur_mon.empty())
     _reopen_session();
 
@@ -252,13 +252,13 @@ void MonClient::init()
   entity_name = *g_conf.entity_name;
   
   Mutex::Locker l(monc_lock);
-  timer.add_event_after(10.0, new C_Tick(this));
+  schedule_tick();
 
   // seed rng so we choose a different monitor each time
   srand(getpid());
 
   auth_supported.clear();
-  string str = g_conf.supported_auth;
+  string str = g_conf.auth_supported;
   list<string> sup_list;
   get_str_list(str, sup_list);
   for (list<string>::iterator iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
@@ -288,7 +288,7 @@ int MonClient::authenticate(double timeout)
     return 0;
   }
 
-  _sub_want("monmap", monmap.get_epoch());
+  _sub_want("monmap", monmap.get_epoch() ? monmap.get_epoch() + 1 : 0, 0);
   if (cur_mon.empty())
     _reopen_session();
 
@@ -450,7 +450,7 @@ bool MonClient::ms_handle_reset(Connection *con)
 void MonClient::_finish_hunting()
 {
   if (hunting) {
-    dout(0) << "found mon." << cur_mon << dendl; 
+    dout(1) << "found mon." << cur_mon << dendl; 
     hunting = false;
   }
 }
@@ -476,7 +476,15 @@ void MonClient::tick()
   if (auth)
     auth->tick();
 
-  timer.add_event_after(10.0, new C_Tick(this));
+  schedule_tick();
+}
+
+void MonClient::schedule_tick()
+{
+  if (hunting)
+    timer.add_event_after(g_conf.mon_client_hunt_interval, new C_Tick(this));
+  else
+    timer.add_event_after(g_conf.mon_client_ping_interval, new C_Tick(this));
 }
 
 

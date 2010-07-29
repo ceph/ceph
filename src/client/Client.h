@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __CLIENT_H
-#define __CLIENT_H
+#ifndef CEPH_CLIENT_H
+#define CEPH_CLIENT_H
 
 enum {
   l_c_first = 20000,
@@ -113,6 +113,8 @@ struct MetaRequest {
   utime_t  sent_stamp;
   int      mds;                // who i am asking
   int      resend_mds;         // someone wants you to (re)send the request here
+  bool     send_to_auth;       // must send to auth mds
+  __u32    sent_on_mseq;       // mseq at last submission of this request
   int      num_fwd;            // # of times i've been forwarded
   int      retry_attempt;
   int      ref;
@@ -140,7 +142,8 @@ struct MetaRequest {
     old_dentry_drop(0), old_dentry_unless(0),
     inode(NULL), old_inode(NULL),
     dentry(NULL), old_dentry(NULL),
-    mds(-1), resend_mds(-1), num_fwd(0), retry_attempt(0),
+    mds(-1), resend_mds(-1), send_to_auth(false), sent_on_mseq(0),
+    num_fwd(0), retry_attempt(0),
     ref(1), reply(0), 
     kick(false), got_safe(false), got_unsafe(false), item(this), unsafe_item(this),
     lock("MetaRequest lock"),
@@ -199,6 +202,7 @@ struct MetaRequest {
 
 
 struct MDSSession {
+  int mds_num;
   version_t seq;
   uint64_t cap_gen;
   utime_t cap_ttl, last_cap_renew_request;
@@ -215,7 +219,7 @@ struct MDSSession {
 
   MClientCapRelease *release;
   
-  MDSSession() : seq(0), cap_gen(0), cap_renew_seq(0), num_caps(0), 
+  MDSSession() : mds_num(-1), seq(0), cap_gen(0), cap_renew_seq(0), num_caps(0),
 		 closing(false), was_stale(false), release(NULL) {}
 };
 
@@ -377,7 +381,6 @@ class Inode {
   unsigned flags;
 
   // about the dir (if this is one!)
-  int       dir_auth;
   set<int>  dir_contacts;
   bool      dir_hashed, dir_replicated;
 
@@ -431,23 +434,28 @@ class Inode {
       dn->dir->parent_inode->make_long_path(p);
       p.push_dentry(dn->name);
     } else if (snapdir_parent) {
-      snapdir_parent->make_path(p);
+      snapdir_parent->make_nosnap_relative_path(p);
       string empty;
       p.push_dentry(empty);
     } else
       p = filepath(ino);
   }
 
-  void make_path(filepath& p) {
+  /*
+   * make a filepath suitable for an mds request:
+   *  - if we are non-snapped/live, the ino is sufficient, e.g. #1234
+   *  - if we are snapped, make filepath relative to first non-snapped parent.
+   */
+  void make_nosnap_relative_path(filepath& p) {
     if (snapid == CEPH_NOSNAP) {
       p = filepath(ino);
     } else if (snapdir_parent) {
-      snapdir_parent->make_path(p);
+      snapdir_parent->make_nosnap_relative_path(p);
       string empty;
       p.push_dentry(empty);
     } else if (dn) {
       assert(dn->dir && dn->dir->parent_inode);
-      dn->dir->parent_inode->make_path(p);
+      dn->dir->parent_inode->make_nosnap_relative_path(p);
       p.push_dentry(dn->name);
     } else {
       p = filepath(ino);
@@ -477,7 +485,7 @@ class Inode {
     rdev(0), mode(0), uid(0), gid(0), nlink(0), size(0), truncate_seq(0), truncate_size(0),
     time_warp_seq(0), max_size(0), version(0), xattr_version(0),
     flags(0),
-    dir_auth(-1), dir_hashed(false), dir_replicated(false), 
+    dir_hashed(false), dir_replicated(false), auth_cap(NULL),
     dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), shared_gen(0), cache_gen(0),
     snap_caps(0), snap_cap_refs(0),
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
@@ -606,88 +614,6 @@ class Inode {
       return true;
     return false;
   }
-
- 
-  int authority(const string& dname) {
-    if (!dirfragtree.empty()) {
-      __gnu_cxx::hash<string> H;
-      frag_t fg = dirfragtree[H(dname)];
-      while (fg != frag_t()) {
-	if (fragmap.count(fg) &&
-	    fragmap[fg] >= 0) {
-	  //cout << "picked frag ino " << inode.ino << " dname " << dname << " fg " << fg << " mds" << fragmap[fg] << std::endl;
-	  return fragmap[fg];
-	}
-	fg = frag_t(fg.value(), fg.bits()-1); // try more general...
-      }
-    }
-    return authority();
-  }
-
-  int authority() {
-    if (dir_auth >= 0)
-      return dir_auth;
-
-    assert(dn);
-    return dn->dir->parent_inode->authority(dn->name);
-  }
-
-
-  int pick_replica(MDSMap *mdsmap) {
-    // replicas?
-    /* fixme
-    if (//ino() > 1ULL && 
-	dir_contacts.size()) {
-      set<int>::iterator it = dir_contacts.begin();
-      if (dir_contacts.size() == 1)
-        return *it;
-      else {
-	//cout << "dir_contacts on " << inode.ino << " is " << dir_contacts << std::endl;
-	int r = 1 + (rand() % dir_contacts.size());
-	int a = authority();
-	while (r--) {
-	  it++;
-	  if (mdsmap->is_down(*it)) it++;
-	  if (it == dir_contacts.end()) it = dir_contacts.begin();
-	  if (*it == a) it++;  // skip the authority
-	  if (it == dir_contacts.end()) it = dir_contacts.begin();
-	}
-	return *it;
-      }
-    }
-    */
-
-    if (dir_replicated) {// || ino() == 1) {
-      // pick a random mds that isn't the auth
-      set<int> s;
-      mdsmap->get_mds_set(s);
-      set<int>::iterator it = s.begin();
-      if (s.empty())
-	return 0;
-      if (s.size() == 1)
-        return *it;
-      else {
-	//cout << "dir_contacts on " << inode.ino << " is " << dir_contacts << std::endl;
-	int r = 1 + (rand() % s.size());
-	int a = authority();
-	while (r--) {
-	  it++;
-	  if (mdsmap->is_down(*it)) it++;
-	  if (it == s.end()) it = s.begin();
-	  if (*it == a) it++;  // skip the authority
-	  if (it == s.end()) it = s.begin();
-	}
-	//if (ino == 1) cout << "chose " << *it << " from " << s << std::endl;
-	return *it;
-      }
-      //cout << "num_mds is " << mdcluster->get_num_mds() << endl;
-      //return mdsmap->get_random_in_mds();
-      //return rand() % mdsmap->get_num_mds();  // huh.. pick a random mds!
-    }
-    else
-      return authority();
-  }
-
 
   // open Dir for an inode.  if it's not open, allocated it (and pin dentry in memory).
   Dir *open_dir() {
@@ -830,7 +756,7 @@ public:
   client_t whoami;
 
   // mds sessions
-  map<int, MDSSession> mds_sessions;  // mds -> push seq
+  map<int, MDSSession*> mds_sessions;  // mds -> push seq
   map<int, list<Cond*> > waiting_for_session;
   list<Cond*> waiting_for_mdsmap;
 
@@ -857,6 +783,7 @@ public:
   int choose_target_mds(MetaRequest *req);
   void connect_mds_targets(int mds);
   void send_request(MetaRequest *request, int mds);
+  MClientRequest *build_client_request(MetaRequest *request);
   void kick_requests(int mds, bool signal);
   void handle_client_request_forward(MClientRequestForward *reply);
   void handle_client_reply(MClientReply *reply);
@@ -1092,6 +1019,7 @@ protected:
   void tear_down_cache();   
 
   client_t get_nodeid() { return whoami; }
+  inodeno_t get_root_ino() { return root->ino; }
 
   void init();
   void shutdown();
@@ -1114,6 +1042,7 @@ protected:
   void trim_caps(int mds, int max);
   void mark_caps_dirty(Inode *in, int caps);
   void flush_caps();
+  void flush_caps(Inode *in, int mds);
   void kick_flushing_caps(int mds);
   int get_caps(Inode *in, int need, int want, int *got, loff_t endoff);
 
@@ -1213,12 +1142,11 @@ private:
   int _fsync(Fh *fh, bool syncdataonly);
   int _sync_fs();
 
-  MClientRequest* make_request_from_Meta(MetaRequest * request);
   int get_or_create(Inode *dir, const char* name,
 		    Dentry **pdn, bool expect_null=false);
 
 public:
-  int mount();
+  int mount(const char *mount_root = NULL);
   int unmount();
 
   // these shoud (more or less) mirror the actual system calls.

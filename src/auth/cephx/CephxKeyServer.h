@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __KEYSSERVER_H
-#define __KEYSSERVER_H
+#ifndef CEPH_KEYSSERVER_H
+#define CEPH_KEYSSERVER_H
 
 #include "config.h"
 

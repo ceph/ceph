@@ -18,8 +18,8 @@
  * where & is a bit-wise AND and m=2^k-1
  */
 
-#ifndef __PGMAP_H
-#define __PGMAP_H
+#ifndef CEPH_PGMAP_H
+#define CEPH_PGMAP_H
 
 #include "osd/osd_types.h"
 #include <sstream>

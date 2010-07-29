@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MCLIENTREPLY_H
-#define __MCLIENTREPLY_H
+#ifndef CEPH_MCLIENTREPLY_H
+#define CEPH_MCLIENTREPLY_H
 
 #include "include/types.h"
 #include "MClientRequest.h"

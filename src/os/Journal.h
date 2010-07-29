@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __EBOFS_JOURNAL_H
-#define __EBOFS_JOURNAL_H
+#ifndef CEPH_EBOFS_JOURNAL_H
+#define CEPH_EBOFS_JOURNAL_H
 
 #include "include/buffer.h"
 #include "include/Context.h"
@@ -45,7 +45,7 @@ public:
   // writes
   virtual bool is_writeable() = 0;
   virtual void make_writeable() = 0;
-  virtual void submit_entry(uint64_t seq, bufferlist& e, Context *oncommit) = 0;
+  virtual void submit_entry(uint64_t seq, bufferlist& e, int alignment, Context *oncommit) = 0;
   virtual void committed_thru(uint64_t seq) = 0;
   virtual bool read_entry(bufferlist& bl, uint64_t &seq) = 0;
 

@@ -14,8 +14,8 @@
  * See src/doc/exports.txt for a description.
  */
 
-#ifndef __MDS_MIGRATOR_H
-#define __MDS_MIGRATOR_H
+#ifndef CEPH_MDS_MIGRATOR_H
+#define CEPH_MDS_MIGRATOR_H
 
 #include "include/types.h"
 

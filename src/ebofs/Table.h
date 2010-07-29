@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __EBOFS_TABLE_H
-#define __EBOFS_TABLE_H
+#ifndef CEPH_EBOFS_TABLE_H
+#define CEPH_EBOFS_TABLE_H
 
 #include "types.h"
 #include "nodes.h"

@@ -1,5 +1,5 @@
-#ifndef _WS_CEPH_TYPES_H
-#define _WS_CEPH_TYPES_H
+#ifndef CEPH_WS_TYPES_H
+#define CEPH_WS_TYPES_H
 
 #ifdef HAVE_CONFIG_H
 # include "config.h"

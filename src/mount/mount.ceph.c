@@ -5,6 +5,10 @@
 #include <errno.h>
 #include <sys/mount.h>
 
+#ifndef MS_RELATIME
+# define MS_RELATIME (1<<21)
+#endif
+
 #define BUF_SIZE 128
 
 int verboseflag = 0;
@@ -77,20 +81,38 @@ char *mount_resolve_dest(char *orig_str)
 	while (tok) {
 		struct addrinfo hint;
 		struct addrinfo *res, *ores;
+		char *firstcolon, *lastcolon, *bracecolon;
 		int r;
+		int brackets = 0;
 
-		port_str = strchr(tok, ':');
-		if (port_str) {
+		firstcolon = strchr(tok, ':');
+		lastcolon = strrchr(tok, ':');
+		bracecolon = strstr(tok, "]:");
+
+		port_str = 0;
+		if (firstcolon && firstcolon == lastcolon) {
+			/* host:port or a.b.c.d:port */
+			*firstcolon = 0;
+			port_str = firstcolon + 1;
+		} else if (bracecolon) {
+			/* {ipv6addr}:port */
+			port_str = bracecolon + 1;
 			*port_str = 0;
 			port_str++;
-			if (!*port_str)
-				port_str = NULL;
 		}
+		if (port_str && !*port_str)
+			port_str = NULL;
+
+		if (*tok == '[' &&
+		    tok[strlen(tok)-1] == ']') {
+			tok[strlen(tok)-1] = 0;
+			tok++;
+			brackets = 1;
+		}			
 
 		/*printf("name '%s' port '%s'\n", tok, port_str);*/
 
 		memset(&hint, 0, sizeof(hint));
-		hint.ai_family = AF_INET;
 		hint.ai_socktype = SOCK_STREAM;
 		hint.ai_protocol = IPPROTO_TCP;
 
@@ -113,7 +135,13 @@ char *mount_resolve_dest(char *orig_str)
 			       host, port,
 			       res->ai_flags, res->ai_family, res->ai_socktype, res->ai_protocol,
 			       res->ai_canonname);*/
+			if (res->ai_family == AF_INET6)
+				brackets = 1;  /* always surround ipv6 addrs with brackets */
+			if (brackets)
+				pos = safe_cat(&new_str, &len, pos, "[");
 			pos = safe_cat(&new_str, &len, pos, host);
+			if (brackets)
+				pos = safe_cat(&new_str, &len, pos, "]");
 			if (port_str) {
 				pos = safe_cat(&new_str, &len, pos, ":");
 				pos = safe_cat(&new_str, &len, pos, port);
@@ -133,6 +161,7 @@ char *mount_resolve_dest(char *orig_str)
 	pos = safe_cat(&new_str, &len, pos, ":");
 	pos = safe_cat(&new_str, &len, pos, mount_path);
 
+	/*printf("new_str is '%s'\n", new_str);*/
 	return new_str;
 }
 
@@ -177,29 +206,43 @@ static int parse_options(char ** optionsp, int * filesys_flags)
 
 		skip = 1;
 
-		if (strncmp(data, "nosuid", 6) == 0) {
+		if (strncmp(data, "ro", 2) == 0) {
+			*filesys_flags |= MS_RDONLY;
+		} else if (strncmp(data, "rw", 2) == 0) {
+			*filesys_flags &= ~MS_RDONLY;
+		} else if (strncmp(data, "nosuid", 6) == 0) {
 			*filesys_flags |= MS_NOSUID;
 		} else if (strncmp(data, "suid", 4) == 0) {
 			*filesys_flags &= ~MS_NOSUID;
-		} else if (strncmp(data, "nodev", 5) == 0) {
-			*filesys_flags |= MS_NODEV;
-		} else if ((strncmp(data, "nobrl", 5) == 0) || 
-			   (strncmp(data, "nolock", 6) == 0)) {
-			*filesys_flags &= ~MS_MANDLOCK;
 		} else if (strncmp(data, "dev", 3) == 0) {
 			*filesys_flags &= ~MS_NODEV;
+		} else if (strncmp(data, "nodev", 5) == 0) {
+			*filesys_flags |= MS_NODEV;
 		} else if (strncmp(data, "noexec", 6) == 0) {
 			*filesys_flags |= MS_NOEXEC;
 		} else if (strncmp(data, "exec", 4) == 0) {
 			*filesys_flags &= ~MS_NOEXEC;
-		} else if (strncmp(data, "ro", 2) == 0) {
-			*filesys_flags |= MS_RDONLY;
-		} else if (strncmp(data, "rw", 2) == 0) {
-			*filesys_flags &= ~MS_RDONLY;
-                } else if (strncmp(data, "remount", 7) == 0) {
-                        *filesys_flags |= MS_REMOUNT;
                 } else if (strncmp(data, "sync", 4) == 0) {
                         *filesys_flags |= MS_SYNCHRONOUS;
+                } else if (strncmp(data, "remount", 7) == 0) {
+                        *filesys_flags |= MS_REMOUNT;
+                } else if (strncmp(data, "mandlock", 8) == 0) {
+                        *filesys_flags |= MS_MANDLOCK;
+		} else if ((strncmp(data, "nobrl", 5) == 0) || 
+			   (strncmp(data, "nolock", 6) == 0)) {
+			*filesys_flags &= ~MS_MANDLOCK;
+		} else if (strncmp(data, "noatime", 7) == 0) {
+			*filesys_flags |= MS_NOATIME;
+		} else if (strncmp(data, "nodiratime", 10) == 0) {
+			*filesys_flags |= MS_NODIRATIME;
+		} else if (strncmp(data, "relatime", 8) == 0) {
+			*filesys_flags |= MS_RELATIME;
+
+		} else if (strncmp(data, "noauto", 6) == 0) {
+			skip = 1;  /* ignore */
+		} else if (strncmp(data, "_netdev", 7) == 0) {
+			skip = 1;  /* ignore */
+
 		} else if (strncmp(data, "secretfile", 7) == 0) {
 			char *fn = value;
 			char *end = fn;

@@ -4,7 +4,9 @@ set -e
 
 remote=ceph.newdream.net
 vers=$1
+[ -z "$vers" ] && [ -e .last_release ] && vers=`cat .last_release`
 [ -z "$vers" ] && echo specify version && exit 1
+echo version $vers
 
 test -d release/$vers || mkdir -p release/$vers
 

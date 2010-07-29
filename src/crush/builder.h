@@ -1,5 +1,5 @@
-#ifndef _CRUSH_BUILDER_H
-#define _CRUSH_BUILDER_H
+#ifndef CEPH_CRUSH_BUILDER_H
+#define CEPH_CRUSH_BUILDER_H
 
 #include "crush.h"
 

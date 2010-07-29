@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __LOGMONITOR_H
-#define __LOGMONITOR_H
+#ifndef CEPH_LOGMONITOR_H
+#define CEPH_LOGMONITOR_H
 
 #include <map>
 #include <set>

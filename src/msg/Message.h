@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MESSAGE_H
-#define __MESSAGE_H
+#ifndef CEPH_MESSAGE_H
+#define CEPH_MESSAGE_H
  
 /* public message types */
 #include "include/types.h"
@@ -146,12 +146,12 @@ struct RefCountedObject {
   virtual ~RefCountedObject() {}
   
   RefCountedObject *get() {
-    //generic_dout(0) << "RefCountedObject::get " << this << " " << nref.test() << " -> " << (nref.test() + 1) << dendl;
+    //generic_dout(0) << "RefCountedObject::get " << this << " " << nref.read() << " -> " << (nref.read() + 1) << dendl;
     nref.inc();
     return this;
   }
   void put() {
-    //generic_dout(0) << "RefCountedObject::put " << this << " " << nref.test() << " -> " << (nref.test() - 1) << dendl;
+    //generic_dout(0) << "RefCountedObject::put " << this << " " << nref.read() << " -> " << (nref.read() - 1) << dendl;
     if (nref.dec() == 0)
       delete this;
   }
@@ -164,7 +164,7 @@ struct Connection : public RefCountedObject {
   int peer_type;
   entity_addr_t peer_addr;
   unsigned features;
-  void *pipe;
+  RefCountedObject *pipe;
 
 public:
   Connection() : nref(1), lock("Connection::lock"), priv(NULL), peer_type(-1), features(0), pipe(NULL) {}
@@ -174,6 +174,8 @@ public:
       //generic_dout(0) << "~Connection " << this << " dropping priv " << priv << dendl;
       priv->put();
     }
+    if (pipe)
+      pipe->put();
   }
 
   Connection *get() {
@@ -196,6 +198,20 @@ public:
     if (priv)
       return priv->get();
     return NULL;
+  }
+
+  RefCountedObject *get_pipe() {
+    Mutex::Locker l(lock);
+    if (pipe)
+      return pipe->get();
+    return NULL;
+  }
+  void clear_pipe() {
+    Mutex::Locker l(lock);
+    if (pipe) {
+      pipe->put();
+      pipe = NULL;
+    }
   }
 
   int get_peer_type() { return peer_type; }
@@ -229,22 +245,29 @@ protected:
   
   utime_t recv_stamp;
   Connection *connection;
+
+  // release our size in bytes back to this throttler when our payload
+  // is adjusted or when we are destroyed.
   Throttle *throttler;
+
+  // keep track of how big this message was when we reserved space in
+  // the msgr dispatch_throttler, so that we can properly release it
+  // later.  this is necessary because messages can enter the dispatch
+  // queue locally (not via read_message()), and those are not
+  // currently throttled.
+  uint64_t dispatch_throttle_size;
 
   friend class Messenger;
 
-  bool _forwarded;
-  entity_inst_t _orig_source_inst;
-  
 public:
   atomic_t nref;
 
-  Message() : connection(NULL), _forwarded(false), nref(1) {
+  Message() : connection(NULL), dispatch_throttle_size(0), nref(1) {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
     throttler = NULL;
   };
-  Message(int t) : connection(NULL), _forwarded(false), nref(1) {
+  Message(int t) : connection(NULL), dispatch_throttle_size(0), nref(1) {
     memset(&header, 0, sizeof(header));
     header.type = t;
     header.version = 1;
@@ -286,6 +309,9 @@ public:
   void set_throttler(Throttle *t) { throttler = t; }
   Throttle *get_throttler() { return throttler; }
  
+  void set_dispatch_throttle_size(uint64_t s) { dispatch_throttle_size = s; }
+  uint64_t get_dispatch_throttle_size() { return dispatch_throttle_size; }
+
   ceph_msg_header &get_header() { return header; }
   void set_header(const ceph_msg_header &e) { header = e; }
   void set_footer(const ceph_msg_footer &e) { footer = e; }
@@ -379,8 +405,6 @@ public:
 
   // forwarded?
   entity_inst_t get_orig_source_inst() {
-    if (_forwarded)
-      return _orig_source_inst;
     return get_source_inst();
   }
   entity_name_t get_orig_source() {
@@ -388,10 +412,6 @@ public:
   }
   entity_addr_t get_orig_source_addr() {
     return get_orig_source_inst().addr;
-  }
-  void set_orig_source_inst(entity_inst_t& i) {
-    _forwarded = true;
-    _orig_source_inst = i;
   }
 
   // virtual bits

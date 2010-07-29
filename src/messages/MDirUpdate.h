@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MDIRUPDATE_H
-#define __MDIRUPDATE_H
+#ifndef CEPH_MDIRUPDATE_H
+#define CEPH_MDIRUPDATE_H
 
 #include "msg/Message.h"
 

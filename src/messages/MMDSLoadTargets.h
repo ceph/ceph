@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MMDSLoadTargets_H
-#define __MMDSLoadTargets_H
+#ifndef CEPH_MMDSLoadTargets_H
+#define CEPH_MMDSLoadTargets_H
 
 #include "msg/Message.h"
 #include "messages/PaxosServiceMessage.h"

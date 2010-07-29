@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MCLIENTSNAP_H
-#define __MCLIENTSNAP_H
+#ifndef CEPH_MCLIENTSNAP_H
+#define CEPH_MCLIENTSNAP_H
 
 #include "msg/Message.h"
 

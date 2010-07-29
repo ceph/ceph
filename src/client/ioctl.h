@@ -39,10 +39,4 @@ struct ceph_ioctl_dataloc {
 
 #define CEPH_IOC_LAZYIO _IO(CEPH_IOCTL_MAGIC, 4)
 
-struct ceph_ioctl_invalidate_range {
-	__u64 offset, length;
-};
-#define CEPH_IOC_INVALIDATE_RANGE _IOW(CEPH_IOCTL_MAGIC, 5, \
-				       struct ceph_ioctl_invalidate_range)
-
 #endif

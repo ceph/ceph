@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __OSDMAP_H
-#define __OSDMAP_H
+#ifndef CEPH_OSDMAP_H
+#define CEPH_OSDMAP_H
 
 /*
  * describe properties of the OSD cluster.
@@ -398,7 +398,10 @@ private:
 
 
 
-  bool exists(int osd) { return osd < max_osd && (osd_state[osd] & CEPH_OSD_EXISTS); }
+  bool exists(int osd) {
+    //assert(osd >= 0);
+    return osd >= 0 && osd < max_osd && (osd_state[osd] & CEPH_OSD_EXISTS);
+  }
   bool is_up(int osd) { return exists(osd) && osd_state[osd] & CEPH_OSD_UP; }
   bool is_down(int osd) { return !exists(osd) || !is_up(osd); }
   bool is_out(int osd) { return !exists(osd) || get_weight(osd) == CEPH_OSD_OUT; }
@@ -475,11 +478,13 @@ private:
   }
 
 
-  void apply_incremental(Incremental &inc) {
+  int apply_incremental(Incremental &inc) {
     if (inc.epoch == 1)
       fsid = inc.fsid;
     else
-      assert(ceph_fsid_compare(&inc.fsid, &fsid) == 0);
+      if (ceph_fsid_compare(&inc.fsid, &fsid) != 0) {
+	return -EINVAL;
+      }
     assert(inc.epoch == epoch+1);
     epoch++;
     modified = inc.modified;
@@ -487,7 +492,7 @@ private:
     // full map?
     if (inc.fullmap.length()) {
       decode(inc.fullmap);
-      return;
+      return 0;
     }
 
     // nope, incremental.
@@ -586,6 +591,9 @@ private:
       bufferlist::iterator blp = inc.crush.begin();
       crush.decode(blp);
     }
+
+    calc_num_osds();
+    return 0;
   }
 
   // serialize, unserialize

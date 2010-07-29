@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MMONCOMMAND_H
-#define __MMONCOMMAND_H
+#ifndef CEPH_MMONCOMMAND_H
+#define CEPH_MMONCOMMAND_H
 
 #include "messages/PaxosServiceMessage.h"
 

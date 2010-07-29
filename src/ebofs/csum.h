@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __EBOFS_CSUM_H
-#define __EBOFS_CSUM_H
+#ifndef CEPH_EBOFS_CSUM_H
+#define CEPH_EBOFS_CSUM_H
 
 typedef uint64_t csum_t;
 

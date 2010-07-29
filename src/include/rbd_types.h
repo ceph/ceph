@@ -10,8 +10,8 @@
  *
  */
 
-#ifndef _FS_CEPH_RBD
-#define _FS_CEPH_RBD
+#ifndef CEPH_RBD_TYPES_H
+#define CEPH_RBD_TYPES_H
 
 #include <linux/types.h>
 
@@ -25,10 +25,12 @@
 
 #define RBD_SUFFIX	 	".rbd"
 #define RBD_DIRECTORY           "rbd_directory"
+#define RBD_INFO                "rbd_info"
 
 #define RBD_DEFAULT_OBJ_ORDER	22   /* 4MB */
 
 #define RBD_MAX_OBJ_NAME_SIZE	96
+#define RBD_MAX_BLOCK_NAME_SIZE 24
 #define RBD_MAX_SEG_NAME_SIZE	128
 
 #define RBD_COMP_NONE		0
@@ -36,7 +38,11 @@
 
 #define RBD_HEADER_TEXT		"<<< Rados Block Device Image >>>\n"
 #define RBD_HEADER_SIGNATURE	"RBD"
-#define RBD_HEADER_VERSION	"001.004"
+#define RBD_HEADER_VERSION	"001.005"
+
+struct rbd_info {
+	__le64 max_id;
+} __attribute__ ((packed));
 
 struct rbd_obj_snap_ondisk {
 	__le64 id;
@@ -44,7 +50,8 @@ struct rbd_obj_snap_ondisk {
 } __attribute__((packed));
 
 struct rbd_obj_header_ondisk {
-	char text[64];
+	char text[40];
+	char block_name[RBD_MAX_BLOCK_NAME_SIZE];
 	char signature[4];
 	char version[8];
 	struct {

@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MOSDSUBOPREPLY_H
-#define __MOSDSUBOPREPLY_H
+#ifndef CEPH_MOSDSUBOPREPLY_H
+#define CEPH_MOSDSUBOPREPLY_H
 
 #include "msg/Message.h"
 

@@ -1,6 +1,6 @@
 
-#ifndef __CEPH_MDS_LOCKS_H
-#define __CEPH_MDS_LOCKS_H
+#ifndef CEPH_MDS_LOCKS_H
+#define CEPH_MDS_LOCKS_H
 
 struct sm_state_t {
   int next;         // 0 if stable
@@ -10,6 +10,7 @@ struct sm_state_t {
   char can_read_projected;
   char can_rdlock;
   char can_wrlock;
+  char can_force_wrlock;
   char can_lease;
   char can_xlock;
   int caps;

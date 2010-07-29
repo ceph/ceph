@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 
-#ifndef __CEPH_DEBUG_H
-#define __CEPH_DEBUG_H
+#ifndef CEPH_DEBUG_H
+#define CEPH_DEBUG_H
 
 #include "include/assert.h"
 #include "Mutex.h"
@@ -21,9 +21,14 @@ extern bool _dout_need_open;
 extern bool _dout_is_open;
 
 extern void _dout_open_log();
-extern int _dout_rename_output_file();  // after calling daemon()
-extern int _dout_create_courtesy_output_symlink(const char *type, int64_t n);
-extern int _dout_create_courtesy_output_symlink(const char *name);
+
+static inline void dout_open_log() {
+  _dout_lock.Lock();
+  _dout_open_log();
+  _dout_lock.Unlock();
+}
+extern int dout_rename_output_file();  // after calling daemon()
+extern int dout_create_rank_symlink(int64_t n);
 
 static inline void _dout_check_log() {
   _dout_lock.Lock();

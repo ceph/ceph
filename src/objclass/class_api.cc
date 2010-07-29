@@ -170,17 +170,24 @@ int cls_read(cls_method_context_t hctx, int ofs, int len,
   memcpy(*outdata, odata.c_str(), odata.length());
   *outdatalen = odata.length();
 
-  return r;
+  if (r < 0)
+    return r;
+
+  return *outdatalen;
 }
 
 int cls_cxx_read(cls_method_context_t hctx, int ofs, int len, bufferlist *outbl)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
+  int ret;
   ops[0].op.op = CEPH_OSD_OP_READ;
   ops[0].op.extent.offset = ofs;
   ops[0].op.extent.length = len;
-  return (*pctx)->pg->do_osd_ops(*pctx, ops, *outbl);
+  ret = (*pctx)->pg->do_osd_ops(*pctx, ops, *outbl);
+  if (ret < 0)
+    return ret;
+  return outbl->length();
 }
 
 int cls_cxx_write(cls_method_context_t hctx, int ofs, int len, bufferlist *inbl)
@@ -190,6 +197,18 @@ int cls_cxx_write(cls_method_context_t hctx, int ofs, int len, bufferlist *inbl)
   ops[0].op.op = CEPH_OSD_OP_WRITE;
   ops[0].op.extent.offset = ofs;
   ops[0].op.extent.length = len;
+  ops[0].data = *inbl;
+  bufferlist outbl;
+  return (*pctx)->pg->do_osd_ops(*pctx, ops, outbl);
+}
+
+int cls_cxx_write_full(cls_method_context_t hctx, bufferlist *inbl)
+{
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
+  vector<OSDOp> ops(1);
+  ops[0].op.op = CEPH_OSD_OP_WRITEFULL;
+  ops[0].op.extent.offset = 0;
+  ops[0].op.extent.length = inbl->length();
   ops[0].data = *inbl;
   bufferlist outbl;
   return (*pctx)->pg->do_osd_ops(*pctx, ops, outbl);
@@ -206,6 +225,16 @@ int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len, bufferlist *inb
   ops[1].op.extent.offset = ofs;
   ops[1].op.extent.length = len;
   ops[1].data = *inbl;
+  bufferlist outbl;
+  return (*pctx)->pg->do_osd_ops(*pctx, ops, outbl);
+}
+
+int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid)
+{
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
+  vector<OSDOp> ops(1);
+  ops[0].op.op = CEPH_OSD_OP_ROLLBACK;
+  ops[0].op.snap.snapid = snapid;
   bufferlist outbl;
   return (*pctx)->pg->do_osd_ops(*pctx, ops, outbl);
 }

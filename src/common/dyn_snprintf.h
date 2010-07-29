@@ -1,5 +1,5 @@
-#ifndef __DYN_SNPRINTF_H
-#define __DYN_SNPRINTF_H
+#ifndef CEPH_DYN_SNPRINTF_H
+#define CEPH_DYN_SNPRINTF_H
 
 #ifdef __cplusplus
 extern "C" {

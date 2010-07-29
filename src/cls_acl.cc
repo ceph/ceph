@@ -50,7 +50,7 @@ int set_method(cls_method_context_t ctx, char *indata, int datalen,
    return 0;
 }
 
-void class_init()
+void __cls_init()
 {
    cls_log("Loaded acl class!");
 

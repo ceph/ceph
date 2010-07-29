@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MEXPORTDIRACK_H
-#define __MEXPORTDIRACK_H
+#ifndef CEPH_MEXPORTDIRACK_H
+#define CEPH_MEXPORTDIRACK_H
 
 #include "MExportDir.h"
 

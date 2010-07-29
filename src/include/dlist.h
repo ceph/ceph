@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __DLIST_H
-#define __DLIST_H
+#ifndef CEPH_DLIST_H
+#define CEPH_DLIST_H
 
 template<typename T>
 class dlist {

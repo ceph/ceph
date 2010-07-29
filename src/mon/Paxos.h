@@ -47,8 +47,8 @@ e 12v
  * See PaxosService.h
  */
 
-#ifndef __MON_PAXOS_H
-#define __MON_PAXOS_H
+#ifndef CEPH_MON_PAXOS_H
+#define CEPH_MON_PAXOS_H
 
 #include "include/types.h"
 #include "mon_types.h"

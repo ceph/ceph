@@ -1,5 +1,5 @@
-#ifndef __ARCH_H
-
+#ifndef CEPH_ARCH_H
+#define CEPH_ARCH_H
 
 static const char *get_arch()
 {

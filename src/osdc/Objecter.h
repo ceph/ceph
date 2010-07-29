@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __OBJECTER_H
-#define __OBJECTER_H
+#ifndef CEPH_OBJECTER_H
+#define CEPH_OBJECTER_H
 
 #include "include/types.h"
 #include "include/buffer.h"
@@ -603,6 +603,21 @@ private:
     o->snapc = snapc;
     return op_submit(o);
   }
+  tid_t trunc(const object_t& oid, ceph_object_layout ol,
+	      const SnapContext& snapc,
+	      utime_t mtime, int flags,
+	      uint64_t trunc_size, __u32 trunc_seq,
+              Context *onack, Context *oncommit) {
+    vector<OSDOp> ops(1);
+    ops[0].op.op = CEPH_OSD_OP_TRUNCATE;
+    ops[0].op.extent.offset = trunc_size;
+    ops[0].op.extent.truncate_size = trunc_size;
+    ops[0].op.extent.truncate_seq = trunc_seq;
+    Op *o = new Op(oid, ol, ops, flags, onack, oncommit);
+    o->mtime = mtime;
+    o->snapc = snapc;
+    return op_submit(o);
+  }
   tid_t zero(const object_t& oid, ceph_object_layout ol, 
 	     uint64_t off, uint64_t len, const SnapContext& snapc, utime_t mtime, int flags,
              Context *onack, Context *oncommit) {
@@ -689,7 +704,7 @@ public:
   int delete_selfmanaged_snap(int pool, snapid_t snap, Context *onfinish);
 
   int create_pool(string& name, Context *onfinish, uint64_t auid=0,
-		  __u8 crush_rule=0);
+		  int crush_rule=-1);
   int delete_pool(int pool, Context *onfinish);
   int change_pool_auid(int pool, Context *onfinish, uint64_t auid);
 

@@ -40,6 +40,7 @@ usage_exit() {
     echo "usage: $0 [options] {start|stop|restart} [mon|osd|mds]..."
     printf "\t-c ceph.conf\n"
     printf "\t--valgrind\trun via valgrind\n"
+    printf "\t--hostname [hostname]\toverride hostname lookup\n"
     exit
 }
 
@@ -131,7 +132,7 @@ case $1 in
 	    docrun=0
 	    ;;
     -m )
-	    [ "$2" = "" ] && usage_exit
+	    [ -z "$2" ] && usage_exit
 	    options="$options $1"
 	    shift
 	    MON_ADDR=$1
@@ -143,11 +144,17 @@ case $1 in
 	    dobtrfs=0
 	    ;;
     --conf | -c)
-	    [ "$2" = "" ] && usage_exit
+	    [ -z "$2" ] && usage_exit
 	    options="$options $1"
 	    shift
 	    conf=$1
 	    ;;
+    --hostname )
+	    [ -z "$2" ] && usage_exit
+	    options="$options $1"
+	    shift
+	    hostname=$1
+            ;;
     *)
 	    echo unrecognized option \'$1\'
 	    usage_exit
@@ -203,14 +210,15 @@ for name in $what; do
 
     # conf file
     if [ "$host" = "$hostname" ]; then
-	cmd="$cmd -c $conf"
+	cur_conf=$conf
     else
 	if echo $pushed_to | grep -v -q " $host "; then
 	    scp -q $conf $host:/tmp/ceph.conf.$$
 	    pushed_to="$pushed_to $host "
 	fi
-	cmd="$cmd -c /tmp/ceph.conf.$$"
+	cur_conf="/tmp/ceph.conf.$$"
     fi
+    cmd="$cmd -c $cur_conf"
 
     if echo $name | grep -q ^osd; then
 	get_conf osd_data "" "osd data"
@@ -252,7 +260,7 @@ for name in $what; do
 	    [ -n "$pre_start" ] && do_cmd "$pre_start"
 	    do_cmd "$cmd" $runarg
 	    [ -n "$post_start" ] && do_cmd "$post_start"
-	    [ -n "$lockfile" ] && [ "$?" = 0 ] && touch $lockfile
+	    [ -n "$lockfile" ] && [ "$?" -eq 0 ] && touch $lockfile
 	    ;;
 	
 	stop)
@@ -261,10 +269,10 @@ for name in $what; do
 	    [ -n "$pre_stop" ] && do_cmd "$pre_stop"
 	    stop_daemon $name c$type $pid_file
 	    [ -n "$post_stop" ] && do_cmd "$post_stop"
-	    [ -n "$lockfile" ] && [ "$?" = 0 ] && rm -f $lockfile
+	    [ -n "$lockfile" ] && [ "$?" -eq 0 ] && rm -f $lockfile
 	    if [ $dobtrfs -eq 1 ] && [ -n "$btrfs_devs" ]; then
 		echo Unmounting Btrfs on $host:$btrfs_path
-		do_root_cmd "umount $btrfs_path"	
+		do_root_cmd "umount $btrfs_path || true"
 	    fi
 	    ;;
 
@@ -279,13 +287,13 @@ for name in $what; do
 	    [ -n "$pre_forcestop" ] && do_cmd "$pre_forcestop"
 	    stop_daemon $name c$type $pid_file -9
 	    [ -n "$post_forcestop" ] && do_cmd "$post_forcestop"
-	    [ -n "$lockfile" ] && [ "$?" = 0 ] && rm -f $lockfile
+	    [ -n "$lockfile" ] && [ "$?" -eq 0 ] && rm -f $lockfile
 	    ;;
 	    
 	killall)
 	    echo "killall c$type on $host"
 	    do_cmd "pkill ^c$type || true"
-	    [ -n "$lockfile" ] && [ "$?" = 0 ] && rm -f $lockfile
+	    [ -n "$lockfile" ] && [ "$?" -eq 0 ] && rm -f $lockfile
 	    ;;
 	
 	force-reload | reload)

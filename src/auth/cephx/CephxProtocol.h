@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __CEPHXPROTOCOL_H
-#define __CEPHXPROTOCOL_H
+#ifndef CEPH_CEPHXPROTOCOL_H
+#define CEPH_CEPHXPROTOCOL_H
 
 /*
   Ceph X protocol

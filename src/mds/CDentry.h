@@ -14,8 +14,8 @@
 
 
 
-#ifndef __CDENTRY_H
-#define __CDENTRY_H
+#ifndef CEPH_CDENTRY_H
+#define CEPH_CDENTRY_H
 
 #include <string>
 #include <set>
@@ -41,6 +41,7 @@ class Anchor;
 class CDentry;
 class LogSegment;
 
+class Session;
 
 
 
@@ -53,7 +54,10 @@ private:
   static boost::pool<> pool;
 public:
   static void *operator new(size_t num_bytes) { 
-    return pool.malloc();
+    void *n = pool.malloc();
+    if (!n)
+      throw std::bad_alloc();
+    return n;
   }
   void operator delete(void *p) {
     pool.free(p);
@@ -370,16 +374,16 @@ public:
       return client_lease_map[c];
     return 0;
   }
-  int get_client_lease_mask(client_t c) {
+  bool have_client_lease(client_t c) {
     ClientLease *l = get_client_lease(c);
     if (l) 
-      return l->mask;
+      return true;
     else
-      return 0;
+      return false;
   }
 
-  ClientLease *add_client_lease(client_t c, int mask);
-  int remove_client_lease(ClientLease *r, int mask, class Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
+  ClientLease *add_client_lease(client_t c, Session *session);
+  void remove_client_lease(ClientLease *r, class Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
   
 
   

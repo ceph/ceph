@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MDLOG_H
-#define __MDLOG_H
+#ifndef CEPH_MDLOG_H
+#define CEPH_MDLOG_H
 
 enum {
   l_mdl_first = 5000,
@@ -136,7 +136,7 @@ private:
   void init_journaler();
   
 public:
-  void reopen_logger(utime_t start, bool append=false);
+  void open_logger();
   
   // replay state
   map<inodeno_t, set<inodeno_t> >   pending_exports;

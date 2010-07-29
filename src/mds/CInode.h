@@ -14,8 +14,8 @@
 
 
 
-#ifndef __CINODE_H
-#define __CINODE_H
+#ifndef CEPH_CINODE_H
+#define CEPH_CINODE_H
 
 #include "config.h"
 #include "include/dlist.h"
@@ -61,7 +61,10 @@ private:
   static boost::pool<> pool;
 public:
   static void *operator new(size_t num_bytes) { 
-    return pool.malloc();
+    void *n = pool.malloc();
+    if (!n)
+      throw std::bad_alloc();
+    return n;
   }
   void operator delete(void *p) {
     pool.free(p);
@@ -83,7 +86,7 @@ public:
   //static const int PIN_PURGING =         -12;	
   static const int PIN_FREEZING =         13;
   static const int PIN_FROZEN =           14;
-  static const int PIN_IMPORTINGCAPS =    15;
+  static const int PIN_IMPORTINGCAPS =   -15;
   static const int PIN_PASTSNAPPARENT =  -16;
   static const int PIN_OPENINGSNAPPARENTS = 17;
   static const int PIN_TRUNCATING =       18;

@@ -1,5 +1,5 @@
-#ifndef __RGW_ACCESS_H
-#define __RGW_ACCESS_H
+#ifndef CEPH_RGW_ACCESS_H
+#define CEPH_RGW_ACCESS_H
 
 #include <time.h>
 #include <string>
@@ -43,9 +43,19 @@ public:
   virtual int create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, uint64_t auid=0) = 0;
   /** write an object to the storage device in the appropriate pool
     with the given stats */
-  virtual int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
-                      time_t *mtime,
+  virtual int put_obj_meta(std::string& id, std::string& bucket, std::string& obj, time_t *mtime,
                       map<std::string, bufferlist>& attrs) = 0;
+  virtual int put_obj_data(std::string& id, std::string& bucket, std::string& obj, const char *data,
+                      off_t ofs, size_t len, time_t *mtime) = 0;
+
+  int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t len,
+              time_t *mtime, map<std::string, bufferlist>& attrs) {
+    int ret = put_obj_meta(id, bucket, obj, NULL, attrs);
+    if (ret >= 0)
+      ret = put_obj_data(id, bucket, obj, data, 0, len, mtime);
+    return ret;
+  }
+
   /**
    * Copy an object.
    * id: unused (well, it's passed to put_obj)
@@ -101,22 +111,28 @@ public:
  *    and if mtime is >= it fails.
  * if_match/nomatch: if non-NULL, compares the object's etag attr
  *    to the string and, if it doesn't/does match, fails out.
- * get_data: if true, the object's data/value will be read out, otherwise not
  * err: Many errors will result in this structure being filled
  *    with extra informatin on the error.
  * Returns: -ERR# on failure, otherwise
  *          (if get_data==true) length of read data,
  *          (if get_data==false) length of the object
  */
-  virtual int get_obj(std::string& bucket, std::string& obj, 
-		      char **data, off_t ofs, off_t end,
-		      map<std::string, bufferlist> *attrs,
-		      const time_t *mod_ptr,
-		      const time_t *unmod_ptr,
-		      const char *if_match,
-		      const char *if_nomatch,
-		      bool get_data,
-		      struct rgw_err *err) = 0;
+  virtual int prepare_get_obj(std::string& bucket, std::string& obj, 
+            off_t ofs, off_t *end,
+            map<string, bufferlist> *attrs,
+            const time_t *mod_ptr,
+            const time_t *unmod_ptr,
+            time_t *lastmod,
+            const char *if_match,
+            const char *if_nomatch,
+            size_t *total_size,
+            void **handle,
+            struct rgw_err *err) = 0;
+
+  virtual int get_obj(void **handle, std::string& bucket, std::string& oid, 
+            char **data, off_t ofs, off_t end) = 0;
+
+  virtual void finish_get_obj(void **handle) = 0;
 
   /**
    * Get the attributes for an object.

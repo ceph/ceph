@@ -44,33 +44,13 @@ bin_PROGRAMS += monmaptool crushtool osdmaptool
 mount_ceph_SOURCES = mount/mount.ceph.c
 noinst_PROGRAMS = mount.ceph
 
-
-core: cmon cosd cmds ceph cconf monmaptool osdmaptool crushtool
-
-
-dumpjournal_SOURCES = dumpjournal.cc msg/SimpleMessenger.cc
-dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a -lpthread -lm -lcrypto
-dupstore_SOURCES = dupstore.cc
-dupstore_LDADD = libos.a libcommon.a -lpthread -lm -lcrypto
-streamtest_SOURCES = streamtest.cc
-streamtest_LDADD = libos.a libcommon.a -lpthread -lm -lcrypto
-bin_PROGRAMS += dumpjournal dupstore streamtest
-
-test_trans_SOURCES = test_trans.cc
-test_trans_LDADD = libos.a libcommon.a -lpthread -lm -lcrypto
-bin_PROGRAMS += test_trans
-
 # synthetic client
 csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc
 csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += csyn
 
-testmsgr_SOURCES = testmsgr.cc msg/SimpleMessenger.cc
-testmsgr_LDADD = libcommon.a -lpthread -lm -lcrypto
-bin_PROGRAMS += testmsgr
+core: cmon cosd cmds ceph cconf monmaptool osdmaptool crushtool csyn
 
-test_ioctls_SOURCES = client/test_ioctls.c
-bin_PROGRAMS += test_ioctls
 
 # fuse targets?
 if WITH_FUSE
@@ -89,9 +69,30 @@ endif
 
 # debug targets?
 if WITH_DEBUG
+
 psim_SOURCES = psim.cc
 psim_LDADD = libcrush.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += psim
+
+testmsgr_SOURCES = testmsgr.cc msg/SimpleMessenger.cc
+testmsgr_LDADD = libcommon.a -lpthread -lm -lcrypto
+bin_PROGRAMS += testmsgr
+
+test_ioctls_SOURCES = client/test_ioctls.c
+bin_PROGRAMS += test_ioctls
+
+dumpjournal_SOURCES = dumpjournal.cc msg/SimpleMessenger.cc
+dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a -lpthread -lm -lcrypto
+dupstore_SOURCES = dupstore.cc
+dupstore_LDADD = libos.a libcommon.a -lpthread -lm -lcrypto
+streamtest_SOURCES = streamtest.cc
+streamtest_LDADD = libos.a libcommon.a -lpthread -lm -lcrypto
+bin_PROGRAMS += dumpjournal dupstore streamtest
+
+test_trans_SOURCES = test_trans.cc
+test_trans_LDADD = libos.a libcommon.a -lpthread -lm -lcrypto
+bin_PROGRAMS += test_trans
+
 
 #fakesyn_SOURCES = fakesyn.cc msg/FakeMessenger.cc
 #fakesyn_LDADD = libmon.a libmds.a libosd.a libos.a \
@@ -126,12 +127,14 @@ libceph_la_SOURCES = \
 libceph_la_CFLAGS = ${AM_CFLAGS}
 libceph_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_la_LIBADD = libcrush.la
-libceph_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '^ceph_.*' -lpthread
+libceph_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '^ceph_.*' -lpthread -lssl
 lib_LTLIBRARIES += libceph.la
 
+if WITH_DEBUG
 testceph_SOURCES = client/testceph.cc
 testceph_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto
 bin_PROGRAMS += testceph
+endif
 
 # librados
 librados_SOURCES = \
@@ -154,15 +157,19 @@ rados_SOURCES = rados.cc
 rados_LDADD = librados.la -lpthread -lm -lcrypto
 bin_PROGRAMS += rados
 
+if WITH_DEBUG
 testrados_SOURCES = testrados.c
 testrados_LDADD = librados.la -lpthread -lm -lcrypto
 testradospp_SOURCES = testradospp.cc
 testradospp_LDADD = librados.la -lpthread -lm -lcrypto
+bin_PROGRAMS += testrados testradospp
+endif
+
 radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la -lpthread -lm -lcrypto
-rbdtool_SOURCES = rbdtool.cc
-rbdtool_LDADD = librados.la -lpthread -lm -lcrypto
-bin_PROGRAMS += testrados testradospp radosacl rbdtool
+rbd_SOURCES = rbd.cc
+rbd_LDADD = librados.la -lpthread -lm -lcrypto
+bin_PROGRAMS += radosacl rbd
 
 if WITH_RADOSGW
 libradosgw_a_SOURCES = \
@@ -184,6 +191,7 @@ radosgw_admin_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat
 bin_PROGRAMS += radosgw radosgw_admin
 endif
 
+if WITH_DEBUG
 testcrypto_SOURCES = testcrypto.cc
 testcrypto_LDADD = libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += testcrypto
@@ -191,24 +199,27 @@ bin_PROGRAMS += testcrypto
 testkeys_SOURCES = testkeys.cc
 testkeys_LDADD = libmon.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += testkeys
-## object classes
+endif
 
-# libtestclass.so: testclass.cc
-# 	${CXX} -fPIC -shared -g -o libtestclass.so testclass.cc
-# libbarclass.so: barclass.cc
-# 	${CXX} -fPIC -shared -g -o libbarclass.so barclass.cc
-# libfooclass.so: fooclass.cc
-# 	${CXX} -fPIC -shared -g -o libfooclass.so fooclass.cc
-# 
-#BUILT_SOURCES += libtestclass.so libfooclass.so libbarclass.so
 
-libcls_crypto.so: cls_crypto.cc
-	${CXX} -I. -fPIC -shared -g -o libcls_crypto.so -lcrypto cls_crypto.cc
-BUILT_SOURCES += libcls_crypto.so
+## rados object classes
 
-libcls_acl.so: cls_acl.cc
-	${CXX} -I. -fPIC -shared -g -o libcls_acl.so cls_acl.cc
-BUILT_SOURCES += libcls_acl.so
+#libcls_crypto.so: cls_crypto.cc
+#	${CXX} -I. -fPIC -shared -g -o libcls_crypto.so -lcrypto cls_crypto.cc
+#BUILT_SOURCES += libcls_crypto.so
+
+#libcls_acl.so: cls_acl.cc
+#	${CXX} -I. -fPIC -shared -g -o libcls_acl.so cls_acl.cc
+#BUILT_SOURCES += libcls_acl.so
+
+# rbd: rados block device class
+libcls_rbd_la_SOURCES = cls_rbd.cc
+libcls_rbd_la_CFLAGS = ${AM_CFLAGS}
+libcls_rbd_la_CXXFLAGS= ${AM_CXXFLAGS}
+libcls_rbd_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '.*__cls_.*' -lpthread
+
+radoslibdir = $(libdir)/rados-classes
+radoslib_LTLIBRARIES = libcls_rbd.la
 
 
 ## hadoop client
@@ -231,14 +242,14 @@ editpaths = sed \
 	-e 's|@datadir[@]|$(pkgdatadir)|g' \
 	-e 's|@prefix[@]|$(prefix)|g'
 
-init-ceph mkcephfs: init-ceph.in mkcephfs.in Makefile
+init-ceph mkcephfs cclass: init-ceph.in mkcephfs.in cclass.in Makefile
 	rm -f $@ $@.tmp
 	$(editpaths) '$(srcdir)/$@.in' >$@.tmp
 	chmod +x $@.tmp
 	chmod a-w $@.tmp
 	mv $@.tmp $@
 
-BUILT_SOURCES += init-ceph mkcephfs
+BUILT_SOURCES += init-ceph mkcephfs cclass
 
 ##
 LDADD =
@@ -261,9 +272,11 @@ noinst_LIBRARIES +=  #libcephclient_so.a
 
 # extra bits
 EXTRA_DIST = verify-mds-journal.sh vstart.sh stop.sh \
-	     crun ceph_common.sh init-ceph.in mkcephfs.in make_version
+	     crun ceph_common.sh init-ceph.in mkcephfs.in cclass.in cclsinfo make_version check_version
 
 install-data-local:
+	$(install_sh_SCRIPT) -m 0755 cclass $(DESTDIR)$(bindir)/cclass
+	$(install_sh_SCRIPT) -m 0755 cclsinfo $(DESTDIR)$(bindir)/cclsinfo
 	sh -c "if [ \"$(sbindir)\" = \"/usr/sbin\" ]; then mkdir -p $(DESTDIR)/sbin ; $(install_sh_SCRIPT) -m 0755 mount.ceph $(DESTDIR)/sbin/mount.ceph ; else mkdir -p $(DESTDIR)$(sbindir) ; $(install_sh_SCRIPT) -m 0755 mount.ceph $(DESTDIR)$(sbindir)/mount.ceph ; fi"
 	mkdir -p $(DESTDIR)$(sbindir)/ceph
 	$(install_sh_SCRIPT) -m 0755 mkcephfs $(DESTDIR)$(sbindir)/mkcephfs
@@ -289,14 +302,15 @@ install-data-local:
 	$(install_sh_SCRIPT) -m 0644 crush/types.h $(DESTDIR)$(includedir)/crush/types.h
 	$(install_sh_SCRIPT) -m 0644 crush/mapper.h $(DESTDIR)$(includedir)/crush/mapper.h
 
-.make_last_ver:
-	./make_version --check
+FORCE:
+.git_version: FORCE
+	./check_version .git_version
+ceph_ver.h: .git_version
+	./make_version .git_version ceph_ver.h
 
-ceph_ver.h : $(all_sources) .make_last_ver
-	./make_version
-
-ceph_ver.c : ceph_ver.h
-debug.cc : ceph_ver.h
+ceph_ver.c: ceph_ver.h
+common/debug.cc: ceph_ver.h 
+config.cc: ceph_ver.h
 
 
 

@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MSTATFSREPLY_H
-#define __MSTATFSREPLY_H
+#ifndef CEPH_MSTATFSREPLY_H
+#define CEPH_MSTATFSREPLY_H
 
 class MStatfsReply : public Message {
 public:

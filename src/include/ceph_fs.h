@@ -9,25 +9,11 @@
  * LGPL2
  */
 
-#ifndef _FS_CEPH_CEPH_FS_H
-#define _FS_CEPH_CEPH_FS_H
+#ifndef CEPH_FS_H
+#define CEPH_FS_H
 
 #include "msgr.h"
 #include "rados.h"
-
-/*
- * Ceph release version
- */
-#define CEPH_VERSION_MAJOR 0
-#define CEPH_VERSION_MINOR 20
-#define CEPH_VERSION_PATCH 0
-
-#define _CEPH_STRINGIFY(x) #x
-#define CEPH_STRINGIFY(x) _CEPH_STRINGIFY(x)
-#define CEPH_MAKE_VERSION(x, y, z) CEPH_STRINGIFY(x) "." CEPH_STRINGIFY(y) \
-	"." CEPH_STRINGIFY(z)
-#define CEPH_VERSION CEPH_MAKE_VERSION(CEPH_VERSION_MAJOR, \
-				       CEPH_VERSION_MINOR, CEPH_VERSION_PATCH)
 
 /*
  * subprotocol versions.  when specific messages types or high-level
@@ -56,21 +42,9 @@
 #define CEPH_FEATURE_UID            (1<<0)
 #define CEPH_FEATURE_NOSRCADDR      (1<<1)
 #define CEPH_FEATURE_MONCLOCKCHECK  (1<<2)
-#define CEPH_FEATURE_MONNAMES       (1<<3)
-
-#define CEPH_FEATURE_SUPPORTED_MON  CEPH_FEATURE_UID|CEPH_FEATURE_NOSRCADDR|\
-	                            CEPH_FEATURE_MONCLOCKCHECK|\
-	                            CEPH_FEATURE_MONNAMES
-#define CEPH_FEATURE_REQUIRED_MON   CEPH_FEATURE_UID
-#define CEPH_FEATURE_SUPPORTED_MDS  CEPH_FEATURE_UID|CEPH_FEATURE_NOSRCADDR|\
-	                            CEPH_FEATURE_MONNAMES
-#define CEPH_FEATURE_REQUIRED_MDS   CEPH_FEATURE_UID
-#define CEPH_FEATURE_SUPPORTED_OSD  CEPH_FEATURE_UID|CEPH_FEATURE_NOSRCADDR|\
-	                            CEPH_FEATURE_MONNAMES
-#define CEPH_FEATURE_REQUIRED_OSD   CEPH_FEATURE_UID
-#define CEPH_FEATURE_SUPPORTED_CLIENT CEPH_FEATURE_NOSRCADDR|\
-	                            CEPH_FEATURE_MONNAMES
-#define CEPH_FEATURE_REQUIRED_CLIENT 0
+#define CEPH_FEATURE_FLOCK          (1<<3)
+#define CEPH_FEATURE_SUBSCRIBE2     (1<<4)
+#define CEPH_FEATURE_MONNAMES       (1<<5)
 
 
 /*
@@ -229,9 +203,11 @@ struct ceph_client_mount {
 	struct ceph_mon_request_header monhdr;
 } __attribute__ ((packed));
 
+#define CEPH_SUBSCRIBE_ONETIME    1  /* i want only 1 update after have */
+
 struct ceph_mon_subscribe_item {
-	__le64 have_version;	__le64 have;
-	__u8 onetime;
+	__le64 start;
+	__u8 flags;
 } __attribute__ ((packed));
 
 struct ceph_mon_subscribe_ack {
@@ -281,6 +257,7 @@ extern const char *ceph_mds_state_name(int s);
 #define CEPH_LOCK_IDFT        512   /* dir frag tree */
 #define CEPH_LOCK_INEST       1024  /* mds internal */
 #define CEPH_LOCK_IXATTR      2048
+#define CEPH_LOCK_IFLOCK      4096  /* advisory file locks */
 #define CEPH_LOCK_INO         8192  /* immutable inode bits; not a lock */
 
 /* client_session ops */

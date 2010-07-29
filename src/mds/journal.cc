@@ -161,6 +161,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     elist<CInode*>::iterator p = open_files.begin(member_offset(CInode, item_open_file));
     while (!p.end()) {
       CInode *in = *p;
+      assert(in->last == CEPH_NOSNAP);
       ++p;
       if (in->is_any_caps()) {
 	if (in->is_any_caps_wanted()) {
@@ -438,6 +439,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     if (lump.is_complete())
       dir->mark_complete();
     
+    dout(10) << "EMetaBlob.replay updated dir " << *dir << dendl;  
+
     // decode bits
     lump._decode_bits();
 
@@ -476,13 +479,19 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	mds->mdcache->add_inode(in);
 	if (!dn->get_linkage()->is_null()) {
-	  if (dn->get_linkage()->is_primary())
-	    dout(-10) << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn 
-		     << " " << *dn->get_linkage()->get_inode()
-		     << " should be " << p->inode.ino
-		     << dendl;
-	  dir->unlink_inode(dn);
-	  //assert(0); // hrm!  fallout from sloppy unlink?  or?  hmmm FIXME investigate further
+	  if (dn->get_linkage()->is_primary()) {
+	    CInode *old_in = dn->get_linkage()->get_inode();
+	    stringstream ss;
+	    ss << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
+	        << " " << *old_in
+	        << " should be " << p->inode.ino;
+	    dout(-10) << ss << dendl;
+	    mds->logclient.log(LOG_WARN, ss);
+	    dir->unlink_inode(dn);
+	    mds->mdcache->remove_inode(old_in);
+
+	    //assert(0); // hrm!  fallout from sloppy unlink?  or?  hmmm FIXME investigate further
+	  }
 	}
 	dir->link_primary_inode(dn, in);
 	if (p->dirty) in->_mark_dirty(logseg);
@@ -892,7 +901,10 @@ void EOpen::replay(MDS *mds)
        p != inos.end();
        p++) {
     CInode *in = mds->mdcache->get_inode(*p);
-    assert(in); 
+    if (!in) {
+      dout(0) << "EOpen.replay ino " << *p << " not in metablob" << dendl;
+      assert(in);
+    }
     _segment->open_files.push_back(&in->item_open_file);
   }
 }

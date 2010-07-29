@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MMDSMAP_H
-#define __MMDSMAP_H
+#ifndef CEPH_MMDSMAP_H
+#define CEPH_MMDSMAP_H
 
 #include "msg/Message.h"
 #include "mds/MDSMap.h"

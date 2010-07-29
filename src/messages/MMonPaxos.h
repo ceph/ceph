@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MMONPAXOS_H
-#define __MMONPAXOS_H
+#ifndef CEPH_MMONPAXOS_H
+#define CEPH_MMONPAXOS_H
 
 #include "messages/PaxosServiceMessage.h"
 #include "mon/mon_types.h"

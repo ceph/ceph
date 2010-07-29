@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MOSDSCRUB_H
-#define __MOSDSCRUB_H
+#ifndef CEPH_MOSDSCRUB_H
+#define CEPH_MOSDSCRUB_H
 
 #include "msg/Message.h"
 

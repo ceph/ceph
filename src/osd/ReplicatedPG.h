@@ -11,13 +11,14 @@
  * 
  */
 
-#ifndef __REPLICATEDPG_H
-#define __REPLICATEDPG_H
+#ifndef CEPH_REPLICATEDPG_H
+#define CEPH_REPLICATEDPG_H
 
 
 #include "PG.h"
 
 #include "messages/MOSDOp.h"
+#include "messages/MOSDOpReply.h"
 class MOSDSubOp;
 class MOSDSubOpReply;
 
@@ -96,6 +97,7 @@ public:
     state_t state;
     int num_wr;
     list<Message*> waiting;
+    list<Cond*> waiting_cond;
     bool wake;
 
     AccessMode() : state(IDLE),
@@ -282,10 +284,11 @@ public:
     Message *op;
     osd_reqid_t reqid;
     vector<OSDOp>& ops;
-    bufferlist& indata;
     bufferlist outdata;
 
     ObjectState *obs;
+
+    uint64_t bytes_written;
 
     utime_t mtime;
     SnapContext snapc;           // writer snap context
@@ -299,14 +302,19 @@ public:
 
     int data_off;        // FIXME: we may want to kill this msgr hint off at some point!
 
+    MOSDOpReply *reply;
+
     ReplicatedPG *pg;
 
-    OpContext(Message *_op, osd_reqid_t _reqid, vector<OSDOp>& _ops, bufferlist& _data,
+    OpContext(Message *_op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
 	      ObjectState *_obs, ReplicatedPG *_pg) :
-      op(_op), reqid(_reqid), ops(_ops), indata(_data), obs(_obs),
-      clone_obc(0), snapset_obc(0), data_off(0), pg(_pg) {}
+      op(_op), reqid(_reqid), ops(_ops), obs(_obs),
+      bytes_written(0),
+      clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) {}
     ~OpContext() {
       assert(!clone_obc);
+      if (reply)
+	reply->put();
     }
   };
 
@@ -354,27 +362,6 @@ public:
       sent_disk(false),
       pg_local_last_complete(lc) { }
 
-    bool can_send_ack() { 
-      return
-	!sent_ack && /*!sent_nvram && */!sent_disk &&
-	waitfor_ack.empty(); 
-    }
-    /*
-    bool can_send_nvram() { 
-      return
-	!sent_nvram && !sent_disk &&
-	waitfor_ack.empty() && waitfor_disk.empty(); 
-    }
-    */
-    bool can_send_disk() { 
-      return
-	!sent_disk &&
-	waitfor_disk.empty(); 
-    }
-    bool can_delete() { 
-      return waitfor_ack.empty() && /*waitfor_nvram.empty() &&*/ waitfor_disk.empty(); 
-    }
-
     void get() {
       nref++;
     }
@@ -409,6 +396,7 @@ protected:
   void issue_repop(RepGather *repop, utime_t now,
 		   eversion_t old_last_update, bool old_exists, uint64_t old_size, eversion_t old_version);
   RepGather *new_repop(OpContext *ctx, ObjectContext *obc, bool noop, tid_t rep_tid);
+  void remove_repop(RepGather *repop);
   void repop_ack(RepGather *repop,
                  int result, int ack_type,
                  int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
@@ -459,10 +447,25 @@ protected:
   hash_map<sobject_t, list<Message*> > waiting_for_unbalanced_reads;  // i.e. primary-lock
 
   
-  // push/pull
-  map<sobject_t, pair<eversion_t, int> > pulling;  // which objects are currently being pulled, and from where
-  map<sobject_t, set<int> > pushing;
+  // pull
+  struct pull_info_t {
+    eversion_t version;
+    int from;
+    bool need_size;
+    interval_set<uint64_t> data_subset, data_subset_pulling;
+  };
+  map<sobject_t, pull_info_t> pulling;
 
+  // push
+  struct push_info_t {
+    uint64_t size;
+    eversion_t version;
+    interval_set<uint64_t> data_subset, data_subset_pushing;
+    map<sobject_t, interval_set<uint64_t> > clone_subsets;
+  };
+  map<sobject_t, map<int, push_info_t> > pushing;
+
+  int recover_object_replicas(const sobject_t& soid);
   void calc_head_subsets(SnapSet& snapset, const sobject_t& head,
 			 Missing& missing,
 			 interval_set<uint64_t>& data_subset,
@@ -470,11 +473,19 @@ protected:
   void calc_clone_subsets(SnapSet& snapset, const sobject_t& poid, Missing& missing,
 			  interval_set<uint64_t>& data_subset,
 			  map<sobject_t, interval_set<uint64_t> >& clone_subsets);
-  void push_to_replica(const sobject_t& oid, int dest);
-  void push(const sobject_t& oid, int dest);
-  void push(const sobject_t& oid, int dest, interval_set<uint64_t>& data_subset, 
-	    map<sobject_t, interval_set<uint64_t> >& clone_subsets);
+  void push_to_replica(ObjectContext *obc, const sobject_t& oid, int dest);
+  void push_start(const sobject_t& oid, int dest);
+  void push_start(const sobject_t& soid, int peer,
+		  uint64_t size, eversion_t version,
+		  interval_set<uint64_t> &data_subset,
+		  map<sobject_t, interval_set<uint64_t> >& clone_subsets);
+  void send_push_op(const sobject_t& oid, int dest,
+		    uint64_t size, bool first, bool complete,
+		    interval_set<uint64_t>& data_subset, 
+		    map<sobject_t, interval_set<uint64_t> >& clone_subsets);
+
   bool pull(const sobject_t& oid);
+  void send_pull_op(const sobject_t& soid, eversion_t v, bool first, const interval_set<uint64_t>& data_subset, int fromosd);
 
 
   // low level ops
@@ -483,13 +494,14 @@ protected:
 		   const sobject_t& head, const sobject_t& coid,
 		   object_info_t *poi);
   void make_writeable(OpContext *ctx);
-  void log_op_stats(const sobject_t &soid, OpContext *ctx);
+  void log_op_stats(OpContext *ctx);
   void add_interval_usage(interval_set<uint64_t>& s, pg_stat_t& st);  
 
   int prepare_transaction(OpContext *ctx);
   void log_op(vector<Log::Entry>& log, eversion_t trim_to, ObjectStore::Transaction& t);
   
   // pg on-disk content
+  void remove_object_with_snap_hardlinks(ObjectStore::Transaction& t, const sobject_t& soid);
   void clean_up_local(ObjectStore::Transaction& t);
 
   void _clear_recovery_state();
@@ -507,10 +519,13 @@ protected:
     int ackerosd;
     eversion_t last_complete;
 
+    uint64_t bytes_written;
+
     ObjectStore::Transaction opt, localt;
     list<ObjectStore::Transaction*> tls;
     
-    RepModify() : pg(NULL), op(NULL), ctx(NULL), applied(false), committed(false), ackerosd(-1) {}
+    RepModify() : pg(NULL), op(NULL), ctx(NULL), applied(false), committed(false), ackerosd(-1),
+		  bytes_written(0) {}
   };
 
   struct C_OSD_RepModifyApply : public Context {
@@ -593,6 +608,9 @@ public:
 
   bool is_missing_object(const sobject_t& oid);
   void wait_for_missing_object(const sobject_t& oid, Message *op);
+
+  bool is_degraded_object(const sobject_t& oid);
+  void wait_for_degraded_object(const sobject_t& oid, Message *op);
 
   void on_osd_failure(int o);
   void on_acker_change();

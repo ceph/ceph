@@ -18,6 +18,7 @@
 #include "include/types.h"
 
 #include "common/Clock.h"
+#include "common/Logger.h"
 
 #include <fstream>
 #include <stdlib.h>
@@ -207,6 +208,7 @@ void parse_config_option_string(string& s)
 void sighup_handler(int signum)
 {
   _dout_need_open = true;
+  logger_reopen_all();
 }
 
 #define _STR(x) #x
@@ -256,14 +258,17 @@ static struct config_option config_optionsp[] = {
 	OPTION(monmap, 'M', OPT_STR, 0),
 	OPTION(mon_host, 'm', OPT_STR, 0),
 	OPTION(daemonize, 'd', OPT_BOOL, false),
-	OPTION(logger, 0, OPT_BOOL, true),
+	OPTION(logger, 0, OPT_BOOL, false),
 	OPTION(logger_interval, 0, OPT_INT, 1),
 	OPTION(logger_calc_variance, 0, OPT_BOOL, true),
 	OPTION(logger_subdir, 0, OPT_STR, 0),
 	OPTION(logger_dir, 0, OPT_STR, "/var/log/ceph/stat"),
-	OPTION(log_dir, 0, OPT_STR, "/var/log/ceph"),		// if daemonize == true
+	OPTION(log_file, 0, OPT_STR, 0),
+	OPTION(log_dir, 0, OPT_STR, "/var/log/ceph"),
 	OPTION(log_sym_dir, 0, OPT_STR, 0),
+	OPTION(log_sym_history, 0, OPT_INT, 10),
 	OPTION(log_to_stdout, 0, OPT_BOOL, true),
+	OPTION(log_per_instance, 0, OPT_BOOL, false),
 	OPTION(pid_file, 0, OPT_STR, "/var/run/ceph/$type.$id.pid"),
 	OPTION(conf, 'c', OPT_STR, "/etc/ceph/ceph.conf, ~/.ceph/config, ceph.conf"),
 	OPTION(chdir, 0, OPT_STR, "/"),
@@ -280,7 +285,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(debug_buffer, 0, OPT_INT, 0),
 	OPTION(debug_timer, 0, OPT_INT, 0),
 	OPTION(debug_filer, 0, OPT_INT, 0),
-	OPTION(debug_objecter, 0, OPT_INT, 1),
+	OPTION(debug_objecter, 0, OPT_INT, 0),
 	OPTION(debug_rados, 0, OPT_INT, 0),
 	OPTION(debug_journaler, 0, OPT_INT, 0),
 	OPTION(debug_objectcacher, 0, OPT_INT, 0),
@@ -293,7 +298,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(debug_ns, 0, OPT_INT, 0),
 	OPTION(debug_ms, 0, OPT_INT, 0),
 	OPTION(debug_mon, 0, OPT_INT, 1),
-	OPTION(debug_monc, 0, OPT_INT, 1),
+	OPTION(debug_monc, 0, OPT_INT, 0),
 	OPTION(debug_paxos, 0, OPT_INT, 0),
 	OPTION(debug_tp, 0, OPT_INT, 0),
 	OPTION(debug_auth, 0, OPT_INT, 1),
@@ -301,7 +306,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(key, 0, OPT_STR, ""),
 	OPTION(keyfile, 'K', OPT_STR, ""),
 	OPTION(keyring, 'k', OPT_STR, "~/.ceph/keyring.bin, /etc/ceph/keyring.bin, .ceph_keyring"),
-	OPTION(supported_auth, 0, OPT_STR, "none"),
 	OPTION(clock_lock, 0, OPT_BOOL, false),
 	OPTION(clock_tare, 0, OPT_BOOL, false),
 	OPTION(ms_tcp_nodelay, 0, OPT_BOOL, true),
@@ -310,7 +314,9 @@ static struct config_option config_optionsp[] = {
 	OPTION(ms_die_on_failure, 0, OPT_BOOL, false),
 	OPTION(ms_nocrc, 0, OPT_BOOL, false),
 	OPTION(ms_die_on_bad_msg, 0, OPT_BOOL, false),
-	OPTION(ms_waiting_message_bytes, 0, OPT_INT, 104857600),
+	OPTION(ms_dispatch_throttle_bytes, 0, OPT_INT, 100 << 20),
+	OPTION(ms_bind_ipv6, 0, OPT_BOOL, false),
+        OPTION(ms_rwthread_stack_bytes, 0, OPT_INT, 1024 << 10),
 	OPTION(mon_data, 0, OPT_STR, ""),
 	OPTION(mon_tick_interval, 0, OPT_INT, 5),
 	OPTION(mon_subscribe_interval, 0, OPT_DOUBLE, 300),
@@ -318,7 +324,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mon_lease, 0, OPT_FLOAT, 5),  		    // lease interval
 	OPTION(mon_lease_renew_interval, 0, OPT_FLOAT, 3), // on leader, to renew the lease
 	OPTION(mon_lease_ack_timeout, 0, OPT_FLOAT, 10.0), // on leader, if lease isn't acked by all peons
-	OPTION(mon_lease_wiggle_room, 0, OPT_FLOAT, .001), // allowed clock drive between monitors
+	OPTION(mon_lease_wiggle_room, 0, OPT_FLOAT, .010), // allowed clock drift between monitors
 	OPTION(mon_lease_timeout, 0, OPT_FLOAT, 10.0),     // on peon, if lease isn't extended
 	OPTION(mon_accept_timeout, 0, OPT_FLOAT, 10.0),    // on leader, if paxos update isn't accepted
 	OPTION(mon_stop_on_last_unmount, 0, OPT_BOOL, false),
@@ -329,16 +335,19 @@ static struct config_option config_optionsp[] = {
 	OPTION(mon_globalid_prealloc, 0, OPT_INT, 100),   // how many globalids to prealloc
 	OPTION(paxos_propose_interval, 0, OPT_DOUBLE, 1.0),  // gather updates for this long before proposing a map update
 	OPTION(paxos_observer_timeout, 0, OPT_DOUBLE, 5*60), // gather updates for this long before proposing a map update
+	OPTION(auth_supported, 0, OPT_STR, "none"),
 	OPTION(auth_mon_ticket_ttl, 0, OPT_DOUBLE, 60*60*12),
 	OPTION(auth_service_ticket_ttl, 0, OPT_DOUBLE, 60*60),
 	OPTION(auth_nonce_len, 0, OPT_INT, 16),
+	OPTION(mon_client_hunt_interval, 0, OPT_DOUBLE, 3.0),   // try new mon every N seconds until we connect
+	OPTION(mon_client_ping_interval, 0, OPT_DOUBLE, 10.0),  // ping every N seconds
 	OPTION(client_cache_size, 0, OPT_INT, 1000),
 	OPTION(client_cache_mid, 0, OPT_FLOAT, .5),
 	OPTION(client_cache_stat_ttl, 0, OPT_INT, 0), // seconds until cached stat results become invalid
 	OPTION(client_cache_readdir_ttl, 0, OPT_INT, 1),  // 1 second only
 	OPTION(client_use_random_mds, 0, OPT_BOOL, false),
-	OPTION(client_mount_timeout, 0, OPT_DOUBLE, 10.0),  // retry every N seconds
-	OPTION(client_unmount_timeout, 0, OPT_DOUBLE, 10.0),  // retry every N seconds
+	OPTION(client_mount_timeout, 0, OPT_DOUBLE, 30.0),
+	OPTION(client_unmount_timeout, 0, OPT_DOUBLE, 10.0),
 	OPTION(client_tick_interval, 0, OPT_DOUBLE, 1.0),
 	OPTION(client_hack_balance_reads, 0, OPT_BOOL, false),
 	OPTION(client_trace, 0, OPT_STR, 0),
@@ -346,6 +355,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(client_readahead_max_bytes, 0, OPT_LONGLONG, 0),  //8 * 1024*1024,
 	OPTION(client_readahead_max_periods, 0, OPT_LONGLONG, 4),  // as multiple of file layout period (object size * num stripes)
 	OPTION(client_snapdir, 0, OPT_STR, ".snap"),
+	OPTION(client_mountpoint, 'r', OPT_STR, "/"),
 	OPTION(fuse_direct_io, 0, OPT_INT, 0),
 	OPTION(fuse_ll, 0, OPT_BOOL, true),
 	OPTION(client_oc, 0, OPT_BOOL, true),
@@ -453,6 +463,10 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_max_rep, 0, OPT_INT, 10),
 	OPTION(osd_min_raid_width, 0, OPT_INT, 3),
 	OPTION(osd_max_raid_width, 0, OPT_INT, 2),
+	OPTION(osd_pool_default_crush_rule, 0, OPT_INT, 0),
+	OPTION(osd_pool_default_size, 0, OPT_INT, 2),
+	OPTION(osd_pool_default_pg_num, 0, OPT_INT, 8),
+	OPTION(osd_pool_default_pgp_num, 0, OPT_INT, 8),
 	OPTION(osd_op_threads, 0, OPT_INT, 2),    // 0 == no threading
 	OPTION(osd_max_opq, 0, OPT_INT, 10),
 	OPTION(osd_disk_threads, 0, OPT_INT, 1),
@@ -468,8 +482,11 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_preserve_trimmed_log, 0, OPT_BOOL, true),
 	OPTION(osd_recovery_delay_start, 0, OPT_FLOAT, 15),
 	OPTION(osd_recovery_max_active, 0, OPT_INT, 5),
+	OPTION(osd_recovery_max_chunk, 0, OPT_LONGLONG, 1<<20),  // max size of push chunk
 	OPTION(osd_auto_weight, 0, OPT_BOOL, false),
 	OPTION(osd_class_timeout, 0, OPT_FLOAT, 10.0),
+	OPTION(osd_class_tmp, 0, OPT_STR, "/var/lib/ceph/tmp"),
+	OPTION(osd_check_for_log_corruption, 0, OPT_BOOL, false),
 	OPTION(filestore, 0, OPT_BOOL, false),
 	OPTION(filestore_max_sync_interval, 0, OPT_DOUBLE, 5),    // seconds
 	OPTION(filestore_min_sync_interval, 0, OPT_DOUBLE, .01),  // seconds
@@ -478,6 +495,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(filestore_dev, 0, OPT_STR, 0),
 	OPTION(filestore_btrfs_trans, 0, OPT_BOOL, true),
 	OPTION(filestore_btrfs_snap, 0, OPT_BOOL, false),
+	OPTION(filestore_btrfs_clone_range, 0, OPT_BOOL, true),
 	OPTION(filestore_flusher, 0, OPT_BOOL, true),
 	OPTION(filestore_flusher_max_fds, 0, OPT_INT, 512),
 	OPTION(filestore_sync_flush, 0, OPT_BOOL, false),
@@ -499,10 +517,11 @@ static struct config_option config_optionsp[] = {
 	OPTION(ebofs_verify_csum_on_read, 0, OPT_BOOL, true),
 	OPTION(journal_dio, 0, OPT_BOOL, true),
 	OPTION(journal_block_align, 0, OPT_BOOL, true),
-	OPTION(journal_max_write_bytes, 0, OPT_INT, 0),
+	OPTION(journal_max_write_bytes, 0, OPT_INT, 10 << 20),
 	OPTION(journal_max_write_entries, 0, OPT_INT, 100),
 	OPTION(journal_queue_max_ops, 0, OPT_INT, 500),
 	OPTION(journal_queue_max_bytes, 0, OPT_INT, 100 << 20),
+	OPTION(journal_align_min_size, 0, OPT_INT, 64 << 10),  // align data payloads >= this.
 	OPTION(bdev_lock, 0, OPT_BOOL, true),
 	OPTION(bdev_iothreads, 0, OPT_INT, 1),         // number of ios to queue with kernel
 	OPTION(bdev_idle_kick_after_ms, 0, OPT_INT, 100),  // ms
@@ -748,7 +767,8 @@ static bool get_var(const char *str, int pos, char *var_name, int len, int *new_
 
   while (str[pos] &&
 	((bracket && str[pos] != '}') ||
-	 isalnum(str[pos]))) {
+	 isalnum(str[pos]) ||
+         str[pos] == '_')) {
 	var_name[out_pos] = str[pos];
 	
 	out_pos	++;
@@ -758,6 +778,7 @@ static bool get_var(const char *str, int pos, char *var_name, int len, int *new_
   }
 
   var_name[out_pos] = '\0';
+
 
   if (bracket && (str[pos] == '}'))
 	pos++;
@@ -769,6 +790,8 @@ static bool get_var(const char *str, int pos, char *var_name, int len, int *new_
 
 static const char *var_val(char *var_name)
 {
+	const char *val;
+
 	if (strcmp(var_name, "type")==0)
 		return g_conf.type;
 	if (strcmp(var_name, "id")==0)
@@ -778,9 +801,13 @@ static const char *var_val(char *var_name)
 	if (strcmp(var_name, "name")==0)
 		return g_conf.name;
 	if (strcmp(var_name, "host")==0)
-	  return g_conf.host;
+		return g_conf.host;
 
-	return "";
+	val = getenv(var_name);
+	if (!val)
+		val = "";
+
+	return val;
 }
 
 #define MAX_LINE 256
@@ -795,6 +822,7 @@ char *conf_post_process_val(const char *val)
   size_t max_line = MAX_LINE;
 
   buf = (char *)malloc(max_line);
+  *buf = 0;
 
   while (val[i]) {
     if (val[i] == '$') {
@@ -925,7 +953,7 @@ bool is_bool_param(const char *param)
 	return ((strcasecmp(param, "true")==0) || (strcasecmp(param, "false")==0));
 }
 
-void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon, const char *module_type)
+void parse_startup_config_options(std::vector<const char*>& args, const char *module_type)
 {
   DEFINE_CONF_VARS(NULL);
   std::vector<const char *> nargs;
@@ -935,6 +963,8 @@ void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon,
     g_conf.id = (char *)g_default_id;
   if (!g_conf.type)
     g_conf.type = (char *)"";
+
+  bool isdaemon = g_conf.daemonize;
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("version", 'v')) {
@@ -952,12 +982,14 @@ void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon,
     } else if (isdaemon && CONF_ARG_EQ("nodaemon", 'D')) {
       g_conf.daemonize = false;
       g_conf.log_to_stdout = true;
+      /*
     } else if (isdaemon && CONF_ARG_EQ("daemonize", 'd')) {
       g_conf.daemonize = true;
       g_conf.log_to_stdout = false;
+      */
     } else if (isdaemon && CONF_ARG_EQ("foreground", 'f')) {
       g_conf.daemonize = false;
-      g_conf.log_to_stdout = false;
+      //g_conf.log_to_stdout = false;
     } else if (isdaemon && (CONF_ARG_EQ("id", 'i') || CONF_ARG_EQ("name", 'n'))) {
       CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
     } else if (!isdaemon && (CONF_ARG_EQ("id", 'I') || CONF_ARG_EQ("name", 'n'))) {

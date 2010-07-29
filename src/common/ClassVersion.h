@@ -1,5 +1,5 @@
-#ifndef __CLASSVERSION_H
-#define __CLASSVERSION_H
+#ifndef CEPH_CLASSVERSION_H
+#define CEPH_CLASSVERSION_H
 
 #include "include/types.h"
 

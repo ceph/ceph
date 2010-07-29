@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __CEPHXAUTHORIZEHANDLER_H
-#define __CEPHXAUTHORIZEHANDLER_H
+#ifndef CEPH_CEPHXAUTHORIZEHANDLER_H
+#define CEPH_CEPHXAUTHORIZEHANDLER_H
 
 #include "../AuthAuthorizeHandler.h"
 

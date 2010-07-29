@@ -185,11 +185,13 @@ void handle_notify(MMonObserveNotify *notify)
 	    cout << now << "   class " <<  iter->second << std::endl;
 	}
       } else {
-	ClassInfo info;
 	__u8 v;
 	::decode(v, p);
 	while (!p.end()) {
-          info.decode(p);
+	  ClassLibraryIncremental inc;
+          ::decode(inc, p);
+	  ClassInfo info;
+	  inc.decode_info(info);
 	  cout << now << "   class " << info << std::endl;
 	}
       }
@@ -515,8 +517,9 @@ int main(int argc, const char **argv, const char *envp[])
   env_to_vec(args);
 
   ceph_set_default_id("admin");
-
-  common_init(args, "ceph", false, true);
+  
+  common_set_defaults(false);
+  common_init(args, "ceph", true);
 
   vec_to_argv(args, argc, argv);
 
@@ -533,7 +536,7 @@ int main(int argc, const char **argv, const char *envp[])
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("out_file", 'o')) {
       CONF_SAFE_SET_ARG_VAL(&outfile, OPT_STR);
-    } else if (CONF_ARG_EQ("in_data", 'i')) {
+    } else if (CONF_ARG_EQ("in_file", 'i')) {
       CONF_SAFE_SET_ARG_VAL(&fname, OPT_STR);
       int fd = ::open(fname, O_RDONLY);
       struct stat st;

@@ -53,6 +53,7 @@ void usage()
   cerr << "   mkpool foo [123[ 4]]  -- create pool 'foo'\n"
        << "                         [with auid 123[and using crush rule 4]]\n";
   cerr << "   rmpool foo  -- remove pool 'foo'\n";
+  cerr << "   mkpool foo  -- create the pool 'foo'\n";
   cerr << "   lssnap      -- list snaps\n";
   cerr << "   mksnap foo  -- create snap 'foo'\n";
   cerr << "   rmsnap foo  -- remove snap 'foo'\n";
@@ -85,7 +86,9 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  common_init(args, "rados", false, true);
+
+  common_set_defaults(false);
+  common_init(args, "rados", true);
 
   vector<const char*> nargs;
   bufferlist indata, outdata;
@@ -198,10 +201,12 @@ int main(int argc, const char **argv)
   }
 
   else if (strcmp(nargs[0], "ls") == 0) {
-    if (!pool || nargs.size() < 2)
-      usage();
+    if (!pool) {
+      cerr << "pool name was not specified" << std::endl;
+      goto out;
+    }
 
-    bool stdout = (strcmp(nargs[1], "-") == 0);
+    bool stdout = (nargs.size() < 2) || (strcmp(nargs[1], "-") == 0);
     ostream *outstream;
     if(stdout)
       outstream = &cout;

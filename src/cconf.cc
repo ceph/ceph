@@ -51,7 +51,8 @@ int main(int argc, const char **argv)
   }
   args.swap(nargs);
 
-  common_init(args, type, false, false);
+  common_set_defaults(false);
+  common_init(args, type, false);
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("list_sections", 'l')) {

@@ -1,5 +1,7 @@
 usr/bin/ceph
 usr/bin/cconf
+usr/bin/cclass
+usr/bin/cclsinfo
 usr/bin/crushtool
 usr/bin/monmaptool
 usr/bin/osdmaptool
@@ -10,17 +12,17 @@ usr/bin/cmds
 usr/bin/cosd
 usr/bin/cauthtool
 usr/bin/rados
-usr/bin/rbdtool
+usr/bin/rbd
 sbin/mount.ceph
 usr/sbin/mkcephfs
 usr/lib/ceph/ceph_common.sh
+usr/lib/rados-classes/*
 etc/ceph/sample.ceph.conf
 etc/ceph/sample.fetch_config
 usr/share/man/man8/cmon.8
 usr/share/man/man8/cmds.8
 usr/share/man/man8/cosd.8
 usr/share/man/man8/mkcephfs.8
-usr/share/man/man8/mkmonfs.8
 usr/share/man/man8/crun.8
 usr/share/man/man8/csyn.8
 usr/share/man/man8/crushtool.8
@@ -31,4 +33,6 @@ usr/share/man/man8/ceph.8
 usr/share/man/man8/mount.ceph.8
 usr/share/man/man8/cauthtool.8
 usr/share/man/man8/rados.8
-usr/share/man/man8/rbdtool.8
+usr/share/man/man8/rbd.8
+usr/share/man/man8/cclass.8
+usr/share/man/man8/cclsinfo.8

@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __CAPABILITY_H
-#define __CAPABILITY_H
+#ifndef CEPH_CAPABILITY_H
+#define CEPH_CAPABILITY_H
 
 #include "include/buffer.h"
 #include "include/xlist.h"
@@ -62,7 +62,10 @@ private:
   static boost::pool<> pool;
 public:
   static void *operator new(size_t num_bytes) { 
-    return pool.malloc();
+    void *n = pool.malloc();
+    if (!n)
+      throw std::bad_alloc();
+    return n;
   }
   void operator delete(void *p) {
     pool.free(p);

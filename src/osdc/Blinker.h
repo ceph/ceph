@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __BLINKER_H
-#define __BLINKER_H
+#ifndef CEPH_BLINKER_H
+#define CEPH_BLINKER_H
 
 class Blinker {
 

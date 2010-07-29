@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __EBOFS_BLOCKDEVICE_H
-#define __EBOFS_BLOCKDEVICE_H
+#ifndef CEPH_EBOFS_BLOCKDEVICE_H
+#define CEPH_EBOFS_BLOCKDEVICE_H
 
 using namespace std;
 #include "include/buffer.h"

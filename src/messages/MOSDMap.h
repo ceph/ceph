@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MOSDMAP_H
-#define __MOSDMAP_H
+#ifndef CEPH_MOSDMAP_H
+#define CEPH_MOSDMAP_H
 
 #include "msg/Message.h"
 #include "osd/OSDMap.h"

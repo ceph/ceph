@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __JOURNALINGOBJECTSTORE_H
-#define __JOURNALINGOBJECTSTORE_H
+#ifndef CEPH_JOURNALINGOBJECTSTORE_H
+#define CEPH_JOURNALINGOBJECTSTORE_H
 
 #include "ObjectStore.h"
 #include "Journal.h"
@@ -42,7 +42,7 @@ protected:
 
   // --
   uint64_t op_apply_start(uint64_t op);
-  void op_apply_finish();
+  void op_apply_finish(uint64_t op);
   uint64_t op_journal_start(uint64_t op);
   void op_journal_finish();
 

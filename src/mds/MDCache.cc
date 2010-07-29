@@ -1262,7 +1262,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 
   in->first = last+1;
 
-  dout(10) << "cow_inode to " << *oldin << dendl;
+  dout(10) << "cow_inode " << *in << " to " << *oldin << dendl;
   add_inode(oldin);
   
   // clone caps?
@@ -1272,7 +1272,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
     client_t client = p->first;
     Capability *cap = p->second;
     if ((cap->issued() & CEPH_CAP_ANY_WR) &&
-	cap->client_follows == oldin->first) {
+	cap->client_follows <= oldin->first) {
       // clone to oldin
       Capability *newcap = oldin->add_client_cap(client, 0, in->containing_realm);
       cap->item_session_caps.get_list()->push_back(&newcap->item_session_caps);
@@ -5314,7 +5314,7 @@ void MDCache::trim_client_leases()
       if (r->ttl > now) break;
       CDentry *dn = (CDentry*)r->parent;
       dout(10) << " expiring client" << r->client << " lease of " << *dn << dendl;
-      dn->remove_client_lease(r, r->mask, mds->locker);
+      dn->remove_client_lease(r, mds->locker);
     }
     int after = client_leases[pool].size();
     dout(10) << "trim_client_leases pool " << pool << " trimmed "
@@ -5335,7 +5335,7 @@ void MDCache::check_memory_usage()
   float caps_per_inode = (float)num_caps / (float)num_inodes;
   //float cap_rate = (float)num_inodes_with_caps / (float)inode_map.size();
 
-  dout(0) << "check_memory_usage"
+  dout(2) << "check_memory_usage"
 	   << " total " << last.get_total()
 	   << ", rss " << last.get_rss()
 	   << ", heap " << last.get_heap()
@@ -5420,6 +5420,7 @@ void MDCache::shutdown_check()
   }
 }
 
+
 void MDCache::shutdown_start()
 {
   dout(2) << "shutdown_start" << dendl;
@@ -5442,6 +5443,14 @@ bool MDCache::shutdown_pass()
     show_subtrees();
     return true;
   }
+
+  // close out any sessions (and open files!) before we try to trim the log, etc.
+  if (!mds->server->terminating_sessions &&
+      mds->sessionmap.have_unclosed_sessions()) {
+    mds->server->terminate_sessions();
+    return false;
+  }
+
 
   // flush what we can from the log
   mds->mdlog->trim(0);
@@ -6908,7 +6917,9 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in
   ::decode(seq, p);
 
   in->open_snaprealm();
-  in->snaprealm->seq = in->snaprealm->created = seq;
+  in->snaprealm->seq = seq;
+  in->snaprealm->created = seq;
+  in->snaprealm->current_parent_since = seq;
 
   do_realm_invalidate_and_update_notify(in, CEPH_SNAP_OP_SPLIT);
 
@@ -8293,16 +8304,19 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 
       // straydn
       bufferlist::iterator p = m->straybl.begin();
-      list<Context*> finished;
-      int from = m->get_source().num();
-      CInode *mdsin = add_replica_inode(p, NULL, finished);
-      CDir *mdsdir = add_replica_dir(p, mdsin, from, finished);
-      CDentry *straydirdn = add_replica_dentry(p, mdsdir, finished);
-      CInode *strayin = add_replica_inode(p, straydirdn, finished);
-      CDir *straydir = add_replica_dir(p, strayin, from, finished);
-      CDentry *straydn = add_replica_dentry(p, straydir, finished);
-      if (!finished.empty())
-	mds->queue_waiters(finished);
+      CDentry *straydn = NULL;
+      if (!p.end()) {
+	list<Context*> finished;
+	int from = m->get_source().num();
+	CInode *mdsin = add_replica_inode(p, NULL, finished);
+	CDir *mdsdir = add_replica_dir(p, mdsin, from, finished);
+	CDentry *straydirdn = add_replica_dentry(p, mdsdir, finished);
+	CInode *strayin = add_replica_inode(p, straydirdn, finished);
+	CDir *straydir = add_replica_dir(p, strayin, from, finished);
+	straydn = add_replica_dentry(p, straydir, finished);
+	if (!finished.empty())
+	  mds->queue_waiters(finished);
+      }
 
       // open inode?
       if (dnl->is_primary()) {

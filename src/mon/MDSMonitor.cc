@@ -599,13 +599,13 @@ void MDSMonitor::check_subs()
 
 void MDSMonitor::check_sub(Subscription *sub)
 {
-  if (sub->last < mdsmap.get_epoch()) {
+  if (sub->next <= mdsmap.get_epoch()) {
     mon->messenger->send_message(new MMDSMap(mon->monmap->fsid, &mdsmap),
 				 sub->session->inst);
     if (sub->onetime)
       mon->session_map.remove_sub(sub);
     else
-      sub->last = mdsmap.get_epoch();
+      sub->next = mdsmap.get_epoch() + 1;
   }
 }
 

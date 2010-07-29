@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __EBOFS_FILEJOURNAL_H
-#define __EBOFS_FILEJOURNAL_H
+#ifndef CEPH_EBOFS_FILEJOURNAL_H
+#define CEPH_EBOFS_FILEJOURNAL_H
 
 #include <deque>
 using std::deque;
@@ -97,8 +97,12 @@ private:
   struct write_item {
     uint64_t seq;
     bufferlist bl;
+    int alignment;
     Context *fin;
-    write_item(uint64_t s, bufferlist& b, Context *f) : seq(s), fin(f) { bl.claim(b); }
+    write_item(uint64_t s, bufferlist& b, int al, Context *f) :
+      seq(s), alignment(al), fin(f) { 
+      bl.claim(b);
+    }
   };
   deque<write_item> writeq;
   
@@ -114,7 +118,7 @@ private:
 
   int _open(bool wr, bool create=false);
   void print_header();
-  void read_header();
+  int read_header();
   bufferptr prepare_header();
   void start_writer();
   void stop_writer();
@@ -174,7 +178,7 @@ private:
   void make_writeable();
 
   // writes
-  void submit_entry(uint64_t seq, bufferlist& bl, Context *oncommit);  // submit an item
+  void submit_entry(uint64_t seq, bufferlist& bl, int alignment, Context *oncommit);  // submit an item
   void committed_thru(uint64_t seq);
   bool is_full();
 

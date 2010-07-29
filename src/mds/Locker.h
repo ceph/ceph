@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDS_LOCKER_H
-#define __MDS_LOCKER_H
+#ifndef CEPH_MDS_LOCKER_H
+#define CEPH_MDS_LOCKER_H
 
 #include "include/types.h"
 
@@ -241,9 +241,7 @@ private:
 public:
   void handle_client_lease(class MClientLease *m);
 
-  void _issue_client_lease(CDentry *dn, int mask, int pool, client_t client, bufferlist &bl, utime_t now, Session *session);
-  int issue_client_lease(CInode *in, client_t client, bufferlist &bl, utime_t now, Session *session);
-  int issue_client_lease(CDentry *dn, client_t client, bufferlist &bl, utime_t now, Session *session);
+  void issue_client_lease(CDentry *dn, client_t client, bufferlist &bl, utime_t now, Session *session);
   void revoke_client_leases(SimpleLock *lock);
 };
 

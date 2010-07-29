@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MOSDPGLOG_H
-#define __MOSDPGLOG_H
+#ifndef CEPH_MOSDPGLOG_H
+#define CEPH_MOSDPGLOG_H
 
 #include "msg/Message.h"
 

@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MOSDPGPEERNOTIFY_H
-#define __MOSDPGPEERNOTIFY_H
+#ifndef CEPH_MOSDPGPEERNOTIFY_H
+#define CEPH_MOSDPGPEERNOTIFY_H
 
 #include "msg/Message.h"
 

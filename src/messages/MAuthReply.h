@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MAUTHREPLY_H
-#define __MAUTHREPLY_H
+#ifndef CEPH_MAUTHREPLY_H
+#define CEPH_MAUTHREPLY_H
 
 #include "msg/Message.h"
 

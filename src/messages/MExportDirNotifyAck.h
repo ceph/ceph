@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MEXPORTDIRNOTIFYACK_H
-#define __MEXPORTDIRNOTIFYACK_H
+#ifndef CEPH_MEXPORTDIRNOTIFYACK_H
+#define CEPH_MEXPORTDIRNOTIFYACK_H
 
 #include "msg/Message.h"
 #include <string>

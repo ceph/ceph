@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDSTABLE_H
-#define __MDSTABLE_H
+#ifndef CEPH_MDSTABLE_H
+#define CEPH_MDSTABLE_H
 
 #include "mdstypes.h"
 #include "mds_table_types.h"

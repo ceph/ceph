@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __OBJECT_H
-#define __OBJECT_H
+#ifndef CEPH_OBJECT_H
+#define CEPH_OBJECT_H
 
 #include <stdint.h>
 #include <stdio.h>

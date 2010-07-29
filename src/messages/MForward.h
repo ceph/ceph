@@ -16,8 +16,8 @@
  * checking.
  */
 
-#ifndef __MFORWARD_H
-#define __MFORWARD_H
+#ifndef CEPH_MFORWARD_H
+#define CEPH_MFORWARD_H
 
 #include "msg/Message.h"
 #include "mon/MonCaps.h"
@@ -59,7 +59,6 @@ public:
     ::decode(client, p);
     ::decode(client_caps, p);
     msg = (PaxosServiceMessage *)decode_message(p);
-    msg->set_orig_source_inst(client);
   }
 
   const char *get_type_name() { return "forward"; }

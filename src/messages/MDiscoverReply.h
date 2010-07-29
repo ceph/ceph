@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MDISCOVERREPLY_H
-#define __MDISCOVERREPLY_H
+#ifndef CEPH_MDISCOVERREPLY_H
+#define CEPH_MDISCOVERREPLY_H
 
 #include "msg/Message.h"
 #include "include/filepath.h"

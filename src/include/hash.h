@@ -1,5 +1,5 @@
-#ifndef __CEPHHASH_H
-#define __CEPHHASH_H
+#ifndef CEPH_HASH_H
+#define CEPH_HASH_H
 
 #include "../acconfig.h"
 

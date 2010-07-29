@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __SIMPLELOCK_H
-#define __SIMPLELOCK_H
+#ifndef CEPH_SIMPLELOCK_H
+#define CEPH_SIMPLELOCK_H
 
 // -- lock types --
 // see CEPH_LOCK_*
@@ -224,14 +224,16 @@ public:
   int get_wait_shift() {
     switch (get_type()) {
     case CEPH_LOCK_DN:       return 8;
-    case CEPH_LOCK_IAUTH:    return 5 +   SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_ILINK:    return 5 +   SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IDFT:     return 5 + 2*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IFILE:    return 5 + 3*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IVERSION: return 5 + 4*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IXATTR:   return 5 + 5*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_ISNAP:    return 5 + 6*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_INEST:    return 5 + 7*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_DVERSION: return 8 +   SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IAUTH:    return 8 + 1*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_ILINK:    return 8 + 2*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IDFT:     return 8 + 3*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IFILE:    return 8 + 4*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IVERSION: return 8 + 5*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IXATTR:   return 8 + 6*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_ISNAP:    return 8 + 7*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_INEST:    return 8 + 8*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IFLOCK:   return 8 + 9*SimpleLock::WAIT_BITS;
     default:
       assert(0);
     }
@@ -374,6 +376,12 @@ public:
       (get_sm()->states[state].can_wrlock == AUTH && parent->is_auth()) ||
       (get_sm()->states[state].can_wrlock == XCL && client >= 0 && (get_xlock_by_client() == client ||
 								    get_excl_client() == client));
+  }
+  bool can_force_wrlock(client_t client) {
+    return get_sm()->states[state].can_force_wrlock == ANY ||
+      (get_sm()->states[state].can_force_wrlock == AUTH && parent->is_auth()) ||
+      (get_sm()->states[state].can_force_wrlock == XCL && client >= 0 && (get_xlock_by_client() == client ||
+									  get_excl_client() == client));
   }
   bool can_xlock(client_t client) {
     return get_sm()->states[state].can_xlock == ANY ||

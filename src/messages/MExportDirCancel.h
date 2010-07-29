@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MEXPORTDIRCANCEL_H
-#define __MEXPORTDIRCANCEL_H
+#ifndef CEPH_MEXPORTDIRCANCEL_H
+#define CEPH_MEXPORTDIRCANCEL_H
 
 #include "msg/Message.h"
 #include "include/types.h"

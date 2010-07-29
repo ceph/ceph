@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDS_SERVER_H
-#define __MDS_SERVER_H
+#ifndef CEPH_MDS_SERVER_H
+#define CEPH_MDS_SERVER_H
 
 #include "MDS.h"
 
@@ -46,18 +46,22 @@ class Server {
 public:
   int failed_reconnects;
 
+  bool terminating_sessions;
+
   Server(MDS *m) : 
     mds(m), 
     mdcache(mds->mdcache), mdlog(mds->mdlog),
     messenger(mds->messenger),
     logger(0),
-    failed_reconnects(0) {
+    failed_reconnects(0),
+    terminating_sessions(false) {
   }
   ~Server() {
+    logger_remove(logger);
     delete logger;
   }
 
-  void reopen_logger(utime_t start, bool append);
+  void open_logger();
 
   // message handler
   void dispatch(Message *m);
@@ -141,7 +145,7 @@ public:
   // open
   void handle_client_open(MDRequest *mdr);
   void handle_client_openc(MDRequest *mdr);  // O_CREAT variant.
-  void handle_client_opent(MDRequest *mdr, int cmode);  // O_TRUNC variant.
+  void do_open_truncate(MDRequest *mdr, int cmode);  // O_TRUNC variant.
 
   // namespace changes
   void handle_client_mknod(MDRequest *mdr);

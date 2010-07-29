@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDS_SESSIONMAP_H
-#define __MDS_SESSIONMAP_H
+#ifndef CEPH_MDS_SESSIONMAP_H
+#define CEPH_MDS_SESSIONMAP_H
 
 #include <set>
 using std::set;
@@ -55,12 +55,14 @@ public:
     + additional dimension of 'importing' (with counter)
 
   */
-  static const int STATE_CLOSED = 0;
-  static const int STATE_OPENING = 1;   // journaling open
-  static const int STATE_OPEN = 2;
-  static const int STATE_CLOSING = 3;   // journaling close
-  static const int STATE_STALE = 4;
-  static const int STATE_KILLING = 5;
+  enum {
+    STATE_CLOSED = 0,
+    STATE_OPENING = 1,   // journaling open
+    STATE_OPEN = 2,
+    STATE_CLOSING = 3,   // journaling close
+    STATE_STALE = 4,
+    STATE_KILLING = 5
+  };
 
   const char *get_state_name(int s) {
     switch (s) {
@@ -155,6 +157,9 @@ public:
     leases.push_back(&r->item_session_lease);
   }
 
+  // -- leases --
+  uint32_t lease_seq;
+
   // -- completed requests --
 private:
   set<tid_t> completed_requests;
@@ -178,7 +183,8 @@ public:
     state(STATE_CLOSED), state_seq(0), importing_count(0),
     connection(NULL), item_session_list(this),
     requests(0),  // member_offset passed to front() manually
-    cap_push_seq(0) { }
+    cap_push_seq(0),
+    lease_seq(0) { }
   ~Session() {
     assert(!item_session_list.is_on_list());
   }
@@ -239,6 +245,14 @@ public:
     
   // sessions
   bool empty() { return session_map.empty(); }
+  bool have_unclosed_sessions() {
+    return
+      !by_state[Session::STATE_OPENING].empty() ||
+      !by_state[Session::STATE_OPEN].empty() ||
+      !by_state[Session::STATE_CLOSING].empty() ||
+      !by_state[Session::STATE_STALE].empty() ||
+      !by_state[Session::STATE_KILLING].empty();
+  }
   bool have_session(entity_name_t w) {
     return session_map.count(w);
   }

@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __EBOFS_NODES_H
-#define __EBOFS_NODES_H
+#ifndef CEPH_EBOFS_NODES_H
+#define CEPH_EBOFS_NODES_H
 
 /** nodes, node regions **/
 

@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MCLIENTRECONNECT_H
-#define __MCLIENTRECONNECT_H
+#ifndef CEPH_MCLIENTRECONNECT_H
+#define CEPH_MCLIENTRECONNECT_H
 
 #include "msg/Message.h"
 #include "mds/mdstypes.h"

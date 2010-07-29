@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
-#ifndef __TCP_H
-#define __TCP_H
+#ifndef CEPH_TCP_H
+#define CEPH_TCP_H
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -19,27 +19,14 @@ inline ostream& operator<<(ostream& out, const sockaddr_storage &ss)
   getnameinfo((struct sockaddr *)&ss, sizeof(ss), buf, sizeof(buf),
 	      serv, sizeof(serv),
 	      NI_NUMERICHOST | NI_NUMERICSERV);
+  if (ss.ss_family == AF_INET6)
+    return out << '[' << buf << "]:" << serv;
   return out //<< ss.ss_family << ":"
 	     << buf << ':' << serv;
 }
 
-inline ostream& operator<<(ostream& out, const sockaddr_in &ss)
-{
-  char buf[NI_MAXHOST] = { 0 };
-  char serv[20] = { 0 };
-  getnameinfo((struct sockaddr *)&ss, sizeof(ss), buf, sizeof(buf),
-	      serv, sizeof(serv),
-	      NI_NUMERICHOST | NI_NUMERICSERV);
-  return out //<< ss.sin_family << ":"
-	     << buf << ':' << serv;
-}
-
-
 extern int tcp_read(int sd, char *buf, int len);
 extern int tcp_write(int sd, const char *buf, int len);
-
-
-extern int tcp_hostlookup(char *str, sockaddr_in& ta);
 
 inline bool operator==(const sockaddr_in& a, const sockaddr_in& b) {
   return strncmp((const char*)&a, (const char*)&b, sizeof(a)) == 0;

@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MON_MONITORSTORE_H
-#define __MON_MONITORSTORE_H
+#ifndef CEPH_MON_MONITORSTORE_H
+#define CEPH_MON_MONITORSTORE_H
 
 #include "include/types.h"
 #include "include/buffer.h"

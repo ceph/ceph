@@ -29,6 +29,125 @@ the time of mount.
 .PP
 A subdirectory \fIsubdir\fP may be specified if a subset of the file system is to be
 mounted.
+
+.SH OPTIONS
+
+wsize
+.IP
+int, max write size.  Default: none (writeback uses smaller of wsize and stripe unit)
+.PP
+
+rsize
+.IP
+int (bytes), max readahead, multiple of 1024, Default: 524288 (512*1024)
+.PP
+
+osdtimeout
+.IP
+int (seconds), Default: 60
+.PP
+
+osdkeepalivetimeout
+.IP
+int, Default: 5
+.PP
+
+mount_timeout
+.IP
+int (seconds), Default: 60
+.PP
+
+osd_idle_ttl
+.IP
+int (seconds), Default: 60
+.PP
+
+caps_wanted_delay_min
+.IP
+int, cap release delay, Default: 5
+.PP
+
+caps_wanted_delay_max
+.IP
+int, cap release delay, Default: 60
+.PP
+
+cap_release_safety
+.IP
+int, Default: calculated
+.PP
+
+readdir_max_entries
+.IP
+int, Default: 1024
+.PP
+
+readdir_max_bytes
+.IP
+int, Default: 524288 (512*1024)
+.PP
+
+write_congestion_kb
+.IP
+int (kb), max writeback in flight. scale with available memory. Default: calculated from available memory
+.PP
+
+snapdirname
+.IP
+string, set the name of the hidden snapdir. Default: .snap
+.PP
+
+name
+.IP
+string, used with authx, Default: guest
+.PP
+
+secret
+.IP
+string, used with authx 
+.PP
+
+ip
+.IP
+my ip
+.PP
+
+noshare
+.IP
+create a new client instance, instead of sharing an existing instance of a client mounting the same cluster
+.PP
+
+dirstat
+.IP
+funky `cat dirname` for stats, Default: off
+.PP
+
+nodirstat
+.IP
+no funky `cat dirname` for stats
+.PP
+
+rbytes
+.IP
+Report rbytes for st_size on directories.  Default: on
+.PP
+
+norbytes
+.IP
+Do not report rbytse for st_size.
+.PP
+
+nocrc
+.IP
+no data crc on writes
+.PP
+
+noasyncreaddir
+.IP
+no dcache readdir
+.PP
+
+
 .SH EXAMPLES
 Mount the full file system:
 .IP

@@ -1,0 +1,9 @@
+/var/log/ceph/*.log /var/log/ceph/stat/*.log {
+    rotate 7
+    daily
+    compress
+    sharedscripts
+    postrotate
+        invoke-rc.d ceph reload || service ceph reload
+    endscript
+}

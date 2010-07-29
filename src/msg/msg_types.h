@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MSG_TYPES_H
-#define __MSG_TYPES_H
+#ifndef CEPH_MSG_TYPES_H
+#define CEPH_MSG_TYPES_H
 
 #include "include/types.h"
 #include "include/blobhash.h"
@@ -146,6 +146,13 @@ struct entity_addr_t {
 
   __u32 get_nonce() const { return nonce; }
   void set_nonce(__u32 n) { nonce = n; }
+
+  int get_family() const {
+    return addr.ss_family;
+  }
+  void set_family(int f) {
+    addr.ss_family = f;
+  }
   
   sockaddr_storage &ss_addr() {
     return addr;
@@ -212,12 +219,7 @@ struct entity_addr_t {
     case AF_INET:
       return addr4.sin_addr.s_addr == INADDR_ANY;
     case AF_INET6:
-      {
-	return addr6.sin6_addr.s6_addr32[0] == 0 &&
-	  addr6.sin6_addr.s6_addr32[1] == 0 &&
-	  addr6.sin6_addr.s6_addr32[2] == 0 &&
-	  addr6.sin6_addr.s6_addr32[3] == 0;
-      }
+      return memcmp(&addr6.sin6_addr, &in6addr_any, sizeof(in6addr_any)) == 0;
     default:
       return true;
     }

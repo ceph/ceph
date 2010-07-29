@@ -16,8 +16,8 @@
  * Boston, MA 021110-1307, USA.
  */
 
-#ifndef __IOCTL_
-#define __IOCTL_
+#ifndef BTRFS_IOCTL_H
+#define BTRFS_IOCTL_H
 #include <linux/ioctl.h>
 
 #define BTRFS_IOCTL_MAGIC 0x94

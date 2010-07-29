@@ -33,7 +33,6 @@ cauthtool
 crushtool
 *.la
 mkcephfs
-mkmonfs
 mount.ceph
 osdmaptool
 rados

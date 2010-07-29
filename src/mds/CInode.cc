@@ -112,41 +112,24 @@ ostream& operator<<(ostream& out, CInode& in)
   if (in.is_freezing_inode()) out << " FREEZING=" << in.auth_pin_freeze_allowance;
   if (in.is_frozen_inode()) out << " FROZEN";
 
+  // anchors
+  if (in.is_anchored())
+    out << " anc";
   if (in.get_nested_anchors())
     out << " na=" << in.get_nested_anchors();
 
   if (in.inode.is_dir()) {
     out << " " << in.inode.dirstat;
-    out << " ds=" << in.inode.dirstat.size() << "=" 
-	<< in.inode.dirstat.nfiles << "+" << in.inode.dirstat.nsubdirs;
     //if (in.inode.dirstat.version > 10000) out << " BADDIRSTAT";
   } else {
     out << " s=" << in.inode.size;
     out << " nl=" << in.inode.nlink;
   }
-  if (in.is_anchored())
-    out << " anc";
 
-  out << " rb=" << in.inode.rstat.rbytes;
-  if (in.inode.rstat.rbytes != in.inode.accounted_rstat.rbytes)
-    out << "/" << in.inode.accounted_rstat.rbytes;
-  if (in.is_projected()) 
-    out << "(" << in.get_projected_inode()->rstat.rbytes
-	<< "/" << in.get_projected_inode()->accounted_rstat.rbytes << ")";
-
-  out << " rf=" << in.inode.rstat.rfiles;
-  if (in.inode.rstat.rfiles != in.inode.accounted_rstat.rfiles)
-    out << "/" << in.inode.accounted_rstat.rfiles;
-  if (in.is_projected()) 
-    out << "(" << in.get_projected_inode()->rstat.rfiles
-	<< "/" << in.get_projected_inode()->accounted_rstat.rfiles << ")";
-
-  out << " rd=" << in.inode.rstat.rsubdirs;
-  if (in.inode.rstat.rsubdirs != in.inode.accounted_rstat.rsubdirs)
-    out << "/" << in.inode.accounted_rstat.rsubdirs;
-  if (in.is_projected()) 
-    out << "(" << in.get_projected_inode()->rstat.rsubdirs
-	<< "/" << in.get_projected_inode()->accounted_rstat.rsubdirs << ")";
+  // rstat
+  out << " " << in.inode.rstat;
+  if (!(in.inode.rstat == in.inode.accounted_rstat))
+    out << "/" << in.inode.accounted_rstat;
 
   // locks
   out << " " << in.authlock;
@@ -1473,12 +1456,11 @@ pair<int,int> CInode::authority()
 
 snapid_t CInode::get_oldest_snap()
 {
-  snapid_t t = CEPH_NOSNAP;
+  snapid_t t = first;
   if (!old_inodes.empty())
     t = old_inodes.begin()->second.first;
   return MIN(t, first);
 }
-
 
 old_inode_t& CInode::cow_old_inode(snapid_t follows, inode_t *pi)
 {
@@ -1636,6 +1618,11 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
     map<snapid_t,old_inode_t>::iterator p = old_inodes.lower_bound(snapid);
     if (p != old_inodes.end()) {
+      if (p->second.first > snapid) {
+        if  (p != old_inodes.begin())
+          --p;
+        else dout(0) << "old_inode.begin() starts after snapid!" << dendl;
+      }
       dout(15) << "encode_inodestat snapid " << snapid
 	       << " to old_inode [" << p->second.first << "," << p->first << "]" 
 	       << " " << p->second.inode.rstat
@@ -1752,18 +1739,22 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   // encode caps
   if (snapid != CEPH_NOSNAP) {
     /*
-     * snapped inodes (files or dirs) only get read-only caps.  if
-     * there is a Capability on the inode (either it's a dir, or it's
-     * a file with a flushing cap), then limit caps issued to what is
-     * already on teh cap.
+     * snapped inodes (files or dirs) only get read-only caps.  always
+     * issue everything possible, since it is read only.
+     *
+     * if a snapped inode has caps, limit issued caps based on the
+     * lock state.
+     *
+     * if it is a live inode, limit issued caps based on the lock
+     * state.
      *
      * do NOT adjust cap issued state, because the client always
      * tracks caps per-snap and the mds does either per-interval or
      * multiversion.
      */
     e.cap.caps = valid ? get_caps_allowed_by_type(CAP_ANY) : CEPH_STAT_CAP_INODE;
-    if (cap)
-      e.cap.caps = e.cap.caps & cap->issued();
+    if (last == CEPH_NOSNAP || is_any_caps())
+      e.cap.caps = e.cap.caps & get_caps_allowed_for_client(client);
     e.cap.seq = 0;
     e.cap.mseq = 0;
     e.cap.realm = 0;

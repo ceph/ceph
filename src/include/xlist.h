@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __XLIST_H
-#define __XLIST_H
+#ifndef CEPH_XLIST_H
+#define CEPH_XLIST_H
 
 template<typename T>
 class xlist {

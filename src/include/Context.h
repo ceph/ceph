@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __CONTEXT_H
-#define __CONTEXT_H
+#ifndef CEPH_CONTEXT_H
+#define CEPH_CONTEXT_H
 
 #include "config.h"
 

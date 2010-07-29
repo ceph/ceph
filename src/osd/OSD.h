@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __OSD_H
-#define __OSD_H
+#ifndef CEPH_OSD_H
+#define CEPH_OSD_H
 
 #include "msg/Dispatcher.h"
 
@@ -49,6 +49,7 @@ enum {
   l_osd_first = 10000,
   l_osd_opq,
   l_osd_op,
+  l_osd_opwip,
   l_osd_c_rd,
   l_osd_c_rdb,
   l_osd_c_wr,
@@ -73,6 +74,9 @@ enum {
   l_osd_rlsum,
   l_osd_rlnum,
   l_osd_numpg,
+  l_osd_numpg_primary,
+  l_osd_numpg_replica,
+  l_osd_numpg_stray,
   l_osd_hbto,
   l_osd_hbfrom,
   l_osd_buf,
@@ -104,10 +108,10 @@ protected:
   Messenger   *messenger; 
   MonClient   *monc;
   Logger      *logger;
+  bool         logger_started;
   ObjectStore *store;
 
   LogClient   logclient;
-
 
   int whoami;
   const char *dev_path, *journal_path;
@@ -123,8 +127,9 @@ protected:
 
   bool dispatch_running;
 
+  void open_logger();
+  void start_logger();
   void tick();
-
   void _dispatch(Message *m);
 
 public:
@@ -208,6 +213,7 @@ private:
   void update_heartbeat_peers();
   void reset_heartbeat_peers();
   void heartbeat();
+  void heartbeat_check();
   void heartbeat_entry();
 
   struct T_Heartbeat : public Thread {
@@ -247,10 +253,12 @@ private:
   int stat_rd_ops_in_queue;  // in queue
 
   Mutex peer_stat_lock;
+  osd_stat_t osd_stat;
   osd_peer_stat_t my_stat;
   hash_map<int, osd_peer_stat_t, rjhash<uint32_t> > peer_stat;
   hash_map<int, osd_peer_stat_t, rjhash<uint32_t> > my_stat_on_peer;  // what the peer thinks of me
 
+  void update_osd_stat();
   void _refresh_my_stat(utime_t now);
   osd_peer_stat_t get_my_stat_for(utime_t now, int peer);
   void take_peer_stat(int peer, const osd_peer_stat_t& stat);
@@ -513,6 +521,8 @@ protected:
 
   // -- boot --
   void send_boot();
+  
+  void clear_temp();
 
   // -- alive --
   epoch_t up_thru_wanted;

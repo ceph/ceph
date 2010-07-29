@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __AUTHNONEPROTOCOL_H
-#define __AUTHNONEPROTOCOL_H
+#ifndef CEPH_AUTHNONEPROTOCOL_H
+#define CEPH_AUTHNONEPROTOCOL_H
 
 #include "../Auth.h"
 

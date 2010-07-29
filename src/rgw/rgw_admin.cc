@@ -21,7 +21,7 @@ using namespace std;
 
 void usage() 
 {
-  cerr << "usage: rgw_admin <--user-gen | --user-modify | --read-policy | --list-buckets > [options...]" << std::endl;
+  cerr << "usage: radosgw_admin <--user-gen | --user-modify | --read-policy | --list-buckets > [options...]" << std::endl;
   cerr << "options:" << std::endl;
   cerr << "   --uid=<id> (S3 uid)" << std::endl;
   cerr << "   --auth_uid=<auid> (librados uid)" << std::endl;
@@ -85,7 +85,9 @@ int main(int argc, char **argv)
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
-  common_init(args, "rgw", true, true);
+
+  common_set_defaults(true);
+  common_init(args, "rgw", true);
 
   const char *user_id = 0;
   const char *secret_key = 0;

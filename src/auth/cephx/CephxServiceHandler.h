@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __CEPHXSERVICEHANDLER_H
-#define __CEPHXSERVICEHANDLER_H
+#ifndef CEPH_CEPHXSERVICEHANDLER_H
+#define CEPH_CEPHXSERVICEHANDLER_H
 
 #include "../AuthServiceHandler.h"
 #include "../Auth.h"

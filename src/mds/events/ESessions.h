@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDS_ESESSIONS_H
-#define __MDS_ESESSIONS_H
+#ifndef CEPH_MDS_ESESSIONS_H
+#define CEPH_MDS_ESESSIONS_H
 
 #include "config.h"
 #include "include/types.h"
@@ -28,9 +28,10 @@ public:
   map<client_t,entity_inst_t> client_map;
 
   ESessions() : LogEvent(EVENT_SESSION) { }
-  ESessions(version_t v) :
-    LogEvent(EVENT_SESSIONS),
-    cmapv(v) {
+  ESessions(version_t pv, map<client_t,entity_inst_t>& cm) :
+    LogEvent(EVENT_SESSION),
+    cmapv(pv) {
+    client_map.swap(cm);
   }
   
   void encode(bufferlist &bl) const {

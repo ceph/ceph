@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MOSDOP_H
-#define __MOSDOP_H
+#ifndef CEPH_MOSDOP_H
+#define CEPH_MOSDOP_H
 
 #include "msg/Message.h"
 #include "osd/osd_types.h"
@@ -67,7 +67,8 @@ public:
   int get_rmw_flags() { assert(rmw_flags); return rmw_flags; }
   bool may_read() { assert(rmw_flags); return rmw_flags & CEPH_OSD_FLAG_READ; }
   bool may_write() { assert(rmw_flags); return rmw_flags & CEPH_OSD_FLAG_WRITE; }
-  bool may_exec() { assert(rmw_flags); return rmw_flags & CEPH_OSD_FLAG_EXEC; }
+  bool may_exec() { assert(rmw_flags); return rmw_flags & (CEPH_OSD_FLAG_EXEC | CEPH_OSD_FLAG_EXEC_PUBLIC); }
+  bool require_exec_caps() { assert(rmw_flags); return rmw_flags & CEPH_OSD_FLAG_EXEC; }
 
   void set_peer_stat(const osd_peer_stat_t& stat) {
     peer_stat = stat;
@@ -213,7 +214,7 @@ public:
     out << " " << ops;
     out << " " << pg_t(head.layout.ol_pgid);
     if (is_retry_attempt()) out << " RETRY";
-    if (!snaps.empty())
+    if (get_snap_seq())
       out << " snapc " << get_snap_seq() << "=" << snaps;
     out << ")";
   }

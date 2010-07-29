@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDS_ECOMMITTED_H
-#define __MDS_ECOMMITTED_H
+#ifndef CEPH_MDS_ECOMMITTED_H
+#define CEPH_MDS_ECOMMITTED_H
 
 #include "../LogEvent.h"
 #include "EMetaBlob.h"

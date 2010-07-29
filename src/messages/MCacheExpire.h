@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MCACHEEXPIRE_H
-#define __MCACHEEXPIRE_H
+#ifndef CEPH_MCACHEEXPIRE_H
+#define CEPH_MCACHEEXPIRE_H
 
 class MCacheExpire : public Message {
   __s32 from;

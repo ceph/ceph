@@ -14,8 +14,8 @@
 
 
 
-#ifndef __MDS_H
-#define __MDS_H
+#ifndef CEPH_MDS_H
+#define CEPH_MDS_H
 
 #include "mdstypes.h"
 
@@ -335,11 +335,13 @@ class MDS : public Dispatcher {
   void send_message_client_counted(Message *m, client_t client);
   void send_message_client_counted(Message *m, Session *session);
   void send_message_client_counted(Message *m, Connection *connection);
+  void send_message_client(Message *m, Session *session);
   void send_message(Message *m, Connection *c);
 
   // start up, shutdown
   int init();
-  void reopen_logger(utime_t start);
+
+  void open_logger();
 
   void bcast_mds_map();  // to mounted clients
 

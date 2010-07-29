@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __AUTHSERVICEHANDLER_H
-#define __AUTHSERVICEHANDLER_H
+#ifndef CEPH_AUTHSERVICEHANDLER_H
+#define CEPH_AUTHSERVICEHANDLER_H
 
 #include "include/types.h"
 #include "config.h"

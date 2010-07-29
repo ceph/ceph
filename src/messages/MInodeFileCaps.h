@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MINODEFILECAPS_H
-#define __MINODEFILECAPS_H
+#ifndef CEPH_MINODEFILECAPS_H
+#define CEPH_MINODEFILECAPS_H
 
 class MInodeFileCaps : public Message {
   inodeno_t ino;

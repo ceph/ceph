@@ -58,7 +58,9 @@ int main(int argc, const char **argv)
       break;
     } 
   }
-  common_init(args, "osd", true, should_authenticate);
+
+  common_set_defaults(true);
+  common_init(args, "osd", should_authenticate);
 
   if (g_conf.clock_tare) g_clock.tare();
 
@@ -66,6 +68,7 @@ int main(int argc, const char **argv)
   bool mkfs = false;
   bool mkjournal = false;
   bool flushjournal = false;
+  char *dump_pg_log = 0;
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("mkfs", '\0')) {
       mkfs = true;
@@ -73,10 +76,34 @@ int main(int argc, const char **argv)
       mkjournal = true;
     } else if (CONF_ARG_EQ("flush-journal", '\0')) {
       flushjournal = true;
+    } else if (CONF_ARG_EQ("dump-pg-log", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&dump_pg_log, OPT_STR);
     } else {
       cerr << "unrecognized arg " << args[i] << std::endl;
       ARGS_USAGE();
     }
+  }
+
+  if (dump_pg_log) {
+    bufferlist bl;
+    int r = bl.read_file(dump_pg_log);
+    if (r >= 0) {
+      PG::Log::Entry e;
+      bufferlist::iterator p = bl.begin();
+      while (!p.end()) {
+	uint64_t pos = p.get_off();
+	try {
+	  ::decode(e, p);
+	}
+	catch (buffer::error *e) {
+	  cerr << "failed to decode LogEntry at offset " << pos << std::endl;
+	  return 1;
+	}
+	cout << pos << ":\t" << e << std::endl;
+      }
+    } else
+      cerr << "unable to open " << dump_pg_log << ": " << strerror(r) << std::endl;
+    return 0;
   }
 
   // whoami
@@ -92,8 +119,6 @@ int main(int argc, const char **argv)
     usage();
   }
 
-  _dout_create_courtesy_output_symlink("osd", whoami);
-
   // get monmap
   RotatingKeyRing rkeys(CEPH_ENTITY_TYPE_OSD, &g_keyring);
   MonClient mc(&rkeys);
@@ -107,8 +132,8 @@ int main(int argc, const char **argv)
 
     int err = OSD::mkfs(g_conf.osd_data, g_conf.osd_journal, mc.monmap.fsid, whoami);
     if (err < 0) {
-      cerr << "error creating empty object store in " << g_conf.osd_data
-	   << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
+      cerr << TEXT_RED << " ** ERROR: error creating empty object store in " << g_conf.osd_data
+	   << ": " << strerror_r(-err, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
       exit(1);
     }
     cout << "created object store " << g_conf.osd_data;
@@ -120,7 +145,7 @@ int main(int argc, const char **argv)
   if (mkjournal) {
     int err = OSD::mkjournal(g_conf.osd_data, g_conf.osd_journal);
     if (err < 0) {
-      cerr << "error creating fresh journal " << g_conf.osd_journal
+      cerr << TEXT_RED << " ** ERROR: error creating fresh journal " << g_conf.osd_journal
 	   << " for object store " << g_conf.osd_data
 	   << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
       exit(1);
@@ -133,7 +158,7 @@ int main(int argc, const char **argv)
   if (flushjournal) {
     int err = OSD::flushjournal(g_conf.osd_data, g_conf.osd_journal);
     if (err < 0) {
-      cerr << "error flushing journal " << g_conf.osd_journal
+      cerr << TEXT_RED << " ** ERROR: error flushing journal " << g_conf.osd_journal
 	   << " for object store " << g_conf.osd_data
 	   << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
       exit(1);
@@ -149,8 +174,7 @@ int main(int argc, const char **argv)
   int w;
   int r = OSD::peek_meta(g_conf.osd_data, magic, fsid, w);
   if (r < 0) {
-    cerr << TEXT_RED << " ** " << TEXT_HAZARD << "ERROR: " << TEXT_RED
-         << "unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror_r(-r, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
+    cerr << TEXT_RED << " ** ERROR: unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror_r(-r, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
     if (r == -ENOTSUP)
       cerr << TEXT_RED << " **        please verify that underlying storage supports xattrs" << TEXT_NORMAL << std::endl;
     derr(0) << "unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror_r(-r, buf, sizeof(buf)) << dendl;
@@ -183,12 +207,21 @@ int main(int argc, const char **argv)
   if (!messenger_hb)
     return 1;
 
-  Throttle *client_throttler = new Throttle(g_conf.osd_client_message_size_cap);
+  Throttle client_throttler(g_conf.osd_client_message_size_cap);
 
-  messenger->set_default_policy(SimpleMessenger::Policy::stateless_server());
-  messenger->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::client());
-  messenger->set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless_peer());
-  messenger->set_policy(entity_name_t::TYPE_CLIENT, SimpleMessenger::Policy(true, true, client_throttler));
+  uint64_t supported =
+    CEPH_FEATURE_UID | 
+    CEPH_FEATURE_NOSRCADDR;
+  messenger->set_default_policy(SimpleMessenger::Policy::stateless_server(supported, 0));
+  messenger->set_policy(entity_name_t::TYPE_MON,
+			SimpleMessenger::Policy::client(supported,
+							CEPH_FEATURE_UID));
+  messenger->set_policy(entity_name_t::TYPE_OSD,
+			SimpleMessenger::Policy::lossless_peer(supported,
+							       CEPH_FEATURE_UID));
+  messenger->set_policy(entity_name_t::TYPE_CLIENT,
+			SimpleMessenger::Policy::stateless_server(supported, 0));
+  messenger->set_policy_throttler(entity_name_t::TYPE_CLIENT, &client_throttler);
 
 
   OSD *osd = new OSD(whoami, messenger, messenger_hb, &mc, g_conf.osd_data, g_conf.osd_journal);
@@ -196,7 +229,7 @@ int main(int argc, const char **argv)
   int err = osd->pre_init();
   if (err < 0) {
     char buf[80];
-    cerr << "error initializing osd: " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
+    cerr << TEXT_RED << " ** ERROR: initializing osd failed: " << strerror_r(-err, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
     return 1;
   }
 
@@ -205,7 +238,7 @@ int main(int argc, const char **argv)
 
   // start osd
   if (osd->init() < 0) {
-    cout << "error starting osd" << std::endl;
+    cerr << TEXT_RED << " ** ERROR: initializing osd failed: " << strerror_r(-err, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
     return 1;
   }
 
@@ -215,7 +248,7 @@ int main(int argc, const char **argv)
   delete osd;
   messenger->destroy();
   messenger_hb->destroy();
-  delete client_throttler;
+
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];
   snprintf(s, sizeof(s), "gmon/%d", getpid());

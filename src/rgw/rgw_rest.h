@@ -1,15 +1,23 @@
-#ifndef __RGW_REST_H
-#define __RGW_REST_H
+#ifndef CEPH_RGW_REST_H
+#define CEPH_RGW_REST_H
+#define TIME_BUF_SIZE 128
 
 #include "rgw_op.h"
 
 class RGWGetObj_REST : public RGWGetObj
 {
+  bool sent_header;
 public:
   RGWGetObj_REST() {}
   ~RGWGetObj_REST() {}
+
+  virtual void init(struct req_state *s) {
+    RGWGetObj::init(s);
+    sent_header = false;
+  }
+
   int get_params();
-  int send_response();
+  int send_response(void *handle);
 };
 
 class RGWListBuckets_REST : public RGWListBuckets {
@@ -51,6 +59,7 @@ public:
   ~RGWPutObj_REST() {}
 
   int get_params();
+  int get_data();
   void send_response();
 };
 

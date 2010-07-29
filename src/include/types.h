@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __CEPH_TYPES_H
-#define __CEPH_TYPES_H
+#ifndef CEPH_TYPES_H
+#define CEPH_TYPES_H
 
 // this is needed for ceph_fs to compile in userland
 #include "inttypes.h"
@@ -374,6 +374,25 @@ struct SnapContext {
   SnapContext() {}
   SnapContext(snapid_t s, vector<snapid_t>& v) : seq(s), snaps(v) {}    
 
+  bool is_valid() const {
+    // seq is a valid snapid
+    if (seq > CEPH_MAXSNAP)
+      return false;
+    if (!snaps.empty()) {
+      // seq >= snaps[0]
+      if (snaps[0] > seq)
+	return false;
+      // snaps[] is descending
+      snapid_t t = snaps[0];
+      for (unsigned i=1; i<snaps.size(); i++) {
+	if (snaps[i] >= t || t == 0)
+	  return false;
+	t = snaps[i];
+      }
+    }
+    return true;
+  }
+
   void clear() {
     seq = 0;
     snaps.clear();
@@ -453,7 +472,8 @@ inline ostream& operator<<(ostream& out, const kb_t& kb)
 
 inline ostream& operator<<(ostream& out, const ceph_mon_subscribe_item& i)
 {
-  return out << i.have << (i.onetime ? "" : "+");
+  return out << i.start
+	     << ((i.flags & CEPH_SUBSCRIBE_ONETIME) ? "" : "+");
 }
 
 #endif

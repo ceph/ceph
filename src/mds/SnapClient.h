@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __SNAPCLIENT_H
-#define __SNAPCLIENT_H
+#ifndef CEPH_SNAPCLIENT_H
+#define CEPH_SNAPCLIENT_H
 
 #include "MDSTableClient.h"
 #include "snap.h"

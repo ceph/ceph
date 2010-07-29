@@ -12,10 +12,21 @@
  * 
  */
 
-#ifndef __MMONSUBSCRIBE_H
-#define __MMONSUBSCRIBE_H
+#ifndef CEPH_MMONSUBSCRIBE_H
+#define CEPH_MMONSUBSCRIBE_H
 
 #include "msg/Message.h"
+
+/*
+ * compatibility with old crap
+ */
+struct ceph_mon_subscribe_item_old {
+	__le64 unused;
+	__le64 have;
+	__u8 onetime;
+} __attribute__ ((packed));
+WRITE_RAW_ENCODER(ceph_mon_subscribe_item_old)
+
 
 struct MMonSubscribe : public Message {
   map<string, ceph_mon_subscribe_item> what;
@@ -25,13 +36,9 @@ private:
   ~MMonSubscribe() {}
 
 public:  
-  void sub_onetime(const char *w, version_t have) {
-    what[w].onetime = true;
-    what[w].have = have;
-  }
-  void sub_persistent(const char *w, version_t have) {
-    what[w].onetime = false;
-    what[w].have = have;
+  void sub_want(const char *w, version_t start, unsigned flags) {
+    what[w].start = start;
+    what[w].flags = flags;
   }
 
   const char *get_type_name() { return "mon_subscribe"; }
@@ -41,10 +48,43 @@ public:
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::decode(what, p);
+    if (header.version < 2) {
+      map<string, ceph_mon_subscribe_item_old> oldwhat;
+      ::decode(oldwhat, p);
+      what.clear();
+      for (map<string, ceph_mon_subscribe_item_old>::iterator q = oldwhat.begin();
+	   q != oldwhat.end();
+	   q++) {
+	if (q->second.have)
+	  what[q->first].start = q->second.have + 1;
+	else
+	  what[q->first].start = 0;
+	what[q->first].flags = 0;
+	if (q->second.onetime)
+	  what[q->first].flags |= CEPH_SUBSCRIBE_ONETIME;
+      }
+    } else {
+      ::decode(what, p);
+    }
   }
   void encode_payload() {
-    ::encode(what, payload);
+    if (get_connection()->has_feature(CEPH_FEATURE_SUBSCRIBE2)) {
+      header.version = 2;
+      ::encode(what, payload);
+    } else {
+      map<string, ceph_mon_subscribe_item_old> oldwhat;
+      for (map<string, ceph_mon_subscribe_item>::iterator q = what.begin();
+	   q != what.end();
+	   q++) {
+	if (q->second.start)
+	  // warning: start=1 -> have=0, which was ambiguous
+	  oldwhat[q->first].have = q->second.start - 1;
+	else
+	  oldwhat[q->first].have = 0;
+	oldwhat[q->first].onetime = q->second.flags & CEPH_SUBSCRIBE_ONETIME;
+      }
+      ::encode(oldwhat, payload);
+    }
   }
 };
 

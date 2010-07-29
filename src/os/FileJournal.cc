@@ -65,7 +65,7 @@ int FileJournal::_open(bool forwrite, bool create)
   if (r < 0)
     return -errno;
   max_size = st.st_size;
-  block_size = st.st_blksize;
+  block_size = MAX(st.st_blksize, PAGE_SIZE);
 
   if (max_size == 0) {
     // hmm, is this a raw block device?
@@ -105,11 +105,13 @@ int FileJournal::_open(bool forwrite, bool create)
 	    int on;
 	    if (sscanf(s, " write-caching =  %d", &on) == 1) {
 	      if (on) {
-		dout(0) << "WARNING: disk write cache is ON, journaling will not be reliable" << dendl;
+		dout(0) << "WARNING: disk write cache is ON; journaling will not be reliable" << dendl;
+		dout(0) << "         on kernels prior to 2.6.33 (recent kernels are safe)" << dendl;
 		dout(0) << "         disable with 'hdparm -W 0 " << fn << "'" << dendl;
 		cout << TEXT_RED
 		     << " ** WARNING: disk write cache is ON on " << fn << ".\n"
-		     << "    Journaling will not be reliable.  Disable write cache with\n"
+		     << "    Journaling will not be reliable on kernels prior to 2.6.33\n"
+		     << "    (recent kernels are safe).  You can disable the write cache with\n"
 		     << "    'hdparm -W 0 " << fn << "'"
 		     << TEXT_NORMAL
 		     << std::endl;
@@ -194,7 +196,9 @@ int FileJournal::open(uint64_t next_seq)
   write_pos = get_top();
 
   // read header?
-  read_header();
+  err = read_header();
+  if (err < 0)
+    return err;
   dout(10) << "open header.fsid = " << header.fsid 
     //<< " vs expected fsid = " << fsid 
 	   << dendl;
@@ -218,6 +222,11 @@ int FileJournal::open(uint64_t next_seq)
   if (header.alignment != block_size && directio) {
     derr(0) << "open journal alignment " << header.alignment << " does not match block size " 
 	    << block_size << " (required for direct_io journal mode)" << dendl;
+    err = -EINVAL;
+  }
+  if ((header.alignment % PAGE_SIZE) && directio) {
+    derr(0) << "open journal alignment " << header.alignment << " is not multiple of page size " << PAGE_SIZE
+	    << " (required for direct_io journal mode)" << dendl;
     err = -EINVAL;
   }
   if (err)
@@ -295,7 +304,7 @@ void FileJournal::print_header()
   dout(10) << " write_pos " << write_pos << dendl;
 }
 
-void FileJournal::read_header()
+int FileJournal::read_header()
 {
   int r;
   dout(10) << "read_header" << dendl;
@@ -311,8 +320,11 @@ void FileJournal::read_header()
   if (r < 0) {
     char buf[80];
     dout(0) << "read_header error " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    return -errno;
   }
   print_header();
+
+  return 0;
 }
 
 bufferptr FileJournal::prepare_header()
@@ -342,8 +354,10 @@ int FileJournal::check_for_full(uint64_t seq, off64_t pos, off64_t size)
 
   if (do_sync_cond) {
     if (room < (header.max_size >> 1) &&
-	room + size > (header.max_size >> 1))
+	room + size > (header.max_size >> 1)) {
+      dout(10) << " passing half full mark, triggering commit" << dendl;
       do_sync_cond->Signal();  // initiate a real commit so we can trim
+    }
   }
 
   if (room >= size) {
@@ -358,6 +372,10 @@ int FileJournal::check_for_full(uint64_t seq, off64_t pos, off64_t size)
 	  << pos << " >= " << room
 	  << " (max_size " << header.max_size << " start " << header.start << ")"
 	  << dendl;
+
+  off64_t max = header.max_size - get_top();
+  if (size > max)
+    dout(0) << "JOURNAL TOO SMALL: item " << size << " > journal " << max << " (usable)" << dendl;
 
   if (wait_on_full)
     return -ENOSPC;
@@ -412,6 +430,7 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
     }
   }
 
+  dout(20) << "prepare_multi_write queue_pos now " << queue_pos << dendl;
   //assert(write_pos + bl.length() == queue_pos);
   return 0;
 }
@@ -421,8 +440,15 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
   // grab next item
   uint64_t seq = writeq.front().seq;
   bufferlist &ebl = writeq.front().bl;
-  off64_t base_size = 2*sizeof(entry_header_t) + ebl.length();
-  off64_t size = ROUND_UP_TO(base_size, header.alignment);
+  unsigned head_size = sizeof(entry_header_t);
+  off64_t base_size = 2*head_size + ebl.length();
+
+  int alignment = writeq.front().alignment; // we want to start ebl with this alignment
+  unsigned pre_pad = 0;
+  if (alignment >= 0)
+    pre_pad = (alignment - head_size) & ~PAGE_MASK;
+  off64_t size = ROUND_UP_TO(base_size + pre_pad, header.alignment);
+  unsigned post_pad = size - base_size - pre_pad;
 
   int r = check_for_full(seq, queue_pos, size);
   if (r < 0)
@@ -434,20 +460,27 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
   // add to write buffer
   dout(15) << "prepare_single_write " << orig_ops << " will write " << queue_pos << " : seq " << seq
 	   << " len " << ebl.length() << " -> " << size
+	   << " (head " << head_size << " pre_pad " << pre_pad
+	   << " ebl " << ebl.length() << " post_pad " << post_pad << " tail " << head_size << ")"
+	   << " (ebl alignment " << alignment << ")"
 	   << dendl;
     
   // add it this entry
   entry_header_t h;
   h.seq = seq;
-  h.pre_pad = 0;
+  h.pre_pad = pre_pad;
   h.len = ebl.length();
-  h.post_pad = size - base_size;
+  h.post_pad = post_pad;
   h.make_magic(queue_pos, header.fsid);
 
   bl.append((const char*)&h, sizeof(h));
+  if (pre_pad) {
+    bufferptr bp = buffer::create_static(pre_pad, zero_buf);
+    bl.push_back(bp);
+  }
   bl.claim_append(ebl);
   if (h.post_pad) {
-    bufferptr bp = buffer::create_static(h.post_pad, zero_buf);
+    bufferptr bp = buffer::create_static(post_pad, zero_buf);
     bl.push_back(bp);
   }
   bl.append((const char*)&h, sizeof(h));
@@ -470,28 +503,25 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
 
 void FileJournal::write_bl(off64_t& pos, bufferlist& bl)
 {
-  // make sure this is a single, contiguous buffer
-  if (directio && !bl.is_contiguous()) {
-    bl.rebuild();
+  // make sure list segments are page aligned
+  if (directio && (!bl.is_page_aligned() ||
+		   !bl.is_n_page_sized())) {
+    bl.rebuild_page_aligned();
+    if ((bl.length() & ~PAGE_MASK) != 0 ||
+	(pos & ~PAGE_MASK) != 0)
+      dout(0) << "rebuild_page_aligned failed, " << bl << dendl;
     assert((bl.length() & ~PAGE_MASK) == 0);
+    assert((pos & ~PAGE_MASK) == 0);
   }
 
   ::lseek64(fd, pos, SEEK_SET);
-
-  for (list<bufferptr>::const_iterator it = bl.buffers().begin();
-       it != bl.buffers().end();
-       it++) {
-    if ((*it).length() == 0)
-      continue;  // blank buffer.
-    int r = ::write(fd, (char*)(*it).c_str(), (*it).length());
-    if (r < 0) {
-      char buf[80];
-      derr(0) << "do_write failed with " << errno << " " << strerror_r(errno, buf, sizeof(buf)) 
-	      << " with " << (void*)(*it).c_str() << " len " << (*it).length()
-	      << dendl;
-    }
-    pos += (*it).length();
+  int err = bl.write_fd(fd);
+  if (err) {
+    char buf[80];
+    derr(0) << "write_bl failed with " << err << " " << strerror_r(-err, buf, sizeof(buf)) 
+	    << dendl;
   }
+  pos += bl.length();
 }
 
 void FileJournal::do_write(bufferlist& bl)
@@ -578,6 +608,9 @@ void FileJournal::do_write(bufferlist& bl)
 
   writing = false;
 
+  // wrap if we hit the end of the journal
+  if (pos == header.max_size)
+    pos = get_top();
   write_pos = pos;
   assert(write_pos % header.alignment == 0);
 
@@ -650,7 +683,7 @@ void FileJournal::write_thread_entry()
 }
 
 
-void FileJournal::submit_entry(uint64_t seq, bufferlist& e, Context *oncommit)
+void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment, Context *oncommit)
 {
   Mutex::Locker locker(write_lock);  // ** lock **
 
@@ -669,7 +702,7 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, Context *oncommit)
     full_restart_seq = 0;
   }
   if (!full_commit_seq && !full_restart_seq) {
-    writeq.push_back(write_item(seq, e, oncommit));
+    writeq.push_back(write_item(seq, e, alignment, oncommit));
     write_cond.Signal(); // kick writer thread
   } else {
     // not journaling this.  restart writing no sooner than seq + 1.

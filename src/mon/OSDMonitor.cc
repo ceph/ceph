@@ -182,7 +182,7 @@ void OSDMonitor::committed()
     MonSession *s = mon->session_map.get_random_osd_session();
     if (s) {
       dout(10) << "committed, telling random " << s->inst << " all about it" << dendl;
-      MOSDMap *m = build_incremental(osdmap.get_epoch() - 1);  // whatev, they'll request more if they need it
+      MOSDMap *m = build_incremental(osdmap.get_epoch() - 1, osdmap.get_epoch());  // whatev, they'll request more if they need it
       mon->messenger->send_message(m, s->inst);
     }
   }
@@ -749,12 +749,12 @@ void OSDMonitor::send_full(PaxosServiceMessage *m)
   mon->send_reply(m, new MOSDMap(mon->monmap->fsid, &osdmap));
 }
 
-MOSDMap *OSDMonitor::build_incremental(epoch_t from)
+MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to)
 {
-  dout(10) << "build_incremental from " << from << " to " << osdmap.get_epoch() << dendl;
+  dout(10) << "build_incremental from " << from << " to " << to << dendl;
   MOSDMap *m = new MOSDMap(mon->monmap->fsid);
   
-  for (epoch_t e = osdmap.get_epoch();
+  for (epoch_t e = to;
        e >= from;
        e--) {
     bufferlist bl;
@@ -777,9 +777,23 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t from)
 {
   dout(5) << "send_incremental from " << from << " -> " << osdmap.get_epoch()
 	  << " to " << req->get_orig_source_inst() << dendl;
-  MOSDMap *m = build_incremental(from);
+  MOSDMap *m = build_incremental(from, osdmap.get_epoch());
   mon->send_reply(req, m);
 }
+
+void OSDMonitor::send_incremental(epoch_t from, entity_inst_t& dest)
+{
+  dout(5) << "send_incremental from " << from << " -> " << osdmap.get_epoch()
+	  << " to " << dest << dendl;
+  while (from < osdmap.get_epoch()) {
+    epoch_t to = MIN(from + 100, osdmap.get_epoch());
+    MOSDMap *m = build_incremental(from, to);
+    mon->messenger->send_message(m, dest);
+    from = to;
+  }
+}
+
+
 
 
 void OSDMonitor::blacklist(entity_addr_t a, utime_t until)
@@ -802,17 +816,16 @@ void OSDMonitor::check_subs()
 
 void OSDMonitor::check_sub(Subscription *sub)
 {
-  if (sub->last < osdmap.get_epoch()) {
-    if (sub->last)
-      mon->messenger->send_message(build_incremental(sub->last),
-				   sub->session->inst);
+  if (sub->next <= osdmap.get_epoch()) {
+    if (sub->next > 1)
+      send_incremental(sub->next - 1, sub->session->inst);
     else
       mon->messenger->send_message(new MOSDMap(mon->monmap->fsid, &osdmap),
 				   sub->session->inst);
     if (sub->onetime)
       mon->session_map.remove_sub(sub);
     else
-      sub->last = osdmap.get_epoch();
+      sub->next = osdmap.get_epoch() + 1;
   }
 }
 
@@ -982,7 +995,12 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       ss << "max_osd = " << osdmap.get_max_osd() << " in epoch " << osdmap.get_epoch();
       r = 0;
     }
-    else if (m->cmd[1] == "injectargs" && m->cmd.size() == 4) {
+    else if (m->cmd[1] == "injectargs") {
+      if (m->cmd.size() != 4) {
+	r = -EINVAL;
+	ss << "usage: osd injectargs <who> <args>";
+	goto out;
+      }
       if (m->cmd[2] == "*") {
 	for (int i=0; i<osdmap.get_max_osd(); i++)
 	  if (osdmap.is_up(i))
@@ -1001,6 +1019,11 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       }
     }
     else if (m->cmd[1] == "tell") {
+      if (m->cmd.size() < 4) {
+	r = -EINVAL;
+	ss << "usage: osd tell <who> <what>";
+	goto out;
+      }
       m->cmd.erase(m->cmd.begin()); //take out first two args; don't need them
       m->cmd.erase(m->cmd.begin());
       if (m->cmd[0] == "*") {
@@ -1026,7 +1049,12 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	} else ss << "specify osd number or *";
       }
     }
-    else if ((m->cmd[1] == "scrub" || m->cmd[1] == "repair") && m->cmd.size() > 2) {
+    else if ((m->cmd[1] == "scrub" || m->cmd[1] == "repair")) {
+      if (m->cmd.size() <= 2) {
+	r = -EINVAL;
+	ss << "usage: osd [scrub|repair] <who>";
+	goto out;
+      }
       if (m->cmd[2] == "*") {
 	ss << "osds ";
 	int c = 0;
@@ -1066,6 +1094,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       r = 0;
     }
   }
+ out:
   if (r != -1) {
     string rs;
     getline(ss, rs);
@@ -1087,7 +1116,7 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
     return prepare_new_pool(m->name, session->caps.auid, m->crush_rule);
 }
 
-int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, __u8 crush_rule)
+int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule)
 {
   if (osdmap.name_pool.count(name)) {
     return -EEXIST;
@@ -1096,10 +1125,15 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, __u8 crush_rule)
     pending_inc.new_pool_max = osdmap.pool_max;
   int pool = ++pending_inc.new_pool_max;
   pending_inc.new_pools[pool].v.type = CEPH_PG_TYPE_REP;
-  pending_inc.new_pools[pool].v.size = 2;
-  pending_inc.new_pools[pool].v.crush_ruleset = crush_rule;
-  pending_inc.new_pools[pool].v.pg_num = 8;
-  pending_inc.new_pools[pool].v.pgp_num = 8;
+
+  pending_inc.new_pools[pool].v.size = g_conf.osd_pool_default_size;
+  if (crush_rule >= 0)
+    pending_inc.new_pools[pool].v.crush_ruleset = crush_rule;
+  else
+    pending_inc.new_pools[pool].v.crush_ruleset = g_conf.osd_pool_default_crush_rule;
+  pending_inc.new_pools[pool].v.object_hash = CEPH_STR_HASH_RJENKINS;
+  pending_inc.new_pools[pool].v.pg_num = g_conf.osd_pool_default_pg_num;
+  pending_inc.new_pools[pool].v.pgp_num = g_conf.osd_pool_default_pgp_num;
   pending_inc.new_pools[pool].v.lpg_num = 0;
   pending_inc.new_pools[pool].v.lpgp_num = 0;
   pending_inc.new_pools[pool].v.last_change = pending_inc.epoch;
@@ -1142,6 +1176,24 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd[1] == "setmaxosd" && m->cmd.size() > 2) {
       pending_inc.new_max_osd = atoi(m->cmd[2].c_str());
       ss << "set new max_osd = " << pending_inc.new_max_osd;
+      getline(ss, rs);
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      return true;
+    }
+    else if (m->cmd[1] == "pause") {
+      if (pending_inc.new_flags < 0)
+	pending_inc.new_flags = osdmap.get_flags();
+      pending_inc.new_flags |= CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR;
+      ss << "pause rd+wr";
+      getline(ss, rs);
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      return true;
+    }
+    else if (m->cmd[1] == "unpause") {
+      if (pending_inc.new_flags < 0)
+	pending_inc.new_flags = osdmap.get_flags();
+      pending_inc.new_flags &= ~(CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
+      ss << "unpause rd+wr";
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
@@ -1304,6 +1356,11 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  return true;
 	}
       } else if (m->cmd[2] == "set") {
+	if (m->cmd.size() != 6) {
+	  err = -EINVAL;
+	  ss << "usage: osd pool set <poolname> <field> <value>";
+	  goto out;
+	}
 	int pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
 	if (pool < 0) {
 	  ss << "unrecognized pool '" << m->cmd[3] << "'";

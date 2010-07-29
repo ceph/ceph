@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __LOCALLOCK_H
-#define __LOCALLOCK_H
+#ifndef CEPH_LOCALLOCK_H
+#define CEPH_LOCALLOCK_H
 
 #include "SimpleLock.h"
 

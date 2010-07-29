@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MCLASS_H
-#define __MCLASS_H
+#ifndef CEPH_MCLASS_H
+#define CEPH_MCLASS_H
 
 #include "include/ClassLibrary.h"
 #include "messages/PaxosServiceMessage.h"

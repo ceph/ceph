@@ -71,7 +71,7 @@ check_host() {
 	host=$hostname
     fi
 
-    echo "=== $name === "
+    echo "=== $type.$id === "
 
     return 0
 }
@@ -103,8 +103,8 @@ do_root_cmd() {
 	    sudo bash -c "$1" || { echo "failed: '$1'" ; exit 1; }
 	fi
     else
-	[ $verbose -eq 1 ] && echo "--- $ssh $2 \"cd $dir ; ulimit -c unlimited ; $1\""
-	$rootssh $2 "cd $dir ; ulimit -c unlimited ; $1" || { echo "failed: '$ssh $1'" ; exit 1; }
+	[ $verbose -eq 1 ] && echo "--- $rootssh $2 \"cd $dir ; ulimit -c unlimited ; $1\""
+	$rootssh $2 "cd $dir ; ulimit -c unlimited ; $1" || { echo "failed: '$rootssh $1'" ; exit 1; }
     fi
 }
 
@@ -122,14 +122,15 @@ get_name_list() {
     what=""
     for f in "$orig"; do
 	type=`echo $f | cut -c 1-3`   # e.g. 'mon', if $item is 'mon1'
-	bit=`$CCONF -c $conf -l $type | egrep -v "^$type$"`
+	id=`echo $f | cut -c 4- | sed 's/\\.//'`
+	all=`$CCONF -c $conf -l $type | egrep -v "^$type$"`
 	case $f in
 	    mon | osd | mds)
-		what="$what $bit"
+		what="$what $all"
 		;;
 	    *)
-		if echo " " $bit " " | grep -v -q " $f "; then
-		    echo "$0: $type '$f' not found ($conf defines "$bit")"
+		if echo " " $all " " | egrep -v -q "( $type$id | $type.$id )"; then
+		    echo "$0: $type.$id not found ($conf defines \"$all\")"
 		    exit 1
 		fi
 		what="$what $f"
@@ -140,11 +141,11 @@ get_name_list() {
 
 
 get_val() {
-  [ "$2" != "" ] && export $1=$2 || export $1=`$CCONF -c $conf "$3" "$4" "$5"`
+  [ -n "$2" ] && export $1=$2 || export $1=`$CCONF -c $conf "$3" "$4" "$5"`
 }
 
 get_val_bool() {
-  if [ "$2" != "" ]; then
+  if [ -n "$2" ]; then
 	export $1=$2
   else
 	tmp=`$CCONF "$3" "$4" "$5"`

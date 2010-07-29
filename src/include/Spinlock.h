@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __SPINLOCK_H
-#define __SPINLOCK_H
+#ifndef CEPH_SPINLOCK_H
+#define CEPH_SPINLOCK_H
 
 #include <pthread.h>
 #include "assert.h"

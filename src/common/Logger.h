@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __LOGGER_H
-#define __LOGGER_H
+#ifndef CEPH_LOGGER_H
+#define CEPH_LOGGER_H
 
 #include "include/types.h"
 #include "Clock.h"
@@ -29,14 +29,22 @@ using std::ofstream;
 
 #include "LogType.h"
 
+extern void logger_reopen_all();
+extern void logger_reset_all();
+extern void logger_add(class Logger *l);
+extern void logger_remove(class Logger *l);
+extern void logger_tare(utime_t when);
+extern void logger_start();
 
 class Logger {
  protected:
   // my type
   string name, filename;
-  bool append;
   LogType *type;
-  bool open;
+
+  bool need_open;
+  bool need_reset;
+  bool need_close;
 
   // values for this instance
   vector<int64_t> vals;
@@ -49,16 +57,15 @@ class Logger {
   //int last_logged;
   int wrote_header_last;
 
- public:
-  Logger(string n, LogType *t, bool ap=false) :
-    name(n), append(ap), type(t), open(false),
-    vals(t->num_keys), fvals(t->num_keys), vals_to_avg(t->num_keys),
-    wrote_header_last(10000) {
-    _open_log();
-  }
-  ~Logger();
-
   void _open_log();
+
+ public:
+  Logger(string n, LogType *t) :
+    name(n), type(t),
+    need_open(true), need_reset(false), need_close(false),
+    vals(t->num_keys), fvals(t->num_keys), vals_to_avg(t->num_keys),
+    wrote_header_last(10000) { }
+  ~Logger();
 
   int64_t inc(int f, int64_t v = 1);
   int64_t set(int f, int64_t v);
@@ -68,10 +75,11 @@ class Logger {
   double finc(int f, double v);
   double favg(int f, double v);
 
-  //void flush();
-  void _flush(bool reset=true);
+  void _flush();
 
-  void set_start(utime_t s);
+  void reopen();
+  void reset();
+  void close();
 };
 
 #endif

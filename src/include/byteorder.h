@@ -4,8 +4,8 @@
  * LGPL 2
  */
 
-#ifndef _CEPH_BYTEORDER_H
-#define _CEPH_BYTEORDER_H
+#ifndef CEPH_BYTEORDER_H
+#define CEPH_BYTEORDER_H
 
 #include <endian.h>
 

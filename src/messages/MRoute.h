@@ -14,8 +14,8 @@
 
 
 
-#ifndef __MROUTE_H
-#define __MROUTE_H
+#ifndef CEPH_MROUTE_H
+#define CEPH_MROUTE_H
 
 #include "msg/Message.h"
 #include "include/encoding.h"

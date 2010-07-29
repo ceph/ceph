@@ -339,7 +339,6 @@ void PG::merge_log(ObjectStore::Transaction& t,
     } else {
       // primary should have requested our backlog during peer().
     }
-    assert(log.backlog || log.head == eversion_t());
 
     hash_map<sobject_t, Log::Entry*> old_objects;
     old_objects.swap(log.objects);
@@ -615,6 +614,8 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
   while (i != omap.end()) {
     Log::Entry& be = i->second;
 
+    dout(15) << " " << be << dendl;
+
     /*
      * we can skip an object if
      *  - is already in the log AND
@@ -625,11 +626,9 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
     if (log.objects.count(be.soid)) {
       Log::Entry *le = log.objects[be.soid];
       
-      assert(!le->is_delete());  // if it's a deletion, we are corrupt..
-
       // note the prior version
       if (le->prior_version == eversion_t() ||  // either new object, or
-	  le->prior_version >= log.tail) {    // prior_version also already in log
+	  le->prior_version >= log.tail) {      // prior_version also already in log
 	dout(15) << " skipping " << be << " (have " << *le << ")" << dendl;
       } else {
 	be.version = le->prior_version;
@@ -1034,6 +1033,8 @@ void PG::clear_primary_state()
   min_last_complete_ondisk = eversion_t();
   stray_purged.clear();
 
+  last_update_ondisk = eversion_t();
+
   snap_trimq.clear();
 
   finish_sync_event = 0;  // so that _finish_recvoery doesn't go off in another thread
@@ -1311,8 +1312,13 @@ void PG::peer(ObjectStore::Transaction& t, list<Context*>& tfin,
     if (pi.is_empty())
       continue;
     if (peer_missing.count(peer) == 0) {
-      dout(10) << " still need log+missing from osd" << peer << dendl;
-      have_all_missing = false;
+      if (pi.last_update == pi.last_complete) {
+	dout(10) << " infering no missing (last_update==last_complete) for osd" << peer << dendl;
+	peer_missing[peer].num_missing();  // just create the entry.
+      } else {
+	dout(10) << " still need log+missing from osd" << peer << dendl;
+	have_all_missing = false;
+      }
     }
     if (peer_log_requested.count(peer) ||
         peer_summary_requested.count(peer)) continue;
@@ -1582,6 +1588,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   trim_past_intervals();
   
   if (role == 0) {    // primary state
+    last_update_ondisk = info.last_update;
     min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
   }
 
@@ -2276,6 +2283,74 @@ void PG::read_log(ObjectStore *store)
   dout(10) << "read_log done" << dendl;
 }
 
+bool PG::check_log_for_corruption(ObjectStore *store)
+{
+  OndiskLog bounds;
+  bufferlist blb;
+  store->collection_getattr(coll_t::build_pg_coll(info.pgid), "ondisklog", blb);
+  bufferlist::iterator p = blb.begin();
+  ::decode(bounds, p);
+
+  dout(10) << "check_log_for_corruption: tail " << bounds.tail << " head " << bounds.head
+	   << " block_map " << bounds.block_map << dendl;
+
+  stringstream ss;
+  ss << "CORRUPT pg " << info.pgid << " log: ";
+
+  bool ok = true;
+  uint64_t pos = 0;
+  if (bounds.head > 0) {
+    // read
+    struct stat st;
+    store->stat(meta_coll, log_oid, &st);
+    bufferlist bl;
+    store->read(meta_coll, log_oid, bounds.tail, bounds.length(), bl);
+    if (st.st_size != (int)bounds.head) {
+      ss << "mismatched bounds " << bounds.tail << ".." << bounds.head << " and file size " << st.st_size;
+      ok = false;
+    } else if (bl.length() < bounds.length()) {
+      dout(0) << " got " << bl.length() << " bytes, expected " 
+	      << bounds.tail << ".." << bounds.head << "="
+	      << bounds.length()
+	      << dendl;
+      ss << "short log, " << bl.length() << " bytes, expected " << bounds.length();
+      ok = false;
+    } else {
+      PG::Log::Entry e;
+      bufferlist::iterator p = bl.begin();
+      while (!p.end()) {
+	pos = bounds.tail + p.get_off();
+	try {
+	  ::decode(e, p);
+	}
+	catch (buffer::error *e) {
+	  dout(0) << "corrupt entry at " << pos << dendl;
+	  ss << "corrupt entry at offset " << pos;
+	  ok = false;
+	  break;
+	}
+	catch(std::bad_alloc a) {
+	  dout(0) << "corrupt entry at " << pos << dendl;
+	  ss << "corrupt entry at offset " << pos;
+	  ok = false;
+	  break;
+	}
+	dout(30) << " " << pos << " " << e << dendl;
+      }
+    }
+  }
+  if (!ok) {
+    stringstream f;
+    f << "/tmp/pglog_bad_" << info.pgid;
+    string filename;
+    getline(f, filename);
+    blb.write_file(filename.c_str(), 0644);
+    ss << ", saved to " << filename;
+    osd->logclient.log(LOG_ERROR, ss);
+  }
+  return ok;
+}
+
 
 
 void PG::read_state(ObjectStore *store)
@@ -2340,6 +2415,14 @@ bool PG::block_if_wrlocked(MOSDOp* op, object_info_t& oi)
   return false; //the object wasn't locked, so the operation can be handled right away
 }
 
+void PG::take_object_waiters(hash_map<sobject_t, list<Message*> >& m)
+{
+  for (hash_map<sobject_t, list<Message*> >::iterator it = m.begin();
+       it != m.end();
+       it++)
+    osd->take_waiters(it->second);
+  m.clear();
+}
 
 
 // ==========================================================================================

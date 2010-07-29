@@ -59,7 +59,9 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  common_init(args, "mon", true, true);
+
+  common_set_defaults(true);
+  common_init(args, "mon", true);
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("mkfs", '\0')) {
@@ -221,13 +223,14 @@ int main(int argc, const char **argv)
 
   messenger->start();  // may daemonize
 
-  char fullname[80];
-  snprintf(fullname, sizeof(fullname), "mon.%s", name.c_str());
-  _dout_create_courtesy_output_symlink(fullname);
-
-  messenger->set_default_policy(SimpleMessenger::Policy::stateless_server());
-  messenger->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossless_peer());
-
+  uint64_t supported =
+    CEPH_FEATURE_UID |
+    CEPH_FEATURE_NOSRCADDR |
+    CEPH_FEATURE_MONCLOCKCHECK;
+  messenger->set_default_policy(SimpleMessenger::Policy::stateless_server(supported, 0));
+  messenger->set_policy(entity_name_t::TYPE_MON,
+			SimpleMessenger::Policy::lossless_peer(supported,
+							       CEPH_FEATURE_UID));
   mon->init();
   messenger->wait();
 

@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __CEPH_MEMORYMODEL_H
-#define __CEPH_MEMORYMODEL_H
+#ifndef CEPH_MEMORYMODEL_H
+#define CEPH_MEMORYMODEL_H
 
 class MemoryModel {
 public:

@@ -5,7 +5,6 @@ dist_man_MANS = \
 	cmds.8 \
 	cmon.8 \
 	mkcephfs.8 \
-	mkmonfs.8 \
 	cfuse.8 \
 	csyn.8 \
 	crushtool.8 \
@@ -19,4 +18,6 @@ dist_man_MANS = \
 	radosgw_admin.8 \
 	cauthtool.8 \
 	rados.8 \
-	rbdtool.8
+	rbd.8 \
+	cclass.8 \
+	cclsinfo.8

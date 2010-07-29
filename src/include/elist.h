@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __ELIST_H
-#define __ELIST_H
+#ifndef CEPH_ELIST_H
+#define CEPH_ELIST_H
 
 /*
  * elist: embedded list.

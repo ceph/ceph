@@ -47,6 +47,9 @@ static uint64_t fino_snap(uint64_t fino)
 }
 static vinodeno_t fino_vino(inodeno_t fino)
 {
+  if (fino.val == 1) {
+    fino = inodeno_t(client->get_root_ino());
+  }
   vinodeno_t vino(FINO_INO(fino), fino_snap(fino));
   //cout << "fino_vino " << fino << " -> " << vino << std::endl;
   return vino;
@@ -72,15 +75,15 @@ static void ceph_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   struct fuse_entry_param fe;
-  int stmask;
+  int r;
 
   memset(&fe, 0, sizeof(fe));
-  stmask = client->ll_lookup(fino_vino(parent), name, &fe.attr, ctx->uid, ctx->gid);
-  if (stmask >= 0) {
+  r = client->ll_lookup(fino_vino(parent), name, &fe.attr, ctx->uid, ctx->gid);
+  if (r >= 0) {
     fe.ino = make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fuse_reply_entry(req, &fe);
   } else {
-    fuse_reply_err(req, ENOENT);
+    fuse_reply_err(req, -r);
   }
 }
 
@@ -422,8 +425,25 @@ static void ceph_ll_statfs(fuse_req_t req, fuse_ino_t ino)
     fuse_reply_err(req, -r);
 }
 
+int fd_on_success = 0;
+
+static void do_init(void *foo, fuse_conn_info *bar)
+{
+  if (fd_on_success) {
+    //cout << "fuse init signaling on fd " << fd_on_success << std::endl;
+    int r = 0;
+    ::write(fd_on_success, &r, sizeof(r));
+    //cout << "fuse init done signaling on fd " << fd_on_success << std::endl;
+
+    // close stdout, etc.
+    ::close(0);
+    ::close(1);
+    ::close(2);
+  }
+}
+
 static struct fuse_lowlevel_ops ceph_ll_oper = {
- init: 0,
+ init: do_init,
  destroy: 0,
  lookup: ceph_ll_lookup,
  forget: ceph_ll_forget,
@@ -459,9 +479,11 @@ static struct fuse_lowlevel_ops ceph_ll_oper = {
  bmap: 0
 };
 
-int ceph_fuse_ll_main(Client *c, int argc, const char *argv[])
+int ceph_fuse_ll_main(Client *c, int argc, const char *argv[], int fd)
 {
-  cout << "ceph_fuse_ll_main starting fuse on pid " << getpid() << std::endl;
+  //cout << "ceph_fuse_ll_main starting fuse on pid " << getpid() << std::endl;
+
+  fd_on_success = fd;
 
   client = c;
 
@@ -507,10 +529,13 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[])
       fuse_session_destroy(se);
     }
     fuse_unmount(mountpoint, ch);
+    err = 0;
+  } else {
+    err = -errno;
   }
   fuse_opt_free_args(&args);
   
-  cout << "ceph_fuse_ll_main done, err=" << err << std::endl;
-  return err ? 1 : 0;
+  //cout << "ceph_fuse_ll_main done, err=" << err << std::endl;
+  return err;
 }
 

@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __KEYRING_H
-#define __KEYRING_H
+#ifndef CEPH_KEYRING_H
+#define CEPH_KEYRING_H
 
 #include "config.h"
 

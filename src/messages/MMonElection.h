@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MMONELECTION_H
-#define __MMONELECTION_H
+#ifndef CEPH_MMONELECTION_H
+#define CEPH_MMONELECTION_H
 
 #include "msg/Message.h"
 #include "mon/MonMap.h"

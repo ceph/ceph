@@ -1,0 +1,34 @@
+.TH CCLASS 8
+.SH NAME
+cclass \- ceph class loading utility
+.SH SYNOPSIS
+.B cclass
+[ \fIoptions\fR ] ... [ \fIcls_filename\fR ] 
+.SH DESCRIPTION
+.B cclass
+will load class libraries into the ceph cluster. Ceph classes are loadable libraries that complement
+and extend the \fIosd\fR functionality. They define \fImethods\fR that can be executed on osd objects and
+may read and modify the data on these objects.
+.SH OPTIONS
+.TP
+\fB\-l\fP, \fB\-\-load\fP
+Loads a class, specified by \fIcls_filename\fR, into the system
+.TP
+\fB\-a\fP, \fB\-\-load-all\fP
+Searches for all the classes in the specified libdir and try to load them into the monitor
+.TP
+\fB\-L\fP, \fB\-\-libdir \fIpath\fP
+Specifies the path where classes will be searched for (used in conjuction with \fB\-\-load-all\fP)
+.TP
+\fB\-o\fP, \fB\-\-overwrite\fP
+Overwrite an existing class with the same name, version, and architecture.
+.TP
+\fB\-e\fP, \fB\-\-excl\fP
+Exclusively load class. Will only load the class if one with the same name (and version and architecture) hasn't been loaded yet.
+.SH AVAILABILITY
+.B cclass
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR cclsinfo (8)
+.BR ceph (8)

@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __EBOFS_ALLOCATOR_H
-#define __EBOFS_ALLOCATOR_H
+#ifndef CEPH_EBOFS_ALLOCATOR_H
+#define CEPH_EBOFS_ALLOCATOR_H
 
 #include "types.h"
 

@@ -2334,20 +2334,18 @@ void Migrator::handle_export_caps(MExportCaps *ex)
    */
 
   C_M_LoggedImportCaps *finish = new C_M_LoggedImportCaps(this, in, ex->get_source().num());
-  finish->client_map.swap(ex->client_map);
-
-  ESessions *le = new ESessions(++mds->sessionmap.projected);
-  mds->mdlog->start_entry(le);
+  finish->client_map = ex->client_map;
 
   // decode new caps
   bufferlist::iterator blp = ex->cap_bl.begin();
   decode_import_inode_caps(in, blp, finish->cap_imports);
   assert(!finish->cap_imports.empty());   // thus, inode is pinned.
-  
+
   // journal open client sessions
-  mds->server->prepare_force_open_sessions(finish->client_map, finish->sseqmap);
-  le->client_map = finish->client_map;
+  version_t pv = mds->server->prepare_force_open_sessions(finish->client_map, finish->sseqmap);
   
+  ESessions *le = new ESessions(pv, ex->client_map);
+  mds->mdlog->start_entry(le);
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_safe(finish);
   mds->mdlog->flush();

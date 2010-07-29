@@ -14,8 +14,8 @@
 
 
 
-#ifndef __CLOCK_H
-#define __CLOCK_H
+#ifndef CEPH_CLOCK_H
+#define CEPH_CLOCK_H
 
 #include <iostream>
 #include <iomanip>

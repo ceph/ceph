@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef __CRUSH_WRAPPER_H
-#define __CRUSH_WRAPPER_H
+#ifndef CEPH_CRUSH_WRAPPER_H
+#define CEPH_CRUSH_WRAPPER_H
 
 #define BUG_ON(x) assert(!(x))
 #include "include/types.h"
@@ -335,7 +335,10 @@ public:
   void do_rule(int rule, int x, vector<int>& out, int maxout, int forcefeed,
 	       vector<__u32>& weight) {
     int rawout[maxout];
-    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, forcefeed, &weight[0]);
+    int numrep = crush_do_rule(crush, rule, x, rawout, maxout,
+			       forcefeed, &weight[0]);
+    if (numrep < 0)
+      numrep = 0;   // e.g., when forcefed device dne.
     out.resize(numrep);
     for (int i=0; i<numrep; i++)
       out[i] = rawout[i];

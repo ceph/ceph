@@ -168,6 +168,12 @@ bool LogMonitor::update_from_paxos()
   if (blogerr.length())
     mon->store->append_bl_ss(blogerr, "log.err", NULL);
 
+
+  // trim
+  unsigned max = 500;
+  if (mon->is_leader() && paxosv > max)
+    paxos->trim_to(paxosv - max);
+
   return true;
 }
 

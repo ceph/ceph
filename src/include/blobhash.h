@@ -11,8 +11,8 @@
  * 
  */
 
-#ifndef __BLOBHASH_H
-#define __BLOBHASH_H
+#ifndef CEPH_BLOBHASH_H
+#define CEPH_BLOBHASH_H
 
 #include "hash.h"
 

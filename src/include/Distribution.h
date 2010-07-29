@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __DISTRIBUTION_H
-#define __DISTRIBUTION_H
+#ifndef CEPH_DISTRIBUTION_H
+#define CEPH_DISTRIBUTION_H
 
 #include <vector>
 using namespace std;

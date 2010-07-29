@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MOSDPGQUERY_H
-#define __MOSDPGQUERY_H
+#ifndef CEPH_MOSDPGQUERY_H
+#define CEPH_MOSDPGQUERY_H
 
 #include "msg/Message.h"
 

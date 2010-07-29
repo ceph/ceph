@@ -22,8 +22,8 @@
  * should get *
  */
 
-#ifndef __CEPH_OSDCAPS_H
-#define __CEPH_OSDCAPS_H
+#ifndef CEPH_OSDCAPS_H
+#define CEPH_OSDCAPS_H
 
 #include "include/types.h"
 
@@ -56,10 +56,35 @@ static inline ostream& operator<<(ostream& out, const OSDCap& pc) {
   return out << "(allow " << pc.allow << ", deny " << pc.deny << ")";
 }
 
+struct CapMap {
+  virtual OSDCap& get_cap(string& name) = 0;
+};
+
+struct PoolsMap : public CapMap {
+  map<string, OSDCap> pools_map;
+
+  OSDCap& get_cap(string& name) { return pools_map[name]; }
+
+  void dump();
+  void apply_caps(string& name, int& cap);
+};
+
+struct AuidMap : public CapMap {
+  map<uint64_t, OSDCap> auid_map;
+
+  OSDCap& get_cap(string& name) {
+    uint64_t num = strtoll(name.c_str(), NULL, 10);
+    return auid_map[num];
+  }
+
+  void apply_caps(uint64_t uid, int& cap);
+};
+
 struct OSDCaps {
-  map<int, OSDCap> pools_map;
-  map<int, OSDCap> auid_map;
-  rwx_t default_action;
+  PoolsMap pools_map;
+  AuidMap auid_map;
+  rwx_t default_allow;
+  rwx_t default_deny;
   bool allow_all;
   int peer_type;
   uint64_t auid;
@@ -67,10 +92,10 @@ struct OSDCaps {
   bool get_next_token(string s, size_t& pos, string& token);
   bool is_rwx(string& token, rwx_t& cap_val);
   
-  OSDCaps() : default_action(0), allow_all(false),
+  OSDCaps() : default_allow(0), default_deny(0), allow_all(false),
 	      auid(CEPH_AUTH_UID_DEFAULT) {}
   bool parse(bufferlist::iterator& iter);
-  int get_pool_cap(int pool_id, uint64_t uid = CEPH_AUTH_UID_DEFAULT);
+  int get_pool_cap(string& pool_name, uint64_t uid = CEPH_AUTH_UID_DEFAULT);
   bool is_mon() { return CEPH_ENTITY_TYPE_MON == peer_type; }
   bool is_osd() { return CEPH_ENTITY_TYPE_OSD == peer_type; }
   bool is_mds() { return CEPH_ENTITY_TYPE_MDS == peer_type; }
@@ -80,7 +105,7 @@ struct OSDCaps {
 };
 
 static inline ostream& operator<<(ostream& out, const OSDCaps& c) {
-  return out << "osdcaps(pools=" << c.pools_map << " default=" << c.default_action << ")";
+  return out << "osdcaps(pools=" << c.pools_map.pools_map << " default allow=" << c.default_allow << " default_deny=" << c.default_deny << ")";
 }
 
 #endif

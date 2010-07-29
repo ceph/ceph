@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __CEPH_FINISHER_H
-#define __CEPH_FINISHER_H
+#ifndef CEPH_FINISHER_H
+#define CEPH_FINISHER_H
 
 #include "common/Mutex.h"
 #include "common/Cond.h"

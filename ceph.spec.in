@@ -1,3 +1,5 @@
+%define with_radosgw %{?_with_radosgw: 1} %{!?_with_radosgw: 0}
+
 Name:          ceph
 Version:       @VERSION@
 Release:       4%{?dist}
@@ -11,7 +13,7 @@ BuildRequires: fuse-devel, libtool, libtool-ltdl-devel, boost-devel,
 BuildRequires: libedit-devel, fuse-devel, git, perl, gdbm,
 BuildRequires: openssl-devel, libatomic_ops-devel
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
-Requires(post): chkconfig
+Requires(post): chkconfig, binutils, libedit
 Requires(preun): chkconfig
 Requires(preun): initscripts
 
@@ -35,21 +37,43 @@ Requires:    %{name} = %{version}-%{release}
 %description devel
 This package contains the headers needed to develop programs that use Ceph.
 
+%if %{with_radosgw}
+%package radosgw
+Summary:        rados REST gateway
+Group:          Development/Libraries
+Requires:       mod_fcgid
+BuildRequires:  fcgi-devel
+BuildRequires:  expat-devel
+
+%description radosgw
+radosgw is an S3 HTTP REST gateway for the RADOS object store. It is
+implemented as a FastCGI module using libfcgi, and can be used in
+conjunction with any FastCGI capable web server.
+%endif
+
 %prep
 %setup -q
 
 %build
 ./autogen.sh
-%{configure} --without-hadoop --without-debug
-make CFLAGS="$RPM_OPT_FLAGS"
+%if %{with_radosgw}
+%{configure} --without-hadoop --with-radosgw
+%else
+%{configure} --without-hadoop --without-radosgw
+%endif
+make -j$(getconf _NPROCESSORS_ONLN) CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
 %install
 rm -rf $RPM_BUILD_ROOT
 make install DESTDIR=$RPM_BUILD_ROOT
 find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
-install -D src/init-ceph $RPM_BUILD_ROOT%{_initddir}/ceph
+install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
 chmod 0644 $RPM_BUILD_ROOT%{_sysconfdir}/ceph/sample.ceph.conf
+install -m 0644 -D debian/ceph.logrotate $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/stat
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -75,6 +99,8 @@ fi
 %doc README COPYING
 %{_bindir}/ceph
 %{_bindir}/cconf
+%{_bindir}/cclass
+%{_bindir}/cclsinfo
 %{_bindir}/crushtool
 %{_bindir}/monmaptool
 %{_bindir}/osdmaptool
@@ -84,23 +110,24 @@ fi
 %{_bindir}/cmon
 %{_bindir}/cmds
 %{_bindir}/cosd
-%{_bindir}/mkmonfs
 %{_bindir}/rados
-%{_bindir}/rbdtool
-%{_initddir}/ceph
+%{_bindir}/radosacl
+%{_bindir}/rbd
+%{_initrddir}/ceph
 %{_libdir}/libceph.so.*
 %{_libdir}/libcrush.so.*
 %{_libdir}/librados.so.*
+%{_libdir}/rados-classes/libcls_rbd.so.*
 %{_sbindir}/mkcephfs
 /sbin/mount.ceph
 %{_libdir}/ceph
 %config(noreplace) %{_sysconfdir}/ceph/sample.ceph.conf
 %config(noreplace) %{_sysconfdir}/ceph/sample.fetch_config
+%config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %{_mandir}/man8/cmon.8*
 %{_mandir}/man8/cmds.8*
 %{_mandir}/man8/cosd.8*
 %{_mandir}/man8/mkcephfs.8*
-%{_mandir}/man8/mkmonfs.8*
 %{_mandir}/man8/crun.8*
 %{_mandir}/man8/csyn.8*
 %{_mandir}/man8/crushtool.8*
@@ -112,8 +139,13 @@ fi
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw_admin.8*
 %{_mandir}/man8/rados.8*
-%{_mandir}/man8/rbdtool.8*
+%{_mandir}/man8/rbd.8*
 %{_mandir}/man8/cauthtool.8*
+%{_mandir}/man8/cclass.8.gz
+%{_mandir}/man8/cclsinfo.8.gz
+%dir %{_localstatedir}/lib/ceph/
+%dir %{_localstatedir}/lib/ceph/tmp/
+%dir %{_localstatedir}/log/ceph/
 
 %files fuse
 %defattr(-,root,root,-)
@@ -140,6 +172,13 @@ fi
 %{_libdir}/libceph.so
 %{_libdir}/libcrush.so
 %{_libdir}/librados.so
+%{_libdir}/rados-classes/libcls_rbd.so
+
+%if %{with_radosgw}
+%files radosgw
+%{_bindir}/radosgw
+%{_bindir}/radosgw_admin
+%endif
 
 %changelog
 * Fri Apr 30 2010 Sage Weil <sage@newdream.net> 0.19.1-5

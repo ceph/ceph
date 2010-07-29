@@ -28,7 +28,7 @@ void ThreadPool::worker()
   dout(10) << "worker start" << dendl;
   while (!_stop) {
     if (!_pause && work_queues.size()) {
-      _WorkQueue *wq;
+      WorkQueue_* wq;
       int tries = work_queues.size();
       bool did = false;
       while (tries--) {
@@ -121,7 +121,7 @@ void ThreadPool::unpause()
   _lock.Unlock();
 }
 
-void ThreadPool::drain(_WorkQueue *wq)
+void ThreadPool::drain(WorkQueue_* wq)
 {
   dout(10) << "drain" << dendl;
   _lock.Lock();

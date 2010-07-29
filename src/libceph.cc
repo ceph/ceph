@@ -14,15 +14,18 @@
  * C interface
  */
 
-extern "C" const char *ceph_version(int *major, int *minor, int *patch)
+extern "C" const char *ceph_version(int *pmajor, int *pminor, int *ppatch)
 {
-  if (major)
-    *major = CEPH_VERSION_MAJOR;
-  if (minor)
-    *minor = CEPH_VERSION_MINOR;
-  if (patch)
-    *patch = CEPH_VERSION_PATCH;
-  return CEPH_VERSION;
+  int major, minor, patch;
+
+  sscanf(VERSION, "%d.%d.%d", &major, &minor, &patch);
+  if (pmajor)
+    *pmajor = major;
+  if (pminor)
+    *pminor = minor;
+  if (ppatch)
+    *ppatch = patch;
+  return VERSION;
 }
 
 static Mutex ceph_client_mutex("ceph_client");
@@ -39,7 +42,8 @@ extern "C" int ceph_initialize(int argc, const char **argv)
     //create everything to start a client
     vector<const char*> args;
     argv_to_vec(argc, argv, args);
-    common_init(args, "libceph", false, true);
+    common_set_defaults(false);
+    common_init(args, "libceph", true);
     if (g_conf.clock_tare) g_clock.tare();
     //monmap
     monclient = new MonClient();
@@ -68,7 +72,10 @@ extern "C" void ceph_deinitialize()
   ceph_client_mutex.Lock();
   --client_initialized;
   if(!client_initialized) {
-    client->unmount();
+    if(client_mount) {
+      client_mount = 0;
+      client->unmount();
+    }
     client->shutdown();
     delete client;
     messenger->wait();

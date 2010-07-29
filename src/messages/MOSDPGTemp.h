@@ -14,8 +14,8 @@
 
 
 
-#ifndef __MOSDPGTEMP_H
-#define __MOSDPGTEMP_H
+#ifndef CEPH_MOSDPGTEMP_H
+#define CEPH_MOSDPGTEMP_H
 
 #include "messages/PaxosServiceMessage.h"
 

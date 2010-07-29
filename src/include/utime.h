@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __UTIME_H
-#define __UTIME_H
+#ifndef CEPH_UTIME_H
+#define CEPH_UTIME_H
 
 #include <math.h>
 #include <sys/time.h>

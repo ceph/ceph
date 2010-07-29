@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __FILESTORE_H
-#define __FILESTORE_H
+#ifndef CEPH_FILESTORE_H
+#define CEPH_FILESTORE_H
 
 #include "ObjectStore.h"
 #include "JournalingObjectStore.h"
@@ -77,6 +77,7 @@ class FileStore : public JournalingObjectStore {
   Mutex lock;
   Cond sync_cond;
   uint64_t sync_epoch;
+  list<Context*> sync_waiters;
   bool stop;
   void sync_entry();
   struct SyncThread : public Thread {
@@ -232,8 +233,9 @@ class FileStore : public JournalingObjectStore {
 
   void _start_sync();
 
+  void start_sync();
+  void start_sync(Context *onsafe);
   void sync();
-  void sync(Context *onsafe);
   void _flush_op_queue();
   void flush();
   void sync_and_flush();

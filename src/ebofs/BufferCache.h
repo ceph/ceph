@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __EBOFS_BUFFERCACHE_H
-#define __EBOFS_BUFFERCACHE_H
+#ifndef CEPH_EBOFS_BUFFERCACHE_H
+#define CEPH_EBOFS_BUFFERCACHE_H
 
 #include "include/lru.h"
 #include "include/Context.h"

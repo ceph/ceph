@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __SNAPSERVER_H
-#define __SNAPSERVER_H
+#ifndef CEPH_SNAPSERVER_H
+#define CEPH_SNAPSERVER_H
 
 #include "MDSTableServer.h"
 #include "snap.h"

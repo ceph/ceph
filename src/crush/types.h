@@ -1,5 +1,5 @@
-#ifndef _CRUSH_TYPES_H
-#define _CRUSH_TYPES_H
+#ifndef CEPH_CRUSH_TYPES_H
+#define CEPH_CRUSH_TYPES_H
 
 #ifdef KERNEL
 # define free(x) kfree(x)

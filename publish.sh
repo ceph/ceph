@@ -5,8 +5,10 @@ set -e
 repo=~/debian
 
 vers=$1
+[ -z "$vers" ] && [ -e .last_release ] && vers=`cat .last_release`
 [ -z "$vers" ] && echo specify version && exit 1
 [ ! -d "release/$vers" ] && echo missing release/$vers && exit 1
+echo version $vers
 
 if echo $vers | grep -q testing ; then
     component="ceph-testing"
@@ -17,8 +19,6 @@ else
 	component="ceph-stable"
     fi
 fi
-
-echo vers $vers
 echo component $component
 
 for dist in sid squeeze lenny

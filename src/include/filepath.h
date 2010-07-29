@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __FILEPATH_H
-#define __FILEPATH_H
+#ifndef CEPH_FILEPATH_H
+#define CEPH_FILEPATH_H
 
 
 /*

@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __AUTHMONITOR_H
-#define __AUTHMONITOR_H
+#ifndef CEPH_AUTHMONITOR_H
+#define CEPH_AUTHMONITOR_H
 
 #include <map>
 #include <set>

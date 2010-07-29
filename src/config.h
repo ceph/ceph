@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __CEPH_CONFIG_H
-#define __CEPH_CONFIG_H
+#ifndef CEPH_CONFIG_H
+#define CEPH_CONFIG_H
 
 extern struct ceph_file_layout g_default_file_layout;
 
@@ -65,9 +65,12 @@ struct md_config_t {
   const char *logger_subdir;
   const char *logger_dir;
 
+  const char *log_file;
   const char *log_dir;
   const char *log_sym_dir;
+  int log_sym_history;
   bool log_to_stdout;
+  bool log_per_instance;
 
   const char *pid_file;
 
@@ -117,7 +120,6 @@ struct md_config_t {
   char *key;
   char *keyfile;
   char *keyring;
-  char *supported_auth;
 
   // messenger
 
@@ -136,7 +138,9 @@ struct md_config_t {
   bool ms_die_on_failure;
   bool ms_nocrc;
   bool ms_die_on_bad_msg;
-  uint64_t ms_waiting_message_bytes;
+  uint64_t ms_dispatch_throttle_bytes;
+  bool ms_bind_ipv6;
+  uint64_t ms_rwthread_stack_bytes;
 
   // mon
   const char *mon_data;
@@ -160,10 +164,14 @@ struct md_config_t {
   double paxos_observer_timeout;
 
   // auth
+  char *auth_supported;
   double auth_mon_ticket_ttl;
   double auth_service_ticket_ttl;
   int auth_nonce_len;
   EntityName *entity_name;
+
+  double mon_client_hunt_interval;
+  double mon_client_ping_interval;
 
   // client
   int      client_cache_size;
@@ -180,6 +188,7 @@ struct md_config_t {
   long long client_readahead_max_bytes;
   long long client_readahead_max_periods;
   const char *client_snapdir;
+  const char *client_mountpoint;
   int fuse_direct_io;
   bool fuse_ll;
 
@@ -317,6 +326,12 @@ struct md_config_t {
   int   osd_max_rep;
   int   osd_min_raid_width;
   int   osd_max_raid_width;
+
+  int osd_pool_default_crush_rule;
+  int osd_pool_default_size;
+  int osd_pool_default_pg_num;
+  int osd_pool_default_pgp_num;
+
   int   osd_op_threads;
   int   osd_max_opq;
   int   osd_disk_threads;
@@ -334,10 +349,14 @@ struct md_config_t {
 
   float osd_recovery_delay_start;
   int osd_recovery_max_active;
+  uint64_t osd_recovery_max_chunk;
 
   bool osd_auto_weight;
 
   bool osd_class_timeout;
+  const char *osd_class_tmp;
+
+  bool osd_check_for_log_corruption;  // bleh
 
   // filestore
   bool filestore;
@@ -348,6 +367,7 @@ struct md_config_t {
   const char  *filestore_dev;
   bool filestore_btrfs_trans;
   bool filestore_btrfs_snap;
+  bool filestore_btrfs_clone_range;
   bool filestore_flusher;
   int filestore_flusher_max_fds;
   bool filestore_sync_flush;
@@ -377,6 +397,7 @@ struct md_config_t {
   int journal_max_write_entries;
   int journal_queue_max_ops;
   int journal_queue_max_bytes;
+  int journal_align_min_size;
 
   // block device
   bool  bdev_lock;
@@ -420,7 +441,7 @@ void env_to_deq(std::deque<const char*>& args);
 void argv_to_deq(int argc, const char **argv,
                  std::deque<const char*>& args);
 
-void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon, const char *module_type);
+void parse_startup_config_options(std::vector<const char*>& args, const char *module_type);
 void parse_config_options(std::vector<const char*>& args);
 void parse_config_option_string(string& s);
 
@@ -447,8 +468,14 @@ ExportControl *conf_get_export_control();
 #define CONF_SET_ARG_VAL(dest, type) \
 	conf_set_conf_val(dest, type, CONF_NEXT_VAL)
 
-#define CONF_SAFE_SET_ARG_VAL(dest, type) \
+#define CONF_VAL args[i]
+
+#define CONF_SAFE_SET_ARG_VAL_USAGE(dest, type, show_usage) \
 	do { \
+          __isarg = i+1 < args.size(); \
+          if (__isarg && !val_pos && \
+              args[i+1][0] == '-' && args[i+1][1] != '\0') \
+              __isarg = false; \
           if (type == OPT_BOOL) { \
 		if (val_pos) { \
 			CONF_SET_ARG_VAL(dest, type); \
@@ -456,9 +483,11 @@ ExportControl *conf_get_export_control();
 			conf_set_conf_val(dest, type, "true"); \
           } else if (__isarg || val_pos) { \
 		CONF_SET_ARG_VAL(dest, type); \
-	  } else if (args_usage) \
+	  } else if (show_usage && args_usage) \
 		args_usage(); \
 	} while (0)
+
+#define CONF_SAFE_SET_ARG_VAL(dest, type) CONF_SAFE_SET_ARG_VAL_USAGE(dest, type, true)
 
 #define CONF_SET_BOOL_ARG_VAL(dest) \
 	conf_set_conf_val(dest, OPT_BOOL, (val_pos ? &args[i][val_pos] : "true"))

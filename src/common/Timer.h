@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __TIMER_H
-#define __TIMER_H
+#ifndef CEPH_TIMER_H
+#define CEPH_TIMER_H
 
 #include "include/types.h"
 #include "include/Context.h"

@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __SIMPLEMESSENGER_H
-#define __SIMPLEMESSENGER_H
+#ifndef CEPH_SIMPLEMESSENGER_H
+#define CEPH_SIMPLEMESSENGER_H
 
 #include "include/types.h"
 #include "include/xlist.h"
@@ -51,6 +51,9 @@ using namespace __gnu_cxx;
  * the destructor will lead to badness.
  */
 
+// default feature(s) everyone gets
+#define MSGR_FEATURES_SUPPORTED  CEPH_FEATURE_NOSRCADDR|CEPH_FEATURE_SUBSCRIBE2
+
 class SimpleMessenger : public Messenger {
 public:
   struct Policy {
@@ -58,16 +61,22 @@ public:
     bool server;
     Throttle *throttler;
 
-    Policy(bool l=false, bool s=false, Throttle *t=NULL) :
-      lossy(l), server(s), throttler(t) {}
+    uint64_t features_supported;
+    uint64_t features_required;
 
-    Policy(Throttle *t) : lossy(false), server(false), throttler(t) {}
+    Policy() :
+      lossy(false), server(false), throttler(NULL),
+      features_supported(MSGR_FEATURES_SUPPORTED),
+      features_required(0) {}
+    Policy(bool l, bool s, uint64_t sup, uint64_t req) :
+      lossy(l), server(s), throttler(NULL),
+      features_supported(sup | MSGR_FEATURES_SUPPORTED),
+      features_required(req) {}
 
-    static Policy stateful_server() { return Policy(false, true); }
-    static Policy stateless_server() { return Policy(true, true); }
-    static Policy lossless_peer() { return Policy(false, false); }
-    static Policy client() { return Policy(false, false); }
-    static Policy client(Throttle *t) { return Policy(false, false, t); }
+    static Policy stateful_server(uint64_t sup, uint64_t req) { return Policy(false, true, sup, req); }
+    static Policy stateless_server(uint64_t sup, uint64_t req) { return Policy(true, true, sup, req); }
+    static Policy lossless_peer(uint64_t sup, uint64_t req) { return Policy(false, false, sup, req); }
+    static Policy client(uint64_t sup, uint64_t req) { return Policy(false, false, sup, req); }
   };
 
 
@@ -95,7 +104,7 @@ private:
   void sigint(int r);
 
   // pipe
-  class Pipe {
+  class Pipe : public RefCountedObject {
   public:
     SimpleMessenger *messenger;
     ostream& _pipe_prefix();
@@ -139,17 +148,13 @@ private:
     uint64_t out_seq;
     uint64_t in_seq, in_seq_acked;
     
-    int get_required_bits(); /* get bits this Messenger requires
-			      * the peer to support */
-    int get_supported_bits(); /* get bits this Messenger expects
-			       * the peer to support */
     int accept();   // server handshake
     int connect();  // client handshake
     void reader();
     void writer();
     void unlock_maybe_reap();
 
-    Message *read_message();
+    int read_message(Message **pm);
     int write_message(Message *m);
     int do_sendmsg(int sd, struct msghdr *msg, int len, bool more=false);
     int write_ack(uint64_t s);
@@ -189,7 +194,7 @@ private:
       connect_seq(0), peer_global_seq(0),
       out_seq(0), in_seq(0), in_seq_acked(0),
       reader_thread(this), writer_thread(this) {
-      connection_state->pipe = this;
+      connection_state->pipe = get();
     }
     ~Pipe() {
       for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
@@ -201,7 +206,6 @@ private:
       }
       assert(out_q.empty());
       assert(sent.empty());
-      connection_state->pipe = NULL;
       connection_state->put();
     }
 
@@ -210,13 +214,13 @@ private:
       assert(pipe_lock.is_locked());
       assert(!reader_running);
       reader_running = true;
-      reader_thread.create();
+      reader_thread.create(g_conf.ms_rwthread_stack_bytes);
     }
     void start_writer() {
       assert(pipe_lock.is_locked());
       assert(!writer_running);
       writer_running = true;
-      writer_thread.create();
+      writer_thread.create(g_conf.ms_rwthread_stack_bytes);
     }
     void join_reader() {
       if (!reader_running)
@@ -419,13 +423,15 @@ private:
     }
   } dispatch_queue;
 
+  void dispatch_throttle_release(uint64_t msize);
+
   // SimpleMessenger stuff
  public:
   Mutex lock;
   Cond  wait_cond;  // for wait()
   bool started;
   bool did_bind;
-  Throttle message_throttler;
+  Throttle dispatch_throttler;
 
   // where i listen
   bool need_addr;
@@ -438,9 +444,29 @@ private:
   hash_map<entity_addr_t, Pipe*> rank_pipe;
  
   int my_type;
+
+
+  // --- policy ---
   Policy default_policy;
   map<int, Policy> policy_map; // entity_name_t::type -> Policy
 
+  Policy& get_policy(int t) {
+    if (policy_map.count(t))
+      return policy_map[t];
+    else
+      return default_policy;
+  }
+  void set_default_policy(Policy p) {
+    default_policy = p;
+  }
+  void set_policy(int type, Policy p) {
+    policy_map[type] = p;
+  }
+  void set_policy_throttler(int type, Throttle *t) {
+    get_policy(type).throttler = t;
+  }
+
+  // --- pipes ---
   set<Pipe*>      pipes;
   list<Pipe*>     pipe_reap_queue;
   
@@ -453,14 +479,26 @@ private:
 
   void mark_down(const entity_addr_t& addr);
 
-  void reaper();
+  // reaper
+  class ReaperThread : public Thread {
+    SimpleMessenger *messenger;
+  public:
+    ReaperThread(SimpleMessenger *m) : messenger(m) {}
+    void *entry() {
+      messenger->get();
+      messenger->reaper_entry();
+      messenger->put();
+      return 0;
+    }
+  } reaper_thread;
 
-  Policy get_policy(int t) {
-    if (policy_map.count(t))
-      return policy_map[t];
-    else
-      return default_policy;
-  }
+  bool reaper_started, reaper_stop;
+  Cond reaper_cond;
+
+  void reaper_entry();
+  void reaper();
+  void queue_reap(Pipe *pipe);
+
 
   /***** Messenger-required functions  **********/
   void destroy() {
@@ -510,9 +548,10 @@ public:
     Messenger(entity_name_t()),
     accepter(this),
     lock("SimpleMessenger::lock"), started(false), did_bind(false),
-    message_throttler(g_conf.ms_waiting_message_bytes), need_addr(true),
+    dispatch_throttler(g_conf.ms_dispatch_throttle_bytes), need_addr(true),
     destination_stopped(true), my_type(-1),
     global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0),
+    reaper_thread(this), reaper_started(false), reaper_stop(false), 
     dispatch_thread(this), messenger(this) {
     // for local dmsg delivery
     dispatch_queue.local_pipe = new Pipe(this, Pipe::STATE_OPEN);
@@ -548,12 +587,6 @@ public:
   void learned_addr(entity_addr_t peer_addr_for_me);
   void init_local_pipe();
 
-  void set_default_policy(Policy p) {
-    default_policy = p;
-  }
-  void set_policy(int type, Policy p) {
-    policy_map[type] = p;
-  }
 } ;
 
 #endif

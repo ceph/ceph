@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __DECAYCOUNTER_H
-#define __DECAYCOUNTER_H
+#ifndef CEPH_DECAYCOUNTER_H
+#define CEPH_DECAYCOUNTER_H
 
 #include <math.h>
 #include "Clock.h"

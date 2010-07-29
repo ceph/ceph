@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __BUFFER_H
-#define __BUFFER_H
+#ifndef CEPH_BUFFER_H
+#define CEPH_BUFFER_H
 
 #include <linux/types.h>
 
@@ -827,6 +827,7 @@ public:
       _buffers.clear();
       _buffers.push_back(nb);
     }
+    void rebuild_page_aligned();
 
 
     // sort-of-like-assignment-op
@@ -1134,7 +1135,7 @@ public:
     void hexdump(std::ostream &out) const;
     int read_file(const char *fn, bool silent=false);
     int write_file(const char *fn, int mode=0644);
-    int write_fd(int fd);
+    int write_fd(int fd) const;
     __u32 crc32c(__u32 crc) {
       for (std::list<ptr>::const_iterator it = _buffers.begin(); 
 	   it != _buffers.end(); 

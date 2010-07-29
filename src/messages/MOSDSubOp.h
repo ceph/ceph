@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MOSDSUBOP_H
-#define __MOSDSUBOP_H
+#ifndef CEPH_MOSDSUBOP_H
+#define CEPH_MOSDSUBOP_H
 
 #include "msg/Message.h"
 #include "osd/osd_types.h"
@@ -64,7 +64,9 @@ public:
   interval_set<uint64_t> data_subset;
   map<sobject_t, interval_set<uint64_t> > clone_subsets;
 
- virtual void decode_payload() {
+  bool first, complete;
+
+  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(map_epoch, p);
     ::decode(reqid, p);
@@ -96,9 +98,16 @@ public:
     ::decode(attrset, p);
     ::decode(data_subset, p);
     ::decode(clone_subsets, p);
+    
+    if (header.version >= 2) {
+      ::decode(first, p);
+      ::decode(complete, p);
+    }
   }
 
   virtual void encode_payload() {
+    header.version = 2;
+
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
     ::encode(pgid, payload);
@@ -131,6 +140,8 @@ public:
       header.data_off = ops[0].op.extent.offset;
     else
       header.data_off = 0;
+    ::encode(first, payload);
+    ::encode(complete, payload);
   }
 
 
@@ -144,7 +155,8 @@ public:
     acks_wanted(aw),
     noop(noop_),   
     old_exists(false), old_size(0),
-    version(v)
+    version(v),
+    first(false), complete(false)
   {
     memset(&peer_stat, 0, sizeof(peer_stat));
     set_tid(rtid);
@@ -162,6 +174,10 @@ public:
 	<< " " << ops;
     if (noop)
       out << " (NOOP)";
+    if (first)
+      out << " first";
+    if (complete)
+      out << " complete";
     out << " v " << version
 	<< " snapset=" << snapset << " snapc=" << snapc;    
     if (!data_subset.empty()) out << " subset " << data_subset;

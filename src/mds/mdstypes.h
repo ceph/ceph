@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
-#ifndef __MDSTYPES_H
-#define __MDSTYPES_H
+#ifndef CEPH_MDSTYPES_H
+#define CEPH_MDSTYPES_H
 
 
 #include <math.h>
@@ -156,10 +156,15 @@ inline bool operator==(const frag_info_t &l, const frag_info_t &r) {
 }
 
 inline ostream& operator<<(ostream &out, const frag_info_t &f) {
-  return out << "f(v" << f.version
-	     << " m" << f.mtime
-	     << " " << f.size() << "=" << f.nfiles << "+" << f.nsubdirs
-	     << ")";    
+  if (f == frag_info_t())
+    return out << "f()";
+  out << "f(v" << f.version;
+  if (f.mtime != utime_t())
+    out << " m" << f.mtime;
+  if (f.nfiles || f.nsubdirs)
+    out << " " << f.size() << "=" << f.nfiles << "+" << f.nsubdirs;
+  out << ")";    
+  return out;
 }
 
 struct nest_info_t {
@@ -241,13 +246,21 @@ inline bool operator==(const nest_info_t &l, const nest_info_t &r) {
 }
 
 inline ostream& operator<<(ostream &out, const nest_info_t &n) {
-  return out << "n(v" << n.version
-	     << " rc" << n.rctime
-	     << " b" << n.rbytes
-	     << " a" << n.ranchors
-	     << " sr" << n.rsnaprealms
-	     << " " << n.rsize() << "=" << n.rfiles << "+" << n.rsubdirs
-	     << ")";    
+  if (n == nest_info_t())
+    return out << "n()";
+  out << "n(v" << n.version;
+  if (n.rctime != utime_t())
+    out << " rc" << n.rctime;
+  if (n.rbytes)
+    out << " b" << n.rbytes;
+  if (n.ranchors)
+    out << " a" << n.ranchors;
+  if (n.rsnaprealms)
+    out << " sr" << n.rsnaprealms;
+  if (n.rfiles || n.rsubdirs)
+    out << " " << n.rsize() << "=" << n.rfiles << "+" << n.rsubdirs;
+  out << ")";    
+  return out;
 }
 
 struct vinodeno_t {
@@ -1037,7 +1050,6 @@ class MDSCacheObject;
  */
 struct ClientLease {
   client_t client;
-  int mask;                 // CEPH_STAT_MASK_*
   MDSCacheObject *parent;
 
   ceph_seq_t seq;
@@ -1046,7 +1058,7 @@ struct ClientLease {
   xlist<ClientLease*>::item item_lease;         // global list
 
   ClientLease(client_t c, MDSCacheObject *p) : 
-    client(c), mask(0), parent(p), seq(0),
+    client(c), parent(p), seq(0),
     item_session_lease(this),
     item_lease(this) { }
 };

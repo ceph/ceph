@@ -25,16 +25,32 @@ int rgw_get_user_info(string user_id, RGWUserInfo& info)
   int ret;
   char *data;
   struct rgw_err err;
+  void *handle = NULL;
+  off_t ofs = 0, end = -1;
+  size_t total_len;
+  time_t lastmod;
+  bufferlist::iterator iter;
 
-  ret = rgwstore->get_obj(ui_bucket, user_id, &data, 0, -1, NULL, NULL, NULL, NULL, NULL, true, &err);
-  if (ret < 0) {
+  ret = rgwstore->prepare_get_obj(ui_bucket, user_id, ofs, &end, NULL, NULL, NULL, &lastmod, NULL, NULL, &total_len, &handle, &err);
+  if (ret < 0)
     return ret;
-  }
-  bl.append(data, ret);
-  bufferlist::iterator iter = bl.begin();
+  do {
+    ret = rgwstore->get_obj(&handle, ui_bucket, user_id, &data, ofs, end);
+    if (ret < 0) {
+      goto done;
+    }
+    bl.append(data, ret);
+    free(data);
+    ofs += ret;
+  } while (ofs <= end);
+
+
+  iter = bl.begin();
   info.decode(iter); 
-  free(data);
-  return 0;
+  ret = 0;
+done:
+  rgwstore->finish_get_obj(&handle);
+  return ret;
 }
 
 /**
@@ -100,17 +116,31 @@ int rgw_get_uid_by_email(string& email, string& user_id)
   char *data;
   struct rgw_err err;
   RGWUID uid;
+  void *handle = NULL;
+  off_t ofs = 0, end = -1;
+  bufferlist::iterator iter;
+  size_t total_len;
 
-  ret = rgwstore->get_obj(ui_email_bucket, email, &data, 0, -1, NULL, NULL, NULL, NULL, NULL, true, &err);
-  if (ret < 0) {
+  ret = rgwstore->prepare_get_obj(ui_email_bucket, email, ofs, &end, NULL, NULL,
+                                  NULL, NULL, NULL, NULL, &total_len, &handle, &err);
+  if (ret < 0)
     return ret;
-  }
-  bl.append(data, ret);
-  bufferlist::iterator iter = bl.begin();
+  do {
+    ret = rgwstore->get_obj(&handle, ui_email_bucket, email, &data, ofs, end);
+    if (ret < 0)
+      goto done;
+    ofs += ret;
+    bl.append(data, ret);
+    free(data);
+  } while (ofs <= end);
+
+  iter = bl.begin();
   uid.decode(iter); 
   user_id = uid.user_id;
-  free(data);
-  return 0;
+  ret = 0;
+done:
+  rgwstore->finish_get_obj(&handle);
+  return ret;
 }
 
 /**

@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __RANGESET_H
-#define __RANGESET_H
+#ifndef CEPH_RANGESET_H
+#define CEPH_RANGESET_H
 
 /*
  *

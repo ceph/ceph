@@ -14,8 +14,8 @@
 
 
 
-#ifndef __LRU_H
-#define __LRU_H
+#ifndef CEPH_LRU_H
+#define CEPH_LRU_H
 
 #include <stdint.h>
 

@@ -1339,8 +1339,8 @@ void Locker::remove_stale_leases(Session *session)
     ClientLease *l = *p;
     ++p;
     CDentry *parent = (CDentry*)l->parent;
-    dout(15) << " removing lease for " << l->mask << " on " << *parent << dendl;
-    parent->remove_client_lease(l, l->mask, this);
+    dout(15) << " removing lease on " << *parent << dendl;
+    parent->remove_client_lease(l, this);
   }
 }
 
@@ -1557,7 +1557,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   // newer log segments.
   LogEvent *le;
   EMetaBlob *metablob;
-  if (in->is_any_caps_wanted()) {   
+  if (in->is_any_caps_wanted() && in->last == CEPH_NOSNAP) {   
     EOpen *eo = new EOpen(mds->mdlog);
     eo->add_ino(in->ino());
     metablob = &eo->metablob;
@@ -1648,6 +1648,7 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
   } else {
     if (!cur->item_open_file.is_on_list()) {
       dout(10) << " adding to open file list " << *cur << dendl;
+      assert(cur->last == CEPH_NOSNAP);
       LogSegment *ls = mds->mdlog->get_current_segment();
       EOpen *le = new EOpen(mds->mdlog);
       mds->mdlog->start_entry(le);
@@ -1732,8 +1733,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       dout(7) << " flushsnap follows " << follows
 	      << " client" << client << " on " << *in << dendl;
       // this cap now follows a later snap (i.e. the one initiating this flush, or later)
-      cap->client_follows = follows+1;
-      cap->confirm_receipt(cap->get_last_sent(), 0);
+      cap->client_follows = MAX(follows, in->first) + 1;
    
       // we can prepare the ack now, since this FLUSHEDSNAP is independent of any
       // other cap ops.  (except possibly duplicate FLUSHSNAP requests, but worst
@@ -1870,7 +1870,7 @@ void Locker::process_cap_update(MDRequest *mdr, client_t client,
 	ClientLease *l = dn->get_client_lease(client);
 	if (l) {
 	  dout(10) << " removing lease on " << *dn << dendl;
-	  dn->remove_client_lease(l, l->mask, this);
+	  dn->remove_client_lease(l, this);
 	}
       } else {
 	stringstream ss;
@@ -1961,7 +1961,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     }
 
     if (change_max &&
-	!in->filelock.can_wrlock(client)) {
+	!in->filelock.can_wrlock(client) &&
+	!in->filelock.can_force_wrlock(client)) {
       dout(10) << " i want to change file_max, but lock won't allow it (yet)" << dendl;
       if (in->filelock.is_stable()) {
 	bool need_issue = false;
@@ -1976,7 +1977,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	  issue_caps(in);
 	cap->dec_suppress();
       }
-      if (!in->filelock.can_wrlock(client)) {
+      if (!in->filelock.can_wrlock(client) &&
+	  !in->filelock.can_force_wrlock(client)) {
 	in->filelock.add_waiter(SimpleLock::WAIT_STABLE, new C_MDL_CheckMaxSize(this, in));
 	change_max = false;
       }
@@ -2191,8 +2193,7 @@ void Locker::handle_client_lease(MClientLease *m)
     } else {
       dout(7) << "handle_client_lease client" << client
 	      << " on " << *dn << dendl;
-      int left = dn->remove_client_lease(l, CEPH_LOCK_DN, this);
-      dout(10) << " release remaining mask is " << left << " on " << *dn << dendl;
+      dn->remove_client_lease(l, this);
     }
     m->put();
     break;
@@ -2221,66 +2222,39 @@ void Locker::handle_client_lease(MClientLease *m)
 }
 
 
-
-void Locker::_issue_client_lease(CDentry *dn, int mask, int pool, client_t client,
-				 bufferlist &bl, utime_t now, Session *session)
-{
-  LeaseStat e;
-  e.mask = 1;
-
-  if (mask) {
-    ClientLease *l = dn->add_client_lease(client, mask);
-    session->touch_lease(l);
-
-    e.seq = ++l->seq;
-
-    now += mdcache->client_lease_durations[pool];
-    mdcache->touch_client_lease(l, pool, now);
-  } else
-    e.seq = 0;
-
-  e.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
-  ::encode(e, bl);
-  dout(20) << "_issue_client_lease mask " << e.mask << " dur " << e.duration_ms << "ms" << dendl;
-}
-  
-
-
-/*
-int Locker::issue_client_lease(CInode *in, client_t client, 
-			       bufferlist &bl, utime_t now, Session *session)
-{
-  int mask = CEPH_LOCK_INO;
-  int pool = 1;   // fixme.. do something smart!
-  if (in->authlock.can_lease()) mask |= CEPH_LOCK_IAUTH;
-  if (in->linklock.can_lease()) mask |= CEPH_LOCK_ILINK;
-  if (in->filelock.can_lease()) mask |= CEPH_LOCK_IFILE;
-  if (in->xattrlock.can_lease()) mask |= CEPH_LOCK_IXATTR;
-
-  _issue_client_lease(in, mask, pool, client, bl, now, session);
-  return mask;
-}
-*/
-
-int Locker::issue_client_lease(CDentry *dn, client_t client,
+void Locker::issue_client_lease(CDentry *dn, client_t client,
 			       bufferlist &bl, utime_t now, Session *session)
 {
   int pool = 1;   // fixme.. do something smart!
-
-  // is it necessary?
-  // -> dont issue per-dentry lease if a dir lease is possible, or
-  //    if the client is holding EXCL|RDCACHE caps.
-  int mask = 0;
 
   CInode *diri = dn->get_dir()->get_inode();
   if (!diri->is_stray() &&  // do not issue dn leases in stray dir!
       ((!diri->filelock.can_lease(client) &&
 	(diri->get_client_cap_pending(client) & (CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL)) == 0)) &&
-      dn->lock.can_lease(client))
-    mask |= CEPH_LOCK_DN;
-  
-  _issue_client_lease(dn, mask, pool, client, bl, now, session);
-  return mask;
+      dn->lock.can_lease(client)) {
+    // issue a dentry lease
+    ClientLease *l = dn->add_client_lease(client, session);
+    session->touch_lease(l);
+    
+    now += mdcache->client_lease_durations[pool];
+    mdcache->touch_client_lease(l, pool, now);
+
+    LeaseStat e;
+    e.mask = 1;
+    e.seq = ++l->seq;
+    e.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
+    ::encode(e, bl);
+    dout(20) << "issue_client_lease seq " << e.seq << " dur " << e.duration_ms << "ms "
+	     << " on " << *dn << dendl;
+  } else {
+    // null lease
+    LeaseStat e;
+    e.mask = 0;
+    e.seq = 0;
+    e.duration_ms = 0;
+    ::encode(e, bl);
+    dout(20) << "issue_client_lease no/null lease on " << *dn << dendl;
+  }
 }
 
 
@@ -2292,9 +2266,6 @@ void Locker::revoke_client_leases(SimpleLock *lock)
        p != dn->client_lease_map.end();
        p++) {
     ClientLease *l = p->second;
-    
-    if ((l->mask & lock->get_type()) == 0)
-      continue;
     
     n++;
     assert(lock->get_type() == CEPH_LOCK_DN);
@@ -3612,7 +3583,9 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     break;
 
   case LOCK_AC_REQRDLOCK:
-    if (lock->is_stable()) {
+    if (lock->get_parent()->is_auth() &&
+	lock->is_stable() &&
+	lock->get_state() != LOCK_SYNC) {
       dout(7) << "handle_file_lock got rdlock request on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
       assert(in->is_auth()); // replica auth pinned if they're doing this!

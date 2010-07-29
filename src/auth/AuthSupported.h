@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __AUTHSUPPORTED_H
-#define __AUTHSUPPORTED_H
+#ifndef CEPH_AUTHSUPPORTED_H
+#define CEPH_AUTHSUPPORTED_H
 
 #include <map>
 

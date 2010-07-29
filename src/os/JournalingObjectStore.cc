@@ -30,6 +30,8 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
 {
   dout(10) << "journal_replay fs op_seq " << fs_op_seq << dendl;
   op_seq = fs_op_seq;
+  committed_seq = op_seq;
+  applied_seq = fs_op_seq;
 
   if (!journal)
     return 0;
@@ -78,6 +80,7 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
   }
 
   committed_seq = op_seq;
+  applied_seq = op_seq;
 
   // done reading, make writeable.
   journal->make_writeable();
@@ -105,12 +108,19 @@ uint64_t JournalingObjectStore::op_apply_start(uint64_t op)
   return op;
 }
 
-void JournalingObjectStore::op_apply_finish() 
+void JournalingObjectStore::op_apply_finish(uint64_t op) 
 {
   dout(10) << "op_apply_finish" << dendl;
   lock.Lock();
   if (--open_ops == 0)
     cond.Signal();
+
+  // there can be multiple applies in flight; track the max value we
+  // note.  note that we can't _read_ this value and learn anything
+  // meaningful unless/until we've quiesced all in-flight applies.
+  if (op > applied_seq)
+    applied_seq = op;
+
   lock.Unlock();
 }
 
@@ -152,8 +162,12 @@ bool JournalingObjectStore::commit_start()
     assert(commit_waiters.empty());
     return false;
   }
-  committing_seq = op_seq;
-  dout(10) << "commit_start committing " << committing_seq << ", blocked" << dendl;
+
+  // we can _only_ read applied_seq here because open_ops == 0 (we've
+  // quiesced all in-flight applies).
+  committing_seq = applied_seq;
+
+  dout(10) << "commit_start committing " << committing_seq << ", still blocked" << dendl;
   return true;
 }
 
@@ -191,7 +205,12 @@ void JournalingObjectStore::journal_transaction(ObjectStore::Transaction& t, uin
   if (journal && journal->is_writeable()) {
     bufferlist tbl;
     t.encode(tbl);
-    journal->submit_entry(op, tbl, onjournal);
+
+    int alignment = -1;
+    if ((int)t.get_data_length() >= g_conf.journal_align_min_size)
+      alignment = t.get_data_alignment();
+
+    journal->submit_entry(op, tbl, alignment, onjournal);
   } else if (onjournal)
     commit_waiters[op].push_back(onjournal);
 }
@@ -204,9 +223,17 @@ void JournalingObjectStore::journal_transactions(list<ObjectStore::Transaction*>
     
   if (journal && journal->is_writeable()) {
     bufferlist tbl;
-    for (list<ObjectStore::Transaction*>::iterator p = tls.begin(); p != tls.end(); p++)
-      (*p)->encode(tbl);
-    journal->submit_entry(op, tbl, onjournal);
+    unsigned data_len = 0, data_align = 0;
+    for (list<ObjectStore::Transaction*>::iterator p = tls.begin(); p != tls.end(); p++) {
+      ObjectStore::Transaction *t = *p;
+      if (t->get_data_length() > data_len &&
+	  (int)t->get_data_length() >= g_conf.journal_align_min_size) {
+	data_len = t->get_data_length();
+	data_align = (t->get_data_alignment() - tbl.length()) & ~PAGE_MASK;
+      }
+      t->encode(tbl);
+    }
+    journal->submit_entry(op, tbl, data_align, onjournal);
   } else if (onjournal)
     commit_waiters[op].push_back(onjournal);
 }

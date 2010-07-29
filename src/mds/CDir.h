@@ -14,8 +14,8 @@
 
 
 
-#ifndef __CDIR_H
-#define __CDIR_H
+#ifndef CEPH_CDIR_H
+#define CEPH_CDIR_H
 
 #include "include/types.h"
 #include "include/buffer.h"
@@ -49,7 +49,10 @@ private:
   static boost::pool<> pool;
 public:
   static void *operator new(size_t num_bytes) { 
-    return pool.malloc();
+    void *n = pool.malloc();
+    if (!n)
+      throw std::bad_alloc();
+    return n;
   }
   void operator delete(void *p) {
     pool.free(p);

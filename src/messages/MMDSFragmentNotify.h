@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MMDSFRAGMENTNOTIFY_H
-#define __MMDSFRAGMENTNOTIFY_H
+#ifndef CEPH_MMDSFRAGMENTNOTIFY_H
+#define CEPH_MMDSFRAGMENTNOTIFY_H
 
 #include "msg/Message.h"
 #include <string>

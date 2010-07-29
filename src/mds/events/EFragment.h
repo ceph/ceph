@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDS_EFRAGMENT_H
-#define __MDS_EFRAGMENT_H
+#ifndef CEPH_MDS_EFRAGMENT_H
+#define CEPH_MDS_EFRAGMENT_H
 
 #include "../LogEvent.h"
 #include "EMetaBlob.h"

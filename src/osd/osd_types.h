@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __OSD_TYPES_H
-#define __OSD_TYPES_H
+#ifndef CEPH_OSD_TYPES_H
+#define CEPH_OSD_TYPES_H
 
 #include <stdio.h>
 
@@ -228,34 +228,70 @@ namespace __gnu_cxx {
 // ----------------------
 
 struct coll_t {
+  enum type_t {
+    TYPE_META = 0,
+    TYPE_TEMP = 1,
+    TYPE_PG = 2
+  };
+  __u8 type;
   pg_t pgid;
   snapid_t snap;
 
-  coll_t() : snap(0) {}
-  coll_t(pg_t p, snapid_t s) : pgid(p), snap(s) {}
+  coll_t() : type(TYPE_META), snap(0) {}
+  coll_t(type_t t) : type(t), snap(0) {}
+  coll_t(type_t t, pg_t p, snapid_t s) : type(t), pgid(p), snap(s) {}
   
   static coll_t build_pg_coll(pg_t p) {
-    return coll_t(p, CEPH_NOSNAP);
+    return coll_t(TYPE_PG, p, CEPH_NOSNAP);
   }
   static coll_t build_snap_pg_coll(pg_t p, snapid_t s) {
-    return coll_t(p, s);
+    return coll_t(TYPE_PG, p, s);
   }
 
-  int print(char *o, int maxlen) {
-    if (pgid == pg_t() && snap == 0)
-      return snprintf(o, maxlen, "meta");
-    int len = pgid.print(o, maxlen);
-    if (snap != CEPH_NOSNAP)
-      len += snprintf(o + len, maxlen - len, "_%llx", (long long unsigned)snap);
-    else {
-      strncat(o + len, "_head", maxlen - len);
-      len += 5;
+  ostream& print(ostream& out) const {
+    switch (type) {
+    case TYPE_META:
+      return out << "meta";
+    case TYPE_TEMP:
+      return out << "temp";
+    case TYPE_PG:
+      out << pgid << "_" << snap;
+    default:
+      return out << "???";
     }
-    return len;
+  }
+  int print(char *o, int maxlen) {
+    switch (type) {
+    case TYPE_META:
+      return snprintf(o, maxlen, "meta");
+    case TYPE_TEMP:
+      return snprintf(o, maxlen, "temp");
+    case TYPE_PG:
+      {
+	int len = pgid.print(o, maxlen);
+	if (snap != CEPH_NOSNAP)
+	  len += snprintf(o + len, maxlen - len, "_%llx", (long long unsigned)snap);
+	else {
+	  strncat(o + len, "_head", maxlen - len);
+	  len += 5;
+	}
+	return len;
+      }
+    default:
+      return snprintf(o, maxlen, "???");
+    }
   }
   bool parse(char *s) {
     if (strncmp(s, "meta", 4) == 0) {
-      *this = coll_t();
+      type = TYPE_META;
+      pgid = pg_t();
+      snap = 0;
+      return true;
+    }
+    if (strncmp(s, "temp", 4) == 0) {
+      type = TYPE_TEMP;
+      pgid = pg_t();
+      snap = 0;
       return true;
     }
     if (!pgid.parse(s))
@@ -267,45 +303,73 @@ struct coll_t {
       snap = CEPH_NOSNAP;
     else
       snap = strtoull(sn+1, 0, 16);
+    type = TYPE_PG;
     return true;
   }
 
   void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
     ::encode(struct_v, bl);
+    ::encode(type, bl);
     ::encode(pgid, bl);
     ::encode(snap, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
+    if (struct_v >= 2)
+      ::decode(type, bl);
     ::decode(pgid, bl);
     ::decode(snap, bl);
+    if (struct_v < 2) {
+      // infer the type
+      if (pgid == pg_t() && snap == 0)
+	type = TYPE_META;
+      else
+	type = TYPE_PG;
+    }
   }
 };
 WRITE_CLASS_ENCODER(coll_t)
 
 inline ostream& operator<<(ostream& out, const coll_t& c) {
-  return out << hex << c.pgid << '_' << c.snap << dec;
+  return c.print(out);
 }
 
+#define TRIPLE_EQ(l, r, a, b, c) \
+  l.a == r.a && l.b == r.b && l.c == r.c;
+#define TRIPLE_NE(l, r, a, b, c) \
+  l.a != r.a && l.b != r.b && l.c != r.c;
+#define TRIPLE_LT(l, r, a, b, c)				\
+  l.a < r.a || (l.a == r.a && (l.b < r.b ||			\
+			       (l.b == r.b && l.c < r.c)));
+#define TRIPLE_LTE(l, r, a, b, c)				\
+  l.a < r.a || (l.a == r.a && (l.b < r.b ||			\
+			       (l.b == r.b && l.c <= r.c)));
+#define TRIPLE_GT(l, r, a, b, c)				\
+  l.a > r.a || (l.a == r.a && (l.b > r.b ||			\
+			       (l.b == r.b && l.c > r.c)));
+#define TRIPLE_GTE(l, r, a, b, c)				\
+  l.a > r.a || (l.a == r.a && (l.b > r.b ||			\
+			       (l.b == r.b && l.c >= r.c)));
+
 inline bool operator<(const coll_t& l, const coll_t& r) {
-  return l.pgid < r.pgid || (l.pgid == r.pgid && l.snap < r.snap);
+  return TRIPLE_LT(l, r, type, pgid, snap);
 }
 inline bool operator<=(const coll_t& l, const coll_t& r) {
-  return l.pgid < r.pgid || (l.pgid == r.pgid && l.snap <= r.snap);
+  return TRIPLE_LTE(l, r, type, pgid, snap);
 }
 inline bool operator==(const coll_t& l, const coll_t& r) {
-  return l.pgid == r.pgid && l.snap == r.snap;
+  return TRIPLE_EQ(l, r, type, pgid, snap);
 }
 inline bool operator!=(const coll_t& l, const coll_t& r) {
-  return l.pgid != r.pgid || l.snap != r.snap;
+  return TRIPLE_NE(l, r, type, pgid, snap);
 }
 inline bool operator>(const coll_t& l, const coll_t& r) {
-  return l.pgid > r.pgid || (l.pgid == r.pgid && l.snap > r.snap);
+  return TRIPLE_GT(l, r, type, pgid, snap);
 }
 inline bool operator>=(const coll_t& l, const coll_t& r) {
-  return l.pgid > r.pgid || (l.pgid == r.pgid && l.snap >= r.snap);
+  return TRIPLE_GTE(l, r, type, pgid, snap);
 }
 
 namespace __gnu_cxx {
@@ -313,7 +377,7 @@ namespace __gnu_cxx {
     size_t operator()(const coll_t &c) const { 
       static hash<pg_t> H;
       static rjhash<uint64_t> I;
-      return H(c.pgid) ^ I(c.snap);
+      return H(c.pgid) ^ I(c.snap + c.type);
     }
   };
 }
@@ -467,8 +531,9 @@ inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
 
 
 inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
-  return out << "osd_stat(" << (s.kb_used) << "/" << s.kb << " KB used, " 
-	     << s.kb_avail << " avail, "
+  return out << "osd_stat(" << kb_t(s.kb_used) << " used, "
+	     << kb_t(s.kb_avail) << " avail, "
+	     << kb_t(s.kb) << " total, "
 	     << "peers " << s.hb_in << "/" << s.hb_out << ")";
 }
 
@@ -998,23 +1063,23 @@ WRITE_CLASS_ENCODER(pool_stat_t)
 
 
 struct osd_peer_stat_t {
-	struct ceph_timespec stamp;
-	float oprate;
-	float qlen;
-	float recent_qlen;
-	float read_latency;
-	float read_latency_mine;
-	float frac_rd_ops_shed_in;
-	float frac_rd_ops_shed_out;
+  struct ceph_timespec stamp;
+  float oprate;
+  float qlen;            // current
+  float recent_qlen;     // moving average
+  float read_latency;
+  float read_latency_mine;
+  float frac_rd_ops_shed_in;
+  float frac_rd_ops_shed_out;
 } __attribute__ ((packed));
 
 WRITE_RAW_ENCODER(osd_peer_stat_t)
 
 inline ostream& operator<<(ostream& out, const osd_peer_stat_t &stat) {
   return out << "stat(" << stat.stamp
-    //<< " oprate=" << stat.oprate
-    //	     << " qlen=" << stat.qlen 
-    //	     << " recent_qlen=" << stat.recent_qlen
+	     << " oprate=" << stat.oprate
+    	     << " qlen=" << stat.qlen 
+    	     << " recent_qlen=" << stat.recent_qlen
 	     << " rdlat=" << stat.read_latency_mine << " / " << stat.read_latency
 	     << " fshedin=" << stat.frac_rd_ops_shed_in
 	     << ")";

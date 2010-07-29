@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __AUTHCLIENTHANDLER_H
-#define __AUTHCLIENTHANDLER_H
+#ifndef CEPH_AUTHCLIENTHANDLER_H
+#define CEPH_AUTHCLIENTHANDLER_H
 
 
 #include "auth/Auth.h"

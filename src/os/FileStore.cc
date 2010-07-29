@@ -471,13 +471,17 @@ int FileStore::_detect_fs()
     btrfs = true;
 
     // clone_range?
-    btrfs_clone_range = true;
-    int r = _do_clone_range(fsid_fd, -1, 0, 1);
-    if (r == -EBADF) {
-      dout(0) << "mount btrfs CLONE_RANGE ioctl is supported" << dendl;
+    if (g_conf.filestore_btrfs_clone_range) {
+      btrfs_clone_range = true;
+      int r = _do_clone_range(fsid_fd, -1, 0, 1);
+      if (r == -EBADF) {
+	dout(0) << "mount btrfs CLONE_RANGE ioctl is supported" << dendl;
+      } else {
+	btrfs_clone_range = false;
+	dout(0) << "mount btrfs CLONE_RANGE ioctl is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+      }
     } else {
-      btrfs_clone_range = false;
-      dout(0) << "mount btrfs CLONE_RANGE ioctl is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+      dout(0) << "mount btrfs CLONE_RANGE ioctl is DISABLED via 'filestore btrfs clone range' option" << dendl;
     }
 
     // snap_create and snap_destroy?
@@ -683,6 +687,9 @@ int FileStore::mount()
 	    << strerror_r(-r, buf, sizeof(buf)) << dendl;
     cerr << "mount failed to open journal " << journalpath << ": "
 	 << strerror_r(-r, buf, sizeof(buf)) << std::endl;
+    if (r == -ENOTTY)
+      cerr << "maybe journal is not pointing to a block device and its size wasn't configured?" << std::endl;
+
     return r;
   }
   journal_start();
@@ -705,7 +712,7 @@ int FileStore::umount()
 {
   dout(5) << "umount " << basedir << dendl;
   
-  sync();
+  start_sync();
 
   lock.Lock();
   stop = true;
@@ -740,7 +747,8 @@ int FileStore::umount()
 
 /// -----------------------------
 
-void FileStore::queue_op(Sequencer *posr, uint64_t op_seq, list<Transaction*>& tls, Context *onreadable, Context *onreadable_sync)
+void FileStore::queue_op(Sequencer *posr, uint64_t op_seq, list<Transaction*>& tls,
+			 Context *onreadable, Context *onreadable_sync)
 {
   uint64_t bytes = 0, ops = 0;
   for (list<Transaction*>::iterator p = tls.begin();
@@ -753,6 +761,11 @@ void FileStore::queue_op(Sequencer *posr, uint64_t op_seq, list<Transaction*>& t
   // initialize next_finish on first op
   if (next_finish == 0)
     next_finish = op_seq;
+
+  // mark apply start _now_, because we need to drain the entire apply
+  // queue during commit in order to put the store in a consistent
+  // state.
+  op_apply_start(op_seq);
 
   Op *o = new Op;
   o->op = op_seq;
@@ -797,9 +810,8 @@ void FileStore::_do_op(OpSequencer *osr)
   Op *o = osr->q.front();
 
   dout(10) << "_do_op " << o << " " << o->op << " osr " << osr << "/" << osr->parent << " start" << dendl;
-  op_apply_start(o->op);
   int r = do_transactions(o->tls, o->op);
-  op_apply_finish();
+  op_apply_finish(o->op);
   dout(10) << "_do_op " << o << " " << o->op << " r = " << r
 	   << ", finisher " << o->onreadable << " " << o->onreadable_sync << dendl;
   
@@ -917,7 +929,7 @@ int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
   uint64_t op_seq = op_apply_start(0);
   dout(10) << "queue_transactions (trailing journal) " << op_seq << " " << tls << dendl;
   int r = do_transactions(tls, op_seq);
-  op_apply_finish();
+  op_apply_finish(op_seq);
     
   if (r >= 0) {
     op_journal_start(op_seq);
@@ -1016,7 +1028,7 @@ unsigned FileStore::apply_transactions(list<Transaction*> &tls,
   } else {
     uint64_t op_seq = op_apply_start(0);
     r = do_transactions(tls, op_seq);
-    op_apply_finish();
+    op_apply_finish(op_seq);
 
     if (r >= 0) {
       op_journal_start(op_seq);
@@ -1290,8 +1302,10 @@ int FileStore::stat(coll_t cid, const sobject_t& oid, struct stat *st)
   char fn[PATH_MAX];
   get_coname(cid, oid, fn, sizeof(fn));
   int r = ::stat(fn, st);
+  if (r < 0)
+    r = -errno;
   dout(10) << "stat " << fn << " = " << r << dendl;
-  return r < 0 ? -errno:r;
+  return r;
 }
 
 int FileStore::read(coll_t cid, const sobject_t& oid, 
@@ -1385,48 +1399,48 @@ int FileStore::_write(coll_t cid, const sobject_t& oid,
   dout(15) << "write " << fn << " " << offset << "~" << len << dendl;
   int r;
 
+  int64_t actual;
+
   char buf[80];
   int flags = O_WRONLY|O_CREAT;
   int fd = ::open(fn, flags, 0644);
   if (fd < 0) {
     derr(0) << "write couldn't open " << fn << " flags " << flags << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     r = -errno;
-  } else {
+    goto out;
+  }
     
-    // seek
-    uint64_t actual = ::lseek64(fd, offset, SEEK_SET);
-    int did = 0;
-    assert(actual == offset);
-    
-    // write buffers
-    for (list<bufferptr>::const_iterator it = bl.buffers().begin();
-	 it != bl.buffers().end();
-	 it++) {
-      int r = ::write(fd, (char*)(*it).c_str(), (*it).length());
-      if (r > 0)
-	did += r;
-      else {
-	derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-      }
-    }
-    
-    if (did < 0) {
-      derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    }
-
-#ifdef HAVE_SYNC_FILE_RANGE
-    if (!g_conf.filestore_flusher ||
-	!queue_flusher(fd, offset, len)) {
-      if (g_conf.filestore_sync_flush)
-	::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
-      ::close(fd);
-    }
-#else
-    ::close(fd);
-#endif
-    r = did;
+  // seek
+  actual = ::lseek64(fd, offset, SEEK_SET);
+  if (actual < 0) {
+    dout(0) << "write lseek64 to " << offset << " failed: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    r = -errno;
+    goto out;
+  }
+  if (actual != (int64_t)offset) {
+    dout(0) << "write lseek64 to " << offset << " gave bad offset " << actual << dendl;
+    r = -EIO;
+    goto out;
   }
 
+  // write
+  r = bl.write_fd(fd);
+  if (r == 0)
+    r = bl.length();
+
+  // flush?
+#ifdef HAVE_SYNC_FILE_RANGE
+  if (!g_conf.filestore_flusher ||
+      !queue_flusher(fd, offset, len)) {
+    if (g_conf.filestore_sync_flush)
+      ::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
+    ::close(fd);
+  }
+#else
+  ::close(fd);
+#endif
+
+ out:
   dout(10) << "write " << fn << " " << offset << "~" << len << " = " << r << dendl;
   return r;
 }
@@ -1506,19 +1520,32 @@ int FileStore::_do_clone_range(int from, int to, uint64_t off, uint64_t len)
   while (pos < end) {
     int l = MIN(end-pos, buflen);
     r = ::read(from, buf, l);
+    dout(25) << "  read from " << from << "~" << l << " got " << r << dendl;
     if (r < 0)
       break;
-    int op = 0;
-    while (op < l) {
-      int r2 = ::write(to, buf+op, l-op);
-      
-      if (r2 < 0) { r = r2; break; }
-      op += r2;	  
+    if (r == 0) {
+      // hrm, bad source range, wtf.
+      dout(0) << "_do_clone_range got short read result at " << from << " of " << from << "~" << len << dendl;
+      r = -ERANGE;
+      break;
     }
-    if (r < 0) break;
+    int op = 0;
+    while (op < r) {
+      int r2 = ::write(to, buf+op, r-op);
+      dout(25) << " write to " << to << "~" << (r-op) << " got " << r2 << dendl;      
+      if (r2 < 0) {
+	r = r2;
+	break;
+      }
+      op += r2;
+    }
+    if (r < 0)
+      break;
     pos += r;
   }
-
+  if (r < 0)
+    r = -errno;
+  dout(20) << "_do_clone_range " << off << "~" << len << " = " << r << dendl;
   return r;
 }
 
@@ -1646,15 +1673,19 @@ void FileStore::sync_entry()
     if (woke < min_interval) {
       utime_t t = min_interval;
       t -= woke;
-      dout(20) << "sync_entry waiting for another " << t << " to reach min interval " << min_interval << dendl;
+      dout(20) << "sync_entry waiting for another " << t 
+	       << " to reach min interval " << min_interval << dendl;
       othercond.WaitInterval(lock, t);
     }
 
+    list<Context*> fin;
+  again:
+    fin.swap(sync_waiters);
     lock.Unlock();
     
     if (commit_start()) {
       utime_t start = g_clock.now();
-      uint64_t cp = op_seq;
+      uint64_t cp = committing_seq;
 
       // make flusher stop flushing previously queued stuff
       sync_epoch++;
@@ -1722,7 +1753,12 @@ void FileStore::sync_entry()
     }
     
     lock.Lock();
-    
+    finish_contexts(fin, 0);
+    fin.clear();
+    if (!sync_waiters.empty()) {
+      dout(10) << "sync_entry more waiters, committing again" << dendl;
+      goto again;
+    }
   }
   lock.Unlock();
 }
@@ -1737,17 +1773,36 @@ void FileStore::_start_sync()
   }
 }
 
-void FileStore::sync()
+void FileStore::start_sync()
 {
   Mutex::Locker l(lock);
   sync_cond.Signal();
 }
 
-void FileStore::sync(Context *onsafe)
+void FileStore::start_sync(Context *onsafe)
 {
-  ObjectStore::Transaction t;
-  apply_transaction(t);
-  sync();
+  Mutex::Locker l(lock);
+  sync_waiters.push_back(onsafe);
+  sync_cond.Signal();
+  dout(10) << "start_sync" << dendl;
+}
+
+void FileStore::sync()
+{
+  Mutex l("FileStore::sync");
+  Cond c;
+  bool done;
+  C_SafeCond *fin = new C_SafeCond(&l, &c, &done);
+
+  start_sync(fin);
+
+  l.Lock();
+  while (!done) {
+    dout(10) << "sync waiting" << dendl;
+    c.Wait(l);
+  }
+  l.Unlock();
+  dout(10) << "sync done" << dendl;
 }
 
 void FileStore::_flush_op_queue()

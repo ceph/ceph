@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef HYPERTABLE_CEPHBROKER_H
-#define HYPERTABLE_CEPHBROKER_H
+#ifndef CEPH_HYPERTABLE_BROKER_H
+#define CEPH_HYPERTABLE_BROKER_H
 
 extern "C" {
 #include <unistd.h>

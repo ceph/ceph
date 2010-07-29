@@ -13,8 +13,8 @@
  */
 
 
-#ifndef _Sem_Posix_
-#define _Sem_Posix_
+#ifndef CEPH_Sem_Posix__H
+#define CEPH_Sem_Posix__H
 
 class Semaphore
 {

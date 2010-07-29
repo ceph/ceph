@@ -9,8 +9,8 @@
  * LGPL2
  */
 
-#ifndef _FS_CEPH_CEPH_FS_H
-#define _FS_CEPH_CEPH_FS_H
+#ifndef CEPH_FS_H
+#define CEPH_FS_H
 
 #include "msgr.h"
 #include "rados.h"
@@ -22,8 +22,8 @@
 #define CEPH_VERSION_MINOR 16
 #define CEPH_VERSION_PATCH 1
 
-#define _CEPH_STRINGIFY(x) #x
-#define CEPH_STRINGIFY(x) _CEPH_STRINGIFY(x)
+#define CEPH_STRINGIFY_(x) #x
+#define CEPH_STRINGIFY(x) CEPH_STRINGIFY_(x)
 #define CEPH_MAKE_VERSION(x, y, z) CEPH_STRINGIFY(x) "." CEPH_STRINGIFY(y) \
 	"." CEPH_STRINGIFY(z)
 #define CEPH_VERSION CEPH_MAKE_VERSION(CEPH_VERSION_MAJOR, \

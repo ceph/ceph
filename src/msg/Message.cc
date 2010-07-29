@@ -149,7 +149,6 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
   if (!g_conf.ms_nocrc) {
     __u32 front_crc = front.crc32c(0);
     __u32 middle_crc = middle.crc32c(0);
-    __u32 data_crc = data.crc32c(0);
 
     if (front_crc != footer.front_crc) {
       dout(0) << "bad crc in front " << front_crc << " != exp " << footer.front_crc << dendl;
@@ -165,13 +164,16 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
       *_dout << dendl;
       return 0;
     }
-    if (data_crc != footer.data_crc &&
-        !(footer.flags & CEPH_MSG_FOOTER_NOCRC)) {
-      dout(0) << "bad crc in data " << data_crc << " != exp " << footer.data_crc << dendl;
-      dout(20);
-      data.hexdump(*_dout);
-      *_dout << dendl;
-      return 0;
+
+    if ((footer.flags & CEPH_MSG_FOOTER_NOCRC) == 0) {
+      __u32 data_crc = data.crc32c(0);
+      if (data_crc != footer.data_crc) {
+	dout(0) << "bad crc in data " << data_crc << " != exp " << footer.data_crc << dendl;
+	dout(20);
+	data.hexdump(*_dout);
+	*_dout << dendl;
+	return 0;
+      }
     }
   }
 

@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MPOOLOPREPLY_H
-#define __MPOOLOPREPLY_H
+#ifndef CEPH_MPOOLOPREPLY_H
+#define CEPH_MPOOLOPREPLY_H
 
 
 class MPoolOpReply : public PaxosServiceMessage {

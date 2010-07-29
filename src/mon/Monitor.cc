@@ -395,7 +395,7 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
 //extract the original message and put it into the regular dispatch function
 void Monitor::handle_forward(MForward *m)
 {
-  dout(10) << "received forwarded message from " << m->msg->get_source_inst()
+  dout(10) << "received forwarded message from " << m->client
 	   << " via " << m->get_source_inst() << dendl;
   MonSession *session = (MonSession *)m->get_connection()->get_priv();
   assert(session);
@@ -407,6 +407,8 @@ void Monitor::handle_forward(MForward *m)
     Connection *c = new Connection;
     MonSession *s = new MonSession(m->msg->get_source_inst(), c);
     c->set_priv(s);
+    c->set_peer_addr(m->client.addr);
+    c->set_peer_type(m->client.name.type());
 
     s->caps = m->client_caps;
     s->proxy_con = m->get_connection()->get();
@@ -416,8 +418,7 @@ void Monitor::handle_forward(MForward *m)
     m->msg = NULL;  // so ~MForward doesn't delete it
     req->set_connection(c);
 
-    dout(10) << " got tid " << s->proxy_tid << " " << m << " " << *m
-	     << " from " << m->get_orig_source_inst() << dendl;
+    dout(10) << " mesg " << req << " from " << m->get_source_addr() << dendl;
 
     _ms_dispatch(req);
   }
@@ -782,9 +783,13 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   for (map<string,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();
        p++) {
-    if (!p->second.onetime)
+    // if there are any non-onetime subscriptions, we need to reply to start the resubscribe timer
+    if ((p->second.flags & CEPH_SUBSCRIBE_ONETIME) == 0)
       reply = true;
-    session_map.add_update_sub(s, p->first, p->second.have, p->second.onetime);
+
+    session_map.add_update_sub(s, p->first, p->second.start, 
+			       p->second.flags & CEPH_SUBSCRIBE_ONETIME);
+
     if (p->first == "mdsmap") {
       if ((int)s->caps.check_privileges(PAXOS_MDSMAP, MON_CAP_R)) {
         mdsmon()->check_sub(s->sub_map["mdsmap"]);
@@ -843,13 +848,13 @@ void Monitor::check_subs()
 
 void Monitor::check_sub(Subscription *sub)
 {
-  dout(0) << "check_sub monmap last " << sub->last << " have " << monmap->get_epoch() << dendl;
-  if (sub->last < monmap->get_epoch()) {
+  dout(0) << "check_sub monmap next " << sub->next << " have " << monmap->get_epoch() << dendl;
+  if (sub->next <= monmap->get_epoch()) {
     send_latest_monmap(sub->session->con);
     if (sub->onetime)
       session_map.remove_sub(sub);
     else
-      sub->last = monmap->get_epoch();
+      sub->next = monmap->get_epoch() + 1;
   }
 }
 

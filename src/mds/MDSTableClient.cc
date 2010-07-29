@@ -92,8 +92,9 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
       assert(g_conf.mds_kill_mdstable_at != 7);
       
       // remove from committing list
-      assert(pending_commit[tid]->pending_commit_tids[table].count(tid));
-      
+      pending_commit[tid]->pending_commit_tids[table].erase(tid);
+      pending_commit.erase(tid);
+
       // log ACK.
       mds->mdlog->start_submit_entry(new ETableClient(table, TABLESERVER_OP_ACK, tid),
 				     new C_LoggedAck(this, tid));
@@ -116,12 +117,6 @@ void MDSTableClient::_logged_ack(version_t tid)
 
   assert(g_conf.mds_kill_mdstable_at != 8);
 
-  assert(pending_commit.count(tid));
-  assert(pending_commit[tid]->pending_commit_tids[table].count(tid));
-  
-  pending_commit[tid]->pending_commit_tids[table].erase(tid);
-  pending_commit.erase(tid);
-  
   // kick any waiters (LogSegment trim)
   if (ack_waiters.count(tid)) {
     dout(15) << "kicking ack waiters on tid " << tid << dendl;
@@ -151,7 +146,7 @@ void MDSTableClient::_prepare(bufferlist& mutation, version_t *ptid, bufferlist 
 void MDSTableClient::send_to_tableserver(MMDSTableRequest *req)
 {
   int ts = mds->mdsmap->get_tableserver();
-  if (mds->mdsmap->get_state(ts) >= MDSMap::STATE_ACTIVE)
+  if (mds->mdsmap->get_state(ts) >= MDSMap::STATE_CLIENTREPLAY)
     mds->send_message_mds(req, ts);
   else {
     dout(10) << " deferring request to not-yet-active tableserver mds" << ts << dendl;

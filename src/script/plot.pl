@@ -45,4 +45,4 @@ if (scalar(@files) > 30) { print "set key off\n"; }
     } 
     print "plot " . join(',', @p) . "\n";
 #}
-print "pause 60000\n";
+#print "pause 60000\n";

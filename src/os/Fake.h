@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __FAKE_H
-#define __FAKE_H
+#ifndef CEPH_FAKE_H
+#define CEPH_FAKE_H
 
 #include "include/types.h"
 

@@ -25,8 +25,8 @@
  * PAXOS_OSDMAP.
  */
 
-#ifndef __MONCAPS_H
-#define __MONCAPS_H
+#ifndef CEPH_MONCAPS_H
+#define CEPH_MONCAPS_H
 
 #include "include/types.h"
 //#include ""

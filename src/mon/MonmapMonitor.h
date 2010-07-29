@@ -16,8 +16,8 @@
  * The Monmap Monitor is used to track the monitors in the cluster.
  */
 
-#ifndef __MONMAPMONITOR_H
-#define __MONMAPMONITOR_H
+#ifndef CEPH_MONMAPMONITOR_H
+#define CEPH_MONMAPMONITOR_H
 
 #include <map>
 #include <set>

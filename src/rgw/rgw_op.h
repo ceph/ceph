@@ -6,8 +6,8 @@
  * These subclasses must be further subclassed (by interface type)
  * to provide additional virtual methods such as send_response or get_params.
  */
-#ifndef __RGW_OP_H
-#define __RGW_OP_H
+#ifndef CEPH_RGW_OP_H
+#define CEPH_RGW_OP_H
 
 #include <string>
 
@@ -34,11 +34,15 @@ extern int read_acls(struct req_state *s, bool only_bucket = false);
 class RGWOp {
 protected:
   struct req_state *s;
+  struct rgw_err err;
 public:
   RGWOp() {}
   ~RGWOp() {}
 
-  virtual void init(struct req_state *s) { this->s = s; }
+  virtual void init(struct req_state *s) {
+    this->s = s;
+    memset(&err, 0, sizeof(err));
+  }
   virtual void execute() = 0;
 };
 
@@ -50,16 +54,17 @@ protected:
   const char *if_match;
   const char *if_nomatch;
   off_t ofs;
-  off_t len;
+  size_t len;
+  size_t total_len;
   off_t end;
   time_t mod_time;
+  time_t lastmod;
   time_t unmod_time;
   time_t *mod_ptr;
   time_t *unmod_ptr;
   map<string, bufferlist> attrs;
   char *data;
   int ret;
-  struct rgw_err err;
   bool get_data;
 
   int init_common();
@@ -71,9 +76,11 @@ public:
     RGWOp::init(s);
     ofs = 0;
     len = 0;
+    total_len = 0;
     end = -1;
     mod_ptr = NULL;
     unmod_ptr = NULL;
+    data = NULL;
   }
   void set_get_data(bool get_data) {
     this->get_data = get_data;
@@ -81,7 +88,7 @@ public:
   void execute();
 
   virtual int get_params() = 0;
-  virtual int send_response() = 0;
+  virtual int send_response(void *handle) = 0;
 };
 
 class RGWListBuckets : public RGWOp {
@@ -169,8 +176,8 @@ class RGWPutObj : public RGWOp {
 protected:
   int ret;
   size_t len;
+  off_t ofs;
   char *data;
-  struct rgw_err err;
   char *supplied_md5_b64;
 
 public:
@@ -181,12 +188,14 @@ public:
     RGWOp::init(s);
     ret = 0;
     len = 0;
+    ofs = 0;
     data = NULL;
     supplied_md5_b64 = NULL;
   }
   void execute();
 
   virtual int get_params() = 0;
+  virtual int get_data() = 0;
   virtual void send_response() = 0;
 };
 
@@ -220,7 +229,6 @@ protected:
   time_t *unmod_ptr;
   int ret;
   map<string, bufferlist> attrs;
-  struct rgw_err err;
   string src_bucket;
   string src_object;
   time_t mtime;
@@ -243,7 +251,6 @@ public:
     unmod_ptr = NULL;
     ret = 0;
     attrs.clear();
-    memset(&err, 0, sizeof(err));
     src_bucket.clear();
     src_object.clear();
     mtime = 0;

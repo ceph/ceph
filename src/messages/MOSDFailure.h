@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MOSDFAILURE_H
-#define __MOSDFAILURE_H
+#ifndef CEPH_MOSDFAILURE_H
+#define CEPH_MOSDFAILURE_H
 
 #include "messages/PaxosServiceMessage.h"
 

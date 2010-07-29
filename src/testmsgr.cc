@@ -68,7 +68,9 @@ int main(int argc, const char **argv, const char *envp[]) {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  common_init(args, NULL, false, false);
+
+  common_set_defaults(false);
+  common_init(args, NULL, false);
 
   vec_to_argv(args, argc, argv);
 
@@ -88,8 +90,6 @@ int main(int argc, const char **argv, const char *envp[]) {
   int err = rank->bind();
   if (err < 0)
     return 1;
-
-  _dout_create_courtesy_output_symlink("mon", whoami);
 
   // start monitor
   rank->register_entity(entity_name_t::MON(whoami));

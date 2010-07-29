@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __RGW_COMMON_H
-#define __RGW_COMMON_H
+#ifndef CEPH_RGW_COMMON_H
+#define CEPH_RGW_COMMON_H
 
 #include "fcgiapp.h"
 
@@ -35,6 +35,11 @@ using namespace std;
 #define RGW_ATTR_CONTENT_TYPE	RGW_ATTR_PREFIX "content_type"
 
 #define USER_INFO_VER 2
+
+#define RGW_MAX_CHUNK_SIZE	(4*1024*1024)
+
+#define RGW_LOG_BEGIN "RADOS S3 Gateway:"
+#define RGW_LOG(x) if ((x) <= rgw_log_level) cout << RGW_LOG_BEGIN << " "
 
 typedef void *RGWAccessHandle;
 
@@ -234,5 +239,7 @@ extern bool verify_permission(struct req_state *s, int perm);
  * by converting %-escaped strings into characters, etc*/
 extern bool url_decode(string& src_str, string& dest_str);
 
+/* loglevel of the gateway */
+extern int rgw_log_level;
 
 #endif

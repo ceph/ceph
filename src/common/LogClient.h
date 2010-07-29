@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __LOGCLIENT_H
-#define __LOGCLIENT_H
+#ifndef CEPH_LOGCLIENT_H
+#define CEPH_LOGCLIENT_H
 
 #include "msg/Dispatcher.h"
 

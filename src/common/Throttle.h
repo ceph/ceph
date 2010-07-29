@@ -1,5 +1,5 @@
-#ifndef _CEPH_THROTTLE_H
-#define _CEPH_THROTTLE_H
+#ifndef CEPH_THROTTLE_H
+#define CEPH_THROTTLE_H
 
 #include "Mutex.h"
 #include "Cond.h"

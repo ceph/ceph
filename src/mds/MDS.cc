@@ -150,15 +150,22 @@ MDS::~MDS() {
   if (filer) { delete filer; filer = 0; }
   if (objecter) { delete objecter; objecter = 0; }
 
-  if (logger) { delete logger; logger = 0; }
-  delete mlogger;
+  if (logger) {
+    logger_remove(logger);
+    delete logger;
+    logger = 0;
+  }
+  if (mlogger) {
+    logger_remove(mlogger);
+    delete mlogger;
+  }
   
   if (messenger)
     messenger->destroy();
 }
 
 
-void MDS::reopen_logger(utime_t start)
+void MDS::open_logger()
 {
   static LogType mds_logtype(l_mds_first, l_mds_last);
   static LogType mdm_logtype(l_mdm_first, l_mdm_last);
@@ -249,28 +256,24 @@ void MDS::reopen_logger(utime_t start)
     mdm_logtype.validate();
   }
 
-  if (whoami < 0) return;
+  dout(10) << "open_logger" << dendl;
 
-  // flush+close old log
-  delete logger;
-  delete mlogger;
-
-  // log
+  // open loggers
   char name[80];
-  snprintf(name, sizeof(name), "mds%d", whoami);
+  snprintf(name, sizeof(name), "mds.%s.log", g_conf.id);
+  logger = new Logger(name, (LogType*)&mds_logtype);
+  logger_add(logger);
 
-  bool append = mdsmap->get_inc(whoami) > 1;
+  snprintf(name, sizeof(name), "mds.%s.mem.log", g_conf.id);
+  mlogger = new Logger(name, (LogType*)&mdm_logtype);
+  logger_add(mlogger);
 
-  logger = new Logger(name, (LogType*)&mds_logtype, append);
-  logger->set_start(start);
+  mdlog->open_logger();
+  server->open_logger();
 
-  snprintf(name, sizeof(name), "mds%d.mem", whoami);
-  mlogger = new Logger(name, (LogType*)&mdm_logtype, append);
-
-  mdlog->reopen_logger(start, append);
-  server->reopen_logger(start, append);
+  logger_tare(mdsmap->get_created());
+  logger_start();
 }
-
 
 
 
@@ -299,7 +302,9 @@ MDSTableServer *MDS::get_table_server(int t)
 
 
 
-void MDS::send_message(Message *m, Connection *c) { 
+void MDS::send_message(Message *m, Connection *c)
+{ 
+  assert(c);
   messenger->send_message(m, c);
 }
 
@@ -398,6 +403,16 @@ void MDS::send_message_client_counted(Message *m, Session *session)
   }
 }
 
+void MDS::send_message_client(Message *m, Session *session)
+{
+  dout(10) << "send_message_client " << session->inst << " " << *m << dendl;
+ if (session->connection) {
+    messenger->send_message(m, session->connection);
+  } else {
+    messenger->send_message(m, session->inst);
+  }
+}
+
 int MDS::init()
 {
   dout(10) << sizeof(MDSCacheObject) << "\tMDSCacheObject" << dendl;
@@ -422,10 +437,6 @@ int MDS::init()
   messenger->add_dispatcher_tail(this);
   messenger->add_dispatcher_head(&logclient);
 
-  char name[30];
-  snprintf(name, sizeof(name), "mds.%s", g_conf.id);
-  _dout_create_courtesy_output_symlink(name);
-
   // get monmap
   monc->set_messenger(messenger);
 
@@ -445,12 +456,14 @@ int MDS::init()
 
   objecter->init();
 
-  monc->sub_want("mdsmap", 0);
+  monc->sub_want("mdsmap", 0, 0);
   monc->renew_subs();
 
   // schedule tick
   reset_tick();
   last_tick = g_clock.now();
+
+  open_logger();
 
   mds_lock.Unlock();
   return 0;
@@ -766,11 +779,8 @@ void MDS::handle_mds_map(MMDSMap *m)
   assert(whoami >= 0);
   incarnation = mdsmap->get_inc(whoami);
 
-  // open logger?
-  if (oldwhoami != whoami || !logger) {
-    _dout_create_courtesy_output_symlink("mds", whoami);
-    reopen_logger(mdsmap->get_created());   // adopt mds cluster timeline
-  }
+  if (oldwhoami != whoami)
+    dout_create_rank_symlink(whoami);
   
   if (oldwhoami != whoami) {
     // update messenger.
@@ -1239,11 +1249,7 @@ void MDS::stopping_start()
     suicide();
   }
 
-  // start cache shutdown
   mdcache->shutdown_start();
-  
-  // terminate client sessions
-  server->terminate_sessions();
 }
 
 void MDS::stopping_done()

@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __COMPLETION_H
-#define __COMPLETION_H
+#ifndef CEPH_COMPLETION_H
+#define CEPH_COMPLETION_H
 
 
 struct Completion : public Context {

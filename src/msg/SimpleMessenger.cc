@@ -62,12 +62,16 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   // bind to a socket
   dout(10) << "accepter.bind" << dendl;
   
-  // use whatever user specified (if anything)
-  sockaddr_in listen_addr = g_my_addr.in4_addr();
-  listen_addr.sin_family = AF_INET;
+  int family = g_conf.ms_bind_ipv6 ? AF_INET6 : AF_INET;
+  switch (g_my_addr.get_family()) {
+  case AF_INET:
+  case AF_INET6:
+    family = g_my_addr.get_family();
+    break;
+  }
 
   /* socket creation */
-  listen_sd = ::socket(AF_INET, SOCK_STREAM, 0);
+  listen_sd = ::socket(family, SOCK_STREAM, 0);
   if (listen_sd < 0) {
     char buf[80];
     derr(0) << "accepter.bind unable to create socket: "
@@ -78,14 +82,19 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   }
   opened_socket();
 
+  // reuse addr+port when possible
   int on = 1;
   ::setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-  
+
+  // use whatever user specified (if anything)
+  entity_addr_t listen_addr = g_my_addr;
+  listen_addr.set_family(family);
+
   /* bind to port */
   int rc;
-  if (listen_addr.sin_port) {
+  if (listen_addr.get_port()) {
     // specific port
-    rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
+    rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), sizeof(listen_addr.ss_addr()));
     if (rc < 0) {
       char buf[80];
       derr(0) << "accepter.bind unable to bind to " << g_my_addr.ss_addr()
@@ -97,8 +106,8 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   } else {
     // try a range of ports
     for (int port = CEPH_PORT_START; port <= CEPH_PORT_LAST; port++) {
-      listen_addr.sin_port = htons(port);
-      rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
+      listen_addr.set_port(port);
+      rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), sizeof(listen_addr.ss_addr()));
       if (rc == 0)
 	break;
     }
@@ -115,8 +124,8 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   }
 
   // what port did we get?
-  socklen_t llen = sizeof(listen_addr);
-  getsockname(listen_sd, (sockaddr*)&listen_addr, &llen);
+  socklen_t llen = sizeof(listen_addr.ss_addr());
+  getsockname(listen_sd, (sockaddr*)&listen_addr.ss_addr(), &llen);
   
   dout(10) << "accepter.bind bound to " << listen_addr << dendl;
 
@@ -138,7 +147,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
     messenger->need_addr = true;
 
   if (messenger->ms_addr.get_port() == 0) {
-    messenger->ms_addr.in4_addr() = listen_addr;
+    messenger->ms_addr = listen_addr;
     if (force_nonce >= 0)
       messenger->ms_addr.nonce = force_nonce;
     else
@@ -187,9 +196,9 @@ void *SimpleMessenger::Accepter::entry()
     if (done) break;
 
     // accept
-    struct sockaddr_in addr;
-    socklen_t slen = sizeof(addr);
-    int sd = ::accept(listen_sd, (sockaddr*)&addr, &slen);
+    entity_addr_t addr;
+    socklen_t slen = sizeof(addr.ss_addr());
+    int sd = ::accept(listen_sd, (sockaddr*)&addr.ss_addr(), &slen);
     if (sd >= 0) {
       errors = 0;
       opened_socket();
@@ -318,8 +327,9 @@ void SimpleMessenger::dispatch_entry()
 	  ms_deliver_handle_reset(con);
 	  con->put();
 	} else {
-	  ceph_msg_header& header = m->get_header();
-	  int msize = header.front_len + header.middle_len + header.data_len;
+	  uint64_t msize = m->get_dispatch_throttle_size();
+	  m->set_dispatch_throttle_size(0);  // clear it out, in case we requeue this message.
+
 	  dout(1) << "<== " << m->get_source_inst()
 		  << " " << m->get_seq()
 		  << " ==== " << *m
@@ -330,8 +340,9 @@ void SimpleMessenger::dispatch_entry()
 		  << " " << m 
 		  << dendl;
 	  ms_deliver_dispatch(m);
-	  if (msize > 0)
-	    message_throttler.put(msize);
+
+	  dispatch_throttle_release(msize);
+
 	  dout(20) << "done calling dispatch on " << m << dendl;
 	}
       }
@@ -421,7 +432,11 @@ int SimpleMessenger::send_message(Message *m, Connection *con)
 	  << " " << m
 	  << dendl;
 
-  submit_message(m, (SimpleMessenger::Pipe *)con->pipe);
+  SimpleMessenger::Pipe *pipe = (SimpleMessenger::Pipe *)con->get_pipe();
+  if (pipe) {
+    submit_message(m, pipe);
+    pipe->put();
+  } // else we raced with reaper()
   return 0;
 }
 
@@ -497,71 +512,6 @@ static int get_proto_version(int my_type, int peer_type, bool connect)
   return 0;
 }
 
-int SimpleMessenger::Pipe::get_required_bits()
-{
-  int my_reqs = 0;
-  int peer_reqs = 0;
-  switch(messenger->my_type) {
-  case CEPH_ENTITY_TYPE_OSD: my_reqs = CEPH_FEATURE_REQUIRED_OSD;
-    break;
-  case CEPH_ENTITY_TYPE_MDS: my_reqs = CEPH_FEATURE_REQUIRED_MDS;
-    break;
-  case CEPH_ENTITY_TYPE_MON: my_reqs = CEPH_FEATURE_REQUIRED_MON;
-    break;
-  case CEPH_ENTITY_TYPE_CLIENT: my_reqs = CEPH_FEATURE_REQUIRED_CLIENT;
-    break;
-  default: dout(0) << "I have no/unexpected type: "
-		   << messenger->my_type << dendl;
-    //die somehow?
-  }
-  switch(peer_type) {
-  case CEPH_ENTITY_TYPE_OSD: peer_reqs = CEPH_FEATURE_REQUIRED_OSD;
-    break;
-  case CEPH_ENTITY_TYPE_MDS: peer_reqs = CEPH_FEATURE_REQUIRED_MDS;
-    break;
-  case CEPH_ENTITY_TYPE_MON: peer_reqs = CEPH_FEATURE_REQUIRED_MON;
-    break;
-  case CEPH_ENTITY_TYPE_CLIENT: peer_reqs = CEPH_FEATURE_REQUIRED_CLIENT;
-    break;
-  default: dout(0) << "Peer has no/unexpected type: "
-		   <<peer_type << dendl;
-    //die somewhow?
-  }
-  return my_reqs & peer_reqs; // only need those required by both
-}
-
-int SimpleMessenger::Pipe::get_supported_bits()
-{
-  int my_sup = 0;
-  int peer_sup = 0;
-  switch(messenger->my_type) {
-  case CEPH_ENTITY_TYPE_OSD: my_sup = CEPH_FEATURE_SUPPORTED_OSD;
-    break;
-  case CEPH_ENTITY_TYPE_MDS: my_sup = CEPH_FEATURE_SUPPORTED_MDS;
-    break;
-  case CEPH_ENTITY_TYPE_MON: my_sup = CEPH_FEATURE_SUPPORTED_MON;
-    break;
-  case CEPH_ENTITY_TYPE_CLIENT: my_sup = CEPH_FEATURE_SUPPORTED_CLIENT;
-    break;
-  default: dout(0) << "I have no/unexpected type: " 
-		   << messenger->my_type << dendl;
-    //die somehow?
-  }
-  switch(peer_type) {
-  case CEPH_ENTITY_TYPE_OSD: peer_sup = CEPH_FEATURE_SUPPORTED_OSD;
-    break;
-  case CEPH_ENTITY_TYPE_MDS: peer_sup = CEPH_FEATURE_SUPPORTED_MDS;
-    break;
-  case CEPH_ENTITY_TYPE_MON: peer_sup = CEPH_FEATURE_SUPPORTED_MON;
-    break;
-  case CEPH_ENTITY_TYPE_CLIENT: peer_sup = CEPH_FEATURE_SUPPORTED_CLIENT;
-    break;
-  default: dout(0) << "Peer has no/unexpected type: "
-		   << peer_type << dendl;
-    //die somewhow?
-  }
-  return my_sup & peer_sup; // only need those required by both
-}
 int SimpleMessenger::Pipe::accept()
 {
   dout(10) << "accept" << dendl;
@@ -698,7 +648,7 @@ int SimpleMessenger::Pipe::accept()
       goto reply;
     }
 
-    feat_missing = get_required_bits() & ~(uint64_t)connect.features;
+    feat_missing = policy.features_required & ~(uint64_t)connect.features;
     if (feat_missing) {
       dout(1) << "peer missing required features " << std::hex << feat_missing << std::dec << dendl;
       reply.tag = CEPH_MSGR_TAG_FEATURES;
@@ -831,7 +781,7 @@ int SimpleMessenger::Pipe::accept()
     assert(0);    
 
   reply:
-    reply.features = ((uint64_t)connect.features & get_supported_bits()) | get_required_bits();
+    reply.features = ((uint64_t)connect.features & policy.features_supported) | policy.features_required;
     reply.authorizer_len = authorizer_reply.length();
     rc = tcp_write(sd, (char*)&reply, sizeof(reply));
     if (rc < 0)
@@ -869,7 +819,7 @@ int SimpleMessenger::Pipe::accept()
 
   // send READY reply
   reply.tag = CEPH_MSGR_TAG_READY;
-  reply.features = get_supported_bits();
+  reply.features = policy.features_supported;
   reply.global_seq = messenger->get_global_seq();
   reply.connect_seq = connect_seq;
   reply.flags = 0;
@@ -944,7 +894,7 @@ int SimpleMessenger::Pipe::connect()
   bufferlist addrbl, myaddrbl;
 
   // create socket?
-  sd = ::socket(AF_INET, SOCK_STREAM, 0);
+  sd = ::socket(peer_addr.get_family(), SOCK_STREAM, 0);
   if (sd < 0) {
     char buf[80];
     dout(-1) << "connect couldn't created socket " << strerror_r(errno, buf, sizeof(buf)) << dendl;
@@ -1051,7 +1001,7 @@ int SimpleMessenger::Pipe::connect()
     bufferlist authorizer_reply;
 
     ceph_msg_connect connect;
-    connect.features = get_supported_bits();
+    connect.features = policy.features_supported;
     connect.host_type = messenger->my_type;
     connect.global_seq = gseq;
     connect.connect_seq = cseq;
@@ -1126,7 +1076,7 @@ int SimpleMessenger::Pipe::connect()
     if (reply.tag == CEPH_MSGR_TAG_FEATURES) {
       dout(0) << "connect protocol feature mismatch, my " << std::hex
 	      << connect.features << " < peer " << reply.features
-	      << " missing " << (reply.features & ~get_supported_bits())
+	      << " missing " << (reply.features & ~policy.features_supported)
 	      << std::dec << dendl;
       goto fail_locked;
     }
@@ -1176,7 +1126,7 @@ int SimpleMessenger::Pipe::connect()
     }
 
     if (reply.tag == CEPH_MSGR_TAG_READY) {
-      uint64_t feat_missing = get_required_bits() & ~(uint64_t)reply.features;
+      uint64_t feat_missing = policy.features_required & ~(uint64_t)reply.features;
       if (feat_missing) {
 	dout(1) << "missing required features " << std::hex << feat_missing << std::dec << dendl;
 	goto fail_locked;
@@ -1190,7 +1140,7 @@ int SimpleMessenger::Pipe::connect()
       assert(connect_seq == reply.connect_seq);
       backoff = utime_t();
       connection_state->set_features((unsigned)reply.features & (unsigned)connect.features);
-      dout(20) << "connect success " << connect_seq << ", lossy = " << policy.lossy
+      dout(10) << "connect success " << connect_seq << ", lossy = " << policy.lossy
 	       << ", features " << connection_state->get_features() << dendl;
       
       if (!messenger->destination_stopped) {
@@ -1496,21 +1446,23 @@ void SimpleMessenger::Pipe::reader()
 
     else if (tag == CEPH_MSGR_TAG_MSG) {
       dout(20) << "reader got MSG" << dendl;
-      Message *m = read_message();
+      Message *m = 0;
+      int r = read_message(&m);
 
       pipe_lock.Lock();
       
       if (!m) {
-	derr(2) << "reader read null message, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-	fault(false, true);
+	if (r < 0)
+	  fault(false, true);
 	continue;
       }
 
       if (state == STATE_CLOSED ||
-	  state == STATE_CONNECTING)
+	  state == STATE_CONNECTING) {
+	messenger->dispatch_throttle_release(m->get_dispatch_throttle_size());
+	m->put();
 	continue;
-
-      m->set_connection(connection_state->get());
+      }
 
       // check received seq#.  if it is old, drop the message.  
       // note that incoming messages may skip ahead.  this is convenient for the client
@@ -1521,9 +1473,12 @@ void SimpleMessenger::Pipe::reader()
 	dout(-10) << "reader got old message "
 		  << m->get_seq() << " <= " << in_seq << " " << m << " " << *m
 		  << ", discarding" << dendl;
+	messenger->dispatch_throttle_release(m->get_dispatch_throttle_size());
 	m->put();
 	continue;
       }
+
+      m->set_connection(connection_state->get());
 
       // note last received message.
       in_seq = m->get_seq();
@@ -1690,22 +1645,16 @@ void SimpleMessenger::Pipe::unlock_maybe_reap()
 
     pipe_lock.Unlock();
 
-    // queue for reap
-    dout(10) << "unlock_maybe_reap queueing for reap" << dendl;
-    messenger->lock.Lock();
-    {
-      messenger->pipe_reap_queue.push_back(this);
-      messenger->wait_cond.Signal();
-    }
-    messenger->lock.Unlock();
+    messenger->queue_reap(this);
   } else {
     pipe_lock.Unlock();
   }
 }
 
 
-Message *SimpleMessenger::Pipe::read_message()
+int SimpleMessenger::Pipe::read_message(Message **pm)
 {
+  int ret = -1;
   // envelope
   //dout(10) << "receiver.read_message from sd " << sd  << dendl;
   
@@ -1715,12 +1664,12 @@ Message *SimpleMessenger::Pipe::read_message()
   
   if (connection_state->has_feature(CEPH_FEATURE_NOSRCADDR)) {
     if (tcp_read( sd, (char*)&header, sizeof(header) ) < 0)
-      return 0;
+      return -1;
     header_crc = ceph_crc32c_le(0, (unsigned char *)&header, sizeof(header) - sizeof(header.crc));
   } else {
     ceph_msg_header_old oldheader;
     if (tcp_read( sd, (char*)&oldheader, sizeof(oldheader) ) < 0)
-      return 0;
+      return -1;
     // this is fugly
     memcpy(&header, &oldheader, sizeof(header));
     header.src = oldheader.src.name;
@@ -1739,44 +1688,58 @@ Message *SimpleMessenger::Pipe::read_message()
   // verify header crc
   if (header_crc != header.crc) {
     dout(0) << "reader got bad header crc " << header_crc << " != " << header.crc << dendl;
-    return 0;
+    return -1;
   }
-  dout(10) << "getting message bytes now, currently using "
-	   << messenger->message_throttler.get_current() << "/"
-	   << messenger->message_throttler.get_max() << dendl;
-  uint64_t message_size = header.front_len  + header.middle_len
-    + header.data_len;
-  if (message_size)
-    messenger->message_throttler.get(message_size);
-  if (policy.throttler) policy.throttler->get(message_size);
+
+  bufferlist front, middle, data;
+  int front_len, middle_len;
+  unsigned data_len, data_off;
+  int aborted;
+  Message *message;
+
+  uint64_t message_size = header.front_len + header.middle_len + header.data_len;
+  if (message_size) {
+    if (policy.throttler) {
+      dout(10) << "reader wants " << message_size << " from policy throttler "
+	       << policy.throttler->get_current() << "/"
+	       << policy.throttler->get_max() << dendl;
+      policy.throttler->get(message_size);
+    }
+
+    // throttle total bytes waiting for dispatch.  do this _after_ the
+    // policy throttle, as this one does not deadlock (unless dispatch
+    // blocks indefinitely, which it shouldn't).  in contrast, the
+    // policy throttle carries for the lifetime of the message.
+    dout(10) << "reader wants " << message_size << " from dispatch throttler "
+	     << messenger->dispatch_throttler.get_current() << "/"
+	     << messenger->dispatch_throttler.get_max() << dendl;
+    messenger->dispatch_throttler.get(message_size);
+  }
 
   // read front
-  bufferlist front;
-  int front_len = header.front_len;
+  front_len = header.front_len;
   if (front_len) {
     bufferptr bp = buffer::create(front_len);
     if (tcp_read( sd, bp.c_str(), front_len ) < 0) 
-      return 0;
+      goto out_dethrottle;
     front.push_back(bp);
     dout(20) << "reader got front " << front.length() << dendl;
   }
 
   // read middle
-  bufferlist middle;
-  int middle_len = header.middle_len;
+  middle_len = header.middle_len;
   if (middle_len) {
     bufferptr bp = buffer::create(middle_len);
     if (tcp_read( sd, bp.c_str(), middle_len ) < 0) 
-      return 0;
+      goto out_dethrottle;
     middle.push_back(bp);
     dout(20) << "reader got middle " << middle.length() << dendl;
   }
 
 
   // read data
-  bufferlist data;
-  unsigned data_len = le32_to_cpu(header.data_len);
-  unsigned data_off = le32_to_cpu(header.data_off);
+  data_len = le32_to_cpu(header.data_len);
+  data_off = le32_to_cpu(header.data_off);
   if (data_len) {
     int left = data_len;
     if (data_off & ~PAGE_MASK) {
@@ -1785,7 +1748,7 @@ Message *SimpleMessenger::Pipe::read_message()
 		     (unsigned)left);
       bufferptr bp = buffer::create(head);
       if (tcp_read( sd, bp.c_str(), head ) < 0) 
-	return 0;
+	goto out_dethrottle;
       data.push_back(bp);
       left -= head;
       dout(20) << "reader got data head " << head << dendl;
@@ -1796,7 +1759,7 @@ Message *SimpleMessenger::Pipe::read_message()
     if (middle > 0) {
       bufferptr bp = buffer::create_page_aligned(middle);
       if (tcp_read( sd, bp.c_str(), middle ) < 0) 
-	return 0;
+	goto out_dethrottle;
       data.push_back(bp);
       left -= middle;
       dout(20) << "reader got data page-aligned middle " << middle << dendl;
@@ -1805,7 +1768,7 @@ Message *SimpleMessenger::Pipe::read_message()
     if (left) {
       bufferptr bp = buffer::create(left);
       if (tcp_read( sd, bp.c_str(), left ) < 0) 
-	return 0;
+	goto out_dethrottle;
       data.push_back(bp);
       dout(20) << "reader got data tail " << left << dendl;
     }
@@ -1813,27 +1776,48 @@ Message *SimpleMessenger::Pipe::read_message()
 
   // footer
   if (tcp_read(sd, (char*)&footer, sizeof(footer)) < 0) 
-    return 0;
+    goto out_dethrottle;
   
-  int aborted = (footer.flags & CEPH_MSG_FOOTER_COMPLETE) == 0;
+  aborted = (footer.flags & CEPH_MSG_FOOTER_COMPLETE) == 0;
   dout(10) << "aborted = " << aborted << dendl;
   if (aborted) {
     dout(0) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
 	    << " byte message.. ABORTED" << dendl;
-    // MEH FIXME 
-    Message *m = new MGenericMessage(CEPH_MSG_PING);
-    header.type = CEPH_MSG_PING;
-    m->set_header(header);
-    return m;
+    ret = 0;
+    goto out_dethrottle;
   }
 
   dout(20) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
 	   << " byte message" << dendl;
-  Message *message = decode_message(header, footer, front, middle, data);
-  message->set_throttler(policy.throttler);
-  return message;
-}
+  message = decode_message(header, footer, front, middle, data);
+  if (!message) {
+    ret = -EINVAL;
+    goto out_dethrottle;
+  }
 
+  message->set_throttler(policy.throttler);
+
+  // store reservation size in message, so we don't get confused
+  // by messages entering the dispatch queue through other paths.
+  message->set_dispatch_throttle_size(message_size);
+
+  *pm = message;
+  return 0;
+
+ out_dethrottle:
+  // release bytes reserved from the throttlers on failure
+  if (message_size) {
+    if (policy.throttler) {
+      dout(10) << "reader releasing " << message_size << " to policy throttler "
+	       << policy.throttler->get_current() << "/"
+	       << policy.throttler->get_max() << dendl;
+      policy.throttler->put(message_size);
+    }
+
+    messenger->dispatch_throttle_release(message_size);
+  }
+  return ret;
+}
 
 int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len, bool more)
 {
@@ -2091,6 +2075,27 @@ int SimpleMessenger::Pipe::write_message(Message *m)
 #undef dout_prefix
 #define dout_prefix _prefix(this)
 
+void SimpleMessenger::dispatch_throttle_release(uint64_t msize)
+{
+  if (msize) {
+    dout(10) << "dispatch_throttle_release " << msize << " to dispatch throttler "
+	    << messenger->dispatch_throttler.get_current() << "/"
+	    << messenger->dispatch_throttler.get_max() << dendl;
+    dispatch_throttler.put(msize);
+  }
+}
+
+void SimpleMessenger::reaper_entry()
+{
+  dout(10) << "reaper_entry start" << dendl;
+  lock.Lock();
+  while (!reaper_stop) {
+    reaper();
+    reaper_cond.Wait(lock);
+  }
+  lock.Unlock();
+  dout(10) << "reaper_entry done" << dendl;
+}
 
 /*
  * note: assumes lock is held
@@ -2113,10 +2118,23 @@ void SimpleMessenger::reaper()
     p->join();
     dout(10) << "reaper reaped pipe " << p << " " << p->get_peer_addr() << dendl;
     assert(p->sd < 0);
-    delete p;
+    if (p->connection_state)
+      p->connection_state->clear_pipe();
+    p->put();
     dout(10) << "reaper deleted pipe " << p << dendl;
   }
+  dout(10) << "reaper done" << dendl;
 }
+
+void SimpleMessenger::queue_reap(Pipe *pipe)
+{
+  dout(10) << "queue_reap " << pipe << dendl;
+  lock.Lock();
+  pipe_reap_queue.push_back(pipe);
+  reaper_cond.Signal();
+  lock.Unlock();
+}
+
 
 
 int SimpleMessenger::bind(int64_t force_nonce)
@@ -2228,14 +2246,16 @@ int SimpleMessenger::start(bool nodaemon)
       ::chdir(g_conf.chdir);
     }
 
-    _dout_rename_output_file();
-  } else if (g_daemon) {
-    write_pid_file(getpid());
+    dout_rename_output_file();
   }
 
   // go!
-  if (did_bind)
+  if (did_bind) {
     accepter.start();
+
+    reaper_started = true;
+    reaper_thread.create();
+  }
   return 0;
 }
 
@@ -2321,7 +2341,10 @@ void SimpleMessenger::submit_message(Message *m, Pipe *pipe)
   }
 
   lock.Lock();
-  {
+  if (pipe == dispatch_queue.local_pipe) {
+    dout(20) << "submit_message " << *m << " local" << dendl;
+    dispatch_queue.local_delivery(m, m->get_priority());
+  } else {
     pipe->pipe_lock.Lock();
     if (pipe->state == Pipe::STATE_CLOSED) {
       dout(20) << "submit_message " << *m << " ignoring closed pipe " << pipe->peer_addr << dendl;
@@ -2343,6 +2366,12 @@ void SimpleMessenger::submit_message(Message *m, const entity_addr_t& dest_addr,
   // if you start using the refcounting more and have multiple people
   // hanging on to a message, ditch the assert!
   assert(m->nref.read() == 1);
+
+  if (dest_addr == entity_addr_t()) {
+    dout(0) << "submit_message message " << *m << " with empty dest " << dest_addr << dendl;
+    m->put();
+    return;
+  }
 
   lock.Lock();
   {
@@ -2428,23 +2457,15 @@ int SimpleMessenger::send_keepalive(const entity_inst_t& dest)
 
 
 
-
-
 void SimpleMessenger::wait()
 {
   lock.Lock();
-  while (1) {
-    // reap dead pipes
-    reaper();
-
-    if (destination_stopped) {
-      dout(10) << "wait: everything stopped" << dendl;
-      break;   // everything stopped.
-    }
-
-    dout(10) << "wait: local_endpoint still active" << dendl;
+  while (!destination_stopped) {
+    dout(10) << "wait: still active" << dendl;
     wait_cond.Wait(lock);
+    dout(10) << "wait: woke up" << dendl;
   }
+  dout(10) << "wait: everything stopped" << dendl;
   lock.Unlock();
   
   // done!  clean up.
@@ -2452,6 +2473,16 @@ void SimpleMessenger::wait()
     dout(20) << "wait: stopping accepter thread" << dendl;
     accepter.stop();
     dout(20) << "wait: stopped accepter thread" << dendl;
+  }
+
+  if (reaper_started) {
+    dout(20) << "wait: stopping reaper thread" << dendl;
+    lock.Lock();
+    reaper_cond.Signal();
+    reaper_stop = true;
+    lock.Unlock();
+    reaper_thread.join();
+    dout(20) << "wait: stopped reaper thread" << dendl;
   }
 
   // close+reap all pipes
@@ -2470,7 +2501,7 @@ void SimpleMessenger::wait()
     reaper();
     dout(10) << "wait: waiting for pipes " << pipes << " to close" << dendl;
     while (!pipes.empty()) {
-      wait_cond.Wait(lock);
+      reaper_cond.Wait(lock);
       reaper();
     }
   }

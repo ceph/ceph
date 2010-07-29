@@ -1,5 +1,5 @@
-#ifndef __STRLIST_H
-#define __STRLIST_H
+#ifndef CEPH_STRLIST_H
+#define CEPH_STRLIST_H
 
 #include <string>
 #include <list>

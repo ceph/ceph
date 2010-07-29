@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MLOCK_H
-#define __MLOCK_H
+#ifndef CEPH_MLOCK_H
+#define CEPH_MLOCK_H
 
 #include "msg/Message.h"
 #include "mds/locks.h"

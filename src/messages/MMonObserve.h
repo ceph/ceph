@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MMONOBSERVE_H
-#define __MMONOBSERVE_H
+#ifndef CEPH_MMONOBSERVE_H
+#define CEPH_MMONOBSERVE_H
 
 #include "msg/Message.h"
 

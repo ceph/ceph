@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MMONGLOBALID_H
-#define __MMONGLOBALID_H
+#ifndef CEPH_MMONGLOBALID_H
+#define CEPH_MMONGLOBALID_H
 
 #include "messages/PaxosServiceMessage.h"
 

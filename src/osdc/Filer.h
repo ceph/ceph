@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __FILER_H
-#define __FILER_H
+#ifndef CEPH_FILER_H
+#define CEPH_FILER_H
 
 /*** Filer
  *

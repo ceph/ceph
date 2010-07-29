@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __EIMPORTSTART_H
-#define __EIMPORTSTART_H
+#ifndef CEPH_EIMPORTSTART_H
+#define CEPH_EIMPORTSTART_H
 
 #include "config.h"
 #include "include/types.h"

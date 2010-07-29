@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDS_EOPEN_H
-#define __MDS_EOPEN_H
+#ifndef CEPH_MDS_EOPEN_H
+#define CEPH_MDS_EOPEN_H
 
 #include "../LogEvent.h"
 #include "EMetaBlob.h"

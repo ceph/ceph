@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __OBJECTSTORE_H
-#define __OBJECTSTORE_H
+#ifndef CEPH_OBJECTSTORE_H
+#define CEPH_OBJECTSTORE_H
 
 #include "include/types.h"
 #include "include/Context.h"
@@ -115,6 +115,7 @@ public:
 
   private:
     uint64_t ops, bytes;
+    uint32_t largest_data_len, largest_data_off, largest_data_off_in_tbl;
     bufferlist tbl;
     bufferlist::iterator p;
 
@@ -135,6 +136,10 @@ public:
     unsigned opp, blp, oidp, cidp, lengthp, attrnamep, attrsetp;
 
   public:
+    uint64_t get_encoded_bytes() {
+      return 1 + 8 + 8 + 4 + 4 + 4 + 4 + tbl.length();
+    }
+
     uint64_t get_num_bytes() {
       if (old) {
 	uint64_t s = 16384 +
@@ -144,6 +149,28 @@ public:
 	return s;
       }
       return bytes;
+    }
+
+    uint32_t get_data_length() {
+      return largest_data_len;
+    }
+    uint32_t get_data_offset() {
+      if (largest_data_off_in_tbl) {
+	return largest_data_off_in_tbl +
+	  sizeof(__u8) +  // struct_v
+	  sizeof(ops) +
+	  sizeof(bytes) +
+	  sizeof(largest_data_len) +
+	  sizeof(largest_data_off) +
+	  sizeof(largest_data_off_in_tbl) +
+	  sizeof(__u32);  // tbl length
+      }
+      return 0;  // none
+    }
+    int get_data_alignment() {
+      if (!largest_data_len)
+	return -1;
+      return (largest_data_off - get_data_offset()) & ~PAGE_MASK;
     }
 
     bool empty() {
@@ -249,6 +276,12 @@ public:
       ::encode(oid, tbl);
       ::encode(off, tbl);
       ::encode(len, tbl);
+      assert(len == data.length());
+      if (data.length() > largest_data_len) {
+	largest_data_len = data.length();
+	largest_data_off = off;
+	largest_data_off_in_tbl = tbl.length() + sizeof(__u32);  // we are about to 
+      }
       ::encode(data, tbl);
       ops++;
     }
@@ -416,25 +449,28 @@ public:
 
     // etc.
     Transaction() :
-      ops(0), bytes(0),
+      ops(0), bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
       old(false), opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0) { }
     Transaction(bufferlist::iterator &dp) :
-      ops(0), bytes(0),
+      ops(0), bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
       old(false), opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0) {
       decode(dp);
     }
     Transaction(bufferlist &nbl) :
-      ops(0), bytes(0),
+      ops(0), bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
       old(false), opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0) {
       bufferlist::iterator dp = nbl.begin();
       decode(dp); 
     }
 
     void encode(bufferlist& bl) const {
-      __u8 struct_v = 2;
+      __u8 struct_v = 3;
       ::encode(struct_v, bl);
       ::encode(ops, bl);
       ::encode(bytes, bl);
+      ::encode(largest_data_len, bl);
+      ::encode(largest_data_off, bl);
+      ::encode(largest_data_off_in_tbl, bl);
       ::encode(tbl, bl);
     }
     void decode(bufferlist::iterator &bl) {
@@ -455,9 +491,14 @@ public:
           attrnames.push_back((*p).c_str());*/
 	::decode(attrsets, bl);
       } else {
-	assert(struct_v == 2);
+	assert(struct_v <= 3);
 	::decode(ops, bl);
 	::decode(bytes, bl);
+	if (struct_v >= 3) {
+	  ::decode(largest_data_len, bl);
+	  ::decode(largest_data_off, bl);
+	  ::decode(largest_data_off_in_tbl, bl);
+	}
 	::decode(tbl, bl);
       }
     }

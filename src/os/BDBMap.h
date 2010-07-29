@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __BERKELEYDB_H
-#define __BERKELEYDB_H
+#ifndef CEPH_BERKELEYDB_H
+#define CEPH_BERKELEYDB_H
 
 #include <db.h>
 #include <unistd.h>

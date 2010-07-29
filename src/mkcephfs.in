@@ -51,27 +51,27 @@ case $1 in
 	    mkbtrfs=1
 	    ;;
     --conf | -c)
-	    [ "$2" = "" ] && usage_exit
+	    [ -z "$2" ] && usage_exit
 	    shift
 	    conf=$1
 	    ;;
     --numosd)
-	    [ "$2" = "" ] && usage_exit
+	    [ -z "$2" ] && usage_exit
 	    shift
 	    numosd=$1
 	    ;;
     --crushmapsrc)
-	    [ "$2" = "" ] && usage_exit
+	    [ -z "$2" ] && usage_exit
 	    shift
 	    usecrushmapsrc=$1
 	    ;;
     --crushmap)
-	    [ "$2" = "" ] && usage_exit
+	    [ -z "$2" ] && usage_exit
 	    shift
 	    usecrushmap=$1
 	    ;;
     -k)
-	    [ "$2" = "" ] && usage_exit
+	    [ -z "$2" ] && usage_exit
 	    shift
 	    adminkeyring=$1
 	    ;;
@@ -115,7 +115,7 @@ if true; then
     # build osdmap
     osdmap="/tmp/osdmap.$$"
     if [ -z "$numosd" ]; then
-	maxosd=`$CCONF -c $conf -l osd | egrep -v '^osd$' | tail -1 | cut -c 4-`
+	maxosd=`$CCONF -c $conf -l osd | egrep -v '^osd$' | cut -c 4- | sort -n | tail -1`
 	numosd=$(($maxosd + 1))
 	echo max osd in $conf is $maxosd, num osd is $numosd
     fi
@@ -193,6 +193,7 @@ for name in $what; do
     check_host || continue
 
     if [ -n "$ssh" ] && ( echo $pushed_to | grep -v -q " $host " ); then
+	scp -q $conf $host:$conf
 	scp -q $osdmap $host:$osdmap
 	scp -q $monmap $host:$monmap
 	pushed_to="$pushed_to $host "
@@ -232,6 +233,11 @@ for name in $what; do
 	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
 	get_conf btrfs_opt "noatime" "btrfs options"
 	[ -n "$btrfs_opt" ] && btrfs_opt="-o $btrfs_opt"
+
+	if [ -n "$osd_journal" ] && echo "$btrfs_devs" | grep -q -w "$osd_journal" ; then
+	    echo "ERROR: osd journal device ($osd_journal) also used by btrfs devs ($btrfs_devs)"
+	    continue
+	fi
 	
 	do_cmd "test -d $osd_data || mkdir -p $osd_data"
 	[ -n "$osd_journal" ] && do_cmd "test -d $osd_journal || mkdir -p `dirname $osd_journal`"
@@ -242,8 +248,7 @@ for name in $what; do
 	fi
 
 	[ -n "$ssh" ] && scp $monmap $host:$monmap
-	do_root_cmd "$BINDIR/cosd -c $conf --monmap $monmap -i $num --mkfs --osd-data $osd_data"
-	[ -n "$user" ] && do_root_cmd "chown -R $user $osd_data"
+	do_cmd "$BINDIR/cosd -c $conf --monmap $monmap -i $num --mkfs --osd-data $osd_data"
 
 	if [ -n "$keyring" ]; then
 	    if [ -n "$ssh" ]; then

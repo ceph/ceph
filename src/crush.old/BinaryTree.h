@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __crush_BINARYTREE_H
-#define __crush_BINARYTREE_H
+#ifndef CEPH_crush_BINARYTREE_H
+#define CEPH_crush_BINARYTREE_H
 
 #include <cassert>
 #include <iostream>

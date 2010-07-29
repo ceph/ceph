@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MMDSCACHEREJOIN_H
-#define __MMDSCACHEREJOIN_H
+#ifndef CEPH_MMDSCACHEREJOIN_H
+#define CEPH_MMDSCACHEREJOIN_H
 
 #include "msg/Message.h"
 

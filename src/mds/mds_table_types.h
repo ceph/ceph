@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MDSTABLETYPES_H
-#define __MDSTABLETYPES_H
+#ifndef CEPH_MDSTABLETYPES_H
+#define CEPH_MDSTABLETYPES_H
 
 // MDS TABLES
 

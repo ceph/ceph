@@ -14,8 +14,8 @@
 
 
 
-#ifndef __MESSENGER_H
-#define __MESSENGER_H
+#ifndef CEPH_MESSENGER_H
+#define CEPH_MESSENGER_H
 
 #include <map>
 using namespace std;

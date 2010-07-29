@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __CEPH_OSD_OBJECTVERSIONER_H
-#define __CEPH_OSD_OBJECTVERSIONER_H
+#ifndef CEPH_OSD_OBJECTVERSIONER_H
+#define CEPH_OSD_OBJECTVERSIONER_H
 
 class ObjectVersioner {
  public:

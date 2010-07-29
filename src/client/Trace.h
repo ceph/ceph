@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __CLIENT_TRACE_H
-#define __CLIENT_TRACE_H
+#ifndef CEPH_CLIENT_TRACE_H
+#define CEPH_CLIENT_TRACE_H
 
 #include <stdlib.h>
 

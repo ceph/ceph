@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MONMAP_H
-#define __MONMAP_H
+#ifndef CEPH_MONMAP_H
+#define CEPH_MONMAP_H
 
 #include "include/err.h"
 

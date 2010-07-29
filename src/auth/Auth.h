@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __AUTHTYPES_H
-#define __AUTHTYPES_H
+#ifndef CEPH_AUTHTYPES_H
+#define CEPH_AUTHTYPES_H
 
 #include "Crypto.h"
 #include "msg/msg_types.h"

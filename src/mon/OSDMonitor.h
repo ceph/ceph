@@ -15,8 +15,8 @@
 /* Object Store Device (OSD) Monitor
  */
 
-#ifndef __OSDMONITOR_H
-#define __OSDMONITOR_H
+#ifndef CEPH_OSDMONITOR_H
+#define CEPH_OSDMONITOR_H
 
 #include <map>
 #include <set>
@@ -66,8 +66,10 @@ private:
   // ...
   void send_to_waiting();     // send current map to waiters.
   void send_full(PaxosServiceMessage *m);
-  MOSDMap *build_incremental(epoch_t from);
+  MOSDMap *build_incremental(epoch_t from, epoch_t to);
   void send_incremental(PaxosServiceMessage *m, epoch_t since);
+  void send_incremental(epoch_t from, entity_inst_t& dest);
+
  
   bool preprocess_failure(class MOSDFailure *m);
   bool prepare_failure(class MOSDFailure *m);
@@ -91,7 +93,7 @@ private:
   bool prepare_pool_op_delete(MPoolOp *m);
   bool prepare_pool_op_auid(MPoolOp *m);
   int prepare_new_pool(string& name, uint64_t auid = CEPH_AUTH_UID_DEFAULT,
-		       __u8 crush_rule = 0);
+		       int crush_rule = -1);
   int prepare_new_pool(MPoolOp *m);
 
   void _pool_op(MPoolOp *m, int replyCode, epoch_t epoch, bufferlist *blp=NULL);

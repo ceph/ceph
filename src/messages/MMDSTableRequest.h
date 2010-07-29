@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MMDSTABLEREQUEST_H
-#define __MMDSTABLEREQUEST_H
+#ifndef CEPH_MMDSTABLEREQUEST_H
+#define CEPH_MMDSTABLEREQUEST_H
 
 #include "msg/Message.h"
 #include "mds/mds_table_types.h"
