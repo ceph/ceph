@@ -111,7 +111,7 @@ fi
 %{_bindir}/cosd
 %{_bindir}/rados
 %{_bindir}/radosacl
-%{_bindir}/rbdtool
+%{_bindir}/rbd
 %{_initrddir}/ceph
 %{_libdir}/libceph.so.*
 %{_libdir}/libcrush.so.*
@@ -138,7 +138,7 @@ fi
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw_admin.8*
 %{_mandir}/man8/rados.8*
-%{_mandir}/man8/rbdtool.8*
+%{_mandir}/man8/rbd.8*
 %{_mandir}/man8/cauthtool.8*
 %{_mandir}/man8/cclass.8.gz
 %{_mandir}/man8/cclsinfo.8.gz
