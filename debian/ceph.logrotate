@@ -4,6 +4,6 @@
     compress
     sharedscripts
     postrotate
-        invoke-rc.d ceph reload
+        invoke-rc.d ceph reload || service ceph reload
     endscript
 }
