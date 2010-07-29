@@ -2976,7 +2976,7 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
   if (m->get_source().is_osd()) {
     int from = m->get_source().num();
     if (!osdmap->have_inst(from) ||
-	osdmap->get_addr(from) != m->get_source_inst().addr) {
+	osdmap->get_cluster_addr(from) != m->get_source_inst().addr) {
       dout(-7) << "from dead osd" << from << ", dropping, sharing map" << dendl;
       send_incremental_map(epoch, m->get_source_inst(), true);
       m->put();
