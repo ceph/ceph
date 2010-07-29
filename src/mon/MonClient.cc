@@ -64,6 +64,8 @@ int MonClient::build_initial_monmap()
 	char n[2];
 	n[0] = 'a' + i;
 	n[1] = 0;
+	if (addrs[i].get_port() == 0)
+	  addrs[i].set_port(CEPH_MON_PORT);
 	monmap.add(n, addrs[i]);
       }
       return 0;
