@@ -691,7 +691,7 @@ void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
   const char *cgi_env_level = FCGX_GetParam("RGW_LOG_LEVEL", fcgx->envp);
   if (cgi_env_level != NULL) {
     int level = atoi(cgi_env_level);
-    if (level > 0) {
+    if (level >= 0) {
       rgw_log_level = level;
     }
   }
