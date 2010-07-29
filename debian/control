@@ -30,7 +30,7 @@ Description: debugging symbols for ceph
 Package: ceph-fuse
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libfuse2
-Recommends: ceph
+Suggests: ceph
 Description: FUSE-based client for the Ceph distributed file system
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is a
