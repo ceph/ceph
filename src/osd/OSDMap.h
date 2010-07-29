@@ -448,24 +448,10 @@ private:
     return entity_inst_t(entity_name_t::OSD(osd),
 			 osd_addr[osd]);
   }
-  bool get_inst(int osd, entity_inst_t& inst) { 
-    if (have_inst(osd)) {
-      inst.name = entity_name_t::OSD(osd);
-      inst.addr = osd_addr[osd];
-      return true;
-    } 
-    return false;
-  }
   entity_inst_t get_cluster_inst(int osd) {
     assert(exists(osd) && is_up(osd));
     if(osd_cluster_addr[osd] == entity_addr_t()) return get_inst(osd);
     return entity_inst_t(entity_name_t::OSD(osd), osd_cluster_addr[osd]);
-  }
-  bool get_cluster_inst(int osd, entity_inst_t& inst) {
-    bool exists = get_inst(osd, inst);
-    if (exists && (osd_cluster_addr[osd] != entity_addr_t()))
-        inst.addr = osd_cluster_addr[osd];
-    return exists;
   }
   entity_inst_t get_hb_inst(int osd) {
     assert(exists(osd));
