@@ -570,6 +570,7 @@ bool conf_set_conf_val(void *field, opt_type_t type, const char *val)
     break;
   case OPT_ADDR:
     ((entity_addr_t *)field)->parse(val);
+    break;
   default:
     return false;
   }
@@ -933,7 +934,10 @@ int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const ch
       else {
         ret = 1;
       }
-      ((entity_addr_t*)out)->parse(tmp);
+      if ((1 == ret) &&!(((entity_addr_t*)out)->parse(tmp))) {
+        cerr << "Addr " << tmp << " failed to parse! Shutting down" << std::endl;
+        exit(1);
+      }
       break;
     default:
 	ret = 0;
