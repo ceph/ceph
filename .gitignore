@@ -49,3 +49,9 @@ testkeys
 testmsgr
 testrados
 testradospp
+ceph.spec
+compile
+config.guess
+config.sub
+libtool
+ltmain.sh
