@@ -243,19 +243,15 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_UID | 
     CEPH_FEATURE_NOSRCADDR;
   client_messenger->set_default_policy(SimpleMessenger::Policy::stateless_server(supported, 0));
-  client_messenger->set_policy(entity_name_t::TYPE_MON,
-			SimpleMessenger::Policy::client(supported,
-							CEPH_FEATURE_UID));
-  client_messenger->set_policy(entity_name_t::TYPE_OSD,
-			SimpleMessenger::Policy::lossless_peer(supported,
-							       CEPH_FEATURE_UID));
   client_messenger->set_policy(entity_name_t::TYPE_CLIENT,
 			SimpleMessenger::Policy::stateless_server(supported, 0));
   client_messenger->set_policy_throttler(entity_name_t::TYPE_CLIENT, &client_throttler);
-
+  client_messenger->set_policy(entity_name_t::TYPE_MON,
+                               SimpleMessenger::Policy::client(supported,
+                                                               CEPH_FEATURE_UID));
   if (cluster_messenger != client_messenger) {
     cluster_messenger->register_entity(entity_name_t::OSD(whoami));
-    cluster_messenger->set_default_policy(SimpleMessenger::Policy::stateless_server(supported, 0));
+    cluster_messenger->set_default_policy(SimpleMessenger::Policy::stateless_server(0, 0));
     cluster_messenger->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::client(0,0));
     cluster_messenger->set_policy(entity_name_t::TYPE_OSD,
                                   SimpleMessenger::Policy::lossless_peer(supported, CEPH_FEATURE_UID));
@@ -265,6 +261,10 @@ int main(int argc, const char **argv)
     //try to poison pill any OSD connections on the wrong address
     client_messenger->set_policy(entity_name_t::TYPE_OSD,
                                  SimpleMessenger::Policy::stateless_server(0,0));
+  } else {
+    client_messenger->set_policy(entity_name_t::TYPE_OSD,
+				 SimpleMessenger::Policy::lossless_peer(supported,
+									CEPH_FEATURE_UID));
   }
 
 
