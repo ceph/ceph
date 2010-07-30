@@ -471,12 +471,19 @@ int RGWRados::set_attr(std::string& bucket, std::string& oid,
                        const char *name, bufferlist& bl)
 {
   rados_pool_t pool;
+  string actual_bucket = bucket;
+  string actual_obj = oid;
 
-  int r = open_pool(bucket, &pool);
+  if (actual_obj.size() == 0) {
+    actual_obj = bucket;
+    actual_bucket = root_bucket;
+  }
+
+  int r = open_pool(actual_bucket, &pool);
   if (r < 0)
     return r;
 
-  r = rados->setxattr(pool, oid, name, bl);
+  r = rados->setxattr(pool, actual_obj, name, bl);
 
   if (r < 0)
     return r;
