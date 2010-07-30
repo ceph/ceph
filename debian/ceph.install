@@ -14,7 +14,7 @@ usr/bin/cauthtool
 usr/bin/rados
 usr/bin/rbd
 sbin/mount.ceph
-usr/sbin/mkcephfs
+sbin/mkcephfs
 usr/lib/ceph/ceph_common.sh
 usr/lib/rados-classes/*
 usr/share/doc/ceph/sample.ceph.conf

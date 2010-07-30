@@ -278,8 +278,7 @@ install-data-local:
 	$(install_sh_SCRIPT) -m 0755 cclass $(DESTDIR)$(bindir)/cclass
 	$(install_sh_SCRIPT) -m 0755 cclsinfo $(DESTDIR)$(bindir)/cclsinfo
 	sh -c "if [ \"$(sbindir)\" = \"/usr/sbin\" ]; then mkdir -p $(DESTDIR)/sbin ; $(install_sh_SCRIPT) -m 0755 mount.ceph $(DESTDIR)/sbin/mount.ceph ; else mkdir -p $(DESTDIR)$(sbindir) ; $(install_sh_SCRIPT) -m 0755 mount.ceph $(DESTDIR)$(sbindir)/mount.ceph ; fi"
-	mkdir -p $(DESTDIR)$(sbindir)/ceph
-	$(install_sh_SCRIPT) -m 0755 mkcephfs $(DESTDIR)$(sbindir)/mkcephfs
+	sh -c "if [ \"$(sbindir)\" = \"/usr/sbin\" ]; then mkdir -p $(DESTDIR)/sbin ; $(install_sh_SCRIPT) -m 0755 mkcephfs $(DESTDIR)/sbin/mkcephfs ; else mkdir -p $(DESTDIR)$(sbindir) ; $(install_sh_SCRIPT) -m 0755 mkcephfs $(DESTDIR)$(sbindir)/mkcephfs ; fi"
 	mkdir -p $(DESTDIR)$(libdir)/ceph
 	$(install_sh_SCRIPT) -m 0755 ceph_common.sh $(DESTDIR)$(libdir)/ceph/ceph_common.sh
 	mkdir -p $(DESTDIR)$(sysconfdir)/ceph
