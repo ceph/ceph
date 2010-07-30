@@ -123,8 +123,28 @@ bool OSDMonitor::update_from_paxos()
 
   send_to_waiting();
   check_subs();
-    
+   
   return true;
+}
+
+void OSDMonitor::remove_redundant_pg_temp()
+{
+  dout(10) << "remove_redundant_pg_temp" << dendl;
+  bool removed = false;
+
+  for (map<pg_t,vector<int> >::iterator p = osdmap.pg_temp.begin();
+       p != osdmap.pg_temp.end();
+       p++) {
+    if (pending_inc.new_pg_temp.count(p->first) == 0) {
+      vector<int> raw_up;
+      osdmap.pg_to_raw_up(p->first, raw_up);
+      if (raw_up == p->second) {
+	dout(10) << " removing unnecessary pg_temp " << p->first << " -> " << p->second << dendl;
+	pending_inc.new_pg_temp[p->first].clear();
+	removed = true;
+      }
+    }
+  }
 }
 
 
@@ -134,6 +154,9 @@ void OSDMonitor::create_pending()
   pending_inc.fsid = mon->monmap->fsid;
   
   dout(10) << "create_pending e " << pending_inc.epoch << dendl;
+
+  // drop any redundant pg_temp entries
+  remove_redundant_pg_temp();
 }
 
 
@@ -920,7 +943,8 @@ void OSDMonitor::tick()
 #endif
   // ---------------
 
-  if (do_propose)
+  if (do_propose ||
+      !pending_inc.new_pg_temp.empty())  // also propose if we adjusted pg_temp
     propose_pending();
 }
 

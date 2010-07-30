@@ -70,6 +70,8 @@ private:
   void send_incremental(PaxosServiceMessage *m, epoch_t since);
   void send_incremental(epoch_t from, entity_inst_t& dest);
 
+  void remove_redundant_pg_temp();
+
  
   bool preprocess_failure(class MOSDFailure *m);
   bool prepare_failure(class MOSDFailure *m);

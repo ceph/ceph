@@ -855,7 +855,12 @@ private:
     return acting.size();
   }
 
-
+  void pg_to_raw_up(pg_t pg, vector<int>& up) {
+    vector<int> raw;
+    pg_to_osds(pg, raw);
+    raw_to_up_osds(pg, raw, up);
+  }
+  
   void pg_to_up_acting_osds(pg_t pg, vector<int>& up, vector<int>& acting) {
     vector<int> raw;
     pg_to_osds(pg, raw);
