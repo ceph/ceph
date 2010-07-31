@@ -107,7 +107,7 @@ public:
   int decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out);
 };
 
-static const unsigned char *aes_iv = CEPH_AES_IV;
+static const unsigned char *aes_iv = (const unsigned char *)CEPH_AES_IV;
 
 int CryptoAES::create(bufferptr& secret)
 {
