@@ -1167,6 +1167,10 @@ void OSD::update_heartbeat_peers()
   old_from.swap(heartbeat_from);
   old_inst.swap(heartbeat_inst);
 
+  utime_t now = g_clock.now();
+
+  heartbeat_epoch = osdmap->get_epoch();
+
   // build heartbeat to/from set
   for (hash_map<pg_t, PG*>::iterator i = pg_map.begin();
        i != pg_map.end();
@@ -1195,6 +1199,10 @@ void OSD::update_heartbeat_peers()
 	  heartbeat_from_stamp[p] = old_from_stamp[p];
 	} else {
 	  dout(10) << "update_heartbeat_peers: new _from osd" << p << " " << heartbeat_inst[p] << dendl;
+	  heartbeat_from_stamp[p] = now;  
+	  MOSDPing *m = new MOSDPing(osdmap->get_fsid(), 0, heartbeat_epoch, my_stat, true); // request hb
+	  m->set_priority(CEPH_MSG_PRIO_HIGH);
+	  heartbeat_messenger->send_message(m, heartbeat_inst[p]);
 	}
       }
     }
@@ -1223,8 +1231,6 @@ void OSD::update_heartbeat_peers()
       dout(10) << "update_heartbeat_peers: dropped old _from osd" << p->first 
 	       << " " << old_inst[p->first] << dendl;
   }
-
-  heartbeat_epoch = osdmap->get_epoch();
 
   dout(10) << "update_heartbeat_peers: hb   to: " << heartbeat_to << dendl;
   dout(10) << "update_heartbeat_peers: hb from: " << heartbeat_from << dendl;
@@ -1386,20 +1392,6 @@ void OSD::heartbeat()
 				my_stat);
       m->set_priority(CEPH_MSG_PRIO_HIGH);
       heartbeat_messenger->send_message(m, heartbeat_inst[peer]);
-    }
-  }
-
-  // request heartbeats?
-  for (map<int, epoch_t>::iterator p = heartbeat_from.begin();
-       p != heartbeat_from.end();
-       p++) {
-    if (heartbeat_from_stamp.count(p->first) == 0) {
-      // fake initial stamp.  and send them a ping so they know we expect it.
-      dout(10) << "requesting heartbeats from " << heartbeat_inst[p->first] << dendl;
-      heartbeat_from_stamp[p->first] = now;  
-      Message *m = new MOSDPing(osdmap->get_fsid(), 0, heartbeat_epoch, my_stat, true);  // request ack
-      m->set_priority(CEPH_MSG_PRIO_HIGH);
-      heartbeat_messenger->send_message(m, heartbeat_inst[p->first]);
     }
   }
 
