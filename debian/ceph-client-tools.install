@@ -1,2 +1,8 @@
 sbin/mount.ceph
+usr/bin/csyn
+usr/bin/rados
+usr/bin/rbd
+usr/share/man/man8/csyn.8
+usr/share/man/man8/rados.8
+usr/share/man/man8/rbd.8
 usr/share/man/man8/mount.ceph.8
