@@ -178,6 +178,16 @@ public:
       if (head.args.setattr.mask & CEPH_SETATTR_ATIME)
 	out << " atime=" << utime_t(head.args.setattr.atime);
     }
+    if (head.op == CEPH_MDS_OP_SETFILELOCK ||
+	head.op == CEPH_MDS_OP_GETFILELOCK) {
+      out << "rule " << (int)head.args.filelock_change.rule
+	  << ", type " << (int)head.args.filelock_change.type
+	  << ", pid " << head.args.filelock_change.pid
+	  << ", pid_ns " << head.args.filelock_change.pid_namespace
+	  << ", start " << head.args.filelock_change.start
+	  << ", length " << head.args.filelock_change.length
+	  << ", wait " << (int)head.args.filelock_change.wait;
+    }
     //if (!get_filepath().empty()) 
     out << " " << get_filepath();
     if (!get_filepath2().empty())

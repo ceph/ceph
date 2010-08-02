@@ -688,7 +688,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
   // insert readdir results too
 
   // the rest?
-  p = reply->get_dir_bl().begin();
+  p = reply->get_extra_bl().begin();
   if (!p.end()) {
     // only open dir if we're actually adding stuff to it!
     Dir *dir = in->open_dir();
@@ -932,7 +932,7 @@ int Client::make_request(MetaRequest *request,
 
   int r = reply->get_result();
   if (pdirbl)
-    pdirbl->claim(reply->get_dir_bl());
+    pdirbl->claim(reply->get_extra_bl());
   reply->put();
   return r;
 }
@@ -1420,7 +1420,7 @@ void Client::send_reconnect(int mds)
 		 path.get_ino(), path.get_path(),   // ino
 		 in->caps_wanted(), // wanted
 		 in->caps[mds]->issued,     // issued
-		 in->size, in->mtime, in->atime, in->snaprealm->ino);
+		 in->snaprealm->ino);
 
       if (did_snaprealm.count(in->snaprealm->ino) == 0) {
 	dout(10) << " snaprealm " << *in->snaprealm << dendl;

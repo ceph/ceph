@@ -54,6 +54,7 @@ LockType CInode::filelock_type(CEPH_LOCK_IFILE);
 LockType CInode::xattrlock_type(CEPH_LOCK_IXATTR);
 LockType CInode::snaplock_type(CEPH_LOCK_ISNAP);
 LockType CInode::nestlock_type(CEPH_LOCK_INEST);
+LockType CInode::flocklock_type(CEPH_LOCK_IFLOCK);
 
 //int cinode_pins[CINODE_NUM_PINS];  // counts
 ostream& CInode::print_db_line_prefix(ostream& out)
@@ -138,6 +139,8 @@ ostream& operator<<(ostream& out, CInode& in)
     out << " " << in.dirfragtreelock;
     out << " " << in.snaplock;
     out << " " << in.nestlock;
+  } else  {
+    out << " " << in.flocklock;
   }
   out << " " << in.filelock;
   out << " " << in.xattrlock;
@@ -572,6 +575,15 @@ void CInode::remove_client_cap(client_t client)
     mdcache->num_inodes_with_caps--;
   }
   mdcache->num_caps--;
+
+  //clean up advisory locks
+  bool fcntl_removed = fcntl_locks.remove_all_from(client);
+  bool flock_removed = flock_locks.remove_all_from(client);
+  if (fcntl_removed || flock_removed) {
+    list<Context*> waiters;
+    take_waiting(CInode::WAIT_FLOCK, waiters);
+    mdcache->mds->queue_waiters(waiters);
+  }
 }
 
 void CInode::move_to_realm(SnapRealm *realm)
@@ -943,6 +955,10 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     encode_snap(bl);
     break;
 
+  case CEPH_LOCK_IFLOCK:
+    ::encode(fcntl_locks, bl);
+    ::encode(flock_locks, bl);
+    break;
   
   default:
     assert(0);
@@ -1153,6 +1169,11 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       if (snaprealm && snaprealm->seq != seq)
 	mdcache->do_realm_invalidate_and_update_notify(this, seq ? CEPH_SNAP_OP_UPDATE:CEPH_SNAP_OP_SPLIT);
     }
+    break;
+
+  case CEPH_LOCK_IFLOCK:
+    ::decode(fcntl_locks, p);
+    ::decode(flock_locks, p);
     break;
 
   default:

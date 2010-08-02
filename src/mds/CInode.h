@@ -137,6 +137,7 @@ public:
   static const uint64_t WAIT_UNANCHORED  = (1<<2);
   static const uint64_t WAIT_FROZEN      = (1<<3);
   static const uint64_t WAIT_TRUNC       = (1<<4);
+  static const uint64_t WAIT_FLOCK       = (1<<5);
   
   static const uint64_t WAIT_ANY_MASK	= (uint64_t)(-1);
 
@@ -272,6 +273,8 @@ protected:
   int                   replica_caps_wanted; // [replica] what i've requested from auth
   utime_t               replica_caps_wanted_keep_until;
 
+  ceph_lock_state_t fcntl_locks;
+  ceph_lock_state_t flock_locks;
 
   // LogSegment dlists i (may) belong to
 public:
@@ -333,6 +336,7 @@ private:
     xattrlock(this, &xattrlock_type),
     snaplock(this, &snaplock_type),
     nestlock(this, &nestlock_type),
+    flocklock(this, &flocklock_type),
     loner_cap(-1), want_loner_cap(-1)
   {
     g_num_ino++;
@@ -503,6 +507,7 @@ public:
   static LockType xattrlock_type;
   static LockType snaplock_type;
   static LockType nestlock_type;
+  static LockType flocklock_type;
 
   LocalLock  versionlock;
   SimpleLock authlock;
@@ -512,6 +517,7 @@ public:
   SimpleLock xattrlock;
   SimpleLock snaplock;
   ScatterLock nestlock;
+  SimpleLock flocklock;
 
   SimpleLock* get_lock(int type) {
     switch (type) {
@@ -522,6 +528,7 @@ public:
     case CEPH_LOCK_IXATTR: return &xattrlock;
     case CEPH_LOCK_ISNAP: return &snaplock;
     case CEPH_LOCK_INEST: return &nestlock;
+    case CEPH_LOCK_IFLOCK: return &flocklock;
     }
     return 0;
   }
@@ -701,9 +708,6 @@ public:
     }
     cap->set_cap_id(icr.cap_id);
     cap->set_last_issue_stamp(g_clock.recent_now());
-    inode.size = MAX(inode.size, icr.size);
-    inode.mtime = MAX(inode.mtime, utime_t(icr.mtime));
-    inode.atime = MAX(inode.atime, utime_t(icr.atime));
     return cap;
   }
   void clear_client_caps_after_export() {

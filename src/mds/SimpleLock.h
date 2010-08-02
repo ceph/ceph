@@ -32,6 +32,7 @@ inline const char *get_lock_type_name(int t) {
   case CEPH_LOCK_IXATTR: return "ixattr";
   case CEPH_LOCK_ISNAP: return "isnap";
   case CEPH_LOCK_INO: return "ino";
+  case CEPH_LOCK_IFLOCK: return "iflock";
   default: assert(0); return 0;
   }
 }
@@ -58,6 +59,7 @@ struct LockType {
     case CEPH_LOCK_ILINK:
     case CEPH_LOCK_IXATTR:
     case CEPH_LOCK_ISNAP:
+    case CEPH_LOCK_IFLOCK:
       sm = &sm_simplelock;
       break;
     case CEPH_LOCK_IDFT:
@@ -250,7 +252,7 @@ public:
   }
   int get_cap_mask() {
     switch (get_type()) {
-    case CEPH_LOCK_IFILE: return 0xffff;
+    case CEPH_LOCK_IFILE: return 0xf;
     default: return 0x3;
     }
   }
@@ -541,7 +543,7 @@ public:
 
   int gcaps_xlocker_mask(client_t client) {
     if (client == get_xlock_by_client())
-      return type->type == CEPH_LOCK_IFILE ? 0xffff : (CEPH_CAP_GSHARED|CEPH_CAP_GEXCL);
+      return type->type == CEPH_LOCK_IFILE ? 0xf : (CEPH_CAP_GSHARED|CEPH_CAP_GEXCL);
     return 0;
   }
 

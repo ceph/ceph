@@ -602,6 +602,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	       << " on " << *in << dendl;
       in->reconnect_cap(from, p->second.capinfo, session);
       mds->mdcache->add_reconnected_cap(in, from, inodeno_t(p->second.capinfo.snaprealm));
+      recover_filelocks(in, p->second.flockbl, m->get_orig_source().num());
       continue;
     }
       
@@ -662,6 +663,29 @@ void Server::reconnect_tick()
     }
     client_reconnect_gather.clear();
     reconnect_gather_finish();
+  }
+}
+
+void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
+{
+  int numlocks;
+  ceph_filelock lock;
+  bufferlist::iterator p = locks.begin();
+  ::decode(numlocks, p);
+  for (int i = 0; i < numlocks; ++i) {
+    ::decode(lock, p);
+    lock.client = client;
+    in->fcntl_locks.held_locks.insert(pair<uint64_t, ceph_filelock>
+				      (lock.start, lock));
+    ++in->fcntl_locks.client_held_lock_counts[client];
+  }
+  ::decode(numlocks, p);
+  for (int i = 0; i < numlocks; ++i) {
+    ::decode(lock, p);
+    lock.client = client;
+    in->flock_locks.held_locks.insert(pair<uint64_t, ceph_filelock>
+				      (lock.start, lock));
+    ++in->flock_locks.client_held_lock_counts[client];
   }
 }
 
@@ -1120,6 +1144,14 @@ void Server::dispatch_client_request(MDRequest *mdr)
 
   case CEPH_MDS_OP_READDIR:
     handle_client_readdir(mdr);
+    break;
+
+  case CEPH_MDS_OP_SETFILELOCK:
+    handle_client_file_setlock(mdr);
+    break;
+
+  case CEPH_MDS_OP_GETFILELOCK:
+    handle_client_file_readlock(mdr);
     break;
 
     // funky.
@@ -2495,7 +2527,9 @@ void Server::handle_client_readdir(MDRequest *mdr)
 	   << " complete=" << (int)complete
 	   << dendl;
   MClientReply *reply = new MClientReply(req, 0);
-  reply->set_dir_bl(dirbl);
+  reply->set_extra_bl(dirbl);
+  dout(10) << "reply to " << *req << " readdir num=" << numfiles << " end=" << (int)end
+	   << " complete=" << (int)complete << dendl;
 
   // bump popularity.  NOTE: this doesn't quite capture it.
   mds->balancer->hit_dir(g_clock.now(), dir, META_POP_IRD, -1, numfiles);
@@ -2544,6 +2578,141 @@ public:
   }
 };
 
+void Server::handle_client_file_setlock(MDRequest *mdr)
+{
+  MClientRequest *req = mdr->client_request;
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+
+  // get the inode to operate on, and set up any locks needed for that
+  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  if (!cur)
+    return;
+
+  xlocks.insert(&cur->flocklock);
+  /* acquire_locks will return true if it gets the locks. If it fails,
+     it will redeliver this request at a later date, so drop the request.
+   */
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks)) {
+    dout(0) << "handle_client_file_setlock could not get locks!" << dendl;
+    return;
+  }
+
+  // copy the lock change into a ceph_filelock so we can store/apply it
+  ceph_filelock set_lock;
+  set_lock.start = req->head.args.filelock_change.start;
+  set_lock.length = req->head.args.filelock_change.length;
+  set_lock.client = req->get_orig_source().num();
+  set_lock.pid = req->head.args.filelock_change.pid;
+  set_lock.pid_namespace = req->head.args.filelock_change.pid_namespace;
+  set_lock.type = req->head.args.filelock_change.type;
+  bool will_wait = req->head.args.filelock_change.wait;
+
+  dout(0) << "handle_client_file_setlock: " << set_lock << dendl;
+
+  ceph_lock_state_t *lock_state = NULL;
+
+  // get the appropriate lock state
+  switch (req->head.args.filelock_change.rule) {
+  case CEPH_LOCK_FLOCK:
+    lock_state = &cur->flock_locks;
+    break;
+
+  case CEPH_LOCK_FCNTL:
+    lock_state = &cur->fcntl_locks;
+    break;
+
+  default:
+    dout(0) << "got unknown lock type " << set_lock.type
+	    << ", dropping request!" << dendl;
+    return;
+  }
+
+  dout(0) << "state prior to lock change: " << *lock_state << dendl;;
+  if (CEPH_LOCK_UNLOCK == set_lock.type) {
+    dout(0) << "got unlock" << dendl;
+    list<ceph_filelock> activated_locks;
+    lock_state->remove_lock(set_lock, activated_locks);
+    reply_request(mdr, 0);
+    /* For now we're ignoring the activated locks because their responses
+     * will be sent when the lock comes up again in rotation by the MDS.
+     * It's a cheap hack, but it's easy to code. */
+    list<Context*> waiters;
+    cur->take_waiting(CInode::WAIT_FLOCK, waiters);
+    mds->queue_waiters(waiters);
+  } else {
+    dout(0) << "got lock" << dendl;
+    if (lock_state->add_lock(set_lock, will_wait)) {
+      // lock set successfully
+      dout(0) << "it succeeded" << dendl;
+      reply_request(mdr, 0);
+    } else {
+      dout(0) << "it failed on this attempt" << dendl;
+      // couldn't set lock right now
+      if (!will_wait)
+	reply_request(mdr, -1);
+      else {
+	dout(0) << "but it's a wait" << dendl;
+	mds->locker->drop_locks(mdr);
+	mdr->drop_local_auth_pins();
+	cur->add_waiter(CInode::WAIT_FLOCK, new C_MDS_RetryRequest(mdcache, mdr));
+      }
+    }
+  }
+  dout(0) << "state after lock change: " << *lock_state << dendl;
+}
+
+void Server::handle_client_file_readlock(MDRequest *mdr)
+{
+  MClientRequest *req = mdr->client_request;
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+
+  // get the inode to operate on, and set up any locks needed for that
+  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  if (!cur)
+    return;
+
+  /* acquire_locks will return true if it gets the locks. If it fails,
+     it will redeliver this request at a later date, so drop the request.
+  */
+  rdlocks.insert(&cur->flocklock);
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks)) {
+    dout(0) << "handle_client_file_readlock could not get locks!" << dendl;
+    return;
+  }
+  
+  // copy the lock change into a ceph_filelock so we can store/apply it
+  ceph_filelock checking_lock;
+  checking_lock.start = req->head.args.filelock_change.start;
+  checking_lock.length = req->head.args.filelock_change.length;
+  checking_lock.client = req->get_orig_source().num();
+  checking_lock.pid = req->head.args.filelock_change.pid;
+  checking_lock.type = req->head.args.filelock_change.type;
+
+  // get the appropriate lock state
+  ceph_lock_state_t *lock_state = NULL;
+  switch (req->head.args.filelock_change.rule) {
+  case CEPH_LOCK_FLOCK:
+    lock_state = &cur->flock_locks;
+    break;
+
+  case CEPH_LOCK_FCNTL:
+    lock_state = &cur->fcntl_locks;
+    break;
+
+  default:
+    dout(0) << "got unknown lock type " << checking_lock.type
+	    << ", dropping request!" << dendl;
+    return;
+  }
+  lock_state->look_for_lock(checking_lock);
+
+  bufferlist lock_bl;
+  ::encode(lock_state, lock_bl);
+
+  MClientReply *reply = new MClientReply(req);
+  reply->set_extra_bl(lock_bl);
+  reply_request(mdr, reply);
+}
 
 void Server::handle_client_setattr(MDRequest *mdr)
 {
@@ -5464,7 +5633,7 @@ void Server::handle_client_lssnap(MDRequest *mdr)
   dirbl.claim_append(dnbl);
   
   MClientReply *reply = new MClientReply(req);
-  reply->set_dir_bl(dirbl);
+  reply->set_extra_bl(dirbl);
   reply_request(mdr, reply, diri);
 }
 

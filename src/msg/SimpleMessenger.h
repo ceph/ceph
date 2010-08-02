@@ -55,7 +55,8 @@ using namespace __gnu_cxx;
 #define MSGR_FEATURES_SUPPORTED  \
   CEPH_FEATURE_NOSRCADDR |	 \
   CEPH_FEATURE_SUBSCRIBE2 |	 \
-  CEPH_FEATURE_MONNAMES
+  CEPH_FEATURE_MONNAMES |        \
+  CEPH_FEATURE_FLOCK
 
 class SimpleMessenger : public Messenger {
 public:

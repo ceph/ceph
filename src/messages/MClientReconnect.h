@@ -18,6 +18,7 @@
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
 
+
 class MClientReconnect : public Message {
 public:
   map<inodeno_t, cap_reconnect_t>  caps;   // only head inodes
@@ -36,9 +37,8 @@ public:
 
   void add_cap(inodeno_t ino, uint64_t cap_id, inodeno_t pathbase, const string& path,
 	       int wanted, int issued,
-	       loff_t sz, utime_t mt, utime_t at,
 	       inodeno_t sr) {
-    caps[ino] = cap_reconnect_t(cap_id, pathbase, path, wanted, issued, sz, mt, at, sr);
+    caps[ino] = cap_reconnect_t(cap_id, pathbase, path, wanted, issued, sr);
   }
   void add_snaprealm(inodeno_t ino, snapid_t seq, inodeno_t parent) {
     ceph_mds_snaprealm_reconnect r;
@@ -49,12 +49,31 @@ public:
   }
 
   void encode_payload() {
-    ::encode(caps, data);
+    if (connection->has_feature(CEPH_FEATURE_FLOCK)) {
+      // new protocol
+      header.version = 2;
+      ::encode(caps, data);
+    } else {
+      // compat crap
+      map<inodeno_t, old_cap_reconnect_t> ocaps;
+      for (map<inodeno_t,cap_reconnect_t>::iterator p = caps.begin(); p != caps.end(); p++)
+	ocaps[p->first] = p->second;
+      ::encode(ocaps, data);
+    }
     ::encode_nohead(realms, data);
   }
   void decode_payload() {
     bufferlist::iterator p = data.begin();
-    ::decode(caps, p);
+    if (header.version >= 2) {
+      // new protocol
+      ::decode(caps, p);
+    } else {
+      // compat crap
+      map<inodeno_t, old_cap_reconnect_t> ocaps;
+      ::decode(ocaps, p);
+      for (map<inodeno_t,old_cap_reconnect_t>::iterator q = ocaps.begin(); q != ocaps.end(); q++)
+	caps[q->first] = q->second;
+    }
     while (p.end()) {
       realms.push_back(ceph_mds_snaprealm_reconnect());
       ::decode(realms.back(), p);

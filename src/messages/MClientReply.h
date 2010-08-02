@@ -173,7 +173,7 @@ class MClientReply : public Message {
 public:
   struct ceph_mds_reply_head head;
   bufferlist trace_bl;
-  bufferlist dir_bl;
+  bufferlist extra_bl;
   bufferlist snapbl;
 
  public:
@@ -225,24 +225,24 @@ public:
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ::decode(trace_bl, p);
-    ::decode(dir_bl, p);
+    ::decode(extra_bl, p);
     ::decode(snapbl, p);
     assert(p.end());
   }
   virtual void encode_payload() {
     ::encode(head, payload);
     ::encode(trace_bl, payload);
-    ::encode(dir_bl, payload);
+    ::encode(extra_bl, payload);
     ::encode(snapbl, payload);
   }
 
 
   // dir contents
-  void set_dir_bl(bufferlist& bl) {
-    dir_bl.claim(bl);
+  void set_extra_bl(bufferlist& bl) {
+    extra_bl.claim(bl);
   }
-  bufferlist &get_dir_bl() {
-    return dir_bl;
+  bufferlist &get_extra_bl() {
+    return extra_bl;
   }
 
   // trace

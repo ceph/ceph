@@ -23,6 +23,7 @@ class MClientCaps : public Message {
   struct ceph_mds_caps head;
   bufferlist snapbl;
   bufferlist xattrbl;
+  bufferlist flockbl;
 
   int      get_caps() { return head.caps; }
   int      get_wanted() { return head.wanted; }
@@ -138,6 +139,10 @@ public:
     assert(middle.length() == head.xattr_len);
     if (head.xattr_len)
       xattrbl = middle;
+
+    // conditionally decode flock metadata
+    if (header.version >= 2)
+      ::decode(flockbl, p);
   }
   void encode_payload() {
     head.snap_trace_len = snapbl.length();
@@ -146,6 +151,12 @@ public:
     ::encode_nohead(snapbl, payload);
 
     middle = xattrbl;
+
+    // conditionally include flock metadata
+    if (connection->has_feature(CEPH_FEATURE_FLOCK)) {
+      header.version = 2;
+      ::encode(flockbl, payload);
+    }
   }
 };
 
