@@ -13,6 +13,7 @@ build-stamp: configure-stamp
 	./configure --prefix=/usr
 	$(MAKE)
 	cp src/init-ceph debian/ceph.init
+	cp src/logrotate.conf debian/ceph.logrotate
 
 	touch $@
 clean: 
