@@ -85,7 +85,7 @@ load() {
 }
 
 load_all() {
-	all=`find $libdir -name 'libcls_*.so'`;
+	all=`find $libdir -name 'libcls_*.so*' -type f`;
 	if [ -n "$all" ]; then
 		for fn in $all; do
 			echo Loading class: $fn: `$BINDIR/cclsinfo $fn`
