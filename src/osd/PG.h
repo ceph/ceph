@@ -414,7 +414,10 @@ public:
            i != log.end();
            i++) {
         objects[i->soid] = &(*i);
-        caller_ops[i->reqid] = &(*i);
+	if (i->reqid_is_indexed()) {
+	  assert(caller_ops.count(i->reqid) == 0);
+	  caller_ops[i->reqid] = &(*i);
+	}
       }
     }
 
@@ -422,8 +425,10 @@ public:
       if (objects.count(e.soid) == 0 || 
           objects[e.soid]->version < e.version)
         objects[e.soid] = &e;
-      if (e.reqid_is_indexed())
+      if (e.reqid_is_indexed()) {
+	assert(caller_ops.count(e.reqid) == 0);
 	caller_ops[e.reqid] = &e;
+      }
     }
     void unindex() {
       objects.clear();
