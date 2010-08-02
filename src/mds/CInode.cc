@@ -1770,7 +1770,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       }
     }
 
-    if (cap && valid) {
+    if (!no_caps && valid && cap) {
       int likes = get_caps_liked();
       int allowed = get_caps_allowed_for_client(client);
       int issue = (cap->wanted() | likes) & allowed;
@@ -1786,6 +1786,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       e.cap.mseq = cap->get_mseq();
       e.cap.realm = find_snaprealm()->inode->ino();
     } else {
+      e.cap.cap_id = 0;
       e.cap.caps = 0;
       e.cap.seq = 0;
       e.cap.mseq = 0;
