@@ -57,6 +57,26 @@ Description: debugging symbols for ceph-fuse
  .
  This package contains the debugging symbols for ceph-fuse.
 
+Package: ceph-client-tools
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Suggests: ceph
+Description: utilities to mount a ceph filesystem with the kernel client
+ Ceph is a distributed network file system designed to provide
+ excellent performance, reliability, and scalability.  This is the mount
+ utility, that allows to mount the ceph fs with the kernel client.
+
+Package: ceph-client-tools-dbg
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Suggests: ceph
+Description: utilities for mount ceph filesystem with kernel client
+ Ceph is a distributed network file system designed to provide
+ excellent performance, reliability, and scalability.  This is the mount
+ utility, that allows to mount the ceph fs with the kernel client.
+ .
+ This package contains the debugging symbols for ceph-client-tools
+
 Package: libcrush1
 Conflicts: libcrush
 Replaces: libcrush
