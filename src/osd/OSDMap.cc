@@ -23,8 +23,21 @@ void OSDMap::print(ostream& out)
   out << "epoch " << get_epoch() << "\n"
       << "fsid " << get_fsid() << "\n"
       << "created " << get_created() << "\n"
-      << "modifed " << get_modified() << "\n"
-      << std::endl;
+      << "modifed " << get_modified() << "\n";
+
+  out << "flags";
+  if (test_flag(CEPH_OSDMAP_NEARFULL))
+    out << " nearfull";
+  if (test_flag(CEPH_OSDMAP_FULL))
+    out << " full";
+  if (test_flag(CEPH_OSDMAP_PAUSERD))
+    out << " pauserd";
+  if (test_flag(CEPH_OSDMAP_PAUSEWR))
+    out << " pausewr";
+  if (test_flag(CEPH_OSDMAP_PAUSEREC))
+    out << " pauserec";
+  out << "\n" << std::endl;
+ 
   for (map<int,pg_pool_t>::iterator p = pools.begin(); p != pools.end(); p++) {
     out << "pg_pool " << p->first
 	<< " '" << pool_name[p->first]
