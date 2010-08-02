@@ -2166,6 +2166,13 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   state = STATE_ACTIVE;
 
+  // make sure there is something new, here, before we bother flushing the queues and such
+  if (m->get_last() <= osdmap->get_epoch()) {
+    dout(10) << " no new maps here, dropping" << dendl;
+    m->put();
+    return;
+  }
+
   // pause, requeue op queue
   //wait_for_no_ops();
   
