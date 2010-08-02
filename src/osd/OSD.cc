@@ -1219,8 +1219,10 @@ void OSD::update_heartbeat_peers()
 	       (!osdmap->is_up(p->first) ||
 		osdmap->get_hb_inst(p->first) != old_inst[p->first])) {
       dout(10) << "update_heartbeat_peers: marking down old _to peer " << old_inst[p->first] 
-	       << " as of " << p->second << dendl;      
-      heartbeat_messenger->mark_down(old_inst[p->first].addr);
+	       << " as of " << p->second << dendl;
+      // share latest map with this peer, so they know not to expect
+      // heartbeats from us.  otherwise they may mark us down!
+      _share_map_outgoing(heartbeat_inst[p->first]);
     }
   }
   for (map<int,epoch_t>::iterator p = old_from.begin();
@@ -2157,6 +2159,13 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   state = STATE_ACTIVE;
+
+  // make sure there is something new, here, before we bother flushing the queues and such
+  if (m->get_last() <= osdmap->get_epoch()) {
+    dout(10) << " no new maps here, dropping" << dendl;
+    m->put();
+    return;
+  }
 
   // pause, requeue op queue
   //wait_for_no_ops();

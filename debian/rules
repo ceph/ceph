@@ -13,6 +13,7 @@ build-stamp: configure-stamp
 	./configure --prefix=/usr
 	$(MAKE)
 	cp src/init-ceph debian/ceph.init
+	cp src/logrotate.conf debian/ceph.logrotate
 
 	touch $@
 clean: 
@@ -30,9 +31,6 @@ install: build
 	dh_installdirs
 
 	$(MAKE) DESTDIR=$(CURDIR) install
-
-	mkdir -p etc/ceph
-	mv usr/etc/ceph/* etc/ceph
 
 
 # Add here commands to install the package into debian/testpack.
