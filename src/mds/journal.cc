@@ -488,7 +488,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	    dout(-10) << ss << dendl;
 	    mds->logclient.log(LOG_WARN, ss);
 	    dir->unlink_inode(dn);
-	    mds->mdcache->remove_inode(old_in);
+	    mds->mdcache->remove_inode_recursive(old_in);
 
 	    //assert(0); // hrm!  fallout from sloppy unlink?  or?  hmmm FIXME investigate further
 	  }
