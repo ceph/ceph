@@ -570,7 +570,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
       dout(3) << "do_op dup " << ctx->reqid << " was " << oldv << dendl;
       delete ctx;
       put_object_context(obc);
-      if (oldv >= last_update_ondisk) {
+      if (oldv <= last_update_ondisk) {
 	osd->reply_op_error(op, 0);
       } else {
 	dout(10) << " waiting for " << oldv << " to commit" << dendl;
