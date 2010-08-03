@@ -1846,9 +1846,9 @@ bool OSD::ms_dispatch(Message *m)
 {
   // lock!
   osd_lock.Lock();
-  dispatch_running = true;
+  ++dispatch_running;
   _dispatch(m);
-  dispatch_running = false;
+  --dispatch_running;
   do_waiters();
   osd_lock.Unlock();
   return true;

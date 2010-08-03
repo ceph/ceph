@@ -130,7 +130,7 @@ protected:
     }
   };
 
-  bool dispatch_running;
+  int dispatch_running;
 
   void open_logger();
   void start_logger();
