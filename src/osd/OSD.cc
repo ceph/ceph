@@ -1944,6 +1944,17 @@ void OSD::_dispatch(Message *m)
   assert(osd_lock.is_locked());
   dout(20) << "_dispatch " << m << " " << *m << dendl;
   Session *session = NULL;
+
+  if (handle_map_lock) { //can't dispatch while map is being updated!
+    handle_map_lock->Lock();
+    if (map_in_progress) {
+      dout(25) << "waiting for handle_osd_map to complete before dispatching" << dendl;
+      while (map_in_progress)
+        map_cond.Wait(*handle_map_lock);
+    }
+    handle_map_lock->Unlock();
+  }
+
   switch (m->get_type()) {
 
     // -- don't need lock -- 
