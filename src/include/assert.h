@@ -3,7 +3,9 @@
 
 #include <features.h>
 
-#include "acconfig.h"
+#ifdef __CEPH__
+# include "acconfig.h"
+#endif
 
 /*
  * atomic_ops.h includes the system assert.h, which will redefine
