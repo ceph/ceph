@@ -336,7 +336,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   monc(mc),
   logger(NULL), logger_started(false),
   store(NULL),
-  map_in_progress(false),
+  map_cond(), map_in_progress(false),
   logclient(client_messenger, &mc->monmap, mc),
   whoami(id),
   dev_path(dev), journal_path(jdev),
@@ -2160,19 +2160,6 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (session)
     session->put();
 
-  if (handle_map_lock) {
-    handle_map_lock->Lock();
-    if (map_in_progress) {
-      dout(15) << "waiting for prior handle_osd_map to complete" << dendl;
-      Cond map_cond;
-      while (map_in_progress)
-        map_cond.Wait(*handle_map_lock);
-    }
-    dout(10) << "locking handle_osd_map permissions" << dendl;
-    map_in_progress = true;
-    handle_map_lock->Unlock();
-  }
-
   if (osdmap) {
     dout(3) << "handle_osd_map epochs [" 
             << m->get_first() << "," << m->get_last() 
@@ -2199,6 +2186,21 @@ void OSD::handle_osd_map(MOSDMap *m)
   //wait_for_no_ops();
   
   osd_lock.Unlock();
+
+  if (handle_map_lock) {
+    handle_map_lock->Lock();
+    if (map_in_progress) {
+      dout(15) << "waiting for prior handle_osd_map to complete" << dendl;
+      while (map_in_progress) {
+        map_cond.Wait(*handle_map_lock);
+      }
+    }
+    dout(10) << "locking handle_osd_map permissions" << dendl;
+    map_in_progress = true;
+    handle_map_lock->Unlock();
+  }
+
+
   op_tp.pause();
   op_wq.lock();
   list<Message*> rq;
@@ -2464,10 +2466,13 @@ void OSD::handle_osd_map(MOSDMap *m)
     send_boot();
 
   if (handle_map_lock) {
+    osd_lock.Unlock();
     handle_map_lock->Lock();
     map_in_progress = false;
     dout(15) << "unlocking map_in_progress" << dendl;
+    map_cond.Signal();
     handle_map_lock->Unlock();
+    osd_lock.Lock();
   }
 }
 

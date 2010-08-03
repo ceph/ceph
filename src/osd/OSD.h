@@ -113,6 +113,7 @@ protected:
   ObjectStore *store;
 
   Mutex *handle_map_lock; //to cover OSDMap update data when using multiple msgrs
+  Cond map_cond;
   bool map_in_progress;
 
   LogClient   logclient;
