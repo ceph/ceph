@@ -1222,7 +1222,7 @@ void OSD::update_heartbeat_peers()
 	       << " as of " << p->second << dendl;
       // share latest map with this peer, so they know not to expect
       // heartbeats from us.  otherwise they may mark us down!
-      _share_map_outgoing(heartbeat_inst[p->first]);
+      _share_map_outgoing(old_inst[p->first]);
     }
   }
   for (map<int,epoch_t>::iterator p = old_from.begin();
