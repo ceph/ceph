@@ -1946,6 +1946,7 @@ void OSD::_dispatch(Message *m)
   Session *session = NULL;
 
   if (handle_map_lock) { //can't dispatch while map is being updated!
+    osd_lock.Unlock();
     handle_map_lock->Lock();
     if (map_in_progress) {
       dout(25) << "waiting for handle_osd_map to complete before dispatching" << dendl;
@@ -1953,6 +1954,7 @@ void OSD::_dispatch(Message *m)
         map_cond.Wait(*handle_map_lock);
     }
     handle_map_lock->Unlock();
+    osd_lock.Lock();
   }
 
   switch (m->get_type()) {
