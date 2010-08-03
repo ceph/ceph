@@ -336,7 +336,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   monc(mc),
   logger(NULL), logger_started(false),
   store(NULL),
-  map_cond(), map_in_progress(false),
+  map_in_progress(false),
   logclient(client_messenger, &mc->monmap, mc),
   whoami(id),
   dev_path(dev), journal_path(jdev),
@@ -380,8 +380,8 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
 {
   monc->set_messenger(client_messenger);
   if (client_messenger != cluster_messenger)
-    handle_map_lock = new Mutex("OSD::handle_map_lock");
-  else handle_map_lock = NULL;
+    map_in_progress_cond = new Cond();
+  else map_in_progress_cond = NULL;
   
   osdmap = 0;
 
@@ -1945,16 +1945,12 @@ void OSD::_dispatch(Message *m)
   dout(20) << "_dispatch " << m << " " << *m << dendl;
   Session *session = NULL;
 
-  if (handle_map_lock) { //can't dispatch while map is being updated!
-    osd_lock.Unlock();
-    handle_map_lock->Lock();
+  if (map_in_progress_cond) { //can't dispatch while map is being updated!
     if (map_in_progress) {
       dout(25) << "waiting for handle_osd_map to complete before dispatching" << dendl;
       while (map_in_progress)
-        map_cond.Wait(*handle_map_lock);
+        map_in_progress_cond->Wait(osd_lock);
     }
-    handle_map_lock->Unlock();
-    osd_lock.Lock();
   }
 
   switch (m->get_type()) {
@@ -2197,22 +2193,19 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // pause, requeue op queue
   //wait_for_no_ops();
-  
-  osd_lock.Unlock();
 
-  if (handle_map_lock) {
-    handle_map_lock->Lock();
+  if (map_in_progress_cond) {
     if (map_in_progress) {
       dout(15) << "waiting for prior handle_osd_map to complete" << dendl;
       while (map_in_progress) {
-        map_cond.Wait(*handle_map_lock);
+        map_in_progress_cond->Wait(osd_lock);
       }
     }
     dout(10) << "locking handle_osd_map permissions" << dendl;
     map_in_progress = true;
-    handle_map_lock->Unlock();
   }
 
+  osd_lock.Unlock();
 
   op_tp.pause();
   op_wq.lock();
@@ -2478,14 +2471,10 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (is_booting())
     send_boot();
 
-  if (handle_map_lock) {
-    osd_lock.Unlock();
-    handle_map_lock->Lock();
+  if (map_in_progress_cond) {
     map_in_progress = false;
     dout(15) << "unlocking map_in_progress" << dendl;
-    map_cond.Signal();
-    handle_map_lock->Unlock();
-    osd_lock.Lock();
+    map_in_progress_cond->Signal();
   }
 }
 

@@ -112,8 +112,8 @@ protected:
   bool         logger_started;
   ObjectStore *store;
 
-  Mutex *handle_map_lock; //to cover OSDMap update data when using multiple msgrs
-  Cond map_cond;
+  // cover OSDMap update data when using multiple msgrs
+  Cond *map_in_progress_cond;
   bool map_in_progress;
 
   LogClient   logclient;
