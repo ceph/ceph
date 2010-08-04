@@ -233,7 +233,8 @@ public:
       ::decode(new_lost, p);
       ::decode(new_blacklist, p);
       ::decode(old_blacklist, p);
-      ::decode(new_up_internal, p);
+      if (v >= 6)
+        ::decode(new_up_internal, p);
     }
 
     Incremental(epoch_t e=0) :
