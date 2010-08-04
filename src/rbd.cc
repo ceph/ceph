@@ -6,10 +6,17 @@
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
  *
  * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * modify it under the terms of the GNU General Public
+ * License version 2, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
+ * read_fiemap() function was taken from fiemap.c, also
+ * released under the GNU Geneal Public License, authored
+ * by Colin Ian King, corresponding to the following
+ * copyright notice:
+ *
+ * Copyright (C) 2010 Canonical
+ *
  */
 
 #include "config.h"
@@ -27,7 +34,13 @@ using namespace librados;
 #include <sys/types.h>
 #include <errno.h>
 
+#include <sys/ioctl.h>
+
 #include "include/rbd_types.h"
+
+#warning fix fiemap include and define
+#include "include/fiemap.h"
+#define FS_IOC_FIEMAP                      _IOWR('f', 11, struct fiemap)
 
 struct pools {
   pool_t md;
@@ -146,6 +159,20 @@ static uint64_t get_block_num(rbd_obj_header_ondisk *header, uint64_t ofs)
   uint64_t num = ofs >> obj_order;
 
   return num;
+}
+static uint64_t get_pos_in_block(rbd_obj_header_ondisk *header, uint64_t ofs)
+{
+  int obj_order = header->options.order;
+  uint64_t mask = (1 << obj_order) - 1;
+  return ofs & mask;
+}
+
+static uint64_t bounded_pos_in_block(rbd_obj_header_ondisk *header, uint64_t end_ofs, unsigned int i)
+{
+  int obj_order = header->options.order;
+  if (end_ofs >> obj_order > i)
+    return (1 << obj_order);
+  return get_pos_in_block(header, end_ofs);
 }
 
 void trim_image(pools_t& pp, const char *imgname, rbd_obj_header_ondisk *header, uint64_t newsize)
@@ -722,6 +749,57 @@ done_img:
   update_snap_name(*new_img, snap);
 }
 
+/*
+ * the following function was taken from fiemap.c by Colin Ian King, colin.king@canonical.com
+ */
+static struct fiemap *read_fiemap(int fd)
+{
+  struct fiemap *fiemap;
+  int extents_size;
+
+  if ((fiemap = (struct fiemap*)malloc(sizeof(struct fiemap))) == NULL) {
+    fprintf(stderr, "Out of memory allocating fiemap\n");
+    return NULL;
+  }
+  memset(fiemap, 0, sizeof(struct fiemap));
+
+  fiemap->fm_start = 0;
+  fiemap->fm_length = ~0;		/* Lazy */
+  fiemap->fm_flags = 0;
+  fiemap->fm_extent_count = 0;
+  fiemap->fm_mapped_extents = 0;
+
+  /* Find out how many extents there are */
+  if (ioctl(fd, FS_IOC_FIEMAP, fiemap) < 0) {
+    fprintf(stderr, "fiemap ioctl() failed\n");
+    goto done_err;
+  }
+
+  /* Read in the extents */
+  extents_size = sizeof(struct fiemap_extent) * (fiemap->fm_mapped_extents);
+
+  /* Resize fiemap to allow us to read in the extents */
+  if ((fiemap = (struct fiemap*)realloc(fiemap,sizeof(struct fiemap) +
+                                        extents_size)) == NULL) {
+    fprintf(stderr, "Out of memory allocating fiemap\n");
+    goto done_err;
+  }
+
+  memset(fiemap->fm_extents, 0, extents_size);
+  fiemap->fm_extent_count = fiemap->fm_mapped_extents;
+  fiemap->fm_mapped_extents = 0;
+
+  if (ioctl(fd, FS_IOC_FIEMAP, fiemap) < 0) {
+    fprintf(stderr, "fiemap ioctl() failed\n");
+    goto done_err;
+  }
+
+  return fiemap;
+done_err:
+  free(fiemap);
+  return NULL;
+}
+
 static int do_import(pool_t pool, const char *imgname, int order, const char *path)
 {
   int fd = open(path, O_RDONLY);
@@ -730,6 +808,7 @@ static int do_import(pool_t pool, const char *imgname, int order, const char *pa
   uint64_t block_size;
   struct stat stat_buf;
   string md_oid;
+  struct fiemap *fiemap;
 
   if (fd < 0) {
     r = -errno;
@@ -766,34 +845,84 @@ static int do_import(pool_t pool, const char *imgname, int order, const char *pa
     return r;
   }
 
-  uint64_t numseg = get_max_block(&header);
-  uint64_t seg_pos = 0;
-  for (uint64_t i=0; i<numseg; i++) {
-    uint64_t seg_size = min(size - seg_pos, block_size);
-    uint64_t seg_left = seg_size;
-
-    while (seg_left) {
-      uint64_t len = min(seg_left, block_size);
-      bufferptr p(len);
-      len = read(fd, p.c_str(), len);
-      if (len < 0) {
-        r = -errno;
-        cerr << "error reading file\n" << std::endl;
-        return r;
-      }
-      bufferlist bl;
-      bl.append(p);
-      string oid = get_block_oid(&header, i);
-      r = rados.write(pool, oid, 0, bl, len);
-      if (r < 0) {
-        cerr << "error writing to image block" << std::endl;
-        return r;
-      }
-
-      seg_left -= len;
+  fiemap = read_fiemap(fd);
+  if (!fiemap) {
+    fiemap = (struct fiemap *)malloc(sizeof(struct fiemap) +  sizeof(struct fiemap_extent));
+    if (!fiemap) {
+      cerr << "Failed to allocate fiemap, not enough memory." << std::endl;
+      return -ENOMEM;
     }
+    fiemap->fm_start = 0;
+    fiemap->fm_length = size;
+    fiemap->fm_flags = 0;
+    fiemap->fm_extent_count = 1;
+    fiemap->fm_mapped_extents = 1;
+    fiemap->fm_extents[0].fe_logical = 0;
+    fiemap->fm_extents[0].fe_physical = 0;
+    fiemap->fm_extents[0].fe_length = size;
+    fiemap->fm_extents[0].fe_flags = 0;
+  }
 
-    seg_pos += seg_size;
+  uint64_t extent = 0;
+
+  while (extent < fiemap->fm_mapped_extents) {
+    uint64_t start_block, end_block;
+    off_t file_pos, end_ofs;
+    size_t extent_len = 0;
+
+    file_pos = fiemap->fm_extents[extent].fe_logical; /* position within the file we're reading */
+    start_block = get_block_num(&header, file_pos); /* starting block */
+
+    do { /* try to merge consecutive extents */
+#define LARGE_ENOUGH_EXTENT (32 * 1024 * 1024)
+      if (extent_len &&
+          extent_len + fiemap->fm_extents[extent].fe_length > LARGE_ENOUGH_EXTENT)
+        break; /* don't try to merge if we're big enough */
+
+      extent_len += fiemap->fm_extents[extent].fe_length;  /* length of current extent */
+      end_ofs = min(size, file_pos + extent_len);
+
+      end_block = get_block_num(&header, end_ofs - 1); /* ending block */
+
+      extent++;
+      if (extent == fiemap->fm_mapped_extents)
+        break;
+      
+    } while (end_ofs == (off_t)fiemap->fm_extents[extent].fe_logical);
+
+    cerr << "rbd import file_pos=" << file_pos << " extent_len=" << extent_len << std::endl;
+    for (uint64_t i = start_block; i <= end_block; i++) {
+      uint64_t ofs_in_block = get_pos_in_block(&header, file_pos); /* the offset within the starting block */
+      uint64_t seg_size = bounded_pos_in_block(&header, end_ofs, i) - ofs_in_block;
+      uint64_t seg_left = seg_size;
+
+      cerr << "i=" << i << " (" << start_block << "/" << end_block << ") "
+           << "seg_size=" << seg_size << " seg_left=" << seg_left << std::endl;
+      while (seg_left) {
+        uint64_t len = seg_left;
+        bufferptr p(len);
+        cerr << "reading " << len << " bytes at offset " << file_pos << std::endl;
+        len = pread(fd, p.c_str(), len, file_pos);
+        if (len < 0) {
+          r = -errno;
+          cerr << "error reading file\n" << std::endl;
+          return r;
+        }
+        bufferlist bl;
+        bl.append(p);
+        string oid = get_block_oid(&header, i);
+        cerr << "writing " << len << " bytes at offset " << ofs_in_block << " at block " << oid << std::endl;
+        r = rados.write(pool, oid, ofs_in_block, bl, len);
+        if (r < 0) {
+          cerr << "error writing to image block" << std::endl;
+          return r;
+        }
+
+        seg_left -= len;
+        file_pos += len;
+        ofs_in_block += len;
+      }
+    }
   }
 
   return 0;

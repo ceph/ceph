@@ -13,6 +13,12 @@ Copyright:
     Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
 License: GPL
 
+Files: src/rbd.cc
+Copyright:
+    Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+    Copyright (C) 2010 Canonical
+License: GPL2
+
 Files: src/osbdb/OSBDB.h
 Copyright: Copyright (C) 2007 Casey Marshall <csm@soe.ucsc.edu>
 License: LGPL2.1
