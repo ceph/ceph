@@ -482,6 +482,8 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_mon_heartbeat_interval, 0, OPT_INT, 30),  // if no peers, ping monitor
 	OPTION(osd_heartbeat_grace, 0, OPT_INT, 20),
 	OPTION(osd_mon_report_interval, 0, OPT_INT, 5),  // pg stats, failures, up_thru, boot.
+	OPTION(osd_min_down_reporters, 0, OPT_INT, 1),   // number of OSDs who need to report a down OSD for it to count
+	OPTION(osd_min_down_reports, 0, OPT_INT, 1),     // number of times a down OSD must be reported for it to count
 	OPTION(osd_replay_window, 0, OPT_INT, 45),
 	OPTION(osd_max_pull, 0, OPT_INT, 2),
 	OPTION(osd_preserve_trimmed_log, 0, OPT_BOOL, true),

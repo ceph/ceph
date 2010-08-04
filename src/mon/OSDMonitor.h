@@ -45,6 +45,7 @@ private:
 
   // [leader]
   OSDMap::Incremental pending_inc;
+  multimap<int, pair<int, int> > failed_notes; // <failed_osd, <reporter, #reports> >
   map<int,utime_t>    down_pending_out;  // osd down -> out
 
   map<int,double> osd_weight;

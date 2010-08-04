@@ -311,8 +311,8 @@ bool OSDMonitor::should_propose(double& delay)
 
 bool OSDMonitor::preprocess_failure(MOSDFailure *m)
 {
-  // who is failed
-  int badboy = m->get_failed().name.num();
+  // who is target_osd
+  int badboy = m->get_target().name.num();
 
   // check permissions
   MonSession *session = m->get_session();
@@ -329,14 +329,6 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
     goto didit;
   }
 
-  /*
-   * FIXME
-   * this whole thing needs a rework of some sort.  we shouldn't
-   * be taking any failure report on faith.  if A and B can't talk
-   * to each other either A or B should be killed, but we should
-   * make some attempt to make sure we choose the right one.
-   */
-
   // first, verify the reporting host is valid
   if (m->get_orig_source().is_osd()) {
     int from = m->get_orig_source().num();
@@ -352,13 +344,13 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
 
   // weird?
   if (!osdmap.have_inst(badboy)) {
-    dout(5) << "preprocess_failure dne(/dup?): " << m->get_failed() << ", from " << m->get_orig_source_inst() << dendl;
+    dout(5) << "preprocess_failure dne(/dup?): " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(m, m->get_epoch()+1);
     goto didit;
   }
-  if (osdmap.get_inst(badboy) != m->get_failed()) {
-    dout(5) << "preprocess_failure wrong osd: report " << m->get_failed() << " != map's " << osdmap.get_inst(badboy)
+  if (osdmap.get_inst(badboy) != m->get_target()) {
+    dout(5) << "preprocess_failure wrong osd: report " << m->get_target() << " != map's " << osdmap.get_inst(badboy)
 	    << ", from " << m->get_orig_source_inst() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(m, m->get_epoch()+1);
@@ -366,13 +358,13 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
   }
   // already reported?
   if (osdmap.is_down(badboy)) {
-    dout(5) << "preprocess_failure dup: " << m->get_failed() << ", from " << m->get_orig_source_inst() << dendl;
+    dout(5) << "preprocess_failure dup: " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(m, m->get_epoch()+1);
     goto didit;
   }
 
-  dout(10) << "preprocess_failure new: " << m->get_failed() << ", from " << m->get_orig_source_inst() << dendl;
+  dout(10) << "preprocess_failure new: " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
   return false;
 
  didit:
@@ -383,27 +375,71 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
 bool OSDMonitor::prepare_failure(MOSDFailure *m)
 {
   stringstream ss;
-  dout(1) << "prepare_failure " << m->get_failed() << " from " << m->get_orig_source_inst() << dendl;
+  dout(1) << "prepare_failure " << m->get_target() << " from " << m->get_orig_source_inst()
+          << " is reporting failure:" << m->if_osd_failed() << dendl;
 
-  ss << m->get_failed() << " failed (by " << m->get_orig_source_inst() << ")";
+  ss << m->get_target() << " failed (by " << m->get_orig_source_inst() << ")";
   mon->get_logclient()->log(LOG_INFO, ss);
   
-  // FIXME
-  // take their word for it
-  int badboy = m->get_failed().name.num();
-  assert(osdmap.is_up(badboy));
-  assert(osdmap.get_addr(badboy) == m->get_failed().addr);
+  int target_osd = m->get_target().name.num();
+  int reporter = m->get_orig_source().num();
+  assert(osdmap.is_up(target_osd));
+  assert(osdmap.get_addr(target_osd) == m->get_target().addr);
   
-  pending_inc.new_down[badboy] = false;
+  if (m->if_osd_failed()) {
+    int reports = 0;
+    int reporters = 0;
+
+    if (failed_notes.count(target_osd)) {
+      multimap<int, pair<int, int> >::iterator i = failed_notes.lower_bound(target_osd);
+      while ((i != failed_notes.end()) && (i->first == target_osd)) {
+        if (i->second.first == reporter) {
+          ++i->second.second;
+          dout(10) << "adding new failure report from osd" << reporter
+                   << " on osd" << target_osd << dendl;
+          reporter = -1;
+        }
+        ++reporters;
+        reports += i->second.second;
+        ++i;
+      }
+    }
+    if (reporter != -1) { //didn't get counted yet
+      failed_notes.insert(pair<int, pair<int, int> >
+                          (target_osd, pair<int, int>(reporter, 1)));
+      ++reporters;
+      ++reports;
+      dout(10) << "osd" << reporter
+               << " is adding failure report on osd" << target_osd << dendl;
+    }
+
+    if ((reporters >= g_conf.osd_min_down_reporters) &&
+        (reports >= g_conf.osd_min_down_reports)) {
+      dout(1) << "have enough reports/reporters to mark osd" << target_osd
+              << " as down" << dendl;
+      pending_inc.new_down[target_osd] = false;
+      paxos->wait_for_commit(new C_Reported(this, m));
+      //clear out failure reports
+      failed_notes.erase(failed_notes.lower_bound(target_osd),
+                         failed_notes.upper_bound(target_osd));
+      return true;
+    }
+  } else { //remove the report
+    multimap<int, pair<int, int> >::iterator i = failed_notes.lower_bound(target_osd);
+    while ((i->first == target_osd) && (i->second.first != reporter))
+      ++i;
+    if (i->second.first != reporter)
+      dout(0) << "got an OSD not-failed report from osd" << reporter
+              << " that hasn't reported failure! (or in previous epoch?)" << dendl;
+    else failed_notes.erase(i);
+  }
   
-  paxos->wait_for_commit(new C_Reported(this, m));
-  
-  return true;
+  return false;
 }
 
 void OSDMonitor::_reported_failure(MOSDFailure *m)
 {
-  dout(7) << "_reported_failure on " << m->get_failed() << ", telling " << m->get_orig_source_inst() << dendl;
+  dout(7) << "_reported_failure on " << m->get_target() << ", telling " << m->get_orig_source_inst() << dendl;
   send_latest(m, m->get_epoch());
 }
 
