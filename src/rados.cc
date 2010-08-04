@@ -44,8 +44,8 @@ void usage()
   cerr << "   df          -- show per-pool and total usage\n\n";
 
   cerr << "Pool commands:\n";
-  cerr << "   get objname -- fetch object\n";
-  cerr << "   put objname -- write object\n";
+  cerr << "   get objname [outfile] -- fetch object\n";
+  cerr << "   put objname [infile] -- write object\n";
   cerr << "   rm objname  -- remove object\n";
   cerr << "   ls          -- list objects in pool\n\n";
   cerr << "   chown 123   -- change the pool owner to auid 123\n";

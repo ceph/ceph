@@ -69,7 +69,7 @@ make install DESTDIR=$RPM_BUILD_ROOT
 find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
 install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
-chmod 0644 $RPM_BUILD_ROOT%{_sysconfdir}/ceph/sample.ceph.conf
+chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
@@ -121,8 +121,8 @@ fi
 /sbin/mkcephfs
 /sbin/mount.ceph
 %{_libdir}/ceph
-%{_docdir}/sample.ceph.conf
-%{_docdir}/sample.fetch_config
+%{_docdir}/ceph/sample.ceph.conf
+%{_docdir}/ceph/sample.fetch_config
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %{_mandir}/man8/cmon.8*
 %{_mandir}/man8/cmds.8*

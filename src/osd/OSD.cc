@@ -1165,6 +1165,15 @@ void OSD::update_heartbeat_peers()
   assert(osd_lock.is_locked());
   heartbeat_lock.Lock();
 
+  /*
+  for (map<int,epoch_t>::iterator p = heartbeat_to.begin(); p != heartbeat_to.end(); p++)
+    if (heartbeat_inst.count(p->first) == 0)
+      dout(0) << " no inst for _to " << p->first << dendl;
+  for (map<int,epoch_t>::iterator p = heartbeat_from.begin(); p != heartbeat_from.end(); p++)
+    if (heartbeat_inst.count(p->first) == 0)
+      dout(0) << " no inst for _from " << p->first << dendl;
+  */
+
   // filter heartbeat_from_stamp to only include osds that remain in
   // heartbeat_from.
   map<int, utime_t> old_from_stamp;
@@ -1190,6 +1199,8 @@ void OSD::update_heartbeat_peers()
     if (pg->get_role() > 0) {
       assert(pg->acting.size() > 1);
       int p = pg->acting[0];
+      if (heartbeat_to.count(p))
+	continue;
       heartbeat_to[p] = osdmap->get_epoch();
       heartbeat_inst[p] = osdmap->get_hb_inst(p);
       if (old_to.count(p) == 0 || old_inst[p] != heartbeat_inst[p])
@@ -1200,6 +1211,8 @@ void OSD::update_heartbeat_peers()
       for (unsigned i=1; i<pg->acting.size(); i++) {
 	int p = pg->acting[i]; // peer
 	assert(p != whoami);
+	if (heartbeat_from.count(p))
+	  continue;
 	heartbeat_from[p] = osdmap->get_epoch();
 	heartbeat_inst[p] = osdmap->get_hb_inst(p);
 	if (old_from_stamp.count(p) && old_from.count(p) &&
@@ -1219,15 +1232,21 @@ void OSD::update_heartbeat_peers()
   for (map<int,epoch_t>::iterator p = old_to.begin();
        p != old_to.end();
        p++) {
+    assert(old_inst.count(p->first));
+    if (heartbeat_to.count(p->first))
+      continue;
     if (p->second > osdmap->get_epoch()) {
       dout(10) << "update_heartbeat_peers: keeping newer _to peer " << old_inst[p->first]
 	       << " as of " << p->second << dendl;
       heartbeat_to[p->first] = p->second;
       heartbeat_inst[p->first] = old_inst[p->first];
-    } else if (p->second < osdmap->get_epoch() &&
-	       (!osdmap->is_up(p->first) ||
-		osdmap->get_hb_inst(p->first) != old_inst[p->first])) {
-      dout(10) << "update_heartbeat_peers: marking down old _to peer " << old_inst[p->first] 
+    } else if (osdmap->is_down(p->first) ||
+	       osdmap->get_hb_inst(p->first) != old_inst[p->first]) {
+      dout(10) << "update_heartbeat_peers: marking down old down _to peer " << old_inst[p->first] 
+	       << " as of " << p->second << dendl;
+      heartbeat_messenger->mark_down(old_inst[p->first].addr);
+    } else {
+      dout(10) << "update_heartbeat_peers: sharing map with old _to peer " << old_inst[p->first] 
 	       << " as of " << p->second << dendl;
       // share latest map with this peer, so they know not to expect
       // heartbeats from us.  otherwise they may mark us down!
@@ -1245,6 +1264,15 @@ void OSD::update_heartbeat_peers()
 
   dout(10) << "update_heartbeat_peers: hb   to: " << heartbeat_to << dendl;
   dout(10) << "update_heartbeat_peers: hb from: " << heartbeat_from << dendl;
+
+  /*
+  for (map<int,epoch_t>::iterator p = heartbeat_to.begin(); p != heartbeat_to.end(); p++)
+    if (heartbeat_inst.count(p->first) == 0)
+      dout(0) << " no inst for _to " << p->first << dendl;
+  for (map<int,epoch_t>::iterator p = heartbeat_from.begin(); p != heartbeat_from.end(); p++)
+    if (heartbeat_inst.count(p->first) == 0)
+      dout(0) << " no inst for _from " << p->first << dendl;
+  */
 
   heartbeat_lock.Unlock();
 }
@@ -2125,23 +2153,11 @@ void OSD::note_down_osd(int osd)
 
   heartbeat_lock.Lock();
 
-  heartbeat_messenger->mark_down(osdmap->get_hb_addr(osd));
-
-  if (heartbeat_inst.count(osd)) {
-    if (heartbeat_inst[osd] == osdmap->get_hb_inst(osd)) {
-      dout(10) << "note_down_osd removing heartbeat_inst " << heartbeat_inst[osd] << dendl;
-      heartbeat_inst.erase(osd);
-    } else {
-      dout(10) << "note_down_osd leaving heartbeat_inst " << heartbeat_inst[osd]
-	       << " != " << osdmap->get_hb_inst(osd) << dendl;
-    }
-  } else
-    dout(10) << "note_down_osd no heartbeat_inst for osd" << osd << dendl;
+  // note: update_heartbeat_peers will mark down the heartbeat connection.
 
   peer_map_epoch.erase(entity_name_t::OSD(osd));
   failure_queue.erase(osd);
   failure_pending.erase(osd);
-  heartbeat_from_stamp.erase(osd);
 
   heartbeat_lock.Unlock();
 }
