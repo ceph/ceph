@@ -906,7 +906,7 @@ static int do_import(pool_t pool, const char *imgname, int order, const char *pa
         if (len < 0) {
           r = -errno;
           cerr << "error reading file\n" << std::endl;
-          return r;
+          goto done;
         }
         bufferlist bl;
         bl.append(p);
@@ -915,7 +915,7 @@ static int do_import(pool_t pool, const char *imgname, int order, const char *pa
         r = rados.write(pool, oid, ofs_in_block, bl, len);
         if (r < 0) {
           cerr << "error writing to image block" << std::endl;
-          return r;
+          goto done;
         }
 
         seg_left -= len;
@@ -925,7 +925,12 @@ static int do_import(pool_t pool, const char *imgname, int order, const char *pa
     }
   }
 
-  return 0;
+  r = 0;
+
+done:
+  free(fiemap);
+
+  return r;
 }
 
 static int do_copy(pools_t& pp, const char *imgname, const char *destname)

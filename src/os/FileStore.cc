@@ -35,6 +35,11 @@
 #include <errno.h>
 #include <dirent.h>
 #include <sys/ioctl.h>
+
+#warning fix fiemap include and define
+#include "include/fiemap.h"
+#define FS_IOC_FIEMAP                      _IOWR('f', 11, struct fiemap)
+
 #ifndef __CYGWIN__
 # include <sys/xattr.h>
 #endif
@@ -125,6 +130,51 @@ bool parse_attrname(char **name)
   return false;
 }
 
+static int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap)
+{
+  struct fiemap *fiemap = NULL;
+  int size;
+  int ret;
+
+  fiemap = (struct fiemap*)calloc(sizeof(struct fiemap), 1);
+  if (!fiemap)
+    return -ENOMEM;
+
+  fiemap->fm_start = start;
+  fiemap->fm_length = len;
+
+  if (ioctl(fd, FS_IOC_FIEMAP, fiemap) < 0) {
+    ret = -errno;
+    goto done_err;
+  }
+
+  size = sizeof(struct fiemap_extent) * (fiemap->fm_mapped_extents);
+
+  fiemap = (struct fiemap *)realloc(fiemap, sizeof(struct fiemap) +
+                                    size);
+  if (!fiemap) {
+    ret = -ENOMEM;
+    goto done_err;
+  }
+
+  memset(fiemap->fm_extents, 0, size);
+
+  fiemap->fm_extent_count = fiemap->fm_mapped_extents;
+  fiemap->fm_mapped_extents = 0;
+
+  if (ioctl(fd, FS_IOC_FIEMAP, fiemap) < 0) {
+    ret = -errno;
+    goto done_err;
+  }
+  *pfiemap = fiemap;
+
+  return 0;
+
+done_err:
+  *pfiemap = NULL;
+  free(fiemap);
+  return ret;
+}
 
 int FileStore::statfs(struct statfs *buf)
 {
@@ -1342,6 +1392,69 @@ int FileStore::read(coll_t cid, const sobject_t& oid,
     r = got;
   }
   dout(10) << "read " << fn << " " << offset << "~" << len << " = " << r << dendl;
+  return r;
+}
+
+int FileStore::fiemap(coll_t cid, const sobject_t& oid,
+                    uint64_t offset, size_t len,
+                    bufferlist& bl)
+{
+  char fn[PATH_MAX];
+  struct fiemap *fiemap = NULL;
+  map<off_t, size_t> extmap;
+
+  get_coname(cid, oid, fn, sizeof(fn));
+
+  dout(15) << "read " << fn << " " << offset << "~" << len << dendl;
+
+  int r;
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    char buf[80];
+    dout(10) << "read couldn't open " << fn << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    r = -errno;
+  } else {
+    uint64_t i;
+
+    r = do_fiemap(fd, offset, len, &fiemap);
+    if (r < 0)
+      goto done;
+
+    if (fiemap->fm_mapped_extents == 0)
+      goto done;
+
+    struct fiemap_extent *extent = &fiemap->fm_extents[0];
+
+    /* start where we were asked to start */
+    if (extent->fe_logical < offset) {
+      extent->fe_length -= offset - extent->fe_logical;
+      extent->fe_logical = offset;
+    }
+
+    i = 0;
+
+    while (i < fiemap->fm_mapped_extents) {
+      struct fiemap_extent *next = extent + 1;
+
+      /* try to merge extents */
+      while ((i < fiemap->fm_mapped_extents - 1) &&
+             (extent->fe_logical + extent->fe_length == next->fe_logical)) {
+          next->fe_length += extent->fe_length;
+          next->fe_logical = extent->fe_logical;
+          extent = next;
+          i++;
+      }
+
+      extmap[extent->fe_logical] = extent->fe_length;
+      i++;
+    }
+
+    ::encode(extmap, bl);
+  }
+
+done:
+  dout(10) << "fiemap " << fn << " " << offset << "~" << len << " = " << r << " num extents=" << extmap.size() << dendl;
+  free(fiemap);
   return r;
 }
 

@@ -49,6 +49,7 @@ void usage()
   cerr << "   rm objname  -- remove object\n";
   cerr << "   ls          -- list objects in pool\n\n";
   cerr << "   chown 123   -- change the pool owner to auid 123\n";
+  cerr << "   mapext objname\n";
 
   cerr << "   mkpool foo [123[ 4]]  -- create pool 'foo'\n"
        << "                         [with auid 123[and using crush rule 4]]\n";
@@ -243,6 +244,21 @@ int main(int argc, const char **argv)
 	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
     } else cerr << "changed auid on pool " << pool
 		<< " to " << new_auid << std::endl;
+  }
+  else if (strcmp(nargs[0], "mapext") == 0) {
+    if (!pool || nargs.size() < 2)
+      usage();
+    string oid(nargs[1]);
+    std::map<off_t, size_t> m;
+    ret = rados.mapext(p, oid, 0, -1, m);
+    if (ret < 0) {
+      cerr << "mapext error on " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      goto out;
+    }
+    std::map<off_t, size_t>::iterator iter;
+    for (iter = m.begin(); iter != m.end(); ++iter) {
+      cout << hex << iter->first << "\t" << iter->second << dec << std::endl;
+    }
   }
   else if (strcmp(nargs[0], "get") == 0) {
     if (!pool || nargs.size() < 3)

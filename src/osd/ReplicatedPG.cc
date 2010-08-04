@@ -1118,6 +1118,28 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       }
       break;
 
+    /* map extents */
+    case CEPH_OSD_OP_MAPEXT:
+      {
+	dout(0) << "CEPH_OSD_OP_MAPEXT" << dendl;
+	// read into a buffer
+	bufferlist bl;
+	int r = osd->store->fiemap(coll_t::build_pg_coll(info.pgid), soid, op.extent.offset, op.extent.length, bl);
+	if (odata.length() == 0)
+	  ctx->data_off = op.extent.offset;
+	odata.claim(bl);
+	if (r >= 0) 
+	  op.extent.length = r;
+	else {
+	  result = r;
+	  op.extent.length = 0;
+	}
+	info.stats.num_rd_kb += SHIFT_ROUND_UP(op.extent.length, 10);
+	info.stats.num_rd++;
+	dout(0) << " map_extents got " << r << " bytes from object " << soid << dendl;
+      }
+      break;
+
     case CEPH_OSD_OP_CALL:
       {
 	bufferlist indata;
