@@ -69,6 +69,9 @@ void usage()
   cerr << "   -s name\n";
   cerr << "   --snap name\n";
   cerr << "        select given snap name for (read) IO\n";
+  cerr << "   -i infile\n";
+  cerr << "   -o outfile\n";
+  cerr << "        specify input or output file (for certain commands)\n";
   exit(1);
 }
 
