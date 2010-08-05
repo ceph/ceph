@@ -2136,17 +2136,6 @@ void Server::handle_client_open(MDRequest *mdr)
     rdlocks.insert(&cur->filelock);
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
-
-    // sure sure we ended up in the SYNC state
-    if (cur->filelock.is_stable() && cur->filelock.get_state() != LOCK_SYNC) {
-      assert(cur->is_auth());
-      mds->locker->simple_sync(&cur->filelock);
-    }
-    if (!cur->filelock.is_stable()) {
-      dout(10) << " waiting for filelock to stabilize on " << *cur << dendl;
-      cur->filelock.add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mdr));
-      return;
-    }
   }
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
