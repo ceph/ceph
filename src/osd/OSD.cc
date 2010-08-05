@@ -1285,9 +1285,9 @@ void OSD::reset_heartbeat_peers()
   heartbeat_from.clear();
   heartbeat_from_stamp.clear();
   heartbeat_inst.clear();
+  failure_queue.clear();
   heartbeat_lock.Unlock();
 
-  failure_queue.clear();
 }
 
 void OSD::handle_osd_ping(MOSDPing *m)
@@ -1623,12 +1623,18 @@ void OSD::send_pg_temp()
 
 void OSD::send_failures()
 {
+  bool locked = false;
+  if (!failure_queue.empty()) {
+    heartbeat_lock.Lock();
+    locked = true;
+  }
   while (!failure_queue.empty()) {
     int osd = *failure_queue.begin();
     monc->send_mon_message(new MOSDFailure(monc->get_fsid(), osdmap->get_inst(osd), osdmap->get_epoch()));
     failure_queue.erase(osd);
     failure_pending.insert(osd);
   }
+  if (locked) heartbeat_lock.Unlock();
 }
 
 void OSD::send_still_alive(int osd)
