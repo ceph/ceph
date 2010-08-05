@@ -1543,22 +1543,18 @@ void CInode::purge_stale_snap_data(const set<snapid_t>& snaps)
 }
 
 /*
- * pick/create an old_inode that we can write into.
+ * pick/create an old_inode
  */
-/*map<snapid_t,old_inode_t>::iterator CInode::pick_dirty_old_inode(snapid_t last)
+old_inode_t * CInode::pick_old_inode(snapid_t snap)
 {
-  dout(10) << "pick_dirty_old_inode last " << last << dendl;
-  SnapRealm *realm = find_snaprealm();
-  dout(10) << " realm " << *realm << dendl;
-  const set<snapid_t>& snaps = realm->get_snaps();
-  dout(10) << " snaps " << snaps << dendl;
-  
-  //snapid_t snap = snaps.lower_bound(last);
-
-
-  
+  map<snapid_t, old_inode_t>::iterator p = old_inodes.lower_bound(snap);  // p is first key >= to snap
+  if (p != old_inodes.end() && p->second.first <= snap) {
+    dout(10) << "pick_old_inode snap " << snap << " -> [" << p->second.first << "," << p->first << "]" << dendl;
+    return &p->second;
+  }
+  dout(10) << "pick_old_inode snap " << snap << " -> nothing" << dendl;
+  return NULL;
 }
-*/
 
 void CInode::open_snaprealm(bool nosplit)
 {

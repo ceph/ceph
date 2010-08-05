@@ -1987,6 +1987,14 @@ void Locker::_do_snap_update(CInode *in, int dirty, snapid_t follows, MClientCap
   inode_t *pi = in->project_inode(px);
   pi->version = in->pre_dirty();
 
+  if (in->is_multiversion()) {
+    old_inode_t *oi = in->pick_old_inode(snap);
+    if (oi) {
+      dout(10) << " writing into old inode" << dendl;
+      pi = &oi->inode;
+    }
+  }      
+
   _update_cap_fields(in, dirty, m, pi);
 
   // xattr
