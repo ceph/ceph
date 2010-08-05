@@ -654,7 +654,10 @@ static int do_export(pools_t& pp, string& md_oid, const char *path)
   for (uint64_t i = 0; i < numseg; i++) {
     bufferlist bl;
     string oid = get_block_oid(&header, i);
-    r = rados.read(pp.data, oid, 0, bl, block_size);
+    map<off_t, size_t> m;
+    map<off_t, size_t>::iterator iter;
+    off_t bl_ofs = 0;
+    r = rados.sparse_read(pp.data, oid, 0, block_size, m, bl);
     if (r < 0 && r == -ENOENT)
       r = 0;
     if (r < 0) {
@@ -662,16 +665,23 @@ static int do_export(pools_t& pp, string& md_oid, const char *path)
       goto done;
     }
 
-    if (bl.length()) {
-      ret = lseek64(fd, pos, SEEK_SET);
+    for (iter = m.begin(); iter != m.end(); ++iter) {
+      off_t extent_ofs = iter->first;
+      size_t extent_len = iter->second;
+      ret = lseek64(fd, pos + extent_ofs, SEEK_SET);
       if (ret < 0) {
 	ret = -errno;
 	cerr << "could not seek to pos " << pos << std::endl;
 	goto done;
       }
-      ret = write(fd, bl.c_str(), bl.length());
+      if (bl_ofs + extent_len > bl.length()) {
+        cerr << "data error!" << std::endl;
+        return -EIO;
+      }
+      ret = write(fd, bl.c_str() + bl_ofs, extent_len);
       if (ret < 0)
         goto done;
+      bl_ofs += extent_len;
     }
 
     pos += block_size;
