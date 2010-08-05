@@ -175,7 +175,14 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 
   dout(12) << "preprocess_beacon " << *m
 	   << " from " << m->get_orig_source_inst()
+	   << " " << m->get_compat()
 	   << dendl;
+
+  // check compat
+  if (!m->get_compat().writeable(mdsmap.compat)) {
+    dout(1) << " mds " << m->get_source_inst() << " can't write to mdsmap " << mdsmap.compat << dendl;
+    goto out;
+  }
 
   // fw to leader?
   if (!mon->is_leader())
@@ -325,6 +332,14 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
     // initialize the beacon timer
     last_beacon[gid].stamp = g_clock.now();
     last_beacon[gid].seq = seq;
+
+    // new incompat?
+    if (!pending_mdsmap.compat.writeable(m->get_compat())) {
+      dout(10) << " mdsmap " << pending_mdsmap.compat << " can't write to new mds' " << m->get_compat()
+	       << ", updating mdsmap and killing old mds's"
+	       << dendl;
+      pending_mdsmap.compat = m->get_compat();
+    }
 
   } else {
     // state change
