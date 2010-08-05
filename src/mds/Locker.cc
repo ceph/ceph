@@ -749,12 +749,12 @@ bool Locker::rdlock_try(SimpleLock *lock, client_t client, Context *con)
   return false;
 }
 
-bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut)
+bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut, bool as_anon)
 {
   dout(7) << "rdlock_start  on " << *lock << " on " << *lock->get_parent() << dendl;  
 
   // client may be allowed to rdlock the same item it has xlocked.
-  client_t client = mut->get_client();
+  client_t client = as_anon ? -1 : mut->get_client();
 
   if (!lock->get_parent()->is_auth() &&
       lock->fw_rdlock_to_auth()) {
@@ -784,7 +784,7 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut)
     // okay, we actually need to kick the head's lock to get ourselves synced up.
     CInode *head = mdcache->get_inode(in->ino());
     dout(10) << "rdlock_start trying head inode " << *head << dendl;
-    return rdlock_start(head->get_lock(lock->get_type()), mut);
+    return rdlock_start(head->get_lock(lock->get_type()), mut, true);   // ** as_anon, no rdlock on EXCL **
   }
 
   // wait!

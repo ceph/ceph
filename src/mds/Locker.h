@@ -105,7 +105,7 @@ public:
 
   bool _rdlock_kick(SimpleLock *lock);
   bool rdlock_try(SimpleLock *lock, client_t client, Context *c);
-  bool rdlock_start(SimpleLock *lock, MDRequest *mut);
+  bool rdlock_start(SimpleLock *lock, MDRequest *mut, bool as_anon=false);
   void rdlock_finish(SimpleLock *lock, Mutation *mut);
 
   void wrlock_force(SimpleLock *lock, Mutation *mut);
