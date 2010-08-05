@@ -398,7 +398,7 @@ void Locker::drop_rdlocks(Mutation *mut)
 
 // generics
 
-void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue)
+void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<Context*> *pfinishers)
 {
   dout(10) << "eval_gather " << *lock << " on " << *lock->get_parent() << dendl;
   assert(!lock->is_stable());
@@ -558,7 +558,11 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue)
       }
     }
 
-    lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD|SimpleLock::WAIT_XLOCK);
+    if (pfinishers)
+      lock->take_waiting(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD|SimpleLock::WAIT_XLOCK,
+			 *pfinishers);
+    else
+      lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD|SimpleLock::WAIT_XLOCK);
     
     if (caps)
       need_issue = true;
@@ -665,19 +669,22 @@ void Locker::try_eval(CInode *in, int mask)
 void Locker::eval_cap_gather(CInode *in)
 {
   bool need_issue = false;
+  list<Context*> finishers;
 
   // kick locks now
   if (!in->filelock.is_stable())
-    eval_gather(&in->filelock, false, &need_issue);
+    eval_gather(&in->filelock, false, &need_issue, &finishers);
   if (!in->authlock.is_stable())
-    eval_gather(&in->authlock, false, &need_issue);
+    eval_gather(&in->authlock, false, &need_issue, &finishers);
   if (!in->linklock.is_stable())
-    eval_gather(&in->linklock, false, &need_issue);
+    eval_gather(&in->linklock, false, &need_issue, &finishers);
   if (!in->xattrlock.is_stable())
-    eval_gather(&in->xattrlock, false, &need_issue);
+    eval_gather(&in->xattrlock, false, &need_issue, &finishers);
 
   if (need_issue)
     issue_caps(in);
+
+  finish_contexts(finishers);
 }
 
 void Locker::eval(SimpleLock *lock, bool *need_issue)

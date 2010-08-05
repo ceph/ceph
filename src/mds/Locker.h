@@ -89,7 +89,7 @@ public:
   void set_xlocks_done(Mutation *mut);
   void drop_rdlocks(Mutation *mut);
 
-  void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0);
+  void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, list<Context*> *pfinishers=0);
   void eval(SimpleLock *lock, bool *need_issue=0);
   void eval_any(SimpleLock *lock, bool *need_issue=0) {
     if (!lock->is_stable())
