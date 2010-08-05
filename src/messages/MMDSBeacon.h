@@ -31,6 +31,8 @@ class MMDSBeacon : public PaxosServiceMessage {
   __s32 standby_for_rank;
   string standby_for_name;
 
+  CompatSet compat;
+
  public:
   MMDSBeacon() : PaxosServiceMessage(MSG_MDS_BEACON, 0) {}
   MMDSBeacon(const ceph_fsid_t &f, uint64_t g, string& n, epoch_t les, int st, version_t se) : 
@@ -51,6 +53,9 @@ public:
   int get_standby_for_rank() { return standby_for_rank; }
   const string& get_standby_for_name() { return standby_for_name; }
 
+  CompatSet& get_compat() { return compat; }
+  void set_compat(CompatSet& c) { compat = c; }
+
   void set_standby_for_rank(int r) { standby_for_rank = r; }
   void set_standby_for_name(string& n) { standby_for_name = n; }
 
@@ -60,6 +65,7 @@ public:
   }
 
   void encode_payload() {
+    header.version = 2;
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(global_id, payload);
@@ -68,6 +74,7 @@ public:
     ::encode(name, payload);
     ::encode(standby_for_rank, payload);
     ::encode(standby_for_name, payload);
+    ::encode(compat, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -79,6 +86,8 @@ public:
     ::decode(name, p);
     ::decode(standby_for_rank, p);
     ::decode(standby_for_name, p);
+    if (header.version >= 2)
+      ::decode(compat, p);
   }
 };
 

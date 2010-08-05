@@ -572,6 +572,9 @@ void MDS::beacon_send()
   beacon->set_standby_for_rank(standby_for_rank);
   beacon->set_standby_for_name(standby_for_name);
 
+  // include _my_ feature set
+  beacon->set_compat(mdsmap_compat);
+
   monc->send_mon_message(beacon);
 
   // schedule next sender
