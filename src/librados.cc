@@ -135,6 +135,7 @@ public:
   int write_full(PoolCtx& pool, const object_t& oid, bufferlist& bl);
   int read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
   int mapext(PoolCtx& pool, const object_t& oid, off_t off, size_t len, std::map<off_t,size_t>& m);
+  int sparse_read(PoolCtx& pool, const object_t& oid, off_t off, size_t len, std::map<off_t,size_t>& m, bufferlist& bl);
   int remove(PoolCtx& pool, const object_t& oid);
   int stat(PoolCtx& pool, const object_t& oid, uint64_t *psize, time_t *pmtime);
   int trunc(PoolCtx& pool, const object_t& oid, size_t size);
@@ -1149,6 +1150,41 @@ int RadosClient::mapext(PoolCtx& pool, const object_t& oid, off_t off, size_t le
   return m.size();
 }
 
+int RadosClient::sparse_read(PoolCtx& pool, const object_t& oid, off_t off, size_t len,
+                             std::map<off_t,size_t>& m, bufferlist& data_bl)
+{
+  SnapContext snapc;
+  bufferlist bl;
+
+  Mutex mylock("RadosClient::read::mylock");
+  Cond cond;
+  bool done;
+  int r;
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+
+  lock.Lock();
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  objecter->sparse_read(oid, layout,
+	      off, len, pool.snap_seq, &bl, 0,
+              onack);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+  dout(10) << "Objecter returned from read r=" << r << dendl;
+
+  if (r < 0)
+    return r;
+
+  bufferlist::iterator iter = bl.begin();
+  ::decode(m, iter);
+  ::decode(data_bl, iter);
+
+  return m.size();
+}
+
 int RadosClient::stat(PoolCtx& pool, const object_t& oid, uint64_t *psize, time_t *pmtime)
 {
   SnapContext snapc;
@@ -1472,6 +1508,14 @@ int Rados::mapext(rados_pool_t pool, const string& o, off_t off, size_t len, std
     return -EINVAL;
   object_t oid(o);
   return ((RadosClient *)client)->mapext(*(RadosClient::PoolCtx *)pool, oid, off, len, m);
+}
+
+int Rados::sparse_read(rados_pool_t pool, const string& o, off_t off, size_t len, std::map<off_t, size_t>& m, bufferlist& bl)
+{
+  if (!client)
+    return -EINVAL;
+  object_t oid(o);
+  return ((RadosClient *)client)->sparse_read(*(RadosClient::PoolCtx *)pool, oid, off, len, m, bl);
 }
 
 int Rados::getxattr(rados_pool_t pool, const string& o, const char *name, bufferlist& bl)

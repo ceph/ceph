@@ -1442,17 +1442,21 @@ int FileStore::fiemap(coll_t cid, const sobject_t& oid,
           next->fe_length += extent->fe_length;
           next->fe_logical = extent->fe_logical;
           extent = next;
+          next = extent + 1;
           i++;
       }
 
+      if (extent->fe_logical + extent->fe_length > len)
+        extent->fe_length = len - extent->fe_logical;
       extmap[extent->fe_logical] = extent->fe_length;
       i++;
     }
-
-    ::encode(extmap, bl);
   }
 
 done:
+  if (r >= 0)
+    ::encode(extmap, bl);
+
   dout(10) << "fiemap " << fn << " " << offset << "~" << len << " = " << r << " num extents=" << extmap.size() << dendl;
   free(fiemap);
   return r;
