@@ -1260,6 +1260,8 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
   oldin->symlink = in->symlink;
   oldin->xattrs = in->xattrs;
 
+  oldin->inode.trim_client_ranges(last);
+
   in->first = last+1;
 
   dout(10) << "cow_inode " << *in << " to " << *oldin << dendl;
@@ -1271,27 +1273,27 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
       p++) {
     client_t client = p->first;
     Capability *cap = p->second;
-    if ((cap->issued() & CEPH_CAP_ANY_WR) &&
+    int issued = cap->issued();
+    if ((issued & CEPH_CAP_ANY_WR) &&
 	cap->client_follows <= oldin->first) {
-      // clone to oldin
-      Capability *newcap = oldin->add_client_cap(client, 0, in->containing_realm);
-      cap->item_session_caps.get_list()->push_back(&newcap->item_session_caps);
-      newcap->issue(cap->issued());
-      newcap->set_last_issue_stamp(cap->get_last_issue_stamp());
-      newcap->client_follows = cap->client_follows;
-      dout(10) << " cloning client" << client << " wr cap " << cap
-	       << " follows " << cap->client_follows
-	       << " to " << newcap << " on cloned inode" << dendl;
+      // note in oldin
+      for (int i = 0; i < num_cinode_locks; i++) {
+	if (issued & cinode_lock_info[i].wr_caps) {
+	  int lockid = cinode_lock_info[i].lock;
+	  SimpleLock *lock = oldin->get_lock(lockid);
+	  assert(lock);
+	  oldin->client_snap_caps[lockid].insert(client);
+	  oldin->auth_pin(lock);
+	  lock->set_state(LOCK_SNAP_SYNC);  // gathering
+	  lock->get_wrlock(true);
+	  dout(10) << " client" << client << " cap " << ccap_string(issued & cinode_lock_info[i].wr_caps)
+		   << " wrlock lock " << *lock << " on " << *oldin << dendl;
+	}
+      }
       cap->client_follows = last;
     } else {
-      dout(10) << " not cloning client" << client << " cap follows " << cap->client_follows << dendl;
+      dout(10) << " ignoring client" << client << " cap follows " << cap->client_follows << dendl;
     }
-  }
-  if (oldin->is_any_caps())
-    oldin->filelock.set_state(LOCK_LOCK);
-  else if (oldin->inode.client_ranges.size()) {
-    dout(10) << "cow_inode WARNING client_ranges " << oldin->inode.client_ranges << " on " << *oldin << dendl;
-    //oldin->inode.max_size = 0;
   }
 
   return oldin;
@@ -4170,7 +4172,8 @@ void MDCache::do_delayed_cap_imports()
       }
       in->auth_unpin(this);
 
-      mds->locker->issue_caps(in);
+      if (in->is_head())
+	mds->locker->issue_caps(in);
     }
   }    
 }
@@ -4378,7 +4381,7 @@ void MDCache::reissue_all_caps()
        p != inode_map.end();
        ++p) {
     CInode *in = p->second;
-    if (in->is_any_caps()) {
+    if (in->is_head() && in->is_any_caps()) {
       if (!mds->locker->eval(in, CEPH_CAP_LOCKS))
 	mds->locker->issue_caps(in);
     }
@@ -4482,7 +4485,7 @@ void MDCache::identify_files_to_recover(vector<CInode*>& recover_q, vector<CInod
       continue;
     
     bool recover = false;
-    for (map<client_t,byte_range_t>::iterator p = in->inode.client_ranges.begin();
+    for (map<client_t,client_writeable_range_t>::iterator p = in->inode.client_ranges.begin();
 	 p != in->inode.client_ranges.end();
 	 p++) {
       Capability *cap = in->get_client_cap(p->first);

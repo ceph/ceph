@@ -54,6 +54,13 @@ class ObjectOperation;
 
 ostream& operator<<(ostream& out, CInode& in);
 
+struct cinode_lock_info_t {
+  int lock;
+  int wr_caps;
+};
+
+extern cinode_lock_info_t cinode_lock_info[];
+extern int num_cinode_locks;
 
 // cached inode wrapper
 class CInode : public MDSCacheObject {
@@ -273,6 +280,8 @@ protected:
   int                   replica_caps_wanted; // [replica] what i've requested from auth
   utime_t               replica_caps_wanted_keep_until;
 
+  map<int, set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
+
   ceph_lock_state_t fcntl_locks;
   ceph_lock_state_t flock_locks;
 
@@ -366,6 +375,8 @@ private:
   bool is_mdsdir() { return MDS_INO_IS_MDSDIR(inode.ino); }
   bool is_base() { return is_root() || is_mdsdir(); }
   bool is_system() { return inode.ino < MDS_INO_SYSTEM_BASE; }
+
+  bool is_head() { return last == CEPH_NOSNAP; }
 
   // note: this overloads MDSCacheObject
   bool is_ambiguous_auth() {

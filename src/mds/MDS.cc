@@ -668,9 +668,9 @@ void MDS::handle_command(MMonCommand *m)
       dout(15) << "session " << session << " not in sessionmap!" << dendl;
   } else if (m->cmd[0] == "issue_caps") {
     long inum = strtol(m->cmd[1].c_str(), 0, 10);
-    CInode * ino = mdcache->get_inode(inodeno_t(inum));
-    if (ino) {
-      bool r = locker->issue_caps(ino);
+    CInode *in = mdcache->get_inode(inodeno_t(inum));
+    if (in) {
+      bool r = locker->issue_caps(in);
       dout(20) << "called issue_caps on inode "  << inum
 	       << " with result " << r << dendl;
     } else dout(15) << "inode " << inum << " not in mdcache!" << dendl;

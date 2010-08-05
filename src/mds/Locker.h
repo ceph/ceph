@@ -177,6 +177,8 @@ public:
  protected:
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
   void handle_client_caps(class MClientCaps *m);
+  void _update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *pi);
+  void _do_snap_update(CInode *in, int dirty, snapid_t follows, MClientCaps *m, MClientCaps *ack);
   bool _do_cap_update(CInode *in, Capability *cap, int dirty, snapid_t follows, MClientCaps *m,
 		      MClientCaps *ack=0);
   void handle_client_cap_release(class MClientCapRelease *m);
@@ -226,7 +228,7 @@ protected:
   void file_update_finish(CInode *in, Mutation *mut, bool share, client_t client, Capability *cap,
 			  MClientCaps *ack);
 public:
-  void calc_new_client_ranges(CInode *in, uint64_t size, map<client_t,byte_range_t>& new_ranges);
+  void calc_new_client_ranges(CInode *in, uint64_t size, map<client_t, client_writeable_range_t>& new_ranges);
   bool check_inode_max_size(CInode *in, bool force_wrlock=false, bool update_size=false, uint64_t newsize=0,
 			    utime_t mtime=utime_t());
   void share_inode_max_size(CInode *in);

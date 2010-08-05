@@ -86,7 +86,9 @@ extern struct sm_t sm_locallock;
 #define LOCK_SCAN     30
 #define LOCK_SCAN_LOCK 31
 
-#define LOCK_MAX      32
+#define LOCK_SNAP_SYNC 32
+
+#define LOCK_MAX      33
 
 // -------------------------
 // lock actions

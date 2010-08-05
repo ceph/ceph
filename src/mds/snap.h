@@ -218,6 +218,15 @@ struct SnapRealm {
     return cached_seq;
   }
 
+  snapid_t get_snap_following(snapid_t follows) {
+    check_cache();
+    set<snapid_t> s = get_snaps();
+    set<snapid_t>::iterator p = s.upper_bound(follows);
+    if (p != s.end())
+      return *p;
+    return CEPH_NOSNAP;
+  }
+
   void adjust_parent();
 
   void split_at(SnapRealm *child);

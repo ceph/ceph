@@ -62,6 +62,18 @@ ostream& CInode::print_db_line_prefix(ostream& out)
   return out << g_clock.now() << " mds" << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") ";
 }
 
+/*
+ * write caps and lock ids
+ */
+struct cinode_lock_info_t cinode_lock_info[] = {
+  { CEPH_LOCK_IFILE, CEPH_CAP_ANY_FILE_WR },
+  { CEPH_LOCK_IAUTH, CEPH_CAP_AUTH_EXCL },
+  { CEPH_LOCK_ILINK, CEPH_CAP_LINK_EXCL },
+  { CEPH_LOCK_IXATTR, CEPH_CAP_XATTR_EXCL },
+  { CEPH_LOCK_IFLOCK, CEPH_CAP_FLOCK_EXCL }  
+};
+int num_cinode_locks = 5;
+
 
 
 ostream& operator<<(ostream& out, CInode& in)
@@ -1492,6 +1504,8 @@ old_inode_t& CInode::cow_old_inode(snapid_t follows, inode_t *pi)
   old.inode = *pi;
   old.xattrs = xattrs;
   
+  old.inode.trim_client_ranges(follows);
+
   if (!(old.inode.rstat == old.inode.accounted_rstat))
     dirty_old_rstats.insert(follows);
   
@@ -1695,8 +1709,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   e.time_warp_seq = i->time_warp_seq;
 
   // max_size is min of projected, actual
-  e.max_size = MIN(oi->client_ranges.count(client) ? oi->client_ranges[client].last : 0,
-		   pi->client_ranges.count(client) ? pi->client_ranges[client].last : 0);
+  e.max_size = MIN(oi->client_ranges.count(client) ? oi->client_ranges[client].range.last : 0,
+		   pi->client_ranges.count(client) ? pi->client_ranges[client].range.last : 0);
 
   e.files = i->dirstat.nfiles;
   e.subdirs = i->dirstat.nsubdirs;
@@ -1873,8 +1887,8 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
   m->head.time_warp_seq = i->time_warp_seq;
 
   // max_size is min of projected, actual.
-  uint64_t oldms = oi->client_ranges.count(client) ? oi->client_ranges[client].last : 0;
-  uint64_t newms = pi->client_ranges.count(client) ? pi->client_ranges[client].last : 0;
+  uint64_t oldms = oi->client_ranges.count(client) ? oi->client_ranges[client].range.last : 0;
+  uint64_t newms = pi->client_ranges.count(client) ? pi->client_ranges[client].range.last : 0;
   m->head.max_size = MIN(oldms, newms);
 
   i = pauth ? pi:oi;
