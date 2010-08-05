@@ -1334,6 +1334,12 @@ void OSD::handle_osd_ping(MOSDPing *m)
     }
 
     heartbeat_from_stamp[from] = g_clock.now();  // don't let _my_ lag interfere.
+    // remove from failure lists if needed
+    if (failure_pending.count(from)) {
+      send_still_alive(from);
+      failure_pending.erase(from);
+    }
+    failure_queue.erase(from);
   } else {
     dout(10) << " ignoring " << m->get_source_inst() << dendl;
   }
@@ -1376,6 +1382,7 @@ void OSD::heartbeat_check()
 	      << " since " << heartbeat_from_stamp[p->first]
 	      << " (cutoff " << grace << ")" << dendl;
       queue_failure(p->first);
+
     }
   }
 }
@@ -1620,7 +1627,16 @@ void OSD::send_failures()
     int osd = *failure_queue.begin();
     monc->send_mon_message(new MOSDFailure(monc->get_fsid(), osdmap->get_inst(osd), osdmap->get_epoch()));
     failure_queue.erase(osd);
+    failure_pending.insert(osd);
   }
+}
+
+void OSD::send_still_alive(int osd)
+{
+  MOSDFailure *m = new MOSDFailure(monc->get_fsid(), osdmap->get_inst(osd),
+				   osdmap->get_epoch());
+  m->is_failed = false;
+  monc->send_mon_message(m);
 }
 
 void OSD::send_pg_stats()

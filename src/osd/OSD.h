@@ -546,10 +546,12 @@ protected:
   set<int> failure_queue;
   set<int> failure_pending;
 
+
   void queue_failure(int n) {
     failure_queue.insert(n);
   }
   void send_failures();
+  void send_still_alive(int osd);
 
   // -- pg stats --
   Mutex pg_stat_queue_lock;
