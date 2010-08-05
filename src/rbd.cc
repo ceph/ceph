@@ -979,23 +979,34 @@ static int do_copy(pools_t& pp, const char *imgname, const char *destname)
   for (uint64_t i = 0; i < numseg; i++) {
     bufferlist bl;
     string oid = get_block_oid(&header, i);
-    r = rados.read(pp.data, oid, 0, bl, block_size);
+    string dest_oid = get_block_oid(&dest_header, i);
+    map<off_t, size_t> m;
+    map<off_t, size_t>::iterator iter;
+    r = rados.sparse_read(pp.data, oid, 0, block_size, m, bl);
     if (r < 0 && r == -ENOENT)
       r = 0;
     if (r < 0)
       return r;
 
-    if (bl.length()) {
-      string dest_oid = get_block_oid(&dest_header, i);
-      r = rados.write(pp.dest, dest_oid, 0, bl, bl.length());
-      if (r < 0) {
-        cerr << "failed to write block " << dest_oid << std::endl;
-        return r;
+
+    for (iter = m.begin(); iter != m.end(); ++iter) {
+      off_t extent_ofs = iter->first;
+      size_t extent_len = iter->second;
+      bufferlist wrbl;
+      if (extent_ofs + extent_len > bl.length()) {
+        cerr << "data error!" << std::endl;
+        return -EIO;
       }
+      bl.copy(extent_ofs, extent_len, wrbl);
+      r = rados.write(pp.dest, dest_oid, extent_ofs, wrbl, extent_len);
+      if (r < 0)
+        goto done;
     }
   }
+  r = 0;
 
-  return 0;
+done:
+  return r;
 }
 
 static void err_exit(pools_t& pp)
