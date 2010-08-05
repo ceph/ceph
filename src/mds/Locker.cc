@@ -754,6 +754,9 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut, bool as_anon)
   dout(7) << "rdlock_start  on " << *lock << " on " << *lock->get_parent() << dendl;  
 
   // client may be allowed to rdlock the same item it has xlocked.
+  //  UNLESS someone passes in as_anon, or we're reading snapped version here.
+  if (mut->snapid != CEPH_NOSNAP)
+    as_anon = true;
   client_t client = as_anon ? -1 : mut->get_client();
 
   if (!lock->get_parent()->is_auth() &&
