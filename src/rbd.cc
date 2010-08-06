@@ -38,9 +38,34 @@ using namespace librados;
 
 #include "include/rbd_types.h"
 
-#warning fix fiemap include and define
-#include "include/fiemap.h"
-#define FS_IOC_FIEMAP                      _IOWR('f', 11, struct fiemap)
+#include <linux/fs.h>
+
+#ifdef HAVE_FIEMAP_H
+#include <linux/fiemap.h>
+#else
+
+/*
+ the following structures differ from the original structures
+ and should only be used in the following code. Using it for
+ the fiemap ioctl will not work.
+*/
+struct fiemap_extent {
+  __u64 fe_logical;
+  __u64 fe_physical;
+  __u64 fe_length;
+  __u32 fe_flags;
+};
+
+struct fiemap {
+  __u64 fm_start;
+  __u64 fm_length;
+  __u32 fm_flags;
+  __u32 fm_mapped_extents;
+  __u32 fm_extent_count;
+  struct fiemap_extent fm_extents[0];
+};
+
+#endif
 
 struct pools {
   pool_t md;
@@ -759,6 +784,7 @@ done_img:
   update_snap_name(*new_img, snap);
 }
 
+#ifdef HAVE_FIEMAP_H
 /*
  * the following function was taken from fiemap.c by Colin Ian King, colin.king@canonical.com
  */
@@ -809,6 +835,12 @@ done_err:
   free(fiemap);
   return NULL;
 }
+#else
+static struct fiemap *read_fiemap(int fd)
+{
+  return NULL;
+}
+#endif
 
 static int do_import(pool_t pool, const char *imgname, int order, const char *path)
 {

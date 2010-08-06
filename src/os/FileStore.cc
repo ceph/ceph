@@ -35,10 +35,11 @@
 #include <errno.h>
 #include <dirent.h>
 #include <sys/ioctl.h>
+#include <linux/fs.h>
 
-#warning fix fiemap include and define
-#include "include/fiemap.h"
-#define FS_IOC_FIEMAP                      _IOWR('f', 11, struct fiemap)
+#ifdef HAVE_FIEMAP_H
+#include <linux/fiemap.h>
+#endif
 
 #ifndef __CYGWIN__
 # include <sys/xattr.h>
@@ -130,6 +131,7 @@ bool parse_attrname(char **name)
   return false;
 }
 
+#ifdef HAVE_FIEMAP_H
 static int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap)
 {
   struct fiemap *fiemap = NULL;
@@ -175,6 +177,12 @@ done_err:
   free(fiemap);
   return ret;
 }
+#else
+static int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap)
+{
+  return -ENOTSUP;
+}
+#endif
 
 int FileStore::statfs(struct statfs *buf)
 {
@@ -1395,6 +1403,7 @@ int FileStore::read(coll_t cid, const sobject_t& oid,
   return r;
 }
 
+#ifdef HAVE_FIEMAP_H
 int FileStore::fiemap(coll_t cid, const sobject_t& oid,
                     uint64_t offset, size_t len,
                     bufferlist& bl)
@@ -1405,7 +1414,7 @@ int FileStore::fiemap(coll_t cid, const sobject_t& oid,
 
   get_coname(cid, oid, fn, sizeof(fn));
 
-  dout(15) << "read " << fn << " " << offset << "~" << len << dendl;
+  dout(15) << "fiemap " << fn << " " << offset << "~" << len << dendl;
 
   int r;
   int fd = ::open(fn, O_RDONLY);
@@ -1461,7 +1470,17 @@ done:
   free(fiemap);
   return r;
 }
-
+#else
+int FileStore::fiemap(coll_t cid, const sobject_t& oid,
+                    uint64_t offset, size_t len,
+                    bufferlist& bl)
+{
+  map<off_t, size_t> m;
+  m[offset] = len;
+  ::encode(m, bl);
+  return 0;
+}
+#endif
 
 
 int FileStore::_remove(coll_t cid, const sobject_t& oid) 
