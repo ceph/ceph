@@ -44,10 +44,11 @@ public:
     void satisfy_dependency(ClassData *cls);
 
     enum Status { 
-      CLASS_UNKNOWN, 
-      CLASS_INVALID, 
-      CLASS_LOADED, 
-      CLASS_REQUESTED, 
+      CLASS_UNKNOWN,
+      CLASS_INVALID,
+      CLASS_ERROR,
+      CLASS_LOADED,
+      CLASS_REQUESTED,
     } status;
     ClassVersion version;
     time_t timeout;
@@ -73,7 +74,7 @@ public:
     ClassMethod *get_method(const char *mname);
     void unregister_method(ClassMethod *method);
 
-    void load();
+    int load();
     void init();
 
     void set_status(Status _status);
@@ -85,8 +86,8 @@ public:
 
   ClassData& get_obj(const string& cname);
 
-  void load_class(const string& cname);
-  void _load_class(ClassData &data);
+  int load_class(const string& cname);
+  int _load_class(ClassData &data);
 
   ClassHandler(OSD *_osd) : osd(_osd), mutex("ClassHandler") {}
 

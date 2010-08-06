@@ -4810,6 +4810,9 @@ int OSD::get_class(const string& cname, ClassVersion& version, pg_t pgid, Messag
     case ClassHandler::ClassData::CLASS_INVALID:
       dout(0) << "class not supported" << dendl;
       return -EOPNOTSUPP;
+    case ClassHandler::ClassData::CLASS_ERROR:
+      dout(0) << "error loading class!" << dendl;
+      return -EIO;
     default:
       assert(0);
     }
