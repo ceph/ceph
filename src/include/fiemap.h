@@ -1,9 +1,15 @@
 #ifndef __CEPH_FIEMAP_H
 #define __CEPH_FIEMAP_H
 
-#ifndef HAVE_FIEMAP_H
-
 #include "config.h"
+
+#ifdef HAVE_FIEMAP_H
+
+#include <linux/fiemap.h>
+
+extern "C" struct fiemap *read_fiemap(int fd);
+
+#else
 
 /*
  the following structures differ from the original structures.
@@ -30,12 +36,7 @@ static inline struct fiemap *read_fiemap(int fd)
   return NULL;
 }
 
-#else
-
-
-extern "C" struct fiemap *read_fiemap(int fd);
-
-
 #endif
+
 
 #endif
