@@ -446,6 +446,14 @@ void RGWPutACLs_REST::send_response()
 
 void init_entities_from_header(struct req_state *s)
 {
+  const char *gateway_dns_name;
+
+  gateway_dns_name = FCGX_GetParam("RGW_DNS_NAME", s->fcgx->envp);
+  if (!gateway_dns_name)
+    gateway_dns_name = "s3.";
+
+  RGW_LOG(20) << "gateway_dns_name = " << gateway_dns_name << endl;
+
   s->bucket = NULL;
   s->bucket_str = "";
   s->object = NULL;
@@ -456,9 +464,9 @@ void init_entities_from_header(struct req_state *s)
     string h(s->host);
 
     RGW_LOG(10) << "host=" << s->host << endl;
-    pos = h.find("s3.");
-    
-    if (pos > 0) {
+    pos = h.find(gateway_dns_name);
+
+    if (pos > 0 && h[pos - 1] == '.') {
       string encoded_bucket = h.substr(0, pos-1);
       url_decode(encoded_bucket, s->bucket_str);
       s->bucket = s->bucket_str.c_str();
