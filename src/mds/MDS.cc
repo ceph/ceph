@@ -572,6 +572,9 @@ void MDS::beacon_send()
   beacon->set_standby_for_rank(standby_for_rank);
   beacon->set_standby_for_name(standby_for_name);
 
+  // include _my_ feature set
+  beacon->set_compat(mdsmap_compat);
+
   monc->send_mon_message(beacon);
 
   // schedule next sender
@@ -668,9 +671,9 @@ void MDS::handle_command(MMonCommand *m)
       dout(15) << "session " << session << " not in sessionmap!" << dendl;
   } else if (m->cmd[0] == "issue_caps") {
     long inum = strtol(m->cmd[1].c_str(), 0, 10);
-    CInode * ino = mdcache->get_inode(inodeno_t(inum));
-    if (ino) {
-      bool r = locker->issue_caps(ino);
+    CInode *in = mdcache->get_inode(inodeno_t(inum));
+    if (in) {
+      bool r = locker->issue_caps(in);
       dout(20) << "called issue_caps on inode "  << inum
 	       << " with result " << r << dendl;
     } else dout(15) << "inode " << inum << " not in mdcache!" << dendl;

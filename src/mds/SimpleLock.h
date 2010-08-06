@@ -125,6 +125,8 @@ public:
     case LOCK_PRE_SCAN: return "*->scan";
     case LOCK_SCAN: return "scan";
 
+    case LOCK_SNAP_SYNC: return "snap->sync";
+
     default: assert(0); return 0;
     }
   }

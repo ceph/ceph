@@ -334,6 +334,36 @@ inline bool operator==(const byte_range_t& l, const byte_range_t& r) {
   return l.first == r.first && l.last == r.last;
 }
 
+
+struct client_writeable_range_t {
+  byte_range_t range;
+  snapid_t follows;     // aka "data+metadata flushed thru"
+
+  void encode(bufferlist &bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
+    ::encode(range, bl);
+    ::encode(follows, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
+    ::decode(range, bl);
+    ::decode(follows, bl);
+  }
+};
+WRITE_CLASS_ENCODER(client_writeable_range_t)
+
+inline ostream& operator<<(ostream& out, const client_writeable_range_t& r)
+{
+  return out << r.range << "@" << r.follows;
+}
+inline bool operator==(const client_writeable_range_t& l, const client_writeable_range_t& r) {
+  return l.range == r.range && l.follows == r.follows;
+}
+
+
+
 inline ostream& operator<<(ostream& out, ceph_filelock& l) {
   out << "start: " << l.start << ", length: " << l.length
       << ", client: " << l.client << ", pid: " << l.pid
@@ -896,7 +926,7 @@ struct inode_t {
   utime_t    atime;   // file data access time.
   uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
 
-  map<client_t,byte_range_t> client_ranges;  // client(s) can write to these ranges
+  map<client_t,client_writeable_range_t> client_ranges;  // client(s) can write to these ranges
 
   // dirfrag, recursive accountin
   frag_info_t dirstat;
@@ -932,26 +962,36 @@ struct inode_t {
 
   uint64_t get_max_size() const {
     uint64_t max = 0;
-      for (map<client_t,byte_range_t>::const_iterator p = client_ranges.begin();
+      for (map<client_t,client_writeable_range_t>::const_iterator p = client_ranges.begin();
 	   p != client_ranges.end();
 	   ++p)
-	if (p->second.last > max)
-	  max = p->second.last;
+	if (p->second.range.last > max)
+	  max = p->second.range.last;
       return max;
   }
   void set_max_size(uint64_t new_max) {
     if (new_max == 0) {
       client_ranges.clear();
     } else {
-      for (map<client_t,byte_range_t>::iterator p = client_ranges.begin();
+      for (map<client_t,client_writeable_range_t>::iterator p = client_ranges.begin();
 	   p != client_ranges.end();
 	   ++p)
-	p->second.last = new_max;
+	p->second.range.last = new_max;
+    }
+  }
+
+  void trim_client_ranges(snapid_t last) {
+    map<client_t, client_writeable_range_t>::iterator p = client_ranges.begin();
+    while (p != client_ranges.end()) {
+      if (p->second.follows >= last)
+	client_ranges.erase(p++);
+      else
+	p++;
     }
   }
 
   void encode(bufferlist &bl) const {
-    __u8 v = 2;
+    __u8 v = 3;
     ::encode(v, bl);
 
     ::encode(ino, bl);
@@ -1007,7 +1047,14 @@ struct inode_t {
     ::decode(mtime, p);
     ::decode(atime, p);
     ::decode(time_warp_seq, p);
-    ::decode(client_ranges, p);
+    if (v >= 3) {
+      ::decode(client_ranges, p);
+    } else {
+      map<client_t, byte_range_t> m;
+      ::decode(m, p);
+      for (map<client_t, byte_range_t>::iterator q = m.begin(); q != m.end(); q++)
+	client_ranges[q->first].range = q->second;
+    }
     
     ::decode(dirstat, p);
     ::decode(rstat, p);

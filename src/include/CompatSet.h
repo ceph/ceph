@@ -39,6 +39,16 @@ struct CompatSet {
       names[f.id] = f.name;
     }
 
+    bool contains(uint64_t f) const {
+      return names.count(f);
+    }
+    void remove(uint64_t f) {
+      if (names.count(f)) {
+	names.erase(f);
+	mask &= ~f;
+      }
+    }      
+
     void encode(bufferlist& bl) const {
       ::encode(mask, bl);
       ::encode(names, bl);

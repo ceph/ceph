@@ -2074,6 +2074,7 @@ void Server::handle_client_open(MDRequest *mdr)
     reply_request(mdr, -EROFS);
     return;
   }
+
   // can only open a dir with mode FILE_MODE_PIN, at least for now.
   if (cur->inode.is_dir())
     cmode = CEPH_FILE_MODE_PIN;
@@ -2135,17 +2136,6 @@ void Server::handle_client_open(MDRequest *mdr)
     rdlocks.insert(&cur->filelock);
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
-
-    // sure sure we ended up in the SYNC state
-    if (cur->filelock.is_stable() && cur->filelock.get_state() != LOCK_SYNC) {
-      assert(cur->is_auth());
-      mds->locker->simple_sync(&cur->filelock);
-    }
-    if (!cur->filelock.is_stable()) {
-      dout(10) << " waiting for filelock to stabilize on " << *cur << dendl;
-      cur->filelock.add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mdr));
-      return;
-    }
   }
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
@@ -2301,8 +2291,9 @@ void Server::handle_client_openc(MDRequest *mdr)
 
   in->inode.version = dn->pre_dirty();
   if (cmode & CEPH_FILE_MODE_WR) {
-    in->inode.client_ranges[client].first = 0;
-    in->inode.client_ranges[client].last = in->inode.get_layout_size_increment();
+    in->inode.client_ranges[client].range.first = 0;
+    in->inode.client_ranges[client].range.last = in->inode.get_layout_size_increment();
+    in->inode.client_ranges[client].follows = follows;
   }
   in->inode.rstat.rfiles = 1;
 
@@ -2798,7 +2789,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
     pi->mtime = now;
 
     // adjust client's max_size?
-    map<client_t,byte_range_t> new_ranges;
+    map<client_t,client_writeable_range_t> new_ranges;
     mds->locker->calc_new_client_ranges(cur, pi->size, new_ranges);
     if (pi->client_ranges != new_ranges) {
       dout(10) << " client_ranges " << pi->client_ranges << " -> " << new_ranges << dendl;
@@ -2844,8 +2835,9 @@ void Server::do_open_truncate(MDRequest *mdr, int cmode)
   pi->truncate_seq++;
 
   if (cmode & CEPH_FILE_MODE_WR) {
-    pi->client_ranges[client].first = 0;
-    pi->client_ranges[client].last = pi->get_layout_size_increment();
+    pi->client_ranges[client].range.first = 0;
+    pi->client_ranges[client].range.last = pi->get_layout_size_increment();
+    pi->client_ranges[client].follows = in->find_snaprealm()->get_newest_seq();
   }
 
   mdr->ls = mdlog->get_current_segment();

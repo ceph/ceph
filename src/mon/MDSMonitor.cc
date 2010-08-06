@@ -175,7 +175,14 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 
   dout(12) << "preprocess_beacon " << *m
 	   << " from " << m->get_orig_source_inst()
+	   << " " << m->get_compat()
 	   << dendl;
+
+  // check compat
+  if (!m->get_compat().writeable(mdsmap.compat)) {
+    dout(1) << " mds " << m->get_source_inst() << " can't write to mdsmap " << mdsmap.compat << dendl;
+    goto out;
+  }
 
   // fw to leader?
   if (!mon->is_leader())
@@ -325,6 +332,14 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
     // initialize the beacon timer
     last_beacon[gid].stamp = g_clock.now();
     last_beacon[gid].seq = seq;
+
+    // new incompat?
+    if (!pending_mdsmap.compat.writeable(m->get_compat())) {
+      dout(10) << " mdsmap " << pending_mdsmap.compat << " can't write to new mds' " << m->get_compat()
+	       << ", updating mdsmap and killing old mds's"
+	       << dendl;
+      pending_mdsmap.compat = m->get_compat();
+    }
 
   } else {
     // state change
@@ -502,6 +517,20 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	} else ss << "specify mds number or *";
       }
     }
+    else if (m->cmd[1] == "compat") {
+      if (m->cmd.size() >= 3) {
+	if (m->cmd[2] == "show") {
+	  ss << mdsmap.compat;
+	  r = 0;
+	} else if (m->cmd[2] == "help") {
+	  ss << "mds compat <rm_compat|rm_ro_compat|rm_incompat> <id>";
+	  r = 0;
+	}
+      } else {
+	ss << "mds compat <rm_compat|rm_ro_compat|rm_incompat> <id>";
+	r = 0;
+      }
+    }
   }
 
   if (r != -1) {
@@ -566,6 +595,28 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	return true;
+      }
+    }
+    else if (m->cmd[1] == "compat" && m->cmd.size() == 4) {
+      uint64_t f = atoll(m->cmd[3].c_str());
+      if (m->cmd[2] == "rm_compat") {
+	if (pending_mdsmap.compat.compat.contains(f)) {
+	  ss << "removing compat feature " << f;
+	  pending_mdsmap.compat.compat.remove(f);
+	  r = 0;
+	} else {
+	  ss << "compat feature " << f << " not present in " << pending_mdsmap.compat;
+	  r = -ENOENT;
+	}
+      } else if (m->cmd[2] == "rm_incompat") {
+	if (pending_mdsmap.compat.incompat.contains(f)) {
+	  ss << "removing incompat feature " << f;
+	  pending_mdsmap.compat.incompat.remove(f);
+	  r = 0;
+	} else {
+	  ss << "incompat feature " << f << " not present in " << pending_mdsmap.compat;
+	  r = -ENOENT;
+	}
       }
     }
   }
