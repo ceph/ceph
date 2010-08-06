@@ -668,6 +668,7 @@ void Server::reconnect_tick()
 
 void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
 {
+  if (!locks.length()) return;
   int numlocks;
   ceph_filelock lock;
   bufferlist::iterator p = locks.begin();
