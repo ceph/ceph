@@ -517,6 +517,20 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	} else ss << "specify mds number or *";
       }
     }
+    else if (m->cmd[1] == "compat") {
+      if (m->cmd.size() >= 3) {
+	if (m->cmd[2] == "show") {
+	  ss << mdsmap.compat;
+	  r = 0;
+	} else if (m->cmd[2] == "help") {
+	  ss << "mds compat <rm_compat|rm_ro_compat|rm_incompat> <id>";
+	  r = 0;
+	}
+      } else {
+	ss << "mds compat <rm_compat|rm_ro_compat|rm_incompat> <id>";
+	r = 0;
+      }
+    }
   }
 
   if (r != -1) {
@@ -581,6 +595,28 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	return true;
+      }
+    }
+    else if (m->cmd[1] == "compat" && m->cmd.size() == 4) {
+      uint64_t f = atoll(m->cmd[3].c_str());
+      if (m->cmd[2] == "rm_compat") {
+	if (pending_mdsmap.compat.compat.contains(f)) {
+	  ss << "removing compat feature " << f;
+	  pending_mdsmap.compat.compat.remove(f);
+	  r = 0;
+	} else {
+	  ss << "compat feature " << f << " not present in " << pending_mdsmap.compat;
+	  r = -ENOENT;
+	}
+      } else if (m->cmd[2] == "rm_incompat") {
+	if (pending_mdsmap.compat.incompat.contains(f)) {
+	  ss << "removing incompat feature " << f;
+	  pending_mdsmap.compat.incompat.remove(f);
+	  r = 0;
+	} else {
+	  ss << "incompat feature " << f << " not present in " << pending_mdsmap.compat;
+	  r = -ENOENT;
+	}
       }
     }
   }
