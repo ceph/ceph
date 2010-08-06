@@ -4818,7 +4818,7 @@ int OSD::get_class(const string& cname, ClassVersion& version, pg_t pgid, Messag
     }
   }
 
-  waiting_for_missing_class[cname][pgid].push_back(m);
+  waiting_for_missing_class[cname].push_back(m);
   return -EAGAIN;
 }
 
@@ -4828,9 +4828,7 @@ void OSD::got_class(const string& cname)
   dout(10) << "got_class '" << cname << "'" << dendl;
 
   if (waiting_for_missing_class.count(cname)) {
-    map<pg_t,list<Message*> >& w = waiting_for_missing_class[cname];
-    for (map<pg_t,list<Message*> >::iterator p = w.begin(); p != w.end(); p++)
-      take_waiters(p->second);
+    take_waiters(waiting_for_missing_class[cname]);
     waiting_for_missing_class.erase(cname);
   }
 }

@@ -456,7 +456,7 @@ private:
 protected:
   // -- classes --
   Mutex class_lock;
-  map<string, map<pg_t, list<Message*> > > waiting_for_missing_class;
+  map<string, list<Message*> > waiting_for_missing_class;
 
   int get_class(const string& cname, ClassVersion& version, pg_t pgid, Message *m, ClassHandler::ClassData **cls);
   void handle_class(MClass *m);
