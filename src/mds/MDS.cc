@@ -381,7 +381,7 @@ void MDS::send_message_client_counted(Message *m, client_t client)
 
 void MDS::send_message_client_counted(Message *m, Connection *connection)
 {
-  Session *session = (Session *)m->get_connection()->get_priv();
+  Session *session = (Session *)connection->get_priv();
   if (session) {
     session->put();  // do not carry ref
     send_message_client_counted(m, session);
