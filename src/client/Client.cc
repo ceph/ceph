@@ -1140,6 +1140,7 @@ MClientRequest* Client::build_client_request(MetaRequest *request)
   req->set_filepath2(request->get_filepath2());
   req->set_data(request->data);
   req->set_retry_attempt(request->retry_attempt);
+  req->head.num_fwd = request->num_fwd;
   return req;
 }
 
