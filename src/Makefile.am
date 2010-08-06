@@ -274,6 +274,10 @@ noinst_LIBRARIES +=  #libcephclient_so.a
 EXTRA_DIST = verify-mds-journal.sh vstart.sh stop.sh \
 	     crun ceph_common.sh init-ceph.in mkcephfs.in cclass.in cclsinfo make_version check_version
 
+
+# work around old versions of automake that don't define $docdir
+docdir = ${datadir}/doc/ceph
+
 install-data-local:
 	$(install_sh_SCRIPT) -m 0755 cclass $(DESTDIR)$(bindir)/cclass
 	$(install_sh_SCRIPT) -m 0755 cclsinfo $(DESTDIR)$(bindir)/cclsinfo
