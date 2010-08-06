@@ -16,6 +16,10 @@ License: GPL
 Files: src/rbd.cc
 Copyright:
     Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+License: GPL2
+
+Files: src/common/fiemap.cc
+Copyright:
     Copyright (C) 2010 Canonical
 License: GPL2
 

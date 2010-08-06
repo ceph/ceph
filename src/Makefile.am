@@ -167,7 +167,7 @@ endif
 
 radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la -lpthread -lm -lcrypto
-rbd_SOURCES = rbd.cc
+rbd_SOURCES = rbd.cc common/fiemap.cc
 rbd_LDADD = librados.la -lpthread -lm -lcrypto
 bin_PROGRAMS += radosacl rbd
 
@@ -537,6 +537,7 @@ noinst_HEADERS = \
         include/encoding.h\
         include/err.h\
         include/error.h\
+        include/fiemap.h\
         include/filepath.h\
         include/frag.h\
         include/hash.h\

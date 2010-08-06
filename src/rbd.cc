@@ -10,13 +10,6 @@
  * License version 2, as published by the Free Software
  * Foundation.  See file COPYING.
  *
- * read_fiemap() function was taken from fiemap.c, also
- * released under the GNU Geneal Public License, authored
- * by Colin Ian King, corresponding to the following
- * copyright notice:
- *
- * Copyright (C) 2010 Canonical
- *
  */
 
 #include "config.h"
@@ -40,32 +33,7 @@ using namespace librados;
 
 #include <linux/fs.h>
 
-#ifdef HAVE_FIEMAP_H
-#include <linux/fiemap.h>
-#else
-
-/*
- the following structures differ from the original structures
- and should only be used in the following code. Using it for
- the fiemap ioctl will not work.
-*/
-struct fiemap_extent {
-  __u64 fe_logical;
-  __u64 fe_physical;
-  __u64 fe_length;
-  __u32 fe_flags;
-};
-
-struct fiemap {
-  __u64 fm_start;
-  __u64 fm_length;
-  __u32 fm_flags;
-  __u32 fm_mapped_extents;
-  __u32 fm_extent_count;
-  struct fiemap_extent fm_extents[0];
-};
-
-#endif
+#include "include/fiemap.h"
 
 struct pools {
   pool_t md;
@@ -783,64 +751,6 @@ static void set_pool_image_name(const char *orig_pool, const char *orig_img,
 done_img:
   update_snap_name(*new_img, snap);
 }
-
-#ifdef HAVE_FIEMAP_H
-/*
- * the following function was taken from fiemap.c by Colin Ian King, colin.king@canonical.com
- */
-static struct fiemap *read_fiemap(int fd)
-{
-  struct fiemap *fiemap;
-  int extents_size;
-
-  if ((fiemap = (struct fiemap*)malloc(sizeof(struct fiemap))) == NULL) {
-    fprintf(stderr, "Out of memory allocating fiemap\n");
-    return NULL;
-  }
-  memset(fiemap, 0, sizeof(struct fiemap));
-
-  fiemap->fm_start = 0;
-  fiemap->fm_length = ~0;		/* Lazy */
-  fiemap->fm_flags = 0;
-  fiemap->fm_extent_count = 0;
-  fiemap->fm_mapped_extents = 0;
-
-  /* Find out how many extents there are */
-  if (ioctl(fd, FS_IOC_FIEMAP, fiemap) < 0) {
-    fprintf(stderr, "fiemap ioctl() failed\n");
-    goto done_err;
-  }
-
-  /* Read in the extents */
-  extents_size = sizeof(struct fiemap_extent) * (fiemap->fm_mapped_extents);
-
-  /* Resize fiemap to allow us to read in the extents */
-  if ((fiemap = (struct fiemap*)realloc(fiemap,sizeof(struct fiemap) +
-                                        extents_size)) == NULL) {
-    fprintf(stderr, "Out of memory allocating fiemap\n");
-    goto done_err;
-  }
-
-  memset(fiemap->fm_extents, 0, extents_size);
-  fiemap->fm_extent_count = fiemap->fm_mapped_extents;
-  fiemap->fm_mapped_extents = 0;
-
-  if (ioctl(fd, FS_IOC_FIEMAP, fiemap) < 0) {
-    fprintf(stderr, "fiemap ioctl() failed\n");
-    goto done_err;
-  }
-
-  return fiemap;
-done_err:
-  free(fiemap);
-  return NULL;
-}
-#else
-static struct fiemap *read_fiemap(int fd)
-{
-  return NULL;
-}
-#endif
 
 static int do_import(pool_t pool, const char *imgname, int order, const char *path)
 {
