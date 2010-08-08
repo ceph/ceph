@@ -459,14 +459,16 @@ int FileStore::_detect_fs()
     }
   }
 
-  // btrfs?
   int fd = ::open(basedir.c_str(), O_RDONLY);
   if (fd < 0)
     return -errno;
 
   struct statfs st;
   int r = ::fstatfs(fd, &st);
-  if (r == 0 && st.f_type == 0x9123683E) {
+  if (r < 0)
+    return -errno;
+
+  if (st.f_type == 0x9123683E) {
     dout(0) << "mount detected btrfs" << dendl;      
     btrfs = true;
 
@@ -1719,11 +1721,14 @@ void FileStore::sync_entry()
 	  dout(15) << "sync_entry doing btrfs sync" << dendl;
 	  // do a full btrfs commit
 	  ::ioctl(op_fd, BTRFS_IOC_SYNC);
-	} else {
+	} else if (g_conf.filestore_fsync_flushes_journal_data) {
 	  dout(15) << "sync_entry doing fsync on " << current_op_seq_fn << dendl;
 	  // make the file system's journal commit.
 	  //  this works with ext3, but NOT ext4
 	  ::fsync(op_fd);  
+	} else {
+	  dout(15) << "sync_entry doing a full sync (!)" << dendl;
+	  ::sync();
 	}
       }
       

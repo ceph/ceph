@@ -503,6 +503,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(filestore_btrfs_trans, 0, OPT_BOOL, true),
 	OPTION(filestore_btrfs_snap, 0, OPT_BOOL, false),
 	OPTION(filestore_btrfs_clone_range, 0, OPT_BOOL, true),
+	OPTION(filestore_fsync_flushes_journal_data, 0, OPT_BOOL, false),
 	OPTION(filestore_flusher, 0, OPT_BOOL, true),
 	OPTION(filestore_flusher_max_fds, 0, OPT_INT, 512),
 	OPTION(filestore_sync_flush, 0, OPT_BOOL, false),
