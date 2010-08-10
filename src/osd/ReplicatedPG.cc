@@ -3635,6 +3635,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     if (missing.is_missing(soid, v)) {
       dout(10) << "got missing " << soid << " v " << v << dendl;
       missing.got(soid, v);
+      if (is_primary())
+	missing_loc.erase(soid);
       
       // raise last_complete?
       while (log.complete_to != log.log.end()) {
@@ -3695,8 +3697,6 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     assert(pi);
 
     if (complete) {
-      missing_loc.erase(soid);
-
       // close out pull op
       pulling.erase(soid);
       finish_recovery_op(soid);
