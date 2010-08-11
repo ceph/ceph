@@ -567,6 +567,7 @@ noinst_HEADERS = \
         include/dlist.h\
         include/elist.h\
         include/xlist.h\
+	logrotate.conf\
 	mds/locks.c\
 	mds/locks.h\
         mds/Anchor.h\
