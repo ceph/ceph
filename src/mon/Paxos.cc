@@ -572,12 +572,19 @@ void Paxos::handle_lease(MMonPaxos *lease)
   }
 
   if (lease->sent_timestamp > g_clock.now() + g_conf.mon_lease_wiggle_room) {
-    stringstream ss;
-    ss << "lease_expire from mon" << lease->get_source().num()
-       << " was sent from future time " << lease->sent_timestamp
-       << ", clocks not synchronized"
-       << std::endl;
-    mon->get_logclient()->log(LOG_WARN, ss);
+    utime_t warn_diff = g_clock.now() - last_lease_time_warn;
+    if ((last_lease_time_warn == utime_t()) ||
+	(warn_diff > 
+	 pow(g_conf.mon_lease_time_warn_backoff, lease_times_warned))) {
+      stringstream ss;
+      ss << "lease_expire from mon" << lease->get_source().num()
+	 << " was sent from future time " << lease->sent_timestamp
+	 << ", clocks not synchronized"
+	 << std::endl;
+      mon->get_logclient()->log(LOG_WARN, ss);
+      last_lease_time_warn = g_clock.now();
+      ++lease_times_warned;
+    }
   }
 
   // extend lease

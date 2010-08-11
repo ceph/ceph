@@ -150,6 +150,7 @@ struct md_config_t {
   float mon_lease;
   float mon_lease_renew_interval;
   float mon_lease_wiggle_room;
+  float mon_lease_time_warn_backoff;
   float mon_lease_ack_timeout;
   float mon_lease_timeout;
   float mon_accept_timeout;
