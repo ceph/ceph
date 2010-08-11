@@ -3974,7 +3974,7 @@ void OSD::_remove_pg(PG *pg)
   {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     pg->write_info(*t);
-    t->remove(meta_coll, pg->log_oid);
+    pg->write_log(*t);
     int tr = store->queue_transaction(&pg->osr, t);
     assert(tr == 0);
   }
