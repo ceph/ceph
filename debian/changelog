@@ -1,3 +1,22 @@
+ceph (0.21.1-1) unstable; urgency=high
+
+  * ceph.spec: many fixes
+  * mds mds->client message crash
+  * monmaptool: man page typo
+  * rados: usage fix
+  * osd: fix heartbeat to/from node
+  * osd: fix replies to dup/already committed requests
+  * librados: hpp fix
+  * mds: fix cap/snaprealm behavior on readdir
+  * debian: fix fuse-utils depcs
+  * cclass: fix .so loading
+  * osd: fix crazy slowdown during recovery/repeering due to hadnle_osd_map
+  * cauthtool: fix man page example for fs clients
+  * mkcephfs to /sbin
+  * fix log rotation
+
+ -- Sage Weil <sage@fatty.ops.newdream.net>  Wed, 11 Aug 2010 14:55:25 -0700
+
 ceph (0.21-1) unstable; urgency=low
 
   * improved logging infrastructure
