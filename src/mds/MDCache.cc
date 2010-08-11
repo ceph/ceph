@@ -246,6 +246,7 @@ void MDCache::init_layouts()
 
 CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
 {
+  dout(0) << "creating system inode with ino:" << ino << dendl;
   CInode *in = new CInode(this);
   in->inode.ino = ino;
   in->inode.version = 1;
@@ -1302,6 +1303,10 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn, snapid_t follows,
 				 CInode **pcow_inode, CDentry::linkage_t *dnl)
 {
+  if (!dn) {
+    dout(10) << "journal_cow_dentry got null CDentry, returning" << dendl;
+    return;
+  }
   dout(10) << "journal_cow_dentry follows " << follows << " on " << *dn << dendl;
 
   // nothing to cow on a null dentry, fix caller
@@ -6667,6 +6672,10 @@ void MDCache::anchor_create(MDRequest *mdr, CInode *in, Context *onfinish)
   // make trace
   vector<Anchor> trace;
   in->make_anchor_trace(trace);
+  if (!trace.size()) {
+    assert(MDS_INO_IS_BASE(in->ino()));
+    trace.push_back(Anchor(in->ino(), in->ino(), "", 0, 0));
+  }
   
   // do it
   C_MDC_AnchorPrepared *fin = new C_MDC_AnchorPrepared(this, in, true);

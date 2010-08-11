@@ -80,7 +80,7 @@ void AnchorServer::inc(inodeno_t ino)
     dout(10) << "inc now " << anchor << dendl;
     ino = anchor.dirino;
     
-    if (ino == 0) break;
+    if (ino == 0 || MDS_INO_IS_BASE(ino)) break;
     if (anchor_map.count(ino) == 0) break;
   }
 }
@@ -128,8 +128,11 @@ void AnchorServer::_prepare(bufferlist &bl, uint64_t reqid, int bymds)
     version++;
 
     // make sure trace is in table
-    for (unsigned i=0; i<trace.size(); i++) 
+    dout(0) << "trace.size=" << trace.size() << dendl;
+    for (unsigned i=0; i<trace.size(); i++) {
       add(trace[i].ino, trace[i].dirino, trace[i].dn_hash);
+      dout(0) << trace[i] << dendl;
+    }
     inc(ino);
     pending_create[version] = ino;  // so we can undo
     break;
