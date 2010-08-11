@@ -571,7 +571,7 @@ void Paxos::handle_lease(MMonPaxos *lease)
     return;
   }
 
-  if (lease->sent_timestamp > g_clock.now() + g_conf.mon_lease_wiggle_room) {
+  if (lease->sent_timestamp > g_clock.now() + g_conf.mon_allowed_clock_drift) {
     utime_t warn_diff = g_clock.now() - last_lease_time_warn;
     if ((last_lease_time_warn == utime_t()) ||
 	(warn_diff > 
@@ -648,7 +648,7 @@ void Paxos::handle_lease_ack(MMonPaxos *ack)
 	     << " dup (lagging!), ignoring" << dendl;
   }
 
-  if (ack->sent_timestamp > g_clock.now() + g_conf.mon_lease_wiggle_room) {
+  if (ack->sent_timestamp > g_clock.now() + g_conf.mon_allowed_clock_drift) {
     stringstream ss;
     ss << "lease_ack from mon" << from
        << " was sent from future time " << ack->sent_timestamp
