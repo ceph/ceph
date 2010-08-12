@@ -783,9 +783,10 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut, bool as_anon)
   if (lock->get_type() != CEPH_LOCK_DN)
     in = (CInode *)lock->get_parent();
   
-  if (in && !in->is_head()) {
+  if (in && !in->is_head() && in->is_auth()) {
     // okay, we actually need to kick the head's lock to get ourselves synced up.
     CInode *head = mdcache->get_inode(in->ino());
+    assert(head);
     dout(10) << "rdlock_start trying head inode " << *head << dendl;
     return rdlock_start(head->get_lock(lock->get_type()), mut, true);   // ** as_anon, no rdlock on EXCL **
   }
