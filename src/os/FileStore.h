@@ -148,6 +148,7 @@ class FileStore : public JournalingObjectStore {
   void _do_op(OpSequencer *o);
   void _finish_op(OpSequencer *o);
   void queue_op(Sequencer *osr, uint64_t op, list<Transaction*>& tls, Context *onreadable, Context *onreadable_sync);
+  void op_queue_throttle();
   void _journaled_ahead(Sequencer *osr, uint64_t op, list<Transaction*> &tls,
 			Context *onreadable, Context *ondisk, Context *onreadable_sync);
   friend class C_JournaledAhead;
