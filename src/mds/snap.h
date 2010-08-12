@@ -93,8 +93,8 @@ inline ostream& operator<<(ostream& out, const snaplink_t &l)
   return out << l.ino << "@" << l.first;
 }
 
-struct SnapRealm {
-  // realm state
+// carry data about a specific version of a SnapRealm
+struct sr_t {
   snapid_t seq;                     // basically, a version/seq # for changes to _this_ realm.
   snapid_t created;                 // when this realm was created.
   snapid_t last_created;            // last snap created in _this_ realm.
@@ -102,6 +102,13 @@ struct SnapRealm {
   snapid_t current_parent_since;
   map<snapid_t, SnapInfo> snaps;
   map<snapid_t, snaplink_t> past_parents;  // key is "last" (or NOSNAP)
+
+  sr_t() :
+    seq(0), created(0),
+    last_created(0), last_destroyed(0),
+    current_parent_since(1)
+  {}
+
 
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
@@ -124,6 +131,34 @@ struct SnapRealm {
     ::decode(current_parent_since, p);
     ::decode(snaps, p);
     ::decode(past_parents, p);
+  }
+};
+WRITE_CLASS_ENCODER(sr_t);
+
+struct SnapRealm {
+  // realm state
+
+  sr_t snaprealm;
+
+  void encode(bufferlist& bl) const {
+    __u8 struct_v = 2;
+    ::encode(struct_v, bl);
+    ::encode(snaprealm, bl);
+  }
+  void decode(bufferlist::iterator& p) {
+    __u8 struct_v;
+    ::decode(struct_v, p);
+    if (struct_v >= 2)
+      ::decode(snaprealm, p);
+    else {
+      ::decode(snaprealm.seq, p);
+      ::decode(snaprealm.created, p);
+      ::decode(snaprealm.last_created, p);
+      ::decode(snaprealm.last_destroyed, p);
+      ::decode(snaprealm.current_parent_since, p);
+      ::decode(snaprealm.snaps, p);
+      ::decode(snaprealm.past_parents, p);
+    }
   }
 
   // in-memory state
@@ -148,17 +183,15 @@ struct SnapRealm {
   map<client_t, xlist<Capability*> > client_caps;   // to identify clients who need snap notifications
 
   SnapRealm(MDCache *c, CInode *in) : 
-    seq(0), created(0),
-    last_created(0), last_destroyed(0),
-    current_parent_since(1),
+    snaprealm(),
     mdcache(c), inode(in),
     open(false), parent(0),
     inodes_with_caps(0) 
   { }
 
   bool exists(const string &name) {
-    for (map<snapid_t,SnapInfo>::iterator p = snaps.begin();
-	 p != snaps.end();
+    for (map<snapid_t,SnapInfo>::iterator p = snaprealm.snaps.begin();
+	 p != snaprealm.snaps.end();
 	 p++)
       if (p->second.name == name)
 	return true;
@@ -179,7 +212,7 @@ struct SnapRealm {
   void project_past_parent(SnapRealm *newparent, bufferlist& snapbl);
   void add_past_parent(SnapRealm *oldparent);
   void prune_past_parents();
-  bool has_past_parents() { return !past_parents.empty(); }
+  bool has_past_parents() { return !snaprealm.past_parents.empty(); }
 
   void build_snap_set(set<snapid_t>& s, 
 		      snapid_t& max_seq, snapid_t& max_last_created, snapid_t& max_last_destroyed,
