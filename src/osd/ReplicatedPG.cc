@@ -2247,8 +2247,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
 	dout(10) << " sending commit on " << *repop << " " << reply << dendl;
 	assert(entity_name_t::TYPE_OSD != op->get_connection()->peer_type);
-	osd->client_messenger->
-	  send_message(reply, op->get_connection());
+	osd->client_messenger->send_message(reply, op->get_connection());
 	repop->sent_disk = true;
       }
     }
