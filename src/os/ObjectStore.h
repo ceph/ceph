@@ -114,7 +114,8 @@ public:
     static const int OP_RMATTRS =      28;  // cid, oid
 
   private:
-    uint64_t ops, bytes;
+    uint64_t ops;
+    uint64_t pad_unused_bytes;
     uint32_t largest_data_len, largest_data_off, largest_data_off_in_tbl;
     bufferlist tbl;
     bufferlist::iterator p;
@@ -148,7 +149,7 @@ public:
 	  s += bls.size() + 4096;
 	return s;
       }
-      return bytes;
+      return get_encoded_bytes();
     }
 
     uint32_t get_data_length() {
@@ -159,7 +160,7 @@ public:
 	return largest_data_off_in_tbl +
 	  sizeof(__u8) +  // struct_v
 	  sizeof(ops) +
-	  sizeof(bytes) +
+	  sizeof(pad_unused_bytes) +
 	  sizeof(largest_data_len) +
 	  sizeof(largest_data_off) +
 	  sizeof(largest_data_off_in_tbl) +
@@ -449,15 +450,15 @@ public:
 
     // etc.
     Transaction() :
-      ops(0), bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
+      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
       old(false), opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0) { }
     Transaction(bufferlist::iterator &dp) :
-      ops(0), bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
+      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
       old(false), opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0) {
       decode(dp);
     }
     Transaction(bufferlist &nbl) :
-      ops(0), bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
+      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
       old(false), opp(0), blp(0), oidp(0), cidp(0), lengthp(0), attrnamep(0), attrsetp(0) {
       bufferlist::iterator dp = nbl.begin();
       decode(dp); 
@@ -467,7 +468,7 @@ public:
       __u8 struct_v = 3;
       ::encode(struct_v, bl);
       ::encode(ops, bl);
-      ::encode(bytes, bl);
+      ::encode(pad_unused_bytes, bl);
       ::encode(largest_data_len, bl);
       ::encode(largest_data_off, bl);
       ::encode(largest_data_off_in_tbl, bl);
@@ -493,7 +494,7 @@ public:
       } else {
 	assert(struct_v <= 3);
 	::decode(ops, bl);
-	::decode(bytes, bl);
+	::decode(pad_unused_bytes, bl);
 	if (struct_v >= 3) {
 	  ::decode(largest_data_len, bl);
 	  ::decode(largest_data_off, bl);
