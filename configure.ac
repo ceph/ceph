@@ -79,6 +79,26 @@ AS_IF([test "x$with_fuse" != xno],
              ])])
 AM_CONDITIONAL(WITH_FUSE, [test "$HAVE_LIBFUSE" = "1"])
 
+# tcmalloc?
+AC_ARG_WITH([tcmalloc],
+	    [AS_HELP_STRING([--with--tcmalloc], [use tcmalloc instead of ptmallc])],
+	    [],
+	    [with_tcmalloc=check])
+TCMALLOC=
+AS_IF([test "x$with_tcmalloc" != xno],
+	    [AC_CHECK_LIB([tcmalloc], [malloc],
+	     [AC_SUBST([LIBTCMALLOC], ["-ltcmalloc"])
+	       AC_DEFINE([HAVE_LIBTCMALLOC], [1],
+	       		 [Define if you have tcmalloc])
+	       HAVE_LIBTCMALLOC=1
+	     ],
+	    [if test "x$with_tcmalloc" != xcheck; then
+	        AC_MSG_FAILURE(
+		  [--with-tcmalloc was given but test failed])
+	      fi
+	    ])])
+AM_CONDITIONAL(WITH_TCMALLOC, [test "$HAVE_LIBTCMALLOC" = "1"])
+
 # jni?
 AC_ARG_WITH([hadoop],
             [AS_HELP_STRING([--with-hadoop], [build hadoop client])],

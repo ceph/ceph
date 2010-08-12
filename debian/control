@@ -2,12 +2,12 @@ Source: ceph
 Section: admin
 Priority: optional
 Maintainer: Sage Weil <sage@newdream.net>
-Build-Depends: debhelper (>= 6.0.7~), autotools-dev, autoconf, automake, cdbs, libfuse-dev, libboost-dev, libedit-dev, libssl-dev, libtool, libexpat1-dev, libfcgi-dev, libatomic-ops-dev
+Build-Depends: debhelper (>= 6.0.7~), autotools-dev, autoconf, automake, cdbs, libfuse-dev, libboost-dev, libedit-dev, libssl-dev, libtool, libexpat1-dev, libfcgi-dev, libatomic-ops-dev, libgoogle-perftools-dev
 Standards-Version: 3.8.4
 
 Package: ceph
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libedit2, hdparm, binutils
+Depends: ${shlibs:Depends}, ${misc:Depends}, libedit2, hdparm, binutils, libtcmalloc-minimal0
 Recommends: ceph-client-tools, ceph-fuse, libceph1, librados1, libcrush1, btrfs-tools
 Description: distributed storage and file system
  Ceph is a distributed storage and network file system designed to provide
