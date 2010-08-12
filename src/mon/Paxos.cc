@@ -571,19 +571,19 @@ void Paxos::handle_lease(MMonPaxos *lease)
     return;
   }
 
-  if (lease->sent_timestamp > g_clock.now() + g_conf.mon_allowed_clock_drift) {
-    utime_t warn_diff = g_clock.now() - last_lease_time_warn;
-    if ((last_lease_time_warn == utime_t()) ||
+  if (lease->sent_timestamp > g_clock.now() + g_conf.mon_clock_drift_allowed) {
+    utime_t warn_diff = g_clock.now() - last_clock_drift_warn;
+    if ((last_clock_drift_warn == utime_t()) ||
 	(warn_diff > 
-	 pow(g_conf.mon_lease_time_warn_backoff, lease_times_warned))) {
+	 pow(g_conf.mon_clock_drift_warn_backoff, clock_drift_warned))) {
       stringstream ss;
       ss << "lease_expire from mon" << lease->get_source().num()
 	 << " was sent from future time " << lease->sent_timestamp
 	 << ", clocks not synchronized"
 	 << std::endl;
       mon->get_logclient()->log(LOG_WARN, ss);
-      last_lease_time_warn = g_clock.now();
-      ++lease_times_warned;
+      last_clock_drift_warn = g_clock.now();
+      ++clock_drift_warned;
     }
   }
 
@@ -648,7 +648,7 @@ void Paxos::handle_lease_ack(MMonPaxos *ack)
 	     << " dup (lagging!), ignoring" << dendl;
   }
 
-  if (ack->sent_timestamp > g_clock.now() + g_conf.mon_allowed_clock_drift) {
+  if (ack->sent_timestamp > g_clock.now() + g_conf.mon_clock_drift_allowed) {
     stringstream ss;
     ss << "lease_ack from mon" << from
        << " was sent from future time " << ack->sent_timestamp
