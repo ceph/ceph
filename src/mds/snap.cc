@@ -530,3 +530,23 @@ void SnapRealm::prune_past_parents()
     }
   }
 }
+
+sr_t *SnapRealm::project_snaprealm()
+{
+  if (projected_srnode.empty())
+    projected_srnode.push_back(new sr_t(srnode));
+  else
+    projected_srnode.push_back(new sr_t(*projected_srnode.back()));
+  dout(0) << "project_snaprealm " << projected_srnode.back() << dendl;
+  return projected_srnode.back();
+}
+
+void SnapRealm::pop_projected_snaprealm()
+{
+  assert(!projected_srnode.empty());
+  dout(0) << "pop_projected_snaprealm " << projected_srnode.front()
+          << " seq" << projected_srnode.front()->seq << dendl;
+  srnode = *projected_srnode.front();
+  delete projected_srnode.front();
+  projected_srnode.pop_front();
+}

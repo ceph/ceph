@@ -139,6 +139,7 @@ struct SnapRealm {
   // realm state
 
   sr_t srnode;
+  list<sr_t*> projected_srnode;
 
   void encode(bufferlist& bl) const {
     __u8 struct_v = 2;
@@ -273,6 +274,15 @@ struct SnapRealm {
     if (client_caps[client].empty())
       client_caps.erase(client);
   }
+
+  sr_t *get_projected_snaprealm() {
+    if (projected_srnode.empty())
+      return &srnode;
+    else
+      return projected_srnode.back();
+  }
+  sr_t *project_snaprealm();
+  void pop_projected_snaprealm();
 };
 WRITE_CLASS_ENCODER(SnapRealm)
 
