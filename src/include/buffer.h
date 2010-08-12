@@ -60,11 +60,15 @@ void	*valloc(size_t);
 # include <assert.h>
 #endif
 
-
 //#define BUFFER_DEBUG
 
 #ifdef BUFFER_DEBUG
-#include "Spinlock.h"
+# include "Spinlock.h"
+#endif
+
+namespace ceph {
+
+#ifdef BUFFER_DEBUG
 extern Spinlock buffer_lock;
 # define bdout { buffer_lock.lock(); std::cout
 # define bendl std::endl; buffer_lock.unlock(); }
@@ -73,7 +77,6 @@ extern Spinlock buffer_lock;
 # define bendl std::endl; }
 #endif
 
-namespace ceph {
 
 extern atomic_t buffer_total_alloc;
 
@@ -155,16 +158,16 @@ private:
       else
 	data = 0;
       inc_total_alloc(len);
-      bdout << "raw_char alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
     }
     raw_char(unsigned l, char *b) : raw(b, l) {
       inc_total_alloc(len);
-      bdout << "raw_char alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
     }
     ~raw_char() {
       delete[] data;
       dec_total_alloc(len);      
-      bdout << "raw_char free " << (void *)data << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_char " << this << " free " << (void *)data << " " << buffer_total_alloc.read() << bendl;
     }
     raw* clone_empty() {
       return new raw_char(len);
@@ -179,16 +182,16 @@ private:
       else
 	data = 0;
       inc_total_alloc(len);
-      bdout << "raw_malloc alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
     }
     raw_malloc(unsigned l, char *b) : raw(b, l) {
       inc_total_alloc(len);
-      bdout << "raw_malloc alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
     }
     ~raw_malloc() {
       free(data);
       dec_total_alloc(len);      
-      bdout << "raw_malloc free " << (void *)data << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_malloc " << this << " free " << (void *)data << " " << buffer_total_alloc.read() << bendl;
     }
     raw* clone_empty() {
       return new raw_malloc(len);
@@ -212,12 +215,12 @@ private:
       if (!data)
 	throw new bad_alloc;
       inc_total_alloc(len);
-      bdout << "raw_mmap alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_mmap " << this << " alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
     }
     ~raw_mmap_pages() {
       ::munmap(data, len);
       dec_total_alloc(len);
-      bdout << "raw_mmap free " << (void *)data << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_mmap " << this << " free " << (void *)data << " " << buffer_total_alloc.read() << bendl;
     }
     raw* clone_empty() {
       return new raw_mmap_pages(len);
@@ -238,12 +241,12 @@ private:
       if (!data)
 	throw new bad_alloc;
       inc_total_alloc(len);
-      bdout << "raw_posix_aligned alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_posix_aligned " << this << " alloc " << (void *)data << " " << l << " " << buffer_total_alloc.read() << bendl;
     }
     ~raw_posix_aligned() {
       ::free((void*)data);
       dec_total_alloc(len);
-      bdout << "raw_posix_aligned free " << (void *)data << " " << buffer_total_alloc.read() << bendl;
+      bdout << "raw_posix_aligned " << this << " free " << (void *)data << " " << buffer_total_alloc.read() << bendl;
     }
     raw* clone_empty() {
       return new raw_posix_aligned(len);
@@ -326,29 +329,36 @@ public:
     ptr() : _raw(0), _off(0), _len(0) {}
     ptr(raw *r) : _raw(r), _off(0), _len(r->len) {   // no lock needed; this is an unref raw.
       r->nref.inc();
+      bdout << "ptr " << this << " get " << _raw << bendl;
     }
     ptr(unsigned l) : _off(0), _len(l) {
       _raw = create(l);
       _raw->nref.inc();
+      bdout << "ptr " << this << " get " << _raw << bendl;
     }
     ptr(const char *d, unsigned l) : _off(0), _len(l) {    // ditto.
       _raw = copy(d, l);
       _raw->nref.inc();
+      bdout << "ptr " << this << " get " << _raw << bendl;
     }
     ptr(const ptr& p) : _raw(p._raw), _off(p._off), _len(p._len) {
       if (_raw) {
 	_raw->nref.inc();
+	bdout << "ptr " << this << " get " << _raw << bendl;
       }
     }
     ptr(const ptr& p, unsigned o, unsigned l) : _raw(p._raw), _off(p._off + o), _len(l) {
       assert(o+l <= p._len);
       assert(_raw);
       _raw->nref.inc();
+      bdout << "ptr " << this << " get " << _raw << bendl;
     }
     ptr& operator= (const ptr& p) {
       // be careful -- we need to properly handle self-assignment.
-      if (p._raw)
+      if (p._raw) {
 	p._raw->nref.inc();                      // inc new
+	bdout << "ptr " << this << " get " << _raw << bendl;
+      }
       release();                                 // dec (+ dealloc) old (if any)
       if (p._raw) {
 	_raw = p._raw;
@@ -398,6 +408,7 @@ public:
 
     void release() {
       if (_raw) {
+	bdout << "ptr " << this << " release " << _raw << bendl;
         if (_raw->nref.dec() == 0) {
           //cout << "hosing raw " << (void*)_raw << " len " << _raw->len << std::endl;
           delete _raw;  // dealloc old (if any)
