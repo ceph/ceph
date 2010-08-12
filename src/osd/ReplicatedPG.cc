@@ -3688,8 +3688,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 					onreadable_sync);
   assert(r == 0);
 
-  osd->logger->inc(l_osd_r_pull);
-  osd->logger->inc(l_osd_r_pullb, data.length());
+  osd->logger->inc(l_osd_r_push);
+  osd->logger->inc(l_osd_r_pushb, data.length());
 
   if (is_primary()) {
     assert(pi);

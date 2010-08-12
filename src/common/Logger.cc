@@ -261,10 +261,8 @@ void Logger::_flush()
   if (need_reset || logger_need_reset) {
     // reset the counters
     for (int i=0; i<type->num_keys; i++) {
-      if (type->inc_keys[i]) {
-	this->vals[i] = 0;
-	this->fvals[i] = 0;
-      }
+      this->vals[i] = 0;
+      this->fvals[i] = 0;
     }
     need_reset = false;
   }
@@ -310,6 +308,15 @@ void Logger::_flush()
       }
     }
   }
+
+  // reset the counters
+  for (int i=0; i<type->num_keys; i++) {
+    if (type->inc_keys[i]) {
+      this->vals[i] = 0;
+      this->fvals[i] = 0;
+    }
+  }
+
   out << std::endl;
 }
 
