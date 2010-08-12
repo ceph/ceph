@@ -265,7 +265,7 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
     else
       in->inode_auth = pair<int,int>(in->ino() - MDS_INO_MDSDIR_OFFSET, CDIR_AUTH_UNKNOWN);
     in->open_snaprealm();  // empty snaprealm
-    in->snaprealm->seq = 1;
+    in->snaprealm->snaprealm.seq = 1;
   }
   
   add_inode(in);
@@ -6829,7 +6829,7 @@ void MDCache::snaprealm_create(MDRequest *mdr, CInode *in)
   ::decode(seq, p);
 
   SnapRealm t(this, in);
-  t.created = seq;
+  t.snaprealm.created = seq;
   bufferlist snapbl;
   ::encode(t, snapbl);
   
@@ -6920,9 +6920,9 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in
   ::decode(seq, p);
 
   in->open_snaprealm();
-  in->snaprealm->seq = seq;
-  in->snaprealm->created = seq;
-  in->snaprealm->current_parent_since = seq;
+  in->snaprealm->snaprealm.seq = seq;
+  in->snaprealm->snaprealm.created = seq;
+  in->snaprealm->snaprealm.current_parent_since = seq;
 
   do_realm_invalidate_and_update_notify(in, CEPH_SNAP_OP_SPLIT);
 
@@ -6996,7 +6996,7 @@ void MDCache::eval_stray(CDentry *dn)
 	  return;
 	in->snaprealm->prune_past_parents();
 	if (in->snaprealm->has_past_parents()) {
-	  dout(20) << "  has past parents " << in->snaprealm->past_parents << dendl;
+	  dout(20) << "  has past parents " << in->snaprealm->snaprealm.past_parents << dendl;
 	  return;  // not until some snaps are deleted.
 	}
       }

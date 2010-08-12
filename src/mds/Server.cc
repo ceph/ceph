@@ -4102,7 +4102,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
     bool isnew = false;
     if (!straydnl->get_inode()->snaprealm) {
       straydnl->get_inode()->open_snaprealm();
-      straydnl->get_inode()->snaprealm->seq = oldparent->get_newest_seq();
+      straydnl->get_inode()->snaprealm->snaprealm.seq = oldparent->get_newest_seq();
       isnew = true;
     }
     straydnl->get_inode()->snaprealm->add_past_parent(oldparent);
@@ -4160,7 +4160,7 @@ bool Server::_dir_is_nonempty(MDRequest *mdr, CInode *in)
   assert(in->is_auth());
 
   
-  if (in->snaprealm && in->snaprealm->snaps.size())
+  if (in->snaprealm && in->snaprealm->snaprealm.snaps.size())
     return true; //in a snapshot!
 
   list<frag_t> frags;
@@ -4896,7 +4896,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 	bool isnew = false;
 	if (!straydnl->get_inode()->snaprealm) {
 	  straydnl->get_inode()->open_snaprealm();
-	  straydnl->get_inode()->snaprealm->seq = oldparent->get_newest_seq();
+	  straydnl->get_inode()->snaprealm->snaprealm.seq = oldparent->get_newest_seq();
 	  isnew = true;
 	}
 	straydnl->get_inode()->snaprealm->add_past_parent(oldparent);
@@ -5748,18 +5748,18 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   if (!diri->snaprealm) {
     newrealm = true;
     diri->open_snaprealm(true);
-    diri->snaprealm->created = snapid;
-    diri->snaprealm->current_parent_since = snapid;
+    diri->snaprealm->snaprealm.created = snapid;
+    diri->snaprealm->snaprealm.current_parent_since = snapid;
   }
-  snapid_t old_seq = diri->snaprealm->seq;
-  snapid_t old_lc = diri->snaprealm->last_created;
-  diri->snaprealm->snaps[snapid] = info;
-  diri->snaprealm->seq = snapid;
-  diri->snaprealm->last_created = snapid;
+  snapid_t old_seq = diri->snaprealm->snaprealm.seq;
+  snapid_t old_lc = diri->snaprealm->snaprealm.last_created;
+  diri->snaprealm->snaprealm.snaps[snapid] = info;
+  diri->snaprealm->snaprealm.seq = snapid;
+  diri->snaprealm->snaprealm.last_created = snapid;
   diri->encode_snap_blob(snapbl);
-  diri->snaprealm->snaps.erase(snapid);
-  diri->snaprealm->seq = old_seq;
-  diri->snaprealm->last_created = old_lc;
+  diri->snaprealm->snaprealm.snaps.erase(snapid);
+  diri->snaprealm->snaprealm.seq = old_seq;
+  diri->snaprealm->snaprealm.last_created = old_lc;
   if (newrealm)
     diri->close_snaprealm(true);
   
@@ -5783,13 +5783,13 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
   int op = CEPH_SNAP_OP_CREATE;
   if (!diri->snaprealm) {
     diri->open_snaprealm();
-    diri->snaprealm->created = snapid;
-    diri->snaprealm->current_parent_since = snapid;
+    diri->snaprealm->snaprealm.created = snapid;
+    diri->snaprealm->snaprealm.current_parent_since = snapid;
     op = CEPH_SNAP_OP_SPLIT;
   }
-  diri->snaprealm->snaps[snapid] = info;
-  diri->snaprealm->seq = snapid;
-  diri->snaprealm->last_created = snapid;
+  diri->snaprealm->snaprealm.snaps[snapid] = info;
+  diri->snaprealm->snaprealm.seq = snapid;
+  diri->snaprealm->snaprealm.last_created = snapid;
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
   mdcache->do_realm_invalidate_and_update_notify(diri, op);
@@ -5892,16 +5892,16 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
   
   // project the snaprealm.. hack!
   bufferlist snapbl;
-  snapid_t old_seq = diri->snaprealm->seq;
-  snapid_t old_ld = diri->snaprealm->last_destroyed;
-  SnapInfo old_info = diri->snaprealm->snaps[snapid];
-  diri->snaprealm->snaps.erase(snapid);
-  diri->snaprealm->seq = seq;
-  diri->snaprealm->last_destroyed = seq;
+  snapid_t old_seq = diri->snaprealm->snaprealm.seq;
+  snapid_t old_ld = diri->snaprealm->snaprealm.last_destroyed;
+  SnapInfo old_info = diri->snaprealm->snaprealm.snaps[snapid];
+  diri->snaprealm->snaprealm.snaps.erase(snapid);
+  diri->snaprealm->snaprealm.seq = seq;
+  diri->snaprealm->snaprealm.last_destroyed = seq;
   diri->encode_snap_blob(snapbl);
-  diri->snaprealm->snaps[snapid] = old_info;
-  diri->snaprealm->seq = old_seq;
-  diri->snaprealm->last_destroyed = old_ld;
+  diri->snaprealm->snaprealm.snaps[snapid] = old_info;
+  diri->snaprealm->snaprealm.seq = old_seq;
+  diri->snaprealm->snaprealm.last_destroyed = old_ld;
   le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), true, 0, 0, &snapbl);
 
   mdlog->submit_entry(le, new C_MDS_rmsnap_finish(mds, mdr, diri, snapid));
@@ -5922,9 +5922,9 @@ void Server::_rmsnap_finish(MDRequest *mdr, CInode *diri, snapid_t snapid)
   mds->snapclient->commit(stid, mdr->ls);
 
   // remove snap
-  diri->snaprealm->snaps.erase(snapid);
-  diri->snaprealm->last_destroyed = seq;
-  diri->snaprealm->seq = seq;
+  diri->snaprealm->snaprealm.snaps.erase(snapid);
+  diri->snaprealm->snaprealm.last_destroyed = seq;
+  diri->snaprealm->snaprealm.seq = seq;
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
   mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_DESTROY);
