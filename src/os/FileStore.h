@@ -119,8 +119,6 @@ class FileStore : public JournalingObjectStore {
 
     bool _enqueue(OpSequencer *osr) {
       store->op_queue.push_back(osr);
-      store->op_queue_len++;
-      store->op_queue_bytes += osr->q.back()->bytes;
       return true;
     }
     void _dequeue(OpSequencer *o) {

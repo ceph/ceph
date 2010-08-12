@@ -798,9 +798,15 @@ void FileStore::queue_op(Sequencer *posr, uint64_t op_seq, list<Transaction*>& t
 	     << op_queue_bytes << " > " << g_conf.filestore_queue_max_bytes << dendl;
     op_tp.wait(op_throttle_cond);
   }
+
+  op_queue_len++;
+  op_queue_bytes += bytes;
+
   op_tp.unlock();
 
-  dout(10) << "queue_op " << o << " seq " << op_seq << " " << bytes << " bytes" << dendl;
+  dout(10) << "queue_op " << o << " seq " << op_seq << " " << bytes << " bytes"
+	   << "   (queue has " << op_queue_len << " ops and " << op_queue_bytes << " bytes)"
+	   << dendl;
   op_wq.queue(osr);
 }
 
