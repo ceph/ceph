@@ -236,6 +236,35 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
   projected_xattrs.pop_front();
 }
 
+sr_t *CInode::project_snaprealm(snapid_t snapid)
+{
+  if (projected_srnode.empty()) {
+    if (snaprealm)
+      projected_srnode.push_back(new sr_t(snaprealm->srnode));
+    else {
+      projected_srnode.push_back(new sr_t());
+      projected_srnode.back()->created = snapid;
+      projected_srnode.back()->current_parent_since = snapid;
+    }
+  }
+  else
+    projected_srnode.push_back(new sr_t(*projected_srnode.back()));
+  dout(0) << "project_snaprealm " << projected_srnode.back() << dendl;
+  return projected_srnode.back();
+}
+
+void CInode::pop_projected_snaprealm()
+{
+  assert(!projected_srnode.empty());
+  dout(0) << "pop_projected_snaprealm " << projected_srnode.front()
+          << " seq" << projected_srnode.front()->seq << dendl;
+  if (!snaprealm)
+    open_snaprealm();
+  snaprealm->srnode = *projected_srnode.front();
+  delete projected_srnode.front();
+  projected_srnode.pop_front();
+}
+
 
 // ====== CInode =======
 

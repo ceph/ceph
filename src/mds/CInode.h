@@ -164,6 +164,7 @@ public:
   SnapRealm        *snaprealm;
 
   SnapRealm        *containing_realm;
+  list<sr_t*>       projected_srnode;
   snapid_t          first, last;
   map<snapid_t, old_inode_t> old_inodes;  // key = last, value.first = first
   set<snapid_t> dirty_old_rstats;
@@ -227,6 +228,18 @@ public:
     else
       return &inode;
   }
+
+  sr_t *project_snaprealm(snapid_t snapid=0);
+  void pop_projected_snaprealm();
+  sr_t *get_projected_srnode() {
+    if (projected_srnode.empty())
+      if (snaprealm)
+        return &snaprealm->srnode;
+      else return NULL;
+    else
+      return projected_srnode.back();
+  }
+
 
   old_inode_t& cow_old_inode(snapid_t follows, inode_t *pi);
   old_inode_t *pick_old_inode(snapid_t last);
