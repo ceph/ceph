@@ -5859,18 +5859,14 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_cow_inode(mdr, &le->metablob, diri);
   
-  // project the snaprealm.. hack!
+  // project the snaprealm
   bufferlist snapbl;
-  snapid_t old_seq = diri->snaprealm->srnode.seq;
-  snapid_t old_ld = diri->snaprealm->srnode.last_destroyed;
-  SnapInfo old_info = diri->snaprealm->srnode.snaps[snapid];
-  diri->snaprealm->srnode.snaps.erase(snapid);
-  diri->snaprealm->srnode.seq = seq;
-  diri->snaprealm->srnode.last_destroyed = seq;
-  diri->encode_snap_blob(snapbl);
-  diri->snaprealm->srnode.snaps[snapid] = old_info;
-  diri->snaprealm->srnode.seq = old_seq;
-  diri->snaprealm->srnode.last_destroyed = old_ld;
+  sr_t *newnode = diri->project_snaprealm();
+  newnode->snaps.erase(snapid);
+  newnode->seq = seq;
+  newnode->last_destroyed = seq;
+  newnode->encode(snapbl);
+
   le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), true, 0, 0, &snapbl);
 
   mdlog->submit_entry(le, new C_MDS_rmsnap_finish(mds, mdr, diri, snapid));
@@ -5891,9 +5887,7 @@ void Server::_rmsnap_finish(MDRequest *mdr, CInode *diri, snapid_t snapid)
   mds->snapclient->commit(stid, mdr->ls);
 
   // remove snap
-  diri->snaprealm->srnode.snaps.erase(snapid);
-  diri->snaprealm->srnode.last_destroyed = seq;
-  diri->snaprealm->srnode.seq = seq;
+  diri->pop_projected_snaprealm();
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
   mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_DESTROY);
