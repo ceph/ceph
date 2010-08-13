@@ -208,7 +208,6 @@ struct SnapRealm {
   void add_open_past_parent(SnapRealm *parent);
   void close_parents();
 
-  void project_past_parent(SnapRealm *newparent, bufferlist& snapbl);
   void add_past_parent(SnapRealm *oldparent);
   void prune_past_parents();
   bool has_past_parents() { return !srnode.past_parents.empty(); }

@@ -467,29 +467,6 @@ void SnapRealm::build_snap_trace(bufferlist& snapbl)
 
 
 
-
-void SnapRealm::project_past_parent(SnapRealm *newparent, bufferlist& snapbl)
-{
-  snapid_t newlast = newparent->get_last_created();
-  snapid_t oldlast = parent->get_newest_seq();
-  snapid_t first = srnode.current_parent_since;
-
-  if (oldlast >= srnode.current_parent_since) {
-    srnode.past_parents[oldlast].ino = parent->inode->ino();
-    srnode.past_parents[oldlast].first = first;
-    dout(10) << "project_past_parent new past_parent [" << first << "," << oldlast << "] = "
-	     << parent->inode->ino() << dendl;
-  }
-  srnode.current_parent_since = MAX(oldlast, newlast) + 1;
-  dout(10) << "project_past_parent current_parent_since " << srnode.current_parent_since << dendl;
-
-  ::encode(*this, snapbl);
-
-  if (oldlast >= first)
-    srnode.past_parents.erase(oldlast);
-  srnode.current_parent_since = first;
-}
-
 void SnapRealm::add_past_parent(SnapRealm *oldparent)
 {
   snapid_t newlast = parent->get_last_created();

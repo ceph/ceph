@@ -239,7 +239,7 @@ public:
     else
       return projected_srnode.back();
   }
-
+  void project_past_parent(SnapRealm *newparent, bufferlist& snapbl);
 
   old_inode_t& cow_old_inode(snapid_t follows, inode_t *pi);
   old_inode_t *pick_old_inode(snapid_t last);
