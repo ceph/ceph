@@ -325,12 +325,21 @@ struct CapSnap {
   //snapid_t follows;  // map key
   SnapContext context;
   int issued, dirty;
+
   uint64_t size;
   utime_t ctime, mtime, atime;
   version_t time_warp_seq;
+  uint32_t   mode;
+  uid_t      uid;
+  gid_t      gid;
+  map<string,bufferptr> xattrs;
+  version_t xattr_version;
+
   bool writing, dirty_data;
   uint64_t flush_tid;
-  CapSnap() : issued(0), dirty(0), size(0), time_warp_seq(0), writing(false), dirty_data(false), flush_tid(0) {}
+  CapSnap() : issued(0), dirty(0), 
+	      size(0), time_warp_seq(0), mode(0), uid(0), gid(0), xattr_version(0),
+	      writing(false), dirty_data(false), flush_tid(0) {}
 };
 
 
