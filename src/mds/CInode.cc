@@ -259,8 +259,10 @@ void CInode::project_past_parent(SnapRealm *newparent, bufferlist& snapbl)
 {
   sr_t *new_snap = project_snaprealm();
   SnapRealm *oldparent;
-  if (!snaprealm)
+  if (!snaprealm) {
     oldparent = find_snaprealm();
+    new_snap->seq = oldparent->get_newest_seq();
+  }
   else
     oldparent = snaprealm->parent;
 
@@ -271,8 +273,6 @@ void CInode::project_past_parent(SnapRealm *newparent, bufferlist& snapbl)
     new_snap->current_parent_since = MAX(oldparentseq, newparent->get_last_created()) + 1;
   }
   new_snap->encode(snapbl);
-  projected_srnode.pop_back();
-  delete new_snap;
 }
 
 void CInode::pop_projected_snaprealm()
@@ -280,11 +280,18 @@ void CInode::pop_projected_snaprealm()
   assert(!projected_srnode.empty());
   dout(0) << "pop_projected_snaprealm " << projected_srnode.front()
           << " seq" << projected_srnode.front()->seq << dendl;
+  bool invalidate_cached_snaps = false;
   if (!snaprealm)
     open_snaprealm();
+  else if (projected_srnode.front()->past_parents.size() !=
+           snaprealm->srnode.past_parents.size())
+    invalidate_cached_snaps = true;
   snaprealm->srnode = *projected_srnode.front();
   delete projected_srnode.front();
   projected_srnode.pop_front();
+
+  if (invalidate_cached_snaps)
+    snaprealm->invalidate_cached_snaps();
 }
 
 

@@ -4092,15 +4092,10 @@ void Server::_unlink_local_finish(MDRequest *mdr,
     dout(20) << " straydn is " << *straydn << dendl;
     straydnl = straydn->pop_projected_linkage();
     
-    SnapRealm *oldparent = dn->get_dir()->inode->find_snaprealm();
-    
     bool isnew = false;
-    if (!straydnl->get_inode()->snaprealm) {
-      straydnl->get_inode()->open_snaprealm();
-      straydnl->get_inode()->snaprealm->srnode.seq = oldparent->get_newest_seq();
+    if (!straydnl->get_inode()->snaprealm)
       isnew = true;
-    }
-    straydnl->get_inode()->snaprealm->add_past_parent(oldparent);
+    straydnl->get_inode()->pop_projected_snaprealm();
     if (isnew)
       mdcache->do_realm_invalidate_and_update_notify(straydnl->get_inode(), CEPH_SNAP_OP_SPLIT, true);
 
@@ -4882,14 +4877,10 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 	straydn->get_dir()->link_primary_inode(straydn, oldin);
       
       if (straydn->is_auth()) {
-	SnapRealm *oldparent = destdn->get_dir()->inode->find_snaprealm();
 	bool isnew = false;
-	if (!straydnl->get_inode()->snaprealm) {
-	  straydnl->get_inode()->open_snaprealm();
-	  straydnl->get_inode()->snaprealm->srnode.seq = oldparent->get_newest_seq();
+	if (!straydnl->get_inode()->snaprealm)
 	  isnew = true;
-	}
-	straydnl->get_inode()->snaprealm->add_past_parent(oldparent);
+	straydnl->get_inode()->pop_projected_snaprealm();
 	if (isnew)
 	  mdcache->do_realm_invalidate_and_update_notify(straydnl->get_inode(), CEPH_SNAP_OP_SPLIT);
       }
@@ -4962,7 +4953,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 
     // snap parent update?
     if (destdn->is_auth() && destdnl->get_inode()->snaprealm)
-      destdnl->get_inode()->snaprealm->add_past_parent(srcdn->get_dir()->inode->find_snaprealm());
+      destdnl->get_inode()->pop_projected_snaprealm();
   }
 
   // src

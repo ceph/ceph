@@ -467,25 +467,6 @@ void SnapRealm::build_snap_trace(bufferlist& snapbl)
 
 
 
-void SnapRealm::add_past_parent(SnapRealm *oldparent)
-{
-  snapid_t newlast = parent->get_last_created();
-  snapid_t oldlast = oldparent->get_newest_seq();
-  snapid_t first = srnode.current_parent_since;
-  
-  if (oldlast >= srnode.current_parent_since) {
-    srnode.past_parents[oldlast].ino = oldparent->inode->ino();
-    srnode.past_parents[oldlast].first = first;
-    add_open_past_parent(oldparent);
-    dout(10) << "add_past_parent [" << first << "," << oldlast << "] = "
-	     << oldparent->inode->ino() << dendl;
-  }
-  srnode.current_parent_since = MAX(oldlast, newlast) + 1;
-  dout(10) << "add_past_parent current_parent_since " << srnode.current_parent_since << dendl;
-
-  invalidate_cached_snaps();
-}
-
 void SnapRealm::prune_past_parents()
 {
   dout(10) << "prune_past_parents" << dendl;
