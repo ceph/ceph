@@ -1740,7 +1740,8 @@ void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int
   
   m->head.nlink = in->nlink;
   
-  m->head.xattr_len = 0; // FIXME
+  ::encode(in->xattrs, m->xattrbl);
+  m->head.xattr_version = in->xattr_version;
   
   m->head.layout = in->layout;
   m->head.size = in->size;
