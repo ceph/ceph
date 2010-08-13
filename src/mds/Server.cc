@@ -5732,27 +5732,13 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_cow_inode(mdr, &le->metablob, diri);
   
-  // project the snaprealm.. hack!
+  // project the snaprealm
   bufferlist snapbl;
-  bool newrealm = false;
-  if (!diri->snaprealm) {
-    newrealm = true;
-    diri->open_snaprealm(true);
-    diri->snaprealm->srnode.created = snapid;
-    diri->snaprealm->srnode.current_parent_since = snapid;
-  }
-  snapid_t old_seq = diri->snaprealm->srnode.seq;
-  snapid_t old_lc = diri->snaprealm->srnode.last_created;
-  diri->snaprealm->srnode.snaps[snapid] = info;
-  diri->snaprealm->srnode.seq = snapid;
-  diri->snaprealm->srnode.last_created = snapid;
-  diri->encode_snap_blob(snapbl);
-  diri->snaprealm->srnode.snaps.erase(snapid);
-  diri->snaprealm->srnode.seq = old_seq;
-  diri->snaprealm->srnode.last_created = old_lc;
-  if (newrealm)
-    diri->close_snaprealm(true);
-  
+  sr_t *newsnap = diri->project_snaprealm(snapid);
+  newsnap->snaps[snapid] = info;
+  newsnap->seq = snapid;
+  newsnap->last_created = snapid;
+  newsnap->encode(snapbl);
 
   le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), true, 0, 0, &snapbl);
 
@@ -5771,16 +5757,8 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
 
   // create snap
   snapid_t snapid = info.snapid;
-  int op = CEPH_SNAP_OP_CREATE;
-  if (!diri->snaprealm) {
-    diri->open_snaprealm();
-    diri->snaprealm->srnode.created = snapid;
-    diri->snaprealm->srnode.current_parent_since = snapid;
-    op = CEPH_SNAP_OP_SPLIT;
-  }
-  diri->snaprealm->srnode.snaps[snapid] = info;
-  diri->snaprealm->srnode.seq = snapid;
-  diri->snaprealm->srnode.last_created = snapid;
+  int op = (diri->snaprealm? CEPH_SNAP_OP_CREATE : CEPH_SNAP_OP_SPLIT);
+  diri->pop_projected_snaprealm();
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
   mdcache->do_realm_invalidate_and_update_notify(diri, op);
