@@ -4853,6 +4853,10 @@ void Server::_rename_prepare(MDRequest *mdr,
   mdcache->journal_cow_dentry(mdr, metablob, srcdn, CEPH_NOSNAP, 0, srcdnl);
   metablob->add_null_dentry(srcdn, true);
 
+  // make renamed inode first track the dn
+  if (srcdnl->is_primary() && destdn->is_auth())
+    srcdnl->get_inode()->first = destdn->first;  
+
   // do inode updates in journal, even if we aren't auth (hmm, is this necessary?)
   if (!silent) {
     if (ji && !pi) {
