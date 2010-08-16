@@ -755,6 +755,10 @@ int Client::choose_target_mds(MetaRequest *req)
       is_hash = true;
     }
   }
+  if (dir_inode && dir_inode->snapid == CEPH_SNAPDIR) {
+    dir_inode = dir_inode->snapdir_parent;
+    is_hash = false;
+  }
   
   dout(20) << "choose_target_mds dir_inode" << dir_inode << " is_hash=" << is_hash
            << " hash=" << hash << dendl;
