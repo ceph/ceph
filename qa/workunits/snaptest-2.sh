@@ -36,7 +36,7 @@ mkdir .snap/test2
 
 echo "Copy content of .snap/test1 to copyofsnap1 ..."
 mkdir copyofsnap1
-cp -R .snap/test1 copyofsnap1/
+cp -Rv .snap/test1 copyofsnap1/
 
 
 echo "Take third snapshot .snap/test3"
@@ -54,4 +54,4 @@ find ./ -type d -print0 | \
 	xargs -0 -n1 rmdir
 
 echo "Delete all the files and directories ..."
-rm -Rf ./*
+rm -Rfv ./*
