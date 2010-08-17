@@ -194,37 +194,30 @@ public:
     projection_node(inode_t *in, map<string, bufferptr> *xp = NULL, sr_t *sn = NULL) :
       inode(in), xattrs(xp), snapnode(sn) {}
   };
+  // projected values (only defined while dirty)
   list<projection_node*> projected_nodes;
 
-  // projected values (only defined while dirty)
-  list<inode_t*>   projected_inode;
-
-  // if xattr* is null, it is defined to be the same as the previous version
-  list<map<string,bufferptr>*>   projected_xattrs;
+  sr_t *projected_snaprealm_ptr;
+  map<string, bufferptr> *projected_xattrs_ptr;
   
   version_t get_projected_version() {
-    if (projected_inode.empty())
+    if (projected_nodes.empty())
       return inode.version;
     else
-      return projected_inode.back()->version;
+      return projected_nodes.back()->inode->version;
   }
   bool is_projected() {
-    return !projected_inode.empty();
+    return !projected_nodes.empty();
   }
 
   inode_t *get_projected_inode() { 
-    if (projected_inode.empty())
+    if (projected_nodes.empty())
       return &inode;
     else
-      return projected_inode.back();
+      return projected_nodes.back()->inode;
   }
   map<string,bufferptr> *get_projected_xattrs() {
-    if (!projected_xattrs.empty())
-      for (list<map<string,bufferptr>*>::reverse_iterator p = projected_xattrs.rbegin();
-	   p != projected_xattrs.rend();
-	   p++)
-	if (*p)
-	  return *p;
+    if (projected_xattrs_ptr) return projected_xattrs_ptr;
     return &xattrs;
   }
 
@@ -232,11 +225,11 @@ public:
   void pop_and_dirty_projected_inode(LogSegment *ls);
 
   inode_t *get_previous_projected_inode() {
-    assert(!projected_inode.empty());
-    list<inode_t*>::reverse_iterator p = projected_inode.rbegin();
+    assert(!projected_nodes.empty());
+    list<projection_node*>::reverse_iterator p = projected_nodes.rbegin();
     p++;
-    if (p != projected_inode.rend())
-      return *p;
+    if (p != projected_nodes.rend())
+      return (*p)->inode;
     else
       return &inode;
   }
@@ -351,6 +344,8 @@ private:
     first(f), last(l),
     last_journaled(0), //last_open_journaled(0), 
     //hack_accessed(true),
+    projected_snaprealm_ptr(NULL),
+    projected_xattrs_ptr(NULL),
     stickydir_ref(0),
     parent(0),
     inode_auth(CDIR_AUTH_DEFAULT),

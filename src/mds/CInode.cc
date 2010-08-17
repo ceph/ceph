@@ -203,38 +203,42 @@ void CInode::print(ostream& out)
 
 inode_t *CInode::project_inode(map<string,bufferptr> *px) 
 {
-  if (projected_inode.empty()) {
-    projected_inode.push_back(new inode_t(inode));
+  if (projected_nodes.empty()) {
+    projected_nodes.push_back(new projection_node(new inode_t(inode)));
     if (px)
       *px = xattrs;
   } else {
-    projected_inode.push_back(new inode_t(*projected_inode.back()));
+    projected_nodes.push_back(new projection_node(
+        new inode_t(*projected_nodes.back()->inode)));
     if (px)
       *px = *get_projected_xattrs();
   }
-  projected_xattrs.push_back(px);
-  projected_nodes.push_back(projection_node(projected_inode.back(), px));
-  dout(15) << "project_inode " << projected_inode.back() << dendl;
-  return projected_inode.back();
+  projected_nodes.back()->xattrs = px;
+  if (px) projected_xattrs_ptr = px;
+  dout(15) << "project_inode " << projected_nodes.back()->inode << dendl;
+  return projected_nodes.back()->inode;
 }
 
 void CInode::pop_and_dirty_projected_inode(LogSegment *ls) 
 {
-  assert(!projected_inode.empty());
-  dout(15) << "pop_and_dirty_projected_inode " << projected_inode.front()
-	   << " v" << projected_inode.front()->version << dendl;
-  mark_dirty(projected_inode.front()->version, ls);
-  inode = *projected_inode.front();
-  delete projected_inode.front();
+  assert(!projected_nodes.empty());
+  dout(15) << "pop_and_dirty_projected_inode " << projected_nodes.front()->inode
+	   << " v" << projected_nodes.front()->inode->version << dendl;
+  mark_dirty(projected_nodes.front()->inode->version, ls);
+  inode = *projected_nodes.front()->inode;
 
-  map<string,bufferptr> *px = projected_xattrs.front();
+  map<string,bufferptr> *px = projected_nodes.front()->xattrs;
   if (px) {
     xattrs = *px;
+    if (projected_xattrs_ptr && projected_xattrs_ptr == px)
+      projected_xattrs_ptr = NULL;
     delete px;
   }
 
-  projected_inode.pop_front();
-  projected_xattrs.pop_front();
+  delete projected_nodes.front()->inode;
+  delete projected_nodes.front();
+
+  projected_nodes.pop_front();
 }
 
 sr_t *CInode::project_snaprealm(snapid_t snapid)
