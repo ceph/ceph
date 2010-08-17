@@ -17,4 +17,13 @@ echo more >> foo/b2
 echo "oh, it didn't hang! good job."
 cat foo/b
 rmdir foo/.snap/s
+
+# make sure mds handles it when the client does not send flushsnap
+echo x > foo/x
+sync
+mkdir foo/.snap/ss
+ln foo/x foo/xx
+cat foo/.snap/ss/x
+rmdir foo/.snap/ss
+
 rm -r foo
