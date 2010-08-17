@@ -87,6 +87,7 @@ public:
 
   void drop_locks(Mutation *mut);
   void set_xlocks_done(Mutation *mut);
+  void drop_non_rdlocks(Mutation *mut);
   void drop_rdlocks(Mutation *mut);
 
   void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0);
