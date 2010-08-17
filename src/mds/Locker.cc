@@ -389,6 +389,14 @@ void Locker::drop_locks(Mutation *mut)
   mut->done_locking = false;
 }
 
+void Locker::drop_non_rdlocks(Mutation *mut)
+{
+  while (!mut->xlocks.empty()) 
+    xlock_finish(*mut->xlocks.begin(), mut);
+  while (!mut->wrlocks.empty()) 
+    wrlock_finish(*mut->wrlocks.begin(), mut);
+}
+
 void Locker::drop_rdlocks(Mutation *mut)
 {
   while (!mut->rdlocks.empty()) 

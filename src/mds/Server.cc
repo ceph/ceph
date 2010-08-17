@@ -880,11 +880,8 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   Connection *client_con = req->get_connection();
   client_con->get();
 
-  // clean up request, drop locks, etc.
-  // do this before replying, so that we can issue leases
-  mdcache->request_finish(mdr);
-  mdr = 0;
-  req = 0;
+  // drop non-rdlocks before replying, so that we can issue leases
+  mds->locker->drop_non_rdlocks(mdr);
 
   // reply at all?
   if (client_inst.name.is_mds()) {
@@ -908,6 +905,11 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   }
   client_con->put();
   
+  // clean up request
+  mdcache->request_finish(mdr);
+  mdr = 0;
+  req = 0;
+
   // take a closer look at tracei, if it happens to be a remote link
   if (tracei && 
       tracei->get_parent_dn() &&
