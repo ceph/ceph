@@ -4696,7 +4696,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       assert(straydn);  // moving to straydn.
       // link--, and move.
       if (destdn->is_auth()) {
-	tpi = destdnl->get_inode()->project_inode();
+	tpi = destdnl->get_inode()->project_inode(); //project_snaprealm
 	tpi->version = straydn->pre_dirty(tpi->version);
       }
       straydn->push_projected_linkage(destdnl->get_inode());
@@ -4732,7 +4732,8 @@ void Server::_rename_prepare(MDRequest *mdr,
 	oldpv = srcdnl->get_inode()->get_projected_version();
       else
 	oldpv = _rename_prepare_import(mdr, srcdn, client_map_bl);
-      pi = srcdnl->get_inode()->project_inode();
+      pi = srcdnl->get_inode()->project_inode(); // project snaprealm if srcdnl->is_primary
+                                                 // & srcdnl->snaprealm
       pi->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldpv);
       destdn->push_projected_linkage(srcdnl->get_inode());
     }
