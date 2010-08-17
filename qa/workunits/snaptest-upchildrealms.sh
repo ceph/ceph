@@ -20,3 +20,8 @@ echo "this should not hang..."
 cat a/b/.snap/_a2_*/foo
 echo "good, it did not hang."
 
+rmdir a/b/.snap/b1
+rmdir a/.snap/a1
+rmdir a/.snap/a2
+rm -r a
+
