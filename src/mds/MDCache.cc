@@ -1291,6 +1291,9 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 	}
       }
       cap->client_follows = last;
+      if (in->client_need_snapflush.empty())
+	in->get(CInode::PIN_NEEDSNAPFLUSH);
+      in->client_need_snapflush[last].insert(client);
     } else {
       dout(10) << " ignoring client" << client << " cap follows " << cap->client_follows << dendl;
     }

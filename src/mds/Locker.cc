@@ -1114,7 +1114,7 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t 
   mut->cleanup();
   delete mut;
 
-  if (!in->is_head()) {
+  if (!in->is_head() && in->client_snap_caps.size()) {
     dout(10) << " client_snap_caps " << in->client_snap_caps << dendl;
     // check for snap writeback completion
     bool gather = false;
@@ -1125,6 +1125,7 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t 
       dout(10) << " completing client_snap_caps for " << ccap_string(p->first)
 	       << " lock " << *lock << " on " << *in << dendl;
       lock->put_wrlock();
+
       p->second.erase(client);
       if (p->second.empty()) {
 	gather = true;
@@ -1796,7 +1797,14 @@ void Locker::handle_client_caps(MClientCaps *m)
 
   // flushsnap?
   if (op == CEPH_CAP_OP_FLUSHSNAP) {
-    if (in->is_auth()) {
+    if (!in->is_auth()) {
+      dout(7) << " not auth, ignoring flushsnap on " << *in << dendl;
+      goto out;
+    }
+
+    if (in == head_in ||
+	(head_in->client_need_snapflush.count(in->last) &&
+	 head_in->client_need_snapflush[in->last].count(client))) {
       dout(7) << " flushsnap follows " << follows
 	      << " client" << client << " on " << *in << dendl;
       // this cap now follows a later snap (i.e. the one initiating this flush, or later)
@@ -1813,8 +1821,18 @@ void Locker::handle_client_caps(MClientCaps *m)
       }
 
       _do_snap_update(in, m->get_dirty(), follows, m, ack);
+
+      if (in != head_in) {
+	head_in->client_need_snapflush[in->last].erase(client);
+	if (head_in->client_need_snapflush[in->last].empty()) {
+	  head_in->client_need_snapflush.erase(in->last);
+	  if (head_in->client_need_snapflush.empty())
+	    head_in->put(CInode::PIN_NEEDSNAPFLUSH);
+	}
+      }
+      
     } else
-      dout(7) << " not auth, ignoring flushsnap on " << *in << dendl;
+      dout(7) << " not expecting flushsnap from client" << client << " on " << *in << dendl;
     goto out;
   }
 
@@ -1830,7 +1848,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       }
       in = mdcache->pick_inode_snap(in, in->last);
     }
-    
+ 
     // head inode, and cap
     MClientCaps *ack = 0;
     
@@ -1839,6 +1857,38 @@ void Locker::handle_client_caps(MClientCaps *m)
 	     << " retains " << ccap_string(m->get_caps())
 	     << " dirty " << ccap_string(m->get_caps())
 	     << " on " << *in << dendl;
+
+
+    // missing/skipped snapflush?
+    //  ** only if the client has completed all revocations.  if we
+    //     are still revoking, it's possible the client is waiting for
+    //     data writeback and hasn't sent the flushsnap yet.  **
+    if (head_in->client_need_snapflush.size()) {
+      if ((cap->pending() & ~cap->issued()) == 0) {
+	map<snapid_t, set<client_t> >::iterator p = head_in->client_need_snapflush.begin();
+	while (p != head_in->client_need_snapflush.end()) {
+	  // p->first is the snap inode's ->last
+	  if (follows > p->first)
+	    break;
+	  if (p->second.count(client)) {
+	    dout(10) << " doing async NULL snapflush on " << p->first << " from client" << p->second << dendl;
+	    CInode *sin = mdcache->pick_inode_snap(head_in, p->first - 1);
+	    assert(sin != head_in);
+	    _do_snap_update(sin, 0, sin->first - 1, m, NULL);
+	    head_in->client_need_snapflush[in->last].erase(client);
+	    if (head_in->client_need_snapflush[in->last].empty()) {
+	      head_in->client_need_snapflush.erase(p++);
+	      if (head_in->client_need_snapflush.empty())
+		head_in->put(CInode::PIN_NEEDSNAPFLUSH);
+	      continue;
+	    }
+	  }
+	  p++;
+	}
+      } else {
+	dout(10) << " revocation in progress, not making any conclusions about null snapflushes" << dendl;
+      }
+    }
     
     if (m->get_dirty() && in->is_auth()) {
       dout(7) << " flush client" << client << " dirty " << ccap_string(m->get_dirty()) 
