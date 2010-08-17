@@ -114,7 +114,7 @@ public:
     // inode ptr is required for primary, optional for remote, undefined for null
     bool is_primary() { return remote_ino == 0 && inode != 0; }
     bool is_remote() { return remote_ino > 0; }
-    bool is_null() { return (remote_ino == 0 && inode == 0) ? true:false; }
+    bool is_null() { return remote_ino == 0 && inode == 0; }
 
     CInode *get_inode() { return inode; }
     inodeno_t get_remote_ino() { return remote_ino; }
