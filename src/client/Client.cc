@@ -731,7 +731,7 @@ int Client::choose_target_mds(MetaRequest *req)
   __u32 hash = 0;
   bool is_hash = false;
 
-  Inode *dir_inode = NULL;
+  Inode *in = NULL;
   InodeCap *cap = NULL;
 
   if (req->resend_mds >= 0) {
@@ -744,39 +744,45 @@ int Client::choose_target_mds(MetaRequest *req)
   if (g_conf.client_use_random_mds) goto random_mds;
 
   if (req->inode) {
-    dir_inode = req->inode;
+    in = req->inode;
   } else if (req->dentry) {
     if (req->dentry->inode) {
-      dir_inode = req->dentry->inode;
+      in = req->dentry->inode;
     } else {
-      dir_inode = req->dentry->dir->parent_inode;
+      in = req->dentry->dir->parent_inode;
       hash = ceph_str_hash_linux(req->dentry->name.data(),
                                  req->dentry->name.length());
       is_hash = true;
     }
   }
-  if (dir_inode && dir_inode->snapid == CEPH_SNAPDIR) {
-    dir_inode = dir_inode->snapdir_parent;
+  if (in && in->snapid != CEPH_NOSNAP) {
+    dout(10) << "choose_target_mds " << *in << " is snapped, using nonsnap parent" << dendl;
+    while (in->snapid != CEPH_NOSNAP) {
+      if (in->snapid == CEPH_SNAPDIR)
+	in = in->snapdir_parent;
+      else
+	in = in->dn->dir->parent_inode;
+    }
     is_hash = false;
   }
   
-  dout(20) << "choose_target_mds dir_inode" << dir_inode << " is_hash=" << is_hash
+  dout(20) << "choose_target_mds " << *in << " is_hash=" << is_hash
            << " hash=" << hash << dendl;
 
-  if (!dir_inode) goto random_mds;
+  if (!in) goto random_mds;
 
-  if (is_hash && S_ISDIR(dir_inode->mode) && !dir_inode->dirfragtree.empty()) {
-    if (dir_inode->dirfragtree.contains(hash)) {
-      mds = dir_inode->fragmap[dir_inode->dirfragtree[hash].value()];
+  if (is_hash && S_ISDIR(in->mode) && !in->dirfragtree.empty()) {
+    if (in->dirfragtree.contains(hash)) {
+      mds = in->fragmap[in->dirfragtree[hash].value()];
       dout(10) << "choose_target_mds from dirfragtree hash" << dendl;
       goto out;
     }
   }
 
   if (req->auth_is_best())
-    cap = dir_inode->auth_cap;
-  if (!cap && !dir_inode->caps.empty())
-    cap = dir_inode->caps.begin()->second;
+    cap = in->auth_cap;
+  if (!cap && !in->caps.empty())
+    cap = in->caps.begin()->second;
   if (!cap)
     goto random_mds;
   mds = cap->session->mds_num;
