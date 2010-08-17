@@ -184,6 +184,18 @@ public:
   //bool hack_accessed;
   //utime_t hack_load_stamp;
 
+  struct projection_node {
+    inode_t *inode;
+    map<string,bufferptr> *xattrs;
+    sr_t *snapnode;
+
+    projection_node() : inode(NULL), xattrs(NULL), snapnode(NULL) {}
+    projection_node(inode_t *in, sr_t *sn) : inode(in), xattrs(NULL), snapnode(sn) {}
+    projection_node(inode_t *in, map<string, bufferptr> *xp = NULL, sr_t *sn = NULL) :
+      inode(in), xattrs(xp), snapnode(sn) {}
+  };
+  list<projection_node*> projected_nodes;
+
   // projected values (only defined while dirty)
   list<inode_t*>   projected_inode;
 
