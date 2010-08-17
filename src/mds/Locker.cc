@@ -148,7 +148,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
 			   set<SimpleLock*> &xlocks)
 {
   if (mdr->done_locking) {
-    dout(10) << "acquire_locks " << *mdr << " -- done locking" << dendl;    
+    dout(10) << "acquire_locks " << *mdr << " - done locking" << dendl;    
     return true;  // at least we had better be!
   }
   dout(10) << "acquire_locks " << *mdr << dendl;
@@ -796,8 +796,13 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut, bool as_anon)
     // okay, we actually need to kick the head's lock to get ourselves synced up.
     CInode *head = mdcache->get_inode(in->ino());
     assert(head);
-    dout(10) << "rdlock_start trying head inode " << *head << dendl;
-    return rdlock_start(head->get_lock(lock->get_type()), mut, true);   // ** as_anon, no rdlock on EXCL **
+    SimpleLock *hlock = head->get_lock(lock->get_type());
+    if (hlock->get_state() != LOCK_SYNC) {
+      dout(10) << "rdlock_start trying head inode " << *head << dendl;
+      rdlock_start(head->get_lock(lock->get_type()), mut, true); // ** as_anon, no rdlock on EXCL **
+      hlock->add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mut));
+      return false;
+    }
   }
 
   // wait!
