@@ -213,6 +213,7 @@ inode_t *CInode::project_inode(map<string,bufferptr> *px)
       *px = *get_projected_xattrs();
   }
   projected_xattrs.push_back(px);
+  projected_nodes.push_back(projection_node(projected_inode.back(), px));
   dout(15) << "project_inode " << projected_inode.back() << dendl;
   return projected_inode.back();
 }
