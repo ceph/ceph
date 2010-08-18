@@ -767,11 +767,13 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut, bool as_anon)
     as_anon = true;
   client_t client = as_anon ? -1 : mut->get_client();
 
+  /*
   if (!lock->get_parent()->is_auth() &&
       lock->fw_rdlock_to_auth()) {
     mdcache->request_forward(mut, lock->get_parent()->authority().first);
     return false;
   }
+  */
 
   while (1) {
     // can read?  grab ref.

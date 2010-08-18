@@ -320,9 +320,11 @@ public:
     return get_sm()->states[state].next;
   }
 
+  /*
   bool fw_rdlock_to_auth() {
     return get_sm()->states[state].can_rdlock == FW;
   }
+  */
   bool req_rdlock_from_auth() {
     return get_sm()->states[state].can_rdlock == REQ;
   }
