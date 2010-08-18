@@ -45,7 +45,8 @@ bool KeyRing::load(const char *filename_list)
       const char *home = getenv("HOME");
       if (home)
 	p->replace(pos, 1, getenv("HOME"));
-      else break; //skip, we couldn't correct it
+      else
+	continue; // skip this item, we couldn't do the substitution
     }
 
     if (bl.read_file(p->c_str(), true) == 0) {
