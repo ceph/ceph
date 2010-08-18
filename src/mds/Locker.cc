@@ -1872,7 +1872,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 	    break;
 	  if (p->second.count(client)) {
 	    dout(10) << " doing async NULL snapflush on " << p->first << " from client" << p->second << dendl;
-	    CInode *sin = mdcache->get_inode(head_in->ino(), p->first - 1);
+	    CInode *sin = mdcache->get_inode(head_in->ino(), p->first);
 	    assert(sin);
 	    _do_snap_update(sin, 0, sin->first - 1, m, NULL);
 	    head_in->client_need_snapflush[in->last].erase(client);
