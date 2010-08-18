@@ -2034,7 +2034,8 @@ void Locker::_do_snap_update(CInode *in, int dirty, snapid_t follows, MClientCap
     // hmm, i guess snap was already deleted?  just ack!
     dout(10) << " wow, the snap following " << follows
 	     << " was already deleted.  nothing to record, just ack." << dendl;
-    mds->send_message_client_counted(ack, m->get_connection());
+    if (ack)
+      mds->send_message_client_counted(ack, m->get_connection());
     return;
   }
 
