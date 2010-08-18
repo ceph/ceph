@@ -3792,7 +3792,8 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
        */
       dout(7) << "handle_file_lock got scatter request on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
-      file_mixed(lock);
+      if (lock->get_state() != LOCK_MIX)  // i.e., the reqscatter didn't race with an actual mix/scatter
+	file_mixed(lock);
     } else {
       dout(7) << "handle_file_lock ignoring scatter request on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
