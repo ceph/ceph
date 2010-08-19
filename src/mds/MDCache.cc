@@ -1230,13 +1230,14 @@ CInode *MDCache::pick_inode_snap(CInode *in, snapid_t follows)
   if (snaps.empty())
     return in;
 
-  for (set<snapid_t>::const_iterator p = snaps.upper_bound(follows);
+  for (set<snapid_t>::const_iterator p = snaps.upper_bound(follows);  // first item > follows
        p != snaps.end();
        p++) {
     CInode *t = get_inode(in->ino(), *p);
     if (t) {
       in = t;
       dout(10) << "pick_inode_snap snap " << *p << " found " << *in << dendl;
+      break;
     }
   }
   return in;
