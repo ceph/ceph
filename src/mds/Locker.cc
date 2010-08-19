@@ -1733,6 +1733,33 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
 }
 
 
+
+void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t follows)
+{
+  dout(10) << "_do_null_snapflish client" << client << " follows " << follows << " on " << *head_in << dendl;
+  map<snapid_t, set<client_t> >::iterator p = head_in->client_need_snapflush.begin();
+  while (p != head_in->client_need_snapflush.end()) {
+    // p->first is the snap inode's ->last
+    if (follows > p->first)
+      break;
+    if (p->second.count(client)) {
+      dout(10) << " doing async NULL snapflush on " << p->first << " from client" << p->second << dendl;
+      CInode *sin = mdcache->get_inode(head_in->ino(), p->first);
+      assert(sin);
+      _do_snap_update(sin, 0, sin->first - 1, client, NULL, NULL);
+      head_in->client_need_snapflush[sin->last].erase(client);
+      if (head_in->client_need_snapflush[sin->last].empty()) {
+	head_in->client_need_snapflush.erase(p++);
+	if (head_in->client_need_snapflush.empty())
+	  head_in->put(CInode::PIN_NEEDSNAPFLUSH);
+	continue;
+      }
+    }
+    p++;
+  }
+}
+
+
 /*
  * note: we only get these from the client if
  * - we are calling back previously issued caps (fewer than the client previously had)
@@ -1822,7 +1849,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 	ack->set_client_tid(m->get_client_tid());
       }
 
-      _do_snap_update(in, m->get_dirty(), follows, m, ack);
+      _do_snap_update(in, m->get_dirty(), follows, client, m, ack);
 
       if (in != head_in) {
 	head_in->client_need_snapflush[in->last].erase(client);
@@ -1870,26 +1897,7 @@ void Locker::handle_client_caps(MClientCaps *m)
     //  update/release).
     if (head_in->client_need_snapflush.size()) {
       if ((cap->issued() & CEPH_CAP_ANY_WR) == 0) {
-	map<snapid_t, set<client_t> >::iterator p = head_in->client_need_snapflush.begin();
-	while (p != head_in->client_need_snapflush.end()) {
-	  // p->first is the snap inode's ->last
-	  if (follows > p->first)
-	    break;
-	  if (p->second.count(client)) {
-	    dout(10) << " doing async NULL snapflush on " << p->first << " from client" << p->second << dendl;
-	    CInode *sin = mdcache->get_inode(head_in->ino(), p->first);
-	    assert(sin);
-	    _do_snap_update(sin, 0, sin->first - 1, m, NULL);
-	    head_in->client_need_snapflush[in->last].erase(client);
-	    if (head_in->client_need_snapflush[in->last].empty()) {
-	      head_in->client_need_snapflush.erase(p++);
-	      if (head_in->client_need_snapflush.empty())
-		head_in->put(CInode::PIN_NEEDSNAPFLUSH);
-	      continue;
-	    }
-	  }
-	  p++;
-	}
+	_do_null_snapflush(head_in, client, follows);
       } else {
 	dout(10) << " revocation in progress, not making any conclusions about null snapflushes" << dendl;
       }
@@ -2023,7 +2031,7 @@ static uint64_t calc_bounding(uint64_t t)
   return t + 1;
 }
 
-void Locker::_do_snap_update(CInode *in, int dirty, snapid_t follows, MClientCaps *m, MClientCaps *ack)
+void Locker::_do_snap_update(CInode *in, int dirty, snapid_t follows, client_t client, MClientCaps *m, MClientCaps *ack)
 {
   dout(10) << "_do_snap_update dirty " << ccap_string(dirty)
 	   << " follows " << follows
@@ -2041,8 +2049,6 @@ void Locker::_do_snap_update(CInode *in, int dirty, snapid_t follows, MClientCap
       mds->send_message_client_counted(ack, m->get_connection());
     return;
   }
-
-  client_t client = m->get_source().num();
 
   EUpdate *le = new EUpdate(mds->mdlog, "snap flush");
   mds->mdlog->start_entry(le);
@@ -2363,11 +2369,35 @@ void Locker::handle_client_cap_release(MClientCapRelease *m)
     }
 
     dout(7) << "removing cap on " << *in << dendl;
-    mdcache->remove_client_cap(in, client);
+    remove_client_cap(in, client);
   }
 
   m->put();
 }
+
+
+void Locker::remove_client_cap(CInode *in, client_t client)
+{
+  // clean out any pending snapflush state
+  if (!in->client_need_snapflush.empty())
+    _do_null_snapflush(in, client, 0);
+
+  in->remove_client_cap(client);
+
+  if (in->is_auth()) {
+    // make sure we clear out the client byte range
+    if (in->get_projected_inode()->client_ranges.count(client) &&
+	!(in->inode.nlink == 0 && !in->is_any_caps()))    // unless it's unlink + stray
+      check_inode_max_size(in);
+  } else {
+    request_inode_file_caps(in);
+  }
+  
+  eval(in, CEPH_CAP_LOCKS);
+
+  mds->mdcache->maybe_eval_stray(in);
+}
+
 
 void Locker::handle_client_lease(MClientLease *m)
 {

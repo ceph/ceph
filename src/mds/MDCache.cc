@@ -5373,24 +5373,6 @@ void MDCache::check_memory_usage()
 }
 
 
-void MDCache::remove_client_cap(CInode *in, client_t client)
-{
-  in->remove_client_cap(client);
-
-  if (in->is_auth()) {
-    // make sure we clear out the client byte range
-    if (in->get_projected_inode()->client_ranges.count(client) &&
-	!(in->inode.nlink == 0 && !in->is_any_caps()))    // unless it's unlink + stray
-      mds->locker->check_inode_max_size(in);
-  } else {
-    mds->locker->request_inode_file_caps(in);
-  }
-  
-  mds->locker->eval(in, CEPH_CAP_LOCKS);
-
-  maybe_eval_stray(in);
-}
-
 
 // =========================================================================================
 // shutdown
