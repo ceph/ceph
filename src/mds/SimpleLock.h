@@ -288,7 +288,8 @@ public:
     parent->take_waiting(mask << get_wait_shift(), ls);
   }
   void add_waiter(uint64_t mask, Context *c) {
-    parent->add_waiter(mask << get_wait_shift(), c);
+    // preserve WAIT_AUTHCHANGE bit unshifted, if present.
+    parent->add_waiter((mask << get_wait_shift()) | (mask & MDSCacheObject::WAIT_AUTHCHANGE), c);
   }
   bool is_waiter_for(uint64_t mask) {
     return parent->is_waiter_for(mask << get_wait_shift());

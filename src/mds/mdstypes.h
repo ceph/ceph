@@ -16,6 +16,7 @@ using namespace std;
 
 #include "include/frag.h"
 #include "include/xlist.h"
+#include "include/elist.h"
 
 #include <boost/pool/pool.hpp>
 
@@ -1665,6 +1666,8 @@ class SimpleLock;
 
 class MDSCacheObject;
 
+class CDir;
+
 // -- authority delegation --
 // directory authority types
 //  >= 0 is the auth mds
@@ -1772,6 +1775,7 @@ class MDSCacheObject {
   // -- wait --
   const static uint64_t WAIT_SINGLEAUTH  = (1ull<<60);
   const static uint64_t WAIT_UNFREEZE    = (1ull<<59); // pka AUTHPINNABLE
+  const static uint64_t WAIT_AUTHCHANGE  = (1ull<<58);
 
 
   // ============================================
@@ -1780,7 +1784,8 @@ class MDSCacheObject {
   MDSCacheObject() :
     state(0), 
     ref(0),
-    replica_nonce(0) {}
+    replica_nonce(0),
+    waiting_on_auth_change(0) {}
   virtual ~MDSCacheObject() {}
 
   // printing
@@ -1812,6 +1817,7 @@ class MDSCacheObject {
   bool is_ambiguous_auth() {
     return authority().second != CDIR_AUTH_UNKNOWN;
   }
+  virtual CDir *get_containing_subtree() = 0;
 
   // --------------------------------------------
   // pins
@@ -1957,7 +1963,10 @@ protected:
   // waiting
  protected:
   multimap<uint64_t, Context*>  waiting;
-
+  int waiting_on_auth_change;
+  elist<MDSCacheObject*>::item item_waiting_on_auth_change;
+  friend class CDir;
+  
  public:
   bool is_waiter_for(uint64_t mask, uint64_t min=0) {
     if (!min) {
@@ -1977,6 +1986,10 @@ protected:
     if (waiting.empty())
       get(PIN_WAITER);
     waiting.insert(pair<uint64_t,Context*>(mask, c));
+
+    if (mask & WAIT_AUTHCHANGE)
+      waiting_on_auth_change++;
+
     pdout(10,g_conf.debug_mds) << (mdsco_db_line_prefix(this)) 
 			       << "add_waiter " << hex << mask << dec << " " << c
 			       << " on " << *this
@@ -1989,6 +2002,13 @@ protected:
     while (it != waiting.end()) {
       if (it->first & mask) {
 	ls.push_back(it->second);
+
+	if (it->first & WAIT_AUTHCHANGE) {
+	  waiting_on_auth_change--;
+	  if (!waiting_on_auth_change)
+	    item_waiting_on_auth_change.remove_myself();
+	}
+
 	pdout(10,g_conf.debug_mds) << (mdsco_db_line_prefix(this))
 				   << "take_waiting mask " << hex << mask << dec << " took " << it->second
 				   << " tag " << it->first

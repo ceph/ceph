@@ -808,11 +808,18 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut, bool as_anon)
   }
 
   // wait!
-  int wait_on;
+  uint64_t wait_on;
   if (lock->get_parent()->is_auth() && lock->is_stable())
     wait_on = SimpleLock::WAIT_RD;
-  else
-    wait_on = SimpleLock::WAIT_STABLE;  // REQRDLOCK is ignored if lock is unstable, so we need to retry.
+  else {
+    // REQRDLOCK is ignored if lock is unstable, so we need to retry on stable OR auth change
+    wait_on = SimpleLock::WAIT_STABLE;
+    if (!lock->get_parent()->is_auth()) {
+      wait_on |= MDSCacheObject::WAIT_AUTHCHANGE;
+      CDir *subtree = lock->get_parent()->get_containing_subtree();
+      subtree->add_auth_change_waiter(in);
+    }
+  }
   dout(7) << "rdlock_start waiting on " << *lock << " on " << *lock->get_parent() << dendl;
   lock->add_waiter(wait_on, new C_MDS_RetryRequest(mdcache, mut));
   nudge_log(lock);
@@ -904,7 +911,6 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
       
     } else {
       // replica.
-      // auth should be auth_pinned (see acquire_locks wrlock weird mustpin case).
       int auth = lock->get_parent()->authority().first;
       dout(10) << "requesting scatter from auth on " 
 	       << *lock << " on " << *lock->get_parent() << dendl;
@@ -915,7 +921,13 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
 
   if (!nowait) {
     dout(7) << "wrlock_start waiting on " << *lock << " on " << *lock->get_parent() << dendl;
-    lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
+    uint64_t mask = SimpleLock::WAIT_STABLE;
+    if (!lock->get_parent()->is_auth()) {
+      mask |= MDSCacheObject::WAIT_AUTHCHANGE;
+      CDir *subtree = lock->get_parent()->get_containing_subtree();
+      subtree->add_auth_change_waiter(in);
+    }
+    lock->add_waiter(mask, new C_MDS_RetryRequest(mdcache, mut));
     nudge_log(lock);
   }
     

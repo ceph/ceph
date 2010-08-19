@@ -264,6 +264,9 @@ public:
   void get_stickydirs();
   void put_stickydirs();  
 
+  CDir *get_containing_subtree();
+
+
  protected:
   // parent dentries in cache
   CDentry         *parent;             // primary link
