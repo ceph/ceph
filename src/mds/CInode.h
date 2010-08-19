@@ -199,6 +199,7 @@ public:
 
   sr_t *projected_snaprealm_ptr;
   map<string, bufferptr> *projected_xattrs_ptr;
+  map<string, bufferptr> *previous_projected_xattrs_ptr;
   
   version_t get_projected_version() {
     if (projected_nodes.empty())
@@ -218,6 +219,10 @@ public:
   }
   map<string,bufferptr> *get_projected_xattrs() {
     if (projected_xattrs_ptr) return projected_xattrs_ptr;
+    return &xattrs;
+  }
+  map<string,bufferptr> *get_previous_projected_xattrs() {
+    if (previous_projected_xattrs_ptr) return previous_projected_xattrs_ptr;
     return &xattrs;
   }
 
@@ -345,7 +350,7 @@ private:
     last_journaled(0), //last_open_journaled(0), 
     //hack_accessed(true),
     projected_snaprealm_ptr(NULL),
-    projected_xattrs_ptr(NULL),
+    projected_xattrs_ptr(NULL), previous_projected_xattrs_ptr(NULL),
     stickydir_ref(0),
     parent(0),
     inode_auth(CDIR_AUTH_DEFAULT),

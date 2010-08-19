@@ -1258,7 +1258,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
   CInode *oldin = new CInode(this, true, in->first, last);
   oldin->inode = *in->get_previous_projected_inode();
   oldin->symlink = in->symlink;
-  oldin->xattrs = in->xattrs;
+  oldin->xattrs = *in->get_previous_projected_xattrs();
 
   oldin->inode.trim_client_ranges(last);
 

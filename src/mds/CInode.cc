@@ -214,7 +214,10 @@ inode_t *CInode::project_inode(map<string,bufferptr> *px)
       *px = *get_projected_xattrs();
   }
   projected_nodes.back()->xattrs = px;
-  if (px) projected_xattrs_ptr = px;
+  if (px) {
+    previous_projected_xattrs_ptr = projected_xattrs_ptr;
+    projected_xattrs_ptr = px;
+  }
   dout(15) << "project_inode " << projected_nodes.back()->inode << dendl;
   return projected_nodes.back()->inode;
 }
@@ -230,7 +233,9 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
   map<string,bufferptr> *px = projected_nodes.front()->xattrs;
   if (px) {
     xattrs = *px;
-    if (projected_xattrs_ptr && projected_xattrs_ptr == px)
+    if (previous_projected_xattrs_ptr == px)
+      previous_projected_xattrs_ptr = NULL;
+    else if (projected_xattrs_ptr == px)
       projected_xattrs_ptr = NULL;
     delete px;
   }
@@ -1566,7 +1571,7 @@ old_inode_t& CInode::cow_old_inode(snapid_t follows, inode_t *pi)
   old_inode_t &old = old_inodes[follows];
   old.first = first;
   old.inode = *pi;
-  old.xattrs = xattrs;
+  old.xattrs = *get_previous_projected_xattrs();
   
   old.inode.trim_client_ranges(follows);
 
