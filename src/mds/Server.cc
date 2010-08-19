@@ -5722,12 +5722,10 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   pi->version = diri->pre_dirty();
 
   // project the snaprealm
-  bufferlist snapbl;
   sr_t *newsnap = diri->project_snaprealm(snapid);
   newsnap->snaps[snapid] = info;
   newsnap->seq = snapid;
   newsnap->last_created = snapid;
-  newsnap->encode(snapbl);
 
   // journal the inode changes
   mdr->ls = mdlog->get_current_segment();
@@ -5739,8 +5737,6 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_cow_inode(mdr, &le->metablob, diri);
   // journal the snaprealm changes
-  le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), true, 0, 0, &snapbl);
-
   mdlog->submit_entry(le, new C_MDS_mksnap_finish(mds, mdr, diri, info));
   mdlog->flush();
 }
@@ -5856,19 +5852,15 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
   mdlog->start_entry(le);
   
   // project the snaprealm
-  bufferlist snapbl;
   sr_t *newnode = diri->project_snaprealm();
   newnode->snaps.erase(snapid);
   newnode->seq = seq;
   newnode->last_destroyed = seq;
-  newnode->encode(snapbl);
 
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   le->metablob.add_table_transaction(TABLE_SNAP, stid);
   mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_cow_inode(mdr, &le->metablob, diri);
-
-  le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), true, 0, 0, &snapbl);
 
   mdlog->submit_entry(le, new C_MDS_rmsnap_finish(mds, mdr, diri, snapid));
   mdlog->flush();

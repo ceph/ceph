@@ -1360,7 +1360,10 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
 	*pcow_inode = oldin;
       CDentry *olddn = dn->dir->add_primary_dentry(dn->name, oldin, oldfirst, follows);
       dout(10) << " olddn " << *olddn << dendl;
-      metablob->add_primary_dentry(olddn, true);
+      bufferlist snapbl;
+      if (dnl->get_inode()->projected_nodes.back()->snapnode)
+        dnl->get_inode()->projected_nodes.back()->snapnode->encode(snapbl);
+      metablob->add_primary_dentry(olddn, true, 0, 0, (snapbl.length() ? &snapbl : NULL));
       mut->add_cow_dentry(olddn);
     } else {
       assert(dnl->is_remote());
