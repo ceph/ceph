@@ -36,7 +36,7 @@ mkdir .snap/test2
 
 echo "Copy content of .snap/test1 to copyofsnap1 ..."
 mkdir copyofsnap1
-cp -R .snap/test1 copyofsnap1/
+cp -Rv .snap/test1 copyofsnap1/
 
 
 echo "Take third snapshot .snap/test3"
@@ -44,14 +44,14 @@ mkdir .snap/test3
 
 echo "Delete the snapshots..."
 
-find ./ -type d -print0 | \
-        xargs -0 -I% -n1 find %/.snap -mindepth 1 -maxdepth 1 \
-                         \( ! -name "_*" \) -print0 2>/dev/null
+find ./ -type d -print | \
+        xargs -I% -n1 find %/.snap -mindepth 1 -maxdepth 1 \
+                         \( ! -name "_*" \) -print 2>/dev/null
 
-find ./ -type d -print0 | \
-	xargs -0 -I% -n1 find %/.snap -mindepth 1 -maxdepth 1 \
-                         \( ! -name "_*" \) -print0 2>/dev/null | \
-	xargs -0 -n1 rmdir
+find ./ -type d -print | \
+	xargs -I% -n1 find %/.snap -mindepth 1 -maxdepth 1 \
+                         \( ! -name "_*" \) -print 2>/dev/null | \
+	xargs -n1 rmdir
 
 echo "Delete all the files and directories ..."
-rm -Rf ./*
+rm -Rfv ./*

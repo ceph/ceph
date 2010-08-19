@@ -49,11 +49,18 @@ int MonClient::build_initial_monmap()
   // file?
   if (g_conf.monmap) {
     const char *monmap_fn = g_conf.monmap;
-    int r = monmap.read(monmap_fn);
+    int r;
+    try {
+      r = monmap.read(monmap_fn);
+    }
+    catch (buffer::error *e) {
+      r = -EINVAL;
+    }
     if (r >= 0)
       return 0;
     char buf[80];
-    cerr << "unable to read monmap from " << monmap_fn << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
+    cerr << "unable to read/decode monmap from " << monmap_fn << ": " << strerror_r(-r, buf, sizeof(buf)) << std::endl;
+    return r;
   }
 
   // -m foo?

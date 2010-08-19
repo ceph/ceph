@@ -421,9 +421,10 @@ void Client::update_inode_file_bits(Inode *in,
 Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
 {
   Inode *in;
-  if (inode_map.count(st->vino))
+  if (inode_map.count(st->vino)) {
     in = inode_map[st->vino];
-  else {
+    dout(12) << "add_update_inode had " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
+  } else {
     in = new Inode(st->vino, &st->layout);
     inode_map[st->vino] = in;
     bool new_root = false;
@@ -442,9 +443,10 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
     if (new_root) dout(10) << "setting this inode as root! " << *in << "; ino: " << root->ino << "; snapid" << root->snapid << dendl;
     if (in->is_symlink())
       in->symlink = st->symlink;
+
+    dout(12) << "add_update_inode adding " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
   }
 
-  dout(12) << "add_update_inode " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
   if (!st->cap.caps)
     return in;   // as with readdir returning indoes in different snaprealms (no caps!)
 
@@ -731,7 +733,7 @@ int Client::choose_target_mds(MetaRequest *req)
   __u32 hash = 0;
   bool is_hash = false;
 
-  Inode *dir_inode = NULL;
+  Inode *in = NULL;
   InodeCap *cap = NULL;
 
   if (req->resend_mds >= 0) {
@@ -744,35 +746,45 @@ int Client::choose_target_mds(MetaRequest *req)
   if (g_conf.client_use_random_mds) goto random_mds;
 
   if (req->inode) {
-    dir_inode = req->inode;
+    in = req->inode;
   } else if (req->dentry) {
     if (req->dentry->inode) {
-      dir_inode = req->dentry->inode;
+      in = req->dentry->inode;
     } else {
-      dir_inode = req->dentry->dir->parent_inode;
+      in = req->dentry->dir->parent_inode;
       hash = ceph_str_hash_linux(req->dentry->name.data(),
                                  req->dentry->name.length());
       is_hash = true;
     }
   }
+  if (in && in->snapid != CEPH_NOSNAP) {
+    dout(10) << "choose_target_mds " << *in << " is snapped, using nonsnap parent" << dendl;
+    while (in->snapid != CEPH_NOSNAP) {
+      if (in->snapid == CEPH_SNAPDIR)
+	in = in->snapdir_parent;
+      else
+	in = in->dn->dir->parent_inode;
+    }
+    is_hash = false;
+  }
   
-  dout(20) << "choose_target_mds dir_inode" << dir_inode << " is_hash=" << is_hash
+  dout(20) << "choose_target_mds " << *in << " is_hash=" << is_hash
            << " hash=" << hash << dendl;
 
-  if (!dir_inode) goto random_mds;
+  if (!in) goto random_mds;
 
-  if (is_hash && S_ISDIR(dir_inode->mode) && !dir_inode->dirfragtree.empty()) {
-    if (dir_inode->dirfragtree.contains(hash)) {
-      mds = dir_inode->fragmap[dir_inode->dirfragtree[hash].value()];
+  if (is_hash && S_ISDIR(in->mode) && !in->dirfragtree.empty()) {
+    if (in->dirfragtree.contains(hash)) {
+      mds = in->fragmap[in->dirfragtree[hash].value()];
       dout(10) << "choose_target_mds from dirfragtree hash" << dendl;
       goto out;
     }
   }
 
   if (req->auth_is_best())
-    cap = dir_inode->auth_cap;
-  if (!cap && !dir_inode->caps.empty())
-    cap = dir_inode->caps.begin()->second;
+    cap = in->auth_cap;
+  if (!cap && !in->caps.empty())
+    cap = in->caps.begin()->second;
   if (!cap)
     goto random_mds;
   mds = cap->session->mds_num;
@@ -1739,7 +1751,8 @@ void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int
   
   m->head.nlink = in->nlink;
   
-  m->head.xattr_len = 0; // FIXME
+  ::encode(in->xattrs, m->xattrbl);
+  m->head.xattr_version = in->xattr_version;
   
   m->head.layout = in->layout;
   m->head.size = in->size;
@@ -1912,6 +1925,12 @@ void Client::finish_cap_snap(Inode *in, CapSnap *capsnap, int used)
   capsnap->atime = in->atime;
   capsnap->ctime = in->ctime;
   capsnap->time_warp_seq = in->time_warp_seq;
+  capsnap->uid = in->uid;
+  capsnap->gid = in->gid;
+  capsnap->mode = in->mode;
+  capsnap->xattrs = in->xattrs;
+  capsnap->xattr_version = in->xattr_version;
+
   if (used & CEPH_CAP_FILE_BUFFER) {
     dout(10) << "finish_cap_snap " << *in << " cap_snap " << capsnap << " used " << used
 	     << " WRBUFFER, delaying" << dendl;
@@ -1955,12 +1974,24 @@ void Client::flush_snaps(Inode *in)
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP, in->ino, in->snaprealm->ino, 0, mseq);
     m->set_client_tid(p->second.flush_tid);
     m->head.snap_follows = p->first;
-    m->head.size = p->second.size;
+
     m->head.caps = p->second.issued;
     m->head.dirty = p->second.dirty;
+
+    m->head.uid = p->second.uid;
+    m->head.gid = p->second.gid;
+    m->head.mode = p->second.mode;
+
+    m->head.size = p->second.size;
+
+    m->head.xattr_version = p->second.xattr_version;
+    ::encode(p->second.xattrs, m->xattrbl);
+
     p->second.ctime.encode_timeval(&m->head.ctime);
     p->second.mtime.encode_timeval(&m->head.mtime);
     p->second.atime.encode_timeval(&m->head.atime);
+    m->head.time_warp_seq = p->second.time_warp_seq;
+
     messenger->send_message(m, mdsmap->get_inst(mds));
   }
 }

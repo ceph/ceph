@@ -149,8 +149,8 @@ struct md_config_t {
   int mon_osd_down_out_interval;
   float mon_lease;
   float mon_lease_renew_interval;
-  float mon_allowed_clock_drift;
-  float mon_lease_time_warn_backoff;
+  float mon_clock_drift_allowed;
+  float mon_clock_drift_warn_backoff;
   float mon_lease_ack_timeout;
   float mon_lease_timeout;
   float mon_accept_timeout;

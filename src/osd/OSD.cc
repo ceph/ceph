@@ -1470,6 +1470,8 @@ void OSD::tick()
   assert(osd_lock.is_locked());
   dout(5) << "tick" << dendl;
 
+  logger->set(l_osd_buf, buffer_total_alloc.read());
+
   _dout_check_log();
 
   if (got_sigterm) {
@@ -2003,6 +2005,8 @@ void OSD::_dispatch(Message *m)
     }
   }
 
+  logger->set(l_osd_buf, buffer_total_alloc.read());
+
   switch (m->get_type()) {
 
     // -- don't need lock -- 
@@ -2100,6 +2104,9 @@ void OSD::_dispatch(Message *m)
       }
     }
   }
+
+  logger->set(l_osd_buf, buffer_total_alloc.read());
+
 }
 
 
@@ -4404,8 +4411,6 @@ void OSD::handle_op(MOSDOp *op)
 
   // ...
   throttle_op_queue();
-
-  logger->set(l_osd_buf, buffer_total_alloc.read());
 
   utime_t now = g_clock.now();
 

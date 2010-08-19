@@ -87,6 +87,7 @@ public:
 
   void drop_locks(Mutation *mut);
   void set_xlocks_done(Mutation *mut);
+  void drop_non_rdlocks(Mutation *mut);
   void drop_rdlocks(Mutation *mut);
 
   void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, list<Context*> *pfinishers=0);
@@ -174,11 +175,14 @@ public:
 			  const string& dname);
   void kick_cap_releases(MDRequest *mdr);
 
+  void remove_client_cap(CInode *in, client_t client);
+
  protected:
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
   void handle_client_caps(class MClientCaps *m);
   void _update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *pi);
-  void _do_snap_update(CInode *in, int dirty, snapid_t follows, MClientCaps *m, MClientCaps *ack);
+  void _do_snap_update(CInode *in, int dirty, snapid_t follows, client_t client, MClientCaps *m, MClientCaps *ack);
+  void _do_null_snapflush(CInode *head_in, client_t client, snapid_t follows);
   bool _do_cap_update(CInode *in, Capability *cap, int dirty, snapid_t follows, MClientCaps *m,
 		      MClientCaps *ack=0);
   void handle_client_cap_release(class MClientCapRelease *m);

@@ -19,7 +19,7 @@ struct sm_state_t simplelock[LOCK_MAX] = {
     [LOCK_EXCL_SYNC] = { LOCK_SYNC, true,  LOCK_LOCK, 0,    0,   0,   0,   XCL, 0,   0,   0,CEPH_CAP_GSHARED,0,0 },
     [LOCK_SNAP_SYNC] = { LOCK_SYNC, false, LOCK_LOCK, 0,    0,   0,   0,   AUTH,0,   0,   0,0,0,0 },
 
-    [LOCK_LOCK]      = { 0,         false, LOCK_LOCK, AUTH, 0,   FW,  0,   0,   0,   0,   0,0,0,0 },
+    [LOCK_LOCK]      = { 0,         false, LOCK_LOCK, AUTH, 0,   REQ, 0,   0,   0,   0,   0,0,0,0 },
     [LOCK_SYNC_LOCK] = { LOCK_LOCK, false, LOCK_LOCK, ANY,  0,   0,   0,   0,   0,   0,   0,0,0,0 }, 
     [LOCK_EXCL_LOCK] = { LOCK_LOCK, false, LOCK_LOCK, 0,    0,   0,   0,   XCL, 0,   0,   0,0,0,0 },
 
@@ -28,7 +28,7 @@ struct sm_state_t simplelock[LOCK_MAX] = {
     [LOCK_XLOCKDONE] = { LOCK_SYNC, false, LOCK_LOCK, XCL,  XCL, XCL, 0,   0,   XCL, 0,   0,0,CEPH_CAP_GSHARED,0 },
     [LOCK_LOCK_XLOCK]= { LOCK_PREXLOCK,false,LOCK_LOCK,0,   XCL, 0,   0,   0,   0,   XCL, 0,0,0,0 },
 
-    [LOCK_EXCL]      = { 0,         true,  LOCK_LOCK, 0,    0,   FW,  XCL, 0,   0,   0,   0,CEPH_CAP_GEXCL|CEPH_CAP_GSHARED,0,0 },
+    [LOCK_EXCL]      = { 0,         true,  LOCK_LOCK, 0,    0,   REQ, XCL, 0,   0,   0,   0,CEPH_CAP_GEXCL|CEPH_CAP_GSHARED,0,0 },
     [LOCK_SYNC_EXCL] = { LOCK_EXCL, true,  LOCK_LOCK, ANY,  0,   0,   0,   0,   0,   0,   0,CEPH_CAP_GSHARED,0,0 },
     [LOCK_LOCK_EXCL] = { LOCK_EXCL, false, LOCK_LOCK, ANY,  0,   0,   0,   0,   0,   0,   CEPH_CAP_GSHARED,0,0,0 },
 
@@ -57,7 +57,7 @@ struct sm_state_t scatterlock[LOCK_MAX] = {
     [LOCK_MIX_SYNC]  = { LOCK_SYNC, false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,   0,0,0,0 },
     [LOCK_SNAP_SYNC] = { LOCK_SYNC, false, LOCK_LOCK, 0,    0,   0,   0,   AUTH,0,   0,   0,0,0,0 },
    
-    [LOCK_LOCK]      = { 0,         false, LOCK_LOCK, AUTH, 0,   FW,  AUTH,0,   0,   ANY, 0,0,0,0 },
+    [LOCK_LOCK]      = { 0,         false, LOCK_LOCK, AUTH, 0,   REQ, AUTH,0,   0,   ANY, 0,0,0,0 },
     [LOCK_SYNC_LOCK] = { LOCK_LOCK, false, LOCK_LOCK, AUTH, 0,   0,   0,   0,   0,   0,   0,0,0,0 },
     [LOCK_MIX_LOCK]  = { LOCK_LOCK, false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,   0,0,0,0 },
     [LOCK_TSYN_LOCK] = { LOCK_LOCK, false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,   0,0,0,0 },
@@ -66,7 +66,7 @@ struct sm_state_t scatterlock[LOCK_MAX] = {
     [LOCK_LOCK_TSYN] = { LOCK_TSYN, false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,   0,0,0,0 },
     [LOCK_MIX_TSYN]  = { LOCK_TSYN, false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,   0,0,0,0 },
 
-    [LOCK_MIX]       = { 0,         false, LOCK_MIX,  0,    0,   FW,  ANY, 0,   0,   0,   0,0,0,0 },
+    [LOCK_MIX]       = { 0,         false, LOCK_MIX,  0,    0,   REQ, ANY, 0,   0,   0,   0,0,0,0 },
     [LOCK_TSYN_MIX]  = { LOCK_MIX,  false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,   0,0,0,0 },
     [LOCK_SYNC_MIX]  = { LOCK_MIX,  false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,   0,0,0,0 },
     [LOCK_SYNC_MIX2] = { LOCK_MIX,  false, 0,         0,    0,   0,   0,   0,   0,   0,   0,0,0,0 },

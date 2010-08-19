@@ -166,7 +166,7 @@ static void flush_all_loggers()
   // schedule next flush event
   utime_t next;
   next.sec_ref() = start.sec() + last_flush + g_conf.logger_interval;
-  next.usec_ref() = start.usec();
+  next.nsec_ref() = start.nsec();
   generic_dout(20) << "logger now=" << now
 		   << "  start=" << start 
 		   << "  next=" << next 
@@ -261,10 +261,8 @@ void Logger::_flush()
   if (need_reset || logger_need_reset) {
     // reset the counters
     for (int i=0; i<type->num_keys; i++) {
-      if (type->inc_keys[i]) {
-	this->vals[i] = 0;
-	this->fvals[i] = 0;
-      }
+      this->vals[i] = 0;
+      this->fvals[i] = 0;
     }
     need_reset = false;
   }
@@ -310,6 +308,15 @@ void Logger::_flush()
       }
     }
   }
+
+  // reset the counters
+  for (int i=0; i<type->num_keys; i++) {
+    if (type->inc_keys[i]) {
+      this->vals[i] = 0;
+      this->fvals[i] = 0;
+    }
+  }
+
   out << std::endl;
 }
 

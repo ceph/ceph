@@ -1231,13 +1231,14 @@ CInode *MDCache::pick_inode_snap(CInode *in, snapid_t follows)
   if (snaps.empty())
     return in;
 
-  for (set<snapid_t>::const_iterator p = snaps.upper_bound(follows);
+  for (set<snapid_t>::const_iterator p = snaps.upper_bound(follows);  // first item > follows
        p != snaps.end();
        p++) {
     CInode *t = get_inode(in->ino(), *p);
     if (t) {
       in = t;
       dout(10) << "pick_inode_snap snap " << *p << " found " << *in << dendl;
+      break;
     }
   }
   return in;
@@ -1292,6 +1293,9 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 	}
       }
       cap->client_follows = last;
+      if (in->client_need_snapflush.empty())
+	in->get(CInode::PIN_NEEDSNAPFLUSH);
+      in->client_need_snapflush[last].insert(client);
     } else {
       dout(10) << " ignoring client" << client << " cap follows " << cap->client_follows << dendl;
     }
@@ -5377,24 +5381,6 @@ void MDCache::check_memory_usage()
 
 }
 
-
-void MDCache::remove_client_cap(CInode *in, client_t client)
-{
-  in->remove_client_cap(client);
-
-  if (in->is_auth()) {
-    // make sure we clear out the client byte range
-    if (in->get_projected_inode()->client_ranges.count(client) &&
-	!(in->inode.nlink == 0 && !in->is_any_caps()))    // unless it's unlink + stray
-      mds->locker->check_inode_max_size(in);
-  } else {
-    mds->locker->request_inode_file_caps(in);
-  }
-  
-  mds->locker->eval(in, CEPH_CAP_LOCKS);
-
-  maybe_eval_stray(in);
-}
 
 
 // =========================================================================================

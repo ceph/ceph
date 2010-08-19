@@ -119,8 +119,6 @@ class FileStore : public JournalingObjectStore {
 
     bool _enqueue(OpSequencer *osr) {
       store->op_queue.push_back(osr);
-      store->op_queue_len++;
-      store->op_queue_bytes += osr->q.back()->bytes;
       return true;
     }
     void _dequeue(OpSequencer *o) {
@@ -150,6 +148,7 @@ class FileStore : public JournalingObjectStore {
   void _do_op(OpSequencer *o);
   void _finish_op(OpSequencer *o);
   void queue_op(Sequencer *osr, uint64_t op, list<Transaction*>& tls, Context *onreadable, Context *onreadable_sync);
+  void op_queue_throttle();
   void _journaled_ahead(Sequencer *osr, uint64_t op, list<Transaction*> &tls,
 			Context *onreadable, Context *ondisk, Context *onreadable_sync);
   friend class C_JournaledAhead;
