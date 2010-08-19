@@ -43,7 +43,6 @@ void BackTrace::print(std::ostream& out)
 	function[sz-1] = 0;
       }
       out << " " << (i-skip+1) << ": (" << function << end << std::endl;
-      free(foo);
       //fprintf(out, "    %s:%s\n", stack.strings[i], function);
     } else {
       // didn't find the mangled name, just print the whole line
