@@ -1875,7 +1875,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 	dout(10) << " updating intermediate snapped inode " << *in << dendl;
 	_do_cap_update(in, NULL, m->get_dirty(), follows, m, NULL);
       }
-      in = mdcache->pick_inode_snap(in, in->last);
+      in = mdcache->pick_inode_snap(head_in, in->last);
     }
  
     // head inode, and cap
