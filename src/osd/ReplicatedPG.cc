@@ -2135,13 +2135,13 @@ void ReplicatedPG::op_applied(RepGather *repop)
 
   update_stats();
 
+#if 0
   // any completion stuff to do here?
   if (repop->ctx->ops.size()) {
     const sobject_t& soid = repop->ctx->obs->oi.soid;
     OSDOp& first = repop->ctx->ops[0];
 
     switch (first.op.op) { 
-#if 0
     case CEPH_OSD_OP_UNBALANCEREADS:
       dout(-10) << "op_applied  completed unbalance-reads on " << oid << dendl;
       unbalancing_reads.erase(oid);
@@ -2160,7 +2160,6 @@ void ReplicatedPG::op_applied(RepGather *repop)
 	}
       */
       break;
-#endif
 
     case CEPH_OSD_OP_WRUNLOCK:
       dout(-10) << "op_applied  completed wrunlock on " << soid << dendl;
@@ -2171,6 +2170,7 @@ void ReplicatedPG::op_applied(RepGather *repop)
       break;
     }   
   }
+#endif
 
   if (!repop->aborted)
     eval_repop(repop);
