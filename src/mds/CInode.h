@@ -235,14 +235,14 @@ public:
   }
 
   sr_t *project_snaprealm(snapid_t snapid=0);
-  void pop_projected_snaprealm();
+  void pop_projected_snaprealm(sr_t *next_snaprealm);
   sr_t *get_projected_srnode() {
-    if (projected_srnode.empty())
+    if (!projected_snaprealm_ptr)
       if (snaprealm)
         return &snaprealm->srnode;
       else return NULL;
     else
-      return projected_srnode.back();
+      return projected_snaprealm_ptr;
   }
   void project_past_parent(SnapRealm *newparent, bufferlist& snapbl);
 

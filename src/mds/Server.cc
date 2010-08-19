@@ -4088,22 +4088,26 @@ void Server::_unlink_local_finish(MDRequest *mdr,
 
   // relink as stray?  (i.e. was primary link?)
   CDentry::linkage_t *straydnl = 0;
+  sr_t *next_snap = 0;
   if (straydn) {
     dout(20) << " straydn is " << *straydn << dendl;
     straydnl = straydn->pop_projected_linkage();
     
-    bool isnew = false;
-    if (!straydnl->get_inode()->snaprealm)
-      isnew = true;
-    straydnl->get_inode()->pop_projected_snaprealm();
-    if (isnew)
-      mdcache->do_realm_invalidate_and_update_notify(straydnl->get_inode(), CEPH_SNAP_OP_SPLIT, true);
-
+    next_snap = straydnl->get_inode()->projected_nodes.front()->snapnode;
     mdcache->touch_dentry_bottom(straydn);
   }
 
-  dn->mark_dirty(dnpv, mdr->ls);  
+  dn->mark_dirty(dnpv, mdr->ls);
   mdr->apply();
+
+  if (straydn) {
+    bool isnew = false;
+    if (!straydnl->get_inode()->snaprealm)
+      isnew = true;
+    straydnl->get_inode()->pop_projected_snaprealm(next_snap);
+    if (isnew)
+      mdcache->do_realm_invalidate_and_update_notify(straydnl->get_inode(), CEPH_SNAP_OP_SPLIT, true);
+  }
   
   mds->mdcache->send_dentry_unlink(dn, straydn);
   
@@ -4881,7 +4885,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 	bool isnew = false;
 	if (!straydnl->get_inode()->snaprealm)
 	  isnew = true;
-	straydnl->get_inode()->pop_projected_snaprealm();
+	sr_t *next_snap = straydnl->get_inode()->projected_nodes.front()->snapnode;
+	straydnl->get_inode()->pop_projected_snaprealm(next_snap);
 	if (isnew)
 	  mdcache->do_realm_invalidate_and_update_notify(straydnl->get_inode(), CEPH_SNAP_OP_SPLIT);
       }
@@ -4940,11 +4945,12 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       destdnl->get_inode()->state_set(CInode::STATE_AUTH);
     }
 
+    sr_t *next_snap = NULL;
     if (destdn->is_auth()) {
       CInode *desti = destdnl->get_inode();
+      next_snap = desti->projected_nodes.front()->snapnode;
       desti->pop_and_dirty_projected_inode(mdr->ls);
 
-      
       if (desti->is_dir()) {
 	mdr->ls->renamed_files.push_back(&desti->item_renamed_file);
 	desti->state_set(CInode::STATE_DIRTYPARENT);
@@ -4953,8 +4959,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
     }
 
     // snap parent update?
-    if (destdn->is_auth() && destdnl->get_inode()->snaprealm)
-      destdnl->get_inode()->pop_projected_snaprealm();
+    if (next_snap)
+      destdnl->get_inode()->pop_projected_snaprealm(next_snap);
   }
 
   // src
@@ -5715,15 +5721,6 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   pi->ctime = info.stamp;
   pi->version = diri->pre_dirty();
 
-  mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "mksnap");
-  mdlog->start_entry(le);
-
-  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
-  le->metablob.add_table_transaction(TABLE_SNAP, stid);
-  mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_cow_inode(mdr, &le->metablob, diri);
-  
   // project the snaprealm
   bufferlist snapbl;
   sr_t *newsnap = diri->project_snaprealm(snapid);
@@ -5732,6 +5729,16 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   newsnap->last_created = snapid;
   newsnap->encode(snapbl);
 
+  // journal the inode changes
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "mksnap");
+  mdlog->start_entry(le);
+
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+  le->metablob.add_table_transaction(TABLE_SNAP, stid);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
+  mdcache->journal_cow_inode(mdr, &le->metablob, diri);
+  // journal the snaprealm changes
   le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), true, 0, 0, &snapbl);
 
   mdlog->submit_entry(le, new C_MDS_mksnap_finish(mds, mdr, diri, info));
@@ -5742,6 +5749,8 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
 {
   dout(10) << "_mksnap_finish " << *mdr << " " << info << dendl;
 
+  sr_t *next_snaprealm = diri->projected_nodes.front()->snapnode;
+
   diri->pop_and_dirty_projected_inode(mdr->ls);
   mdr->apply();
 
@@ -5750,7 +5759,7 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
   // create snap
   snapid_t snapid = info.snapid;
   int op = (diri->snaprealm? CEPH_SNAP_OP_CREATE : CEPH_SNAP_OP_SPLIT);
-  diri->pop_projected_snaprealm();
+  diri->pop_projected_snaprealm(next_snaprealm);
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
   mdcache->do_realm_invalidate_and_update_notify(diri, op);
@@ -5845,11 +5854,6 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "rmsnap");
   mdlog->start_entry(le);
-
-  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
-  le->metablob.add_table_transaction(TABLE_SNAP, stid);
-  mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_cow_inode(mdr, &le->metablob, diri);
   
   // project the snaprealm
   bufferlist snapbl;
@@ -5858,6 +5862,11 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
   newnode->seq = seq;
   newnode->last_destroyed = seq;
   newnode->encode(snapbl);
+
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+  le->metablob.add_table_transaction(TABLE_SNAP, stid);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
+  mdcache->journal_cow_inode(mdr, &le->metablob, diri);
 
   le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), true, 0, 0, &snapbl);
 
@@ -5873,13 +5882,15 @@ void Server::_rmsnap_finish(MDRequest *mdr, CInode *diri, snapid_t snapid)
   snapid_t seq;
   ::decode(seq, p);  
 
+  sr_t *next_snaprealm = diri->projected_nodes.front()->snapnode;
+
   diri->pop_and_dirty_projected_inode(mdr->ls);
   mdr->apply();
 
   mds->snapclient->commit(stid, mdr->ls);
 
   // remove snap
-  diri->pop_projected_snaprealm();
+  diri->pop_projected_snaprealm(next_snaprealm);
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
   mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_DESTROY);

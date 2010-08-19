@@ -243,19 +243,21 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
 
 sr_t *CInode::project_snaprealm(snapid_t snapid)
 {
-  if (projected_srnode.empty()) {
+  sr_t *new_snaprealm;
+  if (!projected_snaprealm_ptr) {
     if (snaprealm)
-      projected_srnode.push_back(new sr_t(snaprealm->srnode));
+      new_snaprealm = new sr_t(snaprealm->srnode);
     else {
-      projected_srnode.push_back(new sr_t());
-      projected_srnode.back()->created = snapid;
-      projected_srnode.back()->current_parent_since = snapid;
+      new_snaprealm = new sr_t();
+      new_snaprealm->created = snapid;
+      new_snaprealm->current_parent_since = snapid;
     }
   }
   else
-    projected_srnode.push_back(new sr_t(*projected_srnode.back()));
-  dout(0) << "project_snaprealm " << projected_srnode.back() << dendl;
-  return projected_srnode.back();
+    new_snaprealm = new sr_t(*projected_snaprealm_ptr);
+  dout(0) << "project_snaprealm " << new_snaprealm << dendl;
+  projected_nodes.back()->snapnode = new_snaprealm;
+  return new_snaprealm;
 }
 
 /* if newparent != parent, add parent to past_parents
@@ -280,20 +282,19 @@ void CInode::project_past_parent(SnapRealm *newparent, bufferlist& snapbl)
   new_snap->encode(snapbl);
 }
 
-void CInode::pop_projected_snaprealm()
+void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
 {
-  assert(!projected_srnode.empty());
-  dout(0) << "pop_projected_snaprealm " << projected_srnode.front()
-          << " seq" << projected_srnode.front()->seq << dendl;
+  assert(next_snaprealm);
+  dout(0) << "pop_projected_snaprealm " << next_snaprealm
+          << " seq" << next_snaprealm->seq << dendl;
   bool invalidate_cached_snaps = false;
   if (!snaprealm)
     open_snaprealm();
-  else if (projected_srnode.front()->past_parents.size() !=
+  else if (next_snaprealm->past_parents.size() !=
            snaprealm->srnode.past_parents.size())
     invalidate_cached_snaps = true;
-  snaprealm->srnode = *projected_srnode.front();
-  delete projected_srnode.front();
-  projected_srnode.pop_front();
+  snaprealm->srnode = *next_snaprealm;
+  delete next_snaprealm;
 
   if (invalidate_cached_snaps)
     snaprealm->invalidate_cached_snaps();
