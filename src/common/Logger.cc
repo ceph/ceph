@@ -166,7 +166,7 @@ static void flush_all_loggers()
   // schedule next flush event
   utime_t next;
   next.sec_ref() = start.sec() + last_flush + g_conf.logger_interval;
-  next.usec_ref() = start.usec();
+  next.nsec_ref() = start.nsec();
   generic_dout(20) << "logger now=" << now
 		   << "  start=" << start 
 		   << "  next=" << next 
