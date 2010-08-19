@@ -2087,10 +2087,13 @@ void ReplicatedPG::apply_repop(RepGather *repop)
   repop->tls.push_back(&repop->ctx->local_t);
 
   repop->obc->ondisk_write_lock();
+  if (repop->ctx->clone_obc)
+    repop->ctx->clone_obc->ondisk_write_lock();
 
   Context *oncommit = new C_OSD_OpCommit(this, repop);
   Context *onapplied = new C_OSD_OpApplied(this, repop);
-  Context *onapplied_sync = new C_OSD_OndiskWriteUnlock(repop->obc);
+  Context *onapplied_sync = new C_OSD_OndiskWriteUnlock(repop->obc,
+							repop->ctx->clone_obc);
   int r = osd->store->queue_transactions(&osr, repop->tls, onapplied, oncommit, onapplied_sync);
   if (r) {
     dout(-10) << "apply_repop  queue_transactions returned " << r << " on " << *repop << dendl;

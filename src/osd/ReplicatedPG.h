@@ -543,10 +543,12 @@ protected:
     }
   };
   struct C_OSD_OndiskWriteUnlock : public Context {
-    ObjectContext *obc;
-    C_OSD_OndiskWriteUnlock(ObjectContext *o) : obc(o) {}
+    ObjectContext *obc, *obc2;
+    C_OSD_OndiskWriteUnlock(ObjectContext *o, ObjectContext *o2=0) : obc(o), obc2(o2) {}
     void finish(int r) {
       obc->ondisk_write_unlock();
+      if (obc2)
+	obc2->ondisk_write_unlock();
     }
   };
   struct C_OSD_WrotePushedObject : public Context {
