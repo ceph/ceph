@@ -1862,11 +1862,14 @@ void Locker::handle_client_caps(MClientCaps *m)
 
 
     // missing/skipped snapflush?
-    //  ** only if the client has completed all WR/EXCL revocations.  if we
-    //     are still revoking, it's possible the client is waiting for
-    //     data writeback and hasn't sent the flushsnap yet.  **
+    //  The client MAY send a snapflush if it is issued WR/EXCL caps, but
+    //  presently only does so when it has actual dirty metadata.  But, we
+    //  set up the need_snapflush stuff based on the issued caps.
+    //  We can infer that the client WONT send a FLUSHSNAP once they have
+    //  released all WR/EXCL caps (the FLUSHSNAP always comes before the cap
+    //  update/release).
     if (head_in->client_need_snapflush.size()) {
-      if ((cap->issued() & CEPH_CAP_ANY_WR & ~cap->pending()) == 0) {
+      if ((cap->issued() & CEPH_CAP_ANY_WR) == 0) {
 	map<snapid_t, set<client_t> >::iterator p = head_in->client_need_snapflush.begin();
 	while (p != head_in->client_need_snapflush.end()) {
 	  // p->first is the snap inode's ->last
