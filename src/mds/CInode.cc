@@ -306,6 +306,8 @@ void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
 
   if (invalidate_cached_snaps)
     snaprealm->invalidate_cached_snaps();
+  if (next_snaprealm == projected_snaprealm_ptr)
+    projected_snaprealm_ptr = NULL;
 }
 
 
