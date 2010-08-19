@@ -240,7 +240,6 @@ public:
   }
 
   sr_t *project_snaprealm(snapid_t snapid=0);
-  void pop_projected_snaprealm(sr_t *next_snaprealm);
   sr_t *get_projected_srnode() {
     if (!projected_snaprealm_ptr)
       if (snaprealm)
@@ -251,6 +250,10 @@ public:
   }
   void project_past_parent(SnapRealm *newparent, bufferlist& snapbl);
 
+private:
+  void pop_projected_snaprealm(sr_t *next_snaprealm);
+
+public:
   old_inode_t& cow_old_inode(snapid_t follows, inode_t *pi);
   old_inode_t *pick_old_inode(snapid_t last);
   void pre_cow_old_inode();

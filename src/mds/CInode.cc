@@ -240,6 +240,9 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
     delete px;
   }
 
+  if (projected_nodes.front()->snapnode)
+    pop_projected_snaprealm(projected_nodes.front()->snapnode);
+
   delete projected_nodes.front()->inode;
   delete projected_nodes.front();
 
