@@ -5796,10 +5796,6 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
     reply_request(mdr, -ENOTDIR);
     return;
   }
-  if (diri->is_system()) {  // no snaps on root dir, at least not until we can store it
-    reply_request(mdr, -EPERM);
-    return;
-  }
 
   const string &snapname = req->get_filepath().last_dentry();
   dout(10) << "rmsnap " << snapname << " on " << *diri << dendl;
