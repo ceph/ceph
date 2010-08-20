@@ -196,10 +196,7 @@ public:
     projected_inode_t(inode_t *in, map<string, bufferptr> *xp = NULL, sr_t *sn = NULL) :
       inode(in), xattrs(xp), snapnode(sn) {}
   };
-  // projected values (only defined while dirty)
-  list<projected_inode_t*> projected_nodes;
-
-  sr_t *projected_snaprealm_ptr;
+  list<projected_inode_t*> projected_nodes;   // projected values (only defined while dirty)
   
   inode_t *project_inode(map<string,bufferptr> *px=0);
   void pop_and_dirty_projected_inode(LogSegment *ls);
@@ -250,12 +247,14 @@ public:
 
   sr_t *project_snaprealm(snapid_t snapid=0);
   sr_t *get_projected_srnode() {
-    if (!projected_snaprealm_ptr)
+    if (projected_nodes.empty()) {
       if (snaprealm)
-        return &snaprealm->srnode;
-      else return NULL;
-    else
-      return projected_snaprealm_ptr;
+	return &snaprealm->srnode;
+      else
+	return NULL;
+    } else {
+      return projected_nodes.back()->snapnode;
+    }
   }
   void project_past_parent(SnapRealm *newparent, bufferlist& snapbl);
 
@@ -364,7 +363,6 @@ private:
     first(f), last(l),
     last_journaled(0), //last_open_journaled(0), 
     //hack_accessed(true),
-    projected_snaprealm_ptr(NULL),
     stickydir_ref(0),
     parent(0),
     inode_auth(CDIR_AUTH_DEFAULT),

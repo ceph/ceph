@@ -208,20 +208,16 @@ void CInode::print(ostream& out)
 inode_t *CInode::project_inode(map<string,bufferptr> *px) 
 {
   if (projected_nodes.empty()) {
-    projected_nodes.push_back(new projection_node(new inode_t(inode)));
+    projected_nodes.push_back(new projected_inode_t(new inode_t(inode)));
     if (px)
       *px = xattrs;
   } else {
-    projected_nodes.push_back(new projection_node(
+    projected_nodes.push_back(new projected_inode_t(
         new inode_t(*projected_nodes.back()->inode)));
     if (px)
       *px = *get_projected_xattrs();
   }
   projected_nodes.back()->xattrs = px;
-  if (px) {
-    previous_projected_xattrs_ptr = projected_xattrs_ptr;
-    projected_xattrs_ptr = px;
-  }
   dout(15) << "project_inode " << projected_nodes.back()->inode << dendl;
   return projected_nodes.back()->inode;
 }
@@ -237,10 +233,6 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
   map<string,bufferptr> *px = projected_nodes.front()->xattrs;
   if (px) {
     xattrs = *px;
-    if (previous_projected_xattrs_ptr == px)
-      previous_projected_xattrs_ptr = NULL;
-    else if (projected_xattrs_ptr == px)
-      projected_xattrs_ptr = NULL;
     delete px;
   }
 
@@ -255,21 +247,19 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
 
 sr_t *CInode::project_snaprealm(snapid_t snapid)
 {
-  sr_t *new_snaprealm;
-  if (!projected_snaprealm_ptr) {
-    if (snaprealm)
-      new_snaprealm = new sr_t(snaprealm->srnode);
-    else {
-      new_snaprealm = new sr_t();
-      new_snaprealm->created = snapid;
-      new_snaprealm->current_parent_since = snapid;
-    }
+  sr_t *cur_srnode = get_projected_srnode();
+  sr_t *new_srnode;
+
+  if (cur_srnode) {
+    new_srnode = new sr_t(*cur_srnode);
+  } else {
+    new_srnode = new sr_t();
+    new_srnode->created = snapid;
+    new_srnode->current_parent_since = snapid;
   }
-  else
-    new_snaprealm = new sr_t(*projected_snaprealm_ptr);
-  dout(0) << "project_snaprealm " << new_snaprealm << dendl;
-  projected_nodes.back()->snapnode = new_snaprealm;
-  return new_snaprealm;
+  dout(0) << "project_snaprealm " << new_srnode << dendl;
+  projected_nodes.back()->snapnode = new_srnode;
+  return new_srnode;
 }
 
 /* if newparent != parent, add parent to past_parents
@@ -310,8 +300,6 @@ void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
 
   if (invalidate_cached_snaps)
     snaprealm->invalidate_cached_snaps();
-  if (next_snaprealm == projected_snaprealm_ptr)
-    projected_snaprealm_ptr = NULL;
 }
 
 
