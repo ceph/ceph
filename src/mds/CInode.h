@@ -186,6 +186,19 @@ public:
   //bool hack_accessed;
   //utime_t hack_load_stamp;
 
+  /**
+   * Projection methods, used to store inode changes until they have been journaled,
+   * at which point they are popped.
+   * Usage:
+   * project_inode as needed. If you're also projecting xattrs, pass
+   * in an xattr map (by pointer), then edit the map.
+   * If you're also projecting the snaprealm, call project_snaprealm after
+   * calling project_inode, and modify the snaprealm as necessary.
+   *
+   * Then, journal. Once journaling is done, pop_and_dirty_projected_inode.
+   * This function will take care of the inode itself, the xattrs, and the snaprealm.
+   */
+
   struct projected_inode_t {
     inode_t *inode;
     map<string,bufferptr> *xattrs;
@@ -253,7 +266,11 @@ public:
       else
 	return NULL;
     } else {
-      return projected_nodes.back()->snapnode;
+      for (list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
+          p != projected_nodes.rend();
+          p++)
+        if ((*p)->snapnode)
+          return (*p)->snapnode;
     }
   }
   void project_past_parent(SnapRealm *newparent, bufferlist& snapbl);
