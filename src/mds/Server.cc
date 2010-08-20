@@ -1172,7 +1172,7 @@ void Server::dispatch_client_request(MDRequest *mdr)
 
   default:
     dout(1) << " unknown client op " << req->get_op() << dendl;
-    assert(0);
+    reply_request(mdr, -EOPNOTSUPP);
   }
 }
 
