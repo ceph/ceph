@@ -272,6 +272,8 @@ public:
         if ((*p)->snapnode)
           return (*p)->snapnode;
     }
+    assert(0);
+    return NULL;
   }
   void project_past_parent(SnapRealm *newparent, bufferlist& snapbl);
 
