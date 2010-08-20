@@ -507,10 +507,8 @@ private:
   inode_t *add_primary_dentry(CDentry *dn, bool dirty, 
 			      CInode *in=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
 			      map<string,bufferptr> *px=0) {
-    if (dn)
-      return add_primary_dentry(add_dir(dn->get_dir(), false),
-			      dn, dirty, in, pdft, psnapbl, px);
-    else return NULL;
+    return add_primary_dentry(add_dir(dn->get_dir(), false),
+                              dn, dirty, in, pdft, psnapbl, px);
   }
   inode_t *add_primary_dentry(dirlump& lump, CDentry *dn, bool dirty, 
 			      CInode *in=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
