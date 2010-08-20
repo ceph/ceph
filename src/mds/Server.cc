@@ -3735,9 +3735,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
   if (in->is_dir()) {
     if (rmdir) {
       // do empty directory checks
-      if (_dir_is_nonempty(mdr, in)) {
-	dout(7) << "handle_client_unlink on dir " << *in
-		<< ", returning ENOTEMPTY" << dendl;
+      if (_dir_is_nonempty_unlocked(mdr, in)) {
 	reply_request(mdr, -ENOTEMPTY);
 	return;
       }
@@ -3795,9 +3793,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
     return;
 
   if (in->is_dir() &&
-      in->get_projected_inode()->dirstat.size() != 0) {
-    dout(10) << " not empty, dirstat.size() = " << in->get_projected_inode()->dirstat.size()
-	     << " on " << *in << dendl;
+      _dir_is_nonempty(mdr, in)) {
     reply_request(mdr, -ENOTEMPTY);
     return;
   }
@@ -3980,26 +3976,20 @@ void Server::_unlink_local_finish(MDRequest *mdr,
 
 
 
-/** _dir_is_not_empty
+/** _dir_is_nonempty[_unlocked]
  *
- * check if a directory is non-empty (i.e. we can rmdir it), and make
- * sure it is part of the same subtree (i.e. local) so that rmdir will
- * occur locally.
+ * check if a directory is non-empty (i.e. we can rmdir it).
  *
- * this is a fastpath check.  we can't really be sure until we rdlock
- * the filelock.
- *
- * @param in is the inode being rmdir'd.  return true if it is
- * definitely not empty.
+ * the unlocked varient this is a fastpath check.  we can't really be
+ * sure until we rdlock the filelock.
  */
-bool Server::_dir_is_nonempty(MDRequest *mdr, CInode *in)
+bool Server::_dir_is_nonempty_unlocked(MDRequest *mdr, CInode *in)
 {
-  dout(10) << "dir_is_nonempty " << *in << dendl;
+  dout(10) << "dir_is_nonempty_unlocked " << *in << dendl;
   assert(in->is_auth());
 
-  
   if (in->snaprealm && in->snaprealm->snaps.size())
-    return true; //in a snapshot!
+    return true; // in a snapshot!
 
   list<frag_t> frags;
   in->dirfragtree.get_leaves(frags);
@@ -4010,19 +4000,33 @@ bool Server::_dir_is_nonempty(MDRequest *mdr, CInode *in)
     CDir *dir = in->get_or_open_dirfrag(mdcache, *p);
     assert(dir);
 
-    // does the frag _look_ empty?
-    if (dir->inode->get_projected_inode()->dirstat.size() > 0) {	
-      dout(10) << "dir_is_nonempty projected dir size still "
-	       << dir->inode->get_projected_inode()->dirstat.size()
-	       << " on " << *dir->inode
-	       << dendl;
-      return true;
+    // is the frag obviously non-empty?
+    if (dir->is_auth()) {
+      if (dir->get_projected_fnode()->fragstat.size()) {
+	dout(10) << "dir_is_nonempty_unlocked dirstat has " 
+		 << dir->get_projected_fnode()->fragstat.size() << " items " << *dir << dendl;
+	return true;
+      }
     }
+  }
 
-    // not dir auth?
-    if (!dir->is_auth()) {
-      dout(10) << "dir_is_nonempty non-auth dirfrag for " << *dir << dendl;
-    }
+  return false;
+}
+
+bool Server::_dir_is_nonempty(MDRequest *mdr, CInode *in)
+{
+  dout(10) << "dir_is_nonempty " << *in << dendl;
+  assert(in->is_auth());
+
+  if (in->snaprealm && in->snaprealm->snaps.size())
+    return true; // in a snapshot!
+
+  if (in->get_projected_inode()->dirstat.size() > 0) {	
+    dout(10) << "dir_is_nonempty projected dir size still "
+	     << in->get_projected_inode()->dirstat.size()
+	     << " on " << *in
+	     << dendl;
+    return true;
   }
 
   return false;
@@ -4117,7 +4121,7 @@ void Server::handle_client_rename(MDRequest *mdr)
     }
 
     // non-empty dir?
-    if (oldin->is_dir() && _dir_is_nonempty(mdr, oldin)) {
+    if (oldin->is_dir() && _dir_is_nonempty_unlocked(mdr, oldin)) {
       reply_request(mdr, -ENOTEMPTY);
       return;
     }
@@ -4277,9 +4281,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   
   if (oldin &&
       oldin->is_dir() &&
-      oldin->get_projected_inode()->dirstat.size() != 0) {
-    dout(10) << " target inode dir not empty, dirstat.size() = " << oldin->get_projected_inode()->dirstat.size() 
-	     << " on " << *oldin << dendl;
+      _dir_is_nonempty(mdr, oldin)) {
     reply_request(mdr, -ENOTEMPTY);
     return;
   }
