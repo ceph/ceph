@@ -186,23 +186,24 @@ public:
   //bool hack_accessed;
   //utime_t hack_load_stamp;
 
-  struct projection_node {
+  struct projected_inode_t {
     inode_t *inode;
     map<string,bufferptr> *xattrs;
     sr_t *snapnode;
 
-    projection_node() : inode(NULL), xattrs(NULL), snapnode(NULL) {}
-    projection_node(inode_t *in, sr_t *sn) : inode(in), xattrs(NULL), snapnode(sn) {}
-    projection_node(inode_t *in, map<string, bufferptr> *xp = NULL, sr_t *sn = NULL) :
+    projected_inode_t() : inode(NULL), xattrs(NULL), snapnode(NULL) {}
+    projected_inode_t(inode_t *in, sr_t *sn) : inode(in), xattrs(NULL), snapnode(sn) {}
+    projected_inode_t(inode_t *in, map<string, bufferptr> *xp = NULL, sr_t *sn = NULL) :
       inode(in), xattrs(xp), snapnode(sn) {}
   };
   // projected values (only defined while dirty)
-  list<projection_node*> projected_nodes;
+  list<projected_inode_t*> projected_nodes;
 
   sr_t *projected_snaprealm_ptr;
-  map<string, bufferptr> *projected_xattrs_ptr;
-  map<string, bufferptr> *previous_projected_xattrs_ptr;
   
+  inode_t *project_inode(map<string,bufferptr> *px=0);
+  void pop_and_dirty_projected_inode(LogSegment *ls);
+
   version_t get_projected_version() {
     if (projected_nodes.empty())
       return inode.version;
@@ -219,26 +220,32 @@ public:
     else
       return projected_nodes.back()->inode;
   }
-  map<string,bufferptr> *get_projected_xattrs() {
-    if (projected_xattrs_ptr) return projected_xattrs_ptr;
-    return &xattrs;
-  }
-  map<string,bufferptr> *get_previous_projected_xattrs() {
-    if (previous_projected_xattrs_ptr) return previous_projected_xattrs_ptr;
-    return &xattrs;
-  }
-
-  inode_t *project_inode(map<string,bufferptr> *px=0);
-  void pop_and_dirty_projected_inode(LogSegment *ls);
-
   inode_t *get_previous_projected_inode() {
     assert(!projected_nodes.empty());
-    list<projection_node*>::reverse_iterator p = projected_nodes.rbegin();
+    list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
     p++;
     if (p != projected_nodes.rend())
       return (*p)->inode;
     else
       return &inode;
+  }
+
+  map<string,bufferptr> *get_projected_xattrs() {
+    for (list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
+	 p != projected_nodes.rend();
+	 p++)
+      if ((*p)->xattrs)
+	return (*p)->xattrs;
+    return &xattrs;
+  }
+  map<string,bufferptr> *get_previous_projected_xattrs() {
+    list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
+    for (p++;  // skip the most recent projected value
+	 p != projected_nodes.rend();
+	 p++)
+      if ((*p)->xattrs)
+	return (*p)->xattrs;
+    return &xattrs;
   }
 
   sr_t *project_snaprealm(snapid_t snapid=0);
@@ -358,7 +365,6 @@ private:
     last_journaled(0), //last_open_journaled(0), 
     //hack_accessed(true),
     projected_snaprealm_ptr(NULL),
-    projected_xattrs_ptr(NULL), previous_projected_xattrs_ptr(NULL),
     stickydir_ref(0),
     parent(0),
     inode_auth(CDIR_AUTH_DEFAULT),
