@@ -1976,7 +1976,10 @@ void Migrator::import_finish(CDir *dir)
   // adjust auth, with possible subtree merge.
   cache->adjust_subtree_auth(dir, mds->get_nodeid());
   cache->try_subtree_merge(dir);
-  
+
+  map<CInode*, map<client_t,Capability::Export> > cap_imports;
+  import_caps[dir].swap(cap_imports);
+
   // clear import state (we're done!)
   import_state.erase(dir->dirfrag());
   import_peer.erase(dir->dirfrag());
@@ -1990,9 +1993,15 @@ void Migrator::import_finish(CDir *dir)
 
   // ok now unfreeze (and thus kick waiters)
   dir->unfreeze_tree();
-
   cache->show_subtrees();
   //audit();  // this fails, bc we munge up the subtree map during handle_import_map (resolve phase)
+
+  // re-eval imported caps
+  for (map<CInode*, map<client_t,Capability::Export> >::iterator p = cap_imports.begin();
+       p != cap_imports.end();
+       p++)
+    if (p->first->is_auth())
+      mds->locker->eval(p->first, CEPH_CAP_LOCKS);
 
   // send pending import_maps?
   mds->mdcache->maybe_send_pending_resolves();
