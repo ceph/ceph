@@ -2643,16 +2643,18 @@ void Locker::handle_lock(MLock *m)
 
 void Locker::handle_reqrdlock(SimpleLock *lock)
 {
-  if (lock->get_parent()->is_auth() &&
+  MDSCacheObject *parent = lock->get_parent();
+  if (parent->is_auth() &&
       lock->is_stable() &&
-      lock->get_state() != LOCK_SYNC) {
+      lock->get_state() != LOCK_SYNC &&
+      !parent->is_frozen()) {
     dout(7) << "handle_reqrdlock got rdlock request on " << *lock
-	    << " on " << *lock->get_parent() << dendl;
-    assert(lock->get_parent()->is_auth()); // replica auth pinned if they're doing this!
+	    << " on " << *parent << dendl;
+    assert(parent->is_auth()); // replica auth pinned if they're doing this!
     simple_sync(lock);
   } else {
     dout(7) << "handle_reqrdlock ignoring rdlock request on " << *lock
-	    << " on " << *lock->get_parent() << dendl;
+	    << " on " << *parent << dendl;
     // replica will retry.
   }
 }
