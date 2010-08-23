@@ -7323,6 +7323,19 @@ void MDCache::discover_dir_frag(CInode *base,
   discover_dir[from][base->ino()]++;
 }
 
+struct C_MDC_RetryDiscoverPath : public Context {
+  MDCache *mdc;
+  CInode *base;
+  snapid_t snapid;
+  filepath path;
+  int from;
+  C_MDC_RetryDiscoverPath(MDCache *c, CInode *b, snapid_t s, filepath &p, int f) :
+    mdc(c), base(b), snapid(s), path(p), from(f)  {}
+  void finish(int r) {
+    mdc->discover_path(base, snapid, path, 0, from);
+  }
+};
+
 void MDCache::discover_path(CInode *base,
 			    snapid_t snap,
 			    filepath want_path,
@@ -7338,6 +7351,8 @@ void MDCache::discover_path(CInode *base,
 
   if (base->is_ambiguous_auth()) {
     dout(10) << " waiting for single auth on " << *base << dendl;
+    if (!onfinish)
+      onfinish = new C_MDC_RetryDiscoverPath(this, base, snap, want_path, from);
     base->add_waiter(CInode::WAIT_SINGLEAUTH, onfinish);
     return;
   } 
@@ -7356,6 +7371,18 @@ void MDCache::discover_path(CInode *base,
   discover_dir[from][base->ino()]++;
 }
 
+struct C_MDC_RetryDiscoverPath2 : public Context {
+  MDCache *mdc;
+  CDir *base;
+  snapid_t snapid;
+  filepath path;
+  C_MDC_RetryDiscoverPath2(MDCache *c, CDir *b, snapid_t s, filepath &p) :
+    mdc(c), base(b), snapid(s), path(p) {}
+  void finish(int r) {
+    mdc->discover_path(base, snapid, path, 0);
+  }
+};
+
 void MDCache::discover_path(CDir *base,
 			    snapid_t snap,
 			    filepath want_path,
@@ -7370,6 +7397,8 @@ void MDCache::discover_path(CDir *base,
 
   if (base->is_ambiguous_auth()) {
     dout(7) << " waiting for single auth on " << *base << dendl;
+    if (!onfinish)
+      onfinish = new C_MDC_RetryDiscoverPath2(this, base, snap, want_path);
     base->add_waiter(CDir::WAIT_SINGLEAUTH, onfinish);
     return;
   }
@@ -7388,6 +7417,17 @@ void MDCache::discover_path(CDir *base,
   discover_dir_sub[from][base->dirfrag()]++;
 }
 
+struct C_MDC_RetryDiscoverIno : public Context {
+  MDCache *mdc;
+  CDir *base;
+  inodeno_t want_ino;
+  C_MDC_RetryDiscoverIno(MDCache *c, CDir *b, inodeno_t i) :
+    mdc(c), base(b), want_ino(i) {}
+  void finish(int r) {
+    mdc->discover_ino(base, want_ino, 0);
+  }
+};
+
 void MDCache::discover_ino(CDir *base,
 			   inodeno_t want_ino,
 			   Context *onfinish,
@@ -7401,6 +7441,8 @@ void MDCache::discover_ino(CDir *base,
   
   if (base->is_ambiguous_auth()) {
     dout(10) << " waiting for single auth on " << *base << dendl;
+    if (!onfinish)
+      onfinish = new C_MDC_RetryDiscoverIno(this, base, want_ino);
     base->add_waiter(CDir::WAIT_SINGLEAUTH, onfinish);
     return;
   } 
