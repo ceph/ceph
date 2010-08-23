@@ -819,23 +819,23 @@ int RadosClient::write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist
   static SnapContext snapc;
   static int i;
 
-  snapc.srnode.snaps.clear();
+  snapc.snaps.clear();
 
 #define START_SNAP 1
 
-  if (snapc.srnode.seq == 0)
-    snapc.srnode.seq = START_SNAP - 1;
+  if (snapc.seq == 0)
+    snapc.seq = START_SNAP - 1;
 
-  ++snapc.srnode.seq;
-  for (i=0; i<snapc.srnode.seq-START_SNAP + 1; i++) {
-     snapc.srnode.snaps.push_back(snapc.srnode.seq - i);
+  ++snapc.seq;
+  for (i=0; i<snapc.seq-START_SNAP + 1; i++) {
+     snapc.snaps.push_back(snapc.seq - i);
   }
   i = 0;
-  for (vector<snapid_t>::iterator iter = snapc.srnode.snaps.begin();
-       iter != snapc.srnode.snaps.end(); ++iter, ++i) {
+  for (vector<snapid_t>::iterator iter = snapc.snaps.begin();
+       iter != snapc.snaps.end(); ++iter, ++i) {
     dout(0) << "snapc[" << i << "] = " << *iter << dendl;
   }
-  dout(0) << "seq=" << snapc.srnode.seq << dendl;
+  dout(0) << "seq=" << snapc.seq << dendl;
   dout(0) << "snapc=" << snapc << dendl;
 #endif
   utime_t ut = g_clock.now();
