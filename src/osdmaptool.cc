@@ -111,8 +111,15 @@ int main(int argc, const char **argv)
   int r = 0;
   if (!(createsimple && clobber)) {
     r = bl.read_file(fn);
-    if (r >= 0)
-      osdmap.decode(bl);
+    if (r >= 0) {
+      try {
+	osdmap.decode(bl);
+      }
+      catch (buffer::error *e) {
+	cerr << me << ": error decoding osdmap '" << fn << "'" << std::endl;
+	return -1;
+      }
+    }
   }
   char buf[80];
   if (!createsimple && r < 0) {

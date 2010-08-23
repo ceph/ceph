@@ -1523,9 +1523,9 @@ do { \
   utime_t now = g_clock.now();
   if (start == utime_t()) 
     start = now;
-  double el = now - start;
+  /*double el = now - start;
   if (el > 30.0 &&
-	   el < 60.0)
+    el < 60.0)*/
   for (int i=0; i<g_conf.mds_thrash_exports; i++) {
     set<int> s;
     if (!is_active()) break;

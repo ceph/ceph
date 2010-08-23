@@ -176,6 +176,7 @@ public:
 
   // unlink
   void handle_client_unlink(MDRequest *mdr);
+  bool _dir_is_nonempty_unlocked(MDRequest *mdr, CInode *rmdiri);
   bool _dir_is_nonempty(MDRequest *mdr, CInode *rmdiri);
   void _unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn);
   void _unlink_local_finish(MDRequest *mdr, 

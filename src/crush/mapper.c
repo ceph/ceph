@@ -517,7 +517,10 @@ int crush_do_rule(struct crush_map *map,
 		case CRUSH_RULE_TAKE:
 			w[0] = rule->steps[step].arg1;
 			if (force_pos >= 0) {
-				BUG_ON(force_context[force_pos] != w[0]);
+				if (force_context[force_pos] != w[0]) {
+					rc = -1;  /* forced mapping dne */
+					goto out;
+				}
 				force_pos--;
 			}
 			wsize = 1;
