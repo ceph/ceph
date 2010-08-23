@@ -465,6 +465,11 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
     goto ignore;
   }
 
+  if (m->get_orig_source_inst().addr.is_blank_addr()) {
+    dout(0) << "preprocess_boot got blank addr for " << m->get_orig_source_inst() << dendl;
+    goto ignore;
+  }
+
   assert(m->get_orig_source_inst().name.is_osd());
   
   // already booted?
