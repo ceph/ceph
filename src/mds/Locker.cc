@@ -2693,7 +2693,8 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
 	lock->get_num_client_lease()) {
       dout(7) << "handle_simple_lock has reader|leases, waiting before ack on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
-      revoke_client_leases(lock);
+      if (lock->get_num_client_lease())
+	revoke_client_leases(lock);
       lock->set_state(LOCK_SYNC_LOCK);
     } else {
       // update lock and reply
