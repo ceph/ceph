@@ -2641,6 +2641,22 @@ void Locker::handle_lock(MLock *m)
 // ==========================================================================
 // simple lock
 
+void Locker::handle_reqrdlock(SimpleLock *lock)
+{
+  if (lock->get_parent()->is_auth() &&
+      lock->is_stable() &&
+      lock->get_state() != LOCK_SYNC) {
+    dout(7) << "handle_reqrdlock got rdlock request on " << *lock
+	    << " on " << *lock->get_parent() << dendl;
+    assert(lock->get_parent()->is_auth()); // replica auth pinned if they're doing this!
+    simple_sync(lock);
+  } else {
+    dout(7) << "handle_reqrdlock ignoring rdlock request on " << *lock
+	    << " on " << *lock->get_parent() << dendl;
+    // replica will retry.
+  }
+}
+
 void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
 {
   int from = m->get_asker();
@@ -2700,6 +2716,10 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
 	      << ", last one" << dendl;
       eval_gather(lock);
     }
+    break;
+
+  case LOCK_AC_REQRDLOCK:
+    handle_reqrdlock(lock);
     break;
 
   }
@@ -3835,18 +3855,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     break;
 
   case LOCK_AC_REQRDLOCK:
-    if (lock->get_parent()->is_auth() &&
-	lock->is_stable() &&
-	lock->get_state() != LOCK_SYNC) {
-      dout(7) << "handle_file_lock got rdlock request on " << *lock
-	      << " on " << *lock->get_parent() << dendl;
-      assert(in->is_auth()); // replica auth pinned if they're doing this!
-      simple_sync(lock);
-    } else {
-      dout(7) << "handle_file_lock ignoring rdlock request on " << *lock
-	      << " on " << *lock->get_parent() << dendl;
-      // replica will retry.
-    }
+    handle_reqrdlock(lock);
     break;
 
   case LOCK_AC_NUDGE:

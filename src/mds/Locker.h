@@ -168,6 +168,9 @@ public:
   void mark_updated_scatterlock(ScatterLock *lock);
 
 
+  void handle_reqrdlock(SimpleLock *lock);
+
+
   // caps
   void process_cap_update(MDRequest *mdr, client_t client,
 			  inodeno_t ino, uint64_t cap_id, int caps, int wanted,
