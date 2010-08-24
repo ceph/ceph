@@ -23,3 +23,7 @@ echo 3 > file3
 mkdir .snap/snap1
 echo 4 > file4
 rmdir .snap/snap1
+
+rm file?
+
+echo OK

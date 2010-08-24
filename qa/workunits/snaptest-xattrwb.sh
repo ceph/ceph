@@ -26,3 +26,4 @@ getfattr -n user.foo a/.snap/s/b | grep user.foo  # should be there, too!
 rmdir a/.snap/s
 rm -r a
 
+echo OK

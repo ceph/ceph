@@ -29,3 +29,5 @@ cat foo/b
 rmdir foo/.snap/s
 
 rm -r foo
+
+echo OK

@@ -55,3 +55,5 @@ find ./ -type d -print | \
 
 echo "Delete all the files and directories ..."
 rm -Rfv ./*
+
+echo OK

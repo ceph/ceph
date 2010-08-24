@@ -12,3 +12,6 @@ mkdir .snap/bar
 rm bar
 grep asdf .snap/bar/bar
 rmdir .snap/bar
+rm foo
+
+echo OK
