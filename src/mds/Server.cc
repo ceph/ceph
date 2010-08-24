@@ -4067,7 +4067,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
 
     // project snaprealm, too
     bufferlist snapbl;
-    in->project_past_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
+    in->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
 
     le->metablob.add_primary_dentry(straydn, true, in, 0, &snapbl);
   } else {
@@ -4796,7 +4796,7 @@ void Server::_rename_prepare(MDRequest *mdr,
     if (destdnl->is_primary()) {
       // project snaprealm, too
       bufferlist snapbl;
-      destdnl->get_inode()->project_past_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
+      destdnl->get_inode()->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
       straydn->first = destdnl->get_inode()->first;  // XXX hmm, is this right?
       tji = metablob->add_primary_dentry(straydn, true, destdnl->get_inode(), 0, &snapbl);
     } else if (destdnl->is_remote()) {
@@ -4827,7 +4827,7 @@ void Server::_rename_prepare(MDRequest *mdr,
     // project snap parent update?
     bufferlist snapbl;
     if (destdn->is_auth() && srcdnl->get_inode()->snaprealm)
-      srcdnl->get_inode()->project_past_parent(destdn->get_dir()->inode->find_snaprealm(), snapbl);
+      srcdnl->get_inode()->project_past_snaprealm_parent(destdn->get_dir()->inode->find_snaprealm(), snapbl);
     
     if (!destdnl->is_null())
       mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);

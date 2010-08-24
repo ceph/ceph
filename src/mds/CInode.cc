@@ -264,7 +264,7 @@ sr_t *CInode::project_snaprealm(snapid_t snapid)
 
 /* if newparent != parent, add parent to past_parents
  if parent DNE, we need to find what the parent actually is and fill that in */
-void CInode::project_past_parent(SnapRealm *newparent, bufferlist& snapbl)
+void CInode::project_past_snaprealm_parent(SnapRealm *newparent, bufferlist& snapbl)
 {
   sr_t *new_snap = project_snaprealm();
   SnapRealm *oldparent;

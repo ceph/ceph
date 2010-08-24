@@ -273,7 +273,7 @@ public:
     }
     return &snaprealm->srnode;
   }
-  void project_past_parent(SnapRealm *newparent, bufferlist& snapbl);
+  void project_past_snaprealm_parent(SnapRealm *newparent, bufferlist& snapbl);
 
 private:
   void pop_projected_snaprealm(sr_t *next_snaprealm);
