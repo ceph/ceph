@@ -166,7 +166,6 @@ public:
   SnapRealm        *snaprealm;
 
   SnapRealm        *containing_realm;
-  list<sr_t*>       projected_srnode;
   snapid_t          first, last;
   map<snapid_t, old_inode_t> old_inodes;  // key = last, value.first = first
   set<snapid_t> dirty_old_rstats;
