@@ -34,4 +34,4 @@ dir1=`find 1/ | wc -w`
 dir2=`find 2/.snap/barsnap2/a/b/c | wc -w`
 #diff $dir1 $dir2 && echo "Success!"
 test $dir1==$dir2 && echo "Sucess!"
-echo "Done!"
+echo "OK"
