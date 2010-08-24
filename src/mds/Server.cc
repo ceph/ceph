@@ -5744,13 +5744,14 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
 {
   dout(10) << "_mksnap_finish " << *mdr << " " << info << dendl;
 
+  int op = (diri->snaprealm? CEPH_SNAP_OP_CREATE : CEPH_SNAP_OP_SPLIT);
+
   diri->pop_and_dirty_projected_inode(mdr->ls);
   mdr->apply();
 
   mds->snapclient->commit(mdr->more()->stid, mdr->ls);
 
   // create snap
-  int op = (diri->snaprealm? CEPH_SNAP_OP_CREATE : CEPH_SNAP_OP_SPLIT);
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
   mdcache->do_realm_invalidate_and_update_notify(diri, op);
