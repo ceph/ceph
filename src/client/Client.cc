@@ -1751,8 +1751,10 @@ void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int
   
   m->head.nlink = in->nlink;
   
-  ::encode(in->xattrs, m->xattrbl);
-  m->head.xattr_version = in->xattr_version;
+  if (flush & CEPH_CAP_XATTR_EXCL) {
+    ::encode(in->xattrs, m->xattrbl);
+    m->head.xattr_version = in->xattr_version;
+  }
   
   m->head.layout = in->layout;
   m->head.size = in->size;
