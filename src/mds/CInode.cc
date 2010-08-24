@@ -1561,15 +1561,20 @@ snapid_t CInode::get_oldest_snap()
   return MIN(t, first);
 }
 
-old_inode_t& CInode::cow_old_inode(snapid_t follows, inode_t *pi)
+old_inode_t& CInode::cow_old_inode(snapid_t follows, bool cow_head)
 {
   assert(follows >= first);
+
+  inode_t *pi = cow_head ? get_projected_inode() : get_previous_projected_inode();
+  map<string,bufferptr> *px = cow_head ? get_projected_xattrs() : get_previous_projected_xattrs();
 
   old_inode_t &old = old_inodes[follows];
   old.first = first;
   old.inode = *pi;
-  old.xattrs = *get_previous_projected_xattrs();
+  old.xattrs = *px;
   
+  dout(10) << " " << px->size() << " xattrs cowed, " << *px << dendl;
+
   old.inode.trim_client_ranges(follows);
 
   if (!(old.inode.rstat == old.inode.accounted_rstat))
@@ -1577,7 +1582,8 @@ old_inode_t& CInode::cow_old_inode(snapid_t follows, inode_t *pi)
   
   first = follows+1;
 
-  dout(10) << "cow_old_inode to [" << old.first << "," << follows << "] on "
+  dout(10) << "cow_old_inode " << (cow_head ? "head" : "previous_head" )
+	   << " to [" << old.first << "," << follows << "] on "
 	   << *this << dendl;
 
   return old;
@@ -1587,7 +1593,7 @@ void CInode::pre_cow_old_inode()
 {
   snapid_t follows = find_snaprealm()->get_newest_seq();
   if (first <= follows)
-    cow_old_inode(follows, get_projected_inode());
+    cow_old_inode(follows, true);
 }
 
 void CInode::purge_stale_snap_data(const set<snapid_t>& snaps)
@@ -1798,12 +1804,13 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   // xattr
   i = pxattr ? pi:oi;
   bool had_latest_xattrs = cap && (cap->issued() & CEPH_CAP_XATTR_SHARED) &&
-    cap->client_xattr_version == i->xattr_version;
+    cap->client_xattr_version == i->xattr_version &&
+    snapid == CEPH_NOSNAP;
 
   // xattr
   bufferlist xbl;
   e.xattr_version = i->xattr_version;
-  if (!had_latest_xattrs && cap) {
+  if (!had_latest_xattrs) {
     if (!pxattrs)
       pxattrs = pxattr ? get_projected_xattrs() : &xattrs;
     ::encode(*pxattrs, xbl);
@@ -1893,16 +1900,18 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   }
   e.cap.flags = is_auth() ? CEPH_CAP_FLAG_AUTH:0;
   dout(10) << "encode_inodestat caps " << ccap_string(e.cap.caps)
-	   << " seq " << e.cap.seq
-	   << " mseq " << e.cap.mseq << dendl;
+	   << " seq " << e.cap.seq << " mseq " << e.cap.mseq
+	   << " xattrv " << e.xattr_version << " len " << xbl.length()
+	   << dendl;
 
   // include those xattrs?
-  if (xbl.length()) {
-    if (cap && (cap->pending() & CEPH_CAP_XATTR_SHARED)) {
+  if (xbl.length() && cap) {
+    if (cap->pending() & CEPH_CAP_XATTR_SHARED) {
       dout(10) << "including xattrs version " << i->xattr_version << dendl;
       cap->client_xattr_version = i->xattr_version;
     } else {
-      xbl.clear(); // no xattrs
+      dout(10) << "dropping xattrs version " << i->xattr_version << dendl;
+      xbl.clear(); // no xattrs .. XXX what's this about?!?
     }
   }
 

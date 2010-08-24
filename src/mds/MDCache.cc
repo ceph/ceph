@@ -1344,7 +1344,7 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
       return;
     }
 
-    in->cow_old_inode(follows, in->get_previous_projected_inode());
+    in->cow_old_inode(follows, false);
 
   } else {
     if (follows == CEPH_NOSNAP)
@@ -1537,8 +1537,6 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
 
   accounted_rstat = rstat;
 
-  inode_t *pi_to_cow = cow_head ? pin->get_projected_inode() : pin->get_previous_projected_inode();
-
   while (last >= ofirst) {
     inode_t *pi;
     snapid_t first;
@@ -1546,13 +1544,13 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
       pi = pin->get_projected_inode();
       first = MAX(ofirst, pin->first);
       if (first > pin->first) {
-	old_inode_t& old = pin->cow_old_inode(first-1, pi_to_cow);
+	old_inode_t& old = pin->cow_old_inode(first-1, cow_head);
 	dout(20) << "   cloned old_inode rstat is " << old.inode.rstat << dendl;
       }
     } else {
       if (last >= pin->first) {
 	first = pin->first;
-	pin->cow_old_inode(last, pi_to_cow);
+	pin->cow_old_inode(last, cow_head);
       } else {
 	// our life is easier here because old_inodes is not sparse
 	// (although it may not begin at snapid 1)

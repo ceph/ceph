@@ -279,7 +279,7 @@ private:
   void pop_projected_snaprealm(sr_t *next_snaprealm);
 
 public:
-  old_inode_t& cow_old_inode(snapid_t follows, inode_t *pi);
+  old_inode_t& cow_old_inode(snapid_t follows, bool cow_head);
   old_inode_t *pick_old_inode(snapid_t last);
   void pre_cow_old_inode();
   void purge_stale_snap_data(const set<snapid_t>& snaps);
