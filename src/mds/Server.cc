@@ -5651,6 +5651,11 @@ void Server::handle_client_mksnap(MDRequest *mdr)
     reply_request(mdr, -ENOTDIR);
     return;
   }
+  if (diri->is_system() && !diri->is_root()) {
+    // no snaps in system dirs (root is ok)
+    reply_request(mdr, -EPERM);
+    return;
+  }
 
   const string &snapname = req->get_filepath().last_dentry();
   dout(10) << "mksnap " << snapname << " on " << *diri << dendl;
