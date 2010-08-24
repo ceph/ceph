@@ -30,7 +30,7 @@ struct sm_t {
 #define ANY  1 // auth or replica
 #define AUTH 2 // auth only
 #define XCL  3 // auth or exclusive client
-#define FW   4 // fw to auth, if replica
+//#define FW   4 // fw to auth, if replica
 #define REQ  5 // req state change from auth, if replica
 
 extern struct sm_t sm_simplelock;

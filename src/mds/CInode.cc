@@ -144,6 +144,10 @@ ostream& operator<<(ostream& out, CInode& in)
   if (!(in.inode.rstat == in.inode.accounted_rstat))
     out << "/" << in.inode.accounted_rstat;
 
+  if (!in.client_need_snapflush.empty())
+    out << " needsnapflush=" << in.client_need_snapflush;
+
+
   // locks
   out << " " << in.authlock;
   out << " " << in.linklock;

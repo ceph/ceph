@@ -436,7 +436,10 @@ int SimpleMessenger::send_message(Message *m, Connection *con)
   if (pipe) {
     submit_message(m, pipe);
     pipe->put();
-  } // else we raced with reaper()
+  } else {
+    // else we raced with reaper()
+    m->put();
+  }
   return 0;
 }
 
@@ -2336,11 +2339,6 @@ bool SimpleMessenger::register_entity(entity_name_t name)
 
 void SimpleMessenger::submit_message(Message *m, Pipe *pipe)
 { 
-  if (!pipe) {
-    m->put();
-    return;
-  }
-
   lock.Lock();
   if (pipe == dispatch_queue.local_pipe) {
     dout(20) << "submit_message " << *m << " local" << dendl;

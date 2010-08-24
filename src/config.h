@@ -149,7 +149,8 @@ struct md_config_t {
   int mon_osd_down_out_interval;
   float mon_lease;
   float mon_lease_renew_interval;
-  float mon_lease_wiggle_room;
+  float mon_clock_drift_allowed;
+  float mon_clock_drift_warn_backoff;
   float mon_lease_ack_timeout;
   float mon_lease_timeout;
   float mon_accept_timeout;
@@ -370,6 +371,7 @@ struct md_config_t {
   bool filestore_btrfs_trans;
   bool filestore_btrfs_snap;
   bool filestore_btrfs_clone_range;
+  bool filestore_fsync_flushes_journal_data;
   bool filestore_flusher;
   int filestore_flusher_max_fds;
   bool filestore_sync_flush;

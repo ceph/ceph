@@ -81,9 +81,11 @@ void close_section(struct req_state *s, const char *name)
   CGI_PRINTF(s->fcgx->out, "</%s>", name);
 }
 
-static void dump_content_length(struct req_state *s, int len)
+static void dump_content_length(struct req_state *s, size_t len)
 {
-  CGI_PRINTF(s->fcgx->out, "Content-Length: %d\n", len);
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%lu", len);
+  CGI_PRINTF(s->fcgx->out, "Content-Length: %s\n", buf);
   CGI_PRINTF(s->fcgx->out, "Accept-Ranges: %s\n", "bytes");
 }
 

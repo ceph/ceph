@@ -473,7 +473,6 @@ public:
   // -- client caps --
   uint64_t              last_cap_id;
   
-  void remove_client_cap(CInode *in, client_t client);
 
 
   // -- discover --
@@ -847,19 +846,19 @@ public:
   bool did_shutdown_log_cap;
 
   // inode_map
+  bool have_inode(vinodeno_t vino) {
+    return inode_map.count(vino) ? true:false;
+  }
   bool have_inode(inodeno_t ino, snapid_t snap=CEPH_NOSNAP) {
     return have_inode(vinodeno_t(ino, snap));
   }
-  bool have_inode(vinodeno_t vino) { return inode_map.count(vino) ? true:false; }
-
   CInode* get_inode(vinodeno_t vino) {
-    return get_inode(vino.ino, vino.snapid);
-  }
-  CInode* get_inode(inodeno_t ino, snapid_t s=CEPH_NOSNAP) {
-    vinodeno_t vino(ino, s);
     if (have_inode(vino))
       return inode_map[vino];
     return NULL;
+  }
+  CInode* get_inode(inodeno_t ino, snapid_t s=CEPH_NOSNAP) {
+    return get_inode(vinodeno_t(ino, s));
   }
 
   CDir* get_dirfrag(dirfrag_t df) {

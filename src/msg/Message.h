@@ -158,7 +158,6 @@ struct RefCountedObject {
 };
 
 struct Connection : public RefCountedObject {
-  atomic_t nref;
   Mutex lock;
   RefCountedObject *priv;
   int peer_type;
@@ -167,7 +166,7 @@ struct Connection : public RefCountedObject {
   RefCountedObject *pipe;
 
 public:
-  Connection() : nref(1), lock("Connection::lock"), priv(NULL), peer_type(-1), features(0), pipe(NULL) {}
+  Connection() : lock("Connection::lock"), priv(NULL), peer_type(-1), features(0), pipe(NULL) {}
   ~Connection() {
     //generic_dout(0) << "~Connection " << this << dendl;
     if (priv) {
@@ -179,12 +178,7 @@ public:
   }
 
   Connection *get() {
-    nref.inc();
-    return this;
-  }
-  void put() {
-    if (nref.dec() == 0)
-      delete this;
+    return (Connection *)RefCountedObject::get();
   }
 
   void set_priv(RefCountedObject *o) {
@@ -235,7 +229,7 @@ public:
 
 // abstract Message class
 
-class Message {
+class Message : public RefCountedObject {
 protected:
   ceph_msg_header  header;      // headerelope
   ceph_msg_footer  footer;
@@ -260,14 +254,12 @@ protected:
   friend class Messenger;
 
 public:
-  atomic_t nref;
-
-  Message() : connection(NULL), dispatch_throttle_size(0), nref(1) {
+  Message() : connection(NULL), dispatch_throttle_size(0) {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
     throttler = NULL;
   };
-  Message(int t) : connection(NULL), dispatch_throttle_size(0), nref(1) {
+  Message(int t) : connection(NULL), dispatch_throttle_size(0) {
     memset(&header, 0, sizeof(header));
     header.type = t;
     header.version = 1;
@@ -276,6 +268,11 @@ public:
     memset(&footer, 0, sizeof(footer));
     throttler = NULL;
   }
+
+  Message *get() {
+    return (Message *)RefCountedObject::get();
+  }
+
 protected:
   virtual ~Message() { 
     assert(nref.read() == 0);
@@ -285,21 +282,6 @@ protected:
       throttler->put(payload.length() + middle.length() + data.length());
   }
 public:
-  Message *get() {
-    //int r = 
-    nref.inc();
-    //*_dout << dbeginl << "message(" << this << ").get " << (r-1) << " -> " << r << std::endl;
-    //_dout_end_line();
-    return this;
-  }
-  void put() {
-    int r = nref.dec();
-    //*_dout << dbeginl << "message(" << this << ").put " << (r+1) << " -> " << r << std::endl;
-    //_dout_end_line();
-    if (r == 0)
-      delete this;
-  }
-
   Connection *get_connection() { return connection; }
   void set_connection(Connection *c) {
     if (connection)

@@ -102,13 +102,12 @@ private:
   Elector elector;
   friend class Elector;
   
-  epoch_t  mon_epoch;    // monitor epoch (election instance)
   int leader;            // current leader (to best of knowledge)
   set<int> quorum;       // current active set of monitors (if !starting)
   utime_t last_called_election;  // [starting] last time i called an election
   
 public:
-  epoch_t get_epoch() { return mon_epoch; }
+  epoch_t get_epoch();
   int get_leader() { return leader; }
   const set<int>& get_quorum() { return quorum; }
   bool is_full_quorum() {
@@ -116,6 +115,7 @@ public:
   }
 
   void call_election(bool is_new=true);  // initiate election
+  void starting_election();                              // start election (called by Elector)
   void win_election(epoch_t epoch, set<int>& q);         // end election (called by Elector)
   void win_standalone_election();
   void lose_election(epoch_t epoch, set<int>& q, int l); // end election (called by Elector)

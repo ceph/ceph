@@ -24,6 +24,12 @@ cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
 cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += cmds
 
+# tcmalloc?
+if WITH_TCMALLOC
+cosd_LDADD += -ltcmalloc
+cmds_LDADD += -ltcmalloc
+endif # WITH_TCMALLOC
+
 # admin tools
 ceph_SOURCES = ceph.cc msg/SimpleMessenger.cc
 ceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm -lcrypto
@@ -567,6 +573,7 @@ noinst_HEADERS = \
         include/dlist.h\
         include/elist.h\
         include/xlist.h\
+	logrotate.conf\
 	mds/locks.c\
 	mds/locks.h\
         mds/Anchor.h\

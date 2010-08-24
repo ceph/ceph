@@ -25,26 +25,25 @@
 class utime_t {
 public:
   struct {
-    __u32 tv_sec, tv_usec;
+    __u32 tv_sec, tv_nsec;
   } tv;
 
   friend class Clock;
  
  public:
   bool is_zero() {
-    return (tv.tv_sec == 0) && (tv.tv_usec == 0);
+    return (tv.tv_sec == 0) && (tv.tv_nsec == 0);
   }
   void normalize() {
-    if (tv.tv_usec > 1000*1000) {
-      tv.tv_sec += tv.tv_usec / (1000*1000);
-      tv.tv_usec %= 1000*1000;
+    if (tv.tv_nsec > 1000000000ul) {
+      tv.tv_sec += tv.tv_nsec / (1000000000ul);
+      tv.tv_nsec %= 1000000000ul;
     }
   }
 
   // cons
-  utime_t() { tv.tv_sec = 0; tv.tv_usec = 0; normalize(); }
-  //utime_t(time_t s) { tv.tv_sec = s; tv.tv_usec = 0; }
-  utime_t(time_t s, int u) { tv.tv_sec = s; tv.tv_usec = u; normalize(); }
+  utime_t() { tv.tv_sec = 0; tv.tv_nsec = 0; }
+  utime_t(time_t s, int n) { tv.tv_sec = s; tv.tv_nsec = n; normalize(); }
   utime_t(const struct ceph_timespec &v) {
     decode_timeval(&v);
   }
@@ -57,48 +56,48 @@ public:
 
   void set_from_double(double d) { 
     tv.tv_sec = (__u32)trunc(d);
-    tv.tv_usec = (__u32)((d - (double)tv.tv_sec) * (double)1000000.0);
+    tv.tv_nsec = (__u32)((d - (double)tv.tv_sec) * (double)1000000000.0);
   }
 
   // accessors
   time_t        sec()  const { return tv.tv_sec; } 
-  long          usec() const { return tv.tv_usec; }
-  int           nsec() const { return tv.tv_usec*1000; }
+  long          usec() const { return tv.tv_nsec/1000; }
+  int           nsec() const { return tv.tv_nsec; }
 
   // ref accessors/modifiers
   __u32&         sec_ref()  { return tv.tv_sec; }
-  __u32&         usec_ref() { return tv.tv_usec; }
+  __u32&         nsec_ref() { return tv.tv_nsec; }
 
   void copy_to_timeval(struct timeval *v) const {
     v->tv_sec = tv.tv_sec;
-    v->tv_usec = tv.tv_usec;
+    v->tv_usec = tv.tv_nsec/1000;
   }
   void set_from_timeval(const struct timeval *v) {
     tv.tv_sec = v->tv_sec;
-    tv.tv_usec = v->tv_usec;
+    tv.tv_nsec = v->tv_usec*1000;
   }
 
   void encode(bufferlist &bl) const {
     ::encode(tv.tv_sec, bl);
-    ::encode(tv.tv_usec, bl);
+    ::encode(tv.tv_nsec, bl);
   }
   void decode(bufferlist::iterator &p) {
     ::decode(tv.tv_sec, p);
-    ::decode(tv.tv_usec, p);
+    ::decode(tv.tv_nsec, p);
   }
 
   void encode_timeval(struct ceph_timespec *t) const {
     t->tv_sec = tv.tv_sec;
-    t->tv_nsec = tv.tv_usec*1000;
+    t->tv_nsec = tv.tv_nsec;
   }
   void decode_timeval(const struct ceph_timespec *t) {
     tv.tv_sec = t->tv_sec;
-    tv.tv_usec = t->tv_nsec / 1000;
+    tv.tv_nsec = t->tv_nsec;
   }
 
   // cast to double
   operator double() {
-    return (double)sec() + ((double)usec() / 1000000.0L);
+    return (double)sec() + ((double)nsec() / 100000000.0L);
   }
   operator ceph_timespec() {
     ceph_timespec ts;
@@ -112,45 +111,45 @@ WRITE_CLASS_ENCODER(utime_t)
 
 // arithmetic operators
 inline utime_t operator+(const utime_t& l, const utime_t& r) {
-  return utime_t( l.sec() + r.sec() + (l.usec()+r.usec())/1000000L,
-                  (l.usec()+r.usec())%1000000L );
+  return utime_t( l.sec() + r.sec() + (l.nsec()+r.nsec())/1000000000L,
+                  (l.nsec()+r.nsec())%1000000000L );
 }
 inline utime_t& operator+=(utime_t& l, const utime_t& r) {
-  l.sec_ref() += r.sec() + (l.usec()+r.usec())/1000000L;
-  l.usec_ref() += r.usec();
-  l.usec_ref() %= 1000000L;
+  l.sec_ref() += r.sec() + (l.nsec()+r.nsec())/1000000000L;
+  l.nsec_ref() += r.nsec();
+  l.nsec_ref() %= 1000000000L;
   return l;
 }
 inline utime_t& operator+=(utime_t& l, double f) {
   double fs = trunc(f);
-  double us = (f - fs) * (double)1000000.0;
+  double ns = (f - fs) * (double)1000000000.0;
   l.sec_ref() += (long)fs;
-  l.usec_ref() += (long)us;
+  l.nsec_ref() += (long)ns;
   l.normalize();
   return l;
 }
 
 inline utime_t operator-(const utime_t& l, const utime_t& r) {
-  return utime_t( l.sec() - r.sec() - (l.usec()<r.usec() ? 1:0),
-                  l.usec() - r.usec() + (l.usec()<r.usec() ? 1000000:0) );
+  return utime_t( l.sec() - r.sec() - (l.nsec()<r.nsec() ? 1:0),
+                  l.nsec() - r.nsec() + (l.nsec()<r.nsec() ? 1000000000:0) );
 }
 inline utime_t& operator-=(utime_t& l, const utime_t& r) {
   l.sec_ref() -= r.sec();
-  if (l.usec() >= r.usec())
-    l.usec_ref() -= r.usec();
+  if (l.nsec() >= r.nsec())
+    l.nsec_ref() -= r.nsec();
   else {
-    l.usec_ref() += 1000000L - r.usec();
+    l.nsec_ref() += 1000000000L - r.nsec();
     l.sec_ref()--;
   }
   return l;
 }
 inline utime_t& operator-=(utime_t& l, double f) {
   double fs = trunc(f);
-  double us = (f - fs) * (double)1000000.0;
+  double ns = (f - fs) * (double)1000000000.0;
   l.sec_ref() -= (long)fs;
-  if (us) {
+  if (ns) {
     l.sec_ref()--;
-    l.usec_ref() = 1000000 + l.usec_ref() - (long)us;
+    l.nsec_ref() = 1000000000L + l.nsec_ref() - (long)ns;
   }
   l.normalize();
   return l;
@@ -160,20 +159,20 @@ inline utime_t& operator-=(utime_t& l, double f) {
 // comparators
 inline bool operator>(const utime_t& a, const utime_t& b)
 {
-  return (a.sec() > b.sec()) || (a.sec() == b.sec() && a.usec() > b.usec());
+  return (a.sec() > b.sec()) || (a.sec() == b.sec() && a.nsec() > b.nsec());
 }
 inline bool operator<(const utime_t& a, const utime_t& b)
 {
-  return (a.sec() < b.sec()) || (a.sec() == b.sec() && a.usec() < b.usec());
+  return (a.sec() < b.sec()) || (a.sec() == b.sec() && a.nsec() < b.nsec());
 }
 
 inline bool operator==(const utime_t& a, const utime_t& b)
 {
-  return a.sec() == b.sec() && a.usec() == b.usec();
+  return a.sec() == b.sec() && a.nsec() == b.nsec();
 }
 inline bool operator!=(const utime_t& a, const utime_t& b)
 {
-  return a.sec() != b.sec() || a.usec() != b.usec();
+  return a.sec() != b.sec() || a.nsec() != b.nsec();
 }
 
 // ostream

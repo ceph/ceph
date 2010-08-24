@@ -95,7 +95,6 @@ Monitor::Monitor(string nm, MonitorStore *s, Messenger *m, MonMap *map) :
   state(STATE_STARTING), stopping(false),
   
   elector(this),
-  mon_epoch(0), 
   leader(0),
   paxos(PAXOS_NUM), paxos_service(PAXOS_NUM),
   routed_request_tid(0)
@@ -233,13 +232,23 @@ void Monitor::win_standalone_election()
   win_election(1, q);
 }
 
+void Monitor::starting_election()
+{
+  dout(10) << "starting_election " << get_epoch() << dendl;
+  state = STATE_STARTING;
+}
+
+epoch_t Monitor::get_epoch()
+{
+  return elector.get_epoch();
+}
+
 void Monitor::win_election(epoch_t epoch, set<int>& active) 
 {
   state = STATE_LEADER;
   leader = rank;
-  mon_epoch = epoch;
   quorum = active;
-  dout(10) << "win_election, epoch " << mon_epoch << " quorum is " << quorum << dendl;
+  dout(10) << "win_election, epoch " << epoch << " quorum is " << quorum << dendl;
 
   stringstream ss;
   ss << "mon." << name << "@" << rank << " won leader election with quorum " << quorum;
@@ -256,10 +265,9 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l) 
 {
   state = STATE_PEON;
-  mon_epoch = epoch;
   leader = l;
   quorum = q;
-  dout(10) << "lose_election, epoch " << mon_epoch << " leader is mon" << leader
+  dout(10) << "lose_election, epoch " << epoch << " leader is mon" << leader
 	   << " quorum is " << quorum << dendl;
   
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
@@ -713,9 +721,9 @@ bool Monitor::_ms_dispatch(Message *m)
 	MMonPaxos *pm = (MMonPaxos*)m;
 
 	// sanitize
-	if (pm->epoch > mon_epoch) 
+	if (pm->epoch > get_epoch()) 
 	  call_election();
-	if (pm->epoch != mon_epoch) {
+	if (pm->epoch != get_epoch()) {
 	  pm->put();
 	  break;
 	}

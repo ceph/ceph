@@ -79,6 +79,8 @@ class Elector {
   void init();
   void shutdown();
 
+  epoch_t get_epoch() { return epoch; }
+
   void dispatch(Message *m);
 
   void call_election() {

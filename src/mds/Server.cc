@@ -293,7 +293,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       Capability *cap = session->caps.front();
       CInode *in = cap->get_inode();
       dout(20) << " killing capability " << ccap_string(cap->issued()) << " on " << *in << dendl;
-      mds->mdcache->remove_client_cap(in, session->inst.name.num());
+      mds->locker->remove_client_cap(in, session->inst.name.num());
     }
     while (!session->leases.empty()) {
       ClientLease *r = session->leases.front();
@@ -888,11 +888,8 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   Connection *client_con = req->get_connection();
   client_con->get();
 
-  // clean up request, drop locks, etc.
-  // do this before replying, so that we can issue leases
-  mdcache->request_finish(mdr);
-  mdr = 0;
-  req = 0;
+  // drop non-rdlocks before replying, so that we can issue leases
+  mds->locker->drop_non_rdlocks(mdr);
 
   // reply at all?
   if (client_inst.name.is_mds()) {
@@ -916,6 +913,11 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   }
   client_con->put();
   
+  // clean up request
+  mdcache->request_finish(mdr);
+  mdr = 0;
+  req = 0;
+
   // take a closer look at tracei, if it happens to be a remote link
   if (tracei && 
       tracei->get_parent_dn() &&
@@ -2313,7 +2315,9 @@ void Server::handle_client_openc(MDRequest *mdr)
   }
   in->inode.rstat.rfiles = 1;
 
-  dn->first = in->first = follows+1;
+  if (follows >= dn->first)
+    dn->first = follows+1;
+  in->first = dn->first;
   
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
@@ -3163,7 +3167,9 @@ void Server::handle_client_mknod(MDRequest *mdr)
   newi->inode.version = dn->pre_dirty();
   newi->inode.rstat.rfiles = 1;
 
-  dn->first = newi->first = follows+1;
+  if (follows >= dn->first)
+    dn->first = follows + 1;
+  newi->first = dn->first;
     
   dout(10) << "mknod mode " << newi->inode.mode << " rdev " << newi->inode.rdev << dendl;
 
@@ -3217,7 +3223,10 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   newi->inode.version = dn->pre_dirty();
   newi->inode.rstat.rsubdirs = 1;
 
-  dn->first = newi->first = follows+1;
+  dout(12) << " follows " << follows << dendl;
+  if (follows >= dn->first)
+    dn->first = follows + 1;
+  newi->first = dn->first;
 
   // ...and that new dir is empty.
   CDir *newdir = newi->get_or_open_dirfrag(mds->mdcache, frag_t());
@@ -3290,7 +3299,9 @@ void Server::handle_client_symlink(MDRequest *mdr)
   newi->inode.rstat.rfiles = 1;
   newi->inode.version = dn->pre_dirty();
 
-  dn->first = newi->first = follows+1;
+  if (follows >= dn->first)
+    dn->first = follows + 1;
+  newi->first = dn->first;
 
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
@@ -3410,7 +3421,8 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   pi->version = tipv;
 
   snapid_t follows = dn->get_dir()->inode->find_snaprealm()->get_newest_seq();
-  dn->first = follows+1;
+  if (follows >= dn->first)
+    dn->first = follows;
 
   // log + wait
   EUpdate *le = new EUpdate(mdlog, "link_local");
@@ -4833,7 +4845,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       if (!destdnl->is_null())
 	mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
       else
-	destdn->first = destdn->get_dir()->inode->find_snaprealm()->get_newest_seq()+1;
+	destdn->first = MAX(destdn->first, snapid_t(destdn->get_dir()->inode->find_snaprealm()->get_newest_seq()+1));
       metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
       mdcache->journal_cow_dentry(mdr, metablob, srcdnl->get_inode()->get_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
       ji = metablob->add_primary_dentry(srcdnl->get_inode()->get_parent_dn(), true, srcdnl->get_inode());
@@ -4841,7 +4853,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       if (!destdnl->is_null())
 	mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
       else
-	destdn->first = destdn->get_dir()->inode->find_snaprealm()->get_newest_seq()+1;
+	destdn->first = MAX(destdn->first, snapid_t(destdn->get_dir()->inode->find_snaprealm()->get_newest_seq()+1));
       metablob->add_primary_dentry(destdn, true, destdnl->get_inode()); 
     }
   } else if (srcdnl->is_primary()) {
@@ -4853,13 +4865,17 @@ void Server::_rename_prepare(MDRequest *mdr,
     if (!destdnl->is_null())
       mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
     else
-      destdn->first = destdn->get_dir()->inode->find_snaprealm()->get_newest_seq()+1;
+      destdn->first = MAX(destdn->first, snapid_t(destdn->get_dir()->inode->find_snaprealm()->get_newest_seq()+1));
     ji = metablob->add_primary_dentry(destdn, true, srcdnl->get_inode(), 0, &snapbl); 
   }
     
   // src
   mdcache->journal_cow_dentry(mdr, metablob, srcdn, CEPH_NOSNAP, 0, srcdnl);
   metablob->add_null_dentry(srcdn, true);
+
+  // make renamed inode first track the dn
+  if (srcdnl->is_primary() && destdn->is_auth())
+    srcdnl->get_inode()->first = destdn->first;  
 
   // do inode updates in journal, even if we aren't auth (hmm, is this necessary?)
   if (!silent) {

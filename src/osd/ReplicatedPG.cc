@@ -1824,10 +1824,13 @@ void ReplicatedPG::apply_repop(RepGather *repop)
   repop->tls.push_back(&repop->ctx->local_t);
 
   repop->obc->ondisk_write_lock();
+  if (repop->ctx->clone_obc)
+    repop->ctx->clone_obc->ondisk_write_lock();
 
   Context *oncommit = new C_OSD_OpCommit(this, repop);
   Context *onapplied = new C_OSD_OpApplied(this, repop);
-  Context *onapplied_sync = new C_OSD_OndiskWriteUnlock(repop->obc);
+  Context *onapplied_sync = new C_OSD_OndiskWriteUnlock(repop->obc,
+							repop->ctx->clone_obc);
   int r = osd->store->queue_transactions(&osr, repop->tls, onapplied, oncommit, onapplied_sync);
   if (r) {
     dout(-10) << "apply_repop  queue_transactions returned " << r << " on " << *repop << dendl;
@@ -1873,13 +1876,13 @@ void ReplicatedPG::op_applied(RepGather *repop)
 
   update_stats();
 
+#if 0
   // any completion stuff to do here?
   if (repop->ctx->ops.size()) {
     const sobject_t& soid = repop->ctx->obs->oi.soid;
     OSDOp& first = repop->ctx->ops[0];
 
     switch (first.op.op) { 
-#if 0
     case CEPH_OSD_OP_UNBALANCEREADS:
       dout(-10) << "op_applied  completed unbalance-reads on " << oid << dendl;
       unbalancing_reads.erase(oid);
@@ -1898,7 +1901,6 @@ void ReplicatedPG::op_applied(RepGather *repop)
 	}
       */
       break;
-#endif
 
     case CEPH_OSD_OP_WRUNLOCK:
       dout(-10) << "op_applied  completed wrunlock on " << soid << dendl;
@@ -1909,6 +1911,7 @@ void ReplicatedPG::op_applied(RepGather *repop)
       break;
     }   
   }
+#endif
 
   if (!repop->aborted)
     eval_repop(repop);
@@ -1984,8 +1987,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
 	dout(10) << " sending commit on " << *repop << " " << reply << dendl;
 	assert(entity_name_t::TYPE_OSD != op->get_connection()->peer_type);
-	osd->client_messenger->
-	  send_message(reply, op->get_connection());
+	osd->client_messenger->send_message(reply, op->get_connection());
 	repop->sent_disk = true;
       }
     }
@@ -3265,6 +3267,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     if (missing.is_missing(soid, v)) {
       dout(10) << "got missing " << soid << " v " << v << dendl;
       missing.got(soid, v);
+      if (is_primary())
+	missing_loc.erase(soid);
       
       // raise last_complete?
       while (log.complete_to != log.log.end()) {
@@ -3318,15 +3322,13 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 					onreadable_sync);
   assert(r == 0);
 
-  osd->logger->inc(l_osd_r_pull);
-  osd->logger->inc(l_osd_r_pullb, data.length());
+  osd->logger->inc(l_osd_r_push);
+  osd->logger->inc(l_osd_r_pushb, data.length());
 
   if (is_primary()) {
     assert(pi);
 
     if (complete) {
-      missing_loc.erase(soid);
-
       // close out pull op
       pulling.erase(soid);
       finish_recovery_op(soid);

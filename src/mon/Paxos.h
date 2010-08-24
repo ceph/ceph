@@ -152,6 +152,10 @@ private:
   };
   map<entity_inst_t, Observer *> observers;
 
+  //synchronization warnings
+  utime_t last_clock_drift_warn;
+  int clock_drift_warned;
+
 
   class C_CollectTimeout : public Context {
     Paxos *paxos;
@@ -233,7 +237,8 @@ public:
 		   lease_renew_event(0),
 		   lease_ack_timeout_event(0),
 		   lease_timeout_event(0),
-		   accept_timeout_event(0) { }
+		   accept_timeout_event(0),
+		   clock_drift_warned(0) { }
 
   const char *get_machine_name() const {
     return machine_name;

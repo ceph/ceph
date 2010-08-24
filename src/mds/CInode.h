@@ -98,6 +98,7 @@ public:
   static const int PIN_OPENINGSNAPPARENTS = 17;
   static const int PIN_TRUNCATING =       18;
   static const int PIN_STRAY =            19;  // we pin our stray inode while active
+  static const int PIN_NEEDSNAPFLUSH =    20;
 
   const char *pin_name(int p) {
     switch (p) {
@@ -119,6 +120,7 @@ public:
     case PIN_OPENINGSNAPPARENTS: return "openingsnapparents";
     case PIN_TRUNCATING: return "truncating";
     case PIN_STRAY: return "stray";
+    case PIN_NEEDSNAPFLUSH: return "needsnapflush";
     default: return generic_pin_name(p);
     }
   }
@@ -280,6 +282,9 @@ protected:
   utime_t               replica_caps_wanted_keep_until;
 
   map<int, set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
+public:
+  map<snapid_t, set<client_t> > client_need_snapflush;
+protected:
 
   ceph_lock_state_t fcntl_locks;
   ceph_lock_state_t flock_locks;
