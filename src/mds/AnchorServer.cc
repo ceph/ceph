@@ -225,7 +225,7 @@ void AnchorServer::_rollback(version_t tid)
   //dump();
 }
 
-
+/* This function DOES put the passed message before returning */
 void AnchorServer::handle_query(MMDSTableRequest *req)
 {
   bufferlist::iterator p = req->bl.begin();

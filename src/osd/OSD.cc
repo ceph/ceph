@@ -2261,11 +2261,11 @@ void OSD::handle_osd_map(MOSDMap *m)
     pending_ops--;
     logger->set(l_osd_opq, pending_ops);
 
-    Message *m = pg->op_queue.back();
+    Message *mess = pg->op_queue.back();
     pg->op_queue.pop_back();
     pg->put();
-    dout(15) << " will requeue " << *m << dendl;
-    rq.push_front(m);
+    dout(15) << " will requeue " << *mess << dendl;
+    rq.push_front(mess);
   }
   op_wq.unlock();
   push_waiters(rq);
@@ -2493,6 +2493,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     map_lock.put_write();
     char buf[80];
     dout(0) << "error writing map: " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+    m->put();
     shutdown();
     return;
   }
@@ -4569,14 +4570,6 @@ void OSD::handle_op(MOSDOp *op)
 
   
   dout(10) << "handle_op " << *op << " in " << *pg << dendl;
-
-  /* turn this off for now.
-  // proprocess op? 
-  if (pg->preprocess_op(op, now)) {
-    pg->unlock();
-    return;
-  }
-  */
 
   if (!op->may_write()) {
     Mutex::Locker lock(peer_stat_lock);

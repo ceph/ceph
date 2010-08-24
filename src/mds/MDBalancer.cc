@@ -46,7 +46,7 @@ using std::vector;
 #define MIN_OFFLOAD 10   // point at which i stop trying, close enough
 
 
-
+/* This function DOES put the passed message before returning */
 int MDBalancer::proc_message(Message *m)
 {
   switch (m->get_type()) {
@@ -58,6 +58,7 @@ int MDBalancer::proc_message(Message *m)
   default:
     dout(1) << " balancer unknown message " << m->get_type() << dendl;
     assert(0);
+    m->put();
     break;
   }
 
@@ -220,12 +221,15 @@ void MDBalancer::send_heartbeat()
   }
 }
 
+/* This function DOES put the passed message before returning */
 void MDBalancer::handle_heartbeat(MHeartbeat *m)
 {
   dout(25) << "=== got heartbeat " << m->get_beat() << " from " << m->get_source().num() << " " << m->get_load() << dendl;
   
-  if (!mds->is_active()) 
+  if (!mds->is_active()) {
+    m->put();
     return;
+  }
 
   if (!mds->mdcache->is_open()) {
     dout(10) << "opening root on handle_heartbeat" << dendl;

@@ -127,6 +127,7 @@ void Subnet::parse(const char *str)
 	dout(30) << hex << GET_IP(&subnet.addr) << dec << dendl;
 
 	valid = true;
+	delete mask_str;
 }
 
 class GroupEntry;
@@ -323,7 +324,7 @@ GroupEntry *GroupsManager::get_group(const char *name)
 		   one and exit */
 		group = new GroupEntry(subnet);
 		subnet = NULL;
-		groups_map[strdup(group_name)] = group;
+		groups_map[group_name] = group;
 		goto done;
 	}
 
@@ -331,7 +332,7 @@ GroupEntry *GroupsManager::get_group(const char *name)
 	if (iter == groups_map.end() ) {
 		orig_group = new GroupEntry(subnet);
 		subnet = NULL;
-		groups_map[strdup(group_name)] = orig_group;
+		groups_map[group_name] = orig_group;
 	} else {
 		orig_group = iter->second;
 	}
@@ -616,7 +617,7 @@ void ExportControl::load(ConfFile *conf)
 			free(allow_str);
 		}
 	}
-
+	delete allow_def;
 	free(orig_tmp_sec);
     } else if ((strncmp(GROUP_SEC_NAME, (*p)->get_name().c_str(), grp_len) == 0) ||
         (strncmp(CLIENT_SEC_NAME, (*p)->get_name().c_str(), client_len) == 0)) {

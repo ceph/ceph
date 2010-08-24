@@ -1660,7 +1660,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       if (p->second.first > snapid) {
         if  (p != old_inodes.begin())
           --p;
-        else dout(0) << "old_inode.begin() starts after snapid!" << dendl;
+        else dout(0) << "old_inode lower_bound starts after snapid!" << dendl;
       }
       dout(15) << "encode_inodestat snapid " << snapid
 	       << " to old_inode [" << p->second.first << "," << p->first << "]" 

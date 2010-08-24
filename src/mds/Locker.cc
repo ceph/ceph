@@ -62,7 +62,7 @@ static ostream& _prefix(MDS *mds) {
   return *_dout << dbeginl << "mds" << mds->get_nodeid() << ".locker ";
 }
 
-
+/* This function DOES put the passed message before returning */
 void Locker::dispatch(Message *m)
 {
 
@@ -141,7 +141,8 @@ void Locker::include_snap_rdlocks(set<SimpleLock*>& rdlocks, CInode *in)
 }
 
 
-
+/* If this function returns false, the mdr has been placed
+ * on the appropriate wait list */
 bool Locker::acquire_locks(MDRequest *mdr,
 			   set<SimpleLock*> &rdlocks,
 			   set<SimpleLock*> &wrlocks,
@@ -1489,6 +1490,7 @@ void Locker::request_inode_file_caps(CInode *in)
   }
 }
 
+/* This function DOES put the passed message before returning */
 void Locker::handle_inode_file_caps(MInodeFileCaps *m)
 {
   // nobody should be talking to us during recovery.
@@ -1766,6 +1768,8 @@ void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t follo
  * note: we only get these from the client if
  * - we are calling back previously issued caps (fewer than the client previously had)
  * - or if the client releases (any of) its caps on its own
+ *
+ * This function DOES put the passed message before returning
  */
 void Locker::handle_client_caps(MClientCaps *m)
 {
@@ -2335,6 +2339,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   return true;
 }
 
+/* This function DOES put the passed message before returning */
 void Locker::handle_client_cap_release(MClientCapRelease *m)
 {
   client_t client = m->get_source().num();
@@ -2377,6 +2382,7 @@ void Locker::handle_client_cap_release(MClientCapRelease *m)
   m->put();
 }
 
+/* This function DOES put the passed message before returning */
 
 void Locker::remove_client_cap(CInode *in, client_t client)
 {
@@ -2597,7 +2603,7 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
   return 0;  
 }
 
-
+/* This function DOES put the passed message before returning */
 void Locker::handle_lock(MLock *m)
 {
   // nobody should be talking to us during recovery.
@@ -2661,6 +2667,7 @@ void Locker::handle_reqrdlock(SimpleLock *lock)
   }
 }
 
+/* This function DOES put the passed message before returning */
 void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
 {
   int from = m->get_asker();
@@ -3700,7 +3707,7 @@ void Locker::file_recover(ScatterLock *lock)
 
 
 // messenger
-
+/* This function DOES put the passed message before returning */
 void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
 {
   CInode *in = (CInode*)lock->get_parent();

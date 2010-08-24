@@ -86,6 +86,7 @@ void Server::open_logger()
 }
 
 
+/* This function DOES put the passed message before returning*/
 void Server::dispatch(Message *m) 
 {
   switch (m->get_type()) {
@@ -118,7 +119,6 @@ void Server::dispatch(Message *m)
   switch (m->get_type()) {
   case CEPH_MSG_CLIENT_SESSION:
     handle_client_session((MClientSession*)m);
-    m->put();
     return;
   case CEPH_MSG_CLIENT_REQUEST:
     handle_client_request((MClientRequest*)m);
@@ -169,6 +169,7 @@ Session *Server::get_session(Message *m)
   return session;
 }
 
+/* This function DOES put the passed message before returning*/
 void Server::handle_client_session(MClientSession *m)
 {
   version_t pv, piv = 0;
@@ -191,6 +192,7 @@ void Server::handle_client_session(MClientSession *m)
 	session->is_stale() ||
 	session->is_killing()) {
       dout(10) << "currently open|opening|stale|killing, dropping this req" << dendl;
+      m->put();
       return;
     }
     assert(session->is_closed() ||
@@ -224,10 +226,12 @@ void Server::handle_client_session(MClientSession *m)
 	  session->is_closing() ||
 	  session->is_killing()) {
 	dout(10) << "already closed|closing|killing, dropping this req" << dendl;
+	m->put();
 	return;
       }
       if (session->is_importing()) {
 	dout(10) << "ignoring close req on importing session" << dendl;
+	m->put();
 	return;
       }
       assert(session->is_open() || 
@@ -236,6 +240,7 @@ void Server::handle_client_session(MClientSession *m)
       if (m->get_seq() < session->get_push_seq()) {
 	dout(10) << "old push seq " << m->get_seq() << " < " << session->get_push_seq() 
 		 << ", dropping" << dendl;
+	m->put();
 	return;
       }
       if (m->get_seq() != session->get_push_seq()) {
@@ -263,6 +268,7 @@ void Server::handle_client_session(MClientSession *m)
   default:
     assert(0);
   }
+  m->put();
 }
 
 void Server::_session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
@@ -514,6 +520,7 @@ void Server::reconnect_clients()
   mds->sessionmap.dump();
 }
 
+/* This function DOES put the passed message before returning*/
 void Server::handle_client_reconnect(MClientReconnect *m)
 {
   dout(7) << "handle_client_reconnect " << m->get_source() << dendl;
@@ -730,7 +737,7 @@ void Server::recall_client_state(float ratio)
 /*******
  * some generic stuff for finishing off requests
  */
-
+/* This function takes responsibility for the passed mdr*/
 void Server::journal_and_reply(MDRequest *mdr, CInode *in, CDentry *dn, LogEvent *le, Context *fin)
 {
   dout(10) << "journal_and_reply tracei " << in << " tracedn " << dn << dendl;
@@ -764,7 +771,7 @@ void Server::journal_and_reply(MDRequest *mdr, CInode *in, CDentry *dn, LogEvent
 }
 
 /*
- * send generic response (just an error code)
+ * send generic response (just an error code), clean up mdr
  */
 void Server::reply_request(MDRequest *mdr, int r, CInode *tracei, CDentry *tracedn)
 {
@@ -833,6 +840,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 /*
  * send given reply
  * include a trace to tracei
+ * Clean up mdr
  */
 void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, CDentry *tracedn) 
 {
@@ -1015,6 +1023,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
 
 /***
  * process a client request
+ * This function DOES put the passed message before returning
  */
 void Server::handle_client_request(MClientRequest *req)
 {
@@ -1104,7 +1113,7 @@ void Server::handle_client_request(MClientRequest *req)
   return;
 }
 
-
+/* This function takes responsibility for the passed mdr*/
 void Server::dispatch_client_request(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -1215,6 +1224,7 @@ void Server::dispatch_client_request(MDRequest *mdr)
 // ---------------------------------------
 // SLAVE REQUESTS
 
+/* This function DOES put the passed message before returning*/
 void Server::handle_slave_request(MMDSSlaveRequest *m)
 {
   dout(4) << "handle_slave_request " << m->get_reqid() << " from " << m->get_source() << dendl;
@@ -1306,6 +1316,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
   }
 }
 
+/* This function DOES put the mdr->slave_request before returning*/
 void Server::dispatch_slave_request(MDRequest *mdr)
 {
   dout(7) << "dispatch_slave_request " << *mdr << " " << *mdr->slave_request << dendl;
@@ -1393,7 +1404,7 @@ void Server::dispatch_slave_request(MDRequest *mdr)
   }
 }
 
-
+/* This function DOES put the mdr->slave_request before returning*/
 void Server::handle_slave_auth_pin(MDRequest *mdr)
 {
   dout(10) << "handle_slave_auth_pin " << *mdr << dendl;
@@ -1468,6 +1479,7 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
   return;
 }
 
+/* This function DOES NOT put the passed ack before returning*/
 void Server::handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
 {
   dout(10) << "handle_slave_auth_pin_ack on " << *mdr << " " << *ack << dendl;
@@ -1745,7 +1757,8 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
 }
 
 
-
+/* If this returns null, the request has been handled
+ * as appropriate: forwarded on, or the client's been replied to */
 CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
 				    set<SimpleLock*> &rdlocks,
 				    bool want_auth,
@@ -1906,6 +1919,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
  * @diri base indoe
  * @fg the exact frag we want
  * @mdr request
+ * Returns: the pointer, or NULL if it had to be delayed (but mdr is taken care of)
  */
 CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr)
 {
@@ -1987,6 +2001,7 @@ void Server::handle_client_stat(MDRequest *mdr)
 		req->get_op() == CEPH_MDS_OP_LOOKUP ? mdr->dn[0].back() : 0);
 }
 
+/* This function will clean up the passed mdr*/
 void Server::handle_client_lookup_parent(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -2011,7 +2026,7 @@ void Server::handle_client_lookup_parent(MDRequest *mdr)
   reply_request(mdr, 0, in, dn);  // reply
 }
 
-
+/* This function DOES clean up the mdr before returning*/
 void Server::handle_client_lookup_hash(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -2056,7 +2071,7 @@ void Server::handle_client_lookup_hash(MDRequest *mdr)
 }
 
 
-
+/* This function takes responsibility for the passed mdr*/
 void Server::handle_client_open(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -2221,7 +2236,7 @@ public:
   }
 };
 
-
+/* This function takes responsibility for the passed mdr*/
 void Server::handle_client_openc(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -2819,7 +2834,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
     mds->mdlog->flush();
 }
 
-
+/* Takes responsibility for mdr */
 void Server::do_open_truncate(MDRequest *mdr, int cmode)
 {
   CInode *in = mdr->in[0];
@@ -2867,7 +2882,7 @@ void Server::do_open_truncate(MDRequest *mdr, int cmode)
 }
 
 
-
+/* This function cleans up the passed mdr */
 void Server::handle_client_setlayout(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -3175,7 +3190,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
 
 
 // MKDIR
-
+/* This function takes responsibility for the passed mdr*/
 void Server::handle_client_mkdir(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -3588,6 +3603,7 @@ public:
   }
 };
 
+/* This function DOES put the mdr->slave_request before returning*/
 void Server::handle_slave_link_prep(MDRequest *mdr)
 {
   dout(10) << "handle_slave_link_prep " << *mdr 
@@ -3831,7 +3847,7 @@ void Server::_link_rollback_finish(Mutation *mut, MDRequest *mdr)
 }
 
 
-
+/* This function DOES NOT put the passed message before returning*/
 void Server::handle_slave_link_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m)
 {
   dout(10) << "handle_slave_link_prep_ack " << *mdr 
@@ -4239,6 +4255,8 @@ public:
  * all other nodes have also replciated destdn and straydn.  note that
  * destdn replicas need not also replicate srci.  this only works when 
  * destdn is master.
+ *
+ * This function takes responsibility for the passed mdr.
  */
 void Server::handle_client_rename(MDRequest *mdr)
 {
@@ -5042,6 +5060,7 @@ public:
   }
 };
 
+/* This function DOES put the mdr->slave_request before returning*/
 void Server::handle_slave_rename_prep(MDRequest *mdr)
 {
   dout(10) << "handle_slave_rename_prep " << *mdr 
@@ -5544,7 +5563,7 @@ void Server::_rename_rollback_finish(Mutation *mut, MDRequest *mdr, CInode *in, 
   delete mut;
 }
 
-
+/* This function DOES put the passed message before returning*/
 void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
 {
   dout(10) << "handle_slave_rename_prep_ack " << *mdr 
@@ -5586,7 +5605,7 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
 
 
 // snaps
-
+/* This function takes responsibility for the passed mdr*/
 void Server::handle_client_lssnap(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -5663,6 +5682,7 @@ struct C_MDS_mksnap_finish : public Context {
   }
 };
 
+/* This function takes responsibility for the passed mdr*/
 void Server::handle_client_mksnap(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -5835,6 +5855,7 @@ struct C_MDS_rmsnap_finish : public Context {
   }
 };
 
+/* This function takes responsibility for the passed mdr*/
 void Server::handle_client_rmsnap(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;

@@ -65,7 +65,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".migrator "
 
-
+/* This function DOES put the passed message before returning*/
 void Migrator::dispatch(Message *m)
 {
   switch (m->get_type()) {
@@ -617,6 +617,8 @@ void Migrator::export_dir(CDir *dir, int dest)
 /*
  * called on receipt of MExportDirDiscoverAck
  * the importer now has the directory's _inode_ in memory, and pinned.
+ *
+ * This function DOES put the passed message before returning
  */
 void Migrator::handle_export_discover_ack(MExportDirDiscoverAck *m)
 {
@@ -738,6 +740,7 @@ void Migrator::export_frozen(CDir *dir)
   assert (g_conf.mds_kill_export_at != 4);
 }
 
+/* This function DOES put the passed message before returning*/
 void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
 {
   CDir *dir = cache->get_dirfrag(m->get_dirfrag());
@@ -1119,6 +1122,8 @@ public:
 
 /*
  * i should get an export_ack from the export target.
+ *
+ * This function DOES put the passed message before returning
  */
 void Migrator::handle_export_ack(MExportDirAck *m)
 {
@@ -1275,6 +1280,8 @@ void Migrator::export_logged_finish(CDir *dir)
  * notify:
  *  i'll get an ack from each bystander.
  *  when i get them all, unfreeze and send the finish.
+ *
+ * This function DOES put the passed message before returning
  */
 void Migrator::handle_export_notify_ack(MExportDirNotifyAck *m)
 {
@@ -1436,7 +1443,7 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
     filepath fpath(m->get_path());
     vector<CDentry*> trace;
     int r = cache->path_traverse(0, m, fpath, &trace, NULL, MDS_TRAVERSE_DISCOVER);
-    if (r > 0) return; // wait
+    if (r > 0) return;
     if (r < 0) {
       dout(7) << "handle_export_discover_2 failed to discover or not dir " << m->get_path() << ", NAK" << dendl;
       assert(0);    // this shouldn't happen if the auth pins his path properly!!!! 
@@ -1457,9 +1464,11 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
   // reply
   dout(7) << " sending export_discover_ack on " << *in << dendl;
   mds->send_message_mds(new MExportDirDiscoverAck(df), import_peer[df]);
+  m->put();
   assert (g_conf.mds_kill_import_at != 2);  
 }
 
+/* This function DOES put the passed message before returning*/
 void Migrator::handle_export_cancel(MExportDirCancel *m)
 {
   dout(7) << "handle_export_cancel on " << m->get_dirfrag() << dendl;
@@ -1478,7 +1487,7 @@ void Migrator::handle_export_cancel(MExportDirCancel *m)
   m->put();
 }
 
-
+/* This function DOES put the passed message before returning*/
 void Migrator::handle_export_prep(MExportDirPrep *m)
 {
   int oldauth = m->get_source().num();
@@ -1662,6 +1671,7 @@ public:
   }
 };
 
+/* This function DOES put the passed message before returning*/
 void Migrator::handle_export_dir(MExportDir *m)
 {
   assert (g_conf.mds_kill_import_at != 5);
@@ -1942,7 +1952,7 @@ void Migrator::import_logged_start(CDir *dir, int from,
   cache->show_subtrees();
 }
 
-
+/* This function DOES put the passed message before returning*/
 void Migrator::handle_export_finish(MExportDirFinish *m)
 {
   CDir *dir = cache->get_dirfrag(m->get_dirfrag());
@@ -2236,6 +2246,7 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
 
 // authority bystander
 
+/* This function DOES put the passed message before returning*/
 void Migrator::handle_export_notify(MExportDirNotify *m)
 {
   CDir *dir = cache->get_dirfrag(m->get_dirfrag());
@@ -2312,6 +2323,7 @@ void Migrator::export_caps(CInode *in)
   mds->send_message_mds(ex, dest);
 }
 
+/* This function DOES put the passed message before returning*/
 void Migrator::handle_export_caps_ack(MExportCapsAck *ack)
 {
   CInode *in = cache->get_inode(ack->ino);
@@ -2340,6 +2352,7 @@ public:
   }  
 };
 
+/* This function DOES put the passed message before returning*/
 void Migrator::handle_export_caps(MExportCaps *ex)
 {
   dout(10) << "handle_export_caps " << *ex << " from " << ex->get_source() << dendl;

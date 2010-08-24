@@ -132,6 +132,7 @@ int FileJournal::_open(bool forwrite, bool create)
     dout(10) << "_open journal is not a block device, NOT checking disk write cache on " << fn << dendl;
 
   // static zeroed buffer for alignment padding
+  delete zero_buf;
   zero_buf = new char[header.alignment];
   memset(zero_buf, 0, header.alignment);
 

@@ -583,6 +583,7 @@ void MDS::beacon_send()
   timer.add_event_after(g_conf.mds_beacon_interval, beacon_sender);
 }
 
+/* This fuction puts the passed message before returning */
 void MDS::handle_mds_beacon(MMDSBeacon *m)
 {
   version_t seq = m->get_seq();
@@ -650,7 +651,7 @@ void MDS::beacon_kill(utime_t lab)
   }
 }
 
-
+/* This function DOES put the passed message before returning*/
 void MDS::handle_command(MMonCommand *m)
 {
   dout(10) << "handle_command args: " << m->cmd << dendl;
@@ -703,6 +704,7 @@ void MDS::handle_command(MMonCommand *m)
   m->put();
 }
 
+/* This function deletes the passed message before returning. */
 void MDS::handle_mds_map(MMDSMap *m)
 {
   version_t epoch = m->get_epoch();
@@ -1331,6 +1333,8 @@ bool MDS::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool for
   return *authorizer != NULL;
 }
 
+/* If this function returns true, it has put the message. If it returns false,
+ * it has not put the message. */
 bool MDS::_dispatch(Message *m)
 {
   bool check_from = false;

@@ -464,6 +464,7 @@ tid_t Objecter::op_submit(Op *op)
   return op->tid;
 }
 
+/* This function DOES put the passed message before returning */
 void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 {
   dout(10) << "in handle_osd_op_reply" << dendl;

@@ -24,7 +24,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".tableserver(" << get_mdstable_name(table) << ") "
 
-
+/* This function DOES put the passed message before returning */
 void MDSTableServer::handle_request(MMDSTableRequest *req)
 {
   assert(req->op >= 0);
@@ -38,7 +38,7 @@ void MDSTableServer::handle_request(MMDSTableRequest *req)
 }
 
 // prepare
-
+/* This function DOES put the passed message before returning */
 void MDSTableServer::handle_prepare(MMDSTableRequest *req)
 {
   dout(7) << "handle_prepare " << *req << dendl;
@@ -71,7 +71,7 @@ void MDSTableServer::_prepare_logged(MMDSTableRequest *req, version_t tid)
 
 
 // commit
-
+/* This function DOES put the passed message before returning */
 void MDSTableServer::handle_commit(MMDSTableRequest *req)
 {
   dout(7) << "handle_commit " << *req << dendl;
@@ -101,6 +101,7 @@ void MDSTableServer::handle_commit(MMDSTableRequest *req)
   }
 }
 
+/* This function DOES put the passed message before returning */
 void MDSTableServer::_commit_logged(MMDSTableRequest *req)
 {
   dout(7) << "_commit_logged, sending ACK" << dendl;
@@ -113,7 +114,7 @@ void MDSTableServer::_commit_logged(MMDSTableRequest *req)
 }
 
 // ROLLBACK
-
+/* This function DOES put the passed message before returning */
 void MDSTableServer::handle_rollback(MMDSTableRequest *req)
 {
   dout(7) << "handle_rollback " << *req << dendl;

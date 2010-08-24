@@ -984,7 +984,6 @@ public:
 
 
   // abstract bits
-  virtual bool preprocess_op(MOSDOp *op, utime_t now) { return false; } 
   virtual void do_op(MOSDOp *op) = 0;
   virtual void do_sub_op(MOSDSubOp *op) = 0;
   virtual void do_sub_op_reply(MOSDSubOpReply *op) = 0;
