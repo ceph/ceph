@@ -207,37 +207,99 @@ void CInode::print(ostream& out)
 
 inode_t *CInode::project_inode(map<string,bufferptr> *px) 
 {
-  if (projected_inode.empty()) {
-    projected_inode.push_back(new inode_t(inode));
+  if (projected_nodes.empty()) {
+    projected_nodes.push_back(new projected_inode_t(new inode_t(inode)));
     if (px)
       *px = xattrs;
   } else {
-    projected_inode.push_back(new inode_t(*projected_inode.back()));
+    projected_nodes.push_back(new projected_inode_t(
+        new inode_t(*projected_nodes.back()->inode)));
     if (px)
       *px = *get_projected_xattrs();
   }
-  projected_xattrs.push_back(px);
-  dout(15) << "project_inode " << projected_inode.back() << dendl;
-  return projected_inode.back();
+  projected_nodes.back()->xattrs = px;
+  dout(15) << "project_inode " << projected_nodes.back()->inode << dendl;
+  return projected_nodes.back()->inode;
 }
 
 void CInode::pop_and_dirty_projected_inode(LogSegment *ls) 
 {
-  assert(!projected_inode.empty());
-  dout(15) << "pop_and_dirty_projected_inode " << projected_inode.front()
-	   << " v" << projected_inode.front()->version << dendl;
-  mark_dirty(projected_inode.front()->version, ls);
-  inode = *projected_inode.front();
-  delete projected_inode.front();
+  assert(!projected_nodes.empty());
+  dout(15) << "pop_and_dirty_projected_inode " << projected_nodes.front()->inode
+	   << " v" << projected_nodes.front()->inode->version << dendl;
+  mark_dirty(projected_nodes.front()->inode->version, ls);
+  inode = *projected_nodes.front()->inode;
 
-  map<string,bufferptr> *px = projected_xattrs.front();
+  map<string,bufferptr> *px = projected_nodes.front()->xattrs;
   if (px) {
     xattrs = *px;
     delete px;
   }
 
-  projected_inode.pop_front();
-  projected_xattrs.pop_front();
+  if (projected_nodes.front()->snapnode)
+    pop_projected_snaprealm(projected_nodes.front()->snapnode);
+
+  delete projected_nodes.front()->inode;
+  delete projected_nodes.front();
+
+  projected_nodes.pop_front();
+}
+
+sr_t *CInode::project_snaprealm(snapid_t snapid)
+{
+  sr_t *cur_srnode = get_projected_srnode();
+  sr_t *new_srnode;
+
+  if (cur_srnode) {
+    new_srnode = new sr_t(*cur_srnode);
+  } else {
+    new_srnode = new sr_t();
+    new_srnode->created = snapid;
+    new_srnode->current_parent_since = snapid;
+  }
+  dout(0) << "project_snaprealm " << new_srnode << dendl;
+  projected_nodes.back()->snapnode = new_srnode;
+  return new_srnode;
+}
+
+/* if newparent != parent, add parent to past_parents
+ if parent DNE, we need to find what the parent actually is and fill that in */
+void CInode::project_past_snaprealm_parent(SnapRealm *newparent, bufferlist& snapbl)
+{
+  sr_t *new_snap = project_snaprealm();
+  SnapRealm *oldparent;
+  if (!snaprealm) {
+    oldparent = find_snaprealm();
+    new_snap->seq = oldparent->get_newest_seq();
+  }
+  else
+    oldparent = snaprealm->parent;
+
+  if (newparent != oldparent) {
+    snapid_t oldparentseq = oldparent->get_newest_seq();
+    new_snap->past_parents[oldparentseq].ino = oldparent->inode->ino();
+    new_snap->past_parents[oldparentseq].first = new_snap->current_parent_since;
+    new_snap->current_parent_since = MAX(oldparentseq, newparent->get_last_created()) + 1;
+  }
+  new_snap->encode(snapbl);
+}
+
+void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
+{
+  assert(next_snaprealm);
+  dout(0) << "pop_projected_snaprealm " << next_snaprealm
+          << " seq" << next_snaprealm->seq << dendl;
+  bool invalidate_cached_snaps = false;
+  if (!snaprealm)
+    open_snaprealm();
+  else if (next_snaprealm->past_parents.size() !=
+           snaprealm->srnode.past_parents.size())
+    invalidate_cached_snaps = true;
+  snaprealm->srnode = *next_snaprealm;
+  delete next_snaprealm;
+
+  if (invalidate_cached_snaps)
+    snaprealm->invalidate_cached_snaps();
 }
 
 
@@ -1184,9 +1246,9 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     {
       snapid_t seq = 0;
       if (snaprealm)
-	seq = snaprealm->seq;
+	seq = snaprealm->srnode.seq;
       decode_snap(p);
-      if (snaprealm && snaprealm->seq != seq)
+      if (snaprealm && snaprealm->srnode.seq != seq)
 	mdcache->do_realm_invalidate_and_update_notify(this, seq ? CEPH_SNAP_OP_UPDATE:CEPH_SNAP_OP_SPLIT);
     }
     break;
@@ -1503,15 +1565,20 @@ snapid_t CInode::get_oldest_snap()
   return MIN(t, first);
 }
 
-old_inode_t& CInode::cow_old_inode(snapid_t follows, inode_t *pi)
+old_inode_t& CInode::cow_old_inode(snapid_t follows, bool cow_head)
 {
   assert(follows >= first);
+
+  inode_t *pi = cow_head ? get_projected_inode() : get_previous_projected_inode();
+  map<string,bufferptr> *px = cow_head ? get_projected_xattrs() : get_previous_projected_xattrs();
 
   old_inode_t &old = old_inodes[follows];
   old.first = first;
   old.inode = *pi;
-  old.xattrs = xattrs;
+  old.xattrs = *px;
   
+  dout(10) << " " << px->size() << " xattrs cowed, " << *px << dendl;
+
   old.inode.trim_client_ranges(follows);
 
   if (!(old.inode.rstat == old.inode.accounted_rstat))
@@ -1519,7 +1586,8 @@ old_inode_t& CInode::cow_old_inode(snapid_t follows, inode_t *pi)
   
   first = follows+1;
 
-  dout(10) << "cow_old_inode to [" << old.first << "," << follows << "] on "
+  dout(10) << "cow_old_inode " << (cow_head ? "head" : "previous_head" )
+	   << " to [" << old.first << "," << follows << "] on "
 	   << *this << dendl;
 
   return old;
@@ -1529,7 +1597,7 @@ void CInode::pre_cow_old_inode()
 {
   snapid_t follows = find_snaprealm()->get_newest_seq();
   if (first <= follows)
-    cow_old_inode(follows, get_projected_inode());
+    cow_old_inode(follows, true);
 }
 
 void CInode::purge_stale_snap_data(const set<snapid_t>& snaps)
@@ -1740,12 +1808,13 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   // xattr
   i = pxattr ? pi:oi;
   bool had_latest_xattrs = cap && (cap->issued() & CEPH_CAP_XATTR_SHARED) &&
-    cap->client_xattr_version == i->xattr_version;
+    cap->client_xattr_version == i->xattr_version &&
+    snapid == CEPH_NOSNAP;
 
   // xattr
   bufferlist xbl;
   e.xattr_version = i->xattr_version;
-  if (!had_latest_xattrs && cap) {
+  if (!had_latest_xattrs) {
     if (!pxattrs)
       pxattrs = pxattr ? get_projected_xattrs() : &xattrs;
     ::encode(*pxattrs, xbl);
@@ -1835,16 +1904,18 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   }
   e.cap.flags = is_auth() ? CEPH_CAP_FLAG_AUTH:0;
   dout(10) << "encode_inodestat caps " << ccap_string(e.cap.caps)
-	   << " seq " << e.cap.seq
-	   << " mseq " << e.cap.mseq << dendl;
+	   << " seq " << e.cap.seq << " mseq " << e.cap.mseq
+	   << " xattrv " << e.xattr_version << " len " << xbl.length()
+	   << dendl;
 
   // include those xattrs?
-  if (xbl.length()) {
-    if (cap && (cap->pending() & CEPH_CAP_XATTR_SHARED)) {
+  if (xbl.length() && cap) {
+    if (cap->pending() & CEPH_CAP_XATTR_SHARED) {
       dout(10) << "including xattrs version " << i->xattr_version << dendl;
       cap->client_xattr_version = i->xattr_version;
     } else {
-      xbl.clear(); // no xattrs
+      dout(10) << "dropping xattrs version " << i->xattr_version << dendl;
+      xbl.clear(); // no xattrs .. XXX what's this about?!?
     }
   }
 

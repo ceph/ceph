@@ -185,52 +185,101 @@ public:
   //bool hack_accessed;
   //utime_t hack_load_stamp;
 
-  // projected values (only defined while dirty)
-  list<inode_t*>   projected_inode;
+  /**
+   * Projection methods, used to store inode changes until they have been journaled,
+   * at which point they are popped.
+   * Usage:
+   * project_inode as needed. If you're also projecting xattrs, pass
+   * in an xattr map (by pointer), then edit the map.
+   * If you're also projecting the snaprealm, call project_snaprealm after
+   * calling project_inode, and modify the snaprealm as necessary.
+   *
+   * Then, journal. Once journaling is done, pop_and_dirty_projected_inode.
+   * This function will take care of the inode itself, the xattrs, and the snaprealm.
+   */
 
-  // if xattr* is null, it is defined to be the same as the previous version
-  list<map<string,bufferptr>*>   projected_xattrs;
+  struct projected_inode_t {
+    inode_t *inode;
+    map<string,bufferptr> *xattrs;
+    sr_t *snapnode;
+
+    projected_inode_t() : inode(NULL), xattrs(NULL), snapnode(NULL) {}
+    projected_inode_t(inode_t *in, sr_t *sn) : inode(in), xattrs(NULL), snapnode(sn) {}
+    projected_inode_t(inode_t *in, map<string, bufferptr> *xp = NULL, sr_t *sn = NULL) :
+      inode(in), xattrs(xp), snapnode(sn) {}
+  };
+  list<projected_inode_t*> projected_nodes;   // projected values (only defined while dirty)
   
-  version_t get_projected_version() {
-    if (projected_inode.empty())
-      return inode.version;
-    else
-      return projected_inode.back()->version;
-  }
-  bool is_projected() {
-    return !projected_inode.empty();
-  }
-
-  inode_t *get_projected_inode() { 
-    if (projected_inode.empty())
-      return &inode;
-    else
-      return projected_inode.back();
-  }
-  map<string,bufferptr> *get_projected_xattrs() {
-    if (!projected_xattrs.empty())
-      for (list<map<string,bufferptr>*>::reverse_iterator p = projected_xattrs.rbegin();
-	   p != projected_xattrs.rend();
-	   p++)
-	if (*p)
-	  return *p;
-    return &xattrs;
-  }
-
   inode_t *project_inode(map<string,bufferptr> *px=0);
   void pop_and_dirty_projected_inode(LogSegment *ls);
 
+  version_t get_projected_version() {
+    if (projected_nodes.empty())
+      return inode.version;
+    else
+      return projected_nodes.back()->inode->version;
+  }
+  bool is_projected() {
+    return !projected_nodes.empty();
+  }
+
+  inode_t *get_projected_inode() { 
+    if (projected_nodes.empty())
+      return &inode;
+    else
+      return projected_nodes.back()->inode;
+  }
   inode_t *get_previous_projected_inode() {
-    assert(!projected_inode.empty());
-    list<inode_t*>::reverse_iterator p = projected_inode.rbegin();
+    assert(!projected_nodes.empty());
+    list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
     p++;
-    if (p != projected_inode.rend())
-      return *p;
+    if (p != projected_nodes.rend())
+      return (*p)->inode;
     else
       return &inode;
   }
 
-  old_inode_t& cow_old_inode(snapid_t follows, inode_t *pi);
+  map<string,bufferptr> *get_projected_xattrs() {
+    for (list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
+	 p != projected_nodes.rend();
+	 p++)
+      if ((*p)->xattrs)
+	return (*p)->xattrs;
+    return &xattrs;
+  }
+  map<string,bufferptr> *get_previous_projected_xattrs() {
+    list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
+    for (p++;  // skip the most recent projected value
+	 p != projected_nodes.rend();
+	 p++)
+      if ((*p)->xattrs)
+	return (*p)->xattrs;
+    return &xattrs;
+  }
+
+  sr_t *project_snaprealm(snapid_t snapid=0);
+  sr_t *get_projected_srnode() {
+    if (projected_nodes.empty()) {
+      if (snaprealm)
+	return &snaprealm->srnode;
+      else
+	return NULL;
+    } else {
+      for (list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
+          p != projected_nodes.rend();
+          p++)
+        if ((*p)->snapnode)
+          return (*p)->snapnode;
+    }
+    return &snaprealm->srnode;
+  }
+  void project_past_snaprealm_parent(SnapRealm *newparent, bufferlist& snapbl);
+
+private:
+  void pop_projected_snaprealm(sr_t *next_snaprealm);
+
+public:
+  old_inode_t& cow_old_inode(snapid_t follows, bool cow_head);
   old_inode_t *pick_old_inode(snapid_t last);
   void pre_cow_old_inode();
   void purge_stale_snap_data(const set<snapid_t>& snaps);

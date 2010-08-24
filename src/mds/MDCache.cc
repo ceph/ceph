@@ -246,6 +246,7 @@ void MDCache::init_layouts()
 
 CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
 {
+  dout(0) << "creating system inode with ino:" << ino << dendl;
   CInode *in = new CInode(this);
   in->inode.ino = ino;
   in->inode.version = 1;
@@ -265,7 +266,7 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
     else
       in->inode_auth = pair<int,int>(in->ino() - MDS_INO_MDSDIR_OFFSET, CDIR_AUTH_UNKNOWN);
     in->open_snaprealm();  // empty snaprealm
-    in->snaprealm->seq = 1;
+    in->snaprealm->srnode.seq = 1;
   }
   
   add_inode(in);
@@ -1278,7 +1279,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
   CInode *oldin = new CInode(this, true, in->first, last);
   oldin->inode = *in->get_previous_projected_inode();
   oldin->symlink = in->symlink;
-  oldin->xattrs = in->xattrs;
+  oldin->xattrs = *in->get_previous_projected_xattrs();
 
   oldin->inode.trim_client_ranges(last);
 
@@ -1325,6 +1326,10 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn, snapid_t follows,
 				 CInode **pcow_inode, CDentry::linkage_t *dnl)
 {
+  if (!dn) {
+    dout(10) << "journal_cow_dentry got null CDentry, returning" << dendl;
+    return;
+  }
   dout(10) << "journal_cow_dentry follows " << follows << " on " << *dn << dendl;
 
   // nothing to cow on a null dentry, fix caller
@@ -1358,7 +1363,7 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
       return;
     }
 
-    in->cow_old_inode(follows, in->get_previous_projected_inode());
+    in->cow_old_inode(follows, false);
 
   } else {
     if (follows == CEPH_NOSNAP)
@@ -1383,7 +1388,10 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
 	*pcow_inode = oldin;
       CDentry *olddn = dn->dir->add_primary_dentry(dn->name, oldin, oldfirst, follows);
       dout(10) << " olddn " << *olddn << dendl;
-      metablob->add_primary_dentry(olddn, true);
+      bufferlist snapbl;
+      if (dnl->get_inode()->projected_nodes.back()->snapnode)
+        dnl->get_inode()->projected_nodes.back()->snapnode->encode(snapbl);
+      metablob->add_primary_dentry(olddn, true, 0, 0, (snapbl.length() ? &snapbl : NULL));
       mut->add_cow_dentry(olddn);
     } else {
       assert(dnl->is_remote());
@@ -1548,8 +1556,6 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
 
   accounted_rstat = rstat;
 
-  inode_t *pi_to_cow = cow_head ? pin->get_projected_inode() : pin->get_previous_projected_inode();
-
   while (last >= ofirst) {
     inode_t *pi;
     snapid_t first;
@@ -1557,13 +1563,13 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
       pi = pin->get_projected_inode();
       first = MAX(ofirst, pin->first);
       if (first > pin->first) {
-	old_inode_t& old = pin->cow_old_inode(first-1, pi_to_cow);
+	old_inode_t& old = pin->cow_old_inode(first-1, cow_head);
 	dout(20) << "   cloned old_inode rstat is " << old.inode.rstat << dendl;
       }
     } else {
       if (last >= pin->first) {
 	first = pin->first;
-	pin->cow_old_inode(last, pi_to_cow);
+	pin->cow_old_inode(last, cow_head);
       } else {
 	// our life is easier here because old_inodes is not sparse
 	// (although it may not begin at snapid 1)
@@ -6667,6 +6673,10 @@ void MDCache::anchor_create(MDRequest *mdr, CInode *in, Context *onfinish)
   // make trace
   vector<Anchor> trace;
   in->make_anchor_trace(trace);
+  if (!trace.size()) {
+    assert(MDS_INO_IS_BASE(in->ino()));
+    trace.push_back(Anchor(in->ino(), in->ino(), "", 0, 0));
+  }
   
   // do it
   C_MDC_AnchorPrepared *fin = new C_MDC_AnchorPrepared(this, in, true);
@@ -6832,7 +6842,7 @@ void MDCache::snaprealm_create(MDRequest *mdr, CInode *in)
   ::decode(seq, p);
 
   SnapRealm t(this, in);
-  t.created = seq;
+  t.srnode.created = seq;
   bufferlist snapbl;
   ::encode(t, snapbl);
   
@@ -6923,9 +6933,9 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in
   ::decode(seq, p);
 
   in->open_snaprealm();
-  in->snaprealm->seq = seq;
-  in->snaprealm->created = seq;
-  in->snaprealm->current_parent_since = seq;
+  in->snaprealm->srnode.seq = seq;
+  in->snaprealm->srnode.created = seq;
+  in->snaprealm->srnode.current_parent_since = seq;
 
   do_realm_invalidate_and_update_notify(in, CEPH_SNAP_OP_SPLIT);
 
@@ -6999,7 +7009,7 @@ void MDCache::eval_stray(CDentry *dn)
 	  return;
 	in->snaprealm->prune_past_parents();
 	if (in->snaprealm->has_past_parents()) {
-	  dout(20) << "  has past parents " << in->snaprealm->past_parents << dendl;
+	  dout(20) << "  has past parents " << in->snaprealm->srnode.past_parents << dendl;
 	  return;  // not until some snaps are deleted.
 	}
       }

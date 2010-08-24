@@ -2063,29 +2063,37 @@ void Locker::_do_snap_update(CInode *in, int dirty, snapid_t follows, client_t c
 
   // normal metadata updates that we can apply to the head as well.
 
-  // xattrs update?
+  // update xattrs?
+  bool xattrs = false;
   map<string,bufferptr> *px = 0;
   if ((dirty & CEPH_CAP_XATTR_EXCL) && 
       m->xattrbl.length() &&
       m->head.xattr_version > in->get_projected_inode()->xattr_version)
+    xattrs = true;
+
+  old_inode_t *oi = 0;
+  if (in->is_multiversion()) {
+    oi = in->pick_old_inode(snap);
+    if (oi) {
+      dout(10) << " writing into old inode" << dendl;
+      if (xattrs)
+	px = &oi->xattrs;
+    }
+  }
+  if (xattrs && !px)
     px = new map<string,bufferptr>;
 
   inode_t *pi = in->project_inode(px);
   pi->version = in->pre_dirty();
-
-  if (in->is_multiversion()) {
-    old_inode_t *oi = in->pick_old_inode(snap);
-    if (oi) {
-      dout(10) << " writing into old inode" << dendl;
-      pi = &oi->inode;
-    }
-  }      
+  if (oi)
+    pi = &oi->inode;
 
   _update_cap_fields(in, dirty, m, pi);
 
   // xattr
   if (px) {
-    dout(7) << " xattrs v" << pi->xattr_version << " -> " << m->head.xattr_version << dendl;
+    dout(7) << " xattrs v" << pi->xattr_version << " -> " << m->head.xattr_version
+	    << " len " << m->xattrbl.length() << dendl;
     pi->xattr_version = m->head.xattr_version;
     bufferlist::iterator p = m->xattrbl.begin();
     ::decode(*px, p);
