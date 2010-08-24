@@ -1902,7 +1902,7 @@ void Locker::handle_client_caps(MClientCaps *m)
     //  released all WR/EXCL caps (the FLUSHSNAP always comes before the cap
     //  update/release).
     if (head_in->client_need_snapflush.size()) {
-      if ((cap->issued() & CEPH_CAP_ANY_WR) == 0) {
+      if ((cap->issued() & CEPH_CAP_ANY_FILE_WR) == 0) {
 	_do_null_snapflush(head_in, client, follows);
       } else {
 	dout(10) << " revocation in progress, not making any conclusions about null snapflushes" << dendl;
