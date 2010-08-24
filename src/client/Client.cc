@@ -1890,6 +1890,7 @@ struct C_SnapFlush : public Context {
 void Client::queue_cap_snap(Inode *in, snapid_t seq)
 {
   int used = in->caps_used();
+  int dirty = in->caps_dirty();
   dout(10) << "queue_cap_snap " << *in << " seq " << seq << " used " << ccap_string(used) << dendl;
 
   if (in->cap_snaps.size() &&
@@ -1897,7 +1898,8 @@ void Client::queue_cap_snap(Inode *in, snapid_t seq)
     dout(10) << "queue_cap_snap already have pending cap_snap on " << *in << dendl;
     return;
   } else if (in->caps_dirty() ||
-            (used & CEPH_CAP_FILE_WR)) {
+            (used & CEPH_CAP_FILE_WR) ||
+	     (dirty & CEPH_CAP_ANY_WR)) {
     in->get();
     CapSnap *capsnap = &in->cap_snaps[seq];
     capsnap->context = in->snaprealm->cached_snap_context;
@@ -1906,6 +1908,12 @@ void Client::queue_cap_snap(Inode *in, snapid_t seq)
     
     capsnap->dirty_data = (used & CEPH_CAP_FILE_BUFFER);
     
+    capsnap->uid = in->uid;
+    capsnap->gid = in->gid;
+    capsnap->mode = in->mode;
+    capsnap->xattrs = in->xattrs;
+    capsnap->xattr_version = in->xattr_version;
+ 
     if (used & CEPH_CAP_FILE_WR) {
       dout(10) << "queue_cap_snap WR used on " << *in << dendl;
       capsnap->writing = 1;
@@ -1925,11 +1933,6 @@ void Client::finish_cap_snap(Inode *in, CapSnap *capsnap, int used)
   capsnap->atime = in->atime;
   capsnap->ctime = in->ctime;
   capsnap->time_warp_seq = in->time_warp_seq;
-  capsnap->uid = in->uid;
-  capsnap->gid = in->gid;
-  capsnap->mode = in->mode;
-  capsnap->xattrs = in->xattrs;
-  capsnap->xattr_version = in->xattr_version;
 
   if (used & CEPH_CAP_FILE_BUFFER) {
     dout(10) << "finish_cap_snap " << *in << " cap_snap " << capsnap << " used " << used
