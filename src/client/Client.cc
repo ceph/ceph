@@ -768,7 +768,7 @@ int Client::choose_target_mds(MetaRequest *req)
     is_hash = false;
   }
   
-  dout(20) << "choose_target_mds " << *in << " is_hash=" << is_hash
+  dout(20) << "choose_target_mds " << in << " is_hash=" << is_hash
            << " hash=" << hash << dendl;
 
   if (!in) goto random_mds;
