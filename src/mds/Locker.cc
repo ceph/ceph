@@ -2333,7 +2333,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
       ((dirty & CEPH_CAP_XATTR_EXCL) && !in->xattrlock.is_stable()) ||
       (!dirty && (!in->filelock.is_stable() || !in->authlock.is_stable() || !in->xattrlock.is_stable())) ||  // nothing dirty + unstable lock -> probably a revoke?
       (change_max && new_max) ||         // max INCREASE
-      (cap->wanted() & ~cap->pending()))
+      (cap && (cap->wanted() & ~cap->pending())))
     mds->mdlog->flush();
 
   return true;
