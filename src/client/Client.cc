@@ -492,6 +492,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
   
   if (in->is_dir() &&
       (st->cap.caps & CEPH_CAP_FILE_SHARED) &&
+      (issued & CEPH_CAP_FILE_EXCL) == 0 &&
       in->dirstat.nfiles == 0 &&
       in->dirstat.nsubdirs == 0) {
     dout(10) << " marking I_COMPLETE on empty dir " << *in << dendl;
