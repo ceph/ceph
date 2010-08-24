@@ -2258,6 +2258,15 @@ void Migrator::handle_export_notify(MExportDirNotify *m)
     set<CDir*> have;
     cache->map_dirfrag_set(m->get_bounds(), have);
     cache->adjust_bounded_subtree_auth(dir, have, new_auth);
+
+    if (new_auth.second == CDIR_AUTH_UNKNOWN) {
+      // wake up any auth change waiters
+      list<Context*> ls;
+      dir->take_waiting(MDSCacheObject::WAIT_AUTHCHANGE, ls);
+      if (!ls.empty())
+	dout(10) << "handle_export_notify woke up some AUTHCHANGE waiters" << dendl;
+      mds->queue_waiters(ls);
+    }
     
     // induce a merge?
     cache->try_subtree_merge(dir);

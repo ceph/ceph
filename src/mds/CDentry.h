@@ -258,6 +258,8 @@ public:
     lru_unpin();
   }
 
+  CDir *get_containing_subtree();
+
   // auth pins
   bool can_auth_pin();
   void auth_pin(void *by);
