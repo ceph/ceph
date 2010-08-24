@@ -5635,8 +5635,6 @@ struct C_MDS_mksnap_finish : public Context {
 void Server::handle_client_mksnap(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  dout(0) << "making snap with filepath: " << req->get_filepath().c_str()
-          << " and ino:" << req->get_filepath().get_ino() << dendl;
   CInode *diri = mdcache->get_inode(req->get_filepath().get_ino());
   if (!diri || diri->state_test(CInode::STATE_PURGING)) {
     reply_request(mdr, -ESTALE);
