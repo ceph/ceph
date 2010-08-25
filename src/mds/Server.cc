@@ -4902,7 +4902,9 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 
   // target inode
   if (!linkmerge && oldin) {
+    bool dest_primary = false;
     if (destdnl->is_primary()) {
+      dest_primary = true;
       assert(straydn);
       dout(10) << "straydn is " << *straydn << dendl;
       destdn->get_dir()->unlink_inode(destdn);
@@ -4918,7 +4920,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       destdn->get_dir()->unlink_inode(destdn);
     }
     // nlink-- targeti
-    if (oldin->is_auth() && destdnl->is_primary()) {
+    if (oldin->is_auth() && dest_primary) {
       bool hadrealm = (oldin->snaprealm ? true : false);
       oldin->pop_and_dirty_projected_inode(mdr->ls);
       if (oldin->snaprealm && !hadrealm)
