@@ -4837,7 +4837,7 @@ void OSD::handle_class(MClass *m)
     return;
 
   Mutex::Locker l(class_lock);
-  dout(0) << "handle_class action=" << m->action << dendl;
+  dout(10) << "handle_class action=" << m->action << dendl;
 
   switch (m->action) {
   case CLASS_RESPONSE:

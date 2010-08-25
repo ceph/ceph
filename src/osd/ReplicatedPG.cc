@@ -361,10 +361,8 @@ void ReplicatedPG::do_op(MOSDOp *op)
       obc->ondisk_read_unlock();
     }
 
-    if (result == -EAGAIN) { //must have referenced non-existent class
-      osd->reply_op_error(op, r);
+    if (result == -EAGAIN) // must have referenced non-existent class
       return;
-    }
 
     // prepare the reply
     ctx->reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), 0); 
