@@ -137,7 +137,11 @@ int main(int argc, const char **argv)
   }
 
   bufferlist magicbl;
-  store.get_bl_ss(magicbl, "magic", 0);
+  err = store.get_bl_ss(magicbl, "magic", 0);
+  if (err < 0) {
+    cerr << "unable to read magic from mon data.. did you run mkcephfs?" << std::endl;
+    exit(1);
+  }
   string magic(magicbl.c_str(), magicbl.length()-1);  // ignore trailing \n
   if (strcmp(magic.c_str(), CEPH_MON_ONDISK_MAGIC)) {
     cerr << "mon fs magic '" << magic << "' != current '" << CEPH_MON_ONDISK_MAGIC << "'" << std::endl;
