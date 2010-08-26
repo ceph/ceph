@@ -40,6 +40,11 @@ fi
 
 echo final vers $finalvers
 
+echo making sure .git_version is up to date
+cd src
+./check_version .git_version
+cd ..
+
 echo building tarball
 make dist
 
@@ -48,10 +53,6 @@ mkdir -p release/$finalvers
 cd release/$finalvers
 
 tar zxf ../../ceph-$vers.tar.gz 
-
-# note git version in the tarball
-echo $gitver > ceph-$vers/src/.git_version
-
 [ "$vers" != "$finalvers" ] && mv ceph-$vers ceph-$finalvers
 tar zcf ceph_$finalvers.orig.tar.gz ceph-$finalvers
 

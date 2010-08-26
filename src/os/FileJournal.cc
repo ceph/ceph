@@ -47,25 +47,17 @@ int FileJournal::_open(bool forwrite, bool create)
   fd = ::open(fn.c_str(), flags, 0644);
   if (fd < 0) {
     dout(2) << "_open failed " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    cerr << "unable to open journal " << fn << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
     return -errno;
   }
 
   // get size
   struct stat st;
   int r = ::fstat(fd, &st);
-  if (create && ((r < 0 && errno == ENOENT) ||
-		 (r == 0 && st.st_size < (g_conf.osd_journal_size << 20)))) {
-    uint64_t newsize = g_conf.osd_journal_size << 20;
-    dout(10) << "_open extending to " << newsize << " bytes" << dendl;
-    r = ::ftruncate(fd, newsize);
-    if (r < 0)
-      return -errno;
-    r = ::fstat(fd, &st);
+  if (r < 0) {
+    dout(2) << "_open failed to fstat! " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    return -errno; // wtf
   }
-  if (r < 0)
-    return -errno;
-  max_size = st.st_size;
-  block_size = MAX(st.st_blksize, PAGE_SIZE);
 
   if (max_size == 0) {
     // hmm, is this a raw block device?
@@ -78,13 +70,30 @@ int FileJournal::_open(bool forwrite, bool create)
 # ifdef BLKGETSIZE
     // hrm, try the 32 bit ioctl?
     unsigned long sectors = 0;
-    r = ioctl(fd, BLKGETSIZE, &sectors);
+    r = ::ioctl(fd, BLKGETSIZE, &sectors);
     max_size = sectors * 512ULL;
 # endif
 #endif
-    if (r < 0)
-      return -errno;
-    is_bdev = true;
+    if (r == 0) {
+      is_bdev = true;
+      block_size = PAGE_SIZE;
+    }
+  }
+
+  if (!is_bdev) {
+    if (create && st.st_size < (g_conf.osd_journal_size << 20)) {
+      uint64_t newsize = g_conf.osd_journal_size << 20;
+      dout(10) << "_open extending to " << newsize << " bytes" << dendl;
+      r = ::ftruncate(fd, newsize);
+      if (r < 0) {
+	dout(0) << "_open unable to extend journal to " << newsize << " bytes" << dendl;
+	cerr << "unable to extend journal to " << newsize << " bytes" << std::endl;
+	return -errno;
+      }
+      r = ::fstat(fd, &st);
+    }
+    max_size = st.st_size;
+    block_size = MAX(st.st_blksize, PAGE_SIZE);
   }
 
   max_size -= max_size % block_size;

@@ -1259,8 +1259,10 @@ void SimpleMessenger::Pipe::discard_queue()
       (*r)->put();
   out_q.clear();
   for (map<int,list<Message*> >::iterator p = in_q.begin(); p != in_q.end(); p++)
-    for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++)
+    for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++) {
+      messenger->dispatch_throttle_release((*r)->get_dispatch_throttle_size());
       (*r)->put();
+    }
   in_q.clear();
   in_qlen = 0;
 }
