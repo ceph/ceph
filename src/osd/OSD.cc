@@ -4809,16 +4809,17 @@ void OSD::wait_for_no_ops()
 
 // --------------------------------
 
-int OSD::get_class(const string& cname, ClassVersion& version, pg_t pgid, Message *m, ClassHandler::ClassData **cls)
+int OSD::get_class(const string& cname, ClassVersion& version, pg_t pgid, Message *m,
+		   ClassHandler::ClassData **pcls)
 {
   Mutex::Locker l(class_lock);
-  dout(10) << "wait_for_missing_class '" << cname << "' by " << pgid << dendl;
+  dout(10) << "get_class '" << cname << "' by " << m << dendl;
 
-
-  *cls = class_handler->get_class(cname, version);
-  if (*cls) {
-    switch ((*cls)->status) {
+  ClassHandler::ClassData *cls = class_handler->get_class(cname, version);
+  if (cls) {
+    switch (cls->status) {
     case ClassHandler::ClassData::CLASS_LOADED:
+      *pcls = cls;
       return 0;
     case ClassHandler::ClassData::CLASS_INVALID:
       dout(0) << "class not supported" << dendl;
@@ -4831,6 +4832,7 @@ int OSD::get_class(const string& cname, ClassVersion& version, pg_t pgid, Messag
     }
   }
 
+  dout(10) << "get_class '" << cname << "' by " << m << " waiting for missing class" << dendl;
   waiting_for_missing_class[cname].push_back(m);
   return -EAGAIN;
 }

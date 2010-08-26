@@ -98,36 +98,36 @@ ClassHandler::ClassData& ClassHandler::get_obj(const string& cname)
 
 ClassHandler::ClassData *ClassHandler::get_class(const string& cname, ClassVersion& version)
 {
-  ClassHandler::ClassData *ret = NULL;
-  ClassData *class_data = &get_obj(cname);
-  if (class_data == &null_cls_data)
+  ClassData *ret = NULL;
+  ClassData *cls = &get_obj(cname);
+  if (cls == &null_cls_data)
     return NULL;
 
-  Mutex::Locker lock(*class_data->mutex);
+  Mutex::Locker lock(*cls->mutex);
 
-  switch (class_data->status) {
+  switch (cls->status) {
+  case ClassData::CLASS_LOADED:
   case ClassData::CLASS_ERROR:
   case ClassData::CLASS_INVALID:
-  case ClassData::CLASS_LOADED:
-    if (class_data->cache_timed_out()) {
+    if (cls->cache_timed_out()) {
       dout(0) << "class timed out going to send request for " << cname.c_str() << " v" << version << dendl;
-      ret = class_data;
+      ret = cls;
       goto send;
     }
-    return class_data;
+    return cls;
+
   case ClassData::CLASS_REQUESTED:
     return NULL;
-    break;
 
   case ClassData::CLASS_UNKNOWN:
-    class_data->set_status(ClassData::CLASS_REQUESTED);
+    cls->set_status(ClassData::CLASS_REQUESTED);
     break;
 
   default:
     assert(0);
   }
 
-  class_data->version = version;
+  cls->version = version;
 send:
   osd->send_class_request(cname.c_str(), version);
   return ret;
@@ -144,26 +144,26 @@ void ClassHandler::handle_class(MClass *m)
        ++info_iter, ++add_iter) {
     ClassData& data = get_obj(info_iter->name);
     if (&data == &null_cls_data) {
-      dout(0) << "couldn't get class, out of memory? continuing" << dendl;
+      dout(1) << "couldn't get class, out of memory? continuing" << dendl;
       continue;
     }
-    dout(0) << "handle_class " << info_iter->name << dendl;
+    dout(10) << "handle_class " << info_iter->name << dendl;
     data.mutex->Lock();
     
     if (*add_iter) {
-        data.set_status(ClassData::CLASS_REQUESTED);
-	dout(10) << "added class '" << info_iter->name << "'" << dendl;
-	data.impl = *impl_iter;
-	++impl_iter;
-	int ret = _load_class(data);
-        if (ret < 0) {
-          data.set_status(ClassData::CLASS_ERROR);
-          osd->got_class(info_iter->name);
-        }
+      data.set_status(ClassData::CLASS_REQUESTED);
+      dout(10) << "added class '" << info_iter->name << "'" << dendl;
+      data.impl = *impl_iter;
+      ++impl_iter;
+      int ret = _load_class(data);
+      if (ret < 0) {
+	data.set_status(ClassData::CLASS_ERROR);
+	osd->got_class(info_iter->name);
+      }
     } else {
-	dout(10) << "response of an invalid class '" << info_iter->name << "'" << dendl;
-        data.set_status(ClassData::CLASS_INVALID);
-        osd->got_class(info_iter->name);
+      dout(10) << "response of an invalid class '" << info_iter->name << "'" << dendl;
+      data.set_status(ClassData::CLASS_INVALID);
+      osd->got_class(info_iter->name);
     }
     data.mutex->Unlock();
   }
