@@ -1247,10 +1247,17 @@ void OSD::update_heartbeat_peers()
   for (map<int,epoch_t>::iterator p = old_from.begin();
        p != old_from.end();
        p++) {
-    if (heartbeat_to.count(p->first) == 0 ||
-	heartbeat_inst[p->first] != old_inst[p->first])
-      dout(10) << "update_heartbeat_peers: dropped old _from osd" << p->first 
-	       << " " << old_inst[p->first] << dendl;
+    if (heartbeat_from.count(p->first) == 0 ||
+	heartbeat_inst[p->first] != old_inst[p->first]) {
+      if (heartbeat_to.count(p->first) == 0) {
+	dout(10) << "update_heartbeat_peers: marking down old _from peer " << old_inst[p->first] 
+		 << " as of " << p->second << dendl;
+	heartbeat_messenger->mark_down(old_inst[p->first].addr);
+      } else {
+	dout(10) << "update_heartbeat_peers: old _from peer " << old_inst[p->first]
+		 << " is still a _to peer, not marking down" << dendl;
+      }
+    }
   }
 
   heartbeat_epoch = osdmap->get_epoch();
