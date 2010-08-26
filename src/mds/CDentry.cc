@@ -85,8 +85,10 @@ ostream& operator<<(ostream& out, CDentry& dn)
     out << ")";
   }
 
-  out << " " << dn.lock;
-  out << " " << dn.versionlock;
+  if (!dn.lock.is_sync_and_unlocked())
+    out << " " << dn.lock;
+  if (!dn.versionlock.is_sync_and_unlocked())
+    out << " " << dn.versionlock;
 
   if (dn.get_projected_version() != dn.get_version())
     out << " pv=" << dn.get_projected_version();

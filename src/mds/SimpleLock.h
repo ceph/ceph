@@ -298,7 +298,7 @@ public:
   
 
   // state
-  int get_state() { return state; }
+  int get_state() const { return state; }
   int set_state(int s) { 
     state = s; 
     //assert(!is_stable() || gather_set.size() == 0);  // gather should be empty in stable states.
@@ -314,12 +314,23 @@ public:
     take_waiting(SimpleLock::WAIT_ALL, waiters);
   }
 
-  bool is_stable() {
+  bool is_stable() const {
     return get_sm()->states[state].next == 0;
   }
   int get_next_state() {
     return get_sm()->states[state].next;
   }
+
+
+  bool is_sync_and_unlocked() const {
+    return
+      get_state() == LOCK_SYNC &&
+      !is_rdlocked() &&
+      !is_leased() &&
+      !is_wrlocked() &&
+      !is_xlocked();
+  }
+
 
   /*
   bool fw_rdlock_to_auth() {
@@ -397,7 +408,7 @@ public:
   }
 
   // rdlock
-  bool is_rdlocked() { return num_rdlock > 0; }
+  bool is_rdlocked() const { return num_rdlock > 0; }
   int get_rdlock() { 
     if (!num_rdlock)
       parent->get(MDSCacheObject::PIN_LOCK);
@@ -426,7 +437,7 @@ public:
       try_clear_more();
     }
   }
-  bool is_wrlocked() { return have_more() && more()->num_wrlock > 0; }
+  bool is_wrlocked() const { return have_more() && more()->num_wrlock > 0; }
   int get_num_wrlocks() { return have_more() ? more()->num_wrlock : 0; }
 
   // xlock
@@ -454,7 +465,7 @@ public:
       try_clear_more();
     }
   }
-  bool is_xlocked() { return have_more() && more()->num_xlock > 0; }
+  bool is_xlocked() const { return have_more() && more()->num_xlock > 0; }
   int get_num_xlocks() { return have_more() ? more()->num_xlock : 0; }
   client_t get_xlock_by_client() {
     return have_more() ? more()->xlock_by_client : -1;
@@ -475,7 +486,7 @@ public:
       try_clear_more();
     }
   }
-  bool is_leased() { return num_client_lease > 0; }
+  bool is_leased() const { return num_client_lease > 0; }
   int get_num_client_lease() {
     return num_client_lease;
   }

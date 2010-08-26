@@ -40,7 +40,7 @@ class ScatterLock : public SimpleLock {
   };
   more_bits_t *_more;
 
-  bool have_more() { return _more ? true : false; }
+  bool have_more() const { return _more ? true : false; }
   void try_clear_more() {
     if (_more && _more->empty()) {
       delete _more;
@@ -64,6 +64,14 @@ public:
     }
   }
 
+  bool is_sync_and_unlocked() const {
+    return
+      SimpleLock::is_sync_and_unlocked() && 
+      !is_dirty() &&
+      !is_flushing();
+  }
+
+
   xlist<ScatterLock*>::item *get_updated_item() { return &more()->item_updated; }
   utime_t get_update_stamp() { return more()->update_stamp; }
   void set_update_stamp(utime_t t) { more()->update_stamp = t; }
@@ -79,10 +87,10 @@ public:
     return have_more() ? _more->scatter_wanted : false; 
   }
 
-  bool is_dirty() {
+  bool is_dirty() const {
     return have_more() ? _more->dirty : false;
   }
-  bool is_flushing() {
+  bool is_flushing() const {
     return have_more() ? _more->flushing : false;
   }
 

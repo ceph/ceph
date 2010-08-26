@@ -149,18 +149,27 @@ ostream& operator<<(ostream& out, CInode& in)
 
 
   // locks
-  out << " " << in.authlock;
-  out << " " << in.linklock;
+  if (!in.authlock.is_sync_and_unlocked())
+    out << " " << in.authlock;
+  if (!in.linklock.is_sync_and_unlocked())
+    out << " " << in.linklock;
   if (in.inode.is_dir()) {
-    out << " " << in.dirfragtreelock;
-    out << " " << in.snaplock;
-    out << " " << in.nestlock;
+    if (!in.dirfragtreelock.is_sync_and_unlocked())
+      out << " " << in.dirfragtreelock;
+    if (!in.snaplock.is_sync_and_unlocked())
+      out << " " << in.snaplock;
+    if (!in.nestlock.is_sync_and_unlocked())
+      out << " " << in.nestlock;
   } else  {
-    out << " " << in.flocklock;
+    if (!in.flocklock.is_sync_and_unlocked())
+      out << " " << in.flocklock;
   }
-  out << " " << in.filelock;
-  out << " " << in.xattrlock;
-  out << " " << in.versionlock;
+  if (!in.filelock.is_sync_and_unlocked())
+    out << " " << in.filelock;
+  if (!in.xattrlock.is_sync_and_unlocked())
+    out << " " << in.xattrlock;
+  if (!in.versionlock.is_sync_and_unlocked())  
+    out << " " << in.versionlock;
 
   // hack: spit out crap on which clients have caps
   if (in.inode.client_ranges.size())
