@@ -51,7 +51,7 @@ public:
       CLASS_REQUESTED,
     } status;
     ClassVersion version;
-    time_t timeout;
+    utime_t expires;
     ClassImpl impl;
     string name;
     OSD *osd;
@@ -66,7 +66,7 @@ public:
 
     bool has_missing_deps() { return (missing_dependencies.size() > 0); }
 
-    ClassData() : mutex(NULL), status(CLASS_UNKNOWN), version(), timeout(0), handle(NULL), registered(false)  {}
+    ClassData() : mutex(NULL), status(CLASS_UNKNOWN), version(), handle(NULL), registered(false)  {}
     ~ClassData() { if (mutex) delete mutex; }
 
     ClassMethod *register_method(const char *mname, int flags, cls_method_call_t func);
@@ -78,7 +78,6 @@ public:
     void init();
 
     void set_status(Status _status);
-    void set_timeout();
     bool cache_timed_out();
   };
   Mutex mutex;

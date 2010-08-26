@@ -367,27 +367,29 @@ void ClassHandler::ClassData::set_status(ClassHandler::ClassData::Status _status
 {
   status = _status;
 
+  utime_t e = g_clock.now();
   switch (status) {
     case CLASS_ERROR:
     case CLASS_INVALID:
-    case CLASS_LOADED:
-      set_timeout();
+      e += g_conf.osd_class_error_timeout;
+      expires = e;
       break;
+
+    case CLASS_LOADED:
+      e += g_conf.osd_class_timeout;
+      expires = e;
+      break;
+
     default:
       break;
   }
 }
 
-void ClassHandler::ClassData::set_timeout()
-{
-  timeout = g_clock.now();
-  timeout += g_conf.osd_class_timeout;
-}
-
 bool ClassHandler::ClassData::cache_timed_out()
 {
-  dout(0) << "timeout=" << timeout << " g_clock.now()=" << g_clock.now() << dendl;
-  return (timeout && g_clock.now() >= timeout);
+  utime_t now = g_clock.now();
+  dout(0) << "expires " << expires << " now " << now << dendl;
+  return expires != utime_t() && now > expires;
 }
 
 void ClassHandler::ClassMethod::unregister()

@@ -356,7 +356,8 @@ struct md_config_t {
 
   bool osd_auto_weight;
 
-  bool osd_class_timeout;
+  double osd_class_error_timeout;
+  double osd_class_timeout;
   const char *osd_class_tmp;
 
   bool osd_check_for_log_corruption;  // bleh
