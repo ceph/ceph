@@ -357,6 +357,8 @@ void Client::update_inode_file_bits(Inode *in,
   dout(25) << "truncate_seq: mds " << truncate_seq <<  " local "
 	   << in->truncate_seq << " time_warp_seq: mds " << time_warp_seq
 	   << " local " << in->time_warp_seq << dendl;
+  uint64_t prior_size = in->size;
+
   if (truncate_seq > in->truncate_seq ||
       (truncate_seq == in->truncate_seq && size > in->size)) {
     dout(10) << "size " << in->size << " -> " << size << dendl;
@@ -375,6 +377,13 @@ void Client::update_inode_file_bits(Inode *in,
 	     << truncate_size << dendl;
     in->truncate_size = truncate_size;
     in->oset.truncate_size = truncate_size;
+    if (g_conf.client_oc) { //do actual truncation
+      vector<ObjectExtent> ls;
+      filer->file_to_extents(in->ino, &in->layout,
+                             truncate_size, prior_size - truncate_size,
+                             ls);
+      objectcacher->truncate_set(&in->oset, ls);
+    }
   }
   
   // be careful with size, mtime, atime
@@ -2619,18 +2628,13 @@ void Client::handle_cap_trunc(Inode *in, MClientCaps *m)
   dout(10) << "handle_cap_trunc on ino " << *in
 	   << " size " << in->size << " -> " << m->get_size()
 	   << dendl;
-  // trim filecache?
-  if (g_conf.client_oc &&
-      m->get_size() < in->size) {
-    // map range to objects
-    vector<ObjectExtent> ls;
-    filer->file_to_extents(in->ino, &in->layout, 
-			   m->get_size(), in->size - m->get_size(),
-			   ls);
-    objectcacher->truncate_set(&in->oset, ls);
-  }
   
-  in->reported_size = in->size = m->get_size(); 
+  int implemented = 0;
+  int issued = in->caps_issued(&implemented) | in->caps_dirty();
+  issued |= implemented;
+  update_inode_file_bits(in, m->get_truncate_seq(), m->get_truncate_size(),
+                         m->get_size(), m->get_time_warp_seq(), m->get_ctime(),
+                         m->get_mtime(), m->get_atime(), issued);
   m->put();
 }
 
