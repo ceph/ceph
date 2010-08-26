@@ -1257,7 +1257,7 @@ void OSD::update_heartbeat_peers()
 	// share latest map with this peer (via the cluster link, NOT
 	// the heartbeat link), so they know not to expect heartbeats
 	// from us.  otherwise they may mark us down!
-	_share_map_outgoing(osdmap->get_inst(p->first));
+	_share_map_outgoing(osdmap->get_cluster_inst(p->first));
       }
     }
   }
