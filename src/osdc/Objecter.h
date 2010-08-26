@@ -218,7 +218,6 @@ public:
     SnapContext snapc;
     utime_t mtime;
 
-    bufferlist inbl;
     bufferlist *outbl;
 
     int flags, priority;
