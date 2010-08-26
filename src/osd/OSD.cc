@@ -1224,9 +1224,14 @@ void OSD::update_heartbeat_peers()
       heartbeat_to[p->first] = p->second;
       heartbeat_inst[p->first] = old_inst[p->first];
     } else {
-      dout(10) << "update_heartbeat_peers: marking down old _to peer " << old_inst[p->first] 
-	       << " as of " << p->second << dendl;
-      heartbeat_messenger->mark_down(old_inst[p->first].addr);
+      if (heartbeat_from.count(p->first) && old_inst[p->first] == heartbeat_inst[p->first]) {
+	dout(10) << "update_heartbeat_peers: old _to peer " << old_inst[p->first] 
+		 << " is still a _from peer, not marking down" << dendl;
+      } else {
+	dout(10) << "update_heartbeat_peers: marking down old _to peer " << old_inst[p->first] 
+		 << " as of " << p->second << dendl;
+	heartbeat_messenger->mark_down(old_inst[p->first].addr);
+      }
 
       if (!osdmap->is_down(p->first) &&
 	  osdmap->get_hb_inst(p->first) == old_inst[p->first]) {
