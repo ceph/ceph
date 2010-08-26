@@ -437,7 +437,8 @@ private:
   }
   const entity_addr_t &get_cluster_addr(int osd) {
     assert(exists(osd));
-    if (osd_cluster_addr[osd] == entity_addr_t()) return get_addr(osd);
+    if (osd_cluster_addr[osd] == entity_addr_t())
+      return get_addr(osd);
     return osd_cluster_addr[osd];
   }
   const entity_addr_t &get_hb_addr(int osd) {
@@ -451,7 +452,8 @@ private:
   }
   entity_inst_t get_cluster_inst(int osd) {
     assert(exists(osd) && is_up(osd));
-    if(osd_cluster_addr[osd] == entity_addr_t()) return get_inst(osd);
+    if (osd_cluster_addr[osd] == entity_addr_t())
+      return get_inst(osd);
     return entity_inst_t(entity_name_t::OSD(osd), osd_cluster_addr[osd]);
   }
   entity_inst_t get_hb_inst(int osd) {
