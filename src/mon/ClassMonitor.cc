@@ -517,11 +517,11 @@ void ClassMonitor::handle_request(MClass *m)
     reply->info.push_back(*p);
     switch (m->action) {
     case CLASS_GET:
+      dout(10) << "CLASS_GET name='" << (*p).name << "' ver='" << (*p).version << "'" << dendl;
       if (list.get_ver((*p).name, (*p).version, &ver)) {
         int len = (*p).name.length() + 16;
         int bin_len;
         char store_name[len];
-        dout(0) << "got CLASS_GET name=" << (*p).name << " ver=" << (*p).version << dendl;
         snprintf(store_name, len, "%s.%s.%s", (*p).name.c_str(), ver.str(), ver.arch());
         bufferlist bl;
         bin_len = mon->store->get_bl_ss(bl, "class_impl", store_name);
