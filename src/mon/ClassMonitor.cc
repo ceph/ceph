@@ -346,6 +346,8 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
       }
       impl.stamp = g_clock.now();
 
+      bool in_map = list.library_map.find(name) != list.library_map.end();
+
       ClassVersionMap& map = list.library_map[name];
       ClassVersion cv(ver, arch);
       ClassInfo& info = map.m[cv];
@@ -356,7 +358,7 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
       snprintf(store_name, len, "%s.%s.%s", name.c_str(), cv.str(), cv.arch());
       bufferlist prev_bin;
       bool should_store = true;
-      if (!overwrite_opt) {
+      if (!overwrite_opt && in_map) {
         bufferlist bl;
 
         int bin_len = mon->store->get_bl_ss(bl, "class_impl", store_name);
