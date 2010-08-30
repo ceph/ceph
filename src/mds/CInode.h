@@ -627,7 +627,12 @@ public:
 	lock->set_state(LOCK_EXCL);
       else if (issued & CEPH_CAP_GWR)
 	lock->set_state(LOCK_MIX);
-      else
+      else if (lock->is_dirty()) {
+	if (is_replicated())
+	  lock->set_state(LOCK_MIX);
+	else
+	  lock->set_state(LOCK_LOCK);
+      } else
 	lock->set_state(LOCK_SYNC);
     } else {
       if (lock->is_xlocked())
