@@ -4012,10 +4012,10 @@ void MDCache::process_reconnected_caps()
   map<client_t,MClientSnap*> splits;
 
   // adjust lock states appropriately
-  map<CInode*,map<client_t,inodeno_t> >::iterator p = reconnected_caps.begin();
-  while (p != reconnected_caps.end()) {
+  for (map<CInode*,map<client_t,inodeno_t> >::iterator p = reconnected_caps.begin();
+       p != reconnected_caps.end();
+       p++) {
     CInode *in = p->first;
-    p++;
 
     in->choose_lock_states();
     dout(15) << " chose lock states on " << *in << dendl;
