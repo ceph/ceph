@@ -3975,12 +3975,11 @@ void MDCache::process_reconnected_caps()
 
   map<client_t,MClientSnap*> splits;
 
-  // adjust lock states appropriately
-  for (map<CInode*,map<client_t,inodeno_t> >::iterator p = reconnected_caps.begin();
-       p != reconnected_caps.end();
-       p++) {
-    CInode *in = p->first;
-
+  for (hash_map<vinodeno_t,CInode*>::iterator i = inode_map.begin();
+       i != inode_map.end();
+       ++i) {
+    CInode *in = i->second;
+ 
     in->choose_lock_states();
     dout(15) << " chose lock states on " << *in << dendl;
 
@@ -3988,21 +3987,25 @@ void MDCache::process_reconnected_caps()
 
     check_realm_past_parents(realm);
 
-    // also, make sure client's cap is in the correct snaprealm.
-    for (map<client_t,inodeno_t>::iterator q = p->second.begin();
-	 q != p->second.end();
-	 q++) {
-      if (q->second == realm->inode->ino()) {
-	dout(15) << "  client" << q->first << " has correct realm " << q->second << dendl;
-      } else {
-	dout(15) << "  client" << q->first << " has wrong realm " << q->second
-		 << " != " << realm->inode->ino() << dendl;
-	if (realm->have_past_parents_open()) {
-	  // ok, include in a split message _now_.
-	  prepare_realm_split(realm, q->first, in->ino(), splits);
+    map<CInode*,map<client_t,inodeno_t> >::iterator p = reconnected_caps.find(in);
+    if (p != reconnected_caps.end()) {
+
+      // also, make sure client's cap is in the correct snaprealm.
+      for (map<client_t,inodeno_t>::iterator q = p->second.begin();
+	   q != p->second.end();
+	   q++) {
+	if (q->second == realm->inode->ino()) {
+	  dout(15) << "  client" << q->first << " has correct realm " << q->second << dendl;
 	} else {
-	  // send the split later.
-	  missing_snap_parents[realm->inode][q->first].insert(in->ino());
+	  dout(15) << "  client" << q->first << " has wrong realm " << q->second
+		   << " != " << realm->inode->ino() << dendl;
+	  if (realm->have_past_parents_open()) {
+	    // ok, include in a split message _now_.
+	    prepare_realm_split(realm, q->first, in->ino(), splits);
+	  } else {
+	    // send the split later.
+	    missing_snap_parents[realm->inode][q->first].insert(in->ino());
+	  }
 	}
       }
     }
