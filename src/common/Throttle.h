@@ -69,7 +69,7 @@ public:
   }
 
   bool get(int64_t c = 1, int64_t m = 0) {
-    assert(c > 0);
+    assert(c >= 0);
     Mutex::Locker l(lock);
     if (m) {
       assert(m > 0);
@@ -78,6 +78,17 @@ public:
     bool waited = _wait(c);
     count += c;
     return waited;
+  }
+
+  /* Returns true if it successfully got the requested amount,
+   * or false if it would block.
+   */
+  bool get_or_fail(int64_t c = 1) {
+    assert (c >= 0);
+    Mutex::Locker l(lock);
+    if (_should_wait(c)) return false;
+    count += c;
+    return true;
   }
 
   int64_t put(int64_t c = 1) {
