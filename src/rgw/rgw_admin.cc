@@ -25,7 +25,7 @@ void usage()
   cerr << "options:" << std::endl;
   cerr << "   --uid=<id> (S3 uid)" << std::endl;
   cerr << "   --auth_uid=<auid> (librados uid)" << std::endl;
-  cerr << "   --key=<key>" << std::endl;
+  cerr << "   --secret=<key>" << std::endl;
   cerr << "   --email=<email>" << std::endl;
   cerr << "   --display-name=<name>" << std::endl;
   cerr << "   --bucket=<bucket>" << std::endl;
