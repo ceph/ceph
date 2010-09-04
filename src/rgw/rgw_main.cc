@@ -275,6 +275,7 @@ int main(int argc, char *argv[])
       abort_early(&s, ret);
       continue;
     }
+    dump_continue(&s);
 
     RGWOp *op = rgwhandler.get_op();
     if (op) {

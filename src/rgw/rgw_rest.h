@@ -133,6 +133,7 @@ extern void open_section(struct req_state *s, const char *name);
 extern void close_section(struct req_state *s, const char *name);
 extern void dump_bucket(struct req_state *s, RGWObjEnt& obj);
 extern void abort_early(struct req_state *s, int err);
+extern void dump_continue(struct req_state *s);
 extern void list_all_buckets_end(struct req_state *s);
 extern void dump_value(struct req_state *s, const char *name, const char *fmt, ...);
 extern void dump_time(struct req_state *s, const char *name, time_t *t);

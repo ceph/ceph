@@ -199,6 +199,12 @@ void abort_early(struct req_state *s, int err)
   end_header(s);
 }
 
+void dump_continue(struct req_state *s)
+{
+  dump_status(s, "100");
+  FCGX_FFlush(s->fcgx->out);
+}
+
 void dump_range(struct req_state *s, off_t ofs, off_t end)
 {
     CGI_PRINTF(s->fcgx->out,"Content-Range: bytes %d-%d/%d\n", (int)ofs, (int)end, (int)end + 1);
