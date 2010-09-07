@@ -647,6 +647,8 @@ public:
 	choose_ideal_loner() >= 0)
       try_set_loner();
     choose_lock_state(&filelock, issued);
+    choose_lock_state(&nestlock, issued);
+    choose_lock_state(&dirfragtreelock, issued);
     choose_lock_state(&authlock, issued);
     choose_lock_state(&xattrlock, issued);
     choose_lock_state(&linklock, issued);
