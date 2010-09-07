@@ -3899,7 +3899,7 @@ void MDCache::rejoin_gather_finish()
   }
   
   process_imported_caps();
-  process_reconnected_caps();
+  choose_lock_states_and_reconnect_caps();
 
   vector<CInode*> recover_q, check_q;
   identify_files_to_recover(rejoin_recover_q, rejoin_check_q);
@@ -3969,9 +3969,9 @@ void MDCache::check_realm_past_parents(SnapRealm *realm)
 /*
  * choose lock states based on reconnected caps
  */
-void MDCache::process_reconnected_caps()
+void MDCache::choose_lock_states_and_reconnect_caps()
 {
-  dout(10) << "process_reconnected_caps" << dendl;
+  dout(10) << "choose_lock_states_and_reconnect_caps" << dendl;
 
   map<client_t,MClientSnap*> splits;
 
