@@ -86,7 +86,7 @@ done
 [ -z "$conf" ] && usage_exit
 
 if [ $allhosts -eq 0 ]; then
-    echo mkcephfs currently requires -a|--allhosts to initialize the whole fs at once.
+    echo "mkcephfs currently requires -a|--allhosts to initialize the whole fs at once."
     usage_exit
 fi
 
