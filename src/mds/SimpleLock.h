@@ -347,7 +347,7 @@ public:
 
 
 
-  virtual bool is_dirty() { return false; }
+  virtual bool is_dirty() const { return false; }
 
 
   // can_*

@@ -627,7 +627,12 @@ public:
 	lock->set_state(LOCK_EXCL);
       else if (issued & CEPH_CAP_GWR)
 	lock->set_state(LOCK_MIX);
-      else
+      else if (lock->is_dirty()) {
+	if (is_replicated())
+	  lock->set_state(LOCK_MIX);
+	else
+	  lock->set_state(LOCK_LOCK);
+      } else
 	lock->set_state(LOCK_SYNC);
     } else {
       if (lock->is_xlocked())
@@ -642,6 +647,8 @@ public:
 	choose_ideal_loner() >= 0)
       try_set_loner();
     choose_lock_state(&filelock, issued);
+    choose_lock_state(&nestlock, issued);
+    choose_lock_state(&dirfragtreelock, issued);
     choose_lock_state(&authlock, issued);
     choose_lock_state(&xattrlock, issued);
     choose_lock_state(&linklock, issued);

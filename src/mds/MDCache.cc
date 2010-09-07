@@ -3899,7 +3899,7 @@ void MDCache::rejoin_gather_finish()
   }
   
   process_imported_caps();
-  process_reconnected_caps();
+  choose_lock_states_and_reconnect_caps();
 
   vector<CInode*> recover_q, check_q;
   identify_files_to_recover(rejoin_recover_q, rejoin_check_q);
@@ -3969,18 +3969,17 @@ void MDCache::check_realm_past_parents(SnapRealm *realm)
 /*
  * choose lock states based on reconnected caps
  */
-void MDCache::process_reconnected_caps()
+void MDCache::choose_lock_states_and_reconnect_caps()
 {
-  dout(10) << "process_reconnected_caps" << dendl;
+  dout(10) << "choose_lock_states_and_reconnect_caps" << dendl;
 
   map<client_t,MClientSnap*> splits;
 
-  // adjust lock states appropriately
-  map<CInode*,map<client_t,inodeno_t> >::iterator p = reconnected_caps.begin();
-  while (p != reconnected_caps.end()) {
-    CInode *in = p->first;
-    p++;
-
+  for (hash_map<vinodeno_t,CInode*>::iterator i = inode_map.begin();
+       i != inode_map.end();
+       ++i) {
+    CInode *in = i->second;
+ 
     in->choose_lock_states();
     dout(15) << " chose lock states on " << *in << dendl;
 
@@ -3988,21 +3987,25 @@ void MDCache::process_reconnected_caps()
 
     check_realm_past_parents(realm);
 
-    // also, make sure client's cap is in the correct snaprealm.
-    for (map<client_t,inodeno_t>::iterator q = p->second.begin();
-	 q != p->second.end();
-	 q++) {
-      if (q->second == realm->inode->ino()) {
-	dout(15) << "  client" << q->first << " has correct realm " << q->second << dendl;
-      } else {
-	dout(15) << "  client" << q->first << " has wrong realm " << q->second
-		 << " != " << realm->inode->ino() << dendl;
-	if (realm->have_past_parents_open()) {
-	  // ok, include in a split message _now_.
-	  prepare_realm_split(realm, q->first, in->ino(), splits);
+    map<CInode*,map<client_t,inodeno_t> >::iterator p = reconnected_caps.find(in);
+    if (p != reconnected_caps.end()) {
+
+      // also, make sure client's cap is in the correct snaprealm.
+      for (map<client_t,inodeno_t>::iterator q = p->second.begin();
+	   q != p->second.end();
+	   q++) {
+	if (q->second == realm->inode->ino()) {
+	  dout(15) << "  client" << q->first << " has correct realm " << q->second << dendl;
 	} else {
-	  // send the split later.
-	  missing_snap_parents[realm->inode][q->first].insert(in->ino());
+	  dout(15) << "  client" << q->first << " has wrong realm " << q->second
+		   << " != " << realm->inode->ino() << dendl;
+	  if (realm->have_past_parents_open()) {
+	    // ok, include in a split message _now_.
+	    prepare_realm_split(realm, q->first, in->ino(), splits);
+	  } else {
+	    // send the split later.
+	    missing_snap_parents[realm->inode][q->first].insert(in->ino());
+	  }
 	}
       }
     }
