@@ -139,7 +139,7 @@ ostream& CDir::print_db_line_prefix(ostream& out)
 // CDir
 
 CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
-  item_dirty(this), item_new(this), waiting_on_auth_change(member_offset(MDSCacheObject, item_waiting_on_auth_change))
+  item_dirty(this), item_new(this)
 {
   g_num_dir++;
   g_num_dira++;
@@ -880,7 +880,7 @@ void CDir::add_waiter(uint64_t tag, Context *c)
 
 
 
-/* NOTE: this checks dentry and authchange waiters too */
+/* NOTE: this checks dentry waiters too */
 void CDir::take_waiting(uint64_t mask, list<Context*>& ls)
 {
   if ((mask & WAIT_DENTRY) && waiting_on_dentry.size()) {
@@ -894,15 +894,6 @@ void CDir::take_waiting(uint64_t mask, list<Context*>& ls)
       take_dentry_waiting(name, snap, snap, ls);
     }
     put(PIN_DNWAITER);
-  }
-
-  if (mask & MDSCacheObject::WAIT_AUTHCHANGE) {
-    elist<MDSCacheObject*>::iterator p = waiting_on_auth_change.begin();
-    while (!p.end()) {
-      MDSCacheObject *o = *p;
-      ++p;
-      o->take_waiting(MDSCacheObject::WAIT_AUTHCHANGE, ls);  // careful, this removes *o from the elist
-    }
   }
   
   // waiting
@@ -2226,9 +2217,5 @@ void CDir::unfreeze_dir()
 
 
 
-CDir *CDir::get_containing_subtree()
-{
-  return cache->get_subtree_root(this);
-}
 
 

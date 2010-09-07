@@ -550,8 +550,3 @@ void CDentry::remove_client_lease(ClientLease *l, Locker *locker)
 }
 
 
-
-CDir *CDentry::get_containing_subtree()
-{
-  return get_dir()->get_containing_subtree();
-}

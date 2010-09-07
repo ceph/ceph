@@ -487,10 +487,6 @@ void CInode::put_stickydirs()
 
 
 
-CDir *CInode::get_containing_subtree()
-{
-  return get_projected_parent_dn()->get_dir()->get_containing_subtree();
-}
 
 
 // pins

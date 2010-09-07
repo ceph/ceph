@@ -753,13 +753,6 @@ void MDCache::try_subtree_merge_at(CDir *dir)
     subtrees.erase(dir);
     subtrees[parent].erase(dir);
 
-    // move auth change waiters
-    while (!dir->waiting_on_auth_change.empty()) {
-      MDSCacheObject *o = dir->waiting_on_auth_change.front();
-      parent->add_auth_change_waiter(o);
-      dout(10) << " moved auth change waiter " << *o << dendl;
-    }
-
     // adjust popularity?
     if (dir->is_auth()) {
       utime_t now = g_clock.now();
@@ -877,17 +870,6 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<in
 	subtrees[root].erase(p);
       }
       p = next;
-    }
-
-    // move auth change waiters
-    elist<MDSCacheObject*>::iterator q = root->waiting_on_auth_change.begin();
-    while (!q.end()) {
-      MDSCacheObject *o = *q;
-      ++q;
-      if (o->get_containing_subtree() == dir) {
-	dout(20) << " moving auth change waiter " << *o << dendl;
-	dir->add_auth_change_waiter(o);  // careful, this removes *o from root's list
-      }
     }
     
     // i am a bound of the parent subtree.
@@ -1025,7 +1007,6 @@ void MDCache::remove_subtree(CDir *dir)
     assert(subtrees[p].count(dir));
     subtrees[p].erase(dir);
   }
-  assert(dir->waiting_on_auth_change.empty());
 }
 
 void MDCache::get_subtree_bounds(CDir *dir, set<CDir*>& bounds)

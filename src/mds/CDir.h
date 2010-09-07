@@ -254,16 +254,6 @@ protected:
   int num_dentries_auth_subtree_nested;
 
 
-  // extra wait stuff
-  elist<MDSCacheObject*> waiting_on_auth_change;  // only on subtree roots
-
-public:
-  void add_auth_change_waiter(MDSCacheObject *o) {
-    waiting_on_auth_change.push_back(&o->item_waiting_on_auth_change);
-  }
-protected:
-
-
   // friends
   friend class Migrator;
   friend class CInode;
@@ -342,8 +332,6 @@ private:
   void purge_stale_snap_data(const set<snapid_t>& snaps);
 public:
   bool try_trim_snap_dentry(CDentry *dn, const set<snapid_t>& snaps);
-
-  CDir *get_containing_subtree();
 
 
 public:
