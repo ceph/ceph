@@ -1207,7 +1207,7 @@ void SimpleMessenger::Pipe::unregister_pipe()
 }
 
 
-void SimpleMessenger::Pipe::requeue_sent()
+void SimpleMessenger::Pipe::requeue_sent(uint64_t max_acked)
 {
   if (sent.empty())
     return;
@@ -1215,11 +1215,14 @@ void SimpleMessenger::Pipe::requeue_sent()
   list<Message*>& rq = out_q[CEPH_MSG_PRIO_HIGHEST];
   while (!sent.empty()) {
     Message *m = sent.back();
-    sent.pop_back();
-    dout(10) << "requeue_sent " << *m << " for resend seq " << out_seq
-	     << " (" << m->get_seq() << ")" << dendl;
-    rq.push_front(m);
-    out_seq--;
+    if (m->get_seq() > max_acked) {
+      sent.pop_back();
+      dout(10) << "requeue_sent " << *m << " for resend seq " << out_seq
+          << " (" << m->get_seq() << ")" << dendl;
+      rq.push_front(m);
+      out_seq--;
+    } else
+      sent.clear();
   }
 }
 

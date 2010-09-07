@@ -349,7 +349,9 @@ private:
       return m;
     }
 
-    void requeue_sent();
+    /* Remove all messages from the sent queue. Add those with seq > max_acked
+     * to the highest priority outgoing queue. */
+    void requeue_sent(uint64_t max_acked=0);
     void discard_queue();
 
     void force_close() {
