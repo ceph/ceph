@@ -1677,7 +1677,7 @@ void OSD::send_pg_stats()
   if (osd_stat_updated || !pg_stat_queue.empty()) {
     osd_stat_updated = false;
     
-    dout(1) << "send_pg_stats - " << pg_stat_queue.size() << " pgs updated" << dendl;
+    dout(10) << "send_pg_stats - " << pg_stat_queue.size() << " pgs updated" << dendl;
     
     utime_t had_for = g_clock.now();
     had_for -= had_map_since;
@@ -4459,11 +4459,11 @@ void OSD::handle_op(MOSDOp *op)
 
   int err = -EPERM;
   if (op->may_read() && !(perm & OSD_POOL_CAP_R)) {
-    dout(0) << "no READ permission to access pool " << pg->pool->name << dendl;
+    dout(10) << "no READ permission to access pool " << pg->pool->name << dendl;
   } else if (op->may_write() && !(perm & OSD_POOL_CAP_W)) {
-    dout(0) << "no WRITE permission to access pool " << pg->pool->name << dendl;
+    dout(10) << "no WRITE permission to access pool " << pg->pool->name << dendl;
   } else if (op->require_exec_caps() && !(perm & OSD_POOL_CAP_X)) {
-    dout(0) << "no EXEC permission to access pool " << pg->pool->name << dendl;
+    dout(10) << "no EXEC permission to access pool " << pg->pool->name << dendl;
   } else {
     err = 0;
   }
@@ -4822,7 +4822,7 @@ int OSD::get_class(const string& cname, ClassVersion& version, pg_t pgid, Messag
       *pcls = cls;
       return 0;
     case ClassHandler::ClassData::CLASS_INVALID:
-      dout(0) << "class not supported" << dendl;
+      dout(1) << "class " << cname << " not supported" << dendl;
       return -EOPNOTSUPP;
     case ClassHandler::ClassData::CLASS_ERROR:
       dout(0) << "error loading class!" << dendl;
@@ -4911,7 +4911,7 @@ void OSD::init_op_flags(MOSDOp *op)
 	is_write = flags & CLS_METHOD_WR;
         is_public = flags & CLS_METHOD_PUBLIC;
 
-	dout(0) << "class " << cname << " method " << mname
+	dout(10) << "class " << cname << " method " << mname
 		<< " flags=" << (is_read ? "r" : "") << (is_write ? "w" : "") << dendl;
 	if (is_read)
 	  op->rmw_flags |= CEPH_OSD_FLAG_READ;

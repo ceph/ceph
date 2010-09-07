@@ -1,3 +1,22 @@
+ceph (0.21.2-1) unstable; urgency=low
+
+  * osd: less log noise
+  * osd: mark down old heartbeat peers
+  * filejournal: clean up init sequence, fewer confusing errors on startup
+  * msgr: fix throttler leak when closing connections (fixes deadlock)
+  * osdmaptool: don't crash on corrupt input
+  * crush: error out instead of crashing on ambiguous hierarchy
+  * mds: error to client on invalid op
+  * mds: fix ENOTEMPTY checks on rmdir
+  * osd: fix race between reads and cloned objects
+  * auth: fix keyring load search when $HOME not defined
+  * client: fix xattr cap writeback
+  * client: fix snap vs metadata writeback
+  * osd: fix journal, btrfs throttling
+  * msgr: fix memory leak on closed connections
+
+ -- Sage Weil <sage@newdream.net>  Thu, 26 Aug 2010 15:22:42 -0700
+
 ceph (0.21.1-1) unstable; urgency=high
 
   * ceph.spec: many fixes

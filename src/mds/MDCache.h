@@ -755,7 +755,7 @@ public:
     reconnected_snaprealms[ino][client] = seq;
   }
   void process_imported_caps();
-  void process_reconnected_caps();
+  void choose_lock_states_and_reconnect_caps();
   void prepare_realm_split(SnapRealm *realm, client_t client, inodeno_t ino,
 			   map<client_t,MClientSnap*>& splits);
   void do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool nosend=false);

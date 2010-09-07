@@ -139,7 +139,7 @@ void ReplicatedPG::wait_for_degraded_object(const sobject_t& soid, Message *m)
 // ==========================================================
 void ReplicatedPG::do_pg_op(MOSDOp *op)
 {
-  dout(0) << "do_pg_op " << *op << dendl;
+  dout(10) << "do_pg_op " << *op << dendl;
 
   bufferlist outdata;
   int result = 0;
@@ -813,7 +813,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
     case CEPH_OSD_OP_READ:
       {
-	dout(0) << "CEPH_OSD_OP_READ" << dendl;
 	// read into a buffer
 	bufferlist bl;
 	int r = osd->store->read(coll_t::build_pg_coll(info.pgid), soid, op.extent.offset, op.extent.length, bl);
@@ -828,7 +827,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	}
 	info.stats.num_rd_kb += SHIFT_ROUND_UP(op.extent.length, 10);
 	info.stats.num_rd++;
-	dout(0) << " read got " << r << " / " << op.extent.length << " bytes from obj " << soid << dendl;
+	dout(10) << " read got " << r << " / " << op.extent.length << " bytes from obj " << soid << dendl;
 
 	__u32 seq = oi.truncate_seq;
 	// are we beyond truncate_size?
@@ -845,7 +844,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  bufferlist keep;
 
 	  // keep first part of odata; trim at truncation point
-	  dout(0) << " obj " << soid << " seq " << seq
+	  dout(10) << " obj " << soid << " seq " << seq
 	           << ": trimming overlap " << from << "~" << trim << dendl;
 	  keep.substr_of(odata, 0, odata.length() - trim);
           odata.claim(keep);
@@ -932,7 +931,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       
     case CEPH_OSD_OP_CMPXATTR:
       {
-	dout(0) << "CEPH_OSD_OP_CMPXATTR" << dendl;
 	string aname;
 	bp.copy(op.xattr.name_len, aname);
 	string name = "_" + aname;
@@ -970,16 +968,16 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	}
 
 	if (!result) {
-	  dout(0) << "comparison returned false" << dendl;
+	  dout(10) << "comparison returned false" << dendl;
 	  result = -ECANCELED;
 	  break;
 	}
 	if (result < 0) {
-	  dout(0) << "comparison returned " << result << " " << strerror(-result) << dendl;
+	  dout(10) << "comparison returned " << result << " " << strerror(-result) << dendl;
 	  break;
 	}
 
-	dout(0) << "comparison returned true" << dendl;
+	dout(10) << "comparison returned true" << dendl;
 	info.stats.num_rd++;
       }
       break;
@@ -3158,7 +3156,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       
       dout(10) << "sub_op_push need " << data_needed << ", got " << data_subset << dendl;
       if (!data_needed.subset_of(data_subset)) {
-	dout(0) << " we did not get enough of " << soid << " object data" << dendl;
+	dout(0) << "sub_op_push we did not get enough of " << soid << " object data" << dendl;
 	op->put();
 	return;
       }
