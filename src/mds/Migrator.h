@@ -81,6 +81,8 @@ protected:
   // export fun
   map<CDir*,int>               export_state;
   map<CDir*,int>               export_peer;
+  map<CDir*,int>               export_parent_rdlocked;  // bit set => rdlocked
+  map<CDir*,int>               export_parent_wrlocked;  // bit set => wrlocked
   //map<CDir*,list<bufferlist> > export_data;   // only during EXPORTING state
   map<CDir*,set<int> >         export_warning_ack_waiting;
   map<CDir*,set<int> >         export_notify_ack_waiting;
@@ -165,6 +167,9 @@ public:
   }
 
 
+  void drop_parent_rd_wr_locks(CInode *in, int rd, int wr);
+
+
   // -- misc --
   void handle_mds_failure_or_stop(int who);
 
@@ -212,6 +217,7 @@ public:
   void handle_export_ack(MExportDirAck *m);
   void export_logged_finish(CDir *dir);
   void handle_export_notify_ack(MExportDirNotifyAck *m);
+  void export_unlock(CDir *dir);
   void export_finish(CDir *dir);
 
   void handle_export_caps_ack(MExportCapsAck *m);

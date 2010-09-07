@@ -935,8 +935,10 @@ void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut)
 
   dout(7) << "wrlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
   lock->put_wrlock();
-  mut->wrlocks.erase(lock);
-  mut->locks.erase(lock);
+  if (mut) {
+    mut->wrlocks.erase(lock);
+    mut->locks.erase(lock);
+  }
 
   if (!lock->is_wrlocked()) {
     if (!lock->is_stable())

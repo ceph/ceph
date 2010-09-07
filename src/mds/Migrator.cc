@@ -236,6 +236,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	dir->unfreeze_tree();
 	cache->adjust_subtree_auth(dir, mds->get_nodeid());
 	cache->try_subtree_merge(dir);
+	export_unlock(dir);
 	export_state.erase(dir); // clean up
 	dir->state_clear(CDir::STATE_EXPORTING);
 	break;
@@ -245,6 +246,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	export_reverse(dir);
 	export_state.erase(dir); // clean up
 	dir->state_clear(CDir::STATE_EXPORTING);
+	export_unlock(dir);
 	break;
 
       case EXPORT_LOGGINGFINISH:
@@ -262,11 +264,6 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	export_peer.erase(dir);
 	export_warning_ack_waiting.erase(dir);
 	export_notify_ack_waiting.erase(dir);
-	
-	// unpin the path
-	vector<CDentry*> trace;
-	cache->make_trace(trace, dir->inode);
-	mds->locker->dentry_anon_rdlock_trace_finish(trace);
 	
 	// wake up any waiters
 	mds->queue_waiters(export_finish_waiters[dir]);
@@ -551,6 +548,33 @@ public:
  * public method to initiate an export.
  * will fail if the directory is freezing, frozen, unpinnable, or root. 
  */
+static void rd_or_wr_lock(ScatterLock *lock, int *rd, int *wr)
+{
+  if (lock->can_rdlock(-1)) {
+    lock->get_rdlock();
+    *rd |= lock->get_type();
+  } else {
+    lock->get_wrlock();
+    *wr |= lock->get_type();
+  }
+}
+
+static void rd_or_wr_unlock(MDS *mds, ScatterLock *lock, int rd, int wr)
+{
+  if (rd & lock->get_type())
+    mds->locker->rdlock_finish(lock, NULL);
+  else
+    mds->locker->wrlock_finish(lock, NULL);
+}
+
+void Migrator::drop_parent_rd_wr_locks(CInode *in, int rd, int wr)
+{
+  rd_or_wr_unlock(mds, &in->filelock, rd, wr);
+  rd_or_wr_unlock(mds, &in->nestlock, rd, wr);
+  rd_or_wr_unlock(mds, &in->dirfragtreelock, rd, wr);
+}
+
+
 void Migrator::export_dir(CDir *dir, int dest)
 {
   dout(7) << "export_dir " << *dir << " to " << dest << dendl;
@@ -590,9 +614,16 @@ void Migrator::export_dir(CDir *dir, int dest)
     dout(7) << "export_dir couldn't pin path, failing." << dendl;
     return;
   }
+  // pin parent scatterlocks?
+  CInode *diri = dir->inode;
+  if ((!diri->filelock.can_rdlock(-1) && !diri->filelock.can_wrlock(diri->get_loner())) ||
+      (!diri->nestlock.can_rdlock(-1) && !diri->nestlock.can_wrlock(diri->get_loner())) ||
+      (!diri->dirfragtreelock.can_rdlock(-1) && !diri->dirfragtreelock.can_wrlock(diri->get_loner()))) {
+    dout(7) << "export_dir couldn't rd|wrlock parent inode file+nest+dftlock, failing. " << *diri << dendl;
+    return;
+  }
 
   // ok.
-  mds->locker->dentry_anon_rdlock_trace_start(trace);
   assert(export_state.count(dir) == 0);
   export_state[dir] = EXPORT_DISCOVERING;
   export_peer[dir] = dest;
@@ -648,8 +679,48 @@ void Migrator::export_frozen(CDir *dir)
   assert(dir->is_frozen());
   assert(dir->get_cum_auth_pins() == 0);
 
-  // ok!
   int dest = export_peer[dir];
+
+    // ok, try to grab all my locks.
+  
+  // pin path?
+  vector<CDentry*> trace;
+  cache->make_trace(trace, dir->inode);
+
+  CInode *diri = dir->inode;
+  if (!mds->locker->dentry_can_rdlock_trace(trace) ||
+      (!diri->filelock.can_rdlock(-1) && !diri->filelock.can_wrlock(diri->get_loner())) ||
+      (!diri->nestlock.can_rdlock(-1) && !diri->nestlock.can_wrlock(diri->get_loner())) ||
+      (!diri->dirfragtreelock.can_rdlock(-1) && !diri->dirfragtreelock.can_wrlock(diri->get_loner()))) {
+    dout(7) << "export_dir couldn't rdlock path or rd|wrlock parent inode file+nest+dftlock, failing. " 
+	    << *diri << dendl;
+
+    // .. unwind ..
+    export_peer.erase(dir);
+    export_state.erase(dir);
+    dir->unfreeze_tree();
+    dir->state_clear(CDir::STATE_EXPORTING);
+
+    mds->queue_waiters(export_finish_waiters[dir]);
+    export_finish_waiters.erase(dir);
+
+    mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), dest);
+    return;
+  }
+
+  dout(10) << " taking locks on path, parent inode scatterlocks" << dendl;
+  // rdlock path
+  mds->locker->dentry_anon_rdlock_trace_start(trace);
+
+  // rd or wrlock parent inode scatterlocks
+  //   this prevents accounted_fragstat updates while we are frozen
+  int rdlocked = 0, wrlocked = 0;
+  rd_or_wr_lock(&diri->filelock, &rdlocked, &wrlocked);
+  rd_or_wr_lock(&diri->nestlock, &rdlocked, &wrlocked);
+  rd_or_wr_lock(&diri->dirfragtreelock, &rdlocked, &wrlocked);
+  export_parent_rdlocked[dir] = rdlocked;
+  export_parent_wrlocked[dir] = wrlocked;
+
 
   cache->show_subtrees();
 
@@ -1327,6 +1398,18 @@ void Migrator::handle_export_notify_ack(MExportDirNotifyAck *m)
   m->put();
 }
 
+void Migrator::export_unlock(CDir *dir)
+{
+  dout(10) << "export_unlock " << *dir << dendl;
+
+  // unpin the path
+  vector<CDentry*> trace;
+  cache->make_trace(trace, dir->inode);
+  mds->locker->dentry_anon_rdlock_trace_finish(trace);
+  drop_parent_rd_wr_locks(dir->inode, export_parent_rdlocked[dir], export_parent_wrlocked[dir]);
+  export_parent_rdlocked.erase(dir);
+  export_parent_wrlocked.erase(dir);
+}
 
 void Migrator::export_finish(CDir *dir)
 {
@@ -1372,10 +1455,7 @@ void Migrator::export_finish(CDir *dir)
   cache->try_subtree_merge(dir);
   
   // unpin path
-  dout(7) << "export_finish unpinning path" << dendl;
-  vector<CDentry*> trace;
-  cache->make_trace(trace, dir->inode);
-  mds->locker->dentry_anon_rdlock_trace_finish(trace);
+  export_unlock(dir);
 
   // discard delayed expires
   cache->discard_delayed_expire(dir);
