@@ -3018,14 +3018,24 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
 
   struct stat st;
   int r = osd->store->stat(coll_t::build_pg_coll(info.pgid), soid, &st);
-  assert(r == 0);
-  uint64_t size = st.st_size;
+  if (r != 0) {
+    stringstream ss;
+    char buf[80];
+    ss << op->get_source() << " tried to pull " << soid << " in " << info.pgid
+       << " but got " << strerror_r(-r, buf, sizeof(buf));
+    osd->logclient.log(LOG_ERROR, ss);
 
-  bool complete = false;
-  if (!op->data_subset.empty() && op->data_subset.end() >= size)
-    complete = true;
+    // FIXME: do something more intelligent.. mark the pg as needing repair?
 
-  send_push_op(soid, op->get_source().num(), size, op->first, complete, op->data_subset, op->clone_subsets);
+  } else {
+    uint64_t size = st.st_size;
+
+    bool complete = false;
+    if (!op->data_subset.empty() && op->data_subset.end() >= size)
+      complete = true;
+
+    send_push_op(soid, op->get_source().num(), size, op->first, complete, op->data_subset, op->clone_subsets);
+  }
   op->put();
 }
 
