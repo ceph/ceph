@@ -585,12 +585,12 @@ void Migrator::export_dir(CDir *dir, int dest)
     dout(7) << "cluster degraded, no exports for now" << dendl;
     return;
   }
-  if (dir->inode->is_base() ||
-      dir->inode->is_stray()) {
-    dout(7) << "i won't export root|stray" << dendl;
+  if (dir->inode->is_system()) {
+    dout(7) << "i won't export system dirs (root, mdsdirs, stray, /.ceph, etc.)" << dendl;
     //assert(0);
     return;
   }
+
   if (!dir->inode->is_base() && dir->inode->get_parent_dir()->get_inode()->is_stray()) {
     dout(7) << "i won't export anything in stray" << dendl;
     return;
