@@ -6909,10 +6909,11 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in
   mut->apply();
   mds->locker->drop_locks(mut);
   mut->cleanup();
-  delete mut;
 
   // tell table we've committed
   mds->snapclient->commit(mdr->more()->stid, mut->ls);
+
+  delete mut;
 
   // create
   bufferlist::iterator p = mdr->more()->snapidbl.begin();
