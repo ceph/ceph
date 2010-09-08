@@ -179,6 +179,7 @@ static int parse_options(char ** optionsp, int * filesys_flags)
 	int skip;
 	int pos = 0;
 	char *newdata = 0;
+	char secret[1000];
 
 	if (!optionsp || !*optionsp)
 		return 1;
@@ -247,7 +248,6 @@ static int parse_options(char ** optionsp, int * filesys_flags)
 			char *fn = value;
 			char *end = fn;
 			int fd;
-			char secret[1000];
 			int len;
 
 			while (*end && *end != ',')
