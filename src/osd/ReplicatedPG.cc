@@ -1075,6 +1075,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       }
       break;
 
+    case CEPH_OSD_OP_NOTIFY:
+      break;
+
       // --- WRITES ---
 
       // -- object data --
@@ -1236,6 +1239,58 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
     
     case CEPH_OSD_OP_DELETE:
       _delete_head(ctx);
+      break;
+
+    case CEPH_OSD_OP_WATCH:
+      {
+        uint64_t ver = op.watch.ver;
+	bool do_watch = op.watch.flag & 1;
+
+        entity_name_t entity = ctx->reqid.name;
+
+        map<entity_name_t, uint64_t> m;
+
+        bufferlist xattr_bl;
+
+        vector<OSDOp> nops(1);
+        OSDOp& newop = nops[0];
+
+        newop.op.op = CEPH_OSD_OP_GETXATTR;
+        const char *xattr_name = "watchers";
+        newop.data.append(xattr_name);
+        newop.op.xattr.name_len = strlen(xattr_name);
+        int ret = do_osd_ops(ctx, nops, xattr_bl);
+
+        if (ret >= 0) {
+          try {
+            bufferlist::iterator iter = xattr_bl.begin();
+            ::decode(m, iter);
+          } catch (buffer::error *err) {
+            dout(0) << "error parsing xattr, clearing map" << dendl;
+            m.clear();
+          }
+        }
+
+        if (do_watch)
+          m[entity] = ver;
+        else {
+          m.erase(entity);
+        }
+
+        char buf[128];
+        snprintf(buf, sizeof(buf), "%s%lld", entity.type_str(), (long long)entity.num());
+
+        xattr_bl.clear();
+        ::encode(m, xattr_bl);
+
+        newop.op.op = CEPH_OSD_OP_SETXATTR;
+        newop.data.append(xattr_name);
+        newop.data.append(xattr_bl);
+        newop.op.xattr.name_len = strlen(xattr_name);
+        newop.op.xattr.value_len = xattr_bl.length();
+        result = do_osd_ops(ctx, nops, xattr_bl);
+      }
+
       break;
 
 
