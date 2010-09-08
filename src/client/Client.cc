@@ -4003,6 +4003,68 @@ int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmas
   assert(0);
 }
 
+int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
+{
+  DirResult *dirp = (DirResult*)d;
+
+  dout(10) << "readdir_r_cb " << *dirp->inode << " offset " << dirp->offset
+	   << " frag " << dirp->frag() << " fragpos " << dirp->fragpos()
+	   << " at_end=" << dirp->at_end()
+	   << dendl;
+
+  struct dirent de;
+  struct stat st;
+  memset(&de, 0, sizeof(de));
+  memset(&st, 0, sizeof(st));
+
+  while (1) {
+    if (dirp->at_end())
+      return 0;
+
+    if (dirp->buffer.count(dirp->frag()) == 0) {
+      Mutex::Locker lock(client_lock);
+      _readdir_get_frag(dirp);
+      if (dirp->at_end())
+	return 0;
+    }
+
+    frag_t fg = dirp->frag();
+    uint32_t pos = dirp->fragpos();
+    assert(dirp->buffer.count(fg));   
+    vector<DirEntry> &ent = dirp->buffer[fg];
+
+    if (ent.empty() ||
+	pos >= ent.size()) {
+      dout(10) << "empty frag " << fg << ", moving on to next" << dendl;
+      _readdir_next_frag(dirp);
+      continue;
+    }
+
+    assert(pos < ent.size());
+    _readdir_fill_dirent(&de, &ent[pos], dirp->offset);
+    st = ent[pos].st;
+    int stmask = ent[pos].stmask;
+
+    int r = cb(p, &de, &st, stmask, dirp->offset + 1);  // _next_ offset
+    if (r < 0)
+      break;
+
+    dout(15) << " de " << de.d_name << " off " << dirp->offset
+	     << " = " << r
+	     << dendl;
+
+    pos++;
+    dirp->offset++;
+
+    if (pos == ent.size()) 
+      _readdir_next_frag(dirp);
+
+    return 1;
+  }
+
+  return 0;
+}
+
 int Client::_getdents(DIR *dir, char *buf, int buflen, bool fullent)
 {
   DirResult *dirp = (DirResult *)dir;
