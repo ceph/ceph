@@ -1197,15 +1197,16 @@ public:
   void getcwd(std::string& cwd);
 
   // namespace ops
-  int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
-
   int opendir(const char *name, DIR **dirpp);
   int closedir(DIR *dirp);
-  int readdir_r(DIR *dirp, struct dirent *de);
-  int readdirplus_r(DIR *dirp, struct dirent *de, struct stat *st, int *stmask);
 
   typedef int (*add_dirent_cb_t)(void *p, struct dirent *de, struct stat *st, int stmask, off_t off);
   int readdir_r_cb(DIR *dirp, add_dirent_cb_t cb, void *p);
+
+  int readdir_r(DIR *dirp, struct dirent *de);
+  int readdirplus_r(DIR *dirp, struct dirent *de, struct stat *st, int *stmask);
+
+  int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
 
   int _getdents(DIR *dirp, char *buf, int buflen, bool ful);  // get a bunch of dentries at once
   int getdents(DIR *dirp, char *buf, int buflen) {

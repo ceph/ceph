@@ -3743,46 +3743,6 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
   return _setattr(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME);
 }
 
-/* getdir */
-struct getdir_result {
-  list<string> *contents;
-  int num;
-};
-
-static int _getdir_cb(void *p, struct dirent *de, struct stat *st, int stmask, off_t off)
-{
-  getdir_result *r = (getdir_result *)p;
-
-  r->contents->push_back(de->d_name);
-  r->num++;
-  return 0;
-}
-
-int Client::getdir(const char *relpath, list<string>& contents)
-{
-  dout(3) << "getdir(" << relpath << ")" << dendl;
-  {
-    Mutex::Locker lock(client_lock);
-    tout << "getdir" << std::endl;
-    tout << relpath << std::endl;
-  }
-
-  DIR *d;
-  int r = opendir(relpath, &d);
-  if (r < 0)
-    return r;
-
-  getdir_result gr;
-  gr.contents = &contents;
-  gr.num = 0;
-  r = readdir_r_cb(d, _getdir_cb, (void *)&gr);
-
-  closedir(d);
-
-  if (r < 0)
-    return r;
-  return gr.num;
-}
 
 int Client::opendir(const char *relpath, DIR **dirpp) 
 {
@@ -3811,6 +3771,64 @@ int Client::_opendir(Inode *in, DirResult **dirpp, int uid, int gid)
   dout(3) << "_opendir(" << in->ino << ") = " << 0 << " (" << *dirpp << ")" << dendl;
   return 0;
 }
+
+
+int Client::closedir(DIR *dir) 
+{
+  Mutex::Locker lock(client_lock);
+  tout << "closedir" << std::endl;
+  tout << (unsigned long)dir << std::endl;
+
+  dout(3) << "closedir(" << dir << ") = 0" << dendl;
+  _closedir((DirResult*)dir);
+  return 0;
+}
+
+void Client::_closedir(DirResult *dirp)
+{
+  dout(10) << "_closedir(" << dirp << ")" << dendl;
+  if (dirp->inode) {
+    dout(10) << "_closedir detaching inode " << dirp->inode << dendl;
+    put_inode(dirp->inode);
+    dirp->inode = 0;
+  }
+  delete dirp;
+}
+
+void Client::rewinddir(DIR *dirp)
+{
+  dout(3) << "rewinddir(" << dirp << ")" << dendl;
+  DirResult *d = (DirResult*)dirp;
+  d->reset();
+}
+ 
+loff_t Client::telldir(DIR *dirp)
+{
+  DirResult *d = (DirResult*)dirp;
+  dout(3) << "telldir(" << dirp << ") = " << d->offset << dendl;
+  return d->offset;
+}
+
+void Client::seekdir(DIR *dirp, loff_t offset)
+{
+  dout(3) << "seekdir(" << dirp << ", " << offset << ")" << dendl;
+  DirResult *d = (DirResult*)dirp;
+
+  if (offset == 0 ||
+      DirResult::fpos_frag(offset) != d->frag() ||
+      DirResult::fpos_off(offset) < d->fragpos()) {
+    d->reset();
+  }
+
+  if (offset > d->offset)
+    d->release_count--;   // bump if we do a forward seek
+
+  d->offset = offset;
+}
+
+
+
+
 
 void Client::_readdir_add_dirent(DirResult *dirp, const string& name, Inode *in)
 {
@@ -3951,55 +3969,6 @@ int Client::_readdir_get_frag(DirResult *dirp)
   return res;
 }
 
-int Client::readdir_r(DIR *d, struct dirent *de)
-{  
-  return readdirplus_r(d, de, 0, 0);
-}
-
-/*
- * returns
- *  1 if we got a dirent
- *  0 for end of directory
- * <0 on error
- */
-
-struct single_readdir {
-  struct dirent *de;
-  struct stat *st;
-  int *stmask;
-  bool full;
-};
-
-static int _readdir_single_dirent_cb(void *p, struct dirent *de, struct stat *st, int stmask, off_t off)
-{
-  single_readdir *c = (single_readdir *)p;
-
-  if (c->full)
-    return -1;
-
-  *c->de = *de;
-  *c->st = *st;
-  *c->stmask = stmask;
-  c->full = true;
-  return 0;  
-}
-
-int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmask)
-{  
-  single_readdir sr;
-  sr.de = de;
-  sr.st = st;
-  sr.stmask = stmask;
-  sr.full = false;
-
-  int r = readdir_r_cb(d, _readdir_single_dirent_cb, (void *)&sr);
-  if (r < 0)
-    return r;
-  if (sr.full)
-    return 1;
-  return 0;
-}
-
 int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
 {
   DirResult *dirp = (DirResult*)d;
@@ -4112,6 +4081,60 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
 
 
 
+
+int Client::readdir_r(DIR *d, struct dirent *de)
+{  
+  return readdirplus_r(d, de, 0, 0);
+}
+
+/*
+ * readdirplus_r
+ *
+ * returns
+ *  1 if we got a dirent
+ *  0 for end of directory
+ * <0 on error
+ */
+
+struct single_readdir {
+  struct dirent *de;
+  struct stat *st;
+  int *stmask;
+  bool full;
+};
+
+static int _readdir_single_dirent_cb(void *p, struct dirent *de, struct stat *st, int stmask, off_t off)
+{
+  single_readdir *c = (single_readdir *)p;
+
+  if (c->full)
+    return -1;
+
+  *c->de = *de;
+  *c->st = *st;
+  *c->stmask = stmask;
+  c->full = true;
+  return 0;  
+}
+
+int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmask)
+{  
+  single_readdir sr;
+  sr.de = de;
+  sr.st = st;
+  sr.stmask = stmask;
+  sr.full = false;
+
+  int r = readdir_r_cb(d, _readdir_single_dirent_cb, (void *)&sr);
+  if (r < 0)
+    return r;
+  if (sr.full)
+    return 1;
+  return 0;
+}
+
+
+/* getdents */
 struct getdents_result {
   char *buf;
   int buflen;
@@ -4159,57 +4182,46 @@ int Client::_getdents(DIR *dir, char *buf, int buflen, bool fullent)
   return gr.pos;
 }
 
-int Client::closedir(DIR *dir) 
-{
-  Mutex::Locker lock(client_lock);
-  tout << "closedir" << std::endl;
-  tout << (unsigned long)dir << std::endl;
 
-  dout(3) << "closedir(" << dir << ") = 0" << dendl;
-  _closedir((DirResult*)dir);
+/* getdir */
+struct getdir_result {
+  list<string> *contents;
+  int num;
+};
+
+static int _getdir_cb(void *p, struct dirent *de, struct stat *st, int stmask, off_t off)
+{
+  getdir_result *r = (getdir_result *)p;
+
+  r->contents->push_back(de->d_name);
+  r->num++;
   return 0;
 }
 
-void Client::_closedir(DirResult *dirp)
+int Client::getdir(const char *relpath, list<string>& contents)
 {
-  dout(10) << "_closedir(" << dirp << ")" << dendl;
-  if (dirp->inode) {
-    dout(10) << "_closedir detaching inode " << dirp->inode << dendl;
-    put_inode(dirp->inode);
-    dirp->inode = 0;
-  }
-  delete dirp;
-}
-
-void Client::rewinddir(DIR *dirp)
-{
-  dout(3) << "rewinddir(" << dirp << ")" << dendl;
-  DirResult *d = (DirResult*)dirp;
-  d->reset();
-}
- 
-loff_t Client::telldir(DIR *dirp)
-{
-  DirResult *d = (DirResult*)dirp;
-  dout(3) << "telldir(" << dirp << ") = " << d->offset << dendl;
-  return d->offset;
-}
-
-void Client::seekdir(DIR *dirp, loff_t offset)
-{
-  dout(3) << "seekdir(" << dirp << ", " << offset << ")" << dendl;
-  DirResult *d = (DirResult*)dirp;
-
-  if (offset == 0 ||
-      DirResult::fpos_frag(offset) != d->frag() ||
-      DirResult::fpos_off(offset) < d->fragpos()) {
-    d->reset();
+  dout(3) << "getdir(" << relpath << ")" << dendl;
+  {
+    Mutex::Locker lock(client_lock);
+    tout << "getdir" << std::endl;
+    tout << relpath << std::endl;
   }
 
-  if (offset > d->offset)
-    d->release_count--;   // bump if we do a forward seek
+  DIR *d;
+  int r = opendir(relpath, &d);
+  if (r < 0)
+    return r;
 
-  d->offset = offset;
+  getdir_result gr;
+  gr.contents = &contents;
+  gr.num = 0;
+  r = readdir_r_cb(d, _getdir_cb, (void *)&gr);
+
+  closedir(d);
+
+  if (r < 0)
+    return r;
+  return gr.num;
 }
 
 
