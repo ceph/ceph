@@ -340,54 +340,57 @@ static void ceph_ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
   fuse_reply_err(req, -r);
 }
 
+struct readdir_context {
+  fuse_req_t req;
+  char *buf;
+  size_t size;
+  size_t pos; /* in buf */
+  uint64_t snap;
+};
+
+/*
+ * return 0 on success, -1 if out of space
+ */
+static int ceph_ll_add_dirent(void *p, struct dirent *de, struct stat *st, int stmask, off_t next_off)
+{
+  struct readdir_context *c = (struct readdir_context *)p;
+
+  st->st_ino = make_fake_ino(de->d_ino, c->snap);
+  st->st_mode = DT_TO_MODE(de->d_type);
+
+  size_t room = c->size - c->pos;
+  size_t entrysize = fuse_add_direntry(c->req, c->buf + c->pos, room,
+				       de->d_name, st, next_off);
+  if (entrysize > room)
+    return -ENOSPC;
+
+  /* success */
+  c->pos += entrysize;
+  return 0;
+}
+
 static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 			    off_t off, struct fuse_file_info *fi)
 {
   (void) fi;
 
-  // buffer
-  char *buf;
-  size_t pos = 0;
-
-  buf = new char[size];
-  if (!buf) {
-    fuse_reply_err(req, ENOMEM);
-    return;
-  }
-  
   DIR *dirp = (DIR*)fi->fh;
   client->seekdir(dirp, off);
 
-  struct dirent de;
-  struct stat st;
-  memset(&st, 0, sizeof(st));
+  struct readdir_context rc;
+  rc.req = req;
+  rc.buf = new char[size];
+  rc.size = size;
+  rc.pos = 0;
+  rc.snap = fino_snap(ino);
 
-  uint64_t snap = fino_snap(ino);
+  int r;
+  do {
+    r = client->readdir_r_cb(dirp, ceph_ll_add_dirent, &rc);
+  } while (r > 0);
 
-  while (1) {
-    int r = client->readdir_r(dirp, &de);
-    if (r <= 0)
-      break;
-    st.st_ino = make_fake_ino(de.d_ino, snap);
-    st.st_mode = DT_TO_MODE(de.d_type);
-
-    off_t off = de.d_off;
-    size_t entrysize = fuse_add_direntry(req, buf + pos, size - pos,
-					 de.d_name, &st, off);
-    /*
-    cout << "ceph_ll_readdir ino " << ino << " added " << de.d_name << " at " << pos << " len " << entrysize
-	 << " (buffer size is " << size << ")" 
-	 << " .. off = " << off
-	 << std::endl;
-    */
-    
-    if (entrysize > size - pos) 
-      break;  // didn't fit, done for now.
-    pos += entrysize;
-  }
-
-  fuse_reply_buf(req, buf, pos);
-  delete[] buf;
+  fuse_reply_buf(req, rc.buf, rc.pos);
+  delete[] rc.buf;
 }
 
 static void ceph_ll_releasedir(fuse_req_t req, fuse_ino_t ino,
