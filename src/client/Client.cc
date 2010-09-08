@@ -3743,6 +3743,20 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
   return _setattr(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME);
 }
 
+/* getdir */
+struct getdir_result {
+  list<string> *contents;
+  int num;
+};
+
+static int _getdir_cb(void *p, struct dirent *de, struct stat *st, int stmask, off_t off)
+{
+  getdir_result *r = (getdir_result *)p;
+
+  r->contents->push_back(de->d_name);
+  r->num++;
+  return 0;
+}
 
 int Client::getdir(const char *relpath, list<string>& contents)
 {
@@ -3755,17 +3769,19 @@ int Client::getdir(const char *relpath, list<string>& contents)
 
   DIR *d;
   int r = opendir(relpath, &d);
-  if (r < 0) return r;
+  if (r < 0)
+    return r;
 
-  struct dirent de;
-  int n = 0;
-  while (readdir_r(d, &de) > 0) {
-    contents.push_back(de.d_name);
-    n++;
-  }
+  getdir_result gr;
+  gr.contents = &contents;
+  gr.num = 0;
+  r = readdir_r_cb(d, _getdir_cb, (void *)&gr);
+
   closedir(d);
 
-  return n;
+  if (r < 0)
+    return r;
+  return gr.num;
 }
 
 int Client::opendir(const char *relpath, DIR **dirpp) 
