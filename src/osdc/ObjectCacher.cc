@@ -1134,6 +1134,7 @@ int ObjectCacher::atomic_sync_readx(OSDRead *rd, ObjectSet *oset, Mutex& lock)
     // do the read, into our cache
     Mutex flock("ObjectCacher::atomic_sync_readx flock 2");
     Cond cond;
+    snapid_t snapid = rd->snap;
     bool done = false;
     readx(rd, oset, new C_SafeCond(&flock, &cond, &done));
     
@@ -1144,7 +1145,7 @@ int ObjectCacher::atomic_sync_readx(OSDRead *rd, ObjectSet *oset, Mutex& lock)
     for (vector<ObjectExtent>::iterator ex_it = extents.begin();
          ex_it != extents.end();
          ex_it++) {
-      sobject_t soid(ex_it->oid, rd->snap);
+      sobject_t soid(ex_it->oid, snapid);
       assert(objects.count(soid));
       Object *o = objects[soid];
       rdunlock(o);
