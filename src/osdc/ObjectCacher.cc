@@ -572,6 +572,12 @@ void ObjectCacher::lock_ack(list<sobject_t>& oids, tid_t tid)
     Object *ob = objects[oid];
 
     list<Context*> ls;
+
+    // waiters?
+    if (ob->waitfor_ack.count(tid)) {
+      ls.splice(ls.end(), ob->waitfor_ack[tid]);
+      ob->waitfor_ack.erase(tid);
+    }
     
     assert(tid <= ob->last_write_tid);
     if (ob->last_write_tid == tid) {
@@ -606,12 +612,6 @@ void ObjectCacher::lock_ack(list<sobject_t>& oids, tid_t tid)
     } else {
       dout(10) << "lock_ack " << *ob 
                << " tid " << tid << " obsolete" << dendl;
-    }
-
-    // waiters?
-    if (ob->waitfor_ack.count(tid)) {
-      ls.splice(ls.end(), ob->waitfor_ack[tid]);
-      ob->waitfor_ack.erase(tid);
     }
 
     finish_contexts(ls);
