@@ -1568,21 +1568,23 @@ loff_t ObjectCacher::release(Object *ob)
        p++) {
     BufferHead *bh = p->second;
     if (bh->is_clean()) 
-	  clean.push_back(bh);
+      clean.push_back(bh);
     else 
       o_unclean += bh->length();
   }
 
   for (list<BufferHead*>::iterator p = clean.begin();
-	   p != clean.end();
-	   p++) {
-	bh_remove(ob, *p);
-	delete *p;
+       p != clean.end();
+       p++) {
+    bh_remove(ob, *p);
+    delete *p;
   }
 
   if (ob->can_close()) {
-	dout(10) << "trim trimming " << *ob << dendl;
-	close_object(ob);
+    dout(10) << "trim trimming " << *ob << dendl;
+    close_object(ob);
+    assert(o_unclean == 0);
+    return 0;
   }
 
   return o_unclean;
