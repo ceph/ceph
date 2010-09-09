@@ -817,8 +817,8 @@ void OSDMonitor::check_subs()
 void OSDMonitor::check_sub(Subscription *sub)
 {
   if (sub->next <= osdmap.get_epoch()) {
-      send_incremental(sub->next - 1, sub->session->inst);
     if (sub->next >= 1)
+      send_incremental(sub->next, sub->session->inst);
     else
       mon->messenger->send_message(new MOSDMap(mon->monmap->fsid, &osdmap),
 				   sub->session->inst);
