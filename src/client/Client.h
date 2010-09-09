@@ -686,12 +686,33 @@ class Client : public Dispatcher {
     static const int64_t MASK = (1 << SHIFT) - 1;
     static const loff_t END = 1ULL << (SHIFT + 32);
 
-    Inode *inode;
-    int64_t offset;   // high bits: frag_t, low bits: an offset
-    uint64_t release_count;
-    map<frag_t, vector<DirEntry> > buffer;
+    static uint64_t make_fpos(unsigned frag, unsigned off) {
+      return ((uint64_t)frag << SHIFT) | (uint64_t)off;
+    }
+    static unsigned fpos_frag(uint64_t p) {
+      return p >> SHIFT;
+    }
+    static unsigned fpos_off(uint64_t p) {
+      return p & MASK;
+    }
 
-    DirResult(Inode *in) : inode(in), offset(0), release_count(0) { 
+
+    Inode *inode;
+
+    int64_t offset;        // high bits: frag_t, low bits: an offset
+
+    uint64_t this_offset;  // offset of last chunk, adjusted for . and ..
+    uint64_t next_offset;  // offset of next chunk (last_name's + 1)
+    string last_name;      // last entry in previous chunk
+
+    uint64_t release_count;
+
+    frag_t buffer_frag;
+    vector<DirEntry> *buffer;
+
+    DirResult(Inode *in) : inode(in), offset(0), next_offset(2),
+			   release_count(0),
+			   buffer(0) { 
       inode->get();
     }
 
@@ -711,6 +732,15 @@ class Client : public Dispatcher {
     }
     void set_end() { offset = END; }
     bool at_end() { return (offset == END); }
+
+    void reset() {
+      last_name.clear();
+      next_offset = 2;
+      this_offset = 0;
+      offset = 0;
+      delete buffer;
+      buffer = 0;
+    }
   };
 
   // **** WARNING: be sure to update the struct in libceph.h too! ****
@@ -1105,10 +1135,11 @@ protected:
   // fs ops.
 private:
 
+  void fill_dirent(struct dirent *de, const char *name, int type, uint64_t ino, loff_t next_off);
+
   // some helpers
   int _opendir(Inode *in, DirResult **dirpp, int uid=-1, int gid=-1);
   void _readdir_add_dirent(DirResult *dirp, const string& name, Inode *in);
-  void _readdir_fill_dirent(struct dirent *de, DirEntry *entry, loff_t);
   bool _readdir_have_frag(DirResult *dirp);
   void _readdir_next_frag(DirResult *dirp);
   void _readdir_rechoose_frag(DirResult *dirp);
@@ -1166,12 +1197,16 @@ public:
   void getcwd(std::string& cwd);
 
   // namespace ops
-  int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
-
   int opendir(const char *name, DIR **dirpp);
   int closedir(DIR *dirp);
+
+  typedef int (*add_dirent_cb_t)(void *p, struct dirent *de, struct stat *st, int stmask, off_t off);
+  int readdir_r_cb(DIR *dirp, add_dirent_cb_t cb, void *p);
+
   int readdir_r(DIR *dirp, struct dirent *de);
   int readdirplus_r(DIR *dirp, struct dirent *de, struct stat *st, int *stmask);
+
+  int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
 
   int _getdents(DIR *dirp, char *buf, int buflen, bool ful);  // get a bunch of dentries at once
   int getdents(DIR *dirp, char *buf, int buflen) {

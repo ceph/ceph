@@ -66,7 +66,7 @@ int aio_bench(Rados& rados, rados_pool_t pool, int operation,
     bufferlist object_data;
     r = rados.read(pool, BENCH_DATA, 0, object_data, sizeof(int)*2);
     if (r <= 0) {
-      delete contentsChars;
+      delete[] contentsChars;
       if (r == -2)
 	cerr << "Must write data before running a read benchmark!" << std::endl;
       return r;
@@ -109,7 +109,7 @@ int aio_bench(Rados& rados, rados_pool_t pool, int operation,
   }
   
  out:
-  delete contentsChars;
+  delete[] contentsChars;
   delete data;
   return r;
 }

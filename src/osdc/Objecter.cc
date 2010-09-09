@@ -597,6 +597,7 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
   if (list_context->current_pg == pg_num){ //this context got all the way through
     onfinish->finish(0);
     delete onfinish;
+    return;
   }
 
   ObjectOperation op;

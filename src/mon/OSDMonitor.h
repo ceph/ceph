@@ -67,9 +67,9 @@ private:
   // ...
   void send_to_waiting();     // send current map to waiters.
   void send_full(PaxosServiceMessage *m);
-  MOSDMap *build_incremental(epoch_t from, epoch_t to);
-  void send_incremental(PaxosServiceMessage *m, epoch_t since);
-  void send_incremental(epoch_t from, entity_inst_t& dest);
+  MOSDMap *build_incremental(epoch_t first, epoch_t last);
+  void send_incremental(PaxosServiceMessage *m, epoch_t first);
+  void send_incremental(epoch_t first, entity_inst_t& dest);
 
   void remove_redundant_pg_temp();
 

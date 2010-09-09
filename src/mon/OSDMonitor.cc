@@ -820,11 +820,11 @@ void OSDMonitor::send_full(PaxosServiceMessage *m)
 
 MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to)
 {
-  dout(10) << "build_incremental from " << from << " to " << to << dendl;
+  dout(10) << "build_incremental [" << from << ".." << to << "]" << dendl;
   MOSDMap *m = new MOSDMap(mon->monmap->fsid);
   
   for (epoch_t e = to;
-       e >= from;
+       e >= from && e > 0;
        e--) {
     bufferlist bl;
     if (mon->store->get_bl_sn(bl, "osdmap", e) > 0) {
@@ -832,7 +832,7 @@ MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to)
       m->incremental_maps[e] = bl;
     } 
     else if (mon->store->get_bl_sn(bl, "osdmap_full", e) > 0) {
-      dout(20) << "send_incremental   full " << e << dendl;
+      dout(20) << "send_incremental   full " << e << " " << bl.length() << " bytes" << dendl;
       m->maps[e] = bl;
     }
     else {
@@ -842,23 +842,23 @@ MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to)
   return m;
 }
 
-void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t from)
+void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
 {
-  dout(5) << "send_incremental from " << from << " -> " << osdmap.get_epoch()
+  dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
 	  << " to " << req->get_orig_source_inst() << dendl;
-  MOSDMap *m = build_incremental(from, osdmap.get_epoch());
+  MOSDMap *m = build_incremental(first, osdmap.get_epoch());
   mon->send_reply(req, m);
 }
 
-void OSDMonitor::send_incremental(epoch_t from, entity_inst_t& dest)
+void OSDMonitor::send_incremental(epoch_t first, entity_inst_t& dest)
 {
-  dout(5) << "send_incremental from " << from << " -> " << osdmap.get_epoch()
+  dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
 	  << " to " << dest << dendl;
-  while (from < osdmap.get_epoch()) {
-    epoch_t to = MIN(from + 100, osdmap.get_epoch());
-    MOSDMap *m = build_incremental(from, to);
+  while (first <= osdmap.get_epoch()) {
+    epoch_t last = MIN(first + 100, osdmap.get_epoch());
+    MOSDMap *m = build_incremental(first, last);
     mon->messenger->send_message(m, dest);
-    from = to;
+    first = last + 1;
   }
 }
 
@@ -886,8 +886,8 @@ void OSDMonitor::check_subs()
 void OSDMonitor::check_sub(Subscription *sub)
 {
   if (sub->next <= osdmap.get_epoch()) {
-    if (sub->next > 1)
-      send_incremental(sub->next - 1, sub->session->inst);
+    if (sub->next >= 1)
+      send_incremental(sub->next, sub->session->inst);
     else
       mon->messenger->send_message(new MOSDMap(mon->monmap->fsid, &osdmap),
 				   sub->session->inst);
