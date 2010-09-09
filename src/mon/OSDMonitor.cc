@@ -751,7 +751,7 @@ void OSDMonitor::send_full(PaxosServiceMessage *m)
 
 MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to)
 {
-  dout(10) << "build_incremental from " << from << " to " << to << dendl;
+  dout(10) << "build_incremental [" << from << ".." << to << "]" << dendl;
   MOSDMap *m = new MOSDMap(mon->monmap->fsid);
   
   for (epoch_t e = to;
@@ -773,23 +773,23 @@ MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to)
   return m;
 }
 
-void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t from)
+void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
 {
-  dout(5) << "send_incremental from " << from << " -> " << osdmap.get_epoch()
+  dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
 	  << " to " << req->get_orig_source_inst() << dendl;
-  MOSDMap *m = build_incremental(from, osdmap.get_epoch());
+  MOSDMap *m = build_incremental(first, osdmap.get_epoch());
   mon->send_reply(req, m);
 }
 
-void OSDMonitor::send_incremental(epoch_t from, entity_inst_t& dest)
+void OSDMonitor::send_incremental(epoch_t first, entity_inst_t& dest)
 {
-  dout(5) << "send_incremental from " << from << " -> " << osdmap.get_epoch()
+  dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
 	  << " to " << dest << dendl;
-  while (from <= osdmap.get_epoch()) {
-    epoch_t to = MIN(from + 100, osdmap.get_epoch());
-    MOSDMap *m = build_incremental(from, to);
+  while (first <= osdmap.get_epoch()) {
+    epoch_t last = MIN(first + 100, osdmap.get_epoch());
+    MOSDMap *m = build_incremental(first, last);
     mon->messenger->send_message(m, dest);
-    from = to + 1;
+    first = last + 1;
   }
 }
 
