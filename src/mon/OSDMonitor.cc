@@ -1269,6 +1269,40 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	return true;
       }
     }
+    else if (m->cmd[1] == "blacklist" && m->cmd.size() >= 4) {
+      entity_addr_t addr;
+      if (!addr.parse(m->cmd[3].c_str(), 0))
+	ss << "unable to parse address " << m->cmd[3];
+      else if (m->cmd[2] == "add") {
+
+	utime_t expires = g_clock.now();
+	double d = 60*60;  // 1 hour default
+	if (m->cmd.size() > 4)
+	  d = atof(m->cmd[4].c_str());
+	expires += d;
+
+	pending_inc.new_blacklist[addr] = expires;
+	ss << "blacklisting " << addr << " until " << expires << " (" << d << " sec)";
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	return true;
+      } else if (m->cmd[2] == "rm") {
+	if (osdmap.is_blacklisted(addr) || 
+	    pending_inc.new_blacklist.count(addr)) {
+	  if (osdmap.is_blacklisted(addr))
+	    pending_inc.old_blacklist.push_back(addr);
+	  else
+	    pending_inc.new_blacklist.erase(addr);
+	  ss << "un-blacklisting " << addr;
+	  getline(ss, rs);
+	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	  return true;
+	}
+	ss << addr << " isn't blacklisted";
+	err = -ENOENT;
+	goto out;
+      }
+    }
     else if (m->cmd[1] == "pool" && m->cmd.size() >= 3) {
       if (m->cmd.size() >= 5 && m->cmd[2] == "mksnap") {
 	int pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
