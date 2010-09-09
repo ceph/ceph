@@ -304,7 +304,18 @@ private:
   const utime_t& get_modified() const { return modified; }
 
   bool is_blacklisted(const entity_addr_t& a) {
-    return !blacklist.empty() && blacklist.count(a);
+    if (blacklist.empty())
+      return false;
+
+    // this specific instance?
+    if (blacklist.count(a))
+      return true;
+
+    // is entire ip blacklisted?
+    entity_addr_t b = a;
+    b.set_port(0);
+    b.set_nonce(0);
+    return blacklist.count(b);
   }
 
   /***** cluster state *****/
