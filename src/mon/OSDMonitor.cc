@@ -1093,6 +1093,20 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       }
       r = 0;
     }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "blacklist" && m->cmd[2] == "ls") {
+      for (hash_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
+	   p != osdmap.blacklist.end();
+	   p++) {
+	stringstream ss;
+	string s;
+	ss << p->first << " " << p->second;
+	getline(ss, s);
+	s += "\n";
+	rdata.append(s);
+      }
+      ss << "listed " << osdmap.blacklist.size() << " entries";
+      r = 0;
+    }
   }
  out:
   if (r != -1) {
