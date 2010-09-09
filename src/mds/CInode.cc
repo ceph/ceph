@@ -136,7 +136,8 @@ ostream& operator<<(ostream& out, CInode& in)
     //if (in.inode.dirstat.version > 10000) out << " BADDIRSTAT";
   } else {
     out << " s=" << in.inode.size;
-    out << " nl=" << in.inode.nlink;
+    if (in.inode.nlink != 1)
+      out << " nl=" << in.inode.nlink;
   }
 
   // rstat
