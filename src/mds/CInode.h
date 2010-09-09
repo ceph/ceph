@@ -601,6 +601,8 @@ public:
   void encode_lock_state(int type, bufferlist& bl);
   void decode_lock_state(int type, bufferlist& bl);
 
+  void _finish_frag_update(CDir *dir, Mutation *mut);
+
   void clear_dirty_scattered(int type);
   void finish_scatter_gather_update(int type);
 
