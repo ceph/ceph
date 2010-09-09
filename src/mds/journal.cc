@@ -725,6 +725,8 @@ void ESession::replay(MDS *mds)
       Session *session = mds->sessionmap.get_session(client_inst.name);
       if (session->is_closed())
 	mds->sessionmap.remove_session(session);
+      else
+	session->clear();    // the client has reconnected; keep the Session, but reset
     }
   }
 
