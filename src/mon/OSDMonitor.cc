@@ -509,14 +509,15 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     dout(7) << "prepare_boot was up, first marking down " << osdmap.get_inst(from) << dendl;
     assert(osdmap.get_inst(from) != m->get_orig_source_inst());  // preproces should have caught it
     
-    // mark previous guy down
-    pending_inc.new_down[from] = false;
-    
+    if (pending_inc.new_down.count(from) == 0) {
+      // mark previous guy down
+      pending_inc.new_down[from] = false;
+    }
     paxos->wait_for_commit(new C_RetryMessage(this, m));
   } else if (pending_inc.new_up_client.count(from)) { //FIXME: should this be using new_up_client?
     // already prepared, just wait
     dout(7) << "prepare_boot already prepared, waiting on " << m->get_orig_source_addr() << dendl;
-    paxos->wait_for_commit(new C_Booted(this, m, false));
+    paxos->wait_for_commit(new C_RetryMessage(this, m));
   } else {
     // mark new guy up.
     down_pending_out.erase(from);  // if any
