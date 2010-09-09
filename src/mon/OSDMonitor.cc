@@ -785,11 +785,11 @@ void OSDMonitor::send_incremental(epoch_t from, entity_inst_t& dest)
 {
   dout(5) << "send_incremental from " << from << " -> " << osdmap.get_epoch()
 	  << " to " << dest << dendl;
-  while (from < osdmap.get_epoch()) {
+  while (from <= osdmap.get_epoch()) {
     epoch_t to = MIN(from + 100, osdmap.get_epoch());
     MOSDMap *m = build_incremental(from, to);
     mon->messenger->send_message(m, dest);
-    from = to;
+    from = to + 1;
   }
 }
 
