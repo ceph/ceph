@@ -369,6 +369,7 @@ struct ceph_osd_op {
 		        __le64 snapid;
 	        } __attribute__ ((packed)) snap;
 		struct {
+			__le64 cookie;
 			__le64 ver;
 			__u8 flag;	/* 0 = unwatch, 1 = watch */
 		} __attribute__ ((packed)) watch;

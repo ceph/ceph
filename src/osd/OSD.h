@@ -209,8 +209,10 @@ public:
     EntityName entity_name;
     OSDCaps caps;
     epoch_t last_sent_epoch;
+    Connection *con;
 
-  Session() : last_sent_epoch(0) {}
+  Session() : last_sent_epoch(0), con(0) {}
+  ~Session() { if (con) con->put(); }
   };
 
 private:

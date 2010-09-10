@@ -29,6 +29,7 @@
 #include "messages/MOSDPGTrim.h"
 
 #include "messages/MOSDPing.h"
+#include "messages/MWatchNotify.h"
 
 #include "config.h"
 
@@ -262,7 +263,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
     }
     osd->reply_op_error(op, r);
     return;
-  }    
+  }
   
   bool ok;
   dout(10) << "do_op mode is " << mode << dendl;
@@ -293,6 +294,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   OpContext *ctx = new OpContext(op, op->get_reqid(), op->ops,
 				 &obc->obs, this);
   bool noop = false;
+  ctx->obc = obc;
 
   if (op->may_write()) {
     // snap
@@ -1076,6 +1078,32 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       break;
 
     case CEPH_OSD_OP_NOTIFY:
+      {
+	dout(0) << "CEPH_OSD_OP_NOTIFY" << dendl;
+
+        ObjectContext *obc = ctx->obc;
+	dout(0) << "ctx->obc=" << (void *)obc << dendl;
+
+        map<entity_name_t, OSD::Session *>::iterator iter;
+	map<entity_name_t, watch_info_t>::iterator oi_iter;
+
+	for (oi_iter = oi.watchers.begin();
+	     oi_iter != oi.watchers.end(); oi_iter++) {
+	  watch_info_t& w = oi_iter->second;
+	  dout(0) << "oi->watcher: " << oi_iter->first << " ver=" << w.ver << " cookie=" << w.cookie << dendl;
+	  iter = obc->watchers.find(oi_iter->first);
+	  if (iter != obc->watchers.end()) {
+	    /* found a session for registered watcher */
+	    OSD::Session *session = iter->second;
+	    dout(0) << " found session, sending notidication" << dendl;
+	    MWatchNotify *notify_msg = new MWatchNotify(w.cookie, w.ver);
+	    osd->client_messenger->send_message(notify_msg, session->con);
+	  } else {
+	    dout(0) << " session was not found" << dendl;
+	  }
+	}
+
+      }
       break;
 
       // --- WRITES ---
@@ -1243,52 +1271,54 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
     case CEPH_OSD_OP_WATCH:
       {
+        uint64_t cookie = op.watch.cookie;
         uint64_t ver = op.watch.ver;
 	bool do_watch = op.watch.flag & 1;
 
         entity_name_t entity = ctx->reqid.name;
 
-        map<entity_name_t, uint64_t> m;
+	OSD::Session *session;
+        ObjectContext *obc = ctx->obc;
+	dout(0) << "ctx->obc=" << (void *)obc << " cookie=" << cookie << " ver=" << ver << dendl;
+	map<entity_name_t, OSD::Session *>::iterator iter = obc->watchers.find(entity);
+	session = (OSD::Session *)ctx->op->get_connection()->get_priv();
 
-        bufferlist xattr_bl;
+	/* is there an old watch from the same client? if so, discard it*/
+	if (iter != obc->watchers.end()) {
+	  session = iter->second;
+	  session->put();
+	  put_object_context(obc);
+	}
 
-        vector<OSDOp> nops(1);
-        OSDOp& newop = nops[0];
+	if (do_watch) {
+	  obc->ref++;
+	  register_object_context(obc);
+          watch_info_t w = {cookie,ver};
+          oi.watchers[entity] = w;
 
-        newop.op.op = CEPH_OSD_OP_GETXATTR;
-        const char *xattr_name = "watchers";
-        newop.data.append(xattr_name);
-        newop.op.xattr.name_len = strlen(xattr_name);
-        int ret = do_osd_ops(ctx, nops, xattr_bl);
+	  obc->watchers[entity] = session;
 
-        if (ret >= 0) {
-          try {
-            bufferlist::iterator iter = xattr_bl.begin();
-            ::decode(m, iter);
-          } catch (buffer::error *err) {
-            dout(0) << "error parsing xattr, clearing map" << dendl;
-            m.clear();
-          }
+	  session->get();
+        } else {
+	  obc->watchers.erase(entity);
+
+	  map<entity_name_t, watch_info_t>::iterator oi_iter = oi.watchers.find(entity);
+	  if (oi_iter !=  oi.watchers.end())
+            oi.watchers.erase(entity);
         }
 
-        if (do_watch)
-          m[entity] = ver;
-        else {
-          m.erase(entity);
-        }
 
-        char buf[128];
-        snprintf(buf, sizeof(buf), "%s%lld", entity.type_str(), (long long)entity.num());
+	for (iter = obc->watchers.begin(); iter != obc->watchers.end(); ++iter) {
+	  dout(0) << "* obc->watcher: " << iter->first << " session=" << iter->second << dendl;
+	}
 
-        xattr_bl.clear();
-        ::encode(m, xattr_bl);
-
-        newop.op.op = CEPH_OSD_OP_SETXATTR;
-        newop.data.append(xattr_name);
-        newop.data.append(xattr_bl);
-        newop.op.xattr.name_len = strlen(xattr_name);
-        newop.op.xattr.value_len = xattr_bl.length();
-        result = do_osd_ops(ctx, nops, xattr_bl);
+	map<entity_name_t, watch_info_t>::iterator oi_iter;
+	for (oi_iter = oi.watchers.begin();
+	     oi_iter != oi.watchers.end(); oi_iter++) {
+	  watch_info_t& w = oi_iter->second;
+	  dout(0) << "* oi->watcher: " << oi_iter->first << " ver=" << w.ver << " cookie=" << w.cookie << dendl;
+	}
+        t.nop();
       }
 
       break;
@@ -1819,7 +1849,6 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
   // prepare the actual mutation
   int result = do_osd_ops(ctx, ctx->ops, ctx->outdata);
-
   if (result < 0 || ctx->op_t.empty())
     return result;  // error, or read op.
 

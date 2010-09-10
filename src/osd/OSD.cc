@@ -2062,6 +2062,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
     if (!s) {
       s = new Session;
       con->set_priv(s->get());
+      s->con = con->get();
       dout(10) << " new session " << s << dendl;
     }
 

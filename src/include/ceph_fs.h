@@ -139,6 +139,7 @@ struct ceph_dir_layout {
 #define CEPH_MSG_OSD_MAP          41
 #define CEPH_MSG_OSD_OP           42
 #define CEPH_MSG_OSD_OPREPLY      43
+#define CEPH_MSG_WATCH_NOTIFY     44
 
 /* pool operations */
 enum {

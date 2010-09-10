@@ -1600,6 +1600,8 @@ unsigned FileStore::_do_transaction(Transaction& t)
     int op = t.get_op();
     int r = 0;
     switch (op) {
+    case Transaction::OP_NOP:
+      break;
     case Transaction::OP_TOUCH:
       {
 	coll_t cid = t.get_cid();

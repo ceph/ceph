@@ -16,6 +16,7 @@
 
 
 #include "PG.h"
+#include "OSD.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
@@ -233,6 +234,8 @@ public:
     Cond cond;
     int unstable_writes, readers, writers_waiting, readers_waiting;
 
+    map<entity_name_t, OSD::Session *> watchers;
+
     ObjectContext(const sobject_t& s, const object_locator_t& ol) :
       ref(0), registered(false), obs(s, ol),
       lock("ReplicatedPG::ObjectContext::lock"),
@@ -298,6 +301,7 @@ public:
     ObjectStore::Transaction op_t, local_t;
     vector<PG::Log::Entry> log;
 
+    ObjectContext *obc;
     ObjectContext *clone_obc;    // if we created a clone
     ObjectContext *snapset_obc;  // if we created/deleted a snapdir
 
@@ -311,7 +315,7 @@ public:
 	      ObjectState *_obs, ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(_obs),
       bytes_written(0),
-      clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) {}
+      obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) {}
     ~OpContext() {
       assert(!clone_obc);
       if (reply)

@@ -26,6 +26,7 @@
 
 
 
+
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
 #define CEPH_OSD_NEARFULL_RATIO .8
@@ -1285,6 +1286,24 @@ inline ostream& operator<<(ostream& out, const SnapSet& cs) {
 #define OI_ATTR "_"
 #define SS_ATTR "snapset"
 
+struct watch_info_t {
+  uint64_t cookie;
+  uint64_t ver;
+  void encode(bufferlist& bl) const {
+    const __u8 v = 1;
+    ::encode(v, bl);
+    ::encode(cookie, bl);
+    ::encode(ver, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
+    ::decode(cookie, bl);
+    ::decode(ver, bl);
+ }
+};
+WRITE_CLASS_ENCODER(watch_info_t)
+
 struct object_info_t {
   sobject_t soid;
   object_locator_t oloc;
@@ -1309,6 +1328,8 @@ struct object_info_t {
     truncate_size = other.truncate_size;
   }
 
+  map<entity_name_t, watch_info_t> watchers;
+
   void encode(bufferlist& bl) const {
     const __u8 v = 2;
     ::encode(v, bl);
@@ -1325,6 +1346,7 @@ struct object_info_t {
       ::encode(snaps, bl);
     ::encode(truncate_seq, bl);
     ::encode(truncate_size, bl);
+    ::encode(watchers, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 v;
@@ -1343,6 +1365,8 @@ struct object_info_t {
       ::decode(snaps, bl);
     ::decode(truncate_seq, bl);
     ::decode(truncate_size, bl);
+    if (v >= 2)
+      ::decode(watchers, bl);
   }
   void decode(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
