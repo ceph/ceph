@@ -51,6 +51,7 @@ class SnapRealm;
 class Session;
 class MClientCaps;
 class ObjectOperation;
+class EMetaBlob;
 
 ostream& operator<<(ostream& out, CInode& in);
 
@@ -605,6 +606,7 @@ public:
 
   void clear_dirty_scattered(int type);
   void finish_scatter_gather_update(int type);
+  void finish_scatter_gather_update_accounted(int type, Mutation *mut, EMetaBlob *metablob);
 
 
   // -- snap --

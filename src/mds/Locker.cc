@@ -3149,6 +3149,8 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mut, &le->metablob, in);
   
+  in->finish_scatter_gather_update_accounted(lock->get_type(), mut, &le->metablob);
+
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_sync(new C_Locker_ScatterWB(this, lock, mut));
 }

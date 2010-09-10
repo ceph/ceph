@@ -1383,7 +1383,11 @@ void CInode::finish_scatter_gather_update(int type)
 	frag_t fg = p->first;
 	CDir *dir = p->second;
 	dout(20) << fg << " " << *dir << dendl;
+
 	fnode_t *pf = dir->get_projected_fnode();
+	if (dir->is_auth())
+	  pf = dir->project_fnode();
+
 	if (pf->accounted_fragstat.version == pi->dirstat.version) {
 	  dout(20) << fg << "           fragstat " << pf->fragstat << dendl;
 	  dout(20) << fg << " accounted_fragstat " << pf->accounted_fragstat << dendl;
@@ -1416,7 +1420,11 @@ void CInode::finish_scatter_gather_update(int type)
 	frag_t fg = p->first;
 	CDir *dir = p->second;
 	dout(20) << fg << " " << *dir << dendl;
+
 	fnode_t *pf = dir->get_projected_fnode();
+	if (dir->is_auth())
+	  pf = dir->project_fnode();
+
 	if (pf->accounted_rstat.version == pi->rstat.version) {
 	  dout(20) << fg << "           rstat " << pf->rstat << dendl;
 	  dout(20) << fg << " accounted_rstat " << pf->accounted_rstat << dendl;
@@ -1464,6 +1472,27 @@ void CInode::finish_scatter_gather_update(int type)
   }
 }
 
+void CInode::finish_scatter_gather_update_accounted(int type, Mutation *mut, EMetaBlob *metablob)
+{
+  dout(10) << "finish_scatter_gather_update_accounted " << type << " on " << *this << dendl;
+  assert(is_auth());
+
+  for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+       p != dirfrags.end();
+       p++) {
+    CDir *dir = p->second;
+    if (!dir->is_auth())
+      continue;
+
+    dout(10) << " journaling updated frag accounted_ on " << *dir << dendl;
+    assert(dir->is_projected());
+    fnode_t *pf = dir->get_projected_fnode();
+    pf->version = dir->pre_dirty();
+    mut->add_projected_fnode(dir);
+    metablob->add_dir(dir, true);
+    mut->auth_pin(dir);
+  }
+}
 
 // waiting
 
