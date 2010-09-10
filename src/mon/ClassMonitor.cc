@@ -81,12 +81,12 @@ bool ClassMonitor::store_impl(ClassInfo& info, ClassImpl& impl)
   char store_name[len];
 
   snprintf(store_name, len, "%s.%s.%s", info.name.c_str(), info.version.str(), info.version.arch());
-  dout(0) << "storing inc.impl length=" << impl.binary.length() << dendl;
+  dout(10) << "storing inc.impl length=" << impl.binary.length() << dendl;
   bufferlist bl;
   ::encode(impl.binary, bl);
   ::encode(info, bl);
   mon->store->put_bl_ss(bl, "class_impl", store_name);
-  dout(0) << "adding name=" << info.name << " version=" << info.version <<  " store_name=" << store_name << dendl;
+  dout(10) << "adding name=" << info.name << " version=" << info.version <<  " store_name=" << store_name << dendl;
 
   return true;
 }
@@ -241,7 +241,7 @@ bool ClassMonitor::prepare_class(MClass *m)
   dout(10) << "prepare_class " << *m << " from " << m->get_orig_source() << dendl;
 
   if (ceph_fsid_compare(&m->fsid, &mon->monmap->fsid)) {
-    dout(0) << "handle_class on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
+    dout(10) << "handle_class on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
     m->put();
     return false;
   }
@@ -365,17 +365,17 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
           bufferlist::iterator iter = bl.begin();
           ::decode(prev_bin, iter);
            /* check to see whether we should store it */
-          dout(0) << "class name exists" << dendl;
+          dout(10) << "class name exists" << dendl;
           if (excl_opt) {
-            dout(0) << "excl flag, not overwriting" << dendl;
+            dout(10) << "excl flag, not overwriting" << dendl;
             should_store = false;
           } else if (changed_opt) {
             if (prev_bin.length() == impl.binary.length() &&
                 memcmp(impl.binary.c_str(), prev_bin.c_str(), prev_bin.length()) == 0) {
-              dout(0) << "class content has not changed, not doing anything" << dendl;
+              dout(10) << "class content has not changed, not doing anything" << dendl;
               should_store = false;
             } else {
-              dout(0) << "class content changed, will keep newer version" << dendl;
+              dout(10) << "class content changed, will keep newer version" << dendl;
             }
           }
         }
@@ -383,7 +383,7 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
 
       ClassLibraryIncremental inc;
       if (should_store) {
-        dout(0) << "payload.length=" << m->get_data().length() << dendl;
+        dout(10) << "payload.length=" << m->get_data().length() << dendl;
         info.name = name;
         info.version = cv;
         dout(0) << "storing class " << name << " v" << info.version << dendl;
@@ -521,14 +521,14 @@ void ClassMonitor::handle_request(MClass *m)
         int len = (*p).name.length() + 16;
         int bin_len;
         char store_name[len];
-        dout(0) << "got CLASS_GET name=" << (*p).name << " ver=" << (*p).version << dendl;
+        dout(10) << "got CLASS_GET name=" << (*p).name << " ver=" << (*p).version << dendl;
         snprintf(store_name, len, "%s.%s.%s", (*p).name.c_str(), ver.str(), ver.arch());
         bufferlist bl;
         bin_len = mon->store->get_bl_ss(bl, "class_impl", store_name);
         assert(bin_len > 0);
         bufferlist::iterator iter = bl.begin();
         ::decode(impl.binary, iter);
-        dout(0) << "replying with name=" << (*p).name << " version=" << ver <<  " store_name=" << store_name << dendl;
+        dout(10) << "replying with name=" << (*p).name << " version=" << ver <<  " store_name=" << store_name << dendl;
         list.add((*p).name, ver);
         reply->add.push_back(true);
         reply->impl.push_back(impl);
@@ -538,7 +538,7 @@ void ClassMonitor::handle_request(MClass *m)
       break;
     case CLASS_SET:
        {
-         dout(0) << "ClassMonitor::handle_request() CLASS_SET" << dendl;
+         dout(10) << "ClassMonitor::handle_request() CLASS_SET" << dendl;
          bool add = *add_iter;
          ClassVersionMap& cv = list.library_map[(*p).name];
          ClassInfo entry;

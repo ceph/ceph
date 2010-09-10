@@ -95,7 +95,7 @@ bool PGMonitor::update_from_paxos()
     inc.decode(p);
     pg_map.apply_incremental(inc);
     
-    dout(0) << pg_map << dendl;
+    dout(10) << pg_map << dendl;
 
     if (inc.pg_scan)
       last_sent_pg_create.clear();  // reset pg_create throttle timer

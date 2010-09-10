@@ -52,7 +52,7 @@ struct MonSession : public RefCountedObject {
   MonSession(entity_inst_t i) : inst(i), closed(false), item(this),
 			     global_id(0), notified_global_id(0), auth_handler(NULL) {}
   ~MonSession() {
-    generic_dout(0) << "~MonSession " << this << dendl;
+    //generic_dout(0) << "~MonSession " << this << dendl;
     // we should have been removed before we get destructed; see MonSessionMap::remove_session()
     assert(!item.is_on_list());
     assert(sub_map.empty());

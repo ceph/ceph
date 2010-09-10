@@ -1475,7 +1475,7 @@ out:
 
 bool OSDMonitor::preprocess_pool_op(MPoolOp *m) 
 {
-  dout(0) << "m->op=" << m->op << dendl;
+  dout(10) << "m->op=" << m->op << dendl;
   if (m->op == POOL_OP_CREATE) {
     return preprocess_pool_op_create(m);
   }
@@ -1486,11 +1486,12 @@ bool OSDMonitor::preprocess_pool_op(MPoolOp *m)
   }
   bool snap_exists = false;
   pg_pool_t *pp = 0;
-  if (pending_inc.new_pools.count(m->pool)) pp = &pending_inc.new_pools[m->pool];
-  //check if the snap and snapname exists
+  if (pending_inc.new_pools.count(m->pool))
+    pp = &pending_inc.new_pools[m->pool];
+  // check if the snap and snapname exists
   if (!osdmap.get_pg_pool(m->pool)) {
-    //uh-oh, bad pool num!
-    dout(0) << "attempt to delete non-existent pool id " << m->pool << dendl;
+    // uh-oh, bad pool num!
+    dout(10) << "attempt to delete non-existent pool id " << m->pool << dendl;
     _pool_op(m, -ENODATA, pending_inc.epoch);
     return true;
   }

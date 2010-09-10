@@ -57,7 +57,7 @@ void AuthMonitor::check_rotate()
   rot_inc.op = KeyServerData::AUTH_INC_SET_ROTATING;
   if (!mon->key_server.updated_rotating(rot_inc.rotating_bl, last_rotating_ver))
     return;
-  dout(0) << "AuthMonitor::tick() updated rotating, now calling propose_pending" << dendl;
+  dout(10) << "AuthMonitor::tick() updated rotating, now calling propose_pending" << dendl;
   push_cephx_inc(rot_inc);
   propose_pending();
 }
@@ -80,7 +80,7 @@ void AuthMonitor::tick()
 
 void AuthMonitor::on_active()
 {
-  dout(0) << "AuthMonitor::on_active()" << dendl;
+  dout(10) << "AuthMonitor::on_active()" << dendl;
 
   if (!mon->is_leader())
     return;
@@ -92,9 +92,9 @@ void AuthMonitor::on_active()
 
 void AuthMonitor::create_initial(bufferlist& bl)
 {
-  dout(0) << "create_initial -- creating initial map" << dendl;
+  dout(10) << "create_initial -- creating initial map" << dendl;
   if (g_conf.keyring) {
-    dout(0) << "reading initial keyring " << dendl;
+    dout(10) << "reading initial keyring " << dendl;
     bufferlist bl;
 
     string k = g_conf.keyring;
@@ -129,7 +129,7 @@ void AuthMonitor::create_initial(bufferlist& bl)
 
 bool AuthMonitor::update_from_paxos()
 {
-  dout(0) << "AuthMonitor::update_from_paxos()" << dendl;
+  dout(10) << "AuthMonitor::update_from_paxos()" << dendl;
   version_t paxosv = paxos->get_version();
   version_t keys_ver = mon->key_server.get_ver();
   if (paxosv == keys_ver) return true;
@@ -203,7 +203,7 @@ void AuthMonitor::increase_max_global_id()
   assert(mon->is_leader());
 
   max_global_id += g_conf.mon_globalid_prealloc;
-  dout(0) << "increasing max_global_id to " << max_global_id << dendl;
+  dout(10) << "increasing max_global_id to " << max_global_id << dendl;
   Incremental inc;
   inc.inc_type = GLOBAL_ID;
   inc.max_global_id = max_global_id;
@@ -220,7 +220,7 @@ void AuthMonitor::init()
   version_t paxosv = paxos->get_version();
   version_t keys_ver = mon->key_server.get_ver();
 
-  dout(0) << "AuthMonitor::init() paxosv=" << paxosv << dendl;
+  dout(10) << "AuthMonitor::init() paxosv=" << paxosv << dendl;
 
   if (paxosv == keys_ver) return;
   assert(paxosv >= keys_ver);
@@ -230,7 +230,7 @@ void AuthMonitor::init()
     bufferlist latest;
     version_t v = paxos->get_latest(latest);
     if (v) {
-      dout(0) << "AuthMonitor::init() startup: loading summary e" << v << dendl;
+      dout(10) << "AuthMonitor::init() startup: loading summary e" << v << dendl;
       bufferlist::iterator p = latest.begin();
       __u8 v;
       ::decode(v, p);
@@ -264,7 +264,7 @@ void AuthMonitor::encode_pending(bufferlist &bl)
 
 bool AuthMonitor::preprocess_query(PaxosServiceMessage *m)
 {
-  dout(0) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
+  dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
     return preprocess_command((MMonCommand*)m);
@@ -352,7 +352,7 @@ uint64_t AuthMonitor::assign_global_id(MAuth *m, bool should_increase_max)
 
 bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
 {
-  dout(0) << "prep_auth() blob_size=" << m->get_auth_payload().length() << dendl;
+  dout(10) << "prep_auth() blob_size=" << m->get_auth_payload().length() << dendl;
 
   MonSession *s = (MonSession *)m->get_connection()->get_priv();
   if (!s) {
@@ -381,7 +381,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
       ::decode(entity_name, indata);
       ::decode(s->global_id, indata);
     } catch (buffer::error *e) {
-      dout(0) << "failed to decode initial auth message" << dendl;
+      dout(10) << "failed to decode initial auth message" << dendl;
       ret = -EINVAL;
       goto reply;
     }
@@ -393,7 +393,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
     }
     start = true;
   } else if (!s->auth_handler) {
-      dout(0) << "protocol specified but no s->auth_handler" << dendl;
+      dout(10) << "protocol specified but no s->auth_handler" << dendl;
       ret = -EINVAL;
       goto reply;
   }
@@ -584,7 +584,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       }
 
       bufferlist bl = m->get_data();
-      dout(0) << "AuthMonitor::prepare_command bl.length()=" << bl.length() << dendl;
+      dout(10) << "AuthMonitor::prepare_command bl.length()=" << bl.length() << dendl;
       bufferlist::iterator iter = bl.begin();
       KeyRing keyring;
       try {
