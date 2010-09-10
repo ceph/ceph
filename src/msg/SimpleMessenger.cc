@@ -427,16 +427,18 @@ int SimpleMessenger::send_message(Message *m, Connection *con)
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
 
-  dout(1) << "--> " << con->get_peer_addr() << " -- " << *m
-	  << " -- ?+" << m->get_data().length()
-	  << " " << m
-	  << dendl;
-
   SimpleMessenger::Pipe *pipe = (SimpleMessenger::Pipe *)con->get_pipe();
   if (pipe) {
+    dout(1) << "--> " << con->get_peer_addr() << " -- " << *m
+            << " -- ?+" << m->get_data().length()
+            << " " << m
+            << dendl;
+
     submit_message(m, pipe);
     pipe->put();
   } else {
+    dout(0) << "send_message dropped message " << *m << "because of no pipe"
+        << dendl;
     // else we raced with reaper()
     m->put();
   }
@@ -811,6 +813,11 @@ int SimpleMessenger::Pipe::accept()
        p++)
     out_q[p->first].splice(out_q[p->first].begin(), p->second);
   
+  //set ourself to take over other Connection, for older messages
+  existing->connection_state->clear_pipe();
+  existing->connection_state->pipe = get();
+  existing->connection_state->put();
+  existing->connection_state = NULL;
   existing->pipe_lock.Unlock();
 
  open:

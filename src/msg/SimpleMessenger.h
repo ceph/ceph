@@ -210,7 +210,8 @@ private:
       }
       assert(out_q.empty());
       assert(sent.empty());
-      connection_state->put();
+      if (connection_state)
+        connection_state->put();
     }
 
 
