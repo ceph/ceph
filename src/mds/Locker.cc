@@ -167,6 +167,10 @@ bool Locker::acquire_locks(MDRequest *mdr,
     // augment xlock with a versionlock?
     if ((*p)->get_type() == CEPH_LOCK_DN) {
       CDentry *dn = (CDentry*)(*p)->get_parent();
+
+      if (xlocks.count(&dn->versionlock))
+	continue;  // we're xlocking the versionlock too; don't wrlock it!
+
       if (mdr->is_master()) {
 	// master.  wrlock versionlock so we can pipeline dentry updates to journal.
 	wrlocks.insert(&dn->versionlock);
