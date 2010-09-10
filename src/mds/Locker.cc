@@ -3136,7 +3136,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
 
-  lock->get_parent()->finish_scatter_gather_update(lock->get_type());
+  in->finish_scatter_gather_update(lock->get_type());
   lock->start_flush();
 
   EUpdate *le = new EUpdate(mds->mdlog, "scatter_writebehind");
