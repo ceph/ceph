@@ -379,9 +379,11 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   remove_wq(this, &disk_tp)
 {
   monc->set_messenger(client_messenger);
+
   if (client_messenger != cluster_messenger)
     map_in_progress_cond = new Cond();
-  else map_in_progress_cond = NULL;
+  else
+    map_in_progress_cond = NULL;
   
   osdmap = 0;
 
@@ -400,6 +402,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
 
 OSD::~OSD()
 {
+  delete map_in_progress_cond;
   delete class_handler;
   delete osdmap;
   logger_remove(logger);
