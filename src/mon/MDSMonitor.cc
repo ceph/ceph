@@ -799,11 +799,12 @@ void MDSMonitor::tick()
 	last_beacon.erase(gid);
 	do_propose = true;
       } else if (!info.laggy()) {
-	// just mark laggy
-	dout(10) << " marking " << info.addr << " mds" << info.rank << "." << info.inc
+	// remove it
+	dout(10) << " removing " << info.addr << " mds" << info.rank << "." << info.inc
 		 << " " << ceph_mds_state_name(info.state)
-		 << " laggy" << dendl;
-	info.laggy_since = now;
+		 << " (laggy)" << dendl;
+	pending_mdsmap.mds_info.erase(gid);
+	last_beacon.erase(gid);
 	do_propose = true;
       }
     }
