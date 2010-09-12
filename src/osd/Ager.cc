@@ -318,8 +318,10 @@ void Ager::load_freelist()
   bufferlist bl;
   bl.push_back(bp);
   int fd = ::open("ebofs.freelist", O_RDONLY);
-  ::read(fd, bl.c_str(), st.st_size);
-  ::close(fd);
+  if (fd >= 0) {
+    ::read(fd, bl.c_str(), st.st_size);
+    ::close(fd);
+  }
 
   //((Ebofs*)store)->_import_freelist(bl);
   store->sync();
