@@ -1508,13 +1508,13 @@ int FileStore::_clone(coll_t cid, const sobject_t& oldoid, const sobject_t& newo
     dout(10) << "clone " << ofn << " -> " << nfn << " READ+WRITE" << dendl;
     r = _do_clone_range(o, n, 0, st.st_size);
   }
-  if (r < 0) r = -errno;
+  if (r < 0)
+    r = -errno;
 
- out:
   ::close(n);
- out2:
+ out:
   ::close(o);
-  
+ out2:
   dout(10) << "clone " << ofn << " -> " << nfn << " = " << r << dendl;
   return 0;
 }
