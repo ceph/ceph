@@ -698,6 +698,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
   }
 
   // insert readdir results too
+  request->readdir_result.clear();
 
   // the rest?
   p = reply->get_extra_bl().begin();
@@ -714,6 +715,11 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
     ::decode(end, p);
     ::decode(complete, p);
     
+    dout(10) << " " << numdn << " items end=" << end << dendl;
+
+    request->readdir_end = end;
+    request->readdir_num = numdn;
+
     string dname;
     LeaseStat dlease;
     while (numdn) {
@@ -724,8 +730,16 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
       Inode *in = add_update_inode(&ist, from, mds);
       insert_dentry_inode(dir, dname, &dlease, in, from, mds);
       
+      // add to cached result list
+      struct stat st;
+      int stmask = fill_stat(in, &st);  
+      request->readdir_result.push_back(DirEntry(dname, st, stmask));
+
+      dout(15) << "  '" << dname << "' -> " << in->ino << dendl;
+
       numdn--;
     }
+    request->readdir_last_name = dname;
     
     if (dir->is_empty())
       close_dir(dir);
@@ -3935,47 +3949,20 @@ int Client::_readdir_get_frag(DirResult *dirp)
 
     delete dirp->buffer;
     dirp->buffer = new vector<DirEntry>;
+    dirp->buffer->swap(req->readdir_result);
     dirp->buffer_frag = fg;
-
-    // the rest?
-    bufferlist::iterator p = dirbl.begin();
-    assert(!p.end());
-
-    // dirstat
-    DirStat dst(p);
-    __u32 numdn;
-    __u8 complete, end;
-    ::decode(numdn, p);
-    ::decode(end, p);
-    ::decode(complete, p);
-
-    string dname;
-    LeaseStat dlease;
-    for (unsigned i=0; i<numdn; i++) {
-      ::decode(dname, p);
-      ::decode(dlease, p);
-      InodeStat ist(p);
-      
-      Inode *in = _ll_get_inode(ist.vino);
-      dout(15) << "_readdir_get_frag " << dirp << "    " << dname << " to " << in->ino << dendl;
-
-      // add to cached result list
-      struct stat st;
-      int stmask = fill_stat(in, &st);  
-      dirp->buffer->push_back(DirEntry(dname, st, stmask));
-    }
 
     dirp->this_offset = dirp->next_offset;
     dout(10) << "_readdir_get_frag " << dirp << " got frag " << dirp->buffer_frag
 	     << " this_offset " << dirp->this_offset
 	     << " size " << dirp->buffer->size() << dendl;
 
-    if (end) {
+    if (req->readdir_end) {
       dirp->last_name.clear();
       dirp->next_offset = 2;
     } else {
-      dirp->last_name = dname;
-      dirp->next_offset += numdn;
+      dirp->last_name = req->readdir_last_name;
+      dirp->next_offset += req->readdir_num;
     }
   } else {
     dout(10) << "_readdir_get_frag got error " << res << ", setting end flag" << dendl;

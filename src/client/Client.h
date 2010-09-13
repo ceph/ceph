@@ -94,6 +94,15 @@ struct InodeCap;
 class Inode;
 class Dentry;
 
+/* getdir result */
+struct DirEntry {
+  string d_name;
+  struct stat st;
+  int stmask;
+  DirEntry(const string &s) : d_name(s), stmask(0) {}
+  DirEntry(const string &n, struct stat& s, int stm) : d_name(n), st(s), stmask(stm) {}
+};
+
 struct MetaRequest {
   uint64_t tid;
   ceph_mds_request_head head;
@@ -122,6 +131,12 @@ struct MetaRequest {
   MClientReply *reply;         // the reply
   bool kick;
   
+  // readdir result
+  vector<DirEntry> readdir_result;
+  bool readdir_end;
+  int readdir_num;
+  string readdir_last_name;
+
   //possible responses
   bool got_safe;
   bool got_unsafe;
@@ -673,15 +688,6 @@ struct Fh {
 class Client : public Dispatcher {
  public:
   
-  /* getdir result */
-  struct DirEntry {
-    string d_name;
-    struct stat st;
-    int stmask;
-    DirEntry(const string &s) : d_name(s), stmask(0) {}
-    DirEntry(const string &n, struct stat& s, int stm) : d_name(n), st(s), stmask(stm) {}
-  };
-
   struct DirResult {
     static const int SHIFT = 28;
     static const int64_t MASK = (1 << SHIFT) - 1;
