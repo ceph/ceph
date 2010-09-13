@@ -152,6 +152,7 @@ private:
     __u32 connect_seq, peer_global_seq;
     uint64_t out_seq;
     uint64_t in_seq, in_seq_acked;
+    uint64_t last_close;
     
     int accept();   // server handshake
     int connect();  // client handshake
@@ -211,11 +212,15 @@ private:
       reader_running(false), reader_joining(false), writer_running(false),
       in_qlen(0), keepalive(false),
       connect_seq(0), peer_global_seq(0),
-      out_seq(0), in_seq(0), in_seq_acked(0),
+      out_seq(0), in_seq(0), in_seq_acked(0), last_close(0),
       reader_thread(this), writer_thread(this) {
       connection_state->pipe = get();
+      generic_dout(1) << "creating pipe " << this << " with connection "
+          << connection_state << dendl;
     }
     ~Pipe() {
+      generic_dout(1) << "deleting pipe " << this << " with connection "
+          << connection_state << dendl;
       for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
 	   i != queue_items.end();
 	   ++i) {

@@ -146,12 +146,12 @@ struct RefCountedObject {
   virtual ~RefCountedObject() {}
   
   RefCountedObject *get() {
-    //generic_dout(0) << "RefCountedObject::get " << this << " " << nref.read() << " -> " << (nref.read() + 1) << dendl;
+    generic_dout(1) << "RefCountedObject::get " << this << " " << nref.read() << " -> " << (nref.read() + 1) << dendl;
     nref.inc();
     return this;
   }
   void put() {
-    //generic_dout(0) << "RefCountedObject::put " << this << " " << nref.read() << " -> " << (nref.read() - 1) << dendl;
+    generic_dout(1) << "RefCountedObject::put " << this << " " << nref.read() << " -> " << (nref.read() - 1) << dendl;
     if (nref.dec() == 0)
       delete this;
   }

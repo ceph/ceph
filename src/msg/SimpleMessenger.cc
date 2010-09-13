@@ -865,6 +865,7 @@ int SimpleMessenger::Pipe::accept()
     out_seq = existing->out_seq;
     in_seq = existing->in_seq;
     in_seq_acked = in_seq;
+    last_close = existing->last_close;
     dout(10) << "accept out_seq " << out_seq << " in_seq " << in_seq << dendl;
     for (map<int, list<Message*> >::iterator p = existing->out_q.begin();
          p != existing->out_q.end();
@@ -1661,7 +1662,14 @@ void SimpleMessenger::Pipe::writer()
       }
       continue;
     }
-    
+    dout(1) << "out_seq:" << out_seq << dendl;
+    if (!policy.lossy && policy.server && out_seq > last_close && !(out_seq % 25)) {
+      dout(0) << "closing sd on out_seq " << out_seq
+              << " for testing, last_close is " << last_close << dendl;
+      last_close = out_seq;
+      close(sd);
+      sd = -1;
+    }
     // wait
     dout(20) << "writer sleeping" << dendl;
     cond.Wait(pipe_lock);
