@@ -280,6 +280,8 @@ int FileStore::mkfs()
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
   fsid_fd = ::open(fn, O_CREAT|O_RDWR, 0644);
+  if (fsid_fd < 0)
+    return -errno;
   if (lock_fsid() < 0)
     return -EBUSY;
 
@@ -320,6 +322,8 @@ int FileStore::mkfs()
 
   ::close(fsid_fd);
   fsid_fd = ::open(fn, O_CREAT|O_RDWR, 0644);
+  if (fsid_fd < 0)
+    return -errno;
   if (lock_fsid() < 0)
     return -EBUSY;
   ::write(fsid_fd, &fsid, sizeof(fsid));
