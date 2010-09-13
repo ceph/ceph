@@ -506,6 +506,13 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
       in->dirstat.nsubdirs == 0) {
     dout(10) << " marking I_COMPLETE on empty dir " << *in << dendl;
     in->flags |= I_COMPLETE;
+    if (in->dir) {
+      dout(0) << "WARNING: dir is open on empty dir " << in->ino << " with "
+	      << in->dir->dentry_map.size() << " entries" << dendl;
+      in->dir->max_offset = 2;
+
+      // FIXME: tear down dir?
+    }
   }
 
   return in;
@@ -515,8 +522,8 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
 /*
  * insert_dentry_inode - insert + link a single dentry + inode into the metadata cache.
  */
-void Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
-				 Inode *in, utime_t from, int mds)
+Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
+				    Inode *in, utime_t from, int mds, bool set_offset)
 {
   utime_t dttl = from;
   dttl += (float)dlease->duration_ms / 1000.0;
@@ -557,6 +564,10 @@ void Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dleas
 	       << " unlinked, linking" << dendl;
       dn = link(dir, dname, in, dn);
     }
+    if (set_offset) {
+      dout(15) << " setting dn offset to " << dir->max_offset << dendl;
+      dn->offset = dir->max_offset++;
+    }
   }
 
   assert(dn && dn->inode);
@@ -572,6 +583,7 @@ void Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dleas
     }
   }
   dn->cap_shared_gen = dir->parent_inode->shared_gen;
+  return dn;
 }
 
 
@@ -661,7 +673,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
 
     if (in) {
       Dir *dir = diri->open_dir();
-      insert_dentry_inode(dir, dname, &dlease, in, from, mds);
+      insert_dentry_inode(dir, dname, &dlease, in, from, mds, true);
     } else {
       Dentry *dn = NULL;
       if (diri->dir && diri->dir->dentries.count(dname)) {
@@ -686,7 +698,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
 
     if (in) {
       Dir *dir = diri->open_dir();
-      insert_dentry_inode(dir, dname, &dlease, in, from, mds);
+      insert_dentry_inode(dir, dname, &dlease, in, from, mds, true);
     } else {
       Dentry *dn = NULL;
       if (diri->dir && diri->dir->dentries.count(dname)) {
@@ -724,13 +736,14 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
 
     string dname;
     LeaseStat dlease;
-    while (numdn) {
+    for (unsigned i=0; i<numdn; i++) {
       ::decode(dname, p);
       ::decode(dlease, p);
       InodeStat ist(p);
       
       Inode *in = add_update_inode(&ist, from, mds);
-      insert_dentry_inode(dir, dname, &dlease, in, from, mds);
+      Dentry *dn = insert_dentry_inode(dir, dname, &dlease, in, from, mds, false);
+      dn->offset = DirResult::make_fpos(request->readdir_frag, i + request->readdir_offset);
 
       // remove any extra names
       while (pd != dir->dentry_map.end() && pd->first <= dname) {
@@ -747,9 +760,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
       in->get();
       request->readdir_result.push_back(pair<string,Inode*>(dname, in));
 
-      dout(15) << "insert_trace  '" << dname << "' -> " << in->ino << dendl;
-
-      numdn--;
+      dout(15) << "insert_trace  " << dn->offset << ": '" << dname << "' -> " << in->ino << dendl;
     }
     request->readdir_last_name = dname;
     
@@ -3905,7 +3916,7 @@ void Client::fill_dirent(struct dirent *de, const char *name, int type, uint64_t
 #endif
   de->d_reclen = 1;
   de->d_type = MODE_TO_DT(type);
-  dout(10) << "fill_dirent '" << de->d_name << "' -> " << de->d_ino
+  dout(10) << "fill_dirent '" << de->d_name << "' -> " << inodeno_t(de->d_ino)
 	   << " type " << (int)de->d_type << " w/ next_off " << next_off << dendl;
 #endif
 }
@@ -3968,6 +3979,8 @@ int Client::_readdir_get_frag(DirResult *dirp)
     req->path2.set_path(dirp->last_name.c_str());
     req->readdir_start = dirp->last_name;
   }
+  req->readdir_offset = dirp->next_offset;
+  req->readdir_frag = fg;
   
   
   bufferlist dirbl;
@@ -4027,6 +4040,9 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
   uint32_t off = dirp->fragpos();
 
   Inode *diri = dirp->inode;
+
+  if (dirp->at_end())
+    return 0;
 
   if (dirp->offset == 0) {
     dout(15) << " including ." << dendl;
@@ -4104,13 +4120,15 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
       dout(10) << " advancing to next frag: " << fg << " -> " << dirp->frag() << dendl;
       continue;
     }
-    dirp->set_end();
 
     if (diri->dir && diri->dir->release_count == dirp->release_count) {
       dout(10) << " marking I_COMPLETE on " << *diri << dendl;
       diri->flags |= I_COMPLETE;
+      if (diri->dir)
+	diri->dir->max_offset = dirp->offset;
     }
 
+    dirp->set_end();
     return 1;
   }
   assert(0);

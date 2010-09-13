@@ -132,7 +132,10 @@ struct MetaRequest {
   bool kick;
   
   // readdir result
+  frag_t readdir_frag;
   string readdir_start;  // starting _after_ this name
+  uint64_t readdir_offset;
+
   vector<pair<string,Inode*> > readdir_result;
   bool readdir_end;
   int readdir_num;
@@ -249,6 +252,7 @@ class Dentry : public LRUObject {
   Dir     *dir;
   Inode   *inode;
   int     ref;                       // 1 if there's a dir beneath me.
+  uint64_t offset;
   int lease_mds;
   utime_t lease_ttl;
   uint64_t lease_gen;
@@ -264,7 +268,7 @@ class Dentry : public LRUObject {
     //cout << "dentry.put on " << this << " " << name << " now " << ref << std::endl;
   }
   
-  Dentry() : dir(0), inode(0), ref(0), lease_mds(-1), lease_gen(0), lease_seq(0), cap_shared_gen(0) { }
+  Dentry() : dir(0), inode(0), ref(0), offset(0), lease_mds(-1), lease_gen(0), lease_seq(0), cap_shared_gen(0) { }
 };
 
 class Dir {
@@ -273,8 +277,9 @@ class Dir {
   hash_map<string, Dentry*> dentries;
   map<string, Dentry*> dentry_map;
   uint64_t release_count;
+  uint64_t max_offset;
 
-  Dir(Inode* in) : release_count(0) { parent_inode = in; }
+  Dir(Inode* in) : release_count(0), max_offset(2) { parent_inode = in; }
 
   bool is_empty() {  return dentries.empty(); }
 };
@@ -1139,8 +1144,8 @@ protected:
 			      uint64_t time_warp_seq, utime_t ctime, utime_t mtime, utime_t atime,
 			      int issued);
   Inode *add_update_inode(InodeStat *st, utime_t ttl, int mds);
-  void insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
-			   Inode *in, utime_t from, int mds);
+  Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
+			      Inode *in, utime_t from, int mds, bool set_offset);
 
 
   // ----------------------
@@ -1149,7 +1154,9 @@ private:
 
   void fill_dirent(struct dirent *de, const char *name, int type, uint64_t ino, loff_t next_off);
 
-  // some helpers
+  // some readdir helpers
+  typedef int (*add_dirent_cb_t)(void *p, struct dirent *de, struct stat *st, int stmask, off_t off);
+
   int _opendir(Inode *in, DirResult **dirpp, int uid=-1, int gid=-1);
   void _readdir_drop_dirp_buffer(DirResult *dirp);
   bool _readdir_have_frag(DirResult *dirp);
@@ -1157,6 +1164,8 @@ private:
   void _readdir_rechoose_frag(DirResult *dirp);
   int _readdir_get_frag(DirResult *dirp);
   void _closedir(DirResult *dirp);
+
+  // other helpers
   void _ll_get(Inode *in);
   int _ll_put(Inode *in, int num);
   void _ll_drop_pins();
@@ -1212,7 +1221,6 @@ public:
   int opendir(const char *name, DIR **dirpp);
   int closedir(DIR *dirp);
 
-  typedef int (*add_dirent_cb_t)(void *p, struct dirent *de, struct stat *st, int stmask, off_t off);
   int readdir_r_cb(DIR *dirp, add_dirent_cb_t cb, void *p);
 
   int readdir_r(DIR *dirp, struct dirent *de);
