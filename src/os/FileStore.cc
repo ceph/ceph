@@ -379,6 +379,8 @@ int FileStore::mkjournal()
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
   int fd = ::open(fn, O_RDONLY, 0644);
+  if (fd < 0)
+    return -errno;
   ::read(fd, &fsid, sizeof(fsid));
   ::close(fd);
 
