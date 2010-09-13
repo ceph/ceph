@@ -255,6 +255,7 @@ class Dir {
  public:
   Inode    *parent_inode;  // my inode
   hash_map<string, Dentry*> dentries;
+  map<string, Dentry*> dentry_map;
   uint64_t release_count;
 
   Dir(Inode* in) : release_count(0) { parent_inode = in; }
@@ -942,6 +943,7 @@ protected:
       dn->dir = dir;
       //cout << "link dir " << dir->parent_inode->ino << " '" << name << "' -> inode " << in->ino << endl;
       dir->dentries[dn->name] = dn;
+      dir->dentry_map[dn->name] = dn;
       lru.lru_insert_mid(dn);    // mid or top?
     }
 
@@ -971,6 +973,7 @@ protected:
         
     // unlink from dir
     dn->dir->dentries.erase(dn->name);
+    dn->dir->dentry_map.erase(dn->name);
     if (dn->dir->is_empty() && !keepdir) 
       close_dir(dn->dir);
     dn->dir = 0;
@@ -1004,6 +1007,7 @@ protected:
 
     // unlink old dn from dir
     olddir->dentries.erase(olddn->name);
+    olddir->dentry_map.erase(olddn->name);
     olddn->inode = 0;
     olddn->dir = 0;
     lru.lru_remove(olddn);
@@ -1011,6 +1015,7 @@ protected:
     
     // link new dn to dir
     dir->dentries[name] = newdn;
+    dir->dentry_map[name] = newdn;
     if (made_new)
       lru.lru_insert_mid(newdn);
     else
