@@ -238,9 +238,12 @@ int OSD::write_meta(const char *base, const char *file, const char *val, size_t 
 
   snprintf(fn, sizeof(fn), "%s/%s", base, file);
   fd = ::open(fn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
-  ::write(fd, val, vallen);
+  if (fd < 0)
+    return -errno;
+  int r = ::write(fd, val, vallen);
+  if (r < 0)
+    return -errno;
   ::close(fd);
-
   return 0;
 }
 

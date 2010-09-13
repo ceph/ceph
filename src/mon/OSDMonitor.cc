@@ -1164,6 +1164,20 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       }
       r = 0;
     }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "blacklist" && m->cmd[2] == "ls") {
+      for (hash_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
+	   p != osdmap.blacklist.end();
+	   p++) {
+	stringstream ss;
+	string s;
+	ss << p->first << " " << p->second;
+	getline(ss, s);
+	s += "\n";
+	rdata.append(s);
+      }
+      ss << "listed " << osdmap.blacklist.size() << " entries";
+      r = 0;
+    }
   }
  out:
   if (r != -1) {
@@ -1340,6 +1354,40 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	return true;
       }
     }
+    else if (m->cmd[1] == "blacklist" && m->cmd.size() >= 4) {
+      entity_addr_t addr;
+      if (!addr.parse(m->cmd[3].c_str(), 0))
+	ss << "unable to parse address " << m->cmd[3];
+      else if (m->cmd[2] == "add") {
+
+	utime_t expires = g_clock.now();
+	double d = 60*60;  // 1 hour default
+	if (m->cmd.size() > 4)
+	  d = atof(m->cmd[4].c_str());
+	expires += d;
+
+	pending_inc.new_blacklist[addr] = expires;
+	ss << "blacklisting " << addr << " until " << expires << " (" << d << " sec)";
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	return true;
+      } else if (m->cmd[2] == "rm") {
+	if (osdmap.is_blacklisted(addr) || 
+	    pending_inc.new_blacklist.count(addr)) {
+	  if (osdmap.is_blacklisted(addr))
+	    pending_inc.old_blacklist.push_back(addr);
+	  else
+	    pending_inc.new_blacklist.erase(addr);
+	  ss << "un-blacklisting " << addr;
+	  getline(ss, rs);
+	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	  return true;
+	}
+	ss << addr << " isn't blacklisted";
+	err = -ENOENT;
+	goto out;
+      }
+    }
     else if (m->cmd[1] == "pool" && m->cmd.size() >= 3) {
       if (m->cmd.size() >= 5 && m->cmd[2] == "mksnap") {
 	int pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
@@ -1498,7 +1546,7 @@ out:
 
 bool OSDMonitor::preprocess_pool_op(MPoolOp *m) 
 {
-  dout(0) << "m->op=" << m->op << dendl;
+  dout(10) << "m->op=" << m->op << dendl;
   if (m->op == POOL_OP_CREATE) {
     return preprocess_pool_op_create(m);
   }
@@ -1509,11 +1557,12 @@ bool OSDMonitor::preprocess_pool_op(MPoolOp *m)
   }
   bool snap_exists = false;
   pg_pool_t *pp = 0;
-  if (pending_inc.new_pools.count(m->pool)) pp = &pending_inc.new_pools[m->pool];
-  //check if the snap and snapname exists
+  if (pending_inc.new_pools.count(m->pool))
+    pp = &pending_inc.new_pools[m->pool];
+  // check if the snap and snapname exists
   if (!osdmap.get_pg_pool(m->pool)) {
-    //uh-oh, bad pool num!
-    dout(0) << "attempt to delete non-existent pool id " << m->pool << dendl;
+    // uh-oh, bad pool num!
+    dout(10) << "attempt to delete non-existent pool id " << m->pool << dendl;
     _pool_op(m, -ENODATA, pending_inc.epoch);
     return true;
   }

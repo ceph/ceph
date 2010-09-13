@@ -299,7 +299,6 @@ void Monitor::handle_command(MMonCommand *m)
   string rs;
   int r = -EINVAL;
   if (!m->cmd.empty()) {
-      dout(0) << "m->cmd[0]=" << m->cmd[0] << dendl;
     if (m->cmd[0] == "mds") {
       mdsmon()->dispatch(m);
       return;
@@ -856,7 +855,7 @@ void Monitor::check_subs()
 
 void Monitor::check_sub(Subscription *sub)
 {
-  dout(0) << "check_sub monmap next " << sub->next << " have " << monmap->get_epoch() << dendl;
+  dout(10) << "check_sub monmap next " << sub->next << " have " << monmap->get_epoch() << dendl;
   if (sub->next <= monmap->get_epoch()) {
     send_latest_monmap(sub->session->con);
     if (sub->onetime)
@@ -1018,7 +1017,7 @@ void Monitor::handle_class(MClass *m)
   if (!session)
     goto done;
   if (!session->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_X)) {
-    dout(0) << "MClass received from entity without sufficient privileges "
+    dout(1) << "MClass received from entity without sufficient privileges "
 	    << session->caps << dendl;
     goto done;
   }
@@ -1030,11 +1029,11 @@ void Monitor::handle_class(MClass *m)
       return;
 
     case CLASS_RESPONSE:
-      dout(0) << "got a class response (" << *m << ") ???" << dendl;
+      dout(10) << "got a class response (" << *m << ") ???" << dendl;
       break;
 
     default:
-      dout(0) << "got an unknown class message (" << *m << ") ???" << dendl;
+      dout(10) << "got an unknown class message (" << *m << ") ???" << dendl;
       break;
   }
 
