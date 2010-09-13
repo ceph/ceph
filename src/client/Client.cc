@@ -3851,15 +3851,6 @@ void Client::seekdir(DIR *dirp, loff_t offset)
 
 
 
-void Client::_readdir_add_dirent(DirResult *dirp, const string& name, Inode *in)
-{
-  struct stat st;
-  int stmask = fill_stat(in, &st);  
-  dirp->buffer->push_back(DirEntry(name, st, stmask));
-  dout(10) << "_readdir_add_dirent " << dirp << " added '" << name << "' -> " << in->ino
-	   << ", size now " << dirp->buffer->size() << dendl;
-}
-
 //struct dirent {
 //  ino_t          d_ino;       /* inode number */
 //  off_t          d_off;       /* offset to the next dirent */
@@ -3967,7 +3958,11 @@ int Client::_readdir_get_frag(DirResult *dirp)
       
       Inode *in = _ll_get_inode(ist.vino);
       dout(15) << "_readdir_get_frag " << dirp << "    " << dname << " to " << in->ino << dendl;
-      _readdir_add_dirent(dirp, dname, in);
+
+      // add to cached result list
+      struct stat st;
+      int stmask = fill_stat(in, &st);  
+      dirp->buffer->push_back(DirEntry(dname, st, stmask));
     }
 
     dirp->this_offset = dirp->next_offset;

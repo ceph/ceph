@@ -1139,7 +1139,6 @@ private:
 
   // some helpers
   int _opendir(Inode *in, DirResult **dirpp, int uid=-1, int gid=-1);
-  void _readdir_add_dirent(DirResult *dirp, const string& name, Inode *in);
   bool _readdir_have_frag(DirResult *dirp);
   void _readdir_next_frag(DirResult *dirp);
   void _readdir_rechoose_frag(DirResult *dirp);
