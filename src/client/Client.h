@@ -723,6 +723,8 @@ class Client : public Dispatcher {
     frag_t buffer_frag;
     vector<pair<string,Inode*> > *buffer;
 
+    string at_cache_name;  // last entry we successfully returned
+
     DirResult(Inode *in) : inode(in), offset(0), next_offset(2),
 			   release_count(0),
 			   buffer(0) { 
@@ -1163,6 +1165,7 @@ private:
   void _readdir_next_frag(DirResult *dirp);
   void _readdir_rechoose_frag(DirResult *dirp);
   int _readdir_get_frag(DirResult *dirp);
+  int _readdir_cache_cb(DirResult *dirp, add_dirent_cb_t cb, void *p);
   void _closedir(DirResult *dirp);
 
   // other helpers

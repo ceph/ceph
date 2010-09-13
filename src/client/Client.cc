@@ -4022,6 +4022,59 @@ int Client::_readdir_get_frag(DirResult *dirp)
   return res;
 }
 
+int Client::_readdir_cache_cb(DirResult *dirp, add_dirent_cb_t cb, void *p)
+{
+  dout(10) << "_readdir_cache_cb " << dirp << " on " << dirp->inode->ino
+	   << " at_cache_name " << dirp->at_cache_name << " offset " << dirp->offset
+	   << dendl;
+  Dir *dir = dirp->inode->dir;
+
+  map<string,Dentry*>::iterator pd;
+  if (dirp->at_cache_name.length()) {
+    pd = dir->dentry_map.find(dirp->at_cache_name);
+    if (pd == dir->dentry_map.end())
+      return -EAGAIN;  // weird, i give up
+    pd++;
+  } else {
+    pd = dir->dentry_map.begin();
+  }
+
+  while (pd != dir->dentry_map.end()) {
+    Dentry *dn = pd->second;
+    if (dn->inode == NULL) {
+      dout(15) << " skipping null '" << pd->first << "'" << dendl;
+      pd++;
+      continue;
+    }
+
+    struct stat st;
+    struct dirent de;
+    int stmask = fill_stat(dn->inode, &st);  
+    fill_dirent(&de, pd->first.c_str(), st.st_mode, st.st_ino, dirp->offset + 1);
+      
+    uint64_t next_off = dn->offset + 1;
+    pd++;
+    if (pd == dir->dentry_map.end())
+      next_off = DirResult::END;
+
+    int r = cb(p, &de, &st, stmask, next_off);  // _next_ offset
+    dout(15) << " de " << de.d_name << " off " << dn->offset
+	     << " = " << r
+	     << dendl;
+    if (r < 0) {
+      dirp->next_offset = dn->offset;
+      dirp->at_cache_name = dn->name;
+      return r;
+    }
+
+    dirp->offset = next_off;
+  }
+
+  dout(10) << "_readdir_cache_cb " << dirp << " on " << dirp->inode->ino << " at end" << dendl;
+  dirp->set_end();
+  return 1;
+}
+
 int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
 {
   DirResult *dirp = (DirResult*)d;
@@ -4074,7 +4127,25 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
     dirp->offset = 2;
     off = 2;
   }
-    
+
+  // can we read from our cache?
+  dout(10) << "offset " << dirp->offset << " at_cache_name " << dirp->at_cache_name
+	   << " snapid " << dirp->inode->snapid << " complete " << (bool)(dirp->inode->flags & I_COMPLETE)
+	   << " issued " << ccap_string(dirp->inode->caps_issued())
+	   << dendl;
+  if ((dirp->offset == 2 || dirp->at_cache_name.length()) &&
+      dirp->inode->snapid != CEPH_SNAPDIR &&
+      (dirp->inode->flags & I_COMPLETE) &&
+      dirp->inode->caps_issued_mask(CEPH_CAP_FILE_SHARED)) {
+    int err = _readdir_cache_cb(dirp, cb, p);
+    if (err != -EAGAIN)
+      return err;
+  }					    
+  if (dirp->at_cache_name.length()) {
+    dirp->last_name = dirp->at_cache_name;
+    dirp->at_cache_name.clear();
+  }
+
   while (1) {
     if (dirp->at_end())
       return 0;
