@@ -110,8 +110,10 @@ public:
     out << "client_caps(" << ceph_cap_op_name(head.op)
 	<< " ino " << inodeno_t(head.ino)
 	<< " " << head.cap_id
-	<< " seq " << head.seq 
-	<< " caps=" << ccap_string(head.caps)
+	<< " seq " << head.seq;
+    if (get_tid())
+      out << " tid " << get_tid();
+    out << " caps=" << ccap_string(head.caps)
 	<< " dirty=" << ccap_string(head.dirty)
 	<< " wanted=" << ccap_string(head.wanted);
     out << " follows " << snapid_t(head.snap_follows);
