@@ -677,8 +677,14 @@ int FileStore::mount()
   {
     char s[40];
     int l = ::read(op_fd, s, sizeof(s));
-    s[l] = 0;
-    initial_op_seq = atoll(s);
+    if (l >= 0) {
+      s[l] = 0;
+      initial_op_seq = atoll(s);
+    } else {
+      char buf[80];
+      dout(0) << "mount error reading " << current_op_seq_fn << ": "
+	      << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    }
   }
   dout(5) << "mount op_seq is " << initial_op_seq << dendl;
 
