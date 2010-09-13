@@ -799,11 +799,18 @@ void MDSMonitor::tick()
 	last_beacon.erase(gid);
 	do_propose = true;
       } else if (!info.laggy()) {
-	// remove it
-	dout(10) << " removing " << info.addr << " mds" << info.rank << "." << info.inc
-		 << " " << ceph_mds_state_name(info.state)
-		 << " (laggy)" << dendl;
-	pending_mdsmap.mds_info.erase(gid);
+	if (info.state == MDSMap::STATE_STANDBY) {
+	  // remove it
+	  dout(10) << " removing " << info.addr << " mds" << info.rank << "." << info.inc
+		   << " " << ceph_mds_state_name(info.state)
+		   << " (laggy)" << dendl;
+	  pending_mdsmap.mds_info.erase(gid);
+	} else {
+	  dout(10) << " marking " << info.addr << " mds" << info.rank << "." << info.inc
+		   << " " << ceph_mds_state_name(info.state)
+		   << " laggy" << dendl;
+	  info.laggy_since = now;
+	}
 	last_beacon.erase(gid);
 	do_propose = true;
       }
