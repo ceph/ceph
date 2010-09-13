@@ -1599,19 +1599,23 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
       snaps[i] = snapc.snaps[i];
     
     // prepare clone
-    ctx->clone_obc = new ObjectContext(coid);
-    ctx->clone_obc->obs.oi.version = ctx->at_version;
-    ctx->clone_obc->obs.oi.prior_version = oi.version;
-    ctx->clone_obc->obs.oi.last_reqid = oi.last_reqid;
-    ctx->clone_obc->obs.oi.mtime = oi.mtime;
-    ctx->clone_obc->obs.oi.snaps = snaps;
-    ctx->clone_obc->obs.exists = true;
-    ctx->clone_obc->get();
-
-    if (is_primary())
+    object_info_t static_snap_oi(coid);
+    object_info_t *snap_oi;
+    if (is_primary()) {
+      ctx->clone_obc = new ObjectContext(coid);
+      ctx->clone_obc->obs.exists = true;
+      ctx->clone_obc->get();
       register_object_context(ctx->clone_obc);
-    
-    _make_clone(t, soid, coid, &ctx->clone_obc->obs.oi);
+      snap_oi = &ctx->clone_obc->obs.oi;
+    } else {
+      snap_oi = &static_snap_oi;
+    }
+    snap_oi->version = ctx->at_version;
+    snap_oi->prior_version = oi.version;
+    snap_oi->last_reqid = oi.last_reqid;
+    snap_oi->mtime = oi.mtime;
+    snap_oi->snaps = snaps;
+    _make_clone(t, soid, coid, snap_oi);
     
     // add to snap bound collections
     coll_t fc = make_snap_collection(t, snaps[0]);

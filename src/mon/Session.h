@@ -62,7 +62,7 @@ struct MonSession : public RefCountedObject {
       con->put();
     if (proxy_con)
       proxy_con->put();
-    generic_dout(0) << "~MonSession " << this << dendl;
+    //generic_dout(0) << "~MonSession " << this << dendl;
     // we should have been removed before we get destructed; see MonSessionMap::remove_session()
     assert(!item.is_on_list());
     assert(sub_map.empty());

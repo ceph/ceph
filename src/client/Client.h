@@ -94,6 +94,15 @@ struct InodeCap;
 class Inode;
 class Dentry;
 
+/* getdir result */
+struct DirEntry {
+  string d_name;
+  struct stat st;
+  int stmask;
+  DirEntry(const string &s) : d_name(s), stmask(0) {}
+  DirEntry(const string &n, struct stat& s, int stm) : d_name(n), st(s), stmask(stm) {}
+};
+
 struct MetaRequest {
   uint64_t tid;
   ceph_mds_request_head head;
@@ -122,6 +131,16 @@ struct MetaRequest {
   MClientReply *reply;         // the reply
   bool kick;
   
+  // readdir result
+  frag_t readdir_frag;
+  string readdir_start;  // starting _after_ this name
+  uint64_t readdir_offset;
+
+  vector<pair<string,Inode*> > readdir_result;
+  bool readdir_end;
+  int readdir_num;
+  string readdir_last_name;
+
   //possible responses
   bool got_safe;
   bool got_unsafe;
@@ -233,6 +252,7 @@ class Dentry : public LRUObject {
   Dir     *dir;
   Inode   *inode;
   int     ref;                       // 1 if there's a dir beneath me.
+  uint64_t offset;
   int lease_mds;
   utime_t lease_ttl;
   uint64_t lease_gen;
@@ -248,16 +268,18 @@ class Dentry : public LRUObject {
     //cout << "dentry.put on " << this << " " << name << " now " << ref << std::endl;
   }
   
-  Dentry() : dir(0), inode(0), ref(0), lease_mds(-1), lease_gen(0), lease_seq(0), cap_shared_gen(0) { }
+  Dentry() : dir(0), inode(0), ref(0), offset(0), lease_mds(-1), lease_gen(0), lease_seq(0), cap_shared_gen(0) { }
 };
 
 class Dir {
  public:
   Inode    *parent_inode;  // my inode
   hash_map<string, Dentry*> dentries;
+  map<string, Dentry*> dentry_map;
   uint64_t release_count;
+  uint64_t max_offset;
 
-  Dir(Inode* in) : release_count(0) { parent_inode = in; }
+  Dir(Inode* in) : release_count(0), max_offset(2) { parent_inode = in; }
 
   bool is_empty() {  return dentries.empty(); }
 };
@@ -672,26 +694,40 @@ struct Fh {
 class Client : public Dispatcher {
  public:
   
-  /* getdir result */
-  struct DirEntry {
-    string d_name;
-    struct stat st;
-    int stmask;
-    DirEntry(const string &s) : d_name(s), stmask(0) {}
-    DirEntry(const string &n, struct stat& s, int stm) : d_name(n), st(s), stmask(stm) {}
-  };
-
   struct DirResult {
     static const int SHIFT = 28;
     static const int64_t MASK = (1 << SHIFT) - 1;
     static const loff_t END = 1ULL << (SHIFT + 32);
 
-    Inode *inode;
-    int64_t offset;   // high bits: frag_t, low bits: an offset
-    uint64_t release_count;
-    map<frag_t, vector<DirEntry> > buffer;
+    static uint64_t make_fpos(unsigned frag, unsigned off) {
+      return ((uint64_t)frag << SHIFT) | (uint64_t)off;
+    }
+    static unsigned fpos_frag(uint64_t p) {
+      return p >> SHIFT;
+    }
+    static unsigned fpos_off(uint64_t p) {
+      return p & MASK;
+    }
 
-    DirResult(Inode *in) : inode(in), offset(0), release_count(0) { 
+
+    Inode *inode;
+
+    int64_t offset;        // high bits: frag_t, low bits: an offset
+
+    uint64_t this_offset;  // offset of last chunk, adjusted for . and ..
+    uint64_t next_offset;  // offset of next chunk (last_name's + 1)
+    string last_name;      // last entry in previous chunk
+
+    uint64_t release_count;
+
+    frag_t buffer_frag;
+    vector<pair<string,Inode*> > *buffer;
+
+    string at_cache_name;  // last entry we successfully returned
+
+    DirResult(Inode *in) : inode(in), offset(0), next_offset(2),
+			   release_count(0),
+			   buffer(0) { 
       inode->get();
     }
 
@@ -711,6 +747,15 @@ class Client : public Dispatcher {
     }
     void set_end() { offset = END; }
     bool at_end() { return (offset == END); }
+
+    void reset() {
+      last_name.clear();
+      next_offset = 2;
+      this_offset = 0;
+      offset = 0;
+      delete buffer;
+      buffer = 0;
+    }
   };
 
   // **** WARNING: be sure to update the struct in libceph.h too! ****
@@ -912,6 +957,7 @@ protected:
       dn->dir = dir;
       //cout << "link dir " << dir->parent_inode->ino << " '" << name << "' -> inode " << in->ino << endl;
       dir->dentries[dn->name] = dn;
+      dir->dentry_map[dn->name] = dn;
       lru.lru_insert_mid(dn);    // mid or top?
     }
 
@@ -941,6 +987,7 @@ protected:
         
     // unlink from dir
     dn->dir->dentries.erase(dn->name);
+    dn->dir->dentry_map.erase(dn->name);
     if (dn->dir->is_empty() && !keepdir) 
       close_dir(dn->dir);
     dn->dir = 0;
@@ -974,6 +1021,7 @@ protected:
 
     // unlink old dn from dir
     olddir->dentries.erase(olddn->name);
+    olddir->dentry_map.erase(olddn->name);
     olddn->inode = 0;
     olddn->dir = 0;
     lru.lru_remove(olddn);
@@ -981,6 +1029,7 @@ protected:
     
     // link new dn to dir
     dir->dentries[name] = newdn;
+    dir->dentry_map[name] = newdn;
     if (made_new)
       lru.lru_insert_mid(newdn);
     else
@@ -1097,23 +1146,29 @@ protected:
 			      uint64_t time_warp_seq, utime_t ctime, utime_t mtime, utime_t atime,
 			      int issued);
   Inode *add_update_inode(InodeStat *st, utime_t ttl, int mds);
-  void insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
-			   Inode *in, utime_t from, int mds);
+  Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
+			      Inode *in, utime_t from, int mds, bool set_offset);
 
 
   // ----------------------
   // fs ops.
 private:
 
-  // some helpers
+  void fill_dirent(struct dirent *de, const char *name, int type, uint64_t ino, loff_t next_off);
+
+  // some readdir helpers
+  typedef int (*add_dirent_cb_t)(void *p, struct dirent *de, struct stat *st, int stmask, off_t off);
+
   int _opendir(Inode *in, DirResult **dirpp, int uid=-1, int gid=-1);
-  void _readdir_add_dirent(DirResult *dirp, const string& name, Inode *in);
-  void _readdir_fill_dirent(struct dirent *de, DirEntry *entry, loff_t);
+  void _readdir_drop_dirp_buffer(DirResult *dirp);
   bool _readdir_have_frag(DirResult *dirp);
   void _readdir_next_frag(DirResult *dirp);
   void _readdir_rechoose_frag(DirResult *dirp);
   int _readdir_get_frag(DirResult *dirp);
+  int _readdir_cache_cb(DirResult *dirp, add_dirent_cb_t cb, void *p);
   void _closedir(DirResult *dirp);
+
+  // other helpers
   void _ll_get(Inode *in);
   int _ll_put(Inode *in, int num);
   void _ll_drop_pins();
@@ -1166,12 +1221,15 @@ public:
   void getcwd(std::string& cwd);
 
   // namespace ops
-  int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
-
   int opendir(const char *name, DIR **dirpp);
   int closedir(DIR *dirp);
+
+  int readdir_r_cb(DIR *dirp, add_dirent_cb_t cb, void *p);
+
   int readdir_r(DIR *dirp, struct dirent *de);
   int readdirplus_r(DIR *dirp, struct dirent *de, struct stat *st, int *stmask);
+
+  int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
 
   int _getdents(DIR *dirp, char *buf, int buflen, bool ful);  // get a bunch of dentries at once
   int getdents(DIR *dirp, char *buf, int buflen) {

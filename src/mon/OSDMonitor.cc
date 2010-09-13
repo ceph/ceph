@@ -509,14 +509,15 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     dout(7) << "prepare_boot was up, first marking down " << osdmap.get_inst(from) << dendl;
     assert(osdmap.get_inst(from) != m->get_orig_source_inst());  // preproces should have caught it
     
-    // mark previous guy down
-    pending_inc.new_down[from] = false;
-    
+    if (pending_inc.new_down.count(from) == 0) {
+      // mark previous guy down
+      pending_inc.new_down[from] = false;
+    }
     paxos->wait_for_commit(new C_RetryMessage(this, m));
   } else if (pending_inc.new_up_client.count(from)) { //FIXME: should this be using new_up_client?
     // already prepared, just wait
     dout(7) << "prepare_boot already prepared, waiting on " << m->get_orig_source_addr() << dendl;
-    paxos->wait_for_commit(new C_Booted(this, m, false));
+    paxos->wait_for_commit(new C_RetryMessage(this, m));
   } else {
     // mark new guy up.
     down_pending_out.erase(from);  // if any
@@ -820,11 +821,11 @@ void OSDMonitor::send_full(PaxosServiceMessage *m)
 
 MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to)
 {
-  dout(10) << "build_incremental from " << from << " to " << to << dendl;
+  dout(10) << "build_incremental [" << from << ".." << to << "]" << dendl;
   MOSDMap *m = new MOSDMap(mon->monmap->fsid);
   
   for (epoch_t e = to;
-       e >= from;
+       e >= from && e > 0;
        e--) {
     bufferlist bl;
     if (mon->store->get_bl_sn(bl, "osdmap", e) > 0) {
@@ -832,7 +833,7 @@ MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to)
       m->incremental_maps[e] = bl;
     } 
     else if (mon->store->get_bl_sn(bl, "osdmap_full", e) > 0) {
-      dout(20) << "send_incremental   full " << e << dendl;
+      dout(20) << "send_incremental   full " << e << " " << bl.length() << " bytes" << dendl;
       m->maps[e] = bl;
     }
     else {
@@ -842,23 +843,23 @@ MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to)
   return m;
 }
 
-void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t from)
+void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
 {
-  dout(5) << "send_incremental from " << from << " -> " << osdmap.get_epoch()
+  dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
 	  << " to " << req->get_orig_source_inst() << dendl;
-  MOSDMap *m = build_incremental(from, osdmap.get_epoch());
+  MOSDMap *m = build_incremental(first, osdmap.get_epoch());
   mon->send_reply(req, m);
 }
 
-void OSDMonitor::send_incremental(epoch_t from, entity_inst_t& dest)
+void OSDMonitor::send_incremental(epoch_t first, entity_inst_t& dest)
 {
-  dout(5) << "send_incremental from " << from << " -> " << osdmap.get_epoch()
+  dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
 	  << " to " << dest << dendl;
-  while (from < osdmap.get_epoch()) {
-    epoch_t to = MIN(from + 100, osdmap.get_epoch());
-    MOSDMap *m = build_incremental(from, to);
+  while (first <= osdmap.get_epoch()) {
+    epoch_t last = MIN(first + 100, osdmap.get_epoch());
+    MOSDMap *m = build_incremental(first, last);
     mon->messenger->send_message(m, dest);
-    from = to;
+    first = last + 1;
   }
 }
 
@@ -886,8 +887,8 @@ void OSDMonitor::check_subs()
 void OSDMonitor::check_sub(Subscription *sub)
 {
   if (sub->next <= osdmap.get_epoch()) {
-    if (sub->next > 1)
-      send_incremental(sub->next - 1, sub->session->inst);
+    if (sub->next >= 1)
+      send_incremental(sub->next, sub->session->inst);
     else
       mon->messenger->send_message(new MOSDMap(mon->monmap->fsid, &osdmap),
 				   sub->session->inst);
@@ -1163,6 +1164,20 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       }
       r = 0;
     }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "blacklist" && m->cmd[2] == "ls") {
+      for (hash_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
+	   p != osdmap.blacklist.end();
+	   p++) {
+	stringstream ss;
+	string s;
+	ss << p->first << " " << p->second;
+	getline(ss, s);
+	s += "\n";
+	rdata.append(s);
+      }
+      ss << "listed " << osdmap.blacklist.size() << " entries";
+      r = 0;
+    }
   }
  out:
   if (r != -1) {
@@ -1339,6 +1354,40 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	return true;
       }
     }
+    else if (m->cmd[1] == "blacklist" && m->cmd.size() >= 4) {
+      entity_addr_t addr;
+      if (!addr.parse(m->cmd[3].c_str(), 0))
+	ss << "unable to parse address " << m->cmd[3];
+      else if (m->cmd[2] == "add") {
+
+	utime_t expires = g_clock.now();
+	double d = 60*60;  // 1 hour default
+	if (m->cmd.size() > 4)
+	  d = atof(m->cmd[4].c_str());
+	expires += d;
+
+	pending_inc.new_blacklist[addr] = expires;
+	ss << "blacklisting " << addr << " until " << expires << " (" << d << " sec)";
+	getline(ss, rs);
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	return true;
+      } else if (m->cmd[2] == "rm") {
+	if (osdmap.is_blacklisted(addr) || 
+	    pending_inc.new_blacklist.count(addr)) {
+	  if (osdmap.is_blacklisted(addr))
+	    pending_inc.old_blacklist.push_back(addr);
+	  else
+	    pending_inc.new_blacklist.erase(addr);
+	  ss << "un-blacklisting " << addr;
+	  getline(ss, rs);
+	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+	  return true;
+	}
+	ss << addr << " isn't blacklisted";
+	err = -ENOENT;
+	goto out;
+      }
+    }
     else if (m->cmd[1] == "pool" && m->cmd.size() >= 3) {
       if (m->cmd.size() >= 5 && m->cmd[2] == "mksnap") {
 	int pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
@@ -1497,7 +1546,7 @@ out:
 
 bool OSDMonitor::preprocess_pool_op(MPoolOp *m) 
 {
-  dout(0) << "m->op=" << m->op << dendl;
+  dout(10) << "m->op=" << m->op << dendl;
   if (m->op == POOL_OP_CREATE) {
     return preprocess_pool_op_create(m);
   }
@@ -1508,11 +1557,12 @@ bool OSDMonitor::preprocess_pool_op(MPoolOp *m)
   }
   bool snap_exists = false;
   pg_pool_t *pp = 0;
-  if (pending_inc.new_pools.count(m->pool)) pp = &pending_inc.new_pools[m->pool];
-  //check if the snap and snapname exists
+  if (pending_inc.new_pools.count(m->pool))
+    pp = &pending_inc.new_pools[m->pool];
+  // check if the snap and snapname exists
   if (!osdmap.get_pg_pool(m->pool)) {
-    //uh-oh, bad pool num!
-    dout(0) << "attempt to delete non-existent pool id " << m->pool << dendl;
+    // uh-oh, bad pool num!
+    dout(10) << "attempt to delete non-existent pool id " << m->pool << dendl;
     _pool_op(m, -ENODATA, pending_inc.epoch);
     return true;
   }

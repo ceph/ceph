@@ -850,7 +850,7 @@ int main(int argc, const char **argv)
       crush.set_type_name(type, l.name);
 
       int buckettype = -1;
-      for (int i = 0; i < (int)sizeof(bucket_types); i++)
+      for (int i = 0; i < (int)(sizeof(bucket_types)/sizeof(bucket_types[0])); i++)
 	if (strcmp(l.buckettype, bucket_types[i].name) == 0) {
 	  buckettype = bucket_types[i].type;
 	  break;

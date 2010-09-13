@@ -664,7 +664,7 @@ bool ConfFile::_parse(char *filename, ConfSection **psection)
 	free(buf);
 
 	*psection = section;
-
+	close(fd);
 	free(line);
 
 	return 1;

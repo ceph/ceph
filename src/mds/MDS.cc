@@ -770,6 +770,11 @@ void MDS::handle_mds_map(MMDSMap *m)
   }
 
   if (whoami < 0) {
+    if (want_state == MDSMap::STATE_STANDBY) {
+      dout(10) << "dropped out of mdsmap, try to re-add myself" << dendl;
+      want_state = state = MDSMap::STATE_BOOT;
+      goto out;
+    }
     if (want_state == MDSMap::STATE_BOOT) {
       dout(10) << "not in map yet" << dendl;
     } else {

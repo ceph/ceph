@@ -188,6 +188,11 @@ for name in $what; do
     get_conf pid_file "/var/run/ceph/$type.$id.pid" "pid file"
     [ -n "$pid_file" ] && mkdir -p `dirname $pid_file`
 
+    get_conf log_dir "/var/log/ceph" "log dir"
+    get_conf log_sym_dir "" "log sym dir"
+    [ -n "$log_dir" ] && mkdir -p $log_dir
+    [ -n "$log_sym_dir" ] && mkdir -p $log_sym_dir
+
     # start, and already running?  (do this check early to avoid unnecessary work!)
     if [ "$command" = "start" ]; then
 	if daemon_is_running $name c$type $pid_file; then
@@ -307,15 +312,11 @@ for name in $what; do
 
 	cleanlogs)
 	    echo removing logs
-	    get_conf log_dir "/var/log/ceph" "log dir"
-	    get_conf log_sym_dir "/var/log/ceph" "log sym dir"
 	    do_cmd "for f in $log_sym_dir/$name*; do rm -f \`readlink \$f\` ; rm -f \$f ; done"
 	    ;;
 
 	cleanalllogs)
 	    echo removing all logs
-	    get_conf log_dir "/var/log/ceph" "log dir"
-	    get_conf log_sym_dir "/var/log/ceph" "log sym dir"
 	    do_cmd "rm -f $log_dir/* $log_sym_dir/* || true"
 	    ;;
 

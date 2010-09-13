@@ -280,6 +280,8 @@ int FileStore::mkfs()
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
   fsid_fd = ::open(fn, O_CREAT|O_RDWR, 0644);
+  if (fsid_fd < 0)
+    return -errno;
   if (lock_fsid() < 0)
     return -EBUSY;
 
@@ -320,6 +322,8 @@ int FileStore::mkfs()
 
   ::close(fsid_fd);
   fsid_fd = ::open(fn, O_CREAT|O_RDWR, 0644);
+  if (fsid_fd < 0)
+    return -errno;
   if (lock_fsid() < 0)
     return -EBUSY;
   ::write(fsid_fd, &fsid, sizeof(fsid));
@@ -375,6 +379,8 @@ int FileStore::mkjournal()
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
   int fd = ::open(fn, O_RDONLY, 0644);
+  if (fd < 0)
+    return -errno;
   ::read(fd, &fsid, sizeof(fsid));
   ::close(fd);
 
@@ -675,8 +681,14 @@ int FileStore::mount()
   {
     char s[40];
     int l = ::read(op_fd, s, sizeof(s));
-    s[l] = 0;
-    initial_op_seq = atoll(s);
+    if (l >= 0) {
+      s[l] = 0;
+      initial_op_seq = atoll(s);
+    } else {
+      char buf[80];
+      dout(0) << "mount error reading " << current_op_seq_fn << ": "
+	      << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    }
   }
   dout(5) << "mount op_seq is " << initial_op_seq << dendl;
 
@@ -1510,13 +1522,13 @@ int FileStore::_clone(coll_t cid, const sobject_t& oldoid, const sobject_t& newo
     dout(10) << "clone " << ofn << " -> " << nfn << " READ+WRITE" << dendl;
     r = _do_clone_range(o, n, 0, st.st_size);
   }
-  if (r < 0) r = -errno;
+  if (r < 0)
+    r = -errno;
 
- out:
   ::close(n);
- out2:
+ out:
   ::close(o);
-  
+ out2:
   dout(10) << "clone " << ofn << " -> " << nfn << " = " << r << dendl;
   return 0;
 }

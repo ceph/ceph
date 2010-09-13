@@ -203,7 +203,7 @@ void SessionMap::decode(bufferlist::iterator& p)
 	dout(10) << " already had session for " << s->inst.name << ", recovering" << dendl;
 	entity_name_t n = s->inst.name;
 	delete s;
-	s = session_map[s->inst.name];
+	s = session_map[n];
 	p = p2;
 	s->decode(p);
       } else {

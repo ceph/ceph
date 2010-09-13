@@ -167,6 +167,10 @@ bool Locker::acquire_locks(MDRequest *mdr,
     // augment xlock with a versionlock?
     if ((*p)->get_type() == CEPH_LOCK_DN) {
       CDentry *dn = (CDentry*)(*p)->get_parent();
+
+      if (xlocks.count(&dn->versionlock))
+	continue;  // we're xlocking the versionlock too; don't wrlock it!
+
       if (mdr->is_master()) {
 	// master.  wrlock versionlock so we can pipeline dentry updates to journal.
 	wrlocks.insert(&dn->versionlock);
@@ -3136,7 +3140,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
 
-  lock->get_parent()->finish_scatter_gather_update(lock->get_type());
+  in->finish_scatter_gather_update(lock->get_type());
   lock->start_flush();
 
   EUpdate *le = new EUpdate(mds->mdlog, "scatter_writebehind");
@@ -3145,6 +3149,8 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mut, &le->metablob, in);
   
+  in->finish_scatter_gather_update_accounted(lock->get_type(), mut, &le->metablob);
+
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_sync(new C_Locker_ScatterWB(this, lock, mut));
 }

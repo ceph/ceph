@@ -572,6 +572,12 @@ void ObjectCacher::lock_ack(list<sobject_t>& oids, tid_t tid)
     Object *ob = objects[oid];
 
     list<Context*> ls;
+
+    // waiters?
+    if (ob->waitfor_ack.count(tid)) {
+      ls.splice(ls.end(), ob->waitfor_ack[tid]);
+      ob->waitfor_ack.erase(tid);
+    }
     
     assert(tid <= ob->last_write_tid);
     if (ob->last_write_tid == tid) {
@@ -606,12 +612,6 @@ void ObjectCacher::lock_ack(list<sobject_t>& oids, tid_t tid)
     } else {
       dout(10) << "lock_ack " << *ob 
                << " tid " << tid << " obsolete" << dendl;
-    }
-
-    // waiters?
-    if (ob->waitfor_ack.count(tid)) {
-      ls.splice(ls.end(), ob->waitfor_ack[tid]);
-      ob->waitfor_ack.erase(tid);
     }
 
     finish_contexts(ls);
@@ -1134,6 +1134,7 @@ int ObjectCacher::atomic_sync_readx(OSDRead *rd, ObjectSet *oset, Mutex& lock)
     // do the read, into our cache
     Mutex flock("ObjectCacher::atomic_sync_readx flock 2");
     Cond cond;
+    snapid_t snapid = rd->snap;
     bool done = false;
     readx(rd, oset, new C_SafeCond(&flock, &cond, &done));
     
@@ -1144,7 +1145,7 @@ int ObjectCacher::atomic_sync_readx(OSDRead *rd, ObjectSet *oset, Mutex& lock)
     for (vector<ObjectExtent>::iterator ex_it = extents.begin();
          ex_it != extents.end();
          ex_it++) {
-      sobject_t soid(ex_it->oid, rd->snap);
+      sobject_t soid(ex_it->oid, snapid);
       assert(objects.count(soid));
       Object *o = objects[soid];
       rdunlock(o);
@@ -1568,21 +1569,23 @@ loff_t ObjectCacher::release(Object *ob)
        p++) {
     BufferHead *bh = p->second;
     if (bh->is_clean()) 
-	  clean.push_back(bh);
+      clean.push_back(bh);
     else 
       o_unclean += bh->length();
   }
 
   for (list<BufferHead*>::iterator p = clean.begin();
-	   p != clean.end();
-	   p++) {
-	bh_remove(ob, *p);
-	delete *p;
+       p != clean.end();
+       p++) {
+    bh_remove(ob, *p);
+    delete *p;
   }
 
   if (ob->can_close()) {
-	dout(10) << "trim trimming " << *ob << dendl;
-	close_object(ob);
+    dout(10) << "trim trimming " << *ob << dendl;
+    close_object(ob);
+    assert(o_unclean == 0);
+    return 0;
   }
 
   return o_unclean;

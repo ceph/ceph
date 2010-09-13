@@ -103,8 +103,8 @@ void env_to_vec(std::vector<const char*>& args)
   char *p = getenv("CEPH_ARGS");
   if (!p) return;
   
-  int len = MIN(strlen(p), 1000);  // bleh.
   static char buf[1000];  
+  int len = MIN(strlen(p), sizeof(buf)-1);  // bleh.
   memcpy(buf, p, len);
   buf[len] = 0;
   //cout << "CEPH_ARGS='" << p << ";" << endl;
@@ -126,8 +126,8 @@ void env_to_deq(std::deque<const char*>& args)
   char *p = getenv("CEPH_ARGS");
   if (!p) return;
   
-  int len = MIN(strlen(p), 1000);  // bleh.
   static char buf[1000];  
+  int len = MIN(strlen(p), sizeof(buf)-1);  // bleh.
   memcpy(buf, p, len);
   buf[len] = 0;
 

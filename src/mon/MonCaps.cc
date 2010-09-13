@@ -8,14 +8,14 @@ bool MonCaps::get_next_token(string s, size_t& pos, string& token)
   int start = s.find_first_not_of(" \t", pos);
   int end;
 
+  if (start < 0) {
+    return false; 
+  }
+
   if (s[start] == '=' || s[start] == ',' || s[start] == ';') {
     end = start + 1;
   } else {
     end = s.find_first_of(";,= \t", start+1);
-  }
-
-  if (start < 0) {
-    return false; 
   }
 
   if (end < 0) {
@@ -34,7 +34,7 @@ bool MonCaps::is_rwx(string& token, rwx_t& cap_val)
   const char *t = token.c_str();
   int val = 0;
 
-  generic_dout(0) << "got token=" << token << dendl;
+  generic_dout(10) << "got token=" << token << dendl;
 
   while (*t) {
     switch (*t) {
@@ -52,7 +52,7 @@ bool MonCaps::is_rwx(string& token, rwx_t& cap_val)
     }
     t++;
   }
-  generic_dout(0) << "return val=" << val << dendl;
+  generic_dout(10) << "return val=" << val << dendl;
 
   if (val)
     cap_val = val;
@@ -89,7 +89,7 @@ bool MonCaps::parse(bufferlist::iterator& iter)
     ::decode(s, iter);
     text = s;
 
-    generic_dout(0) << "decoded caps: " << s << dendl;
+    generic_dout(10) << "decoded caps: " << s << dendl;
 
     size_t pos = 0;
     string token;
@@ -208,10 +208,10 @@ do { \
     return false;
   }
 
-  generic_dout(0) << "default=" << (int)default_action << dendl;
+  generic_dout(10) << "default=" << (int)default_action << dendl;
   map<int, MonCap>::iterator it;
   for (it = services_map.begin(); it != services_map.end(); ++it) {
-    generic_dout(0) << it->first << " -> (" << (int)it->second.allow << "." << (int)it->second.deny << ")" << dendl;
+    generic_dout(10) << it->first << " -> (" << (int)it->second.allow << "." << (int)it->second.deny << ")" << dendl;
   }
 
   return true;
