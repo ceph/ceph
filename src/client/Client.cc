@@ -4029,6 +4029,12 @@ int Client::_readdir_cache_cb(DirResult *dirp, add_dirent_cb_t cb, void *p)
 	   << dendl;
   Dir *dir = dirp->inode->dir;
 
+  if (!dir) {
+    dout(10) << " dir is empty" << dendl;
+    dirp->set_end();
+    return 1;
+  }
+
   map<string,Dentry*>::iterator pd;
   if (dirp->at_cache_name.length()) {
     pd = dir->dentry_map.find(dirp->at_cache_name);
