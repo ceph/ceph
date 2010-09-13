@@ -1944,10 +1944,8 @@ void Locker::handle_client_caps(MClientCaps *m)
       
     if (in->is_auth() &&
 	_do_cap_update(in, cap, m->get_dirty(), follows, m, ack)) {
-      // updated, cap msg is delayed
-      cap->inc_suppress();
+      // updated
       eval(in, CEPH_CAP_LOCKS);
-      cap->dec_suppress();
       
       if (cap->wanted() & ~cap->pending())
 	mds->mdlog->flush();
