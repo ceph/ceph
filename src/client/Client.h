@@ -132,6 +132,7 @@ struct MetaRequest {
   bool kick;
   
   // readdir result
+  string readdir_start;  // starting _after_ this name
   vector<pair<string,Inode*> > readdir_result;
   bool readdir_end;
   int readdir_num;

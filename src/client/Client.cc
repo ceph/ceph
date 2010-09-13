@@ -715,10 +715,12 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
     ::decode(end, p);
     ::decode(complete, p);
     
-    dout(10) << " " << numdn << " items end=" << end << dendl;
+    dout(10) << "insert_trace " << numdn << " readdir items, end=" << (int)end << dendl;
 
     request->readdir_end = end;
     request->readdir_num = numdn;
+
+    map<string,Dentry*>::iterator pd = dir->dentry_map.upper_bound(request->readdir_start);
 
     string dname;
     LeaseStat dlease;
@@ -729,17 +731,38 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
       
       Inode *in = add_update_inode(&ist, from, mds);
       insert_dentry_inode(dir, dname, &dlease, in, from, mds);
+
+      // remove any extra names
+      while (pd != dir->dentry_map.end() && pd->first <= dname) {
+	if (pd->first < dname) {
+	  dout(15) << "insert_trace  unlink '" << pd->first << "'" << dendl;
+	  Dentry *dn = pd->second;
+	  pd++;
+	  unlink(dn, true);
+	} else
+	  pd++;
+      }
       
       // add to cached result list
       in->get();
       request->readdir_result.push_back(pair<string,Inode*>(dname, in));
 
-      dout(15) << "  '" << dname << "' -> " << in->ino << dendl;
+      dout(15) << "insert_trace  '" << dname << "' -> " << in->ino << dendl;
 
       numdn--;
     }
     request->readdir_last_name = dname;
     
+    // remove trailing names
+    if (end) {
+      while (pd != dir->dentry_map.end()) {
+	dout(15) << "insert_trace  unlink '" << pd->first << "'" << dendl;
+	Dentry *dn = pd->second;
+	pd++;
+	unlink(dn, true);
+      }
+    }
+
     if (dir->is_empty())
       close_dir(dir);
   }
@@ -3941,8 +3964,11 @@ int Client::_readdir_get_frag(DirResult *dirp)
   req->set_filepath(path); 
   req->inode = diri;
   req->head.args.readdir.frag = fg;
-  if (dirp->last_name.length())
+  if (dirp->last_name.length()) {
     req->path2.set_path(dirp->last_name.c_str());
+    req->readdir_start = dirp->last_name;
+  }
+  
   
   bufferlist dirbl;
   int res = make_request(req, -1, -1, 0, -1, &dirbl);
