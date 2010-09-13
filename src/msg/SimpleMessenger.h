@@ -56,7 +56,8 @@ using namespace __gnu_cxx;
   CEPH_FEATURE_NOSRCADDR |	 \
   CEPH_FEATURE_SUBSCRIBE2 |	 \
   CEPH_FEATURE_MONNAMES |        \
-  CEPH_FEATURE_FLOCK
+  CEPH_FEATURE_FLOCK |           \
+  CEPH_FEATURE_RECONNECT_SEQ
 
 class SimpleMessenger : public Messenger {
 public:
@@ -151,6 +152,7 @@ private:
     __u32 connect_seq, peer_global_seq;
     uint64_t out_seq;
     uint64_t in_seq, in_seq_acked;
+    uint64_t last_close;
     
     int accept();   // server handshake
     int connect();  // client handshake
@@ -168,6 +170,20 @@ private:
     void fail();
 
     void was_session_reset();
+
+    /* Clean up sent list */
+    void handle_ack(uint64_t seq) {
+      dout(15) << "reader got ack seq " << seq << dendl;
+      // trim sent list
+      while (!sent.empty() &&
+          sent.front()->get_seq() <= seq) {
+        Message *m = sent.front();
+        sent.pop_front();
+        dout(10) << "reader got ack seq "
+            << seq << " >= " << m->get_seq() << " on " << m << " " << *m << dendl;
+        m->put();
+      }
+    }
 
     // threads
     class Reader : public Thread {
@@ -196,11 +212,15 @@ private:
       reader_running(false), reader_joining(false), writer_running(false),
       in_qlen(0), keepalive(false),
       connect_seq(0), peer_global_seq(0),
-      out_seq(0), in_seq(0), in_seq_acked(0),
+      out_seq(0), in_seq(0), in_seq_acked(0), last_close(0),
       reader_thread(this), writer_thread(this) {
       connection_state->pipe = get();
+      generic_dout(1) << "creating pipe " << this << " with connection "
+          << connection_state << dendl;
     }
     ~Pipe() {
+      generic_dout(1) << "deleting pipe " << this << " with connection "
+          << connection_state << dendl;
       for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
 	   i != queue_items.end();
 	   ++i) {
@@ -210,7 +230,8 @@ private:
       }
       assert(out_q.empty());
       assert(sent.empty());
-      connection_state->put();
+      if (connection_state)
+        connection_state->put();
     }
 
 
@@ -348,7 +369,9 @@ private:
       return m;
     }
 
-    void requeue_sent();
+    /* Remove all messages from the sent queue. Add those with seq > max_acked
+     * to the highest priority outgoing queue. */
+    void requeue_sent(uint64_t max_acked=0);
     void discard_queue();
 
     void force_close() {
