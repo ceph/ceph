@@ -698,7 +698,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
   }
 
   // insert readdir results too
-  request->readdir_result.clear();
+  assert(request->readdir_result.empty());
 
   // the rest?
   p = reply->get_extra_bl().begin();
@@ -731,9 +731,8 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
       insert_dentry_inode(dir, dname, &dlease, in, from, mds);
       
       // add to cached result list
-      struct stat st;
-      int stmask = fill_stat(in, &st);  
-      request->readdir_result.push_back(DirEntry(dname, st, stmask));
+      in->get();
+      request->readdir_result.push_back(pair<string,Inode*>(dname, in));
 
       dout(15) << "  '" << dname << "' -> " << in->ino << dendl;
 
@@ -3827,6 +3826,7 @@ void Client::_closedir(DirResult *dirp)
     put_inode(dirp->inode);
     dirp->inode = 0;
   }
+  _readdir_drop_dirp_buffer(dirp);
   delete dirp;
 }
 
@@ -3912,6 +3912,16 @@ void Client::_readdir_rechoose_frag(DirResult *dirp)
   }
 }
 
+void Client::_readdir_drop_dirp_buffer(DirResult *dirp)
+{
+  dout(10) << "_readdir_drop_dirp_buffer " << dirp << dendl;
+  if (dirp->buffer) {
+    for (unsigned i = 0; i < dirp->buffer->size(); i++)
+      put_inode((*dirp->buffer)[i].second);
+    delete dirp->buffer;
+  }
+}
+
 int Client::_readdir_get_frag(DirResult *dirp)
 {
   // get the current frag.
@@ -3947,8 +3957,9 @@ int Client::_readdir_get_frag(DirResult *dirp)
     // stuff dir contents to cache, DirResult
     assert(diri);
 
-    delete dirp->buffer;
-    dirp->buffer = new vector<DirEntry>;
+    _readdir_drop_dirp_buffer(dirp);
+
+    dirp->buffer = new vector<pair<string,Inode*> >;
     dirp->buffer->swap(req->readdir_result);
     dirp->buffer_frag = fg;
 
@@ -3997,7 +4008,6 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
 
     fill_dirent(&de, ".", S_IFDIR, diri->ino, next_off);
 
-    struct stat st;
     fill_stat(diri, &st);
 
     int r = cb(p, &de, &st, -1, next_off);
@@ -4013,7 +4023,6 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
     Inode *in = diri->dn->inode;
     fill_dirent(&de, "..", S_IFDIR, in->ino, 2);
 
-    struct stat st;
     fill_stat(in, &st);
 
     int r = cb(p, &de, &st, -1, 2);
@@ -4039,11 +4048,12 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
     while (off - dirp->this_offset >= 0 &&
 	   off - dirp->this_offset < dirp->buffer->size()) {
       uint64_t pos = DirResult::make_fpos(fg, off);
-      DirEntry& ent = (*dirp->buffer)[off - dirp->this_offset];
+      pair<string,Inode*>& ent = (*dirp->buffer)[off - dirp->this_offset];
 
-      fill_dirent(&de, ent.d_name.c_str(), ent.st.st_mode, ent.st.st_ino, dirp->offset + 1);
+      int stmask = fill_stat(ent.second, &st);  
+      fill_dirent(&de, ent.first.c_str(), st.st_mode, st.st_ino, dirp->offset + 1);
       
-      int r = cb(p, &de, &ent.st, ent.stmask, dirp->offset + 1);  // _next_ offset
+      int r = cb(p, &de, &st, stmask, dirp->offset + 1);  // _next_ offset
       dout(15) << " de " << de.d_name << " off " << dirp->offset
 	       << " = " << r
 	       << dendl;
@@ -4056,8 +4066,7 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
 
     if (dirp->last_name.length()) {
       dout(10) << " fetching next chunk of this frag" << dendl;
-      delete dirp->buffer;
-      dirp->buffer = NULL;
+      _readdir_drop_dirp_buffer(dirp);
       continue;  // more!
     }
 

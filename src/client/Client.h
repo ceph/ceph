@@ -132,7 +132,7 @@ struct MetaRequest {
   bool kick;
   
   // readdir result
-  vector<DirEntry> readdir_result;
+  vector<pair<string,Inode*> > readdir_result;
   bool readdir_end;
   int readdir_num;
   string readdir_last_name;
@@ -715,7 +715,7 @@ class Client : public Dispatcher {
     uint64_t release_count;
 
     frag_t buffer_frag;
-    vector<DirEntry> *buffer;
+    vector<pair<string,Inode*> > *buffer;
 
     DirResult(Inode *in) : inode(in), offset(0), next_offset(2),
 			   release_count(0),
@@ -1150,6 +1150,7 @@ private:
 
   // some helpers
   int _opendir(Inode *in, DirResult **dirpp, int uid=-1, int gid=-1);
+  void _readdir_drop_dirp_buffer(DirResult *dirp);
   bool _readdir_have_frag(DirResult *dirp);
   void _readdir_next_frag(DirResult *dirp);
   void _readdir_rechoose_frag(DirResult *dirp);
