@@ -45,6 +45,7 @@
 #define CEPH_FEATURE_FLOCK          (1<<3)
 #define CEPH_FEATURE_SUBSCRIBE2     (1<<4)
 #define CEPH_FEATURE_MONNAMES       (1<<5)
+#define CEPH_FEATURE_RECONNECT_SEQ  (1<<6)
 
 
 /*

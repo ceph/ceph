@@ -56,7 +56,8 @@ using namespace __gnu_cxx;
   CEPH_FEATURE_NOSRCADDR |	 \
   CEPH_FEATURE_SUBSCRIBE2 |	 \
   CEPH_FEATURE_MONNAMES |        \
-  CEPH_FEATURE_FLOCK
+  CEPH_FEATURE_FLOCK |           \
+  CEPH_FEATURE_RECONNECT_SEQ
 
 class SimpleMessenger : public Messenger {
 public:
@@ -168,6 +169,20 @@ private:
     void fail();
 
     void was_session_reset();
+
+    /* Clean up sent list */
+    void handle_ack(uint64_t seq) {
+      dout(15) << "reader got ack seq " << seq << dendl;
+      // trim sent list
+      while (!sent.empty() &&
+          sent.front()->get_seq() <= seq) {
+        Message *m = sent.front();
+        sent.pop_front();
+        dout(10) << "reader got ack seq "
+            << seq << " >= " << m->get_seq() << " on " << m << " " << *m << dendl;
+        m->put();
+      }
+    }
 
     // threads
     class Reader : public Thread {
