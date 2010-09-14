@@ -1269,6 +1269,9 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
   dout(10) << "cow_inode " << *in << " to " << *oldin << dendl;
   add_inode(oldin);
   
+  SnapRealm *realm = in->find_snaprealm();
+  const set<snapid_t>& snaps = realm->get_snaps();
+
   // clone caps?
   for (map<client_t,Capability*>::iterator p = in->client_caps.begin();
       p != in->client_caps.end();
@@ -1295,7 +1298,15 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
       cap->client_follows = last;
       if (in->client_need_snapflush.empty())
 	in->get(CInode::PIN_NEEDSNAPFLUSH);
-      in->client_need_snapflush[last].insert(client);
+      
+      // we need snapflushes for any intervening snaps
+      dout(10) << "  snaps " << snaps << dendl;
+      for (set<snapid_t>::const_iterator q = snaps.lower_bound(oldin->first);
+	   q != snaps.end() && *q <= last;
+	   q++) {
+	dout(10) << "   need_snapflush on " << *q << dendl;
+	in->client_need_snapflush[*q].insert(client);
+      }
     } else {
       dout(10) << " ignoring client" << client << " cap follows " << cap->client_follows << dendl;
     }

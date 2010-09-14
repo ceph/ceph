@@ -1759,9 +1759,9 @@ void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t follo
       dout(10) << " doing async NULL snapflush on " << p->first << " from client" << p->second << dendl;
       CInode *sin = mdcache->get_inode(head_in->ino(), p->first);
       assert(sin);
-      _do_snap_update(sin, 0, sin->first - 1, client, NULL, NULL);
-      head_in->client_need_snapflush[sin->last].erase(client);
-      if (head_in->client_need_snapflush[sin->last].empty()) {
+      _do_snap_update(sin, p->first, 0, sin->first - 1, client, NULL, NULL);
+      head_in->client_need_snapflush[p->first].erase(client);
+      if (head_in->client_need_snapflush[p->first].empty()) {
 	head_in->client_need_snapflush.erase(p++);
 	if (head_in->client_need_snapflush.empty())
 	  head_in->put(CInode::PIN_NEEDSNAPFLUSH);
@@ -1846,11 +1846,16 @@ void Locker::handle_client_caps(MClientCaps *m)
       goto out;
     }
 
+    SnapRealm *realm = in->find_snaprealm();
+    snapid_t snap = realm->get_snap_following(follows);
+    dout(10) << "  flushsnap follows " << follows << " -> snap " << snap << dendl;
+
     if (in == head_in ||
-	(head_in->client_need_snapflush.count(in->last) &&
-	 head_in->client_need_snapflush[in->last].count(client))) {
-      dout(7) << " flushsnap follows " << follows
+	(head_in->client_need_snapflush.count(snap) &&
+	 head_in->client_need_snapflush[snap].count(client))) {
+      dout(7) << " flushsnap snap " << snap
 	      << " client" << client << " on " << *in << dendl;
+
       // this cap now follows a later snap (i.e. the one initiating this flush, or later)
       cap->client_follows = MAX(follows, in->first) + 1;
    
@@ -1864,19 +1869,19 @@ void Locker::handle_client_caps(MClientCaps *m)
 	ack->set_client_tid(m->get_client_tid());
       }
 
-      _do_snap_update(in, m->get_dirty(), follows, client, m, ack);
+      _do_snap_update(in, snap, m->get_dirty(), follows, client, m, ack);
 
       if (in != head_in) {
-	head_in->client_need_snapflush[in->last].erase(client);
-	if (head_in->client_need_snapflush[in->last].empty()) {
-	  head_in->client_need_snapflush.erase(in->last);
+	head_in->client_need_snapflush[snap].erase(client);
+	if (head_in->client_need_snapflush[snap].empty()) {
+	  head_in->client_need_snapflush.erase(snap);
 	  if (head_in->client_need_snapflush.empty())
 	    head_in->put(CInode::PIN_NEEDSNAPFLUSH);
 	}
       }
       
     } else
-      dout(7) << " not expecting flushsnap from client" << client << " on " << *in << dendl;
+      dout(7) << " not expecting flushsnap " << snap << " from client" << client << " on " << *in << dendl;
     goto out;
   }
 
@@ -2044,16 +2049,12 @@ static uint64_t calc_bounding(uint64_t t)
   return t + 1;
 }
 
-void Locker::_do_snap_update(CInode *in, int dirty, snapid_t follows, client_t client, MClientCaps *m, MClientCaps *ack)
+void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t follows, client_t client, MClientCaps *m, MClientCaps *ack)
 {
   dout(10) << "_do_snap_update dirty " << ccap_string(dirty)
-	   << " follows " << follows
+	   << " follows " << follows << " snap " << snap
 	   << " on " << *in << dendl;
 
-  SnapRealm *realm = in->find_snaprealm();
-  snapid_t snap = realm->get_snap_following(follows);
-
-  dout(10) << "  snap is " << snap << dendl;
   if (snap == CEPH_NOSNAP) {
     // hmm, i guess snap was already deleted?  just ack!
     dout(10) << " wow, the snap following " << follows
