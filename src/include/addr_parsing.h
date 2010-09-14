@@ -38,21 +38,14 @@ char *mount_resolve_dest(char *orig_str)
         int len, pos;
 
         mount_path = strrchr(orig_str, ':');
-        if (!mount_path) {
-                printf("source mount path was not specified\n");
-                return NULL;
-        }
         if (mount_path == orig_str) {
                 printf("server address expected\n");
                 return NULL;
         }
 
-        *mount_path = '\0';
-        mount_path++;
-
-        if (!*mount_path) {
-                printf("incorrect source mount path\n");
-                return NULL;
+        if (mount_path) {
+          *mount_path = '\0';
+          mount_path++;
         }
 
         len = BUF_SIZE;
@@ -95,7 +88,7 @@ char *mount_resolve_dest(char *orig_str)
                         brackets = 1;
                 }
 
-                printf("name '%s' port '%s'\n", tok, port_str);
+                //printf("name '%s' port '%s'\n", tok, port_str);
 
                 memset(&hint, 0, sizeof(hint));
                 hint.ai_socktype = SOCK_STREAM;
@@ -116,10 +109,10 @@ char *mount_resolve_dest(char *orig_str)
                                     host, sizeof(host),
                                     port, sizeof(port),
                                     NI_NUMERICSERV | NI_NUMERICHOST);
-                        printf(" host %s port %s flags %d family %d socktype %d proto %d sanonname %s\n",
+                        /*printf(" host %s port %s flags %d family %d socktype %d proto %d sanonname %s\n",
                                host, port,
                                res->ai_flags, res->ai_family, res->ai_socktype, res->ai_protocol,
-                               res->ai_canonname);
+                               res->ai_canonname);*/
                         if (res->ai_family == AF_INET6)
                                 brackets = 1;  /* always surround ipv6 addrs with brackets */
                         if (brackets)
@@ -143,10 +136,12 @@ char *mount_resolve_dest(char *orig_str)
 
         }
 
-        pos = safe_cat(&new_str, &len, pos, ":");
-        pos = safe_cat(&new_str, &len, pos, mount_path);
+        if (mount_path) {
+          pos = safe_cat(&new_str, &len, pos, ":");
+          pos = safe_cat(&new_str, &len, pos, mount_path);
+        }
 
-        printf("new_str is '%s'\n", new_str);
+        //printf("new_str is '%s'\n", new_str);
         return new_str;
 }
 
