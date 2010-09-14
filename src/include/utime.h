@@ -185,13 +185,14 @@ inline std::ostream& operator<<(std::ostream& out, const utime_t& t)
     out << (long)t.sec();
   } else {
     // localtime.  this looks like an absolute time.
+    //  aim for http://en.wikipedia.org/wiki/ISO_8601
     struct tm bdt;
     time_t tt = t.sec();
     localtime_r(&tt, &bdt);
-    out << std::setw(2) << (bdt.tm_year-100)  // 2007 -> '07'
-	<< '.' << std::setw(2) << (bdt.tm_mon+1)
-	<< '.' << std::setw(2) << bdt.tm_mday
-	<< '_'
+    out << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
+	<< '-' << std::setw(2) << (bdt.tm_mon+1)
+	<< '-' << std::setw(2) << bdt.tm_mday
+	<< ' '
 	<< std::setw(2) << bdt.tm_hour
 	<< ':' << std::setw(2) << bdt.tm_min
 	<< ':' << std::setw(2) << bdt.tm_sec;
