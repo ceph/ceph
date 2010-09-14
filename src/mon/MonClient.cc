@@ -29,6 +29,7 @@
 #include "auth/KeyRing.h"
 
 #include "include/str_list.h"
+#include "include/addr_parsing.h"
 
 #include "config.h"
 
@@ -76,6 +77,22 @@ int MonClient::build_initial_monmap()
 	monmap.add(n, addrs[i]);
       }
       return 0;
+    } else { //maybe they passed us a DNS-resolvable name
+      char *hosts = NULL;
+      char *old_addrs = new char[strlen(g_conf.mon_host)];
+      strcpy(old_addrs, g_conf.mon_host);
+      hosts = mount_resolve_dest(old_addrs);
+      if (parse_ip_port_vec(hosts, addrs)) {
+        for (unsigned i=0; i<addrs.size(); i++) {
+          char n[2];
+          n[0] = 'a' + i;
+          n[1] = 0;
+          if (addrs[i].get_port() == 0)
+            addrs[i].set_port(CEPH_MON_PORT);
+          monmap.add(n, addrs[i]);
+        }
+        return 0;
+      } else cerr << "couldn't parse_ip_port_vec on " << hosts << std::endl;
     }
     cerr << "unable to parse addrs in '" << g_conf.mon_host << "'" << std::endl;
   }
