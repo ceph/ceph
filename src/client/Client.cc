@@ -819,8 +819,12 @@ int Client::choose_target_mds(MetaRequest *req)
     while (in->snapid != CEPH_NOSNAP) {
       if (in->snapid == CEPH_SNAPDIR)
 	in = in->snapdir_parent;
-      else
+      else if (in->dn)
 	in = in->dn->dir->parent_inode;
+      else {
+        dout(10) << "got unlinked inode, can't look at parent" << dendl;
+        break;
+      }
     }
     is_hash = false;
   }
