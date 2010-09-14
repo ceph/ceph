@@ -23,6 +23,7 @@ const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_MAPEXT: return "mapext";
 	case CEPH_OSD_OP_SPARSE_READ: return "sparse-read";
 	case CEPH_OSD_OP_NOTIFY: return "notify";
+	case CEPH_OSD_OP_NOTIFY_ACK: return "notify-ack";
 
 	case CEPH_OSD_OP_MASKTRUNC: return "masktrunc";
 

@@ -2063,7 +2063,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
       s = new Session;
       con->set_priv(s->get());
       s->con = con->get();
-      dout(10) << " new session " << s << dendl;
+      dout(10) << " new session " << s << " con=" << s->con << " addr=" << s->con->get_peer_addr() << dendl;
     }
 
     s->caps.set_allow_all(caps_info.allow_all);

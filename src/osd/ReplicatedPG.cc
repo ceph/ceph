@@ -1092,10 +1092,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  watch_info_t& w = oi_iter->second;
 	  dout(0) << "oi->watcher: " << oi_iter->first << " ver=" << w.ver << " cookie=" << w.cookie << dendl;
 	  iter = obc->watchers.find(oi_iter->first);
-	  if (iter != obc->watchers.end()) {
+	  if (/* w.ver < ver && */ iter != obc->watchers.end()) {
 	    /* found a session for registered watcher */
 	    OSD::Session *session = iter->second;
-	    dout(0) << " found session, sending notidication" << dendl;
+	    dout(0) << " found session, sending notification" << dendl;
 	    MWatchNotify *notify_msg = new MWatchNotify(w.cookie, w.ver);
 	    osd->client_messenger->send_message(notify_msg, session->con);
 	  } else {
@@ -1103,6 +1103,27 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  }
 	}
 
+      }
+      break;
+
+    case CEPH_OSD_OP_NOTIFY_ACK:
+      {
+	dout(0) << "CEPH_OSD_OP_NOTIFY_ACK" << dendl;
+
+        ObjectContext *obc = ctx->obc;
+	dout(0) << "ctx->obc=" << (void *)obc << dendl;
+
+        map<entity_name_t, OSD::Session *>::iterator iter;
+	map<entity_name_t, watch_info_t>::iterator oi_iter;
+
+        oi_iter = oi.watchers.find(ctx->op->get_source());
+	if (oi_iter == oi.watchers.end()) {
+	  dout(0) << "couldn't find watcher" << dendl;
+	  // result = -EINVAL;
+	  break;
+	}
+	watch_info_t& wi = oi_iter->second;
+	wi.ver = op.watch.ver;
       }
       break;
 
@@ -1293,7 +1314,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	if (do_watch) {
 	  obc->ref++;
 	  register_object_context(obc);
-          watch_info_t w = {cookie,ver};
+          watch_info_t w = {cookie, ver};
           oi.watchers[entity] = w;
 
 	  obc->watchers[entity] = session;
