@@ -74,13 +74,24 @@ public:
 
   virtual void init(struct req_state *s) {
     RGWOp::init(s);
+    range_str = NULL;
+    if_mod = NULL;
+    if_unmod = NULL;
+    if_match = NULL;
+    if_nomatch = NULL;
     ofs = 0;
     len = 0;
     total_len = 0;
     end = -1;
+    mod_time = 0;
+    lastmod = 0;
+    unmod_time = 0;
     mod_ptr = NULL;
     unmod_ptr = NULL;
+    attrs.clear();
     data = NULL;
+    ret = 0;
+    get_data = false;
   }
   void set_get_data(bool get_data) {
     this->get_data = get_data;
@@ -99,6 +110,7 @@ protected:
 public:
   virtual void init(struct req_state *s) {
     RGWOp::init(s);
+    buckets.clear();
   }
   RGWListBuckets() {}
   ~RGWListBuckets() {}

@@ -97,6 +97,11 @@ public:
    * Get the user's buckets as a map.
    */
   map<string, RGWObjEnt>& get_buckets() { return buckets; }
+
+  /**
+   * Cleanup data structure
+   */
+  void clear() { buckets.clear(); }
 };
 WRITE_CLASS_ENCODER(RGWUserBuckets)
 
