@@ -306,13 +306,30 @@ void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
   if (!snaprealm)
     open_snaprealm();
   else if (next_snaprealm->past_parents.size() !=
-           snaprealm->srnode.past_parents.size())
+           snaprealm->srnode.past_parents.size()) {
     invalidate_cached_snaps = true;
+
+    // update parent pointer
+    assert(snaprealm->parent);   // had a parent before
+    SnapRealm *new_parent = get_parent_inode()->find_snaprealm();
+    assert(new_parent);
+    CInode *parenti = new_parent->inode;
+    assert(parenti);
+    assert(parenti->snaprealm);
+    snaprealm->parent = new_parent;
+    parenti->get(PIN_PASTSNAPPARENT);
+    dout(10) << " realm " << *snaprealm << " past_parents " << snaprealm->srnode.past_parents
+	     << " -> " << next_snaprealm->past_parents << dendl;
+    dout(10) << " pinning new parent " << *parenti << dendl;
+  }
   snaprealm->srnode = *next_snaprealm;
   delete next_snaprealm;
 
   if (invalidate_cached_snaps)
     snaprealm->invalidate_cached_snaps();
+
+  if (snaprealm->parent)
+    dout(10) << " realm " << *snaprealm << " parent " << *snaprealm->parent << dendl;
 }
 
 
