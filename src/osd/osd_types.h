@@ -693,7 +693,7 @@ struct pg_pool_t {
    * we know which mode we're using based on whether removed_snaps is empty.
    */
   bool is_pool_snaps_mode() const {
-    return removed_snaps.empty();
+    return removed_snaps.empty() && get_snap_seq() > 0;
   }
 
   bool is_removed_snap(snapid_t s) const {
