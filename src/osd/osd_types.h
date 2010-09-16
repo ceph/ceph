@@ -1264,6 +1264,15 @@ struct object_info_t {
 
   uint64_t truncate_seq, truncate_size;
 
+  void copy_user_bits(const object_info_t& other) {
+    // these bits are copied from head->clone.
+    size = other.size;
+    mtime = other.mtime;
+    last_reqid = other.last_reqid;
+    truncate_seq = other.truncate_seq;
+    truncate_size = other.truncate_size;
+  }
+
   void encode(bufferlist& bl) const {
     const __u8 v = 1;
     ::encode(v, bl);
