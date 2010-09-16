@@ -1612,8 +1612,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     }
     snap_oi->version = ctx->at_version;
     snap_oi->prior_version = oi.version;
-    snap_oi->last_reqid = oi.last_reqid;
-    snap_oi->mtime = oi.mtime;
+    snap_oi->copy_user_bits(oi);
     snap_oi->snaps = snaps;
     _make_clone(t, soid, coid, snap_oi);
     
@@ -3563,9 +3562,8 @@ int ReplicatedPG::recover_primary(int max)
 	    object_info_t oi(soid);
 	    oi.version = latest->version;
 	    oi.prior_version = latest->prior_version;
-	    oi.last_reqid = headobc->obs.oi.last_reqid;
-	    oi.mtime = headobc->obs.oi.mtime;
 	    ::decode(oi.snaps, latest->snaps);
+	    oi.copy_user_bits(headobc->obs.oi);
 	    _make_clone(*t, head, soid, &oi);
 
 	    put_object_context(headobc);

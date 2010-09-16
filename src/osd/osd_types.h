@@ -693,7 +693,7 @@ struct pg_pool_t {
    * we know which mode we're using based on whether removed_snaps is empty.
    */
   bool is_pool_snaps_mode() const {
-    return removed_snaps.empty();
+    return removed_snaps.empty() && get_snap_seq() > 0;
   }
 
   bool is_removed_snap(snapid_t s) const {
@@ -1263,6 +1263,15 @@ struct object_info_t {
   vector<snapid_t> snaps;  // [clone]
 
   uint64_t truncate_seq, truncate_size;
+
+  void copy_user_bits(const object_info_t& other) {
+    // these bits are copied from head->clone.
+    size = other.size;
+    mtime = other.mtime;
+    last_reqid = other.last_reqid;
+    truncate_seq = other.truncate_seq;
+    truncate_size = other.truncate_size;
+  }
 
   void encode(bufferlist& bl) const {
     const __u8 v = 1;
