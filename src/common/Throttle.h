@@ -3,31 +3,33 @@
 
 #include "Mutex.h"
 #include "Cond.h"
+#include "include/atomic.h"
 
 class Throttle {
-  int64_t count, max, waiting;
+  atomic_t count;
+  size_t max, waiting;
   Mutex lock;
   Cond cond;
   
 public:
-  Throttle(int64_t m = 0) : count(0), max(m), waiting(0),
+  Throttle(size_t m = 0) : count(0), max(m), waiting(0),
 			  lock("Throttle::lock") {
     assert(m >= 0);
 }
 
 private:
-  void _reset_max(int64_t m) {
+  void _reset_max(size_t m) {
     if (m < max)
       cond.SignalOne();
     max = m;
   }
-  bool _should_wait(int64_t c) {
+  bool _should_wait(size_t c) {
     return
       max &&
-      ((c < max && count + c > max) ||   // normally stay under max
-       (c >= max && count > max));       // except for large c
+      ((c < max && count.read() + c > max) ||   // normally stay under max
+       (c >= max && count.read() > max));       // except for large c
   }
-  bool _wait(int64_t c) {
+  bool _wait(size_t c) {
     bool waited = false;
     if (_should_wait(c)) {
       waiting += c;
@@ -45,14 +47,13 @@ private:
   }
 
 public:
-  int64_t get_current() {
-    Mutex::Locker l(lock);
-    return count;
+  size_t get_current() {
+    return count.read();
   }
 
-  int64_t get_max() { return max; }
+  size_t get_max() { return max; }
 
-  bool wait(int64_t m = 0) {
+  bool wait(size_t m = 0) {
     Mutex::Locker l(lock);
     if (m) {
       assert(m > 0);
@@ -61,14 +62,13 @@ public:
     return _wait(0);
   }
 
-  int64_t take(int64_t c = 1) {
+  size_t take(size_t c = 1) {
     assert(c >= 0);
-    Mutex::Locker l(lock);
-    count += c;
-    return count;
+    count.add(c);
+    return count.read();
   }
 
-  bool get(int64_t c = 1, int64_t m = 0) {
+  bool get(size_t c = 1, size_t m = 0) {
     assert(c >= 0);
     Mutex::Locker l(lock);
     if (m) {
@@ -76,30 +76,29 @@ public:
       _reset_max(m);
     }
     bool waited = _wait(c);
-    count += c;
+    count.add(c);
     return waited;
   }
 
   /* Returns true if it successfully got the requested amount,
    * or false if it would block.
    */
-  bool get_or_fail(int64_t c = 1) {
+  bool get_or_fail(size_t c = 1) {
     assert (c >= 0);
     Mutex::Locker l(lock);
     if (_should_wait(c)) return false;
-    count += c;
+    count.add(c);
     return true;
   }
 
-  int64_t put(int64_t c = 1) {
+  size_t put(size_t c = 1) {
     assert(c >= 0);
-    Mutex::Locker l(lock);
     if (c) {
+      count.sub(c);
       cond.SignalOne();
-      count -= c;
-      assert(count >= 0); //if count goes negative, we failed somewhere!
+      assert(count.read() >= 0); //if count goes negative, we failed somewhere!
     }
-    return count;
+    return count.read();
   }
 };
 
