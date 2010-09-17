@@ -1832,7 +1832,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       break;
     
     // next!
-    in = mdcache->pick_inode_snap(in, in->last);
+    in = mdcache->pick_inode_snap(head_in, in->last);
     cap = in->get_client_cap(client);
     assert(cap);    
   }
