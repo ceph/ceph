@@ -13,3 +13,5 @@ rmdir a/.snap/foo
 rmdir a
 stat .snap/bar/a
 rmdir .snap/bar
+
+echo OK

@@ -25,3 +25,4 @@ rmdir a/.snap/a1
 rmdir a/.snap/a2
 rm -r a
 
+echo "OK"
