@@ -879,6 +879,7 @@ public:
     if (in->get_parent_dn())
       touch_dentry(in->get_projected_parent_dn());
   }
+public:
   void touch_dentry(CDentry *dn) {
     // touch ancestors
     if (dn->get_dir()->get_inode()->get_projected_parent_dn())
@@ -890,7 +891,6 @@ public:
     else
       lru.lru_midtouch(dn);
   }
-public:
   void touch_dentry_bottom(CDentry *dn) {
     lru.lru_bottouch(dn);
   }

@@ -1032,16 +1032,23 @@ void CDir::last_put()
 class C_Dir_Fetch : public Context {
  protected:
   CDir *dir;
+  string want_dn;
  public:
   bufferlist bl;
 
-  C_Dir_Fetch(CDir *d) : dir(d) { }
+  C_Dir_Fetch(CDir *d, const string& w) : dir(d), want_dn(w) { }
   void finish(int result) {
-    dir->_fetched(bl);
+    dir->_fetched(bl, want_dn);
   }
 };
 
 void CDir::fetch(Context *c, bool ignore_authpinnability)
+{
+  string want;
+  return fetch(c, want, ignore_authpinnability);
+}
+
+void CDir::fetch(Context *c, const string& want_dn, bool ignore_authpinnability)
 {
   dout(10) << "fetch on " << *this << dendl;
   
@@ -1068,7 +1075,7 @@ void CDir::fetch(Context *c, bool ignore_authpinnability)
   if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_f);
 
   // start by reading the first hunk of it
-  C_Dir_Fetch *fin = new C_Dir_Fetch(this);
+  C_Dir_Fetch *fin = new C_Dir_Fetch(this, want_dn);
   object_t oid = get_ondisk_object();
   OSDMap *osdmap = cache->mds->objecter->osdmap;
   ceph_object_layout ol = osdmap->make_object_layout(oid,
@@ -1078,10 +1085,11 @@ void CDir::fetch(Context *c, bool ignore_authpinnability)
   cache->mds->objecter->read(oid, ol, rd, CEPH_NOSNAP, &fin->bl, 0, fin);
 }
 
-void CDir::_fetched(bufferlist &bl)
+void CDir::_fetched(bufferlist &bl, const string& want_dn)
 {
   dout(10) << "_fetched " << bl.length() 
 	   << " bytes for " << *this
+	   << " want_dn=" << want_dn
 	   << dendl;
   
   assert(is_auth());
@@ -1300,6 +1308,11 @@ void CDir::_fetched(bufferlist &bl)
       assert(0);
     }
     
+    if (dn && want_dn.length() && want_dn == dname) {
+      dout(10) << " touching wanted dn " << *dn << dendl;
+      inode->mdcache->touch_dentry(dn);
+    }
+
     /** clean underwater item?
      * Underwater item is something that is dirty in our cache from
      * journal replay, but was previously flushed to disk before the
