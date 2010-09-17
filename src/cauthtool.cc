@@ -52,6 +52,7 @@ int main(int argc, const char **argv)
   bool set_auid = false;
   uint64_t auid = CEPH_AUTH_UID_DEFAULT;
   const char *name = g_conf.name;
+  map<string,bufferlist> caps;
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("gen-key", 'g')) {
@@ -64,6 +65,11 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&list, OPT_BOOL);
     } else if (CONF_ARG_EQ("caps", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&caps_fn, OPT_STR);
+    } else if (CONF_ARG_EQ("cap", '\0')) {
+      const char *key, *val;
+      CONF_SAFE_SET_ARG_VAL(&key, OPT_STR);
+      CONF_SAFE_SET_ARG_VAL(&val, OPT_STR);
+      ::encode(val, caps[key]);
     } else if (CONF_ARG_EQ("print-key", 'p')) {
       CONF_SAFE_SET_ARG_VAL(&print_key, OPT_BOOL);
     } else if (CONF_ARG_EQ("create-keyring", 'c')) {
@@ -87,6 +93,7 @@ int main(int argc, const char **argv)
 	add_key ||
 	list ||
 	caps_fn ||
+	caps.size() ||
 	set_auid ||
 	print_key ||
 	create_keyring ||
@@ -98,7 +105,7 @@ int main(int argc, const char **argv)
     cerr << "can't both gen_key and add_key" << std::endl;
     usage();
   }	
-  if (caps_fn || add_key || gen_key || print_key || set_auid) {
+  if (caps_fn || caps.size() || add_key || gen_key || print_key || set_auid) {
     if (!name || !(*name)) {
       cerr << "must specify entity name" << std::endl;
       usage();
@@ -208,6 +215,10 @@ int main(int argc, const char **argv)
         free(val);
       }
     }
+    keyring.set_caps(ename, caps);
+    modified = true;
+  }
+  if (caps.size()) {
     keyring.set_caps(ename, caps);
     modified = true;
   }
