@@ -34,13 +34,24 @@ will generate a new secret key for the specified \fIentityname\fP:
 \fB\-\-add\-key\fP
 will add an encoded key to the keyring.
 .TP
+\fB\-\-cap\fI subsystem capability \fP
+will set the capability for given subsystem.
+.TP
 \fB\-\-caps\fI capsfile \fP
-will set the capabilities associated with a given key.
-.SH CAPS FILE FORMAT
-The caps file format consists of zero or more key/value pairs.  The key is the name of the Ceph
-subsystem (osd, mds, mon).  The value is a comma separated list of allow, deny clauses with a permission
-specifier containing one or more of \fIrwx\fP, for read, write, and execute permission.  If you want to declare the key an administrator (with full privileges on everything), use the shorthand 'subsystem = "allow *"'. For
-example,
+will set all of capabilities associated with a given key, for all subsystems.
+
+.SH CAPABILITIES
+
+The \fIsubsystem\fP is the name of a Ceph subsystem: mon, mds, or osd.
+.PP
+The \fIcapability\fP is a string describing what the given user is
+allowed to do.  This takes the form of a comma separated list of
+allow, deny clauses with a permission specifier containing one or more
+of \fIrwx\fP for read, write, and execute permission.  The "allow *" grants
+full superuser permissions for the given subsystem.
+.PP
+For example,
+
 .IP
 osd = "allow rwx [pool=foo[,bar]]|[uid=baz[,bay]]"  # can read, write, and execute objects
 .IP
@@ -60,14 +71,20 @@ osd = "allow rw pool=data"
 .IP
 mon = "allow r"
 .PP
+
+.SH CAPS FILE FORMAT
+
+The caps file format consists of zero or more key/value pairs, one per line.  The key and value are separated by an '=', and the value must be quoted (with ' or ") if it contains any whitespace.  The key is the name of the Ceph
+subsystem (osd, mds, mon), and the value is the capability string (see above). 
+
 .SH EXAMPLE
 To create a new keyring containing a key for \fIclient.foo\fP:
 .IP
 cauthtool -c -n client.foo --gen-key keyring.bin
 .PP
-To associate some capabilities with the key:
+To associate some capabilities with the key (namely, the ability to mount a Ceph filesystem):
 .IP
-cauthtool -n client.foo --caps foocaps.conf keyring.bin
+cauthtool -n client.foo --cap mds 'allow' --cap osd 'allow rw pool=data' --cap mon 'allow r' keyring.bin
 .PP
 To display the contents of the keyring:
 .IP
