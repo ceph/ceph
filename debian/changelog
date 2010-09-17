@@ -1,3 +1,17 @@
+ceph (0.21.3-1) unstable; urgency=low
+
+  * cfuse: fixed readdir for large directories
+  * cfuse: fixed truncation (now passes fsx)
+  * radosgw: fixed information leakage between sessions
+  * radosgw: support wildcard dns for bucketname.domain/object access
+  * mds: fixed snap bug with directory renames
+  * mon: less log noise
+  * osdmap: allowed blacklisting of entire ips
+  * mds: fix journal replay bug with reconnecting clients
+  * mds: fix journal replay bug with inconsistent lock state, subsequent crash 
+
+ -- Sage Weil <sage@newdream.net>  Fri, 17 Sep 2010 15:44:06 -0700
+
 ceph (0.21.2-1) unstable; urgency=low
 
   * osd: less log noise
