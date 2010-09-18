@@ -5,6 +5,7 @@ set -e
 basedir=~/debian-base
 
 vers=$1
+dists=$2
 [ -z "$vers" ] && [ -e .last_release ] && vers=`cat .last_release`
 [ -z "$vers" ] && echo specify version && exit 1
 
@@ -12,7 +13,9 @@ echo version $vers
 
 #./pull.sh $vers gz dsc
 
-for dist in sid squeeze lenny
+[ -z "$dists" ] && dists="sid squeeze lenny"
+
+for dist in $dists
 do
     pbuilder --clean
 
