@@ -60,6 +60,13 @@ int main(int argc, const char **argv)
   }
 
   common_set_defaults(true);
+#ifdef HAVE_LIBTCMALLOC
+  g_conf.profiler_start = HeapProfilerStart;
+  g_conf.profiler_running = IsHeapProfilerRunning;
+  g_conf.profiler_stop = HeapProfilerStop;
+  g_conf.profiler_dump = HeapProfilerDump;
+  g_conf.tcmalloc_have = true;
+#endif //HAVE_LIBTCMALLOC
   common_init(args, "osd", should_authenticate);
 
   if (g_conf.clock_tare) g_clock.tare();
