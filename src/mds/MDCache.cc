@@ -6024,7 +6024,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	// directory isn't complete; reload
         dout(7) << "traverse: incomplete dir contents for " << *cur << ", fetching" << dendl;
         touch_inode(cur);
-        curdir->fetch(_get_waiter(mdr, req));
+        curdir->fetch(_get_waiter(mdr, req), path[depth]);
 	if (mds->logger) mds->logger->inc(l_mds_tdirf);
         return 1;
       }

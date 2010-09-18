@@ -347,8 +347,8 @@ static struct config_option config_optionsp[] = {
 	OPTION(auth_nonce_len, 0, OPT_INT, 16),
 	OPTION(mon_client_hunt_interval, 0, OPT_DOUBLE, 3.0),   // try new mon every N seconds until we connect
 	OPTION(mon_client_ping_interval, 0, OPT_DOUBLE, 10.0),  // ping every N seconds
-	OPTION(client_cache_size, 0, OPT_INT, 1000),
-	OPTION(client_cache_mid, 0, OPT_FLOAT, .5),
+	OPTION(client_cache_size, 0, OPT_INT, 16384),
+	OPTION(client_cache_mid, 0, OPT_FLOAT, .75),
 	OPTION(client_cache_stat_ttl, 0, OPT_INT, 0), // seconds until cached stat results become invalid
 	OPTION(client_cache_readdir_ttl, 0, OPT_INT, 1),  // 1 second only
 	OPTION(client_use_random_mds, 0, OPT_BOOL, false),

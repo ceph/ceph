@@ -438,7 +438,8 @@ private:
     return file_object_t(ino(), frag);
   }
   void fetch(Context *c, bool ignore_authpinnability=false);
-  void _fetched(bufferlist &bl);
+  void fetch(Context *c, const string& want_dn, bool ignore_authpinnability=false);
+  void _fetched(bufferlist &bl, const string& want_dn);
 
   // -- commit --
   map<version_t, list<Context*> > waiting_for_commit;
