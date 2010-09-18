@@ -263,6 +263,9 @@ static struct config_option config_optionsp[] = {
 	OPTION(monmap, 'M', OPT_STR, 0),
 	OPTION(mon_host, 'm', OPT_STR, 0),
 	OPTION(daemonize, 'd', OPT_BOOL, false),
+        OPTION(tcmalloc_profiler_run, 0, OPT_BOOL, false),
+        OPTION(profiler_allocation_interval, 0, OPT_INT, 1073741824),
+        OPTION(profiler_highwater_interval, 0, OPT_INT, 104857600),
 	OPTION(logger, 0, OPT_BOOL, false),
 	OPTION(logger_interval, 0, OPT_INT, 1),
 	OPTION(logger_calc_variance, 0, OPT_BOOL, true),
@@ -1075,7 +1078,6 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
       }
     }
   }
-
   // open new conf
   string fn = g_conf.conf;
   list<string> ls;
