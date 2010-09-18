@@ -91,7 +91,8 @@ public:
     attrs.clear();
     data = NULL;
     ret = 0;
-    get_data = false;
+
+    /* get_data should not be initialized here! */
   }
   void set_get_data(bool get_data) {
     this->get_data = get_data;
