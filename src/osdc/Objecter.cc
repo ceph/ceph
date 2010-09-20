@@ -484,9 +484,10 @@ int Objecter::calc_op_budget(Op *op)
   return op_budget;
 }
 
-void Objecter::throttle_op(Op *op)
+void Objecter::throttle_op(Op *op, int op_budget)
 {
-  int op_budget = calc_op_budget(op);
+  if (!op_budget)
+    op_budget = calc_op_budget(op);
   if (!op_throttler.get_or_fail(op_budget)) { //couldn't take right now
     client_lock.Unlock();
     op_throttler.get(op_budget);
