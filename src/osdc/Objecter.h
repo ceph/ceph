@@ -409,6 +409,24 @@ public:
 
   void resend_mon_ops();
 
+  /**
+   * handle a budget for in-flight ops
+   * budget is taken whenever an op goes into the op_osd map
+   * and returned whenever an op is removed from the map
+   * If throttle_op needs to throttle it will unlock client_lock.
+   */
+  int calc_op_budget(Op *op);
+  void throttle_op(Op *op);
+  void take_op_budget(Op *op) {
+    int op_budget = calc_op_budget(op);
+    op_throttler.take(op_budget);
+  }
+  void put_op_budget(Op *op) {
+    int op_budget = calc_op_budget(op);
+    op_throttler.put(op_budget);
+  }
+  Throttle op_throttler;
+
  public:
   Objecter(Messenger *m, MonClient *mc, OSDMap *om, Mutex& l) : 
     messenger(m), monc(mc), osdmap(om),
@@ -416,7 +434,8 @@ public:
     num_unacked(0), num_uncommitted(0),
     last_seen_osdmap_version(0),
     last_seen_pgmap_version(0),
-    client_lock(l), timer(l)
+    client_lock(l), timer(l),
+    op_throttler(g_conf.objecter_inflight_op_bytes)
   { }
   ~Objecter() { }
 

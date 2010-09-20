@@ -302,6 +302,7 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
       hash_map<tid_t, Op*>::iterator p = op_osd.find(tid);
       if (p != op_osd.end()) {
 	Op *op = p->second;
+	put_op_budget(op);
 	op_osd.erase(p);
 
 	if (op->onack)
@@ -409,6 +410,7 @@ tid_t Objecter::op_submit(Op *op)
   } else {
     dout(20) << " note: not requesting commit" << dendl;
   }
+  take_op_budget(op);
   op_osd[op->tid] = op;
   pg.active_tids.insert(op->tid);
   pg.last = g_clock.now();
@@ -462,6 +464,34 @@ tid_t Objecter::op_submit(Op *op)
   dout(5) << num_unacked << " unacked, " << num_uncommitted << " uncommitted" << dendl;
   
   return op->tid;
+}
+
+int Objecter::calc_op_budget(Op *op)
+{
+  int op_budget = 0;
+  for (vector<OSDOp>::iterator i = op->ops.begin();
+       i != op->ops.end();
+       ++i) {
+    if (i->op.op & CEPH_OSD_OP_MODE_WR) {
+      op_budget += i->data.length();
+    } else if (i->op.op & CEPH_OSD_OP_MODE_RD) {
+      if (i->op.op & CEPH_OSD_OP_TYPE_DATA)
+        op_budget += i->op.extent.length;
+      else if (i->op.op & CEPH_OSD_OP_TYPE_ATTR)
+        op_budget += i->op.xattr.name_len + i->op.xattr.value_len;
+    }
+  }
+  return op_budget;
+}
+
+void Objecter::throttle_op(Op *op)
+{
+  int op_budget = calc_op_budget(op);
+  if (!op_throttler.get_or_fail(op_budget)) { //couldn't take right now
+    client_lock.Unlock();
+    op_throttler.get(op_budget);
+    client_lock.Lock();
+  }
 }
 
 /* This function DOES put the passed message before returning */
@@ -539,6 +569,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 	     << " still has " << pg.active_tids << dendl;
     if (pg.active_tids.empty()) 
       close_pg( m->get_pg() );
+    put_op_budget(op);
     op_osd.erase( tid );
     delete op;
   }
