@@ -100,7 +100,7 @@ struct Mutation {
   list<ScatterLock*> updated_locks;
 
   list<CInode*> dirty_cow_inodes;
-  list<CDentry*> dirty_cow_dentries;
+  list<pair<CDentry*,version_t> > dirty_cow_dentries;
 
   Mutation() : 
     ls(0),
@@ -206,7 +206,7 @@ struct Mutation {
   }
   void add_cow_dentry(CDentry *dn) {
     pin(dn);
-    dirty_cow_dentries.push_back(dn);
+    dirty_cow_dentries.push_back(pair<CDentry*,version_t>(dn, dn->get_projected_version()));
   }
 
   void apply() {
@@ -217,10 +217,10 @@ struct Mutation {
 	 p != dirty_cow_inodes.end();
 	 p++) 
       (*p)->_mark_dirty(ls);
-    for (list<CDentry*>::iterator p = dirty_cow_dentries.begin();
+    for (list<pair<CDentry*,version_t> >::iterator p = dirty_cow_dentries.begin();
 	 p != dirty_cow_dentries.end();
-	 p++) 
-      (*p)->_mark_dirty(ls);
+	 p++)
+      p->first->mark_dirty(p->second, ls);
 
     for (list<ScatterLock*>::iterator p = updated_locks.begin();
 	 p != updated_locks.end();

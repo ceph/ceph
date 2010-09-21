@@ -1320,6 +1320,7 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
       dn->first = follows+1;
       CDentry *olddn = dn->dir->add_remote_dentry(dn->name, in->ino(),  in->d_type(),
 						  oldfirst, follows);
+      olddn->pre_dirty();
       dout(10) << " olddn " << *olddn << dendl;
       metablob->add_remote_dentry(olddn, true);
       mut->add_cow_dentry(olddn);
@@ -1357,6 +1358,7 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
       if (pcow_inode)
 	*pcow_inode = oldin;
       CDentry *olddn = dn->dir->add_primary_dentry(dn->name, oldin, oldfirst, follows);
+      oldin->inode.version = olddn->pre_dirty();
       dout(10) << " olddn " << *olddn << dendl;
       metablob->add_primary_dentry(olddn, true);
       mut->add_cow_dentry(olddn);
@@ -1364,6 +1366,7 @@ void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn
       assert(dnl->is_remote());
       CDentry *olddn = dn->dir->add_remote_dentry(dn->name, dnl->get_remote_ino(), dnl->get_remote_d_type(),
 						  oldfirst, follows);
+      olddn->pre_dirty();
       dout(10) << " olddn " << *olddn << dendl;
       metablob->add_remote_dentry(olddn, true);
       mut->add_cow_dentry(olddn);
