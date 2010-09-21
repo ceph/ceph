@@ -185,6 +185,7 @@ class Objecter {
   int client_inc;
   int num_unacked;
   int num_uncommitted;
+  bool keep_balanced_budget;
 
   void maybe_request_map();
 
@@ -409,20 +410,52 @@ public:
 
   void resend_mon_ops();
 
+  /**
+   * handle a budget for in-flight ops
+   * budget is taken whenever an op goes into the op_osd map
+   * and returned whenever an op is removed from the map
+   * If throttle_op needs to throttle it will unlock client_lock.
+   */
+  int calc_op_budget(Op *op);
+  void throttle_op(Op *op, int op_size=0);
+  void take_op_budget(Op *op) {
+    int op_budget = calc_op_budget(op);
+    if (keep_balanced_budget)
+      throttle_op(op, op_budget);
+    else
+      op_throttler.take(op_budget);
+  }
+  void put_op_budget(Op *op) {
+    int op_budget = calc_op_budget(op);
+    op_throttler.put(op_budget);
+  }
+  Throttle op_throttler;
+
  public:
   Objecter(Messenger *m, MonClient *mc, OSDMap *om, Mutex& l) : 
     messenger(m), monc(mc), osdmap(om),
     last_tid(0), client_inc(-1),
     num_unacked(0), num_uncommitted(0),
+    keep_balanced_budget(false),
     last_seen_osdmap_version(0),
     last_seen_pgmap_version(0),
-    client_lock(l), timer(l)
+    client_lock(l), timer(l),
+    op_throttler(g_conf.objecter_inflight_op_bytes)
   { }
   ~Objecter() { }
 
   void init();
   void shutdown();
 
+  /**
+   * Tell the objecter to throttle outgoing ops according to its
+   * budget (in g_conf). If you do this, ops can block, in
+   * which case it will unlock client_lock and sleep until
+   * incoming messages reduce the used budget low enough for
+   * the ops to continue going; then it will lock client_lock again.
+   */
+  void set_balanced_budget() { keep_balanced_budget = true; }
+  void unset_balanced_budget() { keep_balanced_budget = false; }
   // messages
  public:
   void dispatch(Message *m);

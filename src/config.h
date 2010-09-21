@@ -206,6 +206,7 @@ struct md_config_t {
   double objecter_map_request_interval;
   double objecter_tick_interval;
   double objecter_timeout;
+  uint64_t objecter_inflight_op_bytes;
 
   // journaler
   bool  journaler_allow_split_entries;

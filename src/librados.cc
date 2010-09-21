@@ -347,6 +347,7 @@ bool RadosClient::init()
   objecter = new Objecter(messenger, &monclient, &osdmap, lock);
   if (!objecter)
     return false;
+  objecter->set_balanced_budget();
 
   monclient.set_messenger(messenger);
   
