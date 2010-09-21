@@ -31,6 +31,10 @@ extern struct ceph_file_layout g_default_file_layout;
 
 #include "msg/msg_types.h"
 
+#ifdef HAVE_LIBTCMALLOC
+#include <google/heap-profiler.h>
+#endif //HAVE_LIBTCMALLOC
+
 extern bool g_daemon;
 extern const char *g_default_id;
 
@@ -55,6 +59,16 @@ struct md_config_t {
   const char *monmap;
   const char *mon_host;
   bool daemonize;
+
+  //profiling
+  bool tcmalloc_have;
+  bool tcmalloc_profiler_run;
+  void (*profiler_start)(const char*);
+  bool (*profiler_running)();
+  void (*profiler_stop)();
+  void (*profiler_dump)(const char*);
+  int profiler_allocation_interval;
+  int profiler_highwater_interval;
 
   // logger (profiling)
   bool logger;

@@ -18,11 +18,13 @@ cosd_SOURCES = cosd.cc msg/SimpleMessenger.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
 cosd_LDADD = libosd.a libos.a libcrush.a libcommon.a -ldl -lpthread -lm -lcrypto
 bin_PROGRAMS += cosd
+cosd_CXXFLAGS = ${AM_CFLAGS}
 
 # mds
 cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
 cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += cmds
+cmds_CXXFLAGS = ${AM_CFLAGS}
 
 # admin tools
 ceph_SOURCES = ceph.cc msg/SimpleMessenger.cc
@@ -56,13 +58,18 @@ core: cmon cosd cmds ceph cconf monmaptool osdmaptool crushtool csyn
 if WITH_FUSE
 cfuse_SOURCES = cfuse.cc msg/SimpleMessenger.cc client/fuse.cc client/fuse_ll.cc
 cfuse_LDADD = -lfuse libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm -lcrypto
+cfuse_CXXFLAGS = ${AM_CFLAGS}
 bin_PROGRAMS += cfuse
 
 # tcmalloc?
 if WITH_TCMALLOC
+tcmalloc_safety_flags = "-fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free"
 cosd_LDADD += -ltcmalloc
+cosd_CXXFLAGS += ${tcmalloc_safety_flags}
 cmds_LDADD += -ltcmalloc
+cmds_CXXFLAGS += ${tcmalloc_safety_flags}
 cfuse_LDADD += -ltcmalloc
+cfuse_CXXFLAGS += ${tcmalloc_safety_flags}
 endif # WITH_TCMALLOC
 
 #if WITH_DEBUG

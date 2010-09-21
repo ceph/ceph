@@ -52,6 +52,13 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   common_set_defaults(true);
+#ifdef HAVE_LIBTCMALLOC
+  g_conf.profiler_start = HeapProfilerStart;
+  g_conf.profiler_running = IsHeapProfilerRunning;
+  g_conf.profiler_stop = HeapProfilerStop;
+  g_conf.profiler_dump = HeapProfilerDump;
+  g_conf.tcmalloc_have = true;
+#endif //HAVE_LIBTCMALLOC
   common_init(args, "mds", true);
 
   // mds specific args

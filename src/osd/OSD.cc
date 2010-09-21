@@ -1811,8 +1811,42 @@ void OSD::handle_command(MMonCommand *m)
     logger_reset_all();
   } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reopen") {
     logger_reopen_all();
-  } else
-    dout(0) << "unrecognized command! " << m->cmd << dendl;
+  } else if (m->cmd.size() == 1 && m->cmd[0] == "heapdump") {
+    stringstream ss;
+    if (g_conf.tcmalloc_have) {
+      if (!g_conf.profiler_running()) {
+        ss << "can't dump heap: profiler not running";
+      } else {
+        ss << g_conf.name << "dumping heap profile now";
+        g_conf.profiler_dump("admin request");
+      }
+    } else {
+      ss << g_conf.name << " does not have tcmalloc, can't use profiler";
+    }
+    logclient.log(LOG_INFO, ss);
+  } else if (m->cmd.size() == 1 && m->cmd[0] == "enable_profiler_options") {
+    char *val = new char[sizeof(int)*8+1];
+    sprintf(val, "%i", g_conf.profiler_allocation_interval);
+    setenv("HEAP_PROFILE_ALLOCATION_INTERVAL", val, g_conf.profiler_allocation_interval);
+    sprintf(val, "%i", g_conf.profiler_highwater_interval);
+    setenv("HEAP_PROFILE_INUSE_INTERVAL", "", g_conf.profiler_highwater_interval);
+    stringstream ss;
+    ss << g_conf.name << " set heap variables from current config";
+    logclient.log(LOG_INFO, ss);
+  } else if (m->cmd.size() == 1 && m->cmd[0] == "start_profiler") {
+    char *location = new char[PATH_MAX];
+    sprintf(location, "%s/%s", g_conf.log_dir, g_conf.name);
+    g_conf.profiler_start(location);
+    stringstream ss;
+    ss << g_conf.name << " started profiler with output " << location;
+    logclient.log(LOG_INFO, ss);
+  } else if (m->cmd.size() == 1 && m->cmd[0] == "stop_profiler") {
+    g_conf.profiler_stop();
+    stringstream ss;
+    ss << g_conf.name << " stopped profiler";
+    logclient.log(LOG_INFO, ss);
+  }
+  else dout(0) << "unrecognized command! " << m->cmd << dendl;
   m->put();
 }
 
