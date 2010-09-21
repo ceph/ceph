@@ -61,17 +61,6 @@ cfuse_LDADD = -lfuse libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm 
 cfuse_CXXFLAGS = ${AM_CFLAGS}
 bin_PROGRAMS += cfuse
 
-# tcmalloc?
-if WITH_TCMALLOC
-tcmalloc_safety_flags = "-fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free"
-cosd_LDADD += -ltcmalloc
-cosd_CXXFLAGS += ${tcmalloc_safety_flags}
-cmds_LDADD += -ltcmalloc
-cmds_CXXFLAGS += ${tcmalloc_safety_flags}
-cfuse_LDADD += -ltcmalloc
-cfuse_CXXFLAGS += ${tcmalloc_safety_flags}
-endif # WITH_TCMALLOC
-
 #if WITH_DEBUG
 #fakefuse_SOURCES = fakefuse.cc msg/FakeMessenger.cc client/fuse.cc client/fuse_ll.cc
 #fakefuse_LDADD = -lfuse libmon.a libmds.a libosd.a libos.a \
@@ -80,6 +69,19 @@ endif # WITH_TCMALLOC
 #endif
 
 endif
+
+# tcmalloc?
+if WITH_TCMALLOC
+tcmalloc_safety_flags = "-fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free"
+cosd_LDADD += -ltcmalloc
+cosd_CXXFLAGS += ${tcmalloc_safety_flags}
+cmds_LDADD += -ltcmalloc
+cmds_CXXFLAGS += ${tcmalloc_safety_flags}
+if WITH_FUSE
+cfuse_LDADD += -ltcmalloc
+cfuse_CXXFLAGS += ${tcmalloc_safety_flags}
+endif #WITH_FUSE
+endif # WITH_TCMALLOC
 
 # debug targets?
 if WITH_DEBUG
