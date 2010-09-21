@@ -4810,6 +4810,9 @@ void Server::_rename_prepare(MDRequest *mdr,
   if (straydn)
     metablob->add_dir_context(straydn->get_dir());
 
+  SnapRealm *dest_realm = destdn->get_dir()->inode->find_snaprealm();
+  snapid_t next_dest_snap = dest_realm->get_newest_seq() + 1;
+
   // add it all to the metablob
   // target inode
   if (!linkmerge) {
@@ -4817,7 +4820,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       // project snaprealm, too
       bufferlist snapbl;
       destdnl->get_inode()->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
-      straydn->first = destdnl->get_inode()->first;  // XXX hmm, is this right?
+      straydn->first = MAX(destdnl->get_inode()->first, next_dest_snap);
       tji = metablob->add_primary_dentry(straydn, true, destdnl->get_inode(), 0, &snapbl);
     } else if (destdnl->is_remote()) {
       metablob->add_dir_context(destdnl->get_inode()->get_parent_dir());
@@ -4832,7 +4835,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       if (!destdnl->is_null())
 	mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
       else
-	destdn->first = MAX(destdn->first, snapid_t(destdn->get_dir()->inode->find_snaprealm()->get_newest_seq()+1));
+	destdn->first = MAX(destdn->first, next_dest_snap);
       metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
       mdcache->journal_cow_dentry(mdr, metablob, srcdnl->get_inode()->get_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
       ji = metablob->add_primary_dentry(srcdnl->get_inode()->get_parent_dn(), true, srcdnl->get_inode());
@@ -4840,19 +4843,19 @@ void Server::_rename_prepare(MDRequest *mdr,
       if (!destdnl->is_null())
 	mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
       else
-	destdn->first = MAX(destdn->first, snapid_t(destdn->get_dir()->inode->find_snaprealm()->get_newest_seq()+1));
+	destdn->first = MAX(destdn->first, next_dest_snap);
       metablob->add_primary_dentry(destdn, true, destdnl->get_inode()); 
     }
   } else if (srcdnl->is_primary()) {
     // project snap parent update?
     bufferlist snapbl;
     if (destdn->is_auth() && srcdnl->get_inode()->snaprealm)
-      srcdnl->get_inode()->project_past_snaprealm_parent(destdn->get_dir()->inode->find_snaprealm(), snapbl);
+      srcdnl->get_inode()->project_past_snaprealm_parent(dest_realm, snapbl);
     
     if (!destdnl->is_null())
       mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
     else
-      destdn->first = MAX(destdn->first, snapid_t(destdn->get_dir()->inode->find_snaprealm()->get_newest_seq()+1));
+      destdn->first = MAX(destdn->first, next_dest_snap);
     ji = metablob->add_primary_dentry(destdn, true, srcdnl->get_inode(), 0, &snapbl); 
   }
     
