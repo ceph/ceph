@@ -5774,6 +5774,14 @@ Context *MDCache::_get_waiter(MDRequest *mdr, Message *req)
   }
 }
 
+/*
+ * Returns 0 on success, >0 if request has been put on hold or otherwise dealt with,
+ * <0 if there's been a failure the caller needs to clean up from.
+ *
+ * on succes, @pdnvec points to a vector of dentries we traverse.  
+ * on failure, @pdnvec it is either the full trace, up to and
+ *             including the final null dn, or empty.
+ */
 int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 			   const filepath& path,                   // what
                            vector<CDentry*> *pdnvec,         // result
@@ -6004,8 +6012,11 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       if (curdir->is_complete()) {
         // file not found
 	if (pdnvec) {
-	  // instantiate a null dn
-	  if (dn) {
+	  // instantiate a null dn?
+	  if (depth < path.depth()-1){
+	    dout(20) << " didn't traverse full path; not returning pdnvec" << dendl;
+	    dn = NULL;
+	  } else if (dn) {
 	    dout(20) << " had null " << *dn << dendl;
 	    assert(dnl->is_null());
 	  } else if (curdir->is_frozen()) {
@@ -6019,6 +6030,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	  }
 	  if (dn)
 	    pdnvec->push_back(dn);
+	  else
+	    pdnvec->clear();   // do not confuse likes of rdlock_path_pin_ref();
 	}
         return -ENOENT;
       } else {
