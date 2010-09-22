@@ -2405,7 +2405,12 @@ void SimpleMessenger::submit_message(Message *m, const entity_addr_t& dest_addr,
 	}
       }
       if (!pipe) {
-	if (lazy) {
+	Policy& policy = get_policy(dest_type);
+	if (policy.lossy && policy.server) {
+	  dout(20) << "submit_message " << *m << " remote, " << dest_addr << ", lossy server for target type "
+		   << ceph_entity_type_name(dest_type) << ", no session, dropping." << dendl;
+	  m->put();
+	} else if (lazy) {
 	  dout(20) << "submit_message " << *m << " remote, " << dest_addr << ", lazy, dropping." << dendl;
 	  m->put();
 	} else {
