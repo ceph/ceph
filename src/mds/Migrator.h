@@ -81,8 +81,6 @@ protected:
   // export fun
   map<CDir*,int>               export_state;
   map<CDir*,int>               export_peer;
-  map<CDir*,int>               export_parent_rdlocked;  // bit set => rdlocked
-  map<CDir*,int>               export_parent_wrlocked;  // bit set => wrlocked
   //map<CDir*,list<bufferlist> > export_data;   // only during EXPORTING state
   map<CDir*,set<int> >         export_warning_ack_waiting;
   map<CDir*,set<int> >         export_notify_ack_waiting;
@@ -166,8 +164,6 @@ public:
     return (export_warning_ack_waiting[dir].count(who) == 0);
   }
 
-
-  void drop_parent_rd_wr_locks(CInode *in, int rd, int wr);
 
 
   // -- misc --
