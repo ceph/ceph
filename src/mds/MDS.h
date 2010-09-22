@@ -146,8 +146,6 @@ class MDS : public Dispatcher {
   int whoami;
   int incarnation;
 
-  CompatSet mds_features;
-  
   int standby_for_rank;
   string standby_for_name;
   int standby_replay_for;
