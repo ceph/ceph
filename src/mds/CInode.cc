@@ -58,6 +58,7 @@ LockType CInode::xattrlock_type(CEPH_LOCK_IXATTR);
 LockType CInode::snaplock_type(CEPH_LOCK_ISNAP);
 LockType CInode::nestlock_type(CEPH_LOCK_INEST);
 LockType CInode::flocklock_type(CEPH_LOCK_IFLOCK);
+LockType CInode::policylock_type(CEPH_LOCK_IPOLICY);
 
 //int cinode_pins[CINODE_NUM_PINS];  // counts
 ostream& CInode::print_db_line_prefix(ostream& out)
@@ -164,6 +165,8 @@ ostream& operator<<(ostream& out, CInode& in)
       out << " " << in.snaplock;
     if (!in.nestlock.is_sync_and_unlocked())
       out << " " << in.nestlock;
+    if (!in.policylock.is_sync_and_unlocked())
+      out << " " << in.policylock;
   } else  {
     if (!in.flocklock.is_sync_and_unlocked())
       out << " " << in.flocklock;
@@ -2146,6 +2149,7 @@ void CInode::_encode_locks_full(bufferlist& bl)
   ::encode(snaplock, bl);
   ::encode(nestlock, bl);
   ::encode(flocklock, bl);
+  ::encode(policylock, bl);
 }
 void CInode::_decode_locks_full(bufferlist::iterator& p)
 {
@@ -2157,6 +2161,7 @@ void CInode::_decode_locks_full(bufferlist::iterator& p)
   ::decode(snaplock, p);
   ::decode(nestlock, p);
   ::decode(flocklock, p);
+  ::decode(policylock, p);
 }
 
 void CInode::_encode_locks_state_for_replica(bufferlist& bl)
@@ -2169,6 +2174,7 @@ void CInode::_encode_locks_state_for_replica(bufferlist& bl)
   xattrlock.encode_state_for_replica(bl);
   snaplock.encode_state_for_replica(bl);
   flocklock.encode_state_for_replica(bl);
+  policylock.encode_state_for_replica(bl);
 }
 void CInode::_decode_locks_state(bufferlist::iterator& p, bool is_new)
 {
@@ -2180,6 +2186,7 @@ void CInode::_decode_locks_state(bufferlist::iterator& p, bool is_new)
   xattrlock.decode_state(p, is_new);
   snaplock.decode_state(p, is_new);
   flocklock.decode_state(p, is_new);
+  policylock.decode_state(p, is_new);
 }
 void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters)
 {
@@ -2191,6 +2198,7 @@ void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waite
   xattrlock.decode_state_rejoin(p, waiters);
   snaplock.decode_state_rejoin(p, waiters);
   flocklock.decode_state_rejoin(p, waiters);
+  policylock.decode_state_rejoin(p, waiters);
 }
 
 

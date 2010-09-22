@@ -400,6 +400,7 @@ private:
     snaplock(this, &snaplock_type),
     nestlock(this, &nestlock_type),
     flocklock(this, &flocklock_type),
+    policylock(this, &policylock_type),
     loner_cap(-1), want_loner_cap(-1)
   {
     g_num_ino++;
@@ -573,6 +574,7 @@ public:
   static LockType snaplock_type;
   static LockType nestlock_type;
   static LockType flocklock_type;
+  static LockType policylock_type;
 
   LocalLock  versionlock;
   SimpleLock authlock;
@@ -583,6 +585,7 @@ public:
   SimpleLock snaplock;
   ScatterLock nestlock;
   SimpleLock flocklock;
+  SimpleLock policylock;
 
   SimpleLock* get_lock(int type) {
     switch (type) {
@@ -594,6 +597,7 @@ public:
     case CEPH_LOCK_ISNAP: return &snaplock;
     case CEPH_LOCK_INEST: return &nestlock;
     case CEPH_LOCK_IFLOCK: return &flocklock;
+    case CEPH_LOCK_IPOLICY: return &policylock;
     }
     return 0;
   }
@@ -929,6 +933,7 @@ public:
     snaplock.replicate_relax();
     nestlock.replicate_relax();
     flocklock.replicate_relax();
+    policylock.replicate_relax();
   }
 
 

@@ -1027,6 +1027,7 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& fini
   in->nestlock.export_twiddle();
   in->xattrlock.export_twiddle();
   in->snaplock.export_twiddle();
+  in->policylock.export_twiddle();
   
   // mark auth
   assert(in->is_auth());

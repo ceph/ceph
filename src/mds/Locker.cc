@@ -630,6 +630,8 @@ bool Locker::eval(CInode *in, int mask)
     eval_any(&in->nestlock, &need_issue);
   if (mask & CEPH_LOCK_IFLOCK)
     eval_any(&in->flocklock, &need_issue);
+  if (mask & CEPH_LOCK_IPOLICY)
+    eval_any(&in->policylock, &need_issue);
 
   // drop loner?
   if (in->is_auth() && in->get_loner() >= 0 && in->get_wanted_loner() < 0) {
@@ -2592,6 +2594,7 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
   case CEPH_LOCK_IXATTR:
   case CEPH_LOCK_ISNAP:
   case CEPH_LOCK_IFLOCK:
+  case CEPH_LOCK_IPOLICY:
     {
       CInode *in = mdcache->get_inode(info.ino, info.snapid);
       if (!in) {
@@ -2607,6 +2610,7 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
       case CEPH_LOCK_IXATTR: return &in->xattrlock;
       case CEPH_LOCK_ISNAP: return &in->snaplock;
       case CEPH_LOCK_IFLOCK: return &in->flocklock;
+      case CEPH_LOCK_IPOLICY: return &in->policylock;
       }
     }
 
@@ -2639,6 +2643,7 @@ void Locker::handle_lock(MLock *m)
   case CEPH_LOCK_ISNAP:
   case CEPH_LOCK_IXATTR:
   case CEPH_LOCK_IFLOCK:
+  case CEPH_LOCK_IPOLICY:
     handle_simple_lock(lock, m);
     break;
     
