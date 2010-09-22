@@ -99,6 +99,20 @@ public:
       eval(lock, need_issue);
   }
 
+  class C_EvalScatterGathers : public Context {
+    Locker *locker;
+    CInode *in;
+  public:
+    C_EvalScatterGathers(Locker *l, CInode *i) : locker(l), in(i) {
+      in->get(CInode::PIN_PTRWAITER);    
+    }
+    void finish(int r) {
+      in->put(CInode::PIN_PTRWAITER);
+      locker->eval_scatter_gathers(in);
+    }
+  };
+  void eval_scatter_gathers(CInode *in);
+
   void eval_cap_gather(CInode *in);
 
   bool eval(CInode *in, int mask);

@@ -64,6 +64,10 @@ public:
     }
   }
 
+  bool is_scatterlock() const {
+    return true;
+  }
+
   bool is_sync_and_unlocked() const {
     return
       SimpleLock::is_sync_and_unlocked() && 
@@ -71,6 +75,9 @@ public:
       !is_flushing();
   }
 
+  bool can_scatter_pin(client_t loner) {
+    return can_rdlock(-1) || can_wrlock(loner);
+  }
 
   xlist<ScatterLock*>::item *get_updated_item() { return &more()->item_updated; }
   utime_t get_update_stamp() { return more()->update_stamp; }

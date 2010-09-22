@@ -220,6 +220,10 @@ public:
     delete _unstable;
   }
 
+  virtual bool is_scatterlock() const {
+    return false;
+  }
+
   // parent
   MDSCacheObject *get_parent() { return parent; }
   int get_type() { return type->type; }

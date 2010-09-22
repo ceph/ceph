@@ -152,6 +152,9 @@ ostream& operator<<(ostream& out, CInode& in)
     out << " need_snapflush=" << in.client_need_snapflush;
 
 
+  if (in.scatter_pins > 0)
+    out << " scatter_pins=" << in.scatter_pins;
+
   // locks
   if (!in.authlock.is_sync_and_unlocked())
     out << " " << in.authlock;
@@ -1510,6 +1513,20 @@ void CInode::finish_scatter_gather_update_accounted(int type, Mutation *mut, EMe
     mut->auth_pin(dir);
   }
 }
+
+void CInode::put_scatter_pin(list<Context*>& ls)
+{
+  assert(scatter_pins > 0);
+  scatter_pins--;
+  if (scatter_pins == 0) {
+    dirfragtreelock.take_waiting(SimpleLock::WAIT_ALL, ls);
+    filelock.take_waiting(SimpleLock::WAIT_ALL, ls);
+    nestlock.take_waiting(SimpleLock::WAIT_ALL, ls);
+    ls.push_back(new Locker::C_EvalScatterGathers(mdcache->mds->locker, this));
+  }
+}
+
+
 
 // waiting
 

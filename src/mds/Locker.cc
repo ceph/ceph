@@ -452,6 +452,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
       (IS_TRUE_AND_LT_AUTH(lock->get_sm()->states[next].can_wrlock, auth) || !lock->is_wrlocked()) &&
       (IS_TRUE_AND_LT_AUTH(lock->get_sm()->states[next].can_xlock, auth) || !lock->is_xlocked()) &&
       (IS_TRUE_AND_LT_AUTH(lock->get_sm()->states[next].can_lease, auth) || !lock->is_leased()) &&
+      (!in || !in->is_scatter_pinned() || !lock->is_scatterlock()) &&
       (!caps || ((~lock->gcaps_allowed(CAP_ANY, next) & other_issued) == 0 &&
 		 (~lock->gcaps_allowed(CAP_LONER, next) & loner_issued) == 0 &&
 		 (~lock->gcaps_allowed(CAP_XLOCKER, next) & xlocker_issued) == 0)) &&
@@ -702,6 +703,27 @@ void Locker::eval_cap_gather(CInode *in)
   if (need_issue && in->is_head())
     issue_caps(in);
 
+  finish_contexts(finishers);
+}
+
+void Locker::eval_scatter_gathers(CInode *in)
+{
+  bool need_issue = false;
+  list<Context*> finishers;
+
+  dout(10) << "eval_scatter_gathers " << *in << dendl;
+
+  // kick locks now
+  if (!in->filelock.is_stable())
+    eval_gather(&in->filelock, false, &need_issue, &finishers);
+  if (!in->nestlock.is_stable())
+    eval_gather(&in->nestlock, false, &need_issue, &finishers);
+  if (!in->dirfragtreelock.is_stable())
+    eval_gather(&in->dirfragtreelock, false, &need_issue, &finishers);
+  
+  if (need_issue && in->is_head())
+    issue_caps(in);
+  
   finish_contexts(finishers);
 }
 
@@ -3125,6 +3147,8 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   CInode *in = (CInode*)lock->get_parent();
   dout(10) << "scatter_writebehind " << in->inode.mtime << " on " << *lock << " on " << *in << dendl;
 
+  assert(!in->is_scatter_pinned());
+
   // journal
   Mutation *mut = new Mutation;
   mut->ls = mds->mdlog->get_current_segment();
@@ -3233,6 +3257,15 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
 {
   CInode *p = (CInode *)lock->get_parent();
 
+  if (p->is_scatter_pinned()) {
+    dout(10) << "scatter_nudge waiting for scatter pin release on " << *p << dendl;
+    if (c) 
+      p->filelock.add_waiter(SimpleLock::WAIT_RD, c);
+    else
+      // just requeue.  not ideal.. starvation prone..
+      updated_scatterlocks.push_back(lock->get_updated_item());
+    return;
+  }
   if (p->is_frozen() || p->is_freezing()) {
     dout(10) << "scatter_nudge waiting for unfreeze on " << *p << dendl;
     if (c) 

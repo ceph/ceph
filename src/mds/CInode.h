@@ -400,6 +400,7 @@ private:
     snaplock(this, &snaplock_type),
     nestlock(this, &nestlock_type),
     flocklock(this, &flocklock_type),
+    scatter_pins(0),
     loner_cap(-1), want_loner_cap(-1)
   {
     g_num_ino++;
@@ -584,6 +585,8 @@ public:
   ScatterLock nestlock;
   SimpleLock flocklock;
 
+  int scatter_pins;
+
   SimpleLock* get_lock(int type) {
     switch (type) {
     case CEPH_LOCK_IFILE: return &filelock;
@@ -608,6 +611,21 @@ public:
   void finish_scatter_gather_update(int type);
   void finish_scatter_gather_update_accounted(int type, Mutation *mut, EMetaBlob *metablob);
 
+  // scatter pins prevent either a scatter or unscatter on _any_
+  // scatterlock for this inode.
+  bool is_scatter_pinned() {
+    return scatter_pins > 0;
+  }
+  bool can_scatter_pin() {
+    return 
+      dirfragtreelock.can_scatter_pin(get_loner()) &&
+      filelock.can_scatter_pin(get_loner()) &&
+      nestlock.can_scatter_pin(get_loner());
+  }
+  void get_scatter_pin() {
+    scatter_pins++;
+  }
+  void put_scatter_pin(list<Context*>& ls);
 
   // -- snap --
   void open_snaprealm(bool no_split=false);
