@@ -2145,6 +2145,7 @@ void CInode::_encode_locks_full(bufferlist& bl)
   ::encode(xattrlock, bl);
   ::encode(snaplock, bl);
   ::encode(nestlock, bl);
+  ::encode(flocklock, bl);
 }
 void CInode::_decode_locks_full(bufferlist::iterator& p)
 {
@@ -2155,6 +2156,7 @@ void CInode::_decode_locks_full(bufferlist::iterator& p)
   ::decode(xattrlock, p);
   ::decode(snaplock, p);
   ::decode(nestlock, p);
+  ::decode(flocklock, p);
 }
 
 void CInode::_encode_locks_state_for_replica(bufferlist& bl)
@@ -2166,6 +2168,7 @@ void CInode::_encode_locks_state_for_replica(bufferlist& bl)
   nestlock.encode_state_for_replica(bl);
   xattrlock.encode_state_for_replica(bl);
   snaplock.encode_state_for_replica(bl);
+  flocklock.encode_state_for_replica(bl);
 }
 void CInode::_decode_locks_state(bufferlist::iterator& p, bool is_new)
 {
@@ -2176,6 +2179,7 @@ void CInode::_decode_locks_state(bufferlist::iterator& p, bool is_new)
   nestlock.decode_state(p, is_new);
   xattrlock.decode_state(p, is_new);
   snaplock.decode_state(p, is_new);
+  flocklock.decode_state(p, is_new);
 }
 void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters)
 {
@@ -2186,6 +2190,7 @@ void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waite
   nestlock.decode_state_rejoin(p, waiters);
   xattrlock.decode_state_rejoin(p, waiters);
   snaplock.decode_state_rejoin(p, waiters);
+  flocklock.decode_state_rejoin(p, waiters);
 }
 
 

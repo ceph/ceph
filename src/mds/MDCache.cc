@@ -5318,6 +5318,7 @@ void MDCache::inode_remove_replica(CInode *in, int from)
   if (in->xattrlock.remove_replica(from)) mds->locker->eval_gather(&in->xattrlock);
 
   if (in->nestlock.remove_replica(from)) mds->locker->eval_gather(&in->nestlock);
+  if (in->flocklock.remove_replica(from)) mds->locker->eval_gather(&in->flocklock);
 
   // trim?
   maybe_eval_stray(in);

@@ -928,6 +928,7 @@ public:
     xattrlock.replicate_relax();
     snaplock.replicate_relax();
     nestlock.replicate_relax();
+    flocklock.replicate_relax();
   }
 
 
