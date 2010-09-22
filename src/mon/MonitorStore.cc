@@ -198,12 +198,13 @@ int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
   
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
+    char buf[80];
     if (b) {
-      dout(15) << "get_bl " << a << "/" << b << " DNE" << dendl;
+      dout(15) << "get_bl " << a << "/" << b << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     } else {
-      dout(15) << "get_bl " << a << " DNE" << dendl;
+      dout(15) << "get_bl " << a << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     }
-    return 0;
+    return -errno;
   }
 
   // get size

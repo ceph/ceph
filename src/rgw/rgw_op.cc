@@ -216,7 +216,7 @@ void RGWListBucket::execute()
     goto done;
   }
 
-  prefix = s->args.get("prefix");
+  url_decode(s->args.get("prefix"), prefix);
   marker = s->args.get("marker");
   max_keys = s->args.get("max-keys");
  if (!max_keys.empty()) {
