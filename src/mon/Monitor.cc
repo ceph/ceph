@@ -210,13 +210,6 @@ void Monitor::call_election(bool is_new)
   }
 
   dout(10) << "call_election" << dendl;
-  state = STATE_STARTING;
-  
-  // tell paxos
-  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
-    (*p)->election_starting();
-  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
-    (*p)->election_starting();
 
   // call a new election
   elector.call_election();
@@ -236,6 +229,12 @@ void Monitor::starting_election()
 {
   dout(10) << "starting_election " << get_epoch() << dendl;
   state = STATE_STARTING;
+
+  // tell paxos
+  for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
+    (*p)->election_starting();
+  for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
+    (*p)->election_starting();
 }
 
 epoch_t Monitor::get_epoch()
