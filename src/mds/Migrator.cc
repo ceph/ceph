@@ -720,6 +720,7 @@ void Migrator::export_frozen(CDir *dir)
   rd_or_wr_lock(&diri->dirfragtreelock, &rdlocked, &wrlocked);
   export_parent_rdlocked[dir] = rdlocked;
   export_parent_wrlocked[dir] = wrlocked;
+  dout(10) << " dir inode now locked " << *diri << dendl;
 
 
   cache->show_subtrees();

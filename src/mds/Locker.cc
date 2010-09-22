@@ -445,13 +445,13 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
       need_issue = true;
   }
 
-#define IS_TRUE_AND_LT_AUTH(x) (x && x <= AUTH)
-
+#define IS_TRUE_AND_LT_AUTH(x, auth) (x && ((auth && x <= AUTH) || (!auth && x < AUTH)))
+  bool auth = lock->get_parent()->is_auth();
   if (!lock->is_gathering() &&
-      (IS_TRUE_AND_LT_AUTH(lock->get_sm()->states[next].can_rdlock) || !lock->is_rdlocked()) &&
-      (IS_TRUE_AND_LT_AUTH(lock->get_sm()->states[next].can_wrlock) || !lock->is_wrlocked()) &&
-      (IS_TRUE_AND_LT_AUTH(lock->get_sm()->states[next].can_xlock) || !lock->is_xlocked()) &&
-      (IS_TRUE_AND_LT_AUTH(lock->get_sm()->states[next].can_lease) || !lock->is_leased()) &&
+      (IS_TRUE_AND_LT_AUTH(lock->get_sm()->states[next].can_rdlock, auth) || !lock->is_rdlocked()) &&
+      (IS_TRUE_AND_LT_AUTH(lock->get_sm()->states[next].can_wrlock, auth) || !lock->is_wrlocked()) &&
+      (IS_TRUE_AND_LT_AUTH(lock->get_sm()->states[next].can_xlock, auth) || !lock->is_xlocked()) &&
+      (IS_TRUE_AND_LT_AUTH(lock->get_sm()->states[next].can_lease, auth) || !lock->is_leased()) &&
       (!caps || ((~lock->gcaps_allowed(CAP_ANY, next) & other_issued) == 0 &&
 		 (~lock->gcaps_allowed(CAP_LONER, next) & loner_issued) == 0 &&
 		 (~lock->gcaps_allowed(CAP_XLOCKER, next) & xlocker_issued) == 0)) &&
