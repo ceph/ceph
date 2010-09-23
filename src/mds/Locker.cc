@@ -3292,7 +3292,7 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
 	// can we do it now?
 	//  (only if we're not replicated.. if we are, we really do need
 	//   to nudge the lock state!)
-	if (!forcelockchange && lock->can_wrlock(-1)) {
+	if (!forcelockchange && !lock->get_parent()->is_replicated() && lock->can_wrlock(-1)) {
 	  dout(10) << "scatter_nudge auth, propagating " << *lock << " on " << *p << dendl;
 	  scatter_writebehind(lock);
 	  if (c)
