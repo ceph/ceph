@@ -1831,7 +1831,8 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
  */
 CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
 					  set<SimpleLock*>& rdlocks, set<SimpleLock*>& wrlocks, set<SimpleLock*>& xlocks,
-					  bool okexist, bool mustexist, bool alwaysxlock)
+					  bool okexist, bool mustexist, bool alwaysxlock,
+					  ceph_file_layout **layout)
 {
   MClientRequest *req = mdr->client_request;
   const filepath& refpath = n ? req->get_filepath2() : req->get_filepath();
@@ -1904,7 +1905,10 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
     rdlocks.insert(&dn->lock);  // existing dn, rdlock
   wrlocks.insert(&dn->get_dir()->inode->filelock); // also, wrlock on dir mtime
   wrlocks.insert(&dn->get_dir()->inode->nestlock); // also, wrlock on dir mtime
-  mds->locker->include_snap_rdlocks(rdlocks, dn->get_dir()->inode);
+  if (layout)
+    mds->locker->include_snap_rdlocks_wlayout(rdlocks, dn->get_dir()->inode, layout);
+  else
+    mds->locker->include_snap_rdlocks(rdlocks, dn->get_dir()->inode);
 
   return dn;
 }
@@ -2244,8 +2248,23 @@ void Server::handle_client_openc(MDRequest *mdr)
 
   dout(7) << "open w/ O_CREAT on " << req->get_filepath() << dendl;
 
-  // validate layout
-  ceph_file_layout layout = mds->mdcache->default_file_layout;
+  bool excl = (req->head.args.open.flags & O_EXCL);
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  ceph_file_layout *dir_layout = NULL;
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks,
+                                         !excl, false, false, &dir_layout);
+  if (!dn) return;
+  if (mdr->snapid != CEPH_NOSNAP) {
+    reply_request(mdr, -EROFS);
+    return;
+  }
+  // set layout
+  ceph_file_layout layout;
+  if (dir_layout)
+    layout = *dir_layout;
+  else
+    layout = mds->mdcache->default_file_layout;
+  // fill in any special params from client
   if (req->head.args.open.stripe_unit)
     layout.fl_stripe_unit = req->head.args.open.stripe_unit;
   if (req->head.args.open.stripe_count)
@@ -2253,21 +2272,14 @@ void Server::handle_client_openc(MDRequest *mdr)
   if (req->head.args.open.object_size)
     layout.fl_object_size = req->head.args.open.object_size;
   layout.fl_pg_preferred = req->head.args.open.preferred;
-    
+  // validate layout
   if (!ceph_file_layout_is_valid(&layout)) {
     dout(10) << " invalid initial file layout" << dendl;
     reply_request(mdr, -EINVAL);
     return;
   }
-  
-  bool excl = (req->head.args.open.flags & O_EXCL);
-  set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, !excl, false, false);
-  if (!dn) return;
-  if (mdr->snapid != CEPH_NOSNAP) {
-    reply_request(mdr, -EROFS);
-    return;
-  }
+
+
   CInode *diri = dn->get_dir()->get_inode();
   rdlocks.insert(&diri->authlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))

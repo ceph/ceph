@@ -140,6 +140,30 @@ void Locker::include_snap_rdlocks(set<SimpleLock*>& rdlocks, CInode *in)
   }
 }
 
+void Locker::include_snap_rdlocks_wlayout(set<SimpleLock*>& rdlocks, CInode *in,
+                                  ceph_file_layout **layout)
+{
+  //rdlock ancestor snaps
+  CInode *t = in;
+  rdlocks.insert(&in->snaplock);
+  rdlocks.insert(&in->policylock);
+  bool found_layout = false;
+  while (t) {
+    rdlocks.insert(&t->snaplock);
+    if (!found_layout) {
+      rdlocks.insert(&t->policylock);
+      if (t->get_projected_dir_layout()) {
+        *layout = t->get_projected_dir_layout();
+        found_layout = true;
+      }
+    }
+    if (t->get_projected_parent_dn() &&
+        t->get_projected_parent_dn()->get_dir())
+      t = t->get_projected_parent_dn()->get_dir()->get_inode();
+    else t = NULL;
+  }
+}
+
 
 /* If this function returns false, the mdr has been placed
  * on the appropriate wait list */

@@ -79,6 +79,8 @@ protected:
   // -- locks --
 public:
   void include_snap_rdlocks(set<SimpleLock*>& rdlocks, CInode *in);
+  void include_snap_rdlocks_wlayout(set<SimpleLock*>& rdlocks, CInode *in,
+                                    ceph_file_layout **layout);
 
   bool acquire_locks(MDRequest *mdr,
 		     set<SimpleLock*> &rdlocks,
