@@ -1463,8 +1463,12 @@ void CInode::finish_scatter_gather_update(int type)
 	dout(20) << fg << " " << *dir << dendl;
 
 	fnode_t *pf = dir->get_projected_fnode();
-	if (dir->is_auth())
+	if (dir->is_auth()) {
 	  pf = dir->project_fnode();
+
+	  // first push any inodes with dirty rstat into this dirfrag
+	  dir->assimilate_dirty_rstat_inodes();
+	}
 
 	if (pf->accounted_rstat.version == pi->rstat.version) {
 	  dout(20) << fg << "           rstat " << pf->rstat << dendl;
@@ -1532,6 +1536,8 @@ void CInode::finish_scatter_gather_update_accounted(int type, Mutation *mut, EMe
     mut->add_projected_fnode(dir);
     metablob->add_dir(dir, true);
     mut->auth_pin(dir);
+
+    dir->assimilate_dirty_rstat_inodes_finish(mut, metablob);
   }
 }
 

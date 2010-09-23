@@ -771,6 +771,39 @@ void CDir::merge(int bits, list<Context*>& waiters, bool replay)
 
 
 
+void CDir::assimilate_dirty_rstat_inodes()
+{
+  dout(10) << "assimilate_dirty_rstat_inodes" << dendl;
+  for (elist<CInode*>::iterator p = dirty_rstat_inodes.begin_use_current();
+       !p.end(); ++p) {
+    CInode *in = *p;
+    inode_t *pi = in->project_inode();
+    pi->version = in->pre_dirty();
+
+    inode->mdcache->project_rstat_inode_to_frag(in, this, 0, 0);
+  }
+  dout(10) << "assimilate_dirty_rstat_inodes done" << dendl;
+}
+
+void CDir::assimilate_dirty_rstat_inodes_finish(Mutation *mut, EMetaBlob *blob)
+{
+  dout(10) << "assimilate_dirty_rstat_inodes_finish" << dendl;
+  elist<CInode*>::iterator p = dirty_rstat_inodes.begin_use_current();
+  while (!p.end()) {
+    CInode *in = *p;
+    CDentry *dn = in->get_projected_parent_dn();
+    ++p;
+
+    mut->auth_pin(in);
+    mut->add_projected_inode(in);
+
+    in->clear_dirty_rstat();
+    blob->add_primary_dentry(dn, true, in);
+  }
+  assert(dirty_rstat_inodes.empty());
+}
+
+
 
 
 /****************************************

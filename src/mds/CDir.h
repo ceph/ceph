@@ -169,6 +169,9 @@ public:
   // my inodes with dirty rstat data
   elist<CInode*> dirty_rstat_inodes;     
 
+  void assimilate_dirty_rstat_inodes();
+  void assimilate_dirty_rstat_inodes_finish(Mutation *mut, EMetaBlob *blob);
+
 protected:
   version_t projected_version;
   list<fnode_t*> projected_fnode;

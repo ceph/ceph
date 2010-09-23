@@ -1426,6 +1426,35 @@ inode_t *MDCache::journal_dirty_inode(Mutation *mut, EMetaBlob *metablob, CInode
 
 // nested ---------------------------------------------------------------
 
+void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t first, int linkunlink)
+{
+  CDentry *parentdn = cur->get_projected_parent_dn();
+  inode_t *curi = cur->get_projected_inode();
+
+  dout(20) << "    frag head is [" << parent->first << ",head] " << dendl;
+  dout(20) << " inode update is [" << first << "," << cur->last << "]" << dendl;
+
+  /*
+   * FIXME.  this incompletely propagates rstats to _old_ parents
+   * (i.e. shortly after a directory rename).  but we need full
+   * blown hard link backpointers to make this work properly...
+   */
+  snapid_t floor = parentdn->first;
+  dout(20) << " floor of " << floor << " from parent dn " << *parentdn << dendl;
+
+  if (cur->last >= floor)
+    project_rstat_inode_to_frag(*curi, MAX(first, floor), cur->last, parent, linkunlink);
+      
+  for (set<snapid_t>::iterator p = cur->dirty_old_rstats.begin();
+       p != cur->dirty_old_rstats.end();
+       p++) {
+    old_inode_t& old = cur->old_inodes[*p];
+    if (*p >= floor)
+      project_rstat_inode_to_frag(old.inode, MAX(old.first, floor), *p, parent);
+  }
+  cur->dirty_old_rstats.clear();
+}
+
 
 void MDCache::project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
 					  CDir *parent, int linkunlink)
@@ -1724,7 +1753,14 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
     
     // rstat
-    if (primary_dn) { 
+    if (!primary_dn) {
+      // don't update parent this pass
+    } else if (!parent->inode->nestlock.can_wrlock(-1)) {
+      dout(20) << " unwritable parent nestlock " << parent->inode->nestlock
+	       << ", marking dirty rstat on " << *cur << dendl;
+      cur->mark_dirty_rstat();      
+      mds->locker->mark_updated_scatterlock(&parent->inode->nestlock);
+   } else {
       SnapRealm *prealm = parent->inode->find_snaprealm();
       
       snapid_t follows = cfollows;
@@ -1735,28 +1771,9 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       if (cur->first > first)
 	first = cur->first;
 
-      dout(20) << "    frag head is [" << parent->first << ",head] " << dendl;
-      dout(20) << " inode update is [" << first << "," << cur->last << "]" << dendl;
+      project_rstat_inode_to_frag(cur, parent, first, linkunlink);
 
-      /*
-       * FIXME.  this incompletely propagates rstats to _old_ parents
-       * (i.e. shortly after a directory rename).  but we need full
-       * blow hard link backpointers to make this work properly...
-       */
-      snapid_t floor = parentdn->first;
-      dout(20) << " floor of " << floor << " from parent dn " << *parentdn << dendl;
-
-      if (cur->last >= floor)
-	project_rstat_inode_to_frag(*curi, MAX(first, floor), cur->last, parent, linkunlink);
-      
-      for (set<snapid_t>::iterator p = cur->dirty_old_rstats.begin();
-	   p != cur->dirty_old_rstats.end();
-	   p++) {
-	old_inode_t& old = cur->old_inodes[*p];
-	if (*p >= floor)
-	  project_rstat_inode_to_frag(old.inode, MAX(old.first, floor), *p, parent);
-      }
-      cur->dirty_old_rstats.clear();
+      cur->clear_dirty_rstat();
     }
 
     bool stop = false;
