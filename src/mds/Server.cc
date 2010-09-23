@@ -2924,6 +2924,7 @@ void Server::handle_client_setlayout(MDRequest *mdr)
   // validate layout
   // FIXME: only set striping parameters, for now.
   ceph_file_layout layout;
+  memset(&layout, 0, sizeof(layout));
 
   if (req->head.args.setlayout.layout.fl_object_size > 0)
     layout.fl_object_size = req->head.args.setlayout.layout.fl_object_size;
