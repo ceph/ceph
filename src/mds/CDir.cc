@@ -99,11 +99,23 @@ ostream& operator<<(ostream& out, CDir& dir)
   out << " " << dir.fnode.fragstat;
   if (!(dir.fnode.fragstat == dir.fnode.accounted_fragstat))
     out << "/" << dir.fnode.accounted_fragstat;
+  if (false && dir.is_projected()) {
+    fnode_t *pf = dir.get_projected_fnode();
+    out << "->" << pf->fragstat;
+    if (!(pf->fragstat == pf->accounted_fragstat))
+      out << "/" << pf->accounted_fragstat;
+  }
   
   // rstat
   out << " " << dir.fnode.rstat;
   if (!(dir.fnode.rstat == dir.fnode.accounted_rstat))
     out << "/" << dir.fnode.accounted_rstat;
+  if (false && dir.is_projected()) {
+    fnode_t *pf = dir.get_projected_fnode();
+    out << "->" << pf->rstat;
+    if (!(pf->rstat == pf->accounted_rstat))
+      out << "/" << pf->accounted_rstat;
+ }
 
   out << " hs=" << dir.get_num_head_items() << "+" << dir.get_num_head_null();
   out << ",ss=" << dir.get_num_snap_items() << "+" << dir.get_num_snap_null();
