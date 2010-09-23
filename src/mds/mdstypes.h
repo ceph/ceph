@@ -929,8 +929,9 @@ struct inode_t {
   map<client_t,client_writeable_range_t> client_ranges;  // client(s) can write to these ranges
 
   // dirfrag, recursive accountin
-  frag_info_t dirstat;
-  nest_info_t rstat, accounted_rstat;
+  frag_info_t dirstat;         // protected by my filelock
+  nest_info_t rstat;           // protected by my nestlock
+  nest_info_t accounted_rstat; // protected by parent's nestlock
  
   // special stuff
   version_t version;           // auth only
