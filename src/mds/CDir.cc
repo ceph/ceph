@@ -1298,6 +1298,9 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
 	  dn = add_primary_dentry(dname, in, first, last);
 	  dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
 
+	  if (in->inode.is_dirty_rstat())
+	    in->mark_dirty_rstat();
+
 	  //in->hack_accessed = false;
 	  //in->hack_load_stamp = g_clock.now();
 	  //num_new_inodes_loaded++;

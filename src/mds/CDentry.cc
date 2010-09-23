@@ -295,8 +295,16 @@ void CDentry::unlink_remote(CDentry::linkage_t *dnl)
 
 void CDentry::push_projected_linkage(CInode *inode)
 {
+  // dirty rstat tracking is in the projected plane
+  bool dirty_rstat = inode->is_dirty_rstat();
+  if (dirty_rstat)
+    inode->clear_dirty_rstat();
+
   _project_linkage()->inode = inode;
   inode->push_projected_parent(this);
+
+  if (dirty_rstat)
+    inode->mark_dirty_rstat();
 }
 
 CDentry::linkage_t *CDentry::pop_projected_linkage()

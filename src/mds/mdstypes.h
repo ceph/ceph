@@ -961,6 +961,8 @@ struct inode_t {
     return layout.fl_object_size * layout.fl_stripe_count;
   }
 
+  bool is_dirty_rstat() const { return !(rstat == accounted_rstat); }
+
   uint64_t get_max_size() const {
     uint64_t max = 0;
       for (map<client_t,client_writeable_range_t>::const_iterator p = client_ranges.begin();
