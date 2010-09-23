@@ -1487,6 +1487,20 @@ void CInode::finish_scatter_gather_update(int type)
 	}
 	dir->dirty_old_rstat.clear();
 	pf->rstat.version = pf->accounted_rstat.version = pi->rstat.version + 1;
+
+	if (fg == frag_t()) { // i.e., we are the only frag
+	  if (pi->rstat.rbytes != pf->rstat.rbytes) { 
+	    stringstream ss;
+	    ss << "unmatched rstat rbytes on single dirfrag " << dir->dirfrag()
+	       << ", inode has " << pi->rstat << ", dirfrag has " << pf->rstat;
+	    mdcache->mds->logclient.log(LOG_ERROR, ss);
+
+	    // trust the dirfrag for now
+	    pi->rstat = pf->rstat;
+	    pi->rstat.version--;  // (about to re-increment it below!)
+	    assert("unmatched rstat rbytes" == 0);
+	  }
+	}
       }
       pi->rstat.version++;
       dout(20) << " final rstat " << pi->rstat << dendl;
