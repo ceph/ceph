@@ -34,7 +34,6 @@ class Logger;
 class MDS;
 class Session;
 class Migrator;
-class Renamer;
 
 class Message;
 class Session;
@@ -779,7 +778,6 @@ public:
 
   friend class Locker;
   friend class Migrator;
-  friend class Renamer;
   friend class MDBalancer;
 
 
@@ -805,7 +803,6 @@ public:
 
   // subsystems
   Migrator *migrator;
-  Renamer *renamer;
 
  public:
   MDCache(MDS *m);
