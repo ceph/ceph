@@ -1684,6 +1684,9 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   
   // freeze.
   dir->_freeze_tree();
+
+  // pin parent scatterlocks (sloppily!)
+  dir->inode->get_scatter_pin();
   
   // ok!
   dout(7) << " sending export_prep_ack on " << *dir << dendl;
@@ -1943,6 +1946,9 @@ void Migrator::import_reverse_unfreeze(CDir *dir)
 {
   dout(7) << "import_reverse_unfreeze " << *dir << dendl;
   dir->unfreeze_tree();
+  list<Context*> ls;
+  dir->inode->put_scatter_pin(ls);
+  mds->queue_waiters(ls);
   cache->discard_delayed_expire(dir);
   import_reverse_final(dir);
 }
@@ -2050,6 +2056,10 @@ void Migrator::import_finish(CDir *dir)
   dir->unfreeze_tree();
   cache->show_subtrees();
   //audit();  // this fails, bc we munge up the subtree map during handle_import_map (resolve phase)
+
+  list<Context*> ls;
+  dir->inode->put_scatter_pin(ls);
+  mds->queue_waiters(ls);
 
   // re-eval imported caps
   for (map<CInode*, map<client_t,Capability::Export> >::iterator p = cap_imports.begin();
