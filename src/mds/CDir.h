@@ -166,6 +166,9 @@ public:
   snapid_t first;
   map<snapid_t,old_rstat_t> dirty_old_rstat;  // [value.first,key]
 
+  // my inodes with dirty rstat data
+  elist<CInode*> dirty_rstat_inodes;     
+
 protected:
   version_t projected_version;
   list<fnode_t*> projected_fnode;

@@ -100,6 +100,7 @@ public:
   static const int PIN_TRUNCATING =       18;
   static const int PIN_STRAY =            19;  // we pin our stray inode while active
   static const int PIN_NEEDSNAPFLUSH =    20;
+  static const int PIN_DIRTYRSTAT =       21;
 
   const char *pin_name(int p) {
     switch (p) {
@@ -122,6 +123,7 @@ public:
     case PIN_TRUNCATING: return "truncating";
     case PIN_STRAY: return "stray";
     case PIN_NEEDSNAPFLUSH: return "needsnapflush";
+    case PIN_DIRTYRSTAT: return "dirtyrstat";
     default: return generic_pin_name(p);
     }
   }
@@ -140,6 +142,7 @@ public:
   static const int STATE_RECOVERING =   (1<<12);
   static const int STATE_PURGING =     (1<<13);
   static const int STATE_DIRTYPARENT =  (1<<14);
+  static const int STATE_DIRTYRSTAT =  (1<<15);
 
   // -- waiters --
   static const uint64_t WAIT_DIR         = (1<<0);
@@ -182,6 +185,16 @@ public:
   loff_t last_journaled;       // log offset for the last time i was journaled
   //loff_t last_open_journaled;  // log offset for the last journaled EOpen
   utime_t last_dirstat_prop;
+
+
+  // list item node for when we have unpropagated rstat data
+  elist<CInode*>::item dirty_rstat_item;
+
+  bool is_dirty_rstat() {
+    return state_test(STATE_DIRTYRSTAT);
+  }
+  void mark_dirty_rstat();
+  void clear_dirty_rstat();
 
   //bool hack_accessed;
   //utime_t hack_load_stamp;

@@ -221,6 +221,27 @@ void CInode::print(ostream& out)
 }
 
 
+
+void CInode::mark_dirty_rstat()
+{
+  if (!state_test(STATE_DIRTYRSTAT)) {
+    dout(10) << "mark_dirty_rstat" << dendl;
+    state_set(STATE_DIRTYRSTAT);
+    get(PIN_DIRTYRSTAT);
+    CDentry *dn = get_projected_parent_dn();
+    dn->dir->dirty_rstat_inodes.push_back(&dirty_rstat_item);
+  }
+}
+void CInode::clear_dirty_rstat()
+{
+  if (state_test(STATE_DIRTYRSTAT)) {
+    dout(10) << "clear_dirty_rstat" << dendl;
+    state_clear(STATE_DIRTYRSTAT);
+    put(PIN_DIRTYRSTAT);
+    dirty_rstat_item.remove_myself();
+  }
+}
+
 inode_t *CInode::project_inode(map<string,bufferptr> *px) 
 {
   if (projected_nodes.empty()) {
