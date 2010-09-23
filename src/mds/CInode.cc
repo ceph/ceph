@@ -1072,6 +1072,14 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     ::encode(fcntl_locks, bl);
     ::encode(flock_locks, bl);
     break;
+
+  case CEPH_LOCK_IPOLICY:
+    if (inode.is_dir()) {
+      ::encode((default_layout ? true : false), bl);
+      if (default_layout)
+        encode(*default_layout, bl);
+    }
+    break;
   
   default:
     assert(0);
@@ -1345,6 +1353,17 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_IFLOCK:
     ::decode(fcntl_locks, p);
     ::decode(flock_locks, p);
+    break;
+
+  case CEPH_LOCK_IPOLICY:
+    if (inode.is_dir()) {
+      bool default_layout_exists;
+      ::decode(default_layout_exists, p);
+      if (default_layout_exists) {
+       default_layout = new default_file_layout;
+       decode(*default_layout, p);
+      }
+    }
     break;
 
   default:
