@@ -509,6 +509,7 @@ libosd_a_SOURCES = \
 	osd/Ager.cc \
 	osd/OSD.cc \
 	osd/OSDCaps.cc \
+	osd/Watch.cc \
         common/ClassHandler.cc
 #	osd/RAID4PG.cc
 

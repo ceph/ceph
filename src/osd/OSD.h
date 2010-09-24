@@ -99,6 +99,8 @@ class MLog;
 class MClass;
 class MOSDPGMissing;
 
+class Watch;
+
 extern const coll_t meta_coll;
 
 class OSD : public Dispatcher {
@@ -463,6 +465,9 @@ private:
   bool get_inc_map(epoch_t e, OSDMap::Incremental &inc);
   
   void send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy=false);
+
+protected:
+  Watch *watch; /* notify-watch handler */
 
 
 protected:

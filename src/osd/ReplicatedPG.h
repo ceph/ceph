@@ -235,6 +235,7 @@ public:
     int unstable_writes, readers, writers_waiting, readers_waiting;
 
     map<entity_name_t, OSD::Session *> watchers;
+    map<entity_name_t, bool> pending_watchers;
 
     ObjectContext(const sobject_t& s, const object_locator_t& ol) :
       ref(0), registered(false), obs(s, ol),

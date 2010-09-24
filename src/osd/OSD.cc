@@ -18,6 +18,7 @@
 
 #include "OSD.h"
 #include "OSDMap.h"
+#include "Watch.h"
 
 #include "os/FileStore.h"
 
@@ -454,6 +455,7 @@ int OSD::init()
   Mutex::Locker lock(osd_lock);
 
   timer.init();
+  watch = new Watch();
 
   // mount.
   dout(2) << "mounting " << dev_path << " " << (journal_path ? journal_path : "(no journal)") << dendl;
@@ -740,6 +742,8 @@ int OSD::shutdown()
     heartbeat_messenger->shutdown();
 
   monc->shutdown();
+
+  delete watch;
 
   return r;
 }

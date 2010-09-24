@@ -31,6 +31,8 @@
 #include "messages/MOSDPing.h"
 #include "messages/MWatchNotify.h"
 
+#include "Watch.h"
+
 #include "config.h"
 
 #define DOUT_SUBSYS osd
@@ -1086,21 +1088,32 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
         map<entity_name_t, OSD::Session *>::iterator iter;
 	map<entity_name_t, watch_info_t>::iterator oi_iter;
+	Watch::Notification *notif = new Watch::Notification(ctx->reqid.name);
+	if (!notif) {
+	  result = -ENOMEM;	
+	  break;
+	}
+	osd->watch->add_notification(notif);
 
 	for (oi_iter = oi.watchers.begin();
 	     oi_iter != oi.watchers.end(); oi_iter++) {
 	  watch_info_t& w = oi_iter->second;
 	  dout(0) << "oi->watcher: " << oi_iter->first << " ver=" << w.ver << " cookie=" << w.cookie << dendl;
 	  iter = obc->watchers.find(oi_iter->first);
+
 	  if (/* w.ver < ver && */ iter != obc->watchers.end()) {
 	    /* found a session for registered watcher */
 	    OSD::Session *session = iter->second;
 	    dout(0) << " found session, sending notification" << dendl;
+	    notif->add_watcher(oi_iter->first, Watch::WATCHER_NOTIFIED); // adding before send_message to avoid race
+
 	    MWatchNotify *notify_msg = new MWatchNotify(w.cookie, w.ver);
 	    osd->client_messenger->send_message(notify_msg, session->con);
 	  } else {
+	    notif->add_watcher(oi_iter->first, Watch::WATCHER_PENDING);
 	    dout(0) << " session was not found" << dendl;
 	  }
+
 	}
 
       }
@@ -1119,11 +1132,19 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
         oi_iter = oi.watchers.find(ctx->op->get_source());
 	if (oi_iter == oi.watchers.end()) {
 	  dout(0) << "couldn't find watcher" << dendl;
-	  // result = -EINVAL;
 	  break;
 	}
 	watch_info_t& wi = oi_iter->second;
 	wi.ver = op.watch.ver;
+
+	map<entity_name_t, bool>::iterator pending_iter =
+			obc->pending_watchers.find(ctx->op->get_source());
+	if (pending_iter != obc->pending_watchers.end()) {
+	  obc->pending_watchers.erase(pending_iter);
+	  if (obc->pending_watchers.empty()) {
+	    dout(0) << "got the last reply from pending watchers, can send response now" << dendl;
+	  }
+	}
       }
       break;
 
