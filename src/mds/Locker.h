@@ -185,7 +185,14 @@ public:
   void handle_reqrdlock(SimpleLock *lock);
 
 
+
   // caps
+
+  // when to defer processing client cap release or writeback due to being
+  // frozen.  the condition must be consistent across handle_client_caps and
+  // process_request_cap_release to preserve ordering.
+  bool should_defer_client_cap_frozen(CInode *in);
+
   void process_request_cap_release(MDRequest *mdr, client_t client, const ceph_mds_request_release& r,
 				   const string &dname);
 

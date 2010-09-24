@@ -1795,6 +1795,15 @@ void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t follo
 }
 
 
+bool Locker::should_defer_client_cap_frozen(CInode *in)
+{
+  return (in->is_freezing() && (in->filelock.is_stable() &&
+				in->authlock.is_stable() &&
+				in->xattrlock.is_stable() &&
+				in->linklock.is_stable())) ||  // continue if freezing and lock is unstable
+    in->is_frozen();
+}
+
 /*
  * This function DOES put the passed message before returning
  */
@@ -1838,11 +1847,7 @@ void Locker::handle_client_caps(MClientCaps *m)
   assert(cap);
 
   // freezing|frozen?
-  if ((in->is_freezing() && (in->filelock.is_stable() &&
-			     in->authlock.is_stable() &&
-			     in->xattrlock.is_stable() &&
-			     in->linklock.is_stable())) ||  // continue if freezing and lock is unstable
-      in->is_frozen()) {
+  if (should_defer_client_cap_frozen(in)) {
     dout(7) << "handle_client_caps freezing|frozen on " << *in << dendl;
     in->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, m));
     return;
@@ -1987,6 +1992,19 @@ void Locker::handle_client_caps(MClientCaps *m)
   m->put();
 }
 
+class C_Locker_RetryRequestCapRelease : public Context {
+  Locker *locker;
+  client_t client;
+  ceph_mds_request_release item;
+public:
+  C_Locker_RetryRequestCapRelease(Locker *l, client_t c, const ceph_mds_request_release& it) :
+    locker(l), client(c), item(it) { }
+  void finish(int r) {
+    string dname;
+    locker->process_request_cap_release(NULL, client, item, dname);
+  }
+};
+
 void Locker::process_request_cap_release(MDRequest *mdr, client_t client, const ceph_mds_request_release& item,
 					 const string &dname)
 {
@@ -2001,26 +2019,7 @@ void Locker::process_request_cap_release(MDRequest *mdr, client_t client, const 
   CInode *in = mdcache->get_inode(ino);
   if (!in)
     return;
-  Capability *cap = in->get_client_cap(client);
-  if (cap) {
-    dout(10) << "process_cap_update client" << client << " " << ccap_string(caps) << " on " << *in << dendl;
-    
-    if (ceph_seq_cmp(mseq, cap->get_mseq()) < 0) {
-      dout(7) << " mseq " << mseq << " < " << cap->get_mseq() << ", dropping" << dendl;
-      return;
-    }
-    
-    cap->confirm_receipt(seq, caps);
-    adjust_cap_wanted(cap, wanted, issue_seq);
 
-    cap->inc_suppress();
-    eval(in, CEPH_CAP_LOCKS);
-    cap->dec_suppress();
-
-    // take note; we may need to reissue on this cap later
-    mdr->cap_releases[in->vino()] = cap->get_last_seq();
-  }
-  
   if (dname.length()) {
     frag_t fg = in->pick_dirfrag(dname);
     CDir *dir = in->get_dirfrag(fg);
@@ -2039,6 +2038,43 @@ void Locker::process_request_cap_release(MDRequest *mdr, client_t client, const 
      }
     }
   }
+
+  Capability *cap = in->get_client_cap(client);
+  if (!cap)
+    return;
+
+  dout(10) << "process_cap_update client" << client << " " << ccap_string(caps) << " on " << *in
+	   << (mdr ? "" : " (DEFERRED, no mdr)")
+	   << dendl;
+    
+  if (ceph_seq_cmp(mseq, cap->get_mseq()) < 0) {
+    dout(7) << " mseq " << mseq << " < " << cap->get_mseq() << ", dropping" << dendl;
+    return;
+  }
+
+  if (cap->get_cap_id() != cap_id) {
+    dout(7) << " cap_id " << cap_id << " < " << cap->get_cap_id() << ", dropping" << dendl;
+    return;
+  }
+
+  if (should_defer_client_cap_frozen(in)) {
+    dout(7) << " frozen, deferring" << dendl;
+    in->add_waiter(CInode::WAIT_UNFREEZE, new C_Locker_RetryRequestCapRelease(this, client, item));
+    return;
+  }
+    
+  cap->confirm_receipt(seq, caps);
+  adjust_cap_wanted(cap, wanted, issue_seq);
+  
+  if (mdr)
+    cap->inc_suppress();
+  eval(in, CEPH_CAP_LOCKS);
+  if (mdr)
+    cap->dec_suppress();
+  
+  // take note; we may need to reissue on this cap later
+  if (mdr)
+    mdr->cap_releases[in->vino()] = cap->get_last_seq();
 }
 
 void Locker::kick_cap_releases(MDRequest *mdr)
