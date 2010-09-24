@@ -229,7 +229,10 @@ void CInode::mark_dirty_rstat()
     state_set(STATE_DIRTYRSTAT);
     get(PIN_DIRTYRSTAT);
     CDentry *dn = get_projected_parent_dn();
-    dn->dir->dirty_rstat_inodes.push_back(&dirty_rstat_item);
+    CDir *pdir = dn->dir;
+    pdir->dirty_rstat_inodes.push_back(&dirty_rstat_item);
+
+    mdcache->mds->locker->mark_updated_scatterlock(&pdir->inode->nestlock);
   }
 }
 void CInode::clear_dirty_rstat()

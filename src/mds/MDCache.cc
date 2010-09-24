@@ -1759,7 +1759,6 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       dout(20) << " unwritable parent nestlock " << parent->inode->nestlock
 	       << ", marking dirty rstat on " << *cur << dendl;
       cur->mark_dirty_rstat();      
-      mds->locker->mark_updated_scatterlock(&parent->inode->nestlock);
    } else {
       SnapRealm *prealm = parent->inode->find_snaprealm();
       
