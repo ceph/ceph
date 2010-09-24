@@ -1463,6 +1463,12 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
 
   dout(7) << "handle_export_discover on " << m->get_path() << dendl;
 
+  if (!mds->mdcache->is_open()) {
+    dout(5) << " waiting for root" << dendl;
+    mds->mdcache->wait_for_open(new C_MDS_RetryMessage(mds, m));
+    return;
+  }
+
   // note import state
   dirfrag_t df = m->get_dirfrag();
   
