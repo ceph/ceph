@@ -72,7 +72,7 @@ endif
 
 # tcmalloc?
 if WITH_TCMALLOC
-tcmalloc_safety_flags = "-fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free"
+tcmalloc_safety_flags = -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free
 cosd_LDADD += -ltcmalloc
 cosd_CXXFLAGS += ${tcmalloc_safety_flags}
 cmds_LDADD += -ltcmalloc
