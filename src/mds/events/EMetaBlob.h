@@ -46,6 +46,15 @@ class EMetaBlob {
 
 public:
   /* fullbit - a regular dentry + inode
+   *
+   * We encode this one a bit weirdly, just because (also, it's marginally faster
+   * on multiple encodes, which I think can happen):
+   * Encode a bufferlist on struct creation with all data members, without a struct_v.
+   * When encode is called, encode struct_v and then append the bufferlist.
+   * Decode straight into the appropriate variables.
+   *
+   * So, if you add members, encode them in the constructor and then change
+   * the struct_v in the encode function!
    */
   struct fullbit {
     string  dn;         // dentry
@@ -57,12 +66,14 @@ public:
     string symlink;
     bufferlist snapbl;
     bool dirty;
+    struct default_file_layout *dir_layout;
 
     bufferlist _enc;
 
     fullbit(const string& d, snapid_t df, snapid_t dl, 
 	    version_t v, inode_t& i, fragtree_t &dft, 
-	    map<string,bufferptr> &xa, const string& sym, bufferlist &sbl, bool dr) :
+	    map<string,bufferptr> &xa, const string& sym,
+	    bufferlist &sbl, bool dr, default_file_layout *defl = NULL) :
       //dn(d), dnfirst(df), dnlast(dl), dnv(v), 
       //inode(i), dirfragtree(dft), xattrs(xa), symlink(sym), snapbl(sbl), dirty(dr) 
       _enc(1024)
@@ -78,6 +89,9 @@ public:
       if (i.is_dir()) {
 	::encode(dft, _enc);
 	::encode(sbl, _enc);
+	::encode((dl ? true : false), _enc);
+	if (defl)
+	  ::encode(*defl, _enc);
       }
       ::encode(dr, _enc);      
     }
@@ -85,7 +99,7 @@ public:
     fullbit() {}
 
     void encode(bufferlist& bl) const {
-      __u8 struct_v = 1;
+      __u8 struct_v = 2;
       ::encode(struct_v, bl);
       assert(_enc.length());
       bl.append(_enc); 
@@ -119,6 +133,14 @@ public:
       if (inode.is_dir()) {
 	::decode(dirfragtree, bl);
 	::decode(snapbl, bl);
+	if (struct_v >=2 ) {
+	  bool dir_layout_exists;
+	  ::decode(dir_layout_exists, bl);
+	  if (dir_layout_exists) {
+	    dir_layout = new default_file_layout;
+	    ::decode(*dir_layout, bl);
+	  }
+	}
       }
       ::decode(dirty, bl);
     }
@@ -521,6 +543,10 @@ private:
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
     inode_t *pi = in->get_projected_inode();
+    default_file_layout *default_layout = NULL;
+    if (in->is_dir())
+      default_layout = in->get_projected_node()->dir_layout;
+
     if (!pdft)
       pdft = &in->dirfragtree;
     if (!px)
@@ -538,7 +564,7 @@ private:
 				       dn->get_projected_version(), 
 				       *pi, *pdft, *px,
 				       in->symlink, snapbl,
-				       dirty));
+				       dirty, default_layout));
     if (pi)
       lump.get_dfull().back().inode = *pi;
     return &lump.get_dfull().back().inode;
