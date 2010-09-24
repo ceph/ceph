@@ -449,6 +449,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_kill_mdstable_at, 0, OPT_INT, 0),
 	OPTION(mds_kill_export_at, 0, OPT_INT, 0),
 	OPTION(mds_kill_import_at, 0, OPT_INT, 0),
+	OPTION(mds_kill_rename_at, 0, OPT_INT, 0),
 	OPTION(osd_data, 0, OPT_STR, ""),
 	OPTION(osd_journal, 0, OPT_STR, ""),
 	OPTION(osd_journal_size, 0, OPT_INT, 0),         // in mb

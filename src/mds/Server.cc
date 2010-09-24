@@ -4454,7 +4454,7 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
-  
+
   if (oldin &&
       oldin->is_dir() &&
       _dir_is_nonempty(mdr, oldin)) {
@@ -4469,6 +4469,8 @@ void Server::handle_client_rename(MDRequest *mdr)
     mds->mdcache->snaprealm_create(mdr, srci);
     return;
   }
+
+  assert(g_conf.mds_kill_rename_at != 1);
 
   // -- open all srcdn inode frags, if any --
   // we need these open so that auth can properly delegate from inode to dirfrags
@@ -4528,8 +4530,10 @@ void Server::handle_client_rename(MDRequest *mdr)
   }
 
   // test hack: bail after slave does prepare, so we can verify it's _live_ rollback.
-  //if (!mdr->more()->slaves.empty() && !srci->is_dir()) assert(0); 
-  //if (!mdr->more()->slaves.empty() && srci->is_dir()) assert(0); 
+  if (!mdr->more()->slaves.empty() && !srci->is_dir())
+    assert(g_conf.mds_kill_rename_at != 2);
+  if (!mdr->more()->slaves.empty() && srci->is_dir())
+    assert(g_conf.mds_kill_rename_at != 3);    
   
   // -- prepare anchor updates -- 
   if (!linkmerge || srcdnl->is_primary()) {
@@ -4566,6 +4570,8 @@ void Server::handle_client_rename(MDRequest *mdr)
 
     if (anchorgather) 
       return;  // waiting for anchor prepares
+
+    assert(g_conf.mds_kill_rename_at != 4);
   }
 
   // -- prepare journal entry --
@@ -4602,14 +4608,15 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
 {
   dout(10) << "_rename_finish " << *mdr << dendl;
 
-  // test hack: test slave commit
-  //if (!mdr->more()->slaves.empty() && !destdn->get_inode()->is_dir()) assert(0); 
-  //if (!mdr->more()->slaves.empty() && destdn->get_inode()->is_dir()) assert(0); 
-
   // apply
   _rename_apply(mdr, srcdn, destdn, straydn);
 
   CDentry::linkage_t *destdnl = destdn->get_linkage();
+  // test hack: test slave commit
+  if (!mdr->more()->slaves.empty() && !destdnl->get_inode()->is_dir())
+    assert(g_conf.mds_kill_rename_at != 5);
+  if (!mdr->more()->slaves.empty() && destdnl->get_inode()->is_dir())
+    assert(g_conf.mds_kill_rename_at != 6);
   
   // commit anchor updates?
   if (mdr->more()->src_reanchor_atid) 

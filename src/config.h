@@ -311,6 +311,7 @@ struct md_config_t {
   int mds_kill_mdstable_at;
   int mds_kill_export_at;
   int mds_kill_import_at;
+  int mds_kill_rename_at;
 
   // osd
   const char *osd_data;
