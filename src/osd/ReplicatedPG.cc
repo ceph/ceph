@@ -3393,6 +3393,10 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
     if (!op->data_subset.empty() && op->data_subset.end() >= size)
       complete = true;
 
+    // complete==true implies we are definitely complete.
+    // complete==false means nothing.  we don't know because the primary may
+    // not be pulling the entire object.
+
     send_push_op(soid, op->get_source().num(), size, op->first, complete, op->data_subset, op->clone_subsets);
   }
   op->put();
@@ -3488,6 +3492,10 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   pull_info_t *pi = 0;
   bool first = op->first;
   bool complete = op->complete;
+
+  // op->complete == true means we reached the end of the object (file size)
+  // op->complete == false means nothing; we may not have asked for the whole thing.
+
   if (is_primary()) {
     if (pulling.count(soid) == 0) {
       dout(10) << " not pulling, ignoring" << dendl;
@@ -3520,10 +3528,6 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       dout(10) << "sub_op_push need " << data_needed << ", got " << data_subset
 	       << ", overlap " << overlap << dendl;
 
-      if (complete) {
-	// FIXME: we should verify that we got the whole thing.
-      }
-
       // did we get more data than we need?
       if (!data_subset.subset_of(data_needed)) {
 	interval_set<uint64_t> extra = data_subset;
@@ -3553,6 +3557,20 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 	data.claim(result);
 	dout(20) << " new data len is " << data.length() << dendl;
       }
+
+      // did we get everything we wanted?
+      if (pi->data_subset.empty()) {
+	complete = true;
+      } else {
+	complete = pi->data_subset.end() == data_subset.end();
+      }
+
+      if (op->complete && !complete) {
+	dout(0) << " uh oh, we reached EOF on peer before we got everything we wanted" << dendl;
+	op->put();
+	return;
+      }
+
     } else {
       // head|unversioned. for now, primary will _only_ pull full copies of the head.
       assert(op->clone_subsets.empty());
