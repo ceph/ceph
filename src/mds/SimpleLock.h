@@ -223,6 +223,9 @@ public:
   virtual bool is_scatterlock() const {
     return false;
   }
+  virtual bool is_locallock() const {
+    return false;
+  }
 
   // parent
   MDSCacheObject *get_parent() { return parent; }
@@ -446,7 +449,7 @@ public:
   // xlock
   void get_xlock(Mutation *who, client_t client) { 
     assert(get_xlock_by() == 0);
-    assert(state == LOCK_XLOCK);
+    assert(state == LOCK_XLOCK || is_locallock());
     parent->get(MDSCacheObject::PIN_LOCK);
     more()->num_xlock++;
     more()->xlock_by = who; 
@@ -454,12 +457,13 @@ public:
   }
   void set_xlock_done() {
     assert(more()->xlock_by);
-    assert(state == LOCK_XLOCK);
-    state = LOCK_XLOCKDONE;
+    assert(state == LOCK_XLOCK || is_locallock());
+    if (!is_locallock())
+      state = LOCK_XLOCKDONE;
     more()->xlock_by = 0;
   }
   void put_xlock() {
-    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE);
+    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE || is_locallock());
     --more()->num_xlock;
     parent->put(MDSCacheObject::PIN_LOCK);
     if (more()->num_xlock == 0) {

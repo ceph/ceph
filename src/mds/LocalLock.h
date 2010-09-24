@@ -27,6 +27,10 @@ public:
     set_state(LOCK_LOCK); // always.
   }
 
+  bool is_locallock() const {
+    return true;
+  }
+
   bool can_wrlock() {
     return !is_xlocked();
   }
