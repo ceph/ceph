@@ -2919,7 +2919,7 @@ void Server::handle_client_setlayout(MDRequest *mdr)
   }
   
   if (cur->get_projected_inode()->size ||
-      cur->get_projected_inode()->truncate_seq) {
+      cur->get_projected_inode()->truncate_seq > 1) {
     reply_request(mdr, -ENOTEMPTY);
     return;
   }
