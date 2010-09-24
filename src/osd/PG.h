@@ -484,6 +484,7 @@ public:
     // ok
     uint64_t tail;                     // first byte of log. 
     uint64_t head;                        // byte following end of log.
+    bool has_checksums;
     map<uint64_t,eversion_t> block_map;  // offset->version of _last_ entry with _any_ bytes in each block
 
     OndiskLog() : tail(0), head(0) {}
@@ -498,7 +499,7 @@ public:
     }
 
     void encode(bufferlist& bl) const {
-      __u8 struct_v = 1;
+      __u8 struct_v = 2;
       ::encode(struct_v, bl);
       ::encode(tail, bl);
       ::encode(head, bl);
@@ -506,6 +507,7 @@ public:
     void decode(bufferlist::iterator& bl) {
       __u8 struct_v;
       ::decode(struct_v, bl);
+      has_checksums = (struct_v >= 2);
       ::decode(tail, bl);
       ::decode(head, bl);
     }
