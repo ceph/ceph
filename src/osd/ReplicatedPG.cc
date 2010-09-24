@@ -1701,7 +1701,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	      << " " << ceph_osd_op_name(op.op)
 	      << dendl;
       result = -EOPNOTSUPP;
-      assert(0);  // for now
     }
 
     if ((is_modify) &&
