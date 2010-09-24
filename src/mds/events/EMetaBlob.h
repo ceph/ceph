@@ -545,7 +545,9 @@ private:
     inode_t *pi = in->get_projected_inode();
     default_file_layout *default_layout = NULL;
     if (in->is_dir())
-      default_layout = in->get_projected_node()->dir_layout;
+      default_layout = (in->get_projected_node() ?
+                           in->get_projected_node()->dir_layout :
+                           in->default_layout);
 
     if (!pdft)
       pdft = &in->dirfragtree;

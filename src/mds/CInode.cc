@@ -229,10 +229,12 @@ inode_t *CInode::project_inode(map<string,bufferptr> *px)
       *px = xattrs;
     projected_nodes.back()->dir_layout = default_layout;
   } else {
+    default_file_layout *last_dl = projected_nodes.back()->dir_layout;
     projected_nodes.push_back(new projected_inode_t(
         new inode_t(*projected_nodes.back()->inode)));
     if (px)
       *px = *get_projected_xattrs();
+    projected_nodes.back()->dir_layout = last_dl;
   }
   projected_nodes.back()->xattrs = px;
   dout(15) << "project_inode " << projected_nodes.back()->inode << dendl;
