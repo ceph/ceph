@@ -1796,10 +1796,6 @@ void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t follo
 
 
 /*
- * note: we only get these from the client if
- * - we are calling back previously issued caps (fewer than the client previously had)
- * - or if the client releases (any of) its caps on its own
- *
  * This function DOES put the passed message before returning
  */
 void Locker::handle_client_caps(MClientCaps *m)
