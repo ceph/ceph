@@ -137,8 +137,8 @@ struct sm_t sm_filelock = {
 
 
 struct sm_state_t locallock[LOCK_MAX] = {
-                      // stable     loner  rep state  r     rp   rd   wr   l    x    caps(any,loner,xlocker,replica)
-    [LOCK_LOCK]      = { 0,         false, LOCK_LOCK, ANY,  0,   ANY, 0,   ANY, AUTH,0,0,0,0 },
+                      // stable     loner  rep state  r     rp   rd   wr   fwr  l    x    caps(any,loner,xlocker,replica)
+    [LOCK_LOCK]      = { 0,         false, LOCK_LOCK, ANY,  0,   ANY, 0,   0,   ANY, AUTH,0,0,0,0 },
 };
 
 struct sm_t sm_locallock = {
