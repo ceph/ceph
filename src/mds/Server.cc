@@ -1100,12 +1100,7 @@ void Server::handle_client_request(MClientRequest *req)
     for (vector<MClientRequest::Release>::iterator p = req->releases.begin();
 	 p != req->releases.end();
 	 p++)
-      mds->locker->process_cap_update(mdr, client,
-				      inodeno_t((uint64_t)p->item.ino), p->item.cap_id,
-				      p->item.caps, p->item.wanted,
-				      p->item.seq, 
-				      p->item.issue_seq, 
-				      p->item.mseq, p->dname);
+      mds->locker->process_request_cap_release(mdr, client, p->item, p->dname);
   }
 
 

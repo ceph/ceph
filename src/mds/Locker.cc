@@ -1987,11 +1987,17 @@ void Locker::handle_client_caps(MClientCaps *m)
   m->put();
 }
 
-void Locker::process_cap_update(MDRequest *mdr, client_t client,
-				inodeno_t ino, uint64_t cap_id, int caps, int wanted,
-				int seq, int issue_seq, int mseq,
-				const string& dname)
+void Locker::process_request_cap_release(MDRequest *mdr, client_t client, const ceph_mds_request_release& item,
+					 const string &dname)
 {
+  inodeno_t ino = (uint64_t)item.ino;
+  uint64_t cap_id = item.cap_id;
+  int caps = item.caps;
+  int wanted = item.wanted;
+  int seq = item.seq;
+  int issue_seq = item.issue_seq;
+  int mseq = item.mseq;
+
   CInode *in = mdcache->get_inode(ino);
   if (!in)
     return;

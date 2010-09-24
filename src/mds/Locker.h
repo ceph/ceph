@@ -186,10 +186,9 @@ public:
 
 
   // caps
-  void process_cap_update(MDRequest *mdr, client_t client,
-			  inodeno_t ino, uint64_t cap_id, int caps, int wanted,
-			  int seq, int issue_seq, int mseq,
-			  const string& dname);
+  void process_request_cap_release(MDRequest *mdr, client_t client, const ceph_mds_request_release& r,
+				   const string &dname);
+
   void kick_cap_releases(MDRequest *mdr);
 
   void remove_client_cap(CInode *in, client_t client);
