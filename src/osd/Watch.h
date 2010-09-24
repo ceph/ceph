@@ -23,6 +23,7 @@
 
 /* keeps track and accounts sessions, watchers and notifiers */
 class Watch {
+  uint64_t notif_id;
 
 public:
   enum WatcherState {
@@ -33,6 +34,7 @@ public:
   struct Notification {
     std::map<entity_name_t, WatcherState> watchers;
     entity_name_t name;
+    uint64_t id;
 
     void add_watcher(const entity_name_t& name, WatcherState state) { watchers[name] = state; }
 
@@ -42,18 +44,26 @@ public:
 private:
   std::multimap<entity_name_t, Notification *> notifs;
   std::multimap<entity_name_t, Notification *> wtn; /* watchers to notifications */
+  std::map<uint64_t, Notification *> itn; /* notif_id to notifications */
 
   std::map<OSD::Session *, entity_name_t> ste; /* sessions to entities */
   std::map<entity_name_t, OSD::Session *> ets; /* entities to sessions */
 
 public:
 
-  Watch() {}
+  Watch() : notif_id(0) {}
 
   void register_session(OSD::Session *session, entity_name_t& name);
   void remove_session(OSD::Session *session);
   void add_notification(Notification *notif);
   bool ack_notification(entity_name_t& watcher, Notification *notif);
+
+  Notification *get_notif(uint64_t id) {
+    map<uint64_t, Notification *>::iterator iter = itn.find(id);
+    if (iter != itn.end())
+      return iter->second;
+    return NULL;
+  }
 };
 
 
