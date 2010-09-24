@@ -3503,12 +3503,15 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       interval_set<uint64_t> data_needed;
       calc_clone_subsets(ssc->snapset, soid, missing, data_needed, clone_subsets);
       put_snapset_context(ssc);
+
+      interval_set<uint64_t> overlap;
+      overlap.intersection_of(data_subset, data_needed);
       
-      dout(10) << "sub_op_push need " << data_needed << ", got " << data_subset << dendl;
-      if (!data_needed.subset_of(data_subset)) {
-	dout(0) << "sub_op_push we did not get enough of " << soid << " object data" << dendl;
-	op->put();
-	return;
+      dout(10) << "sub_op_push need " << data_needed << ", got " << data_subset
+	       << ", overlap " << overlap << dendl;
+
+      if (op->complete) {
+	// FIXME: we should verify that we got the whole thing.
       }
 
       // did we get more data than we need?
