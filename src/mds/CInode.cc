@@ -227,6 +227,7 @@ inode_t *CInode::project_inode(map<string,bufferptr> *px)
     projected_nodes.push_back(new projected_inode_t(new inode_t(inode)));
     if (px)
       *px = xattrs;
+    projected_nodes.back()->dir_layout = default_layout;
   } else {
     projected_nodes.push_back(new projected_inode_t(
         new inode_t(*projected_nodes.back()->inode)));
@@ -250,6 +251,11 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
   if (px) {
     xattrs = *px;
     delete px;
+  }
+
+  if (projected_nodes.front()->dir_layout != default_layout) {
+    delete default_layout;
+    default_layout = projected_nodes.front()->dir_layout;
   }
 
   if (projected_nodes.front()->snapnode)

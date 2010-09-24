@@ -1147,6 +1147,9 @@ void Server::dispatch_client_request(MDRequest *mdr)
   case CEPH_MDS_OP_SETLAYOUT:
     handle_client_setlayout(mdr);
     break;
+  case CEPH_MDS_OP_SETDIRLAYOUT:
+    handle_client_setdirlayout(mdr);
+    break;
   case CEPH_MDS_OP_SETXATTR:
     handle_client_setxattr(mdr);
     break;
@@ -2956,6 +2959,69 @@ void Server::handle_client_setlayout(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
+}
+
+void Server::handle_client_setdirlayout(MDRequest *mdr)
+{
+  MClientRequest *req = mdr->client_request;
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  if (!cur) return;
+
+  if (mdr->snapid != CEPH_NOSNAP) {
+    reply_request(mdr, -EROFS);
+    return;
+  }
+
+  if (!cur->is_dir()) {
+    reply_request(mdr, -ENOTDIR);
+    return;
+  }
+
+  xlocks.insert(&cur->policylock);
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  // validate layout
+  default_file_layout *layout = new default_file_layout;
+  if (cur->get_projected_dir_layout())
+    layout->layout = *cur->get_projected_dir_layout();
+  else
+    layout->layout = g_default_file_layout;
+
+  if (req->head.args.setlayout.layout.fl_object_size > 0)
+    layout->layout.fl_object_size = req->head.args.setlayout.layout.fl_object_size;
+  if (req->head.args.setlayout.layout.fl_stripe_unit > 0)
+    layout->layout.fl_stripe_unit = req->head.args.setlayout.layout.fl_stripe_unit;
+  if (req->head.args.setlayout.layout.fl_stripe_count > 0)
+    layout->layout.fl_stripe_count=req->head.args.setlayout.layout.fl_stripe_count;
+  if (req->head.args.setlayout.layout.fl_cas_hash > 0)
+    layout->layout.fl_cas_hash = req->head.args.setlayout.layout.fl_cas_hash;
+  if (req->head.args.setlayout.layout.fl_object_stripe_unit > 0)
+    layout->layout.fl_object_stripe_unit = req->head.args.setlayout.layout.fl_object_stripe_unit;
+  if (req->head.args.setlayout.layout.fl_pg_preferred > 0)
+    layout->layout.fl_pg_preferred = req->head.args.setlayout.layout.fl_pg_preferred;
+  if (req->head.args.setlayout.layout.fl_pg_pool > 0)
+    layout->layout.fl_pg_pool = req->head.args.setlayout.layout.fl_pg_pool;
+  if (!ceph_file_layout_is_valid(&layout->layout)) {
+    dout(10) << "bad layout" << dendl;
+    reply_request(mdr, -EINVAL);
+    return;
+  }
+
+  cur->project_inode();
+  cur->get_projected_node()->dir_layout = layout;
+  cur->get_projected_inode()->version = cur->pre_dirty();
+
+  // log + wait
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "setlayout");
+  mdlog->start_entry(le);
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
+  mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
+
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 

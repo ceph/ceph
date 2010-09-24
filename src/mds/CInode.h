@@ -232,6 +232,7 @@ public:
     inode_t *inode;
     map<string,bufferptr> *xattrs;
     sr_t *snapnode;
+    default_file_layout *dir_layout;
 
     projected_inode_t() : inode(NULL), xattrs(NULL), snapnode(NULL) {}
     projected_inode_t(inode_t *in, sr_t *sn) : inode(in), xattrs(NULL), snapnode(sn) {}
@@ -242,6 +243,26 @@ public:
   
   inode_t *project_inode(map<string,bufferptr> *px=0);
   void pop_and_dirty_projected_inode(LogSegment *ls);
+
+  projected_inode_t *get_projected_node() {
+    if (projected_nodes.empty())
+      return NULL;
+    else
+      return projected_nodes.back();
+  }
+
+  ceph_file_layout *get_projected_dir_layout() {
+    if (!inode.is_dir()) return NULL;
+    if (projected_nodes.empty()) {
+      if (default_layout)
+        return &default_layout->layout;
+      else
+        return NULL;
+    }
+    else if (projected_nodes.back()->dir_layout)
+      return &projected_nodes.back()->dir_layout->layout;
+    else return NULL;
+  }
 
   version_t get_projected_version() {
     if (projected_nodes.empty())

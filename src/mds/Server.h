@@ -141,6 +141,7 @@ public:
 
   void handle_client_setattr(MDRequest *mdr);
   void handle_client_setlayout(MDRequest *mdr);
+  void handle_client_setdirlayout(MDRequest *mdr);
   void handle_client_setxattr(MDRequest *mdr);
   void handle_client_removexattr(MDRequest *mdr);
 
