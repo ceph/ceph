@@ -3163,7 +3163,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       dout(10) << "sub_op_push need " << data_needed << ", got " << data_subset
 	       << ", overlap " << overlap << dendl;
 
-      if (op->complete) {
+      if (complete) {
 	// FIXME: we should verify that we got the whole thing.
       }
 
@@ -3200,13 +3200,6 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       // head|unversioned. for now, primary will _only_ pull full copies of the head.
       assert(op->clone_subsets.empty());
     }
-
-    if (pi->data_subset.empty()) {
-      complete = true;
-    } else {
-      complete = pi->data_subset.end() == data_subset.end();
-    }
-    assert(complete == op->complete);
   }
   dout(15) << " data_subset " << data_subset
 	   << " clone_subsets " << clone_subsets
