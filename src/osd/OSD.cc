@@ -966,11 +966,12 @@ void OSD::load_pgs()
   for (vector<coll_t>::iterator it = ls.begin();
        it != ls.end();
        it++) {
-    if (*it == meta_coll)
+    pg_t pgid;
+    snapid_t snap;
+    if (!it->is_pg(pgid, snap))
       continue;
-    if (it->snap != CEPH_NOSNAP)
+    if (snap != CEPH_NOSNAP)
       continue;
-    pg_t pgid = it->pgid;
     PG *pg = _open_lock_pg(pgid);
 
     // read pg state, log

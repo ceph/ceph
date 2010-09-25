@@ -248,6 +248,15 @@ struct coll_t {
     return coll_t(TYPE_PG, p, s);
   }
 
+  bool is_pg(pg_t& p, snapid_t& sn) {
+    if (type == TYPE_PG) {
+      p = pgid;
+      sn = snap;
+      return true;
+    }
+    return false;
+  }
+
   ostream& print(ostream& out) const {
     switch (type) {
     case TYPE_META:
