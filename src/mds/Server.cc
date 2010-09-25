@@ -1799,7 +1799,9 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
     }
 
     // auth_pin?
-    if (ref->is_frozen()) {
+    //   do NOT proceed if freezing, as cap release may defer in that case, and
+    //   we could deadlock when we try to lock @ref.
+    if (ref->is_frozen() || ref->is_freezing()) {
       dout(7) << "waiting for !frozen/authpinnable on " << *ref << dendl;
       ref->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
       return 0;

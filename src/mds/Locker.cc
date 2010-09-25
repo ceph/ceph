@@ -1797,6 +1797,16 @@ void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t follo
 
 bool Locker::should_defer_client_cap_frozen(CInode *in)
 {
+  /*
+   * This policy needs to be AT LEAST as permissive as allowing a client request
+   * to go forward, or else a client request can release something, the release
+   * gets deferred, but the request gets processed and deadlocks because when the
+   * caps can't get revoked.
+   *
+   * Currently, a request wait if anything locked is freezing (can't
+   * auth_pin), which would avoid any deadlock with cap release.  Thus @in
+   * _MUST_ be in the lock/auth_pin set.
+   */
   return (in->is_freezing() && (in->filelock.is_stable() &&
 				in->authlock.is_stable() &&
 				in->xattrlock.is_stable() &&
