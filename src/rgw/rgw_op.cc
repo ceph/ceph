@@ -435,7 +435,6 @@ int RGWCopyObj::init_common()
   RGWAccessControlPolicy dest_policy;
   bool ret;
   bufferlist aclbl;
-  map<string, bufferlist> attrs;
   bufferlist bl;
   RGWAccessControlPolicy src_policy;
   string empty_str;
