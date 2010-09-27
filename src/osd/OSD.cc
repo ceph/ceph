@@ -3722,7 +3722,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 	    dout(10) << " purged_snaps " << pg->info.purged_snaps
 		     << " -> " << info.purged_snaps
 		     << " removed " << p << dendl;
-	    snapid_t sn = p.start();
+	    snapid_t sn = p.range_start();
 	    coll_t c = coll_t::build_snap_pg_coll(info.pgid, sn);
 	    t->remove_collection(c);
 	    

@@ -907,7 +907,7 @@ protected:
   hash_map<int, Fh*> fd_map;
   
   int get_fd() {
-    int fd = free_fd_set.start();
+    int fd = free_fd_set.range_start();
     free_fd_set.erase(fd, 1);
     return fd;
   }

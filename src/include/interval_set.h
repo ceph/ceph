@@ -151,12 +151,12 @@ class interval_set {
   bool empty() const {
     return m.empty();
   }
-  T start() const {
+  T range_start() const {
     assert(!empty());
     typename map<T,T>::const_iterator p = m.begin();
     return p->first;
   }
-  T end() const {
+  T range_end() const {
     assert(!empty());
     typename map<T,T>::const_iterator p = m.end();
     p--;

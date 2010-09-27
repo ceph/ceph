@@ -11,7 +11,6 @@
  * 
  */
 
-
 #include "ReplicatedPG.h"
 #include "OSD.h"
 #include "PGLS.h"
@@ -494,7 +493,7 @@ bool ReplicatedPG::snap_trimmer()
 	 is_primary() &&
 	 is_active()) {
 
-    snapid_t sn = snap_trimq.start();
+    snapid_t sn = snap_trimq.range_start();
     coll_t c = coll_t::build_snap_pg_coll(info.pgid, sn);
     vector<sobject_t> ls;
     osd->store->collection_list(c, ls);
@@ -2963,15 +2962,15 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
 
     bool complete = false;
     if (pi->data_subset.empty() ||
-	pi->data_subset.end() == pi->data_subset_pushing.end())
+	pi->data_subset.range_end() == pi->data_subset_pushing.range_end())
       complete = true;
 
     if (!complete) {
       // push more
-      uint64_t from = pi->data_subset_pushing.end();
+      uint64_t from = pi->data_subset_pushing.range_end();
       pi->data_subset_pushing.span_of(pi->data_subset, from, g_conf.osd_recovery_max_chunk);
       dout(10) << " pushing more, " << pi->data_subset_pushing << " of " << pi->data_subset << dendl;
-      complete = pi->data_subset.end() == pi->data_subset_pushing.end();
+      complete = pi->data_subset.range_end() == pi->data_subset_pushing.range_end();
       send_push_op(soid, peer, pi->size, false, complete, pi->data_subset_pushing, pi->clone_subsets);
     } else {
       // done!
@@ -3032,7 +3031,7 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
     uint64_t size = st.st_size;
 
     bool complete = false;
-    if (!op->data_subset.empty() && op->data_subset.end() >= size)
+    if (!op->data_subset.empty() && op->data_subset.range_end() >= size)
       complete = true;
 
     // complete==true implies we are definitely complete.
@@ -3205,7 +3204,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       if (pi->data_subset.empty()) {
 	complete = true;
       } else {
-	complete = pi->data_subset.end() == data_subset.end();
+	complete = pi->data_subset.range_end() == data_subset.range_end();
       }
 
       if (op->complete && !complete) {
@@ -3362,7 +3361,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 	uptodate_set.insert(osd->get_nodeid());
     } else {
       // pull more
-      pi->data_subset_pulling.span_of(pi->data_subset, data_subset.end(), g_conf.osd_recovery_max_chunk);
+      pi->data_subset_pulling.span_of(pi->data_subset, data_subset.range_end(), g_conf.osd_recovery_max_chunk);
       dout(10) << " pulling more, " << pi->data_subset_pulling << " of " << pi->data_subset << dendl;
       send_pull_op(soid, v, false, pi->data_subset_pulling, pi->from);
     }
