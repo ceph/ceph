@@ -3135,6 +3135,7 @@ void Locker::simple_xlock(SimpleLock *lock)
 
   if (!gather) {
     lock->set_state(LOCK_PREXLOCK);
+    assert("shouldn't be called if we are already xlockable" == 0);
   }
 }
 
