@@ -712,6 +712,7 @@ void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
      s->acl = new RGWAccessControlPolicy;
   }
   s->canned_acl.clear();
+  s->expect_cont = false;
 
   provider_init_state();
 }
