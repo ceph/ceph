@@ -3214,7 +3214,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       }
 
     } else {
-      // head|unversioned. for now, primary will _only_ pull full copies of the head.
+      // head|unversioned. for now, primary will _only_ pull data copies of the head (no cloning)
       assert(op->clone_subsets.empty());
     }
   }
