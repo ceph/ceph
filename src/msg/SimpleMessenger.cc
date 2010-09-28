@@ -808,11 +808,14 @@ int SimpleMessenger::Pipe::accept()
   existing->stop();
   existing->unregister_pipe();
     
-  //set ourself to take over other Connection, for older messages
-  existing->connection_state->clear_pipe();
-  existing->connection_state->pipe = get();
-  existing->connection_state->put();
-  existing->connection_state = NULL;
+  if (!existing->policy.lossy) { /* if we're lossy, we can lose messages and
+                                    should let the daemon handle it itself.
+    Otherwise, take over other Connection so we don't lose older messages */
+    existing->connection_state->clear_pipe();
+    existing->connection_state->pipe = get();
+    existing->connection_state->put();
+    existing->connection_state = NULL;
+  }
 
  open:
   // open
