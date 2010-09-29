@@ -544,6 +544,7 @@ noinst_HEADERS = \
         include/Distribution.h\
 	include/LogEntry.h\
 	include/Spinlock.h\
+	include/addr_parsing.h\
 	include/assert.h\
         include/atomic.h\
         include/bitmapper.h\
