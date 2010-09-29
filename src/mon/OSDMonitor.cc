@@ -426,10 +426,10 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
     }
   } else { //remove the report
     multimap<int, pair<int, int> >::iterator i = failed_notes.lower_bound(target_osd);
-    while ((i->first == target_osd) && (i->second.first != reporter) 
-	   && i != failed_notes.end())
+    while ((i != failed_notes.end()) && (i->first == target_osd)
+                                && (i->second.first != reporter))
       ++i;
-    if (i->second.first != reporter)
+    if ((i == failed_notes.end()) || (i->second.first != reporter))
       dout(0) << "got an OSD not-failed report from osd" << reporter
               << " that hasn't reported failure! (or in previous epoch?)" << dendl;
     else failed_notes.erase(i);
