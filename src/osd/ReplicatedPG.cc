@@ -3209,6 +3209,22 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
       if (op->complete && !complete) {
 	dout(0) << " uh oh, we reached EOF on peer before we got everything we wanted" << dendl;
+
+	// hmm, do we have another source?
+	int from = op->get_source().num();
+	set<int>& reps = missing_loc[soid];
+	dout(0) << " we have reps on osds " << reps << dendl;
+	set<int>::iterator q = reps.begin();
+	if (q != reps.end() && *q == from) {
+	  q++;
+	  if (q != reps.end()) {
+	    dout(0) << " trying next replica on osd" << *q << dendl;
+	    reps.erase(reps.begin());  // forget about the bad replica...
+	    finish_recovery_op(soid);  // close out this attempt,
+	    pulling.erase(soid);
+	    pull(soid);	               // and try again.
+	  }
+	}
 	op->put();
 	return;
       }
