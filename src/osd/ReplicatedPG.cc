@@ -1650,9 +1650,9 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
 
 void ReplicatedPG::add_interval_usage(interval_set<uint64_t>& s, pg_stat_t& stats)
 {
-  for (map<uint64_t,uint64_t>::iterator p = s.m.begin(); p != s.m.end(); p++) {
-    stats.num_bytes += p->second;
-    stats.num_kb += SHIFT_ROUND_UP(p->first+p->second, 10) - (p->first >> 10);
+  for (interval_set<uint64_t>::const_iterator p = s.begin(); p != s.end(); ++p) {
+    stats.num_bytes += p.get_len();
+    stats.num_kb += SHIFT_ROUND_UP(p.get_start() + p.get_len(), 10) - (p.get_start() >> 10);
   }
 }
 
@@ -2894,15 +2894,16 @@ void ReplicatedPG::send_push_op(const sobject_t& soid, int peer,
   bufferlist bl;
   map<string,bufferptr> attrset;
 
-  for (map<uint64_t,uint64_t>::iterator p = data_subset.m.begin();
-       p != data_subset.m.end();
-       p++) {
+  for (interval_set<uint64_t>::iterator p = data_subset.begin();
+       p != data_subset.end();
+       ++p) {
     bufferlist bit;
-    osd->store->read(coll_t::build_pg_coll(info.pgid), soid, p->first, p->second, bit);
-    if (p->second != bit.length()) {
-      dout(10) << " extent " << p->first << "~" << p->second
-	       << " is actually " << p->first << "~" << bit.length() << dendl;
-      p->second = bit.length();
+    osd->store->read(coll_t::build_pg_coll(info.pgid),
+		     soid, p.get_start(), p.get_len(), bit);
+    if (p.get_len() != bit.length()) {
+      dout(10) << " extent " << p.get_start() << "~" << p.get_len()
+	       << " is actually " << p.get_start() << "~" << bit.length() << dendl;
+      p.set_len(bit.length());
     }
     bl.claim_append(bit);
   }
@@ -3178,23 +3179,23 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
 	bufferlist result;
 	int off = 0;
-	for (map<uint64_t,uint64_t>::iterator p = data_subset.m.begin();
-	     p != data_subset.m.end();
-	     p++) {
+	for (interval_set<uint64_t>::const_iterator p = data_subset.begin();
+	     p != data_subset.end();
+	     ++p) {
 	  interval_set<uint64_t> x;
-	  x.insert(p->first, p->second);
+	  x.insert(p.get_start(), p.get_len());
 	  x.intersection_of(data_needed);
-	  dout(20) << " data_subset object extent " << p->first << "~" << p->second << " need " << x << dendl;
+	  dout(20) << " data_subset object extent " << p.get_start() << "~" << p.get_len() << " need " << x << dendl;
 	  if (!x.empty()) {
-	    uint64_t first = x.m.begin()->first;
-	    uint64_t len = x.m.begin()->second;
+	    uint64_t first = x.begin().get_start();
+	    uint64_t len = x.begin().get_len();
 	    bufferlist sub;
-	    int boff = off + (first - p->first);
+	    int boff = off + (first - p.get_start());
 	    dout(20) << "   keeping buffer extent " << boff << "~" << len << dendl;
 	    sub.substr_of(data, boff, len);
 	    result.claim_append(sub);
 	  }
-	  off += p->second;
+	  off += p.get_len();
 	}
 	data.claim(result);
 	dout(20) << " new data len is " << data.length() << dendl;
@@ -3255,14 +3256,14 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
   // write data
   uint64_t boff = 0;
-  for (map<uint64_t,uint64_t>::iterator p = data_subset.m.begin();
-       p != data_subset.m.end(); 
-       p++) {
+  for (interval_set<uint64_t>::const_iterator p = data_subset.begin();
+       p != data_subset.end();
+       ++p) {
     bufferlist bit;
-    bit.substr_of(data, boff, p->second);
-    dout(15) << " write " << p->first << "~" << p->second << dendl;
-    t->write(target, soid, p->first, p->second, bit);
-    boff += p->second;
+    bit.substr_of(data, boff, p.get_len());
+    dout(15) << " write " << p.get_start() << "~" << p.get_len() << dendl;
+    t->write(target, soid, p.get_start(), p.get_len(), bit);
+    boff += p.get_len();
   }
   
   if (complete) {
@@ -3273,15 +3274,20 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     }
 
     // clone bits
-    for (map<sobject_t, interval_set<uint64_t> >::iterator p = clone_subsets.begin();
+    for (map<sobject_t, interval_set<uint64_t> >::const_iterator p = clone_subsets.begin();
 	 p != clone_subsets.end();
-	 p++)
-      for (map<uint64_t,uint64_t>::iterator q = p->second.m.begin();
-	   q != p->second.m.end(); 
-	 q++) {
-	dout(15) << " clone_range " << p->first << " " << q->first << "~" << q->second << dendl;
-	t->clone_range(coll_t::build_pg_coll(info.pgid), p->first, soid, q->first, q->second);
+	 ++p)
+    {
+      for (interval_set<uint64_t>::const_iterator q = p->second.begin();
+	   q != p->second.end();
+	   ++q)
+      {
+	dout(15) << " clone_range " << p->first << " "
+		 << q.get_start() << "~" << q.get_len() << dendl;
+	t->clone_range(coll_t::build_pg_coll(info.pgid), p->first, soid,
+		       q.get_start(), q.get_len());
       }
+    }
 
     if (data_subset.empty())
       t->touch(coll_t::build_pg_coll(info.pgid), soid);
@@ -3877,12 +3883,12 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
       // subtract off any clone overlap
       for (map<snapid_t,interval_set<uint64_t> >::iterator q = snapset.clone_overlap.begin();
 	   q != snapset.clone_overlap.end();
-	   q++) {
-	for (map<uint64_t,uint64_t>::iterator r = q->second.m.begin();
-	     r != q->second.m.end();
-	     r++) {
-	  stat.num_bytes -= r->second;
-	  stat.num_kb -= SHIFT_ROUND_UP(r->first+r->second, 10) - (r->first >> 10);
+	   ++q) {
+	for (interval_set<uint64_t>::const_iterator r = q->second.begin();
+	     r != q->second.end();
+	     ++r) {
+	  stat.num_bytes -= r.get_len();
+	  stat.num_kb -= SHIFT_ROUND_UP(r.get_start()+r.get_len(), 10) - (r.get_start() >> 10);
 	}	  
       }
     }

@@ -798,7 +798,7 @@ struct pg_pool_t {
     __u8 struct_v = CEPH_PG_POOL_VERSION;
     ::encode(struct_v, bl);
     v.num_snaps = snaps.size();
-    v.num_removed_snap_intervals = removed_snaps.m.size();
+    v.num_removed_snap_intervals = removed_snaps.num_intervals();
     ::encode(v, bl);
     ::encode_nohead(snaps, bl);
     removed_snaps.encode_nohead(bl);
