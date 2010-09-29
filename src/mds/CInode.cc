@@ -1915,6 +1915,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   bool pxattr = xattrlock.is_xlocked_by_client(client) || get_loner() == client;
 
   bool plocal = versionlock.get_last_wrlock_client() == client;
+  bool ppolicy = policylock.is_xlocked_by_client(client) || get_loner()==client;
   
   inode_t *i = (pfile|pauth|plink|pxattr|plocal) ? pi : oi;
   i->ctime.encode_timeval(&e.ctime);
@@ -1926,7 +1927,16 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   // file
   i = pfile ? pi:oi;
-  e.layout = i->layout;
+  if (is_file()) {
+    e.layout = i->layout;
+  } else {
+    if (ppolicy && get_projected_dir_layout())
+      e.layout = *get_projected_dir_layout();
+    else if (default_layout)
+      e.layout = default_layout->layout;
+    else
+      memset(&e.layout, 0, sizeof(e.layout));
+  }
   e.size = i->size;
   e.truncate_seq = i->truncate_seq;
   e.truncate_size = i->truncate_size;
