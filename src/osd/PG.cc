@@ -1364,6 +1364,11 @@ void PG::peer(ObjectStore::Transaction& t, list<Context*>& tfin,
       if (osd->osdmap->is_down(peer))
 	continue;
 
+      if (it->second.dne()) {
+        dout(10) << " not requesting summary/backlog; pg dne on osd" << peer << dendl;
+	continue;
+      }
+
       if (peer_summary_requested.count(peer)) {
         dout(10) << " already requested summary/backlog from osd" << peer << dendl;
         continue;
