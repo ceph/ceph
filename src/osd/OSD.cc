@@ -100,10 +100,8 @@ static ostream& _prefix(ostream& out, int whoami, OSDMap *osdmap) {
   return out << dbeginl << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " ";
 }
 
-
-const coll_t meta_coll(coll_t::TYPE_META);
-const coll_t temp_coll(coll_t::TYPE_TEMP);
-
+const coll_t coll_t::META_COLL("meta");
+const coll_t coll_t::TEMP_COLL("temp");
 
 const struct CompatSet::Feature ceph_osd_feature_compat[] = {
   END_FEATURE
@@ -180,7 +178,7 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
     object_t oid("disk_bw_test");
     for (int i=0; i<1000; i++) {
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      t->write(meta_coll, sobject_t(oid, 0), i*bl.length(), bl.length(), bl);
+      t->write(coll_t::META_COLL, sobject_t(oid, 0), i*bl.length(), bl.length(), bl);
       store->queue_transaction(NULL, t);
     }
     store->sync();
@@ -188,7 +186,7 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
     end -= start;
     cout << "measured " << (1000.0 / (double)end) << " mb/sec" << std::endl;
     ObjectStore::Transaction tr;
-    tr.remove(meta_coll, sobject_t(oid, 0));
+    tr.remove(coll_t::META_COLL, sobject_t(oid, 0));
     store->apply_transaction(tr);
     
     // set osd weight
@@ -199,9 +197,9 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
   ::encode(sb, bl);
 
   ObjectStore::Transaction t;
-  t.create_collection(meta_coll);
-  t.write(meta_coll, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
-  t.create_collection(temp_coll);
+  t.create_collection(coll_t::META_COLL);
+  t.write(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+  t.create_collection(coll_t::TEMP_COLL);
   int r = store->apply_transaction(t);
   store->umount();
   delete store;
@@ -493,10 +491,10 @@ int OSD::init()
   clear_temp();
 
   // make sure (newish) temp dir exists
-  if (!store->collection_exists(coll_t(coll_t::TYPE_TEMP))) {
+  if (!store->collection_exists(coll_t::TEMP_COLL)) {
     dout(10) << "creating temp pg dir" << dendl;
     ObjectStore::Transaction t;
-    t.create_collection(coll_t(coll_t::TYPE_TEMP));
+    t.create_collection(coll_t::TEMP_COLL);
     store->apply_transaction(t);
   }
 
@@ -755,13 +753,13 @@ void OSD::write_superblock(ObjectStore::Transaction& t)
 
   bufferlist bl;
   ::encode(superblock, bl);
-  t.write(meta_coll, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+  t.write(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
 }
 
 int OSD::read_superblock()
 {
   bufferlist bl;
-  int r = store->read(meta_coll, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
+  int r = store->read(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
   if (r < 0)
     return r;
 
@@ -802,7 +800,7 @@ void OSD::clear_temp()
   dout(10) << "clear_temp" << dendl;
 
   vector<sobject_t> objects;
-  store->collection_list(temp_coll, objects);
+  store->collection_list(coll_t::TEMP_COLL, objects);
 
   dout(10) << objects.size() << " objects" << dendl;
   if (objects.empty())
@@ -813,7 +811,7 @@ void OSD::clear_temp()
   for (vector<sobject_t>::iterator p = objects.begin();
        p != objects.end();
        p++)
-    t->collection_remove(temp_coll, *p);
+    t->collection_remove(coll_t::TEMP_COLL, *p);
   int r = store->queue_transaction(NULL, t);
   assert(r == 0);
   store->sync_and_flush();
@@ -901,8 +899,8 @@ PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
   PG *pg = _open_lock_pg(pgid);
 
   // create collection
-  assert(!store->collection_exists(coll_t::build_pg_coll(pgid)));
-  t.create_collection(coll_t::build_pg_coll(pgid));
+  assert(!store->collection_exists(coll_t(pgid)));
+  t.create_collection(coll_t(pgid));
 
   pg->write_info(t);
   pg->write_log(t);
@@ -919,8 +917,8 @@ PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transa
 
   PG *pg = _open_lock_pg(pgid, true);
 
-  assert(!store->collection_exists(coll_t::build_pg_coll(pgid)));
-  t.create_collection(coll_t::build_pg_coll(pgid));
+  assert(!store->collection_exists(coll_t(pgid)));
+  t.create_collection(coll_t(pgid));
 
   pg->set_role(0);
   pg->acting.swap(acting);
@@ -1791,9 +1789,9 @@ void OSD::handle_command(MMonCommand *m)
       object_t oid(nm);
       sobject_t soid(oid, 0);
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      t->write(meta_coll, soid, 0, bsize, bl);
+      t->write(coll_t::META_COLL, soid, 0, bsize, bl);
       store->queue_transaction(NULL, t);
-      cleanupt->remove(meta_coll, soid);
+      cleanupt->remove(coll_t::META_COLL, soid);
     }
     store->sync_and_flush();
     utime_t end = g_clock.now();
@@ -2348,7 +2346,7 @@ void OSD::handle_osd_map(MOSDMap *m)
        p != m->maps.end();
        p++) {
     sobject_t poid = get_osdmap_pobject_name(p->first);
-    if (store->exists(meta_coll, poid)) {
+    if (store->exists(coll_t::META_COLL, poid)) {
       dout(10) << "handle_osd_map already had full map epoch " << p->first << dendl;
       logger->inc(l_osd_mapfdup);
       bufferlist bl;
@@ -2359,7 +2357,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
     dout(10) << "handle_osd_map got full map epoch " << p->first << dendl;
     ObjectStore::Transaction *ft = new ObjectStore::Transaction;
-    ft->write(meta_coll, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
+    ft->write(coll_t::META_COLL, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
     int r = store->queue_transaction(NULL, ft);
     assert(r == 0);
 
@@ -2375,7 +2373,7 @@ void OSD::handle_osd_map(MOSDMap *m)
        p != m->incremental_maps.end();
        p++) {
     sobject_t poid = get_inc_osdmap_pobject_name(p->first);
-    if (store->exists(meta_coll, poid)) {
+    if (store->exists(coll_t::META_COLL, poid)) {
       dout(10) << "handle_osd_map already had incremental map epoch " << p->first << dendl;
       logger->inc(l_osd_mapidup);
       bufferlist bl;
@@ -2386,7 +2384,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
     dout(10) << "handle_osd_map got incremental map epoch " << p->first << dendl;
     ObjectStore::Transaction *ft = new ObjectStore::Transaction;
-    ft->write(meta_coll, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
+    ft->write(coll_t::META_COLL, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
     int r = store->queue_transaction(NULL, ft);
     assert(r == 0);
 
@@ -2412,7 +2410,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     OSDMap::Incremental inc;
 
     if (m->incremental_maps.count(cur+1) ||
-        store->exists(meta_coll, get_inc_osdmap_pobject_name(cur+1))) {
+        store->exists(coll_t::META_COLL, get_inc_osdmap_pobject_name(cur+1))) {
       dout(10) << "handle_osd_map decoding inc map epoch " << cur+1 << dendl;
       
       bufferlist bl;
@@ -2438,7 +2436,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       bl.clear();
       osdmap->encode(bl);
       ObjectStore::Transaction ft;
-      ft.write(meta_coll, get_osdmap_pobject_name(cur+1), 0, bl.length(), bl);
+      ft.write(coll_t::META_COLL, get_osdmap_pobject_name(cur+1), 0, bl.length(), bl);
       int r = store->apply_transaction(ft);
       assert(r == 0);
 
@@ -2458,7 +2456,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       }
     }
     else if (m->maps.count(cur+1) ||
-             store->exists(meta_coll, get_osdmap_pobject_name(cur+1))) {
+             store->exists(coll_t::META_COLL, get_osdmap_pobject_name(cur+1))) {
       dout(10) << "handle_osd_map decoding full map epoch " << cur+1 << dendl;
       bufferlist bl;
       if (m->maps.count(cur+1))
@@ -2945,12 +2943,12 @@ void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool la
 
 bool OSD::get_map_bl(epoch_t e, bufferlist& bl)
 {
-  return store->read(meta_coll, get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
+  return store->read(coll_t::META_COLL, get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
 }
 
 bool OSD::get_inc_map_bl(epoch_t e, bufferlist& bl)
 {
-  return store->read(meta_coll, get_inc_osdmap_pobject_name(e), 0, 0, bl) >= 0;
+  return store->read(coll_t::META_COLL, get_inc_osdmap_pobject_name(e), 0, 0, bl) >= 0;
 }
 
 OSDMap *OSD::get_map(epoch_t epoch)
@@ -3213,7 +3211,7 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
 
   // split objects
   vector<sobject_t> olist;
-  store->collection_list(coll_t::build_pg_coll(parent->info.pgid), olist);  
+  store->collection_list(coll_t(parent->info.pgid), olist);
 
   for (vector<sobject_t>::iterator p = olist.begin(); p != olist.end(); p++) {
     sobject_t poid = *p;
@@ -3226,20 +3224,20 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
       bufferlist bv;
 
       struct stat st;
-      store->stat(coll_t::build_pg_coll(parentid), poid, &st);
-      store->getattr(coll_t::build_pg_coll(parentid), poid, OI_ATTR, bv);
+      store->stat(coll_t(parentid), poid, &st);
+      store->getattr(coll_t(parentid), poid, OI_ATTR, bv);
       object_info_t oi(bv);
 
-      t.collection_add(coll_t::build_pg_coll(pgid), coll_t::build_pg_coll(parentid), poid);
-      t.collection_remove(coll_t::build_pg_coll(parentid), poid);
+      t.collection_add(coll_t(pgid), coll_t(parentid), poid);
+      t.collection_remove(coll_t(parentid), poid);
       if (oi.snaps.size()) {
 	snapid_t first = oi.snaps[0];
-	t.collection_add(coll_t::build_snap_pg_coll(pgid, first), coll_t::build_pg_coll(parentid), poid);
-	t.collection_remove(coll_t::build_snap_pg_coll(parentid, first), poid);
+	t.collection_add(coll_t(pgid, first), coll_t(parentid), poid);
+	t.collection_remove(coll_t(parentid, first), poid);
 	if (oi.snaps.size() > 1) {
 	  snapid_t last = oi.snaps[oi.snaps.size()-1];
-	  t.collection_add(coll_t::build_snap_pg_coll(pgid, last), coll_t::build_pg_coll(parentid), poid);
-	  t.collection_remove(coll_t::build_snap_pg_coll(parentid, last), poid);
+	  t.collection_add(coll_t(pgid, last), coll_t(parentid), poid);
+	  t.collection_remove(coll_t(parentid, last), poid);
 	}
       }
 
@@ -3723,7 +3721,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 		     << " -> " << info.purged_snaps
 		     << " removed " << p << dendl;
 	    snapid_t sn = p.range_start();
-	    coll_t c = coll_t::build_snap_pg_coll(info.pgid, sn);
+	    coll_t c(info.pgid, sn);
 	    t->remove_collection(c);
 	    
 	    pg->info.purged_snaps = info.purged_snaps;
@@ -4052,14 +4050,14 @@ void OSD::_remove_pg(PG *pg)
        p != pg->snap_collections.end();
        p++) {
     vector<sobject_t> olist;      
-    store->collection_list(coll_t::build_snap_pg_coll(pgid, *p), olist);
+    store->collection_list(coll_t(pgid, *p), olist);
     dout(10) << "_remove_pg " << pgid << " snap " << *p << " " << olist.size() << " objects" << dendl;
     for (vector<sobject_t>::iterator q = olist.begin();
 	 q != olist.end();
 	 q++) {
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      t->remove(coll_t::build_snap_pg_coll(pgid, *p), *q);
-      t->remove(coll_t::build_pg_coll(pgid), *q);          // we may hit this twice, but it's harmless
+      t->remove(coll_t(pgid, *p), *q);
+      t->remove(coll_t(pgid), *q);          // we may hit this twice, but it's harmless
       int tr = store->queue_transaction(&pg->osr, t);
       assert(tr == 0);
 
@@ -4073,18 +4071,18 @@ void OSD::_remove_pg(PG *pg)
 	}
       }
     }
-    rmt->remove_collection(coll_t::build_snap_pg_coll(pgid, *p));
+    rmt->remove_collection(coll_t(pgid, *p));
   }
 
   // (what remains of the) main collection
   vector<sobject_t> olist;
-  store->collection_list(coll_t::build_pg_coll(pgid), olist);
+  store->collection_list(coll_t(pgid), olist);
   dout(10) << "_remove_pg " << pgid << " " << olist.size() << " objects" << dendl;
   for (vector<sobject_t>::iterator p = olist.begin();
        p != olist.end();
        p++) {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    t->remove(coll_t::build_pg_coll(pgid), *p);
+    t->remove(coll_t(pgid), *p);
     int tr = store->queue_transaction(&pg->osr, t);
     assert(tr == 0);
 
@@ -4117,7 +4115,7 @@ void OSD::_remove_pg(PG *pg)
   dout(10) << "_remove_pg " << pgid << " removing final" << dendl;
 
   {
-    rmt->remove_collection(coll_t::build_pg_coll(pgid));
+    rmt->remove_collection(coll_t(pgid));
     int tr = store->queue_transaction(NULL, rmt);
     assert(tr == 0);
   }

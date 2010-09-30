@@ -223,10 +223,8 @@ bool FileStore::parse_coll(char *s, coll_t& c)
 
 void FileStore::get_cdir(coll_t cid, char *s, int len) 
 {
-  int ret = snprintf(s, len, "%s/current/", basedir.c_str());
-  s += ret;
-  len -= ret;
-  s += cid.print(s, len);
+  const string &cid_str(cid.to_str());
+  snprintf(s, len, "%s/current/%s", basedir.c_str(), cid_str.c_str());
 }
 
 void FileStore::get_coname(coll_t cid, const sobject_t& oid, char *s, int len) 

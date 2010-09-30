@@ -15,7 +15,9 @@
 #ifndef CEPH_OSD_TYPES_H
 #define CEPH_OSD_TYPES_H
 
+#include <sstream>
 #include <stdio.h>
+#include <stdexcept>
 
 #include "msg/msg_types.h"
 #include "include/types.h"
@@ -227,171 +229,165 @@ namespace __gnu_cxx {
 
 // ----------------------
 
-struct coll_t {
-  enum type_t {
-    TYPE_META = 0,
-    TYPE_TEMP = 1,
-    TYPE_PG = 2
-  };
-  __u8 type;
-  pg_t pgid;
-  snapid_t snap;
+class coll_t {
+public:
+  const static coll_t META_COLL;
+  const static coll_t TEMP_COLL;
 
-  coll_t() : type(TYPE_META), snap(0) {}
-  coll_t(type_t t) : type(t), snap(0) {}
-  coll_t(type_t t, pg_t p, snapid_t s) : type(t), pgid(p), snap(s) {}
-  
-  static coll_t build_pg_coll(pg_t p) {
-    return coll_t(TYPE_PG, p, CEPH_NOSNAP);
-  }
-  static coll_t build_snap_pg_coll(pg_t p, snapid_t s) {
-    return coll_t(TYPE_PG, p, s);
+  coll_t()
+    : str("meta")
+  { }
+
+  explicit coll_t(const std::string &str_)
+    : str(str_)
+  { }
+
+  explicit coll_t(pg_t pgid, snapid_t snap = CEPH_NOSNAP)
+    : str(pg_and_snap_to_str(pgid, snap))
+  { }
+
+  const std::string& to_str() const {
+    return str;
   }
 
-  bool is_pg(pg_t& p, snapid_t& sn) {
-    if (type == TYPE_PG) {
-      p = pgid;
-      sn = snap;
+  bool is_pg(pg_t& pgid, snapid_t& snap) const {
+    const char *cstr(str.c_str());
+
+    if (!pgid.parse(cstr))
+      return false;
+    const char *snap_start = strchr(cstr, '_');
+    if (!snap_start)
+      return false;
+    if (strncmp(snap_start, "_head", 5) == 0)
+      snap = CEPH_NOSNAP;
+    else
+      snap = strtoull(snap_start+1, 0, 16);
+    return true;
+  }
+
+  bool parse(const char *s) {
+    if (strncmp(s, "meta", 4) == 0) {
+      str = s;
+      return true;
+    }
+    if (strncmp(s, "temp", 4) == 0) {
+      str = s;
+      return true;
+    }
+    pg_t pgid;
+    snapid_t snap;
+    if (is_pg(pgid, snap)) {
+      str = s;
       return true;
     }
     return false;
   }
 
-  ostream& print(ostream& out) const {
-    switch (type) {
-    case TYPE_META:
-      return out << "meta";
-    case TYPE_TEMP:
-      return out << "temp";
-    case TYPE_PG:
-      out << pgid << "_" << snap;
-    default:
-      return out << "???";
-    }
-  }
-  int print(char *o, int maxlen) {
-    switch (type) {
-    case TYPE_META:
-      return snprintf(o, maxlen, "meta");
-    case TYPE_TEMP:
-      return snprintf(o, maxlen, "temp");
-    case TYPE_PG:
-      {
-	int len = pgid.print(o, maxlen);
-	if (snap != CEPH_NOSNAP)
-	  len += snprintf(o + len, maxlen - len, "_%llx", (long long unsigned)snap);
-	else {
-	  strncat(o + len, "_head", maxlen - len);
-	  len += 5;
-	}
-	return len;
-      }
-    default:
-      return snprintf(o, maxlen, "???");
-    }
-  }
-  bool parse(char *s) {
-    if (strncmp(s, "meta", 4) == 0) {
-      type = TYPE_META;
-      pgid = pg_t();
-      snap = 0;
-      return true;
-    }
-    if (strncmp(s, "temp", 4) == 0) {
-      type = TYPE_TEMP;
-      pgid = pg_t();
-      snap = 0;
-      return true;
-    }
-    if (!pgid.parse(s))
-      return false;
-    char *sn = strchr(s, '_');
-    if (!sn)
-      return false;
-    if (strncmp(sn, "_head", 5) == 0)
-      snap = CEPH_NOSNAP;
-    else
-      snap = strtoull(sn+1, 0, 16);
-    type = TYPE_PG;
-    return true;
+  void encode(bufferlist& bl) const {
+    __u8 struct_v = 3;
+    ::encode(struct_v, bl);
+    ::encode(str, bl);
   }
 
-  void encode(bufferlist& bl) const {
-    __u8 struct_v = 2;
-    ::encode(struct_v, bl);
-    ::encode(type, bl);
-    ::encode(pgid, bl);
-    ::encode(snap, bl);
-  }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
-    if (struct_v >= 2)
-      ::decode(type, bl);
-    ::decode(pgid, bl);
-    ::decode(snap, bl);
-    if (struct_v < 2) {
-      // infer the type
-      if (pgid == pg_t() && snap == 0)
-	type = TYPE_META;
-      else
-	type = TYPE_PG;
+    switch (struct_v) {
+      case 1: {
+	pg_t pgid;
+	snapid_t snap;
+
+	::decode(pgid, bl);
+	::decode(snap, bl);
+	// infer the type
+	if (pgid == pg_t() && snap == 0)
+	  str = "meta";
+	else
+	  str = pg_and_snap_to_str(pgid, snap);
+	break;
+      }
+
+      case 2: {
+	int type;
+	pg_t pgid;
+	snapid_t snap;
+
+	::decode(type, bl);
+	::decode(pgid, bl);
+	::decode(snap, bl);
+	switch (type) {
+	  case 0:
+	    str = "meta";
+	    break;
+	  case 1:
+	    str = "temp";
+	    break;
+	  case 2:
+	    str = pg_and_snap_to_str(pgid, snap);
+	    break;
+	  default: {
+	    ostringstream oss;
+	    oss << "coll_t::decode(): can't understand type " << type;
+	    throw std::domain_error(oss.str());
+	  }
+	}
+	break;
+      }
+
+      case 3:
+	::decode(str, bl);
+	break;
+
+      default: {
+	ostringstream oss;
+	oss << "coll_t::decode(): don't know how to decode verison "
+            << struct_v;
+	throw std::domain_error(oss.str());
+      }
     }
   }
+  inline bool operator==(const coll_t& rhs) const {
+    return str == rhs.str;
+  }
+  inline bool operator!=(const coll_t& rhs) const {
+    return str != rhs.str;
+  }
+
+private:
+  static std::string pg_and_snap_to_str(pg_t p, snapid_t s) {
+    std::ostringstream oss;
+    oss << p << "_" << s;
+    return oss.str();
+  }
+
+  std::string str;
 };
+
 WRITE_CLASS_ENCODER(coll_t)
 
 inline ostream& operator<<(ostream& out, const coll_t& c) {
-  return c.print(out);
-}
-
-#define TRIPLE_EQ(l, r, a, b, c) \
-  l.a == r.a && l.b == r.b && l.c == r.c;
-#define TRIPLE_NE(l, r, a, b, c) \
-  l.a != r.a && l.b != r.b && l.c != r.c;
-#define TRIPLE_LT(l, r, a, b, c)				\
-  l.a < r.a || (l.a == r.a && (l.b < r.b ||			\
-			       (l.b == r.b && l.c < r.c)));
-#define TRIPLE_LTE(l, r, a, b, c)				\
-  l.a < r.a || (l.a == r.a && (l.b < r.b ||			\
-			       (l.b == r.b && l.c <= r.c)));
-#define TRIPLE_GT(l, r, a, b, c)				\
-  l.a > r.a || (l.a == r.a && (l.b > r.b ||			\
-			       (l.b == r.b && l.c > r.c)));
-#define TRIPLE_GTE(l, r, a, b, c)				\
-  l.a > r.a || (l.a == r.a && (l.b > r.b ||			\
-			       (l.b == r.b && l.c >= r.c)));
-
-inline bool operator<(const coll_t& l, const coll_t& r) {
-  return TRIPLE_LT(l, r, type, pgid, snap);
-}
-inline bool operator<=(const coll_t& l, const coll_t& r) {
-  return TRIPLE_LTE(l, r, type, pgid, snap);
-}
-inline bool operator==(const coll_t& l, const coll_t& r) {
-  return TRIPLE_EQ(l, r, type, pgid, snap);
-}
-inline bool operator!=(const coll_t& l, const coll_t& r) {
-  return TRIPLE_NE(l, r, type, pgid, snap);
-}
-inline bool operator>(const coll_t& l, const coll_t& r) {
-  return TRIPLE_GT(l, r, type, pgid, snap);
-}
-inline bool operator>=(const coll_t& l, const coll_t& r) {
-  return TRIPLE_GTE(l, r, type, pgid, snap);
+  out << c.to_str();
+  return out;
 }
 
 namespace __gnu_cxx {
   template<> struct hash<coll_t> {
     size_t operator()(const coll_t &c) const { 
-      static hash<pg_t> H;
-      static rjhash<uint64_t> I;
-      return H(c.pgid) ^ I(c.snap + c.type);
+      size_t hash = 0;
+      string str(c.to_str());
+      std::string::const_iterator end(str.end());
+      for (std::string::const_iterator s = str.begin(); s != end; ++s) {
+	hash += *s;
+	hash += (hash << 10);
+	hash ^= (hash >> 6);
+      }
+      hash += (hash << 3);
+      hash ^= (hash >> 11);
+      hash += (hash << 15);
+      return hash;
     }
   };
 }
-
-
 
 inline ostream& operator<<(ostream& out, const ceph_object_layout &ol)
 {
