@@ -212,9 +212,10 @@ public:
     OSDCaps caps;
     epoch_t last_sent_epoch;
     Connection *con;
+    std::map<void *, ceph_object_layout> watches;
 
-  Session() : last_sent_epoch(0), con(0) {}
-  ~Session() { if (con) con->put(); }
+    Session() : last_sent_epoch(0), con(0) {}
+    ~Session() { if (con) con->put(); }
   };
 
 private:
@@ -925,7 +926,7 @@ protected:
 			    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
 			    bool& isvalid);
   void ms_handle_connect(Connection *con);
-  bool ms_handle_reset(Connection *con) { return false; }
+  bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con) {}
 
  public:

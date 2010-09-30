@@ -1088,11 +1088,15 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
         map<entity_name_t, OSD::Session *>::iterator iter;
 	map<entity_name_t, watch_info_t>::iterator oi_iter;
-	Watch::Notification *notif = new Watch::Notification(ctx->reqid.name);
+	OSD::Session *session = (OSD::Session *)ctx->op->get_connection()->get_priv();
+	session->get();
+	Watch::Notification *notif = new Watch::Notification(ctx->reqid.name, session, op.watch.cookie);
 	if (!notif) {
 	  result = -ENOMEM;	
 	  break;
 	}
+	notif->reply = ctx->reply;
+	ctx->reply = NULL;
 	osd->watch->add_notification(notif);
 
 	for (oi_iter = oi.watchers.begin();
@@ -1103,19 +1107,17 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
 	  if (/* w.ver < ver && */ iter != obc->watchers.end()) {
 	    /* found a session for registered watcher */
-	    OSD::Session *session = iter->second;
+	    session = iter->second;
 	    dout(0) << " found session, sending notification" << dendl;
 	    notif->add_watcher(oi_iter->first, Watch::WATCHER_NOTIFIED); // adding before send_message to avoid race
 
-	    MWatchNotify *notify_msg = new MWatchNotify(w.cookie, w.ver, notif->id);
+	    MWatchNotify *notify_msg = new MWatchNotify(w.cookie, w.ver, notif->id, WATCH_NOTIFY);
 	    osd->client_messenger->send_message(notify_msg, session->con);
 	  } else {
 	    notif->add_watcher(oi_iter->first, Watch::WATCHER_PENDING);
 	    dout(0) << " session was not found" << dendl;
 	  }
-
 	}
-
       }
       break;
 
@@ -1146,6 +1148,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	entity_name_t source = ctx->op->get_source();
 	if (osd->watch->ack_notification(source, notif)) {
 	  dout(0) << "got the last reply from pending watchers, can send response now" << dendl;
+	  MWatchNotify *reply = new MWatchNotify(notif->cookie, wi.ver, notif->id, WATCH_NOTIFY_COMPLETE);
+	  osd->client_messenger->send_message(reply, notif->session->con);
+	  notif->session->put();
+	  osd->watch->remove_notification(notif);
+	  delete notif;
 	}
       }
       break;
@@ -1343,6 +1350,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  obc->watchers[entity] = session;
 
 	  session->get();
+dout(0) << "info.pgid=" << info.pgid << dendl;
+	  ceph_object_layout layout = osd->osdmap->make_object_layout(soid.oid, info.pgid.pool(), info.pgid.preferred());
+dout(0) << "JJJ layout=" << layout << dendl;
+	  session->watches[obc] = layout;
         } else {
 	  obc->watchers.erase(entity);
 
@@ -1355,7 +1366,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
 
 	for (iter = obc->watchers.begin(); iter != obc->watchers.end(); ++iter) {
-	  dout(0) << "* obc->watcher: " << iter->first << " session=" << iter->second << dendl;
+	  dout(0) << "* obc->watcher: " << iter->first << " session=" << iter->second << " obc->obs.oi=" << obc->obs.oi << dendl;
 	}
 
 	map<entity_name_t, watch_info_t>::iterator oi_iter;
@@ -2209,7 +2220,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	else
 	  reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), 0);
 	reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
-	dout(10) << " sending commit on " << *repop << " " << reply << dendl;
+	dout(0) << " sending commit on " << *repop << " " << reply << dendl;
 	assert(entity_name_t::TYPE_OSD != op->get_connection()->peer_type);
 	osd->client_messenger->send_message(reply, op->get_connection());
 	repop->sent_disk = true;

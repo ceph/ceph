@@ -136,10 +136,18 @@ struct ceph_dir_layout {
 
 
 /* osd */
-#define CEPH_MSG_OSD_MAP          41
-#define CEPH_MSG_OSD_OP           42
-#define CEPH_MSG_OSD_OPREPLY      43
-#define CEPH_MSG_WATCH_NOTIFY     44
+#define CEPH_MSG_OSD_MAP                41
+#define CEPH_MSG_OSD_OP                 42
+#define CEPH_MSG_OSD_OPREPLY            43
+#define CEPH_MSG_WATCH_NOTIFY           44
+
+
+/* watch-notify operations */
+enum {
+  WATCH_NOTIFY				= 1, /* notifying watcher */
+  WATCH_NOTIFY_COMPLETE			= 2, /* notifier notified when done */
+};
+
 
 /* pool operations */
 enum {

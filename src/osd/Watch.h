@@ -35,10 +35,13 @@ public:
     std::map<entity_name_t, WatcherState> watchers;
     entity_name_t name;
     uint64_t id;
+    OSD::Session *session;
+    uint64_t cookie;
+    Message *reply;
 
     void add_watcher(const entity_name_t& name, WatcherState state) { watchers[name] = state; }
 
-    Notification(entity_name_t& n) { name = n; }
+    Notification(entity_name_t& n, OSD::Session *s, uint64_t c) : name(n), session(s), cookie(c) { }
   };
 
 private:
@@ -56,6 +59,7 @@ public:
   void register_session(OSD::Session *session, entity_name_t& name);
   void remove_session(OSD::Session *session);
   void add_notification(Notification *notif);
+  void remove_notification(Notification *notif);
   bool ack_notification(entity_name_t& watcher, Notification *notif);
 
   Notification *get_notif(uint64_t id) {

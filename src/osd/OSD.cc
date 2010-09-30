@@ -1594,6 +1594,49 @@ void OSD::ms_handle_connect(Connection *con)
 }
 
 
+bool OSD::ms_handle_reset(Connection *con)
+{
+  dout(0) << "OSD::ms_handle_reset()" << dendl;
+  OSD::Session *session = (OSD::Session *)con->get_priv();
+  if (!session)
+    return false;
+
+  dout(0) << "OSD::ms_handle_reset() s=" << (void *)session << dendl;
+
+  map<void *, ceph_object_layout>::iterator iter;
+  for (iter = session->watches.begin(); iter != session->watches.end(); ++iter) {
+    ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)iter->first;
+    dout(0) << "obc=" << (void *)obc << dendl;
+
+    obc->lock.Lock();
+    map<entity_name_t, Session *>::iterator witer;
+    /* NOTE! fix this one, should be able to just lookup entity name,
+       however, we currently only keep EntityName on the session and not
+       entity_name_t. */
+    witer = obc->watchers.begin();
+    while (1) {
+      while (witer != obc->watchers.end() && witer->second == session) {
+        dout(0) << "removing watching session entity_name=" << session->entity_name << " from " << obc->obs.oi << dendl;
+        obc->watchers.erase(witer++);
+      }
+      if (witer == obc->watchers.end())
+        break;
+      ++witer;
+    }
+    obc->lock.Unlock();
+    osd_lock.Lock();
+
+    dout(0) << "iter->second="<< iter->second << dendl;
+    /* now drop a reference to that obc */
+    pg_t pgid = osdmap->raw_pg_to_pg(pg_t(iter->second.ol_pgid));
+    ReplicatedPG *pg = (ReplicatedPG *)_lookup_lock_pg(pgid);
+    pg->put_object_context(obc);
+    pg->unlock();
+    osd_lock.Unlock();
+  }
+
+  return true;
+}
 
 void OSD::send_boot()
 {
