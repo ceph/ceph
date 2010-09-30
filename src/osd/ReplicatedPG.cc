@@ -1114,9 +1114,18 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	    MWatchNotify *notify_msg = new MWatchNotify(w.cookie, w.ver, notif->id, WATCH_NOTIFY);
 	    osd->client_messenger->send_message(notify_msg, session->con);
 	  } else {
-	    notif->add_watcher(oi_iter->first, Watch::WATCHER_PENDING);
+	    /* FIXME: check timestamp on session disconnection */
+	    // notif->add_watcher(oi_iter->first, Watch::WATCHER_PENDING);
 	    dout(0) << " session was not found" << dendl;
 	  }
+	}
+
+	if (notif->watchers.empty()) {
+	  MWatchNotify *reply = new MWatchNotify(op.watch.cookie, op.watch.ver, notif->id, WATCH_NOTIFY_COMPLETE);
+	  osd->client_messenger->send_message(reply, notif->session->con);
+	  notif->session->put();
+	  osd->watch->remove_notification(notif);
+	  delete notif;
 	}
       }
       break;
