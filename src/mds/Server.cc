@@ -4659,11 +4659,8 @@ void Server::_rename_prepare_witness(MDRequest *mdr, int who, CDentry *srcdn, CD
   destdn->make_path(req->destdnpath);
   req->now = mdr->now;
   
-  if (straydn) {
-    mdcache->replicate_inode(straydn->get_dir()->inode, who, req->stray);
-    mdcache->replicate_dir(straydn->get_dir(), who, req->stray);
-    mdcache->replicate_dentry(straydn, who, req->stray);
-  }
+  if (straydn)
+    mdcache->replicate_stray(straydn, who, req->stray);
   
   // srcdn auth will verify our current witness list is sufficient
   req->witnesses = mdr->more()->witnessed;

@@ -1048,6 +1048,8 @@ public:
   CDir* forge_replica_dir(CInode *diri, frag_t fg, int from);
   CDentry *add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<Context*>& finished);
   CInode *add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<Context*>& finished);
+
+  void replicate_stray(CDentry *straydn, int who, bufferlist& bl);
   CDentry *add_replica_stray(bufferlist &bl, int from);
 
   // -- namespace --

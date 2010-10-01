@@ -8142,7 +8142,17 @@ CInode *MDCache::add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<Co
   return in;
 }
 
-    
+ 
+void MDCache::replicate_stray(CDentry *straydn, int who, bufferlist& bl)
+{
+  replicate_inode(get_myin(), who, bl);
+  replicate_dir(straydn->get_dir()->inode->get_parent_dn()->get_dir(), who, bl);
+  replicate_dentry(straydn->get_dir()->inode->get_parent_dn(), who, bl);
+  replicate_inode(straydn->get_dir()->inode, who, bl);
+  replicate_dir(straydn->get_dir(), who, bl);
+  replicate_dentry(straydn, who, bl);
+}
+   
 CDentry *MDCache::add_replica_stray(bufferlist &bl, int from)
 {
   list<Context*> finished;
@@ -8317,14 +8327,8 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn)
        it != dn->replicas_end();
        it++) {
     MDentryUnlink *unlink = new MDentryUnlink(dn->get_dir()->dirfrag(), dn->name);
-    if (straydn) {
-      replicate_inode(get_myin(), it->first, unlink->straybl);
-      replicate_dir(straydn->get_dir()->inode->get_parent_dn()->get_dir(), it->first, unlink->straybl);
-      replicate_dentry(straydn->get_dir()->inode->get_parent_dn(), it->first, unlink->straybl);
-      replicate_inode(straydn->get_dir()->inode, it->first, unlink->straybl);
-      replicate_dir(straydn->get_dir(), it->first, unlink->straybl);
-      replicate_dentry(straydn, it->first, unlink->straybl);
-    }
+    if (straydn)
+      replicate_stray(straydn, it->first, unlink->straybl);
     mds->send_message_mds(unlink, it->first);
   }
 }
