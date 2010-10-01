@@ -55,3 +55,7 @@ config.guess
 config.sub
 libtool
 ltmain.sh
+cscope.files
+cscope.out
+*.swp
+*.swo
