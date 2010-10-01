@@ -316,7 +316,7 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
       dout(20) << "merge_old_entry  had " << oe << " new dne : ok" << dendl;      
     } else {
       dout(20) << "merge_old_entry  had " << oe << " new dne : deleting" << dendl;
-      t.remove(info.coll, oe.soid);
+      t.remove(coll, oe.soid);
       missing.rm(oe.soid, oe.version);
     }
   }
@@ -373,7 +373,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
       dout(20) << "merge_log merging " << ne << dendl;
       missing.add_next_event(ne);
       if (ne.is_delete())
-	t.remove(info.coll, ne.soid);
+	t.remove(coll, ne.soid);
     }
 
     // find any divergent or removed items in old log.
@@ -458,7 +458,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
 	log.index(ne);
 	missing.add_next_event(ne);
 	if (ne.is_delete())
-	  t.remove(info.coll, ne.soid);
+	  t.remove(coll, ne.soid);
       }
       
       // move aside divergent items
@@ -544,7 +544,7 @@ bool PG::build_backlog_map(map<eversion_t,Log::Entry>& omap)
   unlock();
 
   vector<sobject_t> olist;
-  osd->store->collection_list(info.coll, olist);
+  osd->store->collection_list(coll, olist);
 
   for (vector<sobject_t>::iterator it = olist.begin();
        it != olist.end();
@@ -554,7 +554,7 @@ bool PG::build_backlog_map(map<eversion_t,Log::Entry>& omap)
     Log::Entry e;
     e.soid = poid;
     bufferlist bv;
-    int r = osd->store->getattr(info.coll, poid, OI_ATTR, bv);
+    int r = osd->store->getattr(coll, poid, OI_ATTR, bv);
     if (r < 0)
       continue;  // musta just been deleted!
     object_info_t oi(bv);
@@ -1991,7 +1991,7 @@ void PG::write_info(ObjectStore::Transaction& t)
   ::encode(info, infobl);
   ::encode(past_intervals, infobl);
   dout(20) << "write_info info " << infobl.length() << dendl;
-  t.collection_setattr(info.coll, "info", infobl);
+  t.collection_setattr(coll, "info", infobl);
  
   // local state
   bufferlist snapbl;
@@ -1999,7 +1999,7 @@ void PG::write_info(ObjectStore::Transaction& t)
   ::encode(struct_v, snapbl);
   ::encode(snap_collections, snapbl);
   dout(20) << "write_info snap " << snapbl.length() << dendl;
-  t.collection_setattr(info.coll, "snap_collections", snapbl);
+  t.collection_setattr(coll, "snap_collections", snapbl);
 
   dirty_info = false;
 }
@@ -2040,7 +2040,7 @@ void PG::write_log(ObjectStore::Transaction& t)
 
   bufferlist blb(sizeof(ondisklog));
   ::encode(ondisklog, blb);
-  t.collection_setattr(info.coll, "ondisklog", blb);
+  t.collection_setattr(coll, "ondisklog", blb);
   
   dout(10) << "write_log to " << ondisklog.tail << "~" << ondisklog.length() << dendl;
   dirty_log = false;
@@ -2090,7 +2090,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   
   bufferlist blb(sizeof(ondisklog));
   ::encode(ondisklog, blb);
-  t.collection_setattr(info.coll, "ondisklog", blb);
+  t.collection_setattr(coll, "ondisklog", blb);
 
   if (!g_conf.osd_preserve_trimmed_log)
     t.zero(coll_t::META_COLL, log_oid, 0, ondisklog.tail & ~4095);
@@ -2142,7 +2142,7 @@ void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
 
   bufferlist blb(sizeof(ondisklog));
   ::encode(ondisklog, blb);
-  t.collection_setattr(info.coll, "ondisklog", blb);
+  t.collection_setattr(coll, "ondisklog", blb);
   dout(10) << "append_log  now " << ondisklog.tail << "~" << ondisklog.length() << dendl;
 }
 
@@ -2152,7 +2152,7 @@ void PG::read_log(ObjectStore *store)
   ondisklog.tail = ondisklog.head = 0;
 
   bufferlist blb;
-  store->collection_getattr(info.coll, "ondisklog", blb);
+  store->collection_getattr(coll, "ondisklog", blb);
   bufferlist::iterator p = blb.begin();
   ::decode(ondisklog, p);
 
@@ -2253,7 +2253,7 @@ void PG::read_log(ObjectStore *store)
       
       bufferlist bv;
       struct stat st;
-      int r = osd->store->getattr(info.coll, i->soid, OI_ATTR, bv);
+      int r = osd->store->getattr(coll, i->soid, OI_ATTR, bv);
       if (r >= 0) {
 	object_info_t oi(bv);
 	if (oi.version < i->version) {
@@ -2261,7 +2261,7 @@ void PG::read_log(ObjectStore *store)
 	  missing.add(i->soid, i->version, oi.version);
 	}
       } else if (i->soid.snap == CEPH_NOSNAP &&
-		 osd->store->stat(info.coll, i->soid, &st) == 0) {
+		 osd->store->stat(coll, i->soid, &st) == 0) {
 	dout(0) << "read_log  rebuilding missing xattr on " << *i << dendl;
 	object_info_t oi(i->soid);
 	oi.version = i->version;
@@ -2272,7 +2272,7 @@ void PG::read_log(ObjectStore *store)
 	bufferlist bl;
 	::encode(oi, bl);
 	ObjectStore::Transaction *t = new ObjectStore::Transaction;
-	t->setattr(info.coll, i->soid, OI_ATTR, bl);
+	t->setattr(coll, i->soid, OI_ATTR, bl);
 	int tr = osd->store->queue_transaction(&osr, t);
 	assert(tr == 0);
 
@@ -2292,7 +2292,7 @@ bool PG::check_log_for_corruption(ObjectStore *store)
 {
   OndiskLog bounds;
   bufferlist blb;
-  store->collection_getattr(info.coll, "ondisklog", blb);
+  store->collection_getattr(coll, "ondisklog", blb);
   bufferlist::iterator p = blb.begin();
   ::decode(bounds, p);
 
@@ -2365,7 +2365,7 @@ void PG::read_state(ObjectStore *store)
   __u8 struct_v;
 
   // info
-  store->collection_getattr(info.coll, "info", bl);
+  store->collection_getattr(coll, "info", bl);
   p = bl.begin();
   ::decode(struct_v, p);
   ::decode(info, p);
@@ -2373,7 +2373,7 @@ void PG::read_state(ObjectStore *store)
   
   // snap_collections
   bl.clear();
-  store->collection_getattr(info.coll, "snap_collections", bl);
+  store->collection_getattr(coll, "snap_collections", bl);
   p = bl.begin();
   ::decode(struct_v, p);
   ::decode(snap_collections, p);
@@ -2389,7 +2389,7 @@ coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
     dout(10) << "create_snap_collection " << c << ", set now " << snap_collections << dendl;
     bufferlist bl;
     ::encode(snap_collections, bl);
-    t.collection_setattr(info.coll, "snap_collections", bl);
+    t.collection_setattr(coll, "snap_collections", bl);
     t.create_collection(c);
   }
   return c;
@@ -2489,7 +2489,7 @@ void PG::build_scrub_map(ScrubMap &map)
 
   // objects
   vector<sobject_t> ls;
-  osd->store->collection_list(info.coll, ls);
+  osd->store->collection_list(coll, ls);
 
   // sort
   dout(10) << "sorting " << ls.size() << " objects" << dendl;
@@ -2524,17 +2524,17 @@ void PG::build_scrub_map(ScrubMap &map)
     o.poid = *p;
 
     struct stat st;
-    int r = osd->store->stat(info.coll, poid, &st);
+    int r = osd->store->stat(coll, poid, &st);
     assert(r == 0);
     o.size = st.st_size;
 
-    osd->store->getattrs(info.coll, poid, o.attrs);
+    osd->store->getattrs(coll, poid, o.attrs);
 
     dout(25) << "   " << poid << dendl;
   }
 
   // pg attrs
-  osd->store->collection_getattrs(info.coll, map.attrs);
+  osd->store->collection_getattrs(coll, map.attrs);
 
   // log
   osd->store->read(coll_t(), log_oid, 0, 0, map.logbl);
