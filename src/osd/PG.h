@@ -91,6 +91,7 @@ public:
    */
   struct Info {
     pg_t pgid;
+    coll_t coll;
     eversion_t last_update;    // last object version applied to store.
     eversion_t last_complete;  // last version pg was complete through.
 
@@ -146,7 +147,7 @@ public:
     } history;
     
     Info() : log_backlog(false) {}
-    Info(pg_t p) : pgid(p), log_backlog(false) { }
+    Info(pg_t p) : pgid(p), coll(p), log_backlog(false) { }
 
     bool is_uptodate() const { return last_update == last_complete; }
     bool is_empty() const { return last_update.version == 0; }
@@ -170,6 +171,7 @@ public:
       ::decode(v, bl);
 
       ::decode(pgid, bl);
+      coll = coll_t(pgid);
       ::decode(last_update, bl);
       ::decode(last_complete, bl);
       ::decode(log_tail, bl);
