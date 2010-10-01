@@ -597,6 +597,17 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	return true;
       }
     }
+    else if (m->cmd[1] == "fail" && m->cmd.size() == 3) {
+      int w = atoi(m->cmd[2].c_str());
+      pending_mdsmap.failed.insert(w);
+      pending_mdsmap.up.erase(w);
+      stringstream ss;
+      ss << "failed mds" << w;
+      string rs;
+      getline(ss, rs);
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      return true;
+    }
     else if (m->cmd[1] == "compat" && m->cmd.size() == 4) {
       uint64_t f = atoll(m->cmd[3].c_str());
       if (m->cmd[2] == "rm_compat") {
