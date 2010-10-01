@@ -8158,14 +8158,15 @@ CDentry *MDCache::add_replica_stray(bufferlist &bl, int from)
   list<Context*> finished;
   bufferlist::iterator p = bl.begin();
 
-  CInode *strayin = add_replica_inode(p, NULL, finished);
-  dout(15) << "strayin " << *strayin << dendl;
+  CInode *mdsin = add_replica_inode(p, NULL, finished);
+  CDir *mdsdir = add_replica_dir(p, mdsin, from, finished);
+  CDentry *straydirdn = add_replica_dentry(p, mdsdir, finished);
+  CInode *strayin = add_replica_inode(p, straydirdn, finished);
   CDir *straydir = add_replica_dir(p, strayin, from, finished);
-  dout(15) << "straydir " << *straydir << dendl;
   CDentry *straydn = add_replica_dentry(p, straydir, finished);
-  dout(15) << "straydn " << *straydn << dendl;
+  if (!finished.empty())
+    mds->queue_waiters(finished);
 
-  mds->queue_waiters(finished);
   return straydn;
 }
 
@@ -8348,19 +8349,10 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
       CDentry::linkage_t *dnl = dn->get_linkage();
 
       // straydn
-      bufferlist::iterator p = m->straybl.begin();
       CDentry *straydn = NULL;
-      if (!p.end()) {
-	list<Context*> finished;
+      if (m->straybl.length()) {
 	int from = m->get_source().num();
-	CInode *mdsin = add_replica_inode(p, NULL, finished);
-	CDir *mdsdir = add_replica_dir(p, mdsin, from, finished);
-	CDentry *straydirdn = add_replica_dentry(p, mdsdir, finished);
-	CInode *strayin = add_replica_inode(p, straydirdn, finished);
-	CDir *straydir = add_replica_dir(p, strayin, from, finished);
-	straydn = add_replica_dentry(p, straydir, finished);
-	if (!finished.empty())
-	  mds->queue_waiters(finished);
+	straydn = add_replica_stray(m->straybl, from);
       }
 
       // open inode?
