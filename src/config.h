@@ -370,6 +370,8 @@ struct md_config_t {
   int osd_recovery_max_active;
   uint64_t osd_recovery_max_chunk;
 
+  bool osd_recovery_forget_lost_objects;
+
   bool osd_auto_weight;
 
   double osd_class_error_timeout;
