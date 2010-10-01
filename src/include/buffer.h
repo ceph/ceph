@@ -87,15 +87,29 @@ class buffer {
 
 public:
   struct error : public std::exception{
-    const char *what() {
+    const char *what() const throw () {
       return "buffer::exception";
     }
   };
   struct bad_alloc : public error {
-    const char *what() { return "buffer::bad_alloc"; }
+    const char *what() const throw () {
+      return "buffer::bad_alloc";
+    }
   };
   struct end_of_buffer : public error {
-    const char *what() { return "buffer::end_of_buffer"; }
+    const char *what() const throw () {
+      return "buffer::end_of_buffer";
+    }
+  };
+  struct malformed_input : public error {
+    explicit malformed_input(const char *what) {
+      snprintf(buf, sizeof(buf), "buffer::malformed_input: %s", what);
+    }
+    const char *what() const throw () {
+      return buf;
+    }
+  private:
+    char buf[256];
   };
 
 
@@ -654,8 +668,11 @@ public:
 	    throw new end_of_buffer;
 
 	  unsigned howmuch = p->length() - p_off;
+	  const char *c_str = p->c_str();
 	  if (len < howmuch) howmuch = len;
-	  dest.append(p->c_str() + p_off, howmuch);
+	  if (memchr(c_str + p_off, '\0', howmuch))
+	    throw new malformed_input("embedded NULL in string!");
+	  dest.append(c_str + p_off, howmuch);
 
 	  len -= howmuch;
 	  advance(howmuch);
