@@ -265,24 +265,6 @@ public:
     return true;
   }
 
-  bool parse(const char *s) {
-    if (strncmp(s, "meta", 4) == 0) {
-      str = s;
-      return true;
-    }
-    if (strncmp(s, "temp", 4) == 0) {
-      str = s;
-      return true;
-    }
-    pg_t pgid;
-    snapid_t snap;
-    if (is_pg(pgid, snap)) {
-      str = s;
-      return true;
-    }
-    return false;
-  }
-
   void encode(bufferlist& bl) const {
     __u8 struct_v = 3;
     ::encode(struct_v, bl);
