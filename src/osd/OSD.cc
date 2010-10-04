@@ -1435,7 +1435,7 @@ void OSD::heartbeat()
       in.close();
     }
   }
-  catch (ios::failure f) {
+  catch (const ios::failure &f) {
     dout(0) << "heartbeat: failed to read /proc/loadavg" << dendl;
   }
 

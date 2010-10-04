@@ -102,7 +102,7 @@ int main(int argc, const char **argv)
 	try {
 	  ::decode(e, p);
 	}
-	catch (buffer::error *e) {
+	catch (const buffer::error &e) {
 	  cerr << "failed to decode LogEntry at offset " << pos << std::endl;
 	  return 1;
 	}

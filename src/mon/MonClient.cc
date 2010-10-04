@@ -54,7 +54,7 @@ int MonClient::build_initial_monmap()
     try {
       r = monmap.read(monmap_fn);
     }
-    catch (buffer::error *e) {
+    catch (const buffer::error &e) {
       r = -EINVAL;
     }
     if (r >= 0)

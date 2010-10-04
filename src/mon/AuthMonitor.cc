@@ -111,7 +111,7 @@ void AuthMonitor::create_initial(bufferlist& bl)
         bufferlist::iterator iter = bl.begin();
         ::decode(keyring, iter);
         read_ok = true;
-      } catch (buffer::error *err) {
+      } catch (const buffer::error &err) {
         cerr << "error reading file " << g_conf.keyring << std::endl;
       }
       if (read_ok)
@@ -380,7 +380,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
       ::decode(supported, indata);
       ::decode(entity_name, indata);
       ::decode(s->global_id, indata);
-    } catch (buffer::error *e) {
+    } catch (const buffer::error &e) {
       dout(10) << "failed to decode initial auth message" << dendl;
       ret = -EINVAL;
       goto reply;
@@ -436,7 +436,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
       s->caps.parse(iter);
       s->caps.set_auid(auid);
     }
-  } catch (buffer::error *err) {
+  } catch (const buffer::error &err) {
     ret = -EINVAL;
     dout(0) << "caught error when trying to handle auth request, probably malformed request" << dendl;
   }
@@ -562,7 +562,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       KeyRing keyring;
       try {
         ::decode(keyring, iter);
-      } catch (buffer::error *err) {
+      } catch (const buffer::error &err) {
         ss << "error decoding keyring";
         rs = -EINVAL;
         goto done;
@@ -589,7 +589,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       KeyRing keyring;
       try {
         ::decode(keyring, iter);
-      } catch (buffer::error *err) {
+      } catch (const buffer::error &err) {
         ss << "error decoding keyring";
         rs = -EINVAL;
         goto done;

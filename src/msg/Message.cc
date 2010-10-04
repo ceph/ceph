@@ -513,11 +513,10 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
   try {
     m->decode_payload();
   }
-  catch (buffer::error *e) {
+  catch (const buffer::error &e) {
     dout(0) << "failed to decode message of type " << type
 	    << " v" << header.version
-	    << ": " << *e << dendl;
-    delete e;
+	    << ": " << e.what() << dendl;
     if (g_conf.ms_die_on_bad_msg)
       assert(0);
     return 0;

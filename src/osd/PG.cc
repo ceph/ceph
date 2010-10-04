@@ -2321,13 +2321,13 @@ bool PG::check_log_for_corruption(ObjectStore *store)
 	try {
 	  ::decode(e, p);
 	}
-	catch (buffer::error *e) {
+	catch (const buffer::error &e) {
 	  dout(0) << "corrupt entry at " << pos << dendl;
 	  ss << "corrupt entry at offset " << pos;
 	  ok = false;
 	  break;
 	}
-	catch(std::bad_alloc a) {
+	catch(const std::bad_alloc &a) {
 	  dout(0) << "corrupt entry at " << pos << dendl;
 	  ss << "corrupt entry at offset " << pos;
 	  ok = false;

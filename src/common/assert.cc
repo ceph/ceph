@@ -27,7 +27,7 @@ void __ceph_assert_fail(const char *assertion, const char *file, int line, const
   cerr.flush();
 
   if (1) {
-    throw new FailedAssertion(bt);
+    throw FailedAssertion(bt);
   } else {
     // make myself core dump.
     char *p = 0;

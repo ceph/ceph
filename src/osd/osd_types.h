@@ -785,7 +785,7 @@ struct pg_pool_t {
     __u8 struct_v;
     ::decode(struct_v, bl);
     if (struct_v > CEPH_PG_POOL_VERSION)
-      throw new buffer::error;
+      throw buffer::error();
     ::decode(v, bl);
     ::decode_nohead(v.num_snaps, snaps, bl);
     removed_snaps.decode_nohead(v.num_removed_snap_intervals, bl);
