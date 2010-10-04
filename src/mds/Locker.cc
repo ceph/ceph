@@ -140,6 +140,30 @@ void Locker::include_snap_rdlocks(set<SimpleLock*>& rdlocks, CInode *in)
   }
 }
 
+void Locker::include_snap_rdlocks_wlayout(set<SimpleLock*>& rdlocks, CInode *in,
+                                  ceph_file_layout **layout)
+{
+  //rdlock ancestor snaps
+  CInode *t = in;
+  rdlocks.insert(&in->snaplock);
+  rdlocks.insert(&in->policylock);
+  bool found_layout = false;
+  while (t) {
+    rdlocks.insert(&t->snaplock);
+    if (!found_layout) {
+      rdlocks.insert(&t->policylock);
+      if (t->get_projected_dir_layout()) {
+        *layout = t->get_projected_dir_layout();
+        found_layout = true;
+      }
+    }
+    if (t->get_projected_parent_dn() &&
+        t->get_projected_parent_dn()->get_dir())
+      t = t->get_projected_parent_dn()->get_dir()->get_inode();
+    else t = NULL;
+  }
+}
+
 
 /* If this function returns false, the mdr has been placed
  * on the appropriate wait list */
@@ -631,6 +655,8 @@ bool Locker::eval(CInode *in, int mask)
     eval_any(&in->nestlock, &need_issue);
   if (mask & CEPH_LOCK_IFLOCK)
     eval_any(&in->flocklock, &need_issue);
+  if (mask & CEPH_LOCK_IPOLICY)
+    eval_any(&in->policylock, &need_issue);
 
   // drop loner?
   if (in->is_auth() && in->get_loner() >= 0 && in->get_wanted_loner() < 0) {
@@ -2662,6 +2688,7 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
   case CEPH_LOCK_IXATTR:
   case CEPH_LOCK_ISNAP:
   case CEPH_LOCK_IFLOCK:
+  case CEPH_LOCK_IPOLICY:
     {
       CInode *in = mdcache->get_inode(info.ino, info.snapid);
       if (!in) {
@@ -2677,6 +2704,7 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
       case CEPH_LOCK_IXATTR: return &in->xattrlock;
       case CEPH_LOCK_ISNAP: return &in->snaplock;
       case CEPH_LOCK_IFLOCK: return &in->flocklock;
+      case CEPH_LOCK_IPOLICY: return &in->policylock;
       }
     }
 
@@ -2709,6 +2737,7 @@ void Locker::handle_lock(MLock *m)
   case CEPH_LOCK_ISNAP:
   case CEPH_LOCK_IXATTR:
   case CEPH_LOCK_IFLOCK:
+  case CEPH_LOCK_IPOLICY:
     handle_simple_lock(lock, m);
     break;
     

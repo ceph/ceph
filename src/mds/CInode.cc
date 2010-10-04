@@ -58,6 +58,7 @@ LockType CInode::xattrlock_type(CEPH_LOCK_IXATTR);
 LockType CInode::snaplock_type(CEPH_LOCK_ISNAP);
 LockType CInode::nestlock_type(CEPH_LOCK_INEST);
 LockType CInode::flocklock_type(CEPH_LOCK_IFLOCK);
+LockType CInode::policylock_type(CEPH_LOCK_IPOLICY);
 
 //int cinode_pins[CINODE_NUM_PINS];  // counts
 ostream& CInode::print_db_line_prefix(ostream& out)
@@ -167,6 +168,8 @@ ostream& operator<<(ostream& out, CInode& in)
       out << " " << in.snaplock;
     if (!in.nestlock.is_sync_and_unlocked())
       out << " " << in.nestlock;
+    if (!in.policylock.is_sync_and_unlocked())
+      out << " " << in.policylock;
   } else  {
     if (!in.flocklock.is_sync_and_unlocked())
       out << " " << in.flocklock;
@@ -251,11 +254,14 @@ inode_t *CInode::project_inode(map<string,bufferptr> *px)
     projected_nodes.push_back(new projected_inode_t(new inode_t(inode)));
     if (px)
       *px = xattrs;
+    projected_nodes.back()->dir_layout = default_layout;
   } else {
+    default_file_layout *last_dl = projected_nodes.back()->dir_layout;
     projected_nodes.push_back(new projected_inode_t(
         new inode_t(*projected_nodes.back()->inode)));
     if (px)
       *px = *get_projected_xattrs();
+    projected_nodes.back()->dir_layout = last_dl;
   }
   projected_nodes.back()->xattrs = px;
   dout(15) << "project_inode " << projected_nodes.back()->inode << dendl;
@@ -274,6 +280,11 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
   if (px) {
     xattrs = *px;
     delete px;
+  }
+
+  if (projected_nodes.front()->dir_layout != default_layout) {
+    delete default_layout;
+    default_layout = projected_nodes.front()->dir_layout;
   }
 
   if (projected_nodes.front()->snapnode)
@@ -1096,6 +1107,14 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     ::encode(fcntl_locks, bl);
     ::encode(flock_locks, bl);
     break;
+
+  case CEPH_LOCK_IPOLICY:
+    if (inode.is_dir()) {
+      ::encode((default_layout ? true : false), bl);
+      if (default_layout)
+        encode(*default_layout, bl);
+    }
+    break;
   
   default:
     assert(0);
@@ -1369,6 +1388,17 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_IFLOCK:
     ::decode(fcntl_locks, p);
     ::decode(flock_locks, p);
+    break;
+
+  case CEPH_LOCK_IPOLICY:
+    if (inode.is_dir()) {
+      bool default_layout_exists;
+      ::decode(default_layout_exists, p);
+      if (default_layout_exists) {
+       default_layout = new default_file_layout;
+       decode(*default_layout, p);
+      }
+    }
     break;
 
   default:
@@ -1946,6 +1976,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   bool pxattr = xattrlock.is_xlocked_by_client(client) || get_loner() == client;
 
   bool plocal = versionlock.get_last_wrlock_client() == client;
+  bool ppolicy = policylock.is_xlocked_by_client(client) || get_loner()==client;
   
   inode_t *i = (pfile|pauth|plink|pxattr|plocal) ? pi : oi;
   i->ctime.encode_timeval(&e.ctime);
@@ -1957,7 +1988,16 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   // file
   i = pfile ? pi:oi;
-  e.layout = i->layout;
+  if (is_file()) {
+    e.layout = i->layout;
+  } else {
+    if (ppolicy && get_projected_dir_layout())
+      e.layout = *get_projected_dir_layout();
+    else if (default_layout)
+      e.layout = default_layout->layout;
+    else
+      memset(&e.layout, 0, sizeof(e.layout));
+  }
   e.size = i->size;
   e.truncate_seq = i->truncate_seq;
   e.truncate_size = i->truncate_size;
@@ -2207,6 +2247,7 @@ void CInode::_encode_locks_full(bufferlist& bl)
   ::encode(snaplock, bl);
   ::encode(nestlock, bl);
   ::encode(flocklock, bl);
+  ::encode(policylock, bl);
 }
 void CInode::_decode_locks_full(bufferlist::iterator& p)
 {
@@ -2218,6 +2259,7 @@ void CInode::_decode_locks_full(bufferlist::iterator& p)
   ::decode(snaplock, p);
   ::decode(nestlock, p);
   ::decode(flocklock, p);
+  ::decode(policylock, p);
 }
 
 void CInode::_encode_locks_state_for_replica(bufferlist& bl)
@@ -2230,6 +2272,7 @@ void CInode::_encode_locks_state_for_replica(bufferlist& bl)
   xattrlock.encode_state_for_replica(bl);
   snaplock.encode_state_for_replica(bl);
   flocklock.encode_state_for_replica(bl);
+  policylock.encode_state_for_replica(bl);
 }
 void CInode::_decode_locks_state(bufferlist::iterator& p, bool is_new)
 {
@@ -2241,6 +2284,7 @@ void CInode::_decode_locks_state(bufferlist::iterator& p, bool is_new)
   xattrlock.decode_state(p, is_new);
   snaplock.decode_state(p, is_new);
   flocklock.decode_state(p, is_new);
+  policylock.decode_state(p, is_new);
 }
 void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters)
 {
@@ -2252,6 +2296,7 @@ void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waite
   xattrlock.decode_state_rejoin(p, waiters);
   snaplock.decode_state_rejoin(p, waiters);
   flocklock.decode_state_rejoin(p, waiters);
+  policylock.decode_state_rejoin(p, waiters);
 }
 
 

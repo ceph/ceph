@@ -1142,6 +1142,9 @@ void Server::dispatch_client_request(MDRequest *mdr)
   case CEPH_MDS_OP_SETLAYOUT:
     handle_client_setlayout(mdr);
     break;
+  case CEPH_MDS_OP_SETDIRLAYOUT:
+    handle_client_setdirlayout(mdr);
+    break;
   case CEPH_MDS_OP_SETXATTR:
     handle_client_setxattr(mdr);
     break;
@@ -1829,7 +1832,8 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
  */
 CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
 					  set<SimpleLock*>& rdlocks, set<SimpleLock*>& wrlocks, set<SimpleLock*>& xlocks,
-					  bool okexist, bool mustexist, bool alwaysxlock)
+					  bool okexist, bool mustexist, bool alwaysxlock,
+					  ceph_file_layout **layout)
 {
   MClientRequest *req = mdr->client_request;
   const filepath& refpath = n ? req->get_filepath2() : req->get_filepath();
@@ -1902,7 +1906,10 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
     rdlocks.insert(&dn->lock);  // existing dn, rdlock
   wrlocks.insert(&dn->get_dir()->inode->filelock); // also, wrlock on dir mtime
   wrlocks.insert(&dn->get_dir()->inode->nestlock); // also, wrlock on dir mtime
-  mds->locker->include_snap_rdlocks(rdlocks, dn->get_dir()->inode);
+  if (layout)
+    mds->locker->include_snap_rdlocks_wlayout(rdlocks, dn->get_dir()->inode, layout);
+  else
+    mds->locker->include_snap_rdlocks(rdlocks, dn->get_dir()->inode);
 
   return dn;
 }
@@ -2242,8 +2249,23 @@ void Server::handle_client_openc(MDRequest *mdr)
 
   dout(7) << "open w/ O_CREAT on " << req->get_filepath() << dendl;
 
-  // validate layout
-  ceph_file_layout layout = mds->mdcache->default_file_layout;
+  bool excl = (req->head.args.open.flags & O_EXCL);
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  ceph_file_layout *dir_layout = NULL;
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks,
+                                         !excl, false, false, &dir_layout);
+  if (!dn) return;
+  if (mdr->snapid != CEPH_NOSNAP) {
+    reply_request(mdr, -EROFS);
+    return;
+  }
+  // set layout
+  ceph_file_layout layout;
+  if (dir_layout)
+    layout = *dir_layout;
+  else
+    layout = mds->mdcache->default_file_layout;
+  // fill in any special params from client
   if (req->head.args.open.stripe_unit)
     layout.fl_stripe_unit = req->head.args.open.stripe_unit;
   if (req->head.args.open.stripe_count)
@@ -2251,21 +2273,14 @@ void Server::handle_client_openc(MDRequest *mdr)
   if (req->head.args.open.object_size)
     layout.fl_object_size = req->head.args.open.object_size;
   layout.fl_pg_preferred = req->head.args.open.preferred;
-    
+  // validate layout
   if (!ceph_file_layout_is_valid(&layout)) {
     dout(10) << " invalid initial file layout" << dendl;
     reply_request(mdr, -EINVAL);
     return;
   }
-  
-  bool excl = (req->head.args.open.flags & O_EXCL);
-  set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, !excl, false, false);
-  if (!dn) return;
-  if (mdr->snapid != CEPH_NOSNAP) {
-    reply_request(mdr, -EROFS);
-    return;
-  }
+
+
   CInode *diri = dn->get_dir()->get_inode();
   rdlocks.insert(&diri->authlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
@@ -2942,6 +2957,69 @@ void Server::handle_client_setlayout(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
+}
+
+void Server::handle_client_setdirlayout(MDRequest *mdr)
+{
+  MClientRequest *req = mdr->client_request;
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  if (!cur) return;
+
+  if (mdr->snapid != CEPH_NOSNAP) {
+    reply_request(mdr, -EROFS);
+    return;
+  }
+
+  if (!cur->is_dir()) {
+    reply_request(mdr, -ENOTDIR);
+    return;
+  }
+
+  xlocks.insert(&cur->policylock);
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  // validate layout
+  default_file_layout *layout = new default_file_layout;
+  if (cur->get_projected_dir_layout())
+    layout->layout = *cur->get_projected_dir_layout();
+  else
+    layout->layout = g_default_file_layout;
+
+  if (req->head.args.setlayout.layout.fl_object_size > 0)
+    layout->layout.fl_object_size = req->head.args.setlayout.layout.fl_object_size;
+  if (req->head.args.setlayout.layout.fl_stripe_unit > 0)
+    layout->layout.fl_stripe_unit = req->head.args.setlayout.layout.fl_stripe_unit;
+  if (req->head.args.setlayout.layout.fl_stripe_count > 0)
+    layout->layout.fl_stripe_count=req->head.args.setlayout.layout.fl_stripe_count;
+  if (req->head.args.setlayout.layout.fl_cas_hash > 0)
+    layout->layout.fl_cas_hash = req->head.args.setlayout.layout.fl_cas_hash;
+  if (req->head.args.setlayout.layout.fl_object_stripe_unit > 0)
+    layout->layout.fl_object_stripe_unit = req->head.args.setlayout.layout.fl_object_stripe_unit;
+  if (req->head.args.setlayout.layout.fl_pg_preferred > 0)
+    layout->layout.fl_pg_preferred = req->head.args.setlayout.layout.fl_pg_preferred;
+  if (req->head.args.setlayout.layout.fl_pg_pool > 0)
+    layout->layout.fl_pg_pool = req->head.args.setlayout.layout.fl_pg_pool;
+  if (!ceph_file_layout_is_valid(&layout->layout)) {
+    dout(10) << "bad layout" << dendl;
+    reply_request(mdr, -EINVAL);
+    return;
+  }
+
+  cur->project_inode();
+  cur->get_projected_node()->dir_layout = layout;
+  cur->get_projected_inode()->version = cur->pre_dirty();
+
+  // log + wait
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "setlayout");
+  mdlog->start_entry(le);
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
+  mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
+
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 
