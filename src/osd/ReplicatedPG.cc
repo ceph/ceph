@@ -1439,7 +1439,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	      << " " << ceph_osd_op_name(op.op)
 	      << dendl;
       result = -EOPNOTSUPP;
-      assert(0);  // for now
     }
 
     if ((is_modify) &&
@@ -3567,6 +3566,7 @@ int ReplicatedPG::recover_primary(int max)
       soid = p->second;
     }
     Missing::item& item = missing.missing[p->second];
+    p++;
 
     sobject_t head = soid;
     head.snap = CEPH_NOSNAP;
@@ -3621,8 +3621,6 @@ int ReplicatedPG::recover_primary(int max)
       }
     }
     
-    p++;
-
     // only advance last_requested if we haven't skipped anything
     if (!skipped)
       log.last_requested = v;
