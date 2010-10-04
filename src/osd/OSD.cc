@@ -966,10 +966,15 @@ void OSD::load_pgs()
        it++) {
     pg_t pgid;
     snapid_t snap;
-    if (!it->is_pg(pgid, snap))
+    if (!it->is_pg(pgid, snap)) {
+      dout(10) << "load_pgs skipping non-pg " << *it << dendl;
       continue;
-    if (snap != CEPH_NOSNAP)
+    }
+    if (snap != CEPH_NOSNAP) {
+      dout(10) << "load_pgs skipping snapped dir " << *it
+	       << " (pg " << pgid << " snap " << snap << ")" << dendl;
       continue;
+    }
     PG *pg = _open_lock_pg(pgid);
 
     // read pg state, log
@@ -983,6 +988,7 @@ void OSD::load_pgs()
     dout(10) << "load_pgs loaded " << *pg << " " << pg->log << dendl;
     pg->unlock();
   }
+  dout(10) << "load_pgs done" << dendl;
 }
  
 
