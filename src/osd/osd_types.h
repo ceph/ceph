@@ -1309,6 +1309,7 @@ struct object_info_t {
   object_locator_t oloc;
 
   eversion_t version, prior_version;
+  eversion_t user_version;
   osd_reqid_t last_reqid;
 
   uint64_t size;
@@ -1347,6 +1348,7 @@ struct object_info_t {
     ::encode(truncate_seq, bl);
     ::encode(truncate_size, bl);
     ::encode(watchers, bl);
+    ::encode(user_version, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 v;
@@ -1365,8 +1367,10 @@ struct object_info_t {
       ::decode(snaps, bl);
     ::decode(truncate_seq, bl);
     ::decode(truncate_size, bl);
-    if (v >= 2)
+    if (v >= 2) {
       ::decode(watchers, bl);
+      ::decode(user_version, bl);
+    }
   }
   void decode(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();

@@ -824,6 +824,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       if (!ctx->snapc.is_valid())
         return -EINVAL;
       make_writeable(ctx);
+
+      if (op.op != CEPH_OSD_OP_WATCH) {
+        /* update the user_version for any modify ops, except for the watch op */
+        oi.user_version = ctx->at_version;
+      }
     }
 
     // munge ZERO -> TRUNCATE?  (don't munge to DELETE or we risk hosing attributes)
@@ -1114,7 +1119,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	    MWatchNotify *notify_msg = new MWatchNotify(w.cookie, w.ver, notif->id, WATCH_NOTIFY);
 	    osd->client_messenger->send_message(notify_msg, session->con);
 	  } else {
-	    /* FIXME: check timestamp on session disconnection */
 	    // notif->add_watcher(oi_iter->first, Watch::WATCHER_PENDING);
 	    dout(0) << " session was not found" << dendl;
 	  }
@@ -1339,7 +1343,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
 	OSD::Session *session;
         ObjectContext *obc = ctx->obc;
-	dout(0) << "ctx->obc=" << (void *)obc << " cookie=" << cookie << " ver=" << ver << dendl;
+	dout(0) << "ctx->obc=" << (void *)obc << " cookie=" << cookie << " ver=" << ver << " oi.version=" << oi.version.version << " ctx->at_version=" << ctx->at_version << dendl;
+	dout(0) << "oi.user_version=" << oi.user_version.version << dendl;
 	map<entity_name_t, OSD::Session *>::iterator iter = obc->watchers.find(entity);
 	session = (OSD::Session *)ctx->op->get_connection()->get_priv();
 
@@ -1359,9 +1364,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  obc->watchers[entity] = session;
 
 	  session->get();
-dout(0) << "info.pgid=" << info.pgid << dendl;
 	  ceph_object_layout layout = osd->osdmap->make_object_layout(soid.oid, info.pgid.pool(), info.pgid.preferred());
-dout(0) << "JJJ layout=" << layout << dendl;
 	  session->watches[obc] = layout;
         } else {
 	  obc->watchers.erase(entity);
