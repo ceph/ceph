@@ -216,6 +216,7 @@ static void (*old_sigabrt_handler)(int);
 
 void sigsegv_handler(int signum)
 {
+  *_dout << "*** Caught signal (SEGV) ***" << std::endl;
   BackTrace bt(0);
   bt.print(*_dout);
 
@@ -224,6 +225,7 @@ void sigsegv_handler(int signum)
 
 void sigabrt_handler(int signum)
 {
+  *_dout << "*** Caught signal (ABRT) ***" << std::endl;
   BackTrace bt(0);
   bt.print(*_dout);
 
