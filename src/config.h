@@ -482,6 +482,7 @@ char *conf_post_process_val(const char *val);
 int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out, void *def, bool free_old_val = false);
 bool conf_set_conf_val(void *field, opt_type_t type, const char *val);
 bool conf_cmd_equals(const char *cmd, const char *opt, char char_opt, unsigned int *val_pos);
+int ceph_def_conf_by_name(const char *name, char *buf, int len);
 
 class ExportControl;
 ExportControl *conf_get_export_control();
