@@ -19,6 +19,7 @@
 
 #include "common/Clock.h"
 #include "common/Logger.h"
+#include "common/BackTrace.h"
 
 #include <fstream>
 #include <stdlib.h>
@@ -208,6 +209,25 @@ void sighup_handler(int signum)
 {
   _dout_need_open = true;
   logger_reopen_all();
+}
+
+static void (*old_sigsegv_handler)(int);
+static void (*old_sigabrt_handler)(int);
+
+void sigsegv_handler(int signum)
+{
+  BackTrace bt(0);
+  bt.print(*_dout);
+
+  old_sigsegv_handler(signum);
+}
+
+void sigabrt_handler(int signum)
+{
+  BackTrace bt(0);
+  bt.print(*_dout);
+
+  old_sigabrt_handler(signum);
 }
 
 #define _STR(x) #x
@@ -1177,6 +1197,8 @@ void parse_config_options(std::vector<const char*>& args)
   }
 
   signal(SIGHUP, sighup_handler);
+  old_sigsegv_handler = signal(SIGSEGV, sigsegv_handler);
+  old_sigabrt_handler = signal(SIGABRT, sigabrt_handler);
 
   args = nargs;
 }
