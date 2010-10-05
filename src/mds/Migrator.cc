@@ -991,12 +991,15 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& fini
   in->nestlock.export_twiddle();
   in->xattrlock.export_twiddle();
   in->snaplock.export_twiddle();
+  in->policylock.export_twiddle();
   
   // mark auth
   assert(in->is_auth());
   in->state_clear(CInode::STATE_AUTH);
   in->replica_nonce = CInode::EXPORT_NONCE;
   
+  in->clear_dirty_rstat();
+
   // waiters
   in->take_waiting(CInode::WAIT_ANY_MASK, finished);
   
@@ -1460,6 +1463,12 @@ void Migrator::handle_export_discover(MExportDirDiscover *m)
   assert(from != mds->get_nodeid());
 
   dout(7) << "handle_export_discover on " << m->get_path() << dendl;
+
+  if (!mds->mdcache->is_open()) {
+    dout(5) << " waiting for root" << dendl;
+    mds->mdcache->wait_for_open(new C_MDS_RetryMessage(mds, m));
+    return;
+  }
 
   // note import state
   dirfrag_t df = m->get_dirfrag();
@@ -2124,6 +2133,9 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
   } else {
     dout(10) << "  had " << *in << dendl;
   }
+
+  if (in->inode.is_dirty_rstat())
+    in->mark_dirty_rstat();
   
   // clear if dirtyscattered, since we're going to journal this
   //  but not until we _actually_ finish the import...

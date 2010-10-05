@@ -33,6 +33,7 @@ inline const char *get_lock_type_name(int t) {
   case CEPH_LOCK_ISNAP: return "isnap";
   case CEPH_LOCK_INO: return "ino";
   case CEPH_LOCK_IFLOCK: return "iflock";
+  case CEPH_LOCK_IPOLICY: return "ipolicy";
   default: assert(0); return 0;
   }
 }
@@ -60,6 +61,7 @@ struct LockType {
     case CEPH_LOCK_IXATTR:
     case CEPH_LOCK_ISNAP:
     case CEPH_LOCK_IFLOCK:
+    case CEPH_LOCK_IPOLICY:
       sm = &sm_simplelock;
       break;
     case CEPH_LOCK_IDFT:
@@ -223,6 +225,9 @@ public:
   virtual bool is_scatterlock() const {
     return false;
   }
+  virtual bool is_locallock() const {
+    return false;
+  }
 
   // parent
   MDSCacheObject *get_parent() { return parent; }
@@ -242,6 +247,7 @@ public:
     case CEPH_LOCK_ISNAP:    return 8 + 8*SimpleLock::WAIT_BITS;
     case CEPH_LOCK_INEST:    return 8 + 9*SimpleLock::WAIT_BITS;
     case CEPH_LOCK_IFLOCK:   return 8 +10*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IPOLICY:  return 8 +11*SimpleLock::WAIT_BITS;
     default:
       assert(0);
     }
@@ -446,7 +452,7 @@ public:
   // xlock
   void get_xlock(Mutation *who, client_t client) { 
     assert(get_xlock_by() == 0);
-    assert(state == LOCK_XLOCK);
+    assert(state == LOCK_XLOCK || is_locallock());
     parent->get(MDSCacheObject::PIN_LOCK);
     more()->num_xlock++;
     more()->xlock_by = who; 
@@ -454,12 +460,13 @@ public:
   }
   void set_xlock_done() {
     assert(more()->xlock_by);
-    assert(state == LOCK_XLOCK);
-    state = LOCK_XLOCKDONE;
+    assert(state == LOCK_XLOCK || is_locallock());
+    if (!is_locallock())
+      state = LOCK_XLOCKDONE;
     more()->xlock_by = 0;
   }
   void put_xlock() {
-    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE);
+    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE || is_locallock());
     --more()->num_xlock;
     parent->put(MDSCacheObject::PIN_LOCK);
     if (more()->num_xlock == 0) {

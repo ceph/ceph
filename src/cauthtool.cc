@@ -140,7 +140,7 @@ int main(int argc, const char **argv)
       try {
 	bufferlist::iterator iter = bl.begin();
 	::decode(keyring, iter);
-      } catch (buffer::error *err) {
+      } catch (const buffer::error &err) {
 	cerr << "error reading file " << fn << std::endl;
 	exit(1);
       }
@@ -159,7 +159,7 @@ int main(int argc, const char **argv)
       try {
 	bufferlist::iterator iter = obl.begin();
 	::decode(other, iter);
-      } catch (buffer::error *err) {
+      } catch (const buffer::error &err) {
 	cerr << "error reading file " << import_keyring << std::endl;
 	exit(1);
       }
@@ -188,7 +188,7 @@ int main(int argc, const char **argv)
     string ekey(add_key);
     try {
       eauth.key.decode_base64(ekey);
-    } catch (buffer::error *err) {
+    } catch (const buffer::error &err) {
       cerr << "can't decode key '" << add_key << "'" << std::endl;
       exit(1);
     }

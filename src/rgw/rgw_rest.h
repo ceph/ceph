@@ -115,6 +115,8 @@ class RGWHandler_REST : public RGWHandler {
   RGWOp *get_create_op(struct req_state *s);
   RGWOp *get_delete_op(struct req_state *s);
 
+  bool expect100cont;
+
 protected:
   void provider_init_state();
 public:

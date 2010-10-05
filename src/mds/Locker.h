@@ -79,6 +79,8 @@ protected:
   // -- locks --
 public:
   void include_snap_rdlocks(set<SimpleLock*>& rdlocks, CInode *in);
+  void include_snap_rdlocks_wlayout(set<SimpleLock*>& rdlocks, CInode *in,
+                                    ceph_file_layout **layout);
 
   bool acquire_locks(MDRequest *mdr,
 		     set<SimpleLock*> &rdlocks,
@@ -185,11 +187,17 @@ public:
   void handle_reqrdlock(SimpleLock *lock);
 
 
+
   // caps
-  void process_cap_update(MDRequest *mdr, client_t client,
-			  inodeno_t ino, uint64_t cap_id, int caps, int wanted,
-			  int seq, int issue_seq, int mseq,
-			  const string& dname);
+
+  // when to defer processing client cap release or writeback due to being
+  // frozen.  the condition must be consistent across handle_client_caps and
+  // process_request_cap_release to preserve ordering.
+  bool should_defer_client_cap_frozen(CInode *in);
+
+  void process_request_cap_release(MDRequest *mdr, client_t client, const ceph_mds_request_release& r,
+				   const string &dname);
+
   void kick_cap_releases(MDRequest *mdr);
 
   void remove_client_cap(CInode *in, client_t client);

@@ -45,7 +45,7 @@ inodeno_t InoTable::project_alloc_id(inodeno_t id)
   dout(10) << "project_alloc_id " << id << " to " << projected_free << "/" << free << dendl;
   assert(is_active());
   if (!id)
-    id = projected_free.start();
+    id = projected_free.range_start();
   projected_free.erase(id);
   ++projected_version;
   return id;
@@ -61,7 +61,7 @@ void InoTable::project_alloc_ids(interval_set<inodeno_t>& ids, int want)
 {
   assert(is_active());
   while (want > 0) {
-    inodeno_t start = projected_free.start();
+    inodeno_t start = projected_free.range_start();
     inodeno_t end = projected_free.end_after(start);
     inodeno_t num = end - start;
     if (num > (inodeno_t)want)

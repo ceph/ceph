@@ -648,6 +648,9 @@ void RGWHandler_REST::provider_init_state()
 
   s->copy_source = FCGX_GetParam("HTTP_X_AMZ_COPY_SOURCE", s->fcgx->envp);
   s->http_auth = FCGX_GetParam("HTTP_AUTHORIZATION", s->fcgx->envp);
+
+  const char *expect = FCGX_GetParam("HTTP_EXPECT", s->fcgx->envp);
+  s->expect_cont = (expect && !strcasecmp(expect, "100-continue"));
 }
 
 static bool is_acl_op(struct req_state *s)

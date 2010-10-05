@@ -238,11 +238,12 @@ public:
     /** Entry
      */
     struct Entry {
-      const static int LOST = 0;
+      const static int LOST = 0;        // lost new version, now deleted
       const static int MODIFY = 1;
       const static int CLONE = 2;  
       const static int DELETE = 3;
       const static int BACKLOG = 4;  // event invented by generate_backlog
+      const static int LOST_REVERT = 5; // lost new version, reverted to old
 
       __s32      op;   // write, zero, trunc, remove
       sobject_t  soid;
@@ -264,10 +265,12 @@ public:
       bool is_clone() const { return op == CLONE; }
       bool is_modify() const { return op == MODIFY; }
       bool is_backlog() const { return op == BACKLOG; }
-      bool is_update() const { return is_clone() || is_modify() || is_backlog(); }
+      bool is_lost() const { return op == LOST; }
+      bool is_lost_revert() const { return op == LOST_REVERT; }
+      bool is_update() const { return is_clone() || is_modify() || is_backlog() || is_lost_revert(); }
 
       bool reqid_is_indexed() const {
-	return reqid != osd_reqid_t() && op != BACKLOG && op != CLONE;
+	return reqid != osd_reqid_t() && op != BACKLOG && op != CLONE && op != LOST && op != LOST_REVERT;
       }
 
       void encode(bufferlist &bl) const {
@@ -727,6 +730,7 @@ public:
 
   // pg state
   Info        info;
+  const coll_t coll;
   IndexedLog  log;
   sobject_t    log_oid;
   OndiskLog   ondisklog;
@@ -856,6 +860,7 @@ public:
   void search_for_missing(Log &olog, Missing &omissing, int fromosd);
 
   void check_for_lost_objects();
+  void forget_lost_objects();
   
   bool build_backlog_map(map<eversion_t,Log::Entry>& omap);
   void assemble_backlog(map<eversion_t,Log::Entry>& omap);
@@ -912,7 +917,7 @@ public:
     osd(o), pool(_pool),
     _lock("PG::_lock"),
     ref(0), deleting(false), dirty_info(false), dirty_log(false),
-    info(p), log_oid(oid),
+    info(p), coll(p), log_oid(oid),
     recovery_item(this), backlog_item(this), scrub_item(this), snap_trim_item(this), remove_item(this), stat_queue_item(this),
     recovery_ops_active(0),
     generate_backlog_epoch(0),
@@ -1053,7 +1058,9 @@ inline ostream& operator<<(ostream& out, const PG::Log::Entry& e)
 		 (e.is_clone() ? " c ":
 		  (e.is_modify() ? " m ":
 		   (e.is_backlog() ? " b ":
-		    " ? "))))
+		    (e.is_lost() ? " L ":
+		     (e.is_lost_revert() ? " R " :
+		      " ? "))))))
              << e.soid << " by " << e.reqid << " " << e.mtime;
 }
 

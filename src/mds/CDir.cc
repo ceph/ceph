@@ -99,11 +99,23 @@ ostream& operator<<(ostream& out, CDir& dir)
   out << " " << dir.fnode.fragstat;
   if (!(dir.fnode.fragstat == dir.fnode.accounted_fragstat))
     out << "/" << dir.fnode.accounted_fragstat;
+  if (false && dir.is_projected()) {
+    fnode_t *pf = dir.get_projected_fnode();
+    out << "->" << pf->fragstat;
+    if (!(pf->fragstat == pf->accounted_fragstat))
+      out << "/" << pf->accounted_fragstat;
+  }
   
   // rstat
   out << " " << dir.fnode.rstat;
   if (!(dir.fnode.rstat == dir.fnode.accounted_rstat))
     out << "/" << dir.fnode.accounted_rstat;
+  if (false && dir.is_projected()) {
+    fnode_t *pf = dir.get_projected_fnode();
+    out << "->" << pf->rstat;
+    if (!(pf->rstat == pf->accounted_rstat))
+      out << "/" << pf->accounted_rstat;
+ }
 
   out << " hs=" << dir.get_num_head_items() << "+" << dir.get_num_head_null();
   out << ",ss=" << dir.get_num_snap_items() << "+" << dir.get_num_snap_null();
@@ -139,6 +151,7 @@ ostream& CDir::print_db_line_prefix(ostream& out)
 // CDir
 
 CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
+  dirty_rstat_inodes(member_offset(CInode, dirty_rstat_item)),
   item_dirty(this), item_new(this)
 {
   g_num_dir++;
@@ -770,6 +783,39 @@ void CDir::merge(int bits, list<Context*>& waiters, bool replay)
 
 
 
+void CDir::assimilate_dirty_rstat_inodes()
+{
+  dout(10) << "assimilate_dirty_rstat_inodes" << dendl;
+  for (elist<CInode*>::iterator p = dirty_rstat_inodes.begin_use_current();
+       !p.end(); ++p) {
+    CInode *in = *p;
+    inode_t *pi = in->project_inode();
+    pi->version = in->pre_dirty();
+
+    inode->mdcache->project_rstat_inode_to_frag(in, this, 0, 0);
+  }
+  dout(10) << "assimilate_dirty_rstat_inodes done" << dendl;
+}
+
+void CDir::assimilate_dirty_rstat_inodes_finish(Mutation *mut, EMetaBlob *blob)
+{
+  dout(10) << "assimilate_dirty_rstat_inodes_finish" << dendl;
+  elist<CInode*>::iterator p = dirty_rstat_inodes.begin_use_current();
+  while (!p.end()) {
+    CInode *in = *p;
+    CDentry *dn = in->get_projected_parent_dn();
+    ++p;
+
+    mut->auth_pin(in);
+    mut->add_projected_inode(in);
+
+    in->clear_dirty_rstat();
+    blob->add_primary_dentry(dn, true, in);
+  }
+  assert(dirty_rstat_inodes.empty());
+}
+
+
 
 
 /****************************************
@@ -1296,6 +1342,9 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
 	  // link
 	  dn = add_primary_dentry(dname, in, first, last);
 	  dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
+
+	  if (in->inode.is_dirty_rstat())
+	    in->mark_dirty_rstat();
 
 	  //in->hack_accessed = false;
 	  //in->hack_load_stamp = g_clock.now();

@@ -95,7 +95,7 @@ public:
   inodeno_t next_ino() {
     if (prealloc_inos.empty())
       return 0;
-    return prealloc_inos.start();
+    return prealloc_inos.range_start();
   }
   inodeno_t take_ino(inodeno_t ino = 0) {
     assert(!prealloc_inos.empty());
@@ -107,7 +107,7 @@ public:
 	ino = 0;
     }
     if (!ino) {
-      ino = prealloc_inos.start();
+      ino = prealloc_inos.range_start();
       prealloc_inos.erase(ino);
     }
     used_inos.insert(ino, 1);

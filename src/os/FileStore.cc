@@ -214,19 +214,10 @@ bool FileStore::parse_object(char *s, sobject_t& o)
   // 012345678901234567890123456789012
   // pppppppppppppppp.ssssssssssssssss
 
-bool FileStore::parse_coll(char *s, coll_t& c)
-{
-  bool r = c.parse(s);
-  dout(0) << "parse " << s << " -> " << c << " = " << r << dendl;
-  return r;
-}
-
 void FileStore::get_cdir(coll_t cid, char *s, int len) 
 {
-  int ret = snprintf(s, len, "%s/current/", basedir.c_str());
-  s += ret;
-  len -= ret;
-  s += cid.print(s, len);
+  const string &cid_str(cid.to_str());
+  snprintf(s, len, "%s/current/%s", basedir.c_str(), cid_str.c_str());
 }
 
 void FileStore::get_coname(coll_t cid, const sobject_t& oid, char *s, int len) 
@@ -2216,9 +2207,14 @@ int FileStore::list_collections(vector<coll_t>& ls)
   while (::readdir_r(dir, &sde, &de) == 0) {
     if (!de)
       break;
-    coll_t c;
-    if (parse_coll(de->d_name, c))
-      ls.push_back(c);
+    if (!S_ISDIR(de->d_type << 12))
+      continue;
+    if (de->d_name[0] == '.' &&
+	(de->d_name[1] == '\0' ||
+	 (de->d_name[1] == '.' &&
+	  de->d_name[2] == '\0')))
+      continue;
+    ls.push_back(coll_t(de->d_name));
   }
   
   ::closedir(dir);

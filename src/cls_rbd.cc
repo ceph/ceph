@@ -115,7 +115,7 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   try {
     ::decode(s, iter);
     ::decode(snap_id, iter);
-  } catch (buffer::error *err) {
+  } catch (const buffer::error &err) {
     return -EINVAL;
   }
   snap_name = s.c_str();
@@ -192,7 +192,7 @@ int snapshot_revert(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   try {
     ::decode(s, iter);
-  } catch (buffer::error *err) {
+  } catch (const buffer::error &err) {
     return -EINVAL;
   }
   snap_name = s.c_str();
@@ -267,7 +267,7 @@ int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   try {
     ::decode(s, iter);
-  } catch (buffer::error *err) {
+  } catch (const buffer::error &err) {
     return -EINVAL;
   }
   snap_name = s.c_str();

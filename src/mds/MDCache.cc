@@ -1222,6 +1222,7 @@ int MDCache::num_subtrees_fullnonauth()
 CInode *MDCache::pick_inode_snap(CInode *in, snapid_t follows)
 {
   dout(10) << "pick_inode_snap follows " << follows << " on " << *in << dendl;
+  assert(in->last == CEPH_NOSNAP);
 
   SnapRealm *realm = in->find_snaprealm();
   const set<snapid_t>& snaps = realm->get_snaps();
@@ -1425,6 +1426,35 @@ inode_t *MDCache::journal_dirty_inode(Mutation *mut, EMetaBlob *metablob, CInode
 
 
 // nested ---------------------------------------------------------------
+
+void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t first, int linkunlink)
+{
+  CDentry *parentdn = cur->get_projected_parent_dn();
+  inode_t *curi = cur->get_projected_inode();
+
+  dout(20) << "    frag head is [" << parent->first << ",head] " << dendl;
+  dout(20) << " inode update is [" << first << "," << cur->last << "]" << dendl;
+
+  /*
+   * FIXME.  this incompletely propagates rstats to _old_ parents
+   * (i.e. shortly after a directory rename).  but we need full
+   * blown hard link backpointers to make this work properly...
+   */
+  snapid_t floor = parentdn->first;
+  dout(20) << " floor of " << floor << " from parent dn " << *parentdn << dendl;
+
+  if (cur->last >= floor)
+    project_rstat_inode_to_frag(*curi, MAX(first, floor), cur->last, parent, linkunlink);
+      
+  for (set<snapid_t>::iterator p = cur->dirty_old_rstats.begin();
+       p != cur->dirty_old_rstats.end();
+       p++) {
+    old_inode_t& old = cur->old_inodes[*p];
+    if (*p >= floor)
+      project_rstat_inode_to_frag(old.inode, MAX(old.first, floor), *p, parent);
+  }
+  cur->dirty_old_rstats.clear();
+}
 
 
 void MDCache::project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
@@ -1724,7 +1754,13 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
     
     // rstat
-    if (primary_dn) { 
+    if (!primary_dn) {
+      // don't update parent this pass
+    } else if (!parent->inode->nestlock.can_wrlock(-1)) {
+      dout(20) << " unwritable parent nestlock " << parent->inode->nestlock
+	       << ", marking dirty rstat on " << *cur << dendl;
+      cur->mark_dirty_rstat();      
+   } else {
       SnapRealm *prealm = parent->inode->find_snaprealm();
       
       snapid_t follows = cfollows;
@@ -1735,28 +1771,9 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       if (cur->first > first)
 	first = cur->first;
 
-      dout(20) << "    frag head is [" << parent->first << ",head] " << dendl;
-      dout(20) << " inode update is [" << first << "," << cur->last << "]" << dendl;
+      project_rstat_inode_to_frag(cur, parent, first, linkunlink);
 
-      /*
-       * FIXME.  this incompletely propagates rstats to _old_ parents
-       * (i.e. shortly after a directory rename).  but we need full
-       * blow hard link backpointers to make this work properly...
-       */
-      snapid_t floor = parentdn->first;
-      dout(20) << " floor of " << floor << " from parent dn " << *parentdn << dendl;
-
-      if (cur->last >= floor)
-	project_rstat_inode_to_frag(*curi, MAX(first, floor), cur->last, parent, linkunlink);
-      
-      for (set<snapid_t>::iterator p = cur->dirty_old_rstats.begin();
-	   p != cur->dirty_old_rstats.end();
-	   p++) {
-	old_inode_t& old = cur->old_inodes[*p];
-	if (*p >= floor)
-	  project_rstat_inode_to_frag(old.inode, MAX(old.first, floor), *p, parent);
-      }
-      cur->dirty_old_rstats.clear();
+      cur->clear_dirty_rstat();
     }
 
     bool stop = false;
@@ -4011,6 +4028,9 @@ void MDCache::choose_lock_states_and_reconnect_caps()
        ++i) {
     CInode *in = i->second;
  
+    if (in->is_auth() && in->inode.is_dirty_rstat())
+      in->mark_dirty_rstat();
+
     in->choose_lock_states();
     dout(15) << " chose lock states on " << *in << dendl;
 
@@ -5319,6 +5339,7 @@ void MDCache::inode_remove_replica(CInode *in, int from)
 
   if (in->nestlock.remove_replica(from)) mds->locker->eval_gather(&in->nestlock);
   if (in->flocklock.remove_replica(from)) mds->locker->eval_gather(&in->flocklock);
+  if (in->policylock.remove_replica(from)) mds->locker->eval_gather(&in->policylock);
 
   // trim?
   maybe_eval_stray(in);
@@ -8123,20 +8144,31 @@ CInode *MDCache::add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<Co
   return in;
 }
 
-    
+ 
+void MDCache::replicate_stray(CDentry *straydn, int who, bufferlist& bl)
+{
+  replicate_inode(get_myin(), who, bl);
+  replicate_dir(straydn->get_dir()->inode->get_parent_dn()->get_dir(), who, bl);
+  replicate_dentry(straydn->get_dir()->inode->get_parent_dn(), who, bl);
+  replicate_inode(straydn->get_dir()->inode, who, bl);
+  replicate_dir(straydn->get_dir(), who, bl);
+  replicate_dentry(straydn, who, bl);
+}
+   
 CDentry *MDCache::add_replica_stray(bufferlist &bl, int from)
 {
   list<Context*> finished;
   bufferlist::iterator p = bl.begin();
 
-  CInode *strayin = add_replica_inode(p, NULL, finished);
-  dout(15) << "strayin " << *strayin << dendl;
+  CInode *mdsin = add_replica_inode(p, NULL, finished);
+  CDir *mdsdir = add_replica_dir(p, mdsin, from, finished);
+  CDentry *straydirdn = add_replica_dentry(p, mdsdir, finished);
+  CInode *strayin = add_replica_inode(p, straydirdn, finished);
   CDir *straydir = add_replica_dir(p, strayin, from, finished);
-  dout(15) << "straydir " << *straydir << dendl;
   CDentry *straydn = add_replica_dentry(p, straydir, finished);
-  dout(15) << "straydn " << *straydn << dendl;
+  if (!finished.empty())
+    mds->queue_waiters(finished);
 
-  mds->queue_waiters(finished);
   return straydn;
 }
 
@@ -8298,14 +8330,8 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn)
        it != dn->replicas_end();
        it++) {
     MDentryUnlink *unlink = new MDentryUnlink(dn->get_dir()->dirfrag(), dn->name);
-    if (straydn) {
-      replicate_inode(get_myin(), it->first, unlink->straybl);
-      replicate_dir(straydn->get_dir()->inode->get_parent_dn()->get_dir(), it->first, unlink->straybl);
-      replicate_dentry(straydn->get_dir()->inode->get_parent_dn(), it->first, unlink->straybl);
-      replicate_inode(straydn->get_dir()->inode, it->first, unlink->straybl);
-      replicate_dir(straydn->get_dir(), it->first, unlink->straybl);
-      replicate_dentry(straydn, it->first, unlink->straybl);
-    }
+    if (straydn)
+      replicate_stray(straydn, it->first, unlink->straybl);
     mds->send_message_mds(unlink, it->first);
   }
 }
@@ -8325,19 +8351,10 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
       CDentry::linkage_t *dnl = dn->get_linkage();
 
       // straydn
-      bufferlist::iterator p = m->straybl.begin();
       CDentry *straydn = NULL;
-      if (!p.end()) {
-	list<Context*> finished;
+      if (m->straybl.length()) {
 	int from = m->get_source().num();
-	CInode *mdsin = add_replica_inode(p, NULL, finished);
-	CDir *mdsdir = add_replica_dir(p, mdsin, from, finished);
-	CDentry *straydirdn = add_replica_dentry(p, mdsdir, finished);
-	CInode *strayin = add_replica_inode(p, straydirdn, finished);
-	CDir *straydir = add_replica_dir(p, strayin, from, finished);
-	straydn = add_replica_dentry(p, straydir, finished);
-	if (!finished.empty())
-	  mds->queue_waiters(finished);
+	straydn = add_replica_stray(m->straybl, from);
       }
 
       // open inode?

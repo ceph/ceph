@@ -311,6 +311,7 @@ struct md_config_t {
   int mds_kill_mdstable_at;
   int mds_kill_export_at;
   int mds_kill_import_at;
+  int mds_kill_rename_at;
 
   // osd
   const char *osd_data;
@@ -368,6 +369,8 @@ struct md_config_t {
   float osd_recovery_delay_start;
   int osd_recovery_max_active;
   uint64_t osd_recovery_max_chunk;
+
+  bool osd_recovery_forget_lost_objects;
 
   bool osd_auto_weight;
 

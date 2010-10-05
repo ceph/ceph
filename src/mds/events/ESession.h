@@ -30,9 +30,9 @@ class ESession : public LogEvent {
   version_t inotablev;
 
  public:
-  ESession() : LogEvent(EVENT_SESSION) { }
+  ESession() : LogEvent(EVENT_SESSIONS) { }
   ESession(entity_inst_t inst, bool o, version_t v) :
-    LogEvent(EVENT_SESSION),
+    LogEvent(EVENT_SESSIONS),
     client_inst(inst),
     open(o),
     cmapv(v),
@@ -40,7 +40,7 @@ class ESession : public LogEvent {
   }
   ESession(entity_inst_t inst, bool o, version_t v,
 	   const interval_set<inodeno_t>& i, version_t iv) :
-    LogEvent(EVENT_SESSION),
+    LogEvent(EVENT_SESSIONS),
     client_inst(inst),
     open(o),
     cmapv(v),

@@ -16,6 +16,7 @@
 #ifndef CEPH_INTERVAL_SET_H
 #define CEPH_INTERVAL_SET_H
 
+#include <iterator>
 #include <map>
 #include <ostream>
 using namespace std;
@@ -33,10 +34,143 @@ using namespace std;
 template<typename T>
 class interval_set {
  public:
-  map<T,T> m;   // map start -> len  
-  int64_t _size;
-  
+  class iterator : public std::iterator <std::forward_iterator_tag, T>
+  {
+    public:
+        explicit iterator(typename std::map<T,T>::iterator iter)
+          : _iter(iter)
+        { }
+
+        // For the copy constructor and assignment operator, the compiler-generated functions, which
+        // perform simple bitwise copying, should be fine.
+
+        bool operator==(const iterator& rhs) const {
+          return (_iter == rhs._iter);
+        }
+
+        bool operator!=(const iterator& rhs) const {
+          return (_iter != rhs._iter);
+        }
+
+        // Dereference this iterator to get a pair.
+        pair < T, T > &operator*() {
+                return *_iter;
+        }
+
+        // Return the interval start.
+        T get_start() const {
+                return _iter->first;
+        }
+
+        // Return the interval length.
+        T get_len() const {
+                return _iter->second;
+        }
+
+        // Set the interval length.
+        void set_len(T len) {
+                _iter->second = len;
+        }
+
+        // Preincrement
+        iterator &operator++()
+        {
+                ++_iter;
+                return *this;
+        }
+
+        // Postincrement
+        iterator operator++(int)
+        {
+                iterator prev(_iter);
+                ++_iter;
+                return prev;
+        }
+
+    friend class interval_set<T>::const_iterator;
+
+    protected:
+        typename map<T,T>::iterator _iter;
+  };
+
+  class const_iterator : public std::iterator <std::forward_iterator_tag, T>
+  {
+    public:
+        explicit const_iterator(typename std::map<T,T>::const_iterator iter)
+          : _iter(iter)
+        { }
+
+        const_iterator(const iterator &i)
+	  : _iter(i._iter)
+        { }
+
+        // For the copy constructor and assignment operator, the compiler-generated functions, which
+        // perform simple bitwise copying, should be fine.
+
+        bool operator==(const const_iterator& rhs) const {
+          return (_iter == rhs._iter);
+        }
+
+        bool operator!=(const const_iterator& rhs) const {
+          return (_iter != rhs._iter);
+        }
+
+        // Dereference this iterator to get a pair.
+        pair < T, T > operator*() const {
+                return *_iter;
+        }
+
+        // Return the interval start.
+        T get_start() const {
+                return _iter->first;
+        }
+
+        // Return the interval length.
+        T get_len() const {
+                return _iter->second;
+        }
+
+        // Preincrement
+        const_iterator &operator++()
+        {
+                ++_iter;
+                return *this;
+        }
+
+        // Postincrement
+        const_iterator operator++(int)
+        {
+                const_iterator prev(_iter);
+                ++_iter;
+                return prev;
+        }
+
+    protected:
+        typename map<T,T>::const_iterator _iter;
+  };
+
   interval_set() : _size(0) {}
+
+  int num_intervals() const
+  {
+    return m.size();
+  }
+
+  typename interval_set<T>::iterator begin() {
+    return typename interval_set<T>::iterator(m.begin());
+  }
+
+  typename interval_set<T>::iterator end() {
+    return typename interval_set<T>::iterator(m.end());
+  }
+
+  typename interval_set<T>::const_iterator begin() const {
+    return typename interval_set<T>::const_iterator(m.begin());
+  }
+
+  typename interval_set<T>::const_iterator end() const {
+    return typename interval_set<T>::const_iterator(m.end());
+  }
 
   // helpers
  private:
@@ -151,12 +285,12 @@ class interval_set {
   bool empty() const {
     return m.empty();
   }
-  T start() const {
+  T range_start() const {
     assert(!empty());
     typename map<T,T>::const_iterator p = m.begin();
     return p->first;
   }
-  T end() const {
+  T range_end() const {
     assert(!empty());
     typename map<T,T>::const_iterator p = m.end();
     p--;
@@ -371,16 +505,23 @@ class interval_set {
     }
   }
 
+private:
+  // data
+  int64_t _size;
+  map<T,T> m;   // map start -> len
 };
+
 
 template<class T>
 inline ostream& operator<<(ostream& out, const interval_set<T> &s) {
   out << "[";
-  for (typename map<T,T>::const_iterator i = s.m.begin();
-       i != s.m.end();
-       i++) {
-    if (i != s.m.begin()) out << ",";
-    out << i->first << "~" << i->second;
+  const char *prequel = "";
+  for (typename interval_set<T>::const_iterator i = s.begin();
+       i != s.end();
+       ++i)
+  {
+    out << prequel << i.get_start() << "~" << i.get_len();
+    prequel = ",";
   }
   out << "]";
   return out;

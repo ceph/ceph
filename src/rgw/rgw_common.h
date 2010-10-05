@@ -164,6 +164,7 @@ struct req_state {
    const char *content_type;
    bool err_exist;
    struct rgw_err err;
+   bool expect_cont;
 
    XMLArgs args;
 

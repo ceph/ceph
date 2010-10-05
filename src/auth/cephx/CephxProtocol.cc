@@ -429,9 +429,8 @@ bool CephXAuthorizer::verify_reply(bufferlist::iterator& indata)
       dout(0) << "verify_authorizer_reply coudln't decrypt with " << session_key << dendl;
       return false;
     }
-  } catch (buffer::error *e) {
+  } catch (const buffer::error &e) {
     dout(0) << "verify_authorizer_reply exception in decode_decrypt with " << session_key << dendl;
-    delete e;
     return false;
   }
 

@@ -589,6 +589,7 @@ public:
 			  CInode **pcow_inode=0);
   inode_t *journal_dirty_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
 
+  void project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t first, int linkunlink);
   void project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
 				   CDir *parent, int linkunlink=0);
   void project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accounted_rstat,
@@ -1047,6 +1048,8 @@ public:
   CDir* forge_replica_dir(CInode *diri, frag_t fg, int from);
   CDentry *add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<Context*>& finished);
   CInode *add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<Context*>& finished);
+
+  void replicate_stray(CDentry *straydn, int who, bufferlist& bl);
   CDentry *add_replica_stray(bufferlist &bl, int from);
 
   // -- namespace --

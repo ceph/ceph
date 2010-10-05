@@ -449,6 +449,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_kill_mdstable_at, 0, OPT_INT, 0),
 	OPTION(mds_kill_export_at, 0, OPT_INT, 0),
 	OPTION(mds_kill_import_at, 0, OPT_INT, 0),
+	OPTION(mds_kill_rename_at, 0, OPT_INT, 0),
 	OPTION(osd_data, 0, OPT_STR, ""),
 	OPTION(osd_journal, 0, OPT_STR, ""),
 	OPTION(osd_journal_size, 0, OPT_INT, 0),         // in mb
@@ -495,6 +496,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_recovery_delay_start, 0, OPT_FLOAT, 15),
 	OPTION(osd_recovery_max_active, 0, OPT_INT, 5),
 	OPTION(osd_recovery_max_chunk, 0, OPT_LONGLONG, 1<<20),  // max size of push chunk
+	OPTION(osd_recovery_forget_lost_objects, 0, OPT_BOOL, false),   // off for now
 	OPTION(osd_auto_weight, 0, OPT_BOOL, false),
 	OPTION(osd_class_error_timeout, 0, OPT_DOUBLE, 60.0),  // seconds
 	OPTION(osd_class_timeout, 0, OPT_DOUBLE, 60*60.0), // seconds

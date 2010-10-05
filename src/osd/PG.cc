@@ -316,7 +316,7 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
       dout(20) << "merge_old_entry  had " << oe << " new dne : ok" << dendl;      
     } else {
       dout(20) << "merge_old_entry  had " << oe << " new dne : deleting" << dendl;
-      t.remove(coll_t::build_pg_coll(info.pgid), oe.soid);
+      t.remove(coll, oe.soid);
       missing.rm(oe.soid, oe.version);
     }
   }
@@ -373,7 +373,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
       dout(20) << "merge_log merging " << ne << dendl;
       missing.add_next_event(ne);
       if (ne.is_delete())
-	t.remove(coll_t::build_pg_coll(info.pgid), ne.soid);
+	t.remove(coll, ne.soid);
     }
 
     // find any divergent or removed items in old log.
@@ -458,7 +458,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
 	log.index(ne);
 	missing.add_next_event(ne);
 	if (ne.is_delete())
-	  t.remove(coll_t::build_pg_coll(info.pgid), ne.soid);
+	  t.remove(coll, ne.soid);
       }
       
       // move aside divergent items
@@ -544,7 +544,7 @@ bool PG::build_backlog_map(map<eversion_t,Log::Entry>& omap)
   unlock();
 
   vector<sobject_t> olist;
-  osd->store->collection_list(coll_t::build_pg_coll(info.pgid), olist);
+  osd->store->collection_list(coll, olist);
 
   for (vector<sobject_t>::iterator it = olist.begin();
        it != olist.end();
@@ -554,7 +554,7 @@ bool PG::build_backlog_map(map<eversion_t,Log::Entry>& omap)
     Log::Entry e;
     e.soid = poid;
     bufferlist bv;
-    int r = osd->store->getattr(coll_t::build_pg_coll(info.pgid), poid, OI_ATTR, bv);
+    int r = osd->store->getattr(coll, poid, OI_ATTR, bv);
     if (r < 0)
       continue;  // musta just been deleted!
     object_info_t oi(bv);
@@ -1364,6 +1364,11 @@ void PG::peer(ObjectStore::Transaction& t, list<Context*>& tfin,
       if (osd->osdmap->is_down(peer))
 	continue;
 
+      if (it->second.dne()) {
+        dout(10) << " not requesting summary/backlog; pg dne on osd" << peer << dendl;
+	continue;
+      }
+
       if (peer_summary_requested.count(peer)) {
         dout(10) << " already requested summary/backlog from osd" << peer << dendl;
         continue;
@@ -1443,8 +1448,15 @@ void PG::check_for_lost_objects()
    * means any lost objects are also (permanently) lost.
    */
   dout(10) << " prior_set_down " << prior_set_down << dendl;
-  if (prior_set_down.empty())
+  if (prior_set_down.empty()) {
+    if (g_conf.osd_recovery_forget_lost_objects) {
+      dout(10) << " nobody in the prior_set is down; give up" << dendl;
+      forget_lost_objects();
+    } else {
+      dout(10) << " nobody in the prior_set is down, but not giving up (osd_recovery_forget_lost_objects=false)" << dendl;
+    }
     return;
+  }
   
   bool all_lost = true;
   for (set<int>::iterator q = prior_set_down.begin();
@@ -1465,102 +1477,88 @@ void PG::check_for_lost_objects()
 
   if (all_lost) {
     dout(10) << " all prior_set_down osds " << prior_set_down << " are lost" << dendl;
+    forget_lost_objects();
+    //assert(0);
+  }
+}
 
-    dout(10) << "log before:\n";
-    log.print(*_dout);
-    *_dout << dendl;
+void PG::forget_lost_objects()
+{
+  dout(10) << "forget_lost_objects" << dendl;
 
-    eversion_t oldest_lost = info.last_update;
-    int lost = 0;
+  dout(30) << "log before:\n";
+  log.print(*_dout);
+  *_dout << dendl;
+
+  eversion_t oldest_lost = info.last_update;
+
+  eversion_t v = info.last_update;
+  v.epoch = osd->osdmap->get_epoch();
+  v.version++;
+
+  utime_t mtime = g_clock.now();
     
-    map<sobject_t,Missing::item>::iterator p = missing.missing.begin();
-    while (p != missing.missing.end()) {
-      if (missing_loc.count(p->first) == 0) {
+  map<sobject_t,Missing::item>::iterator p = missing.missing.begin();
+  while (p != missing.missing.end()) {
+    if (missing_loc.count(p->first) == 0) {
+     
+      Log::Entry e(Log::Entry::LOST, p->first, v, p->second.need, osd_reqid_t(), mtime);
+      
+      if (p->second.have == eversion_t()) {
 	dout(10) << "    " << p->first << " " << p->second.need << " is permanently lost" << dendl;
-	
-	eversion_t v = p->second.need;
-
-	list<Log::Entry>::iterator lp = log.find_entry(v);
-	eversion_t prior = lp->prior_version;
-	dout(10) << " log entry is " << *lp << dendl;
-
-	if (prior != eversion_t() &&
-	    prior != p->second.have) {
-	  dout(10) << " prior version is " << prior << ", but we only have " << p->second.have << dendl;
-	  p++;
-	  continue;
-	}
 
 	stringstream ss;
 	ss << "lost object " << p->first << " " << v << " in " << info.pgid;
 	osd->logclient.log(LOG_ERROR, ss);
 
-	// remove from our log
-	eversion_t prev_entry = log.tail;
-	if (lp != log.log.begin()) {
-	  lp--;
-	  prev_entry = lp->version;
-	  lp++;
-	}
-	dout(10) << " prior object version " << prior << ", prev_entry " << prev_entry << dendl;
-
-	if (v == info.last_update)
-	  log.head = info.last_update = prev_entry;
-	if (v == info.last_complete)
-	  info.last_complete = prev_entry;
-	log.log.erase(lp);
-	lost++;
-
-	if (prev_entry < oldest_lost)
-	  oldest_lost = prev_entry;
+	e.op = Log::Entry::LOST;
 
 	// remove from peer_missing
 	for (map<int,Missing>::iterator q = peer_missing.begin();
 	     q != peer_missing.end();
 	     q++) {
-	  if (q->second.missing.count(p->first) &&
-	      q->second.missing[p->first].need == v) {
-	    if (q->second.missing[p->first].have == prior) {
-	      dout(10) << "  peer osd" << q->first << " no longer missing at all" << dendl;
-	      q->second.missing.erase(p->first);
-	      q->second.rmissing.erase(v);
-	    } else {
-	      dout(10) << "  peer osd" << q->first << " now missing prior " << prior << dendl;
-	      q->second.missing[p->first].need = prior;
-	      q->second.missing[p->first].have = eversion_t(); // a lie!
-	    }
+	  if (q->second.missing.count(p->first)) {
+	    dout(10) << "  peer osd" << q->first << " no longer missing " << p->first << " at all" << dendl;
+	    q->second.rm(p->first, v);
 	  }
-	  if (peer_info[q->first].last_update == v)
-	    peer_info[q->first].last_update = prev_entry;
-	  if (peer_info[q->first].last_complete == v)
-	    peer_info[q->first].last_complete = prev_entry;
-
-	  dout(10) << " osd" << q->first << " info now " << peer_info[q->first] << dendl;
-	  dout(10) << " osd" << q->first << " missing now " << peer_missing[q->first] << dendl;
-	  dout(20) << " osd" << q->first << " missing now " << peer_missing[q->first].missing << dendl;
 	}
-	
+
 	// remove from my missing
-	missing.rmissing.erase(v);
+	missing.rmissing.erase(p->second.need);
 	missing.missing.erase(p++);
-	continue;
+      } else {
+	dout(10) << "    " << p->first << " " << p->second.need << " is permanently lost, reverting to "
+		 << p->second.have << dendl;
+
+	stringstream ss;
+	ss << "lost object " << p->first << " " << p->second.need
+	   << " reverted to " << p->second.have << " in " << info.pgid;
+	osd->logclient.log(LOG_ERROR, ss);
+	
+	e.op = Log::Entry::LOST_REVERT;
+
+	assert(0 == "not implemented yet");  // FIXME ****
+
+	// remove from my missing
+	missing.rmissing.erase(p->second.need);
+	missing.missing.erase(p++);
       }
+
+      log.add(e);
+      info.last_update = v;
+      v.version++;
+
+      dout(10) << "  " << e << dendl;
+
+    } else
       p++;
-    }
-
-    if (lost) {
-      dout(10) << lost << " objects lost, reindexing log" << dendl;
-      log.index();
-    }
-
-    dout(10) << "log after:\n";
-    log.print(*_dout);
-    *_dout << dendl;
-    dout(10) << "missing now " << missing << dendl;
-    dout(20) << "missing now " << missing.missing << dendl;
-
-    //assert(0);
   }
+  
+  dout(30) << "log after:\n";
+  log.print(*_dout);
+  *_dout << dendl;
+  dout(10) << "missing now " << missing << dendl;
+  dout(20) << "missing now " << missing.missing << dendl;
 }
 
 void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
@@ -1986,7 +1984,7 @@ void PG::write_info(ObjectStore::Transaction& t)
   ::encode(info, infobl);
   ::encode(past_intervals, infobl);
   dout(20) << "write_info info " << infobl.length() << dendl;
-  t.collection_setattr(coll_t::build_pg_coll(info.pgid), "info", infobl);
+  t.collection_setattr(coll, "info", infobl);
  
   // local state
   bufferlist snapbl;
@@ -1994,7 +1992,7 @@ void PG::write_info(ObjectStore::Transaction& t)
   ::encode(struct_v, snapbl);
   ::encode(snap_collections, snapbl);
   dout(20) << "write_info snap " << snapbl.length() << dendl;
-  t.collection_setattr(coll_t::build_pg_coll(info.pgid), "snap_collections", snapbl);
+  t.collection_setattr(coll, "snap_collections", snapbl);
 
   dirty_info = false;
 }
@@ -2036,12 +2034,12 @@ void PG::write_log(ObjectStore::Transaction& t)
   ondisklog.has_checksums = true;
 
   // write it
-  t.remove(meta_coll, log_oid );
-  t.write(meta_coll, log_oid , 0, bl.length(), bl);
+  t.remove(coll_t::META_COLL, log_oid );
+  t.write(coll_t::META_COLL, log_oid , 0, bl.length(), bl);
 
   bufferlist blb(sizeof(ondisklog));
   ::encode(ondisklog, blb);
-  t.collection_setattr(coll_t::build_pg_coll(info.pgid), "ondisklog", blb);
+  t.collection_setattr(coll, "ondisklog", blb);
   
   dout(10) << "write_log to " << ondisklog.tail << "~" << ondisklog.length() << dendl;
   dirty_log = false;
@@ -2091,10 +2089,10 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   
   bufferlist blb(sizeof(ondisklog));
   ::encode(ondisklog, blb);
-  t.collection_setattr(coll_t::build_pg_coll(info.pgid), "ondisklog", blb);
+  t.collection_setattr(coll, "ondisklog", blb);
 
   if (!g_conf.osd_preserve_trimmed_log)
-    t.zero(meta_coll, log_oid, 0, ondisklog.tail & ~4095);
+    t.zero(coll_t::META_COLL, log_oid, 0, ondisklog.tail & ~4095);
 }
 
 void PG::trim_peers()
@@ -2145,13 +2143,13 @@ void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
   if (ondisklog.head % 4096 < (ondisklog.head + bl.length()) % 4096)
     ondisklog.block_map[ondisklog.head] = log_version;  // log_version is last event in prev. block
 
-  t.write(meta_coll, log_oid, ondisklog.head, bl.length(), bl );
+  t.write(coll_t::META_COLL, log_oid, ondisklog.head, bl.length(), bl );
   
   ondisklog.head += bl.length();
 
   bufferlist blb(sizeof(ondisklog));
   ::encode(ondisklog, blb);
-  t.collection_setattr(coll_t::build_pg_coll(info.pgid), "ondisklog", blb);
+  t.collection_setattr(coll, "ondisklog", blb);
   dout(10) << "append_log  now " << ondisklog.tail << "~" << ondisklog.length() << dendl;
 }
 
@@ -2161,7 +2159,7 @@ void PG::read_log(ObjectStore *store)
   ondisklog.tail = ondisklog.head = 0;
 
   bufferlist blb;
-  store->collection_getattr(coll_t::build_pg_coll(info.pgid), "ondisklog", blb);
+  store->collection_getattr(coll, "ondisklog", blb);
   bufferlist::iterator p = blb.begin();
   ::decode(ondisklog, p);
 
@@ -2173,7 +2171,7 @@ void PG::read_log(ObjectStore *store)
   if (ondisklog.head > 0) {
     // read
     bufferlist bl;
-    store->read(meta_coll, log_oid, ondisklog.tail, ondisklog.length(), bl);
+    store->read(coll_t::META_COLL, log_oid, ondisklog.tail, ondisklog.length(), bl);
     if (bl.length() < ondisklog.length()) {
       dout(0) << "read_log got " << bl.length() << " bytes, expected " 
 	      << ondisklog.head << "-" << ondisklog.tail << "="
@@ -2280,7 +2278,7 @@ void PG::read_log(ObjectStore *store)
       
       bufferlist bv;
       struct stat st;
-      int r = osd->store->getattr(coll_t::build_pg_coll(info.pgid), i->soid, OI_ATTR, bv);
+      int r = osd->store->getattr(coll, i->soid, OI_ATTR, bv);
       if (r >= 0) {
 	object_info_t oi(bv);
 	if (oi.version < i->version) {
@@ -2288,7 +2286,7 @@ void PG::read_log(ObjectStore *store)
 	  missing.add(i->soid, i->version, oi.version);
 	}
       } else if (i->soid.snap == CEPH_NOSNAP &&
-		 osd->store->stat(coll_t::build_pg_coll(info.pgid), i->soid, &st) == 0) {
+		 osd->store->stat(coll, i->soid, &st) == 0) {
 	dout(0) << "read_log  rebuilding missing xattr on " << *i << dendl;
 	object_info_t oi(i->soid);
 	oi.version = i->version;
@@ -2299,7 +2297,7 @@ void PG::read_log(ObjectStore *store)
 	bufferlist bl;
 	::encode(oi, bl);
 	ObjectStore::Transaction *t = new ObjectStore::Transaction;
-	t->setattr(coll_t::build_pg_coll(info.pgid), i->soid, OI_ATTR, bl);
+	t->setattr(coll, i->soid, OI_ATTR, bl);
 	int tr = osd->store->queue_transaction(&osr, t);
 	assert(tr == 0);
 
@@ -2319,7 +2317,7 @@ bool PG::check_log_for_corruption(ObjectStore *store)
 {
   OndiskLog bounds;
   bufferlist blb;
-  store->collection_getattr(coll_t::build_pg_coll(info.pgid), "ondisklog", blb);
+  store->collection_getattr(coll, "ondisklog", blb);
   bufferlist::iterator p = blb.begin();
   ::decode(bounds, p);
 
@@ -2334,9 +2332,9 @@ bool PG::check_log_for_corruption(ObjectStore *store)
   if (bounds.head > 0) {
     // read
     struct stat st;
-    store->stat(meta_coll, log_oid, &st);
+    store->stat(coll_t::META_COLL, log_oid, &st);
     bufferlist bl;
-    store->read(meta_coll, log_oid, bounds.tail, bounds.length(), bl);
+    store->read(coll_t::META_COLL, log_oid, bounds.tail, bounds.length(), bl);
     if (st.st_size != (int)bounds.head) {
       ss << "mismatched bounds " << bounds.tail << ".." << bounds.head << " and file size " << st.st_size;
       ok = false;
@@ -2355,13 +2353,13 @@ bool PG::check_log_for_corruption(ObjectStore *store)
 	try {
 	  ::decode(e, p);
 	}
-	catch (buffer::error *e) {
+	catch (const buffer::error &e) {
 	  dout(0) << "corrupt entry at " << pos << dendl;
 	  ss << "corrupt entry at offset " << pos;
 	  ok = false;
 	  break;
 	}
-	catch(std::bad_alloc a) {
+	catch(const std::bad_alloc &a) {
 	  dout(0) << "corrupt entry at " << pos << dendl;
 	  ss << "corrupt entry at offset " << pos;
 	  ok = false;
@@ -2392,7 +2390,7 @@ void PG::read_state(ObjectStore *store)
   __u8 struct_v;
 
   // info
-  store->collection_getattr(coll_t::build_pg_coll(info.pgid), "info", bl);
+  store->collection_getattr(coll, "info", bl);
   p = bl.begin();
   ::decode(struct_v, p);
   ::decode(info, p);
@@ -2400,7 +2398,7 @@ void PG::read_state(ObjectStore *store)
   
   // snap_collections
   bl.clear();
-  store->collection_getattr(coll_t::build_pg_coll(info.pgid), "snap_collections", bl);
+  store->collection_getattr(coll, "snap_collections", bl);
   p = bl.begin();
   ::decode(struct_v, p);
   ::decode(snap_collections, p);
@@ -2410,13 +2408,13 @@ void PG::read_state(ObjectStore *store)
 
 coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
 {
-  coll_t c = coll_t::build_snap_pg_coll(info.pgid, s);
+  coll_t c(info.pgid, s);
   if (snap_collections.count(s) == 0) {
     snap_collections.insert(s);
     dout(10) << "create_snap_collection " << c << ", set now " << snap_collections << dendl;
     bufferlist bl;
     ::encode(snap_collections, bl);
-    t.collection_setattr(coll_t::build_pg_coll(info.pgid), "snap_collections", bl);
+    t.collection_setattr(coll, "snap_collections", bl);
     t.create_collection(c);
   }
   return c;
@@ -2513,11 +2511,10 @@ void PG::sub_op_scrub_reply(MOSDSubOpReply *op)
 void PG::build_scrub_map(ScrubMap &map)
 {
   dout(10) << "build_scrub_map" << dendl;
-  coll_t c = coll_t::build_pg_coll(info.pgid);
 
   // objects
   vector<sobject_t> ls;
-  osd->store->collection_list(c, ls);
+  osd->store->collection_list(coll, ls);
 
   // sort
   dout(10) << "sorting " << ls.size() << " objects" << dendl;
@@ -2552,17 +2549,17 @@ void PG::build_scrub_map(ScrubMap &map)
     o.poid = *p;
 
     struct stat st;
-    int r = osd->store->stat(c, poid, &st);
+    int r = osd->store->stat(coll, poid, &st);
     assert(r == 0);
     o.size = st.st_size;
 
-    osd->store->getattrs(c, poid, o.attrs);    
+    osd->store->getattrs(coll, poid, o.attrs);
 
     dout(25) << "   " << poid << dendl;
   }
 
   // pg attrs
-  osd->store->collection_getattrs(c, map.attrs);
+  osd->store->collection_getattrs(coll, map.attrs);
 
   // log
   osd->store->read(coll_t(), log_oid, 0, 0, map.logbl);

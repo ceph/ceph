@@ -192,7 +192,7 @@ do { \
         
       }
     }
-  } catch (buffer::error *err) {
+  } catch (const buffer::error &err) {
     return false;
   }
 
