@@ -373,6 +373,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     in->xattrs = root->xattrs;
     if (in->inode.is_dir()) {
       in->dirfragtree = root->dirfragtree;
+      delete in->default_layout;
+      in->default_layout = root->dir_layout;
       /*
        * we can do this before linking hte inode bc the split_at would
        * be a no-op.. we have no children (namely open snaprealms) to
@@ -469,6 +471,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	in->xattrs = p->xattrs;
 	if (in->inode.is_dir()) {
 	  in->dirfragtree = p->dirfragtree;
+	  delete in->default_layout;
+	  in->default_layout = p->dir_layout;
 	  /*
 	   * we can do this before linking hte inode bc the split_at would
 	   * be a no-op.. we have no children (namely open snaprealms) to
@@ -507,6 +511,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	in->xattrs = p->xattrs;
 	if (in->inode.is_dir()) {
 	  in->dirfragtree = p->dirfragtree;
+	  delete in->default_layout;
+	  in->default_layout = p->dir_layout;
 	  in->decode_snap_blob(p->snapbl);
 	}
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
