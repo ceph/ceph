@@ -4031,7 +4031,7 @@ void MDCache::choose_lock_states_and_reconnect_caps()
        ++i) {
     CInode *in = i->second;
  
-    if (in->is_auth() && in->inode.is_dirty_rstat())
+    if (in->is_auth() && !in->is_base() && in->inode.is_dirty_rstat())
       in->mark_dirty_rstat();
 
     in->choose_lock_states();
