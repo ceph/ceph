@@ -122,7 +122,7 @@ void MDLog::create(Context *c)
 {
   dout(5) << "create empty log" << dendl;
   init_journaler();
-  journaler->create(&mds->mdcache->default_dir_layout);
+  journaler->create(&mds->mdcache->default_log_layout);
   write_head(c);
 
   logger->set(l_mdl_expos, journaler->get_expire_pos());

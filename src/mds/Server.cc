@@ -1655,7 +1655,7 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino, u
   if (layout)
     in->inode.layout = *layout;
   else if (in->inode.is_dir())
-    in->inode.layout = mds->mdcache->default_dir_layout;
+    memset(&in->inode.layout, 0, sizeof(in->inode.layout));
   else
     in->inode.layout = mds->mdcache->default_file_layout;
 
