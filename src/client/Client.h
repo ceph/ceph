@@ -513,7 +513,7 @@ class Inode {
 
   Inode(vinodeno_t vino, ceph_file_layout *layout) : 
     ino(vino.ino), snapid(vino.snapid),
-    rdev(0), mode(0), uid(0), gid(0), nlink(0), size(0), truncate_seq(0), truncate_size(0),
+    rdev(0), mode(0), uid(0), gid(0), nlink(0), size(0), truncate_seq(1), truncate_size(-1),
     time_warp_seq(0), max_size(0), version(0), xattr_version(0),
     flags(0),
     dir_hashed(false), dir_replicated(false), auth_cap(NULL),
