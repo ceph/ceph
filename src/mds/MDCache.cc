@@ -275,7 +275,10 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
 
 CInode *MDCache::create_root_inode()
 {
-  return create_system_inode(MDS_INO_ROOT, S_IFDIR|0755);
+  CInode *i = create_system_inode(MDS_INO_ROOT, S_IFDIR|0755);
+  i->default_layout = new default_file_layout;
+  *(i->default_layout) = default_file_layout;
+  return i;
 }
 
 void MDCache::create_empty_hierarchy(C_Gather *gather)
