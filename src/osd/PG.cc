@@ -39,7 +39,6 @@ static ostream& _prefix(PG *pg, int whoami, OSDMap *osdmap) {
   return *_dout << dbeginl << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
 }
 
-
 /******* PGLog ********/
 
 void PG::Log::copy_after(const Log &other, eversion_t v) 
@@ -2173,11 +2172,11 @@ void PG::read_log(ObjectStore *store)
     bufferlist bl;
     store->read(coll_t::META_COLL, log_oid, ondisklog.tail, ondisklog.length(), bl);
     if (bl.length() < ondisklog.length()) {
-      dout(0) << "read_log got " << bl.length() << " bytes, expected " 
-	      << ondisklog.head << "-" << ondisklog.tail << "="
-	      << ondisklog.length()
-	      << dendl;
-      assert(0);
+      std::ostringstream oss;
+      oss << "read_log got " << bl.length() << " bytes, expected "
+	  << ondisklog.head << "-" << ondisklog.tail << "="
+	  << ondisklog.length();
+      throw read_log_error(oss.str().c_str());
     }
     
     PG::Log::Entry e;
@@ -2198,10 +2197,9 @@ void PG::read_log(ObjectStore *store)
 	  bufferlist::iterator q = ebl.begin();
 	  ::decode(e, q);
 	} else {
-	  dout(0) << "read_log " << pos << " bad crc got " << got << " expected" << crc << dendl;
-
-	  // ....
-	  assert("do something smart here..." == 0);
+	  std::ostringstream oss;
+	  oss << "read_log " << pos << " bad crc got " << got << " expected" << crc;
+	  throw read_log_error(oss.str().c_str());
 	}
       } else {
 	::decode(e, p);
@@ -2403,7 +2401,18 @@ void PG::read_state(ObjectStore *store)
   ::decode(struct_v, p);
   ::decode(snap_collections, p);
 
-  read_log(store);
+  try {
+    read_log(store);
+  }
+  catch (const buffer::error &e) {
+    // Pretend that there is no ondisklog
+    dout(0) << "Got exception '" << e.what() << "' while reading log. "
+            << "Zeroing log." << dendl;
+    ondisklog.zero();
+    log.head = log.tail = info.last_update;
+    info.log_tail = info.last_update;
+    info.log_backlog = false;
+  }
 }
 
 coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)

@@ -79,7 +79,19 @@ struct PGPool {
 
 class PG {
 public:
-  
+  /* Exceptions */
+  class read_log_error : public buffer::error {
+  public:
+    explicit read_log_error(const char *what) {
+      snprintf(buf, sizeof(buf), "read_log_error: %s", what);
+    }
+    const char *what() const throw () {
+      return buf;
+    }
+  private:
+    char buf[512];
+  };
+
   /*
    * PG::Info - summary of PG statistics.
    *
