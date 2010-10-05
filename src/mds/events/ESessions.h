@@ -27,9 +27,9 @@ protected:
 public:
   map<client_t,entity_inst_t> client_map;
 
-  ESessions() : LogEvent(EVENT_SESSION) { }
+  ESessions() : LogEvent(EVENT_SESSIONS) { }
   ESessions(version_t pv, map<client_t,entity_inst_t>& cm) :
-    LogEvent(EVENT_SESSION),
+    LogEvent(EVENT_SESSIONS),
     cmapv(pv) {
     client_map.swap(cm);
   }
