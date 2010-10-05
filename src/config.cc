@@ -178,9 +178,15 @@ bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec)
   const char *end = p + strlen(p);
   while (p < end) {
     entity_addr_t a;
-    if (!a.parse(p, &p))
+    //cout << " parse at '" << p << "'" << std::endl;
+    if (!a.parse(p, &p)) {
+      //dout(0) << " failed to parse address '" << p << "'" << dendl;
       return false;
+    }
+    //cout << " got " << a << ", rest is '" << p << "'" << std::endl;
     vec.push_back(a);
+    while (*p == ',' || *p == ' ')
+      p++;
   }
   return true;
 }
