@@ -2659,14 +2659,14 @@ void OSD::advance_map(ObjectStore::Transaction& t)
       if (osdmap->is_down(oldacting[i]))
 	pg->on_osd_failure(oldacting[i]);
     pg->on_change();
+
+    if (pg->deleting) {
+      dout(10) << *pg << " canceling deletion!" << dendl;
+      pg->deleting = false;
+      remove_wq.dequeue(pg);
+    }
     
     if (role != oldrole) {
-      // old stray?
-      if (oldrole < 0 && pg->deleting) {
-	dout(10) << *pg << " canceling deletion!" << dendl;
-	pg->deleting = false;
-      }
-
       // old primary?
       if (oldrole == 0) {
 	pg->state_clear(PG_STATE_CLEAN);
