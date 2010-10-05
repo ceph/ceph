@@ -1806,6 +1806,8 @@ void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t follo
     if (p->second.count(client)) {
       dout(10) << " doing async NULL snapflush on " << p->first << " from client" << p->second << dendl;
       CInode *sin = mdcache->get_inode(head_in->ino(), p->first);
+      if (!sin && head_in->is_multiversion())
+	sin = head_in;
       assert(sin);
       _do_snap_update(sin, p->first, 0, sin->first - 1, client, NULL, NULL);
       head_in->client_need_snapflush[p->first].erase(client);
