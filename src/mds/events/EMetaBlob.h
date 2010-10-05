@@ -89,7 +89,7 @@ public:
       if (i.is_dir()) {
 	::encode(dft, _enc);
 	::encode(sbl, _enc);
-	::encode((dl ? true : false), _enc);
+	::encode((defl ? true : false), _enc);
 	if (defl)
 	  ::encode(*defl, _enc);
       }
@@ -103,21 +103,6 @@ public:
       ::encode(struct_v, bl);
       assert(_enc.length());
       bl.append(_enc); 
-      /*
-      ::encode(dn, bl);
-      ::encode(dnfirst, bl);
-      ::encode(dnlast, bl);
-      ::encode(dnv, bl);
-      ::encode(inode, bl);
-      ::encode(xattrs, bl);
-      if (inode.is_symlink())
-	::encode(symlink, bl);
-      if (inode.is_dir()) {
-	::encode(dirfragtree, bl);
-	::encode(snapbl, bl);
-      }
-      ::encode(dirty, bl);
-      */
     }
     void decode(bufferlist::iterator &bl) {
       __u8 struct_v;
@@ -133,7 +118,7 @@ public:
       if (inode.is_dir()) {
 	::decode(dirfragtree, bl);
 	::decode(snapbl, bl);
-	if (struct_v >=2 ) {
+	if (struct_v >= 2) {
 	  bool dir_layout_exists;
 	  ::decode(dir_layout_exists, bl);
 	  if (dir_layout_exists) {
