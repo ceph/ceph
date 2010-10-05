@@ -76,7 +76,7 @@ public:
 	    bufferlist &sbl, bool dr, default_file_layout *defl = NULL) :
       //dn(d), dnfirst(df), dnlast(dl), dnv(v), 
       //inode(i), dirfragtree(dft), xattrs(xa), symlink(sym), snapbl(sbl), dirty(dr) 
-      _enc(1024)
+      dir_layout(NULL), _enc(1024)
     {
       ::encode(d, _enc);
       ::encode(df, _enc);
@@ -95,8 +95,11 @@ public:
       }
       ::encode(dr, _enc);      
     }
-    fullbit(bufferlist::iterator &p) { decode(p); }
-    fullbit() {}
+    fullbit(bufferlist::iterator &p) : dir_layout(NULL) { decode(p); }
+    fullbit() : dir_layout(NULL) {}
+    ~fullbit() {
+      delete dir_layout;
+    }
 
     void encode(bufferlist& bl) const {
       __u8 struct_v = 2;
@@ -137,6 +140,7 @@ public:
 	in->dirfragtree = dirfragtree;
 	delete in->default_layout;
 	in->default_layout = dir_layout;
+	dir_layout = NULL;
 	/*
 	 * we can do this before linking hte inode bc the split_at would
 	 * be a no-op.. we have no children (namely open snaprealms) to
