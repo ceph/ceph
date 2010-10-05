@@ -3811,6 +3811,19 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       }
     }
 
+    if (pg->deleting) {
+      /*
+       * We cancel deletion on pg change.  And the primary will never
+       * query anything it already asked us to delete.  So the only
+       * reason we would ever get a query on a deleting pg is when we
+       * get an old query from an old primary.. which we can safely
+       * ignore.
+       */
+      dout(10) << *pg << " query on deleting pg; ignoring" << dendl;
+      pg->unlock();
+      continue;
+    }
+
     pg->info.history.merge(it->second.history);
 
     // ok, process query!
