@@ -18,6 +18,7 @@
 #include "include/types.h"
 #include "include/buffer.h"
 
+#include <iosfwd>
 #include <string.h>
 
 class MonitorStore {
@@ -25,7 +26,20 @@ class MonitorStore {
   int lock_fd;
 
   int write_bl_ss(bufferlist& bl, const char *a, const char *b, bool append, bool sync=true);
+
 public:
+  class Error : public std::exception
+  {
+  public:
+    static Error FromErrno(const char *prefix,
+				  const char *prefix2, int errno_);
+    Error(const std::string &str_);
+    virtual ~Error() throw ();
+    const char *what() const throw ();
+  private:
+    std::string str;
+  };
+
   MonitorStore(const char *d) : dir(d) { }
   ~MonitorStore() { }
 
