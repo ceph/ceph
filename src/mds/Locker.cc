@@ -3654,7 +3654,7 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
 	   !lock->is_wrlocked() &&   // drain wrlocks first!
 	   !in->filelock.is_waiter_for(SimpleLock::WAIT_WR) &&
 	   !(wanted & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) &&
-	   !(in->get_state() == LOCK_MIX &&
+	   !(lock->get_state() == LOCK_MIX &&
 	     in->is_dir() && in->has_subtree_root_dirfrag())  // if we are a delegation point, stay where we are
 	   //((wanted & CEPH_CAP_RD) || 
 	   //in->is_replicated() || 
