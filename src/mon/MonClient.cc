@@ -79,7 +79,7 @@ int MonClient::build_initial_monmap()
       return 0;
     } else { //maybe they passed us a DNS-resolvable name
       char *hosts = NULL;
-      char *old_addrs = new char[strlen(g_conf.mon_host)];
+      char *old_addrs = new char[strlen(g_conf.mon_host)+1];
       strcpy(old_addrs, g_conf.mon_host);
       hosts = mount_resolve_dest(old_addrs);
       if (parse_ip_port_vec(hosts, addrs)) {
