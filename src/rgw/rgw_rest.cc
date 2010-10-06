@@ -161,7 +161,7 @@ void dump_start_xml(struct req_state *s)
 void end_header(struct req_state *s, const char *content_type)
 {
   if (!content_type)
-    content_type = "text/plain";
+    content_type = "binary/octet-stream";
   CGI_PRINTF(s->fcgx->out,"Content-type: %s\r\n\r\n", content_type);
   if (s->err_exist) {
     dump_start_xml(s);
