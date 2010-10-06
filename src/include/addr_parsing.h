@@ -33,20 +33,8 @@ static int safe_cat(char **pstr, int *plen, int pos, const char *str2)
 char *mount_resolve_dest(char *orig_str)
 {
         char *new_str;
-        char *mount_path;
         char *tok, *p, *port_str;
         int len, pos;
-
-        mount_path = strrchr(orig_str, ':');
-        if (mount_path == orig_str) {
-                printf("server address expected\n");
-                return NULL;
-        }
-
-        if (mount_path) {
-          *mount_path = '\0';
-          mount_path++;
-        }
 
         len = BUF_SIZE;
         new_str = (char *)malloc(len);
@@ -134,11 +122,6 @@ char *mount_resolve_dest(char *orig_str)
                 if (tok)
                         pos = safe_cat(&new_str, &len, pos, ",");
 
-        }
-
-        if (mount_path) {
-          pos = safe_cat(&new_str, &len, pos, ":");
-          pos = safe_cat(&new_str, &len, pos, mount_path);
         }
 
         //printf("new_str is '%s'\n", new_str);
