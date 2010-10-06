@@ -30,6 +30,9 @@ static int safe_cat(char **pstr, int *plen, int pos, const char *str2)
         return pos + len2;
 }
 
+/*
+ * returns a string allocated by malloc; caller must free
+ */
 char *mount_resolve_dest(char *orig_str)
 {
         char *new_str;
