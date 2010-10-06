@@ -43,6 +43,7 @@
 
 #include "common/Timer.h"
 #include "common/Clock.h"
+#include "include/color.h"
 
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
@@ -972,7 +973,15 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   bufferlist magicbl;
   magicbl.append(CEPH_MON_ONDISK_MAGIC);
   magicbl.append("\n");
-  store->put_bl_ss(magicbl, "magic", 0);
+  try {
+    store->put_bl_ss(magicbl, "magic", 0);
+  }
+  catch (const MonitorStore::Error &e) {
+    std::cerr << TEXT_RED << "** ERROR: initializing cmon failed: couldn't "
+              << "initialize the monitor state machine: "
+	      << e.what() << TEXT_NORMAL << std::endl;
+    exit(1);
+  }
 
   bufferlist features;
   CompatSet mon_features(ceph_mon_feature_compat,

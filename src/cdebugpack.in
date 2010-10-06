@@ -1,0 +1,109 @@
+#!/bin/sh
+
+
+
+# if we start up as ./init-ceph, assume everything else is in the
+# current directory too.
+if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
+    BINDIR=.
+    LIBDIR=.
+    ETCDIR=.
+else
+    BINDIR=@bindir@
+    LIBDIR=@libdir@/ceph
+    # i hate autoconf:
+    if [ "@sysconfdir@" = "/usr/etc" ]; then
+	ETCDIR=/etc/ceph
+    else
+	ETCDIR=@sysconfdir@/ceph
+    fi
+fi
+
+BINDBGDIR="/usr/lib/debug/usr/bin"
+
+usage_exit() {
+    echo "usage: $0 [-c ceph.conf] <filename>"
+    exit
+}
+
+
+. $LIBDIR/ceph_common.sh
+
+dest_tar=""
+
+while [ $# -ge 1 ]; do
+case $1 in
+    --conf | -c)
+	    [ -z "$2" ] && usage_exit
+	    shift
+	    conf=$1
+	    ;;
+    *)
+	    if [ "$dest_tar" != "" ]; then
+	    	echo unrecognized option \'$1\'
+	    	usage_exit
+	    fi
+	    dest_tar=$1
+	    ;;
+esac
+shift
+done
+
+[ "$dest_tar" == "" ] && usage_exit
+
+# get absolute path for dest_tar
+[ "${dest_tar::1}" != "/" ] && dest_tar="`pwd`/$dest_tar"
+
+bins="cmon cmds cosd"
+core_paths="/ $BINDIR $BINDBGDIR"
+[ "$conf" == "" ] && conf=$ETCDIR/ceph.conf
+log_path=`$CCONF -c $conf "log dir"`
+
+[ -z "$conf" ] && usage_exit
+
+
+tmp_path=`mktemp -d /tmp/cdebugpack.XXXXXXXXXX`
+tmp_path_bin=$tmp_path/bin
+tmp_path_bin_dbg=$tmp_path/bin.dbg
+tmp_path_log=$tmp_path/out
+tmp_path_core=$tmp_path/core
+
+echo tmp_path=$tmp_path
+
+mkdir -p $tmp_path_bin
+mkdir -p $tmp_path_bin_dbg
+mkdir -p $tmp_path_log
+mkdir -p $tmp_path_core
+
+
+#copy the binaries
+
+for name in $bins; do
+	[ -e $BINDIR/$name ] && cp $BINDIR/$name $tmp_path_bin
+	[ -e $BINDBGDIR/$name ] && cp $BINDBGDIR/$name $tmp_path_bin_dbg
+done
+
+
+# copy the logs
+cp -rp $log_path/* $tmp_path_log
+
+# copy cores (if exist)
+
+for path in $core_paths; do
+  files="`find $path -maxdepth 1 -name 'core*'`"
+  if [ "$files" != "" ]; then
+    for core_file in `ls $path/core*`; do
+      tmp_core=`mktemp $tmp_path_core/core.XXXX`
+      cp $core_file $tmp_core
+    done
+  fi
+done
+
+
+# now create a tarball
+
+cd $tmp_path
+tar cvfz $dest_tar -C $tmp_path *
+
+rm -fR $tmp_path
+

@@ -19,6 +19,7 @@
 
 #include "common/Clock.h"
 #include "common/Logger.h"
+#include "common/BackTrace.h"
 
 #include <fstream>
 #include <stdlib.h>
@@ -208,6 +209,27 @@ void sighup_handler(int signum)
 {
   _dout_need_open = true;
   logger_reopen_all();
+}
+
+static void (*old_sigsegv_handler)(int);
+static void (*old_sigabrt_handler)(int);
+
+void sigsegv_handler(int signum)
+{
+  *_dout << "*** Caught signal (SEGV) ***" << std::endl;
+  BackTrace bt(0);
+  bt.print(*_dout);
+
+  old_sigsegv_handler(signum);
+}
+
+void sigabrt_handler(int signum)
+{
+  *_dout << "*** Caught signal (ABRT) ***" << std::endl;
+  BackTrace bt(0);
+  bt.print(*_dout);
+
+  old_sigabrt_handler(signum);
 }
 
 #define _STR(x) #x
@@ -719,6 +741,58 @@ static bool init_g_conf()
   return true;
 }
 
+static int def_conf_to_str(config_option *opt, char *buf, int len)
+{
+  int ret = 0;
+
+  switch (opt->type) {
+  case OPT_INT:
+  case OPT_BOOL:
+    ret = snprintf(buf, len, "%d", (int)opt->def_longlong);
+    break;
+  case OPT_LONGLONG:
+    ret = snprintf(buf, len, "%lld", opt->def_longlong);
+    break;
+  case OPT_STR:
+  case OPT_ADDR:
+    ret = snprintf(buf, len, "%s", opt->def_str);
+    break;
+  case OPT_FLOAT:
+  case OPT_DOUBLE:
+    ret = snprintf(buf, len, "%f", opt->def_double);
+    break;
+  default:
+    break;
+  }
+  return ret;
+}
+
+int ceph_def_conf_by_name(const char *name, char *buf, int buflen)
+{
+  char *newname = strdup(name);
+  int len = strlen(name);
+  config_option *opt;
+  int ret = 0;
+  int i;
+
+  for (i = 0; i < len; i++) {
+    if (newname[i] == ' ')
+      newname[i] = '_';
+  }
+
+  len = sizeof(config_optionsp)/sizeof(config_option);
+
+  for (i = 0; i < len; i++) {
+    opt = &config_optionsp[i];
+    if (strcmp(opt->name, newname) == 0) {
+      ret = def_conf_to_str(opt, buf, buflen);
+      break;
+    }
+  }
+  free(newname);
+  return ret;
+}
+
 static void fini_g_conf()
 {
   int len = sizeof(config_optionsp)/sizeof(config_option);
@@ -1177,6 +1251,8 @@ void parse_config_options(std::vector<const char*>& args)
   }
 
   signal(SIGHUP, sighup_handler);
+  old_sigsegv_handler = signal(SIGSEGV, sigsegv_handler);
+  old_sigabrt_handler = signal(SIGABRT, sigabrt_handler);
 
   args = nargs;
 }

@@ -455,7 +455,7 @@ public:
   int num_caps;
 
   ceph_file_layout default_file_layout;
-  ceph_file_layout default_dir_layout;
+  ceph_file_layout default_log_layout;
 
   // -- client leases --
 public:

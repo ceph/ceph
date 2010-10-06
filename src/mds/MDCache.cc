@@ -239,9 +239,9 @@ void MDCache::init_layouts()
   default_file_layout.fl_pg_preferred = -1;
   default_file_layout.fl_pg_pool = mds->mdsmap->get_data_pg_pool();
 
-  default_dir_layout = g_default_file_layout;
-  default_dir_layout.fl_pg_preferred = -1;
-  default_dir_layout.fl_pg_pool = mds->mdsmap->get_metadata_pg_pool();
+  default_log_layout = g_default_file_layout;
+  default_log_layout.fl_pg_preferred = -1;
+  default_log_layout.fl_pg_pool = mds->mdsmap->get_metadata_pg_pool();
 }
 
 CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
@@ -256,7 +256,7 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
     in->inode.mtime = g_clock.now();
   in->inode.nlink = 1;
   if (in->inode.is_dir())
-    in->inode.layout = default_dir_layout;
+    memset(&in->inode.layout, 0, sizeof(in->inode.layout));
   else
     in->inode.layout = default_file_layout;
 
@@ -275,7 +275,10 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
 
 CInode *MDCache::create_root_inode()
 {
-  return create_system_inode(MDS_INO_ROOT, S_IFDIR|0755);
+  CInode *i = create_system_inode(MDS_INO_ROOT, S_IFDIR|0755);
+  i->default_layout = new struct default_file_layout;
+  i->default_layout->layout = default_file_layout;
+  return i;
 }
 
 void MDCache::create_empty_hierarchy(C_Gather *gather)

@@ -31,7 +31,30 @@ static ostream& _prefix(const string& dir) {
 #include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
+#include <sstream>
 #include <sys/file.h>
+
+MonitorStore::Error MonitorStore::Error::
+FromErrno(const char *prefix, const char *prefix2, int errno_)
+{
+  char buf[128];
+  const char *b2 = strerror_r(errno_, buf, sizeof(buf));
+  ostringstream oss;
+  oss << prefix << prefix2 << ": " << b2 << " (" << errno_ << ")";
+  return MonitorStore::Error(oss.str());
+}
+
+MonitorStore::Error::
+Error(const std::string &str_) : str(str_) { }
+
+MonitorStore::Error::
+~Error() throw () { }
+
+const char *MonitorStore::Error::
+what() const throw ()
+{
+  return str.c_str();
+}
 
 int MonitorStore::mount()
 {
@@ -256,11 +279,14 @@ int MonitorStore::write_bl_ss(bufferlist& bl, const char *a, const char *b, bool
   int fd;
   if (append) {
     fd = ::open(fn, O_WRONLY|O_CREAT|O_APPEND, 0644);
+    if (fd < 0)
+      throw Error::FromErrno("failed to open for append: ", fn, errno);
   } else {
     snprintf(tfn, sizeof(tfn), "%s.new", fn);
     fd = ::open(tfn, O_WRONLY|O_CREAT, 0644);
+    if (fd < 0)
+      throw Error::FromErrno("failed to open: ", tfn, errno);
   }
-  assert(fd >= 0);
   
   err = bl.write_fd(fd);
 

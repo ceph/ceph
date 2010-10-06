@@ -369,18 +369,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     bool isnew = in ? false:true;
     if (!in)
       in = new CInode(mds->mdcache, true);
-    in->inode = root->inode;
-    in->xattrs = root->xattrs;
-    if (in->inode.is_dir()) {
-      in->dirfragtree = root->dirfragtree;
-      /*
-       * we can do this before linking hte inode bc the split_at would
-       * be a no-op.. we have no children (namely open snaprealms) to
-       * divy up 
-       */
-      in->decode_snap_blob(root->snapbl);  
-    }
-    if (in->inode.is_symlink()) in->symlink = root->symlink;
+    root->update_inode(in);
     if (isnew)
       mds->mdcache->add_inode(in);
     if (root->dirty) in->_mark_dirty(logseg);
@@ -465,18 +454,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       CInode *in = mds->mdcache->get_inode(p->inode.ino, p->dnlast);
       if (!in) {
 	in = new CInode(mds->mdcache, true, p->dnfirst, p->dnlast);
-	in->inode = p->inode;
-	in->xattrs = p->xattrs;
-	if (in->inode.is_dir()) {
-	  in->dirfragtree = p->dirfragtree;
-	  /*
-	   * we can do this before linking hte inode bc the split_at would
-	   * be a no-op.. we have no children (namely open snaprealms) to
-	   * divy up 
-	   */
-	  in->decode_snap_blob(p->snapbl);  
-	}
-	if (in->inode.is_symlink()) in->symlink = p->symlink;
+	p->update_inode(in);
 	mds->mdcache->add_inode(in);
 	if (!dn->get_linkage()->is_null()) {
 	  if (dn->get_linkage()->is_primary()) {
@@ -503,13 +481,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	}
 	if (in->get_parent_dn() && in->inode.anchored != p->inode.anchored)
 	  in->get_parent_dn()->adjust_nested_anchors( (int)p->inode.anchored - (int)in->inode.anchored );
-	in->inode = p->inode;
-	in->xattrs = p->xattrs;
-	if (in->inode.is_dir()) {
-	  in->dirfragtree = p->dirfragtree;
-	  in->decode_snap_blob(p->snapbl);
-	}
-	if (in->inode.is_symlink()) in->symlink = p->symlink;
+	p->update_inode(in);
 	if (p->dirty) in->_mark_dirty(logseg);
 	if (dn->get_linkage()->get_inode() != in) {
 	  if (!dn->get_linkage()->is_null())  // note: might be remote.  as with stray reintegration.

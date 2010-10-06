@@ -76,7 +76,7 @@ public:
 	    bufferlist &sbl, bool dr, default_file_layout *defl = NULL) :
       //dn(d), dnfirst(df), dnlast(dl), dnv(v), 
       //inode(i), dirfragtree(dft), xattrs(xa), symlink(sym), snapbl(sbl), dirty(dr) 
-      _enc(1024)
+      dir_layout(NULL), _enc(1024)
     {
       ::encode(d, _enc);
       ::encode(df, _enc);
@@ -89,35 +89,23 @@ public:
       if (i.is_dir()) {
 	::encode(dft, _enc);
 	::encode(sbl, _enc);
-	::encode((dl ? true : false), _enc);
+	::encode((defl ? true : false), _enc);
 	if (defl)
 	  ::encode(*defl, _enc);
       }
       ::encode(dr, _enc);      
     }
-    fullbit(bufferlist::iterator &p) { decode(p); }
-    fullbit() {}
+    fullbit(bufferlist::iterator &p) : dir_layout(NULL) { decode(p); }
+    fullbit() : dir_layout(NULL) {}
+    ~fullbit() {
+      delete dir_layout;
+    }
 
     void encode(bufferlist& bl) const {
       __u8 struct_v = 2;
       ::encode(struct_v, bl);
       assert(_enc.length());
       bl.append(_enc); 
-      /*
-      ::encode(dn, bl);
-      ::encode(dnfirst, bl);
-      ::encode(dnlast, bl);
-      ::encode(dnv, bl);
-      ::encode(inode, bl);
-      ::encode(xattrs, bl);
-      if (inode.is_symlink())
-	::encode(symlink, bl);
-      if (inode.is_dir()) {
-	::encode(dirfragtree, bl);
-	::encode(snapbl, bl);
-      }
-      ::encode(dirty, bl);
-      */
     }
     void decode(bufferlist::iterator &bl) {
       __u8 struct_v;
@@ -133,7 +121,7 @@ public:
       if (inode.is_dir()) {
 	::decode(dirfragtree, bl);
 	::decode(snapbl, bl);
-	if (struct_v >=2 ) {
+	if (struct_v >= 2) {
 	  bool dir_layout_exists;
 	  ::decode(dir_layout_exists, bl);
 	  if (dir_layout_exists) {
@@ -144,6 +132,26 @@ public:
       }
       ::decode(dirty, bl);
     }
+
+    void update_inode(CInode *in) {
+      in->inode = inode;
+      in->xattrs = xattrs;
+      if (in->inode.is_dir()) {
+	in->dirfragtree = dirfragtree;
+	delete in->default_layout;
+	in->default_layout = dir_layout;
+	dir_layout = NULL;
+	/*
+	 * we can do this before linking hte inode bc the split_at would
+	 * be a no-op.. we have no children (namely open snaprealms) to
+	 * divy up 
+	 */
+	in->decode_snap_blob(snapbl);  
+      } else if (in->inode.is_symlink()) {
+	in->symlink = symlink;
+      }
+    }
+
     void print(ostream& out) {
       out << " fullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " inode " << inode.ino

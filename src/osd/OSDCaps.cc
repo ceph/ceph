@@ -94,7 +94,7 @@ bool OSDCaps::parse(bufferlist::iterator& iter)
   try {
     ::decode(s, iter);
 
-    generic_dout(0) << "decoded caps: " << s << dendl;
+    generic_dout(10) << "decoded caps: " << s << dendl;
 
     size_t pos = 0;
     string token;
@@ -196,7 +196,7 @@ do { \
     return false;
   }
 
-  generic_dout(0) << "default allow=" << (int)default_allow << " default_deny=" << (int) default_deny << dendl;
+  generic_dout(10) << "default allow=" << (int)default_allow << " default_deny=" << (int) default_deny << dendl;
   pools_map.dump();
   return true;
 }

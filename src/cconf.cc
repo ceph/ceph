@@ -32,6 +32,8 @@ int main(int argc, const char **argv)
   vector<const char*> args, nargs;
   deque<const char *> sections;
   unsigned i;
+  std::vector<const char *> empty_args;
+  char buf[1024];
   DEFINE_CONF_VARS(usage);
 
   argv_to_vec(argc, argv, args);
@@ -109,6 +111,10 @@ int main(int argc, const char **argv)
     val = conf_post_process_val(defval);
     goto done_ok;
   }
+
+  parse_startup_config_options(empty_args, type);
+  if (ceph_def_conf_by_name(key, buf, sizeof(buf)))
+    cout << buf << std::endl;
 
   exit(1);
 

@@ -31,6 +31,10 @@ public:
     return true;
   }
 
+  bool can_xlock_local() {
+    return !is_wrlocked();
+  }
+
   bool can_wrlock() {
     return !is_xlocked();
   }
