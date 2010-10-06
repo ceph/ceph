@@ -2420,24 +2420,29 @@ void PG::read_state(ObjectStore *store)
     read_log(store);
   }
   catch (const buffer::error &e) {
-    // Pretend that there is no ondisklog
     string cr_log_coll_name(get_corrupt_pg_log_name());
     dout(0) << "Got exception '" << e.what() << "' while reading log. "
             << "Moving corrupted log file to '" << cr_log_coll_name
 	    << "' for later " << "analysis." << dendl;
+
+    ondisklog.zero();
+
+    // clear log index
+    log.head = log.tail = info.last_update;
+
+    // reset info
+    info.log_tail = info.last_update;
+    info.log_backlog = false;
+
+    // Move the corrupt log to a new place and create a new zero-length log entry.
     ObjectStore::Transaction t;
     coll_t cr_log_coll(cr_log_coll_name);
     t.create_collection(cr_log_coll);
     t.collection_add(cr_log_coll, coll_t::META_COLL, log_oid);
     t.collection_remove(coll_t::META_COLL, log_oid);
     t.touch(coll_t::META_COLL, log_oid);
+    write_info(t);
     store->apply_transaction(t);
-
-    // clear the log
-    ondisklog.zero();
-    log.head = log.tail = info.last_update;
-    info.log_tail = info.last_update;
-    info.log_backlog = false;
   }
 }
 
