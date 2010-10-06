@@ -386,6 +386,9 @@ void ReplicatedPG::do_op(MOSDOp *op)
     ctx->reply->get_header().data_off = ctx->data_off;
     ctx->reply->set_result(result);
 
+    if (result >= 0)
+      ctx->reply->set_version(ctx->reply_version);
+
     // read or error?
     if (ctx->op_t.empty() || result < 0) {
       log_op_stats(ctx);
@@ -401,9 +404,6 @@ void ReplicatedPG::do_op(MOSDOp *op)
     }
 
     assert(op->may_write());
-
-    // set version in op, for benefit of client and our eventual reply.  if !noop!
-    op->set_version(ctx->at_version);
 
     // trim log?
     calc_trim_to();
@@ -819,6 +819,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       break;
     }
 
+    ctx->reply_version = oi.user_version;
     // make writeable (i.e., clone if necessary)
     if (is_modify) {
       if (!ctx->snapc.is_valid())
@@ -828,8 +829,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       if (op.op != CEPH_OSD_OP_WATCH) {
         /* update the user_version for any modify ops, except for the watch op */
         oi.user_version = ctx->at_version;
+        ctx->reply_version = oi.user_version;
       }
     }
+
+    dout(0) << "oi.user_version=" << oi.user_version << " is_modify=" << is_modify << dendl;
 
     // munge ZERO -> TRUNCATE?  (don't munge to DELETE or we risk hosing attributes)
     if (op.op == CEPH_OSD_OP_ZERO &&
