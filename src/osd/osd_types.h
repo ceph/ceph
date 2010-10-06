@@ -141,7 +141,7 @@ struct pg_t {
     return coll_t(u.pg64, sn);
     }*/
 
-  int print(char *o, int maxlen) {
+  int print(char *o, int maxlen) const {
     if (preferred() >= 0)
       return snprintf(o, maxlen, "%d.%xp%d", pool(), ps(), preferred());
     else

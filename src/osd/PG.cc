@@ -35,7 +35,7 @@
 #define DOUT_SUBSYS osd
 #undef dout_prefix
 #define dout_prefix _prefix(this, osd->whoami, osd->osdmap)
-static ostream& _prefix(PG *pg, int whoami, OSDMap *osdmap) {
+static ostream& _prefix(const PG *pg, int whoami, OSDMap *osdmap) {
   return *_dout << dbeginl << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
 }
 
@@ -2379,7 +2379,22 @@ bool PG::check_log_for_corruption(ObjectStore *store)
   return ok;
 }
 
-
+//! Get the name we're going to save our corrupt page log as
+std::string PG::get_corrupt_pg_log_name() const
+{
+  const int MAX_BUF = 512;
+  char buf[MAX_BUF];
+  struct tm tm_buf;
+  time_t my_time(time(NULL));
+  const struct tm *t = localtime_r(&my_time, &tm_buf);
+  int ret = strftime(buf, sizeof(buf), "corrupt_log_%Y-%m-%d_%k:%M_", t);
+  if (ret == 0) {
+    dout(0) << "strftime failed" << dendl;
+    return "corrupt_log_unknown_time";
+  }
+  info.pgid.print(buf + ret, MAX_BUF - ret);
+  return buf;
+}
 
 void PG::read_state(ObjectStore *store)
 {
@@ -2406,8 +2421,19 @@ void PG::read_state(ObjectStore *store)
   }
   catch (const buffer::error &e) {
     // Pretend that there is no ondisklog
+    string cr_log_coll_name(get_corrupt_pg_log_name());
     dout(0) << "Got exception '" << e.what() << "' while reading log. "
-            << "Zeroing log." << dendl;
+            << "Moving corrupted log file to '" << cr_log_coll_name
+	    << "' for later " << "analysis." << dendl;
+    ObjectStore::Transaction t;
+    coll_t cr_log_coll(cr_log_coll_name);
+    t.create_collection(cr_log_coll);
+    t.collection_add(cr_log_coll, coll_t::META_COLL, log_oid);
+    t.collection_remove(coll_t::META_COLL, log_oid);
+    t.touch(coll_t::META_COLL, log_oid);
+    store->apply_transaction(t);
+
+    // clear the log
     ondisklog.zero();
     log.head = log.tail = info.last_update;
     info.log_tail = info.last_update;

@@ -995,6 +995,7 @@ public:
   void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
   void trim_peers();
 
+  std::string get_corrupt_pg_log_name() const;
   void read_state(ObjectStore *store);
   coll_t make_snap_collection(ObjectStore::Transaction& t, snapid_t sn);
 
