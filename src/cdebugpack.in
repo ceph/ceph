@@ -33,8 +33,10 @@ wait_pid_exit() {
 		[ -e /proc/$pid ] || return
 		sleep 1
 	done
-	echo Killing pid $pid
-	kill $pid
+	if [ -e /proc/$pid ]; then
+	    echo Killing pid $pid
+	    kill $pid
+	fi
 }
 
 
@@ -60,14 +62,14 @@ esac
 shift
 done
 
-[ "$dest_tar" == "" ] && usage_exit
+[ "$dest_tar" = "" ] && usage_exit
 
 # get absolute path for dest_tar
-[ "${dest_tar::1}" != "/" ] && dest_tar="`pwd`/$dest_tar"
+[ `echo $dest_tar | cut -c 1` != "/" ] && dest_tar="`pwd`/$dest_tar"
 
 bins="cmon cmds cosd"
 core_paths="/ $BINDIR $BINDBGDIR"
-[ "$conf" == "" ] && conf=$ETCDIR/ceph.conf
+[ "$conf" = "" ] && conf=$ETCDIR/ceph.conf
 log_path=`$CCONF -c $conf "log dir"`
 
 [ -z "$conf" ] && usage_exit
