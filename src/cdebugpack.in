@@ -122,6 +122,8 @@ $BINDIR/ceph osd dump -o $tmp_path_log/ceph-osd-dump &
 wait_pid_exit $!
 $BINDIR/ceph mds dump -o $tmp_path_log/ceph-mds-dump &
 wait_pid_exit $!
+$BINDIR/ceph pg dump -o $tmp_path_log/ceph-pg-dump &
+wait_pid_exit $!
 
 
 # now create a tarball
