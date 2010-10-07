@@ -127,9 +127,7 @@ wait_pid_exit $!
 
 
 # now create a tarball
-
-cd $tmp_path
-tar cvfz $dest_tar -C $tmp_path *
-
+tmp_path_dir=`echo $tmp_path | cut -d / -f 3`
+tar cvfz $dest_tar -C /tmp $tmp_path_dir
 rm -fR $tmp_path
 
