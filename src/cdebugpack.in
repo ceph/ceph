@@ -22,7 +22,7 @@ fi
 BINDBGDIR="/usr/lib/debug/usr/bin"
 
 usage_exit() {
-    echo "usage: $0 [-c ceph.conf] <filename>"
+    echo "usage: $0 [-c ceph.conf] <filename.tar.gz>"
     exit
 }
 
