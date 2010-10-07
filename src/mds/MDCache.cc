@@ -6781,13 +6781,9 @@ void MDCache::_anchor_prepared(CInode *in, version_t atid, bool add)
   if (add) {
     pi->anchored = true;
     pi->rstat.ranchors++;
-    if (in->parent)
-      in->parent->adjust_nested_anchors(1);
   } else {
     pi->anchored = false;
     pi->rstat.ranchors--;
-    if (in->parent)
-      in->parent->adjust_nested_anchors(-1);
   }
   pi->version = in->pre_dirty();
 
@@ -6811,9 +6807,13 @@ void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
   if (in->state_test(CInode::STATE_ANCHORING)) {
     in->state_clear(CInode::STATE_ANCHORING);
     in->put(CInode::PIN_ANCHORING);
+    if (in->parent)
+      in->parent->adjust_nested_anchors(1);
   } else if (in->state_test(CInode::STATE_UNANCHORING)) {
     in->state_clear(CInode::STATE_UNANCHORING);
     in->put(CInode::PIN_UNANCHORING);
+    if (in->parent)
+      in->parent->adjust_nested_anchors(-1);
   }
   in->auth_unpin(this);
   
