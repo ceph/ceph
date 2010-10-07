@@ -1352,6 +1352,17 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	map<entity_name_t, OSD::Session *>::iterator iter = obc->watchers.find(entity);
 	session = (OSD::Session *)ctx->op->get_connection()->get_priv();
 
+	if (do_watch) {
+	  if (ver < oi.user_version.version) {
+	    result = -ERANGE;
+	    break;
+	  }
+	  if (ver > oi.user_version.version) {
+	    result = -EOVERFLOW;
+	    break;
+	  }
+	}
+	  
 	/* is there an old watch from the same client? if so, discard it*/
 	if (iter != obc->watchers.end()) {
 	  session = iter->second;
