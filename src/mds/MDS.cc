@@ -87,6 +87,9 @@ MDS::MDS(const char *n, Messenger *m, MonClient *mc) :
   logclient(messenger, &mc->monmap, mc),
   sessionmap(this) {
 
+  orig_argc = 0;
+  orig_argv = NULL;
+
   last_tid = 0;
 
   monc->set_messenger(messenger);
@@ -814,8 +817,8 @@ void MDS::handle_mds_map(MMDSMap *m)
       dout(10) << "not in map yet" << dendl;
     } else {
       dout(1) << "handle_mds_map i (" << addr
-	      << ") dne in the mdsmap, killing myself" << dendl;
-      suicide();
+	      << ") dne in the mdsmap, respawning myself" << dendl;
+      respawn();
     }
     goto out;
   }
@@ -1344,6 +1347,25 @@ void MDS::suicide()
   monc->shutdown();
 }
 
+void MDS::respawn()
+{
+  dout(1) << "respawn" << dendl;
+
+  char *new_argv[orig_argc+1];
+  dout(1) << " e: '" << orig_argv[0] << "'" << dendl;
+  for (int i=0; i<orig_argc; i++) {
+    new_argv[i] = (char *)orig_argv[i];
+    dout(1) << " " << i << ": '" << orig_argv[i] << "'" << dendl;
+  }
+  new_argv[orig_argc] = NULL;
+
+  dout(1) << " cwd " << get_current_dir_name() << dendl;
+
+  execv(orig_argv[0], new_argv);
+
+  dout(0) << "respawn execv " << orig_argv[0] << " failed with " << strerror(errno) << dendl;
+  suicide();
+}
 
 
 
