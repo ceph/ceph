@@ -113,6 +113,7 @@ fi
 %{_bindir}/rados
 %{_bindir}/radosacl
 %{_bindir}/rbd
+%{_bindir}/cdebugpack
 %{_initrddir}/ceph
 %{_libdir}/libceph.so.*
 %{_libdir}/libcrush.so.*

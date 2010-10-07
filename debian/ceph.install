@@ -10,6 +10,7 @@ usr/bin/cmon
 usr/bin/cmds
 usr/bin/cosd
 usr/bin/cauthtool
+usr/bin/cdebugpack
 sbin/mkcephfs
 usr/lib/ceph/ceph_common.sh
 usr/lib/rados-classes/*
