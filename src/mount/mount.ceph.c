@@ -15,8 +15,8 @@ int verboseflag = 0;
 
 #include "mtab.c"
 
-void
-block_signals (int how) {
+static void block_signals (int how)
+{
      sigset_t sigs;
 
      sigfillset (&sigs);
@@ -45,19 +45,21 @@ static int safe_cat(char **pstr, int *plen, int pos, const char *str2)
 	return pos + len2;
 }
 
-char *mount_resolve_dest(char *orig_str)
+static char *mount_resolve_src(const char *orig_str)
 {
 	char *new_str;
 	char *mount_path;
 	char *tok, *p, *port_str;
 	int len, pos;
+	char buf[strlen(orig_str) + 1];
+	strcpy(buf, orig_str);
 
-	mount_path = strrchr(orig_str, ':');
+	mount_path = strrchr(buf, ':');
 	if (!mount_path) {
 		printf("source mount path was not specified\n");
 		return NULL;
 	}
-	if (mount_path == orig_str) {
+	if (mount_path == buf) {
 		printf("server address expected\n");
 		return NULL;
 	}
@@ -76,7 +78,7 @@ char *mount_resolve_dest(char *orig_str)
 	p = new_str;
 	pos = 0;
 
-	tok = strtok(orig_str, ",");
+	tok = strtok(buf, ",");
 
 	while (tok) {
 		struct addrinfo hint;
@@ -168,9 +170,8 @@ char *mount_resolve_dest(char *orig_str)
 /*
  * this one is partialy based on parse_options() from cifs.mount.c
  */
-static int parse_options(char ** optionsp, int * filesys_flags)
+static char *parse_options(const char *data, int *filesys_flags)
 {
-	const char * data;
 	char * value = NULL;
 	char * next_keyword = NULL;
 	char * out = NULL;
@@ -181,14 +182,13 @@ static int parse_options(char ** optionsp, int * filesys_flags)
 	char *newdata = 0;
 	char secret[1000];
 
-	if (!optionsp || !*optionsp)
-		return 1;
-	data = *optionsp;
+	if (!data)
+		return NULL;
 
 	if(verboseflag)
 		printf("parsing options: %s\n", data);
 
-	while(data != NULL) {
+	do {
 		/*  check if ends with trailing comma */
 		if(*data == 0)
 			break;
@@ -255,12 +255,12 @@ static int parse_options(char ** optionsp, int * filesys_flags)
 			fd = open(fn, O_RDONLY);
 			if (fd < 0) {
 				perror("unable to read secretfile");
-				return -1;
+				return NULL;
 			}
 			len = read(fd, secret, 1000);
 			if (len <= 0) {
 				perror("unable to read secret from secretfile");
-				return -1;
+				return NULL;
 			}
 			end = secret;
 			while (end < secret + len && *end && *end != '\n' && *end != '\r')
@@ -296,10 +296,9 @@ static int parse_options(char ** optionsp, int * filesys_flags)
 			
 		}
 		data = next_keyword;
-	}
+	} while (data);
 
-	*optionsp = out;
-	return 0;
+	return out;
 }
 
 
@@ -307,6 +306,7 @@ int main(int argc, char *argv[])
 {
 	int i;
 	char **new_argv;
+	char *src, *node, *opts;
 	int flags = 0;
 	int options_pos = 0;
 	int retval = 0;
@@ -329,13 +329,23 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	new_argv[1] = mount_resolve_dest(argv[1]);
+	src = mount_resolve_src(argv[1]);
+	if (!src) {
+		printf("failed to resolve source\n");
+		exit(1);
+	}
 
-	parse_options(&new_argv[options_pos], &flags);
+	node = new_argv[2];
+
+	opts = parse_options(new_argv[options_pos], &flags);
+	if (!opts) {
+		printf("failed to parse ceph_options\n");
+		exit(1);
+	}
 
 	block_signals(SIG_BLOCK);
 
-	if (mount(new_argv[1], new_argv[2], "ceph", flags, new_argv[options_pos])) {
+	if (mount(src, node, "ceph", flags, opts)) {
 		retval = errno;
 		switch (errno) {
 		case ENODEV:
@@ -345,11 +355,13 @@ int main(int argc, char *argv[])
 			printf("mount error %d = %s\n",errno,strerror(errno));
 		}
 	} else {
-		update_mtab_entry(new_argv[1], new_argv[2], "ceph", new_argv[options_pos], flags, 0, 0);
+		update_mtab_entry(src, node, "ceph", opts, flags, 0, 0);
 	}
 
 	block_signals(SIG_UNBLOCK);
 
+	free(opts);
+	free(src);
 	free(new_argv);	
 	exit(retval);
 }
