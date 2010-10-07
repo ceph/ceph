@@ -26,6 +26,17 @@ usage_exit() {
     exit
 }
 
+wait_pid_exit() {
+	pid=$1
+
+	for i in {1..10}; do
+		[ -e /proc/$pid ] || return
+		sleep 1
+	done
+	echo Killing pid $pid
+	kill $pid
+}
+
 
 . $LIBDIR/ceph_common.sh
 
@@ -67,6 +78,7 @@ tmp_path_bin=$tmp_path/bin
 tmp_path_bin_dbg=$tmp_path/bin.dbg
 tmp_path_log=$tmp_path/out
 tmp_path_core=$tmp_path/core
+tmp_path_etc=$tmp_path/etc
 
 echo tmp_path=$tmp_path
 
@@ -74,6 +86,7 @@ mkdir -p $tmp_path_bin
 mkdir -p $tmp_path_bin_dbg
 mkdir -p $tmp_path_log
 mkdir -p $tmp_path_core
+mkdir -p $tmp_path_etc
 
 
 #copy the binaries
@@ -98,6 +111,17 @@ for path in $core_paths; do
     done
   fi
 done
+
+# copy config
+cp $conf $tmp_path_etc
+
+# other output
+$BINDIR/ceph -s > $tmp_path_log/ceph-s &
+wait_pid_exit $!
+$BINDIR/ceph osd dump -o $tmp_path_log/ceph-osd-dump &
+wait_pid_exit $!
+$BINDIR/ceph mds dump -o $tmp_path_log/ceph-mds-dump &
+wait_pid_exit $!
 
 
 # now create a tarball
