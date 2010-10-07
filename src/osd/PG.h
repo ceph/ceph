@@ -418,7 +418,7 @@ public:
            i++) {
         objects[i->soid] = &(*i);
 	if (i->reqid_is_indexed()) {
-	  assert(caller_ops.count(i->reqid) == 0);
+	  //assert(caller_ops.count(i->reqid) == 0);  // divergent merge_log indexes new before unindexing old
 	  caller_ops[i->reqid] = &(*i);
 	}
       }
@@ -429,7 +429,7 @@ public:
           objects[e.soid]->version < e.version)
         objects[e.soid] = &e;
       if (e.reqid_is_indexed()) {
-	assert(caller_ops.count(e.reqid) == 0);
+	//assert(caller_ops.count(i->reqid) == 0);  // divergent merge_log indexes new before unindexing old
 	caller_ops[e.reqid] = &e;
       }
     }
@@ -441,10 +441,10 @@ public:
       // NOTE: this only works if we remove from the _tail_ of the log!
       if (objects.count(e.soid) && objects[e.soid]->version == e.version)
         objects.erase(e.soid);
-      if (e.reqid_is_indexed()) {
-	assert(caller_ops.count(e.reqid));
+      if (e.reqid_is_indexed() &&
+	  caller_ops.count(e.reqid) &&  // divergent merge_log indexes new before unindexing old
+	  caller_ops[e.reqid] == &e)
 	caller_ops.erase(e.reqid);
-      }
     }
 
 
