@@ -1,0 +1,27 @@
+.TH CDEBUGPACK 8
+.SH NAME
+cdebugpack \- ceph debug packer utility
+.SH SYNOPSIS
+.B cdebugpack
+[ \fIoptions\fR ] \fIfilename.tar.gz\fR
+.SH DESCRIPTION
+.B cdebugpack
+will build a tarball containing various items that are useful for
+debugging crashes.  The resulting tarball can be shared with Ceph
+developers when debugging a problem.
+.P
+The tarball will include the binaries for cmds, cosd, and cmon, any
+log files, the ceph.conf configuration file, any core files we can
+find, and (if the system is running) dumps of the current osd, mds,
+and pg maps from the monitor.
+.SH OPTIONS
+.TP
+\fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
+Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
+to determine monitor addresses during startup.
+.SH AVAILABILITY
+.B cdebugpack
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR ceph (8)
