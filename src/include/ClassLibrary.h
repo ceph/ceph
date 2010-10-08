@@ -115,14 +115,17 @@ public:
   string default_ver;
 
   void encode(bufferlist& bl) const {
-    __u8 v = 1;
+    __u8 v = 2;
     ::encode(v, bl);
     ::encode(m, bl);
+    ::encode(default_ver, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 v;
     ::decode(v, bl);
     ::decode(m, bl);
+    if (v >= 2)
+      ::decode(default_ver, bl);
   }
 
   tClassVersionMap::iterator begin() { return m.begin(); }
