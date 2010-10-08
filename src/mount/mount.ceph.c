@@ -12,7 +12,7 @@
 #define BUF_SIZE 128
 
 int verboseflag = 0;
-static char *EMPTY_STRING = "";
+const static char * const EMPTY_STRING = "";
 
 #include "mtab.c"
 
@@ -302,8 +302,8 @@ static char *parse_options(const char *data, int *filesys_flags)
 }
 
 
-static int parse_arguments(int argc, char **argv,
-		char **src, char **node, char **opts)
+static int parse_arguments(int argc, char *const *const argv,
+		const char **src, const char **node, const char **opts)
 {
 	int i;
 
@@ -358,7 +358,9 @@ static void usage(const char *prog_name)
 
 int main(int argc, char *argv[])
 {
-	char *src, *node, *opts;
+	const char *src, *node, *opts;
+	char *rsrc = NULL;
+	char *popts = NULL;
 	int flags = 0;
 	int retval = 0;
 
@@ -368,21 +370,21 @@ int main(int argc, char *argv[])
 		exit((retval > 0) ? EXIT_SUCCESS : EXIT_FAILURE);
 	}
 
-	src = mount_resolve_src(src);
-	if (!src) {
+	rsrc = mount_resolve_src(src);
+	if (!rsrc) {
 		printf("failed to resolve source\n");
 		exit(1);
 	}
 
-	opts = parse_options(opts, &flags);
-	if (!opts) {
+	popts = parse_options(opts, &flags);
+	if (!popts) {
 		printf("failed to parse ceph_options\n");
 		exit(1);
 	}
 
 	block_signals(SIG_BLOCK);
 
-	if (mount(src, node, "ceph", flags, opts)) {
+	if (mount(rsrc, node, "ceph", flags, popts)) {
 		retval = errno;
 		switch (errno) {
 		case ENODEV:
@@ -392,13 +394,13 @@ int main(int argc, char *argv[])
 			printf("mount error %d = %s\n",errno,strerror(errno));
 		}
 	} else {
-		update_mtab_entry(src, node, "ceph", opts, flags, 0, 0);
+		update_mtab_entry(rsrc, node, "ceph", popts, flags, 0, 0);
 	}
 
 	block_signals(SIG_UNBLOCK);
 
-	free(opts);
-	free(src);
+	free(popts);
+	free(rsrc);
 	exit(retval);
 }
 
