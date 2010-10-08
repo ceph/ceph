@@ -266,13 +266,15 @@ static char *parse_options(const char *data, int *filesys_flags)
 			*end = '\0';
 			close(fd);
 
-			//printf("read secret of len %d from %s\n", len, fn);
+			if (verboseflag)
+				printf("read secret of len %d from %s\n", len, fn);
 			data = "secret";
 			value = secret;
 			skip = 0;
 		} else {
 			skip = 0;
-			/* printf("ceph: Unknown mount option %s\n",data); */
+			if (verboseflag)
+				printf("ceph: Unknown mount option %s\n",data);
 		}
 
 		/* Copy (possibly modified) option to out */
