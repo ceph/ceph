@@ -148,14 +148,16 @@ bool JournalingObjectStore::commit_start()
   // suspend new ops...
   Mutex::Locker l(lock);
 
-  dout(10) << "commit_start" << dendl;
+  dout(10) << "commit_start op_seq " << op_seq
+	   << ", applied_seq " << applied_seq
+	   << ", committed_seq " << committed_seq << dendl;
   blocked = true;
   while (open_ops > 0) {
     dout(10) << "commit_start blocked, waiting for " << open_ops << " open ops" << dendl;
     cond.Wait(lock);
   }
   
-  if (op_seq == committed_seq) {
+  if (applied_seq == committed_seq) {
     dout(10) << "commit_start nothing to do" << dendl;
     blocked = false;
     cond.Signal();
