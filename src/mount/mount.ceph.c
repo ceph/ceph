@@ -302,42 +302,79 @@ static char *parse_options(const char *data, int *filesys_flags)
 }
 
 
-int main(int argc, char *argv[])
+static int parse_arguments(int argc, char **argv,
+		char **src, char **node, char **opts)
 {
 	int i;
-	char **new_argv;
-	char *src, *node, *opts;
-	int flags = 0;
-	int options_pos = 0;
-	int retval = 0;
 
-	if (argc < 5)
-		exit(1);
-
-	new_argv = (char **)malloc(sizeof(char *)*argc);
-
-	for (i=0; i<argc; i++) {
-		new_argv[i] = argv[i];
-		if (strcmp(new_argv[i], "-o") == 0) {
-			options_pos = i+1;
-			if (options_pos >= argc) {
-				printf("usage error\n");
-				exit(1);
-			}		
-		} else if (strcmp(new_argv[i], "-v") == 0) {
-			verboseflag = 1;
-		}
+	if (argc < 2) {
+		// There were no arguments. Just show the usage.
+		return 1;
+	}
+	if ((!strcmp(argv[1], "-h")) || (!strcmp(argv[1], "--help"))) {
+		// The user asked for help.
+		return 1;
 	}
 
-	src = mount_resolve_src(argv[1]);
+	// The first two arguments are positional
+	if (argc < 3)
+		return -EINVAL;
+	*src = argv[1];
+	*node = argv[2];
+
+	// Parse the remaining options
+	*opts = NULL;
+	for (i = 3; i < argc; ++i) {
+		if (!strcmp("-h", argv[i]))
+			return 1;
+		else if (!strcmp("-v", argv[i]))
+			verboseflag = 1;
+		else if (!strcmp("-o", argv[i])) {
+			++i;
+			if (i >= argc) {
+				printf("Option -o requires an argument.\n\n");
+				return -EINVAL;
+			}
+			*opts = argv[i];
+		}
+		else {
+			printf("Can't understand option: '%s'\n\n", argv[i]);
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+
+static void usage(const char *prog_name)
+{
+	printf("usage: %s [src] [mount-point] [-v] [-o ceph-options]\n",
+		prog_name);
+	printf("options:\n");
+	printf("\t-h: Print this help\n");
+	printf("\t-v: Verbose\n");
+	printf("\tceph-options: refer to mount.ceph(8)\n");
+	printf("\n");
+}
+
+int main(int argc, char *argv[])
+{
+	char *src, *node, *opts;
+	int flags = 0;
+	int retval = 0;
+
+	retval = parse_arguments(argc, argv, &src, &node, &opts);
+	if (retval) {
+		usage(argv[0]);
+		exit((retval > 0) ? EXIT_SUCCESS : EXIT_FAILURE);
+	}
+
+	src = mount_resolve_src(src);
 	if (!src) {
 		printf("failed to resolve source\n");
 		exit(1);
 	}
 
-	node = new_argv[2];
-
-	opts = parse_options(new_argv[options_pos], &flags);
+	opts = parse_options(opts, &flags);
 	if (!opts) {
 		printf("failed to parse ceph_options\n");
 		exit(1);
@@ -362,7 +399,6 @@ int main(int argc, char *argv[])
 
 	free(opts);
 	free(src);
-	free(new_argv);	
 	exit(retval);
 }
 
