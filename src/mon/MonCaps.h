@@ -73,7 +73,7 @@ public:
 	      allow_all(false), auid(CEPH_AUTH_UID_DEFAULT) {}
   const string& get_str() const { return text; }
   bool parse(bufferlist::iterator& iter);
-  rwx_t get_caps(int service);
+  rwx_t get_caps(int service) const;
   bool check_privileges(int service, int req_perm,
 			uint64_t auid=CEPH_AUTH_UID_DEFAULT);
   void set_allow_all(bool allow) { allow_all = allow; }

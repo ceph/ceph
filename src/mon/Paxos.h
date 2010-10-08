@@ -99,9 +99,9 @@ private:
   int state;
 
 public:
-  bool is_recovering() { return state == STATE_RECOVERING; }
-  bool is_active() { return state == STATE_ACTIVE; }
-  bool is_updating() { return state == STATE_UPDATING; }
+  bool is_recovering() const { return state == STATE_RECOVERING; }
+  bool is_active() const { return state == STATE_ACTIVE; }
+  bool is_updating() const { return state == STATE_UPDATING; }
 
 private:
   // recovery (phase 1)

@@ -190,7 +190,9 @@ public:
     _reopen_session();
   }
 
-  entity_addr_t get_my_addr() { return my_addr; }
+  entity_addr_t get_my_addr() const {
+    return my_addr;
+  }
 
   const ceph_fsid_t& get_fsid() {
     return monmap.fsid;
@@ -213,7 +215,9 @@ public:
     return monmap.size();
   }
 
-  uint64_t get_global_id() { return global_id; }
+  uint64_t get_global_id() const {
+    return global_id;
+  }
 
   void set_messenger(Messenger *m) { messenger = m; }
 

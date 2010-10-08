@@ -91,10 +91,10 @@ private:
   bool stopping;
 
 public:
-  bool is_starting() { return state == STATE_STARTING; }
-  bool is_leader() { return state == STATE_LEADER; }
-  bool is_peon() { return state == STATE_PEON; }
-  bool is_stopping() { return stopping; }
+  bool is_starting() const { return state == STATE_STARTING; }
+  bool is_leader() const { return state == STATE_LEADER; }
+  bool is_peon() const { return state == STATE_PEON; }
+  bool is_stopping() const { return stopping; }
 
 
   // -- elector --

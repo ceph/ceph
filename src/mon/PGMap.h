@@ -216,7 +216,7 @@ public:
       stat_osd_add(p->second);
   }
 
-  void dump(ostream& ss)
+  void dump(ostream& ss) const
   {
     ss << "version " << version << std::endl;
     ss << "last_osdmap_epoch " << last_osdmap_epoch << std::endl;
@@ -224,10 +224,15 @@ public:
     ss << "full_ratio " << full_ratio << std::endl;
     ss << "nearfull_ratio " << nearfull_ratio << std::endl;
     ss << "pg_stat\tobjects\tmip\tdegr\tkb\tbytes\tlog\tdisklog\tstate\tv\treported\tup\tacting\tlast_scrub" << std::endl;
-    for (set<pg_t>::iterator p = pg_set.begin();
+    for (set<pg_t>::const_iterator p = pg_set.begin();
 	 p != pg_set.end();
 	 p++) {
-      pg_stat_t &st = pg_stat[*p];
+      hash_map<pg_t,pg_stat_t>::const_iterator i = pg_stat.find(*p);
+      if (i == pg_stat.end()) {
+	ss << *p << ": ERROR: no pg_stat information found" << std::endl;
+	continue;
+      }
+      const pg_stat_t &st(i->second);
       ss << *p 
 	 << "\t" << st.num_objects
 	//<< "\t" << st.num_object_copies
@@ -245,7 +250,7 @@ public:
 	 << "\t" << st.last_scrub << "\t" << st.last_scrub_stamp
 	 << std::endl;
     }
-    for (hash_map<int,pool_stat_t>::iterator p = pg_pool_sum.begin();
+    for (hash_map<int,pool_stat_t>::const_iterator p = pg_pool_sum.begin();
 	 p != pg_pool_sum.end();
 	 p++)
       ss << "pool " << p->first
@@ -268,7 +273,7 @@ public:
        << "\t" << pg_sum.ondisk_log_size
        << std::endl;
     ss << "osdstat\tkbused\tkbavail\tkb\thb in\thb out" << std::endl;
-    for (hash_map<int,osd_stat_t>::iterator p = osd_stat.begin();
+    for (hash_map<int,osd_stat_t>::const_iterator p = osd_stat.begin();
 	 p != osd_stat.end();
 	 p++)
       ss << p->first
@@ -284,9 +289,9 @@ public:
 	 << std::endl;
   }
 
-  void print_summary(ostream& out) {
+  void print_summary(ostream& out) const {
     std::stringstream ss;
-    for (hash_map<int,int>::iterator p = num_pg_by_state.begin();
+    for (hash_map<int,int>::const_iterator p = num_pg_by_state.begin();
 	 p != num_pg_by_state.end();
 	 ++p) {
       if (p != num_pg_by_state.begin())
@@ -314,7 +319,7 @@ public:
 
 };
 
-inline ostream& operator<<(ostream& out, PGMap& m) {
+inline ostream& operator<<(ostream& out, const PGMap& m) {
   m.print_summary(out);
   return out;
 }
