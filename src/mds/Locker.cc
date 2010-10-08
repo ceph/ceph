@@ -3552,6 +3552,11 @@ void Locker::local_wrlock_finish(LocalLock *lock, Mutation *mut)
   lock->put_wrlock();
   mut->wrlocks.erase(lock);
   mut->locks.erase(lock);
+  if (lock->get_num_wrlocks() == 0) {
+    lock->finish_waiters(SimpleLock::WAIT_STABLE |
+                         SimpleLock::WAIT_WR |
+                         SimpleLock::WAIT_RD);
+  }
 }
 
 bool Locker::local_xlock_start(LocalLock *lock, MDRequest *mut)
