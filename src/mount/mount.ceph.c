@@ -12,6 +12,7 @@
 #define BUF_SIZE 128
 
 int verboseflag = 0;
+static char *EMPTY_STRING = "";
 
 #include "mtab.c"
 
@@ -182,9 +183,6 @@ static char *parse_options(const char *data, int *filesys_flags)
 	char *newdata = 0;
 	char secret[1000];
 
-	if (!data)
-		return NULL;
-
 	if(verboseflag)
 		printf("parsing options: %s\n", data);
 
@@ -298,6 +296,8 @@ static char *parse_options(const char *data, int *filesys_flags)
 		data = next_keyword;
 	} while (data);
 
+	if (!out)
+		return strdup(EMPTY_STRING);
 	return out;
 }
 
@@ -323,7 +323,7 @@ static int parse_arguments(int argc, char **argv,
 	*node = argv[2];
 
 	// Parse the remaining options
-	*opts = NULL;
+	*opts = EMPTY_STRING;
 	for (i = 3; i < argc; ++i) {
 		if (!strcmp("-h", argv[i]))
 			return 1;
