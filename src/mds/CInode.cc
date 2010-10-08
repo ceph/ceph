@@ -1584,7 +1584,8 @@ void CInode::finish_scatter_gather_update_accounted(int type, Mutation *mut, EMe
     metablob->add_dir(dir, true);
     mut->auth_pin(dir);
 
-    dir->assimilate_dirty_rstat_inodes_finish(mut, metablob);
+    if (type == CEPH_LOCK_INEST)
+      dir->assimilate_dirty_rstat_inodes_finish(mut, metablob);
   }
 }
 
