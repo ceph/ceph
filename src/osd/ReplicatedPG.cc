@@ -1183,7 +1183,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	    osd->watch_timer.cancel_event(notif->timeout);
 	  delete notif;
 	}
-	osd->watch_lock.Lock();
+	osd->watch_lock.Unlock();
       }
       break;
 
