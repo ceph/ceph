@@ -1104,8 +1104,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  result = -ENOMEM;	
 	  break;
 	}
-	notif->reply = ctx->reply;
-	ctx->reply = NULL;
+	notif->layout = osd->osdmap->make_object_layout(soid.oid, info.pgid.pool(), info.pgid.preferred());
+
+	osd->watch_lock.Lock();
 	osd->watch->add_notification(notif);
 
 	for (oi_iter = oi.watchers.begin();
@@ -1128,13 +1129,20 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  }
 	}
 
+	MWatchNotify *reply = new MWatchNotify(op.watch.cookie, op.watch.ver, notif->id, WATCH_NOTIFY_COMPLETE);
 	if (notif->watchers.empty()) {
-	  MWatchNotify *reply = new MWatchNotify(op.watch.cookie, op.watch.ver, notif->id, WATCH_NOTIFY_COMPLETE);
 	  osd->client_messenger->send_message(reply, notif->session->con);
 	  notif->session->put();
 	  osd->watch->remove_notification(notif);
 	  delete notif;
+	} else {
+          obc->ref++;
+          notif->obc = obc;
+	  notif->reply = reply;
+	  notif->timeout = new Watch::C_NotifyTimeout(osd, notif);
+	  osd->watch_timer.add_event_after(5.0, notif->timeout);
 	}
+	osd->watch_lock.Unlock();
       }
       break;
 
@@ -1147,6 +1155,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
         map<entity_name_t, OSD::Session *>::iterator iter;
 	map<entity_name_t, watch_info_t>::iterator oi_iter;
+
+	osd->watch_lock.Lock();
 
         oi_iter = oi.watchers.find(ctx->op->get_source());
 	if (oi_iter == oi.watchers.end()) {
@@ -1165,12 +1175,15 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	entity_name_t source = ctx->op->get_source();
 	if (osd->watch->ack_notification(source, notif)) {
 	  dout(0) << "got the last reply from pending watchers, can send response now" << dendl;
-	  MWatchNotify *reply = new MWatchNotify(notif->cookie, wi.ver, notif->id, WATCH_NOTIFY_COMPLETE);
+	  MWatchNotify *reply = notif->reply; // new MWatchNotify(notif->cookie, wi.ver, notif->id, WATCH_NOTIFY_COMPLETE);
 	  osd->client_messenger->send_message(reply, notif->session->con);
 	  notif->session->put();
 	  osd->watch->remove_notification(notif);
+	  if (notif->timeout)
+	    osd->watch_timer.cancel_event(notif->timeout);
 	  delete notif;
 	}
+	osd->watch_lock.Lock();
       }
       break;
 
@@ -1349,8 +1362,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
         ObjectContext *obc = ctx->obc;
 	dout(0) << "ctx->obc=" << (void *)obc << " cookie=" << cookie << " ver=" << ver << " oi.version=" << oi.version.version << " ctx->at_version=" << ctx->at_version << dendl;
 	dout(0) << "oi.user_version=" << oi.user_version.version << dendl;
-	map<entity_name_t, OSD::Session *>::iterator iter = obc->watchers.find(entity);
-	session = (OSD::Session *)ctx->op->get_connection()->get_priv();
 
 	if (do_watch) {
 	  if (ver < oi.user_version.version) {
@@ -1363,6 +1374,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  }
 	}
 	  
+	session = (OSD::Session *)ctx->op->get_connection()->get_priv();
+
+	osd->watch_lock.Lock();
+
+	map<entity_name_t, OSD::Session *>::iterator iter = obc->watchers.find(entity);
+
 	/* is there an old watch from the same client? if so, discard it*/
 	if (iter != obc->watchers.end()) {
 	  session = iter->second;
@@ -1402,6 +1419,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  watch_info_t& w = oi_iter->second;
 	  dout(0) << "* oi->watcher: " << oi_iter->first << " ver=" << w.ver << " cookie=" << w.cookie << dendl;
 	}
+	osd->watch_lock.Unlock();
         t.nop();
       }
 

@@ -21,6 +21,8 @@
 #include "OSD.h"
 #include "config.h"
 
+class MWatchNotify;
+
 /* keeps track and accounts sessions, watchers and notifiers */
 class Watch {
   uint64_t notif_id;
@@ -37,11 +39,22 @@ public:
     uint64_t id;
     OSD::Session *session;
     uint64_t cookie;
-    Message *reply;
+    MWatchNotify *reply;
+    Context *timeout;
+    void *obc;
+    ceph_object_layout layout;
 
     void add_watcher(const entity_name_t& name, WatcherState state) { watchers[name] = state; }
 
     Notification(entity_name_t& n, OSD::Session *s, uint64_t c) : name(n), session(s), cookie(c) { }
+  };
+
+  class C_NotifyTimeout : public Context {
+    OSD *osd;
+    Notification *notif;
+  public:
+    C_NotifyTimeout(OSD *_osd, Notification *_notif) : osd(_osd), notif(_notif) {}
+    void finish(int r);
   };
 
 private:

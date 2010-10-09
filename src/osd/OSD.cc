@@ -72,6 +72,8 @@
 
 #include "messages/MClass.h"
 
+#include "messages/MWatchNotify.h"
+
 #include "common/Logger.h"
 #include "common/LogType.h"
 #include "common/Timer.h"
@@ -385,7 +387,9 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   scrubs_pending(0),
   scrubs_active(0),
   scrub_wq(this, &disk_tp),
-  remove_wq(this, &disk_tp)
+  remove_wq(this, &disk_tp),
+  watch_lock("OSD::watch_lock"),
+  watch_timer(watch_lock)
 {
   monc->set_messenger(client_messenger);
 
@@ -956,6 +960,14 @@ PG *OSD::_lookup_lock_pg(pg_t pgid)
   assert(pg_map.count(pgid));
   PG *pg = pg_map[pgid];
   pg->lock();
+  return pg;
+}
+
+PG *OSD::lookup_lock_pg(pg_t pgid)
+{
+  osd_lock.Lock();
+  PG *pg = _lookup_lock_pg(pgid);
+  osd_lock.Unlock();
   return pg;
 }
 
@@ -1593,6 +1605,14 @@ void OSD::ms_handle_connect(Connection *con)
   }
 }
 
+void OSD::put_object_context(void *_obc, ceph_object_layout& layout)
+{
+  ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)_obc;
+  pg_t pgid = osdmap->raw_pg_to_pg(pg_t(layout.ol_pgid));
+  ReplicatedPG *pg = (ReplicatedPG *)lookup_lock_pg(pgid);
+  pg->put_object_context(obc);
+  pg->unlock();
+}
 
 bool OSD::ms_handle_reset(Connection *con)
 {
@@ -1624,18 +1644,44 @@ bool OSD::ms_handle_reset(Connection *con)
       ++witer;
     }
     obc->lock.Unlock();
-    osd_lock.Lock();
-
-    dout(0) << "iter->second="<< iter->second << dendl;
     /* now drop a reference to that obc */
-    pg_t pgid = osdmap->raw_pg_to_pg(pg_t(iter->second.ol_pgid));
-    ReplicatedPG *pg = (ReplicatedPG *)_lookup_lock_pg(pgid);
-    pg->put_object_context(obc);
-    pg->unlock();
-    osd_lock.Unlock();
+    put_object_context(obc, iter->second);
   }
 
   return true;
+}
+
+void OSD::handle_notify_timeout(void *_notif)
+{
+  Watch::Notification *notif = (Watch::Notification *)_notif;
+
+  dout(0) << "OSD::handle_notify_timeout" << dendl;
+
+  ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)notif->obc;
+
+  notif->timeout = NULL; /* need to do it under the watch_lock, so we're not getting cancelled somewhere else */
+
+  watch_lock.Unlock(); /* drop lock to change locking order */
+
+  obc->lock.Lock();
+  watch_lock.Lock();
+
+  std::map<entity_name_t, Watch::WatcherState>::iterator notif_iter;
+  for (notif_iter = notif->watchers.begin(); notif_iter != notif->watchers.end(); ++notif_iter) {
+    map<entity_name_t, Session *>::iterator witer = obc->watchers.find(notif_iter->first);
+    if (witer != obc->watchers.end())
+      obc->watchers.erase(witer);
+  }
+  obc->lock.Unlock();
+  watch_lock.Unlock(); /* put_object_context takes osd->lock */
+
+  client_messenger->send_message(notif->reply, notif->session->con);
+  put_object_context(obc, notif->layout);
+  delete notif;
+
+  watch_lock.Lock();
+
+/* exiting with watch_lock held */
 }
 
 void OSD::send_boot()

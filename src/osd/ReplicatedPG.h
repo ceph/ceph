@@ -17,6 +17,7 @@
 
 #include "PG.h"
 #include "OSD.h"
+#include "Watch.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
