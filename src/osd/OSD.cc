@@ -1623,12 +1623,25 @@ bool OSD::ms_handle_reset(Connection *con)
 
   dout(0) << "OSD::ms_handle_reset() s=" << (void *)session << dendl;
 
+  map<ReplicatedPG::ObjectContext *, ceph_object_layout> obcs;
+
+  watch_lock.Lock();
+
   map<void *, ceph_object_layout>::iterator iter;
   for (iter = session->watches.begin(); iter != session->watches.end(); ++iter) {
     ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)iter->first;
+    obcs[obc] = iter->second;
+  }
+  watch_lock.Unlock();
+
+  
+  map<ReplicatedPG::ObjectContext *, ceph_object_layout>::iterator oiter;
+  for (oiter = obcs.begin(); oiter != obcs.end(); ++oiter) {
+    ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)oiter->first;
     dout(0) << "obc=" << (void *)obc << dendl;
 
     obc->lock.Lock();
+    watch_lock.Lock();
     map<entity_name_t, Session *>::iterator witer;
     /* NOTE! fix this one, should be able to just lookup entity name,
        however, we currently only keep EntityName on the session and not
@@ -1643,9 +1656,10 @@ bool OSD::ms_handle_reset(Connection *con)
         break;
       ++witer;
     }
+    watch_lock.Unlock();
     obc->lock.Unlock();
     /* now drop a reference to that obc */
-    put_object_context(obc, iter->second);
+    put_object_context(obc, oiter->second);
   }
 
   return true;
