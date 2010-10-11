@@ -83,6 +83,7 @@ class MDSMonitor : public PaxosService {
   bool preprocess_offload_targets(MMDSLoadTargets *m);
   bool prepare_offload_targets(MMDSLoadTargets *m);
 
+  enum health_status_t get_health(std::ostream &ss);
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
 

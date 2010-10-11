@@ -1016,7 +1016,27 @@ void OSDMonitor::mark_all_down()
   propose_pending();
 }
 
+enum health_status_t OSDMonitor::get_health(std::ostream &ss)
+{
+  enum health_status_t ret(HEALTH_OK);
 
+  int num_osds = osdmap.get_num_osds();
+  int num_up_osds = osdmap.get_num_up_osds();
+  int num_in_osds = osdmap.get_num_in_osds();
+
+  if (num_osds == 0) {
+    ss << " osdmonitor: no OSDS in osdmap!";
+    ret = HEALTH_ERR;
+  }
+  else if ((num_up_osds != num_osds) ||
+	   (num_in_osds != num_osds)) {
+    ss << " osdmonitor: num_osds = " << num_osds << ", ";
+    ss << "num_up_osds = " << num_up_osds << ", num_in_osds = ";
+    ss << num_in_osds;
+    ret = HEALTH_WARN;
+  }
+  return ret;
+}
 
 bool OSDMonitor::preprocess_command(MMonCommand *m)
 {

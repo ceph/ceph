@@ -298,6 +298,7 @@ void Monitor::handle_command(MMonCommand *m)
   bufferlist rdata;
   string rs;
   int r = -EINVAL;
+  rs = "unrecognized subsystem";
   if (!m->cmd.empty()) {
     if (m->cmd[0] == "mds") {
       mdsmon()->dispatch(m);
@@ -339,7 +340,10 @@ void Monitor::handle_command(MMonCommand *m)
       authmon()->dispatch(m);
       return;
     }
-    rs = "unrecognized subsystem";
+    if (m->cmd[0] == "health") {
+      monmon()->dispatch(m);
+      return;
+    }
   } else 
     rs = "no command";
 

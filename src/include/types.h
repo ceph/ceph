@@ -477,4 +477,27 @@ inline ostream& operator<<(ostream& out, const ceph_mon_subscribe_item& i)
 	     << ((i.flags & CEPH_SUBSCRIBE_ONETIME) ? "" : "+");
 }
 
+enum health_status_t {
+  HEALTH_ERR = 0,
+  HEALTH_WARN = 1,
+  HEALTH_OK = 2,
+};
+
+#ifdef __cplusplus
+inline ostream& operator<<(ostream &oss, health_status_t status) {
+  switch (status) {
+    case HEALTH_ERR:
+      oss << "HEALTH_ERR";
+      break;
+    case HEALTH_WARN:
+      oss << "HEALTH_WARN";
+      break;
+    case HEALTH_OK:
+      oss << "HEALTH_OK";
+      break;
+  }
+  return oss;
+};
+#endif
+
 #endif
