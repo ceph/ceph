@@ -1845,6 +1845,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       dout(20) << "predirty_journal_parents take_diff " << pf->fragstat << dendl;
       dout(20) << "predirty_journal_parents         - " << pf->accounted_fragstat << dendl;
       bool touched_mtime = false;
+      pi->dirstat.version++;
       pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat, touched_mtime);
       if (touched_mtime)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
