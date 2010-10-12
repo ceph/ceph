@@ -452,7 +452,8 @@ public:
   // xlock
   void get_xlock(Mutation *who, client_t client) { 
     assert(get_xlock_by() == 0);
-    assert(state == LOCK_XLOCK || is_locallock());
+    assert(state == LOCK_XLOCK || is_locallock() ||
+	   state == LOCK_LOCK /* if we are a slave */);
     parent->get(MDSCacheObject::PIN_LOCK);
     more()->num_xlock++;
     more()->xlock_by = who; 
@@ -460,7 +461,8 @@ public:
   }
   void set_xlock_done() {
     assert(more()->xlock_by);
-    assert(state == LOCK_XLOCK || is_locallock());
+    assert(state == LOCK_XLOCK || is_locallock() ||
+	   state == LOCK_LOCK /* if we are a slave */);
     if (!is_locallock())
       state = LOCK_XLOCKDONE;
     more()->xlock_by = 0;
