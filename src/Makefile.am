@@ -288,7 +288,8 @@ noinst_LIBRARIES +=  #libcephclient_so.a
 
 # extra bits
 EXTRA_DIST = verify-mds-journal.sh vstart.sh stop.sh \
-	     crun ceph_common.sh init-ceph.in mkcephfs.in cclass.in cclsinfo make_version check_version \
+	crun ceph_common.sh init-ceph.in mkcephfs.in cclass.in cdebugpack.in \
+	cclsinfo make_version check_version \
 	.git_version
 
 
