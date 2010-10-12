@@ -580,8 +580,7 @@ void Paxos::handle_lease(MMonPaxos *lease)
       ss << "lease_expire from mon" << lease->get_source().num()
 	 << " was sent from future time " << lease->sent_timestamp
 	 << " with expected time <=" << allowed_time
-	 << ", clocks not synchronized"
-	 << std::endl;
+	 << ", clocks not synchronized";
       mon->get_logclient()->log(LOG_WARN, ss);
       last_clock_drift_warn = g_clock.now();
       ++clock_drift_warned;
@@ -659,7 +658,7 @@ void Paxos::handle_lease_ack(MMonPaxos *ack)
       ss << "lease_ack from mon" << from
           << " was sent from future time " << ack->sent_timestamp
           << " with allowed time <=" << allowed_time
-          << ", clocks not synchronized." << std::endl;
+          << ", clocks not synchronized.";
       mon->get_logclient()->log(LOG_WARN, ss);
       last_clock_drift_warn = g_clock.now();
       ++clock_drift_warned;
