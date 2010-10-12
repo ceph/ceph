@@ -40,7 +40,7 @@ class ScatterLock : public SimpleLock {
   };
   more_bits_t *_more;
 
-  bool have_more() { return _more ? true : false; }
+  bool have_more() const { return _more ? true : false; }
   void try_clear_more() {
     if (_more && _more->empty()) {
       delete _more;
@@ -79,7 +79,7 @@ public:
     return have_more() ? _more->scatter_wanted : false; 
   }
 
-  bool is_dirty() {
+  bool is_dirty() const {
     return have_more() ? _more->dirty : false;
   }
   bool is_flushing() {
