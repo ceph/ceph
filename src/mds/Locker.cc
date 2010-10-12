@@ -2343,7 +2343,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
       if (in->filelock.is_stable()) {
 	bool need_issue = false;
 	cap->inc_suppress();
-	if (in->get_loner() >= 0 || (in->get_wanted_loner() >= 0 && in->try_set_loner())) {
+	if (in->mds_caps_wanted.empty() &&
+	    (in->get_loner() >= 0 || (in->get_wanted_loner() >= 0 && in->try_set_loner()))) {
 	  if (in->filelock.get_state() != LOCK_EXCL)
 	    file_excl(&in->filelock, &need_issue);
 	  need_issue = false;  // loner!
