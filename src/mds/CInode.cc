@@ -1531,7 +1531,7 @@ void CInode::finish_scatter_gather_update(int type)
 	    // trust the dirfrag for now
 	    pi->rstat = pf->rstat;
 	    pi->rstat.version--;  // (about to re-increment it below!)
-	    assert("unmatched rstat rbytes" == 0);
+	    //assert("unmatched rstat rbytes" == 0);
 	  }
 	}
       }
