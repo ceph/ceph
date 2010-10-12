@@ -1875,6 +1875,10 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	project_rstat_frag_to_inode(p->second.rstat, p->second.accounted_rstat, p->second.first, p->first, pin, true);//false);
       parent->dirty_old_rstat.clear();
       project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat, parent->first, CEPH_NOSNAP, pin, true);//false);
+      
+      // bump version
+      pi->rstat.version++;
+      pf->rstat.version = pf->accounted_rstat.version = pi->rstat.version;
     }
 
     // next parent!
