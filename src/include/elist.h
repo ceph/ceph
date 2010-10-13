@@ -43,8 +43,8 @@ public:
     const item& operator= (const item& right);
 
     
-    bool empty() { return _prev == this; }
-    bool is_on_list() { return !empty(); }
+    bool empty() const { return _prev == this; }
+    bool is_on_list() const { return !empty(); }
 
     bool remove_myself() {
       if (_next == this) {
@@ -88,7 +88,7 @@ public:
     assert(_head.empty());
   }
 
-  bool empty() { 
+  bool empty() const {
     return _head.empty();
   }
 
@@ -165,7 +165,7 @@ public:
       next = cur->_next;
       return *this;
     }
-    bool end() {
+    bool end() const {
       return cur == head;
     }
   };

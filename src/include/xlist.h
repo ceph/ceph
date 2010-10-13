@@ -34,7 +34,7 @@ public:
 
     
     xlist* get_list() { return _list; }
-    bool is_on_list() { return _list ? true:false; }
+    bool is_on_list() const { return _list ? true:false; }
     bool remove_myself() {
       if (_list) {
 	_list->remove(this);
@@ -65,8 +65,8 @@ public:
     assert(_back == 0);
   }
 
-  int size() { return _size; }
-  bool empty() { 
+  int size() const { return _size; }
+  bool empty() const { 
     assert((bool)_front == (bool)_size);
     return _front == 0; 
   }
@@ -144,7 +144,7 @@ public:
       cur = cur->_next;
       return *this;
     }
-    bool end() { return cur == 0; }
+    bool end() const { return cur == 0; }
   };
 
   iterator begin() { return iterator(_front); }
