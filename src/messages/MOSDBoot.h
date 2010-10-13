@@ -26,18 +26,17 @@ class MOSDBoot : public PaxosServiceMessage {
   entity_addr_t hb_addr;
   entity_addr_t cluster_addr;
 
-  MOSDBoot() : PaxosServiceMessage( MSG_OSD_BOOT, 0){}
+  MOSDBoot() : PaxosServiceMessage(MSG_OSD_BOOT, 0) { }
   MOSDBoot(OSDSuperblock& s, entity_addr_t& hb_addr_ref) : 
     PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch),
-    sb(s), hb_addr(hb_addr_ref), cluster_addr() {
-  }
+    sb(s), hb_addr(hb_addr_ref), cluster_addr() { }
   MOSDBoot(OSDSuperblock& s, entity_addr_t& hb_addr_ref,
            entity_addr_t& cluster_addr_ref) :
-             PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch),
-             sb(s), hb_addr(hb_addr_ref), cluster_addr(cluster_addr_ref) {}
-
+    PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch),
+    sb(s), hb_addr(hb_addr_ref), cluster_addr(cluster_addr_ref) { }
+  
 private:
-  ~MOSDBoot() {}
+  ~MOSDBoot() { }
 
 public:
   const char *get_type_name() { return "osd_boot"; }
@@ -46,7 +45,7 @@ public:
   }
   
   void encode_payload() {
-    header.version = 1;
+    header.version = 2;
     paxos_encode();
     ::encode(sb, payload);
     ::encode(hb_addr, payload);
@@ -57,7 +56,7 @@ public:
     paxos_decode(p);
     ::decode(sb, p);
     ::decode(hb_addr, p);
-    if (header.version >=1)
+    if (header.version >= 2)
       ::decode(cluster_addr, p);
   }
 };
