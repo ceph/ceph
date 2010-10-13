@@ -8,6 +8,8 @@
 #include <vector>
 #include "buffer.h"
 
+class RadosClient;
+
 namespace librados {
 
   using ceph::bufferlist;
@@ -45,10 +47,15 @@ namespace librados {
 
 class Rados
 {
-  void *client;
+  RadosClient *client;
 public:
   Rados();
   ~Rados();
+
+  /* We don't allow assignment or copying */
+  Rados(const Rados& rhs);
+  const Rados& operator=(const Rados& rhs);
+
   int initialize(int argc, const char *argv[]);
   void shutdown();
 
