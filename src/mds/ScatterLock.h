@@ -31,7 +31,7 @@ class ScatterLock : public SimpleLock {
       item_updated(lock)
     {}
 
-    bool empty() {
+    bool empty() const {
       return dirty == false &&
 	flushing == false &&
 	scatter_wanted == false &&
@@ -75,12 +75,16 @@ public:
       !is_flushing();
   }
 
-  bool can_scatter_pin(client_t loner) {
+  bool can_scatter_pin(client_t loner) const {
     return can_rdlock(-1) || can_wrlock(loner);
   }
 
   xlist<ScatterLock*>::item *get_updated_item() { return &more()->item_updated; }
-  utime_t get_update_stamp() { return more()->update_stamp; }
+
+  utime_t get_update_stamp() {
+    return more()->update_stamp;
+  }
+
   void set_update_stamp(utime_t t) { more()->update_stamp = t; }
 
   void set_scatter_wanted() {
@@ -90,7 +94,7 @@ public:
     if (have_more())
       _more->scatter_wanted = false;
   }
-  bool get_scatter_wanted() {
+  bool get_scatter_wanted() const {
     return have_more() ? _more->scatter_wanted : false; 
   }
 
@@ -127,7 +131,9 @@ public:
   }
   
   void set_last_scatter(utime_t t) { more()->last_scatter = t; }
-  utime_t get_last_scatter() { return more()->last_scatter; }
+  utime_t get_last_scatter() {
+    return more()->last_scatter;
+  }
 
   void infer_state_from_strong_rejoin(int rstate, bool locktoo) {
     if (rstate == LOCK_MIX || 
@@ -139,7 +145,7 @@ public:
       state = LOCK_LOCK;
   }
 
-  void print(ostream& out) {
+  virtual void print(ostream& out) const {
     out << "(";
     _print(out);
     if (is_dirty())
