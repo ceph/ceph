@@ -163,7 +163,7 @@ void _dout_open_log()
     *_dout << g_clock.now() << " --- " << getpid() << " opened log "
 	   << _dout_path << " ---" << std::endl;
   }
-  *_dout << "ceph version " << VERSION << " (" << STRINGIFY(CEPH_GIT_VER) << ")" << std::endl;
+  *_dout << "ceph version " << VERSION << " (commit:" << STRINGIFY(CEPH_GIT_VER) << ")" << std::endl;
 
   if (need_symlink)
     create_name_symlink();

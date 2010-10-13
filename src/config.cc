@@ -1086,7 +1086,7 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("version", 'v')) {
-      cout << "ceph version " << VERSION << " (" << STRINGIFY(CEPH_GIT_VER) << ")" << std::endl;
+      cout << "ceph version " << VERSION << " (commit:" << STRINGIFY(CEPH_GIT_VER) << ")" << std::endl;
       _exit(0);
     } else if (CONF_ARG_EQ("conf", 'c')) {
 	CONF_SAFE_SET_ARG_VAL(&g_conf.conf, OPT_STR);

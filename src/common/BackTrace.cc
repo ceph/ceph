@@ -16,7 +16,7 @@ namespace ceph {
 
 void BackTrace::print(std::ostream& out)
 {
-  out << " ceph version " << VERSION << " (" << STRINGIFY(CEPH_GIT_VER) << ")" << std::endl;
+  out << " ceph version " << VERSION << " (commit:" << STRINGIFY(CEPH_GIT_VER) << ")" << std::endl;
   for (size_t i = skip; i < size; i++) {
     //      out << " " << (i-skip+1) << ": " << strings[i] << std::endl;
 
