@@ -1300,6 +1300,14 @@ unsigned FileStore::_do_transaction(Transaction& t)
       _start_sync();
       break;
 
+    case Transaction::OP_COLL_RENAME:
+      {
+	coll_t cid(t.get_cid());
+	coll_t ncid(t.get_cid());
+	_collection_rename(cid, ncid);
+      }
+      break;
+
     default:
       cerr << "bad op " << op << std::endl;
       assert(0);
@@ -2185,7 +2193,16 @@ int FileStore::_collection_setattrs(coll_t cid, map<string,bufferptr>& aset)
   return r;
 }
 
-
+int FileStore::_collection_rename(const coll_t &cid, const coll_t &ncid)
+{
+  int ret = 0;
+  if (::rename(cid.c_str(), ncid.c_str())) {
+    ret = errno;
+  }
+  dout(10) << "collection_rename '" << cid << "' to '" << ncid << "'"
+	   << ": ret = " << ret << dendl;
+  return ret;
+}
 
 // --------------------------
 // collections

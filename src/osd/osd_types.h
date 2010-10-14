@@ -250,6 +250,10 @@ public:
     return str;
   }
 
+  const char* c_str() const {
+    return str.c_str();
+  }
+
   bool is_pg(pg_t& pgid, snapid_t& snap) const {
     const char *cstr(str.c_str());
 
