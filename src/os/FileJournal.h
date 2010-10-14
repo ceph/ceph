@@ -44,7 +44,7 @@ public:
     void clear() {
       start = block_size;
     }
-  } header;
+  } header __attribute__((__packed__, aligned(4)));
 
   struct entry_header_t {
     uint64_t seq;  // fs op seq #
@@ -63,7 +63,7 @@ public:
 	magic1 == (uint64_t)pos &&
 	magic2 == (fsid ^ seq ^ len);
     }
-  };
+  } __attribute__((__packed__, aligned(4)));
 
 private:
   string fn;
