@@ -53,19 +53,23 @@ void MDSMonitor::print_map(MDSMap &m, int dbl)
   *_dout << dendl;
 }
 
+void MDSMonitor::create_new_fs(MDSMap &m, int metadata_pool, int data_pool)
+{
+  m.max_mds = 1;
+  m.created = g_clock.now();
+  m.data_pg_pools.push_back(data_pool);
+  m.metadata_pg_pool = metadata_pool;
+  m.cas_pg_pool = CEPH_CASDATA_RULE;
+  m.compat = mdsmap_compat;
+  print_map(m);
+}
 
 
 // service methods
 void MDSMonitor::create_initial(bufferlist& bl)
 {
   dout(10) << "create_initial" << dendl;
-  pending_mdsmap.max_mds = 1;
-  pending_mdsmap.created = g_clock.now();
-  pending_mdsmap.data_pg_pools.push_back(CEPH_DATA_RULE);
-  pending_mdsmap.metadata_pg_pool = CEPH_METADATA_RULE;
-  pending_mdsmap.cas_pg_pool = CEPH_CASDATA_RULE;
-  pending_mdsmap.compat = mdsmap_compat;
-  print_map(pending_mdsmap);
+  create_new_fs(pending_mdsmap, CEPH_METADATA_RULE, CEPH_DATA_RULE);
 }
 
 
@@ -675,7 +679,19 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	  r = -ENOENT;
 	}
       }
-    }
+    } else if (m->cmd[1] == "newfs" && m->cmd.size() == 4) {
+      MDSMap newmap;
+      int metadata = atoi(m->cmd[2].c_str());
+      int data = atoi(m->cmd[3].c_str());
+      pending_mdsmap = newmap;
+      pending_mdsmap.epoch = mdsmap.epoch + 1;
+      create_new_fs(pending_mdsmap, metadata, data);
+      ss << "new fs with metadata pool " << metadata << " and data pool " << data;
+      string rs;
+      getline(ss, rs);
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      return true;
+    }    
   }
   if (r == -EINVAL) 
     ss << "unrecognized command";
