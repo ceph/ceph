@@ -384,18 +384,19 @@ int FileStore::mkjournal()
   ::read(fd, &fsid, sizeof(fsid));
   ::close(fd);
 
+  int ret = 0;
+
   open_journal();
   if (journal) {
-    int err = journal->create();
-    if (err < 0) {
+    ret = journal->create();
+    if (ret)
       dout(0) << "mkjournal error creating journal on " << journalpath << dendl;
-    } else {
+    else
       dout(0) << "mkjournal created journal on " << journalpath << dendl;
-    }
     delete journal;
     journal = 0;
   }
-  return 0;
+  return ret;
 }
 
 
