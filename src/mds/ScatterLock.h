@@ -76,7 +76,17 @@ public:
   }
 
   bool can_scatter_pin(client_t loner) {
-    return can_rdlock(-1) || can_wrlock(loner);
+    /*
+      LOCK : NOT okay because it can MIX and force replicas to journal something
+      TSYN : also not okay for same reason
+      EXCL : also not okay
+
+      MIX  : okay, replica can stall before sending AC_SYNCACK
+      SYNC : okay, replica can stall before sending AC_MIXACK or AC_LOCKACK
+    */   
+    return
+      get_state() == LOCK_SYNC ||
+      get_state() == LOCK_MIX;
   }
 
   xlist<ScatterLock*>::item *get_updated_item() { return &more()->item_updated; }

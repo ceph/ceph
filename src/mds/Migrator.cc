@@ -591,6 +591,9 @@ void Migrator::export_dir(CDir *dir, int dest)
   CInode *diri = dir->inode;
   if (!diri->can_scatter_pin()) {
     dout(7) << "export_dir couldn't pin parent inode scatterlocks, failing. " << *diri << dendl;
+
+    // XXX we should make some effort to move lock(s) to a state where we _can_ export!
+
     return;
   }
 
