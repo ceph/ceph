@@ -1008,6 +1008,9 @@ int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const ch
     case OPT_BOOL:
       OPT_READ_TYPE(ret, section, key, bool, out, def);
       break;
+    case OPT_LONGLONG:
+      OPT_READ_TYPE(ret, section, key, long long, out, def);
+      break;
     case OPT_INT:
       OPT_READ_TYPE(ret, section, key, int, out, def);
       break;
