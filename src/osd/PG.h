@@ -79,7 +79,19 @@ struct PGPool {
 
 class PG {
 public:
-  
+  /* Exceptions */
+  class read_log_error : public buffer::error {
+  public:
+    explicit read_log_error(const char *what) {
+      snprintf(buf, sizeof(buf), "read_log_error: %s", what);
+    }
+    const char *what() const throw () {
+      return buf;
+    }
+  private:
+    char buf[512];
+  };
+
   /*
    * PG::Info - summary of PG statistics.
    *
@@ -487,6 +499,7 @@ public:
     // ok
     uint64_t tail;                     // first byte of log. 
     uint64_t head;                        // byte following end of log.
+    bool has_checksums;
     map<uint64_t,eversion_t> block_map;  // offset->version of _last_ entry with _any_ bytes in each block
 
     OndiskLog() : tail(0), head(0) {}
@@ -501,7 +514,7 @@ public:
     }
 
     void encode(bufferlist& bl) const {
-      __u8 struct_v = 1;
+      __u8 struct_v = 2;
       ::encode(struct_v, bl);
       ::encode(tail, bl);
       ::encode(head, bl);
@@ -509,6 +522,7 @@ public:
     void decode(bufferlist::iterator& bl) {
       __u8 struct_v;
       ::decode(struct_v, bl);
+      has_checksums = (struct_v >= 2);
       ::decode(tail, bl);
       ::decode(head, bl);
     }
@@ -981,6 +995,7 @@ public:
   void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
   void trim_peers();
 
+  std::string get_corrupt_pg_log_name() const;
   void read_state(ObjectStore *store);
   coll_t make_snap_collection(ObjectStore::Transaction& t, snapid_t sn);
 

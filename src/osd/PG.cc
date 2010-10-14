@@ -35,10 +35,9 @@
 #define DOUT_SUBSYS osd
 #undef dout_prefix
 #define dout_prefix _prefix(this, osd->whoami, osd->osdmap)
-static ostream& _prefix(PG *pg, int whoami, OSDMap *osdmap) {
+static ostream& _prefix(const PG *pg, int whoami, OSDMap *osdmap) {
   return *_dout << dbeginl << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
 }
-
 
 /******* PGLog ********/
 
@@ -2003,7 +2002,7 @@ void PG::write_log(ObjectStore::Transaction& t)
 
   // assemble buffer
   bufferlist bl;
-  
+
   // build buffer
   ondisklog.tail = 0;
   ondisklog.block_map.clear();
@@ -2011,8 +2010,13 @@ void PG::write_log(ObjectStore::Transaction& t)
        p != log.log.end();
        p++) {
     uint64_t startoff = bl.length();
-    ::encode(*p, bl);
-    uint64_t endoff = bl.length();
+
+    bufferlist ebl(sizeof(*p)*2);
+    ::encode(*p, ebl);
+    __u32 crc = ebl.crc32c(0);
+    ::encode(ebl, bl);
+    ::encode(crc, bl);
+    uint64_t endoff = ebl.length();
     if (startoff / 4096 != endoff / 4096) {
       // we reached a new block. *p was the last entry with bytes in previous block
       ondisklog.block_map[startoff] = p->version;
@@ -2026,7 +2030,8 @@ void PG::write_log(ObjectStore::Transaction& t)
     */
   }
   ondisklog.head = bl.length();
-  
+  ondisklog.has_checksums = true;
+
   // write it
   t.remove(coll_t::META_COLL, log_oid );
   t.write(coll_t::META_COLL, log_oid , 0, bl.length(), bl);
@@ -2114,7 +2119,15 @@ void PG::add_log_entry(Log::Entry& e, bufferlist& log_bl)
 
   // log mutation
   log.add(e);
-  ::encode(e, log_bl);
+  if (ondisklog.has_checksums) {
+    bufferlist ebl(sizeof(e)*2);
+    ::encode(e, ebl);
+    __u32 crc = ebl.crc32c(0);
+    ::encode(ebl, log_bl);
+    ::encode(crc, log_bl);
+  } else {
+    ::encode(e, log_bl);
+  }
   dout(10) << "add_log_entry " << e << dendl;
 }
 
@@ -2159,11 +2172,11 @@ void PG::read_log(ObjectStore *store)
     bufferlist bl;
     store->read(coll_t::META_COLL, log_oid, ondisklog.tail, ondisklog.length(), bl);
     if (bl.length() < ondisklog.length()) {
-      dout(0) << "read_log got " << bl.length() << " bytes, expected " 
-	      << ondisklog.head << "-" << ondisklog.tail << "="
-	      << ondisklog.length()
-	      << dendl;
-      assert(0);
+      std::ostringstream oss;
+      oss << "read_log got " << bl.length() << " bytes, expected "
+	  << ondisklog.head << "-" << ondisklog.tail << "="
+	  << ondisklog.length();
+      throw read_log_error(oss.str().c_str());
     }
     
     PG::Log::Entry e;
@@ -2173,7 +2186,24 @@ void PG::read_log(ObjectStore *store)
     bool reorder = false;
     while (!p.end()) {
       uint64_t pos = ondisklog.tail + p.get_off();
-      ::decode(e, p);
+      if (ondisklog.has_checksums) {
+	bufferlist ebl;
+	::decode(ebl, p);
+	__u32 crc;
+	::decode(crc, p);
+	
+	__u32 got = ebl.crc32c(0);
+	if (crc == got) {
+	  bufferlist::iterator q = ebl.begin();
+	  ::decode(e, q);
+	} else {
+	  std::ostringstream oss;
+	  oss << "read_log " << pos << " bad crc got " << got << " expected" << crc;
+	  throw read_log_error(oss.str().c_str());
+	}
+      } else {
+	::decode(e, p);
+      }
       dout(20) << "read_log " << pos << " " << e << dendl;
 
       // [repair] in order?
@@ -2349,7 +2379,22 @@ bool PG::check_log_for_corruption(ObjectStore *store)
   return ok;
 }
 
-
+//! Get the name we're going to save our corrupt page log as
+std::string PG::get_corrupt_pg_log_name() const
+{
+  const int MAX_BUF = 512;
+  char buf[MAX_BUF];
+  struct tm tm_buf;
+  time_t my_time(time(NULL));
+  const struct tm *t = localtime_r(&my_time, &tm_buf);
+  int ret = strftime(buf, sizeof(buf), "corrupt_log_%Y-%m-%d_%k:%M_", t);
+  if (ret == 0) {
+    dout(0) << "strftime failed" << dendl;
+    return "corrupt_log_unknown_time";
+  }
+  info.pgid.print(buf + ret, MAX_BUF - ret);
+  return buf;
+}
 
 void PG::read_state(ObjectStore *store)
 {
@@ -2371,7 +2416,34 @@ void PG::read_state(ObjectStore *store)
   ::decode(struct_v, p);
   ::decode(snap_collections, p);
 
-  read_log(store);
+  try {
+    read_log(store);
+  }
+  catch (const buffer::error &e) {
+    string cr_log_coll_name(get_corrupt_pg_log_name());
+    dout(0) << "Got exception '" << e.what() << "' while reading log. "
+            << "Moving corrupted log file to '" << cr_log_coll_name
+	    << "' for later " << "analysis." << dendl;
+
+    ondisklog.zero();
+
+    // clear log index
+    log.head = log.tail = info.last_update;
+
+    // reset info
+    info.log_tail = info.last_update;
+    info.log_backlog = false;
+
+    // Move the corrupt log to a new place and create a new zero-length log entry.
+    ObjectStore::Transaction t;
+    coll_t cr_log_coll(cr_log_coll_name);
+    t.create_collection(cr_log_coll);
+    t.collection_add(cr_log_coll, coll_t::META_COLL, log_oid);
+    t.collection_remove(coll_t::META_COLL, log_oid);
+    t.touch(coll_t::META_COLL, log_oid);
+    write_info(t);
+    store->apply_transaction(t);
+  }
 }
 
 coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
