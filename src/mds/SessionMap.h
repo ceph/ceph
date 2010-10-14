@@ -358,6 +358,7 @@ public:
     session->trim_completed_requests(tid);
   }
 
+  void wipe();
   void wipe_ino_prealloc();
 
   // -- loading, saving --

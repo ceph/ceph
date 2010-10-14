@@ -1167,7 +1167,7 @@ void MDS::starting_done()
 void MDS::replay_start()
 {
   dout(1) << "replay_start" << dendl;
-
+  
   // initialize gather sets
   set<int> rs;
   mdsmap->get_recovery_mds_set(rs);
@@ -1199,6 +1199,11 @@ void MDS::replay_done()
     return;
   }
 
+  if (g_conf.mds_wipe_sessions) {
+    dout(1) << "wiping out client sessions" << dendl;
+    sessionmap.wipe();
+    sessionmap.save(new C_NoopContext);
+  }
   if (g_conf.mds_wipe_ino_prealloc) {
     dout(1) << "wiping out ino prealloc from sessions" << dendl;
     sessionmap.wipe_ino_prealloc();

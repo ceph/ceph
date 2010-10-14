@@ -319,8 +319,9 @@ struct md_config_t {
   int mds_kill_import_at;
   int mds_kill_rename_at;
 
+  bool mds_wipe_sessions;
   bool mds_wipe_ino_prealloc;
-  long long mds_skip_ino;
+  int mds_skip_ino;
 
   // osd
   const char *osd_data;

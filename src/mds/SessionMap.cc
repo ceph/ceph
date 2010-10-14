@@ -213,6 +213,19 @@ void SessionMap::decode(bufferlist::iterator& p)
 
 
 
+void SessionMap::wipe()
+{
+  dout(1) << "wipe start" << dendl;
+  dump();
+  while (!session_map.empty()) {
+    Session *s = session_map.begin()->second;
+    remove_session(s);
+  }
+  version = ++projected;
+  dout(1) << "wipe result" << dendl;
+  dump();
+  dout(1) << "wipe done" << dendl;
+}
 
 void SessionMap::wipe_ino_prealloc()
 {
