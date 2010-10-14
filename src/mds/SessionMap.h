@@ -358,6 +358,8 @@ public:
     session->trim_completed_requests(tid);
   }
 
+  void wipe_ino_prealloc();
+
   // -- loading, saving --
   inodeno_t ino;
   list<Context*> waiting_for_load;

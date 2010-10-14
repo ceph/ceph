@@ -1199,6 +1199,18 @@ void MDS::replay_done()
     return;
   }
 
+  if (g_conf.mds_wipe_ino_prealloc) {
+    dout(1) << "wiping out ino prealloc from sessions" << dendl;
+    sessionmap.wipe_ino_prealloc();
+    sessionmap.save(new C_NoopContext);
+  }
+  if (g_conf.mds_skip_ino) {
+    inodeno_t i = g_conf.mds_skip_ino;
+    dout(1) << "skipping " << i << " inodes" << dendl;
+    inotable->skip_inos(i);
+    inotable->save(new C_NoopContext);
+  }
+
   if (mdsmap->get_num_mds() == 1 &&
       mdsmap->get_num_failed() == 0) { // just me!
     dout(2) << "i am alone, moving to state reconnect" << dendl;      

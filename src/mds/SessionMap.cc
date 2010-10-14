@@ -210,3 +210,18 @@ void SessionMap::decode(bufferlist::iterator& p)
     }
   }
 }
+
+
+
+
+void SessionMap::wipe_ino_prealloc()
+{
+  for (hash_map<entity_name_t,Session*>::iterator p = session_map.begin(); 
+       p != session_map.end(); 
+       ++p) {
+    p->second->pending_prealloc_inos.clear();
+    p->second->prealloc_inos.clear();
+    p->second->used_inos.clear();
+  }
+  projected = ++version;
+}

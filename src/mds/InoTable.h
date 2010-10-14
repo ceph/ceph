@@ -53,6 +53,8 @@ class InoTable : public MDSTable {
     ::decode(free, bl);
     projected_free = free;
   }
+
+  void skip_inos(inodeno_t i);
 };
 
 #endif
