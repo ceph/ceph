@@ -42,8 +42,8 @@ bool MonmapMonitor::update_from_paxos()
 {
   //check versions to see if there's an update
   version_t paxosv = paxos->get_version();
-  if (paxosv == mon->monmap->epoch) return true;
-  assert(paxosv >= mon->monmap->epoch);
+  if (paxosv <= mon->monmap->epoch) return true;
+  //assert(paxosv >= mon->monmap->epoch);
 
   dout(10) << "update_from_paxos paxosv " << paxosv
 	   << ", my v " << mon->monmap->epoch << dendl;
