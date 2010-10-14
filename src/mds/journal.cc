@@ -56,8 +56,8 @@
 
 #define DOUT_SUBSYS mds
 #undef DOUT_COND
-#define DOUT_COND(cct, l) l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_log \
-			      || l <= cct->_conf->debug_mds_log_expire
+#define DOUT_COND(cct, l) (l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_log \
+			      || l <= cct->_conf->debug_mds_log_expire)
 #undef dout_prefix
 #define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".journal "
 
@@ -266,7 +266,7 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
 
 
 #undef DOUT_COND
-#define DOUT_COND(cct, l) l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_log
+#define DOUT_COND(cct, l) (l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_log)
 
 
 // -----------------------

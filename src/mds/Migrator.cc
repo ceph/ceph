@@ -78,7 +78,7 @@
 
 #define DOUT_SUBSYS mds
 #undef DOUT_COND
-#define DOUT_COND(cct, l) l <= cct->_conf->debug_mds || l <= cct->_conf->debug_mds_migrator
+#define DOUT_COND(cct, l) (l <= cct->_conf->debug_mds || l <= cct->_conf->debug_mds_migrator)
 #undef dout_prefix
 #define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".migrator "
 
