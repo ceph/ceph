@@ -905,7 +905,7 @@ void CDir::add_waiter(uint64_t tag, Context *c)
     if (!(is_freezing_tree_root() || is_frozen_tree_root() ||
 	  is_freezing_dir() || is_frozen_dir())) {
       // try parent
-      dout(10) << "add_waiter " << tag << " " << c << " should be ATFREEZEROOT, " << *this << " is not root, trying parent" << dendl;
+      dout(10) << "add_waiter " << std::hex << tag << std::dec << " " << c << " should be ATFREEZEROOT, " << *this << " is not root, trying parent" << dendl;
       inode->parent->dir->add_waiter(tag, c);
       return;
     }
@@ -915,7 +915,7 @@ void CDir::add_waiter(uint64_t tag, Context *c)
   if (tag & WAIT_ATSUBTREEROOT) {
     if (!is_subtree_root()) {
       // try parent
-      dout(10) << "add_waiter " << tag << " " << c << " should be ATSUBTREEROOT, " << *this << " is not root, trying parent" << dendl;
+      dout(10) << "add_waiter " << std::hex << tag << std::dec << " " << c << " should be ATSUBTREEROOT, " << *this << " is not root, trying parent" << dendl;
       inode->parent->dir->add_waiter(tag, c);
       return;
     }

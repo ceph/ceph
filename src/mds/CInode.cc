@@ -1627,7 +1627,7 @@ bool CInode::is_freezing()
 
 void CInode::add_waiter(uint64_t tag, Context *c) 
 {
-  dout(10) << "add_waiter tag " << tag 
+  dout(10) << "add_waiter tag " << std::hex << tag << std::dec << " " << c
 	   << " !ambig " << !state_test(STATE_AMBIGUOUSAUTH)
 	   << " !frozen " << !is_frozen_inode()
 	   << " !freezing " << !is_freezing_inode()
