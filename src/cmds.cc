@@ -107,6 +107,11 @@ int main(int argc, const char **argv)
   
   // start mds
   MDS *mds = new MDS(g_conf.id, messenger, &mc);
+
+  // in case we have to respawn...
+  mds->orig_argc = argc;
+  mds->orig_argv = argv;
+
   mds->init();
   
   messenger->wait();

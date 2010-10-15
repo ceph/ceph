@@ -178,6 +178,8 @@ class MDS : public Dispatcher {
 
   Logger       *logger, *mlogger;
 
+  int orig_argc;
+  const char **orig_argv;
 
  protected:
   // -- MDS state --
@@ -364,7 +366,9 @@ class MDS : public Dispatcher {
   void active_start();
   void stopping_start();
   void stopping_done();
+
   void suicide();
+  void respawn();
 
   void tick();
   

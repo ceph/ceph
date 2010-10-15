@@ -217,8 +217,8 @@ void sighup_handler(int signum)
   logger_reopen_all();
 }
 
-static void (*old_sigsegv_handler)(int);
-static void (*old_sigabrt_handler)(int);
+static void (*old_sigsegv_handler)(int) = NULL;
+static void (*old_sigabrt_handler)(int) = NULL;
 
 void sigsegv_handler(int signum)
 {
@@ -353,6 +353,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(ms_dispatch_throttle_bytes, 0, OPT_INT, 100 << 20),
 	OPTION(ms_bind_ipv6, 0, OPT_BOOL, false),
         OPTION(ms_rwthread_stack_bytes, 0, OPT_INT, 1024 << 10),
+        OPTION(ms_tcp_read_timeout, 0, OPT_LONGLONG, 900),
 	OPTION(mon_data, 0, OPT_STR, ""),
 	OPTION(mon_tick_interval, 0, OPT_INT, 5),
 	OPTION(mon_subscribe_interval, 0, OPT_DOUBLE, 300),
@@ -1089,7 +1090,7 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("version", 'v')) {
-      cout << "ceph version " << VERSION << " (" << STRINGIFY(CEPH_GIT_VER) << ")" << std::endl;
+      cout << "ceph version " << VERSION << " (commit:" << STRINGIFY(CEPH_GIT_VER) << ")" << std::endl;
       _exit(0);
     } else if (CONF_ARG_EQ("conf", 'c')) {
 	CONF_SAFE_SET_ARG_VAL(&g_conf.conf, OPT_STR);
@@ -1260,8 +1261,10 @@ void parse_config_options(std::vector<const char*>& args)
   }
 
   signal(SIGHUP, sighup_handler);
-  old_sigsegv_handler = signal(SIGSEGV, sigsegv_handler);
-  old_sigabrt_handler = signal(SIGABRT, sigabrt_handler);
+  if (!old_sigsegv_handler)
+    old_sigsegv_handler = signal(SIGSEGV, sigsegv_handler);
+  if (!old_sigabrt_handler)
+    old_sigabrt_handler = signal(SIGABRT, sigabrt_handler);
 
   args = nargs;
 }

@@ -16,7 +16,11 @@ else
     if echo $vers | grep -q unstable ; then
 	component="ceph-unstable"
     else
-	component="ceph-stable"
+	if echo $vers | grep -q rc ; then
+	    component="ceph-rc"
+	else
+	    component="ceph-stable"
+	fi
     fi
 fi
 echo component $component

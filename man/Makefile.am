@@ -20,4 +20,5 @@ dist_man_MANS = \
 	rados.8 \
 	rbd.8 \
 	cclass.8 \
-	cclsinfo.8
+	cclsinfo.8 \
+	cdebugpack.8

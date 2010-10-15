@@ -1764,6 +1764,15 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	       << ", marking dirty rstat on " << *cur << dendl;
       cur->mark_dirty_rstat();      
    } else {
+      // if we don't hold a wrlock reference on this nestlock, take one,
+      // because we are about to write into the dirfrag fnode and that needs
+      // to commit before the lock can cycle.
+      if (mut->wrlocks.count(&parent->inode->nestlock) == 0) {
+	dout(10) << " taking wrlock on " << parent->inode->nestlock << " on " << *parent->inode << dendl;
+	mds->locker->wrlock_force(&parent->inode->nestlock, mut);
+      }
+
+      // now we can project the inode rstat diff the dirfrag
       SnapRealm *prealm = parent->inode->find_snaprealm();
       
       snapid_t follows = cfollows;
@@ -1845,6 +1854,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       dout(20) << "predirty_journal_parents take_diff " << pf->fragstat << dendl;
       dout(20) << "predirty_journal_parents         - " << pf->accounted_fragstat << dendl;
       bool touched_mtime = false;
+      pi->dirstat.version++;
       pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat, touched_mtime);
       if (touched_mtime)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
@@ -1875,6 +1885,10 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	project_rstat_frag_to_inode(p->second.rstat, p->second.accounted_rstat, p->second.first, p->first, pin, true);//false);
       parent->dirty_old_rstat.clear();
       project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat, parent->first, CEPH_NOSNAP, pin, true);//false);
+      
+      // bump version
+      pi->rstat.version++;
+      pf->rstat.version = pf->accounted_rstat.version = pi->rstat.version;
     }
 
     // next parent!
@@ -6776,13 +6790,9 @@ void MDCache::_anchor_prepared(CInode *in, version_t atid, bool add)
   if (add) {
     pi->anchored = true;
     pi->rstat.ranchors++;
-    if (in->parent)
-      in->parent->adjust_nested_anchors(1);
   } else {
     pi->anchored = false;
     pi->rstat.ranchors--;
-    if (in->parent)
-      in->parent->adjust_nested_anchors(-1);
   }
   pi->version = in->pre_dirty();
 
@@ -6806,9 +6816,13 @@ void MDCache::_anchor_logged(CInode *in, version_t atid, Mutation *mut)
   if (in->state_test(CInode::STATE_ANCHORING)) {
     in->state_clear(CInode::STATE_ANCHORING);
     in->put(CInode::PIN_ANCHORING);
+    if (in->parent)
+      in->parent->adjust_nested_anchors(1);
   } else if (in->state_test(CInode::STATE_UNANCHORING)) {
     in->state_clear(CInode::STATE_UNANCHORING);
     in->put(CInode::PIN_UNANCHORING);
+    if (in->parent)
+      in->parent->adjust_nested_anchors(-1);
   }
   in->auth_unpin(this);
   

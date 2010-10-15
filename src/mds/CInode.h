@@ -128,6 +128,7 @@ public:
   static const int PIN_STRAY =            19;  // we pin our stray inode while active
   static const int PIN_NEEDSNAPFLUSH =    20;
   static const int PIN_DIRTYRSTAT =       21;
+  static const int PIN_EXPORTINGCAPS =    22;
 
   const char *pin_name(int p) {
     switch (p) {
@@ -145,6 +146,7 @@ public:
     case PIN_FREEZING: return "freezing";
     case PIN_FROZEN: return "frozen";
     case PIN_IMPORTINGCAPS: return "importingcaps";
+    case PIN_EXPORTINGCAPS: return "exportingcaps";
     case PIN_PASTSNAPPARENT: return "pastsnapparent";
     case PIN_OPENINGSNAPPARENTS: return "openingsnapparents";
     case PIN_TRUNCATING: return "truncating";

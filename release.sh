@@ -8,7 +8,7 @@ echo vers $vers
 repo=$1
 force=$2
 
-[ -z "$repo" ] && echo stable or testing or unstable && exit 1
+[ -z "$repo" ] && echo stable or testing or unstable or rc && exit 1
 
 if git diff --quiet ; then
     echo repository is clean
@@ -26,16 +26,11 @@ fi
 gitver=`git rev-parse HEAD 2>/dev/null | cut -c 1-8`
 echo gitver $gitver
 
-if [ "$repo" = "testing" ]; then
-    versuffix=`date "+%Y%m%d%H%M"`
-    finalvers="${vers}-testing${versuffix}-$gitver"
+if [ "$repo" = "stable" ]; then
+    finalvers="$vers"
 else
-    if [ "$repo" = "unstable" ]; then
-	versuffix=`date "+%Y%m%d%H%M"`
-	finalvers="${vers}-unstable${versuffix}-$gitver"
-    else
-	finalvers="$vers"
-    fi
+    versuffix=`date "+%Y%m%d%H%M"`
+    finalvers="${vers}-$repo${versuffix}-$gitver"
 fi
 
 echo final vers $finalvers
@@ -78,6 +73,8 @@ do
 	DEBEMAIL="sage@newdream.net" dch -D $dist --force-distribution -b -v "$dvers" "$comment"
 	cd ..
     fi
+
+    [ "$dist" = "lenny" ] && sed -i 's/, libgoogle-perftools-dev//' ceph-$finalvers/debian/control
 
     dpkg-source -b ceph-$finalvers
 

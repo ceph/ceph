@@ -17,6 +17,7 @@
 
 #include "common/Timer.h"
 #include "MonitorStore.h"
+#include "MonmapMonitor.h"
 #include "messages/MMonElection.h"
 
 #include "config.h"
@@ -292,18 +293,15 @@ void Elector::dispatch(Message *m)
 		<< " > my epoch " << mon->monmap->epoch 
 		<< ", taking it"
 		<< dendl;
-	delete mon->monmap;
-	mon->monmap = peermap;
-	mon->store->put_bl_sn(em->monmap_bl, "monmap", peermap->epoch);
-	mon->store->put_bl_ss(em->monmap_bl, "monmap", "latest");
-      } else {
-	if (peermap->epoch < mon->monmap->epoch) {
-	  dout(0) << m->get_source_inst() << " has older monmap epoch " << peermap->epoch
-		  << " < my epoch " << mon->monmap->epoch 
-		  << dendl;
-	}
-	delete peermap;
+	mon->monmap->decode(em->monmap_bl);
+	mon->store->put_bl_sn(em->monmap_bl, "monmap", mon->monmap->epoch);
+	mon->monmon()->paxos->stash_latest(mon->monmap->epoch, em->monmap_bl);
+      } else if (peermap->epoch < mon->monmap->epoch) {
+	dout(0) << m->get_source_inst() << " has older monmap epoch " << peermap->epoch
+		<< " < my epoch " << mon->monmap->epoch 
+		<< dendl;
       } 
+      delete peermap;
 
       switch (em->op) {
       case MMonElection::OP_PROPOSE:

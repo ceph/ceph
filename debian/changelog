@@ -1,3 +1,32 @@
+ceph (0.22-1) experimental; urgency=low
+
+  * mon: improved monitor naming
+  * osd: support seprate interface for cluster-internal traffic
+  * mds: many many snapshot, cap protocol fixes
+  * mon: back off on clock drift errors/warnings
+  * mds: fix cow on xattrs
+  * mds: many recurstat stat fixes
+  * uclient/cfuse: improved caching and readdir fixes
+  * mon: tri laggy standby MDS's from map
+  * osd: data integrity fixes
+  * trim stale connections
+  * osd: fix hang during mkfs
+  * improved debug log on SIGSEG
+  * uclient/cfuse: cache readdir results
+  * mon: improved osd failure smarts
+  * mds/osd: tcmalloc (less memory utilization)
+  * mds: set file layout/striping on per-directory/subtree basis
+  * cfuse: mount server subdir
+  * cfuse: log to file if run as daemon
+  * allow monitor hostnames on command line
+  * mon: ability to blacklist/unblacklist clients for osd cluster
+  * cdebugpack: add debug capture tool
+  * mds: respawn on suicide
+  * msgr: more efficient reconnect resync
+  * standard date/time format
+
+ -- Sage Weil <sage@newdream.net>  Fri, 15 Oct 2010 13:42:24 -0700
+
 ceph (0.21.3-1) unstable; urgency=low
 
   * cfuse: fixed readdir for large directories

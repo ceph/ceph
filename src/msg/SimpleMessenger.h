@@ -214,6 +214,7 @@ private:
       out_seq(0), in_seq(0), in_seq_acked(0),
       reader_thread(this), writer_thread(this) {
       connection_state->pipe = get();
+      messenger->timeout = g_conf.ms_tcp_read_timeout * 1000; //convert to ms
     }
     ~Pipe() {
       for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
@@ -564,6 +565,7 @@ private:
   void dispatch_entry();
 
   SimpleMessenger *messenger; //hack to make dout macro work, will fix
+  int timeout;
 
 public:
   SimpleMessenger() :

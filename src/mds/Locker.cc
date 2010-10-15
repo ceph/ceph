@@ -2343,7 +2343,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
       if (in->filelock.is_stable()) {
 	bool need_issue = false;
 	cap->inc_suppress();
-	if (in->get_loner() >= 0 || (in->get_wanted_loner() >= 0 && in->try_set_loner())) {
+	if (in->mds_caps_wanted.empty() &&
+	    (in->get_loner() >= 0 || (in->get_wanted_loner() >= 0 && in->try_set_loner()))) {
 	  if (in->filelock.get_state() != LOCK_EXCL)
 	    file_excl(&in->filelock, &need_issue);
 	  need_issue = false;  // loner!
@@ -2481,7 +2482,7 @@ void Locker::handle_client_cap_release(MClientCapRelease *m)
       continue;
     }
     if (p->seq != cap->get_last_issue()) {
-      dout(10) << " seq " << p->seq << " != " << cap->get_last_issue() << " on " << *in << dendl;
+      dout(10) << " issue_seq " << p->seq << " != " << cap->get_last_issue() << " on " << *in << dendl;
       
       // clean out any old revoke history
       cap->clean_revoke_from(p->seq);
@@ -3551,6 +3552,11 @@ void Locker::local_wrlock_finish(LocalLock *lock, Mutation *mut)
   lock->put_wrlock();
   mut->wrlocks.erase(lock);
   mut->locks.erase(lock);
+  if (lock->get_num_wrlocks() == 0) {
+    lock->finish_waiters(SimpleLock::WAIT_STABLE |
+                         SimpleLock::WAIT_WR |
+                         SimpleLock::WAIT_RD);
+  }
 }
 
 bool Locker::local_xlock_start(LocalLock *lock, MDRequest *mut)
@@ -3654,7 +3660,7 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
 	   !lock->is_wrlocked() &&   // drain wrlocks first!
 	   !in->filelock.is_waiter_for(SimpleLock::WAIT_WR) &&
 	   !(wanted & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) &&
-	   !(in->get_state() == LOCK_MIX &&
+	   !(lock->get_state() == LOCK_MIX &&
 	     in->is_dir() && in->has_subtree_root_dirfrag())  // if we are a delegation point, stay where we are
 	   //((wanted & CEPH_CAP_RD) || 
 	   //in->is_replicated() || 

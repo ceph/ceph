@@ -2526,8 +2526,9 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (osdmap->get_epoch() > 0 &&
       state != STATE_BOOTING &&
       (!osdmap->exists(whoami) || 
-       (!osdmap->is_up(whoami) && osdmap->get_addr(whoami) == client_messenger->get_myaddr()))) {
-    dout(0) << "map says i am down.  switching to boot state." << dendl;
+       !osdmap->is_up(whoami) ||
+       osdmap->get_addr(whoami) != client_messenger->get_myaddr())) {
+    dout(0) << "map says i am down or have a different address.  switching to boot state." << dendl;
     //shutdown();
 
     stringstream ss;

@@ -355,7 +355,7 @@ void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
     assert(parenti);
     assert(parenti->snaprealm);
     snaprealm->parent = new_parent;
-    parenti->get(PIN_PASTSNAPPARENT);
+    snaprealm->add_open_past_parent(new_parent);
     dout(10) << " realm " << *snaprealm << " past_parents " << snaprealm->srnode.past_parents
 	     << " -> " << next_snaprealm->past_parents << dendl;
     dout(10) << " pinning new parent " << *parenti << dendl;
@@ -1531,7 +1531,7 @@ void CInode::finish_scatter_gather_update(int type)
 	    // trust the dirfrag for now
 	    pi->rstat = pf->rstat;
 	    pi->rstat.version--;  // (about to re-increment it below!)
-	    assert("unmatched rstat rbytes" == 0);
+	    //assert("unmatched rstat rbytes" == 0);
 	  }
 	}
       }
@@ -1584,7 +1584,8 @@ void CInode::finish_scatter_gather_update_accounted(int type, Mutation *mut, EMe
     metablob->add_dir(dir, true);
     mut->auth_pin(dir);
 
-    dir->assimilate_dirty_rstat_inodes_finish(mut, metablob);
+    if (type == CEPH_LOCK_INEST)
+      dir->assimilate_dirty_rstat_inodes_finish(mut, metablob);
   }
 }
 
@@ -1626,7 +1627,7 @@ bool CInode::is_freezing()
 
 void CInode::add_waiter(uint64_t tag, Context *c) 
 {
-  dout(10) << "add_waiter tag " << tag 
+  dout(10) << "add_waiter tag " << std::hex << tag << std::dec << " " << c
 	   << " !ambig " << !state_test(STATE_AMBIGUOUSAUTH)
 	   << " !frozen " << !is_frozen_inode()
 	   << " !freezing " << !is_freezing_inode()

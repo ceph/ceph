@@ -10,6 +10,7 @@ usr/bin/cmon
 usr/bin/cmds
 usr/bin/cosd
 usr/bin/cauthtool
+usr/bin/cdebugpack
 sbin/mkcephfs
 usr/lib/ceph/ceph_common.sh
 usr/lib/rados-classes/*
@@ -28,3 +29,4 @@ usr/share/man/man8/ceph.8
 usr/share/man/man8/cauthtool.8
 usr/share/man/man8/cclass.8
 usr/share/man/man8/cclsinfo.8
+usr/share/man/man8/cdebugpack.8

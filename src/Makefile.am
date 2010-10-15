@@ -288,7 +288,8 @@ noinst_LIBRARIES +=  #libcephclient_so.a
 
 # extra bits
 EXTRA_DIST = verify-mds-journal.sh vstart.sh stop.sh \
-	     crun ceph_common.sh init-ceph.in mkcephfs.in cclass.in cclsinfo make_version check_version \
+	crun ceph_common.sh init-ceph.in mkcephfs.in cclass.in cdebugpack.in \
+	cclsinfo make_version check_version \
 	.git_version
 
 
@@ -300,6 +301,7 @@ install-data-local:
 	$(install_sh_SCRIPT) -m 0755 cclsinfo $(DESTDIR)$(bindir)/cclsinfo
 	sh -c "if [ \"$(sbindir)\" = \"/usr/sbin\" ]; then mkdir -p $(DESTDIR)/sbin ; $(install_sh_SCRIPT) -m 0755 mount.ceph $(DESTDIR)/sbin/mount.ceph ; else mkdir -p $(DESTDIR)$(sbindir) ; $(install_sh_SCRIPT) -m 0755 mount.ceph $(DESTDIR)$(sbindir)/mount.ceph ; fi"
 	sh -c "if [ \"$(sbindir)\" = \"/usr/sbin\" ]; then mkdir -p $(DESTDIR)/sbin ; $(install_sh_SCRIPT) -m 0755 mkcephfs $(DESTDIR)/sbin/mkcephfs ; else mkdir -p $(DESTDIR)$(sbindir) ; $(install_sh_SCRIPT) -m 0755 mkcephfs $(DESTDIR)$(sbindir)/mkcephfs ; fi"
+	sh -c "if [ \"$(bindir)\" = \"/usr/bin\" ]; then mkdir -p $(DESTDIR)/usr/bin ; $(install_sh_SCRIPT) -m 0755 cdebugpack $(DESTDIR)/usr/bin/cdebugpack ; else mkdir -p $(DESTDIR)$(bindir) ; $(install_sh_SCRIPT) -m 0755 cdebugpack $(DESTDIR)$(bindir)/cdebugpack ; fi"
 	mkdir -p $(DESTDIR)$(libdir)/ceph
 	$(install_sh_SCRIPT) -m 0755 ceph_common.sh $(DESTDIR)$(libdir)/ceph/ceph_common.sh
 	mkdir -p $(DESTDIR)$(sysconfdir)/ceph

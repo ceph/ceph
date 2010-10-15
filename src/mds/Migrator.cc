@@ -591,6 +591,9 @@ void Migrator::export_dir(CDir *dir, int dest)
   CInode *diri = dir->inode;
   if (!diri->can_scatter_pin()) {
     dout(7) << "export_dir couldn't pin parent inode scatterlocks, failing. " << *diri << dendl;
+
+    // XXX we should make some effort to move lock(s) to a state where we _can_ export!
+
     return;
   }
 
@@ -938,6 +941,7 @@ void Migrator::encode_export_inode_caps(CInode *in, bufferlist& bl,
   ::encode(cap_map, bl);
 
   in->state_set(CInode::STATE_EXPORTINGCAPS);
+  in->get(CInode::PIN_EXPORTINGCAPS);
 
   // make note of clients named by exported capabilities
   for (map<client_t, Capability*>::iterator it = in->client_caps.begin();
@@ -949,6 +953,7 @@ void Migrator::encode_export_inode_caps(CInode *in, bufferlist& bl,
 void Migrator::finish_export_inode_caps(CInode *in)
 {
   in->state_clear(CInode::STATE_EXPORTINGCAPS);
+  in->put(CInode::PIN_EXPORTINGCAPS);
 
   // tell (all) clients about migrating caps.. 
   for (map<client_t, Capability*>::iterator it = in->client_caps.begin();

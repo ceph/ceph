@@ -113,6 +113,7 @@ fi
 %{_bindir}/rados
 %{_bindir}/radosacl
 %{_bindir}/rbd
+%{_bindir}/cdebugpack
 %{_initrddir}/ceph
 %{_libdir}/libceph.so.*
 %{_libdir}/libcrush.so.*
@@ -141,6 +142,7 @@ fi
 %{_mandir}/man8/rados.8*
 %{_mandir}/man8/rbd.8*
 %{_mandir}/man8/cauthtool.8*
+%{_mandir}/man8/cdebugpack.8*
 %{_mandir}/man8/cclass.8.gz
 %{_mandir}/man8/cclsinfo.8.gz
 %dir %{_localstatedir}/lib/ceph/

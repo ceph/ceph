@@ -4900,7 +4900,8 @@ void Server::_rename_prepare(MDRequest *mdr,
     if (destdnl->is_primary()) {
       // project snaprealm, too
       bufferlist snapbl;
-      destdnl->get_inode()->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
+      if (destdn->is_auth())
+        destdnl->get_inode()->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
       straydn->first = MAX(destdnl->get_inode()->first, next_dest_snap);
       tji = metablob->add_primary_dentry(straydn, true, destdnl->get_inode(), 0, &snapbl);
     } else if (destdnl->is_remote()) {
@@ -5031,6 +5032,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
     }
     if (destdnl->get_inode()->is_auth())
       destdnl->get_inode()->pop_and_dirty_projected_inode(mdr->ls);
+    else
+      destdnl->get_inode()->open_snaprealm();
   } else {
     if (linkmerge) {
       dout(10) << "merging primary onto remote link" << dendl;

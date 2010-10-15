@@ -443,7 +443,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
         from--;
         dout(20) << "  ? " << *from << dendl;
         if (from->version <= log.head) {
-	  dout(20) << "merge_log last shared is " << *from << dendl;
+	  dout(20) << "merge_log cut point (usually last shared) is " << *from << dendl;
 	  lower_bound = from->version;
           from++;
           break;
@@ -464,7 +464,15 @@ void PG::merge_log(ObjectStore::Transaction& t,
       list<Log::Entry> divergent;
       while (!log.log.empty()) {
 	Log::Entry &oe = *log.log.rbegin();
-	if (oe.version <= lower_bound)
+	/*
+	 * look at eversion.version here.  we want to avoid a situation like:
+	 *  our log: 100'10 (0'0) m 10000004d3a.00000000/head by client4225.1:18529
+	 *  new log: 122'10 (0'0) m 10000004d3a.00000000/head by client4225.1:18529
+	 *  lower_bound = 100'9
+	 * i.e, same request, different version.  If the eversion.version is > the
+	 * lower_bound, we it is divergent.
+	 */
+	if (oe.version.version <= lower_bound.version)
 	  break;
 	dout(10) << "merge_log divergent " << oe << dendl;
 	divergent.push_front(oe);

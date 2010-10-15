@@ -152,8 +152,7 @@ void _dout_open_log()
   }
 
   _dout_out.close();
-  // only truncate if log_per_instance is set.
-  _dout_out.open(_dout_path, g_conf.log_per_instance ? (ios::trunc | ios::out) : (ios::out | ios::app));
+  _dout_out.open(_dout_path, ios::out | ios::app);
   if (!_dout_out.is_open()) {
     std::cerr << "error opening output file " << _dout_path << std::endl;
     _dout = &std::cout;
@@ -161,11 +160,10 @@ void _dout_open_log()
     _dout_need_open = false;
     _dout_is_open = true;
     _dout = &_dout_out;
-    *_dout << g_clock.now() << " --- " << getpid()
-	   << (g_conf.log_per_instance ? " created new log " : " appending to log ")
+    *_dout << g_clock.now() << " --- " << getpid() << " opened log "
 	   << _dout_path << " ---" << std::endl;
   }
-  *_dout << "ceph version " << VERSION << " (" << STRINGIFY(CEPH_GIT_VER) << ")" << std::endl;
+  *_dout << "ceph version " << VERSION << " (commit:" << STRINGIFY(CEPH_GIT_VER) << ")" << std::endl;
 
   if (need_symlink)
     create_name_symlink();
