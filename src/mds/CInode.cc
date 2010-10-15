@@ -355,7 +355,7 @@ void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
     assert(parenti);
     assert(parenti->snaprealm);
     snaprealm->parent = new_parent;
-    parenti->get(PIN_PASTSNAPPARENT);
+    snaprealm->add_open_past_parent(new_parent);
     dout(10) << " realm " << *snaprealm << " past_parents " << snaprealm->srnode.past_parents
 	     << " -> " << next_snaprealm->past_parents << dendl;
     dout(10) << " pinning new parent " << *parenti << dendl;
