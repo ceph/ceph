@@ -60,10 +60,7 @@ void OSDMap::print(ostream& out)
 	out << " weight " << get_weightf(i);
       out << (is_up(i) ? " up  ":" down");
       osd_info_t& info = get_info(i);
-      out << " (up_from " << info.up_from
-	  << " up_thru " << info.up_thru
-	  << " down_at " << info.down_at
-	  << " last_clean " << info.last_clean_first << "-" << info.last_clean_last << ")";
+      out << info;
       if (is_up(i))
 	out << " " << get_addr(i) << " " << get_hb_addr(i);
       out << "\n";
