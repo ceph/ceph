@@ -1,7 +1,6 @@
 
 - ensure debian package builds
 - adjust version in configure.ac
-- adjust version in src/include/ceph_fs.h
 - add entry to debian/changelog, with proper version
 - commit
 - git tag version
