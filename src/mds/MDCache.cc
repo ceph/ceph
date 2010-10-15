@@ -1764,6 +1764,15 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	       << ", marking dirty rstat on " << *cur << dendl;
       cur->mark_dirty_rstat();      
    } else {
+      // if we don't hold a wrlock reference on this nestlock, take one,
+      // because we are about to write into the dirfrag fnode and that needs
+      // to commit before the lock can cycle.
+      if (mut->wrlocks.count(&parent->inode->nestlock) == 0) {
+	dout(10) << " taking wrlock on " << parent->inode->nestlock << " on " << *parent->inode << dendl;
+	mds->locker->wrlock_force(&parent->inode->nestlock, mut);
+      }
+
+      // now we can project the inode rstat diff the dirfrag
       SnapRealm *prealm = parent->inode->find_snaprealm();
       
       snapid_t follows = cfollows;
