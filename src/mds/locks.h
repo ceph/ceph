@@ -75,6 +75,7 @@ extern struct sm_t sm_locallock;
 #define LOCK_MIX_SYNC2 21
 #define LOCK_MIX_LOCK 22
 #define LOCK_MIX_EXCL 23
+#define LOCK_MIX_STALE 33
 
 #define LOCK_TSYN      24
 #define LOCK_TSYN_LOCK 25
@@ -88,7 +89,7 @@ extern struct sm_t sm_locallock;
 
 #define LOCK_SNAP_SYNC 32
 
-#define LOCK_MAX      33
+#define LOCK_MAX      34
 
 // -------------------------
 // lock actions
