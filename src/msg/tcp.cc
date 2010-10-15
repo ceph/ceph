@@ -8,14 +8,14 @@
  * tcp crap
  */
 
-int tcp_read(int sd, char *buf, int len) {
+int tcp_read(int sd, char *buf, int len, int timeout) {
   if (sd < 0)
     return -1;
   struct pollfd pfd;
   pfd.fd = sd;
   pfd.events = POLLIN | POLLHUP | POLLRDHUP | POLLNVAL | POLLERR;
   while (len > 0) {
-    if (poll(&pfd, 1, -1) < 0)
+    if (poll(&pfd, 1, timeout) <= 0)
       return -1;
 
     if (!(pfd.revents & POLLIN))

@@ -155,6 +155,7 @@ struct md_config_t {
   uint64_t ms_dispatch_throttle_bytes;
   bool ms_bind_ipv6;
   uint64_t ms_rwthread_stack_bytes;
+  uint64_t ms_tcp_read_timeout;
 
   // mon
   const char *mon_data;
