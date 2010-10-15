@@ -74,6 +74,8 @@ do
 	cd ..
     fi
 
+    [ "$dist" = "lenny" ] && sed -i 's/, libgoogle-perftools-dev//' ceph-$finalvers/debian/control
+
     dpkg-source -b ceph-$finalvers
 
 #    cd ..
