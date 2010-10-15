@@ -1359,10 +1359,14 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       } 
     }
     else if (m->cmd[1] == "lost" && m->cmd.size() >= 3) {
-      long osd = strtol(m->cmd[2].c_str(), 0, 10);
-      if (m->cmd.size() < 4 ||
-	  m->cmd[3] != "--yes-i-really-mean-it") {
-	ss << "are you SURE?  this might mean real, permanent data loss.  pass --yes-i-really-mean-it if you really do.";
+      string err;
+      int osd = strict_strtol(m->cmd[2].c_str(), 10, &err);
+      if (!err.empty()) {
+	ss << err;
+      }
+      else if ((m->cmd.size() < 4) || m->cmd[3] != "--yes-i-really-mean-it") {
+	ss << "are you SURE?  this might mean real, permanent data loss.  pass "
+	      "--yes-i-really-mean-it if you really do.";
       }
       else if (!osdmap.exists(osd) || !osdmap.is_down(osd)) {
 	ss << "osd" << osd << " is not down or doesn't exist";
