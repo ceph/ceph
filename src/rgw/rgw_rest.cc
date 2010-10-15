@@ -611,6 +611,16 @@ static void init_auth_info(struct req_state *s)
   }
 }
 
+static int str_to_bool(const char *s, int def_val)
+{
+  if (!s)
+    return def_val;
+
+  return (strcasecmp(s, "on") == 0 ||
+          strcasecmp(s, "yes") == 0 ||
+          strcasecmp(s, "1"));
+}
+
 void RGWHandler_REST::provider_init_state()
 {
   s->path_name = FCGX_GetParam("SCRIPT_NAME", s->fcgx->envp);
@@ -650,7 +660,7 @@ void RGWHandler_REST::provider_init_state()
   s->http_auth = FCGX_GetParam("HTTP_AUTHORIZATION", s->fcgx->envp);
 
   const char *cgi_env_continue = FCGX_GetParam("RGW_PRINT_CONTINUE", s->fcgx->envp);
-  if (cgi_env_continue != NULL && strcasecmp(cgi_env_continue, "On") == 0) {
+  if (str_to_bool(cgi_env_continue, 0)) {
     const char *expect = FCGX_GetParam("HTTP_EXPECT", s->fcgx->envp);
     s->expect_cont = (expect && !strcasecmp(expect, "100-continue"));
   }
