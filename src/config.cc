@@ -217,8 +217,8 @@ void sighup_handler(int signum)
   logger_reopen_all();
 }
 
-static void (*old_sigsegv_handler)(int);
-static void (*old_sigabrt_handler)(int);
+static void (*old_sigsegv_handler)(int) = NULL;
+static void (*old_sigabrt_handler)(int) = NULL;
 
 void sigsegv_handler(int signum)
 {
@@ -1257,8 +1257,10 @@ void parse_config_options(std::vector<const char*>& args)
   }
 
   signal(SIGHUP, sighup_handler);
-  old_sigsegv_handler = signal(SIGSEGV, sigsegv_handler);
-  old_sigabrt_handler = signal(SIGABRT, sigabrt_handler);
+  if (!old_sigsegv_handler)
+    old_sigsegv_handler = signal(SIGSEGV, sigsegv_handler);
+  if (!old_sigabrt_handler)
+    old_sigabrt_handler = signal(SIGABRT, sigabrt_handler);
 
   args = nargs;
 }
