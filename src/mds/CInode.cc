@@ -2391,7 +2391,8 @@ void CInode::decode_import(bufferlist::iterator& p,
       // it is frozen (and in a SYNC or LOCK state).  FIXME.
 
       if (dir->is_auth() ||
-	  filelock.get_state() == LOCK_MIX) {
+	  filelock.get_state() == LOCK_MIX ||
+	  filelock.get_state() == LOCK_MIX_STALE) {
 	dout(10) << " skipped fragstat info for " << *dir << dendl;
 	frag_info_t f;
 	::decode(f, q);
@@ -2402,7 +2403,8 @@ void CInode::decode_import(bufferlist::iterator& p,
 	dout(10) << " took fragstat info for " << *dir << dendl;
       }
       if (dir->is_auth() ||
-	  nestlock.get_state() == LOCK_MIX) {
+	  nestlock.get_state() == LOCK_MIX ||
+	  nestlock.get_state() == LOCK_MIX_STALE) {
 	dout(10) << " skipped rstat info for " << *dir << dendl;
 	nest_info_t n;
 	::decode(n, q);
