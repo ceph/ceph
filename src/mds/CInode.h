@@ -816,8 +816,12 @@ public:
     if (is_auth()) {
       if (issued & CEPH_CAP_GEXCL)
 	lock->set_state(LOCK_EXCL);
-      else if (issued & CEPH_CAP_GWR)
-	lock->set_state(LOCK_MIX);
+      else if (issued & CEPH_CAP_GWR) {
+        if (lock->is_stale())
+          lock->set_state(LOCK_MIX_STALE);
+        else
+          lock->set_state(LOCK_MIX);
+      }
       else if (lock->is_dirty()) {
 	if (is_replicated())
 	  lock->set_state(LOCK_MIX);

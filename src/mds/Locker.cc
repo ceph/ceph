@@ -585,6 +585,10 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
 
     }
 
+    if (next == LOCK_MIX && lock->is_stale()) {
+      dout(15) << "setting state to LOCK_MIX_STALE instead of LOCK_MIX" << dendl;
+      next = LOCK_MIX_STALE;
+    }
     lock->set_state(next);
     
     if (lock->get_parent()->is_auth() &&
@@ -3700,7 +3704,10 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
     }
 
     // change lock
-    lock->set_state(LOCK_MIX);
+    if (lock->is_stale())
+      lock->set_state(LOCK_MIX_STALE);
+    else
+      lock->set_state(LOCK_MIX);
     lock->clear_scatter_wanted();
     if (need_issue)
       *need_issue = true;
@@ -3745,7 +3752,10 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
     if (gather)
       lock->get_parent()->auth_pin(lock);
     else {
-      lock->set_state(LOCK_MIX);
+      if (lock->is_stale())
+        lock->set_state(LOCK_MIX_STALE);
+      else
+        lock->set_state(LOCK_MIX);
       lock->clear_scatter_wanted();
       if (in->is_replicated()) {
 	bufferlist softdata;
@@ -3922,7 +3932,12 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     
     // ok
     lock->decode_locked_state(m->get_data());
-    lock->set_state(LOCK_MIX);
+    if (!lock->is_stale())
+      lock->set_state(LOCK_MIX);
+    else {
+      dout(15) << "setting state to LOCK_MIX_STALE instead of LOCK_MIX" << dendl;
+      lock->set_state(LOCK_MIX_STALE);
+    }
 
     ((ScatterLock *)lock)->finish_flush();
 
