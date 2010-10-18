@@ -897,6 +897,8 @@ int SimpleMessenger::Pipe::accept()
 
 
  fail_unlocked:
+  if (existing)
+    existing->pipe_lock.Unlock();
   pipe_lock.Lock();
   state = STATE_CLOSED;
   fault();
