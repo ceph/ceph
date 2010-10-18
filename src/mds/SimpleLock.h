@@ -376,6 +376,7 @@ public:
 
 
   virtual bool is_dirty() const { return false; }
+  virtual bool is_stale() const { return false; }
 
 
   // can_*

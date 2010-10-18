@@ -25,17 +25,19 @@ class ScatterLock : public SimpleLock {
     utime_t last_scatter;
     xlist<ScatterLock*>::item item_updated;
     utime_t update_stamp;
+    bool stale;
 
     more_bits_t(ScatterLock *lock) :
       dirty(false), flushing(false), scatter_wanted(false),
-      item_updated(lock)
+      item_updated(lock), stale(false)
     {}
 
     bool empty() {
       return dirty == false &&
 	flushing == false &&
 	scatter_wanted == false &&
-	!item_updated.is_on_list();
+	!item_updated.is_on_list() &&
+	!stale;
     }
   };
   more_bits_t *_more;
@@ -136,6 +138,21 @@ public:
     finish_flush();
   }
   
+  bool is_stale() const {
+    return have_more() && _more->stale;
+  }
+
+  void set_stale() {
+    more()->stale = true;
+  }
+
+  void clear_stale() {
+    if (is_stale()) {
+      _more->stale = false;
+      try_clear_more();
+    }
+  }
+
   void set_last_scatter(utime_t t) { more()->last_scatter = t; }
   utime_t get_last_scatter() { return more()->last_scatter; }
 
