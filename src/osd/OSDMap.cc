@@ -60,9 +60,9 @@ void OSDMap::print(ostream& out)
 	out << " weight " << get_weightf(i);
       out << (is_up(i) ? " up  ":" down");
       osd_info_t& info = get_info(i);
-      out << info;
+      out << info << " ";
       if (is_up(i))
-	out << " " << get_addr(i) << " " << get_hb_addr(i);
+	out << get_addr(i) << " " << get_hb_addr(i);
       out << "\n";
     }
   }
