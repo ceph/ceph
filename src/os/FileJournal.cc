@@ -158,6 +158,12 @@ int FileJournal::create()
   char buf[80];
   dout(2) << "create " << fn << dendl;
 
+  if (g_conf.osd_journal_size == 0) {
+    dout(0) << "You must set a non-zero journal size in order to create a journal. "
+	"Set osd_journal_size." << dendl;
+    return -EINVAL;
+  }
+
   int err = _open(true, true);
   if (err < 0)
     return err;
