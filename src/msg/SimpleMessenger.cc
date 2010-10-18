@@ -782,6 +782,7 @@ int SimpleMessenger::Pipe::accept()
     } else {
       // new session
       dout(10) << "accept new session" << dendl;
+      existing = NULL;
       goto open;
     }
     assert(0);    
