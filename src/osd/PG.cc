@@ -772,14 +772,26 @@ void PG::trim_past_intervals()
 // true if the given map affects the prior set
 bool PG::prior_set_affected(OSDMap *osdmap)
 {
-  // did someone in the prior set go down?
   for (set<int>::iterator p = prior_set.begin();
        p != prior_set.end();
        p++)
-    if (osdmap->is_down(*p) && prior_set_down.count(*p) == 0) {
-      dout(10) << "prior_set_affected: osd" << *p << " now down" << dendl;
+  {
+    int o = *p;
+
+    // did someone in the prior set go down?
+    if (osdmap->is_down(o) && prior_set_down.count(o) == 0) {
+      dout(10) << "prior_set_affected: osd" << osd << " now down" << dendl;
       return true;
     }
+
+    // did someone in the prior set get lost?
+    const osd_info_t& pinfo(osdmap->get_info(o));
+    if (pinfo.lost_at > pinfo.up_from) {
+      set<int>::const_iterator pl = prior_set_lost.find(o);
+      if (pl == prior_set_lost.end())
+	return true;
+    }
+  }
 
   // did someone in the prior down set go up?
   for (set<int>::iterator p = prior_set_down.begin();
@@ -811,6 +823,7 @@ void PG::clear_prior()
   prior_set.clear();
   prior_set_down.clear();
   prior_set_up_thru.clear();
+  prior_set_lost.clear();
 }
 
 
@@ -1011,6 +1024,15 @@ void PG::build_prior()
     }
   }
 
+  // Build prior_set_lost
+  for (set<int>::const_iterator i = prior_set.begin(); i != prior_set.end(); ++i) {
+    int o = *i;
+    const osd_info_t& pinfo(osd->osdmap->get_info(o));
+    if (pinfo.lost_at > pinfo.up_from) {
+      prior_set_lost.insert(o);
+    }
+  }
+
   dout(10) << "build_prior = " << prior_set
 	   << " down = " << prior_set_down << " ..."
 	   << (is_crashed() ? " crashed":"")
@@ -1025,9 +1047,7 @@ void PG::clear_primary_state()
 
   // clear peering state
   have_master_log = false;
-  prior_set.clear();
-  prior_set_down.clear();
-  prior_set_up_thru.clear();
+  clear_prior();
   stray_set.clear();
   uptodate_set.clear();
   peer_info_requested.clear();
