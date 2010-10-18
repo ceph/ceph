@@ -1272,7 +1272,7 @@ void SimpleMessenger::Pipe::discard_queue()
 {
   dout(10) << "discard_queue" << dendl;
   DispatchQueue& q = messenger->dispatch_queue;
-  halt_delivery = true;
+
   pipe_lock.Unlock();
   xlist<Pipe *>* list_on;
   q.lock.Lock();//to remove from round-robin
