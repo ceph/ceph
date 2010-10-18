@@ -1132,12 +1132,13 @@ unsigned FileStore::_do_transaction(Transaction& t)
 
   while (t.have_op()) {
     int op = t.get_op();
+    int r = 0;
     switch (op) {
     case Transaction::OP_TOUCH:
       {
 	coll_t cid = t.get_cid();
 	sobject_t oid = t.get_oid();
-	_touch(cid, oid);
+	r = _touch(cid, oid);
       }
       break;
       
@@ -1149,7 +1150,7 @@ unsigned FileStore::_do_transaction(Transaction& t)
 	uint64_t len = t.get_length();
 	bufferlist bl;
 	t.get_bl(bl);
-	_write(cid, oid, off, len, bl);
+	r = _write(cid, oid, off, len, bl);
       }
       break;
       
@@ -1159,7 +1160,7 @@ unsigned FileStore::_do_transaction(Transaction& t)
 	sobject_t oid = t.get_oid();
 	uint64_t off = t.get_length();
 	uint64_t len = t.get_length();
-	_zero(cid, oid, off, len);
+	r = _zero(cid, oid, off, len);
       }
       break;
       
@@ -1178,7 +1179,7 @@ unsigned FileStore::_do_transaction(Transaction& t)
 	coll_t cid = t.get_cid();
 	sobject_t oid = t.get_oid();
 	uint64_t off = t.get_length();
-	_truncate(cid, oid, off);
+	r = _truncate(cid, oid, off);
       }
       break;
       
@@ -1186,7 +1187,7 @@ unsigned FileStore::_do_transaction(Transaction& t)
       {
 	coll_t cid = t.get_cid();
 	sobject_t oid = t.get_oid();
-	_remove(cid, oid);
+	r = _remove(cid, oid);
       }
       break;
       
@@ -1197,7 +1198,7 @@ unsigned FileStore::_do_transaction(Transaction& t)
 	string name = t.get_attrname();
 	bufferlist bl;
 	t.get_bl(bl);
-	_setattr(cid, oid, name.c_str(), bl.c_str(), bl.length());
+	r = _setattr(cid, oid, name.c_str(), bl.c_str(), bl.length());
       }
       break;
       
@@ -1207,7 +1208,7 @@ unsigned FileStore::_do_transaction(Transaction& t)
 	sobject_t oid = t.get_oid();
 	map<string, bufferptr> aset;
 	t.get_attrset(aset);
-	_setattrs(cid, oid, aset);
+	r = _setattrs(cid, oid, aset);
       }
       break;
 
@@ -1216,7 +1217,7 @@ unsigned FileStore::_do_transaction(Transaction& t)
 	coll_t cid = t.get_cid();
 	sobject_t oid = t.get_oid();
 	string name = t.get_attrname();
-	_rmattr(cid, oid, name.c_str());
+	r = _rmattr(cid, oid, name.c_str());
       }
       break;
 
@@ -1224,7 +1225,7 @@ unsigned FileStore::_do_transaction(Transaction& t)
       {
 	coll_t cid = t.get_cid();
 	sobject_t oid = t.get_oid();
-	_rmattrs(cid, oid);
+	r = _rmattrs(cid, oid);
       }
       break;
       
@@ -1233,7 +1234,7 @@ unsigned FileStore::_do_transaction(Transaction& t)
 	coll_t cid = t.get_cid();
 	sobject_t oid = t.get_oid();
 	sobject_t noid = t.get_oid();
-	_clone(cid, oid, noid);
+	r = _clone(cid, oid, noid);
       }
       break;
 
@@ -1244,21 +1245,21 @@ unsigned FileStore::_do_transaction(Transaction& t)
 	sobject_t noid = t.get_oid();
  	uint64_t off = t.get_length();
 	uint64_t len = t.get_length();
-	_clone_range(cid, oid, noid, off, len);
+	r = _clone_range(cid, oid, noid, off, len);
       }
       break;
 
     case Transaction::OP_MKCOLL:
       {
 	coll_t cid = t.get_cid();
-	_create_collection(cid);
+	r = _create_collection(cid);
       }
       break;
 
     case Transaction::OP_RMCOLL:
       {
 	coll_t cid = t.get_cid();
-	_destroy_collection(cid);
+	r = _destroy_collection(cid);
       }
       break;
 
@@ -1267,7 +1268,7 @@ unsigned FileStore::_do_transaction(Transaction& t)
 	coll_t ocid = t.get_cid();
 	coll_t ncid = t.get_cid();
 	sobject_t oid = t.get_oid();
-	_collection_add(ocid, ncid, oid);
+	r = _collection_add(ocid, ncid, oid);
       }
       break;
 
@@ -1275,7 +1276,7 @@ unsigned FileStore::_do_transaction(Transaction& t)
        {
 	coll_t cid = t.get_cid();
 	sobject_t oid = t.get_oid();
-	_collection_remove(cid, oid);
+	r = _collection_remove(cid, oid);
        }
       break;
 
@@ -1285,7 +1286,7 @@ unsigned FileStore::_do_transaction(Transaction& t)
 	string name = t.get_attrname();
 	bufferlist bl;
 	t.get_bl(bl);
-	_collection_setattr(cid, name.c_str(), bl.c_str(), bl.length());
+	r = _collection_setattr(cid, name.c_str(), bl.c_str(), bl.length());
       }
       break;
 
@@ -1293,7 +1294,7 @@ unsigned FileStore::_do_transaction(Transaction& t)
       {
 	coll_t cid = t.get_cid();
 	string name = t.get_attrname();
-	_collection_rmattr(cid, name.c_str());
+	r = _collection_rmattr(cid, name.c_str());
       }
       break;
 
@@ -1304,6 +1305,15 @@ unsigned FileStore::_do_transaction(Transaction& t)
     default:
       cerr << "bad op " << op << std::endl;
       assert(0);
+    }
+
+    if (r == -ENOSPC) {
+      // For now, if we hit _any_ ENOSPC, crash, before we do any damage
+      // by partially applying transactions.
+      assert(0 == "ENOSPC handling not implemented");
+    }
+    if (r == -EIO) {
+      assert(0 == "EIO handling not implemented");
     }
   }
   
