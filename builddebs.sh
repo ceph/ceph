@@ -5,7 +5,11 @@ set -e
 basedir=~/debian-base
 
 vers=$1
-dists=$2
+debsubver=$2
+dists=$3
+
+[ -z "$debsubver" ] && debsubver="1"
+
 [ -z "$vers" ] && [ -e .last_release ] && vers=`cat .last_release`
 [ -z "$vers" ] && echo specify version && exit 1
 
@@ -19,7 +23,7 @@ for dist in $dists
 do
     pbuilder --clean
 
-    dvers="$vers-1"
+    dvers="$vers-$debsubver"
     [ "$dist" = "squeeze" ] && dvers="$dvers~bpo60+1"
     [ "$dist" = "lenny" ] && dvers="$dvers~bpo50+1"
     echo debian vers $dvers
@@ -36,9 +40,9 @@ done
 
 
 # do lintian checks
-for dist in sid squeeze lenny
+for dist in $dists
 do
-    dvers="$vers-1"
+    dvers="$vers-$debsubver"
     [ "$dist" = "squeeze" ] && dvers="$dvers~bpo60+1"
     [ "$dist" = "lenny" ] && dvers="$dvers~bpo50+1"
     echo lintian checks for $dvers
