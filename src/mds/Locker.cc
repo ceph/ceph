@@ -950,7 +950,7 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
 
     if (in->is_auth()) {
       if (want_scatter)
-	file_mixed((ScatterLock*)lock);
+	scatter_mix((ScatterLock*)lock);
       else {
 	if (nowait && lock->is_dirty())
 	  return false;   // don't do nested lock, as that may scatter_writebehind in simple_lock!
@@ -3294,7 +3294,7 @@ void Locker::scatter_eval(ScatterLock *lock, bool *need_issue)
     if (!lock->is_rdlocked() &&
 	lock->get_state() != LOCK_MIX &&
 	lock->get_state() != LOCK_MIX_STALE)
-      file_mixed(lock, need_issue);
+      scatter_mix(lock, need_issue);
       return;
   }
 
@@ -3390,7 +3390,7 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
 	case CEPH_LOCK_IFILE:
 	  if (p->is_replicated() && lock->get_state() != LOCK_MIX &&
 	      lock->get_state() != LOCK_MIX_STALE)
-	    file_mixed((ScatterLock*)lock);
+	    scatter_mix((ScatterLock*)lock);
 	  else if (lock->get_state() != LOCK_LOCK)
 	    simple_lock((ScatterLock*)lock);
 	  else
@@ -3401,7 +3401,7 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
 	case CEPH_LOCK_INEST:
 	  if (p->is_replicated() && lock->get_state() != LOCK_MIX &&
 	      lock->get_state() != LOCK_MIX_STALE)
-	    file_mixed(lock);
+	    scatter_mix(lock);
 	  else if (lock->get_state() != LOCK_LOCK)
 	    simple_lock(lock);
 	  else
@@ -3630,7 +3630,7 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
       // we should lose it.
       if ((other_wanted & (CEPH_CAP_GRD|CEPH_CAP_GWR)) ||
 	  lock->is_waiter_for(SimpleLock::WAIT_WR))
-	file_mixed(lock, need_issue);
+	scatter_mix(lock, need_issue);
       else if (!lock->is_wrlocked())   // let excl wrlocks drain first
 	simple_sync(lock, need_issue);
       else
@@ -3658,7 +3658,7 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
 	    (in->multiple_nonstale_caps() && (wanted & CEPH_CAP_GWR)))) {
     dout(7) << "file_eval stable, bump to mixed " << *lock
 	    << " on " << *lock->get_parent() << dendl;
-    file_mixed(lock, need_issue);
+    scatter_mix(lock, need_issue);
   }
   
   // * -> sync?
@@ -3681,9 +3681,9 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
 
 
 
-void Locker::file_mixed(ScatterLock *lock, bool *need_issue)
+void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
 {
-  dout(7) << "file_mixed " << *lock << " on " << *lock->get_parent() << dendl;  
+  dout(7) << "scatter_mix " << *lock << " on " << *lock->get_parent() << dendl;
 
   CInode *in = (CInode*)lock->get_parent();
   assert(in->is_auth());
@@ -4004,7 +4004,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
 	      << " on " << *lock->get_parent() << dendl;
       if (lock->get_state() != LOCK_MIX &&
           lock->get_state() != LOCK_MIX_STALE)  // i.e., the reqscatter didn't race with an actual mix/scatter
-	file_mixed(lock);
+	scatter_mix(lock);
     } else {
       dout(7) << "handle_file_lock ignoring scatter request on " << *lock
 	      << " on " << *lock->get_parent() << dendl;

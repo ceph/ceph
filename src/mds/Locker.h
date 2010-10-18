@@ -228,7 +228,7 @@ public:
   void file_eval(ScatterLock *lock, bool *need_issue);
 protected:
   void handle_file_lock(ScatterLock *lock, MLock *m);
-  void file_mixed(ScatterLock *lock, bool *need_issue=0);
+  void scatter_mix(ScatterLock *lock, bool *need_issue=0);
   void file_excl(ScatterLock *lock, bool *need_issue=0);
 
 public:
