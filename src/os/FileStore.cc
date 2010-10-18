@@ -512,6 +512,7 @@ int FileStore::_detect_fs()
 	   << "           Linux 2.6.32).\n"
 	   << TEXT_NORMAL;
       return -ENOTTY;
+    }
 
     // start_sync?
     __u64 transid = 0;
@@ -534,11 +535,13 @@ int FileStore::_detect_fs()
 
     if (btrfs_wait_sync) {
       // async snap creation?
+      struct btrfs_ioctl_async_vol_args async_args;
       struct btrfs_ioctl_vol_args volargs;
+      __u64 transid = 0;
+      async_args.args = &volargs;
+      async_args.transid = (__u64 *)&transid;
       volargs.fd = 0;
       strcpy(volargs.name, "async_snap_test");
-      volargs.transid = 0;
-      volargs.reserved = 0;
 
       // remove old one, first
       struct stat st;
@@ -550,7 +553,7 @@ int FileStore::_detect_fs()
       }
 
       volargs.fd = fd;
-      r = ::ioctl(fd, BTRFS_IOC_SNAP_CREATE_ASYNC, &volargs);
+      r = ::ioctl(fd, BTRFS_IOC_SNAP_CREATE_ASYNC, &async_args);
       dout(0) << "mount btrfs SNAP_CREATE_ASYNC got " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
       if (r == 0 || errno == EEXIST) {
 	dout(0) << "mount btrfs SNAP_CREATE_ASYNC is supported" << dendl;
@@ -558,17 +561,9 @@ int FileStore::_detect_fs()
       
 	// clean up
 	volargs.fd = 0;
-	r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY_ASYNC, &volargs);
-	if (r == 0) {
-	  dout(0) << "mount btrfs SNAP_DESTROY_ASYNC is supported" << dendl;
-	  btrfs_snap_destroy_async = true;
-	} else {
-	  dout(0) << "mount btrfs SNAP_DESTROY_ASYNC is NOT supported: "
-		  << strerror_r(-r, buf, sizeof(buf)) << dendl;
-	  r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &volargs);
-	  if (r != 0) {
-	    dout(0) << "mount btrfs SNAP_DESTROY failed: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
-	  }
+	r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &volargs);
+	if (r != 0) {
+	  dout(0) << "mount btrfs SNAP_DESTROY failed: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
 	}
       } else {
 	dout(0) << "mount btrfs SNAP_CREATE_ASYNC is NOT supported: "
@@ -699,7 +694,7 @@ int FileStore::mount()
       snapargs.fd = 0;
       strcpy(snapargs.name, "current");
       int r = ::ioctl(basedir_fd,
-		      btrfs_snap_destroy_async ? BTRFS_IOC_SNAP_DESTROY_ASYNC:BTRFS_IOC_SNAP_DESTROY,
+		      BTRFS_IOC_SNAP_DESTROY,
 		      &snapargs);
       if (r) {
 	char buf[80];
@@ -1801,17 +1796,21 @@ void FileStore::sync_entry()
       bool do_snap = btrfs && g_conf.filestore_btrfs_snap;
 
       if (do_snap) {
-	btrfs_ioctl_vol_args snapargs;
+	struct btrfs_ioctl_async_vol_args async_args;
+	struct btrfs_ioctl_vol_args snapargs;
+	__u64 transid = 0;
+	async_args.transid = &transid;
+	async_args.args = &snapargs;
 	snapargs.fd = current_fd;
 	snprintf(snapargs.name, sizeof(snapargs.name), COMMIT_SNAP_ITEM, (long long unsigned)cp);
 
 	if (btrfs_snap_create_async) {
 	  // be smart!
 	  dout(10) << "taking async snap '" << snapargs.name << "'" << dendl;
-	  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE_ASYNC, &snapargs);
+	  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE_ASYNC, &async_args);
 	  char buf[100];
 	  dout(20) << "async snap create '" << snapargs.name
-		   << "' transid " << snapargs.transid
+		   << "' transid " << transid
 		   << " got " << r << " " << strerror_r(r < 0 ? errno : 0, buf, sizeof(buf)) << dendl;
 	  assert(r == 0);
 	  snaps.push_back(cp);
@@ -1819,9 +1818,9 @@ void FileStore::sync_entry()
 	  commit_started();
 
 	  // wait for commit
-	  dout(20) << " waiting for transid " << snapargs.transid << " to complete" << dendl;
-	  ::ioctl(op_fd, BTRFS_IOC_WAIT_SYNC, &snapargs.transid);
-	  dout(20) << " done waiting for transid " << snapargs.transid << " to complete" << dendl;
+	  dout(20) << " waiting for transid " << transid << " to complete" << dendl;
+	  ::ioctl(op_fd, BTRFS_IOC_WAIT_SYNC, &transid);
+	  dout(20) << " done waiting for transid " << transid << " to complete" << dendl;
 
 	} else {
 	  // the synchronous snap create does a sync.
