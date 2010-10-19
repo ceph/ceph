@@ -47,7 +47,8 @@ write_objects() {
         start_ver=$1
         stop_ver=$2
         for v in `seq $start_ver $stop_ver`; do
-                head -c $OBJ_SIZE /dev/zero  | tr '\0' '$v' > $TEMPDIR/ver$v
+                chr=`perl -e "print chr(48+$v)"`
+                head -c $OBJ_SIZE /dev/zero  | tr '\0' "$chr" > $TEMPDIR/ver$v
                 for i in `seq -w 1 $MAX_OBJS`; do
                         ./rados -p data put obj$i $TEMPDIR/ver$v || die "radostool failed"
                 done
@@ -77,7 +78,7 @@ do_test() {
         restart_osd 1
 
         # Give recovery some time to start
-        sleep 30
+        sleep 20
 
         # Stop osd0 before recovery can complete
         stop_osd 0
