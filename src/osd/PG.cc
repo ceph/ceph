@@ -876,7 +876,7 @@ void PG::build_prior()
         written to the pg.
    *
    * If B is really dead, then an administrator will need to manually
-   * intervene in some as-yet-undetermined way.  :)
+   * intervene by marking the OSD as "lost."
    */
 
   clear_prior();
