@@ -1,3 +1,15 @@
+ceph (0.22-4) experimental; urgency=low
+
+  * more packaging fixes 
+
+ -- Sage Weil <sage@newdream.net>  Tue, 19 Oct 2010 09:00:21 -0700
+
+ceph (0.22-3) experimental; urgency=low
+
+  * packaging fixes 
+
+ -- Sage Weil <sage@newdream.net>  Mon, 18 Oct 2010 10:23:02 -0700
+
 ceph (0.22-1) experimental; urgency=low
 
   * mon: improved monitor naming
