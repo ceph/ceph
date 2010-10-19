@@ -78,7 +78,7 @@ do
     [ "$dist" = "lenny" ] && bpver="$debver~bpo50+1"
 
     comment=""
-    [ "$debsubver" != "1" ] && comment="package fixes "
+#    [ "$debsubver" != "1" ] && comment="package fixes "
     [ -n "$versuffix" ] && comment="git snapshot "
     [ "$dist" != "sid" ] && comment="${comment}$dist backport"
 
