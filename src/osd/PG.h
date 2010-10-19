@@ -116,6 +116,7 @@ public:
     struct History {
       epoch_t epoch_created;       // epoch in which PG was created
       epoch_t last_epoch_started;  // lower bound on last epoch started (anywhere, not necessarily locally)
+      epoch_t last_epoch_clean;    // lower bound on last epoch the PG was completely clean.
       epoch_t last_epoch_split;    // as parent
 
       epoch_t same_up_since;       // same acting set since
@@ -149,6 +150,7 @@ public:
 	::encode(struct_v, bl);
 	::encode(epoch_created, bl);
 	::encode(last_epoch_started, bl);
+	::encode(last_epoch_clean, bl);
 	::encode(last_epoch_split, bl);
 	::encode(same_acting_since, bl);
 	::encode(same_up_since, bl);
@@ -161,6 +163,10 @@ public:
 	::decode(struct_v, bl);
 	::decode(epoch_created, bl);
 	::decode(last_epoch_started, bl);
+	if (struct_v >= 2)
+	  ::decode(last_epoch_clean, bl);
+	else
+	  last_epoch_clean = last_epoch_started;  // careful, it's a lie!
 	::decode(last_epoch_split, bl);
 	::decode(same_acting_since, bl);
 	::decode(same_up_since, bl);
