@@ -385,6 +385,7 @@ libcommon_files = \
 	common/armor.c \
 	common/base64.c \
 	common/str_list.cc \
+	common/errno.cc \
 	mon/MonMap.cc \
 	mon/MonClient.cc \
 	osd/OSDMap.cc \

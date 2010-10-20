@@ -13,6 +13,7 @@
  */
 
 #include "config.h"
+#include "common/errno.h"
 #include "FileJournal.h"
 #include "include/color.h"
 
@@ -31,7 +32,6 @@ const static int64_t ONE_MEG(1 << 20);
 
 int FileJournal::_open(bool forwrite, bool create)
 {
-  char buf[80];
   int flags, ret;
 
   if (forwrite) {
@@ -47,17 +47,17 @@ int FileJournal::_open(bool forwrite, bool create)
     ::close(fd);
   fd = ::open(fn.c_str(), flags, 0644);
   if (fd < 0) {
-    dout(2) << "_open failed " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    cerr << "unable to open journal " << fn << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
-    return -errno;
+    int err = errno;
+    dout(2) << "_open failed " << cpp_strerror(err) << dendl;
+    cerr << "unable to open journal " << fn << ": " << cpp_strerror(err) << std::endl;
+    return -err;
   }
 
   struct stat st;
   ret = ::fstat(fd, &st);
   if (ret) {
     int err = errno;
-    dout(2) << "_open failed to fstat! " << err << " "
-	    << strerror_r(err, buf, sizeof(buf)) << dendl;
+    dout(2) << "_open failed to fstat! " << cpp_strerror(err) << dendl;
     return -err;
   }
 
