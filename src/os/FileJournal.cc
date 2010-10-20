@@ -27,11 +27,12 @@
 #undef dout_prefix
 #define dout_prefix *_dout << dbeginl << "journal "
 
+const static int64_t ONE_MEG(1 << 20);
 
 int FileJournal::_open(bool forwrite, bool create)
 {
   char buf[80];
-  int flags;
+  int flags, ret;
 
   if (forwrite) {
     flags = O_RDWR;
@@ -51,97 +52,28 @@ int FileJournal::_open(bool forwrite, bool create)
     return -errno;
   }
 
-  // get size
   struct stat st;
-  int r = ::fstat(fd, &st);
-  if (r < 0) {
-    dout(2) << "_open failed to fstat! " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    return -errno; // wtf
+  ret = ::fstat(fd, &st);
+  if (ret) {
+    int err = errno;
+    dout(2) << "_open failed to fstat! " << err << " "
+	    << strerror_r(err, buf, sizeof(buf)) << dendl;
+    return -err;
   }
 
-  if (max_size == 0) {
-    // hmm, is this a raw block device?
-#ifdef BLKGETSIZE64
-    // ioctl block device
-    uint64_t bytes;
-    r = ::ioctl(fd, BLKGETSIZE64, &bytes);
-    max_size = bytes;
-#else
-# ifdef BLKGETSIZE
-    // hrm, try the 32 bit ioctl?
-    unsigned long sectors = 0;
-    r = ::ioctl(fd, BLKGETSIZE, &sectors);
-    max_size = sectors * 512ULL;
-# endif
-#endif
-    if (r == 0) {
-      is_bdev = true;
-      block_size = PAGE_SIZE;
-    }
-  }
+  if (S_ISBLK(st.st_mode))
+    ret = _open_block_device();
+  else
+    ret = _open_file(st.st_size, st.st_blksize, create);
 
-  if (!is_bdev) {
-    if (create && st.st_size < (g_conf.osd_journal_size << 20)) {
-      uint64_t newsize = g_conf.osd_journal_size << 20;
-      dout(10) << "_open extending to " << newsize << " bytes" << dendl;
-      r = ::ftruncate(fd, newsize);
-      if (r < 0) {
-	dout(0) << "_open unable to extend journal to " << newsize << " bytes" << dendl;
-	cerr << "unable to extend journal to " << newsize << " bytes" << std::endl;
-	return -errno;
-      }
-      r = ::fstat(fd, &st);
-    }
-    max_size = st.st_size;
-    block_size = MAX(st.st_blksize, PAGE_SIZE);
-  }
+  if (ret)
+    return ret;
 
+  /* We really want max_size to be a multiple of block_size. */
   max_size -= max_size % block_size;
 
-  // try to check if the disk write cache is on
-  if (is_bdev) {
-    if (geteuid() == 0) {
-      char cmd[4096];
-      snprintf(cmd, sizeof(cmd), "/sbin/hdparm -W %s > /tmp/out.%d", fn.c_str(), getpid());
-      int r = system(cmd);
-      if (r == 0) {
-	snprintf(cmd, sizeof(cmd), "/tmp/out.%d", getpid());
-	FILE *f = fopen(cmd, "r");
-	if (f) {
-	  while (!feof(f)) {
-	    char s[100];
-	    fgets(s, sizeof(s), f);
-	    int on;
-	    if (sscanf(s, " write-caching =  %d", &on) == 1) {
-	      if (on) {
-		dout(0) << "WARNING: disk write cache is ON; journaling will not be reliable" << dendl;
-		dout(0) << "         on kernels prior to 2.6.33 (recent kernels are safe)" << dendl;
-		dout(0) << "         disable with 'hdparm -W 0 " << fn << "'" << dendl;
-		cout << TEXT_RED
-		     << " ** WARNING: disk write cache is ON on " << fn << ".\n"
-		     << "    Journaling will not be reliable on kernels prior to 2.6.33\n"
-		     << "    (recent kernels are safe).  You can disable the write cache with\n"
-		     << "    'hdparm -W 0 " << fn << "'"
-		     << TEXT_NORMAL
-		     << std::endl;
-	      } else {
-		dout(10) << "_open disk write cache is off (good) on " << fn << dendl;
-	      }
-	      break;
-	    }
-	  }
-	  fclose(f);
-	}
-	::unlink(cmd);
-      } else
-	dout(10) << "_open failed to run '" << cmd << "', NOT checking disk write cache on " << fn << dendl;      
-    } else
-      dout(10) << "_open not root, NOT checking disk write cache on " << fn << dendl;
-  } else
-    dout(10) << "_open journal is not a block device, NOT checking disk write cache on " << fn << dendl;
-
   // static zeroed buffer for alignment padding
-  delete zero_buf;
+  delete [] zero_buf;
   zero_buf = new char[header.alignment];
   memset(zero_buf, 0, header.alignment);
 
@@ -149,6 +81,148 @@ int FileJournal::_open(bool forwrite, bool create)
 	  << ": " << max_size 
 	  << " bytes, block size " << block_size
 	  << " bytes, directio = " << directio << dendl;
+  return 0;
+}
+
+int FileJournal::_open_block_device()
+{
+  int ret = 0;
+  int64_t bdev_sz = 0;
+#ifdef BLKGETSIZE64
+  // ioctl block device
+  ret = ::ioctl(fd, BLKGETSIZE64, &bdev_sz);
+#elif BLKGETSIZE
+  // hrm, try the 32 bit ioctl?
+  unsigned long sectors = 0;
+  ret = ::ioctl(fd, BLKGETSIZE, &sectors);
+  bdev_sz = sectors * 512ULL;
+#else
+#error "Compile error: we don't know how to get the size of a raw block device."
+#endif
+  if (ret) {
+    dout(0) << __func__ << ": failed to read block device size." << dendl;
+    return -EIO;
+  }
+
+  /* Check for bdev_sz too small */
+  if (bdev_sz < ONE_MEG) {
+    dout(0) << __func__ << ": your block device must be at least "
+      << ONE_MEG << " bytes to be used for a Ceph journal." << dendl;
+    return -EINVAL;
+  }
+
+  int64_t conf_journal_sz(g_conf.osd_journal_size);
+  conf_journal_sz <<= 20;
+  if (bdev_sz < conf_journal_sz) {
+    dout(0) << __func__ << ": you have configured a journal of size "
+      << conf_journal_sz << ", but the block device " << fn << " is only "
+      << bdev_sz << " bytes in size." << dendl;
+    return -EINVAL;
+  }
+
+  if (conf_journal_sz == 0) {
+    dout(10) << __func__ << ": no journal size specified in configuration. "
+      << "We'll use the entire block device (size: " << bdev_sz << ")" << dendl;
+    max_size = bdev_sz;
+  }
+  else {
+    dout(10) << __func__ << ": using " << conf_journal_sz << " bytes "
+             << "of a " << bdev_sz << " byte block device." << dendl;
+    max_size = conf_journal_sz;
+  }
+
+  /* block devices have to write in blocks of PAGE_SIZE */
+  block_size = PAGE_SIZE;
+
+  _check_disk_write_cache();
+  return 0;
+}
+
+void FileJournal::_check_disk_write_cache() const
+{
+  if (geteuid() != 0) {
+    dout(10) << __func__ << ": not root, NOT checking disk write "
+      << "cache on raw block device " << fn << dendl;
+    return;
+  }
+
+  char cmd[4096];
+  snprintf(cmd, sizeof(cmd), "/sbin/hdparm -W %s > /tmp/out.%d",
+	   fn.c_str(), getpid());
+  int r = ::system(cmd);
+  if (r != 0) {
+    dout(10) << __func__ << ": failed to run '" << cmd
+      << "', NOT checking disk write cache on " << fn << dendl;
+    return;
+  }
+
+  snprintf(cmd, sizeof(cmd), "/tmp/out.%d", getpid());
+  FILE *f = ::fopen(cmd, "r");
+  if (!f) {
+    dout(10) << "_open failed to read '" << cmd
+      << "', NOT checking disk write cache on " << fn << dendl;
+    ::unlink(cmd);
+    return;
+  }
+
+  while (!feof(f)) {
+    char s[100];
+    fgets(s, sizeof(s), f);
+    int on;
+    if (sscanf(s, " write-caching =  %d", &on) == 1) {
+      if (on) {
+	dout(0) << "WARNING: disk write cache is ON; journaling will not be reliable" << dendl;
+	dout(0) << "         on kernels prior to 2.6.33 (recent kernels are safe)" << dendl;
+	dout(0) << "         disable with 'hdparm -W 0 " << fn << "'" << dendl;
+	cout << TEXT_RED
+	     << " ** WARNING: disk write cache is ON on " << fn << ".\n"
+	     << "    Journaling will not be reliable on kernels prior to 2.6.33\n"
+	     << "    (recent kernels are safe).  You can disable the write cache with\n"
+	     << "    'hdparm -W 0 " << fn << "'"
+	     << TEXT_NORMAL
+	     << std::endl;
+      } else {
+	dout(10) << "_open disk write cache is off (good) on " << fn << dendl;
+      }
+      break;
+    }
+  }
+  fclose(f);
+  ::unlink(cmd);
+}
+
+int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
+			    bool create)
+{
+  int ret;
+  int64_t conf_journal_sz(g_conf.osd_journal_size);
+  conf_journal_sz <<= 20;
+
+  if ((g_conf.osd_journal_size == 0) && (oldsize < ONE_MEG)) {
+    dout(0) << "I'm sorry, I don't know how large of a journal to create."
+	    << "Please specify a block device to use as the journal OR "
+	    << "set osd_journal_size in your ceph.conf" << dendl;
+    return -EINVAL;
+  }
+
+  if (create && (oldsize < conf_journal_sz)) {
+    uint64_t newsize = g_conf.osd_journal_size << 20;
+    dout(10) << "_open extending to " << newsize << " bytes" << dendl;
+    ret = ::ftruncate(fd, newsize);
+    if (ret < 0) {
+      dout(0) << __func__ << ": unable to extend journal to " << newsize
+	      << " bytes" << dendl;
+      return -errno;
+    }
+    max_size = newsize;
+  }
+  else {
+    max_size = oldsize;
+  }
+  block_size = MAX(blksize, PAGE_SIZE);
+
+  dout(10) << "_open journal is not a block device, NOT checking disk "
+           << "write cache on '" << fn << "'" << dendl;
 
   return 0;
 }
@@ -157,12 +231,6 @@ int FileJournal::create()
 {
   char buf[80];
   dout(2) << "create " << fn << dendl;
-
-  if (g_conf.osd_journal_size == 0) {
-    dout(0) << "You must set a non-zero journal size in order to create a journal. "
-	"Set osd_journal_size." << dendl;
-    return -EINVAL;
-  }
 
   int err = _open(true, true);
   if (err < 0)

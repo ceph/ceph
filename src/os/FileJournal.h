@@ -117,6 +117,9 @@ private:
   Cond commit_cond;
 
   int _open(bool wr, bool create=false);
+  int _open_block_device();
+  void _check_disk_write_cache() const;
+  int _open_file(int64_t oldsize, blksize_t blksize, bool create);
   void print_header();
   int read_header();
   bufferptr prepare_header();
