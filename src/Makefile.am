@@ -150,6 +150,11 @@ if WITH_DEBUG
 testceph_SOURCES = client/testceph.cc
 testceph_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto
 bin_PROGRAMS += testceph
+
+testtimers_SOURCES = test/TestTimers.cc
+testtimers_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto
+bin_PROGRAMS += testtimers
+
 endif
 
 # librados
