@@ -186,5 +186,5 @@ struct btrfs_ioctl_space_args {
 #define BTRFS_IOC_START_SYNC _IOR(BTRFS_IOCTL_MAGIC, 21, __u64)
 #define BTRFS_IOC_WAIT_SYNC  _IOW(BTRFS_IOCTL_MAGIC, 22, __u64)
 #define BTRFS_IOC_SNAP_CREATE_ASYNC _IOW(BTRFS_IOCTL_MAGIC, 23, \
-				   struct btrfs_ioctl_vol_args)
+				   struct btrfs_ioctl_async_vol_args)
 #endif
