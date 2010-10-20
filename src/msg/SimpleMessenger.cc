@@ -782,6 +782,7 @@ int SimpleMessenger::Pipe::accept()
     } else {
       // new session
       dout(10) << "accept new session" << dendl;
+      existing = NULL;
       goto open;
     }
     assert(0);    
@@ -842,13 +843,19 @@ int SimpleMessenger::Pipe::accept()
   messenger->lock.Unlock();
 
   rc = tcp_write(sd, (char*)&reply, sizeof(reply));
-  if (rc < 0)
+  if (rc < 0) {
+    if (existing)
+      existing->pipe_lock.Unlock();
     goto fail_unlocked;
+  }
 
   if (reply.authorizer_len) {
     rc = tcp_write(sd, authorizer_reply.c_str(), authorizer_reply.length());
-    if (rc < 0)
+    if (rc < 0) {
+      if (existing)
+        existing->pipe_lock.Unlock();
       goto fail_unlocked;
+    }
   }
 
   if (replace) {
@@ -856,10 +863,12 @@ int SimpleMessenger::Pipe::accept()
     if (reply_tag == CEPH_MSGR_TAG_SEQ) {
       if(tcp_write(sd, (char*)&existing->in_seq, sizeof(existing->in_seq)) < 0) {
         dout(2) << "accept write error on in_seq" << dendl;
+        existing->pipe_lock.Unlock();
         goto fail_unlocked;
       }
       if(tcp_read(sd, (char*)&newly_acked_seq, sizeof(newly_acked_seq)) < 0) {
         dout(2) << "accept read error on newly_acked_seq" << dendl;
+        existing->pipe_lock.Unlock();
         goto fail_unlocked;
       }
     }
@@ -1272,7 +1281,7 @@ void SimpleMessenger::Pipe::discard_queue()
 {
   dout(10) << "discard_queue" << dendl;
   DispatchQueue& q = messenger->dispatch_queue;
-
+  halt_delivery = true;
   pipe_lock.Unlock();
   xlist<Pipe *>* list_on;
   q.lock.Lock();//to remove from round-robin
@@ -1313,6 +1322,7 @@ void SimpleMessenger::Pipe::discard_queue()
     }
   in_q.clear();
   in_qlen = 0;
+  halt_delivery = false;
 }
 
 

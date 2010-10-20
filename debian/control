@@ -3,7 +3,7 @@ Section: admin
 Priority: optional
 Maintainer: Sage Weil <sage@newdream.net>
 Build-Depends: debhelper (>= 6.0.7~), autotools-dev, autoconf, automake, cdbs, libfuse-dev, libboost-dev, libedit-dev, libssl-dev, libtool, libexpat1-dev, libfcgi-dev, libatomic-ops-dev, libgoogle-perftools-dev
-Standards-Version: 3.8.4
+Standards-Version: 3.9.1
 
 Package: ceph
 Architecture: any
@@ -68,14 +68,15 @@ Description: utilities to mount a ceph filesystem with the kernel client
 
 Package: ceph-client-tools-dbg
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Suggests: ceph
-Description: utilities for mount ceph filesystem with kernel client
+Depends: ceph-client-tools (= ${binary:Version}), ${misc:Depends}
+Section: debug
+Priority: extra
+Description: debugging symbols for ceph-client-tools
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is the mount
  utility, that allows to mount the ceph fs with the kernel client.
  .
- This package contains the debugging symbols for ceph-client-tools
+ This package contains the debugging symbols for ceph-client-tools.
 
 Package: libcrush1
 Conflicts: libcrush

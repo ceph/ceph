@@ -58,6 +58,7 @@ void Objecter::shutdown()
 {
   assert(client_lock.is_locked());  // otherwise event cancellation is unsafe
   timer.cancel_all();
+  timer.join();
 }
 
 
