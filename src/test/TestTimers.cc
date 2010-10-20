@@ -15,7 +15,7 @@ class TestContext;
 namespace
 {
   int array[MAX_TEST_CONTEXTS];
-  int array_idx = 0;
+  int array_idx;
   TestContext* test_contexts[MAX_TEST_CONTEXTS];
 
   Mutex array_lock("test_timers_mutex");
@@ -32,6 +32,7 @@ public:
   virtual void finish(int r)
   {
     array_lock.Lock();
+    cout << "TestContext " << num << std::endl;
     array[array_idx++] = num;
     array_lock.Unlock();
   }
@@ -44,22 +45,34 @@ private:
   int num;
 };
 
-int main(void)
+static void print_status(const char *str, int ret)
+{
+  cout << str << ": ";
+  cout << ((ret == 0) ? "SUCCESS" : "FAILURE");
+  cout << std::endl;
+}
+
+template <typename T>
+static int basic_timer_test(T &timer, Mutex *lock)
 {
   int ret = 0;
   memset(&array, 0, sizeof(array));
+  array_idx = 0;
   memset(&test_contexts, 0, sizeof(test_contexts));
 
   for (int i = 0; i < MAX_TEST_CONTEXTS; ++i) {
     test_contexts[i] = new TestContext(i);
   }
 
-  Timer my_timer;
 
   for (int i = 0; i < MAX_TEST_CONTEXTS; ++i) {
-    utime_t inc(2 * i, 0);
+    if (lock)
+      lock->Lock();
+    utime_t inc(2 * i, 0); 
     utime_t t = g_clock.now() + inc;
-    my_timer.add_event_at(t, test_contexts[i]);
+    timer.add_event_at(t, test_contexts[i]);
+    if (lock)
+      lock->Unlock();
   }
 
   bool done = false;
@@ -78,7 +91,87 @@ int main(void)
     }
   }
 
-  cout << ((ret == 0) ? "SUCCESS" : "FAILURE");
-  cout << std::endl;
   return ret;
+}
+
+static int test_timers(void)
+{
+  int ret = 0;
+  Timer timer;
+  ret = basic_timer_test <Timer>(timer, NULL);
+  if (ret)
+    goto done;
+
+done:
+  print_status("test_timers", ret);
+  return ret;
+}
+
+static int safe_timer_join_test(SafeTimer &safe_timer, Mutex& safe_timer_lock)
+{
+  int ret = 0;
+  memset(&array, 0, sizeof(array));
+  array_idx = 0;
+  memset(&test_contexts, 0, sizeof(test_contexts));
+
+  for (int i = 0; i < MAX_TEST_CONTEXTS; ++i) {
+    test_contexts[i] = new TestContext(i);
+  }
+
+  safe_timer_lock.Lock();
+  for (int i = 0; i < MAX_TEST_CONTEXTS; ++i) {
+    utime_t inc(4 * i, 0);
+    utime_t t = g_clock.now() + inc;
+    safe_timer.add_event_at(t, test_contexts[i]);
+  }
+  safe_timer_lock.Unlock();
+
+  sleep(10);
+
+  safe_timer_lock.Lock();
+  safe_timer.cancel_all();
+  safe_timer.shutdown();
+  safe_timer.join();
+  safe_timer_lock.Unlock();
+
+  for (int i = 0; i < array_idx; ++i) {
+    if (array[i] != i) {
+      ret = 1;
+      cout << "error: expected array[" << i << "] = " << i
+	   << "; got " << array[i] << " instead." << std::endl;
+    }
+  }
+
+  return ret;
+}
+
+static int test_safe_timers(void)
+{
+  int ret = 0;
+  Mutex safe_timer_lock("safe_timer_lock");
+  SafeTimer safe_timer(safe_timer_lock);
+
+  ret = basic_timer_test <SafeTimer>(safe_timer, &safe_timer_lock);
+  if (ret)
+    goto done;
+
+  ret = safe_timer_join_test(safe_timer, safe_timer_lock);
+  if (ret)
+    goto done;
+
+done:
+  print_status("test_safe_timers", ret);
+  return ret;
+}
+
+int main(void)
+{
+  int ret;
+  ret = test_timers();
+  if (ret)
+    return ret;
+  ret = test_safe_timers();
+  if (ret)
+    return ret;
+  return 0;
 }
