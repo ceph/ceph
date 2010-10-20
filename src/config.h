@@ -177,6 +177,7 @@ struct md_config_t {
   int mon_globalid_prealloc;
 
   double paxos_propose_interval;
+  double paxos_min_wait;
   double paxos_observer_timeout;
 
   // auth

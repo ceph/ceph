@@ -109,6 +109,7 @@ private:
   version_t first_committed;
   version_t last_pn;
   version_t last_committed;
+  utime_t last_commit_time;
   version_t accepted_pn;
   version_t accepted_pn_from;
 
