@@ -423,6 +423,8 @@ tid_t Objecter::op_submit(Op *op)
            << " osd" << pg.primary()
            << dendl;
 
+  assert(op->flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE));
+
   if ((op->flags & CEPH_OSD_FLAG_WRITE) &&
       osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
     dout(10) << " paused modify " << op << " tid " << last_tid << dendl;
