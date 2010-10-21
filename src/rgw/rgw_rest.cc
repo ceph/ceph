@@ -21,6 +21,7 @@ struct errno_http {
 
 static struct errno_http hterrs[] = {
     { 0, "200", "" },
+    { 204, "204", "NoContent" },
     { 206, "206", "" },
     { EINVAL, "400", "InvalidArgument" },
     { EACCES, "403", "AccessDenied" },
@@ -346,7 +347,11 @@ void RGWCreateBucket_REST::send_response()
 
 void RGWDeleteBucket_REST::send_response()
 {
-  dump_errno(s, ret);
+  int r = ret;
+  if (!r)
+    r = 204;
+
+  dump_errno(s, r);
   end_header(s);
 }
 
@@ -385,7 +390,11 @@ void RGWPutObj_REST::send_response()
 
 void RGWDeleteObj_REST::send_response()
 {
-  dump_errno(s, ret);
+  int r = ret;
+  if (!r)
+    r = 204;
+
+  dump_errno(s, r);
   end_header(s);
 }
 
