@@ -4059,6 +4059,7 @@ int Client::_readdir_cache_cb(DirResult *dirp, add_dirent_cb_t cb, void *p)
     pd = dir->dentry_map.begin();
   }
 
+  string prev_name;
   while (pd != dir->dentry_map.end()) {
     Dentry *dn = pd->second;
     if (dn->inode == NULL) {
@@ -4083,10 +4084,11 @@ int Client::_readdir_cache_cb(DirResult *dirp, add_dirent_cb_t cb, void *p)
 	     << dendl;
     if (r < 0) {
       dirp->next_offset = dn->offset;
-      dirp->at_cache_name = dn->name;
+      dirp->at_cache_name = prev_name;
       return r;
     }
 
+    prev_name = dn->name;
     dirp->offset = next_off;
   }
 
