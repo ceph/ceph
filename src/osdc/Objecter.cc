@@ -122,10 +122,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
 	bool was_pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
 	bool was_pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR);
-
-	if (was_pauserd || was_pausewr)
-	  maybe_request_map();
-    
+	bool was_full = osdmap->test_flag(CEPH_OSDMAP_FULL);
+  
 	if (m->incremental_maps.count(e)) {
 	  dout(3) << "handle_osd_map decoding incremental epoch " << e << dendl;
 	  OSDMap::Incremental inc(m->incremental_maps[e]);
@@ -144,17 +142,20 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	}
 	else {
 	  dout(3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << dendl;
-	  monc->sub_want("osdmap", osdmap->get_epoch() + 1, CEPH_SUBSCRIBE_ONETIME);
-	  monc->renew_subs();
+	  maybe_request_map();
 	  break;
 	}
+
+	if (was_pauserd || was_pausewr || was_full)
+	  maybe_request_map();
 	
 	// scan pgs for changes
 	scan_pgs(changed_pgs);
 
 	// kick paused
 	if ((was_pauserd && !osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) ||
-	    (was_pausewr && !osdmap->test_flag(CEPH_OSDMAP_PAUSEWR))) {
+	    (was_pausewr && !osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) ||
+	    (was_full && !osdmap->test_flag(CEPH_OSDMAP_FULL))) {
 	  for (hash_map<tid_t,Op*>::iterator p = op_osd.begin();
 	       p != op_osd.end();
 	       p++) {
@@ -213,8 +214,14 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
 void Objecter::maybe_request_map()
 {
-  dout(10) << "maybe_request_map subscribing (onetime) to next osd map" << dendl;
-  if (monc->sub_want("osdmap", osdmap->get_epoch() ? osdmap->get_epoch()+1 : 0, CEPH_SUBSCRIBE_ONETIME))
+  int flag = 0;
+  if (osdmap->test_flag(CEPH_OSDMAP_FULL)) {
+    dout(10) << "maybe_request_map subscribing (continuous) to next osd map (FULL flag is set)" << dendl;
+  } else {
+    dout(10) << "maybe_request_map subscribing (onetime) to next osd map" << dendl;
+    flag = CEPH_SUBSCRIBE_ONETIME;
+  }
+  if (monc->sub_want("osdmap", osdmap->get_epoch() ? osdmap->get_epoch()+1 : 0, flag))
     monc->renew_subs();
 }
 
@@ -433,6 +440,11 @@ tid_t Objecter::op_submit(Op *op)
   } else if ((op->flags & CEPH_OSD_FLAG_READ) &&
 	     osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) {
     dout(10) << " paused read " << op << " tid " << last_tid << dendl;
+    op->paused = true;
+    maybe_request_map();
+ } else if ((op->flags & CEPH_OSD_FLAG_WRITE) &&
+	    osdmap->test_flag(CEPH_OSDMAP_FULL)) {
+    dout(10) << " FULL, paused modify " << op << " tid " << last_tid << dendl;
     op->paused = true;
     maybe_request_map();
   } else if (pg.primary() >= 0) {

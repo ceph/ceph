@@ -98,6 +98,8 @@ MDS::MDS(const char *n, Messenger *m, MonClient *mc) :
   osdmap = new OSDMap;
 
   objecter = new Objecter(messenger, monc, osdmap, mds_lock);
+  objecter->unset_honor_osdmap_full();
+
   filer = new Filer(objecter);
 
   mdcache = new MDCache(this);

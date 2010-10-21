@@ -186,6 +186,7 @@ class Objecter {
   int num_unacked;
   int num_uncommitted;
   bool keep_balanced_budget;
+  bool honor_osdmap_full;
 
   void maybe_request_map();
 
@@ -436,7 +437,7 @@ public:
     messenger(m), monc(mc), osdmap(om),
     last_tid(0), client_inc(-1),
     num_unacked(0), num_uncommitted(0),
-    keep_balanced_budget(false),
+    keep_balanced_budget(false), honor_osdmap_full(true),
     last_seen_osdmap_version(0),
     last_seen_pgmap_version(0),
     client_lock(l), timer(l),
@@ -456,6 +457,10 @@ public:
    */
   void set_balanced_budget() { keep_balanced_budget = true; }
   void unset_balanced_budget() { keep_balanced_budget = false; }
+
+  void set_honor_osdmap_full() { honor_osdmap_full = true; }
+  void unset_honor_osdmap_full() { honor_osdmap_full = false; }
+
   // messages
  public:
   void dispatch(Message *m);
