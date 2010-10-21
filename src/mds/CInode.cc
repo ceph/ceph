@@ -1575,6 +1575,9 @@ void CInode::finish_scatter_gather_update_accounted(int type, Mutation *mut, EMe
     CDir *dir = p->second;
     if (!dir->is_auth())
       continue;
+    
+    if (type == CEPH_LOCK_IDFT)
+      continue;  // nothing to do.
 
     dout(10) << " journaling updated frag accounted_ on " << *dir << dendl;
     assert(dir->is_projected());
