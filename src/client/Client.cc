@@ -4177,6 +4177,7 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
       int r = _readdir_get_frag(dirp);
       if (r)
 	return r;
+      fg = dirp->buffer_frag;
     }
 
     dout(10) << "off " << off << " this_offset " << hex << dirp->this_offset << dec << " size " << dirp->buffer->size()
