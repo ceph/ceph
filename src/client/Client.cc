@@ -761,7 +761,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
       in->get();
       request->readdir_result.push_back(pair<string,Inode*>(dname, in));
 
-      dout(15) << "insert_trace  " << dn->offset << ": '" << dname << "' -> " << in->ino << dendl;
+      dout(15) << "insert_trace  " << hex << dn->offset << dec << ": '" << dname << "' -> " << in->ino << dendl;
     }
     request->readdir_last_name = dname;
     
@@ -3922,7 +3922,7 @@ void Client::fill_dirent(struct dirent *de, const char *name, int type, uint64_t
   de->d_reclen = 1;
   de->d_type = MODE_TO_DT(type);
   dout(10) << "fill_dirent '" << de->d_name << "' -> " << inodeno_t(de->d_ino)
-	   << " type " << (int)de->d_type << " w/ next_off " << next_off << dendl;
+	   << " type " << (int)de->d_type << " w/ next_off " << hex << next_off << dec << dendl;
 #endif
 }
 
@@ -4030,7 +4030,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
 int Client::_readdir_cache_cb(DirResult *dirp, add_dirent_cb_t cb, void *p)
 {
   dout(10) << "_readdir_cache_cb " << dirp << " on " << dirp->inode->ino
-	   << " at_cache_name " << dirp->at_cache_name << " offset " << dirp->offset
+	   << " at_cache_name " << dirp->at_cache_name << " offset " << hex << dirp->offset << dec
 	   << dendl;
   Dir *dir = dirp->inode->dir;
 
@@ -4069,7 +4069,7 @@ int Client::_readdir_cache_cb(DirResult *dirp, add_dirent_cb_t cb, void *p)
       next_off = DirResult::END;
 
     int r = cb(p, &de, &st, stmask, next_off);  // _next_ offset
-    dout(15) << " de " << de.d_name << " off " << dn->offset
+    dout(15) << " de " << de.d_name << " off " << hex << dn->offset << dec
 	     << " = " << r
 	     << dendl;
     if (r < 0) {
@@ -4090,8 +4090,8 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
 {
   DirResult *dirp = (DirResult*)d;
 
-  dout(10) << "readdir_r_cb " << *dirp->inode << " offset " << dirp->offset
-	   << " frag " << dirp->frag() << " fragpos " << dirp->fragpos()
+  dout(10) << "readdir_r_cb " << *dirp->inode << " offset " << hex << dirp->offset << dec
+	   << " frag " << dirp->frag() << " fragpos " << hex << dirp->fragpos() << dec
 	   << " at_end=" << dirp->at_end()
 	   << dendl;
 
@@ -4140,7 +4140,7 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
   }
 
   // can we read from our cache?
-  dout(10) << "offset " << dirp->offset << " at_cache_name " << dirp->at_cache_name
+  dout(10) << "offset " << hex << dirp->offset << dec << " at_cache_name " << dirp->at_cache_name
 	   << " snapid " << dirp->inode->snapid << " complete " << (bool)(dirp->inode->flags & I_COMPLETE)
 	   << " issued " << ccap_string(dirp->inode->caps_issued())
 	   << dendl;
@@ -4168,7 +4168,8 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
 	return r;
     }
 
-    dout(10) << "off " << off << " this_offset " << dirp->this_offset << " size " << dirp->buffer->size() << dendl;
+    dout(10) << "off " << off << " this_offset " << hex << dirp->this_offset << dec << " size " << dirp->buffer->size()
+	     << " frag " << fg << dendl;
     while (off - dirp->this_offset >= 0 &&
 	   off - dirp->this_offset < dirp->buffer->size()) {
       uint64_t pos = DirResult::make_fpos(fg, off);
@@ -4178,7 +4179,7 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
       fill_dirent(&de, ent.first.c_str(), st.st_mode, st.st_ino, dirp->offset + 1);
       
       int r = cb(p, &de, &st, stmask, dirp->offset + 1);  // _next_ offset
-      dout(15) << " de " << de.d_name << " off " << dirp->offset
+      dout(15) << " de " << de.d_name << " off " << hex << dirp->offset << dec
 	       << " = " << r
 	       << dendl;
       if (r < 0)
