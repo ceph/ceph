@@ -59,9 +59,8 @@ setup() {
         # Start ceph
         ./stop.sh
 
-        # TODO: somehow constrain the number of PGs created by vstart.sh so that
-        # situations are more reproducible
-        CEPH_NUM_OSD=2 ./vstart.sh -d -n || die "vstart failed"
+        # set recovery start to a really long time to ensure that we don't start recovery
+        CEPH_NUM_OSD=2 ./vstart.sh -d -n -o 'osd recovery delay start = 10000' || die "vstart failed"
 }
 
 do_test() {
@@ -77,10 +76,12 @@ do_test() {
         # Bring up osd1
         restart_osd 1
 
-        # Give recovery some time to start
-        sleep 20
+        # Finish peering.
+        sleep 15
 
-        # Stop osd0 before recovery can complete
+        # Stop osd0.
+        # At this point we have peered, but *NOT* recovered.
+        # Objects should be lost.
         stop_osd 0
 
         # Now we should be in LOST_REVERT
