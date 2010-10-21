@@ -803,8 +803,10 @@ bool PG::prior_set_affected(OSDMap *osdmap)
     const osd_info_t& pinfo(osdmap->get_info(o));
     if (pinfo.lost_at > pinfo.up_from) {
       set<int>::const_iterator pl = prior_set_lost.find(o);
-      if (pl == prior_set_lost.end())
+      if (pl == prior_set_lost.end()) {
+	dout(10) << "prior_set_affected: osd" << o << " now lost" << dendl;
 	return true;
+      }
     }
   }
   
