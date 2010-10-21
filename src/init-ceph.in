@@ -69,10 +69,11 @@ signal_daemon() {
 daemon_is_running() {
     name=$1
     daemon=$2
-    pidfile=$3
+    daemon_id=$3
+    pidfile=$4
     do_cmd "[ -e $pidfile ] || exit 1   # no pid, presumably not running
 	pid=\`cat $pidfile\`
-	[ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline && exit 0 # running
+	[ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline && grep -qwe -i.$daemon_id /proc/\$pid/cmdline && exit 0 # running
         exit 1  # pid is something else" "" "okfail"
 }
 
@@ -195,7 +196,7 @@ for name in $what; do
 
     # start, and already running?  (do this check early to avoid unnecessary work!)
     if [ "$command" = "start" ]; then
-	if daemon_is_running $name c$type $pid_file; then
+	if daemon_is_running $name c$type $id $pid_file; then
 	    echo "Starting Ceph $name on $host...already running"
 	    continue
 	fi
