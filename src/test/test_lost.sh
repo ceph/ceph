@@ -5,7 +5,7 @@
 #
 
 # Constants
-MAX_OBJS=100
+MAX_OBJS=50
 OBJ_SIZE=1000000
 TEMPDIR=`mktemp -d`
 SDIR=`dirname $0`/..
@@ -65,13 +65,13 @@ setup() {
 
 do_test() {
         # Write lots and lots of objects
-        write_objects 1 3
+        write_objects 1 2
 
         # Take down osd1
         stop_osd 1
 
         # Continue writing a lot of objects
-        write_objects 4 6
+        write_objects 3 4
 
         # Bring up osd1
         restart_osd 1

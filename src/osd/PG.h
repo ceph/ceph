@@ -782,7 +782,7 @@ public:
   bool        have_master_log;
  protected:
   set<int>    prior_set;   // current+prior OSDs, as defined by info.history.last_epoch_started.
-  set<int>    prior_set_down;          // down osds exluded from prior_set
+  set<int>    prior_set_down;     // down osds normally exluded from prior_set
   map<int,epoch_t> prior_set_up_thru;  // osds whose up_thru we care about
   set<int>    prior_set_lost;  // osds in the prior set which are lost
   bool        need_up_thru;

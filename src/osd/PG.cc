@@ -784,6 +784,21 @@ bool PG::prior_set_affected(OSDMap *osdmap)
       return true;
     }
 
+    // If someone in the prior set is marked as lost, it would also have to be
+    // marked as down. So don't check for newly lost osds here.
+  }
+
+  // did someone in the prior down set go up?
+  for (set<int>::iterator p = prior_set_down.begin();
+       p != prior_set_down.end();
+       p++)
+  {
+    int o = *p;
+
+    if (osdmap->is_up(o)) {
+      dout(10) << "prior_set_affected: osd" << *p << " now up" << dendl;
+      return true;
+    }
     // did someone in the prior set get lost?
     const osd_info_t& pinfo(osdmap->get_info(o));
     if (pinfo.lost_at > pinfo.up_from) {
@@ -792,15 +807,6 @@ bool PG::prior_set_affected(OSDMap *osdmap)
 	return true;
     }
   }
-
-  // did someone in the prior down set go up?
-  for (set<int>::iterator p = prior_set_down.begin();
-       p != prior_set_down.end();
-       p++)
-    if (osdmap->is_up(*p)) {
-      dout(10) << "prior_set_affected: osd" << *p << " now up" << dendl;
-      return true;
-    }
   
   // did a significant osd's up_thru change?
   for (map<int,epoch_t>::iterator p = prior_set_up_thru.begin();
