@@ -756,6 +756,7 @@ protected:
 public:
   eversion_t  last_update_ondisk;    // last_update that has committed; ONLY DEFINED WHEN is_active()
   eversion_t  last_complete_ondisk;  // last_complete that has committed.
+  eversion_t  last_update_applied;
 
   // primary state
  public:
@@ -900,10 +901,14 @@ public:
 
   // -- scrub --
   map<int,ScrubMap> peer_scrub_map;
+  bool finalizing_scrub; 
 
   void repair_object(ScrubMap::object *po, int bad_peer, int ok_peer);
   void scrub();
+  void _scan_list(ScrubMap &map, vector<sobject_t> &ls);
+  void _request_scrub_map(int replica, eversion_t version);
   void build_scrub_map(ScrubMap &map);
+  void build_inc_scrub_map(ScrubMap &map, eversion_t v);
   virtual int _scrub(ScrubMap &map, int& errors, int& fixed) { return 0; }
 
   void sub_op_scrub(class MOSDSubOp *op);
@@ -925,7 +930,8 @@ public:
     need_up_thru(false),
     pg_stats_lock("PG::pg_stats_lock"),
     pg_stats_valid(false),
-    finish_sync_event(NULL)
+    finish_sync_event(NULL),
+    finalizing_scrub(false)
   {
     pool->get();
   }
