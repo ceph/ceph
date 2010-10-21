@@ -920,14 +920,10 @@ void PG::build_prior()
 	break;  // we don't care
       if (!interval.maybe_went_rw)
 	continue;
-      bool in = false;
-      for (vector<int>::iterator q = interval.acting.begin(); q != interval.acting.end(); q++)
-	if (*q == o)
-	  in = true;
-      if (in)
+      if (std::find(interval.acting.begin(), interval.acting.end(), o)
+	  != interval.acting.end())
 	started_since_joining.insert(o);
-      else
-	break;
+      break;
     }
   }
 
