@@ -2032,8 +2032,6 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   i = plink ? pi:oi;
   e.nlink = i->nlink;
   
-  e.fragtree.nsplits = dirfragtree._splits.size();
-
   // xattr
   i = pxattr ? pi:oi;
   bool had_latest_xattrs = cap && (cap->issued() & CEPH_CAP_XATTR_SHARED) &&
@@ -2049,25 +2047,13 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     ::encode(*pxattrs, xbl);
   }
   
-  bufferlist splits;
-  for (map<frag_t,int32_t>::iterator p = dirfragtree._splits.begin();
-       p != dirfragtree._splits.end();
-       p++) {
-    ::encode(p->first, bl);
-    ::encode(p->second, bl);
-  }
-
   // do we have room?
   if (max_bytes) {
     unsigned bytes = sizeof(e);
     bytes += sizeof(__u32);
-    for (map<frag_t,int32_t>::iterator p = dirfragtree._splits.begin();
-	 p != dirfragtree._splits.end();
-	 p++)
-      bytes += sizeof(p->first) + sizeof(p->second);
+    bytes += (sizeof(__u32) + sizeof(__u32)) * dirfragtree._splits.size();
     bytes += sizeof(__u32) + symlink.length();
     bytes += sizeof(__u32) + xbl.length();
-
     if (bytes > max_bytes)
       return -ENOSPC;
   }
@@ -2149,6 +2135,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   }
 
   // encode
+  e.fragtree.nsplits = dirfragtree._splits.size();
   ::encode(e, bl);
   for (map<frag_t,int32_t>::iterator p = dirfragtree._splits.begin();
        p != dirfragtree._splits.end();
