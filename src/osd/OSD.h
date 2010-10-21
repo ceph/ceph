@@ -796,6 +796,9 @@ protected:
 
 
   // -- scrubbing --
+  Mutex scrub_lock;
+  int scrubs_pending;
+  int scrubs_active;
   xlist<PG*> scrub_queue;
 
   struct ScrubWQ : public ThreadPool::WorkQueue<PG> {

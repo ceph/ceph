@@ -899,6 +899,7 @@ public:
 
 
   // -- scrub --
+  bool scrubbing;
   map<int,ScrubMap> peer_scrub_map;
 
   void repair_object(ScrubMap::object *po, int bad_peer, int ok_peer);
@@ -917,6 +918,7 @@ public:
     ref(0), deleting(false), dirty_info(false), dirty_log(false),
     info(p), coll(p), log_oid(oid),
     recovery_item(this), backlog_item(this), scrub_item(this), snap_trim_item(this), remove_item(this), stat_queue_item(this),
+    scrubbing(false),
     recovery_ops_active(0),
     generate_backlog_epoch(0),
     role(0),

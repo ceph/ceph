@@ -376,6 +376,9 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   remove_list_lock("OSD::remove_list_lock"),
   replay_queue_lock("OSD::replay_queue_lock"),
   snap_trim_wq(this, &disk_tp),
+  scrub_lock("OSD::scrub_lock"),
+  scrubs_pending(0),
+  scrubs_active(0),
   scrub_wq(this, &disk_tp),
   remove_wq(this, &disk_tp)
 {

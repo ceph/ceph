@@ -526,6 +526,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_recovery_max_active, 0, OPT_INT, 5),
 	OPTION(osd_recovery_max_chunk, 0, OPT_LONGLONG, 1<<20),  // max size of push chunk
 	OPTION(osd_recovery_forget_lost_objects, 0, OPT_BOOL, false),   // off for now
+	OPTION(osd_max_scrubs, 0, OPT_INT, 4),
 	OPTION(osd_auto_weight, 0, OPT_BOOL, false),
 	OPTION(osd_class_error_timeout, 0, OPT_DOUBLE, 60.0),  // seconds
 	OPTION(osd_class_timeout, 0, OPT_DOUBLE, 60*60.0), // seconds
