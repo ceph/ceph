@@ -1110,8 +1110,19 @@ void Objecter::ms_handle_connect(Connection *con)
 
 void Objecter::ms_handle_reset(Connection *con)
 {
-  if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD)
-    maybe_request_map();
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
+    //
+    int osd = osdmap->identify_osd(con->get_peer_addr());
+    if (osd >= 0) {
+      dout(1) << "ms_handle_reset on osd" << osd << dendl;
+      set<pg_t> changed_pgs;
+      scan_pgs_for(changed_pgs, osd);
+      kick_requests(changed_pgs);
+      maybe_request_map();
+    } else {
+      dout(10) << "ms_handle_reset on unknown osd addr " << con->get_peer_addr() << dendl;
+    }
+  }
 }
 
 void Objecter::ms_handle_remote_reset(Connection *con)
