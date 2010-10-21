@@ -735,6 +735,9 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
 
     map<string,Dentry*>::iterator pd = dir->dentry_map.upper_bound(request->readdir_start);
 
+    frag_t fg = request->readdir_frag;
+    Inode *diri = in;
+
     string dname;
     LeaseStat dlease;
     for (unsigned i=0; i<numdn; i++) {
@@ -748,7 +751,9 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
 
       // remove any extra names
       while (pd != dir->dentry_map.end() && pd->first <= dname) {
-	if (pd->first < dname) {
+	if (pd->first < dname &&
+	    diri->dirfragtree[ceph_str_hash_linux(pd->first.c_str(),
+						  pd->first.length())] == fg) {  // do not remove items in earlier frags
 	  dout(15) << "insert_trace  unlink '" << pd->first << "'" << dendl;
 	  Dentry *dn = pd->second;
 	  pd++;
@@ -768,10 +773,14 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
     // remove trailing names
     if (end) {
       while (pd != dir->dentry_map.end()) {
-	dout(15) << "insert_trace  unlink '" << pd->first << "'" << dendl;
-	Dentry *dn = pd->second;
-	pd++;
-	unlink(dn, true);
+	if (diri->dirfragtree[ceph_str_hash_linux(pd->first.c_str(),
+						  pd->first.length())] == fg) {
+	  dout(15) << "insert_trace  unlink '" << pd->first << "'" << dendl;
+	  Dentry *dn = pd->second;
+	  pd++;
+	  unlink(dn, true);
+	} else 
+	  pd++;
       }
     }
 
