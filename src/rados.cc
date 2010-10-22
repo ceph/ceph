@@ -47,8 +47,9 @@ void usage()
   cerr << "   get objname [outfile] -- fetch object\n";
   cerr << "   put objname [infile] -- write object\n";
   cerr << "   rm objname  -- remove object\n";
-  cerr << "   getxattr objame attr\n";
-  cerr << "   setxattr objame attr val\n";
+  cerr << "   listxattr objname\n";
+  cerr << "   getxattr objname attr\n";
+  cerr << "   setxattr objname attr val\n";
   cerr << "   ls          -- list objects in pool\n\n";
   cerr << "   chown 123   -- change the pool owner to auid 123\n";
 
@@ -317,11 +318,28 @@ int main(int argc, const char **argv)
     bufferlist bl;
     ret = rados.getxattr(p, oid, attr_name.c_str(), bl);
     if (ret < 0) {
-      cerr << "error setting xattr " << pool << "/" << oid << "/" << attr_name << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      cerr << "error getting xattr " << pool << "/" << oid << "/" << attr_name << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       goto out;
     }
     string s(bl.c_str(), bl.length());
     cout << s << std::endl;
+  } else if (strcmp(nargs[0], "listxattr") == 0) {
+    if (!pool || nargs.size() < 2)
+      usage();
+
+    string oid(nargs[1]);
+    map<std::string, bufferlist> attrset;
+    bufferlist bl;
+    ret = rados.getxattrs(p, oid, attrset);
+    if (ret < 0) {
+      cerr << "error getting xattr set " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      goto out;
+    }
+
+    for (map<std::string, bufferlist>::iterator iter = attrset.begin();
+         iter != attrset.end(); ++iter) {
+      cout << iter->first << std::endl;
+    }
   }
   else if (strcmp(nargs[0], "rm") == 0) {
     if (!pool || nargs.size() < 2)
