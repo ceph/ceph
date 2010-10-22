@@ -48,7 +48,7 @@
 
 
 #define ATTR_MAX_NAME_LEN  128
-#define ATTR_MAX_BLOCK_LEN 512 // (3*1024)
+#define ATTR_MAX_BLOCK_LEN 2048
 
 #define COMMIT_SNAP_ITEM "snap_%lld"
 
