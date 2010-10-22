@@ -817,9 +817,11 @@ protected:
       return osd->scrub_queue.empty();
     }
     bool _enqueue(PG *pg) {
-      if (pg->scrub_item.is_on_list())
+      if (pg->scrub_item.is_on_list() || !osd->inc_scrubs_pending()) {
 	return false;
+      }
       pg->get();
+      osd->sched_scrub_lock.Unlock();
       osd->scrub_queue.push_back(&pg->scrub_item);
       return true;
     }
@@ -835,13 +837,23 @@ protected:
       return pg;
     }
     void _process(PG *pg) {
+      osd->sched_scrub_lock.Lock();
+      --(osd->scrubs_pending);
+      ++(osd->scrubs_active);
+      osd->sched_scrub_lock.Unlock();
       pg->scrub();
       pg->get();
+    }
+    void _process_finish(PG *pg) {
+      osd->sched_scrub_lock.Lock();
+      --(osd->scrubs_active);
+      osd->sched_scrub_lock.Unlock();
     }
     void _clear() {
       while (!osd->scrub_queue.empty()) {
 	PG *pg = osd->scrub_queue.front();
 	osd->scrub_queue.pop_front();
+	osd->dec_scrubs_pending();
 	pg->put();
       }
     }

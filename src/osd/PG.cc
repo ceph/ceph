@@ -2552,9 +2552,9 @@ void PG::clear_scrub_reserved()
 {
   if (scrub_reserved) {
     scrub_reserved = false;
-    osd->dec_scrubs_pending();
   }
   reserved_peers.clear();
+  osd->scrub_wq.dequeue(this);
 }
 
 void PG::reserve_replicas()

@@ -2222,8 +2222,6 @@ void OSD::handle_scrub(MOSDScrub *m)
 
 void OSD::sched_scrub()
 {
-  sched_scrub_lock.Lock();
-
   hash_map<pg_t, PG*>::iterator p = pg_map.find(sched_pg);
   if (p == pg_map.end()) {
     p = pg_map.begin();
@@ -2231,14 +2229,14 @@ void OSD::sched_scrub()
 
   while (p != pg_map.end()) {
     PG *pg = p->second;
+
     pg->lock();
     if (pg->is_primary() && pg->is_active() && pg->is_clean()) {
       if (pg->all_replicas_reserved()) {
-	if (scrubs_active + scrubs_pending < g_conf.osd_max_scrubs &&
-	    !pg->is_scrubbing() && scrub_wq.queue(pg)) {
-	  --scrubs_pending;
-	  assert(scrubs_pending > 0);
-	  ++scrubs_active;
+	// FIXME: decrement pending so we add to the queue
+	dec_scrubs_pending();
+	if (!pg->is_scrubbing() && scrub_wq.queue(pg)) {
+	  dout(10) << "added scrub to queue for PG " << p->first << dendl;
 	}
       } else if (!pg->scrub_reserved) {
 	pg->scrub_reserved = true;
@@ -2254,11 +2252,10 @@ void OSD::sched_scrub()
       }
     }
     pg->unlock();
+
     ++p;
   }
   sched_pg = p->first;
-
-  sched_scrub_lock.Unlock();
 }
 
 bool OSD::inc_scrubs_pending()
