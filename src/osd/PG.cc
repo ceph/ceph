@@ -832,6 +832,7 @@ void PG::clear_prior()
   prior_set_down.clear();
   prior_set_up_thru.clear();
   prior_set_lost.clear();
+  prior_set_built = false;
 }
 
 
@@ -1043,6 +1044,7 @@ void PG::build_prior()
 	   << (is_down() ? " down":"")
 	   << (some_down ? " some_down":"")
 	   << dendl;
+  prior_set_built = true;
 }
 
 void PG::clear_primary_state()
@@ -1273,7 +1275,7 @@ void PG::peer(ObjectStore::Transaction& t, list<Context*>& tfin,
   if (!is_active())
     state_set(PG_STATE_PEERING);
   
-  if (prior_set.empty())
+  if (!prior_set_built)
     build_prior();
 
   dout(10) << "peer prior_set is " << prior_set << dendl;
