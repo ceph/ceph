@@ -476,7 +476,6 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
       (IS_TRUE_AND_LT_AUTH(lock->get_sm()->states[next].can_wrlock, auth) || !lock->is_wrlocked()) &&
       (IS_TRUE_AND_LT_AUTH(lock->get_sm()->states[next].can_xlock, auth) || !lock->is_xlocked()) &&
       (IS_TRUE_AND_LT_AUTH(lock->get_sm()->states[next].can_lease, auth) || !lock->is_leased()) &&
-      (!in || !in->is_scatter_pinned() || !lock->is_scatterlock()) &&
       (!caps || ((~lock->gcaps_allowed(CAP_ANY, next) & other_issued) == 0 &&
 		 (~lock->gcaps_allowed(CAP_LONER, next) & loner_issued) == 0 &&
 		 (~lock->gcaps_allowed(CAP_XLOCKER, next) & xlocker_issued) == 0)) &&
@@ -3234,8 +3233,6 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   CInode *in = (CInode*)lock->get_parent();
   dout(10) << "scatter_writebehind " << in->inode.mtime << " on " << *lock << " on " << *in << dendl;
 
-  assert(!in->is_scatter_pinned());
-
   // journal
   Mutation *mut = new Mutation;
   mut->ls = mds->mdlog->get_current_segment();
@@ -3345,15 +3342,6 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
 {
   CInode *p = (CInode *)lock->get_parent();
 
-  if (p->is_scatter_pinned()) {
-    dout(10) << "scatter_nudge waiting for scatter pin release on " << *p << dendl;
-    if (c) 
-      p->filelock.add_waiter(SimpleLock::WAIT_RD, c);
-    else
-      // just requeue.  not ideal.. starvation prone..
-      updated_scatterlocks.push_back(lock->get_updated_item());
-    return;
-  }
   if (p->is_frozen() || p->is_freezing()) {
     dout(10) << "scatter_nudge waiting for unfreeze on " << *p << dendl;
     if (c) 
