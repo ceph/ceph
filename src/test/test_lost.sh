@@ -4,44 +4,15 @@
 # Simple test of recovery logic
 #
 
+# Includes
+dir=`dirname $0`
+source $dir/test_common.sh
+setup_tempdir
+cd $dir/..
+
 # Constants
 MAX_OBJS=50
 OBJ_SIZE=1000000
-TEMPDIR=`mktemp -d`
-SDIR=`dirname $0`/..
-
-# Initialization
-cd $SDIR
-[ -e "/dev/urandom" ] || die "need /dev/urandom"
-trap cleanup INT TERM EXIT
-rm -rf $TEMPDIR
-mkdir -p $TEMPDIR || die "failed to make tempdir"
-
-# Functions
-cleanup() {
-        rm -rf "${TEMPDIR}"
-}
-
-die() {
-        echo $@
-        exit 1
-}
-
-stop_osd() {
-        osd_index=$1
-        pidfile="out/osd.$osd_index.pid"
-        if [ -e $pidfile ]; then
-                kill `cat $pidfile` && return 0
-        else
-                echo "cosd process $osd_index is not running" 
-        fi
-        return 1
-}
-
-restart_osd() {
-        osd_index=$1
-        ./cosd -i $osd_index -c ceph.conf &
-}
 
 write_objects() {
         start_ver=$1
