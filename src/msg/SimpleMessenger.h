@@ -216,6 +216,8 @@ private:
       reader_thread(this), writer_thread(this) {
       connection_state->pipe = get();
       messenger->timeout = g_conf.ms_tcp_read_timeout * 1000; //convert to ms
+      if (messenger->timeout == 0)
+        messenger->timeout = -1;
     }
     ~Pipe() {
       for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
