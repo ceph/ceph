@@ -643,9 +643,8 @@ int OSD::shutdown()
 
   state = STATE_STOPPING;
 
-  // cancel timers
-  timer.cancel_all();
-  timer.join();
+  // Cancel all timers. The timer thread will be destroyed by ~SafeTimer
+  timer.cancel_all_events();
 
   heartbeat_lock.Lock();
   heartbeat_stop = true;

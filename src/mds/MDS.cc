@@ -136,6 +136,7 @@ MDS::MDS(const char *n, Messenger *m, MonClient *mc) :
 }
 
 MDS::~MDS() {
+  timer.shutdown();
   Mutex::Locker lock(mds_lock);
 
   if (mdcache) { delete mdcache; mdcache = NULL; }
@@ -1366,7 +1367,7 @@ void MDS::suicide()
     timer.cancel_event(tick_event);
     tick_event = 0;
   }
-  timer.cancel_all();
+  timer.cancel_all_events();
   //timer.join();  // this will deadlock from beacon_kill -> suicide
   
   // shut down cache

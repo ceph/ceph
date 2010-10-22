@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,169 +7,143 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 
 #ifndef CEPH_TIMER_H
 #define CEPH_TIMER_H
 
-#include "include/types.h"
-#include "include/Context.h"
 #include "Clock.h"
-
-#include "Mutex.h"
 #include "Cond.h"
-#include "Thread.h"
+#include "Mutex.h"
+#include "include/types.h"
 
+#include <list>
 #include <map>
-#include <set>
-using std::map;
-using std::set;
 
-#include <ext/hash_map>
-using namespace __gnu_cxx;
+class Context;
+class TimerThread;
 
-
-/*** Timer
- * schedule callbacks
+/* Timer
+ *
+ * An instance of the timer class holds a thread which executes callbacks at
+ * predetermined times.
  */
+class Timer
+{
+public:
+  Timer();
 
-//class Messenger;
+  /* Calls shutdown() */
+  ~Timer();
 
+  /* Cancel all events and stop the timer thread.
+   *
+   * This function might block for a while because it does a thread.join().
+   * */
+  void shutdown();
 
-namespace __gnu_cxx {
-  template<> struct hash<Context*> {
-    size_t operator()(const Context *p) const { 
-      static hash<unsigned long> H;
-      return H((unsigned long)p); 
-    }
-  };
-}
+  /* Schedule an event in the future */
+  void add_event_after(double seconds, Context *callback);
+  void add_event_at(utime_t when, Context *callback);
 
+  /* Cancel an event.
+   *
+   * If this function returns true, you know that the callback has been
+   * destroyed and is not currently running.
+   * If it returns false, either the callback is in progress, or you never addded
+   * the callback in the first place.
+   */
+  bool cancel_event(Context *callback);
 
-class Timer {
- private:
-  map< utime_t, set<Context*> >  scheduled;    // time -> (context ...)
-  hash_map< Context*, utime_t >  event_times;  // event -> time
+  /* Cancel all events.
+   *
+   * Even after this function returns, there may be events in progress.
+   * Use SafeTimer if you have to be sure that nothing is running after
+   * cancelling an event or events.
+   */
+  void cancel_all_events();
 
-  bool get_next_due(utime_t &when);
+private:
+  Timer(Mutex *event_lock_);
 
-  void register_timer();  // make sure i get a callback
-  void cancel_timer();    // make sure i get a callback
+  /* Starts the timer thread.
+   * Returns 0 on success; error code otherwise. */
+  int init();
 
-  bool      thread_stop;
-  Mutex     lock;
-  bool      timed_sleep;
-  bool      sleeping;
-  Cond      sleep_cond;
-  Cond      timeout_cond;
+  bool cancel_event_impl(Context *callback, bool cancel_running);
 
- public:
-  void timer_entry();    // waiter thread (that wakes us up)
+  void cancel_all_events_impl(bool clear_running);
 
-  class TimerThread : public Thread {
-    Timer *t;
-  public:
-    void *entry() {
-      t->timer_entry();
-      return 0;
-    }
-    TimerThread(Timer *_t) : t(_t) {}
-  } timer_thread;
+  void pop_running(std::list <Context*> &running_, const utime_t &now);
 
+  // This class isn't supposed to be copied
+  Timer(const Timer &rhs);
+  Timer& operator=(const Timer &rhs);
 
-  int num_event;
+  Mutex lock;
+  Mutex *event_lock;
+  Cond cond;
+  TimerThread *thread;
+  bool exiting;
+  std::multimap < utime_t, Context* > scheduled;
+  std::map < Context*, std::multimap < utime_t, Context* >::iterator > events;
+  std::list<Context*> running;
 
-
- public:
-  Timer() :
-    thread_stop(false),
-    lock("Timer::lock"),
-    timed_sleep(false),
-    sleeping(false),
-    timer_thread(this),
-    num_event(0)
-  { 
-  }
-  virtual ~Timer() {
-    // stop.
-    cancel_timer();
-
-    // scheduled
-    for (map< utime_t, set<Context*> >::iterator it = scheduled.begin();
-         it != scheduled.end();
-         it++) {
-      for (set<Context*>::iterator sit = it->second.begin();
-           sit != it->second.end();
-           sit++)
-        delete *sit;
-    }
-    scheduled.clear();
-  }
-  
-  void init() {
-    register_timer();
-  }
-  void shutdown() {
-    cancel_timer();
-    cancel_all_events();
-  }
-
-  // schedule events
-  virtual void add_event_after(double seconds,
-                       Context *callback);
-  virtual void add_event_at(utime_t when,
-                    Context *callback);
-  virtual bool cancel_event(Context *callback);
-  virtual void cancel_all_events();
-
-  // execute pending events
-  void execute_pending();
-
+  friend class TimerThread;
+  friend class SafeTimer;
 };
-
 
 /*
  * SafeTimer is a wrapper around the a Timer that protects event
  * execution with an existing mutex.  It provides for, among other
- * things, reliable event cancellation on class destruction.  The
- * caller just needs to cancel each event (or cancel_all()), and then
- * call join() to ensure any concurrently exectuting events (in other
- * threads) get flushed.
+ * things, reliable event cancellation in cancel_event. Unlike in
+ * Timer::cancel_event, the caller can be sure that once SafeTimer::cancel_event
+ * returns, the callback will not be in progress.
  */
-class SafeTimer : public Timer {
-  Mutex&        lock;
-  Cond          cond;
-  map<Context*,Context*> scheduled;  // actual -> wrapper
-  map<Context*,Context*> canceled;
-  
-  class EventWrapper : public Context {
-    SafeTimer *timer;
-    Context *actual;
-  public:
-    EventWrapper(SafeTimer *st, Context *c) : timer(st), 
-					      actual(c) {}
-    void finish(int r);
-  };
-
+class SafeTimer
+{
 public:
-  SafeTimer(Mutex& l) : lock(l) { }
+  SafeTimer(Mutex &event_lock_);
   ~SafeTimer();
 
-  void add_event_after(double seconds, Context *c);
-  void add_event_at(utime_t when, Context *c);
-  bool cancel_event(Context *c);
-  void cancel_all();
-  void join();
+  /* Call with the event_lock UNLOCKED.
+   *
+   * Cancel all events and stop the timer thread.
+   *
+   * If there are any events that still have to run, they will need to take
+   * the event_lock first. */
+  void shutdown();
 
-  int get_num_scheduled() { return scheduled.size(); }
-  int get_num_canceled() { return canceled.size(); }
+  /* Schedule an event in the future
+   * Call with the event_lock LOCKED */
+  void add_event_after(double seconds, Context *callback);
+  void add_event_at(utime_t when, Context *callback);
+
+  /* Cancel an event.
+   * Call with the event_lock LOCKED
+   *
+   * Returns true if the callback was cancelled.
+   * Returns false if you never addded the callback in the first place.
+   */
+  bool cancel_event(Context *callback);
+
+  /* Cancel all events.
+   * Call with the event_lock LOCKED
+   *
+   * When this function returns, all events have been cancelled, and there are no
+   * more in progress.
+   */
+  void cancel_all_events();
+
+private:
+  // This class isn't supposed to be copied
+  SafeTimer(const Timer &rhs);
+  SafeTimer& operator=(const Timer &rhs);
+
+  Timer t;
 };
-
-
-
-
 #endif

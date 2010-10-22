@@ -192,10 +192,8 @@ void Monitor::shutdown()
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->shutdown();
 
-  // cancel all events
-  cancel_tick();
-  timer.cancel_all();
-  timer.join();  
+  // Cancel all events. The timer thread will be joined later in ~SafeTimer
+  timer.cancel_all_events();
 
   // die.
   messenger->shutdown();

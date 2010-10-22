@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,16 +7,15 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
-
-
-
-#include "Timer.h"
 #include "Cond.h"
+#include "Mutex.h"
+#include "Thread.h"
+#include "Timer.h"
 
 #include "config.h"
 #include "include/Context.h"
@@ -31,336 +30,304 @@
 #include <sys/time.h>
 #include <math.h>
 
+typedef std::multimap < utime_t, Context *> scheduled_map_t;
+typedef std::map < Context*, scheduled_map_t::iterator > event_lookup_map_t;
 
-/**** thread solution *****/
-
-bool Timer::get_next_due(utime_t& when)
-{
-  if (scheduled.empty()) {
-    return false;
-  } else {
-    map< utime_t, set<Context*> >::iterator it = scheduled.begin();
-    when = it->first;
-    return true;
-  }
-}
-
-
-void Timer::timer_entry()
-{
-  lock.Lock();
-  
-  utime_t now = g_clock.now();
-
-  while (!thread_stop) {
-    dout(10) << "at top" << dendl;
-    // any events due?
-    utime_t next;
-    bool next_due = get_next_due(next);
-    if (next_due) {
-      dout(10) << "get_next_due - " << next << dendl;
-    } else {
-      dout(10) << "get_next_due - nothing scheduled" << dendl;
-    }
-    
-    if (next_due && now >= next) {
-      // move to pending list
-      list<Context*> pending;
-
-      map< utime_t, set<Context*> >::iterator it = scheduled.begin();
-      while (it != scheduled.end()) {
-        if (it->first > now) break;
-
-        utime_t t = it->first;
-        dout(DBL) << "queueing event(s) scheduled at " << t << dendl;
-
-        for (set<Context*>::iterator cit = it->second.begin();
-             cit != it->second.end();
-             cit++) {
-          pending.push_back(*cit);
-          event_times.erase(*cit);
-          num_event--;
-        }
-
-        map< utime_t, set<Context*> >::iterator previt = it;
-        it++;
-        scheduled.erase(previt);
-      }
-
-      if (!pending.empty()) {
-        sleeping = false;
-        lock.Unlock();
-        { 
-	  // make sure we're not holding any locks while we do callbacks
-          // make the callbacks myself.
-          for (list<Context*>::iterator cit = pending.begin();
-               cit != pending.end();
-               cit++) {
-            dout(DBL) << "start callback " << *cit << dendl;
-            (*cit)->finish(0);
-            dout(DBL) << "finish callback " << *cit << dendl;
-	    delete *cit;
-          }
-          pending.clear();
-          assert(pending.empty());
-        }
-        lock.Lock();
-      }
-
-      now = g_clock.now();
-      dout(DBL) << "looping at " << now << dendl;
-    }
-    else {
-      // sleep
-      if (next_due) {
-        dout(DBL) << "sleeping until " << next << dendl;
-        timed_sleep = true;
-        sleeping = true;
-        timeout_cond.WaitUntil(lock, next);  // wait for waker or time
-        now = g_clock.now();
-        dout(DBL) << "kicked or timed out at " << now << dendl;
-      } else {
-        dout(DBL) << "sleeping" << dendl;
-        timed_sleep = false;
-        sleeping = true;
-        sleep_cond.Wait(lock);         // wait for waker
-        now = g_clock.now();
-        dout(DBL) << "kicked at " << now << dendl;
-      }
-      dout(10) << "in brace" << dendl;
-    }
-    dout(10) << "at bottom" << dendl;
+class TimerThread : public Thread {
+public:
+  TimerThread(Timer &parent_)
+    : p(parent_)
+  {
   }
 
-  lock.Unlock();
-}
-
-
-
-/**
- * Timer bits
- */
-
-void Timer::register_timer()
-{
-  if (timer_thread.is_started()) {
-    if (sleeping) {
-      dout(DBL) << "register_timer kicking thread" << dendl;
-      if (timed_sleep)
-        timeout_cond.SignalAll();
+  void *entry()
+  {
+    p.lock.Lock();
+    while (true) {
+      /* Wait for a cond_signal */
+      scheduled_map_t::iterator s = p.scheduled.begin();
+      if (s == p.scheduled.end())
+	p.cond.Wait(p.lock);
       else
-        sleep_cond.SignalAll();
-    } else {
-      dout(DBL) << "register_timer doing nothing; thread is awake" << dendl;
-      // it's probably doing callbacks.
+	p.cond.WaitUntil(p.lock, s->first);
+
+      if (p.exiting) {
+	dout(DBL) << "exiting TimerThread" << dendl;
+	p.lock.Unlock();
+	return NULL;
+      }
+
+      // Find out what callbacks we have to do
+      list <Context*> running;
+      utime_t now = g_clock.now();
+      p.pop_running(running, now);
+
+      if (running.empty()) {
+	continue;
+      }
+
+      dout(DBL) << "pt2" << dendl;
+      p.lock.Unlock();
+      if (p.event_lock)
+	p.event_lock->Lock();
+      p.running.swap(running);
+      while (true) {
+	list <Context*>::const_iterator cit = p.running.begin();
+	if (cit == p.running.end())
+	  break;
+	p.running.pop_front();
+	dout(DBL) << "start callback " << *cit << dendl;
+	(*cit)->finish(0);
+	if (p.event_lock) {
+	  dout(DBL) << "pt3" << dendl;
+	  p.event_lock->Unlock();
+	}
+	dout(DBL) << "finish callback " << *cit << dendl;
+	delete *cit;
+	if (p.event_lock)
+	  p.event_lock->Lock();
+      }
+      if (p.event_lock) {
+	dout(DBL) << "pt4" << dendl;
+	p.event_lock->Unlock();
+      }
+      p.lock.Lock();
     }
-  } else {
-    dout(DBL) << "register_timer starting thread" << dendl;
-    timer_thread.create();
   }
-}
 
-void Timer::cancel_timer()
+private:
+  Timer &p;
+};
+
+Timer::Timer()
+  : lock("Timer::lock"),
+    event_lock(NULL),
+    cond(),
+    thread(NULL),
+    exiting(false)
 {
-  // clear my callback pointers
-  if (timer_thread.is_started()) {
-    dout(10) << "setting thread_stop flag" << dendl;
-    lock.Lock();
-    thread_stop = true;
-    if (timed_sleep)
-      timeout_cond.SignalAll();
-    else
-      sleep_cond.SignalAll();
-    lock.Unlock();
-    
-    dout(10) << "waiting for thread to finish" << dendl;
-    void *ptr;
-    timer_thread.join(&ptr);
-    thread_stop = false;
-
-    dout(10) << "thread finished, exit code " << ptr << dendl;
+  if (init()) {
+    assert(0);
   }
 }
 
-void Timer::cancel_all_events()
+Timer::Timer(Mutex *event_lock_)
+  : lock("Timer::lock"),
+    event_lock(event_lock_),
+    cond(),
+    thread(NULL),
+    exiting(false)
+{
+  if (init()) {
+    assert(0);
+  }
+}
+
+Timer::~Timer()
+{
+  shutdown();
+}
+
+void Timer::shutdown()
 {
   lock.Lock();
-
-  // clean up unfired events.
-  for (map<utime_t, set<Context*> >::iterator p = scheduled.begin();
-       p != scheduled.end();
-       p++) {
-    for (set<Context*>::iterator q = p->second.begin();
-	 q != p->second.end();
-	 q++) {
-      dout(DBL) << "cancel_all_events deleting " << *q << dendl;
-      delete *q;
-    }
+  if (!thread) {
+    lock.Unlock();
+    return;
   }
-  scheduled.clear();
-  event_times.clear();
-
+  exiting = true;
+  cancel_all_events_impl(false);
+  cond.Signal();
   lock.Unlock();
+
+  /* Block until the thread has exited.
+   * Only then do we know that no events are in progress. */
+  thread->join();
+
+  delete thread;
+  thread = NULL;
 }
-
-
-/*
- * schedule
- */
-
 
 void Timer::add_event_after(double seconds,
-                            Context *callback) 
+                            Context *callback)
 {
   utime_t when = g_clock.now();
   when += seconds;
   Timer::add_event_at(when, callback);
 }
 
-void Timer::add_event_at(utime_t when,
-                         Context *callback) 
+void Timer::add_event_at(utime_t when, Context *callback)
 {
   lock.Lock();
+
+  /* Don't start using the timer until it's initialized */
+  assert(thread);
 
   dout(DBL) << "add_event " << callback << " at " << when << dendl;
 
-  // insert
-  scheduled[when].insert(callback);
-  assert(event_times.count(callback) == 0);
-  event_times[callback] = when;
-  
-  num_event++;
-  
-  // make sure i wake up on time
-  register_timer();
-  
+  scheduled_map_t::value_type s_val(when, callback);
+  scheduled_map_t::iterator i = scheduled.insert(s_val);
+
+  event_lookup_map_t::value_type e_val(callback, i);
+  pair < event_lookup_map_t::iterator, bool > rval(events.insert(e_val));
+  dout(DBL) << "inserted events entry for " << callback << dendl;
+
+  /* If you hit this, you tried to insert the same Context* twice. */
+  assert(rval.second);
+
+  /* If the event we have just inserted comes before everything else, we need to
+   * adjust our timeout. */
+  if (i == scheduled.begin())
+    cond.Signal();
+
   lock.Unlock();
 }
 
-bool Timer::cancel_event(Context *callback) 
+bool Timer::cancel_event(Context *callback)
 {
+  dout(DBL) << __func__ << ": " << callback << dendl;
+
   lock.Lock();
-  
-  dout(DBL) << "cancel_event " << callback << dendl;
-
-  if (!event_times.count(callback)) {
-    dout(DBL) << "cancel_event " << callback << " isn't scheduled (probably executing)" << dendl;
-    lock.Unlock();
-    return false;     // wasn't scheduled.
-  }
-
-  utime_t tp = event_times[callback];
-  event_times.erase(callback);
-
-  assert(scheduled.count(tp));
-  assert(scheduled[tp].count(callback));
-  scheduled[tp].erase(callback);
-  if (scheduled[tp].empty())
-    scheduled.erase(tp);
-  
+  bool ret = cancel_event_impl(callback, false);
   lock.Unlock();
-
-  // delete the canceled event.
-  delete callback;
-
-  return true;
-}
-
-
-// -------------------------------
-
-void SafeTimer::add_event_after(double seconds, Context *c)
-{
-  assert(lock.is_locked());
-  Context *w = new EventWrapper(this, c);
-  dout(DBL) << "SafeTimer.add_event_after wrapping " << c << " with " << w << dendl;
-  scheduled[c] = w;
-  Timer::add_event_after(seconds, w);
-}
-
-void SafeTimer::add_event_at(utime_t when, Context *c)
-{
-  assert(lock.is_locked());
-  Context *w = new EventWrapper(this, c);
-  dout(DBL) << "SafeTimer.add_event_at wrapping " << c << " with " << w << dendl;
-  scheduled[c] = w;
-  Timer::add_event_at(when, w);
-}
-
-void SafeTimer::EventWrapper::finish(int r)
-{
-  timer->lock.Lock();
-  if (timer->scheduled.count(actual)) {
-    // still scheduled.  execute.
-    actual->finish(r);
-    timer->scheduled.erase(actual);
-  } else {
-    // i was canceled.
-    assert(timer->canceled.count(actual));
-  }
-
-  // did i get canceled?
-  // (this can happen even if i just executed above. e.g., i may have canceled myself.)
-  if (timer->canceled.count(actual)) {
-    timer->canceled.erase(actual); 
-    timer->cond.Signal();
-  }
-
-  // delete the original event
-  delete actual;
-
-  timer->lock.Unlock();
-}
-
-bool SafeTimer::cancel_event(Context *c) 
-{
-  bool ret;
-
-  assert(lock.is_locked());
-  assert(scheduled.count(c));
-
-  ret = Timer::cancel_event(scheduled[c]);
-
-  if (ret) {
-    // hosed wrapper.  hose original event too.
-    delete c;
-  } else {
-    // clean up later.
-    canceled[c] = scheduled[c];
-  }
-  scheduled.erase(c);
   return ret;
 }
 
-void SafeTimer::cancel_all()
+void Timer::cancel_all_events(void)
 {
-  assert(lock.is_locked());
-  
-  while (!scheduled.empty()) 
-    cancel_event(scheduled.begin()->first);
+  dout(DBL) << __func__ << dendl;
+
+  lock.Lock();
+  cancel_all_events_impl(false);
+  lock.Unlock();
 }
 
-void SafeTimer::join()
+int Timer::init()
 {
-  assert(lock.is_locked());
-  assert(scheduled.empty());
+  int ret = 0;
+  lock.Lock();
+  assert(exiting == false);
+  assert(!thread);
 
-  if (!canceled.empty()) {
-    while (!canceled.empty()) {
-      // wait
-      dout(2) << "SafeTimer.join waiting for " << canceled.size() << " to join: " << canceled << dendl;
-      cond.Wait(lock);
-    }
-    dout(2) << "SafeTimer.join done" << dendl;
+  dout(DBL) << "Timer::init: starting thread" << dendl;
+  thread = new TimerThread(*this);
+  ret = thread->create();
+  lock.Unlock();
+  return ret;
+}
+
+bool Timer::cancel_event_impl(Context *callback, bool cancel_running)
+{
+  event_lookup_map_t::iterator e = events.find(callback);
+  if (e != events.end()) {
+    // Erase the item out of the scheduled map.
+    scheduled.erase(e->second);
+    events.erase(e);
+
+    delete callback;
+    return true;
   }
+
+  // If we can't peek at the running list, we have to give up.
+  if (!cancel_running)
+    return false;
+
+  // Ok, we will check the running list. It's safe, because we're holding the
+  // event_lock.
+  list <Context*>::iterator cit =
+    std::find(running.begin(), running.end(), callback);
+  if (cit == running.end())
+    return false;
+  running.erase(cit);
+  delete callback;
+  return true;
+}
+
+void Timer::cancel_all_events_impl(bool clear_running)
+{
+  while (1) {
+    scheduled_map_t::iterator s = scheduled.begin();
+    if (s == scheduled.end())
+      break;
+    delete s->second;
+    scheduled.erase(s);
+  }
+  events.clear();
+
+  if (clear_running) {
+    running.clear();
+  }
+}
+
+void Timer::pop_running(list <Context*> &running_, const utime_t &now)
+{
+  while (true) {
+    std::multimap < utime_t, Context* >::iterator s = scheduled.begin();
+    if (s == scheduled.end())
+      return;
+    const utime_t &utime(s->first);
+    Context *cit(s->second);
+    if (utime > now)
+      return;
+    running_.push_back(cit);
+    event_lookup_map_t::iterator e = events.find(cit);
+    assert(e != events.end());
+    events.erase(e);
+    scheduled.erase(s);
+  }
+}
+
+/******************************************************************/
+SafeTimer::SafeTimer(Mutex &event_lock)
+  : t(&event_lock)
+{
 }
 
 SafeTimer::~SafeTimer()
 {
-  if (!scheduled.empty() && !canceled.empty()) {
-    derr(0) << "SafeTimer.~SafeTimer " << scheduled.size() << " events scheduled, " 
-	    << canceled.size() << " canceled but unflushed" 
-	    << dendl;
-    assert(0);
-  }
+  dout(DBL) << __func__ << dendl;
+
+  t.shutdown();
+}
+
+void SafeTimer::shutdown()
+{
+  t.shutdown();
+}
+
+void SafeTimer::add_event_after(double seconds, Context *callback)
+{
+  assert(t.event_lock->is_locked());
+
+  t.add_event_after(seconds, callback);
+}
+
+void SafeTimer::add_event_at(utime_t when, Context *callback)
+{
+  assert(t.event_lock->is_locked());
+
+  t.add_event_at(when, callback);
+}
+
+bool SafeTimer::cancel_event(Context *callback)
+{
+  dout(DBL) << __func__ << ": " << callback << dendl;
+
+  assert(t.event_lock->is_locked());
+
+  t.lock.Lock();
+  bool ret = t.cancel_event_impl(callback, true);
+  t.lock.Unlock();
+  return ret;
+}
+
+void SafeTimer::cancel_all_events()
+{
+  dout(DBL) << __func__ << dendl;
+
+  assert(t.event_lock->is_locked());
+
+  t.lock.Lock();
+  t.cancel_all_events_impl(true);
+  t.lock.Unlock();
 }

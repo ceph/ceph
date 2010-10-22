@@ -170,8 +170,9 @@ public:
     authenticate_err(0),
     auth(NULL),
     rotating_secrets(rkeys) { }
+
   ~MonClient() {
-    timer.cancel_all_events();
+    timer.shutdown();
   }
 
   void init();

@@ -129,10 +129,9 @@ static int safe_timer_join_test(SafeTimer &safe_timer, Mutex& safe_timer_lock)
   sleep(10);
 
   safe_timer_lock.Lock();
-  safe_timer.cancel_all();
-  safe_timer.shutdown();
-  safe_timer.join();
+  safe_timer.cancel_all_events();
   safe_timer_lock.Unlock();
+  safe_timer.shutdown();
 
   for (int i = 0; i < array_idx; ++i) {
     if (array[i] != i) {
