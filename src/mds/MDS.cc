@@ -691,6 +691,28 @@ void MDS::handle_command(MMonCommand *m)
       locker->try_eval(ino, mask);
       dout(20) << "try_eval(" << inum << ", " << mask << ")" << dendl;
     } else dout(15) << "inode " << inum << " not in mdcache!" << dendl;
+  } else if (m->cmd[0] == "fragment_dir" ||
+	     m->cmd[0] == "merge_dir") {
+    if (m->cmd.size() == 4) {
+      filepath fp(m->cmd[1].c_str());
+      CInode *in = mdcache->cache_traverse(fp);
+      if (in) {
+	frag_t fg = frag_t(atoi(m->cmd[2].c_str()));   // FIXME: need to parse a frag_t...
+	CDir *dir = in->get_dirfrag(fg);
+	if (dir) {
+	  if (dir->is_auth()) {
+	    int by = atoi(m->cmd[3].c_str());
+	    if (by) {
+	      if (m->cmd[0] == "fragment_dir")
+		mdcache->split_dir(dir, by);
+	      //else
+	      //mdcache->merge_dir(dir, by);
+	    } else
+	      dout(0) << "need to split by >0 bits" << dendl;
+	  } else dout(0) << "dir " << dir->dirfrag() << " not auth" << dendl;
+	} else dout(0) << "dir " << in->ino() << " " << fg << " dne" << dendl;
+      } else dout(0) << "path " << fp << " not found" << dendl;
+    } else dout(0) << "bad syntax" << dendl;
   } else if (m->cmd[0] == "export_dir") {
     if (m->cmd.size() == 3) {
       filepath fp(m->cmd[1].c_str());
