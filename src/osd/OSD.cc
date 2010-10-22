@@ -2338,8 +2338,6 @@ void OSD::handle_osd_map(MOSDMap *m)
   store->flush();
   osd_lock.Lock();
 
-  map_lock.get_write();
-
   assert(osd_lock.is_locked());
 
   ObjectStore::Transaction t;
@@ -2404,7 +2402,12 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   // flush new maps (so they are readable)
+  osd_lock.Unlock();
   store->flush();
+  osd_lock.Lock();
+
+  // finally, take map_lock _after_ we do this flush, to avoid deadlock
+  map_lock.get_write();
 
   // advance if we can
   bool advanced = false;
