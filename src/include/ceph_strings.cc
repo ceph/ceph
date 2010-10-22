@@ -52,6 +52,9 @@ const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_BALANCEREADS: return "balance-reads";
 	case CEPH_OSD_OP_UNBALANCEREADS: return "unbalance-reads";
 	case CEPH_OSD_OP_SCRUB: return "scrub";
+	case CEPH_OSD_OP_SCRUB_RESERVE: return "scrub-reserve";
+	case CEPH_OSD_OP_SCRUB_UNRESERVE: return "scrub-unreserve";
+	case CEPH_OSD_OP_SCRUB_STOP: return "scrub-stop";
 
 	case CEPH_OSD_OP_WRLOCK: return "wrlock";
 	case CEPH_OSD_OP_WRUNLOCK: return "wrunlock";

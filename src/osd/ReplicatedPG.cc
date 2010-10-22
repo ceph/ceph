@@ -450,6 +450,7 @@ void ReplicatedPG::do_sub_op(MOSDSubOp *op)
     OSDOp& first = op->ops[0];
     switch (first.op.op) {
       // rep stuff
+      // reserve, unreserve, stop
     case CEPH_OSD_OP_PULL:
       sub_op_pull(op);
       return;
@@ -458,6 +459,15 @@ void ReplicatedPG::do_sub_op(MOSDSubOp *op)
       return;
     case CEPH_OSD_OP_SCRUB:
       sub_op_scrub(op);
+      return;
+    case CEPH_OSD_OP_SCRUB_RESERVE:
+      sub_op_scrub_reserve(op);
+      return;
+    case CEPH_OSD_OP_SCRUB_UNRESERVE:
+      sub_op_scrub_unreserve(op);
+      return;
+    case CEPH_OSD_OP_SCRUB_STOP:
+      sub_op_scrub_stop(op);
       return;
     }
   }
@@ -3476,7 +3486,10 @@ void ReplicatedPG::on_change()
 {
   dout(10) << "on_change" << dendl;
   apply_and_flush_repops(is_primary());
-  
+
+  // clear reserved scrub state
+  clear_scrub_reserved();
+
   // clear pushing/pulling maps
   pushing.clear();
   pulling.clear();

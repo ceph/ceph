@@ -376,7 +376,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   remove_list_lock("OSD::remove_list_lock"),
   replay_queue_lock("OSD::replay_queue_lock"),
   snap_trim_wq(this, &disk_tp),
-  scrub_lock("OSD::scrub_lock"),
+  sched_scrub_lock("OSD::scrub_lock"),
   scrubs_pending(0),
   scrubs_active(0),
   scrub_wq(this, &disk_tp),
@@ -1515,6 +1515,8 @@ void OSD::tick()
   
   map_lock.get_read();
 
+  sched_scrub();
+
   heartbeat_lock.Lock();
   heartbeat_check();
   heartbeat_lock.Unlock();
@@ -2218,7 +2220,68 @@ void OSD::handle_scrub(MOSDScrub *m)
   m->put();
 }
 
+void OSD::sched_scrub()
+{
+  sched_scrub_lock.Lock();
 
+  hash_map<pg_t, PG*>::iterator p = pg_map.find(sched_pg);
+  if (p == pg_map.end()) {
+    p = pg_map.begin();
+  }
+
+  while (p != pg_map.end()) {
+    PG *pg = p->second;
+    pg->lock();
+    if (pg->is_primary() && pg->is_active() && pg->is_clean()) {
+      if (pg->all_replicas_reserved()) {
+	if (scrubs_active + scrubs_pending < g_conf.osd_max_scrubs &&
+	    !pg->is_scrubbing() && scrub_wq.queue(pg)) {
+	  --scrubs_pending;
+	  assert(scrubs_pending > 0);
+	  ++scrubs_active;
+	}
+      } else if (!pg->scrub_reserved) {
+	pg->scrub_reserved = true;
+	pg->reserved_peers.insert(0);
+	pg->reserve_replicas();
+      } else if (pg->scrub_reserved) {
+	// if no replicas declined scrubbing yet, wait
+	pg->unlock();
+	break;
+      } else {
+	// at least one replica declined, so unreserve the rest
+	pg->unreserve_replicas();
+      }
+    }
+    pg->unlock();
+    ++p;
+  }
+  sched_pg = p->first;
+
+  sched_scrub_lock.Unlock();
+}
+
+bool OSD::inc_scrubs_pending()
+{
+  bool result = false;
+
+  sched_scrub_lock.Lock();
+  if (scrubs_pending + scrubs_active < g_conf.osd_max_scrubs) {
+    result = true;
+    ++scrubs_pending;
+  }
+  sched_scrub_lock.Unlock();
+
+  return result;
+}
+
+void OSD::dec_scrubs_pending()
+{
+  sched_scrub_lock.Lock();
+  --scrubs_pending;
+  assert(scrubs_pending >= 0);
+  sched_scrub_lock.Unlock();
+}
 
 // =====================================================
 // MAP

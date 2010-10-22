@@ -794,12 +794,20 @@ protected:
     }
   } snap_trim_wq;
 
-
-  // -- scrubbing --
-  Mutex scrub_lock;
+  // -- scrub scheduling --
+  Mutex sched_scrub_lock;
+  pg_t sched_pg;
   int scrubs_pending;
   int scrubs_active;
+  void sched_scrub();
+
+  // -- scrubbing --
   xlist<PG*> scrub_queue;
+
+  bool inc_scrubs_pending();
+  void dec_scrubs_pending();
+  bool inc_scrubs_active();
+  void dec_scrubs_active();
 
   struct ScrubWQ : public ThreadPool::WorkQueue<PG> {
     OSD *osd;

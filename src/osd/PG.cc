@@ -1052,6 +1052,7 @@ void PG::clear_primary_state()
 
   stat_object_temp_rd.clear();
 
+  reserved_peers.clear();
   peer_scrub_map.clear();
   osd->recovery_wq.dequeue(this);
   osd->snap_trim_wq.dequeue(this);
@@ -2434,6 +2435,10 @@ void PG::take_object_waiters(hash_map<sobject_t, list<Message*> >& m)
 // ==========================================================================================
 // SCRUB
 
+bool PG::all_replicas_reserved() const {
+  return peer_scrub_map.size() == acting.size();
+}
+
 void PG::sub_op_scrub(MOSDSubOp *op)
 {
   dout(7) << "sub_op_scrub" << dendl;
@@ -2480,6 +2485,109 @@ void PG::sub_op_scrub_reply(MOSDSubOpReply *op)
   op->put();
 }
 
+void PG::sub_op_scrub_reserve(MOSDSubOp *op)
+{
+  dout(7) << "sub_op_scrub_reserve" << dendl;
+
+  if (scrub_reserved) {
+    dout(10) << "Ignoring reserve request: Already reserved" << dendl;
+    op->put();
+    return;
+  }
+
+  bool result = osd->inc_scrubs_pending();
+
+  MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
+  ::encode(result, reply->get_data());
+  osd->cluster_messenger->send_message(reply, op->get_connection());
+
+  op->put();
+}
+
+void PG::sub_op_scrub_reserve_reply(MOSDSubOpReply *op)
+{
+  dout(7) << "sub_op_scrub_reply" << dendl;
+
+  int from = op->get_source().num();
+  bufferlist::iterator p = op->get_data().begin();
+  bool reserved;
+  ::decode(reserved, p);
+
+  if (reserved_peers.find(from) != reserved_peers.end()) {
+    dout(10) << " already had osd" << from << " reserved: " << dendl;
+  } else {
+    dout(10) << " got osd" << from << " scrub reserved: " << reserved << dendl;
+    if (reserved) {
+      reserved_peers.insert(from);
+    }
+  }
+
+  op->put();
+}
+
+void PG::sub_op_scrub_unreserve(MOSDSubOp *op)
+{
+  dout(7) << "sub_op_scrub_unreserve" << dendl;
+
+  if (scrub_reserved) {
+    clear_scrub_reserved();
+  }
+
+  op->put();
+}
+
+void PG::sub_op_scrub_stop(MOSDSubOp *op)
+{
+  dout(7) << "sub_op_scrub_stop" << dendl;
+
+  clear_scrub_reserved();
+
+  MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK); 
+  osd->cluster_messenger->send_message(reply, op->get_connection());
+
+  op->put();
+}
+
+void PG::clear_scrub_reserved()
+{
+  if (scrub_reserved) {
+    scrub_reserved = false;
+    osd->dec_scrubs_pending();
+  }
+  reserved_peers.clear();
+}
+
+void PG::reserve_replicas()
+{
+  for (unsigned i=1; i<acting.size(); i++) {
+    dout(10) << "scrub requesting reserve from osd" << acting[i] << dendl;
+    vector<OSDOp> scrub(1);
+    scrub[0].op.op = CEPH_OSD_OP_SCRUB_RESERVE;
+    sobject_t poid;
+    eversion_t v;
+    osd_reqid_t reqid;
+    MOSDSubOp *subop = new MOSDSubOp(reqid, info.pgid, poid, false, 0,
+				     osd->osdmap->get_epoch(), osd->get_tid(), v);
+    subop->ops = scrub;
+    osd->cluster_messenger->send_message(subop, osd->osdmap->get_cluster_inst(acting[i]));
+  }
+}
+
+void PG::unreserve_replicas()
+{
+  for (unsigned i=1; i<acting.size(); i++) {
+    dout(10) << "scrub requesting unreserve from osd" << acting[i] << dendl;
+    vector<OSDOp> scrub(1);
+    scrub[0].op.op = CEPH_OSD_OP_SCRUB_UNRESERVE;
+    sobject_t poid;
+    eversion_t v;
+    osd_reqid_t reqid;
+    MOSDSubOp *subop = new MOSDSubOp(reqid, info.pgid, poid, false, 0,
+				     osd->osdmap->get_epoch(), osd->get_tid(), v);
+    subop->ops = scrub;
+    osd->cluster_messenger->send_message(subop, osd->osdmap->get_cluster_inst(acting[i]));
+  }
+}
 
 /*
  * build a (sorted) summary of pg content for purposes of scrubbing
