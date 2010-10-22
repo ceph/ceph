@@ -1143,7 +1143,7 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
     }
     missing_info = true;
 
-    if (peer_info_requested.count(*it)) {
+    if (peer_info_requested.find(*it) != peer_info_requested.end()) {
       dout(10) << " waiting for osd" << *it << dendl;
       continue;
     }
