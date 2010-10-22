@@ -275,6 +275,7 @@ struct md_config_t {
   int mds_bal_split_size;
   float mds_bal_split_rd;
   float mds_bal_split_wr;
+  int mds_bal_split_bits;
   int mds_bal_merge_size;
   float mds_bal_merge_rd;
   float mds_bal_merge_wr;

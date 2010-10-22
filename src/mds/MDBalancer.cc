@@ -328,7 +328,7 @@ void MDBalancer::do_fragmenting()
     if (!dir->is_auth()) continue;
 
     dout(0) << "do_fragmenting splitting " << *dir << dendl;
-    mds->mdcache->split_dir(dir, 4);
+    mds->mdcache->split_dir(dir, g_conf.mds_bal_split_bits);
   }
   split_queue.clear();
 }
