@@ -892,8 +892,6 @@ int SimpleMessenger::Pipe::accept()
   return 0;   // success.
 
  fail_unlocked:
-  if (existing)
-    existing->pipe_lock.Unlock();
   pipe_lock.Lock();
   bool queued = is_queued();
   if (queued)
