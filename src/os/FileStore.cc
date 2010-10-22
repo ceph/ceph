@@ -1388,6 +1388,9 @@ unsigned FileStore::_do_transaction(Transaction& t)
 	bufferlist bl;
 	t.get_bl(bl);
 	r = _setattr(cid, oid, name.c_str(), bl.c_str(), bl.length());
+	if (r == -ENOSPC)
+	  dout(0) << " ENOSPC on setxattr on " << cid << "/" << oid
+		  << " name " << name << " size " << bl.length() << dendl;
       }
       break;
       
@@ -1398,7 +1401,9 @@ unsigned FileStore::_do_transaction(Transaction& t)
 	map<string, bufferptr> aset;
 	t.get_attrset(aset);
 	r = _setattrs(cid, oid, aset);
-      }
+  	if (r == -ENOSPC)
+	  dout(0) << " ENOSPC on setxattrs on " << cid << "/" << oid << dendl;
+    }
       break;
 
     case Transaction::OP_RMATTR:
@@ -1499,7 +1504,13 @@ unsigned FileStore::_do_transaction(Transaction& t)
     if (r == -ENOSPC) {
       // For now, if we hit _any_ ENOSPC, crash, before we do any damage
       // by partially applying transactions.
-      assert(0 == "ENOSPC handling not implemented");
+
+      // XXX HACK: if it was an setxattr op, silently fail, until we have a better workaround XXX
+      if (op == Transaction::OP_SETATTR || op == Transaction::OP_SETATTRS)
+	dout(0) << "WARNING: ignoring setattr ENOSPC failure, until we implement a workaround for extN"
+		<< " xattr limitations" << dendl;
+      else
+	assert(0 == "ENOSPC handling not implemented");
     }
     if (r == -EIO) {
       assert(0 == "EIO handling not implemented");
