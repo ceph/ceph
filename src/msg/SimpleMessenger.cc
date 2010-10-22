@@ -891,11 +891,16 @@ int SimpleMessenger::Pipe::accept()
   pipe_lock.Unlock();
   return 0;   // success.
 
-
  fail_unlocked:
   pipe_lock.Lock();
-  state = STATE_CLOSED;
+  bool queued = is_queued();
+  if (queued)
+    state = STATE_CONNECTING;
+  else
+    state = STATE_CLOSED;
   fault();
+  if (queued)
+    start_writer();
   pipe_lock.Unlock();
   return -1;
 }
