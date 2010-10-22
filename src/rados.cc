@@ -50,6 +50,8 @@ void usage()
   cerr << "   listxattr objname\n";
   cerr << "   getxattr objname attr\n";
   cerr << "   setxattr objname attr val\n";
+  cerr << "   getxattr objname attr\n";
+  cerr << "   rmxattr objname attr\n";
   cerr << "   ls          -- list objects in pool\n\n";
   cerr << "   chown 123   -- change the pool owner to auid 123\n";
 
@@ -323,6 +325,18 @@ int main(int argc, const char **argv)
     }
     string s(bl.c_str(), bl.length());
     cout << s << std::endl;
+  } else if (strcmp(nargs[0], "rmxattr") == 0) {
+    if (!pool || nargs.size() < 3)
+      usage();
+
+    string oid(nargs[1]);
+    string attr_name(nargs[2]);
+
+    ret = rados.rmxattr(p, oid, attr_name.c_str());
+    if (ret < 0) {
+      cerr << "error removing xattr " << pool << "/" << oid << "/" << attr_name << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      goto out;
+    }
   } else if (strcmp(nargs[0], "listxattr") == 0) {
     if (!pool || nargs.size() < 2)
       usage();

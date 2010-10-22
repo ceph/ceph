@@ -726,7 +726,21 @@ private:
     o->snapc = snapc;
     return op_submit(o);
   }
-
+  tid_t removexattr(const object_t& oid, ceph_object_layout ol,
+	      const char *name, const SnapContext& snapc,
+	      utime_t mtime, int flags,
+              Context *onack, Context *oncommit) {
+    vector<OSDOp> ops(1);
+    ops[0].op.op = CEPH_OSD_OP_RMXATTR;
+    ops[0].op.xattr.name_len = (name ? strlen(name) : 0);
+    ops[0].op.xattr.value_len = 0;
+    if (name)
+      ops[0].data.append(name);
+    Op *o = new Op(oid, ol, ops, flags | CEPH_OSD_FLAG_WRITE, onack, oncommit);
+    o->mtime = mtime;
+    o->snapc = snapc;
+    return op_submit(o);
+  }
 
   void list_objects(ListContext *p, Context *onfinish);
 

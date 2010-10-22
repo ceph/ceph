@@ -77,6 +77,7 @@ public:
 
   int getxattr(pool_t pool, const std::string& oid, const char *name, bufferlist& bl);
   int setxattr(pool_t pool, const std::string& oid, const char *name, bufferlist& bl);
+  int rmxattr(pool_t pool, const std::string& oid, const char *name);
   int getxattrs(pool_t pool, const std::string& oid, std::map<std::string, bufferlist>& attrset);
   int stat(pool_t pool, const std::string& oid, uint64_t *psize, time_t *pmtime);
 
