@@ -1255,34 +1255,39 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 		     << " on " << *dir << dendl;
 	    dir->first = fgfirst;
 
-	    fnode_t *pf = dir->get_projected_fnode();
-
-	    if (pf->accounted_fragstat.version != fragstat.version) {
-	      dout(10) << fg << " journaling accounted_fragstat update v" << fragstat.version << dendl;
-
-	      MDLog *mdlog = mdcache->mds->mdlog;
-	      Mutation *mut = new Mutation;
-	      mut->ls = mdlog->get_current_segment();
-	      EUpdate *le = new EUpdate(mdlog, "lock ifile accounted_fragstat update");
-	      mdlog->start_entry(le);
-
-	      pf = dir->project_fnode();
-	      pf->version = dir->pre_dirty();
-	      pf->accounted_fragstat = fragstat;
-	      pf->fragstat.version = fragstat.version;
-	      mut->add_projected_fnode(dir);
-
-	      le->metablob.add_dir_context(dir);
-	      le->metablob.add_dir(dir, true);
-
-	      assert(!dir->is_frozen());
-	      mut->auth_pin(dir);
-
-	      mdlog->submit_entry(le, new C_Inode_FragUpdate(this, dir, mut));
+	    if (is_frozen()) {
+	      filelock.set_stale();
 	    } else {
-	      dout(10) << fg << " accounted_fragstat unchanged at v" << fragstat.version << dendl;
-	      assert(pf->fragstat == fragstat);
-	      assert(pf->accounted_fragstat == fragstat);
+	      filelock.clear_stale();
+	      fnode_t *pf = dir->get_projected_fnode();
+
+	      if (pf->accounted_fragstat.version != fragstat.version) {
+	        dout(10) << fg << " journaling accounted_fragstat update v" << fragstat.version << dendl;
+
+	        MDLog *mdlog = mdcache->mds->mdlog;
+	        Mutation *mut = new Mutation;
+	        mut->ls = mdlog->get_current_segment();
+	        EUpdate *le = new EUpdate(mdlog, "lock ifile accounted_fragstat update");
+	        mdlog->start_entry(le);
+
+	        pf = dir->project_fnode();
+	        pf->version = dir->pre_dirty();
+	        pf->accounted_fragstat = fragstat;
+	        pf->fragstat.version = fragstat.version;
+	        mut->add_projected_fnode(dir);
+
+	        le->metablob.add_dir_context(dir);
+	        le->metablob.add_dir(dir, true);
+
+	        assert(!dir->is_frozen());
+	        mut->auth_pin(dir);
+
+	        mdlog->submit_entry(le, new C_Inode_FragUpdate(this, dir, mut));
+	      } else {
+	        dout(10) << fg << " accounted_fragstat unchanged at v" << fragstat.version << dendl;
+	        assert(pf->fragstat == fragstat);
+	        assert(pf->accounted_fragstat == fragstat);
+	      }
 	    }
 	  }
 	}
@@ -1331,38 +1336,43 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	  }
 	} else {
 	  if (dir && dir->is_auth()) {
-	    dout(10) << fg << " first " << dir->first << " -> " << fgfirst
-		     << " on " << *dir << dendl;
-	    dir->first = fgfirst;
-
-	    fnode_t *pf = dir->get_projected_fnode();
-
-	    if (pf->accounted_rstat.version != rstat.version) {
-	      dout(10) << fg << " journaling accounted_rstat update v" << rstat.version << dendl;
-
-	      MDLog *mdlog = mdcache->mds->mdlog;
-	      Mutation *mut = new Mutation;
-	      mut->ls = mdlog->get_current_segment();
-	      EUpdate *le = new EUpdate(mdlog, "lock inest accounted_rstat update");
-	      mdlog->start_entry(le);
-
-	      pf = dir->project_fnode();
-	      pf->version = dir->pre_dirty();
-	      pf->accounted_rstat = rstat;
-	      pf->rstat.version = rstat.version;
-	      mut->add_projected_fnode(dir);
-
-	      le->metablob.add_dir_context(dir);
-	      le->metablob.add_dir(dir, true);
-
-	      assert(!dir->is_frozen());
-	      mut->auth_pin(dir);
-
-	      mdlog->submit_entry(le, new C_Inode_FragUpdate(this, dir, mut));
+	    if (is_frozen()) {
+	      nestlock.set_stale();
 	    } else {
-	      dout(10) << fg << " accounted_rstat unchanged at v" << rstat.version << dendl;
-	      assert(pf->rstat == rstat);
-	      assert(pf->accounted_rstat == rstat);
+	      nestlock.clear_stale();
+	      dout(10) << fg << " first " << dir->first << " -> " << fgfirst
+	          << " on " << *dir << dendl;
+	      dir->first = fgfirst;
+
+	      fnode_t *pf = dir->get_projected_fnode();
+
+	      if (pf->accounted_rstat.version != rstat.version) {
+	        dout(10) << fg << " journaling accounted_rstat update v" << rstat.version << dendl;
+
+	        MDLog *mdlog = mdcache->mds->mdlog;
+	        Mutation *mut = new Mutation;
+	        mut->ls = mdlog->get_current_segment();
+	        EUpdate *le = new EUpdate(mdlog, "lock inest accounted_rstat update");
+	        mdlog->start_entry(le);
+
+	        pf = dir->project_fnode();
+	        pf->version = dir->pre_dirty();
+	        pf->accounted_rstat = rstat;
+	        pf->rstat.version = rstat.version;
+	        mut->add_projected_fnode(dir);
+
+	        le->metablob.add_dir_context(dir);
+	        le->metablob.add_dir(dir, true);
+
+	        assert(!dir->is_frozen());
+	        mut->auth_pin(dir);
+
+	        mdlog->submit_entry(le, new C_Inode_FragUpdate(this, dir, mut));
+	      } else {
+	        dout(10) << fg << " accounted_rstat unchanged at v" << rstat.version << dendl;
+	        assert(pf->rstat == rstat);
+	        assert(pf->accounted_rstat == rstat);
+	      }
 	    }
 	  }
 	}

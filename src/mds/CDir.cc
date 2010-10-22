@@ -1185,6 +1185,11 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
     assert(!state_test(STATE_COMMITTING));
     fnode = got_fnode;
     projected_version = committing_version = committed_version = got_fnode.version;
+
+    if (fnode.rstat.version < inode->inode.rstat.version)
+      inode->nestlock.set_stale();
+    if (fnode.fragstat.version < inode->inode.dirstat.version)
+      inode->filelock.set_stale();
   }
 
   // purge stale snaps?
