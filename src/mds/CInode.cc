@@ -308,7 +308,7 @@ sr_t *CInode::project_snaprealm(snapid_t snapid)
     new_srnode->created = snapid;
     new_srnode->current_parent_since = snapid;
   }
-  dout(0) << "project_snaprealm " << new_srnode << dendl;
+  dout(10) << "project_snaprealm " << new_srnode << dendl;
   projected_nodes.back()->snapnode = new_srnode;
   return new_srnode;
 }
@@ -338,7 +338,7 @@ void CInode::project_past_snaprealm_parent(SnapRealm *newparent, bufferlist& sna
 void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
 {
   assert(next_snaprealm);
-  dout(0) << "pop_projected_snaprealm " << next_snaprealm
+  dout(10) << "pop_projected_snaprealm " << next_snaprealm
           << " seq" << next_snaprealm->seq << dendl;
   bool invalidate_cached_snaps = false;
   if (!snaprealm)
