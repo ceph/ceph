@@ -4606,27 +4606,6 @@ void OSD::handle_op(MOSDOp *op)
       pg->unlock();
       return;
     }
-
-    if (op->get_snapid() > 0) {
-      // snap read.  hrm.
-      // are we missing a revision that we might need?
-      // let's get them all.
-      sobject_t soid(op->get_oid(), CEPH_NOSNAP);
-      for (int i=-2; i<(int)op->get_snaps().size(); i++) {
-	if (i >= 0)
-	  soid.snap = op->get_snaps()[i];
-	else if (i == -1)
-	  soid.snap = CEPH_NOSNAP;
-	else
-	  soid.snap = CEPH_SNAPDIR;
-	if (pg->is_missing_object(soid)) {
-	  dout(10) << "handle_op _may_ need missing rev " << soid << ", pulling" << dendl;
-	  pg->wait_for_missing_object(soid, op);
-	  pg->unlock();
-	  return;
-	}
-      }
-    }
   }
 
   if ((op->get_flags() & CEPH_OSD_FLAG_PGOP) == 0) {
