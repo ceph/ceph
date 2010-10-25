@@ -132,15 +132,69 @@ int sys_listxattr(const char *fn, char *names, size_t len)
 static void get_raw_xattr_name(const char *name, int i, char *raw_name, int raw_len)
 {
   int r;
+  int pos = 0;
 
-  if (!i)
-    r = snprintf(raw_name, raw_len, "%s", name);
-  else
-    r = snprintf(raw_name, raw_len, "%s@%d", name, i);
+  while (*name) {
+    switch (*name) {
+    case '@': /* escape it */
+      pos += 2;
+      assert (pos < raw_len - 1);
+      *raw_name = '@';
+      raw_name++;
+      *raw_name = '@';
+      break;
+    default:
+      pos++;
+      assert(pos < raw_len - 1);
+      *raw_name = *name;
+      break;
+    }
+    name++;
+    raw_name++;
+  }
 
-  assert(r < raw_len);
+  if (!i) {
+    *raw_name = '\0';
+  } else {
+    r = snprintf(raw_name, raw_len, "@%d", i);
+    assert(r < raw_len - pos);
+  }
 }
 
+static int translate_raw_name(const char *raw_name, char *name, int name_len, bool *is_first)
+{
+  int pos = 0;
+
+  generic_dout(0) << "translate_raw_name raw_name=" << raw_name << dendl;
+  const char *n = name;
+
+  *is_first = true;
+  while (*raw_name) {
+    switch (*raw_name) {
+    case '@': /* escape it */
+      raw_name++;
+      if (!*raw_name)
+        break;
+      if (*raw_name != '@') {
+        *is_first = false;
+        goto done;
+      }
+
+    /* fall through */
+    default:
+      *name = *raw_name;
+      break;
+    }
+    pos++;
+    assert(pos < name_len);
+    name++;
+    raw_name++;
+  }
+done:
+  *name = '\0';
+  generic_dout(0) << "translate_raw_name name=" << n << dendl;
+  return pos;
+}
 
 int do_getxattr_len(const char *fn, const char *name)
 {
@@ -278,14 +332,18 @@ int do_listxattr(const char *fn, char *names, size_t len) {
   char *dest_end = names + len;
 
   while (p < end) {
+    char name[ATTR_MAX_NAME_LEN * 2 + 16];
     int attr_len = strlen(p);
-    if (!strchr(p, '@')) {
-      if (dest + attr_len > dest_end) {
+    bool is_first;
+    int name_len = translate_raw_name(p, name, sizeof(name), &is_first);
+    if (is_first)  {
+      generic_dout(0) << "dest+name_len=" << (void *)(dest+name_len) << " dest_end=" << (void *)dest_end << dendl;
+      if (dest + name_len > dest_end) {
         r = -ERANGE;
         goto done;
       }
-      strcpy(dest, p);
-      dest += attr_len + 1;
+      strcpy(dest, name);
+      dest += name_len + 1;
     }
     p += attr_len + 1;
   }
