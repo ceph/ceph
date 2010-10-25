@@ -46,12 +46,16 @@ bin_PROGRAMS += monmaptool crushtool osdmaptool
 mount_ceph_SOURCES = mount/mount.ceph.c
 noinst_PROGRAMS = mount.ceph
 
+# user tools
+cephfs_SOURCES = cephfs.cc
+bin_PROGRAMS += cephfs
+
 # synthetic client
 csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc
 csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += csyn
 
-core: cmon cosd cmds ceph cconf monmaptool osdmaptool crushtool csyn
+core: cmon cosd cmds ceph cephfs cconf monmaptool osdmaptool crushtool csyn
 
 
 # fuse targets?
@@ -795,7 +799,7 @@ noinst_HEADERS = \
 	rgw/rgw_user.h\
 	sample.ceph.conf
 
-all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
+all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
 	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
 	$(dumpjournal_SOURCES) $(cosd_SOURCES) $(dupstore_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
 	$(testmsgr_SOURCES) $(cfuse_SOURCES) $(fakefuse_SOURCES) $(psim_SOURCES) \
