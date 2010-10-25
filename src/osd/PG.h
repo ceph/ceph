@@ -127,6 +127,7 @@ public:
 	same_up_since(0), same_acting_since(0), same_primary_since(0) {}
 
       void merge(const History &other) {
+	// Here, we only update the fields which cannot be calculated from the OSDmap.
 	if (epoch_created < other.epoch_created)
 	  epoch_created = other.epoch_created;
 	if (last_epoch_started < other.last_epoch_started)
@@ -257,7 +258,7 @@ public:
       const static int BACKLOG = 4;  // event invented by generate_backlog
       const static int LOST_REVERT = 5; // lost new version, reverted to old
 
-      __s32      op;   // write, zero, trunc, remove
+      __s32      op;
       sobject_t  soid;
       eversion_t version, prior_version;
       osd_reqid_t reqid;  // caller+tid to uniquely identify request
@@ -317,8 +318,8 @@ public:
      *          complete negative information.  
      * i.e. we can infer pg contents for any store whose last_update >= tail.
      */
-    eversion_t head;    // newest entry (update|delete)
-    eversion_t tail;    // version prior to oldest (update|delete) 
+    eversion_t head;    // newest entry
+    eversion_t tail;    // version prior to oldest
 
     /*
      * backlog - true if log is a complete summary of pg contents.

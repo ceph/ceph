@@ -3671,6 +3671,8 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
   } else {
     pg = _lookup_lock_pg(info.pgid);
     if (epoch < pg->info.history.same_acting_since) {
+      // The peering stuff resets when the acting set changes, so ignore any messges sent
+      // before that.
       dout(10) << *pg << " got old info " << info << ", ignoring" << dendl;
       pg->unlock();
       return;
