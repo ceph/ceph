@@ -259,7 +259,6 @@ public:
 
       __s32      op;   // write, zero, trunc, remove
       sobject_t  soid;
-      snapid_t   snap;
       eversion_t version, prior_version;
       osd_reqid_t reqid;  // caller+tid to uniquely identify request
       utime_t     mtime;  // this is the _user_ mtime, mind you
