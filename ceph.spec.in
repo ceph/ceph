@@ -98,6 +98,7 @@ fi
 %defattr(-,root,root,-)
 %doc README COPYING
 %{_bindir}/ceph
+%{_bindir}/cephfs
 %{_bindir}/cconf
 %{_bindir}/cclass
 %{_bindir}/cclsinfo
