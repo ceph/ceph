@@ -917,6 +917,7 @@ struct inode_t {
   bool       anchored;          // auth only?
 
   // file (data access)
+  ceph_dir_layout  dir_layout;    // [dir only]
   ceph_file_layout layout;
   uint64_t   size;        // on directory, # dentries
   uint32_t   truncate_seq;
@@ -994,7 +995,7 @@ struct inode_t {
   }
 
   void encode(bufferlist &bl) const {
-    __u8 v = 3;
+    __u8 v = 4;
     ::encode(v, bl);
 
     ::encode(ino, bl);
@@ -1008,6 +1009,7 @@ struct inode_t {
     ::encode(nlink, bl);
     ::encode(anchored, bl);
 
+    ::encode(dir_layout, bl);
     ::encode(layout, bl);
     ::encode(size, bl);
     ::encode(truncate_seq, bl);
@@ -1042,6 +1044,10 @@ struct inode_t {
     ::decode(nlink, p);
     ::decode(anchored, p);
 
+    if (v >= 4)
+      ::decode(dir_layout, p);
+    else
+      memset(&dir_layout, 0, sizeof(dir_layout));
     ::decode(layout, p);
     ::decode(size, p);
     ::decode(truncate_seq, p);

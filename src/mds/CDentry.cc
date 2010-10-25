@@ -262,7 +262,7 @@ void CDentry::make_anchor_trace(vector<Anchor>& trace, CInode *in)
     dir->inode->make_anchor_trace(trace);
 
   // add this inode (in my dirfrag) to the end
-  trace.push_back(Anchor(in->ino(), dir->ino(), name, 0, 0));
+  trace.push_back(Anchor(in->ino(), dir->ino(), get_hash(), 0, 0));
   dout(10) << "make_anchor_trace added " << trace.back() << dendl;
 }
 

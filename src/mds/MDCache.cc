@@ -6845,7 +6845,7 @@ void MDCache::anchor_create(MDRequest *mdr, CInode *in, Context *onfinish)
   in->make_anchor_trace(trace);
   if (!trace.size()) {
     assert(MDS_INO_IS_BASE(in->ino()));
-    trace.push_back(Anchor(in->ino(), in->ino(), "", 0, 0));
+    trace.push_back(Anchor(in->ino(), in->ino(), 0, 0, 0));
   }
   
   // do it
