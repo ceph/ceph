@@ -1256,7 +1256,18 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "setcrushmap") {
       dout(10) << "prepare_command setting new crush map" << dendl;
-      pending_inc.crush = m->get_data();
+      bufferlist data(m->get_data());
+      try {
+	bufferlist::iterator bl(data.begin());
+	CrushWrapper crush;
+	crush.decode(bl);
+      }
+      catch (const std::exception &e) {
+	err = -EINVAL;
+	ss << "Failed to parse crushmap: " << e.what();
+	goto out;
+      }
+      pending_inc.crush = data;
       string rs = "set crush map";
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
