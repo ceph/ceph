@@ -1648,6 +1648,7 @@ uint64_t ObjectCacher::release_all()
       dout(10) << "release_all " << *ob 
                << " has " << o_unclean << " bytes left"
                << dendl;
+    p = n;
   }
 
   if (unclean) {
