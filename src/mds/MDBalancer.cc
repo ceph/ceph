@@ -98,7 +98,7 @@ void MDBalancer::tick()
   }
   
   // hash?
-  if (g_conf.mds_bal_fragment_interval > 0 &&
+  if (g_conf.mds_bal_frag && g_conf.mds_bal_fragment_interval > 0 &&
       now.sec() - last_fragment.sec() > g_conf.mds_bal_fragment_interval) {
     last_fragment = now;
     do_fragmenting();
@@ -906,7 +906,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
 
   // hit modify counter, if this was a modify
   if (//g_conf.num_mds > 2 &&             // FIXME >2 thing
-      g_conf.mds_bal_frag &&
+      g_conf.mds_bal_frag && g_conf.mds_bal_fragment_interval > 0 &&
       !dir->inode->is_base() &&        // not root/base (for now at least)
       dir->is_auth() &&
       
