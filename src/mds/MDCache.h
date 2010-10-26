@@ -1052,15 +1052,23 @@ protected:
 private:
   void adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
 			    list<CDir*>& frags, list<Context*>& waiters, bool replay);
+  void adjust_dir_fragments(CInode *diri,
+			    list<CDir*>& srcfrags,
+			    frag_t basefrag, int bits,
+			    list<CDir*>& resultfrags, 
+			    list<Context*>& waiters,
+			    bool replay);
+
   friend class EFragment;
 
 public:
   void split_dir(CDir *dir, int byn);
+  void merge_dir(CInode *diri, frag_t fg);
 
 private:
   void fragment_freeze_dirs(list<CDir*>& dirs, C_Gather *gather);
   void fragment_mark_and_complete(list<CDir*>& dirs);
-  void fragment_frozen(list<CDir*>& dirs, int bits);
+  void fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits);
   void fragment_stored(list<CDir*>& resultfrags, frag_t basefrag, int bits);
   void fragment_logged(Mutation *mut, list<CDir*>& resultfrags, frag_t basefrag, int bits);
   friend class C_MDC_FragmentFrozen;
