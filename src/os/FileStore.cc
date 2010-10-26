@@ -165,7 +165,7 @@ static int translate_raw_name(const char *raw_name, char *name, int name_len, bo
 {
   int pos = 0;
 
-  generic_dout(0) << "translate_raw_name raw_name=" << raw_name << dendl;
+  generic_dout(10) << "translate_raw_name raw_name=" << raw_name << dendl;
   const char *n = name;
 
   *is_first = true;
@@ -192,7 +192,7 @@ static int translate_raw_name(const char *raw_name, char *name, int name_len, bo
   }
 done:
   *name = '\0';
-  generic_dout(0) << "translate_raw_name name=" << n << dendl;
+  generic_dout(10) << "translate_raw_name name=" << n << dendl;
   return pos;
 }
 
@@ -337,7 +337,6 @@ int do_listxattr(const char *fn, char *names, size_t len) {
     bool is_first;
     int name_len = translate_raw_name(p, name, sizeof(name), &is_first);
     if (is_first)  {
-      generic_dout(0) << "dest+name_len=" << (void *)(dest+name_len) << " dest_end=" << (void *)dest_end << dendl;
       if (dest + name_len > dest_end) {
         r = -ERANGE;
         goto done;
