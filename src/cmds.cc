@@ -114,8 +114,9 @@ int main(int argc, const char **argv)
       return 1;
 
     uint64_t supported =
-        CEPH_FEATURE_UID |
-        CEPH_FEATURE_NOSRCADDR;
+      CEPH_FEATURE_UID |
+      CEPH_FEATURE_NOSRCADDR |
+      CEPH_FEATURE_DIRLAYOUTHASH;
     messenger->set_default_policy(SimpleMessenger::Policy::client(supported, 0));
     messenger->set_policy(entity_name_t::TYPE_MON,
                           SimpleMessenger::Policy::client(supported,
