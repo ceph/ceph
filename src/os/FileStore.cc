@@ -570,6 +570,17 @@ int FileStore::_detect_fs()
 		<< strerror_r(-r, buf, sizeof(buf)) << dendl;
       }
     }
+
+    if (g_conf.filestore_btrfs_snap && !btrfs_snap_create_async) {
+      dout(0) << "mount WARNING: btrfs snaps enabled, but no SNAP_CREATE_ASYNC ioctl (from kernel 2.6.37+)" << dendl;
+      cerr << TEXT_YELLOW
+	   << " ** WARNING: 'filestore btrfs snap' is enabled (for safe transactions,\n"	 
+	   << "             rollback), but btrfs does not support the SNAP_CREATE_ASYNC ioctl\n"
+	   << "             (added in Linux 2.6.37).  Expect slow btrfs sync/commit\n"
+	   << "             performance.\n"
+	   << TEXT_NORMAL;
+    }
+
   } else {
     dout(0) << "mount did NOT detect btrfs" << dendl;
     btrfs = false;
