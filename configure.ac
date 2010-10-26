@@ -210,10 +210,21 @@ AC_CHECK_FUNC([sync_file_range],
 #AC_FUNC_UTIME_NULL
 #AC_CHECK_FUNCS([bzero fchdir fdatasync floor ftruncate getcwd gethostbyname gethostname gettimeofday inet_ntoa localtime_r memmove memset mkdir munmap pow rmdir select socket sqrt strcasecmp strchr strerror strstr utime])
 
+AC_ARG_WITH(gtk2,
+        AC_HELP_STRING([--with-gtk2],
+        [Build the graphical tools.  Default=no]),
+        [HAVE_GTK2=yes],[HAVE_GTK2=no]
+        )
+
+AM_CONDITIONAL(WITH_GTK2, [test "x$HAVE_GTK2" = "xyes"])
+
+if test "x$HAVE_GTK2" == "xyes"; then
+	PKG_CHECK_MODULES(GTKMM, [gtkmm-2.4 >= 1.0.0])
+fi
+
 AC_CONFIG_HEADERS([src/acconfig.h])
 AC_CONFIG_FILES([Makefile
 	src/Makefile
 	man/Makefile
 	ceph.spec])
 AC_OUTPUT
-
