@@ -8804,12 +8804,13 @@ void MDCache::fragment_logged(Mutation *mut, list<CDir*>& resultfrags, frag_t ba
        p != first->replica_map.end();
        p++) {
     MMDSFragmentNotify *notify = new MMDSFragmentNotify(diri->ino(), basefrag, bits);
-    if (bits == 0) {
-      // freshly replicate new basedir to peer on merge
-      CDir *base = resultfrags.front();
-      replicate_dir(base, p->first, notify->basebl);
-      assert(0); // audit this
-    }
+
+    /*
+    // freshly replicate new dirs to peers
+    for (list<CDir*>::iterator q = resultfrags.begin(); q != resultfrags.end(); q++)
+      replicate_dir(*q, p->first, notify->basebl);
+    */
+
     mds->send_message_mds(notify, p->first);
   } 
   
@@ -8850,17 +8851,18 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
   if (diri) {
     list<Context*> waiters;
 
-    // add replica dir (for merge)?
-    //  (adjust_dir_fragments expects base to already exist, if non-auth)
-    if (notify->get_bits() < 0) {
-      bufferlist::iterator p = notify->basebl.begin();
-      add_replica_dir(p, diri, notify->get_source().num(), waiters);
-    }
-
     // refragment
     list<CDir*> resultfrags;
     adjust_dir_fragments(diri, notify->get_basefrag(), notify->get_bits(), 
 			 resultfrags, waiters, false);
+
+    /*
+    // add new replica dirs values
+    bufferlist::iterator p = notify->basebl.begin();
+    while (!p.end()) {
+      add_replica_dir(p, diri, notify->get_source().num(), waiters);
+    */
+
     mds->queue_waiters(waiters);
   }
 
