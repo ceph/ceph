@@ -556,9 +556,9 @@ public:
 
     unsigned int num_missing() const;
     void swap(Missing& o);
-    bool is_missing(const sobject_t& oid);
-    bool is_missing(const sobject_t& oid, eversion_t v);
-    eversion_t have_old(const sobject_t& oid);
+    bool is_missing(const sobject_t& oid) const;
+    bool is_missing(const sobject_t& oid, eversion_t v) const;
+    eversion_t have_old(const sobject_t& oid) const;
     void add_next_event(Log::Entry& e);
     void add_event(Log::Entry& e);
     void revise_need(sobject_t oid, eversion_t need);

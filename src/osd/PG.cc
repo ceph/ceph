@@ -2930,19 +2930,29 @@ void PG::Missing::swap(Missing& o)
   rmissing.swap(o.rmissing);
 }
 
-bool PG::Missing::is_missing(const sobject_t& oid)
+bool PG::Missing::is_missing(const sobject_t& oid) const
 {
-  return missing.count(oid);
+  return (missing.find(oid) != missing.end());
 }
 
-bool PG::Missing::is_missing(const sobject_t& oid, eversion_t v)
+bool PG::Missing::is_missing(const sobject_t& oid, eversion_t v) const
 {
-  return missing.count(oid) && missing[oid].need <= v;
+  map<sobject_t, item>::const_iterator m = missing.find(oid);
+  if (m == missing.end())
+    return false;
+  const Missing::item &item(m->second);
+  if (item.need > v)
+    return false;
+  return true;
 }
 
-eversion_t PG::Missing::have_old(const sobject_t& oid)
+eversion_t PG::Missing::have_old(const sobject_t& oid) const
 {
-  return missing.count(oid) ? missing[oid].have : eversion_t();
+  map<sobject_t, item>::const_iterator m = missing.find(oid);
+  if (m == missing.end())
+    return eversion_t();
+  const Missing::item &item(m->second);
+  return item.have;
 }
 
 /*
