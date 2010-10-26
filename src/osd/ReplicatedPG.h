@@ -522,6 +522,8 @@ protected:
   int recover_primary(int max);
   int recover_replicas(int max);
 
+  void do_complete_notify(Watch::Notification *notif);
+
   struct RepModify {
     ReplicatedPG *pg;
     MOSDSubOp *op;

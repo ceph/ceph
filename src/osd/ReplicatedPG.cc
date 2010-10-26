@@ -780,6 +780,15 @@ int ReplicatedPG::do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr)
   }
 }
 
+void ReplicatedPG::do_complete_notify(Watch::Notification *notif)
+{
+  osd->client_messenger->send_message(notif->reply, notif->session->con);
+  notif->session->put();
+  osd->watch->remove_notification(notif);
+  delete notif;
+}
+
+
 
 // ========================================================================
 // low level osd ops
@@ -1129,16 +1138,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  }
 	}
 
-	MWatchNotify *reply = new MWatchNotify(op.watch.cookie, op.watch.ver, notif->id, WATCH_NOTIFY_COMPLETE);
+	notif->reply = new MWatchNotify(op.watch.cookie, op.watch.ver, notif->id, WATCH_NOTIFY_COMPLETE);
 	if (notif->watchers.empty()) {
-	  osd->client_messenger->send_message(reply, notif->session->con);
-	  notif->session->put();
-	  osd->watch->remove_notification(notif);
-	  delete notif;
+          do_complete_notify(notif);
 	} else {
           obc->ref++;
           notif->obc = obc;
-	  notif->reply = reply;
 	  notif->timeout = new Watch::C_NotifyTimeout(osd, notif);
 	  osd->watch_timer.add_event_after(5.0, notif->timeout);
 	}

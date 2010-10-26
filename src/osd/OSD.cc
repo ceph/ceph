@@ -1605,11 +1605,17 @@ void OSD::ms_handle_connect(Connection *con)
   }
 }
 
+ReplicatedPG *OSD::get_pg(void *_obc, ceph_object_layout& layout)
+{
+  pg_t pgid = osdmap->raw_pg_to_pg(pg_t(layout.ol_pgid));
+  ReplicatedPG *pg = (ReplicatedPG *)lookup_lock_pg(pgid);
+  return pg;
+}
+
 void OSD::put_object_context(void *_obc, ceph_object_layout& layout)
 {
   ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)_obc;
-  pg_t pgid = osdmap->raw_pg_to_pg(pg_t(layout.ol_pgid));
-  ReplicatedPG *pg = (ReplicatedPG *)lookup_lock_pg(pgid);
+  ReplicatedPG *pg = get_pg(_obc, layout);
   pg->put_object_context(obc);
   pg->unlock();
 }
@@ -1689,9 +1695,9 @@ void OSD::handle_notify_timeout(void *_notif)
   obc->lock.Unlock();
   watch_lock.Unlock(); /* put_object_context takes osd->lock */
 
-  client_messenger->send_message(notif->reply, notif->session->con);
+  ReplicatedPG *pg =  get_pg(obc, notif->layout);
   put_object_context(obc, notif->layout);
-  delete notif;
+  pg->do_complete_notify(notif);
 
   watch_lock.Lock();
 

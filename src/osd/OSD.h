@@ -102,6 +102,7 @@ class MOSDPGMissing;
 class Watch;
 class Notification;
 class ObjectContext;
+class ReplicatedPG;
 
 extern const coll_t meta_coll;
 
@@ -984,6 +985,7 @@ public:
   void init_op_flags(MOSDOp *op);
 
   PG *lookup_lock_pg(pg_t pgid);
+  ReplicatedPG *get_pg(void *_obc, ceph_object_layout& layout);
   void put_object_context(void *_obc, ceph_object_layout& layout);
   Mutex watch_lock;
   SafeTimer watch_timer;
