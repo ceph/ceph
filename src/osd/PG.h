@@ -554,107 +554,33 @@ public:
     map<sobject_t, item> missing;         // oid -> (need v, have v)
     map<eversion_t, sobject_t> rmissing;  // v -> oid
 
-    unsigned num_missing() const { return missing.size(); }
-
-    void swap(Missing& o) {
-      missing.swap(o.missing);
-      rmissing.swap(o.rmissing);
-    }
-
-    bool is_missing(const sobject_t& oid) {
-      return missing.count(oid);
-    }
-    bool is_missing(const sobject_t& oid, eversion_t v) {
-      return missing.count(oid) && missing[oid].need <= v;
-    }
-    eversion_t have_old(const sobject_t& oid) {
-      return missing.count(oid) ? missing[oid].have : eversion_t();
-    }
-    
-    /*
-     * this needs to be called in log order as we extend the log.  it
-     * assumes missing is accurate up through the previous log entry.
-     */
-    void add_next_event(Log::Entry& e) {
-      if (e.is_update()) {
-	if (e.prior_version == eversion_t()) {
-	  // new object.
-	  //assert(missing.count(e.soid) == 0);  // might already be missing divergent item.
-	  if (missing.count(e.soid))  // already missing divergent item
-	    rmissing.erase(missing[e.soid].need);
-	  missing[e.soid] = item(e.version, eversion_t());  // .have = nil
-	} else if (missing.count(e.soid)) {
-	  // already missing (prior).
-	  //assert(missing[e.soid].need == e.prior_version);
-	  rmissing.erase(missing[e.soid].need);
-	  missing[e.soid].need = e.version;  // leave .have unchanged.
-	} else {
-	  // not missing, we must have prior_version (if any)
-	  missing[e.soid] = item(e.version, e.prior_version);
-	}
-	rmissing[e.version] = e.soid;
-      } else
-	rm(e.soid, e.version);
-    }
-
-    void add_event(Log::Entry& e) {
-      if (e.is_update()) {
-	if (missing.count(e.soid)) {
-	  if (missing[e.soid].need >= e.version)
-	    return;   // already missing same or newer.
-	  // missing older, revise need
-	  rmissing.erase(missing[e.soid].need);
-	  missing[e.soid].need = e.version;
-	} else 
-	  // not missing => have prior_version (if any)
-	  missing[e.soid] = item(e.version, e.prior_version);
-	rmissing[e.version] = e.soid;
-      } else
-	rm(e.soid, e.version);
-    }
-
-    void revise_need(sobject_t oid, eversion_t need) {
-      if (missing.count(oid)) {
-	rmissing.erase(missing[oid].need);
-	missing[oid].need = need;            // no not adjust .have
-      } else {
-	missing[oid] = item(need, eversion_t());
-      }
-      rmissing[need] = oid;
-    }
-
-    void add(const sobject_t& oid, eversion_t need, eversion_t have) {
-      missing[oid] = item(need, have);
-      rmissing[need] = oid;
-    }
-    
-    void rm(const sobject_t& oid, eversion_t when) {
-      if (missing.count(oid) && missing[oid].need < when) {
-        rmissing.erase(missing[oid].need);
-        missing.erase(oid);
-      }
-    }
-    void got(const sobject_t& oid, eversion_t v) {
-      assert(missing.count(oid));
-      assert(missing[oid].need <= v);
-      rmissing.erase(missing[oid].need);
-      missing.erase(oid);
-    }
+    unsigned int num_missing() const;
+    void swap(Missing& o);
+    bool is_missing(const sobject_t& oid);
+    bool is_missing(const sobject_t& oid, eversion_t v);
+    eversion_t have_old(const sobject_t& oid);
+    void add_next_event(Log::Entry& e);
+    void add_event(Log::Entry& e);
+    void revise_need(sobject_t oid, eversion_t need);
+    void add(const sobject_t& oid, eversion_t need, eversion_t have);
+    void rm(const sobject_t& oid, eversion_t when);
+    void got(const sobject_t& oid, eversion_t v);
 
     void encode(bufferlist &bl) const {
       __u8 struct_v = 1;
       ::encode(struct_v, bl);
       ::encode(missing, bl);
     }
+
     void decode(bufferlist::iterator &bl) {
       __u8 struct_v;
       ::decode(struct_v, bl);
       ::decode(missing, bl);
 
       for (map<sobject_t,item>::iterator it = missing.begin();
-           it != missing.end();
-           it++) 
-        rmissing[it->second.need] = it->first;
+	   it != missing.end();
+	   ++it)
+	rmissing[it->second.need] = it->first;
     }
   };
   WRITE_CLASS_ENCODER(Missing)
