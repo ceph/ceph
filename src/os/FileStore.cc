@@ -878,6 +878,27 @@ int FileStore::_sanity_check_fs()
   return 0;
 }
 
+
+int FileStore::read_op_seq(const char *fn, uint64_t *seq)
+{
+  int op_fd = ::open(current_op_seq_fn, O_CREAT|O_RDWR, 0644);
+  if (op_fd < 0)
+    return op_fd;
+
+  char s[40];
+  int l = ::read(op_fd, s, sizeof(s));
+  if (l >= 0) {
+    s[l] = 0;
+    *seq = atoll(s);
+  } else {
+    char buf[80];
+    dout(0) << "error reading " << current_op_seq_fn << ": "
+     << strerror_r(errno, buf, sizeof(buf)) << dendl;
+  }
+
+  return op_fd;
+}
+
 int FileStore::mount() 
 {
   char buf[80];
@@ -947,6 +968,14 @@ int FileStore::mount()
       uint64_t cp = snaps.back();
       btrfs_ioctl_vol_args snapargs;
 
+      uint64_t curr_seq;
+
+      int curr_fd = read_op_seq(current_op_seq_fn, &curr_seq);
+      if (curr_fd >= 0)
+        close(curr_fd);
+      dout(0) << "*** curr_seq=" << curr_seq << " cp=" << cp << dendl;
+      
+
       // drop current
       snapargs.fd = 0;
       strcpy(snapargs.name, "current");
@@ -978,26 +1007,13 @@ int FileStore::mount()
     }
   }
 
+  uint64_t initial_op_seq = 0;
+
   current_fd = ::open(current_fn, O_RDONLY);
   assert(current_fd >= 0);
 
-  // init op_seq
-  op_fd = ::open(current_op_seq_fn, O_CREAT|O_RDWR, 0644);
-  assert(op_fd >= 0);
-
-  uint64_t initial_op_seq = 0;
-  {
-    char s[40];
-    int l = ::read(op_fd, s, sizeof(s));
-    if (l >= 0) {
-      s[l] = 0;
-      initial_op_seq = atoll(s);
-    } else {
-      char buf[80];
-      dout(0) << "mount error reading " << current_op_seq_fn << ": "
-	      << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    }
-  }
+  op_fd = read_op_seq(current_op_seq_fn, &initial_op_seq);
+  assert (op_fd >= 0);
   dout(5) << "mount op_seq is " << initial_op_seq << dendl;
 
   // journal
