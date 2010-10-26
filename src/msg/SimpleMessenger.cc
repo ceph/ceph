@@ -829,9 +829,8 @@ int SimpleMessenger::Pipe::accept()
          p != existing->out_q.end();
          p++)
       out_q[p->first].splice(out_q[p->first].begin(), p->second);
-
-    existing->pipe_lock.Unlock();
   }
+  existing->pipe_lock.Unlock();
 
  open:
   // open
