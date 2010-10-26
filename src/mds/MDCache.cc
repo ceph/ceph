@@ -8511,9 +8511,10 @@ void MDCache::adjust_dir_fragments(CInode *diri,
       }
     } else {
       // merge
+      CDir *f = new CDir(diri, basefrag, this, srcfrags.front()->is_auth());
+      f->merge(srcfrags, waiters, replay);
 
-      // ....
-      assert(0 == "not implemented");
+      assert(0 == "fix subtree map...not implemented");
     }
   }
 }

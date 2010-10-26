@@ -743,17 +743,14 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   inode->close_dirfrag(frag); // selft deletion, watch out.
 }
 
-void CDir::merge(int bits, list<Context*>& waiters, bool replay)
+void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
 {
-  dout(10) << "merge by " << bits << " bits" << dendl;
+  dout(10) << "merge " << subs << dendl;
 
-  list<frag_t> frags;
-  frag.split(bits, frags);
-  
-  for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
-    CDir *dir = inode->get_or_open_dirfrag(cache, *p);
-    assert(dir->is_complete());
-    dout(10) << " subfrag " << *p << " " << *dir << dendl;
+  for (list<CDir*>::iterator p = subs.begin(); p != subs.end(); p++) {
+    CDir *dir = *p;
+    dout(10) << " subfrag " << dir->get_frag() << " " << *dir << dendl;
+    assert(!dir->is_auth() || dir->is_complete());
     
     // steal dentries
     while (!dir->items.empty()) 
