@@ -516,6 +516,7 @@ noinst_HEADERS = \
         common/armor.h\
 	common/base64.h\
 	common/debug.h\
+	common/errno.h\
 	common/lockdep.h\
 	common/BackTrace.h\
         common/ClassVersion.h\
