@@ -1061,6 +1061,8 @@ private:
 
   friend class EFragment;
 
+  bool can_fragment(CInode *diri, list<CDir*>& dirs);
+
 public:
   void split_dir(CDir *dir, int byn);
   void merge_dir(CInode *diri, frag_t fg);
