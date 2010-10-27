@@ -86,8 +86,6 @@ static set<int> registered, seen;
 
 version_t map_ver[PAXOS_NUM];
 
-version_t last_seen_version = 0;
-
 void handle_observe(MMonObserve *observe)
 {
   dout(1) << observe->get_source() << " -> " << get_paxos_name(observe->machine_id)
@@ -269,11 +267,6 @@ static void send_observe_requests()
   timer.add_event_after(seconds, new C_ObserverRefresh(false));
 }
 
-
-
-
-int lines = 0;
-
 void handle_ack(MMonCommandAck *ack)
 {
   lock.Lock();
@@ -293,6 +286,7 @@ void handle_ack(MMonCommandAck *ack)
 
 void send_command()
 {
+  version_t last_seen_version = 0;
   MMonCommand *m = new MMonCommand(mc.monmap.fsid, last_seen_version);
   m->cmd = pending_cmd;
   m->set_data(pending_bl);
