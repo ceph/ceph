@@ -8533,35 +8533,41 @@ public:
 };
 
 
+bool MDCache::can_fragment_lock(CInode *diri)
+{
+  if (!diri->dirfragtreelock.can_wrlock(-1)) {
+    dout(7) << "can_fragment: can't wrlock dftlock" << dendl;
+    mds->locker->scatter_nudge(&diri->dirfragtreelock, NULL);
+    return false;
+  }
+  return true;
+}
+
 bool MDCache::can_fragment(CInode *diri, list<CDir*>& dirs)
 {
   if (mds->mdsmap->is_degraded()) {
-    dout(7) << "cluster degraded, no fragmenting for now" << dendl;
+    dout(7) << "can_fragment: cluster degraded, no fragmenting for now" << dendl;
     return false;
   }
   if (diri->get_parent_dir() &&
       diri->get_parent_dir()->get_inode()->is_stray()) {
-    dout(7) << "i won't merge|split anything in stray" << dendl;
-    return false;
-  }
-  if (!diri->dirfragtreelock.can_wrlock(-1)) {
-    dout(7) << "can't wrlock dftlock" << dendl;
+    dout(7) << "can_fragment: i won't merge|split anything in stray" << dendl;
     return false;
   }
 
   for (list<CDir*>::iterator p = dirs.begin(); p != dirs.end(); p++) {
     CDir *dir = *p;
     if (dir->state_test(CDir::STATE_FRAGMENTING)) {
-      dout(7) << " already fragmenting " << *dir << dendl;
+      dout(7) << "can_fragment: already fragmenting " << *dir << dendl;
       return false;
     }
     if (!dir->is_auth()) {
-      dout(7) << " not auth on " << *dir << dendl;
+      dout(7) << "can_fragment: not auth on " << *dir << dendl;
       return false;
     }
     if (dir->is_frozen() ||
 	dir->is_freezing()) {
-      dout(7) << " can't merge, freezing|frozen.  wait for other exports to finish first." << dendl;
+      dout(7) << "can_fragment: can't merge, freezing|frozen.  wait for other exports to finish first." << dendl;
       return false;
     }
   }
@@ -8580,6 +8586,11 @@ void MDCache::split_dir(CDir *dir, int bits)
 
   if (!can_fragment(diri, dirs))
     return;
+  if (!can_fragment_lock(diri)) {
+    dout(10) << " requeuing dir " << dir->dirfrag() << dendl;
+    mds->balancer->queue_split(dir);
+    return;
+  }
 
   C_Gather *gather = new C_Gather(new C_MDC_FragmentFrozen(this, dirs, dir->get_frag(), bits));
   fragment_freeze_dirs(dirs, gather);
@@ -8600,6 +8611,11 @@ void MDCache::merge_dir(CInode *diri, frag_t frag)
 
   if (!can_fragment(diri, dirs))
     return;
+  if (!can_fragment_lock(diri)) {
+    //dout(10) << " requeuing dir " << dir->dirfrag() << dendl;
+    //mds->mdbalancer->split_queue.insert(dir->dirfrag());
+    return;
+  }
 
   C_Gather *gather = new C_Gather(new C_MDC_FragmentFrozen(this, dirs, frag, 0));
   fragment_freeze_dirs(dirs, gather);

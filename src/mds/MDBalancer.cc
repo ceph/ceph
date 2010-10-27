@@ -309,7 +309,10 @@ double MDBalancer::try_match(int ex, double& maxex,
   return howmuch;
 }
 
-
+void MDBalancer::queue_split(CDir *dir)
+{
+  split_queue.insert(dir->dirfrag());
+}
 
 void MDBalancer::do_fragmenting()
 {
@@ -320,8 +323,11 @@ void MDBalancer::do_fragmenting()
 
   dout(0) << "do_fragmenting " << split_queue.size() << " dirs marked for possible splitting" << dendl;
   
-  for (set<dirfrag_t>::iterator i = split_queue.begin();
-       i != split_queue.end();
+  set<dirfrag_t> q;
+  q.swap(split_queue);
+
+  for (set<dirfrag_t>::iterator i = q.begin();
+       i != q.end();
        i++) {
     CDir *dir = mds->mdcache->get_dirfrag(*i);
     if (!dir) continue;
@@ -330,7 +336,6 @@ void MDBalancer::do_fragmenting()
     dout(0) << "do_fragmenting splitting " << *dir << dendl;
     mds->mdcache->split_dir(dir, g_conf.mds_bal_split_bits);
   }
-  split_queue.clear();
 }
 
 
