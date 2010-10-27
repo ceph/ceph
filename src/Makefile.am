@@ -27,7 +27,7 @@ bin_PROGRAMS += cmds
 cmds_CXXFLAGS = ${AM_CFLAGS}
 
 # admin tools
-ceph_SOURCES = ceph.cc msg/SimpleMessenger.cc
+ceph_SOURCES = tools/ceph.cc msg/SimpleMessenger.cc
 ceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm -lcrypto
 cconf_SOURCES = cconf.cc
 cconf_LDADD = libcommon.a -lpthread -lm -lcrypto
