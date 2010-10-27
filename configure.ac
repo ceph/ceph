@@ -220,6 +220,8 @@ AM_CONDITIONAL(WITH_GTK2, [test "x$HAVE_GTK2" = "xyes"])
 
 if test "x$HAVE_GTK2" == "xyes"; then
 	PKG_CHECK_MODULES(GTKMM, [gtkmm-2.4 >= 1.0.0])
+	AC_DEFINE([HAVE_GTK2], [1],
+		 [Define if you have GTK2])
 fi
 
 AC_CONFIG_HEADERS([src/acconfig.h])

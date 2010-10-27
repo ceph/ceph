@@ -29,6 +29,14 @@ cmds_CXXFLAGS = ${AM_CFLAGS}
 # admin tools
 ceph_SOURCES = tools/ceph.cc msg/SimpleMessenger.cc
 ceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm -lcrypto
+ceph_CXXFLAGS = ${AM_CFLAGS}
+
+if WITH_GTK2
+ceph_SOURCES += tools/gui.cc
+ceph_LDADD += $(GTKMM_LIBS)
+ceph_CXXFLAGS += $(GTKMM_CFLAGS)
+endif
+
 cconf_SOURCES = cconf.cc
 cconf_LDADD = libcommon.a -lpthread -lm -lcrypto
 cauthtool_SOURCES = cauthtool.cc
