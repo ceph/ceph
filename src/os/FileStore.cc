@@ -973,37 +973,40 @@ int FileStore::mount()
       int curr_fd = read_op_seq(current_op_seq_fn, &curr_seq);
       if (curr_fd >= 0)
         close(curr_fd);
-      dout(0) << "*** curr_seq=" << curr_seq << " cp=" << cp << dendl;
+      dout(10) << "*** curr_seq=" << curr_seq << " cp=" << cp << dendl;
       
-
-      // drop current
-      snapargs.fd = 0;
-      strcpy(snapargs.name, "current");
-      int r = ::ioctl(basedir_fd,
-		      BTRFS_IOC_SNAP_DESTROY,
-		      &snapargs);
-      if (r) {
-	char buf[80];
-	dout(0) << "error removing old current subvol: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-	char s[PATH_MAX];
-	snprintf(s, sizeof(s), "%s/current.remove.me.%d", basedir.c_str(), rand());
-	r = ::rename(current_fn, s);
-	if (r) {
-	  dout(0) << "error renaming old current subvol: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-	  return -errno;
-	}
+      if (cp >= curr_seq) {
+        // drop current
+        snapargs.fd = 0;
+        strcpy(snapargs.name, "current");
+        int r = ::ioctl(basedir_fd,
+		        BTRFS_IOC_SNAP_DESTROY,
+		        &snapargs);
+        if (r) {
+	  char buf[80];
+	  dout(0) << "error removing old current subvol: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+	  char s[PATH_MAX];
+	  snprintf(s, sizeof(s), "%s/current.remove.me.%d", basedir.c_str(), rand());
+	  r = ::rename(current_fn, s);
+	  if (r) {
+	    dout(0) << "error renaming old current subvol: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+	    return -errno;
+	  }
+        }
+        assert(r == 0);
+      
+        // roll back
+        char s[PATH_MAX];
+        snprintf(s, sizeof(s), "%s/" COMMIT_SNAP_ITEM, basedir.c_str(), (long long unsigned)cp);
+        snapargs.fd = ::open(s, O_RDONLY);
+        r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &snapargs);
+        assert(r == 0);
+        ::close(snapargs.fd);
+        dout(10) << "mount rolled back to consistent snap " << cp << dendl;
+        snaps.pop_back();
+      } else {
+          dout(0) << "WARNING: skipping revert of current subvol to last snap, curr_seq=" << curr_seq << " snap seq=" << cp << dendl;
       }
-      assert(r == 0);
-      
-      // roll back
-      char s[PATH_MAX];
-      snprintf(s, sizeof(s), "%s/" COMMIT_SNAP_ITEM, basedir.c_str(), (long long unsigned)cp);
-      snapargs.fd = ::open(s, O_RDONLY);
-      r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &snapargs);
-      assert(r == 0);
-      ::close(snapargs.fd);
-      dout(10) << "mount rolled back to consistent snap " << cp << dendl;
-      snaps.pop_back();
     }
   }
 
