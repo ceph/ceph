@@ -740,7 +740,6 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   dout(10) << "               " << subfrags[0]->fnode.accounted_fragstat << dendl;
 
   purge_stolen(waiters, replay);
-  inode->close_dirfrag(frag); // selft deletion, watch out.
 }
 
 void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
@@ -764,7 +763,16 @@ void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
       if (p->second > cur)
 	replica_map[p->first] = p->second;
     }
-    
+
+    // merge version
+    if (dir->get_version() > get_version())
+      set_version(dir->get_version());
+
+    if (fnode.fragstat.version == 0)
+      fnode.fragstat.version = dir->fnode.fragstat.version;
+    if (fnode.rstat.version == 0)
+      fnode.rstat.version = dir->fnode.rstat.version;
+
     // merge state
     state_set(dir->get_state() & MASK_STATE_FRAGMENT_KEPT);
     dir_auth = dir->dir_auth;

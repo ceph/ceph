@@ -8468,54 +8468,88 @@ void MDCache::adjust_dir_fragments(CInode *diri,
   // split
   CDir *baseparent = diri->get_parent_dir();
 
-  for (list<CDir*>::iterator p = srcfrags.begin(); 
-       p != srcfrags.end();
-       p++) {
-    CDir *dir = *p;
+  if (bits > 0) {
+    // SPLIT
+    assert(srcfrags.size() == 1);
+    CDir *dir = srcfrags.front();
 
-    if (bits > 0) {
+    dir->split(bits, resultfrags, waiters, replay);
 
-      dir->split(bits, resultfrags, waiters, replay);
-
-      // did i change the subtree map?
-      if (dir->is_subtree_root()) {
-	// new frags are now separate subtrees
+    // did i change the subtree map?
+    if (dir->is_subtree_root()) {
+      // new frags are now separate subtrees
+      for (list<CDir*>::iterator p = resultfrags.begin();
+	   p != resultfrags.end();
+	   ++p)
+	subtrees[*p].clear();   // new frag is now its own subtree
+      
+      // was i a bound?
+      if (baseparent) {
+	CDir *parent = get_subtree_root(baseparent);
+	assert(subtrees[parent].count(dir));
+	subtrees[parent].erase(dir);
 	for (list<CDir*>::iterator p = resultfrags.begin();
 	     p != resultfrags.end();
 	     ++p)
-	  subtrees[*p].clear();   // new frag is now its own subtree
-
-	// was i a bound?
-	if (baseparent) {
-	  CDir *parent = get_subtree_root(baseparent);
-	  assert(subtrees[parent].count(dir));
-	  subtrees[parent].erase(dir);
-	  for (list<CDir*>::iterator p = resultfrags.begin();
-	       p != resultfrags.end();
-	       ++p)
-	    subtrees[parent].insert(*p);
-	}
-
-	// adjust my bounds.
-	set<CDir*> bounds;
-	bounds.swap(subtrees[dir]);
-	subtrees.erase(dir);
-	for (set<CDir*>::iterator p = bounds.begin();
-	     p != bounds.end();
-	     ++p) {
-	  CDir *frag = get_subtree_root((*p)->get_parent_dir());
-	  subtrees[frag].insert(*p);
-	}
-	
-	show_subtrees(10);
+	  subtrees[parent].insert(*p);
       }
-    } else {
-      // merge
-      CDir *f = new CDir(diri, basefrag, this, srcfrags.front()->is_auth());
-      f->merge(srcfrags, waiters, replay);
-
-      assert(0 == "fix subtree map...not implemented");
+      
+      // adjust my bounds.
+      set<CDir*> bounds;
+      bounds.swap(subtrees[dir]);
+      subtrees.erase(dir);
+      for (set<CDir*>::iterator p = bounds.begin();
+	   p != bounds.end();
+	   ++p) {
+	CDir *frag = get_subtree_root((*p)->get_parent_dir());
+	subtrees[frag].insert(*p);
+      }
+      
+      show_subtrees(10);
     }
+    
+    diri->close_dirfrag(dir->get_frag());
+    
+  } else {
+    // MERGE
+
+    // are my constituent bits subtrees?  if so, i will be too.
+    // (it's all or none, actually.)
+    bool was_subtree = false;
+    set<CDir*> new_bounds;
+    for (list<CDir*>::iterator p = srcfrags.begin(); p != srcfrags.end(); p++) {
+      CDir *dir = *p;
+      if (dir->is_subtree_root()) {
+	dout(10) << " taking srcfrag subtree bounds from " << *dir << dendl;
+	was_subtree = true;
+	map<CDir*, set<CDir*> >::iterator q = subtrees.find(dir);
+	set<CDir*>::iterator r = q->second.begin();
+	while (r != subtrees[dir].end()) {
+	  new_bounds.insert(*r);
+	  subtrees[dir].erase(r++);
+	}
+	subtrees.erase(q);
+	
+	// remove myself as my parent's bound
+	if (baseparent)
+	  subtrees[baseparent].erase(dir);
+      }
+    }
+    
+    // merge
+    CDir *f = new CDir(diri, basefrag, this, srcfrags.front()->is_auth());
+    f->merge(srcfrags, waiters, replay);
+    diri->add_dirfrag(f);
+
+    if (was_subtree) {
+      subtrees[f].swap(new_bounds);
+      if (baseparent)
+	subtrees[baseparent].insert(f);
+      
+      show_subtrees(10);
+    }
+
+    resultfrags.push_back(f);
   }
 }
 
