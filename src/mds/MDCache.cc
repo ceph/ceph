@@ -8609,6 +8609,11 @@ void MDCache::merge_dir(CInode *diri, frag_t frag)
     return;
   }
 
+  if (diri->dirfragtree.is_leaf(frag)) {
+    dout(10) << " " << frag << " already a leaf for " << *diri << dendl;
+    return;
+  }
+
   if (!can_fragment(diri, dirs))
     return;
   if (!can_fragment_lock(diri)) {
