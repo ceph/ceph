@@ -513,10 +513,19 @@ inline std::ostream& operator<<(std::ostream& out, fragtree_t& ft)
       }
     }
   }
-  if (1) {
+  if (0) {
     std::list<frag_t> leaves;
     ft.get_leaves(leaves);
     out << leaves;
+  }
+  if (1) {
+    for (std::map<frag_t,int32_t>::const_iterator p = ft._splits.begin();
+	 p != ft._splits.end();
+	 p++) {
+      if (p != ft._splits.begin())
+	out << " ";
+      out << p->first << "^" << p->second;
+    }
   }
   return out << ")";
 }
