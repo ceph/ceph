@@ -899,6 +899,15 @@ int FileStore::read_op_seq(const char *fn, uint64_t *seq)
   return op_fd;
 }
 
+int FileStore::write_op_seq(int fd, uint64_t seq)
+{
+  char s[30];
+  int ret;
+  sprintf(s, "%lld\n", (long long unsigned)seq);
+  ret = ::pwrite(fd, s, strlen(s), 0);
+  return ret;
+}
+
 int FileStore::mount() 
 {
   char buf[80];
@@ -971,42 +980,71 @@ int FileStore::mount()
       uint64_t curr_seq;
 
       int curr_fd = read_op_seq(current_op_seq_fn, &curr_seq);
-      if (curr_fd >= 0)
-        close(curr_fd);
+      assert(curr_fd >= 0);
+      close(curr_fd);
       dout(10) << "*** curr_seq=" << curr_seq << " cp=" << cp << dendl;
-      
-      if (cp >= curr_seq) {
-        // drop current
-        snapargs.fd = 0;
-        strcpy(snapargs.name, "current");
-        int r = ::ioctl(basedir_fd,
-		        BTRFS_IOC_SNAP_DESTROY,
-		        &snapargs);
-        if (r) {
-	  char buf[80];
-	  dout(0) << "error removing old current subvol: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-	  char s[PATH_MAX];
-	  snprintf(s, sizeof(s), "%s/current.remove.me.%d", basedir.c_str(), rand());
-	  r = ::rename(current_fn, s);
-	  if (r) {
-	    dout(0) << "error renaming old current subvol: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-	    return -errno;
-	  }
-        }
-        assert(r == 0);
-      
-        // roll back
-        char s[PATH_MAX];
-        snprintf(s, sizeof(s), "%s/" COMMIT_SNAP_ITEM, basedir.c_str(), (long long unsigned)cp);
-        snapargs.fd = ::open(s, O_RDONLY);
-        r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &snapargs);
-        assert(r == 0);
-        ::close(snapargs.fd);
-        dout(10) << "mount rolled back to consistent snap " << cp << dendl;
-        snaps.pop_back();
-      } else {
-          dout(0) << "WARNING: skipping revert of current subvol to last snap, curr_seq=" << curr_seq << " snap seq=" << cp << dendl;
+     
+      if (cp != curr_seq && !g_conf.osd_use_stale_snap) { 
+        dout(0) << "\n"
+             << " ** ERROR: current volume data version is not equal to snapshotted version\n"
+	     << "           which can lead to data inconsistency. \n"
+	     << "           Current version=" << curr_seq << " snapshot version=" << cp << "\n"
+	     << "           Startup with snapshotted version can be forced using the\n"
+             <<"            'osd use stale snap = true' config option.\n"
+	     << dendl;
+        cerr << TEXT_RED
+	     << " ** ERROR: current volume data version is not equal to snapshotted version\n"
+	     << "           which can lead to data inconsistency. \n"
+	     << "           Current version=" << curr_seq << " snapshot version=" << cp << "\n"
+	     << "           Startup with snapshotted version can be forced using the\n"
+             <<"            'osd use stale snap = true' config option.\n"
+	     << TEXT_NORMAL;
+        exit(1);
       }
+
+      if (cp != curr_seq) {
+        dout(0) << "WARNING: user forced start with data sequence mismatch: curr=" << curr_seq << " snap_seq=" << cp << dendl;
+        cerr << TEXT_YELLOW
+	     << " ** WARNING: forcing the use of stale snapshot data\n" << TEXT_NORMAL;
+      }
+
+      // drop current
+      snapargs.fd = 0;
+      strcpy(snapargs.name, "current");
+      int r = ::ioctl(basedir_fd,
+		      BTRFS_IOC_SNAP_DESTROY,
+		      &snapargs);
+      if (r) {
+	char buf[80];
+	dout(0) << "error removing old current subvol: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+	char s[PATH_MAX];
+	snprintf(s, sizeof(s), "%s/current.remove.me.%d", basedir.c_str(), rand());
+	r = ::rename(current_fn, s);
+	if (r) {
+	  dout(0) << "error renaming old current subvol: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+	  return -errno;
+	}
+      }
+      assert(r == 0);
+
+      // roll back
+      char s[PATH_MAX];
+      snprintf(s, sizeof(s), "%s/" COMMIT_SNAP_ITEM, basedir.c_str(), (long long unsigned)cp);
+      snapargs.fd = ::open(s, O_RDONLY);
+      r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &snapargs);
+      assert(r == 0);
+      ::close(snapargs.fd);
+      dout(10) << "mount rolled back to consistent snap " << cp << dendl;
+      snaps.pop_back();
+
+      assert(curr_fd >= 0);
+      if (cp != curr_seq) {
+        curr_fd = read_op_seq(current_op_seq_fn, &curr_seq);
+        /* we'll use the higher version from now on */
+        curr_seq = cp;
+        write_op_seq(curr_fd, curr_seq);
+      }
+      close(curr_fd);
     }
   }
 
@@ -2084,9 +2122,7 @@ void FileStore::sync_entry()
       sync_epoch++;
 
       dout(15) << "sync_entry committing " << cp << " sync_epoch " << sync_epoch << dendl;
-      char s[30];
-      sprintf(s, "%lld\n", (long long unsigned)cp);
-      ::pwrite(op_fd, s, strlen(s), 0);
+      write_op_seq(op_fd, cp);
 
       bool do_snap = btrfs && g_conf.filestore_btrfs_snap;
 

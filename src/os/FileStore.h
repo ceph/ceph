@@ -197,6 +197,7 @@ class FileStore : public JournalingObjectStore {
   
   bool test_mount_in_use();
   int read_op_seq(const char *fn, uint64_t *seq);
+  int write_op_seq(int, uint64_t seq);
   int mount();
   int umount();
   int wipe_subvol(const char *s);

@@ -532,6 +532,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_class_timeout, 0, OPT_DOUBLE, 60*60.0), // seconds
 	OPTION(osd_class_tmp, 0, OPT_STR, "/var/lib/ceph/tmp"),
 	OPTION(osd_check_for_log_corruption, 0, OPT_BOOL, false),
+	OPTION(osd_use_stale_snap, 0, OPT_BOOL, false),
 	OPTION(filestore, 0, OPT_BOOL, false),
 	OPTION(filestore_max_sync_interval, 0, OPT_DOUBLE, 5),    // seconds
 	OPTION(filestore_min_sync_interval, 0, OPT_DOUBLE, .01),  // seconds

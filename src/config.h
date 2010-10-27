@@ -382,6 +382,8 @@ struct md_config_t {
 
   bool osd_check_for_log_corruption;  // bleh
 
+  bool osd_use_stale_snap;
+
   // filestore
   bool filestore;
   double   filestore_max_sync_interval;
