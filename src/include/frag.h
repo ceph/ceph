@@ -19,6 +19,8 @@
 #include <map>
 #include <list>
 #include <iostream>
+#include <stdio.h>
+
 #include "buffer.h"
 
 #include "ceph_frag.h"
@@ -131,6 +133,17 @@ class frag_t {
   frag_t next() const {
     assert(!is_rightmost());
     return frag_t(ceph_frag_next(_enc));
+  }
+
+  // parse
+  bool parse(const char *s) {
+    int value, bits;
+    int r = sscanf(s, "%x/%d", &value, &bits);
+    if (r == 2) {
+      *this = frag_t(value, bits);
+      return true;
+    }
+    return false;
   }
 };
 
