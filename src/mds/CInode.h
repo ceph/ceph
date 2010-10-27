@@ -354,7 +354,7 @@ public:
 
   // -- cache infrastructure --
 private:
-  map<frag_t,CDir*> dirfrags; // cached dir fragments
+  map<frag_t,CDir*> dirfrags; // cached dir fragments under this Inode
   int stickydir_ref;
 
 public:
