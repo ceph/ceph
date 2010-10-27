@@ -546,7 +546,7 @@ private:
   void store(Context *fin);
   void _stored(version_t cv, Context *fin);
   void fetch(Context *fin);
-  void _fetched(bufferlist& bl, Context *fin);  
+  void _fetched(bufferlist& bl, bufferlist& bl2, Context *fin);  
 
   void store_parent(Context *fin);
   void _stored_parent(version_t v, Context *fin);

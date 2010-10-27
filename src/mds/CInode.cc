@@ -831,6 +831,7 @@ void CInode::store(Context *fin)
   dout(10) << "store " << get_version() << dendl;
   assert(is_base());
 
+  // encode
   bufferlist bl;
   string magic = CEPH_FS_ONDISK_MAGIC;
   ::encode(magic, bl);
@@ -839,10 +840,10 @@ void CInode::store(Context *fin)
   // write it.
   SnapContext snapc;
   ObjectOperation m;
-  m.setxattr("inode", bl);
+  m.write_full(bl);
 
   char n[30];
-  snprintf(n, sizeof(n), "%llx.%08llx", (long long unsigned)ino(), (long long unsigned)frag_t());
+  snprintf(n, sizeof(n), "%llx.%08llx.inode", (long long unsigned)ino(), (long long unsigned)frag_t());
   object_t oid(n);
   OSDMap *osdmap = mdcache->mds->objecter->osdmap;
   ceph_object_layout ol = osdmap->make_object_layout(oid,
@@ -864,11 +865,11 @@ void CInode::_stored(version_t v, Context *fin)
 
 struct C_Inode_Fetched : public Context {
   CInode *in;
-  bufferlist bl;
+  bufferlist bl, bl2;
   Context *fin;
   C_Inode_Fetched(CInode *i, Context *f) : in(i), fin(f) {}
   void finish(int r) {
-    in->_fetched(bl, fin);
+    in->_fetched(bl, bl2, fin);
   }
 };
 
@@ -877,6 +878,8 @@ void CInode::fetch(Context *fin)
   dout(10) << "fetch" << dendl;
 
   C_Inode_Fetched *c = new C_Inode_Fetched(this, fin);
+  C_Gather *gather = new C_Gather(c);
+
   char n[30];
   snprintf(n, sizeof(n), "%llx.%08llx", (long long unsigned)ino(), (long long unsigned)frag_t());
   object_t oid(n);
@@ -888,13 +891,27 @@ void CInode::fetch(Context *fin)
   ceph_object_layout ol = osdmap->make_object_layout(oid,
 						     mdcache->mds->mdsmap->get_metadata_pg_pool());
 
-  mdcache->mds->objecter->read(oid, ol, rd, CEPH_NOSNAP, &c->bl, 0, c );
+  mdcache->mds->objecter->read(oid, ol, rd, CEPH_NOSNAP, &c->bl, 0, gather->new_sub() );
+
+  
+  // read from separate object too
+  snprintf(n, sizeof(n), "%llx.%08llx.inode", (long long unsigned)ino(), (long long unsigned)frag_t());
+  object_t oid2(n);
+
+  ceph_object_layout ol2 = osdmap->make_object_layout(oid2,
+						     mdcache->mds->mdsmap->get_metadata_pg_pool());
+
+  mdcache->mds->objecter->read(oid2, ol2, 0, 0, CEPH_NOSNAP, &c->bl2, 0, gather->new_sub() );
 }
 
-void CInode::_fetched(bufferlist& bl, Context *fin)
+void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
 {
-  dout(10) << "_fetched" << dendl;
-  bufferlist::iterator p = bl.begin();
+  dout(10) << "_fetched got " << bl.length() << " and " << bl2.length() << dendl;
+  bufferlist::iterator p;
+  if (bl2.length())
+    p = bl2.begin();
+  else
+    p = bl.begin();
   string magic;
   ::decode(magic, p);
   dout(10) << " magic is '" << magic << "' (expecting '" << CEPH_FS_ONDISK_MAGIC << "')" << dendl;
