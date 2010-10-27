@@ -1071,6 +1071,7 @@ private:
   void fragment_freeze_dirs(list<CDir*>& dirs, C_Gather *gather);
   void fragment_mark_and_complete(list<CDir*>& dirs);
   void fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits);
+  void fragment_unmark_unfreeze_dirs(list<CDir*>& dirs);
   void fragment_stored(list<CDir*>& resultfrags, frag_t basefrag, int bits);
   void fragment_logged(Mutation *mut, list<CDir*>& resultfrags, frag_t basefrag, int bits);
   friend class C_MDC_FragmentFrozen;

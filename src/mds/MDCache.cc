@@ -8544,6 +8544,10 @@ bool MDCache::can_fragment(CInode *diri, list<CDir*>& dirs)
     dout(7) << "i won't merge|split anything in stray" << dendl;
     return false;
   }
+  if (!diri->dirfragtreelock.can_wrlock(-1)) {
+    dout(7) << "can't wrlock dftlock" << dendl;
+    return false;
+  }
 
   for (list<CDir*>::iterator p = dirs.begin(); p != dirs.end(); p++) {
     CDir *dir = *p;
@@ -8565,12 +8569,12 @@ bool MDCache::can_fragment(CInode *diri, list<CDir*>& dirs)
   return true;
 }
 
-
 void MDCache::split_dir(CDir *dir, int bits)
 {
   dout(7) << "split_dir " << *dir << " bits " << bits << dendl;
   assert(dir->is_auth());
   CInode *diri = dir->inode;
+
   list<CDir*> dirs;
   dirs.push_back(dir);
 
@@ -8615,17 +8619,6 @@ void MDCache::fragment_freeze_dirs(list<CDir*>& dirs, C_Gather *gather)
     dir->add_waiter(CDir::WAIT_FROZEN, gather->new_sub());
   }
 }
-
-/*
-void MDCache::fragment_unfreeze_dirs(list<CDir*>& dirs)
-{
-  for (list<CDir*>::iterator p = dirs.begin(); p != dirs.end(); p++) {
-    CDir *dir = *p;
-    dir->state_clear(CDir::STATE_FRAGMENTING);
-    dir->unfreeze_dir();
-  }
-}
-*/
 
 class C_MDC_FragmentMarking : public Context {
   MDCache *mdcache;
@@ -8673,6 +8666,29 @@ void MDCache::fragment_mark_and_complete(list<CDir*>& dirs)
   }
 }
 
+void MDCache::fragment_unmark_unfreeze_dirs(list<CDir*>& dirs)
+{
+  dout(10) << "fragment_unmark_unfreeze_dirs " << dirs << dendl;
+  for (list<CDir*>::iterator p = dirs.begin(); p != dirs.end(); p++) {
+    CDir *dir = *p;
+    dout(10) << " frag " << *dir << dendl;
+
+    assert(dir->state_test(CDir::STATE_DNPINNEDFRAG));
+    dir->state_clear(CDir::STATE_DNPINNEDFRAG);
+
+    assert(dir->state_test(CDir::STATE_FRAGMENTING));
+    dir->state_clear(CDir::STATE_FRAGMENTING);
+
+    for (CDir::map_t::iterator p = dir->items.begin();
+	 p != dir->items.end();
+	 ++p) {
+      p->second->state_clear(CDentry::STATE_FRAGMENTING);
+      p->second->put(CDentry::PIN_FRAGMENTING);
+    }
+
+    dir->unfreeze_dir();
+  }
+}
 
 class C_MDC_FragmentStored : public Context {
   MDCache *mdcache;
@@ -8699,6 +8715,14 @@ void MDCache::fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits)
 
   dout(10) << "fragment_frozen " << dirs << " " << basefrag << " by " << bits 
 	   << " on " << *diri << dendl;
+
+  // wrlock dirfragtreelock
+  if (!diri->dirfragtreelock.can_wrlock(-1)) {
+    dout(10) << " can't wrlock " << diri->dirfragtreelock << " on " << *diri << dendl;
+    fragment_unmark_unfreeze_dirs(dirs);
+    return;
+  }
+  diri->dirfragtreelock.get_wrlock(true);
 
   // refragment
   list<CDir*> resultfrags;
@@ -8806,6 +8830,9 @@ void MDCache::fragment_logged(Mutation *mut, list<CDir*>& resultfrags, frag_t ba
   mds->locker->drop_locks(mut);
   mut->cleanup();
   delete mut;
+
+  // drop dft wrlock
+  mds->locker->wrlock_finish(&diri->dirfragtreelock, NULL);
 
   // unfreeze resulting frags
   for (list<CDir*>::iterator p = resultfrags.begin();
