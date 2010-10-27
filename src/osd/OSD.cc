@@ -1620,6 +1620,21 @@ void OSD::put_object_context(void *_obc, ceph_object_layout& layout)
   pg->unlock();
 }
 
+void OSD::ack_notification(entity_name_t& name, void *_notif)
+{
+  Watch::Notification *notif = (Watch::Notification *)_notif;
+  if (watch->ack_notification(name, notif)) {
+	dout(0) << "got the last reply from pending watchers, can send response now" << dendl;
+	MWatchNotify *reply = notif->reply; // new MWatchNotify(notif->cookie, wi.ver, notif->id, WATCH_NOTIFY_COMPLETE);
+	client_messenger->send_message(reply, notif->session->con);
+	notif->session->put();
+	watch->remove_notification(notif);
+	if (notif->timeout)
+	  watch_timer.cancel_event(notif->timeout);
+	delete notif;
+  }
+}
+
 bool OSD::ms_handle_reset(Connection *con)
 {
   dout(0) << "OSD::ms_handle_reset()" << dendl;
@@ -1667,6 +1682,19 @@ bool OSD::ms_handle_reset(Connection *con)
     /* now drop a reference to that obc */
     put_object_context(obc, oiter->second);
   }
+
+  watch_lock.Lock();
+
+  map<void *, entity_name_t>::iterator notif_iter;
+  for (notif_iter = session->notifs.begin(); notif_iter != session->notifs.end(); ++notif_iter) {
+    Watch::Notification *notif = (Watch::Notification *)notif_iter->first;
+    entity_name_t& dest = notif_iter->second;
+    dout(0) << "ms_handle_reset: ack notification for notif=" << (void *)notif << " entity=" << dest << dendl;
+    ack_notification(dest, notif);
+  }
+  session->notifs.clear();
+
+  watch_lock.Unlock();
 
   return true;
 }

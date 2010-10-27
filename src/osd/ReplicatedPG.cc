@@ -1129,6 +1129,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	    session = iter->second;
 	    dout(0) << " found session, sending notification" << dendl;
 	    notif->add_watcher(oi_iter->first, Watch::WATCHER_NOTIFIED); // adding before send_message to avoid race
+            entity_name_t name = oi_iter->first;
+            session->add_notif(notif, name);
 
 	    MWatchNotify *notify_msg = new MWatchNotify(w.cookie, w.ver, notif->id, WATCH_NOTIFY);
 	    osd->client_messenger->send_message(notify_msg, session->con);
@@ -1145,7 +1147,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
           obc->ref++;
           notif->obc = obc;
 	  notif->timeout = new Watch::C_NotifyTimeout(osd, notif);
-	  osd->watch_timer.add_event_after(5.0, notif->timeout);
+	  osd->watch_timer.add_event_after(5.0, notif->timeout); /* FIXME: use a configurable timeout here */
 	}
 	osd->watch_lock.Unlock();
       }
@@ -1176,18 +1178,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  result = -EINVAL;
 	  break;
 	}
+	OSD::Session *session = (OSD::Session *)ctx->op->get_connection()->get_priv();
+        session->del_notif(notif);
 
 	entity_name_t source = ctx->op->get_source();
-	if (osd->watch->ack_notification(source, notif)) {
-	  dout(0) << "got the last reply from pending watchers, can send response now" << dendl;
-	  MWatchNotify *reply = notif->reply; // new MWatchNotify(notif->cookie, wi.ver, notif->id, WATCH_NOTIFY_COMPLETE);
-	  osd->client_messenger->send_message(reply, notif->session->con);
-	  notif->session->put();
-	  osd->watch->remove_notification(notif);
-	  if (notif->timeout)
-	    osd->watch_timer.cancel_event(notif->timeout);
-	  delete notif;
-	}
+        osd->ack_notification(source, notif);
 	osd->watch_lock.Unlock();
       }
       break;
