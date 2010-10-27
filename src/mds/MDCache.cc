@@ -5164,6 +5164,71 @@ void MDCache::trim_non_auth()
   show_subtrees();
 }
 
+/**
+ * Recursively trim the subtree rooted at directory to remove all
+ * CInodes/CDentrys/CDirs that aren't links to remote MDSes, or ancestors
+ * of those links. This is used to clear invalid data out of the cache.
+ * Note that it doesn't clear the passed-in directory, since that's not
+ * always safe.
+ */
+bool MDCache::trim_non_auth_subtree(CDir *directory)
+{
+  dout(10) << "trim_non_auth_subtree " << directory << dendl;
+  bool keep_directory = false;
+  CDir::map_t::iterator j = directory->begin();
+  CDir::map_t::iterator i = j;
+  while (j != directory->end()) {
+    i = j++;
+    CDentry *dn = i->second;
+    dout(10) << "Checking dentry " << dn << dendl;
+    CDentry::linkage_t *dnl = dn->get_linkage();
+    if (dnl->is_primary()) { // check for subdirectories, etc
+      CInode *in = dnl->get_inode();
+      bool keep_inode = false;
+      if (in->is_dir()) {
+        list<CDir*> subdirs;
+        in->get_dirfrags(subdirs);
+        for (list<CDir*>::iterator subdir = subdirs.begin();
+            subdir != subdirs.end();
+            ++subdir) {
+          if ((*subdir)->is_subtree_root()) {
+            keep_inode = true;
+            dout(10) << "subdir " << *subdir << "is kept!" << dendl;
+          }
+          else {
+            if (trim_non_auth_subtree(*subdir))
+              keep_inode = true;
+            else {
+              in->close_dirfrag((*subdir)->get_frag());
+              directory->state_clear(CDir::STATE_COMPLETE);  // now incomplete!
+            }
+          }
+        }
+
+      }
+      if (!keep_inode) { // remove it!
+        dout(20) << "removing inode " << in << " with dentry" << dn << dendl;
+        directory->unlink_inode(dn);
+        remove_inode(in);
+        directory->remove_dentry(dn);
+      } else {
+        dout(20) << "keeping inode " << in << "with dentry " << dn <<dendl;
+        keep_directory = true;
+      }
+    } else { // just remove it
+      dout(20) << "removing dentry " << dn << dendl;
+      if (dnl->is_remote())
+        directory->unlink_inode(dn);
+      directory->remove_dentry(dn);
+    }
+  }
+  /**
+   * We've now checked all our children and deleted those that need it.
+   * Now return to caller, and tell them if *we're* a keeper.
+   */
+  return keep_directory;
+}
+
 /* This function DOES put the passed message before returning */
 void MDCache::handle_cache_expire(MCacheExpire *m)
 {
