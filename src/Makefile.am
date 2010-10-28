@@ -32,9 +32,29 @@ ceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm -lcrypto
 ceph_CXXFLAGS = ${AM_CFLAGS}
 
 if WITH_GTK2
+ceph_tool_guidir = ${datadir}/ceph_tool/gui_resources/
+ceph_tool_gui_DATA = \
+	tools/gui_resources/blacklist.svg \
+	tools/gui_resources/client.svg \
+	tools/gui_resources/cluster_stats_window.glade \
+	tools/gui_resources/down_osd.svg \
+	tools/gui_resources/failed_mds.svg \
+	tools/gui_resources/gui_monitor.build \
+	tools/gui_resources/gui_monitor.glade \
+	tools/gui_resources/gui_monitor_old.glade \
+	tools/gui_resources/main-window.glade \
+	tools/gui_resources/mds.svg \
+	tools/gui_resources/monitor.svg \
+	tools/gui_resources/node_stats_window.glade \
+	tools/gui_resources/osd.svg \
+	tools/gui_resources/out_osd.svg \
+	tools/gui_resources/pg.svg \
+	tools/gui_resources/stats_window.glade \
+	tools/gui_resources/stopped_mds.svg
 ceph_SOURCES += tools/gui.cc
 ceph_LDADD += $(GTKMM_LIBS)
 ceph_CXXFLAGS += $(GTKMM_CFLAGS)
+ceph_CXXFLAGS += -DCEPH_TOOL_GUIDIR="\"${ceph_tool_guidir}\""
 endif
 
 cconf_SOURCES = cconf.cc
@@ -352,8 +372,6 @@ ceph_ver.c: ceph_ver.h
 common/debug.cc: ceph_ver.h 
 common/BackTrace.cc: ceph_ver.h
 config.cc: ceph_ver.h
-
-
 
 # cleaning
 clean-local:

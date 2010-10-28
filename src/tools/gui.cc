@@ -13,6 +13,8 @@
 #include "tools/gui.h"
 #include "tools/gui_resources.h"
 
+#include <gtkmm.h>
+#include <libgen.h>
 #include <set>
 #include <string>
 
@@ -27,6 +29,44 @@ using std::string;
 #define MY_GET_WIDGET(x) do { builder->get_widget(#x, x); } while(0);
 
 ///////////////// Functions /////////////////
+static std::string resource_path_prefix(".");
+
+static std::string resource_path(const std::string &loc)
+{
+  ostringstream oss;
+  oss << resource_path_prefix << "/" << loc;
+  return oss.str();
+}
+
+//
+// Figure out where our XML files are for the GUI.
+//
+// The first place we look is in "D/gui_resources"
+// (where D is the directory where the executable lives.)
+// If we find it there, we assume that the developer has built the application and is running it
+// from the source tree.
+//
+// If that doesn't work, we use the GUI_RESOURCE_DIR set up by automake.
+// When the user runs make install, all the XML files will get placed there.
+//
+static int calculate_resource_path_prefix(const char *argv0)
+{
+  char d_input[strlen(argv0) + 1];
+  memset(d_input, 0, sizeof(d_input));
+  char *d_name = dirname(d_input);
+
+  ostringstream oss;
+  oss << d_name << "/tools/gui_resources";
+  resource_path_prefix = oss.str();
+  if (!access(resource_path(GUI_MONITOR_BUILDER_FILE).c_str(), R_OK))
+    return 0;
+
+  resource_path_prefix = CEPH_TOOL_GUIDIR;
+  if (!access(resource_path(GUI_MONITOR_BUILDER_FILE).c_str(), R_OK))
+    return 0;
+
+  return EIO;
+}
 
 // Given an integer m and an array of length n, divides m into n categories of
 // equal or near-equal values.
@@ -149,7 +189,7 @@ GuiMonitor::~GuiMonitor()
    delete guiMonitorAboutDialog;
 }
 
-bool GuiMonitor::open_icon(Glib::RefPtr<Gdk::Pixbuf> &icon, std::string path)
+bool GuiMonitor::open_icon(Glib::RefPtr<Gdk::Pixbuf> &icon, const std::string &path)
 {
    try {
       icon = Gdk::Pixbuf::create_from_file(path);
@@ -173,25 +213,25 @@ bool GuiMonitor::init()
 
   if (!guiMonitorWindow)
     return false;
-  if (!open_icon(blacklistIcon, BLACKLIST_ICON_PATH))
+  if (!open_icon(blacklistIcon, resource_path(BLACKLIST_ICON_PATH)))
     return false;
-  if (!open_icon(clientIcon, CLIENT_ICON_PATH))
+  if (!open_icon(clientIcon, resource_path(CLIENT_ICON_PATH)))
     return false;
-  if (!open_icon(MDSIcon, MDS_ICON_PATH))
+  if (!open_icon(MDSIcon, resource_path(MDS_ICON_PATH)))
     return false;
-  //if (!open_icon(failedMDSIcon, FAILED_MDS_ICON_PATH))
+  //if (!open_icon(failedMDSIcon, resource_path(FAILED_MDS_ICON_PATH)))
   //  return false;
-  //if (!open_icon(stoppedMDSIcon, STOPPED_MDS_ICON_PATH))
+  //if (!open_icon(stoppedMDSIcon, resource_path(STOPPED_MDS_ICON_PATH)))
   //  return false;
-  if (!open_icon(monitorIcon, MONITOR_ICON_PATH))
+  if (!open_icon(monitorIcon, resource_path(MONITOR_ICON_PATH)))
     return false;
-  if (!open_icon(upOSDIcon, UP_OSD_ICON_PATH))
+  if (!open_icon(upOSDIcon, resource_path(UP_OSD_ICON_PATH)))
     return false;
-  if (!open_icon(downOSDIcon, DOWN_OSD_ICON_PATH))
+  if (!open_icon(downOSDIcon, resource_path(DOWN_OSD_ICON_PATH)))
     return false;
-  if (!open_icon(outOSDIcon, OUT_OSD_ICON_PATH))
+  if (!open_icon(outOSDIcon, resource_path(OUT_OSD_ICON_PATH)))
     return false;
-  if (!open_icon(PGIcon, PG_ICON_PATH))
+  if (!open_icon(PGIcon, resource_path(PG_ICON_PATH)))
     return false;
 
   // connect callbacks to their corresponding signals.
@@ -974,7 +1014,7 @@ void GuiMonitor::gen_icons_from_node_info(vector<NodeInfo *>& nodeInfo)
 void GuiMonitor::open_stats(enum NodeType type, bool is_cluster, int id)
 {
   Glib::RefPtr<Gtk::Builder> builder_file =
-    Gtk::Builder::create_from_file(STATS_WINDOW_BUILDER_FILE);
+    Gtk::Builder::create_from_file(resource_path(STATS_WINDOW_BUILDER_FILE));
 
   /* note that node_stats will be deleted once the stats window closes */
   StatsWindowInfo *node_stats =
@@ -1268,17 +1308,13 @@ void GuiMonitor::handle_view_node_response(int response)
 
   switch (selected_type) {
     case OSD_NODE: {
-      long id;
+      int id;
 
       try {
-	id = boost::lexical_cast<long>(id_entry);
+	id = boost::lexical_cast<int>(id_entry);
       }
       catch (const boost::bad_lexical_cast &) {
 	dialog_error("Node ID must be a number.", Gtk::MESSAGE_ERROR);
-	return;
-      }
-      if (id < 0) {
-	dialog_error("ID must be a positive number.", Gtk::MESSAGE_ERROR);
 	return;
       }
       if (id >= g.osdmap.get_max_osd()) {
@@ -1696,30 +1732,59 @@ void GuiMonitor::StatsWindowInfo::insert_stats(const std::string &key,
 int run_gui(int argc, char **argv)
 {
   int ret = EXIT_SUCCESS;
+  GuiMonitor *gui = NULL;
 
-  // Now that the monitor map is up and running, initialize the GUI and start
-  // sending observe requests.  The observe requests will update the
-  // guiMonitorWindow (the main window of the Ceph monitor).  Observe requests
-  // will continue to be sent until the application is closed or until the file
-  // system is no longer running.
-  Gtk::Main kit(&argc, &argv);
-
-  // read the Gtk::Builder file that contains the layout of the windows.
-  Glib::RefPtr<Gtk::Builder> builder =
-	Gtk::Builder::create_from_file(GUI_MONITOR_BUILDER_FILE);
-
-  // stores pointers to all GUI elements
-  GuiMonitor *gui = new GuiMonitor(builder);
-
-  if (!gui->init()) {
-     cerr << "There was a problem with initializing the GUI." << std::endl;
-     ret = EXIT_FAILURE;
-     goto done;
+  ret = calculate_resource_path_prefix(argv[0]);
+  if (ret) {
+    cerr << "Couldn't find GUI resource files!" << std::endl;
+    goto done;
   }
 
-  // The GUI will now enter its main run loop and will
-  // not exit until the GUI closes.
-  gui->run_main_loop(kit);
+  try {
+    // Now that the monitor map is up and running, initialize the GUI and start
+    // sending observe requests.  The observe requests will update the
+    // guiMonitorWindow (the main window of the Ceph monitor).  Observe requests
+    // will continue to be sent until the application is closed or until the file
+    // system is no longer running.
+    Gtk::Main kit(argc, argv);
+
+    // read the Gtk::Builder file that contains the layout of the windows.
+    Glib::RefPtr<Gtk::Builder> builder =
+	  Gtk::Builder::create_from_file(resource_path(GUI_MONITOR_BUILDER_FILE));
+
+    // stores pointers to all GUI elements
+    gui = new GuiMonitor(builder);
+
+    if (!gui->init()) {
+       cerr << "There was a problem with initializing the GUI." << std::endl;
+       ret = EXIT_FAILURE;
+       goto done;
+    }
+
+    // The GUI will now enter its main run loop and will
+    // not exit until the GUI closes.
+    gui->run_main_loop(kit);
+  }
+  catch(const Gtk::BuilderError& ex) {
+    std::cerr << "Gtk BuilderError: " << ex.what() << std::endl;
+    ret = EXIT_FAILURE;
+    goto done;
+  }
+  catch(const Glib::FileError& ex) {
+    std::cerr << "FileError: " << ex.what() << std::endl;
+    ret = EXIT_FAILURE;
+    goto done;
+  }
+  catch (const Glib::Exception &e) {
+    cerr << "got Glib exception: " << e.what() << std::endl;
+    ret = EXIT_FAILURE;
+    goto done;
+  }
+  catch (const std::exception &e) {
+    cerr << "got exception: " << e.what() << std::endl;
+    ret = EXIT_FAILURE;
+    goto done;
+  }
 
 done:
   delete gui;

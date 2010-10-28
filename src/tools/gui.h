@@ -177,7 +177,7 @@ private:
    * Private Functions
    */
   void get_widgets(Glib::RefPtr<Gtk::Builder> builder_object);
-  bool open_icon(Glib::RefPtr<Gdk::Pixbuf> &icon, std::string path);
+  bool open_icon(Glib::RefPtr<Gdk::Pixbuf> &icon, const std::string &path);
   void connect_signals();
   void link_elements();
   void update_osd_cluster_view();
