@@ -217,12 +217,12 @@ bool GuiMonitor::init()
   if (!open_icon(PGIcon, resource_path(PG_ICON_PATH)))
     return false;
 
-  // connect callbacks to their corresponding signals.
-  connect_signals();
-
   // Link elements (e.g., text buffers, list stores, etc.) to their
   // containers (e.g., text views, list views, etc.)
   link_elements();
+
+  // connect callbacks to their corresponding signals.
+  connect_signals();
 
   thread = new GuiMonitorThread(this);
   thread->create();
