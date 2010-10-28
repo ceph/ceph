@@ -6357,7 +6357,7 @@ int Client::get_file_stripe_address(int fd, loff_t offset, string& address)
   assert(extents.size() == 1);
 
   // now we have the object and its 'layout'
-  pg_t pg = (pg_t)extents[0].layout.ol_pgid;
+  pg_t pg = osdmap->object_locator_to_pg(extents[0].oid, extents[0].oloc);
   vector<int> osds;
   osdmap->pg_to_osds(pg, osds);
   if (!osds.size())

@@ -396,8 +396,12 @@ void Objecter::resend_mon_ops()
 
 tid_t Objecter::op_submit(Op *op)
 {
+
+  if (op->oid.name.length())
+    op->pgid = osdmap->object_locator_to_pg(op->oid, op->oloc);
+
   // find
-  PG &pg = get_pg( pg_t(op->layout.ol_pgid) );
+  PG &pg = get_pg(op->pgid);
     
   // pick tid
   if (!op->tid)
@@ -425,8 +429,8 @@ tid_t Objecter::op_submit(Op *op)
 
   // send?
   dout(10) << "op_submit oid " << op->oid
+           << " " << op->oloc 
 	   << " " << op->ops << " tid " << op->tid
-           << " " << op->layout 
            << " osd" << pg.primary()
            << dendl;
 
@@ -454,8 +458,12 @@ tid_t Objecter::op_submit(Op *op)
     if (op->onack)
       flags |= CEPH_OSD_FLAG_ACK;
 
+    ceph_object_layout ol;
+    ol.ol_pgid = op->pgid.v;
+    ol.ol_stripe_unit = 0;
+
     MOSDOp *m = new MOSDOp(client_inc, op->tid,
-			   op->oid, op->layout, osdmap->get_epoch(),
+			   op->oid, ol, osdmap->get_epoch(),
 			   flags);
 
     m->set_snapid(op->snapid);
@@ -625,10 +633,9 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
     return;
   }
 
-  ceph_object_layout layout;
-  object_t oid;
+  const pg_pool_t *pool = osdmap->get_pg_pool(list_context->pool_id);
+  int pg_num = pool->get_pg_num();
 
-  int pg_num = osdmap->get_pg_layout(list_context->pool_id, list_context->current_pg, layout);
   if (list_context->starting_pg_num == 0) {     // there can't be zero pgs!
     list_context->starting_pg_num = pg_num;
     dout(20) << pg_num << " placement groups" << dendl;
@@ -639,7 +646,6 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
     list_context->current_pg = 0;
     list_context->cookie = 0;
     list_context->starting_pg_num = pg_num;
-    osdmap->get_pg_layout(list_context->pool_id, list_context->current_pg, layout);
   }
   if (list_context->current_pg == pg_num){ //this context got all the way through
     onfinish->finish(0);
@@ -652,7 +658,19 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
 
   bufferlist *bl = new bufferlist();
   C_List *onack = new C_List(list_context, onfinish, bl, this);
-  read(oid, layout, op, list_context->pool_snap_seq, bl, 0, onack);
+
+  object_t oid;
+  object_locator_t oloc(list_context->pool_id);
+
+  // 
+  Op *o = new Op(oid, oloc, op.ops, CEPH_OSD_FLAG_READ, onack, NULL);
+  o->priority = op.priority;
+  o->snapid = list_context->pool_snap_seq;
+  o->outbl = bl;
+
+  o->pgid = pg_t(list_context->current_pg, list_context->pool_id, -1);
+
+  op_submit(o);
 }
 
 void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *final_finish)

@@ -580,8 +580,8 @@ int RadosClient::selfmanaged_snap_rollback_object(const rados_pool_t pool,
 {
   int reply;
   PoolCtx* ctx = (PoolCtx *) pool;
-  ceph_object_layout layout = objecter->osdmap
-    ->make_object_layout(oid, ctx->poolid);
+
+  object_locator_t oloc(ctx->poolid);
 
   Mutex mylock("RadosClient::snap_rollback::mylock");
   Cond cond;
@@ -589,7 +589,7 @@ int RadosClient::selfmanaged_snap_rollback_object(const rados_pool_t pool,
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &reply);
 
   lock.Lock();
-  objecter->rollback_object(oid, layout, snapc, snapid,
+  objecter->rollback_object(oid, oloc, snapc, snapid,
 		     g_clock.now(), onack, NULL);
   lock.Unlock();
 
@@ -801,8 +801,8 @@ int RadosClient::create(PoolCtx& pool, const object_t& oid, bool exclusive)
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
-  objecter->create(oid, layout,
+  object_locator_t oloc(pool.poolid);
+  objecter->create(oid, oloc,
 		  pool.snapc, ut, 0, (exclusive ? CEPH_OSD_OP_FLAG_EXCL : 0),
 		  onack, NULL);
   lock.Unlock();
@@ -854,8 +854,8 @@ int RadosClient::write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
-  objecter->write(oid, layout,
+  object_locator_t oloc(pool.poolid);
+  objecter->write(oid, oloc,
 		  off, len, pool.snapc, bl, ut, 0,
 		  onack, NULL);
   lock.Unlock();
@@ -887,8 +887,8 @@ int RadosClient::write_full(PoolCtx& pool, const object_t& oid, bufferlist& bl)
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
-  objecter->write_full(oid, layout,
+  object_locator_t oloc(pool.poolid);
+  objecter->write_full(oid, oloc,
 		  pool.snapc, bl, ut, 0,
 		  onack, NULL);
   lock.Unlock();
@@ -910,8 +910,8 @@ int RadosClient::aio_read(PoolCtx& pool, const object_t oid, off_t off, bufferli
   c->pbl = pbl;
 
   Mutex::Locker l(lock);
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
-  objecter->read(oid, layout,
+  object_locator_t oloc(pool.poolid);
+  objecter->read(oid, oloc,
 		 off, len, pool.snap_seq, &c->bl, 0,
 		  onack);
 
@@ -926,8 +926,8 @@ int RadosClient::aio_read(PoolCtx& pool, const object_t oid, off_t off, char *bu
   c->maxlen = len;
 
   Mutex::Locker l(lock);
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
-  objecter->read(oid, layout,
+  object_locator_t oloc(pool.poolid);
+  objecter->read(oid, oloc,
 		 off, len, pool.snap_seq, &c->bl, 0,
 		  onack);
 
@@ -944,8 +944,8 @@ int RadosClient::aio_write(PoolCtx& pool, const object_t oid, off_t off, const b
   Context *onsafe = new C_aio_Safe(c);
 
   Mutex::Locker l(lock);
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
-  objecter->write(oid, layout,
+  object_locator_t oloc(pool.poolid);
+  objecter->write(oid, oloc,
 		  off, len, pool.snapc, bl, ut, 0,
 		  onack, onsafe);
 
@@ -962,8 +962,8 @@ int RadosClient::aio_write_full(PoolCtx& pool, const object_t oid, const bufferl
   Context *onsafe = new C_aio_Safe(c);
 
   Mutex::Locker l(lock);
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
-  objecter->write_full(oid, layout,
+  object_locator_t oloc(pool.poolid);
+  objecter->write_full(oid, oloc,
 		  pool.snapc, bl, ut, 0,
 		  onack, onsafe);
 
@@ -982,8 +982,8 @@ int RadosClient::remove(PoolCtx& pool, const object_t& oid)
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
-  objecter->remove(oid, layout,
+  object_locator_t oloc(pool.poolid);
+  objecter->remove(oid, oloc,
 		  snapc, ut, 0,
 		  onack, NULL);
   lock.Unlock();
@@ -1012,8 +1012,8 @@ int RadosClient::trunc(PoolCtx& pool, const object_t& oid, size_t size)
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
-  objecter->trunc(oid, layout,
+  object_locator_t oloc(pool.poolid);
+  objecter->trunc(oid, oloc,
 		  pool.snapc, ut, 0,
 		  size, 0,
 		  onack, NULL);
@@ -1041,10 +1041,10 @@ int RadosClient::tmap_update(PoolCtx& pool, const object_t& oid, bufferlist& cmd
 
   lock.Lock();
   SnapContext snapc;
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  object_locator_t oloc(pool.poolid);
   ObjectOperation wr;
   wr.tmap_update(cmdbl);
-  objecter->mutate(oid, layout, wr, snapc, ut, 0, onack, NULL);
+  objecter->mutate(oid, oloc, wr, snapc, ut, 0, onack, NULL);
   lock.Unlock();
 
   mylock.Lock();
@@ -1069,10 +1069,10 @@ int RadosClient::exec(PoolCtx& pool, const object_t& oid, const char *cls, const
 
 
   lock.Lock();
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  object_locator_t oloc(pool.poolid);
   ObjectOperation rd;
   rd.call(cls, method, inbl);
-  objecter->read(oid, layout, rd, pool.snap_seq, &outbl, 0, onack);
+  objecter->read(oid, oloc, rd, pool.snap_seq, &outbl, 0, onack);
   lock.Unlock();
 
   mylock.Lock();
@@ -1094,8 +1094,8 @@ int RadosClient::read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist&
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
-  objecter->read(oid, layout,
+  object_locator_t oloc(pool.poolid);
+  objecter->read(oid, oloc,
 	      off, len, pool.snap_seq, &bl, 0,
               onack);
   lock.Unlock();
@@ -1133,8 +1133,8 @@ int RadosClient::stat(PoolCtx& pool, const object_t& oid, uint64_t *psize, time_
     psize = &size;
 
   lock.Lock();
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
-  objecter->stat(oid, layout,
+  object_locator_t oloc(pool.poolid);
+  objecter->stat(oid, oloc,
 	      pool.snap_seq, psize, &mtime, 0,
               onack);
   lock.Unlock();
@@ -1163,8 +1163,8 @@ int RadosClient::getxattr(PoolCtx& pool, const object_t& oid, const char *name, 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
-  objecter->getxattr(oid, layout,
+  object_locator_t oloc(pool.poolid);
+  objecter->getxattr(oid, oloc,
 	      name, pool.snap_seq, &bl, 0,
               onack);
   lock.Unlock();
@@ -1196,9 +1196,10 @@ int RadosClient::rmxattr(PoolCtx& pool, const object_t& oid, const char *name)
 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
+  object_locator_t oloc(pool.poolid);
+
   lock.Lock();
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
-  objecter->removexattr(oid, layout, name,
+  objecter->removexattr(oid, oloc, name,
 		  pool.snapc, ut, 0,
 		  onack, NULL);
   lock.Unlock();
@@ -1230,8 +1231,8 @@ int RadosClient::setxattr(PoolCtx& pool, const object_t& oid, const char *name, 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
-  objecter->setxattr(oid, layout, name,
+  object_locator_t oloc(pool.poolid);
+  objecter->setxattr(oid, oloc, name,
 		  pool.snapc, bl, ut, 0,
 		  onack, NULL);
   lock.Unlock();
@@ -1263,9 +1264,9 @@ int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<std::string, 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  object_locator_t oloc(pool.poolid);
   map<string, bufferlist> aset;
-  objecter->getxattrs(oid, layout, pool.snap_seq,
+  objecter->getxattrs(oid, oloc, pool.snap_seq,
 		      aset,
 		      0, onack);
   lock.Unlock();

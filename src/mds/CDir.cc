@@ -1123,12 +1123,10 @@ void CDir::fetch(Context *c, const string& want_dn, bool ignore_authpinnability)
   // start by reading the first hunk of it
   C_Dir_Fetch *fin = new C_Dir_Fetch(this, want_dn);
   object_t oid = get_ondisk_object();
-  OSDMap *osdmap = cache->mds->objecter->osdmap;
-  ceph_object_layout ol = osdmap->make_object_layout(oid,
-						     cache->mds->mdsmap->get_metadata_pg_pool());
+  object_locator_t oloc(cache->mds->mdsmap->get_metadata_pg_pool());
   ObjectOperation rd;
   rd.tmap_get();
-  cache->mds->objecter->read(oid, ol, rd, CEPH_NOSNAP, &fin->bl, 0, fin);
+  cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, &fin->bl, 0, fin);
 }
 
 void CDir::_fetched(bufferlist &bl, const string& want_dn)
@@ -1681,13 +1679,11 @@ void CDir::_commit(version_t want)
 
   SnapContext snapc;
   object_t oid = get_ondisk_object();
-  OSDMap *osdmap = cache->mds->objecter->osdmap;
-  ceph_object_layout ol = osdmap->make_object_layout(oid,
-						     cache->mds->mdsmap->get_metadata_pg_pool());
+  object_locator_t oloc(cache->mds->mdsmap->get_metadata_pg_pool());
 
   m.priority = CEPH_MSG_PRIO_LOW;  // set priority lower than journal!
 
-  cache->mds->objecter->mutate(oid, ol, m, snapc, g_clock.now(), 0,
+  cache->mds->objecter->mutate(oid, oloc, m, snapc, g_clock.now(), 0,
 			       NULL, new C_Dir_Committed(this, get_version(), inode->inode.last_renamed_version) );
 }
 

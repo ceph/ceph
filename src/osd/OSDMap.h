@@ -737,47 +737,50 @@ private:
 
   /****   mapping facilities   ****/
 
-  // oid -> pg
-  ceph_object_layout file_to_object_layout(object_t oid, ceph_file_layout& layout) {
-    return make_object_layout(oid, layout.fl_pg_pool,
-			      layout.fl_pg_preferred,
-			      layout.fl_stripe_unit);
-  }
-
-  ceph_object_layout make_object_layout(object_t oid, int pg_pool, int preferred=-1, int object_stripe_unit = 0) {
+  pg_t object_locator_to_pg(const object_t& oid, const object_locator_t& loc) {
     // calculate ps (placement seed)
-    const pg_pool_t *pool = get_pg_pool(pg_pool);
-    ps_t ps = ceph_str_hash(pool->v.object_hash, oid.name.c_str(), oid.name.length());
+    const pg_pool_t *pool = get_pg_pool(loc.get_pool());
+    ps_t ps;
+    if (loc.key.length())
+      ps = ceph_str_hash(pool->v.object_hash, loc.key.c_str(), loc.key.length());
+    else
+      ps = ceph_str_hash(pool->v.object_hash, oid.name.c_str(), oid.name.length());
 
     // mix in preferred osd, so we don't get the same peers for
     // all of the placement pgs (e.g. 0.0p*)
-    if (preferred >= 0)
-      ps += preferred;
+    if (loc.get_preferred() >= 0)
+      ps += loc.get_preferred();
 
     //cout << "preferred " << preferred << " num "
     // << num << " mask " << num_mask << " ps " << ps << endl;
 
-    // construct object layout
-    pg_t pgid = pg_t(ps, pg_pool, preferred);
-    ceph_object_layout layout;
-    layout.ol_pgid = pgid.v;
-    layout.ol_stripe_unit = object_stripe_unit;
-    return layout;
+    return pg_t(ps, loc.get_pool(), loc.get_preferred());
+  }
+
+  object_locator_t file_to_object_locator(const ceph_file_layout& layout) {
+    return object_locator_t(layout.fl_pg_pool, layout.fl_pg_preferred);
+  }
+
+  // oid -> pg
+  ceph_object_layout file_to_object_layout(object_t oid, ceph_file_layout& layout) {
+    return make_object_layout(oid, layout.fl_pg_pool,
+			      layout.fl_pg_preferred);
+  }
+
+  ceph_object_layout make_object_layout(object_t oid, int pg_pool, int preferred=-1) {
+    object_locator_t loc(pg_pool);
+    loc.preferred = preferred;
+    
+    ceph_object_layout ol;
+    pg_t pgid = object_locator_to_pg(oid, loc);
+    ol.ol_pgid = pgid.v;
+    ol.ol_stripe_unit = 0;
+    return ol;
   }
 
   int get_pg_num(int pg_pool)
   {
     const pg_pool_t *pool = get_pg_pool(pg_pool);
-    return pool->get_pg_num();
-  }
-
-  int get_pg_layout(int pg_pool, int seed, ceph_object_layout& layout) {
-    const pg_pool_t *pool = get_pg_pool(pg_pool);
-
-    pg_t pgid = pg_t(seed, pg_pool, -1);
-    layout.ol_pgid = pgid.v;
-    layout.ol_stripe_unit = 0;
-
     return pool->get_pg_num();
   }
 

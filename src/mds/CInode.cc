@@ -845,11 +845,9 @@ void CInode::store(Context *fin)
   char n[30];
   snprintf(n, sizeof(n), "%llx.%08llx.inode", (long long unsigned)ino(), (long long unsigned)frag_t());
   object_t oid(n);
-  OSDMap *osdmap = mdcache->mds->objecter->osdmap;
-  ceph_object_layout ol = osdmap->make_object_layout(oid,
-						     mdcache->mds->mdsmap->get_metadata_pg_pool());
+  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pg_pool());
 
-  mdcache->mds->objecter->mutate(oid, ol, m, snapc, g_clock.now(), 0,
+  mdcache->mds->objecter->mutate(oid, oloc, m, snapc, g_clock.now(), 0,
 				 NULL, new C_Inode_Stored(this, get_version(), fin) );
 }
 
@@ -883,25 +881,17 @@ void CInode::fetch(Context *fin)
   char n[30];
   snprintf(n, sizeof(n), "%llx.%08llx", (long long unsigned)ino(), (long long unsigned)frag_t());
   object_t oid(n);
+  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pg_pool());
 
   ObjectOperation rd;
   rd.getxattr("inode");
 
-  OSDMap *osdmap = mdcache->mds->objecter->osdmap;
-  ceph_object_layout ol = osdmap->make_object_layout(oid,
-						     mdcache->mds->mdsmap->get_metadata_pg_pool());
+  mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, &c->bl, 0, gather->new_sub());
 
-  mdcache->mds->objecter->read(oid, ol, rd, CEPH_NOSNAP, &c->bl, 0, gather->new_sub() );
-
-  
   // read from separate object too
   snprintf(n, sizeof(n), "%llx.%08llx.inode", (long long unsigned)ino(), (long long unsigned)frag_t());
   object_t oid2(n);
-
-  ceph_object_layout ol2 = osdmap->make_object_layout(oid2,
-						     mdcache->mds->mdsmap->get_metadata_pg_pool());
-
-  mdcache->mds->objecter->read(oid2, ol2, 0, 0, CEPH_NOSNAP, &c->bl2, 0, gather->new_sub() );
+  mdcache->mds->objecter->read(oid2, oloc, 0, 0, CEPH_NOSNAP, &c->bl2, 0, gather->new_sub());
 }
 
 void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
@@ -974,11 +964,9 @@ void CInode::store_parent(Context *fin)
   char n[30];
   snprintf(n, sizeof(n), "%llx.%08llx", (long long unsigned)ino(), (long long unsigned)frag_t());
   object_t oid(n);
-  OSDMap *osdmap = mdcache->mds->objecter->osdmap;
-  ceph_object_layout ol = osdmap->make_object_layout(oid,
-						     mdcache->mds->mdsmap->get_metadata_pg_pool());
+  object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pg_pool());
 
-  mdcache->mds->objecter->mutate(oid, ol, m, snapc, g_clock.now(), 0,
+  mdcache->mds->objecter->mutate(oid, oloc, m, snapc, g_clock.now(), 0,
 				 NULL, new C_Inode_StoredParent(this, inode.last_renamed_version, fin) );
 
 }

@@ -100,7 +100,7 @@ void Filer::_probe(Probe *probe)
        p++) {
     dout(10) << "_probe  probing " << p->oid << dendl;
     C_Probe *c = new C_Probe(this, probe, p->oid);
-    probe->ops[p->oid] = objecter->stat(p->oid, p->layout, probe->snapid, &c->size, &c->mtime, probe->flags, c);
+    probe->ops[p->oid] = objecter->stat(p->oid, p->oloc, probe->snapid, &c->size, &c->mtime, probe->flags, c);
   }
 }
 
@@ -236,8 +236,8 @@ int Filer::purge_range(inodeno_t ino,
   // single object?  easy!
   if (num_obj == 1) {
     object_t oid = file_object_t(ino, first_obj);
-    ceph_object_layout ol = objecter->osdmap->file_to_object_layout(oid, *layout);
-    objecter->remove(oid, ol, snapc, mtime, flags, NULL, oncommit);
+    object_locator_t oloc = objecter->osdmap->file_to_object_locator(*layout);
+    objecter->remove(oid, oloc, snapc, mtime, flags, NULL, oncommit);
     return 0;
   }
 
@@ -282,8 +282,8 @@ void Filer::_do_purge_range(PurgeRange *pr, int fin)
   int max = 10 - pr->uncommitted;
   while (pr->num > 0 && max > 0) {
     object_t oid = file_object_t(pr->ino, pr->first);
-    ceph_object_layout ol = objecter->osdmap->file_to_object_layout(oid, pr->layout);
-    objecter->remove(oid, ol, pr->snapc, pr->mtime, pr->flags,
+    object_locator_t oloc = objecter->osdmap->file_to_object_locator(pr->layout);
+    objecter->remove(oid, oloc, pr->snapc, pr->mtime, pr->flags,
 		     NULL, new C_PurgeRange(this, pr));
     pr->uncommitted++;
     pr->first++;
@@ -335,7 +335,7 @@ void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
     else {
       ex = &object_extents[oid];
       ex->oid = oid;
-      ex->layout = objecter->osdmap->file_to_object_layout( oid, *layout );
+      ex->oloc = objecter->osdmap->file_to_object_locator(*layout);
     }
     
     // map range into object
@@ -362,7 +362,7 @@ void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
     }
     ex->buffer_extents[cur-offset] = x_len;
         
-    dout(15) << "file_to_extents  " << *ex << " in " << ex->layout << dendl;
+    dout(15) << "file_to_extents  " << *ex << " in " << ex->oloc << dendl;
     //dout(0) << "map: ino " << ino << " oid " << ex.oid << " osd " << ex.osd << " offset " << ex.offset << " len " << ex.len << " ... left " << left << dendl;
     
     left -= x_len;

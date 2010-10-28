@@ -1088,7 +1088,7 @@ class ObjectExtent {
   __u32      offset;    // in object
   __u32      length;    // in object
 
-  ceph_object_layout layout;   // object layout (pgid, etc.)
+  object_locator_t oloc;   // object locator (pool etc)
 
   map<__u32, __u32>  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
   
@@ -1099,7 +1099,7 @@ class ObjectExtent {
 inline ostream& operator<<(ostream& out, ObjectExtent &ex)
 {
   return out << "extent(" 
-             << ex.oid << " in " << ex.layout
+             << ex.oid << " in " << ex.oloc
              << " " << ex.offset << "~" << ex.length
              << ")";
 }

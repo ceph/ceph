@@ -101,6 +101,33 @@ struct file_object_t {
 };
 
 
+// a locator constrains the placement of an object.  mainly, which pool
+// does it go in.
+struct object_locator_t {
+  int pool;
+  int preferred;
+  string key;
+
+  object_locator_t(int po=-1, int pre=-1) : pool(po), preferred(pre) {}
+
+  int get_pool() const {
+    return pool;
+  }
+  int get_preferred() const {
+    return preferred;
+  }
+};
+
+inline ostream& operator<<(ostream& out, const object_locator_t& loc)
+{
+  out << "@" << loc.pool;
+  if (loc.preferred >= 0)
+    out << "p" << loc.preferred;
+  if (loc.key.length())
+    out << ":" << loc.key;
+  return out;
+}
+
 
 // ---------------------------
 // snaps

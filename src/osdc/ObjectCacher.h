@@ -137,7 +137,8 @@ class ObjectCacher {
   public:
     ObjectSet *oset;
     xlist<Object*>::item set_item;
-    ceph_object_layout layout;
+    object_locator_t oloc;
+    
 
   public:
     map<loff_t, BufferHead*>     data;
@@ -168,9 +169,9 @@ class ObjectCacher {
     int rdlock_ref;  // how many ppl want or are using a READ lock
 
   public:
-    Object(ObjectCacher *_oc, sobject_t o, ObjectSet *os, ceph_object_layout& l) : 
+    Object(ObjectCacher *_oc, sobject_t o, ObjectSet *os, object_locator_t& l) : 
       oc(_oc),
-      oid(o), oset(os), set_item(this), layout(l),
+      oid(o), oset(os), set_item(this), oloc(l),
       last_write_tid(0), last_ack_tid(0), last_commit_tid(0),
       uncommitted_item(this),
       lock_state(LOCK_NONE), wrlock_ref(0), rdlock_ref(0) {
@@ -187,8 +188,8 @@ class ObjectCacher {
     snapid_t get_snap() { return oid.snap; }
     ObjectSet *get_object_set() { return oset; }
     
-    ceph_object_layout& get_layout() { return layout; }
-    void set_layout(ceph_object_layout& l) { layout = l; }
+    object_locator_t& get_oloc() { return oloc; }
+    void set_object_locator(object_locator_t& l) { oloc = l; }
 
     bool can_close() {
       return data.empty() && lock_state == LOCK_NONE &&
@@ -293,26 +294,28 @@ class ObjectCacher {
   
 
   // objects
-  Object *get_object_maybe(sobject_t oid, ceph_object_layout &l) {
+  Object *get_object_maybe(sobject_t oid, object_locator_t &l) {
     // have it?
-    if ((l.ol_pgid.pool < objects.size()) &&
-        (objects[l.ol_pgid.pool].count(oid)))
-      return objects[l.ol_pgid.pool][oid];
+    assert(l.pool >= 0);
+    if ((l.pool < (int)objects.size()) &&
+        (objects[l.pool].count(oid)))
+      return objects[l.pool][oid];
     return NULL;
   }
 
-  Object *get_object(sobject_t oid, ObjectSet *oset, ceph_object_layout &l) {
+  Object *get_object(sobject_t oid, ObjectSet *oset, object_locator_t &l) {
     // have it?
-    if (l.ol_pgid.pool < objects.size()) {
-      if (objects[l.ol_pgid.pool].count(oid))
-        return objects[l.ol_pgid.pool][oid];
+    assert(l.pool >= 0);
+    if (l.pool < (int)objects.size()) {
+      if (objects[l.pool].count(oid))
+        return objects[l.pool][oid];
     } else {
-      objects.resize(l.ol_pgid.pool+1);
+      objects.resize(l.pool+1);
     }
 
     // create it.
     Object *o = new Object(this, oid, oset, l);
-    objects[l.ol_pgid.pool][oid] = o;
+    objects[l.pool][oid] = o;
     return o;
   }
   void close_object(Object *ob);
