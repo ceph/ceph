@@ -1300,8 +1300,6 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 	}
       }
       cap->client_follows = last;
-      if (in->client_need_snapflush.empty())
-	in->get(CInode::PIN_NEEDSNAPFLUSH);
       
       // we need snapflushes for any intervening snaps
       dout(10) << "  snaps " << snaps << dendl;
@@ -1309,6 +1307,8 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 	   q != snaps.end() && *q <= last;
 	   q++) {
 	dout(10) << "   need_snapflush on " << *q << dendl;
+	if (in->client_need_snapflush.empty())
+	  in->get(CInode::PIN_NEEDSNAPFLUSH);
 	in->client_need_snapflush[*q].insert(client);
       }
     } else {
