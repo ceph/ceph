@@ -1189,7 +1189,7 @@ void Migrator::handle_export_ack(MExportDirAck *m)
   EExport *le = new EExport(mds->mdlog, dir);
   mds->mdlog->start_entry(le);
 
-  le->metablob.add_dir_context(dir);
+  le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
   le->metablob.add_dir( dir, false );
   for (set<CDir*>::iterator p = bounds.begin();
        p != bounds.end();
