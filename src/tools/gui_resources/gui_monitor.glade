@@ -552,7 +552,8 @@ All rights reserved</property>
     <property name="website">http://ceph.newdream.net</property>
     <property name="website_label" translatable="yes">Ceph website</property>
     <property name="authors">Main Author: Michael McThrow
-Portions of the code for the Ceph Monitor were written by Sage Weil and other contributors of the Ceph distributed file system.</property>
+Portions of the code for the Ceph Monitor were written by Sage Weil, Colin McCabe, and other
+contributors to the Ceph distributed file system.</property>
     <child internal-child="vbox">
       <object class="GtkVBox" id="guiMonitorAboutVBox">
         <property name="visible">True</property>

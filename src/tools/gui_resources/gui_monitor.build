@@ -528,13 +528,13 @@
     <property name="has_separator">False</property>
     <property name="program_name">Ceph Monitor</property>
     <property name="version">0.1</property>
-    <property name="copyright" translatable="yes">(c) 2009 Michael McThrow
+    <property name="copyright" translatable="yes">(c) 2009-2010 Michael McThrow
 All rights reserved</property>
     <property name="comments" translatable="yes">Monitoring tool for the Ceph distributed file system</property>
     <property name="website">http://ceph.newdream.net</property>
     <property name="website_label" translatable="yes">Ceph website</property>
     <property name="authors">Author: Michael McThrow
-Based on code written by Sage Weil and other contributors.</property>
+Based on code written by Sage Weil, Colin Patrick McCabe, and other contributors.</property>
     <child internal-child="vbox">
       <object class="GtkVBox" id="guiMonitorAboutVBox">
         <property name="visible">True</property>
