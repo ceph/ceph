@@ -1317,16 +1317,17 @@ void GuiMonitor::handle_view_node_response(int response)
 
   switch (selected_type) {
     case OSD_NODE: {
-      int id;
+      unsigned int id;
 
       try {
-	id = boost::lexical_cast<int>(id_entry);
+	id = boost::lexical_cast<unsigned int>(id_entry);
       }
       catch (const boost::bad_lexical_cast &) {
 	dialog_error("Node ID must be a number.", Gtk::MESSAGE_ERROR);
 	return;
       }
-      if (id >= g.osdmap.get_max_osd()) {
+      unsigned int max_osd = g.osdmap.get_max_osd();
+      if (id >= max_osd) {
 	dialog_error("OSD does not exist.", Gtk::MESSAGE_ERROR);
 	return;
       }
@@ -1356,7 +1357,6 @@ void GuiMonitor::handle_view_node_response(int response)
 	dialog_error("Node ID must be a number.", Gtk::MESSAGE_ERROR);
 	return;
       }
-
       if (id >= g.pgmap.pg_stat.size()) {
 	dialog_error("PG does not exist.", Gtk::MESSAGE_ERROR);
 	return;
