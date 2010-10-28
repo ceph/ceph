@@ -1189,3 +1189,4 @@ void Objecter::dump_active()
   for (hash_map<tid_t,Op*>::iterator p = op_osd.begin(); p != op_osd.end(); p++)
     dout(10) << " " << p->first << "\t" << p->second->oid << "\t" << p->second->ops << dendl;
 }
+

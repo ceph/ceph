@@ -85,6 +85,14 @@ struct ObjectOperation {
     ops[s].data.append(method, ops[s].op.cls.method_len);
     ops[s].data.append(indata);
   }
+  void add_watch(int op, uint64_t cookie, uint64_t ver, uint8_t flag) {
+    int s = ops.size();
+    ops.resize(s+1);
+    ops[s].op.op = op;
+    ops[s].op.watch.cookie = cookie;
+    ops[s].op.watch.ver = ver;
+    ops[s].op.watch.flag = flag;
+  }
   void add_pgls(int op, uint64_t count, uint64_t cookie) {
     int s = ops.size();
     ops.resize(s+1);
@@ -175,6 +183,15 @@ struct ObjectOperation {
   // object classes
   void call(const char *cname, const char *method, bufferlist &indata) {
     add_call(CEPH_OSD_OP_CALL, cname, method, indata);
+  }
+
+  // watch/notify
+  void watch(uint64_t cookie, uint64_t ver, bool set) {
+    add_watch(CEPH_OSD_OP_WATCH, cookie, ver, (set ? 1 : 0));
+  }
+
+  void notify(uint64_t cookie, uint64_t ver) {
+    add_watch(CEPH_OSD_OP_NOTIFY, cookie, ver, 1); 
   }
 };
 

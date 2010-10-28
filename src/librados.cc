@@ -74,9 +74,13 @@ class RadosClient : public Dispatcher
   Cond cond;
   SafeTimer timer;
 
+  Mutex watch_lock;
+  uint64_t max_watch_cookie;
+  map<uint64_t, Context *> watchers;
  
 public:
-  RadosClient() : messenger(NULL), lock("radosclient"), timer(lock) {
+  RadosClient() : messenger(NULL), lock("radosclient"), timer(lock),
+                  watch_lock("watch_lock"), max_watch_cookie(0) {
     messenger = new SimpleMessenger();
   }
 
@@ -332,6 +336,23 @@ public:
       c->set_safe_callback(cb_arg, cb_safe);
     return c;
   }
+
+  // watch/notify
+  struct WatchContext : public Context {
+    librados::Rados::WatchCtx *ctx;
+    uint64_t cookie;
+    uint64_t ver;
+  
+    WatchContext(librados::Rados::WatchCtx *_ctx) : ctx(_ctx) {}
+    ~WatchContext() {
+      delete _ctx;
+    }
+    int finish() {
+      return ctx->finish();
+    }
+  }
+  int watch(PoolCtx& pool, const object_t& oid, uint64_t ver, uint64_t *cookie, WatchContext *ctx);
+  int unwatch(PoolCtx& pool, const object_t& oid, uint64_t cookie);
 };
 
 bool RadosClient::init()
@@ -1361,7 +1382,69 @@ int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<std::string, 
   return r;
 }
 
-// ---------------------------------------------
+int RadosClient::watch(PoolCtx& pool, const object_t& oid, uint64_t ver, uint64_t *cookie, Context *ctx)
+{
+  utime_t ut = g_clock.now();
+  bufferlist inbl, outbl;
+
+  watch_lock.Lock();
+  *cookie = ++max_watch_cookie;
+  watchers[*cookie] = ctx;
+  watch_lock.Unlock();
+
+  Mutex mylock("RadosClient::watch::mylock");
+  Cond cond;
+  bool done;
+  int r;
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+
+  lock.Lock();
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  ObjectOperation rd;
+  rd.watch(*cookie, ver, 1);
+  objecter->read(oid, layout, rd, pool.snap_seq, &outbl, 0, onack);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  return r;
+}
+
+int RadosClient::unwatch(PoolCtx& pool, const object_t& oid, uint64_t cookie)
+{
+  utime_t ut = g_clock.now();
+  bufferlist inbl, outbl;
+
+  watch_lock.Lock();
+  map<uint64_t, Context *>::iterator iter = watchers.find(cookie);
+  if (iter != watchers.end()) {
+    watchers.erase(iter);
+  }
+  watch_lock.Unlock();
+
+  Mutex mylock("RadosClient::watch::mylock");
+  Cond cond;
+  bool done;
+  int r;
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+
+  lock.Lock();
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  ObjectOperation rd;
+  rd.watch(cookie, 0, 1);
+  objecter->read(oid, layout, rd, pool.snap_seq, &outbl, 0, onack);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  return r;
+}// ---------------------------------------------
 
 namespace librados {
 
@@ -1811,6 +1894,24 @@ void Rados::AioCompletion::release()
   c->put();
 }
 
+// watch/notify
+int Rados::watch(pool_t pool, const string& o,
+                 uint64_t ver, uint64_t *cookie, Context *ctx)
+{
+  if (!client)
+    return -EINVAL;
+  object_t oid(o);
+  return client->watch(*(RadosClient::PoolCtx *)pool, oid, ver, cookie, ctx);
+}
+
+int Rados::unwatch(pool_t pool, const string& o,
+                 uint64_t ver, uint64_t cookie)
+{
+  if (!client)
+    return -EINVAL;
+  object_t oid(o);
+  return client->unwatch(*(RadosClient::PoolCtx *)pool, oid, cookie);
+}
 }
 
 // ---------------------------------------------

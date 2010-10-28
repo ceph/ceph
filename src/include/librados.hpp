@@ -9,6 +9,7 @@
 #include "buffer.h"
 
 class RadosClient;
+class Context;
 
 namespace librados {
 
@@ -140,6 +141,15 @@ public:
 		AioCompletion *c);
   AioCompletion *aio_create_completion();
   AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete, callback_t cb_safe);
+
+  class WatchCtx {
+  public:
+  virtual int finish() = 0;
+  };
+
+  // watch/notify
+  int watch(pool_t pool, const string& o, uint64_t ver, uint64_t *cookie, Context *ctx);
+  int unwatch(pool_t pool, const string& o, uint64_t ver, uint64_t cookie);
 };
 
 }
