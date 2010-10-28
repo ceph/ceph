@@ -56,6 +56,7 @@ struct ceph_tool_data g;
 static Cond cmd_cond;
 static SimpleMessenger *messenger = 0;
 static SafeTimer timer(g.lock);
+static Tokenizer *tok;
 
 static const char *outfile = 0;
 
@@ -449,10 +450,8 @@ int run_command(const char *line)
 
   int argc;
   const char **argv;
-  Tokenizer *tok = tok_init(NULL);
   tok_str(tok, line, &argc, &argv);
   tok_reset(tok);
-  tok_end(tok);
 
   vector<string> cmd;
   const char *infile = 0;
@@ -595,6 +594,9 @@ int main(int argc, const char **argv)
   if (g.mc.build_initial_monmap() < 0)
     return -1;
   
+  // initialize tokenizer
+  tok = tok_init(NULL);
+
   // start up network
   messenger = new SimpleMessenger();
   messenger->register_entity(entity_name_t::CLIENT());
@@ -680,5 +682,6 @@ int main(int argc, const char **argv)
   // wait for messenger to finish
   messenger->wait();
   messenger->destroy();
+  tok_end(tok);
   return ret;
 }
