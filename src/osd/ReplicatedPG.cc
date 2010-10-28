@@ -1517,21 +1517,19 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
        * 2) Clone correct snapshot into head
        * 3) Calculate clone_overlaps by following overlaps
        *    forward from rollback snapshot */
-       dout(10) << "_rollback_to deleting " << soid.oid
-	        << " and rolling back to old snap" << dendl;
-
-      sobject_t new_head = get_object_context(ctx->obs->oi.soid)->obs.oi.soid;
+      dout(10) << "_rollback_to deleting " << soid.oid
+	       << " and rolling back to old snap" << dendl;
       
       _delete_head(ctx);
       ctx->obs->exists = true; //we're about to recreate it
       
       map<string, bufferptr> attrs;
       t.clone(coll_t(info.pgid),
-	      rollback_to_sobject, new_head);
+	      rollback_to_sobject, soid);
       osd->store->getattrs(coll_t(info.pgid),
 			   rollback_to_sobject, attrs, false);
       osd->filter_xattrs(attrs);
-      t.setattrs(coll_t(info.pgid), new_head, attrs);
+      t.setattrs(coll_t(info.pgid), soid, attrs);
       ssc->snapset.head_exists = true;
 
       map<snapid_t, interval_set<uint64_t> >::iterator iter =
