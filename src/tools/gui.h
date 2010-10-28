@@ -169,6 +169,7 @@ public:
 
   bool init();
   void run_main_loop(Gtk::Main &kit);
+  void thread_shutdown();
 
   void check_status();
 
@@ -176,7 +177,6 @@ private:
   /*
    * Private Functions
    */
-  void get_widgets(Glib::RefPtr<Gtk::Builder> builder_object);
   bool open_icon(Glib::RefPtr<Gdk::Pixbuf> &icon, const std::string &path);
   void connect_signals();
   void link_elements();

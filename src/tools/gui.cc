@@ -131,6 +131,7 @@ public:
   {
     shutting_down = true;
     g.gui_cond.Signal();
+    this->join();
   }
 
 private:
@@ -189,24 +190,6 @@ GuiMonitor::~GuiMonitor()
    delete guiMonitorAboutDialog;
 }
 
-bool GuiMonitor::open_icon(Glib::RefPtr<Gdk::Pixbuf> &icon, const std::string &path)
-{
-   try {
-      icon = Gdk::Pixbuf::create_from_file(path);
-   }
-   catch (const Gdk::PixbufError& e) {
-      cerr << "Problem making graphic from " << path << "; error code: " <<
-       e.code() << std::endl;
-      return false;
-   }
-   catch (const Glib::FileError& e) {
-      cerr << "Problem open " << path << std::endl;
-      return false;
-   }
-
-   return true;
-}
-
 bool GuiMonitor::init()
 {
   assert(!thread);
@@ -249,6 +232,33 @@ bool GuiMonitor::init()
 void GuiMonitor::run_main_loop(Gtk::Main &kit)
 {
   kit.run(*guiMonitorWindow);
+}
+
+void GuiMonitor::thread_shutdown()
+{
+  if (!thread)
+    return;
+  thread->shutdown();
+  delete thread;
+  thread = NULL;
+}
+
+bool GuiMonitor::open_icon(Glib::RefPtr<Gdk::Pixbuf> &icon, const std::string &path)
+{
+   try {
+      icon = Gdk::Pixbuf::create_from_file(path);
+   }
+   catch (const Gdk::PixbufError& e) {
+      cerr << "Problem making graphic from " << path << "; error code: " <<
+       e.code() << std::endl;
+      return false;
+   }
+   catch (const Glib::FileError& e) {
+      cerr << "Problem open " << path << std::endl;
+      return false;
+   }
+
+   return true;
 }
 
 // Connects signals to the GUI elements such that they respond to events.
@@ -824,8 +834,7 @@ void GuiMonitor::check_status()
 // Handler for quitting the GUI via the "x" button on the window.
 bool GuiMonitor::quit_gui(GdkEventAny *event)
 {
-  if (thread)
-    thread->shutdown();
+  thread_shutdown();
   guiMonitorWindow->hide();
   return true;
 }
@@ -833,14 +842,14 @@ bool GuiMonitor::quit_gui(GdkEventAny *event)
 // Handler for quitting the GUI via the menu option.
 void GuiMonitor::gui_monitor_quit()
 {
-  if (thread)
-    thread->shutdown();
+  thread_shutdown();
   guiMonitorWindow->hide();
 }
 
 // Called when the main window is closed.  Ends the program.
 bool GuiMonitor::quit_signal_handler()
 {
+  thread_shutdown();
   Gtk::Main::quit();
   return false; // never executed
 }
