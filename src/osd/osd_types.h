@@ -32,6 +32,7 @@
 #define CEPH_OSD_FULL_RATIO .95
 
 #define CEPH_OSD_FEATURE_INCOMPAT_BASE CompatSet::Feature(1, "initial feature set(~v.18)")
+#define CEPH_OSD_FEATURE_INCOMPAT_OLOC CompatSet::Feature(2, "object locator")
 
 
 /* osdreqid_t - caller name + incarnation# + tid to unique identify this request
@@ -1243,6 +1244,7 @@ inline ostream& operator<<(ostream& out, const SnapSet& cs) {
 
 struct object_info_t {
   sobject_t soid;
+  object_locator_t oloc;
 
   eversion_t version, prior_version;
   osd_reqid_t last_reqid;
@@ -1265,9 +1267,10 @@ struct object_info_t {
   }
 
   void encode(bufferlist& bl) const {
-    const __u8 v = 1;
+    const __u8 v = 2;
     ::encode(v, bl);
     ::encode(soid, bl);
+    ::encode(oloc, bl);
     ::encode(version, bl);
     ::encode(prior_version, bl);
     ::encode(last_reqid, bl);
@@ -1284,6 +1287,8 @@ struct object_info_t {
     __u8 v;
     ::decode(v, bl);
     ::decode(soid, bl);
+    if (v >= 2)
+      ::decode(oloc, bl);
     ::decode(version, bl);
     ::decode(prior_version, bl);
     ::decode(last_reqid, bl);
@@ -1301,8 +1306,9 @@ struct object_info_t {
     decode(p);
   }
 
-  object_info_t(sobject_t s) : soid(s), size(0),
-                               truncate_seq(0), truncate_size(0) {}
+  object_info_t(const sobject_t& s, const object_locator_t& o) :
+    soid(s), size(0),
+    truncate_seq(0), truncate_size(0) {}
   object_info_t(bufferlist& bl) {
     decode(bl);
   }

@@ -108,6 +108,7 @@ const struct CompatSet::Feature ceph_osd_feature_compat[] = {
 };
 const struct CompatSet::Feature ceph_osd_feature_incompat[] = {
   CEPH_OSD_FEATURE_INCOMPAT_BASE,
+  CEPH_OSD_FEATURE_INCOMPAT_OLOC,
   END_FEATURE
 };
 const struct CompatSet::Feature ceph_osd_feature_ro_compat[] = {

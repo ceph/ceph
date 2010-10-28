@@ -2320,7 +2320,8 @@ void PG::read_log(ObjectStore *store)
       } else if (i->soid.snap == CEPH_NOSNAP &&
 		 osd->store->stat(coll, i->soid, &st) == 0) {
 	dout(0) << "read_log  rebuilding missing xattr on " << *i << dendl;
-	object_info_t oi(i->soid);
+	object_locator_t oloc(info.pgid.pool(), info.pgid.preferred()); // we lose the key here!
+	object_info_t oi(i->soid, oloc);
 	oi.version = i->version;
 	oi.prior_version = i->prior_version;
 	oi.size = st.st_size;
