@@ -41,22 +41,28 @@ rbd_load() {
 }
 
 rbd_create_image() {
-	rbd create $img_name --size=$imgsize
+	id=$1
+	rbd create $img_name.$id --size=$imgsize
 }
 
 rbd_add() {
 	id=$1
-	echo "$monip:$monport name=$user,secret=$secret rbd $img_name" > /sys/class/rbd/add
-	sleep 1
-	export rbd$id="`tail -1 /sys/class/rbd/list | cut -f1`"
+	echo "$monip:$monport name=$user,secret=$secret rbd $img_name.$id" > /sys/class/rbd/add
+	devid="`cat /sys/class/rbd/list | grep $img_name.$ext | tail -1 | cut -f1`"
+	export rbd$id=$devid
+	while [ ! -e /dev/rbd$devid ]; do sleep 0; done
 }
 
 rbd_test_init() {
 	rbd_load
-	rbd_create_image
 }
 
 
 rbd_remove() {
 	echo $1 > /sys/class/rbd/remove
+}
+
+rbd_rm_image() {
+	id=$1
+	rbd rm $imgname.$id
 }
