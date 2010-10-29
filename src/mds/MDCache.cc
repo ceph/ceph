@@ -5066,6 +5066,7 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
 void MDCache::trim_non_auth()
 {
   dout(7) << "trim_non_auth" << dendl;
+  stringstream warn_string_dirs;
   
   // temporarily pin all subtree roots
   for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
@@ -5109,12 +5110,15 @@ void MDCache::trim_non_auth()
 	in->get_dirfrags(ls);
 	for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
 	  CDir *subdir = *p;
+	  warn_string_dirs << subdir->get_inode()->get_parent_dn()->get_name()
+	                   << std::endl;
 	  if (subdir->is_subtree_root()) 
 	    remove_subtree(subdir);
 	  in->close_dirfrag(subdir->dirfrag().frag);
 	}
 	dir->unlink_inode(dn);
 	remove_inode(in);
+	warn_string_dirs << in->get_parent_dn()->get_name() << std::endl;
       } 
       else {
 	assert(dnl->is_null());
@@ -5149,11 +5153,14 @@ void MDCache::trim_non_auth()
 	     p != ls.end();
 	     ++p) {
 	  dout(0) << " ... " << **p << dendl;
+	  warn_string_dirs << (*p)->get_inode()->get_parent_dn()->get_name()
+	                   << std::endl;
 	  assert((*p)->get_num_ref() == 1);  // SUBTREE
 	  remove_subtree((*p));
 	  in->close_dirfrag((*p)->dirfrag().frag);
 	}
 	dout(0) << " ... " << *in << dendl;
+	warn_string_dirs << in->get_parent_dn()->get_name() << std::endl;
 	assert(in->get_num_ref() == 0);
 	remove_inode(in);
       }
@@ -5162,6 +5169,12 @@ void MDCache::trim_non_auth()
   }
 
   show_subtrees();
+  if (warn_string_dirs.peek() != EOF) {
+    stringstream warn_string;
+    warn_string << "trim_non_auth has deleted paths: " << std::endl;
+    warn_string << warn_string_dirs;
+    mds->logclient.log(LOG_INFO, warn_string);
+  }
 }
 
 /**
