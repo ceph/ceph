@@ -1,7 +1,7 @@
 #ifndef CEPH_HASH_H
 #define CEPH_HASH_H
 
-#include "../acconfig.h"
+#include "acconfig.h"
 
 // Robert Jenkins' function for mixing 32-bit values
 // http://burtleburtle.net/bob/hash/evahash.html

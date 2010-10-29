@@ -326,52 +326,52 @@ noinst_LIBRARIES +=  #libcephclient_so.a
 # extra bits
 EXTRA_DIST = verify-mds-journal.sh vstart.sh stop.sh \
 	crun ceph_common.sh init-ceph.in mkcephfs.in cclass.in cdebugpack.in \
-	cclsinfo make_version check_version \
-	.git_version
-
+	$(srcdir)/cclsinfo $(srcdir)/make_version $(srcdir)/check_version \
+	$(srcdir)/.git_version \
+	$(ceph_tool_gui_DATA)
 
 # work around old versions of automake that don't define $docdir
 docdir = ${datadir}/doc/ceph
 
 install-data-local:
-	$(install_sh_SCRIPT) -m 0755 cclass $(DESTDIR)$(bindir)/cclass
-	$(install_sh_SCRIPT) -m 0755 cclsinfo $(DESTDIR)$(bindir)/cclsinfo
-	$(install_sh_SCRIPT) -m 0755 cdebugpack $(DESTDIR)$(bindir)/cdebugpack
+	$(install_sh_SCRIPT) -m 0755 $(srcdir)/cclass $(DESTDIR)$(bindir)/cclass
+	$(install_sh_SCRIPT) -m 0755 $(srcdir)/cclsinfo $(DESTDIR)$(bindir)/cclsinfo
+	$(install_sh_SCRIPT) -m 0755 $(srcdir)/cdebugpack $(DESTDIR)$(bindir)/cdebugpack
 	sh -c "if [ \"$(sbindir)\" = \"/usr/sbin\" ]; then mkdir -p $(DESTDIR)/sbin ; $(install_sh_SCRIPT) -m 0755 mount.ceph $(DESTDIR)/sbin/mount.ceph ; else mkdir -p $(DESTDIR)$(sbindir) ; $(install_sh_SCRIPT) -m 0755 mount.ceph $(DESTDIR)$(sbindir)/mount.ceph ; fi"
 	sh -c "if [ \"$(sbindir)\" = \"/usr/sbin\" ]; then mkdir -p $(DESTDIR)/sbin ; $(install_sh_SCRIPT) -m 0755 mkcephfs $(DESTDIR)/sbin/mkcephfs ; else mkdir -p $(DESTDIR)$(sbindir) ; $(install_sh_SCRIPT) -m 0755 mkcephfs $(DESTDIR)$(sbindir)/mkcephfs ; fi"
 	mkdir -p $(DESTDIR)$(libdir)/ceph
-	$(install_sh_SCRIPT) -m 0755 ceph_common.sh $(DESTDIR)$(libdir)/ceph/ceph_common.sh
+	$(install_sh_SCRIPT) -m 0755 $(srcdir)/ceph_common.sh $(DESTDIR)$(libdir)/ceph/ceph_common.sh
 	mkdir -p $(DESTDIR)$(sysconfdir)/ceph
 	mkdir -p $(DESTDIR)$(docdir)
-	$(install_sh_SCRIPT) -m 0600 sample.ceph.conf $(DESTDIR)$(docdir)/sample.ceph.conf
-	$(install_sh_SCRIPT) -m 0755 fetch_config $(DESTDIR)$(docdir)/sample.fetch_config
+	$(install_sh_SCRIPT) -m 0600 $(srcdir)/sample.ceph.conf $(DESTDIR)$(docdir)/sample.ceph.conf
+	$(install_sh_SCRIPT) -m 0755 $(srcdir)/fetch_config $(DESTDIR)$(docdir)/sample.fetch_config
 	mkdir -p $(DESTDIR)$(includedir)/ceph
-	$(install_sh_SCRIPT) -m 0644 client/libceph.h $(DESTDIR)$(includedir)/ceph/libceph.h
+	$(install_sh_SCRIPT) -m 0644 $(srcdir)/client/libceph.h $(DESTDIR)$(includedir)/ceph/libceph.h
 	mkdir -p $(DESTDIR)$(includedir)/rados
-	$(install_sh_SCRIPT) -m 0644 include/librados.h $(DESTDIR)$(includedir)/rados/librados.h
-	$(install_sh_SCRIPT) -m 0644 include/librados.hpp $(DESTDIR)$(includedir)/rados/librados.hpp
-	$(install_sh_SCRIPT) -m 0644 include/buffer.h $(DESTDIR)$(includedir)/rados/buffer.h
-	$(install_sh_SCRIPT) -m 0644 include/atomic.h $(DESTDIR)$(includedir)/rados/atomic.h
-	$(install_sh_SCRIPT) -m 0644 include/page.h $(DESTDIR)$(includedir)/rados/page.h
-	$(install_sh_SCRIPT) -m 0644 include/crc32c.h $(DESTDIR)$(includedir)/rados/crc32c.h
-	$(install_sh_SCRIPT) -m 0644 include/Spinlock.h $(DESTDIR)$(includedir)/rados/Spinlock.h
-	$(install_sh_SCRIPT) -m 0644 include/assert.h $(DESTDIR)$(includedir)/rados/assert.h
+	$(install_sh_SCRIPT) -m 0644 $(srcdir)/include/librados.h $(DESTDIR)$(includedir)/rados/librados.h
+	$(install_sh_SCRIPT) -m 0644 $(srcdir)/include/librados.hpp $(DESTDIR)$(includedir)/rados/librados.hpp
+	$(install_sh_SCRIPT) -m 0644 $(srcdir)/include/buffer.h $(DESTDIR)$(includedir)/rados/buffer.h
+	$(install_sh_SCRIPT) -m 0644 $(srcdir)/include/atomic.h $(DESTDIR)$(includedir)/rados/atomic.h
+	$(install_sh_SCRIPT) -m 0644 $(srcdir)/include/page.h $(DESTDIR)$(includedir)/rados/page.h
+	$(install_sh_SCRIPT) -m 0644 $(srcdir)/include/crc32c.h $(DESTDIR)$(includedir)/rados/crc32c.h
+	$(install_sh_SCRIPT) -m 0644 $(srcdir)/include/Spinlock.h $(DESTDIR)$(includedir)/rados/Spinlock.h
+	$(install_sh_SCRIPT) -m 0644 $(srcdir)/include/assert.h $(DESTDIR)$(includedir)/rados/assert.h
 	mkdir -p $(DESTDIR)$(includedir)/crush
-	$(install_sh_SCRIPT) -m 0644 crush/hash.h $(DESTDIR)$(includedir)/crush/hash.h
-	$(install_sh_SCRIPT) -m 0644 crush/crush.h $(DESTDIR)$(includedir)/crush/crush.h
-	$(install_sh_SCRIPT) -m 0644 crush/types.h $(DESTDIR)$(includedir)/crush/types.h
-	$(install_sh_SCRIPT) -m 0644 crush/mapper.h $(DESTDIR)$(includedir)/crush/mapper.h
+	$(install_sh_SCRIPT) -m 0644 $(srcdir)/crush/hash.h $(DESTDIR)$(includedir)/crush/hash.h
+	$(install_sh_SCRIPT) -m 0644 $(srcdir)/crush/crush.h $(DESTDIR)$(includedir)/crush/crush.h
+	$(install_sh_SCRIPT) -m 0644 $(srcdir)/crush/types.h $(DESTDIR)$(includedir)/crush/types.h
+	$(install_sh_SCRIPT) -m 0644 $(srcdir)/crush/mapper.h $(DESTDIR)$(includedir)/crush/mapper.h
 
 FORCE:
 .git_version: FORCE
-	./check_version .git_version
+	$(srcdir)/check_version $(srcdir)/.git_version
 ceph_ver.h: .git_version
-	./make_version .git_version ceph_ver.h
+	$(srcdir)/make_version $(srcdir)/.git_version $(builddir)/ceph_ver.h
 
-ceph_ver.c: ceph_ver.h
-common/debug.cc: ceph_ver.h 
-common/BackTrace.cc: ceph_ver.h
-config.cc: ceph_ver.h
+ceph_ver.c: $(builddir)/ceph_ver.h
+common/debug.cc: $(builddir)/ceph_ver.h
+common/BackTrace.cc: $(builddir)/ceph_ver.h
+config.cc: $(builddir)/ceph_ver.h
 
 # cleaning
 clean-local:
@@ -381,7 +381,7 @@ clean-local:
 
 # libs
 libcommon_a_SOURCES = \
-	ceph_ver.c \
+	$(builddir)/ceph_ver.c \
 	$(libcommon_files)
 
 # this list ommits the ceph_ver.c file
@@ -505,6 +505,9 @@ libclient_a_SOURCES = \
 	client/SyntheticClient.cc \
 	client/Trace.cc
 
+dist-hook:
+	$(srcdir)/check_version $(srcdir)/.git_version
+
 # headers... and everything else we want to include in a 'make dist' 
 # that autotools doesn't magically identify.
 noinst_HEADERS = \
@@ -526,7 +529,6 @@ noinst_HEADERS = \
 	auth/RotatingKeyRing.h\
 	auth/Crypto.h\
 	auth/ExportControl.h\
-	ceph_ver.h \
         client/Client.h\
         client/SyntheticClient.h\
         client/Trace.h\
@@ -826,7 +828,8 @@ noinst_HEADERS = \
 	rgw/rgw_user.h\
 	sample.ceph.conf\
 	tools/ceph.h\
-	tools/gui.h
+	tools/gui.h\
+	tools/gui_resources.h
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
 	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
@@ -834,4 +837,4 @@ all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(cauthtool_SOUR
 	$(testmsgr_SOURCES) $(cfuse_SOURCES) $(fakefuse_SOURCES) $(psim_SOURCES) \
 	$(libcrush_so_a_SOURCES) $(libcommon_files) $(libcrush_a_SOURCES)  \
 	$(libmon_a_SOURCES) $(libmds_a_SOURCES) $(libos_a_SOURCES) $(libosd_a_SOURCES) \
-	$(libosdc_a_SOURCES) $(libclient_a_SOURCES)
+	$(libosdc_a_SOURCES) $(libclient_a_SOURCES) $(ceph_tool_gui_DATA)

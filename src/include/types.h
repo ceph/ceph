@@ -65,7 +65,7 @@ using namespace __gnu_cxx;
 #include "utime.h"
 #include "intarith.h"
 
-#include "../acconfig.h"
+#include "acconfig.h"
 
 // DARWIN compatibility
 #ifdef DARWIN
