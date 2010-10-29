@@ -48,7 +48,7 @@ class MDBalancer {
   utime_t rebalance_time; //ensure a consistent view of load for rebalance
 
   // todo
-  set<dirfrag_t>   split_queue;
+  set<dirfrag_t>   split_queue, merge_queue;
 
   // per-epoch scatter/gathered info
   map<int, mds_load_t>  mds_load;
