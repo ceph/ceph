@@ -108,6 +108,7 @@ const struct CompatSet::Feature ceph_osd_feature_compat[] = {
 };
 const struct CompatSet::Feature ceph_osd_feature_incompat[] = {
   CEPH_OSD_FEATURE_INCOMPAT_BASE,
+  CEPH_OSD_FEATURE_INCOMPAT_PGINFO,
   END_FEATURE
 };
 const struct CompatSet::Feature ceph_osd_feature_ro_compat[] = {
@@ -871,8 +872,9 @@ PG *OSD::_open_lock_pg(pg_t pgid, bool no_lockdep_check)
   // create
   PG *pg;
   sobject_t logoid = make_pg_log_oid(pgid);
+  sobject_t infooid = make_pg_biginfo_oid(pgid);
   if (osdmap->get_pg_type(pgid) == CEPH_PG_TYPE_REP)
-    pg = new ReplicatedPG(this, pool, pgid, logoid);
+    pg = new ReplicatedPG(this, pool, pgid, logoid, infooid);
   //else if (pgid.is_raid4())
   //pg = new RAID4PG(this, pgid);
   else 
@@ -4138,6 +4140,8 @@ void OSD::_remove_pg(PG *pg)
   dout(10) << "_remove_pg " << pgid << " removing final" << dendl;
 
   {
+    rmt->remove(coll_t::META_COLL, pg->log_oid);
+    rmt->remove(coll_t::META_COLL, pg->biginfo_oid);
     rmt->remove_collection(coll_t(pgid));
     int tr = store->queue_transaction(NULL, rmt);
     assert(tr == 0);

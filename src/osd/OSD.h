@@ -160,6 +160,14 @@ public:
     return sobject_t(object_t(s.c_str()), 0);
   }
   
+  sobject_t make_pg_biginfo_oid(pg_t pg) {
+    stringstream ss;
+    ss << "pginfo_" << pg;
+    string s;
+    getline(ss, s);
+    return sobject_t(object_t(s.c_str()), 0);
+  }
+  
 
 private:
   // -- superblock --

@@ -587,8 +587,8 @@ protected:
   int do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr);
 
 public:
-  ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid) : 
-    PG(o, _pool, p, oid)
+  ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid, const sobject_t& ioid) : 
+    PG(o, _pool, p, oid, ioid)
   { }
   ~ReplicatedPG() {}
 

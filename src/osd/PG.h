@@ -670,6 +670,7 @@ public:
   const coll_t coll;
   IndexedLog  log;
   sobject_t    log_oid;
+  sobject_t    biginfo_oid;
   OndiskLog   ondisklog;
   Missing     missing;
   map<sobject_t, set<int> > missing_loc;
@@ -853,11 +854,11 @@ public:
 
 
  public:  
-  PG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid) : 
+  PG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& loid, const sobject_t& ioid) : 
     osd(o), pool(_pool),
     _lock("PG::_lock"),
     ref(0), deleting(false), dirty_info(false), dirty_log(false),
-    info(p), coll(p), log_oid(oid),
+    info(p), coll(p), log_oid(loid), biginfo_oid(ioid),
     recovery_item(this), backlog_item(this), scrub_item(this), snap_trim_item(this), remove_item(this), stat_queue_item(this),
     recovery_ops_active(0),
     generate_backlog_epoch(0),

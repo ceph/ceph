@@ -32,6 +32,7 @@
 #define CEPH_OSD_FULL_RATIO .95
 
 #define CEPH_OSD_FEATURE_INCOMPAT_BASE CompatSet::Feature(1, "initial feature set(~v.18)")
+#define CEPH_OSD_FEATURE_INCOMPAT_PGINFO CompatSet::Feature(1, "pginfo object")
 
 
 /* osdreqid_t - caller name + incarnation# + tid to unique identify this request
