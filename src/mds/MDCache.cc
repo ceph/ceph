@@ -2700,14 +2700,15 @@ void MDCache::remove_inode_recursive(CInode *in)
   dout(10) << "remove_inode_recursive " << *in << dendl;
   list<CDir*> ls;
   in->get_dirfrags(ls);
-  for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
-    CDir *subdir = *p;
+  list<CDir*>::iterator p = ls.begin();
+  while (p != ls.end()) {
+    CDir *subdir = *p++;
 
     dout(10) << " removing dirfrag " << subdir << dendl;
-    CDir::map_t::iterator p = subdir->items.begin();
-    while (p != subdir->items.end()) {
-      CDentry *dn = p->second;
-      ++p;
+    CDir::map_t::iterator q = subdir->items.begin();
+    while (q != subdir->items.end()) {
+      CDentry *dn = q->second;
+      ++q;
       CDentry::linkage_t *dnl = dn->get_linkage();
       if (dnl->is_primary()) {
 	CInode *in = dnl->get_inode();
