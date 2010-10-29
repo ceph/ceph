@@ -685,6 +685,12 @@ bool ReplicatedPG::snap_trimmer()
       osd->cluster_messenger->
 	send_message(m, osd->osdmap->get_cluster_inst(peer));
     }
+
+    unlock();
+    // flush, to make sure the collection adjustments we just made are
+    // reflected when we scan the next collection set.
+    osd->store->flush();
+    lock();
   }  
 
   // done
