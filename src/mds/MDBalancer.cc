@@ -909,9 +909,8 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
   //if (dir->ino() == inodeno_t(0x10000000000))
   //dout(0) << "hit_dir " << type << " pop " << v << " in " << *dir << dendl;
 
-  // hit modify counter, if this was a modify
-  if (//g_conf.num_mds > 2 &&             // FIXME >2 thing
-      g_conf.mds_bal_frag && g_conf.mds_bal_fragment_interval > 0 &&
+  // split?
+  if (g_conf.mds_bal_frag && g_conf.mds_bal_fragment_interval > 0 &&
       !dir->inode->is_base() &&        // not root/base (for now at least)
       dir->is_auth() &&
       
@@ -923,6 +922,8 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
     dout(0) << "hit_dir " << type << " pop is " << v << ", putting in split_queue: " << *dir << dendl;
     split_queue.insert(dir->dirfrag());
   }
+  // merge?
+  
   
   // replicate?
   if (type == META_POP_IRD && who >= 0) {

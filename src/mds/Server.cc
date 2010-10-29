@@ -3205,7 +3205,6 @@ public:
 
     // hit pop
     mds->balancer->hit_inode(mdr->now, newi, META_POP_IWR);
-    //mds->balancer->hit_dir(mdr->now, dn->get_dir(), META_POP_DWR);
 
     // reply
     MClientReply *reply = new MClientReply(mdr->client_request, 0);
@@ -3535,7 +3534,7 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
 
   // bump target popularity
   mds->balancer->hit_inode(mdr->now, targeti, META_POP_IWR);
-  //mds->balancer->hit_dir(mdr->now, dn->get_dir(), META_POP_DWR);
+  mds->balancer->hit_dir(mdr->now, dn->get_dir(), META_POP_IWR);
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
@@ -3654,7 +3653,7 @@ void Server::_link_remote_finish(MDRequest *mdr, bool inc,
 
   // bump target popularity
   mds->balancer->hit_inode(mdr->now, targeti, META_POP_IWR);
-  //mds->balancer->hit_dir(mdr->now, dn->get_dir(), META_POP_DWR);
+  mds->balancer->hit_dir(mdr->now, dn->get_dir(), META_POP_IWR);
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
@@ -4217,7 +4216,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
     mds->anchorclient->commit(mdr->more()->dst_reanchor_atid, mdr->ls);
 
   // bump pop
-  //mds->balancer->hit_dir(mdr->now, dn->get_dir(), META_POP_DWR);
+  mds->balancer->hit_dir(mdr->now, dn->get_dir(), META_POP_IWR);
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
@@ -4708,9 +4707,7 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
     mds->anchorclient->commit(mdr->more()->dst_reanchor_atid, mdr->ls);
 
   // bump popularity
-  //if (srcdn->is_auth())
-  //  mds->balancer->hit_dir(mdr->now, srcdn->get_dir(), META_POP_DWR);
-  //  mds->balancer->hit_dir(mdr->now, destdn->get_dir(), META_POP_DWR);
+  mds->balancer->hit_dir(mdr->now, srcdn->get_dir(), META_POP_IWR);
   if (destdnl->is_remote() &&
       destdnl->get_inode()->is_auth())
     mds->balancer->hit_inode(mdr->now, destdnl->get_inode(), META_POP_IWR);
@@ -5322,8 +5319,7 @@ void Server::_logged_slave_rename(MDRequest *mdr,
   mds->send_message_mds(reply, mdr->slave_to_mds);
   
   // bump popularity
-  //if (srcdn->is_auth())
-    //mds->balancer->hit_dir(mdr->now, srcdn->get_dir(), META_POP_DWR);
+  mds->balancer->hit_dir(mdr->now, srcdn->get_dir(), META_POP_IWR);
   if (destdnl->get_inode() && destdnl->get_inode()->is_auth())
     mds->balancer->hit_inode(mdr->now, destdnl->get_inode(), META_POP_IWR);
 
