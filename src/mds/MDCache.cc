@@ -2728,7 +2728,7 @@ void MDCache::remove_inode_recursive(CInode *in)
 void MDCache::trim_unlinked_inodes()
 {
   dout(7) << "trim_unlinked_inodes" << dendl;
-  vector<CInode*> q;
+  list<CInode*> q;
   for (hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
        p != inode_map.end();
        p++) {
@@ -2738,7 +2738,7 @@ void MDCache::trim_unlinked_inodes()
       q.push_back(in);
     }
   }
-  for (vector<CInode*>::iterator p = q.begin(); p != q.end(); p++)
+  for (list<CInode*>::iterator p = q.begin(); p != q.end(); p++)
     remove_inode_recursive(*p);
 }
 
