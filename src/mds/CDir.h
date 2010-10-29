@@ -216,7 +216,7 @@ public:
   typedef map<dentry_key_t, CDentry*> map_t;
 protected:
 
-  // contents
+  // contents of this directory
   map_t items;       // non-null AND null
   unsigned num_head_items;
   unsigned num_head_null;

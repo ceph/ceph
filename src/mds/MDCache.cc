@@ -5066,6 +5066,7 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
 void MDCache::trim_non_auth()
 {
   dout(7) << "trim_non_auth" << dendl;
+  stringstream warn_string_dirs;
   
   // temporarily pin all subtree roots
   for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
@@ -5109,12 +5110,15 @@ void MDCache::trim_non_auth()
 	in->get_dirfrags(ls);
 	for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
 	  CDir *subdir = *p;
+	  warn_string_dirs << subdir->get_inode()->get_parent_dn()->get_name()
+	                   << std::endl;
 	  if (subdir->is_subtree_root()) 
 	    remove_subtree(subdir);
 	  in->close_dirfrag(subdir->dirfrag().frag);
 	}
 	dir->unlink_inode(dn);
 	remove_inode(in);
+	warn_string_dirs << in->get_parent_dn()->get_name() << std::endl;
       } 
       else {
 	assert(dnl->is_null());
@@ -5149,11 +5153,14 @@ void MDCache::trim_non_auth()
 	     p != ls.end();
 	     ++p) {
 	  dout(0) << " ... " << **p << dendl;
+	  warn_string_dirs << (*p)->get_inode()->get_parent_dn()->get_name()
+	                   << std::endl;
 	  assert((*p)->get_num_ref() == 1);  // SUBTREE
 	  remove_subtree((*p));
 	  in->close_dirfrag((*p)->dirfrag().frag);
 	}
 	dout(0) << " ... " << *in << dendl;
+	warn_string_dirs << in->get_parent_dn()->get_name() << std::endl;
 	assert(in->get_num_ref() == 0);
 	remove_inode(in);
       }
@@ -5162,6 +5169,77 @@ void MDCache::trim_non_auth()
   }
 
   show_subtrees();
+  if (warn_string_dirs.peek() != EOF) {
+    stringstream warn_string;
+    warn_string << "trim_non_auth has deleted paths: " << std::endl;
+    warn_string << warn_string_dirs;
+    mds->logclient.log(LOG_INFO, warn_string);
+  }
+}
+
+/**
+ * Recursively trim the subtree rooted at directory to remove all
+ * CInodes/CDentrys/CDirs that aren't links to remote MDSes, or ancestors
+ * of those links. This is used to clear invalid data out of the cache.
+ * Note that it doesn't clear the passed-in directory, since that's not
+ * always safe.
+ */
+bool MDCache::trim_non_auth_subtree(CDir *directory)
+{
+  dout(10) << "trim_non_auth_subtree " << directory << dendl;
+  bool keep_directory = false;
+  CDir::map_t::iterator j = directory->begin();
+  CDir::map_t::iterator i = j;
+  while (j != directory->end()) {
+    i = j++;
+    CDentry *dn = i->second;
+    dout(10) << "Checking dentry " << dn << dendl;
+    CDentry::linkage_t *dnl = dn->get_linkage();
+    if (dnl->is_primary()) { // check for subdirectories, etc
+      CInode *in = dnl->get_inode();
+      bool keep_inode = false;
+      if (in->is_dir()) {
+        list<CDir*> subdirs;
+        in->get_dirfrags(subdirs);
+        for (list<CDir*>::iterator subdir = subdirs.begin();
+            subdir != subdirs.end();
+            ++subdir) {
+          if ((*subdir)->is_subtree_root()) {
+            keep_inode = true;
+            dout(10) << "subdir " << *subdir << "is kept!" << dendl;
+          }
+          else {
+            if (trim_non_auth_subtree(*subdir))
+              keep_inode = true;
+            else {
+              in->close_dirfrag((*subdir)->get_frag());
+              directory->state_clear(CDir::STATE_COMPLETE);  // now incomplete!
+            }
+          }
+        }
+
+      }
+      if (!keep_inode) { // remove it!
+        dout(20) << "removing inode " << in << " with dentry" << dn << dendl;
+        directory->unlink_inode(dn);
+        remove_inode(in);
+        directory->remove_dentry(dn);
+      } else {
+        dout(20) << "keeping inode " << in << "with dentry " << dn <<dendl;
+        keep_directory = true;
+      }
+    } else { // just remove it
+      dout(20) << "removing dentry " << dn << dendl;
+      if (dnl->is_remote())
+        directory->unlink_inode(dn);
+      directory->remove_dentry(dn);
+    }
+  }
+  /**
+   * We've now checked all our children and deleted those that need it.
+   * Now return to caller, and tell them if *we're* a keeper.
+   */
+  return keep_directory;
 }
 
 /* This function DOES put the passed message before returning */

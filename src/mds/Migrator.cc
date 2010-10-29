@@ -1189,7 +1189,7 @@ void Migrator::handle_export_ack(MExportDirAck *m)
   EExport *le = new EExport(mds->mdlog, dir);
   mds->mdlog->start_entry(le);
 
-  le->metablob.add_dir_context(dir);
+  le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
   le->metablob.add_dir( dir, false );
   for (set<CDir*>::iterator p = bounds.begin();
        p != bounds.end();
@@ -1858,6 +1858,8 @@ void Migrator::import_reverse(CDir *dir)
 
   // update auth, with possible subtree merge.
   assert(dir->is_subtree_root());
+  if (mds->is_resolve())
+    cache->trim_non_auth_subtree(dir);
   cache->adjust_subtree_auth(dir, import_peer[dir->dirfrag()]);
   cache->try_subtree_merge(dir);
 
