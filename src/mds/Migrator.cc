@@ -1858,6 +1858,8 @@ void Migrator::import_reverse(CDir *dir)
 
   // update auth, with possible subtree merge.
   assert(dir->is_subtree_root());
+  if (mds->is_resolve())
+    cache->trim_non_auth_subtree(dir);
   cache->adjust_subtree_auth(dir, import_peer[dir->dirfrag()]);
   cache->try_subtree_merge(dir);
 
