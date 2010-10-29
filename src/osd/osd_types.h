@@ -290,7 +290,7 @@ public:
       }
 
       case 2: {
-	int type;
+	__u8 type;
 	pg_t pgid;
 	snapid_t snap;
 
