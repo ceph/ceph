@@ -5,10 +5,8 @@ ceph (0.22.1-1) experimental; urgency=low
   * msgr: fix reconnect/disconnect errors due to timeouts
   * init-ceph: check for correct instance in daemon_is_running()
   * filestore: deliberate crash on ENOSPC or EIO to avoid corruption
-  * filestore: split xattrs into chunk (partial workaround for xattr size 
-	limitations) 
-  * filestore: ignore ENOSPC on xattrs until workaround for extN is
-	implemented
+  * filestore: split xattrs into chunk (partial workaround for xattr size)
+  * filestore: ignore ENOSPC on xattrs until workaround for extN is ready
   * radosgw: return 204 on removal of bucket/object
 
  -- Sage Weil <sage@newdream.net>  Fri, 22 Oct 2010 16:18:49 -0700
