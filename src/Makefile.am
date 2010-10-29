@@ -824,7 +824,9 @@ noinst_HEADERS = \
 	rgw/rgw_rest.h\
 	rgw/rgw_common.h\
 	rgw/rgw_user.h\
-	sample.ceph.conf
+	sample.ceph.conf\
+	tools/ceph.h\
+	tools/gui.h
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
 	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \

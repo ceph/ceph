@@ -210,19 +210,16 @@ AC_CHECK_FUNC([sync_file_range],
 #AC_FUNC_UTIME_NULL
 #AC_CHECK_FUNCS([bzero fchdir fdatasync floor ftruncate getcwd gethostbyname gethostname gettimeofday inet_ntoa localtime_r memmove memset mkdir munmap pow rmdir select socket sqrt strcasecmp strchr strerror strstr utime])
 
-AC_ARG_WITH(gtk2,
-        AC_HELP_STRING([--with-gtk2],
-        [Build the graphical tools.  Default=no]),
-        [HAVE_GTK2=yes],[HAVE_GTK2=no]
-        )
-
-AM_CONDITIONAL(WITH_GTK2, [test "x$HAVE_GTK2" = "xyes"])
-
-if test "x$HAVE_GTK2" == "xyes"; then
-	PKG_CHECK_MODULES(GTKMM, [gtkmm-2.4 >= 1.0.0])
-	AC_DEFINE([HAVE_GTK2], [1],
-		 [Define if you have GTK2])
-fi
+AC_ARG_WITH([gtk2],
+        [AS_HELP_STRING([--with-gtk2], [Build the graphical tools.  Default=yes.])],
+        [try_with_gtk2=$withval],
+        [])
+AS_IF([test "x$try_with_gtk2" != "xno"],
+        [PKG_CHECK_MODULES(GTKMM, [gtkmm-2.4 >= 1.0.0],
+                [AC_DEFINE([HAVE_GTK2], [1], [we have gtk2])],
+                [try_with_gtk2=no
+                 AC_MSG_RESULT([Sorry, a usable version of gtkmm was not found. We will build without it.])])])
+AM_CONDITIONAL(WITH_GTK2, [test "x$try_with_gtk2" != "xno"])
 
 AC_CONFIG_HEADERS([src/acconfig.h])
 AC_CONFIG_FILES([Makefile
