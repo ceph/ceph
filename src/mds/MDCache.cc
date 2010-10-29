@@ -1306,10 +1306,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
       for (set<snapid_t>::const_iterator q = snaps.lower_bound(oldin->first);
 	   q != snaps.end() && *q <= last;
 	   q++) {
-	dout(10) << "   need_snapflush on " << *q << dendl;
-	if (in->client_need_snapflush.empty())
-	  in->get(CInode::PIN_NEEDSNAPFLUSH);
-	in->client_need_snapflush[*q].insert(client);
+	in->add_need_snapflush(oldin, *q, client);
       }
     } else {
       dout(10) << " ignoring client" << client << " cap follows " << cap->client_follows << dendl;

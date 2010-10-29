@@ -401,6 +401,10 @@ protected:
   map<int, set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
 public:
   map<snapid_t, set<client_t> > client_need_snapflush;
+
+  void add_need_snapflush(CInode *snapin, snapid_t snapid, client_t client);
+  void remove_need_snapflush(CInode *snapin, snapid_t snapid, client_t client);
+
 protected:
 
   ceph_lock_state_t fcntl_locks;
