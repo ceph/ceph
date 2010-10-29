@@ -146,12 +146,13 @@ public:
 
   class WatchCtx {
   public:
-  virtual bool finish(int r) = 0;
+  virtual void notify(uint8_t opcode, uint64_t ver) = 0;
   };
 
   // watch/notify
   int watch(pool_t pool, const string& o, uint64_t ver, uint64_t *cookie, librados::Rados::WatchCtx *ctx);
   int unwatch(pool_t pool, const string& o, uint64_t ver, uint64_t cookie);
+  int notify(pool_t pool, const string& o, uint64_t ver);
 };
 
 }

@@ -33,9 +33,8 @@ void buf_to_hex(const unsigned char *buf, int len, char *str)
 class C_Watch : public Rados::WatchCtx {
 public:
   C_Watch() {}
-  bool finish(int r) {
-    cout << "C_Watch::finish()" << std::endl;
-    return true;
+  void notify(uint8_t opcode, uint64_t ver) {
+    cout << "C_Watch::notify() opcode=" << (int)opcode << " ver=" << ver << std::endl;
   }
 };
 
@@ -69,12 +68,19 @@ int main(int argc, const char **argv)
 
   r = rados.write(pool, oid, 0, bl, bl.length());
   uint64_t objver = rados.get_last_ver();
-  cout << "rados.write returned " << r << " last_ver=" << rados.get_last_ver() << std::endl;
+  cout << "rados.write returned " << r << " last_ver=" << objver << std::endl;
 
   uint64_t cookie;
   C_Watch wc;
-  r = rados.watch(pool, oid, 0, &cookie, &wc);
+  r = rados.watch(pool, oid, objver, &cookie, &wc);
   cout << "rados.watch returned " << r << std::endl;
+
+  cout << "*** press enter to continue ***" << std::endl;
+  getchar();
+  r = rados.notify(pool, oid, objver);
+  cout << "rados.notify returned " << r << std::endl;
+  cout << "*** press enter to continue ***" << std::endl;
+  getchar();
 
   exit(0);
 

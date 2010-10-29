@@ -193,6 +193,10 @@ struct ObjectOperation {
   void notify(uint64_t cookie, uint64_t ver) {
     add_watch(CEPH_OSD_OP_NOTIFY, cookie, ver, 1); 
   }
+
+  void notify_ack(uint64_t notify_id, uint64_t ver) {
+    add_watch(CEPH_OSD_OP_NOTIFY_ACK, notify_id, ver, 0);
+  }
 };
 
 
