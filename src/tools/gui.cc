@@ -264,8 +264,8 @@ bool GuiMonitor::open_icon(Glib::RefPtr<Gdk::Pixbuf> &icon, const std::string &p
       icon = Gdk::Pixbuf::create_from_file(path);
    }
    catch (const Gdk::PixbufError& e) {
-      cerr << "Problem making graphic from " << path << "; error code: " <<
-       e.code() << std::endl;
+      cerr << "Problem making graphic from " << path << "; error code: "
+	   << e.code() << ": " << e.what() << std::endl;
       return false;
    }
    catch (const Glib::FileError& e) {
