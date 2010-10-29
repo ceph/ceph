@@ -231,9 +231,16 @@ void CInode::add_need_snapflush(CInode *snapin, snapid_t snapid, client_t client
 
   if (client_need_snapflush.empty()) {
     get(CInode::PIN_NEEDSNAPFLUSH);
+
+    // FIXME: this is non-optimal, as we'll block freezes/migrations for potentially
+    // long periods waiting for clients to flush their snaps.
+    auth_pin(this);   // pin head inode...
   }
 
   set<client_t>& clients = client_need_snapflush[snapid];
+  if (clients.empty())
+    snapin->auth_pin(this);  // ...and pin snapped/old inode!
+  
   clients.insert(client);
 }
 
@@ -244,9 +251,11 @@ void CInode::remove_need_snapflush(CInode *snapin, snapid_t snapid, client_t cli
   clients.erase(client);
   if (clients.empty()) {
     client_need_snapflush.erase(snapid);
+    snapin->auth_unpin(this);
 
     if (client_need_snapflush.empty()) {
       put(CInode::PIN_NEEDSNAPFLUSH);
+      auth_unpin(this);
     }
   }
 }
