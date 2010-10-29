@@ -2451,6 +2451,11 @@ extern "C" int rados_aio_get_return_value(rados_completion_t c)
   return ((RadosClient::AioCompletion *)c)->get_return_value();
 }
 
+extern "C" uint64_t rados_aio_get_obj_ver(rados_completion_t c)
+{
+  return ((RadosClient::AioCompletion *)c)->get_obj_ver();
+}
+
 extern "C" void rados_aio_release(rados_completion_t c)
 {
   ((RadosClient::AioCompletion *)c)->put();

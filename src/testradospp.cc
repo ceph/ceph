@@ -68,6 +68,7 @@ int main(int argc, const char **argv)
   cout << "open pool result = " << r << " pool = " << pool << std::endl;
 
   r = rados.write(pool, oid, 0, bl, bl.length());
+  uint64_t objver = rados.get_last_ver();
   cout << "rados.write returned " << r << " last_ver=" << rados.get_last_ver() << std::endl;
 
   uint64_t cookie;
