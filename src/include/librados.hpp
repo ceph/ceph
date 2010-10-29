@@ -68,6 +68,7 @@ public:
   void set_snap(pool_t pool, snap_t seq);
   int set_snap_context(pool_t pool, snap_t seq, std::vector<snap_t>& snaps);
 
+  uint64_t get_last_ver();
 
   int create(pool_t pool, const std::string& oid, bool exclusive);
 
@@ -132,6 +133,7 @@ public:
     bool is_complete();
     bool is_safe();
     int get_return_value();
+    int get_obj_ver();
     void release();
   };
 
@@ -144,11 +146,11 @@ public:
 
   class WatchCtx {
   public:
-  virtual int finish() = 0;
+  virtual bool finish(int r) = 0;
   };
 
   // watch/notify
-  int watch(pool_t pool, const string& o, uint64_t ver, uint64_t *cookie, Context *ctx);
+  int watch(pool_t pool, const string& o, uint64_t ver, uint64_t *cookie, librados::Rados::WatchCtx *ctx);
   int unwatch(pool_t pool, const string& o, uint64_t ver, uint64_t cookie);
 };
 

@@ -592,6 +592,9 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     return;
   }
 
+  if (op->objver)
+    *op->objver = m->get_version();
+
   // got data?
   if (op->outbl) {
     if (op->outbl->length())

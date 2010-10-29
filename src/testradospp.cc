@@ -30,6 +30,15 @@ void buf_to_hex(const unsigned char *buf, int len, char *str)
   }
 }
 
+class C_Watch : public Rados::WatchCtx {
+public:
+  C_Watch() {}
+  bool finish(int r) {
+    cout << "C_Watch::finish()" << std::endl;
+    return true;
+  }
+};
+
 int main(int argc, const char **argv) 
 {
   Rados rados;
@@ -59,7 +68,16 @@ int main(int argc, const char **argv)
   cout << "open pool result = " << r << " pool = " << pool << std::endl;
 
   r = rados.write(pool, oid, 0, bl, bl.length());
-  cout << "rados.write returned " << r << std::endl;
+  cout << "rados.write returned " << r << " last_ver=" << rados.get_last_ver() << std::endl;
+
+  uint64_t cookie;
+  C_Watch wc;
+  r = rados.watch(pool, oid, 0, &cookie, &wc);
+  cout << "rados.watch returned " << r << std::endl;
+
+  exit(0);
+
+
   r = rados.write(pool, oid, 0, bl, bl.length() - 1);
   cout << "rados.write returned " << r << std::endl;
   r = rados.write(pool, oid, 0, bl, bl.length() - 2);
