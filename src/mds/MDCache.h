@@ -244,10 +244,6 @@ inline ostream& operator<<(ostream& out, Mutation &mut)
 }
 
 
-enum {
-  MDS_INTERNAL_OP_FRAGMENT,
-};
-
 /** active_request_t
  * state we track for requests we are currently processing.
  * mostly information about locks held, so that we can drop them all
@@ -315,19 +311,11 @@ struct MDRequest : public Mutation {
     Context *slave_commit;
     bufferlist rollback_bl;
 
-    // internal ops
-    CInode *fragment_in;
-    frag_t fragment_base;
-    list<CDir*> fragment_start;
-    list<CDir*> fragment_result;
-    int fragment_bits;
-
     More() : 
       src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
       destdn_was_remote_inode(0), was_link_merge(false),
       stid(0),
-      slave_commit(0),
-      fragment_in(0), fragment_bits(0) { }
+      slave_commit(0) { }
   } *_more;
 
 
@@ -402,7 +390,6 @@ struct MDRequest : public Mutation {
     if (is_slave()) out << " slave_to mds" << slave_to_mds;
     if (client_request) out << " cr=" << client_request;
     if (slave_request) out << " sr=" << slave_request;
-    if (internal_op == MDS_INTERNAL_OP_FRAGMENT) out << " fragment";
     out << ")";
   }
 };
@@ -1066,18 +1053,30 @@ protected:
 private:
   void adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
 			    list<CDir*>& frags, list<Context*>& waiters, bool replay);
+  void adjust_dir_fragments(CInode *diri,
+			    list<CDir*>& srcfrags,
+			    frag_t basefrag, int bits,
+			    list<CDir*>& resultfrags, 
+			    list<Context*>& waiters,
+			    bool replay);
+
   friend class EFragment;
+
+  bool can_fragment_lock(CInode *diri);
+  bool can_fragment(CInode *diri, list<CDir*>& dirs);
 
 public:
   void split_dir(CDir *dir, int byn);
+  void merge_dir(CInode *diri, frag_t fg);
 
 private:
-  void dispatch_fragment(MDRequest *mdr);
-  void fragment_mark_and_complete(MDRequest *mdr);
-  void fragment_go(MDRequest *mdr);
-  void fragment_stored(MDRequest *mdr);
-  void fragment_logged(MDRequest *mdr);
-  friend class C_MDC_FragmentGo;
+  void fragment_freeze_dirs(list<CDir*>& dirs, C_Gather *gather);
+  void fragment_mark_and_complete(list<CDir*>& dirs);
+  void fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits);
+  void fragment_unmark_unfreeze_dirs(list<CDir*>& dirs);
+  void fragment_stored(list<CDir*>& resultfrags, frag_t basefrag, int bits);
+  void fragment_logged(Mutation *mut, list<CDir*>& resultfrags, frag_t basefrag, int bits);
+  friend class C_MDC_FragmentFrozen;
   friend class C_MDC_FragmentMarking;
   friend class C_MDC_FragmentStored;
   friend class C_MDC_FragmentLogged;

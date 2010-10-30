@@ -453,6 +453,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_bal_split_size, 0, OPT_INT, 10000),
 	OPTION(mds_bal_split_rd, 0, OPT_FLOAT, 25000),
 	OPTION(mds_bal_split_wr, 0, OPT_FLOAT, 10000),
+	OPTION(mds_bal_split_bits, 0, OPT_INT, 3),
 	OPTION(mds_bal_merge_size, 0, OPT_INT, 50),
 	OPTION(mds_bal_merge_rd, 0, OPT_FLOAT, 1000),
 	OPTION(mds_bal_merge_wr, 0, OPT_FLOAT, 1000),

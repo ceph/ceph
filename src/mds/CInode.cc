@@ -421,15 +421,19 @@ frag_t CInode::pick_dirfrag(const string& dn)
   return dirfragtree[h];
 }
 
-void CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
+bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
 {
   list<frag_t> fglist;
   dirfragtree.get_leaves_under(fg, fglist);
+  bool all = true;
   for (list<frag_t>::iterator p = fglist.begin();
        p != fglist.end();
        ++p) 
     if (dirfrags.count(*p))
       ls.push_back(dirfrags[*p]);
+    else 
+      all = false;
+  return all;
 }
 
 CDir *CInode::get_approx_dirfrag(frag_t fg)

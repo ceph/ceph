@@ -728,7 +728,8 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
     ::decode(end, p);
     ::decode(complete, p);
     
-    dout(10) << "insert_trace " << numdn << " readdir items, end=" << (int)end << dendl;
+    dout(10) << "insert_trace " << numdn << " readdir items, end=" << (int)end
+	     << ", offset " << request->readdir_offset << dendl;
 
     request->readdir_end = end;
     request->readdir_num = numdn;
@@ -3907,6 +3908,8 @@ void Client::seekdir(DIR *dirp, loff_t offset)
     d->release_count--;   // bump if we do a forward seek
 
   d->offset = offset;
+  if (!d->frag().is_leftmost() && d->next_offset == 2)
+    d->next_offset = 0;  // not 2 on non-leftmost frags!
 }
 
 
@@ -3975,7 +3978,9 @@ int Client::_readdir_get_frag(DirResult *dirp)
   // get the current frag.
   frag_t fg = dirp->frag();
   
-  dout(10) << "_readdir_get_frag " << dirp << " on " << dirp->inode->ino << " fg " << fg << dendl;
+  dout(10) << "_readdir_get_frag " << dirp << " on " << dirp->inode->ino << " fg " << fg
+	   << " next_offset " << dirp->next_offset
+	   << dendl;
 
   int op = CEPH_MDS_OP_READDIR;
   if (dirp->inode && dirp->inode->snapid == CEPH_SNAPDIR)
@@ -4023,7 +4028,10 @@ int Client::_readdir_get_frag(DirResult *dirp)
 
     if (req->readdir_end) {
       dirp->last_name.clear();
-      dirp->next_offset = 2;
+      if (fg.is_rightmost())
+	dirp->next_offset = 2;
+      else
+	dirp->next_offset = 0;
     } else {
       dirp->last_name = req->readdir_last_name;
       dirp->next_offset += req->readdir_num;
@@ -4210,9 +4218,9 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
     if (!fg.is_rightmost()) {
       // next frag!
       dirp->next_frag();
-      fg = dirp->frag();
       off = 0;
       dout(10) << " advancing to next frag: " << fg << " -> " << dirp->frag() << dendl;
+      fg = dirp->frag();
       continue;
     }
 

@@ -19,6 +19,8 @@
 #include <map>
 #include <list>
 #include <iostream>
+#include <stdio.h>
+
 #include "buffer.h"
 
 #include "ceph_frag.h"
@@ -131,6 +133,17 @@ class frag_t {
   frag_t next() const {
     assert(!is_rightmost());
     return frag_t(ceph_frag_next(_enc));
+  }
+
+  // parse
+  bool parse(const char *s) {
+    int value, bits;
+    int r = sscanf(s, "%x/%d", &value, &bits);
+    if (r == 2) {
+      *this = frag_t(value, bits);
+      return true;
+    }
+    return false;
   }
 };
 
@@ -500,10 +513,19 @@ inline std::ostream& operator<<(std::ostream& out, fragtree_t& ft)
       }
     }
   }
-  if (1) {
+  if (0) {
     std::list<frag_t> leaves;
     ft.get_leaves(leaves);
     out << leaves;
+  }
+  if (1) {
+    for (std::map<frag_t,int32_t>::const_iterator p = ft._splits.begin();
+	 p != ft._splits.end();
+	 p++) {
+      if (p != ft._splits.begin())
+	out << " ";
+      out << p->first << "^" << p->second;
+    }
   }
   return out << ")";
 }

@@ -48,7 +48,7 @@ class MDBalancer {
   utime_t rebalance_time; //ensure a consistent view of load for rebalance
 
   // todo
-  set<dirfrag_t>   split_queue;
+  set<dirfrag_t>   split_queue, merge_queue;
 
   // per-epoch scatter/gathered info
   map<int, mds_load_t>  mds_load;
@@ -109,12 +109,14 @@ public:
   void add_import(class CDir *im, utime_t now);
 
   void hit_inode(utime_t now, class CInode *in, int type, int who=-1);
-  void hit_dir(utime_t now, class CDir *dir, int type, int who, double amount=1.0);
+  void hit_dir(utime_t now, class CDir *dir, int type, int who=-1, double amount=1.0);
   void hit_recursive(utime_t now, class CDir *dir, int type, double amount, double rd_adj);
 
 
   void show_imports(bool external=false);
   void dump_pop_map();  
+
+  void queue_split(CDir *dir);
 
 };
 
