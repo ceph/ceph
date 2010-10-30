@@ -836,6 +836,18 @@ int FileStore::_detect_fs()
 int FileStore::_sanity_check_fs()
 {
   // sanity check(s)
+
+  if ((int)g_conf.filestore_journal_writeahead +
+      (int)g_conf.filestore_journal_parallel +
+      (int)g_conf.filestore_journal_trailing > 1) {
+    dout(0) << "mount ERROR: more than one of filestore journal {writeahead,parallel,trailing} enabled" << dendl;
+    cerr << TEXT_RED 
+	 << " ** WARNING: more than one of 'filestore journal {writeahead,parallel,trailing}'\n"
+	 << "             is enabled in ceph.conf.  You must choose a single journal mode."
+	 << std::endl;
+    return -EINVAL;
+  }
+
   if (!btrfs) {
     if (!journal || !g_conf.filestore_journal_writeahead) {
       dout(0) << "mount WARNING: no btrfs, and no journal in writeahead mode; data may be lost" << dendl;
@@ -1075,10 +1087,32 @@ int FileStore::mount()
   op_finisher.start();
   ondisk_finisher.start();
 
+  // select journal mode?
+  if (journal &&
+      !g_conf.filestore_journal_writeahead &&
+      !g_conf.filestore_journal_parallel &&
+      !g_conf.filestore_journal_trailing) {
+    if (!btrfs) {
+      g_conf.filestore_journal_writeahead = true;
+      dout(0) << "mount: enabling WRITEAHEAD journal mode: btrfs not detected" << dendl;
+    } else if (!g_conf.filestore_btrfs_snap) {
+      g_conf.filestore_journal_writeahead = true;
+      dout(0) << "mount: enabling WRITEAHEAD journal mode: 'filestore btrfs snap' mode is not enabled" << dendl;
+    } else if (!btrfs_snap_create_async) {
+      g_conf.filestore_journal_writeahead = true;
+      dout(0) << "mount: enabling WRITEAHEAD journal mode: btrfs SNAP_CREATE_ASYNC ioctl not detected (v2.6.37+)" << dendl;
+    } else {
+      g_conf.filestore_journal_parallel = true;
+      dout(0) << "mount: enabling PARALLEL journal mode: btrfs, SNAP_CREATE_ASYNC detected and 'filestore btrfs snap' mode is enabled" << dendl;
+    }
+  }
+
   if (journal && g_conf.filestore_journal_writeahead)
     journal->set_wait_on_full(true);
 
-  _sanity_check_fs();
+  r = _sanity_check_fs();
+  if (r < 0)
+    return r;
 
   // all okay.
   return 0;
