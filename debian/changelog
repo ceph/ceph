@@ -1,3 +1,12 @@
+ceph (0.22.2-1) experimental; urgency=low
+
+  * cfuse: fix truncation problem
+  * osd: fix decoding of legacay (0.21) coll_t
+  * osd: handle missing objects on snap reads
+  * filestore: escape xattr chunk names 
+
+ -- Sage Weil <sage@newdream.net>  Sat, 30 Oct 2010 11:22:51 -0700
+
 ceph (0.22.1-1) experimental; urgency=low
 
   * osd: fix hang during mkfs journal creation

@@ -3,7 +3,7 @@
 
 # Autoconf
 AC_PREREQ(2.59)
-AC_INIT([Ceph distributed file system], [0.22.1], 
+AC_INIT([Ceph distributed file system], [0.22.2], 
 	      [Sage Weil <sage@newdream.net>],
 	      [ceph])
 
@@ -12,7 +12,7 @@ AC_CANONICAL_HOST
 AC_CANONICAL_TARGET
 
 # Automake
-AM_INIT_AUTOMAKE(ceph, 0.22.1)
+AM_INIT_AUTOMAKE(ceph, 0.22.2)
 AM_PROG_CC_C_O
 AM_PROG_LIBTOOL
 
