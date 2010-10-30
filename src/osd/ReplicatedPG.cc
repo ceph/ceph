@@ -243,10 +243,16 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
   ObjectContext *obc;
   bool can_create = op->may_write();
-  int r = find_object_context(op->get_oid(), op->get_snapid(), &obc, can_create);
+  snapid_t snapid;
+  int r = find_object_context(op->get_oid(), op->get_snapid(), &obc, can_create, &snapid);
   if (r) {
-    assert(r != -EAGAIN); /* if we're doing an op, it's a write --
-			     don't write to snaps! */
+    if (r == -EAGAIN) {
+      // missing the specific snap we need; requeue and wait.
+      assert(!can_create); // only happens on a read
+      sobject_t soid(op->get_oid(), snapid);
+      wait_for_missing_object(soid, op);
+      return;
+    }
     osd->reply_op_error(op, r);
     return;
   }    
@@ -2213,7 +2219,8 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const sobject_t& s
 
 int ReplicatedPG::find_object_context(const object_t& oid, snapid_t snapid,
 				      ObjectContext **pobc,
-				      bool can_create)
+				      bool can_create,
+				      snapid_t *psnapid)
 {
   // want the head?
   sobject_t head(oid, CEPH_NOSNAP);
@@ -2280,6 +2287,8 @@ int ReplicatedPG::find_object_context(const object_t& oid, snapid_t snapid,
 
   if (missing.is_missing(soid)) {
     dout(20) << "get_object_context  " << soid << " missing, try again later" << dendl;
+    if (psnapid)
+      *psnapid = soid.snap;
     return -EAGAIN;
   }
 

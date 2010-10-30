@@ -378,7 +378,7 @@ void Client::update_inode_file_bits(Inode *in,
     assert(in->is_file());
     in->truncate_size = truncate_size;
     in->oset.truncate_size = truncate_size;
-    if (g_conf.client_oc) { //do actual truncation
+    if (g_conf.client_oc && prior_size) { //do actual truncation
       vector<ObjectExtent> ls;
       filer->file_to_extents(in->ino, &in->layout,
                              truncate_size, prior_size - truncate_size,

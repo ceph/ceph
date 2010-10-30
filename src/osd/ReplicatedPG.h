@@ -426,7 +426,8 @@ protected:
       register_snapset_context(obc->obs.ssc);
   }
   void put_object_context(ObjectContext *obc);
-  int find_object_context(const object_t& oid, snapid_t snapid, ObjectContext **pobc, bool can_create);
+  int find_object_context(const object_t& oid, snapid_t snapid, ObjectContext **pobc,
+			  bool can_create, snapid_t *psnapid=NULL);
 
   SnapSetContext *get_snapset_context(const object_t& oid, bool can_create);
   void register_snapset_context(SnapSetContext *ssc) {
