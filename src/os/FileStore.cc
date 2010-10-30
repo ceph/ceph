@@ -781,24 +781,23 @@ int FileStore::_detect_fs()
 
     if (btrfs_wait_sync) {
       // async snap creation?
+      struct btrfs_ioctl_vol_args vol_args;
+      vol_args.fd = 0;
+      strcpy(vol_args.name, "async_snap_test");
+
       struct btrfs_ioctl_async_vol_args async_args;
-      struct btrfs_ioctl_vol_args volargs;
-      __u64 transid = 0;
-      async_args.args = &volargs;
-      async_args.transid = (__u64 *)&transid;
-      volargs.fd = 0;
-      strcpy(volargs.name, "async_snap_test");
+      async_args.fd = fd;
+      strcpy(async_args.name, "async_snap_test");
 
       // remove old one, first
       struct stat st;
-      if (::fstatat(fd, volargs.name, &st, 0) == 0) {
+      if (::fstatat(fd, vol_args.name, &st, 0) == 0) {
 	dout(0) << "mount btrfs removing old async_snap_test" << dendl;
-	r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &volargs);
+	r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &vol_args);
 	if (r != 0)
 	  dout(0) << "mount  failed to remove old async_snap_test: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
       }
 
-      volargs.fd = fd;
       r = ::ioctl(fd, BTRFS_IOC_SNAP_CREATE_ASYNC, &async_args);
       dout(0) << "mount btrfs SNAP_CREATE_ASYNC got " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
       if (r == 0 || errno == EEXIST) {
@@ -806,8 +805,7 @@ int FileStore::_detect_fs()
 	btrfs_snap_create_async = true;
       
 	// clean up
-	volargs.fd = 0;
-	r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &volargs);
+	r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &vol_args);
 	if (r != 0) {
 	  dout(0) << "mount btrfs SNAP_DESTROY failed: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
 	}
@@ -975,8 +973,6 @@ int FileStore::mount()
       dout(0) << "mount WARNING: not btrfs, store may be in inconsistent state" << dendl;
     } else {
       uint64_t cp = snaps.back();
-      btrfs_ioctl_vol_args snapargs;
-
       uint64_t curr_seq;
 
       int curr_fd = read_op_seq(current_op_seq_fn, &curr_seq);
@@ -1009,11 +1005,12 @@ int FileStore::mount()
       }
 
       // drop current
-      snapargs.fd = 0;
-      strcpy(snapargs.name, "current");
+      btrfs_ioctl_vol_args vol_args;
+      vol_args.fd = 0;
+      strcpy(vol_args.name, "current");
       int r = ::ioctl(basedir_fd,
 		      BTRFS_IOC_SNAP_DESTROY,
-		      &snapargs);
+		      &vol_args);
       if (r) {
 	char buf[80];
 	dout(0) << "error removing old current subvol: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
@@ -1030,10 +1027,10 @@ int FileStore::mount()
       // roll back
       char s[PATH_MAX];
       snprintf(s, sizeof(s), "%s/" COMMIT_SNAP_ITEM, basedir.c_str(), (long long unsigned)cp);
-      snapargs.fd = ::open(s, O_RDONLY);
-      r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &snapargs);
+      vol_args.fd = ::open(s, O_RDONLY);
+      r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &vol_args);
       assert(r == 0);
-      ::close(snapargs.fd);
+      ::close(vol_args.fd);
       dout(10) << "mount rolled back to consistent snap " << cp << dendl;
       snaps.pop_back();
 
@@ -2127,21 +2124,19 @@ void FileStore::sync_entry()
       bool do_snap = btrfs && g_conf.filestore_btrfs_snap;
 
       if (do_snap) {
-	struct btrfs_ioctl_async_vol_args async_args;
-	struct btrfs_ioctl_vol_args snapargs;
-	__u64 transid = 0;
-	async_args.transid = &transid;
-	async_args.args = &snapargs;
-	snapargs.fd = current_fd;
-	snprintf(snapargs.name, sizeof(snapargs.name), COMMIT_SNAP_ITEM, (long long unsigned)cp);
 
 	if (btrfs_snap_create_async) {
 	  // be smart!
-	  dout(10) << "taking async snap '" << snapargs.name << "'" << dendl;
+	  struct btrfs_ioctl_async_vol_args async_args;
+	  async_args.fd = current_fd;
+	  snprintf(async_args.name, sizeof(async_args.name), COMMIT_SNAP_ITEM,
+		   (long long unsigned)cp);
+
+	  dout(10) << "taking async snap '" << async_args.name << "'" << dendl;
 	  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE_ASYNC, &async_args);
 	  char buf[100];
-	  dout(20) << "async snap create '" << snapargs.name
-		   << "' transid " << transid
+	  dout(20) << "async snap create '" << async_args.name
+		   << "' transid " << async_args.transid
 		   << " got " << r << " " << strerror_r(r < 0 ? errno : 0, buf, sizeof(buf)) << dendl;
 	  assert(r == 0);
 	  snaps.push_back(cp);
@@ -2149,16 +2144,21 @@ void FileStore::sync_entry()
 	  commit_started();
 
 	  // wait for commit
-	  dout(20) << " waiting for transid " << transid << " to complete" << dendl;
-	  ::ioctl(op_fd, BTRFS_IOC_WAIT_SYNC, &transid);
-	  dout(20) << " done waiting for transid " << transid << " to complete" << dendl;
+	  dout(20) << " waiting for transid " << async_args.transid << " to complete" << dendl;
+	  ::ioctl(op_fd, BTRFS_IOC_WAIT_SYNC, &async_args.transid);
+	  dout(20) << " done waiting for transid " << async_args.transid << " to complete" << dendl;
 
 	} else {
 	  // the synchronous snap create does a sync.
-	  dout(10) << "taking snap '" << snapargs.name << "'" << dendl;
-	  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &snapargs);
+	  struct btrfs_ioctl_vol_args vol_args;
+	  vol_args.fd = current_fd;
+	  snprintf(vol_args.name, sizeof(vol_args.name), COMMIT_SNAP_ITEM,
+		   (long long unsigned)cp);
+
+	  dout(10) << "taking snap '" << vol_args.name << "'" << dendl;
+	  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &vol_args);
 	  char buf[100];
-	  dout(20) << "snap create '" << snapargs.name << "' got " << r
+	  dout(20) << "snap create '" << vol_args.name << "' got " << r
 		   << " " << strerror_r(r < 0 ? errno : 0, buf, sizeof(buf)) << dendl;
 	  assert(r == 0);
 	  snaps.push_back(cp);
@@ -2191,15 +2191,17 @@ void FileStore::sync_entry()
       // remove old snaps?
       if (do_snap) {
 	while (snaps.size() > 2) {
-	  btrfs_ioctl_vol_args snapargs;
-	  snapargs.fd = 0;
-	  snprintf(snapargs.name, sizeof(snapargs.name), COMMIT_SNAP_ITEM, (long long unsigned)snaps.front());
+	  btrfs_ioctl_vol_args vol_args;
+	  vol_args.fd = 0;
+	  snprintf(vol_args.name, sizeof(vol_args.name), COMMIT_SNAP_ITEM,
+		   (long long unsigned)snaps.front());
+
 	  snaps.pop_front();
-	  dout(10) << "removing snap '" << snapargs.name << "'" << dendl;
-	  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_DESTROY, &snapargs);
+	  dout(10) << "removing snap '" << vol_args.name << "'" << dendl;
+	  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_DESTROY, &vol_args);
 	  if (r) {
 	    char buf[100];
-	    dout(20) << "unable to destroy snap '" << snapargs.name << "' got " << r
+	    dout(20) << "unable to destroy snap '" << vol_args.name << "' got " << r
 		     << " " << strerror_r(r < 0 ? errno : 0, buf, sizeof(buf)) << dendl;
 	  }
 	}
