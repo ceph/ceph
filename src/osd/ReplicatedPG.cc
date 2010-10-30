@@ -449,8 +449,6 @@ void ReplicatedPG::do_sub_op(MOSDSubOp *op)
   if (op->ops.size() >= 1) {
     OSDOp& first = op->ops[0];
     switch (first.op.op) {
-      // rep stuff
-      // reserve, unreserve, stop
     case CEPH_OSD_OP_PULL:
       sub_op_pull(op);
       return;
@@ -479,13 +477,18 @@ void ReplicatedPG::do_sub_op_reply(MOSDSubOpReply *r)
 {
   if (r->ops.size() >= 1) {
     OSDOp& first = r->ops[0];
-    if (first.op.op == CEPH_OSD_OP_PUSH) {
+    switch (first.op.op) {
+    case CEPH_OSD_OP_PUSH:
       // continue peer recovery
       sub_op_push_reply(r);
       return;
-    }
-    if (first.op.op == CEPH_OSD_OP_SCRUB) {
+
+    case CEPH_OSD_OP_SCRUB:
       sub_op_scrub_reply(r);
+      return;
+
+    case CEPH_OSD_OP_SCRUB_RESERVE:
+      sub_op_scrub_reserve_reply(r);
       return;
     }
   }

@@ -2436,7 +2436,7 @@ void PG::take_object_waiters(hash_map<sobject_t, list<Message*> >& m)
 // SCRUB
 
 bool PG::all_replicas_reserved() const {
-  return peer_scrub_map.size() == acting.size();
+  return reserved_peers.size() == acting.size();
 }
 
 void PG::sub_op_scrub(MOSDSubOp *op)
@@ -2495,10 +2495,10 @@ void PG::sub_op_scrub_reserve(MOSDSubOp *op)
     return;
   }
 
-  bool result = osd->inc_scrubs_pending();
+  scrub_reserved = osd->inc_scrubs_pending();
 
   MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
-  ::encode(result, reply->get_data());
+  ::encode(scrub_reserved, reply->get_data());
   osd->cluster_messenger->send_message(reply, op->get_connection());
 
   op->put();
@@ -2506,7 +2506,7 @@ void PG::sub_op_scrub_reserve(MOSDSubOp *op)
 
 void PG::sub_op_scrub_reserve_reply(MOSDSubOpReply *op)
 {
-  dout(7) << "sub_op_scrub_reply" << dendl;
+  dout(7) << "sub_op_scrub_reserve_reply" << dendl;
 
   int from = op->get_source().num();
   bufferlist::iterator p = op->get_data().begin();
@@ -2519,6 +2519,9 @@ void PG::sub_op_scrub_reserve_reply(MOSDSubOpReply *op)
     dout(10) << " got osd" << from << " scrub reserved: " << reserved << dendl;
     if (reserved) {
       reserved_peers.insert(from);
+    } else {
+      // one decline stops this pg from being scheduled for scrubbing
+      osd->scrub_unreserve(this);
     }
   }
 
@@ -2529,9 +2532,7 @@ void PG::sub_op_scrub_unreserve(MOSDSubOp *op)
 {
   dout(7) << "sub_op_scrub_unreserve" << dendl;
 
-  if (scrub_reserved) {
-    clear_scrub_reserved();
-  }
+  clear_scrub_reserved();
 
   op->put();
 }
@@ -2552,9 +2553,9 @@ void PG::clear_scrub_reserved()
 {
   if (scrub_reserved) {
     scrub_reserved = false;
+    reserved_peers.clear();
+    osd->scrub_wq.dequeue(this);
   }
-  reserved_peers.clear();
-  osd->scrub_wq.dequeue(this);
 }
 
 void PG::reserve_replicas()
@@ -2567,7 +2568,7 @@ void PG::reserve_replicas()
     eversion_t v;
     osd_reqid_t reqid;
     MOSDSubOp *subop = new MOSDSubOp(reqid, info.pgid, poid, false, 0,
-				     osd->osdmap->get_epoch(), osd->get_tid(), v);
+                                     osd->osdmap->get_epoch(), osd->get_tid(), v);
     subop->ops = scrub;
     osd->cluster_messenger->send_message(subop, osd->osdmap->get_cluster_inst(acting[i]));
   }
@@ -2583,7 +2584,7 @@ void PG::unreserve_replicas()
     eversion_t v;
     osd_reqid_t reqid;
     MOSDSubOp *subop = new MOSDSubOp(reqid, info.pgid, poid, false, 0,
-				     osd->osdmap->get_epoch(), osd->get_tid(), v);
+                                     osd->osdmap->get_epoch(), osd->get_tid(), v);
     subop->ops = scrub;
     osd->cluster_messenger->send_message(subop, osd->osdmap->get_cluster_inst(acting[i]));
   }

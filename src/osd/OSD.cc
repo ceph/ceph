@@ -376,7 +376,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   remove_list_lock("OSD::remove_list_lock"),
   replay_queue_lock("OSD::replay_queue_lock"),
   snap_trim_wq(this, &disk_tp),
-  sched_scrub_lock("OSD::scrub_lock"),
+  sched_scrub_lock("OSD::sched_scrub_lock"),
   scrubs_pending(0),
   scrubs_active(0),
   scrub_wq(this, &disk_tp),
@@ -2222,8 +2222,13 @@ void OSD::handle_scrub(MOSDScrub *m)
 
 void OSD::sched_scrub()
 {
+  dout(20) << "sched_scrub" << dendl;
+  sched_scrub_lock.Lock();
   hash_map<pg_t, PG*>::iterator p = pg_map.find(sched_pg);
+  sched_scrub_lock.Unlock();
+
   if (p == pg_map.end()) {
+    dout(10) << "starting sched_pg at the beginning" << dendl;
     p = pg_map.begin();
   }
 
@@ -2231,31 +2236,63 @@ void OSD::sched_scrub()
     PG *pg = p->second;
 
     pg->lock();
-    if (pg->is_primary() && pg->is_active() && pg->is_clean()) {
-      if (pg->all_replicas_reserved()) {
-	// FIXME: decrement pending so we add to the queue
-	dec_scrubs_pending();
-	if (!pg->is_scrubbing() && scrub_wq.queue(pg)) {
-	  dout(10) << "added scrub to queue for PG " << p->first << dendl;
-	}
-      } else if (!pg->scrub_reserved) {
-	pg->scrub_reserved = true;
-	pg->reserved_peers.insert(0);
-	pg->reserve_replicas();
-      } else if (pg->scrub_reserved) {
-	// if no replicas declined scrubbing yet, wait
-	pg->unlock();
-	break;
-      } else {
-	// at least one replica declined, so unreserve the rest
-	pg->unreserve_replicas();
-      }
-    }
-    pg->unlock();
 
+    if (!(pg->is_primary() && pg->is_active() && pg->is_clean() && !pg->is_scrubbing())) {
+      pg->unlock();
+      ++p;
+      continue;
+    }
+
+    if (pg->scrub_reserved && !pg->all_replicas_reserved()) {
+      // none declined, since pg->scrub_reserved is set
+      dout(20) << "Waiting for scrub replies for " << pg << " we have reserved " << pg->reserved_peers << dendl;
+      dout(20) << "acting set size is: " << pg->acting.size() << dendl;
+      pg->unlock();
+      break;
+    }
+
+    if (pg->all_replicas_reserved()) {
+      // decrement pending so we can add to the queue
+      if (scrub_wq.queue(pg)) {
+	dout(10) << "added scrub to queue for PG " << p->first << dendl;
+      } else {
+	dout(10) << "failed to add scrub to queue for PG " << p->first << dendl;
+      }
+    } else if (!pg->scrub_reserved) {
+      dout(20) << "trying to schedule " << pg << " for scrubbing" << dendl;
+      pg->scrub_reserved = true;
+      pg->reserved_peers.insert(0);
+      pg->reserve_replicas();
+    }
+
+    pg->unlock();
     ++p;
   }
-  sched_pg = p->first;
+
+  if (p == pg_map.end()) {
+    p = pg_map.begin();
+  }
+
+  // no pgs!?
+  sched_scrub_lock.Lock();
+  if (p != pg_map.end()) {
+    sched_pg = p->first;
+  }
+  sched_scrub_lock.Unlock();
+}
+
+void OSD::scrub_unreserve(PG* pg) {
+  sched_scrub_lock.Lock();
+  if (pg->is_primary() && sched_pg == pg->get_pgid()) {
+    hash_map<pg_t, PG*>::iterator p = pg_map.find(sched_pg);
+    if (p != pg_map.end()) {
+      ++p;
+      sched_pg = p->first;
+    }
+  }
+  sched_scrub_lock.Unlock();
+  pg->clear_scrub_reserved();
+  pg->unreserve_replicas();
 }
 
 bool OSD::inc_scrubs_pending()

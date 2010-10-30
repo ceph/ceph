@@ -801,13 +801,14 @@ protected:
   int scrubs_active;
   void sched_scrub();
 
+  bool inc_scrubs_pending();
+  void dec_scrubs_pending();
+
+  void scrub_unreserve(PG* pg);
+
   // -- scrubbing --
   xlist<PG*> scrub_queue;
 
-  bool inc_scrubs_pending();
-  void dec_scrubs_pending();
-  bool inc_scrubs_active();
-  void dec_scrubs_active();
 
   struct ScrubWQ : public ThreadPool::WorkQueue<PG> {
     OSD *osd;
@@ -821,13 +822,14 @@ protected:
 	return false;
       }
       pg->get();
-      osd->sched_scrub_lock.Unlock();
       osd->scrub_queue.push_back(&pg->scrub_item);
       return true;
     }
     void _dequeue(PG *pg) {
-      if (pg->scrub_item.remove_myself())
+      if (pg->scrub_item.remove_myself()) {
+	osd->dec_scrubs_pending();
 	pg->put();
+      }
     }
     PG *_dequeue() {
       if (osd->scrub_queue.empty())
