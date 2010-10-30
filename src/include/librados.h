@@ -118,6 +118,13 @@ int rados_aio_read(rados_pool_t pool, const char *oid,
 		   off_t off, char *buf, size_t len,
 		   rados_completion_t completion);
 
+/* watch/notify */
+typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
+int rados_watch(rados_pool_t pool, const char *o, uint64_t ver, uint64_t *cookie,
+                rados_watchcb_t watchcb, void *arg);
+int rados_unwatch(rados_pool_t pool, const char *o, uint64_t cookie);
+int rados_notify(rados_pool_t pool, const char *o, uint64_t ver);
+
 #ifdef __cplusplus
 }
 #endif
