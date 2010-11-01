@@ -2168,8 +2168,9 @@ int Rados::watch(pool_t pool, const string& o,
   return client->watch(*(RadosClient::PoolCtx *)pool, oid, ver, cookie, ctx);
 }
 
-int Rados::unwatch(pool_t pool, const string& o, uint64_t cookie)
+int Rados::unwatch(pool_t pool, const string& o, uint64_t handle)
 {
+  uint64_t cookie = handle;
   if (!client)
     return -EINVAL;
   object_t oid(o);
@@ -2671,17 +2672,19 @@ struct C_WatchCB : public librados::Rados::WatchCtx {
   }
 };
 
-int rados_watch(rados_pool_t pool, const char *o, uint64_t ver, uint64_t *cookie,
+int rados_watch(rados_pool_t pool, const char *o, uint64_t ver, uint64_t *handle,
                 rados_watchcb_t watchcb, void *arg)
 {
+  uint64_t *cookie = handle;
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   object_t oid(o);
   C_WatchCB *wc = new C_WatchCB(watchcb, arg);
   return radosp->watch(*ctx, oid, ver, cookie, wc);
 }
 
-int rados_unwatch(rados_pool_t pool, const char *o, uint64_t cookie)
+int rados_unwatch(rados_pool_t pool, const char *o, uint64_t handle)
 {
+  uint64_t cookie = handle;
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   object_t oid(o);
   return radosp->unwatch(*ctx, oid, cookie);

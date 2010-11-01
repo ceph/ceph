@@ -150,8 +150,8 @@ public:
   };
 
   // watch/notify
-  int watch(pool_t pool, const string& o, uint64_t ver, uint64_t *cookie, librados::Rados::WatchCtx *ctx);
-  int unwatch(pool_t pool, const string& o, uint64_t cookie);
+  int watch(pool_t pool, const string& o, uint64_t ver, uint64_t *handle, librados::Rados::WatchCtx *ctx);
+  int unwatch(pool_t pool, const string& o, uint64_t handle);
   int notify(pool_t pool, const string& o, uint64_t ver);
 };
 
