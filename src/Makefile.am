@@ -3,10 +3,11 @@
 #
 
 AUTOMAKE_OPTIONS = gnu
-
+CLEANFILES =
 bin_PROGRAMS =
 sbin_PROGRAMS =
-bin_SCRIPTS = crun
+sbin_SCRIPTS =
+bin_SCRIPTS = crun cclass $(srcdir)/cclsinfo cdebugpack
 
 # monitor
 cmon_SOURCES = cmon.cc msg/SimpleMessenger.cc
@@ -72,7 +73,7 @@ osdmaptool_LDADD = libcrush.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
 mount_ceph_SOURCES = mount/mount.ceph.c
-noinst_PROGRAMS = mount.ceph
+sbin_PROGRAMS += mount.ceph
 
 # user tools
 cephfs_SOURCES = cephfs.cc
@@ -302,7 +303,16 @@ init-ceph mkcephfs cclass cdebugpack: init-ceph.in mkcephfs.in cclass.in Makefil
 	chmod a-w $@.tmp
 	mv $@.tmp $@
 
-BUILT_SOURCES += init-ceph mkcephfs cclass cdebugpack
+BUILT_SOURCES += init-ceph
+sbin_SCRIPTS += mkcephfs
+
+CLEANFILES += \
+	cclass \
+	cdebugpack \
+	ceph_ver.h \
+	init-ceph \
+	mkcephfs \
+	sample.fetch_config
 
 ##
 LDADD =
@@ -324,43 +334,37 @@ noinst_LIBRARIES = \
 noinst_LIBRARIES +=  #libcephclient_so.a
 
 # extra bits
-EXTRA_DIST = verify-mds-journal.sh vstart.sh stop.sh \
-	crun ceph_common.sh init-ceph.in mkcephfs.in cclass.in cdebugpack.in \
+EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.sh \
+	crun $(srcdir)/ceph_common.sh $(srcdir)/init-ceph.in $(srcdir)/mkcephfs.in \
+	$(srcdir)/cclass.in $(srcdir)/cdebugpack.in \
 	$(srcdir)/cclsinfo $(srcdir)/make_version $(srcdir)/check_version \
 	$(srcdir)/.git_version \
 	$(ceph_tool_gui_DATA)
 
 # work around old versions of automake that don't define $docdir
 docdir = ${datadir}/doc/ceph
+doc_DATA = $(srcdir)/sample.ceph.conf
+doc_SCRIPTS = sample.fetch_config
 
-install-data-local:
-	$(install_sh_SCRIPT) -m 0755 $(srcdir)/cclass $(DESTDIR)$(bindir)/cclass
-	$(install_sh_SCRIPT) -m 0755 $(srcdir)/cclsinfo $(DESTDIR)$(bindir)/cclsinfo
-	$(install_sh_SCRIPT) -m 0755 $(srcdir)/cdebugpack $(DESTDIR)$(bindir)/cdebugpack
-	sh -c "if [ \"$(sbindir)\" = \"/usr/sbin\" ]; then mkdir -p $(DESTDIR)/sbin ; $(install_sh_SCRIPT) -m 0755 mount.ceph $(DESTDIR)/sbin/mount.ceph ; else mkdir -p $(DESTDIR)$(sbindir) ; $(install_sh_SCRIPT) -m 0755 mount.ceph $(DESTDIR)$(sbindir)/mount.ceph ; fi"
-	sh -c "if [ \"$(sbindir)\" = \"/usr/sbin\" ]; then mkdir -p $(DESTDIR)/sbin ; $(install_sh_SCRIPT) -m 0755 mkcephfs $(DESTDIR)/sbin/mkcephfs ; else mkdir -p $(DESTDIR)$(sbindir) ; $(install_sh_SCRIPT) -m 0755 mkcephfs $(DESTDIR)$(sbindir)/mkcephfs ; fi"
-	mkdir -p $(DESTDIR)$(libdir)/ceph
-	$(install_sh_SCRIPT) -m 0755 $(srcdir)/ceph_common.sh $(DESTDIR)$(libdir)/ceph/ceph_common.sh
-	mkdir -p $(DESTDIR)$(sysconfdir)/ceph
-	mkdir -p $(DESTDIR)$(docdir)
-	$(install_sh_SCRIPT) -m 0600 $(srcdir)/sample.ceph.conf $(DESTDIR)$(docdir)/sample.ceph.conf
-	$(install_sh_SCRIPT) -m 0755 $(srcdir)/fetch_config $(DESTDIR)$(docdir)/sample.fetch_config
-	mkdir -p $(DESTDIR)$(includedir)/ceph
-	$(install_sh_SCRIPT) -m 0644 $(srcdir)/client/libceph.h $(DESTDIR)$(includedir)/ceph/libceph.h
-	mkdir -p $(DESTDIR)$(includedir)/rados
-	$(install_sh_SCRIPT) -m 0644 $(srcdir)/include/librados.h $(DESTDIR)$(includedir)/rados/librados.h
-	$(install_sh_SCRIPT) -m 0644 $(srcdir)/include/librados.hpp $(DESTDIR)$(includedir)/rados/librados.hpp
-	$(install_sh_SCRIPT) -m 0644 $(srcdir)/include/buffer.h $(DESTDIR)$(includedir)/rados/buffer.h
-	$(install_sh_SCRIPT) -m 0644 $(srcdir)/include/atomic.h $(DESTDIR)$(includedir)/rados/atomic.h
-	$(install_sh_SCRIPT) -m 0644 $(srcdir)/include/page.h $(DESTDIR)$(includedir)/rados/page.h
-	$(install_sh_SCRIPT) -m 0644 $(srcdir)/include/crc32c.h $(DESTDIR)$(includedir)/rados/crc32c.h
-	$(install_sh_SCRIPT) -m 0644 $(srcdir)/include/Spinlock.h $(DESTDIR)$(includedir)/rados/Spinlock.h
-	$(install_sh_SCRIPT) -m 0644 $(srcdir)/include/assert.h $(DESTDIR)$(includedir)/rados/assert.h
-	mkdir -p $(DESTDIR)$(includedir)/crush
-	$(install_sh_SCRIPT) -m 0644 $(srcdir)/crush/hash.h $(DESTDIR)$(includedir)/crush/hash.h
-	$(install_sh_SCRIPT) -m 0644 $(srcdir)/crush/crush.h $(DESTDIR)$(includedir)/crush/crush.h
-	$(install_sh_SCRIPT) -m 0644 $(srcdir)/crush/types.h $(DESTDIR)$(includedir)/crush/types.h
-	$(install_sh_SCRIPT) -m 0644 $(srcdir)/crush/mapper.h $(DESTDIR)$(includedir)/crush/mapper.h
+sample.fetch_config: fetch_config
+	cp -f $(srcdir)/fetch_config $(builddir)/sample.fetch_config
+
+shell_commondir = $(libdir)/ceph
+shell_common_SCRIPTS = ceph_common.sh
+
+libceph_includedir = $(includedir)/ceph
+libceph_include_DATA = $(srcdir)/client/libceph.h
+
+rados_includedir = $(includedir)/rados
+rados_include_DATA = \
+	$(srcdir)/include/librados.h \
+	$(srcdir)/include/librados.hpp \
+	$(srcdir)/include/buffer.h \
+	$(srcdir)/include/atomic.h \
+	$(srcdir)/include/page.h \
+	$(srcdir)/include/crc32c.h \
+	$(srcdir)/include/Spinlock.h  \
+	$(srcdir)/include/assert.h
 
 FORCE:
 .git_version: FORCE
