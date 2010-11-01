@@ -372,10 +372,10 @@ void Client::update_inode_file_bits(Inode *in,
     }
   }
   if (truncate_seq >= in->truncate_seq &&
-      in->truncate_size != truncate_size) {
+      in->truncate_size != truncate_size &&
+      in->is_file()) {
     dout(10) << "truncate_size " << in->truncate_size << " -> "
 	     << truncate_size << dendl;
-    assert(in->is_file());
     in->truncate_size = truncate_size;
     in->oset.truncate_size = truncate_size;
     if (g_conf.client_oc && prior_size) { //do actual truncation
