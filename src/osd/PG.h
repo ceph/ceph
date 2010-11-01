@@ -900,7 +900,7 @@ public:
 
   // -- scrub --
   bool scrub_reserved;
-  set<int> reserved_peers;
+  set<int> scrub_reserved_peers;
   map<int,ScrubMap> peer_scrub_map;
 
   void repair_object(ScrubMap::object *po, int bad_peer, int ok_peer);
@@ -908,9 +908,9 @@ public:
   void build_scrub_map(ScrubMap &map);
   virtual int _scrub(ScrubMap &map, int& errors, int& fixed) { return 0; }
   void clear_scrub_reserved();
-  void reserve_replicas();
-  void unreserve_replicas();
-  bool all_replicas_reserved() const;
+  void scrub_reserve_replicas();
+  void scrub_unreserve_replicas();
+  bool scrub_all_replicas_reserved() const;
 
   void sub_op_scrub(class MOSDSubOp *op);
   void sub_op_scrub_reply(class MOSDSubOpReply *op);

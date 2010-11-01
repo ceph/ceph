@@ -1052,7 +1052,7 @@ void PG::clear_primary_state()
 
   stat_object_temp_rd.clear();
 
-  reserved_peers.clear();
+  scrub_reserved_peers.clear();
   peer_scrub_map.clear();
   osd->recovery_wq.dequeue(this);
   osd->snap_trim_wq.dequeue(this);
@@ -2435,8 +2435,8 @@ void PG::take_object_waiters(hash_map<sobject_t, list<Message*> >& m)
 // ==========================================================================================
 // SCRUB
 
-bool PG::all_replicas_reserved() const {
-  return reserved_peers.size() == acting.size();
+bool PG::scrub_all_replicas_reserved() const {
+  return scrub_reserved_peers.size() == acting.size();
 }
 
 void PG::sub_op_scrub(MOSDSubOp *op)
@@ -2513,12 +2513,12 @@ void PG::sub_op_scrub_reserve_reply(MOSDSubOpReply *op)
   bool reserved;
   ::decode(reserved, p);
 
-  if (reserved_peers.find(from) != reserved_peers.end()) {
+  if (scrub_reserved_peers.find(from) != scrub_reserved_peers.end()) {
     dout(10) << " already had osd" << from << " reserved: " << dendl;
   } else {
     dout(10) << " got osd" << from << " scrub reserved: " << reserved << dendl;
     if (reserved) {
-      reserved_peers.insert(from);
+      scrub_reserved_peers.insert(from);
     } else {
       // one decline stops this pg from being scheduled for scrubbing
       osd->scrub_unreserve(this);
@@ -2553,12 +2553,12 @@ void PG::clear_scrub_reserved()
 {
   if (scrub_reserved) {
     scrub_reserved = false;
-    reserved_peers.clear();
+    scrub_reserved_peers.clear();
     osd->scrub_wq.dequeue(this);
   }
 }
 
-void PG::reserve_replicas()
+void PG::scrub_reserve_replicas()
 {
   for (unsigned i=1; i<acting.size(); i++) {
     dout(10) << "scrub requesting reserve from osd" << acting[i] << dendl;
@@ -2574,7 +2574,7 @@ void PG::reserve_replicas()
   }
 }
 
-void PG::unreserve_replicas()
+void PG::scrub_unreserve_replicas()
 {
   for (unsigned i=1; i<acting.size(); i++) {
     dout(10) << "scrub requesting unreserve from osd" << acting[i] << dendl;

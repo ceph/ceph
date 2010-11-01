@@ -796,7 +796,7 @@ protected:
 
   // -- scrub scheduling --
   Mutex sched_scrub_lock;
-  pg_t sched_pg;
+  pg_t sched_scrub_pg;
   int scrubs_pending;
   int scrubs_active;
   void sched_scrub();

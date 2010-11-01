@@ -2224,11 +2224,11 @@ void OSD::sched_scrub()
 {
   dout(20) << "sched_scrub" << dendl;
   sched_scrub_lock.Lock();
-  hash_map<pg_t, PG*>::iterator p = pg_map.find(sched_pg);
+  hash_map<pg_t, PG*>::iterator p = pg_map.find(sched_scrub_pg);
   sched_scrub_lock.Unlock();
 
   if (p == pg_map.end()) {
-    dout(10) << "starting sched_pg at the beginning" << dendl;
+    dout(10) << "starting sched_scrub_pg at the beginning" << dendl;
     p = pg_map.begin();
   }
 
@@ -2243,15 +2243,15 @@ void OSD::sched_scrub()
       continue;
     }
 
-    if (pg->scrub_reserved && !pg->all_replicas_reserved()) {
+    if (pg->scrub_reserved && !pg->scrub_all_replicas_reserved()) {
       // none declined, since pg->scrub_reserved is set
-      dout(20) << "Waiting for scrub replies for " << pg << " we have reserved " << pg->reserved_peers << dendl;
+      dout(20) << "Waiting for scrub replies for " << pg << " we have reserved " << pg->scrub_reserved_peers << dendl;
       dout(20) << "acting set size is: " << pg->acting.size() << dendl;
       pg->unlock();
       break;
     }
 
-    if (pg->all_replicas_reserved()) {
+    if (pg->scrub_all_replicas_reserved()) {
       // decrement pending so we can add to the queue
       if (scrub_wq.queue(pg)) {
 	dout(10) << "added scrub to queue for PG " << p->first << dendl;
@@ -2261,8 +2261,8 @@ void OSD::sched_scrub()
     } else if (!pg->scrub_reserved) {
       dout(20) << "trying to schedule " << pg << " for scrubbing" << dendl;
       pg->scrub_reserved = true;
-      pg->reserved_peers.insert(0);
-      pg->reserve_replicas();
+      pg->scrub_reserved_peers.insert(0);
+      pg->scrub_reserve_replicas();
     }
 
     pg->unlock();
@@ -2276,23 +2276,23 @@ void OSD::sched_scrub()
   // no pgs!?
   sched_scrub_lock.Lock();
   if (p != pg_map.end()) {
-    sched_pg = p->first;
+    sched_scrub_pg = p->first;
   }
   sched_scrub_lock.Unlock();
 }
 
 void OSD::scrub_unreserve(PG* pg) {
   sched_scrub_lock.Lock();
-  if (pg->is_primary() && sched_pg == pg->get_pgid()) {
-    hash_map<pg_t, PG*>::iterator p = pg_map.find(sched_pg);
+  if (pg->is_primary() && sched_scrub_pg == pg->get_pgid()) {
+    hash_map<pg_t, PG*>::iterator p = pg_map.find(sched_scrub_pg);
     if (p != pg_map.end()) {
       ++p;
-      sched_pg = p->first;
+      sched_scrub_pg = p->first;
     }
   }
   sched_scrub_lock.Unlock();
   pg->clear_scrub_reserved();
-  pg->unreserve_replicas();
+  pg->scrub_unreserve_replicas();
 }
 
 bool OSD::inc_scrubs_pending()
