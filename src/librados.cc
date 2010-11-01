@@ -144,8 +144,9 @@ public:
     string name;
     snapid_t snap_seq;
     SnapContext snapc;
+    uint64_t assert_ver;
 
-    PoolCtx(int pid, const char *n, snapid_t s = CEPH_NOSNAP) : poolid(pid), name(n), snap_seq(s) {}
+    PoolCtx(int pid, const char *n, snapid_t s = CEPH_NOSNAP) : poolid(pid), name(n), snap_seq(s), assert_ver(0) {}
 
     void set_snap(snapid_t s) {
       if (!s)
@@ -491,6 +492,9 @@ public:
     else
       ver = eversion_t(-1, -1);
     return ver;
+  }
+  void set_assert_ver(PoolCtx& pool, uint64_t ver) {
+    pool.assert_ver = ver;
   }
 };
 
@@ -1012,11 +1016,18 @@ int RadosClient::write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
 
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_ver(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
+
   lock.Lock();
   object_locator_t oloc(pool.poolid);
   objecter->write(oid, oloc,
 		  off, len, pool.snapc, bl, ut, 0,
-		  onack, NULL, &ver);
+		  onack, NULL, &ver, pop);
   lock.Unlock();
 
   mylock.Lock();
@@ -1046,13 +1057,20 @@ int RadosClient::write_full(PoolCtx& pool, const object_t& oid, bufferlist& bl)
   int r;
 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+
   eversion_t ver;
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_ver(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
 
   lock.Lock();
   object_locator_t oloc(pool.poolid);
   objecter->write_full(oid, oloc,
 		  pool.snapc, bl, ut, 0,
-		  onack, NULL, &ver);
+		  onack, NULL, &ver, pop);
   lock.Unlock();
 
   mylock.Lock();
@@ -1147,11 +1165,18 @@ int RadosClient::remove(PoolCtx& pool, const object_t& oid)
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
 
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_ver(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
+
   lock.Lock();
   object_locator_t oloc(pool.poolid);
   objecter->remove(oid, oloc,
 		  snapc, ut, 0,
-		  onack, NULL, &ver);
+		  onack, NULL, &ver, pop);
   lock.Unlock();
 
   mylock.Lock();
@@ -1180,12 +1205,19 @@ int RadosClient::trunc(PoolCtx& pool, const object_t& oid, size_t size)
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
 
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_ver(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
+
   lock.Lock();
   object_locator_t oloc(pool.poolid);
   objecter->trunc(oid, oloc,
 		  pool.snapc, ut, 0,
 		  size, 0,
-		  onack, NULL, &ver);
+		  onack, NULL, &ver, pop);
   lock.Unlock();
 
   mylock.Lock();
@@ -1215,6 +1247,10 @@ int RadosClient::tmap_update(PoolCtx& pool, const object_t& oid, bufferlist& cmd
   SnapContext snapc;
   object_locator_t oloc(pool.poolid);
   ObjectOperation wr;
+  if (pool.assert_ver) {
+    wr.assert_ver(pool.assert_ver);
+    pool.assert_ver = 0;
+  }
   wr.tmap_update(cmdbl);
   objecter->mutate(oid, oloc, wr, snapc, ut, 0, onack, NULL, &ver);
   lock.Unlock();
@@ -1246,6 +1282,10 @@ int RadosClient::exec(PoolCtx& pool, const object_t& oid, const char *cls, const
   lock.Lock();
   object_locator_t oloc(pool.poolid);
   ObjectOperation rd;
+  if (pool.assert_ver) {
+    rd.assert_ver(pool.assert_ver);
+    pool.assert_ver = 0;
+  }
   rd.call(cls, method, inbl);
   objecter->read(oid, oloc, rd, pool.snap_seq, &outbl, 0, onack, &ver);
   lock.Unlock();
@@ -1271,11 +1311,17 @@ int RadosClient::read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist&
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
 
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_ver(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
   lock.Lock();
   object_locator_t oloc(pool.poolid);
   objecter->read(oid, oloc,
 	      off, len, pool.snap_seq, &bl, 0,
-              onack, &ver);
+              onack, &ver, pop);
   lock.Unlock();
 
   mylock.Lock();
@@ -1381,11 +1427,17 @@ int RadosClient::stat(PoolCtx& pool, const object_t& oid, uint64_t *psize, time_
   if (!psize)
     psize = &size;
 
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_ver(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
   lock.Lock();
   object_locator_t oloc(pool.poolid);
   objecter->stat(oid, oloc,
 	      pool.snap_seq, psize, &mtime, 0,
-              onack, &ver);
+              onack, &ver, pop);
   lock.Unlock();
 
   mylock.Lock();
@@ -1414,11 +1466,17 @@ int RadosClient::getxattr(PoolCtx& pool, const object_t& oid, const char *name, 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
 
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_ver(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
   lock.Lock();
   object_locator_t oloc(pool.poolid);
   objecter->getxattr(oid, oloc,
 	      name, pool.snap_seq, &bl, 0,
-              onack, &ver);
+              onack, &ver, pop);
   lock.Unlock();
 
   mylock.Lock();
@@ -1453,10 +1511,16 @@ int RadosClient::rmxattr(PoolCtx& pool, const object_t& oid, const char *name)
 
   object_locator_t oloc(pool.poolid);
 
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_ver(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
   lock.Lock();
   objecter->removexattr(oid, oloc, name,
 		  pool.snapc, ut, 0,
-		  onack, NULL, &ver);
+		  onack, NULL, &ver, pop);
   lock.Unlock();
 
   mylock.Lock();
@@ -1488,11 +1552,17 @@ int RadosClient::setxattr(PoolCtx& pool, const object_t& oid, const char *name, 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
 
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_ver(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
   lock.Lock();
   object_locator_t oloc(pool.poolid);
   objecter->setxattr(oid, oloc, name,
 		  pool.snapc, bl, ut, 0,
-		  onack, NULL, &ver);
+		  onack, NULL, &ver, pop);
   lock.Unlock();
 
   mylock.Lock();
@@ -1522,6 +1592,12 @@ int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<std::string, 
   int r;
   eversion_t ver;
 
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_ver(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
@@ -1529,7 +1605,7 @@ int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<std::string, 
   map<string, bufferlist> aset;
   objecter->getxattrs(oid, oloc, pool.snap_seq,
 		      aset,
-		      0, onack, &ver);
+		      0, onack, &ver, pop);
   lock.Unlock();
 
   attrset.clear();
@@ -1581,10 +1657,14 @@ int RadosClient::watch(PoolCtx& pool, const object_t& oid, uint64_t ver, uint64_
   eversion_t objver;
 
   lock.Lock();
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  object_locator_t oloc(pool.poolid);
   ObjectOperation rd;
+  if (pool.assert_ver) {
+    rd.assert_ver(pool.assert_ver);
+    pool.assert_ver = 0;
+  }
   rd.watch(*cookie, ver, 1);
-  objecter->read(oid, layout, rd, pool.snap_seq, &outbl, 0, onack, &objver);
+  objecter->read(oid, oloc, rd, pool.snap_seq, &outbl, 0, onack, &objver);
   lock.Unlock();
 
   mylock.Lock();
@@ -1607,10 +1687,14 @@ int RadosClient::_notify_ack(PoolCtx& pool, const object_t& oid, uint64_t notify
   Cond cond;
   eversion_t objver;
 
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  object_locator_t oloc(pool.poolid);
   ObjectOperation rd;
+  if (pool.assert_ver) {
+    rd.assert_ver(pool.assert_ver);
+    pool.assert_ver = 0;
+  }
   rd.notify_ack(notify_id, ver);
-  objecter->read(oid, layout, rd, pool.snap_seq, NULL, 0, 0, 0);
+  objecter->read(oid, oloc, rd, pool.snap_seq, NULL, 0, 0, 0);
 
   return 0;
 }
@@ -1637,10 +1721,14 @@ int RadosClient::unwatch(PoolCtx& pool, const object_t& oid, uint64_t cookie)
   eversion_t ver;
 
   lock.Lock();
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  object_locator_t oloc(pool.poolid);
   ObjectOperation rd;
+  if (pool.assert_ver) {
+    rd.assert_ver(pool.assert_ver);
+    pool.assert_ver = 0;
+  }
   rd.watch(cookie, 0, 1);
-  objecter->read(oid, layout, rd, pool.snap_seq, &outbl, 0, onack, &ver);
+  objecter->read(oid, oloc, rd, pool.snap_seq, &outbl, 0, onack, &ver);
   lock.Unlock();
 
   mylock.Lock();
@@ -1672,11 +1760,15 @@ int RadosClient::notify(PoolCtx& pool, const object_t& oid, uint64_t ver)
   if (r < 0)
     return r;
 
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  object_locator_t oloc(pool.poolid);
   ObjectOperation rd;
+  if (pool.assert_ver) {
+    rd.assert_ver(pool.assert_ver);
+    pool.assert_ver = 0;
+  }
   rd.notify(cookie, ver);
   lock.Lock();
-  objecter->read(oid, layout, rd, pool.snap_seq, &outbl, 0, onack, &objver);
+  objecter->read(oid, oloc, rd, pool.snap_seq, &outbl, 0, onack, &objver);
   lock.Unlock();
 
   mylock_all.Lock();
@@ -2185,6 +2277,12 @@ int Rados::notify(pool_t pool, const string& o, uint64_t ver)
   return client->notify(*(RadosClient::PoolCtx *)pool, oid, ver);
 }
 
+void Rados::set_assert_ver(pool_t pool, uint64_t ver)
+{
+  if (!client)
+    return;
+  client->set_assert_ver(*(RadosClient::PoolCtx *)pool, ver);
+}
 }
 
 // ---------------------------------------------

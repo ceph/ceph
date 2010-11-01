@@ -70,9 +70,9 @@ int main(int argc, const char **argv)
   uint64_t objver = rados.get_last_ver();
   cout << "rados.write returned " << r << " last_ver=" << objver << std::endl;
 
-  uint64_t cookie;
+  uint64_t handle;
   C_Watch wc;
-  r = rados.watch(pool, oid, objver, &cookie, &wc);
+  r = rados.watch(pool, oid, objver, &handle, &wc);
   cout << "rados.watch returned " << r << std::endl;
 
   cout << "*** press enter to continue ***" << std::endl;
@@ -82,11 +82,12 @@ int main(int argc, const char **argv)
   cout << "*** press enter to continue ***" << std::endl;
   getchar();
 
-  exit(0);
-
+  rados.set_assert_ver(pool, objver);
 
   r = rados.write(pool, oid, 0, bl, bl.length() - 1);
   cout << "rados.write returned " << r << std::endl;
+
+  exit(0);
   r = rados.write(pool, oid, 0, bl, bl.length() - 2);
   cout << "rados.write returned " << r << std::endl;
   r = rados.write(pool, oid, 0, bl, bl.length() - 3);

@@ -1097,7 +1097,19 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       }
       break;
 
-    case CEPH_OSD_OP_NOTIFY:
+    case CEPH_OSD_OP_ASSERT_VER:
+      {
+	uint64_t ver = op.watch.ver;
+	if (!ver)
+	  result = -EINVAL;
+        else if (ver < oi.user_version.version)
+	  result = -ERANGE;
+	else if (ver > oi.user_version.version)
+	  result = -EOVERFLOW;
+	break;
+      }
+
+   case CEPH_OSD_OP_NOTIFY:
       {
 	dout(0) << "CEPH_OSD_OP_NOTIFY" << dendl;
 
