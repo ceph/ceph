@@ -413,10 +413,8 @@ public:
     void notify(uint8_t opcode, uint64_t ver) {
       if (opcode != WATCH_NOTIFY_COMPLETE)
         cerr << "WARNING: C_NotifyComplete got response: opcode=" << (int)opcode << " ver=" << ver << std::endl;
-      lock->Lock();
       *done = true;
       cond->Signal();
-      lock->Unlock();
     }
   };
 
