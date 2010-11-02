@@ -241,7 +241,7 @@ static int rbd_assign_bid(pool_t pool, string& info_oid, uint64_t *id)
 }
 
 
-static int read_header_bl(pool_t pool, string& md_oid, bufferlist& header)
+static int read_header_bl(pool_t pool, string& md_oid, bufferlist& header, uint64_t *ver)
 {
   int r;
 #define READ_SIZE 4096
@@ -253,13 +253,16 @@ static int read_header_bl(pool_t pool, string& md_oid, bufferlist& header)
     header.claim_append(bl);
    } while (r == READ_SIZE);
 
+  if (ver)
+    *ver = rados.get_last_ver(pool);
+
   return 0;
 }
 
-static int read_header(pool_t pool, string& md_oid, struct rbd_obj_header_ondisk *header)
+static int read_header(pool_t pool, string& md_oid, struct rbd_obj_header_ondisk *header, uint64_t *ver)
 {
   bufferlist header_bl;
-  int r = read_header_bl(pool, md_oid, header_bl);
+  int r = read_header_bl(pool, md_oid, header_bl, ver);
   if (r < 0)
     return r;
   if (header_bl.length() < (int)sizeof(*header))
@@ -390,8 +393,9 @@ static int do_rename(pools_t& pp, string& md_oid, const char *imgname, const cha
   dst_md_oid += RBD_SUFFIX;
   string dstname_str = dstname;
   string imgname_str = imgname;
+  uint64_t ver;
   bufferlist header;
-  int r = read_header_bl(pp.md, md_oid, header);
+  int r = read_header_bl(pp.md, md_oid, header, &ver);
   if (r < 0) {
     cerr << "error reading header: " << md_oid << ": " << strerror(-r) << std::endl;
     return r;
@@ -427,7 +431,7 @@ static int do_rename(pools_t& pp, string& md_oid, const char *imgname, const cha
 static int do_show_info(pools_t& pp, string& md_oid, const char *imgname)
 {
   struct rbd_obj_header_ondisk header;
-  int r = read_header(pp.md, md_oid, &header);
+  int r = read_header(pp.md, md_oid, &header, NULL);
   if (r < 0)
     return r;
 
@@ -438,7 +442,7 @@ static int do_show_info(pools_t& pp, string& md_oid, const char *imgname)
 static int do_delete(pools_t& pp, string& md_oid, const char *imgname)
 {
   struct rbd_obj_header_ondisk header;
-  int r = read_header(pp.md, md_oid, &header);
+  int r = read_header(pp.md, md_oid, &header, NULL);
   if (r >= 0) {
     print_header(imgname, &header);
     trim_image(pp, imgname, &header, 0);
@@ -464,7 +468,8 @@ static int do_delete(pools_t& pp, string& md_oid, const char *imgname)
 static int do_resize(pools_t& pp, string& md_oid, const char *imgname, uint64_t size)
 {
   struct rbd_obj_header_ondisk header;
-  int r = read_header(pp.md, md_oid, &header);
+  uint64_t ver;
+  int r = read_header(pp.md, md_oid, &header, &ver);
   if (r < 0)
     return r;
 
@@ -488,7 +493,10 @@ static int do_resize(pools_t& pp, string& md_oid, const char *imgname, uint64_t 
   // rewrite header
   bufferlist bl;
   bl.append((const char *)&header, sizeof(header));
+  rados.set_assert_ver(pp.md, ver);
   r = rados.write(pp.md, md_oid, 0, bl, bl.length());
+  if (r == -ERANGE)
+    cerr << "operation might have conflicted with another client!" << std::endl;
   if (r < 0) {
     cerr << "error writing header: " << strerror(-r) << std::endl;
     return r;
@@ -607,7 +615,7 @@ static int do_get_snapc(pools_t& pp, string& md_oid, const char *snapname,
 static int do_rollback_snap(pools_t& pp, string& md_oid, ::SnapContext& snapc, uint64_t snapid)
 {
   struct rbd_obj_header_ondisk header;
-  int r = read_header(pp.md, md_oid, &header);
+  int r = read_header(pp.md, md_oid, &header, NULL);
   if (r < 0) {
     cerr << "error reading header: " << md_oid << ": " << strerror(-r) << std::endl;
     return r;
@@ -634,7 +642,7 @@ static int do_export(pools_t& pp, string& md_oid, const char *path)
   int64_t ret;
   int r;
 
-  ret = read_header(pp.md, md_oid, &header);
+  ret = read_header(pp.md, md_oid, &header, NULL);
   if (ret < 0)
     return ret;
 
@@ -793,7 +801,7 @@ static int do_import(pool_t pool, const char *imgname, int order, const char *pa
 
   /* FIXME: use fiemap to read sparse files */
   struct rbd_obj_header_ondisk header;
-  r = read_header(pool, md_oid, &header);
+  r = read_header(pool, md_oid, &header, NULL);
   if (r < 0) {
     cerr << "error reading header" << std::endl;
     return r;
@@ -900,7 +908,7 @@ static int do_copy(pools_t& pp, const char *imgname, const char *destname)
   dest_md_oid = destname;
   dest_md_oid += RBD_SUFFIX;
 
-  ret = read_header(pp.md, md_oid, &header);
+  ret = read_header(pp.md, md_oid, &header, NULL);
   if (ret < 0)
     return ret;
 
@@ -914,7 +922,7 @@ static int do_copy(pools_t& pp, const char *imgname, const char *destname)
     return r;
   }
 
-  ret = read_header(pp.dest, dest_md_oid, &dest_header);
+  ret = read_header(pp.dest, dest_md_oid, &dest_header, NULL);
   if (ret < 0) {
     cerr << "failed to read newly created header" << std::endl;
     return ret;

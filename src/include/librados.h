@@ -76,7 +76,7 @@ int rados_snap_lookup(rados_pool_t pool, const char *name, rados_snap_t *id);
 int rados_snap_get_name(rados_pool_t pool, rados_snap_t id, char *name, int maxlen);
 
 /* sync io */
-uint64_t rados_get_last_ver();
+uint64_t rados_get_last_ver(rados_pool_t pool);
 
 int rados_write(rados_pool_t pool, const char *oid, off_t off, const char *buf, size_t len);
 int rados_write_full(rados_pool_t pool, const char *oid, off_t off, const char *buf, size_t len);

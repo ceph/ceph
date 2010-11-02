@@ -49,21 +49,6 @@ using namespace std;
 #define dout_prefix *_dout << dbeginl << "librados: "
 
 
-struct RadosTlsInfo {
-  pthread_key_t tls_key;
-  eversion_t objver;
-
-  RadosTlsInfo(pthread_key_t key) : tls_key(key), objver(eversion_t(-1, -1)) {}
-};
-
-static void rados_tls_destructor(void *val)
-{
-  RadosTlsInfo *info = (RadosTlsInfo *)val;
-  pthread_key_t key = info->tls_key;
-  delete info;
-  pthread_setspecific(key, NULL);
-}
-
 class RadosClient : public Dispatcher
 {
   OSDMap osdmap;
@@ -145,6 +130,7 @@ public:
     snapid_t snap_seq;
     SnapContext snapc;
     uint64_t assert_ver;
+    eversion_t last_objver;
 
     PoolCtx(int pid, const char *n, snapid_t s = CEPH_NOSNAP) : poolid(pid), name(n), snap_seq(s), assert_ver(0) {}
 
@@ -438,21 +424,8 @@ public:
   uint64_t max_watch_cookie;
   map<uint64_t, WatchContext *> watchers;
  
-  pthread_key_t tls_key;
-
-  RadosTlsInfo *tls_info() {
-    struct RadosTlsInfo *info = (RadosTlsInfo *)pthread_getspecific(tls_key);
-    if (!info) {
-      info = new RadosTlsInfo(tls_key);
-      pthread_setspecific(tls_key, info);
-    }
-    return info;
-  }
-
-  void set_sync_op_version(eversion_t& ver) {
-    RadosTlsInfo *info = tls_info();
-    if (info)
-      info->objver = ver;
+  void set_sync_op_version(PoolCtx& pool, eversion_t& ver) {
+      pool.last_objver = ver;
   }
 
   int register_watcher(PoolCtx& pool, const object_t& oid, librados::Rados::WatchCtx *ctx, uint64_t *cookie) {
@@ -484,14 +457,8 @@ public:
   int notify(PoolCtx& pool, const object_t& oid, uint64_t ver);
   int _notify_ack(PoolCtx& pool, const object_t& oid, uint64_t notify_id, uint64_t ver);
 
-  eversion_t last_version() {
-    eversion_t ver;
-    RadosTlsInfo *info = tls_info();
-    if (info)
-      ver = info->objver;
-    else
-      ver = eversion_t(-1, -1);
-    return ver;
+  eversion_t last_version(PoolCtx& pool) {
+    return pool.last_objver;
   }
   void set_assert_ver(PoolCtx& pool, uint64_t ver) {
     pool.assert_ver = ver;
@@ -500,13 +467,6 @@ public:
 
 bool RadosClient::init()
 {
-  int ret = pthread_key_create(&tls_key, rados_tls_destructor);
-  if (ret < 0) {
-    int err = errno;
-    dout(0) << "pthread_key_create returned " << err << dendl;
-    return false;
-  }
-
   // get monmap
   if (monclient.build_initial_monmap() < 0)
     return false;
@@ -995,7 +955,7 @@ int RadosClient::create(PoolCtx& pool, const object_t& oid, bool exclusive)
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(ver);
+  set_sync_op_version(pool, ver);
 
   return r;
 }
@@ -1035,7 +995,7 @@ int RadosClient::write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(ver);
+  set_sync_op_version(pool, ver);
 
   if (r < 0)
     return r;
@@ -1078,7 +1038,7 @@ int RadosClient::write_full(PoolCtx& pool, const object_t& oid, bufferlist& bl)
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(ver);
+  set_sync_op_version(pool, ver);
 
   return r;
 }
@@ -1184,7 +1144,7 @@ int RadosClient::remove(PoolCtx& pool, const object_t& oid)
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(ver);
+  set_sync_op_version(pool, ver);
 
   return r;
 }
@@ -1225,7 +1185,7 @@ int RadosClient::trunc(PoolCtx& pool, const object_t& oid, size_t size)
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(ver);
+  set_sync_op_version(pool, ver);
 
   return r;
 }
@@ -1260,7 +1220,7 @@ int RadosClient::tmap_update(PoolCtx& pool, const object_t& oid, bufferlist& cmd
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(ver);
+  set_sync_op_version(pool, ver);
 
   return r;
 }
@@ -1295,7 +1255,7 @@ int RadosClient::exec(PoolCtx& pool, const object_t& oid, const char *cls, const
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(ver);
+  set_sync_op_version(pool, ver);
 
   return r;
 }
@@ -1330,7 +1290,7 @@ int RadosClient::read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist&
   mylock.Unlock();
   dout(10) << "Objecter returned from read r=" << r << dendl;
 
-  set_sync_op_version(ver);
+  set_sync_op_version(pool, ver);
 
   if (r < 0)
     return r;
@@ -1450,7 +1410,7 @@ int RadosClient::stat(PoolCtx& pool, const object_t& oid, uint64_t *psize, time_
     *pmtime = mtime.sec();
   }
 
-  set_sync_op_version(ver);
+  set_sync_op_version(pool, ver);
 
   return r;
 }
@@ -1485,7 +1445,7 @@ int RadosClient::getxattr(PoolCtx& pool, const object_t& oid, const char *name, 
   mylock.Unlock();
   dout(10) << "Objecter returned from getxattr" << dendl;
 
-  set_sync_op_version(ver);
+  set_sync_op_version(pool, ver);
 
   if (r < 0)
     return r;
@@ -1528,7 +1488,7 @@ int RadosClient::rmxattr(PoolCtx& pool, const object_t& oid, const char *name)
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(ver);
+  set_sync_op_version(pool, ver);
 
   if (r < 0)
     return r;
@@ -1570,7 +1530,7 @@ int RadosClient::setxattr(PoolCtx& pool, const object_t& oid, const char *name, 
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(ver);
+  set_sync_op_version(pool, ver);
 
   if (r < 0)
     return r;
@@ -1621,7 +1581,7 @@ int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<std::string, 
     attrset[p->first.c_str()] = p->second;
   }
 
-  set_sync_op_version(ver);
+  set_sync_op_version(pool, ver);
 
   return r;
 }
@@ -1672,7 +1632,7 @@ int RadosClient::watch(PoolCtx& pool, const object_t& oid, uint64_t ver, uint64_
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(objver);
+  set_sync_op_version(pool, objver);
 
   return r;
 }
@@ -1736,7 +1696,7 @@ int RadosClient::unwatch(PoolCtx& pool, const object_t& oid, uint64_t cookie)
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(ver);
+  set_sync_op_version(pool, ver);
 
   return r;
 }// ---------------------------------------------
@@ -1783,7 +1743,7 @@ int RadosClient::notify(PoolCtx& pool, const object_t& oid, uint64_t ver)
 
   unregister_watcher(cookie);
 
-  set_sync_op_version(objver);
+  set_sync_op_version(pool, objver);
 
   return r;
 }
@@ -1920,12 +1880,12 @@ void Rados::list_objects_close(Rados::ListCtx ctx)
   delete h;
 }
 
-uint64_t Rados::get_last_ver()
+uint64_t Rados::get_last_ver(rados_pool_t pool)
 {
   if (!client)
     return -EINVAL;
 
-  eversion_t ver = client->last_version();
+  eversion_t ver = client->last_version(*(RadosClient::PoolCtx *)pool);
   return ver.version;
 }
 
@@ -2463,9 +2423,10 @@ extern "C" int rados_read(rados_pool_t pool, const char *o, off_t off, char *buf
   return ret;
 }
 
-extern "C" uint64_t rados_get_last_ver()
+extern "C" uint64_t rados_get_last_ver(rados_pool_t pool)
 {
-  eversion_t ver = radosp->last_version();
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  eversion_t ver = radosp->last_version(*ctx);
   return ver.version;
 }
 

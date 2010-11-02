@@ -67,7 +67,7 @@ int main(int argc, const char **argv)
   cout << "open pool result = " << r << " pool = " << pool << std::endl;
 
   r = rados.write(pool, oid, 0, bl, bl.length());
-  uint64_t objver = rados.get_last_ver();
+  uint64_t objver = rados.get_last_ver(pool);
   cout << "rados.write returned " << r << " last_ver=" << objver << std::endl;
 
   uint64_t handle;

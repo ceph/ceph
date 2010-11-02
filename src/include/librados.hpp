@@ -68,7 +68,7 @@ public:
   void set_snap(pool_t pool, snap_t seq);
   int set_snap_context(pool_t pool, snap_t seq, std::vector<snap_t>& snaps);
 
-  uint64_t get_last_ver();
+  uint64_t get_last_ver(pool_t pool);
 
   int create(pool_t pool, const std::string& oid, bool exclusive);
 
