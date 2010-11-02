@@ -62,35 +62,49 @@ public:
       utime_t now = g_clock.now();
       p.pop_running(running, now);
 
-      if (running.empty())
+      if (running.empty()) {
+	dout(DBL) << "TimerThread: nothing to do." << dendl;
 	continue;
+      }
 
       p.lock.Unlock();
-      if (p.event_lock)
-	p.event_lock->Lock();
+
+      lock_event_lock();
+      // p.running is protected by the event lock.
       p.running.swap(running);
       while (true) {
 	list <Context*>::const_iterator cit = p.running.begin();
 	if (cit == p.running.end())
 	  break;
 	p.running.pop_front();
-	dout(DBL) << "start callback " << *cit << dendl;
-	(*cit)->finish(0);
-	if (p.event_lock) {
-	  p.event_lock->Unlock();
-	}
-	dout(DBL) << "finish callback " << *cit << dendl;
-	delete *cit;
-	if (p.event_lock)
-	  p.event_lock->Lock();
+	Context *ctx = *cit;
+	dout(DBL) << "start callback " << ctx << dendl;
+	ctx->finish(0);
+	dout(DBL) << "deleting callback " << ctx << dendl;
+	delete ctx;
+	unlock_event_lock();
+	// Release the event_lock here to give other waiters a chance.
+	dout(DBL) << "finished callback " << ctx << dendl;
+	lock_event_lock();
       }
-      if (p.event_lock)
-	p.event_lock->Unlock();
+      unlock_event_lock();
       p.lock.Lock();
     }
   }
 
 private:
+  inline void lock_event_lock()
+  {
+    if (p.event_lock)
+      p.event_lock->Lock();
+  }
+
+  inline void unlock_event_lock()
+  {
+    if (p.event_lock)
+      p.event_lock->Unlock();
+  }
+
   Timer &p;
 };
 
