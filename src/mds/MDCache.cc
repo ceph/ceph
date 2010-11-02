@@ -255,6 +255,7 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
   in->inode.ctime = 
     in->inode.mtime = g_clock.now();
   in->inode.nlink = 1;
+  in->inode.truncate_size = -1ull;
   if (in->inode.is_dir())
     memset(&in->inode.layout, 0, sizeof(in->inode.layout));
   else
