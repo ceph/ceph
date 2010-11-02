@@ -1130,13 +1130,16 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	osd->watch_lock.Lock();
 	osd->watch->add_notification(notif);
 
+        entity_name_t myname = ctx->op->get_source();
+
 	for (oi_iter = oi.watchers.begin();
 	     oi_iter != oi.watchers.end(); oi_iter++) {
 	  watch_info_t& w = oi_iter->second;
 	  dout(0) << "oi->watcher: " << oi_iter->first << " ver=" << w.ver << " cookie=" << w.cookie << dendl;
 	  iter = obc->watchers.find(oi_iter->first);
 
-	  if (/* w.ver < ver && */ iter != obc->watchers.end()) {
+	  if (/* w.ver < ver && */ iter != obc->watchers.end() &&
+              iter->first != myname) { // don't notify the originator of this message
 	    /* found a session for registered watcher */
 	    session = iter->second;
 	    dout(0) << " found session, sending notification" << dendl;
@@ -1147,6 +1150,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	    MWatchNotify *notify_msg = new MWatchNotify(w.cookie, w.ver, notif->id, WATCH_NOTIFY);
 	    osd->client_messenger->send_message(notify_msg, session->con);
 	  } else {
+	    /* FIXME.. need to add watcher and time out accordingly */
 	    // notif->add_watcher(oi_iter->first, Watch::WATCHER_PENDING);
 	    dout(0) << " session was not found" << dendl;
 	  }
