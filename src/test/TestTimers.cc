@@ -42,8 +42,29 @@ public:
   {
   }
 
-private:
+protected:
   int num;
+};
+
+class CancellationTestContext : public TestContext
+{
+public:
+  CancellationTestContext (int num_)
+    : TestContext(num_)
+  {
+  }
+
+  virtual void finish(int r)
+  {
+    array_lock.Lock();
+    cout << "CancellationTestContext " << num << std::endl;
+    array[num] = num;
+    array_lock.Unlock();
+  }
+
+  virtual ~CancellationTestContext()
+  {
+  }
 };
 
 static void print_status(const char *str, int ret)
@@ -60,6 +81,8 @@ static int basic_timer_test(T &timer, Mutex *lock)
   memset(&array, 0, sizeof(array));
   array_idx = 0;
   memset(&test_contexts, 0, sizeof(test_contexts));
+
+  cout << __PRETTY_FUNCTION__ << std::endl;
 
   for (int i = 0; i < MAX_TEST_CONTEXTS; ++i) {
     test_contexts[i] = new TestContext(i);
@@ -108,8 +131,10 @@ done:
   return ret;
 }
 
-static int safe_timer_join_test(SafeTimer &safe_timer, Mutex& safe_timer_lock)
+static int safe_timer_cancel_all_test(SafeTimer &safe_timer, Mutex& safe_timer_lock)
 {
+  cout << __PRETTY_FUNCTION__ << std::endl;
+
   int ret = 0;
   memset(&array, 0, sizeof(array));
   array_idx = 0;
@@ -132,9 +157,53 @@ static int safe_timer_join_test(SafeTimer &safe_timer, Mutex& safe_timer_lock)
   safe_timer_lock.Lock();
   safe_timer.cancel_all_events();
   safe_timer_lock.Unlock();
-  safe_timer.shutdown();
 
   for (int i = 0; i < array_idx; ++i) {
+    if (array[i] != i) {
+      ret = 1;
+      cout << "error: expected array[" << i << "] = " << i
+	   << "; got " << array[i] << " instead." << std::endl;
+    }
+  }
+
+  return ret;
+}
+
+static int safe_timer_cancellation_test(SafeTimer &safe_timer, Mutex& safe_timer_lock)
+{
+  cout << __PRETTY_FUNCTION__ << std::endl;
+
+  int ret = 0;
+  memset(&array, 0, sizeof(array));
+  array_idx = 0;
+  memset(&test_contexts, 0, sizeof(test_contexts));
+
+  for (int i = 0; i < MAX_TEST_CONTEXTS; ++i) {
+    test_contexts[i] = new CancellationTestContext(i);
+  }
+
+  safe_timer_lock.Lock();
+  for (int i = 0; i < MAX_TEST_CONTEXTS; ++i) {
+    utime_t inc(4 * i, 0);
+    utime_t t = g_clock.now() + inc;
+    safe_timer.add_event_at(t, test_contexts[i]);
+  }
+  safe_timer_lock.Unlock();
+
+  // cancel the even-numbered events
+  for (int i = 0; i < MAX_TEST_CONTEXTS; i += 2) {
+    safe_timer_lock.Lock();
+    safe_timer.cancel_event(test_contexts[i]);
+    safe_timer_lock.Unlock();
+  }
+
+  sleep(20);
+
+  safe_timer_lock.Lock();
+  safe_timer.cancel_all_events();
+  safe_timer_lock.Unlock();
+
+  for (int i = 1; i < array_idx; i += 2) {
     if (array[i] != i) {
       ret = 1;
       cout << "error: expected array[" << i << "] = " << i
@@ -155,7 +224,11 @@ static int test_safe_timers(void)
   if (ret)
     goto done;
 
-  ret = safe_timer_join_test(safe_timer, safe_timer_lock);
+  ret = safe_timer_cancel_all_test(safe_timer, safe_timer_lock);
+  if (ret)
+    goto done;
+
+  ret = safe_timer_cancellation_test(safe_timer, safe_timer_lock);
   if (ret)
     goto done;
 
