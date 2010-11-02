@@ -141,8 +141,8 @@ public:
 
 private:
   // This class isn't supposed to be copied
-  SafeTimer(const Timer &rhs);
-  SafeTimer& operator=(const Timer &rhs);
+  SafeTimer(const SafeTimer &rhs);
+  SafeTimer& operator=(const SafeTimer &rhs);
 
   Timer t;
 };
