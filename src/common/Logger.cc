@@ -20,6 +20,7 @@
 #include "Logger.h"
 
 #include <iostream>
+#include <memory>
 #include "Clock.h"
 
 #include "config.h"
@@ -31,7 +32,7 @@
 
 // per-process lock.  lame, but this way I protect LogType too!
 Mutex logger_lock("logger_lock");
-SafeTimer logger_timer(logger_lock);
+std::auto_ptr < SafeTimer >logger_timer;
 Context *logger_event = 0;
 list<Logger*> logger_list;
 utime_t start;
@@ -172,12 +173,14 @@ static void flush_all_loggers()
 		   << "  next=" << next 
 		   << dendl;
   logger_event = new C_FlushLoggers;
-  logger_timer.add_event_at(next, logger_event);
+  if (!logger_timer.get())
+    logger_timer.reset(new SafeTimer(logger_lock));
+  logger_timer->add_event_at(next, logger_event);
 }
 
 static void stop()
 {
-  logger_timer.shutdown();
+  logger_timer.reset(NULL);
 }
 
 
