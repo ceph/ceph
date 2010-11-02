@@ -372,18 +372,21 @@ void Client::update_inode_file_bits(Inode *in,
     }
   }
   if (truncate_seq >= in->truncate_seq &&
-      in->truncate_size != truncate_size &&
-      in->is_file()) {
-    dout(10) << "truncate_size " << in->truncate_size << " -> "
-	     << truncate_size << dendl;
-    in->truncate_size = truncate_size;
-    in->oset.truncate_size = truncate_size;
-    if (g_conf.client_oc && prior_size) { //do actual truncation
-      vector<ObjectExtent> ls;
-      filer->file_to_extents(in->ino, &in->layout,
-                             truncate_size, prior_size - truncate_size,
-                             ls);
-      objectcacher->truncate_set(&in->oset, ls);
+      in->truncate_size != truncate_size) {
+    if (in->is_file()) {
+      dout(10) << "truncate_size " << in->truncate_size << " -> "
+	       << truncate_size << dendl;
+      in->truncate_size = truncate_size;
+      in->oset.truncate_size = truncate_size;
+      if (g_conf.client_oc && prior_size) { //do actual truncation
+	vector<ObjectExtent> ls;
+	filer->file_to_extents(in->ino, &in->layout,
+			       truncate_size, prior_size - truncate_size,
+			       ls);
+	objectcacher->truncate_set(&in->oset, ls);
+      }
+    } else {
+      dout(0) << "Hmmm, truncate_seq && truncate_size changed on non-file inode!" << dendl;
     }
   }
   
