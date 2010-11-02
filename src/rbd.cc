@@ -259,6 +259,16 @@ static int read_header_bl(pool_t pool, string& md_oid, bufferlist& header, uint6
   return 0;
 }
 
+static int notify_change(pool_t pool, string& oid, uint64_t *pver)
+{
+  uint64_t ver;
+  if (pver)
+    ver = *pver;
+  else
+    ver = rados.get_last_ver(pool);
+  rados.notify(pool, oid, ver);
+}
+
 static int read_header(pool_t pool, string& md_oid, struct rbd_obj_header_ondisk *header, uint64_t *ver)
 {
   bufferlist header_bl;
@@ -276,6 +286,8 @@ static int write_header(pools_t& pp, string& md_oid, bufferlist& header)
 {
   bufferlist bl;
   int r = rados.write(pp.md, md_oid, 0, header, header.length());
+
+  notify_change(pp.md, md_oid, NULL);
 
   return r;
 }
@@ -500,10 +512,12 @@ static int do_resize(pools_t& pp, string& md_oid, const char *imgname, uint64_t 
   if (r < 0) {
     cerr << "error writing header: " << strerror(-r) << std::endl;
     return r;
+  } else {
+    notify_change(pp.md, md_oid, NULL);
   }
 
-   cout << "done." << std::endl;
-   return 0;
+  cout << "done." << std::endl;
+  return 0;
 }
 
 static int do_list_snaps(pools_t& pp, string& md_oid)
@@ -551,6 +565,7 @@ static int do_add_snap(pools_t& pp, string& md_oid, const char *snapname)
     cerr << "rbd.snap_add execution failed failed: " << strerror(-r) << std::endl;
     return r;
   }
+  notify_change(pp.md, md_oid, NULL);
 
   return 0;
 }
