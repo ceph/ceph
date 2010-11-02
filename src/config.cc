@@ -1268,15 +1268,16 @@ void parse_config_options(std::vector<const char*>& args)
   }
 
   signal(SIGHUP, sighup_handler);
-  if (!old_sigsegv_handler)
+  if (!old_sigsegv_handler) {
     old_sigsegv_handler = signal(SIGSEGV, sigsegv_handler);
+    if (old_sigsegv_handler == sigsegv_handler)
+      old_sigsegv_handler = NULL;
+  }
   if (!old_sigabrt_handler) {
     old_sigabrt_handler = signal(SIGABRT, sigabrt_handler);
     if (old_sigabrt_handler == sigabrt_handler)
       old_sigabrt_handler = NULL;
-    //cout << "old_sigabrt_handler is " << (void*)old_sigabrt_handler << " new value is " << (void*)sigabrt_handler << std::endl;
-  } else {
-    //cout << "old_sigabrt_handler is " << (void*)old_sigabrt_handler << " didn't change" << std::endl;
   }
+
   args = nargs;
 }
