@@ -804,8 +804,6 @@ protected:
   bool inc_scrubs_pending();
   void dec_scrubs_pending();
 
-  void scrub_unreserve(PG* pg);
-
   // -- scrubbing --
   xlist<PG*> scrub_queue;
 
@@ -818,7 +816,7 @@ protected:
       return osd->scrub_queue.empty();
     }
     bool _enqueue(PG *pg) {
-      if (pg->scrub_item.is_on_list() || !osd->inc_scrubs_pending()) {
+      if (pg->scrub_item.is_on_list()) {
 	return false;
       }
       pg->get();
@@ -827,7 +825,6 @@ protected:
     }
     void _dequeue(PG *pg) {
       if (pg->scrub_item.remove_myself()) {
-	osd->dec_scrubs_pending();
 	pg->put();
       }
     }
@@ -841,6 +838,7 @@ protected:
     void _process(PG *pg) {
       osd->sched_scrub_lock.Lock();
       --(osd->scrubs_pending);
+      assert(osd->scrubs_pending >= 0);
       ++(osd->scrubs_active);
       osd->sched_scrub_lock.Unlock();
       pg->scrub();
@@ -855,7 +853,6 @@ protected:
       while (!osd->scrub_queue.empty()) {
 	PG *pg = osd->scrub_queue.front();
 	osd->scrub_queue.pop_front();
-	osd->dec_scrubs_pending();
 	pg->put();
       }
     }

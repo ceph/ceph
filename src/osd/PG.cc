@@ -2435,8 +2435,42 @@ void PG::take_object_waiters(hash_map<sobject_t, list<Message*> >& m)
 // ==========================================================================================
 // SCRUB
 
-bool PG::scrub_all_replicas_reserved() const {
-  return scrub_reserved_peers.size() == acting.size();
+// returns false if waiting for a reply
+bool PG::sched_scrub()
+{
+  assert(_lock.is_locked());
+  if (!(is_primary() && is_active() && is_clean() && !is_scrubbing())) {
+    return true;
+  }
+
+  bool ret = false;
+  if (!scrub_reserved) {
+    if (scrub_reserved_peers.empty()) {
+      dout(20) << "trying to schedule " << this << " for scrubbing" << dendl;
+      if (osd->inc_scrubs_pending()) {
+	scrub_reserved = true;
+	scrub_reserved_peers.insert(0);
+	scrub_reserve_replicas();
+      }
+    } else {
+      // a peer couldn't be reserved
+      osd->dec_scrubs_pending();
+      clear_scrub_reserved();
+      scrub_unreserve_replicas();
+      ret = true;
+    }
+  } else {
+    if (scrub_reserved_peers.size() == acting.size()) {
+      osd->scrub_wq.queue(this);
+      ret = true;
+    } else {
+      // none declined, since scrub_reserved is set
+      dout(20) << "Waiting for scrub replies for " << this << " we have reserved " << scrub_reserved_peers << dendl;
+      dout(20) << "acting set size is: " << acting.size() << dendl;
+    }
+  }
+
+  return ret;
 }
 
 void PG::sub_op_scrub(MOSDSubOp *op)
@@ -2508,6 +2542,12 @@ void PG::sub_op_scrub_reserve_reply(MOSDSubOpReply *op)
 {
   dout(7) << "sub_op_scrub_reserve_reply" << dendl;
 
+  if (!scrub_reserved) {
+    dout(10) << "ignoring obsolete scrub reserve reply" << dendl;
+    op->put();
+    return;
+  }
+
   int from = op->get_source().num();
   bufferlist::iterator p = op->get_data().begin();
   bool reserved;
@@ -2520,8 +2560,14 @@ void PG::sub_op_scrub_reserve_reply(MOSDSubOpReply *op)
     if (reserved) {
       scrub_reserved_peers.insert(from);
     } else {
-      // one decline stops this pg from being scheduled for scrubbing
-      osd->scrub_unreserve(this);
+      /*
+       * One decline stops this pg from being scheduled for scrubbing.
+       * We don't clear reserved_peers here so that sched_pg can be
+       * advanced without acquiring the osd lock here.
+       * The rest of the state will be cleared, and the other peers
+       * signalled, in the next call to sched_scrub.
+       */
+      scrub_reserved = false;
     }
   }
 
@@ -2541,7 +2587,8 @@ void PG::sub_op_scrub_stop(MOSDSubOp *op)
 {
   dout(7) << "sub_op_scrub_stop" << dendl;
 
-  clear_scrub_reserved();
+  // see comment in sub_op_scrub_reserve
+  scrub_reserved = false;
 
   MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK); 
   osd->cluster_messenger->send_message(reply, op->get_connection());
@@ -2551,10 +2598,12 @@ void PG::sub_op_scrub_stop(MOSDSubOp *op)
 
 void PG::clear_scrub_reserved()
 {
+  osd->scrub_wq.dequeue(this);
+  scrub_reserved_peers.clear();
+
   if (scrub_reserved) {
     scrub_reserved = false;
-    scrub_reserved_peers.clear();
-    osd->scrub_wq.dequeue(this);
+    osd->dec_scrubs_pending();
   }
 }
 

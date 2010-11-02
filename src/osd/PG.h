@@ -911,6 +911,7 @@ public:
   void scrub_reserve_replicas();
   void scrub_unreserve_replicas();
   bool scrub_all_replicas_reserved() const;
+  bool sched_scrub();
 
   void sub_op_scrub(class MOSDSubOp *op);
   void sub_op_scrub_reply(class MOSDSubOpReply *op);

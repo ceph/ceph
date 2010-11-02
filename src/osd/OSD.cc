@@ -2222,6 +2222,8 @@ void OSD::handle_scrub(MOSDScrub *m)
 
 void OSD::sched_scrub()
 {
+  assert(osd_lock.is_locked());
+
   dout(20) << "sched_scrub" << dendl;
   sched_scrub_lock.Lock();
   hash_map<pg_t, PG*>::iterator p = pg_map.find(sched_scrub_pg);
@@ -2236,35 +2238,11 @@ void OSD::sched_scrub()
     PG *pg = p->second;
 
     pg->lock();
-
-    if (!(pg->is_primary() && pg->is_active() && pg->is_clean() && !pg->is_scrubbing())) {
-      pg->unlock();
-      ++p;
-      continue;
-    }
-
-    if (pg->scrub_reserved && !pg->scrub_all_replicas_reserved()) {
-      // none declined, since pg->scrub_reserved is set
-      dout(20) << "Waiting for scrub replies for " << pg << " we have reserved " << pg->scrub_reserved_peers << dendl;
-      dout(20) << "acting set size is: " << pg->acting.size() << dendl;
+    if (!pg->sched_scrub()) {
+      // continue waiting
       pg->unlock();
       break;
     }
-
-    if (pg->scrub_all_replicas_reserved()) {
-      // decrement pending so we can add to the queue
-      if (scrub_wq.queue(pg)) {
-	dout(10) << "added scrub to queue for PG " << p->first << dendl;
-      } else {
-	dout(10) << "failed to add scrub to queue for PG " << p->first << dendl;
-      }
-    } else if (!pg->scrub_reserved) {
-      dout(20) << "trying to schedule " << pg << " for scrubbing" << dendl;
-      pg->scrub_reserved = true;
-      pg->scrub_reserved_peers.insert(0);
-      pg->scrub_reserve_replicas();
-    }
-
     pg->unlock();
     ++p;
   }
@@ -2281,25 +2259,12 @@ void OSD::sched_scrub()
   sched_scrub_lock.Unlock();
 }
 
-void OSD::scrub_unreserve(PG* pg) {
-  sched_scrub_lock.Lock();
-  if (pg->is_primary() && sched_scrub_pg == pg->get_pgid()) {
-    hash_map<pg_t, PG*>::iterator p = pg_map.find(sched_scrub_pg);
-    if (p != pg_map.end()) {
-      ++p;
-      sched_scrub_pg = p->first;
-    }
-  }
-  sched_scrub_lock.Unlock();
-  pg->clear_scrub_reserved();
-  pg->scrub_unreserve_replicas();
-}
-
 bool OSD::inc_scrubs_pending()
 {
   bool result = false;
 
   sched_scrub_lock.Lock();
+  dout(20) << "attempting to add a pending scrub with " << scrubs_pending << " scrubs_pending and " << scrubs_active << " scrubs_active and " << g_conf.osd_max_scrubs << " max scrubs " << dendl;
   if (scrubs_pending + scrubs_active < g_conf.osd_max_scrubs) {
     result = true;
     ++scrubs_pending;
