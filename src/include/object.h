@@ -101,6 +101,33 @@ struct file_object_t {
 };
 
 
+// a locator constrains the placement of an object.  mainly, which pool
+// does it go in.
+struct object_locator_t {
+  int pool;
+  int preferred;
+  string key;
+
+  object_locator_t(int po=-1, int pre=-1) : pool(po), preferred(pre) {}
+
+  int get_pool() const {
+    return pool;
+  }
+  int get_preferred() const {
+    return preferred;
+  }
+};
+
+inline ostream& operator<<(ostream& out, const object_locator_t& loc)
+{
+  out << "@" << loc.pool;
+  if (loc.preferred >= 0)
+    out << "p" << loc.preferred;
+  if (loc.key.length())
+    out << ":" << loc.key;
+  return out;
+}
+
 
 // ---------------------------
 // snaps
@@ -151,31 +178,31 @@ struct sobject_t {
 };
 WRITE_CLASS_ENCODER(sobject_t)
 
-inline bool operator==(const sobject_t l, const sobject_t r) {
+inline bool operator==(const sobject_t &l, const sobject_t &r) {
   return l.oid == r.oid && l.snap == r.snap;
 }
-inline bool operator!=(const sobject_t l, const sobject_t r) {
+inline bool operator!=(const sobject_t &l, const sobject_t &r) {
   return l.oid != r.oid || l.snap != r.snap;
 }
-inline bool operator>(const sobject_t l, const sobject_t r) {
+inline bool operator>(const sobject_t &l, const sobject_t &r) {
   return l.oid > r.oid || (l.oid == r.oid && l.snap > r.snap);
 }
-inline bool operator<(const sobject_t l, const sobject_t r) {
+inline bool operator<(const sobject_t &l, const sobject_t &r) {
   return l.oid < r.oid || (l.oid == r.oid && l.snap < r.snap);
 }
-inline bool operator>=(const sobject_t l, const sobject_t r) { 
+inline bool operator>=(const sobject_t &l, const sobject_t &r) {
   return l.oid > r.oid || (l.oid == r.oid && l.snap >= r.snap);
 }
-inline bool operator<=(const sobject_t l, const sobject_t r) {
+inline bool operator<=(const sobject_t &l, const sobject_t &r) {
   return l.oid < r.oid || (l.oid == r.oid && l.snap <= r.snap);
 }
-inline ostream& operator<<(ostream& out, const sobject_t o) {
+inline ostream& operator<<(ostream& out, const sobject_t &o) {
   return out << o.oid << "/" << o.snap;
 }
 
 namespace __gnu_cxx {
   template<> struct hash<sobject_t> {
-    size_t operator()(const sobject_t &r) const { 
+    size_t operator()(const sobject_t &r) const {
       static hash<object_t> H;
       static rjhash<uint64_t> I;
       return H(r.oid) ^ I(r.snap);

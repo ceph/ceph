@@ -243,10 +243,16 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
   ObjectContext *obc;
   bool can_create = op->may_write();
-  int r = find_object_context(op->get_oid(), op->get_snapid(), &obc, can_create);
+  snapid_t snapid;
+  int r = find_object_context(op->get_oid(), op->get_snapid(), &obc, can_create, &snapid);
   if (r) {
-    assert(r != -EAGAIN); /* if we're doing an op, it's a write --
-			     don't write to snaps! */
+    if (r == -EAGAIN) {
+      // missing the specific snap we need; requeue and wait.
+      assert(!can_create); // only happens on a read
+      sobject_t soid(op->get_oid(), snapid);
+      wait_for_missing_object(soid, op);
+      return;
+    }
     osd->reply_op_error(op, r);
     return;
   }    
@@ -685,6 +691,12 @@ bool ReplicatedPG::snap_trimmer()
       osd->cluster_messenger->
 	send_message(m, osd->osdmap->get_cluster_inst(peer));
     }
+
+    unlock();
+    // flush, to make sure the collection adjustments we just made are
+    // reflected when we scan the next collection set.
+    osd->store->flush();
+    lock();
   }  
 
   // done
@@ -1517,21 +1529,19 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
        * 2) Clone correct snapshot into head
        * 3) Calculate clone_overlaps by following overlaps
        *    forward from rollback snapshot */
-       dout(10) << "_rollback_to deleting " << soid.oid
-	        << " and rolling back to old snap" << dendl;
-
-      sobject_t new_head = get_object_context(ctx->obs->oi.soid)->obs.oi.soid;
+      dout(10) << "_rollback_to deleting " << soid.oid
+	       << " and rolling back to old snap" << dendl;
       
       _delete_head(ctx);
       ctx->obs->exists = true; //we're about to recreate it
       
       map<string, bufferptr> attrs;
       t.clone(coll_t(info.pgid),
-	      rollback_to_sobject, new_head);
+	      rollback_to_sobject, soid);
       osd->store->getattrs(coll_t(info.pgid),
 			   rollback_to_sobject, attrs, false);
       osd->filter_xattrs(attrs);
-      t.setattrs(coll_t(info.pgid), new_head, attrs);
+      t.setattrs(coll_t(info.pgid), soid, attrs);
       ssc->snapset.head_exists = true;
 
       map<snapid_t, interval_set<uint64_t> >::iterator iter =
@@ -2209,7 +2219,8 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const sobject_t& s
 
 int ReplicatedPG::find_object_context(const object_t& oid, snapid_t snapid,
 				      ObjectContext **pobc,
-				      bool can_create)
+				      bool can_create,
+				      snapid_t *psnapid)
 {
   // want the head?
   sobject_t head(oid, CEPH_NOSNAP);
@@ -2276,6 +2287,8 @@ int ReplicatedPG::find_object_context(const object_t& oid, snapid_t snapid,
 
   if (missing.is_missing(soid)) {
     dout(20) << "get_object_context  " << soid << " missing, try again later" << dendl;
+    if (psnapid)
+      *psnapid = soid.snap;
     return -EAGAIN;
   }
 

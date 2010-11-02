@@ -1803,25 +1803,22 @@ void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t follo
   dout(10) << "_do_null_snapflish client" << client << " follows " << follows << " on " << *head_in << dendl;
   map<snapid_t, set<client_t> >::iterator p = head_in->client_need_snapflush.begin();
   while (p != head_in->client_need_snapflush.end()) {
-    // p->first is the snap inode's ->last
-    if (follows > p->first)
+    snapid_t snapid = p->first;
+    set<client_t>& clients = p->second;
+    p++;
+
+    // snapid is the snap inode's ->last
+    if (follows > snapid)
       break;
-    if (p->second.count(client)) {
-      dout(10) << " doing async NULL snapflush on " << p->first << " from client" << p->second << dendl;
-      CInode *sin = mdcache->get_inode(head_in->ino(), p->first);
+    if (clients.count(client)) {
+      dout(10) << " doing async NULL snapflush on " << snapid << " from client" << client << dendl;
+      CInode *sin = mdcache->get_inode(head_in->ino(), snapid);
       if (!sin && head_in->is_multiversion())
 	sin = head_in;
       assert(sin);
-      _do_snap_update(sin, p->first, 0, sin->first - 1, client, NULL, NULL);
-      head_in->client_need_snapflush[p->first].erase(client);
-      if (head_in->client_need_snapflush[p->first].empty()) {
-	head_in->client_need_snapflush.erase(p++);
-	if (head_in->client_need_snapflush.empty())
-	  head_in->put(CInode::PIN_NEEDSNAPFLUSH);
-	continue;
-      }
+      _do_snap_update(sin, snapid, 0, sin->first - 1, client, NULL, NULL);
+      head_in->remove_need_snapflush(sin, snapid, client);
     }
-    p++;
   }
 }
 
@@ -1935,14 +1932,8 @@ void Locker::handle_client_caps(MClientCaps *m)
 
       _do_snap_update(in, snap, m->get_dirty(), follows, client, m, ack);
 
-      if (in != head_in) {
-	head_in->client_need_snapflush[snap].erase(client);
-	if (head_in->client_need_snapflush[snap].empty()) {
-	  head_in->client_need_snapflush.erase(snap);
-	  if (head_in->client_need_snapflush.empty())
-	    head_in->put(CInode::PIN_NEEDSNAPFLUSH);
-	}
-      }
+      if (in != head_in)
+	head_in->remove_need_snapflush(in, snap, client);
       
     } else
       dout(7) << " not expecting flushsnap " << snap << " from client" << client << " on " << *in << dendl;

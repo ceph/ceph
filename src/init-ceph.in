@@ -29,13 +29,6 @@ else
     fi
 fi
 
-# do lockfile, if RH
-if [ -d /var/lock/subsys ]; then
-    lockfile=/var/lock/subsys/ceph
-else
-    lockfile=""
-fi
-
 usage_exit() {
     echo "usage: $0 [options] {start|stop|restart} [mon|osd|mds]..."
     printf "\t-c ceph.conf\n"
@@ -231,6 +224,13 @@ for name in $what; do
 	get_conf btrfs_path "$osd_data" "btrfs path"  # mount point defaults so osd data
 	get_conf btrfs_devs "" "btrfs devs"
 	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
+    fi
+
+    # do lockfile, if RH
+    get_conf lockfile "/var/lock/subsys/ceph" "lock file"
+    lockdir=`dirname $lockfile`
+    if [ ! -d "$lockdir" ]; then
+	lockfile=""
     fi
 
     case "$command" in

@@ -217,15 +217,15 @@ do { \
   return true;
 }
 
-rwx_t MonCaps::get_caps(int service)
+rwx_t MonCaps::get_caps(int service) const
 {
   if (allow_all)
     return MON_CAP_ALL;
 
   int caps = default_action;
-  map<int, MonCap>::iterator it = services_map.find(service);
+  map<int, MonCap>::const_iterator it = services_map.find(service);
   if (it != services_map.end()) {
-    MonCap& sc = it->second;
+    const MonCap& sc(it->second);
     caps |= sc.allow;
     caps &= ~sc.deny;
     

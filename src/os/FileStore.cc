@@ -47,7 +47,8 @@
 #include <sstream>
 
 
-#define ATTR_MAX 80
+#define ATTR_MAX_NAME_LEN  128
+#define ATTR_MAX_BLOCK_LEN 2048
 
 #define COMMIT_SNAP_ITEM "snap_%lld"
 
@@ -70,42 +71,286 @@
 
 #include <map>
 
-
-/*
- * xattr portability stupidity.  hide errno, while we're at it.
- */ 
-
-int do_getxattr(const char *fn, const char *name, void *val, size_t size) {
 #ifdef DARWIN
+static int sys_getxattr(const char *fn, const char *name, void *val, size_t size)
+{
   int r = ::getxattr(fn, name, val, size, 0, 0);
-#else
-  int r = ::getxattr(fn, name, val, size);
-#endif
-  return r < 0 ? -errno:r;
+  return (r < 0 ? -errno : r);
 }
-int do_setxattr(const char *fn, const char *name, const void *val, size_t size) {
-#ifdef DARWIN
+
+static int sys_setxattr(const char *fn, const char *name, const void *val, size_t size)
+{
   int r = ::setxattr(fn, name, val, size, 0, 0);
-#else
-  int r = ::setxattr(fn, name, val, size, 0);
-#endif
-  return r < 0 ? -errno:r;
+  return (r < 0 ? -errno : r);
 }
-int do_removexattr(const char *fn, const char *name) {
-#ifdef DARWIN
+
+static int sys_removexattr(const char *fn, const char *name)
+{
   int r = ::removexattr(fn, name, 0);
-#else
-  int r = ::removexattr(fn, name);
-#endif
-  return r < 0 ? -errno:r;
+  return (r < 0 ? -errno : r);
 }
-int do_listxattr(const char *fn, char *names, size_t len) {
-#ifdef DARWIN
+
+
+int sys_removexattr(const char *fn, const char *name)
+{
+  int r = ::removexattr(fn, name, 0);
+  return (r < 0 ? -errno : r);
+}
+
+int sys_listxattr(const char *fn, char *names, size_t len)
+{
   int r = ::listxattr(fn, names, len, 0);
+  return (r < 0 ? -errno : r);
+}
 #else
+
+static int sys_getxattr(const char *fn, const char *name, void *val, size_t size)
+{
+  int r = ::getxattr(fn, name, val, size);
+  return (r < 0 ? -errno : r);
+}
+
+static int sys_setxattr(const char *fn, const char *name, const void *val, size_t size)
+{
+  int r = ::setxattr(fn, name, val, size, 0);
+  return (r < 0 ? -errno : r);
+}
+
+static int sys_removexattr(const char *fn, const char *name)
+{
+  int r = ::removexattr(fn, name);
+  return (r < 0 ? -errno : r);
+}
+
+int sys_listxattr(const char *fn, char *names, size_t len)
+{
   int r = ::listxattr(fn, names, len);
+  return (r < 0 ? -errno : r);
+}
 #endif
-  return r < 0 ? -errno:r;
+
+static void get_raw_xattr_name(const char *name, int i, char *raw_name, int raw_len)
+{
+  int r;
+  int pos = 0;
+
+  while (*name) {
+    switch (*name) {
+    case '@': /* escape it */
+      pos += 2;
+      assert (pos < raw_len - 1);
+      *raw_name = '@';
+      raw_name++;
+      *raw_name = '@';
+      break;
+    default:
+      pos++;
+      assert(pos < raw_len - 1);
+      *raw_name = *name;
+      break;
+    }
+    name++;
+    raw_name++;
+  }
+
+  if (!i) {
+    *raw_name = '\0';
+  } else {
+    r = snprintf(raw_name, raw_len, "@%d", i);
+    assert(r < raw_len - pos);
+  }
+}
+
+static int translate_raw_name(const char *raw_name, char *name, int name_len, bool *is_first)
+{
+  int pos = 0;
+
+  generic_dout(10) << "translate_raw_name raw_name=" << raw_name << dendl;
+  const char *n = name;
+
+  *is_first = true;
+  while (*raw_name) {
+    switch (*raw_name) {
+    case '@': /* escape it */
+      raw_name++;
+      if (!*raw_name)
+        break;
+      if (*raw_name != '@') {
+        *is_first = false;
+        goto done;
+      }
+
+    /* fall through */
+    default:
+      *name = *raw_name;
+      break;
+    }
+    pos++;
+    assert(pos < name_len);
+    name++;
+    raw_name++;
+  }
+done:
+  *name = '\0';
+  generic_dout(10) << "translate_raw_name name=" << n << dendl;
+  return pos;
+}
+
+int do_getxattr_len(const char *fn, const char *name)
+{
+  int i = 0, total = 0;
+  char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
+  int r;
+
+  do {
+    get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+    r = sys_getxattr(fn, raw_name, 0, 0);
+    if (!i && r < 0) {
+      return r;
+    }
+    if (r < 0)
+      break;
+    total += r;
+    i++;
+  } while (r == ATTR_MAX_BLOCK_LEN);
+
+  return total;
+}
+
+int do_getxattr(const char *fn, const char *name, void *val, size_t size)
+{
+  int i = 0, pos = 0;
+  char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
+  int ret = 0;
+  int r;
+  size_t chunk_size;
+
+  if (!size)
+    return do_getxattr_len(fn, name);
+
+  do {
+    chunk_size = (size < ATTR_MAX_BLOCK_LEN ? size : ATTR_MAX_BLOCK_LEN);
+    get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+    size -= chunk_size;
+
+    r = sys_getxattr(fn, raw_name, (char *)val + pos, chunk_size);
+    if (r < 0) {
+      ret = r;
+      break;
+    }
+
+    if (r > 0)
+      pos += r;
+
+    i++;
+  } while (size && r == ATTR_MAX_BLOCK_LEN);
+
+  if (r >= 0) {
+    ret = pos;
+    /* is there another chunk? that can happen if the last read size span over
+       exactly one block */
+    if (chunk_size == ATTR_MAX_BLOCK_LEN) {
+      get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+      r = sys_getxattr(fn, raw_name, 0, 0);
+      if (r > 0) { // there's another chunk.. the original buffer was too small
+        ret = -ERANGE;
+      }
+    }
+  }
+  return ret;
+}
+
+int do_setxattr(const char *fn, const char *name, const void *val, size_t size) {
+  int i = 0, pos = 0;
+  char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
+  int ret = 0;
+  size_t chunk_size;
+
+  do {
+    chunk_size = (size < ATTR_MAX_BLOCK_LEN ? size : ATTR_MAX_BLOCK_LEN);
+    get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+    size -= chunk_size;
+
+    int r = sys_setxattr(fn, raw_name, (char *)val + pos, chunk_size);
+    if (r < 0) {
+      ret = r;
+      break;
+    }
+    pos  += chunk_size;
+    ret = pos;
+    i++;
+  } while (size);
+
+  /* if we're exactly at a chunk size, remove the next one (if wasn't removed
+     before) */
+  if (ret >= 0 && chunk_size == ATTR_MAX_BLOCK_LEN) {
+    get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+    sys_removexattr(fn, raw_name);
+  }
+  
+  return ret;
+}
+
+int do_removexattr(const char *fn, const char *name) {
+  int i = 0;
+  char raw_name[ATTR_MAX_NAME_LEN * 2 + 16];
+  int r;
+
+  do {
+    get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+    r = sys_removexattr(fn, raw_name);
+    if (!i && r < 0) {
+      return r;
+    }
+    i++;
+  } while (r >= 0);
+  return 0;
+}
+
+int do_listxattr(const char *fn, char *names, size_t len) {
+  int r;
+
+  if (!len)
+   return sys_listxattr(fn, names, len);
+
+  r = sys_listxattr(fn, 0, 0);
+  if (r < 0)
+    return r;
+
+  size_t total_len = r  * 2; // should be enough
+  char *full_buf = (char *)malloc(total_len * 2);
+  if (!full_buf)
+    return -ENOMEM;
+
+  r = sys_listxattr(fn, full_buf, total_len);
+  if (r < 0)
+    return r;
+
+  char *p = full_buf;
+  char *end = full_buf + r;
+  char *dest = names;
+  char *dest_end = names + len;
+
+  while (p < end) {
+    char name[ATTR_MAX_NAME_LEN * 2 + 16];
+    int attr_len = strlen(p);
+    bool is_first;
+    int name_len = translate_raw_name(p, name, sizeof(name), &is_first);
+    if (is_first)  {
+      if (dest + name_len > dest_end) {
+        r = -ERANGE;
+        goto done;
+      }
+      strcpy(dest, name);
+      dest += name_len + 1;
+    }
+    p += attr_len + 1;
+  }
+  r = dest - names;
+
+done:
+  free(full_buf);
+  return r;
 }
 
 
@@ -116,6 +361,7 @@ static void get_attrname(const char *name, char *buf, int len)
 {
   snprintf(buf, len, "user.ceph.%s", name);
 }
+
 bool parse_attrname(char **name)
 {
   if (strncmp(*name, "user.ceph.", 10) == 0) {
@@ -506,13 +752,79 @@ int FileStore::_detect_fs()
 
     if (g_conf.filestore_btrfs_snap && !btrfs_snap_destroy) {
       dout(0) << "mount btrfs snaps enabled, but no SNAP_DESTROY ioctl (from kernel 2.6.32+)" << dendl;
-      cerr << TEXT_RED
-	   << " ** ERROR: 'filestore btrfs snap' is enabled (for safe transactions, rollback),\n"
-	   << "           but btrfs does not support the SNAP_DESTROY ioctl (added in\n"
-	   << "           Linux 2.6.32).\n"
+      cerr << TEXT_YELLOW
+	   << " ** WARNING: 'filestore btrfs snap' was enabled (for safe transactions, rollback),\n"
+	   << "             but btrfs does not support the SNAP_DESTROY ioctl (added in\n"
+	   << "             Linux 2.6.32).  Disabling.\n"
 	   << TEXT_NORMAL;
-      return -ENOTTY;
+      g_conf.filestore_btrfs_snap = false;
     }
+
+    // start_sync?
+    __u64 transid = 0;
+    r = ::ioctl(fd, BTRFS_IOC_START_SYNC, &transid);
+    dout(0) << "mount btrfs START_SYNC got " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+    if (r == 0 && transid > 0) {
+      dout(0) << "mount btrfs START_SYNC is supported (transid " << transid << ")" << dendl;
+
+      // do we have wait_sync too?
+      r = ::ioctl(fd, BTRFS_IOC_WAIT_SYNC, &transid);
+      if (r == 0 || r == -ERANGE) {
+	dout(0) << "mount btrfs WAIT_SYNC is supported" << dendl;
+	btrfs_wait_sync = true;
+      } else {
+	dout(0) << "mount btrfs WAIT_SYNC is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+      }
+    } else {
+      dout(0) << "mount btrfs START_SYNC is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+    }
+
+    if (btrfs_wait_sync) {
+      // async snap creation?
+      struct btrfs_ioctl_vol_args vol_args;
+      vol_args.fd = 0;
+      strcpy(vol_args.name, "async_snap_test");
+
+      struct btrfs_ioctl_async_vol_args async_args;
+      async_args.fd = fd;
+      strcpy(async_args.name, "async_snap_test");
+
+      // remove old one, first
+      struct stat st;
+      if (::fstatat(fd, vol_args.name, &st, 0) == 0) {
+	dout(0) << "mount btrfs removing old async_snap_test" << dendl;
+	r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &vol_args);
+	if (r != 0)
+	  dout(0) << "mount  failed to remove old async_snap_test: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+      }
+
+      r = ::ioctl(fd, BTRFS_IOC_SNAP_CREATE_ASYNC, &async_args);
+      dout(0) << "mount btrfs SNAP_CREATE_ASYNC got " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+      if (r == 0 || errno == EEXIST) {
+	dout(0) << "mount btrfs SNAP_CREATE_ASYNC is supported" << dendl;
+	btrfs_snap_create_async = true;
+      
+	// clean up
+	r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &vol_args);
+	if (r != 0) {
+	  dout(0) << "mount btrfs SNAP_DESTROY failed: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+	}
+      } else {
+	dout(0) << "mount btrfs SNAP_CREATE_ASYNC is NOT supported: "
+		<< strerror_r(-r, buf, sizeof(buf)) << dendl;
+      }
+    }
+
+    if (g_conf.filestore_btrfs_snap && !btrfs_snap_create_async) {
+      dout(0) << "mount WARNING: btrfs snaps enabled, but no SNAP_CREATE_ASYNC ioctl (from kernel 2.6.37+)" << dendl;
+      cerr << TEXT_YELLOW
+	   << " ** WARNING: 'filestore btrfs snap' is enabled (for safe transactions,\n"	 
+	   << "             rollback), but btrfs does not support the SNAP_CREATE_ASYNC ioctl\n"
+	   << "             (added in Linux 2.6.37).  Expect slow btrfs sync/commit\n"
+	   << "             performance.\n"
+	   << TEXT_NORMAL;
+    }
+
   } else {
     dout(0) << "mount did NOT detect btrfs" << dendl;
     btrfs = false;
@@ -524,6 +836,18 @@ int FileStore::_detect_fs()
 int FileStore::_sanity_check_fs()
 {
   // sanity check(s)
+
+  if ((int)g_conf.filestore_journal_writeahead +
+      (int)g_conf.filestore_journal_parallel +
+      (int)g_conf.filestore_journal_trailing > 1) {
+    dout(0) << "mount ERROR: more than one of filestore journal {writeahead,parallel,trailing} enabled" << dendl;
+    cerr << TEXT_RED 
+	 << " ** WARNING: more than one of 'filestore journal {writeahead,parallel,trailing}'\n"
+	 << "             is enabled in ceph.conf.  You must choose a single journal mode."
+	 << std::endl;
+    return -EINVAL;
+  }
+
   if (!btrfs) {
     if (!journal || !g_conf.filestore_journal_writeahead) {
       dout(0) << "mount WARNING: no btrfs, and no journal in writeahead mode; data may be lost" << dendl;
@@ -562,6 +886,36 @@ int FileStore::_sanity_check_fs()
   }
 
   return 0;
+}
+
+
+int FileStore::read_op_seq(const char *fn, uint64_t *seq)
+{
+  int op_fd = ::open(current_op_seq_fn, O_CREAT|O_RDWR, 0644);
+  if (op_fd < 0)
+    return op_fd;
+
+  char s[40];
+  int l = ::read(op_fd, s, sizeof(s));
+  if (l >= 0) {
+    s[l] = 0;
+    *seq = atoll(s);
+  } else {
+    char buf[80];
+    dout(0) << "error reading " << current_op_seq_fn << ": "
+     << strerror_r(errno, buf, sizeof(buf)) << dendl;
+  }
+
+  return op_fd;
+}
+
+int FileStore::write_op_seq(int fd, uint64_t seq)
+{
+  char s[30];
+  int ret;
+  sprintf(s, "%lld\n", (long long unsigned)seq);
+  ret = ::pwrite(fd, s, strlen(s), 0);
+  return ret;
 }
 
 int FileStore::mount() 
@@ -631,12 +985,44 @@ int FileStore::mount()
       dout(0) << "mount WARNING: not btrfs, store may be in inconsistent state" << dendl;
     } else {
       uint64_t cp = snaps.back();
-      btrfs_ioctl_vol_args snapargs;
+      uint64_t curr_seq;
+
+      int curr_fd = read_op_seq(current_op_seq_fn, &curr_seq);
+      assert(curr_fd >= 0);
+      close(curr_fd);
+      dout(10) << "*** curr_seq=" << curr_seq << " cp=" << cp << dendl;
+     
+      if (cp != curr_seq && !g_conf.osd_use_stale_snap) { 
+        dout(0) << "\n"
+             << " ** ERROR: current volume data version is not equal to snapshotted version\n"
+	     << "           which can lead to data inconsistency. \n"
+	     << "           Current version=" << curr_seq << " snapshot version=" << cp << "\n"
+	     << "           Startup with snapshotted version can be forced using the\n"
+             <<"            'osd use stale snap = true' config option.\n"
+	     << dendl;
+        cerr << TEXT_RED
+	     << " ** ERROR: current volume data version is not equal to snapshotted version\n"
+	     << "           which can lead to data inconsistency. \n"
+	     << "           Current version=" << curr_seq << " snapshot version=" << cp << "\n"
+	     << "           Startup with snapshotted version can be forced using the\n"
+             <<"            'osd use stale snap = true' config option.\n"
+	     << TEXT_NORMAL;
+        exit(1);
+      }
+
+      if (cp != curr_seq) {
+        dout(0) << "WARNING: user forced start with data sequence mismatch: curr=" << curr_seq << " snap_seq=" << cp << dendl;
+        cerr << TEXT_YELLOW
+	     << " ** WARNING: forcing the use of stale snapshot data\n" << TEXT_NORMAL;
+      }
 
       // drop current
-      snapargs.fd = 0;
-      strcpy(snapargs.name, "current");
-      int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_DESTROY, &snapargs);
+      btrfs_ioctl_vol_args vol_args;
+      vol_args.fd = 0;
+      strcpy(vol_args.name, "current");
+      int r = ::ioctl(basedir_fd,
+		      BTRFS_IOC_SNAP_DESTROY,
+		      &vol_args);
       if (r) {
 	char buf[80];
 	dout(0) << "error removing old current subvol: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
@@ -649,39 +1035,35 @@ int FileStore::mount()
 	}
       }
       assert(r == 0);
-      
+
       // roll back
       char s[PATH_MAX];
       snprintf(s, sizeof(s), "%s/" COMMIT_SNAP_ITEM, basedir.c_str(), (long long unsigned)cp);
-      snapargs.fd = ::open(s, O_RDONLY);
-      r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &snapargs);
+      vol_args.fd = ::open(s, O_RDONLY);
+      r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &vol_args);
       assert(r == 0);
-      ::close(snapargs.fd);
+      ::close(vol_args.fd);
       dout(10) << "mount rolled back to consistent snap " << cp << dendl;
       snaps.pop_back();
+
+      assert(curr_fd >= 0);
+      if (cp != curr_seq) {
+        curr_fd = read_op_seq(current_op_seq_fn, &curr_seq);
+        /* we'll use the higher version from now on */
+        curr_seq = cp;
+        write_op_seq(curr_fd, curr_seq);
+      }
+      close(curr_fd);
     }
   }
+
+  uint64_t initial_op_seq = 0;
 
   current_fd = ::open(current_fn, O_RDONLY);
   assert(current_fd >= 0);
 
-  // init op_seq
-  op_fd = ::open(current_op_seq_fn, O_CREAT|O_RDWR, 0644);
-  assert(op_fd >= 0);
-
-  uint64_t initial_op_seq = 0;
-  {
-    char s[40];
-    int l = ::read(op_fd, s, sizeof(s));
-    if (l >= 0) {
-      s[l] = 0;
-      initial_op_seq = atoll(s);
-    } else {
-      char buf[80];
-      dout(0) << "mount error reading " << current_op_seq_fn << ": "
-	      << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    }
-  }
+  op_fd = read_op_seq(current_op_seq_fn, &initial_op_seq);
+  assert (op_fd >= 0);
   dout(5) << "mount op_seq is " << initial_op_seq << dendl;
 
   // journal
@@ -705,10 +1087,32 @@ int FileStore::mount()
   op_finisher.start();
   ondisk_finisher.start();
 
+  // select journal mode?
+  if (journal &&
+      !g_conf.filestore_journal_writeahead &&
+      !g_conf.filestore_journal_parallel &&
+      !g_conf.filestore_journal_trailing) {
+    if (!btrfs) {
+      g_conf.filestore_journal_writeahead = true;
+      dout(0) << "mount: enabling WRITEAHEAD journal mode: btrfs not detected" << dendl;
+    } else if (!g_conf.filestore_btrfs_snap) {
+      g_conf.filestore_journal_writeahead = true;
+      dout(0) << "mount: enabling WRITEAHEAD journal mode: 'filestore btrfs snap' mode is not enabled" << dendl;
+    } else if (!btrfs_snap_create_async) {
+      g_conf.filestore_journal_writeahead = true;
+      dout(0) << "mount: enabling WRITEAHEAD journal mode: btrfs SNAP_CREATE_ASYNC ioctl not detected (v2.6.37+)" << dendl;
+    } else {
+      g_conf.filestore_journal_parallel = true;
+      dout(0) << "mount: enabling PARALLEL journal mode: btrfs, SNAP_CREATE_ASYNC detected and 'filestore btrfs snap' mode is enabled" << dendl;
+    }
+  }
+
   if (journal && g_conf.filestore_journal_writeahead)
     journal->set_wait_on_full(true);
 
-  _sanity_check_fs();
+  r = _sanity_check_fs();
+  if (r < 0)
+    return r;
 
   // all okay.
   return 0;
@@ -1199,6 +1603,9 @@ unsigned FileStore::_do_transaction(Transaction& t)
 	bufferlist bl;
 	t.get_bl(bl);
 	r = _setattr(cid, oid, name.c_str(), bl.c_str(), bl.length());
+	if (r == -ENOSPC)
+	  dout(0) << " ENOSPC on setxattr on " << cid << "/" << oid
+		  << " name " << name << " size " << bl.length() << dendl;
       }
       break;
       
@@ -1209,7 +1616,9 @@ unsigned FileStore::_do_transaction(Transaction& t)
 	map<string, bufferptr> aset;
 	t.get_attrset(aset);
 	r = _setattrs(cid, oid, aset);
-      }
+  	if (r == -ENOSPC)
+	  dout(0) << " ENOSPC on setxattrs on " << cid << "/" << oid << dendl;
+    }
       break;
 
     case Transaction::OP_RMATTR:
@@ -1302,6 +1711,14 @@ unsigned FileStore::_do_transaction(Transaction& t)
       _start_sync();
       break;
 
+    case Transaction::OP_COLL_RENAME:
+      {
+	coll_t cid(t.get_cid());
+	coll_t ncid(t.get_cid());
+	r = _collection_rename(cid, ncid);
+      }
+      break;
+
     default:
       cerr << "bad op " << op << std::endl;
       assert(0);
@@ -1310,7 +1727,13 @@ unsigned FileStore::_do_transaction(Transaction& t)
     if (r == -ENOSPC) {
       // For now, if we hit _any_ ENOSPC, crash, before we do any damage
       // by partially applying transactions.
-      assert(0 == "ENOSPC handling not implemented");
+
+      // XXX HACK: if it was an setxattr op, silently fail, until we have a better workaround XXX
+      if (op == Transaction::OP_SETATTR || op == Transaction::OP_SETATTRS)
+	dout(0) << "WARNING: ignoring setattr ENOSPC failure, until we implement a workaround for extN"
+		<< " xattr limitations" << dendl;
+      else
+	assert(0 == "ENOSPC handling not implemented");
     }
     if (r == -EIO) {
       assert(0 == "EIO handling not implemented");
@@ -1730,32 +2153,57 @@ void FileStore::sync_entry()
       sync_epoch++;
 
       dout(15) << "sync_entry committing " << cp << " sync_epoch " << sync_epoch << dendl;
-      char s[30];
-      sprintf(s, "%lld\n", (long long unsigned)cp);
-      ::pwrite(op_fd, s, strlen(s), 0);
+      write_op_seq(op_fd, cp);
 
       bool do_snap = btrfs && g_conf.filestore_btrfs_snap;
 
       if (do_snap) {
-	btrfs_ioctl_vol_args snapargs;
-	snapargs.fd = current_fd;
-	snprintf(snapargs.name, sizeof(snapargs.name), COMMIT_SNAP_ITEM, (long long unsigned)cp);
-	dout(10) << "taking snap '" << snapargs.name << "'" << dendl;
-	int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &snapargs);
-	if (r) {
+
+	if (btrfs_snap_create_async) {
+	  // be smart!
+	  struct btrfs_ioctl_async_vol_args async_args;
+	  async_args.fd = current_fd;
+	  snprintf(async_args.name, sizeof(async_args.name), COMMIT_SNAP_ITEM,
+		   (long long unsigned)cp);
+
+	  dout(10) << "taking async snap '" << async_args.name << "'" << dendl;
+	  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE_ASYNC, &async_args);
 	  char buf[100];
-	  dout(0) << "snap create '" << snapargs.name << "' got " << r
-		  << " " << strerror_r(r < 0 ? errno : 0, buf, sizeof(buf)) << dendl;
+	  dout(20) << "async snap create '" << async_args.name
+		   << "' transid " << async_args.transid
+		   << " got " << r << " " << strerror_r(r < 0 ? errno : 0, buf, sizeof(buf)) << dendl;
 	  assert(r == 0);
+	  snaps.push_back(cp);
+
+	  commit_started();
+
+	  // wait for commit
+	  dout(20) << " waiting for transid " << async_args.transid << " to complete" << dendl;
+	  ::ioctl(op_fd, BTRFS_IOC_WAIT_SYNC, &async_args.transid);
+	  dout(20) << " done waiting for transid " << async_args.transid << " to complete" << dendl;
+
+	} else {
+	  // the synchronous snap create does a sync.
+	  struct btrfs_ioctl_vol_args vol_args;
+	  vol_args.fd = current_fd;
+	  snprintf(vol_args.name, sizeof(vol_args.name), COMMIT_SNAP_ITEM,
+		   (long long unsigned)cp);
+
+	  dout(10) << "taking snap '" << vol_args.name << "'" << dendl;
+	  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &vol_args);
+	  char buf[100];
+	  dout(20) << "snap create '" << vol_args.name << "' got " << r
+		   << " " << strerror_r(r < 0 ? errno : 0, buf, sizeof(buf)) << dendl;
+	  assert(r == 0);
+	  snaps.push_back(cp);
+	  
+	  commit_started();
 	}
-	snaps.push_back(cp);
-      }
+      } else {
+	commit_started();
 
-      commit_started();
-
-      if (!do_snap) {
 	if (btrfs) {
-	  dout(15) << "sync_entry doing btrfs sync" << dendl;
+	  dout(15) << "sync_entry doing btrfs SYNC" << dendl;
 	  // do a full btrfs commit
 	  ::ioctl(op_fd, BTRFS_IOC_SYNC);
 	} else if (g_conf.filestore_fsync_flushes_journal_data) {
@@ -1777,15 +2225,17 @@ void FileStore::sync_entry()
       // remove old snaps?
       if (do_snap) {
 	while (snaps.size() > 2) {
-	  btrfs_ioctl_vol_args snapargs;
-	  snapargs.fd = 0;
-	  snprintf(snapargs.name, sizeof(snapargs.name), COMMIT_SNAP_ITEM, (long long unsigned)snaps.front());
+	  btrfs_ioctl_vol_args vol_args;
+	  vol_args.fd = 0;
+	  snprintf(vol_args.name, sizeof(vol_args.name), COMMIT_SNAP_ITEM,
+		   (long long unsigned)snaps.front());
+
 	  snaps.pop_front();
-	  dout(10) << "removing snap '" << snapargs.name << "'" << dendl;
-	  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_DESTROY, &snapargs);
+	  dout(10) << "removing snap '" << vol_args.name << "'" << dendl;
+	  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_DESTROY, &vol_args);
 	  if (r) {
 	    char buf[100];
-	    dout(20) << "unable to destroy snap '" << snapargs.name << "' got " << r
+	    dout(20) << "unable to destroy snap '" << vol_args.name << "' got " << r
 		     << " " << strerror_r(r < 0 ? errno : 0, buf, sizeof(buf)) << dendl;
 	  }
 	}
@@ -1977,8 +2427,8 @@ int FileStore::getattr(coll_t cid, const sobject_t& oid, const char *name,
   char fn[PATH_MAX];
   get_coname(cid, oid, fn, sizeof(fn));
   dout(15) << "getattr " << fn << " '" << name << "' len " << size << dendl;
-  char n[ATTR_MAX];
-  get_attrname(name, n, ATTR_MAX);
+  char n[ATTR_MAX_NAME_LEN];
+  get_attrname(name, n, ATTR_MAX_NAME_LEN);
   int r = do_getxattr(fn, n, value, size);
   dout(10) << "getattr " << fn << " '" << name << "' len " << size << " = " << r << dendl;
   return r;
@@ -1991,8 +2441,8 @@ int FileStore::getattr(coll_t cid, const sobject_t& oid, const char *name, buffe
   char fn[PATH_MAX];
   get_coname(cid, oid, fn, sizeof(fn));
   dout(15) << "getattr " << fn << " '" << name << "'" << dendl;
-  char n[ATTR_MAX];
-  get_attrname(name, n, ATTR_MAX);
+  char n[ATTR_MAX_NAME_LEN];
+  get_attrname(name, n, ATTR_MAX_NAME_LEN);
   int r = _getattr(fn, n, bp);
   dout(10) << "getattr " << fn << " '" << name << "' = " << r << dendl;
   return r;
@@ -2022,8 +2472,8 @@ int FileStore::_setattr(coll_t cid, const sobject_t& oid, const char *name,
   char fn[PATH_MAX];
   get_coname(cid, oid, fn, sizeof(fn));
   dout(15) << "setattr " << fn << " '" << name << "' len " << size << dendl;
-  char n[ATTR_MAX];
-  get_attrname(name, n, ATTR_MAX);
+  char n[ATTR_MAX_NAME_LEN];
+  get_attrname(name, n, ATTR_MAX_NAME_LEN);
   int r = do_setxattr(fn, n, value, size);
   dout(10) << "setattr " << fn << " '" << name << "' len " << size << " = " << r << dendl;
   return r;
@@ -2040,8 +2490,8 @@ int FileStore::_setattrs(coll_t cid, const sobject_t& oid, map<string,bufferptr>
   for (map<string,bufferptr>::iterator p = aset.begin();
        p != aset.end();
        ++p) {
-    char n[ATTR_MAX];
-    get_attrname(p->first.c_str(), n, ATTR_MAX);
+    char n[ATTR_MAX_NAME_LEN];
+    get_attrname(p->first.c_str(), n, ATTR_MAX_NAME_LEN);
     const char *val;
     if (p->second.length())
       val = p->second.c_str();
@@ -2066,8 +2516,8 @@ int FileStore::_rmattr(coll_t cid, const sobject_t& oid, const char *name)
   char fn[PATH_MAX];
   get_coname(cid, oid, fn, sizeof(fn));
   dout(15) << "rmattr " << fn << " '" << name << "'" << dendl;
-  char n[ATTR_MAX];
-  get_attrname(name, n, ATTR_MAX);
+  char n[ATTR_MAX_NAME_LEN];
+  get_attrname(name, n, ATTR_MAX_NAME_LEN);
   int r = do_removexattr(fn, n);
   dout(10) << "rmattr " << fn << " '" << name << "' = " << r << dendl;
   return r;
@@ -2086,8 +2536,8 @@ int FileStore::_rmattrs(coll_t cid, const sobject_t& oid)
   int r = _getattrs(fn, aset);
   if (r >= 0) {
     for (map<string,bufferptr>::iterator p = aset.begin(); p != aset.end(); p++) {
-      char n[ATTR_MAX];
-      get_attrname(p->first.c_str(), n, ATTR_MAX);
+      char n[ATTR_MAX_NAME_LEN];
+      get_attrname(p->first.c_str(), n, ATTR_MAX_NAME_LEN);
       r = do_removexattr(fn, n);
       if (r < 0)
 	break;
@@ -2196,7 +2646,16 @@ int FileStore::_collection_setattrs(coll_t cid, map<string,bufferptr>& aset)
   return r;
 }
 
-
+int FileStore::_collection_rename(const coll_t &cid, const coll_t &ncid)
+{
+  int ret = 0;
+  if (::rename(cid.c_str(), ncid.c_str())) {
+    ret = errno;
+  }
+  dout(10) << "collection_rename '" << cid << "' to '" << ncid << "'"
+	   << ": ret = " << ret << dendl;
+  return ret;
+}
 
 // --------------------------
 // collections

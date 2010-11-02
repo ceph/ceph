@@ -59,6 +59,11 @@
 
 #include "config.h"
 
+#include <errno.h>
+#include <limits.h>
+#include <sstream>
+#include <stdlib.h>
+
 #define DOUT_SUBSYS mon
 #undef dout_prefix
 #define dout_prefix _prefix(this)
@@ -298,6 +303,7 @@ void Monitor::handle_command(MMonCommand *m)
   bufferlist rdata;
   string rs;
   int r = -EINVAL;
+  rs = "unrecognized subsystem";
   if (!m->cmd.empty()) {
     if (m->cmd[0] == "mds") {
       mdsmon()->dispatch(m);
@@ -339,7 +345,10 @@ void Monitor::handle_command(MMonCommand *m)
       authmon()->dispatch(m);
       return;
     }
-    rs = "unrecognized subsystem";
+    if (m->cmd[0] == "health") {
+      monmon()->dispatch(m);
+      return;
+    }
   } else 
     rs = "no command";
 
@@ -1141,3 +1150,50 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
   return true;
 };
 
+static long long strict_strtoll(const char *str, int base, std::string *err)
+{
+  char *endptr;
+  errno = 0; /* To distinguish success/failure after call (see man page) */
+  long long ret = strtoll(str, &endptr, base);
+
+  if ((errno == ERANGE && (ret == LLONG_MAX || ret == LLONG_MIN))
+      || (errno != 0 && ret == 0)) {
+    ostringstream oss;
+    oss << "strict_strtoll: integer underflow or overflow parsing '" << str << "'";
+    *err = oss.str();
+    return 0;
+  }
+  if (endptr == str) {
+    ostringstream oss;
+    oss << "strict_strtoll: expected integer, got: '" << str << "'";
+    *err = oss.str();
+    return 0;
+  }
+  if (*endptr != '\0') {
+    ostringstream oss;
+    oss << "strict_strtoll: garbage at end of string. got: '" << str << "'";
+    *err = oss.str();
+    return 0;
+  }
+  return ret;
+}
+
+int strict_strtol(const char *str, int base, std::string *err)
+{
+  long long ret = strict_strtoll(str, base, err);
+  if (!err->empty())
+    return 0;
+  if (ret <= INT_MIN) {
+    ostringstream oss;
+    oss << "strict_strtol: integer underflow parsing '" << str << "'";
+    *err = oss.str();
+    return 0;
+  }
+  if (ret >= INT_MAX) {
+    ostringstream oss;
+    oss << "strict_strtol: integer overflow parsing '" << str << "'";
+    *err = oss.str();
+    return 0;
+  }
+  return static_cast<int>(ret);
+}

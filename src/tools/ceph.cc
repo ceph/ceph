@@ -17,14 +17,16 @@
 #include <string>
 using namespace std;
 
-#include "config.h"
-
-#include "mon/MonMap.h"
-#include "mon/MonClient.h"
-#include "msg/SimpleMessenger.h"
+#include "acconfig.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
+#include "mon/MonClient.h"
+#include "mon/MonMap.h"
+#include "msg/SimpleMessenger.h"
+#include "tools/ceph.h"
 
+#include "common/Cond.h"
+#include "common/Mutex.h"
 #include "common/Timer.h"
 #include "common/common_init.h"
 
@@ -40,15 +42,23 @@ extern "C" {
 #include <histedit.h>
 }
 
+enum CephToolMode {
+  CEPH_TOOL_MODE_CLI_INPUT = 0,
+  CEPH_TOOL_MODE_OBSERVER = 1,
+  CEPH_TOOL_MODE_ONE_SHOT_OBSERVER = 2,
+  CEPH_TOOL_MODE_GUI = 3
+};
 
+static enum CephToolMode ceph_tool_mode(CEPH_TOOL_MODE_CLI_INPUT);
 
-Mutex lock("ceph.cc lock");
-Cond cond;
-SimpleMessenger *messenger = 0;
-SafeTimer timer(lock);
-MonClient mc;
+struct ceph_tool_data g;
 
-const char *outfile = 0;
+static Cond cmd_cond;
+static SimpleMessenger *messenger = 0;
+static SafeTimer timer(g.lock);
+static Tokenizer *tok;
+
+static const char *outfile = 0;
 
 
 
@@ -76,29 +86,22 @@ Context *resend_event = 0;
 #include "messages/MMonObserve.h"
 #include "messages/MMonObserveNotify.h"
 
-int observe = 0;
-bool one_shot = false;
-static PGMap pgmap;
-static MDSMap mdsmap;
-static OSDMap osdmap;
 
 static set<int> registered, seen;
 
 version_t map_ver[PAXOS_NUM];
 
-version_t last_seen_version = 0;
-
-void handle_observe(MMonObserve *observe)
+static void handle_observe(MMonObserve *observe)
 {
   dout(1) << observe->get_source() << " -> " << get_paxos_name(observe->machine_id)
 	  << " registered" << dendl;
-  lock.Lock();
+  g.lock.Lock();
   registered.insert(observe->machine_id);  
-  lock.Unlock();
+  g.lock.Unlock();
   observe->put();
 }
 
-void handle_notify(MMonObserveNotify *notify)
+static void handle_notify(MMonObserveNotify *notify)
 {
   utime_t now = g_clock.now();
 
@@ -107,8 +110,8 @@ void handle_notify(MMonObserveNotify *notify)
 	  << (notify->is_latest ? " (latest)" : "")
 	  << dendl;
   
-  if (ceph_fsid_compare(&notify->fsid, &mc.monmap.fsid)) {
-    dout(0) << notify->get_source_inst() << " notify fsid " << notify->fsid << " != " << mc.monmap.fsid << dendl;
+  if (ceph_fsid_compare(&notify->fsid, &g.mc.monmap.fsid)) {
+    dout(0) << notify->get_source_inst() << " notify fsid " << notify->fsid << " != " << g.mc.monmap.fsid << dendl;
     notify->put();
     return;
   }
@@ -121,31 +124,34 @@ void handle_notify(MMonObserveNotify *notify)
     {
       bufferlist::iterator p = notify->bl.begin();
       if (notify->is_latest) {
-	pgmap.decode(p);
+	g.pgmap.decode(p);
       } else {
 	PGMap::Incremental inc;
 	inc.decode(p);
-	pgmap.apply_incremental(inc);
+	g.pgmap.apply_incremental(inc);
       }
-      cout << now << "    pg " << pgmap << std::endl;
+      *g.log << now << "    pg " << g.pgmap << std::endl;
+      g.updates |= PG_MON_UPDATE;
       break;
     }
 
   case PAXOS_MDSMAP:
-    mdsmap.decode(notify->bl);
-    cout << now << "   mds " << mdsmap << std::endl;
+    g.mdsmap.decode(notify->bl);
+    *g.log << now << "   mds " << g.mdsmap << std::endl;
+    g.updates |= MDS_MON_UPDATE;
     break;
 
   case PAXOS_OSDMAP:
     {
       if (notify->is_latest) {
-	osdmap.decode(notify->bl);
+	g.osdmap.decode(notify->bl);
       } else {
 	OSDMap::Incremental inc(notify->bl);
-	osdmap.apply_incremental(inc);
+	g.osdmap.apply_incremental(inc);
       }
-      cout << now << "   osd " << osdmap << std::endl;
+      *g.log << now << "   osd " << g.osdmap << std::endl;
     }
+    g.updates |= OSD_MON_UPDATE;
     break;
 
   case PAXOS_LOG:
@@ -156,14 +162,14 @@ void handle_notify(MMonObserveNotify *notify)
 	::decode(summary, p);
 	// show last log message
 	if (!summary.tail.empty())
-	  cout << now << "   log " << summary.tail.back() << std::endl;
+	  *g.log << now << "   log " << summary.tail.back() << std::endl;
       } else {
 	LogEntry le;
 	__u8 v;
 	::decode(v, p);
 	while (!p.end()) {
 	  le.decode(p);
-	  cout << now << "   log " << le << std::endl;
+	  *g.log << now << "   log " << le << std::endl;
 	}
       }
       break;
@@ -182,7 +188,7 @@ void handle_notify(MMonObserveNotify *notify)
           tClassVersionMap::iterator iter = map.begin();
 
           if (iter != map.end())
-	    cout << now << "   class " <<  iter->second << std::endl;
+	    *g.log << now << "   class " <<  iter->second << std::endl;
 	}
       } else {
 	__u8 v;
@@ -192,7 +198,7 @@ void handle_notify(MMonObserveNotify *notify)
           ::decode(inc, p);
 	  ClassInfo info;
 	  inc.decode_info(info);
-	  cout << now << "   class " << info << std::endl;
+	  *g.log << now << "   class " << info << std::endl;
 	}
       }
       break;
@@ -205,12 +211,12 @@ void handle_notify(MMonObserveNotify *notify)
       if (notify->is_latest) {
 	KeyServerData data;
 	::decode(data, p);
-	cout << now << "   auth " << std::endl;
+	*g.log << now << "   auth " << std::endl;
       } else {
 	while (!p.end()) {
 	  AuthMonitor::Incremental inc;
           inc.decode(p);
-	  cout << now << "   auth " << inc.name.to_str() << std::endl;
+	  *g.log << now << "   auth " << inc.name.to_str() << std::endl;
 	}
       }
 #endif
@@ -220,22 +226,32 @@ void handle_notify(MMonObserveNotify *notify)
 
   case PAXOS_MONMAP:
     {
-      mc.monmap.decode(notify->bl);
-      cout << now << "   mon " << mc.monmap << std::endl;
+      g.mc.monmap.decode(notify->bl);
+      *g.log << now << "   mon " << g.mc.monmap << std::endl;
     }
     break;
 
   default:
-    cout << now << "  ignoring unknown machine id " << notify->machine_id << std::endl;
+    *g.log << now << "  ignoring unknown machine id " << notify->machine_id << std::endl;
   }
 
   map_ver[notify->machine_id] = notify->ver;
 
   // have we seen them all?
   seen.insert(notify->machine_id);
-  if (one_shot && seen.size() == PAXOS_NUM) {
-    messenger->shutdown();
-  }  
+  switch (ceph_tool_mode) {
+    case CEPH_TOOL_MODE_ONE_SHOT_OBSERVER:
+      if (seen.size() == PAXOS_NUM) {
+	messenger->shutdown();
+      }
+      break;
+    case CEPH_TOOL_MODE_GUI:
+      g.gui_cond.Signal();
+      break;
+    default:
+      // do nothing
+      break;
+  }
 
   notify->put();
 }
@@ -257,9 +273,9 @@ static void send_observe_requests()
 
   bool sent = false;
   for (int i=0; i<PAXOS_NUM; i++) {
-    MMonObserve *m = new MMonObserve(mc.monmap.fsid, i, map_ver[i]);
+    MMonObserve *m = new MMonObserve(g.mc.monmap.fsid, i, map_ver[i]);
     dout(1) << "mon" << " <- observe " << get_paxos_name(i) << dendl;
-    mc.send_mon_message(m);
+    g.mc.send_mon_message(m);
     sent = true;
   }
 
@@ -269,38 +285,33 @@ static void send_observe_requests()
   timer.add_event_after(seconds, new C_ObserverRefresh(false));
 }
 
-
-
-
-int lines = 0;
-
-void handle_ack(MMonCommandAck *ack)
+static void handle_ack(MMonCommandAck *ack)
 {
-  lock.Lock();
+  g.lock.Lock();
   reply = true;
   reply_from = ack->get_source_inst();
   reply_rs = ack->rs;
   reply_rc = ack->r;
   reply_bl = ack->get_data();
-  cond.Signal();
+  cmd_cond.Signal();
   if (resend_event) {
     timer.cancel_event(resend_event);
     resend_event = 0;
   }
-  lock.Unlock();
+  g.lock.Unlock();
   ack->put();
 }
 
-void send_command()
+static void send_command()
 {
-  MMonCommand *m = new MMonCommand(mc.monmap.fsid, last_seen_version);
+  version_t last_seen_version = 0;
+  MMonCommand *m = new MMonCommand(g.mc.monmap.fsid, last_seen_version);
   m->cmd = pending_cmd;
   m->set_data(pending_bl);
 
-  cout << g_clock.now() << " mon" << " <- " << pending_cmd << std::endl;
-  mc.send_mon_message(m);
+  *g.log << g_clock.now() << " mon" << " <- " << pending_cmd << std::endl;
+  g.mc.send_mon_message(m);
 }
-
 
 class Admin : public Dispatcher {
   bool ms_dispatch(Message *m) {
@@ -325,12 +336,13 @@ class Admin : public Dispatcher {
 
   void ms_handle_connect(Connection *con) {
     if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
-      lock.Lock();
-      if (observe)
+      g.lock.Lock();
+      if (ceph_tool_mode != CEPH_TOOL_MODE_CLI_INPUT) {
 	send_observe_requests();
+      }
       if (pending_cmd.size())
 	send_command();
-      lock.Unlock();
+      g.lock.Unlock();
     }
   }
   bool ms_handle_reset(Connection *con) { return false; }
@@ -340,7 +352,7 @@ class Admin : public Dispatcher {
 
 int do_command(vector<string>& cmd, bufferlist& bl, string& rs, bufferlist& rbl)
 {
-  Mutex::Locker l(lock);
+  Mutex::Locker l(g.lock);
 
   pending_cmd = cmd;
   pending_bl = bl;
@@ -349,11 +361,11 @@ int do_command(vector<string>& cmd, bufferlist& bl, string& rs, bufferlist& rbl)
   send_command();
 
   while (!reply)
-    cond.Wait(lock);
+    cmd_cond.Wait(g.lock);
 
   rs = rs;
   rbl = reply_bl;
-  cout << g_clock.now() << " "
+  *g.log << g_clock.now() << " "
        << reply_from.name << " -> '"
        << reply_rs << "' (" << reply_rc << ")"
        << std::endl;
@@ -361,9 +373,7 @@ int do_command(vector<string>& cmd, bufferlist& bl, string& rs, bufferlist& rbl)
   return reply_rc;
 }
 
-
-
-void usage() 
+static void usage() 
 {
   cerr << "usage: ceph [options] [commands]" << std::endl;
   cerr << "If no commands are specified, enter interactive mode.\n";
@@ -379,11 +389,13 @@ void usage()
   cerr << "        print current system status\n";
   cerr << "   -w or --watch\n";
   cerr << "        watch system status changes in real time (push)\n";
+  cerr << "   -g or --gui\n";
+  cerr << "        watch system status changes graphically\n";
   generic_client_usage();
 }
 
-
-const char *cli_prompt(EditLine *e) {
+static const char *cli_prompt(EditLine *e)
+{
   return "ceph> ";
 }
 
@@ -408,95 +420,21 @@ int do_cli()
   /* This sets up the call back functions for history functionality */
   el_set(el, EL_HIST, history, myhistory);
 
-  Tokenizer *tok = tok_init(NULL);
-
-  bufferlist in;
   while (1) {
-    int count;  // # chars read
-    const char *line = el_gets(el, &count);
+    int chars_read;
+    const char *line = el_gets(el, &chars_read);
 
-    if (!count) {
-      cout << "quit" << std::endl;
+    //*g.log << "typed '" << line << "'" << std::endl;
+
+    if (chars_read == 0) {
+      *g.log << "quit" << std::endl;
       break;
     }
-
-    //cout << "typed '" << line << "'" << std::endl;
-
-    if (strcmp(line, "quit\n") == 0)
-      break;
 
     history(myhistory, &ev, H_ENTER, line);
 
-    int argc;
-    const char **argv;
-    tok_str(tok, line, &argc, &argv);
-    tok_reset(tok);
-
-    vector<string> cmd;
-    const char *infile = 0;
-    const char *outfile = 0;
-    for (int i=0; i<argc; i++) {
-      if (strcmp(argv[i], ">") == 0 && i < argc-1) {
-	outfile = argv[++i];
-	continue;
-      }
-      if (argv[i][0] == '>') {
-	outfile = argv[i] + 1;
-	while (*outfile == ' ') outfile++;
-	continue;
-      }
-      if (strcmp(argv[i], "<") == 0 && i < argc-1) {
-	infile = argv[++i];
-	continue;
-      }
-      if (argv[i][0] == '<') {
-	infile = argv[i] + 1;
-	while (*infile == ' ') infile++;
-	continue;
-      }
-      cmd.push_back(argv[i]);
-    }
-    if (cmd.empty())
-      continue;
-
-    if (cmd.size() == 1 && cmd[0] == "print") {
-      cout << "----" << std::endl;
-      write(1, in.c_str(), in.length());
-      cout << "---- (" << in.length() << " bytes)" << std::endl;
-      continue;
-    }
-
-    //cout << "cmd is " << cmd << std::endl;
-
-    bufferlist out;
-    if (infile) {
-      if (out.read_file(infile) == 0) {
-	cout << "read " << out.length() << " from " << infile << std::endl;
-      } else {
-	char buf[80];
-	cerr << "couldn't read from " << infile << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
-	continue;
-      }
-    }
-
-    in.clear();
-    string rs;
-    do_command(cmd, out, rs, in);
-
-    if (in.length()) {
-      if (outfile) {
-	if (strcmp(outfile, "-") == 0) {
-	  cout << "----" << std::endl;
-	  write(1, in.c_str(), in.length());
-	  cout << "---- (" << in.length() << " bytes)" << std::endl;
-	} else {
-	  in.write_file(outfile);
-	  cout << "wrote " << in.length() << " to " << outfile << std::endl;
-	}
-      } else {
-	cout << "got " << in.length() << " byte payload; 'print' to dump to terminal, or add '>-' to command." << std::endl;
-      }
-    }
+    if (run_command(line))
+      break;
   }
 
   history_end(myhistory);
@@ -505,12 +443,93 @@ int do_cli()
   return 0;
 }
 
-
-
-
-
-int main(int argc, const char **argv, const char *envp[])
+int run_command(const char *line)
 {
+  if (strcmp(line, "quit\n") == 0)
+    return 1;
+
+  int argc;
+  const char **argv;
+  tok_str(tok, line, &argc, &argv);
+  tok_reset(tok);
+
+  vector<string> cmd;
+  const char *infile = 0;
+  const char *outfile = 0;
+  for (int i=0; i<argc; i++) {
+    if (strcmp(argv[i], ">") == 0 && i < argc-1) {
+      outfile = argv[++i];
+      continue;
+    }
+    if (argv[i][0] == '>') {
+      outfile = argv[i] + 1;
+      while (*outfile == ' ') outfile++;
+      continue;
+    }
+    if (strcmp(argv[i], "<") == 0 && i < argc-1) {
+      infile = argv[++i];
+      continue;
+    }
+    if (argv[i][0] == '<') {
+      infile = argv[i] + 1;
+      while (*infile == ' ') infile++;
+      continue;
+    }
+    cmd.push_back(argv[i]);
+  }
+  if (cmd.empty())
+    return 0;
+
+  bufferlist in;
+  if (cmd.size() == 1 && cmd[0] == "print") {
+    *g.log << "----" << std::endl;
+    write(1, in.c_str(), in.length());
+    *g.log << "---- (" << in.length() << " bytes)" << std::endl;
+    return 0;
+  }
+
+  //out << "cmd is " << cmd << std::endl;
+
+  bufferlist out;
+  if (infile) {
+    if (out.read_file(infile) == 0) {
+      *g.log << "read " << out.length() << " from " << infile << std::endl;
+    } else {
+      char buf[80];
+      *g.log << "couldn't read from " << infile << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
+      return 0;
+    }
+  }
+
+  in.clear();
+  string rs;
+  do_command(cmd, out, rs, in);
+
+  if (in.length() == 0)
+    return 0;
+
+  if (outfile) {
+    if (strcmp(outfile, "-") == 0) {
+      *g.log << "----" << std::endl;
+      write(1, in.c_str(), in.length());
+      *g.log << "---- (" << in.length() << " bytes)" << std::endl;
+    }
+    else {
+      in.write_file(outfile);
+      *g.log << "wrote " << in.length() << " to "
+	     << outfile << std::endl;
+    }
+  }
+  else {
+    *g.log << "got " << in.length() << " byte payload; 'print' "
+      << "to dump to terminal, or add '>-' to command." << std::endl;
+  }
+  return 0;
+}
+
+int main(int argc, const char **argv)
+{
+  ostringstream gss;
   DEFINE_CONF_VARS(usage);
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -548,12 +567,13 @@ int main(int argc, const char **argv, const char *envp[])
 	cout << "read " << st.st_size << " bytes from " << args[i] << std::endl;
       }
     } else if (CONF_ARG_EQ("status", 's')) {
-      CONF_SAFE_SET_ARG_VAL(&observe, OPT_BOOL);
-      one_shot = true;
+      ceph_tool_mode = CEPH_TOOL_MODE_ONE_SHOT_OBSERVER;
     } else if (CONF_ARG_EQ("watch", 'w')) {
-      CONF_SAFE_SET_ARG_VAL(&observe, OPT_BOOL);
+      ceph_tool_mode = CEPH_TOOL_MODE_OBSERVER;
     } else if (CONF_ARG_EQ("help", 'h')) {
       usage();
+    } else if (CONF_ARG_EQ("gui", 'g')) {
+      ceph_tool_mode = CEPH_TOOL_MODE_GUI;
     } else if (args[i][0] == '-' && nargs.empty()) {
       cerr << "unrecognized option " << args[i] << std::endl;
       usage();
@@ -571,9 +591,12 @@ int main(int argc, const char **argv, const char *envp[])
   }
 
   // get monmap
-  if (mc.build_initial_monmap() < 0)
+  if (g.mc.build_initial_monmap() < 0)
     return -1;
   
+  // initialize tokenizer
+  tok = tok_init(NULL);
+
   // start up network
   messenger = new SimpleMessenger();
   messenger->register_entity(entity_name_t::CLIENT());
@@ -581,31 +604,39 @@ int main(int argc, const char **argv, const char *envp[])
 
   messenger->start();
 
-  mc.set_messenger(messenger);
-  mc.init();
+  g.mc.set_messenger(messenger);
+  g.mc.init();
 
-  if (mc.authenticate() < 0) {
+  if (g.mc.authenticate() < 0) {
     cerr << "unable to authenticate as " << *g_conf.entity_name << std::endl;
     return -1;
   }
-  if (mc.get_monmap() < 0) {
+  if (g.mc.get_monmap() < 0) {
     cerr << "unable to get monmap" << std::endl;
     return -1;
   }
 
   int ret = 0;
 
-  if (observe) {
-    lock.Lock();
-    send_observe_requests();
-    lock.Unlock();
-  } else {
-    if (vcmd.size()) {
-      
+  switch (ceph_tool_mode)
+  {
+    case CEPH_TOOL_MODE_OBSERVER:
+    case CEPH_TOOL_MODE_ONE_SHOT_OBSERVER:
+      g.lock.Lock();
+      send_observe_requests();
+      g.lock.Unlock();
+      break;
+
+    case CEPH_TOOL_MODE_CLI_INPUT: {
+      if (vcmd.empty()) {
+	// interactive mode
+	do_cli();
+	messenger->shutdown();
+	break;
+      }
       string rs;
       bufferlist odata;
       ret = do_command(vcmd, indata, rs, odata);
-      
       int len = odata.length();
       if (len) {
 	if (outfile) {
@@ -619,18 +650,38 @@ int main(int argc, const char **argv, const char *envp[])
 	  cout << g_clock.now() << " got " << len << " byte payload, discarding (specify -o <outfile)" << std::endl;
 	}
       }
-    } else {
-      // interactive mode
-      do_cli();
+      messenger->shutdown();
+      break;
     }
-    
-    messenger->shutdown();
-  }
 
+    case CEPH_TOOL_MODE_GUI: {
+#ifdef HAVE_GTK2
+      g.log = &gss;
+      g.slog = &gss;
+
+      // TODO: make sure that we capture the log this generates in the GUI
+      g.lock.Lock();
+      send_observe_requests();
+      g.lock.Unlock();
+
+      run_gui(argc, (char **)argv);
+#else
+      cerr << "I'm sorry. This tool was not compiled with support for  "
+	   << "GTK2." << std::endl;
+      ret = EXIT_FAILURE;
+#endif
+      messenger->shutdown();
+      break;
+    }
+
+    default:
+      assert(0);
+      break;
+  }
 
   // wait for messenger to finish
   messenger->wait();
   messenger->destroy();
+  tok_end(tok);
   return ret;
 }
-

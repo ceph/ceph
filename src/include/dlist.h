@@ -31,8 +31,8 @@ public:
     const item& operator= (const item& right);
 
     
-    bool empty() { return _prev == this; }
-    bool is_on_list() { return !empty(); }
+    bool empty() const { return _prev == this; }
+    bool is_on_list() const { return !empty(); }
 
     bool remove_myself() {
       if (_next == this) {

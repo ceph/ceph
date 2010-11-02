@@ -354,7 +354,7 @@ public:
 
   // -- cache infrastructure --
 private:
-  map<frag_t,CDir*> dirfrags; // cached dir fragments
+  map<frag_t,CDir*> dirfrags; // cached dir fragments under this Inode
   int stickydir_ref;
 
 public:
@@ -367,7 +367,7 @@ public:
     } else
       return 0;
   }
-  void get_dirfrags_under(frag_t fg, list<CDir*>& ls);
+  bool get_dirfrags_under(frag_t fg, list<CDir*>& ls);
   CDir* get_approx_dirfrag(frag_t fg);
   void get_dirfrags(list<CDir*>& ls);
   void get_nested_dirfrags(list<CDir*>& ls);
@@ -401,6 +401,10 @@ protected:
   map<int, set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
 public:
   map<snapid_t, set<client_t> > client_need_snapflush;
+
+  void add_need_snapflush(CInode *snapin, snapid_t snapid, client_t client);
+  void remove_need_snapflush(CInode *snapin, snapid_t snapid, client_t client);
+
 protected:
 
   ceph_lock_state_t fcntl_locks;
@@ -545,7 +549,7 @@ private:
   void store(Context *fin);
   void _stored(version_t cv, Context *fin);
   void fetch(Context *fin);
-  void _fetched(bufferlist& bl, Context *fin);  
+  void _fetched(bufferlist& bl, bufferlist& bl2, Context *fin);  
 
   void store_parent(Context *fin);
   void _stored_parent(version_t v, Context *fin);

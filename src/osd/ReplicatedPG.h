@@ -426,7 +426,8 @@ protected:
       register_snapset_context(obc->obs.ssc);
   }
   void put_object_context(ObjectContext *obc);
-  int find_object_context(const object_t& oid, snapid_t snapid, ObjectContext **pobc, bool can_create);
+  int find_object_context(const object_t& oid, snapid_t snapid, ObjectContext **pobc,
+			  bool can_create, snapid_t *psnapid=NULL);
 
   SnapSetContext *get_snapset_context(const object_t& oid, bool can_create);
   void register_snapset_context(SnapSetContext *ssc) {
@@ -587,8 +588,8 @@ protected:
   int do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr);
 
 public:
-  ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid) : 
-    PG(o, _pool, p, oid)
+  ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid, const sobject_t& ioid) : 
+    PG(o, _pool, p, oid, ioid)
   { }
   ~ReplicatedPG() {}
 

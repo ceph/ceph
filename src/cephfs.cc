@@ -44,8 +44,6 @@ int get_location(int fd, struct ceph_ioctl_dataloc *location);
 int main (int argc, char **argv) {
   int fd = 0;
   int err = 0;
-  struct ceph_ioctl_layout layout;
-  struct ceph_ioctl_dataloc location;
   char *path = 0;
   int cmd = 0;
   int stripe_unit = 0;

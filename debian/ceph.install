@@ -1,4 +1,5 @@
 usr/bin/ceph
+usr/bin/cephfs
 usr/bin/cconf
 usr/bin/cclass
 usr/bin/cclsinfo

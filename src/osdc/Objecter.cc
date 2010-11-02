@@ -122,10 +122,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
 	bool was_pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
 	bool was_pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR);
-
-	if (was_pauserd || was_pausewr)
-	  maybe_request_map();
-    
+	bool was_full = osdmap->test_flag(CEPH_OSDMAP_FULL);
+  
 	if (m->incremental_maps.count(e)) {
 	  dout(3) << "handle_osd_map decoding incremental epoch " << e << dendl;
 	  OSDMap::Incremental inc(m->incremental_maps[e]);
@@ -144,17 +142,20 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	}
 	else {
 	  dout(3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << dendl;
-	  monc->sub_want("osdmap", osdmap->get_epoch() + 1, CEPH_SUBSCRIBE_ONETIME);
-	  monc->renew_subs();
+	  maybe_request_map();
 	  break;
 	}
+
+	if (was_pauserd || was_pausewr || was_full)
+	  maybe_request_map();
 	
 	// scan pgs for changes
 	scan_pgs(changed_pgs);
 
 	// kick paused
 	if ((was_pauserd && !osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) ||
-	    (was_pausewr && !osdmap->test_flag(CEPH_OSDMAP_PAUSEWR))) {
+	    (was_pausewr && !osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) ||
+	    (was_full && !osdmap->test_flag(CEPH_OSDMAP_FULL))) {
 	  for (hash_map<tid_t,Op*>::iterator p = op_osd.begin();
 	       p != op_osd.end();
 	       p++) {
@@ -213,8 +214,14 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
 void Objecter::maybe_request_map()
 {
-  dout(10) << "maybe_request_map subscribing (onetime) to next osd map" << dendl;
-  if (monc->sub_want("osdmap", osdmap->get_epoch() ? osdmap->get_epoch()+1 : 0, CEPH_SUBSCRIBE_ONETIME))
+  int flag = 0;
+  if (osdmap->test_flag(CEPH_OSDMAP_FULL)) {
+    dout(10) << "maybe_request_map subscribing (continuous) to next osd map (FULL flag is set)" << dendl;
+  } else {
+    dout(10) << "maybe_request_map subscribing (onetime) to next osd map" << dendl;
+    flag = CEPH_SUBSCRIBE_ONETIME;
+  }
+  if (monc->sub_want("osdmap", osdmap->get_epoch() ? osdmap->get_epoch()+1 : 0, flag))
     monc->renew_subs();
 }
 
@@ -389,8 +396,12 @@ void Objecter::resend_mon_ops()
 
 tid_t Objecter::op_submit(Op *op)
 {
+
+  if (op->oid.name.length())
+    op->pgid = osdmap->object_locator_to_pg(op->oid, op->oloc);
+
   // find
-  PG &pg = get_pg( pg_t(op->layout.ol_pgid) );
+  PG &pg = get_pg(op->pgid);
     
   // pick tid
   if (!op->tid)
@@ -418,10 +429,12 @@ tid_t Objecter::op_submit(Op *op)
 
   // send?
   dout(10) << "op_submit oid " << op->oid
+           << " " << op->oloc 
 	   << " " << op->ops << " tid " << op->tid
-           << " " << op->layout 
            << " osd" << pg.primary()
            << dendl;
+
+  assert(op->flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE));
 
   if ((op->flags & CEPH_OSD_FLAG_WRITE) &&
       osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
@@ -433,6 +446,11 @@ tid_t Objecter::op_submit(Op *op)
     dout(10) << " paused read " << op << " tid " << last_tid << dendl;
     op->paused = true;
     maybe_request_map();
+ } else if ((op->flags & CEPH_OSD_FLAG_WRITE) &&
+	    osdmap->test_flag(CEPH_OSDMAP_FULL)) {
+    dout(10) << " FULL, paused modify " << op << " tid " << last_tid << dendl;
+    op->paused = true;
+    maybe_request_map();
   } else if (pg.primary() >= 0) {
     int flags = op->flags;
     if (op->oncommit)
@@ -440,8 +458,12 @@ tid_t Objecter::op_submit(Op *op)
     if (op->onack)
       flags |= CEPH_OSD_FLAG_ACK;
 
+    ceph_object_layout ol;
+    ol.ol_pgid = op->pgid.v;
+    ol.ol_stripe_unit = 0;
+
     MOSDOp *m = new MOSDOp(client_inc, op->tid,
-			   op->oid, op->layout, osdmap->get_epoch(),
+			   op->oid, ol, osdmap->get_epoch(),
 			   flags);
 
     m->set_snapid(op->snapid);
@@ -611,10 +633,9 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
     return;
   }
 
-  ceph_object_layout layout;
-  object_t oid;
+  const pg_pool_t *pool = osdmap->get_pg_pool(list_context->pool_id);
+  int pg_num = pool->get_pg_num();
 
-  int pg_num = osdmap->get_pg_layout(list_context->pool_id, list_context->current_pg, layout);
   if (list_context->starting_pg_num == 0) {     // there can't be zero pgs!
     list_context->starting_pg_num = pg_num;
     dout(20) << pg_num << " placement groups" << dendl;
@@ -625,7 +646,6 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
     list_context->current_pg = 0;
     list_context->cookie = 0;
     list_context->starting_pg_num = pg_num;
-    osdmap->get_pg_layout(list_context->pool_id, list_context->current_pg, layout);
   }
   if (list_context->current_pg == pg_num){ //this context got all the way through
     onfinish->finish(0);
@@ -638,7 +658,19 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
 
   bufferlist *bl = new bufferlist();
   C_List *onack = new C_List(list_context, onfinish, bl, this);
-  read(oid, layout, op, list_context->pool_snap_seq, bl, 0, onack);
+
+  object_t oid;
+  object_locator_t oloc(list_context->pool_id);
+
+  // 
+  Op *o = new Op(oid, oloc, op.ops, CEPH_OSD_FLAG_READ, onack, NULL);
+  o->priority = op.priority;
+  o->snapid = list_context->pool_snap_seq;
+  o->outbl = bl;
+
+  o->pgid = pg_t(list_context->current_pg, list_context->pool_id, -1);
+
+  op_submit(o);
 }
 
 void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *final_finish)
@@ -1096,8 +1128,19 @@ void Objecter::ms_handle_connect(Connection *con)
 
 void Objecter::ms_handle_reset(Connection *con)
 {
-  if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD)
-    maybe_request_map();
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
+    //
+    int osd = osdmap->identify_osd(con->get_peer_addr());
+    if (osd >= 0) {
+      dout(1) << "ms_handle_reset on osd" << osd << dendl;
+      set<pg_t> changed_pgs;
+      scan_pgs_for(changed_pgs, osd);
+      kick_requests(changed_pgs);
+      maybe_request_map();
+    } else {
+      dout(10) << "ms_handle_reset on unknown osd addr " << con->get_peer_addr() << dendl;
+    }
+  }
 }
 
 void Objecter::ms_handle_remote_reset(Connection *con)

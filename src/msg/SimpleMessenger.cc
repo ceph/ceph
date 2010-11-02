@@ -610,6 +610,7 @@ int SimpleMessenger::Pipe::accept()
   //  http://ceph.newdream.net/wiki/Messaging_protocol
   int reply_tag = 0;
   bool replace = false;
+  uint64_t existing_seq = -1;
   while (1) {
     rc = tcp_read(sd, (char*)&connect, sizeof(connect), messenger->timeout);
     if (rc < 0) {
@@ -804,6 +805,7 @@ int SimpleMessenger::Pipe::accept()
   replace = true;
   if (connect.features & CEPH_FEATURE_RECONNECT_SEQ) {
     reply_tag = CEPH_MSGR_TAG_SEQ;
+    existing_seq = existing->in_seq;
   }
   dout(10) << "accept replacing " << existing << dendl;
   existing->stop();
@@ -816,7 +818,19 @@ int SimpleMessenger::Pipe::accept()
     existing->connection_state->pipe = get();
     existing->connection_state->put();
     existing->connection_state = NULL;
+
+    // steal queue and out_seq
+    existing->requeue_sent();
+    out_seq = existing->out_seq;
+    in_seq = existing->in_seq;
+    in_seq_acked = in_seq;
+    dout(10) << "accept re-queuing on out_seq " << out_seq << " in_seq " << in_seq << dendl;
+    for (map<int, list<Message*> >::iterator p = existing->out_q.begin();
+         p != existing->out_q.end();
+         p++)
+      out_q[p->first].splice(out_q[p->first].begin(), p->second);
   }
+  existing->pipe_lock.Unlock();
 
  open:
   // open
@@ -844,46 +858,27 @@ int SimpleMessenger::Pipe::accept()
 
   rc = tcp_write(sd, (char*)&reply, sizeof(reply));
   if (rc < 0) {
-    if (existing)
-      existing->pipe_lock.Unlock();
     goto fail_unlocked;
   }
 
   if (reply.authorizer_len) {
     rc = tcp_write(sd, authorizer_reply.c_str(), authorizer_reply.length());
     if (rc < 0) {
-      if (existing)
-        existing->pipe_lock.Unlock();
       goto fail_unlocked;
     }
   }
 
-  if (replace) {
+  if (reply_tag == CEPH_MSGR_TAG_SEQ) {
     uint64_t newly_acked_seq = 0;
-    if (reply_tag == CEPH_MSGR_TAG_SEQ) {
-      if(tcp_write(sd, (char*)&existing->in_seq, sizeof(existing->in_seq)) < 0) {
-        dout(2) << "accept write error on in_seq" << dendl;
-        existing->pipe_lock.Unlock();
-        goto fail_unlocked;
-      }
-      if(tcp_read(sd, (char*)&newly_acked_seq, sizeof(newly_acked_seq)) < 0) {
-        dout(2) << "accept read error on newly_acked_seq" << dendl;
-        existing->pipe_lock.Unlock();
-        goto fail_unlocked;
-      }
+    if(tcp_write(sd, (char*)&existing_seq, sizeof(existing_seq)) < 0) {
+      dout(2) << "accept write error on in_seq" << dendl;
+      goto fail_unlocked;
     }
-    // steal queue and out_seq
-    existing->requeue_sent(newly_acked_seq);
-    out_seq = existing->out_seq;
-    in_seq = existing->in_seq;
-    in_seq_acked = in_seq;
-    dout(10) << "accept out_seq " << out_seq << " in_seq " << in_seq << dendl;
-    for (map<int, list<Message*> >::iterator p = existing->out_q.begin();
-         p != existing->out_q.end();
-         p++)
-      out_q[p->first].splice(out_q[p->first].begin(), p->second);
-
-    existing->pipe_lock.Unlock();
+    if(tcp_read(sd, (char*)&newly_acked_seq, sizeof(newly_acked_seq)) < 0) {
+      dout(2) << "accept read error on newly_acked_seq" << dendl;
+      goto fail_unlocked;
+    }
+    requeue_sent(newly_acked_seq);
   }
 
   pipe_lock.Lock();
@@ -895,11 +890,16 @@ int SimpleMessenger::Pipe::accept()
   pipe_lock.Unlock();
   return 0;   // success.
 
-
  fail_unlocked:
   pipe_lock.Lock();
-  state = STATE_CLOSED;
+  bool queued = is_queued();
+  if (queued)
+    state = STATE_CONNECTING;
+  else
+    state = STATE_CLOSED;
   fault();
+  if (queued)
+    start_writer();
   pipe_lock.Unlock();
   return -1;
 }

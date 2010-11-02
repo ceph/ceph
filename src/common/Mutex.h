@@ -62,15 +62,36 @@ public:
   Mutex(const char *n, bool r = false, bool ld=true, bool bt=false) :
     name(n), id(-1), recursive(r), lockdep(ld), backtrace(bt), nlock(0) {
     if (recursive) {
+      // Mutexes of type PTHREAD_MUTEX_RECURSIVE do all the same checks as
+      // mutexes of type PTHREAD_MUTEX_ERRORCHECK.
       pthread_mutexattr_t attr;
       pthread_mutexattr_init(&attr);
       pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
       pthread_mutex_init(&_m,&attr);
       pthread_mutexattr_destroy(&attr);
-    } else {
+      if (g_lockdep)
+	_register();
+    }
+    else if (lockdep) {
+      // If the mutex type is PTHREAD_MUTEX_ERRORCHECK, then error checking
+      // shall be provided. If a thread attempts to relock a mutex that it
+      // has already locked, an error shall be returned. If a thread
+      // attempts to unlock a mutex that it has not locked or a mutex which
+      // is unlocked, an error shall be returned.
+      pthread_mutexattr_t attr;
+      pthread_mutexattr_init(&attr);
+      pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+      pthread_mutex_init(&_m, &attr);
+      if (g_lockdep)
+	_register();
+    }
+    else {
+      // If the mutex type is PTHREAD_MUTEX_NORMAL, deadlock detection
+      // shall not be provided. Attempting to relock the mutex causes
+      // deadlock. If a thread attempts to unlock a mutex that  it  has not
+      // locked or a mutex which is unlocked, undefined behavior results.
       pthread_mutex_init(&_m, NULL);
     }
-    if (lockdep && g_lockdep) _register();
   }
   ~Mutex() {
     assert(nlock == 0);

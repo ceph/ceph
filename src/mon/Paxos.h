@@ -99,9 +99,9 @@ private:
   int state;
 
 public:
-  bool is_recovering() { return state == STATE_RECOVERING; }
-  bool is_active() { return state == STATE_ACTIVE; }
-  bool is_updating() { return state == STATE_UPDATING; }
+  bool is_recovering() const { return state == STATE_RECOVERING; }
+  bool is_active() const { return state == STATE_ACTIVE; }
+  bool is_updating() const { return state == STATE_UPDATING; }
 
 private:
   // recovery (phase 1)
@@ -109,6 +109,7 @@ private:
   version_t first_committed;
   version_t last_pn;
   version_t last_committed;
+  utime_t last_commit_time;
   version_t accepted_pn;
   version_t accepted_pn_from;
 

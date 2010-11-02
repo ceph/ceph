@@ -98,6 +98,8 @@ MDS::MDS(const char *n, Messenger *m, MonClient *mc) :
   osdmap = new OSDMap;
 
   objecter = new Objecter(messenger, monc, osdmap, mds_lock);
+  objecter->unset_honor_osdmap_full();
+
   filer = new Filer(objecter);
 
   mdcache = new MDCache(this);
@@ -689,6 +691,37 @@ void MDS::handle_command(MMonCommand *m)
       locker->try_eval(ino, mask);
       dout(20) << "try_eval(" << inum << ", " << mask << ")" << dendl;
     } else dout(15) << "inode " << inum << " not in mdcache!" << dendl;
+  } else if (m->cmd[0] == "fragment_dir") {
+    if (m->cmd.size() == 4) {
+      filepath fp(m->cmd[1].c_str());
+      CInode *in = mdcache->cache_traverse(fp);
+      if (in) {
+	frag_t fg;
+	if (fg.parse(m->cmd[2].c_str())) {
+	  CDir *dir = in->get_dirfrag(fg);
+	  if (dir) {
+	    if (dir->is_auth()) {
+	      int by = atoi(m->cmd[3].c_str());
+	      if (by)
+		mdcache->split_dir(dir, by);
+	      else
+		dout(0) << "need to split by >0 bits" << dendl;
+	    } else dout(0) << "dir " << dir->dirfrag() << " not auth" << dendl;
+	  } else dout(0) << "dir " << in->ino() << " " << fg << " dne" << dendl;
+	} else dout(0) << " frag " << m->cmd[2] << " does not parse" << dendl;
+      } else dout(0) << "path " << fp << " not found" << dendl;
+    } else dout(0) << "bad syntax" << dendl;
+  } else if (m->cmd[0] == "merge_dir") {
+    if (m->cmd.size() == 3) {
+      filepath fp(m->cmd[1].c_str());
+      CInode *in = mdcache->cache_traverse(fp);
+      if (in) {
+	frag_t fg;
+	if (fg.parse(m->cmd[2].c_str())) {
+	  mdcache->merge_dir(in, fg);
+	} else dout(0) << " frag " << m->cmd[2] << " does not parse" << dendl;
+      } else dout(0) << "path " << fp << " not found" << dendl;
+    } else dout(0) << "bad syntax" << dendl;
   } else if (m->cmd[0] == "export_dir") {
     if (m->cmd.size() == 3) {
       filepath fp(m->cmd[1].c_str());

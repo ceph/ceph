@@ -740,20 +740,16 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   dout(10) << "               " << subfrags[0]->fnode.accounted_fragstat << dendl;
 
   purge_stolen(waiters, replay);
-  inode->close_dirfrag(frag); // selft deletion, watch out.
 }
 
-void CDir::merge(int bits, list<Context*>& waiters, bool replay)
+void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
 {
-  dout(10) << "merge by " << bits << " bits" << dendl;
+  dout(10) << "merge " << subs << dendl;
 
-  list<frag_t> frags;
-  frag.split(bits, frags);
-  
-  for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
-    CDir *dir = inode->get_or_open_dirfrag(cache, *p);
-    assert(dir->is_complete());
-    dout(10) << " subfrag " << *p << " " << *dir << dendl;
+  for (list<CDir*>::iterator p = subs.begin(); p != subs.end(); p++) {
+    CDir *dir = *p;
+    dout(10) << " subfrag " << dir->get_frag() << " " << *dir << dendl;
+    assert(!dir->is_auth() || dir->is_complete());
     
     // steal dentries
     while (!dir->items.empty()) 
@@ -767,7 +763,16 @@ void CDir::merge(int bits, list<Context*>& waiters, bool replay)
       if (p->second > cur)
 	replica_map[p->first] = p->second;
     }
-    
+
+    // merge version
+    if (dir->get_version() > get_version())
+      set_version(dir->get_version());
+
+    if (fnode.fragstat.version == 0)
+      fnode.fragstat.version = dir->fnode.fragstat.version;
+    if (fnode.rstat.version == 0)
+      fnode.rstat.version = dir->fnode.rstat.version;
+
     // merge state
     state_set(dir->get_state() & MASK_STATE_FRAGMENT_KEPT);
     dir_auth = dir->dir_auth;
@@ -1123,12 +1128,10 @@ void CDir::fetch(Context *c, const string& want_dn, bool ignore_authpinnability)
   // start by reading the first hunk of it
   C_Dir_Fetch *fin = new C_Dir_Fetch(this, want_dn);
   object_t oid = get_ondisk_object();
-  OSDMap *osdmap = cache->mds->objecter->osdmap;
-  ceph_object_layout ol = osdmap->make_object_layout(oid,
-						     cache->mds->mdsmap->get_metadata_pg_pool());
+  object_locator_t oloc(cache->mds->mdsmap->get_metadata_pg_pool());
   ObjectOperation rd;
   rd.tmap_get();
-  cache->mds->objecter->read(oid, ol, rd, CEPH_NOSNAP, &fin->bl, 0, fin);
+  cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, &fin->bl, 0, fin);
 }
 
 void CDir::_fetched(bufferlist &bl, const string& want_dn)
@@ -1686,13 +1689,11 @@ void CDir::_commit(version_t want)
 
   SnapContext snapc;
   object_t oid = get_ondisk_object();
-  OSDMap *osdmap = cache->mds->objecter->osdmap;
-  ceph_object_layout ol = osdmap->make_object_layout(oid,
-						     cache->mds->mdsmap->get_metadata_pg_pool());
+  object_locator_t oloc(cache->mds->mdsmap->get_metadata_pg_pool());
 
   m.priority = CEPH_MSG_PRIO_LOW;  // set priority lower than journal!
 
-  cache->mds->objecter->mutate(oid, ol, m, snapc, g_clock.now(), 0,
+  cache->mds->objecter->mutate(oid, oloc, m, snapc, g_clock.now(), 0,
 			       NULL, new C_Dir_Committed(this, get_version(), inode->inode.last_renamed_version) );
 }
 

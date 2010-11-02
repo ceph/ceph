@@ -8,6 +8,8 @@
 #include <vector>
 #include "buffer.h"
 
+class RadosClient;
+
 namespace librados {
 
   using ceph::bufferlist;
@@ -45,10 +47,15 @@ namespace librados {
 
 class Rados
 {
-  void *client;
+  RadosClient *client;
 public:
   Rados();
   ~Rados();
+
+  /* We don't allow assignment or copying */
+  Rados(const Rados& rhs);
+  const Rados& operator=(const Rados& rhs);
+
   int initialize(int argc, const char *argv[]);
   void shutdown();
 
@@ -70,6 +77,7 @@ public:
 
   int getxattr(pool_t pool, const std::string& oid, const char *name, bufferlist& bl);
   int setxattr(pool_t pool, const std::string& oid, const char *name, bufferlist& bl);
+  int rmxattr(pool_t pool, const std::string& oid, const char *name);
   int getxattrs(pool_t pool, const std::string& oid, std::map<std::string, bufferlist>& attrset);
   int stat(pool_t pool, const std::string& oid, uint64_t *psize, time_t *pmtime);
 

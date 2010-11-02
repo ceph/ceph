@@ -1016,7 +1016,27 @@ void OSDMonitor::mark_all_down()
   propose_pending();
 }
 
+enum health_status_t OSDMonitor::get_health(std::ostream &ss)
+{
+  enum health_status_t ret(HEALTH_OK);
 
+  int num_osds = osdmap.get_num_osds();
+  int num_up_osds = osdmap.get_num_up_osds();
+  int num_in_osds = osdmap.get_num_in_osds();
+
+  if (num_osds == 0) {
+    ss << " osdmonitor: no OSDS in osdmap!";
+    ret = HEALTH_ERR;
+  }
+  else if ((num_up_osds != num_osds) ||
+	   (num_in_osds != num_osds)) {
+    ss << " osdmonitor: num_osds = " << num_osds << ", ";
+    ss << "num_up_osds = " << num_up_osds << ", num_in_osds = ";
+    ss << num_in_osds;
+    ret = HEALTH_WARN;
+  }
+  return ret;
+}
 
 bool OSDMonitor::preprocess_command(MMonCommand *m)
 {
@@ -1236,7 +1256,18 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "setcrushmap") {
       dout(10) << "prepare_command setting new crush map" << dendl;
-      pending_inc.crush = m->get_data();
+      bufferlist data(m->get_data());
+      try {
+	bufferlist::iterator bl(data.begin());
+	CrushWrapper crush;
+	crush.decode(bl);
+      }
+      catch (const std::exception &e) {
+	err = -EINVAL;
+	ss << "Failed to parse crushmap: " << e.what();
+	goto out;
+      }
+      pending_inc.crush = data;
       string rs = "set crush map";
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
@@ -1339,10 +1370,14 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       } 
     }
     else if (m->cmd[1] == "lost" && m->cmd.size() >= 3) {
-      long osd = strtol(m->cmd[2].c_str(), 0, 10);
-      if (m->cmd.size() < 4 ||
-	  m->cmd[3] != "--yes-i-really-mean-it") {
-	ss << "are you SURE?  this might mean real, permanent data loss.  pass --yes-i-really-mean-it if you really do.";
+      string err;
+      int osd = strict_strtol(m->cmd[2].c_str(), 10, &err);
+      if (!err.empty()) {
+	ss << err;
+      }
+      else if ((m->cmd.size() < 4) || m->cmd[3] != "--yes-i-really-mean-it") {
+	ss << "are you SURE?  this might mean real, permanent data loss.  pass "
+	      "--yes-i-really-mean-it if you really do.";
       }
       else if (!osdmap.exists(osd) || !osdmap.is_down(osd)) {
 	ss << "osd" << osd << " is not down or doesn't exist";

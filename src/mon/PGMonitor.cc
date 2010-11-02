@@ -575,7 +575,18 @@ bool PGMonitor::register_new_pgs()
       pending_inc.pg_remove.insert(*p);
       removed++;
     }
-    if (NULL == mon->osdmon()->osdmap.get_pg_pool(p->pool())) {
+    if (!osdmap->have_pg_pool(p->pool())) {
+      dout(20) << " removing creating_pg " << *p << " because containing pool deleted" << dendl;
+      pending_inc.pg_remove.insert(*p);
+      ++removed;
+    }
+  }
+
+  // deleted pools?
+  for (set<pg_t>::iterator p = pg_map.pg_set.begin();
+       p != pg_map.pg_set.end();
+       p++) {
+    if (!osdmap->have_pg_pool(p->pool())) {
       dout(20) << " removing creating_pg " << *p << " because containing pool deleted" << dendl;
       pending_inc.pg_remove.insert(*p);
       ++removed;

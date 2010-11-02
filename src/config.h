@@ -177,6 +177,7 @@ struct md_config_t {
   int mon_globalid_prealloc;
 
   double paxos_propose_interval;
+  double paxos_min_wait;
   double paxos_observer_timeout;
 
   // auth
@@ -274,6 +275,7 @@ struct md_config_t {
   int mds_bal_split_size;
   float mds_bal_split_rd;
   float mds_bal_split_wr;
+  int mds_bal_split_bits;
   int mds_bal_merge_size;
   float mds_bal_merge_rd;
   float mds_bal_merge_wr;
@@ -381,6 +383,8 @@ struct md_config_t {
 
   bool osd_check_for_log_corruption;  // bleh
 
+  bool osd_use_stale_snap;
+
   // filestore
   bool filestore;
   double   filestore_max_sync_interval;
@@ -397,6 +401,7 @@ struct md_config_t {
   bool filestore_sync_flush;
   bool filestore_journal_parallel;
   bool filestore_journal_writeahead;
+  bool filestore_journal_trailing;
   int filestore_queue_max_ops;
   int filestore_queue_max_bytes;
   int filestore_op_threads;

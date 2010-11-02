@@ -31,11 +31,11 @@ public:
     return true;
   }
 
-  bool can_xlock_local() {
+  bool can_xlock_local() const {
     return !is_wrlocked();
   }
 
-  bool can_wrlock() {
+  bool can_wrlock() const {
     return !is_xlocked();
   }
   void get_wrlock(client_t client) {
@@ -48,9 +48,11 @@ public:
     if (get_num_wrlocks() == 0)
       last_wrlock_client = client_t();
   }
-  client_t get_last_wrlock_client() { return last_wrlock_client; }
+  client_t get_last_wrlock_client() const {
+    return last_wrlock_client;
+  }
   
-  virtual void print(ostream& out) {
+  virtual void print(ostream& out) const {
     out << "(";
     _print(out);
     if (last_wrlock_client >= 0)

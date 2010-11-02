@@ -3,7 +3,7 @@
 
 # Autoconf
 AC_PREREQ(2.59)
-AC_INIT([Ceph distributed file system], [.1], 
+AC_INIT([Ceph distributed file system], [0.23~rc], 
 	      [Sage Weil <sage@newdream.net>],
 	      [ceph])
 
@@ -12,7 +12,7 @@ AC_CANONICAL_HOST
 AC_CANONICAL_TARGET
 
 # Automake
-AM_INIT_AUTOMAKE(ceph, 0.22)
+AM_INIT_AUTOMAKE(ceph, 0.23~rc)
 AM_PROG_CC_C_O
 AM_PROG_LIBTOOL
 
@@ -210,10 +210,20 @@ AC_CHECK_FUNC([sync_file_range],
 #AC_FUNC_UTIME_NULL
 #AC_CHECK_FUNCS([bzero fchdir fdatasync floor ftruncate getcwd gethostbyname gethostname gettimeofday inet_ntoa localtime_r memmove memset mkdir munmap pow rmdir select socket sqrt strcasecmp strchr strerror strstr utime])
 
+AC_ARG_WITH([gtk2],
+        [AS_HELP_STRING([--with-gtk2], [Build the graphical tools.  Default=yes.])],
+        [try_with_gtk2=$withval],
+        [])
+AS_IF([test "x$try_with_gtk2" != "xno"],
+        [PKG_CHECK_MODULES(GTKMM, [gtkmm-2.4 >= 1.0.0],
+                [AC_DEFINE([HAVE_GTK2], [1], [we have gtk2])],
+                [try_with_gtk2=no
+                 AC_MSG_RESULT([Sorry, a usable version of gtkmm was not found. We will build without it.])])])
+AM_CONDITIONAL(WITH_GTK2, [test "x$try_with_gtk2" != "xno"])
+
 AC_CONFIG_HEADERS([src/acconfig.h])
 AC_CONFIG_FILES([Makefile
 	src/Makefile
 	man/Makefile
 	ceph.spec])
 AC_OUTPUT
-

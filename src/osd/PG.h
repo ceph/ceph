@@ -79,7 +79,19 @@ struct PGPool {
 
 class PG {
 public:
-  
+  /* Exceptions */
+  class read_log_error : public buffer::error {
+  public:
+    explicit read_log_error(const char *what) {
+      snprintf(buf, sizeof(buf), "read_log_error: %s", what);
+    }
+    const char *what() const throw () {
+      return buf;
+    }
+  private:
+    char buf[512];
+  };
+
   /*
    * PG::Info - summary of PG statistics.
    *
@@ -115,6 +127,7 @@ public:
 	same_up_since(0), same_acting_since(0), same_primary_since(0) {}
 
       void merge(const History &other) {
+	// Here, we only update the fields which cannot be calculated from the OSDmap.
 	if (epoch_created < other.epoch_created)
 	  epoch_created = other.epoch_created;
 	if (last_epoch_started < other.last_epoch_started)
@@ -245,9 +258,8 @@ public:
       const static int BACKLOG = 4;  // event invented by generate_backlog
       const static int LOST_REVERT = 5; // lost new version, reverted to old
 
-      __s32      op;   // write, zero, trunc, remove
+      __s32      op;
       sobject_t  soid;
-      snapid_t   snap;
       eversion_t version, prior_version;
       osd_reqid_t reqid;  // caller+tid to uniquely identify request
       utime_t     mtime;  // this is the _user_ mtime, mind you
@@ -306,8 +318,8 @@ public:
      *          complete negative information.  
      * i.e. we can infer pg contents for any store whose last_update >= tail.
      */
-    eversion_t head;    // newest entry (update|delete)
-    eversion_t tail;    // version prior to oldest (update|delete) 
+    eversion_t head;    // newest entry
+    eversion_t tail;    // version prior to oldest
 
     /*
      * backlog - true if log is a complete summary of pg contents.
@@ -487,6 +499,7 @@ public:
     // ok
     uint64_t tail;                     // first byte of log. 
     uint64_t head;                        // byte following end of log.
+    bool has_checksums;
     map<uint64_t,eversion_t> block_map;  // offset->version of _last_ entry with _any_ bytes in each block
 
     OndiskLog() : tail(0), head(0) {}
@@ -501,7 +514,7 @@ public:
     }
 
     void encode(bufferlist& bl) const {
-      __u8 struct_v = 1;
+      __u8 struct_v = 2;
       ::encode(struct_v, bl);
       ::encode(tail, bl);
       ::encode(head, bl);
@@ -509,6 +522,7 @@ public:
     void decode(bufferlist::iterator& bl) {
       __u8 struct_v;
       ::decode(struct_v, bl);
+      has_checksums = (struct_v >= 2);
       ::decode(tail, bl);
       ::decode(head, bl);
     }
@@ -541,107 +555,33 @@ public:
     map<sobject_t, item> missing;         // oid -> (need v, have v)
     map<eversion_t, sobject_t> rmissing;  // v -> oid
 
-    unsigned num_missing() const { return missing.size(); }
-
-    void swap(Missing& o) {
-      missing.swap(o.missing);
-      rmissing.swap(o.rmissing);
-    }
-
-    bool is_missing(const sobject_t& oid) {
-      return missing.count(oid);
-    }
-    bool is_missing(const sobject_t& oid, eversion_t v) {
-      return missing.count(oid) && missing[oid].need <= v;
-    }
-    eversion_t have_old(const sobject_t& oid) {
-      return missing.count(oid) ? missing[oid].have : eversion_t();
-    }
-    
-    /*
-     * this needs to be called in log order as we extend the log.  it
-     * assumes missing is accurate up through the previous log entry.
-     */
-    void add_next_event(Log::Entry& e) {
-      if (e.is_update()) {
-	if (e.prior_version == eversion_t()) {
-	  // new object.
-	  //assert(missing.count(e.soid) == 0);  // might already be missing divergent item.
-	  if (missing.count(e.soid))  // already missing divergent item
-	    rmissing.erase(missing[e.soid].need);
-	  missing[e.soid] = item(e.version, eversion_t());  // .have = nil
-	} else if (missing.count(e.soid)) {
-	  // already missing (prior).
-	  //assert(missing[e.soid].need == e.prior_version);
-	  rmissing.erase(missing[e.soid].need);
-	  missing[e.soid].need = e.version;  // leave .have unchanged.
-	} else {
-	  // not missing, we must have prior_version (if any)
-	  missing[e.soid] = item(e.version, e.prior_version);
-	}
-	rmissing[e.version] = e.soid;
-      } else
-	rm(e.soid, e.version);
-    }
-
-    void add_event(Log::Entry& e) {
-      if (e.is_update()) {
-	if (missing.count(e.soid)) {
-	  if (missing[e.soid].need >= e.version)
-	    return;   // already missing same or newer.
-	  // missing older, revise need
-	  rmissing.erase(missing[e.soid].need);
-	  missing[e.soid].need = e.version;
-	} else 
-	  // not missing => have prior_version (if any)
-	  missing[e.soid] = item(e.version, e.prior_version);
-	rmissing[e.version] = e.soid;
-      } else
-	rm(e.soid, e.version);
-    }
-
-    void revise_need(sobject_t oid, eversion_t need) {
-      if (missing.count(oid)) {
-	rmissing.erase(missing[oid].need);
-	missing[oid].need = need;            // no not adjust .have
-      } else {
-	missing[oid] = item(need, eversion_t());
-      }
-      rmissing[need] = oid;
-    }
-
-    void add(const sobject_t& oid, eversion_t need, eversion_t have) {
-      missing[oid] = item(need, have);
-      rmissing[need] = oid;
-    }
-    
-    void rm(const sobject_t& oid, eversion_t when) {
-      if (missing.count(oid) && missing[oid].need < when) {
-        rmissing.erase(missing[oid].need);
-        missing.erase(oid);
-      }
-    }
-    void got(const sobject_t& oid, eversion_t v) {
-      assert(missing.count(oid));
-      assert(missing[oid].need <= v);
-      rmissing.erase(missing[oid].need);
-      missing.erase(oid);
-    }
+    unsigned int num_missing() const;
+    void swap(Missing& o);
+    bool is_missing(const sobject_t& oid) const;
+    bool is_missing(const sobject_t& oid, eversion_t v) const;
+    eversion_t have_old(const sobject_t& oid) const;
+    void add_next_event(Log::Entry& e);
+    void add_event(Log::Entry& e);
+    void revise_need(sobject_t oid, eversion_t need);
+    void add(const sobject_t& oid, eversion_t need, eversion_t have);
+    void rm(const sobject_t& oid, eversion_t when);
+    void got(const sobject_t& oid, eversion_t v);
 
     void encode(bufferlist &bl) const {
       __u8 struct_v = 1;
       ::encode(struct_v, bl);
       ::encode(missing, bl);
     }
+
     void decode(bufferlist::iterator &bl) {
       __u8 struct_v;
       ::decode(struct_v, bl);
       ::decode(missing, bl);
 
       for (map<sobject_t,item>::iterator it = missing.begin();
-           it != missing.end();
-           it++) 
-        rmissing[it->second.need] = it->first;
+	   it != missing.end();
+	   ++it)
+	rmissing[it->second.need] = it->first;
     }
   };
   WRITE_CLASS_ENCODER(Missing)
@@ -731,6 +671,7 @@ public:
   const coll_t coll;
   IndexedLog  log;
   sobject_t    log_oid;
+  sobject_t    biginfo_oid;
   OndiskLog   ondisklog;
   Missing     missing;
   map<sobject_t, set<int> > missing_loc;
@@ -767,9 +708,12 @@ public:
   // [primary only] content recovery state
   bool        have_master_log;
  protected:
+  bool prior_set_built;
   set<int>    prior_set;   // current+prior OSDs, as defined by info.history.last_epoch_started.
-  set<int>    prior_set_down;          // down osds exluded from prior_set
+  set<int>    prior_set_down;     // down osds normally exluded from prior_set
   map<int,epoch_t> prior_set_up_thru;  // osds whose up_thru we care about
+  set<int>    prior_set_lost;  // osds in the prior set which are lost
+
   bool        need_up_thru;
   set<int>    stray_set;   // non-acting osds that have PG data.
   set<int>    uptodate_set;  // current OSDs that are uptodate
@@ -911,17 +855,18 @@ public:
 
 
  public:  
-  PG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid) : 
+  PG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& loid, const sobject_t& ioid) : 
     osd(o), pool(_pool),
     _lock("PG::_lock"),
     ref(0), deleting(false), dirty_info(false), dirty_log(false),
-    info(p), coll(p), log_oid(oid),
+    info(p), coll(p), log_oid(loid), biginfo_oid(ioid),
     recovery_item(this), backlog_item(this), scrub_item(this), snap_trim_item(this), remove_item(this), stat_queue_item(this),
     recovery_ops_active(0),
     generate_backlog_epoch(0),
     role(0),
     state(0),
     have_master_log(true),
+    prior_set_built(false),
     need_up_thru(false),
     pg_stats_lock("PG::pg_stats_lock"),
     pg_stats_valid(false),
@@ -981,6 +926,7 @@ public:
   void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
   void trim_peers();
 
+  std::string get_corrupt_pg_log_name() const;
   void read_state(ObjectStore *store);
   coll_t make_snap_collection(ObjectStore::Transaction& t, snapid_t sn);
 

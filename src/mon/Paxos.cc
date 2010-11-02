@@ -478,6 +478,7 @@ void Paxos::commit()
 
   // commit locally
   last_committed++;
+  last_commit_time = g_clock.now();
   mon->store->put_int(last_committed, machine_name, "last_committed");
 
   // tell everyone

@@ -48,6 +48,8 @@ class FileStore : public JournalingObjectStore {
   bool btrfs_clone_range;
   bool btrfs_snap_create;
   bool btrfs_snap_destroy;
+  bool btrfs_snap_create_async;
+  bool btrfs_wait_sync;
   int fsid_fd, op_fd;
 
   int basedir_fd, current_fd;
@@ -175,6 +177,8 @@ class FileStore : public JournalingObjectStore {
     btrfs(false), btrfs_trans_start_end(false), btrfs_clone_range(false),
     btrfs_snap_create(false),
     btrfs_snap_destroy(false),
+    btrfs_snap_create_async(false),
+    btrfs_wait_sync(false),
     fsid_fd(-1), op_fd(-1),
     attrs(this), fake_attrs(false), 
     collections(this), fake_collections(false),
@@ -192,6 +196,8 @@ class FileStore : public JournalingObjectStore {
   int _sanity_check_fs();
   
   bool test_mount_in_use();
+  int read_op_seq(const char *fn, uint64_t *seq);
+  int write_op_seq(int, uint64_t seq);
   int mount();
   int umount();
   int wipe_subvol(const char *s);
@@ -258,6 +264,7 @@ class FileStore : public JournalingObjectStore {
   int _collection_setattr(coll_t c, const char *name, const void *value, size_t size);
   int _collection_rmattr(coll_t c, const char *name);
   int _collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
+  int _collection_rename(const coll_t &cid, const coll_t &ncid);
 
   // collections
   int list_collections(vector<coll_t>& ls);

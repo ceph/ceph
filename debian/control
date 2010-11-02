@@ -2,7 +2,7 @@ Source: ceph
 Section: admin
 Priority: optional
 Maintainer: Sage Weil <sage@newdream.net>
-Build-Depends: debhelper (>= 6.0.7~), autotools-dev, autoconf, automake, cdbs, libfuse-dev, libboost-dev, libedit-dev, libssl-dev, libtool, libexpat1-dev, libfcgi-dev, libatomic-ops-dev, libgoogle-perftools-dev
+Build-Depends: debhelper (>= 6.0.7~), autotools-dev, autoconf, automake, cdbs, libfuse-dev, libboost-dev, libedit-dev, libssl-dev, libtool, libexpat1-dev, libfcgi-dev, libatomic-ops-dev, libgoogle-perftools-dev, pkg-config
 Standards-Version: 3.9.1
 
 Package: ceph

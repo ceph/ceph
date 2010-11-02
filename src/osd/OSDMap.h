@@ -290,7 +290,7 @@ private:
   }
 
   // map info
-  ceph_fsid_t& get_fsid() { return fsid; }
+  const ceph_fsid_t& get_fsid() const { return fsid; }
   void set_fsid(ceph_fsid_t& f) { fsid = f; }
 
   epoch_t get_epoch() const { return epoch; }
@@ -343,7 +343,7 @@ private:
     calc_num_osds();
   }
 
-  int get_num_osds() {
+  int get_num_osds() const {
     return num_osd;
   }
   int calc_num_osds() {
@@ -359,14 +359,14 @@ private:
       if (exists(i))
 	ls.insert(i);
   }
-  int get_num_up_osds() {
+  int get_num_up_osds() const {
     int n = 0;
     for (int i=0; i<max_osd; i++)
       if (osd_state[i] & CEPH_OSD_EXISTS &&
 	  osd_state[i] & CEPH_OSD_UP) n++;
     return n;
   }
-  int get_num_in_osds() {
+  int get_num_in_osds() const {
     int n = 0;
     for (int i=0; i<max_osd; i++)
       if (osd_state[i] & CEPH_OSD_EXISTS &&
@@ -396,11 +396,11 @@ private:
     if (w)
       osd_state[o] |= CEPH_OSD_EXISTS;
   }
-  unsigned get_weight(int o) {
+  unsigned get_weight(int o) const {
     assert(o < max_osd);
     return osd_weight[o];
   }
-  float get_weightf(int o) {
+  float get_weightf(int o) const {
     return (float)get_weight(o) / (float)CEPH_OSD_IN;
   }
   void adjust_osd_weights(map<int,double>& weights, Incremental& inc) {
@@ -415,14 +415,26 @@ private:
 
 
 
-  bool exists(int osd) {
+  bool exists(int osd) const {
     //assert(osd >= 0);
     return osd >= 0 && osd < max_osd && (osd_state[osd] & CEPH_OSD_EXISTS);
   }
-  bool is_up(int osd) { return exists(osd) && osd_state[osd] & CEPH_OSD_UP; }
-  bool is_down(int osd) { return !exists(osd) || !is_up(osd); }
-  bool is_out(int osd) { return !exists(osd) || get_weight(osd) == CEPH_OSD_OUT; }
-  bool is_in(int osd) { return exists(osd) && !is_out(osd); }
+
+  bool is_up(int osd) const {
+    return exists(osd) && osd_state[osd] & CEPH_OSD_UP;
+  }
+
+  bool is_down(int osd) const {
+    return !exists(osd) || !is_up(osd);
+  }
+
+  bool is_out(int osd) const {
+    return !exists(osd) || get_weight(osd) == CEPH_OSD_OUT;
+  }
+
+  bool is_in(int osd) const {
+    return exists(osd) && !is_out(osd);
+  }
   
   int identify_osd(const entity_addr_t& addr) const {
     for (unsigned i=0; i<osd_addr.size(); i++)
@@ -442,17 +454,17 @@ private:
   bool have_inst(int osd) {
     return exists(osd) && is_up(osd); 
   }
-  const entity_addr_t &get_addr(int osd) {
+  const entity_addr_t &get_addr(int osd) const {
     assert(exists(osd));
     return osd_addr[osd];
   }
-  const entity_addr_t &get_cluster_addr(int osd) {
+  const entity_addr_t &get_cluster_addr(int osd) const {
     assert(exists(osd));
     if (osd_cluster_addr[osd] == entity_addr_t())
       return get_addr(osd);
     return osd_cluster_addr[osd];
   }
-  const entity_addr_t &get_hb_addr(int osd) {
+  const entity_addr_t &get_hb_addr(int osd) const {
     assert(exists(osd));
     return osd_hb_addr[osd];
   }
@@ -486,7 +498,7 @@ private:
     assert(exists(osd));
     return osd_info[osd].down_at;
   }
-  osd_info_t& get_info(int osd) {
+  const osd_info_t& get_info(int osd) const {
     assert(osd < max_osd);
     return osd_info[osd];
   }
@@ -725,47 +737,50 @@ private:
 
   /****   mapping facilities   ****/
 
-  // oid -> pg
-  ceph_object_layout file_to_object_layout(object_t oid, ceph_file_layout& layout) {
-    return make_object_layout(oid, layout.fl_pg_pool,
-			      layout.fl_pg_preferred,
-			      layout.fl_stripe_unit);
-  }
-
-  ceph_object_layout make_object_layout(object_t oid, int pg_pool, int preferred=-1, int object_stripe_unit = 0) {
+  pg_t object_locator_to_pg(const object_t& oid, const object_locator_t& loc) {
     // calculate ps (placement seed)
-    const pg_pool_t *pool = get_pg_pool(pg_pool);
-    ps_t ps = ceph_str_hash(pool->v.object_hash, oid.name.c_str(), oid.name.length());
+    const pg_pool_t *pool = get_pg_pool(loc.get_pool());
+    ps_t ps;
+    if (loc.key.length())
+      ps = ceph_str_hash(pool->v.object_hash, loc.key.c_str(), loc.key.length());
+    else
+      ps = ceph_str_hash(pool->v.object_hash, oid.name.c_str(), oid.name.length());
 
     // mix in preferred osd, so we don't get the same peers for
     // all of the placement pgs (e.g. 0.0p*)
-    if (preferred >= 0)
-      ps += preferred;
+    if (loc.get_preferred() >= 0)
+      ps += loc.get_preferred();
 
     //cout << "preferred " << preferred << " num "
     // << num << " mask " << num_mask << " ps " << ps << endl;
 
-    // construct object layout
-    pg_t pgid = pg_t(ps, pg_pool, preferred);
-    ceph_object_layout layout;
-    layout.ol_pgid = pgid.v;
-    layout.ol_stripe_unit = object_stripe_unit;
-    return layout;
+    return pg_t(ps, loc.get_pool(), loc.get_preferred());
+  }
+
+  object_locator_t file_to_object_locator(const ceph_file_layout& layout) {
+    return object_locator_t(layout.fl_pg_pool, layout.fl_pg_preferred);
+  }
+
+  // oid -> pg
+  ceph_object_layout file_to_object_layout(object_t oid, ceph_file_layout& layout) {
+    return make_object_layout(oid, layout.fl_pg_pool,
+			      layout.fl_pg_preferred);
+  }
+
+  ceph_object_layout make_object_layout(object_t oid, int pg_pool, int preferred=-1) {
+    object_locator_t loc(pg_pool);
+    loc.preferred = preferred;
+    
+    ceph_object_layout ol;
+    pg_t pgid = object_locator_to_pg(oid, loc);
+    ol.ol_pgid = pgid.v;
+    ol.ol_stripe_unit = 0;
+    return ol;
   }
 
   int get_pg_num(int pg_pool)
   {
     const pg_pool_t *pool = get_pg_pool(pg_pool);
-    return pool->get_pg_num();
-  }
-
-  int get_pg_layout(int pg_pool, int seed, ceph_object_layout& layout) {
-    const pg_pool_t *pool = get_pg_pool(pg_pool);
-
-    pg_t pgid = pg_t(seed, pg_pool, -1);
-    layout.ol_pgid = pgid.v;
-    layout.ol_stripe_unit = 0;
-
     return pool->get_pg_num();
   }
 
@@ -1011,12 +1026,12 @@ private:
   static void build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& poolsets, int num_osd, int num_dom=0);
 
 
-  void print(ostream& out);
-  void print_summary(ostream& out);
+  void print(ostream& out) const;
+  void print_summary(ostream& out) const;
 
 };
 
-inline ostream& operator<<(ostream& out, OSDMap& m) {
+inline ostream& operator<<(ostream& out, const OSDMap& m) {
   m.print_summary(out);
   return out;
 }

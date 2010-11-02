@@ -132,13 +132,13 @@ class ObjectCacher {
     // ObjectCacher::Object fields
     ObjectCacher *oc;
     sobject_t oid;
+    friend class ObjectSet;
+
   public:
     ObjectSet *oset;
     xlist<Object*>::item set_item;
-  private:
-    ceph_object_layout layout;
+    object_locator_t oloc;
     
-    friend class ObjectSet;
 
   public:
     map<loff_t, BufferHead*>     data;
@@ -169,9 +169,9 @@ class ObjectCacher {
     int rdlock_ref;  // how many ppl want or are using a READ lock
 
   public:
-    Object(ObjectCacher *_oc, sobject_t o, ObjectSet *os, ceph_object_layout& l) : 
+    Object(ObjectCacher *_oc, sobject_t o, ObjectSet *os, object_locator_t& l) : 
       oc(_oc),
-      oid(o), oset(os), set_item(this), layout(l),
+      oid(o), oset(os), set_item(this), oloc(l),
       last_write_tid(0), last_ack_tid(0), last_commit_tid(0),
       uncommitted_item(this),
       lock_state(LOCK_NONE), wrlock_ref(0), rdlock_ref(0) {
@@ -188,8 +188,8 @@ class ObjectCacher {
     snapid_t get_snap() { return oid.snap; }
     ObjectSet *get_object_set() { return oset; }
     
-    ceph_object_layout& get_layout() { return layout; }
-    void set_layout(ceph_object_layout& l) { layout = l; }
+    object_locator_t& get_oloc() { return oloc; }
+    void set_object_locator(object_locator_t& l) { oloc = l; }
 
     bool can_close() {
       return data.empty() && lock_state == LOCK_NONE &&
@@ -251,12 +251,14 @@ class ObjectCacher {
     inodeno_t ino;
     uint64_t truncate_seq, truncate_size;
 
+    int poolid;
     xlist<Object*> objects;
     xlist<Object*> uncommitted;
 
     int dirty_tx;
 
-    ObjectSet(void *p, inodeno_t i) : parent(p), ino(i), truncate_seq(0), truncate_size(0), dirty_tx(0) {}
+    ObjectSet(void *p, int _poolid, inodeno_t i) : parent(p), ino(i), truncate_seq(0),
+                                      truncate_size(0), poolid(_poolid), dirty_tx(0) {}
   };
 
 
@@ -272,7 +274,7 @@ class ObjectCacher {
   flush_set_callback_t flush_set_callback, commit_set_callback;
   void *flush_set_callback_arg;
 
-  hash_map<sobject_t, Object*> objects;
+  vector<hash_map<sobject_t, Object*> > objects; // indexed by pool_id
 
   set<BufferHead*>    dirty_bh;
   LRU   lru_dirty, lru_rest;
@@ -292,21 +294,28 @@ class ObjectCacher {
   
 
   // objects
-  Object *get_object_maybe(sobject_t oid, ceph_object_layout &l) {
+  Object *get_object_maybe(sobject_t oid, object_locator_t &l) {
     // have it?
-    if (objects.count(oid))
-      return objects[oid];
+    assert(l.pool >= 0);
+    if ((l.pool < (int)objects.size()) &&
+        (objects[l.pool].count(oid)))
+      return objects[l.pool][oid];
     return NULL;
   }
 
-  Object *get_object(sobject_t oid, ObjectSet *oset, ceph_object_layout &l) {
+  Object *get_object(sobject_t oid, ObjectSet *oset, object_locator_t &l) {
     // have it?
-    if (objects.count(oid))
-      return objects[oid];
+    assert(l.pool >= 0);
+    if (l.pool < (int)objects.size()) {
+      if (objects[l.pool].count(oid))
+        return objects[l.pool][oid];
+    } else {
+      objects.resize(l.pool+1);
+    }
 
     // create it.
     Object *o = new Object(this, oid, oset, l);
-    objects[oid] = o;
+    objects[l.pool][oid] = o;
     return o;
   }
   void close_object(Object *ob);
@@ -450,59 +459,66 @@ class ObjectCacher {
   void wrunlock(Object *o);
 
  public:
-  void bh_read_finish(sobject_t oid, loff_t offset, uint64_t length, bufferlist &bl);
-  void bh_write_ack(sobject_t oid, loff_t offset, uint64_t length, tid_t t);
-  void bh_write_commit(sobject_t oid, loff_t offset, uint64_t length, tid_t t);
-  void lock_ack(list<sobject_t>& oids, tid_t tid);
+  void bh_read_finish(int poolid, sobject_t oid, loff_t offset, uint64_t length, bufferlist &bl);
+  void bh_write_ack(int poolid, sobject_t oid, loff_t offset, uint64_t length, tid_t t);
+  void bh_write_commit(int poolid, sobject_t oid, loff_t offset, uint64_t length, tid_t t);
+  void lock_ack(int poolid, list<sobject_t>& oids, tid_t tid);
 
   class C_ReadFinish : public Context {
     ObjectCacher *oc;
+    int poolid;
     sobject_t oid;
     loff_t start;
     uint64_t length;
   public:
     bufferlist bl;
-    C_ReadFinish(ObjectCacher *c, sobject_t o, loff_t s, uint64_t l) : oc(c), oid(o), start(s), length(l) {}
+    C_ReadFinish(ObjectCacher *c, int _poolid, sobject_t o, loff_t s, uint64_t l) :
+      oc(c), poolid(_poolid), oid(o), start(s), length(l) {}
     void finish(int r) {
-      oc->bh_read_finish(oid, start, length, bl);
+      oc->bh_read_finish(poolid, oid, start, length, bl);
     }
   };
 
   class C_WriteAck : public Context {
     ObjectCacher *oc;
+    int poolid;
     sobject_t oid;
     loff_t start;
     uint64_t length;
   public:
     tid_t tid;
-    C_WriteAck(ObjectCacher *c, sobject_t o, loff_t s, uint64_t l) : oc(c), oid(o), start(s), length(l) {}
+    C_WriteAck(ObjectCacher *c, int _poolid, sobject_t o, loff_t s, uint64_t l) :
+      oc(c), poolid(_poolid), oid(o), start(s), length(l) {}
     void finish(int r) {
-      oc->bh_write_ack(oid, start, length, tid);
+      oc->bh_write_ack(poolid, oid, start, length, tid);
     }
   };
   class C_WriteCommit : public Context {
     ObjectCacher *oc;
+    int poolid;
     sobject_t oid;
     loff_t start;
     uint64_t length;
   public:
     tid_t tid;
-    C_WriteCommit(ObjectCacher *c, sobject_t o, loff_t s, uint64_t l) : oc(c), oid(o), start(s), length(l) {}
+    C_WriteCommit(ObjectCacher *c, int _poolid, sobject_t o, loff_t s, uint64_t l) :
+      oc(c), poolid(_poolid), oid(o), start(s), length(l) {}
     void finish(int r) {
-      oc->bh_write_commit(oid, start, length, tid);
+      oc->bh_write_commit(poolid, oid, start, length, tid);
     }
   };
 
   class C_LockAck : public Context {
     ObjectCacher *oc;
   public:
+    int poolid;
     list<sobject_t> oids;
     tid_t tid;
-    C_LockAck(ObjectCacher *c, sobject_t o) : oc(c) {
+    C_LockAck(ObjectCacher *c, int _poolid, sobject_t o) : oc(c), poolid(_poolid) {
       oids.push_back(o);
     }
     void finish(int r) {
-      oc->lock_ack(oids, tid);
+      oc->lock_ack(poolid, oids, tid);
     }
   };
 

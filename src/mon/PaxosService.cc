@@ -94,8 +94,14 @@ bool PaxosService::should_propose(double& delay)
   // simple default policy: quick startup, then some damping.
   if (paxos->last_committed <= 1)
     delay = 0.0;
-  else
-    delay = g_conf.paxos_propose_interval;
+  else {
+    utime_t now = g_clock.now();
+    if ((now - paxos->last_commit_time) > g_conf.paxos_propose_interval)
+      delay = (double)g_conf.paxos_min_wait;
+    else
+      delay = (double)(g_conf.paxos_propose_interval + paxos->last_commit_time
+		       - now);
+  }
   return true;
 }
 

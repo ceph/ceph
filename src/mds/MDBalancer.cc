@@ -98,7 +98,7 @@ void MDBalancer::tick()
   }
   
   // hash?
-  if (g_conf.mds_bal_fragment_interval > 0 &&
+  if (g_conf.mds_bal_frag && g_conf.mds_bal_fragment_interval > 0 &&
       now.sec() - last_fragment.sec() > g_conf.mds_bal_fragment_interval) {
     last_fragment = now;
     do_fragmenting();
@@ -309,28 +309,85 @@ double MDBalancer::try_match(int ex, double& maxex,
   return howmuch;
 }
 
-
+void MDBalancer::queue_split(CDir *dir)
+{
+  split_queue.insert(dir->dirfrag());
+}
 
 void MDBalancer::do_fragmenting()
 {
-  if (split_queue.empty()) {
+  if (split_queue.empty() && merge_queue.empty()) {
     dout(20) << "do_fragmenting has nothing to do" << dendl;
     return;
   }
 
-  dout(0) << "do_fragmenting " << split_queue.size() << " dirs marked for possible splitting" << dendl;
+  if (!split_queue.empty()) {
+    dout(0) << "do_fragmenting " << split_queue.size() << " dirs marked for possible splitting" << dendl;
   
-  for (set<dirfrag_t>::iterator i = split_queue.begin();
-       i != split_queue.end();
-       i++) {
-    CDir *dir = mds->mdcache->get_dirfrag(*i);
-    if (!dir) continue;
-    if (!dir->is_auth()) continue;
+    set<dirfrag_t> q;
+    q.swap(split_queue);
 
-    dout(0) << "do_fragmenting splitting " << *dir << dendl;
-    mds->mdcache->split_dir(dir, 4);
+    for (set<dirfrag_t>::iterator i = q.begin();
+	 i != q.end();
+	 i++) {
+      CDir *dir = mds->mdcache->get_dirfrag(*i);
+      if (!dir ||
+	  !dir->is_auth())
+	continue;
+      
+      dout(0) << "do_fragmenting splitting " << *dir << dendl;
+      mds->mdcache->split_dir(dir, g_conf.mds_bal_split_bits);
+    }
   }
-  split_queue.clear();
+
+  if (!merge_queue.empty()) {
+    dout(0) << "do_fragmenting " << merge_queue.size() << " dirs marked for possible merging" << dendl;
+  
+    set<dirfrag_t> q;
+    q.swap(merge_queue);
+
+    for (set<dirfrag_t>::iterator i = q.begin();
+	 i != q.end();
+	 i++) {
+      CDir *dir = mds->mdcache->get_dirfrag(*i);
+      if (!dir ||
+	  !dir->is_auth() ||
+	  dir->get_frag() == frag_t())  // ok who's the joker?
+	continue;
+      
+      dout(0) << "do_fragmenting merging " << *dir << dendl;
+
+      CInode *diri = dir->get_inode();
+
+      frag_t fg = dir->get_frag();
+      while (fg != frag_t()) {
+	frag_t sibfg = fg.get_sibling();
+	list<CDir*> sibs;
+	bool complete = diri->get_dirfrags_under(sibfg, sibs);
+	if (!complete) {
+	  dout(10) << "  not all sibs under " << sibfg << " in cache (have " << sibs << ")" << dendl;
+	  break;
+	}
+	bool all = true;
+	for (list<CDir*>::iterator p = sibs.begin(); p != sibs.end(); p++) {
+	  CDir *sib = *p;
+	  if (!sib->is_auth() || !sib->should_merge()) {
+	    all = false;
+	    break;
+	  }
+	}
+	if (!all) {
+	  dout(10) << "  not all sibs under " << sibfg << " " << sibs << " should_merge" << dendl;
+	  break;
+	}
+	dout(10) << "  all sibs under " << sibfg << " " << sibs << " should merge" << dendl;
+	fg = fg.parent();
+      }
+
+      if (fg != dir->get_frag())
+	mds->mdcache->merge_dir(diri, fg);
+    }
+  }
 }
 
 
@@ -904,20 +961,32 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
   //if (dir->ino() == inodeno_t(0x10000000000))
   //dout(0) << "hit_dir " << type << " pop " << v << " in " << *dir << dendl;
 
-  // hit modify counter, if this was a modify
-  if (//g_conf.num_mds > 2 &&             // FIXME >2 thing
-      g_conf.mds_bal_frag &&
+  // split/merge
+  if (g_conf.mds_bal_frag && g_conf.mds_bal_fragment_interval > 0 &&
       !dir->inode->is_base() &&        // not root/base (for now at least)
-      dir->is_auth() &&
-      
-      ((g_conf.mds_bal_split_size > 0 &&
-	dir->get_num_head_items() > (unsigned)g_conf.mds_bal_split_size) ||
-       (v > g_conf.mds_bal_split_rd && type == META_POP_IRD) ||
-       (v > g_conf.mds_bal_split_wr && type == META_POP_IWR)) &&
-      split_queue.count(dir->dirfrag()) == 0) {
-    dout(0) << "hit_dir " << type << " pop is " << v << ", putting in split_queue: " << *dir << dendl;
-    split_queue.insert(dir->dirfrag());
-  }
+      dir->is_auth()) {
+
+    dout(20) << "hit_dir " << type << " pop is " << v << ", frag " << dir->get_frag()
+	     << " size " << dir->get_num_head_items() << dendl;
+
+    // split
+    if (g_conf.mds_bal_split_size > 0 &&
+	((dir->get_num_head_items() > (unsigned)g_conf.mds_bal_split_size) ||
+	 (v > g_conf.mds_bal_split_rd && type == META_POP_IRD) ||
+	 (v > g_conf.mds_bal_split_wr && type == META_POP_IWR)) &&
+	split_queue.count(dir->dirfrag()) == 0) {
+      dout(1) << "hit_dir " << type << " pop is " << v << ", putting in split_queue: " << *dir << dendl;
+      split_queue.insert(dir->dirfrag());
+    }
+
+    // merge?
+    if (dir->get_frag() != frag_t() &&
+	(dir->get_num_head_items() < (unsigned)g_conf.mds_bal_merge_size) &&
+	merge_queue.count(dir->dirfrag()) == 0) {
+      dout(1) << "hit_dir " << type << " pop is " << v << ", putting in merge_queue: " << *dir << dendl;
+      merge_queue.insert(dir->dirfrag());
+    }
+  }  
   
   // replicate?
   if (type == META_POP_IRD && who >= 0) {

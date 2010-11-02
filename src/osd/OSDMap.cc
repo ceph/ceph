@@ -18,7 +18,7 @@
 
 
 
-void OSDMap::print(ostream& out)
+void OSDMap::print(ostream& out) const
 {
   out << "epoch " << get_epoch() << "\n"
       << "fsid " << get_fsid() << "\n"
@@ -38,11 +38,15 @@ void OSDMap::print(ostream& out)
     out << " pauserec";
   out << "\n" << std::endl;
  
-  for (map<int,pg_pool_t>::iterator p = pools.begin(); p != pools.end(); p++) {
+  for (map<int,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
+    std::string name("<unknown>");
+    map<int32_t,string>::const_iterator pni = pool_name.find(p->first);
+    if (pni != pool_name.end())
+      name = pni->second;
     out << "pg_pool " << p->first
-	<< " '" << pool_name[p->first]
+	<< " '" << name
 	<< "' " << p->second << "\n";
-    for (map<snapid_t,pool_snap_info_t>::iterator q = p->second.snaps.begin();
+    for (map<snapid_t,pool_snap_info_t>::const_iterator q = p->second.snaps.begin();
 	 q != p->second.snaps.end();
 	 q++)
       out << "\tsnap " << q->second.snapid << " '" << q->second.name << "' " << q->second.stamp << "\n";
@@ -59,24 +63,21 @@ void OSDMap::print(ostream& out)
       if (is_in(i))
 	out << " weight " << get_weightf(i);
       out << (is_up(i) ? " up  ":" down");
-      osd_info_t& info = get_info(i);
-      out << " (up_from " << info.up_from
-	  << " up_thru " << info.up_thru
-	  << " down_at " << info.down_at
-	  << " last_clean " << info.last_clean_first << "-" << info.last_clean_last << ")";
+      const osd_info_t& info(get_info(i));
+      out << info << " ";
       if (is_up(i))
-	out << " " << get_addr(i) << " " << get_hb_addr(i);
+	out << get_addr(i) << " " << get_hb_addr(i);
       out << "\n";
     }
   }
   out << std::endl;
 
-  for (map<pg_t,vector<int> >::iterator p = pg_temp.begin();
+  for (map<pg_t,vector<int> >::const_iterator p = pg_temp.begin();
        p != pg_temp.end();
        p++)
     out << "pg_temp " << p->first << " " << p->second << "\n";
   
-  for (hash_map<entity_addr_t,utime_t>::iterator p = blacklist.begin();
+  for (hash_map<entity_addr_t,utime_t>::const_iterator p = blacklist.begin();
        p != blacklist.end();
        p++)
     out << "blacklist " << p->first << " expires " << p->second << "\n";
@@ -84,7 +85,7 @@ void OSDMap::print(ostream& out)
   // ignore pg_swap_primary
 }
 
-void OSDMap::print_summary(ostream& out)
+void OSDMap::print_summary(ostream& out) const
 {
   out << "e" << get_epoch() << ": "
       << get_num_osds() << " osds: "

@@ -226,7 +226,8 @@ void sigsegv_handler(int signum)
   BackTrace bt(0);
   bt.print(*_dout);
 
-  old_sigsegv_handler(signum);
+  if (old_sigsegv_handler)
+    old_sigsegv_handler(signum);
 }
 
 void sigabrt_handler(int signum)
@@ -235,7 +236,9 @@ void sigabrt_handler(int signum)
   BackTrace bt(0);
   bt.print(*_dout);
 
-  old_sigabrt_handler(signum);
+  //*_dout << "i am " << (void*)sigabrt_handler << ", chaining to " << (void*)old_sigabrt_handler << std::endl;
+  if (old_sigabrt_handler)
+    old_sigabrt_handler(signum);
 }
 
 #define _STR(x) #x
@@ -372,6 +375,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mon_clientid_prealloc, 0, OPT_INT, 100),   // how many clientids to prealloc
 	OPTION(mon_globalid_prealloc, 0, OPT_INT, 100),   // how many globalids to prealloc
 	OPTION(paxos_propose_interval, 0, OPT_DOUBLE, 1.0),  // gather updates for this long before proposing a map update
+	OPTION(paxos_min_wait, 0, OPT_DOUBLE, 0.05),  // min time to gather updates for after period of inactivity
 	OPTION(paxos_observer_timeout, 0, OPT_DOUBLE, 5*60), // gather updates for this long before proposing a map update
 	OPTION(auth_supported, 0, OPT_STR, "none"),
 	OPTION(auth_mon_ticket_ttl, 0, OPT_DOUBLE, 60*60*12),
@@ -445,15 +449,16 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_bal_sample_interval, 0, OPT_FLOAT, 3.0),  // every 5 seconds
 	OPTION(mds_bal_replicate_threshold, 0, OPT_FLOAT, 8000),
 	OPTION(mds_bal_unreplicate_threshold, 0, OPT_FLOAT, 0),
-	OPTION(mds_bal_frag, 0, OPT_BOOL, true),
+	OPTION(mds_bal_frag, 0, OPT_BOOL, false),
 	OPTION(mds_bal_split_size, 0, OPT_INT, 10000),
 	OPTION(mds_bal_split_rd, 0, OPT_FLOAT, 25000),
 	OPTION(mds_bal_split_wr, 0, OPT_FLOAT, 10000),
+	OPTION(mds_bal_split_bits, 0, OPT_INT, 3),
 	OPTION(mds_bal_merge_size, 0, OPT_INT, 50),
 	OPTION(mds_bal_merge_rd, 0, OPT_FLOAT, 1000),
 	OPTION(mds_bal_merge_wr, 0, OPT_FLOAT, 1000),
 	OPTION(mds_bal_interval, 0, OPT_INT, 10),           // seconds
-	OPTION(mds_bal_fragment_interval, 0, OPT_INT, -1),      // seconds
+	OPTION(mds_bal_fragment_interval, 0, OPT_INT, 5),      // seconds
 	OPTION(mds_bal_idle_threshold, 0, OPT_FLOAT, 0),
 	OPTION(mds_bal_max, 0, OPT_INT, -1),
 	OPTION(mds_bal_max_until, 0, OPT_INT, -1),
@@ -531,21 +536,23 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_class_timeout, 0, OPT_DOUBLE, 60*60.0), // seconds
 	OPTION(osd_class_tmp, 0, OPT_STR, "/var/lib/ceph/tmp"),
 	OPTION(osd_check_for_log_corruption, 0, OPT_BOOL, false),
+	OPTION(osd_use_stale_snap, 0, OPT_BOOL, false),
 	OPTION(filestore, 0, OPT_BOOL, false),
 	OPTION(filestore_max_sync_interval, 0, OPT_DOUBLE, 5),    // seconds
 	OPTION(filestore_min_sync_interval, 0, OPT_DOUBLE, .01),  // seconds
 	OPTION(filestore_fake_attrs, 0, OPT_BOOL, false),
 	OPTION(filestore_fake_collections, 0, OPT_BOOL, false),
 	OPTION(filestore_dev, 0, OPT_STR, 0),
-	OPTION(filestore_btrfs_trans, 0, OPT_BOOL, true),
-	OPTION(filestore_btrfs_snap, 0, OPT_BOOL, false),
+	OPTION(filestore_btrfs_trans, 0, OPT_BOOL, false),
+	OPTION(filestore_btrfs_snap, 0, OPT_BOOL, true),
 	OPTION(filestore_btrfs_clone_range, 0, OPT_BOOL, true),
 	OPTION(filestore_fsync_flushes_journal_data, 0, OPT_BOOL, false),
 	OPTION(filestore_flusher, 0, OPT_BOOL, true),
 	OPTION(filestore_flusher_max_fds, 0, OPT_INT, 512),
 	OPTION(filestore_sync_flush, 0, OPT_BOOL, false),
 	OPTION(filestore_journal_parallel, 0, OPT_BOOL, false),
-	OPTION(filestore_journal_writeahead, 0, OPT_BOOL, true),
+	OPTION(filestore_journal_writeahead, 0, OPT_BOOL, false),
+	OPTION(filestore_journal_trailing, 0, OPT_BOOL, false),
 	OPTION(filestore_queue_max_ops, 0, OPT_INT, 500),
 	OPTION(filestore_queue_max_bytes, 0, OPT_INT, 100 << 20),
 	OPTION(filestore_op_threads, 0, OPT_INT, 2),
@@ -1009,6 +1016,9 @@ int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const ch
     case OPT_BOOL:
       OPT_READ_TYPE(ret, section, key, bool, out, def);
       break;
+    case OPT_LONGLONG:
+      OPT_READ_TYPE(ret, section, key, long long, out, def);
+      break;
     case OPT_INT:
       OPT_READ_TYPE(ret, section, key, int, out, def);
       break;
@@ -1258,10 +1268,16 @@ void parse_config_options(std::vector<const char*>& args)
   }
 
   signal(SIGHUP, sighup_handler);
-  if (!old_sigsegv_handler)
+  if (!old_sigsegv_handler) {
     old_sigsegv_handler = signal(SIGSEGV, sigsegv_handler);
-  if (!old_sigabrt_handler)
+    if (old_sigsegv_handler == sigsegv_handler)
+      old_sigsegv_handler = NULL;
+  }
+  if (!old_sigabrt_handler) {
     old_sigabrt_handler = signal(SIGABRT, sigabrt_handler);
+    if (old_sigabrt_handler == sigabrt_handler)
+      old_sigabrt_handler = NULL;
+  }
 
   args = nargs;
 }

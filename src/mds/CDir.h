@@ -216,7 +216,7 @@ public:
   typedef map<dentry_key_t, CDentry*> map_t;
 protected:
 
-  // contents
+  // contents of this directory
   map_t items;       // non-null AND null
   unsigned num_head_items;
   unsigned num_head_null;
@@ -342,7 +342,15 @@ public:
 
 public:
   void split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool replay);
-  void merge(int bits, list<Context*>& waiters, bool replay);
+  void merge(list<CDir*>& subs, list<Context*>& waiters, bool replay);
+
+  bool should_split() {
+    return (int)get_num_head_items() > g_conf.mds_bal_split_size;
+  }
+  bool should_merge() {
+    return (int)get_num_head_items() < g_conf.mds_bal_merge_size;
+  }
+
 private:
   void steal_dentry(CDentry *dn);  // from another dir.  used by merge/split.
   void purge_stolen(list<Context*>& waiters, bool replay);

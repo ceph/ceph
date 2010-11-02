@@ -91,10 +91,10 @@ private:
   bool stopping;
 
 public:
-  bool is_starting() { return state == STATE_STARTING; }
-  bool is_leader() { return state == STATE_LEADER; }
-  bool is_peon() { return state == STATE_PEON; }
-  bool is_stopping() { return stopping; }
+  bool is_starting() const { return state == STATE_STARTING; }
+  bool is_leader() const { return state == STATE_LEADER; }
+  bool is_peon() const { return state == STATE_PEON; }
+  bool is_stopping() const { return stopping; }
 
 
   // -- elector --
@@ -237,6 +237,8 @@ public:
 
   LogClient *get_logclient() { return &logclient; }
 };
+
+int strict_strtol(const char *str, int base, std::string *err);
 
 #define CEPH_MON_FEATURE_INCOMPAT_BASE CompatSet::Feature (1, "initial feature set (~v.18)")
 extern const CompatSet::Feature ceph_mon_feature_compat[];

@@ -32,7 +32,7 @@ using namespace librados;
 
 void usage() 
 {
-  cerr << "usage: radostool [options] [commands]" << std::endl;
+  cerr << "usage: rados [options] [commands]" << std::endl;
   /*  cerr << "If no commands are specified, enter interactive mode.\n";
   cerr << "Commands:" << std::endl;
   cerr << "   stop              -- cleanly shut down file system" << std::endl
@@ -47,6 +47,11 @@ void usage()
   cerr << "   get objname [outfile] -- fetch object\n";
   cerr << "   put objname [infile] -- write object\n";
   cerr << "   rm objname  -- remove object\n";
+  cerr << "   listxattr objname\n";
+  cerr << "   getxattr objname attr\n";
+  cerr << "   setxattr objname attr val\n";
+  cerr << "   getxattr objname attr\n";
+  cerr << "   rmxattr objname attr\n";
   cerr << "   ls          -- list objects in pool\n\n";
   cerr << "   chown 123   -- change the pool owner to auid 123\n";
 
@@ -286,6 +291,68 @@ int main(int argc, const char **argv)
     if (ret < 0) {
       cerr << "error writing " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       goto out;
+    }
+  }
+  else if (strcmp(nargs[0], "setxattr") == 0) {
+    if (!pool || nargs.size() < 4)
+      usage();
+
+    string oid(nargs[1]);
+    string attr_name(nargs[2]);
+    string attr_val(nargs[3]);
+
+    bufferlist bl;
+    bl.append(attr_val.c_str(), attr_val.length());
+
+    ret = rados.setxattr(p, oid, attr_name.c_str(), bl);
+    if (ret < 0) {
+      cerr << "error setting xattr " << pool << "/" << oid << "/" << attr_name << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      goto out;
+    }
+  }
+  else if (strcmp(nargs[0], "getxattr") == 0) {
+    if (!pool || nargs.size() < 3)
+      usage();
+
+    string oid(nargs[1]);
+    string attr_name(nargs[2]);
+
+    bufferlist bl;
+    ret = rados.getxattr(p, oid, attr_name.c_str(), bl);
+    if (ret < 0) {
+      cerr << "error getting xattr " << pool << "/" << oid << "/" << attr_name << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      goto out;
+    }
+    string s(bl.c_str(), bl.length());
+    cout << s << std::endl;
+  } else if (strcmp(nargs[0], "rmxattr") == 0) {
+    if (!pool || nargs.size() < 3)
+      usage();
+
+    string oid(nargs[1]);
+    string attr_name(nargs[2]);
+
+    ret = rados.rmxattr(p, oid, attr_name.c_str());
+    if (ret < 0) {
+      cerr << "error removing xattr " << pool << "/" << oid << "/" << attr_name << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      goto out;
+    }
+  } else if (strcmp(nargs[0], "listxattr") == 0) {
+    if (!pool || nargs.size() < 2)
+      usage();
+
+    string oid(nargs[1]);
+    map<std::string, bufferlist> attrset;
+    bufferlist bl;
+    ret = rados.getxattrs(p, oid, attrset);
+    if (ret < 0) {
+      cerr << "error getting xattr set " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      goto out;
+    }
+
+    for (map<std::string, bufferlist>::iterator iter = attrset.begin();
+         iter != attrset.end(); ++iter) {
+      cout << iter->first << std::endl;
     }
   }
   else if (strcmp(nargs[0], "rm") == 0) {

@@ -112,6 +112,7 @@ public:
     static const int OP_STARTSYNC =    27;  // start a sync 
 
     static const int OP_RMATTRS =      28;  // cid, oid
+    static const int OP_COLL_RENAME =       29;  // cid, newcid
 
   private:
     uint64_t ops;
@@ -444,6 +445,13 @@ public:
       ::encode(op, tbl);
       ::encode(cid, tbl);
       ::encode(aset, tbl);
+      ops++;
+    }
+    void collection_rename(coll_t cid, coll_t ncid) {
+      __u32 op = OP_COLL_RENAME;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(ncid, tbl);
       ops++;
     }
 

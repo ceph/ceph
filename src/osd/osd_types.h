@@ -32,6 +32,7 @@
 #define CEPH_OSD_FULL_RATIO .95
 
 #define CEPH_OSD_FEATURE_INCOMPAT_BASE CompatSet::Feature(1, "initial feature set(~v.18)")
+#define CEPH_OSD_FEATURE_INCOMPAT_PGINFO CompatSet::Feature(1, "pginfo object")
 
 
 /* osdreqid_t - caller name + incarnation# + tid to unique identify this request
@@ -141,7 +142,7 @@ struct pg_t {
     return coll_t(u.pg64, sn);
     }*/
 
-  int print(char *o, int maxlen) {
+  int print(char *o, int maxlen) const {
     if (preferred() >= 0)
       return snprintf(o, maxlen, "%d.%xp%d", pool(), ps(), preferred());
     else
@@ -250,6 +251,10 @@ public:
     return str;
   }
 
+  const char* c_str() const {
+    return str.c_str();
+  }
+
   bool is_pg(pg_t& pgid, snapid_t& snap) const {
     const char *cstr(str.c_str());
 
@@ -290,7 +295,7 @@ public:
       }
 
       case 2: {
-	int type;
+	__u8 type;
 	pg_t pgid;
 	snapid_t snap;
 
@@ -1084,7 +1089,7 @@ class ObjectExtent {
   __u32      offset;    // in object
   __u32      length;    // in object
 
-  ceph_object_layout layout;   // object layout (pgid, etc.)
+  object_locator_t oloc;   // object locator (pool etc)
 
   map<__u32, __u32>  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
   
@@ -1095,7 +1100,7 @@ class ObjectExtent {
 inline ostream& operator<<(ostream& out, ObjectExtent &ex)
 {
   return out << "extent(" 
-             << ex.oid << " in " << ex.layout
+             << ex.oid << " in " << ex.oloc
              << " " << ex.offset << "~" << ex.length
              << ")";
 }

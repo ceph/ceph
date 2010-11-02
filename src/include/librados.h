@@ -84,6 +84,7 @@ int rados_trunc(rados_pool_t pool, const char *oid, size_t size);
 /* attrs */
 int rados_getxattr(rados_pool_t pool, const char *o, const char *name, char *buf, size_t len);
 int rados_setxattr(rados_pool_t pool, const char *o, const char *name, const char *buf, size_t len);
+int rados_rmxattr(rados_pool_t pool, const char *o, const char *name);
 
 /* misc */
 int rados_stat(rados_pool_t pool, const char *o, uint64_t *psize, time_t *pmtime);

@@ -28,6 +28,7 @@ const struct CompatSet::Feature feature_incompat[] = {
   MDS_FEATURE_INCOMPAT_BASE,
   MDS_FEATURE_INCOMPAT_CLIENTRANGES,
   MDS_FEATURE_INCOMPAT_FILELAYOUT,
+  MDS_FEATURE_INCOMPAT_DIRINODE,
   END_FEATURE
 };
 const struct CompatSet::Feature feature_ro_compat[] = {

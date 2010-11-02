@@ -195,8 +195,8 @@ class MonMap {
   int write(const char *fn);
   int read(const char *fn);
 
-  void print(ostream& out);
-  void print_summary(ostream& out);
+  void print(ostream& out) const;
+  void print_summary(ostream& out) const;
 };
 
 inline void encode(MonMap &m, bufferlist &bl) {
