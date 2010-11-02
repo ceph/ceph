@@ -62,11 +62,9 @@ public:
       utime_t now = g_clock.now();
       p.pop_running(running, now);
 
-      if (running.empty()) {
+      if (running.empty())
 	continue;
-      }
 
-      dout(DBL) << "pt2" << dendl;
       p.lock.Unlock();
       if (p.event_lock)
 	p.event_lock->Lock();
@@ -79,7 +77,6 @@ public:
 	dout(DBL) << "start callback " << *cit << dendl;
 	(*cit)->finish(0);
 	if (p.event_lock) {
-	  dout(DBL) << "pt3" << dendl;
 	  p.event_lock->Unlock();
 	}
 	dout(DBL) << "finish callback " << *cit << dendl;
@@ -87,10 +84,8 @@ public:
 	if (p.event_lock)
 	  p.event_lock->Lock();
       }
-      if (p.event_lock) {
-	dout(DBL) << "pt4" << dendl;
+      if (p.event_lock)
 	p.event_lock->Unlock();
-      }
       p.lock.Lock();
     }
   }
@@ -185,7 +180,7 @@ void Timer::add_event_at(utime_t when, Context *callback)
 
 bool Timer::cancel_event(Context *callback)
 {
-  dout(DBL) << __func__ << ": " << callback << dendl;
+  dout(DBL) << __PRETTY_FUNCTION__ << ": " << callback << dendl;
 
   lock.Lock();
   bool ret = cancel_event_impl(callback, false);
@@ -195,7 +190,7 @@ bool Timer::cancel_event(Context *callback)
 
 void Timer::cancel_all_events(void)
 {
-  dout(DBL) << __func__ << dendl;
+  dout(DBL) << __PRETTY_FUNCTION__ << dendl;
 
   lock.Lock();
   cancel_all_events_impl(false);
@@ -285,7 +280,7 @@ SafeTimer::SafeTimer(Mutex &event_lock)
 
 SafeTimer::~SafeTimer()
 {
-  dout(DBL) << __func__ << dendl;
+  dout(DBL) << __PRETTY_FUNCTION__ << dendl;
 
   t.shutdown();
 }
@@ -311,7 +306,7 @@ void SafeTimer::add_event_at(utime_t when, Context *callback)
 
 bool SafeTimer::cancel_event(Context *callback)
 {
-  dout(DBL) << __func__ << ": " << callback << dendl;
+  dout(DBL) << __PRETTY_FUNCTION__ << ": " << callback << dendl;
 
   assert(t.event_lock->is_locked());
 
@@ -323,7 +318,7 @@ bool SafeTimer::cancel_event(Context *callback)
 
 void SafeTimer::cancel_all_events()
 {
-  dout(DBL) << __func__ << dendl;
+  dout(DBL) << __PRETTY_FUNCTION__ << dendl;
 
   assert(t.event_lock->is_locked());
 
