@@ -47,6 +47,14 @@ struct bench_data {
   char *object_contents; //pointer to the contents written to each object
 };
 
+void generate_object_name(char *s, int objnum)
+{
+  char hostname[30];
+  gethostname(hostname, sizeof(hostname)-1);
+  hostname[sizeof(hostname)-1] = 0;
+  sprintf(s, "%s_%d_object%d", hostname, getpid(), objnum);
+}
+
 int write_bench(Rados& rados, rados_pool_t pool,
 		 int secondsToRun, int concurrentios, bench_data *data);
 int seq_read_bench(Rados& rados, rados_pool_t pool,
@@ -132,7 +140,7 @@ int write_bench(Rados& rados, rados_pool_t pool,
   for (int i = 0; i<concurrentios; ++i) {
     name[i] = new char[128];
     contents[i] = new bufferlist();
-    snprintf(name[i], 128, "Object %d", i);
+    generate_object_name(name[i], i);
     snprintf(data->object_contents, data->object_size, "I'm the %dth object!", i);
     contents[i]->append(data->object_contents, data->object_size);
   }
@@ -173,7 +181,7 @@ int write_bench(Rados& rados, rados_pool_t pool,
     //create new contents and name on the heap, and fill them
     newContents = new bufferlist();
     newName = new char[128];
-    snprintf(newName, 128, "Object %d", data->started);
+    generate_object_name(newName, data->started);
     snprintf(data->object_contents, data->object_size, "I'm the %dth object!", data->started);
     newContents->append(data->object_contents, data->object_size);
     completions[slot]->wait_for_safe();
@@ -297,7 +305,7 @@ int seq_read_bench(Rados& rados, rados_pool_t pool, int seconds_to_run,
   //set up initial reads
   for (int i = 0; i < concurrentios; ++i) {
     name[i] = new char[128];
-    snprintf(name[i], 128, "Object %d", i);
+    generate_object_name(name[i], i);
     contents[i] = new bufferlist();
   }
 
@@ -334,7 +342,7 @@ int seq_read_bench(Rados& rados, rados_pool_t pool, int seconds_to_run,
        ++i) {
     slot = data->finished % concurrentios;
     newName = new char[128];
-    snprintf(newName, 128, "Object %d", data->started);
+    generate_object_name(newName, data->started);
     completions[slot]->wait_for_complete();
     dataLock.Lock();
     r = completions[slot]->get_return_value();
