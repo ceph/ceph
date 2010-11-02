@@ -1298,7 +1298,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 		     << " on " << *dir << dendl;
 	    dir->first = fgfirst;
 
-	    if (is_frozen()) {
+	    if (dir->is_frozen()) {
+	      dout(10) << fg << " frozen, marking " << filelock << " stale " << *dir << dendl;
 	      filelock.set_stale();
 	    } else {
 	      filelock.clear_stale();
@@ -1379,7 +1380,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	  }
 	} else {
 	  if (dir && dir->is_auth()) {
-	    if (is_frozen()) {
+	    if (dir->is_frozen()) {
+	      dout(10) << fg << " frozen, marking " << nestlock << " stale " << *dir << dendl;
 	      nestlock.set_stale();
 	    } else {
 	      nestlock.clear_stale();
