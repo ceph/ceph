@@ -1,5 +1,6 @@
 #include "common/Mutex.h"
 #include "common/Timer.h"
+#include "common/common_init.h"
 
 #include <iostream>
 
@@ -163,8 +164,16 @@ done:
   return ret;
 }
 
-int main(void)
+int main(int argc, const char **argv)
 {
+  vector<const char*> args;
+  argv_to_vec(argc, argv, args);
+  env_to_vec(args);
+
+  ceph_set_default_id("admin");
+  common_set_defaults(false);
+  common_init(args, "ceph", true);
+
   int ret;
   ret = test_timers();
   if (ret)
