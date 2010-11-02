@@ -178,31 +178,31 @@ struct sobject_t {
 };
 WRITE_CLASS_ENCODER(sobject_t)
 
-inline bool operator==(const sobject_t l, const sobject_t r) {
+inline bool operator==(const sobject_t &l, const sobject_t &r) {
   return l.oid == r.oid && l.snap == r.snap;
 }
-inline bool operator!=(const sobject_t l, const sobject_t r) {
+inline bool operator!=(const sobject_t &l, const sobject_t &r) {
   return l.oid != r.oid || l.snap != r.snap;
 }
-inline bool operator>(const sobject_t l, const sobject_t r) {
+inline bool operator>(const sobject_t &l, const sobject_t &r) {
   return l.oid > r.oid || (l.oid == r.oid && l.snap > r.snap);
 }
-inline bool operator<(const sobject_t l, const sobject_t r) {
+inline bool operator<(const sobject_t &l, const sobject_t &r) {
   return l.oid < r.oid || (l.oid == r.oid && l.snap < r.snap);
 }
-inline bool operator>=(const sobject_t l, const sobject_t r) { 
+inline bool operator>=(const sobject_t &l, const sobject_t &r) {
   return l.oid > r.oid || (l.oid == r.oid && l.snap >= r.snap);
 }
-inline bool operator<=(const sobject_t l, const sobject_t r) {
+inline bool operator<=(const sobject_t &l, const sobject_t &r) {
   return l.oid < r.oid || (l.oid == r.oid && l.snap <= r.snap);
 }
-inline ostream& operator<<(ostream& out, const sobject_t o) {
+inline ostream& operator<<(ostream& out, const sobject_t &o) {
   return out << o.oid << "/" << o.snap;
 }
 
 namespace __gnu_cxx {
   template<> struct hash<sobject_t> {
-    size_t operator()(const sobject_t &r) const { 
+    size_t operator()(const sobject_t &r) const {
       static hash<object_t> H;
       static rjhash<uint64_t> I;
       return H(r.oid) ^ I(r.snap);
