@@ -752,12 +752,12 @@ int FileStore::_detect_fs()
 
     if (g_conf.filestore_btrfs_snap && !btrfs_snap_destroy) {
       dout(0) << "mount btrfs snaps enabled, but no SNAP_DESTROY ioctl (from kernel 2.6.32+)" << dendl;
-      cerr << TEXT_RED
-	   << " ** ERROR: 'filestore btrfs snap' is enabled (for safe transactions, rollback),\n"
-	   << "           but btrfs does not support the SNAP_DESTROY ioctl (added in\n"
-	   << "           Linux 2.6.32).\n"
+      cerr << TEXT_YELLOW
+	   << " ** WARNING: 'filestore btrfs snap' was enabled (for safe transactions, rollback),\n"
+	   << "             but btrfs does not support the SNAP_DESTROY ioctl (added in\n"
+	   << "             Linux 2.6.32).  Disabling.\n"
 	   << TEXT_NORMAL;
-      return -ENOTTY;
+      g_conf.filestore_btrfs_snap = false;
     }
 
     // start_sync?
