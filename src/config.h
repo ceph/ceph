@@ -311,6 +311,7 @@ struct md_config_t {
   bool mds_hack_log_expire_for_better_stats;
 
   // set these to non-zero to specify kill points
+  bool mds_verify_scatter;
   int mds_kill_mdstable_at;
   int mds_kill_export_at;
   int mds_kill_import_at;

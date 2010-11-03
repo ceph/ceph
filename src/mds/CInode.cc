@@ -1562,6 +1562,21 @@ void CInode::finish_scatter_gather_update(int type)
 	    dout(20) << fg << " skipping OLD accounted_fragstat " << pf->accounted_fragstat << dendl;
 	  }
 	  pf->fragstat.version = pf->accounted_fragstat.version = pi->dirstat.version + 1;
+
+	  if (fg == frag_t()) { // i.e., we are the only frag
+	    if (pi->dirstat.size() != pf->fragstat.size()) {
+	      stringstream ss;
+	      ss << "unmatched fragstat size on single dirfrag " << dir->dirfrag()
+		 << ", inode has " << pi->dirstat << ", dirfrag has " << pf->fragstat;
+	      mdcache->mds->logclient.log(LOG_ERROR, ss);
+	      
+	      // trust the dirfrag for now
+	      pi->dirstat = pf->fragstat;
+	      pi->dirstat.version--;  // (about to re-increment it below!)
+
+	      assert(!!"unmatched fragstat size" == g_conf.mds_verify_scatter);
+	    }
+	  }
 	}
       }
       if (touched_mtime)
@@ -1626,7 +1641,8 @@ void CInode::finish_scatter_gather_update(int type)
 	      // trust the dirfrag for now
 	      pi->rstat = pf->rstat;
 	      pi->rstat.version--;  // (about to re-increment it below!)
-	      //assert("unmatched rstat rbytes" == 0);
+
+	      assert(!!"unmatched rstat rbytes" == g_conf.mds_verify_scatter);
 	    }
 	  }
 	}
