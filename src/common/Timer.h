@@ -80,6 +80,8 @@ private:
 
   void pop_running(std::list <Context*> &running_, const utime_t &now);
 
+  std::string show_all_events(const char *caller) const;
+
   // This class isn't supposed to be copied
   Timer(const Timer &rhs);
   Timer& operator=(const Timer &rhs);

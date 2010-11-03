@@ -26,6 +26,7 @@
 
 #define DBL 10
 
+#include <sstream>
 #include <signal.h>
 #include <sys/time.h>
 #include <math.h>
@@ -189,6 +190,7 @@ void Timer::add_event_at(utime_t when, Context *callback)
   if (i == scheduled.begin())
     cond.Signal();
 
+  dout(19) << show_all_events(__func__) << dendl;
   lock.Unlock();
 }
 
@@ -205,6 +207,8 @@ bool Timer::cancel_event(Context *callback)
 void Timer::cancel_all_events(void)
 {
   dout(DBL) << __PRETTY_FUNCTION__ << dendl;
+
+  dout(19) << show_all_events(__func__) << dendl;
 
   lock.Lock();
   cancel_all_events_impl(false);
@@ -227,6 +231,8 @@ int Timer::init()
 
 bool Timer::cancel_event_impl(Context *callback, bool cancel_running)
 {
+  dout(19) << show_all_events(__func__) << dendl;
+
   event_lookup_map_t::iterator e = events.find(callback);
   if (e != events.end()) {
     // Erase the item out of the scheduled map.
@@ -284,6 +290,33 @@ void Timer::pop_running(list <Context*> &running_, const utime_t &now)
     events.erase(e);
     scheduled.erase(s);
   }
+}
+
+std::string Timer::show_all_events(const char *caller) const
+{
+  ostringstream oss;
+  string sep;
+  oss << "show_all_events: from " << caller << ": scheduled [";
+  for (scheduled_map_t::const_iterator s = scheduled.begin();
+       s != scheduled.end();
+       ++s)
+  {
+    oss << sep << s->first << "->" << s->second;
+    sep = ",";
+  }
+  oss << "] ";
+
+  oss << "events [";
+  string sep2;
+  for (event_lookup_map_t::const_iterator e = events.begin();
+       e != events.end();
+       ++e)
+  {
+    oss << sep2 << e->first << "->" << e->second->first;
+    sep2 = ",";
+  }
+  oss << "]";
+  return oss.str();
 }
 
 /******************************************************************/
