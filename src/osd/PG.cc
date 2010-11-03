@@ -3001,6 +3001,11 @@ unsigned int PG::Missing::num_missing() const
   return missing.size();
 }
 
+bool PG::Missing::have_missing() const
+{
+  return !missing.empty();
+}
+
 void PG::Missing::swap(Missing& o)
 {
   missing.swap(o.missing);

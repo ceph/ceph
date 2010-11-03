@@ -556,6 +556,7 @@ public:
     map<eversion_t, sobject_t> rmissing;  // v -> oid
 
     unsigned int num_missing() const;
+    bool have_missing() const;
     void swap(Missing& o);
     bool is_missing(const sobject_t& oid) const;
     bool is_missing(const sobject_t& oid, eversion_t v) const;
