@@ -101,16 +101,19 @@ inline string ccap_string(int cap)
 }
 
 
-
-struct frag_info_t {
+struct scatter_info_t {
   version_t version;
 
+  scatter_info_t() : version(0) {}
+};
+
+struct frag_info_t : public scatter_info_t {
   // this frag
   utime_t mtime;
   int64_t nfiles;        // files
   int64_t nsubdirs;      // subdirs
 
-  frag_info_t() : version(0), nfiles(0), nsubdirs(0) {}
+  frag_info_t() : nfiles(0), nsubdirs(0) {}
 
   int64_t size() const { return nfiles + nsubdirs; }
 
@@ -167,9 +170,7 @@ inline ostream& operator<<(ostream &out, const frag_info_t &f) {
   return out;
 }
 
-struct nest_info_t {
-  version_t version;
-
+struct nest_info_t : public scatter_info_t {
   // this frag + children
   utime_t rctime;
   int64_t rbytes;
@@ -180,8 +181,7 @@ struct nest_info_t {
   int64_t ranchors;  // for dirstat, includes inode's anchored flag.
   int64_t rsnaprealms;
 
-  nest_info_t() : version(0),
-		  rbytes(0), rfiles(0), rsubdirs(0),
+  nest_info_t() : rbytes(0), rfiles(0), rsubdirs(0),
 		  ranchors(0), rsnaprealms(0) {}
 
   void zero() {
