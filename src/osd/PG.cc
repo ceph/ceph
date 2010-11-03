@@ -1345,7 +1345,7 @@ void PG::peer(ObjectStore::Transaction& t, list<Context*>& tfin,
 
     if (pi.is_empty())
       continue;
-    if (peer_missing.count(peer) == 0) {
+    if (peer_missing.find(peer) == peer_missing.end()) {
       if (pi.last_update == pi.last_complete) {
 	dout(10) << " infering no missing (last_update==last_complete) for osd" << peer << dendl;
 	peer_missing[peer].num_missing();  // just create the entry.
@@ -1354,8 +1354,10 @@ void PG::peer(ObjectStore::Transaction& t, list<Context*>& tfin,
 	have_all_missing = false;
       }
     }
-    if (peer_log_requested.count(peer) ||
-        peer_summary_requested.count(peer)) continue;
+    if (peer_log_requested.find(peer) != peer_log_requested.end())
+      continue;
+    if (peer_summary_requested.find(peer) != peer_summary_requested.end())
+      continue;
    
     assert(pi.last_update <= log.head);
 
