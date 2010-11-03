@@ -1138,7 +1138,7 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
   dout(10) << "recover_master_log" << dendl;
 
   // -- query info from everyone in prior_set.
-  bool missing_info = false;
+  bool lack_info = false;
   for (set<int>::iterator it = prior_set.begin();
        it != prior_set.end();
        it++) {
@@ -1148,7 +1148,7 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
                << dendl;      
       continue;
     }
-    missing_info = true;
+    lack_info = true;
 
     if (peer_info_requested.find(*it) != peer_info_requested.end()) {
       dout(10) << " waiting for osd" << *it << dendl;
@@ -1163,7 +1163,7 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
       dout(10) << " not querying info from down osd" << *it << dendl;
     }
   }
-  if (missing_info)
+  if (lack_info)
     return false;
 
   
