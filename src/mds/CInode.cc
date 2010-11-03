@@ -1329,8 +1329,6 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	        mdlog->submit_entry(le, new C_Inode_FragUpdate(this, dir, mut));
 	      } else {
 	        dout(10) << fg << " accounted_fragstat unchanged at v" << fragstat.version << dendl;
-	        assert(pf->fragstat == fragstat);
-	        assert(pf->accounted_fragstat == fragstat);
 	      }
 	    }
 	  }
@@ -1415,8 +1413,6 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	        mdlog->submit_entry(le, new C_Inode_FragUpdate(this, dir, mut));
 	      } else {
 	        dout(10) << fg << " accounted_rstat unchanged at v" << rstat.version << dendl;
-	        assert(pf->rstat == rstat);
-	        assert(pf->accounted_rstat == rstat);
 	      }
 	    }
 	  }
