@@ -1515,7 +1515,9 @@ void OSD::tick()
   
   map_lock.get_read();
 
-  sched_scrub();
+  if (scrub_should_schedule()) {
+    sched_scrub();
+  }
 
   heartbeat_lock.Lock();
   heartbeat_check();
@@ -2220,11 +2222,24 @@ void OSD::handle_scrub(MOSDScrub *m)
   m->put();
 }
 
+bool OSD::scrub_should_schedule()
+{
+  double loadavgs[1];
+  if (getloadavg(loadavgs, 1) != 1) {
+    dout(10) << "Couldn't read loadavgs!\n" << dendl;
+    return false;
+  }
+
+  dout(20) << "Got loadavg " << loadavgs[0] << " max is " << g_conf.osd_scrub_load_threshold << dendl;
+  return loadavgs[0] < g_conf.osd_scrub_load_threshold;
+}
+
 void OSD::sched_scrub()
 {
   assert(osd_lock.is_locked());
 
   dout(20) << "sched_scrub" << dendl;
+
   sched_scrub_lock.Lock();
   hash_map<pg_t, PG*>::iterator p = pg_map.find(sched_scrub_pg);
   sched_scrub_lock.Unlock();

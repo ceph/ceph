@@ -380,6 +380,7 @@ struct md_config_t {
   const char *osd_class_tmp;
 
   int osd_max_scrubs;
+  float osd_scrub_load_threshold;
 
   bool osd_check_for_log_corruption;  // bleh
 

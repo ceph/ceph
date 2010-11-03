@@ -799,6 +799,7 @@ protected:
   pg_t sched_scrub_pg;
   int scrubs_pending;
   int scrubs_active;
+  bool scrub_should_schedule();
   void sched_scrub();
 
   bool inc_scrubs_pending();
