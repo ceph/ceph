@@ -39,6 +39,7 @@
 
 #include "auth/cephx/CephxKeyServer.h"
 
+#include <memory>
 
 class MonitorStore;
 
@@ -66,17 +67,13 @@ public:
   MonMap *monmap;
 
   LogClient logclient;
-
-  // timer.
-  SafeTimer timer;
-  Context *tick_timer;
-  void cancel_tick();
-  void reset_tick();
-  friend class C_Mon_Tick;
-
   KeyServer key_server;
 
-
+  // timer.
+  std::auto_ptr < SafeTimer > timer;
+private:
+  void new_tick();
+  friend class C_Mon_Tick;
 
   // -- local storage --
 public:

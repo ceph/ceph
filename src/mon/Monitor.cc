@@ -95,7 +95,6 @@ Monitor::Monitor(string nm, MonitorStore *s, Messenger *m, MonMap *map) :
   lock("Monitor::lock"),
   monmap(map),
   logclient(messenger, monmap),
-  timer(lock), tick_timer(0),
   store(s),
   
   state(STATE_STARTING), stopping(false),
@@ -170,8 +169,9 @@ void Monitor::init()
   messenger->add_dispatcher_head(&logclient);
   
   // start ticker
-  reset_tick();
-  
+  timer.reset(new SafeTimer(lock));
+  new_tick();
+
   // call election?
   if (monmap->size() > 1) {
     call_election();
@@ -193,7 +193,7 @@ void Monitor::shutdown()
     (*p)->shutdown();
 
   // Cancel all events. The timer thread will be joined later in ~SafeTimer
-  timer.cancel_all_events();
+  timer->cancel_all_events();
 
   // die.
   messenger->shutdown();
@@ -911,23 +911,14 @@ public:
   }
 };
 
-void Monitor::cancel_tick()
+void Monitor::new_tick()
 {
-  if (tick_timer) timer.cancel_event(tick_timer);
+  C_Mon_Tick *ctx = new C_Mon_Tick(this);
+  timer->add_event_after(g_conf.mon_tick_interval, ctx);
 }
-
-void Monitor::reset_tick()
-{
-  cancel_tick();
-  tick_timer = new C_Mon_Tick(this);
-  timer.add_event_after(g_conf.mon_tick_interval, tick_timer);
-}
-
 
 void Monitor::tick()
 {
-  tick_timer = 0;
-
   _dout_check_log();
 
   // ok go.
@@ -955,13 +946,8 @@ void Monitor::tick()
     }
   }
 
-  // next tick!
-  reset_tick();
+  new_tick();
 }
-
-
-
-
 
 /*
  * this is the closest thing to a traditional 'mkfs' for ceph.

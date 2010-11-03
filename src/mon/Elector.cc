@@ -44,7 +44,7 @@ void Elector::init()
 void Elector::shutdown()
 {
   if (expire_event)
-    mon->timer.cancel_event(expire_event);
+    mon->timer->cancel_event(expire_event);
 }
 
 void Elector::bump_epoch(epoch_t e) 
@@ -110,7 +110,7 @@ void Elector::reset_timer(double plus)
   // set the timer
   cancel_timer();
   expire_event = new C_ElectionExpire(this);
-  mon->timer.add_event_after(g_conf.mon_lease + plus,
+  mon->timer->add_event_after(g_conf.mon_lease + plus,
 			     expire_event);
 }
 
@@ -118,7 +118,7 @@ void Elector::reset_timer(double plus)
 void Elector::cancel_timer()
 {
   if (expire_event) {
-    mon->timer.cancel_event(expire_event);
+    mon->timer->cancel_event(expire_event);
     expire_event = 0;
   }
 }
