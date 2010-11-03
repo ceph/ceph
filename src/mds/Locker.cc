@@ -953,9 +953,12 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
       break;
 
     if (in->is_auth()) {
-      if (want_scatter)
-	scatter_mix((ScatterLock*)lock);
-      else {
+      if (want_scatter) {
+	if (lock->get_state() == LOCK_MIX_STALE)
+	  simple_lock(lock);
+	else 
+	  scatter_mix((ScatterLock*)lock);
+      } else {
 	if (nowait && lock->is_dirty())
 	  return false;   // don't do nested lock, as that may scatter_writebehind in simple_lock!
 	simple_lock(lock);
