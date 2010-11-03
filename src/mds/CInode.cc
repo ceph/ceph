@@ -1492,6 +1492,48 @@ void CInode::clear_dirty_scattered(int type)
 }
 
 
+/*
+ * when we initially scatter a lock, we need to check if any of the dirfrags
+ * have out of date accounted_rstat/fragstat.  if so, mark the lock stale.
+ */
+void CInode::start_scatter(ScatterLock *lock)
+{
+  dout(10) << "start_scatter " << *lock << " on " << *this << dendl;
+  assert(is_auth());
+  inode_t *pi = get_projected_inode();
+
+  for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+       p != dirfrags.end();
+       p++) {
+    frag_t fg = p->first;
+    CDir *dir = p->second;
+    fnode_t *pf = dir->get_projected_fnode();
+    dout(20) << fg << " " << *dir << dendl;
+
+    switch (lock->get_type()) {
+    case CEPH_LOCK_IFILE:
+      if (pf->fragstat.version < pi->dirstat.version) {
+	dout(10) << fg << " stale dirstat on " << *dir << dendl;
+	lock->set_stale();
+      }
+      break;
+
+    case CEPH_LOCK_INEST:
+      if (pf->rstat.version < pi->rstat.version) {
+	dout(10) << fg << " stale rstat on " << *dir << dendl;
+	lock->set_stale();
+      }
+      break;
+    }
+  }
+}
+
+/*
+ * when we gather a lock, we need to assimilate dirfrag changes into the inode
+ * state.  it's possible we can't update the dirfrag accounted_rstat/fragstat
+ * because the frag is auth and frozen, or that the replica couldn't for the same
+ * reason.  hopefully it will get updated the next time the lock cycles.
+ */
 void CInode::finish_scatter_gather_update(int type)
 {
   dout(10) << "finish_scatter_gather_update " << type << " on " << *this << dendl;

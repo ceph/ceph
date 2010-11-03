@@ -707,6 +707,8 @@ public:
   void _finish_frag_update(CDir *dir, Mutation *mut);
 
   void clear_dirty_scattered(int type);
+
+  void start_scatter(ScatterLock *lock);
   void finish_scatter_gather_update(int type);
   void finish_scatter_gather_update_accounted(int type, Mutation *mut, EMetaBlob *metablob);
 

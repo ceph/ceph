@@ -560,6 +560,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
       case LOCK_TSYN_MIX:
       case LOCK_SYNC_MIX:
       case LOCK_EXCL_MIX:
+	in->start_scatter((ScatterLock *)lock);
 	if (lock->get_parent()->is_replicated()) {
 	  bufferlist softdata;
 	  lock->encode_locked_state(softdata);
@@ -3673,11 +3674,13 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
   assert(lock->is_stable());
 
   if (lock->get_state() == LOCK_LOCK) {
+    in->start_scatter(lock);
     if (in->is_replicated()) {
       // data
+
       bufferlist softdata;
       lock->encode_locked_state(softdata);
-      
+
       // bcast to replicas
       send_lock_message(lock, LOCK_AC_MIX, softdata);
     }
@@ -3731,6 +3734,7 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
     if (gather)
       lock->get_parent()->auth_pin(lock);
     else {
+      in->start_scatter(lock);
       if (lock->is_stale())
         lock->set_state(LOCK_MIX_STALE);
       else
