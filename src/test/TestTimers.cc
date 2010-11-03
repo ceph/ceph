@@ -46,10 +46,10 @@ protected:
   int num;
 };
 
-class CancellationTestContext : public TestContext
+class StrictOrderTestContext : public TestContext
 {
 public:
-  CancellationTestContext (int num_)
+  StrictOrderTestContext (int num_)
     : TestContext(num_)
   {
   }
@@ -57,12 +57,12 @@ public:
   virtual void finish(int r)
   {
     array_lock.Lock();
-    cout << "CancellationTestContext " << num << std::endl;
+    cout << "StrictOrderTestContext " << num << std::endl;
     array[num] = num;
     array_lock.Unlock();
   }
 
-  virtual ~CancellationTestContext()
+  virtual ~StrictOrderTestContext()
   {
   }
 };
@@ -92,7 +92,7 @@ static int basic_timer_test(T &timer, Mutex *lock)
   for (int i = 0; i < MAX_TEST_CONTEXTS; ++i) {
     if (lock)
       lock->Lock();
-    utime_t inc(2 * i, 0); 
+    utime_t inc(2 * i, 0);
     utime_t t = g_clock.now() + inc;
     timer.add_event_at(t, test_contexts[i]);
     if (lock)
@@ -113,6 +113,53 @@ static int basic_timer_test(T &timer, Mutex *lock)
       cout << "error: expected array[" << i << "] = " << i
 	   << "; got " << array[i] << " instead." << std::endl;
     }
+  }
+
+  return ret;
+}
+
+static int test_out_of_order_insertion(SafeTimer &timer, Mutex *lock)
+{
+  int ret = 0;
+  memset(&array, 0, sizeof(array));
+  array_idx = 0;
+  memset(&test_contexts, 0, sizeof(test_contexts));
+
+  cout << __PRETTY_FUNCTION__ << std::endl;
+
+  test_contexts[0] = new StrictOrderTestContext(0);
+  test_contexts[1] = new StrictOrderTestContext(1);
+
+  {
+    utime_t inc(100, 0);
+    utime_t t = g_clock.now() + inc;
+    lock->Lock();
+    timer.add_event_at(t, test_contexts[0]);
+    lock->Unlock();
+  }
+
+  {
+    utime_t inc(2, 0);
+    utime_t t = g_clock.now() + inc;
+    lock->Lock();
+    timer.add_event_at(t, test_contexts[1]);
+    lock->Unlock();
+  }
+
+  int secs = 0;
+  for (; secs < 100 ; ++secs) {
+    sleep(1);
+    array_lock.Lock();
+    int a = array[1];
+    array_lock.Unlock();
+    if (a == 1)
+      break;
+  }
+
+  if (secs == 100) {
+    ret = 1;
+    cout << "error: expected array[" << 1 << "] = " << 1
+	 << "; got " << array[1] << " instead." << std::endl;
   }
 
   return ret;
@@ -179,7 +226,7 @@ static int safe_timer_cancellation_test(SafeTimer &safe_timer, Mutex& safe_timer
   memset(&test_contexts, 0, sizeof(test_contexts));
 
   for (int i = 0; i < MAX_TEST_CONTEXTS; ++i) {
-    test_contexts[i] = new CancellationTestContext(i);
+    test_contexts[i] = new StrictOrderTestContext(i);
   }
 
   safe_timer_lock.Lock();
@@ -229,6 +276,10 @@ static int test_safe_timers(void)
     goto done;
 
   ret = safe_timer_cancellation_test(safe_timer, safe_timer_lock);
+  if (ret)
+    goto done;
+
+  ret = test_out_of_order_insertion(safe_timer, &safe_timer_lock);
   if (ret)
     goto done;
 
