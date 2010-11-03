@@ -956,7 +956,7 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
     if (in->is_auth()) {
       if (want_scatter) {
 	if (lock->get_state() == LOCK_MIX_STALE)
-	  simple_lock(lock);
+	  simple_lock(lock); // FIXME: tempsync?
 	else 
 	  scatter_mix((ScatterLock*)lock);
       } else {
@@ -972,9 +972,15 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
       // replica.
       // auth should be auth_pinned (see acquire_locks wrlock weird mustpin case).
       int auth = lock->get_parent()->authority().first;
-      dout(10) << "requesting scatter from auth on " 
-	       << *lock << " on " << *lock->get_parent() << dendl;
-      mds->send_message_mds(new MLock(lock, LOCK_AC_REQSCATTER, mds->get_nodeid()), auth);
+      if (lock->get_state() == LOCK_MIX_STALE) {
+	dout(10) << "requesting unscatter from auth on " 
+		 << *lock << " on " << *lock->get_parent() << dendl;
+	mds->send_message_mds(new MLock(lock, LOCK_AC_REQUNSCATTER, mds->get_nodeid()), auth);
+      } else {
+	dout(10) << "requesting scatter from auth on " 
+		 << *lock << " on " << *lock->get_parent() << dendl;
+	mds->send_message_mds(new MLock(lock, LOCK_AC_REQSCATTER, mds->get_nodeid()), auth);
+      }
       break;
     }
   }
@@ -4049,6 +4055,25 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
 	scatter_mix(lock);
     } else {
       dout(7) << "handle_file_lock ignoring scatter request on " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+      lock->set_scatter_wanted();
+    }
+    break;
+
+  case LOCK_AC_REQUNSCATTER:
+    if (lock->is_stable()) {
+      /* NOTE: we can do this _even_ if !can_auth_pin (i.e. freezing)
+       *  because the replica should be holding an auth_pin if they're
+       *  doing this (and thus, we are freezing, not frozen, and indefinite
+       *  starvation isn't an issue).
+       */
+      dout(7) << "handle_file_lock got unscatter request on " << *lock
+	      << " on " << *lock->get_parent() << dendl;
+      if (lock->get_state() == LOCK_MIX ||
+	  lock->get_state() == LOCK_MIX_STALE)  // i.e., the reqscatter didn't race with an actual mix/scatter
+	simple_lock(lock);  // FIXME tempsync?
+    } else {
+      dout(7) << "handle_file_lock ignoring unscatter request on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
       lock->set_scatter_wanted();
     }
