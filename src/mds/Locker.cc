@@ -780,10 +780,11 @@ bool Locker::_rdlock_kick(SimpleLock *lock)
   if (lock->is_stable()) {
     if (lock->get_parent()->is_auth()) {
       if (lock->get_sm() == &sm_scatterlock) {
-	if (lock->get_parent()->is_replicated())
-	  scatter_tempsync((ScatterLock*)lock);
-	else
-	  simple_sync(lock);
+	// not until tempsync is fully implemented
+	//if (lock->get_parent()->is_replicated())
+	//scatter_tempsync((ScatterLock*)lock);
+	//else
+	simple_sync(lock);
       } else 
 	simple_sync(lock);
       return true;
@@ -3501,6 +3502,8 @@ void Locker::scatter_tempsync(ScatterLock *lock, bool *need_issue)
 	   << " on " << *lock->get_parent() << dendl;
   assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
+
+  assert(0 == "not fully implemented, at least not for filelock");
 
   CInode *in = (CInode *)lock->get_parent();
 
