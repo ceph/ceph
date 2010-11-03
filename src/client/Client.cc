@@ -1747,7 +1747,7 @@ int Client::get_caps(Inode *in, int need, int want, int *got, loff_t endoff)
     }
     
     if (endoff >= 0 && endoff > (loff_t)in->max_size) {
-      dout(10) << "waiting on max_size" << dendl;
+      dout(10) << "waiting on max_size, endoff " << endoff << " max_size " << in->max_size << dendl;
     } else if (!in->cap_snaps.empty() && in->cap_snaps.rbegin()->second.writing) {
       dout(10) << "waiting on cap_snap write to complete" << dendl;
     } else {
