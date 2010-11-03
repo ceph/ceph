@@ -1164,17 +1164,6 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
   }
 }
 
-struct C_Inode_FragUpdate : public Context {
-  CInode *in;
-  CDir *dir;
-  Mutation *mut;
-
-  C_Inode_FragUpdate(CInode *i, CDir *d, Mutation *m) : in(i), dir(d), mut(m) {}
-  void finish(int r) {
-    in->_finish_frag_update(dir, mut);
-  }    
-};
-
 
 /* for more info on scatterlocks, see comments by Locker::scatter_writebehind */
 
@@ -1299,40 +1288,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	    dout(10) << fg << " first " << dir->first << " -> " << fgfirst
 		     << " on " << *dir << dendl;
 	    dir->first = fgfirst;
-
-	    if (dir->is_frozen()) {
-	      dout(10) << fg << " frozen, marking " << filelock << " stale " << *dir << dendl;
-	      filelock.set_stale();
-	    } else {
-	      filelock.clear_stale();
-	      fnode_t *pf = dir->get_projected_fnode();
-
-	      if (pf->accounted_fragstat.version != fragstat.version) {
-	        dout(10) << fg << " journaling accounted_fragstat update v" << fragstat.version << dendl;
-
-	        MDLog *mdlog = mdcache->mds->mdlog;
-	        Mutation *mut = new Mutation;
-	        mut->ls = mdlog->get_current_segment();
-	        EUpdate *le = new EUpdate(mdlog, "lock ifile accounted_fragstat update");
-	        mdlog->start_entry(le);
-
-	        pf = dir->project_fnode();
-	        pf->version = dir->pre_dirty();
-	        pf->accounted_fragstat = fragstat;
-	        pf->fragstat.version = fragstat.version;
-	        mut->add_projected_fnode(dir);
-
-	        le->metablob.add_dir_context(dir);
-	        le->metablob.add_dir(dir, true);
-
-	        assert(!dir->is_frozen());
-	        mut->auth_pin(dir);
-
-	        mdlog->submit_entry(le, new C_Inode_FragUpdate(this, dir, mut));
-	      } else {
-	        dout(10) << fg << " accounted_fragstat unchanged at v" << fragstat.version << dendl;
-	      }
-	    }
+	    fnode_t *pf = dir->get_projected_fnode();
+	    finish_scatter_update(&filelock, dir, dirstat.version, pf->accounted_fragstat.version);
 	  }
 	}
       }
@@ -1380,43 +1337,11 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	  }
 	} else {
 	  if (dir && dir->is_auth()) {
-	    if (dir->is_frozen()) {
-	      dout(10) << fg << " frozen, marking " << nestlock << " stale " << *dir << dendl;
-	      nestlock.set_stale();
-	    } else {
-	      nestlock.clear_stale();
-	      dout(10) << fg << " first " << dir->first << " -> " << fgfirst
-	          << " on " << *dir << dendl;
-	      dir->first = fgfirst;
-
-	      fnode_t *pf = dir->get_projected_fnode();
-
-	      if (pf->accounted_rstat.version != rstat.version) {
-	        dout(10) << fg << " journaling accounted_rstat update v" << rstat.version << dendl;
-
-	        MDLog *mdlog = mdcache->mds->mdlog;
-	        Mutation *mut = new Mutation;
-	        mut->ls = mdlog->get_current_segment();
-	        EUpdate *le = new EUpdate(mdlog, "lock inest accounted_rstat update");
-	        mdlog->start_entry(le);
-
-	        pf = dir->project_fnode();
-	        pf->version = dir->pre_dirty();
-	        pf->accounted_rstat = rstat;
-	        pf->rstat.version = rstat.version;
-	        mut->add_projected_fnode(dir);
-
-	        le->metablob.add_dir_context(dir);
-	        le->metablob.add_dir(dir, true);
-
-	        assert(!dir->is_frozen());
-	        mut->auth_pin(dir);
-
-	        mdlog->submit_entry(le, new C_Inode_FragUpdate(this, dir, mut));
-	      } else {
-	        dout(10) << fg << " accounted_rstat unchanged at v" << rstat.version << dendl;
-	      }
-	    }
+	    dout(10) << fg << " first " << dir->first << " -> " << fgfirst
+		     << " on " << *dir << dendl;
+	    dir->first = fgfirst;
+	    fnode_t *pf = dir->get_projected_fnode();
+	    finish_scatter_update(&nestlock, dir, rstat.version, pf->accounted_rstat.version);
 	  }
 	}
       }
@@ -1459,13 +1384,6 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
   }
 }
 
-void CInode::_finish_frag_update(CDir *dir, Mutation *mut)
-{
-  dout(10) << "_finish_frag_update on " << *dir << dendl;
-  mut->apply();
-  mut->cleanup();
-  delete mut;
-}
 
 
 void CInode::clear_dirty_scattered(int type)
@@ -1529,6 +1447,83 @@ void CInode::start_scatter(ScatterLock *lock)
     }
   }
 }
+
+struct C_Inode_FragUpdate : public Context {
+  CInode *in;
+  CDir *dir;
+  Mutation *mut;
+
+  C_Inode_FragUpdate(CInode *i, CDir *d, Mutation *m) : in(i), dir(d), mut(m) {}
+  void finish(int r) {
+    in->_finish_frag_update(dir, mut);
+  }    
+};
+
+void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
+				   version_t inode_version, version_t dir_accounted_version)
+{
+  frag_t fg = dir->get_frag();
+  assert(dir->is_auth());
+
+  if (dir->is_frozen()) {
+    dout(10) << "finish_scatter_update " << fg << " frozen, marking " << *lock << " stale " << *dir << dendl;
+    lock->set_stale();
+  } else {
+    lock->clear_stale();
+
+    if (dir_accounted_version != inode_version) {
+      dout(10) << "finish_scatter_update " << fg << " journaling accounted scatterstat update v" << inode_version << dendl;
+
+      MDLog *mdlog = mdcache->mds->mdlog;
+      Mutation *mut = new Mutation;
+      mut->ls = mdlog->get_current_segment();
+
+      inode_t *pi = get_projected_inode();
+      fnode_t *pf = dir->project_fnode();
+      pf->version = dir->pre_dirty();
+
+      const char *ename = 0;
+      switch (lock->get_type()) {
+      case CEPH_LOCK_IFILE:
+	pf->fragstat.version = pi->dirstat.version;
+	pf->accounted_fragstat = pf->fragstat;
+	ename = "lock ifile accounted scatter stat update";
+	break;
+      case CEPH_LOCK_INEST:
+	pf->rstat.version = pi->rstat.version;
+	pf->accounted_rstat = pf->rstat;
+	ename = "lock inest accounted scatter stat update";
+	break;
+      default:
+	assert(0);
+      }
+	
+      mut->add_projected_fnode(dir);
+
+      EUpdate *le = new EUpdate(mdlog, ename);
+      mdlog->start_entry(le);
+      le->metablob.add_dir_context(dir);
+      le->metablob.add_dir(dir, true);
+      
+      assert(!dir->is_frozen());
+      mut->auth_pin(dir);
+      
+      mdlog->submit_entry(le, new C_Inode_FragUpdate(this, dir, mut));
+    } else {
+      dout(10) << "finish_scatter_update " << fg << " accounted " << *lock
+	       << " scatter stat unchanged at v" << dir_accounted_version << dendl;
+    }
+  }
+}
+
+void CInode::_finish_frag_update(CDir *dir, Mutation *mut)
+{
+  dout(10) << "_finish_frag_update on " << *dir << dendl;
+  mut->apply();
+  mut->cleanup();
+  delete mut;
+}
+
 
 /*
  * when we gather a lock, we need to assimilate dirfrag changes into the inode
