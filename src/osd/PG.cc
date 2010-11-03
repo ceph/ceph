@@ -3320,12 +3320,13 @@ ostream& operator<<(ostream& out, const PG& pg)
   out << " " << pg_state_string(pg.get_state());
 
   //out << " (" << pg.log.tail << "," << pg.log.head << "]";
-  if (pg.missing.num_missing())
+  if (pg.missing.num_missing()) {
     out << " m=" << pg.missing.num_missing();
-  if (pg.is_primary()) {
-    int lost = pg.missing.num_missing() - pg.missing_loc.size();
-    if (lost)
-      out << " l=" << lost;
+    if (pg.is_primary()) {
+      int unfound = pg.missing.num_missing() - pg.missing_loc.size();
+      if (unfound)
+	out << " u=" << unfound;
+    }
   }
   if (pg.snap_trimq.size())
     out << " snaptrimq=" << pg.snap_trimq;
