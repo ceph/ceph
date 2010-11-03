@@ -11,27 +11,43 @@ using std::cerr;
 using std::string;
 using std::vector;
 
-// Test string serialization
-static int test_string_sz(const char *str)
+typedef std::multimap < int, std::string > multimap_t;
+typedef multimap_t::value_type val_ty;
+
+static std::ostream& operator<<(std::ostream& oss, const multimap_t &multimap)
 {
-  bufferlist bl(100000);
+  for (multimap_t::const_iterator m = multimap.begin();
+       m != multimap.end();
+       ++m)
+  {
+    oss << m->first << "->" << m->second << " ";
+  }
+  return oss;
+}
+
+template < typename T >
+static int test_encode_and_decode(const T& src)
+{
+  bufferlist bl(1000000);
 
   try {
     // source
-    string src(str);
     encode(src, bl);
 
     // dest
-    string dst;
+    T dst;
     bufferlist::iterator i(bl.begin());
     decode(dst, i);
     if (src != dst) {
       cout << "src = " << src << ", but dst = " << dst << std::endl;
       return 1;
     }
+//    else {
+//      cout << "src = " << src << ", and dst = " << dst << std::endl;
+//    }
   }
-  catch (const ceph::buffer::malformed_input &i) {
-    cout << "got exception " << i.what() << std::endl;
+  catch (const ceph::buffer::malformed_input &e) {
+    cout << "got exception " << e.what() << std::endl;
     return 1;
   }
   catch (const std::exception &e) {
@@ -43,6 +59,24 @@ static int test_string_sz(const char *str)
     return 1;
   }
   return 0;
+}
+
+static int test_string_sz(const char *str)
+{
+  string my_str(str);
+  return test_encode_and_decode < std::string >(my_str);
+}
+
+static int multimap_tests(void)
+{
+  multimap_t multimap;
+  multimap.insert( val_ty(1, "foo") );
+  multimap.insert( val_ty(2, "bar") );
+  multimap.insert( val_ty(2, "baz") );
+  multimap.insert( val_ty(3, "lucky number 3") );
+  multimap.insert( val_ty(10000, "large number") );
+
+  return test_encode_and_decode < multimap_t >(multimap);
 }
 
 int main(int argc, const char **argv)
@@ -66,6 +100,10 @@ int main(int argc, const char **argv)
     goto done;
 
   ret = test_string_sz("foo bar baz\n");
+  if (ret)
+    goto done;
+
+  ret = multimap_tests();
   if (ret)
     goto done;
 
