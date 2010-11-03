@@ -1432,17 +1432,11 @@ void CInode::start_scatter(ScatterLock *lock)
 
     switch (lock->get_type()) {
     case CEPH_LOCK_IFILE:
-      if (pf->fragstat.version < pi->dirstat.version) {
-	dout(10) << fg << " stale dirstat on " << *dir << dendl;
-	lock->set_stale();
-      }
+      finish_scatter_update(lock, dir, pi->dirstat.version, pf->accounted_fragstat.version);
       break;
 
     case CEPH_LOCK_INEST:
-      if (pf->rstat.version < pi->rstat.version) {
-	dout(10) << fg << " stale rstat on " << *dir << dendl;
-	lock->set_stale();
-      }
+      finish_scatter_update(lock, dir, pi->rstat.version, pf->accounted_rstat.version);
       break;
     }
   }
