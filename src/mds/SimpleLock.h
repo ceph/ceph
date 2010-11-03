@@ -481,7 +481,8 @@ public:
     more()->xlock_by = 0;
   }
   void put_xlock() {
-    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE || is_locallock());
+    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE || is_locallock() ||
+	   state == LOCK_LOCK /* if we are a master of a slave */);
     --more()->num_xlock;
     parent->put(MDSCacheObject::PIN_LOCK);
     if (more()->num_xlock == 0) {
