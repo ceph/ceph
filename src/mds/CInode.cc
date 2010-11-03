@@ -1680,7 +1680,7 @@ void CInode::finish_scatter_gather_update_accounted(int type, Mutation *mut, EMe
        p != dirfrags.end();
        p++) {
     CDir *dir = p->second;
-    if (!dir->is_auth())
+    if (!dir->is_auth() || dir->is_frozen())
       continue;
     
     if (type == CEPH_LOCK_IDFT)
