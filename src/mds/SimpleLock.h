@@ -114,6 +114,7 @@ public:
     case LOCK_MIX_LOCK: return "mix->lock";
     case LOCK_MIX: return "mix";
     case LOCK_MIX_TSYN: return "mix->tsyn";
+    case LOCK_MIX_STALE: return "mix_stale";
       
     case LOCK_TSYN_MIX: return "tsyn->mix";
     case LOCK_TSYN_LOCK: return "tsyn->lock";
@@ -380,6 +381,7 @@ public:
 
 
   virtual bool is_dirty() const { return false; }
+  virtual bool is_stale() const { return false; }
 
 
   // can_*
@@ -479,7 +481,8 @@ public:
     more()->xlock_by = 0;
   }
   void put_xlock() {
-    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE || is_locallock());
+    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE || is_locallock() ||
+	   state == LOCK_LOCK /* if we are a master of a slave */);
     --more()->num_xlock;
     parent->put(MDSCacheObject::PIN_LOCK);
     if (more()->num_xlock == 0) {

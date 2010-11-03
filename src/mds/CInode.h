@@ -473,7 +473,6 @@ private:
     nestlock(this, &nestlock_type),
     flocklock(this, &flocklock_type),
     policylock(this, &policylock_type),
-    scatter_pins(0),
     loner_cap(-1), want_loner_cap(-1)
   {
     g_num_ino++;
@@ -686,8 +685,6 @@ public:
   SimpleLock flocklock;
   SimpleLock policylock;
 
-  int scatter_pins;
-
   SimpleLock* get_lock(int type) {
     switch (type) {
     case CEPH_LOCK_IFILE: return &filelock;
@@ -710,24 +707,12 @@ public:
   void _finish_frag_update(CDir *dir, Mutation *mut);
 
   void clear_dirty_scattered(int type);
+
+  void start_scatter(ScatterLock *lock);
+  void finish_scatter_update(ScatterLock *lock, CDir *dir,
+			     version_t inode_version, version_t dir_accounted_version);
   void finish_scatter_gather_update(int type);
   void finish_scatter_gather_update_accounted(int type, Mutation *mut, EMetaBlob *metablob);
-
-  // scatter pins prevent either a scatter or unscatter on _any_
-  // scatterlock for this inode.
-  bool is_scatter_pinned() {
-    return scatter_pins > 0;
-  }
-  bool can_scatter_pin() {
-    return 
-      dirfragtreelock.can_scatter_pin(get_loner()) &&
-      filelock.can_scatter_pin(get_loner()) &&
-      nestlock.can_scatter_pin(get_loner());
-  }
-  void get_scatter_pin() {
-    scatter_pins++;
-  }
-  void put_scatter_pin(list<Context*>& ls);
 
   // -- snap --
   void open_snaprealm(bool no_split=false);
@@ -820,8 +805,12 @@ public:
     if (is_auth()) {
       if (issued & CEPH_CAP_GEXCL)
 	lock->set_state(LOCK_EXCL);
-      else if (issued & CEPH_CAP_GWR)
-	lock->set_state(LOCK_MIX);
+      else if (issued & CEPH_CAP_GWR) {
+        if (lock->is_stale())
+          lock->set_state(LOCK_MIX_STALE);
+        else
+          lock->set_state(LOCK_MIX);
+      }
       else if (lock->is_dirty()) {
 	if (is_replicated())
 	  lock->set_state(LOCK_MIX);
@@ -841,7 +830,9 @@ public:
     if (is_auth() && (issued & (CEPH_CAP_ANY_EXCL|CEPH_CAP_ANY_WR)) &&
 	choose_ideal_loner() >= 0)
       try_set_loner();
+    filelock.set_stale(); // go to MIX_STALE instead of MIX -- safe but non-optimal
     choose_lock_state(&filelock, issued);
+    nestlock.set_stale(); // again, safe but non-optimal
     choose_lock_state(&nestlock, issued);
     choose_lock_state(&dirfragtreelock, issued);
     choose_lock_state(&authlock, issued);

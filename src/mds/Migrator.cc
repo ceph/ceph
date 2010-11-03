@@ -587,15 +587,6 @@ void Migrator::export_dir(CDir *dir, int dest)
     dout(7) << "export_dir couldn't pin path, failing." << dendl;
     return;
   }
-  // pin parent scatterlocks?
-  CInode *diri = dir->inode;
-  if (!diri->can_scatter_pin()) {
-    dout(7) << "export_dir couldn't pin parent inode scatterlocks, failing. " << *diri << dendl;
-
-    // XXX we should make some effort to move lock(s) to a state where we _can_ export!
-
-    return;
-  }
 
   // ok.
   assert(export_state.count(dir) == 0);
@@ -662,8 +653,7 @@ void Migrator::export_frozen(CDir *dir)
   cache->make_trace(trace, dir->inode);
 
   CInode *diri = dir->inode;
-  if (!mds->locker->dentry_can_rdlock_trace(trace) ||
-      !diri->can_scatter_pin()) {
+  if (!mds->locker->dentry_can_rdlock_trace(trace)) {
     dout(7) << "export_dir couldn't rdlock path or rd|wrlock parent inode file+nest+dftlock, failing. " 
 	    << *diri << dendl;
 
@@ -684,11 +674,6 @@ void Migrator::export_frozen(CDir *dir)
   // rdlock path
   mds->locker->dentry_anon_rdlock_trace_start(trace);
   
-  // pin scatterlocks
-  diri->get_scatter_pin();
-  dout(10) << " dir inode now scatter pinned " << *diri << dendl;
-
-
   cache->show_subtrees();
 
   // note the bounds.
@@ -1380,7 +1365,6 @@ void Migrator::export_unlock(CDir *dir)
   mds->locker->dentry_anon_rdlock_trace_finish(trace);
 
   list<Context*> ls;
-  dir->inode->put_scatter_pin(ls);
   mds->queue_waiters(ls);
 }
 
@@ -1699,9 +1683,6 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   // freeze.
   dir->_freeze_tree();
 
-  // pin parent scatterlocks (sloppily!)
-  dir->inode->get_scatter_pin();
-  
   // ok!
   dout(7) << " sending export_prep_ack on " << *dir << dendl;
   mds->send_message(new MExportDirPrepAck(dir->dirfrag()), m->get_connection());
@@ -1963,7 +1944,6 @@ void Migrator::import_reverse_unfreeze(CDir *dir)
   dout(7) << "import_reverse_unfreeze " << *dir << dendl;
   dir->unfreeze_tree();
   list<Context*> ls;
-  dir->inode->put_scatter_pin(ls);
   mds->queue_waiters(ls);
   cache->discard_delayed_expire(dir);
   import_reverse_final(dir);
@@ -2074,7 +2054,6 @@ void Migrator::import_finish(CDir *dir)
   //audit();  // this fails, bc we munge up the subtree map during handle_import_map (resolve phase)
 
   list<Context*> ls;
-  dir->inode->put_scatter_pin(ls);
   mds->queue_waiters(ls);
 
   // re-eval imported caps
