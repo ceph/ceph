@@ -188,6 +188,10 @@ testtimers_SOURCES = test/TestTimers.cc
 testtimers_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto
 bin_PROGRAMS += testtimers
 
+testencoding_SOURCES = test/TestEncoding.cc
+testencoding_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto
+bin_PROGRAMS += testencoding
+
 endif
 
 # librados
