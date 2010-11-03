@@ -1176,6 +1176,8 @@ struct C_Inode_FragUpdate : public Context {
 };
 
 
+/* for more info on scatterlocks, see comments by Locker::scatter_writebehind */
+
 void CInode::decode_lock_state(int type, bufferlist& bl)
 {
   bufferlist::iterator p = bl.begin();
@@ -1492,6 +1494,7 @@ void CInode::clear_dirty_scattered(int type)
  * when we initially scatter a lock, we need to check if any of the dirfrags
  * have out of date accounted_rstat/fragstat.  if so, mark the lock stale.
  */
+/* for more info on scatterlocks, see comments by Locker::scatter_writebehind */
 void CInode::start_scatter(ScatterLock *lock)
 {
   dout(10) << "start_scatter " << *lock << " on " << *this << dendl;
@@ -1533,6 +1536,7 @@ void CInode::start_scatter(ScatterLock *lock)
  * because the frag is auth and frozen, or that the replica couldn't for the same
  * reason.  hopefully it will get updated the next time the lock cycles.
  */
+/* for more info on scatterlocks, see comments by Locker::scatter_writebehind */
 void CInode::finish_scatter_gather_update(int type)
 {
   dout(10) << "finish_scatter_gather_update " << type << " on " << *this << dendl;

@@ -3223,6 +3223,44 @@ void Locker::dentry_anon_rdlock_trace_finish(vector<CDentry*>& trace)
 // ==========================================================================
 // scatter lock
 
+/*
+
+Some notes on scatterlocks.
+
+ - The scatter/gather is driven by the inode lock.  The scatter always
+   brings in the latest metadata from the fragments.
+
+ - When in a scattered/MIX state, fragments are only allowed to
+   update/be written to if the accounted stat matches the inode's
+   current version.
+
+ - That means, on gather, we _only_ assimilate diffs for frag metadata
+   that match the current version, because those are the only ones
+   written during this scatter/gather cycle.  (Others didn't permit
+   it.)  We increment the version and journal this to disk.
+
+ - When possible, we also simultaneously update our local frag
+   accounted stats to match.
+
+ - On scatter, the new inode info is broadcast to frags, both local
+   and remote.  If possible (auth and !frozen), the dirfrag auth
+   should update the accounted state (if it isn't already up to date).
+   Note that this may occur on both the local inode auth node and
+   inode replicas, so there are two potential paths. If it is NOT
+   possible, they need to mark_stale to prevent any possible writes.
+
+ - A scatter can be to MIX (potentially writeable) or to SYNC (read
+   only).  Both are opportunities to update the frag accounted stats,
+   even though only the MIX case is affected by a stale dirfrag.
+
+ - Because many scatter/gather cycles can potentially go by without a
+   frag being able to update its accounted stats (due to being frozen
+   by exports/refragments in progress), the frag may have (even very)
+   old stat versions.  That's fine.  It is always stale (MIX_STALE
+   instead of MIX) as a result, and then ignored by the gather.
+
+*/
+
 void Locker::scatter_writebehind(ScatterLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
