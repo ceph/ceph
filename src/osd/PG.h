@@ -919,7 +919,6 @@ public:
   bool       is_crashed() const { return state_test(PG_STATE_CRASHED); }
   bool       is_down() const { return state_test(PG_STATE_DOWN); }
   bool       is_replay() const { return state_test(PG_STATE_REPLAY); }
-  //bool       is_complete()    { return state_test(PG_STATE_COMPLETE); }
   bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
   bool       is_degraded() const { return state_test(PG_STATE_DEGRADED); }
   bool       is_stray() const { return state_test(PG_STATE_STRAY); }
@@ -927,8 +926,6 @@ public:
   bool       is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }
 
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
-
-  //bool is_complete_pg() { return acting.size() == info.pgid.size(); }
 
   void add_log_entry(Log::Entry& e, bufferlist& log_bl);
 
