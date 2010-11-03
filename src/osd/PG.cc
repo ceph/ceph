@@ -512,28 +512,32 @@ void PG::merge_log(ObjectStore::Transaction& t,
 /*
  * process replica's missing map to determine if they have
  * any objects that i need
+ *
+ * TODO: if the missing set becomes very large, this could get expensive.
+ * Instead, we probably want to just iterate over our unfound set.
  */
 void PG::search_for_missing(Log &olog, Missing &omissing, int fromosd)
 {
   // found items?
   for (map<sobject_t,Missing::item>::iterator p = missing.missing.begin();
        p != missing.missing.end();
-       p++) {
+       ++p) {
     eversion_t need = p->second.need;
     eversion_t have = p->second.have;
     if (omissing.is_missing(p->first)) {
       dout(10) << "search_for_missing " << p->first << " " << need
 	       << " also missing on osd" << fromosd << dendl;
+      continue;
     } 
-    else if (need <= olog.head) {
-      dout(10) << "search_for_missing " << p->first << " " << need
-               << " is on osd" << fromosd << dendl;
-      missing_loc[p->first].insert(fromosd);
-    } else {
+    if (need > olog.head) {
       dout(10) << "search_for_missing " << p->first << " " << need
                << " > olog.head " << olog.head << ", also missing on osd" << fromosd
                << dendl;
+      continue;
     }
+    dout(10) << "search_for_missing " << p->first << " " << need
+	     << " is on osd" << fromosd << dendl;
+    missing_loc[p->first].insert(fromosd);
   }
 
   dout(20) << "search_for_missing missing " << missing.missing << dendl;
