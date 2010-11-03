@@ -1510,6 +1510,9 @@ void CInode::start_scatter(ScatterLock *lock)
     fnode_t *pf = dir->get_projected_fnode();
     dout(20) << fg << " " << *dir << dendl;
 
+    if (!dir->is_auth())
+      continue;
+
     switch (lock->get_type()) {
     case CEPH_LOCK_IFILE:
       if (pf->fragstat.version < pi->dirstat.version) {
