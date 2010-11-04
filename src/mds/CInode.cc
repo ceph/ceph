@@ -1574,7 +1574,7 @@ void CInode::finish_scatter_gather_update(int type)
 	      pi->dirstat = pf->fragstat;
 	      pi->dirstat.version--;  // (about to re-increment it below!)
 
-	      assert(!!"unmatched fragstat size" == g_conf.mds_verify_scatter);
+	      assert(!"unmatched fragstat size" == g_conf.mds_verify_scatter);
 	    }
 	  }
 	}
@@ -1642,7 +1642,7 @@ void CInode::finish_scatter_gather_update(int type)
 	      pi->rstat = pf->rstat;
 	      pi->rstat.version--;  // (about to re-increment it below!)
 
-	      assert(!!"unmatched rstat rbytes" == g_conf.mds_verify_scatter);
+	      assert(!"unmatched rstat rbytes" == g_conf.mds_verify_scatter);
 	    }
 	  }
 	}
