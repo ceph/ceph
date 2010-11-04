@@ -78,8 +78,17 @@ bool PGMonitor::update_from_paxos()
     version_t v = paxos->get_latest(latest);
     if (v) {
       dout(7) << "update_from_paxos startup: got latest latest full pgmap v" << v << dendl;
-      bufferlist::iterator p = latest.begin();
-      pg_map.decode(p);
+      try {
+	PGMap tmp_pg_map;
+	bufferlist::iterator p = latest.begin();
+	tmp_pg_map.decode(p);
+	pg_map = tmp_pg_map;
+      }
+      catch (const std::exception &e) {
+	dout(0) << "PGMonitor::update_from_paxos: error parsing update: "
+		<< e.what() << dendl;
+	return false;
+      }
     }
   } 
 
@@ -91,8 +100,15 @@ bool PGMonitor::update_from_paxos()
 
     dout(7) << "update_from_paxos  applying incremental " << pg_map.version+1 << dendl;
     PGMap::Incremental inc;
-    bufferlist::iterator p = bl.begin();
-    inc.decode(p);
+    try {
+      bufferlist::iterator p = bl.begin();
+      inc.decode(p);
+    }
+    catch (const std::exception &e) {
+      dout(0) << "PGMonitor::update_from_paxos: error parsing "
+	      << "incremental update: " << e.what() << dendl;
+      return false;
+    }
     pg_map.apply_incremental(inc);
     
     dout(10) << pg_map << dendl;
