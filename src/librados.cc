@@ -1416,6 +1416,7 @@ int Rados::get_pool_stats(std::list<string>& v, std::map<string,pool_stat_t>& re
     v.num_object_clones = p->second.num_object_clones;
     v.num_object_copies = p->second.num_object_copies;
     v.num_objects_missing_on_primary = p->second.num_objects_missing_on_primary;
+    v.num_objects_unfound = p->second.num_objects_unfound;
     v.num_objects_degraded = p->second.num_objects_degraded;
     v.num_rd = p->second.num_rd;
     v.num_rd_kb = p->second.num_rd_kb;
@@ -1904,6 +1905,7 @@ extern "C" int rados_stat_pool(rados_pool_t pool, struct rados_pool_stat_t *stat
   stats->num_object_clones = r.num_object_clones;
   stats->num_object_copies = r.num_object_copies;
   stats->num_objects_missing_on_primary = r.num_objects_missing_on_primary;
+  stats->num_objects_unfound = r.num_objects_unfound;
   stats->num_objects_degraded = r.num_objects_degraded;
   stats->num_rd = r.num_rd;
   stats->num_rd_kb = r.num_rd_kb;

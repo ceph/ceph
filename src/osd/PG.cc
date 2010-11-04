@@ -1823,6 +1823,9 @@ void PG::update_stats()
 	degraded += peer_missing[acting[i]].num_missing();
       }
       pg_stats_stable.num_objects_degraded += degraded;
+
+      pg_stats_stable.num_objects_unfound =
+	missing.num_missing() - missing_loc.size();
     }
 
     dout(15) << "update_stats " << pg_stats_stable.reported << dendl;

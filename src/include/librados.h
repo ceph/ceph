@@ -31,6 +31,7 @@ struct rados_pool_stat_t {
   uint64_t num_object_clones;
   uint64_t num_object_copies;  // num_objects * num_replicas
   uint64_t num_objects_missing_on_primary;
+  uint64_t num_objects_unfound;
   uint64_t num_objects_degraded;
   uint64_t num_rd, num_rd_kb,num_wr, num_wr_kb;
 };

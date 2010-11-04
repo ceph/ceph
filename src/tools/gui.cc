@@ -1669,6 +1669,8 @@ void GuiMonitor::StatsWindowInfo::gen_pg_node_columns()
      str(boost::format("%llu") % stat.num_objects_missing_on_primary));
   insert_stats("Number of Objects Degraded",
      str(boost::format("%llu") % stat.num_objects_degraded));
+  insert_stats("Number of Objects Unfound",
+     str(boost::format("%llu") % stat.num_objects_unfound));
   insert_stats("KB", str(boost::format("%llu") % stat.num_kb));
   insert_stats("Bytes", str(boost::format("%llu") % stat.num_bytes));
   insert_stats("Log Size", str(boost::format("%llu") % stat.log_size));
