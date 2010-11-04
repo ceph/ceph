@@ -37,7 +37,7 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool i
     sprintf(val, "%i", g_conf.profiler_allocation_interval);
     setenv("HEAP_PROFILE_ALLOCATION_INTERVAL", val, g_conf.profiler_allocation_interval);
     sprintf(val, "%i", g_conf.profiler_highwater_interval);
-    setenv("HEAP_PROFILE_INUSE_INTERVAL", "", g_conf.profiler_highwater_interval);
+    setenv("HEAP_PROFILE_INUSE_INTERVAL", val, g_conf.profiler_highwater_interval);
     generic_dout(0) << "turning on heap profiler with prefix " << profile_name << dendl;
     g_conf.profiler_start(profile_name);
     delete profile_name;

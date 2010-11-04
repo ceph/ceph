@@ -754,7 +754,7 @@ void MDS::handle_command(MMonCommand *m)
     sprintf(val, "%i", g_conf.profiler_allocation_interval);
     setenv("HEAP_PROFILE_ALLOCATION_INTERVAL", val, g_conf.profiler_allocation_interval);
     sprintf(val, "%i", g_conf.profiler_highwater_interval);
-    setenv("HEAP_PROFILE_INUSE_INTERVAL", "", g_conf.profiler_highwater_interval);
+    setenv("HEAP_PROFILE_INUSE_INTERVAL", val, g_conf.profiler_highwater_interval);
     stringstream ss;
     ss << g_conf.name << " set heap variables from current config";
     logclient.log(LOG_INFO, ss);
