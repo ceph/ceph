@@ -437,6 +437,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_use_tmap, 0, OPT_BOOL, true),        // use trivialmap for dir updates
 	OPTION(mds_log, 0, OPT_BOOL, true),
 	OPTION(mds_log_unsafe, 0, OPT_BOOL, false),      // only wait for log sync, when it's mostly safe to do so
+	OPTION(mds_log_skip_corrupt_events, 0, OPT_BOOL, false),
 	OPTION(mds_log_max_events, 0, OPT_INT, -1),
 	OPTION(mds_log_max_segments, 0, OPT_INT, 30),  // segment size defined by FileLayout, above
 	OPTION(mds_log_max_expiring, 0, OPT_INT, 20),
