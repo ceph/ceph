@@ -1793,7 +1793,7 @@ void OSD::handle_command(MMonCommand *m)
     utime_t start = g_clock.now();
     for (uint64_t pos = 0; pos < count; pos += bsize) {
       char nm[30];
-      sprintf(nm, "disk_bw_test_%lld", (long long)pos);
+      snprintf(nm, sizeof(nm), "disk_bw_test_%lld", (long long)pos);
       object_t oid(nm);
       sobject_t soid(oid, 0);
       ObjectStore::Transaction *t = new ObjectStore::Transaction;

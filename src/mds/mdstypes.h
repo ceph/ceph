@@ -3,7 +3,11 @@
 #ifndef CEPH_MDSTYPES_H
 #define CEPH_MDSTYPES_H
 
+#ifndef __STDC_FORMAT_MACROS
+#define __STDC_FORMAT_MACROS
+#endif
 
+#include <inttypes.h>
 #include <math.h>
 #include <ostream>
 #include <set>
@@ -1171,10 +1175,11 @@ struct dentry_key_t {
     __u32 l = strlen(name) + 1;
     char b[20];
     if (snapid != CEPH_NOSNAP) {
-      sprintf(b, "%llx", (long long unsigned)snapid);
+      uint64_t val(snapid);
+      snprintf(b, sizeof(b), "%" PRIx64, val);
       l += strlen(b);
     } else {
-      strcpy(b, "head");
+      snprintf(b, sizeof(b), "%s", "head");
       l += 4;
     }
     ::encode(l, bl);

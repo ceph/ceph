@@ -12,6 +12,7 @@
  * 
  */
 
+#define __STDC_FORMAT_MACROS
 #include "config.h"
 
 #include "common/common_init.h"
@@ -20,12 +21,12 @@ using namespace librados;
 #include "include/byteorder.h"
 
 
-#include <iostream>
-
-#include <stdlib.h>
-#include <time.h>
-#include <sys/types.h>
 #include <errno.h>
+#include <inttypes.h>
+#include <iostream>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <time.h>
 
 #include "include/rbd_types.h"
 
@@ -121,7 +122,8 @@ static void print_header(const char *imgname, rbd_obj_header_ondisk *header)
 static string get_block_oid(rbd_obj_header_ondisk *header, uint64_t num)
 {
   char o[RBD_MAX_SEG_NAME_SIZE];
-  sprintf(o, "%s.%012llx", header->block_name, (unsigned long long)num);
+  snprintf(o, RBD_MAX_SEG_NAME_SIZE,
+	   "%s.%012" PRIx64, header->block_name, num);
   return o;
 }
 

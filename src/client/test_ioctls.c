@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <limits.h>
 
 #include <sys/ioctl.h>
 #include <netinet/in.h>
@@ -19,7 +20,7 @@ int main(int argc, char **argv)
 	int fd, err;
 	struct ceph_ioctl_layout l;
 	struct ceph_ioctl_dataloc dl;
-        char *new_file_name = (char *)malloc(sizeof(char)*4096);
+        char new_file_name[PATH_MAX];
 
 	if (argc < 3) {
 		printf("usage: test_ioctls <filename> <offset>\n");
@@ -102,7 +103,8 @@ int main(int argc, char **argv)
         }
         printf("set layout, creating file\n");
 
-        sprintf(new_file_name, "%s/testfile", argv[3]);
+        snprintf(new_file_name, sizeof(new_file_name),
+		 "%s/testfile", argv[3]);
         fd = open(new_file_name, O_CREAT | O_RDWR, 0644);
         if (fd < 0) {
                 perror("couldn't open file");

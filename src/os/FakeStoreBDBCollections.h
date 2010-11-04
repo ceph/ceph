@@ -36,13 +36,11 @@ class FakeStoreBDBCollections {
   
   // dirs
   void get_dir(string& dir) {
-    char s[30];
-    sprintf(s, "%d", whoami);
-    dir = basedir + "/" + s;
+    dir = basedir + "/" + string(whoami);
   }
   void get_collfn(coll_t c, string &fn) {
     char s[100];
-    sprintf(s, "%d/%02llx/%016llx.co", whoami, BDBHASH_FUNC(c), c);
+    snprintf(s, sizeof(s), "%d/%02llx/%016llx.co", whoami, BDBHASH_FUNC(c), c);
     fn = basedir + "/" + s;
   }
 

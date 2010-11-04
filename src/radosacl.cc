@@ -145,7 +145,7 @@ int main(int argc, const char **argv)
 
   ACLID id;
 
-  sprintf(id.id, "%.16x", 0x1234);
+  snprintf(id.id, ID_SIZE + 1, "%.16x", 0x1234);
   cout << "id=" << id.id << std::endl;
 
   r = rados.exec(pool, oid, "acl", "get", bl, bl2);

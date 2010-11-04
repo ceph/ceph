@@ -24,7 +24,7 @@ class MGenericMessage : public Message {
 
  public:
   MGenericMessage(int t) : Message(t) { 
-    sprintf(tname, "generic%d", get_type());
+    snprintf(tname, sizeof(tname), "generic%d", get_type());
   }
 
   //void set_pcid(long pcid) { this->pcid = pcid; }

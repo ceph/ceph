@@ -52,7 +52,7 @@ void generate_object_name(char *s, int objnum)
   char hostname[30];
   gethostname(hostname, sizeof(hostname)-1);
   hostname[sizeof(hostname)-1] = 0;
-  sprintf(s, "%s_%d_object%d", hostname, getpid(), objnum);
+  snprintf(s, sizeof(hostname), "%s_%d_object%d", hostname, getpid(), objnum);
 }
 
 int write_bench(Rados& rados, rados_pool_t pool,
@@ -254,7 +254,7 @@ int write_bench(Rados& rados, rados_pool_t pool,
   bandwidth = ((double)data->finished)*((double)data->object_size)/(double)timePassed;
   bandwidth = bandwidth/(1024*1024); // we want it in MB/sec
   char bw[20];
-  sprintf(bw, "%.3lf \n", bandwidth);
+  snprintf(bw, sizeof(bw), "%.3lf \n", bandwidth);
   
   cout << "Total time run:        " << timePassed << std::endl
        << "Total writes made:     " << data->finished << std::endl
@@ -427,7 +427,7 @@ int seq_read_bench(Rados& rados, rados_pool_t pool, int seconds_to_run,
   bandwidth = ((double)data->finished)*((double)data->object_size)/(double)runtime;
   bandwidth = bandwidth/(1024*1024); // we want it in MB/sec
   char bw[20];
-  sprintf(bw, "%.3lf \n", bandwidth);
+  snprintf(bw, sizeof(bw), "%.3lf \n", bandwidth);
 
   cout << "Total time run:        " << runtime << std::endl
        << "Total reads made:     " << data->finished << std::endl

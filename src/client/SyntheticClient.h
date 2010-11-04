@@ -155,7 +155,7 @@ class SyntheticClient {
   filepath sub;
   char sub_s[50];
   const char *make_sub(const char *base) {
-    sprintf(sub_s, "%s.%d", base, rand() % 100);
+    snprintf(sub_s, sizeof(sub_s), "%s.%d", base, rand() % 100);
     string f = sub_s;
     sub = cwd;
     sub.push_dentry(f);

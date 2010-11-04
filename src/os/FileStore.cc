@@ -25,6 +25,8 @@
 
 #include "common/Timer.h"
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -913,7 +915,7 @@ int FileStore::write_op_seq(int fd, uint64_t seq)
 {
   char s[30];
   int ret;
-  sprintf(s, "%lld\n", (long long unsigned)seq);
+  snprintf(s, sizeof(s), "%" PRId64 "\n", seq);
   ret = ::pwrite(fd, s, strlen(s), 0);
   return ret;
 }
