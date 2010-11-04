@@ -67,6 +67,8 @@ void MDSMap::print(ostream& out)
   out << "root " << root << std::endl;
   out << "session_timeout " << session_timeout << "\n"
       << "session_autoclose " << session_autoclose << "\n";
+  out << "last_failure " << last_failure << "\n"
+      << "last_failure_osd_epoch" << last_failure_osd_epoch << "\n";
 
   out << "\ncompat\t" << compat << std::endl;
   out << "\nmax_mds\t" << max_mds << std::endl;

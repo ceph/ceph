@@ -143,7 +143,9 @@ protected:
   // base map
   epoch_t epoch;
   epoch_t client_epoch;  // incremented only when change is significant to client.
-  epoch_t last_failure;  // epoch of last failure
+  epoch_t last_failure;  // mds epoch of last failure
+  epoch_t last_failure_osd_epoch; // osd epoch of last failure; any mds entering replay needs
+                                  // at least this osdmap to ensure the blacklist propagates.
   utime_t created, modified;
 
   int32_t tableserver;   // which MDS has anchortable, snaptable
@@ -180,7 +182,7 @@ public:
   friend class MDSMonitor;
 
 public:
-  MDSMap() : epoch(0), client_epoch(0), last_failure(0), tableserver(0), root(0),
+  MDSMap() : epoch(0), client_epoch(0), last_failure(0), last_failure_osd_epoch(0), tableserver(0), root(0),
 	     cas_pg_pool(0), metadata_pg_pool(0) {
     // hack.. this doesn't really belong here
     session_timeout = (int)g_conf.mds_session_timeout;
@@ -202,6 +204,7 @@ public:
   void set_modified(utime_t mt) { modified = mt; }
 
   epoch_t get_last_failure() const { return last_failure; }
+  epoch_t get_last_failure_osd_epoch() const { return last_failure_osd_epoch; }
 
   unsigned get_max_mds() const { return max_mds; }
   void set_max_mds(int m) { max_mds = m; }
@@ -421,7 +424,7 @@ public:
     ::encode(cas_pg_pool, bl);
 
     // kclient ignores everything from here
-    __u16 ev = 3;
+    __u16 ev = 4;
     ::encode(ev, bl);
     ::encode(compat, bl);
     ::encode(metadata_pg_pool, bl);
@@ -433,6 +436,7 @@ public:
     ::encode(up, bl);
     ::encode(failed, bl);
     ::encode(stopped, bl);
+    ::encode(last_failure_osd_epoch, bl);
   }
   void decode(bufferlist::iterator& p) {
     __u16 v;
@@ -466,6 +470,8 @@ public:
     ::decode(up, p);
     ::decode(failed, p);
     ::decode(stopped, p);
+    if (ev >= 4)
+      ::decode(last_failure_osd_epoch, p);
   }
   void decode(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
