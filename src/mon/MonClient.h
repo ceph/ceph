@@ -27,6 +27,8 @@
 
 #include "messages/MMonSubscribe.h"
 
+#include <memory>
+
 class MonMap;
 class MMonMap;
 class MMonSubscribeAck;
@@ -56,7 +58,7 @@ private:
   entity_addr_t my_addr;
 
   Mutex monc_lock;
-  SafeTimer timer;
+  std::auto_ptr < SafeTimer > timer;
 
   set<__u32> auth_supported;
 
@@ -163,7 +165,6 @@ public:
     state(MC_STATE_NONE),
     messenger(NULL),
     monc_lock("MonClient::monc_lock"),
-    timer(monc_lock),
     hunting(true),
     want_monmap(true),
     want_keys(0), global_id(0),
@@ -172,7 +173,6 @@ public:
     rotating_secrets(rkeys) { }
 
   ~MonClient() {
-    timer.shutdown();
   }
 
   void init();
