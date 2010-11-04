@@ -25,6 +25,7 @@ using namespace std;
 
 #include "mon/MonMap.h"
 #include "mds/MDS.h"
+#include "mds/Dumper.h"
 
 #include "msg/SimpleMessenger.h"
 
@@ -50,6 +51,8 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
+  bool dump_journal = false;
+  const char *dump_file = NULL;
 
   common_set_defaults(true);
 #ifdef HAVE_LIBTCMALLOC
@@ -63,8 +66,18 @@ int main(int argc, const char **argv)
 
   // mds specific args
   for (unsigned i=0; i<args.size(); i++) {
+    if (!strcmp(args[i], "--dump-journal")) {
+      if (i + 2 < args.size()) // another argument?
+        dump_file = args[i+1];
+      else
+        dump_file = "mds.journal.dump";
+      dump_journal = true;
+      dout(0) << "dumping journal" << dendl;
+      ++i;
+    } else {
     cerr << "unrecognized arg " << args[i] << std::endl;
     usage();
+    }
   }
   if (!g_conf.id) {
     cerr << "must specify '-i name' with the cmds instance name" << std::endl;
@@ -81,58 +94,64 @@ int main(int argc, const char **argv)
 
   SimpleMessenger *messenger = new SimpleMessenger();
   messenger->bind();
-  cout << "starting mds." << g_conf.id
-       << " at " << messenger->get_ms_addr() 
-       << std::endl;
+  if (dump_journal) {
+    Dumper *journal_dumper = new Dumper(messenger, &mc);
+    journal_dumper->init();
+    journal_dumper->dump(dump_file);
+  } else {
+    cout << "starting mds." << g_conf.id
+        << " at " << messenger->get_ms_addr()
+        << std::endl;
 
-  messenger->register_entity(entity_name_t::MDS(-1));
-  assert_warn(messenger);
-  if (!messenger)
-    return 1;
+    messenger->register_entity(entity_name_t::MDS(-1));
+    assert_warn(messenger);
+    if (!messenger)
+      return 1;
 
-  uint64_t supported =
-    CEPH_FEATURE_UID |
-    CEPH_FEATURE_NOSRCADDR;
-  messenger->set_default_policy(SimpleMessenger::Policy::client(supported, 0));
-  messenger->set_policy(entity_name_t::TYPE_MON,
-			SimpleMessenger::Policy::client(supported,
-							CEPH_FEATURE_UID));
-  messenger->set_policy(entity_name_t::TYPE_MDS,
-			SimpleMessenger::Policy::lossless_peer(supported,
-							       CEPH_FEATURE_UID));
-  messenger->set_policy(entity_name_t::TYPE_CLIENT,
-			SimpleMessenger::Policy::stateful_server(supported, 0));
+    uint64_t supported =
+        CEPH_FEATURE_UID |
+        CEPH_FEATURE_NOSRCADDR;
+    messenger->set_default_policy(SimpleMessenger::Policy::client(supported, 0));
+    messenger->set_policy(entity_name_t::TYPE_MON,
+                          SimpleMessenger::Policy::client(supported,
+                                                          CEPH_FEATURE_UID));
+    messenger->set_policy(entity_name_t::TYPE_MDS,
+                          SimpleMessenger::Policy::lossless_peer(supported,
+                                                                 CEPH_FEATURE_UID));
+    messenger->set_policy(entity_name_t::TYPE_CLIENT,
+                          SimpleMessenger::Policy::stateful_server(supported, 0));
 
-  messenger->start();
-  
-  // start mds
-  MDS *mds = new MDS(g_conf.id, messenger, &mc);
+    messenger->start();
 
-  // in case we have to respawn...
-  mds->orig_argc = argc;
-  mds->orig_argv = argv;
+    // start mds
+    MDS *mds = new MDS(g_conf.id, messenger, &mc);
 
-  mds->init();
-  
-  messenger->wait();
+    // in case we have to respawn...
+    mds->orig_argc = argc;
+    mds->orig_argv = argv;
 
-  // yuck: grab the mds lock, so we can be sure that whoever in *mds 
-  // called shutdown finishes what they were doing.
-  mds->mds_lock.Lock();
-  mds->mds_lock.Unlock();
+    mds->init();
 
-  // only delete if it was a clean shutdown (to aid memory leak
-  // detection, etc.).  don't bother if it was a suicide.
-  if (mds->is_stopped())
-    delete mds;
+    messenger->wait();
 
-  // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
-  char s[20];
-  snprintf(s, sizeof(s), "gmon/%d", getpid());
-  if (mkdir(s, 0755) == 0)
-    chdir(s);
+    // yuck: grab the mds lock, so we can be sure that whoever in *mds
+    // called shutdown finishes what they were doing.
+    mds->mds_lock.Lock();
+    mds->mds_lock.Unlock();
 
-  generic_dout(0) << "stopped." << dendl;
+    // only delete if it was a clean shutdown (to aid memory leak
+    // detection, etc.).  don't bother if it was a suicide.
+    if (mds->is_stopped())
+      delete mds;
+
+    // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
+    char s[20];
+    snprintf(s, sizeof(s), "gmon/%d", getpid());
+    if (mkdir(s, 0755) == 0)
+      chdir(s);
+
+    generic_dout(0) << "stopped." << dendl;
+  }
   return 0;
 }
 
