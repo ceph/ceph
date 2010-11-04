@@ -639,7 +639,7 @@ int OSD::shutdown()
   g_conf.debug_ebofs = 100;
   g_conf.debug_ms = 100;
   
-  dout(1) << "shutdown" << dendl;
+  dout(1) << "shutdown." << dendl;
 
   state = STATE_STOPPING;
 
@@ -2289,7 +2289,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     osdmap = new OSDMap;
   }
 
-  state = STATE_ACTIVE;
 
   // make sure there is something new, here, before we bother flushing the queues and such
   if (m->get_last() <= osdmap->get_epoch()) {
@@ -2509,6 +2508,12 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (advanced && cur == superblock.newest_map) {
     if (osdmap->is_up(whoami) &&
 	osdmap->get_addr(whoami) == client_messenger->get_myaddr()) {
+
+      if (is_booting()) {
+	dout(1) << "state: booting -> active" << dendl;
+	state = STATE_ACTIVE;
+      }
+      
       // yay!
       activate_map(t, fin->contexts);
 
@@ -2529,11 +2534,11 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   if (osdmap->get_epoch() > 0 &&
-      state != STATE_BOOTING &&
+      state == STATE_ACTIVE &&
       (!osdmap->exists(whoami) || 
        !osdmap->is_up(whoami) ||
        osdmap->get_addr(whoami) != client_messenger->get_myaddr())) {
-    dout(0) << "map says i am down or have a different address.  switching to boot state." << dendl;
+    dout(0) << "map says i am down or have a different address.  state: active -> booting" << dendl;
     //shutdown();
 
     stringstream ss;
