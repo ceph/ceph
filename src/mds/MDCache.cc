@@ -1883,6 +1883,20 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	project_rstat_frag_to_inode(p->second.rstat, p->second.accounted_rstat, p->second.first, p->first, pin, true);//false);
       parent->dirty_old_rstat.clear();
       project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat, parent->first, CEPH_NOSNAP, pin, true);//false);
+
+      if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
+	if (pi->rstat.rbytes != pf->rstat.rbytes) { 
+	  stringstream ss;
+	  ss << "unmatched rstat rbytes on single dirfrag " << parent->dirfrag()
+	     << ", inode has " << pi->rstat << ", dirfrag has " << pf->rstat;
+	  mds->logclient.log(LOG_ERROR, ss);
+	  
+	  // trust the dirfrag for now
+	  pi->rstat = pf->rstat;
+
+	  assert(!"unmatched rstat rbytes" == g_conf.mds_verify_scatter);
+	}
+      }
       
       // bump version
       pi->rstat.version++;
