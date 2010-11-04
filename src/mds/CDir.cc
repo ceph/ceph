@@ -99,7 +99,7 @@ ostream& operator<<(ostream& out, CDir& dir)
   out << " " << dir.fnode.fragstat;
   if (!(dir.fnode.fragstat == dir.fnode.accounted_fragstat))
     out << "/" << dir.fnode.accounted_fragstat;
-  if (false && dir.is_projected()) {
+  if (g_conf.mds_debug_scatterstat && dir.is_projected()) {
     fnode_t *pf = dir.get_projected_fnode();
     out << "->" << pf->fragstat;
     if (!(pf->fragstat == pf->accounted_fragstat))
@@ -110,7 +110,7 @@ ostream& operator<<(ostream& out, CDir& dir)
   out << " " << dir.fnode.rstat;
   if (!(dir.fnode.rstat == dir.fnode.accounted_rstat))
     out << "/" << dir.fnode.accounted_rstat;
-  if (false && dir.is_projected()) {
+  if (g_conf.mds_debug_scatterstat && dir.is_projected()) {
     fnode_t *pf = dir.get_projected_fnode();
     out << "->" << pf->rstat;
     if (!(pf->rstat == pf->accounted_rstat))

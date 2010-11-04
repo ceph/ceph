@@ -481,6 +481,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_dump_cache_after_rejoin, 0, OPT_BOOL, false),
 	OPTION(mds_hack_log_expire_for_better_stats, 0, OPT_BOOL, false),
 	OPTION(mds_verify_scatter, 0, OPT_BOOL, false),
+	OPTION(mds_debug_scatterstat, 0, OPT_BOOL, false),
 	OPTION(mds_kill_mdstable_at, 0, OPT_INT, 0),
 	OPTION(mds_kill_export_at, 0, OPT_INT, 0),
 	OPTION(mds_kill_import_at, 0, OPT_INT, 0),

@@ -137,7 +137,10 @@ ostream& operator<<(ostream& out, CInode& in)
 
   if (in.inode.is_dir()) {
     out << " " << in.inode.dirstat;
-    //if (in.inode.dirstat.version > 10000) out << " BADDIRSTAT";
+    if (g_conf.mds_debug_scatterstat && in.is_projected()) {
+      inode_t *pi = in.get_projected_inode();
+      out << "->" << pi->dirstat;
+    }
   } else {
     out << " s=" << in.inode.size;
     if (in.inode.nlink != 1)
@@ -148,6 +151,12 @@ ostream& operator<<(ostream& out, CInode& in)
   out << " " << in.inode.rstat;
   if (!(in.inode.rstat == in.inode.accounted_rstat))
     out << "/" << in.inode.accounted_rstat;
+  if (g_conf.mds_debug_scatterstat && in.is_projected()) {
+    inode_t *pi = in.get_projected_inode();
+    out << "->" << pi->rstat;
+    if (!(pi->rstat == pi->accounted_rstat))
+      out << "/" << pi->accounted_rstat;
+  }
 
   if (!in.client_need_snapflush.empty())
     out << " need_snapflush=" << in.client_need_snapflush;

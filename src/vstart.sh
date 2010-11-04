@@ -168,6 +168,8 @@ else
         debug mds = 20
         debug auth = 20
         debug monc = 20
+        mds debug scatterstat = true
+        mds verify scatter = true
         mds log max segments = 2'
 fi
 
