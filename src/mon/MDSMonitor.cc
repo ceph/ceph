@@ -816,7 +816,7 @@ void MDSMonitor::tick()
 	  // blacklist laggy mds
 	  utime_t until = now;
 	  until += g_conf.mds_blacklist_interval;
-	  mon->osdmon()->blacklist(info.addr, until);
+	  pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
 	  propose_osdmap = true;
 	}
 	pending_mdsmap.mds_info.erase(gid);

@@ -168,7 +168,7 @@ private:
     send_incremental(m, start);
   }
 
-  void blacklist(entity_addr_t a, utime_t until);
+  epoch_t blacklist(entity_addr_t a, utime_t until);
 
   void check_subs();
   void check_sub(Subscription *sub);
