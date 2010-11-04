@@ -1135,13 +1135,19 @@ void MDS::replay_start()
   set<int> rs;
   mdsmap->get_recovery_mds_set(rs);
   rs.erase(whoami);
-  dout(1) << "now replay.  my recovery peers are " << rs << dendl;
+  dout(1) << "now replay.  my recovery peers are " << rs
+	  << ".  need osdmap epoch " << mdsmap->get_last_failure_osd_epoch()
+	  <<", have " << osdmap->get_epoch()
+	  << dendl;
   mdcache->set_recovery_set(rs);
 
   // start?
-  //if (osdmap->get_epoch() > 0 &&
-  //mdsmap->get_epoch() > 0)
-  boot_start();
+  if (osdmap->get_epoch() >= mdsmap->get_last_failure_osd_epoch()) {
+    boot_start();
+  } else {
+    objecter->wait_for_new_map(new C_MDS_BootStart(this, 0),
+			       mdsmap->get_last_failure_osd_epoch());
+  }
 }
 
 void MDS::replay_done()
