@@ -468,6 +468,7 @@ libmon_a_SOURCES = \
 	mon/MonCaps.cc
 
 libmds_a_SOURCES = \
+	mds/Dumper.cc \
 	mds/MDS.cc \
 	mds/locks.c \
 	mds/journal.cc \
