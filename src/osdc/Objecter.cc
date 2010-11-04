@@ -211,6 +211,20 @@ void Objecter::handle_osd_map(MOSDMap *m)
   monc->sub_got("osdmap", osdmap->get_epoch());
 }
 
+void Objecter::wait_for_osd_map()
+{
+  if (osdmap->get_epoch()) return;
+  Mutex lock("");
+  Cond cond;
+  bool done;
+  lock.Lock();
+  C_SafeCond *context = new C_SafeCond(&lock, &cond, &done, NULL);
+  waiting_for_map[0].push_back(pair<Context*, int>(context, 0));
+  while (!done)
+    cond.Wait(lock);
+  lock.Unlock();
+}
+
 
 void Objecter::maybe_request_map()
 {

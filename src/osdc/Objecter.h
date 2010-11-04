@@ -468,6 +468,7 @@ public:
   void dispatch(Message *m);
   void handle_osd_op_reply(class MOSDOpReply *m);
   void handle_osd_map(class MOSDMap *m);
+  void wait_for_osd_map();
 
 private:
   // low-level
