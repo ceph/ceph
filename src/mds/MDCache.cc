@@ -1852,7 +1852,6 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       dout(20) << "predirty_journal_parents take_diff " << pf->fragstat << dendl;
       dout(20) << "predirty_journal_parents         - " << pf->accounted_fragstat << dendl;
       bool touched_mtime = false;
-      pi->dirstat.version++;
       pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat, touched_mtime);
       if (touched_mtime)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
@@ -1897,10 +1896,6 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	  assert(!"unmatched rstat rbytes" == g_conf.mds_verify_scatter);
 	}
       }
-      
-      // bump version
-      pi->rstat.version++;
-      pf->rstat.version = pf->accounted_rstat.version = pi->rstat.version;
     }
 
     // next parent!
