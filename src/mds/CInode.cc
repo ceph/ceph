@@ -1298,7 +1298,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 		     << " on " << *dir << dendl;
 	    dir->first = fgfirst;
 	    fnode_t *pf = dir->get_projected_fnode();
-	    finish_scatter_update(&filelock, dir, dirstat.version, pf->accounted_fragstat.version);
+	    finish_scatter_update(&filelock, dir,
+				  inode.dirstat.version, pf->accounted_fragstat.version);
 	  }
 	}
       }
@@ -1350,7 +1351,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 		     << " on " << *dir << dendl;
 	    dir->first = fgfirst;
 	    fnode_t *pf = dir->get_projected_fnode();
-	    finish_scatter_update(&nestlock, dir, rstat.version, pf->accounted_rstat.version);
+	    finish_scatter_update(&nestlock, dir,
+				  inode.rstat.version, pf->accounted_rstat.version);
 	  }
 	}
       }
