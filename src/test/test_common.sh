@@ -99,4 +99,21 @@ write_objects() {
         done
 }
 
+poll_cmd() {
+        command=$1
+        search_str=$2
+        polling_interval=$3
+        total_time=$4
+
+        t=0
+        while [ $t -lt $total_time ]; do
+                $command | grep $search_str
+                [ $? -eq 0 ] && return 1
+                sleep $polling_interval
+                t=$(($t+$polling_interval))
+        done
+
+        return 0
+}
+
 init

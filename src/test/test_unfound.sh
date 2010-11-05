@@ -41,10 +41,17 @@ do_test() {
         # Objects should be lost.
         stop_osd 0
 
-        echo "There should be unfound objects."
-        continue_prompt "to test finding the unfound objects."
+	poll_cmd "./ceph pg debug unfound_objects_exist" TRUE 3 120
+        [ $? -eq 1 ] || die "Failed to see unfound objects."
+        echo "Got unfound objects."
 
         restart_osd 0
+
+	poll_cmd "./ceph pg debug unfound_objects_exist" FALSE 3 120
+        [ $? -eq 1 ] || die "Failed to recover unfound objects."
+
+        # success
+        return 1
 }
 
 run() {
