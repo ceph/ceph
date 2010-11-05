@@ -683,7 +683,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   nest_info_t olddiff;  // old += f - af;
   dout(10) << "           rstat " << fnode.rstat << dendl;
   dout(10) << " accounted_rstat " << fnode.accounted_rstat << dendl;
-  olddiff.take_diff(fnode.rstat, fnode.accounted_rstat);
+  olddiff.add_delta(fnode.rstat, fnode.accounted_rstat);
   dout(10) << "         olddiff " << olddiff << dendl;
 
   // create subfrag dirs
@@ -736,7 +736,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   //   af[0] -= olddiff
   dout(10) << "giving olddiff " << olddiff << " to " << *subfrags[0] << dendl;
   nest_info_t zero;
-  subfrags[0]->fnode.accounted_rstat.take_diff(zero, olddiff);
+  subfrags[0]->fnode.accounted_rstat.add_delta(zero, olddiff);
   dout(10) << "               " << subfrags[0]->fnode.accounted_fragstat << dendl;
 
   purge_stolen(waiters, replay);

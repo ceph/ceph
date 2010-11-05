@@ -1535,6 +1535,17 @@ void CInode::_finish_frag_update(CDir *dir, Mutation *mut)
  * state.  it's possible we can't update the dirfrag accounted_rstat/fragstat
  * because the frag is auth and frozen, or that the replica couldn't for the same
  * reason.  hopefully it will get updated the next time the lock cycles.
+ *
+ * we have two dimensions of behavior:
+ *  - we may be (auth and !frozen), and able to update, or not.
+ *  - the frag may be stale, or not.
+ *
+ * if the frag is non-stale, we want to assimilate the diff into the
+ * inode, regardless of whether it's auth or updateable.
+ *
+ * if we update the frag, we want to set accounted_fragstat = frag,
+ * both if we took the diff or it was stale and we are making it
+ * un-stale.
  */
 /* for more info on scatterlocks, see comments by Locker::scatter_writebehind */
 void CInode::finish_scatter_gather_update(int type)
@@ -1551,6 +1562,7 @@ void CInode::finish_scatter_gather_update(int type)
 
       bool touched_mtime = false;
       dout(20) << "  orig dirstat " << pi->dirstat << dendl;
+      pi->dirstat.version++;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
 	   p++) {
@@ -1558,41 +1570,43 @@ void CInode::finish_scatter_gather_update(int type)
 	CDir *dir = p->second;
 	dout(20) << fg << " " << *dir << dendl;
 
-	if (dir->is_auth() && dir->is_frozen()) {
-	  dout(20) << fg << " skipping FROZEN frag" << dendl;
+	bool update = dir->is_auth() && !dir->is_frozen();
+
+	fnode_t *pf = dir->get_projected_fnode();
+	if (update)
+	  pf = dir->project_fnode();
+
+	if (pf->accounted_fragstat.version == pi->dirstat.version - 1) {
+	  dout(20) << fg << "           fragstat " << pf->fragstat << dendl;
+	  dout(20) << fg << " accounted_fragstat " << pf->accounted_fragstat << dendl;
+	  pi->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, touched_mtime);
 	} else {
-	  fnode_t *pf = dir->get_projected_fnode();
-	  if (dir->is_auth())
-	    pf = dir->project_fnode();
-	  
-	  if (pf->accounted_fragstat.version == pi->dirstat.version) {
-	    dout(20) << fg << "           fragstat " << pf->fragstat << dendl;
-	    dout(20) << fg << " accounted_fragstat " << pf->accounted_fragstat << dendl;
-	    pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat, touched_mtime);
-	  } else {
-	    dout(20) << fg << " skipping OLD accounted_fragstat " << pf->accounted_fragstat << dendl;
-	  }
-	  pf->fragstat.version = pf->accounted_fragstat.version = pi->dirstat.version + 1;
+	  dout(20) << fg << " skipping STALE accounted_fragstat " << pf->accounted_fragstat << dendl;
+	}
+	if (update) {
+	  pf->accounted_fragstat = pf->fragstat;
+	  pf->fragstat.version = pf->accounted_fragstat.version = pi->dirstat.version;
+	  dout(10) << fg << " updated accounted_fragstat " << pf->fragstat << " on " << *dir << dendl;
+	}
 
-	  if (fg == frag_t()) { // i.e., we are the only frag
-	    if (pi->dirstat.size() != pf->fragstat.size()) {
-	      stringstream ss;
-	      ss << "unmatched fragstat size on single dirfrag " << dir->dirfrag()
-		 << ", inode has " << pi->dirstat << ", dirfrag has " << pf->fragstat;
-	      mdcache->mds->logclient.log(LOG_ERROR, ss);
-	      
-	      // trust the dirfrag for now
-	      pi->dirstat = pf->fragstat;
-	      pi->dirstat.version--;  // (about to re-increment it below!)
+	if (fg == frag_t()) { // i.e., we are the only frag
+	  if (pi->dirstat.size() != pf->fragstat.size()) {
+	    stringstream ss;
+	    ss << "unmatched fragstat size on single dirfrag " << dir->dirfrag()
+	       << ", inode has " << pi->dirstat << ", dirfrag has " << pf->fragstat;
+	    mdcache->mds->logclient.log(LOG_ERROR, ss);
+	    
+	    // trust the dirfrag for now
+	    version_t v = pi->dirstat.version;
+	    pi->dirstat = pf->fragstat;
+	    pi->dirstat.version = v;
 
-	      assert(!"unmatched fragstat size" == g_conf.mds_verify_scatter);
-	    }
+	    assert(!"unmatched fragstat size" == g_conf.mds_verify_scatter);
 	  }
 	}
       }
       if (touched_mtime)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
-      pi->dirstat.version++;
       dout(20) << " final dirstat " << pi->dirstat << dendl;
       assert(pi->dirstat.size() >= 0);
       assert(pi->dirstat.nfiles >= 0);
@@ -1606,6 +1620,7 @@ void CInode::finish_scatter_gather_update(int type)
       assert(is_auth());
       inode_t *pi = get_projected_inode();
       dout(20) << "  orig rstat " << pi->rstat << dendl;
+      pi->rstat.version++;
       for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	   p != dirfrags.end();
 	   p++) {
@@ -1613,52 +1628,55 @@ void CInode::finish_scatter_gather_update(int type)
 	CDir *dir = p->second;
 	dout(20) << fg << " " << *dir << dendl;
 
-	if (dir->is_auth() && dir->is_frozen()) {
-	  dout(20) << fg << " skipping FROZEN frag" << dendl;
-	} else {
-	  fnode_t *pf = dir->get_projected_fnode();
-	  if (dir->is_auth()) {
-	    pf = dir->project_fnode();
+	bool update = dir->is_auth() && !dir->is_frozen();
 
-	    // first push any inodes with dirty rstat into this dirfrag
+	fnode_t *pf = dir->get_projected_fnode();
+	if (update)
+	  pf = dir->project_fnode();
+
+	if (pf->accounted_rstat.version == pi->rstat.version-1) {
+	  // only pull this frag's dirty rstat inodes into the frag if
+	  // the frag is non-stale and updateable.  if it's stale,
+	  // that info will just get thrown out!
+	  if (update)
 	    dir->assimilate_dirty_rstat_inodes();
-	  }
 
-	  if (pf->accounted_rstat.version == pi->rstat.version) {
-	    dout(20) << fg << "           rstat " << pf->rstat << dendl;
-	    dout(20) << fg << " accounted_rstat " << pf->accounted_rstat << dendl;
-	    dout(20) << fg << " dirty_old_rstat " << dir->dirty_old_rstat << dendl;
-	    mdcache->project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat,
+	  dout(20) << fg << "           rstat " << pf->rstat << dendl;
+	  dout(20) << fg << " accounted_rstat " << pf->accounted_rstat << dendl;
+	  dout(20) << fg << " dirty_old_rstat " << dir->dirty_old_rstat << dendl;
+	  mdcache->project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat,
 					       dir->first, CEPH_NOSNAP, this, true);
-	    for (map<snapid_t,old_rstat_t>::iterator q = dir->dirty_old_rstat.begin();
-		 q != dir->dirty_old_rstat.end();
-		 q++)
-	      mdcache->project_rstat_frag_to_inode(q->second.rstat, q->second.accounted_rstat,
-						   q->second.first, q->first, this, true);
-	  } else {
-	    dout(20) << fg << " skipping OLD accounted_rstat " << pf->accounted_rstat << dendl;
-	    pf->accounted_rstat = pf->rstat;
-	  }
+	  for (map<snapid_t,old_rstat_t>::iterator q = dir->dirty_old_rstat.begin();
+	       q != dir->dirty_old_rstat.end();
+	       q++)
+	    mdcache->project_rstat_frag_to_inode(q->second.rstat, q->second.accounted_rstat,
+						 q->second.first, q->first, this, true);
+	} else {
+	  dout(20) << fg << " skipping STALE accounted_rstat " << pf->accounted_rstat << dendl;
+	}
+	if (update) {
+	  pf->accounted_rstat = pf->rstat;
 	  dir->dirty_old_rstat.clear();
-	  pf->rstat.version = pf->accounted_rstat.version = pi->rstat.version + 1;
+	  pf->rstat.version = pf->accounted_rstat.version = pi->rstat.version;
+	  dout(10) << fg << " updated accounted_rstat " << pf->rstat << " on " << *dir << dendl;
+	}
 
-	  if (fg == frag_t()) { // i.e., we are the only frag
-	    if (pi->rstat.rbytes != pf->rstat.rbytes) { 
-	      stringstream ss;
-	      ss << "unmatched rstat rbytes on single dirfrag " << dir->dirfrag()
-		 << ", inode has " << pi->rstat << ", dirfrag has " << pf->rstat;
-	      mdcache->mds->logclient.log(LOG_ERROR, ss);
-	      
-	      // trust the dirfrag for now
-	      pi->rstat = pf->rstat;
-	      pi->rstat.version--;  // (about to re-increment it below!)
-
-	      assert(!"unmatched rstat rbytes" == g_conf.mds_verify_scatter);
-	    }
+	if (fg == frag_t()) { // i.e., we are the only frag
+	  if (pi->rstat.rbytes != pf->rstat.rbytes) { 
+	    stringstream ss;
+	    ss << "unmatched rstat rbytes on single dirfrag " << dir->dirfrag()
+	       << ", inode has " << pi->rstat << ", dirfrag has " << pf->rstat;
+	    mdcache->mds->logclient.log(LOG_ERROR, ss);
+	    
+	    // trust the dirfrag for now
+	    version_t v = pi->rstat.version;
+	    pi->rstat = pf->rstat;
+	    pi->rstat.version = v;
+	    
+	    assert(!"unmatched rstat rbytes" == g_conf.mds_verify_scatter);
 	  }
 	}
       }
-      pi->rstat.version++;
       dout(20) << " final rstat " << pi->rstat << dendl;
 
       //assert(pi->rstat.rfiles >= 0);

@@ -1580,8 +1580,6 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
   delta.sub(accounted_rstat);
   dout(20) << "                 delta " << delta << dendl;
 
-  accounted_rstat = rstat;
-
   while (last >= ofirst) {
     inode_t *pi;
     snapid_t first;
@@ -1849,10 +1847,11 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
     // dirstat
     if (do_parent_mtime || linkunlink) {
-      dout(20) << "predirty_journal_parents take_diff " << pf->fragstat << dendl;
+      dout(20) << "predirty_journal_parents add_delta " << pf->fragstat << dendl;
       dout(20) << "predirty_journal_parents         - " << pf->accounted_fragstat << dendl;
       bool touched_mtime = false;
-      pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat, touched_mtime);
+      pi->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, touched_mtime);
+      pf->accounted_fragstat = pf->fragstat;
       if (touched_mtime)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
       dout(20) << "predirty_journal_parents     gives " << pi->dirstat << " on " << *pin << dendl;
@@ -1876,12 +1875,25 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
     // rstat
     if (primary_dn) {
+
+      dout(10) << "predirty_journal_parents frag->inode on " << *parent << dendl;
+
+      // first, if the frag is stale, bring it back in sync.
+      // this matches the logic in CInode::finish_scatter_gather_update();
+      if (pf->accounted_fragstat.version != pi->dirstat.version) {
+	dout(10) << " resyncing stale rstat (rstat->accounted_rstat)" << dendl;
+	pf->accounted_rstat = pf->rstat;
+	parent->dirty_old_rstat.clear();
+      }
+
       for (map<snapid_t,old_rstat_t>::iterator p = parent->dirty_old_rstat.begin();
 	   p != parent->dirty_old_rstat.end();
 	   p++)
 	project_rstat_frag_to_inode(p->second.rstat, p->second.accounted_rstat, p->second.first, p->first, pin, true);//false);
       parent->dirty_old_rstat.clear();
       project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat, parent->first, CEPH_NOSNAP, pin, true);//false);
+
+      pf->accounted_rstat = pf->rstat;
 
       if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
 	if (pi->rstat.rbytes != pf->rstat.rbytes) { 
