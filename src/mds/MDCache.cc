@@ -1903,7 +1903,9 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	  mds->logclient.log(LOG_ERROR, ss);
 	  
 	  // trust the dirfrag for now
+	  version_t v = pi->rstat.version;
 	  pi->rstat = pf->rstat;
+	  pi->rstat.version = v;
 
 	  assert(!"unmatched rstat rbytes" == g_conf.mds_verify_scatter);
 	}
