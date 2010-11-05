@@ -1880,7 +1880,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
       // first, if the frag is stale, bring it back in sync.
       // this matches the logic in CInode::finish_scatter_gather_update();
-      if (pf->accounted_fragstat.version != pi->dirstat.version) {
+      if (pf->accounted_rstat.version != pi->rstat.version) {
 	dout(10) << " resyncing stale rstat (rstat->accounted_rstat)" << dendl;
 	pf->accounted_rstat = pf->rstat;
 	parent->dirty_old_rstat.clear();
