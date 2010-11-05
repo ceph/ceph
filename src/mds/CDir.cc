@@ -1871,6 +1871,25 @@ void CDir::decode_import(bufferlist::iterator& blp, utime_t now)
     cache->mds->locker->mark_updated_scatterlock(&inode->nestlock);
   if (!(fnode.fragstat == fnode.accounted_fragstat))
     cache->mds->locker->mark_updated_scatterlock(&inode->filelock);
+
+  // stale fragstat?
+  inode_t *pi = inode->get_projected_inode();
+  if (fnode.fragstat.version != pi->dirstat.version) {
+    dout(10) << " got stale fragstat " << fnode.fragstat << " vs inode " << pi->dirstat << dendl;
+    if (inode->filelock.get_state() == LOCK_MIX)
+      inode->filelock.set_state(LOCK_MIX_STALE);
+    else if (inode->filelock.get_state() != LOCK_MIX_STALE)
+      inode->filelock.set_stale();
+  }
+
+  // stale rstat?
+  if (fnode.rstat.version != pi->rstat.version) {
+    dout(10) << " got stale rstat " << fnode.rstat << " vs inode " << pi->rstat << dendl;
+    if (inode->nestlock.get_state() == LOCK_MIX)
+      inode->nestlock.set_state(LOCK_MIX_STALE);
+    else if (inode->nestlock.get_state() != LOCK_MIX_STALE)
+      inode->nestlock.set_stale();
+  }
 }
 
 
