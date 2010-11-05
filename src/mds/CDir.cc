@@ -799,11 +799,15 @@ void CDir::assimilate_dirty_rstat_inodes()
 
     inode->mdcache->project_rstat_inode_to_frag(in, this, 0, 0);
   }
+  state_set(STATE_ASSIMRSTAT);
   dout(10) << "assimilate_dirty_rstat_inodes done" << dendl;
 }
 
 void CDir::assimilate_dirty_rstat_inodes_finish(Mutation *mut, EMetaBlob *blob)
 {
+  if (!state_test(STATE_ASSIMRSTAT))
+    return;
+  state_clear(STATE_ASSIMRSTAT);
   dout(10) << "assimilate_dirty_rstat_inodes_finish" << dendl;
   elist<CInode*>::iterator p = dirty_rstat_inodes.begin_use_current();
   while (!p.end()) {
