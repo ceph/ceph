@@ -3965,12 +3965,11 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     
     // ok
     lock->decode_locked_state(m->get_data());
-    if (!lock->is_stale())
-      lock->set_state(LOCK_MIX);
-    else {
+    if (!lock->is_stale()) {
       dout(15) << "setting state to LOCK_MIX_STALE instead of LOCK_MIX" << dendl;
       lock->set_state(LOCK_MIX_STALE);
-    }
+    } else
+      lock->set_state(LOCK_MIX);
 
     ((ScatterLock *)lock)->finish_flush();
 

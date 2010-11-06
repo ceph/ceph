@@ -2373,9 +2373,11 @@ void CInode::_decode_locks_full(bufferlist::iterator& p)
   ::decode(linklock, p);
   ::decode(dirfragtreelock, p);
   ::decode(filelock, p);
+  filelock.apply_stale();
   ::decode(xattrlock, p);
   ::decode(snaplock, p);
   ::decode(nestlock, p);
+  nestlock.apply_stale();
   ::decode(flocklock, p);
   ::decode(policylock, p);
 }

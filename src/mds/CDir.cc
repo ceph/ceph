@@ -1194,9 +1194,9 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
     projected_version = committing_version = committed_version = got_fnode.version;
 
     if (fnode.rstat.version < inode->inode.rstat.version)
-      inode->nestlock.set_stale();
+      inode->nestlock.set_and_apply_stale();
     if (fnode.fragstat.version < inode->inode.dirstat.version)
-      inode->filelock.set_stale();
+      inode->filelock.set_and_apply_stale();
   }
 
   // purge stale snaps?
@@ -1876,19 +1876,13 @@ void CDir::decode_import(bufferlist::iterator& blp, utime_t now)
   inode_t *pi = inode->get_projected_inode();
   if (fnode.fragstat.version != pi->dirstat.version) {
     dout(10) << " got stale fragstat " << fnode.fragstat << " vs inode " << pi->dirstat << dendl;
-    if (inode->filelock.get_state() == LOCK_MIX)
-      inode->filelock.set_state(LOCK_MIX_STALE);
-    else if (inode->filelock.get_state() != LOCK_MIX_STALE)
-      inode->filelock.set_stale();
+    inode->filelock.set_and_apply_stale();
   }
 
   // stale rstat?
   if (fnode.rstat.version != pi->rstat.version) {
     dout(10) << " got stale rstat " << fnode.rstat << " vs inode " << pi->rstat << dendl;
-    if (inode->nestlock.get_state() == LOCK_MIX)
-      inode->nestlock.set_state(LOCK_MIX_STALE);
-    else if (inode->nestlock.get_state() != LOCK_MIX_STALE)
-      inode->nestlock.set_stale();
+    inode->nestlock.set_and_apply_stale();
   }
 }
 
