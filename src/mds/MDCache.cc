@@ -1629,7 +1629,10 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
     dout(20) << " projecting to [" << first << "," << last << "] " << pi->rstat << dendl;
     pi->rstat.add(delta);
     dout(20) << "        result [" << first << "," << last << "] " << pi->rstat << dendl;
-    
+
+    if (pi->rstat.rbytes < 0)
+      assert(!"negative rstat rbytes" == g_conf.mds_verify_scatter);
+
     last = first-1;
   }
 }
@@ -1855,6 +1858,24 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       if (touched_mtime)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
       dout(20) << "predirty_journal_parents     gives " << pi->dirstat << " on " << *pin << dendl;
+
+      if (pi->dirstat.size() < 0)
+	assert(!"negative dirstat size" == g_conf.mds_verify_scatter);
+      if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
+	if (pi->dirstat.size() != pf->fragstat.size()) {
+	  stringstream ss;
+	  ss << "unmatched fragstat size on single dirfrag " << parent->dirfrag()
+	     << ", inode has " << pi->dirstat << ", dirfrag has " << pf->fragstat;
+	  mds->logclient.log(LOG_ERROR, ss);
+	  
+	  // trust the dirfrag for now
+	  version_t v = pi->dirstat.version;
+	  pi->dirstat = pf->fragstat;
+	  pi->dirstat.version = v;
+
+	  assert(!"unmatched fragstat size" == g_conf.mds_verify_scatter);
+	}
+      }
     }
 
     /* 
