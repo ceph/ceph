@@ -312,6 +312,7 @@ struct md_config_t {
 
   // set these to non-zero to specify kill points
   bool mds_verify_scatter;
+  bool mds_debug_scatterstat;
   int mds_kill_mdstable_at;
   int mds_kill_export_at;
   int mds_kill_import_at;

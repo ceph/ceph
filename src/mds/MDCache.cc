@@ -1580,8 +1580,6 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
   delta.sub(accounted_rstat);
   dout(20) << "                 delta " << delta << dendl;
 
-  accounted_rstat = rstat;
-
   while (last >= ofirst) {
     inode_t *pi;
     snapid_t first;
@@ -1631,7 +1629,10 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
     dout(20) << " projecting to [" << first << "," << last << "] " << pi->rstat << dendl;
     pi->rstat.add(delta);
     dout(20) << "        result [" << first << "," << last << "] " << pi->rstat << dendl;
-    
+
+    if (pi->rstat.rbytes < 0)
+      assert(!"negative rstat rbytes" == g_conf.mds_verify_scatter);
+
     last = first-1;
   }
 }
@@ -1849,14 +1850,32 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
     // dirstat
     if (do_parent_mtime || linkunlink) {
-      dout(20) << "predirty_journal_parents take_diff " << pf->fragstat << dendl;
+      dout(20) << "predirty_journal_parents add_delta " << pf->fragstat << dendl;
       dout(20) << "predirty_journal_parents         - " << pf->accounted_fragstat << dendl;
       bool touched_mtime = false;
-      pi->dirstat.version++;
-      pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat, touched_mtime);
+      pi->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, touched_mtime);
+      pf->accounted_fragstat = pf->fragstat;
       if (touched_mtime)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
       dout(20) << "predirty_journal_parents     gives " << pi->dirstat << " on " << *pin << dendl;
+
+      if (pi->dirstat.size() < 0)
+	assert(!"negative dirstat size" == g_conf.mds_verify_scatter);
+      if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
+	if (pi->dirstat.size() != pf->fragstat.size()) {
+	  stringstream ss;
+	  ss << "unmatched fragstat size on single dirfrag " << parent->dirfrag()
+	     << ", inode has " << pi->dirstat << ", dirfrag has " << pf->fragstat;
+	  mds->logclient.log(LOG_ERROR, ss);
+	  
+	  // trust the dirfrag for now
+	  version_t v = pi->dirstat.version;
+	  pi->dirstat = pf->fragstat;
+	  pi->dirstat.version = v;
+
+	  assert(!"unmatched fragstat size" == g_conf.mds_verify_scatter);
+	}
+      }
     }
 
     /* 
@@ -1877,16 +1896,41 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
     // rstat
     if (primary_dn) {
+
+      dout(10) << "predirty_journal_parents frag->inode on " << *parent << dendl;
+
+      // first, if the frag is stale, bring it back in sync.
+      // this matches the logic in CInode::finish_scatter_gather_update();
+      if (pf->accounted_rstat.version != pi->rstat.version) {
+	dout(10) << " resyncing stale rstat (rstat->accounted_rstat)" << dendl;
+	pf->accounted_rstat = pf->rstat;
+	parent->dirty_old_rstat.clear();
+      }
+
       for (map<snapid_t,old_rstat_t>::iterator p = parent->dirty_old_rstat.begin();
 	   p != parent->dirty_old_rstat.end();
 	   p++)
 	project_rstat_frag_to_inode(p->second.rstat, p->second.accounted_rstat, p->second.first, p->first, pin, true);//false);
       parent->dirty_old_rstat.clear();
       project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat, parent->first, CEPH_NOSNAP, pin, true);//false);
-      
-      // bump version
-      pi->rstat.version++;
-      pf->rstat.version = pf->accounted_rstat.version = pi->rstat.version;
+
+      pf->accounted_rstat = pf->rstat;
+
+      if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
+	if (pi->rstat.rbytes != pf->rstat.rbytes) { 
+	  stringstream ss;
+	  ss << "unmatched rstat rbytes on single dirfrag " << parent->dirfrag()
+	     << ", inode has " << pi->rstat << ", dirfrag has " << pf->rstat;
+	  mds->logclient.log(LOG_ERROR, ss);
+	  
+	  // trust the dirfrag for now
+	  version_t v = pi->rstat.version;
+	  pi->rstat = pf->rstat;
+	  pi->rstat.version = v;
+
+	  assert(!"unmatched rstat rbytes" == g_conf.mds_verify_scatter);
+	}
+      }
     }
 
     // next parent!

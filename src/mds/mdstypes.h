@@ -125,16 +125,14 @@ struct frag_info_t : public scatter_info_t {
     *this = frag_info_t();
   }
 
-  // *this += cur - acc; acc = cur
-  void take_diff(const frag_info_t &cur, frag_info_t &acc, bool& touched_mtime) {
+  // *this += cur - acc;
+  void add_delta(const frag_info_t &cur, frag_info_t &acc, bool& touched_mtime) {
     if (!(cur.mtime == acc.mtime)) {
       mtime = cur.mtime;
       touched_mtime = true;
     }
     nfiles += cur.nfiles - acc.nfiles;
     nsubdirs += cur.nsubdirs - acc.nsubdirs;
-    acc = cur;
-    acc.version = version;
   }
 
   void encode(bufferlist &bl) const {
@@ -205,8 +203,8 @@ struct nest_info_t : public scatter_info_t {
     rsnaprealms += fac*other.rsnaprealms;
   }
 
-  // *this += cur - acc; acc = cur
-  void take_diff(const nest_info_t &cur, nest_info_t &acc) {
+  // *this += cur - acc;
+  void add_delta(const nest_info_t &cur, nest_info_t &acc) {
     if (cur.rctime > rctime)
       rctime = cur.rctime;
     rbytes += cur.rbytes - acc.rbytes;
@@ -214,8 +212,6 @@ struct nest_info_t : public scatter_info_t {
     rsubdirs += cur.rsubdirs - acc.rsubdirs;
     ranchors += cur.ranchors - acc.ranchors;
     rsnaprealms += cur.rsnaprealms - acc.rsnaprealms;
-    acc = cur;
-    acc.version = version;
   }
 
   void encode(bufferlist &bl) const {

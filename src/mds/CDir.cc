@@ -99,7 +99,7 @@ ostream& operator<<(ostream& out, CDir& dir)
   out << " " << dir.fnode.fragstat;
   if (!(dir.fnode.fragstat == dir.fnode.accounted_fragstat))
     out << "/" << dir.fnode.accounted_fragstat;
-  if (false && dir.is_projected()) {
+  if (g_conf.mds_debug_scatterstat && dir.is_projected()) {
     fnode_t *pf = dir.get_projected_fnode();
     out << "->" << pf->fragstat;
     if (!(pf->fragstat == pf->accounted_fragstat))
@@ -110,7 +110,7 @@ ostream& operator<<(ostream& out, CDir& dir)
   out << " " << dir.fnode.rstat;
   if (!(dir.fnode.rstat == dir.fnode.accounted_rstat))
     out << "/" << dir.fnode.accounted_rstat;
-  if (false && dir.is_projected()) {
+  if (g_conf.mds_debug_scatterstat && dir.is_projected()) {
     fnode_t *pf = dir.get_projected_fnode();
     out << "->" << pf->rstat;
     if (!(pf->rstat == pf->accounted_rstat))
@@ -683,7 +683,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   nest_info_t olddiff;  // old += f - af;
   dout(10) << "           rstat " << fnode.rstat << dendl;
   dout(10) << " accounted_rstat " << fnode.accounted_rstat << dendl;
-  olddiff.take_diff(fnode.rstat, fnode.accounted_rstat);
+  olddiff.add_delta(fnode.rstat, fnode.accounted_rstat);
   dout(10) << "         olddiff " << olddiff << dendl;
 
   // create subfrag dirs
@@ -736,7 +736,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   //   af[0] -= olddiff
   dout(10) << "giving olddiff " << olddiff << " to " << *subfrags[0] << dendl;
   nest_info_t zero;
-  subfrags[0]->fnode.accounted_rstat.take_diff(zero, olddiff);
+  subfrags[0]->fnode.accounted_rstat.add_delta(zero, olddiff);
   dout(10) << "               " << subfrags[0]->fnode.accounted_fragstat << dendl;
 
   purge_stolen(waiters, replay);
@@ -799,11 +799,15 @@ void CDir::assimilate_dirty_rstat_inodes()
 
     inode->mdcache->project_rstat_inode_to_frag(in, this, 0, 0);
   }
+  state_set(STATE_ASSIMRSTAT);
   dout(10) << "assimilate_dirty_rstat_inodes done" << dendl;
 }
 
 void CDir::assimilate_dirty_rstat_inodes_finish(Mutation *mut, EMetaBlob *blob)
 {
+  if (!state_test(STATE_ASSIMRSTAT))
+    return;
+  state_clear(STATE_ASSIMRSTAT);
   dout(10) << "assimilate_dirty_rstat_inodes_finish" << dendl;
   elist<CInode*>::iterator p = dirty_rstat_inodes.begin_use_current();
   while (!p.end()) {
@@ -1867,6 +1871,25 @@ void CDir::decode_import(bufferlist::iterator& blp, utime_t now)
     cache->mds->locker->mark_updated_scatterlock(&inode->nestlock);
   if (!(fnode.fragstat == fnode.accounted_fragstat))
     cache->mds->locker->mark_updated_scatterlock(&inode->filelock);
+
+  // stale fragstat?
+  inode_t *pi = inode->get_projected_inode();
+  if (fnode.fragstat.version != pi->dirstat.version) {
+    dout(10) << " got stale fragstat " << fnode.fragstat << " vs inode " << pi->dirstat << dendl;
+    if (inode->filelock.get_state() == LOCK_MIX)
+      inode->filelock.set_state(LOCK_MIX_STALE);
+    else if (inode->filelock.get_state() != LOCK_MIX_STALE)
+      inode->filelock.set_stale();
+  }
+
+  // stale rstat?
+  if (fnode.rstat.version != pi->rstat.version) {
+    dout(10) << " got stale rstat " << fnode.rstat << " vs inode " << pi->rstat << dendl;
+    if (inode->nestlock.get_state() == LOCK_MIX)
+      inode->nestlock.set_state(LOCK_MIX_STALE);
+    else if (inode->nestlock.get_state() != LOCK_MIX_STALE)
+      inode->nestlock.set_stale();
+  }
 }
 
 

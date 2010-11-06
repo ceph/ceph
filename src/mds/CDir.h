@@ -101,6 +101,7 @@ public:
   static const unsigned STATE_FRAGMENTING =   (1<<14);
   static const unsigned STATE_STICKY =        (1<<15);  // sticky pin due to inode stickydirs
   static const unsigned STATE_DNPINNEDFRAG =  (1<<16);  // dir is refragmenting
+  static const unsigned STATE_ASSIMRSTAT =    (1<<17);  // assimilating inode->frag rstats
 
   // common states
   static const unsigned STATE_CLEAN =  0;
