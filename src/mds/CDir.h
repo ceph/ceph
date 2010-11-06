@@ -170,6 +170,8 @@ public:
   // my inodes with dirty rstat data
   elist<CInode*> dirty_rstat_inodes;     
 
+  void resync_accounted_fragstat();
+  void resync_accounted_rstat();
   void assimilate_dirty_rstat_inodes();
   void assimilate_dirty_rstat_inodes_finish(Mutation *mut, EMetaBlob *blob);
 

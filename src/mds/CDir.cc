@@ -787,6 +787,33 @@ void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
 
 
 
+void CDir::resync_accounted_fragstat()
+{
+  fnode_t *pf = get_projected_fnode();
+  inode_t *pi = inode->get_projected_inode();
+
+  if (pf->accounted_fragstat.version != pi->dirstat.version) {
+    pf->fragstat.version = pi->dirstat.version;
+    dout(10) << "resync_accounted_fragstat " << pf->accounted_fragstat << " -> " << pf->fragstat << dendl;
+    pf->accounted_fragstat = pf->fragstat;
+  }
+}
+
+/*
+ * resync rstat and accounted_rstat with inode
+ */
+void CDir::resync_accounted_rstat()
+{
+  fnode_t *pf = get_projected_fnode();
+  inode_t *pi = inode->get_projected_inode();
+  
+  if (pf->accounted_rstat.version != pi->rstat.version) {
+    pf->rstat.version = pi->rstat.version;
+    dout(10) << "resync_accounted_rstat " << pf->accounted_rstat << " -> " << pf->rstat << dendl;
+    pf->accounted_rstat = pf->rstat;
+    dirty_old_rstat.clear();
+  }
+}
 
 void CDir::assimilate_dirty_rstat_inodes()
 {

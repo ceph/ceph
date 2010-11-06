@@ -1733,6 +1733,9 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	     mut->is_slave());   // we are slave.  master will have wrlocked the dir.
       assert(cfollows == CEPH_NOSNAP);
       
+      // update stale fragstat?
+      parent->resync_accounted_fragstat();
+
       if (do_parent_mtime) {
 	pf->fragstat.mtime = mut->now;
 	if (mut->now > pf->rstat.rctime) {
@@ -1782,8 +1785,11 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       if (cur->first > first)
 	first = cur->first;
 
-      project_rstat_inode_to_frag(cur, parent, first, linkunlink);
+      // first, if the frag is stale, bring it back in sync.
+      parent->resync_accounted_rstat();
 
+      // now push inode rstats into frag
+      project_rstat_inode_to_frag(cur, parent, first, linkunlink);
       cur->clear_dirty_rstat();
     }
 
@@ -1900,13 +1906,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       dout(10) << "predirty_journal_parents frag->inode on " << *parent << dendl;
 
       // first, if the frag is stale, bring it back in sync.
-      // this matches the logic in CInode::finish_scatter_gather_update();
-      if (pf->accounted_rstat.version != pi->rstat.version) {
-	dout(10) << " resyncing stale rstat (rstat->accounted_rstat)" << dendl;
-	pf->rstat.version = pi->rstat.version;
-	pf->accounted_rstat = pf->rstat;
-	parent->dirty_old_rstat.clear();
-      }
+      parent->resync_accounted_rstat();
 
       for (map<snapid_t,old_rstat_t>::iterator p = parent->dirty_old_rstat.begin();
 	   p != parent->dirty_old_rstat.end();
