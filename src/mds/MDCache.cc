@@ -3313,10 +3313,8 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 
       // scatter the dirlock, just in case?
       if (!survivor && in->is_dir() && in->has_subtree_root_dirfrag()) {
-        if (in->filelock.is_stale())
-          in->filelock.set_state(LOCK_MIX_STALE);
-        else
-          in->filelock.set_state(LOCK_MIX);
+	in->filelock.set_state(LOCK_MIX);
+        in->filelock.apply_stale();
       }
 
       if (ack) {

@@ -806,10 +806,8 @@ public:
       if (issued & CEPH_CAP_GEXCL)
 	lock->set_state(LOCK_EXCL);
       else if (issued & CEPH_CAP_GWR) {
-        if (lock->is_stale())
-          lock->set_state(LOCK_MIX_STALE);
-        else
-          lock->set_state(LOCK_MIX);
+	lock->set_state(LOCK_MIX);
+	((ScatterLock *)lock)->apply_stale();
       }
       else if (lock->is_dirty()) {
 	if (is_replicated())

@@ -3736,10 +3736,8 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
     }
 
     // change lock
-    if (lock->is_stale())
-      lock->set_state(LOCK_MIX_STALE);
-    else
-      lock->set_state(LOCK_MIX);
+    lock->set_state(LOCK_MIX);
+    lock->apply_stale();
     lock->clear_scatter_wanted();
     if (need_issue)
       *need_issue = true;
@@ -3785,10 +3783,8 @@ void Locker::scatter_mix(ScatterLock *lock, bool *need_issue)
       lock->get_parent()->auth_pin(lock);
     else {
       in->start_scatter(lock);
-      if (lock->is_stale())
-        lock->set_state(LOCK_MIX_STALE);
-      else
-        lock->set_state(LOCK_MIX);
+      lock->set_state(LOCK_MIX);
+      lock->apply_stale();
       lock->clear_scatter_wanted();
       if (in->is_replicated()) {
 	bufferlist softdata;
@@ -3965,11 +3961,8 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     
     // ok
     lock->decode_locked_state(m->get_data());
-    if (!lock->is_stale()) {
-      dout(15) << "setting state to LOCK_MIX_STALE instead of LOCK_MIX" << dendl;
-      lock->set_state(LOCK_MIX_STALE);
-    } else
-      lock->set_state(LOCK_MIX);
+    lock->set_state(LOCK_MIX);
+    lock->apply_stale();
 
     ((ScatterLock *)lock)->finish_flush();
 

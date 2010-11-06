@@ -164,15 +164,18 @@ public:
     }
   }
   void apply_stale() {
-    if (state == LOCK_MIX_STALE)
-      set_stale();
-    else if (is_stale() && state == LOCK_MIX)
+    if (state == LOCK_MIX && is_stale()) {
       state = LOCK_MIX_STALE;
+      clear_stale();
+    }
   }
-  void set_and_apply_stale() {
-    set_stale();
-    if (state == LOCK_MIX)
+  void set_or_apply_stale() {
+    if (state == LOCK_MIX) {
       state = LOCK_MIX_STALE;
+      clear_stale();
+    } else {
+      set_stale();
+    }
   }
 
   void set_last_scatter(utime_t t) { more()->last_scatter = t; }

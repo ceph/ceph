@@ -2372,12 +2372,20 @@ void CInode::_decode_locks_full(bufferlist::iterator& p)
   ::decode(authlock, p);
   ::decode(linklock, p);
   ::decode(dirfragtreelock, p);
+
+  if (filelock.get_state() == LOCK_MIX_STALE)
+    filelock.set_stale();
   ::decode(filelock, p);
   filelock.apply_stale();
+
   ::decode(xattrlock, p);
   ::decode(snaplock, p);
+
+  if (nestlock.get_state() == LOCK_MIX_STALE)
+    nestlock.set_stale();
   ::decode(nestlock, p);
   nestlock.apply_stale();
+
   ::decode(flocklock, p);
   ::decode(policylock, p);
 }
