@@ -3309,10 +3309,8 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       dout(10) << " have " << *in << dendl;
 
       // scatter the dirlock, just in case?
-      if (!survivor && in->is_dir() && in->has_subtree_root_dirfrag()) {
+      if (!survivor && in->is_dir() && in->has_subtree_root_dirfrag())
 	in->filelock.set_state(LOCK_MIX);
-        in->filelock.apply_stale();
-      }
 
       if (ack) {
 	ack->add_inode_base(in);

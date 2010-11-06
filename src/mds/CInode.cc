@@ -1472,10 +1472,7 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
 
   if (dir->is_frozen()) {
     dout(10) << "finish_scatter_update " << fg << " frozen, marking " << *lock << " stale " << *dir << dendl;
-    lock->set_stale();
   } else {
-    lock->clear_stale();
-
     if (dir_accounted_version != inode_version) {
       dout(10) << "finish_scatter_update " << fg << " journaling accounted scatterstat update v" << inode_version << dendl;
 
@@ -2372,20 +2369,10 @@ void CInode::_decode_locks_full(bufferlist::iterator& p)
   ::decode(authlock, p);
   ::decode(linklock, p);
   ::decode(dirfragtreelock, p);
-
-  if (filelock.get_state() == LOCK_MIX_STALE)
-    filelock.set_stale();
   ::decode(filelock, p);
-  filelock.apply_stale();
-
   ::decode(xattrlock, p);
   ::decode(snaplock, p);
-
-  if (nestlock.get_state() == LOCK_MIX_STALE)
-    nestlock.set_stale();
   ::decode(nestlock, p);
-  nestlock.apply_stale();
-
   ::decode(flocklock, p);
   ::decode(policylock, p);
 }
@@ -2518,8 +2505,7 @@ void CInode::decode_import(bufferlist::iterator& p,
       // it is frozen (and in a SYNC or LOCK state).  FIXME.
 
       if (dir->is_auth() ||
-	  filelock.get_state() == LOCK_MIX ||
-	  filelock.get_state() == LOCK_MIX_STALE) {
+	  filelock.get_state() == LOCK_MIX) {
 	dout(10) << " skipped fragstat info for " << *dir << dendl;
 	frag_info_t f;
 	::decode(f, q);
@@ -2530,8 +2516,7 @@ void CInode::decode_import(bufferlist::iterator& p,
 	dout(10) << " took fragstat info for " << *dir << dendl;
       }
       if (dir->is_auth() ||
-	  nestlock.get_state() == LOCK_MIX ||
-	  nestlock.get_state() == LOCK_MIX_STALE) {
+	  nestlock.get_state() == LOCK_MIX) {
 	dout(10) << " skipped rstat info for " << *dir << dendl;
 	nest_info_t n;
 	::decode(n, q);

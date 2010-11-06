@@ -142,42 +142,6 @@ public:
     finish_flush();
   }
 
-  /*
-   * "stale" means that at least one of our dirfrags has stale
-   * accounted_* scatter metadata on this inode.  that means that any
-   * transition to MIX needs to implicitly go to MIX_STALE.  also,
-   * MIX_STALE implies is_stale().
-   */  
-  bool is_stale() const {
-    if (have_more() && _more->stale)
-      return true;
-    assert(state != LOCK_MIX_STALE);   // invariant: LOCK_MIX_STALE => is_stale()
-    return false;
-  }
-  void set_stale() {
-    more()->stale = true;
-  }
-  void clear_stale() {
-    if (is_stale()) {
-      _more->stale = false;
-      try_clear_more();
-    }
-  }
-  void apply_stale() {
-    if (state == LOCK_MIX && is_stale()) {
-      state = LOCK_MIX_STALE;
-      clear_stale();
-    }
-  }
-  void set_or_apply_stale() {
-    if (state == LOCK_MIX) {
-      state = LOCK_MIX_STALE;
-      clear_stale();
-    } else {
-      set_stale();
-    }
-  }
-
   void set_last_scatter(utime_t t) { more()->last_scatter = t; }
   utime_t get_last_scatter() {
     return more()->last_scatter;

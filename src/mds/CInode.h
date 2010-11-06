@@ -805,10 +805,8 @@ public:
     if (is_auth()) {
       if (issued & CEPH_CAP_GEXCL)
 	lock->set_state(LOCK_EXCL);
-      else if (issued & CEPH_CAP_GWR) {
+      else if (issued & CEPH_CAP_GWR)
 	lock->set_state(LOCK_MIX);
-	((ScatterLock *)lock)->apply_stale();
-      }
       else if (lock->is_dirty()) {
 	if (is_replicated())
 	  lock->set_state(LOCK_MIX);
@@ -828,9 +826,7 @@ public:
     if (is_auth() && (issued & (CEPH_CAP_ANY_EXCL|CEPH_CAP_ANY_WR)) &&
 	choose_ideal_loner() >= 0)
       try_set_loner();
-    filelock.set_stale(); // go to MIX_STALE instead of MIX -- safe but non-optimal
     choose_lock_state(&filelock, issued);
-    nestlock.set_stale(); // again, safe but non-optimal
     choose_lock_state(&nestlock, issued);
     choose_lock_state(&dirfragtreelock, issued);
     choose_lock_state(&authlock, issued);

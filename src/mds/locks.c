@@ -70,7 +70,6 @@ struct sm_state_t scatterlock[LOCK_MAX] = {
     [LOCK_TSYN_MIX]  = { LOCK_MIX,  false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,   0,0,0,0 },
     [LOCK_SYNC_MIX]  = { LOCK_MIX,  false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,   0,0,0,0 },
     [LOCK_SYNC_MIX2] = { LOCK_MIX,  false, 0,         0,    0,   0,   0,   0,   0,   0,   0,0,0,0 },
-    [LOCK_MIX_STALE] = { 0,         false, LOCK_MIX,  0,    0,   REQ, REQ, 0,   0,   0,   0,0,0,0 },
 };
 
 struct sm_t sm_scatterlock = {
@@ -104,7 +103,6 @@ struct sm_state_t filelock[LOCK_MAX] = {
     [LOCK_SYNC_MIX]  = { LOCK_MIX,  false, LOCK_MIX,  ANY,  0,   0,   0,   0,   0,   0,   CEPH_CAP_GRD|CEPH_CAP_GLAZYIO,0,0,CEPH_CAP_GRD },
     [LOCK_SYNC_MIX2] = { LOCK_MIX,  false, 0,         0,    0,   0,   0,   0,   0,   0,   CEPH_CAP_GRD|CEPH_CAP_GLAZYIO,0,0,CEPH_CAP_GRD },
     [LOCK_EXCL_MIX]  = { LOCK_MIX,  true,  LOCK_LOCK, 0,    0,   0,   XCL, 0,   0,   0,   0,CEPH_CAP_GRD|CEPH_CAP_GWR|CEPH_CAP_GLAZYIO,0,0 },
-    [LOCK_MIX_STALE] = { 0,         false, LOCK_MIX,  0,    0,   REQ, REQ, 0,   0,   0,   CEPH_CAP_GRD,0,0,CEPH_CAP_GRD },
 
     
     [LOCK_EXCL]      = { 0,         true,  LOCK_LOCK, 0,    0,   XCL, XCL, 0,   0,   0,   0,CEPH_CAP_GSHARED|CEPH_CAP_GEXCL|CEPH_CAP_GCACHE|CEPH_CAP_GRD|CEPH_CAP_GWR|CEPH_CAP_GBUFFER|CEPH_CAP_GLAZYIO,0,0 },
