@@ -1903,6 +1903,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       // this matches the logic in CInode::finish_scatter_gather_update();
       if (pf->accounted_rstat.version != pi->rstat.version) {
 	dout(10) << " resyncing stale rstat (rstat->accounted_rstat)" << dendl;
+	pf->rstat.version = pi->rstat.version;
 	pf->accounted_rstat = pf->rstat;
 	parent->dirty_old_rstat.clear();
       }
