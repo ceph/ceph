@@ -56,8 +56,13 @@ public:
   tid_t get_client_tid() { return header.tid; }
   
   object_t& get_oid() { return oid; }
-  pg_t     get_pg() { return pg_t(head.layout.ol_pgid); }
-  ceph_object_layout get_layout() { return head.layout; }
+  pg_t     get_pg() const { return pg_t(head.layout.ol_pgid); }
+  //ceph_object_layout get_layout() { return head.layout; }
+  object_locator_t get_object_locator() const {
+    pg_t pgid = get_pg();
+    return object_locator_t(pgid.pool(), pgid.preferred());
+  }
+
   epoch_t  get_map_epoch() { return head.osdmap_epoch; }
 
   eversion_t get_version() { return head.reassert_version; }
@@ -82,7 +87,6 @@ public:
   //void inc_shed_count() { head.shed_count = get_shed_count() + 1; }
   //int get_shed_count() { return head.shed_count; }
  
-
 
   MOSDOp(int inc, long tid,
          object_t& _oid, ceph_object_layout ol, epoch_t mapepoch,

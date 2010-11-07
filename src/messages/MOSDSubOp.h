@@ -33,6 +33,7 @@ public:
   // subop
   pg_t pgid;
   sobject_t poid;
+  object_locator_t oloc;
   
   __u8 acks_wanted;
 
@@ -103,10 +104,12 @@ public:
       ::decode(first, p);
       ::decode(complete, p);
     }
+    if (header.version >= 3)
+      ::decode(oloc, p);
   }
 
   virtual void encode_payload() {
-    header.version = 2;
+    header.version = 3;
 
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
@@ -142,10 +145,11 @@ public:
       header.data_off = 0;
     ::encode(first, payload);
     ::encode(complete, payload);
+    ::encode(oloc, payload);
   }
 
 
-  MOSDSubOp(osd_reqid_t r, pg_t p, sobject_t po, bool noop_, int aw,
+  MOSDSubOp(osd_reqid_t r, pg_t p, const sobject_t& po, bool noop_, int aw,
 	    epoch_t mape, tid_t rtid, eversion_t v) :
     Message(MSG_OSD_SUBOP),
     map_epoch(mape),

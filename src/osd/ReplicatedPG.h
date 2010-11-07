@@ -72,7 +72,8 @@ public:
     bool exists;
     SnapSetContext *ssc;  // may be null
 
-    ObjectState(const sobject_t& s) : oi(s), exists(false), ssc(NULL) {}
+    ObjectState(const sobject_t& s, const object_locator_t& ol) :
+      oi(s, ol), exists(false), ssc(NULL) {}
   };
 
 
@@ -232,8 +233,8 @@ public:
     Cond cond;
     int unstable_writes, readers, writers_waiting, readers_waiting;
 
-    ObjectContext(const sobject_t& s) :
-      ref(0), registered(false), obs(s),
+    ObjectContext(const sobject_t& s, const object_locator_t& ol) :
+      ref(0), registered(false), obs(s, ol),
       lock("ReplicatedPG::ObjectContext::lock"),
       unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0) {}
 
@@ -416,7 +417,8 @@ protected:
     }
     return NULL;
   }
-  ObjectContext *get_object_context(const sobject_t& soid, bool can_create=true);
+  ObjectContext *get_object_context(const sobject_t& soid, const object_locator_t& oloc,
+				    bool can_create=true);
   void register_object_context(ObjectContext *obc) {
     if (!obc->registered) {
       obc->registered = true;
@@ -426,7 +428,8 @@ protected:
       register_snapset_context(obc->obs.ssc);
   }
   void put_object_context(ObjectContext *obc);
-  int find_object_context(const object_t& oid, snapid_t snapid, ObjectContext **pobc,
+  int find_object_context(const object_t& oid, const object_locator_t& oloc,
+			  snapid_t snapid, ObjectContext **pobc,
 			  bool can_create, snapid_t *psnapid=NULL);
 
   SnapSetContext *get_snapset_context(const object_t& oid, bool can_create);
