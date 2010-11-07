@@ -36,6 +36,7 @@
 #include "auth/KeyRing.h"
 
 #include <map>
+#include <memory>
 using namespace std;
 
 #include <ext/hash_map>
@@ -102,8 +103,8 @@ extern const coll_t meta_coll;
 class OSD : public Dispatcher {
   /** OSD **/
 protected:
-  Mutex osd_lock;     // global lock
-  SafeTimer timer;    // safe timer (osd_lock)
+  Mutex osd_lock;			// global lock
+  std::auto_ptr < SafeTimer > timer;    // safe timer (osd_lock)
 
   Messenger   *cluster_messenger;
   Messenger   *client_messenger;

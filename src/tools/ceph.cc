@@ -34,6 +34,7 @@ using namespace std;
 #include <envz.h>
 #endif // DARWIN
 
+#include <memory>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -55,7 +56,7 @@ struct ceph_tool_data g;
 
 static Cond cmd_cond;
 static SimpleMessenger *messenger = 0;
-static SafeTimer timer(g.lock);
+static std::auto_ptr < SafeTimer > timer;
 static Tokenizer *tok;
 
 static const char *outfile = 0;
@@ -282,7 +283,7 @@ static void send_observe_requests()
   registered.clear();
   float seconds = g_conf.paxos_observer_timeout/2;
   dout(1) << " refresh after " << seconds << " with same mon" << dendl;
-  timer.add_event_after(seconds, new C_ObserverRefresh(false));
+  timer->add_event_after(seconds, new C_ObserverRefresh(false));
 }
 
 static void handle_ack(MMonCommandAck *ack)
@@ -295,7 +296,7 @@ static void handle_ack(MMonCommandAck *ack)
   reply_bl = ack->get_data();
   cmd_cond.Signal();
   if (resend_event) {
-    timer.cancel_event(resend_event);
+    timer->cancel_event(resend_event);
     resend_event = 0;
   }
   g.lock.Unlock();
@@ -539,6 +540,7 @@ int main(int argc, const char **argv)
   
   common_set_defaults(false);
   common_init(args, "ceph", true);
+  timer.reset(new SafeTimer(g.lock));
 
   vec_to_argv(args, argc, argv);
 
@@ -682,6 +684,7 @@ int main(int argc, const char **argv)
   // wait for messenger to finish
   messenger->wait();
   messenger->destroy();
+  timer->shutdown();
   tok_end(tok);
   return ret;
 }

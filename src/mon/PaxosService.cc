@@ -77,7 +77,7 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
 	if (!proposal_timer) {
 	  dout(10) << " setting propose timer with delay of " << delay << dendl;
 	  proposal_timer = new C_Propose(this);
-	  mon->timer.add_event_after(delay, proposal_timer);
+	  mon->timer->add_event_after(delay, proposal_timer);
 	} else { 
 	  dout(10) << " propose timer already set" << dendl;
 	}
@@ -128,7 +128,7 @@ void PaxosService::propose_pending()
   assert(mon->is_leader() && paxos->is_active());
 
   if (proposal_timer) {
-    mon->timer.cancel_event(proposal_timer);
+    mon->timer->cancel_event(proposal_timer);
     proposal_timer = 0;
   }
 
@@ -148,7 +148,7 @@ void PaxosService::election_starting()
 {
   dout(10) << "election_starting" << dendl;
   if (proposal_timer) {
-    mon->timer.cancel_event(proposal_timer);
+    mon->timer->cancel_event(proposal_timer);
     proposal_timer = 0;
   }
 
@@ -196,7 +196,7 @@ void PaxosService::shutdown()
   paxos->cancel_events();
 
   if (proposal_timer) {
-    mon->timer.cancel_event(proposal_timer);
+    mon->timer->cancel_event(proposal_timer);
     proposal_timer = 0;
   }
 }

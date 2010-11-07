@@ -279,6 +279,7 @@ void MonClient::handle_monmap(MMonMap *m)
 void MonClient::init()
 {
   dout(10) << "init" << dendl;
+  timer.reset(new SafeTimer(monc_lock));
   messenger->add_dispatcher_head(this);
 
   entity_name = *g_conf.entity_name;
@@ -308,7 +309,7 @@ void MonClient::init()
 
 void MonClient::shutdown()
 {
-  timer.cancel_all_events();
+  timer->cancel_all_events();
 }
 
 int MonClient::authenticate(double timeout)
@@ -514,9 +515,9 @@ void MonClient::tick()
 void MonClient::schedule_tick()
 {
   if (hunting)
-    timer.add_event_after(g_conf.mon_client_hunt_interval, new C_Tick(this));
+    timer->add_event_after(g_conf.mon_client_hunt_interval, new C_Tick(this));
   else
-    timer.add_event_after(g_conf.mon_client_ping_interval, new C_Tick(this));
+    timer->add_event_after(g_conf.mon_client_ping_interval, new C_Tick(this));
 }
 
 

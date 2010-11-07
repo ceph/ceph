@@ -22,6 +22,7 @@
 #include "common/Clock.h"
 #include "common/Cond.h"
 #include "common/Mutex.h"
+#include "common/Thread.h"
 #include "mon/MonClient.h"
 #include "mon/MonMap.h"
 #include "tools/ceph.h"

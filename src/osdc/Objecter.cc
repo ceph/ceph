@@ -49,7 +49,7 @@
 
 void Objecter::init()
 {
-  assert(client_lock.is_locked());  // otherwise event cancellation is unsafe
+  assert(client_lock.is_locked());
   timer.add_event_after(g_conf.objecter_tick_interval, new C_Tick(this));
   maybe_request_map();
 }
@@ -57,8 +57,7 @@ void Objecter::init()
 void Objecter::shutdown() 
 {
   assert(client_lock.is_locked());  // otherwise event cancellation is unsafe
-  timer.cancel_all();
-  timer.join();
+  timer.cancel_all_events();
 }
 
 

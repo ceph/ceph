@@ -142,11 +142,11 @@ run() {
 if [ "$debug" -eq 0 ]; then
     CMONDEBUG='
 	debug mon = 10
-        debug ms = 1'
+        debug ms = 20'
     COSDDEBUG='
-        debug ms = 1'
+        debug ms = 20'
     CMDSDEBUG='
-        debug ms = 1'
+        debug ms = 20'
 else
     echo "** going verbose **"
     CMONDEBUG='
@@ -154,17 +154,17 @@ else
 	debug mon = 20
         debug paxos = 20
         debug auth = 20
-        debug ms = 1'
+        debug ms = 20'
     COSDDEBUG='
         lockdep = 1
-        debug ms = 1
+        debug ms = 20
         debug osd = 25
         debug monc = 20
         debug journal = 20
         debug filestore = 10'
     CMDSDEBUG='
         lockdep = 1
-        debug ms = 1
+        debug ms = 20
         debug mds = 20
         debug auth = 20
         debug monc = 20
@@ -214,10 +214,13 @@ echo "ip $IP"
 [ -z "$CEPH_PORT" ] && CEPH_PORT=6789
 
 
+
+CEPH_ADM_DEBUG="--debug-ms 20 --log-file /tmp/foo"
+
 if [ "$cephx" -eq 1 ]; then
-    CEPH_ADM="$CEPH_BIN/ceph -c $conf -k $keyring_fn"
+    CEPH_ADM="$CEPH_BIN/ceph -c $conf -k $keyring_fn ${CEPH_ADM_DEBUG}"
 else
-    CEPH_ADM="$CEPH_BIN/ceph -c $conf"
+    CEPH_ADM="$CEPH_BIN/ceph -c $conf ${CEPH_ADM_DEBUG}"
 fi
 
 
