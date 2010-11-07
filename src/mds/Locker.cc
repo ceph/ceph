@@ -172,7 +172,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
 			   set<SimpleLock*> &wrlocks,
 			   set<SimpleLock*> &xlocks)
 {
-  if (mdr->done_locking) {
+  if (mdr->done_locking &&
+      !mdr->is_slave()) {  // not on slaves!  master requests locks piecemeal.
     dout(10) << "acquire_locks " << *mdr << " - done locking" << dendl;    
     return true;  // at least we had better be!
   }
@@ -476,6 +477,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
       (IS_TRUE_AND_LT_AUTH(lock->get_sm()->states[next].can_wrlock, auth) || !lock->is_wrlocked()) &&
       (IS_TRUE_AND_LT_AUTH(lock->get_sm()->states[next].can_xlock, auth) || !lock->is_xlocked()) &&
       (IS_TRUE_AND_LT_AUTH(lock->get_sm()->states[next].can_lease, auth) || !lock->is_leased()) &&
+      (!lock->is_flushing()) &&  // i.e. wait for scatter_writebehind!
       (!caps || ((~lock->gcaps_allowed(CAP_ANY, next) & other_issued) == 0 &&
 		 (~lock->gcaps_allowed(CAP_LONER, next) & loner_issued) == 0 &&
 		 (~lock->gcaps_allowed(CAP_XLOCKER, next) & xlocker_issued) == 0)) &&

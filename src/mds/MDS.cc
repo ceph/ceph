@@ -750,17 +750,20 @@ void MDS::handle_command(MMonCommand *m)
     }
     logclient.log(LOG_INFO, ss);
   } else if (m->cmd.size() == 1 && m->cmd[0] == "enable_profiler_options") {
-    char *val = new char[sizeof(int)*8+1];
-    sprintf(val, "%i", g_conf.profiler_allocation_interval);
-    setenv("HEAP_PROFILE_ALLOCATION_INTERVAL", val, g_conf.profiler_allocation_interval);
-    sprintf(val, "%i", g_conf.profiler_highwater_interval);
-    setenv("HEAP_PROFILE_INUSE_INTERVAL", "", g_conf.profiler_highwater_interval);
+    char val[sizeof(int)*8+1];
+    snprintf(val, sizeof(val), "%i", g_conf.profiler_allocation_interval);
+    setenv("HEAP_PROFILE_ALLOCATION_INTERVAL",
+	   val, g_conf.profiler_allocation_interval);
+    snprintf(val, sizeof(val), "%i", g_conf.profiler_highwater_interval);
+    setenv("HEAP_PROFILE_INUSE_INTERVAL",
+	   val, g_conf.profiler_highwater_interval);
     stringstream ss;
     ss << g_conf.name << " set heap variables from current config";
     logclient.log(LOG_INFO, ss);
   } else if (m->cmd.size() == 1 && m->cmd[0] == "start_profiler") {
-    char *location = new char[PATH_MAX];
-    sprintf(location, "%s/%s", g_conf.log_dir, g_conf.name);
+    char location[PATH_MAX];
+    snprintf(location, sizeof(location),
+	     "%s/%s", g_conf.log_dir, g_conf.name);
     g_conf.profiler_start(location);
     stringstream ss;
     ss << g_conf.name << " started profiler";

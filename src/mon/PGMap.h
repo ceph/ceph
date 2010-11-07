@@ -310,7 +310,7 @@ public:
     if (pg_sum.num_objects_degraded) {
       double pc = (double)pg_sum.num_objects_degraded / (double)pg_sum.num_object_copies * (double)100.0;
       char b[20];
-      sprintf(b, "%.3lf", pc);
+      snprintf(b, sizeof(b), "%.3lf", pc);
       out << "; " //<< pg_sum.num_objects_missing_on_primary << "/"
 	  << pg_sum.num_objects_degraded 
 	  << "/" << pg_sum.num_object_copies << " degraded (" << b << "%)";

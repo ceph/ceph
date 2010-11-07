@@ -60,7 +60,7 @@ int main(int argc, const char **argv)
 
   for (int i=0; i<mb; i++) {
     char f[30];
-    sprintf(f, "foo%d\n", i);
+    snprintf(f, sizeof(f), "foo%d\n", i);
     sobject_t soid(f, CEPH_NOSNAP);
     t.write(coll_t(), soid, 0, bl.length(), bl);
   }

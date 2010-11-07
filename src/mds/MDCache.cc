@@ -5147,6 +5147,7 @@ void MDCache::trim_non_auth()
       else if (dnl->is_primary()) {
 	CInode *in = dnl->get_inode();
 	list<CDir*> ls;
+        warn_string_dirs << in->get_parent_dn()->get_name() << std::endl;
 	in->get_dirfrags(ls);
 	for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
 	  CDir *subdir = *p;
@@ -5158,7 +5159,6 @@ void MDCache::trim_non_auth()
 	}
 	dir->unlink_inode(dn);
 	remove_inode(in);
-	warn_string_dirs << in->get_parent_dn()->get_name() << std::endl;
       } 
       else {
 	assert(dnl->is_null());

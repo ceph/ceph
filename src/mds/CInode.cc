@@ -13,6 +13,7 @@
  */
 
 
+#define __STDC_FORMAT_MACROS
 
 #include "CInode.h"
 #include "CDir.h"
@@ -36,6 +37,7 @@
 #include "messages/MLock.h"
 #include "messages/MClientCaps.h"
 
+#include <inttypes.h>
 #include <string>
 #include <stdio.h>
 
@@ -664,13 +666,16 @@ void CInode::make_path_string(string& s, bool force, CDentry *use_parent)
     s = "";  // root
   } 
   else if (is_mdsdir()) {
-    char t[30];
-    sprintf(t, "~mds%d", (int)ino() - MDS_INO_MDSDIR_OFFSET);
+    char t[40];
+    uint64_t eino(ino());
+    eino -= MDS_INO_MDSDIR_OFFSET;
+    snprintf(t, sizeof(t), "~mds%" PRId64, eino);
     s = t;
   }
   else {
-    char n[20];
-    snprintf(n, sizeof(n), "#%llx", (unsigned long long)(ino()));
+    char n[40];
+    uint64_t eino(ino());
+    snprintf(n, sizeof(n), "#%" PRIx64, eino);
     s += n;
   }
 }

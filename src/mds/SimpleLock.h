@@ -381,7 +381,7 @@ public:
 
   virtual bool is_dirty() const { return false; }
   virtual bool is_stale() const { return false; }
-
+  virtual bool is_flushing() const { return false; }
 
   // can_*
   bool can_lease(client_t client) const {

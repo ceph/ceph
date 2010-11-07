@@ -450,10 +450,10 @@ inline void decode(std::multimap<T,U>& m, bufferlist::iterator& p)
   decode(n, p);
   m.clear();
   while (n--) {
-    typename std::pair<T,U> val;
-    decode(val.first, p);
-    decode(val.second, p);
-    m.insert(val);
+    typename std::pair<T,U> tu;
+    decode(tu.first, p);
+    typename std::multimap<T,U>::iterator it = m.insert(tu);
+    decode(it->second, p);
   }
 }
 
