@@ -262,6 +262,7 @@ struct md_config_t {
 
   bool mds_log;
   bool mds_log_unsafe;
+  bool mds_log_skip_corrupt_events;
   int mds_log_max_events;
   int mds_log_max_segments;
   int mds_log_max_expiring;

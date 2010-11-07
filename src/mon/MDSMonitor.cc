@@ -616,6 +616,15 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "fail" && m->cmd.size() == 3) {
       int w = atoi(m->cmd[2].c_str());
+
+      if (pending_mdsmap.up.count(w) &&
+	  pending_mdsmap.mds_info.count(pending_mdsmap.up[w])) {
+	utime_t until = g_clock.now();
+	until += g_conf.mds_blacklist_interval;
+	MDSMap::mds_info_t& info = pending_mdsmap.mds_info[pending_mdsmap.up[w]];
+	pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
+	mon->osdmon()->propose_pending();
+      }
       pending_mdsmap.failed.insert(w);
       pending_mdsmap.up.erase(w);
       stringstream ss;
@@ -833,7 +842,7 @@ void MDSMonitor::tick()
 	  // blacklist laggy mds
 	  utime_t until = now;
 	  until += g_conf.mds_blacklist_interval;
-	  mon->osdmon()->blacklist(info.addr, until);
+	  pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
 	  propose_osdmap = true;
 	}
 	pending_mdsmap.mds_info.erase(gid);
@@ -953,6 +962,8 @@ void MDSMonitor::do_stop()
   dout(7) << "do_stop stopping active mds nodes" << dendl;
   print_map(mdsmap);
 
+  bool propose_osdmap = false;
+
   map<uint64_t,MDSMap::mds_info_t>::iterator p = pending_mdsmap.mds_info.begin();
   while (p != pending_mdsmap.mds_info.end()) {
     uint64_t gid = p->first;
@@ -976,6 +987,12 @@ void MDSMonitor::do_stop()
     case MDSMap::STATE_REJOIN:
     case MDSMap::STATE_CLIENTREPLAY:
       // BUG: hrm, if this is the case, the STOPPING guys won't be able to stop, will they?
+      {
+	utime_t until = g_clock.now();
+	until += g_conf.mds_blacklist_interval;
+	pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
+	propose_osdmap = true;
+      }
       pending_mdsmap.failed.insert(info.rank);
       pending_mdsmap.up.erase(info.rank);
       pending_mdsmap.mds_info.erase(gid);
@@ -985,4 +1002,6 @@ void MDSMonitor::do_stop()
   }
 
   propose_pending();
+  if (propose_osdmap)
+    mon->osdmon()->propose_pending();
 }

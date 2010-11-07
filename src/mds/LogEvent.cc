@@ -48,8 +48,6 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   int length = bl.length() - p.get_off();
   generic_dout(15) << "decode_log_event type " << type << ", size " << length << dendl;
   
-  assert(type > 0);
-  
   // create event
   LogEvent *le;
   switch (type) {
@@ -73,14 +71,21 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   case EVENT_TABLESERVER: le = new ETableServer; break;
 
   default:
-    generic_dout(1) << "uh oh, unknown log event type " << type << dendl;
-    assert(0);
+    generic_dout(0) << "uh oh, unknown log event type " << type << " length " << length << dendl;
+    return NULL;
   }
 
   // decode
-  le->decode(p);
+  try {
+    le->decode(p);
+  }
+  catch (const buffer::error &e) {
+    generic_dout(0) << "failed to decode LogEvent type " << type << dendl;
+    delete le;
+    return NULL;
+  }
+
   assert(p.end());
-  
   return le;
 }
 

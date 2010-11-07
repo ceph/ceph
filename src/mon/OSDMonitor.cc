@@ -867,10 +867,11 @@ void OSDMonitor::send_incremental(epoch_t first, entity_inst_t& dest)
 
 
 
-void OSDMonitor::blacklist(entity_addr_t a, utime_t until)
+epoch_t OSDMonitor::blacklist(entity_addr_t a, utime_t until)
 {
   dout(10) << "blacklist " << a << " until " << until << dendl;
   pending_inc.new_blacklist[a] = until;
+  return pending_inc.epoch;
 }
 
 

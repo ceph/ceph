@@ -522,6 +522,16 @@ void MDLog::_replay_thread()
     
     // unpack event
     LogEvent *le = LogEvent::decode(bl);
+    if (!le) {
+      dout(0) << "_replay " << pos << "~" << bl.length() << " / " << journaler->get_write_pos() 
+	      << " -- unable to decode event" << dendl;
+      dout(0) << "dump of unknown or corrupt event:\n";
+      bl.hexdump(*_dout);
+      *_dout << dendl;
+
+      assert(!!"corrupt log event" == g_conf.mds_log_skip_corrupt_events);
+      continue;
+    }
 
     // new segment?
     if (le->get_type() == EVENT_SUBTREEMAP) {
