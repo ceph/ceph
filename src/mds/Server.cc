@@ -1898,6 +1898,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
   mdr->in[n] = dn->get_projected_linkage()->get_inode();
 
   // -- lock --
+  // NOTE: rename takes the same set of locks for srcdn
   for (int i=0; i<(int)mdr->dn[n].size(); i++) 
     rdlocks.insert(&mdr->dn[n][i]->lock);
   if (alwaysxlock || dn->get_linkage(client, mdr)->is_null())
@@ -4337,6 +4338,9 @@ void Server::handle_client_rename(MDRequest *mdr)
   }
   const string &destname = destpath.last_dentry();
 
+  vector<CDentry*>& srctrace = mdr->dn[1];
+  vector<CDentry*>& desttrace = mdr->dn[0];
+
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
 
   CDentry *destdn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, true, false, true);
@@ -4350,10 +4354,17 @@ void Server::handle_client_rename(MDRequest *mdr)
   CDir *destdir = destdn->get_dir();
   assert(destdir->is_auth());
 
-  CDentry *srcdn = rdlock_path_xlock_dentry(mdr, 1, rdlocks, wrlocks, xlocks, true, true, true);
-  if (!srcdn) return;
+  int r = mdcache->path_traverse(mdr, 0, srcpath, &srctrace, NULL, MDS_TRAVERSE_DISCOVERXLOCK);
+  if (r > 0)
+    return; // delayed
+  if (r < 0) {
+    reply_request(mdr, r);
+    return;
+  }
+  assert(!srctrace.empty());
+  CDentry *srcdn = srctrace[srctrace.size()-1];
   dout(10) << " srcdn " << *srcdn << dendl;
-  if (mdr->snapid != CEPH_NOSNAP) {
+  if (srcdn->last != CEPH_NOSNAP) {
     reply_request(mdr, -EROFS);
     return;
   }
@@ -4391,8 +4402,6 @@ void Server::handle_client_rename(MDRequest *mdr)
   if (destpath.get_ino() != srcpath.get_ino() &&
       !MDS_INO_IS_STRAY(srcpath.get_ino())) {  // <-- mds 'rename' out of stray dir is ok!
     // do traces share a dentry?
-    vector<CDentry*>& srctrace = mdr->dn[1];
-    vector<CDentry*>& desttrace = mdr->dn[0];
     CDentry *common = 0;
     for (unsigned i=0; i < srctrace.size(); i++) {
       for (unsigned j=0; j < desttrace.size(); j++) {
@@ -4493,6 +4502,14 @@ void Server::handle_client_rename(MDRequest *mdr)
 
 
   // -- locks --
+
+  // srctrace items.  this mirrors locks taken in rdlock_path_xlock_dentry
+  for (int i=0; i<(int)srctrace.size(); i++) 
+    rdlocks.insert(&srctrace[i]->lock);
+  xlocks.insert(&srcdn->lock);
+  wrlocks.insert(&srcdn->get_dir()->inode->filelock);
+  wrlocks.insert(&srcdn->get_dir()->inode->nestlock);
+  mds->locker->include_snap_rdlocks(rdlocks, srcdn->get_dir()->inode);
 
   // straydn?
   if (straydn) {
