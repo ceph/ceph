@@ -3393,6 +3393,11 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
 	// can we do it now?
 	//  (only if we're not replicated.. if we are, we really do need
 	//   to nudge the lock state!)
+	/*
+	  actually, even if we're not replicated, we can't stay in MIX, because another mds
+	  could discover and replicate us at any time.  if that happens while we're flushing,
+	  they end up in MIX but their inode has the old scatterstat version.
+
 	if (!forcelockchange && !lock->get_parent()->is_replicated() && lock->can_wrlock(-1)) {
 	  dout(10) << "scatter_nudge auth, propagating " << *lock << " on " << *p << dendl;
 	  scatter_writebehind(lock);
@@ -3400,6 +3405,7 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
 	    lock->add_waiter(SimpleLock::WAIT_STABLE, c);
 	  return;
 	}
+	*/
 
 	// adjust lock state
 	dout(10) << "scatter_nudge auth, scatter/unscattering " << *lock << " on " << *p << dendl;
