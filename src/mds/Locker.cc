@@ -172,7 +172,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
 			   set<SimpleLock*> &wrlocks,
 			   set<SimpleLock*> &xlocks)
 {
-  if (mdr->done_locking) {
+  if (mdr->done_locking &&
+      !mdr->is_slave()) {  // not on slaves!  master requests locks piecemeal.
     dout(10) << "acquire_locks " << *mdr << " - done locking" << dendl;    
     return true;  // at least we had better be!
   }
