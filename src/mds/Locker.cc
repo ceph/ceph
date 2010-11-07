@@ -3317,11 +3317,18 @@ void Locker::scatter_eval(ScatterLock *lock, bool *need_issue)
   if (lock->get_parent()->is_frozen()) return;
   
   if (lock->get_type() == CEPH_LOCK_INEST) {
-    // in general, we want to keep INEST scattered at all times.
+    // in general, we want to keep INEST writable at all times.
     if (!lock->is_rdlocked() &&
-	lock->get_state() != LOCK_MIX)
-      scatter_mix(lock, need_issue);
-      return;
+	!lock->is_xlocked()) {
+      if (lock->get_parent()->is_replicated()) {
+	if (lock->get_state() != LOCK_MIX)
+	  scatter_mix(lock, need_issue);
+      } else {
+	if (lock->get_state() != LOCK_LOCK)
+	  simple_lock(lock, need_issue);
+      }
+    }
+    return;
   }
 
   CInode *in = (CInode*)lock->get_parent();
