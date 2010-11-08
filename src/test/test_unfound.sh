@@ -45,10 +45,19 @@ do_test() {
         [ $? -eq 1 ] || die "Failed to see unfound objects."
         echo "Got unfound objects."
 
+        (
+                ./rados -p data get obj01 $TEMPDIR/obj01 || die "radostool failed"
+        ) &
+        sleep 5
+        [ -e $TEMPDIR/obj01 ] && die "unexpected error: fetched unfound object?"
+
         restart_osd 0
 
 	poll_cmd "./ceph pg debug unfound_objects_exist" FALSE 3 120
         [ $? -eq 1 ] || die "Failed to recover unfound objects."
+
+        wait
+        [ -e $TEMPDIR/obj01 ] || die "unexpected error: failed to fetched newly-found object"
 
         # success
         return 1
