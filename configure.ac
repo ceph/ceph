@@ -160,6 +160,7 @@ AC_CHECK_HEADER([histedit.h],
 AC_CHECK_HEADER([openssl/md5.h],
 	[],
 	[AC_MSG_ERROR([Sorry you need openssl dev files (libssl-dev on debian)])])
+PKG_CHECK_MODULES([OPENSSL], [openssl])
 
 AC_CHECK_HEADERS([sys/xattr.h arpa/inet.h netdb.h netinet/in.h sys/file.h sys/ioctl.h sys/mount.h sys/param.h sys/socket.h sys/statvfs.h sys/time.h sys/vfs.h syslog.h utime.h])
 
