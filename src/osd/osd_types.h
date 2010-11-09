@@ -1337,13 +1337,17 @@ struct ScrubMap {
   struct object {
     sobject_t poid;
     uint64_t size;
+    bool negative;
     map<string,bufferptr> attrs;
+
+    object(): poid(),size(0),negative(0),attrs() {}
 
     void encode(bufferlist& bl) const {
       __u8 struct_v = 1;
       ::encode(struct_v, bl);
       ::encode(poid, bl);
       ::encode(size, bl);
+      ::encode(negative, bl);
       ::encode(attrs, bl);
     }
     void decode(bufferlist::iterator& bl) {
@@ -1351,14 +1355,38 @@ struct ScrubMap {
       ::decode(struct_v, bl);
       ::decode(poid, bl);
       ::decode(size, bl);
+      ::decode(negative, bl);
       ::decode(attrs, bl);
     }
   };
   WRITE_CLASS_ENCODER(object)
 
-  vector<object> objects;
+  map<sobject_t,object> objects;
   map<string,bufferptr> attrs;
   bufferlist logbl;
+  eversion_t valid_through;
+  eversion_t incr_since;
+
+  void merge_incr(const ScrubMap &l) {
+    assert(valid_through == l.incr_since);
+    attrs = l.attrs;
+    logbl = l.logbl;
+    valid_through = l.valid_through;
+
+    for (map<sobject_t,object>::const_iterator p = l.objects.begin();
+         p != l.objects.end();
+         p++){
+      if (p->second.negative) {
+        map<sobject_t,object>::iterator q = objects.find(p->first);
+        if (q != objects.end()) {
+          objects.erase(q);
+        }
+      } else {
+        objects[p->first] = p->second;
+      }
+    }
+  }
+          
 
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
@@ -1366,6 +1394,8 @@ struct ScrubMap {
     ::encode(objects, bl);
     ::encode(attrs, bl);
     ::encode(logbl, bl);
+    ::encode(valid_through, bl);
+    ::encode(incr_since, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 struct_v;
@@ -1373,6 +1403,8 @@ struct ScrubMap {
     ::decode(objects, bl);
     ::decode(attrs, bl);
     ::decode(logbl, bl);
+    ::decode(valid_through, bl);
+    ::decode(incr_since, bl);
   }
 };
 WRITE_CLASS_ENCODER(ScrubMap::object)

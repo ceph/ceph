@@ -215,7 +215,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 
 void ReplicatedPG::calc_trim_to()
 {
-  if (!is_degraded() &&
+  if (!is_degraded() && !is_scrubbing() &&
       (is_clean() ||
        log.head.version - log.tail.version > info.stats.num_objects)) {
     if (min_last_complete_ondisk != eversion_t() &&
@@ -238,6 +238,10 @@ void ReplicatedPG::do_op(MOSDOp *op)
     return do_pg_op(op);
 
   dout(10) << "do_op " << *op << dendl;
+  if (finalizing_scrub && op->may_write()) {
+    waiting_for_active.push_back(op);
+    return;
+  }
 
   entity_inst_t client = op->get_source_inst();
 
@@ -1952,6 +1956,10 @@ void ReplicatedPG::op_applied(RepGather *repop)
   put_object_context(repop->obc);
   repop->obc = 0;
 
+  last_update_applied = repop->v;
+  if (last_update_applied == info.last_update && finalizing_scrub) {
+    kick();
+  }
   update_stats();
 
 #if 0
@@ -2575,6 +2583,11 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
 
   rm->applied = true;
   bool done = rm->applied && rm->committed;
+
+  last_update_applied = rm->op->version;
+  if (last_update_applied == info.last_update && finalizing_scrub) {
+    kick();
+  }
 
   unlock();
   if (done) {
@@ -3938,22 +3951,22 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 
   bufferlist last_data;
 
-  for (vector<ScrubMap::object>::reverse_iterator p = scrubmap.objects.rbegin(); 
+  for (map<sobject_t,ScrubMap::object>::reverse_iterator p = scrubmap.objects.rbegin(); 
        p != scrubmap.objects.rend(); 
        p++) {
-    const sobject_t& soid = p->poid;
+    const sobject_t& soid = p->second.poid;
     stat.num_objects++;
 
     // new snapset?
     if (soid.snap == CEPH_SNAPDIR ||
 	soid.snap == CEPH_NOSNAP) {
-      if (p->attrs.count(SS_ATTR) == 0) {
+      if (p->second.attrs.count(SS_ATTR) == 0) {
 	dout(0) << mode << " no '" << SS_ATTR << "' attr on " << soid << dendl;
 	errors++;
 	continue;
       }
       bufferlist bl;
-      bl.push_back(p->attrs[SS_ATTR]);
+      bl.push_back(p->second.attrs[SS_ATTR]);
       bufferlist::iterator blp = bl.begin();
       ::decode(snapset, blp);
 
@@ -3986,19 +3999,19 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
       continue;
 
     // basic checks.
-    if (p->attrs.count(OI_ATTR) == 0) {
+    if (p->second.attrs.count(OI_ATTR) == 0) {
       dout(0) << mode << " no '" << OI_ATTR << "' attr on " << soid << dendl;
       errors++;
       continue;
     }
     bufferlist bv;
-    bv.push_back(p->attrs[OI_ATTR]);
+    bv.push_back(p->second.attrs[OI_ATTR]);
     object_info_t oi(bv);
 
     dout(20) << mode << "  " << soid << " " << oi << dendl;
 
-    stat.num_bytes += p->size;
-    stat.num_kb += SHIFT_ROUND_UP(p->size, 10);
+    stat.num_bytes += p->second.size;
+    stat.num_kb += SHIFT_ROUND_UP(p->second.size, 10);
 
     //bufferlist data;
     //osd->store->read(c, poid, 0, 0, data);
@@ -4018,7 +4031,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
       
       assert(soid.snap == snapset.clones[curclone]);
 
-      assert(p->size == snapset.clone_size[curclone]);
+      assert(p->second.size == snapset.clone_size[curclone]);
 
       // verify overlap?
       // ...

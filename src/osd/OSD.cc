@@ -4604,13 +4604,6 @@ void OSD::handle_op(MOSDOp *op)
       return;
     }
     
-    // scrubbing?
-    if (pg->is_scrubbing()) {
-      dout(10) << *pg << " is scrubbing, deferring op " << *op << dendl;
-      pg->waiting_for_active.push_back(op);
-      pg->unlock();
-      return;
-    }
   } else {
     // read
     if (!pg->same_for_read_since(op->get_map_epoch())) {
