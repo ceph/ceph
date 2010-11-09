@@ -421,7 +421,7 @@ private:
   }
 
   bool is_up(int osd) const {
-    return exists(osd) && osd_state[osd] & CEPH_OSD_UP;
+    return exists(osd) && (osd_state[osd] & CEPH_OSD_UP);
   }
 
   bool is_down(int osd) const {
