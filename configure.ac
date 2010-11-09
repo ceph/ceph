@@ -161,6 +161,10 @@ AC_CHECK_HEADER([openssl/md5.h],
 	[],
 	[AC_MSG_ERROR([Sorry you need openssl dev files (libssl-dev on debian)])])
 
+AC_CHECK_HEADER([linux/fiemap.h],
+	[AC_DEFINE([HAVE_FIEMAP_H], [], [linux/fiemap.h was found, fiemap ioctl will be used])],
+	[AC_MSG_NOTICE([linux/fiemap.h was not found, fiemap ioctl will not be used])])
+
 AC_CHECK_HEADERS([sys/xattr.h arpa/inet.h netdb.h netinet/in.h sys/file.h sys/ioctl.h sys/mount.h sys/param.h sys/socket.h sys/statvfs.h sys/time.h sys/vfs.h syslog.h utime.h])
 
 # sync_file_range

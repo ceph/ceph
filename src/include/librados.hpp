@@ -74,7 +74,8 @@ public:
   int read(pool_t pool, const std::string& oid, off_t off, bufferlist& bl, size_t len);
   int remove(pool_t pool, const std::string& oid);
   int trunc(pool_t pool, const std::string& oid, size_t size);
-
+  int mapext(pool_t pool, const string& o, off_t off, size_t len, std::map<off_t, size_t>& m);
+  int sparse_read(pool_t pool, const string& o, off_t off, size_t len, std::map<off_t, size_t>& m, bufferlist& bl);
   int getxattr(pool_t pool, const std::string& oid, const char *name, bufferlist& bl);
   int setxattr(pool_t pool, const std::string& oid, const char *name, bufferlist& bl);
   int rmxattr(pool_t pool, const std::string& oid, const char *name);

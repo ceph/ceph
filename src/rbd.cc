@@ -6,10 +6,10 @@
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
  *
  * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * modify it under the terms of the GNU General Public
+ * License version 2, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #define __STDC_FORMAT_MACROS
@@ -28,7 +28,13 @@ using namespace librados;
 #include <sys/types.h>
 #include <time.h>
 
+#include <sys/ioctl.h>
+
 #include "include/rbd_types.h"
+
+#include <linux/fs.h>
+
+#include "include/fiemap.h"
 
 struct pools {
   pool_t md;
@@ -148,6 +154,20 @@ static uint64_t get_block_num(rbd_obj_header_ondisk *header, uint64_t ofs)
   uint64_t num = ofs >> obj_order;
 
   return num;
+}
+static uint64_t get_pos_in_block(rbd_obj_header_ondisk *header, uint64_t ofs)
+{
+  int obj_order = header->options.order;
+  uint64_t mask = (1 << obj_order) - 1;
+  return ofs & mask;
+}
+
+static uint64_t bounded_pos_in_block(rbd_obj_header_ondisk *header, uint64_t end_ofs, unsigned int i)
+{
+  int obj_order = header->options.order;
+  if (end_ofs >> obj_order > i)
+    return (1 << obj_order);
+  return get_pos_in_block(header, end_ofs);
 }
 
 void trim_image(pools_t& pp, const char *imgname, rbd_obj_header_ondisk *header, uint64_t newsize)
@@ -629,7 +649,10 @@ static int do_export(pools_t& pp, string& md_oid, const char *path)
   for (uint64_t i = 0; i < numseg; i++) {
     bufferlist bl;
     string oid = get_block_oid(&header, i);
-    r = rados.read(pp.data, oid, 0, bl, block_size);
+    map<off_t, size_t> m;
+    map<off_t, size_t>::iterator iter;
+    off_t bl_ofs = 0;
+    r = rados.sparse_read(pp.data, oid, 0, block_size, m, bl);
     if (r < 0 && r == -ENOENT)
       r = 0;
     if (r < 0) {
@@ -637,16 +660,23 @@ static int do_export(pools_t& pp, string& md_oid, const char *path)
       goto done;
     }
 
-    if (bl.length()) {
-      ret = lseek64(fd, pos, SEEK_SET);
+    for (iter = m.begin(); iter != m.end(); ++iter) {
+      off_t extent_ofs = iter->first;
+      size_t extent_len = iter->second;
+      ret = lseek64(fd, pos + extent_ofs, SEEK_SET);
       if (ret < 0) {
 	ret = -errno;
 	cerr << "could not seek to pos " << pos << std::endl;
 	goto done;
       }
-      ret = write(fd, bl.c_str(), bl.length());
+      if (bl_ofs + extent_len > bl.length()) {
+        cerr << "data error!" << std::endl;
+        return -EIO;
+      }
+      ret = write(fd, bl.c_str() + bl_ofs, extent_len);
       if (ret < 0)
         goto done;
+      bl_ofs += extent_len;
     }
 
     pos += block_size;
@@ -732,6 +762,7 @@ static int do_import(pool_t pool, const char *imgname, int order, const char *pa
   uint64_t block_size;
   struct stat stat_buf;
   string md_oid;
+  struct fiemap *fiemap;
 
   if (fd < 0) {
     r = -errno;
@@ -768,37 +799,92 @@ static int do_import(pool_t pool, const char *imgname, int order, const char *pa
     return r;
   }
 
-  uint64_t numseg = get_max_block(&header);
-  uint64_t seg_pos = 0;
-  for (uint64_t i=0; i<numseg; i++) {
-    uint64_t seg_size = min(size - seg_pos, block_size);
-    uint64_t seg_left = seg_size;
-
-    while (seg_left) {
-      uint64_t len = min(seg_left, block_size);
-      bufferptr p(len);
-      len = read(fd, p.c_str(), len);
-      if (len < 0) {
-        r = -errno;
-        cerr << "error reading file\n" << std::endl;
-        return r;
-      }
-      bufferlist bl;
-      bl.append(p);
-      string oid = get_block_oid(&header, i);
-      r = rados.write(pool, oid, 0, bl, len);
-      if (r < 0) {
-        cerr << "error writing to image block" << std::endl;
-        return r;
-      }
-
-      seg_left -= len;
+  fiemap = read_fiemap(fd);
+  if (!fiemap) {
+    fiemap = (struct fiemap *)malloc(sizeof(struct fiemap) +  sizeof(struct fiemap_extent));
+    if (!fiemap) {
+      cerr << "Failed to allocate fiemap, not enough memory." << std::endl;
+      return -ENOMEM;
     }
-
-    seg_pos += seg_size;
+    fiemap->fm_start = 0;
+    fiemap->fm_length = size;
+    fiemap->fm_flags = 0;
+    fiemap->fm_extent_count = 1;
+    fiemap->fm_mapped_extents = 1;
+    fiemap->fm_extents[0].fe_logical = 0;
+    fiemap->fm_extents[0].fe_physical = 0;
+    fiemap->fm_extents[0].fe_length = size;
+    fiemap->fm_extents[0].fe_flags = 0;
   }
 
-  return 0;
+  uint64_t extent = 0;
+
+  while (extent < fiemap->fm_mapped_extents) {
+    uint64_t start_block, end_block;
+    off_t file_pos, end_ofs;
+    size_t extent_len = 0;
+
+    file_pos = fiemap->fm_extents[extent].fe_logical; /* position within the file we're reading */
+    start_block = get_block_num(&header, file_pos); /* starting block */
+
+    do { /* try to merge consecutive extents */
+#define LARGE_ENOUGH_EXTENT (32 * 1024 * 1024)
+      if (extent_len &&
+          extent_len + fiemap->fm_extents[extent].fe_length > LARGE_ENOUGH_EXTENT)
+        break; /* don't try to merge if we're big enough */
+
+      extent_len += fiemap->fm_extents[extent].fe_length;  /* length of current extent */
+      end_ofs = min(size, file_pos + extent_len);
+
+      end_block = get_block_num(&header, end_ofs - 1); /* ending block */
+
+      extent++;
+      if (extent == fiemap->fm_mapped_extents)
+        break;
+      
+    } while (end_ofs == (off_t)fiemap->fm_extents[extent].fe_logical);
+
+    cerr << "rbd import file_pos=" << file_pos << " extent_len=" << extent_len << std::endl;
+    for (uint64_t i = start_block; i <= end_block; i++) {
+      uint64_t ofs_in_block = get_pos_in_block(&header, file_pos); /* the offset within the starting block */
+      uint64_t seg_size = bounded_pos_in_block(&header, end_ofs, i) - ofs_in_block;
+      uint64_t seg_left = seg_size;
+
+      cerr << "i=" << i << " (" << start_block << "/" << end_block << ") "
+           << "seg_size=" << seg_size << " seg_left=" << seg_left << std::endl;
+      while (seg_left) {
+        uint64_t len = seg_left;
+        bufferptr p(len);
+        cerr << "reading " << len << " bytes at offset " << file_pos << std::endl;
+        len = pread(fd, p.c_str(), len, file_pos);
+        if (len < 0) {
+          r = -errno;
+          cerr << "error reading file\n" << std::endl;
+          goto done;
+        }
+        bufferlist bl;
+        bl.append(p);
+        string oid = get_block_oid(&header, i);
+        cerr << "writing " << len << " bytes at offset " << ofs_in_block << " at block " << oid << std::endl;
+        r = rados.write(pool, oid, ofs_in_block, bl, len);
+        if (r < 0) {
+          cerr << "error writing to image block" << std::endl;
+          goto done;
+        }
+
+        seg_left -= len;
+        file_pos += len;
+        ofs_in_block += len;
+      }
+    }
+  }
+
+  r = 0;
+
+done:
+  free(fiemap);
+
+  return r;
 }
 
 static int do_copy(pools_t& pp, const char *imgname, const char *destname)
@@ -837,23 +923,34 @@ static int do_copy(pools_t& pp, const char *imgname, const char *destname)
   for (uint64_t i = 0; i < numseg; i++) {
     bufferlist bl;
     string oid = get_block_oid(&header, i);
-    r = rados.read(pp.data, oid, 0, bl, block_size);
+    string dest_oid = get_block_oid(&dest_header, i);
+    map<off_t, size_t> m;
+    map<off_t, size_t>::iterator iter;
+    r = rados.sparse_read(pp.data, oid, 0, block_size, m, bl);
     if (r < 0 && r == -ENOENT)
       r = 0;
     if (r < 0)
       return r;
 
-    if (bl.length()) {
-      string dest_oid = get_block_oid(&dest_header, i);
-      r = rados.write(pp.dest, dest_oid, 0, bl, bl.length());
-      if (r < 0) {
-        cerr << "failed to write block " << dest_oid << std::endl;
-        return r;
+
+    for (iter = m.begin(); iter != m.end(); ++iter) {
+      off_t extent_ofs = iter->first;
+      size_t extent_len = iter->second;
+      bufferlist wrbl;
+      if (extent_ofs + extent_len > bl.length()) {
+        cerr << "data error!" << std::endl;
+        return -EIO;
       }
+      bl.copy(extent_ofs, extent_len, wrbl);
+      r = rados.write(pp.dest, dest_oid, extent_ofs, wrbl, extent_len);
+      if (r < 0)
+        goto done;
     }
   }
+  r = 0;
 
-  return 0;
+done:
+  return r;
 }
 
 static void err_exit(pools_t& pp)
