@@ -77,8 +77,8 @@ public:
 	list <Context*>::const_iterator cit = p.running.begin();
 	if (cit == p.running.end())
 	  break;
-	p.running.pop_front();
 	Context *ctx = *cit;
+	p.running.pop_front();
 	dout(DBL) << "start callback " << ctx << dendl;
 	ctx->finish(0);
 	dout(DBL) << "deleting callback " << ctx << dendl;
