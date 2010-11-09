@@ -39,9 +39,7 @@
 #include <sys/ioctl.h>
 #include <linux/fs.h>
 
-#ifdef HAVE_FIEMAP_H
-#include <linux/fiemap.h>
-#endif
+#include "include/fiemap.h"
 
 #ifndef __CYGWIN__
 # include <sys/xattr.h>
@@ -379,7 +377,6 @@ bool parse_attrname(char **name)
   return false;
 }
 
-#ifdef HAVE_FIEMAP_H
 static int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap)
 {
   struct fiemap *fiemap = NULL;
@@ -425,12 +422,6 @@ done_err:
   free(fiemap);
   return ret;
 }
-#else
-static int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap)
-{
-  return -ENOTSUP;
-}
-#endif
 
 int FileStore::statfs(struct statfs *buf)
 {
@@ -767,8 +758,19 @@ int FileStore::_detect_fs()
   if (fd < 0)
     return -errno;
 
+  // fiemap?
+  struct fiemap *fiemap;
+  int r = do_fiemap(fd, 0, 1, &fiemap);
+  if (r == -EOPNOTSUPP) {
+    dout(0) << "mount FIEMAP ioctl is NOT supported" << dendl;
+    ioctl_fiemap = false;
+  } else {
+    dout(0) << "mount FIEMAP ioctl is supported" << dendl;
+    ioctl_fiemap = true;
+  }
+
   struct statfs st;
-  int r = ::fstatfs(fd, &st);
+  r = ::fstatfs(fd, &st);
   if (r < 0)
     return -errno;
 
@@ -1867,11 +1869,19 @@ int FileStore::read(coll_t cid, const sobject_t& oid,
   return r;
 }
 
-#ifdef HAVE_FIEMAP_H
 int FileStore::fiemap(coll_t cid, const sobject_t& oid,
                     uint64_t offset, size_t len,
                     bufferlist& bl)
 {
+
+  if (!ioctl_fiemap) {
+    map<off_t, size_t> m;
+    m[offset] = len;
+    ::encode(m, bl);
+    return 0;
+  }
+
+
   char fn[PATH_MAX];
   struct fiemap *fiemap = NULL;
   map<off_t, size_t> extmap;
@@ -1934,17 +1944,6 @@ done:
   free(fiemap);
   return r;
 }
-#else
-int FileStore::fiemap(coll_t cid, const sobject_t& oid,
-                    uint64_t offset, size_t len,
-                    bufferlist& bl)
-{
-  map<off_t, size_t> m;
-  m[offset] = len;
-  ::encode(m, bl);
-  return 0;
-}
-#endif
 
 
 int FileStore::_remove(coll_t cid, const sobject_t& oid) 
