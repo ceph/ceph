@@ -83,19 +83,19 @@ void ReplicatedPG::wait_for_missing_object(const sobject_t& soid, Message *m)
   assert(is_missing_object(soid));
 
   // we don't have it (yet).
-  eversion_t v = missing.missing[soid].need;
-  if (pulling.count(soid)) {
-    dout(7) << "missing "
-	    << soid 
-	    << " v " << v
-	    << ", already pulling"
-	    << dendl;
-  } else {
-    dout(7) << "missing " 
-	    << soid 
-	    << " v " << v
-	    << ", pulling"
-	    << dendl;
+  map<sobject_t, Missing::item>::const_iterator g = missing.missing.find(soid);
+  assert(g != missing.missing.end());
+  const eversion_t &v(g->second.need);
+
+  map<sobject_t, pull_info_t>::const_iterator p = pulling.find(soid);
+  if (p != pulling.end()) {
+    dout(7) << "missing " << soid << " v " << v << ", already pulling." << dendl;
+  }
+  else if (missing_loc.find(soid) == missing_loc.end()) {
+    dout(7) << "missing " << soid << " v " << v << ", is unfound." << dendl;
+  }
+  else {
+    dout(7) << "missing " << soid << " v " << v << ", pulling." << dendl;
     pull(soid);
   }
   waiting_for_missing_object[soid].push_back(m);
@@ -3596,6 +3596,10 @@ void ReplicatedPG::on_change()
   // clear reserved scrub state
   clear_scrub_reserved();
 
+  // take object waiters
+  take_object_waiters(waiting_for_missing_object);
+  take_object_waiters(waiting_for_degraded_object);
+
   // clear pushing/pulling maps
   pushing.clear();
   pulling.clear();
@@ -3611,10 +3615,6 @@ void ReplicatedPG::on_role_change()
        p++)
     osd->take_waiters(p->second);
   waiting_for_ondisk.clear();
-
-  // take object waiters
-  take_object_waiters(waiting_for_missing_object);
-  take_object_waiters(waiting_for_degraded_object);
 }
 
 

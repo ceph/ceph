@@ -522,22 +522,35 @@ void PG::search_for_missing(Log &olog, Missing &omissing, int fromosd)
   for (map<sobject_t,Missing::item>::iterator p = missing.missing.begin();
        p != missing.missing.end();
        ++p) {
+    const sobject_t &soid(p->first);
     eversion_t need = p->second.need;
     eversion_t have = p->second.have;
-    if (omissing.is_missing(p->first)) {
-      dout(10) << "search_for_missing " << p->first << " " << need
+    if (omissing.is_missing(soid)) {
+      dout(10) << "search_for_missing " << soid << " " << need
 	       << " also missing on osd" << fromosd << dendl;
       continue;
     } 
     if (need > olog.head) {
-      dout(10) << "search_for_missing " << p->first << " " << need
+      dout(10) << "search_for_missing " << soid << " " << need
                << " > olog.head " << olog.head << ", also missing on osd" << fromosd
                << dendl;
       continue;
     }
-    dout(10) << "search_for_missing " << p->first << " " << need
+    dout(10) << "search_for_missing " << soid << " " << need
 	     << " is on osd" << fromosd << dendl;
-    missing_loc[p->first].insert(fromosd);
+
+    map<sobject_t, set<int> >::iterator ml = missing_loc.find(soid);
+    if (ml == missing_loc.end()) {
+      hash_map<sobject_t, list<class Message*> >::iterator wmo =
+	waiting_for_missing_object.find(soid);
+      if (wmo != waiting_for_missing_object.end()) {
+	osd->take_waiters(wmo->second);
+      }
+      missing_loc[soid].insert(fromosd);
+    }
+    else {
+      ml->second.insert(fromosd);
+    }
   }
 
   dout(20) << "search_for_missing missing " << missing.missing << dendl;
@@ -2726,8 +2739,12 @@ void PG::repair_object(ScrubMap::object *po, int bad_peer, int ok_peer)
   if (bad_peer != acting[0]) {
     peer_missing[bad_peer].add(po->poid, oi.version, eversion_t());
   } else {
+    // We should only be scrubbing if the PG is clean.
+    assert(waiting_for_missing_object.empty());
+
     missing.add(po->poid, oi.version, eversion_t());
     missing_loc[po->poid].insert(ok_peer);
+
     log.last_requested = eversion_t();
   }
   uptodate_set.erase(bad_peer);
