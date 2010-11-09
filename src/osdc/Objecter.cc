@@ -512,10 +512,12 @@ int Objecter::calc_op_budget(Op *op)
     if (i->op.op & CEPH_OSD_OP_MODE_WR) {
       op_budget += i->data.length();
     } else if (i->op.op & CEPH_OSD_OP_MODE_RD) {
-      if (i->op.op & CEPH_OSD_OP_TYPE_DATA)
-        op_budget += i->op.extent.length;
-      else if (i->op.op & CEPH_OSD_OP_TYPE_ATTR)
+      if (i->op.op & CEPH_OSD_OP_TYPE_DATA) {
+        if ((int64_t)i->op.extent.length > 0)
+	  op_budget += (int64_t)i->op.extent.length;
+      } else if (i->op.op & CEPH_OSD_OP_TYPE_ATTR) {
         op_budget += i->op.xattr.name_len + i->op.xattr.value_len;
+      }
     }
   }
   return op_budget;
