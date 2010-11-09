@@ -10,7 +10,7 @@ namespace ceph {
 
 void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *func)
 {
-  BackTrace *bt = new BackTrace(2);
+  BackTrace *bt = new BackTrace(1);
 
   _dout_lock.TryLock();
   *_dout << file << ": In function '" << func << "':" << std::endl;
