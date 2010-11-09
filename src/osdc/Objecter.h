@@ -26,6 +26,7 @@
 
 #include <list>
 #include <map>
+#include <memory>
 #include <ext/hash_map>
 using namespace std;
 using namespace __gnu_cxx;
@@ -194,7 +195,7 @@ class Objecter {
   version_t last_seen_pgmap_version;
 
   Mutex &client_lock;
-  SafeTimer timer;
+  std::auto_ptr < SafeTimer > timer;
   
   class C_Tick : public Context {
     Objecter *ob;
@@ -442,7 +443,7 @@ public:
     keep_balanced_budget(false), honor_osdmap_full(true),
     last_seen_osdmap_version(0),
     last_seen_pgmap_version(0),
-    client_lock(l), timer(l),
+    client_lock(l),
     op_throttler(g_conf.objecter_inflight_op_bytes)
   { }
   ~Objecter() { }
