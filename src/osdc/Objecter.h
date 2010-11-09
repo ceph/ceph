@@ -571,7 +571,7 @@ private:
     ops[0].op.extent.length = len;
     ops[0].op.extent.truncate_size = 0;
     ops[0].op.extent.truncate_seq = 0;
-    Op *o = new Op(oid, oloc, ops, flags, onfinish, 0);
+    Op *o = new Op(oid, oloc, ops, flags | CEPH_OSD_FLAG_READ, onfinish, 0);
     o->snapid = snap;
     o->outbl = pbl;
     return op_submit(o);
@@ -585,7 +585,7 @@ private:
     ops[0].op.extent.length = len;
     ops[0].op.extent.truncate_size = 0;
     ops[0].op.extent.truncate_seq = 0;
-    Op *o = new Op(oid, oloc, ops, flags, onfinish, 0);
+    Op *o = new Op(oid, oloc, ops, flags | CEPH_OSD_FLAG_READ, onfinish, 0);
     o->snapid = snap;
     o->outbl = pbl;
     return op_submit(o);
