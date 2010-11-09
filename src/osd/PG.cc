@@ -944,8 +944,6 @@ void PG::build_prior()
     if (interval.acting.empty())
       continue;
 
-    OSDMap *lastmap = osd->get_map(interval.last);
-
     int crashed = 0;
     int need_down = 0;
     bool any_survived = false;
@@ -963,16 +961,19 @@ void PG::build_prior()
     // consider ACTING osds
     for (unsigned i=0; i<interval.acting.size(); i++) {
       int o = interval.acting[i];
-      const osd_info_t& pinfo = osd->osdmap->get_info(o);
+
+      const osd_info_t *pinfo = 0;
+      if (osd->osdmap->exists(o))
+	pinfo = &osd->osdmap->get_info(o);
 
       // if the osd restarted after this interval but is not known to have
       // cleanly survived through this interval, we mark the pg crashed.
-      if (pinfo.up_from > interval.last &&
-	  !(pinfo.last_clean_first <= interval.first &&
-	    pinfo.last_clean_last >= interval.last)) {
+      if (pinfo && (pinfo->up_from > interval.last &&
+		    !(pinfo->last_clean_first <= interval.first &&
+		      pinfo->last_clean_last >= interval.last))) {
 	dout(10) << "build_prior  prior osd" << o
-		 << " up_from " << pinfo.up_from
-		 << " and last clean interval " << pinfo.last_clean_first << "-" << pinfo.last_clean_last
+		 << " up_from " << pinfo->up_from
+		 << " and last clean interval " << pinfo->last_clean_first << "-" << pinfo->last_clean_last
 		 << " does not include us" << dendl;
 	crashed++;
       }
@@ -980,18 +981,29 @@ void PG::build_prior()
       if (osd->osdmap->is_up(o)) {  // is up now
 	// did any osds survive _this_ interval?
 	any_survived = true;
-      } else if (pinfo.lost_at > interval.first) {
+      } else if (!pinfo || pinfo->lost_at > interval.first) {
 	prior_set_down.insert(o);
 	if (started_since_joining.size()) {
-	  dout(10) << "build_prior  prior osd" << o
-		   << " is down, but marked lost at " << pinfo.lost_at
-		   << ", and " << started_since_joining << " have started since joining pg"
-		   << dendl;
+	  if (pinfo)
+	    dout(10) << "build_prior  prior osd" << o
+		     << " is down, but marked lost at " << pinfo->lost_at
+		     << ", and " << started_since_joining << " have started since joining pg"
+		     << dendl;
+	  else
+	    dout(10) << "build_prior  prior osd" << o
+		     << " no longer exists, and " << started_since_joining << " have started since joining pg"
+		     << dendl;
+
 	} else {
-	  dout(10) << "build_prior  prior osd" << o
-		   << " is down, but marked lost at " << pinfo.lost_at
-		   << ", and NO acting osds have started since joining pg, so i may not have any pg state :/"
-		   << dendl;
+	  if (pinfo)
+	    dout(10) << "build_prior  prior osd" << o
+		     << " is down, but marked lost at " << pinfo->lost_at
+		     << ", and NO acting osds have started since joining pg, so i may not have any pg state :/"
+		     << dendl;
+	  else
+	    dout(10) << "build_prior  prior osd" << o
+		     << " no longer exists, and NO acting osds have started since joining pg, so i may not have any pg state :/"
+		     << dendl;
 	  need_down++;
 	}
       } else {
@@ -1019,6 +1031,7 @@ void PG::build_prior()
       // take note that we care about the primary's up_thru.  if it
       // changes later, it will affect our prior_set, and we'll want
       // to rebuild it!
+      OSDMap *lastmap = osd->get_map(interval.last);
       prior_set_up_thru[interval.acting[0]] = lastmap->get_up_thru(interval.acting[0]);
     }
 
