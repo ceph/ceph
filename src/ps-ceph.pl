@@ -12,6 +12,21 @@ use strict;
 # Foundation.  See file COPYING.
 #
 
+sub is_ceph_proc {
+        my $cmdline = @_[0];
+        return 1 if $cmdline =~ /\bceph\b/;
+        return 1 if $cmdline =~ /\bcfuse\b/;
+        return 1 if $cmdline =~ /\bcmds\b/;
+        return 1 if $cmdline =~ /\bcmon\b/;
+        return 1 if $cmdline =~ /\bcosd\b/;
+        return 1 if $cmdline =~ /\bosdmaptool\b/;
+        return 1 if $cmdline =~ /\brados\b/;
+        return 1 if $cmdline =~ /test_/;
+        return 1 if $cmdline =~ /\bvstart.sh\b/;
+
+        return 0;
+}
+
 opendir PROC, "/proc";
 while(my $pid = readdir PROC) {
         next if $pid =~ /\D/;        # not a pid
@@ -20,6 +35,7 @@ while(my $pid = readdir PROC) {
         my $cmdline = <CMDLINE>;
         $cmdline =~ s/[^\x20-\x7e]/ /g;
         close CMDLINE;
-        next unless $cmdline =~ /\b(ceph|cfuse|cmds|cmon|cosd|osdmaptool|rados|vstart\.sh)\b/;
-        print "$pid\t$cmdline\n";
+        if (is_ceph_proc($cmdline)) {
+                print "$pid\t$cmdline\n";
+        }
 }
