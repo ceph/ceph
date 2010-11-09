@@ -799,7 +799,13 @@ bool PG::prior_set_affected(OSDMap *osdmap)
       dout(10) << "prior_set_affected: osd" << *p << " now up" << dendl;
       return true;
     }
-    // did someone in the prior set get lost?
+
+    // did someone in the prior set get lost or destroyed?
+    if (!osdmap->exists(o)) {
+      dout(10) << "prior_set_affected: osd" << o << " no longer exists" << dendl;
+      return true;
+    }
+      
     const osd_info_t& pinfo(osdmap->get_info(o));
     if (pinfo.lost_at > pinfo.up_from) {
       set<int>::const_iterator pl = prior_set_lost.find(o);
