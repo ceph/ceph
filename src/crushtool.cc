@@ -30,6 +30,7 @@
 #include <stack>
 #include <functional>
 #include <string>
+#include <stdexcept>
 #include <map>
 
 #include <typeinfo>
@@ -511,6 +512,60 @@ void print_fixedpoint(ostream& out, int i)
   out << s;
 }
 
+class CrushDecompilerComparator
+{
+public:
+  explicit CrushDecompilerComparator(CrushWrapper &crush_)
+    : crush(crush_)
+  {
+  }
+
+
+  CrushDecompilerComparator(const CrushDecompilerComparator &rhs)
+    : crush(rhs.crush)
+  {
+  }
+
+  bool operator()(int a, int b) const
+  {
+    if (need_bucket(a, b)) {
+      if (need_bucket(b, a)) {
+	std::ostringstream oss;
+	oss << __PRETTY_FUNCTION__ << ": circular dependency! Bucket "
+	    << a << " references bucket " << b << ", but bucket " << b
+	    << " references bucket " << a << " as well!";
+	throw std::invalid_argument(oss.str());
+      }
+      // b has to come before a because a references b.
+      return false;
+    }
+
+    if (need_bucket(b, a)) {
+      // a has to come before b because b references a.
+      return true;
+    }
+    return (a > b);
+  }
+
+  // Returns true if bucket x references bucket y
+  bool need_bucket(int x, int y) const
+  {
+    int x_size = crush.get_bucket_size(x);
+    for (int i = 0; i < x_size; ++i) {
+      int item = crush.get_bucket_item(x, i);
+      if (item == y)
+	return true;
+    }
+    return false;
+  }
+
+private:
+  const CrushDecompilerComparator
+    &operator=(const CrushDecompilerComparator &rhs);
+
+  CrushWrapper &crush;
+};
+
 int decompile_crush(CrushWrapper &crush, ostream &out)
 {
   out << "# begin crush map\n\n";
@@ -537,8 +592,19 @@ int decompile_crush(CrushWrapper &crush, ostream &out)
   }
 
   out << "\n# buckets\n";
-  for (int i=-1; i > -1-crush.get_max_buckets(); i--) {
-    if (!crush.bucket_exists(i)) continue;
+  CrushDecompilerComparator myCdc(crush);
+  std::set < int,  CrushDecompilerComparator > buckets(myCdc);
+  for (int bucket = -1; bucket > -1-crush.get_max_buckets(); --bucket) {
+    if (!crush.bucket_exists(bucket))
+      continue;
+    buckets.insert(bucket);
+  }
+
+  for (std::set <int>::const_iterator s = buckets.begin();
+       s != buckets.end();
+       ++s)
+  {
+    int i = *s;
     int type = crush.get_bucket_type(i);
     print_type_name(out, type, crush);
     out << " ";
