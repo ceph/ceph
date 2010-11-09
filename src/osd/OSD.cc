@@ -2534,22 +2534,23 @@ void OSD::handle_osd_map(MOSDMap *m)
       pg->write_log(t);
   }
 
+  bool do_shutdown = false;
   if (osdmap->get_epoch() > 0 &&
-      state == STATE_ACTIVE &&
-      (!osdmap->exists(whoami) || 
-       !osdmap->is_up(whoami) ||
-       osdmap->get_addr(whoami) != client_messenger->get_myaddr())) {
-    dout(0) << "map says i am down or have a different address.  state: active -> booting" << dendl;
-    //shutdown();
+      state == STATE_ACTIVE) {
+    if (!osdmap->exists(whoami)) {
+      dout(0) << "map says i do not exist.  shutting down." << dendl;
+      do_shutdown = true;   // don't call shutdown() while we have everything paused
+    } else if (!osdmap->is_up(whoami) ||
+	       osdmap->get_addr(whoami) != client_messenger->get_myaddr()) {
+      stringstream ss;
+      ss << "map e" << osdmap->get_epoch() << " wrongly marked me down";
+      logclient.log(LOG_WARN, ss);
+      
+      state = STATE_BOOTING;
+      up_epoch = 0;
 
-    stringstream ss;
-    ss << "map e" << osdmap->get_epoch() << " wrongly marked me down";
-    logclient.log(LOG_WARN, ss);
-
-    state = STATE_BOOTING;
-    up_epoch = 0;
-
-    reset_heartbeat_peers();
+      reset_heartbeat_peers();
+    }
   }
 
   // note in the superblock that we were clean thru the prior epoch
@@ -2588,6 +2589,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   if (is_booting())
     send_boot();
+  if (do_shutdown)
+    shutdown();
 
   if (map_in_progress_cond) {
     map_in_progress = false;
