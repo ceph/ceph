@@ -14,6 +14,8 @@ use strict;
 
 sub is_ceph_proc {
         my $cmdline = @_[0];
+        return 0 if $cmdline =~ /\bps-ceph.pl\b/;
+
         return 1 if $cmdline =~ /\bceph\b/;
         return 1 if $cmdline =~ /\bcfuse\b/;
         return 1 if $cmdline =~ /\bcmds\b/;
