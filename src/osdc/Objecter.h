@@ -120,6 +120,14 @@ struct ObjectOperation {
     bufferlist bl;
     add_data(CEPH_OSD_OP_DELETE, 0, 0, bl);
   }
+  void mapext(uint64_t off, uint64_t len) {
+    bufferlist bl;
+    add_data(CEPH_OSD_OP_MAPEXT, off, len, bl);
+  }
+  void sparse_read(uint64_t off, uint64_t len) {
+    bufferlist bl;
+    add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl);
+  }
 
   // object attrs
   void getxattr(const char *name) {
@@ -549,6 +557,34 @@ private:
     ops[0].op.extent.length = len;
     ops[0].op.extent.truncate_size = trunc_size;
     ops[0].op.extent.truncate_seq = trunc_seq;
+    Op *o = new Op(oid, oloc, ops, flags | CEPH_OSD_FLAG_READ, onfinish, 0);
+    o->snapid = snap;
+    o->outbl = pbl;
+    return op_submit(o);
+  }
+  tid_t mapext(const object_t& oid, const object_locator_t& oloc,
+	     uint64_t off, uint64_t len, snapid_t snap, bufferlist *pbl, int flags,
+	     Context *onfinish) {
+    vector<OSDOp> ops(1);
+    ops[0].op.op = CEPH_OSD_OP_MAPEXT;
+    ops[0].op.extent.offset = off;
+    ops[0].op.extent.length = len;
+    ops[0].op.extent.truncate_size = 0;
+    ops[0].op.extent.truncate_seq = 0;
+    Op *o = new Op(oid, oloc, ops, flags | CEPH_OSD_FLAG_READ, onfinish, 0);
+    o->snapid = snap;
+    o->outbl = pbl;
+    return op_submit(o);
+  }
+  tid_t sparse_read(const object_t& oid, const object_locator_t& oloc,
+	     uint64_t off, uint64_t len, snapid_t snap, bufferlist *pbl, int flags,
+	     Context *onfinish) {
+    vector<OSDOp> ops(1);
+    ops[0].op.op = CEPH_OSD_OP_SPARSE_READ;
+    ops[0].op.extent.offset = off;
+    ops[0].op.extent.length = len;
+    ops[0].op.extent.truncate_size = 0;
+    ops[0].op.extent.truncate_seq = 0;
     Op *o = new Op(oid, oloc, ops, flags | CEPH_OSD_FLAG_READ, onfinish, 0);
     o->snapid = snap;
     o->outbl = pbl;

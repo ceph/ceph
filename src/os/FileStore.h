@@ -50,6 +50,7 @@ class FileStore : public JournalingObjectStore {
   bool btrfs_snap_destroy;
   bool btrfs_snap_create_async;
   bool btrfs_wait_sync;
+  bool ioctl_fiemap;
   int fsid_fd, op_fd;
 
   int basedir_fd, current_fd;
@@ -179,6 +180,7 @@ class FileStore : public JournalingObjectStore {
     btrfs_snap_destroy(false),
     btrfs_snap_create_async(false),
     btrfs_wait_sync(false),
+    ioctl_fiemap(false),
     fsid_fd(-1), op_fd(-1),
     attrs(this), fake_attrs(false), 
     collections(this), fake_collections(false),
@@ -225,6 +227,7 @@ class FileStore : public JournalingObjectStore {
   bool exists(coll_t cid, const sobject_t& oid);
   int stat(coll_t cid, const sobject_t& oid, struct stat *st);
   int read(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
+  int fiemap(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
 
   int _touch(coll_t cid, const sobject_t& oid);
   int _write(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len, const bufferlist& bl);

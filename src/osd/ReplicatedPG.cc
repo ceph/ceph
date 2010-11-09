@@ -864,6 +864,75 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       }
       break;
 
+    /* map extents */
+    case CEPH_OSD_OP_MAPEXT:
+      {
+	// read into a buffer
+	bufferlist bl;
+	int r = osd->store->fiemap(coll, soid, op.extent.offset, op.extent.length, bl);
+/*
+	if (odata.length() == 0)
+	  ctx->data_off = op.extent.offset; */
+	odata.claim(bl);
+	if (r < 0)
+	  result = r;
+	info.stats.num_rd_kb += SHIFT_ROUND_UP(op.extent.length, 10);
+	info.stats.num_rd++;
+	dout(10) << " map_extents done on object " << soid << dendl;
+      }
+      break;
+
+    /* map extents */
+    case CEPH_OSD_OP_SPARSE_READ:
+      {
+        if (op.extent.truncate_seq) {
+          dout(0) << "sparse_read does not support truncation sequence " << dendl;
+          result = -EINVAL;
+          break;
+        }
+	// read into a buffer
+	bufferlist bl;
+        int total_read = 0;
+	int r = osd->store->fiemap(coll, soid, op.extent.offset, op.extent.length, bl);
+	if (r < 0)  {
+	  result = r;
+          break;
+	}
+        map<off_t, size_t> m;
+        bufferlist::iterator iter = bl.begin();
+        ::decode(m, iter);
+        map<off_t, size_t>::iterator miter;
+        bufferlist data_bl;
+        for (miter = m.begin(); miter != m.end(); ++miter) {
+          bufferlist tmpbl;
+          r = osd->store->read(coll, soid, miter->first, miter->second, tmpbl);
+          if (r < 0)
+            break;
+
+          if (r < (int)miter->second) /* this is usually happen when we get extent that exceeds the actual file size */
+            miter->second = r;
+          total_read += r;
+          dout(10) << "sparse-read " << miter->first << "@" << miter->second << dendl;
+	  data_bl.claim_append(tmpbl);
+        }
+
+        if (r < 0) {
+          result = r;
+          break;
+        }
+
+        op.extent.length = total_read;
+
+        ::encode(m, odata);
+        ::encode(data_bl, odata);
+
+	info.stats.num_rd_kb += SHIFT_ROUND_UP(op.extent.length, 10);
+	info.stats.num_rd++;
+
+	dout(10) << " sparse_read got " << total_read << " bytes from object " << soid << dendl;
+      }
+      break;
+
     case CEPH_OSD_OP_CALL:
       {
 	bufferlist indata;

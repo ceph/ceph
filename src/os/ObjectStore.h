@@ -554,6 +554,7 @@ public:
   virtual bool exists(coll_t cid, const sobject_t& oid) = 0;                   // useful?
   virtual int stat(coll_t cid, const sobject_t& oid, struct stat *st) = 0;     // struct stat?
   virtual int read(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) = 0;
+  virtual int fiemap(coll_t cid, const sobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) = 0;
 
   /*
   virtual int _remove(coll_t cid, sobject_t oid) = 0;
