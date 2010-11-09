@@ -388,6 +388,9 @@ struct md_config_t {
   double osd_class_timeout;
   const char *osd_class_tmp;
 
+  int osd_max_scrubs;
+  float osd_scrub_load_threshold;
+
   bool osd_check_for_log_corruption;  // bleh
 
   bool osd_use_stale_snap;

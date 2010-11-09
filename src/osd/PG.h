@@ -844,8 +844,10 @@ public:
 
 
   // -- scrub --
+  set<int> scrub_reserved_peers;
   map<int,ScrubMap> peer_scrub_map;
   bool finalizing_scrub; 
+  bool scrub_reserved;
 
   void repair_object(ScrubMap::object *po, int bad_peer, int ok_peer);
   void scrub();
@@ -854,10 +856,18 @@ public:
   void build_scrub_map(ScrubMap &map);
   void build_inc_scrub_map(ScrubMap &map, eversion_t v);
   virtual int _scrub(ScrubMap &map, int& errors, int& fixed) { return 0; }
+  void clear_scrub_reserved();
+  void scrub_reserve_replicas();
+  void scrub_unreserve_replicas();
+  bool scrub_all_replicas_reserved() const;
+  bool sched_scrub();
 
   void sub_op_scrub(class MOSDSubOp *op);
   void sub_op_scrub_reply(class MOSDSubOpReply *op);
-
+  void sub_op_scrub_reserve(class MOSDSubOp *op);
+  void sub_op_scrub_reserve_reply(class MOSDSubOpReply *op);
+  void sub_op_scrub_unreserve(class MOSDSubOp *op);
+  void sub_op_scrub_stop(class MOSDSubOp *op);
 
  public:  
   PG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& loid, const sobject_t& ioid) : 
@@ -876,7 +886,8 @@ public:
     pg_stats_lock("PG::pg_stats_lock"),
     pg_stats_valid(false),
     finish_sync_event(NULL),
-    finalizing_scrub(false)
+    finalizing_scrub(false),
+    scrub_reserved(false)
   {
     pool->get();
   }

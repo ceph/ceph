@@ -803,9 +803,20 @@ protected:
     }
   } snap_trim_wq;
 
+  // -- scrub scheduling --
+  Mutex sched_scrub_lock;
+  pg_t sched_scrub_pg;
+  int scrubs_pending;
+  int scrubs_active;
+  bool scrub_should_schedule();
+  void sched_scrub();
+
+  bool inc_scrubs_pending();
+  void dec_scrubs_pending();
 
   // -- scrubbing --
   xlist<PG*> scrub_queue;
+
 
   struct ScrubWQ : public ThreadPool::WorkQueue<PG> {
     OSD *osd;
@@ -815,15 +826,17 @@ protected:
       return osd->scrub_queue.empty();
     }
     bool _enqueue(PG *pg) {
-      if (pg->scrub_item.is_on_list())
+      if (pg->scrub_item.is_on_list()) {
 	return false;
+      }
       pg->get();
       osd->scrub_queue.push_back(&pg->scrub_item);
       return true;
     }
     void _dequeue(PG *pg) {
-      if (pg->scrub_item.remove_myself())
+      if (pg->scrub_item.remove_myself()) {
 	pg->put();
+      }
     }
     PG *_dequeue() {
       if (osd->scrub_queue.empty())
@@ -833,8 +846,18 @@ protected:
       return pg;
     }
     void _process(PG *pg) {
+      osd->sched_scrub_lock.Lock();
+      --(osd->scrubs_pending);
+      assert(osd->scrubs_pending >= 0);
+      ++(osd->scrubs_active);
+      osd->sched_scrub_lock.Unlock();
       pg->scrub();
       pg->get();
+    }
+    void _process_finish(PG *pg) {
+      osd->sched_scrub_lock.Lock();
+      --(osd->scrubs_active);
+      osd->sched_scrub_lock.Unlock();
     }
     void _clear() {
       while (!osd->scrub_queue.empty()) {

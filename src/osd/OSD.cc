@@ -377,6 +377,9 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   remove_list_lock("OSD::remove_list_lock"),
   replay_queue_lock("OSD::replay_queue_lock"),
   snap_trim_wq(this, &disk_tp),
+  sched_scrub_lock("OSD::sched_scrub_lock"),
+  scrubs_pending(0),
+  scrubs_active(0),
   scrub_wq(this, &disk_tp),
   remove_wq(this, &disk_tp)
 {
@@ -1514,6 +1517,10 @@ void OSD::tick()
   
   map_lock.get_read();
 
+  if (scrub_should_schedule()) {
+    sched_scrub();
+  }
+
   heartbeat_lock.Lock();
   heartbeat_check();
   heartbeat_lock.Unlock();
@@ -2218,7 +2225,81 @@ void OSD::handle_scrub(MOSDScrub *m)
   m->put();
 }
 
+bool OSD::scrub_should_schedule()
+{
+  double loadavgs[1];
+  if (getloadavg(loadavgs, 1) != 1) {
+    dout(10) << "scrub_should_schedule couldn't read loadavgs\n" << dendl;
+    return false;
+  }
 
+  dout(20) << "scrub_should_schedule loadavg " << loadavgs[0]
+	   << " max " << g_conf.osd_scrub_load_threshold << dendl;
+  return loadavgs[0] < g_conf.osd_scrub_load_threshold;
+}
+
+void OSD::sched_scrub()
+{
+  assert(osd_lock.is_locked());
+
+  dout(20) << "sched_scrub" << dendl;
+
+  sched_scrub_lock.Lock();
+  hash_map<pg_t, PG*>::iterator p = pg_map.find(sched_scrub_pg);
+  sched_scrub_lock.Unlock();
+
+  if (p == pg_map.end()) {
+    dout(10) << "starting sched_scrub_pg at the beginning" << dendl;
+    p = pg_map.begin();
+  }
+
+  while (p != pg_map.end()) {
+    PG *pg = p->second;
+
+    pg->lock();
+    if (!pg->sched_scrub()) {
+      // continue waiting
+      pg->unlock();
+      break;
+    }
+    pg->unlock();
+    ++p;
+  }
+
+  if (p == pg_map.end()) {
+    p = pg_map.begin();
+  }
+
+  // no pgs!?
+  sched_scrub_lock.Lock();
+  if (p != pg_map.end()) {
+    sched_scrub_pg = p->first;
+  }
+  sched_scrub_lock.Unlock();
+}
+
+bool OSD::inc_scrubs_pending()
+{
+  bool result = false;
+
+  sched_scrub_lock.Lock();
+  dout(20) << "attempting to add a pending scrub with " << scrubs_pending << " scrubs_pending and " << scrubs_active << " scrubs_active and " << g_conf.osd_max_scrubs << " max scrubs " << dendl;
+  if (scrubs_pending + scrubs_active < g_conf.osd_max_scrubs) {
+    result = true;
+    ++scrubs_pending;
+  }
+  sched_scrub_lock.Unlock();
+
+  return result;
+}
+
+void OSD::dec_scrubs_pending()
+{
+  sched_scrub_lock.Lock();
+  --scrubs_pending;
+  assert(scrubs_pending >= 0);
+  sched_scrub_lock.Unlock();
+}
 
 // =====================================================
 // MAP

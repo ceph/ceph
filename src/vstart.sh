@@ -269,6 +269,7 @@ $CMDSDEBUG
         osd class tmp = out
 	filestore journal writeahead = 1
 	filestore journal parallel = 0
+        osd scrub load threshold = 5.0
 $COSDDEBUG
 [mon]
 $CMONDEBUG
