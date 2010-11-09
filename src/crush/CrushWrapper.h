@@ -304,6 +304,8 @@ public:
   int get_bucket_item(int id, int pos) {
     crush_bucket *b = get_bucket(id);
     if (IS_ERR(b)) return PTR_ERR(b);
+    if ((__u32)pos >= b->size)
+      return PTR_ERR(b);
     return b->items[pos];
   }
   int get_bucket_item_weight(int id, int pos) {
