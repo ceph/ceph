@@ -2647,14 +2647,15 @@ void PG::build_scrub_map(ScrubMap &map)
 {
   dout(10) << "build_scrub_map" << dendl;
 
-  // objects
-  vector<sobject_t> ls;
-  osd->store->collection_list(coll, ls);
-
   map.valid_through = last_update_applied;
   epoch_t epoch = info.history.same_acting_since;
 
   unlock();
+
+  // objects
+  vector<sobject_t> ls;
+  osd->store->collection_list(coll, ls);
+
   _scan_list(map, ls);
   lock();
 
