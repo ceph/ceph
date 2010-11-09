@@ -2226,11 +2226,12 @@ bool OSD::scrub_should_schedule()
 {
   double loadavgs[1];
   if (getloadavg(loadavgs, 1) != 1) {
-    dout(10) << "Couldn't read loadavgs!\n" << dendl;
+    dout(10) << "scrub_should_schedule couldn't read loadavgs\n" << dendl;
     return false;
   }
 
-  dout(20) << "Got loadavg " << loadavgs[0] << " max is " << g_conf.osd_scrub_load_threshold << dendl;
+  dout(20) << "scrub_should_schedule loadavg " << loadavgs[0]
+	   << " max " << g_conf.osd_scrub_load_threshold << dendl;
   return loadavgs[0] < g_conf.osd_scrub_load_threshold;
 }
 
