@@ -626,6 +626,7 @@ noinst_HEADERS = \
         include/inttypes.h\
 	include/librados.h\
 	include/librados.hpp\
+	include/linux_fiemap.h\
         include/lru.h\
 	include/msgr.h\
         include/nstring.h\

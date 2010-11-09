@@ -21,10 +21,6 @@
  *  Author Colin Ian King,  colin.king@canonical.com
  */
 
-
-#ifdef HAVE_FIEMAP_H
-
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -42,6 +38,7 @@ struct fiemap *read_fiemap(int fd)
 {
   struct fiemap *fiemap;
   int extents_size;
+  int r;
 
   if ((fiemap = (struct fiemap*)malloc(sizeof(struct fiemap))) == NULL) {
     fprintf(stderr, "Out of memory allocating fiemap\n");
@@ -56,7 +53,8 @@ struct fiemap *read_fiemap(int fd)
   fiemap->fm_mapped_extents = 0;
 
   /* Find out how many extents there are */
-  if (ioctl(fd, FS_IOC_FIEMAP, fiemap) < 0) {
+  r = ioctl(fd, FS_IOC_FIEMAP, fiemap);
+  if (r < 0) {
     fprintf(stderr, "fiemap ioctl() failed\n");
     goto done_err;
   }
@@ -86,4 +84,3 @@ done_err:
   return NULL;
 }
 
-#endif

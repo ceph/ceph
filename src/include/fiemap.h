@@ -1,42 +1,23 @@
 #ifndef __CEPH_FIEMAP_H
 #define __CEPH_FIEMAP_H
 
-#include "config.h"
-
-#ifdef HAVE_FIEMAP_H
-
-#include <linux/fiemap.h>
-
-extern "C" struct fiemap *read_fiemap(int fd);
-
-#else
+#include "acconfig.h"
 
 /*
- the following structures differ from the original structures.
- Using it for the fiemap ioctl will not work.
-*/
-struct fiemap_extent {
-  __u64 fe_logical;
-  __u64 fe_physical;
-  __u64 fe_length;
-  __u32 fe_flags;
-};
-
-struct fiemap {
-  __u64 fm_start;
-  __u64 fm_length;
-  __u32 fm_flags;
-  __u32 fm_mapped_extents;
-  __u32 fm_extent_count;
-  struct fiemap_extent fm_extents[0];
-};
-
-static inline struct fiemap *read_fiemap(int fd)
-{
-  return NULL;
-}
-
+ * the header is missing on most systems.  for the time being at
+ * least, include our own copy in the repo.
+ */
+#ifdef HAVE_FIEMAP_H
+# include <linux/fiemap.h>
+#else
+# include "linux_fiemap.h"
 #endif
 
+#include <linux/ioctl.h>
+#ifndef FS_IOC_FIEMAP
+# define FS_IOC_FIEMAP                        _IOWR('f', 11, struct fiemap)
+#endif
+
+extern "C" struct fiemap *read_fiemap(int fd);
 
 #endif
