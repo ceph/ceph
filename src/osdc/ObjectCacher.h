@@ -537,7 +537,10 @@ class ObjectCacher {
   }
   ~ObjectCacher() {
     // we should be empty.
-    assert(objects.empty());
+    for (vector<hash_map<sobject_t, Object *> >::iterator i = objects.begin();
+        i != objects.end();
+        ++i)
+      assert(!i->size());
     assert(lru_rest.lru_get_size() == 0);
     assert(lru_dirty.lru_get_size() == 0);
     assert(dirty_bh.empty());
