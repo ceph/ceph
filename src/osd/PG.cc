@@ -2546,6 +2546,11 @@ void PG::take_object_waiters(hash_map<sobject_t, list<Message*> >& m)
  * when holding pg and sched_scrub_lock, then the states are:
  *   scheduling:
  *     scrub_reserved = true
+ *     scrub_rserved_peers includes whoami
+ *     osd->scrub_pending++
+ *   scheduling, replica declined:
+ *     scrub_reserved = true
+ *     scrub_reserved_peers includes -1
  *     osd->scrub_pending++
  *   pending:
  *     scrub_reserved = true
@@ -2554,6 +2559,7 @@ void PG::take_object_waiters(hash_map<sobject_t, list<Message*> >& m)
  *     osd->scrub_pending++
  *   scrubbing:
  *     scrub_reserved = false;
+ *     scrub_reserved_peers empty
  *     osd->scrub_active++
  */
 
@@ -2567,28 +2573,29 @@ bool PG::sched_scrub()
 
   bool ret = false;
   if (!scrub_reserved) {
-    if (scrub_reserved_peers.empty()) {
-      dout(20) << "trying to schedule " << this << " for scrubbing" << dendl;
-      if (osd->inc_scrubs_pending()) {
-	scrub_reserved = true;
-	scrub_reserved_peers.insert(0);
-	scrub_reserve_replicas();
-      }
+    assert(scrub_reserved_peers.empty());
+    if (osd->inc_scrubs_pending()) {
+      dout(20) << "sched_scrub: reserved locally, reserving replicas" << dendl;
+      scrub_reserved = true;
+      scrub_reserved_peers.insert(0);
+      scrub_reserve_replicas();
     } else {
-      // a peer couldn't be reserved
-      osd->dec_scrubs_pending();
+      dout(20) << "sched_scrub: failed to reserve locally" << dendl;
+    }
+  }
+  if (scrub_reserved) {
+    if (scrub_reserve_failed) {
+      dout(20) << "sched_scrub: failed, a peer declined" << dendl;
       clear_scrub_reserved();
       scrub_unreserve_replicas();
       ret = true;
-    }
-  } else {
-    if (scrub_reserved_peers.size() == acting.size()) {
+    } else if (scrub_reserved_peers.size() == acting.size()) {
+      dout(20) << "sched_scrub: success, reserved self and replicas" << dendl;
       osd->scrub_wq.queue(this);
       ret = true;
     } else {
       // none declined, since scrub_reserved is set
-      dout(20) << "Waiting for scrub replies for " << this << " we have reserved " << scrub_reserved_peers << dendl;
-      dout(20) << "acting set size is: " << acting.size() << dendl;
+      dout(20) << "sched_scrub: reserved " << scrub_reserved_peers << ", waiting for replicas" << dendl;
     }
   }
 
@@ -2734,14 +2741,8 @@ void PG::sub_op_scrub_reserve_reply(MOSDSubOpReply *op)
     if (reserved) {
       scrub_reserved_peers.insert(from);
     } else {
-      /*
-       * One decline stops this pg from being scheduled for scrubbing.
-       * We don't clear reserved_peers here so that sched_pg can be
-       * advanced without acquiring the osd lock here.
-       * The rest of the state will be cleared, and the other peers
-       * signalled, in the next call to sched_scrub.
-       */
-      scrub_reserved = false;
+      /* One decline stops this pg from being scheduled for scrubbing. */
+      scrub_reserve_failed = true;
     }
   }
 
@@ -2774,6 +2775,7 @@ void PG::clear_scrub_reserved()
 {
   osd->scrub_wq.dequeue(this);
   scrub_reserved_peers.clear();
+  scrub_reserve_failed = false;
 
   if (scrub_reserved) {
     scrub_reserved = false;

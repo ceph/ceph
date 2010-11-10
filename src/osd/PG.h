@@ -847,7 +847,7 @@ public:
   set<int> scrub_reserved_peers;
   map<int,ScrubMap> peer_scrub_map;
   bool finalizing_scrub; 
-  bool scrub_reserved;
+  bool scrub_reserved, scrub_reserve_failed;
 
   void repair_object(ScrubMap::object *po, int bad_peer, int ok_peer);
   void scrub();
@@ -887,7 +887,7 @@ public:
     pg_stats_valid(false),
     finish_sync_event(NULL),
     finalizing_scrub(false),
-    scrub_reserved(false)
+    scrub_reserved(false), scrub_reserve_failed(false)
   {
     pool->get();
   }
