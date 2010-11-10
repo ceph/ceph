@@ -846,15 +846,21 @@ protected:
       return pg;
     }
     void _process(PG *pg) {
+
+      // pending -> active
+      pg->lock();
       osd->sched_scrub_lock.Lock();
       --(osd->scrubs_pending);
       assert(osd->scrubs_pending >= 0);
       ++(osd->scrubs_active);
       osd->sched_scrub_lock.Unlock();
+      pg->scrub_reserved = false;
+      pg->scrub_reserved_peers.clear();
+      pg->unlock();
+
       pg->scrub();
-      pg->get();
-    }
-    void _process_finish(PG *pg) {
+      
+      // active -> nothing.
       osd->sched_scrub_lock.Lock();
       --(osd->scrubs_active);
       osd->sched_scrub_lock.Unlock();

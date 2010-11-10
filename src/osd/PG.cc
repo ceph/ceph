@@ -2542,6 +2542,21 @@ void PG::take_object_waiters(hash_map<sobject_t, list<Message*> >& m)
 // ==========================================================================================
 // SCRUB
 
+/*
+ * when holding pg and sched_scrub_lock, then the states are:
+ *   scheduling:
+ *     scrub_reserved = true
+ *     osd->scrub_pending++
+ *   pending:
+ *     scrub_reserved = true
+ *     scrub_reserved_peers.size() == acting.size();
+ *     pg on scrub_wq
+ *     osd->scrub_pending++
+ *   scrubbing:
+ *     scrub_reserved = false;
+ *     osd->scrub_active++
+ */
+
 // returns false if waiting for a reply
 bool PG::sched_scrub()
 {
