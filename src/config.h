@@ -390,6 +390,8 @@ struct md_config_t {
 
   int osd_max_scrubs;
   float osd_scrub_load_threshold;
+  float osd_scrub_min_interval;
+  float osd_scrub_max_interval;
 
   bool osd_check_for_log_corruption;  // bleh
 

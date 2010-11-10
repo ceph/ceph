@@ -2573,6 +2573,12 @@ bool PG::sched_scrub()
     return true;
   }
 
+  // just scrubbed?
+  if (info.history.last_scrub_stamp + g_conf.osd_scrub_min_interval > g_clock.now()) {
+    dout(20) << "sched_scrub: just scrubbed, skipping" << dendl;
+    return true;
+  }
+
   bool ret = false;
   if (!scrub_reserved) {
     assert(scrub_reserved_peers.empty());
