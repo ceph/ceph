@@ -215,12 +215,10 @@ echo "ip $IP"
 
 
 
-CEPH_ADM_DEBUG="--debug-ms 20 --log-file /tmp/foo"
-
 if [ "$cephx" -eq 1 ]; then
-    CEPH_ADM="$CEPH_BIN/ceph -c $conf -k $keyring_fn ${CEPH_ADM_DEBUG}"
+    CEPH_ADM="$CEPH_BIN/ceph -c $conf -k $keyring_fn"
 else
-    CEPH_ADM="$CEPH_BIN/ceph -c $conf ${CEPH_ADM_DEBUG}"
+    CEPH_ADM="$CEPH_BIN/ceph -c $conf"
 fi
 
 
