@@ -411,6 +411,10 @@ void Objecter::resend_mon_ops()
 tid_t Objecter::op_submit(Op *op)
 {
 
+  // throttle.  before we look at any state, because
+  // take_op_budget() may drop our lock while it blocks.
+  take_op_budget(op);
+
   if (op->oid.name.length())
     op->pgid = osdmap->object_locator_to_pg(op->oid, op->oloc);
 
@@ -436,7 +440,6 @@ tid_t Objecter::op_submit(Op *op)
   } else {
     dout(20) << " note: not requesting commit" << dendl;
   }
-  take_op_budget(op);
   op_osd[op->tid] = op;
   pg.active_tids.insert(op->tid);
   pg.last = g_clock.now();
