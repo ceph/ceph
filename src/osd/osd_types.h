@@ -550,28 +550,41 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_REPAIR       (1<<13) // pg should repair on next scrub
 #define PG_STATE_SCANNING     (1<<14) // scanning content to generate backlog
 
-static inline std::string pg_state_string(int state) {
-  std::string st;
-  if (state & PG_STATE_CREATING) st += "creating+";
-  if (state & PG_STATE_ACTIVE) st += "active+";
-  if (state & PG_STATE_CLEAN) st += "clean+";
-  if (state & PG_STATE_CRASHED) st += "crashed+";
-  if (state & PG_STATE_DOWN) st += "down+";
-  if (state & PG_STATE_REPLAY) st += "replay+";
-  if (state & PG_STATE_STRAY) st += "stray+";
-  if (state & PG_STATE_SPLITTING) st += "splitting+";
-  if (state & PG_STATE_DEGRADED) st += "degraded+";
-  if (state & PG_STATE_SCRUBBING) st += "scrubbing+";
-  if (state & PG_STATE_SCRUBQ) st += "scrubq+";
-  if (state & PG_STATE_INCONSISTENT) st += "inconsistent+";
-  if (state & PG_STATE_PEERING) st += "peering+";
-  if (state & PG_STATE_REPAIR) st += "repair+";
-  if (state & PG_STATE_SCANNING) st += "scanning+";
-  if (!st.length()) 
-    st = "inactive";
-  else 
-    st.resize(st.length()-1);
-  return st;
+static inline std::string pg_state_string(int state)
+{
+  ostringstream oss;
+  if (state & PG_STATE_CREATING)
+    oss << "creating+";
+  if (state & PG_STATE_ACTIVE)
+    oss << "active+";
+  if (state & PG_STATE_CLEAN)
+    oss << "clean+";
+  if (state & PG_STATE_CRASHED)
+    oss << "crashed+";
+  if (state & PG_STATE_DOWN)
+    oss << "down+";
+  if (state & PG_STATE_REPLAY)
+    oss << "replay+";
+  if (state & PG_STATE_STRAY)
+    oss << "stray+";
+  if (state & PG_STATE_SPLITTING)
+    oss << "splitting+";
+  if (state & PG_STATE_DEGRADED)
+    oss << "degraded+";
+  if (state & PG_STATE_SCRUBBING)
+    oss << "scrubbing+";
+  if (state & PG_STATE_SCRUBQ)
+    oss << "scrubq+";
+  if (state & PG_STATE_INCONSISTENT)
+    oss << "inconsistent+";
+  if (state & PG_STATE_PEERING)
+    oss << "peering+";
+  if (state & PG_STATE_REPAIR)
+    oss << "repair+";
+  if (state & PG_STATE_SCANNING)
+    oss << "scanning+";
+  string ret(oss.str());
+  return (ret.length() == 0) ? "inactive" : ret;
 }
 
 
