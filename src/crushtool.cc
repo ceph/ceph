@@ -512,59 +512,130 @@ void print_fixedpoint(ostream& out, int i)
   out << s;
 }
 
-class CrushDecompilerComparator
-{
-public:
-  explicit CrushDecompilerComparator(CrushWrapper &crush_)
-    : crush(crush_)
-  {
-  }
-
-
-  CrushDecompilerComparator(const CrushDecompilerComparator &rhs)
-    : crush(rhs.crush)
-  {
-  }
-
-  bool operator()(int a, int b) const
-  {
-    if (need_bucket(a, b)) {
-      if (need_bucket(b, a)) {
-	std::ostringstream oss;
-	oss << __PRETTY_FUNCTION__ << ": circular dependency! Bucket "
-	    << a << " references bucket " << b << ", but bucket " << b
-	    << " references bucket " << a << " as well!";
-	throw std::invalid_argument(oss.str());
-      }
-      // b has to come before a because a references b.
-      return false;
-    }
-
-    if (need_bucket(b, a)) {
-      // a has to come before b because b references a.
-      return true;
-    }
-    return (a > b);
-  }
-
-  // Returns true if bucket x references bucket y
-  bool need_bucket(int x, int y) const
-  {
-    int x_size = crush.get_bucket_size(x);
-    for (int i = 0; i < x_size; ++i) {
-      int item = crush.get_bucket_item(x, i);
-      if (item == y)
-	return true;
-    }
-    return false;
-  }
-
-private:
-  const CrushDecompilerComparator
-    &operator=(const CrushDecompilerComparator &rhs);
-
-  CrushWrapper &crush;
+enum dcb_state_t {
+  DCB_STATE_IN_PROGRESS = 0,
+  DCB_STATE_DONE
 };
+
+static int decompile_crush_bucket_impl(int i,
+			    CrushWrapper &crush, ostream &out)
+{
+  int type = crush.get_bucket_type(i);
+  print_type_name(out, type, crush);
+  out << " ";
+  print_item_name(out, i, crush);
+  out << " {\n";
+  out << "\tid " << i << "\t\t# do not change unnecessarily\n";
+
+  int n = crush.get_bucket_size(i);
+
+  int alg = crush.get_bucket_alg(i);
+  out << "\talg " << crush_bucket_alg_name(alg);
+
+  // notate based on alg type
+  bool dopos = false;
+  switch (alg) {
+  case CRUSH_BUCKET_UNIFORM:
+    out << "\t# do not change bucket size (" << n << ") unnecessarily";
+    dopos = true;
+    break;
+  case CRUSH_BUCKET_LIST:
+    out << "\t# add new items at the end; do not change order unnecessarily";
+    break;
+  case CRUSH_BUCKET_TREE:
+    out << "\t# do not change pos for existing items unnecessarily";
+    dopos = true;
+    break;
+  }
+  out << "\n";
+
+  int hash = crush.get_bucket_hash(i);
+  out << "\thash " << hash << "\t# " << crush_hash_name(hash) << "\n";
+
+  for (int j=0; j<n; j++) {
+    int item = crush.get_bucket_item(i, j);
+    int w = crush.get_bucket_item_weight(i, j);
+    out << "\titem ";
+    print_item_name(out, item, crush);
+    out << " weight ";
+    print_fixedpoint(out, w);
+    if (dopos) {
+      if (alg == CRUSH_BUCKET_TREE)
+	out << " pos " << (j-1)/2;
+      else
+	out << " pos " << j;
+    }
+    out << "\n";
+  }
+  out << "}\n";
+  return 0;
+}
+
+/* Basically, we just descend recursively into all of the buckets,
+ * executing a depth-first traversal of the graph. Since the buckets form a
+ * directed acyclic graph, this should work just fine. The graph isn't
+ * necessarily a tree, so we have to keep track of what buckets we already
+ * outputted. We don't want to output anything twice. We also keep track of
+ * what buckets are in progress so that we can detect cycles. These can
+ * arise through user error.
+ */
+static int decompile_crush_bucket(int cur,
+		    std::map<int, dcb_state_t> &dcb_states,
+		    CrushWrapper &crush, ostream &out)
+{
+  if ((cur == 0) || (!crush.bucket_exists(cur)))
+    return 0;
+
+  std::map<int, dcb_state_t>::iterator c = dcb_states.find(cur);
+  if (c == dcb_states.end()) {
+    // Mark this bucket as "in progress."
+    std::map<int, dcb_state_t>::value_type val(cur, DCB_STATE_IN_PROGRESS);
+    std::pair <std::map<int, dcb_state_t>::iterator, bool> rval
+      (dcb_states.insert(val));
+    assert(rval.second);
+    c = rval.first;
+  }
+  else if (c->second == DCB_STATE_DONE) {
+    // We already did this bucket.
+    return 0;
+  }
+  else if (c->second == DCB_STATE_IN_PROGRESS) {
+    cout << __PRETTY_FUNCTION__ << ": logic error: tried to decompile "
+	"a bucket that is already being decompiled" << std::endl;
+    return -EBADE;
+  }
+  else {
+    cout << __PRETTY_FUNCTION__ << ": logic error: illegal bucket state! "
+	 << c->second << std::endl;
+    return -EBADE;
+  }
+
+  int bsize = crush.get_bucket_size(cur);
+  for (int i = 0; i < bsize; ++i) {
+    int item = crush.get_bucket_item(cur, i);
+    std::map<int, dcb_state_t>::iterator d = dcb_states.find(item);
+    if (d == dcb_states.end()) {
+      int ret = decompile_crush_bucket(item, dcb_states, crush, out);
+      if (ret)
+	return ret;
+    }
+    else if (d->second == DCB_STATE_IN_PROGRESS) {
+      cout << __PRETTY_FUNCTION__ << ": error: while trying to output bucket "
+	   << cur << ", we found out that it contains one of the buckets that "
+	   << "contain it. This is not allowed. The buckets must form a "
+	   <<  "directed acyclic graph." << std::endl;
+      return -EINVAL;
+    }
+    else if (d->second != DCB_STATE_DONE) {
+      cout << __PRETTY_FUNCTION__ << ": logic error: illegal bucket state "
+	   << d->second << std::endl;
+      return -EBADE;
+    }
+  }
+  decompile_crush_bucket_impl(cur, crush, out);
+  c->second = DCB_STATE_DONE;
+  return 0;
+}
 
 int decompile_crush(CrushWrapper &crush, ostream &out)
 {
@@ -592,67 +663,11 @@ int decompile_crush(CrushWrapper &crush, ostream &out)
   }
 
   out << "\n# buckets\n";
-  CrushDecompilerComparator myCdc(crush);
-  std::set < int,  CrushDecompilerComparator > buckets(myCdc);
+  std::map<int, dcb_state_t> dcb_states;
   for (int bucket = -1; bucket > -1-crush.get_max_buckets(); --bucket) {
-    if (!crush.bucket_exists(bucket))
-      continue;
-    buckets.insert(bucket);
-  }
-
-  for (std::set <int>::const_iterator s = buckets.begin();
-       s != buckets.end();
-       ++s)
-  {
-    int i = *s;
-    int type = crush.get_bucket_type(i);
-    print_type_name(out, type, crush);
-    out << " ";
-    print_item_name(out, i, crush);
-    out << " {\n";
-    out << "\tid " << i << "\t\t# do not change unnecessarily\n";
-
-    int n = crush.get_bucket_size(i);
-
-    int alg = crush.get_bucket_alg(i);
-    out << "\talg " << crush_bucket_alg_name(alg);
-
-    // notate based on alg type
-    bool dopos = false;
-    switch (alg) {
-    case CRUSH_BUCKET_UNIFORM:
-      out << "\t# do not change bucket size (" << n << ") unnecessarily";
-      dopos = true;
-      break;
-    case CRUSH_BUCKET_LIST:
-      out << "\t# add new items at the end; do not change order unnecessarily";
-      break;
-    case CRUSH_BUCKET_TREE:
-      out << "\t# do not change pos for existing items unnecessarily";
-      dopos = true;
-      break;
-    }
-    out << "\n";
-
-    int hash = crush.get_bucket_hash(i);
-    out << "\thash " << hash << "\t# " << crush_hash_name(hash) << "\n";
-
-    for (int j=0; j<n; j++) {
-      int item = crush.get_bucket_item(i, j);
-      int w = crush.get_bucket_item_weight(i, j);
-      out << "\titem ";
-      print_item_name(out, item, crush);
-      out << " weight ";
-      print_fixedpoint(out, w);
-      if (dopos) {
-	if (alg == CRUSH_BUCKET_TREE)
-	  out << " pos " << (j-1)/2;
-	else 
-	  out << " pos " << j;
-      }
-      out << "\n";
-    }
-    out << "}\n";
+    int ret = decompile_crush_bucket(bucket, dcb_states, crush, out);
+    if (ret)
+      return ret;
   }
 
   out << "\n# rules\n";
