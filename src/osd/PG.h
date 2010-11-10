@@ -121,6 +121,10 @@ public:
       epoch_t same_up_since;       // same acting set since
       epoch_t same_acting_since;   // same acting set since
       epoch_t same_primary_since;  // same primary at least back through this epoch.
+
+      eversion_t last_scrub;
+      utime_t last_scrub_stamp;
+
       History() : 	      
 	epoch_created(0),
 	last_epoch_started(0), last_epoch_split(0),
@@ -134,10 +138,14 @@ public:
 	  last_epoch_started = other.last_epoch_started;
 	if (last_epoch_split < other.last_epoch_started)
 	  last_epoch_split = other.last_epoch_started;
+	if (other.last_scrub > last_scrub)
+	  last_scrub = other.last_scrub;
+	if (other.last_scrub_stamp > last_scrub_stamp)
+	  last_scrub_stamp = other.last_scrub_stamp;
       }
 
       void encode(bufferlist &bl) const {
-	__u8 struct_v = 1;
+	__u8 struct_v = 2;
 	::encode(struct_v, bl);
 	::encode(epoch_created, bl);
 	::encode(last_epoch_started, bl);
@@ -145,6 +153,8 @@ public:
 	::encode(same_acting_since, bl);
 	::encode(same_up_since, bl);
 	::encode(same_primary_since, bl);
+	::encode(last_scrub, bl);
+	::encode(last_scrub_stamp, bl);
       }
       void decode(bufferlist::iterator &bl) {
 	__u8 struct_v;
@@ -155,6 +165,10 @@ public:
 	::decode(same_acting_since, bl);
 	::decode(same_up_since, bl);
 	::decode(same_primary_since, bl);
+	if (struct_v >= 2) {
+	  ::decode(last_scrub, bl);
+	  ::decode(last_scrub_stamp, bl);
+	}
       }
     } history;
     
@@ -949,6 +963,7 @@ public:
 
   void queue_snap_trim();
 
+  void share_pg_info();
 
 
   // abstract bits

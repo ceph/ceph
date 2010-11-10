@@ -701,14 +701,7 @@ bool ReplicatedPG::snap_trimmer()
     int tr = osd->store->queue_transaction(&osr, t);
     assert(tr == 0);
  
-    // share new PG::Info with replicas
-    for (unsigned i=1; i<acting.size(); i++) {
-      int peer = acting[i];
-      MOSDPGInfo *m = new MOSDPGInfo(osd->osdmap->get_epoch());
-      m->pg_info.push_back(info);
-      osd->cluster_messenger->
-	send_message(m, osd->osdmap->get_cluster_inst(peer));
-    }
+    share_pg_info();
 
     unlock();
     // flush, to make sure the collection adjustments we just made are

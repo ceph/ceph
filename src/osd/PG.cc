@@ -1960,6 +1960,8 @@ void PG::update_stats()
     info.stats.reported.inc(info.history.same_primary_since);
     info.stats.version = info.last_update;
     info.stats.created = info.history.epoch_created;
+    info.stats.last_scrub = info.history.last_scrub;
+    info.stats.last_scrub_stamp = info.history.last_scrub_stamp;
     pg_stats_valid = true;
     pg_stats_stable = info.stats;
     pg_stats_stable.state = state;
@@ -3160,9 +3162,17 @@ void PG::scrub()
   state_clear(PG_STATE_REPAIR);
 
   // finish up
-  info.stats.last_scrub = info.last_update;
-  info.stats.last_scrub_stamp = g_clock.now();
+  info.history.last_scrub = info.last_update;
+  info.history.last_scrub_stamp = g_clock.now();
 
+  {
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    write_info(*t);
+    int tr = osd->store->queue_transaction(&osr, t);
+    assert(tr == 0);
+  }
+
+  share_pg_info();
 
  out:
   state_clear(PG_STATE_SCRUBBING);
@@ -3175,6 +3185,20 @@ void PG::scrub()
   finalizing_scrub = false;
   unlock();
 }
+
+void PG::share_pg_info()
+{
+  dout(10) << "share_pg_info" << dendl;
+
+  // share new PG::Info with replicas
+  for (unsigned i=1; i<acting.size(); i++) {
+    int peer = acting[i];
+    MOSDPGInfo *m = new MOSDPGInfo(osd->osdmap->get_epoch());
+    m->pg_info.push_back(info);
+    osd->cluster_messenger->send_message(m, osd->osdmap->get_cluster_inst(peer));
+  }
+}
+
 
 unsigned int PG::Missing::num_missing() const
 {
