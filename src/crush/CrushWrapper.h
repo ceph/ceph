@@ -256,10 +256,16 @@ public:
   /** buckets **/
 private:
   crush_bucket *get_bucket(int id) {
-    if (!crush) return (crush_bucket *)(-ENOENT);
-    int pos = -1 - id;
-    if (pos >= crush->max_buckets) return 0;
-    return crush->buckets[pos];
+    if (!crush)
+      return (crush_bucket *)(-EINVAL);
+    unsigned int pos = (unsigned int)(-1 - id);
+    unsigned int max_buckets = crush->max_buckets;
+    if (pos >= max_buckets)
+      return (crush_bucket *)(-ENOENT);
+    crush_bucket *ret = crush->buckets[pos];
+    if (ret == NULL)
+      return (crush_bucket *)(-ENOENT);
+    return ret;
   }
 
 public:
@@ -273,7 +279,8 @@ public:
   }
   bool bucket_exists(int id) {
     crush_bucket *b = get_bucket(id);
-    if (b == 0 || IS_ERR(b)) return false;
+    if (IS_ERR(b))
+      return false;
     return true;
   }
   int get_bucket_weight(int id) {
