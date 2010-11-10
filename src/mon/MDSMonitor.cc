@@ -206,9 +206,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
     goto out;
   }
 
-  if (mdsmap.get_epoch() != m->get_last_epoch_seen()
-      && !((info.state == MDSMap::STATE_STANDBY) ||
-          (info.state == MDSMap::STATE_STANDBY_REPLAY))){
+  if (mdsmap.get_epoch() != m->get_last_epoch_seen()) {
     dout(10) << "mds_beacon " << *m
 	     << " ignoring requested state, because mds hasn't seen latest map" << dendl;
     goto ignore;
