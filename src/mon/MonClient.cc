@@ -309,7 +309,9 @@ void MonClient::init()
 
 void MonClient::shutdown()
 {
+  monc_lock.Lock();
   timer->cancel_all_events();
+  monc_lock.Unlock();
 }
 
 int MonClient::authenticate(double timeout)
