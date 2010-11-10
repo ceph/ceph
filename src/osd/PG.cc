@@ -2737,15 +2737,17 @@ void PG::sub_op_scrub_reserve_reply(MOSDSubOpReply *op)
   ::decode(reserved, p);
 
   if (scrub_reserved_peers.find(from) != scrub_reserved_peers.end()) {
-    dout(10) << " already had osd" << from << " reserved: " << dendl;
+    dout(10) << " already had osd" << from << " reserved" << dendl;
   } else {
-    dout(10) << " got osd" << from << " scrub reserved: " << reserved << dendl;
     if (reserved) {
+      dout(10) << " osd" << from << " scrub reserve = success" << dendl;
       scrub_reserved_peers.insert(from);
     } else {
       /* One decline stops this pg from being scheduled for scrubbing. */
+      dout(10) << " osd" << from << " scrub reserve = fail" << dendl;
       scrub_reserve_failed = true;
     }
+    sched_scrub();
   }
 
   op->put();
