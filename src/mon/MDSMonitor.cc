@@ -206,7 +206,9 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
     goto out;
   }
 
-  if (mdsmap.get_epoch() != m->get_last_epoch_seen()) {
+  if (mdsmap.get_epoch() != m->get_last_epoch_seen()
+      && !((info.state == MDSMap::STATE_STANDBY) ||
+          (info.state == MDSMap::STATE_STANDBY_REPLAY))){
     dout(10) << "mds_beacon " << *m
 	     << " ignoring requested state, because mds hasn't seen latest map" << dendl;
     goto ignore;
@@ -233,8 +235,10 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
     if (info.state == MDSMap::STATE_STANDBY &&
 	state == MDSMap::STATE_STANDBY_REPLAY &&
 	(pending_mdsmap.is_degraded() ||
-	 pending_mdsmap.get_state(info.rank) < MDSMap::STATE_ACTIVE)) {
-      dout(10) << "mds_beacon can't standby-replay mds" << info.rank << " at this time (cluster degraded, or mds not active)" << dendl;
+	 pending_mdsmap.get_state(m->get_standby_for_rank()) < MDSMap::STATE_ACTIVE)) {
+      dout(10) << "mds_beacon can't standby-replay mds" << m->get_standby_for_rank() << " at this time (cluster degraded, or mds not active)" << dendl;
+      dout(10) << "pending_mdsmap.is_degraded()==" << pending_mdsmap.is_degraded()
+          << " rank state: " << ceph_mds_state_name(pending_mdsmap.get_state(m->get_standby_for_rank())) << dendl;
       goto ignore;
     }
     _note_beacon(m);
@@ -363,6 +367,8 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
     } else {
       info.state = state;
       info.state_seq = seq;
+      if (state == MDSMap::STATE_STANDBY_REPLAY)
+        info.rank = m->get_standby_for_rank();
     }
   }
 

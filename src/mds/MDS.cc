@@ -81,7 +81,6 @@ MDS::MDS(const char *n, Messenger *m, MonClient *mc) :
   name(n),
   whoami(-1), incarnation(0),
   standby_for_rank(-1),
-  standby_replay_for(-1),
   messenger(m),
   monc(mc),
   logclient(messenger, &mc->monmap, mc),
@@ -418,7 +417,7 @@ void MDS::send_message_client(Message *m, Session *session)
   }
 }
 
-int MDS::init()
+int MDS::init(int wanted_state)
 {
   dout(10) << sizeof(MDSCacheObject) << "\tMDSCacheObject" << dendl;
   dout(10) << sizeof(CInode) << "\tCInode" << dendl;
@@ -454,7 +453,9 @@ int MDS::init()
   mds_lock.Lock();
 
   // starting beacon.  this will induce an MDSMap from the monitor
-  want_state = MDSMap::STATE_BOOT;
+  want_state = wanted_state;
+  if (wanted_state == MDSMap::STATE_STANDBY && g_conf.id)
+    standby_for_rank = strtol(g_conf.id, NULL, 0);
   beacon_start();
   whoami = -1;
   messenger->set_myname(entity_name_t::MDS(whoami));
@@ -837,7 +838,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     want_state = state = MDSMap::STATE_STANDBY;
     dout(1) << "handle_mds_map standby" << dendl;
 
-    if (standby_replay_for >= 0)
+    if (standby_for_rank >= 0)
       request_state(MDSMap::STATE_STANDBY_REPLAY);
 
     goto out;
@@ -860,7 +861,6 @@ void MDS::handle_mds_map(MMDSMap *m)
   }
 
   // ??
-  assert(whoami >= 0);
   incarnation = mdsmap->get_inc(whoami);
 
   if (oldwhoami != whoami)
@@ -984,7 +984,8 @@ void MDS::handle_mds_map(MMDSMap *m)
 	mdcache->migrator->handle_mds_failure_or_stop(*p);
   }
 
-  balancer->try_rebalance();
+  if (standby_for_rank < 0) //if we're not replaying
+    balancer->try_rebalance();
 
  out:
   m->put();

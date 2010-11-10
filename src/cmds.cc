@@ -38,7 +38,7 @@ using namespace std;
 
 void usage()
 {
-  cerr << "usage: cmds -i name [flags] [--mds rank] [--shadow rank]\n";
+  cerr << "usage: cmds -i name [flags] [--mds rank] [--journal_check]\n";
   cerr << "  -m monitorip:port\n";
   cerr << "        connect to monitor at given address\n";
   cerr << "  --debug_mds n\n";
@@ -53,6 +53,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   bool dump_journal = false;
   const char *dump_file = NULL;
+  bool shadow = false;
 
   common_set_defaults(true);
 #ifdef HAVE_LIBTCMALLOC
@@ -67,16 +68,20 @@ int main(int argc, const char **argv)
   // mds specific args
   for (unsigned i=0; i<args.size(); i++) {
     if (!strcmp(args[i], "--dump-journal")) {
-      if (i + 2 < args.size()) // another argument?
+      if (i + 1 < args.size() &&
+          (args[i+1][0] != '-')) { // another argument?
         dump_file = args[i+1];
-      else
+        ++i;
+      } else
         dump_file = "mds.journal.dump";
       dump_journal = true;
       dout(0) << "dumping journal" << dendl;
-      ++i;
+    } else if (!strcmp(args[i], "--journal_check")) {
+      dout(0) << "checking journal"  << dendl;
+      shadow = true;
     } else {
-    cerr << "unrecognized arg " << args[i] << std::endl;
-    usage();
+      cerr << "unrecognized arg " << args[i] << std::endl;
+      usage();
     }
   }
   if (!g_conf.id) {
@@ -130,7 +135,10 @@ int main(int argc, const char **argv)
     mds->orig_argc = argc;
     mds->orig_argv = argv;
 
-    mds->init();
+    if (shadow)
+      mds->init(MDSMap::STATE_STANDBY);
+    else
+      mds->init();
 
     messenger->wait();
 
