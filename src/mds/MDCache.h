@@ -577,8 +577,8 @@ public:
   inode_t *journal_dirty_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
 
   void project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t first, int linkunlink);
-  void project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
-				   CDir *parent, int linkunlink=0);
+  void _project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
+				    CDir *parent, int linkunlink=0);
   void project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accounted_rstat,
 				   snapid_t ofirst, snapid_t last, 
 				   CInode *pin, bool cow_head);
