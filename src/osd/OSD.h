@@ -813,6 +813,7 @@ protected:
 
   bool inc_scrubs_pending();
   void dec_scrubs_pending();
+  void dec_scrubs_active();
 
   // -- scrubbing --
   xlist<PG*> scrub_queue;

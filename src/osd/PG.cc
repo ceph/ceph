@@ -2579,7 +2579,7 @@ bool PG::sched_scrub()
     if (osd->inc_scrubs_pending()) {
       dout(20) << "sched_scrub: reserved locally, reserving replicas" << dendl;
       scrub_reserved = true;
-      scrub_reserved_peers.insert(0);
+      scrub_reserved_peers.insert(osd->whoami);
       scrub_reserve_replicas();
     } else {
       dout(20) << "sched_scrub: failed to reserve locally" << dendl;
@@ -3189,9 +3189,7 @@ void PG::scrub()
   update_stats();
 
   // active -> nothing.
-  osd->sched_scrub_lock.Lock();
-  --(osd->scrubs_active);
-  osd->sched_scrub_lock.Unlock();
+  osd->dec_scrubs_active();
 
   scrub_unreserve_replicas();
   

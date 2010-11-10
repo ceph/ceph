@@ -2233,8 +2233,25 @@ bool OSD::scrub_should_schedule()
     return false;
   }
 
+  if (loadavgs[0] >= g_conf.osd_scrub_load_threshold) {
+    dout(20) << "scrub_should_schedule loadavg " << loadavgs[0]
+	     << " >= max " << g_conf.osd_scrub_load_threshold
+	     << " = no, load too high" << dendl;
+    return false;
+  }
+
+  bool coin_flip = (rand() % 3) == whoami % 3;
+  if (!coin_flip) {
+    dout(20) << "scrub_should_schedule loadavg " << loadavgs[0]
+	     << " < max " << g_conf.osd_scrub_load_threshold
+	     << " = no, randomly backing off"
+	     << dendl;
+    return false;
+  }
+  
   dout(20) << "scrub_should_schedule loadavg " << loadavgs[0]
-	   << " max " << g_conf.osd_scrub_load_threshold << dendl;
+	   << " < max " << g_conf.osd_scrub_load_threshold
+	   << " = yes" << dendl;
   return loadavgs[0] < g_conf.osd_scrub_load_threshold;
 }
 
@@ -2283,10 +2300,13 @@ bool OSD::inc_scrubs_pending()
   bool result = false;
 
   sched_scrub_lock.Lock();
-  dout(20) << "attempting to add a pending scrub with " << scrubs_pending << " scrubs_pending and " << scrubs_active << " scrubs_active and " << g_conf.osd_max_scrubs << " max scrubs " << dendl;
   if (scrubs_pending + scrubs_active < g_conf.osd_max_scrubs) {
+    dout(20) << "inc_scrubs_pending " << scrubs_pending << " -> " << (scrubs_pending+1)
+	     << " (max " << g_conf.osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
     result = true;
     ++scrubs_pending;
+  } else {
+    dout(20) << "inc_scrubs_pending " << scrubs_pending << " + " << scrubs_active << " active >= max " << g_conf.osd_max_scrubs << dendl;
   }
   sched_scrub_lock.Unlock();
 
@@ -2296,8 +2316,19 @@ bool OSD::inc_scrubs_pending()
 void OSD::dec_scrubs_pending()
 {
   sched_scrub_lock.Lock();
+  dout(20) << "dec_scrubs_pending " << scrubs_pending << " -> " << (scrubs_pending-1)
+	   << " (max " << g_conf.osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
   --scrubs_pending;
   assert(scrubs_pending >= 0);
+  sched_scrub_lock.Unlock();
+}
+
+void OSD::dec_scrubs_active()
+{
+  sched_scrub_lock.Lock();
+  dout(20) << "dec_scrubs_active " << scrubs_active << " -> " << (scrubs_active-1)
+	   << " (max " << g_conf.osd_max_scrubs << ", pending " << scrubs_pending << ")" << dendl;
+  --scrubs_active;
   sched_scrub_lock.Unlock();
 }
 
