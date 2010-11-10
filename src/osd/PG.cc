@@ -2930,6 +2930,7 @@ void PG::scrub()
 
   if (!is_primary()) {
     dout(10) << "scrub -- not primary" << dendl;
+    clear_scrub_reserved();
     unlock();
     osd->map_lock.put_read();
     return;
@@ -2937,6 +2938,7 @@ void PG::scrub()
 
   if (!is_active() || !is_clean()) {
     dout(10) << "scrub -- not active or not clean" << dendl;
+    clear_scrub_reserved();
     unlock();
     osd->map_lock.put_read();
     return;
@@ -2945,6 +2947,15 @@ void PG::scrub()
   dout(10) << "scrub start" << dendl;
   state_set(PG_STATE_SCRUBBING);
   update_stats();
+
+  osd->sched_scrub_lock.Lock();
+  --(osd->scrubs_pending);
+  assert(osd->scrubs_pending >= 0);
+  ++(osd->scrubs_active);
+  osd->sched_scrub_lock.Unlock();
+
+  scrub_reserved = false;
+  scrub_reserved_peers.clear();
 
   // request maps from replicas
   for (unsigned i=1; i<acting.size(); i++) {
@@ -2963,7 +2974,6 @@ void PG::scrub()
       goto out;
     }
   }
-
 
   waiting_on = acting.size() - 1;
   while (waiting_on > 0) {
@@ -3178,6 +3188,13 @@ void PG::scrub()
   state_clear(PG_STATE_SCRUBBING);
   update_stats();
 
+  // active -> nothing.
+  osd->sched_scrub_lock.Lock();
+  --(osd->scrubs_active);
+  osd->sched_scrub_lock.Unlock();
+
+  scrub_unreserve_replicas();
+  
   dout(10) << "scrub done" << dendl;
 
   osd->take_waiters(waiting_for_active);
