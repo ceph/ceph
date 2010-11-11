@@ -488,6 +488,7 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
   } else if (session && !session->closed) {
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
+    rr->client = req->get_source_inst();
     encode_message(g_ceph_context, req, rr->request_bl);
     rr->session = (MonSession *)session->get();
     routed_requests[rr->tid] = rr;
@@ -634,6 +635,7 @@ void Monitor::resend_routed_requests()
 
     dout(10) << " resend to mon" << mon << " tid " << rr->tid << " " << *req << dendl;
     MForward *forward = new MForward(rr->tid, req, rr->session->caps);
+    forward->client = rr->client;
     forward->set_priority(req->get_priority());
     messenger->send_message(forward, monmap->get_inst(mon));
   }  
