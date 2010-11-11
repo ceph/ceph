@@ -2238,6 +2238,8 @@ public:
 
     mds->mdcache->send_dentry_link(dn);
 
+    mds->balancer->hit_inode(mdr->now, newi, META_POP_IWR);
+
     mds->server->reply_request(mdr, 0);
   }
 };
