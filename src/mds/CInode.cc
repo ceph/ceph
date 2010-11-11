@@ -1585,6 +1585,21 @@ void CInode::finish_scatter_gather_update(int type)
 	} else {
 	  dout(20) << fg << " skipping STALE accounted_fragstat " << pf->accounted_fragstat << dendl;
 	}
+
+	if (pf->fragstat.nfiles < 0 ||
+	    pf->fragstat.nsubdirs < 0) {
+	  stringstream ss;
+	  ss << "bad/negative dir size on " << dir->dirfrag() << " " << pf->fragstat;
+	  mdcache->mds->logclient.log(LOG_ERROR, ss);
+	  
+	  if (pf->fragstat.nfiles < 0)
+	    pf->fragstat.nfiles = 0;
+	  if (pf->fragstat.nsubdirs < 0)
+	    pf->fragstat.nsubdirs = 0;
+
+	  assert(!"bad/negative frag size" == g_conf.mds_verify_scatter);
+	}
+
 	if (update) {
 	  pf->accounted_fragstat = pf->fragstat;
 	  pf->fragstat.version = pf->accounted_fragstat.version = pi->dirstat.version;
@@ -1610,9 +1625,20 @@ void CInode::finish_scatter_gather_update(int type)
       if (touched_mtime)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
       dout(20) << " final dirstat " << pi->dirstat << dendl;
-      assert(pi->dirstat.size() >= 0);
-      assert(pi->dirstat.nfiles >= 0);
-      assert(pi->dirstat.nsubdirs >= 0);
+
+      if (pi->dirstat.nfiles < 0 ||
+	  pi->dirstat.nsubdirs < 0) {
+	stringstream ss;
+	ss << "bad/negative dir size on " << ino() << ", inode has " << pi->dirstat;
+	mdcache->mds->logclient.log(LOG_ERROR, ss);
+
+	if (pi->dirstat.nfiles < 0)
+	  pi->dirstat.nfiles = 0;
+	if (pi->dirstat.nsubdirs < 0)
+	  pi->dirstat.nsubdirs = 0;
+
+	assert(!"bad/negative dir size" == g_conf.mds_verify_scatter);
+      }
     }
     break;
 

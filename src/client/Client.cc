@@ -463,61 +463,69 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
   if (!st->cap.caps)
     return in;   // as with readdir returning indoes in different snaprealms (no caps!)
 
-  int implemented = 0;
-  int issued = in->caps_issued(&implemented) | in->caps_dirty();
-  issued |= implemented;
+  // only update inode if mds info is strictly newer, or it is the same and projected (odd).
+  if (st->version == 0 ||
+      (in->version & ~1) < st->version) {
+
+    int implemented = 0;
+    int issued = in->caps_issued(&implemented) | in->caps_dirty();
+    issued |= implemented;
+
+    in->version = st->version;
+
+    if ((issued & CEPH_CAP_AUTH_EXCL) == 0) {
+      in->mode = st->mode;
+      in->uid = st->uid;
+      in->gid = st->gid;
+    }
+
+    if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
+      in->nlink = st->nlink;
+    }
+
+    if ((issued & CEPH_CAP_XATTR_EXCL) == 0 &&
+	st->xattrbl.length() &&
+	st->xattr_version > in->xattr_version) {
+      bufferlist::iterator p = st->xattrbl.begin();
+      ::decode(in->xattrs, p);
+      in->xattr_version = st->xattr_version;
+    }
+
+    in->dirstat = st->dirstat;
+    in->rstat = st->rstat;
+
+    in->layout = st->layout;
+    in->ctime = st->ctime;
+    in->max_size = st->max_size;  // right?
+  
+    update_inode_file_bits(in, st->truncate_seq, st->truncate_size, st->size,
+			   st->time_warp_seq, st->ctime, st->mtime, st->atime,
+			   issued);
+
+    if (in->is_dir() &&
+	(st->cap.caps & CEPH_CAP_FILE_SHARED) &&
+	(issued & CEPH_CAP_FILE_EXCL) == 0 &&
+	in->dirstat.nfiles == 0 &&
+	in->dirstat.nsubdirs == 0) {
+      dout(10) << " marking I_COMPLETE on empty dir " << *in << dendl;
+      in->flags |= I_COMPLETE;
+      if (in->dir) {
+	dout(0) << "WARNING: dir is open on empty dir " << in->ino << " with "
+		<< in->dir->dentry_map.size() << " entries" << dendl;
+	in->dir->max_offset = 2;
+	
+	// FIXME: tear down dir?
+      }
+    }  
+  }
+
+  // move me if/when version reflects fragtree changes.
+  in->dirfragtree = st->dirfragtree;
 
   if (in->snapid == CEPH_NOSNAP)
     add_update_cap(in, mds, st->cap.cap_id, st->cap.caps, st->cap.seq, st->cap.mseq, inodeno_t(st->cap.realm), st->cap.flags);
   else
     in->snap_caps |= st->cap.caps;
-
-  in->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
-
-  if ((issued & CEPH_CAP_AUTH_EXCL) == 0) {
-    in->mode = st->mode;
-    in->uid = st->uid;
-    in->gid = st->gid;
-  }
-
-  if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
-    in->nlink = st->nlink;
-  }
-
-  if ((issued & CEPH_CAP_XATTR_EXCL) == 0 &&
-      st->xattrbl.length() &&
-      st->xattr_version > in->xattr_version) {
-    bufferlist::iterator p = st->xattrbl.begin();
-    ::decode(in->xattrs, p);
-    in->xattr_version = st->xattr_version;
-  }
-
-  in->dirstat = st->dirstat;
-  in->rstat = st->rstat;
-
-  in->layout = st->layout;
-  in->ctime = st->ctime;
-  in->max_size = st->max_size;  // right?
-  
-  update_inode_file_bits(in, st->truncate_seq, st->truncate_size, st->size,
-			 st->time_warp_seq, st->ctime, st->mtime, st->atime,
-			 issued);
-  
-  if (in->is_dir() &&
-      (st->cap.caps & CEPH_CAP_FILE_SHARED) &&
-      (issued & CEPH_CAP_FILE_EXCL) == 0 &&
-      in->dirstat.nfiles == 0 &&
-      in->dirstat.nsubdirs == 0) {
-    dout(10) << " marking I_COMPLETE on empty dir " << *in << dendl;
-    in->flags |= I_COMPLETE;
-    if (in->dir) {
-      dout(0) << "WARNING: dir is open on empty dir " << in->ino << " with "
-	      << in->dir->dentry_map.size() << " entries" << dendl;
-      in->dir->max_offset = 2;
-
-      // FIXME: tear down dir?
-    }
-  }
 
   return in;
 }

@@ -160,6 +160,7 @@ AC_CHECK_HEADER([histedit.h],
 AC_CHECK_HEADER([openssl/md5.h],
 	[],
 	[AC_MSG_ERROR([Sorry you need openssl dev files (libssl-dev on debian)])])
+PKG_CHECK_MODULES([OPENSSL], [openssl])
 
 AC_CHECK_HEADER([linux/fiemap.h],
 	[AC_DEFINE([HAVE_FIEMAP_H], [], [linux/fiemap.h was found, fiemap ioctl will be used])],

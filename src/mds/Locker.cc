@@ -1805,7 +1805,7 @@ void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t follo
   while (p != head_in->client_need_snapflush.end()) {
     snapid_t snapid = p->first;
     set<client_t>& clients = p->second;
-    p++;
+    p++;  // be careful, q loop below depends on this
 
     // snapid is the snap inode's ->last
     if (follows > snapid)
@@ -1813,9 +1813,25 @@ void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t follo
     if (clients.count(client)) {
       dout(10) << " doing async NULL snapflush on " << snapid << " from client" << client << dendl;
       CInode *sin = mdcache->get_inode(head_in->ino(), snapid);
-      if (!sin && head_in->is_multiversion())
-	sin = head_in;
-      assert(sin);
+      if (!sin) {
+	// hrm, look forward until we find the inode. 
+	//  (we can only look it up by the last snapid it is valid for)
+	dout(10) << " didn't have " << head_in->ino() << " snapid " << snapid << dendl;
+	for (map<snapid_t, set<client_t> >::iterator q = p;  // p is already at next entry
+	     q != head_in->client_need_snapflush.end();
+	     q++) {
+	  dout(10) << " trying snapid " << q->first << dendl;
+	  sin = mdcache->get_inode(head_in->ino(), q->first);
+	  if (sin) {
+	    assert(sin->first <= snapid);
+	    break;
+	  }
+	  dout(10) << " didn't have " << head_in->ino() << " snapid " << q->first << dendl;
+	}
+	if (!sin && head_in->is_multiversion())
+	  sin = head_in;
+	assert(sin);
+      }
       _do_snap_update(sin, snapid, 0, sin->first - 1, client, NULL, NULL);
       head_in->remove_need_snapflush(sin, snapid, client);
     }

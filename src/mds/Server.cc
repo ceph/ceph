@@ -5205,7 +5205,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
       //  - avoid conflicting lock state changes
       //  - avoid concurrent updates to the inode
       //     (this could also be accomplished with the versionlock)
-      int allowance = 1; // for the versionlock and possible linklock xlock (both are tied to mdr)
+      int allowance = 2; // for the mdr auth_pin, one for the xlock state
       dout(10) << " freezing srci " << *srcdnl->get_inode() << " with allowance " << allowance << dendl;
       if (!srcdnl->get_inode()->freeze_inode(allowance)) {
 	srcdnl->get_inode()->add_waiter(CInode::WAIT_FROZEN, new C_MDS_RetryRequest(mdcache, mdr));

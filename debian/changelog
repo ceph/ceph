@@ -1,3 +1,17 @@
+ceph (0.23-1) experimental; urgency=low
+
+  * osd: use new btrfs snapshot ioctls
+  * mds: replay fixes
+  * mds: many many clustering fixes
+  * mds: directory fragmentation (off by default)
+  * mon: better commit batching, lower latency
+  * objecter: bug fixes
+  * osd: spread data across multiple xattrs
+  * osd: start up despite corrupt pg logs
+  * new gui (ceph -g)
+
+ -- Sage Weil <sage@newdream.net>  Wed, 10 Nov 2010 16:32:07 -0800
+
 ceph (0.22.2-1) experimental; urgency=low
 
   * cfuse: fix truncation problem

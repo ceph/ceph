@@ -148,7 +148,6 @@ class MDS : public Dispatcher {
 
   int standby_for_rank;
   string standby_for_name;
-  int standby_replay_for;
 
   Messenger    *messenger;
   MonClient    *monc;
@@ -339,7 +338,7 @@ class MDS : public Dispatcher {
   void send_message(Message *m, Connection *c);
 
   // start up, shutdown
-  int init();
+  int init(int wanted_state=MDSMap::STATE_BOOT);
 
   void open_logger();
 

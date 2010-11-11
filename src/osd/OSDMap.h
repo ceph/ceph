@@ -469,12 +469,14 @@ private:
     return osd_hb_addr[osd];
   }
   entity_inst_t get_inst(int osd) {
-    assert(exists(osd) && is_up(osd));
+    assert(exists(osd));
+    assert(is_up(osd));
     return entity_inst_t(entity_name_t::OSD(osd),
 			 osd_addr[osd]);
   }
   entity_inst_t get_cluster_inst(int osd) {
-    assert(exists(osd) && is_up(osd));
+    assert(exists(osd));
+    assert(is_up(osd));
     if (osd_cluster_addr[osd] == entity_addr_t())
       return get_inst(osd);
     return entity_inst_t(entity_name_t::OSD(osd), osd_cluster_addr[osd]);

@@ -75,6 +75,11 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/stat
 
+# To avoid that libcls_rbd.so.1.0.0 is beeing stiped by find-debuginfo.sh
+# we petend that the debug symbols have already been extracted
+mkdir -p $RPM_BUILD_ROOT/usr/lib/debug/%{_libdir}/rados-classes/
+touch $RPM_BUILD_ROOT/usr/lib/debug/%{_libdir}/rados-classes/libcls_rbd.so.1.0.0.debug
+
 %clean
 rm -rf $RPM_BUILD_ROOT
 

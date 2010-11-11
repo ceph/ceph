@@ -34,6 +34,7 @@
 #include <boost/lexical_cast.hpp>
 #include <gtkmm.h>
 #include <iosfwd>
+#include <stack>
 
 enum NodeType {
    OSD_NODE = 0,
