@@ -9,7 +9,7 @@ source "`dirname $0`/test_common.sh"
 
 # Constants
 my_write_objects() {
-        write_objects $1 $2 50 1000000
+        write_objects $1 $2 10 1000000
 }
 
 setup() {
@@ -41,10 +41,26 @@ do_test() {
         # Objects should be lost.
         stop_osd 0
 
-        echo "There should be unfound objects."
-        continue_prompt "to test finding the unfound objects."
+	poll_cmd "./ceph pg debug unfound_objects_exist" TRUE 3 120
+        [ $? -eq 1 ] || die "Failed to see unfound objects."
+        echo "Got unfound objects."
+
+        (
+                ./rados -p data get obj01 $TEMPDIR/obj01 || die "radostool failed"
+        ) &
+        sleep 5
+        [ -e $TEMPDIR/obj01 ] && die "unexpected error: fetched unfound object?"
 
         restart_osd 0
+
+	poll_cmd "./ceph pg debug unfound_objects_exist" FALSE 3 120
+        [ $? -eq 1 ] || die "Failed to recover unfound objects."
+
+        wait
+        [ -e $TEMPDIR/obj01 ] || die "unexpected error: failed to fetched newly-found object"
+
+        # success
+        return 1
 }
 
 run() {

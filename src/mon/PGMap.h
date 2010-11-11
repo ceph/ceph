@@ -223,7 +223,7 @@ public:
     ss << "last_pg_scan " << last_pg_scan << std::endl;
     ss << "full_ratio " << full_ratio << std::endl;
     ss << "nearfull_ratio " << nearfull_ratio << std::endl;
-    ss << "pg_stat\tobjects\tmip\tdegr\tkb\tbytes\tlog\tdisklog\tstate\tv\treported\tup\tacting\tlast_scrub" << std::endl;
+    ss << "pg_stat\tobjects\tmip\tunf\tdegr\tkb\tbytes\tlog\tdisklog\tstate\tv\treported\tup\tacting\tlast_scrub" << std::endl;
     for (set<pg_t>::const_iterator p = pg_set.begin();
 	 p != pg_set.end();
 	 p++) {
@@ -237,6 +237,7 @@ public:
 	 << "\t" << st.num_objects
 	//<< "\t" << st.num_object_copies
 	 << "\t" << st.num_objects_missing_on_primary
+	 << "\t" << st.num_objects_unfound
 	 << "\t" << st.num_objects_degraded
 	 << "\t" << st.num_kb
 	 << "\t" << st.num_bytes
@@ -257,6 +258,7 @@ public:
 	 << "\t" << p->second.num_objects
 	//<< "\t" << p->second.num_object_copies
 	 << "\t" << p->second.num_objects_missing_on_primary
+	 << "\t" << p->second.num_objects_unfound
 	 << "\t" << p->second.num_objects_degraded
 	 << "\t" << p->second.num_kb
 	 << "\t" << p->second.num_bytes
@@ -266,6 +268,7 @@ public:
     ss << " sum\t" << pg_sum.num_objects
       //<< "\t" << pg_sum.num_object_copies
        << "\t" << pg_sum.num_objects_missing_on_primary
+       << "\t" << pg_sum.num_objects_unfound
        << "\t" << pg_sum.num_objects_degraded
        << "\t" << pg_sum.num_kb
        << "\t" << pg_sum.num_bytes

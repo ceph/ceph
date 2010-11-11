@@ -512,27 +512,44 @@ void PG::merge_log(ObjectStore::Transaction& t,
 /*
  * process replica's missing map to determine if they have
  * any objects that i need
+ *
+ * TODO: if the missing set becomes very large, this could get expensive.
+ * Instead, we probably want to just iterate over our unfound set.
  */
 void PG::search_for_missing(Log &olog, Missing &omissing, int fromosd)
 {
   // found items?
   for (map<sobject_t,Missing::item>::iterator p = missing.missing.begin();
        p != missing.missing.end();
-       p++) {
+       ++p) {
+    const sobject_t &soid(p->first);
     eversion_t need = p->second.need;
     eversion_t have = p->second.have;
-    if (omissing.is_missing(p->first)) {
-      dout(10) << "search_for_missing " << p->first << " " << need
+    if (omissing.is_missing(soid)) {
+      dout(10) << "search_for_missing " << soid << " " << need
 	       << " also missing on osd" << fromosd << dendl;
+      continue;
     } 
-    else if (need <= olog.head) {
-      dout(10) << "search_for_missing " << p->first << " " << need
-               << " is on osd" << fromosd << dendl;
-      missing_loc[p->first].insert(fromosd);
-    } else {
-      dout(10) << "search_for_missing " << p->first << " " << need
+    if (need > olog.head) {
+      dout(10) << "search_for_missing " << soid << " " << need
                << " > olog.head " << olog.head << ", also missing on osd" << fromosd
                << dendl;
+      continue;
+    }
+    dout(10) << "search_for_missing " << soid << " " << need
+	     << " is on osd" << fromosd << dendl;
+
+    map<sobject_t, set<int> >::iterator ml = missing_loc.find(soid);
+    if (ml == missing_loc.end()) {
+      hash_map<sobject_t, list<class Message*> >::iterator wmo =
+	waiting_for_missing_object.find(soid);
+      if (wmo != waiting_for_missing_object.end()) {
+	osd->take_waiters(wmo->second);
+      }
+      missing_loc[soid].insert(fromosd);
+    }
+    else {
+      ml->second.insert(fromosd);
     }
   }
 
@@ -1134,7 +1151,7 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
   dout(10) << "recover_master_log" << dendl;
 
   // -- query info from everyone in prior_set.
-  bool missing_info = false;
+  bool lack_info = false;
   for (set<int>::iterator it = prior_set.begin();
        it != prior_set.end();
        it++) {
@@ -1144,7 +1161,7 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
                << dendl;      
       continue;
     }
-    missing_info = true;
+    lack_info = true;
 
     if (peer_info_requested.find(*it) != peer_info_requested.end()) {
       dout(10) << " waiting for osd" << *it << dendl;
@@ -1159,7 +1176,7 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
       dout(10) << " not querying info from down osd" << *it << dendl;
     }
   }
-  if (missing_info)
+  if (lack_info)
     return false;
 
   
@@ -1345,7 +1362,7 @@ void PG::peer(ObjectStore::Transaction& t, list<Context*>& tfin,
 
     if (pi.is_empty())
       continue;
-    if (peer_missing.count(peer) == 0) {
+    if (peer_missing.find(peer) == peer_missing.end()) {
       if (pi.last_update == pi.last_complete) {
 	dout(10) << " infering no missing (last_update==last_complete) for osd" << peer << dendl;
 	peer_missing[peer].num_missing();  // just create the entry.
@@ -1354,8 +1371,10 @@ void PG::peer(ObjectStore::Transaction& t, list<Context*>& tfin,
 	have_all_missing = false;
       }
     }
-    if (peer_log_requested.count(peer) ||
-        peer_summary_requested.count(peer)) continue;
+    if (peer_log_requested.find(peer) != peer_log_requested.end())
+      continue;
+    if (peer_summary_requested.find(peer) != peer_summary_requested.end())
+      continue;
    
     assert(pi.last_update <= log.head);
 
@@ -1380,60 +1399,14 @@ void PG::peer(ObjectStore::Transaction& t, list<Context*>& tfin,
   if (!have_all_missing)
     return;
 
-  dout(10) << " min_last_complete_ondisk " << min_last_complete_ondisk << dendl;
-
-  
-  // -- ok.  and have i located all pg contents?
-  if (missing.num_missing() > missing_loc.size()) {
-    dout(10) << "there are still " << (missing.num_missing() - missing_loc.size()) << " lost objects" << dendl;
-
-    // let's pull info+logs from _everyone_ (strays included, this
-    // time) in search of missing objects.
-
-    for (map<int,Info>::iterator it = peer_info.begin();
-         it != peer_info.end();
-         it++) {
-      int peer = it->first;
-
-      if (osd->osdmap->is_down(peer))
-	continue;
-
-      if (it->second.dne()) {
-        dout(10) << " not requesting summary/backlog; pg dne on osd" << peer << dendl;
-	continue;
-      }
-
-      if (peer_summary_requested.count(peer)) {
-        dout(10) << " already requested summary/backlog from osd" << peer << dendl;
-        continue;
-      }
-
-      dout(10) << " requesting summary/backlog from osd" << peer << dendl;      
-      query_map[peer][info.pgid] = Query(Query::BACKLOG, info.history);
-      peer_summary_requested.insert(peer);
-      return;
-    }
-    
-    // hmm, could these objects be permanently lost?
-    check_for_lost_objects();
-
-    // still lost?
-    if (missing.num_missing() > missing_loc.size()) {
-      dout(10) << (missing.num_missing() - missing_loc.size())
-	       << " objects are still lost, waiting+hoping for a notify from someone else!" << dendl;
-      dout(20) << "  lost: ";
-      for (map<sobject_t,Missing::item>::iterator p = missing.missing.begin();
-	   p != missing.missing.end();
-	   p++) 
-	if (missing_loc.count(p->first) == 0)
-	  *_dout << " " << p->first;
-      *_dout << dendl;
-      return;
-    }
+  {
+    int num_missing = missing.num_missing();
+    int num_locs = missing_loc.size();
+    dout(10) << "num_missing = " << num_missing
+	     << ", num_unfound = " << (num_missing - num_locs) << dendl;
   }
 
   // sanity check
-  assert(missing.num_missing() == missing_loc.size());
   assert(info.last_complete >= log.tail || log.backlog);
 
   // -- do need to notify the monitor?
@@ -1470,129 +1443,6 @@ void PG::peer(ObjectStore::Transaction& t, list<Context*>& tfin,
   }
   else if (is_all_uptodate()) 
     finish_recovery(t, tfin);
-}
-
-
-void PG::check_for_lost_objects()
-{
-  dout(10) << "check_for_lost_objects" << dendl;
-  
-  /*
-   * see if any prior_set_down osds are lost, and if so whether that
-   * means any lost objects are also (permanently) lost.
-   */
-  dout(10) << " prior_set_down " << prior_set_down << dendl;
-  if (prior_set_down.empty()) {
-    if (g_conf.osd_recovery_forget_lost_objects) {
-      dout(10) << " nobody in the prior_set is down; give up" << dendl;
-      forget_lost_objects();
-    } else {
-      dout(10) << " nobody in the prior_set is down, but not giving up (osd_recovery_forget_lost_objects=false)" << dendl;
-    }
-    return;
-  }
-  
-  bool all_lost = true;
-  for (set<int>::iterator q = prior_set_down.begin();
-       q != prior_set_down.end();
-       q++) {
-    int o = *q;
-    if (!osd->osdmap->exists(o)) {
-      dout(10) << "  osd" << o << " dne (and presumably lost)" << dendl;
-      continue;
-    }
-    const osd_info_t& pinfo = osd->osdmap->get_info(o);
-    if (pinfo.lost_at > pinfo.up_from) {
-      dout(10) << "  osd" << o << " lost" << dendl;
-      continue;
-    }
-    all_lost = false;
-  }
-
-  if (all_lost) {
-    dout(10) << " all prior_set_down osds " << prior_set_down << " are lost" << dendl;
-    forget_lost_objects();
-    //assert(0);
-  }
-}
-
-void PG::forget_lost_objects()
-{
-  dout(10) << "forget_lost_objects" << dendl;
-
-  dout(30) << "log before:\n";
-  log.print(*_dout);
-  *_dout << dendl;
-
-  eversion_t oldest_lost = info.last_update;
-
-  eversion_t v = info.last_update;
-  v.epoch = osd->osdmap->get_epoch();
-  v.version++;
-
-  utime_t mtime = g_clock.now();
-    
-  map<sobject_t,Missing::item>::iterator p = missing.missing.begin();
-  while (p != missing.missing.end()) {
-    if (missing_loc.count(p->first) == 0) {
-     
-      Log::Entry e(Log::Entry::LOST, p->first, v, p->second.need, osd_reqid_t(), mtime);
-      
-      if (p->second.have == eversion_t()) {
-	dout(10) << "    " << p->first << " " << p->second.need << " is permanently lost" << dendl;
-
-	stringstream ss;
-	ss << "lost object " << p->first << " " << v << " in " << info.pgid;
-	osd->logclient.log(LOG_ERROR, ss);
-
-	e.op = Log::Entry::LOST;
-
-	// remove from peer_missing
-	for (map<int,Missing>::iterator q = peer_missing.begin();
-	     q != peer_missing.end();
-	     q++) {
-	  if (q->second.missing.count(p->first)) {
-	    dout(10) << "  peer osd" << q->first << " no longer missing " << p->first << " at all" << dendl;
-	    q->second.rm(p->first, v);
-	  }
-	}
-
-	// remove from my missing
-	missing.rmissing.erase(p->second.need);
-	missing.missing.erase(p++);
-      } else {
-	dout(10) << "    " << p->first << " " << p->second.need << " is permanently lost, reverting to "
-		 << p->second.have << dendl;
-
-	stringstream ss;
-	ss << "lost object " << p->first << " " << p->second.need
-	   << " reverted to " << p->second.have << " in " << info.pgid;
-	osd->logclient.log(LOG_ERROR, ss);
-	
-	e.op = Log::Entry::LOST_REVERT;
-
-	assert(0 == "not implemented yet");  // FIXME ****
-
-	// remove from my missing
-	missing.rmissing.erase(p->second.need);
-	missing.missing.erase(p++);
-      }
-
-      log.add(e);
-      info.last_update = v;
-      v.version++;
-
-      dout(10) << "  " << e << dendl;
-
-    } else
-      p++;
-  }
-  
-  dout(30) << "log after:\n";
-  log.print(*_dout);
-  *_dout << dendl;
-  dout(10) << "missing now " << missing << dendl;
-  dout(20) << "missing now " << missing.missing << dendl;
 }
 
 void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
@@ -1988,6 +1838,9 @@ void PG::update_stats()
 	degraded += peer_missing[acting[i]].num_missing();
       }
       pg_stats_stable.num_objects_degraded += degraded;
+
+      pg_stats_stable.num_objects_unfound =
+	missing.num_missing() - missing_loc.size();
     }
 
     dout(15) << "update_stats " << pg_stats_stable.reported << dendl;
@@ -2913,8 +2766,12 @@ void PG::repair_object(ScrubMap::object *po, int bad_peer, int ok_peer)
   if (bad_peer != acting[0]) {
     peer_missing[bad_peer].add(po->poid, oi.version, eversion_t());
   } else {
+    // We should only be scrubbing if the PG is clean.
+    assert(waiting_for_missing_object.empty());
+
     missing.add(po->poid, oi.version, eversion_t());
     missing_loc[po->poid].insert(ok_peer);
+
     log.last_requested = eversion_t();
   }
   uptodate_set.erase(bad_peer);
@@ -3230,6 +3087,11 @@ unsigned int PG::Missing::num_missing() const
   return missing.size();
 }
 
+bool PG::Missing::have_missing() const
+{
+  return !missing.empty();
+}
+
 void PG::Missing::swap(Missing& o)
 {
   missing.swap(o.missing);
@@ -3336,4 +3198,71 @@ void PG::Missing::got(const sobject_t& oid, eversion_t v)
   assert(missing[oid].need <= v);
   rmissing.erase(missing[oid].need);
   missing.erase(oid);
+}
+
+ostream& operator<<(ostream& out, const PG& pg)
+{
+  out << "pg[" << pg.info
+      << " " << pg.up;
+  if (pg.acting != pg.up)
+    out << "/" << pg.acting;
+  out << " r=" << pg.get_role();
+
+  if (pg.is_active() &&
+      pg.last_update_ondisk != pg.info.last_update)
+    out << " luod=" << pg.last_update_ondisk;
+
+  if (pg.recovery_ops_active)
+    out << " rops=" << pg.recovery_ops_active;
+
+  if (pg.log.tail != pg.info.log_tail ||
+      pg.log.head != pg.info.last_update)
+    out << " (info mismatch, " << pg.log << ")";
+
+  if (pg.log.log.empty()) {
+    // shoudl it be?
+    if (pg.log.head.version - pg.log.tail.version != 0) {
+      out << " (log bound mismatch, empty)";
+    }
+  } else {
+    if (((pg.log.log.begin()->version.version <= pg.log.tail.version) &&  // sloppy check
+         !pg.log.backlog) ||
+        (pg.log.log.rbegin()->version.version != pg.log.head.version)) {
+      out << " (log bound mismatch, actual=["
+	  << pg.log.log.begin()->version << ","
+	  << pg.log.log.rbegin()->version << "]";
+      //out << "len=" << pg.log.log.size();
+      out << ")";
+    }
+  }
+
+  if (pg.last_complete_ondisk != pg.info.last_complete)
+    out << " lcod " << pg.last_complete_ondisk;
+
+  if (pg.get_role() == 0) {
+    out << " mlcod " << pg.min_last_complete_ondisk;
+    if (!pg.have_master_log)
+      out << " !hml";
+  }
+
+  out << " " << pg_state_string(pg.get_state());
+
+  //out << " (" << pg.log.tail << "," << pg.log.head << "]";
+  if (pg.missing.num_missing()) {
+    out << " m=" << pg.missing.num_missing();
+    if (pg.is_primary()) {
+      int unfound = pg.missing.num_missing() - pg.missing_loc.size();
+      if (unfound)
+	out << " u=" << unfound;
+    }
+  }
+  if (pg.snap_trimq.size())
+    out << " snaptrimq=" << pg.snap_trimq;
+
+  if (pg.deleting)
+    out << " DELETING";
+  out << "]";
+
+
+  return out;
 }

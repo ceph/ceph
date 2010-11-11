@@ -3830,7 +3830,8 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
   if (pg->is_primary()) {
     // i am PRIMARY
     if (pg->peer_log_requested.count(from) ||
-	pg->peer_summary_requested.count(from)) {
+	pg->peer_summary_requested.count(from))
+    {
       if (!pg->is_active()) {
 	pg->proc_replica_log(*t, info, log, missing, from);
 	
@@ -3839,11 +3840,16 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 	pg->peer(*t, fin->contexts, query_map, info_map);
 	pg->update_stats();
 	do_queries(query_map);
-      } else {
-	dout(10) << *pg << " ignoring osd" << from << " log, pg is already active" << dendl;
       }
-    } else {
-      dout(10) << *pg << " ignoring osd" << from << " log, i didn't ask for it (recently)" << dendl;
+      else {
+	if (pg->missing.have_missing()) {
+	  dout(10) << *pg << " searching osd" << from << " log for missing items." << dendl;
+	  pg->search_for_missing(log, missing, from);
+	}
+	else {
+	  dout(10) << *pg << " ignoring osd" << from << " log, pg is already active" << dendl;
+	}
+      }
     }
   } else {
     if (!pg->info.dne()) {

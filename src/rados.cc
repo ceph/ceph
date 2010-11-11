@@ -184,15 +184,22 @@ int main(int argc, const char **argv)
     map<string,pool_stat_t> stats;
     rados.get_pool_stats(vec, stats);
 
-    printf("%-15s %12s %12s %12s %12s %12s %12s %12s %12s\n",
-	   "pool name", "KB", "objects", "clones", "degraded", "rd", "rd KB", "wr", "wr KB");
+    printf("%-15s "
+	   "%12s %12s %12s %12s "
+	   "%12s %12s %12s %12s %12s\n",
+	   "pool name",
+	   "KB", "objects", "clones", "degraded",
+	   "unfound", "rd", "rd KB", "wr", "wr KB");
     for (map<string,pool_stat_t>::iterator i = stats.begin(); i != stats.end(); ++i) {
-      printf("%-15s %12lld %12lld %12lld %12lld %12lld %12lld %12lld %12lld\n",
+      printf("%-15s "
+	     "%12lld %12lld %12lld %12lld"
+	     "%12lld %12lld %12lld %12lld %12lld\n",
 	     i->first.c_str(),
 	     (long long)i->second.num_kb,
 	     (long long)i->second.num_objects,
 	     (long long)i->second.num_object_clones,
 	     (long long)i->second.num_objects_degraded,
+	     (long long)i->second.num_objects_unfound,
 	     (long long)i->second.num_rd, (long long)i->second.num_rd_kb,
 	     (long long)i->second.num_wr, (long long)i->second.num_wr_kb);
     }

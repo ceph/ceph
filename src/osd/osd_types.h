@@ -855,13 +855,19 @@ struct pg_stat_t {
   uint64_t num_objects;
   uint64_t num_object_clones;
   uint64_t num_object_copies;  // num_objects * num_replicas
+
+  // The number of objects missing on the primary OSD
   uint64_t num_objects_missing_on_primary;
+
   uint64_t num_objects_degraded;
   uint64_t log_size;
   uint64_t ondisk_log_size;    // >= active_log_size
 
   uint64_t num_rd, num_rd_kb;
   uint64_t num_wr, num_wr_kb;
+
+  // The number of objects missing on the primary OSD
+  uint64_t num_objects_unfound;
   
   vector<int> up, acting;
 
@@ -871,11 +877,12 @@ struct pg_stat_t {
 		num_objects(0), num_object_clones(0), num_object_copies(0),
 		num_objects_missing_on_primary(0), num_objects_degraded(0),
 		log_size(0), ondisk_log_size(0),
-		num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0)
+		num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0),
+		num_objects_unfound(0)
   { }
 
   void encode(bufferlist &bl) const {
-    __u8 v = 3;
+    __u8 v = 4;
     ::encode(v, bl);
 
     ::encode(version, bl);
@@ -902,6 +909,7 @@ struct pg_stat_t {
     ::encode(num_wr, bl);
     ::encode(num_wr_kb, bl);
     ::encode(up, bl);
+    ::encode(num_objects_unfound, bl);
     ::encode(acting, bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -933,8 +941,12 @@ struct pg_stat_t {
       ::decode(num_wr, bl);
       ::decode(num_wr_kb, bl);
     }
-    if (v >= 3)
+    if (v >= 3) {
       ::decode(up, bl);
+    }
+    if (v >= 4) {
+      ::decode(num_objects_unfound, bl);
+    }
     ::decode(acting, bl);
   }
 
@@ -952,6 +964,7 @@ struct pg_stat_t {
     num_rd_kb += o.num_rd_kb;
     num_wr += o.num_wr;
     num_wr_kb += o.num_wr_kb;
+    num_objects_unfound += o.num_objects_unfound;
   }
   void sub(const pg_stat_t& o) {
     num_bytes -= o.num_bytes;
@@ -967,6 +980,7 @@ struct pg_stat_t {
     num_rd_kb -= o.num_rd_kb;
     num_wr -= o.num_wr;
     num_wr_kb -= o.num_wr_kb;
+    num_objects_unfound -= o.num_objects_unfound;
   }
 };
 WRITE_CLASS_ENCODER(pg_stat_t)
@@ -987,15 +1001,19 @@ struct pool_stat_t {
   uint64_t num_rd, num_rd_kb;
   uint64_t num_wr, num_wr_kb;
 
+  // The number of logical objects that are still unfound
+  uint64_t num_objects_unfound;
+
   pool_stat_t() : num_bytes(0), num_kb(0), 
 		  num_objects(0), num_object_clones(0), num_object_copies(0),
 		  num_objects_missing_on_primary(0), num_objects_degraded(0),
 		  log_size(0), ondisk_log_size(0),
-		  num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0)
+		  num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0),
+		  num_objects_unfound(0)
   { }
 
   void encode(bufferlist &bl) const {
-    __u8 v = 2;
+    __u8 v = 3;
     ::encode(v, bl);
     ::encode(num_bytes, bl);
     ::encode(num_kb, bl);
@@ -1010,6 +1028,7 @@ struct pool_stat_t {
     ::encode(num_rd_kb, bl);
     ::encode(num_wr, bl);
     ::encode(num_wr_kb, bl);
+    ::encode(num_objects_unfound, bl);
  }
   void decode(bufferlist::iterator &bl) {
     __u8 v;
@@ -1029,6 +1048,9 @@ struct pool_stat_t {
       ::decode(num_wr, bl);
       ::decode(num_wr_kb, bl);
     }
+    if (v >= 3) {
+      ::decode(num_objects_unfound, bl);
+    }
   }
 
   void add(const pg_stat_t& o) {
@@ -1045,6 +1067,7 @@ struct pool_stat_t {
     num_rd_kb += o.num_rd_kb;
     num_wr += o.num_wr;
     num_wr_kb += o.num_wr_kb;
+    num_objects_unfound += o.num_objects_unfound;
   }
   void sub(const pg_stat_t& o) {
     num_bytes -= o.num_bytes;
@@ -1060,6 +1083,7 @@ struct pool_stat_t {
     num_rd_kb -= o.num_rd_kb;
     num_wr -= o.num_wr;
     num_wr_kb -= o.num_wr_kb;
+    num_objects_unfound -= o.num_objects_unfound;
   }
 };
 WRITE_CLASS_ENCODER(pool_stat_t)

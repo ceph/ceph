@@ -570,6 +570,7 @@ public:
     map<eversion_t, sobject_t> rmissing;  // v -> oid
 
     unsigned int num_missing() const;
+    bool have_missing() const;
     void swap(Missing& o);
     bool is_missing(const sobject_t& oid) const;
     bool is_missing(const sobject_t& oid, eversion_t v) const;
@@ -933,7 +934,6 @@ public:
   bool       is_crashed() const { return state_test(PG_STATE_CRASHED); }
   bool       is_down() const { return state_test(PG_STATE_DOWN); }
   bool       is_replay() const { return state_test(PG_STATE_REPLAY); }
-  //bool       is_complete()    { return state_test(PG_STATE_COMPLETE); }
   bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
   bool       is_degraded() const { return state_test(PG_STATE_DEGRADED); }
   bool       is_stray() const { return state_test(PG_STATE_STRAY); }
@@ -941,8 +941,6 @@ public:
   bool       is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }
 
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
-
-  //bool is_complete_pg() { return acting.size() == info.pgid.size(); }
 
   void add_log_entry(Log::Entry& e, bufferlist& log_bl);
 
@@ -1072,72 +1070,6 @@ inline ostream& operator<<(ostream& out, const PG::Interval& i)
   return out;
 }
 
-inline ostream& operator<<(ostream& out, const PG& pg)
-{
-  out << "pg[" << pg.info
-      << " " << pg.up;
-  if (pg.acting != pg.up)
-    out << "/" << pg.acting;
-  out << " r=" << pg.get_role();
-  
-  if (pg.is_active() &&
-      pg.last_update_ondisk != pg.info.last_update)
-    out << " luod=" << pg.last_update_ondisk;
-
-  if (pg.recovery_ops_active)
-    out << " rops=" << pg.recovery_ops_active;
-
-  if (pg.log.tail != pg.info.log_tail ||
-      pg.log.head != pg.info.last_update)
-    out << " (info mismatch, " << pg.log << ")";
-
-  if (pg.log.log.empty()) {
-    // shoudl it be?
-    if (pg.log.head.version - pg.log.tail.version != 0) {
-      out << " (log bound mismatch, empty)";
-    }
-  } else {
-    if (((pg.log.log.begin()->version.version <= pg.log.tail.version) &&  // sloppy check
-         !pg.log.backlog) ||
-        (pg.log.log.rbegin()->version.version != pg.log.head.version)) {
-      out << " (log bound mismatch, actual=["
-	  << pg.log.log.begin()->version << ","
-	  << pg.log.log.rbegin()->version << "]";
-      //out << "len=" << pg.log.log.size();
-      out << ")";
-    }
-  }
-
-  if (pg.last_complete_ondisk != pg.info.last_complete)
-    out << " lcod " << pg.last_complete_ondisk;
-
-  if (pg.get_role() == 0) {
-    out << " mlcod " << pg.min_last_complete_ondisk;
-    if (!pg.have_master_log)
-      out << " !hml";
-  }
-
-  out << " " << pg_state_string(pg.get_state());
-
-  //out << " (" << pg.log.tail << "," << pg.log.head << "]";
-  if (pg.missing.num_missing())
-    out << " m=" << pg.missing.num_missing();
-  if (pg.is_primary()) {
-    int lost = pg.missing.num_missing() - pg.missing_loc.size();
-    if (lost)
-      out << " l=" << lost;
-  }
-  if (pg.snap_trimq.size())
-    out << " snaptrimq=" << pg.snap_trimq;
-
-  if (pg.deleting)
-    out << " DELETING";
-  out << "]";
-
-
-  return out;
-}
-
-
+ostream& operator<<(ostream& out, const PG& pg);
 
 #endif
