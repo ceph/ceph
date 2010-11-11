@@ -540,7 +540,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_max_scrubs, 0, OPT_INT, 1),
 	OPTION(osd_scrub_load_threshold, 0, OPT_FLOAT, 0.5),
 	OPTION(osd_scrub_min_interval, 0, OPT_FLOAT, 300),
-	OPTION(osd_scrub_max_interval, 0, OPT_FLOAT, 60*60*24*7*4),   // 4 weeks
+	OPTION(osd_scrub_max_interval, 0, OPT_FLOAT, 60*60*24),   // once a day
 	OPTION(osd_auto_weight, 0, OPT_BOOL, false),
 	OPTION(osd_class_error_timeout, 0, OPT_DOUBLE, 60.0),  // seconds
 	OPTION(osd_class_timeout, 0, OPT_DOUBLE, 60*60.0), // seconds

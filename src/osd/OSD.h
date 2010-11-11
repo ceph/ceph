@@ -805,11 +805,22 @@ protected:
 
   // -- scrub scheduling --
   Mutex sched_scrub_lock;
-  pg_t sched_scrub_pg;
   int scrubs_pending;
   int scrubs_active;
+  set< pair<utime_t,pg_t> > last_scrub_pg;
+
   bool scrub_should_schedule();
   void sched_scrub();
+
+  void reg_last_pg_scrub(pg_t pgid, utime_t t) {
+    Mutex::Locker l(sched_scrub_lock);
+    last_scrub_pg.insert(pair<utime_t,pg_t>(t, pgid));
+  }
+  void unreg_last_pg_scrub(pg_t pgid, utime_t t) {
+    Mutex::Locker l(sched_scrub_lock);
+    pair<utime_t,pg_t> p(t, pgid);
+    last_scrub_pg.erase(p);
+  }
 
   bool inc_scrubs_pending();
   void dec_scrubs_pending();

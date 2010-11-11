@@ -3180,8 +3180,10 @@ void PG::scrub()
   state_clear(PG_STATE_REPAIR);
 
   // finish up
+  osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
   info.history.last_scrub = info.last_update;
   info.history.last_scrub_stamp = g_clock.now();
+  osd->reg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
 
   {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;

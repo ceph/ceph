@@ -2261,38 +2261,49 @@ void OSD::sched_scrub()
 
   dout(20) << "sched_scrub" << dendl;
 
+  pair<utime_t,pg_t> pos;
+  utime_t max = g_clock.now();
+  max -= g_conf.osd_scrub_max_interval;
+  
   sched_scrub_lock.Lock();
-  hash_map<pg_t, PG*>::iterator p = pg_map.find(sched_scrub_pg);
-  sched_scrub_lock.Unlock();
 
-  if (p == pg_map.end()) {
-    dout(10) << "starting sched_scrub_pg at the beginning" << dendl;
-    p = pg_map.begin();
-  }
+  //dout(20) << " " << last_scrub_pg << dendl;
 
-  while (p != pg_map.end()) {
-    PG *pg = p->second;
+  set< pair<utime_t,pg_t> >::iterator p = last_scrub_pg.begin();
+  while (p != last_scrub_pg.end()) {
+    //dout(10) << "pos is " << *p << dendl;
+    pos = *p;
+    utime_t t = pos.first;
+    pg_t pgid = pos.second;
 
-    pg->lock();
-    if (!pg->sched_scrub()) {
-      // continue waiting
-      pg->unlock();
+    if (t > max) {
+      dout(10) << " " << pgid << " at " << t
+	       << " > " << max << " (" << g_conf.osd_scrub_max_interval << " seconds ago)" << dendl;
       break;
     }
-    pg->unlock();
-    ++p;
-  }
 
-  if (p == pg_map.end()) {
-    p = pg_map.begin();
-  }
+    dout(10) << " on " << t << " " << pgid << dendl;
+    sched_scrub_lock.Unlock();
+    PG *pg = _lookup_lock_pg(pgid);
+    if (pg) {
+      if (pg->is_active() && !pg->sched_scrub()) {
+	pg->unlock();
+	sched_scrub_lock.Lock();
+	break;
+      }
+      pg->unlock();
+    }
+    sched_scrub_lock.Lock();
 
-  // no pgs!?
-  sched_scrub_lock.Lock();
-  if (p != pg_map.end()) {
-    sched_scrub_pg = p->first;
-  }
+    // next!
+    p = last_scrub_pg.lower_bound(pos);
+    //dout(10) << "lb is " << *p << dendl;
+    if (p != last_scrub_pg.end())
+      p++;
+  }    
   sched_scrub_lock.Unlock();
+
+  dout(20) << "sched_scrub done" << dendl;
 }
 
 bool OSD::inc_scrubs_pending()
@@ -3679,6 +3690,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	pg->up.swap(up);
 	pg->set_role(role);
 	pg->info.history = history;
+	reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
 	pg->clear_primary_state();  // yep, notably, set hml=false
 	pg->write_info(*t);
 	pg->write_log(*t);
@@ -3714,7 +3726,10 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     } else {
       dout(10) << *pg << " got osd" << from << " info " << *it << dendl;
       pg->peer_info[from] = *it;
+
+      unreg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
       pg->info.history.merge(it->history);
+      reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
 
       // stray?
       if (!pg->is_acting(from)) {
@@ -3783,6 +3798,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     pg->up.swap(up);
     pg->set_role(role);
     pg->info.history = info.history;
+    reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
     pg->write_info(*t);
     pg->write_log(*t);
     created++;
@@ -3799,7 +3815,9 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
   assert(pg);
 
   dout(10) << *pg << " got " << info << " " << log << " " << missing << dendl;
+  unreg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
   pg->info.history.merge(info.history);
+  reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
 
   // dump log
   dout(15) << *pg << " my log = ";
@@ -4026,6 +4044,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       pg->up.swap( up );
       pg->set_role(role);
       pg->info.history = history;
+      reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
       pg->write_info(*t);
       pg->write_log(*t);
       int tr = store->queue_transaction(&pg->osr, t);
@@ -4057,7 +4076,9 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       continue;
     }
 
+    unreg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
     pg->info.history.merge(it->second.history);
+    reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
 
     // ok, process query!
     assert(!pg->acting.empty());
