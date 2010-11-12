@@ -68,7 +68,7 @@ public:
   void set_snap(pool_t pool, snap_t seq);
   int set_snap_context(pool_t pool, snap_t seq, std::vector<snap_t>& snaps);
 
-  uint64_t get_last_ver(pool_t pool);
+  uint64_t get_last_version(pool_t pool);
 
   int create(pool_t pool, const std::string& oid, bool exclusive);
 
@@ -133,7 +133,7 @@ public:
     bool is_complete();
     bool is_safe();
     int get_return_value();
-    int get_obj_ver();
+    int get_version();
     void release();
   };
 
@@ -155,7 +155,7 @@ public:
   int notify(pool_t pool, const string& o, uint64_t ver);
 
   /* assert version for next sync operations */
-  void set_assert_ver(pool_t pool, uint64_t ver);
+  void set_assert_version(pool_t pool, uint64_t ver);
 };
 
 }

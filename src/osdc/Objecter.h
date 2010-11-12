@@ -198,7 +198,7 @@ struct ObjectOperation {
     add_watch(CEPH_OSD_OP_NOTIFY_ACK, notify_id, ver, 0);
   }
 
-  void assert_ver(uint64_t ver) {
+  void assert_version(uint64_t ver) {
     add_watch(CEPH_OSD_OP_ASSERT_VER, 0, ver, 0);
   }
 };
