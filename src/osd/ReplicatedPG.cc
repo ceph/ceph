@@ -1411,7 +1411,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
 	osd->watch_lock.Lock();
 	map<entity_name_t, OSD::Session *>::iterator iter = obc->watchers.find(entity);
-	watch_info_t w = {cookie, ver};
+	watch_info_t w = {cookie, ver, 30};  // FIXME: where does the timeout come from?
 	if (do_watch) {
 	  if (oi.watchers.count(entity) && oi.watchers[entity] == w) {
 	    dout(10) << " found existing watch " << w << " by " << entity << " session " << session << dendl;

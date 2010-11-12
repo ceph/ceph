@@ -1289,27 +1289,30 @@ inline ostream& operator<<(ostream& out, const SnapSet& cs) {
 struct watch_info_t {
   uint64_t cookie;
   uint64_t ver;
+  uint32_t timeout_seconds;
   void encode(bufferlist& bl) const {
     const __u8 v = 1;
     ::encode(v, bl);
     ::encode(cookie, bl);
     ::encode(ver, bl);
+    ::encode(timeout_seconds, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 v;
     ::decode(v, bl);
     ::decode(cookie, bl);
     ::decode(ver, bl);
+    ::decode(timeout_seconds, bl);
  }
 };
 WRITE_CLASS_ENCODER(watch_info_t)
 
 static inline bool operator==(const watch_info_t& l, const watch_info_t& r) {
-  return l.cookie == r.cookie && l.ver == r.ver;  
+  return l.cookie == r.cookie && l.ver == r.ver && l.timeout_seconds == r.timeout_seconds;  
 }
 
 static inline ostream& operator<<(ostream& out, const watch_info_t& w) {
-  return out << w.cookie << '@' << w.ver;
+  return out << "watch(cookie " << w.cookie << " v" << w.ver << " " << w.timeout_seconds << "s)";
 }
 
 struct object_info_t {
