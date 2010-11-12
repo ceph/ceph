@@ -1303,7 +1303,7 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
 }
 
 
-void PG::peer(ObjectStore::Transaction& t, list<Context*>& tfin,
+void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
               map< int, map<pg_t,Query> >& query_map,
 	      map<int, MOSDPGInfo*> *activator_map)
 {

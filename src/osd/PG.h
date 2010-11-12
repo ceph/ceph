@@ -828,9 +828,9 @@ public:
 
   bool choose_acting(int newest_update_osd);
   bool recover_master_log(map< int, map<pg_t,Query> >& query_map);
-  void peer(ObjectStore::Transaction& t, list<Context*>& tfin,
-	    map< int, map<pg_t,Query> >& query_map,
-	    map<int, MOSDPGInfo*> *activator_map=0);
+  void do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
+	      map< int, map<pg_t,Query> >& query_map,
+	      map<int, MOSDPGInfo*> *activator_map=0);
   void activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 		map<int, MOSDPGInfo*> *activator_map=0);
 

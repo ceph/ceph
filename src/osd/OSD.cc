@@ -3025,7 +3025,7 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
       // i am (inactive) primary
       if (!pg->is_peering() || 
 	  (pg->need_up_thru && up_thru >= pg->info.history.same_acting_since))
-	pg->peer(t, tfin, query_map, &info_map);
+	pg->do_peer(t, tfin, query_map, &info_map);
     }
     else if (pg->is_stray() &&
 	     pg->get_primary() >= 0) {
@@ -3328,7 +3328,7 @@ void OSD::kick_pg_split_queue()
 
       wake_pg_waiters(pg->info.pgid);
 
-      pg->peer(*t, fin->contexts, query_map, &info_map);
+      pg->do_peer(*t, fin->contexts, query_map, &info_map);
       pg->update_stats();
       pg->unlock();
       created++;
@@ -3544,7 +3544,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
       creating_pgs.erase(pgid);
 
       wake_pg_waiters(pg->info.pgid);
-      pg->peer(*t, fin->contexts, query_map, &info_map);
+      pg->do_peer(*t, fin->contexts, query_map, &info_map);
       pg->update_stats();
 
       int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
@@ -3741,7 +3741,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	pg->state_clear(PG_STATE_CLEAN);
       }
       
-      pg->peer(*t, fin->contexts, query_map, &info_map);
+      pg->do_peer(*t, fin->contexts, query_map, &info_map);
       pg->update_stats();
     }
     int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
@@ -3840,7 +3840,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 	
 	// peer
 	map< int, map<pg_t,PG::Query> > query_map;
-	pg->peer(*t, fin->contexts, query_map, info_map);
+	pg->do_peer(*t, fin->contexts, query_map, info_map);
 	pg->update_stats();
 	do_queries(query_map);
       }
@@ -4391,7 +4391,7 @@ void OSD::generate_backlog(PG *pg)
     map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     C_Contexts *fin = new C_Contexts;
-    pg->peer(*t, fin->contexts, query_map, NULL);
+    pg->do_peer(*t, fin->contexts, query_map, NULL);
     do_queries(query_map);
     if (pg->dirty_info)
       pg->write_info(*t);
