@@ -1646,33 +1646,29 @@ bool OSD::ms_handle_reset(Connection *con)
 
   dout(0) << "OSD::ms_handle_reset() s=" << (void *)session << dendl;
 
+  // get any watched obc's
   map<ReplicatedPG::ObjectContext *, pg_t> obcs;
-
   watch_lock.Lock();
-
-  map<void *, pg_t>::iterator iter;
-  for (iter = session->watches.begin(); iter != session->watches.end(); ++iter) {
+  for (map<void *, pg_t>::iterator iter = session->watches.begin(); iter != session->watches.end(); ++iter) {
     ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)iter->first;
     obcs[obc] = iter->second;
   }
   watch_lock.Unlock();
 
-  
-  map<ReplicatedPG::ObjectContext *, pg_t>::iterator oiter;
-  for (oiter = obcs.begin(); oiter != obcs.end(); ++oiter) {
+  for (map<ReplicatedPG::ObjectContext *, pg_t>::iterator oiter = obcs.begin(); oiter != obcs.end(); ++oiter) {
     ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)oiter->first;
     dout(0) << "obc=" << (void *)obc << dendl;
 
     obc->lock.Lock();
     watch_lock.Lock();
-    map<entity_name_t, Session *>::iterator witer;
     /* NOTE! fix this one, should be able to just lookup entity name,
        however, we currently only keep EntityName on the session and not
        entity_name_t. */
-    witer = obc->watchers.begin();
+    map<entity_name_t, Session *>::iterator witer = obc->watchers.begin();
     while (1) {
       while (witer != obc->watchers.end() && witer->second == session) {
-        dout(0) << "removing watching session entity_name=" << session->entity_name << " from " << obc->obs.oi << dendl;
+        dout(0) << "removing watching session entity_name=" << session->entity_name
+		<< " from " << obc->obs.oi << dendl;
         obc->watchers.erase(witer++);
       }
       if (witer == obc->watchers.end())
@@ -1686,16 +1682,15 @@ bool OSD::ms_handle_reset(Connection *con)
   }
 
   watch_lock.Lock();
-
-  map<void *, entity_name_t>::iterator notif_iter;
-  for (notif_iter = session->notifs.begin(); notif_iter != session->notifs.end(); ++notif_iter) {
+  for (map<void *, entity_name_t>::iterator notif_iter = session->notifs.begin();
+       notif_iter != session->notifs.end();
+       ++notif_iter) {
     Watch::Notification *notif = (Watch::Notification *)notif_iter->first;
     entity_name_t& dest = notif_iter->second;
     dout(0) << "ms_handle_reset: ack notification for notif=" << (void *)notif << " entity=" << dest << dendl;
     ack_notification(dest, notif);
   }
   session->notifs.clear();
-
   watch_lock.Unlock();
 
   return true;
