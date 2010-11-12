@@ -165,19 +165,6 @@ static int test_out_of_order_insertion(SafeTimer &timer, Mutex *lock)
   return ret;
 }
 
-static int test_timers(void)
-{
-  int ret = 0;
-  Timer timer;
-  ret = basic_timer_test <Timer>(timer, NULL);
-  if (ret)
-    goto done;
-
-done:
-  print_status("test_timers", ret);
-  return ret;
-}
-
 static int safe_timer_cancel_all_test(SafeTimer &safe_timer, Mutex& safe_timer_lock)
 {
   cout << __PRETTY_FUNCTION__ << std::endl;
@@ -261,9 +248,17 @@ static int safe_timer_cancellation_test(SafeTimer &safe_timer, Mutex& safe_timer
   return ret;
 }
 
-static int test_safe_timers(void)
+int main(int argc, const char **argv)
 {
-  int ret = 0;
+  vector<const char*> args;
+  argv_to_vec(argc, argv, args);
+  env_to_vec(args);
+
+  ceph_set_default_id("admin");
+  common_set_defaults(false);
+  common_init(args, "ceph", true);
+
+  int ret;
   Mutex safe_timer_lock("safe_timer_lock");
   SafeTimer safe_timer(safe_timer_lock);
 
@@ -284,26 +279,6 @@ static int test_safe_timers(void)
     goto done;
 
 done:
-  print_status("test_safe_timers", ret);
+  print_status(argv[0], ret);
   return ret;
-}
-
-int main(int argc, const char **argv)
-{
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
-  env_to_vec(args);
-
-  ceph_set_default_id("admin");
-  common_set_defaults(false);
-  common_init(args, "ceph", true);
-
-  int ret;
-  ret = test_timers();
-  if (ret)
-    return ret;
-  ret = test_safe_timers();
-  if (ret)
-    return ret;
-  return 0;
 }
