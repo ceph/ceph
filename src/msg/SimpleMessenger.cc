@@ -1128,6 +1128,7 @@ int SimpleMessenger::Pipe::connect()
     if (reply.tag == CEPH_MSGR_TAG_RESETSESSION) {
       dout(0) << "connect got RESETSESSION" << dendl;
       was_session_reset();
+      halt_delivery = false;
       cseq = 0;
       pipe_lock.Unlock();
       continue;
@@ -1313,7 +1314,6 @@ void SimpleMessenger::Pipe::discard_queue()
     }
   in_q.clear();
   in_qlen = 0;
-  halt_delivery = false;
 }
 
 
