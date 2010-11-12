@@ -205,7 +205,8 @@ private:
   public:
     Pipe(SimpleMessenger *r, int st) : 
       messenger(r),
-      sd(-1), peer_type(-1),
+      sd(-1),
+      peer_type(-1),
       pipe_lock("SimpleMessenger::Pipe::pipe_lock"),
       state(st), 
       connection_state(new Connection),
@@ -381,8 +382,9 @@ private:
     void requeue_sent(uint64_t max_acked=0);
     void discard_queue();
 
-    void force_close() {
-      if (sd >= 0) ::close(sd);
+    void shutdown_socket() {
+      if (sd >= 0)
+        ::shutdown(sd, SHUT_RDWR);
     }
   };
 
