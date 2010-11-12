@@ -285,6 +285,7 @@ void SimpleMessenger::dispatch_entry()
       } else {
 	pipe_list.push_back(pipe->queue_items[priority]);  // move to end of list
       }
+      dout(20) << "dispatch_entry pipe " << pipe << " dequeued " << m << dendl;
       dispatch_queue.lock.Unlock(); //done with the pipe queue for a while
 
       pipe->in_qlen--;
@@ -505,6 +506,53 @@ static int get_proto_version(int my_type, int peer_type, bool connect)
   }
   return 0;
 }
+
+void SimpleMessenger::Pipe::queue_received(Message *m, int priority)
+{
+  assert(pipe_lock.is_locked());
+  
+  list<Message *>& queue = in_q[priority];
+  bool was_empty;
+  
+  if (halt_delivery)
+    goto halt;
+  
+  was_empty = queue.empty();
+  queue.push_back(m);
+  
+  //increment queue length counters
+  in_qlen++;
+  messenger->dispatch_queue.qlen_lock.lock();
+  ++messenger->dispatch_queue.qlen;
+  messenger->dispatch_queue.qlen_lock.unlock();
+  
+  if (was_empty) { //this pipe isn't on the endpoint queue
+    pipe_lock.Unlock();
+    messenger->dispatch_queue.lock.Lock();
+    pipe_lock.Lock();
+    
+    if (halt_delivery)
+      goto halt;
+    
+    dout(20) << "queue_received queuing pipe" << dendl;
+    if (!queue_items.count(priority)) 
+      queue_items[priority] = new xlist<Pipe *>::item(this);
+    if (messenger->dispatch_queue.queued_pipes.empty())
+      messenger->dispatch_queue.cond.Signal();
+    messenger->dispatch_queue.queued_pipes[priority].push_back(queue_items[priority]);
+    messenger->dispatch_queue.lock.Unlock();
+  }
+  return;
+  
+ halt:
+  // don't want to put local-delivery signals
+  // this magic number should be larger than
+  // the size of the D_CONNECT et al enum
+  if (m>(void *)5)
+    m->put();
+}
+
+
 
 int SimpleMessenger::Pipe::accept()
 {
@@ -1295,21 +1343,28 @@ void SimpleMessenger::Pipe::discard_queue()
 
   q.lock.Unlock();
 
+  dout(20) << " dequeued pipe " << dendl;
+
   // adjust qlen
   q.qlen_lock.lock();
   q.qlen -= in_qlen;
   q.qlen_lock.unlock();
 
-  for (list<Message*>::iterator p = sent.begin(); p != sent.end(); p++)
+  for (list<Message*>::iterator p = sent.begin(); p != sent.end(); p++) {
+    dout(20) << "  discard " << *p << dendl;
     (*p)->put();
+  }
   sent.clear();
   for (map<int,list<Message*> >::iterator p = out_q.begin(); p != out_q.end(); p++)
-    for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++)
+    for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++) {
+      dout(20) << "  discard " << *r << dendl;
       (*r)->put();
+    }
   out_q.clear();
   for (map<int,list<Message*> >::iterator p = in_q.begin(); p != in_q.end(); p++)
     for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++) {
       messenger->dispatch_throttle_release((*r)->get_dispatch_throttle_size());
+      dout(20) << "  discard " << *r << dendl;
       (*r)->put();
     }
   in_q.clear();

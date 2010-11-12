@@ -265,48 +265,7 @@ private:
 
     //we have two queue_received's to allow local signal delivery
     // via Message * (that doesn't actually point to a Message)
-    void queue_received(Message *m, int priority) {
-      assert(pipe_lock.is_locked());
-
-      list<Message *>& queue = in_q[priority];
-      bool was_empty;
-
-      if (halt_delivery)
-	goto halt;
-
-      was_empty = queue.empty();
-      queue.push_back(m);
-
-      //increment queue length counters
-      in_qlen++;
-      messenger->dispatch_queue.qlen_lock.lock();
-      ++messenger->dispatch_queue.qlen;
-      messenger->dispatch_queue.qlen_lock.unlock();
-
-      if (was_empty) { //this pipe isn't on the endpoint queue
-	pipe_lock.Unlock();
-	messenger->dispatch_queue.lock.Lock();
-	pipe_lock.Lock();
-	
-	if (halt_delivery)
-	  goto halt;
-	
-	if (!queue_items.count(priority)) 
-	  queue_items[priority] = new xlist<Pipe *>::item(this);
-	if (messenger->dispatch_queue.queued_pipes.empty())
-	  messenger->dispatch_queue.cond.Signal();
-	messenger->dispatch_queue.queued_pipes[priority].push_back(queue_items[priority]);
-	messenger->dispatch_queue.lock.Unlock();
-      }
-      return;
-
-    halt:
-      // don't want to put local-delivery signals
-      // this magic number should be larger than
-      // the size of the D_CONNECT et al enum
-      if (m>(void *)5)
-	m->put();
-    }
+    void queue_received(Message *m, int priority);
     
     void queue_received(Message *m) {
       m->set_recv_stamp(g_clock.now());
