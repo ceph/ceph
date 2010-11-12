@@ -1285,6 +1285,7 @@ void SimpleMessenger::Pipe::discard_queue()
   pipe_lock.Unlock();
   xlist<Pipe *>* list_on;
   q.lock.Lock();//to remove from round-robin
+  pipe_lock.Lock();
   for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
        i != queue_items.end();
        ++i) {
@@ -1295,7 +1296,6 @@ void SimpleMessenger::Pipe::discard_queue()
     }
   }
   q.lock.Unlock();
-  pipe_lock.Lock();
 
   // clear queue_items
   while (!queue_items.empty()) {
@@ -1539,14 +1539,11 @@ void SimpleMessenger::Pipe::reader()
       in_seq = m->get_seq();
 
       cond.Signal();  // wake up writer, to ack this
-      pipe_lock.Unlock();
       
       dout(10) << "reader got message "
 	       << m->get_seq() << " " << m << " " << *m
 	       << dendl;
       queue_received(m);
-
-      pipe_lock.Lock();
     } 
     
     else if (tag == CEPH_MSGR_TAG_CLOSE) {
