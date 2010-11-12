@@ -97,6 +97,7 @@ class ObjectStore;
 class OSDMap;
 class MLog;
 class MClass;
+class MOSDPGMissing;
 
 extern const coll_t meta_coll;
 
@@ -627,6 +628,7 @@ protected:
   bool require_same_or_newer_map(Message *m, epoch_t e);
 
   void handle_pg_query(class MOSDPGQuery *m);
+  void handle_pg_missing(class MOSDPGMissing *m);
   void handle_pg_notify(class MOSDPGNotify *m);
   void handle_pg_log(class MOSDPGLog *m);
   void handle_pg_info(class MOSDPGInfo *m);

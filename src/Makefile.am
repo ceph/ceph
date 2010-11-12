@@ -764,6 +764,7 @@ noinst_HEADERS = \
         messages/MOSDPGCreate.h\
         messages/MOSDPGInfo.h\
         messages/MOSDPGLog.h\
+        messages/MOSDPGMissing.h\
         messages/MOSDPGNotify.h\
         messages/MOSDPGQuery.h\
         messages/MOSDPGRemove.h\

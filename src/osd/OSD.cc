@@ -58,6 +58,7 @@
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGTrim.h"
+#include "messages/MOSDPGMissing.h"
 
 #include "messages/MOSDAlive.h"
 
@@ -2158,6 +2159,9 @@ void OSD::_dispatch(Message *m)
       case MSG_OSD_PG_TRIM:
         handle_pg_trim((MOSDPGTrim*)m);
         break;
+      case MSG_OSD_PG_MISSING:
+	handle_pg_missing((MOSDPGMissing*)m);
+	break;
 
 	// client ops
       case CEPH_MSG_OSD_OP:
@@ -2171,7 +2175,6 @@ void OSD::_dispatch(Message *m)
       case MSG_OSD_SUBOPREPLY:
         handle_sub_op_reply((MOSDSubOpReply*)m);
         break;
-        
       }
     }
   }
@@ -3991,6 +3994,26 @@ void OSD::handle_pg_trim(MOSDPGTrim *m)
   m->put();
 }
 
+void OSD::handle_pg_missing(MOSDPGMissing *m)
+{
+  dout(7) << __func__  << " " << *m << " from " << m->get_source() << dendl;
+
+  if (!require_osd_peer(m))
+    return;
+
+  int from = m->get_source().num();
+  if (!require_same_or_newer_map(m, m->get_epoch()))
+    return;
+
+  PG::Log empty_log;
+  int created = 0;
+  _process_pg_info(m->get_epoch(), from, m->info,
+		   empty_log, m->missing, NULL, created);
+  if (created)
+    update_heartbeat_peers();
+
+  m->put();
+}
 
 /** PGQuery
  * from primary to replica | stray
