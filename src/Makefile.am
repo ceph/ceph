@@ -785,6 +785,7 @@ noinst_HEADERS = \
 	messages/MForward.h\
         messages/MStatfs.h\
         messages/MStatfsReply.h\
+        messages/MWatchNotify.h\
 	messages/PaxosServiceMessage.h\
 	mon/AuthMonitor.h\
         mon/ClassMonitor.h\
