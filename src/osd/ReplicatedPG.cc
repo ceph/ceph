@@ -1125,7 +1125,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  result = -ENOMEM;	
 	  break;
 	}
-	notif->layout = osd->osdmap->make_object_layout(soid.oid, info.pgid.pool(), info.pgid.preferred());
+	notif->pgid = osd->osdmap->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
 
 	osd->watch_lock.Lock();
 	osd->watch->add_notification(notif);
@@ -1412,8 +1412,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  obc->watchers[entity] = session;
 
 	  session->get();
-	  ceph_object_layout layout = osd->osdmap->make_object_layout(soid.oid, info.pgid.pool(), info.pgid.preferred());
-	  session->watches[obc] = layout;
+	  session->watches[obc] = osd->osdmap->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
         } else {
 	  obc->watchers.erase(entity);
 

@@ -42,7 +42,7 @@ public:
     MWatchNotify *reply;
     Context *timeout;
     void *obc;
-    ceph_object_layout layout;
+    pg_t pgid;
 
     void add_watcher(const entity_name_t& name, WatcherState state) { watchers[name] = state; }
 

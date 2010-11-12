@@ -971,6 +971,15 @@ PG *OSD::lookup_lock_pg(pg_t pgid)
   return pg;
 }
 
+PG *OSD::lookup_lock_raw_pg(pg_t pgid)
+{
+  osd_lock.Lock();
+  pgid = osdmap->raw_pg_to_pg(pgid);
+  PG *pg = _lookup_lock_pg(pgid);
+  osd_lock.Unlock();
+  return pg;
+}
+
 void OSD::load_pgs()
 {
   assert(osd_lock.is_locked());
@@ -1605,17 +1614,10 @@ void OSD::ms_handle_connect(Connection *con)
   }
 }
 
-ReplicatedPG *OSD::get_pg(void *_obc, ceph_object_layout& layout)
-{
-  pg_t pgid = osdmap->raw_pg_to_pg(pg_t(layout.ol_pgid));
-  ReplicatedPG *pg = (ReplicatedPG *)lookup_lock_pg(pgid);
-  return pg;
-}
-
-void OSD::put_object_context(void *_obc, ceph_object_layout& layout)
+void OSD::put_object_context(void *_obc, pg_t pgid)
 {
   ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)_obc;
-  ReplicatedPG *pg = get_pg(_obc, layout);
+  ReplicatedPG *pg = (ReplicatedPG *)lookup_lock_raw_pg(pgid);
   pg->put_object_context(obc);
   pg->unlock();
 }
@@ -1644,11 +1646,11 @@ bool OSD::ms_handle_reset(Connection *con)
 
   dout(0) << "OSD::ms_handle_reset() s=" << (void *)session << dendl;
 
-  map<ReplicatedPG::ObjectContext *, ceph_object_layout> obcs;
+  map<ReplicatedPG::ObjectContext *, pg_t> obcs;
 
   watch_lock.Lock();
 
-  map<void *, ceph_object_layout>::iterator iter;
+  map<void *, pg_t>::iterator iter;
   for (iter = session->watches.begin(); iter != session->watches.end(); ++iter) {
     ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)iter->first;
     obcs[obc] = iter->second;
@@ -1656,7 +1658,7 @@ bool OSD::ms_handle_reset(Connection *con)
   watch_lock.Unlock();
 
   
-  map<ReplicatedPG::ObjectContext *, ceph_object_layout>::iterator oiter;
+  map<ReplicatedPG::ObjectContext *, pg_t>::iterator oiter;
   for (oiter = obcs.begin(); oiter != obcs.end(); ++oiter) {
     ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)oiter->first;
     dout(0) << "obc=" << (void *)obc << dendl;
@@ -1723,8 +1725,8 @@ void OSD::handle_notify_timeout(void *_notif)
   obc->lock.Unlock();
   watch_lock.Unlock(); /* put_object_context takes osd->lock */
 
-  ReplicatedPG *pg =  get_pg(obc, notif->layout);
-  put_object_context(obc, notif->layout);
+  ReplicatedPG *pg = (ReplicatedPG *)lookup_lock_raw_pg(notif->pgid);
+  put_object_context(obc, notif->pgid);
   pg->do_complete_notify(notif);
 
   watch_lock.Lock();

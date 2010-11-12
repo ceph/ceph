@@ -215,7 +215,7 @@ public:
     OSDCaps caps;
     epoch_t last_sent_epoch;
     Connection *con;
-    std::map<void *, ceph_object_layout> watches;
+    std::map<void *, pg_t> watches;
     std::map<void *, entity_name_t> notifs;
 
     Session() : last_sent_epoch(0), con(0) {}
@@ -510,6 +510,9 @@ protected:
   PG   *_create_lock_pg(pg_t pg, ObjectStore::Transaction& t); // create new PG
   PG   *_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t);
   //void  _remove_unlock_pg(PG *pg);         // remove from store and memory
+
+  PG *lookup_lock_pg(pg_t pgid);
+  PG *lookup_lock_raw_pg(pg_t pgid);
 
   void load_pgs();
   void calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset);
@@ -993,9 +996,8 @@ public:
 
   void init_op_flags(MOSDOp *op);
 
-  PG *lookup_lock_pg(pg_t pgid);
-  ReplicatedPG *get_pg(void *_obc, ceph_object_layout& layout);
-  void put_object_context(void *_obc, ceph_object_layout& layout);
+
+  void put_object_context(void *_obc, pg_t pgid);
   void ack_notification(entity_name_t& peer_addr, void *notif);
   Mutex watch_lock;
   SafeTimer watch_timer;
