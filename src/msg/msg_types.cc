@@ -18,7 +18,7 @@ bool entity_addr_t::parse(const char *s, const char **end)
     ipv6 = true;
   }
   
-  char buf[32];
+  char buf[39];
   char *o = buf;
 
   while (o < buf + sizeof(buf) &&

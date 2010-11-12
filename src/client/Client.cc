@@ -545,7 +545,7 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
     dn = dir->dentries[dname];
   
   dout(12) << "insert_dentry_inode " << dname << " vino " << in->vino()
-	   << " in dir " << dir->parent_inode->ino
+	   << " in dir " << dir->parent_inode->vino()
            << dendl;
   
   if (dn && dn->inode) {
@@ -727,6 +727,10 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
   // the rest?
   p = reply->get_extra_bl().begin();
   if (!p.end()) {
+    // snapdir?
+    if (request->head.op == CEPH_MDS_OP_LSSNAP)
+      in = open_snapdir(in);
+
     // only open dir if we're actually adding stuff to it!
     Dir *dir = in->open_dir();
     assert(dir);
