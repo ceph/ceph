@@ -1624,16 +1624,17 @@ void OSD::put_object_context(void *_obc, pg_t pgid)
 
 void OSD::ack_notification(entity_name_t& name, void *_notif)
 {
+  assert(watch_lock.is_locked());
   Watch::Notification *notif = (Watch::Notification *)_notif;
   if (watch->ack_notification(name, notif)) {
-	dout(0) << "got the last reply from pending watchers, can send response now" << dendl;
-	MWatchNotify *reply = notif->reply; // new MWatchNotify(notif->cookie, wi.ver, notif->id, WATCH_NOTIFY_COMPLETE);
-	client_messenger->send_message(reply, notif->session->con);
-	notif->session->put();
-	watch->remove_notification(notif);
-	if (notif->timeout)
-	  watch_timer.cancel_event(notif->timeout);
-	delete notif;
+    dout(0) << "got the last reply from pending watchers, can send response now" << dendl;
+    MWatchNotify *reply = notif->reply;
+    client_messenger->send_message(reply, notif->session->con);
+    notif->session->put();
+    watch->remove_notification(notif);
+    if (notif->timeout)
+      watch_timer.cancel_event(notif->timeout);
+    delete notif;
   }
 }
 
@@ -1688,6 +1689,9 @@ bool OSD::ms_handle_reset(Connection *con)
     put_object_context(obc, oiter->second);
   }
 
+  // FIXME: do we really want to _cancel_ notifications here?
+  // shouldn't they time out in the usual way?  because this person
+  // might/should immediately reconnect...
   watch_lock.Lock();
   for (map<void *, entity_name_t>::iterator notif_iter = session->notifs.begin();
        notif_iter != session->notifs.end();
@@ -1705,35 +1709,34 @@ bool OSD::ms_handle_reset(Connection *con)
 
 void OSD::handle_notify_timeout(void *_notif)
 {
+  assert(watch_lock.is_locked());
   Watch::Notification *notif = (Watch::Notification *)_notif;
-
-  dout(0) << "OSD::handle_notify_timeout" << dendl;
+  dout(0) << "OSD::handle_notify_timeout notif " << notif->id << dendl;
 
   ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)notif->obc;
 
   notif->timeout = NULL; /* need to do it under the watch_lock, so we're not getting cancelled somewhere else */
 
   watch_lock.Unlock(); /* drop lock to change locking order */
-
   obc->lock.Lock();
   watch_lock.Lock();
 
-  std::map<entity_name_t, Watch::WatcherState>::iterator notif_iter;
-  for (notif_iter = notif->watchers.begin(); notif_iter != notif->watchers.end(); ++notif_iter) {
+  for (std::map<entity_name_t, Watch::WatcherState>::iterator notif_iter = notif->watchers.begin();
+       notif_iter != notif->watchers.end();
+       ++notif_iter) {
     map<entity_name_t, Session *>::iterator witer = obc->watchers.find(notif_iter->first);
     if (witer != obc->watchers.end())
-      obc->watchers.erase(witer);
+      obc->watchers.erase(witer);   // FIXME: hmm? notify timeout may be different than watch timeout?
   }
   obc->lock.Unlock();
   watch_lock.Unlock(); /* put_object_context takes osd->lock */
-
+  
   ReplicatedPG *pg = (ReplicatedPG *)lookup_lock_raw_pg(notif->pgid);
   put_object_context(obc, notif->pgid);
   pg->do_complete_notify(notif);
-
+  
   watch_lock.Lock();
-
-/* exiting with watch_lock held */
+  /* exiting with watch_lock held */
 }
 
 void OSD::send_boot()

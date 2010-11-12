@@ -1130,48 +1130,38 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
    case CEPH_OSD_OP_NOTIFY:
       {
 	dout(0) << "CEPH_OSD_OP_NOTIFY" << dendl;
-
         ObjectContext *obc = ctx->obc;
 	dout(0) << "ctx->obc=" << (void *)obc << dendl;
 
-        map<entity_name_t, OSD::Session *>::iterator iter;
-	map<entity_name_t, watch_info_t>::iterator oi_iter;
 	OSD::Session *session = (OSD::Session *)ctx->op->get_connection()->get_priv();
-	session->get();
+	// give the session reference to notif.
 	Watch::Notification *notif = new Watch::Notification(ctx->reqid.name, session, op.watch.cookie);
-	if (!notif) {
-	  result = -ENOMEM;	
-	  break;
-	}
 	notif->pgid = osd->osdmap->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
 
 	osd->watch_lock.Lock();
 	osd->watch->add_notification(notif);
 
-        entity_name_t myname = ctx->op->get_source();
+	// connected
+	for (map<entity_name_t, OSD::Session*>::iterator p = obc->watchers.begin();
+	     p != obc->watchers.end();
+	     p++) {
+	  entity_name_t name = p->first;
+	  OSD::Session *s = p->second;
+	  watch_info_t& w = obc->obs.oi.watchers[p->first];
 
-	for (oi_iter = oi.watchers.begin();
-	     oi_iter != oi.watchers.end(); oi_iter++) {
-	  watch_info_t& w = oi_iter->second;
-	  dout(0) << "oi->watcher: " << oi_iter->first << " ver=" << w.ver << " cookie=" << w.cookie << dendl;
-	  iter = obc->watchers.find(oi_iter->first);
+	  notif->add_watcher(name, Watch::WATCHER_NOTIFIED); // adding before send_message to avoid race
+	  s->add_notif(notif, name);
 
-	  if (/* w.ver < ver && */ iter != obc->watchers.end() &&
-              iter->first != myname) { // don't notify the originator of this message
-	    /* found a session for registered watcher */
-	    session = iter->second;
-	    dout(0) << " found session, sending notification" << dendl;
-	    notif->add_watcher(oi_iter->first, Watch::WATCHER_NOTIFIED); // adding before send_message to avoid race
-            entity_name_t name = oi_iter->first;
-            session->add_notif(notif, name);
+	  MWatchNotify *notify_msg = new MWatchNotify(w.cookie, w.ver, notif->id, WATCH_NOTIFY);
+	  osd->client_messenger->send_message(notify_msg, s->con);
+	}
 
-	    MWatchNotify *notify_msg = new MWatchNotify(w.cookie, w.ver, notif->id, WATCH_NOTIFY);
-	    osd->client_messenger->send_message(notify_msg, session->con);
-	  } else {
-	    /* FIXME.. need to add watcher and time out accordingly */
-	    // notif->add_watcher(oi_iter->first, Watch::WATCHER_PENDING);
-	    dout(0) << " session was not found" << dendl;
-	  }
+	// unconnected
+	for (map<entity_name_t, utime_t>::iterator p = obc->unconnected_watchers.begin();
+	     p != obc->unconnected_watchers.end();
+	     p++) {
+	  entity_name_t name = p->first;
+	  // notif->add_watcher(name, Watch::WATCHER_PENDING);
 	}
 
 	notif->reply = new MWatchNotify(op.watch.cookie, op.watch.ver, notif->id, WATCH_NOTIFY_COMPLETE);
@@ -1189,33 +1179,31 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
     case CEPH_OSD_OP_NOTIFY_ACK:
       {
-	dout(0) << "CEPH_OSD_OP_NOTIFY_ACK" << dendl;
-
         ObjectContext *obc = ctx->obc;
+	entity_name_t source = ctx->op->get_source();
+	dout(0) << "CEPH_OSD_OP_NOTIFY_ACK" << dendl;
 	dout(0) << "ctx->obc=" << (void *)obc << dendl;
 
-        map<entity_name_t, OSD::Session *>::iterator iter;
-	map<entity_name_t, watch_info_t>::iterator oi_iter;
-
 	osd->watch_lock.Lock();
-
-        oi_iter = oi.watchers.find(ctx->op->get_source());
+        map<entity_name_t, watch_info_t>::iterator oi_iter = oi.watchers.find(source);
 	if (oi_iter == oi.watchers.end()) {
 	  dout(0) << "couldn't find watcher" << dendl;
 	  break;
 	}
 	watch_info_t& wi = oi_iter->second;
 	wi.ver = op.watch.ver;
+	// FIXME: this gets lost without t.nop().
 
 	Watch::Notification *notif = osd->watch->get_notif(op.watch.cookie);
 	if (!notif) {
 	  result = -EINVAL;
 	  break;
 	}
+
 	OSD::Session *session = (OSD::Session *)ctx->op->get_connection()->get_priv();
         session->del_notif(notif);
+	session->put();
 
-	entity_name_t source = ctx->op->get_source();
         osd->ack_notification(source, notif);
 	osd->watch_lock.Unlock();
       }

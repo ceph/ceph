@@ -44,7 +44,9 @@ public:
     void *obc;
     pg_t pgid;
 
-    void add_watcher(const entity_name_t& name, WatcherState state) { watchers[name] = state; }
+    void add_watcher(const entity_name_t& name, WatcherState state) {
+      watchers[name] = state;
+    }
 
     Notification(entity_name_t& n, OSD::Session *s, uint64_t c) : name(n), session(s), cookie(c) { }
   };
@@ -58,26 +60,28 @@ public:
   };
 
 private:
-  std::multimap<entity_name_t, Notification *> notifs;
-  std::multimap<entity_name_t, Notification *> wtn; /* watchers to notifications */
-  std::map<uint64_t, Notification *> itn; /* notif_id to notifications */
+  std::map<uint64_t, Notification *> notifs; /* notif_id to notifications */
 
 public:
-
   Watch() : notif_id(0) {}
 
-  void register_session(OSD::Session *session, entity_name_t& name);
-  void remove_session(OSD::Session *session);
-  void add_notification(Notification *notif);
-  void remove_notification(Notification *notif);
-  bool ack_notification(entity_name_t& watcher, Notification *notif);
-
+  void add_notification(Notification *notif) {
+    notif->id = ++notif_id;
+    notifs[notif->id] = notif;
+  }
   Notification *get_notif(uint64_t id) {
-    map<uint64_t, Notification *>::iterator iter = itn.find(id);
-    if (iter != itn.end())
+    map<uint64_t, Notification *>::iterator iter = notifs.find(id);
+    if (iter != notifs.end())
       return iter->second;
     return NULL;
   }
+  void remove_notification(Notification *notif) {
+    map<uint64_t, Notification *>::iterator iter = notifs.find(notif->id);
+    if (iter != notifs.end())
+      notifs.erase(iter);
+  }
+
+  bool ack_notification(entity_name_t& watcher, Notification *notif);
 };
 
 
