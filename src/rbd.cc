@@ -254,7 +254,7 @@ static int read_header_bl(pool_t pool, string& md_oid, bufferlist& header, uint6
    } while (r == READ_SIZE);
 
   if (ver)
-    *ver = rados.get_last_ver(pool);
+    *ver = rados.get_last_version(pool);
 
   return 0;
 }
@@ -265,8 +265,9 @@ static int notify_change(pool_t pool, string& oid, uint64_t *pver)
   if (pver)
     ver = *pver;
   else
-    ver = rados.get_last_ver(pool);
+    ver = rados.get_last_version(pool);
   rados.notify(pool, oid, ver);
+  return 0;
 }
 
 static int read_header(pool_t pool, string& md_oid, struct rbd_obj_header_ondisk *header, uint64_t *ver)
@@ -505,7 +506,7 @@ static int do_resize(pools_t& pp, string& md_oid, const char *imgname, uint64_t 
   // rewrite header
   bufferlist bl;
   bl.append((const char *)&header, sizeof(header));
-  rados.set_assert_ver(pp.md, ver);
+  rados.set_assert_version(pp.md, ver);
   r = rados.write(pp.md, md_oid, 0, bl, bl.length());
   if (r == -ERANGE)
     cerr << "operation might have conflicted with another client!" << std::endl;
