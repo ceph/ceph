@@ -1304,6 +1304,14 @@ struct watch_info_t {
 };
 WRITE_CLASS_ENCODER(watch_info_t)
 
+static inline bool operator==(const watch_info_t& l, const watch_info_t& r) {
+  return l.cookie == r.cookie && l.ver == r.ver;  
+}
+
+static inline ostream& operator<<(ostream& out, const watch_info_t& w) {
+  return out << w.cookie << '@' << w.ver;
+}
+
 struct object_info_t {
   sobject_t soid;
   object_locator_t oloc;

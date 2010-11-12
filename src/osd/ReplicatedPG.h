@@ -522,6 +522,7 @@ protected:
   int recover_primary(int max);
   int recover_replicas(int max);
 
+  void dump_watchers(ObjectContext *obc);
   void do_complete_notify(Watch::Notification *notif);
 
   struct RepModify {
