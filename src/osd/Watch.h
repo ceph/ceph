@@ -62,9 +62,6 @@ private:
   std::multimap<entity_name_t, Notification *> wtn; /* watchers to notifications */
   std::map<uint64_t, Notification *> itn; /* notif_id to notifications */
 
-  std::map<OSD::Session *, entity_name_t> ste; /* sessions to entities */
-  std::map<entity_name_t, OSD::Session *> ets; /* entities to sessions */
-
 public:
 
   Watch() : notif_id(0) {}
