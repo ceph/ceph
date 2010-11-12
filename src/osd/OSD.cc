@@ -1669,6 +1669,13 @@ bool OSD::ms_handle_reset(Connection *con)
       while (witer != obc->watchers.end() && witer->second == session) {
         dout(0) << "removing watching session entity_name=" << session->entity_name
 		<< " from " << obc->obs.oi << dendl;
+	entity_name_t entity = witer->first;
+	watch_info_t& w = obc->obs.oi.watchers[entity];
+	utime_t expire = g_clock.now();
+	expire += w.timeout_seconds;
+	obc->unconnected_watchers[entity] = expire;
+	dout(10) << " disconnected watch " << w << " by " << entity << " session " << session
+		 << ", expires " << expire << dendl;
         obc->watchers.erase(witer++);
       }
       if (witer == obc->watchers.end())

@@ -1427,12 +1427,16 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	    session->get();
 	    session->watches[obc] = osd->osdmap->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
 	    obc->ref++;
+	    assert(obc->unconnected_watchers.count(entity));
+	    obc->unconnected_watchers.erase(entity);
 	  } else if (iter->second == session) {
 	    // already there
-	    dout(10) << " already connected to watch " << w << " by " << entity << " session " << session << dendl;
+	    dout(10) << " already connected to watch " << w << " by " << entity
+		     << " session " << session << dendl;
 	  } else {
 	    // weird: same entity, different session.
-	    dout(10) << " reconnected (with different session!) watch " << w << " by " << entity << " session " << session << dendl;
+	    dout(10) << " reconnected (with different session!) watch " << w << " by " << entity
+		     << " session " << session << " (was " << iter->second << ")" << dendl;
 	    iter->second->watches.erase(obc);
 	    iter->second->put();
 	    iter->second = session;
@@ -1443,18 +1447,25 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
         } else {
 	  map<entity_name_t, watch_info_t>::iterator oi_iter = oi.watchers.find(entity);
 	  if (oi_iter != oi.watchers.end()) {
-	    dout(10) << " removed watch " << oi_iter->second << " by " << entity << " session " << session << dendl;
+	    dout(10) << " removed watch " << oi_iter->second << " by " << entity << dendl;
             oi.watchers.erase(entity);
-	    t.nop();
+	    t.nop();  // update oi on disk
 
 	    if (iter != obc->watchers.end()) {
+	      dout(10) << " disconnected session " << iter->second << dendl;
 	      obc->watchers.erase(iter);
 	      session->watches.erase(obc);
 	      put_object_context(obc);
 	      iter->second->put();
+	    } else {
+	      assert(obc->unconnected_watchers.count(entity));
+	      obc->unconnected_watchers.erase(entity);
 	    }
+
+	    // FIXME: trigger notifies?
+
 	  } else {
-	    dout(10) << " can't remove: no watch by " << entity << " session " << session << dendl;
+	    dout(10) << " can't remove: no watch by " << entity << dendl;
 	    assert(iter == obc->watchers.end());
 	  }
         }
@@ -2523,6 +2534,19 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const sobject_t& s
     if (r >= 0) {
       obc->obs.oi.decode(bv);
       obc->obs.exists = true;
+
+      if (!obc->obs.oi.watchers.empty()) {
+	// populate unconnected_watchers
+	utime_t now = g_clock.now();
+	for (map<entity_name_t, watch_info_t>::iterator p = obc->obs.oi.watchers.begin();
+	     p != obc->obs.oi.watchers.begin();
+	     p++) {
+	  utime_t expire = now;
+	  expire += p->second.timeout_seconds;
+	  dout(10) << "  unconnected watcher " << p->first << " will expire " << expire << dendl;
+	  obc->unconnected_watchers[p->first] = expire;
+	}
+      }
     } else {
       obc->obs.exists = false;
     }

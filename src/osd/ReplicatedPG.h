@@ -236,7 +236,9 @@ public:
     Cond cond;
     int unstable_writes, readers, writers_waiting, readers_waiting;
 
+    // any entity in obs.oi.watchers MUST be in either watchers or unconnected_watchers.
     map<entity_name_t, OSD::Session *> watchers;
+    map<entity_name_t, utime_t> unconnected_watchers;
 
     ObjectContext(const sobject_t& s, const object_locator_t& ol) :
       ref(0), registered(false), obs(s, ol),
