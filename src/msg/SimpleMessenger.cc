@@ -1267,28 +1267,32 @@ void SimpleMessenger::Pipe::requeue_sent(uint64_t max_acked)
 void SimpleMessenger::Pipe::discard_queue()
 {
   dout(10) << "discard_queue" << dendl;
-  DispatchQueue& q = messenger->dispatch_queue;
+
   halt_delivery = true;
+
+  // dequeue pipe
+  DispatchQueue& q = messenger->dispatch_queue;
   pipe_lock.Unlock();
-  xlist<Pipe *>* list_on;
-  q.lock.Lock();//to remove from round-robin
+  q.lock.Lock();
   pipe_lock.Lock();
   for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
        i != queue_items.end();
        ++i) {
+    xlist<Pipe *>* list_on;
     if ((list_on = i->second->get_list())) { //if in round-robin
       i->second->remove_myself(); //take off
       if (list_on->empty()) //if round-robin queue is empty
 	q.queued_pipes.erase(i->first); //remove from map
     }
   }
-  q.lock.Unlock();
 
   // clear queue_items
   while (!queue_items.empty()) {
     delete queue_items.begin()->second;
     queue_items.erase(queue_items.begin());
   }
+
+  q.lock.Unlock();
 
   // adjust qlen
   q.qlen_lock.lock();

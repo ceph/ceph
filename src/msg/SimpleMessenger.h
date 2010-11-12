@@ -144,7 +144,7 @@ private:
     map<int, list<Message*> > out_q;  // priority queue for outbound msgs
     map<int, list<Message*> > in_q; // and inbound ones
     int in_qlen;
-    map<int, xlist<Pipe *>::item* > queue_items; // _map_ protected by pipe_lock, *item protected by q.lock
+    map<int, xlist<Pipe *>::item* > queue_items; // protected by pipe_lock AND q.lock
     list<Message*> sent;
     Cond cond;
     bool keepalive;
@@ -224,8 +224,7 @@ private:
       for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
 	   i != queue_items.end();
 	   ++i) {
-	if (i->second->is_on_list())
-	  i->second->remove_myself();
+	assert(!i->second->is_on_list());
 	delete i->second;
       }
       assert(out_q.empty());
@@ -269,11 +268,11 @@ private:
     //Also, call with pipe_lock held or bad things happen
     void enqueue_me(int priority) {
       assert(pipe_lock.is_locked());
-      if (!queue_items.count(priority))
-	queue_items[priority] = new xlist<Pipe *>::item(this);
       pipe_lock.Unlock();
       messenger->dispatch_queue.lock.Lock();
       pipe_lock.Lock();
+      if (!queue_items.count(priority)) 
+	queue_items[priority] = new xlist<Pipe *>::item(this);
       if (messenger->dispatch_queue.queued_pipes.empty())
 	messenger->dispatch_queue.cond.Signal();
       messenger->dispatch_queue.queued_pipes[priority].push_back(queue_items[priority]);
