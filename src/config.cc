@@ -357,6 +357,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(ms_bind_ipv6, 0, OPT_BOOL, false),
         OPTION(ms_rwthread_stack_bytes, 0, OPT_INT, 1024 << 10),
         OPTION(ms_tcp_read_timeout, 0, OPT_LONGLONG, 900),
+	OPTION(ms_inject_socket_failures, 0, OPT_LONGLONG, 0),
 	OPTION(mon_data, 0, OPT_STR, ""),
 	OPTION(mon_tick_interval, 0, OPT_INT, 5),
 	OPTION(mon_subscribe_interval, 0, OPT_DOUBLE, 300),

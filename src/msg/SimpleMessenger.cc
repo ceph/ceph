@@ -45,14 +45,6 @@ static ostream& _prefix(SimpleMessenger *messenger) {
 
 #include "tcp.cc"
 
-
-// help find socket resource leaks
-//static int sockopen = 0;
-#define closed_socket() //dout(20) << "closed_socket " << --sockopen << dendl;
-#define opened_socket() //dout(20) << "opened_socket " << ++sockopen << dendl;
-
-
-
 /********************************************
  * Accepter
  */
@@ -80,7 +72,6 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_add
 	 << strerror_r(errno, buf, sizeof(buf)) << std::endl;
     return -errno;
   }
-  opened_socket();
 
   // reuse addr+port when possible
   int on = 1;
@@ -201,7 +192,6 @@ void *SimpleMessenger::Accepter::entry()
     int sd = ::accept(listen_sd, (sockaddr*)&addr.ss_addr(), &slen);
     if (sd >= 0) {
       errors = 0;
-      opened_socket();
       dout(10) << "accepted incoming on sd " << sd << dendl;
       
       // disable Nagle algorithm?
@@ -236,7 +226,6 @@ void *SimpleMessenger::Accepter::entry()
   if (listen_sd >= 0) {
     ::close(listen_sd);
     listen_sd = -1;
-    closed_socket();
   }
   dout(10) << "accepter stopping" << dendl;
   return 0;
@@ -296,6 +285,7 @@ void SimpleMessenger::dispatch_entry()
       } else {
 	pipe_list.push_back(pipe->queue_items[priority]);  // move to end of list
       }
+      dout(20) << "dispatch_entry pipe " << pipe << " dequeued " << m << dendl;
       dispatch_queue.lock.Unlock(); //done with the pipe queue for a while
 
       pipe->in_qlen--;
@@ -516,6 +506,53 @@ static int get_proto_version(int my_type, int peer_type, bool connect)
   }
   return 0;
 }
+
+void SimpleMessenger::Pipe::queue_received(Message *m, int priority)
+{
+  assert(pipe_lock.is_locked());
+  
+  list<Message *>& queue = in_q[priority];
+  bool was_empty;
+  
+  if (halt_delivery)
+    goto halt;
+  
+  was_empty = queue.empty();
+  queue.push_back(m);
+  
+  //increment queue length counters
+  in_qlen++;
+  messenger->dispatch_queue.qlen_lock.lock();
+  ++messenger->dispatch_queue.qlen;
+  messenger->dispatch_queue.qlen_lock.unlock();
+  
+  if (was_empty) { //this pipe isn't on the endpoint queue
+    pipe_lock.Unlock();
+    messenger->dispatch_queue.lock.Lock();
+    pipe_lock.Lock();
+    
+    if (halt_delivery)
+      goto halt;
+    
+    dout(20) << "queue_received queuing pipe" << dendl;
+    if (!queue_items.count(priority)) 
+      queue_items[priority] = new xlist<Pipe *>::item(this);
+    if (messenger->dispatch_queue.queued_pipes.empty())
+      messenger->dispatch_queue.cond.Signal();
+    messenger->dispatch_queue.queued_pipes[priority].push_back(queue_items[priority]);
+    messenger->dispatch_queue.lock.Unlock();
+  }
+  return;
+  
+ halt:
+  // don't want to put local-delivery signals
+  // this magic number should be larger than
+  // the size of the D_CONNECT et al enum
+  if (m>(void *)5)
+    m->put();
+}
+
+
 
 int SimpleMessenger::Pipe::accept()
 {
@@ -911,11 +948,6 @@ int SimpleMessenger::Pipe::connect()
   dout(10) << "connect " << connect_seq << dendl;
   assert(pipe_lock.is_locked());
 
-  if (sd >= 0) {
-    ::close(sd);
-    sd = -1;
-    closed_socket();
-  }
   __u32 cseq = connect_seq;
   __u32 gseq = messenger->get_global_seq();
 
@@ -935,6 +967,10 @@ int SimpleMessenger::Pipe::connect()
   AuthAuthorizer *authorizer = NULL;
   bufferlist addrbl, myaddrbl;
 
+  // close old socket.  this is safe because we stopped the reader thread above.
+  if (sd >= 0)
+    ::close(sd);
+
   // create socket?
   sd = ::socket(peer_addr.get_family(), SOCK_STREAM, 0);
   if (sd < 0) {
@@ -943,7 +979,6 @@ int SimpleMessenger::Pipe::connect()
     assert(0);
     goto fail;
   }
-  opened_socket();
 
   char buf[80];
 
@@ -1141,6 +1176,7 @@ int SimpleMessenger::Pipe::connect()
     if (reply.tag == CEPH_MSGR_TAG_RESETSESSION) {
       dout(0) << "connect got RESETSESSION" << dendl;
       was_session_reset();
+      halt_delivery = false;
       cseq = 0;
       pipe_lock.Unlock();
       continue;
@@ -1280,22 +1316,24 @@ void SimpleMessenger::Pipe::requeue_sent(uint64_t max_acked)
 void SimpleMessenger::Pipe::discard_queue()
 {
   dout(10) << "discard_queue" << dendl;
-  DispatchQueue& q = messenger->dispatch_queue;
+
   halt_delivery = true;
+
+  // dequeue pipe
+  DispatchQueue& q = messenger->dispatch_queue;
   pipe_lock.Unlock();
-  xlist<Pipe *>* list_on;
-  q.lock.Lock();//to remove from round-robin
+  q.lock.Lock();
+  pipe_lock.Lock();
   for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
        i != queue_items.end();
        ++i) {
+    xlist<Pipe *>* list_on;
     if ((list_on = i->second->get_list())) { //if in round-robin
       i->second->remove_myself(); //take off
       if (list_on->empty()) //if round-robin queue is empty
 	q.queued_pipes.erase(i->first); //remove from map
     }
   }
-  q.lock.Unlock();
-  pipe_lock.Lock();
 
   // clear queue_items
   while (!queue_items.empty()) {
@@ -1303,26 +1341,34 @@ void SimpleMessenger::Pipe::discard_queue()
     queue_items.erase(queue_items.begin());
   }
 
+  q.lock.Unlock();
+
+  dout(20) << " dequeued pipe " << dendl;
+
   // adjust qlen
   q.qlen_lock.lock();
   q.qlen -= in_qlen;
   q.qlen_lock.unlock();
 
-  for (list<Message*>::iterator p = sent.begin(); p != sent.end(); p++)
+  for (list<Message*>::iterator p = sent.begin(); p != sent.end(); p++) {
+    dout(20) << "  discard " << *p << dendl;
     (*p)->put();
+  }
   sent.clear();
   for (map<int,list<Message*> >::iterator p = out_q.begin(); p != out_q.end(); p++)
-    for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++)
+    for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++) {
+      dout(20) << "  discard " << *r << dendl;
       (*r)->put();
+    }
   out_q.clear();
   for (map<int,list<Message*> >::iterator p = in_q.begin(); p != in_q.end(); p++)
     for (list<Message*>::iterator r = p->second.begin(); r != p->second.end(); r++) {
       messenger->dispatch_throttle_release((*r)->get_dispatch_throttle_size());
+      dout(20) << "  discard " << *r << dendl;
       (*r)->put();
     }
   in_q.clear();
   in_qlen = 0;
-  halt_delivery = false;
 }
 
 
@@ -1345,11 +1391,7 @@ void SimpleMessenger::Pipe::fault(bool onconnect, bool onread)
     return;
   }
 
-  if (sd >= 0) {
-    ::close(sd);
-    sd = -1;
-    closed_socket();
-  }
+  shutdown_socket();
 
   // lossy channel?
   if (policy.lossy) {
@@ -1435,11 +1477,7 @@ void SimpleMessenger::Pipe::stop()
   assert(pipe_lock.is_locked());
   state = STATE_CLOSED;
   cond.Signal();
-  if (sd >= 0) {
-    ::shutdown(sd, SHUT_RDWR);
-    ::close(sd);
-    sd = -1;
-  }
+  shutdown_socket();
 }
 
 
@@ -1539,14 +1577,11 @@ void SimpleMessenger::Pipe::reader()
       in_seq = m->get_seq();
 
       cond.Signal();  // wake up writer, to ack this
-      pipe_lock.Unlock();
       
       dout(10) << "reader got message "
 	       << m->get_seq() << " " << m << " " << *m
 	       << dendl;
       queue_received(m);
-
-      pipe_lock.Lock();
     } 
     
     else if (tag == CEPH_MSGR_TAG_CLOSE) {
@@ -1581,7 +1616,6 @@ void SimpleMessenger::Pipe::writer()
   char buf[80];
 
   pipe_lock.Lock();
-
   while (state != STATE_CLOSED) {// && state != STATE_WAIT) {
     dout(10) << "writer: state = " << state << " policy.server=" << policy.server << dendl;
 
@@ -1691,15 +1725,8 @@ void SimpleMessenger::Pipe::writer()
 void SimpleMessenger::Pipe::unlock_maybe_reap()
 {
   if (!reader_running && !writer_running) {
-    // close
-    if (sd >= 0) {
-      ::close(sd);
-      sd = -1;
-      closed_socket();
-    }
-
+    shutdown_socket();
     pipe_lock.Unlock();
-
     messenger->queue_reap(this);
   } else {
     pipe_lock.Unlock();
@@ -2171,8 +2198,9 @@ void SimpleMessenger::reaper()
     assert(pipes.count(p));
     pipes.erase(p);
     p->join();
+    if (p->sd >= 0)
+      ::close(p->sd);
     dout(10) << "reaper reaped pipe " << p << " " << p->get_peer_addr() << dendl;
-    assert(p->sd < 0);
     if (p->connection_state)
       p->connection_state->clear_pipe();
     p->put();
