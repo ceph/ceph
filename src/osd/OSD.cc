@@ -3777,7 +3777,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 void OSD::_process_pg_info(epoch_t epoch, int from,
 			   PG::Info &info, 
 			   PG::Log &log, 
-			   PG::Missing &missing,
+			   PG::Missing *missing,
 			   map<int, MOSDPGInfo*>* info_map,
 			   int& created)
 {
@@ -3821,7 +3821,18 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
   }
   assert(pg);
 
-  dout(10) << *pg << " got " << info << " " << log << " " << missing << dendl;
+  dout(10) << *pg << ": " << __func__ << " info: " << info << ", ";
+  if (log.empty())
+    *_dout << "(log omitted)";
+  else
+    *_dout << "log: " << log;
+  *_dout << ", ";
+  if (!missing)
+    *_dout << "(missing omitted)";
+  else
+    *_dout << "missing: " << *missing;
+  *_dout << dendl;
+
   unreg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
   pg->info.history.merge(info.history);
   reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
@@ -3829,40 +3840,40 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
   // dump log
   dout(15) << *pg << " my log = ";
   pg->log.print(*_dout);
-  *_dout << dendl;
-  dout(15) << *pg << " osd" << from << " log = ";
-  log.print(*_dout);
+  *_dout << std::endl;
+  if (!log.empty()) {
+    *_dout << *pg << " osd" << from << " log = ";
+    log.print(*_dout);
+  }
   *_dout << dendl;
 
   if (pg->is_primary()) {
     // i am PRIMARY
-    if (pg->peer_log_requested.count(from) ||
-	pg->peer_summary_requested.count(from))
-    {
-      if (!pg->is_active()) {
-	pg->proc_replica_log(*t, info, log, missing, from);
-	
-	// peer
-	map< int, map<pg_t,PG::Query> > query_map;
-	pg->do_peer(*t, fin->contexts, query_map, info_map);
-	pg->update_stats();
-	do_queries(query_map);
+    if (pg->is_active())  {
+      // PG is ACTIVE
+      if (pg->missing.have_missing()) {
+	dout(10) << *pg << " searching osd" << from << " log for missing items." << dendl;
+	pg->search_for_missing(info, missing, from);
       }
       else {
-	if (pg->missing.have_missing()) {
-	  dout(10) << *pg << " searching osd" << from << " log for missing items." << dendl;
-	  pg->search_for_missing(log, missing, from);
-	}
-	else {
-	  dout(10) << *pg << " ignoring osd" << from << " log, pg is already active" << dendl;
-	}
+	dout(10) << *pg << " ignoring osd" << from << " log, pg is already active" << dendl;
       }
+    }
+    else if ((!log.empty()) && missing) {
+      // PG is INACTIVE
+      pg->proc_replica_log(*t, info, log, *missing, from);
+      
+      // peer
+      map< int, map<pg_t,PG::Query> > query_map;
+      pg->do_peer(*t, fin->contexts, query_map, info_map);
+      pg->update_stats();
+      do_queries(query_map);
     }
   } else {
     if (!pg->info.dne()) {
       // i am REPLICA
       if (!pg->is_active()) {
-	pg->merge_log(*t, info, log, missing, from);
+	pg->merge_log(*t, info, log, from);
 	pg->activate(*t, fin->contexts, info_map);
       } else {
 	// just update our stats
@@ -3915,7 +3926,7 @@ void OSD::handle_pg_log(MOSDPGLog *m)
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
   _process_pg_info(m->get_epoch(), from, 
-		   m->info, m->log, m->missing, 0,
+		   m->info, m->log, &m->missing, 0,
 		   created);
   if (created)
     update_heartbeat_peers();
@@ -3934,14 +3945,13 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
   PG::Log empty_log;
-  PG::Missing empty_missing;
   map<int,MOSDPGInfo*> info_map;
   int created = 0;
 
   for (vector<PG::Info>::iterator p = m->pg_info.begin();
        p != m->pg_info.end();
        ++p) 
-    _process_pg_info(m->get_epoch(), from, *p, empty_log, empty_missing, &info_map, created);
+    _process_pg_info(m->get_epoch(), from, *p, empty_log, NULL, &info_map, created);
 
   do_infos(info_map);
   if (created)
@@ -4008,7 +4018,7 @@ void OSD::handle_pg_missing(MOSDPGMissing *m)
   PG::Log empty_log;
   int created = 0;
   _process_pg_info(m->get_epoch(), from, m->info,
-		   empty_log, m->missing, NULL, created);
+		   empty_log, &m->missing, NULL, created);
   if (created)
     update_heartbeat_peers();
 

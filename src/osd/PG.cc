@@ -179,7 +179,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
     // make any adjustments to their missing map; we are taking their
     // log to be authoritative (i.e., their entries are by definitely
     // non-divergent).
-    merge_log(t, oinfo, olog, omissing, from);
+    merge_log(t, oinfo, olog, from);
 
   } else if (is_acting(from)) {
     // replica.  have master log. 
@@ -262,7 +262,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
   peer_info[from] = oinfo;
   dout(10) << " peer osd" << from << " now " << oinfo << dendl;
 
-  search_for_missing(olog, omissing, from);
+  search_for_missing(oinfo, &omissing, from);
   peer_missing[from].swap(omissing);
 }
 
@@ -323,7 +323,7 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
 }
 
 void PG::merge_log(ObjectStore::Transaction& t,
-		   Info &oinfo, Log &olog, Missing &omissing, int fromosd)
+		   Info &oinfo, Log &olog, int fromosd)
 {
   dout(10) << "merge_log " << olog << " from osd" << fromosd
            << " into " << log << dendl;
@@ -510,13 +510,14 @@ void PG::merge_log(ObjectStore::Transaction& t,
 }
 
 /*
- * process replica's missing map to determine if they have
- * any objects that i need
+ * Process information from a replica to determine if it could have any
+ * objects that i need.
  *
  * TODO: if the missing set becomes very large, this could get expensive.
  * Instead, we probably want to just iterate over our unfound set.
  */
-void PG::search_for_missing(Log &olog, Missing &omissing, int fromosd)
+void PG::search_for_missing(const Info &oinfo, const Missing *omissing,
+			    int fromosd)
 {
   // found items?
   for (map<sobject_t,Missing::item>::iterator p = missing.missing.begin();
@@ -525,16 +526,21 @@ void PG::search_for_missing(Log &olog, Missing &omissing, int fromosd)
     const sobject_t &soid(p->first);
     eversion_t need = p->second.need;
     eversion_t have = p->second.have;
-    if (omissing.is_missing(soid)) {
-      dout(10) << "search_for_missing " << soid << " " << need
-	       << " also missing on osd" << fromosd << dendl;
-      continue;
-    } 
-    if (need > olog.head) {
-      dout(10) << "search_for_missing " << soid << " " << need
-               << " > olog.head " << olog.head << ", also missing on osd" << fromosd
-               << dendl;
-      continue;
+    if (oinfo.last_complete < need) {
+      if (!omissing) {
+	// We know that the peer lacks some objects at the revision we need.
+	// Without the peer's missing set, we don't know whether it has this
+	// particular object or not.
+	dout(10) << __func__ << " " << soid << " " << need
+		 << " might also be missing on osd" << fromosd << dendl;
+	continue;
+      }
+
+      if (omissing->is_missing(soid)) {
+	dout(10) << "search_for_missing " << soid << " " << need
+		 << " also missing on osd" << fromosd << dendl;
+	continue;
+      }
     }
     dout(10) << "search_for_missing " << soid << " " << need
 	     << " is on osd" << fromosd << dendl;

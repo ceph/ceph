@@ -818,10 +818,12 @@ public:
 
   virtual void calc_trim_to() = 0;
 
-  void proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from);
+  void proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog,
+			Missing& omissing, int from);
   bool merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe);
-  void merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from);
-  void search_for_missing(Log &olog, Missing &omissing, int fromosd);
+  void merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, int from);
+  void search_for_missing(const Info &oinfo, const Missing *omissing,
+			  int fromosd);
 
   void check_for_lost_objects();
   void forget_lost_objects();

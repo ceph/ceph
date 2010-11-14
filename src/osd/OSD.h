@@ -642,7 +642,7 @@ protected:
   void _process_pg_info(epoch_t epoch, int from,
 			PG::Info &info, 
 			PG::Log &log, 
-			PG::Missing &missing,
+			PG::Missing *missing,
 			map<int, MOSDPGInfo*>* info_map,
 			int& created);
 
