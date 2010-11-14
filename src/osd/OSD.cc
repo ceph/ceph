@@ -3748,6 +3748,15 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       pg->do_peer(*t, fin->contexts, query_map, &info_map);
       pg->update_stats();
     }
+
+    if (pg->is_active() && pg->missing.have_missing()) {
+      // Make sure we've requested MISSING information from every OSD
+      // we know about.
+      map< int, map<pg_t,PG::Query> > query_map;
+      pg->discover_all_missing(query_map);
+      do_queries(query_map);
+    }
+
     int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(tr == 0);
     pg->unlock();
@@ -3854,6 +3863,12 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       if (pg->missing.have_missing()) {
 	dout(10) << *pg << " searching osd" << from << " log for missing items." << dendl;
 	pg->search_for_missing(info, missing, from);
+
+	// Make sure we've requested MISSING information from every OSD
+	// we know about.
+	map< int, map<pg_t,PG::Query> > query_map;
+	pg->discover_all_missing(query_map);
+	do_queries(query_map);
       }
       else {
 	dout(10) << *pg << " ignoring osd" << from << " log, pg is already active" << dendl;

@@ -562,7 +562,31 @@ void PG::search_for_missing(const Info &oinfo, const Missing *omissing,
   dout(20) << "search_for_missing missing " << missing.missing << dendl;
 }
 
+void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map)
+{
+  assert(missing.have_missing());
 
+  dout(10) << __func__ << ": searching for " << missing.num_missing()
+          << " missing objects." << dendl;
+
+  std::map<int,Info>::const_iterator end = peer_info.end();
+  for (std::map<int,Info>::const_iterator pi = peer_info.begin();
+       pi != end; ++pi)
+  {
+    int from(pi->first);
+    if (peer_missing.find(from) != peer_missing.end())
+      continue;
+    if (peer_log_requested.find(from) != peer_log_requested.end())
+      continue;
+    if (peer_summary_requested.find(from) != peer_summary_requested.end())
+      continue;
+    if (peer_missing_requested.find(from) != peer_missing_requested.end())
+      continue;
+    peer_missing_requested.insert(from);
+    query_map[from][info.pgid] =
+      PG::Query(PG::Query::MISSING, info.history);
+  }
+}
 
 // ===============================================================
 // BACKLOG
@@ -1101,6 +1125,7 @@ void PG::clear_primary_state()
   peer_info_requested.clear();
   peer_log_requested.clear();
   peer_summary_requested.clear();
+  peer_missing_requested.clear();
   peer_info.clear();
   peer_missing.clear();
   need_up_thru = false;
@@ -1465,6 +1490,9 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
   else if (!is_active()) {
     // -- ok, activate!
     activate(t, tfin, activator_map);
+    if (missing.have_missing()) {
+      discover_all_missing(query_map);
+    }
   }
   else if (is_all_uptodate()) 
     finish_recovery(t, tfin);
@@ -1824,6 +1852,7 @@ void PG::purge_strays()
   peer_info_requested.clear();
   peer_log_requested.clear();
   peer_summary_requested.clear();
+  peer_missing_requested.clear();
 }
 
 

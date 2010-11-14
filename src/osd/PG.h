@@ -745,6 +745,7 @@ public:
   map<int, Missing>    peer_missing;
   set<int>             peer_log_requested;  // logs i've requested (and start stamps)
   set<int>             peer_summary_requested;
+  set<int>             peer_missing_requested;
   set<int>             stray_purged;  // i deleted these strays; ignore racing PGInfo from them
   friend class OSD;
 
@@ -827,6 +828,8 @@ public:
 
   void check_for_lost_objects();
   void forget_lost_objects();
+
+  void discover_all_missing(std::map< int, map<pg_t,PG::Query> > &query_map);
   
   bool build_backlog_map(map<eversion_t,Log::Entry>& omap);
   void assemble_backlog(map<eversion_t,Log::Entry>& omap);
