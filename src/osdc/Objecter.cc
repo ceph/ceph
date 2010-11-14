@@ -57,8 +57,9 @@ void Objecter::init()
 
 void Objecter::shutdown() 
 {
-  assert(client_lock.is_locked());  // otherwise event cancellation is unsafe
-  timer->cancel_all_events();
+  client_lock.Unlock();
+  timer->shutdown();
+  client_lock.Lock();
 }
 
 
