@@ -1687,6 +1687,8 @@ void PG::finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin)
   dout(10) << "finish_recovery" << dendl;
   state_set(PG_STATE_CLEAN);
   assert(info.last_complete == info.last_update);
+  info.history.last_epoch_clean = osd->osdmap->get_epoch();
+  share_pg_info();
 
   clear_recovery_state();
 
