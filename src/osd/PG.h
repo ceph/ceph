@@ -116,6 +116,7 @@ public:
     struct History {
       epoch_t epoch_created;       // epoch in which PG was created
       epoch_t last_epoch_started;  // lower bound on last epoch started (anywhere, not necessarily locally)
+      epoch_t last_epoch_clean;    // lower bound on last epoch the PG was completely clean.
       epoch_t last_epoch_split;    // as parent
 
       epoch_t same_up_since;       // same acting set since
@@ -149,6 +150,7 @@ public:
 	::encode(struct_v, bl);
 	::encode(epoch_created, bl);
 	::encode(last_epoch_started, bl);
+	::encode(last_epoch_clean, bl);
 	::encode(last_epoch_split, bl);
 	::encode(same_acting_since, bl);
 	::encode(same_up_since, bl);
@@ -161,6 +163,10 @@ public:
 	::decode(struct_v, bl);
 	::decode(epoch_created, bl);
 	::decode(last_epoch_started, bl);
+	if (struct_v >= 2)
+	  ::decode(last_epoch_clean, bl);
+	else
+	  last_epoch_clean = last_epoch_started;  // careful, it's a lie!
 	::decode(last_epoch_split, bl);
 	::decode(same_acting_since, bl);
 	::decode(same_up_since, bl);
@@ -739,6 +745,7 @@ public:
   map<int, Missing>    peer_missing;
   set<int>             peer_log_requested;  // logs i've requested (and start stamps)
   set<int>             peer_summary_requested;
+  set<int>             peer_missing_requested;
   set<int>             stray_purged;  // i deleted these strays; ignore racing PGInfo from them
   friend class OSD;
 
@@ -812,13 +819,17 @@ public:
 
   virtual void calc_trim_to() = 0;
 
-  void proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from);
+  void proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog,
+			Missing& omissing, int from);
   bool merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe);
-  void merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from);
-  void search_for_missing(Log &olog, Missing &omissing, int fromosd);
+  void merge_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, int from);
+  void search_for_missing(const Info &oinfo, const Missing *omissing,
+			  int fromosd);
 
   void check_for_lost_objects();
   void forget_lost_objects();
+
+  void discover_all_missing(std::map< int, map<pg_t,PG::Query> > &query_map);
   
   bool build_backlog_map(map<eversion_t,Log::Entry>& omap);
   void assemble_backlog(map<eversion_t,Log::Entry>& omap);

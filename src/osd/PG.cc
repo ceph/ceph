@@ -179,7 +179,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
     // make any adjustments to their missing map; we are taking their
     // log to be authoritative (i.e., their entries are by definitely
     // non-divergent).
-    merge_log(t, oinfo, olog, omissing, from);
+    merge_log(t, oinfo, olog, from);
 
   } else if (is_acting(from)) {
     // replica.  have master log. 
@@ -262,7 +262,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
   peer_info[from] = oinfo;
   dout(10) << " peer osd" << from << " now " << oinfo << dendl;
 
-  search_for_missing(olog, omissing, from);
+  search_for_missing(oinfo, &omissing, from);
   peer_missing[from].swap(omissing);
 }
 
@@ -323,7 +323,7 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
 }
 
 void PG::merge_log(ObjectStore::Transaction& t,
-		   Info &oinfo, Log &olog, Missing &omissing, int fromosd)
+		   Info &oinfo, Log &olog, int fromosd)
 {
   dout(10) << "merge_log " << olog << " from osd" << fromosd
            << " into " << log << dendl;
@@ -510,14 +510,17 @@ void PG::merge_log(ObjectStore::Transaction& t,
 }
 
 /*
- * process replica's missing map to determine if they have
- * any objects that i need
+ * Process information from a replica to determine if it could have any
+ * objects that i need.
  *
  * TODO: if the missing set becomes very large, this could get expensive.
  * Instead, we probably want to just iterate over our unfound set.
  */
-void PG::search_for_missing(Log &olog, Missing &omissing, int fromosd)
+void PG::search_for_missing(const Info &oinfo, const Missing *omissing,
+			    int fromosd)
 {
+  bool stats_updated = false;
+
   // found items?
   for (map<sobject_t,Missing::item>::iterator p = missing.missing.begin();
        p != missing.missing.end();
@@ -525,16 +528,21 @@ void PG::search_for_missing(Log &olog, Missing &omissing, int fromosd)
     const sobject_t &soid(p->first);
     eversion_t need = p->second.need;
     eversion_t have = p->second.have;
-    if (omissing.is_missing(soid)) {
-      dout(10) << "search_for_missing " << soid << " " << need
-	       << " also missing on osd" << fromosd << dendl;
-      continue;
-    } 
-    if (need > olog.head) {
-      dout(10) << "search_for_missing " << soid << " " << need
-               << " > olog.head " << olog.head << ", also missing on osd" << fromosd
-               << dendl;
-      continue;
+    if (oinfo.last_complete < need) {
+      if (!omissing) {
+	// We know that the peer lacks some objects at the revision we need.
+	// Without the peer's missing set, we don't know whether it has this
+	// particular object or not.
+	dout(10) << __func__ << " " << soid << " " << need
+		 << " might also be missing on osd" << fromosd << dendl;
+	continue;
+      }
+
+      if (omissing->is_missing(soid)) {
+	dout(10) << "search_for_missing " << soid << " " << need
+		 << " also missing on osd" << fromosd << dendl;
+	continue;
+      }
     }
     dout(10) << "search_for_missing " << soid << " " << need
 	     << " is on osd" << fromosd << dendl;
@@ -546,17 +554,45 @@ void PG::search_for_missing(Log &olog, Missing &omissing, int fromosd)
       if (wmo != waiting_for_missing_object.end()) {
 	osd->take_waiters(wmo->second);
       }
+      stats_updated = true;
       missing_loc[soid].insert(fromosd);
     }
     else {
       ml->second.insert(fromosd);
     }
   }
+  if (stats_updated) {
+    update_stats();
+  }
 
   dout(20) << "search_for_missing missing " << missing.missing << dendl;
 }
 
+void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map)
+{
+  assert(missing.have_missing());
 
+  dout(10) << __func__ << ": searching for " << missing.num_missing()
+          << " missing objects." << dendl;
+
+  std::map<int,Info>::const_iterator end = peer_info.end();
+  for (std::map<int,Info>::const_iterator pi = peer_info.begin();
+       pi != end; ++pi)
+  {
+    int from(pi->first);
+    if (peer_missing.find(from) != peer_missing.end())
+      continue;
+    if (peer_log_requested.find(from) != peer_log_requested.end())
+      continue;
+    if (peer_summary_requested.find(from) != peer_summary_requested.end())
+      continue;
+    if (peer_missing_requested.find(from) != peer_missing_requested.end())
+      continue;
+    peer_missing_requested.insert(from);
+    query_map[from][info.pgid] =
+      PG::Query(PG::Query::MISSING, info.history);
+  }
+}
 
 // ===============================================================
 // BACKLOG
@@ -1095,6 +1131,7 @@ void PG::clear_primary_state()
   peer_info_requested.clear();
   peer_log_requested.clear();
   peer_summary_requested.clear();
+  peer_missing_requested.clear();
   peer_info.clear();
   peer_missing.clear();
   need_up_thru = false;
@@ -1459,6 +1496,9 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
   else if (!is_active()) {
     // -- ok, activate!
     activate(t, tfin, activator_map);
+    if (missing.have_missing()) {
+      discover_all_missing(query_map);
+    }
   }
   else if (is_all_uptodate()) 
     finish_recovery(t, tfin);
@@ -1687,6 +1727,8 @@ void PG::finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin)
   dout(10) << "finish_recovery" << dendl;
   state_set(PG_STATE_CLEAN);
   assert(info.last_complete == info.last_update);
+  info.history.last_epoch_clean = osd->osdmap->get_epoch();
+  share_pg_info();
 
   clear_recovery_state();
 
@@ -1816,6 +1858,7 @@ void PG::purge_strays()
   peer_info_requested.clear();
   peer_log_requested.clear();
   peer_summary_requested.clear();
+  peer_missing_requested.clear();
 }
 
 
