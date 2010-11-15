@@ -3683,8 +3683,11 @@ int ReplicatedPG::recover_primary(int max)
     sobject_t head = soid;
     head.snap = CEPH_NOSNAP;
 
+    bool unfound = missing_loc.count(soid);
+
     dout(10) << "recover_primary "
              << soid << " " << item.need
+	     << (unfound ? "":" (unfound)")
 	     << (missing.is_missing(soid) ? " (missing)":"")
 	     << (missing.is_missing(head) ? " (missing head)":"")
              << (pulling.count(soid) ? " (pulling)":"")
@@ -3693,6 +3696,8 @@ int ReplicatedPG::recover_primary(int max)
     
     if (!pulling.count(soid)) {
       if (pulling.count(head)) {
+	++skipped;
+      } else if (unfound) {
 	++skipped;
       } else {
 	// is this a clone operation that we can do locally?
