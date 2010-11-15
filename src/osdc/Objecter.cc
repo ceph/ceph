@@ -477,7 +477,7 @@ tid_t Objecter::op_submit(Op *op)
       flags |= CEPH_OSD_FLAG_ACK;
 
     if (op->con) {
-      if (op->outbl->length()) {
+      if (op->outbl && op->outbl->length()) {
 	dout(20) << " revoking rx buffer for " << op->tid << " on " << op->con << dendl;
 	op->con->revoke_rx_buffer(op->tid);
       }
