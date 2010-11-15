@@ -96,7 +96,7 @@ MDS::MDS(const char *n, Messenger *m, MonClient *mc) :
   mdsmap = new MDSMap;
   osdmap = new OSDMap;
 
-  objecter = new Objecter(messenger, monc, osdmap, mds_lock);
+  objecter = new Objecter(messenger, monc, osdmap, mds_lock, timer);
   objecter->unset_honor_osdmap_full();
 
   filer = new Filer(objecter);
@@ -135,7 +135,6 @@ MDS::MDS(const char *n, Messenger *m, MonClient *mc) :
 }
 
 MDS::~MDS() {
-  timer.shutdown();
   Mutex::Locker lock(mds_lock);
 
   if (mdcache) { delete mdcache; mdcache = NULL; }
@@ -452,6 +451,8 @@ int MDS::init(int wanted_state)
   monc->wait_auth_rotating(30.0);
 
   mds_lock.Lock();
+
+  timer.init();
 
   // starting beacon.  this will induce an MDSMap from the monitor
   want_state = wanted_state;
@@ -1406,6 +1407,8 @@ void MDS::suicide()
   messenger->shutdown();
 
   monc->shutdown();
+
+  timer.shutdown();
 }
 
 void MDS::respawn()

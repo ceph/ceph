@@ -104,7 +104,7 @@ class OSD : public Dispatcher {
   /** OSD **/
 protected:
   Mutex osd_lock;			// global lock
-  std::auto_ptr < SafeTimer > timer;    // safe timer (osd_lock)
+  SafeTimer timer;    // safe timer (osd_lock)
 
   Messenger   *cluster_messenger;
   Messenger   *client_messenger;

@@ -50,27 +50,32 @@ SafeTimer::SafeTimer(Mutex &l)
     thread(NULL),
     stopping(false) 
 {
-  thread = new SafeTimerThread(this);
-  thread->create();
 }
 
 SafeTimer::~SafeTimer()
 {
-  shutdown();
+  assert(thread == NULL);
+}
+
+void SafeTimer::init()
+{
+  dout(10) << "init" << dendl;
+  thread = new SafeTimerThread(this);
+  thread->create();
 }
 
 void SafeTimer::shutdown()
 {
+  dout(10) << "shutdown" << dendl;
   if (thread) {
-    lock.Lock();
     cancel_all_events();
-    
     stopping = true;
     cond.Signal();
     lock.Unlock();
 
     thread->join();
 
+    lock.Lock();
     delete thread;
     thread = NULL;
   }

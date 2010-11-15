@@ -56,7 +56,6 @@ struct ceph_tool_data g;
 
 static Cond cmd_cond;
 static SimpleMessenger *messenger = 0;
-static std::auto_ptr < SafeTimer > timer;
 static Tokenizer *tok;
 
 static const char *outfile = 0;
@@ -283,7 +282,7 @@ static void send_observe_requests()
   registered.clear();
   float seconds = g_conf.paxos_observer_timeout/2;
   dout(1) << " refresh after " << seconds << " with same mon" << dendl;
-  timer->add_event_after(seconds, new C_ObserverRefresh(false));
+  g.timer.add_event_after(seconds, new C_ObserverRefresh(false));
 }
 
 static void handle_ack(MMonCommandAck *ack)
@@ -296,7 +295,7 @@ static void handle_ack(MMonCommandAck *ack)
   reply_bl = ack->get_data();
   cmd_cond.Signal();
   if (resend_event) {
-    timer->cancel_event(resend_event);
+    g.timer.cancel_event(resend_event);
     resend_event = 0;
   }
   g.lock.Unlock();
@@ -540,7 +539,6 @@ int main(int argc, const char **argv)
   
   common_set_defaults(false);
   common_init(args, "ceph", true);
-  timer.reset(new SafeTimer(g.lock));
 
   vec_to_argv(args, argc, argv);
 
@@ -606,19 +604,23 @@ int main(int argc, const char **argv)
 
   messenger->start();
 
+  g.lock.Lock();
+  g.timer.init();
+  g.lock.Unlock();
+
   g.mc.set_messenger(messenger);
   g.mc.init();
 
+  int ret = -1;
+
   if (g.mc.authenticate() < 0) {
     cerr << "unable to authenticate as " << *g_conf.entity_name << std::endl;
-    return -1;
+    goto out;
   }
   if (g.mc.get_monmap() < 0) {
     cerr << "unable to get monmap" << std::endl;
-    return -1;
+    goto out;
   }
-
-  int ret = 0;
 
   switch (ceph_tool_mode)
   {
@@ -681,10 +683,17 @@ int main(int argc, const char **argv)
       break;
   }
 
+  ret = 0;
+ out:
+
   // wait for messenger to finish
   messenger->wait();
   messenger->destroy();
-  timer->shutdown();
   tok_end(tok);
+  
+  g.lock.Lock();
+  g.mc.shutdown();
+  g.timer.shutdown();
+  g.lock.Unlock();
   return ret;
 }

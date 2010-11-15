@@ -38,6 +38,7 @@ public:
   SimpleMessenger *messenger;
   MonClient *monc;
   Mutex lock;
+  SafeTimer timer;
 
   /*
    * The messenger should be a valid SimpleMessenger. You should call bind()
@@ -45,9 +46,10 @@ public:
    * The MonClient needs to be valid, and you should have called
    * build_initial_monmap().
    */
-  Dumper(SimpleMessenger *messenger_, MonClient *monc_) : messenger(messenger_),
-      monc(monc_),
-      lock("Dumper::lock")
+  Dumper(SimpleMessenger *messenger_, MonClient *monc_) :
+    messenger(messenger_),
+    monc(monc_),
+    lock("Dumper::lock"), timer(lock)
   {}
 
   bool ms_dispatch(Message *m) {
@@ -68,6 +70,7 @@ public:
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
                          bool force_new);
   void init();
+  void shutdown();
   void dump(const char *dumpfile);
 };
 

@@ -32,13 +32,14 @@ bool Dumper::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
   return *authorizer != NULL;
 }
 
-void Dumper::init() {
+void Dumper::init() 
+{
   inodeno_t ino = MDS_INO_LOG_OFFSET + strtol(g_conf.id, 0, 0);
   unsigned pg_pool = CEPH_METADATA_RULE;
   osdmap = new OSDMap();
-  objecter = new Objecter(messenger, monc, osdmap, lock);
+  objecter = new Objecter(messenger, monc, osdmap, lock, timer);
   journaler = new Journaler(ino, pg_pool, CEPH_FS_ONDISK_MAGIC,
-                                       objecter, 0, 0,  &lock);
+                                       objecter, 0, 0, &timer);
 
   objecter->set_client_incarnation(0);
 
@@ -54,6 +55,14 @@ void Dumper::init() {
   lock.Lock();
   objecter->init();
   objecter->wait_for_osd_map();
+  timer.init();
+  lock.Unlock();
+}
+
+void Dumper::shutdown()
+{
+  lock.Lock();
+  timer.shutdown();
   lock.Unlock();
 }
 
@@ -90,4 +99,5 @@ void Dumper::dump(const char *dump_file)
   // wait for messenger to finish
   messenger->wait();
 
+  shutdown();
 }

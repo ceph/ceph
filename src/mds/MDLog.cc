@@ -93,7 +93,7 @@ void MDLog::init_journaler()
   if (journaler) delete journaler;
   journaler = new Journaler(ino, mds->mdsmap->get_metadata_pg_pool(), CEPH_FS_ONDISK_MAGIC, mds->objecter, 
 			    logger, l_mdl_jlat,
-			    &mds->mds_lock);
+			    &mds->timer);
 }
 
 void MDLog::write_head(Context *c) 

@@ -63,14 +63,13 @@ public:
   entity_addr_t myaddr;
   Messenger *messenger;
   Mutex lock;
+  SafeTimer timer;
 
   MonMap *monmap;
 
   LogClient logclient;
   KeyServer key_server;
 
-  // timer.
-  std::auto_ptr < SafeTimer > timer;
 private:
   void new_tick();
   friend class C_Mon_Tick;

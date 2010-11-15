@@ -32,7 +32,7 @@
 
 // per-process lock.  lame, but this way I protect LogType too!
 Mutex logger_lock("logger_lock");
-std::auto_ptr < SafeTimer >logger_timer;
+SafeTimer logger_timer(logger_lock);
 Context *logger_event = 0;
 list<Logger*> logger_list;
 utime_t start;
@@ -75,6 +75,7 @@ void logger_reset_all()
 void logger_start()
 {
   Mutex::Locker l(logger_lock);
+  logger_timer.init();
   flush_all_loggers();
 }
 
@@ -173,14 +174,12 @@ static void flush_all_loggers()
 		   << "  next=" << next 
 		   << dendl;
   logger_event = new C_FlushLoggers;
-  if (!logger_timer.get())
-    logger_timer.reset(new SafeTimer(logger_lock));
-  logger_timer->add_event_at(next, logger_event);
+  logger_timer.add_event_at(next, logger_event);
 }
 
 static void stop()
 {
-  logger_timer.reset(NULL);
+  logger_timer.shutdown();
 }
 
 

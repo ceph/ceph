@@ -72,10 +72,11 @@ class RadosClient : public Dispatcher
 
   Mutex lock;
   Cond cond;
+  SafeTimer timer;
 
  
 public:
-  RadosClient() : messenger(NULL), lock("radosclient") {
+  RadosClient() : messenger(NULL), lock("radosclient"), timer(lock) {
     messenger = new SimpleMessenger();
   }
 
@@ -347,7 +348,7 @@ bool RadosClient::init()
     return false;
   dout(1) << "starting objecter" << dendl;
 
-  objecter = new Objecter(messenger, &monclient, &osdmap, lock);
+  objecter = new Objecter(messenger, &monclient, &osdmap, lock, timer);
   if (!objecter)
     return false;
   objecter->set_balanced_budget();
@@ -373,6 +374,8 @@ bool RadosClient::init()
 
   lock.Lock();
 
+  timer.init();
+
   objecter->set_client_incarnation(0);
   objecter->init();
   monclient.renew_subs();
@@ -392,6 +395,7 @@ void RadosClient::shutdown()
 {
   lock.Lock();
   objecter->shutdown();
+  timer.shutdown();
   lock.Unlock();
   messenger->shutdown();
   messenger->wait();

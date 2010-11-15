@@ -333,6 +333,7 @@ int OSD::peek_meta(const char *dev, string& magic, ceph_fsid_t& fsid, int& whoam
 
 OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, Messenger *hbm, MonClient *mc, const char *dev, const char *jdev) :
   osd_lock("OSD::osd_lock"),
+  timer(osd_lock),
   cluster_messenger(internal_messenger),
   client_messenger(external_messenger),
   monc(mc),
@@ -451,8 +452,9 @@ int OSD::pre_init()
 
 int OSD::init()
 {
-  timer.reset(new SafeTimer(osd_lock));
   Mutex::Locker lock(osd_lock);
+
+  timer.init();
 
   // mount.
   dout(2) << "mounting " << dev_path << " " << (journal_path ? journal_path : "(no journal)") << dendl;
@@ -542,7 +544,7 @@ int OSD::init()
   heartbeat_thread.create();
 
   // tick
-  timer->add_event_after(g_conf.osd_heartbeat_interval, new C_Tick(this));
+  timer.add_event_after(g_conf.osd_heartbeat_interval, new C_Tick(this));
 
   if (false) {
     signal(SIGTERM, handle_signal);
@@ -647,8 +649,7 @@ int OSD::shutdown()
 
   state = STATE_STOPPING;
 
-  // Cancel all timers. The timer thread will be destroyed by ~SafeTimer
-  timer->cancel_all_events();
+  timer.shutdown();
 
   heartbeat_lock.Lock();
   heartbeat_stop = true;
@@ -1552,7 +1553,7 @@ void OSD::tick()
 
   logclient.send_log();
 
-  timer->add_event_after(1.0, new C_Tick(this));
+  timer.add_event_after(1.0, new C_Tick(this));
 
   // only do waiters if dispatch() isn't currently running.  (if it is,
   // it'll do the waiters, and doing them here may screw up ordering

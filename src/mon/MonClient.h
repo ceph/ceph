@@ -58,7 +58,7 @@ private:
   entity_addr_t my_addr;
 
   Mutex monc_lock;
-  std::auto_ptr < SafeTimer > timer;
+  SafeTimer timer;
 
   set<__u32> auth_supported;
 
@@ -165,6 +165,7 @@ public:
     state(MC_STATE_NONE),
     messenger(NULL),
     monc_lock("MonClient::monc_lock"),
+    timer(monc_lock),
     hunting(true),
     want_monmap(true),
     want_keys(0), global_id(0),

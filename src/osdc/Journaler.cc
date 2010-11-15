@@ -473,9 +473,10 @@ void Journaler::flush(Context *onsync, Context *onsafe, bool add_ack_barrier)
       if (write_buf.length() < g_conf.journaler_batch_max) {
 	// delay!  schedule an event.
 	dout(20) << "flush delaying flush" << dendl;
-	if (delay_flush_event) timer.cancel_event(delay_flush_event);
+	if (delay_flush_event)
+	  timer->cancel_event(delay_flush_event);
 	delay_flush_event = new C_DelayFlush(this);
-	timer.add_event_after(g_conf.journaler_batch_interval, delay_flush_event);	
+	timer->add_event_after(g_conf.journaler_batch_interval, delay_flush_event);	
       } else {
 	dout(20) << "flush not delaying flush" << dendl;
 	_do_flush();

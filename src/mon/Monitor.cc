@@ -93,6 +93,7 @@ Monitor::Monitor(string nm, MonitorStore *s, Messenger *m, MonMap *map) :
   rank(-1), 
   messenger(m),
   lock("Monitor::lock"),
+  timer(lock),
   monmap(map),
   logclient(messenger, monmap),
   store(s),
@@ -169,7 +170,7 @@ void Monitor::init()
   messenger->add_dispatcher_head(&logclient);
   
   // start ticker
-  timer.reset(new SafeTimer(lock));
+  timer.init();
   new_tick();
 
   // call election?
@@ -192,8 +193,7 @@ void Monitor::shutdown()
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->shutdown();
 
-  // Cancel all events. The timer thread will be joined later in ~SafeTimer
-  timer->cancel_all_events();
+  timer.shutdown();
 
   // die.
   messenger->shutdown();
@@ -914,7 +914,7 @@ public:
 void Monitor::new_tick()
 {
   C_Mon_Tick *ctx = new C_Mon_Tick(this);
-  timer->add_event_after(g_conf.mon_tick_interval, ctx);
+  timer.add_event_after(g_conf.mon_tick_interval, ctx);
 }
 
 void Monitor::tick()

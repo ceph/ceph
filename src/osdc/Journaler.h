@@ -111,8 +111,7 @@ public:
   Logger *logger;
   int logger_key_lat;
 
-  Mutex *lock;
-  SafeTimer timer;
+  SafeTimer *timer;
 
   class C_DelayFlush : public Context {
     Journaler *journaler;
@@ -207,11 +206,11 @@ public:
   friend class C_Trim;
 
 public:
-  Journaler(inodeno_t ino_, int pool, const char *mag, Objecter *obj, Logger *l, int lkey, Mutex *lk) : 
+  Journaler(inodeno_t ino_, int pool, const char *mag, Objecter *obj, Logger *l, int lkey, SafeTimer *tim) : 
     last_written(mag), last_committed(mag),
     ino(ino_), pg_pool(pool), magic(mag),
     objecter(obj), filer(objecter), logger(l), logger_key_lat(lkey),
-    lock(lk), timer(*lk), delay_flush_event(0),
+    timer(tim), delay_flush_event(0),
     state(STATE_UNDEF), error(0),
     write_pos(0), flush_pos(0), ack_pos(0), safe_pos(0),
     read_pos(0), requested_pos(0), received_pos(0),

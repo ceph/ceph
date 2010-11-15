@@ -50,16 +50,12 @@
 void Objecter::init()
 {
   assert(client_lock.is_locked());
-  timer.reset(new SafeTimer(client_lock));
-  timer->add_event_after(g_conf.objecter_tick_interval, new C_Tick(this));
+  timer.add_event_after(g_conf.objecter_tick_interval, new C_Tick(this));
   maybe_request_map();
 }
 
 void Objecter::shutdown() 
 {
-  client_lock.Unlock();
-  timer->shutdown();
-  client_lock.Lock();
 }
 
 
@@ -380,7 +376,7 @@ void Objecter::tick()
     messenger->send_message(new MPing, osdmap->get_inst(*p));
 
   // reschedule
-  timer->add_event_after(g_conf.objecter_tick_interval, new C_Tick(this));
+  timer.add_event_after(g_conf.objecter_tick_interval, new C_Tick(this));
 }
 
 void Objecter::resend_mon_ops()

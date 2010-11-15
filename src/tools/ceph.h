@@ -7,6 +7,7 @@
 #include "mon/PGMap.h"
 #include "mds/MDSMap.h"
 #include "osd/OSDMap.h"
+#include "common/Timer.h"
 
 #include <iosfwd>
 #include <stdint.h>
@@ -37,15 +38,16 @@ struct ceph_tool_data
 
   // The ceph-tool lock
   Mutex lock;
+  SafeTimer timer;
 
   // A condition variable used to wake up the GUI thread
   Cond gui_cond;
 
-  ceph_tool_data()
-    : updates(EVERYTHING_UPDATE),
-      log(&std::cout),
-      slog(NULL),
-      lock("ceph.cc lock")
+  ceph_tool_data() :
+    updates(EVERYTHING_UPDATE),
+    log(&std::cout),
+    slog(NULL),
+    lock("ceph.cc lock"), timer(lock)
   {
   }
 };

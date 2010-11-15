@@ -98,7 +98,7 @@ void Paxos::collect(version_t oldpn)
 
   // set timeout event
   collect_timeout_event = new C_CollectTimeout(this);
-  mon->timer->add_event_after(g_conf.mon_accept_timeout, collect_timeout_event);
+  mon->timer.add_event_after(g_conf.mon_accept_timeout, collect_timeout_event);
 }
 
 
@@ -252,7 +252,7 @@ void Paxos::handle_last(MMonPaxos *last)
     dout(10) << " they had a higher pn than us, picking a new one." << dendl;
 
     // cancel timeout event
-    mon->timer->cancel_event(collect_timeout_event);
+    mon->timer.cancel_event(collect_timeout_event);
     collect_timeout_event = 0;
 
     collect(last->pn);
@@ -277,7 +277,7 @@ void Paxos::handle_last(MMonPaxos *last)
     // is that everyone?
     if (num_last == mon->get_quorum().size()) {
       // cancel timeout event
-      mon->timer->cancel_event(collect_timeout_event);
+      mon->timer.cancel_event(collect_timeout_event);
       collect_timeout_event = 0;
 
       // almost...
@@ -369,7 +369,7 @@ void Paxos::begin(bufferlist& v)
 
   // set timeout event
   accept_timeout_event = new C_AcceptTimeout(this);
-  mon->timer->add_event_after(g_conf.mon_accept_timeout, accept_timeout_event);
+  mon->timer.add_event_after(g_conf.mon_accept_timeout, accept_timeout_event);
 }
 
 // peon
@@ -442,7 +442,7 @@ void Paxos::handle_accept(MMonPaxos *accept)
   if (accepted == mon->get_quorum()) {
     dout(10) << " got quorum, done with update" << dendl;
     // cancel timeout event
-    mon->timer->cancel_event(accept_timeout_event);
+    mon->timer.cancel_event(accept_timeout_event);
     accept_timeout_event = 0;
 
     // yay!
@@ -549,7 +549,7 @@ void Paxos::extend_lease()
   //  if old timeout is still in place, leave it.
   if (!lease_ack_timeout_event) {
     lease_ack_timeout_event = new C_LeaseAckTimeout(this);
-    mon->timer->add_event_after(g_conf.mon_lease_ack_timeout, lease_ack_timeout_event);
+    mon->timer.add_event_after(g_conf.mon_lease_ack_timeout, lease_ack_timeout_event);
   }
 
   // set renew event
@@ -557,7 +557,7 @@ void Paxos::extend_lease()
   utime_t at = lease_expire;
   at -= g_conf.mon_lease;
   at += g_conf.mon_lease_renew_interval;
-  mon->timer->add_event_at(at, lease_renew_event);
+  mon->timer.add_event_at(at, lease_renew_event);
 }
 
 
@@ -607,9 +607,9 @@ void Paxos::handle_lease(MMonPaxos *lease)
 
   // (re)set timeout event.
   if (lease_timeout_event) 
-    mon->timer->cancel_event(lease_timeout_event);
+    mon->timer.cancel_event(lease_timeout_event);
   lease_timeout_event = new C_LeaseTimeout(this);
-  mon->timer->add_event_after(g_conf.mon_lease_ack_timeout, lease_timeout_event);
+  mon->timer.add_event_after(g_conf.mon_lease_ack_timeout, lease_timeout_event);
 
   // trim?
   trim_to(lease->first_committed);
@@ -636,7 +636,7 @@ void Paxos::handle_lease_ack(MMonPaxos *ack)
       // yay!
       dout(10) << "handle_lease_ack from " << ack->get_source() 
 	       << " -- got everyone" << dendl;
-      mon->timer->cancel_event(lease_ack_timeout_event);
+      mon->timer.cancel_event(lease_ack_timeout_event);
       lease_ack_timeout_event = 0;
     } else {
       dout(10) << "handle_lease_ack from " << ack->get_source() 
@@ -744,23 +744,23 @@ version_t Paxos::get_new_proposal_number(version_t gt)
 void Paxos::cancel_events()
 {
   if (collect_timeout_event) {
-    mon->timer->cancel_event(collect_timeout_event);
+    mon->timer.cancel_event(collect_timeout_event);
     collect_timeout_event = 0;
   }
   if (accept_timeout_event) {
-    mon->timer->cancel_event(accept_timeout_event);
+    mon->timer.cancel_event(accept_timeout_event);
     accept_timeout_event = 0;
   }
   if (lease_renew_event) {
-    mon->timer->cancel_event(lease_renew_event);
+    mon->timer.cancel_event(lease_renew_event);
     lease_renew_event = 0;
   }
   if (lease_ack_timeout_event) {
-    mon->timer->cancel_event(lease_ack_timeout_event);
+    mon->timer.cancel_event(lease_ack_timeout_event);
     lease_ack_timeout_event = 0;
   }  
   if (lease_timeout_event) {
-    mon->timer->cancel_event(lease_timeout_event);
+    mon->timer.cancel_event(lease_timeout_event);
     lease_timeout_event = 0;
   }
 }

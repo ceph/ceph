@@ -54,6 +54,7 @@ public:
    *
    * If there are any events that still have to run, they will need to take
    * the event_lock first. */
+  void init();
   void shutdown();
 
   /* Schedule an event in the future
