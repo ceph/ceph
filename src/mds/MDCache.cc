@@ -124,6 +124,8 @@ MDCache::MDCache(MDS *m)
   num_inodes_with_caps = 0;
   num_caps = 0;
 
+  discover_last_tid = 0;
+
   last_cap_id = 0;
 
   client_lease_durations[0] = 5.0;
@@ -7470,16 +7472,18 @@ void MDCache::migrate_stray(CDentry *dn, int from, int to)
 
   - for all discovers (except base_inos, e.g. root, stray), waiters are attached
   to the parent metadata object in the cache (pinning it).
-  
-  - the discover is also registered under the per-mds discover_ hashes, so that 
-  waiters can be kicked in the event of a failure.  that is, every discover will 
-  be followed by a reply, unless the remote node fails..
-  
-  - each discover_reply must reliably decrement the discover_ counts.
 
-  - base_inos are the exception.  those waiters are under waiting_for_base_ino.
+  - all discovers are tracked by tid, so that we can ignore potentially dup replies.
 
 */
+
+void MDCache::_send_discover(discover_info_t& d)
+{
+  MDiscover *dis = new MDiscover(d.ino, d.frag, d.snap,
+				 d.want_path, d.want_ino, d.want_base_dir, d.want_xlocked);
+  dis->set_tid(d.tid);
+  mds->send_message_mds(dis, d.mds);
+}
 
 void MDCache::discover_base_ino(inodeno_t want_ino,
 				Context *onfinish,
@@ -7487,15 +7491,11 @@ void MDCache::discover_base_ino(inodeno_t want_ino,
 {
   dout(7) << "discover_base_ino " << want_ino << " from mds" << from << dendl;
   if (waiting_for_base_ino[from].count(want_ino) == 0) {
-    filepath want_path;
-    MDiscover *dis = new MDiscover(want_ino,
-				   CEPH_NOSNAP,
-				   want_path,
-				   false);
-    mds->send_message_mds(dis, from);
+    discover_info_t& d = _create_discover(from);
+    d.ino = want_ino;
+    _send_discover(d);
+    waiting_for_base_ino[from][want_ino].push_back(onfinish);
   }
-
-  waiting_for_base_ino[from][want_ino].push_back(onfinish);
 }
 
 
@@ -7504,25 +7504,23 @@ void MDCache::discover_dir_frag(CInode *base,
 				Context *onfinish,
 				int from)
 {
-  if (from < 0) from = base->authority().first;
+  if (from < 0)
+    from = base->authority().first;
 
-  dout(7) << "discover_dir_frag " << base->ino() << " " << approx_fg
+  dirfrag_t df(base->ino(), approx_fg);
+  dout(7) << "discover_dir_frag " << df
 	  << " from mds" << from << dendl;
 
-  if (!base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) {    // this is overly conservative
-    filepath want_path;
-    MDiscover *dis = new MDiscover(base->ino(),
-				   CEPH_NOSNAP,
-				   want_path,
-				   true);  // need the base dir open
-    dis->set_base_dir_frag(approx_fg);
-    mds->send_message_mds(dis, from);
+  if (!base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) {  // FIXME: this is kind of weak!
+    discover_info_t& d = _create_discover(from);
+    d.ino = base->ino();
+    d.frag = approx_fg;
+    d.want_base_dir = true;
+    _send_discover(d);
   }
 
-  // register + wait
   if (onfinish) 
     base->add_waiter(CInode::WAIT_DIR, onfinish);
-  discover_dir[from][base->ino()]++;
 }
 
 struct C_MDC_RetryDiscoverPath : public Context {
@@ -7545,7 +7543,8 @@ void MDCache::discover_path(CInode *base,
 			    bool want_xlocked,
 			    int from)
 {
-  if (from < 0) from = base->authority().first;
+  if (from < 0)
+    from = base->authority().first;
 
   dout(7) << "discover_path " << base->ino() << " " << want_path << " snap " << snap << " from mds" << from
 	  << (want_xlocked ? " want_xlocked":"")
@@ -7559,18 +7558,19 @@ void MDCache::discover_path(CInode *base,
     return;
   } 
 
-  if (!base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) {    // this is overly conservative
-    MDiscover *dis = new MDiscover(base->ino(),
-				   snap,
-				   want_path,
-				   true,        // we want the base dir; we are relative to ino.
-				   want_xlocked);
-    mds->send_message_mds(dis, from);
+  if (!base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) { // FIXME: weak!
+    discover_info_t& d = _create_discover(from);
+    d.ino = base->ino();
+    d.snap = snap;
+    d.want_path = want_path;
+    d.want_base_dir = true;
+    d.want_xlocked = want_xlocked;
+    _send_discover(d);
   }
 
   // register + wait
-  if (onfinish) base->add_waiter(CInode::WAIT_DIR, onfinish);
-  discover_dir[from][base->ino()]++;
+  if (onfinish)
+    base->add_waiter(CInode::WAIT_DIR, onfinish);
 }
 
 struct C_MDC_RetryDiscoverPath2 : public Context {
@@ -7606,17 +7606,19 @@ void MDCache::discover_path(CDir *base,
   }
 
   if (!base->is_waiting_for_dentry(want_path[0].c_str(), snap) || !onfinish) {
-    MDiscover *dis = new MDiscover(base->ino(),
-				   snap,
-				   want_path,
-				   false,   // no base dir; we are relative to dir
-				   want_xlocked);
-    mds->send_message_mds(dis, from);
+    discover_info_t& d = _create_discover(from);
+    d.ino = base->ino();
+    d.frag = base->get_frag();
+    d.snap = snap;
+    d.want_path = want_path;
+    d.want_base_dir = true;
+    d.want_xlocked = want_xlocked;
+    _send_discover(d);
   }
 
   // register + wait
-  if (onfinish) base->add_dentry_waiter(want_path[0], snap, onfinish);
-  discover_dir_sub[from][base->dirfrag()]++;
+  if (onfinish)
+    base->add_dentry_waiter(want_path[0], snap, onfinish);
 }
 
 struct C_MDC_RetryDiscoverIno : public Context {
@@ -7650,53 +7652,27 @@ void MDCache::discover_ino(CDir *base,
   } 
 
   if (!base->is_waiting_for_ino(want_ino)) {
-    MDiscover *dis = new MDiscover(base->dirfrag(),
-				   CEPH_NOSNAP,
-				   want_ino,
-				   want_xlocked);
-    mds->send_message_mds(dis, from);
+    discover_info_t& d = _create_discover(from);
+    d.ino = base->ino();
+    d.frag = base->get_frag();
+    d.want_ino = want_ino;
+    d.want_base_dir = true;
+    d.want_xlocked = want_xlocked;
+    _send_discover(d);
   }
   
   // register + wait
   base->add_ino_waiter(want_ino, onfinish);
-  discover_dir_sub[from][base->dirfrag()]++;
 }
 
 
 
 void MDCache::kick_discovers(int who)
 {
-  list<Context*> waiters;
-
-  for (map<inodeno_t, list<Context*> >::iterator p = waiting_for_base_ino[who].begin();
-       p != waiting_for_base_ino[who].end();
-       ++p) {
-    dout(10) << "kick_discovers on base ino " << p->first << dendl;
-    mds->queue_waiters(p->second);
-  }
-  waiting_for_base_ino.erase(who);
-
-  for (map<inodeno_t,int>::iterator p = discover_dir[who].begin();
-       p != discover_dir[who].end();
-       ++p) {
-    CInode *in = get_inode(p->first);
-    if (!in) continue;
-    dout(10) << "kick_discovers dir waiters on " << *in << dendl;
-    in->take_waiting(CInode::WAIT_DIR, waiters);
-  }
-  discover_dir.erase(who);
-
-  for (map<dirfrag_t,int>::iterator p = discover_dir_sub[who].begin();
-       p != discover_dir_sub[who].end();
-       ++p) {
-    CDir *dir = get_dirfrag(p->first);
-    if (!dir) continue;
-    dout(10) << "kick_discovers dentry+ino waiters on " << *dir << dendl;
-    dir->take_sub_waiting(waiters);
-  }
-  discover_dir_sub.erase(who);
-
-  mds->queue_waiters(waiters);
+  for (map<tid_t,discover_info_t>::iterator p = discovers.begin();
+       p != discovers.end();
+       p++)
+    _send_discover(p->second);
 }
 
 
@@ -7725,34 +7701,19 @@ void MDCache::handle_discover(MDiscover *dis)
   snapid_t snapid = dis->get_snapid();
 
   // get started.
-  if (dis->get_base_ino() == MDS_INO_ROOT) {
+  if (MDS_INO_IS_BASE(dis->get_base_ino())) {
     // wants root
     dout(7) << "handle_discover from mds" << from
-	    << " wants root + " << dis->get_want().get_path()
+	    << " wants base + " << dis->get_want().get_path()
 	    << " snap " << snapid
 	    << dendl;
 
-    assert(mds->get_nodeid() == 0);
-    assert(root->is_auth());
+    cur = get_inode(dis->get_base_ino());
 
     // add root
     reply->starts_with = MDiscoverReply::INODE;
-    replicate_inode(root, from, reply->trace);
-    dout(10) << "added root " << *root << dendl;
-
-    cur = root;
-  }
-  else if (dis->get_base_ino() == MDS_INO_MDSDIR(whoami)) {
-    // wants root
-    dout(7) << "handle_discover from mds" << from
-	    << " wants mdsdir + " << dis->get_want().get_path()
-	    << " snap " << snapid
-	    << dendl;
-    reply->starts_with = MDiscoverReply::INODE;
-    replicate_inode(myin, from, reply->trace);
-    dout(10) << "added mdsdir " << *myin << dendl;
-
-    cur = myin;
+    replicate_inode(cur, from, reply->trace);
+    dout(10) << "added base " << *cur << dendl;
   }
   else {
     // there's a base inode
@@ -8008,6 +7969,12 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
   }
   */
   dout(7) << "discover_reply " << *m << dendl;
+  if (m->is_flag_error_dir()) 
+    dout(7) << " flag error, dir" << dendl;
+  if (m->is_flag_error_dn()) 
+    dout(7) << " flag error, dentry = " << m->get_error_dentry() << dendl;
+  if (m->is_flag_error_ino()) 
+    dout(7) << " flag error, ino = " << m->get_wanted_ino() << dendl;
 
   list<Context*> finished, error;
   int from = m->get_source().num();
@@ -8018,44 +7985,34 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 
   int next = m->starts_with;
 
-  if (!p.end() && next == MDiscoverReply::INODE) {
-    // add base inode
-    cur = add_replica_inode(p, NULL, finished);
-    dout(7) << "discover_reply got base inode " << *cur << dendl;
-    assert(cur->is_base());
-
-    next = MDiscoverReply::DIR;
-    
-    // take waiters
-    finished.swap(waiting_for_base_ino[from][cur->ino()]);
-    waiting_for_base_ino[from].erase(cur->ino());
-  }
-  assert(cur);
-
-  
-  // fyi
-  if (m->is_flag_error_dir()) 
-    dout(7) << " flag error, dir" << dendl;
-  if (m->is_flag_error_dn()) 
-    dout(7) << " flag error, dentry = " << m->get_error_dentry() << dendl;
-  if (m->is_flag_error_ino()) 
-    dout(7) << " flag error, ino = " << m->get_wanted_ino() << dendl;
-
   // decrement discover counters
-  if (!m->is_unsolicited()) {
-    if (m->get_wanted_base_dir()) {
-      inodeno_t ino = m->get_base_ino();
-      assert(discover_dir[from].count(ino));
-      if (--discover_dir[from][ino] == 0)
-	discover_dir[from].erase(ino);
-    } else if (m->get_base_ino() >= MDS_INO_SYSTEM_BASE) {
-      dirfrag_t df(m->get_base_ino(), m->get_base_dir_frag());
-      assert(discover_dir_sub[from].count(df));
-      if (--discover_dir_sub[from][df] == 0)
-	discover_dir_sub[from].erase(df);
+  if (m->get_tid()) {
+    map<tid_t,discover_info_t>::iterator p = discovers.find(m->get_tid());
+    if (p != discovers.end()) {
+      dout(10) << " found tid " << m->get_tid() << dendl;
+      discovers.erase(p);
+    } else {
+      dout(10) << " tid " << m->get_tid() << " not found, must be dup reply" << dendl;
     }
   }
 
+  // discover may start with an inode
+  if (!p.end() && next == MDiscoverReply::INODE) {
+    cur = add_replica_inode(p, NULL, finished);
+    dout(7) << "discover_reply got base inode " << *cur << dendl;
+    assert(cur->is_base());
+    
+    next = MDiscoverReply::DIR;
+    
+    // take waiters?
+    if (cur->is_base() &&
+	waiting_for_base_ino[from].count(cur->ino())) {
+      finished.swap(waiting_for_base_ino[from][cur->ino()]);
+      waiting_for_base_ino[from].erase(cur->ino());
+    }
+  }
+  assert(cur);
+  
   // loop over discover results.
   // indexes follow each ([[dir] dentry] inode) 
   // can start, end with any type.

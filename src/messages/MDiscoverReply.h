@@ -124,6 +124,7 @@ class MDiscoverReply : public Message {
     flag_error_ino(false),
     flag_error_dir(false),
     dir_auth_hint(CDIR_AUTH_UNKNOWN) {
+    header.tid = dis->get_tid();
   }
   MDiscoverReply(dirfrag_t df) :
     Message(MSG_MDS_DISCOVERREPLY),
@@ -137,6 +138,7 @@ class MDiscoverReply : public Message {
     flag_error_ino(false),
     flag_error_dir(false),
     dir_auth_hint(CDIR_AUTH_UNKNOWN) {
+    header.tid = 0;
   }
 private:
   ~MDiscoverReply() {}
@@ -144,7 +146,7 @@ private:
 public:
   const char *get_type_name() { return "discover_reply"; }
   void print(ostream& out) {
-    out << "discover_reply(" << base_ino << ")";
+    out << "discover_reply(" << header.tid << " " << base_ino << ")";
   }
   
   // builders

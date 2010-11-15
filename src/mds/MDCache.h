@@ -462,14 +462,32 @@ public:
 
 
   // -- discover --
+  struct discover_info_t {
+    tid_t tid;
+    int mds;
+    inodeno_t ino;
+    frag_t frag;
+    snapid_t snap;
+    filepath want_path;
+    inodeno_t want_ino;
+    bool want_base_dir;
+    bool want_xlocked;
+
+    discover_info_t() : tid(0), mds(-1), snap(CEPH_NOSNAP), want_base_dir(false), want_xlocked(false) {}
+  };
+
+  map<tid_t, discover_info_t> discovers;
+  tid_t discover_last_tid;
+
+  void _send_discover(discover_info_t& dis);
+  discover_info_t& _create_discover(int mds) {
+    discover_info_t& d = discovers[++discover_last_tid];
+    d.mds = mds;
+    return d;
+  }
+
   // waiters
   map<int, map<inodeno_t, list<Context*> > > waiting_for_base_ino;
-
-  // in process discovers, by mds.
-  //  this is just enough info to kick any waiters in the event of a failure.
-  //  FIXME: use pointers here instead of identifiers?
-  map<int, map<inodeno_t,int> > discover_dir;
-  map<int, map<dirfrag_t,int> > discover_dir_sub;
 
   void discover_base_ino(inodeno_t want_ino, Context *onfinish, int from=-1);
   void discover_dir_frag(CInode *base, frag_t approx_fg, Context *onfinish,
