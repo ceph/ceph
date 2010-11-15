@@ -64,7 +64,7 @@ osd_resurrection_1_impl() {
         # TODO: turn off recovery delay start and verify that every osd gets copies of the correct objects.
 
         # success
-        return 1
+        return 0
 }
 
 osd_resurrection_1() {
@@ -112,7 +112,7 @@ stray_test_impl() {
         [ $? -eq 1 ] || die "Failed to discover unfound objects."
 
         # success
-        return 1
+        return 0
 }
 
 stray_test() {
@@ -121,13 +121,9 @@ stray_test() {
 }
 
 run() {
-        osd_resurrection_1
-        [ $? -eq 1 ] || return 0
-        ./stop.sh
+        osd_resurrection_1 || die "test failed"
 
-        stray_test
-        [ $? -eq 1 ] || return 0
-        ./stop.sh
+        stray_test || die "test failed"
 }
 
 $@
