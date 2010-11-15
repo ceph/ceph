@@ -622,6 +622,12 @@ public:
 	return *this;
       }
 
+      ptr get_current_ptr() {
+	if (p == ls->end())
+	  throw end_of_buffer();
+	return ptr(*p, p_off, p->length() - p_off);
+      }
+
       // copy data out.
       // note that these all _append_ to dest!
 
