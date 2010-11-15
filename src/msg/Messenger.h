@@ -157,6 +157,8 @@ protected:
 
   virtual void mark_down(const entity_addr_t& a) = 0;
 
+  virtual Connection *get_connection(const entity_inst_t& dest) = 0;
+
 protected:
   //destruction should be handled via destroy()
   virtual ~Messenger() {

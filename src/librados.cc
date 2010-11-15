@@ -1969,12 +1969,17 @@ extern "C" int rados_read(rados_pool_t pool, const char *o, off_t off, char *buf
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   int ret;
   object_t oid(o);
+
   bufferlist bl;
+  bufferptr bp = buffer::create_static(len, buf);
+  bl.push_back(bp);
+  
   ret = radosp->read(*ctx, oid, off, bl, len);
   if (ret >= 0) {
     if (bl.length() > len)
       return -ERANGE;
-    bl.copy(0, bl.length(), buf);
+    if (bl.c_str() != buf)
+      bl.copy(0, bl.length(), buf);
     ret = bl.length();    // hrm :/
   }
 
