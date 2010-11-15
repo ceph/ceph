@@ -156,6 +156,7 @@ struct md_config_t {
   bool ms_bind_ipv6;
   uint64_t ms_rwthread_stack_bytes;
   uint64_t ms_tcp_read_timeout;
+  uint64_t ms_inject_socket_failures;
 
   // mon
   const char *mon_data;

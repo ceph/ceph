@@ -144,7 +144,7 @@ private:
     map<int, list<Message*> > out_q;  // priority queue for outbound msgs
     map<int, list<Message*> > in_q; // and inbound ones
     int in_qlen;
-    map<int, xlist<Pipe *>::item* > queue_items; // _map_ protected by pipe_lock, *item protected by q.lock
+    map<int, xlist<Pipe *>::item* > queue_items; // protected by pipe_lock AND q.lock
     list<Message*> sent;
     Cond cond;
     bool keepalive;
@@ -205,7 +205,8 @@ private:
   public:
     Pipe(SimpleMessenger *r, int st) : 
       messenger(r),
-      sd(-1), peer_type(-1),
+      sd(-1),
+      peer_type(-1),
       pipe_lock("SimpleMessenger::Pipe::pipe_lock"),
       state(st), 
       connection_state(new Connection),
@@ -223,8 +224,7 @@ private:
       for (map<int, xlist<Pipe *>::item* >::iterator i = queue_items.begin();
 	   i != queue_items.end();
 	   ++i) {
-	if (i->second->is_on_list())
-	  i->second->remove_myself();
+	assert(!i->second->is_on_list());
 	delete i->second;
       }
       assert(out_q.empty());
@@ -263,49 +263,9 @@ private:
     static const Pipe& Server(int s);
     static const Pipe& Client(const entity_addr_t& pi);
 
-    //callers make sure it's not already enqueued or you'll just
-    //push it to the back of the line!
-    //Also, call with pipe_lock held or bad things happen
-    void enqueue_me(int priority) {
-      if (!queue_items.count(priority))
-	queue_items[priority] = new xlist<Pipe *>::item(this);
-      pipe_lock.Unlock();
-      messenger->dispatch_queue.lock.Lock();
-      if (messenger->dispatch_queue.queued_pipes.empty())
-	messenger->dispatch_queue.cond.Signal();
-      messenger->dispatch_queue.queued_pipes[priority].push_back(queue_items[priority]);
-      messenger->dispatch_queue.lock.Unlock();
-      pipe_lock.Lock();
-    }
-
     //we have two queue_received's to allow local signal delivery
     // via Message * (that doesn't actually point to a Message)
-    //Don't call while holding pipe_lock!
-    void queue_received(Message *m, int priority) {
-      list<Message *>& queue = in_q[priority];
-      bool was_empty;
-      pipe_lock.Lock();
-      if (halt_delivery) {
-        if (m>(void *)5) // don't want to put local-delivery signals
-                         // this magic number should be larger than
-                         // the size of the D_CONNECT et al enum
-          m->put();
-        goto unlock_return;
-      }
-      was_empty = queue.empty();
-      queue.push_back(m);
-      if (was_empty) //this pipe isn't on the endpoint queue
-	enqueue_me(priority);
-
-      //increment queue length counters
-      in_qlen++;
-      messenger->dispatch_queue.qlen_lock.lock();
-      ++messenger->dispatch_queue.qlen;
-      messenger->dispatch_queue.qlen_lock.unlock();
-
-unlock_return:
-      pipe_lock.Unlock();
-    }
+    void queue_received(Message *m, int priority);
     
     void queue_received(Message *m) {
       m->set_recv_stamp(g_clock.now());
@@ -381,8 +341,9 @@ unlock_return:
     void requeue_sent(uint64_t max_acked=0);
     void discard_queue();
 
-    void force_close() {
-      if (sd >= 0) ::close(sd);
+    void shutdown_socket() {
+      if (sd >= 0)
+        ::shutdown(sd, SHUT_RDWR);
     }
   };
 
@@ -404,9 +365,11 @@ unlock_return:
 
     Pipe *local_pipe;
     void local_delivery(Message *m, int priority) {
+      local_pipe->pipe_lock.Lock();
       if ((unsigned long)m > 10)
 	m->set_connection(local_pipe->connection_state->get());
       local_pipe->queue_received(m, priority);
+      local_pipe->pipe_lock.Unlock();
     }
 
     int get_queue_len() {
@@ -416,12 +379,6 @@ unlock_return:
       return l;
     }
     
-    void local_delivery(Message *m) {
-      if ((unsigned long)m > 10)
-	m->set_connection(local_pipe->connection_state->get());
-      local_pipe->queue_received(m);
-    }
-
     void queue_connect(Connection *con) {
       lock.Lock();
       connect_q.push_back(con);

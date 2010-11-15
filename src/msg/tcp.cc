@@ -3,6 +3,7 @@
 
 #include <poll.h>
 #include "tcp.h"
+#include "config.h"
 
 /******************
  * tcp crap
@@ -11,10 +12,19 @@ int tcp_read(int sd, char *buf, int len, int timeout)
 {
   if (sd < 0)
     return -1;
+
   struct pollfd pfd;
   pfd.fd = sd;
   pfd.events = POLLIN | POLLHUP | POLLRDHUP | POLLNVAL | POLLERR;
   while (len > 0) {
+
+    if (g_conf.ms_inject_socket_failures && sd >= 0) {
+      if (rand() % g_conf.ms_inject_socket_failures == 0) {
+	generic_dout(0) << "injecting socket failure" << dendl;
+	::shutdown(sd, SHUT_RDWR);
+      }
+    }
+
     if (poll(&pfd, 1, timeout) <= 0)
       return -1;
 
@@ -69,6 +79,13 @@ int tcp_write(int sd, const char *buf, int len)
   struct pollfd pfd;
   pfd.fd = sd;
   pfd.events = POLLOUT | POLLHUP | POLLRDHUP | POLLNVAL | POLLERR;
+
+  if (g_conf.ms_inject_socket_failures && sd >= 0) {
+    if (rand() % g_conf.ms_inject_socket_failures == 0) {
+      generic_dout(0) << "injecting socket failure" << dendl;
+      ::shutdown(sd, SHUT_RDWR);
+    }
+  }
 
   if (poll(&pfd, 1, -1) < 0)
     return -1;
