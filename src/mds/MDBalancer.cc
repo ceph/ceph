@@ -314,6 +314,11 @@ void MDBalancer::queue_split(CDir *dir)
   split_queue.insert(dir->dirfrag());
 }
 
+void MDBalancer::queue_merge(CDir *dir)
+{
+  merge_queue.insert(dir->dirfrag());
+}
+
 void MDBalancer::do_fragmenting()
 {
   if (split_queue.empty() && merge_queue.empty()) {

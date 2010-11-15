@@ -117,6 +117,7 @@ public:
   void dump_pop_map();  
 
   void queue_split(CDir *dir);
+  void queue_merge(CDir *dir);
 
 };
 
