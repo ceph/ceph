@@ -4299,6 +4299,7 @@ void OSD::_remove_pg(PG *pg)
   
   // remove from map
   pg_map.erase(pgid);
+  unreg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
 
   _put_pool(pgid.pool());
 
