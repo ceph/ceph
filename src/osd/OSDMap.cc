@@ -59,10 +59,10 @@ void OSDMap::print(ostream& out) const
   for (int i=0; i<get_max_osd(); i++) {
     if (exists(i)) {
       out << "osd" << i;
-      out << (is_in(i) ? " in":" out");
+      out << (is_up(i) ? " up   ":" down ");
+      out << (is_in(i) ? " in ":" out");
       if (is_in(i))
 	out << " weight " << get_weightf(i);
-      out << (is_up(i) ? " up  ":" down");
       const osd_info_t& info(get_info(i));
       out << info << " ";
       if (is_up(i))
