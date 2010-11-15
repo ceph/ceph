@@ -3828,6 +3828,8 @@ int ReplicatedPG::recover_replicas(int max)
       sobject_t soid = p->second;
       if (pushing.count(soid))
 	dout(10) << " already pushing " << soid << dendl;
+      else if (missing.is_missing(soid))
+	dout(10) << " still missing on primary " << soid << dendl;
       else
 	started += recover_object_replicas(soid);
     }
