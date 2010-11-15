@@ -165,8 +165,12 @@ struct Connection : public RefCountedObject {
   unsigned features;
   RefCountedObject *pipe;
 
+  int rx_buffers_version;
+  map<tid_t,pair<bufferlist,int> > rx_buffers;
+
 public:
-  Connection() : lock("Connection::lock"), priv(NULL), peer_type(-1), features(0), pipe(NULL) {}
+  Connection() : lock("Connection::lock"), priv(NULL), peer_type(-1), features(0), pipe(NULL),
+		 rx_buffers_version(0) {}
   ~Connection() {
     //generic_dout(0) << "~Connection " << this << dendl;
     if (priv) {
@@ -223,6 +227,16 @@ public:
   bool has_feature(int f) const { return features & f; }
   void set_features(unsigned f) { features = f; }
   void set_feature(unsigned f) { features |= f; }
+
+  void post_rx_buffer(tid_t tid, bufferlist& bl) {
+    Mutex::Locker l(lock);
+    ++rx_buffers_version;
+    rx_buffers[tid] = pair<bufferlist,int>(bl, rx_buffers_version);
+  }
+  void revoke_rx_buffer(tid_t tid) {
+    Mutex::Locker l(lock);
+    rx_buffers.erase(tid);
+  }
 };
 
 
