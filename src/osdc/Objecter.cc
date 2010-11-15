@@ -161,6 +161,10 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	      op_submit(p->second);
 	    }
 	  }
+	  for (hash_map<tid_t,Op*>::iterator p = op_osd_linger.begin();
+               p != op_osd_linger.end(); p++) {
+            op_submit(p->second);
+          }
 	}
         
 	assert(e == osdmap->get_epoch());
@@ -333,11 +337,14 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
 	if (op->onack) {
           dout(3) << "kick_requests missing ack, resub " << tid << dendl;
           op_submit(op);
-        } else {
+        } else if (!op->linger) {
 	  assert(op->oncommit);
 	  dout(3) << "kick_requests missing commit, resub " << tid << dendl;
 	  op_submit(op);
-        } 
+        } else {
+	  dout(3) << "kick_requests on lingering op " << tid << dendl;
+	  op_submit(op);
+        }
       }
       else 
         assert(0);
@@ -438,6 +445,9 @@ tid_t Objecter::op_submit(Op *op)
     dout(20) << " note: not requesting commit" << dendl;
   }
   op_osd[op->tid] = op;
+  if (op->linger) {
+    op_osd_linger[op->tid] = op;
+  }
   pg.active_tids.insert(op->tid);
   pg.last = g_clock.now();
 
@@ -631,7 +641,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     op_osd.erase( tid );
     if (op->con)
       op->con->put();
-    delete op;
+    if (!op->linger)
+      delete op;
   }
   
   dout(5) << num_unacked << " unacked, " << num_uncommitted << " uncommitted" << dendl;
@@ -1190,6 +1201,9 @@ void Objecter::dump_active()
 {
   dout(10) << "dump_active" << dendl;
   for (hash_map<tid_t,Op*>::iterator p = op_osd.begin(); p != op_osd.end(); p++)
+    dout(10) << " " << p->first << "\t" << p->second->oid << "\t" << p->second->ops << dendl;
+  dout(10) << "lingering" << dendl;
+  for (hash_map<tid_t,Op*>::iterator p = op_osd_linger.begin(); p != op_osd_linger.end(); p++)
     dout(10) << " " << p->first << "\t" << p->second->oid << "\t" << p->second->ops << dendl;
 }
 

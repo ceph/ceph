@@ -405,6 +405,7 @@ public:
  private:
   // pending ops
   hash_map<tid_t,Op*>       op_osd;
+  hash_map<tid_t,Op*>       op_osd_linger;
   map<tid_t,PoolStatOp*>    op_poolstat;
   map<tid_t,StatfsOp*>      op_statfs;
   map<tid_t,PoolOp*>        op_pool;
