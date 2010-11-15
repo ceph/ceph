@@ -22,6 +22,15 @@ setup() {
         ./vstart.sh -d -n -o 'osd recovery delay start = 10000' || die "vstart failed"
 }
 
+start_recovery() {
+        CEPH_NUM_OSD=$1
+        osd=0
+        while [ $osd -lt $CEPH_NUM_OSD ]; do
+                ./ceph osd tell $osd injectargs 'osd recovery delay start = 0'
+                osd=$((osd+1))
+        done
+}
+
 osd_resurrection_1_impl() {
         # Write lots and lots of objects
         my_write_objects 1 2
@@ -110,6 +119,9 @@ stray_test_impl() {
 
 	poll_cmd "./ceph pg debug unfound_objects_exist" FALSE 4 240
         [ $? -eq 1 ] || die "Failed to discover unfound objects."
+
+        echo "starting recovery..."
+        start_recovery 3
 
         # success
         return 0
