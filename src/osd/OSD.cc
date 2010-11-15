@@ -1863,7 +1863,45 @@ void OSD::handle_command(MMonCommand *m)
     ss << g_conf.name << " stopped profiler";
     logclient.log(LOG_INFO, ss);
   }
+  else if (m->cmd.size() == 2 && m->cmd[0] == "dump_missing") {
+    const string &file_name(m->cmd[1]);
+    std::ofstream fout(file_name.c_str());
+    if (!fout.is_open()) {
+      stringstream ss;
+      ss << "failed to open file '" << file_name << "'";
+      logclient.log(LOG_INFO, ss);
+      goto done;
+    }
+
+    std::set <pg_t> keys;
+    for (hash_map<pg_t, PG*>::const_iterator pg_map_e = pg_map.begin();
+	 pg_map_e != pg_map.end(); ++pg_map_e) {
+      keys.insert(pg_map_e->first);
+    }
+
+    fout << "*** osd " << whoami << ": dump_missing ***" << std::endl;
+    for (std::set <pg_t>::iterator p = keys.begin();
+	 p != keys.end(); ++p) {
+      hash_map<pg_t, PG*>::iterator q = pg_map.find(*p);
+      assert(q != pg_map.end());
+      PG *pg = q->second;
+      pg->lock();
+
+      fout << *pg << std::endl;
+      std::map<sobject_t, PG::Missing::item>::iterator mend = pg->missing.missing.end();
+      std::map<sobject_t, PG::Missing::item>::iterator m = pg->missing.missing.begin();
+      for (; m != mend; ++m) {
+	fout << m->first << " -> " << m->second << std::endl;
+      }
+      pg->unlock();
+      fout << std::endl;
+    }
+
+    fout.close();
+  }
   else dout(0) << "unrecognized command! " << m->cmd << dendl;
+
+done:
   m->put();
 }
 
