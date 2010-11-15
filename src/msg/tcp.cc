@@ -7,8 +7,8 @@
 /******************
  * tcp crap
  */
-
-int tcp_read(int sd, char *buf, int len, int timeout) {
+int tcp_read(int sd, char *buf, int len, int timeout) 
+{
   if (sd < 0)
     return -1;
   struct pollfd pfd;
@@ -40,7 +40,30 @@ int tcp_read(int sd, char *buf, int len, int timeout) {
   return len;
 }
 
-int tcp_write(int sd, const char *buf, int len) {
+int tcp_wait(int sd, int timeout) 
+{
+  if (sd < 0)
+    return -1;
+  struct pollfd pfd;
+  pfd.fd = sd;
+  pfd.events = POLLIN | POLLHUP | POLLRDHUP | POLLNVAL | POLLERR;
+
+  if (poll(&pfd, 1, timeout) <= 0)
+    return -1;
+
+  if (!(pfd.revents & POLLIN))
+    return -1;
+
+  return 0;
+}
+
+int tcp_read_nonblocking(int sd, char *buf, int len)
+{
+  return ::recv(sd, buf, len, MSG_DONTWAIT);
+}
+
+int tcp_write(int sd, const char *buf, int len)
+{
   if (sd < 0)
     return -1;
   struct pollfd pfd;

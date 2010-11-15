@@ -26,6 +26,8 @@ inline ostream& operator<<(ostream& out, const sockaddr_storage &ss)
 }
 
 extern int tcp_read(int sd, char *buf, int len, int timeout=-1);
+extern int tcp_wait(int sd, int timeout);
+extern int tcp_read_nonblocking(int sd, char *buf, int len);
 extern int tcp_write(int sd, const char *buf, int len);
 
 inline bool operator==(const sockaddr_in& a, const sockaddr_in& b) {
