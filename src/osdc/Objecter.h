@@ -225,6 +225,8 @@ public:
     object_locator_t oloc;
     pg_t pgid;
 
+    Connection *con;
+
     vector<OSDOp> ops;
 
     snapid_t snapid;
@@ -246,6 +248,7 @@ public:
        int f, Context *ac, Context *co) :
       session_item(this),
       oid(o), oloc(ol),
+      con(NULL),
       snapid(CEPH_NOSNAP), outbl(0), flags(f), priority(0), onack(ac), oncommit(co), 
       tid(0), attempts(0),
       paused(false) {
@@ -897,7 +900,6 @@ public:
   void ms_handle_connect(Connection *con);
   void ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con);
-
 };
 
 #endif
