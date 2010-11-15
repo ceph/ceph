@@ -648,13 +648,17 @@ void CDir::purge_stolen(list<Context*>& waiters, bool replay)
 
   if (is_auth()) 
     clear_replica_map();
-  if (is_dirty()) mark_clean();
-  if (state_test(STATE_IMPORTBOUND)) put(PIN_IMPORTBOUND);
-  if (state_test(STATE_EXPORTBOUND)) put(PIN_EXPORTBOUND);
+  if (is_dirty())
+    mark_clean();
+  if (state_test(STATE_IMPORTBOUND))
+    put(PIN_IMPORTBOUND);
+  if (state_test(STATE_EXPORTBOUND))
+    put(PIN_EXPORTBOUND);
 
-  if (auth_pins > 0) put(PIN_AUTHPIN);
+  if (auth_pins > 0)
+    put(PIN_AUTHPIN);
 
-  assert(get_num_ref() == (state_test(STATE_STICKY) ? 1:0));
+  assert(get_num_ref() == (state_test(STATE_STICKY) ? 1:0) + (is_subtree_root() ? 1:0));
 }
 
 void CDir::init_fragment_pins()
