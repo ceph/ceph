@@ -519,6 +519,8 @@ void PG::merge_log(ObjectStore::Transaction& t,
 void PG::search_for_missing(const Info &oinfo, const Missing *omissing,
 			    int fromosd)
 {
+  bool stats_updated = false;
+
   // found items?
   for (map<sobject_t,Missing::item>::iterator p = missing.missing.begin();
        p != missing.missing.end();
@@ -552,11 +554,15 @@ void PG::search_for_missing(const Info &oinfo, const Missing *omissing,
       if (wmo != waiting_for_missing_object.end()) {
 	osd->take_waiters(wmo->second);
       }
+      stats_updated = true;
       missing_loc[soid].insert(fromosd);
     }
     else {
       ml->second.insert(fromosd);
     }
+  }
+  if (stats_updated) {
+    update_stats();
   }
 
   dout(20) << "search_for_missing missing " << missing.missing << dendl;
