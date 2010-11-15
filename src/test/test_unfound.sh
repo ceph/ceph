@@ -73,35 +73,30 @@ osd_resurrection_1() {
 }
 
 stray_test_impl() {
-        ./ceph osd down 0
         ./ceph osd out 0
         # 0:out 1:active 2:active
 
         my_write_objects 1 1
 
-        ./ceph osd down 1
         ./ceph osd out 1
         sleep 15
         # 0:out 1:out(ver1) 2:active(ver1)
 
         my_write_objects 2 2
 
-        ./ceph osd up 1
         ./ceph osd in 1
         sleep 15
         # 0:out 1:active(ver1) 2:active(ver2)
 
-        ./ceph osd down 2
         ./ceph osd out 2
         sleep 15
         # 0:out 1:active(ver1) 2:out(ver2)
 
-        ./ceph osd up 0
         ./ceph osd in 0
         sleep 15
         # 0:active 1:active(ver1) 2:out(ver2)
 
-	poll_cmd "./ceph pg debug unfound_objects_exist" TRUE 3 120
+	poll_cmd "./ceph pg debug unfound_objects_exist" TRUE 5 300
         [ $? -eq 1 ] || die "Failed to see unfound objects."
 
         #
@@ -110,11 +105,10 @@ stray_test_impl() {
         # objects.
         #
 
-        ./ceph osd up 2
         ./ceph osd in 2
         sleep 15
 
-	poll_cmd "./ceph pg debug unfound_objects_exist" FALSE 3 120
+	poll_cmd "./ceph pg debug unfound_objects_exist" FALSE 4 240
         [ $? -eq 1 ] || die "Failed to discover unfound objects."
 
         # success
