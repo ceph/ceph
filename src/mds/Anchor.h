@@ -40,10 +40,6 @@ public:
   Anchor() : dn_hash(0), nref(0), updated(0) {}
   Anchor(inodeno_t i, inodeno_t di, __u32 hash, int nr, version_t u) :
     ino(i), dirino(di), dn_hash(hash), nref(nr), updated(u) { }
-  Anchor(inodeno_t i, inodeno_t di, const string &dname, int nr, version_t u) :
-    ino(i), dirino(di),
-    dn_hash(ceph_str_hash_linux(dname.data(), dname.length())),
-    nref(nr), updated(u) { }
   
   void encode(bufferlist &bl) const {
     __u8 struct_v = 1;

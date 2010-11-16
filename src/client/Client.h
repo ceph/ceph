@@ -387,6 +387,7 @@ class Inode {
   int32_t    nlink;  
 
   // file (data access)
+  ceph_dir_layout dir_layout;
   ceph_file_layout layout;
   uint64_t   size;        // on directory, # dentries
   uint32_t   truncate_seq;

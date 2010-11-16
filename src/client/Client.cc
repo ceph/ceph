@@ -494,6 +494,11 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
     in->dirstat = st->dirstat;
     in->rstat = st->rstat;
 
+    if (in->is_dir()) {
+      in->dir_layout = st->dir_layout;
+      dout(20) << " dir hash is " << (int)in->dir_layout.dl_dir_hash << dendl;
+    }
+
     in->layout = st->layout;
     in->ctime = st->ctime;
     in->max_size = st->max_size;  // right?
@@ -651,6 +656,10 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
     return NULL;
   }
 
+  Connection *con = request->reply->get_connection();
+  int features = con->get_features();
+  dout(10) << " features 0x" << hex << features << dec << dendl;
+
   // snap trace
   if (reply->snapbl.length())
     update_snap_trace(reply->snapbl);
@@ -667,7 +676,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
   InodeStat ist;
 
   if (reply->head.is_dentry) {
-    dirst.decode(p);
+    dirst.decode(p, features);
     dst.decode(p);
     ::decode(dname, p);
     ::decode(dlease, p);
@@ -675,7 +684,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
 
   Inode *in = 0;
   if (reply->head.is_target) {
-    ist.decode(p);
+    ist.decode(p, features);
     in = add_update_inode(&ist, from, mds);
   }
 
@@ -759,7 +768,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
     for (unsigned i=0; i<numdn; i++) {
       ::decode(dname, p);
       ::decode(dlease, p);
-      InodeStat ist(p);
+      InodeStat ist(p, features);
       
       Inode *in = add_update_inode(&ist, from, mds);
       Dentry *dn = insert_dentry_inode(dir, dname, &dlease, in, from, mds, false);
@@ -830,13 +839,25 @@ int Client::choose_target_mds(MetaRequest *req)
 
   if (req->inode) {
     in = req->inode;
+    if (req->path.depth()) {
+      hash = ceph_str_hash(in->dir_layout.dl_dir_hash,
+			   req->path[0].data(),
+			   req->path[0].length());
+      dout(20) << " dir hash is " << (int)in->dir_layout.dl_dir_hash << " on " << req->path[0]
+	       << " => " << hash << dendl;
+      is_hash = true;
+
+    }
   } else if (req->dentry) {
     if (req->dentry->inode) {
       in = req->dentry->inode;
     } else {
       in = req->dentry->dir->parent_inode;
-      hash = ceph_str_hash_linux(req->dentry->name.data(),
-                                 req->dentry->name.length());
+      hash = ceph_str_hash(in->dir_layout.dl_dir_hash,
+			   req->dentry->name.data(),
+			   req->dentry->name.length());
+      dout(20) << " dir hash is " << (int)in->dir_layout.dl_dir_hash << " on " << req->dentry->name
+	       << " => " << hash << dendl;
       is_hash = true;
     }
   }

@@ -96,6 +96,7 @@ public:
 
 public:
   string name;
+  __u32 hash;
   snapid_t first, last;
 
   dentry_key_t key() { 
@@ -163,9 +164,9 @@ public:
 
  public:
   // cons
-  CDentry(const string& n, 
+  CDentry(const string& n, __u32 h,
 	  snapid_t f, snapid_t l) :
-    name(n),
+    name(n), hash(h),
     first(f), last(l),
     dir(0),
     version(0), projected_version(0),
@@ -176,9 +177,9 @@ public:
     g_num_dn++;
     g_num_dna++;
   }
-  CDentry(const string& n, inodeno_t ino, unsigned char dt,
+  CDentry(const string& n, __u32 h, inodeno_t ino, unsigned char dt,
 	  snapid_t f, snapid_t l) :
-    name(n),
+    name(n), hash(h),
     first(f), last(l),
     dir(0),
     version(0), projected_version(0),
@@ -199,6 +200,8 @@ public:
 
   CDir *get_dir() const { return dir; }
   const string& get_name() const { return name; }
+
+  __u32 get_hash() const { return hash; }
 
   /*
   CInode *get_inode() const { return linkage.inode; }

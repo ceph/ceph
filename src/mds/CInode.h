@@ -358,6 +358,7 @@ private:
   int stickydir_ref;
 
 public:
+  __u32 hash_dentry_name(const string &dn);
   frag_t pick_dirfrag(const string &dn);
   bool has_dirfrags() { return !dirfrags.empty(); }
   CDir* get_dirfrag(frag_t fg) {

@@ -113,15 +113,18 @@ struct InodeStat {
 
   version_t xattr_version;
   bufferlist xattrbl;
+
+  ceph_dir_layout dir_layout;
+
   //map<string, bufferptr> xattrs;
 
  public:
   InodeStat() {}
-  InodeStat(bufferlist::iterator& p) {
-    decode(p);
+  InodeStat(bufferlist::iterator& p, int features) {
+    decode(p, features);
   }
 
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::iterator &p, int features) {
     struct ceph_mds_reply_inode e;
     ::decode(e, p);
     vino.ino = inodeno_t(e.ino);
@@ -160,6 +163,11 @@ struct InodeStat {
     }
     ::decode(symlink, p);
     
+    if (features & CEPH_FEATURE_DIRLAYOUTHASH)
+      ::decode(dir_layout, p);
+    else
+      memset(&dir_layout, 0, sizeof(dir_layout));
+
     xattr_version = e.xattr_version;
     ::decode(xattrbl, p);
   }

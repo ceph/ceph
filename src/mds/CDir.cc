@@ -229,7 +229,7 @@ CDentry* CDir::add_null_dentry(const string& dname,
   assert(lookup_exact_snap(dname, last) == 0);
    
   // create dentry
-  CDentry* dn = new CDentry(dname, first, last);
+  CDentry* dn = new CDentry(dname, inode->hash_dentry_name(dname), first, last);
   if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
   cache->lru.lru_insert_mid(dn);
@@ -265,7 +265,7 @@ CDentry* CDir::add_primary_dentry(const string& dname, CInode *in,
   assert(lookup_exact_snap(dname, last) == 0);
   
   // create dentry
-  CDentry* dn = new CDentry(dname, first, last);
+  CDentry* dn = new CDentry(dname, inode->hash_dentry_name(dname), first, last);
   if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
   cache->lru.lru_insert_mid(dn);
@@ -303,9 +303,9 @@ CDentry* CDir::add_remote_dentry(const string& dname, inodeno_t ino, unsigned ch
 {
   // foreign
   assert(lookup_exact_snap(dname, last) == 0);
-  
+
   // create dentry
-  CDentry* dn = new CDentry(dname, ino, d_type, first, last);
+  CDentry* dn = new CDentry(dname, inode->hash_dentry_name(dname), ino, d_type, first, last);
   if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
   cache->lru.lru_insert_mid(dn);

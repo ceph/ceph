@@ -261,6 +261,8 @@ struct md_config_t {
 
   bool mds_use_tmap;
 
+  int mds_default_dir_hash;
+
   bool mds_log;
   bool mds_log_unsafe;
   bool mds_log_skip_corrupt_events;

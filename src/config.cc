@@ -96,6 +96,7 @@ std::map<entity_name_t,float> g_fake_kill_after;
 md_config_t g_conf;
 bool g_daemon = false;
 
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -440,6 +441,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_early_reply, 0, OPT_BOOL, true),
 	OPTION(mds_short_reply_trace, 0, OPT_BOOL, true),
 	OPTION(mds_use_tmap, 0, OPT_BOOL, true),        // use trivialmap for dir updates
+	OPTION(mds_default_dir_hash, 0, OPT_INT, CEPH_STR_HASH_RJENKINS),
 	OPTION(mds_log, 0, OPT_BOOL, true),
 	OPTION(mds_log_unsafe, 0, OPT_BOOL, false),      // only wait for log sync, when it's mostly safe to do so
 	OPTION(mds_log_skip_corrupt_events, 0, OPT_BOOL, false),

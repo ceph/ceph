@@ -256,10 +256,14 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
     in->inode.mtime = g_clock.now();
   in->inode.nlink = 1;
   in->inode.truncate_size = -1ull;
-  if (in->inode.is_dir())
+
+  memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
+  if (in->inode.is_dir()) {
     memset(&in->inode.layout, 0, sizeof(in->inode.layout));
-  else
+    in->inode.dir_layout.dl_dir_hash = g_conf.mds_default_dir_hash;
+  } else {
     in->inode.layout = default_file_layout;
+  }
 
   if (in->is_base()) {
     if (in->is_root())
@@ -6845,7 +6849,7 @@ void MDCache::anchor_create(MDRequest *mdr, CInode *in, Context *onfinish)
   in->make_anchor_trace(trace);
   if (!trace.size()) {
     assert(MDS_INO_IS_BASE(in->ino()));
-    trace.push_back(Anchor(in->ino(), in->ino(), "", 0, 0));
+    trace.push_back(Anchor(in->ino(), in->ino(), 0, 0, 0));
   }
   
   // do it
