@@ -8717,6 +8717,10 @@ bool MDCache::can_fragment(CInode *diri, list<CDir*>& dirs)
     dout(7) << "can_fragment: i won't merge|split anything in stray" << dendl;
     return false;
   }
+  if (diri->is_mdsdir() || diri->ino() == MDS_INO_CEPH) {
+    dout(7) << "can_fragment: i won't fragment the mdsdir or .ceph" << dendl;
+    return false;
+  }
 
   for (list<CDir*>::iterator p = dirs.begin(); p != dirs.end(); p++) {
     CDir *dir = *p;
