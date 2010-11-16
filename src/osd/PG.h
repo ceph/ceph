@@ -181,7 +181,6 @@ public:
     Info() : log_backlog(false) {}
     Info(pg_t p) : pgid(p), log_backlog(false) { }
 
-    bool is_uptodate() const { return last_update == last_complete; }
     bool is_empty() const { return last_update.version == 0; }
     bool dne() const { return history.epoch_created == 0; }
 
@@ -794,7 +793,7 @@ public:
   bool is_prior(int osd) const { return prior_set.count(osd); }
   bool is_stray(int osd) const { return stray_set.count(osd); }
   
-  bool is_all_uptodate() const { return uptodate_set.size() == acting.size() && up == acting; }
+  bool is_all_uptodate() const;
 
   void generate_past_intervals();
   void trim_past_intervals();
