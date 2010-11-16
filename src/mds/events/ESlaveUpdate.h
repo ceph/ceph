@@ -161,8 +161,9 @@ public:
   }
 
   void encode(bufferlist &bl) const {
-    __u8 struct_v = 1;
+    __u8 struct_v = 2;
     ::encode(struct_v, bl);
+    ::encode(stamp, bl);
     ::encode(type, bl);
     ::encode(reqid, bl);
     ::encode(master, bl);
@@ -174,6 +175,8 @@ public:
   void decode(bufferlist::iterator &bl) {
     __u8 struct_v;
     ::decode(struct_v, bl);
+    if (struct_v >= 2)
+      ::decode(stamp, bl);
     ::decode(type, bl);
     ::decode(reqid, bl);
     ::decode(master, bl);

@@ -170,6 +170,8 @@ void MDLog::submit_entry( LogEvent *le, Context *c, bool wait_safe )
   le->_segment = segments.rbegin()->second;
   le->_segment->num_events++;
   le->update_segment();
+
+  le->set_stamp(g_clock.now());
   
   num_events++;
   assert(!capped);
@@ -542,10 +544,10 @@ void MDLog::_replay_thread()
     // have we seen an import map yet?
     if (segments.empty()) {
       dout(10) << "_replay " << pos << "~" << bl.length() << " / " << journaler->get_write_pos() 
-	       << " -- waiting for subtree_map.  (skipping " << *le << ")" << dendl;
+	       << " " << le->get_stamp() << " -- waiting for subtree_map.  (skipping " << *le << ")" << dendl;
     } else {
       dout(10) << "_replay " << pos << "~" << bl.length() << " / " << journaler->get_write_pos() 
-	       << " : " << *le << dendl;
+	       << " " << le->get_stamp() << ": " << *le << dendl;
       le->_segment = get_current_segment();    // replay may need this
       le->_segment->num_events++;
       le->_segment->end = journaler->get_read_pos();

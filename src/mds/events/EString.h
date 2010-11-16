@@ -38,9 +38,12 @@ class EString : public LogEvent {
 
   void encode(bufferlist& bl) const {
     ::encode(event, bl);
+    ::encode(stamp, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(event, bl);
+    if (!bl.end())
+      ::decode(stamp, bl);
   }
 
   void print(ostream& out) {

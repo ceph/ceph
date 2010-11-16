@@ -37,10 +37,13 @@ public:
   void encode(bufferlist &bl) const {
     ::encode(client_map, bl);
     ::encode(cmapv, bl);
+    ::encode(stamp, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(client_map, bl);
     ::decode(cmapv, bl);
+    if (!bl.end())
+      ::decode(stamp, bl);
   }
 
 

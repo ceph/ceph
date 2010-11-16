@@ -51,6 +51,9 @@ class LogEvent {
   __u32 _type;
   loff_t _start_off,_end_off;
 
+protected:
+  utime_t stamp;
+
   friend class MDLog;
 
  public:
@@ -63,6 +66,9 @@ class LogEvent {
   int get_type() { return _type; }
   loff_t get_start_off() { return _start_off; }
   loff_t get_end_off() { return _end_off; }
+  utime_t get_stamp() const { return stamp; }
+
+  void set_stamp(utime_t t) { stamp = t; }
 
   // encoding
   virtual void encode(bufferlist& bl) const = 0;
