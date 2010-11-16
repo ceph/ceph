@@ -292,6 +292,11 @@ void MDLog::start_new_segment(Context *onsync)
 
   logger->inc(l_mdl_segadd);
   logger->set(l_mdl_seg, segments.size());
+
+  // Adjust to next stray dir
+  dout(10) << "Advancing to next stray directory on mds " << mds->get_nodeid() 
+	   << dendl;
+  mds->mdcache->advance_stray();
 }
 
 void MDLog::_logged_subtree_map(loff_t off)

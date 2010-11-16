@@ -82,6 +82,7 @@
 
 #include <errno.h>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <map>
 using namespace std;
@@ -119,7 +120,10 @@ MDCache::MDCache(MDS *m)
   migrator = new Migrator(mds, this);
   root = NULL;
   myin = NULL;
-  stray = NULL;
+
+  for (int i = 0; i < NUM_STRAY; ++i) {
+    strays[i] = NULL;
+  }
 
   num_inodes_with_caps = 0;
   num_caps = 0;
@@ -190,8 +194,11 @@ void MDCache::add_inode(CInode *in)
       root = in;
     else if (in->ino() == MDS_INO_MDSDIR(mds->get_nodeid()))
       myin = in;
-    else if (in->ino() == MDS_INO_STRAY(mds->get_nodeid()))
-      stray = in;
+    else if (in->is_stray()) {
+      if (MDS_INO_STRAY_OWNER(in->ino()) == mds->get_nodeid()) {
+	strays[MDS_INO_STRAY_INDEX(in->ino())] = in;
+      }
+    }
     if (in->is_base())
       base_inodes.insert(in);
   }
@@ -223,10 +230,14 @@ void MDCache::remove_inode(CInode *o)
   if (o->ino() < MDS_INO_SYSTEM_BASE) {
     if (o == root) root = 0;
     if (o == myin) myin = 0;
-    if (o == stray) stray = 0;
+    if (o->is_stray()) {
+      if (MDS_INO_STRAY_OWNER(o->ino()) == mds->get_nodeid()) {
+	strays[MDS_INO_STRAY_INDEX(o->ino())] = 0;
+      }
+    }
     if (o->is_base())
       base_inodes.erase(o);
-  }
+    }
 
   // delete it
   assert(o->get_num_ref() == 0);
@@ -343,20 +354,28 @@ void MDCache::create_mydir_hierarchy(C_Gather *gather)
   adjust_subtree_auth(mydir, mds->whoami);   
 
   // stray dir
-  CInode *stray = create_system_inode(MDS_INO_STRAY(mds->whoami), S_IFDIR);
-  CDir *straydir = stray->get_or_open_dirfrag(this, frag_t());
-  string name("stray");
-  mydir->add_primary_dentry(name, stray);
-  stray->inode.dirstat = straydir->fnode.fragstat;
-  stray->inode.accounted_rstat = stray->inode.rstat;
+  for (int i = 0; i < NUM_STRAY; ++i) {
+    CInode *stray = create_system_inode(MDS_INO_STRAY(mds->whoami, i), S_IFDIR);
+    CDir *straydir = stray->get_or_open_dirfrag(this, frag_t());
+    stringstream name;
+    name << "stray" << i;
+    mydir->add_primary_dentry(name.str(), stray);
+    stray->inode.dirstat = straydir->fnode.fragstat;
+    stray->inode.accounted_rstat = stray->inode.rstat;
+
+    mydir->fnode.rstat.add(stray->inode.rstat);
+    // save them
+    straydir->mark_complete();
+    straydir->mark_dirty(straydir->pre_dirty(), mds->mdlog->get_current_segment());
+    straydir->commit(0, gather->new_sub());
+  }
 
   CInode *journal = create_system_inode(MDS_INO_LOG_OFFSET + mds->whoami, S_IFREG);
-  name = "journal";
+  string name = "journal";
   mydir->add_primary_dentry(name, journal);
 
   mydir->fnode.fragstat.nsubdirs = 1;
   mydir->fnode.fragstat.nfiles = 1;
-  mydir->fnode.rstat = stray->inode.rstat;
   mydir->fnode.rstat.rsubdirs++;
   mydir->fnode.rstat.rfiles++;
   mydir->fnode.accounted_fragstat = mydir->fnode.fragstat;
@@ -366,10 +385,6 @@ void MDCache::create_mydir_hierarchy(C_Gather *gather)
   myin->inode.rstat = mydir->fnode.rstat;
   myin->inode.accounted_rstat = myin->inode.rstat;
 
-  // save them
-  straydir->mark_complete();
-  straydir->mark_dirty(straydir->pre_dirty(), mds->mdlog->get_current_segment());
-  straydir->commit(0, gather->new_sub());
 
   mydir->mark_complete();
   mydir->mark_dirty(mydir->pre_dirty(), mds->mdlog->get_current_segment());
@@ -543,15 +558,20 @@ void MDCache::populate_mydir()
   }    
 
   // open or create stray
-  string strayname("stray");
-  CDentry *straydn = mydir->lookup(strayname);
-  if (!straydn || !straydn->get_linkage()->get_inode()) {
-    _create_system_file(mydir, strayname.c_str(), create_system_inode(MDS_INO_STRAY(mds->whoami), S_IFDIR),
-			new C_MDS_RetryOpenRoot(this));
-    return;
+  for (int i = 0; i < NUM_STRAY; ++i) {
+    stringstream name;
+    name << "stray" << i;
+    CDentry *straydn = mydir->lookup(name.str());
+    if (!straydn || !straydn->get_linkage()->get_inode()) {
+      _create_system_file(mydir, name.str().c_str(), create_system_inode(MDS_INO_STRAY(mds->whoami, i), S_IFDIR),
+			  new C_MDS_RetryOpenRoot(this));
+      return;
+    }
+    assert(straydn);
+    assert(strays[i]);
+    strays[i]->get(CInode::PIN_STRAY);
+    dout(20) << " stray num " << i << " is " << *strays[i] << dendl;
   }
-  assert(straydn);
-  assert(stray);
 
   // open or create journal file
   string jname("journal");
@@ -566,9 +586,6 @@ void MDCache::populate_mydir()
   dout(10) << "populate_mydir done" << dendl;
   assert(!open);    
   open = true;
-  stray->get(CInode::PIN_STRAY);
-  dout(20) << " stray is " << *stray << dendl;
-
   mds->queue_waiters(waiting_for_open);
 }
 
@@ -582,11 +599,11 @@ CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
   string straydname;
   in->name_stray_dentry(straydname);
   
-  assert(stray);
+  assert(get_stray());
 
-  frag_t fg = stray->pick_dirfrag(straydname);
+  frag_t fg = get_stray()->pick_dirfrag(straydname);
 
-  CDir *straydir = stray->get_or_open_dirfrag(this, fg);
+  CDir *straydir = get_stray()->get_or_open_dirfrag(this, fg);
   
   CDentry *straydn = straydir->lookup(straydname);
   if (!straydn) {
@@ -3003,9 +3020,11 @@ void MDCache::rejoin_send_rejoins()
       // weak
       if (p->first == 0 && root) 
 	p->second->add_weak_inode(root->vino());
-      CInode *s = get_inode(MDS_INO_STRAY(p->first)); 
-      if (s)
-	p->second->add_weak_inode(s->vino());
+      for (int i = 0; i < NUM_STRAY; ++i) {
+	CInode *s = get_inode(MDS_INO_STRAY(p->first, i)); 
+	if (s)
+	  p->second->add_weak_inode(s->vino());
+      }
     } else {
       // strong
       if (p->first == 0 && root) {
@@ -3016,13 +3035,15 @@ void MDCache::rejoin_send_rejoins()
 				    root->nestlock.get_state(),
 				    root->dirfragtreelock.get_state());
       }
-      if (CInode *in = get_inode(MDS_INO_STRAY(p->first))) {
-    	p->second->add_weak_inode(in->vino());
-  	p->second->add_strong_inode(in->vino(),
-				    in->get_caps_wanted(),
-				    in->filelock.get_state(),
-				    in->nestlock.get_state(),
-				    in->dirfragtreelock.get_state());
+      for (int i = 0; i < NUM_STRAY; ++i) {
+	if (CInode *in = get_inode(MDS_INO_STRAY(p->first, i))) {
+	  p->second->add_weak_inode(in->vino());
+	  p->second->add_strong_inode(in->vino(),
+				      in->get_caps_wanted(),
+				      in->filelock.get_state(),
+				      in->nestlock.get_state(),
+				      in->dirfragtreelock.get_state());
+	}
       }
     }
   }  
@@ -5665,9 +5686,13 @@ bool MDCache::shutdown_pass()
   
   // drop our reference to our stray dir inode
   static bool did_stray_put = false;
-  if (!did_stray_put && stray) {
+  if (!did_stray_put) {
+    for (int i = 0; i < NUM_STRAY; ++i) {
+      if (strays[i]) {
+	strays[i]->put(CInode::PIN_STRAY);
+      }
+    }
     did_stray_put = true;
-    stray->put(CInode::PIN_STRAY);
   }
 
   // trim cache
@@ -5781,15 +5806,20 @@ bool MDCache::shutdown_pass()
 bool MDCache::shutdown_export_strays()
 {
   if (mds->get_nodeid() == 0) return true;
-  if (!stray) return true;
   
   dout(10) << "shutdown_export_strays" << dendl;
 
   bool done = true;
   static set<inodeno_t> exported_strays;
-  list<CDir*> dfs;
 
-  stray->get_dirfrags(dfs);
+  list<CDir*> dfs;
+  for (int i = 0; i < NUM_STRAY; ++i) {
+    if (!strays[i]) {
+      continue;
+    }
+    strays[i]->get_dirfrags(dfs);
+  }
+  
   while (!dfs.empty()) {
     CDir *dir = dfs.front();
     dfs.pop_front();
@@ -5810,7 +5840,7 @@ bool MDCache::shutdown_export_strays()
       // FIXME: we'll deadlock if a rename fails.
       if (exported_strays.count(dnl->get_inode()->ino()) == 0) {
 	exported_strays.insert(dnl->get_inode()->ino());
-	migrate_stray(dn, mds->get_nodeid(), 0);  // send to root!
+	migrate_stray(dn, 0);  // send to root!
       } else {
 	dout(10) << "already exporting " << *dn << dendl;
       }
@@ -7149,6 +7179,12 @@ void MDCache::scan_stray_dir()
   dout(10) << "scan_stray_dir" << dendl;
   
   list<CDir*> ls;
+  for (int i = 0; i < NUM_STRAY; ++i) {
+    if (strays[i]) {
+      strays[i]->get_dirfrags(ls);
+    }
+  }
+
   for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); p++) {
     CDir *dir = *p;
     for (CDir::map_t::iterator q = dir->items.begin(); q != dir->items.end(); q++) {
@@ -7248,7 +7284,7 @@ void MDCache::eval_stray(CDentry *dn)
 	  reintegrate_stray(dn, rlink);
 	
 	if (!rlink->is_auth() && dn->is_auth())
-	  migrate_stray(dn, mds->get_nodeid(), rlink->authority().first);
+	  migrate_stray(dn, rlink->authority().first);
       }
     }
   } else {
@@ -7269,7 +7305,7 @@ void MDCache::eval_remote(CDentry *dn)
     if (in->is_auth())
       eval_stray(in->get_parent_dn());
     else
-      migrate_stray(in->get_parent_dn(), in->authority().first, mds->get_nodeid());
+      migrate_stray(in->get_parent_dn(), mds->get_nodeid());
   }
 }
 
@@ -7457,16 +7493,19 @@ void MDCache::reintegrate_stray(CDentry *straydn, CDentry *rdn)
 }
  
 
-void MDCache::migrate_stray(CDentry *dn, int from, int to)
+void MDCache::migrate_stray(CDentry *dn, int to)
 {
-  dout(10) << "migrate_stray from mds" << from << " to mds" << to 
+  CInode *fromino = dn->dir->get_inode();
+  dout(10) << "migrate_stray from mds" 
+	   << MDS_INO_STRAY_OWNER(fromino->inode.ino) << " to mds" << to 
 	   << " " << *dn << " " << *dn->get_projected_linkage()->get_inode() << dendl;
 
   // rename it to another mds.
   string dname;
   dn->get_projected_linkage()->get_inode()->name_stray_dentry(dname);
-  filepath src(dname, MDS_INO_STRAY(from));
-  filepath dst(dname, MDS_INO_STRAY(to));
+
+  filepath src(dname, fromino->inode.ino);
+  filepath dst(dname, MDS_INO_STRAY(to, 0));
 
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME);
   req->set_filepath(dst);
@@ -9163,8 +9202,8 @@ void MDCache::show_subtrees(int dbl)
       assert(dir->inode == root);
     if (dir->ino() == MDS_INO_MDSDIR(mds->get_nodeid()))
       assert(dir->inode == myin);
-    if (dir->ino() == MDS_INO_STRAY(mds->get_nodeid()))
-      assert(dir->inode == stray);
+    if (dir->inode->is_stray() && (MDS_INO_STRAY_OWNER(dir->ino()) == mds->get_nodeid()))
+      assert(strays[MDS_INO_STRAY_INDEX(dir->ino())] == dir->inode);
 
     // nested items?
     if (!subtrees[dir].empty()) {

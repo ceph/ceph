@@ -432,10 +432,21 @@ class MDCache {
   hash_map<vinodeno_t,CInode*> inode_map;  // map of inodes by ino
   CInode *root;                            // root inode
   CInode *myin;                            // .ceph/mds%d dir
-  CInode *stray;                           // my stray dir
+
+  CInode *strays[NUM_STRAY];         // my stray dir
+  int stray_index;
+
+  CInode *get_stray() {
+    return strays[stray_index];
+  }
+
   set<CInode*> base_inodes;
 
 public:
+  void advance_stray() {
+    stray_index = (stray_index+1)%NUM_STRAY;
+  }
+
   DecayRate decayrate;
 
   int num_inodes_with_caps;
@@ -1020,7 +1031,7 @@ protected:
   friend class C_MDC_PurgeStrayLoggedTruncate;
   friend class C_MDC_PurgeStrayPurged;
   void reintegrate_stray(CDentry *dn, CDentry *rlink);
-  void migrate_stray(CDentry *dn, int src, int dest);
+  void migrate_stray(CDentry *dn, int dest);
 
 
   // == messages ==
