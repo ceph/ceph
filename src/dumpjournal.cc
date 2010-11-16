@@ -46,6 +46,8 @@ Cond cond;
 Messenger *messenger = 0;
 Objecter *objecter = 0;
 Journaler *journaler = 0;
+SafeTimer *obj_timer = 0;
+SafeTimer *jnl_timer = 0;
 
 class Dumper : public Dispatcher {
   bool ms_dispatch(Message *m) {
@@ -101,8 +103,10 @@ int main(int argc, const char **argv, const char *envp[])
   inodeno_t ino = MDS_INO_LOG_OFFSET + mds;
   unsigned pg_pool = CEPH_METADATA_RULE;
 
-  objecter = new Objecter(messenger, &mc, &osdmap, lock);
-  journaler = new Journaler(ino, pg_pool, CEPH_FS_ONDISK_MAGIC, objecter, 0, 0,  &lock);
+  obj_timer = new SafeTimer(lock);
+  jnl_timer = new SafeTimer(lock);
+  objecter = new Objecter(messenger, &mc, &osdmap, lock, *obj_timer);
+  journaler = new Journaler(ino, pg_pool, CEPH_FS_ONDISK_MAGIC, objecter, 0, 0,  jnl_timer);
 
   objecter->set_client_incarnation(0);
 
