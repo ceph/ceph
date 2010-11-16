@@ -1653,6 +1653,8 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino, u
   in->inode.version = 1;
   in->inode.nlink = 1;   // FIXME
 
+  in->inode.mode = mode;
+
   memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
   if (in->inode.is_dir())
     in->inode.dir_layout.dl_dir_hash = g_conf.mds_default_dir_hash;
@@ -1682,7 +1684,6 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino, u
     in->inode.gid = mdr->client_request->get_caller_gid();
 
   in->inode.uid = mdr->client_request->get_caller_uid();
-  in->inode.mode = mode;
 
   in->inode.ctime = in->inode.mtime = in->inode.atime = mdr->now;   // now
 
