@@ -3083,8 +3083,6 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
     } else {
       // done!
       peer_missing[peer].got(soid, pi->version);
-      if (peer_missing[peer].num_missing() == 0) 
-	uptodate_set.insert(peer);
       
       pushing[soid].erase(peer);
       pi = NULL;
@@ -3486,9 +3484,6 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       finish_recovery_op(soid);
       
       update_stats();
-
-      if (info.is_uptodate())
-	uptodate_set.insert(osd->get_nodeid());
     } else {
       // pull more
       pi->data_subset_pulling.span_of(pi->data_subset, data_subset.range_end(), g_conf.osd_recovery_max_chunk);
@@ -3631,10 +3626,20 @@ int ReplicatedPG::start_recovery_ops(int max)
   
   while (max > 0) {
     int n;
-    if (uptodate_set.count(osd->whoami))
+
+    size_t ml_sz = missing_loc.size();
+    size_t m_sz = missing.missing.size();
+
+    assert(m_sz >= ml_sz);
+
+    if (m_sz == ml_sz) {
+      // All of the missing objects we have are unfound.
       n = recover_replicas(max);
-    else
+    }
+    else {
+      // We still have missing objects that we should grab from replicas.
       n = recover_primary(max);
+    }
     started += n;
     osd->logger->inc(l_osd_rop, n);
     if (n < max)
@@ -3762,7 +3767,6 @@ int ReplicatedPG::recover_primary(int max)
 
   log.reset_recovery_pointers();
 
-  uptodate_set.insert(osd->whoami);
   if (is_all_uptodate()) {
     dout(-7) << "recover_primary complete" << dendl;
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
@@ -3809,43 +3813,61 @@ int ReplicatedPG::recover_object_replicas(const sobject_t& soid)
 
 int ReplicatedPG::recover_replicas(int max)
 {
+  dout(10) << __func__ << "(" << max << ")" << dendl;
+  bool all_uptodate = true;
   int started = 0;
-  dout(-10) << "recover_replicas" << dendl;
+
+  // Is the primary uptodate?
+  size_t ml_size = missing_loc.size();
+  if (missing.num_missing() > ml_size)
+    all_uptodate = false;
 
   // this is FAR from an optimal recovery order.  pretty lame, really.
   for (unsigned i=1; i<acting.size(); i++) {
     int peer = acting[i];
-    assert(peer_missing.count(peer));
+    map<int, Missing>::const_iterator pm = peer_missing.find(peer);
+    assert(pm != peer_missing.end());
+    size_t m_sz = pm->second.num_missing();
 
-    dout(10) << " peer osd" << peer << " missing " << peer_missing[peer] << dendl;
-    dout(20) << "   " << peer_missing[peer].missing << dendl;
+    dout(10) << " peer osd" << peer << " missing " << m_sz << " objects." << dendl;
+    dout(20) << " peer osd" << peer << " missing " << pm->second.missing << dendl;
 
     // oldest first!
-    Missing &m = peer_missing[peer];
-    for (map<eversion_t, sobject_t>::iterator p = m.rmissing.begin();
+    const Missing &m(pm->second);
+    for (map<eversion_t, sobject_t>::const_iterator p = m.rmissing.begin();
 	   p != m.rmissing.end() && started < max;
-	   p++) {
-      sobject_t soid = p->second;
-      if (pushing.count(soid))
-	dout(10) << " already pushing " << soid << dendl;
-      else if (missing.is_missing(soid))
-	dout(10) << " still missing on primary " << soid << dendl;
-      else
-	started += recover_object_replicas(soid);
+	   ++p) {
+      const sobject_t soid(p->second);
+      if (pushing.count(soid)) {
+	dout(10) << __func__ << ": already pushing " << soid << dendl;
+	all_uptodate = false;
+	continue;
+      }
+      if (missing_loc.find(soid) == missing_loc.end()) {
+	dout(10) << __func__ << ": " << soid << " is still unfound." << dendl;
+	continue;
+      }
+      if (missing.is_missing(soid)) {
+	dout(10) << __func__ << ": still missing on primary " << soid << dendl;
+	all_uptodate = false;
+	continue;
+      }
+      dout(10) << __func__ << ": recover_object_replicas(" << soid << ")" << dendl;
+      started += recover_object_replicas(soid);
+      all_uptodate = false;
     }
   }
   
-  // nothing to do!
-  dout(-10) << "recover_replicas - nothing to do!" << dendl;
-
-  if (is_all_uptodate()) {
+  if (all_uptodate) {
+    dout(10) << __func__ << ": all replicas are up-to-date!" << dendl;
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     C_Contexts *fin = new C_Contexts;
     finish_recovery(*t, fin->contexts);
     int tr = osd->store->queue_transaction(&osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(tr == 0);
-  } else {
-    dout(10) << "recover_replicas not all uptodate, acting " << acting << ", uptodate " << uptodate_set << dendl;
+  }
+  else {
+    dout(20) << __func__ << ": some replicas are not up-to-date." << dendl;
   }
 
   return started;

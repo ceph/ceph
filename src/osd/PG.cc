@@ -765,6 +765,38 @@ ostream& PG::IndexedLog::print(ostream& out) const
 
 
 /******* PG ***********/
+bool PG::is_all_uptodate() const
+{
+  assert(is_primary());
+
+  if (up != acting) {
+    dout(10) << __func__ << ": the set of UP osds is not the same as the "
+	     << "set of ACTING osds." << dendl;
+    return false;
+  }
+
+  size_t ml_sz = missing_loc.size();
+  vector<int>::const_iterator end = acting.end();
+  for (vector<int>::const_iterator a = acting.begin(); a != end; ++a) {
+    int peer = *a;
+    map<int, Missing>::const_iterator pm = peer_missing.find(peer);
+    if (pm == peer_missing.end()) {
+      dout(10) << __func__ << ": osd " << peer << " is not up-to-date. We "
+	       << "have no peer_missing information for this osd." << dendl;
+      return false;
+    }
+    size_t m_sz = pm->second.num_missing();
+    if (m_sz != ml_sz) {
+      dout(10) << __func__ << ": osd " << peer << " is not up-to-date. "
+	       << "num_missing = " << m_sz << ", but missing_loc.size() = "
+	       << ml_sz << dendl;
+      return false;
+    }
+  }
+
+  dout(10) << __func__ << ": all OSDs are uptodate!" << dendl;
+  return true;
+}
 
 void PG::generate_past_intervals()
 {
@@ -1586,11 +1618,6 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 
   // if primary..
   if (is_primary()) {
-    // who is clean?
-    uptodate_set.clear();
-    if (info.is_uptodate()) 
-      uptodate_set.insert(osd->whoami);
-    
     // start up replicas
     for (unsigned i=1; i<acting.size(); i++) {
       int peer = acting[i];
@@ -1649,13 +1676,10 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       if (pm.num_missing() == 0) {
 	pi.last_complete = pi.last_update;
         dout(10) << "activate peer osd" << peer << " already uptodate, " << pi << dendl;
-	assert(pi.is_uptodate());
-        uptodate_set.insert(peer);
       } else {
         dout(10) << "activate peer osd" << peer << " " << pi
                  << " missing " << pm << dendl;
       }
-            
     }
 
     // discard unneeded peering state
@@ -2836,7 +2860,6 @@ void PG::repair_object(ScrubMap::object *po, int bad_peer, int ok_peer)
 
     log.last_requested = eversion_t();
   }
-  uptodate_set.erase(bad_peer);
   osd->queue_for_recovery(this);
 }
 
