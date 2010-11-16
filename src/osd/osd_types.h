@@ -585,7 +585,11 @@ static inline std::string pg_state_string(int state)
   if (state & PG_STATE_SCANNING)
     oss << "scanning+";
   string ret(oss.str());
-  return (ret.length() == 0) ? "inactive" : ret;
+  if (ret.length() > 0)
+    ret.resize(ret.length() - 1);
+  else
+    ret = "inactive";
+  return ret;
 }
 
 
