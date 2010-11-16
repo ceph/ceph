@@ -11,7 +11,7 @@
 
 #include "include/rbd_types.h"
 
-CLS_VER(1,2)
+CLS_VER(1,3)
 CLS_NAME(rbd)
 
 cls_handle_t h_class;
@@ -285,8 +285,6 @@ int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -ENOENT;
   }
 
-  snap_names += s.length() + 1;
-
   header->snap_names_len  = header->snap_names_len - (s.length() + 1);
   header->snap_count = header->snap_count - 1;
 
@@ -297,16 +295,25 @@ int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   newbl.push_back(header_bp);
 
   if (header->snap_count) {
+    int snaps_len = 0;
+    int names_len = 0;
+    CLS_LOG("i=%d\n", i);
     if (i > 0) {
-      memcpy(new_snaps_bp.c_str(), header->snaps, sizeof(header->snaps[0]) * i);
-      memcpy(new_names_bp.c_str(), header->snaps, snap_names - orig_names);
+      snaps_len = sizeof(header->snaps[0]) * i;
+      names_len =  snap_names - orig_names;
+      memcpy(new_snaps_bp.c_str(), header->snaps, snaps_len);
+      memcpy(new_names_bp.c_str(), orig_names, names_len);
     }
     snap_names += s.length() + 1;
 
     if (i < header->snap_count) {
-      memcpy(new_snaps_bp.c_str(), header->snaps, sizeof(header->snaps[0]) * i);
-      memcpy(new_names_bp.c_str(), snap_names , end - snap_names);
+      memcpy(new_snaps_bp.c_str() + snaps_len,
+             header->snaps + i + 1,
+             sizeof(header->snaps[0]) * (header->snap_count - i));
+      memcpy(new_names_bp.c_str() + names_len, snap_names , end - snap_names);
     }
+    newbl.push_back(new_snaps_bp);
+    newbl.push_back(new_names_bp);
   }
 
   rc = cls_cxx_write_full(hctx, &newbl);
