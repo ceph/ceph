@@ -394,6 +394,7 @@ bool RadosClient::init()
 void RadosClient::shutdown()
 {
   lock.Lock();
+  monclient.shutdown();
   objecter->shutdown();
   timer.shutdown();
   lock.Unlock();
