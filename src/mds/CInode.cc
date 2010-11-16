@@ -2084,6 +2084,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 {
   int client = session->inst.name.num();
   assert(snapid);
+
+  assert(session->connection);
   
   bool valid = true;
 
@@ -2307,6 +2309,10 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     ::encode(p->second, bl);
   }
   ::encode(symlink, bl);
+  if (session->connection->has_feature(CEPH_FEATURE_DIRLAYOUTHASH)) {
+    i = pfile ? pi : oi;
+    ::encode(i->dir_layout, bl);
+  }
   ::encode(xbl, bl);
 
   return valid;

@@ -470,7 +470,7 @@ struct ceph_mds_reply_inode {
 	struct ceph_timespec rctime;
 	struct ceph_frag_tree_head fragtree;  /* (must be at end of struct) */
 } __attribute__ ((packed));
-/* followed by frag array, then symlink string, then xattr blob */
+/* followed by frag array, symlink string, dir layout, xattr blob */
 
 /* reply_lease follows dname, and reply_inode */
 struct ceph_mds_reply_lease {
