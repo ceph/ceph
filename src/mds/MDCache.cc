@@ -8809,6 +8809,9 @@ void MDCache::fragment_mark_and_complete(list<CDir*>& dirs)
       dout(15) << " already marked " << *dir << dendl;
     }
   }
+
+  // flush log so that request auth_pins are retired
+  mds->mdlog->flush();
 }
 
 void MDCache::fragment_unmark_unfreeze_dirs(list<CDir*>& dirs)
