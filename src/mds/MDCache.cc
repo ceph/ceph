@@ -8590,7 +8590,7 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 
       show_subtrees(10);
 
-      dir->put(CDir::PIN_SUBTREE);
+      // dir has no PIN_SUBTREE; CDir::purge_stolen() drops it.
       dir->dir_auth = CDIR_AUTH_DEFAULT;
     }
     
