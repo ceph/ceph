@@ -630,6 +630,7 @@ void CDir::steal_dentry(CDentry *dn)
   }
 
   nested_auth_pins += dn->auth_pins + dn->nested_auth_pins;
+  dir_auth_pins += dn->auth_pins;
   nested_anchors += dn->nested_anchors;
   if (dn->is_dirty()) 
     num_dirty++;
