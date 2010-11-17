@@ -986,14 +986,12 @@ void ESubtreeMap::replay(MDS *mds)
 void EFragment::replay(MDS *mds)
 {
   dout(10) << "EFragment.replay " << ino << " " << basefrag << " by " << bits << dendl;
-  
   CInode *in = mds->mdcache->get_inode(ino);
-  assert(in);
-
-  list<CDir*> resultfrags;
-  list<Context*> waiters;
-  mds->mdcache->adjust_dir_fragments(in, basefrag, bits, resultfrags, waiters, true);
-
+  if (in) {
+    list<CDir*> resultfrags;
+    list<Context*> waiters;
+    mds->mdcache->adjust_dir_fragments(in, basefrag, bits, resultfrags, waiters, true);
+  }
   metablob.replay(mds, _segment);
 }
 

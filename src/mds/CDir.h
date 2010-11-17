@@ -563,6 +563,8 @@ public:
     }
     if (nested_auth_pins != 0) 
       return;
+    if (!is_subtree_root() && inode->is_frozen())
+      return;
     if (state_test(STATE_FREEZINGTREE)) {
       _freeze_tree();
       auth_unpin(this);

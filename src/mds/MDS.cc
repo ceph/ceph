@@ -1698,7 +1698,10 @@ do { \
     CDir *dir = ls.front();
     if (!dir->get_parent_dir()) continue;    // must be linked.
     if (!dir->is_auth()) continue;           // must be auth.
-    mdcache->split_dir(dir, 1);// + (rand() % 3));
+    if (dir->get_frag() == frag_t() || (rand() % 3 == 0)) {
+      mdcache->split_dir(dir, 1);
+    } else
+      balancer->queue_merge(dir);
   }
 
   // hack: force hash root?

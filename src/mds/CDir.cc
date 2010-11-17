@@ -604,7 +604,8 @@ void CDir::steal_dentry(CDentry *dn)
       num_snap_items++;
 
     if (dn->get_linkage()->is_primary()) {
-      inode_t *pi = dn->get_linkage()->get_inode()->get_projected_inode();
+      CInode *in = dn->get_linkage()->get_inode();
+      inode_t *pi = in->get_projected_inode();
       if (dn->get_linkage()->get_inode()->is_dir())
 	fnode.fragstat.nsubdirs++;
       else
@@ -616,6 +617,10 @@ void CDir::steal_dentry(CDentry *dn)
       fnode.rstat.rsnaprealms += pi->accounted_rstat.ranchors;
       if (pi->accounted_rstat.rctime > fnode.rstat.rctime)
 	fnode.rstat.rctime = pi->accounted_rstat.rctime;
+
+      // move dirty inode rstat to new dirfrag
+      if (in->is_dirty_rstat())
+	dirty_rstat_inodes.push_back(&in->dirty_rstat_item);
     } else if (dn->get_linkage()->is_remote()) {
       if (dn->get_linkage()->get_remote_d_type() == (S_IFDIR >> 12))
 	fnode.fragstat.nsubdirs++;
@@ -625,6 +630,7 @@ void CDir::steal_dentry(CDentry *dn)
   }
 
   nested_auth_pins += dn->auth_pins + dn->nested_auth_pins;
+  dir_auth_pins += dn->auth_pins;
   nested_anchors += dn->nested_anchors;
   if (dn->is_dirty()) 
     num_dirty++;
@@ -646,23 +652,36 @@ void CDir::purge_stolen(list<Context*>& waiters, bool replay)
   num_head_items = num_head_null = 0;
   num_snap_items = num_snap_null = 0;
 
+  // this mirrors init_fragment_pins()
   if (is_auth()) 
     clear_replica_map();
-  if (is_dirty()) mark_clean();
-  if (state_test(STATE_IMPORTBOUND)) put(PIN_IMPORTBOUND);
-  if (state_test(STATE_EXPORTBOUND)) put(PIN_EXPORTBOUND);
+  if (is_dirty())
+    mark_clean();
+  if (state_test(STATE_IMPORTBOUND))
+    put(PIN_IMPORTBOUND);
+  if (state_test(STATE_EXPORTBOUND))
+    put(PIN_EXPORTBOUND);
+  if (is_subtree_root())
+    put(PIN_SUBTREE);
 
-  if (auth_pins > 0) put(PIN_AUTHPIN);
+  if (auth_pins > 0)
+    put(PIN_AUTHPIN);
 
   assert(get_num_ref() == (state_test(STATE_STICKY) ? 1:0));
 }
 
 void CDir::init_fragment_pins()
 {
-  if (!replica_map.empty()) get(PIN_REPLICATED);
-  if (state_test(STATE_DIRTY)) get(PIN_DIRTY);
-  if (state_test(STATE_EXPORTBOUND)) get(PIN_EXPORTBOUND);
-  if (state_test(STATE_IMPORTBOUND)) get(PIN_IMPORTBOUND);
+  if (!replica_map.empty())
+    get(PIN_REPLICATED);
+  if (state_test(STATE_DIRTY))
+    get(PIN_DIRTY);
+  if (state_test(STATE_EXPORTBOUND))
+    get(PIN_EXPORTBOUND);
+  if (state_test(STATE_IMPORTBOUND))
+    get(PIN_IMPORTBOUND);
+  if (is_subtree_root())
+    get(PIN_SUBTREE);
 }
 
 void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool replay)

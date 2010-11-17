@@ -51,37 +51,30 @@ class MDiscover : public Message {
 
   MDiscover() { }
   MDiscover(inodeno_t base_ino_,
+	    frag_t base_frag_,
 	    snapid_t s,
-            filepath& want_,
+            filepath& want_path_,
+	    inodeno_t want_ino_,
             bool want_base_dir_ = true,
 	    bool discover_xlocks_ = false) :
     Message(MSG_MDS_DISCOVER),
     base_ino(base_ino_),
+    base_dir_frag(base_frag_),
     snapid(s),
-    want(want_),
-    want_ino(0),
-    want_base_dir(want_base_dir_),
-    want_xlocked(discover_xlocks_) { }
-  MDiscover(dirfrag_t base_dirfrag,
-	    snapid_t s,
-            inodeno_t want_ino_,
-            bool want_base_dir_ = true) :
-    Message(MSG_MDS_DISCOVER),
-    base_ino(base_dirfrag.ino),
-    base_dir_frag(base_dirfrag.frag),
-    snapid(s),
+    want(want_path_),
     want_ino(want_ino_),
     want_base_dir(want_base_dir_),
-    want_xlocked(false) { }
+    want_xlocked(discover_xlocks_) { }
 private:
   ~MDiscover() {}
 
 public:
   const char *get_type_name() { return "Dis"; }
   void print(ostream &out) {
-    out << "discover(" << base_ino << "." << base_dir_frag
+    out << "discover(" << header.tid << " " << base_ino << "." << base_dir_frag
 	<< " " << want;
-    if (want_ino) out << want_ino;
+    if (want_ino)
+      out << want_ino;
     out << ")";
   }
 
