@@ -604,7 +604,8 @@ void CDir::steal_dentry(CDentry *dn)
       num_snap_items++;
 
     if (dn->get_linkage()->is_primary()) {
-      inode_t *pi = dn->get_linkage()->get_inode()->get_projected_inode();
+      CInode *in = dn->get_linkage()->get_inode();
+      inode_t *pi = in->get_projected_inode();
       if (dn->get_linkage()->get_inode()->is_dir())
 	fnode.fragstat.nsubdirs++;
       else
@@ -616,6 +617,10 @@ void CDir::steal_dentry(CDentry *dn)
       fnode.rstat.rsnaprealms += pi->accounted_rstat.ranchors;
       if (pi->accounted_rstat.rctime > fnode.rstat.rctime)
 	fnode.rstat.rctime = pi->accounted_rstat.rctime;
+
+      // move dirty inode rstat to new dirfrag
+      if (in->is_dirty_rstat())
+	dirty_rstat_inodes.push_back(&in->dirty_rstat_item);
     } else if (dn->get_linkage()->is_remote()) {
       if (dn->get_linkage()->get_remote_d_type() == (S_IFDIR >> 12))
 	fnode.fragstat.nsubdirs++;
