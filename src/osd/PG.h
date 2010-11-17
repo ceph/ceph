@@ -146,7 +146,7 @@ public:
       }
 
       void encode(bufferlist &bl) const {
-	__u8 struct_v = 2;
+	__u8 struct_v = 3;
 	::encode(struct_v, bl);
 	::encode(epoch_created, bl);
 	::encode(last_epoch_started, bl);
@@ -163,7 +163,7 @@ public:
 	::decode(struct_v, bl);
 	::decode(epoch_created, bl);
 	::decode(last_epoch_started, bl);
-	if (struct_v >= 2)
+	if (struct_v >= 3)
 	  ::decode(last_epoch_clean, bl);
 	else
 	  last_epoch_clean = last_epoch_started;  // careful, it's a lie!
