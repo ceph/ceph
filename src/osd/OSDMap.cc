@@ -91,8 +91,6 @@ void OSDMap::print_summary(ostream& out) const
       << get_num_osds() << " osds: "
       << get_num_up_osds() << " up, " 
       << get_num_in_osds() << " in";
-  if (blacklist.size())
-    out << " -- " << blacklist.size() << " blacklisted MDSes";
 }
 
 
