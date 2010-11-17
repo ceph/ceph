@@ -1022,6 +1022,9 @@ protected:
     // unlink old dn from dir
     olddir->dentries.erase(olddn->name);
     olddir->dentry_map.erase(olddn->name);
+    // HACK: in the case of hard links. Resolving #588 should include
+    // rendering this unnecessary.
+    olddir->parent_inode->flags &= ~I_COMPLETE;
     olddn->inode = 0;
     olddn->dir = 0;
     lru.lru_remove(olddn);
