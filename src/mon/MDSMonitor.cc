@@ -55,7 +55,7 @@ void MDSMonitor::print_map(MDSMap &m, int dbl)
 
 void MDSMonitor::create_new_fs(MDSMap &m, int metadata_pool, int data_pool)
 {
-  m.max_mds = 1;
+  m.max_mds = g_conf.max_mds;
   m.created = g_clock.now();
   m.data_pg_pools.push_back(data_pool);
   m.metadata_pg_pool = metadata_pool;

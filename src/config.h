@@ -325,6 +325,7 @@ struct md_config_t {
   bool mds_wipe_sessions;
   bool mds_wipe_ino_prealloc;
   int mds_skip_ino;
+  int max_mds;
 
   // osd
   const char *osd_data;
