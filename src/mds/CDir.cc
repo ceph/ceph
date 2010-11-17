@@ -663,10 +663,16 @@ void CDir::purge_stolen(list<Context*>& waiters, bool replay)
 
 void CDir::init_fragment_pins()
 {
-  if (!replica_map.empty()) get(PIN_REPLICATED);
-  if (state_test(STATE_DIRTY)) get(PIN_DIRTY);
-  if (state_test(STATE_EXPORTBOUND)) get(PIN_EXPORTBOUND);
-  if (state_test(STATE_IMPORTBOUND)) get(PIN_IMPORTBOUND);
+  if (!replica_map.empty())
+    get(PIN_REPLICATED);
+  if (state_test(STATE_DIRTY))
+    get(PIN_DIRTY);
+  if (state_test(STATE_EXPORTBOUND))
+    get(PIN_EXPORTBOUND);
+  if (state_test(STATE_IMPORTBOUND))
+    get(PIN_IMPORTBOUND);
+  if (is_subtree_root())
+    get(PIN_SUBTREE);
 }
 
 void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool replay)
