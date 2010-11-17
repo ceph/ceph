@@ -8549,7 +8549,10 @@ void MDCache::adjust_dir_fragments(CInode *diri,
   dout(10) << " new fragtree is " << diri->dirfragtree << dendl;
 
   // split
-  CDir *baseparent = diri->get_parent_dir();
+  CDir *parent_dir = diri->get_parent_dir();
+  CDir *parent_subtree = 0;
+  if (parent_dir)
+    parent_subtree = get_subtree_root(parent_dir);
 
   if (bits > 0) {
     // SPLIT
@@ -8567,14 +8570,13 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 	subtrees[*p].clear();   // new frag is now its own subtree
       
       // was i a bound?
-      if (baseparent) {
-	CDir *parent = get_subtree_root(baseparent);
-	assert(subtrees[parent].count(dir));
-	subtrees[parent].erase(dir);
+      if (parent_subtree) {
+	assert(subtrees[parent_subtree].count(dir));
+	subtrees[parent_subtree].erase(dir);
 	for (list<CDir*>::iterator p = resultfrags.begin();
 	     p != resultfrags.end();
 	     ++p)
-	  subtrees[parent].insert(*p);
+	  subtrees[parent_subtree].insert(*p);
       }
       
       // adjust my bounds.
@@ -8617,8 +8619,8 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 	subtrees.erase(q);
 	
 	// remove myself as my parent's bound
-	if (baseparent)
-	  subtrees[baseparent].erase(dir);
+	if (parent_subtree)
+	  subtrees[parent_subtree].erase(dir);
       }
     }
     
@@ -8629,8 +8631,8 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 
     if (was_subtree) {
       subtrees[f].swap(new_bounds);
-      if (baseparent)
-	subtrees[baseparent].insert(f);
+      if (parent_subtree)
+	subtrees[parent_subtree].insert(f);
       
       show_subtrees(10);
     }
