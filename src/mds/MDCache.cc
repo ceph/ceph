@@ -8874,6 +8874,10 @@ void MDCache::fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits)
   }
   diri->dirfragtreelock.get_wrlock(true);
 
+  // prevent a racing gather on any other scatterlocks too
+  diri->nestlock.get_wrlock(true);
+  diri->filelock.get_wrlock(true);
+
   // refragment
   list<CDir*> resultfrags;
   list<Context*> waiters;
@@ -8983,6 +8987,8 @@ void MDCache::fragment_logged(Mutation *mut, list<CDir*>& resultfrags, frag_t ba
 
   // drop dft wrlock
   mds->locker->wrlock_finish(&diri->dirfragtreelock, NULL);
+  mds->locker->wrlock_finish(&diri->nestlock, NULL);
+  mds->locker->wrlock_finish(&diri->filelock, NULL);
 
   // unfreeze resulting frags
   for (list<CDir*>::iterator p = resultfrags.begin();
