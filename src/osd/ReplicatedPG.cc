@@ -3624,33 +3624,45 @@ int ReplicatedPG::start_recovery_ops(int max)
   int started = 0;
   assert(is_primary());
   
-  while (max > 0) {
-    int n;
-
-    size_t ml_sz = missing_loc.size();
-    size_t m_sz = missing.missing.size();
-
-    assert(m_sz >= ml_sz);
-
-    if (m_sz == ml_sz) {
-      // All of the missing objects we have are unfound.
-      n = recover_replicas(max);
-    }
-    else {
-      // We still have missing objects that we should grab from replicas.
-      n = recover_primary(max);
-    }
-    started += n;
-    osd->logger->inc(l_osd_rop, n);
-    if (n < max)
-      break;
-    max -= n;
+  size_t m_sz = missing.missing.size();
+  if (m_sz == 0) {
+    info.last_complete = info.last_update;
   }
-  return started;
+
+  size_t ml_sz = missing_loc.size();
+  assert(m_sz >= ml_sz);
+
+  if (m_sz == ml_sz) {
+    // All of the missing objects we have are unfound.
+    // Recover the replicas.
+    started = recover_replicas(max);
+  }
+  else {
+    // We still have missing objects that we should grab from replicas.
+    started = recover_primary(max);
+  }
+
+  osd->logger->inc(l_osd_rop, started);
+
+  if (started)
+    return started;
+
+  if (is_all_uptodate()) {
+    dout(10) << __func__ << ": all OSDs in the PG are up-to-date!" << dendl;
+    log.reset_recovery_pointers();
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    C_Contexts *fin = new C_Contexts;
+    finish_recovery(*t, fin->contexts);
+    int tr = osd->store->queue_transaction(&osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
+    assert(tr == 0);
+  }
+  else {
+    dout(10) << __func__ << ": some OSDs are not up-to-date yet. "
+             << "Recovery isn't finished yet." << dendl;
+  }
+
+  return 0;
 }
-
-
-
 
 /**
  * do one recovery op.
@@ -3748,36 +3760,6 @@ int ReplicatedPG::recover_primary(int max)
     if (!skipped)
       log.last_requested = v;
   }
-
-  // done?
-  if (!pulling.empty()) {
-    dout(7) << "recover_primary requested everything, still waiting" << dendl;
-    return started;
-  }
-  if (missing.num_missing()) {
-    dout(7) << "recover_primary still missing " << missing << dendl;
-    return started;
-  }
-
-  // done.
-  if (info.last_complete != info.last_update) {
-    dout(7) << "recover_primary last_complete " << info.last_complete << " -> " << info.last_update << dendl;
-    info.last_complete = info.last_update;
-  }
-
-  log.reset_recovery_pointers();
-
-  if (is_all_uptodate()) {
-    dout(-7) << "recover_primary complete" << dendl;
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    C_Contexts *fin = new C_Contexts;
-    finish_recovery(*t, fin->contexts);
-    int tr = osd->store->queue_transaction(&osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
-    assert(tr == 0);
-  } else {
-    dout(-10) << "recover_primary primary now complete, starting peer recovery" << dendl;
-  }
-
   return started;
 }
 
@@ -3814,13 +3796,7 @@ int ReplicatedPG::recover_object_replicas(const sobject_t& soid)
 int ReplicatedPG::recover_replicas(int max)
 {
   dout(10) << __func__ << "(" << max << ")" << dendl;
-  bool all_uptodate = true;
   int started = 0;
-
-  // Is the primary uptodate?
-  size_t ml_size = missing_loc.size();
-  if (missing.num_missing() > ml_size)
-    all_uptodate = false;
 
   // this is FAR from an optimal recovery order.  pretty lame, really.
   for (unsigned i=1; i<acting.size(); i++) {
@@ -3840,7 +3816,6 @@ int ReplicatedPG::recover_replicas(int max)
       const sobject_t soid(p->second);
       if (pushing.count(soid)) {
 	dout(10) << __func__ << ": already pushing " << soid << dendl;
-	all_uptodate = false;
 	continue;
       }
       if (missing_loc.find(soid) == missing_loc.end()) {
@@ -3849,30 +3824,15 @@ int ReplicatedPG::recover_replicas(int max)
       }
       if (missing.is_missing(soid)) {
 	dout(10) << __func__ << ": still missing on primary " << soid << dendl;
-	all_uptodate = false;
 	continue;
       }
       dout(10) << __func__ << ": recover_object_replicas(" << soid << ")" << dendl;
       started += recover_object_replicas(soid);
-      all_uptodate = false;
     }
-  }
-  
-  if (all_uptodate) {
-    dout(10) << __func__ << ": all replicas are up-to-date!" << dendl;
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    C_Contexts *fin = new C_Contexts;
-    finish_recovery(*t, fin->contexts);
-    int tr = osd->store->queue_transaction(&osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
-    assert(tr == 0);
-  }
-  else {
-    dout(20) << __func__ << ": some replicas are not up-to-date." << dendl;
   }
 
   return started;
 }
-
 
 void ReplicatedPG::remove_object_with_snap_hardlinks(ObjectStore::Transaction& t, const sobject_t& soid)
 {
