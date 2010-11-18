@@ -108,7 +108,11 @@ struct object_locator_t {
   __s16 preferred;
   string key;
 
-  object_locator_t(int po=-1, int pre=-1) : pool(po), preferred(pre) {}
+  explicit object_locator_t() : pool(-1), preferred(-1) {}
+
+  explicit object_locator_t(int po) : pool(po), preferred(-1) {}
+
+  explicit object_locator_t(int po, int pre) : pool(po), preferred(pre) {}
 
   int get_pool() const {
     return pool;

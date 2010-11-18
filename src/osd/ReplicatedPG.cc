@@ -50,6 +50,8 @@ static const int LOAD_LATENCY    = 1;
 static const int LOAD_QUEUE_SIZE = 2;
 static const int LOAD_HYBRID     = 3;
 
+// Blank object locator
+static const object_locator_t OLOC_BLANK;
 
 // =======================
 // pg changes
@@ -645,7 +647,7 @@ bool ReplicatedPG::snap_trimmer()
       dout(10) << coid << " new snapset " << snapset << dendl;
 
       sobject_t snapoid(coid.oid, snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR);
-      ctx->snapset_obc = get_object_context(snapoid, false);
+      ctx->snapset_obc = get_object_context(snapoid, OLOC_BLANK, false);
       register_object_context(ctx->snapset_obc);
       if (snapset.clones.empty() && !snapset.head_exists) {
 	dout(10) << coid << " removing " << snapoid << dendl;
@@ -1804,7 +1806,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
       // if we logically recreated the head, remove old _snapdir object
       sobject_t snapoid(soid.oid, CEPH_SNAPDIR);
 
-      ctx->snapset_obc = get_object_context(snapoid, false);
+      ctx->snapset_obc = get_object_context(snapoid, OLOC_BLANK, false);
       if (ctx->snapset_obc && ctx->snapset_obc->obs.exists) {
 	ctx->op_t.remove(coll_t(info.pgid), snapoid);
 	dout(10) << " removing old " << snapoid << dendl;
@@ -1826,7 +1828,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, snapoid, ctx->at_version, old_version,
 				  osd_reqid_t(), ctx->mtime));
 
-    ctx->snapset_obc = get_object_context(snapoid, true);
+    ctx->snapset_obc = get_object_context(snapoid, OLOC_BLANK, true);
     ctx->snapset_obc->obs.exists = true;
     ctx->snapset_obc->obs.oi.version = ctx->at_version;
     ctx->snapset_obc->obs.oi.last_reqid = ctx->reqid;
@@ -2314,7 +2316,7 @@ int ReplicatedPG::find_object_context(const object_t& oid, const object_locator_
   // want the head?
   sobject_t head(oid, CEPH_NOSNAP);
   if (snapid == CEPH_NOSNAP) {
-    ObjectContext *obc = get_object_context(head, can_create);
+    ObjectContext *obc = get_object_context(head, OLOC_BLANK, can_create);
     if (!obc)
       return -ENOENT;
     dout(10) << "find_object_context " << oid << " @" << snapid << dendl;
@@ -2381,7 +2383,7 @@ int ReplicatedPG::find_object_context(const object_t& oid, const object_locator_
     return -EAGAIN;
   }
 
-  ObjectContext *obc = get_object_context(soid, oloc);
+  ObjectContext *obc = get_object_context(soid, oloc, false);
 
   // clone
   dout(20) << "get_object_context  " << soid << " snaps " << obc->obs.oi.snaps << dendl;
@@ -3726,8 +3728,7 @@ int ReplicatedPG::recover_primary(int max)
 		     << " snaps " << latest->snaps << dendl;
 	    ObjectStore::Transaction *t = new ObjectStore::Transaction;
 
-	    object_locator_t oloc_blank;
-	    ObjectContext *headobc = get_object_context(head, oloc_blank);
+	    ObjectContext *headobc = get_object_context(head, OLOC_BLANK, false);
 
 	    object_info_t oi(soid, headobc->obs.oi.oloc);
 	    oi.version = latest->version;
@@ -3769,8 +3770,7 @@ int ReplicatedPG::recover_object_replicas(const sobject_t& soid)
 
   dout(10) << "recover_object_replicas " << soid << dendl;
 
-  object_locator_t oloc_blank;
-  ObjectContext *obc = get_object_context(soid, oloc_blank);
+  ObjectContext *obc = get_object_context(soid, OLOC_BLANK, false);
   dout(10) << " ondisk_read_lock for " << soid << dendl;
   obc->ondisk_read_lock();
   

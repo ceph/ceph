@@ -418,7 +418,7 @@ protected:
     return NULL;
   }
   ObjectContext *get_object_context(const sobject_t& soid, const object_locator_t& oloc,
-				    bool can_create=true);
+				    bool can_create);
   void register_object_context(ObjectContext *obc) {
     if (!obc->registered) {
       obc->registered = true;
