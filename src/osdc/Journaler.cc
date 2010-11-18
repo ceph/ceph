@@ -86,6 +86,7 @@ public:
 
 void Journaler::recover(Context *onread) 
 {
+  dout(1) << "recover start" << dendl;
   assert(state != STATE_ACTIVE);
 
   if (onread)
@@ -99,10 +100,50 @@ void Journaler::recover(Context *onread)
   dout(1) << "read_head" << dendl;
   state = STATE_READHEAD;
   C_ReadHead *fin = new C_ReadHead(this);
+  read_head(fin, &fin->bl);
+}
+
+void Journaler::read_head(Context *on_finish, bufferlist *bl)
+{
+  assert(state == STATE_READHEAD || state == STATE_REREADHEAD);
 
   object_t oid = file_object_t(ino, 0);
   object_locator_t oloc(pg_pool);
-  objecter->read_full(oid, oloc, CEPH_NOSNAP, &fin->bl, 0, fin);
+  objecter->read_full(oid, oloc, CEPH_NOSNAP, bl, 0, on_finish);
+}
+
+/**
+ * Re-read the head from disk, and set the write_pos, expire_pos, trimmed_pos
+ * from the on-disk header. This switches the state to STATE_REREADHEAD for
+ * the duration, and you shouldn't start a re-read while other operations are
+ * in-flight, nor start other operations while a re-read is in progress.
+ * Also, don't call this until the Journaler has finished its recovery and has
+ * gone STATE_ACTIVE!
+ */
+void Journaler::reread_head()
+{
+  dout(10) << "reread_head" << dendl;
+  assert(state == STATE_ACTIVE);
+
+  Mutex lock("Journaler::reread_head");
+  Cond cond;
+  bool done = false;
+  bufferlist bl;
+  state = STATE_REREADHEAD;
+  read_head(new C_SafeCond(&lock, &cond, &done), &bl);
+  while (!done) cond.Wait(lock);
+
+  //read on-disk header into
+  assert (bl.length());
+
+  // unpack header
+  Header h;
+  bufferlist::iterator p = bl.begin();
+  ::decode(h, p);
+  write_pos = h.write_pos;
+  expire_pos = h.expire_pos;
+  trimmed_pos = h.trimmed_pos;
+  state = STATE_ACTIVE;
 }
 
 void Journaler::_finish_read_head(int r, bufferlist& bl)

@@ -129,6 +129,7 @@ public:
   static const int STATE_READHEAD = 1;
   static const int STATE_PROBING = 2;
   static const int STATE_ACTIVE = 2;
+  static const int STATE_REREADHEAD = 3;
 
   int state;
   int error;
@@ -232,6 +233,8 @@ public:
    */
   void create(ceph_file_layout *layout);
   void recover(Context *onfinish);
+  void read_head(Context *on_finish, bufferlist *bl);
+  void reread_head();
   void write_head(Context *onsave=0);
 
   void set_layout(ceph_file_layout *l);
