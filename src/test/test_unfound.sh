@@ -70,7 +70,10 @@ osd_resurrection_1_impl() {
         wait
         [ -e $TEMPDIR/obj01 ] || die "unexpected error: failed to fetched newly-found object"
 
-        # TODO: turn off recovery delay start and verify that every osd gets copies of the correct objects.
+        # Turn off recovery delay start and verify that every osd gets copies
+        # of the correct objects.
+        echo "starting recovery..."
+        start_recovery 2
 
         # success
         return 0
