@@ -98,10 +98,11 @@ public:
   } last_written, last_committed;
   WRITE_CLASS_ENCODER(Header)
 
-  private:
+private:
   // me
   inodeno_t ino;
   unsigned pg_pool;
+  bool readonly;
   ceph_file_layout layout;
 
   const char *magic;
@@ -209,7 +210,7 @@ public:
 public:
   Journaler(inodeno_t ino_, int pool, const char *mag, Objecter *obj, Logger *l, int lkey, SafeTimer *tim) : 
     last_written(mag), last_committed(mag),
-    ino(ino_), pg_pool(pool), magic(mag),
+    ino(ino_), pg_pool(pool), readonly(false), magic(mag),
     objecter(obj), filer(objecter), logger(l), logger_key_lat(lkey),
     timer(tim), delay_flush_event(0),
     state(STATE_UNDEF), error(0),
@@ -238,6 +239,9 @@ public:
   void write_head(Context *onsave=0);
 
   void set_layout(ceph_file_layout *l);
+
+  void set_readonly() { readonly = true; }
+  void set_writeable() { readonly = false; }
 
   bool is_active() { return state == STATE_ACTIVE; }
   int get_error() { return error; }

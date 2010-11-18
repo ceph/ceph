@@ -28,6 +28,7 @@
 
 void Journaler::create(ceph_file_layout *l)
 {
+  assert(!readonly);
   dout(1) << "create blank journal" << dendl;
   state = STATE_ACTIVE;
 
@@ -40,6 +41,7 @@ void Journaler::create(ceph_file_layout *l)
 
 void Journaler::set_layout(ceph_file_layout *l)
 {
+  assert(!readonly);
   layout = *l;
 
   assert(layout.fl_pg_pool == pg_pool);
@@ -233,6 +235,7 @@ public:
 
 void Journaler::write_head(Context *oncommit)
 {
+  assert (!readonly);
   assert(state == STATE_ACTIVE);
   last_written.trimmed_pos = trimmed_pos;
   last_written.expire_pos = expire_pos;
@@ -255,6 +258,7 @@ void Journaler::write_head(Context *oncommit)
 
 void Journaler::_finish_write_head(Header &wrote, Context *oncommit)
 {
+  assert(!readonly);
   dout(10) << "_finish_write_head " << wrote << dendl;
   last_committed = wrote;
   if (oncommit) {
@@ -280,6 +284,7 @@ public:
 
 void Journaler::_finish_flush(int r, int64_t start, utime_t stamp, bool safe)
 {
+  assert(!readonly);
   assert(r>=0);
 
   assert((!safe && start >= ack_pos) || (safe && start >= safe_pos));
@@ -353,6 +358,7 @@ void Journaler::_finish_flush(int r, int64_t start, utime_t stamp, bool safe)
 
 int64_t Journaler::append_entry(bufferlist& bl)
 {
+  assert(!readonly);
   uint32_t s = bl.length();
 
   if (!g_conf.journaler_allow_split_entries) {
@@ -416,6 +422,7 @@ void Journaler::_do_flush(unsigned amount)
 {
   if (write_pos == flush_pos) return;
   assert(write_pos > flush_pos);
+  assert(!readonly);
 
   // flush
   unsigned len = write_pos - flush_pos;
@@ -462,6 +469,7 @@ void Journaler::_do_flush(unsigned amount)
 
 void Journaler::wait_for_flush(Context *onsync, Context *onsafe, bool add_ack_barrier)
 {
+  assert(!readonly);
   if (g_conf.journaler_safe && onsync) {
     assert(!onsafe);
     onsafe = onsync;
@@ -501,6 +509,7 @@ void Journaler::wait_for_flush(Context *onsync, Context *onsafe, bool add_ack_ba
 
 void Journaler::flush(Context *onsync, Context *onsafe, bool add_ack_barrier)
 {
+  assert(!readonly);
   wait_for_flush(onsync, onsafe, add_ack_barrier);
   if (write_pos == ack_pos)
     return;
@@ -748,6 +757,8 @@ bool Journaler::is_readable()
 
 bool Journaler::truncate_tail_junk(Context *c)
 {
+  if(readonly)
+    return true; //can't touch journal in readonly mode!
   if (!junk_tail_pos) {
     dout(10) << "truncate_tail_junk -- no trailing junk" << dendl;
     return true;
@@ -825,6 +836,7 @@ public:
 
 void Journaler::trim()
 {
+  assert(!readonly);
   uint64_t period = layout.fl_stripe_count * layout.fl_object_size;
 
   int64_t trim_to = last_committed.expire_pos;
@@ -863,6 +875,7 @@ void Journaler::trim()
 
 void Journaler::_trim_finish(int r, int64_t to)
 {
+  assert(!readonly);
   dout(10) << "_trim_finish trimmed_pos was " << trimmed_pos
 	   << ", trimmed/trimming/expire now "
 	   << to << "/" << trimming_pos << "/" << expire_pos
