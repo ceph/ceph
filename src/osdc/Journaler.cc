@@ -167,6 +167,8 @@ void Journaler::_finish_probe_end(int r, int64_t end)
 	    << dendl;
   }
 
+  state = STATE_ACTIVE;
+
   write_pos = flush_pos = ack_pos = safe_pos = end;
   
   // done.
