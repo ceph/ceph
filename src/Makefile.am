@@ -353,7 +353,7 @@ doc_DATA = $(srcdir)/sample.ceph.conf
 doc_SCRIPTS = sample.fetch_config
 
 sample.fetch_config: fetch_config
-	cp -f $(srcdir)/fetch_config $(builddir)/sample.fetch_config
+	cp -f $(srcdir)/fetch_config sample.fetch_config
 
 shell_commondir = $(libdir)/ceph
 shell_common_SCRIPTS = ceph_common.sh
@@ -383,12 +383,12 @@ FORCE:
 .git_version: FORCE
 	$(srcdir)/check_version $(srcdir)/.git_version
 ceph_ver.h: .git_version
-	$(srcdir)/make_version $(srcdir)/.git_version $(builddir)/ceph_ver.h
+	$(srcdir)/make_version $(srcdir)/.git_version ceph_ver.h
 
-ceph_ver.c: $(builddir)/ceph_ver.h
-common/debug.cc: $(builddir)/ceph_ver.h
-common/BackTrace.cc: $(builddir)/ceph_ver.h
-config.cc: $(builddir)/ceph_ver.h
+ceph_ver.c: ceph_ver.h
+common/debug.cc: ceph_ver.h
+common/BackTrace.cc: ceph_ver.h
+config.cc: ceph_ver.h
 
 # cleaning
 clean-local:
@@ -398,7 +398,7 @@ clean-local:
 
 # libs
 libcommon_a_SOURCES = \
-	$(builddir)/ceph_ver.c \
+	ceph_ver.c \
 	$(libcommon_files)
 
 # this list ommits the ceph_ver.c file
