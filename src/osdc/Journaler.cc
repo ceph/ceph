@@ -99,7 +99,6 @@ void Journaler::recover(Context *onread)
   dout(1) << "read_head" << dendl;
   state = STATE_READHEAD;
   C_ReadHead *fin = new C_ReadHead(this);
-  vector<snapid_t> snaps;
 
   object_t oid = file_object_t(ino, 0);
   object_locator_t oloc(pg_pool);
