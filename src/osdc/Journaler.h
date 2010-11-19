@@ -223,6 +223,30 @@ public:
   {
   }
 
+  void reset() {
+    assert(state == STATE_ACTIVE);
+    readonly = false;
+    delay_flush_event = 0;
+    state = STATE_UNDEF;
+    error = 0;
+    write_pos = 0;
+    flush_pos = 0;
+    ack_pos = 0;
+    safe_pos = 0;
+    read_pos = 0;
+    requested_pos = 0;
+    received_pos = 0;
+    fetch_len = 0;
+    prefetch_from = 0;
+    junk_tail_pos = 0;
+    read_bl = 0;
+    on_read_finish = 0;
+    assert(!on_readable);
+    expire_pos = 0;
+    trimming_pos = 0;
+    trimmed_pos = 0;
+  }
+
   // me
   //void open(Context *onopen);
   //void claim(Context *onclaim, msg_addr_t from);
