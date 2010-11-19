@@ -3702,7 +3702,7 @@ int ReplicatedPG::recover_primary(int max)
     sobject_t head = soid;
     head.snap = CEPH_NOSNAP;
 
-    bool unfound = missing_loc.count(soid);
+    bool unfound = (missing_loc.find(soid) == missing_loc.end());
 
     dout(10) << "recover_primary "
              << soid << " " << item.need
