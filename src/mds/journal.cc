@@ -1023,8 +1023,8 @@ void EExport::replay(MDS *mds)
   }
 
   // adjust auth away
-  mds->mdcache->trim_non_auth_subtree(dir);
   mds->mdcache->adjust_bounded_subtree_auth(dir, realbounds, pair<int,int>(CDIR_AUTH_UNKNOWN, CDIR_AUTH_UNKNOWN));
+  mds->mdcache->trim_non_auth_subtree(dir);
   mds->mdcache->try_subtree_merge(dir);
 }
 
