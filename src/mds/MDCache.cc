@@ -2503,19 +2503,20 @@ void MDCache::handle_resolve(MMDSResolve *m)
 
   show_subtrees();
 
-
-  // note ambiguous imports too
-  for (map<dirfrag_t, vector<dirfrag_t> >::iterator pi = m->ambiguous_imports.begin();
-       pi != m->ambiguous_imports.end();
-       ++pi) {
-    dout(10) << "noting ambiguous import on " << pi->first << " bounds " << pi->second << dendl;
-    other_ambiguous_imports[from][pi->first].swap( pi->second );
+  if (mds->is_resolve()) {
+    // note ambiguous imports too
+    for (map<dirfrag_t, vector<dirfrag_t> >::iterator pi = m->ambiguous_imports.begin();
+	 pi != m->ambiguous_imports.end();
+	 ++pi) {
+      dout(10) << "noting ambiguous import on " << pi->first << " bounds " << pi->second << dendl;
+      other_ambiguous_imports[from][pi->first].swap( pi->second );
+    }
+    
+    // did i get them all?
+    got_resolve.insert(from);
+  
+    maybe_resolve_finish();
   }
-  
-  // did i get them all?
-  got_resolve.insert(from);
-  
-  maybe_resolve_finish();
 
   m->put();
 }
