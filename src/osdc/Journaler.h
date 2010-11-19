@@ -131,6 +131,7 @@ private:
   static const int STATE_PROBING = 2;
   static const int STATE_ACTIVE = 2;
   static const int STATE_REREADHEAD = 3;
+  static const int STATE_REPROBING = 4;
 
   int state;
   int error;
@@ -143,6 +144,8 @@ private:
 
   list<Context*> waitfor_recover;
   void _finish_read_head(int r, bufferlist& bl);
+  void probe(Context *finish, uint64_t *end);
+  void reprobe();
   void _finish_probe_end(int r, int64_t end);
   class C_ReadHead;
   friend class C_ReadHead;

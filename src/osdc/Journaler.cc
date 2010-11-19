@@ -183,12 +183,37 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   trimmed_pos = trimming_pos = h.trimmed_pos;
 
   dout(1) << "_finish_read_head " << h << ".  probing for end of log (from " << write_pos << ")..." << dendl;
-
-  // probe the log
-  state = STATE_PROBING;
   C_ProbeEnd *fin = new C_ProbeEnd(this);
+  state = STATE_PROBING;
+  probe(fin, (uint64_t*)&fin->end);
+}
+
+void Journaler::probe(Context *finish, uint64_t *end)
+{
+  dout(1) << "probing for end of the log" << dendl;
+  assert(state == STATE_PROBING || state == STATE_REPROBING);
+  // probe the log
   filer.probe(ino, &layout, CEPH_NOSNAP,
-	      h.write_pos, (uint64_t *)&fin->end, 0, true, 0, fin);
+	      write_pos, end, 0, true, 0, finish);
+}
+
+void Journaler::reprobe()
+{
+  dout(10) << "reprobe" << dendl;
+  assert(state == STATE_ACTIVE);
+
+  Mutex lock("Journaler::reprobe");
+  Cond cond;
+  bool done = false;
+  bufferlist bl;
+  state = STATE_REPROBING;
+  uint64_t new_end = 0;
+  probe(new C_SafeCond(&lock, &cond, &done), &new_end);
+  while (!done) cond.Wait(lock);
+
+  assert(new_end >= write_pos);
+  write_pos = new_end;
+  state = STATE_ACTIVE;
 }
 
 void Journaler::_finish_probe_end(int r, int64_t end)
