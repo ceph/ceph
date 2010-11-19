@@ -1192,6 +1192,7 @@ void PG::clear_primary_state()
   peer_last_complete_ondisk.clear();
   min_last_complete_ondisk = eversion_t();
   stray_purged.clear();
+  might_have_unfound.clear();
 
   last_update_ondisk = eversion_t();
 
@@ -1558,6 +1559,55 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
     finish_recovery(t, tfin);
 }
 
+/* Build the might_have_unfound set.
+ *
+ * This is used by the primary OSD during recovery.
+ *
+ * This set tracks the OSDs which might have unfound objects that the primary
+ * OSD needs. As we receive Missing from each OSD in might_have_unfound, we
+ * will remove the OSD from the set.
+ */
+void PG::build_might_have_unfound()
+{
+  assert(might_have_unfound.empty());
+  assert(is_primary());
+
+  dout(10) << __func__ << dendl;
+
+  // Make sure that we have past intervals.
+  if (info.history.same_acting_since > info.history.last_epoch_started &&
+      (past_intervals.empty() ||
+       past_intervals.begin()->first > info.history.last_epoch_started))
+    generate_past_intervals();
+
+  // We need to decide who might have unfound objects that we need
+  std::map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
+  std::map<epoch_t,Interval>::const_reverse_iterator end = past_intervals.rend();
+  for (; p != end; ++p) {
+    const Interval &interval(p->second);
+    // We already have all the objects that exist at last_epoch_clean,
+    // so there's no need to look at earlier intervals.
+    if (interval.last < info.history.last_epoch_clean)
+      break;
+
+    // If nothing changed, we don't care about this interval.
+    if (!interval.maybe_went_rw)
+      continue;
+
+    std::vector<int>::const_iterator a = interval.acting.begin();
+    std::vector<int>::const_iterator a_end = interval.acting.end();
+    for (; a != a_end; ++a) {
+      might_have_unfound.insert(*a);
+    }
+  }
+
+  // The objects which are unfound on the primary can't be found on the
+  // primary itself.
+  might_have_unfound.erase(osd->whoami);
+
+  dout(15) << __func__ << ": built " << might_have_unfound << dendl;
+}
+
 void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 		  map<int, MOSDPGInfo*> *activator_map)
 {
@@ -1578,6 +1628,16 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
     state_set(PG_STATE_DEGRADED);
   else
     state_clear(PG_STATE_DEGRADED);
+
+  if (is_primary()) {
+    // If necessary, create might_have_unfound to help us find our unfound objects.
+    // NOTE: It's important that we build might_have_unfound before trimming the
+    // past intervals.
+    might_have_unfound.clear();
+    if (missing.have_missing()) {
+      build_might_have_unfound();
+    }
+  }
 
   info.history.last_epoch_started = osd->osdmap->get_epoch();
   trim_past_intervals();

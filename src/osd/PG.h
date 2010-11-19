@@ -746,6 +746,10 @@ public:
   set<int>             peer_summary_requested;
   set<int>             peer_missing_requested;
   set<int>             stray_purged;  // i deleted these strays; ignore racing PGInfo from them
+
+  // primary-only, recovery-only state
+  set<int>             might_have_unfound;  // These osds might have objects on them
+					    // which are unfound on the primary
   friend class OSD;
 
 
@@ -841,6 +845,7 @@ public:
   void do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
 	      map< int, map<pg_t,Query> >& query_map,
 	      map<int, MOSDPGInfo*> *activator_map=0);
+  void build_might_have_unfound();
   void activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 		map<int, MOSDPGInfo*> *activator_map=0);
 
