@@ -38,6 +38,7 @@ class CDentry;
 class MDCache;
 class MDCluster;
 class Context;
+class bloom_filter;
 
 class ObjectOperation;
 
@@ -273,6 +274,10 @@ protected:
   friend class CDirDiscover;
   friend class CDirExport;
 
+  bloom_filter *bloom;
+  /* If you set up the bloom filter, you must keep it accurate!
+   * It's deleted when you mark_complete() and is deliberately not serialized.*/
+
  public:
   CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth);
   ~CDir() {
@@ -334,6 +339,10 @@ protected:
   void link_primary_inode( CDentry *dn, CInode *in );
   void unlink_inode( CDentry *dn );
   void try_remove_unlinked_dn(CDentry *dn);
+
+  void add_to_bloom(CDentry *dn);
+  bool is_in_bloom(const string& name);
+  bool has_bloom() { return (bloom ? true : false); }
 private:
   void link_inode_work( CDentry *dn, CInode *in );
   void unlink_inode_work( CDentry *dn );
@@ -475,7 +484,7 @@ private:
   version_t get_committed_version() { return committed_version; }
   void set_committed_version(version_t v) { committed_version = v; }
 
-  void mark_complete() { state_set(STATE_COMPLETE); }
+  void mark_complete();
 
 
   // -- reference counting --

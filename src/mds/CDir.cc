@@ -26,6 +26,7 @@
 #include "MDLog.h"
 #include "LogSegment.h"
 
+#include "include/bloom_filter.hpp"
 #include "include/Context.h"
 #include "common/Clock.h"
 
@@ -152,7 +153,7 @@ ostream& CDir::print_db_line_prefix(ostream& out)
 
 CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   dirty_rstat_inodes(member_offset(CInode, dirty_rstat_item)),
-  item_dirty(this), item_new(this)
+  item_dirty(this), item_new(this), bloom(NULL)
 {
   g_num_dir++;
   g_num_dira++;
@@ -514,6 +515,21 @@ void CDir::unlink_inode_work( CDentry *dn )
     in->remove_primary_parent(dn);
     dn->get_linkage()->inode = 0;
   }
+}
+
+void CDir::add_to_bloom(CDentry *dn)
+{
+  if (!bloom)
+    bloom = new bloom_filter(100, 0.05, 0);
+  /* This size and false positive probability is completely random.*/
+  bloom->insert(dn->name.c_str(), dn->name.size());
+}
+
+bool CDir::is_in_bloom(const string& name)
+{
+  if (!bloom)
+    return false;
+  return bloom->contains(name.c_str(), name.size());
 }
 
 void CDir::remove_null_dentries() {
@@ -1109,7 +1125,11 @@ void CDir::log_mark_dirty()
   mdlog->wait_for_sync(new C_Dir_Dirty(this, pv, mdlog->get_current_segment()));
 }
 
-
+void CDir::mark_complete() {
+  state_set(STATE_COMPLETE);
+  delete bloom;
+  bloom = NULL;
+}
 
 void CDir::first_get()
 {

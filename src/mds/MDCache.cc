@@ -4985,6 +4985,7 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
   }
     
   // remove dentry
+  dir->add_to_bloom(dn);
   dir->remove_dentry(dn);
   
   // reexport?
@@ -5173,6 +5174,7 @@ void MDCache::trim_non_auth()
       else {
 	assert(dnl->is_null());
       }
+      dir->add_to_bloom(dn);
       dir->remove_dentry(dn);
       
       // adjust the dir state
@@ -5273,6 +5275,7 @@ bool MDCache::trim_non_auth_subtree(CDir *directory)
         dout(20) << "removing inode " << in << " with dentry" << dn << dendl;
         directory->unlink_inode(dn);
         remove_inode(in);
+        directory->add_to_bloom(dn);
         directory->remove_dentry(dn);
       } else {
         dout(20) << "keeping inode " << in << "with dentry " << dn <<dendl;
@@ -6177,7 +6180,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 
     if (curdir->is_auth()) {
       // dentry is mine.
-      if (curdir->is_complete()) {
+      if (curdir->is_complete() || (curdir->has_bloom() &&
+          !curdir->is_in_bloom(path[depth]))){
         // file not found
 	if (pdnvec) {
 	  // instantiate a null dn?
