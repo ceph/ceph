@@ -194,7 +194,9 @@ void CDentry::mark_clean()
 {
   dout(10) << " mark_clean " << *this << dendl;
   assert(is_dirty());
-  assert(dir->get_version() == 0 || version <= dir->get_version());  // hmm?
+
+  // not always true for recalc_auth_bits during resolve finish
+  //assert(dir->get_version() == 0 || version <= dir->get_version());  // hmm?
 
   // state+pin
   state_clear(STATE_DIRTY);
