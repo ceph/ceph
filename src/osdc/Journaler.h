@@ -64,10 +64,10 @@ class Journaler {
 public:
   // this goes at the head of the log "file".
   struct Header {
-    int64_t trimmed_pos;
-    int64_t expire_pos;
-    int64_t read_pos;
-    int64_t write_pos;
+    uint64_t trimmed_pos;
+    uint64_t expire_pos;
+    uint64_t read_pos;
+    uint64_t write_pos;
     string magic;
     ceph_file_layout layout;
 
@@ -146,7 +146,7 @@ private:
   void _finish_read_head(int r, bufferlist& bl);
   void probe(Context *finish, uint64_t *end);
   void reprobe();
-  void _finish_probe_end(int r, int64_t end);
+  void _finish_probe_end(int r, uint64_t end);
   class C_ReadHead;
   friend class C_ReadHead;
   class C_ProbeEnd;
@@ -155,31 +155,31 @@ private:
 
 
   // writer
-  int64_t write_pos;       // logical write position, where next entry will go
-  int64_t flush_pos;       // where we will flush. if write_pos>flush_pos, we're buffering writes.
-  int64_t ack_pos;         // what has been acked.
-  int64_t safe_pos;        // what has been committed safely to disk.
+  uint64_t write_pos;       // logical write position, where next entry will go
+  uint64_t flush_pos;       // where we will flush. if write_pos>flush_pos, we're buffering writes.
+  uint64_t ack_pos;         // what has been acked.
+  uint64_t safe_pos;        // what has been committed safely to disk.
   bufferlist write_buf;  // write buffer.  flush_pos + write_buf.length() == write_pos.
 
-  std::set<int64_t> pending_ack, pending_safe;
-  std::map<int64_t, std::list<Context*> > waitfor_ack;  // when flushed through given offset
-  std::map<int64_t, std::list<Context*> > waitfor_safe; // when safe through given offset
-  std::set<int64_t> ack_barrier;
+  std::set<uint64_t> pending_ack, pending_safe;
+  std::map<uint64_t, std::list<Context*> > waitfor_ack;  // when flushed through given offset
+  std::map<uint64_t, std::list<Context*> > waitfor_safe; // when safe through given offset
+  std::set<uint64_t> ack_barrier;
 
   void _do_flush(unsigned amount=0);
-  void _finish_flush(int r, int64_t start, utime_t stamp, bool safe);
+  void _finish_flush(int r, uint64_t start, utime_t stamp, bool safe);
   class C_Flush;
   friend class C_Flush;
 
   // reader
-  int64_t read_pos;      // logical read position, where next entry starts.
-  int64_t requested_pos; // what we've requested from OSD.
-  int64_t received_pos;  // what we've received from OSD.
+  uint64_t read_pos;      // logical read position, where next entry starts.
+  uint64_t requested_pos; // what we've requested from OSD.
+  uint64_t received_pos;  // what we've received from OSD.
   bufferlist read_buf; // read buffer.  read_pos + read_buf.length() == prefetch_pos.
   bufferlist reading_buf; // what i'm reading into
 
-  int64_t fetch_len;     // how much to read at a time
-  int64_t prefetch_from; // how far from end do we read next chunk
+  uint64_t fetch_len;     // how much to read at a time
+  uint64_t prefetch_from; // how far from end do we read next chunk
 
   int64_t junk_tail_pos; // for truncate
 
@@ -201,12 +201,12 @@ private:
   friend class C_RetryRead;
 
   // trimmer
-  int64_t expire_pos;    // what we're allowed to trim to
-  int64_t trimming_pos;      // what we've requested to trim through
-  int64_t trimmed_pos;   // what has been trimmed
-  map<int64_t, list<Context*> > waitfor_trim;
+  uint64_t expire_pos;    // what we're allowed to trim to
+  uint64_t trimming_pos;      // what we've requested to trim through
+  uint64_t trimmed_pos;   // what has been trimmed
+  map<uint64_t, list<Context*> > waitfor_trim;
 
-  void _trim_finish(int r, int64_t to);
+  void _trim_finish(int r, uint64_t to);
   class C_Trim;
   friend class C_Trim;
 

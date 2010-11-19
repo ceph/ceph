@@ -79,7 +79,7 @@ public:
 class Journaler::C_ProbeEnd : public Context {
   Journaler *ls;
 public:
-  int64_t end;
+  uint64_t end;
   C_ProbeEnd(Journaler *l) : ls(l), end(-1) {}
   void finish(int r) {
     ls->_finish_probe_end(r, end);
@@ -185,7 +185,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   dout(1) << "_finish_read_head " << h << ".  probing for end of log (from " << write_pos << ")..." << dendl;
   C_ProbeEnd *fin = new C_ProbeEnd(this);
   state = STATE_PROBING;
-  probe(fin, (uint64_t*)&fin->end);
+  probe(fin, &fin->end);
 }
 
 void Journaler::probe(Context *finish, uint64_t *end)
@@ -216,11 +216,11 @@ void Journaler::reprobe()
   state = STATE_ACTIVE;
 }
 
-void Journaler::_finish_probe_end(int r, int64_t end)
+void Journaler::_finish_probe_end(int r, uint64_t end)
 {
   assert(state == STATE_PROBING);
   
-  if (end == -1) {
+  if (((int64_t)end) == -1) {
     end = write_pos;
     dout(1) << "_finish_probe_end write_pos = " << end 
 	    << " (header had " << write_pos << "). log was empty. recovered."
@@ -299,7 +299,7 @@ void Journaler::_finish_write_head(Header &wrote, Context *oncommit)
 
 class Journaler::C_Flush : public Context {
   Journaler *ls;
-  int64_t start;
+  uint64_t start;
   utime_t stamp;
   bool safe;
 public:
@@ -307,7 +307,7 @@ public:
   void finish(int r) { ls->_finish_flush(r, start, stamp, safe); }
 };
 
-void Journaler::_finish_flush(int r, int64_t start, utime_t stamp, bool safe)
+void Journaler::_finish_flush(int r, uint64_t start, utime_t stamp, bool safe)
 {
   assert(!readonly);
   assert(r>=0);
@@ -689,7 +689,7 @@ void Journaler::_issue_read(int64_t len)
 void Journaler::_prefetch()
 {
   // prefetch?
-  int64_t left = requested_pos - read_pos;
+  uint64_t left = requested_pos - read_pos;
   if (left <= prefetch_from &&      // should read more,
       !_is_reading() &&             // and not reading anything right now
       write_pos > requested_pos) {  // there's something more to read...
@@ -773,7 +773,7 @@ bool Journaler::is_readable()
   // start reading some more?
   if (!_is_reading()) {
     if (s)
-      fetch_len = MAX(fetch_len, (int64_t)(sizeof(s)+s-read_buf.length())); 
+      fetch_len = MAX(fetch_len, (sizeof(s)+s-read_buf.length()));
     _issue_read(fetch_len);
   }
 
@@ -851,7 +851,7 @@ void Journaler::wait_for_readable(Context *onreadable)
 
 class Journaler::C_Trim : public Context {
   Journaler *ls;
-  int64_t to;
+  uint64_t to;
 public:
   C_Trim(Journaler *l, int64_t t) : ls(l), to(t) {}
   void finish(int r) {
@@ -864,7 +864,7 @@ void Journaler::trim()
   assert(!readonly);
   uint64_t period = layout.fl_stripe_count * layout.fl_object_size;
 
-  int64_t trim_to = last_committed.expire_pos;
+  uint64_t trim_to = last_committed.expire_pos;
   trim_to -= trim_to % period;
   dout(10) << "trim last_commited head was " << last_committed
 	   << ", can trim to " << trim_to
@@ -898,7 +898,7 @@ void Journaler::trim()
   trimming_pos = trim_to;  
 }
 
-void Journaler::_trim_finish(int r, int64_t to)
+void Journaler::_trim_finish(int r, uint64_t to)
 {
   assert(!readonly);
   dout(10) << "_trim_finish trimmed_pos was " << trimmed_pos
