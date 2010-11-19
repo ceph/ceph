@@ -591,7 +591,7 @@ void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map)
       continue;
     if (peer_log_requested.find(from) != peer_log_requested.end())
       continue;
-    if (peer_summary_requested.find(from) != peer_summary_requested.end())
+    if (peer_backlog_requested.find(from) != peer_backlog_requested.end())
       continue;
     if (peer_missing_requested.find(from) != peer_missing_requested.end())
       continue;
@@ -1184,7 +1184,7 @@ void PG::clear_primary_state()
   uptodate_set.clear();
   peer_info_requested.clear();
   peer_log_requested.clear();
-  peer_summary_requested.clear();
+  peer_backlog_requested.clear();
   peer_missing_requested.clear();
   peer_info.clear();
   peer_missing.clear();
@@ -1363,7 +1363,7 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
 	return false;
       }
       
-      if (peer_summary_requested.count(newest_update_osd)) {
+      if (peer_backlog_requested.count(newest_update_osd)) {
 	dout(10) << " newest update on osd" << newest_update_osd
 		 << " v " << newest_update 
 		 << ", already queried summary/backlog" 
@@ -1374,7 +1374,7 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
 		 << ", querying entire summary/backlog"
 		 << dendl;
 	query_map[newest_update_osd][info.pgid] = Query(Query::BACKLOG, info.history);
-	peer_summary_requested.insert(newest_update_osd);
+	peer_backlog_requested.insert(newest_update_osd);
       }
     }
     return false;
@@ -1484,7 +1484,7 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
     }
     if (peer_log_requested.find(peer) != peer_log_requested.end())
       continue;
-    if (peer_summary_requested.find(peer) != peer_summary_requested.end())
+    if (peer_backlog_requested.find(peer) != peer_backlog_requested.end())
       continue;
    
     assert(pi.last_update <= log.head);
@@ -1495,7 +1495,7 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
 	       << " < log.tail " << log.tail
 	       << ", pulling missing+backlog" << dendl;
       query_map[peer][info.pgid] = Query(Query::BACKLOG, info.history);
-      peer_summary_requested.insert(peer);
+      peer_backlog_requested.insert(peer);
     } else {
       // we need just enough log to get any divergent items so that we
       // can appropriate adjust the missing map.  that can be as far back
@@ -1963,7 +1963,7 @@ void PG::purge_strays()
   // (more) stray content
   peer_info_requested.clear();
   peer_log_requested.clear();
-  peer_summary_requested.clear();
+  peer_backlog_requested.clear();
   peer_missing_requested.clear();
 }
 

@@ -743,7 +743,7 @@ public:
   set<int>             peer_info_requested;
   map<int, Missing>    peer_missing;
   set<int>             peer_log_requested;  // logs i've requested (and start stamps)
-  set<int>             peer_summary_requested;
+  set<int>             peer_backlog_requested;
   set<int>             peer_missing_requested;
   set<int>             stray_purged;  // i deleted these strays; ignore racing PGInfo from them
 
