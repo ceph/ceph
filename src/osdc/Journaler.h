@@ -143,9 +143,9 @@ private:
   friend class C_WriteHead;
 
   list<Context*> waitfor_recover;
+  void read_head(Context *on_finish, bufferlist *bl);
   void _finish_read_head(int r, bufferlist& bl);
   void probe(Context *finish, uint64_t *end);
-  void reprobe();
   void _finish_probe_end(int r, uint64_t end);
   class C_ReadHead;
   friend class C_ReadHead;
@@ -261,8 +261,8 @@ public:
    */
   void create(ceph_file_layout *layout);
   void recover(Context *onfinish);
-  void read_head(Context *on_finish, bufferlist *bl);
   void reread_head();
+  void reprobe();
   void write_head(Context *onsave=0);
 
   void set_layout(ceph_file_layout *l);
