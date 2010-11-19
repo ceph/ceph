@@ -640,6 +640,9 @@ void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth, bool do_eval)
   dout(7) << "adjust_subtree_auth " << dir->get_dir_auth() << " -> " << auth
 	  << " on " << *dir << dendl;
 
+  if (mds->is_replay() || mds->is_resolve())
+    do_eval = false;
+
   show_subtrees();
 
   CDir *root;
@@ -740,6 +743,10 @@ void MDCache::try_subtree_merge_at(CDir *dir)
   dout(10) << "try_subtree_merge_at " << *dir << dendl;
   assert(subtrees.count(dir));
 
+  bool do_eval = true;
+  if (mds->is_replay() || mds->is_resolve())
+    do_eval = false;
+
   // merge with parent?
   CDir *parent = dir;  
   if (!dir->inode->is_base())
@@ -775,7 +782,8 @@ void MDCache::try_subtree_merge_at(CDir *dir)
       }
     }
 
-    eval_subtree_root(dir->get_inode());
+    if (do_eval)
+      eval_subtree_root(dir->get_inode());
 
     // journal inode? 
     //  (this is a large hammer to ensure that dirfragtree updates will
