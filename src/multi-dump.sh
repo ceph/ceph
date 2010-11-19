@@ -11,10 +11,12 @@ usage() {
         echo <<EOF
 multi-dump.sh: dumps out ceph maps
 
+-D                         Enable diff-mode
 -e <start-epoch>           What epoch to end with.
 -h                         This help message
 -s <start-epoch>           What epoch to start with. Defaults to 1.
--t <osdmap>                What type of map to dump. Defaults to osdmap.
+-t <map-type>              What type of map to dump. Defaults to osdmap.
+                           Valid map types are: osdmap, 
 EOF
 }
 
@@ -32,11 +34,24 @@ dump_osdmap() {
                 ./ceph osd getmap $v -o $TEMPDIR/$v >> $TEMPDIR/cephtool-out \
                         || die "cephtool failed to dump epoch $v"
         done
-        for v in `seq $START_EPOCH $END_EPOCH`; do
-                echo "************** $v **************"
-                ./osdmaptool --print $TEMPDIR/$v \
-                        || die "osdmaptool failed to print epoch $v"
-        done
+        if [ $DIFFMODE -eq 1 ]; then
+                for v in `seq $START_EPOCH $END_EPOCH`; do
+                        ./osdmaptool --print $TEMPDIR/$v > $TEMPDIR/$v.out
+                done
+                cat $TEMPDIR/$START_EPOCH.out
+                E=$((END_EPOCH-1))
+                for v in `seq $START_EPOCH $E`; do
+                        S=$((v+1))
+                        echo "************** $S **************"
+                        diff  $TEMPDIR/$v.out $TEMPDIR/$S.out
+                done
+        else
+                for v in `seq $START_EPOCH $END_EPOCH`; do
+                        echo "************** $v **************"
+                        ./osdmaptool --print $TEMPDIR/$v \
+                                || die "osdmaptool failed to print epoch $v"
+                done
+        fi
 }
 
 ### Setup
@@ -48,11 +63,14 @@ MAP_TYPE=osdmap
 cd $MYDIR
 
 ### Parse arguments
+DIFFMODE=0
 START_EPOCH=1
 END_EPOCH=0
 
-while getopts  "e:hs:t:" flag; do
+while getopts  "De:hs:t:" flag; do
 case $flag in
+        D) DIFFMODE=1;;
+
         e) END_EPOCH=$OPTARG;;
 
         h)  usage
