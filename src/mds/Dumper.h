@@ -52,6 +52,8 @@ public:
     lock("Dumper::lock"), timer(lock)
   {}
 
+  virtual ~Dumper();
+
   bool ms_dispatch(Message *m) {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OPREPLY:

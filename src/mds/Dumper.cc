@@ -17,6 +17,10 @@
 #include "mds/mdstypes.h"
 #include "mon/MonClient.h"
 
+Dumper::~Dumper()
+{
+}
+
 bool Dumper::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
                          bool force_new)
 {
