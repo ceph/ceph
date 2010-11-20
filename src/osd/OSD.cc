@@ -3079,6 +3079,13 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
     if (g_conf.osd_check_for_log_corruption)
       pg->check_log_for_corruption(store);
 
+    if (pg->is_primary() &&
+	(pg->missing.num_missing() > pg->missing_loc.size())) {
+      if (pg->all_unfound_are_lost(osdmap)) {
+	pg->mark_all_unfound_as_lost();
+      }
+    }
+
     if (!osdmap->have_pg_pool(pg->info.pgid.pool())) {
       //pool is deleted!
       queue_pg_for_deletion(pg);

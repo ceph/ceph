@@ -805,6 +805,9 @@ public:
   void clear_prior();
   bool prior_set_affected(OSDMap *map);
 
+  bool all_unfound_are_lost(const OSDMap* osdmap) const;
+  void mark_all_unfound_as_lost();
+
   bool calc_min_last_complete_ondisk() {
     eversion_t min = last_complete_ondisk;
     for (unsigned i=1; i<acting.size(); i++) {

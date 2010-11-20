@@ -974,6 +974,75 @@ bool PG::prior_set_affected(OSDMap *osdmap)
   return false;
 }
 
+/*
+ * Returns true unless there is a non-lost OSD in might_have_unfound.
+ */
+bool PG::all_unfound_are_lost(const OSDMap* osdmap) const
+{
+  assert(is_primary());
+
+  set<int>::const_iterator peer = might_have_unfound.begin();
+  set<int>::const_iterator mend = might_have_unfound.end();
+  for (; peer != mend; ++peer) {
+    const osd_info_t &osd_info(osdmap->get_info(*peer));
+    if (osd_info.lost_at <= osd_info.up_from) {
+      // If there is even one OSD in might_have_unfound that isn't lost, we
+      // still might retrieve our unfound.
+      return false;
+    }
+  }
+  return true;
+}
+
+class CompareSobjectPtrs {
+public:
+  bool operator()(const sobject_t *a, const sobject_t *b) {
+    return *a < *b;
+  }
+};
+
+/* Mark all unfound objects as lost.
+ */
+void PG::mark_all_unfound_as_lost()
+{
+  dout(3) << __func__ << dendl;
+
+  // Find out what to delete
+  map<sobject_t, Missing::item>::iterator m = missing.missing.begin();
+  map<sobject_t, Missing::item>::iterator mend = missing.missing.end();
+  std::set <const sobject_t*, CompareSobjectPtrs> del;
+  for (; m != mend; ++m) {
+    const sobject_t &soid(m->first);
+    if (missing_loc.find(soid) == missing_loc.end()) {
+      del.insert(&m->first);
+      continue;
+    }
+  }
+
+  // Iterate over rmissing, removing elements that point to deleted sobject_t
+  map<eversion_t, sobject_t>::iterator z = missing.rmissing.begin();
+  map<eversion_t, sobject_t>::iterator zend = missing.rmissing.end();
+  std::set <const sobject_t*, CompareSobjectPtrs>::iterator dend = del.end();
+  while (z != zend) {
+    const sobject_t &soid(z->second);
+    if (del.find(&soid) != dend) {
+      missing.rmissing.erase(z++);
+    }
+  }
+
+  // Remove deleted elements from missing.
+  std::set <const sobject_t*, CompareSobjectPtrs>::iterator d = del.begin();
+  while (d != dend) {
+    sobject_t lost_soid(**d);
+
+    // TODO: some kind of bit that we set inside the object store
+    dout(10) << __func__ << ": marked " << lost_soid << " as lost!" << dendl;
+
+    missing.missing.erase(lost_soid);
+    del.erase(d++);
+  }
+}
+
 void PG::clear_prior()
 {
   dout(10) << "clear_prior" << dendl;
@@ -983,7 +1052,6 @@ void PG::clear_prior()
   prior_set_lost.clear();
   prior_set_built = false;
 }
-
 
 void PG::build_prior()
 {
@@ -1607,10 +1675,7 @@ void PG::build_might_have_unfound()
   dout(10) << __func__ << dendl;
 
   // Make sure that we have past intervals.
-  if (info.history.same_acting_since > info.history.last_epoch_started &&
-      (past_intervals.empty() ||
-       past_intervals.begin()->first > info.history.last_epoch_started))
-    generate_past_intervals();
+  generate_past_intervals();
 
   // We need to decide who might have unfound objects that we need
   std::map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
