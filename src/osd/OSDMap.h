@@ -488,15 +488,15 @@ private:
     return i;
   }
 
-  epoch_t get_up_from(int osd) {
+  const epoch_t& get_up_from(int osd) const {
     assert(exists(osd));
     return osd_info[osd].up_from;
   }
-  epoch_t get_up_thru(int osd) {
+  const epoch_t& get_up_thru(int osd) const {
     assert(exists(osd));
     return osd_info[osd].up_thru;
   }
-  epoch_t get_down_at(int osd) {
+  const epoch_t& get_down_at(int osd) const {
     assert(exists(osd));
     return osd_info[osd].down_at;
   }
@@ -505,7 +505,7 @@ private:
     return osd_info[osd];
   }
   
-  int get_any_up_osd() {
+  int get_any_up_osd() const {
     for (int i=0; i<max_osd; i++)
       if (is_up(i))
 	return i;
