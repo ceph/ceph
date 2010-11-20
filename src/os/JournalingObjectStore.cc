@@ -186,9 +186,11 @@ bool JournalingObjectStore::commit_start()
     goto out;
   }
 
+  com_lock.Lock();
   // we can _only_ read applied_seq here because open_ops == 0 (we've
   // quiesced all in-flight applies).
   committing_seq = applied_seq;
+  com_lock.Unlock();
 
   dout(10) << "commit_start committing " << committing_seq << ", still blocked" << dendl;
   ret = true;
@@ -217,7 +219,10 @@ void JournalingObjectStore::commit_finish()
   
   if (journal)
     journal->committed_thru(committing_seq);
+
+  com_lock.Lock();
   committed_seq = committing_seq;
+  com_lock.Unlock();
   
   map<version_t, vector<Context*> >::iterator p = commit_waiters.begin();
   while (p != commit_waiters.end() &&

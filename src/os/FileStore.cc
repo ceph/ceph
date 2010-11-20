@@ -1481,11 +1481,19 @@ void FileStore::queue_op(OpSequencer *osr, uint64_t op_seq, list<Transaction*>& 
 void FileStore::op_queue_throttle()
 {
   op_tp.lock();
-  while ((g_conf.filestore_queue_max_ops && op_queue_len >= (unsigned)g_conf.filestore_queue_max_ops) ||
-	 (g_conf.filestore_queue_max_bytes && op_queue_bytes >= (unsigned)g_conf.filestore_queue_max_bytes)) {
-    dout(2) << "throttle: "
-	     << op_queue_len << " > " << g_conf.filestore_queue_max_ops << " ops || "
-	     << op_queue_bytes << " > " << g_conf.filestore_queue_max_bytes << dendl;
+
+  uint64_t max_ops = g_conf.filestore_queue_max_ops;
+  uint64_t max_bytes = g_conf.filestore_queue_max_bytes;
+  if (is_committing()) {
+    max_ops += g_conf.filestore_queue_committing_max_ops;
+    max_bytes += g_conf.filestore_queue_committing_max_bytes;
+  }
+
+  while ((max_ops && op_queue_len >= max_ops) ||
+	 (max_bytes && op_queue_bytes >= max_bytes)) {
+    dout(2) << "op_queue_throttle waiting: "
+	     << op_queue_len << " > " << max_ops << " ops || "
+	     << op_queue_bytes << " > " << max_bytes << dendl;
     op_tp.wait(op_throttle_cond);
   }
   op_tp.unlock();

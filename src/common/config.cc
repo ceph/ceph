@@ -364,6 +364,8 @@ struct config_option config_optionsp[] = {
   OPTION(filestore_journal_trailing, 0, OPT_BOOL, false),
   OPTION(filestore_queue_max_ops, 0, OPT_INT, 500),
   OPTION(filestore_queue_max_bytes, 0, OPT_INT, 100 << 20),
+  OPTION(filestore_queue_committing_max_ops, 0, OPT_INT, 500),        // this is ON TOP of filestore_queue_max_*
+  OPTION(filestore_queue_committing_max_bytes, 0, OPT_INT, 100 << 20), //  "
   OPTION(filestore_op_threads, 0, OPT_INT, 2),
   OPTION(filestore_commit_timeout, 0, OPT_FLOAT, 600),
   OPTION(ebofs, 0, OPT_BOOL, false),

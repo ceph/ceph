@@ -413,6 +413,8 @@ struct md_config_t
   bool filestore_journal_trailing;
   int filestore_queue_max_ops;
   int filestore_queue_max_bytes;
+  int filestore_queue_committing_max_ops;
+  int filestore_queue_committing_max_bytes;
   int filestore_op_threads;
   float filestore_commit_timeout;
   
