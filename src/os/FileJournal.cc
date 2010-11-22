@@ -171,16 +171,33 @@ void FileJournal::_check_disk_write_cache() const
     int on;
     if (sscanf(s, " write-caching =  %d", &on) == 1) {
       if (on) {
-	dout(0) << "WARNING: disk write cache is ON; journaling will not be reliable" << dendl;
-	dout(0) << "         on kernels prior to 2.6.33 (recent kernels are safe)" << dendl;
-	dout(0) << "         disable with 'hdparm -W 0 " << fn << "'" << dendl;
-	cout << TEXT_RED
-	     << " ** WARNING: disk write cache is ON on " << fn << ".\n"
-	     << "    Journaling will not be reliable on kernels prior to 2.6.33\n"
-	     << "    (recent kernels are safe).  You can disable the write cache with\n"
-	     << "    'hdparm -W 0 " << fn << "'"
-	     << TEXT_NORMAL
-	     << std::endl;
+
+	// check kenrel version
+	char buf[40];
+	int fd = ::open("/proc/version", O_RDONLY);
+	::read(fd, buf, 39);
+	buf[39] = 0;
+	::close(fd);
+
+	int b, c;
+	int r = sscanf(buf, "Linux version 2.%d.%d", &b, &c);
+	dout(0) << " kernel version is 2." << b << "." << c << dendl;
+	if (r == 2 &&
+	    b >= 6 &&
+	    c >= 33) {
+	  // a-ok
+	} else {
+	  dout(0) << "WARNING: disk write cache is ON; journaling will not be reliable" << dendl;
+	  dout(0) << "         on kernels prior to 2.6.33 (recent kernels are safe)" << dendl;
+	  dout(0) << "         disable with 'hdparm -W 0 " << fn << "'" << dendl;
+	  cout << TEXT_RED
+	       << " ** WARNING: disk write cache is ON on " << fn << ".\n"
+	       << "    Journaling will not be reliable on kernels prior to 2.6.33\n"
+	       << "    (recent kernels are safe).  You can disable the write cache with\n"
+	       << "    'hdparm -W 0 " << fn << "'"
+	       << TEXT_NORMAL
+	       << std::endl;
+	}
       } else {
 	dout(10) << "_open disk write cache is off (good) on " << fn << dendl;
       }
