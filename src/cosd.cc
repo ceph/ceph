@@ -209,11 +209,8 @@ int main(int argc, const char **argv)
   }
 
   SimpleMessenger *client_messenger = new SimpleMessenger();
-  SimpleMessenger *cluster_messenger = client_messenger;
+  SimpleMessenger *cluster_messenger = new SimpleMessenger();
   SimpleMessenger *messenger_hb = new SimpleMessenger();
-
-  if (!client_messenger || !messenger_hb)
-    return 1;
 
   entity_addr_t hb_addr;
 
@@ -221,16 +218,16 @@ int main(int argc, const char **argv)
     client_messenger->bind(g_conf.public_addr);
     hb_addr = g_conf.public_addr;
     hb_addr.set_port(0);
+  } else {
+    client_messenger->bind();
   }
-  else client_messenger->bind();
 
   if (cluster_addr_set) {
-    cluster_messenger = new SimpleMessenger();
-    if (!cluster_messenger)
-      return 1;
     cluster_messenger->bind(g_conf.cluster_addr);
     hb_addr = g_conf.cluster_addr;
     hb_addr.set_port(0);
+  } else {
+    cluster_messenger->bind();
   }
 
   messenger_hb->bind(hb_addr);
@@ -242,6 +239,7 @@ int main(int argc, const char **argv)
        << std::endl;
 
   client_messenger->register_entity(entity_name_t::OSD(whoami));
+  cluster_messenger->register_entity(entity_name_t::OSD(whoami));
   messenger_hb->register_entity(entity_name_t::OSD(whoami));
 
   Throttle client_throttler(g_conf.osd_client_message_size_cap);
@@ -249,30 +247,25 @@ int main(int argc, const char **argv)
   uint64_t supported =
     CEPH_FEATURE_UID | 
     CEPH_FEATURE_NOSRCADDR;
+
   client_messenger->set_default_policy(SimpleMessenger::Policy::stateless_server(supported, 0));
   client_messenger->set_policy(entity_name_t::TYPE_CLIENT,
-			SimpleMessenger::Policy::stateless_server(supported, 0));
+			       SimpleMessenger::Policy::stateless_server(supported, 0));
   client_messenger->set_policy_throttler(entity_name_t::TYPE_CLIENT, &client_throttler);
   client_messenger->set_policy(entity_name_t::TYPE_MON,
                                SimpleMessenger::Policy::client(supported,
                                                                CEPH_FEATURE_UID));
-  if (cluster_messenger != client_messenger) {
-    cluster_messenger->register_entity(entity_name_t::OSD(whoami));
-    cluster_messenger->set_default_policy(SimpleMessenger::Policy::stateless_server(0, 0));
-    cluster_messenger->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::client(0,0));
-    cluster_messenger->set_policy(entity_name_t::TYPE_OSD,
-                                  SimpleMessenger::Policy::lossless_peer(supported, CEPH_FEATURE_UID));
-    cluster_messenger->set_policy(entity_name_t::TYPE_CLIENT,
-                                  SimpleMessenger::Policy::stateless_server(0, 0));
+  //try to poison pill any OSD connections on the wrong address
+  client_messenger->set_policy(entity_name_t::TYPE_OSD,
+			       SimpleMessenger::Policy::stateless_server(0,0));
 
-    //try to poison pill any OSD connections on the wrong address
-    client_messenger->set_policy(entity_name_t::TYPE_OSD,
-                                 SimpleMessenger::Policy::stateless_server(0,0));
-  } else {
-    client_messenger->set_policy(entity_name_t::TYPE_OSD,
-				 SimpleMessenger::Policy::lossless_peer(supported,
-									CEPH_FEATURE_UID));
-  }
+  cluster_messenger->set_default_policy(SimpleMessenger::Policy::stateless_server(0, 0));
+  cluster_messenger->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::client(0,0));
+  cluster_messenger->set_policy(entity_name_t::TYPE_OSD,
+				SimpleMessenger::Policy::lossless_peer(supported, CEPH_FEATURE_UID));
+  cluster_messenger->set_policy(entity_name_t::TYPE_CLIENT,
+				SimpleMessenger::Policy::stateless_server(0, 0));
+
 
 
   OSD *osd = new OSD(whoami, cluster_messenger, client_messenger, messenger_hb, &mc, g_conf.osd_data, g_conf.osd_journal);
@@ -286,7 +279,7 @@ int main(int argc, const char **argv)
 
   client_messenger->start();
   messenger_hb->start(true);  // only need to daemon() once
-  if (cluster_messenger != client_messenger) cluster_messenger->start(true);
+  cluster_messenger->start(true);
 
   // start osd
   if (osd->init() < 0) {
@@ -296,12 +289,13 @@ int main(int argc, const char **argv)
 
   client_messenger->wait();
   messenger_hb->wait();
-  if (cluster_messenger != client_messenger) cluster_messenger->wait();
+  cluster_messenger->wait();
+
   // done
   delete osd;
   client_messenger->destroy();
   messenger_hb->destroy();
-  if (cluster_messenger != client_messenger) cluster_messenger->destroy();
+  cluster_messenger->destroy();
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];
