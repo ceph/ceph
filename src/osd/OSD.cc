@@ -2717,6 +2717,10 @@ void OSD::handle_osd_map(MOSDMap *m)
       state = STATE_BOOTING;
       up_epoch = 0;
 
+      int r = cluster_messenger->rebind();
+      if (r != 0)
+	do_shutdown = true;  // FIXME: do_restart?
+
       reset_heartbeat_peers();
     }
   }
