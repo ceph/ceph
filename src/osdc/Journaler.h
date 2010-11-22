@@ -129,9 +129,9 @@ private:
   static const int STATE_UNDEF = 0;
   static const int STATE_READHEAD = 1;
   static const int STATE_PROBING = 2;
-  static const int STATE_ACTIVE = 2;
-  static const int STATE_REREADHEAD = 3;
-  static const int STATE_REPROBING = 4;
+  static const int STATE_ACTIVE = 3;
+  static const int STATE_REREADHEAD = 4;
+  static const int STATE_REPROBING = 5;
 
   int state;
   int error;
