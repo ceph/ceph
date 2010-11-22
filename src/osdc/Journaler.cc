@@ -76,6 +76,17 @@ public:
   }
 };
 
+class Journaler::C_RereadHead : public Context {
+  Journaler *ls;
+  Context *onfinish;
+public:
+  bufferlist bl;
+  C_RereadHead(Journaler *l, Context *onfinish_) : ls (l), onfinish(onfinish_){}
+  void finish(int r) {
+    ls->_finish_reread_head(r, bl, onfinish);
+  }
+};
+
 class Journaler::C_ProbeEnd : public Context {
   Journaler *ls;
 public:
@@ -122,19 +133,18 @@ void Journaler::read_head(Context *on_finish, bufferlist *bl)
  * Also, don't call this until the Journaler has finished its recovery and has
  * gone STATE_ACTIVE!
  */
-void Journaler::reread_head()
+void Journaler::reread_head(Context *onfinish)
 {
   dout(10) << "reread_head" << dendl;
   assert(state == STATE_ACTIVE);
 
-  Mutex lock("Journaler::reread_head");
-  Cond cond;
-  bool done = false;
-  bufferlist bl;
   state = STATE_REREADHEAD;
-  read_head(new C_SafeCond(&lock, &cond, &done), &bl);
-  while (!done) cond.Wait(lock);
+  C_RereadHead *fin = new C_RereadHead(this, onfinish);
+  read_head(fin, &fin->bl);
+}
 
+void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
+{
   //read on-disk header into
   assert (bl.length());
 
@@ -142,10 +152,11 @@ void Journaler::reread_head()
   Header h;
   bufferlist::iterator p = bl.begin();
   ::decode(h, p);
-  write_pos = h.write_pos;
+  write_pos = flush_pos = h.write_pos;
   expire_pos = h.expire_pos;
   trimmed_pos = h.trimmed_pos;
   state = STATE_ACTIVE;
+  finish->finish(r);
 }
 
 void Journaler::_finish_read_head(int r, bufferlist& bl)
