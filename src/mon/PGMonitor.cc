@@ -754,6 +754,24 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 
 	r = 0;
       }
+      else if (m->cmd[2] == "degraded_pgs_exist") {
+	bool degraded_pgs_exist = false;
+	hash_map<pg_t,pg_stat_t>::const_iterator end = pg_map.pg_stat.end();
+	for (hash_map<pg_t,pg_stat_t>::const_iterator s = pg_map.pg_stat.begin();
+	     s != end; ++s)
+	{
+	  if (s->second.num_objects_degraded > 0) {
+	    degraded_pgs_exist = true;
+	    break;
+	  }
+	}
+	if (degraded_pgs_exist)
+	  ss << "TRUE";
+	else
+	  ss << "FALSE";
+
+	r = 0;
+      }
     }
   }
 

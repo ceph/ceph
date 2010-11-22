@@ -118,10 +118,20 @@ poll_cmd() {
 
 dump_osd_store() {
         set +x
+        echo "dumping osd store..."
         find ./dev/osd* -type f | grep obj | grep head$ | while read file; do
                 echo $file
                 head -c 10 $file
                 echo
+        done
+}
+
+start_recovery() {
+        CEPH_NUM_OSD=$1
+        osd=0
+        while [ $osd -lt $CEPH_NUM_OSD ]; do
+                ./ceph osd tell $osd injectargs 'osd recovery delay start = 0'
+                osd=$((osd+1))
         done
 }
 

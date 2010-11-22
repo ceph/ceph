@@ -7,7 +7,7 @@
 # Includes
 source "`dirname $0`/test_common.sh"
 
-# Constants
+# Functions
 my_write_objects() {
         write_objects $1 $2 10 1000000
 }
@@ -20,15 +20,6 @@ setup() {
 
         # set recovery start to a really long time to ensure that we don't start recovery
         ./vstart.sh -d -n -o 'osd recovery delay start = 10000' || die "vstart failed"
-}
-
-start_recovery() {
-        CEPH_NUM_OSD=$1
-        osd=0
-        while [ $osd -lt $CEPH_NUM_OSD ]; do
-                ./ceph osd tell $osd injectargs 'osd recovery delay start = 0'
-                osd=$((osd+1))
-        done
 }
 
 osd_resurrection_1_impl() {
