@@ -3248,8 +3248,9 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 
   // possible response(s)
   MMDSCacheRejoin *ack = 0;      // if survivor
+  set<vinodeno_t> acked_inodes;  // if survivor
   bool survivor = false;  // am i a survivor?
-  
+
   if (mds->is_clientreplay() || mds->is_active() || mds->is_stopping()) {
     survivor = true;
     dout(10) << "i am a surivivor, and will ack immediately" << dendl;
@@ -3353,6 +3354,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 	in->filelock.set_state(LOCK_MIX);
 
       if (ack) {
+	acked_inodes.insert(in->vino());
 	ack->add_inode_base(in);
 	ack->add_inode_locks(in, inonce);
       }
@@ -3371,6 +3373,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     dout(10) << " have base " << *in << dendl;
     
     if (ack) {
+      acked_inodes.insert(in->vino());
       ack->add_inode_base(in);
       ack->add_inode_locks(in, inonce);
     }
@@ -3383,10 +3386,11 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 	 p++) {
       CInode *in = get_inode(p->first);
       dout(10) << " including base inode (due to potential scatterlock update) " << *in << dendl;
+      acked_inodes.insert(in->vino());
       ack->add_inode_base(in);
     }
 
-    rejoin_scour_survivor_replicas(from, ack);
+    rejoin_scour_survivor_replicas(from, ack, acked_inodes);
     mds->send_message(ack, weak->get_connection());
   } else {
     // done?
@@ -3520,7 +3524,7 @@ bool MDCache::parallel_fetch_traverse_dir(inodeno_t ino, filepath& path,
  * all validated replicas are acked with a strong nonce, etc.  if that isn't in the
  * ack, the replica dne, and we can remove it from our replica maps.
  */
-void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack)
+void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack, set<vinodeno_t>& acked_inodes)
 {
   dout(10) << "rejoin_scour_survivor_replicas from mds" << from << dendl;
 
@@ -3534,7 +3538,7 @@ void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack)
     // inode?
     if (in->is_auth() &&
 	in->is_replica(from) &&
-	ack->strong_inodes.count(p->second->vino()) == 0) {
+	acked_inodes.count(p->second->vino()) == 0) {
       inode_remove_replica(in, from);
       dout(10) << " rem " << *in << dendl;
     }
