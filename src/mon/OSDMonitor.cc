@@ -493,7 +493,9 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
 
 bool OSDMonitor::prepare_boot(MOSDBoot *m)
 {
-  dout(7) << "prepare_boot from " << m->get_orig_source_inst() << " sb " << m->sb << dendl;
+  dout(7) << "prepare_boot from " << m->get_orig_source_inst() << " sb " << m->sb
+	  << " cluster_addr " << m->cluster_addr << " hb_addr " << m->hb_addr
+	  << dendl;
 
   assert(m->get_orig_source().is_osd());
   int from = m->get_orig_source().num();
@@ -522,13 +524,11 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
   } else {
     // mark new guy up.
     down_pending_out.erase(from);  // if any
-    pending_inc.new_up_client[from] = m->get_orig_source_addr(); //FIXME: should this be using new_up_client?
+
+    pending_inc.new_up_client[from] = m->get_orig_source_addr();
+    if (!m->cluster_addr.is_blank_addr())
+      pending_inc.new_up_internal[from] = m->cluster_addr;
     pending_inc.new_hb_up[from] = m->hb_addr;
-    
-    if (!m->cluster_addr.is_blank_addr()) { //is there a cluster addr?
-      dout(0) << "setting new_up_internal[" << from << "] to " << m->cluster_addr << dendl;
-      pending_inc.new_up_internal[from] = m->cluster_addr; //fill it in!
-    }
 
     // mark in?
     pending_inc.new_weight[from] = CEPH_OSD_IN;
