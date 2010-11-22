@@ -314,15 +314,15 @@ for name in $what; do
 	cleanlogs)
 	    echo removing logs
 	    if [ -n "$log_sym_dir" ]; then
-		do_cmd "for f in $log_sym_dir/$name*; do rm -f \`readlink \$f\` ; rm -f \$f ; done ; rm -f $log_dir/$name.*"
-	    else
-		do_cmd "rm -f $log_dir/$name.*"
+		do_cmd "for f in $log_sym_dir/$type.$id.*; do rm -f \`readlink \$f\` ; rm -f \$f ; done ; rm -f $log_dir/$type.$id.*"
 	    fi
+	    [ -n "$log_dir" ] && do_cmd "rm -f $log_dir/$type.$id.*"
 	    ;;
 
 	cleanalllogs)
 	    echo removing all logs
-	    do_cmd "rm -f $log_dir/* $log_sym_dir/* || true"
+	    [ -n "$log_sym_dir" ] && do_cmd "rm -f $log_sym_dir/*"
+	    [ -n "$log_dir" ] && do_cmd "rm -f $log_dir/*"
 	    ;;
 
 	*)
