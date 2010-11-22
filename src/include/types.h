@@ -294,7 +294,7 @@ struct inodeno_t {
   inodeno_t(_inodeno_t v) : val(v) {}
   inodeno_t operator+=(inodeno_t o) { val += o.val; return *this; }
   operator _inodeno_t() const { return val; }
-};
+} __attribute__ ((__may_alias__));
 
 inline void encode(inodeno_t i, bufferlist &bl) { encode(i.val, bl); }
 inline void decode(inodeno_t &i, bufferlist::iterator &p) { decode(i.val, p); }
