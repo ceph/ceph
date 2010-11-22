@@ -66,7 +66,7 @@ void OSDMap::print(ostream& out) const
       const osd_info_t& info(get_info(i));
       out << " " << info;
       if (is_up(i))
-	out << " " << get_addr(i) << " " << get_hb_addr(i);
+	out << " " << get_addr(i) << " " << get_cluster_addr(i) << " " << get_hb_addr(i);
       out << "\n";
     }
   }

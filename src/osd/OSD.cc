@@ -388,10 +388,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
 {
   monc->set_messenger(client_messenger);
 
-  if (client_messenger != cluster_messenger)
-    map_in_progress_cond = new Cond();
-  else
-    map_in_progress_cond = NULL;
+  map_in_progress_cond = new Cond();
   
   osdmap = 0;
 
@@ -522,9 +519,7 @@ int OSD::init()
   // i'm ready!
   client_messenger->add_dispatcher_head(this);
   client_messenger->add_dispatcher_head(&logclient);
-  if (cluster_messenger != client_messenger) {
-    cluster_messenger->add_dispatcher_head(this);
-  }
+  cluster_messenger->add_dispatcher_head(this);
 
   heartbeat_messenger->add_dispatcher_head(&heartbeat_dispatcher);
 
@@ -740,7 +735,7 @@ int OSD::shutdown()
   pg_map.clear();
 
   client_messenger->shutdown();
-  if (client_messenger != cluster_messenger) cluster_messenger->shutdown();
+  cluster_messenger->shutdown();
   if (heartbeat_messenger)
     heartbeat_messenger->shutdown();
 
@@ -1599,18 +1594,25 @@ void OSD::ms_handle_connect(Connection *con)
 void OSD::send_boot()
 {
   dout(10) << "send_boot" << dendl;
+  entity_addr_t cluster_addr = cluster_messenger->get_myaddr();
+  if (cluster_addr.is_blank_addr()) {
+    int port = cluster_addr.get_port();
+    cluster_addr = client_messenger->get_myaddr();
+    cluster_addr.set_port(port);
+    dout(10) << " assuming cluster_addr ip matches client_addr" << dendl;
+  }
   entity_addr_t hb_addr = heartbeat_messenger->get_myaddr();
   if (hb_addr.is_blank_addr()) {
     int port = hb_addr.get_port();
-    hb_addr = cluster_messenger->get_myaddr();
+    hb_addr = cluster_addr;
     hb_addr.set_port(port);
+    dout(10) << " assuming hb_addr ip matches cluster_addr" << dendl;
   }
-  MOSDBoot *mboot = new MOSDBoot(superblock, hb_addr);
-  if (cluster_messenger != client_messenger) {
-    mboot->cluster_addr = cluster_messenger->get_myaddr();
-    dout(0) << "setting MOSDBoot->cluster_addr to" << cluster_messenger->get_myaddr()
-            << " while client_messenger addr is " << client_messenger->get_myaddr() << dendl;
-  }
+  MOSDBoot *mboot = new MOSDBoot(superblock, hb_addr, cluster_addr);
+  dout(10) << " client_addr " << client_messenger->get_myaddr()
+	   << ", cluster_addr " << cluster_addr
+	   << ", hb addr " << hb_addr
+	   << dendl;
   monc->send_mon_message(mboot);
 }
 
@@ -2715,6 +2717,10 @@ void OSD::handle_osd_map(MOSDMap *m)
       state = STATE_BOOTING;
       up_epoch = 0;
 
+      int r = cluster_messenger->rebind();
+      if (r != 0)
+	do_shutdown = true;  // FIXME: do_restart?
+
       reset_heartbeat_peers();
     }
   }
@@ -3121,7 +3127,8 @@ void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool la
     }
   }
   Messenger *msgr = client_messenger;
-  if (entity_name_t::TYPE_OSD == inst.name._type) msgr = cluster_messenger;
+  if (entity_name_t::TYPE_OSD == inst.name._type)
+    msgr = cluster_messenger;
   if (lazy)
     msgr->lazy_send_message(m, inst);  // only if we already have an open connection
   else
