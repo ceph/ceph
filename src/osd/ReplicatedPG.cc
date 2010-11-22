@@ -1692,11 +1692,10 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
       snaps[i] = snapc.snaps[i];
     
     // prepare clone
-    object_info_t static_snap_oi(coid, oi.oloc);
+    object_info_t static_snap_oi(coid, oi.oloc, oi.lost);
     object_info_t *snap_oi;
     if (is_primary()) {
-      ctx->clone_obc = new ObjectContext(coid, oi.oloc);
-      ctx->clone_obc->obs.exists = true;
+      ctx->clone_obc = new ObjectContext(static_snap_oi, true, NULL);
       ctx->clone_obc->get();
       register_object_context(ctx->clone_obc);
       snap_oi = &ctx->clone_obc->obs.oi;
@@ -2288,10 +2287,19 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const sobject_t& s
     // check disk
     bufferlist bv;
     int r = osd->store->getattr(coll_t(info.pgid), soid, OI_ATTR, bv);
-    if (r < 0 && !can_create)
-      return 0;   // -ENOENT!
-
-    obc = new ObjectContext(soid, oloc);
+    if (r < 0) {
+      if (!can_create)
+	return NULL;   // -ENOENT!
+      object_info_t oi(soid, oloc, false);
+      obc = new ObjectContext(oi, false, NULL);
+    }
+    else {
+      object_info_t oi(bv);
+      SnapSetContext *ssc = NULL;
+      if (can_create)
+	ssc = get_snapset_context(soid.oid, true);
+      obc = new ObjectContext(oi, true, ssc);
+    }
 
     if (can_create)
       obc->obs.ssc = get_snapset_context(soid.oid, true);
@@ -2535,10 +2543,15 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
 
     } else {
       // do op
-      ObjectState obs(op->poid, op->oloc);
-      obs.oi.version = op->old_version;
-      obs.oi.size = op->old_size;
-      obs.exists = op->old_exists;
+      assert(0);
+
+      // TODO: this is severely broken because we don't know whether this object is really lost or
+      // not. We just always assume that it's not right now.
+      // Also, we're taking the address of a variable on the stack. 
+      object_info_t oi(soid, op->oloc, false);
+      oi.version = op->old_version;
+      oi.size = op->old_size;
+      ObjectState obs(oi, op->old_exists, NULL);
       
       rm->ctx = new OpContext(op, op->reqid, op->ops, &obs, this);
       
@@ -3730,7 +3743,7 @@ int ReplicatedPG::recover_primary(int max)
 
 	    ObjectContext *headobc = get_object_context(head, OLOC_BLANK, false);
 
-	    object_info_t oi(soid, headobc->obs.oi.oloc);
+	    object_info_t oi(soid, headobc->obs.oi.oloc, headobc->obs.oi.lost);
 	    oi.version = latest->version;
 	    oi.prior_version = latest->prior_version;
 	    ::decode(oi.snaps, latest->snaps);

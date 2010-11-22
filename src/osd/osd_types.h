@@ -1294,6 +1294,7 @@ struct object_info_t {
 
   uint64_t size;
   utime_t mtime;
+  bool lost;
 
   osd_reqid_t wrlock_by;   // [head]
   vector<snapid_t> snaps;  // [clone]
@@ -1310,7 +1311,7 @@ struct object_info_t {
   }
 
   void encode(bufferlist& bl) const {
-    const __u8 v = 2;
+    const __u8 v = 3;
     ::encode(v, bl);
     ::encode(soid, bl);
     ::encode(oloc, bl);
@@ -1325,6 +1326,7 @@ struct object_info_t {
       ::encode(snaps, bl);
     ::encode(truncate_seq, bl);
     ::encode(truncate_size, bl);
+    ::encode(lost, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 v;
@@ -1343,15 +1345,17 @@ struct object_info_t {
       ::decode(snaps, bl);
     ::decode(truncate_seq, bl);
     ::decode(truncate_size, bl);
+    if (v >= 3)
+      ::decode(lost, bl);
   }
   void decode(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
     decode(p);
   }
 
-  object_info_t(const sobject_t& s, const object_locator_t& o) :
+  object_info_t(const sobject_t& s, const object_locator_t& o, bool lost_) :
     soid(s), size(0),
-    truncate_seq(0), truncate_size(0) {}
+    lost(lost_), truncate_seq(0), truncate_size(0) {}
   object_info_t(bufferlist& bl) {
     decode(bl);
   }
@@ -1366,6 +1370,8 @@ inline ostream& operator<<(ostream& out, const object_info_t& oi) {
     out << " wrlock_by=" << oi.wrlock_by;
   else
     out << " " << oi.snaps;
+  if (oi.lost)
+    out << " LOST";
   out << ")";
   return out;
 }

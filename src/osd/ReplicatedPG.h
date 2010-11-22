@@ -72,8 +72,8 @@ public:
     bool exists;
     SnapSetContext *ssc;  // may be null
 
-    ObjectState(const sobject_t& s, const object_locator_t& ol) :
-      oi(s, ol), exists(false), ssc(NULL) {}
+    ObjectState(const object_info_t &oi_, bool exists_, SnapSetContext *ssc_)
+      : oi(oi_), exists(exists_), ssc(ssc_) {}
   };
 
 
@@ -233,8 +233,8 @@ public:
     Cond cond;
     int unstable_writes, readers, writers_waiting, readers_waiting;
 
-    ObjectContext(const sobject_t& s, const object_locator_t& ol) :
-      ref(0), registered(false), obs(s, ol),
+    ObjectContext(const object_info_t &oi_, bool exists_, SnapSetContext *ssc_)
+      : ref(0), registered(false), obs(oi_, exists_, ssc_),
       lock("ReplicatedPG::ObjectContext::lock"),
       unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0) {}
 

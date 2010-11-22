@@ -1007,6 +1007,10 @@ void PG::mark_all_unfound_as_lost()
 {
   dout(3) << __func__ << dendl;
 
+  dout(30) << __func__  << ": log before:\n";
+  log.print(*_dout);
+  *_dout << dendl;
+
   // Find out what to delete
   map<sobject_t, Missing::item>::iterator m = missing.missing.begin();
   map<sobject_t, Missing::item>::iterator mend = missing.missing.end();
@@ -1030,17 +1034,36 @@ void PG::mark_all_unfound_as_lost()
     }
   }
 
-  // Remove deleted elements from missing.
+  // Remove deleted elements from missing,
+  // and add LOST log entries for them.
+  eversion_t v = info.last_update;
+  v.epoch = osd->osdmap->get_epoch();
+  utime_t mtime = g_clock.now();
   std::set <const sobject_t*, CompareSobjectPtrs>::iterator d = del.begin();
   while (d != dend) {
     sobject_t lost_soid(**d);
 
-    // TODO: some kind of bit that we set inside the object store
-    dout(10) << __func__ << ": marked " << lost_soid << " as lost!" << dendl;
+    map<sobject_t, Missing::item>::iterator ms = missing.missing.find(lost_soid);
+    assert(ms != mend);
+    v.version++;
+    Log::Entry e(Log::Entry::LOST, lost_soid, v, ms->second.need, osd_reqid_t(), mtime);
+    log.add(e);
+
+    dout(10) << __func__ << ": created event " << e << dendl;
 
     missing.missing.erase(lost_soid);
     del.erase(d++);
   }
+
+  info.last_update = v;
+
+  dout(30) << __func__ << ": log after:\n";
+  log.print(*_dout);
+  *_dout << dendl;
+
+  // Send out the PG log to all replicas
+  // So that they know what is lost
+  share_pg_log();
 }
 
 void PG::clear_prior()
@@ -3326,6 +3349,19 @@ void PG::share_pg_info()
   }
 }
 
+void PG::share_pg_log()
+{
+  dout(10) << __func__ << dendl;
+
+  // share PG::Log with replicas
+  for (unsigned i=1; i<acting.size(); i++) {
+    int peer = acting[i];
+    MOSDPGLog *m = new MOSDPGLog(info.last_update, info);
+    m->log = log;
+    m->missing = missing;
+    osd->cluster_messenger->send_message(m, osd->osdmap->get_cluster_inst(peer));
+  }
+}
 
 unsigned int PG::Missing::num_missing() const
 {
