@@ -82,7 +82,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_add
   listen_addr.set_family(family);
 
   /* bind to port */
-  int rc;
+  int rc = -1;
   if (listen_addr.get_port()) {
     // specific port
     rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), sizeof(listen_addr.ss_addr()));
