@@ -212,15 +212,12 @@ int main(int argc, const char **argv)
   SimpleMessenger *cluster_messenger = new SimpleMessenger();
   SimpleMessenger *messenger_hb = new SimpleMessenger();
 
-  entity_addr_t hb_addr;
-
-  if (client_addr_set) {
+  if (client_addr_set)
     client_messenger->bind(g_conf.public_addr);
-    hb_addr = g_conf.public_addr;
-    hb_addr.set_port(0);
-  } else {
+  else
     client_messenger->bind();
-  }
+
+  entity_addr_t hb_addr;  // hb should bind to same ip ad cluster_addr (if specified)
 
   if (cluster_addr_set) {
     cluster_messenger->bind(g_conf.cluster_addr);

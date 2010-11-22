@@ -27,11 +27,8 @@ class MOSDBoot : public PaxosServiceMessage {
   entity_addr_t cluster_addr;
 
   MOSDBoot() : PaxosServiceMessage(MSG_OSD_BOOT, 0) { }
-  MOSDBoot(OSDSuperblock& s, entity_addr_t& hb_addr_ref) : 
-    PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch),
-    sb(s), hb_addr(hb_addr_ref), cluster_addr() { }
-  MOSDBoot(OSDSuperblock& s, entity_addr_t& hb_addr_ref,
-           entity_addr_t& cluster_addr_ref) :
+  MOSDBoot(OSDSuperblock& s, const entity_addr_t& hb_addr_ref,
+           const entity_addr_t& cluster_addr_ref) :
     PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch),
     sb(s), hb_addr(hb_addr_ref), cluster_addr(cluster_addr_ref) { }
   

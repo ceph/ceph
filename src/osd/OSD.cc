@@ -1594,17 +1594,25 @@ void OSD::ms_handle_connect(Connection *con)
 void OSD::send_boot()
 {
   dout(10) << "send_boot" << dendl;
+  entity_addr_t cluster_addr = cluster_messenger->get_myaddr();
+  if (cluster_addr.is_blank_addr()) {
+    int port = cluster_addr.get_port();
+    cluster_addr = client_messenger->get_myaddr();
+    cluster_addr.set_port(port);
+    dout(10) << " assuming cluster_addr ip matches client_addr" << dendl;
+  }
   entity_addr_t hb_addr = heartbeat_messenger->get_myaddr();
   if (hb_addr.is_blank_addr()) {
     int port = hb_addr.get_port();
-    hb_addr = cluster_messenger->get_myaddr();
+    hb_addr = cluster_addr;
     hb_addr.set_port(port);
+    dout(10) << " assuming hb_addr ip matches cluster_addr" << dendl;
   }
-  MOSDBoot *mboot = new MOSDBoot(superblock, hb_addr);
-
-  mboot->cluster_addr = cluster_messenger->get_myaddr();
-  dout(0) << "setting MOSDBoot->cluster_addr to" << cluster_messenger->get_myaddr()
-	  << " while client_messenger addr is " << client_messenger->get_myaddr() << dendl;
+  MOSDBoot *mboot = new MOSDBoot(superblock, hb_addr, cluster_addr);
+  dout(10) << " client_addr " << client_messenger->get_myaddr()
+	   << ", cluster_addr " << cluster_addr
+	   << ", hb addr " << hb_addr
+	   << dendl;
   monc->send_mon_message(mboot);
 }
 
