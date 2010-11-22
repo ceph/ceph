@@ -807,11 +807,21 @@ bool PG::is_all_uptodate() const
 
 void PG::generate_past_intervals()
 {
-  epoch_t first_epoch = 0;
-  epoch_t stop = MAX(1, info.history.last_epoch_started);
-  epoch_t last_epoch = info.history.same_acting_since - 1;
+  // Do we already have the intervals we want?
+  map<epoch_t,Interval>::const_iterator pif = past_intervals.begin();
+  if (pif != past_intervals.end()) {
+    if (pif->first <= info.history.last_epoch_clean) {
+      dout(10) << __func__ << ": already have past intervals back to "
+	       << info.history.last_epoch_clean << dendl;
+      return;
+    }
+    past_intervals.clear();
+  }
 
-  dout(10) << "generate_past_intervals over epochs " << stop << "-" << last_epoch << dendl;
+  epoch_t first_epoch = 0;
+  epoch_t stop = MAX(1, info.history.last_epoch_clean);
+  epoch_t last_epoch = info.history.same_acting_since - 1;
+  dout(10) << __func__ << " over epochs " << stop << "-" << last_epoch << dendl;
 
   OSDMap *nextmap = osd->get_map(last_epoch);
   for (;
@@ -850,12 +860,20 @@ void PG::generate_past_intervals()
   }
 }
 
+/*
+ * Trim past_intervals.
+ *
+ * This gets rid of all the past_intervals that happened before last_epoch_clean.
+ */
 void PG::trim_past_intervals()
 {
-  while (past_intervals.size() &&
-	 past_intervals.begin()->second.last < info.history.last_epoch_started) {
-    dout(10) << "trim_past_intervals trimming " << past_intervals.begin()->second << dendl;
-    past_intervals.erase(past_intervals.begin());
+  std::map<epoch_t,Interval>::iterator pif = past_intervals.begin();
+  std::map<epoch_t,Interval>::iterator end = past_intervals.end();
+  while (pif != end) {
+    if (pif->second.last >= info.history.last_epoch_clean)
+      return;
+    dout(10) << __func__ << ": trimming " << pif->second << dendl;
+    past_intervals.erase(pif++);
   }
 }
 
@@ -1002,10 +1020,7 @@ void PG::build_prior()
   bool some_down = false;
 
   // generate past intervals, if we don't have them.
-  if (info.history.same_acting_since > info.history.last_epoch_started &&
-      (past_intervals.empty() ||
-       past_intervals.begin()->first > info.history.last_epoch_started))
-    generate_past_intervals();
+  generate_past_intervals();
   
   // see if i have ever started since joining the pg.  this is important only
   // if we want to exclude lost osds.
