@@ -256,6 +256,7 @@ void Client::dump_cache()
 void Client::init() 
 {
   Mutex::Locker lock(client_lock);
+  timer.init();
 
   objectcacher->start();
 
@@ -298,6 +299,7 @@ void Client::shutdown()
   objectcacher->stop();  // outside of client_lock! this does a join.
 
   client_lock.Lock();
+  timer.shutdown();
   objecter->shutdown();
   client_lock.Unlock();
   monclient->shutdown();
