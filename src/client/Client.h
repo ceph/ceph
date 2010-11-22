@@ -37,6 +37,7 @@ enum {
 #include "msg/Messenger.h"
 
 #include "messages/MClientReply.h"
+#include "messages/MClientRequest.h"
 
 #include "include/types.h"
 #include "include/lru.h"
@@ -113,6 +114,7 @@ struct MetaRequest {
   int old_inode_drop, old_inode_unless;
   int dentry_drop, dentry_unless;
   int old_dentry_drop, old_dentry_unless;
+  vector<MClientRequest::Release> cap_releases;
   Inode *inode;
   Inode *old_inode;
   Dentry *dentry; //associated with path
@@ -828,11 +830,11 @@ public:
 		   //MClientRequest *req, int uid, int gid,
 		   Inode **ptarget = 0,
 		   int use_mds=-1, bufferlist *pdirbl=0);
-  void encode_cap_releases(MetaRequest *request, MClientRequest *m, int mds);
-  int encode_inode_release(Inode *in, MClientRequest *req,
+  void encode_cap_releases(MetaRequest *request, int mds);
+  int encode_inode_release(Inode *in, MetaRequest *req,
 			   int mds, int drop,
 			   int unless,int force=0);
-  void encode_dentry_release(Dentry *dn, MClientRequest *req,
+  void encode_dentry_release(Dentry *dn, MetaRequest *req,
 			     int mds, int drop, int unless);
   int choose_target_mds(MetaRequest *req);
   void connect_mds_targets(int mds);
