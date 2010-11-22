@@ -2341,26 +2341,6 @@ void PG::read_log(ObjectStore *store)
 	  dout(15) << "read_log  missing " << *i << " (have " << oi.version << ")" << dendl;
 	  missing.add(i->soid, i->version, oi.version);
 	}
-      } else if (i->soid.snap == CEPH_NOSNAP &&
-		 osd->store->stat(coll, i->soid, &st) == 0) {
-	dout(0) << "read_log  rebuilding missing xattr on " << *i << dendl;
-	object_locator_t oloc(info.pgid.pool(), info.pgid.preferred()); // we lose the key here!
-	object_info_t oi(i->soid, oloc);
-	oi.version = i->version;
-	oi.prior_version = i->prior_version;
-	oi.size = st.st_size;
-	oi.mtime = i->mtime;
-	oi.last_reqid = i->reqid;
-	bufferlist bl;
-	::encode(oi, bl);
-	ObjectStore::Transaction *t = new ObjectStore::Transaction;
-	t->setattr(coll, i->soid, OI_ATTR, bl);
-	int tr = osd->store->queue_transaction(&osr, t);
-	assert(tr == 0);
-
-	stringstream ss;
-	ss << info.pgid << " rebuilt missing xattr on " << i->soid;
-	osd->get_logclient()->log(LOG_ERROR, ss);
       } else {
 	dout(15) << "read_log  missing " << *i << dendl;
 	missing.add(i->soid, i->version, eversion_t());
