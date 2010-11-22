@@ -188,7 +188,7 @@ fi
 test -d dev/osd0/. && test -e dev/sudo && SUDO="sudo"
 
 if [ "$start_all" -eq 1 ]; then
-	$SUDO ./stop.sh
+    $SUDO ./init-ceph stop
 fi
 $SUDO rm -f core*
 
