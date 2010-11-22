@@ -233,7 +233,7 @@ public:
       ::decode(new_lost, p);
       ::decode(new_blacklist, p);
       ::decode(old_blacklist, p);
-      if (v >= 6)
+      if (ev >= 6)
         ::decode(new_up_internal, p);
     }
 
@@ -579,21 +579,16 @@ private:
          i++) {
       osd_state[i->first] |= CEPH_OSD_EXISTS | CEPH_OSD_UP;
       osd_addr[i->first] = i->second;
-      if (inc.new_hb_up.empty()) {
-	//this is a backward-compatibility hack
-	osd_hb_addr[i->first] = i->second;
-	//osd_hb_addr[i->first].erank = osd_hb_addr[i->first].erank + 1;
-      }
-      else osd_hb_addr[i->first] = inc.new_hb_up[i->first];
+      if (inc.new_hb_up.empty())
+	osd_hb_addr[i->first] = i->second;	//this is a backward-compatibility hack
+      else
+	osd_hb_addr[i->first] = inc.new_hb_up[i->first];
       osd_info[i->first].up_from = epoch;
-      //cout << "epoch " << epoch << " up osd" << i->first << " at " << i->second << "with hb addr" << osd_hb_addr[i->first] << std::endl;
     }
     for (map<int32_t,entity_addr_t>::iterator i = inc.new_up_internal.begin();
-        i != inc.new_up_internal.end();
-        ++i)
+         i != inc.new_up_internal.end();
+         i++)
       osd_cluster_addr[i->first] = i->second;
-    if (osd_cluster_addr.size() != osd_addr.size())
-        osd_cluster_addr.resize(osd_addr.size());
     // info
     for (map<int32_t,epoch_t>::iterator i = inc.new_up_thru.begin();
          i != inc.new_up_thru.end();
@@ -721,9 +716,9 @@ private:
       ::decode(pool_name, p);
    
     ::decode(blacklist, p);
-    if (v>=6)
+    if (ev >= 6)
       ::decode(osd_cluster_addr, p);
-    if (osd_cluster_addr.size() != osd_addr.size())
+    else
       osd_cluster_addr.resize(osd_addr.size());
 
     // index pool names
