@@ -49,7 +49,7 @@ static ostream& _prefix(SimpleMessenger *messenger) {
  * Accepter
  */
 
-int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_addr)
+int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_addr, int avoid_port)
 {
   // bind to a socket
   dout(10) << "accepter.bind" << dendl;
@@ -97,6 +97,8 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_add
   } else {
     // try a range of ports
     for (int port = CEPH_PORT_START; port <= CEPH_PORT_LAST; port++) {
+      if (port == avoid_port)
+	continue;
       listen_addr.set_port(port);
       rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), sizeof(listen_addr.ss_addr()));
       if (rc == 0)
@@ -112,6 +114,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_add
 	   << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
       return -errno;
     }
+    dout(10) << "accepter.bind bound on random port " << listen_addr << dendl;
   }
 
   // what port did we get?
@@ -150,6 +153,23 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_add
   dout(1) << "accepter.bind ms_addr is " << messenger->ms_addr << " need_addr=" << messenger->need_addr << dendl;
   messenger->did_bind = true;
   return 0;
+}
+
+int SimpleMessenger::Accepter::rebind()
+{
+  dout(1) << "accepter.rebind" << dendl;
+  
+  stop();
+
+  entity_addr_t addr = messenger->ms_addr;
+  int old_port = addr.get_port();
+  addr.set_port(0);
+
+  dout(10) << " will try " << addr << dendl;
+  int r = bind(addr.get_nonce(), addr, old_port);
+  if (r == 0)
+    start();
+  return r;
 }
 
 int SimpleMessenger::Accepter::start()
@@ -235,7 +255,7 @@ void SimpleMessenger::Accepter::stop()
 {
   done = true;
   dout(10) << "stop accepter" << dendl;
-  if (listen_sd) {
+  if (listen_sd >= 0) {
     ::shutdown(listen_sd, SHUT_RDWR);
     ::close(listen_sd);
     listen_sd = -1;
@@ -2277,6 +2297,13 @@ int SimpleMessenger::bind(entity_addr_t &bind_addr, int64_t force_nonce)
   return accepter.bind(force_nonce, bind_addr);
 }
 
+int SimpleMessenger::rebind()
+{
+  dout(1) << "rebind" << dendl;
+  mark_down_all();
+  return accepter.rebind();
+}
+
 static void remove_pid_file(int signal = 0)
 {
   if (!g_conf.pid_file)
@@ -2676,7 +2703,22 @@ void SimpleMessenger::wait()
 }
 
 
-
+void SimpleMessenger::mark_down_all()
+{
+  dout(1) << "mark_down_all" << dendl;
+  lock.Lock();
+  while (!rank_pipe.empty()) {
+    hash_map<entity_addr_t,Pipe*>::iterator it = rank_pipe.begin();
+    Pipe *p = it->second;
+    dout(5) << "mark_down_all " << it->first << " " << p << dendl;
+    rank_pipe.erase(it);
+    p->unregister_pipe();
+    p->pipe_lock.Lock();
+    p->stop();
+    p->pipe_lock.Unlock();
+  }
+  lock.Unlock();
+}
 
 void SimpleMessenger::mark_down(const entity_addr_t& addr)
 {

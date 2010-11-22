@@ -103,7 +103,8 @@ private:
     
     void *entry();
     void stop();
-    int bind(int64_t force_nonce, entity_addr_t &bind_addr);
+    int bind(int64_t force_nonce, entity_addr_t &bind_addr, int avoid_port=0);
+    int rebind();
     int start();
   } accepter;
 
@@ -470,6 +471,7 @@ private:
   const entity_addr_t &get_ms_addr() { return ms_addr; }
 
   void mark_down(const entity_addr_t& addr);
+  void mark_down_all();
 
   // reaper
   class ReaperThread : public Thread {
@@ -560,6 +562,8 @@ public:
   int bind(int64_t force_nonce = -1) { return bind(g_conf.public_addr, force_nonce); }
   int start(bool nodaemon = false);
   void wait();
+
+  int rebind();
 
   __u32 get_global_seq(__u32 old=0) {
     Mutex::Locker l(global_seq_lock);

@@ -159,6 +159,8 @@ protected:
 
   virtual Connection *get_connection(const entity_inst_t& dest) = 0;
 
+  virtual int rebind() { return -EOPNOTSUPP; }
+
 protected:
   //destruction should be handled via destroy()
   virtual ~Messenger() {
