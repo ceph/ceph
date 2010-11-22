@@ -528,6 +528,13 @@ void PG::search_for_missing(const Info &oinfo, const Missing *omissing,
     const sobject_t &soid(p->first);
     eversion_t need = p->second.need;
     eversion_t have = p->second.have;
+    if (oinfo.last_update < need) {
+      dout(10) << "search_for_missing " << soid << " " << need
+	       << " also missing on osd" << fromosd
+	       << " (last_update " << oinfo.last_update << " < needed " << need << ")"
+	       << dendl;
+      continue;
+    }
     if (oinfo.last_complete < need) {
       if (!omissing) {
 	// We know that the peer lacks some objects at the revision we need.
