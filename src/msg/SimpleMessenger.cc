@@ -1910,11 +1910,12 @@ int SimpleMessenger::Pipe::read_message(Message **pm)
       connection_state->lock.Unlock();
       if (got < 0)
 	goto out_dethrottle;
-      assert(got > 0);  // hmm.. right?
-      blp.advance(got);
-      data.append(bp, 0, got);
-      offset += got;
-      left -= got;
+      if (got > 0) {
+	blp.advance(got);
+	data.append(bp, 0, got);
+	offset += got;
+	left -= got;
+      } // else we got a signal or something; just loop.
     }
   }
 
