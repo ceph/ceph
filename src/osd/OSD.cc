@@ -3930,41 +3930,41 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       pg->update_stats();
       do_queries(query_map);
     }
-  } else {
-    if (!pg->info.dne()) {
-      // i am REPLICA
-      if (!pg->is_active()) {
-	pg->merge_log(*t, info, log, from);
-	pg->activate(*t, fin->contexts, info_map);
+  } else if (!pg->info.dne()) {
+    if (!pg->is_active()) {
+      // INACTIVE REPLICA
+      pg->merge_log(*t, info, log, from);
+      pg->activate(*t, fin->contexts, info_map);
+    } else {
+      // ACTIVE REPLICA
+
+      // just update our stats
+      dout(10) << *pg << " writing updated stats" << dendl;
+      pg->info.stats = info.stats;
+
+      // did a snap just get purged?
+      if (info.purged_snaps.size() < pg->info.purged_snaps.size()) {
+	stringstream ss;
+	ss << "pg " << pg->info.pgid << " replica got purged_snaps " << info.purged_snaps
+	   << " had " << pg->info.purged_snaps;
+	logclient.log(LOG_WARN, ss);
+	pg->info.purged_snaps = info.purged_snaps;
       } else {
-	// just update our stats
-	dout(10) << *pg << " writing updated stats" << dendl;
-	pg->info.stats = info.stats;
+	interval_set<snapid_t> p = info.purged_snaps;
+	p.subtract(pg->info.purged_snaps);
+	if (!p.empty()) {
+	  dout(10) << " purged_snaps " << pg->info.purged_snaps
+		   << " -> " << info.purged_snaps
+		   << " removed " << p << dendl;
+	  snapid_t sn = p.range_start();
+	  coll_t c(info.pgid, sn);
+	  t->remove_collection(c);
 
-	// did a snap just get purged?
-	if (info.purged_snaps.size() < pg->info.purged_snaps.size()) {
-	  stringstream ss;
-	  ss << "pg " << pg->info.pgid << " replica got purged_snaps " << info.purged_snaps
-	     << " had " << pg->info.purged_snaps;
-	  logclient.log(LOG_WARN, ss);
 	  pg->info.purged_snaps = info.purged_snaps;
-	} else {
-	  interval_set<snapid_t> p = info.purged_snaps;
-	  p.subtract(pg->info.purged_snaps);
-	  if (!p.empty()) {
-	    dout(10) << " purged_snaps " << pg->info.purged_snaps
-		     << " -> " << info.purged_snaps
-		     << " removed " << p << dendl;
-	    snapid_t sn = p.range_start();
-	    coll_t c(info.pgid, sn);
-	    t->remove_collection(c);
-	    
-	    pg->info.purged_snaps = info.purged_snaps;
-	  }
 	}
-
-	pg->write_info(*t);
       }
+
+      pg->write_info(*t);
     }
   }
 
