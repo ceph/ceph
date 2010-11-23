@@ -2733,7 +2733,7 @@ void Server::handle_client_file_readlock(MDRequest *mdr)
   lock_state->look_for_lock(checking_lock);
 
   bufferlist lock_bl;
-  ::encode(lock_state, lock_bl);
+  ::encode(checking_lock, lock_bl);
 
   MClientReply *reply = new MClientReply(req);
   reply->set_extra_bl(lock_bl);
