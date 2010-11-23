@@ -3625,21 +3625,19 @@ int ReplicatedPG::start_recovery_ops(int max)
 {
   int started = 0;
   assert(is_primary());
-  
-  size_t m_sz = missing.missing.size();
-  if (m_sz == 0) {
+
+  int num_missing = missing.num_missing();
+  int num_unfound = get_num_unfound();
+
+  if (num_missing == 0) {
     info.last_complete = info.last_update;
   }
 
-  size_t ml_sz = missing_loc.size();
-  assert(m_sz >= ml_sz);
-
-  if (m_sz == ml_sz) {
+  if (num_missing == num_unfound) {
     // All of the missing objects we have are unfound.
     // Recover the replicas.
     started = recover_replicas(max);
-  }
-  else {
+  } else {
     // We still have missing objects that we should grab from replicas.
     started = recover_primary(max);
   }
