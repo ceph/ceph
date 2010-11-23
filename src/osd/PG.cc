@@ -579,8 +579,10 @@ void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map)
 {
   assert(missing.have_missing());
 
-  dout(10) << __func__ << ": searching for " << missing.num_missing()
-          << " missing objects." << dendl;
+  dout(10) << __func__ << " "
+	   << missing.num_missing() << " missing, "
+	   << get_num_unfound() << " unfound"
+	   << dendl;
 
   std::map<int,Info>::const_iterator end = peer_info.end();
   for (std::map<int,Info>::const_iterator pi = peer_info.begin();
@@ -2015,8 +2017,7 @@ void PG::update_stats()
       }
       pg_stats_stable.num_objects_degraded += degraded;
 
-      pg_stats_stable.num_objects_unfound =
-	missing.num_missing() - missing_loc.size();
+      pg_stats_stable.num_objects_unfound = get_num_unfound();
     }
 
     dout(15) << "update_stats " << pg_stats_stable.reported << dendl;
@@ -3405,7 +3406,7 @@ ostream& operator<<(ostream& out, const PG& pg)
   if (pg.missing.num_missing()) {
     out << " m=" << pg.missing.num_missing();
     if (pg.is_primary()) {
-      int unfound = pg.missing.num_missing() - pg.missing_loc.size();
+      int unfound = pg.get_num_unfound();
       if (unfound)
 	out << " u=" << unfound;
     }

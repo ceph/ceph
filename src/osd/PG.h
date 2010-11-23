@@ -852,6 +852,9 @@ public:
   bool have_unfound() const { 
     return missing.num_missing() > missing_loc.size();
   }
+  int get_num_unfound() const {
+    return missing.num_missing() - missing_loc.size();
+  }
 
   virtual void clean_up_local(ObjectStore::Transaction& t) = 0;
 
