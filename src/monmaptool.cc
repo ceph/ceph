@@ -89,8 +89,14 @@ int main(int argc, const char **argv)
   cout << me << ": monmap file " << fn << std::endl;
 
   int r = 0;
-  if (!(create && clobber))
-    r = monmap.read(fn);
+  if (!(create && clobber)) {
+    try {
+      r = monmap.read(fn);
+    } catch (...) {
+      cerr << me << ": unable to read monmap file" << std::endl;
+      return -1;
+    }
+  }
 
   char buf[80];
   if (!create && r < 0) {
