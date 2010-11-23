@@ -562,6 +562,11 @@ void MDCache::populate_mydir()
     stringstream name;
     name << "stray" << i;
     CDentry *straydn = mydir->lookup(name.str());
+
+    // allow for older fs's with stray instead of stray0
+    if (straydn == NULL && i == 0)
+      straydn = mydir->lookup("stray");
+
     if (!straydn || !straydn->get_linkage()->get_inode()) {
       _create_system_file(mydir, name.str().c_str(), create_system_inode(MDS_INO_STRAY(mds->whoami, i), S_IFDIR),
 			  new C_MDS_RetryOpenRoot(this));
