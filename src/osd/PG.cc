@@ -2341,7 +2341,6 @@ void PG::read_log(ObjectStore *store)
       if (i->is_delete()) continue;
       
       bufferlist bv;
-      struct stat st;
       int r = osd->store->getattr(coll, i->soid, OI_ATTR, bv);
       if (r >= 0) {
 	object_info_t oi(bv);
