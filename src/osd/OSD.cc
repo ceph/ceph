@@ -3933,6 +3933,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
   } else if (!pg->info.dne()) {
     if (!pg->is_active()) {
       // INACTIVE REPLICA
+      assert(from == pg->acting[0]);
       pg->merge_log(*t, info, log, from);
       pg->activate(*t, fin->contexts, info_map);
     } else {
