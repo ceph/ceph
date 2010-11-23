@@ -97,6 +97,18 @@ public:
   }
 };
 
+class Journaler::C_ReProbe : public Context {
+  Journaler *ls;
+  Context *onfinish;
+public:
+  uint64_t end;
+  C_ReProbe(Journaler *l, Context *onfinish_) :
+    ls(l), onfinish(onfinish_), end(0) {}
+  void finish(int r) {
+    ls->_finish_reprobe(r, end, onfinish);
+  }
+};
+
 void Journaler::recover(Context *onread) 
 {
   dout(1) << "recover start" << dendl;
@@ -208,23 +220,23 @@ void Journaler::probe(Context *finish, uint64_t *end)
 	      write_pos, end, 0, true, 0, finish);
 }
 
-void Journaler::reprobe()
+void Journaler::reprobe(Context *finish)
 {
   dout(10) << "reprobe" << dendl;
   assert(state == STATE_ACTIVE);
 
-  Mutex lock("Journaler::reprobe");
-  Cond cond;
-  bool done = false;
-  bufferlist bl;
   state = STATE_REPROBING;
-  uint64_t new_end = 0;
-  probe(new C_SafeCond(&lock, &cond, &done), &new_end);
-  while (!done) cond.Wait(lock);
+  C_ReProbe *fin = new C_ReProbe(this, finish);
+  probe(fin, &fin->end);
+}
 
+
+void Journaler::_finish_reprobe(int r, uint64_t new_end, Context *onfinish) {
   assert(new_end >= write_pos);
-  write_pos = new_end;
+  assert(r >= 0);
+  write_pos = flush_pos = ack_pos = safe_pos = new_end;
   state = STATE_ACTIVE;
+  onfinish->finish(r);
 }
 
 void Journaler::_finish_probe_end(int r, uint64_t end)
