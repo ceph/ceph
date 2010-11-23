@@ -987,7 +987,7 @@ public:
   void queue_snap_trim();
 
   void share_pg_info();
-  void share_pg_log();
+  void share_pg_log(const eversion_t &oldver);
 
   // abstract bits
   virtual void do_op(MOSDOp *op) = 0;

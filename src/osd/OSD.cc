@@ -4000,6 +4000,11 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       }
 
       pg->write_info(*t);
+
+      if (!log.empty()) {
+	dout(10) << *pg << ": inactive replica merging new PG log entries" << dendl;
+	pg->merge_log(*t, info, log, from);
+      }
     }
   }
 

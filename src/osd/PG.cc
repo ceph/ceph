@@ -1055,15 +1055,15 @@ void PG::mark_all_unfound_as_lost()
     del.erase(d++);
   }
 
-  info.last_update = v;
-
   dout(30) << __func__ << ": log after:\n";
   log.print(*_dout);
   *_dout << dendl;
 
   // Send out the PG log to all replicas
   // So that they know what is lost
-  share_pg_log();
+  eversion_t oldver(info.last_update);
+  info.last_update = v;
+  share_pg_log(oldver);
 }
 
 void PG::clear_prior()
@@ -3349,15 +3349,22 @@ void PG::share_pg_info()
   }
 }
 
-void PG::share_pg_log()
+/*
+ * Share this PG's log with some replicas.
+ *
+ * The log will be shared from the current version (last_update) back to 'oldver'
+ */
+void PG::share_pg_log(const eversion_t &oldver)
 {
   dout(10) << __func__ << dendl;
+
+  assert(is_primary());
 
   // share PG::Log with replicas
   for (unsigned i=1; i<acting.size(); i++) {
     int peer = acting[i];
-    MOSDPGLog *m = new MOSDPGLog(info.last_update, info);
-    m->log = log;
+    MOSDPGLog *m = new MOSDPGLog(info.last_update.version, info);
+    m->log.copy_after(log, oldver);
     m->missing = missing;
     osd->cluster_messenger->send_message(m, osd->osdmap->get_cluster_inst(peer));
   }
