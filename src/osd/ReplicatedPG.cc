@@ -3816,14 +3816,14 @@ int ReplicatedPG::recover_replicas(int max)
 	dout(10) << __func__ << ": already pushing " << soid << dendl;
 	continue;
       }
-      if (missing_loc.find(soid) == missing_loc.end()) {
-	dout(10) << __func__ << ": " << soid << " is still unfound." << dendl;
-	continue;
-      }
       if (missing.is_missing(soid)) {
-	dout(10) << __func__ << ": still missing on primary " << soid << dendl;
+	if (missing_loc.find(soid) == missing_loc.end())
+	  dout(10) << __func__ << ": " << soid << " still unfound" << dendl;
+	else
+	  dout(10) << __func__ << ": " << soid << " still missing on primary" << dendl;
 	continue;
       }
+
       dout(10) << __func__ << ": recover_object_replicas(" << soid << ")" << dendl;
       started += recover_object_replicas(soid);
     }
