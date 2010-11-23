@@ -175,10 +175,7 @@ public:
   void forward_request_leader(PaxosServiceMessage *req);
   void handle_forward(MForward *m);
   void try_send_message(Message *m, entity_inst_t to);
-  void send_reply(PaxosServiceMessage *req, Message *reply, entity_inst_t to);
-  void send_reply(PaxosServiceMessage *req, Message *reply) {
-    send_reply(req, reply, req->get_orig_source_inst());
-  }
+  void send_reply(PaxosServiceMessage *req, Message *reply);
   void resend_routed_requests();
   void remove_session(MonSession *s);
 

@@ -26,10 +26,10 @@ struct MRoute : public Message {
   entity_inst_t dest;
   
   MRoute() : Message(MSG_ROUTE), msg(NULL) {}
-  MRoute(uint64_t t, Message *m, entity_inst_t i) :
-    Message(MSG_ROUTE), session_mon_tid(t), msg(m), dest(i) {}
-  MRoute(uint64_t t, bufferlist bl, entity_inst_t i) :
-    Message(MSG_ROUTE), session_mon_tid(t), dest(i) {
+  MRoute(uint64_t t, Message *m) :
+    Message(MSG_ROUTE), session_mon_tid(t), msg(m) {}
+  MRoute(bufferlist bl, entity_inst_t i) :
+    Message(MSG_ROUTE), session_mon_tid(0), dest(i) {
     bufferlist::iterator p = bl.begin();
     msg = decode_message(p);
   }
@@ -54,9 +54,13 @@ public:
   const char *get_type_name() { return "route"; }
   void print(ostream& o) {
     if (msg)
-      o << "route(" << *msg << " to " << dest << ")";
+      o << "route(" << *msg;
     else
-      o << "route(??? to " << dest << ")";
+      o << "route(???";
+    if (session_mon_tid)
+      o << " tid " << session_mon_tid << ")";
+    else
+      o << " to " << dest << ")";
   }
 };
 
