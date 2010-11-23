@@ -2241,8 +2241,15 @@ void Client::add_update_cap(Inode *in, int mds, uint64_t cap_id,
 
   check_cap_issue(in, cap, issued);
 
-  if (flags & CEPH_CAP_FLAG_AUTH)
-    in->auth_cap = cap;
+  if (flags & CEPH_CAP_FLAG_AUTH) {
+    if (in->auth_cap != cap) {
+      if (in->auth_cap && in->flushing_cap_item.is_on_list()) {
+	dout(10) << "add_update_cap changing auth cap: removing myself from flush_caps list" << dendl;
+	in->flushing_cap_item.remove_myself();
+      }
+      in->auth_cap = cap;
+    }
+  }
 
   unsigned old_caps = cap->issued;
   cap->cap_id = cap_id;
@@ -2282,8 +2289,13 @@ void Client::remove_cap(Inode *in, int mds)
   
   cap->cap_item.remove_myself();
 
-  if (in->auth_cap == cap)
+  if (in->auth_cap == cap) {
+    if (in->flushing_cap_item.is_on_list()) {
+      dout(10) << " removing myself from flushing_cap list" << dendl;
+      in->flushing_cap_item.remove_myself();
+    }
     in->auth_cap = NULL;
+  }
   assert(in->caps.count(mds));
   in->caps.erase(mds);
 
