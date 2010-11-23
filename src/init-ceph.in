@@ -321,8 +321,8 @@ for name in $what; do
 
 	cleanalllogs)
 	    echo removing all logs
-	    [ -n "$log_sym_dir" ] && do_cmd "rm -f $log_sym_dir/*"
-	    [ -n "$log_dir" ] && do_cmd "rm -f $log_dir/*"
+	    [ -n "$log_sym_dir" ] && do_cmd "rm -f $log_sym_dir/* || true"
+	    [ -n "$log_dir" ] && do_cmd "rm -f $log_dir/* || true"
 	    ;;
 
 	*)
