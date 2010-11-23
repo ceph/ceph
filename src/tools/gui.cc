@@ -89,24 +89,24 @@ static int calculate_resource_path_prefix(const char *argv0)
 static void gen_ranges(unsigned int m, unsigned int n,
 		       unsigned int *ranges)
 {
-   unsigned int multiple = FLOOR(m, n);
-   unsigned int remainder = m % n;
-   long int i, j;
+  unsigned int multiple = FLOOR(m, n);
+  unsigned int remainder = m % n;
+  long int i, j;
 
-   if (m <= n) {
-      for (i = 0; i < n; i++)
-         ranges[i] = (i < m) ? 1 : 0;
-   }
-   else {
-      for (i = n - 1, j = (remainder) ? n - remainder: 0; i >= 0; i--) {
-         if (j) {
-            ranges[i] = multiple - 1;
-            --j;
-         }
-         else
-            ranges[i] = multiple;
+  if (m <= n) {
+    for (i = 0; i < n; i++)
+      ranges[i] = (i < m) ? 1 : 0;
+  }
+  else {
+    for (i = n - 1, j = (remainder) ? n - remainder: 0; i >= 0; i--) {
+      if (j) {
+	ranges[i] = multiple - 1;
+	--j;
       }
-   }
+      else
+	ranges[i] = multiple;
+    }
+  }
 }
 
 // Converts a Ceph entity_addr_t to a C++ string.
@@ -200,10 +200,10 @@ GuiMonitor::GuiMonitor(Glib::RefPtr<Gtk::Builder> builder)
 
 GuiMonitor::~GuiMonitor()
 {
-   delete guiMonitorWindow;
-   delete viewNodeDialog;
-   delete sendCommandDialog;
-   delete guiMonitorAboutDialog;
+  delete guiMonitorWindow;
+  delete viewNodeDialog;
+  delete sendCommandDialog;
+  delete guiMonitorAboutDialog;
 }
 
 bool GuiMonitor::init()
@@ -261,72 +261,72 @@ void GuiMonitor::thread_shutdown()
 
 bool GuiMonitor::open_icon(Glib::RefPtr<Gdk::Pixbuf> &icon, const std::string &path)
 {
-   try {
+  try {
       icon = Gdk::Pixbuf::create_from_file(path);
-   }
-   catch (const Gdk::PixbufError& e) {
+  }
+  catch (const Gdk::PixbufError& e) {
       cerr << "Problem making graphic from " << path << "; error code: "
 	   << e.code() << ": " << e.what() << std::endl;
       return false;
-   }
-   catch (const Glib::FileError& e) {
+  }
+  catch (const Glib::FileError& e) {
       cerr << "Problem open " << path << std::endl;
       return false;
-   }
+  }
 
-   return true;
+  return true;
 }
 
 // Connects signals to the GUI elements such that they respond to events.
 void GuiMonitor::connect_signals()
 {
-   //Gtk::Main::signal_run().connect(sigc::mem_fun(this,
-   //   &GuiMonitor::init_check_status));
+  //Gtk::Main::signal_run().connect(sigc::mem_fun(this,
+  //   &GuiMonitor::init_check_status));
 
-   Gtk::Main::signal_quit().connect(sigc::mem_fun(this,
+  Gtk::Main::signal_quit().connect(sigc::mem_fun(this,
     &GuiMonitor::quit_signal_handler));
 
-   // guiMonitorWindow
-   guiMonitorWindow->signal_delete_event().connect(
+  // guiMonitorWindow
+  guiMonitorWindow->signal_delete_event().connect(
     sigc::mem_fun(this, &GuiMonitor::quit_gui));
 
-   // guiMonitorQuitImageMenuItem
-   guiMonitorQuitImageMenuItem->signal_activate().connect(
+  // guiMonitorQuitImageMenuItem
+  guiMonitorQuitImageMenuItem->signal_activate().connect(
     sigc::mem_fun(this, &GuiMonitor::gui_monitor_quit));
 
-   // guiMonitorCopyImageMenuItem
-   guiMonitorCopyImageMenuItem->signal_activate().connect(
+  // guiMonitorCopyImageMenuItem
+  guiMonitorCopyImageMenuItem->signal_activate().connect(
     sigc::mem_fun(this, &GuiMonitor::copy_log));
 
-   // grey out the copy menu item until the log text box gets data in it.
-   guiMonitorCopyImageMenuItem->set_sensitive(false);
+  // grey out the copy menu item until the log text box gets data in it.
+  guiMonitorCopyImageMenuItem->set_sensitive(false);
 
-   // guiMonitorSendCommandMenuItem
-   guiMonitorSendCommandMenuItem->signal_activate().connect(
+  // guiMonitorSendCommandMenuItem
+  guiMonitorSendCommandMenuItem->signal_activate().connect(
     sigc::mem_fun(this, &GuiMonitor::open_send_command));
 
-   // guiMonitorViewNodeMenuItem
-   guiMonitorViewNodeMenuItem->signal_activate().connect(
+  // guiMonitorViewNodeMenuItem
+  guiMonitorViewNodeMenuItem->signal_activate().connect(
     sigc::mem_fun(this, &GuiMonitor::open_view_mode));
 
-   // guiMonitorAboutImageMenuItem
-   guiMonitorAboutImageMenuItem->signal_activate().connect(
+  // guiMonitorAboutImageMenuItem
+  guiMonitorAboutImageMenuItem->signal_activate().connect(
     sigc::mem_fun(this, &GuiMonitor::open_about_dialog));
 
-   // sendCommandDialog
-   sendCommandDialog->signal_response().connect(sigc::mem_fun(this,
+  // sendCommandDialog
+  sendCommandDialog->signal_response().connect(sigc::mem_fun(this,
     &GuiMonitor::handle_send_command_response));
 
-   // viewNodeDialog
+  // viewNodeDialog
   viewNodeDialog->signal_response().connect(sigc::mem_fun(this,
       &GuiMonitor::handle_view_node_response));
-   viewNodeTypeComboBox->signal_changed().connect(sigc::mem_fun(this,
+  viewNodeTypeComboBox->signal_changed().connect(sigc::mem_fun(this,
       &GuiMonitor::handle_view_node_change));
 
-   /*
+  /*
     * OSD Cluster
     */
-   // guiMonitorOSDClusterIconView
+  // guiMonitorOSDClusterIconView
   guiMonitorOSDClusterIconView->signal_item_activated().connect(
       sigc::mem_fun(this, &GuiMonitor::osdc_cluster_zoom_in));
 
@@ -336,14 +336,14 @@ void GuiMonitor::connect_signals()
   guiMonitorOSDClusterBackButton->signal_clicked().connect(sigc::mem_fun(this,
       &GuiMonitor::osdc_cluster_back));
 
-   // guiMonitorOSDClusterViewAllButton
+  // guiMonitorOSDClusterViewAllButton
   guiMonitorOSDClusterViewAllButton->signal_activate().connect(
       sigc::mem_fun(this, &GuiMonitor::osdc_cluster_view_all));
   guiMonitorOSDClusterViewAllButton->signal_clicked().connect(
       sigc::mem_fun(this, &GuiMonitor::osdc_cluster_view_all));
 
-   // Grey out the "Back" and "View All" icons of the OSD cluster until the
-   // OSDCluterZoom > 0.
+  // Grey out the "Back" and "View All" icons of the OSD cluster until the
+  // OSDCluterZoom > 0.
   guiMonitorOSDClusterBackButton->set_sensitive(false);
   guiMonitorOSDClusterViewAllButton->set_sensitive(false);
 
@@ -426,42 +426,42 @@ void GuiMonitor::connect_signals()
 // Connects elements to their GUI containers.
 void GuiMonitor::link_elements()
 {
-   // get the buffer from the log's TextView
-   guiMonitorLogTextBuffer = guiMonitorLogTextView->get_buffer();
+  // get the buffer from the log's TextView
+  guiMonitorLogTextBuffer = guiMonitorLogTextView->get_buffer();
 
-   // create tree models
-   guiMonitorMonitorClusterEntries = Gtk::ListStore::create(monitorColumns);
-   guiMonitorOSDClusterIcons = Gtk::ListStore::create(icon_columns);
-   guiMonitorMDSClusterIcons = Gtk::ListStore::create(icon_columns);
-   guiMonitorPGClusterIcons = Gtk::ListStore::create(icon_columns);
+  // create tree models
+  guiMonitorMonitorClusterEntries = Gtk::ListStore::create(monitorColumns);
+  guiMonitorOSDClusterIcons = Gtk::ListStore::create(icon_columns);
+  guiMonitorMDSClusterIcons = Gtk::ListStore::create(icon_columns);
+  guiMonitorPGClusterIcons = Gtk::ListStore::create(icon_columns);
 
-   // connect the list stores to the tree views and icon views
-   guiMonitorMonitorClusterTreeView->set_model(
+  // connect the list stores to the tree views and icon views
+  guiMonitorMonitorClusterTreeView->set_model(
     guiMonitorMonitorClusterEntries);
-   guiMonitorMonitorClusterTreeView->append_column("Monitor #",
+  guiMonitorMonitorClusterTreeView->append_column("Monitor #",
     monitorColumns.key);
-   guiMonitorMonitorClusterTreeView->append_column("Address",
+  guiMonitorMonitorClusterTreeView->append_column("Address",
     monitorColumns.value);
 
-   guiMonitorOSDClusterIconView->set_model(guiMonitorOSDClusterIcons);
-   guiMonitorOSDClusterIconView->set_text_column(icon_columns.caption);
-   guiMonitorOSDClusterIconView->set_pixbuf_column(icon_columns.icon);
+  guiMonitorOSDClusterIconView->set_model(guiMonitorOSDClusterIcons);
+  guiMonitorOSDClusterIconView->set_text_column(icon_columns.caption);
+  guiMonitorOSDClusterIconView->set_pixbuf_column(icon_columns.icon);
 
-   guiMonitorMDSClusterIconView->set_model(guiMonitorMDSClusterIcons);
-   guiMonitorMDSClusterIconView->set_text_column(icon_columns.caption);
-   guiMonitorMDSClusterIconView->set_pixbuf_column(icon_columns.icon);
+  guiMonitorMDSClusterIconView->set_model(guiMonitorMDSClusterIcons);
+  guiMonitorMDSClusterIconView->set_text_column(icon_columns.caption);
+  guiMonitorMDSClusterIconView->set_pixbuf_column(icon_columns.icon);
 
-   guiMonitorPGClusterIconView->set_model(guiMonitorPGClusterIcons);
-   guiMonitorPGClusterIconView->set_text_column(icon_columns.caption);
-   guiMonitorPGClusterIconView->set_pixbuf_column(icon_columns.icon);
+  guiMonitorPGClusterIconView->set_model(guiMonitorPGClusterIcons);
+  guiMonitorPGClusterIconView->set_text_column(icon_columns.caption);
+  guiMonitorPGClusterIconView->set_pixbuf_column(icon_columns.icon);
 
-   viewNodeNodeTypeListStore = Gtk::ListStore::create(viewNodeColumns);
-   viewNodeTypeComboBox->set_model(viewNodeNodeTypeListStore);
-   Gtk::TreeModel::Row currentRow;
+  viewNodeNodeTypeListStore = Gtk::ListStore::create(viewNodeColumns);
+  viewNodeTypeComboBox->set_model(viewNodeNodeTypeListStore);
+  Gtk::TreeModel::Row currentRow;
 
-   // Set contents of the list store for use in the the combo box in the "View
-   // Node..." dialog box
-   for (int i = 0; i < NUM_NODE_TYPES; i++) {
+  // Set contents of the list store for use in the the combo box in the "View
+  // Node..." dialog box
+  for (int i = 0; i < NUM_NODE_TYPES; i++) {
       enum NodeType type = (NodeType)i;
 
       if (type == MON_NODE)
@@ -476,7 +476,7 @@ void GuiMonitor::link_elements()
                                   (type == PG_NODE) ? "Placement Group" :
                                   (type == MDS_NODE) ? "Metadata Server" :
                                   "Monitor";
-   }
+  }
 }
 
 /*
@@ -510,7 +510,7 @@ void GuiMonitor::update_osd_cluster_view()
 
   // Do not update the OSD cluster view if the zoom level is not zero.
   if (!osd_cluster_zoom)
-     view_osd_nodes(0, num_osds);
+    view_osd_nodes(0, num_osds);
 
   ostringstream oss;
   oss << num_osds << " OSD" << ((num_osds == 1) ? "" : "s")
@@ -523,7 +523,7 @@ void GuiMonitor::update_mds_cluster_view()
 {
   // Do not update the MDS cluster view if the zoom level is not zero.
   if (!mds_cluster_zoom)
-     view_mds_nodes();
+    view_mds_nodes();
 
   ostringstream oss;
   oss << g.mdsmap.get_num_mds() << " In, "
@@ -537,7 +537,7 @@ void GuiMonitor::update_pg_cluster_view()
 {
   // Do not update the PG cluster view if the zoom level is not zero.
   if (!pg_cluster_zoom)
-     view_pg_nodes(0, 0, true);
+    view_pg_nodes(0, 0, true);
 
   ostringstream oss;
   oss << g.pgmap.pg_stat.size() << " Placement Groups\n"
@@ -565,57 +565,57 @@ void GuiMonitor::update_mon_cluster_view()
 
   // For each monitor in the monitor map, output its ID and its address.
   for (unsigned int i = 0; i < monitors; i++) {
-     currentMonitor = g.mc.monmap.get_inst(i);
+    currentMonitor = g.mc.monmap.get_inst(i);
 
-     input << currentMonitor.addr;
-     currentAddress = input.str();
-     input.str("");
-     input.flush();
-     currentAddress = addr_to_str(currentMonitor.addr);
+    input << currentMonitor.addr;
+    currentAddress = input.str();
+    input.str("");
+    input.flush();
+    currentAddress = addr_to_str(currentMonitor.addr);
 
-     current_row = *(guiMonitorMonitorClusterEntries->append());
+    current_row = *(guiMonitorMonitorClusterEntries->append());
 
-     current_row[monitorColumns.key] = str(boost::format("%d") % i);
-     current_row[monitorColumns.value] = currentAddress;
+    current_row[monitorColumns.key] = str(boost::format("%d") % i);
+    current_row[monitorColumns.value] = currentAddress;
   }
 }
 
 std::string GuiMonitor::gen_osd_icon_caption(unsigned int begin, unsigned int end)
 {
-   boost::format rangeFormatter("OSDs %lu-%lu");
-   boost::format singleFormatter("OSD %lu");
+  boost::format rangeFormatter("OSDs %lu-%lu");
+  boost::format singleFormatter("OSD %lu");
 
-   return (end - begin) ?  str(rangeFormatter % begin % end) :
+  return (end - begin) ?  str(rangeFormatter % begin % end) :
     str(singleFormatter % begin);
 }
 
 void GuiMonitor::view_osd_nodes(unsigned int begin, unsigned int end, bool
  viewAll)
 {
-   unsigned int size = end - begin;
-   unsigned int *ranges = new unsigned int[MAX_VIEW_ICONS];
-   //unsigned int maxViewIcons = getMaxViewIcons();
+  unsigned int size = end - begin;
+  unsigned int *ranges = new unsigned int[MAX_VIEW_ICONS];
+  //unsigned int maxViewIcons = getMaxViewIcons();
 
-   gen_ranges(size, MAX_VIEW_ICONS, ranges);
+  gen_ranges(size, MAX_VIEW_ICONS, ranges);
 
-   // remove old icons
-   if (viewAll) {
-      while (!old_osd_cluster_zoom_states.empty())
-         old_osd_cluster_zoom_states.pop();
+  // remove old icons
+  if (viewAll) {
+    while (!old_osd_cluster_zoom_states.empty())
+      old_osd_cluster_zoom_states.pop();
 
-      osd_cluster_zoom = 0;
-   }
+    osd_cluster_zoom = 0;
+  }
 
-   guiMonitorOSDClusterIcons->clear();
+  guiMonitorOSDClusterIcons->clear();
 
-   unsigned int i = 0, j, range_offset = begin, begin_range, end_range;
-   int icon_status = CEPH_OSD_UP;
-   Gtk::TreeModel::Row row;
+  unsigned int i = 0, j, range_offset = begin, begin_range, end_range;
+  int icon_status = CEPH_OSD_UP;
+  Gtk::TreeModel::Row row;
 
-   string caption;
+  string caption;
 
-   // create and display icons
-   for (i = 0; i < MAX_VIEW_ICONS; i++) {
+  // create and display icons
+  for (i = 0; i < MAX_VIEW_ICONS; i++) {
       if (ranges[i]) {
          icon_status = CEPH_OSD_UP;
          row = *(guiMonitorOSDClusterIcons->append());
@@ -656,40 +656,40 @@ void GuiMonitor::view_osd_nodes(unsigned int begin, unsigned int end, bool
 
          range_offset += ranges[i];
       }
-   }
+  }
 
-   if (viewAll) {
-      guiMonitorOSDClusterBackButton->set_sensitive(false);
-      guiMonitorOSDClusterViewAllButton->set_sensitive(false);
-   }
+  if (viewAll) {
+    guiMonitorOSDClusterBackButton->set_sensitive(false);
+    guiMonitorOSDClusterViewAllButton->set_sensitive(false);
+  }
 
-   delete[] ranges;
+  delete[] ranges;
 }
 
 std::string GuiMonitor::
 gen_mds_icon_caption(unsigned int begin, unsigned int end)
 {
-   if (end == begin) {
-     ostringstream oss;
-     oss << "MDS " << current_up_mds.at(begin);
-     return oss.str();
-   }
+  if (end == begin) {
+    ostringstream oss;
+    oss << "MDS " << current_up_mds.at(begin);
+    return oss.str();
+  }
 
-   ostringstream oss;
-   oss << "MDSes " << current_up_mds.at(begin)
-       << "-" << current_up_mds.at(end);
-   return oss.str();
+  ostringstream oss;
+  oss << "MDSes " << current_up_mds.at(begin)
+      << "-" << current_up_mds.at(end);
+  return oss.str();
 }
 
 void GuiMonitor::view_mds_nodes(unsigned int begin, unsigned int end, bool
  viewAll)
 {
-   unsigned int size;
-   unsigned int *ranges = new unsigned int[MAX_VIEW_ICONS];
+  unsigned int size;
+  unsigned int *ranges = new unsigned int[MAX_VIEW_ICONS];
 
-   // If viewAll is set, then the names set will be filled with all of the names
-   // of the MDSes that are up.
-   if (viewAll) {
+  // If viewAll is set, then the names set will be filled with all of the names
+  // of the MDSes that are up.
+  if (viewAll) {
       // Gather all of the names of the up MDSes
       set<int> up_mds;
       g.mdsmap.get_up_mds_set(up_mds);
@@ -703,115 +703,115 @@ void GuiMonitor::view_mds_nodes(unsigned int begin, unsigned int end, bool
          current_up_mds.push_back(info.name);
       }
       size = current_up_mds.size();
-   }
-   else
+  }
+  else
       size = end - begin;
 
-   // Remove old icons
-   if (viewAll) {
-      while (!old_mds_cluster_zoom_states.empty())
-         old_mds_cluster_zoom_states.pop();
+  // Remove old icons
+  if (viewAll) {
+    while (!old_mds_cluster_zoom_states.empty())
+      old_mds_cluster_zoom_states.pop();
 
-      mds_cluster_zoom = 0;
-   }
+    mds_cluster_zoom = 0;
+  }
 
-   guiMonitorMDSClusterIcons->clear();
+  guiMonitorMDSClusterIcons->clear();
 
-   gen_ranges(size, MAX_VIEW_ICONS, ranges);
+  gen_ranges(size, MAX_VIEW_ICONS, ranges);
 
-   // Create and display icons
-   Gtk::TreeModel::Row row;
-   string caption;
+  // Create and display icons
+  Gtk::TreeModel::Row row;
+  string caption;
 
-   int i = 0;
+  int i = 0;
 
-   for (unsigned int mdsIndex = viewAll ?  0 : begin;
+  for (unsigned int mdsIndex = viewAll ?  0 : begin;
 	i < MAX_VIEW_ICONS;
 	i++, mdsIndex += ranges[i])
-   {
-      if (ranges[i]) {
-         row = *(guiMonitorMDSClusterIcons->append());
+  {
+    if (ranges[i]) {
+      row = *(guiMonitorMDSClusterIcons->append());
 
-         row[icon_columns.icon] = MDSIcon;
-         row[icon_columns.caption] =
-	     gen_mds_icon_caption(mdsIndex, mdsIndex + ranges[i] - 1);
-         row[icon_columns.begin_range] = mdsIndex;
-         row[icon_columns.end_range] = mdsIndex + ranges[i] - 1;
-      }
-   }
+      row[icon_columns.icon] = MDSIcon;
+      row[icon_columns.caption] =
+      gen_mds_icon_caption(mdsIndex, mdsIndex + ranges[i] - 1);
+      row[icon_columns.begin_range] = mdsIndex;
+      row[icon_columns.end_range] = mdsIndex + ranges[i] - 1;
+    }
+  }
 
-   if (viewAll) {
+  if (viewAll) {
       guiMonitorMDSClusterBackButton->set_sensitive(false);
       guiMonitorMDSClusterViewAllButton->set_sensitive(false);
-   }
+  }
 
-   delete[] ranges;
+  delete[] ranges;
 }
 
 std::string GuiMonitor::gen_pg_icon_caption(unsigned int begin, unsigned int end)
 {
-   boost::format rangeFormatter("PGs %lu-%lu");
-   boost::format singleFormatter("PG %lu");
+  boost::format rangeFormatter("PGs %lu-%lu");
+  boost::format singleFormatter("PG %lu");
 
-   return (end - begin) ?  str(rangeFormatter % begin % end) :
+  return (end - begin) ?  str(rangeFormatter % begin % end) :
     str(singleFormatter % begin);
 }
 
 void GuiMonitor::
 view_pg_nodes(unsigned int begin, unsigned int end, bool view_all)
 {
-   unsigned int size;
-   unsigned int *ranges = new unsigned int[MAX_VIEW_ICONS];
+  unsigned int size;
+  unsigned int *ranges = new unsigned int[MAX_VIEW_ICONS];
 
-   // remove old icons
-   if (view_all) {
-      while (!old_pg_cluster_zoom_states.empty())
-         old_pg_cluster_zoom_states.pop();
+  // remove old icons
+  if (view_all) {
+    while (!old_pg_cluster_zoom_states.empty())
+      old_pg_cluster_zoom_states.pop();
 
-      size = g.pgmap.pg_stat.size();
-      pg_cluster_zoom = 0;
+    size = g.pgmap.pg_stat.size();
+    pg_cluster_zoom = 0;
 
-      current_pgs.clear();
-      std::copy(g.pgmap.pg_set.begin(), g.pgmap.pg_set.end(),
-		  std::inserter(current_pgs, current_pgs.begin() ) );
-   }
-   else
-      size = end - begin;
+    current_pgs.clear();
+    std::copy(g.pgmap.pg_set.begin(), g.pgmap.pg_set.end(),
+	std::inserter(current_pgs, current_pgs.begin() ) );
+  }
+  else
+    size = end - begin;
 
-   guiMonitorPGClusterIcons->clear();
+  guiMonitorPGClusterIcons->clear();
 
-   unsigned int i = 0, range_offset = begin, begin_range, end_range;
-   Gtk::TreeModel::Row currentRow;
+  unsigned int i = 0, range_offset = begin, begin_range, end_range;
+  Gtk::TreeModel::Row currentRow;
 
-   string caption;
+  string caption;
 
-   gen_ranges(size, MAX_VIEW_ICONS, ranges);
+  gen_ranges(size, MAX_VIEW_ICONS, ranges);
 
-   // create and display icons
-   for (i = 0; i < MAX_VIEW_ICONS; i++) {
-      if (ranges[i]) {
-         currentRow = *(guiMonitorPGClusterIcons->append());
+  // create and display icons
+  for (i = 0; i < MAX_VIEW_ICONS; i++) {
+    if (ranges[i]) {
+      currentRow = *(guiMonitorPGClusterIcons->append());
 
-         begin_range = range_offset;
-         end_range = ranges[i] - 1 + range_offset;
+      begin_range = range_offset;
+      end_range = ranges[i] - 1 + range_offset;
 
-         caption = gen_pg_icon_caption(begin_range, end_range);
+      caption = gen_pg_icon_caption(begin_range, end_range);
 
-         currentRow[icon_columns.icon] = PGIcon;
-         currentRow[icon_columns.caption] = caption;
-         currentRow[icon_columns.begin_range] = begin_range;
-         currentRow[icon_columns.end_range] = end_range;
+      currentRow[icon_columns.icon] = PGIcon;
+      currentRow[icon_columns.caption] = caption;
+      currentRow[icon_columns.begin_range] = begin_range;
+      currentRow[icon_columns.end_range] = end_range;
 
-         range_offset += ranges[i];
-      }
-   }
+      range_offset += ranges[i];
+    }
+  }
 
-   if (view_all) {
-      guiMonitorPGClusterBackButton->set_sensitive(false);
-      guiMonitorPGClusterViewAllButton->set_sensitive(false);
-   }
+  if (view_all) {
+    guiMonitorPGClusterBackButton->set_sensitive(false);
+    guiMonitorPGClusterViewAllButton->set_sensitive(false);
+  }
 
-   delete[] ranges;
+  delete[] ranges;
 }
 
 void GuiMonitor::check_status()
@@ -874,30 +874,30 @@ bool GuiMonitor::quit_signal_handler()
 // the contents of the log to the clipboard.
 void GuiMonitor::copy_log()
 {
-   Glib::RefPtr<Gtk::Clipboard> clipboard =
+  Glib::RefPtr<Gtk::Clipboard> clipboard =
     Gtk::Clipboard::get(GDK_SELECTION_CLIPBOARD);
 
-   clipboard->set_text(guiMonitorLogTextBuffer->get_text());
-   clipboard->store();
+  clipboard->set_text(guiMonitorLogTextBuffer->get_text());
+  clipboard->store();
 }
 
 // Called when the "Send Command..." menu option in the Ceph menu is clicked.
 // Displays the "Send Command..." dialog box.
 void GuiMonitor::open_send_command()
 {
-   sendCommandPromptEntry->set_text("");
-   int result = sendCommandDialog->run();
+  sendCommandPromptEntry->set_text("");
+  int result = sendCommandDialog->run();
 
-   if (result == Gtk::RESPONSE_OK) {
-      if (send_command_success) {
-         send_command_success = false;
-         sendCommandDialog->hide();
-      }
-      else
-         open_send_command(); // needs to continue running
-   }
-   else
+  if (result == Gtk::RESPONSE_OK) {
+    if (send_command_success) {
+      send_command_success = false;
       sendCommandDialog->hide();
+    }
+    else
+      open_send_command(); // needs to continue running
+  }
+  else
+    sendCommandDialog->hide();
 }
 
 // Called when a button is pressed in the "Send Command..." dialog box.
@@ -912,8 +912,8 @@ void GuiMonitor::handle_send_command_response(int response)
   boost::trim(command_str);
 
   if (command_str.empty()) {
-     dialog_error("Please enter a Ceph command.", Gtk::MESSAGE_INFO);
-     return;
+    dialog_error("Please enter a Ceph command.", Gtk::MESSAGE_INFO);
+    return;
   }
 
   run_command(command_str.c_str());
@@ -925,69 +925,69 @@ void GuiMonitor::handle_send_command_response(int response)
 // Displays the "View Node..." dialog box.
 void GuiMonitor::open_view_mode()
 {
-   viewNodeTypeComboBox->set_active(-1);
-   viewNodeNameEntry->set_text("");
-   viewNodeNameLabel->set_label("Node ID:");
+  viewNodeTypeComboBox->set_active(-1);
+  viewNodeNameEntry->set_text("");
+  viewNodeNameLabel->set_label("Node ID:");
 
-   int result = viewNodeDialog->run();
+  int result = viewNodeDialog->run();
 
-   if (result == Gtk::RESPONSE_OK) {
+  if (result == Gtk::RESPONSE_OK) {
       if (view_node_success) {
          view_node_success = false;
          viewNodeDialog->hide();
       }
       else
          open_view_mode(); // needs to continue running
-   }
-   else
+  }
+  else
       viewNodeDialog->hide();
 }
 
 std::vector<NodeInfo *> GuiMonitor::gen_node_info_from_icons
       (Glib::RefPtr<Gtk::ListStore> iconStore, enum NodeType type)
 {
-   vector<NodeInfo *> clusterInfo;
-   Gtk::TreeModel::Children icons = iconStore->children();
-   Gtk::TreeModel::iterator iter;
-   Gtk::TreeModel::Row currentRow;
-   NodeInfo *currentNodeInfo;
-   int status;
+  vector<NodeInfo *> clusterInfo;
+  Gtk::TreeModel::Children icons = iconStore->children();
+  Gtk::TreeModel::iterator iter;
+  Gtk::TreeModel::Row currentRow;
+  NodeInfo *currentNodeInfo;
+  int status;
 
-   for (iter = icons.begin(); iter != icons.end(); iter++) {
+  for (iter = icons.begin(); iter != icons.end(); iter++) {
       currentRow = *iter;
 
       currentNodeInfo = new NodeInfo(currentRow[icon_columns.begin_range],
-       currentRow[icon_columns.end_range], type, status);
+    currentRow[icon_columns.end_range], type, status);
 
       clusterInfo.push_back(currentNodeInfo);
-   }
+  }
 
-   return clusterInfo;
+  return clusterInfo;
 }
 
 void GuiMonitor::gen_icons_from_node_info(vector<NodeInfo *>& nodeInfo)
 {
-   Glib::RefPtr<Gtk::ListStore> icons;
-   Gtk::TreeModel::Row row;
-   NodeInfo *node;
+  Glib::RefPtr<Gtk::ListStore> icons;
+  Gtk::TreeModel::Row row;
+  NodeInfo *node;
 
-   switch (nodeInfo[0]->type) {
-   case OSD_NODE:
+  switch (nodeInfo[0]->type) {
+  case OSD_NODE:
       icons = guiMonitorOSDClusterIcons;
       break;
-   case MDS_NODE:
+  case MDS_NODE:
       icons = guiMonitorMDSClusterIcons;
       break;
-   case PG_NODE:
+  case PG_NODE:
       icons = guiMonitorPGClusterIcons;
       break;
-   default:
+  default:
       break;
-   }
+  }
 
-   icons->clear();
+  icons->clear();
 
-   for (unsigned int i = 0; i < nodeInfo.size(); i++) {
+  for (unsigned int i = 0; i < nodeInfo.size(); i++) {
       node = nodeInfo[i];
       row = *(icons->append());
 
@@ -1029,9 +1029,9 @@ void GuiMonitor::gen_icons_from_node_info(vector<NodeInfo *>& nodeInfo)
       }
 
       delete node;
-   }
+  }
 
-   nodeInfo.clear();
+  nodeInfo.clear();
 }
 
 // Constructs a StatsWindowInfo object and opens a window containing the stats
@@ -1051,10 +1051,10 @@ void GuiMonitor::open_stats(enum NodeType type, bool is_cluster, int id)
 // Called when an icon in the OSD icon view is activated.
 void GuiMonitor::osdc_cluster_zoom_in(const Gtk::TreeModel::Path& path)
 {
-   Gtk::TreeModel::iterator iter = guiMonitorOSDClusterIcons->get_iter(path);
+  Gtk::TreeModel::iterator iter = guiMonitorOSDClusterIcons->get_iter(path);
 
-   if (!iter)
-     return;
+  if (!iter)
+    return;
 
   Gtk::TreeModel::Row row = *iter;
 
@@ -1096,7 +1096,7 @@ void GuiMonitor::osdc_cluster_zoom_in(const Gtk::TreeModel::Path& path)
 // nodes, however.
 void GuiMonitor::osdc_cluster_back()
 {
-   if (osd_cluster_zoom) {
+  if (osd_cluster_zoom) {
       vector<NodeInfo *> oldOSDInfo = old_osd_cluster_zoom_states.top();
       old_osd_cluster_zoom_states.pop();
 
@@ -1107,28 +1107,28 @@ void GuiMonitor::osdc_cluster_back()
          guiMonitorOSDClusterBackButton->set_sensitive(false);
          guiMonitorOSDClusterViewAllButton->set_sensitive(false);
       }
-   }
+  }
 }
 
 // Called when the "View All" button is activated in the OSD cluster view area.
 // Displays all OSDs, with recent updates.
 void GuiMonitor::osdc_cluster_view_all()
 {
-   view_osd_nodes(0, g.osdmap.get_max_osd());
+  view_osd_nodes(0, g.osdmap.get_max_osd());
 }
 
 // Allows user to obtain the statistics of the OSD cluster.  Called by
 // guiMonitorOSDClusterStatsButton by signal_clicked.
 void GuiMonitor::osdc_cluster_stats()
 {
-   open_stats(OSD_NODE, true, 0);
+  open_stats(OSD_NODE, true, 0);
 }
 
 // Called when an icon in the MDS icon view is activated.
 void GuiMonitor::mds_cluster_zoom_in(const Gtk::TreeModel::Path& path)
 {
-   Gtk::TreeModel::iterator iter =
-     guiMonitorMDSClusterIcons->get_iter(path);
+  Gtk::TreeModel::iterator iter =
+    guiMonitorMDSClusterIcons->get_iter(path);
 
   if (!iter)
     return;
@@ -1183,21 +1183,21 @@ void GuiMonitor::mds_cluster_back()
   if (!mds_cluster_zoom) {
     guiMonitorMDSClusterBackButton->set_sensitive(false);
     guiMonitorMDSClusterViewAllButton->set_sensitive(false);
-   }
+  }
 }
 
 // Called when the "View All" button is activated in the MDS cluster view area.
 // Displays all MDSes, with recent updates.
 void GuiMonitor::mds_cluster_view_all()
 {
-   view_mds_nodes();
+  view_mds_nodes();
 }
 
 // Allows user to obtain the statistics of the MDS cluster.  Called by
 // guiMonitorMDSClusterStatsButton by signal_clicked.
 void GuiMonitor::mds_cluster_stats()
 {
-   open_stats(MDS_NODE, true, 0);
+  open_stats(MDS_NODE, true, 0);
 }
 
 // Called when an icon in the PG icon view is activated.
@@ -1216,7 +1216,7 @@ void GuiMonitor::pg_cluster_zoom_in(const Gtk::TreeModel::Path& path)
     // Zoom in, since this is a range.  Place the old icons on the stack
     // and then call viewPGIcons() on the narrower range.
     vector<NodeInfo *> oldPGInfo =
-     gen_node_info_from_icons(guiMonitorPGClusterIcons, PG_NODE);
+    gen_node_info_from_icons(guiMonitorPGClusterIcons, PG_NODE);
 
     old_pg_cluster_zoom_states.push(oldPGInfo);
     pg_cluster_zoom++;
@@ -1290,19 +1290,19 @@ void GuiMonitor::dialog_error(const std::string &msg, Gtk::MessageType type)
 // name.  Returns the ID of the metadata server or returns -1 if not found.
 int GuiMonitor::find_mds_id(const std::string &name)
 {
-   set<int> upMDSes;
-   g.mdsmap.get_up_mds_set(upMDSes);
+  set<int> upMDSes;
+  g.mdsmap.get_up_mds_set(upMDSes);
 
-   for (set<int>::const_iterator MDSId = upMDSes.begin();
+  for (set<int>::const_iterator MDSId = upMDSes.begin();
 	MDSId != upMDSes.end(); MDSId++)
-   {
+  {
       const MDSMap::mds_info_t& current_mds_info =
 	  g.mdsmap.get_mds_info(*MDSId);
       if (current_mds_info.name == name)
 	return *MDSId;
-   }
+  }
 
-   return -1;
+  return -1;
 }
 
 // Called when a button is pressed in the "View Node..." dialog box.
@@ -1391,27 +1391,27 @@ void GuiMonitor::handle_view_node_response(int response)
 // dialog box.  Activated by signal_changed().
 void GuiMonitor::handle_view_node_change()
 {
-   if (viewNodeTypeComboBox->get_active_row_number() == -1)
+  if (viewNodeTypeComboBox->get_active_row_number() == -1)
       return;
 
-   Gtk::TreeModel::iterator selected_type_iter =
+  Gtk::TreeModel::iterator selected_type_iter =
 	viewNodeTypeComboBox->get_active();
 
-   Gtk::TreeRow selected_row = *selected_type_iter;
-   enum NodeType selected_type = selected_row[viewNodeColumns.type];
-   std::string request_type =
+  Gtk::TreeRow selected_row = *selected_type_iter;
+  enum NodeType selected_type = selected_row[viewNodeColumns.type];
+  std::string request_type =
     (selected_type == OSD_NODE || selected_type == PG_NODE ||
     selected_type == MON_NODE) ? "Node ID:" : "MDS Name:";
 
-   viewNodeNameLabel->set_label(request_type);
+  viewNodeNameLabel->set_label(request_type);
 }
 
 // Called when the "About" menu option in the Help menu is clicked.  Displays
 // the "About" dialog box.
 void GuiMonitor::open_about_dialog()
 {
-   guiMonitorAboutDialog->run();
-   guiMonitorAboutDialog->hide();
+  guiMonitorAboutDialog->run();
+  guiMonitorAboutDialog->hide();
 }
 
 /*
@@ -1425,40 +1425,40 @@ GuiMonitor::StatsWindowInfo::StatsWindowInfo(GuiMonitor *gui_,
     type(type_),
     id(id_)
 {
-   builder->get_widget("statsWindow", stats_window);
-   builder->get_widget("statsInfoLabel", stats_info_label);
-   builder->get_widget("statsInfoTreeView", stats_info_tree_view);
-   builder->get_widget("statsCopyButton", stats_copy_button);
-   builder->get_widget("statsCloseButton", stats_close_button);
+  builder->get_widget("statsWindow", stats_window);
+  builder->get_widget("statsInfoLabel", stats_info_label);
+  builder->get_widget("statsInfoTreeView", stats_info_tree_view);
+  builder->get_widget("statsCopyButton", stats_copy_button);
+  builder->get_widget("statsCloseButton", stats_close_button);
 
-   stats = Gtk::ListStore::create(columns);
+  stats = Gtk::ListStore::create(columns);
 
-   stats_info_tree_view->set_model(stats);
-   stats_info_tree_view->append_column("Name", columns.key);
-   stats_info_tree_view->append_column("Value", columns.value);
+  stats_info_tree_view->set_model(stats);
+  stats_info_tree_view->append_column("Name", columns.key);
+  stats_info_tree_view->append_column("Value", columns.value);
 
-   stats_window->signal_delete_event().connect(sigc::mem_fun(this,
+  stats_window->signal_delete_event().connect(sigc::mem_fun(this,
     &GuiMonitor::StatsWindowInfo::closeWindow));
 
-   stats_close_button->signal_activate().connect(sigc::mem_fun(this,
+  stats_close_button->signal_activate().connect(sigc::mem_fun(this,
     &GuiMonitor::StatsWindowInfo::close));
-   stats_close_button->signal_clicked().connect(sigc::mem_fun(this,
+  stats_close_button->signal_clicked().connect(sigc::mem_fun(this,
     &GuiMonitor::StatsWindowInfo::close));
 
-   stats_copy_button->signal_activate().connect(sigc::mem_fun(this,
+  stats_copy_button->signal_activate().connect(sigc::mem_fun(this,
     &GuiMonitor::StatsWindowInfo::copy));
-   stats_copy_button->signal_clicked().connect(sigc::mem_fun(this,
+  stats_copy_button->signal_clicked().connect(sigc::mem_fun(this,
     &GuiMonitor::StatsWindowInfo::copy));
 }
 
 GuiMonitor::StatsWindowInfo::~StatsWindowInfo()
 {
-   delete stats_window;
+  delete stats_window;
 }
 
 void GuiMonitor::StatsWindowInfo::init()
 {
-   if (is_cluster) {
+  if (is_cluster) {
       if (type == OSD_NODE)
          gen_osd_cluster_columns();
       else if (type == PG_NODE)
@@ -1467,113 +1467,113 @@ void GuiMonitor::StatsWindowInfo::init()
          gen_mds_cluster_columns();
       else
          gen_monitor_cluster_columns();
-   }
-   else {
+  }
+  else {
       if (type == OSD_NODE)
          gen_osd_node_columns();
       else if (type == PG_NODE)
          gen_pg_node_columns();
       else // type == MDS_NODE
          gen_mds_node_columns();
-   }
+  }
 }
 
 void GuiMonitor::StatsWindowInfo::gen_osd_cluster_columns()
 {
-   string label("OSD Cluster Statistics");
+  string label("OSD Cluster Statistics");
 
-   stats_window->set_title(label);
-   stats_info_label->set_label(label);
+  stats_window->set_title(label);
+  stats_info_label->set_label(label);
 
-   {
-     ostringstream oss;
-     oss << g.osdmap.get_epoch();
-     insert_stats("Epoch", oss.str());
-   }
-   {
-     ostringstream oss;
-     oss << g.osdmap.get_max_osd();
-     insert_stats("Maximum Amount of OSDs", oss.str());
-   }
-   {
-     ostringstream oss;
-     oss << g.osdmap.get_num_up_osds();
-     insert_stats("Amount of Up OSDs", oss.str());
-   }
-   {
-     ostringstream oss;
-     oss << g.osdmap.get_num_in_osds();
-     insert_stats("Amount of In OSDs", oss.str());
-   }
+  {
+    ostringstream oss;
+    oss << g.osdmap.get_epoch();
+    insert_stats("Epoch", oss.str());
+  }
+  {
+    ostringstream oss;
+    oss << g.osdmap.get_max_osd();
+    insert_stats("Maximum Amount of OSDs", oss.str());
+  }
+  {
+    ostringstream oss;
+    oss << g.osdmap.get_num_up_osds();
+    insert_stats("Amount of Up OSDs", oss.str());
+  }
+  {
+    ostringstream oss;
+    oss << g.osdmap.get_num_in_osds();
+    insert_stats("Amount of In OSDs", oss.str());
+  }
 }
 
 void GuiMonitor::StatsWindowInfo::gen_mds_cluster_columns()
 {
-   string label("MDS Cluster Statistics");
+  string label("MDS Cluster Statistics");
 
-   stats_window->set_title(label);
-   stats_info_label->set_label(label);
+  stats_window->set_title(label);
+  stats_info_label->set_label(label);
 
-   set<int> up_mds;
-   set<int> stopped_mds;
+  set<int> up_mds;
+  set<int> stopped_mds;
 
-   g.mdsmap.get_up_mds_set(up_mds);
-   g.mdsmap.get_stopped_mds_set(stopped_mds);
+  g.mdsmap.get_up_mds_set(up_mds);
+  g.mdsmap.get_stopped_mds_set(stopped_mds);
 
-   insert_stats("Epoch", str(boost::format("%llu") % g.mdsmap.get_epoch()));
-   insert_stats("Maximum Amount of MDSes", str(boost::format("%u") %
+  insert_stats("Epoch", str(boost::format("%llu") % g.mdsmap.get_epoch()));
+  insert_stats("Maximum Amount of MDSes", str(boost::format("%u") %
     g.mdsmap.get_max_mds()));
-   insert_stats("Amount of Up MDSes", str(boost::format("%d") % up_mds.size()));
-   insert_stats("Amount of In MDSes", str(boost::format("%u") %
+  insert_stats("Amount of Up MDSes", str(boost::format("%d") % up_mds.size()));
+  insert_stats("Amount of In MDSes", str(boost::format("%u") %
     g.mdsmap.get_num_mds()));
-   insert_stats("Amount of Failed MDSes", str(boost::format("%d") %
+  insert_stats("Amount of Failed MDSes", str(boost::format("%d") %
     g.mdsmap.get_num_failed()));
-   insert_stats("Amount of Stopped MDSes", str(boost::format("%d") %
+  insert_stats("Amount of Stopped MDSes", str(boost::format("%d") %
     stopped_mds.size()));
 }
 
 void GuiMonitor::StatsWindowInfo::gen_pg_cluster_columns()
 {
-   string label("PG Cluster Statistics");
+  string label("PG Cluster Statistics");
 
-   stats_window->set_title(label);
-   stats_info_label->set_label(label);
+  stats_window->set_title(label);
+  stats_info_label->set_label(label);
 
-   {
-     ostringstream oss;
-     oss << g.pgmap.version;
-     insert_stats("Version", oss.str());
-   }
+  {
+    ostringstream oss;
+    oss << g.pgmap.version;
+    insert_stats("Version", oss.str());
+  }
 
-   {
-     ostringstream oss;
-     oss << g.pgmap.pg_stat.size();
-     insert_stats("Amount of PGs", oss.str());
-   }
+  {
+    ostringstream oss;
+    oss << g.pgmap.pg_stat.size();
+    insert_stats("Amount of PGs", oss.str());
+  }
 
-   {
-     ostringstream oss;
-     oss << kb_t(g.pgmap.pg_sum.num_kb);
-     insert_stats("Data ", oss.str());
-   }
+  {
+    ostringstream oss;
+    oss << kb_t(g.pgmap.pg_sum.num_kb);
+    insert_stats("Data ", oss.str());
+  }
 
-   {
-     ostringstream oss;
-     oss << kb_t(g.pgmap.osd_sum.kb_used);
-     insert_stats("Amount of Storage Used", oss.str());
-   }
+  {
+    ostringstream oss;
+    oss << kb_t(g.pgmap.osd_sum.kb_used);
+    insert_stats("Amount of Storage Used", oss.str());
+  }
 
-   {
-     ostringstream oss;
-     oss << kb_t(g.pgmap.osd_sum.kb_avail);
-     insert_stats("Amount of Storage Available", oss.str());
-   }
+  {
+    ostringstream oss;
+    oss << kb_t(g.pgmap.osd_sum.kb_avail);
+    insert_stats("Amount of Storage Available", oss.str());
+  }
 
-   {
-     ostringstream oss;
-     oss << kb_t(g.pgmap.osd_sum.kb);
-     insert_stats("Total Storage", oss.str());
-   }
+  {
+    ostringstream oss;
+    oss << kb_t(g.pgmap.osd_sum.kb);
+    insert_stats("Total Storage", oss.str());
+  }
 }
 
 void GuiMonitor::StatsWindowInfo::gen_monitor_cluster_columns()
@@ -1610,42 +1610,42 @@ void GuiMonitor::StatsWindowInfo::gen_monitor_cluster_columns()
 
 void GuiMonitor::StatsWindowInfo::gen_osd_node_columns()
 {
-   bool isIn = g.osdmap.is_in(id);
-   const entity_addr_t& addr = g.osdmap.get_addr(id);
-   const osd_info_t& osdInfo = g.osdmap.get_info(id);
+  bool isIn = g.osdmap.is_in(id);
+  const entity_addr_t& addr = g.osdmap.get_addr(id);
+  const osd_info_t& osdInfo = g.osdmap.get_info(id);
 
-   string label(str(boost::format("OSD %lu Statistics:") % id));
+  string label(str(boost::format("OSD %lu Statistics:") % id));
 
-   stats_window->set_title(label);
-   stats_info_label->set_label(label);
+  stats_window->set_title(label);
+  stats_info_label->set_label(label);
 
-   insert_stats("OSD ID", str(boost::format("%lu") % id));
-   insert_stats("Address", isIn ? addr_to_str(addr) : "None");
-   insert_stats("Up?", g.osdmap.is_up(id) ? "Up" : "Down");
-   insert_stats("In?", isIn ? "In" : "Out");
-   insert_stats("Weight", isIn ? str(boost::format("%f") %
+  insert_stats("OSD ID", str(boost::format("%lu") % id));
+  insert_stats("Address", isIn ? addr_to_str(addr) : "None");
+  insert_stats("Up?", g.osdmap.is_up(id) ? "Up" : "Down");
+  insert_stats("In?", isIn ? "In" : "Out");
+  insert_stats("Weight", isIn ? str(boost::format("%f") %
       g.osdmap.get_weightf(id)) : "None");
-   insert_stats("Up From", str(boost::format("%lu") % osdInfo.up_from));
-   insert_stats("Up Through", str(boost::format("%lu") % osdInfo.up_thru));
-   insert_stats("Down At", str(boost::format("%lu") % osdInfo.down_at));
-   insert_stats("Last Clean", str(boost::format("First: %lu, Last: %lu") %
+  insert_stats("Up From", str(boost::format("%lu") % osdInfo.up_from));
+  insert_stats("Up Through", str(boost::format("%lu") % osdInfo.up_thru));
+  insert_stats("Down At", str(boost::format("%lu") % osdInfo.down_at));
+  insert_stats("Last Clean", str(boost::format("First: %lu, Last: %lu") %
     osdInfo.last_clean_first % osdInfo.last_clean_last));
 }
 
 void GuiMonitor::StatsWindowInfo::gen_mds_node_columns()
 {
-   const MDSMap::mds_info_t &mdsInfo = g.mdsmap.get_mds_info(id);
+  const MDSMap::mds_info_t &mdsInfo = g.mdsmap.get_mds_info(id);
 
-   string label(str(boost::format("MDS %s Statistics:") % mdsInfo.name));
+  string label(str(boost::format("MDS %s Statistics:") % mdsInfo.name));
 
-   stats_window->set_title(label);
-   stats_info_label->set_label(label);
+  stats_window->set_title(label);
+  stats_info_label->set_label(label);
 
-   insert_stats("Name", mdsInfo.name);
-   insert_stats("Address", addr_to_str(mdsInfo.addr));
-   insert_stats("Rank", str(boost::format("%lu") % mdsInfo.rank));
-   insert_stats("Laggy?", mdsInfo.laggy() ? "Yes" : "No");
-   insert_stats("State", ceph_mds_state_name(mdsInfo.state));
+  insert_stats("Name", mdsInfo.name);
+  insert_stats("Address", addr_to_str(mdsInfo.addr));
+  insert_stats("Rank", str(boost::format("%lu") % mdsInfo.rank));
+  insert_stats("Laggy?", mdsInfo.laggy() ? "Yes" : "No");
+  insert_stats("State", ceph_mds_state_name(mdsInfo.state));
 }
 
 void GuiMonitor::StatsWindowInfo::gen_pg_node_columns()
@@ -1664,18 +1664,18 @@ void GuiMonitor::StatsWindowInfo::gen_pg_node_columns()
   stats_info_label->set_label(label);
 
   insert_stats("Number of Objects",
-     str(boost::format("%llu") % stat.num_objects));
+    str(boost::format("%llu") % stat.num_objects));
   insert_stats("Number of Objects Missing on Primary",
-     str(boost::format("%llu") % stat.num_objects_missing_on_primary));
+    str(boost::format("%llu") % stat.num_objects_missing_on_primary));
   insert_stats("Number of Objects Degraded",
-     str(boost::format("%llu") % stat.num_objects_degraded));
+    str(boost::format("%llu") % stat.num_objects_degraded));
   insert_stats("Number of Objects Unfound",
-     str(boost::format("%llu") % stat.num_objects_unfound));
+    str(boost::format("%llu") % stat.num_objects_unfound));
   insert_stats("KB", str(boost::format("%llu") % stat.num_kb));
   insert_stats("Bytes", str(boost::format("%llu") % stat.num_bytes));
   insert_stats("Log Size", str(boost::format("%llu") % stat.log_size));
   insert_stats("On-Disk Log Size", str(boost::format("%llu") %
-   stat.ondisk_log_size));
+  stat.ondisk_log_size));
   insert_stats("State", pg_state_string(stat.state));
 
   ostringstream vss;
@@ -1783,9 +1783,9 @@ int run_gui(int argc, char **argv)
     gui = new GuiMonitor(builder);
 
     if (!gui->init()) {
-       cerr << "There was a problem with initializing the GUI." << std::endl;
-       ret = EXIT_FAILURE;
-       goto done;
+      cerr << "There was a problem with initializing the GUI." << std::endl;
+      ret = EXIT_FAILURE;
+      goto done;
     }
 
     // The GUI will now enter its main run loop and will
