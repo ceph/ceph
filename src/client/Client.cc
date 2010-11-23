@@ -1059,7 +1059,7 @@ int Client::make_request(MetaRequest *request,
   return r;
 }
 
-int Client::encode_inode_release(Inode *in, MClientRequest *req,
+int Client::encode_inode_release(Inode *in, MetaRequest *req,
 			 int mds, int drop,
 			 int unless, int force)
 {
@@ -1091,14 +1091,14 @@ int Client::encode_inode_release(Inode *in, MClientRequest *req,
     rel.wanted = caps->wanted;
     rel.dname_len = 0;
     rel.dname_seq = 0;
-    req->releases.push_back(MClientRequest::Release(rel,""));
+    req->cap_releases.push_back(MClientRequest::Release(rel,""));
   }
   dout(25) << "encode_inode_release exit(in:" << *in << ") released:"
 	   << released << dendl;
   return released;
 }
 
-void Client::encode_dentry_release(Dentry *dn, MClientRequest *req,
+void Client::encode_dentry_release(Dentry *dn, MetaRequest *req,
 			   int mds, int drop, int unless)
 {
   dout(20) << "encode_dentry_release enter(dn:"
@@ -1107,7 +1107,7 @@ void Client::encode_dentry_release(Dentry *dn, MClientRequest *req,
 				      mds, drop, unless, 1);
   if (released && dn->lease_mds == mds) {
     dout(25) << "preemptively releasing dn to mds" << dendl;
-    MClientRequest::Release& rel = req->releases.back();
+    MClientRequest::Release& rel = req->cap_releases.back();
     rel.item.dname_len = dn->name.length();
     rel.item.dname_seq = dn->lease_seq;
     rel.dname = dn->name;
@@ -1123,26 +1123,26 @@ void Client::encode_dentry_release(Dentry *dn, MClientRequest *req,
  * Additionally, if you set any *drop member, you'd better have
  * set the corresponding dentry!
  */
-void Client::encode_cap_releases(MetaRequest *req, MClientRequest *m, int mds) {
+void Client::encode_cap_releases(MetaRequest *req, int mds) {
   dout(20) << "encode_cap_releases enter (req: "
 	   << req << ", mds: " << mds << ")" << dendl;
   if (req->inode_drop && req->inode)
-    encode_inode_release(req->inode, m,
+    encode_inode_release(req->inode, req,
 			 mds, req->inode_drop,
 			 req->inode_unless);
   
   if (req->old_inode_drop && req->old_inode)
-    encode_inode_release(req->old_inode, m,
+    encode_inode_release(req->old_inode, req,
 			 mds, req->old_inode_drop,
 			 req->old_inode_unless);
   
   if (req->dentry_drop && req->dentry)
-    encode_dentry_release(req->dentry, m,
+    encode_dentry_release(req->dentry, req,
 			  mds, req->dentry_drop,
 			  req->dentry_unless);
   
   if (req->old_dentry_drop && req->old_dentry)
-    encode_dentry_release(req->old_dentry, m,
+    encode_dentry_release(req->old_dentry, req,
 			  mds, req->old_dentry_drop,
 			  req->old_dentry_unless);
   dout(25) << "encode_cap_releases exit (req: "
@@ -1217,7 +1217,9 @@ void Client::send_request(MetaRequest *request, int mds)
     r->set_replayed_op();
   r->set_mdsmap_epoch(mdsmap->get_epoch());
 
-  encode_cap_releases(request, r, mds);
+  if (request->cap_releases.empty())
+    encode_cap_releases(request, mds);
+  r->releases = request->cap_releases;
 
   if (request->mds == -1) {
     request->sent_stamp = g_clock.now();

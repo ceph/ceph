@@ -1,3 +1,12 @@
+ceph (0.23.1-1) experimental; urgency=low
+
+  * msgr: fixed rare messenger race/bug
+  * client: fixed cache consitency with link(2)
+  * client: fix lssnap
+  * msgr: fix ipv6 addr parsing buffer overflow 
+
+ -- Sage Weil <sage@newdream.net>  Sun, 21 Nov 2010 15:22:21 -0800
+
 ceph (0.23-1) experimental; urgency=low
 
   * osd: use new btrfs snapshot ioctls
