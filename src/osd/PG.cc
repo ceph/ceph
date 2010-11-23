@@ -776,17 +776,17 @@ bool PG::is_all_uptodate() const
 {
   assert(is_primary());
 
+  bool uptodate = true;
+
   if (up != acting) {
     dout(10) << __func__ << ": the set of UP osds is not the same as the "
 	     << "set of ACTING osds." << dendl;
-    return false;
+    uptodate = false;
   }
 
-  size_t ml_sz = missing_loc.size();
-  size_t p_m_sz = missing.num_missing();
-  if (ml_sz != p_m_sz) {
-    dout(10) << __func__ << ": the primary has unfound objects." << dendl;
-    return false;
+  if (missing.num_missing()) {
+    dout(10) << __func__ << ": primary has " << missing.num_missing() << dendl;
+    uptodate = false;
   }
 
   vector<int>::const_iterator end = acting.end();
@@ -799,19 +799,18 @@ bool PG::is_all_uptodate() const
     if (pm == peer_missing.end()) {
       dout(10) << __func__ << ": osd " << peer << " is not up-to-date. We "
 	       << "have no peer_missing information for this osd." << dendl;
-      return false;
+      uptodate = false;
+      continue;
     }
-    size_t m_sz = pm->second.num_missing();
-    if (m_sz != ml_sz) {
-      dout(10) << __func__ << ": osd " << peer << " is not up-to-date. "
-	       << "num_missing = " << m_sz << ", but missing_loc.size() = "
-	       << ml_sz << dendl;
-      return false;
+    if (pm->second.num_missing()) {
+      dout(10) << __func__ << ": osd " << peer << " has " << pm->second.num_missing() << " missing" << dendl;
+      uptodate = false;
     }
   }
 
-  dout(10) << __func__ << ": all OSDs are uptodate!" << dendl;
-  return true;
+  if (uptodate)
+    dout(10) << __func__ << ": everyone is uptodate" << dendl;
+  return uptodate;
 }
 
 void PG::generate_past_intervals()
