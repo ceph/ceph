@@ -1561,9 +1561,8 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
   else if (!is_active()) {
     // -- ok, activate!
     activate(t, tfin, activator_map);
-    if (missing.have_missing()) {
+    if (have_unfound())
       discover_all_missing(query_map);
-    }
   }
   else if (is_all_uptodate()) 
     finish_recovery(t, tfin);

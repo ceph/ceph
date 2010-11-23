@@ -3906,10 +3906,10 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     // i am PRIMARY
     if (pg->is_active())  {
       // PG is ACTIVE
-      if (pg->have_unfound()) {
-	dout(10) << *pg << " searching osd" << from << " log for missing items." << dendl;
-	pg->search_for_missing(info, missing, from);
+      dout(10) << *pg << " searching osd" << from << " log for unfound items." << dendl;
+      pg->search_for_missing(info, missing, from);
 
+      if (pg->have_unfound()) {
 	// Make sure we've requested MISSING information from every OSD
 	// we know about.
 	map< int, map<pg_t,PG::Query> > query_map;
