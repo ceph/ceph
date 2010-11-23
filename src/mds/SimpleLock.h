@@ -315,7 +315,7 @@ public:
     return s;
   }
   void set_state_rejoin(int s, list<Context*>& waiters) {
-    if (!is_stable()) {
+    if (!is_stable() && get_parent()->is_auth()) {
       state = s;
       get_parent()->auth_unpin(this);
     } else {
