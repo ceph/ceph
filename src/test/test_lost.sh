@@ -9,7 +9,7 @@ source "`dirname $0`/test_common.sh"
 
 # Functions
 my_write_objects() {
-        write_objects $1 $2 10 1000000
+        write_objects $1 $2 200 4000
 }
 
 setup() {
@@ -48,6 +48,10 @@ recovery1_impl() {
 	poll_cmd "./ceph pg debug unfound_objects_exist" TRUE 3 120
         [ $? -eq 1 ] || die "Failed to see unfound objects."
         echo "Got unfound objects."
+
+        restart_osd 0
+	sleep 20
+	start_recovery 2
 
         # Turn on recovery and wait for it to complete.
 	poll_cmd "./ceph pg debug unfound_objects_exist" FALSE 3 120

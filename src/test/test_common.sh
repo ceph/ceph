@@ -130,7 +130,7 @@ start_recovery() {
         CEPH_NUM_OSD=$1
         osd=0
         while [ $osd -lt $CEPH_NUM_OSD ]; do
-                ./ceph osd tell $osd injectargs 'osd recovery delay start = 0'
+                ./ceph osd tell $osd debug kick_recovery_wq 0
                 osd=$((osd+1))
         done
 }
