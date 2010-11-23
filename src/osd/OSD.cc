@@ -3795,7 +3795,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       pg->update_stats();
     }
 
-    if (pg->is_active() && pg->missing.have_missing()) {
+    if (pg->is_active() && pg->have_unfound()) {
       // Make sure we've requested MISSING information from every OSD
       // we know about.
       map< int, map<pg_t,PG::Query> > query_map;
@@ -3906,7 +3906,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     // i am PRIMARY
     if (pg->is_active())  {
       // PG is ACTIVE
-      if (pg->missing.have_missing()) {
+      if (pg->have_unfound()) {
 	dout(10) << *pg << " searching osd" << from << " log for missing items." << dendl;
 	pg->search_for_missing(info, missing, from);
 

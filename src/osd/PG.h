@@ -849,6 +849,10 @@ public:
   void activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 		map<int, MOSDPGInfo*> *activator_map=0);
 
+  bool have_unfound() const { 
+    return missing.num_missing() > missing_loc.size();
+  }
+
   virtual void clean_up_local(ObjectStore::Transaction& t) = 0;
 
   virtual int start_recovery_ops(int max) = 0;
