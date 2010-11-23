@@ -119,7 +119,7 @@ poll_cmd() {
 dump_osd_store() {
         set +x
         echo "dumping osd store..."
-        find ./dev/osd* -type f | grep obj | grep head$ | while read file; do
+        find ./dev/osd* -type f | grep obj | grep head$ | sort | while read file; do
                 echo $file
                 head -c 10 $file
                 echo
