@@ -741,8 +741,8 @@ void GuiMonitor::view_mds_nodes(unsigned int begin, unsigned int end, bool
   }
 
   if (viewAll) {
-      guiMonitorMDSClusterBackButton->set_sensitive(false);
-      guiMonitorMDSClusterViewAllButton->set_sensitive(false);
+    guiMonitorMDSClusterBackButton->set_sensitive(false);
+    guiMonitorMDSClusterViewAllButton->set_sensitive(false);
   }
 
   delete[] ranges;
@@ -1097,16 +1097,16 @@ void GuiMonitor::osdc_cluster_zoom_in(const Gtk::TreeModel::Path& path)
 void GuiMonitor::osdc_cluster_back()
 {
   if (osd_cluster_zoom) {
-      vector<NodeInfo *> oldOSDInfo = old_osd_cluster_zoom_states.top();
-      old_osd_cluster_zoom_states.pop();
+    vector<NodeInfo *> oldOSDInfo = old_osd_cluster_zoom_states.top();
+    old_osd_cluster_zoom_states.pop();
 
-      gen_icons_from_node_info(oldOSDInfo);
-      osd_cluster_zoom--;
+    gen_icons_from_node_info(oldOSDInfo);
+    osd_cluster_zoom--;
 
-      if (!osd_cluster_zoom) {
-         guiMonitorOSDClusterBackButton->set_sensitive(false);
-         guiMonitorOSDClusterViewAllButton->set_sensitive(false);
-      }
+    if (!osd_cluster_zoom) {
+      guiMonitorOSDClusterBackButton->set_sensitive(false);
+      guiMonitorOSDClusterViewAllButton->set_sensitive(false);
+    }
   }
 }
 
