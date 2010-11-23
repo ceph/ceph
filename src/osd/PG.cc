@@ -783,8 +783,17 @@ bool PG::is_all_uptodate() const
   }
 
   size_t ml_sz = missing_loc.size();
+  size_t p_m_sz = missing.num_missing();
+  if (ml_sz != p_m_sz) {
+    dout(10) << __func__ << ": the primary has unfound objects." << dendl;
+    return false;
+  }
+
   vector<int>::const_iterator end = acting.end();
-  for (vector<int>::const_iterator a = acting.begin(); a != end; ++a) {
+  vector<int>::const_iterator a = acting.begin();
+  assert(a != end);
+  ++a;
+  for (; a != end; ++a) {
     int peer = *a;
     map<int, Missing>::const_iterator pm = peer_missing.find(peer);
     if (pm == peer_missing.end()) {
