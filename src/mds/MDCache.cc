@@ -4235,7 +4235,7 @@ void MDCache::clean_open_file_lists()
 {
   dout(10) << "clean_open_file_lists" << dendl;
   
-  for (map<loff_t,LogSegment*>::iterator p = mds->mdlog->segments.begin();
+  for (map<uint64_t,LogSegment*>::iterator p = mds->mdlog->segments.begin();
        p != mds->mdlog->segments.end();
        p++) {
     LogSegment *ls = p->second;
@@ -4933,7 +4933,7 @@ void MDCache::add_recovered_truncate(CInode *in, LogSegment *ls)
 void MDCache::start_recovered_truncates()
 {
   dout(10) << "start_recovered_truncates" << dendl;
-  for (map<loff_t,LogSegment*>::iterator p = mds->mdlog->segments.begin();
+  for (map<uint64_t,LogSegment*>::iterator p = mds->mdlog->segments.begin();
        p != mds->mdlog->segments.end();
        p++) {
     LogSegment *ls = p->second;

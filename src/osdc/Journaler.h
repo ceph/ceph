@@ -279,18 +279,18 @@ public:
   bool is_active() { return state == STATE_ACTIVE; }
   int get_error() { return error; }
 
-  int64_t get_write_pos() const { return write_pos; }
-  int64_t get_write_ack_pos() const { return ack_pos; }
-  int64_t get_write_safe_pos() const { return safe_pos; }
-  int64_t get_read_pos() const { return read_pos; }
-  int64_t get_expire_pos() const { return expire_pos; }
-  int64_t get_trimmed_pos() const { return trimmed_pos; }
+  uint64_t get_write_pos() const { return write_pos; }
+  uint64_t get_write_ack_pos() const { return ack_pos; }
+  uint64_t get_write_safe_pos() const { return safe_pos; }
+  uint64_t get_read_pos() const { return read_pos; }
+  uint64_t get_expire_pos() const { return expire_pos; }
+  uint64_t get_trimmed_pos() const { return trimmed_pos; }
 
-  int64_t get_layout_period() const { return layout.fl_stripe_count * layout.fl_object_size; }
+  uint64_t get_layout_period() const { return layout.fl_stripe_count * layout.fl_object_size; }
   ceph_file_layout& get_layout() { return layout; }
 
   // write
-  int64_t append_entry(bufferlist& bl);
+  uint64_t append_entry(bufferlist& bl);
   void wait_for_flush(Context *onsync = 0, Context *onsafe = 0, bool add_ack_barrier=false);
   void flush(Context *onsync = 0, Context *onsafe = 0, bool add_ack_barrier=false);
 

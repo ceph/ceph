@@ -404,7 +404,7 @@ void Journaler::_finish_flush(int r, uint64_t start, utime_t stamp, bool safe)
 }
 
 
-int64_t Journaler::append_entry(bufferlist& bl)
+uint64_t Journaler::append_entry(bufferlist& bl)
 {
   assert(!readonly);
   uint32_t s = bl.length();

@@ -446,7 +446,7 @@ private:
 
   // soft stateadd
   off_t last_subtree_map;
-  off_t my_offset;
+  uint64_t my_offset;
 
   // for replay, in certain cases
   //LogSegment *_segment;

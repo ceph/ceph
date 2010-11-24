@@ -101,17 +101,17 @@ void MDLog::write_head(Context *c)
   journaler->write_head(c);
 }
 
-loff_t MDLog::get_read_pos() 
+uint64_t MDLog::get_read_pos()
 {
   return journaler->get_read_pos(); 
 }
 
-loff_t MDLog::get_write_pos() 
+uint64_t MDLog::get_write_pos()
 {
   return journaler->get_write_pos(); 
 }
 
-loff_t MDLog::get_safe_pos() 
+uint64_t MDLog::get_safe_pos()
 {
   return journaler->get_write_safe_pos(); 
 }
@@ -220,8 +220,8 @@ void MDLog::submit_entry( LogEvent *le, Context *c, bool wait_safe )
   
   // start a new segment?
   //  FIXME: should this go elsewhere?
-  loff_t last_seg = get_last_segment_offset();
-  loff_t period = journaler->get_layout_period();
+  uint64_t last_seg = get_last_segment_offset();
+  uint64_t period = journaler->get_layout_period();
   if (!segments.empty() && 
       !writing_subtree_map &&
       (journaler->get_write_pos()/period != last_seg/period &&
@@ -300,7 +300,7 @@ void MDLog::start_new_segment(Context *onsync)
   mds->mdcache->advance_stray();
 }
 
-void MDLog::_logged_subtree_map(loff_t off)
+void MDLog::_logged_subtree_map(uint64_t off)
 {
   dout(10) << "_logged_subtree_map at " << off << dendl;
   writing_subtree_map = false;
@@ -335,7 +335,7 @@ void MDLog::trim(int m)
   utime_t stop = g_clock.now();
   stop += 2.0;
 
-  map<loff_t,LogSegment*>::iterator p = segments.begin();
+  map<uint64_t,LogSegment*>::iterator p = segments.begin();
   int left = num_events;
   while (p != segments.end() && 
 	 ((max_events >= 0 && left-expiring_events-expired_events > max_events) ||
@@ -499,7 +499,7 @@ void MDLog::_replay_thread()
 
   // loop
   int r = 0;
-  loff_t new_expire_pos = journaler->get_expire_pos();
+  uint64_t new_expire_pos = journaler->get_expire_pos();
   while (1) {
     // wait for read?
     while (!journaler->is_readable() &&
@@ -521,7 +521,7 @@ void MDLog::_replay_thread()
     assert(journaler->is_readable());
     
     // read it
-    loff_t pos = journaler->get_read_pos();
+    uint64_t pos = journaler->get_read_pos();
     bufferlist bl;
     bool r = journaler->try_read_entry(bl);
     if (!r && journaler->get_error())
