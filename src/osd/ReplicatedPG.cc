@@ -265,6 +265,12 @@ void ReplicatedPG::do_op(MOSDOp *op)
     osd->reply_op_error(op, r);
     return;
   }    
+
+  if ((op->may_read()) && (obc->obs.oi.lost)) {
+    // This object is lost. Reading from it returns an error.
+    osd->reply_op_error(op, -ENFILE);
+    return;
+  }
   
   bool ok;
   dout(10) << "do_op mode is " << mode << dendl;
