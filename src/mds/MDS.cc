@@ -841,7 +841,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     dout(1) << "handle_mds_map standby" << dendl;
 
     if (standby_for_rank >= 0)
-      request_state(MDSMap::STATE_STANDBY_REPLAY);
+      request_state(MDSMap::STATE_ONESHOT_REPLAY);
 
     goto out;
   }
