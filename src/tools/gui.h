@@ -200,13 +200,13 @@ private:
   void update_pg_cluster_view();
   void update_mon_cluster_view();
 
-  std::string gen_osd_icon_caption(unsigned int begin, unsigned int end);
-  std::string gen_mds_icon_caption(unsigned int begin, unsigned int end);
-  std::string gen_pg_icon_caption(unsigned int begin, unsigned int end);
+  std::string gen_osd_icon_caption(unsigned int begin, unsigned int end) const;
+  std::string gen_mds_icon_caption(unsigned int begin, unsigned int end) const;
+  std::string gen_pg_icon_caption(unsigned int begin, unsigned int end) const;
 
-  std::vector<NodeInfo *> gen_node_info_from_icons
-      (Glib::RefPtr<Gtk::ListStore> iconStore, enum NodeType type);
-  void gen_icons_from_node_info(vector<NodeInfo *>& node_info);
+  void gen_node_info_from_icons(Glib::RefPtr<Gtk::ListStore> iconStore,
+				enum NodeType type, std::vector<NodeInfo >& ret);
+  void gen_icons_from_node_info(const std::vector<NodeInfo>& node_info) const;
 
   void view_osd_nodes(unsigned int begin, unsigned int end,
 		      bool view_all = true);
@@ -320,9 +320,9 @@ private:
   unsigned int osd_cluster_zoom; // current zoom level of the OSD cluster view
   unsigned int mds_cluster_zoom; // current zoom level of the MDS cluster view
 
-  stack<vector<NodeInfo *> > old_pg_cluster_zoom_states;
-  stack<vector<NodeInfo *> > old_osd_cluster_zoom_states;
-  stack<vector<NodeInfo *> > old_mds_cluster_zoom_states;
+  stack<vector<NodeInfo> > old_pg_cluster_zoom_states;
+  stack<vector<NodeInfo> > old_osd_cluster_zoom_states;
+  stack<vector<NodeInfo> > old_mds_cluster_zoom_states;
 
   std::vector <std::string> current_up_mds;
   std::vector <pg_t> current_pgs;
