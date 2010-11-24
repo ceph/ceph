@@ -897,7 +897,7 @@ void MDS::handle_mds_map(MMDSMap *m)
 
     if (is_active()) {
       active_start();
-    } else if (is_replay() || is_standby_replay()) {
+    } else if (is_replay() || is_oneshot_replay()) {
       replay_start();
     } else if (is_resolve()) {
       resolve_start();
@@ -1130,7 +1130,7 @@ void MDS::boot_start(int step, int r)
     }
 
   case 3:
-    if (is_replay() || is_standby_replay()) {
+    if (is_replay() || is_oneshot_replay()) {
       dout(2) << "boot_start " << step << ": replaying mds log" << dendl;
       mdlog->replay(new C_MDS_BootStart(this, 4));
       break;
@@ -1141,7 +1141,7 @@ void MDS::boot_start(int step, int r)
     }
 
   case 4:
-    if (is_replay() || is_standby_replay()) {
+    if (is_replay() || is_oneshot_replay()) {
       replay_done();
       break;
     }
@@ -1202,7 +1202,7 @@ void MDS::replay_done()
 	  << " failed=" << mdsmap->get_num_failed()
 	  << dendl;
 
-  if (is_standby_replay()) {
+  if (is_oneshot_replay()) {
     dout(2) << "hack.  journal looks ok.  shutting down." << dendl;
     suicide();
     return;
