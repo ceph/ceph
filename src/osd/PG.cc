@@ -1051,6 +1051,14 @@ void PG::mark_all_unfound_as_lost()
 
     dout(10) << __func__ << ": created event " << e << dendl;
 
+    // Wake anyone waiting for this object. Now that it's been marked as lost,
+    // we will just return an error code.
+    hash_map<sobject_t, list<class Message*> >::iterator wmo =
+      waiting_for_missing_object.find(lost_soid);
+    if (wmo != waiting_for_missing_object.end()) {
+      osd->take_waiters(wmo->second);
+    }
+
     missing.missing.erase(lost_soid);
     del.erase(d++);
   }
