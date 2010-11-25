@@ -62,6 +62,8 @@ recovery1() {
 }
 
 lost1_impl() {
+	try_to_fetch_unfound=$1
+
         # Write lots and lots of objects
         write_objects 1 1 20 8000
 
@@ -86,6 +88,16 @@ lost1_impl() {
 	poll_cmd "./ceph pg debug unfound_objects_exist" TRUE 3 120
         [ $? -eq 1 ] || die "Failed to see unfound objects."
 
+	if [ "$try_to_fetch_unfound" -eq 1 ]; then
+	  # Ask for an object while it's still unfound, and
+	  # verify we get woken to an error when it's declared lost.
+	  echo "trying to get one of the unfound objects"
+	  (
+	  ./rados -p data get obj02 $TEMPDIR/obj02 &&\
+	    die "expected radostool error"
+	  ) &
+	fi
+
         # Lose all objects.
 	./ceph osd lost 0 --yes-i-really-mean-it
 
@@ -97,20 +109,30 @@ lost1_impl() {
 	# TODO: check error code
 	./rados -p data get obj01 $TEMPDIR/obj01 &&\
 	  die "expected radostool error"
-}
 
-# TODO: lost2 test where we ask for an object while it's still unfound, and
-# verify we get woken to an error when it's declared lost.
+	if [ "$try_to_fetch_unfound" -eq 1 ]; then
+	  echo "waiting for the try_to_fetch_unfound \
+radostool instance to finish"
+	  wait
+	fi
+}
 
 lost1() {
         setup 2
-        lost1_impl
+        lost1_impl 0
+}
+
+lost2() {
+        setup 2
+        lost1_impl 1
 }
 
 run() {
         recovery1 || die "test failed"
 
         lost1 || die "test failed"
+
+        lost2 || die "test failed"
 }
 
 $@
