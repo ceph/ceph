@@ -1895,6 +1895,14 @@ void OSD::handle_command(MMonCommand *m)
       std::map<sobject_t, PG::Missing::item>::iterator m = pg->missing.missing.begin();
       for (; m != mend; ++m) {
 	fout << m->first << " -> " << m->second << std::endl;
+	map<sobject_t, set<int> >::const_iterator mli =
+	  pg->missing_loc.find(m->first);
+	if (mli == pg->missing_loc.end())
+	  continue;
+	const set<int> &mls(mli->second);
+	if (mls.empty())
+	  continue;
+	fout << "missing_loc: " << mls << std::endl;
       }
       pg->unlock();
       fout << std::endl;
