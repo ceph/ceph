@@ -584,21 +584,45 @@ void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map)
 	   << get_num_unfound() << " unfound"
 	   << dendl;
 
-  std::map<int,Info>::const_iterator end = peer_info.end();
-  for (std::map<int,Info>::const_iterator pi = peer_info.begin();
-       pi != end; ++pi)
-  {
-    int from(pi->first);
-    if (peer_missing.find(from) != peer_missing.end())
+  std::vector<int>::const_iterator u = up.begin();
+  std::vector<int>::const_iterator end = up.end();
+  std::set<int>::const_iterator mhend = might_have_unfound.end();
+  for (; u != end; ++u) {
+    int peer(*u);
+    if (might_have_unfound.find(peer) == mhend) {
+      dout(25) << __func__ << ": osd" << peer
+	       << " is not in might_have_unfound" << dendl;
       continue;
-    if (peer_log_requested.find(from) != peer_log_requested.end())
+    }
+    // If we've requested any of this stuff, the Missing information
+    // should be on its way.
+    // TODO: coalsce requested_* into a single data structure
+    if (peer_missing.find(peer) != peer_missing.end()) {
+      dout(25) << __func__ << ": osd" << peer
+	       << ": we already have Missing" << dendl;
       continue;
-    if (peer_backlog_requested.find(from) != peer_backlog_requested.end())
+    }
+    if (peer_log_requested.find(peer) != peer_log_requested.end()) {
+      dout(25) << __func__ << ": osd" << peer
+	       << ": in peer_log_requested" << dendl;
       continue;
-    if (peer_missing_requested.find(from) != peer_missing_requested.end())
+    }
+    if (peer_backlog_requested.find(peer) != peer_backlog_requested.end()) {
+      dout(25) << __func__ << ": osd" << peer
+	       << ": in peer_backlog_requested" << dendl;
       continue;
-    peer_missing_requested.insert(from);
-    query_map[from][info.pgid] =
+    }
+    if (peer_missing_requested.find(peer) != peer_missing_requested.end()) {
+      dout(25) << __func__ << ": osd" << peer
+	       << ": in peer_missing_requested" << dendl;
+      continue;
+    }
+
+    // Request missing
+    dout(10) << __func__ << ": osd" << peer << ": requesting Missing"
+	     << dendl;
+    peer_missing_requested.insert(peer);
+    query_map[peer][info.pgid] =
       PG::Query(PG::Query::MISSING, info.history);
   }
 }
