@@ -994,6 +994,35 @@ bool PG::all_unfound_are_lost(const OSDMap* osdmap) const
   return true;
 }
 
+/* Mark an object as lost
+ */
+void PG::mark_obj_as_lost(ObjectStore::Transaction& t,
+			  const sobject_t &lost_soid)
+{
+  // Wake anyone waiting for this object. Now that it's been marked as lost,
+  // we will just return an error code.
+  hash_map<sobject_t, list<class Message*> >::iterator wmo =
+    waiting_for_missing_object.find(lost_soid);
+  if (wmo != waiting_for_missing_object.end()) {
+    osd->take_waiters(wmo->second);
+  }
+
+  // Erase from the missing and missing_loc set.
+  missing.missing.erase(lost_soid);
+  missing_loc.erase(lost_soid);
+
+  // Tell the object store that this object is lost.
+  bufferlist b1;
+  int r = osd->store->getattr(coll_t(info.pgid), lost_soid, OI_ATTR, b1);
+  assert(r >= 0);
+  object_info_t oi(b1);
+  oi.lost = true;
+  oi.version.version++;
+  bufferlist b2;
+  oi.encode(b2);
+  t.setattr(coll_t(info.pgid), lost_soid, OI_ATTR, b2);
+}
+
 class CompareSobjectPtrs {
 public:
   bool operator()(const sobject_t *a, const sobject_t *b) {
@@ -1003,7 +1032,7 @@ public:
 
 /* Mark all unfound objects as lost.
  */
-void PG::mark_all_unfound_as_lost()
+void PG::mark_all_unfound_as_lost(ObjectStore::Transaction& t)
 {
   dout(3) << __func__ << dendl;
 
@@ -1051,15 +1080,7 @@ void PG::mark_all_unfound_as_lost()
 
     dout(10) << __func__ << ": created event " << e << dendl;
 
-    // Wake anyone waiting for this object. Now that it's been marked as lost,
-    // we will just return an error code.
-    hash_map<sobject_t, list<class Message*> >::iterator wmo =
-      waiting_for_missing_object.find(lost_soid);
-    if (wmo != waiting_for_missing_object.end()) {
-      osd->take_waiters(wmo->second);
-    }
-
-    missing.missing.erase(lost_soid);
+    mark_obj_as_lost(t, lost_soid);
     del.erase(d++);
   }
 

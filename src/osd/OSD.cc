@@ -3095,7 +3095,7 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
     if (pg->is_active() && pg->is_primary() &&
 	(pg->missing.num_missing() > pg->missing_loc.size())) {
       if (pg->all_unfound_are_lost(osdmap)) {
-	pg->mark_all_unfound_as_lost();
+	pg->mark_all_unfound_as_lost(t);
       }
     }
 

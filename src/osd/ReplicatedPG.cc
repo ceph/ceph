@@ -243,6 +243,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
   dout(10) << "do_op " << *op << dendl;
   if (finalizing_scrub && op->may_write()) {
+    dout(20) << __func__ << ": waiting for scrub" << dendl;
     waiting_for_active.push_back(op);
     return;
   }
@@ -268,9 +269,13 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
   if ((op->may_read()) && (obc->obs.oi.lost)) {
     // This object is lost. Reading from it returns an error.
+    dout(20) << __func__ << ": object " << obc->obs.oi.soid
+	     << " is lost" << dendl;
     osd->reply_op_error(op, -ENFILE);
     return;
   }
+  dout(25) << __func__ << ": object " << obc->obs.oi.soid
+	   << " has oi of " << obc->obs.oi << dendl;
   
   bool ok;
   dout(10) << "do_op mode is " << mode << dendl;
