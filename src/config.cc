@@ -212,23 +212,41 @@ void parse_config_option_string(string& s)
   parse_config_options(nargs);
 }
 
+typedef void (*signal_handler_t)(int);
+
+static void install_sighandler(int signum, signal_handler_t handler, int flags)
+{
+  int ret;
+  struct sigaction oldact;
+  struct sigaction act;
+  memset(&act, 0, sizeof(act));
+
+  act.sa_handler = handler;
+  sigemptyset(&act.sa_mask);
+  act.sa_flags = flags;
+
+  ret = sigaction(signum, &act, &oldact);
+  if (ret != 0) {
+    fprintf(stderr, "failed to install signal handler for signal %d\n", signum);
+    exit(1);
+  }
+}
+
 void sighup_handler(int signum)
 {
   _dout_need_open = true;
   logger_reopen_all();
 }
 
-static void (*old_sigsegv_handler)(int) = NULL;
-static void (*old_sigabrt_handler)(int) = NULL;
-
 void sigsegv_handler(int signum)
 {
   *_dout << "*** Caught signal (SEGV) ***" << std::endl;
   BackTrace bt(0);
   bt.print(*_dout);
+  _dout->flush();
 
-  if (old_sigsegv_handler)
-    old_sigsegv_handler(signum);
+  // Use default handler to dump core
+  kill(getpid(), signum);
 }
 
 void sigabrt_handler(int signum)
@@ -236,10 +254,10 @@ void sigabrt_handler(int signum)
   *_dout << "*** Caught signal (ABRT) ***" << std::endl;
   BackTrace bt(0);
   bt.print(*_dout);
+  _dout->flush();
 
-  //*_dout << "i am " << (void*)sigabrt_handler << ", chaining to " << (void*)old_sigabrt_handler << std::endl;
-  if (old_sigabrt_handler)
-    old_sigabrt_handler(signum);
+  // Use default handler to dump core
+  kill(getpid(), signum);
 }
 
 #define _STR(x) #x
@@ -1281,17 +1299,9 @@ void parse_config_options(std::vector<const char*>& args)
         nargs.push_back(args[i]);
   }
 
-  signal(SIGHUP, sighup_handler);
-  if (!old_sigsegv_handler) {
-    old_sigsegv_handler = signal(SIGSEGV, sigsegv_handler);
-    if (old_sigsegv_handler == sigsegv_handler)
-      old_sigsegv_handler = NULL;
-  }
-  if (!old_sigabrt_handler) {
-    old_sigabrt_handler = signal(SIGABRT, sigabrt_handler);
-    if (old_sigabrt_handler == sigabrt_handler)
-      old_sigabrt_handler = NULL;
-  }
+  install_sighandler(SIGHUP, sighup_handler, SA_RESTART);
+  install_sighandler(SIGSEGV, sigsegv_handler, SA_RESETHAND);
+  install_sighandler(SIGSEGV, sigabrt_handler, SA_RESETHAND);
 
   args = nargs;
 }
