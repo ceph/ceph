@@ -1007,10 +1007,6 @@ void PG::mark_obj_as_lost(ObjectStore::Transaction& t,
     osd->take_waiters(wmo->second);
   }
 
-  // Erase from the missing and missing_loc set.
-  missing.missing.erase(lost_soid);
-  missing_loc.erase(lost_soid);
-
   // Tell the object store that this object is lost.
   bufferlist b1;
   int r = osd->store->getattr(coll, lost_soid, OI_ATTR, b1);
@@ -1037,13 +1033,6 @@ void PG::mark_obj_as_lost(ObjectStore::Transaction& t,
   t.setattr(coll, lost_soid, OI_ATTR, b2);
 }
 
-class CompareSobjectPtrs {
-public:
-  bool operator()(const sobject_t *a, const sobject_t *b) {
-    return *a < *b;
-  }
-};
-
 /* Mark all unfound objects as lost.
  */
 void PG::mark_all_unfound_as_lost(ObjectStore::Transaction& t)
@@ -1054,48 +1043,30 @@ void PG::mark_all_unfound_as_lost(ObjectStore::Transaction& t)
   log.print(*_dout);
   *_dout << dendl;
 
-  // Find out what to delete
+  utime_t mtime = g_clock.now();
+  eversion_t old_last_update = info.last_update;
+  info.last_update.epoch = osd->osdmap->get_epoch();
   map<sobject_t, Missing::item>::iterator m = missing.missing.begin();
   map<sobject_t, Missing::item>::iterator mend = missing.missing.end();
-  std::set <const sobject_t*, CompareSobjectPtrs> del;
-  for (; m != mend; ++m) {
+  while (m != mend) {
     const sobject_t &soid(m->first);
-    if (missing_loc.find(soid) == missing_loc.end()) {
-      del.insert(&m->first);
+    if (missing_loc.find(soid) != missing_loc.end()) {
+      // We only care about unfound objects
+      ++m;
       continue;
     }
-  }
 
-  // Iterate over rmissing, removing elements that point to deleted sobject_t
-  map<eversion_t, sobject_t>::iterator z = missing.rmissing.begin();
-  map<eversion_t, sobject_t>::iterator zend = missing.rmissing.end();
-  std::set <const sobject_t*, CompareSobjectPtrs>::iterator dend = del.end();
-  while (z != zend) {
-    const sobject_t &soid(z->second);
-    if (del.find(&soid) != dend) {
-      missing.rmissing.erase(z++);
-    }
-  }
-
-  // Remove deleted elements from missing,
-  // and add LOST log entries for them.
-  eversion_t v = info.last_update;
-  v.epoch = osd->osdmap->get_epoch();
-  utime_t mtime = g_clock.now();
-  std::set <const sobject_t*, CompareSobjectPtrs>::iterator d = del.begin();
-  while (d != dend) {
-    sobject_t lost_soid(**d);
-
-    map<sobject_t, Missing::item>::iterator ms = missing.missing.find(lost_soid);
-    assert(ms != mend);
-    v.version++;
-    Log::Entry e(Log::Entry::LOST, lost_soid, v, ms->second.need, osd_reqid_t(), mtime);
+    // Add log entry
+    info.last_update.version++;
+    Log::Entry e(Log::Entry::LOST, soid, info.last_update,
+		 m->second.need, osd_reqid_t(), mtime);
     log.add(e);
 
-    dout(10) << __func__ << ": created event " << e << dendl;
+    // Object store stuff
+    mark_obj_as_lost(t, soid);
 
-    mark_obj_as_lost(t, lost_soid);
-    del.erase(d++);
+    // Remove from missing set
+    missing.got(m++);
   }
 
   dout(30) << __func__ << ": log after:\n";
@@ -1104,9 +1075,7 @@ void PG::mark_all_unfound_as_lost(ObjectStore::Transaction& t)
 
   // Send out the PG log to all replicas
   // So that they know what is lost
-  eversion_t oldver(info.last_update);
-  info.last_update = v;
-  share_pg_log(oldver);
+  share_pg_log(old_last_update);
 }
 
 void PG::clear_prior()
@@ -3529,6 +3498,12 @@ void PG::Missing::got(const sobject_t& oid, eversion_t v)
   assert(missing[oid].need <= v);
   rmissing.erase(missing[oid].need);
   missing.erase(oid);
+}
+
+void PG::Missing::got(const std::map<sobject_t, Missing::item>::iterator &m)
+{
+  rmissing.erase(m->second.need);
+  missing.erase(m);
 }
 
 ostream& operator<<(ostream& out, const PG& pg)
