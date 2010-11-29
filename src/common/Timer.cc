@@ -68,13 +68,12 @@ void SafeTimer::shutdown()
 {
   dout(10) << "shutdown" << dendl;
   if (thread) {
+    assert(lock.is_locked());
     cancel_all_events();
     stopping = true;
     cond.Signal();
     lock.Unlock();
-
     thread->join();
-
     lock.Lock();
     delete thread;
     thread = NULL;

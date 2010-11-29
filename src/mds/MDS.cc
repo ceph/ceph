@@ -1374,6 +1374,7 @@ void MDS::stopping_done()
 
 void MDS::suicide()
 {
+  assert(mds_lock.is_locked());
   if (want_state == MDSMap::STATE_STOPPED)
     state = want_state;
   else
