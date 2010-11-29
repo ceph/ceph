@@ -1484,7 +1484,6 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	    return true;
 	  }
 	}
-
       }
       else if (m->cmd[2] == "create" && m->cmd.size() >= 4) {
         int ret = prepare_new_pool(m->cmd[3]);
@@ -1567,6 +1566,43 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	    }
 	  }
 	}
+      }
+      else if (m->cmd[2] == "get") {
+	if (m->cmd.size() != 5) {
+	  err = -EINVAL;
+	  ss << "usage: osd pool get <poolname> <field>";
+	  goto out;
+	}
+	int pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
+	if (pool < 0) {
+	  ss << "unrecognized pool '" << m->cmd[3] << "'";
+	  err = -ENOENT;
+	  goto out;
+	}
+
+	const pg_pool_t *p = osdmap.get_pg_pool(pool);
+	if (m->cmd[4] == "pg_num") {
+	  ss << "PG_NUM: " << p->get_pg_num();
+	  err = 0;
+	  goto out;
+	}
+	if (m->cmd[4] == "pgp_num") {
+	  ss << "PGP_NUM: " << p->get_pgp_num();
+	  err = 0;
+	  goto out;
+	}
+	if (m->cmd[4] == "lpg_num") {
+	  ss << "LPG_NUM: " << p->get_lpg_num();
+	  err = 0;
+	  goto out;
+	}
+	if (m->cmd[4] == "lpgp_num") {
+	  ss << "LPPG_NUM: " << p->get_lpgp_num();
+	  err = 0;
+	  goto out;
+	}
+	ss << "don't know how to get pool field " << m->cmd[4];
+	goto out;
       }
     }
     else {
