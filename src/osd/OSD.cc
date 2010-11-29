@@ -3943,6 +3943,11 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       // INACTIVE REPLICA
       assert(from == pg->acting[0]);
       pg->merge_log(*t, info, log, from);
+
+      // We should have the right logs before activating.
+      assert(pg->log.tail <= pg->info.last_complete);
+      assert(pg->log.head == pg->info.last_update);
+
       pg->activate(*t, fin->contexts, info_map);
     } else {
       // ACTIVE REPLICA
