@@ -1013,14 +1013,28 @@ void PG::mark_obj_as_lost(ObjectStore::Transaction& t,
 
   // Tell the object store that this object is lost.
   bufferlist b1;
-  int r = osd->store->getattr(coll_t(info.pgid), lost_soid, OI_ATTR, b1);
-  assert(r >= 0);
-  object_info_t oi(b1);
-  oi.lost = true;
-  oi.version.version++;
+  int r = osd->store->getattr(coll, lost_soid, OI_ATTR, b1);
+  auto_ptr < object_info_t > oi;
+  if (r >= 0) {
+    // Some version of this lost object exists in our filestore.
+    // So, we can fetch its attributes.
+    oi.reset(new object_info_t(b1));
+    oi->lost = true;
+  }
+  else {
+    // We don't have any version of this object.
+    // So we'll have to make up our own attributes
+    object_locator_t oloc;
+    oi.reset(new object_info_t(lost_soid, oloc, true));
+
+    // And create the object in the filestore
+    t.touch(coll, lost_soid);
+  }
+
+  oi->version.version++;
   bufferlist b2;
-  oi.encode(b2);
-  t.setattr(coll_t(info.pgid), lost_soid, OI_ATTR, b2);
+  oi->encode(b2);
+  t.setattr(coll, lost_soid, OI_ATTR, b2);
 }
 
 class CompareSobjectPtrs {
