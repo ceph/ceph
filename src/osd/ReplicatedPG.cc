@@ -226,8 +226,10 @@ void ReplicatedPG::calc_trim_to()
       pg_trim_to = min_last_complete_ondisk;
       assert(pg_trim_to <= log.head);
     }
-  } else
+  } else {
+    // don't trim
     pg_trim_to = eversion_t();
+  }
 }
 
 /** do_op - do an op

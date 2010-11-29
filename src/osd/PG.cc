@@ -2137,6 +2137,9 @@ void PG::trim(ObjectStore::Transaction& t, eversion_t trim_to)
 {
   // trim?
   if (trim_to > log.tail) {
+    // We shouldn't be trimming the log past last_complete
+    assert(trim_to >= info.last_complete);
+
     dout(10) << "trim " << log << " to " << trim_to << dendl;
     log.trim(t, trim_to);
     info.log_tail = log.tail;
