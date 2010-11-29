@@ -163,7 +163,7 @@ libcrush_la_SOURCES = \
 	crush/hash.c
 libcrush_la_CFLAGS = ${AM_CFLAGS}
 libcrush_la_CXXFLAGS = ${AM_CXXFLAGS}
-libcrush_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'crush_.*'
+libcrush_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex 'crush_.*'
 libcrush_la_LIBADD = -lm
 lib_LTLIBRARIES += libcrush.la
 
@@ -177,7 +177,7 @@ libceph_la_SOURCES = \
 libceph_la_CFLAGS = ${AM_CFLAGS}
 libceph_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_la_LIBADD = libcrush.la -lpthread $(OPENSSL_LIBS)
-libceph_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
+libceph_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
 lib_LTLIBRARIES += libceph.la
 
 if WITH_DEBUG
@@ -205,7 +205,7 @@ librados_la_SOURCES = ${librados_SOURCES}
 librados_la_CFLAGS = ${AM_CFLAGS}
 librados_la_CXXFLAGS = ${AM_CXXFLAGS}
 librados_la_LIBADD = libcrush.la -lpthread $(OPENSSL_LIBS)
-librados_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '^rados_.*'
+librados_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^rados_.*'
 lib_LTLIBRARIES += librados.la
 
 librados_a_SOURCES = ${librados_SOURCES}
@@ -276,7 +276,7 @@ libcls_rbd_la_SOURCES = cls_rbd.cc
 libcls_rbd_la_CFLAGS = ${AM_CFLAGS}
 libcls_rbd_la_CXXFLAGS= ${AM_CXXFLAGS}
 libcls_rbd_la_LIBADD = -lpthread
-libcls_rbd_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
+libcls_rbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
 
 radoslibdir = $(libdir)/rados-classes
 radoslib_LTLIBRARIES = libcls_rbd.la
@@ -289,7 +289,7 @@ libhadoopcephfs_la_SOURCES = client/hadoop/CephFSInterface.cc
 libhadoopcephfs_la_LIBADD = libceph.la
 libhadoopcephfs_la_CFLAGS = ${AM_CFLAGS}
 libhadoopcephfs_la_CXXFLAGS = ${AM_CXXFLAGS}
-libhadoopcephfs_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'hadoopcephfs_.*'
+libhadoopcephfs_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex 'hadoopcephfs_.*'
 lib_LTLIBRARIES += libhadoopcephfs.la
 endif
 
@@ -326,7 +326,7 @@ LDADD =
 
 AM_CXXFLAGS = $(OPENSSL_CFLAGS) -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic
 AM_CFLAGS = $(OPENSSL_CFLAGS) -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic
-AM_LDFLAGS =
+AM_LDFLAGS = -Wl,--as-needed
 
 if WITH_LIBATOMIC
 LDADD += -latomic_ops
