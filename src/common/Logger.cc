@@ -179,7 +179,9 @@ static void flush_all_loggers()
 
 static void stop()
 {
+  logger_lock.Lock();
   logger_timer.shutdown();
+  logger_lock.Unlock();
 }
 
 
