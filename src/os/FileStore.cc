@@ -1502,37 +1502,21 @@ unsigned FileStore::apply_transaction(Transaction &t,
 unsigned FileStore::apply_transactions(list<Transaction*> &tls,
 				       Context *ondisk)
 {
+  // use op pool
+  Cond my_cond;
+  Mutex my_lock("FileStore::apply_transaction::my_lock");
   int r = 0;
-
-  if (journal && journal->is_writeable() &&
-      (g_conf.filestore_journal_parallel || g_conf.filestore_journal_writeahead)) {
-    // use op pool
-    Cond my_cond;
-    Mutex my_lock("FileStore::apply_transaction::my_lock");
-    bool done;
-    C_SafeCond *onreadable = new C_SafeCond(&my_lock, &my_cond, &done, &r);
-
-    dout(10) << "apply queued" << dendl;
-    queue_transactions(NULL, tls, onreadable, ondisk);
-    
-    my_lock.Lock();
-    while (!done)
-      my_cond.Wait(my_lock);
-    my_lock.Unlock();
-    dout(10) << "apply done r = " << r << dendl;
-  } else {
-    uint64_t op_seq = op_apply_start(0);
-    r = do_transactions(tls, op_seq);
-    op_apply_finish(op_seq);
-
-    if (r >= 0) {
-      op_journal_start(op_seq);
-      journal_transactions(tls, op_seq, ondisk);
-      op_journal_finish();
-    } else {
-      delete ondisk;
-    }
-  }
+  bool done;
+  C_SafeCond *onreadable = new C_SafeCond(&my_lock, &my_cond, &done, &r);
+  
+  dout(10) << "apply queued" << dendl;
+  queue_transactions(NULL, tls, onreadable, ondisk);
+  
+  my_lock.Lock();
+  while (!done)
+    my_cond.Wait(my_lock);
+  my_lock.Unlock();
+  dout(10) << "apply done r = " << r << dendl;
   return r;
 }
 
