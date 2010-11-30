@@ -77,43 +77,6 @@ class RadosClient : public Dispatcher
   Cond cond;
   SafeTimer timer;
 
-  // watch/notify
-  struct WatchContext : public Context {
-    librados::Rados::WatchCtx *ctx;
-    uint64_t cookie;
-    uint64_t ver;
-
-    WatchContext(librados::Rados::WatchCtx *_ctx) : ctx(_ctx) {}
-    ~WatchContext() {
-      delete ctx;
-    }
-    void finish(int r) {
-      ctx->finish(r);
-    }
-  };
-
-  Mutex watch_lock;
-  uint64_t max_watch_cookie;
-  map<uint64_t, WatchContext *> watchers;
- 
-  pthread_key_t tls_key;
-
-  RadosTlsInfo *tls_info() {
-    struct RadosTlsInfo *info = (RadosTlsInfo *)pthread_getspecific(tls_key);
-    cout << "pthread_getspecific returned " << (void *)info << std::endl;
-    if (!info) {
-      info = new RadosTlsInfo(tls_key);
-      pthread_setspecific(tls_key, info);
-    }
-    return info;
-  }
-
-  void set_sync_op_version(eversion_t& ver) {
-    RadosTlsInfo *info = tls_info();
-    if (info)
-      info->objver = ver;
-  }
-
 public:
   RadosClient() : messenger(NULL), lock("radosclient"), timer(lock),
                   watch_lock("watch_lock"), max_watch_cookie(0) {
@@ -390,8 +353,10 @@ public:
     uint64_t cookie;
     uint64_t ver;
     librados::Rados::WatchCtx *ctx;
+    ObjectOperation *op;
 
-    WatchContext(PoolCtx& _pc, const object_t& _oc, librados::Rados::WatchCtx *_ctx) : pool_ctx(_pc), oid(_oc), ctx(_ctx) {}
+    WatchContext(PoolCtx& _pc, const object_t& _oc, librados::Rados::WatchCtx *_ctx,
+                 ObjectOperation *_op) : pool_ctx(_pc), oid(_oc), ctx(_ctx), op(_op) {}
     ~WatchContext() {
       delete ctx;
     }
@@ -426,8 +391,9 @@ public:
       pool.last_objver = ver;
   }
 
-  int register_watcher(PoolCtx& pool, const object_t& oid, librados::Rados::WatchCtx *ctx, uint64_t *cookie) {
-    WatchContext *wc = new WatchContext(pool, oid, ctx);
+  int register_watcher(PoolCtx& pool, const object_t& oid, librados::Rados::WatchCtx *ctx,
+                       ObjectOperation *op, uint64_t *cookie) {
+    WatchContext *wc = new WatchContext(pool, oid, ctx, op);
     if (!wc)
       return -ENOMEM;
     watch_lock.Lock();
@@ -1604,9 +1570,14 @@ int RadosClient::watch(PoolCtx& pool, const object_t& oid, uint64_t ver, uint64_
   utime_t ut = g_clock.now();
   bufferlist inbl, outbl;
 
-  int r = register_watcher(pool, oid, ctx, cookie);
-  if (r < 0)
+  ObjectOperation *rd = new ObjectOperation();
+  if (!rd)
+    return -ENOMEM;
+  int r = register_watcher(pool, oid, ctx, rd, cookie);
+  if (r < 0) {
+    delete rd;
     return r;
+  }
 
   Mutex mylock("RadosClient::watch::mylock");
   Cond cond;
@@ -1616,13 +1587,14 @@ int RadosClient::watch(PoolCtx& pool, const object_t& oid, uint64_t ver, uint64_
 
   lock.Lock();
   object_locator_t oloc(pool.poolid);
-  ObjectOperation rd;
+
   if (pool.assert_ver) {
-    rd.assert_version(pool.assert_ver);
+    rd->assert_version(pool.assert_ver);
     pool.assert_ver = 0;
   }
-  rd.watch(*cookie, ver, 1);
-  objecter->read(oid, oloc, rd, pool.snap_seq, &outbl, 0, onack, &objver);
+  rd->watch(*cookie, ver, 1);
+  rd->set_linger(true);
+  objecter->read(oid, oloc, *rd, pool.snap_seq, &outbl, 0, onack, &objver);
   lock.Unlock();
 
   mylock.Lock();
@@ -1631,6 +1603,10 @@ int RadosClient::watch(PoolCtx& pool, const object_t& oid, uint64_t ver, uint64_
   mylock.Unlock();
 
   set_sync_op_version(pool, objver);
+
+  if (r < 0) {
+    unregister_watcher(*cookie);
+  }
 
   return r;
 }
@@ -1713,13 +1689,13 @@ int RadosClient::notify(PoolCtx& pool, const object_t& oid, uint64_t ver)
   eversion_t objver;
   uint64_t cookie;
   C_NotifyComplete *ctx = new C_NotifyComplete(&mylock_all, &cond_all, &done_all);
+  ObjectOperation rd;
 
-  r = register_watcher(pool, oid, ctx, &cookie);
+  r = register_watcher(pool, oid, ctx, &rd, &cookie);
   if (r < 0)
     return r;
 
   object_locator_t oloc(pool.poolid);
-  ObjectOperation rd;
   if (pool.assert_ver) {
     rd.assert_version(pool.assert_ver);
     pool.assert_ver = 0;

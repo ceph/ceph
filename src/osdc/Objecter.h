@@ -48,8 +48,9 @@ struct ObjectOperation {
   vector<OSDOp> ops;
   int flags;
   int priority;
+  bool linger;
 
-  ObjectOperation() : flags(0), priority(0) {}
+  ObjectOperation() : flags(0), priority(0), linger(false) {}
 
   void add_op(int op) {
     int s = ops.size();
@@ -99,6 +100,9 @@ struct ObjectOperation {
     ops[s].op.op = op;
     ops[s].op.pgls.count = count;
     ops[s].op.pgls.cookie = cookie;
+  }
+  void set_linger(bool l) {
+    linger = l;
   }
 
   // ------
@@ -271,6 +275,8 @@ public:
 
     eversion_t *objver;
 
+    bool linger;
+
     Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>& op,
        int f, Context *ac, Context *co, eversion_t *ov) :
       session_item(this),
@@ -278,7 +284,7 @@ public:
       con(NULL),
       snapid(CEPH_NOSNAP), outbl(0), flags(f), priority(0), onack(ac), oncommit(co), 
       tid(0), attempts(0),
-      paused(false), objver(ov) {
+      paused(false), objver(ov), linger(false) {
       ops.swap(op);
     }
   };

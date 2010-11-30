@@ -1389,7 +1389,7 @@ struct object_info_t {
   }
 
   object_info_t(const sobject_t& s, const object_locator_t& o) :
-    soid(s), size(0),
+    soid(s), oloc(o), size(0),
     truncate_seq(0), truncate_size(0) {}
   object_info_t(bufferlist& bl) {
     decode(bl);

@@ -1415,8 +1415,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	    session->get();
 	    session->watches[obc] = osd->osdmap->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
 	    obc->ref++;
+#if 0
 	    assert(obc->unconnected_watchers.count(entity));
 	    obc->unconnected_watchers.erase(entity);
+#endif
 	  } else if (iter->second == session) {
 	    // already there
 	    dout(10) << " already connected to watch " << w << " by " << entity
@@ -2554,7 +2556,7 @@ int ReplicatedPG::find_object_context(const object_t& oid, const object_locator_
   // want the head?
   sobject_t head(oid, CEPH_NOSNAP);
   if (snapid == CEPH_NOSNAP) {
-    ObjectContext *obc = get_object_context(head, OLOC_BLANK, can_create);
+    ObjectContext *obc = get_object_context(head, oloc, can_create);
     if (!obc)
       return -ENOENT;
     dout(10) << "find_object_context " << oid << " @" << snapid << dendl;

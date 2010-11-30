@@ -445,9 +445,11 @@ tid_t Objecter::op_submit(Op *op)
     dout(20) << " note: not requesting commit" << dendl;
   }
   op_osd[op->tid] = op;
+
   if (op->linger) {
     op_osd_linger[op->tid] = op;
   }
+
   pg.active_tids.insert(op->tid);
   pg.last = g_clock.now();
 

@@ -67,7 +67,7 @@ int main(int argc, const char **argv)
   cout << "open pool result = " << r << " pool = " << pool << std::endl;
 
   r = rados.write(pool, oid, 0, bl, bl.length());
-  uint64_t objver = rados.get_last_ver(pool);
+  uint64_t objver = rados.get_last_version(pool);
   cout << "rados.write returned " << r << " last_ver=" << objver << std::endl;
 
   uint64_t handle;
@@ -82,7 +82,7 @@ int main(int argc, const char **argv)
   cout << "*** press enter to continue ***" << std::endl;
   getchar();
 
-  rados.set_assert_ver(pool, objver);
+  rados.set_assert_version(pool, objver);
 
   r = rados.write(pool, oid, 0, bl, bl.length() - 1);
   cout << "rados.write returned " << r << std::endl;
