@@ -206,7 +206,7 @@ inline void decode(pg_t &pgid, bufferlist::iterator& p) {
 }
 
 
-inline ostream& operator<<(ostream& out, pg_t pg) 
+inline ostream& operator<<(ostream& out, const pg_t &pg)
 {
   out << pg.pool() << '.';
   out << hex << pg.ps() << dec;
@@ -1140,7 +1140,7 @@ class ObjectExtent {
   ObjectExtent(object_t o, __u32 off=0, __u32 l=0) : oid(o), offset(off), length(l) { }
 };
 
-inline ostream& operator<<(ostream& out, ObjectExtent &ex)
+inline ostream& operator<<(ostream& out, const ObjectExtent &ex)
 {
   return out << "extent(" 
              << ex.oid << " in " << ex.oloc
@@ -1214,7 +1214,7 @@ public:
 };
 WRITE_CLASS_ENCODER(OSDSuperblock)
 
-inline ostream& operator<<(ostream& out, OSDSuperblock& sb)
+inline ostream& operator<<(ostream& out, const OSDSuperblock& sb)
 {
   return out << "sb(" << sb.fsid
              << " osd" << sb.whoami
