@@ -4621,7 +4621,7 @@ void OSD::do_recovery(PG *pg)
 	     << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops) on "
 	     << *pg << dendl;
 #ifdef DEBUG_RECOVERY_OIDS
-    dout(20) << "  active was " << recovery_oids << dendl;
+    dout(20) << "  active was " << recovery_oids[pg->info.pgid] << dendl;
 #endif
     
     int started = pg->start_recovery_ops(max);
@@ -4648,10 +4648,9 @@ void OSD::start_recovery_op(PG *pg, const sobject_t& soid)
   recovery_ops_active++;
 
 #ifdef DEBUG_RECOVERY_OIDS
-  dout(20) << "  active was " << recovery_oids << dendl;
-  assert(recovery_oids.count(soid) == 0);
-  recovery_oids.insert(soid);
-  assert((int)recovery_oids.size() == recovery_ops_active);
+  dout(20) << "  active was " << recovery_oids[pg->info.pgid] << dendl;
+  assert(recovery_oids[pg->info.pgid].count(soid) == 0);
+  recovery_oids[pg->info.pgid].insert(soid);
 #endif
 
   recovery_wq.unlock();
@@ -4670,10 +4669,9 @@ void OSD::finish_recovery_op(PG *pg, const sobject_t& soid, bool dequeue)
   assert(recovery_ops_active >= 0);
 
 #ifdef DEBUG_RECOVERY_OIDS
-  dout(20) << "  active oids was " << recovery_oids << dendl;
-  assert(recovery_oids.count(soid));
-  recovery_oids.erase(soid);
-  assert((int)recovery_oids.size() == recovery_ops_active);
+  dout(20) << "  active oids was " << recovery_oids[pg->info.pgid] << dendl;
+  assert(recovery_oids[pg->info.pgid].count(soid));
+  recovery_oids[pg->info.pgid].erase(soid);
 #endif
 
   if (dequeue)

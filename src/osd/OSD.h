@@ -697,7 +697,7 @@ protected:
   utime_t defer_recovery_until;
   int recovery_ops_active;
 #ifdef DEBUG_RECOVERY_OIDS
-  set<sobject_t> recovery_oids;
+  map<pg_t, set<sobject_t> > recovery_oids;
 #endif
 
   struct RecoveryWQ : public ThreadPool::WorkQueue<PG> {

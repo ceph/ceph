@@ -1,4 +1,4 @@
-/usr/lib/libceph.so
-/usr/lib/libceph.a
-/usr/lib/libceph.la
-/usr/include/ceph/libceph.h
+usr/lib/libceph.so
+usr/lib/libceph.a
+usr/lib/libceph.la
+usr/include/ceph/libceph.h

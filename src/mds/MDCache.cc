@@ -5251,7 +5251,8 @@ void MDCache::trim_non_auth()
 	  in->close_dirfrag((*p)->dirfrag().frag);
 	}
 	dout(0) << " ... " << *in << dendl;
-	warn_string_dirs << in->get_parent_dn()->get_name() << std::endl;
+	if (in->get_parent_dn())
+	  warn_string_dirs << in->get_parent_dn()->get_name() << std::endl;
 	assert(in->get_num_ref() == 0);
 	remove_inode(in);
       }
