@@ -34,6 +34,8 @@ protected:
   Cond cond;
   Mutex journal_lock;
 
+  list<uint64_t> ops_submitting;
+
 protected:
   void journal_start();
   void journal_stop();
@@ -41,7 +43,7 @@ protected:
 
   // --
   uint64_t op_submit_start();
-  void op_submit_finish();
+  void op_submit_finish(uint64_t op_seq);
 
   uint64_t op_apply_start(uint64_t op);
   uint64_t _op_apply_start(uint64_t op);

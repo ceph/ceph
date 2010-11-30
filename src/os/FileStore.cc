@@ -1401,7 +1401,7 @@ int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
       // queue inside journal lock, to preserve ordering
       queue_op(osr, op, tls, onreadable, onreadable_sync);
       
-      op_submit_finish();
+      op_submit_finish(op);
       return 0;
     }
     else if (g_conf.filestore_journal_writeahead) {
@@ -1413,18 +1413,19 @@ int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
       dout(10) << "queue_transactions (writeahead) " << op << " " << tls << dendl;
       _op_journal_transactions(tls, op,
 			       new C_JournaledAhead(this, osr, op, tls, onreadable, ondisk, onreadable_sync));
-      op_submit_finish();
+      op_submit_finish(op);
       return 0;
     }
   }
 
-  uint64_t op_seq = op_apply_start(0);
-  dout(10) << "queue_transactions (trailing journal) " << op_seq << " " << tls << dendl;
-  int r = do_transactions(tls, op_seq);
-  op_apply_finish(op_seq);
+  uint64_t op = op_submit_start();
+  dout(10) << "queue_transactions (trailing journal) " << op << " " << tls << dendl;
+
+  _op_apply_start(op);
+  int r = do_transactions(tls, op);
     
   if (r >= 0) {
-    op_journal_transactions(tls, op_seq, ondisk);
+    op_journal_transactions(tls, op, ondisk);
   } else {
     delete ondisk;
   }
@@ -1436,6 +1437,9 @@ int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
     delete onreadable_sync;
   }
   op_finisher.queue(onreadable, r);
+
+  op_submit_finish(op);
+  op_apply_finish(op);
 
   return r;
 }

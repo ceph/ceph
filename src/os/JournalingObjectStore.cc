@@ -132,11 +132,20 @@ void JournalingObjectStore::op_apply_finish(uint64_t op)
 uint64_t JournalingObjectStore::op_submit_start()
 {
   journal_lock.Lock();
-  return ++op_seq;
+  uint64_t op = ++op_seq;
+  dout(10) << "op_submit_start " << op << dendl;
+  ops_submitting.push_back(op);
+  return op;
 }
 
-void JournalingObjectStore::op_submit_finish()
+void JournalingObjectStore::op_submit_finish(uint64_t op)
 {
+  dout(10) << "op_submit_finish " << op << dendl;
+  if (op != ops_submitting.front()) {
+    dout(0) << "op_submit_finish " << op << " expected " << ops_submitting.front()
+	    << ", OUT OF ORDER" << dendl;
+  }
+  ops_submitting.pop_front();
   journal_lock.Unlock();
 }
 
