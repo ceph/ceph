@@ -80,8 +80,19 @@ private:
 
   uint64_t last_committed_seq;
 
-  uint64_t full_commit_seq;  // don't write, wait for this seq to commit
-  uint64_t full_restart_seq; // start writing again with this seq
+  /*
+   * full states cycle at the beginnging of each commit epoch, when commit_start()
+   * is called.
+   *   FULL - we just filled up during this epoch.
+   *   WAIT - we filled up last epoch; now we have to wait until everything during
+   *          that epoch commits to the fs before we can start writing over it.
+   *   NOTFULL - all good, journal away.
+   */
+  enum {
+    FULL_NOTFULL = 0,
+    FULL_FULL = 1,
+    FULL_WAIT = 2,
+  } full_state;
 
   int fd;
 
@@ -92,6 +103,8 @@ private:
   //  or, awaiting callback bc journal was full.
   deque<uint64_t> writing_seq;
   deque<Context*> writing_fin;
+
+  deque<Context*> waiting_for_notfull;
 
   // waiting to be journaled
   struct write_item {
@@ -158,7 +171,7 @@ private:
     writing(false), must_write_header(false),
     write_pos(0), read_pos(0),
     last_committed_seq(0), 
-    full_commit_seq(0), full_restart_seq(0),
+    full_state(FULL_NOTFULL),
     fd(-1),
     write_lock("FileJournal::write_lock"),
     write_stop(false),
@@ -182,8 +195,11 @@ private:
 
   // writes
   void submit_entry(uint64_t seq, bufferlist& bl, int alignment, Context *oncommit);  // submit an item
+  void commit_start();
   void committed_thru(uint64_t seq);
-  bool is_full();
+  bool should_commit_now() {
+    return full_state != FULL_NOTFULL || !waiting_for_notfull.empty();
+  }
 
   void set_wait_on_full(bool b) { wait_on_full = b; }
 

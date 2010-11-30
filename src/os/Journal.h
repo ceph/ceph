@@ -46,8 +46,11 @@ public:
   virtual bool is_writeable() = 0;
   virtual void make_writeable() = 0;
   virtual void submit_entry(uint64_t seq, bufferlist& e, int alignment, Context *oncommit) = 0;
+  virtual void commit_start() = 0;
   virtual void committed_thru(uint64_t seq) = 0;
   virtual bool read_entry(bufferlist& bl, uint64_t &seq) = 0;
+
+  virtual bool should_commit_now() = 0;
 
   // reads/recovery
   
