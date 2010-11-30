@@ -776,9 +776,6 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment, Conte
 	   << " len " << e.length()
 	   << " (" << oncommit << ")" << dendl;
 
-  throttle_ops.take(1);
-  throttle_bytes.take(e.length());
-  
   if (!full_commit_seq && full_restart_seq && 
       seq >= full_restart_seq) {
     dout(1) << " seq " << seq << " >= full_restart_seq " << full_restart_seq 
@@ -786,6 +783,8 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment, Conte
     full_restart_seq = 0;
   }
   if (!full_commit_seq && !full_restart_seq) {
+    throttle_ops.take(1);
+    throttle_bytes.take(e.length());
     writeq.push_back(write_item(seq, e, alignment, oncommit));
     write_cond.Signal(); // kick writer thread
   } else {
