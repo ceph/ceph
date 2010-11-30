@@ -121,6 +121,12 @@ struct object_locator_t {
     return preferred;
   }
 
+  void clear() {
+    pool = 0;
+    preferred = 0;
+    key = "";
+  }
+
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
     ::encode(struct_v, bl);
