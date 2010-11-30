@@ -2155,21 +2155,24 @@ void MDCache::resolve_start()
     if (rootdir)
       adjust_subtree_auth(rootdir, CDIR_AUTH_UNKNOWN);
   }
-
-  for (set<int>::iterator p = recovery_set.begin(); p != recovery_set.end(); ++p) {
-    if (*p == mds->whoami)
-      continue;
-    send_resolve(*p);  // now.
-  }
 }
 
-void MDCache::send_resolve(int who)
+void MDCache::send_resolves()
 {
-  if (migrator->is_importing() || 
-      migrator->is_exporting())
-    send_resolve_later(who);
-  else
-    send_resolve_now(who);
+  // reset resolve state
+  got_resolve.clear();
+  other_ambiguous_imports.clear();
+
+  for (set<int>::iterator p = recovery_set.begin(); p != recovery_set.end(); ++p) {
+    int who = *p;
+    if (who == mds->whoami)
+      continue;
+    if (migrator->is_importing() ||
+	migrator->is_exporting())
+      send_resolve_later(who);
+    else
+      send_resolve_now(who);
+  }
 }
 
 void MDCache::send_resolve_later(int who)
@@ -2512,6 +2515,8 @@ void MDCache::handle_resolve(MMDSResolve *m)
   }    
 
   // update my dir_auth values
+  //   need to do this on recoverying nodes _and_ bystanders (to resolve ambiguous
+  //   migrations between other nodes)
   for (map<dirfrag_t, vector<dirfrag_t> >::iterator pi = m->subtrees.begin();
        pi != m->subtrees.end();
        ++pi) {
@@ -2523,16 +2528,15 @@ void MDCache::handle_resolve(MMDSResolve *m)
 	       << diri->dirfragtree 
 	       << " on " << pi->first << dendl;
     }
-
+    
     CDir *dir = diri->get_dirfrag(pi->first.frag);
     if (!dir) continue;
-
+    
     adjust_bounded_subtree_auth(dir, pi->second, from);
     try_subtree_merge(dir);
   }
 
   show_subtrees();
-
 
   // note ambiguous imports too
   for (map<dirfrag_t, vector<dirfrag_t> >::iterator pi = m->ambiguous_imports.begin();

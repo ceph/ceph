@@ -693,7 +693,7 @@ public:
   void cancel_ambiguous_import(dirfrag_t dirino);
   void finish_ambiguous_import(dirfrag_t dirino);
   void resolve_start();
-  void send_resolve(int who);
+  void send_resolves();
   void send_resolve_now(int who);
   void send_resolve_later(int who);
   void maybe_send_pending_resolves();

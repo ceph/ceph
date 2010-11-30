@@ -1993,6 +1993,10 @@ void Migrator::import_logged_start(CDir *dir, int from,
   
   // send notify's etc.
   dout(7) << "sending ack for " << *dir << " to old auth mds" << from << dendl;
+
+  // test surviving observer of a failed migration that did not complete
+  //assert(dir->replica_map.size() < 2 || mds->whoami != 0);
+
   mds->send_message_mds(new MExportDirAck(dir->dirfrag()), from);
   assert (g_conf.mds_kill_import_at != 8);
 

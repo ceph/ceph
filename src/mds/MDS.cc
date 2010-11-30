@@ -923,11 +923,9 @@ void MDS::handle_mds_map(MMDSMap *m)
     oldmap->get_mds_set(oldresolve, MDSMap::STATE_RESOLVE);
     mdsmap->get_mds_set(resolve, MDSMap::STATE_RESOLVE);
     if (oldresolve != resolve) {
-      dout(10) << "resolve set is " << resolve << ", was " << oldresolve << dendl;
-      for (set<int>::iterator p = resolve.begin(); p != resolve.end(); ++p) 
-	if (*p != whoami &&
-	    oldresolve.count(*p) == 0)
-	  mdcache->send_resolve(*p);  // now or later.
+      dout(10) << " resolve set is " << resolve << ", was " << oldresolve << dendl;
+      calc_recovery_set();
+      mdcache->send_resolves();
     }
   }
   
@@ -1166,19 +1164,27 @@ void MDS::starting_done()
 }
 
 
-void MDS::replay_start()
+void MDS::calc_recovery_set()
 {
-  dout(1) << "replay_start" << dendl;
-  
   // initialize gather sets
   set<int> rs;
   mdsmap->get_recovery_mds_set(rs);
   rs.erase(whoami);
-  dout(1) << "now replay.  my recovery peers are " << rs
-	  << ".  need osdmap epoch " << mdsmap->get_last_failure_osd_epoch()
+  mdcache->set_recovery_set(rs);
+
+  dout(1) << " recovery set is " << rs << dendl;
+}
+
+
+void MDS::replay_start()
+{
+  dout(1) << "replay_start" << dendl;
+  
+  calc_recovery_set();
+
+  dout(1) << " need osdmap epoch " << mdsmap->get_last_failure_osd_epoch()
 	  <<", have " << osdmap->get_epoch()
 	  << dendl;
-  mdcache->set_recovery_set(rs);
 
   // start?
   if (osdmap->get_epoch() >= mdsmap->get_last_failure_osd_epoch()) {
