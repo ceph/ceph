@@ -1623,7 +1623,14 @@ do { \
       dout(7) << "mds has " << finished_queue.size() << " queued contexts" << dendl;
       dout(10) << finished_queue << dendl;
       finishing = true;
-      finish_contexts(finished_queue);
+      list<Context*> ls;
+      ls.swap(finished_queue);
+      while (!ls.empty()) {
+	dout(10) << " finish " << ls.front() << dendl;
+	ls.front()->finish(0);
+	delete ls.front();
+	ls.pop_front();
+      }
       finishing = false;
     }
 
