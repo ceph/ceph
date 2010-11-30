@@ -125,6 +125,7 @@ fi
 %{_libdir}/libcrush.so.*
 %{_libdir}/librados.so.*
 %{_libdir}/rados-classes/libcls_rbd.so.*
+%{_datadir}/ceph_tool/gui_resources/*
 /sbin/mkcephfs
 /sbin/mount.ceph
 %{_libdir}/ceph
