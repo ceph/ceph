@@ -835,6 +835,12 @@ PGPool* OSD::_get_pool(int id)
 {
   PGPool *p = _lookup_pool(id);
   if (!p) {
+    if (!osdmap->have_pg_pool(id)) {
+      dout(5) << __func__ << ": the OSDmap does not contain a PG pool with id = "
+	      << id << dendl;
+      return NULL;
+    }
+
     p = new PGPool(id, osdmap->get_pool_name(id),
 		   osdmap->get_pg_pool(id)->v.auid );
     pool_map[id] = p;
@@ -869,6 +875,7 @@ PG *OSD::_open_lock_pg(pg_t pgid, bool no_lockdep_check)
 
   dout(10) << "_open_lock_pg " << pgid << dendl;
   PGPool *pool = _get_pool(pgid.pool());
+  assert(pool);
 
   // create
   PG *pg;
@@ -978,6 +985,13 @@ void OSD::load_pgs()
 	       << " (pg " << pgid << " snap " << snap << ")" << dendl;
       continue;
     }
+
+    if (!osdmap->have_pg_pool(pgid.pool())) {
+      dout(10) << __func__ << ": skipping PG " << pgid << " because we don't have pool "
+	       << pgid.pool() << dendl;
+      continue;
+    }
+
     PG *pg = _open_lock_pg(pgid);
 
     // read pg state, log
