@@ -1014,7 +1014,7 @@ void PG::mark_obj_as_lost(ObjectStore::Transaction& t,
   object_locator_t oloc;
   oloc.clear();
   oloc.pool = info.pgid.pool();
-  object_info_t oi(lost_soid, oloc, true);
+  object_info_t oi(lost_soid, oloc);
 
   if (r >= 0) {
     // Some version of this lost object exists in our filestore.

@@ -1703,7 +1703,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
       snaps[i] = snapc.snaps[i];
     
     // prepare clone
-    object_info_t static_snap_oi(coid, oi.oloc, oi.lost);
+    object_info_t static_snap_oi(oi);
     object_info_t *snap_oi;
     if (is_primary()) {
       ctx->clone_obc = new ObjectContext(static_snap_oi, true, NULL);
@@ -2301,7 +2301,7 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const sobject_t& s
     if (r < 0) {
       if (!can_create)
 	return NULL;   // -ENOENT!
-      object_info_t oi(soid, oloc, false);
+      object_info_t oi(soid, oloc);
       obc = new ObjectContext(oi, false, NULL);
     }
     else {
@@ -2559,7 +2559,8 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       // TODO: this is severely broken because we don't know whether this object is really lost or
       // not. We just always assume that it's not right now.
       // Also, we're taking the address of a variable on the stack. 
-      object_info_t oi(soid, op->oloc, false);
+      object_info_t oi(soid, op->oloc);
+      oi.lost = false; // I guess?
       oi.version = op->old_version;
       oi.size = op->old_size;
       ObjectState obs(oi, op->old_exists, NULL);
@@ -3754,7 +3755,7 @@ int ReplicatedPG::recover_primary(int max)
 
 	    ObjectContext *headobc = get_object_context(head, OLOC_BLANK, false);
 
-	    object_info_t oi(soid, headobc->obs.oi.oloc, headobc->obs.oi.lost);
+	    object_info_t oi(headobc->obs.oi);
 	    oi.version = latest->version;
 	    oi.prior_version = latest->prior_version;
 	    ::decode(oi.snaps, latest->snaps);

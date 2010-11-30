@@ -1353,9 +1353,15 @@ struct object_info_t {
     decode(p);
   }
 
-  object_info_t(const sobject_t& s, const object_locator_t& o, bool lost_) :
-    soid(s), size(0),
-    lost(lost_), truncate_seq(0), truncate_size(0) {}
+  object_info_t(const object_info_t &rhs)
+    : soid(rhs.soid), size(rhs.size),
+      lost(rhs.lost), truncate_seq(rhs.truncate_seq),
+      truncate_size(rhs.truncate_size) {}
+
+  object_info_t(const sobject_t& s, const object_locator_t& o)
+    : soid(s), size(0),
+      lost(false), truncate_seq(0), truncate_size(0) {}
+
   object_info_t(bufferlist& bl) {
     decode(bl);
   }
