@@ -4022,6 +4022,7 @@ void Client::_readdir_drop_dirp_buffer(DirResult *dirp)
     for (unsigned i = 0; i < dirp->buffer->size(); i++)
       put_inode((*dirp->buffer)[i].second);
     delete dirp->buffer;
+    dirp->buffer = NULL;
   }
 }
 
