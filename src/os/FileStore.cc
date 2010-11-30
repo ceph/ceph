@@ -1263,14 +1263,6 @@ void FileStore::queue_op(Sequencer *posr, uint64_t op_seq, list<Transaction*>& t
   }
   osr->q.push_back(o);
 
-  while ((g_conf.filestore_queue_max_ops && op_queue_len >= (unsigned)g_conf.filestore_queue_max_ops) ||
-	 (g_conf.filestore_queue_max_bytes && op_queue_bytes >= (unsigned)g_conf.filestore_queue_max_bytes)) {
-    dout(2) << "queue_op " << o << " throttle: "
-	     << op_queue_len << " > " << g_conf.filestore_queue_max_ops << " ops || "
-	     << op_queue_bytes << " > " << g_conf.filestore_queue_max_bytes << dendl;
-    op_tp.wait(op_throttle_cond);
-  }
-
   op_queue_len++;
   op_queue_bytes += bytes;
 
@@ -1394,7 +1386,12 @@ int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
   if (journal && journal->is_writeable()) {
     if (g_conf.filestore_journal_parallel) {
 
-      journal->throttle();   // make sure we're note ahead of the jouranl
+      // FIXME: these throttle blocks can build up many threads, and
+      // then let them all (too many!)  through when some space is
+      // available.
+
+      journal->throttle();   // make sure we're not ahead of the jouranl
+      op_queue_throttle();   // make sure the journal isn't getting ahead of our op queue.
 
       uint64_t op = op_journal_start(0);
       dout(10) << "queue_transactions (parallel) " << op << " " << tls << dendl;
@@ -1402,7 +1399,7 @@ int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
       journal_transactions(tls, op, ondisk);
       
       // queue inside journal lock, to preserve ordering
-      queue_op(osr, op, tls, onreadable, onreadable_sync);  // this throttles on the op_queue
+      queue_op(osr, op, tls, onreadable, onreadable_sync);
       
       op_journal_finish();
       return 0;
@@ -1451,6 +1448,9 @@ void FileStore::_journaled_ahead(Sequencer *osr, uint64_t op,
 				 Context *onreadable_sync)
 {
   dout(10) << "_journaled_ahead " << op << " " << tls << dendl;
+
+  op_queue_throttle();
+
   // this should queue in order because the journal does it's completions in order.
   queue_op(osr, op, tls, onreadable, onreadable_sync);
 
