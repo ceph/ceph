@@ -1237,7 +1237,7 @@ void FileStore::queue_op(Sequencer *posr, uint64_t op_seq, list<Transaction*>& t
   // mark apply start _now_, because we need to drain the entire apply
   // queue during commit in order to put the store in a consistent
   // state.
-  op_apply_start(op_seq);
+  _op_apply_start(op_seq);
 
   Op *o = new Op;
   o->op = op_seq;
@@ -1393,15 +1393,15 @@ int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
       journal->throttle();   // make sure we're not ahead of the jouranl
       op_queue_throttle();   // make sure the journal isn't getting ahead of our op queue.
 
-      uint64_t op = op_journal_start(0);
+      uint64_t op = op_submit_start();
       dout(10) << "queue_transactions (parallel) " << op << " " << tls << dendl;
       
-      journal_transactions(tls, op, ondisk);
+      _op_journal_transactions(tls, op, ondisk);
       
       // queue inside journal lock, to preserve ordering
       queue_op(osr, op, tls, onreadable, onreadable_sync);
       
-      op_journal_finish();
+      op_submit_finish();
       return 0;
     }
     else if (g_conf.filestore_journal_writeahead) {
@@ -1409,11 +1409,11 @@ int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
       journal->throttle();   // make sure we're not ahead of the journal
       op_queue_throttle();   // make sure the journal isn't getting ahead of our op queue.
 
-      uint64_t op = op_journal_start(0);
+      uint64_t op = op_submit_start();
       dout(10) << "queue_transactions (writeahead) " << op << " " << tls << dendl;
-      journal_transactions(tls, op,
-			   new C_JournaledAhead(this, osr, op, tls, onreadable, ondisk, onreadable_sync));
-      op_journal_finish();
+      _op_journal_transactions(tls, op,
+			       new C_JournaledAhead(this, osr, op, tls, onreadable, ondisk, onreadable_sync));
+      op_submit_finish();
       return 0;
     }
   }
@@ -1424,9 +1424,7 @@ int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
   op_apply_finish(op_seq);
     
   if (r >= 0) {
-    op_journal_start(op_seq);
-    journal_transactions(tls, op_seq, ondisk);
-    op_journal_finish();
+    op_journal_transactions(tls, op_seq, ondisk);
   } else {
     delete ondisk;
   }
@@ -1452,7 +1450,9 @@ void FileStore::_journaled_ahead(Sequencer *osr, uint64_t op,
   op_queue_throttle();
 
   // this should queue in order because the journal does it's completions in order.
+  journal_lock.Lock();
   queue_op(osr, op, tls, onreadable, onreadable_sync);
+  journal_lock.Unlock();
 
   // do ondisk completions async, to prevent any onreadable_sync completions
   // getting blocked behind an ondisk completion.

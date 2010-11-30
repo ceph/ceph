@@ -93,10 +93,16 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
 
 uint64_t JournalingObjectStore::op_apply_start(uint64_t op) 
 {
-  lock.Lock();
+  Mutex::Locker l(journal_lock);
+  return _op_apply_start(op);
+}
+
+uint64_t JournalingObjectStore::_op_apply_start(uint64_t op) 
+{
+  assert(journal_lock.is_locked());
   while (blocked) {
     dout(10) << "op_apply_start blocked" << dendl;
-    cond.Wait(lock);
+    cond.Wait(journal_lock);
   }
   open_ops++;
 
@@ -104,14 +110,13 @@ uint64_t JournalingObjectStore::op_apply_start(uint64_t op)
     op = ++op_seq;
   dout(10) << "op_apply_start " << op << dendl;
 
-  lock.Unlock();
   return op;
 }
 
 void JournalingObjectStore::op_apply_finish(uint64_t op) 
 {
   dout(10) << "op_apply_finish" << dendl;
-  lock.Lock();
+  journal_lock.Lock();
   if (--open_ops == 0)
     cond.Signal();
 
@@ -121,21 +126,16 @@ void JournalingObjectStore::op_apply_finish(uint64_t op)
   if (op > applied_seq)
     applied_seq = op;
 
-  lock.Unlock();
+  journal_lock.Unlock();
 }
 
-uint64_t JournalingObjectStore::op_journal_start(uint64_t op)
+uint64_t JournalingObjectStore::op_submit_start()
 {
   journal_lock.Lock();
-  if (!op) {
-    lock.Lock();
-    op = ++op_seq;
-    lock.Unlock();
-  }
-  return op;
+  return ++op_seq;
 }
 
-void JournalingObjectStore::op_journal_finish()
+void JournalingObjectStore::op_submit_finish()
 {
   journal_lock.Unlock();
 }
@@ -145,16 +145,16 @@ void JournalingObjectStore::op_journal_finish()
 
 bool JournalingObjectStore::commit_start() 
 {
-  // suspend new ops...
-  Mutex::Locker l(lock);
+  bool ret = false;
 
+  journal_lock.Lock();
   dout(10) << "commit_start op_seq " << op_seq
 	   << ", applied_seq " << applied_seq
 	   << ", committed_seq " << committed_seq << dendl;
   blocked = true;
   while (open_ops > 0) {
     dout(10) << "commit_start blocked, waiting for " << open_ops << " open ops" << dendl;
-    cond.Wait(lock);
+    cond.Wait(journal_lock);
   }
   
   if (applied_seq == committed_seq) {
@@ -162,7 +162,7 @@ bool JournalingObjectStore::commit_start()
     blocked = false;
     cond.Signal();
     assert(commit_waiters.empty());
-    return false;
+    goto out;
   }
 
   // we can _only_ read applied_seq here because open_ops == 0 (we've
@@ -170,12 +170,16 @@ bool JournalingObjectStore::commit_start()
   committing_seq = applied_seq;
 
   dout(10) << "commit_start committing " << committing_seq << ", still blocked" << dendl;
-  return true;
+  ret = true;
+
+ out:
+  journal_lock.Unlock();
+  return ret;
 }
 
 void JournalingObjectStore::commit_started() 
 {
-  Mutex::Locker l(lock);
+  Mutex::Locker l(journal_lock);
   // allow new ops. (underlying fs should now be committing all prior ops)
   dout(10) << "commit_started committing " << committing_seq << ", unblocking" << dendl;
   blocked = false;
@@ -184,7 +188,7 @@ void JournalingObjectStore::commit_started()
 
 void JournalingObjectStore::commit_finish()
 {
-  Mutex::Locker l(lock);
+  Mutex::Locker l(journal_lock);
   dout(10) << "commit_finish thru " << committing_seq << dendl;
   
   if (journal)
@@ -199,29 +203,18 @@ void JournalingObjectStore::commit_finish()
   }
 }
 
-void JournalingObjectStore::journal_transaction(ObjectStore::Transaction& t, uint64_t op,
-						Context *onjournal)
+void JournalingObjectStore::op_journal_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op,
+						    Context *onjournal)
 {
-  Mutex::Locker l(lock);
-  dout(10) << "journal_transaction " << op << dendl;
-  if (journal && journal->is_writeable()) {
-    bufferlist tbl;
-    t.encode(tbl);
-
-    int alignment = -1;
-    if ((int)t.get_data_length() >= g_conf.journal_align_min_size)
-      alignment = t.get_data_alignment();
-
-    journal->submit_entry(op, tbl, alignment, onjournal);
-  } else if (onjournal)
-    commit_waiters[op].push_back(onjournal);
+  Mutex::Locker l(journal_lock);
+  _op_journal_transactions(tls, op, onjournal);
 }
 
-void JournalingObjectStore::journal_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op,
-						 Context *onjournal)
+void JournalingObjectStore::_op_journal_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op,
+						     Context *onjournal)
 {
-  Mutex::Locker l(lock);
-  dout(10) << "journal_transactions " << op << dendl;
+  assert(journal_lock.is_locked());
+  dout(10) << "op_journal_transactions " << op << dendl;
     
   if (journal && journal->is_writeable()) {
     bufferlist tbl;
