@@ -13,6 +13,7 @@
  */
 
 #include "config.h"
+#include "osdc/Journaler.h"
 #include "events/EString.h"
 #include "events/ESubtreeMap.h"
 #include "events/ESession.h"
@@ -955,6 +956,8 @@ void ESlaveUpdate::replay(MDS *mds)
 
 void ESubtreeMap::replay(MDS *mds) 
 {
+  if (expire_pos)
+    mds->mdlog->journaler->set_expire_pos(expire_pos);
   // suck up the subtree map?
   if (mds->mdcache->is_subtrees()) {
     dout(10) << "ESubtreeMap.replay -- ignoring, already have import map" << dendl;

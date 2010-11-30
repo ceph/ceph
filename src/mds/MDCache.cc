@@ -37,7 +37,7 @@
 
 #include "common/Logger.h"
 #include "common/MemoryModel.h"
-
+#include "osdc/Journaler.h"
 #include "osdc/Filer.h"
 
 #include "events/ESubtreeMap.h"
@@ -2138,6 +2138,7 @@ ESubtreeMap *MDCache::create_subtree_map()
   }
 
   //le->metablob.print(cout);
+  le->expire_pos = mds->mdlog->journaler->get_expire_pos();
   return le;
 }
 
