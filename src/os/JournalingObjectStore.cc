@@ -173,6 +173,7 @@ bool JournalingObjectStore::commit_start()
   ret = true;
 
  out:
+  journal->commit_start();  // tell the journal too
   journal_lock.Unlock();
   return ret;
 }

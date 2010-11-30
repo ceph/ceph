@@ -2372,6 +2372,10 @@ void FileStore::sync_entry()
       dout(10) << "sync_entry more waiters, committing again" << dendl;
       goto again;
     }
+    if (journal && journal->should_commit_now()) {
+      dout(10) << "sync_entry journal says we should commit again (probably is/was full)" << dendl;
+      goto again;
+    }
   }
   lock.Unlock();
 }
