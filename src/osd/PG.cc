@@ -3363,9 +3363,12 @@ void PG::share_pg_info()
 }
 
 /*
- * Share this PG's log with some replicas.
+ * Share some of this PG's log with some replicas.
  *
- * The log will be shared from the current version (last_update) back to 'oldver'
+ * The log will be shared from the current version (last_update) back to
+ * 'oldver.'
+ *
+ * Updates peer_missing and peer_info.
  */
 void PG::share_pg_log(const eversion_t &oldver)
 {
@@ -3373,13 +3376,47 @@ void PG::share_pg_log(const eversion_t &oldver)
 
   assert(is_primary());
 
-  // share PG::Log with replicas
-  for (unsigned i=1; i<acting.size(); i++) {
-    int peer = acting[i];
+  vector<int>::const_iterator a = acting.begin();
+  assert(a != acting.end());
+  vector<int>::const_iterator end = acting.end();
+  while (++a != end) {
+    int peer(*a);
     MOSDPGLog *m = new MOSDPGLog(info.last_update.version, info);
-    m->log.copy_after(log, oldver);
+    m->log.head = log.head;
+    m->log.tail = log.tail;
+    for (list<Log::Entry>::const_reverse_iterator i = log.log.rbegin();
+	 i != log.log.rend();
+	 ++i) {
+      if (i->version <= oldver) {
+	m->log.tail = i->version;
+	break;
+      }
+      const Log::Entry &entry(*i);
+      switch (entry.op) {
+	case Log::Entry::LOST: {
+	  PG::Missing& pmissing(peer_missing[peer]);
+	  pmissing.add(entry.soid, entry.version, eversion_t());
+	  break;
+        }
+	default: {
+	  // To do this right, you need to figure out what impact this log
+	  // entry has on the peer missing and the peer info
+	  assert(0);
+	  break;
+        }
+      }
+
+      m->log.log.push_front(*i);
+    }
+    PG::Info& pinfo(peer_info[peer]);
+    pinfo.last_update = log.head;
+    // shouldn't move pinfo.log.tail
+    pinfo.last_update = log.head;
+    // no change in pinfo.last_complete
+
     m->missing = missing;
-    osd->cluster_messenger->send_message(m, osd->osdmap->get_cluster_inst(peer));
+    osd->cluster_messenger->send_message(m, osd->osdmap->
+					 get_cluster_inst(peer));
   }
 }
 
