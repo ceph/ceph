@@ -597,6 +597,7 @@ noinst_HEADERS = \
         crush/sample.txt\
         crush/types.h\
 	fetch_config\
+	include/bloom_filter.hpp\
 	include/ClassLibrary.h\
         include/Context.h\
 	include/CompatSet.h\
