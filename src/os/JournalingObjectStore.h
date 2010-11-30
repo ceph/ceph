@@ -35,6 +35,7 @@ protected:
   Mutex journal_lock;
 
   list<uint64_t> ops_submitting;
+  list<Cond*> ops_apply_blocked;
 
 protected:
   void journal_start();
