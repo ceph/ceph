@@ -2656,7 +2656,8 @@ void Client::handle_caps(MClientCaps *m)
 
   Inode *in = 0;
   vinodeno_t vino(m->get_ino(), CEPH_NOSNAP);
-  if (inode_map.count(vino)) in = inode_map[vino];
+  if (inode_map.count(vino))
+    in = inode_map[vino];
   if (!in) {
     dout(5) << "handle_caps don't have vino " << vino << dendl;
     m->put();
@@ -2714,39 +2715,43 @@ void Client::handle_cap_import(Inode *in, MClientCaps *m)
   m->put();
 }
 
-void Client::handle_cap_export(Inode *in, MClientCaps *m)
+void Client::handle_cap_export(Inode *in, MClientCaps *m,
+			       bool& open_target_sessions)
 {
   int mds = m->get_source().num();
-  assert(in->caps[mds]);
-  InodeCap *cap = in->caps[mds];
+  InodeCap *cap = NULL;
 
   // note?
   bool found_higher_mseq = false;
   for (map<int,InodeCap*>::iterator p = in->caps.begin();
        p != in->caps.end();
        p++) {
+    if (p->first == mds)
+      cap = p->second;
     if (p->second->mseq > m->get_mseq()) {
       found_higher_mseq = true;
       dout(5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq() 
 	      << " EXPORT from mds" << mds
 	      << ", but mds" << p->first << " has higher mseq " << p->second->mseq << dendl;
-      break;
     }
   }
 
-  if (!found_higher_mseq) {
-    dout(5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq() 
-	    << " EXPORT from mds" << mds
-	    << ", setting exporting_issued " << ccap_string(cap->issued) << dendl;
-    in->exporting_issued = cap->issued;
-    in->exporting_mseq = m->get_mseq();
-    in->exporting_mds = mds;
-  } else 
-    dout(5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq() 
-	    << " EXPORT from mds" << mds
-	    << ", just removing old cap" << dendl;
+  if (cap) {
+    if (!found_higher_mseq) {
+      dout(5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq() 
+	      << " EXPORT from mds" << mds
+	      << ", setting exporting_issued " << ccap_string(cap->issued) << dendl;
+      in->exporting_issued = cap->issued;
+      in->exporting_mseq = m->get_mseq();
+      in->exporting_mds = mds;
+    } else 
+      dout(5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq() 
+	      << " EXPORT from mds" << mds
+	      << ", just removing old cap" << dendl;
 
-  remove_cap(in, mds);
+    remove_cap(in, mds);
+  }
+  // else we already released it
 
   m->put();
 }
