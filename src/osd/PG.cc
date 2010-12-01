@@ -974,6 +974,111 @@ bool PG::prior_set_affected(OSDMap *osdmap)
   return false;
 }
 
+/*
+ * Returns true unless there is a non-lost OSD in might_have_unfound.
+ */
+bool PG::all_unfound_are_lost(const OSDMap* osdmap) const
+{
+  assert(is_primary());
+
+  set<int>::const_iterator peer = might_have_unfound.begin();
+  set<int>::const_iterator mend = might_have_unfound.end();
+  for (; peer != mend; ++peer) {
+    const osd_info_t &osd_info(osdmap->get_info(*peer));
+    if (osd_info.lost_at <= osd_info.up_from) {
+      // If there is even one OSD in might_have_unfound that isn't lost, we
+      // still might retrieve our unfound.
+      return false;
+    }
+  }
+  return true;
+}
+
+/* Mark an object as lost
+ */
+void PG::mark_obj_as_lost(ObjectStore::Transaction& t,
+			  const sobject_t &lost_soid)
+{
+  // Wake anyone waiting for this object. Now that it's been marked as lost,
+  // we will just return an error code.
+  hash_map<sobject_t, list<class Message*> >::iterator wmo =
+    waiting_for_missing_object.find(lost_soid);
+  if (wmo != waiting_for_missing_object.end()) {
+    osd->take_waiters(wmo->second);
+  }
+
+  // Tell the object store that this object is lost.
+  bufferlist b1;
+  int r = osd->store->getattr(coll, lost_soid, OI_ATTR, b1);
+
+  object_locator_t oloc;
+  oloc.clear();
+  oloc.pool = info.pgid.pool();
+  object_info_t oi(lost_soid, oloc);
+
+  if (r >= 0) {
+    // Some version of this lost object exists in our filestore.
+    // So, we can fetch its attributes and preserve most of them.
+    oi = object_info_t(b1);
+  }
+  else {
+    // The object doesn't exist in the filestore yet. Make sure that
+    // we create it there.
+    t.touch(coll, lost_soid);
+  }
+
+  oi.lost = true;
+  oi.version = info.last_update;
+  bufferlist b2;
+  oi.encode(b2);
+  t.setattr(coll, lost_soid, OI_ATTR, b2);
+}
+
+/* Mark all unfound objects as lost.
+ */
+void PG::mark_all_unfound_as_lost(ObjectStore::Transaction& t)
+{
+  dout(3) << __func__ << dendl;
+
+  dout(30) << __func__  << ": log before:\n";
+  log.print(*_dout);
+  *_dout << dendl;
+
+  utime_t mtime = g_clock.now();
+  eversion_t old_last_update = info.last_update;
+  info.last_update.epoch = osd->osdmap->get_epoch();
+  map<sobject_t, Missing::item>::iterator m = missing.missing.begin();
+  map<sobject_t, Missing::item>::iterator mend = missing.missing.end();
+  while (m != mend) {
+    const sobject_t &soid(m->first);
+    if (missing_loc.find(soid) != missing_loc.end()) {
+      // We only care about unfound objects
+      ++m;
+      continue;
+    }
+
+    // Add log entry
+    info.last_update.version++;
+    Log::Entry e(Log::Entry::LOST, soid, info.last_update,
+		 m->second.need, osd_reqid_t(), mtime);
+    log.add(e);
+
+    // Object store stuff
+    mark_obj_as_lost(t, soid);
+
+    // Remove from missing set
+    missing.got(m++);
+  }
+
+  dout(30) << __func__ << ": log after:\n";
+  log.print(*_dout);
+  *_dout << dendl;
+
+  // Send out the PG log to all replicas
+  // So that they know what is lost
+  share_pg_log(old_last_update);
+}
+
 void PG::clear_prior()
 {
   dout(10) << "clear_prior" << dendl;
@@ -983,7 +1088,6 @@ void PG::clear_prior()
   prior_set_lost.clear();
   prior_set_built = false;
 }
-
 
 void PG::build_prior()
 {
@@ -1607,10 +1711,7 @@ void PG::build_might_have_unfound()
   dout(10) << __func__ << dendl;
 
   // Make sure that we have past intervals.
-  if (info.history.same_acting_since > info.history.last_epoch_started &&
-      (past_intervals.empty() ||
-       past_intervals.begin()->first > info.history.last_epoch_started))
-    generate_past_intervals();
+  generate_past_intervals();
 
   // We need to decide who might have unfound objects that we need
   std::map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
@@ -3261,6 +3362,63 @@ void PG::share_pg_info()
   }
 }
 
+/*
+ * Share some of this PG's log with some replicas.
+ *
+ * The log will be shared from the current version (last_update) back to
+ * 'oldver.'
+ *
+ * Updates peer_missing and peer_info.
+ */
+void PG::share_pg_log(const eversion_t &oldver)
+{
+  dout(10) << __func__ << dendl;
+
+  assert(is_primary());
+
+  vector<int>::const_iterator a = acting.begin();
+  assert(a != acting.end());
+  vector<int>::const_iterator end = acting.end();
+  while (++a != end) {
+    int peer(*a);
+    MOSDPGLog *m = new MOSDPGLog(info.last_update.version, info);
+    m->log.head = log.head;
+    m->log.tail = log.tail;
+    for (list<Log::Entry>::const_reverse_iterator i = log.log.rbegin();
+	 i != log.log.rend();
+	 ++i) {
+      if (i->version <= oldver) {
+	m->log.tail = i->version;
+	break;
+      }
+      const Log::Entry &entry(*i);
+      switch (entry.op) {
+	case Log::Entry::LOST: {
+	  PG::Missing& pmissing(peer_missing[peer]);
+	  pmissing.add(entry.soid, entry.version, eversion_t());
+	  break;
+        }
+	default: {
+	  // To do this right, you need to figure out what impact this log
+	  // entry has on the peer missing and the peer info
+	  assert(0);
+	  break;
+        }
+      }
+
+      m->log.log.push_front(*i);
+    }
+    PG::Info& pinfo(peer_info[peer]);
+    pinfo.last_update = log.head;
+    // shouldn't move pinfo.log.tail
+    pinfo.last_update = log.head;
+    // no change in pinfo.last_complete
+
+    m->missing = missing;
+    osd->cluster_messenger->send_message(m, osd->osdmap->
+					 get_cluster_inst(peer));
+  }
+}
 
 unsigned int PG::Missing::num_missing() const
 {
@@ -3378,6 +3536,12 @@ void PG::Missing::got(const sobject_t& oid, eversion_t v)
   assert(missing[oid].need <= v);
   rmissing.erase(missing[oid].need);
   missing.erase(oid);
+}
+
+void PG::Missing::got(const std::map<sobject_t, Missing::item>::iterator &m)
+{
+  rmissing.erase(m->second.need);
+  missing.erase(m);
 }
 
 ostream& operator<<(ostream& out, const PG& pg)

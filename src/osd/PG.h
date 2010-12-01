@@ -586,6 +586,7 @@ public:
     void add(const sobject_t& oid, eversion_t need, eversion_t have);
     void rm(const sobject_t& oid, eversion_t when);
     void got(const sobject_t& oid, eversion_t v);
+    void got(const std::map<sobject_t, Missing::item>::iterator &m);
 
     void encode(bufferlist &bl) const {
       __u8 struct_v = 1;
@@ -805,6 +806,12 @@ public:
   void clear_prior();
   bool prior_set_affected(OSDMap *map);
 
+
+  bool all_unfound_are_lost(const OSDMap* osdmap) const;
+  void mark_obj_as_lost(ObjectStore::Transaction& t,
+			const sobject_t &lost_soid);
+  void mark_all_unfound_as_lost(ObjectStore::Transaction& t);
+
   bool calc_min_last_complete_ondisk() {
     eversion_t min = last_complete_ondisk;
     for (unsigned i=1; i<acting.size(); i++) {
@@ -984,7 +991,7 @@ public:
   void queue_snap_trim();
 
   void share_pg_info();
-
+  void share_pg_log(const eversion_t &oldver);
 
   // abstract bits
   virtual void do_op(MOSDOp *op) = 0;

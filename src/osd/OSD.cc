@@ -1880,49 +1880,62 @@ void OSD::handle_command(MMonCommand *m)
     ss << g_conf.name << " stopped profiler";
     logclient.log(LOG_INFO, ss);
   }
-  else if (m->cmd.size() == 2 && m->cmd[0] == "dump_missing") {
-    const string &file_name(m->cmd[1]);
-    std::ofstream fout(file_name.c_str());
-    if (!fout.is_open()) {
-      stringstream ss;
-      ss << "failed to open file '" << file_name << "'";
-      logclient.log(LOG_INFO, ss);
-      goto done;
-    }
-
-    std::set <pg_t> keys;
-    for (hash_map<pg_t, PG*>::const_iterator pg_map_e = pg_map.begin();
-	 pg_map_e != pg_map.end(); ++pg_map_e) {
-      keys.insert(pg_map_e->first);
-    }
-
-    fout << "*** osd " << whoami << ": dump_missing ***" << std::endl;
-    for (std::set <pg_t>::iterator p = keys.begin();
-	 p != keys.end(); ++p) {
-      hash_map<pg_t, PG*>::iterator q = pg_map.find(*p);
-      assert(q != pg_map.end());
-      PG *pg = q->second;
-      pg->lock();
-
-      fout << *pg << std::endl;
-      std::map<sobject_t, PG::Missing::item>::iterator mend = pg->missing.missing.end();
-      std::map<sobject_t, PG::Missing::item>::iterator m = pg->missing.missing.begin();
-      for (; m != mend; ++m) {
-	fout << m->first << " -> " << m->second << std::endl;
-	map<sobject_t, set<int> >::const_iterator mli =
-	  pg->missing_loc.find(m->first);
-	if (mli == pg->missing_loc.end())
-	  continue;
-	const set<int> &mls(mli->second);
-	if (mls.empty())
-	  continue;
-	fout << "missing_loc: " << mls << std::endl;
+  else if (m->cmd.size() > 1 && m->cmd[0] == "debug") {
+    if (m->cmd.size() == 3 && m->cmd[1] == "dump_missing") {
+      const string &file_name(m->cmd[2]);
+      std::ofstream fout(file_name.c_str());
+      if (!fout.is_open()) {
+	stringstream ss;
+	ss << "failed to open file '" << file_name << "'";
+	logclient.log(LOG_INFO, ss);
+	goto done;
       }
-      pg->unlock();
-      fout << std::endl;
-    }
 
-    fout.close();
+      std::set <pg_t> keys;
+      for (hash_map<pg_t, PG*>::const_iterator pg_map_e = pg_map.begin();
+	   pg_map_e != pg_map.end(); ++pg_map_e) {
+	keys.insert(pg_map_e->first);
+      }
+
+      fout << "*** osd " << whoami << ": dump_missing ***" << std::endl;
+      for (std::set <pg_t>::iterator p = keys.begin();
+	   p != keys.end(); ++p) {
+	hash_map<pg_t, PG*>::iterator q = pg_map.find(*p);
+	assert(q != pg_map.end());
+	PG *pg = q->second;
+	pg->lock();
+
+	fout << *pg << std::endl;
+	std::map<sobject_t, PG::Missing::item>::iterator mend = pg->missing.missing.end();
+	std::map<sobject_t, PG::Missing::item>::iterator m = pg->missing.missing.begin();
+	for (; m != mend; ++m) {
+	  fout << m->first << " -> " << m->second << std::endl;
+	  map<sobject_t, set<int> >::const_iterator mli =
+	    pg->missing_loc.find(m->first);
+	  if (mli == pg->missing_loc.end())
+	    continue;
+	  const set<int> &mls(mli->second);
+	  if (mls.empty())
+	    continue;
+	  fout << "missing_loc: " << mls << std::endl;
+	}
+	pg->unlock();
+	fout << std::endl;
+      }
+
+      fout.close();
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "kick_recovery_wq") {
+      g_conf.osd_recovery_delay_start = atoi(m->cmd[2].c_str());
+      stringstream ss;
+      ss << "kicking recovery queue. set osd_recovery_delay_start to "
+	 << g_conf.osd_recovery_delay_start;
+      logclient.log(LOG_INFO, ss);
+
+      defer_recovery_until = g_clock.now();
+      defer_recovery_until += g_conf.osd_recovery_delay_start;
+      recovery_wq._kick();
+    }
   }
   else dout(0) << "unrecognized command! " << m->cmd << dendl;
 
@@ -3079,6 +3092,13 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
     if (g_conf.osd_check_for_log_corruption)
       pg->check_log_for_corruption(store);
 
+    if (pg->is_active() && pg->is_primary() &&
+	(pg->missing.num_missing() > pg->missing_loc.size())) {
+      if (pg->all_unfound_are_lost(osdmap)) {
+	pg->mark_all_unfound_as_lost(t);
+      }
+    }
+
     if (!osdmap->have_pg_pool(pg->info.pgid.pool())) {
       //pool is deleted!
       queue_pg_for_deletion(pg);
@@ -3993,6 +4013,11 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       }
 
       pg->write_info(*t);
+
+      if (!log.empty()) {
+	dout(10) << *pg << ": inactive replica merging new PG log entries" << dendl;
+	pg->merge_log(*t, info, log, from);
+      }
     }
   }
 

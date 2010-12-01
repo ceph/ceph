@@ -118,10 +118,20 @@ poll_cmd() {
 
 dump_osd_store() {
         set +x
-        find ./dev/osd* -type f | grep obj | grep head$ | while read file; do
+        echo "dumping osd store..."
+        find ./dev/osd* -type f | grep obj | grep head$ | sort | while read file; do
                 echo $file
                 head -c 10 $file
                 echo
+        done
+}
+
+start_recovery() {
+        CEPH_NUM_OSD=$1
+        osd=0
+        while [ $osd -lt $CEPH_NUM_OSD ]; do
+                ./ceph osd tell $osd debug kick_recovery_wq 0
+                osd=$((osd+1))
         done
 }
 
