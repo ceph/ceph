@@ -1899,8 +1899,9 @@ void Migrator::import_reverse(CDir *dir)
      * bleh.. just export all caps for this inode.  the auth mds
      * will pick them up during recovery.
      */
-    map<client_t,Capability::Export> cap_map;  // throw this away
-    in->export_client_caps(cap_map);
+    bufferlist bl; // throw this away
+    map<client_t,entity_inst_t> exported_client_map;  // throw this away too
+    encode_export_inode_caps(in, bl, exported_client_map);
     finish_export_inode_caps(in);
   }
 	 
