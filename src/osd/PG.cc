@@ -3095,13 +3095,14 @@ void PG::scrub()
   update_stats();
 
   osd->sched_scrub_lock.Lock();
-  --(osd->scrubs_pending);
-  assert(osd->scrubs_pending >= 0);
+  if (scrub_reserved) {
+    --(osd->scrubs_pending);
+    assert(osd->scrubs_pending >= 0);
+    scrub_reserved = false;
+    scrub_reserved_peers.clear();
+  }
   ++(osd->scrubs_active);
   osd->sched_scrub_lock.Unlock();
-
-  scrub_reserved = false;
-  scrub_reserved_peers.clear();
 
   // request maps from replicas
   for (unsigned i=1; i<acting.size(); i++) {
