@@ -34,15 +34,15 @@ to overwrite \fImapfilename\fP if changes are made.
 \fB\-\-create\fP
 will create a new monitor map with a new UUID (and with it, a new, empty Ceph file system).
 .TP
-\fB\-\-add\fI ip:port\fP
+\fB\-\-add\fI name ip:port\fP
 will add a monitor with the specified \fIip:port\fP to the map.
 .TP
-\fB\-\-rm\fI ip:port\fP
+\fB\-\-rm\fI name\fP
 will remove the monitor with the specified \fIip:port\fP from the map.
 .SH EXAMPLE
 To create a new map with three monitors (for a fresh Ceph file system):
 .IP
-monmaptool --create --add 192.168.0.10:6789 --add 192.168.0.11:6789 --add 192.168.0.12:6789 --clobber monmap
+monmaptool --create --add mon.a 192.168.0.10:6789 --add mon.b 192.168.0.11:6789 --add mon.c 192.168.0.12:6789 --clobber monmap
 .PP
 To display the contents of the map:
 .IP
@@ -50,7 +50,7 @@ monmaptool --print onmap
 .PP
 To replace one monitor:
 .IP
-monmaptool --rm 192.168.0.10:6789 --add 192.168.0.9:6789 --clobber monmap
+monmaptool --rm mon.a --add mon.a 192.168.0.9:6789 --clobber monmap
 .SH AVAILABILITY
 .B monmaptool
 is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
