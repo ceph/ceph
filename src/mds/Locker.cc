@@ -2080,9 +2080,8 @@ void Locker::process_request_cap_release(MDRequest *mdr, client_t client, const 
 	  dn->remove_client_lease(l, this);
 	}
       } else {
-	stringstream ss;
-	ss << "client" << client << " released lease on dn " << dir->dirfrag() << "/" << dname << " which dne";
-	mds->logclient.log(LOG_WARN, ss);
+	mds->clog.warn() << "client" << client << " released lease on dn "
+	    << dir->dirfrag() << "/" << dname << " which dne\n";
      }
     }
   }

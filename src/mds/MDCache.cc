@@ -1909,10 +1909,9 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	assert(!"negative dirstat size" == g_conf.mds_verify_scatter);
       if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
 	if (pi->dirstat.size() != pf->fragstat.size()) {
-	  stringstream ss;
-	  ss << "unmatched fragstat size on single dirfrag " << parent->dirfrag()
-	     << ", inode has " << pi->dirstat << ", dirfrag has " << pf->fragstat;
-	  mds->logclient.log(LOG_ERROR, ss);
+	  mds->clog.error() << "unmatched fragstat size on single dirfrag "
+	     << parent->dirfrag() << ", inode has " << pi->dirstat
+	     << ", dirfrag has " << pf->fragstat << "\n";
 	  
 	  // trust the dirfrag for now
 	  pi->dirstat = pf->fragstat;
@@ -1957,10 +1956,9 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
       if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
 	if (pi->rstat.rbytes != pf->rstat.rbytes) { 
-	  stringstream ss;
-	  ss << "unmatched rstat rbytes on single dirfrag " << parent->dirfrag()
-	     << ", inode has " << pi->rstat << ", dirfrag has " << pf->rstat;
-	  mds->logclient.log(LOG_ERROR, ss);
+	  mds->clog.error() << "unmatched rstat rbytes on single dirfrag "
+	      << parent->dirfrag() << ", inode has " << pi->rstat
+	      << ", dirfrag has " << pf->rstat << "\n";
 	  
 	  // trust the dirfrag for now
 	  pi->rstat = pf->rstat;
@@ -4707,9 +4705,8 @@ void MDCache::do_file_recover()
 
     // blech
     if (pi->client_ranges.size() && !pi->get_max_size()) {
-      stringstream ss;
-      ss << "bad client_range " << pi->client_ranges << " on ino " << pi->ino;
-      mds->logclient.log(LOG_WARN, ss);
+      mds->clog.warn() << "bad client_range " << pi->client_ranges
+	  << " on ino " << pi->ino << "\n";
     }
 
     if (pi->client_ranges.size() && pi->get_max_size()) {
@@ -5159,7 +5156,7 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
 void MDCache::trim_non_auth()
 {
   dout(7) << "trim_non_auth" << dendl;
-  stringstream warn_string_dirs;
+  stringstream warn_str_dirs;
   
   // temporarily pin all subtree roots
   for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
@@ -5200,12 +5197,11 @@ void MDCache::trim_non_auth()
       else if (dnl->is_primary()) {
 	CInode *in = dnl->get_inode();
 	list<CDir*> ls;
-        warn_string_dirs << in->get_parent_dn()->get_name() << std::endl;
+        warn_str_dirs << in->get_parent_dn()->get_name() << "\n";
 	in->get_dirfrags(ls);
 	for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
 	  CDir *subdir = *p;
-	  warn_string_dirs << subdir->get_inode()->get_parent_dn()->get_name()
-	                   << std::endl;
+	  warn_str_dirs << subdir->get_inode()->get_parent_dn()->get_name() << "\n";
 	  if (subdir->is_subtree_root()) 
 	    remove_subtree(subdir);
 	  in->close_dirfrag(subdir->dirfrag().frag);
@@ -5247,15 +5243,14 @@ void MDCache::trim_non_auth()
 	     p != ls.end();
 	     ++p) {
 	  dout(0) << " ... " << **p << dendl;
-	  warn_string_dirs << (*p)->get_inode()->get_parent_dn()->get_name()
-	                   << std::endl;
+	  warn_str_dirs << (*p)->get_inode()->get_parent_dn()->get_name() << "\n";
 	  assert((*p)->get_num_ref() == 1);  // SUBTREE
 	  remove_subtree((*p));
 	  in->close_dirfrag((*p)->dirfrag().frag);
 	}
 	dout(0) << " ... " << *in << dendl;
 	if (in->get_parent_dn())
-	  warn_string_dirs << in->get_parent_dn()->get_name() << std::endl;
+	  warn_str_dirs << in->get_parent_dn()->get_name() << "\n";
 	assert(in->get_num_ref() == 0);
 	remove_inode(in);
       }
@@ -5264,11 +5259,9 @@ void MDCache::trim_non_auth()
   }
 
   show_subtrees();
-  if (warn_string_dirs.peek() != EOF) {
-    stringstream warn_string;
-    warn_string << "trim_non_auth has deleted paths: " << std::endl;
-    warn_string << warn_string_dirs;
-    mds->logclient.log(LOG_INFO, warn_string);
+  if (warn_str_dirs.peek() != EOF) {
+    mds->clog.info() << "trim_non_auth has deleted paths: " << "\n";
+    mds->clog.info(warn_str_dirs);
   }
 }
 

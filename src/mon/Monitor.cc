@@ -95,7 +95,7 @@ Monitor::Monitor(string nm, MonitorStore *s, Messenger *m, MonMap *map) :
   lock("Monitor::lock"),
   timer(lock),
   monmap(map),
-  logclient(messenger, monmap),
+  clog(messenger, monmap, NULL, LogClient::FLAG_SYNC),
   store(s),
   
   state(STATE_STARTING), stopping(false),
@@ -163,11 +163,9 @@ void Monitor::init()
   for (vector<PaxosService*>::iterator ps = paxos_service.begin(); ps != paxos_service.end(); ps++)
     (*ps)->init();
 
-  logclient.set_synchronous(true);
-  
   // i'm ready!
   messenger->add_dispatcher_tail(this);
-  messenger->add_dispatcher_head(&logclient);
+  messenger->add_dispatcher_head(&clog);
   
   // start ticker
   timer.init();
@@ -208,9 +206,7 @@ void Monitor::call_election(bool is_new)
   rank = monmap->get_rank(name);
   
   if (is_new) {
-    stringstream ss;
-    ss << "mon." << name << " calling new monitor election";
-    logclient.log(LOG_INFO, ss);
+    clog.info() << "mon." << name << " calling new monitor election\n";
   }
 
   dout(10) << "call_election" << dendl;
@@ -253,9 +249,8 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
   quorum = active;
   dout(10) << "win_election, epoch " << epoch << " quorum is " << quorum << dendl;
 
-  stringstream ss;
-  ss << "mon." << name << "@" << rank << " won leader election with quorum " << quorum;
-  logclient.log(LOG_INFO, ss);
+  clog.info() << "mon." << name << "@" << rank
+		<< " won leader election with quorum " << quorum << "\n";
   
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     (*p)->leader_init();

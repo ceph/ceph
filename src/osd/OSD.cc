@@ -342,7 +342,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   logger(NULL), logger_started(false),
   store(NULL),
   map_in_progress(false),
-  logclient(client_messenger, &mc->monmap, mc),
+  clog(client_messenger, &mc->monmap, mc, LogClient::NO_FLAGS),
   whoami(id),
   dev_path(dev), journal_path(jdev),
   dispatch_running(false),
@@ -518,7 +518,7 @@ int OSD::init()
     
   // i'm ready!
   client_messenger->add_dispatcher_head(this);
-  client_messenger->add_dispatcher_head(&logclient);
+  client_messenger->add_dispatcher_head(&clog);
   cluster_messenger->add_dispatcher_head(this);
 
   heartbeat_messenger->add_dispatcher_head(&heartbeat_dispatcher);
@@ -1562,7 +1562,7 @@ void OSD::tick()
 
   map_lock.put_read();
 
-  logclient.send_log();
+  clog.send_log();
 
   timer.add_event_after(1.0, new C_Tick(this));
 
@@ -1835,59 +1835,50 @@ void OSD::handle_command(MMonCommand *m)
 
     stringstream ss;
     uint64_t rate = (double)count / (end - start);
-    ss << "bench: wrote " << prettybyte_t(count) << " in blocks of " << prettybyte_t(bsize)
-       << " in " << (end-start)
-       << " sec at " << prettybyte_t(rate) << "/sec";
-    logclient.log(LOG_INFO, ss);    
+    clog.info() << "bench: wrote " << prettybyte_t(count)
+	<< " in blocks of " << prettybyte_t(bsize) << " in "
+	<< (end-start) << " sec at " << prettybyte_t(rate) << "/sec\n";
     
   } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reset") {
     logger_reset_all();
   } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reopen") {
     logger_reopen_all();
   } else if (m->cmd.size() == 1 && m->cmd[0] == "heapdump") {
-    stringstream ss;
     if (g_conf.tcmalloc_have) {
       if (!g_conf.profiler_running()) {
-        ss << "can't dump heap: profiler not running";
+	clog.info() << "can't dump heap: profiler not running\n";
       } else {
-        ss << g_conf.name << "dumping heap profile now";
+        clog.info() << g_conf.name << "dumping heap profile now\n";
         g_conf.profiler_dump("admin request");
       }
     } else {
-      ss << g_conf.name << " does not have tcmalloc, can't use profiler";
+      clog.info() << g_conf.name << " does not have tcmalloc, "
+	"can't use profiler\n";
     }
-    logclient.log(LOG_INFO, ss);
   } else if (m->cmd.size() == 1 && m->cmd[0] == "enable_profiler_options") {
     char val[sizeof(int)*8+1];
     snprintf(val, sizeof(val), "%i", g_conf.profiler_allocation_interval);
     setenv("HEAP_PROFILE_ALLOCATION_INTERVAL", val, g_conf.profiler_allocation_interval);
     snprintf(val, sizeof(val), "%i", g_conf.profiler_highwater_interval);
     setenv("HEAP_PROFILE_INUSE_INTERVAL", val, g_conf.profiler_highwater_interval);
-    stringstream ss;
-    ss << g_conf.name << " set heap variables from current config";
-    logclient.log(LOG_INFO, ss);
+    clog.info() << g_conf.name << " set heap variables from current config";
   } else if (m->cmd.size() == 1 && m->cmd[0] == "start_profiler") {
     char location[PATH_MAX];
     snprintf(location, sizeof(location),
 	     "%s/%s", g_conf.log_dir, g_conf.name);
     g_conf.profiler_start(location);
-    stringstream ss;
-    ss << g_conf.name << " started profiler with output " << location;
-    logclient.log(LOG_INFO, ss);
+    clog.info() << g_conf.name << " started profiler with output "
+      << location << "\n";
   } else if (m->cmd.size() == 1 && m->cmd[0] == "stop_profiler") {
     g_conf.profiler_stop();
-    stringstream ss;
-    ss << g_conf.name << " stopped profiler";
-    logclient.log(LOG_INFO, ss);
+    clog.info() << g_conf.name << " stopped profiler\n";
   }
   else if (m->cmd.size() > 1 && m->cmd[0] == "debug") {
     if (m->cmd.size() == 3 && m->cmd[1] == "dump_missing") {
       const string &file_name(m->cmd[2]);
       std::ofstream fout(file_name.c_str());
       if (!fout.is_open()) {
-	stringstream ss;
-	ss << "failed to open file '" << file_name << "'";
-	logclient.log(LOG_INFO, ss);
+	clog.info() << "failed to open file '" << file_name << "'\n";
 	goto done;
       }
 
@@ -1927,10 +1918,8 @@ void OSD::handle_command(MMonCommand *m)
     }
     else if (m->cmd.size() == 3 && m->cmd[1] == "kick_recovery_wq") {
       g_conf.osd_recovery_delay_start = atoi(m->cmd[2].c_str());
-      stringstream ss;
-      ss << "kicking recovery queue. set osd_recovery_delay_start to "
-	 << g_conf.osd_recovery_delay_start;
-      logclient.log(LOG_INFO, ss);
+      clog.info() << "kicking recovery queue. set osd_recovery_delay_start "
+		    << "to " << g_conf.osd_recovery_delay_start << "\n";
 
       defer_recovery_until = g_clock.now();
       defer_recovery_until += g_conf.osd_recovery_delay_start;
@@ -2745,9 +2734,8 @@ void OSD::handle_osd_map(MOSDMap *m)
       do_shutdown = true;   // don't call shutdown() while we have everything paused
     } else if (!osdmap->is_up(whoami) ||
 	       osdmap->get_addr(whoami) != client_messenger->get_myaddr()) {
-      stringstream ss;
-      ss << "map e" << osdmap->get_epoch() << " wrongly marked me down";
-      logclient.log(LOG_WARN, ss);
+      clog.warn() << "map e" << osdmap->get_epoch()
+	<< " wrongly marked me down\n";
       
       state = STATE_BOOTING;
       up_epoch = 0;
@@ -3589,9 +3577,8 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
     }
     if (up != acting) {
       dout(10) << "mkpg " << pgid << "  up " << up << " != acting " << acting << dendl;
-      stringstream ss;
-      ss << "mkpg " << pgid << " up " << up << " != acting " << acting;
-      logclient.log(LOG_ERROR, ss);
+      clog.error() << "mkpg " << pgid << " up " << up << " != acting "
+	    << acting << "\n";
       continue;
     }
 
@@ -3992,10 +3979,8 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 
       // did a snap just get purged?
       if (info.purged_snaps.size() < pg->info.purged_snaps.size()) {
-	stringstream ss;
-	ss << "pg " << pg->info.pgid << " replica got purged_snaps " << info.purged_snaps
-	   << " had " << pg->info.purged_snaps;
-	logclient.log(LOG_WARN, ss);
+	clog.warn() << "pg " << pg->info.pgid << " replica got purged_snaps "
+	   << info.purged_snaps << " had " << pg->info.purged_snaps << "\n";
 	pg->info.purged_snaps = info.purged_snaps;
       } else {
 	interval_set<snapid_t> p = info.purged_snaps;
@@ -4751,11 +4736,9 @@ void OSD::handle_misdirected_op(PG *pg, MOSDOp *op)
     op->put();
   } else {
     dout(7) << *pg << " misdirected op in " << op->get_map_epoch() << dendl;
-    stringstream ss;
-    ss << op->get_source_inst() << " misdirected " << op->get_reqid()
-       << " " << pg->info.pgid << " to osd" << whoami
-       << " not " << pg->acting;
-    logclient.log(LOG_WARN, ss);
+    clog.warn() << op->get_source_inst() << " misdirected "
+       << op->get_reqid() << " " << pg->info.pgid << " to osd" << whoami
+       << " not " << pg->acting << "\n";
     reply_op_error(op, -ENXIO);
   }
 }

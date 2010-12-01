@@ -37,25 +37,37 @@
 
 #include "config.h"
 
-void LogClient::log(log_type type, const char *s)
+LogClientTemp::LogClientTemp(clog_type type_, LogClient &parent_)
+  : type(type_), parent(parent_)
 {
-  string str(s);
-  log(type, str);
 }
 
-void LogClient::log(log_type type, stringstream& ss)
+LogClientTemp::LogClientTemp(const LogClientTemp &rhs)
+  : type(rhs.type), parent(rhs.parent)
+{
+  // don't want to-- nor can we-- copy the ostringstream
+}
+
+LogClientTemp::~LogClientTemp()
+{
+  if (ss.peek() != EOF)
+    parent.do_log(type, ss);
+}
+
+void LogClient::do_log(clog_type type, std::stringstream& ss)
 {
   while (!ss.eof()) {
     string s;
     getline(ss, s);
-    log(type, s);
+    if (!s.empty())
+      do_log(type, s);
   }
 }
 
-void LogClient::log(log_type type, string& s)
+void LogClient::do_log(clog_type type, const std::string& s)
 {
   Mutex::Locker l(log_lock);
-  dout(0) << "log " << (log_type)type << " : " << s << dendl;
+  dout(0) << "log " << type << " : " << s << dendl;
   LogEntry e;
   e.who = messenger->get_myinst();
   e.stamp = g_clock.now();

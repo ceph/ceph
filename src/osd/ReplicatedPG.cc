@@ -16,6 +16,7 @@
 #include "PGLS.h"
 
 #include "common/arch.h"
+#include "common/errno.h"
 #include "common/Logger.h"
 
 #include "messages/MOSDOp.h"
@@ -3154,14 +3155,10 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
   struct stat st;
   int r = osd->store->stat(coll_t(info.pgid), soid, &st);
   if (r != 0) {
-    stringstream ss;
-    char buf[80];
-    ss << op->get_source() << " tried to pull " << soid << " in " << info.pgid
-       << " but got " << strerror_r(-r, buf, sizeof(buf));
-    osd->logclient.log(LOG_ERROR, ss);
-
+    osd->clog.error() << op->get_source() << " tried to pull " << soid
+	<< " in " << info.pgid << " but got "
+	<< cpp_strerror(-r) << "\n";
     // FIXME: do something more intelligent.. mark the pg as needing repair?
-
   } else {
     uint64_t size = st.st_size;
 
@@ -4079,17 +4076,16 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 	   << stat.num_kb << "/" << info.stats.num_kb << " kb."
 	   << dendl;
 
-  stringstream ss;
   if (stat.num_objects != info.stats.num_objects ||
       stat.num_object_clones != info.stats.num_object_clones ||
       stat.num_bytes != info.stats.num_bytes ||
       stat.num_kb != info.stats.num_kb) {
-    ss << info.pgid << " " << mode << " stat mismatch, got "
+    osd->clog.error() << info.pgid << " " << mode
+       << " stat mismatch, got "
        << stat.num_objects << "/" << info.stats.num_objects << " objects, "
        << stat.num_object_clones << "/" << info.stats.num_object_clones << " clones, "
        << stat.num_bytes << "/" << info.stats.num_bytes << " bytes, "
-       << stat.num_kb << "/" << info.stats.num_kb << " kb.";
-    osd->get_logclient()->log(LOG_ERROR, ss);
+       << stat.num_kb << "/" << info.stats.num_kb << " kb.\n";
     errors++;
 
     if (repair) {

@@ -83,7 +83,7 @@ void LogMonitor::create_initial(bufferlist& bl)
   LogEntry e;
   memset(&e.who, 0, sizeof(e.who));
   e.stamp = g_clock.now();
-  e.type = LOG_ERROR;
+  e.type = CLOG_ERROR;
   e.msg = "mkfs";
   e.seq = 0;
   pending_log.insert(pair<utime_t,LogEntry>(e.stamp, e));
@@ -134,15 +134,15 @@ bool LogMonitor::update_from_paxos()
       s += "\n";
 
       blog.append(s);
-      if (le.type >= LOG_DEBUG)
+      if (le.type >= CLOG_DEBUG)
 	blogdebug.append(s);
-      if (le.type >= LOG_INFO)
+      if (le.type >= CLOG_INFO)
 	bloginfo.append(s);
-      if (le.type == LOG_SEC)
+      if (le.type == CLOG_SEC)
         blogsec.append(s);
-      if (le.type >= LOG_WARN)
+      if (le.type >= CLOG_WARN)
 	blogwarn.append(s);
-      if (le.type >= LOG_ERROR)
+      if (le.type >= CLOG_ERROR)
 	blogerr.append(s);
 
       summary.add(le);
