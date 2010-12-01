@@ -68,7 +68,8 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
       Transaction *t = new Transaction(p);
       tls.push_back(t);
     }
-    int r = apply_transactions(tls);
+    int r = do_transactions(tls, op_seq);
+    op_seq++;
     while (!tls.empty()) {
       delete tls.front(); 
       tls.pop_front();

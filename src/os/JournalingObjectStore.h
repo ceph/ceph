@@ -53,6 +53,8 @@ protected:
   void op_journal_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op, Context *onjournal);
   void _op_journal_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op, Context *onjournal);
 
+  virtual int do_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op_seq) = 0;
+
   bool commit_start();
   void commit_started();  // allow new ops (underlying fs should now be committing all prior ops)
   void commit_finish();
