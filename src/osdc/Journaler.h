@@ -149,6 +149,7 @@ private:
   void probe(Context *finish, uint64_t *end);
   void _finish_probe_end(int r, uint64_t end);
   void _finish_reprobe(int r, uint64_t end, Context *onfinish);
+  void _finish_reread_head_and_probe(int r, Context *onfinish);
   class C_ReadHead;
   friend class C_ReadHead;
   class C_ProbeEnd;
@@ -157,6 +158,8 @@ private:
   friend class C_RereadHead;
   class C_ReProbe;
   friend class C_ReProbe;
+  class C_RereadHeadProbe;
+  friend class C_RereadHeadProbe;
 
 
 
@@ -269,6 +272,7 @@ public:
   void recover(Context *onfinish);
   void reread_head(Context *onfinish);
   void reprobe(Context *onfinish);
+  void reread_head_and_probe(Context *onfinish);
   void write_head(Context *onsave=0);
 
   void set_layout(ceph_file_layout *l);

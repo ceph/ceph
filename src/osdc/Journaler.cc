@@ -267,6 +267,30 @@ void Journaler::_finish_probe_end(int r, uint64_t end)
   finish_contexts(ls, 0);
 }
 
+class Journaler::C_RereadHeadProbe : public Context
+{
+  Journaler *ls;
+  Context *final_finish;
+public:
+  C_RereadHeadProbe(Journaler *l, Context *finish) :
+    ls(l), final_finish(finish) {}
+  void finish(int r) {
+    ls->_finish_reread_head_and_probe(r, final_finish);
+  }
+};
+
+void Journaler::reread_head_and_probe(Context *onfinish)
+{
+  assert(state == STATE_ACTIVE);
+  reread_head(new C_RereadHeadProbe(this, onfinish));
+}
+
+void Journaler::_finish_reread_head_and_probe(int r, Context *onfinish)
+{
+  assert(!r); //if we get an error, we're boned
+  reprobe(onfinish);
+}
+
 
 // WRITING
 
