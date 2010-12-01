@@ -1430,7 +1430,7 @@ int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
   int r = do_transactions(tls, op);
     
   if (r >= 0) {
-    op_journal_transactions(tls, op, ondisk);
+    _op_journal_transactions(tls, op, ondisk);
   } else {
     delete ondisk;
   }
