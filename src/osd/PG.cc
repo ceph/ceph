@@ -3074,16 +3074,8 @@ void PG::scrub()
  
   epoch_t epoch = info.history.same_acting_since;
 
-  if (!is_primary()) {
-    dout(10) << "scrub -- not primary" << dendl;
-    clear_scrub_reserved();
-    unlock();
-    osd->map_lock.put_read();
-    return;
-  }
-
-  if (!is_active() || !is_clean()) {
-    dout(10) << "scrub -- not active or not clean" << dendl;
+  if (!is_primary() || !is_active() || !is_clean()) {
+    dout(10) << "scrub -- not primary or active or not clean" << dendl;
     clear_scrub_reserved();
     unlock();
     osd->map_lock.put_read();
