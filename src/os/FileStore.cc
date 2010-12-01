@@ -860,6 +860,10 @@ int FileStore::_detect_fs()
 	  dout(0) << "mount  failed to remove old async_snap_test: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
       }
 
+      /*
+	
+	do not autodetect this yet until the btrfs ioctl interface is finalized!
+
       r = ::ioctl(fd, BTRFS_IOC_SNAP_CREATE_ASYNC, &async_args);
       dout(0) << "mount btrfs SNAP_CREATE_ASYNC got " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
       if (r == 0 || errno == EEXIST) {
@@ -875,6 +879,7 @@ int FileStore::_detect_fs()
 	dout(0) << "mount btrfs SNAP_CREATE_ASYNC is NOT supported: "
 		<< strerror_r(-r, buf, sizeof(buf)) << dendl;
       }
+      */
     }
 
     if (g_conf.filestore_btrfs_snap && !btrfs_snap_create_async) {
