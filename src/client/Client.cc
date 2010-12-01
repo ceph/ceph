@@ -918,20 +918,18 @@ out:
 void Client::connect_mds_targets(int mds)
 {
   //this function shouldn't be called unless we lost a connection
-  assert (mds_sessions.count(mds));
-  MDSSession *s = mds_sessions[mds];
-  if (!s->requests.empty()) {
-    const MDSMap::mds_info_t& info = mdsmap->get_mds_info(mds);
-    for (set<int>::const_iterator q = info.export_targets.begin();
-	 q != info.export_targets.end();
-	 q++) {
-      if (mds_sessions.count(*q) == 0 && waiting_for_session.count(mds) == 0) {
-	dout(10) << "check_mds_sessions opening mds" << mds
-		 << " export target mds" << *q << dendl;
-	messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN),
-				mdsmap->get_inst(*q));
-	waiting_for_session[*q].size();
-      }
+  dout(10) << "connect_mds_targets for mds" << mds << dendl;
+  assert(mds_sessions.count(mds));
+  const MDSMap::mds_info_t& info = mdsmap->get_mds_info(mds);
+  for (set<int>::const_iterator q = info.export_targets.begin();
+       q != info.export_targets.end();
+       q++) {
+    if (mds_sessions.count(*q) == 0 && waiting_for_session.count(mds) == 0) {
+      dout(10) << "check_mds_sessions opening mds" << mds
+	       << " export target mds" << *q << dendl;
+      messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN),
+			      mdsmap->get_inst(*q));
+      waiting_for_session[*q].size();
     }
   }
 }
@@ -2715,8 +2713,7 @@ void Client::handle_cap_import(Inode *in, MClientCaps *m)
   m->put();
 }
 
-void Client::handle_cap_export(Inode *in, MClientCaps *m,
-			       bool& open_target_sessions)
+void Client::handle_cap_export(Inode *in, MClientCaps *m)
 {
   int mds = m->get_source().num();
   InodeCap *cap = NULL;
@@ -2744,6 +2741,9 @@ void Client::handle_cap_export(Inode *in, MClientCaps *m,
       in->exporting_issued = cap->issued;
       in->exporting_mseq = m->get_mseq();
       in->exporting_mds = mds;
+
+      // open export targets, so we'll get the matching IMPORT
+      connect_mds_targets(mds);
     } else 
       dout(5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq() 
 	      << " EXPORT from mds" << mds
