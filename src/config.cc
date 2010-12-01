@@ -471,7 +471,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_bal_sample_interval, 0, OPT_FLOAT, 3.0),  // every 5 seconds
 	OPTION(mds_bal_replicate_threshold, 0, OPT_FLOAT, 8000),
 	OPTION(mds_bal_unreplicate_threshold, 0, OPT_FLOAT, 0),
-	OPTION(mds_bal_frag, 0, OPT_BOOL, true),
+	OPTION(mds_bal_frag, 0, OPT_BOOL, false),
 	OPTION(mds_bal_split_size, 0, OPT_INT, 10000),
 	OPTION(mds_bal_split_rd, 0, OPT_FLOAT, 25000),
 	OPTION(mds_bal_split_wr, 0, OPT_FLOAT, 10000),
