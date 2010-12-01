@@ -23,6 +23,7 @@
 #include "osd/OSDMap.h"
 #include "osdc/Objecter.h"
 #include "osdc/Filer.h"
+#include "osdc/Journaler.h"
 
 #include "MDSMap.h"
 
@@ -897,7 +898,8 @@ void MDS::handle_mds_map(MMDSMap *m)
 
     if (is_active()) {
       active_start();
-    } else if (is_replay() || is_oneshot_replay()) {
+    } else if (is_replay() || is_oneshot_replay() ||
+        is_standby_replay()) {
       replay_start();
     } else if (is_resolve()) {
       resolve_start();
@@ -1130,7 +1132,7 @@ void MDS::boot_start(int step, int r)
     }
 
   case 3:
-    if (is_replay() || is_oneshot_replay()) {
+    if (is_replay() || is_oneshot_replay() || is_standby_replay()) {
       dout(2) << "boot_start " << step << ": replaying mds log" << dendl;
       mdlog->replay(new C_MDS_BootStart(this, 4));
       break;
@@ -1141,7 +1143,7 @@ void MDS::boot_start(int step, int r)
     }
 
   case 4:
-    if (is_replay() || is_oneshot_replay()) {
+    if (is_replay() || is_oneshot_replay() || is_standby_replay()) {
       replay_done();
       break;
     }
@@ -1196,6 +1198,22 @@ void MDS::replay_start()
   }
 }
 
+
+inline void MDS::standby_replay_restart()
+{
+  mdlog->get_journaler()->reread_head_and_probe(new C_MDS_BootStart(this, 3));
+}
+
+class MDS::C_Standby_replay_start : public Context {
+  MDS *mds;
+public:
+  C_Standby_replay_start(MDS *m) : mds(m) {}
+  void finish(int r) {
+    assert(!r);
+    mds->standby_replay_restart();
+  }
+};
+
 void MDS::replay_done()
 {
   dout(1) << "replay_done in=" << mdsmap->get_num_mds()
@@ -1205,6 +1223,13 @@ void MDS::replay_done()
   if (is_oneshot_replay()) {
     dout(2) << "hack.  journal looks ok.  shutting down." << dendl;
     suicide();
+    return;
+  }
+
+  if (is_standby_replay()) {
+    standby_trim_segments();
+    timer.add_event_after(g_conf.mds_replay_interval,
+                          new C_Standby_replay_start(this));
     return;
   }
 
@@ -1233,6 +1258,11 @@ void MDS::replay_done()
     dout(2) << "i am not alone, moving to state resolve" << dendl;
     request_state(MDSMap::STATE_RESOLVE);
   }
+}
+
+void MDS::standby_trim_segments()
+{
+  return;
 }
 
 

@@ -178,6 +178,7 @@ public:
   uint64_t get_read_pos();
   uint64_t get_write_pos();
   uint64_t get_safe_pos();
+  Journaler *get_journaler() { return journaler; }
   bool empty() { return segments.empty(); }
 
   bool is_capped() { return capped; }

@@ -300,6 +300,8 @@ struct md_config_t {
   int mds_bal_target_removal_min;
   int mds_bal_target_removal_max;
 
+  float mds_replay_interval;
+
   bool  mds_trim_on_rejoin;
   int   mds_shutdown_check;
 
