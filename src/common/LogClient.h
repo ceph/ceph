@@ -110,7 +110,7 @@ private:
   bool is_synchronous;
   Mutex log_lock;
   version_t last_log;
-  deque<LogEntry> log_queue;
+  std::deque<LogEntry> log_queue;
 
   friend class LogClientTemp;
 };

@@ -108,9 +108,14 @@ void LogClient::handle_log_ack(MLogAck *m)
   dout(10) << "handle_log_ack " << *m << dendl;
 
   version_t last = m->last;
-  while (log_queue.size() && log_queue.begin()->seq <= last) {
-    dout(10) << " logged " << log_queue.front() << dendl;
-    log_queue.pop_front();
+
+  deque<LogEntry>::iterator q = log_queue.begin();
+  while (q != log_queue.end()) {
+    const LogEntry &entry(*q);
+    if (entry.seq > last)
+      break;
+    dout(10) << " logged " << entry << dendl;
+    q = log_queue.erase(q);
   }
   m->put();
 }
