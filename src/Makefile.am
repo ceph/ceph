@@ -591,6 +591,7 @@ noinst_HEADERS = \
         common/Timer.h\
         common/tls.h\
 	common/WorkQueue.h\
+	common/LogEntry.h\
 	common/LogClient.h\
         config.h\
         crush/CrushWrapper.h\
@@ -608,7 +609,6 @@ noinst_HEADERS = \
         include/Context.h\
 	include/CompatSet.h\
         include/Distribution.h\
-	include/LogEntry.h\
 	include/Spinlock.h\
 	include/addr_parsing.h\
 	include/assert.h\

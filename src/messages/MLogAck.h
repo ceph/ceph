@@ -15,8 +15,6 @@
 #ifndef CEPH_MLOGACK_H
 #define CEPH_MLOGACK_H
 
-#include "include/LogEntry.h"
-
 class MLogAck : public Message {
 public:
   ceph_fsid_t fsid;

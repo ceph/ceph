@@ -30,7 +30,6 @@
 #include "common/DecayCounter.h"
 #include "common/ClassHandler.h"
 
-#include "include/LogEntry.h"
 #include "include/CompatSet.h"
 
 #include "auth/KeyRing.h"

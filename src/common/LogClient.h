@@ -15,10 +15,9 @@
 #ifndef CEPH_LOGCLIENT_H
 #define CEPH_LOGCLIENT_H
 
-#include "msg/Dispatcher.h"
-
+#include "common/LogEntry.h"
 #include "common/Mutex.h"
-#include "include/LogEntry.h"
+#include "msg/Dispatcher.h"
 
 #include <iosfwd>
 #include <sstream>
