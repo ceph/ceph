@@ -1875,7 +1875,7 @@ int SimpleMessenger::Pipe::read_message(Message **pm)
 	
     while (left > 0) {
       // wait for data
-      if (tcp_wait(sd, messenger->timeout) < 0)
+      if (tcp_read_wait(sd, messenger->timeout) < 0)
 	goto out_dethrottle;
 
       // get a buffer
