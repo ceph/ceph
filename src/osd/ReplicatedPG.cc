@@ -1415,10 +1415,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	    session->get();
 	    session->watches[obc] = osd->osdmap->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
 	    obc->ref++;
-#if 0
-	    assert(obc->unconnected_watchers.count(entity));
-	    obc->unconnected_watchers.erase(entity);
-#endif
 	  } else if (iter->second == session) {
 	    // already there
 	    dout(10) << " already connected to watch " << w << " by " << entity
@@ -1433,6 +1429,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	    session->get();
 	    session->watches[obc] = osd->osdmap->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
 	  }
+          map<entity_name_t, utime_t>::iterator un_iter = obc->unconnected_watchers.find(entity);
+          if (un_iter != obc->unconnected_watchers.end())
+            obc->unconnected_watchers.erase(un_iter);
 	  register_object_context(obc);
         } else {
 	  map<entity_name_t, watch_info_t>::iterator oi_iter = oi.watchers.find(entity);

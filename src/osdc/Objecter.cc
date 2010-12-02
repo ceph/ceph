@@ -35,6 +35,7 @@
 #include "messages/MStatfsReply.h"
 
 #include "messages/MOSDFailure.h"
+#include "common/BackTrace.h"
 
 #include <errno.h>
 
@@ -157,16 +158,23 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	       p != op_osd.end();
 	       p++) {
 	    if (p->second->paused) {
+          dout(0) << "handle_osd_map: op_submit(1)" << dendl;
 	      p->second->paused = false;
 	      op_submit(p->second);
 	    }
 	  }
-	  for (hash_map<tid_t,Op*>::iterator p = op_osd_linger.begin();
-               p != op_osd_linger.end(); p++) {
-            op_submit(p->second);
-          }
 	}
-        
+        dout(0) << "handle_osd_map" << dendl;
+        dump_active();
+#if 0
+        hash_map<tid_t, Op*> old_map;
+        old_map.swap(op_osd_linger);
+	for (hash_map<tid_t,Op*>::iterator p = old_map.begin();
+             p != op_osd_linger.end(); p++) {
+          dout(0) << "handle_osd_map: op_submit" << dendl;
+          op_submit(p->second);
+        }
+#endif   
 	assert(e == osdmap->get_epoch());
       }
       
@@ -304,6 +312,7 @@ void Objecter::scan_pgs(set<pg_t>& changed_pgs)
 void Objecter::kick_requests(set<pg_t>& changed_pgs) 
 {
   dout(10) << "kick_requests in pgs " << changed_pgs << dendl;
+  dout(0) << "kick_requests in pgs " << changed_pgs << dendl;
 
   for (set<pg_t>::iterator i = changed_pgs.begin();
        i != changed_pgs.end();
@@ -314,7 +323,14 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
     // resubmit ops!
     set<tid_t> tids;
     tids.swap( pg.active_tids );
-    close_pg( pgid );  // will pbly reopen, unless it's just commits we're missing
+    set<tid_t>::iterator liter;
+    for (liter = pg.linger_tids.begin(); liter != pg.linger_tids.end(); ++liter) {
+      tids.insert(*liter);
+      dout(0) << "adding lingering tid=" << *liter << " to set" << dendl;
+    }
+    dout(0) << "pg.linger_tids.empty()=" << pg.linger_tids.empty() << " pg=" << &pg << dendl;
+    if (pg.linger_tids.empty())
+      close_pg( pgid );  // will pbly reopen, unless it's just commits we're missing
     
     dout(10) << "kick_requests pg " << pgid << " tids " << tids << dendl;
     for (set<tid_t>::iterator p = tids.begin();
@@ -333,22 +349,29 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
 	if (op->oncommit)
 	  num_uncommitted--;
 	
+        dout(0) << "kick_requests tid=" << tid << " linger=" << op->linger << dendl;
         // WRITE
 	if (op->onack) {
           dout(3) << "kick_requests missing ack, resub " << tid << dendl;
-          op_submit(op);
-        } else if (!op->linger) {
-	  assert(op->oncommit);
-	  dout(3) << "kick_requests missing commit, resub " << tid << dendl;
-	  op_submit(op);
+          op_submit(op, false);
         } else {
-	  dout(3) << "kick_requests on lingering op " << tid << dendl;
-	  op_submit(op);
+          if (!op->linger)
+	    assert(op->oncommit);
+	  dout(3) << "kick_requests missing commit, resub " << tid << dendl;
+	  dout(0) << "kick_requests missing commit, resub " << tid << dendl;
+	  op_submit(op, false);
         }
+      } else {
+        hash_map<tid_t, Op*>::iterator p = op_osd_linger.find(tid);
+        if (p != op_osd_linger.end()) {
+	  dout(0) << "kick_requests lingering " << tid << dendl;
+	  op_submit(p->second, true);
+        } else      
+          assert(0);
       }
-      else 
-        assert(0);
-    }         
+    }
+#if 0
+#endif
   }
 }
 
@@ -412,8 +435,12 @@ void Objecter::resend_mon_ops()
 
 // read | write ---------------------------
 
-tid_t Objecter::op_submit(Op *op)
+tid_t Objecter::op_submit(Op *op, bool register_linger)
 {
+  bool handle_linger = (op->linger && register_linger);
+  bool new_linger = (op->linger && !op->tid);
+
+dout(0) << "Objecter::op_submit register_linger=" << register_linger << " new_linger=" << new_linger << dendl;
 
   // throttle.  before we look at any state, because
   // take_op_budget() may drop our lock while it blocks.
@@ -426,8 +453,13 @@ tid_t Objecter::op_submit(Op *op)
   PG &pg = get_pg(op->pgid);
     
   // pick tid
-  if (!op->tid)
+  if (!op->tid) {
     op->tid = ++last_tid;
+    if (new_linger)
+      op_osd_linger[op->tid] = op;
+  } else  if (handle_linger) {
+    op->tid = ++last_tid;
+  }
   assert(client_inc >= 0);
 
   // add to gather set(s)
@@ -446,14 +478,25 @@ tid_t Objecter::op_submit(Op *op)
   }
   op_osd[op->tid] = op;
 
-  if (op->linger) {
-    op_osd_linger[op->tid] = op;
+  if (handle_linger) {
+    dout(0) << "reset lingering request" << dendl;
+    op->attempts = 0;
   }
-
+  BackTrace bt(0);
+  bt.print(*_dout);
   pg.active_tids.insert(op->tid);
+  if (new_linger) {
+    pg.linger_tids.insert(op->tid);
+    dout(0) << "inserting tid=" << op->tid << " to linger_tids pg=" << (void *)&pg << dendl;
+  }
   pg.last = g_clock.now();
 
   // send?
+  dout(0) << "op_submit oid " << op->oid
+           << " " << op->oloc 
+	   << " " << op->ops << " tid " << op->tid
+           << " osd" << pg.primary()
+           << dendl;
   dout(10) << "op_submit oid " << op->oid
            << " " << op->oloc 
 	   << " " << op->ops << " tid " << op->tid
@@ -513,7 +556,7 @@ tid_t Objecter::op_submit(Op *op)
     m->ops = op->ops;
     m->set_mtime(op->mtime);
     m->set_retry_attempt(op->attempts++);
-    
+
     if (op->version != eversion_t())
       m->set_version(op->version);  // we're replaying this op!
 
@@ -599,7 +642,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       num_unacked--;
     if (op->oncommit)
       num_uncommitted--;
-    op_submit(op);
+    op_submit(op, false);
     m->put();
     return;
   }
@@ -637,14 +680,15 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     pg.active_tids.erase(tid);
     dout(15) << "handle_osd_op_reply completed tid " << tid << ", pg " << m->get_pg()
 	     << " still has " << pg.active_tids << dendl;
-    if (pg.active_tids.empty()) 
+    if (pg.active_tids.empty() && pg.linger_tids.empty()) 
       close_pg( m->get_pg() );
     put_op_budget(op);
     op_osd.erase( tid );
-    if (op->con)
-      op->con->put();
-    if (!op->linger)
+    if (!op->linger) {
+      if (op->con)
+        op->con->put();
       delete op;
+    }
   }
   
   dout(5) << num_unacked << " unacked, " << num_uncommitted << " uncommitted" << dendl;
@@ -712,7 +756,7 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
   object_locator_t oloc(list_context->pool_id);
 
   // 
-  Op *o = new Op(oid, oloc, op.ops, CEPH_OSD_FLAG_READ, onack, NULL, NULL);
+  Op *o = new Op(oid, oloc, op.ops, CEPH_OSD_FLAG_READ, onack, NULL, NULL, false);
   o->priority = op.priority;
   o->snapid = list_context->pool_snap_seq;
   o->outbl = bl;
@@ -1201,11 +1245,11 @@ void Objecter::ms_handle_remote_reset(Connection *con)
 
 void Objecter::dump_active()
 {
-  dout(10) << "dump_active" << dendl;
+  dout(0) << "dump_active" << dendl;
   for (hash_map<tid_t,Op*>::iterator p = op_osd.begin(); p != op_osd.end(); p++)
-    dout(10) << " " << p->first << "\t" << p->second->oid << "\t" << p->second->ops << dendl;
-  dout(10) << "lingering" << dendl;
+    dout(0) << " " << p->first << "\t" << p->second->oid << "\t" << p->second->ops << dendl;
+  dout(0) << "lingering" << dendl;
   for (hash_map<tid_t,Op*>::iterator p = op_osd_linger.begin(); p != op_osd_linger.end(); p++)
-    dout(10) << " " << p->first << "\t" << p->second->oid << "\t" << p->second->ops << dendl;
+    dout(0) << " " << p->first << "\t" << p->second->oid << "\t" << p->second->ops << dendl;
 }
 

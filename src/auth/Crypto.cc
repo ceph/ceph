@@ -12,7 +12,6 @@
  */
 
 #include "Crypto.h"
-
 #include "openssl/evp.h"
 #include "openssl/aes.h"
 
