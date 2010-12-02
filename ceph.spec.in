@@ -143,6 +143,7 @@ fi
 %{_mandir}/man8/monmaptool.8*
 %{_mandir}/man8/cconf.8*
 %{_mandir}/man8/ceph.8*
+%{_mandir}/man8/cephfs.8*
 %{_mandir}/man8/mount.ceph.8*
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw_admin.8*

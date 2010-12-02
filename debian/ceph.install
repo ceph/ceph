@@ -27,6 +27,7 @@ usr/share/man/man8/osdmaptool.8
 usr/share/man/man8/monmaptool.8
 usr/share/man/man8/cconf.8
 usr/share/man/man8/ceph.8
+usr/share/man/man8/cephfs.8
 usr/share/man/man8/cauthtool.8
 usr/share/man/man8/cclass.8
 usr/share/man/man8/cclsinfo.8

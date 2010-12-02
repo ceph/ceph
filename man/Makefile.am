@@ -21,4 +21,5 @@ dist_man_MANS = \
 	rbd.8 \
 	cclass.8 \
 	cclsinfo.8 \
-	cdebugpack.8
+	cdebugpack.8 \
+	cephfs.8
