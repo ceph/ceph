@@ -147,6 +147,7 @@ class MDS : public Dispatcher {
   int incarnation;
 
   int standby_for_rank;
+  int standby_type;
   string standby_for_name;
 
   Messenger    *messenger;

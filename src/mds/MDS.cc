@@ -82,6 +82,7 @@ MDS::MDS(const char *n, Messenger *m, MonClient *mc) :
   name(n),
   whoami(-1), incarnation(0),
   standby_for_rank(-1),
+  standby_type(0),
   messenger(m),
   monc(mc),
   logclient(messenger, &mc->monmap, mc),
@@ -457,8 +458,12 @@ int MDS::init(int wanted_state)
 
   // starting beacon.  this will induce an MDSMap from the monitor
   want_state = wanted_state;
-  if (wanted_state == MDSMap::STATE_STANDBY && g_conf.id)
+  if (g_conf.id && (wanted_state==MDSMap::STATE_STANDBY_REPLAY ||
+                    wanted_state==MDSMap::STATE_ONESHOT_REPLAY)) {
     standby_for_rank = strtol(g_conf.id, NULL, 0);
+    want_state = MDSMap::STATE_STANDBY;
+    standby_type = wanted_state;
+  }
   beacon_start();
   whoami = -1;
   messenger->set_myname(entity_name_t::MDS(whoami));
@@ -842,7 +847,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     dout(1) << "handle_mds_map standby" << dendl;
 
     if (standby_for_rank >= 0)
-      request_state(MDSMap::STATE_ONESHOT_REPLAY);
+      request_state(standby_type);
 
     goto out;
   }
