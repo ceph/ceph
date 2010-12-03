@@ -13,7 +13,7 @@ build-stamp: configure-stamp
 	dh_testdir
 
 	./autogen.sh
-	./configure --prefix=/usr --sbindir=/sbin
+	./configure --prefix=/usr --sbindir=/sbin --localstatedir=/var --sysconfdir=/etc
 	$(MAKE)
 	cp src/init-ceph debian/ceph.init
 	cp src/logrotate.conf debian/ceph.logrotate

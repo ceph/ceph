@@ -861,3 +861,9 @@ all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(cauthtool_SOUR
 	$(libcrush_so_a_SOURCES) $(libcommon_files) $(libcrush_a_SOURCES)  \
 	$(libmon_a_SOURCES) $(libmds_a_SOURCES) $(libos_a_SOURCES) $(libosd_a_SOURCES) \
 	$(libosdc_a_SOURCES) $(libclient_a_SOURCES) $(ceph_tool_gui_DATA)
+
+install-data-local:
+	mkdir -p $(DESTDIR)$(sysconfdir)/ceph
+
+uninstall-local:
+	rmdir --ignore-fail-on-non-empty -p $(DESTDIR)$(sysconfdir)/ceph/
