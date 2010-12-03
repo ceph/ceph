@@ -1347,6 +1347,8 @@ struct object_info_t {
     ::decode(truncate_size, bl);
     if (v >= 3)
       ::decode(lost, bl);
+    else
+      lost = false;
   }
   void decode(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
