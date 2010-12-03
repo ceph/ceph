@@ -430,7 +430,6 @@ libcommon_files = \
 	common/ConfUtils.cc \
 	common/MemoryModel.cc \
 	common/armor.c \
-	common/base64.c \
 	common/str_list.cc \
 	common/errno.cc \
 	mon/MonMap.cc \
@@ -560,7 +559,6 @@ noinst_HEADERS = \
 	cm.txt\
         common/arch.h\
         common/armor.h\
-	common/base64.h\
 	common/debug.h\
 	common/errno.h\
 	common/lockdep.h\

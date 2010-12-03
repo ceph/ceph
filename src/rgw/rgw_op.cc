@@ -4,7 +4,7 @@
 
 #include <sstream>
 
-#include "common/base64.h"
+#include "common/armor.h"
 
 #include "rgw_access.h"
 #include "rgw_op.h"
@@ -333,9 +333,9 @@ void RGWPutObj::execute()
 
     if (supplied_md5_b64) {
       RGW_LOG(15) << "supplied_md5_b64=" << supplied_md5_b64 << endl;
-      int ret = decode_base64(supplied_md5_b64, strlen(supplied_md5_b64),
-                                 supplied_md5_bin, sizeof(supplied_md5_bin));
-      RGW_LOG(15) << "decode_base64 ret=" << ret << endl;
+      int ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[MD5_DIGEST_LENGTH + 1], 
+			     supplied_md5_b64, supplied_md5_b64 + strlen(supplied_md5_b64));
+      RGW_LOG(15) << "ceph_armor ret=" << ret << endl;
       if (ret != MD5_DIGEST_LENGTH) {
         err.code = "InvalidDigest";
         ret = -EINVAL;

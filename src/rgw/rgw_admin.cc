@@ -10,7 +10,7 @@ using namespace std;
 #include <openssl/rand.h>
 #include "common/common_init.h"
 
-#include "common/base64.h"
+#include "common/armor.h"
 #include "rgw_user.h"
 #include "rgw_access.h"
 #include "rgw_acl.h"
@@ -45,9 +45,10 @@ int gen_rand_base64(char *dest, int size) /* size should be the required string 
     return -1;
   }
 
-  ret = encode_base64((const char *)buf, ((size - 1) * 3 + 4 - 1) / 4, tmp_dest, sizeof(tmp_dest));
+  ret = ceph_armor(tmp_dest, &tmp_dest[sizeof(tmp_dest)],
+		   (const char *)buf, ((const char *)buf) + ((size - 1) * 3 + 4 - 1) / 4);
   if (ret < 0) {
-    cerr << "encode_base64 failed" << std::endl;
+    cerr << "ceph_armor failed" << std::endl;
     return -1;
   }
   memcpy(dest, tmp_dest, size);

@@ -31,7 +31,7 @@ atomic_t buffer_total_alloc;
 void buffer::list::encode_base64(buffer::list& o)
 {
   bufferptr bp(length() * 4 / 3 + 3);
-  int l = ceph_armor(bp.c_str(), c_str(), c_str() + length());
+  int l = ceph_armor(bp.c_str(), bp.c_str() + bp.length(), c_str(), c_str() + length());
   bp.set_length(l);
   o.push_back(bp);
 }
@@ -39,7 +39,7 @@ void buffer::list::encode_base64(buffer::list& o)
 void buffer::list::decode_base64(buffer::list& e)
 {
   bufferptr bp(e.length() * 3 / 4 + 4);
-  int l = ceph_unarmor(bp.c_str(), e.c_str(), e.c_str() + e.length());
+  int l = ceph_unarmor(bp.c_str(), bp.c_str() + bp.length(), e.c_str(), e.c_str() + e.length());
   assert(l <= (int)bp.length());
   bp.set_length(l);
   push_back(bp);

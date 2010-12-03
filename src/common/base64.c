@@ -1,11 +1,21 @@
+#define CRYPTOPP
+#ifdef CRYPTOPP
+#include <string.h>
+#include <cryptopp/base64.h>
+#else
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 #include <openssl/buffer.h>
+#endif
 
-#include <string.h>
+#include <string>
+
+using namespace std;
 
 int encode_base64(const char *in, int in_len, char *out, int out_len)
 {
+#ifdef CRYPTOPP
+#else
   BIO *bmem, *b64;
   BUF_MEM *bptr; 
 
@@ -26,12 +36,21 @@ int encode_base64(const char *in, int in_len, char *out, int out_len)
   out[len - 1] = '\0';
 
   BIO_free_all(b64); 
+#endif
 
   return 0;
 }
 
 int decode_base64(const char *in, int in_len, char *out, int out_len)
 {
+#ifdef CRYPTOPP
+  string digest;
+
+  CryptoPP::StringSource foo("CryptoPP is cool", true,
+/*     new CryptoPP::HashFilter(hash, */
+       new CryptoPP::Base64Encoder (
+         new CryptoPP::StringSink(digest)));
+#else
   BIO *b64, *bmem;
   int ret;
   char in_eol[in_len + 2];
@@ -48,4 +67,5 @@ int decode_base64(const char *in, int in_len, char *out, int out_len)
   BIO_free_all(bmem);
 
   return ret;
+#endif
 }

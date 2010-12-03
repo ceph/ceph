@@ -28,7 +28,7 @@
 #include <sstream>
 
 #include "include/types.h"
-#include "common/base64.h"
+#include "common/armor.h"
 #include "common/BackTrace.h"
 
 using namespace std;
@@ -191,9 +191,9 @@ static bool verify_signature(struct req_state *s)
   calc_hmac_sha1(key, key_len, auth_hdr.c_str(), auth_hdr.size(), hmac_sha1, &len);
 
   char b64[64]; /* 64 is really enough */
-  int ret = encode_base64(hmac_sha1, len, b64, sizeof(b64));
+  int ret = ceph_armor(b64, &b64[sizeof(b64)], hmac_sha1, &hmac_sha1[len]);
   if (ret < 0) {
-    RGW_LOG(10) << "encode_base64 failed" << endl;
+    RGW_LOG(10) << "ceph_armor failed" << endl;
     return false;
   }
 
