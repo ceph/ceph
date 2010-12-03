@@ -148,13 +148,7 @@ int CryptoAES::validate_secret(bufferptr& secret)
 int CryptoAES::encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
 {
   const unsigned char *key = (const unsigned char *)secret.c_str();
-  int in_len = in.length();
   const unsigned char *in_buf;
-  int max_out = (in_len + AES_BLOCK_LEN) & ~(AES_BLOCK_LEN - 1);
-  int total_out = 0;
-  int outlen;
-#define OUT_BUF_EXTRA 128
-  unsigned char outbuf[max_out + OUT_BUF_EXTRA];
 
   if (secret.length() < AES_KEY_LEN) {
     derr(0) << "key is too short" << dendl;
@@ -164,7 +158,10 @@ int CryptoAES::encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
   string ciphertext;
   CryptoPP::AES::Encryption aesEncryption(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
   CryptoPP::CBC_Mode_ExternalCipher::Encryption cbcEncryption( aesEncryption, aes_iv );
-  CryptoPP::StreamTransformationFilter stfEncryptor(cbcEncryption, new CryptoPP::StringSink( ciphertext ) );
+  CryptoPP::StringSink *sink = new CryptoPP::StringSink(ciphertext);
+  if (!sink)
+    return false;
+  CryptoPP::StreamTransformationFilter stfEncryptor(cbcEncryption, sink);
 
   for (std::list<bufferptr>::const_iterator it = in.buffers().begin(); 
        it != in.buffers().end(); it++) {
@@ -173,11 +170,17 @@ int CryptoAES::encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
     stfEncryptor.Put(in_buf, it->length());
   }
   stfEncryptor.MessageEnd();
-
   out.append((const char *)ciphertext.c_str(), ciphertext.length());
 
   return true;
 #else
+  int in_len = in.length();
+  int max_out = (in_len + AES_BLOCK_LEN) & ~(AES_BLOCK_LEN - 1);
+  int total_out = 0;
+  int outlen;
+#define OUT_BUF_EXTRA 128
+  unsigned char outbuf[max_out + OUT_BUF_EXTRA];
+
   EVP_CIPHER_CTX ctx;
   EVP_CIPHER_CTX_init(&ctx);
   EVP_EncryptInit_ex(&ctx, EVP_aes_128_cbc(), NULL, key, aes_iv);
@@ -206,13 +209,6 @@ int CryptoAES::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
 {
   const unsigned char *key = (const unsigned char *)secret.c_str();
 
-  int in_len = in.length();
-  int dec_len = 0;
-  int total_dec_len = 0;
-
-  unsigned char dec_data[in_len];
-  int result = 0;
-
 #ifdef CRYPTOPP
   dout(0) << "CryptoPP!" << dendl;
 
@@ -220,8 +216,10 @@ int CryptoAES::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
   CryptoPP::CBC_Mode_ExternalCipher::Decryption cbcDecryption( aesDecryption, aes_iv );
 
   string decryptedtext;
-
-  CryptoPP::StreamTransformationFilter stfDecryptor(cbcDecryption, new CryptoPP::StringSink( decryptedtext ) );
+  CryptoPP::StringSink *sink = new CryptoPP::StringSink(decryptedtext);
+  if (!sink)
+    return -ENOMEM;
+  CryptoPP::StreamTransformationFilter stfDecryptor(cbcDecryption, sink);
   for (std::list<bufferptr>::const_iterator it = in.buffers().begin(); 
        it != in.buffers().end(); it++) {
       const unsigned char *in_buf = (const unsigned char *)it->c_str();
@@ -233,6 +231,13 @@ int CryptoAES::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
   out.append((const char *)decryptedtext.c_str(), decryptedtext.length());
   return decryptedtext.length();
 #else
+  int in_len = in.length();
+  int result = 0;
+
+  int dec_len = 0;
+  int total_dec_len = 0;
+  unsigned char dec_data[in_len];
+
   EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
   EVP_CIPHER_CTX_init(ctx);
 
