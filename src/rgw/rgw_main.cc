@@ -205,6 +205,7 @@ static bool verify_signature(struct req_state *s)
     RGW_LOG(10) << "ceph_armor failed" << endl;
     return false;
   }
+  b64[ret] = '\0';
 
   RGW_LOG(15) << "b64=" << b64 << endl;
   RGW_LOG(15) << "auth_sign=" << auth_sign << endl;
