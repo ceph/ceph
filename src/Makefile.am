@@ -11,25 +11,25 @@ bin_SCRIPTS = crun cclass $(srcdir)/cclsinfo cdebugpack
 
 # monitor
 cmon_SOURCES = cmon.cc msg/SimpleMessenger.cc
-cmon_LDADD = libmon.a libcrush.a libcommon.a -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+cmon_LDADD = libmon.a libcrush.a libcommon.a -lpthread -lm -lcrypto++
 bin_PROGRAMS += cmon
 
 # osd
 cosd_SOURCES = cosd.cc msg/SimpleMessenger.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
-cosd_LDADD = libosd.a libos.a libcrush.a libcommon.a -ldl -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+cosd_LDADD = libosd.a libos.a libcrush.a libcommon.a -ldl -lpthread -lm -lcrypto++
 bin_PROGRAMS += cosd
 cosd_CXXFLAGS = ${AM_CFLAGS}
 
 # mds
 cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
-cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a -lpthread -lm -lcrypto++
 bin_PROGRAMS += cmds
 cmds_CXXFLAGS = ${AM_CFLAGS}
 
 # admin tools
 ceph_SOURCES = tools/ceph.cc msg/SimpleMessenger.cc
-ceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+ceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm -lcrypto++
 ceph_CXXFLAGS = ${AM_CFLAGS}
 
 if WITH_GTK2
@@ -59,17 +59,17 @@ ceph_CXXFLAGS += -DCEPH_TOOL_GUIDIR="\"${ceph_tool_guidir}\""
 endif
 
 cconf_SOURCES = cconf.cc
-cconf_LDADD = libcommon.a -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+cconf_LDADD = libcommon.a -lpthread -lm -lcrypto++
 cauthtool_SOURCES = cauthtool.cc
-cauthtool_LDADD = libcommon.a -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+cauthtool_LDADD = libcommon.a -lpthread -lm -lcrypto++
 bin_PROGRAMS += ceph cconf cauthtool
 
 monmaptool_SOURCES = monmaptool.cc
-monmaptool_LDADD = libcommon.a -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+monmaptool_LDADD = libcommon.a -lpthread -lm -lcrypto++
 crushtool_SOURCES = crushtool.cc
-crushtool_LDADD = libcrush.a libcommon.a -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+crushtool_LDADD = libcrush.a libcommon.a -lpthread -lm -lcrypto++
 osdmaptool_SOURCES = osdmaptool.cc
-osdmaptool_LDADD = libcrush.a libcommon.a -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+osdmaptool_LDADD = libcrush.a libcommon.a -lpthread -lm -lcrypto++
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
 mount_ceph_SOURCES = mount/mount.ceph.c
@@ -81,7 +81,7 @@ bin_PROGRAMS += cephfs
 
 # synthetic client
 csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc
-csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm -lcrypto++
 bin_PROGRAMS += csyn
 
 core: cmon cosd cmds ceph cephfs cconf monmaptool osdmaptool crushtool csyn
@@ -90,7 +90,7 @@ core: cmon cosd cmds ceph cephfs cconf monmaptool osdmaptool crushtool csyn
 # fuse targets?
 if WITH_FUSE
 cfuse_SOURCES = cfuse.cc msg/SimpleMessenger.cc client/fuse.cc client/fuse_ll.cc
-cfuse_LDADD = -lfuse libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+cfuse_LDADD = -lfuse libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm -lcrypto++
 cfuse_CXXFLAGS = ${AM_CFLAGS}
 bin_PROGRAMS += cfuse
 
@@ -120,26 +120,26 @@ endif # WITH_TCMALLOC
 if WITH_DEBUG
 
 psim_SOURCES = psim.cc
-psim_LDADD = libcrush.a libcommon.a -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+psim_LDADD = libcrush.a libcommon.a -lpthread -lm -lcrypto++
 bin_PROGRAMS += psim
 
 testmsgr_SOURCES = testmsgr.cc msg/SimpleMessenger.cc
-testmsgr_LDADD = libcommon.a -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+testmsgr_LDADD = libcommon.a -lpthread -lm -lcrypto++
 bin_PROGRAMS += testmsgr
 
 test_ioctls_SOURCES = client/test_ioctls.c
 bin_PROGRAMS += test_ioctls
 
 dumpjournal_SOURCES = dumpjournal.cc msg/SimpleMessenger.cc
-dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a -lpthread -lm -lcrypto++
 dupstore_SOURCES = dupstore.cc
-dupstore_LDADD = libos.a libcommon.a -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+dupstore_LDADD = libos.a libcommon.a -lpthread -lm -lcrypto++
 streamtest_SOURCES = streamtest.cc
-streamtest_LDADD = libos.a libcommon.a -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+streamtest_LDADD = libos.a libcommon.a -lpthread -lm -lcrypto++
 bin_PROGRAMS += dumpjournal dupstore streamtest
 
 test_trans_SOURCES = test_trans.cc
-test_trans_LDADD = libos.a libcommon.a -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+test_trans_LDADD = libos.a libcommon.a -lpthread -lm -lcrypto++
 bin_PROGRAMS += test_trans
 
 
@@ -176,17 +176,17 @@ libceph_la_SOURCES = \
 	${libosdc_a_SOURCES}
 libceph_la_CFLAGS = ${AM_CFLAGS}
 libceph_la_CXXFLAGS= ${AM_CXXFLAGS}
-libceph_la_LIBADD = libcrush.la -lpthread $(OPENSSL_LIBS) -lcrypto++
+libceph_la_LIBADD = libcrush.la -lpthread -lcrypto++
 libceph_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
 lib_LTLIBRARIES += libceph.la
 
 if WITH_DEBUG
 testceph_SOURCES = client/testceph.cc
-testceph_LDADD = libceph.la libcrush.la -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+testceph_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto++
 bin_PROGRAMS += testceph
 
 testtimers_SOURCES = test/TestTimers.cc
-testtimers_LDADD = libceph.la libcrush.la -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+testtimers_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto++
 bin_PROGRAMS += testtimers
 
 testencoding_SOURCES = test/TestEncoding.cc
@@ -204,7 +204,7 @@ librados_SOURCES = \
 librados_la_SOURCES = ${librados_SOURCES}
 librados_la_CFLAGS = ${AM_CFLAGS}
 librados_la_CXXFLAGS = ${AM_CXXFLAGS}
-librados_la_LIBADD = libcrush.la -lpthread $(OPENSSL_LIBS) -lcrypto++
+librados_la_LIBADD = libcrush.la -lpthread -lcrypto++
 librados_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^rados_.*'
 lib_LTLIBRARIES += librados.la
 
@@ -213,21 +213,21 @@ librados_a_CFLAGS = ${AM_CFLAGS}
 librados_a_CXXFLAGS = ${AM_CXXFLAGS}
 
 rados_SOURCES = rados.cc
-rados_LDADD = librados.la -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+rados_LDADD = librados.la -lpthread -lm -lcrypto++
 bin_PROGRAMS += rados
 
 if WITH_DEBUG
 testrados_SOURCES = testrados.c
-testrados_LDADD = librados.la -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+testrados_LDADD = librados.la -lpthread -lm -lcrypto++
 testradospp_SOURCES = testradospp.cc
-testradospp_LDADD = librados.la -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+testradospp_LDADD = librados.la -lpthread -lm -lcrypto++
 bin_PROGRAMS += testrados testradospp
 endif
 
 radosacl_SOURCES = radosacl.cc
-radosacl_LDADD = librados.la -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+radosacl_LDADD = librados.la -lpthread -lm -lcrypto++
 rbd_SOURCES = rbd.cc common/fiemap.cc
-rbd_LDADD = librados.la -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+rbd_LDADD = librados.la -lpthread -lm -lcrypto++
 bin_PROGRAMS += radosacl rbd
 
 if WITH_RADOSGW
@@ -252,24 +252,16 @@ endif
 
 if WITH_DEBUG
 testcrypto_SOURCES = testcrypto.cc
-testcrypto_LDADD = libcommon.a -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+testcrypto_LDADD = libcommon.a -lpthread -lm -lcrypto++
 bin_PROGRAMS += testcrypto
 
 testkeys_SOURCES = testkeys.cc
-testkeys_LDADD = libmon.a libcommon.a -lpthread -lm $(OPENSSL_LIBS) -lcrypto++
+testkeys_LDADD = libmon.a libcommon.a -lpthread -lm -lcrypto++
 bin_PROGRAMS += testkeys
 endif
 
 
 ## rados object classes
-
-#libcls_crypto.so: cls_crypto.cc
-#	${CXX} -I. -fPIC -shared -g -o libcls_crypto.so $(OPENSSL_LIBS) cls_crypto.cc
-#BUILT_SOURCES += libcls_crypto.so
-
-#libcls_acl.so: cls_acl.cc
-#	${CXX} -I. -fPIC -shared -g -o libcls_acl.so cls_acl.cc
-#BUILT_SOURCES += libcls_acl.so
 
 # rbd: rados block device class
 libcls_rbd_la_SOURCES = cls_rbd.cc
@@ -324,8 +316,8 @@ CLEANFILES += \
 LDADD =
 
 
-AM_CXXFLAGS = $(OPENSSL_CFLAGS) -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic
-AM_CFLAGS = $(OPENSSL_CFLAGS) -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic
+AM_CXXFLAGS = -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic
+AM_CFLAGS = -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic
 AM_LDFLAGS = -Wl,--as-needed
 
 if WITH_LIBATOMIC
