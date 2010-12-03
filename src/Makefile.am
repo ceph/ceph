@@ -864,6 +864,10 @@ all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(cauthtool_SOUR
 
 install-data-local:
 	mkdir -p $(DESTDIR)$(sysconfdir)/ceph
+	mkdir -p $(DESTDIR)$(localstatedir)/log/ceph/stat
+	mkdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
 
 uninstall-local:
 	rmdir --ignore-fail-on-non-empty -p $(DESTDIR)$(sysconfdir)/ceph/
+	rmdir --ignore-fail-on-non-empty -p $(DESTDIR)$(localstatedir)/log/ceph/stat
+	rmdir --ignore-fail-on-non-empty -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
