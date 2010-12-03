@@ -1391,17 +1391,15 @@ inline ostream& operator<<(ostream& out, const object_info_t& oi) {
  */
 struct ScrubMap {
   struct object {
-    sobject_t poid;
     uint64_t size;
     bool negative;
     map<string,bufferptr> attrs;
 
-    object(): poid(),size(0),negative(0),attrs() {}
+    object(): size(0),negative(0),attrs() {}
 
     void encode(bufferlist& bl) const {
       __u8 struct_v = 1;
       ::encode(struct_v, bl);
-      ::encode(poid, bl);
       ::encode(size, bl);
       ::encode(negative, bl);
       ::encode(attrs, bl);
@@ -1409,7 +1407,6 @@ struct ScrubMap {
     void decode(bufferlist::iterator& bl) {
       __u8 struct_v;
       ::decode(struct_v, bl);
-      ::decode(poid, bl);
       ::decode(size, bl);
       ::decode(negative, bl);
       ::decode(attrs, bl);

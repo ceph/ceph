@@ -893,7 +893,7 @@ public:
   bool finalizing_scrub; 
   bool scrub_reserved, scrub_reserve_failed;
 
-  void repair_object(ScrubMap::object *po, int bad_peer, int ok_peer);
+  void repair_object(const sobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
   void scrub();
   void _scan_list(ScrubMap &map, vector<sobject_t> &ls);
   void _request_scrub_map(int replica, eversion_t version);

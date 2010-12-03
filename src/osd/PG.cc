@@ -2809,7 +2809,7 @@ void PG::sub_op_scrub_reply(MOSDSubOpReply *op)
  */
 void PG::_scan_list(ScrubMap &map, vector<sobject_t> &ls)
 {
-  dout(10) << " scanning " << ls.size() << " objects" << dendl;
+  dout(10) << "_scan_list scanning " << ls.size() << " objects" << dendl;
   int i = 0;
   for (vector<sobject_t>::iterator p = ls.begin(); 
        p != ls.end(); 
@@ -2824,7 +2824,7 @@ void PG::_scan_list(ScrubMap &map, vector<sobject_t> &ls)
       osd->store->getattrs(coll, poid, o.attrs);
     }
 
-    dout(25) << "   " << poid << dendl;
+    dout(25) << "_scan_list  " << poid << dendl;
   }
 }
 
@@ -3026,7 +3026,6 @@ void PG::build_inc_scrub_map(ScrubMap &map, eversion_t v)
       ls.push_back(p->soid);
     } else if (p->is_delete()) {
       map.objects[p->soid];
-      map.objects[p->soid].poid = p->soid;
       map.objects[p->soid].negative = 1;
     }
   }
@@ -3039,20 +3038,20 @@ void PG::build_inc_scrub_map(ScrubMap &map, eversion_t v)
   osd->store->read(coll_t(), log_oid, 0, 0, map.logbl);
 }
 
-void PG::repair_object(ScrubMap::object *po, int bad_peer, int ok_peer)
+void PG::repair_object(const sobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer)
 {
   eversion_t v;
   bufferlist bv;
   bv.push_back(po->attrs[OI_ATTR]);
   object_info_t oi(bv);
   if (bad_peer != acting[0]) {
-    peer_missing[bad_peer].add(po->poid, oi.version, eversion_t());
+    peer_missing[bad_peer].add(soid, oi.version, eversion_t());
   } else {
     // We should only be scrubbing if the PG is clean.
     assert(waiting_for_missing_object.empty());
 
-    missing.add(po->poid, oi.version, eversion_t());
-    missing_loc[po->poid].insert(ok_peer);
+    missing.add(soid, oi.version, eversion_t());
+    missing_loc[soid].insert(ok_peer);
 
     log.last_requested = eversion_t();
   }
@@ -3168,6 +3167,7 @@ void PG::scrub()
     
     while (1) {
       ScrubMap::object *po = 0;
+      const sobject_t *psoid = 0;
       int pi = -1;
       bool anymissing = false;
       for (unsigned i=0; i<acting.size(); i++) {
@@ -3176,12 +3176,14 @@ void PG::scrub()
 	  continue;
 	}
 	if (!po) {
+	  psoid = &(p[i]->first);
 	  po = &(p[i]->second);
 	  pi = i;
 	}
-	else if (po->poid != p[i]->second.poid) {
+	else if (*psoid != p[i]->first) {
 	  anymissing = true;
-	  if (po->poid > p[i]->second.poid) {
+	  if (*psoid > p[i]->first) {
+	    psoid = &(p[0]->first);
 	    po = &(p[i]->second);
 	    pi = i;
 	  }
@@ -3192,13 +3194,13 @@ void PG::scrub()
       }
       if (anymissing) {
 	for (unsigned i=0; i<acting.size(); i++) {
-	  if (p[i] == m[i]->objects.end() || po->poid != p[i]->second.poid) {
-	    ss << info.pgid << " " << mode << " osd" << acting[i] << " missing " << po->poid;
+	  if (p[i] == m[i]->objects.end() || *psoid != p[i]->first) {
+	    ss << info.pgid << " " << mode << " osd" << acting[i] << " missing " << *psoid;
 	    osd->get_logclient()->log(LOG_ERROR, ss);
 	    num_missing++;
 	    
 	    if (repair)
-	      repair_object(po, acting[i], acting[pi]);
+	      repair_object(*psoid, po, acting[i], acting[pi]);
 	  } else
 	    p[i]++;
 	}
@@ -3210,18 +3212,18 @@ void PG::scrub()
       for (unsigned i=1; i<acting.size(); i++) {
 	bool peerok = true;
 	if (po->size != p[i]->second.size) {
-	  dout(0) << "scrub osd" << acting[i] << " " << po->poid
+	  dout(0) << "scrub osd" << acting[i] << " " << *psoid
 		  << " size " << p[i]->second.size << " != " << po->size << dendl;
-	  ss << info.pgid << " " << mode << " osd" << acting[i] << " " << po->poid
+	  ss << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
 	     << " size " << p[i]->second.size << " != " << po->size;
 	  osd->get_logclient()->log(LOG_ERROR, ss);
 	  peerok = ok = false;
 	  num_bad++;
 	}
 	if (po->attrs.size() != p[i]->second.attrs.size()) {
-	  dout(0) << "scrub osd" << acting[i] << " " << po->poid
+	  dout(0) << "scrub osd" << acting[i] << " " << *psoid
 		  << " attr count " << p[i]->second.attrs.size() << " != " << po->attrs.size() << dendl;
-	  ss << info.pgid << " " << mode << " osd" << acting[i] << " " << po->poid
+	  ss << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
 	     << " attr count " << p[i]->second.attrs.size() << " != " << po->attrs.size();
 	  osd->get_logclient()->log(LOG_ERROR, ss);
 	  peerok = ok = false;
@@ -3230,18 +3232,18 @@ void PG::scrub()
 	for (map<string,bufferptr>::iterator q = po->attrs.begin(); q != po->attrs.end(); q++) {
 	  if (p[i]->second.attrs.count(q->first)) {
 	    if (q->second.cmp(p[i]->second.attrs[q->first])) {
-	      dout(0) << "scrub osd" << acting[i] << " " << po->poid
+	      dout(0) << "scrub osd" << acting[i] << " " << *psoid
 		      << " attr " << q->first << " value mismatch" << dendl;
-	      ss << info.pgid << " " << mode << " osd" << acting[i] << " " << po->poid
+	      ss << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
 		 << " attr " << q->first << " value mismatch";
 	      osd->get_logclient()->log(LOG_ERROR, ss);
 	      peerok = ok = false;
 	      num_bad++;
 	    }
 	  } else {
-	    dout(0) << "scrub osd" << acting[i] << " " << po->poid
+	    dout(0) << "scrub osd" << acting[i] << " " << *psoid
 		    << " attr " << q->first << " missing" << dendl;
-	    ss << info.pgid << " " << mode << " osd" << acting[i] << " " << po->poid
+	    ss << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
 	       << " attr " << q->first << " missing";
 	    osd->get_logclient()->log(LOG_ERROR, ss);
 	    peerok = ok = false;
@@ -3250,11 +3252,11 @@ void PG::scrub()
 	}
 
 	if (!peerok && repair)
-	  repair_object(po, acting[i], acting[pi]);
+	  repair_object(*psoid, po, acting[i], acting[pi]);
       }
       
       if (ok)
-	dout(20) << "scrub  " << po->poid << " size " << po->size << " ok" << dendl;
+	dout(20) << "scrub  " << *psoid << " size " << po->size << " ok" << dendl;
       
       // next
       for (unsigned i=0; i<acting.size(); i++)

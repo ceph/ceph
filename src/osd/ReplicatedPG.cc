@@ -3980,7 +3980,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
   for (map<sobject_t,ScrubMap::object>::reverse_iterator p = scrubmap.objects.rbegin(); 
        p != scrubmap.objects.rend(); 
        p++) {
-    const sobject_t& soid = p->second.poid;
+    const sobject_t& soid = p->first;
     stat.num_objects++;
 
     // new snapset?
