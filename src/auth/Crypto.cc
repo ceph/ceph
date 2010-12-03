@@ -11,16 +11,27 @@
  * 
  */
 
-#include "Crypto.h"
+#define CRYPTOPP
 
+#include "Crypto.h"
+#ifdef CRYPTOPP
+#include "cryptopp/modes.h"
+#include "cryptopp/aes.h"
+#include "cryptopp/filters.h"
+#else
 #include "openssl/evp.h"
 #include "openssl/aes.h"
+#endif
 
 #include "include/ceph_fs.h"
 #include "config.h"
 #include "common/armor.h"
 
 #include <errno.h>
+
+#ifdef CRYPTOPP
+using namespace CryptoPP;
+#endif
 
 int get_random_bytes(char *buf, int len)
 {
@@ -94,8 +105,13 @@ int CryptoNone::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out
 
 
 // ---------------------------------------------------
-
+#ifdef CRYPTOPP
+#define AES_KEY_LEN     ((size_t)AES::DEFAULT_KEYLENGTH)
+#define AES_BLOCK_LEN   ((size_t)AES::BLOCKSIZE)
+#else
 #define AES_KEY_LEN     AES_BLOCK_SIZE
+#define AES_BLOCK_LEN   AES_BLOCK_SIZE
+#endif
 
 class CryptoAES : public CryptoHandler {
 public:
@@ -121,7 +137,7 @@ int CryptoAES::create(bufferptr& secret)
 
 int CryptoAES::validate_secret(bufferptr& secret)
 {
-  if (secret.length() < AES_KEY_LEN) {
+  if (secret.length() < (size_t)AES_KEY_LEN) {
     dout(0) << "key is too short" << dendl;
     return -EINVAL;
   }
@@ -134,7 +150,7 @@ int CryptoAES::encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
   const unsigned char *key = (const unsigned char *)secret.c_str();
   int in_len = in.length();
   const unsigned char *in_buf;
-  int max_out = (in_len + AES_BLOCK_SIZE) & ~(AES_BLOCK_SIZE -1);
+  int max_out = (in_len + AES_BLOCK_LEN) & ~(AES_BLOCK_LEN - 1);
   int total_out = 0;
   int outlen;
 #define OUT_BUF_EXTRA 128
@@ -144,7 +160,24 @@ int CryptoAES::encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
     derr(0) << "key is too short" << dendl;
     return false;
   }
+#ifdef CRYPTOPP
+  string ciphertext;
+  CryptoPP::AES::Encryption aesEncryption(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
+  CryptoPP::CBC_Mode_ExternalCipher::Encryption cbcEncryption( aesEncryption, aes_iv );
+  CryptoPP::StreamTransformationFilter stfEncryptor(cbcEncryption, new CryptoPP::StringSink( ciphertext ) );
 
+  for (std::list<bufferptr>::const_iterator it = in.buffers().begin(); 
+       it != in.buffers().end(); it++) {
+    in_buf = (const unsigned char *)it->c_str();
+
+    stfEncryptor.Put(in_buf, it->length());
+  }
+  stfEncryptor.MessageEnd();
+
+  out.append((const char *)ciphertext.c_str(), ciphertext.length());
+
+  return true;
+#else
   EVP_CIPHER_CTX ctx;
   EVP_CIPHER_CTX_init(&ctx);
   EVP_EncryptInit_ex(&ctx, EVP_aes_128_cbc(), NULL, key, aes_iv);
@@ -161,12 +194,12 @@ int CryptoAES::encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
   if (!EVP_EncryptFinal_ex(&ctx, outbuf + total_out, &outlen))
     goto out;
   total_out += outlen;
-
   out.append((const char *)outbuf, total_out);
   ret = true;
- out:
+out:
   EVP_CIPHER_CTX_cleanup(&ctx);
   return ret;
+#endif
 }
 
 int CryptoAES::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
@@ -180,6 +213,26 @@ int CryptoAES::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
   unsigned char dec_data[in_len];
   int result = 0;
 
+#ifdef CRYPTOPP
+  dout(0) << "CryptoPP!" << dendl;
+
+  CryptoPP::AES::Decryption aesDecryption(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
+  CryptoPP::CBC_Mode_ExternalCipher::Decryption cbcDecryption( aesDecryption, aes_iv );
+
+  string decryptedtext;
+
+  CryptoPP::StreamTransformationFilter stfDecryptor(cbcDecryption, new CryptoPP::StringSink( decryptedtext ) );
+  for (std::list<bufferptr>::const_iterator it = in.buffers().begin(); 
+       it != in.buffers().end(); it++) {
+      const unsigned char *in_buf = (const unsigned char *)it->c_str();
+      stfDecryptor.Put(in_buf, it->length());
+  }
+
+  stfDecryptor.MessageEnd();
+
+  out.append((const char *)decryptedtext.c_str(), decryptedtext.length());
+  return decryptedtext.length();
+#else
   EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
   EVP_CIPHER_CTX_init(ctx);
 
@@ -212,7 +265,9 @@ int CryptoAES::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
   }
 
   EVP_CIPHER_CTX_free(ctx);
+
   return result;
+#endif
 }
 
 
