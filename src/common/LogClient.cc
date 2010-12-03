@@ -27,6 +27,7 @@
 #include <iostream>
 #include <errno.h>
 #include <sys/stat.h>
+#include <syslog.h>
 
 #ifdef DARWIN
 #include <sys/param.h>
@@ -36,6 +37,28 @@
 #include "common/LogClient.h"
 
 #include "config.h"
+
+/*
+ * Given a clog log_type, return the equivalent syslog priority
+ */
+static inline int clog_type_to_syslog_prio(clog_type t)
+{
+  switch (t) {
+    case CLOG_DEBUG:
+      return LOG_DEBUG;
+    case CLOG_INFO:
+      return LOG_INFO;
+    case CLOG_WARN:
+      return LOG_WARNING;
+    case CLOG_ERROR:
+      return LOG_ERR;
+    case CLOG_SEC:
+      return LOG_CRIT;
+    default:
+      assert(0);
+      return 0;
+  }
+}
 
 LogClientTemp::LogClientTemp(clog_type type_, LogClient &parent_)
   : type(type_), parent(parent_)
@@ -87,6 +110,33 @@ void LogClient::send_log()
 }
 
 void LogClient::_send_log()
+{
+  if (g_conf.clog_to_syslog)
+    _send_log_to_syslog();
+  if (g_conf.clog_to_monitors)
+    _send_log_to_monitors();
+}
+
+void LogClient::_send_log_to_syslog()
+{
+  std::deque<LogEntry>::const_reverse_iterator rbegin = log_queue.rbegin();
+  std::deque<LogEntry>::const_reverse_iterator rend = log_queue.rend();
+  for (std::deque<LogEntry>::const_reverse_iterator a = rbegin; a != rend; ++a) {
+    const LogEntry entry(*a);
+    if (entry.seq < last_syslog)
+      break;
+    ostringstream oss;
+    oss << entry;
+    string str(oss.str());
+    syslog(clog_type_to_syslog_prio(entry.type) | LOG_USER, "%s", str.c_str());
+  }
+  if (rbegin != rend) {
+    const LogEntry entry(*rbegin);
+    last_syslog = entry.seq;
+  }
+}
+
+void LogClient::_send_log_to_monitors()
 {
   if (log_queue.empty())
     return;

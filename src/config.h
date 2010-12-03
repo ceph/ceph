@@ -84,6 +84,9 @@ struct md_config_t {
   bool log_to_stdout;
   bool log_per_instance;
 
+  bool clog_to_monitors;
+  bool clog_to_syslog;
+
   const char *pid_file;
 
   const char *conf;
