@@ -6,8 +6,6 @@
 #include <vector>
 #include <include/types.h>
 
-#include <openssl/md5.h>
-
 #include "rgw_common.h"
 
 /**

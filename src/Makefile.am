@@ -244,9 +244,9 @@ libradosgw_a_CFLAGS = ${AM_CFLAGS}
 # lib_LTLIBRARIES += libradosgw.a
 
 radosgw_SOURCES = rgw/rgw_main.cc
-radosgw_LDADD = libradosgw.a librados.a libcrush.a -lfcgi $(OPENSSL_LIBS) -lexpat -lpthread -lm -lcrypto++
+radosgw_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lexpat -lpthread -lm -lcrypto++
 radosgw_admin_SOURCES = rgw/rgw_admin.cc
-radosgw_admin_LDADD = libradosgw.a librados.a libcrush.a -lfcgi $(OPENSSL_LIBS) -lexpat -lpthread -lm -lcrypto++
+radosgw_admin_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lexpat -lpthread -lm -lcrypto++
 bin_PROGRAMS += radosgw radosgw_admin
 endif
 

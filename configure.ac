@@ -161,11 +161,6 @@ AC_CHECK_HEADER([histedit.h],
 	[],
 	[AC_MSG_ERROR([Sorry you need histedit.h (libedit-dev on debian)])])
 
-AC_CHECK_HEADER([openssl/md5.h],
-	[],
-	[AC_MSG_ERROR([Sorry you need openssl dev files (libssl-dev on debian)])])
-PKG_CHECK_MODULES([OPENSSL], [openssl])
-
 AC_CHECK_MEMBER([struct fiemap_extent.fe_logical],
 	[AC_DEFINE([HAVE_FIEMAP_H], [], [linux/fiemap.h was found, fiemap ioctl will be used])],
 	[AC_MSG_NOTICE([linux/fiemap.h was not found or not usable; using local Ceph copy])],

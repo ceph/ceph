@@ -17,7 +17,9 @@
 
 #include "fcgiapp.h"
 
-#include <openssl/md5.h>
+#include <string.h>
+#define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
+#include <cryptopp/md5.h>
 #include <string>
 #include <map>
 #include "include/types.h"
@@ -195,7 +197,7 @@ struct RGWObjEnt {
   std::string name;
   size_t size;
   time_t mtime;
-  char etag[MD5_DIGEST_LENGTH * 2 + 1];
+  char etag[CryptoPP::Weak::MD5::DIGESTSIZE * 2 + 1];
 
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;

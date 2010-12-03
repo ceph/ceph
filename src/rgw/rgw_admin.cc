@@ -7,7 +7,7 @@ using namespace std;
 
 #include "config.h"
 
-#include <openssl/rand.h>
+#include <cryptopp/osrng.h>
 #include "common/common_init.h"
 
 #include "common/armor.h"
@@ -39,13 +39,10 @@ int gen_rand_base64(char *dest, int size) /* size should be the required string 
   unsigned char buf[size];
   char tmp_dest[size + 4]; /* so that there's space for the extra '=' characters, and some */
 
-  int ret = RAND_bytes(buf, sizeof(buf));
-  if (!ret) {
-    cerr << "RAND_bytes failed, entropy problem?" << std::endl;
-    return -1;
-  }
+  CryptoPP::AutoSeededRandomPool rng;
+  rng.GenerateBlock(buf, sizeof(buf));
 
-  ret = ceph_armor(tmp_dest, &tmp_dest[sizeof(tmp_dest)],
+  int ret = ceph_armor(tmp_dest, &tmp_dest[sizeof(tmp_dest)],
 		   (const char *)buf, ((const char *)buf) + ((size - 1) * 3 + 4 - 1) / 4);
   if (ret < 0) {
     cerr << "ceph_armor failed" << std::endl;
@@ -61,11 +58,8 @@ static const char alphanum_table[]="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 int gen_rand_alphanumeric(char *dest, int size) /* size should be the required string size + 1 */
 {
-  int ret = RAND_bytes((unsigned char *)dest, size);
-  if (!ret) {
-    cerr << "RAND_bytes failed, entropy problem?" << std::endl;
-    return -1;
-  }
+  CryptoPP::AutoSeededRandomPool rng;
+  rng.GenerateBlock((unsigned char *)dest, size);
 
   int i;
   for (i=0; i<size - 1; i++) {

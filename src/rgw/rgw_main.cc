@@ -8,9 +8,8 @@
 #include <errno.h>
 #include <signal.h>
 
-#include <openssl/hmac.h>
-#include <openssl/sha.h>
-#include <openssl/md5.h>
+#include <cryptopp/sha.h>
+#include <cryptopp/hmac.h>
 
 #include "fcgiapp.h"
 
@@ -32,6 +31,7 @@
 #include "common/BackTrace.h"
 
 using namespace std;
+using namespace CryptoPP;
 
 #define CGI_PRINTF(stream, format, ...) do { \
    FCGX_FPrintF(stream, format, __VA_ARGS__); \
@@ -118,17 +118,25 @@ static void get_auth_header(struct req_state *s, string& dest, bool qsr)
 /*
  * calculate the sha1 value of a given msg and key
  */
-static void calc_hmac_sha1(const char *key, int key_len,
+static int calc_hmac_sha1(const char *key, int key_len,
                            const char *msg, int msg_len,
                            char *dest, int *len) /* dest should be large enough to hold result */
 {
-  char hex_str[128];
-  unsigned char *result = HMAC(EVP_sha1(), key, key_len, (const unsigned char *)msg,
-                               msg_len, (unsigned char *)dest, (unsigned int *)len);
+  if (*len < HMAC<SHA1>::DIGESTSIZE)
+    return -EINVAL;
 
-  buf_to_hex(result, *len, hex_str);
+  char hex_str[HMAC<SHA1>::DIGESTSIZE * 2 + 1];
+
+  HMAC<SHA1> hmac((const unsigned char *)key, key_len);
+  hmac.Update((const unsigned char *)msg, msg_len);
+  hmac.Final((unsigned char *)dest);
+  *len = HMAC<SHA1>::DIGESTSIZE;
+  
+  buf_to_hex((unsigned char *)dest, *len, hex_str);
 
   RGW_LOG(15) << "hmac=" << hex_str << endl;
+
+  return 0;
 }
 
 /*
@@ -186,9 +194,10 @@ static bool verify_signature(struct req_state *s)
   const char *key = s->user.secret_key.c_str();
   int key_len = strlen(key);
 
-  char hmac_sha1[EVP_MAX_MD_SIZE];
-  int len;
-  calc_hmac_sha1(key, key_len, auth_hdr.c_str(), auth_hdr.size(), hmac_sha1, &len);
+  char hmac_sha1[HMAC<SHA1>::DIGESTSIZE];
+  int len = sizeof(hmac_sha1);
+  if (calc_hmac_sha1(key, key_len, auth_hdr.c_str(), auth_hdr.size(), hmac_sha1, &len) < 0)
+    return false;
 
   char b64[64]; /* 64 is really enough */
   int ret = ceph_armor(b64, &b64[sizeof(b64)], hmac_sha1, &hmac_sha1[len]);
