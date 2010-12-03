@@ -1139,6 +1139,8 @@ void MDS::boot_start(int step, int r)
   case 3:
     if (is_replay() || is_oneshot_replay() || is_standby_replay()) {
       dout(2) << "boot_start " << step << ": replaying mds log" << dendl;
+      if(is_oneshot_replay() || is_standby_replay())
+        mdlog->get_journaler()->set_readonly();
       mdlog->replay(new C_MDS_BootStart(this, 4));
       break;
     } else {
@@ -1233,6 +1235,8 @@ void MDS::replay_done()
 
   if (is_standby_replay()) {
     standby_trim_segments();
+    mdlog->get_journaler()->set_writeable();
+    dout(10) << "setting replay timer" << dendl;
     timer.add_event_after(g_conf.mds_replay_interval,
                           new C_Standby_replay_start(this));
     return;

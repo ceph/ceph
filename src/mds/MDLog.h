@@ -87,6 +87,7 @@ protected:
       return 0;
     }
   } replay_thread;
+  bool already_replayed;
 
   friend class ReplayThread;
   friend class C_MDL_Replay;
@@ -151,6 +152,7 @@ public:
 		  journaler(0),
 		  logger(0),
 		  replay_thread(this),
+		  already_replayed(false),
 		  expiring_events(0), expired_events(0),
 		  writing_subtree_map(false),
 		  cur_event(NULL) { }		  

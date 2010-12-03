@@ -467,7 +467,8 @@ void MDLog::replay(Context *c)
   dout(10) << "replay start, from " << journaler->get_read_pos()
 	   << " to " << journaler->get_write_pos() << dendl;
 
-  assert(num_events == 0);
+  assert(num_events == 0 || already_replayed);
+  already_replayed = true;
 
   replay_thread.create();
 }
