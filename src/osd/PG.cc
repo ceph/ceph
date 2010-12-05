@@ -584,36 +584,36 @@ void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map)
 	   << get_num_unfound() << " unfound"
 	   << dendl;
 
-  std::vector<int>::const_iterator u = up.begin();
-  std::vector<int>::const_iterator end = up.end();
-  std::set<int>::const_iterator mhend = might_have_unfound.end();
-  for (; u != end; ++u) {
-    int peer(*u);
-    if (might_have_unfound.find(peer) == mhend) {
-      dout(25) << __func__ << ": osd" << peer
-	       << " is not in might_have_unfound" << dendl;
+  std::set<int>::const_iterator m = might_have_unfound.begin();
+  std::set<int>::const_iterator mend = might_have_unfound.end();
+  for (; m != mend; ++m) {
+    int peer(*m);
+    
+    if (!osd->osdmap->is_up(peer)) {
+      dout(20) << __func__ << " skipping down osd" << peer << dendl;
       continue;
     }
+
     // If we've requested any of this stuff, the Missing information
     // should be on its way.
     // TODO: coalsce requested_* into a single data structure
     if (peer_missing.find(peer) != peer_missing.end()) {
-      dout(25) << __func__ << ": osd" << peer
+      dout(20) << __func__ << ": osd" << peer
 	       << ": we already have Missing" << dendl;
       continue;
     }
     if (peer_log_requested.find(peer) != peer_log_requested.end()) {
-      dout(25) << __func__ << ": osd" << peer
+      dout(20) << __func__ << ": osd" << peer
 	       << ": in peer_log_requested" << dendl;
       continue;
     }
     if (peer_backlog_requested.find(peer) != peer_backlog_requested.end()) {
-      dout(25) << __func__ << ": osd" << peer
+      dout(20) << __func__ << ": osd" << peer
 	       << ": in peer_backlog_requested" << dendl;
       continue;
     }
     if (peer_missing_requested.find(peer) != peer_missing_requested.end()) {
-      dout(25) << __func__ << ": osd" << peer
+      dout(20) << __func__ << ": osd" << peer
 	       << ": in peer_missing_requested" << dendl;
       continue;
     }
