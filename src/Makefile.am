@@ -221,14 +221,14 @@ testrados_SOURCES = testrados.c
 testrados_LDADD = librados.la -lpthread -lm -lcrypto++
 testradospp_SOURCES = testradospp.cc
 testradospp_LDADD = librados.la -lpthread -lm -lcrypto++
-bin_PROGRAMS += testrados testradospp
-endif
-
 radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la -lpthread -lm -lcrypto++
+bin_PROGRAMS += testrados testradospp radosacl
+endif
+
 rbd_SOURCES = rbd.cc common/fiemap.cc
 rbd_LDADD = librados.la -lpthread -lm -lcrypto++
-bin_PROGRAMS += radosacl rbd
+bin_PROGRAMS += rbd
 
 if WITH_RADOSGW
 libradosgw_a_SOURCES = \
