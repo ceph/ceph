@@ -3596,6 +3596,22 @@ CInode *MDCache::rejoin_invent_inode(inodeno_t ino, snapid_t last)
   return in;
 }
 
+CDir *MDCache::rejoin_invent_dirfrag(dirfrag_t df)
+{
+  CInode *in = get_inode(df.ino);
+  if (!in) {
+    in = rejoin_invent_inode(df.ino, CEPH_NOSNAP);
+    if (!in->is_dir()) {
+      assert(in->state_test(CInode::STATE_REJOINUNDEF));
+      in->inode.mode = S_IFDIR;
+    }
+  }
+  assert(in->is_dir());
+  CDir *dir = in->get_or_open_dirfrag(this, df.frag);
+  dout(10) << " invented " << *dir << dendl;
+  return dir;
+}
+
 /* This functions DOES NOT put the passed message before returning */
 void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 {
@@ -3624,19 +3640,10 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
        p != strong->strong_dirfrags.end();
        ++p) {
     CDir *dir = get_dirfrag(p->first);
-    if (!dir) {
-      CInode *in = get_inode(p->first.ino);
-      if (!in)
-	in = rejoin_invent_inode(p->first.ino, CEPH_NOSNAP);
-      if (!in->is_dir()) {
-	assert(in->state_test(CInode::STATE_REJOINUNDEF));
-	in->inode.mode = S_IFDIR;
-      }
-      dir = in->get_or_open_dirfrag(this, p->first.frag);
-      dout(10) << " invented " << *dir << dendl;
-    } else {
+    if (!dir)
+      dir = rejoin_invent_dirfrag(p->first);
+    else
       dout(10) << " have " << *dir << dendl;
-    }
     dir->add_replica(from);
     dir->dir_rep = p->second.dir_rep;
 
