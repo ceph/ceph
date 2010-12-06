@@ -207,5 +207,22 @@ int dout_create_rank_symlink(int64_t n)
   return r;
 }
 
+void hex2str(const char *s, int len, char *buf, int dest_len)
+{
+  int pos = 0;
+  for (int i=0; i<len && pos<dest_len; i++) {
+    if (i && !(i%8))
+      pos += snprintf(&buf[pos], dest_len-pos, " ");
+    if (i && !(i%16))
+      pos += snprintf(&buf[pos], dest_len-pos, "\n");
+    pos += snprintf(&buf[pos], dest_len-pos, "%.2x ", (int)(unsigned char)s[i]);
+  }
+}
 
-
+void hexdump(string msg, const char *s, int len)
+{
+  int buf_len = len*4;
+  char buf[buf_len];
+  hex2str(s, len, buf, buf_len);
+  generic_dout(0) << msg << ":\n" << buf << dendl;
+}

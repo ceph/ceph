@@ -85,26 +85,8 @@ inline ostream& operator<<(ostream& out, _bad_endl_use_dendl_t) {
 #define dendl std::endl; _dout_end_line(); } } while (0)
 
 
-inline static void hex2str(const char *s, int len, char *buf, int dest_len)
-{
-  int pos = 0;
-  for (int i=0; i<len && pos<dest_len; i++) {
-    if (i && !(i%8))
-      pos += snprintf(&buf[pos], dest_len-pos, " ");
-    if (i && !(i%16))
-      pos += snprintf(&buf[pos], dest_len-pos, "\n");
-    pos += snprintf(&buf[pos], dest_len-pos, "%.2x ", (int)(unsigned char)s[i]);
-  }
-}
+extern void hex2str(const char *s, int len, char *buf, int dest_len);
 
-inline static void hexdump(string msg, const char *s, int len)
-{
-  int buf_len = len*4;
-  char buf[buf_len];
-  hex2str(s, len, buf, buf_len);
-  generic_dout(0) << msg << ":\n" << buf << dendl;
-}
-
-
+extern void hexdump(string msg, const char *s, int len);
 
 #endif
