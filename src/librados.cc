@@ -1863,6 +1863,7 @@ extern "C" void rados_deinitialize()
   rados_init_mutex.Lock();
   if (!rados_initialized) {
     dout(0) << "rados_deinitialize() called without rados_initialize()" << dendl;
+    rados_init_mutex.Unlock();
     return;
   }
   --rados_initialized;
