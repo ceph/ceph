@@ -13,17 +13,17 @@
  */
 
 /*
- * SyslogStreambuf
+ * DoutStreambuf
  *
- * A stream buffer that writes its output to syslog.
+ * The stream buffer used by dout
  */
-#ifndef CEPH_SYSLOG_STREAMBUF_H
-#define CEPH_SYSLOG_STREAMBUF_H
+#ifndef CEPH_DOUT_STREAMBUF_H
+#define CEPH_DOUT_STREAMBUF_H
 
 #include <iosfwd>
 
 template <typename charT, typename traits = std::char_traits<charT> >
-class SyslogStreambuf : public std::basic_streambuf<charT, traits>
+class DoutStreambuf : public std::basic_streambuf<charT, traits>
 {
 public:
   typedef traits traits_ty;
@@ -34,7 +34,7 @@ public:
   // The size of the input and output buffers.
   static const size_t OBUF_SZ = 32000;
 
-  SyslogStreambuf();
+  DoutStreambuf();
 
 protected:
   // Called when the buffer fills up

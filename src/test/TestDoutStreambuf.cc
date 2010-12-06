@@ -13,12 +13,12 @@
  */
 
 /*
- * TestSyslogStreambuf
+ * TestDoutStreambuf
  *
- * Puts some output into the SyslogStreambuf class.
+ * Puts some output into the DoutStreambuf class.
  * Check your syslog to see what it did.
  */
-#include "common/SyslogStreambuf.h"
+#include "common/DoutStreambuf.h"
 #include "common/common_init.h"
 #include "config.h"
 
@@ -40,9 +40,9 @@ int main(int argc, const char **argv)
   common_set_defaults(false);
   common_init(args, "ceph", true);
 
-  std::ostream oss(new SyslogStreambuf<char>);
+  std::ostream oss(new DoutStreambuf<char>);
 
-  oss << "I am logging to syslog now!" << std::endl;
+  oss << "I am logging to dout now!" << std::endl;
 
   oss << "And here is another line!" << std::endl;
 

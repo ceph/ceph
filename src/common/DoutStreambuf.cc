@@ -12,7 +12,7 @@
  *
  */
 
-#include "common/SyslogStreambuf.h"
+#include "common/DoutStreambuf.h"
 
 #include <assert.h>
 #include <fstream>
@@ -22,7 +22,7 @@
 #include <string.h>
 
 template <typename charT, typename traits>
-SyslogStreambuf<charT, traits>::SyslogStreambuf()
+DoutStreambuf<charT, traits>::DoutStreambuf()
 {
   // Initialize get pointer to zero so that underflow is called on the first read.
   this->setg(0, 0, 0);
@@ -39,8 +39,8 @@ SyslogStreambuf<charT, traits>::SyslogStreambuf()
 // In this function, the buffer should be written to wherever it should
 // be written to (in this case, the streambuf object that this is controlling).
 template <typename charT, typename traits>
-typename SyslogStreambuf<charT, traits>::int_type
-SyslogStreambuf<charT, traits>::overflow(SyslogStreambuf<charT, traits>::int_type c)
+typename DoutStreambuf<charT, traits>::int_type
+DoutStreambuf<charT, traits>::overflow(DoutStreambuf<charT, traits>::int_type c)
 {
   charT* end = this->pptr();
 
@@ -68,8 +68,8 @@ SyslogStreambuf<charT, traits>::overflow(SyslogStreambuf<charT, traits>::int_typ
 // This is called to flush the buffer.
 // This is called when we're done with the file stream (or when .flush() is called).
 template <typename charT, typename traits>
-typename SyslogStreambuf<charT, traits>::int_type
-SyslogStreambuf<charT, traits>::sync()
+typename DoutStreambuf<charT, traits>::int_type
+DoutStreambuf<charT, traits>::sync()
 {
   //std::cout << "flush!" << std::endl;
 
@@ -77,7 +77,7 @@ SyslogStreambuf<charT, traits>::sync()
   if (obuf[0] == '\0')
     return 0;
 
-  typename SyslogStreambuf<charT, traits>::int_type
+  typename DoutStreambuf<charT, traits>::int_type
     ret(this->overflow(traits_ty::eof()));
   if (ret == traits_ty::eof())
     return -1;
@@ -86,8 +86,8 @@ SyslogStreambuf<charT, traits>::sync()
 }
 
 template <typename charT, typename traits>
-typename SyslogStreambuf<charT, traits>::int_type
-SyslogStreambuf<charT, traits>::underflow()
+typename DoutStreambuf<charT, traits>::int_type
+DoutStreambuf<charT, traits>::underflow()
 {
   // We can't read from this
   // TODO: some more elegant way of preventing callers from trying to get input from this stream
@@ -95,4 +95,4 @@ SyslogStreambuf<charT, traits>::underflow()
 }
 
 // Explicit template instantiation
-template class SyslogStreambuf <char>;
+template class DoutStreambuf <char>;
