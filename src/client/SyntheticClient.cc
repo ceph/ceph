@@ -1614,7 +1614,7 @@ int SyntheticClient::dump_placement(string& fn) {
   struct stat stbuf;
   int lstat_result = client->lstat(fn.c_str(), &stbuf);
   if (lstat_result < 0) {
-    derr(0) << "lstat error for file " << fn << dendl;
+    dout(0) << "lstat error for file " << fn << dendl;
     return lstat_result;
   }
     
@@ -2201,7 +2201,6 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
   lock.Unlock();
 
   dout(5) << "create_objects done" << dendl;
-  derr(0) << "create_objects done" << dendl;
   return 0;
 }
 

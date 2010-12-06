@@ -699,7 +699,7 @@ int FileStore::lock_fsid()
   int r = ::fcntl(fsid_fd, F_SETLK, &l);
   if (r < 0) {
     char buf[80];
-    derr(0) << "lock_fsid failed to lock " << basedir << "/fsid, is another cosd still running? " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    dout(0) << "lock_fsid failed to lock " << basedir << "/fsid, is another cosd still running? " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     return -errno;
   }
   return 0;
@@ -748,7 +748,7 @@ int FileStore::_detect_fs()
 	     << " " << strerror(errno)
 	     << dendl;*/
     if (x != y) {
-      derr(0) << "xattrs don't appear to work (" << strerror_r(errno, buf, sizeof(buf))
+      dout(0) << "xattrs don't appear to work (" << strerror_r(errno, buf, sizeof(buf))
 	      << ") on " << fn << ", be sure to mount underlying file system with 'user_xattr' option" << dendl;
       return -errno;
     }
@@ -997,7 +997,7 @@ int FileStore::mount()
   struct stat st;
   int r = ::stat(basedir.c_str(), &st);
   if (r != 0) {
-    derr(0) << "unable to stat basedir " << basedir << ", " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    dout(0) << "unable to stat basedir " << basedir << ", " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     return -errno;
   }
   
@@ -1539,14 +1539,14 @@ int FileStore::_transaction_start(uint64_t bytes, uint64_t ops)
   char buf[80];
   int fd = ::open(basedir.c_str(), O_RDONLY);
   if (fd < 0) {
-    derr(0) << "transaction_start got " << strerror_r(errno, buf, sizeof(buf))
+    dout(0) << "transaction_start got " << strerror_r(errno, buf, sizeof(buf))
  	    << " from btrfs open" << dendl;
     assert(0);
   }
 
   int r = ::ioctl(fd, BTRFS_IOC_TRANS_START);
   if (r < 0) {
-    derr(0) << "transaction_start got " << strerror_r(errno, buf, sizeof(buf))
+    dout(0) << "transaction_start got " << strerror_r(errno, buf, sizeof(buf))
  	    << " from btrfs ioctl" << dendl;    
     ::close(fd);
     return -errno;
@@ -1992,7 +1992,7 @@ int FileStore::_write(coll_t cid, const sobject_t& oid,
   int flags = O_WRONLY|O_CREAT;
   int fd = ::open(fn, flags, 0644);
   if (fd < 0) {
-    derr(0) << "write couldn't open " << fn << " flags " << flags << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    dout(0) << "write couldn't open " << fn << " flags " << flags << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     r = -errno;
     goto out;
   }

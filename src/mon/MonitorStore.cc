@@ -64,7 +64,7 @@ int MonitorStore::mount()
   // verify dir exists
   DIR *d = ::opendir(dir.c_str());
   if (!d) {
-    derr(1) << "basedir " << dir << " dne" << dendl;
+    dout(1) << "basedir " << dir << " dne" << dendl;
     return -ENOENT;
   }
   ::closedir(d);
@@ -82,7 +82,7 @@ int MonitorStore::mount()
   l.l_len = 0;
   int r = ::fcntl(lock_fd, F_SETLK, &l);
   if (r < 0) {
-    derr(0) << "failed to lock " << t << ", is another cmon still running?" << dendl;
+    dout(0) << "failed to lock " << t << ", is another cmon still running?" << dendl;
     return -errno;
   }
 
@@ -245,7 +245,7 @@ int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
     int r = ::read(fd, bp.c_str()+off, len-off);
     if (r < 0) {
       char buf[80];
-      derr(0) << "errno on read " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+      dout(0) << "errno on read " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     }
     assert(r>0);
     off += r;

@@ -321,12 +321,12 @@ int FileJournal::open(uint64_t next_seq)
     err = -EINVAL;
   }
   if (header.alignment != block_size && directio) {
-    derr(0) << "open journal alignment " << header.alignment << " does not match block size " 
+    dout(0) << "open journal alignment " << header.alignment << " does not match block size " 
 	    << block_size << " (required for direct_io journal mode)" << dendl;
     err = -EINVAL;
   }
   if ((header.alignment % PAGE_SIZE) && directio) {
-    derr(0) << "open journal alignment " << header.alignment << " is not multiple of page size " << PAGE_SIZE
+    dout(0) << "open journal alignment " << header.alignment << " is not multiple of page size " << PAGE_SIZE
 	    << " (required for direct_io journal mode)" << dendl;
     err = -EINVAL;
   }
@@ -631,7 +631,7 @@ void FileJournal::write_bl(off64_t& pos, bufferlist& bl)
   int err = bl.write_fd(fd);
   if (err) {
     char buf[80];
-    derr(0) << "write_bl failed with " << err << " " << strerror_r(-err, buf, sizeof(buf)) 
+    dout(0) << "write_bl failed with " << err << " " << strerror_r(-err, buf, sizeof(buf)) 
 	    << dendl;
   }
   pos += bl.length();

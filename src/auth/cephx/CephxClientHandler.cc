@@ -151,7 +151,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 	if (decode_decrypt(secrets, secret_key, indata) == 0) {
 	  rotating_secrets->set_secrets(secrets);
 	} else {
-	  derr(0) << "could not set rotating key: decode_decrypt failed" << dendl;
+	  dout(0) << "could not set rotating key: decode_decrypt failed" << dendl;
 	}
       }
     }

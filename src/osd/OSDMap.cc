@@ -168,7 +168,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
     int rweights[ndom];
 
     int nper = ((num_osd - 1) / ndom) + 1;
-    derr(0) << ndom << " failure domains, " << nper << " osds each" << dendl;
+    dout(0) << ndom << " failure domains, " << nper << " osds each" << dendl;
     
     int o = 0;
     for (int i=0; i<ndom; i++) {

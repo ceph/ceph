@@ -66,7 +66,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_add
   listen_sd = ::socket(family, SOCK_STREAM, 0);
   if (listen_sd < 0) {
     char buf[80];
-    derr(0) << "accepter.bind unable to create socket: "
+    dout(0) << "accepter.bind unable to create socket: "
 	    << strerror_r(errno, buf, sizeof(buf)) << dendl;
     cerr << "accepter.bind unable to create socket: "
 	 << strerror_r(errno, buf, sizeof(buf)) << std::endl;
@@ -88,7 +88,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_add
     rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), sizeof(listen_addr.ss_addr()));
     if (rc < 0) {
       char buf[80];
-      derr(0) << "accepter.bind unable to bind to " << bind_addr.ss_addr()
+      dout(0) << "accepter.bind unable to bind to " << bind_addr.ss_addr()
 	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       cerr << "accepter.bind unable to bind to " << bind_addr.ss_addr()
 	   << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
@@ -106,7 +106,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_add
     }
     if (rc < 0) {
       char buf[80];
-      derr(0) << "accepter.bind unable to bind to " << bind_addr.ss_addr()
+      dout(0) << "accepter.bind unable to bind to " << bind_addr.ss_addr()
 	      << " on any port in range " << CEPH_PORT_START << "-" << CEPH_PORT_LAST
 	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       cerr << "accepter.bind unable to bind to " << bind_addr.ss_addr()
@@ -127,7 +127,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_add
   rc = ::listen(listen_sd, 128);
   if (rc < 0) {
     char buf[80];
-    derr(0) << "accepter.bind unable to listen on " << bind_addr.ss_addr()
+    dout(0) << "accepter.bind unable to listen on " << bind_addr.ss_addr()
 	    << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     cerr << "accepter.bind unable to listen on " << bind_addr.ss_addr()
 	 << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
@@ -1457,7 +1457,7 @@ void SimpleMessenger::Pipe::fault(bool onconnect, bool onread)
 
 void SimpleMessenger::Pipe::fail()
 {
-  derr(10) << "fail" << dendl;
+  dout(10) << "fail" << dendl;
   assert(pipe_lock.is_locked());
 
   stop();
@@ -1720,7 +1720,7 @@ void SimpleMessenger::Pipe::writer()
 
 	pipe_lock.Lock();
 	if (rc < 0) {
-          derr(1) << "writer error sending " << m << ", "
+          dout(1) << "writer error sending " << m << ", "
 		  << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
 	  fault();
         }
@@ -2373,7 +2373,7 @@ int SimpleMessenger::start(bool nodaemon)
   // daemonize?
   if (g_conf.daemonize && !nodaemon) {
     if (Thread::get_num_threads() > 0) {
-      derr(0) << "messenger.start BUG: there are " << Thread::get_num_threads()
+      dout(0) << "messenger.start BUG: there are " << Thread::get_num_threads()
 	      << " already started that will now die!  call messenger.start() sooner." 
 	      << dendl;
     }
@@ -2565,7 +2565,7 @@ void SimpleMessenger::submit_message(Message *m, const entity_addr_t& dest_addr,
         dout(20) << "submit_message " << *m << " local" << dendl;
 	dispatch_queue.local_delivery(m, m->get_priority());
       } else {
-        derr(0) << "submit_message " << *m << " " << dest_addr << " local but no local endpoint, dropping." << dendl;
+        dout(0) << "submit_message " << *m << " " << dest_addr << " local but no local endpoint, dropping." << dendl;
         assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
         m->put();
       }

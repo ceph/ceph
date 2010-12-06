@@ -18,7 +18,6 @@ using namespace std;
 // debug output
 Mutex _dout_lock("_dout_lock", false, false /* no lockdep */);  
 ostream *_dout = &std::cout;
-ostream *_derr = &std::cerr;
 char _dout_dir[PATH_MAX] = {0};
 char _dout_symlink_dir[PATH_MAX] = {0};
 char _dout_file[PATH_MAX] = {0};

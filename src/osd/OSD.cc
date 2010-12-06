@@ -787,7 +787,7 @@ int OSD::read_superblock()
   }
 
   if (whoami != superblock.whoami) {
-    derr(0) << "read_superblock superblock says osd" << superblock.whoami
+    dout(0) << "read_superblock superblock says osd" << superblock.whoami
 	    << ", but i (think i) am osd" << whoami << dendl;
     return -1;
   }
@@ -4828,7 +4828,7 @@ void OSD::handle_op(MOSDOp *op)
   if (!op->may_write()) {
     stat_rd_ops++;
     if (op->get_source().is_osd()) {
-      //derr(-10) << "shed in " << stat_rd_ops_shed_in << " / " << stat_rd_ops << dendl;
+      //dout(-10) << "shed in " << stat_rd_ops_shed_in << " / " << stat_rd_ops << dendl;
       stat_rd_ops_shed_in++;
     }
   }

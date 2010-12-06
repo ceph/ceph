@@ -2597,7 +2597,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   Context *onapply = new C_OSD_RepModifyApply(rm);
   int r = osd->store->queue_transactions(&osr, rm->tls, onapply, oncommit);
   if (r) {
-    derr(0) << "error applying transaction: r = " << r << dendl;
+    dout(0) << "error applying transaction: r = " << r << dendl;
     assert(0);
   }
   // op is cleaned up by oncommit/onapply when both are executed
@@ -3995,7 +3995,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 
       // did we finish the last oid?
       if (head != sobject_t()) {
-	derr(0) << " missing clone(s) for " << head << dendl;
+	dout(0) << " missing clone(s) for " << head << dendl;
 	assert(head == sobject_t());  // we had better be done
 	errors++;
       }

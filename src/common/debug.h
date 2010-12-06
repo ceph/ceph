@@ -13,7 +13,6 @@ using std::ostream;
 
 // the streams
 extern ostream *_dout;
-extern ostream *_derr;
 
 extern Mutex _dout_lock;
 
@@ -22,11 +21,6 @@ extern bool _dout_is_open;
 
 extern void _dout_open_log();
 
-static inline void dout_open_log() {
-  _dout_lock.Lock();
-  _dout_open_log();
-  _dout_lock.Unlock();
-}
 extern int dout_rename_output_file();  // after calling daemon()
 extern int dout_create_rank_symlink(int64_t n);
 
@@ -76,7 +70,6 @@ inline ostream& operator<<(ostream& out, _bad_endl_use_dendl_t) {
 
 // generic macros
 #define generic_dout(x) do { if ((x) <= g_conf.debug) { *_dout << dbeginl
-#define generic_derr(x) do { if ((x) <= g_conf.debug) { *_derr << dbeginl
 
 #define pdout(x,p) do { if ((x) <= (p)) { *_dout << dbeginl
 
@@ -87,7 +80,6 @@ inline ostream& operator<<(ostream& out, _bad_endl_use_dendl_t) {
 #define DOUT_COND(l) l <= XDOUT_CONDVAR(DOUT_SUBSYS)
 
 #define dout(l) do { if (DOUT_COND(l)) { dout_prefix
-#define derr(l) do { if (DOUT_COND(l)) { dout_prefix
 
 #define dendl std::endl; _dout_end_line(); } } while (0)
 
