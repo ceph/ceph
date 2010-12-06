@@ -558,12 +558,12 @@ bool ReplicatedPG::snap_trimmer()
       bufferlist bl;
       osd->store->getattr(coll_t(info.pgid), coid, OI_ATTR, bl);
       object_info_t coi(bl);
+      vector<snapid_t>& snaps = coi.snaps;
 
       // get snap set context
       SnapSetContext *ssc = get_snapset_context(coid.oid, false);
       assert(ssc);
       SnapSet& snapset = ssc->snapset;
-      vector<snapid_t>& snaps = coi.snaps;
 
       dout(10) << coid << " snaps " << snaps << " old snapset " << snapset << dendl;
       assert(snapset.seq);
@@ -1703,7 +1703,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
       snaps[i] = snapc.snaps[i];
     
     // prepare clone
-    object_info_t static_snap_oi(oi);
+    object_info_t static_snap_oi(coid, oi.oloc);
     object_info_t *snap_oi;
     if (is_primary()) {
       ctx->clone_obc = new ObjectContext(static_snap_oi, true, NULL);

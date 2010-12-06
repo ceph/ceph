@@ -1308,6 +1308,7 @@ struct object_info_t {
     last_reqid = other.last_reqid;
     truncate_seq = other.truncate_seq;
     truncate_size = other.truncate_size;
+    lost = other.lost;
   }
 
   void encode(bufferlist& bl) const {
@@ -1354,11 +1355,6 @@ struct object_info_t {
     bufferlist::iterator p = bl.begin();
     decode(p);
   }
-
-  object_info_t(const object_info_t &rhs)
-    : soid(rhs.soid), oloc(rhs.oloc), size(rhs.size),
-      lost(rhs.lost), truncate_seq(rhs.truncate_seq),
-      truncate_size(rhs.truncate_size) {}
 
   object_info_t(const sobject_t& s, const object_locator_t& o)
     : soid(s), oloc(o), size(0),
