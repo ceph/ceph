@@ -1001,12 +1001,17 @@ void CInode::encode_parent_mutation(ObjectOperation& m)
   CDentry *pdn = get_parent_dn();
   if (pdn) {
     bufferlist parent(32 + pdn->name.length());
-    uint64_t ino = pdn->get_dir()->get_inode()->ino();
-    __u8 v = 1;
+    __u8 v = 2;
     ::encode(v, parent);
-    ::encode(inode.version, parent);
-    ::encode(ino, parent);
-    ::encode(pdn->name, parent);
+    while (pdn) {
+      uint64_t ino = pdn->get_dir()->get_inode()->ino();
+      ::encode(inode.version, parent);
+      ::encode(ino, parent);
+      ::encode(pdn->name, parent);
+      pdn = (pdn->get_linkage() && pdn->get_linkage()->get_inode())?
+                pdn->get_linkage()->get_inode()->get_parent_dn()
+                : NULL;
+    }
     m.setxattr("parent", parent);
   }
 }
