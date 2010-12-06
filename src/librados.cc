@@ -1392,7 +1392,7 @@ int Rados::initialize(int argc, const char *argv[])
   if (g_conf.clock_tare) g_clock.tare();
 
   client = new RadosClient();
-  return client->init() ? 0 : -1;
+  return client->init();
 }
 
 void Rados::shutdown()
