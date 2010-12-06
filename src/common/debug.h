@@ -4,11 +4,12 @@
 #ifndef CEPH_DEBUG_H
 #define CEPH_DEBUG_H
 
+#include "common/likely.h"
 #include "include/assert.h"
 #include "Mutex.h"
 #include "Clock.h"
 
-#include <ostream>
+#include <iosfwd>
 using std::ostream;
 
 // the streams
@@ -26,14 +27,14 @@ extern int dout_create_rank_symlink(int64_t n);
 
 static inline void _dout_check_log() {
   _dout_lock.Lock();
-  if (_dout_need_open)
+  if (unlikely(_dout_need_open))
     _dout_open_log();
   _dout_lock.Unlock();
 }
 
 static inline void _dout_begin_line() {
   _dout_lock.Lock();
-  if (_dout_need_open)
+  if (unlikely(_dout_need_open))
     _dout_open_log();
   *_dout << g_clock.now() << " " << std::hex << pthread_self() << std::dec << " ";
 }
