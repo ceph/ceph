@@ -282,6 +282,8 @@ int DoutStreambuf<charT, traits>::rename_output_file()
     return err;
   }
 
+  opath = new_opath;
+
 //  // $type.$id symlink
 //  if (g_conf.log_per_instance && _dout_name_symlink_path[0])
 //    create_symlink(_dout_name_symlink_path);
