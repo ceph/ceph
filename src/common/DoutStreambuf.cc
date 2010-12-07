@@ -183,6 +183,16 @@ set_flags(int flags_)
   flags = flags_;
 }
 
+template <typename charT, typename traits>
+void DoutStreambuf<charT, traits>::
+set_prio(int prio)
+{
+  charT* p = this->pptr();
+  *p++ = '\1';
+  *p++ = ((unsigned char)prio);
+  this->pbump(2);
+}
+
 // This is called to flush the buffer.
 // This is called when we're done with the file stream (or when .flush() is called).
 template <typename charT, typename traits>

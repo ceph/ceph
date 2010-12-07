@@ -54,6 +54,9 @@ public:
   // Set the flags directly (for debug use only)
   void set_flags(int flags_);
 
+  // Set the priority of the messages being put into the stream
+  void set_prio(int prio);
+
 protected:
   // Called when the buffer fills up
   virtual int_type overflow(int_type c);
