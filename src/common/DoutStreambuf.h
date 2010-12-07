@@ -21,6 +21,7 @@
 #define CEPH_DOUT_STREAMBUF_H
 
 #include <iosfwd>
+#include <string>
 
 template <typename charT, typename traits = std::char_traits<charT> >
 class DoutStreambuf : public std::basic_streambuf<charT, traits>
@@ -30,6 +31,7 @@ public:
     DOUTSB_FLAG_SYSLOG =          0x01,
     DOUTSB_FLAG_STDOUT =          0x02,
     DOUTSB_FLAG_STDERR =          0x04,
+    DOUTSB_FLAG_OFILE =           0x08,
   };
 
   typedef traits traits_ty;
@@ -49,13 +51,17 @@ public:
   void set_use_stderr(bool val);
 
   // Set the flags based on the global configuration
-  void read_global_configuration();
+  void read_global_config();
 
   // Set the flags directly (for debug use only)
   void set_flags(int flags_);
 
   // Set the priority of the messages being put into the stream
   void set_prio(int prio);
+
+  int rename_output_file();
+
+  std::string config_to_str() const;
 
 protected:
   // Called when the buffer fills up
@@ -69,11 +75,18 @@ protected:
 
 private:
   void _clear_output_buffer();
+  std::string _calculate_opath() const;
+  bool _read_ofile_config();
 
   // Output buffer
   charT obuf[OBUF_SZ];
 
+  // Output flags
   int flags;
+
+  // ofile stuff
+  int ofd;
+  std::string opath;
 };
 
 #endif

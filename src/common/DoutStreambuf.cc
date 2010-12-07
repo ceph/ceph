@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <streambuf>
 #include <string.h>
@@ -33,7 +34,36 @@ extern Mutex _dout_lock;
 /* True if we should output high-priority messages to stderr */
 static bool use_stderr = true;
 
-///////////////////////////// Helper functions /////////////////////////////
+//////////////////////// Helper functions //////////////////////////
+static bool empty(const char *str)
+{
+  if (!str)
+    return true;
+  if (!str[0])
+    return true;
+  return false;
+}
+
+static string cpp_str(const char *str)
+{
+  if (!str)
+    return "(NULL)";
+  if (str[0] == '\0')
+    return "(empty)";
+  return str;
+}
+
+static std::string normalize_relative(const char *from)
+{
+  if (from[0] == '/')
+    return string(from);
+
+  std::auto_ptr <char> cwd(get_current_dir_name());
+  ostringstream oss;
+  oss << "/" << *cwd << "/" << from;
+  return oss.str();
+}
+
 /* Complain about errors even without a logfile */
 static void primitive_log(const std::string &str)
 {
@@ -89,6 +119,7 @@ static int safe_write(int fd, const char *buf, signed int len)
 ///////////////////////////// DoutStreambuf /////////////////////////////
 template <typename charT, typename traits>
 DoutStreambuf<charT, traits>::DoutStreambuf()
+  : flags(0), ofd(-1)
 {
   // Initialize get pointer to zero so that underflow is called on the first read.
   this->setg(0, 0, 0);
@@ -159,6 +190,10 @@ DoutStreambuf<charT, traits>::overflow(DoutStreambuf<charT, traits>::int_type c)
 	  flags &= ~DOUTSB_FLAG_STDERR;
       }
     }
+    if (flags & DOUTSB_FLAG_OFILE) {
+      if (safe_write(ofd, start, len))
+	flags &= ~DOUTSB_FLAG_OFILE;
+    }
 
     *(end+1) = next;
     start = end + 1;
@@ -185,7 +220,7 @@ void DoutStreambuf<charT, traits>::set_use_stderr(bool val)
 }
 
 template <typename charT, typename traits>
-void DoutStreambuf<charT, traits>::read_global_configuration()
+void DoutStreambuf<charT, traits>::read_global_config()
 {
   assert(_dout_lock.is_locked());
   flags = 0;
@@ -199,11 +234,11 @@ void DoutStreambuf<charT, traits>::read_global_configuration()
   if (use_stderr) {
     flags |= DOUTSB_FLAG_STDERR;
   }
-//  if (g_conf.log_to_file) {
-//    if (read_log_to_file_configuration()) {
-//      flags |= DOUTSB_FLAG_FILE;
-//    }
-//  }
+  if (g_conf.log_to_file) {
+    if (_read_ofile_config()) {
+      flags |= DOUTSB_FLAG_OFILE;
+    }
+  }
 }
 
 template <typename charT, typename traits>
@@ -223,6 +258,53 @@ set_prio(int prio)
   unsigned char val = (prio + 11);
   *p++ = val;
   this->pbump(2);
+}
+
+// call after calling daemon()
+template <typename charT, typename traits>
+int DoutStreambuf<charT, traits>::rename_output_file()
+{
+  Mutex::Locker l(_dout_lock);
+  if (!(flags & DOUTSB_FLAG_OFILE))
+    return 0;
+
+  string new_opath(_calculate_opath());
+  if (opath == new_opath)
+    return 0;
+
+  int ret = ::rename(opath.c_str(), new_opath.c_str());
+  if (ret) {
+    int err = errno;
+    ostringstream oss;
+    oss << __func__ << ": failed to rename '" << opath << "' to "
+        << "'" << new_opath << "': " << cpp_strerror(err) << "\n";
+    primitive_log(oss.str());
+    return err;
+  }
+
+//  // $type.$id symlink
+//  if (g_conf.log_per_instance && _dout_name_symlink_path[0])
+//    create_symlink(_dout_name_symlink_path);
+//  if (_dout_rank_symlink_path[0])
+//    create_symlink(_dout_rank_symlink_path);
+
+  return 0;
+}
+
+template <typename charT, typename traits>
+std::string DoutStreambuf<charT, traits>::config_to_str() const
+{
+  assert(_dout_lock.is_locked());
+  ostringstream oss;
+  oss << "g_conf.log_to_syslog = " << g_conf.log_to_syslog << "\n";
+  oss << "g_conf.log_to_stdout = " << g_conf.log_to_stdout << "\n";
+  oss << "use_stderr = " << use_stderr << "\n";
+  oss << "g_conf.log_to_file = " << g_conf.log_to_file << "\n";
+  oss << "g_conf.log_file = '" << cpp_str(g_conf.log_file) << "'\n";
+  oss << "flags = 0x" << std::hex << flags << std::dec << "\n";
+  oss << "ofd = " << ofd << "\n";
+  oss << "opath = '" << opath << "'\n";
+  return oss.str();
 }
 
 // This is called to flush the buffer.
@@ -255,6 +337,59 @@ void DoutStreambuf<charT, traits>::_clear_output_buffer()
   // Set up the put pointer.
   // Overflow is called when this buffer is filled
   this->setp(obuf, obuf + OBUF_SZ - 5);
+}
+
+template <typename charT, typename traits>
+std::string DoutStreambuf<charT, traits>::_calculate_opath() const
+{
+  assert(_dout_lock.is_locked());
+  if (!empty(g_conf.log_file)) {
+    return normalize_relative(g_conf.log_file);
+  }
+
+  if (g_conf.log_per_instance) {
+    char hostname[255];
+    memset(hostname, 0, sizeof(hostname));
+    int ret = gethostname(hostname, sizeof(hostname));
+    if (ret) {
+      int err = errno;
+      ostringstream oss;
+      oss << __func__ << ": error calling gethostname: " << cpp_strerror(err) << "\n";
+      primitive_log(oss.str());
+      return "";
+    }
+    ostringstream oss;
+    oss << hostname << "." << getpid();
+    return oss.str();
+  }
+  else {
+    ostringstream oss;
+    oss << g_conf.type << "." << g_conf.id << ".log";
+    return oss.str();
+  }
+}
+
+template <typename charT, typename traits>
+bool DoutStreambuf<charT, traits>::_read_ofile_config()
+{
+  opath = _calculate_opath();
+  if (opath.empty()) {
+    primitive_log("_calculate_opath failed.\n");
+    return false;
+  }
+
+  assert(ofd == -1);
+  ofd = open(opath.c_str(),
+	    O_CREAT | O_WRONLY | O_CLOEXEC | O_APPEND, S_IWUSR | S_IRUSR);
+  if (ofd < 0) {
+    int err = errno;
+    ostringstream oss;
+    oss << "failed to open log file '" << opath << "': "
+	<< cpp_strerror(err) << "\n";
+    primitive_log(oss.str());
+    return false;
+  }
+  return true;
 }
 
 // Explicit template instantiation

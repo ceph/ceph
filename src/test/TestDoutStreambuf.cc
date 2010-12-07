@@ -44,9 +44,11 @@ int main(int argc, const char **argv)
   DoutStreambuf<char> *dos = new DoutStreambuf<char>();
 
   _dout_lock.Lock();
-  dos->set_flags(DoutStreambuf<char>::DOUTSB_FLAG_SYSLOG |
-                 DoutStreambuf<char>::DOUTSB_FLAG_STDOUT |
-		 DoutStreambuf<char>::DOUTSB_FLAG_STDERR);
+  dos->read_global_config();
+//  dos->set_flags(DoutStreambuf<char>::DOUTSB_FLAG_SYSLOG |
+//                 DoutStreambuf<char>::DOUTSB_FLAG_STDOUT |
+//		 DoutStreambuf<char>::DOUTSB_FLAG_STDERR);
+  std::cout << "using configuration: " << dos->config_to_str() << std::endl;
   _dout_lock.Unlock();
 
   std::ostream oss(dos);
