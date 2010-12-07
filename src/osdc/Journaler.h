@@ -17,19 +17,19 @@
  * This class stripes a serial log over objects on the store.  Four logical pointers:
  *
  *  write_pos - where we're writing new entries
- *   read_pos - where we're reading old entires
+ *   unused_field - where we're reading old entires
  * expire_pos - what is deemed "old" by user
  *   trimmed_pos - where we're expiring old items
  *
- *  trimmed_pos <= expire_pos <= read_pos <= write_pos.
+ *  trimmed_pos <= expire_pos <= unused_field <= write_pos.
  *
- * Often, read_pos <= write_pos (as with MDS log).  During recovery, write_pos is undefined
+ * Often, unused_field <= write_pos (as with MDS log).  During recovery, write_pos is undefined
  * until the end of the log is discovered.
  *
  * A "head" struct at the beginning of the log is used to store metadata at
  * regular intervals.  The basic invariants include:
  *
- *   head.read_pos   <= read_pos   -- the head may "lag", since it's updated lazily.
+ *   head.unused_field   <= unused_field   -- the head may "lag", since it's updated lazily.
  *   head.write_pos  <= write_pos
  *   head.expire_pos <= expire_pos
  *   head.trimmed_pos   <= trimmed_pos
@@ -66,13 +66,13 @@ public:
   struct Header {
     uint64_t trimmed_pos;
     uint64_t expire_pos;
-    uint64_t read_pos;
+    uint64_t unused_field;
     uint64_t write_pos;
     string magic;
     ceph_file_layout layout;
 
     Header(const char *m="") :
-      trimmed_pos(0), expire_pos(0), read_pos(0), write_pos(0),
+      trimmed_pos(0), expire_pos(0), unused_field(0), write_pos(0),
       magic(m) { }
 
     void encode(bufferlist &bl) const {
@@ -81,7 +81,7 @@ public:
       ::encode(magic, bl);
       ::encode(trimmed_pos, bl);
       ::encode(expire_pos, bl);
-      ::encode(read_pos, bl);
+      ::encode(unused_field, bl);
       ::encode(write_pos, bl);
       ::encode(layout, bl);
     }
@@ -91,7 +91,7 @@ public:
       ::decode(magic, bl);
       ::decode(trimmed_pos, bl);
       ::decode(expire_pos, bl);
-      ::decode(read_pos, bl);
+      ::decode(unused_field, bl);
       ::decode(write_pos, bl);
       ::decode(layout, bl);
     }
@@ -184,7 +184,7 @@ private:
   uint64_t read_pos;      // logical read position, where next entry starts.
   uint64_t requested_pos; // what we've requested from OSD.
   uint64_t received_pos;  // what we've received from OSD.
-  bufferlist read_buf; // read buffer.  read_pos + read_buf.length() == prefetch_pos.
+  bufferlist read_buf; // read buffer.  unused_field + read_buf.length() == prefetch_pos.
   bufferlist reading_buf; // what i'm reading into
 
   uint64_t fetch_len;     // how much to read at a time

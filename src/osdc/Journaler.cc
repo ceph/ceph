@@ -61,7 +61,6 @@ ostream& operator<<(ostream& out, Journaler::Header &h)
 {
   return out << "loghead(trim " << h.trimmed_pos
 	     << ", expire " << h.expire_pos
-	     << ", read " << h.read_pos
 	     << ", write " << h.write_pos
 	     << ")";
 }
@@ -201,8 +200,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   set_layout(&h.layout);
 
   write_pos = flush_pos = ack_pos = safe_pos = h.write_pos;
-  read_pos = requested_pos = received_pos = h.read_pos;
-  expire_pos = h.expire_pos;
+  read_pos = requested_pos = received_pos = expire_pos = h.expire_pos;
   trimmed_pos = trimming_pos = h.trimmed_pos;
 
   dout(1) << "_finish_read_head " << h << ".  probing for end of log (from " << write_pos << ")..." << dendl;
@@ -311,7 +309,7 @@ void Journaler::write_head(Context *oncommit)
   assert(state == STATE_ACTIVE);
   last_written.trimmed_pos = trimmed_pos;
   last_written.expire_pos = expire_pos;
-  last_written.read_pos = read_pos;
+  last_written.unused_field = expire_pos;
   last_written.write_pos = safe_pos;
   dout(10) << "write_head " << last_written << dendl;
   
