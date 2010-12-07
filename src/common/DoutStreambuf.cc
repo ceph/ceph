@@ -101,7 +101,7 @@ static int safe_write(int fd, const char *buf, signed int len)
     res = write(fd, buf, len);
     if (res < 0) {
       int err = errno;
-      if (err != EINVAL) {
+      if (err != EINTR) {
 	ostringstream oss;
 	oss << __func__ << ": failed to write to fd " << fd << ": "
 	    << cpp_strerror(err) << "\n";
