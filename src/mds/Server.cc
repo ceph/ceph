@@ -1062,7 +1062,7 @@ void Server::handle_client_request(MClientRequest *req)
   }
 
   // retry?
-  if (req->get_retry_attempt() &&
+  if ((req->get_retry_attempt() || req->is_replay()) &&
       ((req->get_op() != CEPH_MDS_OP_OPEN) && 
        (req->get_op() != CEPH_MDS_OP_CREATE))) {
     assert(session);
