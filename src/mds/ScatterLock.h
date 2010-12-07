@@ -135,6 +135,7 @@ public:
 	parent->put(MDSCacheObject::PIN_DIRTYSCATTERED);
 	parent->clear_dirty_scattered(get_type());
       }
+      try_clear_more();
     }
   }
   void clear_dirty() {
