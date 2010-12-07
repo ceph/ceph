@@ -116,6 +116,42 @@ static int safe_write(int fd, const char *buf, signed int len)
   }
 }
 
+static int create_symlink(const string &oldpath, const string &newpath)
+{
+  while (1) {
+    if (::symlink(oldpath.c_str(), newpath.c_str()) == 0)
+      return 0;
+    int err = errno;
+    if (err == EEXIST) {
+      // Handle EEXIST
+      if (::unlink(newpath.c_str())) {
+	err = errno;
+	ostringstream oss;
+	oss << __func__ << ": failed to remove '" << newpath << "': "
+	    << cpp_strerror(err) << "\n";
+	primitive_log(oss.str());
+	return err;
+      }
+    }
+    else {
+      // Other errors
+      ostringstream oss;
+      oss << __func__ << ": failed to symlink(oldpath='" << oldpath
+	  << "', newpath='" << newpath << "'): " << cpp_strerror(err) << "\n";
+      primitive_log(oss.str());
+      return err;
+    }
+  }
+}
+
+static std::string get_basename(const std::string &filename)
+{
+  size_t last_slash = filename.find_last_of("/");
+  if (last_slash == std::string::npos)
+    return filename;
+  return filename.substr(last_slash + 1);
+}
+
 ///////////////////////////// DoutStreambuf /////////////////////////////
 template <typename charT, typename traits>
 DoutStreambuf<charT, traits>::DoutStreambuf()
@@ -376,7 +412,9 @@ bool DoutStreambuf<charT, traits>::_read_ofile_config()
 {
   opath = _calculate_opath();
   if (opath.empty()) {
-    primitive_log("_calculate_opath failed.\n");
+    ostringstream oss;
+    oss << __func__ << ": _calculate_opath failed.\n";
+    primitive_log(oss.str());
     return false;
   }
 
@@ -391,6 +429,7 @@ bool DoutStreambuf<charT, traits>::_read_ofile_config()
     primitive_log(oss.str());
     return false;
   }
+
   return true;
 }
 
