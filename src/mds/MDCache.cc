@@ -3154,9 +3154,10 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
       CDentry::linkage_t *dnl = dn->get_linkage();
       dout(15) << " add_weak_primary_dentry " << *dn << dendl;
       assert(dnl->is_primary());
+      CInode *in = dnl->get_inode();
       assert(dnl->get_inode()->is_dir());
-      rejoin->add_weak_primary_dentry(dir->dirfrag(), dn->name.c_str(), dn->first, dn->last, dnl->get_inode()->ino());
-      dnl->get_inode()->get_nested_dirfrags(nested);
+      rejoin->add_weak_primary_dentry(dir->dirfrag(), dn->name.c_str(), dn->first, dn->last, in->ino());
+      in->get_nested_dirfrags(nested);
     }
   } else {
     // STRONG
