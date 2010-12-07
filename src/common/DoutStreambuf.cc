@@ -14,11 +14,14 @@
 
 #include "config.h"
 #include "common/DoutStreambuf.h"
+#include "common/errno.h"
 #include "common/Mutex.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <streambuf>
 #include <string.h>
 #include <syslog.h>
@@ -59,6 +62,30 @@ static inline int dout_prio_to_syslog_prio(int prio)
   return LOG_DEBUG;
 }
 
+static int safe_write(int fd, const char *buf, signed int len)
+{
+  int res;
+
+  assert(len != 0);
+  while (1) {
+    res = write(fd, buf, len);
+    if (res < 0) {
+      int err = errno;
+      if (err != EINVAL) {
+	ostringstream oss;
+	oss << __func__ << ": failed to write to fd " << fd << ": "
+	    << cpp_strerror(err) << "\n";
+	primitive_log(oss.str());
+	return err;
+      }
+    }
+    len -= res;
+    buf += res;
+    if (len <= 0)
+      return 0;
+  }
+}
+
 ///////////////////////////// DoutStreambuf /////////////////////////////
 template <typename charT, typename traits>
 DoutStreambuf<charT, traits>::DoutStreambuf()
@@ -81,15 +108,20 @@ DoutStreambuf<charT, traits>::overflow(DoutStreambuf<charT, traits>::int_type c)
     // zero-terminate the buffer
     charT* end_ptr = this->pptr();
     *end_ptr++ = '\0';
-    //std::cout << "overflow with '" << obuf << "'" << std::endl;
+    *end_ptr++ = '\0';
+//    char buf[1000];
+//    hex2str(obuf, end_ptr - obuf, buf, sizeof(buf));
+//    printf("overflow buffer: '%s'\n", buf);
   }
 
   // Loop over all lines in the buffer.
   int prio = 100;
   charT* start = obuf;
   while (true) {
-    charT* end = strchr(start, '\n');
+    char* end = strchrnul(start, '\n');
     if (start == end) {
+      if (*start == '\0')
+	break;
       // skip zero-length lines
       ++start;
       continue;
@@ -98,38 +130,37 @@ DoutStreambuf<charT, traits>::overflow(DoutStreambuf<charT, traits>::int_type c)
       // Decode some control characters
       ++start;
       unsigned char tmp = *((unsigned char*)start);
-      if (tmp != 0) {
-	prio = tmp;
-	++start;
-      }
+      prio = tmp - 11;
+      ++start;
     }
-    if (end) {
-      *end = '\0';
-    }
-    if (*start == '\0') {
-      // empty buffer
-      break;
-    }
+    *end = '\n';
+    char next = *(end+1);
+    *(end+1) = '\0';
 
-    // Now 'start' points to a NULL-terminated string, which we want to output
-    // with priority 'prio'
+    // Now 'start' points to a NULL-terminated string, which we want to
+    // output with priority 'prio'
+    int len = strlen(start);
     if (flags & DOUTSB_FLAG_SYSLOG) {
+      //printf("syslogging: '%s' len=%d\n", start, len);
       syslog(LOG_USER | dout_prio_to_syslog_prio(prio), "%s", start);
     }
     if (flags & DOUTSB_FLAG_STDOUT) {
-      puts(start);
+      // Just write directly out to the stdout fileno. There's no point in
+      // using something like fputs to write to a temporary buffer,
+      // because we would just have to flush that temporary buffer
+      // immediately.
+      if (safe_write(STDOUT_FILENO, start, len))
+	flags &= ~DOUTSB_FLAG_STDOUT;
     }
     if (flags & DOUTSB_FLAG_STDERR) {
+      // Only write to stderr if the message is important enough.
       if (prio_is_visible_on_stderr(prio)) {
-	fputs(start, stderr);
-	fputc('\n', stderr);
+	if (safe_write(STDERR_FILENO, start, len))
+	  flags &= ~DOUTSB_FLAG_STDERR;
       }
     }
 
-    if (!end) {
-      break;
-    }
-
+    *(end+1) = next;
     start = end + 1;
   }
 
@@ -189,7 +220,8 @@ set_prio(int prio)
 {
   charT* p = this->pptr();
   *p++ = '\1';
-  *p++ = ((unsigned char)prio);
+  unsigned char val = (prio + 11);
+  *p++ = val;
   this->pbump(2);
 }
 

@@ -45,6 +45,7 @@ int main(int argc, const char **argv)
 
   _dout_lock.Lock();
   dos->set_flags(DoutStreambuf<char>::DOUTSB_FLAG_SYSLOG |
+                 DoutStreambuf<char>::DOUTSB_FLAG_STDOUT |
 		 DoutStreambuf<char>::DOUTSB_FLAG_STDERR);
   _dout_lock.Unlock();
 
@@ -52,29 +53,29 @@ int main(int argc, const char **argv)
   syslog(LOG_USER | LOG_NOTICE, "TestDoutStreambuf: starting test\n");
 
   dos->set_prio(1);
-  oss << "I am logging to dout now!" << std::endl;
+  oss << "1. I am logging to dout now!" << std::endl;
 
   dos->set_prio(2);
-  oss << "And here is another line!" << std::endl;
+  oss << "2. And here is another line!" << std::endl;
 
   oss.flush();
 
   dos->set_prio(3);
-  oss << "And here is another line!" << std::endl;
+  oss << "3. And here is another line!" << std::endl;
 
   dos->set_prio(16);
-  oss << "Stuff ";
+  oss << "4. Stuff ";
   oss << "that ";
   oss << "will ";
   oss << "all ";
   oss << "be ";
   oss << "on ";
   oss << "one ";
-  oss << "line.";
+  oss << "line.\n";
   oss.flush();
 
   dos->set_prio(10);
-  oss << "There will be no blank lines here." << std::endl;
+  oss << "5. There will be no blank lines here.\n" << std::endl;
   oss.flush();
   oss.flush();
   oss.flush();
