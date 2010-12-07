@@ -718,6 +718,7 @@ protected:
   
   set<CInode*> rejoin_undef_inodes;
   set<CInode*> rejoin_potential_updated_scatterlocks;
+  set<CDir*>   rejoin_undef_dirfrags;
 
   vector<CInode*> rejoin_recover_q, rejoin_check_q;
   list<Context*> rejoin_waiters;
@@ -790,6 +791,11 @@ public:
   void do_delayed_cap_imports();
   void check_realm_past_parents(SnapRealm *realm);
   void open_snap_parents();
+
+  void open_undef_dirfrags();
+  void opened_undef_dirfrag(CDir *dir) {
+    rejoin_undef_dirfrags.erase(dir);
+  }
 
   void reissue_all_caps();
   

@@ -162,7 +162,6 @@ public:
   static const int STATE_ANCHORING =   (1<<3);
   static const int STATE_UNANCHORING = (1<<4);
   static const int STATE_OPENINGDIR =  (1<<5);
-  static const int STATE_REJOINUNDEF = (1<<6);   // inode contents undefined.
   static const int STATE_FREEZING =    (1<<7);
   static const int STATE_FROZEN =      (1<<8);
   static const int STATE_AMBIGUOUSAUTH = (1<<9);
