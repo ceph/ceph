@@ -920,6 +920,8 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state,
 void Migrator::encode_export_inode_caps(CInode *in, bufferlist& bl, 
 					map<client_t,entity_inst_t>& exported_client_map)
 {
+  dout(20) << "encode_export_inode_caps " << *in << dendl;
+
   // encode caps
   map<client_t,Capability::Export> cap_map;
   in->export_client_caps(cap_map);
@@ -937,6 +939,8 @@ void Migrator::encode_export_inode_caps(CInode *in, bufferlist& bl,
 
 void Migrator::finish_export_inode_caps(CInode *in)
 {
+  dout(20) << "finish_export_inode_caps " << *in << dendl;
+
   in->state_clear(CInode::STATE_EXPORTINGCAPS);
   in->put(CInode::PIN_EXPORTINGCAPS);
 
@@ -1225,7 +1229,8 @@ void Migrator::export_reverse(CDir *dir)
     dir->abort_export();
     for (CDir::map_t::iterator p = dir->items.begin(); p != dir->items.end(); ++p) {
       p->second->abort_export();
-      if (!p->second->get_linkage()->is_primary()) continue;
+      if (!p->second->get_linkage()->is_primary())
+	continue;
       CInode *in = p->second->get_linkage()->get_inode();
       in->abort_export();
       if (in->is_dir())
@@ -1895,6 +1900,7 @@ void Migrator::import_reverse(CDir *dir)
        p != import_caps[dir].end();
        ++p) {
     CInode *in = p->first;
+    dout(20) << " reexporting caps on " << *in << dendl;
     /*
      * bleh.. just export all caps for this inode.  the auth mds
      * will pick them up during recovery.

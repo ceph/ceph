@@ -652,6 +652,9 @@ private:
   void finish_export(utime_t now);
   void abort_export() {
     put(PIN_TEMPEXPORTING);
+    assert(state_test(STATE_EXPORTINGCAPS));
+    state_clear(STATE_EXPORTINGCAPS);
+    put(PIN_EXPORTINGCAPS);
   }
   void decode_import(bufferlist::iterator& p, LogSegment *ls);
   
