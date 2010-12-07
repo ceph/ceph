@@ -90,6 +90,11 @@ if [ $allhosts -eq 0 ]; then
     usage_exit
 fi
 
+if [ -z "$adminkeyring" ]; then
+    echo "mkcephfs requires '-k /path/to/admin/keyring'. default location is /etc/ceph/keyring.bin."
+    usage_exit
+fi
+
 verify_conf
 
 get_name_list "$@"
