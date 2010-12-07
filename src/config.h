@@ -82,6 +82,7 @@ struct md_config_t {
   const char *log_sym_dir;
   int log_sym_history;
   bool log_to_stdout;
+  bool log_to_syslog;
   bool log_per_instance;
 
   bool clog_to_monitors;

@@ -326,6 +326,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(log_sym_dir, 0, OPT_STR, 0),
 	OPTION(log_sym_history, 0, OPT_INT, 10),
 	OPTION(log_to_stdout, 0, OPT_BOOL, true),
+	OPTION(log_to_syslog, 0, OPT_BOOL, false),
 	OPTION(log_per_instance, 0, OPT_BOOL, false),
 	OPTION(clog_to_monitors, 0, OPT_BOOL, true),
 	OPTION(clog_to_syslog, 0, OPT_BOOL, false),
