@@ -25,6 +25,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <syslog.h>
 
 using std::cout;
 using std::cerr;
@@ -40,7 +41,15 @@ int main(int argc, const char **argv)
   common_set_defaults(false);
   common_init(args, "ceph", true);
 
-  std::ostream oss(new DoutStreambuf<char>);
+  DoutStreambuf<char> *dos = new DoutStreambuf<char>();
+
+  _dout_lock.Lock();
+  dos->set_flags(DoutStreambuf<char>::DOUTSB_FLAG_SYSLOG |
+		 DoutStreambuf<char>::DOUTSB_FLAG_STDOUT);
+  _dout_lock.Unlock();
+
+  std::ostream oss(dos);
+  syslog(LOG_USER | LOG_NOTICE, "TestDoutStreambuf: starting test\n");
 
   oss << "I am logging to dout now!" << std::endl;
 
@@ -63,8 +72,7 @@ int main(int argc, const char **argv)
   oss.flush();
   oss.flush();
 
-  oss << "But here is a blank line:" << std::endl;
-  oss << std::endl;
+  syslog(LOG_USER | LOG_NOTICE, "TestDoutStreambuf: ending test\n");
 
   return 0;
 }
