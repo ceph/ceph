@@ -818,10 +818,9 @@ public:
       } else
 	lock->set_state(LOCK_SYNC);
     } else {
+      // our states have already been chosen during rejoin.
       if (lock->is_xlocked())
-	lock->set_state(LOCK_LOCK);
-      else
-	lock->set_state(LOCK_SYNC);  // might have been lock, previously
+	assert(lock->get_state() == LOCK_LOCK);
     }
   }
   void choose_lock_states() {
