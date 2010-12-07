@@ -446,9 +446,6 @@ void MDLog::replay(Context *c)
 {
   assert(journaler->is_active());
 
-  // start reading at the last known expire point.
-  journaler->set_read_pos( journaler->get_expire_pos() );
-
   // empty?
   if (journaler->get_read_pos() == journaler->get_write_pos()) {
     dout(10) << "replay - journal empty, done." << dendl;
@@ -500,7 +497,6 @@ void MDLog::_replay_thread()
 
   // loop
   int r = 0;
-  uint64_t new_expire_pos = journaler->get_expire_pos();
   while (1) {
     // wait for read?
     while (!journaler->is_readable() &&
@@ -561,9 +557,6 @@ void MDLog::_replay_thread()
       num_events++;
 
       le->replay(mds);
-
-      if (!new_expire_pos) 
-	new_expire_pos = pos;
     }
     delete le;
 
@@ -578,12 +571,9 @@ void MDLog::_replay_thread()
   if (r == 0) {
     assert(journaler->get_read_pos() == journaler->get_write_pos());
     dout(10) << "_replay - complete, " << num_events
-	     << " events, new read/expire pos is " << new_expire_pos << dendl;
+	     << " events" << dendl;
 
-    // move read pointer _back_ to first subtree map we saw, for eventual trimming
-    journaler->set_read_pos(new_expire_pos);
-    journaler->set_expire_pos(new_expire_pos);
-    logger->set(l_mdl_expos, new_expire_pos);
+    logger->set(l_mdl_expos, journaler->get_expire_pos());
 
     dout(10) << "_replay - truncating at " << journaler->get_write_pos() << dendl;
     Context *c = new C_MDL_ReplayTruncated(this);
