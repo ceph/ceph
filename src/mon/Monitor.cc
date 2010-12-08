@@ -917,8 +917,6 @@ void Monitor::new_tick()
 
 void Monitor::tick()
 {
-  _dout_check_log();
-
   // ok go.
   dout(11) << "tick" << dendl;
   

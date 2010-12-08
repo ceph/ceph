@@ -494,8 +494,6 @@ void MDS::tick()
   // reschedule
   reset_tick();
 
-  _dout_check_log();
-
   clog.send_log();
 
   utime_t now = g_clock.now();

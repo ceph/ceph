@@ -1515,8 +1515,6 @@ void OSD::tick()
 
   logger->set(l_osd_buf, buffer_total_alloc.read());
 
-  _dout_check_log();
-
   if (got_sigterm) {
     dout(0) << "got SIGTERM, shutting down" << dendl;
     cluster_messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN),
