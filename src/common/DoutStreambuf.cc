@@ -58,9 +58,10 @@ static std::string normalize_relative(const char *from)
   if (from[0] == '/')
     return string(from);
 
-  std::auto_ptr <char> cwd(get_current_dir_name());
+  char c[512];
+  char *cwd = getcwd(c, sizeof(c));
   ostringstream oss;
-  oss << "/" << *cwd << "/" << from;
+  oss << cwd << "/" << from;
   return oss.str();
 }
 
