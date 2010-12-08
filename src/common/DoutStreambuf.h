@@ -59,7 +59,13 @@ public:
   // Set the priority of the messages being put into the stream
   void set_prio(int prio);
 
+  // Call after calling daemon()
+  // A change in the process ID sometimes requires us to change our output
+  // path name.
   int handle_pid_change();
+
+  // Create a rank symlink to the log file
+  int create_rank_symlink(int n);
 
   std::string config_to_str() const;
 
@@ -76,7 +82,9 @@ protected:
 private:
   void _clear_output_buffer();
   std::string _calculate_opath() const;
+  std::string _get_symlink_dir() const;
   bool _read_ofile_config();
+  int _rotate_files(const std::string &base);
 
   // Output buffer
   charT obuf[OBUF_SZ];

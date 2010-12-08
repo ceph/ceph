@@ -313,9 +313,6 @@ set_prio(int prio)
   this->pbump(2);
 }
 
-// Call after calling daemon()
-// A change in the process ID sometimes requires us to change our output
-// path name.
 template <typename charT, typename traits>
 int DoutStreambuf<charT, traits>::handle_pid_change()
 {
@@ -361,6 +358,31 @@ int DoutStreambuf<charT, traits>::handle_pid_change()
 
   opath = new_opath;
 
+  return 0;
+}
+
+template <typename charT, typename traits>
+int DoutStreambuf<charT, traits>::create_rank_symlink(int n)
+{
+  Mutex::Locker l(_dout_lock);
+
+  if (!(flags & DOUTSB_FLAG_OFILE))
+    return 0;
+
+  ostringstream rss;
+  std::string symlink_dir(_get_symlink_dir());
+  rss << symlink_dir << "/" << g_conf.type << "." << n;
+  string rsym_path_(rss.str());
+  int ret = create_symlink(opath, rsym_path_);
+  if (ret) {
+    ostringstream oss;
+    oss << __func__ << ": failed to create rank symlink with n = "
+	<< n << "\n";
+    primitive_log(oss.str());
+    return ret;
+  }
+
+  rsym_path = rsym_path_;
   return 0;
 }
 
@@ -457,6 +479,15 @@ std::string DoutStreambuf<charT, traits>::_calculate_opath() const
 }
 
 template <typename charT, typename traits>
+std::string DoutStreambuf<charT, traits>::_get_symlink_dir() const
+{
+  if (!empty(g_conf.log_sym_dir))
+    return normalize_relative(g_conf.log_sym_dir);
+  else
+    return get_dirname(opath);
+}
+
+template <typename charT, typename traits>
 bool DoutStreambuf<charT, traits>::_read_ofile_config()
 {
   int ret;
@@ -473,12 +504,8 @@ bool DoutStreambuf<charT, traits>::_read_ofile_config()
 
   if (empty(g_conf.log_file) && g_conf.log_per_instance) {
     // Calculate instance symlink path (isym_path)
-    std::string symlink_dir;
-    if (empty(g_conf.log_sym_dir))
-      symlink_dir = get_dirname(opath);
-    else
-      symlink_dir = g_conf.log_sym_dir;
     ostringstream iss;
+    std::string symlink_dir(_get_symlink_dir());
     iss << symlink_dir << "/" << g_conf.type << "." << g_conf.id;
     isym_path = iss.str();
 
