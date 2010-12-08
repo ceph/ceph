@@ -31,10 +31,15 @@
 // TODO: get rid of this lock using thread-local storage
 extern Mutex _dout_lock;
 
-/* True if we should output high-priority messages to stderr */
-static bool use_stderr = true;
-
 //////////////////////// Helper functions //////////////////////////
+// Try a 0-byte write to a file descriptor to see if it open.
+static bool fd_is_open(int fd)
+{
+  char buf;
+  ssize_t res = TEMP_FAILURE_RETRY(write(fd, &buf, 0));
+  return (res == 0);
+}
+
 static bool empty(const char *str)
 {
   if (!str)
@@ -260,15 +265,17 @@ DoutStreambuf<charT, traits>::overflow(DoutStreambuf<charT, traits>::int_type c)
 }
 
 template <typename charT, typename traits>
-void DoutStreambuf<charT, traits>::set_use_stderr(bool val)
+void DoutStreambuf<charT, traits>::handle_stderr_closed()
 {
-  _dout_lock.Lock();
-  use_stderr = val;
-  if (val)
-    flags |= DOUTSB_FLAG_STDERR;
-  else
-    flags &= ~DOUTSB_FLAG_STDERR;
-  _dout_lock.Unlock();
+  assert(_dout_lock.is_locked());
+  flags &= ~DOUTSB_FLAG_STDERR;
+}
+
+template <typename charT, typename traits>
+void DoutStreambuf<charT, traits>::handle_stdout_closed()
+{
+  assert(_dout_lock.is_locked());
+  flags &= ~DOUTSB_FLAG_STDOUT;
 }
 
 template <typename charT, typename traits>
@@ -281,9 +288,11 @@ void DoutStreambuf<charT, traits>::read_global_config()
     flags |= DOUTSB_FLAG_SYSLOG;
   }
   if (g_conf.log_to_stdout) {
-    flags |= DOUTSB_FLAG_STDOUT;
+    if (fd_is_open(STDOUT_FILENO)) {
+      flags |= DOUTSB_FLAG_STDOUT;
+    }
   }
-  if (use_stderr) {
+  if (fd_is_open(STDERR_FILENO)) {
     flags |= DOUTSB_FLAG_STDERR;
   }
   if (g_conf.log_to_file) {
@@ -315,7 +324,7 @@ set_prio(int prio)
 template <typename charT, typename traits>
 int DoutStreambuf<charT, traits>::handle_pid_change()
 {
-  Mutex::Locker l(_dout_lock);
+  assert(_dout_lock.is_locked());
   if (!(flags & DOUTSB_FLAG_OFILE))
     return 0;
 
@@ -392,7 +401,6 @@ std::string DoutStreambuf<charT, traits>::config_to_str() const
   ostringstream oss;
   oss << "g_conf.log_to_syslog = " << g_conf.log_to_syslog << "\n";
   oss << "g_conf.log_to_stdout = " << g_conf.log_to_stdout << "\n";
-  oss << "use_stderr = " << use_stderr << "\n";
   oss << "g_conf.log_to_file = " << g_conf.log_to_file << "\n";
   oss << "g_conf.log_file = '" << cpp_str(g_conf.log_file) << "'\n";
   oss << "g_conf.log_dir = '" << cpp_str(g_conf.log_dir) << "'\n";
@@ -529,7 +537,7 @@ bool DoutStreambuf<charT, traits>::_read_ofile_config()
 
   assert(ofd == -1);
   ofd = open(opath.c_str(),
-	    O_CREAT | O_WRONLY | O_CLOEXEC | O_APPEND, S_IWUSR | S_IRUSR);
+	    O_CREAT | O_WRONLY | O_APPEND, S_IWUSR | S_IRUSR);
   if (ofd < 0) {
     int err = errno;
     ostringstream oss;

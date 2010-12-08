@@ -2377,7 +2377,6 @@ int SimpleMessenger::start(bool nodaemon)
 	      << dendl;
     }
     dout(1) << "messenger.start daemonizing" << dendl;
-    dout_disable_stderr();
 
     if (1) {
       daemon(1, 0);
@@ -2398,8 +2397,7 @@ int SimpleMessenger::start(bool nodaemon)
       ::mkdir(g_conf.chdir, 0700);
       ::chdir(g_conf.chdir);
     }
-
-    dout_handle_pid_change();
+    dout_handle_daemonize();
   }
 
   // go!

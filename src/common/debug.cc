@@ -35,9 +35,11 @@ void _dout_open_log()
   _dout_need_open = false;
 }
 
-int dout_handle_pid_change()  // after calling daemon()
+int dout_handle_daemonize()
 {
   Mutex::Locker l(_dout_lock);
+  _doss->handle_stdout_closed();
+  _doss->handle_stderr_closed();
   return _doss->handle_pid_change();
 }
 
@@ -45,11 +47,6 @@ int dout_create_rank_symlink(int n)
 {
   Mutex::Locker l(_dout_lock);
   return _doss->create_rank_symlink(n);
-}
-
-void dout_disable_stderr()
-{
-  _doss->set_use_stderr(false);
 }
 
 void hex2str(const char *s, int len, char *buf, int dest_len)

@@ -31,11 +31,7 @@ extern Mutex _dout_lock;
 
 extern void _dout_open_log();
 
-// Call when the pid changes. For example, after calling daemon().
-extern int dout_handle_pid_change();
-
-// Skip output to stderr.
-extern void dout_disable_stderr();
+extern int dout_handle_daemonize();
 
 extern int dout_create_rank_symlink(int n);
 

@@ -44,11 +44,13 @@ public:
 
   DoutStreambuf();
 
-  // Set or clear the use_stderr bit
-  // If this bit is cleared, we don't bother outputting high priority messages
-  // on stderr any more. We should clear the bit after daemonizing, since
-  // stderr -> /dev/null at that point.
-  void set_use_stderr(bool val);
+  // Call when you close stderr.  Not strictly necessary, since we would get an
+  // error the next time we tried to write to stdedrr. But nicer than waiting
+  // for the error to happen.
+  void handle_stderr_closed();
+
+  // Call when you close stdout.
+  void handle_stdout_closed();
 
   // Set the flags based on the global configuration
   void read_global_config();
