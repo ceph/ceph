@@ -560,6 +560,26 @@ void Paxos::extend_lease()
   mon->timer.add_event_at(at, lease_renew_event);
 }
 
+void Paxos::warn_on_future_time(utime_t t, entity_name_t from)
+{
+  utime_t now = g_clock.now();
+  if (t > now) {
+    utime_t diff = t - now;
+    if (diff > g_conf.mon_clock_drift_allowed) {
+      utime_t warn_diff = now - last_clock_drift_warn;
+      if (warn_diff >
+	  pow(g_conf.mon_clock_drift_warn_backoff, clock_drift_warned)) {
+	stringstream ss;
+	ss << "message from " << from << " was stamped " << diff
+	   << "s in the future, clocks not synchronized";
+	mon->get_logclient()->log(LOG_WARN, ss);
+	last_clock_drift_warn = g_clock.now();
+	++clock_drift_warned;
+      }
+    }
+  }
+
+}
 
 // peon
 void Paxos::handle_lease(MMonPaxos *lease)
@@ -571,22 +591,8 @@ void Paxos::handle_lease(MMonPaxos *lease)
     lease->put();
     return;
   }
-  utime_t allowed_time;
-  allowed_time.set_from_double(g_clock.now() + g_conf.mon_clock_drift_allowed);
-  if (lease->sent_timestamp > allowed_time) {
-    utime_t warn_diff = g_clock.now() - last_clock_drift_warn;
-    if (warn_diff >
-	 pow(g_conf.mon_clock_drift_warn_backoff, clock_drift_warned)) {
-      stringstream ss;
-      ss << "lease_expire from mon" << lease->get_source().num()
-	 << " was sent from future time " << lease->sent_timestamp
-	 << " with expected time <=" << allowed_time
-	 << ", clocks not synchronized";
-      mon->get_logclient()->log(LOG_WARN, ss);
-      last_clock_drift_warn = g_clock.now();
-      ++clock_drift_warned;
-    }
-  }
+
+  warn_on_future_time(lease->sent_timestamp, lease->get_source());
 
   // extend lease
   if (lease_expire < lease->lease_timestamp) {
@@ -649,22 +655,8 @@ void Paxos::handle_lease_ack(MMonPaxos *ack)
 	     << " dup (lagging!), ignoring" << dendl;
   }
 
-  utime_t allowed_time;
-  allowed_time.set_from_double(g_clock.now() + g_conf.mon_clock_drift_allowed);
-  if (ack->sent_timestamp > allowed_time) {
-    utime_t warn_diff = g_clock.now() - last_clock_drift_warn;
-    if (warn_diff >
-         pow(g_conf.mon_clock_drift_warn_backoff, clock_drift_warned)) {
-      stringstream ss;
-      ss << "lease_ack from mon" << from
-          << " was sent from future time " << ack->sent_timestamp
-          << " with allowed time <=" << allowed_time
-          << ", clocks not synchronized.";
-      mon->get_logclient()->log(LOG_WARN, ss);
-      last_clock_drift_warn = g_clock.now();
-      ++clock_drift_warned;
-    }
-  }
+  warn_on_future_time(ack->sent_timestamp, ack->get_source());
+
   ack->put();
 }
 
