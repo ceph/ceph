@@ -371,9 +371,6 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
     } else {
       info.state = state;
       info.state_seq = seq;
-      if (state == MDSMap::STATE_STANDBY_REPLAY ||
-          state == MDSMap::STATE_ONESHOT_REPLAY)
-        info.rank = m->get_standby_for_rank();
     }
   }
 

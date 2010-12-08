@@ -854,19 +854,26 @@ void MDS::handle_mds_map(MMDSMap *m)
   }
 
   if (whoami < 0) {
-    if (want_state == MDSMap::STATE_STANDBY) {
-      dout(10) << "dropped out of mdsmap, try to re-add myself" << dendl;
-      want_state = state = MDSMap::STATE_BOOT;
+    if (state == MDSMap::STATE_STANDBY_REPLAY ||
+        state == MDSMap::STATE_ONESHOT_REPLAY) {
+      // fill in whoami from standby-for-rank. If we let this be changed
+      // the logic used to set it here will need to be adjusted.
+      whoami = mdsmap->get_mds_info_gid(monc->get_global_id()).standby_for_rank;
+    } else {
+      if (want_state == MDSMap::STATE_STANDBY) {
+        dout(10) << "dropped out of mdsmap, try to re-add myself" << dendl;
+        want_state = state = MDSMap::STATE_BOOT;
+        goto out;
+      }
+      if (want_state == MDSMap::STATE_BOOT) {
+        dout(10) << "not in map yet" << dendl;
+      } else {
+        dout(1) << "handle_mds_map i (" << addr
+            << ") dne in the mdsmap, respawning myself" << dendl;
+        respawn();
+      }
       goto out;
     }
-    if (want_state == MDSMap::STATE_BOOT) {
-      dout(10) << "not in map yet" << dendl;
-    } else {
-      dout(1) << "handle_mds_map i (" << addr
-	      << ") dne in the mdsmap, respawning myself" << dendl;
-      respawn();
-    }
-    goto out;
   }
 
   // ??
