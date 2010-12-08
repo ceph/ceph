@@ -24,7 +24,7 @@
 
 #define DOUT_SUBSYS auth
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "cephx client: "
+#define dout_prefix *_dout << "cephx client: "
 
 
 int CephxClientHandler::build_request(bufferlist& bl)

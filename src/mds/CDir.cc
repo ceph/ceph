@@ -36,7 +36,7 @@
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "mds" << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") "
+#define dout_prefix *_dout << "mds" << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") "
 
 
 

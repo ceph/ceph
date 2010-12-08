@@ -38,7 +38,7 @@ void do_apply_partial(bufferlist& bl, map<uint64_t, bufferlist>& pm)
 /*********** BufferHead **************/
 
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "ebofs." << *this << "."
+#define dout_prefix *_dout << "ebofs." << *this << "."
 
 
 void BufferHead::add_partial(uint64_t off, bufferlist& p) 
@@ -124,7 +124,7 @@ void BufferHead::apply_partial()
 /************ ObjectCache **************/
 
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "ebofs.oc."
+#define dout_prefix *_dout << "ebofs.oc."
 
 void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist& bl)
 {
@@ -983,7 +983,7 @@ void ObjectCache::scrub_csums()
 /************** BufferCache ***************/
 
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "ebofs.bc."
+#define dout_prefix *_dout << "ebofs.bc."
 
 
 BufferHead *BufferCache::split(BufferHead *orig, block_t after) 

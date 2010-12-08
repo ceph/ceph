@@ -22,7 +22,7 @@
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".tableserver(" << get_mdstable_name(table) << ") "
+#define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".tableserver(" << get_mdstable_name(table) << ") "
 
 /* This function DOES put the passed message before returning */
 void MDSTableServer::handle_request(MMDSTableRequest *req)

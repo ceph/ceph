@@ -69,7 +69,7 @@
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "mds" << whoami << '.' << incarnation << ' '
+#define dout_prefix *_dout << "mds" << whoami << '.' << incarnation << ' '
 
 
 

@@ -14,7 +14,7 @@
 
 #define DOUT_SUBSYS osd
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl
+#define dout_prefix *_dout
 
 static ClassHandler::ClassData null_cls_data;
 

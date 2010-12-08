@@ -93,7 +93,7 @@ using namespace std;
 #undef dout_prefix
 #define dout_prefix _prefix(mds)
 static ostream& _prefix(MDS *mds) {
-  return *_dout << dbeginl << "mds" << mds->get_nodeid() << ".cache ";
+  return *_dout << "mds" << mds->get_nodeid() << ".cache ";
 }
 
 long g_num_ino = 0;

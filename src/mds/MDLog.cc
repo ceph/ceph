@@ -30,7 +30,7 @@
 #undef DOUT_COND
 #define DOUT_COND(l) l<=g_conf.debug_mds || l <= g_conf.debug_mds_log
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".log "
+#define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".log "
 
 // cons/des
 

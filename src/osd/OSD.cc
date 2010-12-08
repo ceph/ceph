@@ -98,7 +98,7 @@
 #define dout_prefix _prefix(*_dout, whoami, osdmap)
 
 static ostream& _prefix(ostream& out, int whoami, OSDMap *osdmap) {
-  return out << dbeginl << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " ";
+  return out << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " ";
 }
 
 const coll_t coll_t::META_COLL("meta");

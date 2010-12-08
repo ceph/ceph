@@ -38,7 +38,7 @@ using namespace std;
 
 #define DOUT_SUBSYS client
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "client" << (whoami >= 0 ? whoami:client->get_nodeid()) << " "
+#define dout_prefix *_dout << "client" << (whoami >= 0 ? whoami:client->get_nodeid()) << " "
 
 // traces
 //void trace_include(SyntheticClient *syn, Client *cl, string& prefix);

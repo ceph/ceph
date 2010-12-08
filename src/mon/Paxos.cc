@@ -25,8 +25,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(mon, mon->name, mon->rank, machine_name, state, last_committed)
 static ostream& _prefix(Monitor *mon, const string& name, int rank, const char *machine_name, int state, version_t last_committed) {
-  return *_dout << dbeginl
-		<< "mon." << name << "@" << rank
+  return *_dout << "mon." << name << "@" << rank
 		<< (mon->is_starting() ?
 		    (const char*)"(starting)" :
 		    (mon->is_leader() ?

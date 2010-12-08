@@ -42,7 +42,7 @@
 
 #define DOUT_SUBSYS objecter
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << messenger->get_myname() << ".objecter "
+#define dout_prefix *_dout << messenger->get_myname() << ".objecter "
 
 
 // messages ------------------------------

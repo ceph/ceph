@@ -22,7 +22,7 @@
 
 #define DOUT_SUBSYS journaler
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << objecter->messenger->get_myname() << ".journaler "
+#define dout_prefix *_dout << objecter->messenger->get_myname() << ".journaler "
 
 
 

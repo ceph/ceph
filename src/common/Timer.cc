@@ -22,7 +22,7 @@
 
 #define DOUT_SUBSYS timer
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "timer(" << this << ")."
+#define dout_prefix *_dout << "timer(" << this << ")."
 
 #include <sstream>
 #include <signal.h>

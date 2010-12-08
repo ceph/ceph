@@ -39,7 +39,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(messenger)
 static ostream& _prefix(SimpleMessenger *messenger) {
-  return *_dout << dbeginl << "-- " << messenger->ms_addr << " ";
+  return *_dout << "-- " << messenger->ms_addr << " ";
 }
 
 
@@ -489,8 +489,7 @@ entity_addr_t SimpleMessenger::get_myaddr()
 #undef dout_prefix
 #define dout_prefix _pipe_prefix()
 ostream& SimpleMessenger::Pipe::_pipe_prefix() {
-  return *_dout << dbeginl
-		<< "-- " << messenger->ms_addr << " >> " << peer_addr << " pipe(" << this
+  return *_dout << "-- " << messenger->ms_addr << " >> " << peer_addr << " pipe(" << this
 		<< " sd=" << sd
 		<< " pgs=" << peer_global_seq
 		<< " cs=" << connect_seq

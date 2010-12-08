@@ -26,7 +26,7 @@
 
 #define DOUT_SUBSYS journal
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "journal "
+#define dout_prefix *_dout << "journal "
 
 const static int64_t ONE_MEG(1 << 20);
 

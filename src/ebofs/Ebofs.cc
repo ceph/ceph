@@ -31,7 +31,7 @@
 
 #define DOUT_SUBSYS ebofs
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "ebofs(" << dev.get_device_name() << ")."
+#define dout_prefix *_dout << "ebofs(" << dev.get_device_name() << ")."
 
 
 char *nice_blocks(block_t b) 

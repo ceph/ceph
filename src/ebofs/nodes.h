@@ -45,7 +45,8 @@
 */
 
 #undef debofs
-#define debofs(x) do { if (x <= g_conf.debug_ebofs) { *_dout << dbeginl << "ebofs.nodepool."
+#define debofs(x) do { if (x <= g_conf.debug_ebofs) { \
+  _dout_begin_line(x); *_dout << "ebofs.nodepool."
 
 
 class Node {

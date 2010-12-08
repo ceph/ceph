@@ -43,7 +43,7 @@ using namespace std;
 #define RADOS_LIST_MAX_ENTRIES 1024
 #define DOUT_SUBSYS rados
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "librados: "
+#define dout_prefix *_dout << "librados: "
 
 
 class RadosClient : public Dispatcher

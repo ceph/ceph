@@ -153,14 +153,14 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 
     if (front_crc != footer.front_crc) {
       dout(0) << "bad crc in front " << front_crc << " != exp " << footer.front_crc << dendl;
-      dout(20);
+      dout(20) << " ";
       front.hexdump(*_dout);
       *_dout << dendl;
       return 0;
     }
     if (middle_crc != footer.middle_crc) {
       dout(0) << "bad crc in middle " << middle_crc << " != exp " << footer.middle_crc << dendl;
-      dout(20);
+      dout(20) << " ";
       middle.hexdump(*_dout);
       *_dout << dendl;
       return 0;
@@ -170,7 +170,7 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
       __u32 data_crc = data.crc32c(0);
       if (data_crc != footer.data_crc) {
 	dout(0) << "bad crc in data " << data_crc << " != exp " << footer.data_crc << dendl;
-	dout(20);
+	dout(20) << " ";
 	data.hexdump(*_dout);
 	*_dout << dendl;
 	return 0;
