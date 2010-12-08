@@ -356,9 +356,13 @@ std::string DoutStreambuf<charT, traits>::config_to_str() const
   oss << "use_stderr = " << use_stderr << "\n";
   oss << "g_conf.log_to_file = " << g_conf.log_to_file << "\n";
   oss << "g_conf.log_file = '" << cpp_str(g_conf.log_file) << "'\n";
+  oss << "g_conf.log_dir = '" << cpp_str(g_conf.log_dir) << "'\n";
+  oss << "g_conf.g_conf.log_per_instance = '"
+      << g_conf.log_per_instance << "'\n";
   oss << "flags = 0x" << std::hex << flags << std::dec << "\n";
   oss << "ofd = " << ofd << "\n";
   oss << "opath = '" << opath << "'\n";
+  oss << "log_sym_history = " << g_conf.log_sym_history  << "\n";
   return oss.str();
 }
 
