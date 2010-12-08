@@ -135,8 +135,14 @@ static std::string get_dirname(const std::string &filename)
   return filename.substr(0, last_slash);
 }
 
-static int create_symlink(const string &oldpath, const string &newpath)
+static int create_symlink(string oldpath, const string &newpath)
 {
+  // Create relative symlink if the files are in the same directory
+  if (get_dirname(oldpath) == get_dirname(newpath)) {
+    oldpath = string("./") + get_basename(oldpath);
+    cerr << "setting oldpath = '" << oldpath << "'" << std::endl;
+  }
+
   while (1) {
     if (::symlink(oldpath.c_str(), newpath.c_str()) == 0)
       return 0;
