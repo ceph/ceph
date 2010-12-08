@@ -837,10 +837,10 @@ void MDSMonitor::tick()
 	switch (info.state) {
 	case MDSMap::STATE_CREATING:
 	case MDSMap::STATE_STARTING:
-	case MDSMap::STATE_STANDBY_REPLAY:
 	case MDSMap::STATE_ONESHOT_REPLAY:
 	  si.state = info.state;
 	  break;
+        case MDSMap::STATE_STANDBY_REPLAY:
 	case MDSMap::STATE_REPLAY:
 	case MDSMap::STATE_RESOLVE:
 	case MDSMap::STATE_RECONNECT:

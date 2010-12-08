@@ -83,6 +83,7 @@ MDS::MDS(const char *n, Messenger *m, MonClient *mc) :
   whoami(-1), incarnation(0),
   standby_for_rank(-1),
   standby_type(0),
+  continue_replay(false),
   messenger(m),
   monc(mc),
   logclient(messenger, &mc->monmap, mc),
@@ -895,33 +896,38 @@ void MDS::handle_mds_map(MMDSMap *m)
 	    << ceph_mds_state_name(state) << dendl;
     want_state = state;
 
-    // did i just recover?
-    if ((is_active() || is_clientreplay()) &&
-	(oldstate == MDSMap::STATE_REJOIN ||
-	 oldstate == MDSMap::STATE_RECONNECT)) 
-      recovery_done();
+    if (oldstate == MDSMap::STATE_STANDBY_REPLAY) {
+        dout(10) << "Monitor activated us! Deactivating replay loop" << dendl;
+        assert (state == MDSMap::STATE_REPLAY);
+        standby_for_rank = -1;
+    } else {
+      // did i just recover?
+      if ((is_active() || is_clientreplay()) &&
+          (oldstate == MDSMap::STATE_REJOIN ||
+              oldstate == MDSMap::STATE_RECONNECT))
+        recovery_done();
 
-    if (is_active()) {
-      active_start();
-    } else if (is_replay() || is_oneshot_replay() ||
-        is_standby_replay()) {
-      replay_start();
-    } else if (is_resolve()) {
-      resolve_start();
-    } else if (is_reconnect()) {
-      reconnect_start();
-    } else if (is_clientreplay()) {
-      clientreplay_start();
-    } else if (is_creating()) {
-      boot_create();
-    } else if (is_starting()) {
-      boot_start();
-    } else if (is_stopping()) {
-      assert(oldstate == MDSMap::STATE_ACTIVE);
-      stopping_start();
+      if (is_active()) {
+        active_start();
+      } else if (is_replay() || is_oneshot_replay() ||
+          is_standby_replay()) {
+        replay_start();
+      } else if (is_resolve()) {
+        resolve_start();
+      } else if (is_reconnect()) {
+        reconnect_start();
+      } else if (is_clientreplay()) {
+        clientreplay_start();
+      } else if (is_creating()) {
+        boot_create();
+      } else if (is_starting()) {
+        boot_start();
+      } else if (is_stopping()) {
+        assert(oldstate == MDSMap::STATE_ACTIVE);
+        stopping_start();
+      }
     }
   }
-
   
   // RESOLVE
   // is someone else newly resolving?
@@ -1189,6 +1195,8 @@ void MDS::calc_recovery_set()
 void MDS::replay_start()
 {
   dout(1) << "replay_start" << dendl;
+  if (is_standby_replay())
+    continue_replay = true;
   
   calc_recovery_set();
 
@@ -1235,10 +1243,16 @@ void MDS::replay_done()
 
   if (is_standby_replay()) {
     standby_trim_segments();
-    mdlog->get_journaler()->set_writeable();
     dout(10) << "setting replay timer" << dendl;
     timer.add_event_after(g_conf.mds_replay_interval,
                           new C_Standby_replay_start(this));
+    return;
+  }
+
+  if (continue_replay) {
+    mdlog->get_journaler()->set_writeable();
+    continue_replay = false;
+    standby_replay_restart();
     return;
   }
 

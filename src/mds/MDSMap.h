@@ -299,7 +299,8 @@ public:
       if (p->second.rank == -1 &&
 	  (p->second.standby_for_rank == mds ||
 	   p->second.standby_for_name == name) &&
-	  p->second.state == MDSMap::STATE_STANDBY &&
+	  (p->second.state == MDSMap::STATE_STANDBY ||
+	      p->second.state == MDSMap::STATE_STANDBY_REPLAY) &&
 	  !p->second.laggy()) {
 	return p->first;
       }

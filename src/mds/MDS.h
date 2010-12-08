@@ -149,6 +149,9 @@ class MDS : public Dispatcher {
   int standby_for_rank;
   int standby_type;
   string standby_for_name;
+  bool continue_replay; /* set to true by replay_start if we're a hot standby,
+                           remains true until leader MDS fails and we need to
+                           take over*/
 
   Messenger    *messenger;
   MonClient    *monc;
