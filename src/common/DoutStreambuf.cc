@@ -117,6 +117,24 @@ static int safe_write(int fd, const char *buf, signed int len)
   }
 }
 
+static std::string get_basename(const std::string &filename)
+{
+  size_t last_slash = filename.find_last_of("/");
+  if (last_slash == std::string::npos)
+    return filename;
+  return filename.substr(last_slash + 1);
+}
+
+static std::string get_dirname(const std::string &filename)
+{
+  size_t last_slash = filename.find_last_of("/");
+  if (last_slash == std::string::npos)
+    return ".";
+  if (last_slash == 0)
+    return filename;
+  return filename.substr(0, last_slash);
+}
+
 static int create_symlink(const string &oldpath, const string &newpath)
 {
   while (1) {
@@ -143,14 +161,6 @@ static int create_symlink(const string &oldpath, const string &newpath)
       return err;
     }
   }
-}
-
-static std::string get_basename(const std::string &filename)
-{
-  size_t last_slash = filename.find_last_of("/");
-  if (last_slash == std::string::npos)
-    return filename;
-  return filename.substr(last_slash + 1);
 }
 
 ///////////////////////////// DoutStreambuf /////////////////////////////
