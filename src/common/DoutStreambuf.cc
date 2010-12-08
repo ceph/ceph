@@ -402,9 +402,17 @@ template <typename charT, typename traits>
 std::string DoutStreambuf<charT, traits>::_calculate_opath() const
 {
   assert(_dout_lock.is_locked());
+
+  // If g_conf.log_file was specified, that takes the highest priority
   if (!empty(g_conf.log_file)) {
     return normalize_relative(g_conf.log_file);
   }
+
+  string log_dir;
+  if (empty(g_conf.log_dir))
+    log_dir = normalize_relative(".");
+  else
+    log_dir = normalize_relative(g_conf.log_dir);
 
   if (g_conf.log_per_instance) {
     char hostname[255];
@@ -418,12 +426,12 @@ std::string DoutStreambuf<charT, traits>::_calculate_opath() const
       return "";
     }
     ostringstream oss;
-    oss << hostname << "." << getpid();
+    oss << log_dir << "/" << hostname << "." << getpid();
     return oss.str();
   }
   else {
     ostringstream oss;
-    oss << g_conf.type << "." << g_conf.id << ".log";
+    oss << log_dir << "/" << g_conf.type << "." << g_conf.id << ".log";
     return oss.str();
   }
 }
