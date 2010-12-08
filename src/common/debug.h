@@ -3,7 +3,8 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ * Copyright (C) 2004-2010 Sage Weil <sage@newdream.net>
+ * Copyright (C) 2010 Dreamhost
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -21,10 +22,9 @@
 #include "Clock.h"
 
 #include <iosfwd>
-using std::ostream;
 
 // the streams
-extern ostream *_dout;
+extern std::ostream *_dout;
 
 extern Mutex _dout_lock;
 
@@ -56,11 +56,10 @@ static inline void _dout_end_line() {
 // intentionally conflict with endl
 class _bad_endl_use_dendl_t { public: _bad_endl_use_dendl_t(int) {} };
 static const _bad_endl_use_dendl_t endl = 0;
-inline ostream& operator<<(ostream& out, _bad_endl_use_dendl_t) {
+inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
   assert(0 && "you are using the wrong endl.. use std::endl or dendl");
   return out;
 }
-
 
 // generic macros
 #define generic_dout(x) do { if ((x) <= g_conf.debug) {\
