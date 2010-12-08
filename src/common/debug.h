@@ -16,32 +16,43 @@
 #ifndef CEPH_DEBUG_H
 #define CEPH_DEBUG_H
 
+#include "Clock.h"
+#include "Mutex.h"
+#include "common/DoutStreambuf.h"
 #include "common/likely.h"
 #include "include/assert.h"
-#include "Mutex.h"
-#include "Clock.h"
 
 #include <iosfwd>
 
-// the streams
 extern std::ostream *_dout;
-
-extern Mutex _dout_lock;
-
+extern DoutStreambuf <char> *_doss;
 extern bool _dout_need_open;
-extern bool _dout_is_open;
+extern Mutex _dout_lock;
 
 extern void _dout_open_log();
 
-extern int dout_rename_output_file();  // after calling daemon()
-extern int dout_create_rank_symlink(int64_t n);
+// Call when the pid changes. For example, after calling daemon().
+extern int dout_handle_pid_change();
+
+// Skip output to stderr.
+extern void dout_disable_stderr();
+
+extern int dout_create_rank_symlink(int n);
 
 static inline void _dout_begin_line(int prio) {
   _dout_lock.Lock();
   if (unlikely(_dout_need_open))
     _dout_open_log();
-  *_dout << g_clock.now() << " " << std::hex << pthread_self() << std::dec << " ";
+
+  // Put priority information into dout
+  _doss->sputc(1);
+  _doss->sputc(prio + 11);
+
+  // Some information that goes in every dout message
+  *_dout << g_clock.now() << " " << std::hex << pthread_self()
+	 << std::dec << " ";
 }
+
 static inline void _dout_end_line() {
   _dout_lock.Unlock();
 }

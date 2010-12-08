@@ -75,7 +75,7 @@ static void primitive_log(const std::string &str)
 
 static inline bool prio_is_visible_on_stderr(int prio)
 {
-  return prio <= 15;
+  return prio <= 9;
 }
 
 static inline int dout_prio_to_syslog_prio(int prio)
@@ -140,7 +140,6 @@ static int create_symlink(string oldpath, const string &newpath)
   // Create relative symlink if the files are in the same directory
   if (get_dirname(oldpath) == get_dirname(newpath)) {
     oldpath = string("./") + get_basename(oldpath);
-    cerr << "setting oldpath = '" << oldpath << "'" << std::endl;
   }
 
   while (1) {
