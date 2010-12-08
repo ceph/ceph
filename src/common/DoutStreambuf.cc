@@ -313,9 +313,11 @@ set_prio(int prio)
   this->pbump(2);
 }
 
-// call after calling daemon()
+// Call after calling daemon()
+// A change in the process ID sometimes requires us to change our output
+// path name.
 template <typename charT, typename traits>
-int DoutStreambuf<charT, traits>::rename_output_file()
+int DoutStreambuf<charT, traits>::handle_pid_change()
 {
   Mutex::Locker l(_dout_lock);
   if (!(flags & DOUTSB_FLAG_OFILE))

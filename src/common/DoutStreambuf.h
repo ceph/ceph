@@ -59,7 +59,7 @@ public:
   // Set the priority of the messages being put into the stream
   void set_prio(int prio);
 
-  int rename_output_file();
+  int handle_pid_change();
 
   std::string config_to_str() const;
 
