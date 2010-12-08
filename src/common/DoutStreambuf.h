@@ -87,6 +87,10 @@ private:
   // ofile stuff
   int ofd;
   std::string opath;
+
+  // symlinks
+  std::string isym_path;
+  std::string rsym_path;
 };
 
 #endif

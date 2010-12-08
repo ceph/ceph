@@ -327,6 +327,28 @@ int DoutStreambuf<charT, traits>::handle_pid_change()
   if (opath == new_opath)
     return 0;
 
+  if (!isym_path.empty()) {
+    // Re-create the instance symlink
+    int ret = create_symlink(new_opath, isym_path);
+    if (ret) {
+      ostringstream oss;
+      oss << __func__ << ": failed to (re)create instance symlink";
+      primitive_log(oss.str());
+      return ret;
+    }
+  }
+
+  if (!rsym_path.empty()) {
+    // Re-create the rank symlink
+    int ret = create_symlink(new_opath, rsym_path);
+    if (ret) {
+      ostringstream oss;
+      oss << __func__ << ": failed to (re)create rank symlink";
+      primitive_log(oss.str());
+      return ret;
+    }
+  }
+
   int ret = ::rename(opath.c_str(), new_opath.c_str());
   if (ret) {
     int err = errno;
@@ -338,12 +360,6 @@ int DoutStreambuf<charT, traits>::handle_pid_change()
   }
 
   opath = new_opath;
-
-//  // $type.$id symlink
-//  if (g_conf.log_per_instance && _dout_name_symlink_path[0])
-//    create_symlink(_dout_name_symlink_path);
-//  if (_dout_rank_symlink_path[0])
-//    create_symlink(_dout_rank_symlink_path);
 
   return 0;
 }
@@ -364,6 +380,8 @@ std::string DoutStreambuf<charT, traits>::config_to_str() const
   oss << "flags = 0x" << std::hex << flags << std::dec << "\n";
   oss << "ofd = " << ofd << "\n";
   oss << "opath = '" << opath << "'\n";
+  oss << "isym_path = '" << isym_path << "'\n";
+  oss << "rsym_path = '" << rsym_path << "'\n";
   oss << "log_sym_history = " << g_conf.log_sym_history  << "\n";
   return oss.str();
 }
@@ -441,12 +459,46 @@ std::string DoutStreambuf<charT, traits>::_calculate_opath() const
 template <typename charT, typename traits>
 bool DoutStreambuf<charT, traits>::_read_ofile_config()
 {
+  int ret;
+
+  isym_path = "";
+  rsym_path = "";
   opath = _calculate_opath();
   if (opath.empty()) {
     ostringstream oss;
     oss << __func__ << ": _calculate_opath failed.\n";
     primitive_log(oss.str());
     return false;
+  }
+
+  if (empty(g_conf.log_file) && g_conf.log_per_instance) {
+    // Calculate instance symlink path (isym_path)
+    std::string symlink_dir;
+    if (empty(g_conf.log_sym_dir))
+      symlink_dir = get_dirname(opath);
+    else
+      symlink_dir = g_conf.log_sym_dir;
+    ostringstream iss;
+    iss << symlink_dir << "/" << g_conf.type << "." << g_conf.id;
+    isym_path = iss.str();
+
+    // Rotate isym_path
+    ret = _rotate_files(isym_path);
+    if (ret) {
+      ostringstream oss;
+      oss << __func__ << ": failed to rotate instance symlinks";
+      primitive_log(oss.str());
+      return ret;
+    }
+
+    // Create isym_path
+    ret = create_symlink(opath, isym_path);
+    if (ret) {
+      ostringstream oss;
+      oss << __func__ << ": failed to create instance symlink";
+      primitive_log(oss.str());
+      return ret;
+    }
   }
 
   assert(ofd == -1);
@@ -462,6 +514,79 @@ bool DoutStreambuf<charT, traits>::_read_ofile_config()
   }
 
   return true;
+}
+
+template <typename charT, typename traits>
+int DoutStreambuf<charT, traits>::_rotate_files(const std::string &base)
+{
+  // Given a file name base, and a directory like this:
+  // base
+  // base.1
+  // base.2
+  // base.3
+  // base.4
+  // unrelated_blah
+  // unrelated_blah.1
+  //
+  // We'll take the following actions:
+  // base		  rename to base.1
+  // base.1		  rename to base.2
+  // base.2		  rename to base.3
+  // base.3		  (unlink)
+  // base.4		  (unlink)
+  // unrelated_blah	  (do nothing)
+  // unrelated_blah.1	  (do nothing)
+
+  signed int i;
+  for (i = -1; i < INT_MAX; ++i) {
+    ostringstream oss;
+    oss << base;
+    if (i != -1)
+      oss << "." << i;
+    string path(oss.str());
+
+    if (::access(path.c_str(), R_OK | W_OK))
+      break;
+  }
+  signed int max_symlink = i - 1;
+
+  for (signed int j = max_symlink; j >= -1; --j) {
+    ostringstream oss;
+    oss << base;
+    if (j != -1)
+      oss << "." << j;
+    string path(oss.str());
+
+    signed int k = j + 1;
+    if (k >= g_conf.log_sym_history) {
+      if (::unlink(path.c_str())) {
+	int err = errno;
+	ostringstream ess;
+	ess << __func__ << ": failed to unlink '" << path << "': "
+	    << cpp_strerror(err) << "\n";
+	primitive_log(ess.str());
+	return err;
+      }
+      //*_dout << "---- " << getpid() << " removed " << path << " ----"
+      //       << std::endl;
+    }
+    else {
+      ostringstream pss;
+      pss << base << "." << k;
+      string new_path(pss.str());
+      if (::rename(path.c_str(), new_path.c_str())) {
+	int err = errno;
+	ostringstream ess;
+	ess << __func__ << ": failed to rename '" << path << "' to "
+	    << "'" << new_path << "': " << cpp_strerror(err) << "\n";
+	primitive_log(ess.str());
+	return err;
+      }
+//      *_dout << "---- " << getpid() << " renamed " << path << " -> "
+//      << newpath << " ----" << std::endl;
+    }
+  }
+  return 0;
 }
 
 // Explicit template instantiation
