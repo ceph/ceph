@@ -292,6 +292,8 @@ void Objecter::scan_pgs(set<pg_t>& changed_pgs)
     if (other == pg.acting) 
       continue; // no change.
 
+    pg.epoch = osdmap->get_epoch();
+
     dout(10) << "scan_pgs " << pgid << " " << pg.acting << " -> " << other << dendl;
     
     other.swap(pg.acting);
@@ -312,7 +314,7 @@ void Objecter::scan_pgs(set<pg_t>& changed_pgs)
 void Objecter::kick_requests(set<pg_t>& changed_pgs) 
 {
   dout(10) << "kick_requests in pgs " << changed_pgs << dendl;
-  dout(0) << "kick_requests in pgs " << changed_pgs << dendl;
+  dout(0) << "*** kick_requests in pgs " << changed_pgs << dendl;
 
   for (set<pg_t>::iterator i = changed_pgs.begin();
        i != changed_pgs.end();
@@ -328,10 +330,11 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
       tids.insert(*liter);
       dout(0) << "adding lingering tid=" << *liter << " to set" << dendl;
     }
-    dout(0) << "pg.linger_tids.empty()=" << pg.linger_tids.empty() << " pg=" << &pg << dendl;
+    dout(0) << "pg.linger_tids.empty()=" << pg.linger_tids.empty() << " pg=" << &pg << " pg.epoch=" << pg.epoch << dendl;
+
     if (pg.linger_tids.empty())
       close_pg( pgid );  // will pbly reopen, unless it's just commits we're missing
-    
+
     dout(10) << "kick_requests pg " << pgid << " tids " << tids << dendl;
     for (set<tid_t>::iterator p = tids.begin();
          p != tids.end();
@@ -355,11 +358,12 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
           dout(3) << "kick_requests missing ack, resub " << tid << dendl;
           op_submit(op, false);
         } else {
-          if (!op->linger)
+          if (!op->linger) {
 	    assert(op->oncommit);
-	  dout(3) << "kick_requests missing commit, resub " << tid << dendl;
-	  dout(0) << "kick_requests missing commit, resub " << tid << dendl;
-	  op_submit(op, false);
+	    dout(3) << "kick_requests missing commit, resub " << tid << dendl;
+	    dout(0) << "kick_requests missing commit, resub " << tid << dendl;
+	    op_submit(op, false);
+          }
         }
       } else {
         hash_map<tid_t, Op*>::iterator p = op_osd_linger.find(tid);
@@ -370,9 +374,8 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
           assert(0);
       }
     }
-#if 0
-#endif
   }
+  dout(0) << "*** kick_requests done" << dendl;
 }
 
 

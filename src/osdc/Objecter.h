@@ -428,6 +428,7 @@ public:
     set<tid_t>  active_tids; // active ops
     set<tid_t>  linger_tids; // active ops
     utime_t last;
+    epoch_t epoch; // generation epoch
 
     PG() {}
     
