@@ -106,13 +106,20 @@ int MonitorStore::umount()
 
 int MonitorStore::mkfs()
 {
-  dout(1) << "mkfs" << dendl;
-
   char cmd[1024];
-  snprintf(cmd, sizeof(cmd), "test -d %s && /bin/rm -rf %s ; mkdir -p %s", dir.c_str(), dir.c_str(), dir.c_str());
-  dout(1) << cmd << dendl;
-  int r = system(cmd);
-  return r;
+  snprintf(cmd, sizeof(cmd), "test -d %s && /bin/rm -rf %s ; mkdir -p %s",
+	   dir.c_str(), dir.c_str(), dir.c_str());
+  dout(6) << "MonitorStore::mkfs: running command '" << cmd << "'" << dendl;
+  int res = system(cmd);
+  int r = WEXITSTATUS(res);
+  if (r) {
+    dout(0) << "FAILED to create monfs at " << dir.c_str() << " for "
+	    << g_conf.id << ": cmd '" << cmd << "'" << dendl;
+    return r;
+  }
+
+  dout(0) << "created monfs at " << dir.c_str() << " for " << g_conf.id << dendl;
+  return 0;
 }
 
 void MonitorStore::sync()

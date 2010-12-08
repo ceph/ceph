@@ -953,12 +953,12 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 {
   // create it
   int err = store->mkfs();
-  if (err < 0) {
-    char buf[80];
-    cerr << "error " << err << " " << strerror_r(err, buf, sizeof(buf)) << std::endl;
+  if (err) {
+    dout(0) << TEXT_RED << "** ERROR: store->mkfs failed with error code "
+	    << err << ". Aborting." << dendl;
     exit(1);
   }
-  
+
   bufferlist magicbl;
   magicbl.append(CEPH_MON_ONDISK_MAGIC);
   magicbl.append("\n");
@@ -966,9 +966,9 @@ int Monitor::mkfs(bufferlist& osdmapbl)
     store->put_bl_ss(magicbl, "magic", 0);
   }
   catch (const MonitorStore::Error &e) {
-    std::cerr << TEXT_RED << "** ERROR: initializing cmon failed: couldn't "
+    dout(0) << TEXT_RED << "** ERROR: initializing cmon failed: couldn't "
               << "initialize the monitor state machine: "
-	      << e.what() << TEXT_NORMAL << std::endl;
+	      << e.what() << TEXT_NORMAL << dendl;
     exit(1);
   }
 

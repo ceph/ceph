@@ -2376,7 +2376,6 @@ int SimpleMessenger::start(bool nodaemon)
 	      << " already started that will now die!  call messenger.start() sooner." 
 	      << dendl;
     }
-    dout(1) << "messenger.start daemonizing" << dendl;
 
     if (1) {
       daemon(1, 0);
@@ -2398,6 +2397,7 @@ int SimpleMessenger::start(bool nodaemon)
       ::chdir(g_conf.chdir);
     }
     dout_handle_daemonize();
+    dout(1) << "messenger.start daemonized" << dendl;
   }
 
   // go!

@@ -80,7 +80,7 @@ static void primitive_log(const std::string &str)
 
 static inline bool prio_is_visible_on_stderr(int prio)
 {
-  return prio <= 9;
+  return prio <= 5;
 }
 
 static inline int dout_prio_to_syslog_prio(int prio)
