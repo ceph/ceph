@@ -548,12 +548,15 @@ bool ReplicatedPG::snap_trimmer()
       if (!mode.try_write(nobody)) {
 	dout(10) << " can't write, waiting" << dendl;
 	Cond cond;
-	mode.waiting_cond.push_back(&cond);
+	list<Cond*>::iterator q = mode.waiting_cond.insert(mode.waiting_cond.end(), &cond);
 	while (!mode.try_write(nobody))
 	  cond.Wait(_lock);
+	mode.waiting_cond.erase(q);
 	dout(10) << " done waiting" << dendl;
-	if (!is_primary() || !is_active())
+	if (!(current_set_started == info.history.last_epoch_started &&
+	      is_active())) {
 	  break;
+	}
       }
 
       // load clone info
