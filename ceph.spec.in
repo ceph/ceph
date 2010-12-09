@@ -224,6 +224,11 @@ fi
 %endif
 
 %changelog
+* Thu Dec 9 2010 Colin McCabe <colinm@hq.newdream.net> 0.19.1-6
+- Remove radosacl, since it's a debug binary
+- Fix GUI dependencies
+- Miscellaneous cleanups
+
 * Fri Apr 30 2010 Sage Weil <sage@newdream.net> 0.19.1-5
 - Remove java deps (no need to build hadoop by default)
 - Include all required librados helpers
