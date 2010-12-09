@@ -403,14 +403,18 @@ private:
   float get_weightf(int o) const {
     return (float)get_weight(o) / (float)CEPH_OSD_IN;
   }
-  void adjust_osd_weights(map<int,double>& weights, Incremental& inc) {
+  void adjust_osd_weights(const map<int,double>& weights, Incremental& inc) const {
     float max = 0;
-    for (map<int,double>::iterator p = weights.begin(); p != weights.end(); p++)
+    for (map<int,double>::const_iterator p = weights.begin();
+	 p != weights.end(); ++p) {
       if (p->second > max)
 	max = p->second;
+    }
 
-    for (map<int,double>::iterator p = weights.begin(); p != weights.end(); p++)
+    for (map<int,double>::const_iterator p = weights.begin();
+	 p != weights.end(); ++p) {
       inc.new_weight[p->first] = (unsigned)((p->second / max) * CEPH_OSD_IN);
+    }
   }
 
 
