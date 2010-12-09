@@ -118,7 +118,6 @@ fi
 %{_bindir}/cmds
 %{_bindir}/cosd
 %{_bindir}/rados
-%{_bindir}/radosacl
 %{_bindir}/rbd
 %{_bindir}/cdebugpack
 %{_initrddir}/ceph
