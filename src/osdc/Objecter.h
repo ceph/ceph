@@ -420,7 +420,6 @@ public:
   public:
     vector<int> acting;
     set<tid_t>  active_tids; // active ops
-    set<tid_t>  linger_tids; // active ops
     utime_t last;
     map<uint64_t, bool> linger_ops;
 
@@ -454,6 +453,7 @@ public:
   };
 
   map<uint64_t, LingerOpInfo>  op_linger_info;
+  Mutex linger_info_mutex;
 
   
   PG &get_pg(pg_t pgid);
@@ -500,6 +500,7 @@ public:
     last_seen_osdmap_version(0),
     last_seen_pgmap_version(0),
     client_lock(l), timer(t),
+    linger_info_mutex("Objecter::linger_info_mutex"),
     op_throttler(g_conf.objecter_inflight_op_bytes)
   { }
   ~Objecter() { }
@@ -571,6 +572,7 @@ private:
   tid_t resend_linger(LingerOpInfo& info, Context *onack, Context *onfinish, eversion_t *objver);
   tid_t resend_linger(uint64_t linger_id, Context *onack, Context *onfinish, eversion_t *objver);
   uint64_t register_linger(LingerOpInfo& info, uint64_t linger_id = 0);
+  void unregister_linger(uint64_t linger_id);
 
   tid_t linger(const object_t& oid, const object_locator_t& oloc, 
 	       ObjectOperation& op,

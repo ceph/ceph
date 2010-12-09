@@ -82,6 +82,20 @@ int main(int argc, const char **argv)
   cout << "*** press enter to continue ***" << std::endl;
   getchar();
 
+  r = rados.notify(pool, oid, objver);
+  cout << "rados.notify returned " << r << std::endl;
+  cout << "*** press enter to continue ***" << std::endl;
+  getchar();
+
+  r = rados.unwatch(pool, oid, handle);
+  cout << "rados.unwatch returned " << r << std::endl;
+  cout << "*** press enter to continue ***" << std::endl;
+  getchar();
+
+  r = rados.notify(pool, oid, objver);
+  cout << "rados.notify returned " << r << std::endl;
+  cout << "*** press enter to continue ***" << std::endl;
+  getchar();
   rados.set_assert_version(pool, objver);
 
   r = rados.write(pool, oid, 0, bl, bl.length() - 1);

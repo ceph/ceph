@@ -35,7 +35,6 @@
 #include "messages/MStatfsReply.h"
 
 #include "messages/MOSDFailure.h"
-#include "common/BackTrace.h"
 
 #include <errno.h>
 
@@ -69,6 +68,7 @@ tid_t Objecter::resend_linger(LingerOpInfo& info, Context *onack, Context *onfin
 
 tid_t Objecter::resend_linger(uint64_t linger_id, Context *onack, Context *onfinish, eversion_t *objver)
 {
+  Mutex::Locker locker(linger_info_mutex);
   map<uint64_t, LingerOpInfo>::iterator iter = op_linger_info.find(linger_id);
   if (iter != op_linger_info.end()) {
     return resend_linger(iter->second, onack, onfinish, objver);
@@ -80,6 +80,7 @@ tid_t Objecter::resend_linger(uint64_t linger_id, Context *onack, Context *onfin
 
 uint64_t Objecter::register_linger(LingerOpInfo& info, uint64_t linger_id)
 {
+  Mutex::Locker locker(linger_info_mutex);
   if (!linger_id)
     linger_id = ++max_linger_id;
 
@@ -88,6 +89,25 @@ uint64_t Objecter::register_linger(LingerOpInfo& info, uint64_t linger_id)
   op_linger_info[linger_id] = info;
 
   return linger_id;
+}
+
+
+void Objecter::unregister_linger(uint64_t linger_id)
+{
+  Mutex::Locker locker(linger_info_mutex);
+  map<uint64_t, LingerOpInfo>::iterator iter = op_linger_info.find(linger_id);
+  if (iter != op_linger_info.end()) {
+    LingerOpInfo& info = iter->second;
+    pg_t pgid = osdmap->object_locator_to_pg(info.oid, info.oloc);
+
+    // find
+    PG &pg = get_pg(pgid);
+    map<uint64_t, bool>::iterator pg_iter = pg.linger_ops.find(linger_id);
+    if (pg_iter != pg.linger_ops.end())
+      pg.linger_ops.erase(pg_iter);
+
+    op_linger_info.erase(iter);
+  }
 }
 
 tid_t Objecter::linger(const object_t& oid, const object_locator_t& oloc, 
@@ -208,13 +228,11 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	       p != op_osd.end();
 	       p++) {
 	    if (p->second->paused) {
-          dout(0) << "handle_osd_map: op_submit(1)" << dendl;
 	      p->second->paused = false;
 	      op_submit(p->second);
 	    }
 	  }
 	}
-        dout(0) << "handle_osd_map" << dendl;
         dump_active();
 	assert(e == osdmap->get_epoch());
       }
@@ -368,7 +386,7 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
     for (liter = pg.linger_ops.begin(); liter != pg.linger_ops.end(); ++liter) {
       resend_linger(liter->first, NULL, NULL, NULL);
     }
-    dout(0) << "pg.linger_tids.empty()=" << pg.linger_tids.empty() << " pg=" << &pg << dendl;
+    dout(0) << "pg.linger_ops.empty()=" << pg.linger_ops.empty() << dendl;
 
     if (pg.linger_ops.empty())
       close_pg( pgid );  // will pbly reopen, unless it's just commits we're missing
@@ -505,8 +523,6 @@ tid_t Objecter::op_submit(Op *op, uint64_t linger_id)
   }
   op_osd[op->tid] = op;
 
-  BackTrace bt(0);
-  bt.print(*_dout);
   pg.active_tids.insert(op->tid);
   pg.last = g_clock.now();
 
