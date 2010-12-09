@@ -186,6 +186,7 @@ fi
 
 %if %{with_radosgw}
 %files radosgw
+%defattr(-,root,root,-)
 %{_bindir}/radosgw
 %{_bindir}/radosgw_admin
 %endif
