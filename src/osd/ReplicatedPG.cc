@@ -528,8 +528,10 @@ bool ReplicatedPG::snap_trimmer()
   lock();
   dout(10) << "snap_trimmer start, purged_snaps " << info.purged_snaps << dendl;
 
+  epoch_t current_set_started = info.history.last_epoch_started;
+
   while (snap_trimq.size() &&
-	 is_primary() &&
+	 current_set_started == info.history.last_epoch_started &&
 	 is_active()) {
 
     snapid_t sn = snap_trimq.range_start();
@@ -700,6 +702,10 @@ bool ReplicatedPG::snap_trimmer()
       // give other threads a chance at this pg
       unlock();
       lock();
+      if (!(current_set_started == info.history.last_epoch_started &&
+	    is_active())) {
+	break;
+      }
     }
 
     // adjust pg info
@@ -715,10 +721,15 @@ bool ReplicatedPG::snap_trimmer()
     t->remove_collection(c);
     int tr = osd->store->queue_transaction(&osr, t);
     assert(tr == 0);
- 
-    share_pg_info();
 
+ 
     unlock();
+    osd->map_lock.get_read();
+    lock();
+    share_pg_info();
+    unlock();
+    osd->map_lock.put_read();
+
     // flush, to make sure the collection adjustments we just made are
     // reflected when we scan the next collection set.
     osd->store->flush();
