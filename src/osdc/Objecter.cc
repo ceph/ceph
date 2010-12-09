@@ -59,6 +59,55 @@ void Objecter::shutdown()
 {
 }
 
+tid_t Objecter::resend_linger(LingerOpInfo& info, Context *onack, Context *onfinish, eversion_t *objver)
+{
+  Op *o = new Op(info.oid, info.oloc, info.ops, info.flags | CEPH_OSD_FLAG_READ, onack, onfinish, objver, true);
+  o->snapid = info.snap;
+  return op_submit(o, info.linger_id);
+}
+
+tid_t Objecter::resend_linger(uint64_t linger_id, Context *onack, Context *onfinish, eversion_t *objver)
+{
+  map<uint64_t, LingerOpInfo>::iterator iter = op_linger_info.find(linger_id);
+  if (iter != op_linger_info.end()) {
+    return resend_linger(iter->second, onack, onfinish, objver);
+  } else {
+    dout(0) << "WARNING: resend_linger(): could not find linger_id" << linger_id << dendl; // should that happen?
+  }
+  return -1;
+}
+
+uint64_t Objecter::register_linger(LingerOpInfo& info, uint64_t linger_id)
+{
+  if (!linger_id)
+    linger_id = ++max_linger_id;
+
+  info.linger_id = linger_id;
+ 
+  op_linger_info[linger_id] = info;
+
+  return linger_id;
+}
+
+tid_t Objecter::linger(const object_t& oid, const object_locator_t& oloc, 
+		       ObjectOperation& op,
+		       snapid_t snap, bufferlist *pbl, int flags,
+		       Context *onack, Context *onfinish,
+		       eversion_t *objver,
+                       uint64_t *linger_id)
+{
+  uint64_t lid;
+  LingerOpInfo info;
+  info.oid = oid;
+  info.oloc = oloc;
+  info.snap = snap;
+  info.flags = flags;
+  info.ops = op.ops;
+  lid = register_linger(info, 0);
+  if (linger_id)
+    *linger_id = lid;
+  return resend_linger(info, onack, onfinish, objver);
+}
 
 void Objecter::dispatch(Message *m)
 {
@@ -166,15 +215,6 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	}
         dout(0) << "handle_osd_map" << dendl;
         dump_active();
-#if 0
-        hash_map<tid_t, Op*> old_map;
-        old_map.swap(op_osd_linger);
-	for (hash_map<tid_t,Op*>::iterator p = old_map.begin();
-             p != op_osd_linger.end(); p++) {
-          dout(0) << "handle_osd_map: op_submit" << dendl;
-          op_submit(p->second);
-        }
-#endif   
 	assert(e == osdmap->get_epoch());
       }
       
@@ -292,8 +332,6 @@ void Objecter::scan_pgs(set<pg_t>& changed_pgs)
     if (other == pg.acting) 
       continue; // no change.
 
-    pg.epoch = osdmap->get_epoch();
-
     dout(10) << "scan_pgs " << pgid << " " << pg.acting << " -> " << other << dendl;
     
     other.swap(pg.acting);
@@ -325,14 +363,13 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
     // resubmit ops!
     set<tid_t> tids;
     tids.swap( pg.active_tids );
-    set<tid_t>::iterator liter;
-    for (liter = pg.linger_tids.begin(); liter != pg.linger_tids.end(); ++liter) {
-      tids.insert(*liter);
-      dout(0) << "adding lingering tid=" << *liter << " to set" << dendl;
+    map<tid_t, bool>::iterator liter;
+    for (liter = pg.linger_ops.begin(); liter != pg.linger_ops.end(); ++liter) {
+      resend_linger(liter->first, NULL, NULL, NULL);
     }
-    dout(0) << "pg.linger_tids.empty()=" << pg.linger_tids.empty() << " pg=" << &pg << " pg.epoch=" << pg.epoch << dendl;
+    dout(0) << "pg.linger_tids.empty()=" << pg.linger_tids.empty() << " pg=" << &pg << dendl;
 
-    if (pg.linger_tids.empty())
+    if (pg.linger_ops.empty())
       close_pg( pgid );  // will pbly reopen, unless it's just commits we're missing
 
     dout(10) << "kick_requests pg " << pgid << " tids " << tids << dendl;
@@ -365,14 +402,8 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
 	    op_submit(op, false);
           }
         }
-      } else {
-        hash_map<tid_t, Op*>::iterator p = op_osd_linger.find(tid);
-        if (p != op_osd_linger.end()) {
-	  dout(0) << "kick_requests lingering " << tid << dendl;
-	  op_submit(p->second, true);
-        } else      
+      } else
           assert(0);
-      }
     }
   }
   dout(0) << "*** kick_requests done" << dendl;
@@ -438,13 +469,8 @@ void Objecter::resend_mon_ops()
 
 // read | write ---------------------------
 
-tid_t Objecter::op_submit(Op *op, bool register_linger)
+tid_t Objecter::op_submit(Op *op, uint64_t linger_id)
 {
-  bool handle_linger = (op->linger && register_linger);
-  bool new_linger = (op->linger && !op->tid);
-
-dout(0) << "Objecter::op_submit register_linger=" << register_linger << " new_linger=" << new_linger << dendl;
-
   // throttle.  before we look at any state, because
   // take_op_budget() may drop our lock while it blocks.
   take_op_budget(op);
@@ -454,15 +480,12 @@ dout(0) << "Objecter::op_submit register_linger=" << register_linger << " new_li
 
   // find
   PG &pg = get_pg(op->pgid);
+
+  if (linger_id)
+    pg.linger_ops[linger_id] = true;
     
   // pick tid
-  if (!op->tid) {
-    op->tid = ++last_tid;
-    if (new_linger)
-      op_osd_linger[op->tid] = op;
-  } else  if (handle_linger) {
-    op->tid = ++last_tid;
-  }
+  op->tid = ++last_tid;
   assert(client_inc >= 0);
 
   // add to gather set(s)
@@ -481,17 +504,9 @@ dout(0) << "Objecter::op_submit register_linger=" << register_linger << " new_li
   }
   op_osd[op->tid] = op;
 
-  if (handle_linger) {
-    dout(0) << "reset lingering request" << dendl;
-    op->attempts = 0;
-  }
   BackTrace bt(0);
   bt.print(*_dout);
   pg.active_tids.insert(op->tid);
-  if (new_linger) {
-    pg.linger_tids.insert(op->tid);
-    dout(0) << "inserting tid=" << op->tid << " to linger_tids pg=" << (void *)&pg << dendl;
-  }
   pg.last = g_clock.now();
 
   // send?
@@ -645,7 +660,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       num_unacked--;
     if (op->oncommit)
       num_uncommitted--;
-    op_submit(op, false);
+    op_submit(op);
     m->put();
     return;
   }
@@ -683,15 +698,13 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     pg.active_tids.erase(tid);
     dout(15) << "handle_osd_op_reply completed tid " << tid << ", pg " << m->get_pg()
 	     << " still has " << pg.active_tids << dendl;
-    if (pg.active_tids.empty() && pg.linger_tids.empty()) 
+    if (pg.active_tids.empty() && pg.linger_ops.empty()) 
       close_pg( m->get_pg() );
     put_op_budget(op);
     op_osd.erase( tid );
-    if (!op->linger) {
-      if (op->con)
-        op->con->put();
-      delete op;
-    }
+    if (op->con)
+      op->con->put();
+    delete op;
   }
   
   dout(5) << num_unacked << " unacked, " << num_uncommitted << " uncommitted" << dendl;
@@ -1250,9 +1263,6 @@ void Objecter::dump_active()
 {
   dout(0) << "dump_active" << dendl;
   for (hash_map<tid_t,Op*>::iterator p = op_osd.begin(); p != op_osd.end(); p++)
-    dout(0) << " " << p->first << "\t" << p->second->oid << "\t" << p->second->ops << dendl;
-  dout(0) << "lingering" << dendl;
-  for (hash_map<tid_t,Op*>::iterator p = op_osd_linger.begin(); p != op_osd_linger.end(); p++)
     dout(0) << " " << p->first << "\t" << p->second->oid << "\t" << p->second->ops << dendl;
 }
 

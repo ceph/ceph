@@ -1568,7 +1568,6 @@ void RadosClient::watch_notify(MWatchNotify *m)
 int RadosClient::watch(PoolCtx& pool, const object_t& oid, uint64_t ver, uint64_t *cookie, librados::Rados::WatchCtx *ctx)
 {
   utime_t ut = g_clock.now();
-  bufferlist inbl, outbl;
 
   ObjectOperation *rd = new ObjectOperation();
   if (!rd)
@@ -1593,8 +1592,8 @@ int RadosClient::watch(PoolCtx& pool, const object_t& oid, uint64_t ver, uint64_
     pool.assert_ver = 0;
   }
   rd->watch(*cookie, ver, 1);
-  rd->set_linger(true);
-  objecter->read(oid, oloc, *rd, pool.snap_seq, &outbl, 0, onack, &objver);
+  uint64_t linger_id;
+  objecter->linger(oid, oloc, *rd, pool.snap_seq, NULL, 0, onack, NULL, &objver, &linger_id);
   lock.Unlock();
 
   mylock.Lock();
