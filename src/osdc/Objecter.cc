@@ -61,7 +61,8 @@ void Objecter::shutdown()
 
 tid_t Objecter::resend_linger(LingerOpInfo& info, Context *onack, Context *onfinish, eversion_t *objver)
 {
-  Op *o = new Op(info.oid, info.oloc, info.ops, info.flags | CEPH_OSD_FLAG_READ, onack, onfinish, objver, true);
+  vector<OSDOp> ops = info.ops; // need to pass a copy to ops
+  Op *o = new Op(info.oid, info.oloc, ops, info.flags | CEPH_OSD_FLAG_READ, onack, onfinish, objver, true);
   o->snapid = info.snap;
   return op_submit(o, info.linger_id);
 }
