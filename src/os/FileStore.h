@@ -46,7 +46,7 @@ class FileStore : public JournalingObjectStore {
   bool btrfs_clone_range;
   bool btrfs_snap_create;
   bool btrfs_snap_destroy;
-  bool btrfs_snap_create_async;
+  bool btrfs_snap_create_v2;
   bool btrfs_wait_sync;
   bool ioctl_fiemap;
   int fsid_fd, op_fd;
@@ -176,7 +176,7 @@ class FileStore : public JournalingObjectStore {
     btrfs(false), btrfs_trans_start_end(false), btrfs_clone_range(false),
     btrfs_snap_create(false),
     btrfs_snap_destroy(false),
-    btrfs_snap_create_async(false),
+    btrfs_snap_create_v2(false),
     btrfs_wait_sync(false),
     ioctl_fiemap(false),
     fsid_fd(-1), op_fd(-1),

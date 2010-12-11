@@ -847,8 +847,9 @@ int FileStore::_detect_fs()
       vol_args.fd = 0;
       strcpy(vol_args.name, "async_snap_test");
 
-      struct btrfs_ioctl_async_vol_args async_args;
+      struct btrfs_ioctl_vol_args_v2 async_args;
       async_args.fd = fd;
+      async_args.flags = BTRFS_SUBVOL_CREATE_ASYNC;
       strcpy(async_args.name, "async_snap_test");
 
       // remove old one, first
@@ -860,15 +861,11 @@ int FileStore::_detect_fs()
 	  dout(0) << "mount  failed to remove old async_snap_test: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
       }
 
-      /*
-	
-	do not autodetect this yet until the btrfs ioctl interface is finalized!
-
-      r = ::ioctl(fd, BTRFS_IOC_SNAP_CREATE_ASYNC, &async_args);
-      dout(0) << "mount btrfs SNAP_CREATE_ASYNC got " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+      r = ::ioctl(fd, BTRFS_IOC_SNAP_CREATE_V2, &async_args);
+      dout(0) << "mount btrfs SNAP_CREATE_V2 got " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
       if (r == 0 || errno == EEXIST) {
-	dout(0) << "mount btrfs SNAP_CREATE_ASYNC is supported" << dendl;
-	btrfs_snap_create_async = true;
+	dout(0) << "mount btrfs SNAP_CREATE_V2 is supported" << dendl;
+	btrfs_snap_create_v2 = true;
       
 	// clean up
 	r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &vol_args);
@@ -876,17 +873,16 @@ int FileStore::_detect_fs()
 	  dout(0) << "mount btrfs SNAP_DESTROY failed: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
 	}
       } else {
-	dout(0) << "mount btrfs SNAP_CREATE_ASYNC is NOT supported: "
+	dout(0) << "mount btrfs SNAP_CREATE_V2 is NOT supported: "
 		<< strerror_r(-r, buf, sizeof(buf)) << dendl;
       }
-      */
     }
 
-    if (g_conf.filestore_btrfs_snap && !btrfs_snap_create_async) {
-      dout(0) << "mount WARNING: btrfs snaps enabled, but no SNAP_CREATE_ASYNC ioctl (from kernel 2.6.37+)" << dendl;
+    if (g_conf.filestore_btrfs_snap && !btrfs_snap_create_v2) {
+      dout(0) << "mount WARNING: btrfs snaps enabled, but no SNAP_CREATE_V2 ioctl (from kernel 2.6.37+)" << dendl;
       cerr << TEXT_YELLOW
 	   << " ** WARNING: 'filestore btrfs snap' is enabled (for safe transactions,\n"	 
-	   << "             rollback), but btrfs does not support the SNAP_CREATE_ASYNC ioctl\n"
+	   << "             rollback), but btrfs does not support the SNAP_CREATE_V2 ioctl\n"
 	   << "             (added in Linux 2.6.37).  Expect slow btrfs sync/commit\n"
 	   << "             performance.\n"
 	   << TEXT_NORMAL;
@@ -1147,12 +1143,12 @@ int FileStore::mount()
       } else if (!g_conf.filestore_btrfs_snap) {
 	g_conf.filestore_journal_writeahead = true;
 	dout(0) << "mount: enabling WRITEAHEAD journal mode: 'filestore btrfs snap' mode is not enabled" << dendl;
-      } else if (!btrfs_snap_create_async) {
+      } else if (!btrfs_snap_create_v2) {
 	g_conf.filestore_journal_writeahead = true;
-	dout(0) << "mount: enabling WRITEAHEAD journal mode: btrfs SNAP_CREATE_ASYNC ioctl not detected (v2.6.37+)" << dendl;
+	dout(0) << "mount: enabling WRITEAHEAD journal mode: btrfs SNAP_CREATE_V2 ioctl not detected (v2.6.37+)" << dendl;
       } else {
 	g_conf.filestore_journal_parallel = true;
-	dout(0) << "mount: enabling PARALLEL journal mode: btrfs, SNAP_CREATE_ASYNC detected and 'filestore btrfs snap' mode is enabled" << dendl;
+	dout(0) << "mount: enabling PARALLEL journal mode: btrfs, SNAP_CREATE_V2 detected and 'filestore btrfs snap' mode is enabled" << dendl;
       }
     } else {
       if (g_conf.filestore_journal_writeahead)
@@ -2299,15 +2295,16 @@ void FileStore::sync_entry()
 
       if (do_snap) {
 
-	if (btrfs_snap_create_async) {
+	if (btrfs_snap_create_v2) {
 	  // be smart!
-	  struct btrfs_ioctl_async_vol_args async_args;
+	  struct btrfs_ioctl_vol_args_v2 async_args;
 	  async_args.fd = current_fd;
+	  async_args.flags = BTRFS_SUBVOL_CREATE_ASYNC;
 	  snprintf(async_args.name, sizeof(async_args.name), COMMIT_SNAP_ITEM,
 		   (long long unsigned)cp);
 
 	  dout(10) << "taking async snap '" << async_args.name << "'" << dendl;
-	  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE_ASYNC, &async_args);
+	  int r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE_V2, &async_args);
 	  char buf[100];
 	  dout(20) << "async snap create '" << async_args.name
 		   << "' transid " << async_args.transid
