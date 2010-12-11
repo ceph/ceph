@@ -60,6 +60,12 @@ static int cephtool_run_gui(int argc, const char **argv)
   return run_gui(argc, (char **)argv);
 }
 
+void ceph_tool_common_shutdown_wrapper()
+{
+  ceph_tool_messenger_shutdown();
+  ceph_tool_common_shutdown();
+}
+
 int main(int argc, const char **argv)
 {
   int ret = 0;
@@ -83,13 +89,12 @@ int main(int argc, const char **argv)
     return 1;
   }
 
+  atexit(ceph_tool_common_shutdown_wrapper);
+
   if (cephtool_run_gui(argc, argv))
     ret = 1;
 
   if (ceph_tool_messenger_shutdown())
-    ret = 1;
-
-  if (ceph_tool_common_shutdown())
     ret = 1;
 
   return ret;
