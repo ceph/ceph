@@ -28,7 +28,10 @@ bin_PROGRAMS += cmds
 cmds_CXXFLAGS = ${AM_CFLAGS}
 
 # admin tools
-ceph_SOURCES = tools/ceph.cc msg/SimpleMessenger.cc
+ceph_SOURCES = \
+	msg/SimpleMessenger.cc \
+	tools/ceph.cc \
+	tools/cmd.cc
 ceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm $(CRYPTOPP_LIBS)
 ceph_CXXFLAGS = ${AM_CFLAGS}
 
@@ -52,10 +55,15 @@ ceph_tool_gui_DATA = \
 	tools/gui_resources/pg.svg \
 	tools/gui_resources/stats_window.glade \
 	tools/gui_resources/stopped_mds.svg
-ceph_SOURCES += tools/gui.cc
-ceph_LDADD += $(GTKMM_LIBS)
-ceph_CXXFLAGS += $(GTKMM_CFLAGS)
-ceph_CXXFLAGS += -DCEPH_TOOL_GUIDIR="\"${ceph_tool_guidir}\""
+gceph_SOURCES = \
+	msg/SimpleMessenger.cc \
+	tools/ceph.cc \
+	tools/gceph.cc \
+	tools/gui.cc
+gceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm $(CRYPTOPP_LIBS) \
+	$(GTKMM_LIBS)
+gceph_CXXFLAGS = ${AM_CFLAGS} $(GTKMM_CFLAGS) \
+	-DCEPH_TOOL_GUIDIR="\"${ceph_tool_guidir}\""
 endif
 
 cconf_SOURCES = cconf.cc
