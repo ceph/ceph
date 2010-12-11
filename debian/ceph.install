@@ -4,6 +4,7 @@ usr/bin/cconf
 usr/bin/cclass
 usr/bin/cclsinfo
 usr/bin/crushtool
+usr/bin/gceph
 usr/bin/monmaptool
 usr/bin/osdmaptool
 usr/bin/crun
@@ -27,6 +28,7 @@ usr/share/man/man8/osdmaptool.8
 usr/share/man/man8/monmaptool.8
 usr/share/man/man8/cconf.8
 usr/share/man/man8/ceph.8
+usr/share/man/man8/cephfs.8
 usr/share/man/man8/cauthtool.8
 usr/share/man/man8/cclass.8
 usr/share/man/man8/cclsinfo.8

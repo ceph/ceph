@@ -584,36 +584,36 @@ void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map)
 	   << get_num_unfound() << " unfound"
 	   << dendl;
 
-  std::vector<int>::const_iterator u = up.begin();
-  std::vector<int>::const_iterator end = up.end();
-  std::set<int>::const_iterator mhend = might_have_unfound.end();
-  for (; u != end; ++u) {
-    int peer(*u);
-    if (might_have_unfound.find(peer) == mhend) {
-      dout(25) << __func__ << ": osd" << peer
-	       << " is not in might_have_unfound" << dendl;
+  std::set<int>::const_iterator m = might_have_unfound.begin();
+  std::set<int>::const_iterator mend = might_have_unfound.end();
+  for (; m != mend; ++m) {
+    int peer(*m);
+    
+    if (!osd->osdmap->is_up(peer)) {
+      dout(20) << __func__ << " skipping down osd" << peer << dendl;
       continue;
     }
+
     // If we've requested any of this stuff, the Missing information
     // should be on its way.
     // TODO: coalsce requested_* into a single data structure
     if (peer_missing.find(peer) != peer_missing.end()) {
-      dout(25) << __func__ << ": osd" << peer
+      dout(20) << __func__ << ": osd" << peer
 	       << ": we already have Missing" << dendl;
       continue;
     }
     if (peer_log_requested.find(peer) != peer_log_requested.end()) {
-      dout(25) << __func__ << ": osd" << peer
+      dout(20) << __func__ << ": osd" << peer
 	       << ": in peer_log_requested" << dendl;
       continue;
     }
     if (peer_backlog_requested.find(peer) != peer_backlog_requested.end()) {
-      dout(25) << __func__ << ": osd" << peer
+      dout(20) << __func__ << ": osd" << peer
 	       << ": in peer_backlog_requested" << dendl;
       continue;
     }
     if (peer_missing_requested.find(peer) != peer_missing_requested.end()) {
-      dout(25) << __func__ << ": osd" << peer
+      dout(20) << __func__ << ": osd" << peer
 	       << ": in peer_missing_requested" << dendl;
       continue;
     }
@@ -2809,7 +2809,7 @@ void PG::sub_op_scrub_reply(MOSDSubOpReply *op)
  */
 void PG::_scan_list(ScrubMap &map, vector<sobject_t> &ls)
 {
-  dout(10) << " scanning " << ls.size() << " objects" << dendl;
+  dout(10) << "_scan_list scanning " << ls.size() << " objects" << dendl;
   int i = 0;
   for (vector<sobject_t>::iterator p = ls.begin(); 
        p != ls.end(); 
@@ -2824,7 +2824,7 @@ void PG::_scan_list(ScrubMap &map, vector<sobject_t> &ls)
       osd->store->getattrs(coll, poid, o.attrs);
     }
 
-    dout(25) << "   " << poid << dendl;
+    dout(25) << "_scan_list  " << poid << dendl;
   }
 }
 
@@ -3026,7 +3026,6 @@ void PG::build_inc_scrub_map(ScrubMap &map, eversion_t v)
       ls.push_back(p->soid);
     } else if (p->is_delete()) {
       map.objects[p->soid];
-      map.objects[p->soid].poid = p->soid;
       map.objects[p->soid].negative = 1;
     }
   }
@@ -3039,20 +3038,20 @@ void PG::build_inc_scrub_map(ScrubMap &map, eversion_t v)
   osd->store->read(coll_t(), log_oid, 0, 0, map.logbl);
 }
 
-void PG::repair_object(ScrubMap::object *po, int bad_peer, int ok_peer)
+void PG::repair_object(const sobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer)
 {
   eversion_t v;
   bufferlist bv;
   bv.push_back(po->attrs[OI_ATTR]);
   object_info_t oi(bv);
   if (bad_peer != acting[0]) {
-    peer_missing[bad_peer].add(po->poid, oi.version, eversion_t());
+    peer_missing[bad_peer].add(soid, oi.version, eversion_t());
   } else {
     // We should only be scrubbing if the PG is clean.
     assert(waiting_for_missing_object.empty());
 
-    missing.add(po->poid, oi.version, eversion_t());
-    missing_loc[po->poid].insert(ok_peer);
+    missing.add(soid, oi.version, eversion_t());
+    missing_loc[soid].insert(ok_peer);
 
     log.last_requested = eversion_t();
   }
@@ -3074,16 +3073,8 @@ void PG::scrub()
  
   epoch_t epoch = info.history.same_acting_since;
 
-  if (!is_primary()) {
-    dout(10) << "scrub -- not primary" << dendl;
-    clear_scrub_reserved();
-    unlock();
-    osd->map_lock.put_read();
-    return;
-  }
-
-  if (!is_active() || !is_clean()) {
-    dout(10) << "scrub -- not active or not clean" << dendl;
+  if (!is_primary() || !is_active() || !is_clean()) {
+    dout(10) << "scrub -- not primary or active or not clean" << dendl;
     clear_scrub_reserved();
     unlock();
     osd->map_lock.put_read();
@@ -3095,13 +3086,14 @@ void PG::scrub()
   update_stats();
 
   osd->sched_scrub_lock.Lock();
-  --(osd->scrubs_pending);
-  assert(osd->scrubs_pending >= 0);
+  if (scrub_reserved) {
+    --(osd->scrubs_pending);
+    assert(osd->scrubs_pending >= 0);
+    scrub_reserved = false;
+    scrub_reserved_peers.clear();
+  }
   ++(osd->scrubs_active);
   osd->sched_scrub_lock.Unlock();
-
-  scrub_reserved = false;
-  scrub_reserved_peers.clear();
 
   // request maps from replicas
   for (unsigned i=1; i<acting.size(); i++) {
@@ -3175,6 +3167,7 @@ void PG::scrub()
     
     while (1) {
       ScrubMap::object *po = 0;
+      const sobject_t *psoid = 0;
       int pi = -1;
       bool anymissing = false;
       for (unsigned i=0; i<acting.size(); i++) {
@@ -3183,12 +3176,14 @@ void PG::scrub()
 	  continue;
 	}
 	if (!po) {
+	  psoid = &(p[i]->first);
 	  po = &(p[i]->second);
 	  pi = i;
 	}
-	else if (po->poid != p[i]->second.poid) {
+	else if (*psoid != p[i]->first) {
 	  anymissing = true;
-	  if (po->poid > p[i]->second.poid) {
+	  if (*psoid > p[i]->first) {
+	    psoid = &(p[0]->first);
 	    po = &(p[i]->second);
 	    pi = i;
 	  }
@@ -3199,13 +3194,13 @@ void PG::scrub()
       }
       if (anymissing) {
 	for (unsigned i=0; i<acting.size(); i++) {
-	  if (p[i] == m[i]->objects.end() || po->poid != p[i]->second.poid) {
-	    ss << info.pgid << " " << mode << " osd" << acting[i] << " missing " << po->poid;
+	  if (p[i] == m[i]->objects.end() || *psoid != p[i]->first) {
+	    ss << info.pgid << " " << mode << " osd" << acting[i] << " missing " << *psoid;
 	    osd->get_logclient()->log(LOG_ERROR, ss);
 	    num_missing++;
 	    
 	    if (repair)
-	      repair_object(po, acting[i], acting[pi]);
+	      repair_object(*psoid, po, acting[i], acting[pi]);
 	  } else
 	    p[i]++;
 	}
@@ -3217,18 +3212,18 @@ void PG::scrub()
       for (unsigned i=1; i<acting.size(); i++) {
 	bool peerok = true;
 	if (po->size != p[i]->second.size) {
-	  dout(0) << "scrub osd" << acting[i] << " " << po->poid
+	  dout(0) << "scrub osd" << acting[i] << " " << *psoid
 		  << " size " << p[i]->second.size << " != " << po->size << dendl;
-	  ss << info.pgid << " " << mode << " osd" << acting[i] << " " << po->poid
+	  ss << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
 	     << " size " << p[i]->second.size << " != " << po->size;
 	  osd->get_logclient()->log(LOG_ERROR, ss);
 	  peerok = ok = false;
 	  num_bad++;
 	}
 	if (po->attrs.size() != p[i]->second.attrs.size()) {
-	  dout(0) << "scrub osd" << acting[i] << " " << po->poid
+	  dout(0) << "scrub osd" << acting[i] << " " << *psoid
 		  << " attr count " << p[i]->second.attrs.size() << " != " << po->attrs.size() << dendl;
-	  ss << info.pgid << " " << mode << " osd" << acting[i] << " " << po->poid
+	  ss << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
 	     << " attr count " << p[i]->second.attrs.size() << " != " << po->attrs.size();
 	  osd->get_logclient()->log(LOG_ERROR, ss);
 	  peerok = ok = false;
@@ -3237,18 +3232,18 @@ void PG::scrub()
 	for (map<string,bufferptr>::iterator q = po->attrs.begin(); q != po->attrs.end(); q++) {
 	  if (p[i]->second.attrs.count(q->first)) {
 	    if (q->second.cmp(p[i]->second.attrs[q->first])) {
-	      dout(0) << "scrub osd" << acting[i] << " " << po->poid
+	      dout(0) << "scrub osd" << acting[i] << " " << *psoid
 		      << " attr " << q->first << " value mismatch" << dendl;
-	      ss << info.pgid << " " << mode << " osd" << acting[i] << " " << po->poid
+	      ss << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
 		 << " attr " << q->first << " value mismatch";
 	      osd->get_logclient()->log(LOG_ERROR, ss);
 	      peerok = ok = false;
 	      num_bad++;
 	    }
 	  } else {
-	    dout(0) << "scrub osd" << acting[i] << " " << po->poid
+	    dout(0) << "scrub osd" << acting[i] << " " << *psoid
 		    << " attr " << q->first << " missing" << dendl;
-	    ss << info.pgid << " " << mode << " osd" << acting[i] << " " << po->poid
+	    ss << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
 	       << " attr " << q->first << " missing";
 	    osd->get_logclient()->log(LOG_ERROR, ss);
 	    peerok = ok = false;
@@ -3257,11 +3252,11 @@ void PG::scrub()
 	}
 
 	if (!peerok && repair)
-	  repair_object(po, acting[i], acting[pi]);
+	  repair_object(*psoid, po, acting[i], acting[pi]);
       }
       
       if (ok)
-	dout(20) << "scrub  " << po->poid << " size " << po->size << " ok" << dendl;
+	dout(20) << "scrub  " << *psoid << " size " << po->size << " ok" << dendl;
       
       // next
       for (unsigned i=0; i<acting.size(); i++)

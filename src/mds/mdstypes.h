@@ -1794,6 +1794,8 @@ class MDSCacheObject {
   const static int STATE_AUTH      = (1<<30);
   const static int STATE_DIRTY     = (1<<29);
   const static int STATE_REJOINING = (1<<28);  // replica has not joined w/ primary copy
+  const static int STATE_REJOINUNDEF = (1<<27);  // contents undefined.
+
 
   // -- wait --
   const static uint64_t WAIT_SINGLEAUTH  = (1ull<<60);

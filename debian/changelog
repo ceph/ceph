@@ -1,3 +1,9 @@
+ceph (0.24-1) experimental; urgency=low
+
+  * New upstream release.
+
+ -- Laszlo Boszormenyi (GCS) <gcs@debian.hu>  Wed, 01 Dec 2010 09:26:25 -0800
+
 ceph (0.23.1-1) experimental; urgency=low
 
   * Initial release (Closes: #506040)

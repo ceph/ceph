@@ -1,0 +1,68 @@
+.TH CEPHFS 8
+.SH NAME
+cephfs \- ceph file system options utility
+.SH SYNOPSIS
+.B cephfs
+[ \fIpath \fIcommand \fBoptions]
+.SH DESCRIPTION
+.B cephfs
+is a control utility for accessing and manipulating file layout
+and location data in the Ceph distributed file system.
+
+Choose one of the following three commands:
+.TP
+\fBshow_layout \fPView the layout information on a file or directory
+.TP
+\fBset_layout  \fPSet the layout information on a file or directory.
+.TP
+\fBshow_location \fPView the location information on a file
+
+.SH OPTIONS
+Your applicable options differ depending on whether you are setting
+or viewing layout/location.
+.TP
+\fBViewing options:
+.IP
+\fB\-l \--offset
+\fPSpecify an offset for which to retrieve location data
+
+.TP
+\fBSetting options:
+.IP
+\fB\-u
+\--stripe_unit \fP
+Set the size of each stripe
+.IP
+\fB\-c
+\--stripe_count \fP
+Set the number of stripes per object
+.IP
+\fB\-s
+\--object_size \fP
+Set the size of the objects to stripe across
+.IP
+\fB\-p
+\--pool \fP
+Set the pool (by numeric value, not name!) to use
+.IP
+\fB\-o
+\--osd \fP
+Set the preferred OSD to use as the primary
+
+.SH LIMITATIONS
+When setting layout data, the specified stripe unit and stripe count
+must multiply to the size of an object. Any parameters you don't set explicitly are left at the system defaults.
+
+Obviously setting the layout of a file and a directory means different things.
+Setting the layout of a file specifies exactly how to place the individual file. This must be done before writing *any* data to it. Truncating a file does not allow you to change the layout either.
+
+Setting the layout of a directory sets the "default layout", which is used to set the file layouts on any files subsequently created in the directory (or any subdirectory). Pre-existing files do not have their layouts changed.
+
+You'll notice that the layout information allows you to specify a preferred OSD for placement. This is allowed but is not recommended since it can dramatically unbalance your storage cluster's space utilization.
+
+.SH AVAILABILITY
+.B cephfs
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR ceph (8)

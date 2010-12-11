@@ -162,7 +162,6 @@ public:
   static const int STATE_ANCHORING =   (1<<3);
   static const int STATE_UNANCHORING = (1<<4);
   static const int STATE_OPENINGDIR =  (1<<5);
-  static const int STATE_REJOINUNDEF = (1<<6);   // inode contents undefined.
   static const int STATE_FREEZING =    (1<<7);
   static const int STATE_FROZEN =      (1<<8);
   static const int STATE_AMBIGUOUSAUTH = (1<<9);
@@ -652,6 +651,9 @@ private:
   void finish_export(utime_t now);
   void abort_export() {
     put(PIN_TEMPEXPORTING);
+    assert(state_test(STATE_EXPORTINGCAPS));
+    state_clear(STATE_EXPORTINGCAPS);
+    put(PIN_EXPORTINGCAPS);
   }
   void decode_import(bufferlist::iterator& p, LogSegment *ls);
   
@@ -816,10 +818,9 @@ public:
       } else
 	lock->set_state(LOCK_SYNC);
     } else {
+      // our states have already been chosen during rejoin.
       if (lock->is_xlocked())
-	lock->set_state(LOCK_LOCK);
-      else
-	lock->set_state(LOCK_SYNC);  // might have been lock, previously
+	assert(lock->get_state() == LOCK_LOCK);
     }
   }
   void choose_lock_states() {

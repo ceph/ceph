@@ -1308,6 +1308,7 @@ struct object_info_t {
     last_reqid = other.last_reqid;
     truncate_seq = other.truncate_seq;
     truncate_size = other.truncate_size;
+    lost = other.lost;
   }
 
   void encode(bufferlist& bl) const {
@@ -1347,16 +1348,13 @@ struct object_info_t {
     ::decode(truncate_size, bl);
     if (v >= 3)
       ::decode(lost, bl);
+    else
+      lost = false;
   }
   void decode(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
     decode(p);
   }
-
-  object_info_t(const object_info_t &rhs)
-    : soid(rhs.soid), oloc(rhs.oloc), size(rhs.size),
-      lost(rhs.lost), truncate_seq(rhs.truncate_seq),
-      truncate_size(rhs.truncate_size) {}
 
   object_info_t(const sobject_t& s, const object_locator_t& o)
     : soid(s), oloc(o), size(0),
@@ -1389,17 +1387,15 @@ inline ostream& operator<<(ostream& out, const object_info_t& oi) {
  */
 struct ScrubMap {
   struct object {
-    sobject_t poid;
     uint64_t size;
     bool negative;
     map<string,bufferptr> attrs;
 
-    object(): poid(),size(0),negative(0),attrs() {}
+    object(): size(0),negative(0),attrs() {}
 
     void encode(bufferlist& bl) const {
       __u8 struct_v = 1;
       ::encode(struct_v, bl);
-      ::encode(poid, bl);
       ::encode(size, bl);
       ::encode(negative, bl);
       ::encode(attrs, bl);
@@ -1407,7 +1403,6 @@ struct ScrubMap {
     void decode(bufferlist::iterator& bl) {
       __u8 struct_v;
       ::decode(struct_v, bl);
-      ::decode(poid, bl);
       ::decode(size, bl);
       ::decode(negative, bl);
       ::decode(attrs, bl);

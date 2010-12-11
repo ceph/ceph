@@ -1258,6 +1258,12 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
     assert(!state_test(STATE_COMMITTING));
     fnode = got_fnode;
     projected_version = committing_version = committed_version = got_fnode.version;
+
+    if (state_test(STATE_REJOINUNDEF)) {
+      assert(cache->mds->is_rejoin());
+      state_clear(STATE_REJOINUNDEF);
+      cache->opened_undef_dirfrag(this);
+    }
   }
 
   // purge stale snaps?

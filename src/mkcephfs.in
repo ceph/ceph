@@ -9,12 +9,7 @@ if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
 else
     BINDIR=@bindir@
     LIBDIR=@libdir@/ceph
-    # i hate autoconf:
-    if [ "@sysconfdir@" = "/usr/etc" ]; then
-	ETCDIR=/etc/ceph
-    else
-	ETCDIR=@sysconfdir@/ceph
-    fi
+    ETCDIR=@sysconfdir@/ceph
 fi
 
 usage_exit() {
@@ -87,6 +82,11 @@ done
 
 if [ $allhosts -eq 0 ]; then
     echo "mkcephfs currently requires -a|--allhosts to initialize the whole fs at once."
+    usage_exit
+fi
+
+if [ -z "$adminkeyring" ]; then
+    echo "mkcephfs requires '-k /path/to/admin/keyring'. default location is /etc/ceph/keyring.bin."
     usage_exit
 fi
 

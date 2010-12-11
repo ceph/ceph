@@ -860,6 +860,10 @@ int FileStore::_detect_fs()
 	  dout(0) << "mount  failed to remove old async_snap_test: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
       }
 
+      /*
+	
+	do not autodetect this yet until the btrfs ioctl interface is finalized!
+
       r = ::ioctl(fd, BTRFS_IOC_SNAP_CREATE_ASYNC, &async_args);
       dout(0) << "mount btrfs SNAP_CREATE_ASYNC got " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
       if (r == 0 || errno == EEXIST) {
@@ -875,6 +879,7 @@ int FileStore::_detect_fs()
 	dout(0) << "mount btrfs SNAP_CREATE_ASYNC is NOT supported: "
 		<< strerror_r(-r, buf, sizeof(buf)) << dendl;
       }
+      */
     }
 
     if (g_conf.filestore_btrfs_snap && !btrfs_snap_create_async) {
@@ -1130,6 +1135,41 @@ int FileStore::mount()
 
   // journal
   open_journal();
+
+  // select journal mode?
+  if (journal) {
+    if (!g_conf.filestore_journal_writeahead &&
+	!g_conf.filestore_journal_parallel &&
+	!g_conf.filestore_journal_trailing) {
+      if (!btrfs) {
+	g_conf.filestore_journal_writeahead = true;
+	dout(0) << "mount: enabling WRITEAHEAD journal mode: btrfs not detected" << dendl;
+      } else if (!g_conf.filestore_btrfs_snap) {
+	g_conf.filestore_journal_writeahead = true;
+	dout(0) << "mount: enabling WRITEAHEAD journal mode: 'filestore btrfs snap' mode is not enabled" << dendl;
+      } else if (!btrfs_snap_create_async) {
+	g_conf.filestore_journal_writeahead = true;
+	dout(0) << "mount: enabling WRITEAHEAD journal mode: btrfs SNAP_CREATE_ASYNC ioctl not detected (v2.6.37+)" << dendl;
+      } else {
+	g_conf.filestore_journal_parallel = true;
+	dout(0) << "mount: enabling PARALLEL journal mode: btrfs, SNAP_CREATE_ASYNC detected and 'filestore btrfs snap' mode is enabled" << dendl;
+      }
+    } else {
+      if (g_conf.filestore_journal_writeahead)
+	dout(0) << "mount: WRITEAHEAD journal mode explicitly enabled in conf" << dendl;
+      if (g_conf.filestore_journal_parallel)
+	dout(0) << "mount: PARALLEL journal mode explicitly enabled in conf" << dendl;
+      if (g_conf.filestore_journal_trailing)
+	dout(0) << "mount: TRAILING journal mode explicitly enabled in conf" << dendl;
+    }
+    if (g_conf.filestore_journal_writeahead)
+      journal->set_wait_on_full(true);
+  }
+
+  r = _sanity_check_fs();
+  if (r < 0)
+    return r;
+
   r = journal_replay(initial_op_seq);
   if (r < 0) {
     char buf[40];
@@ -1142,39 +1182,14 @@ int FileStore::mount()
 
     return r;
   }
+
   journal_start();
+
   sync_thread.create();
   op_tp.start();
   flusher_thread.create();
   op_finisher.start();
   ondisk_finisher.start();
-
-  // select journal mode?
-  if (journal &&
-      !g_conf.filestore_journal_writeahead &&
-      !g_conf.filestore_journal_parallel &&
-      !g_conf.filestore_journal_trailing) {
-    if (!btrfs) {
-      g_conf.filestore_journal_writeahead = true;
-      dout(0) << "mount: enabling WRITEAHEAD journal mode: btrfs not detected" << dendl;
-    } else if (!g_conf.filestore_btrfs_snap) {
-      g_conf.filestore_journal_writeahead = true;
-      dout(0) << "mount: enabling WRITEAHEAD journal mode: 'filestore btrfs snap' mode is not enabled" << dendl;
-    } else if (!btrfs_snap_create_async) {
-      g_conf.filestore_journal_writeahead = true;
-      dout(0) << "mount: enabling WRITEAHEAD journal mode: btrfs SNAP_CREATE_ASYNC ioctl not detected (v2.6.37+)" << dendl;
-    } else {
-      g_conf.filestore_journal_parallel = true;
-      dout(0) << "mount: enabling PARALLEL journal mode: btrfs, SNAP_CREATE_ASYNC detected and 'filestore btrfs snap' mode is enabled" << dendl;
-    }
-  }
-
-  if (journal && g_conf.filestore_journal_writeahead)
-    journal->set_wait_on_full(true);
-
-  r = _sanity_check_fs();
-  if (r < 0)
-    return r;
 
   // all okay.
   return 0;
@@ -1425,7 +1440,7 @@ int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
   int r = do_transactions(tls, op);
     
   if (r >= 0) {
-    op_journal_transactions(tls, op, ondisk);
+    _op_journal_transactions(tls, op, ondisk);
   } else {
     delete ondisk;
   }

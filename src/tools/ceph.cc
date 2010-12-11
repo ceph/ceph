@@ -43,24 +43,14 @@ extern "C" {
 #include <histedit.h>
 }
 
-enum CephToolMode {
-  CEPH_TOOL_MODE_CLI_INPUT = 0,
-  CEPH_TOOL_MODE_OBSERVER = 1,
-  CEPH_TOOL_MODE_ONE_SHOT_OBSERVER = 2,
-  CEPH_TOOL_MODE_GUI = 3
-};
-
-static enum CephToolMode ceph_tool_mode(CEPH_TOOL_MODE_CLI_INPUT);
+static enum ceph_tool_mode_t
+  ceph_tool_mode(CEPH_TOOL_MODE_CLI_INPUT);
 
 struct ceph_tool_data g;
 
 static Cond cmd_cond;
 static SimpleMessenger *messenger = 0;
 static Tokenizer *tok;
-
-static const char *outfile = 0;
-
-
 
 // sync command
 vector<string> pending_cmd;
@@ -256,8 +246,6 @@ static void handle_notify(MMonObserveNotify *notify)
   notify->put();
 }
 
-static void send_observe_requests();
-
 class C_ObserverRefresh : public Context {
 public:
   bool newmon;
@@ -267,7 +255,7 @@ public:
   }
 };
 
-static void send_observe_requests()
+void send_observe_requests()
 {
   dout(1) << "send_observe_requests " << dendl;
 
@@ -373,33 +361,12 @@ int do_command(vector<string>& cmd, bufferlist& bl, string& rs, bufferlist& rbl)
   return reply_rc;
 }
 
-static void usage() 
-{
-  cerr << "usage: ceph [options] [commands]" << std::endl;
-  cerr << "If no commands are specified, enter interactive mode.\n";
-  cerr << "Commands:" << std::endl;
-  cerr << "   stop              -- cleanly shut down file system" << std::endl
-       << "   (osd|pg|mds) stat -- get monitor subsystem status" << std::endl
-       << "   ..." << std::endl;
-  cerr << "Options:" << std::endl;
-  cerr << "   -i infile\n";
-  cerr << "   -o outfile\n";
-  cerr << "        specify input or output file (for certain commands)\n";
-  cerr << "   -s or --status\n";
-  cerr << "        print current system status\n";
-  cerr << "   -w or --watch\n";
-  cerr << "        watch system status changes in real time (push)\n";
-  cerr << "   -g or --gui\n";
-  cerr << "        watch system status changes graphically\n";
-  generic_client_usage();
-}
-
 static const char *cli_prompt(EditLine *e)
 {
   return "ceph> ";
 }
 
-int do_cli()
+int ceph_tool_do_cli()
 {
   /* emacs style */
   EditLine *el = el_init("ceph", stdin, stdout, stderr);
@@ -527,68 +494,42 @@ int run_command(const char *line)
   return 0;
 }
 
-int main(int argc, const char **argv)
+int ceph_tool_cli_input(std::vector<std::string> &cmd, const char *outfile,
+			bufferlist &indata)
 {
-  ostringstream gss;
-  DEFINE_CONF_VARS(usage);
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
-  env_to_vec(args);
+  string rs;
+  bufferlist odata;
+  int ret = do_command(cmd, indata, rs, odata);
+  if (ret)
+    return ret;
 
-  ceph_set_default_id("admin");
-  
-  common_set_defaults(false);
-  common_init(args, "ceph", true);
-
-  vec_to_argv(args, argc, argv);
-
-  srand(getpid());
-
-  // default to 'admin' user
-  if (!g_conf.id || !g_conf.id[0])
-    g_conf.id = strdup("admin");
-
-  char *fname;
-  bufferlist indata;
-  vector<const char*> nargs;
-
-  FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("out_file", 'o')) {
-      CONF_SAFE_SET_ARG_VAL(&outfile, OPT_STR);
-    } else if (CONF_ARG_EQ("in_file", 'i')) {
-      CONF_SAFE_SET_ARG_VAL(&fname, OPT_STR);
-      int fd = ::open(fname, O_RDONLY);
-      struct stat st;
-      if (::fstat(fd, &st) == 0) {
-	indata.push_back(buffer::create(st.st_size));
-	indata.zero();
-	::read(fd, indata.c_str(), st.st_size);
-	::close(fd);
-	cout << "read " << st.st_size << " bytes from " << args[i] << std::endl;
-      }
-    } else if (CONF_ARG_EQ("status", 's')) {
-      ceph_tool_mode = CEPH_TOOL_MODE_ONE_SHOT_OBSERVER;
-    } else if (CONF_ARG_EQ("watch", 'w')) {
-      ceph_tool_mode = CEPH_TOOL_MODE_OBSERVER;
-    } else if (CONF_ARG_EQ("help", 'h')) {
-      usage();
-    } else if (CONF_ARG_EQ("gui", 'g')) {
-      ceph_tool_mode = CEPH_TOOL_MODE_GUI;
-    } else if (args[i][0] == '-' && nargs.empty()) {
-      cerr << "unrecognized option " << args[i] << std::endl;
-      usage();
-    } else
-      nargs.push_back(args[i]);
+  int len = odata.length();
+  if (!len) {
+    // no output
+    return 0;
   }
 
-  // build command
-  vector<string> vcmd;
-  string cmd;
-  for (unsigned i=0; i<nargs.size(); i++) {
-    if (i) cmd += " ";
-    cmd += nargs[i];
-    vcmd.push_back(string(nargs[i]));
+  if (!outfile) {
+    // error: no output specified
+    cout << g_clock.now() << " got " << len << " byte payload, discarding (specify -o <outfile)" << std::endl;
+    return 1;
   }
+  if (strcmp(outfile, "-") == 0) {
+    // write to stdout
+    fwrite(odata.c_str(), len, 1, stdout);
+    return 0;
+  }
+
+  // write to file
+  odata.write_file(outfile);
+  cout << g_clock.now() << " wrote " << len << " byte payload to "
+       << outfile << std::endl;
+  return 0;
+}
+
+int ceph_tool_common_init(ceph_tool_mode_t mode)
+{
+  ceph_tool_mode = mode;
 
   // get monmap
   if (g.mc.build_initial_monmap() < 0)
@@ -611,81 +552,24 @@ int main(int argc, const char **argv)
   g.mc.set_messenger(messenger);
   g.mc.init();
 
-  int ret = -1;
-
   if (g.mc.authenticate() < 0) {
     cerr << "unable to authenticate as " << *g_conf.entity_name << std::endl;
-    goto out;
+    return 1;
   }
   if (g.mc.get_monmap() < 0) {
     cerr << "unable to get monmap" << std::endl;
-    goto out;
+    return 1;
   }
+  return 0;
+}
 
-  switch (ceph_tool_mode)
-  {
-    case CEPH_TOOL_MODE_OBSERVER:
-    case CEPH_TOOL_MODE_ONE_SHOT_OBSERVER:
-      g.lock.Lock();
-      send_observe_requests();
-      g.lock.Unlock();
-      break;
+int ceph_tool_messenger_shutdown()
+{
+  return messenger->shutdown();
+}
 
-    case CEPH_TOOL_MODE_CLI_INPUT: {
-      if (vcmd.empty()) {
-	// interactive mode
-	do_cli();
-	messenger->shutdown();
-	break;
-      }
-      string rs;
-      bufferlist odata;
-      ret = do_command(vcmd, indata, rs, odata);
-      int len = odata.length();
-      if (len) {
-	if (outfile) {
-	  if (strcmp(outfile, "-") == 0) {
-	    ::write(1, odata.c_str(), len);
-	  } else {
-	    odata.write_file(outfile);
-	  }
-	  cout << g_clock.now() << " wrote " << len << " byte payload to " << outfile << std::endl;
-	} else {
-	  cout << g_clock.now() << " got " << len << " byte payload, discarding (specify -o <outfile)" << std::endl;
-	}
-      }
-      messenger->shutdown();
-      break;
-    }
-
-    case CEPH_TOOL_MODE_GUI: {
-#ifdef HAVE_GTK2
-      g.log = &gss;
-      g.slog = &gss;
-
-      // TODO: make sure that we capture the log this generates in the GUI
-      g.lock.Lock();
-      send_observe_requests();
-      g.lock.Unlock();
-
-      run_gui(argc, (char **)argv);
-#else
-      cerr << "I'm sorry. This tool was not compiled with support for  "
-	   << "GTK2." << std::endl;
-      ret = EXIT_FAILURE;
-#endif
-      messenger->shutdown();
-      break;
-    }
-
-    default:
-      assert(0);
-      break;
-  }
-
-  ret = 0;
- out:
-
+int ceph_tool_common_shutdown()
+{
   // wait for messenger to finish
   messenger->wait();
   messenger->destroy();
@@ -695,5 +579,5 @@ int main(int argc, const char **argv)
   g.mc.shutdown();
   g.timer.shutdown();
   g.lock.Unlock();
-  return ret;
+  return 0;
 }

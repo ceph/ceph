@@ -528,8 +528,10 @@ bool ReplicatedPG::snap_trimmer()
   lock();
   dout(10) << "snap_trimmer start, purged_snaps " << info.purged_snaps << dendl;
 
+  epoch_t current_set_started = info.history.last_epoch_started;
+
   while (snap_trimq.size() &&
-	 is_primary() &&
+	 current_set_started == info.history.last_epoch_started &&
 	 is_active()) {
 
     snapid_t sn = snap_trimq.range_start();
@@ -546,24 +548,27 @@ bool ReplicatedPG::snap_trimmer()
       if (!mode.try_write(nobody)) {
 	dout(10) << " can't write, waiting" << dendl;
 	Cond cond;
-	mode.waiting_cond.push_back(&cond);
+	list<Cond*>::iterator q = mode.waiting_cond.insert(mode.waiting_cond.end(), &cond);
 	while (!mode.try_write(nobody))
 	  cond.Wait(_lock);
+	mode.waiting_cond.erase(q);
 	dout(10) << " done waiting" << dendl;
-	if (!is_primary() || !is_active())
+	if (!(current_set_started == info.history.last_epoch_started &&
+	      is_active())) {
 	  break;
+	}
       }
 
       // load clone info
       bufferlist bl;
       osd->store->getattr(coll_t(info.pgid), coid, OI_ATTR, bl);
       object_info_t coi(bl);
+      vector<snapid_t>& snaps = coi.snaps;
 
       // get snap set context
       SnapSetContext *ssc = get_snapset_context(coid.oid, false);
       assert(ssc);
       SnapSet& snapset = ssc->snapset;
-      vector<snapid_t>& snaps = coi.snaps;
 
       dout(10) << coid << " snaps " << snaps << " old snapset " << snapset << dendl;
       assert(snapset.seq);
@@ -700,6 +705,10 @@ bool ReplicatedPG::snap_trimmer()
       // give other threads a chance at this pg
       unlock();
       lock();
+      if (!(current_set_started == info.history.last_epoch_started &&
+	    is_active())) {
+	break;
+      }
     }
 
     // adjust pg info
@@ -715,10 +724,15 @@ bool ReplicatedPG::snap_trimmer()
     t->remove_collection(c);
     int tr = osd->store->queue_transaction(&osr, t);
     assert(tr == 0);
- 
-    share_pg_info();
 
+ 
     unlock();
+    osd->map_lock.get_read();
+    lock();
+    share_pg_info();
+    unlock();
+    osd->map_lock.put_read();
+
     // flush, to make sure the collection adjustments we just made are
     // reflected when we scan the next collection set.
     osd->store->flush();
@@ -1703,7 +1717,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
       snaps[i] = snapc.snaps[i];
     
     // prepare clone
-    object_info_t static_snap_oi(oi);
+    object_info_t static_snap_oi(coid, oi.oloc);
     object_info_t *snap_oi;
     if (is_primary()) {
       ctx->clone_obc = new ObjectContext(static_snap_oi, true, NULL);
@@ -3980,7 +3994,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
   for (map<sobject_t,ScrubMap::object>::reverse_iterator p = scrubmap.objects.rbegin(); 
        p != scrubmap.objects.rend(); 
        p++) {
-    const sobject_t& soid = p->second.poid;
+    const sobject_t& soid = p->first;
     stat.num_objects++;
 
     // new snapset?

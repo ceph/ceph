@@ -1,5 +1,4 @@
 usr/bin/radosgw
 usr/bin/radosgw_admin
-usr/bin/radosacl
 usr/share/man/man8/radosgw.8
 usr/share/man/man8/radosgw_admin.8

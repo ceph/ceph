@@ -1081,6 +1081,10 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     break;
     
   case CEPH_LOCK_IDFT:
+    if (!is_auth()) {
+      bool dirty = dirfragtreelock.is_dirty();
+      ::encode(dirty, bl);
+    }
     {
       // encode the raw tree
       ::encode(dirfragtree, bl);
@@ -1106,6 +1110,9 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
       ::encode(inode.atime, bl);
       ::encode(inode.time_warp_seq, bl);
       ::encode(inode.client_ranges, bl);
+    } else {
+      bool dirty = filelock.is_dirty();
+      ::encode(dirty, bl);
     }
 
     {
@@ -1136,6 +1143,10 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     break;
 
   case CEPH_LOCK_INEST:
+    if (!is_auth()) {
+      bool dirty = nestlock.is_dirty();
+      ::encode(dirty, bl);
+    }
     {
       dout(15) << "encode_lock_state inode.rstat is " << inode.rstat << dendl;
       ::encode(inode.rstat, bl);  // only meaningful if i am auth.
@@ -1234,6 +1245,14 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     break;
 
   case CEPH_LOCK_IDFT:
+    if (is_auth()) {
+      bool replica_dirty;
+      ::decode(replica_dirty, p);
+      if (replica_dirty) {
+	dout(10) << "decode_lock_state setting dftlock dirty flag" << dendl;
+	dirfragtreelock.mark_dirty();  // ok bc we're auth and caller will handle
+      }
+    }
     {
       fragtree_t temp;
       ::decode(temp, p);
@@ -1272,8 +1291,14 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       ::decode(inode.atime, p);
       ::decode(inode.time_warp_seq, p);
       ::decode(inode.client_ranges, p);
+    } else {
+      bool replica_dirty;
+      ::decode(replica_dirty, p);
+      if (replica_dirty) {
+	dout(10) << "decode_lock_state setting filelock dirty flag" << dendl;
+	filelock.mark_dirty();  // ok bc we're auth and caller will handle
+      }
     }
-
     {
       frag_info_t dirstat;
       ::decode(dirstat, p);
@@ -1325,6 +1350,14 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     break;
 
   case CEPH_LOCK_INEST:
+    if (is_auth()) {
+      bool replica_dirty;
+      ::decode(replica_dirty, p);
+      if (replica_dirty) {
+	dout(10) << "decode_lock_state setting nestlock dirty flag" << dendl;
+	nestlock.mark_dirty();  // ok bc we're auth and caller will handle
+      }
+    }
     {
       nest_info_t rstat;
       ::decode(rstat, p);

@@ -1062,7 +1062,7 @@ void Server::handle_client_request(MClientRequest *req)
   }
 
   // retry?
-  if (req->get_retry_attempt() &&
+  if ((req->get_retry_attempt() || req->is_replay()) &&
       ((req->get_op() != CEPH_MDS_OP_OPEN) && 
        (req->get_op() != CEPH_MDS_OP_CREATE))) {
     assert(session);
@@ -2058,7 +2058,20 @@ void Server::handle_client_lookup_hash(MDRequest *mdr)
     }
     unsigned hash = atoi(req->get_filepath2()[0].c_str());
     frag_t fg = diri->dirfragtree[hash];
-    CDir *dir = diri->get_or_open_dirfrag(mdcache, fg);
+    CDir *dir = diri->get_dirfrag(fg);
+    if (!dir) {
+      if (!diri->is_auth()) {
+	if (diri->is_ambiguous_auth()) {
+	  // wait
+	  dout(7) << " waiting for single auth in " << *diri << dendl;
+	  diri->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
+	  return;
+	} 
+	mdcache->request_forward(mdr, diri->authority().first);
+	return;
+      }
+      dir = diri->get_or_open_dirfrag(mdcache, fg);
+    }
     assert(dir);
     if (!dir->is_auth()) {
       if (dir->is_ambiguous_auth()) {

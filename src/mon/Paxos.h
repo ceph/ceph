@@ -228,6 +228,8 @@ private:
 
   version_t get_new_proposal_number(version_t gt=0);
   
+  void warn_on_future_time(utime_t t, entity_name_t from);
+
 public:
   Paxos(Monitor *m,
 	int mid) : mon(m),

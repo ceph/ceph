@@ -1,4 +1,5 @@
 %define with_radosgw %{?_with_radosgw: 1} %{!?_with_radosgw: 0}
+%define with_gtk2 %{?_with_gtk2: 1} %{!?_with_gtk2: 0}
 
 Name:          ceph
 Version:       @VERSION@
@@ -11,7 +12,8 @@ URL:           http://ceph.newdream.net/
 Source:        http://ceph.newdream.net/download/%{name}-%{version}.tar.gz
 BuildRequires: fuse-devel, libtool, libtool-ltdl-devel, boost-devel, 
 BuildRequires: libedit-devel, fuse-devel, git, perl, gdbm,
-BuildRequires: openssl-devel, libatomic_ops-devel, google-perftools-devel
+BuildRequires: cryptopp-devel, libatomic_ops-devel, google-perftools-devel
+BuildRequires: pkgconfig
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 Requires(post): chkconfig, binutils, libedit, google-perftools
 Requires(preun): chkconfig
@@ -51,16 +53,42 @@ implemented as a FastCGI module using libfcgi, and can be used in
 conjunction with any FastCGI capable web server.
 %endif
 
+%if %{with_gtk2}
+%package gcephtool
+Summary:        Ceph graphical monitoring tool
+Group:          System Environment/Base
+License:        LGPLv2
+Requires:       gtk2 gtkmm24
+BuildRequires:  gtk2-devel gtkmm24-devel
+
+%description gcephtool
+gcephtool is a graphical monitor for the clusters running the Ceph distributed
+file system.
+%endif
+
 %prep
 %setup -q
 
 %build
 ./autogen.sh
+MY_CONF_OPT=""
+
 %if %{with_radosgw}
-%{configure} --prefix=/usr --sbindir=/sbin --without-hadoop --with-radosgw
+MY_CONF_OPT="$MY_CONF_OPT --with-radosgw"
 %else
-%{configure} --prefix=/usr --sbindir=/sbin --without-hadoop --without-radosgw
+MY_CONF_OPT="$MY_CONF_OPT --without-radosgw"
 %endif
+
+%if %{with_gtk2}
+MY_CONF_OPT="$MY_CONF_OPT --with-gtk2"
+%else
+MY_CONF_OPT="$MY_CONF_OPT --without-gtk2"
+%endif
+
+%{configure} --prefix=/usr --sbindir=/sbin \
+--localstatedir=/var --sysconfdir=/etc \
+--without-hadoop $MY_CONF_OPT
+
 make -j$(getconf _NPROCESSORS_ONLN) CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
 %install
@@ -117,7 +145,6 @@ fi
 %{_bindir}/cmds
 %{_bindir}/cosd
 %{_bindir}/rados
-%{_bindir}/radosacl
 %{_bindir}/rbd
 %{_bindir}/cdebugpack
 %{_initrddir}/ceph
@@ -125,7 +152,6 @@ fi
 %{_libdir}/libcrush.so.*
 %{_libdir}/librados.so.*
 %{_libdir}/rados-classes/libcls_rbd.so.*
-%{_datadir}/ceph_tool/gui_resources/*
 /sbin/mkcephfs
 /sbin/mount.ceph
 %{_libdir}/ceph
@@ -143,6 +169,7 @@ fi
 %{_mandir}/man8/monmaptool.8*
 %{_mandir}/man8/cconf.8*
 %{_mandir}/man8/ceph.8*
+%{_mandir}/man8/cephfs.8*
 %{_mandir}/man8/mount.ceph.8*
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw_admin.8*
@@ -185,11 +212,24 @@ fi
 
 %if %{with_radosgw}
 %files radosgw
+%defattr(-,root,root,-)
 %{_bindir}/radosgw
 %{_bindir}/radosgw_admin
 %endif
 
+%if %{with_gtk2}
+%files gcephtool
+%defattr(-,root,root,-)
+%{_bindir}/gceph
+%{_datadir}/ceph_tool/gui_resources/*
+%endif
+
 %changelog
+* Thu Dec 9 2010 Colin McCabe <colinm@hq.newdream.net> 0.19.1-6
+- Remove radosacl, since it's a debug binary
+- Fix GUI dependencies
+- Miscellaneous cleanups
+
 * Fri Apr 30 2010 Sage Weil <sage@newdream.net> 0.19.1-5
 - Remove java deps (no need to build hadoop by default)
 - Include all required librados helpers

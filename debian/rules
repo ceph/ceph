@@ -6,14 +6,14 @@ export DESTDIR=$(CURDIR)/debian/tmp
 configure: configure-stamp
 configure-stamp:
 	dh_testdir
-	touch configure-stamp
+	touch $@
 
 build: build-stamp
 build-stamp: configure-stamp  
 	dh_testdir
 
 	./autogen.sh
-	./configure --prefix=/usr --sbindir=/sbin
+	./configure --prefix=/usr --sbindir=/sbin --localstatedir=/var --sysconfdir=/etc
 	$(MAKE)
 	cp src/init-ceph debian/ceph.init
 	cp src/logrotate.conf debian/ceph.logrotate
@@ -25,10 +25,12 @@ clean:
 	dh_testroot
 	rm -f build-stamp configure-stamp
 
-	[ ! -f Makefile ] || $(MAKE) clean
-	rm -f Makefile config.log config.status
-	rm -rf src/.deps
-	rm -f debian/ceph.init
+	[ ! -f Makefile ] || $(MAKE) distclean
+	rm -f aclocal.m4 compile config.sub config.guess depcomp install-sh \
+	  ltmain.sh missing
+	rm -f configure Makefile.in man/Makefile.in src/Makefile.in
+	rm -f src/acconfig.h.in
+	rm -f debian/ceph.init debian/ceph.logrotate
 
 	dh_clean
 
@@ -67,7 +69,6 @@ binary-arch: build install
 	dh_strip -plibceph1 --dbg-package=libceph1-dbg
 	dh_strip -pradosgw --dbg-package=radosgw-dbg
 #	dh_strip -k --exclude=libcls_
-#	chmod +x debian/move_dbg_files.sh && debian/move_dbg_files.sh
 
 	dh_compress
 	dh_fixperms

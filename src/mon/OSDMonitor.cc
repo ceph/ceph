@@ -1136,7 +1136,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	    r = 0;
 	    ss << "ok";
 	  } else {
-	    ss << "osd" << who << " no up";
+	    ss << "osd" << who << " not up";
 	    r = -ENOENT;
 	  }
 	} else ss << "specify osd number or *";

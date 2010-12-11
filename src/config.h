@@ -543,9 +543,9 @@ ExportControl *conf_get_export_control();
 	conf_cmd_equals(args[i], str_cmd, char_cmd, &val_pos)
 
 #define DEFINE_CONF_VARS(usage_func) \
-	unsigned int val_pos; \
-	void (*args_usage)() = usage_func; \
-	bool __isarg
+	unsigned int val_pos __attribute__((unused)); \
+	void (*args_usage)() __attribute__((unused)) = usage_func; \
+	bool __isarg __attribute__((unused))
 
 
 #define FOR_EACH_ARG(args) \

@@ -223,7 +223,7 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
   }
 
   if (create && (oldsize < conf_journal_sz)) {
-    uint64_t newsize = g_conf.osd_journal_size << 20;
+    uint64_t newsize = (uint64_t)g_conf.osd_journal_size << 20;
     dout(10) << "_open extending to " << newsize << " bytes" << dendl;
     ret = ::ftruncate(fd, newsize);
     if (ret < 0) {
@@ -347,8 +347,12 @@ int FileJournal::open(uint64_t next_seq)
       break;
     }
     if (seq > next_seq) {
-      dout(10) << "open entry " << seq << " len " << bl.length() << " > next_seq " << next_seq << dendl;
+      dout(10) << "open entry " << seq << " len " << bl.length() << " > next_seq " << next_seq
+	       << ", ignoring journal contents"
+	       << dendl;
       read_pos = -1;
+      last_committed_seq = 0;
+      seq = 0;
       return 0;
     }
     if (seq == next_seq) {

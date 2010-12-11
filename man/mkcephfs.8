@@ -5,6 +5,7 @@ mkcephfs \- create a ceph file system
 .B mkcephfs
 [ \fB\-a\fP ]
 [ \fB\-c\fP\fI ceph.conf\fP ]
+[ \fB\-k\fI /path/to/keyring.bin\fP ]
 [ \fB\-\-clobber_old_data\fP ]
 [ \fB\-\-mkbtrfs\fP ]
 .SH DESCRIPTION
@@ -22,6 +23,9 @@ executing commands via SSH.
 .TP
 \fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
 Use the given conf file instead of the default \fI/etc/ceph/ceph.conf\fP.
+.TP
+\fB\-k\fI /path/to/keyring.bin\fR
+Location to write the client.admin keyring, which is used to administer the cluster.  The default is \fI/etc/ceph/keyring.bin\fP, but must still be specified explicitly.
 .TP
 \fB\-\-clobber_old_data\fR
 Overwrite any existing data found in monitor or osd paths.
