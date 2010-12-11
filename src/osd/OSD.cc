@@ -4860,6 +4860,14 @@ void OSD::handle_op(MOSDOp *op)
 
   // pg must be same-ish...
   if (op->may_write()) {
+    // full?
+    if (osdmap->test_flag(CEPH_OSDMAP_FULL) &&
+	!op->get_source().is_mds()) {  // FIXME: we'll exclude mds writes for now.
+      reply_op_error(op, -ENOSPC);
+      pg->unlock();
+      return;
+    }
+
     if (op->get_snapid() != CEPH_NOSNAP) {
       reply_op_error(op, -EINVAL);
       pg->unlock();
