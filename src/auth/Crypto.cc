@@ -137,7 +137,7 @@ int CryptoAES::encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
   const unsigned char *in_buf;
 
   if (secret.length() < AES_KEY_LEN) {
-    derr(0) << "key is too short" << dendl;
+    dout(0) << "key is too short" << dendl;
     return false;
   }
   string ciphertext;

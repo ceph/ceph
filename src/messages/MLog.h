@@ -15,16 +15,19 @@
 #ifndef CEPH_MLOG_H
 #define CEPH_MLOG_H
 
-#include "include/LogEntry.h"
+#include "common/LogEntry.h"
 #include "messages/PaxosServiceMessage.h"
+
+#include <deque>
 
 class MLog : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;
-  deque<LogEntry> entries;
+  std::deque<LogEntry> entries;
   
   MLog() : PaxosServiceMessage(MSG_LOG, 0) {}
-  MLog(ceph_fsid_t& f, deque<LogEntry>& e) : PaxosServiceMessage(MSG_LOG, 0), fsid(f), entries(e) { }
+  MLog(ceph_fsid_t& f, const std::deque<LogEntry>& e)
+    : PaxosServiceMessage(MSG_LOG, 0), fsid(f), entries(e) { }
   MLog(ceph_fsid_t& f) : PaxosServiceMessage(MSG_LOG, 0), fsid(f) {}
 private:
   ~MLog() {}

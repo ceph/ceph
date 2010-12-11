@@ -25,8 +25,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(mon, mon->name, mon->rank, machine_name, state, last_committed)
 static ostream& _prefix(Monitor *mon, const string& name, int rank, const char *machine_name, int state, version_t last_committed) {
-  return *_dout << dbeginl
-		<< "mon." << name << "@" << rank
+  return *_dout << "mon." << name << "@" << rank
 		<< (mon->is_starting() ?
 		    (const char*)"(starting)" :
 		    (mon->is_leader() ?
@@ -569,10 +568,8 @@ void Paxos::warn_on_future_time(utime_t t, entity_name_t from)
       utime_t warn_diff = now - last_clock_drift_warn;
       if (warn_diff >
 	  pow(g_conf.mon_clock_drift_warn_backoff, clock_drift_warned)) {
-	stringstream ss;
-	ss << "message from " << from << " was stamped " << diff
-	   << "s in the future, clocks not synchronized";
-	mon->get_logclient()->log(LOG_WARN, ss);
+	mon->clog.warn() << "message from " << from << " was stamped " << diff
+			 << "s in the future, clocks not synchronized";
 	last_clock_drift_warn = g_clock.now();
 	++clock_drift_warned;
       }

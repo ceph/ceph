@@ -18,6 +18,7 @@
 #include "common/errno.h"
 #include "config.h"
 
+#include <limits.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <iostream>

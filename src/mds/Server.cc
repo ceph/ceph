@@ -62,7 +62,7 @@ using namespace std;
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".server "
+#define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".server "
 
 
 void Server::open_logger()
@@ -471,12 +471,10 @@ void Server::find_idle_sessions()
       break;
     }
     
-    stringstream ss;
     utime_t age = now;
     age -= session->last_cap_renew;
-    ss << "closing stale session " << session->inst << " after " << age;
-    mds->logclient.log(LOG_INFO, ss);
-
+    mds->clog.info() << "closing stale session " << session->inst
+	<< " after " << age << "\n";
     dout(10) << "autoclosing stale session " << session->inst << " last " << session->last_cap_renew << dendl;
     kill_session(session);
   }
@@ -534,7 +532,6 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     return;
   }
 
-  stringstream ss;
   utime_t delay = g_clock.now();
   delay -= reconnect_start;
   dout(10) << " reconnect_start " << reconnect_start << " delay " << delay << dendl;
@@ -542,10 +539,10 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   if (!mds->is_reconnect()) {
     // XXX maybe in the future we can do better than this?
     dout(1) << " no longer in reconnect state, ignoring reconnect, sending close" << dendl;
-    ss << "denied reconnect attempt (mds is " << ceph_mds_state_name(mds->get_state())
+    mds->clog.info() << "denied reconnect attempt (mds is "
+       << ceph_mds_state_name(mds->get_state())
        << ") from " << m->get_source_inst()
-       << " after " << delay << " (allowed interval " << g_conf.mds_reconnect_timeout << ")";
-    mds->logclient.log(LOG_INFO, ss);
+       << " after " << delay << " (allowed interval " << g_conf.mds_reconnect_timeout << ")\n";
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_connection());
     m->put();
     return;
@@ -563,11 +560,12 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     mdlog->start_submit_entry(new ESession(session->inst, true, pv),
 			      new C_MDS_session_finish(mds, session, sseq, true, pv));
     mdlog->flush();
-    ss << "reconnect by new " << session->inst << " after " << delay;
+    mds->clog.debug() << "reconnect by new " << session->inst
+	<< " after " << delay << "\n";
   } else {
-    ss << "reconnect by " << session->inst << " after " << delay;
+    mds->clog.debug() << "reconnect by " << session->inst
+	<< " after " << delay << "\n";
   }
-  mds->logclient.log(LOG_DEBUG, ss);
   
   // snaprealms
   for (vector<ceph_mds_snaprealm_reconnect>::iterator p = m->realms.begin();
@@ -1634,10 +1632,9 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino, u
 
   if (useino && useino != in->inode.ino) {
     dout(0) << "WARNING: client specified " << useino << " and i allocated " << in->inode.ino << dendl;
-    stringstream ss;
-    ss << mdr->client_request->get_source() << " specified ino " << useino
-       << " but mds" << mds->whoami << " allocated " << in->inode.ino;
-    mds->logclient.log(LOG_ERROR, ss);
+    mds->clog.error() << mdr->client_request->get_source()
+       << " specified ino " << useino
+       << " but mds" << mds->whoami << " allocated " << in->inode.ino << "\n";
     //assert(0); // just for now.
   }
     

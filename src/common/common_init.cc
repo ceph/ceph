@@ -44,13 +44,6 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool i
   }
 #endif //HAVE_LIBTCMALLOC
 
-  if (g_conf.log_file && g_conf.log_file[0])
-    g_conf.log_to_stdout = false;
-
-  // open log file?
-  if (!g_conf.log_to_stdout)
-    _dout_open_log();
-
   if (init_keys && is_supported_auth(CEPH_AUTH_CEPHX)) {
     g_keyring.load(g_conf.keyring);
 

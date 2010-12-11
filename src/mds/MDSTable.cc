@@ -26,7 +26,7 @@
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << "." << table_name << ": "
+#define dout_prefix *_dout << "mds" << mds->get_nodeid() << "." << table_name << ": "
 
 
 class C_MT_Save : public Context {

@@ -155,7 +155,7 @@ class MDS : public Dispatcher {
   OSDMap       *osdmap;
   Objecter     *objecter;
   Filer        *filer;       // for reading/writing to/from osds
-  LogClient    logclient;
+  LogClient    clog;
 
   // sub systems
   Server       *server;

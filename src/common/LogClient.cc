@@ -27,6 +27,7 @@
 #include <iostream>
 #include <errno.h>
 #include <sys/stat.h>
+#include <syslog.h>
 
 #ifdef DARWIN
 #include <sys/param.h>
@@ -37,25 +38,59 @@
 
 #include "config.h"
 
-void LogClient::log(log_type type, const char *s)
+/*
+ * Given a clog log_type, return the equivalent syslog priority
+ */
+static inline int clog_type_to_syslog_prio(clog_type t)
 {
-  string str(s);
-  log(type, str);
+  switch (t) {
+    case CLOG_DEBUG:
+      return LOG_DEBUG;
+    case CLOG_INFO:
+      return LOG_INFO;
+    case CLOG_WARN:
+      return LOG_WARNING;
+    case CLOG_ERROR:
+      return LOG_ERR;
+    case CLOG_SEC:
+      return LOG_CRIT;
+    default:
+      assert(0);
+      return 0;
+  }
 }
 
-void LogClient::log(log_type type, stringstream& ss)
+LogClientTemp::LogClientTemp(clog_type type_, LogClient &parent_)
+  : type(type_), parent(parent_)
+{
+}
+
+LogClientTemp::LogClientTemp(const LogClientTemp &rhs)
+  : type(rhs.type), parent(rhs.parent)
+{
+  // don't want to-- nor can we-- copy the ostringstream
+}
+
+LogClientTemp::~LogClientTemp()
+{
+  if (ss.peek() != EOF)
+    parent.do_log(type, ss);
+}
+
+void LogClient::do_log(clog_type type, std::stringstream& ss)
 {
   while (!ss.eof()) {
     string s;
     getline(ss, s);
-    log(type, s);
+    if (!s.empty())
+      do_log(type, s);
   }
 }
 
-void LogClient::log(log_type type, string& s)
+void LogClient::do_log(clog_type type, const std::string& s)
 {
   Mutex::Locker l(log_lock);
-  dout(0) << "log " << (log_type)type << " : " << s << dendl;
+  dout(0) << "log " << type << " : " << s << dendl;
   LogEntry e;
   e.who = messenger->get_myinst();
   e.stamp = g_clock.now();
@@ -75,6 +110,33 @@ void LogClient::send_log()
 }
 
 void LogClient::_send_log()
+{
+  if (g_conf.clog_to_syslog)
+    _send_log_to_syslog();
+  if (g_conf.clog_to_monitors)
+    _send_log_to_monitors();
+}
+
+void LogClient::_send_log_to_syslog()
+{
+  std::deque<LogEntry>::const_reverse_iterator rbegin = log_queue.rbegin();
+  std::deque<LogEntry>::const_reverse_iterator rend = log_queue.rend();
+  for (std::deque<LogEntry>::const_reverse_iterator a = rbegin; a != rend; ++a) {
+    const LogEntry entry(*a);
+    if (entry.seq < last_syslog)
+      break;
+    ostringstream oss;
+    oss << entry;
+    string str(oss.str());
+    syslog(clog_type_to_syslog_prio(entry.type) | LOG_USER, "%s", str.c_str());
+  }
+  if (rbegin != rend) {
+    const LogEntry entry(*rbegin);
+    last_syslog = entry.seq;
+  }
+}
+
+void LogClient::_send_log_to_monitors()
 {
   if (log_queue.empty())
     return;
@@ -96,9 +158,14 @@ void LogClient::handle_log_ack(MLogAck *m)
   dout(10) << "handle_log_ack " << *m << dendl;
 
   version_t last = m->last;
-  while (log_queue.size() && log_queue.begin()->seq <= last) {
-    dout(10) << " logged " << log_queue.front() << dendl;
-    log_queue.pop_front();
+
+  deque<LogEntry>::iterator q = log_queue.begin();
+  while (q != log_queue.end()) {
+    const LogEntry &entry(*q);
+    if (entry.seq > last)
+      break;
+    dout(10) << " logged " << entry << dendl;
+    q = log_queue.erase(q);
   }
   m->put();
 }

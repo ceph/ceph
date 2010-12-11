@@ -1,117 +1,87 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2010 Sage Weil <sage@newdream.net>
+ * Copyright (C) 2010 Dreamhost
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+ */
 
 #ifndef CEPH_DEBUG_H
 #define CEPH_DEBUG_H
 
-#include "include/assert.h"
-#include "Mutex.h"
 #include "Clock.h"
+#include "Mutex.h"
+#include "common/DoutStreambuf.h"
+#include "common/likely.h"
+#include "include/assert.h"
 
-#include <ostream>
-using std::ostream;
+#include <iosfwd>
 
-// the streams
-extern ostream *_dout;
-extern ostream *_derr;
-
-extern Mutex _dout_lock;
-
+extern std::ostream *_dout;
+extern DoutStreambuf <char> *_doss;
 extern bool _dout_need_open;
-extern bool _dout_is_open;
+extern Mutex _dout_lock;
 
 extern void _dout_open_log();
 
-static inline void dout_open_log() {
-  _dout_lock.Lock();
-  _dout_open_log();
-  _dout_lock.Unlock();
-}
-extern int dout_rename_output_file();  // after calling daemon()
-extern int dout_create_rank_symlink(int64_t n);
+extern int dout_handle_daemonize();
 
-static inline void _dout_check_log() {
-  _dout_lock.Lock();
-  if (_dout_need_open)
-    _dout_open_log();
-  _dout_lock.Unlock();
-}
+extern int dout_create_rank_symlink(int n);
 
-static inline void _dout_begin_line() {
+static inline void _dout_begin_line(int prio) {
   _dout_lock.Lock();
-  if (_dout_need_open)
+  if (unlikely(_dout_need_open))
     _dout_open_log();
-  *_dout << g_clock.now() << " " << std::hex << pthread_self() << std::dec << " ";
-}
-static void _dout_begin_line_static() {
-  _dout_begin_line();
+
+  // Put priority information into dout
+  _doss->sputc(1);
+  _doss->sputc(prio + 11);
+
+  // Some information that goes in every dout message
+  *_dout << g_clock.now() << " " << std::hex << pthread_self()
+	 << std::dec << " ";
 }
 
 static inline void _dout_end_line() {
   _dout_lock.Unlock();
 }
 
-struct _dbeginl_t { _dbeginl_t(int) {} };
-static const _dbeginl_t dbeginl = 0;
-inline ostream& operator<<(ostream& out, _dbeginl_t) {
-  _dout_begin_line();
-  return out;
-}
-
-struct _dbeginlstatic_t { _dbeginlstatic_t(int) {} };
-static const _dbeginlstatic_t dbeginlstatic = 0;
-inline ostream& operator<<(ostream& out, _dbeginlstatic_t) {
-  _dout_begin_line_static();
-  return out;
-}
-
 // intentionally conflict with endl
 class _bad_endl_use_dendl_t { public: _bad_endl_use_dendl_t(int) {} };
 static const _bad_endl_use_dendl_t endl = 0;
-inline ostream& operator<<(ostream& out, _bad_endl_use_dendl_t) {
+inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
   assert(0 && "you are using the wrong endl.. use std::endl or dendl");
   return out;
 }
 
-
 // generic macros
-#define generic_dout(x) do { if ((x) <= g_conf.debug) { *_dout << dbeginl
-#define generic_derr(x) do { if ((x) <= g_conf.debug) { *_derr << dbeginl
+#define generic_dout(x) do { if ((x) <= g_conf.debug) {\
+  _dout_begin_line(x); *_dout
 
-#define pdout(x,p) do { if ((x) <= (p)) { *_dout << dbeginl
+#define pdout(x,p) do { if ((x) <= (p)) {\
+  _dout_begin_line(x); *_dout
 
 #define debug_DOUT_SUBSYS debug
-#define dout_prefix *_dout << dbeginlstatic
+#define dout_prefix *_dout
 #define DOUT_CONDVAR(x) g_conf.debug_ ## x
 #define XDOUT_CONDVAR(x) DOUT_CONDVAR(x)
 #define DOUT_COND(l) l <= XDOUT_CONDVAR(DOUT_SUBSYS)
 
-#define dout(l) do { if (DOUT_COND(l)) { dout_prefix
-#define derr(l) do { if (DOUT_COND(l)) { dout_prefix
+#define dout(l) do { if (DOUT_COND(l)) {\
+  _dout_begin_line(l); dout_prefix
 
 #define dendl std::endl; _dout_end_line(); } } while (0)
 
 
-inline static void hex2str(const char *s, int len, char *buf, int dest_len)
-{
-  int pos = 0;
-  for (int i=0; i<len && pos<dest_len; i++) {
-    if (i && !(i%8))
-      pos += snprintf(&buf[pos], dest_len-pos, " ");
-    if (i && !(i%16))
-      pos += snprintf(&buf[pos], dest_len-pos, "\n");
-    pos += snprintf(&buf[pos], dest_len-pos, "%.2x ", (int)(unsigned char)s[i]);
-  }
-}
+extern void hex2str(const char *s, int len, char *buf, int dest_len);
 
-inline static void hexdump(string msg, const char *s, int len)
-{
-  int buf_len = len*4;
-  char buf[buf_len];
-  hex2str(s, len, buf, buf_len);
-  generic_dout(0) << msg << ":\n" << buf << dendl;
-}
-
-
+extern void hexdump(string msg, const char *s, int len);
 
 #endif

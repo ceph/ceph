@@ -16,6 +16,7 @@
 #include "PGLS.h"
 
 #include "common/arch.h"
+#include "common/errno.h"
 #include "common/Logger.h"
 
 #include "messages/MOSDOp.h"
@@ -37,7 +38,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(this, osd->whoami, osd->osdmap)
 static ostream& _prefix(PG *pg, int whoami, OSDMap *osdmap) {
-  return *_dout << dbeginl << "osd" << whoami
+  return *_dout << "osd" << whoami
 		<< " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
 }
 
@@ -2610,7 +2611,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   Context *onapply = new C_OSD_RepModifyApply(rm);
   int r = osd->store->queue_transactions(&osr, rm->tls, onapply, oncommit);
   if (r) {
-    derr(0) << "error applying transaction: r = " << r << dendl;
+    dout(0) << "error applying transaction: r = " << r << dendl;
     assert(0);
   }
   // op is cleaned up by oncommit/onapply when both are executed
@@ -3168,14 +3169,10 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
   struct stat st;
   int r = osd->store->stat(coll_t(info.pgid), soid, &st);
   if (r != 0) {
-    stringstream ss;
-    char buf[80];
-    ss << op->get_source() << " tried to pull " << soid << " in " << info.pgid
-       << " but got " << strerror_r(-r, buf, sizeof(buf));
-    osd->logclient.log(LOG_ERROR, ss);
-
+    osd->clog.error() << op->get_source() << " tried to pull " << soid
+	<< " in " << info.pgid << " but got "
+	<< cpp_strerror(-r) << "\n";
     // FIXME: do something more intelligent.. mark the pg as needing repair?
-
   } else {
     uint64_t size = st.st_size;
 
@@ -4012,7 +4009,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 
       // did we finish the last oid?
       if (head != sobject_t()) {
-	derr(0) << " missing clone(s) for " << head << dendl;
+	dout(0) << " missing clone(s) for " << head << dendl;
 	assert(head == sobject_t());  // we had better be done
 	errors++;
       }
@@ -4093,17 +4090,16 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 	   << stat.num_kb << "/" << info.stats.num_kb << " kb."
 	   << dendl;
 
-  stringstream ss;
   if (stat.num_objects != info.stats.num_objects ||
       stat.num_object_clones != info.stats.num_object_clones ||
       stat.num_bytes != info.stats.num_bytes ||
       stat.num_kb != info.stats.num_kb) {
-    ss << info.pgid << " " << mode << " stat mismatch, got "
+    osd->clog.error() << info.pgid << " " << mode
+       << " stat mismatch, got "
        << stat.num_objects << "/" << info.stats.num_objects << " objects, "
        << stat.num_object_clones << "/" << info.stats.num_object_clones << " clones, "
        << stat.num_bytes << "/" << info.stats.num_bytes << " bytes, "
-       << stat.num_kb << "/" << info.stats.num_kb << " kb.";
-    osd->get_logclient()->log(LOG_ERROR, ss);
+       << stat.num_kb << "/" << info.stats.num_kb << " kb.\n";
     errors++;
 
     if (repair) {

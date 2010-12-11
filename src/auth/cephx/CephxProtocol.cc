@@ -6,7 +6,7 @@
 
 #define DOUT_SUBSYS auth
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "cephx: "
+#define dout_prefix *_dout << "cephx: "
 
 
 

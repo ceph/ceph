@@ -34,7 +34,7 @@ using std::cerr;
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".tableclient(" << get_mdstable_name(table) << ") "
+#define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".tableclient(" << get_mdstable_name(table) << ") "
 
 
 void MDSTableClient::handle_request(class MMDSTableRequest *m)

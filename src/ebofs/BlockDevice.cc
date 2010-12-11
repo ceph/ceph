@@ -65,7 +65,7 @@ inline ostream& operator<<(ostream& out, BlockDevice::biovec &bio)
  */
 
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "bdev(" << dev << ").elevatorq."
+#define dout_prefix *_dout << "bdev(" << dev << ").elevatorq."
 
 
 int BlockDevice::ElevatorQueue::dequeue_io(list<biovec*>& biols, 
@@ -214,7 +214,7 @@ int BlockDevice::ElevatorQueue::dequeue_io(list<biovec*>& biols,
  * BarrierQueue
  */
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "bdev(" << dev << ").barrierq."
+#define dout_prefix *_dout << "bdev(" << dev << ").barrierq."
 
 void BlockDevice::BarrierQueue::barrier()
 {
@@ -263,7 +263,7 @@ int BlockDevice::BarrierQueue::dequeue_io(list<biovec*>& biols,
  */
 
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "bdev(" << dev << ")."
+#define dout_prefix *_dout << "bdev(" << dev << ")."
 
 block_t BlockDevice::get_num_blocks() 
 {

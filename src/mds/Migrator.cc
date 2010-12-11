@@ -63,7 +63,7 @@
 #undef DOUT_COND
 #define DOUT_COND(l) l <= g_conf.debug_mds || l <= g_conf.debug_mds_migrator
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".migrator "
+#define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".migrator "
 
 /* This function DOES put the passed message before returning*/
 void Migrator::dispatch(Message *m)

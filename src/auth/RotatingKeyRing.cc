@@ -10,7 +10,7 @@
 
 #define DOUT_SUBSYS auth
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "auth: "
+#define dout_prefix *_dout << "auth: "
 
 
 bool RotatingKeyRing::need_new_secrets()

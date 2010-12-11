@@ -68,8 +68,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(this)
 static ostream& _prefix(Monitor *mon) {
-  return *_dout << dbeginl
-		<< "mon." << mon->name << "@" << mon->rank
+  return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< (mon->is_starting() ?
 		    (const char*)"(starting)" : 
 		    (mon->is_leader() ?
@@ -95,7 +94,7 @@ Monitor::Monitor(string nm, MonitorStore *s, Messenger *m, MonMap *map) :
   lock("Monitor::lock"),
   timer(lock),
   monmap(map),
-  logclient(messenger, monmap),
+  clog(messenger, monmap, NULL, LogClient::FLAG_SYNC),
   store(s),
   
   state(STATE_STARTING), stopping(false),
@@ -163,11 +162,9 @@ void Monitor::init()
   for (vector<PaxosService*>::iterator ps = paxos_service.begin(); ps != paxos_service.end(); ps++)
     (*ps)->init();
 
-  logclient.set_synchronous(true);
-  
   // i'm ready!
   messenger->add_dispatcher_tail(this);
-  messenger->add_dispatcher_head(&logclient);
+  messenger->add_dispatcher_head(&clog);
   
   // start ticker
   timer.init();
@@ -208,9 +205,7 @@ void Monitor::call_election(bool is_new)
   rank = monmap->get_rank(name);
   
   if (is_new) {
-    stringstream ss;
-    ss << "mon." << name << " calling new monitor election";
-    logclient.log(LOG_INFO, ss);
+    clog.info() << "mon." << name << " calling new monitor election\n";
   }
 
   dout(10) << "call_election" << dendl;
@@ -253,9 +248,8 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
   quorum = active;
   dout(10) << "win_election, epoch " << epoch << " quorum is " << quorum << dendl;
 
-  stringstream ss;
-  ss << "mon." << name << "@" << rank << " won leader election with quorum " << quorum;
-  logclient.log(LOG_INFO, ss);
+  clog.info() << "mon." << name << "@" << rank
+		<< " won leader election with quorum " << quorum << "\n";
   
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     (*p)->leader_init();
@@ -923,8 +917,6 @@ void Monitor::new_tick()
 
 void Monitor::tick()
 {
-  _dout_check_log();
-
   // ok go.
   dout(11) << "tick" << dendl;
   
@@ -961,12 +953,12 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 {
   // create it
   int err = store->mkfs();
-  if (err < 0) {
-    char buf[80];
-    cerr << "error " << err << " " << strerror_r(err, buf, sizeof(buf)) << std::endl;
+  if (err) {
+    dout(0) << TEXT_RED << "** ERROR: store->mkfs failed with error code "
+	    << err << ". Aborting." << dendl;
     exit(1);
   }
-  
+
   bufferlist magicbl;
   magicbl.append(CEPH_MON_ONDISK_MAGIC);
   magicbl.append("\n");
@@ -974,9 +966,9 @@ int Monitor::mkfs(bufferlist& osdmapbl)
     store->put_bl_ss(magicbl, "magic", 0);
   }
   catch (const MonitorStore::Error &e) {
-    std::cerr << TEXT_RED << "** ERROR: initializing cmon failed: couldn't "
+    dout(0) << TEXT_RED << "** ERROR: initializing cmon failed: couldn't "
               << "initialize the monitor state machine: "
-	      << e.what() << TEXT_NORMAL << std::endl;
+	      << e.what() << TEXT_NORMAL << dendl;
     exit(1);
   }
 

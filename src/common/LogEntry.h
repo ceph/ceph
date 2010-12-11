@@ -19,12 +19,12 @@
 #include "include/encoding.h"
 
 typedef enum {
-  LOG_DEBUG = 0,
-  LOG_INFO = 1,
-  LOG_SEC = 2,
-  LOG_WARN = 3,
-  LOG_ERROR = 4,
-} log_type;
+  CLOG_DEBUG = 0,
+  CLOG_INFO = 1,
+  CLOG_SEC = 2,
+  CLOG_WARN = 3,
+  CLOG_ERROR = 4,
+} clog_type;
 
 struct LogEntryKey {
   entity_inst_t who;
@@ -55,7 +55,7 @@ struct LogEntry {
   entity_inst_t who;
   utime_t stamp;
   uint64_t seq;
-  log_type type;
+  clog_type type;
   string msg;
 
   LogEntryKey key() const { return LogEntryKey(who, stamp, seq); }
@@ -78,7 +78,7 @@ struct LogEntry {
     ::decode(stamp, bl);
     ::decode(seq, bl);
     ::decode(t, bl);
-    type = (log_type)t;
+    type = (clog_type)t;
     ::decode(msg, bl);
   }
 };
@@ -118,18 +118,18 @@ struct LogSummary {
 };
 WRITE_CLASS_ENCODER(LogSummary)
 
-inline ostream& operator<<(ostream& out, const log_type& t)
+inline ostream& operator<<(ostream& out, clog_type t)
 {
   switch (t) {
-  case LOG_DEBUG:
+  case CLOG_DEBUG:
     return out << "[DBG]";
-  case LOG_INFO:
+  case CLOG_INFO:
     return out << "[INF]";
-  case LOG_WARN:
+  case CLOG_WARN:
     return out << "[WRN]";
-  case LOG_ERROR:
+  case CLOG_ERROR:
     return out << "[ERR]";
-  case LOG_SEC:
+  case CLOG_SEC:
     return out << "[SEC]";
   default:
     return out << "[???]";

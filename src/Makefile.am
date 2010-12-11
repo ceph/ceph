@@ -202,6 +202,10 @@ testencoding_SOURCES = test/TestEncoding.cc
 testencoding_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto
 bin_PROGRAMS += testencoding
 
+testdout_streambuf_SOURCES = test/TestDoutStreambuf.cc
+testdout_streambuf_LDADD = libceph.la libcrush.la -lpthread
+bin_PROGRAMS += testdout_streambuf
+
 endif
 
 # librados
@@ -447,7 +451,8 @@ libcommon_files = \
 	include/ceph_frag.cc \
 	config.cc \
 	common/page.cc \
-	common/lockdep.cc
+	common/lockdep.cc \
+	common/DoutStreambuf.cc
 
 libcrush_a_SOURCES = \
 	crush/builder.c \
@@ -579,11 +584,13 @@ noinst_HEADERS = \
         common/Mutex.h\
         common/RWLock.h\
         common/Semaphore.h\
+	common/DoutStreambuf.h\
         common/Thread.h\
         common/Throttle.h\
         common/Timer.h\
         common/tls.h\
 	common/WorkQueue.h\
+	common/LogEntry.h\
 	common/LogClient.h\
         config.h\
         crush/CrushWrapper.h\
@@ -601,7 +608,6 @@ noinst_HEADERS = \
         include/Context.h\
 	include/CompatSet.h\
         include/Distribution.h\
-	include/LogEntry.h\
 	include/Spinlock.h\
 	include/addr_parsing.h\
 	include/assert.h\

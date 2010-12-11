@@ -25,9 +25,7 @@
 
 #include "config.h"
 
-#define dout(x) if ((x) <= g_conf.debug_ms) *_dout << dbeginl << g_clock.now() << " "
-
-
+#define DOUT_SUBSYS ms
 
 #include <stdio.h>
 #include <stdlib.h>

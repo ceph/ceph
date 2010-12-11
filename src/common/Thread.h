@@ -75,7 +75,7 @@ class Thread {
 
     if (r) {
       char buf[80];
-      generic_derr(0) << "pthread_create failed with message: " << strerror_r(r, buf, sizeof(buf)) << dendl;
+      generic_dout(0) << "pthread_create failed with message: " << strerror_r(r, buf, sizeof(buf)) << dendl;
     } else {
       _num_threads.inc();
       generic_dout(10) << "thread " << thread_id << " start" << dendl;
@@ -84,7 +84,7 @@ class Thread {
   }
   int join(void **prval = 0) {
     if (thread_id == 0) {
-      generic_derr(0) << "WARNING: join on thread that was never started" << dendl;
+      generic_dout(0) << "WARNING: join on thread that was never started" << dendl;
       assert(0);
       return -EINVAL;   // never started.
     }
@@ -93,17 +93,17 @@ class Thread {
     if (status != 0) {
       switch (status) {
       case -EINVAL:
-	generic_derr(0) << "thread " << thread_id << " join status = EINVAL" << dendl;
+	generic_dout(0) << "thread " << thread_id << " join status = EINVAL" << dendl;
 	break;
       case -ESRCH:
-	generic_derr(0) << "thread " << thread_id << " join status = ESRCH" << dendl;
+	generic_dout(0) << "thread " << thread_id << " join status = ESRCH" << dendl;
 	assert(0);
 	break;
       case -EDEADLK:
-	generic_derr(0) << "thread " << thread_id << " join status = EDEADLK" << dendl;
+	generic_dout(0) << "thread " << thread_id << " join status = EDEADLK" << dendl;
 	break;
       default:
-	generic_derr(0) << "thread " << thread_id << " join status = " << status << dendl;
+	generic_dout(0) << "thread " << thread_id << " join status = " << status << dendl;
       }
       assert(0); // none of these should happen.
     }

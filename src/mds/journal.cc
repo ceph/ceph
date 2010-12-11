@@ -55,7 +55,7 @@
 #undef DOUT_COND
 #define DOUT_COND(l) l<=g_conf.debug_mds || l <= g_conf.debug_mds_log || l <= g_conf.debug_mds_log_expire
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".journal "
+#define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".journal "
 
 
 // -----------------------
@@ -463,8 +463,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	    ss << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
 	        << " " << *old_in
 	        << " should be " << p->inode.ino;
-	    dout(-10) << ss << dendl;
-	    mds->logclient.log(LOG_WARN, ss);
+	    dout(-10) << ss.str() << dendl;
+	    mds->clog.warn(ss);
 	    dir->unlink_inode(dn);
 	    mds->mdcache->remove_inode_recursive(old_in);
 
@@ -579,9 +579,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 
       // [repair bad inotable updates]
       if (inotablev > mds->inotable->get_version()) {
-	stringstream ss;
-	ss << "journal replay inotablev mismatch " << mds->inotable->get_version() << " -> " << inotablev;
-	mds->logclient.log(LOG_ERROR, ss);
+	mds->clog.error() << "journal replay inotablev mismatch "
+	    << mds->inotable->get_version() << " -> " << inotablev << "\n";
 	mds->inotable->force_replay_version(inotablev);
       }
 
@@ -605,9 +604,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	inodeno_t next = session->next_ino();
 	inodeno_t i = session->take_ino(used_preallocated_ino);
 	if (next != i) {
-	  stringstream ss;
-	  ss << " replayed op " << client_reqs << " used ino " << i << " but session next is " << next;
-	  mds->logclient.log(LOG_WARN, ss);
+	  mds->clog.warn() << " replayed op " << client_reqs << " used ino " << i
+		<< " but session next is " << next << "\n";
 	}
 	assert(i == used_preallocated_ino);
 	session->used_inos.clear();

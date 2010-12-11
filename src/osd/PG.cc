@@ -36,7 +36,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(this, osd->whoami, osd->osdmap)
 static ostream& _prefix(const PG *pg, int whoami, OSDMap *osdmap) {
-  return *_dout << dbeginl << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
+  return *_dout << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
 }
 
 /******* PGLog ********/
@@ -2402,9 +2402,8 @@ void PG::read_log(ObjectStore *store)
       // [repair] in order?
       if (e.version < last) {
 	dout(0) << "read_log " << pos << " out of order entry " << e << " follows " << last << dendl;
-  	stringstream ss;
-	ss << info.pgid << " log has out of order entry " << e << " following " << last;
-	osd->get_logclient()->log(LOG_ERROR, ss);
+	osd->clog.error() << info.pgid << " log has out of order entry "
+	      << e << " following " << last << "\n";
 	reorder = true;
       }
 
@@ -2415,9 +2414,8 @@ void PG::read_log(ObjectStore *store)
       if (last.version == e.version.version) {
 	dout(0) << "read_log  got dup " << e.version << " (last was " << last << ", dropping that one)" << dendl;
 	log.log.pop_back();
-	stringstream ss;
-	ss << info.pgid << " read_log got dup " << e.version << " after " << last;
-	osd->get_logclient()->log(LOG_ERROR, ss);
+	osd->clog.error() << info.pgid << " read_log got dup "
+	      << e.version << " after " << last << "\n";
       }
       
       uint64_t endpos = ondisklog.tail + p.get_off();
@@ -2428,11 +2426,12 @@ void PG::read_log(ObjectStore *store)
 
       // [repair] at end of log?
       if (!p.end() && e.version == info.last_update) {
-	stringstream ss;
-	ss << info.pgid << " log has extra data at " << endpos << "~" << (ondisklog.head-endpos)
-	   << " after " << info.last_update;
-	osd->get_logclient()->log(LOG_ERROR, ss);
-	dout(0) << "read_log " << endpos << " *** extra gunk at end of log, adjusting ondisklog.head" << dendl;
+	osd->clog.error() << info.pgid << " log has extra data at "
+	   << endpos << "~" << (ondisklog.head-endpos) << " after "
+	   << info.last_update << "\n";
+
+	dout(0) << "read_log " << endpos << " *** extra gunk at end of log, "
+	        << "adjusting ondisklog.head" << dendl;
 	ondisklog.head = endpos;
 	break;
       }
@@ -2547,7 +2546,7 @@ bool PG::check_log_for_corruption(ObjectStore *store)
     getline(f, filename);
     blb.write_file(filename.c_str(), 0644);
     ss << ", saved to " << filename;
-    osd->logclient.log(LOG_ERROR, ss);
+    osd->clog.error(ss);
   }
   return ok;
 }
@@ -3060,7 +3059,6 @@ void PG::repair_object(const sobject_t& soid, ScrubMap::object *po, int bad_peer
 
 void PG::scrub()
 {
-  stringstream ss;
   ScrubMap scrubmap;
   int errors = 0, fixed = 0;
   bool repair = state_test(PG_STATE_REPAIR);
@@ -3195,8 +3193,7 @@ void PG::scrub()
       if (anymissing) {
 	for (unsigned i=0; i<acting.size(); i++) {
 	  if (p[i] == m[i]->objects.end() || *psoid != p[i]->first) {
-	    ss << info.pgid << " " << mode << " osd" << acting[i] << " missing " << *psoid;
-	    osd->get_logclient()->log(LOG_ERROR, ss);
+	    osd->clog.error() << info.pgid << " " << mode << " osd" << acting[i] << " missing " << *psoid;
 	    num_missing++;
 	    
 	    if (repair)
@@ -3214,18 +3211,16 @@ void PG::scrub()
 	if (po->size != p[i]->second.size) {
 	  dout(0) << "scrub osd" << acting[i] << " " << *psoid
 		  << " size " << p[i]->second.size << " != " << po->size << dendl;
-	  ss << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
+	  osd->clog.error() << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
 	     << " size " << p[i]->second.size << " != " << po->size;
-	  osd->get_logclient()->log(LOG_ERROR, ss);
 	  peerok = ok = false;
 	  num_bad++;
 	}
 	if (po->attrs.size() != p[i]->second.attrs.size()) {
 	  dout(0) << "scrub osd" << acting[i] << " " << *psoid
 		  << " attr count " << p[i]->second.attrs.size() << " != " << po->attrs.size() << dendl;
-	  ss << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
-	     << " attr count " << p[i]->second.attrs.size() << " != " << po->attrs.size();
-	  osd->get_logclient()->log(LOG_ERROR, ss);
+	  osd->clog.error() << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
+			    << " attr count " << p[i]->second.attrs.size() << " != " << po->attrs.size();
 	  peerok = ok = false;
 	  num_bad++;
 	}
@@ -3234,18 +3229,16 @@ void PG::scrub()
 	    if (q->second.cmp(p[i]->second.attrs[q->first])) {
 	      dout(0) << "scrub osd" << acting[i] << " " << *psoid
 		      << " attr " << q->first << " value mismatch" << dendl;
-	      ss << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
-		 << " attr " << q->first << " value mismatch";
-	      osd->get_logclient()->log(LOG_ERROR, ss);
+	      osd->clog.error() << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
+				<< " attr " << q->first << " value mismatch";
 	      peerok = ok = false;
 	      num_bad++;
 	    }
 	  } else {
 	    dout(0) << "scrub osd" << acting[i] << " " << *psoid
 		    << " attr " << q->first << " missing" << dendl;
-	    ss << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
+	    osd->clog.error() << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
 	       << " attr " << q->first << " missing";
-	    osd->get_logclient()->log(LOG_ERROR, ss);
 	    peerok = ok = false;
 	    num_bad++;
 	  }
@@ -3264,9 +3257,12 @@ void PG::scrub()
     }
     
     if (num_missing || num_bad) {
-      dout(0) << "scrub " << num_missing << " missing, " << num_bad << " bad objects" << dendl;
-      ss << info.pgid << " " << mode << " " << num_missing << " missing, " << num_bad << " bad objects";
-      osd->get_logclient()->log(LOG_ERROR, ss);
+      stringstream ss;
+      ss << info.pgid << " " << mode << " " << num_missing << " missing, "
+	 << num_bad << " bad objects\n";
+      *_dout << ss.str();
+      _dout->flush();
+      osd->clog.error(ss);
       state_set(PG_STATE_INCONSISTENT);
       if (repair)
 	state_clear(PG_STATE_CLEAN);
@@ -3299,14 +3295,21 @@ void PG::scrub()
   }
   */
 
-  ss << info.pgid << " " << mode << " ";
-  if (errors)
-    ss << errors << " errors";
-  else
-    ss << "ok";
-  if (repair)
-    ss << ", " << fixed << " fixed";
-  osd->get_logclient()->log(errors ? LOG_ERROR:LOG_INFO, ss);
+  {
+    stringstream oss;
+    oss << info.pgid << " " << mode << " ";
+    if (errors)
+      oss << errors << " errors";
+    else
+      oss << "ok";
+    if (repair)
+      oss << ", " << fixed << " fixed";
+    oss << "\n";
+    if (errors)
+      osd->clog.error(oss);
+    else
+      osd->clog.info(oss);
+  }
 
   if (!(errors - fixed) && repair)
     state_clear(PG_STATE_INCONSISTENT);
