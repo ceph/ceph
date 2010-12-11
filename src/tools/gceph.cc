@@ -34,6 +34,16 @@ static void usage()
   generic_client_usage(); // Will exit()
 }
 
+static void parse_gceph_args(const vector<const char*> &args)
+{
+  DEFINE_CONF_VARS(usage);
+  FOR_EACH_ARG(args) {
+    if (CONF_ARG_EQ("help", 'h')) {
+      usage();
+    }
+  }
+}
+
 static int cephtool_run_gui()
 {
   g.log = &gss;
@@ -62,6 +72,8 @@ int main(int argc, const char **argv)
   common_init(args, "cephtool", true);
 
   vec_to_argv(args, argc, argv);
+
+  parse_gceph_args(args);
 
   if (cephtool_common_init(CEPH_TOOL_MODE_GUI)) {
     cerr << "cephtool_common_init failed." << std::endl;
