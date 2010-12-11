@@ -13,9 +13,12 @@
  *
  */
 
+#include "ceph.h"
+#include "common/common_init.h"
 #include "config.h"
 
 #include <iostream>
+#include <sstream>
 #include <vector>
 
 // tool/gui.cc
@@ -44,7 +47,7 @@ static void parse_gceph_args(const vector<const char*> &args)
   }
 }
 
-static int cephtool_run_gui()
+static int cephtool_run_gui(int argc, const char **argv)
 {
   g.log = &gss;
   g.slog = &gss;
@@ -75,18 +78,18 @@ int main(int argc, const char **argv)
 
   parse_gceph_args(args);
 
-  if (cephtool_common_init(CEPH_TOOL_MODE_GUI)) {
+  if (ceph_tool_common_init(CEPH_TOOL_MODE_GUI)) {
     cerr << "cephtool_common_init failed." << std::endl;
     return 1;
   }
 
-  if (cephtool_run_gui())
+  if (cephtool_run_gui(argc, argv))
     ret = 1;
 
   if (ceph_tool_messenger_shutdown())
     ret = 1;
 
-  if (cephtool_common_shutdown())
+  if (ceph_tool_common_shutdown())
     ret = 1;
 
   return ret;

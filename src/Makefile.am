@@ -64,6 +64,7 @@ gceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm $(CRYPTOPP_LIBS) \
 	$(GTKMM_LIBS)
 gceph_CXXFLAGS = ${AM_CFLAGS} $(GTKMM_CFLAGS) \
 	-DCEPH_TOOL_GUIDIR="\"${ceph_tool_guidir}\""
+bin_PROGRAMS += gceph
 endif
 
 cconf_SOURCES = cconf.cc
