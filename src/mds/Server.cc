@@ -1061,10 +1061,11 @@ void Server::handle_client_request(MClientRequest *req)
     // they have a high request rate.
   }
 
-  // retry?
-  if ((req->get_retry_attempt() || req->is_replay()) &&
-      ((req->get_op() != CEPH_MDS_OP_OPEN) && 
-       (req->get_op() != CEPH_MDS_OP_CREATE))) {
+  // completed request?
+  if (req->is_replay() ||
+      (req->get_retry_attempt() &&
+       req->get_op() != CEPH_MDS_OP_OPEN && 
+       req->get_op() != CEPH_MDS_OP_CREATE)) {
     assert(session);
     if (session->have_completed_request(req->get_reqid().tid)) {
       dout(5) << "already completed " << req->get_reqid() << dendl;
@@ -1077,6 +1078,7 @@ void Server::handle_client_request(MClientRequest *req)
       return;
     }
   }
+
   // trim completed_request list
   if (req->get_oldest_client_tid() > 0) {
     dout(15) << " oldest_client_tid=" << req->get_oldest_client_tid() << dendl;
