@@ -913,7 +913,7 @@ void PG::trim_past_intervals()
 
 
 // true if the given map affects the prior set
-bool PG::prior_set_affected(OSDMap *osdmap)
+bool PG::prior_set_affected(const OSDMap *osdmap) const
 {
   for (set<int>::iterator p = prior_set.begin();
        p != prior_set.end();
@@ -960,9 +960,9 @@ bool PG::prior_set_affected(OSDMap *osdmap)
   }
   
   // did a significant osd's up_thru change?
-  for (map<int,epoch_t>::iterator p = prior_set_up_thru.begin();
+  for (map<int,epoch_t>::const_iterator p = prior_set_up_thru.begin();
        p != prior_set_up_thru.end();
-       p++)
+       ++p)
     if (p->second != osdmap->get_up_thru(p->first)) {
       dout(10) << "prior_set_affected: primary osd" << p->first
 	       << " up_thru " << p->second

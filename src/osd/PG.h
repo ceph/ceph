@@ -804,7 +804,7 @@ public:
   void trim_past_intervals();
   void build_prior();
   void clear_prior();
-  bool prior_set_affected(OSDMap *map);
+  bool prior_set_affected(const OSDMap *map) const;
 
 
   bool all_unfound_are_lost(const OSDMap* osdmap) const;
