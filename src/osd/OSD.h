@@ -98,6 +98,11 @@ class MLog;
 class MClass;
 class MOSDPGMissing;
 
+class Watch;
+class Notification;
+class ObjectContext;
+class ReplicatedPG;
+
 extern const coll_t meta_coll;
 
 class OSD : public Dispatcher {
@@ -208,8 +213,20 @@ public:
     EntityName entity_name;
     OSDCaps caps;
     epoch_t last_sent_epoch;
+    Connection *con;
+    std::map<void *, pg_t> watches;
+    std::map<void *, entity_name_t> notifs;
 
-  Session() : last_sent_epoch(0) {}
+    Session() : last_sent_epoch(0), con(0) {}
+    ~Session() { if (con) con->put(); }
+    void add_notif(void *n, entity_name_t& name) {
+      notifs[n] = name;
+    }
+    void del_notif(void *n) {
+      std::map<void *, entity_name_t>::iterator iter = notifs.find(n);
+      if (iter != notifs.end())
+        notifs.erase(iter);
+    }
   };
 
 private:
@@ -461,6 +478,9 @@ private:
   
   void send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy=false);
 
+protected:
+  Watch *watch; /* notify-watch handler */
+
 
 protected:
   // -- classes --
@@ -489,6 +509,9 @@ protected:
   PG   *_create_lock_pg(pg_t pg, ObjectStore::Transaction& t); // create new PG
   PG   *_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t);
   //void  _remove_unlock_pg(PG *pg);         // remove from store and memory
+
+  PG *lookup_lock_pg(pg_t pgid);
+  PG *lookup_lock_raw_pg(pg_t pgid);
 
   void load_pgs();
   void calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset);
@@ -917,7 +940,7 @@ protected:
 			    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
 			    bool& isvalid);
   void ms_handle_connect(Connection *con);
-  bool ms_handle_reset(Connection *con) { return false; }
+  bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con) {}
 
  public:
@@ -969,6 +992,13 @@ public:
   void force_remount();
 
   void init_op_flags(MOSDOp *op);
+
+
+  void put_object_context(void *_obc, pg_t pgid);
+  void ack_notification(entity_name_t& peer_addr, void *notif);
+  Mutex watch_lock;
+  SafeTimer watch_timer;
+  void handle_notify_timeout(void *notif);
 };
 
 //compatibility of the executable

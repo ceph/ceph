@@ -9,6 +9,7 @@
 #include "buffer.h"
 
 class RadosClient;
+class Context;
 
 namespace librados {
 
@@ -67,6 +68,7 @@ public:
   void set_snap(pool_t pool, snap_t seq);
   int set_snap_context(pool_t pool, snap_t seq, std::vector<snap_t>& snaps);
 
+  uint64_t get_last_version(pool_t pool);
 
   int create(pool_t pool, const std::string& oid, bool exclusive);
 
@@ -131,6 +133,7 @@ public:
     bool is_complete();
     bool is_safe();
     int get_return_value();
+    int get_version();
     void release();
   };
 
@@ -140,6 +143,19 @@ public:
 		AioCompletion *c);
   AioCompletion *aio_create_completion();
   AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete, callback_t cb_safe);
+
+  class WatchCtx {
+  public:
+  virtual void notify(uint8_t opcode, uint64_t ver) = 0;
+  };
+
+  // watch/notify
+  int watch(pool_t pool, const string& o, uint64_t ver, uint64_t *handle, librados::Rados::WatchCtx *ctx);
+  int unwatch(pool_t pool, const string& o, uint64_t handle);
+  int notify(pool_t pool, const string& o, uint64_t ver);
+
+  /* assert version for next sync operations */
+  void set_assert_version(pool_t pool, uint64_t ver);
 };
 
 }

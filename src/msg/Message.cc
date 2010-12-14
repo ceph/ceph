@@ -125,6 +125,8 @@ using namespace std;
 #include "messages/MClass.h"
 #include "messages/MClassAck.h"
 
+#include "messages/MWatchNotify.h"
+
 #include "config.h"
 
 #define DEBUGLVL  10    // debug level of output
@@ -284,6 +286,10 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 
   case CEPH_MSG_OSD_MAP:
     m = new MOSDMap;
+    break;
+
+  case CEPH_MSG_WATCH_NOTIFY:
+    m = new MWatchNotify;
     break;
 
   case MSG_OSD_PG_NOTIFY:

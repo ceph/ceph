@@ -18,6 +18,7 @@
 
 #include "OSD.h"
 #include "OSDMap.h"
+#include "Watch.h"
 
 #include "os/FileStore.h"
 
@@ -70,6 +71,8 @@
 #include "messages/MPGStatsAck.h"
 
 #include "messages/MClass.h"
+
+#include "messages/MWatchNotify.h"
 
 #include "common/Logger.h"
 #include "common/LogType.h"
@@ -384,7 +387,9 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   scrubs_pending(0),
   scrubs_active(0),
   scrub_wq(this, &disk_tp),
-  remove_wq(this, &disk_tp)
+  remove_wq(this, &disk_tp),
+  watch_lock("OSD::watch_lock"),
+  watch_timer(watch_lock)
 {
   monc->set_messenger(client_messenger);
 
@@ -454,6 +459,7 @@ int OSD::init()
   Mutex::Locker lock(osd_lock);
 
   timer.init();
+  watch = new Watch();
 
   // mount.
   dout(2) << "mounting " << dev_path << " " << (journal_path ? journal_path : "(no journal)") << dendl;
@@ -741,6 +747,8 @@ int OSD::shutdown()
 
   monc->shutdown();
 
+  delete watch;
+
   return r;
 }
 
@@ -959,6 +967,23 @@ PG *OSD::_lookup_lock_pg(pg_t pgid)
   assert(pg_map.count(pgid));
   PG *pg = pg_map[pgid];
   pg->lock();
+  return pg;
+}
+
+PG *OSD::lookup_lock_pg(pg_t pgid)
+{
+  osd_lock.Lock();
+  PG *pg = _lookup_lock_pg(pgid);
+  osd_lock.Unlock();
+  return pg;
+}
+
+PG *OSD::lookup_lock_raw_pg(pg_t pgid)
+{
+  osd_lock.Lock();
+  pgid = osdmap->raw_pg_to_pg(pgid);
+  PG *pg = _lookup_lock_pg(pgid);
+  osd_lock.Unlock();
   return pg;
 }
 
@@ -1601,7 +1626,130 @@ void OSD::ms_handle_connect(Connection *con)
   }
 }
 
+void OSD::put_object_context(void *_obc, pg_t pgid)
+{
+  ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)_obc;
+  ReplicatedPG *pg = (ReplicatedPG *)lookup_lock_raw_pg(pgid);
+  pg->put_object_context(obc);
+  pg->unlock();
+}
 
+void OSD::ack_notification(entity_name_t& name, void *_notif)
+{
+  assert(watch_lock.is_locked());
+  Watch::Notification *notif = (Watch::Notification *)_notif;
+  if (watch->ack_notification(name, notif)) {
+    dout(0) << "got the last reply from pending watchers, can send response now" << dendl;
+    MWatchNotify *reply = notif->reply;
+    client_messenger->send_message(reply, notif->session->con);
+    notif->session->put();
+    watch->remove_notification(notif);
+    if (notif->timeout)
+      watch_timer.cancel_event(notif->timeout);
+    delete notif;
+  }
+}
+
+bool OSD::ms_handle_reset(Connection *con)
+{
+  dout(0) << "OSD::ms_handle_reset()" << dendl;
+  OSD::Session *session = (OSD::Session *)con->get_priv();
+  if (!session)
+    return false;
+
+  dout(0) << "OSD::ms_handle_reset() s=" << (void *)session << dendl;
+
+  // get any watched obc's
+  map<ReplicatedPG::ObjectContext *, pg_t> obcs;
+  watch_lock.Lock();
+  for (map<void *, pg_t>::iterator iter = session->watches.begin(); iter != session->watches.end(); ++iter) {
+    ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)iter->first;
+    obcs[obc] = iter->second;
+  }
+  watch_lock.Unlock();
+
+  for (map<ReplicatedPG::ObjectContext *, pg_t>::iterator oiter = obcs.begin(); oiter != obcs.end(); ++oiter) {
+    ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)oiter->first;
+    dout(0) << "obc=" << (void *)obc << dendl;
+
+    obc->lock.Lock();
+    watch_lock.Lock();
+    /* NOTE! fix this one, should be able to just lookup entity name,
+       however, we currently only keep EntityName on the session and not
+       entity_name_t. */
+    map<entity_name_t, Session *>::iterator witer = obc->watchers.begin();
+    while (1) {
+      while (witer != obc->watchers.end() && witer->second == session) {
+        dout(0) << "removing watching session entity_name=" << session->entity_name
+		<< " from " << obc->obs.oi << dendl;
+	entity_name_t entity = witer->first;
+	watch_info_t& w = obc->obs.oi.watchers[entity];
+	utime_t expire = g_clock.now();
+	expire += w.timeout_seconds;
+	obc->unconnected_watchers[entity] = expire;
+	dout(10) << " disconnected watch " << w << " by " << entity << " session " << session
+		 << ", expires " << expire << dendl;
+        obc->watchers.erase(witer++);
+      }
+      if (witer == obc->watchers.end())
+        break;
+      ++witer;
+    }
+    watch_lock.Unlock();
+    obc->lock.Unlock();
+    /* now drop a reference to that obc */
+    put_object_context(obc, oiter->second);
+  }
+
+  // FIXME: do we really want to _cancel_ notifications here?
+  // shouldn't they time out in the usual way?  because this person
+  // might/should immediately reconnect...
+  watch_lock.Lock();
+  for (map<void *, entity_name_t>::iterator notif_iter = session->notifs.begin();
+       notif_iter != session->notifs.end();
+       ++notif_iter) {
+    Watch::Notification *notif = (Watch::Notification *)notif_iter->first;
+    entity_name_t& dest = notif_iter->second;
+    dout(0) << "ms_handle_reset: ack notification for notif=" << (void *)notif << " entity=" << dest << dendl;
+    ack_notification(dest, notif);
+  }
+  session->notifs.clear();
+  watch_lock.Unlock();
+
+  return true;
+}
+
+void OSD::handle_notify_timeout(void *_notif)
+{
+  assert(watch_lock.is_locked());
+  Watch::Notification *notif = (Watch::Notification *)_notif;
+  dout(0) << "OSD::handle_notify_timeout notif " << notif->id << dendl;
+
+  ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)notif->obc;
+
+  notif->timeout = NULL; /* need to do it under the watch_lock, so we're not getting cancelled somewhere else */
+
+  watch_lock.Unlock(); /* drop lock to change locking order */
+  obc->lock.Lock();
+  watch_lock.Lock();
+
+  for (std::map<entity_name_t, Watch::WatcherState>::iterator notif_iter = notif->watchers.begin();
+       notif_iter != notif->watchers.end();
+       ++notif_iter) {
+    map<entity_name_t, Session *>::iterator witer = obc->watchers.find(notif_iter->first);
+    if (witer != obc->watchers.end())
+      obc->watchers.erase(witer);   // FIXME: hmm? notify timeout may be different than watch timeout?
+  }
+  obc->lock.Unlock();
+  watch_lock.Unlock(); /* put_object_context takes osd->lock */
+  
+  ReplicatedPG *pg = (ReplicatedPG *)lookup_lock_raw_pg(notif->pgid);
+  put_object_context(obc, notif->pgid);
+  pg->do_complete_notify(notif);
+  
+  watch_lock.Lock();
+  /* exiting with watch_lock held */
+}
 
 void OSD::send_boot()
 {
@@ -2084,7 +2232,8 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
     if (!s) {
       s = new Session;
       con->set_priv(s->get());
-      dout(10) << " new session " << s << dendl;
+      s->con = con->get();
+      dout(10) << " new session " << s << " con=" << s->con << " addr=" << s->con->get_peer_addr() << dendl;
     }
 
     s->caps.set_allow_all(caps_info.allow_all);

@@ -441,7 +441,7 @@ int SimpleMessenger::send_message(Message *m, Connection *con)
   if (pipe) {
     dout(1) << "--> " << con->get_peer_addr() << " -- " << *m
             << " -- ?+" << m->get_data().length()
-            << " " << m
+            << " " << m << " con=" << (void *)con
             << dendl;
 
     submit_message(m, pipe);
@@ -466,7 +466,7 @@ int SimpleMessenger::lazy_send_message(Message *m, const entity_inst_t& dest)
 	  << " --> " << dest.name << " " << dest.addr
           << " -- " << *m
     	  << " -- ?+" << m->get_data().length()
-	  << " " << m 
+          << " " << m
           << dendl;
 
   submit_message(m, dest.addr, dest.name.type(), true);

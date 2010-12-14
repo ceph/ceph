@@ -22,6 +22,8 @@ const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_STAT: return "stat";
 	case CEPH_OSD_OP_MAPEXT: return "mapext";
 	case CEPH_OSD_OP_SPARSE_READ: return "sparse-read";
+	case CEPH_OSD_OP_NOTIFY: return "notify";
+	case CEPH_OSD_OP_NOTIFY_ACK: return "notify-ack";
 
 	case CEPH_OSD_OP_MASKTRUNC: return "masktrunc";
 
@@ -40,6 +42,7 @@ const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_TMAPUP: return "tmapup";
 	case CEPH_OSD_OP_TMAPGET: return "tmapget";
 	case CEPH_OSD_OP_TMAPPUT: return "tmapput";
+	case CEPH_OSD_OP_WATCH: return "watch";
 
 	case CEPH_OSD_OP_GETXATTR: return "getxattr";
 	case CEPH_OSD_OP_GETXATTRS: return "getxattrs";

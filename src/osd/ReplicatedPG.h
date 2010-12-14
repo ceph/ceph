@@ -16,6 +16,8 @@
 
 
 #include "PG.h"
+#include "OSD.h"
+#include "Watch.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
@@ -23,6 +25,7 @@ class MOSDSubOp;
 class MOSDSubOpReply;
 
 class ReplicatedPG : public PG {
+  friend class OSD;
 public:  
 
   /*
@@ -233,6 +236,14 @@ public:
     Cond cond;
     int unstable_writes, readers, writers_waiting, readers_waiting;
 
+    // any entity in obs.oi.watchers MUST be in either watchers or unconnected_watchers.
+    map<entity_name_t, OSD::Session *> watchers;
+    map<entity_name_t, utime_t> unconnected_watchers;
+
+    /*    ObjectContext(const sobject_t& s, const object_locator_t& ol) :
+      ref(0), registered(false), obs(s, ol),
+      lock("ReplicatedPG::ObjectContext::lock"),
+      unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0) {}*/
     ObjectContext(const object_info_t &oi_, bool exists_, SnapSetContext *ssc_)
       : ref(0), registered(false), obs(oi_, exists_, ssc_),
       lock("ReplicatedPG::ObjectContext::lock"),
@@ -294,10 +305,12 @@ public:
     utime_t mtime;
     SnapContext snapc;           // writer snap context
     eversion_t at_version;       // pg's current version pointer
+    eversion_t reply_version;    // the version that we report the client (depends on the op)
 
     ObjectStore::Transaction op_t, local_t;
     vector<PG::Log::Entry> log;
 
+    ObjectContext *obc;
     ObjectContext *clone_obc;    // if we created a clone
     ObjectContext *snapset_obc;  // if we created/deleted a snapdir
 
@@ -311,7 +324,7 @@ public:
 	      ObjectState *_obs, ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(_obs),
       bytes_written(0),
-      clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) {}
+      obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) {}
     ~OpContext() {
       assert(!clone_obc);
       if (reply)
@@ -514,6 +527,9 @@ protected:
   int start_recovery_ops(int max);
   int recover_primary(int max);
   int recover_replicas(int max);
+
+  void dump_watchers(ObjectContext *obc);
+  void do_complete_notify(Watch::Notification *notif);
 
   struct RepModify {
     ReplicatedPG *pg;
