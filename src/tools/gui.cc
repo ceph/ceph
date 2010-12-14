@@ -25,7 +25,7 @@
 #include "common/Thread.h"
 #include "mon/MonClient.h"
 #include "mon/MonMap.h"
-#include "tools/ceph.h"
+#include "tools/common.h"
 #include "tools/gui.h"
 #include "tools/gui_resources.h"
 

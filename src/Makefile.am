@@ -31,7 +31,7 @@ cmds_CXXFLAGS = ${AM_CFLAGS}
 ceph_SOURCES = \
 	msg/SimpleMessenger.cc \
 	tools/ceph.cc \
-	tools/cmd.cc
+	tools/common.cc
 ceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm $(CRYPTOPP_LIBS)
 ceph_CXXFLAGS = ${AM_CFLAGS}
 
@@ -57,7 +57,7 @@ ceph_tool_gui_DATA = \
 	tools/gui_resources/stopped_mds.svg
 gceph_SOURCES = \
 	msg/SimpleMessenger.cc \
-	tools/ceph.cc \
+	tools/common.cc \
 	tools/gceph.cc \
 	tools/gui.cc
 gceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm $(CRYPTOPP_LIBS) \
@@ -564,18 +564,19 @@ noinst_HEADERS = \
 	cls_acl.cc\
 	cls_crypto.cc\
 	cm.txt\
-        common/arch.h\
-        common/armor.h\
+	common/BackTrace.h\
+	common/DoutStreambuf.h\
+	common/LogClient.h\
+	common/LogEntry.h\
+	common/WorkQueue.h\
 	common/debug.h\
 	common/errno.h\
+	common/likely.h\
 	common/lockdep.h\
-	common/BackTrace.h\
+        common/ClassHandler.h\
         common/ClassVersion.h\
         common/Clock.h\
-        common/common_init.h\
         common/Cond.h\
-        common/dyn_snprintf.h\
-        common/ClassHandler.h\
         common/ConfUtils.h\
         common/DecayCounter.h\
         common/Finisher.h\
@@ -585,14 +586,14 @@ noinst_HEADERS = \
         common/Mutex.h\
         common/RWLock.h\
         common/Semaphore.h\
-	common/DoutStreambuf.h\
         common/Thread.h\
         common/Throttle.h\
         common/Timer.h\
+        common/arch.h\
+        common/armor.h\
+        common/common_init.h\
+        common/dyn_snprintf.h\
         common/tls.h\
-	common/WorkQueue.h\
-	common/LogEntry.h\
-	common/LogClient.h\
         config.h\
         crush/CrushWrapper.h\
         crush/CrushWrapper.i\
@@ -857,7 +858,7 @@ noinst_HEADERS = \
 	rgw/rgw_common.h\
 	rgw/rgw_user.h\
 	sample.ceph.conf\
-	tools/ceph.h\
+	tools/common.h\
 	tools/gui.h\
 	tools/gui_resources.h
 

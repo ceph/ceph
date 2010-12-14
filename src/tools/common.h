@@ -1,5 +1,5 @@
-#ifndef CEPH_TOOL_H
-#define CEPH_TOOL_H
+#ifndef CEPH_TOOLS_COMMON_DOT_H
+#define CEPH_TOOLS_COMMON_DOT_H
 
 #include "common/Cond.h"
 #include "common/Mutex.h"

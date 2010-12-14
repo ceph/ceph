@@ -13,9 +13,9 @@
  *
  */
 
-#include "ceph.h"
 #include "common/common_init.h"
 #include "config.h"
+#include "tools/common.h"
 
 #include <iostream>
 #include <sstream>
