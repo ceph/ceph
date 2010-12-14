@@ -38,6 +38,11 @@ void _dout_open_log()
 int dout_handle_daemonize()
 {
   Mutex::Locker l(_dout_lock);
+
+  if (_dout_need_open)
+       _dout_open_log();
+
+  assert(_doss);
   _doss->handle_stdout_closed();
   _doss->handle_stderr_closed();
   return _doss->handle_pid_change();
