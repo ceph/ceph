@@ -1600,9 +1600,8 @@ int RadosClient::watch(PoolCtx& pool, const object_t& oid, uint64_t ver, uint64_
     pool.assert_ver = 0;
   }
   rd->watch(*cookie, ver, 1);
-  uint64_t linger_id;
-  objecter->linger(oid, oloc, *rd, pool.snap_seq, NULL, 0, onack, NULL, &objver, &linger_id);
-  wc->linger_id = linger_id;
+  bufferlist bl;
+  wc->linger_id = objecter->linger(oid, oloc, *rd, pool.snap_seq, bl, NULL, 0, onack, NULL, &objver);
   lock.Unlock();
 
   mylock.Lock();

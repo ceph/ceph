@@ -416,12 +416,14 @@ public:
    * track pending ops by pg
    *  ...so we can cope with failures, map changes
    */
+  class LingerOp;
+
   class PG {
   public:
     vector<int> acting;
     set<tid_t>  active_tids; // active ops
     utime_t last;
-    map<uint64_t, bool> linger_ops;
+    xlist<LingerOp*> linger_ops;
 
     PG() {}
     
@@ -439,7 +441,7 @@ public:
 
   hash_map<pg_t,PG> pg_map;
 
-  struct LingerOpInfo {
+  struct LingerOp {
     uint64_t linger_id;
     object_t oid;
     object_locator_t oloc;
@@ -448,11 +450,19 @@ public:
     snapid_t snap;
     int flags;
     vector<OSDOp> ops;
+    bufferlist inbl;
+    bufferlist *poutbl;
     PG *pg;
-    LingerOpInfo() : linger_id(0), off(0), len(0), flags(0), pg(NULL) {}
+    xlist<LingerOp*>::item pg_item;
+
+    LingerOp() : linger_id(0), off(0), len(0), flags(0), poutbl(NULL), pg(NULL), pg_item(this) {}
+
+    // no copy!
+    const LingerOp &operator=(const LingerOp& r);
+    LingerOp(const LingerOp& o);
   };
 
-  map<uint64_t, LingerOpInfo>  op_linger_info;
+  map<uint64_t, LingerOp*>  op_linger_info;
   Mutex linger_info_mutex;
 
   
@@ -530,7 +540,12 @@ public:
 
 private:
   // low-level
-  tid_t op_submit(Op *op, uint64_t linger_id = 0);
+  tid_t op_submit(Op *op, LingerOp *linger_op = NULL);
+
+  tid_t resend_linger(LingerOp *info, Context *onack, Context *onfinish, eversion_t *objver);
+  uint64_t register_linger(LingerOp *info);
+public: // FIXME
+  void unregister_linger(uint64_t linger_id);
 
   // public interface
  public:
@@ -568,17 +583,11 @@ private:
     o->outbl = pbl;
     return op_submit(o);
   }
-
-  tid_t resend_linger(LingerOpInfo& info, Context *onack, Context *onfinish, eversion_t *objver);
-  tid_t resend_linger(uint64_t linger_id, Context *onack, Context *onfinish, eversion_t *objver);
-  uint64_t register_linger(LingerOpInfo& info, uint64_t linger_id = 0);
-  void unregister_linger(uint64_t linger_id);
-
   tid_t linger(const object_t& oid, const object_locator_t& oloc, 
 	       ObjectOperation& op,
-	       snapid_t snap, bufferlist *pbl, int flags,
+	       snapid_t snap, bufferlist& inbl, bufferlist *poutbl, int flags,
                Context *onack, Context *onfinish,
-               eversion_t *objver, uint64_t *linger_id);
+               eversion_t *objver);
 
 
   int init_ops(vector<OSDOp>& ops, int ops_count, ObjectOperation *extra_ops) {
