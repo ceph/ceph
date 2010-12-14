@@ -154,7 +154,12 @@ int CryptoAES::encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
 
     stfEncryptor.Put(in_buf, it->length());
   }
-  stfEncryptor.MessageEnd();
+  try {
+    stfEncryptor.MessageEnd();
+  } catch (CryptoPP::Exception& e) {
+    dout(0) << "encryptor.MessageEnd::Exception: " << e.GetWhat() << dendl;
+    return false;
+  }
   out.append((const char *)ciphertext.c_str(), ciphertext.length());
 
   return true;
@@ -178,7 +183,12 @@ int CryptoAES::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
       stfDecryptor.Put(in_buf, it->length());
   }
 
-  stfDecryptor.MessageEnd();
+  try {
+    stfDecryptor.MessageEnd();
+  } catch (CryptoPP::Exception& e) {
+    dout(0) << "decryptor.MessageEnd::Exception: " << e.GetWhat() << dendl;
+    return -EINVAL;
+  }
 
   out.append((const char *)decryptedtext.c_str(), decryptedtext.length());
   return decryptedtext.length();
