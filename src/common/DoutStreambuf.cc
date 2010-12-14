@@ -373,7 +373,7 @@ int DoutStreambuf<charT, traits>::handle_pid_change()
 template <typename charT, typename traits>
 int DoutStreambuf<charT, traits>::create_rank_symlink(int n)
 {
-  Mutex::Locker l(_dout_lock);
+  assert(_dout_lock.is_locked());
 
   if (!(flags & DOUTSB_FLAG_OFILE))
     return 0;
