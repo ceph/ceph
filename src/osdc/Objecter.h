@@ -571,9 +571,6 @@ private:
   tid_t resend_linger(LingerOp *info);
   void _linger_ack(LingerOp *info, int r);
   void _linger_commit(LingerOp *info, int r);
-  uint64_t register_linger(LingerOp *info);
-public: // FIXME
-  void unregister_linger(uint64_t linger_id);
 
   // public interface
  public:
@@ -616,6 +613,7 @@ public: // FIXME
 	       snapid_t snap, bufferlist& inbl, bufferlist *poutbl, int flags,
                Context *onack, Context *onfinish,
                eversion_t *objver);
+  void unregister_linger(uint64_t linger_id);
 
 
   int init_ops(vector<OSDOp>& ops, int ops_count, ObjectOperation *extra_ops) {

@@ -101,15 +101,6 @@ void Objecter::_linger_commit(LingerOp *info, int r)
 }
 
 
-uint64_t Objecter::register_linger(LingerOp *info)
-{
-  Mutex::Locker locker(linger_info_mutex);
-  info->linger_id = ++max_linger_id;
-  op_linger_info[info->linger_id] = info;
-  return info->linger_id;
-}
-
-
 void Objecter::unregister_linger(uint64_t linger_id)
 {
   Mutex::Locker locker(linger_info_mutex);
@@ -139,9 +130,13 @@ tid_t Objecter::linger(const object_t& oid, const object_locator_t& oloc,
   info->pobjver = objver;
   info->on_reg_ack = onack;
   info->on_reg_commit = onfinish;
-  uint64_t lid = register_linger(info);
+
+  info->linger_id = ++max_linger_id;
+  op_linger_info[info->linger_id] = info;
+
   resend_linger(info);
-  return lid;
+
+  return info->linger_id;
 }
 
 void Objecter::dispatch(Message *m)
