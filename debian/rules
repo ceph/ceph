@@ -1,58 +1,74 @@
 #!/usr/bin/make -f
 # -*- makefile -*-
 export DH_VERBOSE=1
+export DESTDIR=$(CURDIR)/debian/tmp
+
 configure: configure-stamp
 configure-stamp:
 	dh_testdir
-	touch configure-stamp
+	touch $@
+
 build: build-stamp
 build-stamp: configure-stamp  
 	dh_testdir
 
 	./autogen.sh
-	./configure --prefix=/usr --sbindir=/sbin
+	./configure --prefix=/usr --sbindir=/sbin --localstatedir=/var --sysconfdir=/etc
 	$(MAKE)
 	cp src/init-ceph debian/ceph.init
 	cp src/logrotate.conf debian/ceph.logrotate
 
 	touch $@
-clean: 
+
+clean:
 	dh_testdir
 	dh_testroot
 	rm -f build-stamp configure-stamp
 
-	test ! -f Makefile || $(MAKE) clean
+	[ ! -f Makefile ] || $(MAKE) distclean
+	rm -f aclocal.m4 compile config.sub config.guess depcomp install-sh \
+	  ltmain.sh missing
+	rm -f configure Makefile.in man/Makefile.in src/Makefile.in
+	rm -f src/acconfig.h.in
+	rm -f debian/ceph.init debian/ceph.logrotate
 
-	dh_clean 
+	dh_clean
+
 install: build
 	dh_testdir
 	dh_testroot
 	dh_clean -k 
 	dh_installdirs
 
-	$(MAKE) DESTDIR=$(CURDIR) install
-
+	$(MAKE) DESTDIR=$(DESTDIR) install
 
 # Add here commands to install the package into debian/testpack.
 # Build architecture-independent files here.
 binary-indep: build install
+
 # We have nothing to do by default.
 # Build architecture-dependent files here.
 binary-arch: build install
 	dh_testdir
 	dh_testroot
 	dh_installchangelogs 
-	dh_installdocs
+	dh_installdocs --all ChangeLog
 	dh_installexamples
-	dh_install
+	dh_install --sourcedir=$(DESTDIR) --list-missing
 	dh_installlogrotate
 	dh_installinit
 	dh_installman
 	dh_lintian
 	dh_link
 
-	dh_strip -k --exclude=libcls_
-	chmod +x debian/move_dbg_files.sh && debian/move_dbg_files.sh
+	dh_strip -pceph --dbg-package=ceph-dbg
+	dh_strip -pceph-fuse --dbg-package=ceph-fuse-dbg
+	dh_strip -pceph-client-tools --dbg-package=ceph-client-tools-dbg
+	dh_strip -plibcrush1 --dbg-package=libcrush1-dbg
+	dh_strip -plibrados1 --dbg-package=librados1-dbg
+	dh_strip -plibceph1 --dbg-package=libceph1-dbg
+	dh_strip -pradosgw --dbg-package=radosgw-dbg
+#	dh_strip -k --exclude=libcls_
 
 	dh_compress
 	dh_fixperms
@@ -62,5 +78,6 @@ binary-arch: build install
 	dh_gencontrol
 	dh_md5sums
 	dh_builddeb
+
 binary: binary-indep binary-arch
 .PHONY: build clean binary-indep binary-arch binary install configure

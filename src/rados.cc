@@ -233,6 +233,7 @@ int main(int argc, const char **argv)
       ret = rados.list_objects_more(ctx, 1 << 10, vec);
       if (ret < 0) {
 	cerr << "got error: " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+	delete outstream;
 	goto out;
       }
       if (vec.empty())

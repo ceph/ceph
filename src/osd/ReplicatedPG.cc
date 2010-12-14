@@ -16,6 +16,7 @@
 #include "PGLS.h"
 
 #include "common/arch.h"
+#include "common/errno.h"
 #include "common/Logger.h"
 
 #include "messages/MOSDOp.h"
@@ -40,7 +41,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(this, osd->whoami, osd->osdmap)
 static ostream& _prefix(PG *pg, int whoami, OSDMap *osdmap) {
-  return *_dout << dbeginl << "osd" << whoami
+  return *_dout << "osd" << whoami
 		<< " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
 }
 
@@ -229,8 +230,10 @@ void ReplicatedPG::calc_trim_to()
       pg_trim_to = min_last_complete_ondisk;
       assert(pg_trim_to <= log.head);
     }
-  } else
+  } else {
+    // don't trim
     pg_trim_to = eversion_t();
+  }
 }
 
 /** do_op - do an op
@@ -244,6 +247,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
   dout(10) << "do_op " << *op << dendl;
   if (finalizing_scrub && op->may_write()) {
+    dout(20) << __func__ << ": waiting for scrub" << dendl;
     waiting_for_active.push_back(op);
     return;
   }
@@ -266,6 +270,16 @@ void ReplicatedPG::do_op(MOSDOp *op)
     osd->reply_op_error(op, r);
     return;
   }
+
+  if ((op->may_read()) && (obc->obs.oi.lost)) {
+    // This object is lost. Reading from it returns an error.
+    dout(20) << __func__ << ": object " << obc->obs.oi.soid
+	     << " is lost" << dendl;
+    osd->reply_op_error(op, -ENFILE);
+    return;
+  }
+  dout(25) << __func__ << ": object " << obc->obs.oi.soid
+	   << " has oi of " << obc->obs.oi << dendl;
   
   bool ok;
   dout(10) << "do_op mode is " << mode << dendl;
@@ -519,8 +533,10 @@ bool ReplicatedPG::snap_trimmer()
   lock();
   dout(10) << "snap_trimmer start, purged_snaps " << info.purged_snaps << dendl;
 
+  epoch_t current_set_started = info.history.last_epoch_started;
+
   while (snap_trimq.size() &&
-	 is_primary() &&
+	 current_set_started == info.history.last_epoch_started &&
 	 is_active()) {
 
     snapid_t sn = snap_trimq.range_start();
@@ -537,24 +553,27 @@ bool ReplicatedPG::snap_trimmer()
       if (!mode.try_write(nobody)) {
 	dout(10) << " can't write, waiting" << dendl;
 	Cond cond;
-	mode.waiting_cond.push_back(&cond);
+	list<Cond*>::iterator q = mode.waiting_cond.insert(mode.waiting_cond.end(), &cond);
 	while (!mode.try_write(nobody))
 	  cond.Wait(_lock);
+	mode.waiting_cond.erase(q);
 	dout(10) << " done waiting" << dendl;
-	if (!is_primary() || !is_active())
+	if (!(current_set_started == info.history.last_epoch_started &&
+	      is_active())) {
 	  break;
+	}
       }
 
       // load clone info
       bufferlist bl;
       osd->store->getattr(coll_t(info.pgid), coid, OI_ATTR, bl);
       object_info_t coi(bl);
+      vector<snapid_t>& snaps = coi.snaps;
 
       // get snap set context
       SnapSetContext *ssc = get_snapset_context(coid.oid, false);
       assert(ssc);
       SnapSet& snapset = ssc->snapset;
-      vector<snapid_t>& snaps = coi.snaps;
 
       dout(10) << coid << " snaps " << snaps << " old snapset " << snapset << dendl;
       assert(snapset.seq);
@@ -651,7 +670,7 @@ bool ReplicatedPG::snap_trimmer()
       dout(10) << coid << " new snapset " << snapset << dendl;
 
       sobject_t snapoid(coid.oid, snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR);
-      ctx->snapset_obc = get_object_context(snapoid, OLOC_BLANK, false);
+      ctx->snapset_obc = get_object_context(snapoid, coi.oloc, false);
       register_object_context(ctx->snapset_obc);
       if (snapset.clones.empty() && !snapset.head_exists) {
 	dout(10) << coid << " removing " << snapoid << dendl;
@@ -691,6 +710,10 @@ bool ReplicatedPG::snap_trimmer()
       // give other threads a chance at this pg
       unlock();
       lock();
+      if (!(current_set_started == info.history.last_epoch_started &&
+	    is_active())) {
+	break;
+      }
     }
 
     // adjust pg info
@@ -706,10 +729,15 @@ bool ReplicatedPG::snap_trimmer()
     t->remove_collection(c);
     int tr = osd->store->queue_transaction(&osr, t);
     assert(tr == 0);
- 
-    share_pg_info();
 
+ 
     unlock();
+    osd->map_lock.get_read();
+    lock();
+    share_pg_info();
+    unlock();
+    osd->map_lock.put_read();
+
     // flush, to make sure the collection adjustments we just made are
     // reflected when we scan the next collection set.
     osd->store->flush();
@@ -1920,8 +1948,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     object_info_t static_snap_oi(coid, oi.oloc);
     object_info_t *snap_oi;
     if (is_primary()) {
-      ctx->clone_obc = new ObjectContext(coid, oi.oloc);
-      ctx->clone_obc->obs.exists = true;
+      ctx->clone_obc = new ObjectContext(static_snap_oi, true, NULL);
       ctx->clone_obc->get();
       register_object_context(ctx->clone_obc);
       snap_oi = &ctx->clone_obc->obs.oi;
@@ -2032,7 +2059,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
       // if we logically recreated the head, remove old _snapdir object
       sobject_t snapoid(soid.oid, CEPH_SNAPDIR);
 
-      ctx->snapset_obc = get_object_context(snapoid, OLOC_BLANK, false);
+      ctx->snapset_obc = get_object_context(snapoid, poi->oloc, false);
       if (ctx->snapset_obc && ctx->snapset_obc->obs.exists) {
 	ctx->op_t.remove(coll_t(info.pgid), snapoid);
 	dout(10) << " removing old " << snapoid << dendl;
@@ -2054,7 +2081,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, snapoid, ctx->at_version, old_version,
 				  osd_reqid_t(), ctx->mtime));
 
-    ctx->snapset_obc = get_object_context(snapoid, OLOC_BLANK, true);
+    ctx->snapset_obc = get_object_context(snapoid, poi->oloc, true);
     ctx->snapset_obc->obs.exists = true;
     ctx->snapset_obc->obs.oi.version = ctx->at_version;
     ctx->snapset_obc->obs.oi.last_reqid = ctx->reqid;
@@ -2512,10 +2539,19 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const sobject_t& s
     // check disk
     bufferlist bv;
     int r = osd->store->getattr(coll_t(info.pgid), soid, OI_ATTR, bv);
-    if (r < 0 && !can_create)
-      return 0;   // -ENOENT!
-
-    obc = new ObjectContext(soid, oloc);
+    if (r < 0) {
+      if (!can_create)
+	return NULL;   // -ENOENT!
+      object_info_t oi(soid, oloc);
+      obc = new ObjectContext(oi, false, NULL);
+    }
+    else {
+      object_info_t oi(bv);
+      SnapSetContext *ssc = NULL;
+      if (can_create)
+	ssc = get_snapset_context(soid.oid, true);
+      obc = new ObjectContext(oi, true, ssc);
+    }
 
     if (can_create)
       obc->obs.ssc = get_snapset_context(soid.oid, true);
@@ -2772,10 +2808,16 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
 
     } else {
       // do op
-      ObjectState obs(op->poid, op->oloc);
-      obs.oi.version = op->old_version;
-      obs.oi.size = op->old_size;
-      obs.exists = op->old_exists;
+      assert(0);
+
+      // TODO: this is severely broken because we don't know whether this object is really lost or
+      // not. We just always assume that it's not right now.
+      // Also, we're taking the address of a variable on the stack. 
+      object_info_t oi(soid, op->oloc);
+      oi.lost = false; // I guess?
+      oi.version = op->old_version;
+      oi.size = op->old_size;
+      ObjectState obs(oi, op->old_exists, NULL);
       
       rm->ctx = new OpContext(op, op->reqid, op->ops, &obs, this);
       
@@ -2808,7 +2850,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   Context *onapply = new C_OSD_RepModifyApply(rm);
   int r = osd->store->queue_transactions(&osr, rm->tls, onapply, oncommit);
   if (r) {
-    derr(0) << "error applying transaction: r = " << r << dendl;
+    dout(0) << "error applying transaction: r = " << r << dendl;
     assert(0);
   }
   // op is cleaned up by oncommit/onapply when both are executed
@@ -3366,14 +3408,10 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
   struct stat st;
   int r = osd->store->stat(coll_t(info.pgid), soid, &st);
   if (r != 0) {
-    stringstream ss;
-    char buf[80];
-    ss << op->get_source() << " tried to pull " << soid << " in " << info.pgid
-       << " but got " << strerror_r(-r, buf, sizeof(buf));
-    osd->logclient.log(LOG_ERROR, ss);
-
+    osd->clog.error() << op->get_source() << " tried to pull " << soid
+	<< " in " << info.pgid << " but got "
+	<< cpp_strerror(-r) << "\n";
     // FIXME: do something more intelligent.. mark the pg as needing repair?
-
   } else {
     uint64_t size = st.st_size;
 
@@ -3965,9 +4003,11 @@ int ReplicatedPG::recover_primary(int max)
 		     << " snaps " << latest->snaps << dendl;
 	    ObjectStore::Transaction *t = new ObjectStore::Transaction;
 
+	    // NOTE: we know headobc exists on disk, and the oloc will be loaded with it, so
+	    // it is safe to pass in a blank one here.
 	    ObjectContext *headobc = get_object_context(head, OLOC_BLANK, false);
 
-	    object_info_t oi(soid, headobc->obs.oi.oloc);
+	    object_info_t oi(headobc->obs.oi);
 	    oi.version = latest->version;
 	    oi.prior_version = latest->prior_version;
 	    ::decode(oi.snaps, latest->snaps);
@@ -4007,6 +4047,7 @@ int ReplicatedPG::recover_object_replicas(const sobject_t& soid)
 
   dout(10) << "recover_object_replicas " << soid << dendl;
 
+  // NOTE: we know we will get a valid oloc off of disk here.
   ObjectContext *obc = get_object_context(soid, OLOC_BLANK, false);
   dout(10) << " ondisk_read_lock for " << soid << dendl;
   obc->ondisk_read_lock();
@@ -4189,7 +4230,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
   for (map<sobject_t,ScrubMap::object>::reverse_iterator p = scrubmap.objects.rbegin(); 
        p != scrubmap.objects.rend(); 
        p++) {
-    const sobject_t& soid = p->second.poid;
+    const sobject_t& soid = p->first;
     stat.num_objects++;
 
     // new snapset?
@@ -4207,7 +4248,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 
       // did we finish the last oid?
       if (head != sobject_t()) {
-	derr(0) << " missing clone(s) for " << head << dendl;
+	dout(0) << " missing clone(s) for " << head << dendl;
 	assert(head == sobject_t());  // we had better be done
 	errors++;
       }
@@ -4288,17 +4329,16 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 	   << stat.num_kb << "/" << info.stats.num_kb << " kb."
 	   << dendl;
 
-  stringstream ss;
   if (stat.num_objects != info.stats.num_objects ||
       stat.num_object_clones != info.stats.num_object_clones ||
       stat.num_bytes != info.stats.num_bytes ||
       stat.num_kb != info.stats.num_kb) {
-    ss << info.pgid << " " << mode << " stat mismatch, got "
+    osd->clog.error() << info.pgid << " " << mode
+       << " stat mismatch, got "
        << stat.num_objects << "/" << info.stats.num_objects << " objects, "
        << stat.num_object_clones << "/" << info.stats.num_object_clones << " clones, "
        << stat.num_bytes << "/" << info.stats.num_bytes << " bytes, "
-       << stat.num_kb << "/" << info.stats.num_kb << " kb.";
-    osd->get_logclient()->log(LOG_ERROR, ss);
+       << stat.num_kb << "/" << info.stats.num_kb << " kb.\n";
     errors++;
 
     if (repair) {

@@ -18,7 +18,7 @@
 #include "common/common_init.h"
 
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl
+#define dout_prefix *_dout
 
 struct Foo : public Thread {
   void *entry() {

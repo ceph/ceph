@@ -21,7 +21,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(dir)
 static ostream& _prefix(const string& dir) {
-  return *_dout << dbeginl << "store(" << dir << ") ";
+  return *_dout << "store(" << dir << ") ";
 }
 
 
@@ -64,7 +64,7 @@ int MonitorStore::mount()
   // verify dir exists
   DIR *d = ::opendir(dir.c_str());
   if (!d) {
-    derr(1) << "basedir " << dir << " dne" << dendl;
+    dout(1) << "basedir " << dir << " dne" << dendl;
     return -ENOENT;
   }
   ::closedir(d);
@@ -82,7 +82,7 @@ int MonitorStore::mount()
   l.l_len = 0;
   int r = ::fcntl(lock_fd, F_SETLK, &l);
   if (r < 0) {
-    derr(0) << "failed to lock " << t << ", is another cmon still running?" << dendl;
+    dout(0) << "failed to lock " << t << ", is another cmon still running?" << dendl;
     return -errno;
   }
 
@@ -106,13 +106,20 @@ int MonitorStore::umount()
 
 int MonitorStore::mkfs()
 {
-  dout(1) << "mkfs" << dendl;
-
   char cmd[1024];
-  snprintf(cmd, sizeof(cmd), "test -d %s && /bin/rm -rf %s ; mkdir -p %s", dir.c_str(), dir.c_str(), dir.c_str());
-  dout(1) << cmd << dendl;
-  int r = system(cmd);
-  return r;
+  snprintf(cmd, sizeof(cmd), "test -d %s && /bin/rm -rf %s ; mkdir -p %s",
+	   dir.c_str(), dir.c_str(), dir.c_str());
+  dout(6) << "MonitorStore::mkfs: running command '" << cmd << "'" << dendl;
+  int res = system(cmd);
+  int r = WEXITSTATUS(res);
+  if (r) {
+    dout(0) << "FAILED to create monfs at " << dir.c_str() << " for "
+	    << g_conf.id << ": cmd '" << cmd << "'" << dendl;
+    return r;
+  }
+
+  dout(0) << "created monfs at " << dir.c_str() << " for " << g_conf.id << dendl;
+  return 0;
 }
 
 void MonitorStore::sync()
@@ -245,7 +252,7 @@ int MonitorStore::get_bl_ss(bufferlist& bl, const char *a, const char *b)
     int r = ::read(fd, bp.c_str()+off, len-off);
     if (r < 0) {
       char buf[80];
-      derr(0) << "errno on read " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+      dout(0) << "errno on read " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     }
     assert(r>0);
     off += r;

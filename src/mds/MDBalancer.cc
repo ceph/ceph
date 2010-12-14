@@ -39,7 +39,7 @@ using std::vector;
 #undef DOUT_COND
 #define DOUT_COND(l) l<=g_conf.debug_mds || l <= g_conf.debug_mds_balancer
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".bal "
+#define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".bal "
 
 #define MIN_LOAD    50   //  ??
 #define MIN_REEXPORT 5  // will automatically reexport

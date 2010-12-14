@@ -14,7 +14,7 @@
 
 #define DOUT_SUBSYS objectcacher
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << oc->objecter->messenger->get_myname() << ".objectcacher.object(" << oid << ") "
+#define dout_prefix *_dout << oc->objecter->messenger->get_myname() << ".objectcacher.object(" << oid << ") "
 
 
 
@@ -416,7 +416,7 @@ void ObjectCacher::Object::truncate(loff_t s)
 /*** ObjectCacher ***/
 
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << objecter->messenger->get_myname() << ".objectcacher "
+#define dout_prefix *_dout << objecter->messenger->get_myname() << ".objectcacher "
 
 
 /* private */

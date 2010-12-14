@@ -20,6 +20,7 @@
 using namespace librados;
 #include "include/byteorder.h"
 
+#include "include/intarith.h"
 
 #include <errno.h>
 #include <inttypes.h>
@@ -858,7 +859,7 @@ static int do_import(pool_t pool, const char *imgname, int order, const char *pa
         break; /* don't try to merge if we're big enough */
 
       extent_len += fiemap->fm_extents[extent].fe_length;  /* length of current extent */
-      end_ofs = min(size, file_pos + extent_len);
+      end_ofs = MIN(size, file_pos + extent_len);
 
       end_block = get_block_num(&header, end_ofs - 1); /* ending block */
 

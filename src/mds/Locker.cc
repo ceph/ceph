@@ -59,7 +59,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(mds)
 static ostream& _prefix(MDS *mds) {
-  return *_dout << dbeginl << "mds" << mds->get_nodeid() << ".locker ";
+  return *_dout << "mds" << mds->get_nodeid() << ".locker ";
 }
 
 /* This function DOES put the passed message before returning */
@@ -541,6 +541,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
 	    lock->encode_locked_state(data);
 	    mds->send_message_mds(new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid(), data), auth);
 	    ((ScatterLock *)lock)->start_flush();
+	    // we'll get an AC_LOCKFLUSHED to complete
 	  }
 	  break;
 
@@ -2080,9 +2081,8 @@ void Locker::process_request_cap_release(MDRequest *mdr, client_t client, const 
 	  dn->remove_client_lease(l, this);
 	}
       } else {
-	stringstream ss;
-	ss << "client" << client << " released lease on dn " << dir->dirfrag() << "/" << dname << " which dne";
-	mds->logclient.log(LOG_WARN, ss);
+	mds->clog.warn() << "client" << client << " released lease on dn "
+	    << dir->dirfrag() << "/" << dname << " which dne\n";
      }
     }
   }
@@ -3312,6 +3312,17 @@ void Locker::scatter_writebehind_finish(ScatterLock *lock, Mutation *mut)
 
   lock->finish_flush();
 
+  // if replicas may have flushed in a mix->lock state, send another
+  // message so they can finish_flush().
+  if (in->is_replicated()) {
+    switch (lock->get_state()) {
+    case LOCK_MIX_LOCK:
+    case LOCK_MIX_EXCL:
+    case LOCK_MIX_TSYN:
+      send_lock_message(lock, LOCK_AC_LOCKFLUSHED);
+    }
+  }
+
   mut->apply();
   drop_locks(mut);
   mut->cleanup();
@@ -3933,11 +3944,11 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
       break;
     }
 
+    ((ScatterLock *)lock)->finish_flush();
+
     // ok
     lock->decode_locked_state(m->get_data());
     lock->set_state(LOCK_SYNC);
-
-    ((ScatterLock *)lock)->finish_flush();
 
     lock->get_rdlock();
     lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
@@ -3952,6 +3963,10 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     }
 
     eval_gather(lock, true);
+    break;
+
+  case LOCK_AC_LOCKFLUSHED:
+    ((ScatterLock *)lock)->finish_flush();
     break;
     
   case LOCK_AC_MIX:
@@ -3969,8 +3984,6 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     // ok
     lock->decode_locked_state(m->get_data());
     lock->set_state(LOCK_MIX);
-
-    ((ScatterLock *)lock)->finish_flush();
 
     if (caps)
       issue_caps(in);

@@ -12,14 +12,8 @@ if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
     libdir=$LIBDIR
 else
     BINDIR=@bindir@
-    LIBDIR=@libdir@
-    # i hate autoconf:
-    if [ "@sysconfdir@" = "/usr/etc" ]; then
-	ETCDIR=/etc/ceph
-    else
-	ETCDIR=@sysconfdir@/ceph
-    fi
-    libdir="$LIBDIR/rados-classes"
+    ETCDIR=@sysconfdir@/ceph
+    libdir=@libdir@/rados-classes
 fi
 
 load_opt="changed"

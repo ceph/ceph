@@ -69,7 +69,7 @@
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "mds" << whoami << '.' << incarnation << ' '
+#define dout_prefix *_dout << "mds" << whoami << '.' << incarnation << ' '
 
 
 
@@ -83,7 +83,7 @@ MDS::MDS(const char *n, Messenger *m, MonClient *mc) :
   standby_for_rank(-1),
   messenger(m),
   monc(mc),
-  logclient(messenger, &mc->monmap, mc),
+  clog(messenger, &mc->monmap, mc, LogClient::NO_FLAGS),
   sessionmap(this) {
 
   orig_argc = 0;
@@ -439,7 +439,7 @@ int MDS::init(int wanted_state)
   dout(10) << sizeof(xlist<void*>::item) << "\t xlist<>::item   *2=" << 2*sizeof(xlist<void*>::item) << dendl;
 
   messenger->add_dispatcher_tail(this);
-  messenger->add_dispatcher_head(&logclient);
+  messenger->add_dispatcher_head(&clog);
 
   // get monmap
   monc->set_messenger(messenger);
@@ -494,9 +494,7 @@ void MDS::tick()
   // reschedule
   reset_tick();
 
-  _dout_check_log();
-
-  logclient.send_log();
+  clog.send_log();
 
   utime_t now = g_clock.now();
   utime_t delay = now;
@@ -740,18 +738,16 @@ void MDS::handle_command(MMonCommand *m)
       } else dout(0) << "bad migrate_dir target syntax" << dendl;
     } else dout(0) << "bad migrate_dir syntax" << dendl;
   } else if (m->cmd.size() == 1 && m->cmd[0] == "heapdump"){
-    stringstream ss;
     if (g_conf.tcmalloc_have) {
       if (!g_conf.profiler_running()) {
-        ss << g_conf.name << " can't dump heap: profiler not running";
+        clog.info() << g_conf.name << " can't dump heap: profiler not running\n";
       } else {
-        ss << g_conf.name << " dumping heap profile now";
+        clog.info() << g_conf.name << " dumping heap profile now\n";
         g_conf.profiler_dump("admin request");
       }
     } else {
-      ss << "tcmalloc not enabled, can't use profiler";
+      clog.info() << "tcmalloc not enabled, can't use profiler\n";
     }
-    logclient.log(LOG_INFO, ss);
   } else if (m->cmd.size() == 1 && m->cmd[0] == "enable_profiler_options") {
     char val[sizeof(int)*8+1];
     snprintf(val, sizeof(val), "%i", g_conf.profiler_allocation_interval);
@@ -760,22 +756,16 @@ void MDS::handle_command(MMonCommand *m)
     snprintf(val, sizeof(val), "%i", g_conf.profiler_highwater_interval);
     setenv("HEAP_PROFILE_INUSE_INTERVAL",
 	   val, g_conf.profiler_highwater_interval);
-    stringstream ss;
-    ss << g_conf.name << " set heap variables from current config";
-    logclient.log(LOG_INFO, ss);
+    clog.info() << g_conf.name << " set heap variables from current config\n";
   } else if (m->cmd.size() == 1 && m->cmd[0] == "start_profiler") {
     char location[PATH_MAX];
     snprintf(location, sizeof(location),
 	     "%s/%s", g_conf.log_dir, g_conf.name);
     g_conf.profiler_start(location);
-    stringstream ss;
-    ss << g_conf.name << " started profiler";
-    logclient.log(LOG_INFO, ss);
+    clog.info() << g_conf.name << " started profiler\n";
   } else if (m->cmd.size() == 1 && m->cmd[0] == "stop_profiler") {
     g_conf.profiler_stop();
-    stringstream ss;
-    ss << g_conf.name << " stopped profiler";
-    logclient.log(LOG_INFO, ss);
+    clog.info() << g_conf.name << " stopped profiler\n";
   }
   else dout(0) << "unrecognized command! " << m->cmd << dendl;
   m->put();
@@ -923,11 +913,9 @@ void MDS::handle_mds_map(MMDSMap *m)
     oldmap->get_mds_set(oldresolve, MDSMap::STATE_RESOLVE);
     mdsmap->get_mds_set(resolve, MDSMap::STATE_RESOLVE);
     if (oldresolve != resolve) {
-      dout(10) << "resolve set is " << resolve << ", was " << oldresolve << dendl;
-      for (set<int>::iterator p = resolve.begin(); p != resolve.end(); ++p) 
-	if (*p != whoami &&
-	    oldresolve.count(*p) == 0)
-	  mdcache->send_resolve(*p);  // now or later.
+      dout(10) << " resolve set is " << resolve << ", was " << oldresolve << dendl;
+      calc_recovery_set();
+      mdcache->send_resolves();
     }
   }
   
@@ -1166,19 +1154,27 @@ void MDS::starting_done()
 }
 
 
-void MDS::replay_start()
+void MDS::calc_recovery_set()
 {
-  dout(1) << "replay_start" << dendl;
-  
   // initialize gather sets
   set<int> rs;
   mdsmap->get_recovery_mds_set(rs);
   rs.erase(whoami);
-  dout(1) << "now replay.  my recovery peers are " << rs
-	  << ".  need osdmap epoch " << mdsmap->get_last_failure_osd_epoch()
+  mdcache->set_recovery_set(rs);
+
+  dout(1) << " recovery set is " << rs << dendl;
+}
+
+
+void MDS::replay_start()
+{
+  dout(1) << "replay_start" << dendl;
+  
+  calc_recovery_set();
+
+  dout(1) << " need osdmap epoch " << mdsmap->get_last_failure_osd_epoch()
 	  <<", have " << osdmap->get_epoch()
 	  << dendl;
-  mdcache->set_recovery_set(rs);
 
   // start?
   if (osdmap->get_epoch() >= mdsmap->get_last_failure_osd_epoch()) {
@@ -1374,6 +1370,7 @@ void MDS::stopping_done()
 
 void MDS::suicide()
 {
+  assert(mds_lock.is_locked());
   if (want_state == MDSMap::STATE_STOPPED)
     state = want_state;
   else
@@ -1622,7 +1619,14 @@ do { \
       dout(7) << "mds has " << finished_queue.size() << " queued contexts" << dendl;
       dout(10) << finished_queue << dendl;
       finishing = true;
-      finish_contexts(finished_queue);
+      list<Context*> ls;
+      ls.swap(finished_queue);
+      while (!ls.empty()) {
+	dout(10) << " finish " << ls.front() << dendl;
+	ls.front()->finish(0);
+	delete ls.front();
+	ls.pop_front();
+      }
       finishing = false;
     }
 

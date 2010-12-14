@@ -12,7 +12,7 @@ AC_CANONICAL_HOST
 AC_CANONICAL_TARGET
 
 # Automake
-AM_INIT_AUTOMAKE(ceph, 0.24~rc)
+AM_INIT_AUTOMAKE(ceph, 0.25~rc)
 AM_PROG_CC_C_O
 AM_PROG_LIBTOOL
 
@@ -32,6 +32,8 @@ AC_PROG_LIBTOOL
 # Checks for libraries.
 AC_CHECK_LIB([m], [pow], [true], AC_MSG_FAILURE([libm not found]))
 AC_CHECK_LIB([pthread], [pthread_create], [true], AC_MSG_FAILURE([libpthread not found]))
+PKG_CHECK_MODULES([CRYPTOPP], [libcrypto++], [], [
+	AC_SEARCH_LIBS([_ZTIN8CryptoPP14CBC_EncryptionE], [crypto++ cryptopp], [true], AC_MSG_FAILURE([libcrypto++ not found]), [-lpthread])])
 
 # debug crap?
 AC_ARG_WITH([debug],
@@ -151,16 +153,15 @@ AC_CHECK_HEADER([boost/spirit.hpp],
                 [AC_DEFINE([HAVE_BOOST_SPIRIT_CORE_HPP])],
                 [AC_MSG_ERROR([Sorry you need to install the Boost spirit parser library (libboost-dev on debian)])])
 
+AC_CHECK_HEADER([cryptopp/cryptlib.h],
+	[],
+	[AC_MSG_ERROR([Sorry you need libcrypto++ dev files])])
+
 AC_LANG([C])
 
 AC_CHECK_HEADER([histedit.h],
 	[],
 	[AC_MSG_ERROR([Sorry you need histedit.h (libedit-dev on debian)])])
-
-AC_CHECK_HEADER([openssl/md5.h],
-	[],
-	[AC_MSG_ERROR([Sorry you need openssl dev files (libssl-dev on debian)])])
-PKG_CHECK_MODULES([OPENSSL], [openssl])
 
 AC_CHECK_MEMBER([struct fiemap_extent.fe_logical],
 	[AC_DEFINE([HAVE_FIEMAP_H], [], [linux/fiemap.h was found, fiemap ioctl will be used])],

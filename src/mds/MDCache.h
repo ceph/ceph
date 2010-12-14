@@ -693,7 +693,7 @@ public:
   void cancel_ambiguous_import(dirfrag_t dirino);
   void finish_ambiguous_import(dirfrag_t dirino);
   void resolve_start();
-  void send_resolve(int who);
+  void send_resolves();
   void send_resolve_now(int who);
   void send_resolve_later(int who);
   void maybe_send_pending_resolves();
@@ -718,6 +718,7 @@ protected:
   
   set<CInode*> rejoin_undef_inodes;
   set<CInode*> rejoin_potential_updated_scatterlocks;
+  set<CDir*>   rejoin_undef_dirfrags;
 
   vector<CInode*> rejoin_recover_q, rejoin_check_q;
   list<Context*> rejoin_waiters;
@@ -726,6 +727,7 @@ protected:
   void handle_cache_rejoin(MMDSCacheRejoin *m);
   void handle_cache_rejoin_weak(MMDSCacheRejoin *m);
   CInode* rejoin_invent_inode(inodeno_t ino, snapid_t last);
+  CDir* rejoin_invent_dirfrag(dirfrag_t df);
   void handle_cache_rejoin_strong(MMDSCacheRejoin *m);
   void rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack, set<vinodeno_t>& acked_inodes);
   void handle_cache_rejoin_ack(MMDSCacheRejoin *m);
@@ -789,6 +791,11 @@ public:
   void do_delayed_cap_imports();
   void check_realm_past_parents(SnapRealm *realm);
   void open_snap_parents();
+
+  void open_undef_dirfrags();
+  void opened_undef_dirfrag(CDir *dir) {
+    rejoin_undef_dirfrags.erase(dir);
+  }
 
   void reissue_all_caps();
   

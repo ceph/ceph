@@ -24,7 +24,7 @@
 
 #define DOUT_SUBSYS auth
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "cephx client: "
+#define dout_prefix *_dout << "cephx client: "
 
 
 int CephxClientHandler::build_request(bufferlist& bl)
@@ -151,7 +151,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 	if (decode_decrypt(secrets, secret_key, indata) == 0) {
 	  rotating_secrets->set_secrets(secrets);
 	} else {
-	  derr(0) << "could not set rotating key: decode_decrypt failed" << dendl;
+	  dout(0) << "could not set rotating key: decode_decrypt failed" << dendl;
 	}
       }
     }

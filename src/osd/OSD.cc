@@ -101,7 +101,7 @@
 #define dout_prefix _prefix(*_dout, whoami, osdmap)
 
 static ostream& _prefix(ostream& out, int whoami, OSDMap *osdmap) {
-  return out << dbeginl << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " ";
+  return out << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " ";
 }
 
 const coll_t coll_t::META_COLL("meta");
@@ -345,7 +345,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   logger(NULL), logger_started(false),
   store(NULL),
   map_in_progress(false),
-  logclient(client_messenger, &mc->monmap, mc),
+  clog(client_messenger, &mc->monmap, mc, LogClient::NO_FLAGS),
   whoami(id),
   dev_path(dev), journal_path(jdev),
   dispatch_running(false),
@@ -524,7 +524,7 @@ int OSD::init()
     
   // i'm ready!
   client_messenger->add_dispatcher_head(this);
-  client_messenger->add_dispatcher_head(&logclient);
+  client_messenger->add_dispatcher_head(&clog);
   cluster_messenger->add_dispatcher_head(this);
 
   heartbeat_messenger->add_dispatcher_head(&heartbeat_dispatcher);
@@ -795,7 +795,7 @@ int OSD::read_superblock()
   }
 
   if (whoami != superblock.whoami) {
-    derr(0) << "read_superblock superblock says osd" << superblock.whoami
+    dout(0) << "read_superblock superblock says osd" << superblock.whoami
 	    << ", but i (think i) am osd" << whoami << dendl;
     return -1;
   }
@@ -843,6 +843,12 @@ PGPool* OSD::_get_pool(int id)
 {
   PGPool *p = _lookup_pool(id);
   if (!p) {
+    if (!osdmap->have_pg_pool(id)) {
+      dout(5) << __func__ << ": the OSDmap does not contain a PG pool with id = "
+	      << id << dendl;
+      return NULL;
+    }
+
     p = new PGPool(id, osdmap->get_pool_name(id),
 		   osdmap->get_pg_pool(id)->v.auid );
     pool_map[id] = p;
@@ -877,6 +883,7 @@ PG *OSD::_open_lock_pg(pg_t pgid, bool no_lockdep_check)
 
   dout(10) << "_open_lock_pg " << pgid << dendl;
   PGPool *pool = _get_pool(pgid.pool());
+  assert(pool);
 
   // create
   PG *pg;
@@ -1003,6 +1010,13 @@ void OSD::load_pgs()
 	       << " (pg " << pgid << " snap " << snap << ")" << dendl;
       continue;
     }
+
+    if (!osdmap->have_pg_pool(pgid.pool())) {
+      dout(10) << __func__ << ": skipping PG " << pgid << " because we don't have pool "
+	       << pgid.pool() << dendl;
+      continue;
+    }
+
     PG *pg = _open_lock_pg(pgid);
 
     // read pg state, log
@@ -1526,8 +1540,6 @@ void OSD::tick()
 
   logger->set(l_osd_buf, buffer_total_alloc.read());
 
-  _dout_check_log();
-
   if (got_sigterm) {
     dout(0) << "got SIGTERM, shutting down" << dendl;
     cluster_messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN),
@@ -1573,7 +1585,7 @@ void OSD::tick()
 
   map_lock.put_read();
 
-  logclient.send_log();
+  clog.send_log();
 
   timer.add_event_after(1.0, new C_Tick(this));
 
@@ -1969,86 +1981,96 @@ void OSD::handle_command(MMonCommand *m)
 
     stringstream ss;
     uint64_t rate = (double)count / (end - start);
-    ss << "bench: wrote " << prettybyte_t(count) << " in blocks of " << prettybyte_t(bsize)
-       << " in " << (end-start)
-       << " sec at " << prettybyte_t(rate) << "/sec";
-    logclient.log(LOG_INFO, ss);    
+    clog.info() << "bench: wrote " << prettybyte_t(count)
+	<< " in blocks of " << prettybyte_t(bsize) << " in "
+	<< (end-start) << " sec at " << prettybyte_t(rate) << "/sec\n";
     
   } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reset") {
     logger_reset_all();
   } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reopen") {
     logger_reopen_all();
   } else if (m->cmd.size() == 1 && m->cmd[0] == "heapdump") {
-    stringstream ss;
     if (g_conf.tcmalloc_have) {
       if (!g_conf.profiler_running()) {
-        ss << "can't dump heap: profiler not running";
+	clog.info() << "can't dump heap: profiler not running\n";
       } else {
-        ss << g_conf.name << "dumping heap profile now";
+        clog.info() << g_conf.name << "dumping heap profile now\n";
         g_conf.profiler_dump("admin request");
       }
     } else {
-      ss << g_conf.name << " does not have tcmalloc, can't use profiler";
+      clog.info() << g_conf.name << " does not have tcmalloc, "
+	"can't use profiler\n";
     }
-    logclient.log(LOG_INFO, ss);
   } else if (m->cmd.size() == 1 && m->cmd[0] == "enable_profiler_options") {
     char val[sizeof(int)*8+1];
     snprintf(val, sizeof(val), "%i", g_conf.profiler_allocation_interval);
     setenv("HEAP_PROFILE_ALLOCATION_INTERVAL", val, g_conf.profiler_allocation_interval);
     snprintf(val, sizeof(val), "%i", g_conf.profiler_highwater_interval);
     setenv("HEAP_PROFILE_INUSE_INTERVAL", val, g_conf.profiler_highwater_interval);
-    stringstream ss;
-    ss << g_conf.name << " set heap variables from current config";
-    logclient.log(LOG_INFO, ss);
+    clog.info() << g_conf.name << " set heap variables from current config";
   } else if (m->cmd.size() == 1 && m->cmd[0] == "start_profiler") {
     char location[PATH_MAX];
     snprintf(location, sizeof(location),
 	     "%s/%s", g_conf.log_dir, g_conf.name);
     g_conf.profiler_start(location);
-    stringstream ss;
-    ss << g_conf.name << " started profiler with output " << location;
-    logclient.log(LOG_INFO, ss);
+    clog.info() << g_conf.name << " started profiler with output "
+      << location << "\n";
   } else if (m->cmd.size() == 1 && m->cmd[0] == "stop_profiler") {
     g_conf.profiler_stop();
-    stringstream ss;
-    ss << g_conf.name << " stopped profiler";
-    logclient.log(LOG_INFO, ss);
+    clog.info() << g_conf.name << " stopped profiler\n";
   }
-  else if (m->cmd.size() == 2 && m->cmd[0] == "dump_missing") {
-    const string &file_name(m->cmd[1]);
-    std::ofstream fout(file_name.c_str());
-    if (!fout.is_open()) {
-      stringstream ss;
-      ss << "failed to open file '" << file_name << "'";
-      logclient.log(LOG_INFO, ss);
-      goto done;
-    }
-
-    std::set <pg_t> keys;
-    for (hash_map<pg_t, PG*>::const_iterator pg_map_e = pg_map.begin();
-	 pg_map_e != pg_map.end(); ++pg_map_e) {
-      keys.insert(pg_map_e->first);
-    }
-
-    fout << "*** osd " << whoami << ": dump_missing ***" << std::endl;
-    for (std::set <pg_t>::iterator p = keys.begin();
-	 p != keys.end(); ++p) {
-      hash_map<pg_t, PG*>::iterator q = pg_map.find(*p);
-      assert(q != pg_map.end());
-      PG *pg = q->second;
-      pg->lock();
-
-      fout << *pg << std::endl;
-      std::map<sobject_t, PG::Missing::item>::iterator mend = pg->missing.missing.end();
-      std::map<sobject_t, PG::Missing::item>::iterator m = pg->missing.missing.begin();
-      for (; m != mend; ++m) {
-	fout << m->first << " -> " << m->second << std::endl;
+  else if (m->cmd.size() > 1 && m->cmd[0] == "debug") {
+    if (m->cmd.size() == 3 && m->cmd[1] == "dump_missing") {
+      const string &file_name(m->cmd[2]);
+      std::ofstream fout(file_name.c_str());
+      if (!fout.is_open()) {
+	clog.info() << "failed to open file '" << file_name << "'\n";
+	goto done;
       }
-      pg->unlock();
-      fout << std::endl;
-    }
 
-    fout.close();
+      std::set <pg_t> keys;
+      for (hash_map<pg_t, PG*>::const_iterator pg_map_e = pg_map.begin();
+	   pg_map_e != pg_map.end(); ++pg_map_e) {
+	keys.insert(pg_map_e->first);
+      }
+
+      fout << "*** osd " << whoami << ": dump_missing ***" << std::endl;
+      for (std::set <pg_t>::iterator p = keys.begin();
+	   p != keys.end(); ++p) {
+	hash_map<pg_t, PG*>::iterator q = pg_map.find(*p);
+	assert(q != pg_map.end());
+	PG *pg = q->second;
+	pg->lock();
+
+	fout << *pg << std::endl;
+	std::map<sobject_t, PG::Missing::item>::iterator mend = pg->missing.missing.end();
+	std::map<sobject_t, PG::Missing::item>::iterator m = pg->missing.missing.begin();
+	for (; m != mend; ++m) {
+	  fout << m->first << " -> " << m->second << std::endl;
+	  map<sobject_t, set<int> >::const_iterator mli =
+	    pg->missing_loc.find(m->first);
+	  if (mli == pg->missing_loc.end())
+	    continue;
+	  const set<int> &mls(mli->second);
+	  if (mls.empty())
+	    continue;
+	  fout << "missing_loc: " << mls << std::endl;
+	}
+	pg->unlock();
+	fout << std::endl;
+      }
+
+      fout.close();
+    }
+    else if (m->cmd.size() == 3 && m->cmd[1] == "kick_recovery_wq") {
+      g_conf.osd_recovery_delay_start = atoi(m->cmd[2].c_str());
+      clog.info() << "kicking recovery queue. set osd_recovery_delay_start "
+		    << "to " << g_conf.osd_recovery_delay_start << "\n";
+
+      defer_recovery_until = g_clock.now();
+      defer_recovery_until += g_conf.osd_recovery_delay_start;
+      recovery_wq._kick();
+    }
   }
   else dout(0) << "unrecognized command! " << m->cmd << dendl;
 
@@ -2859,9 +2881,8 @@ void OSD::handle_osd_map(MOSDMap *m)
       do_shutdown = true;   // don't call shutdown() while we have everything paused
     } else if (!osdmap->is_up(whoami) ||
 	       osdmap->get_addr(whoami) != client_messenger->get_myaddr()) {
-      stringstream ss;
-      ss << "map e" << osdmap->get_epoch() << " wrongly marked me down";
-      logclient.log(LOG_WARN, ss);
+      clog.warn() << "map e" << osdmap->get_epoch()
+	<< " wrongly marked me down\n";
       
       state = STATE_BOOTING;
       up_epoch = 0;
@@ -3205,6 +3226,13 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
 
     if (g_conf.osd_check_for_log_corruption)
       pg->check_log_for_corruption(store);
+
+    if (pg->is_active() && pg->is_primary() &&
+	(pg->missing.num_missing() > pg->missing_loc.size())) {
+      if (pg->all_unfound_are_lost(osdmap)) {
+	pg->mark_all_unfound_as_lost(t);
+      }
+    }
 
     if (!osdmap->have_pg_pool(pg->info.pgid.pool())) {
       //pool is deleted!
@@ -3696,9 +3724,8 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
     }
     if (up != acting) {
       dout(10) << "mkpg " << pgid << "  up " << up << " != acting " << acting << dendl;
-      stringstream ss;
-      ss << "mkpg " << pgid << " up " << up << " != acting " << acting;
-      logclient.log(LOG_ERROR, ss);
+      clog.error() << "mkpg " << pgid << " up " << up << " != acting "
+	    << acting << "\n";
       continue;
     }
 
@@ -4084,6 +4111,11 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       // INACTIVE REPLICA
       assert(from == pg->acting[0]);
       pg->merge_log(*t, info, log, from);
+
+      // We should have the right logs before activating.
+      assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
+      assert(pg->log.head == pg->info.last_update);
+
       pg->activate(*t, fin->contexts, info_map);
     } else {
       // ACTIVE REPLICA
@@ -4094,10 +4126,8 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 
       // did a snap just get purged?
       if (info.purged_snaps.size() < pg->info.purged_snaps.size()) {
-	stringstream ss;
-	ss << "pg " << pg->info.pgid << " replica got purged_snaps " << info.purged_snaps
-	   << " had " << pg->info.purged_snaps;
-	logclient.log(LOG_WARN, ss);
+	clog.warn() << "pg " << pg->info.pgid << " replica got purged_snaps "
+	   << info.purged_snaps << " had " << pg->info.purged_snaps << "\n";
 	pg->info.purged_snaps = info.purged_snaps;
       } else {
 	interval_set<snapid_t> p = info.purged_snaps;
@@ -4115,6 +4145,11 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       }
 
       pg->write_info(*t);
+
+      if (!log.empty()) {
+	dout(10) << *pg << ": inactive replica merging new PG log entries" << dendl;
+	pg->merge_log(*t, info, log, from);
+      }
     }
   }
 
@@ -4743,7 +4778,7 @@ void OSD::do_recovery(PG *pg)
 	     << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops) on "
 	     << *pg << dendl;
 #ifdef DEBUG_RECOVERY_OIDS
-    dout(20) << "  active was " << recovery_oids << dendl;
+    dout(20) << "  active was " << recovery_oids[pg->info.pgid] << dendl;
 #endif
     
     int started = pg->start_recovery_ops(max);
@@ -4770,10 +4805,9 @@ void OSD::start_recovery_op(PG *pg, const sobject_t& soid)
   recovery_ops_active++;
 
 #ifdef DEBUG_RECOVERY_OIDS
-  dout(20) << "  active was " << recovery_oids << dendl;
-  assert(recovery_oids.count(soid) == 0);
-  recovery_oids.insert(soid);
-  assert((int)recovery_oids.size() == recovery_ops_active);
+  dout(20) << "  active was " << recovery_oids[pg->info.pgid] << dendl;
+  assert(recovery_oids[pg->info.pgid].count(soid) == 0);
+  recovery_oids[pg->info.pgid].insert(soid);
 #endif
 
   recovery_wq.unlock();
@@ -4792,10 +4826,9 @@ void OSD::finish_recovery_op(PG *pg, const sobject_t& soid, bool dequeue)
   assert(recovery_ops_active >= 0);
 
 #ifdef DEBUG_RECOVERY_OIDS
-  dout(20) << "  active oids was " << recovery_oids << dendl;
-  assert(recovery_oids.count(soid));
-  recovery_oids.erase(soid);
-  assert((int)recovery_oids.size() == recovery_ops_active);
+  dout(20) << "  active oids was " << recovery_oids[pg->info.pgid] << dendl;
+  assert(recovery_oids[pg->info.pgid].count(soid));
+  recovery_oids[pg->info.pgid].erase(soid);
 #endif
 
   if (dequeue)
@@ -4850,11 +4883,9 @@ void OSD::handle_misdirected_op(PG *pg, MOSDOp *op)
     op->put();
   } else {
     dout(7) << *pg << " misdirected op in " << op->get_map_epoch() << dendl;
-    stringstream ss;
-    ss << op->get_source_inst() << " misdirected " << op->get_reqid()
-       << " " << pg->info.pgid << " to osd" << whoami
-       << " not " << pg->acting;
-    logclient.log(LOG_WARN, ss);
+    clog.warn() << op->get_source_inst() << " misdirected "
+       << op->get_reqid() << " " << pg->info.pgid << " to osd" << whoami
+       << " not " << pg->acting << "\n";
     reply_op_error(op, -ENXIO);
   }
 }
@@ -4944,7 +4975,7 @@ void OSD::handle_op(MOSDOp *op)
   if (!op->may_write()) {
     stat_rd_ops++;
     if (op->get_source().is_osd()) {
-      //derr(-10) << "shed in " << stat_rd_ops_shed_in << " / " << stat_rd_ops << dendl;
+      //dout(-10) << "shed in " << stat_rd_ops_shed_in << " / " << stat_rd_ops << dendl;
       stat_rd_ops_shed_in++;
     }
   }
@@ -4978,6 +5009,14 @@ void OSD::handle_op(MOSDOp *op)
 
   // pg must be same-ish...
   if (op->may_write()) {
+    // full?
+    if (osdmap->test_flag(CEPH_OSDMAP_FULL) &&
+	!op->get_source().is_mds()) {  // FIXME: we'll exclude mds writes for now.
+      reply_op_error(op, -ENOSPC);
+      pg->unlock();
+      return;
+    }
+
     if (op->get_snapid() != CEPH_NOSNAP) {
       reply_op_error(op, -EINVAL);
       pg->unlock();

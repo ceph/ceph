@@ -67,7 +67,7 @@ public:
 
   MonMap *monmap;
 
-  LogClient logclient;
+  LogClient clog;
   KeyServer key_server;
 
 private:
@@ -227,8 +227,6 @@ public:
   void stop_cluster();
 
   int mkfs(bufferlist& osdmapbl);
-
-  LogClient *get_logclient() { return &logclient; }
 };
 
 int strict_strtol(const char *str, int base, std::string *err);

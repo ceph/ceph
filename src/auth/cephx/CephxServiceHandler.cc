@@ -27,7 +27,7 @@
 
 #define DOUT_SUBSYS auth
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "cephx server " << entity_name << ": "
+#define dout_prefix *_dout << "cephx server " << entity_name << ": "
 
 int CephxServiceHandler::start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps)
 {

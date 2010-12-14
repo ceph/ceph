@@ -71,7 +71,7 @@
 
 #define DOUT_SUBSYS filestore
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "filestore(" << basedir << ") "
+#define dout_prefix *_dout << "filestore(" << basedir << ") "
 
 #include "include/buffer.h"
 
@@ -699,7 +699,7 @@ int FileStore::lock_fsid()
   int r = ::fcntl(fsid_fd, F_SETLK, &l);
   if (r < 0) {
     char buf[80];
-    derr(0) << "lock_fsid failed to lock " << basedir << "/fsid, is another cosd still running? " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    dout(0) << "lock_fsid failed to lock " << basedir << "/fsid, is another cosd still running? " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     return -errno;
   }
   return 0;
@@ -748,7 +748,7 @@ int FileStore::_detect_fs()
 	     << " " << strerror(errno)
 	     << dendl;*/
     if (x != y) {
-      derr(0) << "xattrs don't appear to work (" << strerror_r(errno, buf, sizeof(buf))
+      dout(0) << "xattrs don't appear to work (" << strerror_r(errno, buf, sizeof(buf))
 	      << ") on " << fn << ", be sure to mount underlying file system with 'user_xattr' option" << dendl;
       return -errno;
     }
@@ -860,6 +860,10 @@ int FileStore::_detect_fs()
 	  dout(0) << "mount  failed to remove old async_snap_test: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
       }
 
+      /*
+	
+	do not autodetect this yet until the btrfs ioctl interface is finalized!
+
       r = ::ioctl(fd, BTRFS_IOC_SNAP_CREATE_ASYNC, &async_args);
       dout(0) << "mount btrfs SNAP_CREATE_ASYNC got " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
       if (r == 0 || errno == EEXIST) {
@@ -875,6 +879,7 @@ int FileStore::_detect_fs()
 	dout(0) << "mount btrfs SNAP_CREATE_ASYNC is NOT supported: "
 		<< strerror_r(-r, buf, sizeof(buf)) << dendl;
       }
+      */
     }
 
     if (g_conf.filestore_btrfs_snap && !btrfs_snap_create_async) {
@@ -997,7 +1002,7 @@ int FileStore::mount()
   struct stat st;
   int r = ::stat(basedir.c_str(), &st);
   if (r != 0) {
-    derr(0) << "unable to stat basedir " << basedir << ", " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    dout(0) << "unable to stat basedir " << basedir << ", " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     return -errno;
   }
   
@@ -1130,6 +1135,41 @@ int FileStore::mount()
 
   // journal
   open_journal();
+
+  // select journal mode?
+  if (journal) {
+    if (!g_conf.filestore_journal_writeahead &&
+	!g_conf.filestore_journal_parallel &&
+	!g_conf.filestore_journal_trailing) {
+      if (!btrfs) {
+	g_conf.filestore_journal_writeahead = true;
+	dout(0) << "mount: enabling WRITEAHEAD journal mode: btrfs not detected" << dendl;
+      } else if (!g_conf.filestore_btrfs_snap) {
+	g_conf.filestore_journal_writeahead = true;
+	dout(0) << "mount: enabling WRITEAHEAD journal mode: 'filestore btrfs snap' mode is not enabled" << dendl;
+      } else if (!btrfs_snap_create_async) {
+	g_conf.filestore_journal_writeahead = true;
+	dout(0) << "mount: enabling WRITEAHEAD journal mode: btrfs SNAP_CREATE_ASYNC ioctl not detected (v2.6.37+)" << dendl;
+      } else {
+	g_conf.filestore_journal_parallel = true;
+	dout(0) << "mount: enabling PARALLEL journal mode: btrfs, SNAP_CREATE_ASYNC detected and 'filestore btrfs snap' mode is enabled" << dendl;
+      }
+    } else {
+      if (g_conf.filestore_journal_writeahead)
+	dout(0) << "mount: WRITEAHEAD journal mode explicitly enabled in conf" << dendl;
+      if (g_conf.filestore_journal_parallel)
+	dout(0) << "mount: PARALLEL journal mode explicitly enabled in conf" << dendl;
+      if (g_conf.filestore_journal_trailing)
+	dout(0) << "mount: TRAILING journal mode explicitly enabled in conf" << dendl;
+    }
+    if (g_conf.filestore_journal_writeahead)
+      journal->set_wait_on_full(true);
+  }
+
+  r = _sanity_check_fs();
+  if (r < 0)
+    return r;
+
   r = journal_replay(initial_op_seq);
   if (r < 0) {
     char buf[40];
@@ -1142,39 +1182,14 @@ int FileStore::mount()
 
     return r;
   }
+
   journal_start();
+
   sync_thread.create();
   op_tp.start();
   flusher_thread.create();
   op_finisher.start();
   ondisk_finisher.start();
-
-  // select journal mode?
-  if (journal &&
-      !g_conf.filestore_journal_writeahead &&
-      !g_conf.filestore_journal_parallel &&
-      !g_conf.filestore_journal_trailing) {
-    if (!btrfs) {
-      g_conf.filestore_journal_writeahead = true;
-      dout(0) << "mount: enabling WRITEAHEAD journal mode: btrfs not detected" << dendl;
-    } else if (!g_conf.filestore_btrfs_snap) {
-      g_conf.filestore_journal_writeahead = true;
-      dout(0) << "mount: enabling WRITEAHEAD journal mode: 'filestore btrfs snap' mode is not enabled" << dendl;
-    } else if (!btrfs_snap_create_async) {
-      g_conf.filestore_journal_writeahead = true;
-      dout(0) << "mount: enabling WRITEAHEAD journal mode: btrfs SNAP_CREATE_ASYNC ioctl not detected (v2.6.37+)" << dendl;
-    } else {
-      g_conf.filestore_journal_parallel = true;
-      dout(0) << "mount: enabling PARALLEL journal mode: btrfs, SNAP_CREATE_ASYNC detected and 'filestore btrfs snap' mode is enabled" << dendl;
-    }
-  }
-
-  if (journal && g_conf.filestore_journal_writeahead)
-    journal->set_wait_on_full(true);
-
-  r = _sanity_check_fs();
-  if (r < 0)
-    return r;
 
   // all okay.
   return 0;
@@ -1237,7 +1252,7 @@ void FileStore::queue_op(Sequencer *posr, uint64_t op_seq, list<Transaction*>& t
   // mark apply start _now_, because we need to drain the entire apply
   // queue during commit in order to put the store in a consistent
   // state.
-  op_apply_start(op_seq);
+  _op_apply_start(op_seq);
 
   Op *o = new Op;
   o->op = op_seq;
@@ -1262,14 +1277,6 @@ void FileStore::queue_op(Sequencer *posr, uint64_t op_seq, list<Transaction*>& t
     dout(10) << "queue_op new osr " << osr << "/" << osr->parent << dendl;
   }
   osr->q.push_back(o);
-
-  while ((g_conf.filestore_queue_max_ops && op_queue_len >= (unsigned)g_conf.filestore_queue_max_ops) ||
-	 (g_conf.filestore_queue_max_bytes && op_queue_bytes >= (unsigned)g_conf.filestore_queue_max_bytes)) {
-    dout(2) << "queue_op " << o << " throttle: "
-	     << op_queue_len << " > " << g_conf.filestore_queue_max_ops << " ops || "
-	     << op_queue_bytes << " > " << g_conf.filestore_queue_max_bytes << dendl;
-    op_tp.wait(op_throttle_cond);
-  }
 
   op_queue_len++;
   op_queue_bytes += bytes;
@@ -1394,17 +1401,22 @@ int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
   if (journal && journal->is_writeable()) {
     if (g_conf.filestore_journal_parallel) {
 
-      journal->throttle();   // make sure we're note ahead of the jouranl
+      // FIXME: these throttle blocks can build up many threads, and
+      // then let them all (too many!)  through when some space is
+      // available.
 
-      uint64_t op = op_journal_start(0);
+      journal->throttle();   // make sure we're not ahead of the jouranl
+      op_queue_throttle();   // make sure the journal isn't getting ahead of our op queue.
+
+      uint64_t op = op_submit_start();
       dout(10) << "queue_transactions (parallel) " << op << " " << tls << dendl;
       
-      journal_transactions(tls, op, ondisk);
+      _op_journal_transactions(tls, op, ondisk);
       
       // queue inside journal lock, to preserve ordering
-      queue_op(osr, op, tls, onreadable, onreadable_sync);  // this throttles on the op_queue
+      queue_op(osr, op, tls, onreadable, onreadable_sync);
       
-      op_journal_finish();
+      op_submit_finish(op);
       return 0;
     }
     else if (g_conf.filestore_journal_writeahead) {
@@ -1412,24 +1424,23 @@ int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
       journal->throttle();   // make sure we're not ahead of the journal
       op_queue_throttle();   // make sure the journal isn't getting ahead of our op queue.
 
-      uint64_t op = op_journal_start(0);
+      uint64_t op = op_submit_start();
       dout(10) << "queue_transactions (writeahead) " << op << " " << tls << dendl;
-      journal_transactions(tls, op,
-			   new C_JournaledAhead(this, osr, op, tls, onreadable, ondisk, onreadable_sync));
-      op_journal_finish();
+      _op_journal_transactions(tls, op,
+			       new C_JournaledAhead(this, osr, op, tls, onreadable, ondisk, onreadable_sync));
+      op_submit_finish(op);
       return 0;
     }
   }
 
-  uint64_t op_seq = op_apply_start(0);
-  dout(10) << "queue_transactions (trailing journal) " << op_seq << " " << tls << dendl;
-  int r = do_transactions(tls, op_seq);
-  op_apply_finish(op_seq);
+  uint64_t op = op_submit_start();
+  dout(10) << "queue_transactions (trailing journal) " << op << " " << tls << dendl;
+
+  _op_apply_start(op);
+  int r = do_transactions(tls, op);
     
   if (r >= 0) {
-    op_journal_start(op_seq);
-    journal_transactions(tls, op_seq, ondisk);
-    op_journal_finish();
+    _op_journal_transactions(tls, op, ondisk);
   } else {
     delete ondisk;
   }
@@ -1442,6 +1453,9 @@ int FileStore::queue_transactions(Sequencer *osr, list<Transaction*> &tls,
   }
   op_finisher.queue(onreadable, r);
 
+  op_submit_finish(op);
+  op_apply_finish(op);
+
   return r;
 }
 
@@ -1451,8 +1465,13 @@ void FileStore::_journaled_ahead(Sequencer *osr, uint64_t op,
 				 Context *onreadable_sync)
 {
   dout(10) << "_journaled_ahead " << op << " " << tls << dendl;
+
+  op_queue_throttle();
+
   // this should queue in order because the journal does it's completions in order.
+  journal_lock.Lock();
   queue_op(osr, op, tls, onreadable, onreadable_sync);
+  journal_lock.Unlock();
 
   // do ondisk completions async, to prevent any onreadable_sync completions
   // getting blocked behind an ondisk completion.
@@ -1502,37 +1521,21 @@ unsigned FileStore::apply_transaction(Transaction &t,
 unsigned FileStore::apply_transactions(list<Transaction*> &tls,
 				       Context *ondisk)
 {
+  // use op pool
+  Cond my_cond;
+  Mutex my_lock("FileStore::apply_transaction::my_lock");
   int r = 0;
-
-  if (journal && journal->is_writeable() &&
-      (g_conf.filestore_journal_parallel || g_conf.filestore_journal_writeahead)) {
-    // use op pool
-    Cond my_cond;
-    Mutex my_lock("FileStore::apply_transaction::my_lock");
-    bool done;
-    C_SafeCond *onreadable = new C_SafeCond(&my_lock, &my_cond, &done, &r);
-
-    dout(10) << "apply queued" << dendl;
-    queue_transactions(NULL, tls, onreadable, ondisk);
-    
-    my_lock.Lock();
-    while (!done)
-      my_cond.Wait(my_lock);
-    my_lock.Unlock();
-    dout(10) << "apply done r = " << r << dendl;
-  } else {
-    uint64_t op_seq = op_apply_start(0);
-    r = do_transactions(tls, op_seq);
-    op_apply_finish(op_seq);
-
-    if (r >= 0) {
-      op_journal_start(op_seq);
-      journal_transactions(tls, op_seq, ondisk);
-      op_journal_finish();
-    } else {
-      delete ondisk;
-    }
-  }
+  bool done;
+  C_SafeCond *onreadable = new C_SafeCond(&my_lock, &my_cond, &done, &r);
+  
+  dout(10) << "apply queued" << dendl;
+  queue_transactions(NULL, tls, onreadable, ondisk);
+  
+  my_lock.Lock();
+  while (!done)
+    my_cond.Wait(my_lock);
+  my_lock.Unlock();
+  dout(10) << "apply done r = " << r << dendl;
   return r;
 }
 
@@ -1551,14 +1554,14 @@ int FileStore::_transaction_start(uint64_t bytes, uint64_t ops)
   char buf[80];
   int fd = ::open(basedir.c_str(), O_RDONLY);
   if (fd < 0) {
-    derr(0) << "transaction_start got " << strerror_r(errno, buf, sizeof(buf))
+    dout(0) << "transaction_start got " << strerror_r(errno, buf, sizeof(buf))
  	    << " from btrfs open" << dendl;
     assert(0);
   }
 
   int r = ::ioctl(fd, BTRFS_IOC_TRANS_START);
   if (r < 0) {
-    derr(0) << "transaction_start got " << strerror_r(errno, buf, sizeof(buf))
+    dout(0) << "transaction_start got " << strerror_r(errno, buf, sizeof(buf))
  	    << " from btrfs ioctl" << dendl;    
     ::close(fd);
     return -errno;
@@ -2006,7 +2009,7 @@ int FileStore::_write(coll_t cid, const sobject_t& oid,
   int flags = O_WRONLY|O_CREAT;
   int fd = ::open(fn, flags, 0644);
   if (fd < 0) {
-    derr(0) << "write couldn't open " << fn << " flags " << flags << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    dout(0) << "write couldn't open " << fn << " flags " << flags << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     r = -errno;
     goto out;
   }
@@ -2388,6 +2391,10 @@ void FileStore::sync_entry()
     fin.clear();
     if (!sync_waiters.empty()) {
       dout(10) << "sync_entry more waiters, committing again" << dendl;
+      goto again;
+    }
+    if (journal && journal->should_commit_now()) {
+      dout(10) << "sync_entry journal says we should commit again (probably is/was full)" << dendl;
       goto again;
     }
   }

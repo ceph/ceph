@@ -93,7 +93,7 @@ using namespace std;
 #undef dout_prefix
 #define dout_prefix _prefix(mds)
 static ostream& _prefix(MDS *mds) {
-  return *_dout << dbeginl << "mds" << mds->get_nodeid() << ".cache ";
+  return *_dout << "mds" << mds->get_nodeid() << ".cache ";
 }
 
 long g_num_ino = 0;
@@ -1909,10 +1909,9 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	assert(!"negative dirstat size" == g_conf.mds_verify_scatter);
       if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
 	if (pi->dirstat.size() != pf->fragstat.size()) {
-	  stringstream ss;
-	  ss << "unmatched fragstat size on single dirfrag " << parent->dirfrag()
-	     << ", inode has " << pi->dirstat << ", dirfrag has " << pf->fragstat;
-	  mds->logclient.log(LOG_ERROR, ss);
+	  mds->clog.error() << "unmatched fragstat size on single dirfrag "
+	     << parent->dirfrag() << ", inode has " << pi->dirstat
+	     << ", dirfrag has " << pf->fragstat << "\n";
 	  
 	  // trust the dirfrag for now
 	  pi->dirstat = pf->fragstat;
@@ -1957,10 +1956,9 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
       if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
 	if (pi->rstat.rbytes != pf->rstat.rbytes) { 
-	  stringstream ss;
-	  ss << "unmatched rstat rbytes on single dirfrag " << parent->dirfrag()
-	     << ", inode has " << pi->rstat << ", dirfrag has " << pf->rstat;
-	  mds->logclient.log(LOG_ERROR, ss);
+	  mds->clog.error() << "unmatched rstat rbytes on single dirfrag "
+	      << parent->dirfrag() << ", inode has " << pi->rstat
+	      << ", dirfrag has " << pf->rstat << "\n";
 	  
 	  // trust the dirfrag for now
 	  pi->rstat = pf->rstat;
@@ -2155,21 +2153,24 @@ void MDCache::resolve_start()
     if (rootdir)
       adjust_subtree_auth(rootdir, CDIR_AUTH_UNKNOWN);
   }
-
-  for (set<int>::iterator p = recovery_set.begin(); p != recovery_set.end(); ++p) {
-    if (*p == mds->whoami)
-      continue;
-    send_resolve(*p);  // now.
-  }
 }
 
-void MDCache::send_resolve(int who)
+void MDCache::send_resolves()
 {
-  if (migrator->is_importing() || 
-      migrator->is_exporting())
-    send_resolve_later(who);
-  else
-    send_resolve_now(who);
+  // reset resolve state
+  got_resolve.clear();
+  other_ambiguous_imports.clear();
+
+  for (set<int>::iterator p = recovery_set.begin(); p != recovery_set.end(); ++p) {
+    int who = *p;
+    if (who == mds->whoami)
+      continue;
+    if (migrator->is_importing() ||
+	migrator->is_exporting())
+      send_resolve_later(who);
+    else
+      send_resolve_now(who);
+  }
 }
 
 void MDCache::send_resolve_later(int who)
@@ -2512,6 +2513,8 @@ void MDCache::handle_resolve(MMDSResolve *m)
   }    
 
   // update my dir_auth values
+  //   need to do this on recoverying nodes _and_ bystanders (to resolve ambiguous
+  //   migrations between other nodes)
   for (map<dirfrag_t, vector<dirfrag_t> >::iterator pi = m->subtrees.begin();
        pi != m->subtrees.end();
        ++pi) {
@@ -2523,30 +2526,28 @@ void MDCache::handle_resolve(MMDSResolve *m)
 	       << diri->dirfragtree 
 	       << " on " << pi->first << dendl;
     }
-
+    
     CDir *dir = diri->get_dirfrag(pi->first.frag);
     if (!dir) continue;
-
+    
     adjust_bounded_subtree_auth(dir, pi->second, from);
     try_subtree_merge(dir);
   }
 
   show_subtrees();
 
-  if (mds->is_resolve()) {
-    // note ambiguous imports too
-    for (map<dirfrag_t, vector<dirfrag_t> >::iterator pi = m->ambiguous_imports.begin();
-	 pi != m->ambiguous_imports.end();
-	 ++pi) {
-      dout(10) << "noting ambiguous import on " << pi->first << " bounds " << pi->second << dendl;
-      other_ambiguous_imports[from][pi->first].swap( pi->second );
-    }
-    
-    // did i get them all?
-    got_resolve.insert(from);
-  
-    maybe_resolve_finish();
+  // note ambiguous imports too
+  for (map<dirfrag_t, vector<dirfrag_t> >::iterator pi = m->ambiguous_imports.begin();
+       pi != m->ambiguous_imports.end();
+       ++pi) {
+    dout(10) << "noting ambiguous import on " << pi->first << " bounds " << pi->second << dendl;
+    other_ambiguous_imports[from][pi->first].swap( pi->second );
   }
+  
+  // did i get them all?
+  got_resolve.insert(from);
+  
+  maybe_resolve_finish();
 
   m->put();
 }
@@ -3151,9 +3152,10 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
       CDentry::linkage_t *dnl = dn->get_linkage();
       dout(15) << " add_weak_primary_dentry " << *dn << dendl;
       assert(dnl->is_primary());
+      CInode *in = dnl->get_inode();
       assert(dnl->get_inode()->is_dir());
-      rejoin->add_weak_primary_dentry(dir->dirfrag(), dn->name.c_str(), dn->first, dn->last, dnl->get_inode()->ino());
-      dnl->get_inode()->get_nested_dirfrags(nested);
+      rejoin->add_weak_primary_dentry(dir->dirfrag(), dn->name.c_str(), dn->first, dn->last, in->ino());
+      in->get_nested_dirfrags(nested);
     }
   } else {
     // STRONG
@@ -3593,6 +3595,24 @@ CInode *MDCache::rejoin_invent_inode(inodeno_t ino, snapid_t last)
   return in;
 }
 
+CDir *MDCache::rejoin_invent_dirfrag(dirfrag_t df)
+{
+  CInode *in = get_inode(df.ino);
+  if (!in) {
+    in = rejoin_invent_inode(df.ino, CEPH_NOSNAP);
+    if (!in->is_dir()) {
+      assert(in->state_test(CInode::STATE_REJOINUNDEF));
+      in->inode.mode = S_IFDIR;
+    }
+  }
+  assert(in->is_dir());
+  CDir *dir = in->get_or_open_dirfrag(this, df.frag);
+  dir->state_set(CDir::STATE_REJOINUNDEF);
+  rejoin_undef_dirfrags.insert(dir);
+  dout(10) << " invented " << *dir << dendl;
+  return dir;
+}
+
 /* This functions DOES NOT put the passed message before returning */
 void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 {
@@ -3621,19 +3641,10 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
        p != strong->strong_dirfrags.end();
        ++p) {
     CDir *dir = get_dirfrag(p->first);
-    if (!dir) {
-      CInode *in = get_inode(p->first.ino);
-      if (!in)
-	in = rejoin_invent_inode(p->first.ino, CEPH_NOSNAP);
-      if (!in->is_dir()) {
-	assert(in->state_test(CInode::STATE_REJOINUNDEF));
-	in->inode.mode = S_IFDIR;
-      }
-      dir = in->get_or_open_dirfrag(this, p->first.frag);
-      dout(10) << " invented " << *dir << dendl;
-    } else {
+    if (!dir)
+      dir = rejoin_invent_dirfrag(p->first);
+    else
       dout(10) << " have " << *dir << dendl;
-    }
     dir->add_replica(from);
     dir->dir_rep = p->second.dir_rep;
 
@@ -4396,8 +4407,38 @@ void MDCache::open_snap_parents()
     assert(reconnected_snaprealms.empty());
     dout(10) << "open_snap_parents - all open" << dendl;
     do_delayed_cap_imports();
-    start_files_to_recover(rejoin_recover_q, rejoin_check_q);
 
+    open_undef_dirfrags();
+  }
+}
+
+struct C_MDC_OpenUndefDirfragsFinish : public Context {
+  MDCache *cache;
+  C_MDC_OpenUndefDirfragsFinish(MDCache *c) : cache(c) {}
+  void finish(int r) {
+    cache->open_undef_dirfrags();
+  }
+};
+
+void MDCache::open_undef_dirfrags()
+{
+  dout(10) << "open_undef_dirfrags " << rejoin_undef_dirfrags.size() << " dirfrags" << dendl;
+  
+  C_Gather *gather = 0;
+  for (set<CDir*>::iterator p = rejoin_undef_dirfrags.begin();
+       p != rejoin_undef_dirfrags.end();
+       p++) {
+    CDir *dir = *p;
+    if (!gather)
+      gather = new C_Gather(new C_MDC_OpenUndefDirfragsFinish(this));
+    dir->fetch(gather->new_sub());
+  }
+
+  if (rejoin_undef_dirfrags.empty()) {
+    assert(!gather);
+
+    start_files_to_recover(rejoin_recover_q, rejoin_check_q);
+   
     mds->queue_waiters(rejoin_waiters);
 
     mds->rejoin_done();
@@ -4704,9 +4745,8 @@ void MDCache::do_file_recover()
 
     // blech
     if (pi->client_ranges.size() && !pi->get_max_size()) {
-      stringstream ss;
-      ss << "bad client_range " << pi->client_ranges << " on ino " << pi->ino;
-      mds->logclient.log(LOG_WARN, ss);
+      mds->clog.warn() << "bad client_range " << pi->client_ranges
+	  << " on ino " << pi->ino << "\n";
     }
 
     if (pi->client_ranges.size() && pi->get_max_size()) {
@@ -5156,7 +5196,7 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
 void MDCache::trim_non_auth()
 {
   dout(7) << "trim_non_auth" << dendl;
-  stringstream warn_string_dirs;
+  stringstream warn_str_dirs;
   
   // temporarily pin all subtree roots
   for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
@@ -5197,12 +5237,11 @@ void MDCache::trim_non_auth()
       else if (dnl->is_primary()) {
 	CInode *in = dnl->get_inode();
 	list<CDir*> ls;
-        warn_string_dirs << in->get_parent_dn()->get_name() << std::endl;
+        warn_str_dirs << in->get_parent_dn()->get_name() << "\n";
 	in->get_dirfrags(ls);
 	for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
 	  CDir *subdir = *p;
-	  warn_string_dirs << subdir->get_inode()->get_parent_dn()->get_name()
-	                   << std::endl;
+	  warn_str_dirs << subdir->get_inode()->get_parent_dn()->get_name() << "\n";
 	  if (subdir->is_subtree_root()) 
 	    remove_subtree(subdir);
 	  in->close_dirfrag(subdir->dirfrag().frag);
@@ -5244,14 +5283,14 @@ void MDCache::trim_non_auth()
 	     p != ls.end();
 	     ++p) {
 	  dout(0) << " ... " << **p << dendl;
-	  warn_string_dirs << (*p)->get_inode()->get_parent_dn()->get_name()
-	                   << std::endl;
+	  warn_str_dirs << (*p)->get_inode()->get_parent_dn()->get_name() << "\n";
 	  assert((*p)->get_num_ref() == 1);  // SUBTREE
 	  remove_subtree((*p));
 	  in->close_dirfrag((*p)->dirfrag().frag);
 	}
 	dout(0) << " ... " << *in << dendl;
-	warn_string_dirs << in->get_parent_dn()->get_name() << std::endl;
+	if (in->get_parent_dn())
+	  warn_str_dirs << in->get_parent_dn()->get_name() << "\n";
 	assert(in->get_num_ref() == 0);
 	remove_inode(in);
       }
@@ -5260,11 +5299,9 @@ void MDCache::trim_non_auth()
   }
 
   show_subtrees();
-  if (warn_string_dirs.peek() != EOF) {
-    stringstream warn_string;
-    warn_string << "trim_non_auth has deleted paths: " << std::endl;
-    warn_string << warn_string_dirs;
-    mds->logclient.log(LOG_INFO, warn_string);
+  if (warn_str_dirs.peek() != EOF) {
+    mds->clog.info() << "trim_non_auth has deleted paths: " << "\n";
+    mds->clog.info(warn_str_dirs);
   }
 }
 

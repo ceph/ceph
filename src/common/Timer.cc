@@ -22,7 +22,7 @@
 
 #define DOUT_SUBSYS timer
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "timer(" << this << ")."
+#define dout_prefix *_dout << "timer(" << this << ")."
 
 #include <sstream>
 #include <signal.h>
@@ -68,13 +68,12 @@ void SafeTimer::shutdown()
 {
   dout(10) << "shutdown" << dendl;
   if (thread) {
+    assert(lock.is_locked());
     cancel_all_events();
     stopping = true;
     cond.Signal();
     lock.Unlock();
-
     thread->join();
-
     lock.Lock();
     delete thread;
     thread = NULL;

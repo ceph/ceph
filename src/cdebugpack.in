@@ -11,12 +11,7 @@ if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
 else
     BINDIR=@bindir@
     LIBDIR=@libdir@/ceph
-    # i hate autoconf:
-    if [ "@sysconfdir@" = "/usr/etc" ]; then
-	ETCDIR=/etc/ceph
-    else
-	ETCDIR=@sysconfdir@/ceph
-    fi
+    ETCDIR=@sysconfdir@/ceph
 fi
 
 BINDBGDIR="/usr/lib/debug/usr/bin"

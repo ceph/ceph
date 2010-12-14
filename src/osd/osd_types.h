@@ -207,7 +207,7 @@ inline void decode(pg_t &pgid, bufferlist::iterator& p) {
 }
 
 
-inline ostream& operator<<(ostream& out, pg_t pg) 
+inline ostream& operator<<(ostream& out, const pg_t &pg)
 {
   out << pg.pool() << '.';
   out << hex << pg.ps() << dec;
@@ -1141,7 +1141,7 @@ class ObjectExtent {
   ObjectExtent(object_t o, __u32 off=0, __u32 l=0) : oid(o), offset(off), length(l) { }
 };
 
-inline ostream& operator<<(ostream& out, ObjectExtent &ex)
+inline ostream& operator<<(ostream& out, const ObjectExtent &ex)
 {
   return out << "extent(" 
              << ex.oid << " in " << ex.oloc
@@ -1215,7 +1215,7 @@ public:
 };
 WRITE_CLASS_ENCODER(OSDSuperblock)
 
-inline ostream& operator<<(ostream& out, OSDSuperblock& sb)
+inline ostream& operator<<(ostream& out, const OSDSuperblock& sb)
 {
   return out << "sb(" << sb.fsid
              << " osd" << sb.whoami
@@ -1325,6 +1325,7 @@ struct object_info_t {
 
   uint64_t size;
   utime_t mtime;
+  bool lost;
 
   osd_reqid_t wrlock_by;   // [head]
   vector<snapid_t> snaps;  // [clone]
@@ -1338,12 +1339,13 @@ struct object_info_t {
     last_reqid = other.last_reqid;
     truncate_seq = other.truncate_seq;
     truncate_size = other.truncate_size;
+    lost = other.lost;
   }
 
   map<entity_name_t, watch_info_t> watchers;
 
   void encode(bufferlist& bl) const {
-    const __u8 v = 2;
+    const __u8 v = 4;
     ::encode(v, bl);
     ::encode(soid, bl);
     ::encode(oloc, bl);
@@ -1358,6 +1360,7 @@ struct object_info_t {
       ::encode(snaps, bl);
     ::encode(truncate_seq, bl);
     ::encode(truncate_size, bl);
+    ::encode(lost, bl);
     ::encode(watchers, bl);
     ::encode(user_version, bl);
   }
@@ -1378,7 +1381,11 @@ struct object_info_t {
       ::decode(snaps, bl);
     ::decode(truncate_seq, bl);
     ::decode(truncate_size, bl);
-    if (v >= 2) {
+    if (v >= 3)
+      ::decode(lost, bl);
+    else
+      lost = false;
+    if (v >= 4) {
       ::decode(watchers, bl);
       ::decode(user_version, bl);
     }
@@ -1388,9 +1395,10 @@ struct object_info_t {
     decode(p);
   }
 
-  object_info_t(const sobject_t& s, const object_locator_t& o) :
-    soid(s), oloc(o), size(0),
-    truncate_seq(0), truncate_size(0) {}
+  object_info_t(const sobject_t& s, const object_locator_t& o)
+    : soid(s), oloc(o), size(0),
+      lost(false), truncate_seq(0), truncate_size(0) {}
+
   object_info_t(bufferlist& bl) {
     decode(bl);
   }
@@ -1405,6 +1413,8 @@ inline ostream& operator<<(ostream& out, const object_info_t& oi) {
     out << " wrlock_by=" << oi.wrlock_by;
   else
     out << " " << oi.snaps;
+  if (oi.lost)
+    out << " LOST";
   out << ")";
   return out;
 }
@@ -1416,17 +1426,15 @@ inline ostream& operator<<(ostream& out, const object_info_t& oi) {
  */
 struct ScrubMap {
   struct object {
-    sobject_t poid;
     uint64_t size;
     bool negative;
     map<string,bufferptr> attrs;
 
-    object(): poid(),size(0),negative(0),attrs() {}
+    object(): size(0),negative(0),attrs() {}
 
     void encode(bufferlist& bl) const {
       __u8 struct_v = 1;
       ::encode(struct_v, bl);
-      ::encode(poid, bl);
       ::encode(size, bl);
       ::encode(negative, bl);
       ::encode(attrs, bl);
@@ -1434,7 +1442,6 @@ struct ScrubMap {
     void decode(bufferlist::iterator& bl) {
       __u8 struct_v;
       ::decode(struct_v, bl);
-      ::decode(poid, bl);
       ::decode(size, bl);
       ::decode(negative, bl);
       ::decode(attrs, bl);

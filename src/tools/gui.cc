@@ -580,7 +580,8 @@ void GuiMonitor::update_mon_cluster_view()
   }
 }
 
-std::string GuiMonitor::gen_osd_icon_caption(unsigned int begin, unsigned int end)
+std::string GuiMonitor::
+gen_osd_icon_caption(unsigned int begin, unsigned int end) const
 {
   boost::format rangeFormatter("OSDs %lu-%lu");
   boost::format singleFormatter("OSD %lu");
@@ -667,7 +668,7 @@ void GuiMonitor::view_osd_nodes(unsigned int begin, unsigned int end, bool
 }
 
 std::string GuiMonitor::
-gen_mds_icon_caption(unsigned int begin, unsigned int end)
+gen_mds_icon_caption(unsigned int begin, unsigned int end) const
 {
   if (end == begin) {
     ostringstream oss;
@@ -741,14 +742,15 @@ void GuiMonitor::view_mds_nodes(unsigned int begin, unsigned int end, bool
   }
 
   if (viewAll) {
-      guiMonitorMDSClusterBackButton->set_sensitive(false);
-      guiMonitorMDSClusterViewAllButton->set_sensitive(false);
+    guiMonitorMDSClusterBackButton->set_sensitive(false);
+    guiMonitorMDSClusterViewAllButton->set_sensitive(false);
   }
 
   delete[] ranges;
 }
 
-std::string GuiMonitor::gen_pg_icon_caption(unsigned int begin, unsigned int end)
+std::string GuiMonitor::
+gen_pg_icon_caption(unsigned int begin, unsigned int end) const
 {
   boost::format rangeFormatter("PGs %lu-%lu");
   boost::format singleFormatter("PG %lu");
@@ -943,35 +945,28 @@ void GuiMonitor::open_view_mode()
       viewNodeDialog->hide();
 }
 
-std::vector<NodeInfo *> GuiMonitor::gen_node_info_from_icons
-      (Glib::RefPtr<Gtk::ListStore> iconStore, enum NodeType type)
+void GuiMonitor::gen_node_info_from_icons(Glib::RefPtr<Gtk::ListStore> iconStore,
+					  enum NodeType type, std::vector<NodeInfo >& ret)
 {
-  vector<NodeInfo *> clusterInfo;
   Gtk::TreeModel::Children icons = iconStore->children();
   Gtk::TreeModel::iterator iter;
-  Gtk::TreeModel::Row currentRow;
-  NodeInfo *currentNodeInfo;
-  int status;
+  int status = CEPH_OSD_UP;
 
   for (iter = icons.begin(); iter != icons.end(); iter++) {
-      currentRow = *iter;
+    Gtk::TreeModel::Row cur_row(*iter);
 
-      currentNodeInfo = new NodeInfo(currentRow[icon_columns.begin_range],
-    currentRow[icon_columns.end_range], type, status);
-
-      clusterInfo.push_back(currentNodeInfo);
+    NodeInfo cur(cur_row[icon_columns.begin_range],
+		cur_row[icon_columns.end_range], type, status);
+    ret.push_back(cur);
   }
-
-  return clusterInfo;
 }
 
-void GuiMonitor::gen_icons_from_node_info(vector<NodeInfo *>& nodeInfo)
+void GuiMonitor::gen_icons_from_node_info(const vector<NodeInfo>& node_info) const
 {
   Glib::RefPtr<Gtk::ListStore> icons;
   Gtk::TreeModel::Row row;
-  NodeInfo *node;
 
-  switch (nodeInfo[0]->type) {
+  switch (node_info[0].type) {
   case OSD_NODE:
       icons = guiMonitorOSDClusterIcons;
       break;
@@ -987,51 +982,47 @@ void GuiMonitor::gen_icons_from_node_info(vector<NodeInfo *>& nodeInfo)
 
   icons->clear();
 
-  for (unsigned int i = 0; i < nodeInfo.size(); i++) {
-      node = nodeInfo[i];
-      row = *(icons->append());
+  vector<NodeInfo>::const_iterator i = node_info.begin();
+  vector<NodeInfo>::const_iterator end = node_info.end();
+  for (; i != end; ++i) {
+    const NodeInfo &node(*i);
+    row = *(icons->append());
 
-      row[icon_columns.begin_range] = node->begin_range;
-      row[icon_columns.end_range] = node->end_range;
+    row[icon_columns.begin_range] = node.begin_range;
+    row[icon_columns.end_range] = node.end_range;
 
-      switch (node->type) {
-      case OSD_NODE:
-         row[icon_columns.caption] =
-          gen_osd_icon_caption(node->begin_range, node->end_range);
-
-         switch (node->status) {
-         case CEPH_OSD_OUT:
-            row[icon_columns.icon] = outOSDIcon;
-            break;
-         case CEPH_OSD_UP:
-            row[icon_columns.icon] = upOSDIcon;
-            break;
-         default: // ~CEPH_OSD_UP
-            row[icon_columns.icon] = downOSDIcon;
-            break;
-         }
-
-         break;
-      case MDS_NODE:
-	row[icon_columns.caption] =
-	    gen_mds_icon_caption(node->begin_range, node->end_range);
-        row[icon_columns.icon] = MDSIcon;
-
-        break;
-      case PG_NODE:
-        row[icon_columns.caption] =
-	    gen_pg_icon_caption(node->begin_range, node->end_range);
-        row[icon_columns.icon] = PGIcon;
-
-        break;
-      default:
-        break;
+    switch (node.type) {
+    case OSD_NODE:
+      row[icon_columns.caption] =
+	gen_osd_icon_caption(node.begin_range, node.end_range);
+      switch (node.status) {
+      case CEPH_OSD_OUT:
+	row[icon_columns.icon] = outOSDIcon;
+	break;
+      case CEPH_OSD_UP:
+	row[icon_columns.icon] = upOSDIcon;
+	break;
+      default: // ~CEPH_OSD_UP
+	row[icon_columns.icon] = downOSDIcon;
+	break;
       }
+      break;
 
-      delete node;
+    case MDS_NODE:
+      row[icon_columns.caption] = gen_mds_icon_caption(node.begin_range, node.end_range);
+      row[icon_columns.icon] = MDSIcon;
+      break;
+
+    case PG_NODE:
+      row[icon_columns.caption] =
+	  gen_pg_icon_caption(node.begin_range, node.end_range);
+      row[icon_columns.icon] = PGIcon;
+      break;
+
+    default:
+      break;
+    }
   }
-
-  nodeInfo.clear();
 }
 
 // Constructs a StatsWindowInfo object and opens a window containing the stats
@@ -1076,12 +1067,12 @@ void GuiMonitor::osdc_cluster_zoom_in(const Gtk::TreeModel::Path& path)
     open_stats(OSD_NODE, false, begin_range);
     // Zoom in, since this is a range.  Place the old icons on the stack
     // and then call view_osd_icons() on the narrower range.
-    vector<NodeInfo *> oldOSDInfo =
-    gen_node_info_from_icons(guiMonitorOSDClusterIcons, OSD_NODE);
+    vector<NodeInfo> old_osd_info;
+    gen_node_info_from_icons(guiMonitorOSDClusterIcons, OSD_NODE, old_osd_info);
 
     //Glib::RefPtr<Gtk::ListStore> oldOSDIcons(guiMonitorOSDClusterIcons);
 
-    old_osd_cluster_zoom_states.push(oldOSDInfo);
+    old_osd_cluster_zoom_states.push(old_osd_info);
     osd_cluster_zoom++;
 
     guiMonitorOSDClusterBackButton->set_sensitive(true);
@@ -1097,16 +1088,15 @@ void GuiMonitor::osdc_cluster_zoom_in(const Gtk::TreeModel::Path& path)
 void GuiMonitor::osdc_cluster_back()
 {
   if (osd_cluster_zoom) {
-      vector<NodeInfo *> oldOSDInfo = old_osd_cluster_zoom_states.top();
-      old_osd_cluster_zoom_states.pop();
+    const vector<NodeInfo> &old_osd_info = old_osd_cluster_zoom_states.top();
+    gen_icons_from_node_info(old_osd_info);
+    old_osd_cluster_zoom_states.pop();
+    osd_cluster_zoom--;
 
-      gen_icons_from_node_info(oldOSDInfo);
-      osd_cluster_zoom--;
-
-      if (!osd_cluster_zoom) {
-         guiMonitorOSDClusterBackButton->set_sensitive(false);
-         guiMonitorOSDClusterViewAllButton->set_sensitive(false);
-      }
+    if (!osd_cluster_zoom) {
+      guiMonitorOSDClusterBackButton->set_sensitive(false);
+      guiMonitorOSDClusterViewAllButton->set_sensitive(false);
+    }
   }
 }
 
@@ -1140,8 +1130,8 @@ void GuiMonitor::mds_cluster_zoom_in(const Gtk::TreeModel::Path& path)
   if (end_range - begin_range) {
     // Zoom in, since this is a range.  Place the old icons on the stack
     // and then call viewMDSIcons() on the narrower range.
-    vector<NodeInfo *> old_mds_info =
-	  gen_node_info_from_icons(guiMonitorMDSClusterIcons, MDS_NODE);
+    vector<NodeInfo> old_mds_info;
+    gen_node_info_from_icons(guiMonitorMDSClusterIcons, MDS_NODE, old_mds_info);
 
     old_mds_cluster_zoom_states.push(old_mds_info);
     mds_cluster_zoom++;
@@ -1174,10 +1164,9 @@ void GuiMonitor::mds_cluster_back()
 {
   if (!mds_cluster_zoom)
     return;
-  vector<NodeInfo *> old_mds_info = old_mds_cluster_zoom_states.top();
-  old_mds_cluster_zoom_states.pop();
-
+  const vector<NodeInfo> &old_mds_info = old_mds_cluster_zoom_states.top();
   gen_icons_from_node_info(old_mds_info);
+  old_mds_cluster_zoom_states.pop();
   mds_cluster_zoom--;
 
   if (!mds_cluster_zoom) {
@@ -1215,10 +1204,10 @@ void GuiMonitor::pg_cluster_zoom_in(const Gtk::TreeModel::Path& path)
   if (end_range - begin_range) {
     // Zoom in, since this is a range.  Place the old icons on the stack
     // and then call viewPGIcons() on the narrower range.
-    vector<NodeInfo *> oldPGInfo =
-    gen_node_info_from_icons(guiMonitorPGClusterIcons, PG_NODE);
+    vector<NodeInfo> old_pg_info;
+    gen_node_info_from_icons(guiMonitorPGClusterIcons, PG_NODE, old_pg_info);
 
-    old_pg_cluster_zoom_states.push(oldPGInfo);
+    old_pg_cluster_zoom_states.push(old_pg_info);
     pg_cluster_zoom++;
 
     guiMonitorPGClusterBackButton->set_sensitive(true);
@@ -1245,10 +1234,9 @@ void GuiMonitor::pg_cluster_back()
 {
   if (!pg_cluster_zoom)
     return;
-  vector<NodeInfo *> oldPGInfo = old_pg_cluster_zoom_states.top();
+  const vector<NodeInfo> &old_pg_info = old_pg_cluster_zoom_states.top();
+  gen_icons_from_node_info(old_pg_info);
   old_pg_cluster_zoom_states.pop();
-
-  gen_icons_from_node_info(oldPGInfo);
   pg_cluster_zoom--;
 
   if (!pg_cluster_zoom) {

@@ -23,7 +23,7 @@ using namespace std;
 #include "msg/Messenger.h"
 #include "PaxosService.h"
 
-#include "include/LogEntry.h"
+#include "common/LogEntry.h"
 
 class MMonCommand;
 class MLog;

@@ -46,7 +46,7 @@ using namespace std;
 #define RADOS_LIST_MAX_ENTRIES 1024
 #define DOUT_SUBSYS rados
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "librados: "
+#define dout_prefix *_dout << "librados: "
 
 
 class RadosClient : public Dispatcher
@@ -84,7 +84,7 @@ public:
   }
 
   ~RadosClient();
-  bool init();
+  int init();
   void shutdown();
 
   struct PoolCtx {
@@ -433,23 +433,25 @@ public:
   }
 };
 
-bool RadosClient::init()
+int RadosClient::init()
 {
   // get monmap
-  if (monclient.build_initial_monmap() < 0)
-    return false;
+  int ret = monclient.build_initial_monmap();
+  if (ret < 0)
+    return ret;
+
+  assert_warn(messenger);
+  if (!messenger)
+    return -ENOMEM;
 
   dout(1) << "starting msgr at " << messenger->get_ms_addr() << dendl;
 
   messenger->register_entity(entity_name_t::CLIENT(-1));
-  assert_warn(messenger);
-  if (!messenger)
-    return false;
   dout(1) << "starting objecter" << dendl;
 
   objecter = new Objecter(messenger, &monclient, &osdmap, lock, timer);
   if (!objecter)
-    return false;
+    return -ENOMEM;
   objecter->set_balanced_budget();
 
   monclient.set_messenger(messenger);
@@ -461,13 +463,13 @@ bool RadosClient::init()
 
   dout(1) << "setting wanted keys" << dendl;
   monclient.set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
-  dout(1) << "iit" << dendl;
+  dout(1) << "calling monclient init" << dendl;
   monclient.init();
 
   int err = monclient.authenticate(g_conf.client_mount_timeout);
   if (err) {
     dout(0) << *g_conf.entity_name << " authentication error " << strerror(-err) << dendl;
-    return false;
+    return err;
   }
   messenger->set_myname(entity_name_t::CLIENT(monclient.get_global_id()));
 
@@ -487,7 +489,7 @@ bool RadosClient::init()
 
   dout(1) << "init done" << dendl;
 
-  return true;
+  return 0;
 }
 
 void RadosClient::shutdown()
@@ -1747,7 +1749,7 @@ int Rados::initialize(int argc, const char *argv[])
   if (g_conf.clock_tare) g_clock.tare();
 
   client = new RadosClient();
-  return client->init() ? 0 : -1;
+  return client->init();
 }
 
 void Rados::shutdown()
@@ -2246,10 +2248,16 @@ extern "C" int rados_initialize(int argc, const char **argv)
   if (!rados_initialized) {
     __rados_init(argc, argv);
     radosp = new RadosClient;
-    radosp->init();
+    if (!radosp) {
+      ret = -ENOMEM;
+      goto done;
+    }
+    ret = radosp->init();
+    if (ret < 0)
+      goto done;
   }
   ++rados_initialized;
-
+done:
   rados_init_mutex.Unlock();
   return ret;
 }
@@ -2259,6 +2267,7 @@ extern "C" void rados_deinitialize()
   rados_init_mutex.Lock();
   if (!rados_initialized) {
     dout(0) << "rados_deinitialize() called without rados_initialize()" << dendl;
+    rados_init_mutex.Unlock();
     return;
   }
   --rados_initialized;

@@ -24,7 +24,7 @@
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".anchorclient "
+#define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".anchorclient "
 
 
 

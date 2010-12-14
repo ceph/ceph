@@ -26,7 +26,7 @@
 
 #define DOUT_SUBSYS journal
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "journal "
+#define dout_prefix *_dout << "journal "
 
 const static int64_t ONE_MEG(1 << 20);
 
@@ -223,7 +223,7 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
   }
 
   if (create && (oldsize < conf_journal_sz)) {
-    uint64_t newsize = g_conf.osd_journal_size << 20;
+    uint64_t newsize = (uint64_t)g_conf.osd_journal_size << 20;
     dout(10) << "_open extending to " << newsize << " bytes" << dendl;
     ret = ::ftruncate(fd, newsize);
     if (ret < 0) {
@@ -321,12 +321,12 @@ int FileJournal::open(uint64_t next_seq)
     err = -EINVAL;
   }
   if (header.alignment != block_size && directio) {
-    derr(0) << "open journal alignment " << header.alignment << " does not match block size " 
+    dout(0) << "open journal alignment " << header.alignment << " does not match block size " 
 	    << block_size << " (required for direct_io journal mode)" << dendl;
     err = -EINVAL;
   }
   if ((header.alignment % PAGE_SIZE) && directio) {
-    derr(0) << "open journal alignment " << header.alignment << " is not multiple of page size " << PAGE_SIZE
+    dout(0) << "open journal alignment " << header.alignment << " is not multiple of page size " << PAGE_SIZE
 	    << " (required for direct_io journal mode)" << dendl;
     err = -EINVAL;
   }
@@ -347,8 +347,12 @@ int FileJournal::open(uint64_t next_seq)
       break;
     }
     if (seq > next_seq) {
-      dout(10) << "open entry " << seq << " len " << bl.length() << " > next_seq " << next_seq << dendl;
+      dout(10) << "open entry " << seq << " len " << bl.length() << " > next_seq " << next_seq
+	       << ", ignoring journal contents"
+	       << dendl;
       read_pos = -1;
+      last_committed_seq = 0;
+      seq = 0;
       return 0;
     }
     if (seq == next_seq) {
@@ -441,7 +445,7 @@ bufferptr FileJournal::prepare_header()
 int FileJournal::check_for_full(uint64_t seq, off64_t pos, off64_t size)
 {
   // already full?
-  if (full_commit_seq || full_restart_seq)
+  if (full_state != FULL_NOTFULL)
     return -ENOSPC;
 
   // take 1 byte off so that we only get pos == header.start on EMPTY, never on FULL.
@@ -478,22 +482,6 @@ int FileJournal::check_for_full(uint64_t seq, off64_t pos, off64_t size)
   if (size > max)
     dout(0) << "JOURNAL TOO SMALL: item " << size << " > journal " << max << " (usable)" << dendl;
 
-  if (wait_on_full)
-    return -ENOSPC;
-
-  // throw out what we have so far
-  full_commit_seq = seq;
-  full_restart_seq = seq+1;
-  while (!writeq.empty()) {
-    if (writeq.front().fin) {
-      writing_seq.push_back(writeq.front().seq);
-      writing_fin.push_back(writeq.front().fin);
-    }
-    throttle_ops.put(1);
-    throttle_bytes.put(writeq.front().bl.length());
-    writeq.pop_front();
-  }  
-  print_header();
   return -ENOSPC;
 }
 
@@ -505,7 +493,7 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
   int eleft = g_conf.journal_max_write_entries;
   unsigned bmax = g_conf.journal_max_write_bytes;
 
-  if (full_commit_seq || full_restart_seq)
+  if (full_state != FULL_NOTFULL)
     return -ENOSPC;
   
   while (!writeq.empty()) {
@@ -513,7 +501,27 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
     if (r == -ENOSPC) {
       if (orig_ops)
 	break;         // commit what we have
-      dout(20) << "prepare_multi_write full on first entry, need to wait" << dendl;
+
+      if (wait_on_full) {
+	dout(20) << "prepare_multi_write full on first entry, need to wait" << dendl;
+      } else {
+	dout(20) << "prepare_multi_write full on first entry, restarting journal" << dendl;
+
+	// throw out what we have so far
+	full_state = FULL_FULL;
+	while (!writeq.empty()) {
+	  if (writeq.front().fin) {
+	    writing_seq.push_back(writeq.front().seq);
+	    writing_fin.push_back(writeq.front().fin);
+	  }
+	  dout(30) << "XXX throttle put " << writeq.front().bl.length() << dendl;
+	  throttle_ops.put(1);
+	  throttle_bytes.put(writeq.front().bl.length());
+	  writeq.pop_front();
+	}  
+	print_header();
+      }
+
       return -ENOSPC;  // hrm, full on first op
     }
 
@@ -588,7 +596,15 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
    
   if (writeq.front().fin) {
     writing_seq.push_back(seq);
-    writing_fin.push_back(writeq.front().fin);
+    if (!waiting_for_notfull.empty()) {
+      // make sure previously unjournaled stuff waiting for UNFULL triggers
+      // _before_ newly journaled stuff does
+      dout(10) << " will defer seq " << seq << " callback until after UNFULL" << dendl;
+      C_Gather *g = new C_Gather(writeq.front().fin);
+      writing_fin.push_back(g->new_sub());
+      waiting_for_notfull.push_back(g->new_sub());
+    } else
+      writing_fin.push_back(writeq.front().fin);
   }
 
   // pop from writeq
@@ -619,7 +635,7 @@ void FileJournal::write_bl(off64_t& pos, bufferlist& bl)
   int err = bl.write_fd(fd);
   if (err) {
     char buf[80];
-    derr(0) << "write_bl failed with " << err << " " << strerror_r(-err, buf, sizeof(buf)) 
+    dout(0) << "write_bl failed with " << err << " " << strerror_r(-err, buf, sizeof(buf)) 
 	    << dendl;
   }
   pos += bl.length();
@@ -717,7 +733,7 @@ void FileJournal::do_write(bufferlist& bl)
 
   // kick finisher?  
   //  only if we haven't filled up recently!
-  if (full_commit_seq || full_restart_seq) {
+  if (full_state != FULL_NOTFULL) {
     dout(10) << "do_write NOT queueing finisher seq " << writing_seq.front()
 	     << ", full_commit_seq|full_restart_seq" << dendl;
   } else {
@@ -771,6 +787,7 @@ void FileJournal::write_thread_entry()
     assert(r == 0);
     do_write(bl);
     
+    dout(30) << "XXX throttle put " << orig_bytes << dendl;
     uint64_t new_ops = throttle_ops.put(orig_ops);
     uint64_t new_bytes = throttle_bytes.put(orig_bytes);
     dout(10) << "write_thread throttle finished " << orig_ops << " ops and " 
@@ -793,22 +810,17 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment, Conte
 	   << " len " << e.length()
 	   << " (" << oncommit << ")" << dendl;
 
-  throttle_ops.take(1);
-  throttle_bytes.take(e.length());
-  
-  if (!full_commit_seq && full_restart_seq && 
-      seq >= full_restart_seq) {
-    dout(1) << " seq " << seq << " >= full_restart_seq " << full_restart_seq 
-	     << ", restarting journal" << dendl;
-    full_restart_seq = 0;
-  }
-  if (!full_commit_seq && !full_restart_seq) {
+  if (full_state == FULL_NOTFULL) {
+    // queue and kick writer thread
+    dout(30) << "XXX throttle take " << e.length() << dendl;
+    throttle_ops.take(1);
+    throttle_bytes.take(e.length());
+
     writeq.push_back(write_item(seq, e, alignment, oncommit));
-    write_cond.Signal(); // kick writer thread
+    write_cond.Signal();
   } else {
     // not journaling this.  restart writing no sooner than seq + 1.
-    full_restart_seq = seq+1;
-    dout(10) << " journal is/was full, will restart no sooner than seq " << full_restart_seq << dendl;
+    dout(10) << " journal is/was full" << dendl;
     if (oncommit) {
       writing_seq.push_back(seq);
       writing_fin.push_back(oncommit);
@@ -816,6 +828,26 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment, Conte
   }
 }
 
+void FileJournal::commit_start()
+{
+  dout(10) << "commit_start" << dendl;
+
+  // was full?
+  switch (full_state) {
+  case FULL_NOTFULL:
+    break; // all good
+
+  case FULL_FULL:
+    dout(1) << " FULL_FULL -> FULL_WAIT.  last commit epoch committed, waiting for a new one to start." << dendl;
+    full_state = FULL_WAIT;
+    break;
+
+  case FULL_WAIT:
+    dout(1) << " FULL_WAIT -> FULL_NOTFULL.  journal now active." << dendl;
+    full_state = FULL_NOTFULL;
+    break;
+  }
+}
 
 void FileJournal::committed_thru(uint64_t seq)
 {
@@ -834,13 +866,6 @@ void FileJournal::committed_thru(uint64_t seq)
   dout(10) << "committed_thru " << seq << " (last_committed_seq " << last_committed_seq << ")" << dendl;
   last_committed_seq = seq;
 
-  // was full?
-  if (full_commit_seq && seq >= full_commit_seq) {
-    dout(1) << " seq " << seq << " >= full_commit_seq " << full_commit_seq 
-	     << ", prior journal contents are now fully committed.  resetting journal." << dendl;
-    full_commit_seq = 0;
-  }
-
   // adjust start pointer
   while (!journalq.empty() && journalq.front().first <= seq) {
     journalq.pop_front();
@@ -853,12 +878,29 @@ void FileJournal::committed_thru(uint64_t seq)
   must_write_header = true;
   print_header();
   
+  // recently were full, but aren't now.
+  if (!waiting_for_notfull.empty()) {
+    dout(10) << " finishing waiting_for_notfull items " << waiting_for_notfull << dendl;
+    finisher->queue(waiting_for_notfull);
+  }
+
   // committed but writing
   while (!writing_seq.empty() && writing_seq.front() <= seq) {
     dout(15) << " finishing committed but writing|waiting seq " << writing_seq.front() << dendl;
     finisher->queue(writing_fin.front());
     writing_seq.pop_front();
     writing_fin.pop_front();
+  }
+
+  if (full_state == FULL_WAIT) {
+    // will complete on _next_ commit
+    while (!writing_seq.empty()) {
+      dout(15) << " queuing seq " << writing_seq.front() << " " << writing_fin.front()
+	       << " in waiting_for_notfull" << dendl;
+      waiting_for_notfull.push_back(writing_fin.front());
+      writing_seq.pop_front();
+      writing_fin.pop_front();
+    }
   }
   
   // committed but unjournaled items
@@ -869,6 +911,7 @@ void FileJournal::committed_thru(uint64_t seq)
 	     << dendl;
     if (writeq.front().fin)
       finisher->queue(writeq.front().fin);
+    dout(30) << "XXX throttle put " << writeq.front().bl.length() << dendl;
     throttle_ops.put(1);
     throttle_bytes.put(writeq.front().bl.length());
     writeq.pop_front();  

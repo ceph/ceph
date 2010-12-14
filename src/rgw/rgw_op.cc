@@ -4,7 +4,7 @@
 
 #include <sstream>
 
-#include "common/base64.h"
+#include "common/armor.h"
 
 #include "rgw_access.h"
 #include "rgw_op.h"
@@ -13,6 +13,7 @@
 #include "rgw_user.h"
 
 using namespace std;
+using namespace CryptoPP::Weak;
 
 static int parse_range(const char *range, off_t& ofs, off_t& end)
 {
@@ -325,32 +326,31 @@ void RGWPutObj::execute()
        goto done;
     }
 
-    char supplied_md5_bin[MD5_DIGEST_LENGTH + 1];
-    char supplied_md5[MD5_DIGEST_LENGTH * 2 + 1];
-    char calc_md5[MD5_DIGEST_LENGTH * 2 + 1];
-    MD5_CTX c;
-    unsigned char m[MD5_DIGEST_LENGTH];
+    char supplied_md5_bin[MD5::DIGESTSIZE + 1];
+    char supplied_md5[MD5::DIGESTSIZE * 2 + 1];
+    char calc_md5[MD5::DIGESTSIZE * 2 + 1];
+    unsigned char m[MD5::DIGESTSIZE];
 
     if (supplied_md5_b64) {
       RGW_LOG(15) << "supplied_md5_b64=" << supplied_md5_b64 << endl;
-      int ret = decode_base64(supplied_md5_b64, strlen(supplied_md5_b64),
-                                 supplied_md5_bin, sizeof(supplied_md5_bin));
-      RGW_LOG(15) << "decode_base64 ret=" << ret << endl;
-      if (ret != MD5_DIGEST_LENGTH) {
+      int ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[MD5::DIGESTSIZE + 1], 
+			     supplied_md5_b64, supplied_md5_b64 + strlen(supplied_md5_b64));
+      RGW_LOG(15) << "ceph_armor ret=" << ret << endl;
+      if (ret != MD5::DIGESTSIZE) {
         err.code = "InvalidDigest";
         ret = -EINVAL;
         goto done;
       }
 
-      buf_to_hex((const unsigned char *)supplied_md5_bin, MD5_DIGEST_LENGTH, supplied_md5);
+      buf_to_hex((const unsigned char *)supplied_md5_bin, MD5::DIGESTSIZE, supplied_md5);
       RGW_LOG(15) << "supplied_md5=" << supplied_md5 << endl;
     }
 
-    MD5_Init(&c);
+    MD5 hash;
     do {
       get_data();
       if (len > 0) {
-        MD5_Update(&c, data, (unsigned long)len);
+        hash.Update((unsigned char *)data, len);
         ret = rgwstore->put_obj_data(s->user.user_id, s->bucket_str, s->object_str, data, ofs, len, NULL);
         free(data);
         if (ret < 0)
@@ -359,9 +359,9 @@ void RGWPutObj::execute()
       }
     } while ( len > 0);
 
-    MD5_Final(m, &c);
+    hash.Final(m);
 
-    buf_to_hex(m, MD5_DIGEST_LENGTH, calc_md5);
+    buf_to_hex(m, MD5::DIGESTSIZE, calc_md5);
 
     if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
        err.code = "BadDigest";

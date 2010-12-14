@@ -212,23 +212,41 @@ void parse_config_option_string(string& s)
   parse_config_options(nargs);
 }
 
+typedef void (*signal_handler_t)(int);
+
+static void install_sighandler(int signum, signal_handler_t handler, int flags)
+{
+  int ret;
+  struct sigaction oldact;
+  struct sigaction act;
+  memset(&act, 0, sizeof(act));
+
+  act.sa_handler = handler;
+  sigemptyset(&act.sa_mask);
+  act.sa_flags = flags;
+
+  ret = sigaction(signum, &act, &oldact);
+  if (ret != 0) {
+    fprintf(stderr, "failed to install signal handler for signal %d\n", signum);
+    exit(1);
+  }
+}
+
 void sighup_handler(int signum)
 {
   _dout_need_open = true;
   logger_reopen_all();
 }
 
-static void (*old_sigsegv_handler)(int) = NULL;
-static void (*old_sigabrt_handler)(int) = NULL;
-
 void sigsegv_handler(int signum)
 {
   *_dout << "*** Caught signal (SEGV) ***" << std::endl;
   BackTrace bt(0);
   bt.print(*_dout);
+  _dout->flush();
 
-  if (old_sigsegv_handler)
-    old_sigsegv_handler(signum);
+  // Use default handler to dump core
+  kill(getpid(), signum);
 }
 
 void sigabrt_handler(int signum)
@@ -236,10 +254,10 @@ void sigabrt_handler(int signum)
   *_dout << "*** Caught signal (ABRT) ***" << std::endl;
   BackTrace bt(0);
   bt.print(*_dout);
+  _dout->flush();
 
-  //*_dout << "i am " << (void*)sigabrt_handler << ", chaining to " << (void*)old_sigabrt_handler << std::endl;
-  if (old_sigabrt_handler)
-    old_sigabrt_handler(signum);
+  // Use default handler to dump core
+  kill(getpid(), signum);
 }
 
 #define _STR(x) #x
@@ -308,7 +326,11 @@ static struct config_option config_optionsp[] = {
 	OPTION(log_sym_dir, 0, OPT_STR, 0),
 	OPTION(log_sym_history, 0, OPT_INT, 10),
 	OPTION(log_to_stdout, 0, OPT_BOOL, true),
+	OPTION(log_to_syslog, 0, OPT_BOOL, false),
 	OPTION(log_per_instance, 0, OPT_BOOL, false),
+	OPTION(log_to_file, 0, OPT_BOOL, true),
+	OPTION(clog_to_monitors, 0, OPT_BOOL, true),
+	OPTION(clog_to_syslog, 0, OPT_BOOL, false),
 	OPTION(pid_file, 0, OPT_STR, "/var/run/ceph/$type.$id.pid"),
 	OPTION(conf, 'c', OPT_STR, "/etc/ceph/ceph.conf, ~/.ceph/config, ceph.conf"),
 	OPTION(chdir, 0, OPT_STR, "/"),
@@ -453,7 +475,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_bal_sample_interval, 0, OPT_FLOAT, 3.0),  // every 5 seconds
 	OPTION(mds_bal_replicate_threshold, 0, OPT_FLOAT, 8000),
 	OPTION(mds_bal_unreplicate_threshold, 0, OPT_FLOAT, 0),
-	OPTION(mds_bal_frag, 0, OPT_BOOL, true),
+	OPTION(mds_bal_frag, 0, OPT_BOOL, false),
 	OPTION(mds_bal_split_size, 0, OPT_INT, 10000),
 	OPTION(mds_bal_split_rd, 0, OPT_FLOAT, 25000),
 	OPTION(mds_bal_split_wr, 0, OPT_FLOAT, 10000),
@@ -1281,17 +1303,9 @@ void parse_config_options(std::vector<const char*>& args)
         nargs.push_back(args[i]);
   }
 
-  signal(SIGHUP, sighup_handler);
-  if (!old_sigsegv_handler) {
-    old_sigsegv_handler = signal(SIGSEGV, sigsegv_handler);
-    if (old_sigsegv_handler == sigsegv_handler)
-      old_sigsegv_handler = NULL;
-  }
-  if (!old_sigabrt_handler) {
-    old_sigabrt_handler = signal(SIGABRT, sigabrt_handler);
-    if (old_sigabrt_handler == sigabrt_handler)
-      old_sigabrt_handler = NULL;
-  }
+  install_sighandler(SIGHUP, sighup_handler, SA_RESTART);
+  install_sighandler(SIGSEGV, sigsegv_handler, SA_RESETHAND);
+  install_sighandler(SIGSEGV, sigabrt_handler, SA_RESETHAND);
 
   args = nargs;
 }

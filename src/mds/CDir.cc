@@ -36,7 +36,7 @@
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "mds" << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") "
+#define dout_prefix *_dout << "mds" << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") "
 
 
 
@@ -1206,6 +1206,7 @@ void CDir::fetch(Context *c, const string& want_dn, bool ignore_authpinnability)
 
 void CDir::_fetched(bufferlist &bl, const string& want_dn)
 {
+  LogClient &clog = cache->mds->clog;
   dout(10) << "_fetched " << bl.length() 
 	   << " bytes for " << *this
 	   << " want_dn=" << want_dn
@@ -1217,9 +1218,8 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
   // empty?!?
   if (bl.length() == 0) {
     dout(0) << "_fetched missing object for " << *this << dendl;
-    stringstream ss;
-    ss << "dir " << ino() << "." << dirfrag() << " object missing on disk; some files may be lost";
-    cache->mds->logclient.log(LOG_ERROR, ss);
+    clog.error() << "dir " << ino() << "." << dirfrag()
+	  << " object missing on disk; some files may be lost\n";
 
     log_mark_dirty();
 
@@ -1258,6 +1258,12 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
     assert(!state_test(STATE_COMMITTING));
     fnode = got_fnode;
     projected_version = committing_version = committed_version = got_fnode.version;
+
+    if (state_test(STATE_REJOINUNDEF)) {
+      assert(cache->mds->is_rejoin());
+      state_clear(STATE_REJOINUNDEF);
+      cache->opened_undef_dirfrag(this);
+    }
   }
 
   // purge stale snaps?
@@ -1384,14 +1390,14 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
 	  dout(-12) << "_fetched  badness: got (but i already had) " << *in 
 		   << " mode " << in->inode.mode 
 		   << " mtime " << in->inode.mtime << dendl;
-	  stringstream ss;
 	  string dirpath, inopath;
 	  this->inode->make_path_string(dirpath);
 	  in->make_path_string(inopath);
-	  ss << "loaded dup inode " << inode.ino << " [" << first << "," << last << "] v" << inode.version
-	     << " at " << dirpath << "/" << dname
-	     << ", but inode " << in->vino() << " v" << in->inode.version << " already exists at " << inopath;
-	  cache->mds->logclient.log(LOG_ERROR, ss);
+	  clog.error() << "loaded dup inode " << inode.ino
+	    << " [" << first << "," << last << "] v" << inode.version
+	    << " at " << dirpath << "/" << dname
+	    << ", but inode " << in->vino() << " v" << in->inode.version
+	    << " already exists at " << inopath << "\n";
 	  continue;
 	} else {
 	  // inode
@@ -1462,9 +1468,8 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
     }
   }
   if (!p.end()) {
-    stringstream ss;
-    ss << "dir " << dirfrag() << " has " << bl.length() - p.get_off() << " extra bytes";
-    cache->mds->logclient.log(LOG_WARN, ss);
+    clog.warn() << "dir " << dirfrag() << " has "
+	<< bl.length() - p.get_off() << " extra bytes\n";
   }
 
   //cache->mds->logger->inc("newin", num_new_inodes_loaded);

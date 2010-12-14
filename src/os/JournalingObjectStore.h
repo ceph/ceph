@@ -33,7 +33,9 @@ protected:
 
   Cond cond;
   Mutex journal_lock;
-  Mutex lock;
+
+  list<uint64_t> ops_submitting;
+  list<Cond*> ops_apply_blocked;
 
 protected:
   void journal_start();
@@ -41,13 +43,17 @@ protected:
   int journal_replay(uint64_t fs_op_seq);
 
   // --
-  uint64_t op_apply_start(uint64_t op);
-  void op_apply_finish(uint64_t op);
-  uint64_t op_journal_start(uint64_t op);
-  void op_journal_finish();
+  uint64_t op_submit_start();
+  void op_submit_finish(uint64_t op_seq);
 
-  void journal_transaction(ObjectStore::Transaction& t, uint64_t op, Context *onjournal);
-  void journal_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op, Context *onjournal);
+  uint64_t op_apply_start(uint64_t op);
+  uint64_t _op_apply_start(uint64_t op);
+  void op_apply_finish(uint64_t op);
+
+  void op_journal_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op, Context *onjournal);
+  void _op_journal_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op, Context *onjournal);
+
+  virtual int do_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op_seq) = 0;
 
   bool commit_start();
   void commit_started();  // allow new ops (underlying fs should now be committing all prior ops)
@@ -59,8 +65,7 @@ public:
 			    applied_seq(0), committing_seq(0), committed_seq(0), 
 			    open_ops(0), blocked(false),
 			    journal(NULL),
-			    journal_lock("JournalingObjectStore::journal_lock"),
-			    lock("JournalingObjectStore::lock") { }
+			    journal_lock("JournalingObjectStore::journal_lock") { }
   
 };
 

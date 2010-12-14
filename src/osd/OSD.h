@@ -30,7 +30,6 @@
 #include "common/DecayCounter.h"
 #include "common/ClassHandler.h"
 
-#include "include/LogEntry.h"
 #include "include/CompatSet.h"
 
 #include "auth/KeyRing.h"
@@ -123,7 +122,7 @@ protected:
   Cond *map_in_progress_cond;
   bool map_in_progress;
 
-  LogClient   logclient;
+  LogClient clog;
 
   int whoami;
   const char *dev_path, *journal_path;
@@ -720,7 +719,7 @@ protected:
   utime_t defer_recovery_until;
   int recovery_ops_active;
 #ifdef DEBUG_RECOVERY_OIDS
-  set<sobject_t> recovery_oids;
+  map<pg_t, set<sobject_t> > recovery_oids;
 #endif
 
   struct RecoveryWQ : public ThreadPool::WorkQueue<PG> {
@@ -991,8 +990,6 @@ public:
   void handle_sub_op_reply(class MOSDSubOpReply *m);
 
   void force_remount();
-
-  LogClient *get_logclient() { return &logclient; }
 
   void init_op_flags(MOSDOp *op);
 

@@ -155,7 +155,7 @@ class MDS : public Dispatcher {
   OSDMap       *osdmap;
   Objecter     *objecter;
   Filer        *filer;       // for reading/writing to/from osds
-  LogClient    logclient;
+  LogClient    clog;
 
   // sub systems
   Server       *server;
@@ -346,6 +346,8 @@ class MDS : public Dispatcher {
 
   void boot_create();             // i am new mds.
   void boot_start(int step=0, int r=0);    // starting|replay
+
+  void calc_recovery_set();
 
   void replay_start();
   void creating_done();

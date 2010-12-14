@@ -21,7 +21,7 @@
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << "." << table_name << ": "
+#define dout_prefix *_dout << "mds" << mds->get_nodeid() << "." << table_name << ": "
 
 void InoTable::reset_state()
 {
@@ -104,9 +104,8 @@ void InoTable::replay_alloc_id(inodeno_t id)
     free.erase(id);
     projected_free.erase(id);
   } else {
-    stringstream ss;
-    ss << "journal replay alloc " << id << " not in free " << free;
-    mds->logclient.log(LOG_ERROR, ss);
+    mds->clog.error() << "journal replay alloc " << id
+      << " not in free " << free << "\n";
   }
   projected_version = ++version;
 }
@@ -119,9 +118,8 @@ void InoTable::replay_alloc_ids(interval_set<inodeno_t>& ids)
     free.subtract(ids);
     projected_free.subtract(ids);
   } else {
-    stringstream ss;
-    ss << "journal replay alloc " << ids << ", only " << is << " is in free " << free;
-    mds->logclient.log(LOG_ERROR, ss);
+    mds->clog.error() << "journal replay alloc " << ids << ", only "
+	<< is << " is in free " << free << "\n";
     free.subtract(is);
     projected_free.subtract(is);
   }

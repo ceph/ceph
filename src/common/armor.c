@@ -29,44 +29,63 @@ static int decode_bits(char c)
 	return -EINVAL;	
 }
 
-int ceph_armor(char *dst, const char *src, const char *end)
+static int set_str_val(char **pdst, const char *end, char c)
+{
+	if (*pdst < end) {
+		char *p = *pdst;
+		*p = c;
+		(*pdst)++;
+	} else
+		return -ERANGE;
+
+	return 0;
+}
+
+int ceph_armor(char *dst, const char *dst_end, const char *src, const char *end)
 {
 	int olen = 0;
 	int line = 0;
+
+#define SET_DST(c) do { \
+	int __ret = set_str_val(&dst, dst_end, c); \
+	if (__ret < 0) \
+		return __ret; \
+} while (0);
 
 	while (src < end) {
 		unsigned char a, b, c;
 
 		a = *src++;
-		*dst++ = encode_bits(a >> 2);
+		SET_DST(encode_bits(a >> 2));
 		if (src < end) {
 			b = *src++;
-			*dst++ = encode_bits(((a & 3) << 4) | (b >> 4));
+			SET_DST(encode_bits(((a & 3) << 4) | (b >> 4)));
 			if (src < end) {
 				c = *src++;
-				*dst++ = encode_bits(((b & 15) << 2) | (c >> 6));
-				*dst++ = encode_bits(c & 63);
+				SET_DST(encode_bits(((b & 15) << 2) |
+								(c >> 6)));
+				SET_DST(encode_bits(c & 63));
 			} else {
-				*dst++ = encode_bits((b & 15) << 2);
-				*dst++ = '=';				
+				SET_DST(encode_bits((b & 15) << 2));
+				SET_DST('=');
 			}
 		} else {
-			*dst++ = encode_bits(((a & 3) << 4));
-			*dst++ = '=';
-			*dst++ = '=';
+			SET_DST(encode_bits(((a & 3) << 4)));
+			SET_DST('=');
+			SET_DST('=');
 		}
 		olen += 4;
 		line += 4;
 		if (line == 64) {
 			line = 0;
-			*(dst++) = '\n';
+			SET_DST('\n');
 			olen++;
 		}
 	}
 	return olen;
 }
 
-int ceph_unarmor(char *dst, const char *src, const char *end)
+int ceph_unarmor(char *dst, const char *dst_end, const char *src, const char *end)
 {
 	int olen = 0;
 
@@ -84,13 +103,13 @@ int ceph_unarmor(char *dst, const char *src, const char *end)
 		if (a < 0 || b < 0 || c < 0 || d < 0)
 			return -EINVAL;
 
-		*dst++ = (a << 2) | (b >> 4);
+		SET_DST((a << 2) | (b >> 4));
 		if (src[2] == '=')
 			return olen + 1;
-		*dst++ = ((b & 15) << 4) | (c >> 2);
+		SET_DST(((b & 15) << 4) | (c >> 2));
 		if (src[3] == '=')
 			return olen + 2;
-		*dst++ = ((c & 3) << 6) | d;
+		SET_DST(((c & 3) << 6) | d);
 		olen += 3;
 		src += 4;
 	}

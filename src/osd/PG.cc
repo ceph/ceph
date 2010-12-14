@@ -36,7 +36,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(this, osd->whoami, osd->osdmap)
 static ostream& _prefix(const PG *pg, int whoami, OSDMap *osdmap) {
-  return *_dout << dbeginl << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
+  return *_dout << "osd" << whoami << " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
 }
 
 /******* PGLog ********/
@@ -584,21 +584,45 @@ void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map)
 	   << get_num_unfound() << " unfound"
 	   << dendl;
 
-  std::map<int,Info>::const_iterator end = peer_info.end();
-  for (std::map<int,Info>::const_iterator pi = peer_info.begin();
-       pi != end; ++pi)
-  {
-    int from(pi->first);
-    if (peer_missing.find(from) != peer_missing.end())
+  std::set<int>::const_iterator m = might_have_unfound.begin();
+  std::set<int>::const_iterator mend = might_have_unfound.end();
+  for (; m != mend; ++m) {
+    int peer(*m);
+    
+    if (!osd->osdmap->is_up(peer)) {
+      dout(20) << __func__ << " skipping down osd" << peer << dendl;
       continue;
-    if (peer_log_requested.find(from) != peer_log_requested.end())
+    }
+
+    // If we've requested any of this stuff, the Missing information
+    // should be on its way.
+    // TODO: coalsce requested_* into a single data structure
+    if (peer_missing.find(peer) != peer_missing.end()) {
+      dout(20) << __func__ << ": osd" << peer
+	       << ": we already have Missing" << dendl;
       continue;
-    if (peer_backlog_requested.find(from) != peer_backlog_requested.end())
+    }
+    if (peer_log_requested.find(peer) != peer_log_requested.end()) {
+      dout(20) << __func__ << ": osd" << peer
+	       << ": in peer_log_requested" << dendl;
       continue;
-    if (peer_missing_requested.find(from) != peer_missing_requested.end())
+    }
+    if (peer_backlog_requested.find(peer) != peer_backlog_requested.end()) {
+      dout(20) << __func__ << ": osd" << peer
+	       << ": in peer_backlog_requested" << dendl;
       continue;
-    peer_missing_requested.insert(from);
-    query_map[from][info.pgid] =
+    }
+    if (peer_missing_requested.find(peer) != peer_missing_requested.end()) {
+      dout(20) << __func__ << ": osd" << peer
+	       << ": in peer_missing_requested" << dendl;
+      continue;
+    }
+
+    // Request missing
+    dout(10) << __func__ << ": osd" << peer << ": requesting Missing"
+	     << dendl;
+    peer_missing_requested.insert(peer);
+    query_map[peer][info.pgid] =
       PG::Query(PG::Query::MISSING, info.history);
   }
 }
@@ -950,6 +974,111 @@ bool PG::prior_set_affected(OSDMap *osdmap)
   return false;
 }
 
+/*
+ * Returns true unless there is a non-lost OSD in might_have_unfound.
+ */
+bool PG::all_unfound_are_lost(const OSDMap* osdmap) const
+{
+  assert(is_primary());
+
+  set<int>::const_iterator peer = might_have_unfound.begin();
+  set<int>::const_iterator mend = might_have_unfound.end();
+  for (; peer != mend; ++peer) {
+    const osd_info_t &osd_info(osdmap->get_info(*peer));
+    if (osd_info.lost_at <= osd_info.up_from) {
+      // If there is even one OSD in might_have_unfound that isn't lost, we
+      // still might retrieve our unfound.
+      return false;
+    }
+  }
+  return true;
+}
+
+/* Mark an object as lost
+ */
+void PG::mark_obj_as_lost(ObjectStore::Transaction& t,
+			  const sobject_t &lost_soid)
+{
+  // Wake anyone waiting for this object. Now that it's been marked as lost,
+  // we will just return an error code.
+  hash_map<sobject_t, list<class Message*> >::iterator wmo =
+    waiting_for_missing_object.find(lost_soid);
+  if (wmo != waiting_for_missing_object.end()) {
+    osd->take_waiters(wmo->second);
+  }
+
+  // Tell the object store that this object is lost.
+  bufferlist b1;
+  int r = osd->store->getattr(coll, lost_soid, OI_ATTR, b1);
+
+  object_locator_t oloc;
+  oloc.clear();
+  oloc.pool = info.pgid.pool();
+  object_info_t oi(lost_soid, oloc);
+
+  if (r >= 0) {
+    // Some version of this lost object exists in our filestore.
+    // So, we can fetch its attributes and preserve most of them.
+    oi = object_info_t(b1);
+  }
+  else {
+    // The object doesn't exist in the filestore yet. Make sure that
+    // we create it there.
+    t.touch(coll, lost_soid);
+  }
+
+  oi.lost = true;
+  oi.version = info.last_update;
+  bufferlist b2;
+  oi.encode(b2);
+  t.setattr(coll, lost_soid, OI_ATTR, b2);
+}
+
+/* Mark all unfound objects as lost.
+ */
+void PG::mark_all_unfound_as_lost(ObjectStore::Transaction& t)
+{
+  dout(3) << __func__ << dendl;
+
+  dout(30) << __func__  << ": log before:\n";
+  log.print(*_dout);
+  *_dout << dendl;
+
+  utime_t mtime = g_clock.now();
+  eversion_t old_last_update = info.last_update;
+  info.last_update.epoch = osd->osdmap->get_epoch();
+  map<sobject_t, Missing::item>::iterator m = missing.missing.begin();
+  map<sobject_t, Missing::item>::iterator mend = missing.missing.end();
+  while (m != mend) {
+    const sobject_t &soid(m->first);
+    if (missing_loc.find(soid) != missing_loc.end()) {
+      // We only care about unfound objects
+      ++m;
+      continue;
+    }
+
+    // Add log entry
+    info.last_update.version++;
+    Log::Entry e(Log::Entry::LOST, soid, info.last_update,
+		 m->second.need, osd_reqid_t(), mtime);
+    log.add(e);
+
+    // Object store stuff
+    mark_obj_as_lost(t, soid);
+
+    // Remove from missing set
+    missing.got(m++);
+  }
+
+  dout(30) << __func__ << ": log after:\n";
+  log.print(*_dout);
+  *_dout << dendl;
+
+  // Send out the PG log to all replicas
+  // So that they know what is lost
+  share_pg_log(old_last_update);
+}
+
 void PG::clear_prior()
 {
   dout(10) << "clear_prior" << dendl;
@@ -959,7 +1088,6 @@ void PG::clear_prior()
   prior_set_lost.clear();
   prior_set_built = false;
 }
-
 
 void PG::build_prior()
 {
@@ -1583,10 +1711,7 @@ void PG::build_might_have_unfound()
   dout(10) << __func__ << dendl;
 
   // Make sure that we have past intervals.
-  if (info.history.same_acting_since > info.history.last_epoch_started &&
-      (past_intervals.empty() ||
-       past_intervals.begin()->first > info.history.last_epoch_started))
-    generate_past_intervals();
+  generate_past_intervals();
 
   // We need to decide who might have unfound objects that we need
   std::map<epoch_t,Interval>::const_reverse_iterator p = past_intervals.rbegin();
@@ -2113,6 +2238,9 @@ void PG::trim(ObjectStore::Transaction& t, eversion_t trim_to)
 {
   // trim?
   if (trim_to > log.tail) {
+    // We shouldn't be trimming the log past last_complete
+    assert(trim_to <= info.last_complete);
+
     dout(10) << "trim " << log << " to " << trim_to << dendl;
     log.trim(t, trim_to);
     info.log_tail = log.tail;
@@ -2274,9 +2402,8 @@ void PG::read_log(ObjectStore *store)
       // [repair] in order?
       if (e.version < last) {
 	dout(0) << "read_log " << pos << " out of order entry " << e << " follows " << last << dendl;
-  	stringstream ss;
-	ss << info.pgid << " log has out of order entry " << e << " following " << last;
-	osd->get_logclient()->log(LOG_ERROR, ss);
+	osd->clog.error() << info.pgid << " log has out of order entry "
+	      << e << " following " << last << "\n";
 	reorder = true;
       }
 
@@ -2287,9 +2414,8 @@ void PG::read_log(ObjectStore *store)
       if (last.version == e.version.version) {
 	dout(0) << "read_log  got dup " << e.version << " (last was " << last << ", dropping that one)" << dendl;
 	log.log.pop_back();
-	stringstream ss;
-	ss << info.pgid << " read_log got dup " << e.version << " after " << last;
-	osd->get_logclient()->log(LOG_ERROR, ss);
+	osd->clog.error() << info.pgid << " read_log got dup "
+	      << e.version << " after " << last << "\n";
       }
       
       uint64_t endpos = ondisklog.tail + p.get_off();
@@ -2300,11 +2426,12 @@ void PG::read_log(ObjectStore *store)
 
       // [repair] at end of log?
       if (!p.end() && e.version == info.last_update) {
-	stringstream ss;
-	ss << info.pgid << " log has extra data at " << endpos << "~" << (ondisklog.head-endpos)
-	   << " after " << info.last_update;
-	osd->get_logclient()->log(LOG_ERROR, ss);
-	dout(0) << "read_log " << endpos << " *** extra gunk at end of log, adjusting ondisklog.head" << dendl;
+	osd->clog.error() << info.pgid << " log has extra data at "
+	   << endpos << "~" << (ondisklog.head-endpos) << " after "
+	   << info.last_update << "\n";
+
+	dout(0) << "read_log " << endpos << " *** extra gunk at end of log, "
+	        << "adjusting ondisklog.head" << dendl;
 	ondisklog.head = endpos;
 	break;
       }
@@ -2419,7 +2546,7 @@ bool PG::check_log_for_corruption(ObjectStore *store)
     getline(f, filename);
     blb.write_file(filename.c_str(), 0644);
     ss << ", saved to " << filename;
-    osd->logclient.log(LOG_ERROR, ss);
+    osd->clog.error(ss);
   }
   return ok;
 }
@@ -2681,7 +2808,7 @@ void PG::sub_op_scrub_reply(MOSDSubOpReply *op)
  */
 void PG::_scan_list(ScrubMap &map, vector<sobject_t> &ls)
 {
-  dout(10) << " scanning " << ls.size() << " objects" << dendl;
+  dout(10) << "_scan_list scanning " << ls.size() << " objects" << dendl;
   int i = 0;
   for (vector<sobject_t>::iterator p = ls.begin(); 
        p != ls.end(); 
@@ -2696,7 +2823,7 @@ void PG::_scan_list(ScrubMap &map, vector<sobject_t> &ls)
       osd->store->getattrs(coll, poid, o.attrs);
     }
 
-    dout(25) << "   " << poid << dendl;
+    dout(25) << "_scan_list  " << poid << dendl;
   }
 }
 
@@ -2898,7 +3025,6 @@ void PG::build_inc_scrub_map(ScrubMap &map, eversion_t v)
       ls.push_back(p->soid);
     } else if (p->is_delete()) {
       map.objects[p->soid];
-      map.objects[p->soid].poid = p->soid;
       map.objects[p->soid].negative = 1;
     }
   }
@@ -2911,20 +3037,20 @@ void PG::build_inc_scrub_map(ScrubMap &map, eversion_t v)
   osd->store->read(coll_t(), log_oid, 0, 0, map.logbl);
 }
 
-void PG::repair_object(ScrubMap::object *po, int bad_peer, int ok_peer)
+void PG::repair_object(const sobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer)
 {
   eversion_t v;
   bufferlist bv;
   bv.push_back(po->attrs[OI_ATTR]);
   object_info_t oi(bv);
   if (bad_peer != acting[0]) {
-    peer_missing[bad_peer].add(po->poid, oi.version, eversion_t());
+    peer_missing[bad_peer].add(soid, oi.version, eversion_t());
   } else {
     // We should only be scrubbing if the PG is clean.
     assert(waiting_for_missing_object.empty());
 
-    missing.add(po->poid, oi.version, eversion_t());
-    missing_loc[po->poid].insert(ok_peer);
+    missing.add(soid, oi.version, eversion_t());
+    missing_loc[soid].insert(ok_peer);
 
     log.last_requested = eversion_t();
   }
@@ -2933,7 +3059,6 @@ void PG::repair_object(ScrubMap::object *po, int bad_peer, int ok_peer)
 
 void PG::scrub()
 {
-  stringstream ss;
   ScrubMap scrubmap;
   int errors = 0, fixed = 0;
   bool repair = state_test(PG_STATE_REPAIR);
@@ -2946,16 +3071,8 @@ void PG::scrub()
  
   epoch_t epoch = info.history.same_acting_since;
 
-  if (!is_primary()) {
-    dout(10) << "scrub -- not primary" << dendl;
-    clear_scrub_reserved();
-    unlock();
-    osd->map_lock.put_read();
-    return;
-  }
-
-  if (!is_active() || !is_clean()) {
-    dout(10) << "scrub -- not active or not clean" << dendl;
+  if (!is_primary() || !is_active() || !is_clean()) {
+    dout(10) << "scrub -- not primary or active or not clean" << dendl;
     clear_scrub_reserved();
     unlock();
     osd->map_lock.put_read();
@@ -2967,13 +3084,14 @@ void PG::scrub()
   update_stats();
 
   osd->sched_scrub_lock.Lock();
-  --(osd->scrubs_pending);
-  assert(osd->scrubs_pending >= 0);
+  if (scrub_reserved) {
+    --(osd->scrubs_pending);
+    assert(osd->scrubs_pending >= 0);
+    scrub_reserved = false;
+    scrub_reserved_peers.clear();
+  }
   ++(osd->scrubs_active);
   osd->sched_scrub_lock.Unlock();
-
-  scrub_reserved = false;
-  scrub_reserved_peers.clear();
 
   // request maps from replicas
   for (unsigned i=1; i<acting.size(); i++) {
@@ -3047,6 +3165,7 @@ void PG::scrub()
     
     while (1) {
       ScrubMap::object *po = 0;
+      const sobject_t *psoid = 0;
       int pi = -1;
       bool anymissing = false;
       for (unsigned i=0; i<acting.size(); i++) {
@@ -3055,12 +3174,14 @@ void PG::scrub()
 	  continue;
 	}
 	if (!po) {
+	  psoid = &(p[i]->first);
 	  po = &(p[i]->second);
 	  pi = i;
 	}
-	else if (po->poid != p[i]->second.poid) {
+	else if (*psoid != p[i]->first) {
 	  anymissing = true;
-	  if (po->poid > p[i]->second.poid) {
+	  if (*psoid > p[i]->first) {
+	    psoid = &(p[0]->first);
 	    po = &(p[i]->second);
 	    pi = i;
 	  }
@@ -3071,13 +3192,12 @@ void PG::scrub()
       }
       if (anymissing) {
 	for (unsigned i=0; i<acting.size(); i++) {
-	  if (p[i] == m[i]->objects.end() || po->poid != p[i]->second.poid) {
-	    ss << info.pgid << " " << mode << " osd" << acting[i] << " missing " << po->poid;
-	    osd->get_logclient()->log(LOG_ERROR, ss);
+	  if (p[i] == m[i]->objects.end() || *psoid != p[i]->first) {
+	    osd->clog.error() << info.pgid << " " << mode << " osd" << acting[i] << " missing " << *psoid;
 	    num_missing++;
 	    
 	    if (repair)
-	      repair_object(po, acting[i], acting[pi]);
+	      repair_object(*psoid, po, acting[i], acting[pi]);
 	  } else
 	    p[i]++;
 	}
@@ -3089,51 +3209,47 @@ void PG::scrub()
       for (unsigned i=1; i<acting.size(); i++) {
 	bool peerok = true;
 	if (po->size != p[i]->second.size) {
-	  dout(0) << "scrub osd" << acting[i] << " " << po->poid
+	  dout(0) << "scrub osd" << acting[i] << " " << *psoid
 		  << " size " << p[i]->second.size << " != " << po->size << dendl;
-	  ss << info.pgid << " " << mode << " osd" << acting[i] << " " << po->poid
+	  osd->clog.error() << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
 	     << " size " << p[i]->second.size << " != " << po->size;
-	  osd->get_logclient()->log(LOG_ERROR, ss);
 	  peerok = ok = false;
 	  num_bad++;
 	}
 	if (po->attrs.size() != p[i]->second.attrs.size()) {
-	  dout(0) << "scrub osd" << acting[i] << " " << po->poid
+	  dout(0) << "scrub osd" << acting[i] << " " << *psoid
 		  << " attr count " << p[i]->second.attrs.size() << " != " << po->attrs.size() << dendl;
-	  ss << info.pgid << " " << mode << " osd" << acting[i] << " " << po->poid
-	     << " attr count " << p[i]->second.attrs.size() << " != " << po->attrs.size();
-	  osd->get_logclient()->log(LOG_ERROR, ss);
+	  osd->clog.error() << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
+			    << " attr count " << p[i]->second.attrs.size() << " != " << po->attrs.size();
 	  peerok = ok = false;
 	  num_bad++;
 	}
 	for (map<string,bufferptr>::iterator q = po->attrs.begin(); q != po->attrs.end(); q++) {
 	  if (p[i]->second.attrs.count(q->first)) {
 	    if (q->second.cmp(p[i]->second.attrs[q->first])) {
-	      dout(0) << "scrub osd" << acting[i] << " " << po->poid
+	      dout(0) << "scrub osd" << acting[i] << " " << *psoid
 		      << " attr " << q->first << " value mismatch" << dendl;
-	      ss << info.pgid << " " << mode << " osd" << acting[i] << " " << po->poid
-		 << " attr " << q->first << " value mismatch";
-	      osd->get_logclient()->log(LOG_ERROR, ss);
+	      osd->clog.error() << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
+				<< " attr " << q->first << " value mismatch";
 	      peerok = ok = false;
 	      num_bad++;
 	    }
 	  } else {
-	    dout(0) << "scrub osd" << acting[i] << " " << po->poid
+	    dout(0) << "scrub osd" << acting[i] << " " << *psoid
 		    << " attr " << q->first << " missing" << dendl;
-	    ss << info.pgid << " " << mode << " osd" << acting[i] << " " << po->poid
+	    osd->clog.error() << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
 	       << " attr " << q->first << " missing";
-	    osd->get_logclient()->log(LOG_ERROR, ss);
 	    peerok = ok = false;
 	    num_bad++;
 	  }
 	}
 
 	if (!peerok && repair)
-	  repair_object(po, acting[i], acting[pi]);
+	  repair_object(*psoid, po, acting[i], acting[pi]);
       }
       
       if (ok)
-	dout(20) << "scrub  " << po->poid << " size " << po->size << " ok" << dendl;
+	dout(20) << "scrub  " << *psoid << " size " << po->size << " ok" << dendl;
       
       // next
       for (unsigned i=0; i<acting.size(); i++)
@@ -3141,9 +3257,12 @@ void PG::scrub()
     }
     
     if (num_missing || num_bad) {
-      dout(0) << "scrub " << num_missing << " missing, " << num_bad << " bad objects" << dendl;
-      ss << info.pgid << " " << mode << " " << num_missing << " missing, " << num_bad << " bad objects";
-      osd->get_logclient()->log(LOG_ERROR, ss);
+      stringstream ss;
+      ss << info.pgid << " " << mode << " " << num_missing << " missing, "
+	 << num_bad << " bad objects\n";
+      *_dout << ss.str();
+      _dout->flush();
+      osd->clog.error(ss);
       state_set(PG_STATE_INCONSISTENT);
       if (repair)
 	state_clear(PG_STATE_CLEAN);
@@ -3176,14 +3295,21 @@ void PG::scrub()
   }
   */
 
-  ss << info.pgid << " " << mode << " ";
-  if (errors)
-    ss << errors << " errors";
-  else
-    ss << "ok";
-  if (repair)
-    ss << ", " << fixed << " fixed";
-  osd->get_logclient()->log(errors ? LOG_ERROR:LOG_INFO, ss);
+  {
+    stringstream oss;
+    oss << info.pgid << " " << mode << " ";
+    if (errors)
+      oss << errors << " errors";
+    else
+      oss << "ok";
+    if (repair)
+      oss << ", " << fixed << " fixed";
+    oss << "\n";
+    if (errors)
+      osd->clog.error(oss);
+    else
+      osd->clog.info(oss);
+  }
 
   if (!(errors - fixed) && repair)
     state_clear(PG_STATE_INCONSISTENT);
@@ -3234,6 +3360,63 @@ void PG::share_pg_info()
   }
 }
 
+/*
+ * Share some of this PG's log with some replicas.
+ *
+ * The log will be shared from the current version (last_update) back to
+ * 'oldver.'
+ *
+ * Updates peer_missing and peer_info.
+ */
+void PG::share_pg_log(const eversion_t &oldver)
+{
+  dout(10) << __func__ << dendl;
+
+  assert(is_primary());
+
+  vector<int>::const_iterator a = acting.begin();
+  assert(a != acting.end());
+  vector<int>::const_iterator end = acting.end();
+  while (++a != end) {
+    int peer(*a);
+    MOSDPGLog *m = new MOSDPGLog(info.last_update.version, info);
+    m->log.head = log.head;
+    m->log.tail = log.tail;
+    for (list<Log::Entry>::const_reverse_iterator i = log.log.rbegin();
+	 i != log.log.rend();
+	 ++i) {
+      if (i->version <= oldver) {
+	m->log.tail = i->version;
+	break;
+      }
+      const Log::Entry &entry(*i);
+      switch (entry.op) {
+	case Log::Entry::LOST: {
+	  PG::Missing& pmissing(peer_missing[peer]);
+	  pmissing.add(entry.soid, entry.version, eversion_t());
+	  break;
+        }
+	default: {
+	  // To do this right, you need to figure out what impact this log
+	  // entry has on the peer missing and the peer info
+	  assert(0);
+	  break;
+        }
+      }
+
+      m->log.log.push_front(*i);
+    }
+    PG::Info& pinfo(peer_info[peer]);
+    pinfo.last_update = log.head;
+    // shouldn't move pinfo.log.tail
+    pinfo.last_update = log.head;
+    // no change in pinfo.last_complete
+
+    m->missing = missing;
+    osd->cluster_messenger->send_message(m, osd->osdmap->
+					 get_cluster_inst(peer));
+  }
+}
 
 unsigned int PG::Missing::num_missing() const
 {
@@ -3351,6 +3534,12 @@ void PG::Missing::got(const sobject_t& oid, eversion_t v)
   assert(missing[oid].need <= v);
   rmissing.erase(missing[oid].need);
   missing.erase(oid);
+}
+
+void PG::Missing::got(const std::map<sobject_t, Missing::item>::iterator &m)
+{
+  rmissing.erase(m->second.need);
+  missing.erase(m);
 }
 
 ostream& operator<<(ostream& out, const PG& pg)

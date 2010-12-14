@@ -24,8 +24,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(mon, paxos, paxos->machine_id)
 static ostream& _prefix(Monitor *mon, Paxos *paxos, int machine_id) {
-  return *_dout << dbeginl
-		<< "mon." << mon->name << "@" << mon->rank
+  return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
 		<< ".paxosservice(" << get_paxos_name(machine_id) << ") ";
 }
