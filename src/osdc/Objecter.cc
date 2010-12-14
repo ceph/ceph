@@ -58,13 +58,48 @@ void Objecter::shutdown()
 {
 }
 
-tid_t Objecter::resend_linger(LingerOp *info, Context *onack, Context *onfinish, eversion_t *objver)
+tid_t Objecter::resend_linger(LingerOp *info)
 {
   vector<OSDOp> ops = info->ops; // need to pass a copy to ops
-  Op *o = new Op(info->oid, info->oloc, ops, info->flags | CEPH_OSD_FLAG_READ, onack, onfinish, objver, true);
+  Context *onack = NULL;
+  Context *oncommit = NULL;
+  if (!info->registered) {
+    if (info->on_reg_ack)
+      onack = new C_Linger_Ack(this, info);
+    if (info->on_reg_commit)
+      oncommit = new C_Linger_Commit(this, info);
+  }
+  Op *o = new Op(info->oid, info->oloc, ops, info->flags | CEPH_OSD_FLAG_READ,
+		 onack, oncommit,
+		 info->pobjver, true);
   o->snapid = info->snap;
   return op_submit(o, info);
 }
+
+void Objecter::_linger_ack(LingerOp *info, int r) 
+{
+  dout(10) << "_linger_ack " << info->linger_id << dendl;
+  if (info->on_reg_ack) {
+    info->on_reg_ack->finish(r);
+    delete info->on_reg_ack;
+    info->on_reg_ack = NULL;
+  }
+}
+
+void Objecter::_linger_commit(LingerOp *info, int r) 
+{
+  dout(10) << "_linger_commit " << info->linger_id << dendl;
+  if (info->on_reg_commit) {
+    info->on_reg_commit->finish(r);
+    delete info->on_reg_commit;
+    info->on_reg_commit = NULL;
+  }
+
+  // only tell the user the first time we do this
+  info->registered = true;
+  info->pobjver = NULL;
+}
+
 
 uint64_t Objecter::register_linger(LingerOp *info)
 {
@@ -101,8 +136,11 @@ tid_t Objecter::linger(const object_t& oid, const object_locator_t& oloc,
   info->ops = op.ops;
   info->inbl = inbl;
   info->poutbl = poutbl;
+  info->pobjver = objver;
+  info->on_reg_ack = onack;
+  info->on_reg_commit = onfinish;
   uint64_t lid = register_linger(info);
-  resend_linger(info, onack, onfinish, objver);
+  resend_linger(info);
   return lid;
 }
 
@@ -361,7 +399,7 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
 
     // resend lingers
     for (xlist<LingerOp*>::iterator j = pg.linger_ops.begin(); !j.end(); ++j)
-      resend_linger(*j, NULL, NULL, NULL);
+      resend_linger(*j);
 
     if (pg.linger_ops.empty())
       close_pg( pgid );  // will pbly reopen, unless it's just commits we're missing

@@ -441,21 +441,29 @@ public:
 
   hash_map<pg_t,PG> pg_map;
 
+  // ---
+  // lingering ops
+
   struct LingerOp {
     uint64_t linger_id;
     object_t oid;
     object_locator_t oloc;
-    uint64_t off;
-    uint64_t len;
     snapid_t snap;
     int flags;
     vector<OSDOp> ops;
     bufferlist inbl;
     bufferlist *poutbl;
+    eversion_t *pobjver;
+
+    bool registered;
+    Context *on_reg_ack, *on_reg_commit;
+
     PG *pg;
     xlist<LingerOp*>::item pg_item;
 
-    LingerOp() : linger_id(0), off(0), len(0), flags(0), poutbl(NULL), pg(NULL), pg_item(this) {}
+    LingerOp() : linger_id(0), flags(0), poutbl(NULL), pobjver(NULL),
+		 registered(false), on_reg_ack(NULL), on_reg_commit(NULL),
+		 pg(NULL), pg_item(this) {}
 
     // no copy!
     const LingerOp &operator=(const LingerOp& r);
@@ -464,6 +472,24 @@ public:
 
   map<uint64_t, LingerOp*>  op_linger_info;
   Mutex linger_info_mutex;
+
+  struct C_Linger_Ack : public Context {
+    Objecter *objecter;
+    LingerOp *info;
+    C_Linger_Ack(Objecter *o, LingerOp *l) : objecter(o), info(l) {}
+    void finish(int r) {
+      objecter->_linger_ack(info, r);
+    }
+  };
+  
+  struct C_Linger_Commit : public Context {
+    Objecter *objecter;
+    LingerOp *info;
+    C_Linger_Commit(Objecter *o, LingerOp *l) : objecter(o), info(l) {}
+    void finish(int r) {
+      objecter->_linger_commit(info, r);
+    }
+  };
 
   
   PG &get_pg(pg_t pgid);
@@ -542,7 +568,9 @@ private:
   // low-level
   tid_t op_submit(Op *op, LingerOp *linger_op = NULL);
 
-  tid_t resend_linger(LingerOp *info, Context *onack, Context *onfinish, eversion_t *objver);
+  tid_t resend_linger(LingerOp *info);
+  void _linger_ack(LingerOp *info, int r);
+  void _linger_commit(LingerOp *info, int r);
   uint64_t register_linger(LingerOp *info);
 public: // FIXME
   void unregister_linger(uint64_t linger_id);
