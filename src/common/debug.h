@@ -36,7 +36,6 @@ extern int dout_handle_daemonize();
 extern int dout_create_rank_symlink(int n);
 
 static inline void _dout_begin_line(int prio) {
-  _dout_lock.Lock();
   if (unlikely(_dout_need_open))
     _dout_open_log();
 
@@ -47,10 +46,6 @@ static inline void _dout_begin_line(int prio) {
   // Some information that goes in every dout message
   *_dout << g_clock.now() << " " << std::hex << pthread_self()
 	 << std::dec << " ";
-}
-
-static inline void _dout_end_line() {
-  _dout_lock.Unlock();
 }
 
 // intentionally conflict with endl
@@ -75,9 +70,11 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
 #define DOUT_COND(l) l <= XDOUT_CONDVAR(DOUT_SUBSYS)
 
 #define dout(l) do { if (DOUT_COND(l)) {\
-  _dout_begin_line(l); dout_prefix
+  Mutex::Locker _dout_locker(_dout_lock);\
+  _dout_begin_line(l); \
+  dout_prefix
 
-#define dendl std::endl; _dout_end_line(); } } while (0)
+#define dendl std::endl; } } while (0)
 
 
 extern void hex2str(const char *s, int len, char *buf, int dest_len);
