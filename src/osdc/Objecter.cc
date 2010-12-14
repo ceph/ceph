@@ -103,7 +103,6 @@ void Objecter::_linger_commit(LingerOp *info, int r)
 
 void Objecter::unregister_linger(uint64_t linger_id)
 {
-  Mutex::Locker locker(linger_info_mutex);
   map<uint64_t, LingerOp*>::iterator iter = op_linger_info.find(linger_id);
   if (iter != op_linger_info.end()) {
     LingerOp *info = iter->second;

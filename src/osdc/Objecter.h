@@ -471,7 +471,6 @@ public:
   };
 
   map<uint64_t, LingerOp*>  op_linger_info;
-  Mutex linger_info_mutex;
 
   struct C_Linger_Ack : public Context {
     Objecter *objecter;
@@ -536,7 +535,6 @@ public:
     last_seen_osdmap_version(0),
     last_seen_pgmap_version(0),
     client_lock(l), timer(t),
-    linger_info_mutex("Objecter::linger_info_mutex"),
     op_throttler(g_conf.objecter_inflight_op_bytes)
   { }
   ~Objecter() { }
