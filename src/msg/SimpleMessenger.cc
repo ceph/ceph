@@ -2735,6 +2735,23 @@ void SimpleMessenger::mark_down(const entity_addr_t& addr)
   lock.Unlock();
 }
 
+void SimpleMessenger::mark_down(Connection *con)
+{
+  lock.Lock();
+  Pipe *p = (Pipe *)con->get_pipe();
+  if (p) {
+    dout(1) << "mark_down " << con << " -- " << p << dendl;
+    p->unregister_pipe();
+    p->pipe_lock.Lock();
+    p->stop();
+    p->pipe_lock.Unlock();
+    p->put();
+  } else {
+    dout(1) << "mark_down " << con << " -- pipe dne" << dendl;
+  }
+  lock.Unlock();
+}
+
 void SimpleMessenger::learned_addr(entity_addr_t peer_addr_for_me)
 {
   lock.Lock();
