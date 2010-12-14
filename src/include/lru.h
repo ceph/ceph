@@ -227,15 +227,10 @@ class LRU {
     //if (!o->lru_in_lru) return o;  // might have expired and been removed that way.
     if (!o->lru) return o;
 
-
-    if (o->lru_list == &lru_top)
-      lru_top.remove(o);
-    else if (o->lru_list == &lru_bot) 
-      lru_bot.remove(o);
-    else if (o->lru_list == &lru_pintail)
-      lru_pintail.remove(o);
-    else
-      assert(0);
+    assert((o->lru_list == &lru_pintail) ||
+           (o->lru_list == &lru_top) ||
+           (o->lru_list == &lru_bot));
+    o->lru_list->remove(o);
 
     lru_num--;
     if (o->lru_pinned) lru_num_pinned--;
