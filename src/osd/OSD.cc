@@ -1634,20 +1634,29 @@ void OSD::put_object_context(void *_obc, pg_t pgid)
   pg->unlock();
 }
 
-void OSD::ack_notification(entity_name_t& name, void *_notif)
+void OSD::complete_notify(void *_notif, void *_obc)
+{
+  ReplicatedPG::ObjectContext *obc = (ReplicatedPG::ObjectContext *)_obc;
+  Watch::Notification *notif = (Watch::Notification *)_notif;
+  dout(0) << "got the last reply from pending watchers, can send response now" << dendl;
+  MWatchNotify *reply = notif->reply;
+  client_messenger->send_message(reply, notif->session->con);
+  notif->session->put();
+  watch->remove_notification(notif);
+  if (notif->timeout)
+    watch_timer.cancel_event(notif->timeout);
+  map<Watch::Notification *, bool>::iterator iter = obc->notifs.find(notif);
+  if (iter != obc->notifs.end())
+    obc->notifs.erase(iter);
+  delete notif;
+}
+
+void OSD::ack_notification(entity_name_t& name, void *_notif, void *_obc)
 {
   assert(watch_lock.is_locked());
   Watch::Notification *notif = (Watch::Notification *)_notif;
-  if (watch->ack_notification(name, notif)) {
-    dout(0) << "got the last reply from pending watchers, can send response now" << dendl;
-    MWatchNotify *reply = notif->reply;
-    client_messenger->send_message(reply, notif->session->con);
-    notif->session->put();
-    watch->remove_notification(notif);
-    if (notif->timeout)
-      watch_timer.cancel_event(notif->timeout);
-    delete notif;
-  }
+  if (watch->ack_notification(name, notif))
+    complete_notify(notif, _obc);
 }
 
 bool OSD::ms_handle_reset(Connection *con)
@@ -1701,6 +1710,7 @@ bool OSD::ms_handle_reset(Connection *con)
     put_object_context(obc, oiter->second);
   }
 
+#if 0
   // FIXME: do we really want to _cancel_ notifications here?
   // shouldn't they time out in the usual way?  because this person
   // might/should immediately reconnect...
@@ -1715,6 +1725,7 @@ bool OSD::ms_handle_reset(Connection *con)
   }
   session->notifs.clear();
   watch_lock.Unlock();
+#endif
 
   return true;
 }
@@ -1744,8 +1755,9 @@ void OSD::handle_notify_timeout(void *_notif)
   watch_lock.Unlock(); /* put_object_context takes osd->lock */
   
   ReplicatedPG *pg = (ReplicatedPG *)lookup_lock_raw_pg(notif->pgid);
+  pg_t pgid = notif->pgid;
+  pg->do_complete_notify(notif, obc);
   put_object_context(obc, notif->pgid);
-  pg->do_complete_notify(notif);
   
   watch_lock.Lock();
   /* exiting with watch_lock held */

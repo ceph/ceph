@@ -826,12 +826,9 @@ void ReplicatedPG::dump_watchers(ObjectContext *obc)
   }
 }
 
-void ReplicatedPG::do_complete_notify(Watch::Notification *notif)
+void ReplicatedPG::do_complete_notify(Watch::Notification *notif, ObjectContext *obc)
 {
-  osd->client_messenger->send_message(notif->reply, notif->session->con);
-  notif->session->put();
-  osd->watch->remove_notification(notif);
-  delete notif;
+  osd->complete_notify((void *)notif, obc);
 }
 
 
@@ -1189,13 +1186,14 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	     p != obc->unconnected_watchers.end();
 	     p++) {
 	  entity_name_t name = p->first;
-	  // notif->add_watcher(name, Watch::WATCHER_PENDING);
+	  notif->add_watcher(name, Watch::WATCHER_PENDING);
 	}
 
 	notif->reply = new MWatchNotify(op.watch.cookie, op.watch.ver, notif->id, WATCH_NOTIFY_COMPLETE);
 	if (notif->watchers.empty()) {
-          do_complete_notify(notif);
+          do_complete_notify(notif, obc);
 	} else {
+	  obc->notifs[notif] = true;
           obc->ref++;
           notif->obc = obc;
 	  notif->timeout = new Watch::C_NotifyTimeout(osd, notif);
@@ -1232,7 +1230,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
         session->del_notif(notif);
 	session->put();
 
-        osd->ack_notification(source, notif);
+        osd->ack_notification(source, notif, obc);
 	osd->watch_lock.Unlock();
       }
       break;
@@ -1460,6 +1458,18 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
           map<entity_name_t, utime_t>::iterator un_iter = obc->unconnected_watchers.find(entity);
           if (un_iter != obc->unconnected_watchers.end())
             obc->unconnected_watchers.erase(un_iter);
+
+	  map<Watch::Notification *, bool>::iterator niter;
+          for (niter = obc->notifs.begin(); niter != obc->notifs.end(); ++niter) {
+            Watch::Notification *notif = niter->first;
+            map<entity_name_t, Watch::WatcherState>::iterator iter = notif->watchers.find(entity);
+            if (iter != notif->watchers.end()) {
+            /* there is a pending notification for this watcher, we should resend it anyway
+               even if we already sent it as it might not have received it */
+              MWatchNotify *notify_msg = new MWatchNotify(w.cookie, w.ver, notif->id, WATCH_NOTIFY);
+              osd->client_messenger->send_message(notify_msg, session->con);
+            }
+          }
 	  register_object_context(obc);
         } else {
 	  map<entity_name_t, watch_info_t>::iterator oi_iter = oi.watchers.find(entity);

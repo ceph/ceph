@@ -239,6 +239,7 @@ public:
     // any entity in obs.oi.watchers MUST be in either watchers or unconnected_watchers.
     map<entity_name_t, OSD::Session *> watchers;
     map<entity_name_t, utime_t> unconnected_watchers;
+    map<Watch::Notification *, bool> notifs;
 
     /*    ObjectContext(const sobject_t& s, const object_locator_t& ol) :
       ref(0), registered(false), obs(s, ol),
@@ -529,7 +530,7 @@ protected:
   int recover_replicas(int max);
 
   void dump_watchers(ObjectContext *obc);
-  void do_complete_notify(Watch::Notification *notif);
+  void do_complete_notify(Watch::Notification *notif, ObjectContext *obc);
 
   struct RepModify {
     ReplicatedPG *pg;

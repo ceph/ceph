@@ -995,7 +995,8 @@ public:
 
 
   void put_object_context(void *_obc, pg_t pgid);
-  void ack_notification(entity_name_t& peer_addr, void *notif);
+  void complete_notify(void *notif, void *obc);
+  void ack_notification(entity_name_t& peer_addr, void *notif, void *obc);
   Mutex watch_lock;
   SafeTimer watch_timer;
   void handle_notify_timeout(void *notif);
