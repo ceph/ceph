@@ -244,8 +244,12 @@ public:
   // read
  public:
 
+  class OSDSession;
+
   struct Op {
+    OSDSession *session;
     xlist<Op*>::item session_item;
+    int incarnation;
 
     object_t oid;
     object_locator_t oloc;
@@ -272,16 +276,16 @@ public:
 
     eversion_t *objver;
 
-    bool linger;
+    utime_t stamp;
 
     Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>& op,
-       int f, Context *ac, Context *co, eversion_t *ov, bool ln = false) :
-      session_item(this),
+       int f, Context *ac, Context *co, eversion_t *ov) :
+      session(NULL), session_item(this), incarnation(0),
       oid(o), oloc(ol),
       con(NULL),
       snapid(CEPH_NOSNAP), outbl(0), flags(f), priority(0), onack(ac), oncommit(co), 
       tid(0), attempts(0),
-      paused(false), objver(ov), linger(ln) {
+      paused(false), objver(ov) {
       ops.swap(op);
     }
   };
@@ -394,55 +398,8 @@ public:
 	       auid(0), crush_rule(0), snapid(0), blp(NULL) {}
   };
 
-  // -- osd sessions --
-  struct Session {
-    xlist<Op*> ops;
-    int osd;
-    int incarnation;
-  };
-  map<int,Session*> sessions;
 
-
- private:
-  // pending ops
-  hash_map<tid_t,Op*>       op_osd;
-  map<tid_t,PoolStatOp*>    op_poolstat;
-  map<tid_t,StatfsOp*>      op_statfs;
-  map<tid_t,PoolOp*>        op_pool;
-
-  map<epoch_t,list< pair<Context*, int> > > waiting_for_map;
-
-  /**
-   * track pending ops by pg
-   *  ...so we can cope with failures, map changes
-   */
-  class LingerOp;
-
-  class PG {
-  public:
-    vector<int> acting;
-    set<tid_t>  active_tids; // active ops
-    utime_t last;
-    xlist<LingerOp*> linger_ops;
-
-    PG() {}
-    
-    // primary - where i write
-    int primary() {
-      if (acting.empty()) return -1;
-      return acting[0];
-    }
-    // acker - where i read, and receive acks from
-    int acker() {
-      if (acting.empty()) return -1;
-      return acting[0];
-    }
-  };
-
-  hash_map<pg_t,PG> pg_map;
-
-  // ---
-  // lingering ops
+  // -- lingering ops --
 
   struct LingerOp {
     uint64_t linger_id;
@@ -458,19 +415,17 @@ public:
     bool registered;
     Context *on_reg_ack, *on_reg_commit;
 
-    PG *pg;
-    xlist<LingerOp*>::item pg_item;
+    OSDSession *session;
+    xlist<LingerOp*>::item session_item;
 
     LingerOp() : linger_id(0), flags(0), poutbl(NULL), pobjver(NULL),
 		 registered(false), on_reg_ack(NULL), on_reg_commit(NULL),
-		 pg(NULL), pg_item(this) {}
+		 session(NULL), session_item(this) {}
 
     // no copy!
     const LingerOp &operator=(const LingerOp& r);
     LingerOp(const LingerOp& o);
   };
-
-  map<uint64_t, LingerOp*>  op_linger_info;
 
   struct C_Linger_Ack : public Context {
     Objecter *objecter;
@@ -490,16 +445,41 @@ public:
     }
   };
 
-  
-  PG &get_pg(pg_t pgid);
-  void close_pg(pg_t pgid) {
-    assert(pg_map.count(pgid));
-    assert(pg_map[pgid].active_tids.empty());
-    pg_map.erase(pgid);
+
+  // -- osd sessions --
+  struct OSDSession {
+    xlist<Op*> ops;
+    xlist<LingerOp*> linger_ops;
+    int osd;
+    int incarnation;
+    Connection *con;
+
+    OSDSession(int o) : osd(o), incarnation(0), con(NULL) {}
+  };
+  map<int,OSDSession*> osd_sessions;
+
+  OSDSession *get_session(int osd) {
+    map<int,OSDSession*>::iterator p = osd_sessions.find(osd);
+    if (p != osd_sessions.end())
+      return p->second;
+    OSDSession *s = new OSDSession(osd);
+    osd_sessions[osd] = s;
+    return s;
   }
-  void scan_pgs(set<pg_t>& changed_pgs);
-  void scan_pgs_for(set<pg_t>& changed_pgs, int osd);
-  void kick_requests(set<pg_t>& changed_pgs);
+
+ private:
+  // pending ops
+  hash_map<tid_t,Op*>       op_osd;
+  int                       num_homeless_ops;
+  map<uint64_t, LingerOp*>  op_linger_info;
+  map<tid_t,PoolStatOp*>    op_poolstat;
+  map<tid_t,StatfsOp*>      op_statfs;
+  map<tid_t,PoolOp*>        op_pool;
+
+  map<epoch_t,list< pair<Context*, int> > > waiting_for_map;
+
+  void send_op(Op *op);
+  void kick_requests(OSDSession *session);
 
   void _list_reply(ListContext *list_context, bufferlist *bl, Context *final_finish);
 
@@ -535,6 +515,7 @@ public:
     last_seen_osdmap_version(0),
     last_seen_pgmap_version(0),
     client_lock(l), timer(t),
+    num_homeless_ops(0),
     op_throttler(g_conf.objecter_inflight_op_bytes)
   { }
   ~Objecter() { }
@@ -566,7 +547,7 @@ private:
   // low-level
   tid_t op_submit(Op *op, LingerOp *linger_op = NULL);
 
-  tid_t resend_linger(LingerOp *info);
+  tid_t send_linger(LingerOp *info);
   void _linger_ack(LingerOp *info, int r);
   void _linger_commit(LingerOp *info, int r);
 
@@ -756,7 +737,7 @@ private:
 		const SnapContext& snapc, int flags,
 	        Context *onack, Context *oncommit,
 	        eversion_t *objver = NULL) {
-    Op *o = new Op(oid, oloc, ops, flags | CEPH_OSD_FLAG_WRITE, onack, oncommit, objver, false);
+    Op *o = new Op(oid, oloc, ops, flags | CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
     return op_submit(o);
