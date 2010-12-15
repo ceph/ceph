@@ -480,7 +480,8 @@ public:
 
   void send_op(Op *op);
   void kick_requests(OSDSession *session);
-
+  void reopen_session(OSDSession *session);
+  
   void _list_reply(ListContext *list_context, bufferlist *bl, Context *final_finish);
 
   void resend_mon_ops();

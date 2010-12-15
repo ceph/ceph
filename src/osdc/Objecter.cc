@@ -252,14 +252,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
        p++) {
     OSDSession *s = p->second;
     if (osdmap->is_up(s->osd)) {
-      entity_inst_t inst = osdmap->get_inst(s->osd);
-      if (s->con->get_peer_addr() != osdmap->get_inst(s->osd).addr) {
-	dout(10) << " reopening osd" << s->osd << " session, addr now " << inst << dendl;
-	messenger->mark_down(s->con);
-	s->con->put();
-	s->con = messenger->get_connection(inst);
-	s->incarnation++;
-      }
+      if (s->con->get_peer_addr() != osdmap->get_inst(s->osd).addr)
+	reopen_session(s);
     }
   }
 
@@ -343,6 +337,18 @@ void Objecter::handle_osd_map(MOSDMap *m)
   m->put();
 
   monc->sub_got("osdmap", osdmap->get_epoch());
+}
+
+void Objecter::reopen_session(OSDSession *s)
+{
+  entity_inst_t inst = osdmap->get_inst(s->osd);
+  dout(10) << "reopen_session osd" << s->osd << " session, addr now " << inst << dendl;
+  if (s->con) {
+    messenger->mark_down(s->con);
+    s->con->put();
+  }
+  s->con = messenger->get_connection(inst);
+  s->incarnation++;
 }
 
 void Objecter::wait_for_osd_map()
@@ -1231,9 +1237,7 @@ void Objecter::ms_handle_reset(Connection *con)
       map<int,OSDSession*>::iterator p = osd_sessions.find(osd);
       if (p != osd_sessions.end()) {
 	OSDSession *session = p->second;
-	messenger->mark_down(session->con->get_peer_addr());
-	session->con->put();
-	session->con = NULL;
+	reopen_session(session);
 	kick_requests(session);
 	maybe_request_map();
       }
@@ -1252,8 +1256,11 @@ void Objecter::ms_handle_remote_reset(Connection *con)
 
 void Objecter::dump_active()
 {
-  dout(0) << "dump_active" << dendl;
-  for (hash_map<tid_t,Op*>::iterator p = ops.begin(); p != ops.end(); p++)
-    dout(0) << " " << p->first << "\t" << p->second->oid << "\t" << p->second->ops << dendl;
+  dout(20) << "dump_active" << dendl;
+  for (hash_map<tid_t,Op*>::iterator p = ops.begin(); p != ops.end(); p++) {
+    Op *op = p->second;
+    dout(20) << op->tid << "\t" << op->pgid << "\tosd" << (op->session ? op->session->osd : -1)
+	    << "\t" << op->oid << "\t" << op->ops << dendl;
+  }
 }
 
