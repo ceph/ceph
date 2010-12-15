@@ -58,24 +58,22 @@ void Objecter::shutdown()
 {
 }
 
-tid_t Objecter::send_linger(LingerOp *info)
+void Objecter::send_linger(LingerOp *info)
 {
-  dout(15) << "send_linger " << info->linger_id << dendl;
-  
-  vector<OSDOp> ops = info->ops; // need to pass a copy to ops
-  Context *onack = NULL;
-  Context *oncommit = NULL;
-  if (!info->registered) {
-    if (info->on_reg_ack)
-      onack = new C_Linger_Ack(this, info);
-    if (info->on_reg_commit)
-      oncommit = new C_Linger_Commit(this, info);
+  if (!info->registering) {
+    dout(15) << "send_linger " << info->linger_id << dendl;
+    vector<OSDOp> ops = info->ops; // need to pass a copy to ops
+    Context *onack = (!info->registered && info->on_reg_ack) ? new C_Linger_Ack(this, info) : NULL;
+    Context *oncommit = new C_Linger_Commit(this, info);
+    Op *o = new Op(info->oid, info->oloc, ops, info->flags | CEPH_OSD_FLAG_READ,
+		   onack, oncommit,
+		   info->pobjver);
+    o->snapid = info->snap;
+    op_submit(o, info->session);
+    info->registering = true;
+  } else {
+    dout(15) << "send_linger " << info->linger_id << " already (re)registering" << dendl;
   }
-  Op *o = new Op(info->oid, info->oloc, ops, info->flags | CEPH_OSD_FLAG_READ,
-		 onack, oncommit,
-		 info->pobjver);
-  o->snapid = info->snap;
-  return op_submit(o, info);
 }
 
 void Objecter::_linger_ack(LingerOp *info, int r) 
@@ -99,9 +97,9 @@ void Objecter::_linger_commit(LingerOp *info, int r)
 
   // only tell the user the first time we do this
   info->registered = true;
+  info->registering = false;
   info->pobjver = NULL;
 }
-
 
 void Objecter::unregister_linger(uint64_t linger_id)
 {
@@ -182,6 +180,13 @@ void Objecter::handle_osd_map(MOSDMap *m)
   bool was_pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
   bool was_pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR);
   bool was_full = osdmap->test_flag(CEPH_OSDMAP_FULL);
+  bool kick_paused =
+    (was_pauserd && !osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) ||
+    (was_pausewr && !osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) ||
+    (was_full && !osdmap->test_flag(CEPH_OSDMAP_FULL));
+
+  set<LingerOp*> need_resend_linger;
+  set<Op*> need_resend;
 
   if (m->get_last() <= osdmap->get_epoch()) {
     dout(3) << "handle_osd_map ignoring epochs [" 
@@ -221,6 +226,37 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  maybe_request_map();
 	  break;
 	}
+	
+	// check for changed linger mappings (_before_ regular ops)
+	for (map<tid_t,LingerOp*>::iterator p = linger_ops.begin();
+	     p != linger_ops.end();
+	     p++) {
+	  LingerOp *op = p->second;
+	  if (recalc_linger_op_target(op))
+	    need_resend_linger.insert(op);
+	}
+
+	// check for changed request mappings
+	for (hash_map<tid_t,Op*>::iterator p = ops.begin();
+	     p != ops.end();
+	     p++) {
+	  Op *op = p->second;
+	  if (recalc_op_target(op))
+	    need_resend.insert(op);
+	}
+
+	// osd addr changes?
+	for (map<int,OSDSession*>::iterator p = osd_sessions.begin();
+	     p != osd_sessions.end(); ) {
+	  OSDSession *s = p->second;
+	  p++;
+	  if (osdmap->is_up(s->osd)) {
+	    if (s->con && s->con->get_peer_addr() != osdmap->get_inst(s->osd).addr)
+	      close_session(s);
+	  } else {
+	    close_session(s);
+	  }
+	}
 
 	assert(e == osdmap->get_epoch());
       }
@@ -238,87 +274,34 @@ void Objecter::handle_osd_map(MOSDMap *m)
     }
   }
 
-  if (was_pauserd || was_pausewr || was_full)
+  // was paused, or was/is full?
+  if (was_pauserd || was_pausewr || was_full ||
+      (osdmap->test_flag(CEPH_OSDMAP_FULL) & CEPH_OSDMAP_FULL))
     maybe_request_map();
   
-  bool kick_paused =
-    (was_pauserd && !osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) ||
-    (was_pausewr && !osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) ||
-    (was_full && !osdmap->test_flag(CEPH_OSDMAP_FULL));
+  // unpause paused ops?
+  if (kick_paused)
+    for (hash_map<tid_t,Op*>::iterator p = ops.begin();
+	 p != ops.end();
+	 p++) {
+      Op *op = p->second;
+      if (op->paused)
+	need_resend.insert(op);
+    }
   
-  // osd addr changes?
-  for (map<int,OSDSession*>::iterator p = osd_sessions.begin();
-       p != osd_sessions.end();
-       p++) {
-    OSDSession *s = p->second;
-    if (osdmap->is_up(s->osd)) {
-      if (s->con->get_peer_addr() != osdmap->get_inst(s->osd).addr)
-	reopen_session(s);
-    }
+  // resend requests
+  for (set<Op*>::iterator p = need_resend.begin(); p != need_resend.end(); p++) {
+    Op *op = *p;
+    if (op->session)
+      send_op(*p);
+  }
+  for (set<LingerOp*>::iterator p = need_resend_linger.begin(); p != need_resend_linger.end(); p++) {
+    LingerOp *op = *p;
+    if (op->session)
+      send_linger(*p);
   }
 
-  // active requests
-  for (hash_map<tid_t,Op*>::iterator p = ops.begin();
-       p != ops.end();
-       p++) {
-    Op *op = p->second;
-
-    // calc target
-    vector<int> acting;
-    if (op->oid.name.length())
-      op->pgid = osdmap->object_locator_to_pg(op->oid, op->oloc);
-    osdmap->pg_to_acting_osds(op->pgid, acting);
-    OSDSession *s = 0;
-
-    if (acting.size())
-      s = get_session(acting[0]);
-    if (op->session != s) {
-      dout(10) << " redirecting tid " << op->tid << " to osd" << (s ? s->osd : -1) << dendl;
-      if (!op->session)
-	num_homeless_ops--;
-      op->session_item.remove_myself();
-      op->session = s;
-      if (s) {
-	op->session->ops.push_back(&op->session_item);
-	send_op(op);
-      } else {
-	num_homeless_ops++;
-      }
-    } else if (s) {
-      if (op->incarnation != s->incarnation) {
-	dout(10) << " resending tid " << op->tid << " to (reopened) osd" << s->osd << dendl;
-	send_op(op);
-      } else if (op->paused && kick_paused) {
-	dout(10) << " kicking paused tid " << op->tid << " on osd" << s->osd << dendl;
-	send_op(op);
-      }
-    }
-  }
-
-  // lingers
-  for (map<uint64_t,LingerOp*>::iterator p = linger_ops.begin();
-       p != linger_ops.end();
-       p++) {
-    LingerOp *op = p->second;
-    vector<int> acting;
-    pg_t pgid = osdmap->object_locator_to_pg(op->oid, op->oloc);
-    osdmap->pg_to_acting_osds(pgid, acting);
-    OSDSession *s = acting.size() ? get_session(acting[0]) : NULL;
-    if (op->session != s) {
-      dout(10) << " redirecting linger id " << op->linger_id << " to osd" << (s ? s->osd : -1) << dendl;
-      op->session_item.remove_myself();
-      op->session = s;
-      if (s) {
-	send_linger(op);
-      }
-    }
-  }
-  
   dump_active();
-
-  // now check if the map is full -- we want to subscribe if it is!
-  if (osdmap->test_flag(CEPH_OSDMAP_FULL) & CEPH_OSDMAP_FULL)
-    maybe_request_map();
   
   // finish any Contexts that were waiting on a map update
   map<epoch_t,list< pair< Context*, int > > >::iterator p =
@@ -339,6 +322,17 @@ void Objecter::handle_osd_map(MOSDMap *m)
   monc->sub_got("osdmap", osdmap->get_epoch());
 }
 
+Objecter::OSDSession *Objecter::get_session(int osd)
+{
+  map<int,OSDSession*>::iterator p = osd_sessions.find(osd);
+  if (p != osd_sessions.end())
+    return p->second;
+  OSDSession *s = new OSDSession(osd);
+  osd_sessions[osd] = s;
+  s->con = messenger->get_connection(osdmap->get_inst(osd));
+  return s;
+}
+
 void Objecter::reopen_session(OSDSession *s)
 {
   entity_inst_t inst = osdmap->get_inst(s->osd);
@@ -349,6 +343,19 @@ void Objecter::reopen_session(OSDSession *s)
   }
   s->con = messenger->get_connection(inst);
   s->incarnation++;
+}
+
+void Objecter::close_session(OSDSession *s)
+{
+  dout(10) << "close_session for osd" << s->osd << dendl;
+  if (s->con) {
+    messenger->mark_down(s->con);
+    s->con->put();
+  }
+  s->ops.clear();
+  s->linger_ops.clear();
+  osd_sessions.erase(s->osd);
+  delete s;
 }
 
 void Objecter::wait_for_osd_map()
@@ -456,7 +463,7 @@ void Objecter::resend_mon_ops()
 
 // read | write ---------------------------
 
-tid_t Objecter::op_submit(Op *op, LingerOp *linger_op)
+tid_t Objecter::op_submit(Op *op, OSDSession *s)
 {
   // throttle.  before we look at any state, because
   // take_op_budget() may drop our lock while it blocks.
@@ -467,19 +474,12 @@ tid_t Objecter::op_submit(Op *op, LingerOp *linger_op)
   assert(client_inc >= 0);
 
   // pick target
-  vector<int> acting;
-  if (op->oid.name.length())
-    op->pgid = osdmap->object_locator_to_pg(op->oid, op->oloc);
-  osdmap->pg_to_acting_osds(op->pgid, acting);
-
-  if (acting.size()) {
-    op->session = get_session(acting[0]);
-    op->session->ops.push_back(&op->session_item);
-    if (linger_op)
-      op->session->linger_ops.push_back(&linger_op->session_item);
+  if (s) {
+    op->session = s;
+    s->ops.push_back(&op->session_item);
   } else {
-    op->session = NULL;
-    num_homeless_ops++;
+    num_homeless_ops++;  // initially!
+    recalc_op_target(op);
   }
     
   // add to gather set(s)
@@ -532,6 +532,71 @@ tid_t Objecter::op_submit(Op *op, LingerOp *linger_op)
   return op->tid;
 }
 
+bool Objecter::is_pg_changed(vector<int>& o, vector<int>& n)
+{
+  if (o.empty() && n.empty())
+    return false;    // both still empty
+  if (o.empty() ^ n.empty())
+    return true;     // was empty, now not, or vice versa
+  if (o[0] != n[0])
+    return true;     // primary changed
+  return false;      // same primary (tho replicas may have changed)
+}
+
+bool Objecter::recalc_op_target(Op *op)
+{
+  vector<int> acting;
+  pg_t pgid = op->pgid;
+  if (op->oid.name.length())
+    pgid = osdmap->object_locator_to_pg(op->oid, op->oloc);
+  osdmap->pg_to_acting_osds(pgid, acting);
+
+  if (op->pgid != pgid || is_pg_changed(op->acting, acting)) {
+    op->pgid = pgid;
+    op->acting = acting;
+    dout(10) << "recalc_op_target tid " << op->tid << " pgid " << pgid << " acting " << acting << dendl;
+
+    OSDSession *s = op->acting.size() ? get_session(op->acting[0]) : NULL;
+
+    if (op->session != s) {
+      if (!op->session)
+	num_homeless_ops--;
+      op->session_item.remove_myself();
+      op->session = s;
+      if (s)
+	s->ops.push_back(&op->session_item);
+      else
+	num_homeless_ops++;
+    }
+    return true;
+  }
+  return false;
+}
+
+bool Objecter::recalc_linger_op_target(LingerOp *linger_op)
+{
+  vector<int> acting;
+  pg_t pgid = osdmap->object_locator_to_pg(linger_op->oid, linger_op->oloc);
+  osdmap->pg_to_acting_osds(pgid, acting);
+
+  if (pgid != linger_op->pgid || is_pg_changed(linger_op->acting, acting)) {
+    linger_op->pgid = pgid;
+    linger_op->acting = acting;
+    dout(10) << "recalc_linger_op_target tid " << linger_op->linger_id
+	     << " pgid " << pgid << " acting " << acting << dendl;
+    
+    OSDSession *s = acting.size() ? get_session(acting[0]) : NULL;
+    if (linger_op->session != s) {
+      linger_op->session_item.remove_myself();
+      linger_op->session = s;
+      if (s)
+	s->linger_ops.push_back(&linger_op->session_item);
+    }
+    return true;
+  }
+  return false;
+}
+
 void Objecter::send_op(Op *op)
 {
   dout(15) << "send_op " << op->tid << " to osd" << op->session->osd << dendl;
@@ -542,8 +607,6 @@ void Objecter::send_op(Op *op)
   if (op->onack)
     flags |= CEPH_OSD_FLAG_ACK;
 
-  if (!op->session->con)
-    op->session->con = messenger->get_connection(osdmap->get_inst(op->session->osd));
   assert(op->session->con);
 
   // preallocated rx buffer?
@@ -1256,7 +1319,7 @@ void Objecter::ms_handle_remote_reset(Connection *con)
 
 void Objecter::dump_active()
 {
-  dout(20) << "dump_active" << dendl;
+  dout(20) << "dump_active .. " << num_homeless_ops << " homeless" << dendl;
   for (hash_map<tid_t,Op*>::iterator p = ops.begin(); p != ops.end(); p++) {
     Op *op = p->second;
     dout(20) << op->tid << "\t" << op->pgid << "\tosd" << (op->session ? op->session->osd : -1)

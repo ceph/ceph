@@ -250,12 +250,14 @@ public:
     OSDSession *session;
     xlist<Op*>::item session_item;
     int incarnation;
-
+    
     object_t oid;
     object_locator_t oloc;
-    pg_t pgid;
 
-    Connection *con;
+    pg_t pgid;
+    vector<int> acting;
+
+    Connection *con;  // for rx buffer only
 
     vector<OSDOp> ops;
 
@@ -405,6 +407,10 @@ public:
     uint64_t linger_id;
     object_t oid;
     object_locator_t oloc;
+
+    pg_t pgid;
+    vector<int> acting;
+
     snapid_t snap;
     int flags;
     vector<OSDOp> ops;
@@ -412,14 +418,15 @@ public:
     bufferlist *poutbl;
     eversion_t *pobjver;
 
-    bool registered;
+    bool registering, registered;
     Context *on_reg_ack, *on_reg_commit;
 
     OSDSession *session;
     xlist<LingerOp*>::item session_item;
 
     LingerOp() : linger_id(0), flags(0), poutbl(NULL), pobjver(NULL),
-		 registered(false), on_reg_ack(NULL), on_reg_commit(NULL),
+		 registering(false), registered(false),
+		 on_reg_ack(NULL), on_reg_commit(NULL),
 		 session(NULL), session_item(this) {}
 
     // no copy!
@@ -458,14 +465,6 @@ public:
   };
   map<int,OSDSession*> osd_sessions;
 
-  OSDSession *get_session(int osd) {
-    map<int,OSDSession*>::iterator p = osd_sessions.find(osd);
-    if (p != osd_sessions.end())
-      return p->second;
-    OSDSession *s = new OSDSession(osd);
-    osd_sessions[osd] = s;
-    return s;
-  }
 
  private:
   // pending ops
@@ -479,8 +478,19 @@ public:
   map<epoch_t,list< pair<Context*, int> > > waiting_for_map;
 
   void send_op(Op *op);
+  bool is_pg_changed(vector<int>& a, vector<int>& b);
+  bool recalc_op_target(Op *op);
+  bool recalc_linger_op_target(LingerOp *op);
+
+  void send_linger(LingerOp *info);
+  void _linger_ack(LingerOp *info, int r);
+  void _linger_commit(LingerOp *info, int r);
+
   void kick_requests(OSDSession *session);
+
+  OSDSession *get_session(int osd);
   void reopen_session(OSDSession *session);
+  void close_session(OSDSession *session);
   
   void _list_reply(ListContext *list_context, bufferlist *bl, Context *final_finish);
 
@@ -546,11 +556,7 @@ public:
 
 private:
   // low-level
-  tid_t op_submit(Op *op, LingerOp *linger_op = NULL);
-
-  tid_t send_linger(LingerOp *info);
-  void _linger_ack(LingerOp *info, int r);
-  void _linger_commit(LingerOp *info, int r);
+  tid_t op_submit(Op *op, OSDSession *s = NULL);
 
   // public interface
  public:
