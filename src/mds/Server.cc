@@ -4045,12 +4045,16 @@ void Server::handle_client_unlink(MDRequest *mdr)
     }
   }
 
-  CDentry *straydn = 0;
-  if (dnl->is_primary()) {
+  // -- create stray dentry? --
+  CDentry *straydn = mdr->straydn;
+  if (dnl->is_primary() && !straydn) {
     straydn = mdcache->get_or_create_stray_dentry(dnl->get_inode());
-    mdr->pin(straydn);  // pin it.
-    dout(10) << " straydn is " << *straydn << dendl;
+    mdr->pin(straydn);
+    mdr->straydn = straydn;
   }
+  if (straydn)
+    dout(10) << " straydn is " << *straydn << dendl;
+
 
   // lock
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
@@ -4499,12 +4503,14 @@ void Server::handle_client_rename(MDRequest *mdr)
     dout(10) << " this is a link merge" << dendl;
 
   // -- create stray dentry? --
-  CDentry *straydn = 0;
-  if (destdnl->is_primary() && !linkmerge) {
+  CDentry *straydn = mdr->straydn;
+  if (destdnl->is_primary() && !linkmerge && !straydn) {
     straydn = mdcache->get_or_create_stray_dentry(destdnl->get_inode());
     mdr->pin(straydn);
-    dout(10) << "straydn is " << *straydn << dendl;
+    mdr->straydn = straydn;
   }
+  if (straydn)
+    dout(10) << " straydn is " << *straydn << dendl;
 
   // -- prepare witness list --
   /*
