@@ -469,12 +469,12 @@ public:
 
  private:
   // pending ops
-  hash_map<tid_t,Op*>       op_osd;
+  hash_map<tid_t,Op*>       ops;
   int                       num_homeless_ops;
-  map<uint64_t, LingerOp*>  op_linger_info;
-  map<tid_t,PoolStatOp*>    op_poolstat;
-  map<tid_t,StatfsOp*>      op_statfs;
-  map<tid_t,PoolOp*>        op_pool;
+  map<uint64_t, LingerOp*>  linger_ops;
+  map<tid_t,PoolStatOp*>    poolstat_ops;
+  map<tid_t,StatfsOp*>      statfs_ops;
+  map<tid_t,PoolOp*>        pool_ops;
 
   map<epoch_t,list< pair<Context*, int> > > waiting_for_map;
 
@@ -487,7 +487,7 @@ public:
 
   /**
    * handle a budget for in-flight ops
-   * budget is taken whenever an op goes into the op_osd map
+   * budget is taken whenever an op goes into the ops map
    * and returned whenever an op is removed from the map
    * If throttle_op needs to throttle it will unlock client_lock.
    */
@@ -554,7 +554,7 @@ private:
   // public interface
  public:
   bool is_active() {
-    return !(op_osd.empty() && op_poolstat.empty() && op_statfs.empty());
+    return !(ops.empty() && linger_ops.empty() && poolstat_ops.empty() && statfs_ops.empty());
   }
   void dump_active();
 

@@ -105,11 +105,11 @@ void Objecter::_linger_commit(LingerOp *info, int r)
 
 void Objecter::unregister_linger(uint64_t linger_id)
 {
-  map<uint64_t, LingerOp*>::iterator iter = op_linger_info.find(linger_id);
-  if (iter != op_linger_info.end()) {
+  map<uint64_t, LingerOp*>::iterator iter = linger_ops.find(linger_id);
+  if (iter != linger_ops.end()) {
     LingerOp *info = iter->second;
     info->session_item.remove_myself();
-    op_linger_info.erase(iter);
+    linger_ops.erase(iter);
     delete info;
   }
 }
@@ -133,7 +133,7 @@ tid_t Objecter::linger(const object_t& oid, const object_locator_t& oloc,
   info->on_reg_commit = onfinish;
 
   info->linger_id = ++max_linger_id;
-  op_linger_info[info->linger_id] = info;
+  linger_ops[info->linger_id] = info;
 
   send_linger(info);
 
@@ -264,8 +264,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
   }
 
   // active requests
-  for (hash_map<tid_t,Op*>::iterator p = op_osd.begin();
-       p != op_osd.end();
+  for (hash_map<tid_t,Op*>::iterator p = ops.begin();
+       p != ops.end();
        p++) {
     Op *op = p->second;
 
@@ -302,8 +302,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
   }
 
   // lingers
-  for (map<uint64_t,LingerOp*>::iterator p = op_linger_info.begin();
-       p != op_linger_info.end();
+  for (map<uint64_t,LingerOp*>::iterator p = linger_ops.begin();
+       p != linger_ops.end();
        p++) {
     LingerOp *op = p->second;
     vector<int> acting;
@@ -398,8 +398,8 @@ void Objecter::tick()
   utime_t cutoff = g_clock.now();
   cutoff -= g_conf.objecter_timeout;  // timeout
 
-  for (hash_map<tid_t,Op*>::iterator p = op_osd.begin();
-       p != op_osd.end();
+  for (hash_map<tid_t,Op*>::iterator p = ops.begin();
+       p != ops.end();
        p++) {
     Op *op = p->second;
     if (op->session && op->stamp < cutoff) {
@@ -430,17 +430,17 @@ void Objecter::resend_mon_ops()
   cutoff -= g_conf.objecter_mon_retry_interval;
 
 
-  for (map<tid_t,PoolStatOp*>::iterator p = op_poolstat.begin(); p!=op_poolstat.end(); ++p) {
+  for (map<tid_t,PoolStatOp*>::iterator p = poolstat_ops.begin(); p!=poolstat_ops.end(); ++p) {
     if (p->second->last_submit < cutoff)
       poolstat_submit(p->second);
   }
 
-  for (map<tid_t,StatfsOp*>::iterator p = op_statfs.begin(); p!=op_statfs.end(); ++p) {
+  for (map<tid_t,StatfsOp*>::iterator p = statfs_ops.begin(); p!=statfs_ops.end(); ++p) {
     if (p->second->last_submit < cutoff)
       fs_stats_submit(p->second);
   }
 
-  for (map<tid_t,PoolOp*>::iterator p = op_pool.begin(); p!=op_pool.end(); ++p) {
+  for (map<tid_t,PoolOp*>::iterator p = pool_ops.begin(); p!=pool_ops.end(); ++p) {
     if (p->second->last_submit < cutoff)
       pool_op_submit(p->second);
   }
@@ -490,7 +490,7 @@ tid_t Objecter::op_submit(Op *op, LingerOp *linger_op)
   } else {
     dout(20) << " note: not requesting commit" << dendl;
   }
-  op_osd[op->tid] = op;
+  ops[op->tid] = op;
 
   // send?
   dout(10) << "op_submit oid " << op->oid
@@ -619,7 +619,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   // get pio
   tid_t tid = m->get_tid();
 
-  if (op_osd.count(tid) == 0) {
+  if (ops.count(tid) == 0) {
     dout(7) << "handle_osd_op_reply " << tid
 	    << (m->is_ondisk() ? " ondisk":(m->is_onnvram() ? " onnvram":" ack"))
 	    << " ... stray" << dendl;
@@ -631,7 +631,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 	  << (m->is_ondisk() ? " ondisk":(m->is_onnvram() ? " onnvram":" ack"))
 	  << " v " << m->get_version() << " in " << m->get_pg()
 	  << dendl;
-  Op *op = op_osd[tid];
+  Op *op = ops[tid];
 
   if (op->session->con != m->get_connection()) {
     dout(7) << " ignoring reply from " << m->get_source_inst()
@@ -687,7 +687,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     op->session_item.remove_myself();
     dout(15) << "handle_osd_op_reply completed tid " << tid << dendl;
     put_op_budget(op);
-    op_osd.erase(tid);
+    ops.erase(tid);
     if (op->con)
       op->con->put();
     delete op;
@@ -824,7 +824,7 @@ int Objecter::create_pool_snap(int pool, string& snapName, Context *onfinish) {
   op->name = snapName;
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_CREATE_SNAP;
-  op_pool[op->tid] = op;
+  pool_ops[op->tid] = op;
 
   pool_op_submit(op);
 
@@ -858,7 +858,7 @@ int Objecter::allocate_selfmanaged_snap(int pool, snapid_t *psnapid,
   op->onfinish = fin;
   op->blp = &fin->bl;
   op->pool_op = POOL_OP_CREATE_UNMANAGED_SNAP;
-  op_pool[op->tid] = op;
+  pool_ops[op->tid] = op;
 
   pool_op_submit(op);
   return 0;
@@ -875,7 +875,7 @@ int Objecter::delete_pool_snap(int pool, string& snapName, Context *onfinish)
   op->name = snapName;
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_DELETE_SNAP;
-  op_pool[op->tid] = op;
+  pool_ops[op->tid] = op;
   
   pool_op_submit(op);
   
@@ -893,7 +893,7 @@ int Objecter::delete_selfmanaged_snap(int pool, snapid_t snap,
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_DELETE_UNMANAGED_SNAP;
   op->snapid = snap;
-  op_pool[op->tid] = op;
+  pool_ops[op->tid] = op;
 
   pool_op_submit(op);
 
@@ -912,7 +912,7 @@ int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid,
   op->name = name;
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_CREATE;
-  op_pool[op->tid] = op;
+  pool_ops[op->tid] = op;
   op->auid = auid;
   op->crush_rule = crush_rule;
 
@@ -932,7 +932,7 @@ int Objecter::delete_pool(int pool, Context *onfinish)
   op->name = "delete";
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_DELETE;
-  op_pool[op->tid] = op;
+  pool_ops[op->tid] = op;
 
   pool_op_submit(op);
 
@@ -956,7 +956,7 @@ int Objecter::change_pool_auid(int pool, Context *onfinish, uint64_t auid)
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_AUID_CHANGE;
   op->auid = auid;
-  op_pool[op->tid] = op;
+  pool_ops[op->tid] = op;
 
   pool_op_submit(op);
 
@@ -985,8 +985,8 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
 {
   dout(10) << "handle_pool_op_reply " << *m << dendl;
   tid_t tid = m->get_tid();
-  if (op_pool.count(tid)) {
-    PoolOp *op = op_pool[tid];
+  if (pool_ops.count(tid)) {
+    PoolOp *op = pool_ops[tid];
     dout(10) << "have request " << tid << " at " << op << " Op: " << ceph_pool_op_name(op->pool_op) << dendl;
     if (op->blp) {
       op->blp->claim(*m->response_data);
@@ -1004,7 +1004,7 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
     }
     op->onfinish = NULL;
     delete op;
-    op_pool.erase(tid);
+    pool_ops.erase(tid);
   } else {
     dout(10) << "unknown request " << tid << dendl;
   }
@@ -1025,7 +1025,7 @@ void Objecter::get_pool_stats(list<string>& pools, map<string,pool_stat_t> *resu
   op->pools = pools;
   op->pool_stats = result;
   op->onfinish = onfinish;
-  op_poolstat[op->tid] = op;
+  poolstat_ops[op->tid] = op;
 
   poolstat_submit(op);
 }
@@ -1042,15 +1042,15 @@ void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
   dout(10) << "handle_get_pool_stats_reply " << *m << dendl;
   tid_t tid = m->get_tid();
 
-  if (op_poolstat.count(tid)) {
-    PoolStatOp *op = op_poolstat[tid];
+  if (poolstat_ops.count(tid)) {
+    PoolStatOp *op = poolstat_ops[tid];
     dout(10) << "have request " << tid << " at " << op << dendl;
     *op->pool_stats = m->pool_stats;
     if (m->version > last_seen_pgmap_version)
       last_seen_pgmap_version = m->version;
     op->onfinish->finish(0);
     delete op->onfinish;
-    op_poolstat.erase(tid);
+    poolstat_ops.erase(tid);
     delete op;
   } else {
     dout(10) << "unknown request " << tid << dendl;
@@ -1067,7 +1067,7 @@ void Objecter::get_fs_stats(ceph_statfs& result, Context *onfinish) {
   op->tid = ++last_tid;
   op->stats = &result;
   op->onfinish = onfinish;
-  op_statfs[op->tid] = op;
+  statfs_ops[op->tid] = op;
 
   fs_stats_submit(op);
 }
@@ -1083,15 +1083,15 @@ void Objecter::handle_fs_stats_reply(MStatfsReply *m) {
   dout(10) << "handle_fs_stats_reply " << *m << dendl;
   tid_t tid = m->get_tid();
 
-  if (op_statfs.count(tid)) {
-    StatfsOp *op = op_statfs[tid];
+  if (statfs_ops.count(tid)) {
+    StatfsOp *op = statfs_ops[tid];
     dout(10) << "have request " << tid << " at " << op << dendl;
     *(op->stats) = m->h.st;
     if (m->h.version > last_seen_pgmap_version)
       last_seen_pgmap_version = m->h.version;
     op->onfinish->finish(0);
     delete op->onfinish;
-    op_statfs.erase(tid);
+    statfs_ops.erase(tid);
     delete op;
   } else {
     dout(10) << "unknown request " << tid << dendl;
@@ -1253,7 +1253,7 @@ void Objecter::ms_handle_remote_reset(Connection *con)
 void Objecter::dump_active()
 {
   dout(0) << "dump_active" << dendl;
-  for (hash_map<tid_t,Op*>::iterator p = op_osd.begin(); p != op_osd.end(); p++)
+  for (hash_map<tid_t,Op*>::iterator p = ops.begin(); p != ops.end(); p++)
     dout(0) << " " << p->first << "\t" << p->second->oid << "\t" << p->second->ops << dendl;
 }
 
