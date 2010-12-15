@@ -1292,6 +1292,30 @@ void MDS::replay_done()
 
 void MDS::standby_trim_segments()
 {
+  dout(10) << "standby_trim_segments" << dendl;
+  LogSegment *seg = NULL;
+  uint64_t expire_pos = mdlog->get_journaler()->get_expire_pos();
+  dout(10) << "expire_pos=" << expire_pos << dendl;
+  bool removed_segment = false;
+  while ((seg=mdlog->get_oldest_segment())->end <= expire_pos) {
+    dout(0) << "removing segment" << dendl;
+    seg->dirty_dirfrags.clear_list();
+    seg->new_dirfrags.clear_list();
+    seg->dirty_inodes.clear_list();
+    seg->dirty_dentries.clear_list();
+    seg->open_files.clear_list();
+    seg->renamed_files.clear_list();
+    seg->dirty_dirfrag_dir.clear_list();
+    seg->dirty_dirfrag_nest.clear_list();
+    seg->dirty_dirfrag_dirfragtree.clear_list();
+    mdlog->remove_oldest_segment();
+    removed_segment = true;
+  }
+
+  if (removed_segment) {
+    dout(20) << "calling mdcache->trim!" << dendl;
+    mdcache->trim(-1);
+  } else dout(20) << "removed no segments!" << dendl;
   return;
 }
 
