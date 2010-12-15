@@ -842,6 +842,7 @@ noinst_HEADERS = \
         osd/PGLS.h\
         osd/RAID4PG.h\
         osd/ReplicatedPG.h\
+        osd/Watch.h\
         osd/osd_types.h\
 	osdc/rados_bencher.h\
         osdc/Blinker.h\
