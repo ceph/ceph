@@ -4974,6 +4974,12 @@ bool MDCache::trim(int max)
   while (lru.lru_get_size() > (unsigned)max) {
     CDentry *dn = (CDentry*)lru.lru_expire();
     if (!dn) break;
+    if (dn->get_linkage() &&
+        dn->get_linkage()->inode->item_open_file.is_on_list()) {
+      assert(mds->is_standby_replay());
+      lru.lru_insert_mid(dn);
+      continue;
+    }
     trim_dentry(dn, expiremap);
   }
 
