@@ -877,6 +877,6 @@ install-data-local:
 	mkdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
 
 uninstall-local:
-	rmdir --ignore-fail-on-non-empty -p $(DESTDIR)$(sysconfdir)/ceph/
-	rmdir --ignore-fail-on-non-empty -p $(DESTDIR)$(localstatedir)/log/ceph/stat
-	rmdir --ignore-fail-on-non-empty -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
+	-rmdir -p $(DESTDIR)$(sysconfdir)/ceph/
+	-rmdir -p $(DESTDIR)$(localstatedir)/log/ceph/stat
+	-rmdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
