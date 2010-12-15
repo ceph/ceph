@@ -1222,6 +1222,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
 	Watch::Notification *notif = osd->watch->get_notif(op.watch.cookie);
 	if (!notif) {
+          osd->watch_lock.Unlock();
 	  result = -EINVAL;
 	  break;
 	}

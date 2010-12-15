@@ -459,6 +459,7 @@ int OSD::init()
   Mutex::Locker lock(osd_lock);
 
   timer.init();
+  watch_timer.init();
   watch = new Watch();
 
   // mount.
@@ -653,6 +654,10 @@ int OSD::shutdown()
   state = STATE_STOPPING;
 
   timer.shutdown();
+
+  watch_lock.Lock();
+  watch_timer.shutdown();
+  watch_lock.Unlock();
 
   heartbeat_lock.Lock();
   heartbeat_stop = true;
@@ -1757,7 +1762,8 @@ void OSD::handle_notify_timeout(void *_notif)
   ReplicatedPG *pg = (ReplicatedPG *)lookup_lock_raw_pg(notif->pgid);
   pg_t pgid = notif->pgid;
   pg->do_complete_notify(notif, obc);
-  put_object_context(obc, notif->pgid);
+  pg->put_object_context(obc);
+  pg->unlock();
   
   watch_lock.Lock();
   /* exiting with watch_lock held */
