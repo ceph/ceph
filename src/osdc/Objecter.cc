@@ -58,22 +58,22 @@ void Objecter::shutdown()
 {
 }
 
-tid_t Objecter::resend_linger(LingerOp *info)
+void Objecter::send_linger(LingerOp *info)
 {
-  vector<OSDOp> ops = info->ops; // need to pass a copy to ops
-  Context *onack = NULL;
-  Context *oncommit = NULL;
-  if (!info->registered) {
-    if (info->on_reg_ack)
-      onack = new C_Linger_Ack(this, info);
-    if (info->on_reg_commit)
-      oncommit = new C_Linger_Commit(this, info);
+  if (!info->registering) {
+    dout(15) << "send_linger " << info->linger_id << dendl;
+    vector<OSDOp> ops = info->ops; // need to pass a copy to ops
+    Context *onack = (!info->registered && info->on_reg_ack) ? new C_Linger_Ack(this, info) : NULL;
+    Context *oncommit = new C_Linger_Commit(this, info);
+    Op *o = new Op(info->oid, info->oloc, ops, info->flags | CEPH_OSD_FLAG_READ,
+		   onack, oncommit,
+		   info->pobjver);
+    o->snapid = info->snap;
+    op_submit(o, info->session);
+    info->registering = true;
+  } else {
+    dout(15) << "send_linger " << info->linger_id << " already (re)registering" << dendl;
   }
-  Op *o = new Op(info->oid, info->oloc, ops, info->flags | CEPH_OSD_FLAG_READ,
-		 onack, oncommit,
-		 info->pobjver, true);
-  o->snapid = info->snap;
-  return op_submit(o, info);
 }
 
 void Objecter::_linger_ack(LingerOp *info, int r) 
@@ -97,17 +97,17 @@ void Objecter::_linger_commit(LingerOp *info, int r)
 
   // only tell the user the first time we do this
   info->registered = true;
+  info->registering = false;
   info->pobjver = NULL;
 }
 
-
 void Objecter::unregister_linger(uint64_t linger_id)
 {
-  map<uint64_t, LingerOp*>::iterator iter = op_linger_info.find(linger_id);
-  if (iter != op_linger_info.end()) {
+  map<uint64_t, LingerOp*>::iterator iter = linger_ops.find(linger_id);
+  if (iter != linger_ops.end()) {
     LingerOp *info = iter->second;
-    info->pg_item.remove_myself();
-    op_linger_info.erase(iter);
+    info->session_item.remove_myself();
+    linger_ops.erase(iter);
     delete info;
   }
 }
@@ -131,9 +131,9 @@ tid_t Objecter::linger(const object_t& oid, const object_locator_t& oloc,
   info->on_reg_commit = onfinish;
 
   info->linger_id = ++max_linger_id;
-  op_linger_info[info->linger_id] = info;
+  linger_ops[info->linger_id] = info;
 
-  resend_linger(info);
+  send_linger(info);
 
   return info->linger_id;
 }
@@ -177,6 +177,17 @@ void Objecter::handle_osd_map(MOSDMap *m)
     return;
   }
 
+  bool was_pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
+  bool was_pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR);
+  bool was_full = osdmap->test_flag(CEPH_OSDMAP_FULL);
+  bool kick_paused =
+    (was_pauserd && !osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) ||
+    (was_pausewr && !osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) ||
+    (was_full && !osdmap->test_flag(CEPH_OSDMAP_FULL));
+
+  set<LingerOp*> need_resend_linger;
+  set<Op*> need_resend;
+
   if (m->get_last() <= osdmap->get_epoch()) {
     dout(3) << "handle_osd_map ignoring epochs [" 
             << m->get_first() << "," << m->get_last() 
@@ -188,18 +199,12 @@ void Objecter::handle_osd_map(MOSDMap *m)
             << "] > " << osdmap->get_epoch()
             << dendl;
 
-    set<pg_t> changed_pgs;
-
     if (osdmap->get_epoch()) {
       // we want incrementals
       for (epoch_t e = osdmap->get_epoch() + 1;
 	   e <= m->get_last();
 	   e++) {
-
-	bool was_pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
-	bool was_pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR);
-	bool was_full = osdmap->test_flag(CEPH_OSDMAP_FULL);
-  
+ 
 	if (m->incremental_maps.count(e)) {
 	  dout(3) << "handle_osd_map decoding incremental epoch " << e << dendl;
 	  OSDMap::Incremental inc(m->incremental_maps[e]);
@@ -221,27 +226,38 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  maybe_request_map();
 	  break;
 	}
-
-	if (was_pauserd || was_pausewr || was_full)
-	  maybe_request_map();
 	
-	// scan pgs for changes
-	scan_pgs(changed_pgs);
+	// check for changed linger mappings (_before_ regular ops)
+	for (map<tid_t,LingerOp*>::iterator p = linger_ops.begin();
+	     p != linger_ops.end();
+	     p++) {
+	  LingerOp *op = p->second;
+	  if (recalc_linger_op_target(op))
+	    need_resend_linger.insert(op);
+	}
 
-	// kick paused
-	if ((was_pauserd && !osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) ||
-	    (was_pausewr && !osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) ||
-	    (was_full && !osdmap->test_flag(CEPH_OSDMAP_FULL))) {
-	  for (hash_map<tid_t,Op*>::iterator p = op_osd.begin();
-	       p != op_osd.end();
-	       p++) {
-	    if (p->second->paused) {
-	      p->second->paused = false;
-	      op_submit(p->second);
-	    }
+	// check for changed request mappings
+	for (hash_map<tid_t,Op*>::iterator p = ops.begin();
+	     p != ops.end();
+	     p++) {
+	  Op *op = p->second;
+	  if (recalc_op_target(op))
+	    need_resend.insert(op);
+	}
+
+	// osd addr changes?
+	for (map<int,OSDSession*>::iterator p = osd_sessions.begin();
+	     p != osd_sessions.end(); ) {
+	  OSDSession *s = p->second;
+	  p++;
+	  if (osdmap->is_up(s->osd)) {
+	    if (s->con && s->con->get_peer_addr() != osdmap->get_inst(s->osd).addr)
+	      close_session(s);
+	  } else {
+	    close_session(s);
 	  }
 	}
-        dump_active();
+
 	assert(e == osdmap->get_epoch());
       }
       
@@ -250,25 +266,44 @@ void Objecter::handle_osd_map(MOSDMap *m)
       if (m->maps.count(m->get_last())) {
 	dout(3) << "handle_osd_map decoding full epoch " << m->get_last() << dendl;
 	osdmap->decode(m->maps[m->get_last()]);
-
-	scan_pgs(changed_pgs);
       } else {
 	dout(3) << "handle_osd_map hmm, i want a full map, requesting" << dendl;
 	monc->sub_want("osdmap", 0, CEPH_SUBSCRIBE_ONETIME);
 	monc->renew_subs();
       }
     }
-
-    // kick requests who might be timing out on the wrong osds
-    if (!changed_pgs.empty())
-      kick_requests(changed_pgs);
   }
 
-  //now check if the map is full -- we want to subscribe if it is!
-  if (osdmap->test_flag(CEPH_OSDMAP_FULL) & CEPH_OSDMAP_FULL)
+  // was paused, or was/is full?
+  if (was_pauserd || was_pausewr || was_full ||
+      (osdmap->test_flag(CEPH_OSDMAP_FULL) & CEPH_OSDMAP_FULL))
     maybe_request_map();
   
-  //finish any Contexts that were waiting on a map update
+  // unpause paused ops?
+  if (kick_paused)
+    for (hash_map<tid_t,Op*>::iterator p = ops.begin();
+	 p != ops.end();
+	 p++) {
+      Op *op = p->second;
+      if (op->paused)
+	need_resend.insert(op);
+    }
+  
+  // resend requests
+  for (set<Op*>::iterator p = need_resend.begin(); p != need_resend.end(); p++) {
+    Op *op = *p;
+    if (op->session)
+      send_op(*p);
+  }
+  for (set<LingerOp*>::iterator p = need_resend_linger.begin(); p != need_resend_linger.end(); p++) {
+    LingerOp *op = *p;
+    if (op->session)
+      send_linger(*p);
+  }
+
+  dump_active();
+  
+  // finish any Contexts that were waiting on a map update
   map<epoch_t,list< pair< Context*, int > > >::iterator p =
     waiting_for_map.begin();
   while (p != waiting_for_map.end() &&
@@ -285,6 +320,42 @@ void Objecter::handle_osd_map(MOSDMap *m)
   m->put();
 
   monc->sub_got("osdmap", osdmap->get_epoch());
+}
+
+Objecter::OSDSession *Objecter::get_session(int osd)
+{
+  map<int,OSDSession*>::iterator p = osd_sessions.find(osd);
+  if (p != osd_sessions.end())
+    return p->second;
+  OSDSession *s = new OSDSession(osd);
+  osd_sessions[osd] = s;
+  s->con = messenger->get_connection(osdmap->get_inst(osd));
+  return s;
+}
+
+void Objecter::reopen_session(OSDSession *s)
+{
+  entity_inst_t inst = osdmap->get_inst(s->osd);
+  dout(10) << "reopen_session osd" << s->osd << " session, addr now " << inst << dendl;
+  if (s->con) {
+    messenger->mark_down(s->con);
+    s->con->put();
+  }
+  s->con = messenger->get_connection(inst);
+  s->incarnation++;
+}
+
+void Objecter::close_session(OSDSession *s)
+{
+  dout(10) << "close_session for osd" << s->osd << dendl;
+  if (s->con) {
+    messenger->mark_down(s->con);
+    s->con->put();
+  }
+  s->ops.clear();
+  s->linger_ops.clear();
+  osd_sessions.erase(s->osd);
+  delete s;
 }
 
 void Objecter::wait_for_osd_map()
@@ -316,123 +387,17 @@ void Objecter::maybe_request_map()
 }
 
 
-Objecter::PG &Objecter::get_pg(pg_t pgid)
+void Objecter::kick_requests(OSDSession *session)
 {
-  if (!pg_map.count(pgid)) {
-    osdmap->pg_to_acting_osds(pgid, pg_map[pgid].acting);
-    dout(10) << "get_pg " << pgid << " is new, " << pg_map[pgid].acting << dendl;
-  } else {
-    dout(10) << "get_pg " << pgid << " is old, " << pg_map[pgid].acting << dendl;
-  }
-  return pg_map[pgid];
-}
+  dout(10) << "kick_requests for osd" << session->osd << dendl;
 
+  // resend ops
+  for (xlist<Op*>::iterator p = session->ops.begin(); !p.end(); ++p)
+    send_op(*p);
 
-void Objecter::scan_pgs_for(set<pg_t>& pgs, int osd)
-{
-  dout(10) << "scan_pgs_for osd" << osd << dendl;
-
-  for (hash_map<pg_t,PG>::iterator i = pg_map.begin();
-       i != pg_map.end();
-       i++) {
-    pg_t pgid = i->first;
-    PG& pg = i->second;
-    if (pg.acting.size() && pg.acting[0] == osd)
-      pgs.insert(pgid);
-  }
-}
-
-void Objecter::scan_pgs(set<pg_t>& changed_pgs)
-{
-  dout(10) << "scan_pgs" << dendl;
-
-  for (hash_map<pg_t,PG>::iterator i = pg_map.begin();
-       i != pg_map.end();
-       i++) {
-    pg_t pgid = i->first;
-    PG& pg = i->second;
-    
-    // calc new.
-    vector<int> other;
-    osdmap->pg_to_acting_osds(pgid, other);
-
-    if (other == pg.acting) 
-      continue; // no change.
-
-    dout(10) << "scan_pgs " << pgid << " " << pg.acting << " -> " << other << dendl;
-    
-    other.swap(pg.acting);
-
-    if (other.size() && pg.acting.size() &&
-	other[0] == pg.acting[0])
-      continue;  // same primary.
-
-    // changed significantly.
-    dout(10) << "scan_pgs pg " << pgid 
-             << " (" << pg.active_tids << ")"
-             << " " << other << " -> " << pg.acting
-             << dendl;
-    changed_pgs.insert(pgid);
-  }
-}
-
-void Objecter::kick_requests(set<pg_t>& changed_pgs) 
-{
-  dout(10) << "kick_requests in pgs " << changed_pgs << dendl;
-  dout(0) << "*** kick_requests in pgs " << changed_pgs << dendl;
-
-  for (set<pg_t>::iterator i = changed_pgs.begin();
-       i != changed_pgs.end();
-       i++) {
-    pg_t pgid = *i;
-    PG& pg = pg_map[pgid];
-
-    // resubmit ops!
-    set<tid_t> tids;
-    tids.swap( pg.active_tids );
-
-    // resend lingers
-    for (xlist<LingerOp*>::iterator j = pg.linger_ops.begin(); !j.end(); ++j)
-      resend_linger(*j);
-
-    if (pg.linger_ops.empty())
-      close_pg( pgid );  // will pbly reopen, unless it's just commits we're missing
-
-    dout(10) << "kick_requests pg " << pgid << " tids " << tids << dendl;
-    for (set<tid_t>::iterator p = tids.begin();
-         p != tids.end();
-         p++) {
-      tid_t tid = *p;
-      
-      hash_map<tid_t, Op*>::iterator p = op_osd.find(tid);
-      if (p != op_osd.end()) {
-	Op *op = p->second;
-	put_op_budget(op);
-	op_osd.erase(p);
-
-	if (op->onack)
-	  num_unacked--;
-	if (op->oncommit)
-	  num_uncommitted--;
-	
-        dout(0) << "kick_requests tid=" << tid << " linger=" << op->linger << dendl;
-        // WRITE
-	if (op->onack) {
-          dout(3) << "kick_requests missing ack, resub " << tid << dendl;
-          op_submit(op, false);
-        } else {
-          if (!op->linger) {
-	    assert(op->oncommit);
-	    dout(3) << "kick_requests missing commit, resub " << tid << dendl;
-	    dout(0) << "kick_requests missing commit, resub " << tid << dendl;
-	    op_submit(op, false);
-          }
-        }
-      } else
-          assert(0);
-    }
-  }
-  dout(0) << "*** kick_requests done" << dendl;
+  // resend lingers
+  for (xlist<LingerOp*>::iterator j = session->linger_ops.begin(); !j.end(); ++j)
+    send_linger(*j);
 }
 
 
@@ -440,31 +405,34 @@ void Objecter::tick()
 {
   dout(10) << "tick" << dendl;
 
-  set<int> ping;
+  set<OSDSession*> toping;
 
-  // look for laggy pgs
+  // look for laggy requests
   utime_t cutoff = g_clock.now();
   cutoff -= g_conf.objecter_timeout;  // timeout
-  for (hash_map<pg_t,PG>::iterator i = pg_map.begin();
-       i != pg_map.end();
-       i++) {
-    if (!i->second.active_tids.empty() &&
-	i->second.last < cutoff) {
-      dout(1) << " pg " << i->first << " on " << i->second.acting
-	      << " is laggy: " << i->second.active_tids << dendl;
-      maybe_request_map();
-      //break;
 
-      // send a ping to this osd, to ensure we detect any session resets
-      // (osd reply message policy is lossy)
-      if (i->second.acting.size())
-	ping.insert(i->second.acting[0]);
+  for (hash_map<tid_t,Op*>::iterator p = ops.begin();
+       p != ops.end();
+       p++) {
+    Op *op = p->second;
+    if (op->session && op->stamp < cutoff) {
+      dout(2) << " tid " << p->first << " on osd" << op->session->osd << " is laggy" << dendl;
+      toping.insert(op->session);
     }
   }
 
-  for (set<int>::iterator p = ping.begin(); p != ping.end(); p++)
-    messenger->send_message(new MPing, osdmap->get_inst(*p));
+  if (num_homeless_ops || !toping.empty())
+    maybe_request_map();
 
+  if (!toping.empty()) {
+    // send a ping to these osds, to ensure we detect any session resets
+    // (osd reply message policy is lossy)
+    for (set<OSDSession*>::iterator i = toping.begin();
+	 i != toping.end();
+	 i++)
+      messenger->send_message(new MPing, osdmap->get_inst((*i)->osd));
+  }
+    
   // reschedule
   timer.add_event_after(g_conf.objecter_tick_interval, new C_Tick(this));
 }
@@ -475,17 +443,17 @@ void Objecter::resend_mon_ops()
   cutoff -= g_conf.objecter_mon_retry_interval;
 
 
-  for (map<tid_t,PoolStatOp*>::iterator p = op_poolstat.begin(); p!=op_poolstat.end(); ++p) {
+  for (map<tid_t,PoolStatOp*>::iterator p = poolstat_ops.begin(); p!=poolstat_ops.end(); ++p) {
     if (p->second->last_submit < cutoff)
       poolstat_submit(p->second);
   }
 
-  for (map<tid_t,StatfsOp*>::iterator p = op_statfs.begin(); p!=op_statfs.end(); ++p) {
+  for (map<tid_t,StatfsOp*>::iterator p = statfs_ops.begin(); p!=statfs_ops.end(); ++p) {
     if (p->second->last_submit < cutoff)
       fs_stats_submit(p->second);
   }
 
-  for (map<tid_t,PoolOp*>::iterator p = op_pool.begin(); p!=op_pool.end(); ++p) {
+  for (map<tid_t,PoolOp*>::iterator p = pool_ops.begin(); p!=pool_ops.end(); ++p) {
     if (p->second->last_submit < cutoff)
       pool_op_submit(p->second);
   }
@@ -495,25 +463,25 @@ void Objecter::resend_mon_ops()
 
 // read | write ---------------------------
 
-tid_t Objecter::op_submit(Op *op, LingerOp *linger_op)
+tid_t Objecter::op_submit(Op *op, OSDSession *s)
 {
   // throttle.  before we look at any state, because
   // take_op_budget() may drop our lock while it blocks.
   take_op_budget(op);
 
-  if (op->oid.name.length())
-    op->pgid = osdmap->object_locator_to_pg(op->oid, op->oloc);
-
-  // find
-  PG &pg = get_pg(op->pgid);
-
-  if (linger_op)
-    pg.linger_ops.push_back(&linger_op->pg_item);
-    
   // pick tid
   op->tid = ++last_tid;
   assert(client_inc >= 0);
 
+  // pick target
+  if (s) {
+    op->session = s;
+    s->ops.push_back(&op->session_item);
+  } else {
+    num_homeless_ops++;  // initially!
+    recalc_op_target(op);
+  }
+    
   // add to gather set(s)
   int flags = op->flags;
   if (op->onack) {
@@ -528,21 +496,13 @@ tid_t Objecter::op_submit(Op *op, LingerOp *linger_op)
   } else {
     dout(20) << " note: not requesting commit" << dendl;
   }
-  op_osd[op->tid] = op;
-
-  pg.active_tids.insert(op->tid);
-  pg.last = g_clock.now();
+  ops[op->tid] = op;
 
   // send?
-  dout(0) << "op_submit oid " << op->oid
-           << " " << op->oloc 
-	   << " " << op->ops << " tid " << op->tid
-           << " osd" << pg.primary()
-           << dendl;
   dout(10) << "op_submit oid " << op->oid
            << " " << op->oloc 
 	   << " " << op->ops << " tid " << op->tid
-           << " osd" << pg.primary()
+           << " osd" << (op->session ? op->session->osd : -1)
            << dendl;
 
   assert(op->flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE));
@@ -562,56 +522,132 @@ tid_t Objecter::op_submit(Op *op, LingerOp *linger_op)
     dout(10) << " FULL, paused modify " << op << " tid " << last_tid << dendl;
     op->paused = true;
     maybe_request_map();
-  } else if (pg.primary() >= 0) {
-    int flags = op->flags;
-    if (op->oncommit)
-      flags |= CEPH_OSD_FLAG_ONDISK;
-    if (op->onack)
-      flags |= CEPH_OSD_FLAG_ACK;
-
-    if (op->con) {
-      if (op->outbl && op->outbl->length()) {
-	dout(20) << " revoking rx buffer for " << op->tid << " on " << op->con << dendl;
-	op->con->revoke_rx_buffer(op->tid);
-      }
-      op->con->put();
-    }
-    op->con = messenger->get_connection(osdmap->get_inst(pg.primary()));
-    assert(op->con);
-    if (op->outbl && op->outbl->length()) {
-      dout(20) << " posting rx buffer for " << op->tid << " on " << op->con << dendl;
-      op->con->post_rx_buffer(op->tid, *op->outbl);
-    }
-
-    ceph_object_layout ol;
-    ol.ol_pgid = op->pgid.v;
-    ol.ol_stripe_unit = 0;
-
-    MOSDOp *m = new MOSDOp(client_inc, op->tid,
-			   op->oid, ol, osdmap->get_epoch(),
-			   flags);
-
-    m->set_snapid(op->snapid);
-    m->set_snap_seq(op->snapc.seq);
-    m->get_snaps() = op->snapc.snaps;
-
-    m->ops = op->ops;
-    m->set_mtime(op->mtime);
-    m->set_retry_attempt(op->attempts++);
-
-    if (op->version != eversion_t())
-      m->set_version(op->version);  // we're replaying this op!
-
-    if (op->priority)
-      m->set_priority(op->priority);
-
-    messenger->send_message(m, op->con);
+  } else if (op->session) {
+    send_op(op);
   } else 
     maybe_request_map();
   
   dout(5) << num_unacked << " unacked, " << num_uncommitted << " uncommitted" << dendl;
   
   return op->tid;
+}
+
+bool Objecter::is_pg_changed(vector<int>& o, vector<int>& n)
+{
+  if (o.empty() && n.empty())
+    return false;    // both still empty
+  if (o.empty() ^ n.empty())
+    return true;     // was empty, now not, or vice versa
+  if (o[0] != n[0])
+    return true;     // primary changed
+  return false;      // same primary (tho replicas may have changed)
+}
+
+bool Objecter::recalc_op_target(Op *op)
+{
+  vector<int> acting;
+  pg_t pgid = op->pgid;
+  if (op->oid.name.length())
+    pgid = osdmap->object_locator_to_pg(op->oid, op->oloc);
+  osdmap->pg_to_acting_osds(pgid, acting);
+
+  if (op->pgid != pgid || is_pg_changed(op->acting, acting)) {
+    op->pgid = pgid;
+    op->acting = acting;
+    dout(10) << "recalc_op_target tid " << op->tid << " pgid " << pgid << " acting " << acting << dendl;
+
+    OSDSession *s = op->acting.size() ? get_session(op->acting[0]) : NULL;
+
+    if (op->session != s) {
+      if (!op->session)
+	num_homeless_ops--;
+      op->session_item.remove_myself();
+      op->session = s;
+      if (s)
+	s->ops.push_back(&op->session_item);
+      else
+	num_homeless_ops++;
+    }
+    return true;
+  }
+  return false;
+}
+
+bool Objecter::recalc_linger_op_target(LingerOp *linger_op)
+{
+  vector<int> acting;
+  pg_t pgid = osdmap->object_locator_to_pg(linger_op->oid, linger_op->oloc);
+  osdmap->pg_to_acting_osds(pgid, acting);
+
+  if (pgid != linger_op->pgid || is_pg_changed(linger_op->acting, acting)) {
+    linger_op->pgid = pgid;
+    linger_op->acting = acting;
+    dout(10) << "recalc_linger_op_target tid " << linger_op->linger_id
+	     << " pgid " << pgid << " acting " << acting << dendl;
+    
+    OSDSession *s = acting.size() ? get_session(acting[0]) : NULL;
+    if (linger_op->session != s) {
+      linger_op->session_item.remove_myself();
+      linger_op->session = s;
+      if (s)
+	s->linger_ops.push_back(&linger_op->session_item);
+    }
+    return true;
+  }
+  return false;
+}
+
+void Objecter::send_op(Op *op)
+{
+  dout(15) << "send_op " << op->tid << " to osd" << op->session->osd << dendl;
+
+  int flags = op->flags;
+  if (op->oncommit)
+    flags |= CEPH_OSD_FLAG_ONDISK;
+  if (op->onack)
+    flags |= CEPH_OSD_FLAG_ACK;
+
+  assert(op->session->con);
+
+  // preallocated rx buffer?
+  if (op->con) {
+    dout(20) << " revoking rx buffer for " << op->tid << " on " << op->con << dendl;
+    op->con->revoke_rx_buffer(op->tid);
+    op->con->put();
+  }
+  if (op->outbl && op->outbl->length()) {
+    dout(20) << " posting rx buffer for " << op->tid << " on " << op->session->con << dendl;
+    op->con = op->session->con->get();
+    op->con->post_rx_buffer(op->tid, *op->outbl);
+  }
+
+  op->paused = false;
+  op->incarnation = op->session->incarnation;
+  op->stamp = g_clock.now();
+
+  ceph_object_layout ol;
+  ol.ol_pgid = op->pgid.v;
+  ol.ol_stripe_unit = 0;
+
+  MOSDOp *m = new MOSDOp(client_inc, op->tid,
+			 op->oid, ol, osdmap->get_epoch(),
+			 flags);
+
+  m->set_snapid(op->snapid);
+  m->set_snap_seq(op->snapc.seq);
+  m->get_snaps() = op->snapc.snaps;
+
+  m->ops = op->ops;
+  m->set_mtime(op->mtime);
+  m->set_retry_attempt(op->attempts++);
+
+  if (op->version != eversion_t())
+    m->set_version(op->version);  // we're replaying this op!
+
+  if (op->priority)
+    m->set_priority(op->priority);
+
+  messenger->send_message(m, op->session->con);
 }
 
 int Objecter::calc_op_budget(Op *op)
@@ -652,7 +688,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   // get pio
   tid_t tid = m->get_tid();
 
-  if (op_osd.count(tid) == 0) {
+  if (ops.count(tid) == 0) {
     dout(7) << "handle_osd_op_reply " << tid
 	    << (m->is_ondisk() ? " ondisk":(m->is_onnvram() ? " onnvram":" ack"))
 	    << " ... stray" << dendl;
@@ -664,11 +700,11 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 	  << (m->is_ondisk() ? " ondisk":(m->is_onnvram() ? " onnvram":" ack"))
 	  << " v " << m->get_version() << " in " << m->get_pg()
 	  << dendl;
-  Op *op = op_osd[ tid ];
+  Op *op = ops[tid];
 
-  if (op->con != m->get_connection()) {
+  if (op->session->con != m->get_connection()) {
     dout(7) << " ignoring reply from " << m->get_source_inst()
-	    << ", i last sent to " << op->con->get_peer_addr() << dendl;
+	    << ", i last sent to " << op->session->con->get_peer_addr() << dendl;
     m->put();
     return;
   }
@@ -694,7 +730,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   // got data?
   if (op->outbl) {
-    if (op->outbl->length())
+    if (op->con)
       op->con->revoke_rx_buffer(op->tid);
     m->claim_data(*op->outbl);
     op->outbl = 0;
@@ -717,15 +753,10 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   // done with this tid?
   if (!op->onack && !op->oncommit) {
-    PG &pg = get_pg( m->get_pg() );
-    assert(pg.active_tids.count(tid));
-    pg.active_tids.erase(tid);
-    dout(15) << "handle_osd_op_reply completed tid " << tid << ", pg " << m->get_pg()
-	     << " still has " << pg.active_tids << dendl;
-    if (pg.active_tids.empty() && pg.linger_ops.empty()) 
-      close_pg( m->get_pg() );
+    op->session_item.remove_myself();
+    dout(15) << "handle_osd_op_reply completed tid " << tid << dendl;
     put_op_budget(op);
-    op_osd.erase( tid );
+    ops.erase(tid);
     if (op->con)
       op->con->put();
     delete op;
@@ -796,7 +827,7 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
   object_locator_t oloc(list_context->pool_id);
 
   // 
-  Op *o = new Op(oid, oloc, op.ops, CEPH_OSD_FLAG_READ, onack, NULL, NULL, false);
+  Op *o = new Op(oid, oloc, op.ops, CEPH_OSD_FLAG_READ, onack, NULL, NULL);
   o->priority = op.priority;
   o->snapid = list_context->pool_snap_seq;
   o->outbl = bl;
@@ -862,7 +893,7 @@ int Objecter::create_pool_snap(int pool, string& snapName, Context *onfinish) {
   op->name = snapName;
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_CREATE_SNAP;
-  op_pool[op->tid] = op;
+  pool_ops[op->tid] = op;
 
   pool_op_submit(op);
 
@@ -896,7 +927,7 @@ int Objecter::allocate_selfmanaged_snap(int pool, snapid_t *psnapid,
   op->onfinish = fin;
   op->blp = &fin->bl;
   op->pool_op = POOL_OP_CREATE_UNMANAGED_SNAP;
-  op_pool[op->tid] = op;
+  pool_ops[op->tid] = op;
 
   pool_op_submit(op);
   return 0;
@@ -913,7 +944,7 @@ int Objecter::delete_pool_snap(int pool, string& snapName, Context *onfinish)
   op->name = snapName;
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_DELETE_SNAP;
-  op_pool[op->tid] = op;
+  pool_ops[op->tid] = op;
   
   pool_op_submit(op);
   
@@ -931,7 +962,7 @@ int Objecter::delete_selfmanaged_snap(int pool, snapid_t snap,
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_DELETE_UNMANAGED_SNAP;
   op->snapid = snap;
-  op_pool[op->tid] = op;
+  pool_ops[op->tid] = op;
 
   pool_op_submit(op);
 
@@ -950,7 +981,7 @@ int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid,
   op->name = name;
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_CREATE;
-  op_pool[op->tid] = op;
+  pool_ops[op->tid] = op;
   op->auid = auid;
   op->crush_rule = crush_rule;
 
@@ -970,7 +1001,7 @@ int Objecter::delete_pool(int pool, Context *onfinish)
   op->name = "delete";
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_DELETE;
-  op_pool[op->tid] = op;
+  pool_ops[op->tid] = op;
 
   pool_op_submit(op);
 
@@ -994,7 +1025,7 @@ int Objecter::change_pool_auid(int pool, Context *onfinish, uint64_t auid)
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_AUID_CHANGE;
   op->auid = auid;
-  op_pool[op->tid] = op;
+  pool_ops[op->tid] = op;
 
   pool_op_submit(op);
 
@@ -1023,8 +1054,8 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
 {
   dout(10) << "handle_pool_op_reply " << *m << dendl;
   tid_t tid = m->get_tid();
-  if (op_pool.count(tid)) {
-    PoolOp *op = op_pool[tid];
+  if (pool_ops.count(tid)) {
+    PoolOp *op = pool_ops[tid];
     dout(10) << "have request " << tid << " at " << op << " Op: " << ceph_pool_op_name(op->pool_op) << dendl;
     if (op->blp) {
       op->blp->claim(*m->response_data);
@@ -1042,7 +1073,7 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
     }
     op->onfinish = NULL;
     delete op;
-    op_pool.erase(tid);
+    pool_ops.erase(tid);
   } else {
     dout(10) << "unknown request " << tid << dendl;
   }
@@ -1063,7 +1094,7 @@ void Objecter::get_pool_stats(list<string>& pools, map<string,pool_stat_t> *resu
   op->pools = pools;
   op->pool_stats = result;
   op->onfinish = onfinish;
-  op_poolstat[op->tid] = op;
+  poolstat_ops[op->tid] = op;
 
   poolstat_submit(op);
 }
@@ -1080,15 +1111,15 @@ void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
   dout(10) << "handle_get_pool_stats_reply " << *m << dendl;
   tid_t tid = m->get_tid();
 
-  if (op_poolstat.count(tid)) {
-    PoolStatOp *op = op_poolstat[tid];
+  if (poolstat_ops.count(tid)) {
+    PoolStatOp *op = poolstat_ops[tid];
     dout(10) << "have request " << tid << " at " << op << dendl;
     *op->pool_stats = m->pool_stats;
     if (m->version > last_seen_pgmap_version)
       last_seen_pgmap_version = m->version;
     op->onfinish->finish(0);
     delete op->onfinish;
-    op_poolstat.erase(tid);
+    poolstat_ops.erase(tid);
     delete op;
   } else {
     dout(10) << "unknown request " << tid << dendl;
@@ -1105,7 +1136,7 @@ void Objecter::get_fs_stats(ceph_statfs& result, Context *onfinish) {
   op->tid = ++last_tid;
   op->stats = &result;
   op->onfinish = onfinish;
-  op_statfs[op->tid] = op;
+  statfs_ops[op->tid] = op;
 
   fs_stats_submit(op);
 }
@@ -1121,15 +1152,15 @@ void Objecter::handle_fs_stats_reply(MStatfsReply *m) {
   dout(10) << "handle_fs_stats_reply " << *m << dendl;
   tid_t tid = m->get_tid();
 
-  if (op_statfs.count(tid)) {
-    StatfsOp *op = op_statfs[tid];
+  if (statfs_ops.count(tid)) {
+    StatfsOp *op = statfs_ops[tid];
     dout(10) << "have request " << tid << " at " << op << dendl;
     *(op->stats) = m->h.st;
     if (m->h.version > last_seen_pgmap_version)
       last_seen_pgmap_version = m->h.version;
     op->onfinish->finish(0);
     delete op->onfinish;
-    op_statfs.erase(tid);
+    statfs_ops.erase(tid);
     delete op;
   } else {
     dout(10) << "unknown request " << tid << dendl;
@@ -1266,10 +1297,13 @@ void Objecter::ms_handle_reset(Connection *con)
     int osd = osdmap->identify_osd(con->get_peer_addr());
     if (osd >= 0) {
       dout(1) << "ms_handle_reset on osd" << osd << dendl;
-      set<pg_t> changed_pgs;
-      scan_pgs_for(changed_pgs, osd);
-      kick_requests(changed_pgs);
-      maybe_request_map();
+      map<int,OSDSession*>::iterator p = osd_sessions.find(osd);
+      if (p != osd_sessions.end()) {
+	OSDSession *session = p->second;
+	reopen_session(session);
+	kick_requests(session);
+	maybe_request_map();
+      }
     } else {
       dout(10) << "ms_handle_reset on unknown osd addr " << con->get_peer_addr() << dendl;
     }
@@ -1285,8 +1319,11 @@ void Objecter::ms_handle_remote_reset(Connection *con)
 
 void Objecter::dump_active()
 {
-  dout(0) << "dump_active" << dendl;
-  for (hash_map<tid_t,Op*>::iterator p = op_osd.begin(); p != op_osd.end(); p++)
-    dout(0) << " " << p->first << "\t" << p->second->oid << "\t" << p->second->ops << dendl;
+  dout(20) << "dump_active .. " << num_homeless_ops << " homeless" << dendl;
+  for (hash_map<tid_t,Op*>::iterator p = ops.begin(); p != ops.end(); p++) {
+    Op *op = p->second;
+    dout(20) << op->tid << "\t" << op->pgid << "\tosd" << (op->session ? op->session->osd : -1)
+	    << "\t" << op->oid << "\t" << op->ops << dendl;
+  }
 }
 
