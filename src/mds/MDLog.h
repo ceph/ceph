@@ -131,6 +131,14 @@ public:
     assert(!segments.empty());
     return segments.rbegin()->first;
   }
+  LogSegment *get_oldest_segment() {
+    return segments.begin()->second;
+  }
+  void remove_oldest_segment() {
+    map<uint64_t, LogSegment*>::iterator p = segments.begin();
+    delete p->second;
+    segments.erase(p);
+  }
 
 
 private:
