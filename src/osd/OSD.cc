@@ -1753,8 +1753,13 @@ void OSD::handle_notify_timeout(void *_notif)
        notif_iter != notif->watchers.end();
        ++notif_iter) {
     map<entity_name_t, Session *>::iterator witer = obc->watchers.find(notif_iter->first);
-    if (witer != obc->watchers.end())
+    if (witer != obc->watchers.end()) {
+      watch_info_t& w = obc->obs.oi.watchers[notif_iter->first];
       obc->watchers.erase(witer);   // FIXME: hmm? notify timeout may be different than watch timeout?
+      utime_t expire = g_clock.now();
+      expire += w.timeout_seconds;
+      obc->unconnected_watchers[notif_iter->first] = expire;
+    }
   }
   obc->lock.Unlock();
   watch_lock.Unlock(); /* put_object_context takes osd->lock */
