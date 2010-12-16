@@ -34,11 +34,13 @@ using namespace std;
 #include "common/common_init.h"
 
 #include "include/color.h"
+#include "common/errno.h"
 
 void usage() 
 {
-  cerr << "usage: cosd -i osdid [--osd-data=path] [--osd-journal=path] [--mkfs] [--mkjournal]" << std::endl;
-  cerr << "   --debug_osd N   set debug level (e.g. 10)" << std::endl;
+  derr << "usage: cosd -i osdid [--osd-data=path] [--osd-journal=path] "
+       << "[--mkfs] [--mkjournal]" << dendl;
+  derr << "   --debug_osd N   set debug level (e.g. 10)" << dendl;
   generic_server_usage();
 }
 
@@ -86,7 +88,7 @@ int main(int argc, const char **argv)
     } else if (CONF_ARG_EQ("dump-pg-log", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&dump_pg_log, OPT_STR);
     } else {
-      cerr << "unrecognized arg " << args[i] << std::endl;
+      derr << "unrecognized arg " << args[i] << dendl;
       ARGS_USAGE();
     }
   }
@@ -103,13 +105,14 @@ int main(int argc, const char **argv)
 	  ::decode(e, p);
 	}
 	catch (const buffer::error &e) {
-	  cerr << "failed to decode LogEntry at offset " << pos << std::endl;
+	  derr << "failed to decode LogEntry at offset " << pos << dendl;
 	  return 1;
 	}
-	cout << pos << ":\t" << e << std::endl;
+	derr << pos << ":\t" << e << dendl;
       }
-    } else
-      cerr << "unable to open " << dump_pg_log << ": " << strerror(r) << std::endl;
+    } else {
+      derr << "unable to open " << dump_pg_log << ": " << cpp_strerror(r) << dendl;
+    }
     return 0;
   }
 
@@ -117,12 +120,12 @@ int main(int argc, const char **argv)
   char *end;
   int whoami = strtol(g_conf.id, &end, 10);
   if (*end || end == g_conf.id || whoami < 0) {
-    cerr << "must specify '-i #' where # is the osd number" << std::endl;
+    derr << "must specify '-i #' where # is the osd number" << dendl;
     usage();
   }
 
   if (!g_conf.osd_data) {
-    cerr << "must specify '--osd-data=foo' data path" << std::endl;
+    derr << "must specify '--osd-data=foo' data path" << dendl;
     usage();
   }
 
@@ -132,47 +135,45 @@ int main(int argc, const char **argv)
   if (mc.build_initial_monmap() < 0)
     return -1;
 
-  char buf[80];
   if (mkfs) {
     if (mc.get_monmap_privately() < 0)
       return -1;
 
     int err = OSD::mkfs(g_conf.osd_data, g_conf.osd_journal, mc.monmap.fsid, whoami);
     if (err < 0) {
-      cerr << TEXT_RED << " ** ERROR: error creating empty object store in " << g_conf.osd_data
-	   << ": " << strerror_r(-err, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
+      derr << TEXT_RED << " ** ERROR: error creating empty object store in "
+	   << g_conf.osd_data << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
       exit(1);
     }
-    cout << "created object store " << g_conf.osd_data;
+    derr << "created object store " << g_conf.osd_data;
     if (g_conf.osd_journal)
-      cout << " journal " << g_conf.osd_journal;
-    cout << " for osd" << whoami << " fsid " << mc.monmap.fsid << std::endl;
+      *_dout << " journal " << g_conf.osd_journal;
+    *_dout << " for osd" << whoami << " fsid " << mc.monmap.fsid << dendl;
     exit(0);
   }
   if (mkjournal) {
     int err = OSD::mkjournal(g_conf.osd_data, g_conf.osd_journal);
     if (err < 0) {
-      cerr << TEXT_RED << " ** ERROR: error creating fresh journal " << g_conf.osd_journal
+      derr << TEXT_RED << " ** ERROR: error creating fresh journal " << g_conf.osd_journal
 	   << " for object store " << g_conf.osd_data
-	   << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
+	   << ": " << cpp_strerror(-err) << dendl;
       exit(1);
     }
-    cout << "created new journal " << g_conf.osd_journal
-	 << " for object store " << g_conf.osd_data
-	 << std::endl;
+    derr << "created new journal " << g_conf.osd_journal
+	 << " for object store " << g_conf.osd_data << dendl;
     exit(0);
   }
   if (flushjournal) {
     int err = OSD::flushjournal(g_conf.osd_data, g_conf.osd_journal);
     if (err < 0) {
-      cerr << TEXT_RED << " ** ERROR: error flushing journal " << g_conf.osd_journal
+      derr << TEXT_RED << " ** ERROR: error flushing journal " << g_conf.osd_journal
 	   << " for object store " << g_conf.osd_data
-	   << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
+	   << ": " << cpp_strerror(-err) << dendl;
       exit(1);
     }
-    cout << "flushed journal " << g_conf.osd_journal
+    derr << "flushed journal " << g_conf.osd_journal
 	 << " for object store " << g_conf.osd_data
-	 << std::endl;
+	 << dendl;
     exit(0);
   }
   
@@ -181,18 +182,22 @@ int main(int argc, const char **argv)
   int w;
   int r = OSD::peek_meta(g_conf.osd_data, magic, fsid, w);
   if (r < 0) {
-    cerr << TEXT_RED << " ** ERROR: unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror_r(-r, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
-    if (r == -ENOTSUP)
-      cerr << TEXT_RED << " **        please verify that underlying storage supports xattrs" << TEXT_NORMAL << std::endl;
-    dout(0) << "unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+    derr << TEXT_RED << " ** ERROR: unable to open OSD superblock on "
+	 << g_conf.osd_data << ": " << cpp_strerror(-r)
+	 << TEXT_NORMAL << dendl;
+    if (r == -ENOTSUP) {
+      derr << TEXT_RED << " **        please verify that underlying storage "
+	   << "supports xattrs" << TEXT_NORMAL << dendl;
+    }
     exit(1);
   }
   if (w != whoami) {
-    cerr << "OSD id " << w << " != my id " << whoami << std::endl;
+    derr << "OSD id " << w << " != my id " << whoami << dendl;
     exit(1);
   }
   if (strcmp(magic.c_str(), CEPH_OSD_ONDISK_MAGIC)) {
-    cerr << "OSD magic " << magic << " != my " << CEPH_OSD_ONDISK_MAGIC << std::endl;
+    derr << "OSD magic " << magic << " != my " << CEPH_OSD_ONDISK_MAGIC
+	 << dendl;
     exit(1);
   }
 
@@ -200,9 +205,9 @@ int main(int argc, const char **argv)
   bool cluster_addr_set = !g_conf.cluster_addr.is_blank_addr();
 
   if (cluster_addr_set && !client_addr_set) {
-    cerr << TEXT_RED << " ** "
+    derr << TEXT_RED << " ** "
          << "WARNING: set cluster address but not client address!" << " **\n"
-         << "using cluster address for clients" << TEXT_NORMAL << std::endl;
+         << "using cluster address for clients" << TEXT_NORMAL << dendl;
     g_conf.public_addr = g_conf.cluster_addr;
     client_addr_set = true;
     cluster_addr_set = false;
@@ -229,11 +234,11 @@ int main(int argc, const char **argv)
 
   messenger_hb->bind(hb_addr);
 
-  cout << "starting osd" << whoami
+  derr << "starting osd" << whoami
        << " at " << client_messenger->get_ms_addr() 
        << " osd_data " << g_conf.osd_data
        << " " << ((g_conf.osd_journal && g_conf.osd_journal[0]) ? g_conf.osd_journal:"(no journal)")
-       << std::endl;
+       << dendl;
 
   client_messenger->register_entity(entity_name_t::OSD(whoami));
   cluster_messenger->register_entity(entity_name_t::OSD(whoami));
@@ -269,8 +274,8 @@ int main(int argc, const char **argv)
 
   int err = osd->pre_init();
   if (err < 0) {
-    char buf[80];
-    cerr << TEXT_RED << " ** ERROR: initializing osd failed: " << strerror_r(-err, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
+    derr << TEXT_RED << " ** ERROR: initializing osd failed: " << cpp_strerror(-err)
+	 << TEXT_NORMAL << dendl;
     return 1;
   }
 
@@ -280,7 +285,8 @@ int main(int argc, const char **argv)
 
   // start osd
   if (osd->init() < 0) {
-    cerr << TEXT_RED << " ** ERROR: initializing osd failed: " << strerror_r(-err, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
+    derr << TEXT_RED << " ** ERROR: initializing osd failed: " << cpp_strerror(-err)
+         << TEXT_NORMAL << dendl;
     return 1;
   }
 
@@ -302,4 +308,3 @@ int main(int argc, const char **argv)
 
   return 0;
 }
-

@@ -83,6 +83,8 @@
 
 #include "auth/AuthAuthorizeHandler.h"
 
+#include "common/errno.h"
+
 #include <iostream>
 #include <errno.h>
 #include <sys/stat.h>
@@ -442,13 +444,13 @@ int OSD::pre_init()
   assert(!store);
   store = create_object_store(dev_path, journal_path);
   if (!store) {
-    dout(0) << " unable to create object store" << dendl;
+    derr << __PRETTY_FUNCTION__ << ": unable to create object store" << dendl;
     return -ENODEV;
   }
 
   if (store->test_mount_in_use()) {
-    dout(0) << "object store " << dev_path << " is currently in use" << dendl;
-    cout << "object store " << dev_path << " is currently in use (cosd already running?)" << std::endl;
+    derr << __PRETTY_FUNCTION__ << ": object store '" << dev_path << "' is "
+         << "currently in use. (Is cosd already running?)" << dendl;
     return -EBUSY;
   }
   return 0;
@@ -468,7 +470,7 @@ int OSD::init()
 
   int r = store->mount();
   if (r < 0) {
-    dout(0) << " unable to mount object store" << dendl;
+    derr << __PRETTY_FUNCTION__ << ": unable to mount object store" << dendl;
     return r;
   }
 
@@ -477,7 +479,7 @@ int OSD::init()
   // read superblock
   r = read_superblock();
   if (r < 0) {
-    dout(0) << " unable to read osd superblock" << dendl;
+    derr << __PRETTY_FUNCTION__ << ": unable to read osd superblock" << dendl;
     store->umount();
     delete store;
     return -1;
@@ -491,7 +493,7 @@ int OSD::init()
   // load up "current" osdmap
   assert_warn(!osdmap);
   if (osdmap) {
-    dout(0) << " unable to read current osdmap" << dendl;
+    derr << __PRETTY_FUNCTION__ << ": unable to read current osdmap" << dendl;
     return -1;
   }
   osdmap = new OSDMap;
@@ -517,7 +519,8 @@ int OSD::init()
   dout(2) << "superblock: i am osd" << superblock.whoami << dendl;
   assert_warn(whoami == superblock.whoami);
   if (whoami != superblock.whoami) {
-    dout(0) << "wtf, superblock says osd" << superblock.whoami << " but i am osd" << whoami << dendl;
+    derr << __PRETTY_FUNCTION__ << ": logic error: superblock says osd"
+	 << superblock.whoami << " but i am osd" << whoami << dendl;
     return -EINVAL;
   }
 
@@ -649,7 +652,7 @@ int OSD::shutdown()
   g_conf.debug_ebofs = 100;
   g_conf.debug_ms = 100;
   
-  dout(1) << "shutdown." << dendl;
+  derr << __PRETTY_FUNCTION__ << dendl;
 
   state = STATE_STOPPING;
 
@@ -720,8 +723,8 @@ int OSD::shutdown()
   write_superblock(t);
   int r = store->apply_transaction(t);
   if (r) {
-    char buf[80];
-    dout(0) << "error writing superblock " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+    derr << __PRETTY_FUNCTION__ << ": error writing superblock: "
+	 << cpp_strerror(r) << dendl;
   }
 
   // flush data to disk
@@ -783,25 +786,25 @@ int OSD::read_superblock()
 
   dout(10) << "read_superblock " << superblock << dendl;
   if (osd_compat.compare(superblock.compat_features) < 0) {
-    dout(0) << "The disk uses features unsupported by the executable." << dendl;
-    dout(0) << " ondisk features " << superblock.compat_features << dendl;
-    dout(0) << " daemon features " << osd_compat << dendl;
+    derr << "The disk uses features unsupported by the executable." << dendl;
+    derr << " ondisk features " << superblock.compat_features << dendl;
+    derr << " daemon features " << osd_compat << dendl;
 
     if (osd_compat.writeable(superblock.compat_features)) {
-      dout(0) << "it is still writeable, though. Missing features:" << dendl;
+      derr << "it is still writeable, though. Missing features:" << dendl;
       CompatSet diff = osd_compat.unsupported(superblock.compat_features);
       return -EOPNOTSUPP;
     }
     else {
-      dout(0) << "Cannot write to disk! Missing features:" << dendl;
+      derr << "Cannot write to disk! Missing features:" << dendl;
       CompatSet diff = osd_compat.unsupported(superblock.compat_features);
       return -EOPNOTSUPP;
     }
   }
 
   if (whoami != superblock.whoami) {
-    dout(0) << "read_superblock superblock says osd" << superblock.whoami
-	    << ", but i (think i) am osd" << whoami << dendl;
+    derr << "read_superblock superblock says osd" << superblock.whoami
+         << ", but i (think i) am osd" << whoami << dendl;
     return -1;
   }
   
@@ -1451,9 +1454,9 @@ void OSD::heartbeat_check()
        p++) {
     if (heartbeat_from_stamp.count(p->first) &&
 	heartbeat_from_stamp[p->first] < grace) {
-      dout(0) << "heartbeat_check: no heartbeat from osd" << p->first
-	      << " since " << heartbeat_from_stamp[p->first]
-	      << " (cutoff " << grace << ")" << dendl;
+      derr << "heartbeat_check: no heartbeat from osd" << p->first
+	   << " since " << heartbeat_from_stamp[p->first]
+	   << " (cutoff " << grace << ")" << dendl;
       queue_failure(p->first);
 
     }
@@ -1465,7 +1468,7 @@ void OSD::heartbeat()
   utime_t now = g_clock.now();
 
   if (got_sigterm) {
-    dout(0) << "got SIGTERM, shutting down" << dendl;
+    derr << "got SIGTERM, shutting down" << dendl;
     Message *m = new MGenericMessage(CEPH_MSG_SHUTDOWN);
     m->set_priority(CEPH_MSG_PRIO_HIGHEST);
     cluster_messenger->send_message(m, cluster_messenger->get_myinst());
@@ -1481,9 +1484,12 @@ void OSD::heartbeat()
       logger->fset(l_osd_loadavg, oneminavg);
       in.close();
     }
+    else {
+      derr << "heartbeat: failed to open /proc/loadavg" << dendl;
+    }
   }
   catch (const ios::failure &f) {
-    dout(0) << "heartbeat: failed to read /proc/loadavg" << dendl;
+    derr << "heartbeat: failed to read /proc/loadavg" << dendl;
   }
 
   // calc my stats
@@ -1546,7 +1552,7 @@ void OSD::tick()
   logger->set(l_osd_buf, buffer_total_alloc.read());
 
   if (got_sigterm) {
-    dout(0) << "got SIGTERM, shutting down" << dendl;
+    derr << "got SIGTERM, shutting down" << dendl;
     cluster_messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN),
 			    cluster_messenger->get_myinst());
     return;
@@ -2929,8 +2935,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   int r = store->apply_transaction(t, fin);
   if (r) {
     map_lock.put_write();
-    char buf[80];
-    dout(0) << "error writing map: " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+    derr << "error writing map: " << cpp_strerror(-r) << dendl;
     m->put();
     shutdown();
     return;
@@ -3477,7 +3482,7 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
     int from = m->get_source().num();
     if (!osdmap->have_inst(from) ||
 	osdmap->get_cluster_addr(from) != m->get_source_inst().addr) {
-      dout(-7) << "from dead osd" << from << ", dropping, sharing map" << dendl;
+      dout(0) << "from dead osd" << from << ", dropping, sharing map" << dendl;
       send_incremental_map(epoch, m->get_source_inst(), true);
       m->put();
       return false;
