@@ -43,6 +43,7 @@ public:
   static const size_t OBUF_SZ = 32000;
 
   DoutStreambuf();
+  ~DoutStreambuf();
 
   // Call when you close stderr.  Not strictly necessary, since we would get an
   // error the next time we tried to write to stdedrr. But nicer than waiting

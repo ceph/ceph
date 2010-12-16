@@ -186,6 +186,15 @@ DoutStreambuf<charT, traits>::DoutStreambuf()
   _clear_output_buffer();
 }
 
+template <typename charT, typename traits>
+DoutStreambuf<charT, traits>::~DoutStreambuf()
+{
+  if (ofd != -1) {
+    TEMP_FAILURE_RETRY(::close(ofd));
+    ofd = -1;
+  }
+}
+
 // This function is called when the output buffer is filled.
 // In this function, the buffer should be written to wherever it should
 // be written to (in this case, the streambuf object that this is controlling).
@@ -284,6 +293,11 @@ void DoutStreambuf<charT, traits>::read_global_config()
 {
   assert(_dout_lock.is_locked());
   flags = 0;
+
+  if (ofd != -1) {
+    TEMP_FAILURE_RETRY(::close(ofd));
+    ofd = -1;
+  }
 
   if (g_conf.log_to_syslog) {
     flags |= DOUTSB_FLAG_SYSLOG;
@@ -539,7 +553,7 @@ bool DoutStreambuf<charT, traits>::_read_ofile_config()
   assert(ofd == -1);
   ofd = open(opath.c_str(),
 	    O_CREAT | O_WRONLY | O_APPEND, S_IWUSR | S_IRUSR);
-  if (ofd < 0) {
+  if (ofd == -1) {
     int err = errno;
     ostringstream oss;
     oss << "failed to open log file '" << opath << "': "
