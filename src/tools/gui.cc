@@ -265,12 +265,12 @@ bool GuiMonitor::open_icon(Glib::RefPtr<Gdk::Pixbuf> &icon, const std::string &p
       icon = Gdk::Pixbuf::create_from_file(path);
   }
   catch (const Gdk::PixbufError& e) {
-      cerr << "Problem making graphic from " << path << "; error code: "
-	   << e.code() << ": " << e.what() << std::endl;
+      derr << "Problem making graphic from " << path << "; error code: "
+	   << e.code() << ": " << e.what() << dendl;
       return false;
   }
   catch (const Glib::FileError& e) {
-      cerr << "Problem open " << path << std::endl;
+      derr << "Problem open " << path << dendl;
       return false;
   }
 
@@ -1751,7 +1751,7 @@ int run_gui(int argc, char **argv)
 
   ret = calculate_resource_path_prefix(argv[0]);
   if (ret) {
-    cerr << "Couldn't find GUI resource files!" << std::endl;
+    derr << "Couldn't find GUI resource files!" << dendl;
     goto done;
   }
 
@@ -1771,7 +1771,7 @@ int run_gui(int argc, char **argv)
     gui = new GuiMonitor(builder);
 
     if (!gui->init()) {
-      cerr << "There was a problem with initializing the GUI." << std::endl;
+      derr << "There was a problem with initializing the GUI." << dendl;
       ret = EXIT_FAILURE;
       goto done;
     }
@@ -1781,22 +1781,22 @@ int run_gui(int argc, char **argv)
     gui->run_main_loop(kit);
   }
   catch(const Gtk::BuilderError& ex) {
-    std::cerr << "Gtk BuilderError: " << ex.what() << std::endl;
+    derr << "Gtk BuilderError: " << ex.what() << dendl;
     ret = EXIT_FAILURE;
     goto done;
   }
   catch(const Glib::FileError& ex) {
-    std::cerr << "FileError: " << ex.what() << std::endl;
+    derr << "FileError: " << ex.what() << dendl;
     ret = EXIT_FAILURE;
     goto done;
   }
   catch (const Glib::Exception &e) {
-    cerr << "got Glib exception: " << e.what() << std::endl;
+    derr << "got Glib exception: " << e.what() << dendl;
     ret = EXIT_FAILURE;
     goto done;
   }
   catch (const std::exception &e) {
-    cerr << "got exception: " << e.what() << std::endl;
+    derr << "got exception: " << e.what() << dendl;
     ret = EXIT_FAILURE;
     goto done;
   }

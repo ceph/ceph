@@ -511,7 +511,8 @@ int ceph_tool_cli_input(std::vector<std::string> &cmd, const char *outfile,
 
   if (!outfile) {
     // error: no output specified
-    cout << g_clock.now() << " got " << len << " byte payload, discarding (specify -o <outfile)" << std::endl;
+    derr << " got " << len << " byte payload, discarding "
+         << "(specify -o <outfile)" << dendl;
     return 1;
   }
   if (strcmp(outfile, "-") == 0) {
@@ -522,8 +523,8 @@ int ceph_tool_cli_input(std::vector<std::string> &cmd, const char *outfile,
 
   // write to file
   odata.write_file(outfile);
-  cout << g_clock.now() << " wrote " << len << " byte payload to "
-       << outfile << std::endl;
+  derr << " wrote " << len << " byte payload to "
+       << outfile << dendl;
   return 0;
 }
 
@@ -552,11 +553,11 @@ int ceph_tool_common_init(ceph_tool_mode_t mode)
   g.mc.init();
 
   if (g.mc.authenticate() < 0) {
-    cerr << "unable to authenticate as " << *g_conf.entity_name << std::endl;
+    derr << "unable to authenticate as " << *g_conf.entity_name << dendl;
     return 1;
   }
   if (g.mc.get_monmap() < 0) {
-    cerr << "unable to get monmap" << std::endl;
+    derr << "unable to get monmap" << dendl;
     return 1;
   }
   return 0;

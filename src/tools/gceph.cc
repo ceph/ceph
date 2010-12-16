@@ -24,16 +24,15 @@
 // tool/gui.cc
 int run_gui(int argc, char **argv);
 
-using std::cerr;
 using std::vector;
 
 static std::ostringstream gss;
 
 static void usage()
 {
-  cerr << "usage: gceph [options]" << std::endl;
-  cerr << std::endl;
-  cerr << "Runs the ceph graphical monitor" << std::endl;
+  derr << "usage: gceph [options]" << dendl;
+  derr << dendl;
+  derr << "Runs the ceph graphical monitor" << dendl;
   generic_client_usage(); // Will exit()
 }
 
@@ -85,7 +84,7 @@ int main(int argc, const char **argv)
   parse_gceph_args(args);
 
   if (ceph_tool_common_init(CEPH_TOOL_MODE_GUI)) {
-    cerr << "cephtool_common_init failed." << std::endl;
+    derr << "cephtool_common_init failed." << dendl;
     return 1;
   }
 

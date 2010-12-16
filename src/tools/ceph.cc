@@ -26,25 +26,24 @@
 #include <sys/types.h>
 #include <vector>
 
-using std::cerr;
 using std::vector;
 
 static void usage()
 {
-  cerr << "usage: ceph [options] [commands]" << std::endl;
-  cerr << "If no commands are specified, enter interactive mode.\n";
-  cerr << "Commands:" << std::endl;
-  cerr << "   stop              -- cleanly shut down file system" << std::endl
-       << "   (osd|pg|mds) stat -- get monitor subsystem status" << std::endl
-       << "   ..." << std::endl;
-  cerr << "Options:" << std::endl;
-  cerr << "   -i infile\n";
-  cerr << "   -o outfile\n";
-  cerr << "        specify input or output file (for certain commands)\n";
-  cerr << "   -s or --status\n";
-  cerr << "        print current system status\n";
-  cerr << "   -w or --watch\n";
-  cerr << "        watch system status changes in real time (push)\n";
+  derr << "usage: ceph [options] [commands]" << dendl;
+  derr << "If no commands are specified, enter interactive mode." << dendl;
+  derr << "Commands:" << dendl;
+  derr << "   stop              -- cleanly shut down file system\n"
+       << "   (osd|pg|mds) stat -- get monitor subsystem status\n"
+       << "   ..." << dendl;
+  derr << "Options:" << dendl;
+  derr << "   -i infile\n"
+       << "   -o outfile\n"
+       << "        specify input or output file (for certain commands)\n"
+       << "   -s or --status\n"
+       << "        print current system status\n"
+       << "   -w or --watch\n"
+       << "        watch system status changes in real time (push)" << dendl;
   generic_client_usage(); // Will exit()
 }
 
@@ -65,7 +64,7 @@ static void parse_cmd_args(const vector<const char*> &args,
     } else if (CONF_ARG_EQ("help", 'h')) {
       usage();
     } else if (args[i][0] == '-' && nargs->empty()) {
-      cerr << "unrecognized option " << args[i] << std::endl;
+      derr << "unrecognized option " << args[i] << dendl;
       usage();
     } else {
       nargs->push_back(args[i]);
@@ -98,15 +97,15 @@ static int get_indata(const char *in_file, bufferlist &indata)
   int fd = TEMP_FAILURE_RETRY(::open(in_file, O_RDONLY));
   if (fd < 0) {
     int err = errno;
-    cerr << "error opening in_file '" << in_file << "': "
-	 << cpp_strerror(err);
+    derr << "error opening in_file '" << in_file << "': "
+	 << cpp_strerror(err) << dendl;
     return 1;
   }
   struct stat st;
   if (::fstat(fd, &st)) {
     int err = errno;
-    cerr << "error getting size of in_file '" << in_file << "': "
-	 << cpp_strerror(err);
+    derr << "error getting size of in_file '" << in_file << "': "
+	 << cpp_strerror(err) << dendl;
     return 1;
   }
 
@@ -114,13 +113,13 @@ static int get_indata(const char *in_file, bufferlist &indata)
   indata.zero();
   int ret = safe_read(fd, indata.c_str(), st.st_size);
   if (ret) {
-    cerr << "error reading in_file '" << in_file << "': "
-	 << cpp_strerror(ret);
+    derr << "error reading in_file '" << in_file << "': "
+	 << cpp_strerror(ret) << dendl;
     return 1;
   }
 
   TEMP_FAILURE_RETRY(::close(fd));
-  cout << "read " << st.st_size << " bytes from " << in_file << std::endl;
+  derr << "read " << st.st_size << " bytes from " << in_file << dendl;
   return 0;
 }
 
@@ -149,13 +148,13 @@ int main(int argc, const char **argv)
 
   if (in_file) {
     if (get_indata(in_file, indata)) {
-      cerr << "failed to get data from '" << in_file << "'" << std::endl;
+      derr << "failed to get data from '" << in_file << "'" << dendl;
       return 1;
     }
   }
 
   if (ceph_tool_common_init(mode)) {
-    cerr << "ceph_tool_common_init failed." << std::endl;
+    derr << "ceph_tool_common_init failed." << dendl;
     return 1;
   }
 
@@ -188,7 +187,7 @@ int main(int argc, const char **argv)
     }
 
     default: {
-      cerr << "logic error: illegal ceph command mode " << mode << std::endl;
+      derr << "logic error: illegal ceph command mode " << mode << dendl;
       ret = 1;
       break;
     }
