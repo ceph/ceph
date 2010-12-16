@@ -1221,9 +1221,28 @@ void MDS::replay_start()
 }
 
 
+class MDS::C_MDS_RestartReplay : public Context {
+  MDS *mds;
+  uint64_t old_read_pos;
+public:
+  C_MDS_RestartReplay(MDS *mds_, uint64_t old_read_pos_) :
+    mds(mds_), old_read_pos(old_read_pos_) {}
+  void finish(int r) {
+    if (old_read_pos < mds->mdlog->get_journaler()->get_expire_pos()) {
+      cerr << "standby MDS fell behind active MDS journal's expire_pos, restarting" << std::endl;
+      mds->respawn(); /* we're too far back, and this is easier than
+                         trying to reset everything in the cache, etc */
+    }
+    else {
+      mds->boot_start(3, r);
+    }
+  }
+};
+
 inline void MDS::standby_replay_restart()
 {
-  mdlog->get_journaler()->reread_head_and_probe(new C_MDS_BootStart(this, 3));
+  mdlog->get_journaler()->reread_head_and_probe(
+      new C_MDS_RestartReplay(this, mdlog->get_journaler()->get_read_pos()));
 }
 
 class MDS::C_Standby_replay_start : public Context {
