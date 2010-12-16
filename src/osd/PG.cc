@@ -2759,6 +2759,7 @@ void PG::sub_op_scrub(MOSDSubOp *op)
   ScrubMap map;
   if (op->version > eversion_t()) {
     epoch_t epoch = info.history.same_acting_since;
+    finalizing_scrub = 1;
     while (last_update_applied != info.last_update) {
       wait();
       if (epoch != info.history.same_acting_since ||
@@ -2768,6 +2769,7 @@ void PG::sub_op_scrub(MOSDSubOp *op)
       }
     }
     build_inc_scrub_map(map, op->version);
+    finalizing_scrub = 0;
   } else {
     build_scrub_map(map);
   }
