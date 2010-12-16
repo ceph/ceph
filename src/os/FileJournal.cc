@@ -36,20 +36,26 @@ int FileJournal::_open(bool forwrite, bool create)
 
   if (forwrite) {
     flags = O_RDWR;
-    if (directio) flags |= O_DIRECT | O_SYNC;
+    if (directio)
+      flags |= O_DIRECT | O_SYNC;
   } else {
     flags = O_RDONLY;
   }
   if (create)
     flags |= O_CREAT;
   
-  if (fd >= 0) 
-    ::close(fd);
-  fd = ::open(fn.c_str(), flags, 0644);
+  if (fd >= 0) {
+    if (TEMP_FAILURE_RETRY(::close(fd))) {
+      int err = errno;
+      derr << __PRETTY_FUNCTION__ << ": error closing old fd: "
+	   << cpp_strerror(err) << dendl;
+    }
+  }
+  fd = TEMP_FAILURE_RETRY(::open(fn.c_str(), flags, 0644));
   if (fd < 0) {
     int err = errno;
-    dout(2) << "_open failed " << cpp_strerror(err) << dendl;
-    cerr << "unable to open journal " << fn << ": " << cpp_strerror(err) << std::endl;
+    derr << __PRETTY_FUNCTION__  << ": unable to open journal: open() "
+	 << "failed: " << cpp_strerror(err) << dendl;
     return -err;
   }
 
@@ -57,7 +63,8 @@ int FileJournal::_open(bool forwrite, bool create)
   ret = ::fstat(fd, &st);
   if (ret) {
     int err = errno;
-    dout(2) << "_open failed to fstat! " << cpp_strerror(err) << dendl;
+    derr << __PRETTY_FUNCTION__ << ": unable to fstat journal: "
+         << cpp_strerror(err) << dendl;
     return -err;
   }
 
@@ -77,7 +84,7 @@ int FileJournal::_open(bool forwrite, bool create)
   zero_buf = new char[header.alignment];
   memset(zero_buf, 0, header.alignment);
 
-  dout(2) << "_open " << fn << " fd " << fd 
+  dout(1) << "_open " << fn << " fd " << fd
 	  << ": " << max_size 
 	  << " bytes, block size " << block_size
 	  << " bytes, directio = " << directio << dendl;
@@ -216,9 +223,9 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
   conf_journal_sz <<= 20;
 
   if ((g_conf.osd_journal_size == 0) && (oldsize < ONE_MEG)) {
-    dout(0) << "I'm sorry, I don't know how large of a journal to create."
-	    << "Please specify a block device to use as the journal OR "
-	    << "set osd_journal_size in your ceph.conf" << dendl;
+    derr << "I'm sorry, I don't know how large of a journal to create."
+	 << "Please specify a block device to use as the journal OR "
+	 << "set osd_journal_size in your ceph.conf" << dendl;
     return -EINVAL;
   }
 
@@ -227,9 +234,10 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
     dout(10) << "_open extending to " << newsize << " bytes" << dendl;
     ret = ::ftruncate(fd, newsize);
     if (ret < 0) {
-      dout(0) << __func__ << ": unable to extend journal to " << newsize
-	      << " bytes" << dendl;
-      return -errno;
+      int err = errno;
+      derr << __PRETTY_FUNCTION__ << ": unable to extend journal to "
+	   << newsize << " bytes: " << cpp_strerror(err) << dendl;
+      return -err;
     }
     max_size = newsize;
   }
@@ -246,7 +254,6 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
 
 int FileJournal::create()
 {
-  char buf[80];
   dout(2) << "create " << fn << dendl;
 
   int err = _open(true, true);
@@ -269,8 +276,10 @@ int FileJournal::create()
   buffer::ptr bp = prepare_header();
   int r = ::pwrite(fd, bp.c_str(), bp.length(), 0);
   if (r < 0) {
-    dout(0) << "create write header error " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    return -errno;
+    int err = errno;
+    derr << __PRETTY_FUNCTION__ << ": create write header error "
+         << cpp_strerror(err) << dendl;
+    return -err;
   }
 
   // zero first little bit, too.
@@ -278,7 +287,7 @@ int FileJournal::create()
   memset(z, 0, block_size);
   ::pwrite(fd, z, block_size, get_top());
 
-  ::close(fd);
+  TEMP_FAILURE_RETRY(::close(fd));
   fd = -1;
   dout(2) << "create done" << dendl;
   return 0;
@@ -304,34 +313,33 @@ int FileJournal::open(uint64_t next_seq)
     //<< " vs expected fsid = " << fsid 
 	   << dendl;
   if (header.fsid != fsid) {
-    dout(2) << "open fsid doesn't match, invalid (someone else's?) journal" << dendl;
-    err = -EINVAL;
-  } 
+    derr << __PRETTY_FUNCTION__ << ": open fsid doesn't match, invalid "
+         << "(someone else's?) journal" << dendl;
+    return -EINVAL;
+  }
   if (header.max_size > max_size) {
     dout(2) << "open journal size " << header.max_size << " > current " << max_size << dendl;
-    err = -EINVAL;
+    return -EINVAL;
   }
   if (header.block_size != block_size) {
     dout(2) << "open journal block size " << header.block_size << " != current " << block_size << dendl;
-    err = -EINVAL;
+    return -EINVAL;
   }
   if (header.max_size % header.block_size) {
     dout(2) << "open journal max size " << header.max_size
 	    << " not a multiple of block size " << header.block_size << dendl;
-    err = -EINVAL;
+    return -EINVAL;
   }
   if (header.alignment != block_size && directio) {
     dout(0) << "open journal alignment " << header.alignment << " does not match block size " 
 	    << block_size << " (required for direct_io journal mode)" << dendl;
-    err = -EINVAL;
+    return -EINVAL;
   }
   if ((header.alignment % PAGE_SIZE) && directio) {
     dout(0) << "open journal alignment " << header.alignment << " is not multiple of page size " << PAGE_SIZE
 	    << " (required for direct_io journal mode)" << dendl;
-    err = -EINVAL;
+    return -EINVAL;
   }
-  if (err)
-    return err;
 
   // looks like a valid header.
   write_pos = 0;  // not writeable yet
@@ -375,8 +383,8 @@ void FileJournal::close()
 
   // close
   assert(writeq.empty());
-  assert(fd > 0);
-  ::close(fd);
+  assert(fd >= 0);
+  TEMP_FAILURE_RETRY(::close(fd));
   fd = -1;
 }
 
@@ -634,9 +642,8 @@ void FileJournal::write_bl(off64_t& pos, bufferlist& bl)
   ::lseek64(fd, pos, SEEK_SET);
   int err = bl.write_fd(fd);
   if (err) {
-    char buf[80];
-    dout(0) << "write_bl failed with " << err << " " << strerror_r(-err, buf, sizeof(buf)) 
-	    << dendl;
+    derr << __PRETTY_FUNCTION__ << ": write_fd failed: "
+	 << cpp_strerror(err) << dendl;
   }
   pos += bl.length();
 }
