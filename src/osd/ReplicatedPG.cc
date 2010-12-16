@@ -1182,11 +1182,14 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	}
 
 	// unconnected
+	utime_t now = g_clock.now();
 	for (map<entity_name_t, utime_t>::iterator p = obc->unconnected_watchers.begin();
 	     p != obc->unconnected_watchers.end();
 	     p++) {
 	  entity_name_t name = p->first;
-	  notif->add_watcher(name, Watch::WATCHER_PENDING);
+          utime_t expire = p->second;
+          if (now < expire)
+	    notif->add_watcher(name, Watch::WATCHER_PENDING); /* FIXME: should we remove expired unconnected? probably yes */
 	}
 
 	notif->reply = new MWatchNotify(op.watch.cookie, op.watch.ver, notif->id, WATCH_NOTIFY_COMPLETE);
