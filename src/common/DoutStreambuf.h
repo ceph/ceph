@@ -56,9 +56,6 @@ public:
   // Set the flags based on the global configuration
   void read_global_config();
 
-  // Set the flags directly (for debug use only)
-  void set_flags(int flags_);
-
   // Set the priority of the messages being put into the stream
   void set_prio(int prio);
 

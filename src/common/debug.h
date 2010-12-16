@@ -35,13 +35,13 @@ extern int dout_handle_daemonize();
 
 extern int dout_create_rank_symlink(int n);
 
-static inline void _dout_begin_line(int prio) {
+static inline void _dout_begin_line(signed int prio) {
   if (unlikely(_dout_need_open))
     _dout_open_log();
 
   // Put priority information into dout
   _doss->sputc(1);
-  _doss->sputc(prio + 11);
+  _doss->sputc(prio + 12);
 
   // Some information that goes in every dout message
   *_dout << g_clock.now() << " " << std::hex << pthread_self()
@@ -76,6 +76,7 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
 
 #define dendl std::endl; } } while (0)
 
+#define derr dout(-1)
 
 extern void hex2str(const char *s, int len, char *buf, int dest_len);
 

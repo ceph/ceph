@@ -1,11 +1,22 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2010 Dreamhost
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+ */
 
-#include "config.h"
-#include "tls.h"
-
-#include "include/color.h"
-
-#include "auth/KeyRing.h"
 #include "auth/AuthSupported.h"
+#include "auth/KeyRing.h"
+#include "config.h"
+#include "include/color.h"
+#include "tls.h"
 
 void common_set_defaults(bool daemon)
 {
@@ -15,7 +26,6 @@ void common_set_defaults(bool daemon)
 
     g_conf.daemonize = true;
     g_conf.logger = true;
-    g_conf.log_to_stdout = false;
   } else {
     g_conf.pid_file = 0;
   }
@@ -74,4 +84,3 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool i
     }
   }
 }
-

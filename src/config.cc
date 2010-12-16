@@ -18,6 +18,7 @@
 #include "include/types.h"
 
 #include "common/Clock.h"
+#include "common/DoutStreambuf.h"
 #include "common/Logger.h"
 #include "common/BackTrace.h"
 
@@ -325,7 +326,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(log_dir, 0, OPT_STR, "/var/log/ceph"),
 	OPTION(log_sym_dir, 0, OPT_STR, 0),
 	OPTION(log_sym_history, 0, OPT_INT, 10),
-	OPTION(log_to_stdout, 0, OPT_BOOL, true),
 	OPTION(log_to_syslog, 0, OPT_BOOL, false),
 	OPTION(log_per_instance, 0, OPT_BOOL, false),
 	OPTION(log_to_file, 0, OPT_BOOL, true),
@@ -1124,6 +1124,9 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
   std::vector<const char *> nargs;
   bool conf_specified = false;
 
+  g_conf.log_to_stdout = false;
+  g_conf.log_to_stderr = true;
+
   if (!g_conf.id)
     g_conf.id = (char *)g_default_id;
   if (!g_conf.type)
@@ -1144,17 +1147,12 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
       show_config = true;
     } else if (isdaemon && CONF_ARG_EQ("bind", 0)) {
       g_conf.public_addr.parse(args[++i]);
-    } else if (isdaemon && CONF_ARG_EQ("nodaemon", 'D')) {
+    } else if (CONF_ARG_EQ("nodaemon", 'D')) {
       g_conf.daemonize = false;
       g_conf.log_to_stdout = true;
-      /*
-    } else if (isdaemon && CONF_ARG_EQ("daemonize", 'd')) {
-      g_conf.daemonize = true;
-      g_conf.log_to_stdout = false;
-      */
-    } else if (isdaemon && CONF_ARG_EQ("foreground", 'f')) {
+      g_conf.log_to_stderr = false;
+    } else if (CONF_ARG_EQ("foreground", 'f')) {
       g_conf.daemonize = false;
-      //g_conf.log_to_stdout = false;
     } else if (isdaemon && (CONF_ARG_EQ("id", 'i') || CONF_ARG_EQ("name", 'n'))) {
       CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
     } else if (!isdaemon && (CONF_ARG_EQ("id", 'I') || CONF_ARG_EQ("name", 'n'))) {
@@ -1246,22 +1244,20 @@ void generic_usage()
 {
   cerr << "   -c ceph.conf or --conf=ceph.conf\n";
   cerr << "        get options from given conf file" << std::endl;
+  cerr << "   -D   run in foreground.\n";
+  cerr << "   -f   run in foreground. Show all log messages on stdout.\n";
 }
 
 void generic_server_usage()
 {
   cerr << "   --debug_ms N\n";
   cerr << "        set message debug level (e.g. 1)\n";
-  cerr << "   -D   debug (no fork, log to stdout)\n";
-  cerr << "   -f   foreground (no fork, log to file)\n";
   generic_usage();
   exit(1);
 }
 void generic_client_usage()
 {
   generic_usage();
-  cerr << "   -d   daemonize (detach, fork, log to file)\n";
-  cerr << "   -f   foreground (no fork, log to file)" << std::endl;
   exit(1);
 }
 

@@ -79,9 +79,9 @@ static void primitive_log(const std::string &str)
   syslog(LOG_USER | LOG_NOTICE, "%s", str.c_str());
 }
 
-static inline bool prio_is_visible_on_stderr(int prio)
+static inline bool prio_is_visible_on_stderr(signed int prio)
 {
-  return prio <= 5;
+  return prio == -1;
 }
 
 static inline int dout_prio_to_syslog_prio(int prio)
@@ -213,7 +213,7 @@ DoutStreambuf<charT, traits>::overflow(DoutStreambuf<charT, traits>::int_type c)
   }
 
   // Loop over all lines in the buffer.
-  int prio = 100;
+  signed int prio = 100;
   charT* start = obuf;
   while (true) {
     char* end = strchrnul(start, '\n');
@@ -228,7 +228,8 @@ DoutStreambuf<charT, traits>::overflow(DoutStreambuf<charT, traits>::int_type c)
       // Decode some control characters
       ++start;
       unsigned char tmp = *((unsigned char*)start);
-      prio = tmp - 11;
+      prio = tmp;
+      prio -= 12;
       ++start;
     }
     *end = '\n';
@@ -302,27 +303,24 @@ void DoutStreambuf<charT, traits>::read_global_config()
   if (g_conf.log_to_syslog) {
     flags |= DOUTSB_FLAG_SYSLOG;
   }
+
   if (g_conf.log_to_stdout) {
     if (fd_is_open(STDOUT_FILENO)) {
       flags |= DOUTSB_FLAG_STDOUT;
     }
   }
-  if (fd_is_open(STDERR_FILENO)) {
-    flags |= DOUTSB_FLAG_STDERR;
+
+  if (g_conf.log_to_stderr) {
+    if (fd_is_open(STDERR_FILENO)) {
+      flags |= DOUTSB_FLAG_STDERR;
+    }
   }
+
   if (g_conf.log_to_file) {
     if (_read_ofile_config()) {
       flags |= DOUTSB_FLAG_OFILE;
     }
   }
-}
-
-template <typename charT, typename traits>
-void DoutStreambuf<charT, traits>::
-set_flags(int flags_)
-{
-  assert(_dout_lock.is_locked());
-  flags = flags_;
 }
 
 template <typename charT, typename traits>
@@ -414,8 +412,9 @@ std::string DoutStreambuf<charT, traits>::config_to_str() const
 {
   assert(_dout_lock.is_locked());
   ostringstream oss;
-  oss << "g_conf.log_to_syslog = " << g_conf.log_to_syslog << "\n";
   oss << "g_conf.log_to_stdout = " << g_conf.log_to_stdout << "\n";
+  oss << "g_conf.log_to_stderr = " << g_conf.log_to_stderr << "\n";
+  oss << "g_conf.log_to_syslog = " << g_conf.log_to_syslog << "\n";
   oss << "g_conf.log_to_file = " << g_conf.log_to_file << "\n";
   oss << "g_conf.log_file = '" << cpp_str(g_conf.log_file) << "'\n";
   oss << "g_conf.log_dir = '" << cpp_str(g_conf.log_dir) << "'\n";
