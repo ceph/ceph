@@ -267,11 +267,13 @@ void MDS::open_logger()
 
   // open loggers
   char name[80];
-  snprintf(name, sizeof(name), "mds.%s.log", g_conf.id);
+  snprintf(name, sizeof(name), "mds.%s.%llu.log", g_conf.id,
+           (unsigned long long) monc->get_global_id());
   logger = new Logger(name, (LogType*)&mds_logtype);
   logger_add(logger);
 
-  snprintf(name, sizeof(name), "mds.%s.mem.log", g_conf.id);
+  snprintf(name, sizeof(name), "mds.%s.%llu.mem.log", g_conf.id,
+           (unsigned long long) monc->get_global_id());
   mlogger = new Logger(name, (LogType*)&mdm_logtype);
   logger_add(mlogger);
 
