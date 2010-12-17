@@ -499,9 +499,8 @@ protected:
   hash_map<pg_t, PG*> pg_map;
   hash_map<pg_t, list<Message*> > waiting_for_pg;
 
-  PGPool *_lookup_pool(int id);
   PGPool *_get_pool(int id);
-  void _put_pool(int id);
+  void _put_pool(PGPool *p);
 
   bool  _have_pg(pg_t pgid);
   PG   *_lookup_lock_pg(pg_t pgid);

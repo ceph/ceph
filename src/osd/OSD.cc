@@ -840,15 +840,11 @@ void OSD::clear_temp()
 // ======================================================
 // PG's
 
-PGPool *OSD::_lookup_pool(int id)
-{
-  map<int, PGPool*>::iterator p = pool_map.find(id);
-  return (p == pool_map.end()) ? NULL : p->second;
-}
-
 PGPool* OSD::_get_pool(int id)
 {
-  PGPool *p = _lookup_pool(id);
+  map<int, PGPool*>::iterator pm = pool_map.find(id);
+  PGPool *p = (pm == pool_map.end()) ? NULL : pm->second;
+
   if (!p) {
     if (!osdmap->have_pg_pool(id)) {
       dout(5) << __func__ << ": the OSDmap does not contain a PG pool with id = "
@@ -872,17 +868,17 @@ PGPool* OSD::_get_pool(int id)
   return p;
 }
 
-void OSD::_put_pool(int id)
+void OSD::_put_pool(PGPool *p)
 {
-  PGPool *p = _lookup_pool(id);
-  dout(10) << "_put_pool " << id << " " << p->num_pg << " -> " << (p->num_pg-1) << dendl;
+  dout(10) << "_put_pool " << p->id << " " << p->num_pg
+	   << " -> " << (p->num_pg-1) << dendl;
+  assert(p->num_pg > 0);
   p->num_pg--;
   if (!p->num_pg) {
-    pool_map.erase(id);
+    pool_map.erase(p->id);
     p->put();
   }
 }
-
 
 PG *OSD::_open_lock_pg(pg_t pgid, bool no_lockdep_check)
 {
@@ -4608,7 +4604,7 @@ void OSD::_remove_pg(PG *pg)
   pg_map.erase(pgid);
   unreg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
 
-  _put_pool(pgid.pool());
+  _put_pool(pg->pool);
 
   // unlock, and probably delete
   pg->unlock();
