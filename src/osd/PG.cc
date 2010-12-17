@@ -2824,9 +2824,10 @@ void PG::_scan_list(ScrubMap &map, vector<sobject_t> &ls)
       ScrubMap::object &o = map.objects[poid];
       o.size = st.st_size;
       osd->store->getattrs(coll, poid, o.attrs);
+      dout(25) << "_scan_list  " << poid << dendl;
+    } else {
+      dout(25) << "_scan_list  " << poid << " got " << r << ", skipping" << dendl;
     }
-
-    dout(25) << "_scan_list  " << poid << dendl;
   }
 }
 
@@ -3161,8 +3162,10 @@ void PG::scrub()
     for (unsigned i=1; i<acting.size(); i++)
       m[i] = &received_maps[acting[i]];
     map<sobject_t,ScrubMap::object>::iterator p[acting.size()];
-    for (unsigned i=0; i<acting.size(); i++)
+    for (unsigned i=0; i<acting.size(); i++) {
+      dout(2) << "scrub   osd" << acting[i] << " has " << m[i]->objects.size() << " items" << dendl;
       p[i] = m[i]->objects.begin();
+    }
     
     int num_missing = 0;
     int num_bad = 0;
