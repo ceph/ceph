@@ -1105,9 +1105,15 @@ public:
 void MDS::boot_start(int step, int r)
 {
   if (r < 0) {
-    dout(0) << "boot_start encountered an error, failing" << dendl;
-    suicide();
-    return;
+    if (is_standby_replay() && (r == -EAGAIN)) {
+      dout(0) << "boot_start encountered an error EAGAIN"
+              << ", respawning since we fell behind journal" << dendl;
+      respawn();
+    } else {
+      dout(0) << "boot_start encountered an error, failing" << dendl;
+      suicide();
+      return;
+    }
   }
 
   switch (step) {

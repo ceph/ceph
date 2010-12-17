@@ -508,6 +508,32 @@ void MDLog::_replay_thread()
     if (journaler->get_error()) {
       r = journaler->get_error();
       dout(0) << "_replay journaler got error " << r << ", aborting" << dendl;
+      if (r == -EINVAL) {
+        if (journaler->get_read_pos() < journaler->get_expire_pos()) {
+          // this should only happen if you're following somebody else
+          assert(journaler->is_readonly());
+          dout(0) << "expire_pos is higher than read_pos, returning EAGAIN" << dendl;
+          r = -EAGAIN;
+        } else {
+          /* re-read head and check it
+           * Given that replay happens in a separate thread and
+           * the MDS is going to either shut down or restart when
+           * we return this error, doing it synchronously is fine
+           * -- as long as we drop the main mds lock--. */
+          Mutex mylock("MDLog::_replay_thread lock");
+          Cond cond;
+          bool done = false;
+          journaler->reread_head(new C_SafeCond(&mylock, &cond, &done));
+          mds->mds_lock.Unlock();
+          while (!done)
+            cond.Wait(mylock);
+          mds->mds_lock.Lock();
+          if (journaler->get_read_pos() < journaler->get_expire_pos()) {
+            dout(0) << "expire_pos is higher than read_pos, returning EAGAIN" << dendl;
+            r = -EAGAIN;
+          }
+        }
+      }
       break;
     }
     

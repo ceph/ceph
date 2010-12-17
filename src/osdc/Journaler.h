@@ -286,6 +286,7 @@ public:
 
   void set_readonly() { readonly = true; }
   void set_writeable() { readonly = false; }
+  bool is_readonly() { return readonly; }
 
   bool is_active() { return state == STATE_ACTIVE; }
   int get_error() { return error; }
