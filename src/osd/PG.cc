@@ -1373,7 +1373,7 @@ bool PG::choose_acting(int newest_update_osd)
     Info& pi = (*p == osd->whoami) ? info : peer_info[*p];
     if (pi.last_update < primi.log_tail && !primi.log_backlog) {
       dout(10) << "choose_acting  osd" << *p << " needs primary backlog to catch up" << dendl;
-      want.erase(p);
+      p = want.erase(p);
     } else {
       dout(10) << "choose_acting  osd" << *p << " can catch up with osd" << want[0] << " log" << dendl;
       p++;
