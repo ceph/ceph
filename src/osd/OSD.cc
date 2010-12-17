@@ -842,9 +842,8 @@ void OSD::clear_temp()
 
 PGPool *OSD::_lookup_pool(int id)
 {
-  if (pool_map.count(id))
-    return pool_map[id];
-  return 0;
+  map<int, PGPool*>::iterator p = pool_map.find(id);
+  return (p == pool_map.end()) ? NULL : p->second;
 }
 
 PGPool* OSD::_get_pool(int id)
