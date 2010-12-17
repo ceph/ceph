@@ -82,7 +82,8 @@ void Subnet::parse(const char *str)
 {
 	unsigned char ip[4], mask[4];
 
-	char *mask_str = strdup(str);
+	char mask_str[strlen(str)+1];
+	strcpy(mask_str, str);
 	int ret;
 
 	dout(30) << "Subnet::parse str=" << str << dendl;
@@ -127,7 +128,6 @@ void Subnet::parse(const char *str)
 	dout(30) << hex << GET_IP(&subnet.addr) << dec << dendl;
 
 	valid = true;
-	delete mask_str;
 }
 
 class GroupEntry;
