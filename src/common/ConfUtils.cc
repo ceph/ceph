@@ -473,6 +473,15 @@ ConfLine::~ConfLine()
 		free(section);
 }
 
+ConfFile::ConfFile(const char *fname)
+  : filename(NULL), auto_update(false), post_process_func(NULL)
+{
+  if (fname)
+    filename = strdup(fname);
+  else
+    filename = NULL;
+}
+
 ConfFile::~ConfFile()
 {
 	SectionList::iterator sec_iter, sec_end;
@@ -601,12 +610,11 @@ bool ConfFile::_parse(char *filename, ConfSection **psection)
 	int max_line = MAX_LINE;
 	int eof = 0;
 
-	line = (char *)malloc(max_line);
-
 	fd = open(filename, O_RDONLY);
 	if (fd < 0)
 		return 0;
 
+	line = (char *)malloc(max_line);
 	l = 0;
 
 	buf = (char *)malloc(BUF_SIZE);
