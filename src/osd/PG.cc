@@ -3310,7 +3310,7 @@ void PG::scrub()
     ss << ", " << fixed << " fixed";
   osd->get_logclient()->log(errors ? LOG_ERROR:LOG_INFO, ss);
 
-  if (!(errors - fixed) && repair)
+  if (errors == 0 || (repair && (errors - fixed) == 0))
     state_clear(PG_STATE_INCONSISTENT);
   state_clear(PG_STATE_REPAIR);
 
