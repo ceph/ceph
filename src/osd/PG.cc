@@ -2971,10 +2971,14 @@ void PG::build_scrub_map(ScrubMap &map)
 {
   dout(10) << "build_scrub_map" << dendl;
 
-  map.valid_through = last_update_applied;
+  map.valid_through = info.last_update;
   epoch_t epoch = info.history.same_acting_since;
 
   unlock();
+
+  // wait for any writes on our pg to flush to disk first.  this avoids races
+  // with scrub starting immediately after trim or recovery completion.
+  osr.flush();
 
   // objects
   vector<sobject_t> ls;
