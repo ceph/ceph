@@ -166,6 +166,7 @@ void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
   write_pos = flush_pos = h.write_pos;
   expire_pos = h.expire_pos;
   trimmed_pos = h.trimmed_pos;
+  init_headers(h);
   state = STATE_ACTIVE;
   finish->finish(r);
 }
@@ -202,6 +203,8 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   write_pos = flush_pos = ack_pos = safe_pos = h.write_pos;
   read_pos = requested_pos = received_pos = expire_pos = h.expire_pos;
   trimmed_pos = trimming_pos = h.trimmed_pos;
+
+  init_headers(h);
 
   dout(1) << "_finish_read_head " << h << ".  probing for end of log (from " << write_pos << ")..." << dendl;
   C_ProbeEnd *fin = new C_ProbeEnd(this);

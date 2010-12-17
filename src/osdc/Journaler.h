@@ -219,6 +219,13 @@ private:
   class C_Trim;
   friend class C_Trim;
 
+  // only init_headers when following or first reading off-disk
+  void init_headers(Header& h) {
+    assert(readonly ||
+           state == STATE_READHEAD);
+    last_written = last_committed = h;
+  }
+
 public:
   Journaler(inodeno_t ino_, int pool, const char *mag, Objecter *obj, Logger *l, int lkey, SafeTimer *tim) : 
     last_written(mag), last_committed(mag),
