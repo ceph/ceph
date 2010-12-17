@@ -74,11 +74,19 @@ public:
   };
   
 
+  struct Sequencer_impl {
+    virtual void flush() = 0;
+    virtual ~Sequencer_impl() {}
+  };
   struct Sequencer {
-    void *p;
+    Sequencer_impl *p;
     Sequencer() : p(NULL) {}
     ~Sequencer() {
-      assert(p == NULL);
+      delete p;
+    }
+    void flush() {
+      if (p)
+	p->flush();
     }
   };
   

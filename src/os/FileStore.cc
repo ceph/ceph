@@ -1269,10 +1269,10 @@ void FileStore::queue_op(Sequencer *posr, uint64_t op_seq, list<Transaction*>& t
   } else {
     osr = new OpSequencer;
     osr->parent = posr;
-    posr->p = (void *)osr;
+    posr->p = osr;
     dout(10) << "queue_op new osr " << osr << "/" << osr->parent << dendl;
   }
-  osr->q.push_back(o);
+  osr->queue(o);
 
   op_queue_len++;
   op_queue_bytes += bytes;
@@ -1300,8 +1300,8 @@ void FileStore::op_queue_throttle()
 
 void FileStore::_do_op(OpSequencer *osr)
 {
-  osr->lock.Lock();
-  Op *o = osr->q.front();
+  osr->apply_lock.Lock();
+  Op *o = osr->peek_queue();
 
   dout(10) << "_do_op " << o << " " << o->op << " osr " << osr << "/" << osr->parent << " start" << dendl;
   int r = do_transactions(o->tls, o->op);
@@ -1316,18 +1316,10 @@ void FileStore::_do_op(OpSequencer *osr)
 
 void FileStore::_finish_op(OpSequencer *osr)
 {
-  Op *o = osr->q.front();
-  osr->q.pop_front();
+  Op *o = osr->dequeue();
   
-  if (osr->q.empty()) {
-    dout(10) << "_finish_op last op " << o << " on osr " << osr << "/" << osr->parent << dendl;
-    osr->parent->p = NULL;
-    osr->lock.Unlock();  // locked in _do_op
-    delete osr;
-  } else {
-    dout(10) << "_finish_op on osr " << osr << "/" << osr->parent << dendl; // << " q now " << osr->q << dendl;
-    osr->lock.Unlock();  // locked in _do_op
-  }
+  dout(10) << "_finish_op on osr " << osr << "/" << osr->parent << dendl;
+  osr->apply_lock.Unlock();  // locked in _do_op
 
   // called with tp lock held
   op_queue_len--;

@@ -98,11 +98,44 @@ class FileStore : public JournalingObjectStore {
     Context *onreadable, *onreadable_sync;
     uint64_t ops, bytes;
   };
-  struct OpSequencer {
-    Sequencer *parent;
+  class OpSequencer : public Sequencer_impl {
+    Mutex qlock; // to protect q, for benefit of flush (peek/dequeue also protected by lock)
     list<Op*> q;
-    Mutex lock;
-    OpSequencer() : lock("FileStore::OpSequencer::lock", false, false) {}
+    Cond cond;
+  public:
+    Sequencer *parent;
+    Mutex apply_lock;  // for apply mutual exclusion
+    
+    void queue(Op *o) {
+      Mutex::Locker l(qlock);
+      q.push_back(o);
+    }
+    Op *peek_queue() {
+      assert(apply_lock.is_locked());
+      return q.front();
+    }
+    Op *dequeue() {
+      assert(apply_lock.is_locked());
+      Mutex::Locker l(qlock);
+      Op *o = q.front();
+      q.pop_front();
+      cond.Signal();
+      return o;
+    }
+    void flush() {
+      Mutex::Locker l(qlock);
+      if (!q.empty()) {
+	uint64_t seq = q.back()->op;
+	while (!q.empty() && q.front()->op <= seq)
+	  cond.Wait(qlock);
+      }
+    }
+
+    OpSequencer() : qlock("FileStore::OpSequencer::qlock", false, false),
+		    apply_lock("FileStore::OpSequencer::apply_lock", false, false) {}
+    ~OpSequencer() {
+      assert(q.empty());
+    }
   };
   Sequencer default_osr;
   deque<OpSequencer*> op_queue;
