@@ -27,8 +27,6 @@
 #include <string>
 #include <syslog.h>
 
-using std::cout;
-using std::cerr;
 using std::string;
 
 int main(int argc, const char **argv)
@@ -48,8 +46,8 @@ int main(int argc, const char **argv)
 //  dos->set_flags(DoutStreambuf<char>::DOUTSB_FLAG_SYSLOG |
 //                 DoutStreambuf<char>::DOUTSB_FLAG_STDOUT |
 //		 DoutStreambuf<char>::DOUTSB_FLAG_STDERR);
-  std::cout << "using configuration: " << dos->config_to_str() << std::endl;
   _dout_lock.Unlock();
+  derr << "using configuration: " << dos->config_to_str() << dendl;
 
   std::ostream oss(dos);
   syslog(LOG_USER | LOG_NOTICE, "TestDoutStreambuf: starting test\n");

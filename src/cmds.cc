@@ -38,11 +38,11 @@ using namespace std;
 
 void usage()
 {
-  cerr << "usage: cmds -i name [flags] [--mds rank] [--journal_check]\n";
-  cerr << "  -m monitorip:port\n";
-  cerr << "        connect to monitor at given address\n";
-  cerr << "  --debug_mds n\n";
-  cerr << "        debug MDS level (e.g. 10)\n";
+  derr << "usage: cmds -i name [flags] [--mds rank] [--journal_check]\n"
+       << "  -m monitorip:port\n"
+       << "        connect to monitor at given address\n"
+       << "  --debug_mds n\n"
+       << "        debug MDS level (e.g. 10)\n" << dendl;
   generic_server_usage();
 }
 
@@ -80,12 +80,12 @@ int main(int argc, const char **argv)
       dout(0) << "checking journal"  << dendl;
       shadow = true;
     } else {
-      cerr << "unrecognized arg " << args[i] << std::endl;
+      derr << "unrecognized arg " << args[i] << dendl;
       usage();
     }
   }
   if (!g_conf.id) {
-    cerr << "must specify '-i name' with the cmds instance name" << std::endl;
+    derr << "must specify '-i name' with the cmds instance name" << dendl;
     usage();
   }
 
@@ -104,9 +104,9 @@ int main(int argc, const char **argv)
     journal_dumper->init();
     journal_dumper->dump(dump_file);
   } else {
-    cout << "starting mds." << g_conf.id
+    derr << "starting mds." << g_conf.id
         << " at " << messenger->get_ms_addr()
-        << std::endl;
+        << dendl;
 
     messenger->register_entity(entity_name_t::MDS(-1));
     assert_warn(messenger);

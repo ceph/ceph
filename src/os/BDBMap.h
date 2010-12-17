@@ -17,11 +17,12 @@
 #define CEPH_BERKELEYDB_H
 
 #include <db.h>
+#include <list>
 #include <unistd.h>
 
-#include <list>
-using namespace std;
+#include "common/debug.h"
 
+using namespace std;
 
 template<typename K, typename D>
 class BDBMap {
@@ -42,7 +43,7 @@ class BDBMap {
 
     int r;
     if ((r = db_create(&dbp, NULL, 0)) != 0) {
-      cerr << "db_create: " << db_strerror(r) << endl;
+      derr << "db_create: " << db_strerror(r) << dendl;
       assert(0);
     }
 

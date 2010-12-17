@@ -1240,24 +1240,27 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
   ec->load(cf);
 }
 
-void generic_usage()
+void generic_usage(bool is_server)
 {
-  cerr << "   -c ceph.conf or --conf=ceph.conf\n";
-  cerr << "        get options from given conf file" << std::endl;
-  cerr << "   -D   run in foreground.\n";
-  cerr << "   -f   run in foreground. Show all log messages on stdout.\n";
+  derr << "   -c ceph.conf or --conf=ceph.conf\n"
+       << "        get options from given conf file\n"
+       << "   -D   run in foreground.\n"
+       << "   -f   run in foreground. Show all log messages on stdout.";
+  if (is_server) {
+    *_dout << "   --debug_ms N\n"
+	   << "        set message debug level (e.g. 1)";
+  }
+  *_dout << dendl;
 }
 
 void generic_server_usage()
 {
-  cerr << "   --debug_ms N\n";
-  cerr << "        set message debug level (e.g. 1)\n";
-  generic_usage();
+  generic_usage(true);
   exit(1);
 }
 void generic_client_usage()
 {
-  generic_usage();
+  generic_usage(false);
   exit(1);
 }
 

@@ -15,6 +15,7 @@
 #include "auth/AuthSupported.h"
 #include "auth/KeyRing.h"
 #include "config.h"
+#include "common/errno.h"
 #include "include/color.h"
 #include "tls.h"
 
@@ -66,12 +67,16 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool i
       char buf[100];
       int fd = ::open(g_conf.keyfile, O_RDONLY);
       if (fd < 0) {
-	cerr << "unable to open " << g_conf.keyfile << ": " << strerror(errno) << std::endl;
+	int err = errno;
+	derr << "unable to open " << g_conf.keyfile << ": "
+	     << cpp_strerror(err) << dendl;
 	exit(1);
       }
       int len = ::read(fd, buf, sizeof(buf));
       if (len < 0) {
-	cerr << "unable to read key from " << g_conf.keyfile << ": " << strerror(errno) << std::endl;
+	int err = errno;
+	derr << "unable to read key from " << g_conf.keyfile << ": "
+	     << cpp_strerror(err) << dendl;
 	exit(1);
       }
       ::close(fd);

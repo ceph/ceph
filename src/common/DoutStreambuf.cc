@@ -71,14 +71,6 @@ static std::string normalize_relative(const char *from)
   return oss.str();
 }
 
-/* Complain about errors even without a logfile */
-static void primitive_log(const std::string &str)
-{
-  std::cerr << str;
-  std::cerr.flush();
-  syslog(LOG_USER | LOG_NOTICE, "%s", str.c_str());
-}
-
 static inline bool prio_is_visible_on_stderr(signed int prio)
 {
   return prio == -1;
@@ -112,7 +104,9 @@ static int safe_write(int fd, const char *buf, signed int len)
 	ostringstream oss;
 	oss << __func__ << ": failed to write to fd " << fd << ": "
 	    << cpp_strerror(err) << "\n";
-	primitive_log(oss.str());
+	TEMP_FAILURE_RETRY(::write(STDERR_FILENO, oss.str().c_str(),
+				   oss.str().size()));
+	syslog(LOG_USER | LOG_NOTICE, "%s", oss.str().c_str());
 	return err;
       }
     }
@@ -121,6 +115,13 @@ static int safe_write(int fd, const char *buf, signed int len)
     if (len <= 0)
       return 0;
   }
+}
+
+/* Complain about errors even without a logfile */
+static void primitive_log(const std::string &str)
+{
+  safe_write(STDERR_FILENO, str.c_str(), str.size());
+  syslog(LOG_USER | LOG_NOTICE, "%s", str.c_str());
 }
 
 static std::string get_basename(const std::string &filename)
@@ -435,7 +436,6 @@ template <typename charT, typename traits>
 typename DoutStreambuf<charT, traits>::int_type
 DoutStreambuf<charT, traits>::sync()
 {
-  //std::cout << "flush!" << std::endl;
   typename DoutStreambuf<charT, traits>::int_type
     ret(this->overflow(traits_ty::eof()));
   if (ret == traits_ty::eof())

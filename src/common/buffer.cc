@@ -14,6 +14,7 @@
 
 
 #include "config.h"
+#include "common/errno.h"
 #include "include/types.h"
 #include "armor.h"
 #include "include/Spinlock.h"
@@ -86,13 +87,13 @@ void buffer::list::rebuild_page_aligned()
 int buffer::list::read_file(const char *fn, bool silent)
 {
   struct stat st;
-  int fd = ::open(fn, O_RDONLY);
+  int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY));
   if (fd < 0) {
+    int err = errno;
     if (!silent) {
-      char buf[80];
-      cerr << "can't open " << fn << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
+      derr << "can't open " << fn << ": " << cpp_strerror(err) << dendl;
     }
-    return -errno;
+    return -err;
   }
   ::fstat(fd, &st);
   int s = ROUND_UP_TO(st.st_size, PAGE_SIZE);
@@ -101,12 +102,22 @@ int buffer::list::read_file(const char *fn, bool silent)
   int got = 0;
   while (left > 0) {
     int r = ::read(fd, (void *)(bp.c_str() + got), left);
-    if (r <= 0)
+    if (r <= 0) {
+      int err = errno;
+      if (err == EINTR) {
+	// ignore EINTR, 'tis a silly error
+	continue;
+      }
+      if (!silent) {
+	derr << __PRETTY_FUNCTION__ << ": read error:"
+	     << cpp_strerror(err) << dendl;
+      }
       break;
+    }
     got += r;
     left -= r;
   }
-  ::close(fd);
+  TEMP_FAILURE_RETRY(::close(fd));
   bp.set_length(got);
   append(bp);
   return 0;
