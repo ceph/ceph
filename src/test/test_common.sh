@@ -89,12 +89,13 @@ write_objects() {
         stop_ver=$2
         num_objs=$3
         obj_size=$4
+        pool=$5
         [ -d "${TEMPDIR}" ] || die "must setup_tempdir"
         for v in `seq $start_ver $stop_ver`; do
                 chr=`perl -e "print chr(48+$v)"`
                 head -c $obj_size /dev/zero  | tr '\0' "$chr" > $TEMPDIR/ver$v
                 for i in `seq -w 1 $num_objs`; do
-                        ./rados -p data put obj$i $TEMPDIR/ver$v || die "radostool failed"
+                        ./rados -p $pool put obj$i $TEMPDIR/ver$v || die "radostool failed"
                 done
         done
 }
