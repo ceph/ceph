@@ -973,7 +973,7 @@ void MDSMonitor::do_stop()
   // hrm...
   if (!mon->is_leader() ||
       !paxos->is_active()) {
-    dout(-10) << "do_stop can't stop right now, mdsmap not writeable" << dendl;
+    dout(0) << "do_stop can't stop right now, mdsmap not writeable" << dendl;
     return;
   }
 

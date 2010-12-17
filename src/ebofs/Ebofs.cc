@@ -1015,7 +1015,7 @@ void Ebofs::trim_inodes(int max)
       assert(on->oc == 0);   // an open oc pins the onode!
       delete on;
     } else {
-      dout(-20) << "trim_inodes   still active: " << *on << dendl;
+      dout(0) << "trim_inodes   still active: " << *on << dendl;
       assert(0); // huh?
     }
   }

@@ -723,7 +723,7 @@ int BlockDevice::_write(int fd, unsigned bno, unsigned num, bufferlist& bl)
       assert(0);
     } else if (r < (int)len) {
       // hrm, we didn't write _all_ of our data.  WTF kind of FS is this?
-      dout(-1) << "bloody hell, writev only wrote " << r << " of " << len << " bytes, looping" << dendl;
+      dout(0) << "bloody hell, writev only wrote " << r << " of " << len << " bytes, looping" << dendl;
       assert(r % 4096 == 0);
       int wrote = r / 4096;
       bno += wrote;

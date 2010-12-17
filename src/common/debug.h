@@ -69,7 +69,12 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
 #define XDOUT_CONDVAR(x) DOUT_CONDVAR(x)
 #define DOUT_COND(l) l <= XDOUT_CONDVAR(DOUT_SUBSYS)
 
+// Declare dout().
+// The array declaration will trigger a compiler error if 'l' is out of range
 #define dout(l) do { if (DOUT_COND(l)) {\
+  if (0) {\
+    char __array[((l >= -1) && (l <= 200)) ? 0 : -1] __attribute__((unused)); \
+  }\
   Mutex::Locker _dout_locker(_dout_lock);\
   _dout_begin_line(l); \
   dout_prefix

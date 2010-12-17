@@ -748,32 +748,32 @@ int SimpleMessenger::Pipe::accept()
       }
       
       if (existing->policy.lossy) {
-	dout(-10) << "accept replacing existing (lossy) channel (new one lossy="
-		  << policy.lossy << ")" << dendl;
+	dout(0) << "accept replacing existing (lossy) channel (new one lossy="
+	        << policy.lossy << ")" << dendl;
 	existing->was_session_reset();
 	goto replace;
       }
       /*if (lossy_rx) {
 	if (existing->state == STATE_STANDBY) {
-	  dout(-10) << "accept incoming lossy connection, kicking outgoing lossless "
+	  dout(0) << "accept incoming lossy connection, kicking outgoing lossless "
 		    << existing << dendl;
 	  existing->state = STATE_CONNECTING;
 	  existing->cond.Signal();
 	} else {
-	  dout(-10) << "accept incoming lossy connection, our lossless " << existing
+	  dout(0) << "accept incoming lossy connection, our lossless " << existing
 		    << " has state " << existing->state << ", doing nothing" << dendl;
 	}
 	existing->lock.Unlock();
 	goto fail;
 	}*/
 
-      dout(-10) << "accept connect_seq " << connect.connect_seq
+      dout(0) << "accept connect_seq " << connect.connect_seq
 		<< " vs existing " << existing->connect_seq
 		<< " state " << existing->state << dendl;
 
       if (connect.connect_seq < existing->connect_seq) {
 	if (connect.connect_seq == 0) {
-	  dout(-10) << "accept peer reset, then tried to connect to us, replacing" << dendl;
+	  dout(0) << "accept peer reset, then tried to connect to us, replacing" << dendl;
 	  existing->was_session_reset(); // this resets out_queue, msg_ and connect_seq #'s
 	  goto replace;
 	} else {
@@ -994,7 +994,7 @@ int SimpleMessenger::Pipe::connect()
   sd = ::socket(peer_addr.get_family(), SOCK_STREAM, 0);
   if (sd < 0) {
     char buf[80];
-    dout(-1) << "connect couldn't created socket " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    derr << "connect couldn't created socket " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     assert(0);
     goto fail;
   }
@@ -1582,9 +1582,9 @@ void SimpleMessenger::Pipe::reader()
       // occasionally pull a message out of the sent queue to send elsewhere.  in that case
       // it doesn't matter if we "got" it or not.
       if (m->get_seq() <= in_seq) {
-	dout(-10) << "reader got old message "
-		  << m->get_seq() << " <= " << in_seq << " " << m << " " << *m
-		  << ", discarding" << dendl;
+	dout(0) << "reader got old message "
+		<< m->get_seq() << " <= " << in_seq << " " << m << " " << *m
+		<< ", discarding" << dendl;
 	messenger->dispatch_throttle_release(m->get_dispatch_throttle_size());
 	m->put();
 	continue;

@@ -5599,10 +5599,10 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
     _rollback_repair_dir(mut, straydir, rollback.stray, rollback.ctime,
 			 target->is_dir(), -1, true, ti->dirstat, ti->rstat);
 
-  dout(-10) << "  srcdn back to " << *srcdn << dendl;
-  dout(-10) << "   srci back to " << *srcdnl->get_inode() << dendl;
-  dout(-10) << " destdn back to " << *destdn << dendl;
-  if (destdnl->get_inode()) dout(-10) << "  desti back to " << *destdnl->get_inode() << dendl;
+  dout(0) << "  srcdn back to " << *srcdn << dendl;
+  dout(0) << "   srci back to " << *srcdnl->get_inode() << dendl;
+  dout(0) << " destdn back to " << *destdn << dendl;
+  if (destdnl->get_inode()) dout(0) << "  desti back to " << *destdnl->get_inode() << dendl;
   
   // new subtree?
   if (srcdnl->is_primary() && srcdnl->get_inode()->is_dir()) {

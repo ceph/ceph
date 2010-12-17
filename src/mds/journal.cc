@@ -463,7 +463,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	    ss << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
 	        << " " << *old_in
 	        << " should be " << p->inode.ino;
-	    dout(-10) << ss.str() << dendl;
+	    dout(0) << ss.str() << dendl;
 	    mds->clog.warn(ss);
 	    dir->unlink_inode(dn);
 	    mds->mdcache->remove_inode_recursive(old_in);

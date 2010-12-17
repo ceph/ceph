@@ -1387,9 +1387,9 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
 	CInode *in = 0;
 	if (cache->have_inode(inode.ino, last)) {
 	  in = cache->get_inode(inode.ino, last);
-	  dout(-12) << "_fetched  badness: got (but i already had) " << *in 
-		   << " mode " << in->inode.mode 
-		   << " mtime " << in->inode.mtime << dendl;
+	  dout(0) << "_fetched  badness: got (but i already had) " << *in
+		  << " mode " << in->inode.mode
+		  << " mtime " << in->inode.mtime << dendl;
 	  string dirpath, inopath;
 	  this->inode->make_path_string(dirpath);
 	  in->make_path_string(inopath);

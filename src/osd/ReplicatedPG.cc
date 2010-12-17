@@ -2190,7 +2190,7 @@ void ReplicatedPG::apply_repop(RepGather *repop)
 							repop->ctx->clone_obc);
   int r = osd->store->queue_transactions(&osr, repop->tls, onapplied, oncommit, onapplied_sync);
   if (r) {
-    dout(-10) << "apply_repop  queue_transactions returned " << r << " on " << *repop << dendl;
+    derr << "apply_repop  queue_transactions returned " << r << " on " << *repop << dendl;
     assert(0);
   }
 }
@@ -2245,7 +2245,7 @@ void ReplicatedPG::op_applied(RepGather *repop)
 
     switch (first.op.op) { 
     case CEPH_OSD_OP_UNBALANCEREADS:
-      dout(-10) << "op_applied  completed unbalance-reads on " << oid << dendl;
+      dout(0) << "op_applied  completed unbalance-reads on " << oid << dendl;
       unbalancing_reads.erase(oid);
       if (waiting_for_unbalanced_reads.count(oid)) {
 	osd->take_waiters(waiting_for_unbalanced_reads[oid]);
@@ -2254,7 +2254,7 @@ void ReplicatedPG::op_applied(RepGather *repop)
       break;
 
     case CEPH_OSD_OP_BALANCEREADS:
-      dout(-10) << "op_applied  completed balance-reads on " << oid << dendl;
+      dout(0) << "op_applied  completed balance-reads on " << oid << dendl;
       /*
 	if (waiting_for_balanced_reads.count(oid)) {
 	osd->take_waiters(waiting_for_balanced_reads[oid]);
@@ -2264,7 +2264,7 @@ void ReplicatedPG::op_applied(RepGather *repop)
       break;
 
     case CEPH_OSD_OP_WRUNLOCK:
-      dout(-10) << "op_applied  completed wrunlock on " << soid << dendl;
+      dout(0) << "op_applied  completed wrunlock on " << soid << dendl;
       if (waiting_for_wr_unlock.count(soid)) {
 	osd->take_waiters(waiting_for_wr_unlock[soid]);
 	waiting_for_wr_unlock.erase(soid);

@@ -421,7 +421,7 @@ int ObjectCache::try_map_read(block_t start, block_t len)
 	num_missing++;
       }
       else if (e->is_partial()) {
-        dout(-20) << "try_map_read partial " << *e << dendl;
+        dout(0) << "try_map_read partial " << *e << dendl;
 	num_missing++;
       }
       else {
@@ -890,7 +890,7 @@ BufferHead *ObjectCache::merge_bh_left(BufferHead *left, BufferHead *right)
 /* wait until this has a user
 void ObjectCache::try_merge_bh(BufferHead *bh)
 {
-  dout(-10) << "try_merge_bh " << *bh << dendl;
+  dout(0) << "try_merge_bh " << *bh << dendl;
 
   map<block_t, BufferHead*>::iterator p = data.lower_bound(bh->start());
   assert(p->second == bh);

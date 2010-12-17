@@ -770,7 +770,7 @@ int SyntheticClient::run()
 	snprintf(realtfile, sizeof(realtfile), tfile.c_str(), (int)client->get_nodeid().v);
 
         if (run_me()) {
-          dout(-2) << "trace " << tfile << " prefix=" << prefix << " count=" << iarg1 << " data=" << playdata << dendl;
+          dout(0) << "trace " << tfile << " prefix=" << prefix << " count=" << iarg1 << " data=" << playdata << dendl;
           
           Trace t(realtfile);
           
@@ -1884,7 +1884,7 @@ int SyntheticClient::overload_osd_0(int n, int size, int wrsize) {
 
 
     // pull open a file
-    dout(-1) << "in OSD overload" << dendl;
+    dout(0) << "in OSD overload" << dendl;
     string filename = get_sarg(tried);
     dout(1) << "OSD Overload workload: trying file " << filename << dendl;
     int fd = client->open(filename.c_str(), O_RDWR|O_CREAT);

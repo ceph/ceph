@@ -5003,7 +5003,7 @@ void OSD::handle_op(MOSDOp *op)
   if (!op->may_write()) {
     stat_rd_ops++;
     if (op->get_source().is_osd()) {
-      //dout(-10) << "shed in " << stat_rd_ops_shed_in << " / " << stat_rd_ops << dendl;
+      //dout(0) << "shed in " << stat_rd_ops_shed_in << " / " << stat_rd_ops << dendl;
       stat_rd_ops_shed_in++;
     }
   }

@@ -3839,7 +3839,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
       }
       else if (!dnl->is_null() &&
 	       q->second.is_null()) {
-	dout(-10) << " had bad linkage for " << *dn << dendl;
+	dout(0) << " had bad linkage for " << *dn << dendl;
 	/* 
 	 * this should happen:
 	 *  if we're a survivor, any unlink should commit or rollback during
@@ -7786,7 +7786,7 @@ void MDCache::handle_discover(MDiscover *dis)
     int from = dis->get_source().num();
     if (mds->get_state() < MDSMap::STATE_REJOIN ||
 	rejoin_ack_gather.count(from)) {
-      dout(-7) << "discover_reply not yet active(|still rejoining), delaying" << dendl;
+      dout(0) << "discover_reply not yet active(|still rejoining), delaying" << dendl;
       mds->wait_for_active(new C_MDS_RetryMessage(mds, dis));
       return;
     }
@@ -8061,7 +8061,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 {
   /*
   if (mds->get_state() < MDSMap::STATE_ACTIVE) {
-    dout(-7) << "discover_reply NOT ACTIVE YET" << dendl;
+    dout(0) << "discover_reply NOT ACTIVE YET" << dendl;
     m->put();
     return;
   }

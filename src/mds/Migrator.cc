@@ -521,7 +521,7 @@ void Migrator::maybe_do_queued_export()
     if (!dir) continue;
     if (!dir->is_auth()) continue;
 
-    dout(-7) << "nicely exporting to mds" << dest << " " << *dir << dendl;
+    dout(0) << "nicely exporting to mds" << dest << " " << *dir << dendl;
 
     export_dir(dir, dest);
   }
