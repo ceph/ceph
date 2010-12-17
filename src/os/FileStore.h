@@ -101,11 +101,21 @@ class FileStore : public JournalingObjectStore {
   class OpSequencer : public Sequencer_impl {
     Mutex qlock; // to protect q, for benefit of flush (peek/dequeue also protected by lock)
     list<Op*> q;
+    list<uint64_t> jq;
     Cond cond;
   public:
     Sequencer *parent;
     Mutex apply_lock;  // for apply mutual exclusion
     
+    void queue_journal(uint64_t s) {
+      Mutex::Locker l(qlock);
+      jq.push_back(s);
+    }
+    void dequeue_journal() {
+      Mutex::Locker l(qlock);
+      jq.pop_front();
+      cond.Signal();
+    }
     void queue(Op *o) {
       Mutex::Locker l(qlock);
       q.push_back(o);
@@ -124,9 +134,18 @@ class FileStore : public JournalingObjectStore {
     }
     void flush() {
       Mutex::Locker l(qlock);
-      if (!q.empty()) {
-	uint64_t seq = q.back()->op;
-	while (!q.empty() && q.front()->op <= seq)
+
+      // get max for journal _or_ op queues
+      uint64_t seq = 0;
+      if (!q.empty())
+	seq = q.back()->op;
+      if (!jq.empty() && jq.back() > seq)
+	seq = jq.back();
+
+      if (seq) {
+	// everything prior to our watermark to drain through either/both queues
+	while ((!q.empty() && q.front()->op <= seq) ||
+	       (!jq.empty() && jq.front() <= seq))
 	  cond.Wait(qlock);
       }
     }
@@ -180,9 +199,9 @@ class FileStore : public JournalingObjectStore {
 
   void _do_op(OpSequencer *o);
   void _finish_op(OpSequencer *o);
-  void queue_op(Sequencer *osr, uint64_t op, list<Transaction*>& tls, Context *onreadable, Context *onreadable_sync);
+  void queue_op(OpSequencer *osr, uint64_t op, list<Transaction*>& tls, Context *onreadable, Context *onreadable_sync);
   void op_queue_throttle();
-  void _journaled_ahead(Sequencer *osr, uint64_t op, list<Transaction*> &tls,
+  void _journaled_ahead(OpSequencer *osr, uint64_t op, list<Transaction*> &tls,
 			Context *onreadable, Context *ondisk, Context *onreadable_sync);
   friend class C_JournaledAhead;
 
