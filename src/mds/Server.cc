@@ -2285,6 +2285,7 @@ void Server::handle_client_openc(MDRequest *mdr)
     layout = *dir_layout;
   else
     layout = mds->mdcache->default_file_layout;
+
   // fill in any special params from client
   if (req->head.args.open.stripe_unit)
     layout.fl_stripe_unit = req->head.args.open.stripe_unit;
@@ -2293,7 +2294,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   if (req->head.args.open.object_size)
     layout.fl_object_size = req->head.args.open.object_size;
   layout.fl_pg_preferred = req->head.args.open.preferred;
-  // validate layout
+
   if (!ceph_file_layout_is_valid(&layout)) {
     dout(10) << " invalid initial file layout" << dendl;
     reply_request(mdr, -EINVAL);
@@ -3238,7 +3239,9 @@ void Server::handle_client_mknod(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false, false);
+  ceph_file_layout *dir_layout = NULL;
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false, false,
+					 &dir_layout);
   if (!dn) return;
   if (mdr->snapid != CEPH_NOSNAP) {
     reply_request(mdr, -EROFS);
@@ -3249,11 +3252,24 @@ void Server::handle_client_mknod(MDRequest *mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
+  // set layout
+  ceph_file_layout layout;
+  if (dir_layout)
+    layout = *dir_layout;
+  else
+    layout = mds->mdcache->default_file_layout;
+
+  if (!ceph_file_layout_is_valid(&layout)) {
+    dout(10) << " invalid initial file layout" << dendl;
+    reply_request(mdr, -EINVAL);
+    return;
+  }
+
   snapid_t follows = dn->get_dir()->inode->find_snaprealm()->get_newest_seq();
   mdr->now = g_clock.real_now();
 
   CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
-				   req->head.args.mknod.mode);
+				   req->head.args.mknod.mode, &layout);
   assert(newi);
 
   dn->push_projected_linkage(newi);
