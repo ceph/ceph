@@ -3238,6 +3238,7 @@ public:
 void Server::handle_client_mknod(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
+  client_t client = mdr->get_client();
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   ceph_file_layout *dir_layout = NULL;
   CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false, false,
@@ -3279,6 +3280,18 @@ void Server::handle_client_mknod(MDRequest *mdr)
     newi->inode.mode |= S_IFREG;
   newi->inode.version = dn->pre_dirty();
   newi->inode.rstat.rfiles = 1;
+
+  // if the client created a _regular_ file via MKNOD, it's highly likely they'll
+  // want to write to it (e.g., if they are reexporting NFS)
+  if (S_ISREG(newi->inode.mode)) {
+    dout(15) << " setting a client_range too, since this is a regular file" << dendl;
+    newi->inode.client_ranges[client].range.first = 0;
+    newi->inode.client_ranges[client].range.last = newi->inode.get_layout_size_increment();
+    newi->inode.client_ranges[client].follows = follows;
+
+    newi->authlock.set_state(LOCK_EXCL);
+    newi->xattrlock.set_state(LOCK_EXCL);
+  }
 
   if (follows >= dn->first)
     dn->first = follows + 1;
