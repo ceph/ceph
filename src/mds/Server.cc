@@ -3266,7 +3266,8 @@ void Server::handle_client_mknod(MDRequest *mdr)
     return;
   }
 
-  snapid_t follows = dn->get_dir()->inode->find_snaprealm()->get_newest_seq();
+  SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
+  snapid_t follows = realm->get_newest_seq();
   mdr->now = g_clock.real_now();
 
   CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
@@ -3289,8 +3290,20 @@ void Server::handle_client_mknod(MDRequest *mdr)
     newi->inode.client_ranges[client].range.last = newi->inode.get_layout_size_increment();
     newi->inode.client_ranges[client].follows = follows;
 
-    newi->authlock.set_state(LOCK_EXCL);
-    newi->xattrlock.set_state(LOCK_EXCL);
+    // issue a cap on the file
+    int cmode = CEPH_FILE_MODE_RDWR;
+    Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr->session, realm, req->is_replay());
+    if (cap) {
+      cap->set_wanted(0);
+
+      // put locks in excl mode
+      newi->filelock.set_state(LOCK_EXCL);
+      newi->authlock.set_state(LOCK_EXCL);
+      newi->xattrlock.set_state(LOCK_EXCL);
+      cap->issue_norevoke(CEPH_CAP_AUTH_EXCL|CEPH_CAP_AUTH_SHARED|
+			  CEPH_CAP_XATTR_EXCL|CEPH_CAP_XATTR_SHARED|
+			  CEPH_CAP_ANY_FILE_WR);
+    }
   }
 
   if (follows >= dn->first)
