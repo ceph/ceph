@@ -953,13 +953,16 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
       break;
 
     if (in->is_auth()) {
-      if (want_scatter) {
+      // don't do nested lock state change if we have dirty scatterdata and
+      // may scatter_writebehind or start_scatter, because nowait==true implies
+      // that the caller already has a log entry open!
+      if (nowait && lock->is_dirty())
+	return false;
+
+      if (want_scatter)
 	scatter_mix((ScatterLock*)lock);
-      } else {
-	if (nowait && lock->is_dirty())
-	  return false;   // don't do nested lock, as that may scatter_writebehind in simple_lock!
+      else
 	simple_lock(lock);
-      }
 
       if (nowait && !lock->can_wrlock(client))
 	return false;
