@@ -532,7 +532,7 @@ tid_t Objecter::op_submit(Op *op, OSDSession *s)
   return op->tid;
 }
 
-bool Objecter::is_pg_changed(vector<int>& o, vector<int>& n)
+bool Objecter::is_pg_changed(vector<int>& o, vector<int>& n, bool any_change)
 {
   if (o.empty() && n.empty())
     return false;    // both still empty
@@ -540,6 +540,8 @@ bool Objecter::is_pg_changed(vector<int>& o, vector<int>& n)
     return true;     // was empty, now not, or vice versa
   if (o[0] != n[0])
     return true;     // primary changed
+  if (any_change && o != n)
+    return true;
   return false;      // same primary (tho replicas may have changed)
 }
 
@@ -551,12 +553,27 @@ bool Objecter::recalc_op_target(Op *op)
     pgid = osdmap->object_locator_to_pg(op->oid, op->oloc);
   osdmap->pg_to_acting_osds(pgid, acting);
 
-  if (op->pgid != pgid || is_pg_changed(op->acting, acting)) {
+  if (op->pgid != pgid || is_pg_changed(op->acting, acting, op->used_replica)) {
     op->pgid = pgid;
     op->acting = acting;
-    dout(10) << "recalc_op_target tid " << op->tid << " pgid " << pgid << " acting " << acting << dendl;
+    dout(10) << "recalc_op_target tid " << op->tid
+	     << " pgid " << pgid << " acting " << acting << dendl;
 
-    OSDSession *s = op->acting.size() ? get_session(op->acting[0]) : NULL;
+    OSDSession *s = NULL;
+    op->used_replica = false;
+    if (acting.size()) {
+      int osd;
+      bool read = (op->flags & CEPH_OSD_FLAG_READ) && (op->flags & CEPH_OSD_FLAG_WRITE) == 0;
+      if (read && (op->flags & CEPH_OSD_FLAG_BALANCE_READS)) {
+	int p = rand() % acting.size();
+	if (p)
+	  op->used_replica = true;
+	osd = acting[p];
+	dout(10) << " chose random osd" << osd << " of " << acting << dendl;
+      } else
+	osd = acting[0];
+      s = get_session(osd);
+    }
 
     if (op->session != s) {
       if (!op->session)
