@@ -29,13 +29,20 @@ do
     echo debian vers $dvers
 
     echo building debs for $dist
-    pbuilder build \
+
+    cmd="pbuilder build \
 	--binary-arch \
 	--basetgz $basedir/$dist.tgz --distribution $dist \
 	--buildresult release/$vers \
 	--debbuildopts -j`grep -c processor /proc/cpuinfo` \
-	release/$vers/ceph_$dvers.dsc
-    
+	release/$vers/ceph_$dvers.dsc"
+
+    if $cmd ; then
+	echo $dist done
+    else
+	./update_pbuilder.sh $dist
+	$cmd
+    fi
 done
 
 
