@@ -360,8 +360,8 @@ class MDS : public Dispatcher {
   void replay_done();
   void standby_replay_restart();
   void standby_trim_segments();
-  class C_Standby_replay_start;
-  class C_MDS_RestartReplay;
+  class C_MDS_StandbyReplayRestart;
+  class C_MDS_StandbyReplayRestartFinish;
 
   void resolve_start();
   void resolve_done();
