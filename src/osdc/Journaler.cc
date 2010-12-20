@@ -169,6 +169,7 @@ void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
   init_headers(h);
   state = STATE_ACTIVE;
   finish->finish(r);
+  delete finish;
 }
 
 void Journaler::_finish_read_head(int r, bufferlist& bl)
@@ -238,6 +239,7 @@ void Journaler::_finish_reprobe(int r, uint64_t new_end, Context *onfinish) {
   write_pos = flush_pos = ack_pos = safe_pos = new_end;
   state = STATE_ACTIVE;
   onfinish->finish(r);
+  delete onfinish;
 }
 
 void Journaler::_finish_probe_end(int r, uint64_t end)
