@@ -1855,13 +1855,24 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       } 
       else {
 	m = new MOSDPGLog(osd->osdmap->get_epoch(), info);
-	if (pi.last_update < log.tail) {
-	  // summary/backlog
+	if (pi.log_tail > pi.last_complete && !pi.log_backlog) {
+	  // the replica's tail is after it's last_complete and it has no backlog.
+	  // ick, this shouldn't normally happen.  but we can compensate!
+	  dout(10) << "activate peer osd" << peer << " has last_complete < log tail and no backlog, compensating" << dendl;
+	  if (log.tail >= pi.last_complete) {
+	    // _our_ log is sufficient, phew!
+	    m->log.copy_after(log, pi.last_complete);
+	  } else {
+	    assert(log.backlog);
+	    m->log = log;
+	  }
+	} else if (log.tail > pi.last_update) {
+	  // our tail is too new; send the full backlog.
 	  assert(log.backlog);
 	  m->log = log;
 	} else {
-	  // incremental log
-	  assert(pi.last_update < info.last_update);
+	  // send new stuff to append to replicas log
+	  assert(info.last_update > pi.last_update);
 	  m->log.copy_after(log, pi.last_update);
 	}
       }
