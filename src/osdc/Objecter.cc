@@ -570,6 +570,16 @@ bool Objecter::recalc_op_target(Op *op)
 	  op->used_replica = true;
 	osd = acting[p];
 	dout(10) << " chose random osd" << osd << " of " << acting << dendl;
+      } else if (read && (op->flags & CEPH_OSD_FLAG_LOCALIZE_READS)) {
+	// look for a local replica
+	unsigned i;
+	for (i = acting.size()-1; i > 0; i++)
+	  if (osdmap->get_addr(i).is_same_host(messenger->get_myaddr())) {
+	    op->used_replica = true;
+	    dout(10) << " chose local osd" << acting[i] << " of " << acting << dendl;
+	    break;
+	  }
+	osd = acting[i];
       } else
 	osd = acting[0];
       s = get_session(osd);
