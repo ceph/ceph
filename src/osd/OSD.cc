@@ -4373,32 +4373,36 @@ void OSD::_remove_pg(PG *pg)
   ObjectStore::Transaction *rmt = new ObjectStore::Transaction;
 
   // snap collections
-  for (set<snapid_t>::iterator p = pg->snap_collections.begin();
+  for (interval_set<snapid_t>::iterator p = pg->snap_collections.begin();
        p != pg->snap_collections.end();
        p++) {
-    vector<sobject_t> olist;      
-    store->collection_list(coll_t(pgid, *p), olist);
-    dout(10) << "_remove_pg " << pgid << " snap " << *p << " " << olist.size() << " objects" << dendl;
-    for (vector<sobject_t>::iterator q = olist.begin();
-	 q != olist.end();
-	 q++) {
-      ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      t->remove(coll_t(pgid, *p), *q);
-      t->remove(coll_t(pgid), *q);          // we may hit this twice, but it's harmless
-      int tr = store->queue_transaction(&pg->osr, t);
-      assert(tr == 0);
-
-      if ((++n & 0xff) == 0) {
-	pg->unlock();
-	pg->lock();
-	if (!pg->deleting) {
-	  dout(10) << "_remove_pg aborted on " << *pg << dendl;
+    for (snapid_t cur = p.get_start();
+	 cur < p.get_start() + p.get_len();
+	 ++cur) {
+      vector<sobject_t> olist;      
+      store->collection_list(coll_t(pgid, cur), olist);
+      dout(10) << "_remove_pg " << pgid << " snap " << cur << " " << olist.size() << " objects" << dendl;
+      for (vector<sobject_t>::iterator q = olist.begin();
+	   q != olist.end();
+	   q++) {
+	ObjectStore::Transaction *t = new ObjectStore::Transaction;
+	t->remove(coll_t(pgid, cur), *q);
+	t->remove(coll_t(pgid), *q);          // we may hit this twice, but it's harmless
+	int tr = store->queue_transaction(&pg->osr, t);
+	assert(tr == 0);
+	
+	if ((++n & 0xff) == 0) {
 	  pg->unlock();
-	  return;
+	  pg->lock();
+	  if (!pg->deleting) {
+	    dout(10) << "_remove_pg aborted on " << *pg << dendl;
+	    pg->unlock();
+	    return;
+	  }
 	}
       }
+      rmt->remove_collection(coll_t(pgid, cur));
     }
-    rmt->remove_collection(coll_t(pgid, *p));
   }
 
   // (what remains of the) main collection

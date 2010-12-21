@@ -701,7 +701,7 @@ public:
   Missing     missing;
   map<sobject_t, set<int> > missing_loc;
   
-  set<snapid_t> snap_collections;
+  interval_set<snapid_t> snap_collections;
   map<epoch_t,Interval> past_intervals;
 
   interval_set<snapid_t> snap_trimq;
