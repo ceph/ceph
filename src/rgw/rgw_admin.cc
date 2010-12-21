@@ -30,7 +30,7 @@ void usage()
   cerr << "   --display-name=<name>" << std::endl;
   cerr << "   --bucket=<bucket>" << std::endl;
   cerr << "   --object=<object>" << std::endl;
-  generic_usage();
+  generic_client_usage();
   exit(1);
 }
 
