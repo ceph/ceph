@@ -1840,8 +1840,12 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       PG::Info& pi = peer_info[peer];
 
       MOSDPGLog *m = 0;
-      
-      if (pi.last_update == info.last_update) {
+
+      dout(10) << "activate peer osd" << peer << " " << pi << dendl;
+
+      bool need_old_log_entries = pi.log_tail > pi.last_complete && !pi.log_backlog;
+
+      if (pi.last_update == info.last_update && !need_old_log_entries) {
         // empty log
 	if (activator_map) {
 	  dout(10) << "activate peer osd" << peer << " is up to date, queueing in pending_activators" << dendl;
@@ -1855,7 +1859,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       } 
       else {
 	m = new MOSDPGLog(osd->osdmap->get_epoch(), info);
-	if (pi.log_tail > pi.last_complete && !pi.log_backlog) {
+	if (need_old_log_entries) {
 	  // the replica's tail is after it's last_complete and it has no backlog.
 	  // ick, this shouldn't normally happen.  but we can compensate!
 	  dout(10) << "activate peer osd" << peer << " has last_complete < log tail and no backlog, compensating" << dendl;
