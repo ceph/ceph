@@ -1557,50 +1557,53 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
   }
 
 
-  // -- do i need to generate backlog for any of my peers?
-  if (oldest_update < log.tail && !log.backlog) {
-    dout(10) << "must generate backlog for some peers, my tail " 
-             << log.tail << " > oldest_update " << oldest_update
-             << dendl;
-    osd->queue_generate_backlog(this);
-    return;
-  }
-
-  // do i need a backlog due to mis-trimmed log?
-  if (info.last_complete < log.tail && !log.backlog) {
-    dout(10) << "must generate backlog because my last_complete " << info.last_complete
-	     << " < log.tail " << log.tail << " and no backlog" << dendl;
-    osd->queue_generate_backlog(this);
-    return;
-  }
-  for (unsigned i=0; i<acting.size(); i++) {
-    int o = acting[i];
-    Info& pi = peer_info[o];
-    if (pi.last_complete < pi.log_tail && !pi.log_backlog &&
-	pi.last_complete < log.tail && !log.backlog) {
-      dout(10) << "must generate backlog for replica peer osd" << o
-	       << " who has a last_complete " << pi.last_complete
-	       << " < their log.tail " << pi.log_tail << " and no backlog" << dendl;
+  // -- do i need to generate backlog?
+  if (!log.backlog) {
+    if (oldest_update < log.tail) {
+      dout(10) << "must generate backlog for some peers, my tail " 
+	       << log.tail << " > oldest_update " << oldest_update
+	       << dendl;
       osd->queue_generate_backlog(this);
       return;
     }
-  }
 
-  // do i need a backlog for an up peer excluded from acting?
-  bool need_backlog = false;
-  for (unsigned i=0; i<up.size(); i++) {
-    int o = up[i];
-    if (o == osd->whoami || is_acting(o))
-      continue;
-    Info& pi = peer_info[o];
-    if (pi.last_update < log.tail && !log.backlog) {
-      dout(10) << "must generate backlog for !acting peer osd" << o
-	       << " whose last_update " << pi.last_update << " < my log.tail " << log.tail << dendl;
-      need_backlog = true;
+    // do i need a backlog due to mis-trimmed log?  (compensate for past(!) bugs)
+    if (info.last_complete < log.tail) {
+      dout(10) << "must generate backlog because my last_complete " << info.last_complete
+	       << " < log.tail " << log.tail << " and no backlog" << dendl;
+      osd->queue_generate_backlog(this);
+      return;
     }
+    for (unsigned i=0; i<acting.size(); i++) {
+      int o = acting[i];
+      Info& pi = peer_info[o];
+      if (pi.last_complete < pi.log_tail && !pi.log_backlog &&
+	  pi.last_complete < log.tail) {
+	dout(10) << "must generate backlog for replica peer osd" << o
+		 << " who has a last_complete " << pi.last_complete
+		 << " < their log.tail " << pi.log_tail << " and no backlog" << dendl;
+	osd->queue_generate_backlog(this);
+	return;
+      }
+    }
+
+    // do i need a backlog for an up peer excluded from acting?
+    bool need_backlog = false;
+    for (unsigned i=0; i<up.size(); i++) {
+      int o = up[i];
+      if (o == osd->whoami || is_acting(o))
+	continue;
+      Info& pi = peer_info[o];
+      if (pi.last_update < log.tail) {
+	dout(10) << "must generate backlog for up but !acting peer osd" << o
+		 << " whose last_update " << pi.last_update
+		 << " < my log.tail " << log.tail << dendl;
+	need_backlog = true;
+      }
+    }
+    if (need_backlog)
+      osd->queue_generate_backlog(this);
   }
-  if (need_backlog)
-    osd->queue_generate_backlog(this);
 
 
   /** COLLECT MISSING+LOG FROM PEERS **********/
