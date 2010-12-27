@@ -2326,7 +2326,6 @@ void PG::trim_peers()
   }
 }
 
-
 void PG::add_log_entry(Log::Entry& e, bufferlist& log_bl)
 {
   // raise last_complete only if we were previously up to date

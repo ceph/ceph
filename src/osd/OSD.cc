@@ -3067,11 +3067,13 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     }
     
     // no change?
-    if (tacting == pg->acting && tup == pg->up &&
-	(pg->is_active() || !pg->prior_set_affected(osdmap))) {
-      dout(15) << *pg << " unchanged|active with " << tup << "/" << tacting << " up/acting" << dendl;
-      pg->unlock();
-      continue;
+    if (tacting == pg->acting && tup == pg->up) {
+      if ((pg->prior_set.get() == NULL) || (!pg->prior_set_affected(osdmap))) {
+	dout(15) << *pg << " unaffected with "
+	  << tup << "/" << tacting << " up/acting" << dendl;
+	pg->unlock();
+	continue;
+      }
     }
 
     // -- there was a change! --
