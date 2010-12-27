@@ -28,6 +28,7 @@
 #include "common/DecayCounter.h"
 
 #include <list>
+#include <memory>
 #include <string>
 using namespace std;
 
@@ -735,10 +736,17 @@ public:
   bool        have_master_log;
  protected:
   bool prior_set_built;
-  set<int>    prior_set;   // current+prior OSDs, as defined by info.history.last_epoch_started.
-  set<int>    prior_set_down;     // down osds normally exluded from prior_set
-  map<int,epoch_t> prior_set_up_thru;  // osds whose up_thru we care about
-  set<int>    prior_set_lost;  // osds in the prior set which are lost
+  struct PgPriorSet {
+    set<int>    cur;   // current+prior OSDs, as defined by info.history.last_epoch_started.
+    set<int>    down;  // down osds normally exluded from cur
+    set<int>    lost;  // osds in the prior set which are lost
+    map<int,epoch_t> up_thru;  // osds whose up_thru we care about
+  };
+
+  friend std::ostream& operator<<(std::ostream& oss,
+				  const struct PgPriorSet &prior);
+
+  std::auto_ptr < PgPriorSet > prior_set;
 
   bool        need_up_thru;
   set<int>    stray_set;   // non-acting osds that have PG data.
@@ -799,8 +807,6 @@ public:
       if (up[i] == osd) return true;
     return false;
   }
-  bool is_prior(int osd) const { return prior_set.count(osd); }
-  bool is_stray(int osd) const { return stray_set.count(osd); }
   
   bool is_all_uptodate() const;
 
@@ -809,7 +815,6 @@ public:
   void build_prior();
   void clear_prior();
   bool prior_set_affected(const OSDMap *map) const;
-
 
   bool all_unfound_are_lost(const OSDMap* osdmap) const;
   void mark_obj_as_lost(ObjectStore::Transaction& t,
@@ -929,7 +934,6 @@ public:
     role(0),
     state(0),
     have_master_log(true),
-    prior_set_built(false),
     need_up_thru(false),
     pg_stats_lock("PG::pg_stats_lock"),
     pg_stats_valid(false),

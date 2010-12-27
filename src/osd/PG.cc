@@ -915,14 +915,16 @@ void PG::trim_past_intervals()
 // true if the given map affects the prior set
 bool PG::prior_set_affected(const OSDMap *osdmap) const
 {
-  for (set<int>::iterator p = prior_set.begin();
-       p != prior_set.end();
-       p++)
+  const PgPriorSet &prior = *prior_set.get();
+
+  for (set<int>::iterator p = prior.cur.begin();
+       p != prior.cur.end();
+       ++p)
   {
     int o = *p;
 
     // did someone in the prior set go down?
-    if (osdmap->is_down(o) && prior_set_down.count(o) == 0) {
+    if (osdmap->is_down(o) && prior.down.count(o) == 0) {
       dout(10) << "prior_set_affected: osd" << osd << " now down" << dendl;
       return true;
     }
@@ -932,9 +934,9 @@ bool PG::prior_set_affected(const OSDMap *osdmap) const
   }
 
   // did someone in the prior down set go up?
-  for (set<int>::iterator p = prior_set_down.begin();
-       p != prior_set_down.end();
-       p++)
+  for (set<int>::iterator p = prior.down.begin();
+       p != prior.down.end();
+       ++p)
   {
     int o = *p;
 
@@ -951,8 +953,8 @@ bool PG::prior_set_affected(const OSDMap *osdmap) const
       
     const osd_info_t& pinfo(osdmap->get_info(o));
     if (pinfo.lost_at > pinfo.up_from) {
-      set<int>::const_iterator pl = prior_set_lost.find(o);
-      if (pl == prior_set_lost.end()) {
+      set<int>::const_iterator pl = prior.lost.find(o);
+      if (pl == prior.lost.end()) {
 	dout(10) << "prior_set_affected: osd" << o << " now lost" << dendl;
 	return true;
       }
@@ -960,8 +962,8 @@ bool PG::prior_set_affected(const OSDMap *osdmap) const
   }
   
   // did a significant osd's up_thru change?
-  for (map<int,epoch_t>::const_iterator p = prior_set_up_thru.begin();
-       p != prior_set_up_thru.end();
+  for (map<int,epoch_t>::const_iterator p = prior.up_thru.begin();
+       p != prior.up_thru.end();
        ++p)
     if (p->second != osdmap->get_up_thru(p->first)) {
       dout(10) << "prior_set_affected: primary osd" << p->first
@@ -1079,16 +1081,6 @@ void PG::mark_all_unfound_as_lost(ObjectStore::Transaction& t)
   share_pg_log(old_last_update);
 }
 
-void PG::clear_prior()
-{
-  dout(10) << "clear_prior" << dendl;
-  prior_set.clear();
-  prior_set_down.clear();
-  prior_set_up_thru.clear();
-  prior_set_lost.clear();
-  prior_set_built = false;
-}
-
 void PG::build_prior()
 {
   if (1) {
@@ -1141,15 +1133,16 @@ void PG::build_prior()
    * intervene by marking the OSD as "lost."
    */
 
-  clear_prior();
+  prior_set.reset(new PgPriorSet());
+  PgPriorSet& prior(*prior_set.get());
 
   // current up and/or acting nodes, of course.
   for (unsigned i=0; i<up.size(); i++)
     if (up[i] != osd->whoami)
-      prior_set.insert(up[i]);
+      prior.cur.insert(up[i]);
   for (unsigned i=0; i<acting.size(); i++)
     if (acting[i] != osd->whoami)
-      prior_set.insert(acting[i]);
+      prior.cur.insert(acting[i]);
 
   // and prior PG mappings.  move backwards in time.
   state_clear(PG_STATE_CRASHED);
@@ -1204,7 +1197,7 @@ void PG::build_prior()
 
       if (osd->osdmap->is_up(o)) {  // is up now
 	if (o != osd->whoami)       // and is not me
-	  prior_set.insert(o);
+	  prior.cur.insert(o);
       }
     }
 
@@ -1232,7 +1225,7 @@ void PG::build_prior()
 	// did any osds survive _this_ interval?
 	any_survived = true;
       } else if (!pinfo || pinfo->lost_at > interval.first) {
-	prior_set_down.insert(o);
+	prior.down.insert(0);
 	if (started_since_joining.size()) {
 	  if (pinfo)
 	    dout(10) << "build_prior  prior osd" << o
@@ -1260,7 +1253,7 @@ void PG::build_prior()
 	dout(10) << "build_prior  prior osd" << o
 		 << " is down" << dendl;
 	need_down++;
-	prior_set_down.insert(o);
+	prior.down.insert(o);
       }
     }
 
@@ -1273,7 +1266,7 @@ void PG::build_prior()
 	       << " osds possibly went active+rw, no survivors, including" << dendl;
       for (unsigned i=0; i<interval.acting.size(); i++)
 	if (osd->osdmap->is_down(interval.acting[i])) {
-	  prior_set.insert(interval.acting[i]);
+	  prior.cur.insert(interval.acting[i]);
 	  state_set(PG_STATE_DOWN);
 	}
       some_down = true;
@@ -1282,7 +1275,7 @@ void PG::build_prior()
       // changes later, it will affect our prior_set, and we'll want
       // to rebuild it!
       OSDMap *lastmap = osd->get_map(interval.last);
-      prior_set_up_thru[interval.acting[0]] = lastmap->get_up_thru(interval.acting[0]);
+      prior.up_thru[interval.acting[0]] = lastmap->get_up_thru(interval.acting[0]);
     }
 
     if (crashed) {
@@ -1292,22 +1285,21 @@ void PG::build_prior()
     }
   }
 
-  // Build prior_set_lost
-  for (set<int>::const_iterator i = prior_set.begin(); i != prior_set.end(); ++i) {
+  // Build prior_set.lost
+  for (set<int>::const_iterator i = prior.cur.begin();
+       i != prior.cur.end(); ++i) {
     int o = *i;
     const osd_info_t& pinfo(osd->osdmap->get_info(o));
     if (pinfo.lost_at > pinfo.up_from) {
-      prior_set_lost.insert(o);
+      prior.lost.insert(o);
     }
   }
 
-  dout(10) << "build_prior = " << prior_set
-	   << " down = " << prior_set_down << " ..."
+  dout(10) << "build_prior: " << prior << " "
 	   << (is_crashed() ? " crashed":"")
 	   << (is_down() ? " down":"")
 	   << (some_down ? " some_down":"")
 	   << dendl;
-  prior_set_built = true;
 }
 
 void PG::clear_primary_state()
@@ -1316,7 +1308,7 @@ void PG::clear_primary_state()
 
   // clear peering state
   have_master_log = false;
-  clear_prior();
+  prior_set.reset(NULL);
   stray_set.clear();
   uptodate_set.clear();
   peer_info_requested.clear();
@@ -1400,9 +1392,9 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
 
   // -- query info from everyone in prior_set.
   bool lack_info = false;
-  for (set<int>::iterator it = prior_set.begin();
-       it != prior_set.end();
-       it++) {
+  for (set<int>::const_iterator it = prior_set->cur.begin();
+       it != prior_set->cur.end();
+       ++it) {
     if (peer_info.count(*it)) {
       dout(10) << " have info from osd" << *it 
                << ": " << peer_info[*it]
@@ -1447,7 +1439,7 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
     dout(10) << " have info from osd" << it->first << ": " << it->second << dendl;
     if (it->second.last_update > newest_update ||
 	(it->second.last_update == newest_update &&    // prefer osds in the prior set
-	 prior_set.count(newest_update_osd) == 0)) {
+	 prior_set->cur.count(newest_update_osd) == 0)) {
       newest_update = it->second.last_update;
       newest_update_osd = it->first;
     }
@@ -1536,16 +1528,17 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
               map< int, map<pg_t,Query> >& query_map,
 	      map<int, MOSDPGInfo*> *activator_map)
 {
-  dout(10) << "peer up " << up << ", acting " << acting << dendl;
+  dout(10) << "PG::do_peer: peer up " << up << ", acting "
+	   << acting << dendl;
 
   if (!is_active())
     state_set(PG_STATE_PEERING);
   
-  if (!prior_set_built)
+  if (!prior_set.get())
     build_prior();
 
-  dout(10) << "peer prior_set is " << prior_set << dendl;
-  
+  dout(10) << "PG::do_peer: peer prior_set is "
+	   << *prior_set << dendl;
   
   if (!have_master_log) {
     if (!recover_master_log(query_map))
@@ -1805,7 +1798,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   need_up_thru = false;
 
   // clear prior set (and dependency info)... we are done peering!
-  clear_prior();
+  prior_set.reset(NULL);
 
   // if we are building a backlog, cancel it!
   if (up == acting)
@@ -3650,4 +3643,13 @@ ostream& operator<<(ostream& out, const PG& pg)
 
 
   return out;
+}
+
+std::ostream& operator<<(std::ostream& oss,
+			 const struct PG::PgPriorSet &prior)
+{
+  oss << "[[ cur=" << prior.cur << ", "
+      << "down=" << prior.down << ", "
+      << "lost=" << prior.lost << " ]]";
+  return oss;
 }

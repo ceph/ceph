@@ -3084,7 +3084,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     pg_temp_wanted.erase(pgid);
     
     pg->kick();
-    pg->clear_prior();
+    pg->prior_set.reset(NULL);
 
     // update PG
     pg->acting.swap(tacting);
