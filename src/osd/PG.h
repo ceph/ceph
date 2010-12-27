@@ -947,6 +947,12 @@ public:
     pool->put();
   }
   
+ private:
+  // Prevent copying
+  PG(const PG& rhs);
+  PG& operator=(const PG& rhs);
+
+ public:
   pg_t       get_pgid() const { return info.pgid; }
   int        get_nrep() const { return acting.size(); }
 
