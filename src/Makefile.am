@@ -206,6 +206,10 @@ testdout_streambuf_SOURCES = test/TestDoutStreambuf.cc
 testdout_streambuf_LDADD = libceph.la libcrush.la -lpthread
 bin_PROGRAMS += testdout_streambuf
 
+testsignal_handlers_SOURCES = test/TestSignalHandlers.cc
+testsignal_handlers_LDADD = libceph.la -lpthread
+bin_PROGRAMS += testsignal_handlers
+
 endif
 
 # librados
