@@ -248,7 +248,18 @@ void handle_fatal_signal(int signum)
   _dout->flush();
 
   // Use default handler to dump core
-  kill(getpid(), signum);
+  int ret = raise(signum);
+
+  // Normally, we won't get here. If we do, something is very weird.
+  if (ret) {
+    *_dout << "handle_fatal_signal: failed to re-raise signal " << signum
+	   << std::endl;
+  }
+  else {
+    *_dout << "handle_fatal_signal: default handler for signal " << signum
+	   << " didn't terminate the process?" << std::endl;
+  }
+  exit(1);
 }
 
 #define _STR(x) #x
@@ -1293,14 +1304,14 @@ void parse_config_options(std::vector<const char*>& args)
   }
 
   install_sighandler(SIGHUP, sighup_handler, SA_RESTART);
-  install_sighandler(SIGSEGV, handle_fatal_signal, SA_RESETHAND);
-  install_sighandler(SIGABRT, handle_fatal_signal, SA_RESETHAND);
-  install_sighandler(SIGBUS, handle_fatal_signal, SA_RESETHAND);
-  install_sighandler(SIGILL, handle_fatal_signal, SA_RESETHAND);
-  install_sighandler(SIGFPE, handle_fatal_signal, SA_RESETHAND);
-  install_sighandler(SIGXCPU, handle_fatal_signal, SA_RESETHAND);
-  install_sighandler(SIGXFSZ, handle_fatal_signal, SA_RESETHAND);
-  install_sighandler(SIGSYS, handle_fatal_signal, SA_RESETHAND);
+  install_sighandler(SIGSEGV, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
+  install_sighandler(SIGABRT, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
+  install_sighandler(SIGBUS, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
+  install_sighandler(SIGILL, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
+  install_sighandler(SIGFPE, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
+  install_sighandler(SIGXCPU, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
+  install_sighandler(SIGXFSZ, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
+  install_sighandler(SIGSYS, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
 
   args = nargs;
 }
