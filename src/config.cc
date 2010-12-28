@@ -1295,6 +1295,9 @@ void parse_config_options(std::vector<const char*>& args)
   install_sighandler(SIGBUS, handle_fatal_signal, SA_RESETHAND);
   install_sighandler(SIGILL, handle_fatal_signal, SA_RESETHAND);
   install_sighandler(SIGFPE, handle_fatal_signal, SA_RESETHAND);
+  install_sighandler(SIGXCPU, handle_fatal_signal, SA_RESETHAND);
+  install_sighandler(SIGXFSZ, handle_fatal_signal, SA_RESETHAND);
+  install_sighandler(SIGSYS, handle_fatal_signal, SA_RESETHAND);
 
   args = nargs;
 }
