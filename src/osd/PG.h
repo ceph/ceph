@@ -750,7 +750,6 @@ public:
 
   bool        need_up_thru;
   set<int>    stray_set;   // non-acting osds that have PG data.
-  set<int>    uptodate_set;  // current OSDs that are uptodate
   eversion_t  oldest_update; // acting: lowest (valid) last_update in active set
   map<int,Info>        peer_info;   // info from peers (stray or prior)
   set<int>             peer_info_requested;

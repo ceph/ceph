@@ -1310,7 +1310,6 @@ void PG::clear_primary_state()
   have_master_log = false;
   prior_set.reset(NULL);
   stray_set.clear();
-  uptodate_set.clear();
   peer_info_requested.clear();
   peer_log_requested.clear();
   peer_backlog_requested.clear();
