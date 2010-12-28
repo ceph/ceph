@@ -195,10 +195,14 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
       we will send the peer enough log to arrive at the same state.
     */
 
-    list<Log::Entry>::reverse_iterator pp = olog.log.rbegin();
-    eversion_t lu = oinfo.last_update;
-    while (pp != olog.log.rend()) {
-      Log::Entry& oe = *pp;
+    list<Log::Entry>::const_reverse_iterator pp = olog.log.rbegin();
+    eversion_t lu(oinfo.last_update);
+    while (true) {
+      if (pp == olog.log.rend()) {
+	lu = olog.tail;
+	break;
+      }
+      const Log::Entry& oe = *pp;
 
       // don't continue past the tail of our log.
       if (oe.version <= log.tail)
@@ -213,6 +217,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
       Log::Entry& ne = *log.objects[oe.soid];
       if (ne.version == oe.version) {
 	dout(10) << " had " << oe << " new " << ne << " : match, stopping" << dendl;
+	lu = pp->version;
 	break;
       }
       if (ne.version > oe.version) {
@@ -241,10 +246,6 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
       }
 
       ++pp;
-      if (pp != olog.log.rend())
-        lu = pp->version;
-      else
-        lu = olog.tail;
     }    
 
     if (lu < oinfo.last_update) {
