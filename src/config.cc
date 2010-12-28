@@ -238,20 +238,10 @@ void sighup_handler(int signum)
   logger_reopen_all();
 }
 
-void sigsegv_handler(int signum)
+void handle_fatal_signal(int signum)
 {
-  *_dout << "*** Caught signal (SEGV) ***" << std::endl;
-  BackTrace bt(0);
-  bt.print(*_dout);
-  _dout->flush();
-
-  // Use default handler to dump core
-  kill(getpid(), signum);
-}
-
-void sigabrt_handler(int signum)
-{
-  *_dout << "*** Caught signal (ABRT) ***" << std::endl;
+  *_dout << "*** Caught signal (" << sys_siglist[signum] << ") ***"
+	 << std::endl;
   BackTrace bt(0);
   bt.print(*_dout);
   _dout->flush();
@@ -1300,8 +1290,11 @@ void parse_config_options(std::vector<const char*>& args)
   }
 
   install_sighandler(SIGHUP, sighup_handler, SA_RESTART);
-  install_sighandler(SIGSEGV, sigsegv_handler, SA_RESETHAND);
-  install_sighandler(SIGSEGV, sigabrt_handler, SA_RESETHAND);
+  install_sighandler(SIGSEGV, handle_fatal_signal, SA_RESETHAND);
+  install_sighandler(SIGABRT, handle_fatal_signal, SA_RESETHAND);
+  install_sighandler(SIGBUS, handle_fatal_signal, SA_RESETHAND);
+  install_sighandler(SIGILL, handle_fatal_signal, SA_RESETHAND);
+  install_sighandler(SIGFPE, handle_fatal_signal, SA_RESETHAND);
 
   args = nargs;
 }
