@@ -253,10 +253,6 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
       oinfo.last_update = lu;
       if (lu < oinfo.last_complete)
 	oinfo.last_complete = lu;
-      if (lu < oldest_update) {
-        dout(10) << " oldest_update now " << lu << dendl;
-        oldest_update = lu;
-      }
     }
   }
 
@@ -348,18 +344,11 @@ void PG::merge_log(ObjectStore::Transaction& t,
     log.index();
 
     // first, find split point (old log.head) in new log.
-    // adjust oldest_updated as needed.
     list<Log::Entry>::iterator p = log.log.end();
     while (p != log.log.begin()) {
       p--;
       if (p->version <= log.head) {
 	dout(10) << "merge_log split point is " << *p << dendl;
-
-	if (p->version < log.head && p->version < oldest_update) {
-	  dout(10) << "merge_log oldest_update " << oldest_update << " -> "
-		   << p->version << dendl;
-	  oldest_update = p->version;
-	}
 
 	if (p->version == log.head)
 	  p++;       // move past the split point, if it also exists in our old log...
@@ -1386,7 +1375,8 @@ bool PG::choose_acting(int newest_update_osd)
 }
 
 // if false, stop.
-bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
+bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map,
+			    eversion_t &oldest_update)
 {
   dout(10) << "recover_master_log" << dendl;
 
@@ -1523,6 +1513,22 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
   return true;
 }
 
+eversion_t PG::calc_oldest_known_update() const
+{
+  eversion_t oldest_update(info.last_update);
+  for (map<int,Info>::const_iterator it = peer_info.begin();
+       it != peer_info.end();
+       ++it) {
+    if (osd->osdmap->is_down(it->first))
+      continue;
+    if (!is_acting(it->first))
+      continue;
+    if (it->second.last_update < oldest_update) {
+      oldest_update = it->second.last_update;
+    }
+  }
+  return oldest_update;
+}
 
 void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
               map< int, map<pg_t,Query> >& query_map,
@@ -1540,15 +1546,19 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
   dout(10) << "PG::do_peer: peer prior_set is "
 	   << *prior_set << dendl;
   
+  eversion_t oldest_update;
   if (!have_master_log) {
-    if (!recover_master_log(query_map))
-      return;
-  } else if (up != acting) {
-    // are we done generating backlog(s)?
-    if (!choose_acting(osd->whoami))
+    if (!recover_master_log(query_map, oldest_update))
       return;
   }
-
+  else {
+    if (up != acting) {
+      // are we done generating backlog(s)?
+      if (!choose_acting(osd->whoami))
+	return;
+    }
+    oldest_update = calc_oldest_known_update();
+  }
 
   // -- do i need to generate backlog?
   if (!log.backlog) {
