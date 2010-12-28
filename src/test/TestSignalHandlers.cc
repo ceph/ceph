@@ -35,6 +35,24 @@ static int* get_null()
   return 0;
 }
 
+static void simple_segv_test()
+{
+  dout(0) << "triggering SIGSEGV..." << dendl;
+  int i = *get_null();
+  std::cout << "i = " << i << std::endl;
+}
+
+static void infinite_recursion_test_impl()
+{
+  infinite_recursion_test_impl();
+}
+
+static void infinite_recursion_test()
+{
+  dout(0) << "triggering SIGSEGV with infinite recursion..." << dendl;
+  infinite_recursion_test_impl();
+}
+
 static std::string get_tmp_filename()
 {
   char tmp[PATH_MAX];
@@ -55,6 +73,15 @@ static std::string get_tmp_filename()
   return string(tmp);
 }
 
+static void usage()
+{
+  derr << "usage: TestSignalHandlers [test]" << dendl;
+  derr << "Tests:" << dendl;
+  derr << "   simple_segv" << dendl;
+  derr << "   infinite_recursion" << dendl;
+  generic_client_usage(); // Will exit()
+}
+
 int main(int argc, const char **argv)
 {
   string tmp_log_file(get_tmp_filename());
@@ -71,9 +98,19 @@ int main(int argc, const char **argv)
   g_conf.log_file = tmp_log_file.c_str();
   common_init(args, "TestSignalHandlers", true);
 
-  dout(0) << "triggering SIGSEGV..." << dendl;
-  int i = *get_null();
-  std::cout << "i = " << i << std::endl;
+  DEFINE_CONF_VARS(usage);
+  FOR_EACH_ARG(args) {
+    if (CONF_ARG_EQ("simple_segv", 's')) {
+      simple_segv_test();
+    }
+    else if (CONF_ARG_EQ("infinite_recursion", 'r')) {
+      infinite_recursion_test();
+    }
+    else if (CONF_ARG_EQ("help", 'h')) {
+      usage();
+    }
+  }
 
+  std::cout << "Please select a test to run." << std::endl;
   return 0;
 }
