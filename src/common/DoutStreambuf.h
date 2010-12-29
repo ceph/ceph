@@ -83,7 +83,7 @@ private:
   void _clear_output_buffer();
   std::string _calculate_opath() const;
   std::string _get_symlink_dir() const;
-  bool _read_ofile_config();
+  int _read_ofile_config();
   int _rotate_files(const std::string &base);
 
   // Output buffer

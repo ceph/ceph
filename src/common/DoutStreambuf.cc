@@ -318,7 +318,7 @@ void DoutStreambuf<charT, traits>::read_global_config()
   }
 
   if (g_conf.log_to_file) {
-    if (_read_ofile_config()) {
+    if (_read_ofile_config() == 0) {
       flags |= DOUTSB_FLAG_OFILE;
     }
   }
@@ -351,7 +351,7 @@ int DoutStreambuf<charT, traits>::handle_pid_change()
     int ret = create_symlink(new_opath, isym_path);
     if (ret) {
       ostringstream oss;
-      oss << __func__ << ": failed to (re)create instance symlink";
+      oss << __func__ << ": failed to (re)create instance symlink\n";
       primitive_log(oss.str());
       return ret;
     }
@@ -362,7 +362,7 @@ int DoutStreambuf<charT, traits>::handle_pid_change()
     int ret = create_symlink(new_opath, rsym_path);
     if (ret) {
       ostringstream oss;
-      oss << __func__ << ": failed to (re)create rank symlink";
+      oss << __func__ << ": failed to (re)create rank symlink\n";
       primitive_log(oss.str());
       return ret;
     }
@@ -509,7 +509,7 @@ std::string DoutStreambuf<charT, traits>::_get_symlink_dir() const
 }
 
 template <typename charT, typename traits>
-bool DoutStreambuf<charT, traits>::_read_ofile_config()
+int DoutStreambuf<charT, traits>::_read_ofile_config()
 {
   int ret;
 
@@ -520,7 +520,7 @@ bool DoutStreambuf<charT, traits>::_read_ofile_config()
     ostringstream oss;
     oss << __func__ << ": _calculate_opath failed.\n";
     primitive_log(oss.str());
-    return false;
+    return 1;
   }
 
   if (empty(g_conf.log_file) && g_conf.log_per_instance) {
@@ -534,7 +534,7 @@ bool DoutStreambuf<charT, traits>::_read_ofile_config()
     ret = _rotate_files(isym_path);
     if (ret) {
       ostringstream oss;
-      oss << __func__ << ": failed to rotate instance symlinks";
+      oss << __func__ << ": failed to rotate instance symlinks\n";
       primitive_log(oss.str());
       return ret;
     }
@@ -543,7 +543,7 @@ bool DoutStreambuf<charT, traits>::_read_ofile_config()
     ret = create_symlink(opath, isym_path);
     if (ret) {
       ostringstream oss;
-      oss << __func__ << ": failed to create instance symlink";
+      oss << __func__ << ": failed to create instance symlink\n";
       primitive_log(oss.str());
       return ret;
     }
@@ -558,10 +558,10 @@ bool DoutStreambuf<charT, traits>::_read_ofile_config()
     oss << "failed to open log file '" << opath << "': "
 	<< cpp_strerror(err) << "\n";
     primitive_log(oss.str());
-    return false;
+    return err;
   }
 
-  return true;
+  return 0;
 }
 
 template <typename charT, typename traits>
