@@ -1,40 +1,54 @@
+#!/bin/bash
 
-error_exit() {
+die() {
 	echo "$*"
 	exit 1
 }
 
-# defaults
-[ -z "$bindir" ] && bindir=$PWD       # location of init-ceph
-if [ -z "$conf" ]; then
-	conf="$basedir/ceph.conf"
-	[ -e $conf ] || conf="/etc/ceph/ceph.conf"
-fi
-[ -e $conf ] || error_exit "conf file not found"
+cleanup() {
+    rm -rf $TDIR
+    TDIR=""
+}
 
-CCONF="cconf -c $conf"
+set_variables() {
+    # defaults
+    [ -z "$bindir" ] && bindir=$PWD       # location of init-ceph
+    if [ -z "$conf" ]; then
+        conf="$basedir/ceph.conf"
+        [ -e $conf ] || conf="/etc/ceph/ceph.conf"
+    fi
+    [ -e $conf ] || die "conf file not found"
 
-[ -z "$mnt" ] && mnt="/c"
-[ -z "$monhost" ] && monhost="`$CCONF -t mon -i 0 'mon addr'`"
-[ -z "$imgsize" ] && imgsize=1024
-[ -z "$user" ] && user=admin
-[ -z "$keyring" ] && keyring="`$CCONF keyring`"
-[ -z "$secret" ] && secret="`cauthtool $keyring -n client.$user -p`"
+    CCONF="cconf -c $conf"
 
+    [ -z "$mnt" ] && mnt="/c"
+    if [ -z "$monhost" ]; then
+        $CCONF -t mon -i 0 'mon addr' > $TDIR/cconf_mon
+        if [ $? -ne 0 ]; then
+            $CCONF -t mon.a -i 0 'mon addr' > $TDIR/cconf_mon
+            [ $? -ne 0 ] && die "can't figure out \$monhost"
+        fi
+        read monhost < $TDIR/cconf_mon
+    fi
 
-monip="`echo $monhost | sed 's/:/ /g' | awk '{print $1}'`"
-monport="`echo $monhost | sed 's/:/ /g' | awk '{print $2}'`"
+    [ -z "$imgsize" ] && imgsize=1024
+    [ -z "$user" ] && user=admin
+    [ -z "$keyring" ] && keyring="`$CCONF keyring`"
+    [ -z "$secret" ] && secret="`cauthtool $keyring -n client.$user -p`"
 
-[ -z "$monip" ] && error_exit "bad mon address"
+    monip="`echo $monhost | sed 's/:/ /g' | awk '{print $1}'`"
+    monport="`echo $monhost | sed 's/:/ /g' | awk '{print $2}'`"
 
-[ -z "$monport" ] && monport=6789
+    [ -z "$monip" ] && die "bad mon address"
 
-set -e
+    [ -z "$monport" ] && monport=6789
 
-mydir=`hostname`_`echo $0 | sed 's/\//_/g'`
+    set -e
 
-img_name=test.`hostname`.$$
+    mydir=`hostname`_`echo $0 | sed 's/\//_/g'`
 
+    img_name=test.`hostname`.$$
+}
 
 rbd_load() {
 	modprobe rbd
@@ -57,7 +71,6 @@ rbd_test_init() {
 	rbd_load
 }
 
-
 rbd_remove() {
 	echo $1 > /sys/class/rbd/remove
 }
@@ -66,3 +79,7 @@ rbd_rm_image() {
 	id=$1
 	rbd rm $imgname.$id
 }
+
+TDIR=`mktemp -d`
+trap cleanup INT TERM EXIT
+set_variables

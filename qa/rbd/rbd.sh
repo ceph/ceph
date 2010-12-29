@@ -34,12 +34,12 @@ test_dbench() {
 	devname=/dev/rbd$rbd0
 
 	mkfs -t ext3 $devname
-	mount -t ext3 $devname /mnt
+	mount -t ext3 $devname $mnt
 
-	dbench -D /mnt -t 30 5
+	dbench -D $mnt -t 30 5
 	sync
 
-	umount /mnt
+	umount $mnt
 	rbd_remove $rbd0
 	rbd_rm_image 0
 }
