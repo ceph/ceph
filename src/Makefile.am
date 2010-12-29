@@ -876,9 +876,9 @@ all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(cauthtool_SOUR
 	$(libosdc_a_SOURCES) $(libclient_a_SOURCES) $(ceph_tool_gui_DATA)
 
 install-data-local:
-	mkdir -p $(DESTDIR)$(sysconfdir)/ceph
-	mkdir -p $(DESTDIR)$(localstatedir)/log/ceph/stat
-	mkdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
+	-mkdir -p $(DESTDIR)$(sysconfdir)/ceph
+	-mkdir -p $(DESTDIR)$(localstatedir)/log/ceph/stat
+	-mkdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
 
 uninstall-local:
 	-rmdir -p $(DESTDIR)$(sysconfdir)/ceph/
