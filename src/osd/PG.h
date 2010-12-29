@@ -128,7 +128,7 @@ public:
 
       History() : 	      
 	epoch_created(0),
-	last_epoch_started(0), last_epoch_split(0),
+	last_epoch_started(0), last_epoch_clean(0), last_epoch_split(0),
 	same_up_since(0), same_acting_since(0), same_primary_since(0) {}
 
       void merge(const History &other) {
