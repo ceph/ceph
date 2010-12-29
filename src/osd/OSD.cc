@@ -444,12 +444,12 @@ int OSD::pre_init()
   assert(!store);
   store = create_object_store(dev_path, journal_path);
   if (!store) {
-    derr << __PRETTY_FUNCTION__ << ": unable to create object store" << dendl;
+    derr << "OSD::pre_init: unable to create object store" << dendl;
     return -ENODEV;
   }
 
   if (store->test_mount_in_use()) {
-    derr << __PRETTY_FUNCTION__ << ": object store '" << dev_path << "' is "
+    derr << "OSD::pre_init: object store '" << dev_path << "' is "
          << "currently in use. (Is cosd already running?)" << dendl;
     return -EBUSY;
   }
@@ -470,7 +470,7 @@ int OSD::init()
 
   int r = store->mount();
   if (r < 0) {
-    derr << __PRETTY_FUNCTION__ << ": unable to mount object store" << dendl;
+    derr << "OSD:init: unable to mount object store" << dendl;
     return r;
   }
 
@@ -479,7 +479,7 @@ int OSD::init()
   // read superblock
   r = read_superblock();
   if (r < 0) {
-    derr << __PRETTY_FUNCTION__ << ": unable to read osd superblock" << dendl;
+    derr << "OSD::init() : unable to read osd superblock" << dendl;
     store->umount();
     delete store;
     return -1;
@@ -493,7 +493,7 @@ int OSD::init()
   // load up "current" osdmap
   assert_warn(!osdmap);
   if (osdmap) {
-    derr << __PRETTY_FUNCTION__ << ": unable to read current osdmap" << dendl;
+    derr << "OSD::init: unable to read current osdmap" << dendl;
     return -1;
   }
   osdmap = new OSDMap;
@@ -519,7 +519,7 @@ int OSD::init()
   dout(2) << "superblock: i am osd" << superblock.whoami << dendl;
   assert_warn(whoami == superblock.whoami);
   if (whoami != superblock.whoami) {
-    derr << __PRETTY_FUNCTION__ << ": logic error: superblock says osd"
+    derr << "OSD::init: logic error: superblock says osd"
 	 << superblock.whoami << " but i am osd" << whoami << dendl;
     return -EINVAL;
   }
@@ -652,7 +652,7 @@ int OSD::shutdown()
   g_conf.debug_ebofs = 100;
   g_conf.debug_ms = 100;
   
-  derr << __PRETTY_FUNCTION__ << dendl;
+  derr << "OSD::shutdown" << dendl;
 
   state = STATE_STOPPING;
 
@@ -723,7 +723,7 @@ int OSD::shutdown()
   write_superblock(t);
   int r = store->apply_transaction(t);
   if (r) {
-    derr << __PRETTY_FUNCTION__ << ": error writing superblock: "
+    derr << "OSD::shutdown: error writing superblock: "
 	 << cpp_strerror(r) << dendl;
   }
 

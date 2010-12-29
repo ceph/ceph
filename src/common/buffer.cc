@@ -109,7 +109,7 @@ int buffer::list::read_file(const char *fn, bool silent)
 	continue;
       }
       if (!silent) {
-	derr << __PRETTY_FUNCTION__ << ": read error:"
+	derr << "buffer::list::read_file: read error:"
 	     << cpp_strerror(err) << dendl;
       }
       break;

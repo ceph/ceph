@@ -47,14 +47,14 @@ int FileJournal::_open(bool forwrite, bool create)
   if (fd >= 0) {
     if (TEMP_FAILURE_RETRY(::close(fd))) {
       int err = errno;
-      derr << __PRETTY_FUNCTION__ << ": error closing old fd: "
+      derr << "FileJournal::_open: error closing old fd: "
 	   << cpp_strerror(err) << dendl;
     }
   }
   fd = TEMP_FAILURE_RETRY(::open(fn.c_str(), flags, 0644));
   if (fd < 0) {
     int err = errno;
-    derr << __PRETTY_FUNCTION__  << ": unable to open journal: open() "
+    derr << "FileJournal::_open : unable to open journal: open() "
 	 << "failed: " << cpp_strerror(err) << dendl;
     return -err;
   }
@@ -63,7 +63,7 @@ int FileJournal::_open(bool forwrite, bool create)
   ret = ::fstat(fd, &st);
   if (ret) {
     int err = errno;
-    derr << __PRETTY_FUNCTION__ << ": unable to fstat journal: "
+    derr << "FileJournal::_open: unable to fstat journal: "
          << cpp_strerror(err) << dendl;
     return -err;
   }
@@ -235,7 +235,7 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
     ret = ::ftruncate(fd, newsize);
     if (ret < 0) {
       int err = errno;
-      derr << __PRETTY_FUNCTION__ << ": unable to extend journal to "
+      derr << "FileJournal::_open_file : unable to extend journal to "
 	   << newsize << " bytes: " << cpp_strerror(err) << dendl;
       return -err;
     }
@@ -277,7 +277,7 @@ int FileJournal::create()
   int r = ::pwrite(fd, bp.c_str(), bp.length(), 0);
   if (r < 0) {
     int err = errno;
-    derr << __PRETTY_FUNCTION__ << ": create write header error "
+    derr << "FileJournal::create : create write header error "
          << cpp_strerror(err) << dendl;
     return -err;
   }
@@ -313,7 +313,7 @@ int FileJournal::open(uint64_t next_seq)
     //<< " vs expected fsid = " << fsid 
 	   << dendl;
   if (header.fsid != fsid) {
-    derr << __PRETTY_FUNCTION__ << ": open fsid doesn't match, invalid "
+    derr << "FileJournal::open: open fsid doesn't match, invalid "
          << "(someone else's?) journal" << dendl;
     return -EINVAL;
   }
@@ -642,7 +642,7 @@ void FileJournal::write_bl(off64_t& pos, bufferlist& bl)
   ::lseek64(fd, pos, SEEK_SET);
   int err = bl.write_fd(fd);
   if (err) {
-    derr << __PRETTY_FUNCTION__ << ": write_fd failed: "
+    derr << "FileJournal::write_bl : write_fd failed: "
 	 << cpp_strerror(err) << dendl;
   }
   pos += bl.length();
