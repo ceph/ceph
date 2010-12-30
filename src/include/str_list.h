@@ -5,8 +5,10 @@
 #include <list>
 #include <set>
 
-extern bool get_str_list(std::string& str, std::list<std::string>& str_list);
-extern bool get_str_set(std::string& str, std::set<std::string>& str_list);
+extern bool get_str_list(const std::string& str,
+			 std::list<std::string>& str_list);
+extern bool get_str_set(const std::string& str,
+			std::set<std::string>& str_list);
 
 
 #endif
