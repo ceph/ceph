@@ -135,15 +135,27 @@ int buffer::list::read_file(const char *fn, bool silent)
 
 int buffer::list::write_file(const char *fn, int mode)
 {
-  int fd = ::open(fn, O_WRONLY|O_CREAT|O_TRUNC, mode);
+  int fd = TEMP_FAILURE_RETRY(::open(fn, O_WRONLY|O_CREAT|O_TRUNC, mode));
   if (fd < 0) {
-    char buf[80];
-    cerr << "can't write " << fn << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
-    return -errno;
+    int err = errno;
+    cerr << "bufferlist::write_file(" << fn << "): failed to open file: "
+	 << cpp_strerror(err) << std::endl;
+    return -err;
   }
-  int err = write_fd(fd);
-  ::close(fd);
-  return err;
+  int ret = write_fd(fd);
+  if (ret) {
+    cerr << "bufferlist::write_fd(" << fn << "): write_fd error: "
+	 << cpp_strerror(ret) << std::endl;
+    TEMP_FAILURE_RETRY(::close(fd));
+    return ret;
+  }
+  if (TEMP_FAILURE_RETRY(::close(fd))) {
+    int err = errno;
+    cerr << "bufferlist::write_file(" << fn << "): close error: "
+	 << cpp_strerror(err) << std::endl;
+    return -err;
+  }
+  return 0;
 }
 
 int buffer::list::write_fd(int fd) const
@@ -152,15 +164,19 @@ int buffer::list::write_fd(int fd) const
   if (false) {
     for (std::list<ptr>::const_iterator it = _buffers.begin(); 
 	 it != _buffers.end(); 
-	 it++) {
+	 ++it) {
       int left = it->length();
       if (!left)
         continue;
       const char *c = it->c_str();
       while (left > 0) {
 	int r = ::write(fd, c, left);
-	if (r < 0)
-	  return -errno;
+	if (r < 0) {
+	  int err = errno;
+	  if (err == EINTR)
+	    continue;
+	  return -err;
+	}
 	c += r;
 	left -= r;
       }
@@ -190,8 +206,12 @@ int buffer::list::write_fd(int fd) const
       ssize_t wrote;
     retry:
       wrote = ::writev(fd, start, num);
-      if (wrote < 0)
-	return -errno;
+      if (wrote < 0) {
+	int err = errno;
+	if (err == EINTR)
+	  goto retry;
+	return -err;
+      }
       if (wrote < bytes) {
 	// partial write, recover!
 	while ((size_t)wrote >= start[0].iov_len) {
