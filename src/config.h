@@ -224,6 +224,8 @@ struct md_config_t {
   int      client_oc_target_dirty;
   long long unsigned   client_oc_max_sync_write;
 
+  int      client_notify_timeout;
+
   // objecter
   bool  objecter_buffer_uncommitted;
   double objecter_mon_retry_interval;
@@ -407,6 +409,8 @@ struct md_config_t {
   bool osd_check_for_log_corruption;  // bleh
 
   bool osd_use_stale_snap;
+
+  int osd_max_notify_timeout;
 
   // filestore
   bool filestore;

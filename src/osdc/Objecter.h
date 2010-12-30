@@ -85,13 +85,14 @@ struct ObjectOperation {
     ops[s].data.append(method, ops[s].op.cls.method_len);
     ops[s].data.append(indata);
   }
-  void add_watch(int op, uint64_t cookie, uint64_t ver, uint8_t flag) {
+  void add_watch(int op, uint64_t cookie, uint64_t ver, uint8_t flag, bufferlist& inbl) {
     int s = ops.size();
     ops.resize(s+1);
     ops[s].op.op = op;
     ops[s].op.watch.cookie = cookie;
     ops[s].op.watch.ver = ver;
     ops[s].op.watch.flag = flag;
+    ops[s].data.append(inbl);
   }
   void add_pgls(int op, uint64_t count, uint64_t cookie) {
     int s = ops.size();
@@ -187,19 +188,22 @@ struct ObjectOperation {
 
   // watch/notify
   void watch(uint64_t cookie, uint64_t ver, bool set) {
-    add_watch(CEPH_OSD_OP_WATCH, cookie, ver, (set ? 1 : 0));
+    bufferlist inbl;
+    add_watch(CEPH_OSD_OP_WATCH, cookie, ver, (set ? 1 : 0), inbl);
   }
 
-  void notify(uint64_t cookie, uint64_t ver) {
-    add_watch(CEPH_OSD_OP_NOTIFY, cookie, ver, 1); 
+  void notify(uint64_t cookie, uint64_t ver, bufferlist& inbl) {
+    add_watch(CEPH_OSD_OP_NOTIFY, cookie, ver, 1, inbl); 
   }
 
   void notify_ack(uint64_t notify_id, uint64_t ver) {
-    add_watch(CEPH_OSD_OP_NOTIFY_ACK, notify_id, ver, 0);
+    bufferlist bl;
+    add_watch(CEPH_OSD_OP_NOTIFY_ACK, notify_id, ver, 0, bl);
   }
 
   void assert_version(uint64_t ver) {
-    add_watch(CEPH_OSD_OP_ASSERT_VER, 0, ver, 0);
+    bufferlist bl;
+    add_watch(CEPH_OSD_OP_ASSERT_VER, 0, ver, 0, bl);
   }
 };
 

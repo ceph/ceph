@@ -94,8 +94,10 @@ public:
     SnapContext snapc;
     uint64_t assert_ver;
     eversion_t last_objver;
+    uint32_t notify_timeout;
 
-    PoolCtx(int pid, const char *n, snapid_t s = CEPH_NOSNAP) : poolid(pid), name(n), snap_seq(s), assert_ver(0) {}
+    PoolCtx(int pid, const char *n, snapid_t s = CEPH_NOSNAP) : poolid(pid), name(n), snap_seq(s), assert_ver(0),
+							        notify_timeout(g_conf.client_notify_timeout) {}
 
     void set_snap(snapid_t s) {
       if (!s)
@@ -425,6 +427,10 @@ public:
   }
   void set_assert_version(PoolCtx& pool, uint64_t ver) {
     pool.assert_ver = ver;
+  }
+
+  void set_notify_timeout(PoolCtx& pool, uint32_t timeout) {
+    pool.notify_timeout = timeout;
   }
 };
 
@@ -1692,7 +1698,11 @@ int RadosClient::notify(PoolCtx& pool, const object_t& oid, uint64_t ver)
   }
   lock.Lock();
   register_watcher(pool, oid, ctx, &rd, &cookie);
-  rd.notify(cookie, ver);
+  uint32_t prot_ver = 1;
+  uint32_t timeout = pool.notify_timeout;
+  ::encode(prot_ver, inbl);
+  ::encode(timeout, inbl);
+  rd.notify(cookie, ver, inbl);
   objecter->read(oid, oloc, rd, pool.snap_seq, &outbl, 0, onack, &objver);
   lock.Unlock();
 
@@ -2210,6 +2220,13 @@ void Rados::set_assert_version(pool_t pool, uint64_t ver)
   if (!client)
     return;
   client->set_assert_version(*(RadosClient::PoolCtx *)pool, ver);
+}
+
+void Rados::set_notify_timeout(pool_t pool, uint32_t timeout)
+{
+  if (!client)
+    return;
+  client->set_notify_timeout(*(RadosClient::PoolCtx *)pool, timeout);
 }
 }
 

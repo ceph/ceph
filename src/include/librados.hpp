@@ -153,6 +153,7 @@ public:
   int watch(pool_t pool, const std::string& o, uint64_t ver, uint64_t *handle, librados::Rados::WatchCtx *ctx);
   int unwatch(pool_t pool, const std::string& o, uint64_t handle);
   int notify(pool_t pool, const std::string& o, uint64_t ver);
+  void set_notify_timeout(pool_t pool, uint32_t timeout);
 
   /* assert version for next sync operations */
   void set_assert_version(pool_t pool, uint64_t ver);

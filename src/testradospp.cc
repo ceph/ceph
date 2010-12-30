@@ -77,6 +77,7 @@ int main(int argc, const char **argv)
 
   cout << "*** press enter to continue ***" << std::endl;
   getchar();
+  rados.set_notify_timeout(pool, 7);
   r = rados.notify(pool, oid, objver);
   cout << "rados.notify returned " << r << std::endl;
   cout << "*** press enter to continue ***" << std::endl;

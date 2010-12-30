@@ -1154,6 +1154,17 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
    case CEPH_OSD_OP_NOTIFY:
       {
+	uint32_t ver;
+	uint32_t timeout;
+
+	try {
+          ::decode(ver, bp);
+	  ::decode(timeout, bp);
+	} catch (const buffer::error &e) {
+	  timeout = 0;
+	}
+	if (!timeout || timeout > g_conf.osd_max_notify_timeout)
+		timeout = g_conf.osd_max_notify_timeout;
 	dout(0) << "CEPH_OSD_OP_NOTIFY" << dendl;
         ObjectContext *obc = ctx->obc;
 	dout(0) << "ctx->obc=" << (void *)obc << dendl;
@@ -1200,7 +1211,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
           obc->ref++;
           notif->obc = obc;
 	  notif->timeout = new Watch::C_NotifyTimeout(osd, notif);
-	  osd->watch_timer.add_event_after(5.0, notif->timeout); /* FIXME: use a configurable timeout here */
+	  osd->watch_timer.add_event_after(timeout, notif->timeout);
 	}
 	osd->watch_lock.Unlock();
       }

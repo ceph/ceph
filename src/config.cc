@@ -423,6 +423,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(client_readahead_max_periods, 0, OPT_LONGLONG, 4),  // as multiple of file layout period (object size * num stripes)
 	OPTION(client_snapdir, 0, OPT_STR, ".snap"),
 	OPTION(client_mountpoint, 'r', OPT_STR, "/"),
+	OPTION(client_notify_timeout, 0, OPT_INT, 10), // in seconds
 	OPTION(fuse_direct_io, 0, OPT_INT, 0),
 	OPTION(fuse_ll, 0, OPT_BOOL, true),
 	OPTION(client_oc, 0, OPT_BOOL, true),
@@ -574,6 +575,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_class_tmp, 0, OPT_STR, "/var/lib/ceph/tmp"),
 	OPTION(osd_check_for_log_corruption, 0, OPT_BOOL, false),
 	OPTION(osd_use_stale_snap, 0, OPT_BOOL, false),
+	OPTION(osd_max_notify_timeout, 0, OPT_INT, 30), // max notify timeout in seconds
 	OPTION(filestore, 0, OPT_BOOL, false),
 	OPTION(filestore_max_sync_interval, 0, OPT_DOUBLE, 5),    // seconds
 	OPTION(filestore_min_sync_interval, 0, OPT_DOUBLE, .01),  // seconds
