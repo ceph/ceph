@@ -89,33 +89,43 @@ void AuthMonitor::on_active()
 */
 }
 
+int AuthMonitor::read_keyfile(bufferlist &bl, std::string &keyfile)
+{
+  keyfile.clear();
+  bl.clear();
+
+  if (!g_conf.keyring)
+    return 2;
+  list<string> ls;
+  get_str_list(string(g_conf.keyring), ls);
+  for (list<string>::const_iterator p = ls.begin(); p != ls.end(); ++p) {
+    if (bl.read_file(p->c_str()) == 0) {
+      keyfile = *p;
+      return 0;
+    }
+    bl.clear();
+  }
+  return 1;
+}
+
 void AuthMonitor::create_initial(bufferlist& bl)
 {
   dout(10) << "create_initial -- creating initial map" << dendl;
-  if (g_conf.keyring) {
-    dout(10) << "reading initial keyring " << dendl;
-    bufferlist bl;
 
-    string k = g_conf.keyring;
-    list<string> ls;
-    get_str_list(k, ls);
-    int r = -1;
-    for (list<string>::iterator p = ls.begin(); p != ls.end(); p++)
-      if ((r = bl.read_file(g_conf.keyring)) >= 0)
-	break;
-    if (r >= 0) {
-      KeyRing keyring;
-      bool read_ok = false;
-      try {
-        bufferlist::iterator iter = bl.begin();
-        ::decode(keyring, iter);
-        read_ok = true;
-      } catch (const buffer::error &err) {
-        cerr << "error reading file " << g_conf.keyring << std::endl;
-      }
-      if (read_ok)
-	import_keyring(keyring);
+  bufferlist kbl;
+  string keyfile;
+  if (read_keyfile(kbl, keyfile) == 0) {
+    KeyRing keyring;
+    bool read_ok = false;
+    try {
+      bufferlist::iterator iter = kbl.begin();
+      ::decode(keyring, iter);
+      read_ok = true;
+    } catch (const buffer::error &err) {
+      cerr << "error reading file " << g_conf.keyring << std::endl;
     }
+    if (read_ok)
+      import_keyring(keyring);
   }
 
   max_global_id = MIN_GLOBAL_ID;
