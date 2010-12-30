@@ -24,6 +24,7 @@ using namespace std;
 
 #include "config.h"
 
+#include "common/errno.h"
 #include "osd/OSDMap.h"
 #include "mon/MonMap.h"
 #include "common/common_init.h"
@@ -111,7 +112,7 @@ int main(int argc, const char **argv)
   int r = 0;
   if (!(createsimple && clobber)) {
     r = bl.read_file(fn);
-    if (r >= 0) {
+    if (r == 0) {
       try {
 	osdmap.decode(bl);
       }
@@ -120,12 +121,12 @@ int main(int argc, const char **argv)
 	return -1;
       }
     }
+    else {
+      cerr << me << ": couldn't open " << fn << ": " << cpp_strerror(r)
+	   << std::endl;
+      return -1;
+    }
   }
-  char buf[80];
-  if (!createsimple && r < 0) {
-    cerr << me << ": couldn't open " << fn << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
-    return -1;
-  }    
   else if (createsimple && !clobber && r == 0) {
     cerr << me << ": " << fn << " exists, --clobber to overwrite" << std::endl;
     return -1;
@@ -145,7 +146,7 @@ int main(int argc, const char **argv)
   if (import_crush) {
     bufferlist cbl;
     r = cbl.read_file(import_crush);
-    if (r < 0) {
+    if (r) {
       cerr << me << ": error reading crush map from " << import_crush << std::endl;
       exit(1);
     }
@@ -254,8 +255,9 @@ int main(int argc, const char **argv)
 	 << " to " << fn
 	 << std::endl;
     int r = bl.write_file(fn);
-    if (r < 0) {
-      cerr << "osdmaptool: error writing to '" << fn << "': " << strerror_r(-r, buf, sizeof(buf)) << std::endl;
+    if (r) {
+      cerr << "osdmaptool: error writing to '" << fn << "': "
+	   << cpp_strerror(r) << std::endl;
       return 1;
     }
   }
