@@ -67,9 +67,10 @@ rbd_add() {
 	pushd /sys/bus/rbd/devices &> /dev/null
 	[ $? -eq 0 ] || die "failed to cd"
 	devid=""
-	# We 'should' start at the end (sorting numerically)
-	# TODO: rewrite this to be more efficient if it's important
-	for f in *; do
+	rm -f "$TDIR/rbd_devs"
+	for f in *; do echo $f >> "$TDIR/rbd_devs"; done
+	sort -nr "$TDIR/rbd_devs" > "$TDIR/rev_rbd_devs"
+	while read f < "$TDIR/rev_rbd_devs"; do
 	  read d_img_name < "$f/name"
 	  if [ "x$d_img_name" == "x$img_name.$id" ]; then
 	    devid=$f
