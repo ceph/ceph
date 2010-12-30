@@ -61,10 +61,27 @@ rbd_create_image() {
 
 rbd_add() {
 	id=$1
-	echo "$monip:$monport name=$user,secret=$secret rbd $img_name.$id" > /sys/class/rbd/add
-	devid="`cat /sys/class/rbd/list | grep $img_name.$ext | tail -1 | cut -f1`"
+	echo "$monip:$monport name=$user,secret=$secret rbd $img_name.$id" \
+	    > /sys/bus/rbd/add
+
+	pushd /sys/bus/rbd/devices &> /dev/null
+	[ $? -eq 0 ] || die "failed to cd"
+	devid=""
+	# We 'should' start at the end (sorting numerically)
+	# TODO: rewrite this to be more efficient if it's important
+	for f in *; do
+	  read d_img_name < "$f/name"
+	  if [ "x$d_img_name" == "x$img_name.$id" ]; then
+	    devid=$f
+	    break
+	  fi
+	done
+	popd &> /dev/null
+
+	[ "x$devid" == "x" ] && die "failed to find $img_name.$id"
+
 	export rbd$id=$devid
-	while [ ! -e /dev/rbd$devid ]; do sleep 0; done
+	while [ ! -e /dev/rbd$devid ]; do sleep 1; done
 }
 
 rbd_test_init() {
@@ -72,7 +89,7 @@ rbd_test_init() {
 }
 
 rbd_remove() {
-	echo $1 > /sys/class/rbd/remove
+	echo $1 > /sys/bus/rbd/remove
 }
 
 rbd_rm_image() {
