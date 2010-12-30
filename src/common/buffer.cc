@@ -102,17 +102,27 @@ int buffer::list::read_file(const char *fn, bool silent)
   int got = 0;
   while (left > 0) {
     int r = ::read(fd, (void *)(bp.c_str() + got), left);
-    if (r <= 0) {
+    if (r == 0) {
+      // Premature EOF.
+      // Perhaps the file changed between stat() and read()?
+      if (!silent) {
+	derr << "bufferlist::read_file(" << fn << "): warning: got premature "
+	     << "EOF:" << dendl;
+      }
+      break;
+    }
+    else if (r < 0) {
       int err = errno;
       if (err == EINTR) {
 	// ignore EINTR, 'tis a silly error
 	continue;
       }
       if (!silent) {
-	derr << "buffer::list::read_file: read error:"
+	derr << "bufferlist::read_file(" << fn << "): read error:"
 	     << cpp_strerror(err) << dendl;
       }
-      break;
+      TEMP_FAILURE_RETRY(::close(fd));
+      return -err;
     }
     got += r;
     left -= r;
