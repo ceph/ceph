@@ -115,9 +115,10 @@ if true; then
     # build osdmap
     osdmap="/tmp/osdmap.$$"
     if [ -z "$numosd" ]; then
+	# find highest osd id - assumes the conf file complies with osd numbering requirements
 	maxosd=`$CCONF -c $conf -l osd | egrep -v '^osd$' | cut -c 4- | sort -n | tail -1`
 	numosd=$(($maxosd + 1))
-	echo max osd in $conf is $maxosd, num osd is $numosd
+	echo Highest osd in $conf is osd$maxosd, number of osd is $numosd.
     fi
     $BINDIR/osdmaptool --clobber --createsimple $numosd $osdmap || exit 1
 
