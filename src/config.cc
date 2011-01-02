@@ -1277,6 +1277,16 @@ ExportControl *conf_get_export_control()
   return ec;
 }
 
+static void env_override(char **ceph_var, const char * const env_var)
+{
+  char *e = getenv(env_var);
+  if (!e)
+    return;
+  if (*ceph_var)
+    free(*ceph_var);
+  *ceph_var = strdup(e);
+}
+
 void parse_config_options(std::vector<const char*>& args)
 {
   int opt_len = sizeof(config_optionsp)/sizeof(config_option);
@@ -1304,6 +1314,8 @@ void parse_config_options(std::vector<const char*>& args)
     if (optn == opt_len)
         nargs.push_back(args[i]);
   }
+
+  env_override(&g_conf.keyring, "CEPH_KEYRING");
 
   install_sighandler(SIGHUP, sighup_handler, SA_RESTART);
   install_sighandler(SIGSEGV, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
