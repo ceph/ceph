@@ -4265,8 +4265,10 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
       // what will be next?
       if (snapset.clones.empty())
 	head = sobject_t();  // no clones.
-      else
+      else {
 	curclone = snapset.clones.size()-1;
+	head = p->first;
+      }
 
       // subtract off any clone overlap
       for (map<snapid_t,interval_set<uint64_t> >::iterator q = snapset.clone_overlap.begin();
@@ -4322,9 +4324,10 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
       // ...
 
       // what's next?
-      curclone++;
-      if (curclone == snapset.clones.size())
+      if (curclone == 0)
 	head = sobject_t();
+      else
+	curclone--;
 
     } else {
       // it's unversioned.

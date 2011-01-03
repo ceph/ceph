@@ -3,7 +3,7 @@
 
 # Autoconf
 AC_PREREQ(2.59)
-AC_INIT([Ceph distributed file system], [0.24~rc], 
+AC_INIT([Ceph distributed file system], [0.24], 
 	      [Sage Weil <sage@newdream.net>],
 	      [ceph])
 

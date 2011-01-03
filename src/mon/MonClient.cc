@@ -82,7 +82,7 @@ int MonClient::build_initial_monmap()
       char *old_addrs = new char[strlen(g_conf.mon_host)+1];
       strcpy(old_addrs, g_conf.mon_host);
       hosts = mount_resolve_dest(old_addrs);
-      delete old_addrs;
+      delete [] old_addrs;
       bool success = parse_ip_port_vec(hosts, addrs);
       free(hosts);
       if (success) {

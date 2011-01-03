@@ -259,6 +259,7 @@ struct MDRequest : public Mutation {
 
   // store up to two sets of dn vectors, inode pointers, for request path1 and path2.
   vector<CDentry*> dn[2];
+  CDentry *straydn;
   CInode *in[2];
   snapid_t snapid;
 
@@ -323,7 +324,7 @@ struct MDRequest : public Mutation {
   MDRequest() : 
     ref(1),
     session(0), item_session_request(this),
-    client_request(0), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
+    client_request(0), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
     slave_request(0),
     internal_op(-1),
@@ -334,7 +335,7 @@ struct MDRequest : public Mutation {
     Mutation(ri),
     ref(1),
     session(0), item_session_request(this),
-    client_request(req), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
+    client_request(req), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
     slave_request(0),
     internal_op(-1),
@@ -345,7 +346,7 @@ struct MDRequest : public Mutation {
     Mutation(ri, by),
     ref(1),
     session(0), item_session_request(this),
-    client_request(0), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
+    client_request(0), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
     slave_request(0),
     internal_op(-1),

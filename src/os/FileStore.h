@@ -46,7 +46,7 @@ class FileStore : public JournalingObjectStore {
   bool btrfs_clone_range;
   bool btrfs_snap_create;
   bool btrfs_snap_destroy;
-  bool btrfs_snap_create_async;
+  bool btrfs_snap_create_v2;
   bool btrfs_wait_sync;
   bool ioctl_fiemap;
   int fsid_fd, op_fd;
@@ -98,11 +98,63 @@ class FileStore : public JournalingObjectStore {
     Context *onreadable, *onreadable_sync;
     uint64_t ops, bytes;
   };
-  struct OpSequencer {
-    Sequencer *parent;
+  class OpSequencer : public Sequencer_impl {
+    Mutex qlock; // to protect q, for benefit of flush (peek/dequeue also protected by lock)
     list<Op*> q;
-    Mutex lock;
-    OpSequencer() : lock("FileStore::OpSequencer::lock", false, false) {}
+    list<uint64_t> jq;
+    Cond cond;
+  public:
+    Sequencer *parent;
+    Mutex apply_lock;  // for apply mutual exclusion
+    
+    void queue_journal(uint64_t s) {
+      Mutex::Locker l(qlock);
+      jq.push_back(s);
+    }
+    void dequeue_journal() {
+      Mutex::Locker l(qlock);
+      jq.pop_front();
+      cond.Signal();
+    }
+    void queue(Op *o) {
+      Mutex::Locker l(qlock);
+      q.push_back(o);
+    }
+    Op *peek_queue() {
+      assert(apply_lock.is_locked());
+      return q.front();
+    }
+    Op *dequeue() {
+      assert(apply_lock.is_locked());
+      Mutex::Locker l(qlock);
+      Op *o = q.front();
+      q.pop_front();
+      cond.Signal();
+      return o;
+    }
+    void flush() {
+      Mutex::Locker l(qlock);
+
+      // get max for journal _or_ op queues
+      uint64_t seq = 0;
+      if (!q.empty())
+	seq = q.back()->op;
+      if (!jq.empty() && jq.back() > seq)
+	seq = jq.back();
+
+      if (seq) {
+	// everything prior to our watermark to drain through either/both queues
+	while ((!q.empty() && q.front()->op <= seq) ||
+	       (!jq.empty() && jq.front() <= seq))
+	  cond.Wait(qlock);
+      }
+    }
+
+    OpSequencer() : qlock("FileStore::OpSequencer::qlock", false, false),
+		    apply_lock("FileStore::OpSequencer::apply_lock", false, false) {}
+    ~OpSequencer() {
+      assert(q.empty());
+    }
   };
   Sequencer default_osr;
   deque<OpSequencer*> op_queue;
@@ -147,9 +199,9 @@ class FileStore : public JournalingObjectStore {
 
   void _do_op(OpSequencer *o);
   void _finish_op(OpSequencer *o);
-  void queue_op(Sequencer *osr, uint64_t op, list<Transaction*>& tls, Context *onreadable, Context *onreadable_sync);
+  void queue_op(OpSequencer *osr, uint64_t op, list<Transaction*>& tls, Context *onreadable, Context *onreadable_sync);
   void op_queue_throttle();
-  void _journaled_ahead(Sequencer *osr, uint64_t op, list<Transaction*> &tls,
+  void _journaled_ahead(OpSequencer *osr, uint64_t op, list<Transaction*> &tls,
 			Context *onreadable, Context *ondisk, Context *onreadable_sync);
   friend class C_JournaledAhead;
 
@@ -176,7 +228,7 @@ class FileStore : public JournalingObjectStore {
     btrfs(false), btrfs_trans_start_end(false), btrfs_clone_range(false),
     btrfs_snap_create(false),
     btrfs_snap_destroy(false),
-    btrfs_snap_create_async(false),
+    btrfs_snap_create_v2(false),
     btrfs_wait_sync(false),
     ioctl_fiemap(false),
     fsid_fd(-1), op_fd(-1),

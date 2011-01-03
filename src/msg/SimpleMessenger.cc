@@ -567,8 +567,10 @@ void SimpleMessenger::Pipe::queue_received(Message *m, int priority)
   // don't want to put local-delivery signals
   // this magic number should be larger than
   // the size of the D_CONNECT et al enum
-  if (m>(void *)5)
+  if (m>(void *)5) {
+    messenger->dispatch_throttle_release(m->get_dispatch_throttle_size());
     m->put();
+  }
 }
 
 

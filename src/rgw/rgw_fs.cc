@@ -35,8 +35,10 @@ int RGWFS::list_buckets_init(string& id, RGWAccessHandle *handle)
     return -errno;
 
   state = (struct rgwfs_state *)malloc(sizeof(struct rgwfs_state));
-  if (!state)
+  if (!state) {
+    closedir(dir);
     return -ENOMEM;
+  }
 
   state->dir = dir;
 

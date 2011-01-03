@@ -61,14 +61,13 @@ binary-arch: build install
 	dh_lintian
 	dh_link
 
-	dh_strip -pceph --dbg-package=ceph-dbg
+	dh_strip -pceph --dbg-package=ceph-dbg -k --exclude=libcls_
 	dh_strip -pceph-fuse --dbg-package=ceph-fuse-dbg
 	dh_strip -pceph-client-tools --dbg-package=ceph-client-tools-dbg
 	dh_strip -plibcrush1 --dbg-package=libcrush1-dbg
 	dh_strip -plibrados1 --dbg-package=librados1-dbg
 	dh_strip -plibceph1 --dbg-package=libceph1-dbg
 	dh_strip -pradosgw --dbg-package=radosgw-dbg
-#	dh_strip -k --exclude=libcls_
 
 	dh_compress
 	dh_fixperms

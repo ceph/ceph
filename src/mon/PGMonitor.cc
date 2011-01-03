@@ -133,9 +133,10 @@ bool PGMonitor::update_from_paxos()
     mon->store->put_bl_sn(d, "pgmap_dump", paxosv);
   }
 
+  unsigned max = 500;
   if (mon->is_leader() &&
-      paxosv > 10)
-    paxos->trim_to(paxosv - 10);
+      paxosv > max)
+    paxos->trim_to(paxosv - max);
 
   send_pg_creates();
 

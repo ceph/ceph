@@ -913,7 +913,7 @@ void PG::trim_past_intervals()
 
 
 // true if the given map affects the prior set
-bool PG::prior_set_affected(OSDMap *osdmap)
+bool PG::prior_set_affected(const OSDMap *osdmap) const
 {
   for (set<int>::iterator p = prior_set.begin();
        p != prior_set.end();
@@ -960,9 +960,9 @@ bool PG::prior_set_affected(OSDMap *osdmap)
   }
   
   // did a significant osd's up_thru change?
-  for (map<int,epoch_t>::iterator p = prior_set_up_thru.begin();
+  for (map<int,epoch_t>::const_iterator p = prior_set_up_thru.begin();
        p != prior_set_up_thru.end();
-       p++)
+       ++p)
     if (p->second != osdmap->get_up_thru(p->first)) {
       dout(10) << "prior_set_affected: primary osd" << p->first
 	       << " up_thru " << p->second
@@ -1373,7 +1373,7 @@ bool PG::choose_acting(int newest_update_osd)
     Info& pi = (*p == osd->whoami) ? info : peer_info[*p];
     if (pi.last_update < primi.log_tail && !primi.log_backlog) {
       dout(10) << "choose_acting  osd" << *p << " needs primary backlog to catch up" << dendl;
-      want.erase(p);
+      p = want.erase(p);
     } else {
       dout(10) << "choose_acting  osd" << *p << " can catch up with osd" << want[0] << " log" << dendl;
       p++;
@@ -1855,13 +1855,24 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       } 
       else {
 	m = new MOSDPGLog(osd->osdmap->get_epoch(), info);
-	if (pi.last_update < log.tail) {
-	  // summary/backlog
+	if (pi.log_tail > pi.last_complete && !pi.log_backlog) {
+	  // the replica's tail is after it's last_complete and it has no backlog.
+	  // ick, this shouldn't normally happen.  but we can compensate!
+	  dout(10) << "activate peer osd" << peer << " has last_complete < log tail and no backlog, compensating" << dendl;
+	  if (log.tail >= pi.last_complete) {
+	    // _our_ log is sufficient, phew!
+	    m->log.copy_after(log, pi.last_complete);
+	  } else {
+	    assert(log.backlog);
+	    m->log = log;
+	  }
+	} else if (log.tail > pi.last_update) {
+	  // our tail is too new; send the full backlog.
 	  assert(log.backlog);
 	  m->log = log;
 	} else {
-	  // incremental log
-	  assert(pi.last_update < info.last_update);
+	  // send new stuff to append to replicas log
+	  assert(info.last_update > pi.last_update);
 	  m->log.copy_after(log, pi.last_update);
 	}
       }
@@ -2758,6 +2769,7 @@ void PG::sub_op_scrub(MOSDSubOp *op)
   ScrubMap map;
   if (op->version > eversion_t()) {
     epoch_t epoch = info.history.same_acting_since;
+    finalizing_scrub = 1;
     while (last_update_applied != info.last_update) {
       wait();
       if (epoch != info.history.same_acting_since ||
@@ -2767,6 +2779,7 @@ void PG::sub_op_scrub(MOSDSubOp *op)
       }
     }
     build_inc_scrub_map(map, op->version);
+    finalizing_scrub = 0;
   } else {
     build_scrub_map(map);
   }
@@ -2821,9 +2834,10 @@ void PG::_scan_list(ScrubMap &map, vector<sobject_t> &ls)
       ScrubMap::object &o = map.objects[poid];
       o.size = st.st_size;
       osd->store->getattrs(coll, poid, o.attrs);
+      dout(25) << "_scan_list  " << poid << dendl;
+    } else {
+      dout(25) << "_scan_list  " << poid << " got " << r << ", skipping" << dendl;
     }
-
-    dout(25) << "_scan_list  " << poid << dendl;
   }
 }
 
@@ -2967,10 +2981,14 @@ void PG::build_scrub_map(ScrubMap &map)
 {
   dout(10) << "build_scrub_map" << dendl;
 
-  map.valid_through = last_update_applied;
+  map.valid_through = info.last_update;
   epoch_t epoch = info.history.same_acting_since;
 
   unlock();
+
+  // wait for any writes on our pg to flush to disk first.  this avoids races
+  // with scrub starting immediately after trim or recovery completion.
+  osr.flush();
 
   // objects
   vector<sobject_t> ls;
@@ -3157,8 +3175,10 @@ void PG::scrub()
     for (unsigned i=1; i<acting.size(); i++)
       m[i] = &received_maps[acting[i]];
     map<sobject_t,ScrubMap::object>::iterator p[acting.size()];
-    for (unsigned i=0; i<acting.size(); i++)
+    for (unsigned i=0; i<acting.size(); i++) {
+      dout(2) << "scrub   osd" << acting[i] << " has " << m[i]->objects.size() << " items" << dendl;
       p[i] = m[i]->objects.begin();
+    }
     
     int num_missing = 0;
     int num_bad = 0;
@@ -3311,7 +3331,7 @@ void PG::scrub()
       osd->clog.info(oss);
   }
 
-  if (!(errors - fixed) && repair)
+  if (errors == 0 || (repair && (errors - fixed) == 0))
     state_clear(PG_STATE_INCONSISTENT);
   state_clear(PG_STATE_REPAIR);
 

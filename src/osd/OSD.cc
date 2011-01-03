@@ -4142,6 +4142,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       pg->activate(*t, fin->contexts, info_map);
     } else {
       // ACTIVE REPLICA
+      assert(pg->is_replica());
 
       // just update our stats
       dout(10) << *pg << " writing updated stats" << dendl;

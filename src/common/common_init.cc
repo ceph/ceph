@@ -81,7 +81,7 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool i
 
 #ifdef HAVE_LIBTCMALLOC
   if (g_conf.tcmalloc_profiler_run && g_conf.tcmalloc_have) {
-    char *profile_name = new char[PATH_MAX];
+    char profile_name[PATH_MAX];
     sprintf(profile_name, "%s/%s", g_conf.log_dir, g_conf.name);
     char *val = new char[sizeof(int)*8+1];
     sprintf(val, "%i", g_conf.profiler_allocation_interval);
@@ -90,7 +90,6 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool i
     setenv("HEAP_PROFILE_INUSE_INTERVAL", val, g_conf.profiler_highwater_interval);
     generic_dout(0) << "turning on heap profiler with prefix " << profile_name << dendl;
     g_conf.profiler_start(profile_name);
-    delete profile_name;
   }
 #endif //HAVE_LIBTCMALLOC
 

@@ -94,12 +94,12 @@ JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1getcwd
   int r = ceph_getcwd(path, path_size);
   if (r==-ERANGE) { //path is too short
     path_size = ceph_getcwd(path, 0) * 1.2; //leave some extra
-    delete path;
+    delete [] path;
     path = new char[path_size];
     ceph_getcwd(path, path_size);
   }
   jstring j_path = env->NewStringUTF(path);
-  delete path;
+  delete [] path;
   return j_path;
 }
 
@@ -349,7 +349,7 @@ JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1g
   while (1) {
     r = ceph_getdnames(dirp, buf, buflen);
     if (r==-ERANGE) { //expand the buffer
-      delete buf;
+      delete [] buf;
       buflen *= 2;
       buf = new char[buflen];
       continue;
@@ -367,7 +367,7 @@ JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1g
       delete ent;
     }
   }
-  delete buf;
+  delete [] buf;
   ceph_closedir(dirp);
   env->ReleaseStringUTFChars(j_path, c_path);
   
@@ -681,7 +681,7 @@ JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1hosts
   char *address = new char[IP_ADDR_LENGTH];
   int r = ceph_get_file_stripe_address(j_fh, j_offset, address, IP_ADDR_LENGTH);
   if (r == -ERANGE) {//buffer's too small
-    delete address;
+    delete [] address;
     int size = ceph_get_file_stripe_address(j_fh, j_offset, address, 0);
     address = new char[size];
     r = ceph_get_file_stripe_address(j_fh, j_offset, address, size);
@@ -691,7 +691,7 @@ JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1hosts
   }
   //make java String of address
   jstring j_addr = env->NewStringUTF(address);
-  delete address;
+  delete [] address;
   return j_addr;
 }
 
