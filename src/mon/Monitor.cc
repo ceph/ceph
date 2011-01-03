@@ -228,12 +228,19 @@ void Monitor::starting_election()
 {
   dout(10) << "starting_election " << get_epoch() << dendl;
   state = STATE_STARTING;
+  leader_since = utime_t();
 
   // tell paxos
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     (*p)->election_starting();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->election_starting();
+}
+
+const utime_t& Monitor::get_leader_since() const
+{
+  assert(state == STATE_LEADER);
+  return leader_since;
 }
 
 epoch_t Monitor::get_epoch()
@@ -244,6 +251,7 @@ epoch_t Monitor::get_epoch()
 void Monitor::win_election(epoch_t epoch, set<int>& active) 
 {
   state = STATE_LEADER;
+  leader_since = g_clock.now();
   leader = rank;
   quorum = active;
   dout(10) << "win_election, epoch " << epoch << " quorum is " << quorum << dendl;
@@ -262,6 +270,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l) 
 {
   state = STATE_PEON;
+  leader_since = utime_t();
   leader = l;
   quorum = q;
   dout(10) << "lose_election, epoch " << epoch << " leader is mon" << leader

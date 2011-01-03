@@ -92,6 +92,7 @@ public:
   bool is_peon() const { return state == STATE_PEON; }
   bool is_stopping() const { return stopping; }
 
+  const utime_t &get_leader_since() const;
 
   // -- elector --
 private:
@@ -100,15 +101,12 @@ private:
   
   int leader;            // current leader (to best of knowledge)
   set<int> quorum;       // current active set of monitors (if !starting)
-  utime_t last_called_election;  // [starting] last time i called an election
+  utime_t leader_since;  // when this monitor became the leader, if it is the leader
   
 public:
   epoch_t get_epoch();
   int get_leader() { return leader; }
   const set<int>& get_quorum() { return quorum; }
-  bool is_full_quorum() {
-    return quorum.size() == monmap->size();
-  }
 
   void call_election(bool is_new=true);  // initiate election
   void starting_election();                              // start election (called by Elector)
