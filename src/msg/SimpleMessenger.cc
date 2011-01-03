@@ -550,8 +550,10 @@ void SimpleMessenger::Pipe::queue_received(Message *m, int priority)
     messenger->dispatch_queue.lock.Lock();
     pipe_lock.Lock();
     
-    if (halt_delivery)
+    if (halt_delivery) {
+      messenger->dispatch_queue.lock.Unlock();
       goto halt;
+    }
     
     dout(20) << "queue_received queuing pipe" << dendl;
     if (!queue_items.count(priority)) 
