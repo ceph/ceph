@@ -243,6 +243,7 @@ void handle_fatal_signal(int signum)
 {
   *_dout << "*** Caught signal (" << sys_siglist[signum] << ") ***"
 	 << std::endl;
+  *_dout << "in thread " << pthread_self() << std::endl;
   BackTrace bt(0);
   bt.print(*_dout);
   _dout->flush();

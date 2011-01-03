@@ -13,7 +13,8 @@ void __ceph_assert_fail(const char *assertion, const char *file, int line, const
   BackTrace *bt = new BackTrace(1);
 
   _dout_lock.Lock();
-  *_dout << file << ": In function '" << func << "':" << std::endl;
+  *_dout << file << ": In function '" << func << "', "
+	 << "In thread " << pthread_self() << std::endl;
   *_dout << file << ":" << line << ": FAILED assert(" << assertion << ")" << std::endl;
   bt->print(*_dout);
   *_dout << " NOTE: a copy of the executable, or `objdump -rdS <executable>` is needed to interpret this." << std::endl;
