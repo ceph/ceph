@@ -106,7 +106,7 @@ uint64_t JournalingObjectStore::_op_apply_start(uint64_t op)
     Cond cond;
     ops_apply_blocked.push_back(&cond);
     dout(10) << "op_apply_start " << op << " blocked (getting in back of line)" << dendl;
-    while (blocked)
+    while (blocked && ops_apply_blocked.front() != &cond)
       cond.Wait(journal_lock);
     dout(10) << "op_apply_start " << op << " woke (at front of line)" << dendl;
     ops_apply_blocked.pop_front();
