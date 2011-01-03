@@ -1118,7 +1118,8 @@ void MDS::boot_start(int step, int r)
     break;
 
   case 2:
-    if (is_starting()) {
+    if (is_starting() ||
+	whoami == mdsmap->get_root()) {  // load root inode off disk if we are auth
       dout(2) << "boot_start " << step << ": loading/discovering root inode" << dendl;
       mdcache->open_root_inode(new C_MDS_BootStart(this, 3));
       break;
