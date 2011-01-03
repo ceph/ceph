@@ -7407,17 +7407,27 @@ void MDCache::purge_stray(CDentry *dn)
     assert(in->last == CEPH_NOSNAP);
   }
 
-  uint64_t period = in->inode.layout.fl_object_size * in->inode.layout.fl_stripe_count;
-  uint64_t cur_max_size = in->inode.get_max_size();
-  uint64_t to = MAX(in->inode.size, cur_max_size);
-  uint64_t num = (to + period - 1) / period;
-  dout(10) << "purge_stray 0~" << to << " objects 0~" << num << " snapc " << snapc << " on " << *in << dendl;
-  if (to)
-    mds->filer->purge_range(in->inode.ino, &in->inode.layout, *snapc,
-			    0, num, g_clock.now(), 0,
-			    new C_MDC_PurgeStrayPurged(this, dn));
-  else
+  if (in->is_dir()) {
+    dout(10) << "purge_stray dir ... implement me!" << dendl;  // FIXME XXX
     _purge_stray_purged(dn);
+  } else if (in->is_file()) {
+    uint64_t period = in->inode.layout.fl_object_size * in->inode.layout.fl_stripe_count;
+    uint64_t cur_max_size = in->inode.get_max_size();
+    uint64_t to = MAX(in->inode.size, cur_max_size);
+    if (to && period) {
+      uint64_t num = (to + period - 1) / period;
+      dout(10) << "purge_stray 0~" << to << " objects 0~" << num << " snapc " << snapc << " on " << *in << dendl;
+      mds->filer->purge_range(in->inode.ino, &in->inode.layout, *snapc,
+			      0, num, g_clock.now(), 0,
+			      new C_MDC_PurgeStrayPurged(this, dn));
+    } else {
+      dout(10) << "purge_stray 0 objects snapc " << snapc << " on " << *in << dendl;
+      _purge_stray_purged(dn);
+    }
+  } else {
+    // not a dir or file; purged!
+    _purge_stray_purged(dn);
+  }
 }
 
 class C_MDC_PurgeStrayLogged : public Context {
