@@ -154,6 +154,7 @@ void JournalingObjectStore::op_submit_finish(uint64_t op)
   if (op != ops_submitting.front()) {
     dout(0) << "op_submit_finish " << op << " expected " << ops_submitting.front()
 	    << ", OUT OF ORDER" << dendl;
+    assert(0 == "out of order op_submit_finish");
   }
   ops_submitting.pop_front();
   journal_lock.Unlock();
