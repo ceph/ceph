@@ -974,6 +974,49 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<in
 }
 
 
+/*
+ * return a set of CDir*'s that correspond to the given bound set.  Only adjust
+ * fragmentation as necessary to get an equivalent bounding set.  That is, only
+ * split if one of our frags spans the provided bounding set.  Never merge.
+ */
+void MDCache::get_force_dirfrag_bound_set(vector<dirfrag_t>& dfs, set<CDir*>& bounds)
+{
+  dout(10) << "get_force_dirfrag_bound_set " << dfs << dendl;
+
+  // sort by ino
+  map<inodeno_t, fragset_t> byino;
+  for (vector<dirfrag_t>::iterator p = dfs.begin(); p != dfs.end(); ++p)
+    byino[p->ino].insert(p->frag);
+  dout(10) << " by ino: " << byino << dendl;
+
+  for (map<inodeno_t,fragset_t>::iterator p = byino.begin(); p != byino.end(); ++p) {
+    CInode *diri = get_inode(p->first);
+    if (!diri)
+      continue;
+    dout(10) << " checking fragset " << p->second.get() << " on " << *diri << dendl;
+    for (set<frag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
+      frag_t fg = *q;
+      list<CDir*> u;
+      diri->get_dirfrags_under(fg, u);
+      dout(10) << "  frag " << fg << " contains " << u << dendl;
+      if (!u.empty())
+	bounds.insert(u.begin(), u.end());
+      frag_t t = fg;
+      while (t != frag_t()) {
+	t = t.parent();
+	CDir *dir = diri->get_dirfrag(t);
+	if (dir) {
+	  // ugh, we found a containing parent
+	  dout(10) << "  ugh, splitting parent frag " << t << " " << *dir << dendl;
+	  force_dir_fragment(diri, fg);
+	  break;
+	}
+      }
+    }
+  }
+}
+
+
 void MDCache::adjust_bounded_subtree_auth(CDir *dir, vector<dirfrag_t>& bound_dfs, pair<int,int> auth)
 {
   dout(7) << "adjust_bounded_subtree_auth " << dir->get_dir_auth() << " -> " << auth
@@ -2518,19 +2561,15 @@ void MDCache::handle_resolve(MMDSResolve *m)
   for (map<dirfrag_t, vector<dirfrag_t> >::iterator pi = m->subtrees.begin();
        pi != m->subtrees.end();
        ++pi) {
-    CInode *diri = get_inode(pi->first.ino);
-    if (!diri) continue;
-    bool forced = diri->dirfragtree.force_to_leaf(pi->first.frag);
-    if (forced) {
-      dout(10) << " forced frag " << pi->first.frag << " to leaf in " 
-	       << diri->dirfragtree 
-	       << " on " << pi->first << dendl;
-    }
-    
-    CDir *dir = diri->get_dirfrag(pi->first.frag);
-    if (!dir) continue;
-    
-    adjust_bounded_subtree_auth(dir, pi->second, from);
+    dout(10) << "peer claims " << pi->first << " bounds " << pi->second << dendl;
+    CDir *dir = get_force_dirfrag(pi->first);
+    if (!dir)
+      continue;
+
+    set<CDir*> bounds;
+    get_force_dirfrag_bound_set(pi->second, bounds);
+
+    adjust_bounded_subtree_auth(dir, bounds, from);
     try_subtree_merge(dir);
   }
 
@@ -8633,7 +8672,52 @@ void MDCache::adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
   list<CDir*> srcfrags;
   diri->get_dirfrags_under(basefrag, srcfrags);
 
-  adjust_dir_fragments(diri, srcfrags, basefrag, bits, resultfrags, waiters, replay);
+  if (!srcfrags.empty())
+    adjust_dir_fragments(diri, srcfrags, basefrag, bits, resultfrags, waiters, replay);
+}
+
+CDir *MDCache::force_dir_fragment(CInode *diri, frag_t fg)
+{
+  CDir *dir = diri->get_dirfrag(fg);
+  if (dir)
+    return dir;
+
+  dout(10) << "force_dir_fragment " << fg << " on " << *diri << dendl;
+
+  list<CDir*> src, result;
+  list<Context*> waiters;
+
+  // split a parent?
+  frag_t parent = diri->dirfragtree.get_branch_or_leaf(fg);
+  while (1) {
+    CDir *pdir = diri->get_dirfrag(parent);
+    if (pdir) {
+      int split = fg.bits() - parent.bits();
+      dout(10) << " splitting parent by " << split << " " << *pdir << dendl;
+      src.push_back(pdir);
+      adjust_dir_fragments(diri, src, parent, split, result, waiters, true);
+      dir = diri->get_dirfrag(fg);
+      dout(10) << "force_dir_fragment result " << *dir << dendl;
+      return dir;
+    }
+    if (parent == frag_t())
+      break;
+    frag_t last = parent;
+    parent = parent.parent();
+    dout(10) << " " << last << " parent is " << parent << dendl;
+  }
+
+  // hoover up things under fg?
+  diri->get_dirfrags_under(fg, src);
+  if (src.empty()) {
+    dout(10) << "force_dir_fragment no frags under " << fg << dendl;
+    return NULL;
+  }
+  dout(10) << " will combine frags under " << fg << ": " << src << dendl;
+  adjust_dir_fragments(diri, src, fg, 0, result, waiters, true);
+  dir = result.front();
+  dout(10) << "force_dir_fragment result " << *dir << dendl;
+  return dir;
 }
 
 void MDCache::adjust_dir_fragments(CInode *diri,

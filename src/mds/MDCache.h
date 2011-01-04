@@ -888,6 +888,15 @@ public:
     if (!have_inode(df.ino)) return NULL;
     return get_inode(df.ino)->get_dirfrag(df.frag);
   }
+  CDir* get_force_dirfrag(dirfrag_t df) {
+    CInode *diri = get_inode(df.ino);
+    if (!diri)
+      return NULL;
+    CDir *dir = force_dir_fragment(diri, df.frag);
+    if (!dir)
+      dir = diri->get_dirfrag(df.frag);
+    return dir;
+  }
 
   MDSCacheObject *get_object(MDSCacheObjectInfo &info);
 
@@ -1096,6 +1105,9 @@ private:
 			    list<CDir*>& resultfrags, 
 			    list<Context*>& waiters,
 			    bool replay);
+  CDir *force_dir_fragment(CInode *diri, frag_t fg);
+  void get_force_dirfrag_bound_set(vector<dirfrag_t>& dfs, set<CDir*>& bounds);
+
 
   friend class EFragment;
 
