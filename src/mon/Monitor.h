@@ -225,6 +225,11 @@ public:
   void stop_cluster();
 
   int mkfs(bufferlist& osdmapbl);
+
+private:
+  // don't allow copying
+  Monitor(const Monitor& rhs);
+  Monitor& operator=(const Monitor &rhs);
 };
 
 int strict_strtol(const char *str, int base, std::string *err);
