@@ -102,6 +102,8 @@ struct md_config_t {
 
   int kill_after;
 
+  long long max_open_files;
+
   int debug;
   int debug_lockdep;
   int debug_mds;

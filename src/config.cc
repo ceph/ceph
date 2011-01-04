@@ -339,6 +339,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(fake_clock, 0, OPT_BOOL, false),
 	OPTION(fakemessenger_serialize, 0, OPT_BOOL, true),
 	OPTION(kill_after, 0, OPT_INT, 0),
+	OPTION(max_open_files, 0, OPT_LONGLONG, 0),
 	OPTION(debug, 0, OPT_INT, 0),
 	OPTION(debug_lockdep, 0, OPT_INT, 0),
 	OPTION(debug_mds, 0, OPT_INT, 1),
