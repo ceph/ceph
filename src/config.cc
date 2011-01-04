@@ -536,7 +536,8 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_exclusive_caching, 0, OPT_BOOL, true),         // replicas evict replicated writes
 	OPTION(osd_stat_refresh_interval, 0, OPT_DOUBLE, .5),
 	OPTION(osd_min_pg_size_without_alive, 0, OPT_INT, 2),  // smallest pg we allow to activate without telling the monitor
-	OPTION(osd_pg_bits, 0, OPT_INT, 6),  // bits per osd
+	OPTION(osd_pg_bits, 0, OPT_INT, 9),  // bits per osd
+	OPTION(osd_pgp_bits, 0, OPT_INT, 6),  // bits per osd
 	OPTION(osd_lpg_bits, 0, OPT_INT, 2),  // bits per osd
 	OPTION(osd_object_layout, 0, OPT_INT, CEPH_OBJECT_LAYOUT_HASHINO),
 	OPTION(osd_pg_layout, 0, OPT_INT, CEPH_PG_LAYOUT_CRUSH),

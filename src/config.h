@@ -361,6 +361,7 @@ struct md_config_t {
   int osd_min_pg_size_without_alive;
 
   int   osd_pg_bits;
+  int   osd_pgp_bits;
   int   osd_lpg_bits;
   int   osd_object_layout;
   int   osd_pg_layout;

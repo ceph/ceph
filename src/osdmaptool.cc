@@ -58,6 +58,7 @@ int main(int argc, const char **argv)
   bool createsimple = false;
   int num_osd = 0, num_dom = 0;
   int pg_bits = g_conf.osd_pg_bits;
+  int pgp_bits = g_conf.osd_pgp_bits;
   int lpg_bits = g_conf.osd_lpg_bits;
   bool clobber = false;
   bool modified = false;
@@ -80,6 +81,8 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&clobber, OPT_BOOL);
     } else if (CONF_ARG_EQ("pg_bits", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&pg_bits, OPT_INT);
+    } else if (CONF_ARG_EQ("pgp_bits", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&pgp_bits, OPT_INT);
     } else if (CONF_ARG_EQ("lpg_bits", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&lpg_bits, OPT_INT);
     } else if (CONF_ARG_EQ("num_dom", '\0')) {
@@ -139,7 +142,7 @@ int main(int argc, const char **argv)
     }
     ceph_fsid_t fsid;
     memset(&fsid, 0, sizeof(ceph_fsid_t));
-    osdmap.build_simple(0, fsid, num_osd, num_dom, pg_bits, lpg_bits, 0);
+    osdmap.build_simple(0, fsid, num_osd, num_dom, pg_bits, pgp_bits, lpg_bits, 0);
     modified = true;
   }
 
