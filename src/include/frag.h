@@ -538,7 +538,7 @@ class fragset_t {
   std::set<frag_t> _set;
 
 public:
-  std::set<frag_t> &get() { return _set; }
+  const std::set<frag_t> &get() const { return _set; }
   std::set<frag_t>::iterator begin() { return _set.begin(); }
   std::set<frag_t>::iterator end() { return _set.end(); }
 
@@ -578,7 +578,7 @@ public:
   }
 };
 
-inline std::ostream& operator<<(std::ostream& out, fragset_t& fs) 
+inline std::ostream& operator<<(std::ostream& out, const fragset_t& fs) 
 {
   return out << "fragset_t(" << fs.get() << ")";
 }
