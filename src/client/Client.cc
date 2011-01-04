@@ -89,8 +89,12 @@ ostream& operator<<(ostream &out, Inode &in)
     out << " dirty_caps=" << ccap_string(in.dirty_caps);
   if (in.flushing_caps)
     out << " flushing_caps=" << ccap_string(in.flushing_caps);
-  out << " parent=" << in.dn
-      << ")";
+  set<Dentry*>::iterator i = in.dn_set.begin();
+  while(i != in.dn_set.end()) {
+      out << " parent=" << *i;
+      ++i;
+  }
+  out << ")";
   return out;
 }
 
@@ -542,7 +546,8 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
  * insert_dentry_inode - insert + link a single dentry + inode into the metadata cache.
  */
 Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
-				    Inode *in, utime_t from, int mds, bool set_offset)
+				    Inode *in, utime_t from, int mds, bool set_offset,
+				    Dentry *old_dentry)
 {
   utime_t dttl = from;
   dttl += (float)dlease->duration_ms / 1000.0;
@@ -572,11 +577,11 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
   
   if (!dn || dn->inode == 0) {
     // have inode linked elsewhere?  -> unlink and relink!
-    if (in->dn) {
+    if (!in->dn_set.empty() && old_dentry) {
       dout(12) << " had vino " << in->vino()
-	       << " not linked or linked at the right position, relinking"
+	       << " linked at the wrong position, relinking"
 	       << dendl;
-      dn = relink_inode(dir, dname, in, dn);
+      dn = relink_inode(dir, dname, in, old_dentry, dn);
     } else {
       // link
       dout(12) << " had vino " << in->vino()
@@ -696,7 +701,9 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
 
     if (in) {
       Dir *dir = diri->open_dir();
-      insert_dentry_inode(dir, dname, &dlease, in, from, mds, true);
+      insert_dentry_inode(dir, dname, &dlease, in, from, mds, true,
+                          ((request->head.op == CEPH_MDS_OP_RENAME) ?
+                                        request->old_dentry : NULL));
     } else {
       Dentry *dn = NULL;
       if (diri->dir && diri->dir->dentries.count(dname)) {
@@ -868,8 +875,11 @@ int Client::choose_target_mds(MetaRequest *req)
     while (in->snapid != CEPH_NOSNAP) {
       if (in->snapid == CEPH_SNAPDIR)
 	in = in->snapdir_parent;
-      else if (in->dn)
-	in = in->dn->dir->parent_inode;
+      else if (!in->dn_set.empty())
+        /* In most cases there will only be one dentry, so getting it
+         * will be the correct action. If there are multiple hard links,
+         * I think the MDS should be able to redirect as needed*/
+	in = dentry_of(in)->dir->parent_inode;
       else {
         dout(10) << "got unlinked inode, can't look at parent" << dendl;
         break;
@@ -3222,10 +3232,10 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
   }
 
   if (dname == "..") {
-    if (!dir->dn)
+    if (dir->dn_set.empty())
       r = -ENOENT;
     else
-      *target = dir->dn->dir->parent_inode;
+      *target = dentry_of(dir)->dir->parent_inode; //dirs can't be hard-linked
     goto done;
   }
 
@@ -4188,7 +4198,8 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
 
   if (dirp->offset == 0) {
     dout(15) << " including ." << dendl;
-    uint64_t next_off = diri->dn ? 1 : 2;
+    assert(diri->dn_set.size() < 2); // can't have multiple hard-links to a dir
+    uint64_t next_off = (!diri->dn_set.empty()) ? 1 : 2;
 
     fill_dirent(&de, ".", S_IFDIR, diri->ino, next_off);
 
@@ -4203,8 +4214,8 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
   }
   if (dirp->offset == 1) {
     dout(15) << " including .." << dendl;
-    assert(diri->dn);
-    Inode *in = diri->dn->inode;
+    assert(!diri->dn_set.empty());
+    Inode *in = dentry_of(diri)->inode;
     fill_dirent(&de, "..", S_IFDIR, in->ino, 2);
 
     fill_stat(in, &st);
@@ -5191,7 +5202,8 @@ void Client::getcwd(string& dir)
 
   Inode *in = cwd;
   while (in->ino != CEPH_INO_ROOT) {
-    Dentry *dn = in->dn;
+    assert(in->dn_set.size() < 2); // dirs can't be hard-linked
+    Dentry *dn = dentry_of(in);
     if (!dn) {
       // look it up
       dout(10) << "getcwd looking up parent for " << *in << dendl;
@@ -5707,7 +5719,11 @@ int Client::ll_readlink(vinodeno_t vino, const char **value, int uid, int gid)
   tout << vino.ino.val << std::endl;
 
   Inode *in = _ll_get_inode(vino);
-  if (in->dn) touch_dn(in->dn);
+  set<Dentry*>::iterator dn = in->dn_set.begin();
+  while (dn != in->dn_set.end()) {
+    touch_dn(*dn);
+    ++dn;
+  }
 
   int r = 0;
   if (in->is_symlink()) {
@@ -6032,7 +6048,8 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
   if (res == 0) {
     if (dir->dir && dir->dir->dentries.count(name) ) {
       Dentry *dn = dir->dir->dentries[name];
-      if (dn->inode->dir && dn->inode->dir->is_empty()) 
+      if (dn->inode->dir && dn->inode->dir->is_empty() &&
+          (dn->inode->dn_set.size() == 1))
 	close_dir(dn->inode->dir);  // FIXME: maybe i shoudl proactively hose the whole subtree from cache?
       unlink(dn);
     }

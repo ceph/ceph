@@ -449,7 +449,7 @@ class Inode {
   int       ref;      // ref count. 1 for each dentry, fh that links to me.
   int       ll_ref;   // separate ref count for ll client
   Dir       *dir;     // if i'm a dir.
-  Dentry    *dn;      // if i'm linked to a dentry.
+  set<Dentry*> dn_set;      // if i'm linked to a dentry.
   string    symlink;  // symlink content, if it's a symlink
   fragtree_t dirfragtree;
   map<string,bufferptr> xattrs;
@@ -461,12 +461,13 @@ class Inode {
   // <hack>
   bool hack_balance_reads;
   // </hack>
+#define dentry_of(a) (*(a->dn_set.begin()))
 
   void make_long_path(filepath& p) {
-    if (dn) {
-      assert(dn->dir && dn->dir->parent_inode);
-      dn->dir->parent_inode->make_long_path(p);
-      p.push_dentry(dn->name);
+    if (!dn_set.empty()) {
+      assert((*dn_set.begin())->dir && (*dn_set.begin())->dir->parent_inode);
+      (*dn_set.begin())->dir->parent_inode->make_long_path(p);
+      p.push_dentry((*dn_set.begin())->name);
     } else if (snapdir_parent) {
       snapdir_parent->make_nosnap_relative_path(p);
       string empty;
@@ -487,10 +488,10 @@ class Inode {
       snapdir_parent->make_nosnap_relative_path(p);
       string empty;
       p.push_dentry(empty);
-    } else if (dn) {
-      assert(dn->dir && dn->dir->parent_inode);
-      dn->dir->parent_inode->make_nosnap_relative_path(p);
-      p.push_dentry(dn->name);
+    } else if (!dn_set.empty()) {
+      assert((*dn_set.begin())->dir && (*dn_set.begin())->dir->parent_inode);
+      (*dn_set.begin())->dir->parent_inode->make_nosnap_relative_path(p);
+      p.push_dentry((*dn_set.begin())->name);
     } else {
       p = filepath(ino);
     }
@@ -528,7 +529,7 @@ class Inode {
     oset((void *)this, layout->fl_pg_pool, ino),
     reported_size(0), wanted_max_size(0), requested_max_size(0),
     ref(0), ll_ref(0), 
-    dir(0), dn(0),
+    dir(0), dn_set(),
     hack_balance_reads(false)
   {
     memset(&flushing_cap_tid, 0, sizeof(__u16)*CEPH_CAP_BITS);
@@ -652,7 +653,8 @@ class Inode {
   // open Dir for an inode.  if it's not open, allocated it (and pin dentry in memory).
   Dir *open_dir() {
     if (!dir) {
-      if (dn) dn->get();      // pin dentry
+      assert(dn_set.size() < 2); // dirs can't be hard-linked
+      if (!dn_set.empty()) (*dn_set.begin())->get();      // pin dentry
       get();                  // pin inode
       dir = new Dir(this);
     }
@@ -936,7 +938,8 @@ protected:
     assert(dir->is_empty());
     
     Inode *in = dir->parent_inode;
-    if (in->dn) in->dn->put();   // unpin dentry
+    assert (in->dn_set.size() < 2); //dirs can't be hard-linked
+    if (!in->dn_set.empty()) dentry_of(in)->put();   // unpin dentry
     
     delete in->dir;
     in->dir = 0;
@@ -966,8 +969,10 @@ protected:
 
     if (in) {    // link to inode
       dn->inode = in;
-      assert(in->dn == 0);
-      in->dn = dn;
+      if(!in->dn_set.empty())
+        dout(5) << "adding new hard link to " << in->vino()
+                << " from " << dn << dendl;
+      in->dn_set.insert(dn);
       in->get();
       
       if (in->dir) dn->get();  // dir -> dn pin
@@ -981,10 +986,9 @@ protected:
 
     // unlink from inode
     if (in) {
-      assert(in->dn == dn);
       if (in->dir) dn->put();        // dir -> dn pin
       dn->inode = 0;
-      in->dn = 0;
+      in->dn_set.erase(dn);
       put_inode(in);
     }
         
@@ -1000,8 +1004,10 @@ protected:
     delete dn;
   }
 
-  Dentry *relink_inode(Dir *dir, const string& name, Inode *in, Dentry *newdn=NULL) {
-    Dentry *olddn = in->dn;
+  /* If an inode's been moved from one dentry to another
+   * (via rename, for instance), call this function to move it */
+  Dentry *relink_inode(Dir *dir, const string& name, Inode *in, Dentry *olddn,
+                       Dentry *newdn=NULL) {
     Dir *olddir = olddn->dir;  // note: might == dir!
     bool made_new = false;
 
@@ -1015,7 +1021,8 @@ protected:
       assert(newdn->inode == NULL);
     }
     newdn->inode = in;
-    in->dn = newdn;
+    in->dn_set.erase(olddn);
+    in->dn_set.insert(newdn);
 
     if (in->dir) { // dir -> dn pin
       newdn->get();
@@ -1150,7 +1157,8 @@ protected:
 			      int issued);
   Inode *add_update_inode(InodeStat *st, utime_t ttl, int mds);
   Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
-			      Inode *in, utime_t from, int mds, bool set_offset);
+			      Inode *in, utime_t from, int mds, bool set_offset,
+			      Dentry *old_dentry = NULL);
 
 
   // ----------------------
