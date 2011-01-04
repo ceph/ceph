@@ -377,6 +377,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   class_lock("OSD::class_lock"),
   up_thru_wanted(0), up_thru_pending(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
+  osd_stat_updated(false),
   last_tid(0),
   tid_lock("OSD::tid_lock"),
   backlog_wq(this, &disk_tp),
@@ -400,8 +401,6 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   osdmap = 0;
 
   memset(&my_stat, 0, sizeof(my_stat));
-
-  osd_stat_updated = osd_stat_pending = false;
 
   stat_ops = 0;
   stat_qlen = 0;
@@ -1570,8 +1569,13 @@ void OSD::tick()
 
   // mon report?
   utime_t now = g_clock.now();
-  if (now - last_mon_report > g_conf.osd_mon_report_interval_min)
+  if (now - last_pg_stats_sent > g_conf.osd_mon_report_interval_max) {
+    osd_stat_updated = true;
     do_mon_report();
+  }
+  else if (now - last_mon_report > g_conf.osd_mon_report_interval_min) {
+    do_mon_report();
+  }
 
   // remove stray pgs?
   remove_list_lock.Lock();
@@ -1608,13 +1612,14 @@ void OSD::do_mon_report()
 {
   dout(7) << "do_mon_report" << dendl;
 
-  last_mon_report = g_clock.now();
+  utime_t now(g_clock.now());
+  last_mon_report = now;
 
   // do any pending reports
   send_alive();
   send_pg_temp();
   send_failures();
-  send_pg_stats();
+  send_pg_stats(now);
 }
 
 void OSD::ms_handle_connect(Connection *con)
@@ -1627,7 +1632,7 @@ void OSD::ms_handle_connect(Connection *con)
     send_alive();
     send_pg_temp();
     send_failures();
-    send_pg_stats();
+    send_pg_stats(g_clock.now());
     class_handler->resend_class_requests();
   }
 }
@@ -1871,7 +1876,7 @@ void OSD::send_still_alive(int osd)
   monc->send_mon_message(m);
 }
 
-void OSD::send_pg_stats()
+void OSD::send_pg_stats(const utime_t &now)
 {
   assert(osd_lock.is_locked());
 
@@ -1884,11 +1889,12 @@ void OSD::send_pg_stats()
   pg_stat_queue_lock.Lock();
 
   if (osd_stat_updated || !pg_stat_queue.empty()) {
+    last_pg_stats_sent = now;
     osd_stat_updated = false;
-    
+
     dout(10) << "send_pg_stats - " << pg_stat_queue.size() << " pgs updated" << dendl;
-    
-    utime_t had_for = g_clock.now();
+
+    utime_t had_for(now);
     had_for -= had_map_since;
 
     MPGStats *m = new MPGStats(osdmap->get_fsid(), osdmap->get_epoch(), had_for);
@@ -1949,11 +1955,6 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
       dout(30) << " still pending " << pg->info.pgid << " " << pg->pg_stats_stable.reported << dendl;
   }
   
-  if (pg_stat_queue.empty()) {
-    dout(10) << "clearing osd_stat_pending" << dendl;
-    osd_stat_pending = false;
-  }
-
   pg_stat_queue_lock.Unlock();
 
   ack->put();

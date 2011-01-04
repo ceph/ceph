@@ -43,8 +43,6 @@ using namespace std;
 using namespace __gnu_cxx;
 
 
-
-
 enum {
   l_osd_first = 10000,
   l_osd_opq,
@@ -552,6 +550,7 @@ protected:
 
   // == monitor interaction ==
   utime_t last_mon_report;
+  utime_t last_pg_stats_sent;
 
   void do_mon_report();
 
@@ -588,9 +587,8 @@ protected:
   Mutex pg_stat_queue_lock;
   xlist<PG*> pg_stat_queue;
   bool osd_stat_updated;
-  bool osd_stat_pending;
 
-  void send_pg_stats();
+  void send_pg_stats(const utime_t &now);
   void handle_pg_stats_ack(class MPGStatsAck *ack);
 
   void handle_command(class MMonCommand *m);
