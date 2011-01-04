@@ -12,8 +12,6 @@
  * 
  */
 
-// TODO: missing run() method, which creates the two main timers, refreshTimer and readTimer
-
 #include "Monitor.h"
 
 #include "osd/OSDMap.h"
