@@ -4079,10 +4079,11 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
       // ...
 
       // what's next?
+      if (curclone != snapset.clones.rend())
+	curclone++;
+
       if (curclone == snapset.clones.rend())
 	head = sobject_t();
-      else
-	curclone--;
 
     } else {
       // it's unversioned.
