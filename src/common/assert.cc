@@ -14,7 +14,7 @@ void __ceph_assert_fail(const char *assertion, const char *file, int line, const
 
   _dout_lock.Lock();
   *_dout << file << ": In function '" << func << "', "
-	 << "In thread " << pthread_self() << std::endl;
+	 << "In thread " << hex << pthread_self() << dec << std::endl;
   *_dout << file << ":" << line << ": FAILED assert(" << assertion << ")" << std::endl;
   bt->print(*_dout);
   *_dout << " NOTE: a copy of the executable, or `objdump -rdS <executable>` is needed to interpret this." << std::endl;
