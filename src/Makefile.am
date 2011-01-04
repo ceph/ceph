@@ -654,7 +654,6 @@ noinst_HEADERS = \
         include/triple.h\
         include/tstring.h\
         include/types.h\
-        include/uofs.h\
         include/utime.h\
         include/dlist.h\
         include/elist.h\
