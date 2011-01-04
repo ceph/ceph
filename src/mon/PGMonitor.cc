@@ -279,49 +279,31 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
 
 bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
 {
-  int from = stats->get_orig_source().num();
-  MPGStatsAck *ack;
-
   // check caps
   MonSession *session = stats->get_session();
-  if (!session)
-    goto out;
+  if (!session) {
+    derr << "PGMonitor::preprocess_pg_stats: no monitor session!" << dendl;
+    stats->put();
+    return true;
+  }
   if (!session->caps.check_privileges(PAXOS_PGMAP, MON_CAP_R)) {
-    dout(0) << "MPGStats received from entity with insufficient privileges "
-	    << session->caps << dendl;
-    goto out;
+    derr << "PGMonitor::preprocess_pg_stats: MPGStats received from entity "
+         << "with insufficient privileges " << session->caps << dendl;
+    stats->put();
+    return true;
   }
 
-  // first, just see if they need a new osdmap.  but 
+  // First, just see if they need a new osdmap. But
   // only if they've had the map for a while.
   if (stats->had_map_for > 30.0 && 
       mon->osdmon()->paxos->is_readable() &&
       stats->epoch < mon->osdmon()->osdmap.get_epoch())
     mon->osdmon()->send_latest_now_nodelete(stats, stats->epoch+1);
 
-  // any new osd or pg info?
-  if (!pg_map.osd_stat.count(from) ||
-      pg_map.osd_stat[from] != stats->osd_stat)
-    return false;  // new osd stat
-
-  for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
-       p != stats->pg_stat.end();
-       p++) {
-    if (pg_map.pg_stat.count(p->first) == 0 ||
-	pg_map.pg_stat[p->first].reported != p->second.reported)
-      return false; // new pg stat(s)
-  }
-  
-  dout(10) << " message contains no new osd|pg stats" << dendl;
-  ack = new MPGStatsAck;
-  for (map<pg_t,pg_stat_t>::iterator p = stats->pg_stat.begin();
-       p != stats->pg_stat.end();
-       p++)
-    ack->pg_stat[p->first] = p->second.reported;
-  mon->send_reply(stats, ack);
- out:
-  stats->put();
-  return true;
+  // Always forward the PGStats to the leader, even if they are the same as
+  // the old PGStats. The leader will mark as down osds that haven't sent
+  // PGStats for a few minutes.
+  return false;
 }
 
 bool PGMonitor::prepare_pg_stats(MPGStats *stats) 
