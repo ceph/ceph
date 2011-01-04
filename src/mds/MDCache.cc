@@ -2524,16 +2524,17 @@ void MDCache::handle_resolve(MMDSResolve *m)
 	for (map<dirfrag_t, vector<dirfrag_t> >::iterator q = m->subtrees.begin();
 	     q != m->subtrees.end();
 	     ++q) {
-	  CDir *base = get_dirfrag(q->first);
+	  // an ambiguous import won't race with a refragmentation; it's appropriate to force here.
+	  CDir *base = get_force_dirfrag(q->first);
 	  if (!base || !base->contains(dir)) 
 	    continue;  // base not dir or an ancestor of dir, clearly doesn't claim dir.
 
 	  bool inside = true;
-	  for (vector<dirfrag_t>::iterator r = q->second.begin();
-	       r != q->second.end();
-	       ++r) {
-	    CDir *bound = get_dirfrag(*r);
-	    if (bound && bound->contains(dir)) {
+	  set<CDir*> bounds;
+	  get_force_dirfrag_bound_set(q->second, bounds);
+	  for (set<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p) {
+	    CDir *bound = *p;
+	    if (bound->contains(dir)) {
 	      inside = false;  // nope, bound is dir or parent of dir, not inside.
 	      break;
 	    }
@@ -2712,7 +2713,8 @@ void MDCache::disambiguate_imports()
 	 q != p->second.end();
 	 ++q) {
       dout(10) << " ambiguous import " << q->first << " bounds " << q->second << dendl;
-      CDir *dir = get_dirfrag(q->first);
+      // an ambiguous import will not race with a refragmentation; it's appropriate to force here.
+      CDir *dir = get_force_dirfrag(q->first);
       if (!dir) continue;
       
       if (dir->authority().first == CDIR_AUTH_UNKNOWN ||   // if i am resolving
