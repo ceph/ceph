@@ -1081,6 +1081,9 @@ int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const ch
         exit(1);
       }
       break;
+    case OPT_U32:
+      OPT_READ_TYPE(ret, section, key, uint32_t, out, def);
+      break;
     default:
 	ret = 0;
         break;

@@ -410,7 +410,7 @@ struct md_config_t {
 
   bool osd_use_stale_snap;
 
-  int osd_max_notify_timeout;
+  uint32_t osd_max_notify_timeout;
 
   // filestore
   bool filestore;
@@ -483,7 +483,7 @@ extern md_config_t g_conf;
 
 typedef enum {
 	OPT_NONE, OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL,
-	OPT_ADDR
+	OPT_ADDR, OPT_U32
 } opt_type_t;
 
 /**
