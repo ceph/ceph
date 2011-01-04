@@ -884,8 +884,9 @@ int Client::choose_target_mds(MetaRequest *req)
   if (!in) goto random_mds;
 
   if (is_hash && S_ISDIR(in->mode) && !in->dirfragtree.empty()) {
-    if (in->dirfragtree.contains(hash)) {
-      mds = in->fragmap[in->dirfragtree[hash].value()];
+    frag_t fg = in->dirfragtree[hash];
+    if (in->fragmap.count(fg)) {
+      mds = in->fragmap[fg];
       dout(10) << "choose_target_mds from dirfragtree hash" << dendl;
       goto out;
     }
