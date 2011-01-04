@@ -607,6 +607,13 @@ protected:
   int do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr);
   int do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr);
 
+  int prepare_call(MOSDOp *osd_op, ceph_osd_op& op,
+		   string& cname, string& mname,
+		   bufferlist::iterator& bp,
+		   ClassHandler::ClassMethod **pmethod);
+
+  bool pgls_filter(sobject_t& sobj, bufferlist::iterator& bp);
+
 public:
   ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid, const sobject_t& ioid) : 
     PG(o, _pool, p, oid, ioid)

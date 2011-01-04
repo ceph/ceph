@@ -1837,7 +1837,7 @@ int Rados::list_objects_open(pool_t pool, Rados::ListCtx *ctx)
   return 0;
 }
 
-int Rados::list_objects_more(Rados::ListCtx ctx, int max, std::list<string>& entries)
+int Rados::list_objects_more(Rados::ListCtx& ctx, int max, std::list<string>& entries)
 {
   if (!client)
     return -EINVAL;
@@ -1852,10 +1852,18 @@ int Rados::list_objects_more(Rados::ListCtx ctx, int max, std::list<string>& ent
   return r;
 }
 
-void Rados::list_objects_close(Rados::ListCtx ctx)
+void Rados::list_objects_close(Rados::ListCtx& ctx)
 {
   Objecter::ListContext *h = (Objecter::ListContext *)ctx.ctx;
   delete h;
+}
+
+void Rados::list_filter(Rados::ListCtx& ctx, const std::string& xattr, const std::string& val)
+{
+  Objecter::ListContext *h = (Objecter::ListContext *)ctx.ctx;
+  h->filter.clear();
+  ::encode(xattr, h->filter);
+  ::encode(val, h->filter);
 }
 
 uint64_t Rados::get_last_version(rados_pool_t pool)

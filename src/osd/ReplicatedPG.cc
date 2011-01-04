@@ -140,6 +140,29 @@ void ReplicatedPG::wait_for_degraded_object(const sobject_t& soid, Message *m)
   waiting_for_degraded_object[soid].push_back(m);
 }
 
+bool ReplicatedPG::pgls_filter(sobject_t& sobj, bufferlist::iterator& bp)
+{
+  string xattr, val;
+  ::decode(xattr, bp);
+  ::decode(val, bp);
+
+  dout(0) << "pgls_filter xattr=" << xattr << " val=" << val << dendl;
+
+  bufferlist bl;
+
+  int ret = osd->store->getattr(coll_t(info.pgid), sobj, xattr.c_str(), bl);
+  if (ret < 0)
+    return false;
+
+  if (val.size() != bl.length())
+    return false;
+
+  if (memcmp(val.c_str(), bl.c_str(), val.size()))
+    return false;
+
+  return true;
+}
+
 
 // ==========================================================
 void ReplicatedPG::do_pg_op(MOSDOp *op)
@@ -148,11 +171,21 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 
   bufferlist outdata;
   int result = 0;
+  string cname, mname;
+  bool filter = false;
 
   snapid_t snapid = op->get_snapid();
 
   for (vector<OSDOp>::iterator p = op->ops.begin(); p != op->ops.end(); p++) {
+    bufferlist::iterator bp = p->data.begin();
     switch (p->op.op) {
+    case CEPH_OSD_OP_PGLS_FILTER:
+      ::decode(cname, bp);
+      ::decode(mname, bp);
+      filter = true;
+
+      // fall through
+
     case CEPH_OSD_OP_PGLS:
       if (op->get_pg() != info.pgid) {
         dout(10) << " pgls pg=" << op->get_pg() << " != " << info.pgid << dendl;
@@ -169,6 +202,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 	if (result == 0) {
           vector<sobject_t>::iterator iter;
           for (iter = sentries.begin(); iter != sentries.end(); ++iter) {
+	    bool keep = true;
 	    // skip snapdir objects
 	    if (iter->snap == CEPH_SNAPDIR)
 	      continue;
@@ -196,7 +230,11 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 		  continue;
 	      }
 	    }
-            response.entries.push_back(iter->oid);
+	    if (filter) {
+	      keep = pgls_filter(*iter, bp);
+            }
+            if (keep)
+	      response.entries.push_back(iter->oid);
           }
 	  ::encode(response, outdata);
         }
@@ -831,7 +869,30 @@ void ReplicatedPG::do_complete_notify(Watch::Notification *notif, ObjectContext 
   osd->complete_notify((void *)notif, obc);
 }
 
+int ReplicatedPG::prepare_call(MOSDOp *osd_op, ceph_osd_op& op,
+			       string& cname, string& mname,
+			       bufferlist::iterator& bp,
+			       ClassHandler::ClassMethod **pmethod)
+{
+  int result;
 
+  ClassHandler::ClassData *cls;
+  ClassVersion version;
+  version.set_arch(get_arch());
+  result = osd->get_class(cname, version, info.pgid, osd_op, &cls);
+  if (result) {
+    dout(10) << "call class " << cname << " does not exist" << dendl;
+    return result;
+  }
+  bufferlist outdata;
+  ClassHandler::ClassMethod *method = cls->get_method(mname.c_str());
+  if (!method) {
+    dout(10) << "call method " << cname << "." << mname << " does not exist" << dendl;
+    return -EINVAL;
+  }
+  *pmethod = method;
+  return 0;
+}
 
 // ========================================================================
 // low level osd ops
@@ -1014,28 +1075,20 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       {
 	bufferlist indata;
 	bp.copy(op.cls.indata_len, indata);
-	
-	ClassHandler::ClassData *cls;
-        ClassVersion version;
-        version.set_arch(get_arch());
-        result = osd->get_class(cname, version, info.pgid, ctx->op, &cls);
-	if (result) {
-	  dout(10) << "call class " << cname << " does not exist" << dendl;
-          if (result == -EAGAIN)
-            return result;
-	} else {
+
+	ClassHandler::ClassMethod *method;
+        result = prepare_call((MOSDOp *)ctx->op, op, cname, mname, bp, &method);
+        if (result == -EAGAIN)
+          return result;
+
+        if (!result) {
 	  bufferlist outdata;
-	  ClassHandler::ClassMethod *method = cls->get_method(mname.c_str());
-	  if (!method) {
-	    dout(10) << "call method " << cname << "." << mname << " does not exist" << dendl;
-	    result = -EINVAL;
-	  } else {
-	    dout(10) << "call method " << cname << "." << mname << dendl;
-	    result = method->exec((cls_method_context_t)&ctx, indata, outdata);
-	    dout(10) << "method called response length=" << outdata.length() << dendl;
-	    op.extent.length = outdata.length();
-	    odata.claim_append(outdata);
-	  }
+
+          dout(10) << "call method " << cname << "." << mname << dendl;
+	  result = method->exec((cls_method_context_t)&ctx, indata, outdata);
+	  dout(10) << "method called response length=" << outdata.length() << dendl;
+	  op.extent.length = outdata.length();
+	  odata.claim_append(outdata);
 	}
       }
       break;
@@ -1163,7 +1216,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	} catch (const buffer::error &e) {
 	  timeout = 0;
 	}
-	if (!timeout || timeout > g_conf.osd_max_notify_timeout)
+	if (!timeout || timeout > (uint32_t)g_conf.osd_max_notify_timeout)
 		timeout = g_conf.osd_max_notify_timeout;
 	dout(0) << "CEPH_OSD_OP_NOTIFY" << dendl;
         ObjectContext *obc = ctx->obc;

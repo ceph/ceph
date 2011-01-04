@@ -818,7 +818,7 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
   }
 
   ObjectOperation op;
-  op.pg_ls(list_context->max_entries, list_context->cookie);
+  op.pg_ls(list_context->max_entries, list_context->filter, list_context->cookie);
 
   bufferlist *bl = new bufferlist();
   C_List *onack = new C_List(list_context, onfinish, bl, this);

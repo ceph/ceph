@@ -101,12 +101,27 @@ struct ObjectOperation {
     ops[s].op.pgls.count = count;
     ops[s].op.pgls.cookie = cookie;
   }
+  void add_pgls_filter(int op, uint64_t count, bufferlist& filter, uint64_t cookie) {
+    int s = ops.size();
+    ops.resize(s+1);
+    ops[s].op.op = op;
+    ops[s].op.pgls.count = count;
+    ops[s].op.pgls.cookie = cookie;
+    string cname = "pg";
+    string mname = "filter";
+    ::encode(cname, ops[s].data);
+    ::encode(mname, ops[s].data);
+    ops[s].data.append(filter);
+  }
 
   // ------
 
   // pg
-  void pg_ls(uint64_t count, uint64_t cookie) {
-    add_pgls(CEPH_OSD_OP_PGLS, count, cookie);
+  void pg_ls(uint64_t count, bufferlist& filter, uint64_t cookie) {
+    if (filter.length() == 0)
+      add_pgls(CEPH_OSD_OP_PGLS, count, cookie);
+    else
+      add_pgls_filter(CEPH_OSD_OP_PGLS_FILTER, count, filter, cookie);
     flags |= CEPH_OSD_FLAG_PGOP;
   }
 
@@ -347,6 +362,8 @@ public:
     int pool_snap_seq;
     int max_entries;
     std::list<object_t> list;
+
+    bufferlist filter;
 
     ListContext() : current_pg(0), cookie(0), starting_pg_num(0),
 		    at_end(false), pool_id(0),

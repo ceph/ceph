@@ -107,6 +107,8 @@ int main(int argc, const char **argv)
   const char *snapname = 0;
   snap_t snapid = CEPH_NOSNAP;
 
+  const char *filter = NULL;
+
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("pool", 'p')) {
       CONF_SAFE_SET_ARG_VAL(&pool, OPT_STR);
@@ -120,6 +122,8 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&concurrent_ios, OPT_INT);
     } else if (CONF_ARG_EQ("block-size", 'b')) {
       CONF_SAFE_SET_ARG_VAL(&op_size, OPT_INT);
+    } else if (CONF_ARG_EQ("filter", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&filter, OPT_STR);
     } else if (args[i][0] == '-' && nargs.empty()) {
       cerr << "unrecognized option " << args[i] << std::endl;
       usage();
@@ -228,6 +232,15 @@ int main(int argc, const char **argv)
 
     Rados::ListCtx ctx;
     rados.list_objects_open(p, &ctx);
+    if (filter) {
+      char *flt_str = strdup(filter);
+      char *xattr = strtok(flt_str, " ");
+      char *val = strtok(NULL, " ");
+      string xattr_str(xattr);
+      string val_str(val);
+
+      rados.list_filter(ctx, xattr, val);
+    }
     while (1) {
       list<string> vec;
       ret = rados.list_objects_more(ctx, 1 << 10, vec);
