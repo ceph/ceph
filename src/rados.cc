@@ -50,7 +50,6 @@ void usage()
   cerr << "   listxattr objname\n";
   cerr << "   getxattr objname attr\n";
   cerr << "   setxattr objname attr val\n";
-  cerr << "   getxattr objname attr\n";
   cerr << "   rmxattr objname attr\n";
   cerr << "   ls          -- list objects in pool\n\n";
   cerr << "   chown 123   -- change the pool owner to auid 123\n";
