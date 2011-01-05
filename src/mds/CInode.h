@@ -24,6 +24,7 @@
 #include "include/lru.h"
 
 #include "mdstypes.h"
+#include "flock.h"
 
 #include "CDentry.h"
 #include "SimpleLock.h"
