@@ -30,8 +30,10 @@ public:
   enum dout_streambuf_flags_t {
     DOUTSB_FLAG_SYSLOG =          0x01,
     DOUTSB_FLAG_STDOUT =          0x02,
-    DOUTSB_FLAG_STDERR =          0x04,
-    DOUTSB_FLAG_OFILE =           0x08,
+    DOUTSB_FLAG_STDERR_SOME =     0x04,
+    DOUTSB_FLAG_STDERR_ALL =      0x08,
+    DOUTSB_FLAG_STDERR =          0x0c,
+    DOUTSB_FLAG_OFILE =           0x10,
   };
 
   typedef traits traits_ty;
@@ -49,9 +51,6 @@ public:
   // error the next time we tried to write to stdedrr. But nicer than waiting
   // for the error to happen.
   void handle_stderr_closed();
-
-  // Call when you close stdout.
-  void handle_stdout_closed();
 
   // Set the flags based on the global configuration
   void read_global_config();

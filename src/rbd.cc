@@ -1115,6 +1115,7 @@ int main(int argc, const char **argv)
 
   common_set_defaults(false);
   common_init(args, "rbd", true);
+  set_foreground_logging();
 
   const char *poolname = NULL;
   uint64_t size = 0;

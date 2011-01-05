@@ -21,6 +21,7 @@
 
 #include "config.h"
 
+#include "common/common_init.h"
 #include "crush/CrushWrapper.h"
 #include "crush/grammar.h"
 
@@ -773,6 +774,7 @@ struct layer_t {
 
 int main(int argc, const char **argv)
 {
+  set_foreground_logging();
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);

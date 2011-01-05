@@ -96,6 +96,7 @@ int main(int argc, const char **argv)
   ceph_set_default_id("admin");
   common_set_defaults(false);
   common_init(args, "ceph", true);
+  set_foreground_logging();
 
   ret = test_string_sz("I am the very model of a modern major general");
   if (ret)

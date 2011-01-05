@@ -93,10 +93,10 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
   ceph_set_default_id("admin");
+
   common_set_defaults(false);
-  g_conf.log_to_file = true;
-  g_conf.log_file = tmp_log_file.c_str();
   common_init(args, "TestSignalHandlers", true);
+  set_foreground_logging();
 
   DEFINE_CONF_VARS(usage);
   FOR_EACH_ARG(args) {

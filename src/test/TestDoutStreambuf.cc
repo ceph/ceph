@@ -38,14 +38,12 @@ int main(int argc, const char **argv)
   ceph_set_default_id("admin");
   common_set_defaults(false);
   common_init(args, "ceph", true);
+  set_foreground_logging();
 
   DoutStreambuf<char> *dos = new DoutStreambuf<char>();
 
   _dout_lock.Lock();
   dos->read_global_config();
-//  dos->set_flags(DoutStreambuf<char>::DOUTSB_FLAG_SYSLOG |
-//                 DoutStreambuf<char>::DOUTSB_FLAG_STDOUT |
-//		 DoutStreambuf<char>::DOUTSB_FLAG_STDERR);
   _dout_lock.Unlock();
   derr << "using configuration: " << dos->config_to_str() << dendl;
 

@@ -17,7 +17,7 @@ Mutex _dout_lock("_dout_lock", false, false /* no lockdep */);
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
-void _dout_open_log()
+void _dout_open_log(bool print_version)
 {
   assert(_dout_need_open);
   assert(_dout_lock.is_locked());
@@ -30,8 +30,10 @@ void _dout_open_log()
     _dout = new std::ostream(_doss);
   }
 
-  *_dout << "ceph version " << VERSION << " (commit:"
-	 << STRINGIFY(CEPH_GIT_VER) << ")" << std::endl;
+  if (print_version) {
+    *_dout << "ceph version " << VERSION << " (commit:"
+	   << STRINGIFY(CEPH_GIT_VER) << ")" << std::endl;
+  }
   _dout_need_open = false;
 }
 
@@ -40,10 +42,9 @@ int dout_handle_daemonize()
   Mutex::Locker l(_dout_lock);
 
   if (_dout_need_open)
-       _dout_open_log();
+       _dout_open_log(true);
 
   assert(_doss);
-  _doss->handle_stdout_closed();
   _doss->handle_stderr_closed();
   return _doss->handle_pid_change();
 }

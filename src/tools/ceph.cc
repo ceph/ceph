@@ -133,6 +133,7 @@ int main(int argc, const char **argv)
 
   common_set_defaults(false);
   common_init(args, "ceph", true);
+  set_foreground_logging();
 
   vec_to_argv(args, argc, argv);
 

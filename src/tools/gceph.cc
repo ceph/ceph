@@ -78,6 +78,7 @@ int main(int argc, const char **argv)
 
   common_set_defaults(false);
   common_init(args, "cephtool", true);
+  set_foreground_logging();
 
   vec_to_argv(args, argc, argv);
 

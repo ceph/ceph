@@ -84,6 +84,7 @@ int main(int argc, char **argv)
 
   common_set_defaults(false);
   common_init(args, "rgw", true);
+  set_foreground_logging();
 
   const char *user_id = 0;
   const char *secret_key = 0;

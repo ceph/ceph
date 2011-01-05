@@ -42,6 +42,12 @@ extern void ceph_set_default_id(const char *id);
 
 struct EntityName;
 
+enum log_to_stderr_t {
+  LOG_TO_STDERR_NONE = 0,
+  LOG_TO_STDERR_SOME = 1,
+  LOG_TO_STDERR_ALL = 2,
+};
+
 struct md_config_t {
   char *type;
   char *id;
@@ -82,8 +88,8 @@ struct md_config_t {
   const char *log_sym_dir;
   int log_sym_history;
 
-  bool log_to_stdout;
-  bool log_to_stderr;
+  int log_to_stderr;
+
   bool log_to_syslog;
   bool log_per_instance;
   bool log_to_file;

@@ -94,6 +94,7 @@ int main(int argc, const char **argv)
 
   common_set_defaults(false);
   common_init(args, "rados", true);
+  set_foreground_logging();
 
   vector<const char*> nargs;
   bufferlist indata, outdata;

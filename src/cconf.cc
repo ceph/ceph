@@ -172,6 +172,7 @@ int main(int argc, const char **argv)
 
   common_set_defaults(false);
   common_init(nargs, type, false);
+  set_foreground_logging();
 
   if ((nargs.size() == 1) && (!strcmp(nargs[0], "-h"))) {
     usage();

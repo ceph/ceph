@@ -19,6 +19,40 @@
 #include "include/color.h"
 #include "tls.h"
 
+/* Set foreground logging
+ *
+ * Forces the process to log only to stderr, overriding whatever was in the ceph.conf.
+ *
+ * TODO: make this configurable by a command line switch or environment variable, if users want
+ * an unusual logging setup for their foreground process.
+ */
+void set_foreground_logging()
+{
+  free((void*)g_conf.log_file);
+  g_conf.log_file = NULL;
+
+  free((void*)g_conf.log_dir);
+  g_conf.log_dir = NULL;
+
+  free((void*)g_conf.log_sym_dir);
+  g_conf.log_sym_dir = NULL;
+
+  g_conf.log_sym_history = 0;
+
+  g_conf.log_to_stderr = LOG_TO_STDERR_ALL;
+
+  g_conf.log_to_syslog = false;
+
+  g_conf.log_per_instance = false;
+
+  g_conf.log_to_file = false;
+
+  if (_dout_need_open) {
+    Mutex::Locker l(_dout_lock);
+    _dout_open_log(false);
+  }
+}
+
 void common_set_defaults(bool daemon)
 {
   if (daemon) {

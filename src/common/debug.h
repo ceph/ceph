@@ -29,7 +29,7 @@ extern DoutStreambuf <char> *_doss;
 extern bool _dout_need_open;
 extern Mutex _dout_lock;
 
-extern void _dout_open_log();
+extern void _dout_open_log(bool print_version);
 
 extern int dout_handle_daemonize();
 
@@ -37,7 +37,7 @@ extern int dout_create_rank_symlink(int n);
 
 static inline void _dout_begin_line(signed int prio) {
   if (unlikely(_dout_need_open))
-    _dout_open_log();
+    _dout_open_log(true);
 
   // Put priority information into dout
   _doss->sputc(1);

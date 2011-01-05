@@ -253,8 +253,7 @@ DoutStreambuf<charT, traits>::overflow(DoutStreambuf<charT, traits>::int_type c)
 	flags &= ~DOUTSB_FLAG_STDOUT;
     }
     if (flags & DOUTSB_FLAG_STDERR) {
-      // Only write to stderr if the message is important enough.
-      if (prio_is_visible_on_stderr(prio)) {
+      if ((flags & DOUTSB_FLAG_STDERR_ALL) || (prio == -1)) {
 	if (safe_write(STDERR_FILENO, start, len))
 	  flags &= ~DOUTSB_FLAG_STDERR;
       }
@@ -284,13 +283,6 @@ void DoutStreambuf<charT, traits>::handle_stderr_closed()
 }
 
 template <typename charT, typename traits>
-void DoutStreambuf<charT, traits>::handle_stdout_closed()
-{
-  assert(_dout_lock.is_locked());
-  flags &= ~DOUTSB_FLAG_STDOUT;
-}
-
-template <typename charT, typename traits>
 void DoutStreambuf<charT, traits>::read_global_config()
 {
   assert(_dout_lock.is_locked());
@@ -305,15 +297,21 @@ void DoutStreambuf<charT, traits>::read_global_config()
     flags |= DOUTSB_FLAG_SYSLOG;
   }
 
-  if (g_conf.log_to_stdout) {
-    if (fd_is_open(STDOUT_FILENO)) {
-      flags |= DOUTSB_FLAG_STDOUT;
-    }
-  }
-
-  if (g_conf.log_to_stderr) {
-    if (fd_is_open(STDERR_FILENO)) {
-      flags |= DOUTSB_FLAG_STDERR;
+  if ((g_conf.log_to_stderr != LOG_TO_STDERR_NONE) &&
+       fd_is_open(STDERR_FILENO)) {
+    switch (g_conf.log_to_stderr) {
+      case LOG_TO_STDERR_SOME:
+	flags |= DOUTSB_FLAG_STDERR_SOME;
+	break;
+      case LOG_TO_STDERR_ALL:
+	flags |= DOUTSB_FLAG_STDERR_ALL;
+	break;
+      default:
+	ostringstream oss;
+	oss << "DoutStreambuf::read_global_config: can't understand "
+	    << "g_conf.log_to_stderr = " << g_conf.log_to_stderr << "\n";
+	primitive_log(oss.str());
+	break;
     }
   }
 
@@ -413,7 +411,6 @@ std::string DoutStreambuf<charT, traits>::config_to_str() const
 {
   assert(_dout_lock.is_locked());
   ostringstream oss;
-  oss << "g_conf.log_to_stdout = " << g_conf.log_to_stdout << "\n";
   oss << "g_conf.log_to_stderr = " << g_conf.log_to_stderr << "\n";
   oss << "g_conf.log_to_syslog = " << g_conf.log_to_syslog << "\n";
   oss << "g_conf.log_to_file = " << g_conf.log_to_file << "\n";

@@ -21,6 +21,7 @@
 #include "common/DoutStreambuf.h"
 #include "common/Logger.h"
 #include "common/BackTrace.h"
+#include "common/common_init.h"
 
 #include <fstream>
 #include <stdlib.h>
@@ -328,6 +329,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(log_dir, 0, OPT_STR, "/var/log/ceph"),
 	OPTION(log_sym_dir, 0, OPT_STR, 0),
 	OPTION(log_sym_history, 0, OPT_INT, 10),
+	OPTION(log_to_stderr, 0, OPT_INT, LOG_TO_STDERR_SOME),
 	OPTION(log_to_syslog, 0, OPT_BOOL, false),
 	OPTION(log_per_instance, 0, OPT_BOOL, false),
 	OPTION(log_to_file, 0, OPT_BOOL, true),
@@ -1133,15 +1135,13 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
   std::vector<const char *> nargs;
   bool conf_specified = false;
 
-  g_conf.log_to_stdout = false;
-  g_conf.log_to_stderr = true;
-
   if (!g_conf.id)
     g_conf.id = (char *)g_default_id;
   if (!g_conf.type)
     g_conf.type = (char *)"";
 
   bool isdaemon = g_conf.daemonize;
+  bool force_foreground_logging = false;
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("version", 'v')) {
@@ -1158,10 +1158,10 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
       g_conf.public_addr.parse(args[++i]);
     } else if (CONF_ARG_EQ("nodaemon", 'D')) {
       g_conf.daemonize = false;
-      g_conf.log_to_stdout = true;
-      g_conf.log_to_stderr = false;
+      force_foreground_logging = true;
     } else if (CONF_ARG_EQ("foreground", 'f')) {
       g_conf.daemonize = false;
+      force_foreground_logging = true;
     } else if (isdaemon && (CONF_ARG_EQ("id", 'i') || CONF_ARG_EQ("name", 'n'))) {
       CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
     } else if (!isdaemon && (CONF_ARG_EQ("id", 'I') || CONF_ARG_EQ("name", 'n'))) {
@@ -1232,6 +1232,10 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
   if (conf_specified && !read_conf) {
     cerr << "error reading config file(s) " << g_conf.conf << std::endl;
     exit(1);
+  }
+
+  if (force_foreground_logging) {
+    set_foreground_logging();
   }
 
   if (!cf)

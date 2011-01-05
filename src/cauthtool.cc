@@ -37,6 +37,7 @@ int main(int argc, const char **argv)
 
   common_set_defaults(false);
   common_init(args, "cauthtool", false);
+  set_foreground_logging();
 
   const char *me = argv[0];
 

@@ -45,6 +45,7 @@ int main(int argc, const char **argv, char *envp[])
 
   common_set_defaults(false);
   common_init(args, "csyn", true);
+  set_foreground_logging();
 
   parse_syn_options(args);   // for SyntheticClient
 

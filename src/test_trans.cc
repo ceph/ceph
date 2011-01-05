@@ -37,6 +37,7 @@ int main(int argc, const char **argv)
 
   common_set_defaults(false);
   common_init(args, NULL, false);
+  set_foreground_logging();
 
   // args
   if (args.size() < 2) return -1;
