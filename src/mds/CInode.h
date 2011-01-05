@@ -554,6 +554,7 @@ private:
   void store_parent(Context *fin);
   void _stored_parent(version_t v, Context *fin);
 
+  void build_backtrace(inode_backtrace_t& bt);
   void encode_parent_mutation(ObjectOperation& m);
 
   void encode_store(bufferlist& bl) {

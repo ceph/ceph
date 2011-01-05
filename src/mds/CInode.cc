@@ -990,6 +990,35 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
 // ------------------
 // parent dir
 
+void CInode::build_backtrace(inode_backtrace_t& bt)
+{
+  bt.ino = inode.ino;
+  bt.ancestors.clear();
+
+  CInode *in = this;
+  CDentry *pdn = get_parent_dn();
+  while (pdn) {
+    CInode *diri = pdn->get_dir()->get_inode();
+    bt.ancestors.push_back(inode_backpointer_t(diri->ino(), pdn->name, in->inode.version));
+    in = diri;
+    pdn = in->get_parent_dn();
+  }
+}
+
+void CInode::encode_parent_mutation(ObjectOperation& m)
+{
+  string path;
+  make_path_string(path);
+  m.setxattr("path", path);
+
+  inode_backtrace_t bt;
+  build_backtrace(bt);
+  
+  bufferlist parent;
+  ::encode(bt, parent);
+  m.setxattr("parent", parent);
+}
+
 struct C_Inode_StoredParent : public Context {
   CInode *in;
   version_t version;
@@ -999,28 +1028,6 @@ struct C_Inode_StoredParent : public Context {
     in->_stored_parent(version, fin);
   }
 };
-
-void CInode::encode_parent_mutation(ObjectOperation& m)
-{
-  string path;
-  make_path_string(path);
-  m.setxattr("path", path);
-
-  CDentry *pdn = get_parent_dn();
-  if (pdn) {
-    bufferlist parent;
-    __u8 v = 2;
-    ::encode(v, parent);
-    while (pdn) {
-      CInode *diri = pdn->get_dir()->get_inode();
-      ::encode(inode.version, parent);
-      ::encode(diri->ino(), parent);
-      ::encode(pdn->name, parent);
-      pdn = diri->get_parent_dn();
-    }
-    m.setxattr("parent", parent);
-  }
-}
 
 void CInode::store_parent(Context *fin)
 {
