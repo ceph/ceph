@@ -29,7 +29,7 @@ else
 fi
 echo component $component
 
-for dist in sid squeeze lenny
+for dist in sid squeeze lenny maverick lucid
 do
     dvers="$vers-$debsubver"
     [ "$dist" = "squeeze" ] && dvers="$dvers~bpo60+1"
