@@ -8833,6 +8833,9 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 
     resultfrags.push_back(f);
   }
+
+  if (g_conf.mds_debug_frag)
+    diri->verify_dirfrags();
 }
 
 

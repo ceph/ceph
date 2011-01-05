@@ -460,6 +460,19 @@ bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
   return all;
 }
 
+void CInode::verify_dirfrags()
+{
+  bool bad = false;
+  for (map<frag_t,CDir*>::iterator p = dirfrags.begin(); p != dirfrags.end(); ++p) {
+    if (!dirfragtree.is_leaf(p->first)) {
+      dout(0) << "have open dirfrag " << p->first << " but not leaf in " << dirfragtree
+	      << ": " << *p->second << dendl;
+      bad = true;
+    }
+  }
+  assert(!bad);
+}
+
 CDir *CInode::get_approx_dirfrag(frag_t fg)
 {
   CDir *dir = get_dirfrag(fg);
@@ -1293,6 +1306,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	    dirfragtree.force_to_leaf(p->first);
 	  }
       }
+      if (g_conf.mds_debug_frag)
+	verify_dirfrags();
     }
     break;
 

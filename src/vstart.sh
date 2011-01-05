@@ -264,6 +264,7 @@ EOF
 			cat <<EOF >> $conf
 [mds]
 $CMDSDEBUG
+        mds debug frag = true
 [osd]
         osd class tmp = out
         osd scrub load threshold = 5.0

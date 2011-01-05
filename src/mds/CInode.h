@@ -379,6 +379,8 @@ public:
   void close_dirfrags();
   bool has_subtree_root_dirfrag();
 
+  void verify_dirfrags();
+
   void get_stickydirs();
   void put_stickydirs();  
 
