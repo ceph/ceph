@@ -82,7 +82,7 @@ int main(int argc, char **argv)
   argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
 
-  common_set_defaults(true);
+  common_set_defaults(false);
   common_init(args, "rgw", true);
 
   const char *user_id = 0;
