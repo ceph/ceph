@@ -34,6 +34,8 @@
 
 #include "Watch.h"
 
+#include "mds/inode_backtrace.h" // Ugh
+
 #include "config.h"
 
 #define DOUT_SUBSYS osd
@@ -140,13 +142,37 @@ void ReplicatedPG::wait_for_degraded_object(const sobject_t& soid, Message *m)
   waiting_for_degraded_object[soid].push_back(m);
 }
 
-bool ReplicatedPG::pgls_filter(sobject_t& sobj, bufferlist::iterator& bp)
+bool ReplicatedPG::pgls_filter_find_parent(bufferlist& bl, inodeno_t search_ino, bufferlist& outdata)
 {
-  string xattr, val;
-  ::decode(xattr, bp);
-  ::decode(val, bp);
+  bufferlist::iterator iter = bl.begin();
+  __u8 v;
 
-  dout(0) << "pgls_filter xattr=" << xattr << " val=" << val << dendl;
+  ::decode(v, iter);
+  if (v < 3)
+    return false;
+
+  vector<inode_backpointer_t> ancestors;
+  inodeno_t ino;
+  ::decode(ino, iter);
+  ::decode(ancestors, iter);
+
+  vector<inode_backpointer_t>::iterator vi;
+  for (vi = ancestors.begin(); vi != ancestors.end(); ++vi) {
+    if ( vi->dirino == search_ino) {
+      ::encode(*vi, outdata);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool ReplicatedPG::pgls_filter(sobject_t& sobj, bufferlist::iterator& bp,
+                               bufferlist& outdata)
+{
+  string type, xattr;
+  ::decode(type, bp);
+  ::decode(xattr, bp);
 
   bufferlist bl;
 
@@ -154,11 +180,21 @@ bool ReplicatedPG::pgls_filter(sobject_t& sobj, bufferlist::iterator& bp)
   if (ret < 0)
     return false;
 
-  if (val.size() != bl.length())
-    return false;
+  if (type.compare("find_parent") == 0) {
+    inodeno_t search_ino;
+    ::decode(search_ino, bp);
+    return pgls_filter_find_parent(bl, search_ino, outdata); 
+  } else {
+    string val;
+    ::decode(val, bp);
+    dout(10) << "pgls_filter xattr=" << xattr << " val=" << val << dendl;
 
-  if (memcmp(val.c_str(), bl.c_str(), val.size()))
-    return false;
+    if (val.size() != bl.length())
+      return false;
+
+    if (memcmp(val.c_str(), bl.c_str(), val.size()))
+      return false;
+  }
 
   return true;
 }
@@ -173,6 +209,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
   int result = 0;
   string cname, mname;
   bool filter = false;
+  bufferlist filter_out;
 
   snapid_t snapid = op->get_snapid();
 
@@ -230,13 +267,15 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 		  continue;
 	      }
 	    }
-	    if (filter) {
-	      keep = pgls_filter(*iter, bp);
-            }
+	    if (filter)
+	      keep = pgls_filter(*iter, bp, filter_out);
+
             if (keep)
 	      response.entries.push_back(iter->oid);
           }
 	  ::encode(response, outdata);
+          if (filter)
+	    ::encode(filter_out, outdata);
         }
 	dout(10) << " pgls result=" << result << " outdata.length()=" << outdata.length() << dendl;
       }

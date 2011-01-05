@@ -612,7 +612,8 @@ protected:
 		   bufferlist::iterator& bp,
 		   ClassHandler::ClassMethod **pmethod);
 
-  bool pgls_filter(sobject_t& sobj, bufferlist::iterator& bp);
+  bool pgls_filter(sobject_t& sobj, bufferlist::iterator& bp, bufferlist& outdata);
+  bool pgls_filter_find_parent(bufferlist& bl, inodeno_t search_ino, bufferlist& outdata);
 
 public:
   ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid, const sobject_t& ioid) : 
