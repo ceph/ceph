@@ -1498,7 +1498,7 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
  * @param want - min version i want committed
  * @param c - callback for completion
  */
-void CDir::commit(version_t want, Context *c)
+void CDir::commit(version_t want, Context *c, bool ignore_authpinnability)
 {
   dout(10) << "commit want " << want << " on " << *this << dendl;
   if (want == 0) want = get_version();
@@ -1507,7 +1507,7 @@ void CDir::commit(version_t want, Context *c)
   assert(want <= get_version() || get_version() == 0);    // can't commit the future
   assert(want > committed_version); // the caller is stupid
   assert(is_auth());
-  assert(can_auth_pin());
+  assert(ignore_authpinnability || can_auth_pin());
 
   // note: queue up a noop if necessary, so that we always
   // get an auth_pin.

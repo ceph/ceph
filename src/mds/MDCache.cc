@@ -9090,7 +9090,7 @@ void MDCache::fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits)
     CDir *dir = *p;
     dout(10) << " result frag " << *dir << dendl;
     dir->state_set(CDir::STATE_FRAGMENTING);
-    dir->commit(0, gather->new_sub());
+    dir->commit(0, gather->new_sub(), true);  // ignore authpinnability
     dir->_freeze_dir();
   }  
 }

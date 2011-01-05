@@ -471,7 +471,7 @@ private:
   map<version_t, list<Context*> > waiting_for_commit;
 
   void commit_to(version_t want);
-  void commit(version_t want, Context *c);
+  void commit(version_t want, Context *c, bool ignore_authpinnability=false);
   void _commit(version_t want);
   void _commit_full(ObjectOperation& m, const set<snapid_t> *snaps);
   void _commit_partial(ObjectOperation& m, const set<snapid_t> *snaps);
