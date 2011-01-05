@@ -8674,8 +8674,7 @@ void MDCache::adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
   list<CDir*> srcfrags;
   diri->get_dirfrags_under(basefrag, srcfrags);
 
-  if (!srcfrags.empty())
-    adjust_dir_fragments(diri, srcfrags, basefrag, bits, resultfrags, waiters, replay);
+  adjust_dir_fragments(diri, srcfrags, basefrag, bits, resultfrags, waiters, replay);
 }
 
 CDir *MDCache::force_dir_fragment(CInode *diri, frag_t fg)
@@ -8741,6 +8740,9 @@ void MDCache::adjust_dir_fragments(CInode *diri,
   if (bits > 0)
     diri->dirfragtree.split(basefrag, bits);
   dout(10) << " new fragtree is " << diri->dirfragtree << dendl;
+
+  if (srcfrags.empty())
+    return;
 
   // split
   CDir *parent_dir = diri->get_parent_dir();
