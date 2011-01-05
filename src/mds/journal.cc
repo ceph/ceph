@@ -983,12 +983,29 @@ void ESubtreeMap::replay(MDS *mds)
 
 void EFragment::replay(MDS *mds)
 {
-  dout(10) << "EFragment.replay " << ino << " " << basefrag << " by " << bits << dendl;
+  dout(10) << "EFragment.replay " << op_name(op) << " " << ino << " " << basefrag << " by " << bits << dendl;
   CInode *in = mds->mdcache->get_inode(ino);
   if (in) {
     list<CDir*> resultfrags;
     list<Context*> waiters;
-    mds->mdcache->adjust_dir_fragments(in, basefrag, bits, resultfrags, waiters, true);
+
+    pair<dirfrag_t,int> desc(dirfrag_t(ino,basefrag), bits);
+
+    switch (op) {
+    case OP_PREPARE:
+      mds->mdcache->uncommitted_fragments.insert(desc);
+    case OP_ONESHOT:
+      mds->mdcache->adjust_dir_fragments(in, basefrag, bits, resultfrags, waiters, true);
+      break;
+
+    case OP_COMMIT:
+      mds->mdcache->uncommitted_fragments.erase(desc);
+      break;
+
+    case OP_ROLLBACK:
+      mds->mdcache->adjust_dir_fragments(in, basefrag, -bits, resultfrags, waiters, true);
+      break;
+    }
   }
   metablob.replay(mds, _segment);
 }

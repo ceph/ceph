@@ -353,6 +353,7 @@ class MDS : public Dispatcher {
   void creating_done();
   void starting_done();
   void replay_done();
+  void reopen_log();
 
   void resolve_start();
   void resolve_done();

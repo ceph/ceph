@@ -784,7 +784,7 @@ void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
   for (list<CDir*>::iterator p = subs.begin(); p != subs.end(); p++) {
     CDir *dir = *p;
     dout(10) << " subfrag " << dir->get_frag() << " " << *dir << dendl;
-    assert(!dir->is_auth() || dir->is_complete());
+    assert(!dir->is_auth() || dir->is_complete() || replay);
     
     // steal dentries
     while (!dir->items.empty()) 
