@@ -57,27 +57,33 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
 }
 
 // generic macros
-#define generic_dout(x) do { if ((x) <= g_conf.debug) {\
-  _dout_begin_line(x); *_dout
-
-#define pdout(x,p) do { if ((x) <= (p)) {\
-  _dout_begin_line(x); *_dout
-
 #define debug_DOUT_SUBSYS debug
 #define dout_prefix *_dout
 #define DOUT_CONDVAR(x) g_conf.debug_ ## x
 #define XDOUT_CONDVAR(x) DOUT_CONDVAR(x)
 #define DOUT_COND(l) l <= XDOUT_CONDVAR(DOUT_SUBSYS)
 
-// Declare dout().
-// The array declaration will trigger a compiler error if 'l' is out of range
-#define dout(l) do { if (DOUT_COND(l)) {\
+// The array declaration will trigger a compiler error if 'l' is
+// out of range
+#define dout_impl(v) \
   if (0) {\
-    char __array[((l >= -1) && (l <= 200)) ? 0 : -1] __attribute__((unused)); \
+    char __array[((v >= -1) && (v <= 200)) ? 0 : -1] __attribute__((unused)); \
   }\
   Mutex::Locker _dout_locker(_dout_lock);\
-  _dout_begin_line(l); \
-  dout_prefix
+  _dout_begin_line(v); \
+
+#define dout(v) \
+  do { if (DOUT_COND(v)) {\
+    dout_impl(v) \
+    dout_prefix
+
+#define pdout(v, p) \
+  do { if ((v) <= (p)) {\
+    dout_impl(v) \
+    *_dout
+
+#define generic_dout(v) \
+  pdout(v, g_conf.debug)
 
 #define dendl std::endl; } } while (0)
 
