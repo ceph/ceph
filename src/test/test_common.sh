@@ -108,7 +108,7 @@ poll_cmd() {
 
         t=0
         while [ $t -lt $total_time ]; do
-                $command | grep $search_str
+                $command | grep "$search_str"
                 [ $? -eq 0 ] && return 1
                 sleep $polling_interval
                 t=$(($t+$polling_interval))

@@ -10,12 +10,13 @@ source "`dirname $0`/test_common.sh"
 # Functions
 setup() {
         export CEPH_NUM_OSD=$1
+        vstart_config=$2
 
         # Start ceph
         ./stop.sh
 
         # set recovery start to a really long time to ensure that we don't start recovery
-        ./vstart.sh -d -n -o 'osd recovery delay start = 10000' || die "vstart failed"
+        ./vstart.sh -d -n -o "$vstart_config" || die "vstart failed"
 }
 
 recovery1_impl() {
@@ -57,7 +58,7 @@ recovery1_impl() {
 }
 
 recovery1() {
-        setup 2
+        setup 2 'osd recovery delay start = 10000'
         recovery1_impl
 }
 
@@ -118,13 +119,34 @@ radostool instance to finish"
 }
 
 lost1() {
-        setup 2
+        setup 2 'osd recovery delay start = 10000'
         lost1_impl 0
 }
 
 lost2() {
-        setup 2
+        setup 2 'osd recovery delay start = 10000'
         lost1_impl 1
+}
+
+all_osds_die_impl() {
+        poll_cmd "./ceph osd stat -o -" '3 up, 3 in' 20 240
+        [ $? -eq 1 ] || die "didn't start 3 osds"
+
+        stop_osd 0
+        stop_osd 1
+        stop_osd 2
+
+	# wait for the MOSDPGStat timeout
+        poll_cmd "./ceph osd stat -o -" '0 up' 20 240
+        [ $? -eq 1 ] || die "all osds weren't marked as down"
+}
+
+all_osds_die() {
+	setup 3 'osd mon report interval max = 60
+	osd mon report interval min = 3
+	mon osd report timeout = 60'
+
+	all_osds_die_impl
 }
 
 run() {
@@ -133,6 +155,8 @@ run() {
         lost1 || die "test failed"
 
         lost2 || die "test failed"
+
+        all_osds_die || die "test failed"
 }
 
 $@
