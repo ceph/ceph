@@ -1223,15 +1223,16 @@ void MDS::replay_done()
     dout(2) << "i am not alone, moving to state resolve" << dendl;
     request_state(MDSMap::STATE_RESOLVE);
   }
-
-  // start new segment
-  mdlog->start_new_segment(0);
 }
 
 
 void MDS::resolve_start()
 {
   dout(1) << "resolve_start" << dendl;
+
+  // start new segment
+  mdlog->start_new_segment(0);
+
   mdcache->resolve_start();
 }
 void MDS::resolve_done()
@@ -1243,6 +1244,10 @@ void MDS::resolve_done()
 void MDS::reconnect_start()
 {
   dout(1) << "reconnect_start" << dendl;
+
+  if (last_state == MDSMap::STATE_REPLAY)
+    mdlog->start_new_segment(0);
+
   server->reconnect_clients();
   finish_contexts(waiting_for_reconnect);
 }

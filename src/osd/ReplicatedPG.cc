@@ -4343,7 +4343,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
   // traverse in reverse order.
   sobject_t head;
   SnapSet snapset;
-  unsigned curclone = 0;
+  vector<snapid_t>::reverse_iterator curclone;
 
   pg_stat_t stat;
 
@@ -4379,7 +4379,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
       if (snapset.clones.empty())
 	head = sobject_t();  // no clones.
       else {
-	curclone = snapset.clones.size()-1;
+	curclone = snapset.clones.rbegin();
 	head = p->first;
       }
 
@@ -4429,18 +4429,19 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 
       stat.num_object_clones++;
       
-      assert(soid.snap == snapset.clones[curclone]);
+      assert(soid.snap == *curclone);
 
-      assert(p->second.size == snapset.clone_size[curclone]);
+      assert(p->second.size == snapset.clone_size[*curclone]);
 
       // verify overlap?
       // ...
 
       // what's next?
-      if (curclone == 0)
+      if (curclone != snapset.clones.rend())
+	curclone++;
+
+      if (curclone == snapset.clones.rend())
 	head = sobject_t();
-      else
-	curclone--;
 
     } else {
       // it's unversioned.

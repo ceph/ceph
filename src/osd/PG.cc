@@ -1557,34 +1557,53 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
   }
 
 
-  // -- do i need to generate backlog for any of my peers?
-  if (oldest_update < log.tail && !log.backlog) {
-    dout(10) << "must generate backlog for some peers, my tail " 
-             << log.tail << " > oldest_update " << oldest_update
-             << dendl;
-    osd->queue_generate_backlog(this);
-    return;
-  }
-
-  // do i need a backlog for an up peer excluded from acting?
-  bool need_backlog = false;
-  for (unsigned i=0; i<up.size(); i++) {
-    int o = up[i];
-    if (o == osd->whoami || is_acting(o))
-      continue;
-    Info& pi = peer_info[o];
-    if (pi.last_update < log.tail && !log.backlog) {
-      dout(10) << "must generate backlog for !acting peer osd" << o
-	       << " whose last_update " << pi.last_update << " < my log.tail " << log.tail << dendl;
-      need_backlog = true;
+  // -- do i need to generate backlog?
+  if (!log.backlog) {
+    if (oldest_update < log.tail) {
+      dout(10) << "must generate backlog for some peers, my tail " 
+	       << log.tail << " > oldest_update " << oldest_update
+	       << dendl;
+      osd->queue_generate_backlog(this);
+      return;
     }
-  }
-  if (need_backlog)
-    osd->queue_generate_backlog(this);
 
-  // do we need to wait for our backlog?
-  if (info.last_complete < log.tail && !log.backlog)
-    return;
+    // do i need a backlog due to mis-trimmed log?  (compensate for past(!) bugs)
+    if (info.last_complete < log.tail) {
+      dout(10) << "must generate backlog because my last_complete " << info.last_complete
+	       << " < log.tail " << log.tail << " and no backlog" << dendl;
+      osd->queue_generate_backlog(this);
+      return;
+    }
+    for (unsigned i=0; i<acting.size(); i++) {
+      int o = acting[i];
+      Info& pi = peer_info[o];
+      if (pi.last_complete < pi.log_tail && !pi.log_backlog &&
+	  pi.last_complete < log.tail) {
+	dout(10) << "must generate backlog for replica peer osd" << o
+		 << " who has a last_complete " << pi.last_complete
+		 << " < their log.tail " << pi.log_tail << " and no backlog" << dendl;
+	osd->queue_generate_backlog(this);
+	return;
+      }
+    }
+
+    // do i need a backlog for an up peer excluded from acting?
+    bool need_backlog = false;
+    for (unsigned i=0; i<up.size(); i++) {
+      int o = up[i];
+      if (o == osd->whoami || is_acting(o))
+	continue;
+      Info& pi = peer_info[o];
+      if (pi.last_update < log.tail) {
+	dout(10) << "must generate backlog for up but !acting peer osd" << o
+		 << " whose last_update " << pi.last_update
+		 << " < my log.tail " << log.tail << dendl;
+	need_backlog = true;
+      }
+    }
+    if (need_backlog)
+      osd->queue_generate_backlog(this);
+  }
 
 
   /** COLLECT MISSING+LOG FROM PEERS **********/
@@ -1840,8 +1859,12 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       PG::Info& pi = peer_info[peer];
 
       MOSDPGLog *m = 0;
-      
-      if (pi.last_update == info.last_update) {
+
+      dout(10) << "activate peer osd" << peer << " " << pi << dendl;
+
+      bool need_old_log_entries = pi.log_tail > pi.last_complete && !pi.log_backlog;
+
+      if (pi.last_update == info.last_update && !need_old_log_entries) {
         // empty log
 	if (activator_map) {
 	  dout(10) << "activate peer osd" << peer << " is up to date, queueing in pending_activators" << dendl;
@@ -1855,7 +1878,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       } 
       else {
 	m = new MOSDPGLog(osd->osdmap->get_epoch(), info);
-	if (pi.log_tail > pi.last_complete && !pi.log_backlog) {
+	if (need_old_log_entries) {
 	  // the replica's tail is after it's last_complete and it has no backlog.
 	  // ick, this shouldn't normally happen.  but we can compensate!
 	  dout(10) << "activate peer osd" << peer << " has last_complete < log tail and no backlog, compensating" << dendl;
