@@ -52,6 +52,11 @@ int dout_handle_daemonize()
 int dout_create_rank_symlink(int n)
 {
   Mutex::Locker l(_dout_lock);
+
+  if (_dout_need_open)
+    _dout_open_log(true);
+
+  assert(_doss);
   return _doss->create_rank_symlink(n);
 }
 
