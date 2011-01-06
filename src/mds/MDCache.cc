@@ -8972,7 +8972,7 @@ void MDCache::fragment_freeze_dirs(list<CDir*>& dirs, C_Gather *gather)
 
 class C_MDC_FragmentMarking : public Context {
   MDCache *mdcache;
-  list<CDir*>& dirs;
+  list<CDir*> dirs;
 public:
   C_MDC_FragmentMarking(MDCache *m, list<CDir*>& d) : mdcache(m), dirs(d) {}
   virtual void finish(int r) {
