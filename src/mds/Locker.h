@@ -124,6 +124,10 @@ public:
   bool rdlock_try(SimpleLock *lock, client_t client, Context *c);
   bool rdlock_start(SimpleLock *lock, MDRequest *mut, bool as_anon=false);
   void rdlock_finish(SimpleLock *lock, Mutation *mut);
+  bool can_rdlock_set(set<SimpleLock*>& locks);
+  bool rdlock_try_set(set<SimpleLock*>& locks);
+  void rdlock_take_set(set<SimpleLock*>& locks);
+  void rdlock_finish_set(set<SimpleLock*>& locks);
 
   void wrlock_force(SimpleLock *lock, Mutation *mut);
   bool wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait=false);
@@ -147,10 +151,6 @@ protected:
   void simple_excl(SimpleLock *lock, bool *need_issue=0);
   void simple_xlock(SimpleLock *lock);
 
-public:
-  bool dentry_can_rdlock_trace(vector<CDentry*>& trace);
-  void dentry_anon_rdlock_trace_start(vector<CDentry*>& trace);
-  void dentry_anon_rdlock_trace_finish(vector<CDentry*>& trace);
 
   // scatter
 public:

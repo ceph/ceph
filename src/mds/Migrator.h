@@ -183,6 +183,8 @@ public:
     export_queue.clear();
   }
   
+  void get_export_lock_set(CDir *dir, set<SimpleLock*>& locks);
+
   void encode_export_inode(CInode *in, bufferlist& bl, 
 			   map<client_t,entity_inst_t>& exported_client_map);
   void encode_export_inode_caps(CInode *in, bufferlist& bl,

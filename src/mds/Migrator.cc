@@ -544,6 +544,32 @@ public:
 };
 
 
+void Migrator::get_export_lock_set(CDir *dir, set<SimpleLock*>& locks)
+{
+  // path
+  vector<CDentry*> trace;
+  cache->make_trace(trace, dir->inode);
+  for (vector<CDentry*>::iterator it = trace.begin();
+       it != trace.end();
+       it++)
+    locks.insert(&(*it)->lock);
+
+  // bound dftlocks:
+  // NOTE: We need to take an rdlock on bounding dirfrags during
+  //  migration for a rather irritating reason: when we export the
+  //  bound inode, we need to send scatterlock state for the dirfrags
+  //  as well, so that the new auth also gets the correct info.  If we
+  //  race with a refragment, this info is useless, as we can't
+  //  redivvy it up.  And it's needed for the scatterlocks to work
+  //  properly: when the auth is in a sync/lock state it keeps each
+  //  dirfrag's portion in the local (auth OR replica) dirfrag.
+  set<CDir*> wouldbe_bounds;
+  cache->get_wouldbe_subtree_bounds(dir, wouldbe_bounds);
+  for (set<CDir*>::iterator p = wouldbe_bounds.begin(); p != wouldbe_bounds.end(); ++p)
+    locks.insert(&(*p)->get_inode()->dirfragtreelock);
+}
+
+
 /** export_dir(dir, dest)
  * public method to initiate an export.
  * will fail if the directory is freezing, frozen, unpinnable, or root. 
@@ -580,11 +606,11 @@ void Migrator::export_dir(CDir *dir, int dest)
     return;
   }
   
-  // pin path?
-  vector<CDentry*> trace;
-  cache->make_trace(trace, dir->inode);
-  if (!mds->locker->dentry_can_rdlock_trace(trace)) {
-    dout(7) << "export_dir couldn't pin path, failing." << dendl;
+  // locks?
+  set<SimpleLock*> locks;
+  get_export_lock_set(dir, locks);
+  if (!mds->locker->rdlock_try_set(locks)) {
+    dout(7) << "export_dir can't rdlock needed locks, failing." << dendl;
     return;
   }
 
@@ -645,16 +671,13 @@ void Migrator::export_frozen(CDir *dir)
   assert(dir->get_cum_auth_pins() == 0);
 
   int dest = export_peer[dir];
-
-    // ok, try to grab all my locks.
-  
-  // pin path?
-  vector<CDentry*> trace;
-  cache->make_trace(trace, dir->inode);
-
   CInode *diri = dir->inode;
-  if (!mds->locker->dentry_can_rdlock_trace(trace)) {
-    dout(7) << "export_dir couldn't rdlock path or rd|wrlock parent inode file+nest+dftlock, failing. " 
+
+  // ok, try to grab all my locks.
+  set<SimpleLock*> locks;
+  get_export_lock_set(dir, locks);
+  if (!mds->locker->can_rdlock_set(locks)) {
+    dout(7) << "export_dir couldn't rdlock all needed locks, failing. " 
 	    << *diri << dendl;
 
     // .. unwind ..
@@ -669,10 +692,7 @@ void Migrator::export_frozen(CDir *dir)
     mds->send_message_mds(new MExportDirCancel(dir->dirfrag()), dest);
     return;
   }
-
-  dout(10) << " taking locks on path, parent inode scatterlocks" << dendl;
-  // rdlock path
-  mds->locker->dentry_anon_rdlock_trace_start(trace);
+  mds->locker->rdlock_take_set(locks);
   
   cache->show_subtrees();
 
@@ -1364,10 +1384,9 @@ void Migrator::export_unlock(CDir *dir)
 {
   dout(10) << "export_unlock " << *dir << dendl;
 
-  // unpin the path
-  vector<CDentry*> trace;
-  cache->make_trace(trace, dir->inode);
-  mds->locker->dentry_anon_rdlock_trace_finish(trace);
+  set<SimpleLock*> locks;
+  get_export_lock_set(dir, locks);
+  mds->locker->rdlock_finish_set(locks);
 
   list<Context*> ls;
   mds->queue_waiters(ls);

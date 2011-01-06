@@ -813,9 +813,10 @@ bool Locker::rdlock_try(SimpleLock *lock, client_t client, Context *con)
     return true;
 
   // wait!
-  dout(7) << "rdlock_try waiting on " << *lock << " on " << *lock->get_parent() << dendl;
-  if (con)
+  if (con) {
+    dout(7) << "rdlock_try waiting on " << *lock << " on " << *lock->get_parent() << dendl;
     lock->add_waiter(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_RD, con);
+  }
   return false;
 }
 
@@ -908,6 +909,42 @@ void Locker::rdlock_finish(SimpleLock *lock, Mutation *mut)
   }
 }
 
+
+bool Locker::can_rdlock_set(set<SimpleLock*>& locks)
+{
+  dout(10) << "can_rdlock_set " << locks << dendl;
+  for (set<SimpleLock*>::iterator p = locks.begin(); p != locks.end(); ++p)
+    if (!(*p)->can_rdlock(-1)) {
+      dout(10) << "can_rdlock_set can't rdlock " << *p << " on " << *(*p)->get_parent() << dendl;
+      return false;
+    }
+  return true;
+}
+
+bool Locker::rdlock_try_set(set<SimpleLock*>& locks)
+{
+  dout(10) << "rdlock_try_set " << locks << dendl;
+  for (set<SimpleLock*>::iterator p = locks.begin(); p != locks.end(); ++p)
+    if (!rdlock_try(*p, -1, NULL)) {
+      dout(10) << "rdlock_try_set can't rdlock " << *p << " on " << *(*p)->get_parent() << dendl;
+      return false;
+    }
+  return true;
+}
+
+void Locker::rdlock_take_set(set<SimpleLock*>& locks)
+{
+  dout(10) << "rdlock_take_set " << locks << dendl;
+  for (set<SimpleLock*>::iterator p = locks.begin(); p != locks.end(); ++p)
+    (*p)->get_rdlock();
+}
+
+void Locker::rdlock_finish_set(set<SimpleLock*>& locks)
+{
+  dout(10) << "rdlock_finish_set " << locks << dendl;
+  for (set<SimpleLock*>::iterator p = locks.begin(); p != locks.end(); ++p)
+    rdlock_finish(*p, 0);
+}
 
 
 // ------------------
@@ -3184,51 +3221,6 @@ void Locker::simple_xlock(SimpleLock *lock)
 }
 
 
-
-
-// dentry specific helpers
-
-/** dentry_can_rdlock_trace
- * see if we can _anonymously_ rdlock an entire trace.  
- * if not, and req is specified, wait and retry that message.
- */
-bool Locker::dentry_can_rdlock_trace(vector<CDentry*>& trace) 
-{
-  // verify dentries are rdlockable.
-  // we do this because
-  // - we're being less aggressive about locks acquisition, and
-  // - we're not acquiring the locks in order!
-  for (vector<CDentry*>::iterator it = trace.begin();
-       it != trace.end();
-       it++) {
-    CDentry *dn = *it;
-    if (!dn->lock.can_rdlock(-1)) {
-      dout(10) << "can_rdlock_trace can't rdlock " << *dn << dendl;
-      return false;
-    }
-  }
-  return true;
-}
-
-void Locker::dentry_anon_rdlock_trace_start(vector<CDentry*>& trace)
-{
-  // grab dentry rdlocks
-  for (vector<CDentry*>::iterator it = trace.begin();
-       it != trace.end();
-       it++) {
-    dout(10) << "dentry_anon_rdlock_trace_start rdlocking " << (*it)->lock << " " << **it << dendl;
-    (*it)->lock.get_rdlock();
-  }
-}
-
-
-void Locker::dentry_anon_rdlock_trace_finish(vector<CDentry*>& trace)
-{
-  for (vector<CDentry*>::iterator it = trace.begin();
-       it != trace.end();
-       it++) 
-    rdlock_finish(&(*it)->lock, 0);
-}
 
 
 
