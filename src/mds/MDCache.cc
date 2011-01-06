@@ -37,7 +37,7 @@
 
 #include "common/Logger.h"
 #include "common/MemoryModel.h"
-
+#include "osdc/Journaler.h"
 #include "osdc/Filer.h"
 
 #include "events/ESubtreeMap.h"
@@ -662,7 +662,7 @@ void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth, bool do_eval)
   dout(7) << "adjust_subtree_auth " << dir->get_dir_auth() << " -> " << auth
 	  << " on " << *dir << dendl;
 
-  if (mds->is_replay() || mds->is_resolve())
+  if (mds->is_any_replay() || mds->is_resolve())
     do_eval = false;
 
   show_subtrees();
@@ -766,7 +766,7 @@ void MDCache::try_subtree_merge_at(CDir *dir)
   assert(subtrees.count(dir));
 
   bool do_eval = true;
-  if (mds->is_replay() || mds->is_resolve())
+  if (mds->is_any_replay() || mds->is_resolve())
     do_eval = false;
 
   // merge with parent?
@@ -2179,6 +2179,7 @@ ESubtreeMap *MDCache::create_subtree_map()
   }
 
   //le->metablob.print(cout);
+  le->expire_pos = mds->mdlog->journaler->get_expire_pos();
   return le;
 }
 
@@ -4274,7 +4275,7 @@ void MDCache::clean_open_file_lists()
 {
   dout(10) << "clean_open_file_lists" << dendl;
   
-  for (map<loff_t,LogSegment*>::iterator p = mds->mdlog->segments.begin();
+  for (map<uint64_t,LogSegment*>::iterator p = mds->mdlog->segments.begin();
        p != mds->mdlog->segments.end();
        p++) {
     LogSegment *ls = p->second;
@@ -4971,7 +4972,7 @@ void MDCache::add_recovered_truncate(CInode *in, LogSegment *ls)
 void MDCache::start_recovered_truncates()
 {
   dout(10) << "start_recovered_truncates" << dendl;
-  for (map<loff_t,LogSegment*>::iterator p = mds->mdlog->segments.begin();
+  for (map<uint64_t,LogSegment*>::iterator p = mds->mdlog->segments.begin();
        p != mds->mdlog->segments.end();
        p++) {
     LogSegment *ls = p->second;
@@ -5007,12 +5008,25 @@ bool MDCache::trim(int max)
 
   map<int, MCacheExpire*> expiremap;
 
+  bool is_standby_replay = mds->is_standby_replay();
+  int unexpirable = 0;
+  list<CDentry*> unexpirables;
   // trim dentries from the LRU
-  while (lru.lru_get_size() > (unsigned)max) {
+  while (lru.lru_get_size() + unexpirable > (unsigned)max) {
     CDentry *dn = (CDentry*)lru.lru_expire();
     if (!dn) break;
+    if (is_standby_replay && dn->get_linkage() &&
+        dn->get_linkage()->inode->item_open_file.is_on_list()) {
+      unexpirables.push_back(dn);
+      ++unexpirable;
+      continue;
+    }
     trim_dentry(dn, expiremap);
   }
+  for(list<CDentry*>::iterator i = unexpirables.begin();
+      i != unexpirables.end();
+      ++i)
+    lru.lru_insert_mid(*i);
 
   // trim root?
   if (max == 0 && root) {

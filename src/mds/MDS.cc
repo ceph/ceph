@@ -23,6 +23,7 @@
 #include "osd/OSDMap.h"
 #include "osdc/Objecter.h"
 #include "osdc/Filer.h"
+#include "osdc/Journaler.h"
 
 #include "MDSMap.h"
 
@@ -81,6 +82,8 @@ MDS::MDS(const char *n, Messenger *m, MonClient *mc) :
   name(n),
   whoami(-1), incarnation(0),
   standby_for_rank(-1),
+  standby_type(0),
+  continue_replay(false),
   messenger(m),
   monc(mc),
   clog(messenger, &mc->monmap, mc, LogClient::NO_FLAGS),
@@ -264,11 +267,13 @@ void MDS::open_logger()
 
   // open loggers
   char name[80];
-  snprintf(name, sizeof(name), "mds.%s.log", g_conf.id);
+  snprintf(name, sizeof(name), "mds.%s.%llu.log", g_conf.id,
+           (unsigned long long) monc->get_global_id());
   logger = new Logger(name, (LogType*)&mds_logtype);
   logger_add(logger);
 
-  snprintf(name, sizeof(name), "mds.%s.mem.log", g_conf.id);
+  snprintf(name, sizeof(name), "mds.%s.%llu.mem.log", g_conf.id,
+           (unsigned long long) monc->get_global_id());
   mlogger = new Logger(name, (LogType*)&mdm_logtype);
   logger_add(mlogger);
 
@@ -456,8 +461,12 @@ int MDS::init(int wanted_state)
 
   // starting beacon.  this will induce an MDSMap from the monitor
   want_state = wanted_state;
-  if (wanted_state == MDSMap::STATE_STANDBY && g_conf.id)
+  if (g_conf.id && (wanted_state==MDSMap::STATE_STANDBY_REPLAY ||
+                    wanted_state==MDSMap::STATE_ONESHOT_REPLAY)) {
     standby_for_rank = strtol(g_conf.id, NULL, 0);
+    want_state = MDSMap::STATE_STANDBY;
+    standby_type = wanted_state;
+  }
   beacon_start();
   whoami = -1;
   messenger->set_myname(entity_name_t::MDS(whoami));
@@ -831,25 +840,32 @@ void MDS::handle_mds_map(MMDSMap *m)
     dout(1) << "handle_mds_map standby" << dendl;
 
     if (standby_for_rank >= 0)
-      request_state(MDSMap::STATE_STANDBY_REPLAY);
+      request_state(standby_type);
 
     goto out;
   }
 
   if (whoami < 0) {
-    if (want_state == MDSMap::STATE_STANDBY) {
-      dout(10) << "dropped out of mdsmap, try to re-add myself" << dendl;
-      want_state = state = MDSMap::STATE_BOOT;
+    if (state == MDSMap::STATE_STANDBY_REPLAY ||
+        state == MDSMap::STATE_ONESHOT_REPLAY) {
+      // fill in whoami from standby-for-rank. If we let this be changed
+      // the logic used to set it here will need to be adjusted.
+      whoami = mdsmap->get_mds_info_gid(monc->get_global_id()).standby_for_rank;
+    } else {
+      if (want_state == MDSMap::STATE_STANDBY) {
+        dout(10) << "dropped out of mdsmap, try to re-add myself" << dendl;
+        want_state = state = MDSMap::STATE_BOOT;
+        goto out;
+      }
+      if (want_state == MDSMap::STATE_BOOT) {
+        dout(10) << "not in map yet" << dendl;
+      } else {
+        dout(1) << "handle_mds_map i (" << addr
+            << ") dne in the mdsmap, respawning myself" << dendl;
+        respawn();
+      }
       goto out;
     }
-    if (want_state == MDSMap::STATE_BOOT) {
-      dout(10) << "not in map yet" << dendl;
-    } else {
-      dout(1) << "handle_mds_map i (" << addr
-	      << ") dne in the mdsmap, respawning myself" << dendl;
-      respawn();
-    }
-    goto out;
   }
 
   // ??
@@ -879,32 +895,37 @@ void MDS::handle_mds_map(MMDSMap *m)
 	    << ceph_mds_state_name(state) << dendl;
     want_state = state;
 
-    // did i just recover?
-    if ((is_active() || is_clientreplay()) &&
-	(oldstate == MDSMap::STATE_REJOIN ||
-	 oldstate == MDSMap::STATE_RECONNECT)) 
-      recovery_done();
+    if (oldstate == MDSMap::STATE_STANDBY_REPLAY) {
+        dout(10) << "Monitor activated us! Deactivating replay loop" << dendl;
+        assert (state == MDSMap::STATE_REPLAY);
+        standby_for_rank = -1;
+    } else {
+      // did i just recover?
+      if ((is_active() || is_clientreplay()) &&
+          (oldstate == MDSMap::STATE_REJOIN ||
+              oldstate == MDSMap::STATE_RECONNECT))
+        recovery_done();
 
-    if (is_active()) {
-      active_start();
-    } else if (is_replay() || is_standby_replay()) {
-      replay_start();
-    } else if (is_resolve()) {
-      resolve_start();
-    } else if (is_reconnect()) {
-      reconnect_start();
-    } else if (is_clientreplay()) {
-      clientreplay_start();
-    } else if (is_creating()) {
-      boot_create();
-    } else if (is_starting()) {
-      boot_start();
-    } else if (is_stopping()) {
-      assert(oldstate == MDSMap::STATE_ACTIVE);
-      stopping_start();
+      if (is_active()) {
+        active_start();
+      } else if (is_any_replay()) {
+        replay_start();
+      } else if (is_resolve()) {
+        resolve_start();
+      } else if (is_reconnect()) {
+        reconnect_start();
+      } else if (is_clientreplay()) {
+        clientreplay_start();
+      } else if (is_creating()) {
+        boot_create();
+      } else if (is_starting()) {
+        boot_start();
+      } else if (is_stopping()) {
+        assert(oldstate == MDSMap::STATE_ACTIVE);
+        stopping_start();
+      }
     }
   }
-
   
   // RESOLVE
   // is someone else newly resolving?
@@ -1075,9 +1096,15 @@ public:
 void MDS::boot_start(int step, int r)
 {
   if (r < 0) {
-    dout(0) << "boot_start encountered an error, failing" << dendl;
-    suicide();
-    return;
+    if (is_standby_replay() && (r == -EAGAIN)) {
+      dout(0) << "boot_start encountered an error EAGAIN"
+              << ", respawning since we fell behind journal" << dendl;
+      respawn();
+    } else {
+      dout(0) << "boot_start encountered an error, failing" << dendl;
+      suicide();
+      return;
+    }
   }
 
   switch (step) {
@@ -1120,8 +1147,10 @@ void MDS::boot_start(int step, int r)
     }
 
   case 3:
-    if (is_replay() || is_standby_replay()) {
+    if (is_any_replay()) {
       dout(2) << "boot_start " << step << ": replaying mds log" << dendl;
+      if(is_oneshot_replay() || is_standby_replay())
+        mdlog->get_journaler()->set_readonly();
       mdlog->replay(new C_MDS_BootStart(this, 4));
       break;
     } else {
@@ -1131,7 +1160,7 @@ void MDS::boot_start(int step, int r)
     }
 
   case 4:
-    if (is_replay() || is_standby_replay()) {
+    if (is_any_replay()) {
       replay_done();
       break;
     }
@@ -1170,6 +1199,8 @@ void MDS::calc_recovery_set()
 void MDS::replay_start()
 {
   dout(1) << "replay_start" << dendl;
+  if (is_standby_replay())
+    continue_replay = true;
   
   calc_recovery_set();
 
@@ -1186,15 +1217,64 @@ void MDS::replay_start()
   }
 }
 
+
+class MDS::C_MDS_StandbyReplayRestartFinish : public Context {
+  MDS *mds;
+  uint64_t old_read_pos;
+public:
+  C_MDS_StandbyReplayRestartFinish(MDS *mds_, uint64_t old_read_pos_) :
+    mds(mds_), old_read_pos(old_read_pos_) {}
+  void finish(int r) {
+    if (old_read_pos < mds->mdlog->get_journaler()->get_trimmed_pos()) {
+      cerr << "standby MDS fell behind active MDS journal's expire_pos, restarting" << std::endl;
+      mds->respawn(); /* we're too far back, and this is easier than
+                         trying to reset everything in the cache, etc */
+    } else {
+      mds->boot_start(3, r);
+    }
+  }
+};
+
+inline void MDS::standby_replay_restart()
+{
+  mdlog->get_journaler()->reread_head_and_probe(
+      new C_MDS_StandbyReplayRestartFinish(this, mdlog->get_journaler()->get_read_pos()));
+}
+
+class MDS::C_MDS_StandbyReplayRestart : public Context {
+  MDS *mds;
+public:
+  C_MDS_StandbyReplayRestart(MDS *m) : mds(m) {}
+  void finish(int r) {
+    assert(!r);
+    mds->standby_replay_restart();
+  }
+};
+
 void MDS::replay_done()
 {
   dout(1) << "replay_done in=" << mdsmap->get_num_mds()
 	  << " failed=" << mdsmap->get_num_failed()
 	  << dendl;
 
-  if (is_standby_replay()) {
+  if (is_oneshot_replay()) {
     dout(2) << "hack.  journal looks ok.  shutting down." << dendl;
     suicide();
+    return;
+  }
+
+  if (is_standby_replay()) {
+    standby_trim_segments();
+    dout(10) << "setting replay timer" << dendl;
+    timer.add_event_after(g_conf.mds_replay_interval,
+                          new C_MDS_StandbyReplayRestart(this));
+    return;
+  }
+
+  if (continue_replay) {
+    mdlog->get_journaler()->set_writeable();
+    continue_replay = false;
+    standby_replay_restart();
     return;
   }
 
@@ -1223,6 +1303,35 @@ void MDS::replay_done()
     dout(2) << "i am not alone, moving to state resolve" << dendl;
     request_state(MDSMap::STATE_RESOLVE);
   }
+}
+
+void MDS::standby_trim_segments()
+{
+  dout(10) << "standby_trim_segments" << dendl;
+  LogSegment *seg = NULL;
+  uint64_t expire_pos = mdlog->get_journaler()->get_expire_pos();
+  dout(10) << "expire_pos=" << expire_pos << dendl;
+  bool removed_segment = false;
+  while ((seg=mdlog->get_oldest_segment())->end <= expire_pos) {
+    dout(0) << "removing segment" << dendl;
+    seg->dirty_dirfrags.clear_list();
+    seg->new_dirfrags.clear_list();
+    seg->dirty_inodes.clear_list();
+    seg->dirty_dentries.clear_list();
+    seg->open_files.clear_list();
+    seg->renamed_files.clear_list();
+    seg->dirty_dirfrag_dir.clear_list();
+    seg->dirty_dirfrag_nest.clear_list();
+    seg->dirty_dirfrag_dirfragtree.clear_list();
+    mdlog->remove_oldest_segment();
+    removed_segment = true;
+  }
+
+  if (removed_segment) {
+    dout(20) << "calling mdcache->trim!" << dendl;
+    mdcache->trim(-1);
+  } else dout(20) << "removed no segments!" << dendl;
+  return;
 }
 
 void MDS::reopen_log()

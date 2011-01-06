@@ -101,17 +101,17 @@ void MDLog::write_head(Context *c)
   journaler->write_head(c);
 }
 
-loff_t MDLog::get_read_pos() 
+uint64_t MDLog::get_read_pos()
 {
   return journaler->get_read_pos(); 
 }
 
-loff_t MDLog::get_write_pos() 
+uint64_t MDLog::get_write_pos()
 {
   return journaler->get_write_pos(); 
 }
 
-loff_t MDLog::get_safe_pos() 
+uint64_t MDLog::get_safe_pos()
 {
   return journaler->get_write_safe_pos(); 
 }
@@ -153,7 +153,7 @@ void MDLog::append()
 
 void MDLog::submit_entry( LogEvent *le, Context *c, bool wait_safe ) 
 {
-  assert(!mds->is_replay());
+  assert(!mds->is_any_replay());
   assert(le == cur_event);
   cur_event = NULL;
 
@@ -220,8 +220,8 @@ void MDLog::submit_entry( LogEvent *le, Context *c, bool wait_safe )
   
   // start a new segment?
   //  FIXME: should this go elsewhere?
-  loff_t last_seg = get_last_segment_offset();
-  loff_t period = journaler->get_layout_period();
+  uint64_t last_seg = get_last_segment_offset();
+  uint64_t period = journaler->get_layout_period();
   if (!segments.empty() && 
       !writing_subtree_map &&
       (journaler->get_write_pos()/period != last_seg/period &&
@@ -300,7 +300,7 @@ void MDLog::start_new_segment(Context *onsync)
   mds->mdcache->advance_stray();
 }
 
-void MDLog::_logged_subtree_map(loff_t off)
+void MDLog::_logged_subtree_map(uint64_t off)
 {
   dout(10) << "_logged_subtree_map at " << off << dendl;
   writing_subtree_map = false;
@@ -335,7 +335,7 @@ void MDLog::trim(int m)
   utime_t stop = g_clock.now();
   stop += 2.0;
 
-  map<loff_t,LogSegment*>::iterator p = segments.begin();
+  map<uint64_t,LogSegment*>::iterator p = segments.begin();
   int left = num_events;
   while (p != segments.end() && 
 	 ((max_events >= 0 && left-expiring_events-expired_events > max_events) ||
@@ -446,9 +446,6 @@ void MDLog::replay(Context *c)
 {
   assert(journaler->is_active());
 
-  // start reading at the last known expire point.
-  journaler->set_read_pos( journaler->get_expire_pos() );
-
   // empty?
   if (journaler->get_read_pos() == journaler->get_write_pos()) {
     dout(10) << "replay - journal empty, done." << dendl;
@@ -467,7 +464,8 @@ void MDLog::replay(Context *c)
   dout(10) << "replay start, from " << journaler->get_read_pos()
 	   << " to " << journaler->get_write_pos() << dendl;
 
-  assert(num_events == 0);
+  assert(num_events == 0 || already_replayed);
+  already_replayed = true;
 
   replay_thread.create();
 }
@@ -499,7 +497,6 @@ void MDLog::_replay_thread()
 
   // loop
   int r = 0;
-  loff_t new_expire_pos = journaler->get_expire_pos();
   while (1) {
     // wait for read?
     while (!journaler->is_readable() &&
@@ -511,6 +508,32 @@ void MDLog::_replay_thread()
     if (journaler->get_error()) {
       r = journaler->get_error();
       dout(0) << "_replay journaler got error " << r << ", aborting" << dendl;
+      if (r == -EINVAL) {
+        if (journaler->get_read_pos() < journaler->get_expire_pos()) {
+          // this should only happen if you're following somebody else
+          assert(journaler->is_readonly());
+          dout(0) << "expire_pos is higher than read_pos, returning EAGAIN" << dendl;
+          r = -EAGAIN;
+        } else {
+          /* re-read head and check it
+           * Given that replay happens in a separate thread and
+           * the MDS is going to either shut down or restart when
+           * we return this error, doing it synchronously is fine
+           * -- as long as we drop the main mds lock--. */
+          Mutex mylock("MDLog::_replay_thread lock");
+          Cond cond;
+          bool done = false;
+          journaler->reread_head(new C_SafeCond(&mylock, &cond, &done));
+          mds->mds_lock.Unlock();
+          while (!done)
+            cond.Wait(mylock);
+          mds->mds_lock.Lock();
+          if (journaler->get_read_pos() < journaler->get_expire_pos()) {
+            dout(0) << "expire_pos is higher than read_pos, returning EAGAIN" << dendl;
+            r = -EAGAIN;
+          }
+        }
+      }
       break;
     }
     
@@ -521,7 +544,7 @@ void MDLog::_replay_thread()
     assert(journaler->is_readable());
     
     // read it
-    loff_t pos = journaler->get_read_pos();
+    uint64_t pos = journaler->get_read_pos();
     bufferlist bl;
     bool r = journaler->try_read_entry(bl);
     if (!r && journaler->get_error())
@@ -560,9 +583,6 @@ void MDLog::_replay_thread()
       num_events++;
 
       le->replay(mds);
-
-      if (!new_expire_pos) 
-	new_expire_pos = pos;
     }
     delete le;
 
@@ -577,12 +597,9 @@ void MDLog::_replay_thread()
   if (r == 0) {
     assert(journaler->get_read_pos() == journaler->get_write_pos());
     dout(10) << "_replay - complete, " << num_events
-	     << " events, new read/expire pos is " << new_expire_pos << dendl;
+	     << " events" << dendl;
 
-    // move read pointer _back_ to first subtree map we saw, for eventual trimming
-    journaler->set_read_pos(new_expire_pos);
-    journaler->set_expire_pos(new_expire_pos);
-    logger->set(l_mdl_expos, new_expire_pos);
+    logger->set(l_mdl_expos, journaler->get_expire_pos());
 
     dout(10) << "_replay - truncating at " << journaler->get_write_pos() << dendl;
     Context *c = new C_MDL_ReplayTruncated(this);

@@ -35,9 +35,9 @@ class MDSlaveUpdate;
 
 class LogSegment {
  public:
-  loff_t offset, end;
+  uint64_t offset, end;
   int num_events;
-  loff_t trimmable_at;
+  uint64_t trimmable_at;
 
   // dirty items
   elist<CDir*>    dirty_dirfrags, new_dirfrags;

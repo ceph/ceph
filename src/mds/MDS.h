@@ -147,7 +147,11 @@ class MDS : public Dispatcher {
   int incarnation;
 
   int standby_for_rank;
+  int standby_type;
   string standby_for_name;
+  bool continue_replay; /* set to true by replay_start if we're a hot standby,
+                           remains true until leader MDS fails and we need to
+                           take over*/
 
   Messenger    *messenger;
   MonClient    *monc;
@@ -218,6 +222,7 @@ class MDS : public Dispatcher {
   bool is_starting() { return state == MDSMap::STATE_STARTING; }
   bool is_standby()  { return state == MDSMap::STATE_STANDBY; }
   bool is_replay()   { return state == MDSMap::STATE_REPLAY; }
+  bool is_standby_replay() { return state == MDSMap::STATE_STANDBY_REPLAY; }
   bool is_resolve()  { return state == MDSMap::STATE_RESOLVE; }
   bool is_reconnect() { return state == MDSMap::STATE_RECONNECT; }
   bool is_rejoin()   { return state == MDSMap::STATE_REJOIN; }
@@ -225,7 +230,9 @@ class MDS : public Dispatcher {
   bool is_active()   { return state == MDSMap::STATE_ACTIVE; }
   bool is_stopping() { return state == MDSMap::STATE_STOPPING; }
 
-  bool is_standby_replay()   { return state == MDSMap::STATE_STANDBY_REPLAY; }
+  bool is_oneshot_replay()   { return state == MDSMap::STATE_ONESHOT_REPLAY; }
+  bool is_any_replay() { return (is_replay() || is_standby_replay() ||
+                                 is_oneshot_replay()); }
 
   bool is_stopped()  { return mdsmap->is_stopped(whoami); }
 
@@ -353,6 +360,11 @@ class MDS : public Dispatcher {
   void creating_done();
   void starting_done();
   void replay_done();
+  void standby_replay_restart();
+  void standby_trim_segments();
+  class C_MDS_StandbyReplayRestart;
+  class C_MDS_StandbyReplayRestartFinish;
+
   void reopen_log();
 
   void resolve_start();

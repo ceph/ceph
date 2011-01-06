@@ -503,6 +503,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_bal_minchunk, 0, OPT_FLOAT, .001),     // never take anything smaller than this
 	OPTION(mds_bal_target_removal_min, 0, OPT_INT, 5), // min balance iterations before old target is removed
 	OPTION(mds_bal_target_removal_max, 0, OPT_INT, 10), // max balance iterations before old target is removed
+	OPTION(mds_replay_interval, 0, OPT_FLOAT, 1.0), // time to wait before starting replay again
 	OPTION(mds_trim_on_rejoin, 0, OPT_BOOL, true),
 	OPTION(mds_shutdown_check, 0, OPT_INT, 0),
 	OPTION(mds_verify_export_dirauth, 0, OPT_BOOL, true),

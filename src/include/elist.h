@@ -126,6 +126,11 @@ public:
     _head._prev->remove_myself();
   }
 
+  void clear_list() {
+    while (!empty())
+      pop_front();
+  }
+
   enum mode_t {
     MAGIC, CURRENT, CACHE_NEXT
   };

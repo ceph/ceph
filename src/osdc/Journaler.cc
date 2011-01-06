@@ -28,6 +28,7 @@
 
 void Journaler::create(ceph_file_layout *l)
 {
+  assert(!readonly);
   dout(1) << "create blank journal" << dendl;
   state = STATE_ACTIVE;
 
@@ -40,6 +41,7 @@ void Journaler::create(ceph_file_layout *l)
 
 void Journaler::set_layout(ceph_file_layout *l)
 {
+  assert(!readonly);
   layout = *l;
 
   assert(layout.fl_pg_pool == pg_pool);
@@ -59,7 +61,6 @@ ostream& operator<<(ostream& out, Journaler::Header &h)
 {
   return out << "loghead(trim " << h.trimmed_pos
 	     << ", expire " << h.expire_pos
-	     << ", read " << h.read_pos
 	     << ", write " << h.write_pos
 	     << ")";
 }
@@ -74,18 +75,42 @@ public:
   }
 };
 
+class Journaler::C_RereadHead : public Context {
+  Journaler *ls;
+  Context *onfinish;
+public:
+  bufferlist bl;
+  C_RereadHead(Journaler *l, Context *onfinish_) : ls (l), onfinish(onfinish_){}
+  void finish(int r) {
+    ls->_finish_reread_head(r, bl, onfinish);
+  }
+};
+
 class Journaler::C_ProbeEnd : public Context {
   Journaler *ls;
 public:
-  int64_t end;
+  uint64_t end;
   C_ProbeEnd(Journaler *l) : ls(l), end(-1) {}
   void finish(int r) {
     ls->_finish_probe_end(r, end);
   }
 };
 
+class Journaler::C_ReProbe : public Context {
+  Journaler *ls;
+  Context *onfinish;
+public:
+  uint64_t end;
+  C_ReProbe(Journaler *l, Context *onfinish_) :
+    ls(l), onfinish(onfinish_), end(0) {}
+  void finish(int r) {
+    ls->_finish_reprobe(r, end, onfinish);
+  }
+};
+
 void Journaler::recover(Context *onread) 
 {
+  dout(1) << "recover start" << dendl;
   assert(state != STATE_ACTIVE);
 
   if (onread)
@@ -99,11 +124,52 @@ void Journaler::recover(Context *onread)
   dout(1) << "read_head" << dendl;
   state = STATE_READHEAD;
   C_ReadHead *fin = new C_ReadHead(this);
-  vector<snapid_t> snaps;
+  read_head(fin, &fin->bl);
+}
+
+void Journaler::read_head(Context *on_finish, bufferlist *bl)
+{
+  assert(state == STATE_READHEAD || state == STATE_REREADHEAD);
 
   object_t oid = file_object_t(ino, 0);
   object_locator_t oloc(pg_pool);
-  objecter->read_full(oid, oloc, CEPH_NOSNAP, &fin->bl, 0, fin);
+  objecter->read_full(oid, oloc, CEPH_NOSNAP, bl, 0, on_finish);
+}
+
+/**
+ * Re-read the head from disk, and set the write_pos, expire_pos, trimmed_pos
+ * from the on-disk header. This switches the state to STATE_REREADHEAD for
+ * the duration, and you shouldn't start a re-read while other operations are
+ * in-flight, nor start other operations while a re-read is in progress.
+ * Also, don't call this until the Journaler has finished its recovery and has
+ * gone STATE_ACTIVE!
+ */
+void Journaler::reread_head(Context *onfinish)
+{
+  dout(10) << "reread_head" << dendl;
+  assert(state == STATE_ACTIVE);
+
+  state = STATE_REREADHEAD;
+  C_RereadHead *fin = new C_RereadHead(this, onfinish);
+  read_head(fin, &fin->bl);
+}
+
+void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
+{
+  //read on-disk header into
+  assert (bl.length());
+
+  // unpack header
+  Header h;
+  bufferlist::iterator p = bl.begin();
+  ::decode(h, p);
+  write_pos = flush_pos = h.write_pos;
+  expire_pos = h.expire_pos;
+  trimmed_pos = h.trimmed_pos;
+  init_headers(h);
+  state = STATE_ACTIVE;
+  finish->finish(r);
+  delete finish;
 }
 
 void Journaler::_finish_read_head(int r, bufferlist& bl)
@@ -136,24 +202,51 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   set_layout(&h.layout);
 
   write_pos = flush_pos = ack_pos = safe_pos = h.write_pos;
-  read_pos = requested_pos = received_pos = h.read_pos;
-  expire_pos = h.expire_pos;
+  read_pos = requested_pos = received_pos = expire_pos = h.expire_pos;
   trimmed_pos = trimming_pos = h.trimmed_pos;
 
-  dout(1) << "_finish_read_head " << h << ".  probing for end of log (from " << write_pos << ")..." << dendl;
+  init_headers(h);
 
-  // probe the log
-  state = STATE_PROBING;
+  dout(1) << "_finish_read_head " << h << ".  probing for end of log (from " << write_pos << ")..." << dendl;
   C_ProbeEnd *fin = new C_ProbeEnd(this);
-  filer.probe(ino, &layout, CEPH_NOSNAP,
-	      h.write_pos, (uint64_t *)&fin->end, 0, true, 0, fin);
+  state = STATE_PROBING;
+  probe(fin, &fin->end);
 }
 
-void Journaler::_finish_probe_end(int r, int64_t end)
+void Journaler::probe(Context *finish, uint64_t *end)
+{
+  dout(1) << "probing for end of the log" << dendl;
+  assert(state == STATE_PROBING || state == STATE_REPROBING);
+  // probe the log
+  filer.probe(ino, &layout, CEPH_NOSNAP,
+	      write_pos, end, 0, true, 0, finish);
+}
+
+void Journaler::reprobe(Context *finish)
+{
+  dout(10) << "reprobe" << dendl;
+  assert(state == STATE_ACTIVE);
+
+  state = STATE_REPROBING;
+  C_ReProbe *fin = new C_ReProbe(this, finish);
+  probe(fin, &fin->end);
+}
+
+
+void Journaler::_finish_reprobe(int r, uint64_t new_end, Context *onfinish) {
+  assert(new_end >= write_pos);
+  assert(r >= 0);
+  write_pos = flush_pos = ack_pos = safe_pos = new_end;
+  state = STATE_ACTIVE;
+  onfinish->finish(r);
+  delete onfinish;
+}
+
+void Journaler::_finish_probe_end(int r, uint64_t end)
 {
   assert(state == STATE_PROBING);
   
-  if (end == -1) {
+  if (((int64_t)end) == -1) {
     end = write_pos;
     dout(1) << "_finish_probe_end write_pos = " << end 
 	    << " (header had " << write_pos << "). log was empty. recovered."
@@ -167,12 +260,38 @@ void Journaler::_finish_probe_end(int r, int64_t end)
 	    << dendl;
   }
 
+  state = STATE_ACTIVE;
+
   write_pos = flush_pos = ack_pos = safe_pos = end;
   
   // done.
   list<Context*> ls;
   ls.swap(waitfor_recover);
   finish_contexts(ls, 0);
+}
+
+class Journaler::C_RereadHeadProbe : public Context
+{
+  Journaler *ls;
+  Context *final_finish;
+public:
+  C_RereadHeadProbe(Journaler *l, Context *finish) :
+    ls(l), final_finish(finish) {}
+  void finish(int r) {
+    ls->_finish_reread_head_and_probe(r, final_finish);
+  }
+};
+
+void Journaler::reread_head_and_probe(Context *onfinish)
+{
+  assert(state == STATE_ACTIVE);
+  reread_head(new C_RereadHeadProbe(this, onfinish));
+}
+
+void Journaler::_finish_reread_head_and_probe(int r, Context *onfinish)
+{
+  assert(!r); //if we get an error, we're boned
+  reprobe(onfinish);
 }
 
 
@@ -191,10 +310,11 @@ public:
 
 void Journaler::write_head(Context *oncommit)
 {
+  assert (!readonly);
   assert(state == STATE_ACTIVE);
   last_written.trimmed_pos = trimmed_pos;
   last_written.expire_pos = expire_pos;
-  last_written.read_pos = read_pos;
+  last_written.unused_field = expire_pos;
   last_written.write_pos = safe_pos;
   dout(10) << "write_head " << last_written << dendl;
   
@@ -213,6 +333,7 @@ void Journaler::write_head(Context *oncommit)
 
 void Journaler::_finish_write_head(Header &wrote, Context *oncommit)
 {
+  assert(!readonly);
   dout(10) << "_finish_write_head " << wrote << dendl;
   last_committed = wrote;
   if (oncommit) {
@@ -228,7 +349,7 @@ void Journaler::_finish_write_head(Header &wrote, Context *oncommit)
 
 class Journaler::C_Flush : public Context {
   Journaler *ls;
-  int64_t start;
+  uint64_t start;
   utime_t stamp;
   bool safe;
 public:
@@ -236,8 +357,9 @@ public:
   void finish(int r) { ls->_finish_flush(r, start, stamp, safe); }
 };
 
-void Journaler::_finish_flush(int r, int64_t start, utime_t stamp, bool safe)
+void Journaler::_finish_flush(int r, uint64_t start, utime_t stamp, bool safe)
 {
+  assert(!readonly);
   assert(r>=0);
 
   assert((!safe && start >= ack_pos) || (safe && start >= safe_pos));
@@ -309,8 +431,9 @@ void Journaler::_finish_flush(int r, int64_t start, utime_t stamp, bool safe)
 }
 
 
-int64_t Journaler::append_entry(bufferlist& bl)
+uint64_t Journaler::append_entry(bufferlist& bl)
 {
+  assert(!readonly);
   uint32_t s = bl.length();
 
   if (!g_conf.journaler_allow_split_entries) {
@@ -374,6 +497,7 @@ void Journaler::_do_flush(unsigned amount)
 {
   if (write_pos == flush_pos) return;
   assert(write_pos > flush_pos);
+  assert(!readonly);
 
   // flush
   unsigned len = write_pos - flush_pos;
@@ -420,6 +544,7 @@ void Journaler::_do_flush(unsigned amount)
 
 void Journaler::wait_for_flush(Context *onsync, Context *onsafe, bool add_ack_barrier)
 {
+  assert(!readonly);
   if (g_conf.journaler_safe && onsync) {
     assert(!onsafe);
     onsafe = onsync;
@@ -459,6 +584,7 @@ void Journaler::wait_for_flush(Context *onsync, Context *onsafe, bool add_ack_ba
 
 void Journaler::flush(Context *onsync, Context *onsafe, bool add_ack_barrier)
 {
+  assert(!readonly);
   wait_for_flush(onsync, onsafe, add_ack_barrier);
   if (write_pos == ack_pos)
     return;
@@ -613,7 +739,7 @@ void Journaler::_issue_read(int64_t len)
 void Journaler::_prefetch()
 {
   // prefetch?
-  int64_t left = requested_pos - read_pos;
+  uint64_t left = requested_pos - read_pos;
   if (left <= prefetch_from &&      // should read more,
       !_is_reading() &&             // and not reading anything right now
       write_pos > requested_pos) {  // there's something more to read...
@@ -697,7 +823,7 @@ bool Journaler::is_readable()
   // start reading some more?
   if (!_is_reading()) {
     if (s)
-      fetch_len = MAX(fetch_len, (int64_t)(sizeof(s)+s-read_buf.length())); 
+      fetch_len = MAX(fetch_len, (sizeof(s)+s-read_buf.length()));
     _issue_read(fetch_len);
   }
 
@@ -706,6 +832,8 @@ bool Journaler::is_readable()
 
 bool Journaler::truncate_tail_junk(Context *c)
 {
+  if(readonly)
+    return true; //can't touch journal in readonly mode!
   if (!junk_tail_pos) {
     dout(10) << "truncate_tail_junk -- no trailing junk" << dendl;
     return true;
@@ -773,7 +901,7 @@ void Journaler::wait_for_readable(Context *onreadable)
 
 class Journaler::C_Trim : public Context {
   Journaler *ls;
-  int64_t to;
+  uint64_t to;
 public:
   C_Trim(Journaler *l, int64_t t) : ls(l), to(t) {}
   void finish(int r) {
@@ -783,9 +911,10 @@ public:
 
 void Journaler::trim()
 {
+  assert(!readonly);
   uint64_t period = layout.fl_stripe_count * layout.fl_object_size;
 
-  int64_t trim_to = last_committed.expire_pos;
+  uint64_t trim_to = last_committed.expire_pos;
   trim_to -= trim_to % period;
   dout(10) << "trim last_commited head was " << last_committed
 	   << ", can trim to " << trim_to
@@ -819,8 +948,9 @@ void Journaler::trim()
   trimming_pos = trim_to;  
 }
 
-void Journaler::_trim_finish(int r, int64_t to)
+void Journaler::_trim_finish(int r, uint64_t to)
 {
+  assert(!readonly);
   dout(10) << "_trim_finish trimmed_pos was " << trimmed_pos
 	   << ", trimmed/trimming/expire now "
 	   << to << "/" << trimming_pos << "/" << expire_pos

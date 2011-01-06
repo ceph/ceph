@@ -38,7 +38,7 @@ using namespace std;
 
 void usage()
 {
-  derr << "usage: cmds -i name [flags] [--mds rank] [--journal_check]\n"
+  derr << "usage: cmds -i name [flags] [--mds rank] [[--journal_check]|[--hot-standby]]\n"
        << "  -m monitorip:port\n"
        << "        connect to monitor at given address\n"
        << "  --debug_mds n\n"
@@ -53,7 +53,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   bool dump_journal = false;
   const char *dump_file = NULL;
-  bool shadow = false;
+  int shadow = 0;
 
   common_set_defaults(true);
 #ifdef HAVE_LIBTCMALLOC
@@ -78,7 +78,18 @@ int main(int argc, const char **argv)
       dout(0) << "dumping journal" << dendl;
     } else if (!strcmp(args[i], "--journal_check")) {
       dout(0) << "checking journal"  << dendl;
-      shadow = true;
+      if (shadow) {
+        dout(0) << "Error: can only select one standby state" << dendl;
+        return -1;
+      }
+      shadow = MDSMap::STATE_ONESHOT_REPLAY;
+    } else if (!strcmp(args[i], "--hot-standby")) {
+      dout(0) << "going into standby_replay" << dendl;
+      if (shadow) {
+        dout(0) << "Error: can only select one standby state" << dendl;
+        return -1;
+      }
+      shadow = MDSMap::STATE_STANDBY_REPLAY;
     } else {
       derr << "unrecognized arg " << args[i] << dendl;
       usage();
@@ -137,7 +148,7 @@ int main(int argc, const char **argv)
     mds->orig_argv = argv;
 
     if (shadow)
-      mds->init(MDSMap::STATE_STANDBY);
+      mds->init(shadow);
     else
       mds->init();
 

@@ -87,6 +87,7 @@ protected:
       return 0;
     }
   } replay_thread;
+  bool already_replayed;
 
   friend class ReplayThread;
   friend class C_MDL_Replay;
@@ -100,7 +101,7 @@ protected:
 
 
   // -- segments --
-  map<loff_t,LogSegment*> segments;
+  map<uint64_t,LogSegment*> segments;
   set<LogSegment*> expiring_segments;
   set<LogSegment*> expired_segments;
   int expiring_events;
@@ -108,14 +109,14 @@ protected:
 
   class C_MDL_WroteSubtreeMap : public Context {
     MDLog *mdlog;
-    loff_t off;
+    uint64_t off;
   public:
     C_MDL_WroteSubtreeMap(MDLog *l, loff_t o) : mdlog(l), off(o) { }
     void finish(int r) {
       mdlog->_logged_subtree_map(off);
     }
   };
-  void _logged_subtree_map(loff_t off);
+  void _logged_subtree_map(uint64_t off);
 
 
   // -- subtreemaps --
@@ -126,9 +127,17 @@ protected:
   friend class MDCache;
 
 public:
-  loff_t get_last_segment_offset() {
+  uint64_t get_last_segment_offset() {
     assert(!segments.empty());
     return segments.rbegin()->first;
+  }
+  LogSegment *get_oldest_segment() {
+    return segments.begin()->second;
+  }
+  void remove_oldest_segment() {
+    map<uint64_t, LogSegment*>::iterator p = segments.begin();
+    delete p->second;
+    segments.erase(p);
   }
 
 
@@ -151,6 +160,7 @@ public:
 		  journaler(0),
 		  logger(0),
 		  replay_thread(this),
+		  already_replayed(false),
 		  expiring_events(0), expired_events(0),
 		  writing_subtree_map(false),
 		  cur_event(NULL) { }		  
@@ -175,9 +185,10 @@ public:
   size_t get_num_events() { return num_events; }
   size_t get_num_segments() { return segments.size(); }  
 
-  loff_t get_read_pos();
-  loff_t get_write_pos();
-  loff_t get_safe_pos();
+  uint64_t get_read_pos();
+  uint64_t get_write_pos();
+  uint64_t get_safe_pos();
+  Journaler *get_journaler() { return journaler; }
   bool empty() { return segments.empty(); }
 
   bool is_capped() { return capped; }

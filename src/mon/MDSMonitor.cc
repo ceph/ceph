@@ -227,14 +227,16 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   if (info.state != state) {    
     // legal state change?
     if ((info.state == MDSMap::STATE_STANDBY ||
-	 info.state == MDSMap::STATE_STANDBY_REPLAY) && state > 0) {
+	 info.state == MDSMap::STATE_STANDBY_REPLAY ||
+	 info.state == MDSMap::STATE_ONESHOT_REPLAY) && state > 0) {
       dout(10) << "mds_beacon mds can't activate itself (" << ceph_mds_state_name(info.state)
 	       << " -> " << ceph_mds_state_name(state) << ")" << dendl;
       goto ignore;
     }
     
     if (info.state == MDSMap::STATE_STANDBY &&
-	state == MDSMap::STATE_STANDBY_REPLAY &&
+	(state == MDSMap::STATE_STANDBY_REPLAY ||
+	    state == MDSMap::STATE_ONESHOT_REPLAY) &&
 	(pending_mdsmap.is_degraded() ||
 	 pending_mdsmap.get_state(m->get_standby_for_rank()) < MDSMap::STATE_ACTIVE)) {
       dout(10) << "mds_beacon can't standby-replay mds" << m->get_standby_for_rank() << " at this time (cluster degraded, or mds not active)" << dendl;
@@ -368,8 +370,6 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
     } else {
       info.state = state;
       info.state_seq = seq;
-      if (state == MDSMap::STATE_STANDBY_REPLAY)
-        info.rank = m->get_standby_for_rank();
     }
   }
 
@@ -832,9 +832,9 @@ void MDSMonitor::tick()
 	switch (info.state) {
 	case MDSMap::STATE_CREATING:
 	case MDSMap::STATE_STARTING:
-	case MDSMap::STATE_STANDBY_REPLAY:
 	  si.state = info.state;
 	  break;
+        case MDSMap::STATE_STANDBY_REPLAY:
 	case MDSMap::STATE_REPLAY:
 	case MDSMap::STATE_RESOLVE:
 	case MDSMap::STATE_RECONNECT:
