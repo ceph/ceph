@@ -22,6 +22,7 @@ using namespace librados;
 #include "config.h"
 #include "common/common_init.h"
 #include "common/Cond.h"
+#include "mds/inode_backtrace.h"
 #include <iostream>
 #include <fstream>
 
@@ -232,6 +233,8 @@ int main(int argc, const char **argv)
 
     Rados::ListCtx ctx;
     rados.list_objects_open(p, &ctx);
+    bufferlist extra_info;
+    bool filter_parent = false;
     if (filter) {
       char *flt_str = strdup(filter);
       char *type = strtok(flt_str, " ");
@@ -249,6 +252,7 @@ int main(int argc, const char **argv)
       if (strcmp(type, "parent") ==  0) {
         inodeno_t int_val = strtoll(val, NULL, 0);
         ::encode(int_val, bl);
+        filter_parent = true;
       } else if (strcmp(type, "plain") == 0) {
         ::encode(val, bl);
       } else {
@@ -256,7 +260,7 @@ int main(int argc, const char **argv)
         goto out;
       }
 
-      rados.list_filter(ctx, bl);
+      rados.list_filter(ctx, bl, &extra_info);
     }
     while (1) {
       list<string> vec;
@@ -269,8 +273,15 @@ int main(int argc, const char **argv)
       if (vec.empty())
 	break;
 
-      for (list<string>::iterator iter = vec.begin(); iter != vec.end(); ++iter)
+      bufferlist::iterator exiter = extra_info.begin();
+      for (list<string>::iterator iter = vec.begin(); iter != vec.end(); ++iter) {
 	*outstream << *iter << std::endl;
+        if (filter_parent) {
+          inode_backpointer_t backp;
+          ::decode(backp, exiter);
+          cout << " dirino=" << backp.dirino << " dname=" << backp.dname << " v=" << backp.version << std::endl;
+        }
+      }
     }
     rados.list_objects_close(ctx);
     if (!stdout)

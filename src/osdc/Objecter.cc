@@ -843,12 +843,17 @@ void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *f
 
   bufferlist::iterator iter = bl->begin();
   PGLSResponse response;
+  bufferlist extra_info;
   ::decode(response, iter);
+  if (!iter.end()) {
+    ::decode(extra_info, iter);
+  }
   list_context->cookie = (uint64_t)response.handle;
 
   int response_size = response.entries.size();
   dout(20) << "response.entries.size " << response_size
 	   << ", response.entries " << response.entries << dendl;
+  list_context->extra_info.append(extra_info);
   if (response_size) {
     dout(20) << "got a response with objects, proceeding" << dendl;
     list_context->list.merge(response.entries);

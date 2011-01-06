@@ -1849,6 +1849,8 @@ int Rados::list_objects_more(Rados::ListCtx& ctx, int max, std::list<string>& en
     entries.push_back(h->list.front().name.c_str());
     h->list.pop_front();
   }
+  if (ctx.extra_info)
+    ctx.extra_info->append(h->extra_info);
   return r;
 }
 
@@ -1858,10 +1860,11 @@ void Rados::list_objects_close(Rados::ListCtx& ctx)
   delete h;
 }
 
-void Rados::list_filter(Rados::ListCtx& ctx, bufferlist& filter)
+void Rados::list_filter(Rados::ListCtx& ctx, bufferlist& filter, bufferlist *extra_info)
 {
   Objecter::ListContext *h = (Objecter::ListContext *)ctx.ctx;
   h->filter = filter;
+  ctx.extra_info = extra_info;
 }
 
 uint64_t Rados::get_last_version(rados_pool_t pool)

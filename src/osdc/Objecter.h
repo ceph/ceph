@@ -365,6 +365,8 @@ public:
 
     bufferlist filter;
 
+    bufferlist extra_info;
+
     ListContext() : current_pg(0), cookie(0), starting_pg_num(0),
 		    at_end(false), pool_id(0),
 		    pool_snap_seq(0), max_entries(0) {}
