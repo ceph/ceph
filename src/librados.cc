@@ -2300,12 +2300,14 @@ extern "C" void rados_deinitialize()
   rados_init_mutex.Unlock();
 }
 
-extern "C" void librados_version(int *major, int *minor)
+extern "C" void librados_version(int *major, int *minor, int *extra)
 {
   if (major)
     *major = LIBRADOS_VER_MAJOR;
   if (minor)
     *minor = LIBRADOS_VER_MINOR;
+  if (extra)
+    *extra = LIBRADOS_VER_EXTRA;
 }
 
 extern "C" int rados_lookup_pool(const char *name)

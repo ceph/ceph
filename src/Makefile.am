@@ -88,12 +88,16 @@ sbin_PROGRAMS += mount.ceph
 cephfs_SOURCES = cephfs.cc
 bin_PROGRAMS += cephfs
 
+librados_config_SOURCES = librados-config.cc
+librados_config_LDADD = librados.la
+bin_PROGRAMS += librados-config
+
 # synthetic client
 csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc
 csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm $(CRYPTOPP_LIBS)
 bin_PROGRAMS += csyn
 
-core: cmon cosd cmds ceph cephfs cconf monmaptool osdmaptool crushtool csyn
+core: cmon cosd cmds ceph cephfs librados-config cconf monmaptool osdmaptool crushtool csyn
 
 
 # fuse targets?
@@ -868,7 +872,7 @@ noinst_HEADERS = \
 	tools/gui.h\
 	tools/gui_resources.h
 
-all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
+all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_config_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
 	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
 	$(dumpjournal_SOURCES) $(cosd_SOURCES) $(dupstore_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
 	$(testmsgr_SOURCES) $(cfuse_SOURCES) $(fakefuse_SOURCES) $(psim_SOURCES) \

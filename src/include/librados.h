@@ -17,16 +17,17 @@ extern "C" {
 
 #define LIBRADOS_VER_MAJOR 0
 #define LIBRADOS_VER_MINOR 25
+#define LIBRADOS_VER_EXTRA 0
 
-#define LIBRADOS_VERSION(maj, min) ((maj << 16) + min)
+#define LIBRADOS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 
-#define LIBRADOS_VERSION_CODE LIBRADOS_VERSION(LIBRADOS_VER_MAJOR, LIBRADOS_VER_MINOR)
+#define LIBRADOS_VERSION_CODE LIBRADOS_VERSION(LIBRADOS_VER_MAJOR, LIBRADOS_VER_MINOR, LIBRADOS_VER_EXTRA)
 
 /* initialization */
 int rados_initialize(int argc, const char **argv); /* arguments are optional */
 void rados_deinitialize();
 
-void librados_version(int *major, int *minor);
+void librados_version(int *major, int *minor, int *extra);
 
 /* pools */
 typedef void *rados_pool_t;
