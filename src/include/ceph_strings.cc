@@ -71,6 +71,7 @@ const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_CALL: return "call";
 
 	case CEPH_OSD_OP_PGLS: return "pgls";
+	case CEPH_OSD_OP_PGLS_FILTER: return "pgls-filter";
 	}
 	return "???";
 }

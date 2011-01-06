@@ -24,6 +24,38 @@
 class MOSDSubOp;
 class MOSDSubOpReply;
 
+class PGLSFilter {
+protected:
+  string xattr;
+public:
+  PGLSFilter() {}
+  virtual bool filter(bufferlist& xattr_data, bufferlist& outdata) = 0;
+  virtual string& get_xattr() { return xattr; }
+};
+
+class PGLSPlainFilter : public PGLSFilter {
+  string val;
+public:
+  PGLSPlainFilter(bufferlist::iterator& params) {
+    ::decode(xattr, params);
+    ::decode(val, params);
+  }
+  virtual ~PGLSPlainFilter() {}
+  virtual bool filter(bufferlist& xattr_data, bufferlist& outdata);
+};
+
+class PGLSParentFilter : public PGLSFilter {
+  inodeno_t parent_ino;
+public:
+  PGLSParentFilter(bufferlist::iterator& params) {
+    xattr = "_parent";
+    ::decode(parent_ino, params);
+    generic_dout(0) << "parent_ino=" << parent_ino << dendl;
+  }
+  virtual ~PGLSParentFilter() {}
+  virtual bool filter(bufferlist& xattr_data, bufferlist& outdata);
+};
+
 class ReplicatedPG : public PG {
   friend class OSD;
 public:  
@@ -612,8 +644,8 @@ protected:
 		   bufferlist::iterator& bp,
 		   ClassHandler::ClassMethod **pmethod);
 
-  bool pgls_filter(sobject_t& sobj, bufferlist::iterator& bp, bufferlist& outdata);
-  bool pgls_filter_find_parent(bufferlist& bl, inodeno_t search_ino, bufferlist& outdata);
+  bool pgls_filter(PGLSFilter *filter, sobject_t& sobj, bufferlist& outdata);
+  int get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilter);
 
 public:
   ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid, const sobject_t& ioid) : 

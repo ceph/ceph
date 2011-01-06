@@ -1858,12 +1858,10 @@ void Rados::list_objects_close(Rados::ListCtx& ctx)
   delete h;
 }
 
-void Rados::list_filter(Rados::ListCtx& ctx, const std::string& xattr, const std::string& val)
+void Rados::list_filter(Rados::ListCtx& ctx, bufferlist& filter)
 {
   Objecter::ListContext *h = (Objecter::ListContext *)ctx.ctx;
-  h->filter.clear();
-  ::encode(xattr, h->filter);
-  ::encode(val, h->filter);
+  h->filter = filter;
 }
 
 uint64_t Rados::get_last_version(rados_pool_t pool)

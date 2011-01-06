@@ -142,12 +142,14 @@ void ReplicatedPG::wait_for_degraded_object(const sobject_t& soid, Message *m)
   waiting_for_degraded_object[soid].push_back(m);
 }
 
-bool ReplicatedPG::pgls_filter_find_parent(bufferlist& bl, inodeno_t search_ino, bufferlist& outdata)
+bool PGLSParentFilter::filter(bufferlist& xattr_data, bufferlist& outdata)
 {
-  bufferlist::iterator iter = bl.begin();
+  bufferlist::iterator iter = xattr_data.begin();
   __u8 v;
+  generic_dout(0) << "PGLSParentFilter::filter" << dendl;
 
   ::decode(v, iter);
+  generic_dout(0) << "v=" << (int)v << dendl;
   if (v < 3)
     return false;
 
@@ -155,10 +157,12 @@ bool ReplicatedPG::pgls_filter_find_parent(bufferlist& bl, inodeno_t search_ino,
   inodeno_t ino;
   ::decode(ino, iter);
   ::decode(ancestors, iter);
+  generic_dout(0) << "ino=" << ino << dendl;
 
   vector<inode_backpointer_t>::iterator vi;
   for (vi = ancestors.begin(); vi != ancestors.end(); ++vi) {
-    if ( vi->dirino == search_ino) {
+    generic_dout(0) << "vi->dirino=" << vi->dirino << " parent_ino=" << parent_ino << dendl;
+    if ( vi->dirino == parent_ino) {
       ::encode(*vi, outdata);
       return true;
     }
@@ -167,36 +171,47 @@ bool ReplicatedPG::pgls_filter_find_parent(bufferlist& bl, inodeno_t search_ino,
   return false;
 }
 
-bool ReplicatedPG::pgls_filter(sobject_t& sobj, bufferlist::iterator& bp,
-                               bufferlist& outdata)
+bool PGLSPlainFilter::filter(bufferlist& xattr_data, bufferlist& outdata)
 {
-  string type, xattr;
-  ::decode(type, bp);
-  ::decode(xattr, bp);
+  if (val.size() != xattr_data.length())
+    return false;
 
+  if (memcmp(val.c_str(), xattr_data.c_str(), val.size()))
+    return false;
+
+  return true;
+}
+
+bool ReplicatedPG::pgls_filter(PGLSFilter *filter, sobject_t& sobj, bufferlist& outdata)
+{
   bufferlist bl;
 
-  int ret = osd->store->getattr(coll_t(info.pgid), sobj, xattr.c_str(), bl);
+  int ret = osd->store->getattr(coll_t(info.pgid), sobj, filter->get_xattr().c_str(), bl);
+  dout(0) << "getattr (sobj=" << sobj << ", attr=" << filter->get_xattr() << ") returned " << ret << dendl;
   if (ret < 0)
     return false;
 
-  if (type.compare("find_parent") == 0) {
-    inodeno_t search_ino;
-    ::decode(search_ino, bp);
-    return pgls_filter_find_parent(bl, search_ino, outdata); 
+  return filter->filter(bl, outdata);
+}
+
+int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilter)
+{
+  string type;
+  PGLSFilter *filter;
+
+  ::decode(type, iter);
+
+  if (type.compare("parent") == 0) {
+    filter = new PGLSParentFilter(iter);
+  } else if (type.compare("plain") == 0) {
+    filter = new PGLSPlainFilter(iter);
   } else {
-    string val;
-    ::decode(val, bp);
-    dout(10) << "pgls_filter xattr=" << xattr << " val=" << val << dendl;
-
-    if (val.size() != bl.length())
-      return false;
-
-    if (memcmp(val.c_str(), bl.c_str(), val.size()))
-      return false;
+    return -EINVAL;
   }
 
-  return true;
+  *pfilter = filter;
+
+  return  0;
 }
 
 
@@ -208,7 +223,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
   bufferlist outdata;
   int result = 0;
   string cname, mname;
-  bool filter = false;
+  PGLSFilter *filter = NULL;
   bufferlist filter_out;
 
   snapid_t snapid = op->get_snapid();
@@ -219,7 +234,12 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
     case CEPH_OSD_OP_PGLS_FILTER:
       ::decode(cname, bp);
       ::decode(mname, bp);
-      filter = true;
+
+      result = get_pgls_filter(bp, &filter);
+      if (result < 0)
+        break;
+
+      assert(filter);
 
       // fall through
 
@@ -268,7 +288,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 	      }
 	    }
 	    if (filter)
-	      keep = pgls_filter(*iter, bp, filter_out);
+	      keep = pgls_filter(filter, *iter, filter_out);
 
             if (keep)
 	      response.entries.push_back(iter->oid);
@@ -294,6 +314,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
   reply->set_result(result);
   osd->client_messenger->send_message(reply, op->get_connection());
   op->put();
+  delete filter;
 }
 
 void ReplicatedPG::calc_trim_to()

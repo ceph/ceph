@@ -234,12 +234,29 @@ int main(int argc, const char **argv)
     rados.list_objects_open(p, &ctx);
     if (filter) {
       char *flt_str = strdup(filter);
-      char *xattr = strtok(flt_str, " ");
+      char *type = strtok(flt_str, " ");
+      char *xattr = strtok(NULL, " ");
       char *val = strtok(NULL, " ");
-      string xattr_str(xattr);
-      string val_str(val);
 
-      rados.list_filter(ctx, xattr, val);
+      if (!type || !xattr || !val) {
+        cerr << "filter was not specified correctly" << std::endl;
+        goto out;
+      }
+
+      bufferlist bl;
+      ::encode(type, bl);
+      ::encode(xattr, bl);
+      if (strcmp(type, "parent") ==  0) {
+        inodeno_t int_val = strtoll(val, NULL, 0);
+        ::encode(int_val, bl);
+      } else if (strcmp(type, "plain") == 0) {
+        ::encode(val, bl);
+      } else {
+        cerr << "unknown filter type" << std::endl;
+        goto out;
+      }
+
+      rados.list_filter(ctx, bl);
     }
     while (1) {
       list<string> vec;

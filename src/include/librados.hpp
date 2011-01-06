@@ -98,7 +98,7 @@ public:
   int list_objects_open(pool_t pool, Rados::ListCtx *ctx);
   int list_objects_more(Rados::ListCtx& ctx, int max, std::list<std::string>& entries);
   void list_objects_close(Rados::ListCtx& ctx);
-  void list_filter(Rados::ListCtx& ctx, const std::string& xattr, const std::string& val);
+  void list_filter(Rados::ListCtx& ctx, bufferlist& filter);
 
   int list_pools(std::list<std::string>& v);
   int get_pool_stats(std::list<std::string>& v,
