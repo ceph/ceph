@@ -385,7 +385,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     dirlump &lump = lump_map[*lp];
 
     // the dir 
-    CDir *dir = mds->mdcache->get_dirfrag(*lp);
+    CDir *dir = mds->mdcache->get_force_dirfrag(*lp);
     if (!dir) {
       // hmm.  do i have the inode?
       CInode *diri = mds->mdcache->get_inode((*lp).ino);
