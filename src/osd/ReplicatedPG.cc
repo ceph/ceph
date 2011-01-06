@@ -1161,7 +1161,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	t.write(coll_t(info.pgid), soid, op.extent.offset, op.extent.length, nbl);
 	if (ssc->snapset.clones.size()) {
 	  snapid_t newest = *ssc->snapset.clones.rbegin();
+
+	  // Replace clone_overlap[newest] with an empty interval set since there
+	  // should no longer be any overlap
 	  ssc->snapset.clone_overlap.erase(newest);
+	  ssc->snapset.clone_overlap[newest];
 	  oi.size = 0;
 	}
 	if (op.extent.length != oi.size) {
@@ -1587,7 +1591,11 @@ inline void ReplicatedPG::_delete_head(OpContext *ctx)
   if (ssc->snapset.clones.size()) {
     snapid_t newest = *ssc->snapset.clones.rbegin();
     add_interval_usage(ssc->snapset.clone_overlap[newest], info.stats);
+
+    // Replace clone_overlap[newest] with an empty interval set since there
+    // should no longer be any overlap
     ssc->snapset.clone_overlap.erase(newest);  // ok, redundant.
+    ssc->snapset.clone_overlap[newest];
   }
   if (ctx->obs->exists) {
     info.stats.num_objects--;
@@ -1657,6 +1665,7 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       map<snapid_t, interval_set<uint64_t> >::iterator iter =
 	ssc->snapset.clone_overlap.lower_bound(snapid);
       interval_set<uint64_t> overlaps = iter->second;
+      assert(iter != ssc->snapset.clone_overlap.end());
       for ( ;
 	    iter != ssc->snapset.clone_overlap.end();
 	    ++iter)
@@ -1745,6 +1754,10 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     info.stats.num_object_clones++;
     ssc->snapset.clones.push_back(coid.snap);
     ssc->snapset.clone_size[coid.snap] = ctx->obs->oi.size;
+
+    // clone_overlap should contain an entry for each clone 
+    // (an empty interval_set if there is no overlap)
+    ssc->snapset.clone_overlap[coid.snap];
     if (ctx->obs->oi.size)
       ssc->snapset.clone_overlap[coid.snap].insert(0, ctx->obs->oi.size);
     
