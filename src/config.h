@@ -191,6 +191,7 @@ struct md_config_t {
   float mon_pg_create_interval;
   int mon_clientid_prealloc;
   int mon_globalid_prealloc;
+  int mon_osd_report_timeout;
 
   double paxos_propose_interval;
   double paxos_min_wait;

@@ -989,6 +989,42 @@ void OSDMonitor::tick()
 }
 
 
+void OSDMonitor::handle_osd_timeouts(const utime_t &now,
+			 const std::map<int,utime_t> &last_osd_report)
+{
+  utime_t timeo(g_conf.mon_osd_report_timeout, 0);
+  int max_osd = osdmap.get_max_osd();
+  bool new_down = false;
+
+  for (int i=0; i < max_osd; ++i) {
+    dout(30) << "handle_osd_timeouts: checking up on osd " << i << dendl;
+    if (!osdmap.exists(i))
+      continue;
+    if (!osdmap.is_up(i))
+      continue;
+    const std::map<int,utime_t>::const_iterator t = last_osd_report.find(i);
+    if (t == last_osd_report.end()) {
+      derr << "OSDMonitor::handle_osd_timeouts: never got MOSDPGStat "
+	   << "info from osd " << i << ". Marking down!" << dendl;
+      pending_inc.new_down[i] = true;
+      new_down = true;
+    }
+    else {
+      utime_t diff(now);
+      diff -= t->second;
+      if (diff > timeo) {
+	derr << "OSDMonitor::handle_osd_timeouts: last got MOSDPGStat "
+	     << "info from osd " << i << " at " << t->second << ". It has "
+	     << "been " << diff << ", so we're marking it down!" << dendl;
+	pending_inc.new_down[i] = true;
+	new_down = true;
+      }
+    }
+  }
+  if (new_down) {
+    propose_pending();
+  }
+}
 
 void OSDMonitor::mark_all_down()
 {

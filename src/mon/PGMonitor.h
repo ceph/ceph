@@ -24,11 +24,11 @@
 #include <set>
 using namespace std;
 
-#include "include/types.h"
-#include "msg/Messenger.h"
-#include "PaxosService.h"
-
 #include "PGMap.h"
+#include "PaxosService.h"
+#include "include/types.h"
+#include "include/utime.h"
+#include "msg/Messenger.h"
 
 class MPGStats;
 class MPGStatsAck;
@@ -45,6 +45,7 @@ private:
 
   void create_initial(bufferlist& bl);
   bool update_from_paxos();
+  void handle_osd_timeouts();
   void create_pending();  // prepare a new pending
   void encode_pending(bufferlist &bl);  // propose pending update to peers
 
@@ -54,6 +55,7 @@ private:
   bool prepare_update(PaxosServiceMessage *m);
 
   bool preprocess_pg_stats(MPGStats *stats);
+  bool pg_stats_have_changed(int from, const MPGStats *stats) const;
   bool prepare_pg_stats(MPGStats *stats);
   void _updated_stats(MPGStats *req, MPGStatsAck *ack);
 
@@ -76,6 +78,9 @@ private:
 
   map<int,utime_t> last_sent_pg_create;  // per osd throttle
 
+  // when we last received PG stats from each osd
+  map<int,utime_t> last_osd_report;
+
   void register_pg(pg_pool_t& pool, pg_t pgid, epoch_t epoch, bool new_pool);
   bool register_new_pgs();
   void send_pg_creates();
@@ -83,11 +88,11 @@ private:
  public:
   PGMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
   
+  virtual void on_election_start();
+
   void tick();  // check state, take actions
 
-
   void check_osd_map(epoch_t epoch);
-
 };
 
 #endif

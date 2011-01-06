@@ -47,16 +47,23 @@ static ostream& _prefix(Monitor *mon, PGMap& pg_map) {
 		<< ".pg v" << pg_map.version << " ";
 }
 
-
 /*
  Tick function to update the map based on performance every N seconds
 */
+
+void PGMonitor::on_election_start()
+{
+  // clear leader state
+  last_sent_pg_create.clear();
+  last_osd_report.clear();
+}
 
 void PGMonitor::tick() 
 {
   if (!paxos->is_active()) return;
 
   update_from_paxos();
+  handle_osd_timeouts();
   dout(10) << pg_map << dendl;
 }
 
@@ -92,6 +99,7 @@ bool PGMonitor::update_from_paxos()
   } 
 
   // walk through incrementals
+  utime_t now(g_clock.now());
   while (paxosv > pg_map.version) {
     bufferlist bl;
     bool success = paxos->read(pg_map.version+1, bl);
@@ -141,6 +149,20 @@ bool PGMonitor::update_from_paxos()
   send_pg_creates();
 
   return true;
+}
+
+void PGMonitor::handle_osd_timeouts()
+{
+  if (!mon->is_leader())
+    return;
+  utime_t now(g_clock.now());
+  utime_t timeo(g_conf.mon_osd_report_timeout, 0);
+  if (now - mon->get_leader_since() < timeo) {
+    // We haven't been the leader for long enough to consider OSD timeouts
+    return;
+  }
+
+  mon->osdmon()->handle_osd_timeouts(now, last_osd_report);
 }
 
 void PGMonitor::create_pending()
@@ -306,6 +328,28 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
   return false;
 }
 
+bool PGMonitor::pg_stats_have_changed(int from, const MPGStats *stats) const
+{
+  // any new osd info?
+  hash_map<int,osd_stat_t>::const_iterator s = pg_map.osd_stat.find(from);
+  if (s == pg_map.osd_stat.end())
+    return true;
+  if (s->second != stats->osd_stat)
+    return true;
+
+  // any new pg info?
+  for (map<pg_t,pg_stat_t>::const_iterator p = stats->pg_stat.begin();
+       p != stats->pg_stat.end(); ++p) {
+    hash_map<pg_t,pg_stat_t>::const_iterator t = pg_map.pg_stat.find(p->first);
+    if (t == pg_map.pg_stat.end())
+      return true;
+    if (t->second.reported != p->second.reported)
+      return true;
+  }
+
+  return false;
+}
+
 bool PGMonitor::prepare_pg_stats(MPGStats *stats) 
 {
   dout(10) << "prepare_pg_stats " << *stats << " from " << stats->get_orig_source() << dendl;
@@ -316,6 +360,9 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
     stats->put();
     return false;
   }
+
+  last_osd_report[from] = g_clock.now();
+
   if (!stats->get_orig_source().is_osd() ||
       !mon->osdmon()->osdmap.is_up(from) ||
       stats->get_orig_source_inst() != mon->osdmon()->osdmap.get_inst(from)) {
@@ -324,6 +371,19 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
     return false;
   }
       
+  if (!pg_stats_have_changed(from, stats)) {
+    dout(10) << " message contains no new osd|pg stats" << dendl;
+    MPGStatsAck *ack = new MPGStatsAck;
+    for (map<pg_t,pg_stat_t>::const_iterator p = stats->pg_stat.begin();
+	 p != stats->pg_stat.end();
+	 ++p) {
+      ack->pg_stat[p->first] = p->second.reported;
+    }
+    mon->send_reply(stats, ack);
+    stats->put();
+    return false;
+  }
+
   // osd stat
   pending_inc.osd_stat_updates[from] = stats->osd_stat;
   

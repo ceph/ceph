@@ -162,6 +162,8 @@ private:
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
 
+  void handle_osd_timeouts(const utime_t &now,
+			   const std::map<int,utime_t> &last_osd_report);
   void mark_all_down();
 
   void send_latest(PaxosServiceMessage *m, epoch_t start=0);
