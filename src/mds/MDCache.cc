@@ -662,7 +662,7 @@ void MDCache::adjust_subtree_auth(CDir *dir, pair<int,int> auth, bool do_eval)
   dout(7) << "adjust_subtree_auth " << dir->get_dir_auth() << " -> " << auth
 	  << " on " << *dir << dendl;
 
-  if (mds->is_replay() || mds->is_resolve())
+  if (mds->is_any_replay() || mds->is_resolve())
     do_eval = false;
 
   show_subtrees();
@@ -766,7 +766,7 @@ void MDCache::try_subtree_merge_at(CDir *dir)
   assert(subtrees.count(dir));
 
   bool do_eval = true;
-  if (mds->is_replay() || mds->is_resolve())
+  if (mds->is_any_replay() || mds->is_resolve())
     do_eval = false;
 
   // merge with parent?

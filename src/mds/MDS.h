@@ -231,6 +231,8 @@ class MDS : public Dispatcher {
   bool is_stopping() { return state == MDSMap::STATE_STOPPING; }
 
   bool is_oneshot_replay()   { return state == MDSMap::STATE_ONESHOT_REPLAY; }
+  bool is_any_replay() { return (is_replay() || is_standby_replay() ||
+                                 is_oneshot_replay()); }
 
   bool is_stopped()  { return mdsmap->is_stopped(whoami); }
 

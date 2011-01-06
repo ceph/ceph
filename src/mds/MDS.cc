@@ -908,8 +908,7 @@ void MDS::handle_mds_map(MMDSMap *m)
 
       if (is_active()) {
         active_start();
-      } else if (is_replay() || is_oneshot_replay() ||
-          is_standby_replay()) {
+      } else if (is_any_replay()) {
         replay_start();
       } else if (is_resolve()) {
         resolve_start();
@@ -1148,7 +1147,7 @@ void MDS::boot_start(int step, int r)
     }
 
   case 3:
-    if (is_replay() || is_oneshot_replay() || is_standby_replay()) {
+    if (is_any_replay()) {
       dout(2) << "boot_start " << step << ": replaying mds log" << dendl;
       if(is_oneshot_replay() || is_standby_replay())
         mdlog->get_journaler()->set_readonly();
@@ -1161,7 +1160,7 @@ void MDS::boot_start(int step, int r)
     }
 
   case 4:
-    if (is_replay() || is_oneshot_replay() || is_standby_replay()) {
+    if (is_any_replay()) {
       replay_done();
       break;
     }

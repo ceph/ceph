@@ -153,7 +153,7 @@ void MDLog::append()
 
 void MDLog::submit_entry( LogEvent *le, Context *c, bool wait_safe ) 
 {
-  assert(!mds->is_replay());
+  assert(!mds->is_any_replay());
   assert(le == cur_event);
   cur_event = NULL;
 
