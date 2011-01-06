@@ -1798,8 +1798,13 @@ do { \
 
     list<CDir*> ls;
     in->get_dirfrags(ls);
-    if (ls.empty()) continue;                // must be an open dir.
-    CDir *dir = ls.front();
+    if (ls.empty())
+      continue;                // must be an open dir.
+    list<CDir*>::iterator p = ls.begin();
+    int n = rand() % ls.size();
+    while (n--)
+      ++p;
+    CDir *dir = *p;
     if (!dir->get_parent_dir()) continue;    // must be linked.
     if (!dir->is_auth()) continue;           // must be auth.
 
