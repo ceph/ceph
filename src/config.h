@@ -394,7 +394,7 @@ struct md_config_t {
   int   osd_heartbeat_interval;  
   int   osd_mon_heartbeat_interval;  
   int   osd_heartbeat_grace;
-  int   osd_mon_report_interval;
+  int   osd_mon_report_interval_min;
   int   osd_min_down_reporters;
   int   osd_min_down_reports;
   int   osd_replay_window;

@@ -1570,7 +1570,7 @@ void OSD::tick()
 
   // mon report?
   utime_t now = g_clock.now();
-  if (now - last_mon_report > g_conf.osd_mon_report_interval)
+  if (now - last_mon_report > g_conf.osd_mon_report_interval_min)
     do_mon_report();
 
   // remove stray pgs?
