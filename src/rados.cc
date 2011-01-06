@@ -238,22 +238,28 @@ int main(int argc, const char **argv)
     if (filter) {
       char *flt_str = strdup(filter);
       char *type = strtok(flt_str, " ");
-      char *xattr = strtok(NULL, " ");
+      if (!type) {
+        cerr << "filter type was not specified" << std::endl;
+        goto out;
+      }
+      char *xattr = NULL;
+      if (strcmp(type, "parent") != 0)
+        xattr = strtok(NULL, " ");
       char *val = strtok(NULL, " ");
 
-      if (!type || !xattr || !val) {
+      if (!val) {
         cerr << "filter was not specified correctly" << std::endl;
         goto out;
       }
 
       bufferlist bl;
       ::encode(type, bl);
-      ::encode(xattr, bl);
       if (strcmp(type, "parent") ==  0) {
         inodeno_t int_val = strtoll(val, NULL, 0);
         ::encode(int_val, bl);
         filter_parent = true;
       } else if (strcmp(type, "plain") == 0) {
+        ::encode(xattr, bl);
         ::encode(val, bl);
       } else {
         cerr << "unknown filter type" << std::endl;

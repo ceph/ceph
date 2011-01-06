@@ -145,22 +145,14 @@ void ReplicatedPG::wait_for_degraded_object(const sobject_t& soid, Message *m)
 bool PGLSParentFilter::filter(bufferlist& xattr_data, bufferlist& outdata)
 {
   bufferlist::iterator iter = xattr_data.begin();
-  __u8 v;
+  inode_backtrace_t bt;
+
   generic_dout(0) << "PGLSParentFilter::filter" << dendl;
 
-  ::decode(v, iter);
-  generic_dout(0) << "v=" << (int)v << dendl;
-  if (v < 3)
-    return false;
-
-  vector<inode_backpointer_t> ancestors;
-  inodeno_t ino;
-  ::decode(ino, iter);
-  ::decode(ancestors, iter);
-  generic_dout(0) << "ino=" << ino << dendl;
+  ::decode(bt, iter);
 
   vector<inode_backpointer_t>::iterator vi;
-  for (vi = ancestors.begin(); vi != ancestors.end(); ++vi) {
+  for (vi = bt.ancestors.begin(); vi != bt.ancestors.end(); ++vi) {
     generic_dout(0) << "vi->dirino=" << vi->dirino << " parent_ino=" << parent_ino << dendl;
     if ( vi->dirino == parent_ino) {
       ::encode(*vi, outdata);
