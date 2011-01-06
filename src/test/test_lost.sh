@@ -20,13 +20,13 @@ setup() {
 
 recovery1_impl() {
         # Write lots and lots of objects
-        write_objects 1 1 200 4000
+        write_objects 1 1 200 4000 data
 
         # Take down osd1
         stop_osd 1
 
         # Continue writing a lot of objects
-        write_objects 2 2 200 4000
+        write_objects 2 2 200 4000 data
 
         # Bring up osd1
         restart_osd 1
@@ -65,13 +65,13 @@ lost1_impl() {
 	try_to_fetch_unfound=$1
 
         # Write lots and lots of objects
-        write_objects 1 1 20 8000
+        write_objects 1 1 20 8000 data
 
         # Take down osd1
         stop_osd 1
 
         # Continue writing a lot of objects
-        write_objects 2 2 20 8000
+        write_objects 2 2 20 8000 data
 
         # Bring up osd1
         restart_osd 1

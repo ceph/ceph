@@ -89,8 +89,8 @@ void logger_tare(utime_t s)
 
   utime_t fromstart = g_clock.now();
   if (fromstart < start) {
-    cerr << "logger_tare time jumped backwards from "
-	 << start << " to " << fromstart << std::endl;
+    derr << "logger_tare time jumped backwards from "
+	 << start << " to " << fromstart << dendl;
     fromstart = start;
   }
   fromstart -= start;
@@ -133,7 +133,8 @@ static void flush_all_loggers()
   utime_t now = g_clock.now();
   utime_t fromstart = now;
   if (fromstart < start) {
-    cerr << "logger time jumped backwards from " << start << " to " << fromstart << std::endl;
+    derr << "logger time jumped backwards from " << start << " to "
+	 << fromstart << dendl;
     //assert(0);
     start = fromstart;
   }

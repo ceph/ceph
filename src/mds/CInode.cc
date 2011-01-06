@@ -45,7 +45,7 @@
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "mds" << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") "
+#define dout_prefix *_dout << "mds" << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") "
 
 
 boost::pool<> CInode::pool(sizeof(CInode));
@@ -439,9 +439,16 @@ frag_t CInode::pick_dirfrag(const string& dn)
 
 bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
 {
+  bool all = true;
+  for (map<frag_t,CDir*>::iterator p = dirfrags.begin(); p != dirfrags.end(); ++p) {
+    if (fg.contains(p->first))
+      ls.push_back(p->second);
+    else
+      all = false;
+  }
+  /*
   list<frag_t> fglist;
   dirfragtree.get_leaves_under(fg, fglist);
-  bool all = true;
   for (list<frag_t>::iterator p = fglist.begin();
        p != fglist.end();
        ++p) 
@@ -449,7 +456,21 @@ bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
       ls.push_back(dirfrags[*p]);
     else 
       all = false;
+  */
   return all;
+}
+
+void CInode::verify_dirfrags()
+{
+  bool bad = false;
+  for (map<frag_t,CDir*>::iterator p = dirfrags.begin(); p != dirfrags.end(); ++p) {
+    if (!dirfragtree.is_leaf(p->first)) {
+      dout(0) << "have open dirfrag " << p->first << " but not leaf in " << dirfragtree
+	      << ": " << *p->second << dendl;
+      bad = true;
+    }
+  }
+  assert(!bad);
 }
 
 CDir *CInode::get_approx_dirfrag(frag_t fg)
@@ -982,6 +1003,35 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
 // ------------------
 // parent dir
 
+void CInode::build_backtrace(inode_backtrace_t& bt)
+{
+  bt.ino = inode.ino;
+  bt.ancestors.clear();
+
+  CInode *in = this;
+  CDentry *pdn = get_parent_dn();
+  while (pdn) {
+    CInode *diri = pdn->get_dir()->get_inode();
+    bt.ancestors.push_back(inode_backpointer_t(diri->ino(), pdn->name, in->inode.version));
+    in = diri;
+    pdn = in->get_parent_dn();
+  }
+}
+
+void CInode::encode_parent_mutation(ObjectOperation& m)
+{
+  string path;
+  make_path_string(path);
+  m.setxattr("path", path);
+
+  inode_backtrace_t bt;
+  build_backtrace(bt);
+  
+  bufferlist parent;
+  ::encode(bt, parent);
+  m.setxattr("parent", parent);
+}
+
 struct C_Inode_StoredParent : public Context {
   CInode *in;
   version_t version;
@@ -991,25 +1041,6 @@ struct C_Inode_StoredParent : public Context {
     in->_stored_parent(version, fin);
   }
 };
-
-void CInode::encode_parent_mutation(ObjectOperation& m)
-{
-  string path;
-  make_path_string(path);
-  m.setxattr("path", path);
-
-  CDentry *pdn = get_parent_dn();
-  if (pdn) {
-    bufferlist parent(32 + pdn->name.length());
-    uint64_t ino = pdn->get_dir()->get_inode()->ino();
-    __u8 v = 1;
-    ::encode(v, parent);
-    ::encode(inode.version, parent);
-    ::encode(ino, parent);
-    ::encode(pdn->name, parent);
-    m.setxattr("parent", parent);
-  }
-}
 
 void CInode::store_parent(Context *fin)
 {
@@ -1275,6 +1306,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	    dirfragtree.force_to_leaf(p->first);
 	  }
       }
+      if (g_conf.mds_debug_frag)
+	verify_dirfrags();
     }
     break;
 
@@ -1593,6 +1626,8 @@ void CInode::_finish_frag_update(CDir *dir, Mutation *mut)
 /* for more info on scatterlocks, see comments by Locker::scatter_writebehind */
 void CInode::finish_scatter_gather_update(int type)
 {
+  LogClient &clog = mdcache->mds->clog;
+
   dout(10) << "finish_scatter_gather_update " << type << " on " << *this << dendl;
   assert(is_auth());
 
@@ -1629,9 +1664,8 @@ void CInode::finish_scatter_gather_update(int type)
 
 	if (pf->fragstat.nfiles < 0 ||
 	    pf->fragstat.nsubdirs < 0) {
-	  stringstream ss;
-	  ss << "bad/negative dir size on " << dir->dirfrag() << " " << pf->fragstat;
-	  mdcache->mds->logclient.log(LOG_ERROR, ss);
+	  clog.error() << "bad/negative dir size on "
+	      << dir->dirfrag() << " " << pf->fragstat << "\n";
 	  
 	  if (pf->fragstat.nfiles < 0)
 	    pf->fragstat.nfiles = 0;
@@ -1649,10 +1683,9 @@ void CInode::finish_scatter_gather_update(int type)
 
 	if (fg == frag_t()) { // i.e., we are the only frag
 	  if (pi->dirstat.size() != pf->fragstat.size()) {
-	    stringstream ss;
-	    ss << "unmatched fragstat size on single dirfrag " << dir->dirfrag()
-	       << ", inode has " << pi->dirstat << ", dirfrag has " << pf->fragstat;
-	    mdcache->mds->logclient.log(LOG_ERROR, ss);
+	    clog.error() << "unmatched fragstat size on single "
+	       << "dirfrag " << dir->dirfrag() << ", inode has " 
+	       << pi->dirstat << ", dirfrag has " << pf->fragstat << "\n";
 	    
 	    // trust the dirfrag for now
 	    version_t v = pi->dirstat.version;
@@ -1669,9 +1702,8 @@ void CInode::finish_scatter_gather_update(int type)
 
       if (pi->dirstat.nfiles < 0 ||
 	  pi->dirstat.nsubdirs < 0) {
-	stringstream ss;
-	ss << "bad/negative dir size on " << ino() << ", inode has " << pi->dirstat;
-	mdcache->mds->logclient.log(LOG_ERROR, ss);
+	clog.error() << "bad/negative dir size on " << ino()
+	    << ", inode has " << pi->dirstat << "\n";
 
 	if (pi->dirstat.nfiles < 0)
 	  pi->dirstat.nfiles = 0;
@@ -1732,10 +1764,9 @@ void CInode::finish_scatter_gather_update(int type)
 
 	if (fg == frag_t()) { // i.e., we are the only frag
 	  if (pi->rstat.rbytes != pf->rstat.rbytes) { 
-	    stringstream ss;
-	    ss << "unmatched rstat rbytes on single dirfrag " << dir->dirfrag()
-	       << ", inode has " << pi->rstat << ", dirfrag has " << pf->rstat;
-	    mdcache->mds->logclient.log(LOG_ERROR, ss);
+	    clog.error() << "unmatched rstat rbytes on single dirfrag "
+		<< dir->dirfrag() << ", inode has " << pi->rstat
+		<< ", dirfrag has " << pf->rstat << "\n";
 	    
 	    // trust the dirfrag for now
 	    version_t v = pi->rstat.version;
@@ -1750,17 +1781,15 @@ void CInode::finish_scatter_gather_update(int type)
 
       //assert(pi->rstat.rfiles >= 0);
       if (pi->rstat.rfiles < 0) {
-	stringstream ss;
-	ss << "rfiles underflow " << pi->rstat.rfiles << " on " << *this;
-	mdcache->mds->logclient.log(LOG_ERROR, ss);
+	clog.error() << "rfiles underflow " << pi->rstat.rfiles
+	  << " on " << *this << "\n";
 	pi->rstat.rfiles = 0;
       }
 
       //assert(pi->rstat.rsubdirs >= 0);
       if (pi->rstat.rsubdirs < 0) {
-	stringstream ss;
-	ss << "rsubdirs underflow " << pi->rstat.rfiles << " on " << *this;
-	mdcache->mds->logclient.log(LOG_ERROR, ss);
+	clog.error() << "rsubdirs underflow " << pi->rstat.rfiles
+	  << " on " << *this << "\n";
 	pi->rstat.rsubdirs = 0;
       }
     }

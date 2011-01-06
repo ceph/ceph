@@ -16,13 +16,6 @@
 // global
 int g_lockdep = 0;
 
-/*
-struct foobarr {
-  foobarr() { cerr << "lockdep.cc init" << std::endl; }
-  ~foobarr() { cerr << "lockdep.cc shutdown" << std::endl; }
-} asdff;
-*/
-
 // disable lockdep when this module destructs.
 struct lockdep_stopper_t {
   ~lockdep_stopper_t() {

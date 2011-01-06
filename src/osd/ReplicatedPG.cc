@@ -16,6 +16,7 @@
 #include "PGLS.h"
 
 #include "common/arch.h"
+#include "common/errno.h"
 #include "common/Logger.h"
 
 #include "messages/MOSDOp.h"
@@ -29,6 +30,11 @@
 #include "messages/MOSDPGTrim.h"
 
 #include "messages/MOSDPing.h"
+#include "messages/MWatchNotify.h"
+
+#include "Watch.h"
+
+#include "mds/inode_backtrace.h" // Ugh
 
 #include "config.h"
 
@@ -37,7 +43,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(this, osd->whoami, osd->osdmap)
 static ostream& _prefix(PG *pg, int whoami, OSDMap *osdmap) {
-  return *_dout << dbeginl << "osd" << whoami
+  return *_dout << "osd" << whoami
 		<< " " << (osdmap ? osdmap->get_epoch():0) << " " << *pg << " ";
 }
 
@@ -136,6 +142,70 @@ void ReplicatedPG::wait_for_degraded_object(const sobject_t& soid, Message *m)
   waiting_for_degraded_object[soid].push_back(m);
 }
 
+bool PGLSParentFilter::filter(bufferlist& xattr_data, bufferlist& outdata)
+{
+  bufferlist::iterator iter = xattr_data.begin();
+  inode_backtrace_t bt;
+
+  generic_dout(0) << "PGLSParentFilter::filter" << dendl;
+
+  ::decode(bt, iter);
+
+  vector<inode_backpointer_t>::iterator vi;
+  for (vi = bt.ancestors.begin(); vi != bt.ancestors.end(); ++vi) {
+    generic_dout(0) << "vi->dirino=" << vi->dirino << " parent_ino=" << parent_ino << dendl;
+    if ( vi->dirino == parent_ino) {
+      ::encode(*vi, outdata);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool PGLSPlainFilter::filter(bufferlist& xattr_data, bufferlist& outdata)
+{
+  if (val.size() != xattr_data.length())
+    return false;
+
+  if (memcmp(val.c_str(), xattr_data.c_str(), val.size()))
+    return false;
+
+  return true;
+}
+
+bool ReplicatedPG::pgls_filter(PGLSFilter *filter, sobject_t& sobj, bufferlist& outdata)
+{
+  bufferlist bl;
+
+  int ret = osd->store->getattr(coll_t(info.pgid), sobj, filter->get_xattr().c_str(), bl);
+  dout(0) << "getattr (sobj=" << sobj << ", attr=" << filter->get_xattr() << ") returned " << ret << dendl;
+  if (ret < 0)
+    return false;
+
+  return filter->filter(bl, outdata);
+}
+
+int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilter)
+{
+  string type;
+  PGLSFilter *filter;
+
+  ::decode(type, iter);
+
+  if (type.compare("parent") == 0) {
+    filter = new PGLSParentFilter(iter);
+  } else if (type.compare("plain") == 0) {
+    filter = new PGLSPlainFilter(iter);
+  } else {
+    return -EINVAL;
+  }
+
+  *pfilter = filter;
+
+  return  0;
+}
+
 
 // ==========================================================
 void ReplicatedPG::do_pg_op(MOSDOp *op)
@@ -144,11 +214,27 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 
   bufferlist outdata;
   int result = 0;
+  string cname, mname;
+  PGLSFilter *filter = NULL;
+  bufferlist filter_out;
 
   snapid_t snapid = op->get_snapid();
 
   for (vector<OSDOp>::iterator p = op->ops.begin(); p != op->ops.end(); p++) {
+    bufferlist::iterator bp = p->data.begin();
     switch (p->op.op) {
+    case CEPH_OSD_OP_PGLS_FILTER:
+      ::decode(cname, bp);
+      ::decode(mname, bp);
+
+      result = get_pgls_filter(bp, &filter);
+      if (result < 0)
+        break;
+
+      assert(filter);
+
+      // fall through
+
     case CEPH_OSD_OP_PGLS:
       if (op->get_pg() != info.pgid) {
         dout(10) << " pgls pg=" << op->get_pg() << " != " << info.pgid << dendl;
@@ -165,6 +251,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 	if (result == 0) {
           vector<sobject_t>::iterator iter;
           for (iter = sentries.begin(); iter != sentries.end(); ++iter) {
+	    bool keep = true;
 	    // skip snapdir objects
 	    if (iter->snap == CEPH_SNAPDIR)
 	      continue;
@@ -192,9 +279,15 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 		  continue;
 	      }
 	    }
-            response.entries.push_back(iter->oid);
+	    if (filter)
+	      keep = pgls_filter(filter, *iter, filter_out);
+
+            if (keep)
+	      response.entries.push_back(iter->oid);
           }
 	  ::encode(response, outdata);
+          if (filter)
+	    ::encode(filter_out, outdata);
         }
 	dout(10) << " pgls result=" << result << " outdata.length()=" << outdata.length() << dendl;
       }
@@ -213,6 +306,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
   reply->set_result(result);
   osd->client_messenger->send_message(reply, op->get_connection());
   op->put();
+  delete filter;
 }
 
 void ReplicatedPG::calc_trim_to()
@@ -265,7 +359,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
     }
     osd->reply_op_error(op, r);
     return;
-  }    
+  }
 
   if ((op->may_read()) && (obc->obs.oi.lost)) {
     // This object is lost. Reading from it returns an error.
@@ -306,6 +400,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   OpContext *ctx = new OpContext(op, op->get_reqid(), op->ops,
 				 &obc->obs, this);
   bool noop = false;
+  ctx->obc = obc;
 
   if (op->may_write()) {
     // snap
@@ -395,6 +490,9 @@ void ReplicatedPG::do_op(MOSDOp *op)
     ctx->reply->get_header().data_off = ctx->data_off;
     ctx->reply->set_result(result);
 
+    if (result >= 0)
+      ctx->reply->set_version(ctx->reply_version);
+
     // read or error?
     if (ctx->op_t.empty() || result < 0) {
       log_op_stats(ctx);
@@ -410,9 +508,6 @@ void ReplicatedPG::do_op(MOSDOp *op)
     }
 
     assert(op->may_write());
-
-    // set version in op, for benefit of client and our eventual reply.  if !noop!
-    op->set_version(ctx->at_version);
 
     // trim log?
     calc_trim_to();
@@ -803,6 +898,53 @@ int ReplicatedPG::do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr)
   }
 }
 
+void ReplicatedPG::dump_watchers(ObjectContext *obc)
+{
+  assert(osd->watch_lock.is_locked());
+  
+  dout(0) << "dump_watchers " << obc->obs.oi.soid << " " << obc->obs.oi << dendl;
+  for (map<entity_name_t, OSD::Session *>::iterator iter = obc->watchers.begin(); 
+       iter != obc->watchers.end();
+       ++iter)
+    dout(0) << " * obc->watcher: " << iter->first << " session=" << iter->second << dendl;
+  
+  for (map<entity_name_t, watch_info_t>::iterator oi_iter = obc->obs.oi.watchers.begin();
+       oi_iter != obc->obs.oi.watchers.end();
+       oi_iter++) {
+    watch_info_t& w = oi_iter->second;
+    dout(0) << " * oi->watcher: " << oi_iter->first << " cookie=" << w.cookie << dendl;
+  }
+}
+
+void ReplicatedPG::do_complete_notify(Watch::Notification *notif, ObjectContext *obc)
+{
+  osd->complete_notify((void *)notif, obc);
+}
+
+int ReplicatedPG::prepare_call(MOSDOp *osd_op, ceph_osd_op& op,
+			       string& cname, string& mname,
+			       bufferlist::iterator& bp,
+			       ClassHandler::ClassMethod **pmethod)
+{
+  int result;
+
+  ClassHandler::ClassData *cls;
+  ClassVersion version;
+  version.set_arch(get_arch());
+  result = osd->get_class(cname, version, info.pgid, osd_op, &cls);
+  if (result) {
+    dout(10) << "call class " << cname << " does not exist" << dendl;
+    return result;
+  }
+  bufferlist outdata;
+  ClassHandler::ClassMethod *method = cls->get_method(mname.c_str());
+  if (!method) {
+    dout(10) << "call method " << cname << "." << mname << " does not exist" << dendl;
+    return -EINVAL;
+  }
+  *pmethod = method;
+  return 0;
+}
 
 // ========================================================================
 // low level osd ops
@@ -842,12 +984,21 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       break;
     }
 
+    ctx->reply_version = oi.user_version;
     // make writeable (i.e., clone if necessary)
     if (is_modify) {
       if (!ctx->snapc.is_valid())
         return -EINVAL;
       make_writeable(ctx);
+
+      if (op.op != CEPH_OSD_OP_WATCH) {
+        /* update the user_version for any modify ops, except for the watch op */
+        oi.user_version = ctx->at_version;
+        ctx->reply_version = oi.user_version;
+      }
     }
+
+    dout(0) << "oi.user_version=" << oi.user_version << " is_modify=" << is_modify << dendl;
 
     // munge ZERO -> TRUNCATE?  (don't munge to DELETE or we risk hosing attributes)
     if (op.op == CEPH_OSD_OP_ZERO &&
@@ -976,28 +1127,20 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       {
 	bufferlist indata;
 	bp.copy(op.cls.indata_len, indata);
-	
-	ClassHandler::ClassData *cls;
-        ClassVersion version;
-        version.set_arch(get_arch());
-        result = osd->get_class(cname, version, info.pgid, ctx->op, &cls);
-	if (result) {
-	  dout(10) << "call class " << cname << " does not exist" << dendl;
-          if (result == -EAGAIN)
-            return result;
-	} else {
+
+	ClassHandler::ClassMethod *method;
+        result = prepare_call((MOSDOp *)ctx->op, op, cname, mname, bp, &method);
+        if (result == -EAGAIN)
+          return result;
+
+        if (!result) {
 	  bufferlist outdata;
-	  ClassHandler::ClassMethod *method = cls->get_method(mname.c_str());
-	  if (!method) {
-	    dout(10) << "call method " << cname << "." << mname << " does not exist" << dendl;
-	    result = -EINVAL;
-	  } else {
-	    dout(10) << "call method " << cname << "." << mname << dendl;
-	    result = method->exec((cls_method_context_t)&ctx, indata, outdata);
-	    dout(10) << "method called response length=" << outdata.length() << dendl;
-	    op.extent.length = outdata.length();
-	    odata.claim_append(outdata);
-	  }
+
+          dout(10) << "call method " << cname << "." << mname << dendl;
+	  result = method->exec((cls_method_context_t)&ctx, indata, outdata);
+	  dout(10) << "method called response length=" << outdata.length() << dendl;
+	  op.extent.length = outdata.length();
+	  odata.claim_append(outdata);
 	}
       }
       break;
@@ -1099,6 +1242,113 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
 	dout(10) << "comparison returned true" << dendl;
 	info.stats.num_rd++;
+      }
+      break;
+
+    case CEPH_OSD_OP_ASSERT_VER:
+      {
+	uint64_t ver = op.watch.ver;
+	if (!ver)
+	  result = -EINVAL;
+        else if (ver < oi.user_version.version)
+	  result = -ERANGE;
+	else if (ver > oi.user_version.version)
+	  result = -EOVERFLOW;
+	break;
+      }
+
+   case CEPH_OSD_OP_NOTIFY:
+      {
+	uint32_t ver;
+	uint32_t timeout;
+
+	try {
+          ::decode(ver, bp);
+	  ::decode(timeout, bp);
+	} catch (const buffer::error &e) {
+	  timeout = 0;
+	}
+	if (!timeout || timeout > (uint32_t)g_conf.osd_max_notify_timeout)
+		timeout = g_conf.osd_max_notify_timeout;
+	dout(0) << "CEPH_OSD_OP_NOTIFY" << dendl;
+        ObjectContext *obc = ctx->obc;
+	dout(0) << "ctx->obc=" << (void *)obc << dendl;
+
+	OSD::Session *session = (OSD::Session *)ctx->op->get_connection()->get_priv();
+	// give the session reference to notif.
+	Watch::Notification *notif = new Watch::Notification(ctx->reqid.name, session, op.watch.cookie);
+	notif->pgid = osd->osdmap->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
+
+	osd->watch_lock.Lock();
+	osd->watch->add_notification(notif);
+
+	// connected
+	for (map<entity_name_t, OSD::Session*>::iterator p = obc->watchers.begin();
+	     p != obc->watchers.end();
+	     p++) {
+	  entity_name_t name = p->first;
+	  OSD::Session *s = p->second;
+	  watch_info_t& w = obc->obs.oi.watchers[p->first];
+
+	  notif->add_watcher(name, Watch::WATCHER_NOTIFIED); // adding before send_message to avoid race
+	  s->add_notif(notif, name);
+
+	  MWatchNotify *notify_msg = new MWatchNotify(w.cookie, oi.user_version.version, notif->id, WATCH_NOTIFY);
+	  osd->client_messenger->send_message(notify_msg, s->con);
+	}
+
+	// unconnected
+	utime_t now = g_clock.now();
+	for (map<entity_name_t, utime_t>::iterator p = obc->unconnected_watchers.begin();
+	     p != obc->unconnected_watchers.end();
+	     p++) {
+	  entity_name_t name = p->first;
+          utime_t expire = p->second;
+          if (now < expire)
+	    notif->add_watcher(name, Watch::WATCHER_PENDING); /* FIXME: should we remove expired unconnected? probably yes */
+	}
+
+	notif->reply = new MWatchNotify(op.watch.cookie, oi.user_version.version, notif->id, WATCH_NOTIFY_COMPLETE);
+	if (notif->watchers.empty()) {
+          do_complete_notify(notif, obc);
+	} else {
+	  obc->notifs[notif] = true;
+          obc->ref++;
+          notif->obc = obc;
+	  notif->timeout = new Watch::C_NotifyTimeout(osd, notif);
+	  osd->watch_timer.add_event_after(timeout, notif->timeout);
+	}
+	osd->watch_lock.Unlock();
+      }
+      break;
+
+    case CEPH_OSD_OP_NOTIFY_ACK:
+      {
+        ObjectContext *obc = ctx->obc;
+	entity_name_t source = ctx->op->get_source();
+	dout(0) << "CEPH_OSD_OP_NOTIFY_ACK" << dendl;
+	dout(0) << "ctx->obc=" << (void *)obc << dendl;
+
+	osd->watch_lock.Lock();
+        map<entity_name_t, watch_info_t>::iterator oi_iter = oi.watchers.find(source);
+	if (oi_iter == oi.watchers.end()) {
+	  dout(0) << "couldn't find watcher" << dendl;
+	  break;
+	}
+
+	Watch::Notification *notif = osd->watch->get_notif(op.watch.cookie);
+	if (!notif) {
+          osd->watch_lock.Unlock();
+	  result = -EINVAL;
+	  break;
+	}
+
+	OSD::Session *session = (OSD::Session *)ctx->op->get_connection()->get_priv();
+        session->del_notif(notif);
+	session->put();
+
+        osd->ack_notification(source, notif, obc);
+	osd->watch_lock.Unlock();
       }
       break;
 
@@ -1263,6 +1513,98 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
     
     case CEPH_OSD_OP_DELETE:
       _delete_head(ctx);
+      break;
+
+    case CEPH_OSD_OP_WATCH:
+      {
+        uint64_t cookie = op.watch.cookie;
+	bool do_watch = op.watch.flag & 1;
+        entity_name_t entity = ctx->reqid.name;
+	ObjectContext *obc = ctx->obc;
+
+	dout(0) << "watch: ctx->obc=" << (void *)obc << " cookie=" << cookie
+		<< " oi.version=" << oi.version.version << " ctx->at_version=" << ctx->at_version << dendl;
+	dout(0) << "watch: oi.user_version=" << oi.user_version.version << dendl;
+	OSD::Session *session = (OSD::Session *)ctx->op->get_connection()->get_priv();
+
+	osd->watch_lock.Lock();
+	map<entity_name_t, OSD::Session *>::iterator iter = obc->watchers.find(entity);
+	watch_info_t w = {cookie, 30};  // FIXME: where does the timeout come from?
+	if (do_watch) {
+	  if (oi.watchers.count(entity) && oi.watchers[entity] == w) {
+	    dout(10) << " found existing watch " << w << " by " << entity << " session " << session << dendl;
+	  } else {
+	    dout(10) << " registered new watch " << w << " by " << entity << " session " << session << dendl;
+	    oi.watchers[entity] = w;
+	    t.nop();  // make sure update the object_info on disk!
+	  }
+
+	  if (iter == obc->watchers.end()) {
+	    dout(10) << " connected to watch " << w << " by " << entity << " session " << session << dendl;
+	    obc->watchers[entity] = session;
+	    session->get();
+	    session->watches[obc] = osd->osdmap->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
+	    obc->ref++;
+	  } else if (iter->second == session) {
+	    // already there
+	    dout(10) << " already connected to watch " << w << " by " << entity
+		     << " session " << session << dendl;
+	  } else {
+	    // weird: same entity, different session.
+	    dout(10) << " reconnected (with different session!) watch " << w << " by " << entity
+		     << " session " << session << " (was " << iter->second << ")" << dendl;
+	    iter->second->watches.erase(obc);
+	    iter->second->put();
+	    iter->second = session;
+	    session->get();
+	    session->watches[obc] = osd->osdmap->object_locator_to_pg(soid.oid, obc->obs.oi.oloc);
+	  }
+          map<entity_name_t, utime_t>::iterator un_iter = obc->unconnected_watchers.find(entity);
+          if (un_iter != obc->unconnected_watchers.end())
+            obc->unconnected_watchers.erase(un_iter);
+
+	  map<Watch::Notification *, bool>::iterator niter;
+          for (niter = obc->notifs.begin(); niter != obc->notifs.end(); ++niter) {
+            Watch::Notification *notif = niter->first;
+            map<entity_name_t, Watch::WatcherState>::iterator iter = notif->watchers.find(entity);
+            if (iter != notif->watchers.end()) {
+            /* there is a pending notification for this watcher, we should resend it anyway
+               even if we already sent it as it might not have received it */
+              MWatchNotify *notify_msg = new MWatchNotify(w.cookie, oi.user_version.version, notif->id, WATCH_NOTIFY);
+              osd->client_messenger->send_message(notify_msg, session->con);
+            }
+          }
+	  register_object_context(obc);
+        } else {
+	  map<entity_name_t, watch_info_t>::iterator oi_iter = oi.watchers.find(entity);
+	  if (oi_iter != oi.watchers.end()) {
+	    dout(10) << " removed watch " << oi_iter->second << " by " << entity << dendl;
+            oi.watchers.erase(entity);
+	    t.nop();  // update oi on disk
+
+	    if (iter != obc->watchers.end()) {
+	      dout(10) << " disconnected session " << iter->second << dendl;
+	      obc->watchers.erase(iter);
+	      session->watches.erase(obc);
+	      put_object_context(obc);
+	      iter->second->put();
+	    } else {
+	      assert(obc->unconnected_watchers.count(entity));
+	      obc->unconnected_watchers.erase(entity);
+	    }
+
+	    // FIXME: trigger notifies?
+
+	  } else {
+	    dout(10) << " can't remove: no watch by " << entity << dendl;
+	    assert(iter == obc->watchers.end());
+	  }
+        }
+	dump_watchers(obc);
+	osd->watch_lock.Unlock();
+
+	session->put();
+      }
       break;
 
 
@@ -1790,7 +2132,6 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
   // prepare the actual mutation
   int result = do_osd_ops(ctx, ctx->ops, ctx->outdata);
-
   if (result < 0 || ctx->op_t.empty())
     return result;  // error, or read op.
 
@@ -1949,7 +2290,7 @@ void ReplicatedPG::apply_repop(RepGather *repop)
 							repop->ctx->clone_obc);
   int r = osd->store->queue_transactions(&osr, repop->tls, onapplied, oncommit, onapplied_sync);
   if (r) {
-    dout(-10) << "apply_repop  queue_transactions returned " << r << " on " << *repop << dendl;
+    derr << "apply_repop  queue_transactions returned " << r << " on " << *repop << dendl;
     assert(0);
   }
 }
@@ -2004,7 +2345,7 @@ void ReplicatedPG::op_applied(RepGather *repop)
 
     switch (first.op.op) { 
     case CEPH_OSD_OP_UNBALANCEREADS:
-      dout(-10) << "op_applied  completed unbalance-reads on " << oid << dendl;
+      dout(0) << "op_applied  completed unbalance-reads on " << oid << dendl;
       unbalancing_reads.erase(oid);
       if (waiting_for_unbalanced_reads.count(oid)) {
 	osd->take_waiters(waiting_for_unbalanced_reads[oid]);
@@ -2013,7 +2354,7 @@ void ReplicatedPG::op_applied(RepGather *repop)
       break;
 
     case CEPH_OSD_OP_BALANCEREADS:
-      dout(-10) << "op_applied  completed balance-reads on " << oid << dendl;
+      dout(0) << "op_applied  completed balance-reads on " << oid << dendl;
       /*
 	if (waiting_for_balanced_reads.count(oid)) {
 	osd->take_waiters(waiting_for_balanced_reads[oid]);
@@ -2023,7 +2364,7 @@ void ReplicatedPG::op_applied(RepGather *repop)
       break;
 
     case CEPH_OSD_OP_WRUNLOCK:
-      dout(-10) << "op_applied  completed wrunlock on " << soid << dendl;
+      dout(0) << "op_applied  completed wrunlock on " << soid << dendl;
       if (waiting_for_wr_unlock.count(soid)) {
 	osd->take_waiters(waiting_for_wr_unlock[soid]);
 	waiting_for_wr_unlock.erase(soid);
@@ -2105,7 +2446,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	else
 	  reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), 0);
 	reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
-	dout(10) << " sending commit on " << *repop << " " << reply << dendl;
+	dout(0) << " sending commit on " << *repop << " " << reply << dendl;
 	assert(entity_name_t::TYPE_OSD != op->get_connection()->peer_type);
 	osd->client_messenger->send_message(reply, op->get_connection());
 	repop->sent_disk = true;
@@ -2332,6 +2673,19 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const sobject_t& s
     if (r >= 0) {
       obc->obs.oi.decode(bv);
       obc->obs.exists = true;
+
+      if (!obc->obs.oi.watchers.empty()) {
+	// populate unconnected_watchers
+	utime_t now = g_clock.now();
+	for (map<entity_name_t, watch_info_t>::iterator p = obc->obs.oi.watchers.begin();
+	     p != obc->obs.oi.watchers.begin();
+	     p++) {
+	  utime_t expire = now;
+	  expire += p->second.timeout_seconds;
+	  dout(10) << "  unconnected watcher " << p->first << " will expire " << expire << dendl;
+	  obc->unconnected_watchers[p->first] = expire;
+	}
+      }
     } else {
       obc->obs.exists = false;
     }
@@ -2610,7 +2964,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   Context *onapply = new C_OSD_RepModifyApply(rm);
   int r = osd->store->queue_transactions(&osr, rm->tls, onapply, oncommit);
   if (r) {
-    derr(0) << "error applying transaction: r = " << r << dendl;
+    dout(0) << "error applying transaction: r = " << r << dendl;
     assert(0);
   }
   // op is cleaned up by oncommit/onapply when both are executed
@@ -3168,14 +3522,10 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
   struct stat st;
   int r = osd->store->stat(coll_t(info.pgid), soid, &st);
   if (r != 0) {
-    stringstream ss;
-    char buf[80];
-    ss << op->get_source() << " tried to pull " << soid << " in " << info.pgid
-       << " but got " << strerror_r(-r, buf, sizeof(buf));
-    osd->logclient.log(LOG_ERROR, ss);
-
+    osd->clog.error() << op->get_source() << " tried to pull " << soid
+	<< " in " << info.pgid << " but got "
+	<< cpp_strerror(-r) << "\n";
     // FIXME: do something more intelligent.. mark the pg as needing repair?
-
   } else {
     uint64_t size = st.st_size;
 
@@ -4012,7 +4362,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 
       // did we finish the last oid?
       if (head != sobject_t()) {
-	derr(0) << " missing clone(s) for " << head << dendl;
+	dout(0) << " missing clone(s) for " << head << dendl;
 	assert(head == sobject_t());  // we had better be done
 	errors++;
       }
@@ -4097,17 +4447,16 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 	   << stat.num_kb << "/" << info.stats.num_kb << " kb."
 	   << dendl;
 
-  stringstream ss;
   if (stat.num_objects != info.stats.num_objects ||
       stat.num_object_clones != info.stats.num_object_clones ||
       stat.num_bytes != info.stats.num_bytes ||
       stat.num_kb != info.stats.num_kb) {
-    ss << info.pgid << " " << mode << " stat mismatch, got "
+    osd->clog.error() << info.pgid << " " << mode
+       << " stat mismatch, got "
        << stat.num_objects << "/" << info.stats.num_objects << " objects, "
        << stat.num_object_clones << "/" << info.stats.num_object_clones << " clones, "
        << stat.num_bytes << "/" << info.stats.num_bytes << " bytes, "
-       << stat.num_kb << "/" << info.stats.num_kb << " kb.";
-    osd->get_logclient()->log(LOG_ERROR, ss);
+       << stat.num_kb << "/" << info.stats.num_kb << " kb.\n";
     errors++;
 
     if (repair) {

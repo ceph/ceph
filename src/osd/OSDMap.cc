@@ -95,7 +95,7 @@ void OSDMap::print_summary(ostream& out) const
 
 
 void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
-			  int num_osd, int num_dom, int pg_bits, int lpg_bits,
+			  int num_osd, int num_dom, int pg_bits, int pgp_bits, int lpg_bits,
 			  int mds_local_osd)
 {
   dout(10) << "build_simple on " << num_osd
@@ -121,7 +121,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
     pools[pool].v.crush_ruleset = p->first;
     pools[pool].v.object_hash = CEPH_STR_HASH_RJENKINS;
     pools[pool].v.pg_num = num_osd << pg_bits;
-    pools[pool].v.pgp_num = num_osd << pg_bits;
+    pools[pool].v.pgp_num = num_osd << pgp_bits;
     pools[pool].v.lpg_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
     pools[pool].v.lpgp_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
     pools[pool].v.last_change = epoch;
@@ -168,7 +168,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
     int rweights[ndom];
 
     int nper = ((num_osd - 1) / ndom) + 1;
-    derr(0) << ndom << " failure domains, " << nper << " osds each" << dendl;
+    dout(0) << ndom << " failure domains, " << nper << " osds each" << dendl;
     
     int o = 0;
     for (int i=0; i<ndom; i++) {

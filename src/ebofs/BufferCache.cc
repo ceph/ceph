@@ -38,7 +38,7 @@ void do_apply_partial(bufferlist& bl, map<uint64_t, bufferlist>& pm)
 /*********** BufferHead **************/
 
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "ebofs." << *this << "."
+#define dout_prefix *_dout << "ebofs." << *this << "."
 
 
 void BufferHead::add_partial(uint64_t off, bufferlist& p) 
@@ -124,7 +124,7 @@ void BufferHead::apply_partial()
 /************ ObjectCache **************/
 
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "ebofs.oc."
+#define dout_prefix *_dout << "ebofs.oc."
 
 void ObjectCache::rx_finish(ioh_t ioh, block_t start, block_t length, bufferlist& bl)
 {
@@ -421,7 +421,7 @@ int ObjectCache::try_map_read(block_t start, block_t len)
 	num_missing++;
       }
       else if (e->is_partial()) {
-        dout(-20) << "try_map_read partial " << *e << dendl;
+        dout(0) << "try_map_read partial " << *e << dendl;
 	num_missing++;
       }
       else {
@@ -890,7 +890,7 @@ BufferHead *ObjectCache::merge_bh_left(BufferHead *left, BufferHead *right)
 /* wait until this has a user
 void ObjectCache::try_merge_bh(BufferHead *bh)
 {
-  dout(-10) << "try_merge_bh " << *bh << dendl;
+  dout(0) << "try_merge_bh " << *bh << dendl;
 
   map<block_t, BufferHead*>::iterator p = data.lower_bound(bh->start());
   assert(p->second == bh);
@@ -983,7 +983,7 @@ void ObjectCache::scrub_csums()
 /************** BufferCache ***************/
 
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "ebofs.bc."
+#define dout_prefix *_dout << "ebofs.bc."
 
 
 BufferHead *BufferCache::split(BufferHead *orig, block_t after) 

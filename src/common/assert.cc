@@ -12,19 +12,14 @@ void __ceph_assert_fail(const char *assertion, const char *file, int line, const
 {
   BackTrace *bt = new BackTrace(1);
 
-  _dout_lock.TryLock();
-  *_dout << file << ": In function '" << func << "':" << std::endl;
+  _dout_lock.Lock();
+  *_dout << file << ": In function '" << func << "', "
+	 << "In thread " << hex << pthread_self() << dec << std::endl;
   *_dout << file << ":" << line << ": FAILED assert(" << assertion << ")" << std::endl;
   bt->print(*_dout);
   *_dout << " NOTE: a copy of the executable, or `objdump -rdS <executable>` is needed to interpret this." << std::endl;
 
   _dout->flush();
-
-  cerr << file << ": In function '" << func << "':" << std::endl;
-  cerr << file << ":" << line << ": FAILED assert(" << assertion << ")" << std::endl;
-  bt->print(cerr);
-  cerr << " NOTE: a copy of the executable, or `objdump -rdS <executable>` is needed to interpret this." << std::endl;
-  cerr.flush();
 
   if (1) {
     throw FailedAssertion(bt);
@@ -36,9 +31,10 @@ void __ceph_assert_fail(const char *assertion, const char *file, int line, const
   }
 }
 
-void __ceph_assert_warn(const char *assertion, const char *file, int line, const char *func)
+void __ceph_assert_warn(const char *assertion, const char *file,
+			int line, const char *func)
 {
-  *_dout << "WARNING: assert(" << assertion << ") at: " << file << ":" << line << ": " << func << "()" << std::endl;
+  derr << "WARNING: assert(" << assertion << ") at: " << file << ":" << line << ": " << func << "()" << dendl;
 }
 
 }

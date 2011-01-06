@@ -36,8 +36,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(mon, mdsmap)
 static ostream& _prefix(Monitor *mon, MDSMap& mdsmap) {
-  return *_dout << dbeginl
-		<< "mon." << mon->name << "@" << mon->rank
+  return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
 		<< ".mds e" << mdsmap.get_epoch() << " ";
 }
@@ -404,9 +403,8 @@ bool MDSMonitor::should_propose(double& delay)
 void MDSMonitor::_updated(MMDSBeacon *m)
 {
   dout(10) << "_updated " << m->get_orig_source() << " " << *m << dendl;
-  stringstream ss;
-  ss << m->get_orig_source_inst() << " " << ceph_mds_state_name(m->get_state());
-  mon->get_logclient()->log(LOG_INFO, ss);
+  mon->clog.info() << m->get_orig_source_inst() << " "
+	  << ceph_mds_state_name(m->get_state()) << "\n";
 
   if (m->get_state() == MDSMap::STATE_STOPPED) {
     // send the map manually (they're out of the map, so they won't get it automatic)
@@ -975,7 +973,7 @@ void MDSMonitor::do_stop()
   // hrm...
   if (!mon->is_leader() ||
       !paxos->is_active()) {
-    dout(-10) << "do_stop can't stop right now, mdsmap not writeable" << dendl;
+    dout(0) << "do_stop can't stop right now, mdsmap not writeable" << dendl;
     return;
   }
 

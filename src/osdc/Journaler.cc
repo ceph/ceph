@@ -22,7 +22,7 @@
 
 #define DOUT_SUBSYS journaler
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << objecter->messenger->get_myname() << ".journaler "
+#define dout_prefix *_dout << objecter->messenger->get_myname() << ".journaler "
 
 
 
@@ -869,7 +869,7 @@ bool Journaler::try_read_entry(bufferlist& bl)
 	   << read_pos << "~" << (sizeof(s)+s) << " (have " << read_buf.length() << ")" << dendl;
 
   if (s == 0) {
-    derr(0) << "try_read_entry got 0 len entry at offset " << read_pos << dendl;
+    dout(0) << "try_read_entry got 0 len entry at offset " << read_pos << dendl;
     error = -EINVAL;
     return false;
   }

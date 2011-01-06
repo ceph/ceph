@@ -888,6 +888,15 @@ public:
     if (!have_inode(df.ino)) return NULL;
     return get_inode(df.ino)->get_dirfrag(df.frag);
   }
+  CDir* get_force_dirfrag(dirfrag_t df) {
+    CInode *diri = get_inode(df.ino);
+    if (!diri)
+      return NULL;
+    CDir *dir = force_dir_fragment(diri, df.frag);
+    if (!dir)
+      dir = diri->get_dirfrag(df.frag);
+    return dir;
+  }
 
   MDSCacheObject *get_object(MDSCacheObjectInfo &info);
 
@@ -1087,6 +1096,9 @@ protected:
 
 
   // -- fragmenting --
+public:
+  set< pair<dirfrag_t,int> > uncommitted_fragments;  // prepared but uncommitted refragmentations
+
 private:
   void adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
 			    list<CDir*>& frags, list<Context*>& waiters, bool replay);
@@ -1096,6 +1108,9 @@ private:
 			    list<CDir*>& resultfrags, 
 			    list<Context*>& waiters,
 			    bool replay);
+  CDir *force_dir_fragment(CInode *diri, frag_t fg);
+  void get_force_dirfrag_bound_set(vector<dirfrag_t>& dfs, set<CDir*>& bounds);
+
 
   friend class EFragment;
 
@@ -1111,12 +1126,14 @@ private:
   void fragment_mark_and_complete(list<CDir*>& dirs);
   void fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits);
   void fragment_unmark_unfreeze_dirs(list<CDir*>& dirs);
-  void fragment_stored(list<CDir*>& resultfrags, frag_t basefrag, int bits);
-  void fragment_logged(Mutation *mut, list<CDir*>& resultfrags, frag_t basefrag, int bits);
+  void fragment_logged_and_stored(Mutation *mut, list<CDir*>& resultfrags, frag_t basefrag, int bits);
+public:
+  void rollback_uncommitted_fragments();
+private:
+
   friend class C_MDC_FragmentFrozen;
   friend class C_MDC_FragmentMarking;
-  friend class C_MDC_FragmentStored;
-  friend class C_MDC_FragmentLogged;
+  friend class C_MDC_FragmentLoggedAndStored;
 
   void handle_fragment_notify(MMDSFragmentNotify *m);
 

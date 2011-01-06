@@ -15,9 +15,18 @@ extern "C" {
 #define CEPH_OSD_TMAP_RM  'r'
 #endif
 
+#define LIBRADOS_VER_MAJOR 0
+#define LIBRADOS_VER_MINOR 25
+
+#define LIBRADOS_VERSION(maj, min) ((maj << 16) + min)
+
+#define LIBRADOS_VERSION_CODE LIBRADOS_VERSION(LIBRADOS_VER_MAJOR, LIBRADOS_VER_MINOR)
+
 /* initialization */
 int rados_initialize(int argc, const char **argv); /* arguments are optional */
 void rados_deinitialize();
+
+void librados_version(int *major, int *minor);
 
 /* pools */
 typedef void *rados_pool_t;
@@ -76,6 +85,8 @@ int rados_snap_lookup(rados_pool_t pool, const char *name, rados_snap_t *id);
 int rados_snap_get_name(rados_pool_t pool, rados_snap_t id, char *name, int maxlen);
 
 /* sync io */
+uint64_t rados_get_last_ver(rados_pool_t pool);
+
 int rados_write(rados_pool_t pool, const char *oid, off_t off, const char *buf, size_t len);
 int rados_write_full(rados_pool_t pool, const char *oid, off_t off, const char *buf, size_t len);
 int rados_read(rados_pool_t pool, const char *oid, off_t off, char *buf, size_t len);
@@ -104,6 +115,7 @@ int rados_aio_wait_for_safe(rados_completion_t c);
 int rados_aio_is_complete(rados_completion_t c);
 int rados_aio_is_safe(rados_completion_t c);
 int rados_aio_get_return_value(rados_completion_t c);
+uint64_t rados_aio_get_obj_ver(rados_completion_t c);
 void rados_aio_release(rados_completion_t c);
 int rados_aio_write(rados_pool_t pool, const char *oid,
 		    off_t off, const char *buf, size_t len,
@@ -114,6 +126,13 @@ int rados_aio_write_full(rados_pool_t pool, const char *oid,
 int rados_aio_read(rados_pool_t pool, const char *oid,
 		   off_t off, char *buf, size_t len,
 		   rados_completion_t completion);
+
+/* watch/notify */
+typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
+int rados_watch(rados_pool_t pool, const char *o, uint64_t ver, uint64_t *handle,
+                rados_watchcb_t watchcb, void *arg);
+int rados_unwatch(rados_pool_t pool, const char *o, uint64_t handle);
+int rados_notify(rados_pool_t pool, const char *o, uint64_t ver);
 
 #ifdef __cplusplus
 }

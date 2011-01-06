@@ -1,40 +1,54 @@
+#!/bin/bash
 
-error_exit() {
+die() {
 	echo "$*"
 	exit 1
 }
 
-# defaults
-[ -z "$bindir" ] && bindir=$PWD       # location of init-ceph
-if [ -z "$conf" ]; then
-	conf="$basedir/ceph.conf"
-	[ -e $conf ] || conf="/etc/ceph/ceph.conf"
-fi
-[ -e $conf ] || error_exit "conf file not found"
+cleanup() {
+    rm -rf $TDIR
+    TDIR=""
+}
 
-CCONF="cconf -c $conf"
+set_variables() {
+    # defaults
+    [ -z "$bindir" ] && bindir=$PWD       # location of init-ceph
+    if [ -z "$conf" ]; then
+        conf="$basedir/ceph.conf"
+        [ -e $conf ] || conf="/etc/ceph/ceph.conf"
+    fi
+    [ -e $conf ] || die "conf file not found"
 
-[ -z "$mnt" ] && mnt="/c"
-[ -z "$monhost" ] && monhost="`$CCONF -t mon -i 0 'mon addr'`"
-[ -z "$imgsize" ] && imgsize=1024
-[ -z "$user" ] && user=admin
-[ -z "$keyring" ] && keyring="`$CCONF keyring`"
-[ -z "$secret" ] && secret="`cauthtool $keyring -n client.$user -p`"
+    CCONF="cconf -c $conf"
 
+    [ -z "$mnt" ] && mnt="/c"
+    if [ -z "$monhost" ]; then
+        $CCONF -t mon -i 0 'mon addr' > $TDIR/cconf_mon
+        if [ $? -ne 0 ]; then
+            $CCONF -t mon.a -i 0 'mon addr' > $TDIR/cconf_mon
+            [ $? -ne 0 ] && die "can't figure out \$monhost"
+        fi
+        read monhost < $TDIR/cconf_mon
+    fi
 
-monip="`echo $monhost | sed 's/:/ /g' | awk '{print $1}'`"
-monport="`echo $monhost | sed 's/:/ /g' | awk '{print $2}'`"
+    [ -z "$imgsize" ] && imgsize=1024
+    [ -z "$user" ] && user=admin
+    [ -z "$keyring" ] && keyring="`$CCONF keyring`"
+    [ -z "$secret" ] && secret="`cauthtool $keyring -n client.$user -p`"
 
-[ -z "$monip" ] && error_exit "bad mon address"
+    monip="`echo $monhost | sed 's/:/ /g' | awk '{print $1}'`"
+    monport="`echo $monhost | sed 's/:/ /g' | awk '{print $2}'`"
 
-[ -z "$monport" ] && monport=6789
+    [ -z "$monip" ] && die "bad mon address"
 
-set -e
+    [ -z "$monport" ] && monport=6789
 
-mydir=`hostname`_`echo $0 | sed 's/\//_/g'`
+    set -e
 
-img_name=test.`hostname`.$$
+    mydir=`hostname`_`echo $0 | sed 's/\//_/g'`
 
+    img_name=test.`hostname`.$$
+}
 
 rbd_load() {
 	modprobe rbd
@@ -47,22 +61,43 @@ rbd_create_image() {
 
 rbd_add() {
 	id=$1
-	echo "$monip:$monport name=$user,secret=$secret rbd $img_name.$id" > /sys/class/rbd/add
-	devid="`cat /sys/class/rbd/list | grep $img_name.$ext | tail -1 | cut -f1`"
+	echo "$monip:$monport name=$user,secret=$secret rbd $img_name.$id" \
+	    > /sys/bus/rbd/add
+
+	pushd /sys/bus/rbd/devices &> /dev/null
+	[ $? -eq 0 ] || die "failed to cd"
+	devid=""
+	rm -f "$TDIR/rbd_devs"
+	for f in *; do echo $f >> "$TDIR/rbd_devs"; done
+	sort -nr "$TDIR/rbd_devs" > "$TDIR/rev_rbd_devs"
+	while read f < "$TDIR/rev_rbd_devs"; do
+	  read d_img_name < "$f/name"
+	  if [ "x$d_img_name" == "x$img_name.$id" ]; then
+	    devid=$f
+	    break
+	  fi
+	done
+	popd &> /dev/null
+
+	[ "x$devid" == "x" ] && die "failed to find $img_name.$id"
+
 	export rbd$id=$devid
-	while [ ! -e /dev/rbd$devid ]; do sleep 0; done
+	while [ ! -e /dev/rbd$devid ]; do sleep 1; done
 }
 
 rbd_test_init() {
 	rbd_load
 }
 
-
 rbd_remove() {
-	echo $1 > /sys/class/rbd/remove
+	echo $1 > /sys/bus/rbd/remove
 }
 
 rbd_rm_image() {
 	id=$1
 	rbd rm $imgname.$id
 }
+
+TDIR=`mktemp -d`
+trap cleanup INT TERM EXIT
+set_variables

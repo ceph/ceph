@@ -9,7 +9,7 @@ source "`dirname $0`/test_common.sh"
 
 # Constants
 my_write_objects() {
-        write_objects $1 $2 10 1000000
+        write_objects $1 $2 10 1000000 data
 }
 
 setup() {

@@ -45,7 +45,8 @@
 */
 
 #undef debofs
-#define debofs(x) do { if (x <= g_conf.debug_ebofs) { *_dout << dbeginl << "ebofs.nodepool."
+#define debofs(x) do { if (x <= g_conf.debug_ebofs) { \
+  _dout_begin_line(x); *_dout << "ebofs.nodepool."
 
 
 class Node {
@@ -168,11 +169,11 @@ class NodePool {
     for (region = 0; 
 	 (block_t)nid < region_loc[region].start || (block_t)nid > region_loc[region].end(); 
 	 region++) {
-      //generic_dout(-20) << "node " << nid << " not in " << region << " " << region_loc[region] << dendl;
+      //generic_dout(0) << "node " << nid << " not in " << region << " " << region_loc[region] << dendl;
       num += region_loc[region].length;
     }
     num += nid - region_loc[region].start;
-    //generic_dout(-20) << "node " << nid << " is in " << region << ", overall bitmap pos is " << num << dendl;
+    //generic_dout(0) << "node " << nid << " is in " << region << ", overall bitmap pos is " << num << dendl;
     return num;
   }
 

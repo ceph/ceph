@@ -30,7 +30,7 @@ void usage()
   cerr << "   --display-name=<name>" << std::endl;
   cerr << "   --bucket=<bucket>" << std::endl;
   cerr << "   --object=<object>" << std::endl;
-  generic_usage();
+  generic_client_usage();
   exit(1);
 }
 
@@ -82,8 +82,9 @@ int main(int argc, char **argv)
   argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
 
-  common_set_defaults(true);
+  common_set_defaults(false);
   common_init(args, "rgw", true);
+  set_foreground_logging();
 
   const char *user_id = 0;
   const char *secret_key = 0;

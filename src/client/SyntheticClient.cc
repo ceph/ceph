@@ -38,7 +38,7 @@ using namespace std;
 
 #define DOUT_SUBSYS client
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "client" << (whoami >= 0 ? whoami:client->get_nodeid()) << " "
+#define dout_prefix *_dout << "client" << (whoami >= 0 ? whoami:client->get_nodeid()) << " "
 
 // traces
 //void trace_include(SyntheticClient *syn, Client *cl, string& prefix);
@@ -770,7 +770,7 @@ int SyntheticClient::run()
 	snprintf(realtfile, sizeof(realtfile), tfile.c_str(), (int)client->get_nodeid().v);
 
         if (run_me()) {
-          dout(-2) << "trace " << tfile << " prefix=" << prefix << " count=" << iarg1 << " data=" << playdata << dendl;
+          dout(0) << "trace " << tfile << " prefix=" << prefix << " count=" << iarg1 << " data=" << playdata << dendl;
           
           Trace t(realtfile);
           
@@ -1614,7 +1614,7 @@ int SyntheticClient::dump_placement(string& fn) {
   struct stat stbuf;
   int lstat_result = client->lstat(fn.c_str(), &stbuf);
   if (lstat_result < 0) {
-    derr(0) << "lstat error for file " << fn << dendl;
+    dout(0) << "lstat error for file " << fn << dendl;
     return lstat_result;
   }
     
@@ -1884,7 +1884,7 @@ int SyntheticClient::overload_osd_0(int n, int size, int wrsize) {
 
 
     // pull open a file
-    dout(-1) << "in OSD overload" << dendl;
+    dout(0) << "in OSD overload" << dendl;
     string filename = get_sarg(tried);
     dout(1) << "OSD Overload workload: trying file " << filename << dendl;
     int fd = client->open(filename.c_str(), O_RDWR|O_CREAT);
@@ -2201,7 +2201,6 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
   lock.Unlock();
 
   dout(5) << "create_objects done" << dendl;
-  derr(0) << "create_objects done" << dendl;
   return 0;
 }
 

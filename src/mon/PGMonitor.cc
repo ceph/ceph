@@ -42,8 +42,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(mon, pg_map)
 static ostream& _prefix(Monitor *mon, PGMap& pg_map) {
-  return *_dout << dbeginl
-		<< "mon." << mon->name << "@" << mon->rank
+  return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
 		<< ".pg v" << pg_map.version << " ";
 }
@@ -388,9 +387,8 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
 	       << " state " << pg_state_string(p->second.state)
 	       << " but DNE in pg_map!!"
 	       << dendl;
-      stringstream ss;
-      ss << "got " << pgid << " pg_stat from osd" << from << " but dne in pg_map";
-      mon->logclient.log(LOG_ERROR, ss);
+      mon->clog.error() << "got " << pgid << " pg_stat from osd" << from
+	    << " but dne in pg_map\n";
       continue;
     }
       

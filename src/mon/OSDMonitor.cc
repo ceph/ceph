@@ -42,8 +42,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(mon, osdmap)
 static ostream& _prefix(Monitor *mon, OSDMap& osdmap) {
-  return *_dout << dbeginl 
-		<< "mon." << mon->name << "@" << mon->rank
+  return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
 		<< ".osd e" << osdmap.get_epoch() << " ";
 }
@@ -374,12 +373,10 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
 
 bool OSDMonitor::prepare_failure(MOSDFailure *m)
 {
-  stringstream ss;
   dout(1) << "prepare_failure " << m->get_target() << " from " << m->get_orig_source_inst()
           << " is reporting failure:" << m->if_osd_failed() << dendl;
-
-  ss << m->get_target() << " failed (by " << m->get_orig_source_inst() << ")";
-  mon->get_logclient()->log(LOG_INFO, ss);
+  mon->clog.info() << m->get_target() << " failed (by "
+		     << m->get_orig_source_inst() << ")\n";
   
   int target_osd = m->get_target().name.num();
   int reporter = m->get_orig_source().num();
@@ -569,9 +566,7 @@ void OSDMonitor::_booted(MOSDBoot *m, bool logit)
 	  << " w " << m->sb.weight << " from " << m->sb.current_epoch << dendl;
 
   if (logit) {
-    stringstream ss;
-    ss << m->get_orig_source_inst() << " boot";
-    mon->get_logclient()->log(LOG_INFO, ss);
+    mon->clog.info() << m->get_orig_source_inst() << " boot\n";
   }
 
   send_latest(m, m->sb.current_epoch+1);
@@ -618,9 +613,7 @@ bool OSDMonitor::prepare_alive(MOSDAlive *m)
   int from = m->get_orig_source().num();
 
   if (0) {  // we probably don't care much about these
-    stringstream ss;
-    ss << m->get_orig_source_inst() << " alive";
-    mon->get_logclient()->log(LOG_DEBUG, ss);
+    mon->clog.debug() << m->get_orig_source_inst() << " alive\n";
   }
 
   dout(7) << "prepare_alive e" << m->map_epoch << " from " << m->get_orig_source_inst() << dendl;
@@ -932,9 +925,7 @@ void OSDMonitor::tick()
 	pending_inc.new_weight[o] = CEPH_OSD_OUT;
 	do_propose = true;
 	
-	stringstream ss;
-	ss << "osd" << o << " out (down for " << down << ")";
-	mon->get_logclient()->log(LOG_INFO, ss);
+	mon->clog.info() << "osd" << o << " out (down for " << down << ")\n";
       } else
 	continue;
     }

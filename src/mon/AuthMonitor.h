@@ -93,7 +93,6 @@ private:
   void on_active();
   void election_finished();
   bool should_propose(double& delay);
-
   void create_initial(bufferlist& bl);
   bool update_from_paxos();
   void create_pending();  // prepare a new pending

@@ -82,6 +82,7 @@ int main(int argc, const char **argv, const char *envp[])
 
   common_set_defaults(false);
   common_init(args, "dumpjournal", false);
+  set_foreground_logging();
 
   vec_to_argv(args, argc, argv);
 

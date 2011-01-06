@@ -19,8 +19,8 @@ Foundation.  See file COPYING. */
 
 using namespace std;
 
-#define dout(x) if (x <= g_conf.debug || x <= g_conf.debug_bdbstore) *_dout << dbeginl << "bdbstore(" << device << ")@" << __LINE__ << "."
-#define derr(x) if (x <= g_conf.debug || x <= g_conf.debug_bdbstore) *_derr << dbeginl << "bdbstore(" << device << ")@" << __LINE__ << "."
+#define dout_prefix *_dout << "bdbstore(" << device << ")@" << __LINE__ << "."
+#define derr(x) dout(x)
 
 #define CLEANUP(onsafe) do { \
     dout(6) << "DELETE " << hex << onsafe << dec << dendl; \

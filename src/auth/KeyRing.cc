@@ -23,48 +23,36 @@
 
 #define DOUT_SUBSYS auth
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "auth: "
+#define dout_prefix *_dout << "auth: "
 
 
 using namespace std;
 
 KeyRing g_keyring;
 
-bool KeyRing::load(const char *filename_list)
+int KeyRing::load(const char *filename)
 {
-  string k = filename_list;
-  string filename;
-  list<string> ls;
-  get_str_list(k, ls);
+  if (!filename)
+    return -EINVAL;
+
   bufferlist bl;
-  bool loaded = false;
-  for (list<string>::iterator p = ls.begin(); p != ls.end(); p++) {
-    // subst in home dir?
-    size_t pos = p->find("~/");
-    if (pos != string::npos) {
-      const char *home = getenv("HOME");
-      if (home)
-	p->replace(pos, 1, getenv("HOME"));
-      else
-	continue; // skip this item, we couldn't do the substitution
-    }
-
-    if (bl.read_file(p->c_str(), true) == 0) {
-      loaded = true;
-      filename = *p;
-      break;
-    }
-  }
-  if (!loaded) {
-    dout(0) << "can't open key file(s) " << filename_list << dendl;
-    return false;
+  int ret = bl.read_file(filename);
+  if (ret) {
+    derr << "error reading file: " << filename << dendl;
+    return ret;
   }
 
-  bufferlist::iterator p = bl.begin();
-  decode(p);
+  try {
+    bufferlist::iterator iter = bl.begin();
+    decode(iter);
+  }
+  catch (const buffer::error &err) {
+    derr << "error parsing file " << filename << dendl;
+    return -EIO;
+  }
 
-  dout(2) << "loaded key file " << filename << dendl;
-  return true;
+  dout(2) << "KeyRing::load: loaded key file " << filename << dendl;
+  return 0;
 }
 
 void KeyRing::print(ostream& out)

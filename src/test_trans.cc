@@ -18,7 +18,7 @@
 #include "common/common_init.h"
 
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl
+#define dout_prefix *_dout
 
 struct Foo : public Thread {
   void *entry() {
@@ -37,6 +37,7 @@ int main(int argc, const char **argv)
 
   common_set_defaults(false);
   common_init(args, NULL, false);
+  set_foreground_logging();
 
   // args
   if (args.size() < 2) return -1;

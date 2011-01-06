@@ -156,6 +156,7 @@ protected:
   virtual int send_keepalive(const entity_inst_t& dest) = 0;
 
   virtual void mark_down(const entity_addr_t& a) = 0;
+  virtual void mark_down(Connection *con) = 0;
 
   virtual Connection *get_connection(const entity_inst_t& dest) = 0;
 

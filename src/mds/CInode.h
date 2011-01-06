@@ -24,6 +24,7 @@
 #include "include/lru.h"
 
 #include "mdstypes.h"
+#include "flock.h"
 
 #include "CDentry.h"
 #include "SimpleLock.h"
@@ -362,7 +363,7 @@ public:
   bool has_dirfrags() { return !dirfrags.empty(); }
   CDir* get_dirfrag(frag_t fg) {
     if (dirfrags.count(fg)) {
-      assert(g_conf.debug_mds < 2 || dirfragtree.is_leaf(fg)); // performance hack FIXME
+      //assert(g_conf.debug_mds < 2 || dirfragtree.is_leaf(fg)); // performance hack FIXME
       return dirfrags[fg];
     } else
       return 0;
@@ -377,6 +378,8 @@ public:
   void close_dirfrag(frag_t fg);
   void close_dirfrags();
   bool has_subtree_root_dirfrag();
+
+  void verify_dirfrags();
 
   void get_stickydirs();
   void put_stickydirs();  
@@ -554,6 +557,7 @@ private:
   void store_parent(Context *fin);
   void _stored_parent(version_t v, Context *fin);
 
+  void build_backtrace(inode_backtrace_t& bt);
   void encode_parent_mutation(ObjectOperation& m);
 
   void encode_store(bufferlist& bl) {

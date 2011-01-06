@@ -70,6 +70,7 @@ void usage()
        << "  snap create <--snap=name> [image-name]    create a snapshot\n"
        << "  snap rollback <--snap=name> [image-name]  rollback image head to snapshot\n"
        << "  snap rm <--snap=name> [image-name]        deletes a snapshot\n"
+       << "  watch [image-name]                        watch events on image\n"
        << "\n"
        << "Other input options:\n"
        << "  -p, --pool <pool>            source pool name\n"
@@ -242,7 +243,7 @@ static int rbd_assign_bid(pool_t pool, string& info_oid, uint64_t *id)
 }
 
 
-static int read_header_bl(pool_t pool, string& md_oid, bufferlist& header)
+static int read_header_bl(pool_t pool, string& md_oid, bufferlist& header, uint64_t *ver)
 {
   int r;
 #define READ_SIZE 4096
@@ -254,13 +255,27 @@ static int read_header_bl(pool_t pool, string& md_oid, bufferlist& header)
     header.claim_append(bl);
    } while (r == READ_SIZE);
 
+  if (ver)
+    *ver = rados.get_last_version(pool);
+
   return 0;
 }
 
-static int read_header(pool_t pool, string& md_oid, struct rbd_obj_header_ondisk *header)
+static int notify_change(pool_t pool, string& oid, uint64_t *pver)
+{
+  uint64_t ver;
+  if (pver)
+    ver = *pver;
+  else
+    ver = rados.get_last_version(pool);
+  rados.notify(pool, oid, ver);
+  return 0;
+}
+
+static int read_header(pool_t pool, string& md_oid, struct rbd_obj_header_ondisk *header, uint64_t *ver)
 {
   bufferlist header_bl;
-  int r = read_header_bl(pool, md_oid, header_bl);
+  int r = read_header_bl(pool, md_oid, header_bl, ver);
   if (r < 0)
     return r;
   if (header_bl.length() < (int)sizeof(*header))
@@ -274,6 +289,8 @@ static int write_header(pools_t& pp, string& md_oid, bufferlist& header)
 {
   bufferlist bl;
   int r = rados.write(pp.md, md_oid, 0, header, header.length());
+
+  notify_change(pp.md, md_oid, NULL);
 
   return r;
 }
@@ -391,8 +408,9 @@ static int do_rename(pools_t& pp, string& md_oid, const char *imgname, const cha
   dst_md_oid += RBD_SUFFIX;
   string dstname_str = dstname;
   string imgname_str = imgname;
+  uint64_t ver;
   bufferlist header;
-  int r = read_header_bl(pp.md, md_oid, header);
+  int r = read_header_bl(pp.md, md_oid, header, &ver);
   if (r < 0) {
     cerr << "error reading header: " << md_oid << ": " << strerror(-r) << std::endl;
     return r;
@@ -428,7 +446,7 @@ static int do_rename(pools_t& pp, string& md_oid, const char *imgname, const cha
 static int do_show_info(pools_t& pp, string& md_oid, const char *imgname)
 {
   struct rbd_obj_header_ondisk header;
-  int r = read_header(pp.md, md_oid, &header);
+  int r = read_header(pp.md, md_oid, &header, NULL);
   if (r < 0)
     return r;
 
@@ -439,7 +457,7 @@ static int do_show_info(pools_t& pp, string& md_oid, const char *imgname)
 static int do_delete(pools_t& pp, string& md_oid, const char *imgname)
 {
   struct rbd_obj_header_ondisk header;
-  int r = read_header(pp.md, md_oid, &header);
+  int r = read_header(pp.md, md_oid, &header, NULL);
   if (r >= 0) {
     print_header(imgname, &header);
     trim_image(pp, imgname, &header, 0);
@@ -465,7 +483,8 @@ static int do_delete(pools_t& pp, string& md_oid, const char *imgname)
 static int do_resize(pools_t& pp, string& md_oid, const char *imgname, uint64_t size)
 {
   struct rbd_obj_header_ondisk header;
-  int r = read_header(pp.md, md_oid, &header);
+  uint64_t ver;
+  int r = read_header(pp.md, md_oid, &header, &ver);
   if (r < 0)
     return r;
 
@@ -489,14 +508,19 @@ static int do_resize(pools_t& pp, string& md_oid, const char *imgname, uint64_t 
   // rewrite header
   bufferlist bl;
   bl.append((const char *)&header, sizeof(header));
+  rados.set_assert_version(pp.md, ver);
   r = rados.write(pp.md, md_oid, 0, bl, bl.length());
+  if (r == -ERANGE)
+    cerr << "operation might have conflicted with another client!" << std::endl;
   if (r < 0) {
     cerr << "error writing header: " << strerror(-r) << std::endl;
     return r;
+  } else {
+    notify_change(pp.md, md_oid, NULL);
   }
 
-   cout << "done." << std::endl;
-   return 0;
+  cout << "done." << std::endl;
+  return 0;
 }
 
 static int do_list_snaps(pools_t& pp, string& md_oid)
@@ -544,6 +568,7 @@ static int do_add_snap(pools_t& pp, string& md_oid, const char *snapname)
     cerr << "rbd.snap_add execution failed failed: " << strerror(-r) << std::endl;
     return r;
   }
+  notify_change(pp.md, md_oid, NULL);
 
   return 0;
 }
@@ -608,7 +633,7 @@ static int do_get_snapc(pools_t& pp, string& md_oid, const char *snapname,
 static int do_rollback_snap(pools_t& pp, string& md_oid, ::SnapContext& snapc, uint64_t snapid)
 {
   struct rbd_obj_header_ondisk header;
-  int r = read_header(pp.md, md_oid, &header);
+  int r = read_header(pp.md, md_oid, &header, NULL);
   if (r < 0) {
     cerr << "error reading header: " << md_oid << ": " << strerror(-r) << std::endl;
     return r;
@@ -635,7 +660,7 @@ static int do_export(pools_t& pp, string& md_oid, const char *path)
   int64_t ret;
   int r;
 
-  ret = read_header(pp.md, md_oid, &header);
+  ret = read_header(pp.md, md_oid, &header, NULL);
   if (ret < 0)
     return ret;
 
@@ -794,7 +819,7 @@ static int do_import(pool_t pool, const char *imgname, int order, const char *pa
 
   /* FIXME: use fiemap to read sparse files */
   struct rbd_obj_header_ondisk header;
-  r = read_header(pool, md_oid, &header);
+  r = read_header(pool, md_oid, &header, NULL);
   if (r < 0) {
     cerr << "error reading header" << std::endl;
     return r;
@@ -901,7 +926,7 @@ static int do_copy(pools_t& pp, const char *imgname, const char *destname)
   dest_md_oid = destname;
   dest_md_oid += RBD_SUFFIX;
 
-  ret = read_header(pp.md, md_oid, &header);
+  ret = read_header(pp.md, md_oid, &header, NULL);
   if (ret < 0)
     return ret;
 
@@ -915,7 +940,7 @@ static int do_copy(pools_t& pp, const char *imgname, const char *destname)
     return r;
   }
 
-  ret = read_header(pp.dest, dest_md_oid, &dest_header);
+  ret = read_header(pp.dest, dest_md_oid, &dest_header, NULL);
   if (ret < 0) {
     cerr << "failed to read newly created header" << std::endl;
     return ret;
@@ -954,6 +979,36 @@ done:
   return r;
 }
 
+class RbdWatchCtx : public Rados::WatchCtx {
+  string name;
+public:
+  RbdWatchCtx(const char *imgname) : name(imgname) {}
+  virtual ~RbdWatchCtx() {}
+  virtual void notify(uint8_t opcode, uint64_t ver) {
+    cout << name << " got notification opcode=" << (int)opcode << " ver=" << ver << std::endl;
+  }
+};
+
+static int do_watch(pools_t& pp, const char *imgname)
+{
+  string md_oid, dest_md_oid;
+  uint64_t cookie;
+  RbdWatchCtx ctx(imgname);
+
+  md_oid = imgname;
+  md_oid += RBD_SUFFIX;
+
+  int r = rados.watch(pp.md, md_oid, 0, &cookie, &ctx);
+  if (r < 0) {
+    cerr << "watch failed" << std::endl;
+    return r;
+  }
+
+  cout << "press enter to exit..." << std::endl;
+  getchar();
+  return 0;
+}
+
 static void err_exit(pools_t& pp)
 {
   if (pp.data)
@@ -979,6 +1034,7 @@ enum {
   OPT_SNAP_ROLLBACK,
   OPT_SNAP_REMOVE,
   OPT_SNAP_LIST,
+  OPT_WATCH,
 };
 
 static int get_cmd(const char *cmd, bool *snapcmd)
@@ -1012,6 +1068,8 @@ static int get_cmd(const char *cmd, bool *snapcmd)
     if (strcmp(cmd, "rename") == 0 ||
         strcmp(cmd, "mv") == 0)
       return OPT_RENAME;
+    if (strcmp(cmd, "watch") == 0)
+      return OPT_WATCH;
   } else {
     if (strcmp(cmd, "create") == 0||
         strcmp(cmd, "add") == 0)
@@ -1057,6 +1115,7 @@ int main(int argc, const char **argv)
 
   common_set_defaults(false);
   common_init(args, "rbd", true);
+  set_foreground_logging();
 
   const char *poolname = NULL;
   uint64_t size = 0;
@@ -1103,6 +1162,7 @@ int main(int argc, const char **argv)
           case OPT_SNAP_ROLLBACK:
           case OPT_SNAP_REMOVE:
           case OPT_SNAP_LIST:
+          case OPT_WATCH:
             set_conf_param(CONF_VAL, &imgname, NULL);
             break;
           case OPT_EXPORT:
@@ -1215,7 +1275,8 @@ int main(int argc, const char **argv)
     pp.dest = dest_pool;
   }
 
-  if (opt_cmd == OPT_LIST) {
+  switch (opt_cmd) {
+  case OPT_LIST:
     r = do_list(pp, poolname);
     if (r < 0) {
       switch (r) {
@@ -1227,7 +1288,9 @@ int main(int argc, const char **argv)
       }
       err_exit(pp);
     }
-  } else if (opt_cmd == OPT_CREATE) {
+    break;
+
+  case OPT_CREATE:
     if (!size) {
       cerr << "must specify size in MB to create an rbd image" << std::endl;
       usage();
@@ -1243,31 +1306,41 @@ int main(int argc, const char **argv)
       cerr << "create error: " << strerror(-r) << std::endl;
       err_exit(pp);
     }
-  } else if (opt_cmd == OPT_RENAME) {
+    break;
+
+  case OPT_RENAME:
     r = do_rename(pp, md_oid, imgname, destname);
     if (r < 0) {
       cerr << "rename error: " << strerror(-r) << std::endl;
       err_exit(pp);
     }
-  } else if (opt_cmd == OPT_INFO) {
+    break;
+
+  case OPT_INFO:
     r = do_show_info(pp, md_oid, imgname);
     if (r < 0) {
       cerr << "error: " << strerror(-r) << std::endl;
       err_exit(pp);
     }
-  } else if (opt_cmd == OPT_RM) {
+    break;
+
+  case OPT_RM:
     r = do_delete(pp, md_oid, imgname);
     if (r < 0) {
       cerr << "delete error: " << strerror(-r) << std::endl;
       err_exit(pp);
     }
-  } else if (opt_cmd == OPT_RESIZE) {
+    break;
+
+  case OPT_RESIZE:
     r = do_resize(pp, md_oid, imgname, size);
     if (r < 0) {
       cerr << "resize error: " << strerror(-r) << std::endl;
       err_exit(pp);
     }
-  } else if (opt_cmd == OPT_SNAP_LIST) {
+    break;
+
+  case OPT_SNAP_LIST:
     if (!imgname) {
       usage();
       err_exit(pp);
@@ -1277,7 +1350,9 @@ int main(int argc, const char **argv)
       cerr << "failed to list snapshots: " << strerror(-r) << std::endl;
       err_exit(pp);
     }
-  } else if (opt_cmd == OPT_SNAP_CREATE) {
+    break;
+
+  case OPT_SNAP_CREATE:
     if (!imgname || !snapname) {
       usage();
       err_exit(pp);
@@ -1287,7 +1362,9 @@ int main(int argc, const char **argv)
       cerr << "failed to create snapshot: " << strerror(-r) << std::endl;
       err_exit(pp);
     }
-  } else if (opt_cmd == OPT_SNAP_ROLLBACK) {
+    break;
+
+  case OPT_SNAP_ROLLBACK:
     if (!imgname) {
       usage();
       err_exit(pp);
@@ -1298,7 +1375,9 @@ int main(int argc, const char **argv)
       usage();
       err_exit(pp);
     }
-  } else if (opt_cmd == OPT_SNAP_REMOVE) {
+    break;
+
+  case OPT_SNAP_REMOVE:
     if (!imgname) {
       usage();
       err_exit(pp);
@@ -1309,7 +1388,9 @@ int main(int argc, const char **argv)
       usage();
       err_exit(pp);
     }
-  } else if (opt_cmd == OPT_EXPORT) {
+    break;
+
+  case OPT_EXPORT:
     if (!path) {
       cerr << "pathname should be specified" << std::endl;
       err_exit(pp);
@@ -1319,7 +1400,9 @@ int main(int argc, const char **argv)
       cerr << "export error: " << strerror(-r) << std::endl;
       err_exit(pp);
     }
-  } else if (opt_cmd == OPT_IMPORT) {
+    break;
+
+  case OPT_IMPORT:
      if (!path) {
       cerr << "pathname should be specified" << std::endl;
       err_exit(pp);
@@ -1329,12 +1412,23 @@ int main(int argc, const char **argv)
       cerr << "import failed: " << strerror(-r) << std::endl;
       err_exit(pp);
     }
-  } else if (opt_cmd == OPT_COPY) {
+    break;
+
+  case OPT_COPY:
     r = do_copy(pp, imgname, destname);
     if (r < 0) {
       cerr << "copy failed: " << strerror(-r) << std::endl;
       err_exit(pp);
     }
+    break;
+
+  case OPT_WATCH:
+    r = do_watch(pp, imgname);
+    if (r < 0) {
+      cerr << "watch failed: " << strerror(-r) << std::endl;
+      err_exit(pp);
+    }
+    break;
   }
 
   rados.close_pool(pool);

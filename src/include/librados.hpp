@@ -9,6 +9,7 @@
 #include "buffer.h"
 
 class RadosClient;
+class Context;
 
 namespace librados {
 
@@ -67,6 +68,7 @@ public:
   void set_snap(pool_t pool, snap_t seq);
   int set_snap_context(pool_t pool, snap_t seq, std::vector<snap_t>& snaps);
 
+  uint64_t get_last_version(pool_t pool);
 
   int create(pool_t pool, const std::string& oid, bool exclusive);
 
@@ -75,8 +77,8 @@ public:
   int read(pool_t pool, const std::string& oid, off_t off, bufferlist& bl, size_t len);
   int remove(pool_t pool, const std::string& oid);
   int trunc(pool_t pool, const std::string& oid, size_t size);
-  int mapext(pool_t pool, const string& o, off_t off, size_t len, std::map<off_t, size_t>& m);
-  int sparse_read(pool_t pool, const string& o, off_t off, size_t len, std::map<off_t, size_t>& m, bufferlist& bl);
+  int mapext(pool_t pool, const std::string& o, off_t off, size_t len, std::map<off_t, size_t>& m);
+  int sparse_read(pool_t pool, const std::string& o, off_t off, size_t len, std::map<off_t, size_t>& m, bufferlist& bl);
   int getxattr(pool_t pool, const std::string& oid, const char *name, bufferlist& bl);
   int setxattr(pool_t pool, const std::string& oid, const char *name, bufferlist& bl);
   int rmxattr(pool_t pool, const std::string& oid, const char *name);
@@ -91,11 +93,13 @@ public:
   /* listing objects */
   struct ListCtx {
     void *ctx;
-    ListCtx() : ctx(NULL) {}
+    bufferlist *extra_info;
+    ListCtx() : ctx(NULL), extra_info(NULL) {}
   };
   int list_objects_open(pool_t pool, Rados::ListCtx *ctx);
-  int list_objects_more(Rados::ListCtx ctx, int max, std::list<std::string>& entries);
-  void list_objects_close(Rados::ListCtx ctx);
+  int list_objects_more(Rados::ListCtx& ctx, int max, std::list<std::string>& entries);
+  void list_objects_close(Rados::ListCtx& ctx);
+  void list_filter(Rados::ListCtx& ctx, bufferlist& filter, bufferlist *extra_info);
 
   int list_pools(std::list<std::string>& v);
   int get_pool_stats(std::list<std::string>& v,
@@ -131,6 +135,7 @@ public:
     bool is_complete();
     bool is_safe();
     int get_return_value();
+    int get_version();
     void release();
   };
 
@@ -140,6 +145,20 @@ public:
 		AioCompletion *c);
   AioCompletion *aio_create_completion();
   AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete, callback_t cb_safe);
+
+  class WatchCtx {
+  public:
+  virtual void notify(uint8_t opcode, uint64_t ver) = 0;
+  };
+
+  // watch/notify
+  int watch(pool_t pool, const std::string& o, uint64_t ver, uint64_t *handle, librados::Rados::WatchCtx *ctx);
+  int unwatch(pool_t pool, const std::string& o, uint64_t handle);
+  int notify(pool_t pool, const std::string& o, uint64_t ver);
+  void set_notify_timeout(pool_t pool, uint32_t timeout);
+
+  /* assert version for next sync operations */
+  void set_assert_version(pool_t pool, uint64_t ver);
 };
 
 }

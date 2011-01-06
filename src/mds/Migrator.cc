@@ -63,7 +63,7 @@
 #undef DOUT_COND
 #define DOUT_COND(l) l <= g_conf.debug_mds || l <= g_conf.debug_mds_migrator
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".migrator "
+#define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".migrator "
 
 /* This function DOES put the passed message before returning*/
 void Migrator::dispatch(Message *m)
@@ -521,7 +521,7 @@ void Migrator::maybe_do_queued_export()
     if (!dir) continue;
     if (!dir->is_auth()) continue;
 
-    dout(-7) << "nicely exporting to mds" << dest << " " << *dir << dendl;
+    dout(0) << "nicely exporting to mds" << dest << " " << *dir << dendl;
 
     export_dir(dir, dest);
   }

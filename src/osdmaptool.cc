@@ -24,6 +24,7 @@ using namespace std;
 
 #include "config.h"
 
+#include "common/errno.h"
 #include "osd/OSDMap.h"
 #include "mon/MonMap.h"
 #include "common/common_init.h"
@@ -49,6 +50,7 @@ int main(int argc, const char **argv)
 
   common_set_defaults(false);
   common_init(args, "osdmaptool", false);
+  set_foreground_logging();
 
   const char *me = argv[0];
 
@@ -57,6 +59,7 @@ int main(int argc, const char **argv)
   bool createsimple = false;
   int num_osd = 0, num_dom = 0;
   int pg_bits = g_conf.osd_pg_bits;
+  int pgp_bits = g_conf.osd_pgp_bits;
   int lpg_bits = g_conf.osd_lpg_bits;
   bool clobber = false;
   bool modified = false;
@@ -79,6 +82,8 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&clobber, OPT_BOOL);
     } else if (CONF_ARG_EQ("pg_bits", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&pg_bits, OPT_INT);
+    } else if (CONF_ARG_EQ("pgp_bits", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&pgp_bits, OPT_INT);
     } else if (CONF_ARG_EQ("lpg_bits", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&lpg_bits, OPT_INT);
     } else if (CONF_ARG_EQ("num_dom", '\0')) {
@@ -111,7 +116,7 @@ int main(int argc, const char **argv)
   int r = 0;
   if (!(createsimple && clobber)) {
     r = bl.read_file(fn);
-    if (r >= 0) {
+    if (r == 0) {
       try {
 	osdmap.decode(bl);
       }
@@ -120,12 +125,12 @@ int main(int argc, const char **argv)
 	return -1;
       }
     }
+    else {
+      cerr << me << ": couldn't open " << fn << ": " << cpp_strerror(r)
+	   << std::endl;
+      return -1;
+    }
   }
-  char buf[80];
-  if (!createsimple && r < 0) {
-    cerr << me << ": couldn't open " << fn << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
-    return -1;
-  }    
   else if (createsimple && !clobber && r == 0) {
     cerr << me << ": " << fn << " exists, --clobber to overwrite" << std::endl;
     return -1;
@@ -138,14 +143,14 @@ int main(int argc, const char **argv)
     }
     ceph_fsid_t fsid;
     memset(&fsid, 0, sizeof(ceph_fsid_t));
-    osdmap.build_simple(0, fsid, num_osd, num_dom, pg_bits, lpg_bits, 0);
+    osdmap.build_simple(0, fsid, num_osd, num_dom, pg_bits, pgp_bits, lpg_bits, 0);
     modified = true;
   }
 
   if (import_crush) {
     bufferlist cbl;
     r = cbl.read_file(import_crush);
-    if (r < 0) {
+    if (r) {
       cerr << me << ": error reading crush map from " << import_crush << std::endl;
       exit(1);
     }
@@ -254,8 +259,9 @@ int main(int argc, const char **argv)
 	 << " to " << fn
 	 << std::endl;
     int r = bl.write_file(fn);
-    if (r < 0) {
-      cerr << "osdmaptool: error writing to '" << fn << "': " << strerror_r(-r, buf, sizeof(buf)) << std::endl;
+    if (r) {
+      cerr << "osdmaptool: error writing to '" << fn << "': "
+	   << cpp_strerror(r) << std::endl;
       return 1;
     }
   }

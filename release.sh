@@ -67,15 +67,13 @@ cp -a ../../debian ceph-$cephver
 
 debver="$cephver-$debsubver"
 
-for dist in sid squeeze lenny
+for dist in sid squeeze lenny maverick lucid
 do
     echo building $dist dsc
 #    mkdir $dist
 #    cd $dist
 
-    bpver="$debver"
-    [ "$dist" = "squeeze" ] && bpver="$debver~bpo60+1"
-    [ "$dist" = "lenny" ] && bpver="$debver~bpo50+1"
+    bpver=`../../debvers.sh $debver $dist`
 
     comment=""
 #    [ "$debsubver" != "1" ] && comment="package fixes "

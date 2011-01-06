@@ -388,7 +388,7 @@ void GroupEntry::init(ConfFile *cf, const char *section, const char *options)
 			} else if (strcmp(op, "ro") == 0) {
 				set_readonly(true);
 			} else {
-				derr(0) << "Error: unknown option '" << op << "'" << dendl;
+				dout(0) << "Error: unknown option '" << op << "'" << dendl;
 			}
 			op = strsep(&tmp, ", ");
 		}

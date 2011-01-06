@@ -159,7 +159,7 @@ class MDS : public Dispatcher {
   OSDMap       *osdmap;
   Objecter     *objecter;
   Filer        *filer;       // for reading/writing to/from osds
-  LogClient    logclient;
+  LogClient    clog;
 
   // sub systems
   Server       *server;
@@ -362,6 +362,8 @@ class MDS : public Dispatcher {
   void standby_trim_segments();
   class C_MDS_StandbyReplayRestart;
   class C_MDS_StandbyReplayRestartFinish;
+
+  void reopen_log();
 
   void resolve_start();
   void resolve_done();

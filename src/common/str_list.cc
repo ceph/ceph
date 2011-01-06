@@ -1,16 +1,30 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2009-2010 Dreamhost
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+ */
+
 #include <iostream>
 #include <list>
 #include <set>
 
-using namespace std;
+using std::string;
 
-static bool get_next_token(string s, size_t& pos, string& token)
+static bool get_next_token(const std::string &s, size_t& pos, string& token)
 {
   int start = s.find_first_not_of(" \t", pos);
   int end;
 
   if (start < 0)
-    return false; 
+    return false;
 
   if (s[start]== ',')
     end = start + 1;
@@ -25,7 +39,7 @@ static bool get_next_token(string s, size_t& pos, string& token)
   return true;
 }
 
-bool get_str_list(string& str, list<string>& str_list)
+bool get_str_list(const std::string& str, std::list<string>& str_list)
 {
   size_t pos = 0;
   string token;
@@ -43,8 +57,7 @@ bool get_str_list(string& str, list<string>& str_list)
   return true;
 }
 
-
-bool get_str_set(string& str, set<string>& str_set)
+bool get_str_set(const std::string& str, std::set<std::string>& str_set)
 {
   size_t pos = 0;
   string token;
@@ -61,5 +74,3 @@ bool get_str_set(string& str, set<string>& str_set)
 
   return true;
 }
-
-

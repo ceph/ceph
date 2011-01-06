@@ -59,7 +59,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(mds)
 static ostream& _prefix(MDS *mds) {
-  return *_dout << dbeginl << "mds" << mds->get_nodeid() << ".locker ";
+  return *_dout << "mds" << mds->get_nodeid() << ".locker ";
 }
 
 /* This function DOES put the passed message before returning */
@@ -2084,9 +2084,8 @@ void Locker::process_request_cap_release(MDRequest *mdr, client_t client, const 
 	  dn->remove_client_lease(l, this);
 	}
       } else {
-	stringstream ss;
-	ss << "client" << client << " released lease on dn " << dir->dirfrag() << "/" << dname << " which dne";
-	mds->logclient.log(LOG_WARN, ss);
+	mds->clog.warn() << "client" << client << " released lease on dn "
+	    << dir->dirfrag() << "/" << dname << " which dne\n";
      }
     }
   }

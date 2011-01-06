@@ -21,7 +21,9 @@
 
 /** table **/
 
-#define dbtout do { if (25 <= g_conf.debug_ebofs) { *_dout << dbeginl << "ebofs.table(" << this << ")."
+#define dbtout do { if (25 <= g_conf.debug_ebofs) {\
+  _dout_begin_line(25);\
+  *_dout << "ebofs.table(" << this << ")."
 
 
 template<class K, class V>

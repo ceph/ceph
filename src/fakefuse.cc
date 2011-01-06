@@ -72,6 +72,7 @@ int main(int argc, const char **argv) {
 
   common_set_defaults(false);
   common_init(args, "fakefuse", false);
+  set_foreground_logging();
 
   // start messenger thread
   fakemessenger_startthread();

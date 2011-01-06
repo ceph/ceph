@@ -14,7 +14,7 @@
 
 #define DOUT_SUBSYS objectcacher
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << oc->objecter->messenger->get_myname() << ".objectcacher.object(" << oid << ") "
+#define dout_prefix *_dout << oc->objecter->messenger->get_myname() << ".objectcacher.object(" << oid << ") "
 
 
 
@@ -416,7 +416,7 @@ void ObjectCacher::Object::truncate(loff_t s)
 /*** ObjectCacher ***/
 
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << objecter->messenger->get_myname() << ".objectcacher "
+#define dout_prefix *_dout << objecter->messenger->get_myname() << ".objectcacher "
 
 
 /* private */
@@ -1111,7 +1111,7 @@ int ObjectCacher::atomic_sync_readx(OSDRead *rd, ObjectSet *oset, Mutex& lock)
 		   new C_SafeCond(&flock, &cond, &done));
 
     // block
-    while (!done) cond.Wait(lock);
+    while (!done) cond.Wait(flock);
   } else {
     // spans multiple objects, or is big.
 
@@ -1142,7 +1142,7 @@ int ObjectCacher::atomic_sync_readx(OSDRead *rd, ObjectSet *oset, Mutex& lock)
     readx(rd, oset, new C_SafeCond(&flock, &cond, &done));
     
     // block
-    while (!done) cond.Wait(lock);
+    while (!done) cond.Wait(flock);
     
     // release the locks
     for (vector<ObjectExtent>::iterator ex_it = extents.begin();
@@ -1191,7 +1191,7 @@ int ObjectCacher::atomic_sync_writex(OSDWrite *wr, ObjectSet *oset, Mutex& lock)
 			 new C_SafeCond(&flock, &cond, &done), 0);
       
       // block
-      while (!done) cond.Wait(lock);
+      while (!done) cond.Wait(flock);
       return 0;
     }
   } 
@@ -1268,7 +1268,7 @@ void ObjectCacher::rdlock(Object *o)
     Cond cond;
     bool done = false;
     o->waitfor_rd.push_back(new C_SafeCond(&flock, &cond, &done));
-    while (!done) cond.Wait(lock);
+    while (!done) cond.Wait(flock);
   }
   assert(o->lock_state == Object::LOCK_RDLOCK ||
          o->lock_state == Object::LOCK_WRLOCK ||
@@ -1313,7 +1313,7 @@ void ObjectCacher::wrlock(Object *o)
     Cond cond;
     bool done = false;
     o->waitfor_wr.push_back(new C_SafeCond(&flock, &cond, &done));
-    while (!done) cond.Wait(lock);
+    while (!done) cond.Wait(flock);
   }
   assert(o->lock_state == Object::LOCK_WRLOCK);
 }

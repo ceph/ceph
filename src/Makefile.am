@@ -28,7 +28,10 @@ bin_PROGRAMS += cmds
 cmds_CXXFLAGS = ${AM_CFLAGS}
 
 # admin tools
-ceph_SOURCES = tools/ceph.cc msg/SimpleMessenger.cc
+ceph_SOURCES = \
+	msg/SimpleMessenger.cc \
+	tools/ceph.cc \
+	tools/common.cc
 ceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm $(CRYPTOPP_LIBS)
 ceph_CXXFLAGS = ${AM_CFLAGS}
 
@@ -52,10 +55,16 @@ ceph_tool_gui_DATA = \
 	tools/gui_resources/pg.svg \
 	tools/gui_resources/stats_window.glade \
 	tools/gui_resources/stopped_mds.svg
-ceph_SOURCES += tools/gui.cc
-ceph_LDADD += $(GTKMM_LIBS)
-ceph_CXXFLAGS += $(GTKMM_CFLAGS)
-ceph_CXXFLAGS += -DCEPH_TOOL_GUIDIR="\"${ceph_tool_guidir}\""
+gceph_SOURCES = \
+	msg/SimpleMessenger.cc \
+	tools/common.cc \
+	tools/gceph.cc \
+	tools/gui.cc
+gceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm $(CRYPTOPP_LIBS) \
+	$(GTKMM_LIBS)
+gceph_CXXFLAGS = ${AM_CFLAGS} $(GTKMM_CFLAGS) \
+	-DCEPH_TOOL_GUIDIR="\"${ceph_tool_guidir}\""
+bin_PROGRAMS += gceph
 endif
 
 cconf_SOURCES = cconf.cc
@@ -192,6 +201,14 @@ bin_PROGRAMS += testtimers
 testencoding_SOURCES = test/TestEncoding.cc
 testencoding_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto
 bin_PROGRAMS += testencoding
+
+testdout_streambuf_SOURCES = test/TestDoutStreambuf.cc
+testdout_streambuf_LDADD = libceph.la libcrush.la -lpthread
+bin_PROGRAMS += testdout_streambuf
+
+testsignal_handlers_SOURCES = test/TestSignalHandlers.cc
+testsignal_handlers_LDADD = libceph.la -lpthread
+bin_PROGRAMS += testsignal_handlers
 
 endif
 
@@ -438,7 +455,8 @@ libcommon_files = \
 	include/ceph_frag.cc \
 	config.cc \
 	common/page.cc \
-	common/lockdep.cc
+	common/lockdep.cc \
+	common/DoutStreambuf.cc
 
 libcrush_a_SOURCES = \
 	crush/builder.c \
@@ -500,6 +518,7 @@ libosd_a_SOURCES = \
 	osd/Ager.cc \
 	osd/OSD.cc \
 	osd/OSDCaps.cc \
+	osd/Watch.cc \
         common/ClassHandler.cc
 #	osd/RAID4PG.cc
 
@@ -549,18 +568,19 @@ noinst_HEADERS = \
 	cls_acl.cc\
 	cls_crypto.cc\
 	cm.txt\
-        common/arch.h\
-        common/armor.h\
+	common/BackTrace.h\
+	common/DoutStreambuf.h\
+	common/LogClient.h\
+	common/LogEntry.h\
+	common/WorkQueue.h\
 	common/debug.h\
 	common/errno.h\
+	common/likely.h\
 	common/lockdep.h\
-	common/BackTrace.h\
+        common/ClassHandler.h\
         common/ClassVersion.h\
         common/Clock.h\
-        common/common_init.h\
         common/Cond.h\
-        common/dyn_snprintf.h\
-        common/ClassHandler.h\
         common/ConfUtils.h\
         common/DecayCounter.h\
         common/Finisher.h\
@@ -573,9 +593,11 @@ noinst_HEADERS = \
         common/Thread.h\
         common/Throttle.h\
         common/Timer.h\
+        common/arch.h\
+        common/armor.h\
+        common/common_init.h\
+        common/dyn_snprintf.h\
         common/tls.h\
-	common/WorkQueue.h\
-	common/LogClient.h\
         config.h\
         crush/CrushWrapper.h\
         crush/CrushWrapper.i\
@@ -592,7 +614,6 @@ noinst_HEADERS = \
         include/Context.h\
 	include/CompatSet.h\
         include/Distribution.h\
-	include/LogEntry.h\
 	include/Spinlock.h\
 	include/addr_parsing.h\
 	include/assert.h\
@@ -633,12 +654,13 @@ noinst_HEADERS = \
         include/triple.h\
         include/tstring.h\
         include/types.h\
-        include/uofs.h\
         include/utime.h\
         include/dlist.h\
         include/elist.h\
         include/xlist.h\
 	logrotate.conf\
+	mds/flock.h\
+	mds/inode_backtrace.h\
 	mds/locks.c\
 	mds/locks.h\
         mds/Anchor.h\
@@ -775,6 +797,7 @@ noinst_HEADERS = \
 	messages/MForward.h\
         messages/MStatfs.h\
         messages/MStatfsReply.h\
+        messages/MWatchNotify.h\
 	messages/PaxosServiceMessage.h\
 	mon/AuthMonitor.h\
         mon/ClassMonitor.h\
@@ -824,6 +847,7 @@ noinst_HEADERS = \
         osd/PGLS.h\
         osd/RAID4PG.h\
         osd/ReplicatedPG.h\
+        osd/Watch.h\
         osd/osd_types.h\
 	osdc/rados_bencher.h\
         osdc/Blinker.h\
@@ -840,7 +864,7 @@ noinst_HEADERS = \
 	rgw/rgw_common.h\
 	rgw/rgw_user.h\
 	sample.ceph.conf\
-	tools/ceph.h\
+	tools/common.h\
 	tools/gui.h\
 	tools/gui_resources.h
 
@@ -853,11 +877,11 @@ all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(cauthtool_SOUR
 	$(libosdc_a_SOURCES) $(libclient_a_SOURCES) $(ceph_tool_gui_DATA)
 
 install-data-local:
-	mkdir -p $(DESTDIR)$(sysconfdir)/ceph
-	mkdir -p $(DESTDIR)$(localstatedir)/log/ceph/stat
-	mkdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
+	-mkdir -p $(DESTDIR)$(sysconfdir)/ceph
+	-mkdir -p $(DESTDIR)$(localstatedir)/log/ceph/stat
+	-mkdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
 
 uninstall-local:
-	rmdir --ignore-fail-on-non-empty -p $(DESTDIR)$(sysconfdir)/ceph/
-	rmdir --ignore-fail-on-non-empty -p $(DESTDIR)$(localstatedir)/log/ceph/stat
-	rmdir --ignore-fail-on-non-empty -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
+	-rmdir -p $(DESTDIR)$(sysconfdir)/ceph/
+	-rmdir -p $(DESTDIR)$(localstatedir)/log/ceph/stat
+	-rmdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp

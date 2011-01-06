@@ -68,6 +68,7 @@ int main(int argc, const char **argv)
 
   common_set_defaults(false);
   common_init(args, "fakesyn");
+  set_foreground_logging();
 
   int start = 0;
 

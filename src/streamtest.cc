@@ -18,7 +18,7 @@
 #include "common/common_init.h"
 
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl
+#define dout_prefix *_dout
 
 struct io {
   utime_t start, ack, commit;
@@ -98,6 +98,7 @@ int main(int argc, const char **argv)
 
   common_set_defaults(false);
   common_init(args, NULL, true);
+  set_foreground_logging();
 
   // args
   if (args.size() < 3) return -1;

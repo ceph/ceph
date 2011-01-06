@@ -1,11 +1,57 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2010 Dreamhost
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+ */
 
+#include "auth/AuthSupported.h"
+#include "auth/KeyRing.h"
 #include "config.h"
+#include "common/errno.h"
+#include "include/color.h"
 #include "tls.h"
 
-#include "include/color.h"
+/* Set foreground logging
+ *
+ * Forces the process to log only to stderr, overriding whatever was in the ceph.conf.
+ *
+ * TODO: make this configurable by a command line switch or environment variable, if users want
+ * an unusual logging setup for their foreground process.
+ */
+void set_foreground_logging()
+{
+  free((void*)g_conf.log_file);
+  g_conf.log_file = NULL;
 
-#include "auth/KeyRing.h"
-#include "auth/AuthSupported.h"
+  free((void*)g_conf.log_dir);
+  g_conf.log_dir = NULL;
+
+  free((void*)g_conf.log_sym_dir);
+  g_conf.log_sym_dir = NULL;
+
+  g_conf.log_sym_history = 0;
+
+  g_conf.log_to_stderr = LOG_TO_STDERR_ALL;
+
+  g_conf.log_to_syslog = false;
+
+  g_conf.log_per_instance = false;
+
+  g_conf.log_to_file = false;
+
+  if (_dout_need_open) {
+    Mutex::Locker l(_dout_lock);
+    _dout_open_log(false);
+  }
+}
 
 void common_set_defaults(bool daemon)
 {
@@ -15,9 +61,47 @@ void common_set_defaults(bool daemon)
 
     g_conf.daemonize = true;
     g_conf.logger = true;
-    g_conf.log_to_stdout = false;
   } else {
     g_conf.pid_file = 0;
+  }
+}
+
+static void keyring_init(const char *filename)
+{
+  int ret = g_keyring.load(filename);
+  if (ret) {
+    derr << "keyring_init: failed to load " << filename << dendl;
+    return;
+  }
+
+  if (g_conf.key && g_conf.key[0]) {
+    string k = g_conf.key;
+    EntityAuth ea;
+    ea.key.decode_base64(k);
+    g_keyring.add(*g_conf.entity_name, ea);
+  } else if (g_conf.keyfile && g_conf.keyfile[0]) {
+    char buf[100];
+    int fd = ::open(g_conf.keyfile, O_RDONLY);
+    if (fd < 0) {
+      int err = errno;
+      derr << "unable to open " << g_conf.keyfile << ": "
+	   << cpp_strerror(err) << dendl;
+      exit(1);
+    }
+    int len = ::read(fd, buf, sizeof(buf));
+    if (len < 0) {
+      int err = errno;
+      derr << "unable to read key from " << g_conf.keyfile << ": "
+	   << cpp_strerror(err) << dendl;
+      exit(1);
+    }
+    ::close(fd);
+
+    buf[len] = 0;
+    string k = buf;
+    EntityAuth ea;
+    ea.key.decode_base64(k);
+    g_keyring.add(*g_conf.entity_name, ea);
   }
 }
 
@@ -43,41 +127,7 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool i
   }
 #endif //HAVE_LIBTCMALLOC
 
-  if (g_conf.log_file && g_conf.log_file[0])
-    g_conf.log_to_stdout = false;
-
-  // open log file?
-  if (!g_conf.log_to_stdout)
-    _dout_open_log();
-
-  if (init_keys && is_supported_auth(CEPH_AUTH_CEPHX)) {
-    g_keyring.load(g_conf.keyring);
-
-    if (strlen(g_conf.key)) {
-      string k = g_conf.key;
-      EntityAuth ea;
-      ea.key.decode_base64(k);
-      g_keyring.add(*g_conf.entity_name, ea);
-    } else if (strlen(g_conf.keyfile)) {
-      char buf[100];
-      int fd = ::open(g_conf.keyfile, O_RDONLY);
-      if (fd < 0) {
-	cerr << "unable to open " << g_conf.keyfile << ": " << strerror(errno) << std::endl;
-	exit(1);
-      }
-      int len = ::read(fd, buf, sizeof(buf));
-      if (len < 0) {
-	cerr << "unable to read key from " << g_conf.keyfile << ": " << strerror(errno) << std::endl;
-	exit(1);
-      }
-      ::close(fd);
-
-      buf[len] = 0;
-      string k = buf;
-      EntityAuth ea;
-      ea.key.decode_base64(k);
-      g_keyring.add(*g_conf.entity_name, ea);
-    }
-  }
+  if (init_keys && is_supported_auth(CEPH_AUTH_CEPHX))
+    keyring_init(g_conf.keyring);
 }
 

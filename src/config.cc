@@ -18,8 +18,10 @@
 #include "include/types.h"
 
 #include "common/Clock.h"
+#include "common/DoutStreambuf.h"
 #include "common/Logger.h"
 #include "common/BackTrace.h"
+#include "common/common_init.h"
 
 #include <fstream>
 #include <stdlib.h>
@@ -238,26 +240,28 @@ void sighup_handler(int signum)
   logger_reopen_all();
 }
 
-void sigsegv_handler(int signum)
+void handle_fatal_signal(int signum)
 {
-  *_dout << "*** Caught signal (SEGV) ***" << std::endl;
+  *_dout << "*** Caught signal (" << sys_siglist[signum] << ") ***"
+	 << std::endl;
+  *_dout << "in thread " << std::hex << pthread_self() << std::endl;
   BackTrace bt(0);
   bt.print(*_dout);
   _dout->flush();
 
   // Use default handler to dump core
-  kill(getpid(), signum);
-}
+  int ret = raise(signum);
 
-void sigabrt_handler(int signum)
-{
-  *_dout << "*** Caught signal (ABRT) ***" << std::endl;
-  BackTrace bt(0);
-  bt.print(*_dout);
-  _dout->flush();
-
-  // Use default handler to dump core
-  kill(getpid(), signum);
+  // Normally, we won't get here. If we do, something is very weird.
+  if (ret) {
+    *_dout << "handle_fatal_signal: failed to re-raise signal " << signum
+	   << std::endl;
+  }
+  else {
+    *_dout << "handle_fatal_signal: default handler for signal " << signum
+	   << " didn't terminate the process?" << std::endl;
+  }
+  exit(1);
 }
 
 #define _STR(x) #x
@@ -325,14 +329,19 @@ static struct config_option config_optionsp[] = {
 	OPTION(log_dir, 0, OPT_STR, "/var/log/ceph"),
 	OPTION(log_sym_dir, 0, OPT_STR, 0),
 	OPTION(log_sym_history, 0, OPT_INT, 10),
-	OPTION(log_to_stdout, 0, OPT_BOOL, true),
+	OPTION(log_to_stderr, 0, OPT_INT, LOG_TO_STDERR_SOME),
+	OPTION(log_to_syslog, 0, OPT_BOOL, false),
 	OPTION(log_per_instance, 0, OPT_BOOL, false),
+	OPTION(log_to_file, 0, OPT_BOOL, true),
+	OPTION(clog_to_monitors, 0, OPT_BOOL, true),
+	OPTION(clog_to_syslog, 0, OPT_BOOL, false),
 	OPTION(pid_file, 0, OPT_STR, "/var/run/ceph/$type.$id.pid"),
 	OPTION(conf, 'c', OPT_STR, "/etc/ceph/ceph.conf, ~/.ceph/config, ceph.conf"),
 	OPTION(chdir, 0, OPT_STR, "/"),
 	OPTION(fake_clock, 0, OPT_BOOL, false),
 	OPTION(fakemessenger_serialize, 0, OPT_BOOL, true),
 	OPTION(kill_after, 0, OPT_INT, 0),
+	OPTION(max_open_files, 0, OPT_LONGLONG, 0),
 	OPTION(debug, 0, OPT_INT, 0),
 	OPTION(debug_lockdep, 0, OPT_INT, 0),
 	OPTION(debug_mds, 0, OPT_INT, 1),
@@ -363,7 +372,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(debug_finisher, 0, OPT_INT, 1),
 	OPTION(key, 0, OPT_STR, ""),
 	OPTION(keyfile, 'K', OPT_STR, ""),
-	OPTION(keyring, 'k', OPT_STR, "~/.ceph/keyring.bin, /etc/ceph/keyring.bin, .ceph_keyring"),
+	OPTION(keyring, 'k', OPT_STR, "/etc/ceph/keyring.bin"),
 	OPTION(clock_lock, 0, OPT_BOOL, false),
 	OPTION(clock_tare, 0, OPT_BOOL, false),
 	OPTION(ms_tcp_nodelay, 0, OPT_BOOL, true),
@@ -418,6 +427,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(client_readahead_max_periods, 0, OPT_LONGLONG, 4),  // as multiple of file layout period (object size * num stripes)
 	OPTION(client_snapdir, 0, OPT_STR, ".snap"),
 	OPTION(client_mountpoint, 'r', OPT_STR, "/"),
+	OPTION(client_notify_timeout, 0, OPT_INT, 10), // in seconds
 	OPTION(fuse_direct_io, 0, OPT_INT, 0),
 	OPTION(fuse_ll, 0, OPT_BOOL, true),
 	OPTION(client_oc, 0, OPT_BOOL, true),
@@ -505,6 +515,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_hack_log_expire_for_better_stats, 0, OPT_BOOL, false),
 	OPTION(mds_verify_scatter, 0, OPT_BOOL, false),
 	OPTION(mds_debug_scatterstat, 0, OPT_BOOL, false),
+	OPTION(mds_debug_frag, 0, OPT_BOOL, false),
 	OPTION(mds_kill_mdstable_at, 0, OPT_INT, 0),
 	OPTION(mds_kill_export_at, 0, OPT_INT, 0),
 	OPTION(mds_kill_import_at, 0, OPT_INT, 0),
@@ -529,7 +540,8 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_exclusive_caching, 0, OPT_BOOL, true),         // replicas evict replicated writes
 	OPTION(osd_stat_refresh_interval, 0, OPT_DOUBLE, .5),
 	OPTION(osd_min_pg_size_without_alive, 0, OPT_INT, 2),  // smallest pg we allow to activate without telling the monitor
-	OPTION(osd_pg_bits, 0, OPT_INT, 6),  // bits per osd
+	OPTION(osd_pg_bits, 0, OPT_INT, 9),  // bits per osd
+	OPTION(osd_pgp_bits, 0, OPT_INT, 6),  // bits per osd
 	OPTION(osd_lpg_bits, 0, OPT_INT, 2),  // bits per osd
 	OPTION(osd_object_layout, 0, OPT_INT, CEPH_OBJECT_LAYOUT_HASHINO),
 	OPTION(osd_pg_layout, 0, OPT_INT, CEPH_PG_LAYOUT_CRUSH),
@@ -570,6 +582,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_class_tmp, 0, OPT_STR, "/var/lib/ceph/tmp"),
 	OPTION(osd_check_for_log_corruption, 0, OPT_BOOL, false),
 	OPTION(osd_use_stale_snap, 0, OPT_BOOL, false),
+	OPTION(osd_max_notify_timeout, 0, OPT_INT, 30), // max notify timeout in seconds
 	OPTION(filestore, 0, OPT_BOOL, false),
 	OPTION(filestore_max_sync_interval, 0, OPT_DOUBLE, 5),    // seconds
 	OPTION(filestore_min_sync_interval, 0, OPT_DOUBLE, .01),  // seconds
@@ -1074,6 +1087,9 @@ int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const ch
         exit(1);
       }
       break;
+    case OPT_U32:
+      OPT_READ_TYPE(ret, section, key, uint32_t, out, def);
+      break;
     default:
 	ret = 0;
         break;
@@ -1127,6 +1143,7 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
     g_conf.type = (char *)"";
 
   bool isdaemon = g_conf.daemonize;
+  bool force_foreground_logging = false;
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("version", 'v')) {
@@ -1141,17 +1158,12 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
       show_config = true;
     } else if (isdaemon && CONF_ARG_EQ("bind", 0)) {
       g_conf.public_addr.parse(args[++i]);
-    } else if (isdaemon && CONF_ARG_EQ("nodaemon", 'D')) {
+    } else if (CONF_ARG_EQ("nodaemon", 'D')) {
       g_conf.daemonize = false;
-      g_conf.log_to_stdout = true;
-      /*
-    } else if (isdaemon && CONF_ARG_EQ("daemonize", 'd')) {
-      g_conf.daemonize = true;
-      g_conf.log_to_stdout = false;
-      */
-    } else if (isdaemon && CONF_ARG_EQ("foreground", 'f')) {
+      force_foreground_logging = true;
+    } else if (CONF_ARG_EQ("foreground", 'f')) {
       g_conf.daemonize = false;
-      //g_conf.log_to_stdout = false;
+      force_foreground_logging = true;
     } else if (isdaemon && (CONF_ARG_EQ("id", 'i') || CONF_ARG_EQ("name", 'n'))) {
       CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
     } else if (!isdaemon && (CONF_ARG_EQ("id", 'I') || CONF_ARG_EQ("name", 'n'))) {
@@ -1224,6 +1236,10 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
     exit(1);
   }
 
+  if (force_foreground_logging) {
+    set_foreground_logging();
+  }
+
   if (!cf)
     return;
 
@@ -1239,26 +1255,27 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
   ec->load(cf);
 }
 
-void generic_usage()
+void generic_usage(bool is_server)
 {
-  cerr << "   -c ceph.conf or --conf=ceph.conf\n";
-  cerr << "        get options from given conf file" << std::endl;
+  derr << "   -c ceph.conf or --conf=ceph.conf" << dendl;
+  derr << "        get options from given conf file" << dendl;
+  derr << "   -D   run in foreground." << dendl;
+  derr << "   -f   run in foreground. Show all log messages on stdout."
+       << dendl;
+  if (is_server) {
+    derr << "   --debug_ms N" << dendl;
+    derr << "        set message debug level (e.g. 1)" << dendl;
+  }
 }
 
 void generic_server_usage()
 {
-  cerr << "   --debug_ms N\n";
-  cerr << "        set message debug level (e.g. 1)\n";
-  cerr << "   -D   debug (no fork, log to stdout)\n";
-  cerr << "   -f   foreground (no fork, log to file)\n";
-  generic_usage();
+  generic_usage(true);
   exit(1);
 }
 void generic_client_usage()
 {
-  generic_usage();
-  cerr << "   -d   daemonize (detach, fork, log to file)\n";
-  cerr << "   -f   foreground (no fork, log to file)" << std::endl;
+  generic_usage(false);
   exit(1);
 }
 
@@ -1270,6 +1287,16 @@ ConfFile *conf_get_conf_file()
 ExportControl *conf_get_export_control()
 {
   return ec;
+}
+
+static void env_override(char **ceph_var, const char * const env_var)
+{
+  char *e = getenv(env_var);
+  if (!e)
+    return;
+  if (*ceph_var)
+    free(*ceph_var);
+  *ceph_var = strdup(e);
 }
 
 void parse_config_options(std::vector<const char*>& args)
@@ -1300,9 +1327,17 @@ void parse_config_options(std::vector<const char*>& args)
         nargs.push_back(args[i]);
   }
 
+  env_override(&g_conf.keyring, "CEPH_KEYRING");
+
   install_sighandler(SIGHUP, sighup_handler, SA_RESTART);
-  install_sighandler(SIGSEGV, sigsegv_handler, SA_RESETHAND);
-  install_sighandler(SIGSEGV, sigabrt_handler, SA_RESETHAND);
+  install_sighandler(SIGSEGV, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
+  install_sighandler(SIGABRT, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
+  install_sighandler(SIGBUS, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
+  install_sighandler(SIGILL, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
+  install_sighandler(SIGFPE, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
+  install_sighandler(SIGXCPU, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
+  install_sighandler(SIGXFSZ, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
+  install_sighandler(SIGSYS, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
 
   args = nargs;
 }

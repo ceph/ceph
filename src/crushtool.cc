@@ -21,6 +21,7 @@
 
 #include "config.h"
 
+#include "common/common_init.h"
 #include "crush/CrushWrapper.h"
 #include "crush/grammar.h"
 
@@ -600,12 +601,12 @@ static int decompile_crush_bucket(int cur,
     return 0;
   }
   else if (c->second == DCB_STATE_IN_PROGRESS) {
-    cout << __PRETTY_FUNCTION__ << ": logic error: tried to decompile "
+    cout << "decompile_crush_bucket: logic error: tried to decompile "
 	"a bucket that is already being decompiled" << std::endl;
     return -EBADE;
   }
   else {
-    cout << __PRETTY_FUNCTION__ << ": logic error: illegal bucket state! "
+    cout << "decompile_crush_bucket: logic error: illegal bucket state! "
 	 << c->second << std::endl;
     return -EBADE;
   }
@@ -620,14 +621,14 @@ static int decompile_crush_bucket(int cur,
 	return ret;
     }
     else if (d->second == DCB_STATE_IN_PROGRESS) {
-      cout << __PRETTY_FUNCTION__ << ": error: while trying to output bucket "
+      cout << "decompile_crush_bucket: error: while trying to output bucket "
 	   << cur << ", we found out that it contains one of the buckets that "
 	   << "contain it. This is not allowed. The buckets must form a "
 	   <<  "directed acyclic graph." << std::endl;
       return -EINVAL;
     }
     else if (d->second != DCB_STATE_DONE) {
-      cout << __PRETTY_FUNCTION__ << ": logic error: illegal bucket state "
+      cout << "decompile_crush_bucket: logic error: illegal bucket state "
 	   << d->second << std::endl;
       return -EBADE;
     }
@@ -773,6 +774,7 @@ struct layer_t {
 
 int main(int argc, const char **argv)
 {
+  set_foreground_logging();
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);

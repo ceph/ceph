@@ -42,6 +42,12 @@ extern void ceph_set_default_id(const char *id);
 
 struct EntityName;
 
+enum log_to_stderr_t {
+  LOG_TO_STDERR_NONE = 0,
+  LOG_TO_STDERR_SOME = 1,
+  LOG_TO_STDERR_ALL = 2,
+};
+
 struct md_config_t {
   char *type;
   char *id;
@@ -81,8 +87,15 @@ struct md_config_t {
   const char *log_dir;
   const char *log_sym_dir;
   int log_sym_history;
-  bool log_to_stdout;
+
+  int log_to_stderr;
+
+  bool log_to_syslog;
   bool log_per_instance;
+  bool log_to_file;
+
+  bool clog_to_monitors;
+  bool clog_to_syslog;
 
   const char *pid_file;
 
@@ -94,6 +107,8 @@ struct md_config_t {
   bool fakemessenger_serialize;
 
   int kill_after;
+
+  long long max_open_files;
 
   int debug;
   int debug_lockdep;
@@ -217,6 +232,8 @@ struct md_config_t {
   int      client_oc_target_dirty;
   long long unsigned   client_oc_max_sync_write;
 
+  int      client_notify_timeout;
+
   // objecter
   bool  objecter_buffer_uncommitted;
   double objecter_mon_retry_interval;
@@ -319,6 +336,7 @@ struct md_config_t {
   // set these to non-zero to specify kill points
   bool mds_verify_scatter;
   bool mds_debug_scatterstat;
+  bool mds_debug_frag;
   int mds_kill_mdstable_at;
   int mds_kill_export_at;
   int mds_kill_import_at;
@@ -352,6 +370,7 @@ struct md_config_t {
   int osd_min_pg_size_without_alive;
 
   int   osd_pg_bits;
+  int   osd_pgp_bits;
   int   osd_lpg_bits;
   int   osd_object_layout;
   int   osd_pg_layout;
@@ -402,6 +421,8 @@ struct md_config_t {
   bool osd_check_for_log_corruption;  // bleh
 
   bool osd_use_stale_snap;
+
+  uint32_t osd_max_notify_timeout;
 
   // filestore
   bool filestore;
@@ -474,7 +495,7 @@ extern md_config_t g_conf;
 
 typedef enum {
 	OPT_NONE, OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL,
-	OPT_ADDR
+	OPT_ADDR, OPT_U32
 } opt_type_t;
 
 /**
@@ -545,9 +566,9 @@ ExportControl *conf_get_export_control();
 	conf_cmd_equals(args[i], str_cmd, char_cmd, &val_pos)
 
 #define DEFINE_CONF_VARS(usage_func) \
-	unsigned int val_pos; \
-	void (*args_usage)() = usage_func; \
-	bool __isarg
+	unsigned int val_pos __attribute__((unused)); \
+	void (*args_usage)() __attribute__((unused)) = usage_func; \
+	bool __isarg __attribute__((unused))
 
 
 #define FOR_EACH_ARG(args) \

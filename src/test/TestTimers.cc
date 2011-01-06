@@ -257,6 +257,7 @@ int main(int argc, const char **argv)
   ceph_set_default_id("admin");
   common_set_defaults(false);
   common_init(args, "ceph", true);
+  set_foreground_logging();
 
   int ret;
   Mutex safe_timer_lock("safe_timer_lock");

@@ -38,8 +38,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(mon, paxos->get_version())
 static ostream& _prefix(Monitor *mon, version_t v) {
-  return *_dout << dbeginl
-		<< "mon." << mon->name << "@" << mon->rank
+  return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
 		<< ".auth v" << v << " ";
 }
@@ -93,30 +92,10 @@ void AuthMonitor::on_active()
 void AuthMonitor::create_initial(bufferlist& bl)
 {
   dout(10) << "create_initial -- creating initial map" << dendl;
-  if (g_conf.keyring) {
-    dout(10) << "reading initial keyring " << dendl;
-    bufferlist bl;
 
-    string k = g_conf.keyring;
-    list<string> ls;
-    get_str_list(k, ls);
-    int r = -1;
-    for (list<string>::iterator p = ls.begin(); p != ls.end(); p++)
-      if ((r = bl.read_file(g_conf.keyring)) >= 0)
-	break;
-    if (r >= 0) {
-      KeyRing keyring;
-      bool read_ok = false;
-      try {
-        bufferlist::iterator iter = bl.begin();
-        ::decode(keyring, iter);
-        read_ok = true;
-      } catch (const buffer::error &err) {
-        cerr << "error reading file " << g_conf.keyring << std::endl;
-      }
-      if (read_ok)
-	import_keyring(keyring);
-    }
+  KeyRing keyring;
+  if (keyring.load(g_conf.keyring) == 0) {
+    import_keyring(keyring);
   }
 
   max_global_id = MIN_GLOBAL_ID;

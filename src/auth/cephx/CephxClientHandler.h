@@ -40,6 +40,7 @@ public:
     delete authorizer;
     authorizer = 0;
     starting = true;
+    server_challenge = 0;
   }
   int build_request(bufferlist& bl);
   int handle_response(int ret, bufferlist::iterator& iter);

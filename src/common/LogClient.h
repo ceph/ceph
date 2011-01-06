@@ -15,51 +15,107 @@
 #ifndef CEPH_LOGCLIENT_H
 #define CEPH_LOGCLIENT_H
 
+#include "common/LogEntry.h"
+#include "common/Mutex.h"
 #include "msg/Dispatcher.h"
 
-#include "common/Mutex.h"
-#include "include/LogEntry.h"
-
+#include <iosfwd>
 #include <sstream>
 
-class Messenger;
+class LogClient;
 class MLog;
 class MLogAck;
-class MonMap;
+class Messenger;
 class MonClient;
+class MonMap;
 
-class LogClient : public Dispatcher {
-  Messenger *messenger;
-  MonMap *monmap;
-  MonClient *monc;
+class LogClientTemp
+{
+public:
+  LogClientTemp(clog_type type_, LogClient &parent_);
+  LogClientTemp(const LogClientTemp &rhs);
+  ~LogClientTemp();
 
-  bool ms_dispatch(Message *m);
-  bool is_synchronous;
-  void _send_log();
+  template<typename T>
+  std::ostream& operator<<(const T& rhs)
+  {
+    return ss << rhs;
+  }
 
-  void ms_handle_connect(Connection *con);
+private:
+  clog_type type;
+  LogClient &parent;
+  stringstream ss;
+};
 
-  bool ms_handle_reset(Connection *con) { return false; }
-  void ms_handle_remote_reset(Connection *con) {}
+class LogClient : public Dispatcher
+{
+public:
+  enum logclient_flag_t {
+    NO_FLAGS = 0,
+    FLAG_SYNC = 0x1,
+  };
 
+  LogClient(Messenger *m, MonMap *mm, MonClient *mc, enum logclient_flag_t flags) :
+    messenger(m), monmap(mm), monc(mc), is_synchronous(flags & FLAG_SYNC),
+    log_lock("LogClient::log_lock"), last_log(0), last_syslog(0) { }
 
- public:
-
-  // -- log --
-  Mutex log_lock;
-  deque<LogEntry> log_queue;
-  version_t last_log;
-
-  void log(log_type type, const char *s);
-  void log(log_type type, string& s);
-  void log(log_type type, stringstream& s);
   void send_log();
   void handle_log_ack(MLogAck *m);
   void set_synchronous(bool sync) { is_synchronous = sync; }
 
-  LogClient(Messenger *m, MonMap *mm, MonClient *mc=0) : 
-    messenger(m), monmap(mm), monc(mc), is_synchronous(false),
-    log_lock("LogClient::log_lock"), last_log(0) { }
+  LogClientTemp debug() {
+    return LogClientTemp(CLOG_DEBUG, *this);
+  }
+  void debug(std::stringstream &s) {
+    do_log(CLOG_DEBUG, s);
+  }
+  LogClientTemp info() {
+    return LogClientTemp(CLOG_INFO, *this);
+  }
+  void info(std::stringstream &s) {
+    do_log(CLOG_INFO, s);
+  }
+  LogClientTemp warn() {
+    return LogClientTemp(CLOG_WARN, *this);
+  }
+  void warn(std::stringstream &s) {
+    do_log(CLOG_WARN, s);
+  }
+  LogClientTemp error() {
+    return LogClientTemp(CLOG_ERROR, *this);
+  }
+  void error(std::stringstream &s) {
+    do_log(CLOG_ERROR, s);
+  }
+  LogClientTemp sec() {
+    return LogClientTemp(CLOG_SEC, *this);
+  }
+  void sec(std::stringstream &s) {
+    do_log(CLOG_SEC, s);
+  }
+
+private:
+  void do_log(clog_type type, std::stringstream& ss);
+  void do_log(clog_type type, const std::string& s);
+  bool ms_dispatch(Message *m);
+  void _send_log();
+  void _send_log_to_syslog();
+  void _send_log_to_monitors();
+  void ms_handle_connect(Connection *con);
+  bool ms_handle_reset(Connection *con) { return false; }
+  void ms_handle_remote_reset(Connection *con) {}
+
+  Messenger *messenger;
+  MonMap *monmap;
+  MonClient *monc;
+  bool is_synchronous;
+  Mutex log_lock;
+  version_t last_log;
+  uint64_t last_syslog;
+  std::deque<LogEntry> log_queue;
+
+  friend class LogClientTemp;
 };
 
 #endif

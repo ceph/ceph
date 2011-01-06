@@ -220,6 +220,7 @@ fi
 %if %{with_gtk2}
 %files gcephtool
 %defattr(-,root,root,-)
+%{_bindir}/gceph
 %{_datadir}/ceph_tool/gui_resources/*
 %endif
 

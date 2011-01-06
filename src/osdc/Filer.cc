@@ -28,7 +28,7 @@
 
 #define DOUT_SUBSYS filer
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << objecter->messenger->get_myname() << ".filer "
+#define dout_prefix *_dout << objecter->messenger->get_myname() << ".filer "
 
 
 class Filer::C_Probe : public Context {

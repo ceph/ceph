@@ -69,7 +69,7 @@ class Clock {
     utime_t n(&tv);
     n -= zero;
     if (n < last) {
-      //std::cerr << "WARNING: clock jumped backwards from " << last << " to " << n << std::endl;
+      //derr << "WARNING: clock jumped backwards from " << last << " to " << n << dendl;
       n = last;    // clock jumped backwards!
     } else
       last = n;

@@ -16,13 +16,48 @@
 
 
 #include "PG.h"
+#include "OSD.h"
+#include "Watch.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 class MOSDSubOp;
 class MOSDSubOpReply;
 
+class PGLSFilter {
+protected:
+  string xattr;
+public:
+  PGLSFilter() {}
+  virtual bool filter(bufferlist& xattr_data, bufferlist& outdata) = 0;
+  virtual string& get_xattr() { return xattr; }
+};
+
+class PGLSPlainFilter : public PGLSFilter {
+  string val;
+public:
+  PGLSPlainFilter(bufferlist::iterator& params) {
+    ::decode(xattr, params);
+    ::decode(val, params);
+  }
+  virtual ~PGLSPlainFilter() {}
+  virtual bool filter(bufferlist& xattr_data, bufferlist& outdata);
+};
+
+class PGLSParentFilter : public PGLSFilter {
+  inodeno_t parent_ino;
+public:
+  PGLSParentFilter(bufferlist::iterator& params) {
+    xattr = "_parent";
+    ::decode(parent_ino, params);
+    generic_dout(0) << "parent_ino=" << parent_ino << dendl;
+  }
+  virtual ~PGLSParentFilter() {}
+  virtual bool filter(bufferlist& xattr_data, bufferlist& outdata);
+};
+
 class ReplicatedPG : public PG {
+  friend class OSD;
 public:  
 
   /*
@@ -233,6 +268,15 @@ public:
     Cond cond;
     int unstable_writes, readers, writers_waiting, readers_waiting;
 
+    // any entity in obs.oi.watchers MUST be in either watchers or unconnected_watchers.
+    map<entity_name_t, OSD::Session *> watchers;
+    map<entity_name_t, utime_t> unconnected_watchers;
+    map<Watch::Notification *, bool> notifs;
+
+    /*    ObjectContext(const sobject_t& s, const object_locator_t& ol) :
+      ref(0), registered(false), obs(s, ol),
+      lock("ReplicatedPG::ObjectContext::lock"),
+      unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0) {}*/
     ObjectContext(const object_info_t &oi_, bool exists_, SnapSetContext *ssc_)
       : ref(0), registered(false), obs(oi_, exists_, ssc_),
       lock("ReplicatedPG::ObjectContext::lock"),
@@ -294,10 +338,12 @@ public:
     utime_t mtime;
     SnapContext snapc;           // writer snap context
     eversion_t at_version;       // pg's current version pointer
+    eversion_t reply_version;    // the version that we report the client (depends on the op)
 
     ObjectStore::Transaction op_t, local_t;
     vector<PG::Log::Entry> log;
 
+    ObjectContext *obc;
     ObjectContext *clone_obc;    // if we created a clone
     ObjectContext *snapset_obc;  // if we created/deleted a snapdir
 
@@ -311,7 +357,7 @@ public:
 	      ObjectState *_obs, ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(_obs),
       bytes_written(0),
-      clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) {}
+      obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) {}
     ~OpContext() {
       assert(!clone_obc);
       if (reply)
@@ -515,6 +561,9 @@ protected:
   int recover_primary(int max);
   int recover_replicas(int max);
 
+  void dump_watchers(ObjectContext *obc);
+  void do_complete_notify(Watch::Notification *notif, ObjectContext *obc);
+
   struct RepModify {
     ReplicatedPG *pg;
     MOSDSubOp *op;
@@ -589,6 +638,14 @@ protected:
   void calc_trim_to();
   int do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr);
   int do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr);
+
+  int prepare_call(MOSDOp *osd_op, ceph_osd_op& op,
+		   string& cname, string& mname,
+		   bufferlist::iterator& bp,
+		   ClassHandler::ClassMethod **pmethod);
+
+  bool pgls_filter(PGLSFilter *filter, sobject_t& sobj, bufferlist& outdata);
+  int get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilter);
 
 public:
   ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid, const sobject_t& ioid) : 

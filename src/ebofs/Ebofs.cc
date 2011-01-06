@@ -31,7 +31,7 @@
 
 #define DOUT_SUBSYS ebofs
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "ebofs(" << dev.get_device_name() << ")."
+#define dout_prefix *_dout << "ebofs(" << dev.get_device_name() << ")."
 
 
 char *nice_blocks(block_t b) 
@@ -1015,7 +1015,7 @@ void Ebofs::trim_inodes(int max)
       assert(on->oc == 0);   // an open oc pins the onode!
       delete on;
     } else {
-      dout(-20) << "trim_inodes   still active: " << *on << dendl;
+      dout(0) << "trim_inodes   still active: " << *on << dendl;
       assert(0); // huh?
     }
   }

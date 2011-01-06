@@ -26,6 +26,7 @@
 
 
 
+
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
 #define CEPH_OSD_NEARFULL_RATIO .8
@@ -1285,11 +1286,42 @@ inline ostream& operator<<(ostream& out, const SnapSet& cs) {
 #define OI_ATTR "_"
 #define SS_ATTR "snapset"
 
+struct watch_info_t {
+  uint64_t cookie;
+  uint32_t timeout_seconds;
+  void encode(bufferlist& bl) const {
+    const __u8 v = 2;
+    ::encode(v, bl);
+    ::encode(cookie, bl);
+    ::encode(timeout_seconds, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
+    ::decode(cookie, bl);
+    if (v < 2) {
+      uint64_t ver;
+      ::decode(ver, bl);
+    }
+    ::decode(timeout_seconds, bl);
+ }
+};
+WRITE_CLASS_ENCODER(watch_info_t)
+
+static inline bool operator==(const watch_info_t& l, const watch_info_t& r) {
+  return l.cookie == r.cookie && l.timeout_seconds == r.timeout_seconds;
+}
+
+static inline ostream& operator<<(ostream& out, const watch_info_t& w) {
+  return out << "watch(cookie " << w.cookie << " " << w.timeout_seconds << "s)";
+}
+
 struct object_info_t {
   sobject_t soid;
   object_locator_t oloc;
 
   eversion_t version, prior_version;
+  eversion_t user_version;
   osd_reqid_t last_reqid;
 
   uint64_t size;
@@ -1311,8 +1343,10 @@ struct object_info_t {
     lost = other.lost;
   }
 
+  map<entity_name_t, watch_info_t> watchers;
+
   void encode(bufferlist& bl) const {
-    const __u8 v = 3;
+    const __u8 v = 4;
     ::encode(v, bl);
     ::encode(soid, bl);
     ::encode(oloc, bl);
@@ -1328,6 +1362,8 @@ struct object_info_t {
     ::encode(truncate_seq, bl);
     ::encode(truncate_size, bl);
     ::encode(lost, bl);
+    ::encode(watchers, bl);
+    ::encode(user_version, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 v;
@@ -1350,6 +1386,10 @@ struct object_info_t {
       ::decode(lost, bl);
     else
       lost = false;
+    if (v >= 4) {
+      ::decode(watchers, bl);
+      ::decode(user_version, bl);
+    }
   }
   void decode(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();

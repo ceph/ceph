@@ -30,6 +30,14 @@ void buf_to_hex(const unsigned char *buf, int len, char *str)
   }
 }
 
+class C_Watch : public Rados::WatchCtx {
+public:
+  C_Watch() {}
+  void notify(uint8_t opcode, uint64_t ver) {
+    cout << "C_Watch::notify() opcode=" << (int)opcode << " ver=" << ver << std::endl;
+  }
+};
+
 int main(int argc, const char **argv) 
 {
   Rados rados;
@@ -59,9 +67,42 @@ int main(int argc, const char **argv)
   cout << "open pool result = " << r << " pool = " << pool << std::endl;
 
   r = rados.write(pool, oid, 0, bl, bl.length());
-  cout << "rados.write returned " << r << std::endl;
+  uint64_t objver = rados.get_last_version(pool);
+  cout << "rados.write returned " << r << " last_ver=" << objver << std::endl;
+
+  uint64_t handle;
+  C_Watch wc;
+  r = rados.watch(pool, oid, objver, &handle, &wc);
+  cout << "rados.watch returned " << r << std::endl;
+
+  cout << "*** press enter to continue ***" << std::endl;
+  getchar();
+  rados.set_notify_timeout(pool, 7);
+  r = rados.notify(pool, oid, objver);
+  cout << "rados.notify returned " << r << std::endl;
+  cout << "*** press enter to continue ***" << std::endl;
+  getchar();
+
+  r = rados.notify(pool, oid, objver);
+  cout << "rados.notify returned " << r << std::endl;
+  cout << "*** press enter to continue ***" << std::endl;
+  getchar();
+
+  r = rados.unwatch(pool, oid, handle);
+  cout << "rados.unwatch returned " << r << std::endl;
+  cout << "*** press enter to continue ***" << std::endl;
+  getchar();
+
+  r = rados.notify(pool, oid, objver);
+  cout << "rados.notify returned " << r << std::endl;
+  cout << "*** press enter to continue ***" << std::endl;
+  getchar();
+  rados.set_assert_version(pool, objver);
+
   r = rados.write(pool, oid, 0, bl, bl.length() - 1);
   cout << "rados.write returned " << r << std::endl;
+
+  exit(0);
   r = rados.write(pool, oid, 0, bl, bl.length() - 2);
   cout << "rados.write returned " << r << std::endl;
   r = rados.write(pool, oid, 0, bl, bl.length() - 3);

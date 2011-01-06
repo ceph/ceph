@@ -96,6 +96,7 @@ public:
    */
   class Transaction {
   public:
+    static const int OP_NOP =          0;
     static const int OP_TOUCH =        9;   // cid, oid
     static const int OP_WRITE =        10;  // cid, oid, offset, len, bl
     static const int OP_ZERO =         11;  // cid, oid, offset, len
@@ -269,6 +270,11 @@ public:
 
     void start_sync() {
       __u32 op = OP_STARTSYNC;
+      ::encode(op, tbl);
+      ops++;
+    }
+    void nop() {
+      __u32 op = OP_NOP;
       ::encode(op, tbl);
       ops++;
     }

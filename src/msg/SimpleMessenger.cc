@@ -39,7 +39,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(messenger)
 static ostream& _prefix(SimpleMessenger *messenger) {
-  return *_dout << dbeginl << "-- " << messenger->ms_addr << " ";
+  return *_dout << "-- " << messenger->ms_addr << " ";
 }
 
 
@@ -66,7 +66,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_add
   listen_sd = ::socket(family, SOCK_STREAM, 0);
   if (listen_sd < 0) {
     char buf[80];
-    derr(0) << "accepter.bind unable to create socket: "
+    dout(0) << "accepter.bind unable to create socket: "
 	    << strerror_r(errno, buf, sizeof(buf)) << dendl;
     cerr << "accepter.bind unable to create socket: "
 	 << strerror_r(errno, buf, sizeof(buf)) << std::endl;
@@ -88,7 +88,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_add
     rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), sizeof(listen_addr.ss_addr()));
     if (rc < 0) {
       char buf[80];
-      derr(0) << "accepter.bind unable to bind to " << bind_addr.ss_addr()
+      dout(0) << "accepter.bind unable to bind to " << bind_addr.ss_addr()
 	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       cerr << "accepter.bind unable to bind to " << bind_addr.ss_addr()
 	   << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
@@ -106,7 +106,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_add
     }
     if (rc < 0) {
       char buf[80];
-      derr(0) << "accepter.bind unable to bind to " << bind_addr.ss_addr()
+      dout(0) << "accepter.bind unable to bind to " << bind_addr.ss_addr()
 	      << " on any port in range " << CEPH_PORT_START << "-" << CEPH_PORT_LAST
 	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       cerr << "accepter.bind unable to bind to " << bind_addr.ss_addr()
@@ -127,7 +127,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_add
   rc = ::listen(listen_sd, 128);
   if (rc < 0) {
     char buf[80];
-    derr(0) << "accepter.bind unable to listen on " << bind_addr.ss_addr()
+    dout(0) << "accepter.bind unable to listen on " << bind_addr.ss_addr()
 	    << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     cerr << "accepter.bind unable to listen on " << bind_addr.ss_addr()
 	 << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
@@ -441,7 +441,7 @@ int SimpleMessenger::send_message(Message *m, Connection *con)
   if (pipe) {
     dout(1) << "--> " << con->get_peer_addr() << " -- " << *m
             << " -- ?+" << m->get_data().length()
-            << " " << m
+            << " " << m << " con=" << (void *)con
             << dendl;
 
     submit_message(m, pipe);
@@ -466,7 +466,7 @@ int SimpleMessenger::lazy_send_message(Message *m, const entity_inst_t& dest)
 	  << " --> " << dest.name << " " << dest.addr
           << " -- " << *m
     	  << " -- ?+" << m->get_data().length()
-	  << " " << m 
+          << " " << m
           << dendl;
 
   submit_message(m, dest.addr, dest.name.type(), true);
@@ -489,8 +489,7 @@ entity_addr_t SimpleMessenger::get_myaddr()
 #undef dout_prefix
 #define dout_prefix _pipe_prefix()
 ostream& SimpleMessenger::Pipe::_pipe_prefix() {
-  return *_dout << dbeginl
-		<< "-- " << messenger->ms_addr << " >> " << peer_addr << " pipe(" << this
+  return *_dout << "-- " << messenger->ms_addr << " >> " << peer_addr << " pipe(" << this
 		<< " sd=" << sd
 		<< " pgs=" << peer_global_seq
 		<< " cs=" << connect_seq
@@ -753,32 +752,32 @@ int SimpleMessenger::Pipe::accept()
       }
       
       if (existing->policy.lossy) {
-	dout(-10) << "accept replacing existing (lossy) channel (new one lossy="
-		  << policy.lossy << ")" << dendl;
+	dout(0) << "accept replacing existing (lossy) channel (new one lossy="
+	        << policy.lossy << ")" << dendl;
 	existing->was_session_reset();
 	goto replace;
       }
       /*if (lossy_rx) {
 	if (existing->state == STATE_STANDBY) {
-	  dout(-10) << "accept incoming lossy connection, kicking outgoing lossless "
+	  dout(0) << "accept incoming lossy connection, kicking outgoing lossless "
 		    << existing << dendl;
 	  existing->state = STATE_CONNECTING;
 	  existing->cond.Signal();
 	} else {
-	  dout(-10) << "accept incoming lossy connection, our lossless " << existing
+	  dout(0) << "accept incoming lossy connection, our lossless " << existing
 		    << " has state " << existing->state << ", doing nothing" << dendl;
 	}
 	existing->lock.Unlock();
 	goto fail;
 	}*/
 
-      dout(-10) << "accept connect_seq " << connect.connect_seq
+      dout(0) << "accept connect_seq " << connect.connect_seq
 		<< " vs existing " << existing->connect_seq
 		<< " state " << existing->state << dendl;
 
       if (connect.connect_seq < existing->connect_seq) {
 	if (connect.connect_seq == 0) {
-	  dout(-10) << "accept peer reset, then tried to connect to us, replacing" << dendl;
+	  dout(0) << "accept peer reset, then tried to connect to us, replacing" << dendl;
 	  existing->was_session_reset(); // this resets out_queue, msg_ and connect_seq #'s
 	  goto replace;
 	} else {
@@ -999,7 +998,7 @@ int SimpleMessenger::Pipe::connect()
   sd = ::socket(peer_addr.get_family(), SOCK_STREAM, 0);
   if (sd < 0) {
     char buf[80];
-    dout(-1) << "connect couldn't created socket " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    derr << "connect couldn't created socket " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     assert(0);
     goto fail;
   }
@@ -1461,7 +1460,7 @@ void SimpleMessenger::Pipe::fault(bool onconnect, bool onread)
 
 void SimpleMessenger::Pipe::fail()
 {
-  derr(10) << "fail" << dendl;
+  dout(10) << "fail" << dendl;
   assert(pipe_lock.is_locked());
 
   stop();
@@ -1587,9 +1586,9 @@ void SimpleMessenger::Pipe::reader()
       // occasionally pull a message out of the sent queue to send elsewhere.  in that case
       // it doesn't matter if we "got" it or not.
       if (m->get_seq() <= in_seq) {
-	dout(-10) << "reader got old message "
-		  << m->get_seq() << " <= " << in_seq << " " << m << " " << *m
-		  << ", discarding" << dendl;
+	dout(0) << "reader got old message "
+		<< m->get_seq() << " <= " << in_seq << " " << m << " " << *m
+		<< ", discarding" << dendl;
 	messenger->dispatch_throttle_release(m->get_dispatch_throttle_size());
 	m->put();
 	continue;
@@ -1724,7 +1723,7 @@ void SimpleMessenger::Pipe::writer()
 
 	pipe_lock.Lock();
 	if (rc < 0) {
-          derr(1) << "writer error sending " << m << ", "
+          dout(1) << "writer error sending " << m << ", "
 		  << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
 	  fault();
         }
@@ -2377,11 +2376,10 @@ int SimpleMessenger::start(bool nodaemon)
   // daemonize?
   if (g_conf.daemonize && !nodaemon) {
     if (Thread::get_num_threads() > 0) {
-      derr(0) << "messenger.start BUG: there are " << Thread::get_num_threads()
+      dout(0) << "messenger.start BUG: there are " << Thread::get_num_threads()
 	      << " already started that will now die!  call messenger.start() sooner." 
 	      << dendl;
     }
-    dout(1) << "messenger.start daemonizing" << dendl;
 
     if (1) {
       daemon(1, 0);
@@ -2402,8 +2400,8 @@ int SimpleMessenger::start(bool nodaemon)
       ::mkdir(g_conf.chdir, 0700);
       ::chdir(g_conf.chdir);
     }
-
-    dout_rename_output_file();
+    dout_handle_daemonize();
+    dout(1) << "messenger.start daemonized" << dendl;
   }
 
   // go!
@@ -2569,7 +2567,7 @@ void SimpleMessenger::submit_message(Message *m, const entity_addr_t& dest_addr,
         dout(20) << "submit_message " << *m << " local" << dendl;
 	dispatch_queue.local_delivery(m, m->get_priority());
       } else {
-        derr(0) << "submit_message " << *m << " " << dest_addr << " local but no local endpoint, dropping." << dendl;
+        dout(0) << "submit_message " << *m << " " << dest_addr << " local but no local endpoint, dropping." << dendl;
         assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
         m->put();
       }
@@ -2737,6 +2735,23 @@ void SimpleMessenger::mark_down(const entity_addr_t& addr)
     p->pipe_lock.Unlock();
   } else {
     dout(1) << "mark_down " << addr << " -- pipe dne" << dendl;
+  }
+  lock.Unlock();
+}
+
+void SimpleMessenger::mark_down(Connection *con)
+{
+  lock.Lock();
+  Pipe *p = (Pipe *)con->get_pipe();
+  if (p) {
+    dout(1) << "mark_down " << con << " -- " << p << dendl;
+    p->unregister_pipe();
+    p->pipe_lock.Lock();
+    p->stop();
+    p->pipe_lock.Unlock();
+    p->put();
+  } else {
+    dout(1) << "mark_down " << con << " -- pipe dne" << dendl;
   }
   lock.Unlock();
 }

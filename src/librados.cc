@@ -19,6 +19,7 @@
 #include <sys/stat.h>
 #include <iostream>
 #include <string>
+#include <pthread.h>
 using namespace std;
 
 #include "config.h"
@@ -40,10 +41,12 @@ using namespace std;
 #include "include/librados.h"
 #include "include/librados.hpp"
 
+#include "messages/MWatchNotify.h"
+
 #define RADOS_LIST_MAX_ENTRIES 1024
 #define DOUT_SUBSYS rados
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "librados: "
+#define dout_prefix *_dout << "librados: "
 
 
 class RadosClient : public Dispatcher
@@ -74,9 +77,9 @@ class RadosClient : public Dispatcher
   Cond cond;
   SafeTimer timer;
 
- 
 public:
-  RadosClient() : messenger(NULL), lock("radosclient"), timer(lock) {
+  RadosClient() : messenger(NULL), lock("radosclient"), timer(lock),
+                  max_watch_cookie(0) {
     messenger = new SimpleMessenger();
   }
 
@@ -89,8 +92,12 @@ public:
     string name;
     snapid_t snap_seq;
     SnapContext snapc;
+    uint64_t assert_ver;
+    eversion_t last_objver;
+    uint32_t notify_timeout;
 
-    PoolCtx(int pid, const char *n, snapid_t s = CEPH_NOSNAP) : poolid(pid), name(n), snap_seq(s) {}
+    PoolCtx(int pid, const char *n, snapid_t s = CEPH_NOSNAP) : poolid(pid), name(n), snap_seq(s), assert_ver(0),
+							        notify_timeout(g_conf.client_notify_timeout) {}
 
     void set_snap(snapid_t s) {
       if (!s)
@@ -166,6 +173,7 @@ public:
     int ref, rval;
     bool released;
     bool ack, safe;
+    eversion_t objver;
 
     rados_callback_t callback_complete, callback_safe;
     void *callback_arg;
@@ -225,6 +233,12 @@ public:
       int r = rval;
       lock.Unlock();
       return r;
+    }
+    uint64_t get_version() {
+      lock.Lock();
+      eversion_t v = objver;
+      lock.Unlock();
+      return v.version;
     }
 
     void get() {
@@ -331,6 +345,92 @@ public:
     if (cb_safe)
       c->set_safe_callback(cb_arg, cb_safe);
     return c;
+  }
+
+
+  // watch/notify
+  struct WatchContext {
+    PoolCtx pool_ctx;
+    const object_t oid; 
+    uint64_t cookie;
+    uint64_t ver;
+    librados::Rados::WatchCtx *ctx;
+    ObjectOperation *op;
+    uint64_t linger_id;
+
+    WatchContext(PoolCtx& _pc, const object_t& _oc, librados::Rados::WatchCtx *_ctx,
+                 ObjectOperation *_op) : pool_ctx(_pc), oid(_oc), ctx(_ctx), op(_op), linger_id(0) {}
+    ~WatchContext() {
+    }
+    void notify(RadosClient *client, MWatchNotify *m) {
+      ctx->notify(m->opcode, m->ver);
+      if (m->opcode != WATCH_NOTIFY_COMPLETE) {
+        client->_notify_ack(pool_ctx, oid, m->notify_id, m->ver);
+      }
+    }
+  };
+
+  struct C_NotifyComplete : public librados::Rados::WatchCtx {
+    Mutex *lock;
+    Cond *cond;
+    bool *done;
+
+    C_NotifyComplete(Mutex *_l, Cond *_c, bool *_d) : lock(_l), cond(_c), done(_d) {}
+
+    void notify(uint8_t opcode, uint64_t ver) {
+      if (opcode != WATCH_NOTIFY_COMPLETE)
+        derr << "WARNING: C_NotifyComplete got response: opcode="
+	     << (int)opcode << " ver=" << ver << dendl;
+      *done = true;
+      cond->Signal();
+    }
+  };
+
+  uint64_t max_watch_cookie;
+  map<uint64_t, WatchContext *> watchers;
+ 
+  void set_sync_op_version(PoolCtx& pool, eversion_t& ver) {
+      pool.last_objver = ver;
+  }
+
+  void register_watcher(PoolCtx& pool, const object_t& oid, librados::Rados::WatchCtx *ctx,
+			ObjectOperation *op, uint64_t *cookie, WatchContext **pwc = NULL) {
+    assert(lock.is_locked());
+    WatchContext *wc = new WatchContext(pool, oid, ctx, op);
+    *cookie = ++max_watch_cookie;
+    watchers[*cookie] = wc;
+    if (pwc)
+      *pwc = wc;
+  }
+
+  void unregister_watcher(uint64_t cookie) {
+    assert(lock.is_locked());
+    map<uint64_t, WatchContext *>::iterator iter = watchers.find(cookie);
+    if (iter != watchers.end()) {
+      WatchContext *ctx = iter->second;
+      if (ctx->linger_id)
+        objecter->unregister_linger(ctx->linger_id);
+      delete ctx;
+      watchers.erase(iter);
+    }
+  }
+
+  void watch_notify(MWatchNotify *m);
+
+  int watch(PoolCtx& pool, const object_t& oid, uint64_t ver, uint64_t *cookie, librados::Rados::WatchCtx *ctx);
+  int unwatch(PoolCtx& pool, const object_t& oid, uint64_t cookie);
+  int notify(PoolCtx& pool, const object_t& oid, uint64_t ver);
+  int _notify_ack(PoolCtx& pool, const object_t& oid, uint64_t notify_id, uint64_t ver);
+
+  eversion_t last_version(PoolCtx& pool) {
+    return pool.last_objver;
+  }
+  void set_assert_version(PoolCtx& pool, uint64_t ver) {
+    pool.assert_ver = ver;
+  }
+
+  void set_notify_timeout(PoolCtx& pool, uint32_t timeout) {
+    pool.notify_timeout = timeout;
   }
 };
 
@@ -464,6 +564,10 @@ bool RadosClient::_dispatch(Message *m)
 
   case CEPH_MSG_POOLOP_REPLY:
     objecter->handle_pool_op_reply((MPoolOpReply*)m);
+    break;
+
+  case CEPH_MSG_WATCH_NOTIFY:
+    watch_notify((MWatchNotify *)m);
     break;
   default:
     return false;
@@ -806,6 +910,7 @@ int RadosClient::create(PoolCtx& pool, const object_t& oid, bool exclusive)
   Cond cond;
   bool done;
   int r;
+  eversion_t ver;
 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
@@ -813,7 +918,7 @@ int RadosClient::create(PoolCtx& pool, const object_t& oid, bool exclusive)
   object_locator_t oloc(pool.poolid);
   objecter->create(oid, oloc,
 		  pool.snapc, ut, 0, (exclusive ? CEPH_OSD_OP_FLAG_EXCL : 0),
-		  onack, NULL);
+		  onack, NULL, &ver);
   lock.Unlock();
 
   mylock.Lock();
@@ -821,34 +926,13 @@ int RadosClient::create(PoolCtx& pool, const object_t& oid, bool exclusive)
     cond.Wait(mylock);
   mylock.Unlock();
 
+  set_sync_op_version(pool, ver);
+
   return r;
 }
 
 int RadosClient::write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist& bl, size_t len)
 {
-#if 0
-  static SnapContext snapc;
-  static int i;
-
-  snapc.snaps.clear();
-
-#define START_SNAP 1
-
-  if (snapc.seq == 0)
-    snapc.seq = START_SNAP - 1;
-
-  ++snapc.seq;
-  for (i=0; i<snapc.seq-START_SNAP + 1; i++) {
-     snapc.snaps.push_back(snapc.seq - i);
-  }
-  i = 0;
-  for (vector<snapid_t>::iterator iter = snapc.snaps.begin();
-       iter != snapc.snaps.end(); ++iter, ++i) {
-    dout(0) << "snapc[" << i << "] = " << *iter << dendl;
-  }
-  dout(0) << "seq=" << snapc.seq << dendl;
-  dout(0) << "snapc=" << snapc << dendl;
-#endif
   utime_t ut = g_clock.now();
 
   /* can't write to a snapshot */
@@ -861,18 +945,28 @@ int RadosClient::write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist
   int r;
 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  eversion_t ver;
+
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_version(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
 
   lock.Lock();
   object_locator_t oloc(pool.poolid);
   objecter->write(oid, oloc,
 		  off, len, pool.snapc, bl, ut, 0,
-		  onack, NULL);
+		  onack, NULL, &ver, pop);
   lock.Unlock();
 
   mylock.Lock();
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
+
+  set_sync_op_version(pool, ver);
 
   if (r < 0)
     return r;
@@ -895,17 +989,27 @@ int RadosClient::write_full(PoolCtx& pool, const object_t& oid, bufferlist& bl)
 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
+  eversion_t ver;
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_version(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
+
   lock.Lock();
   object_locator_t oloc(pool.poolid);
   objecter->write_full(oid, oloc,
 		  pool.snapc, bl, ut, 0,
-		  onack, NULL);
+		  onack, NULL, &ver, pop);
   lock.Unlock();
 
   mylock.Lock();
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
+
+  set_sync_op_version(pool, ver);
 
   return r;
 }
@@ -915,6 +1019,7 @@ int RadosClient::aio_read(PoolCtx& pool, const object_t oid, off_t off, bufferli
 {
  
   Context *onack = new C_aio_Ack(c);
+  eversion_t ver;
 
   c->pbl = pbl;
 
@@ -922,7 +1027,7 @@ int RadosClient::aio_read(PoolCtx& pool, const object_t oid, off_t off, bufferli
   object_locator_t oloc(pool.poolid);
   objecter->read(oid, oloc,
 		 off, len, pool.snap_seq, &c->bl, 0,
-		  onack);
+		 onack, &c->objver);
 
   return 0;
 }
@@ -938,7 +1043,7 @@ int RadosClient::aio_read(PoolCtx& pool, const object_t oid, off_t off, char *bu
   object_locator_t oloc(pool.poolid);
   objecter->read(oid, oloc,
 		 off, len, pool.snap_seq, &c->bl, 0,
-		  onack);
+		 onack, &c->objver);
 
   return 0;
 }
@@ -956,7 +1061,7 @@ int RadosClient::aio_write(PoolCtx& pool, const object_t oid, off_t off, const b
   object_locator_t oloc(pool.poolid);
   objecter->write(oid, oloc,
 		  off, len, pool.snapc, bl, ut, 0,
-		  onack, onsafe);
+		  onack, onsafe, &c->objver);
 
   return 0;
 }
@@ -974,7 +1079,7 @@ int RadosClient::aio_write_full(PoolCtx& pool, const object_t oid, const bufferl
   object_locator_t oloc(pool.poolid);
   objecter->write_full(oid, oloc,
 		  pool.snapc, bl, ut, 0,
-		  onack, onsafe);
+		  onack, onsafe, &c->objver);
 
   return 0;
 }
@@ -989,18 +1094,28 @@ int RadosClient::remove(PoolCtx& pool, const object_t& oid)
   bool done;
   int r;
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  eversion_t ver;
+
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_version(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
 
   lock.Lock();
   object_locator_t oloc(pool.poolid);
   objecter->remove(oid, oloc,
 		  snapc, ut, 0,
-		  onack, NULL);
+		  onack, NULL, &ver, pop);
   lock.Unlock();
 
   mylock.Lock();
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
+
+  set_sync_op_version(pool, ver);
 
   return r;
 }
@@ -1019,19 +1134,29 @@ int RadosClient::trunc(PoolCtx& pool, const object_t& oid, size_t size)
   int r;
 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  eversion_t ver;
+
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_version(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
 
   lock.Lock();
   object_locator_t oloc(pool.poolid);
   objecter->trunc(oid, oloc,
 		  pool.snapc, ut, 0,
 		  size, 0,
-		  onack, NULL);
+		  onack, NULL, &ver, pop);
   lock.Unlock();
 
   mylock.Lock();
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
+
+  set_sync_op_version(pool, ver);
 
   return r;
 }
@@ -1045,6 +1170,7 @@ int RadosClient::tmap_update(PoolCtx& pool, const object_t& oid, bufferlist& cmd
   bool done;
   int r;
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  eversion_t ver;
 
   bufferlist outbl;
 
@@ -1052,14 +1178,20 @@ int RadosClient::tmap_update(PoolCtx& pool, const object_t& oid, bufferlist& cmd
   SnapContext snapc;
   object_locator_t oloc(pool.poolid);
   ObjectOperation wr;
+  if (pool.assert_ver) {
+    wr.assert_version(pool.assert_ver);
+    pool.assert_ver = 0;
+  }
   wr.tmap_update(cmdbl);
-  objecter->mutate(oid, oloc, wr, snapc, ut, 0, onack, NULL);
+  objecter->mutate(oid, oloc, wr, snapc, ut, 0, onack, NULL, &ver);
   lock.Unlock();
 
   mylock.Lock();
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
+
+  set_sync_op_version(pool, ver);
 
   return r;
 }
@@ -1075,19 +1207,26 @@ int RadosClient::exec(PoolCtx& pool, const object_t& oid, const char *cls, const
   bool done;
   int r;
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  eversion_t ver;
 
 
   lock.Lock();
   object_locator_t oloc(pool.poolid);
   ObjectOperation rd;
+  if (pool.assert_ver) {
+    rd.assert_version(pool.assert_ver);
+    pool.assert_ver = 0;
+  }
   rd.call(cls, method, inbl);
-  objecter->read(oid, oloc, rd, pool.snap_seq, &outbl, 0, onack);
+  objecter->read(oid, oloc, rd, pool.snap_seq, &outbl, 0, onack, &ver);
   lock.Unlock();
 
   mylock.Lock();
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
+
+  set_sync_op_version(pool, ver);
 
   return r;
 }
@@ -1101,12 +1240,19 @@ int RadosClient::read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist&
   bool done;
   int r;
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  eversion_t ver;
 
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_version(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
   lock.Lock();
   object_locator_t oloc(pool.poolid);
   objecter->read(oid, oloc,
 	      off, len, pool.snap_seq, &bl, 0,
-              onack);
+              onack, &ver, pop);
   lock.Unlock();
 
   mylock.Lock();
@@ -1114,6 +1260,8 @@ int RadosClient::read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist&
     cond.Wait(mylock);
   mylock.Unlock();
   dout(10) << "Objecter returned from read r=" << r << dendl;
+
+  set_sync_op_version(pool, ver);
 
   if (r < 0)
     return r;
@@ -1205,15 +1353,22 @@ int RadosClient::stat(PoolCtx& pool, const object_t& oid, uint64_t *psize, time_
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   uint64_t size;
   utime_t mtime;
+  eversion_t ver;
 
   if (!psize)
     psize = &size;
 
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_version(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
   lock.Lock();
   object_locator_t oloc(pool.poolid);
   objecter->stat(oid, oloc,
 	      pool.snap_seq, psize, &mtime, 0,
-              onack);
+              onack, &ver, pop);
   lock.Unlock();
 
   mylock.Lock();
@@ -1225,6 +1380,8 @@ int RadosClient::stat(PoolCtx& pool, const object_t& oid, uint64_t *psize, time_
   if (r >= 0 && pmtime) {
     *pmtime = mtime.sec();
   }
+
+  set_sync_op_version(pool, ver);
 
   return r;
 }
@@ -1238,12 +1395,19 @@ int RadosClient::getxattr(PoolCtx& pool, const object_t& oid, const char *name, 
   bool done;
   int r;
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  eversion_t ver;
 
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_version(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
   lock.Lock();
   object_locator_t oloc(pool.poolid);
   objecter->getxattr(oid, oloc,
 	      name, pool.snap_seq, &bl, 0,
-              onack);
+              onack, &ver, pop);
   lock.Unlock();
 
   mylock.Lock();
@@ -1251,6 +1415,8 @@ int RadosClient::getxattr(PoolCtx& pool, const object_t& oid, const char *name, 
     cond.Wait(mylock);
   mylock.Unlock();
   dout(10) << "Objecter returned from getxattr" << dendl;
+
+  set_sync_op_version(pool, ver);
 
   if (r < 0)
     return r;
@@ -1272,19 +1438,28 @@ int RadosClient::rmxattr(PoolCtx& pool, const object_t& oid, const char *name)
   int r;
 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  eversion_t ver;
 
   object_locator_t oloc(pool.poolid);
 
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_version(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
   lock.Lock();
   objecter->removexattr(oid, oloc, name,
 		  pool.snapc, ut, 0,
-		  onack, NULL);
+		  onack, NULL, &ver, pop);
   lock.Unlock();
 
   mylock.Lock();
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
+
+  set_sync_op_version(pool, ver);
 
   if (r < 0)
     return r;
@@ -1306,18 +1481,27 @@ int RadosClient::setxattr(PoolCtx& pool, const object_t& oid, const char *name, 
   int r;
 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  eversion_t ver;
 
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_version(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
   lock.Lock();
   object_locator_t oloc(pool.poolid);
   objecter->setxattr(oid, oloc, name,
 		  pool.snapc, bl, ut, 0,
-		  onack, NULL);
+		  onack, NULL, &ver, pop);
   lock.Unlock();
 
   mylock.Lock();
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
+
+  set_sync_op_version(pool, ver);
 
   if (r < 0)
     return r;
@@ -1337,7 +1521,14 @@ int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<std::string, 
   Cond cond;
   bool done;
   int r;
+  eversion_t ver;
 
+  ObjectOperation op, *pop = NULL;
+  if (pool.assert_ver) {
+    op.assert_version(pool.assert_ver);
+    pool.assert_ver = 0;
+    pop = &op;
+  }
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
@@ -1345,7 +1536,7 @@ int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<std::string, 
   map<string, bufferlist> aset;
   objecter->getxattrs(oid, oloc, pool.snap_seq,
 		      aset,
-		      0, onack);
+		      0, onack, &ver, pop);
   lock.Unlock();
 
   attrset.clear();
@@ -1360,10 +1551,180 @@ int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<std::string, 
     dout(10) << "RadosClient::getxattrs: xattr=" << p->first << dendl;
     attrset[p->first.c_str()] = p->second;
   }
+
+  set_sync_op_version(pool, ver);
+
   return r;
 }
 
-// ---------------------------------------------
+void RadosClient::watch_notify(MWatchNotify *m)
+{
+  assert(lock.is_locked());
+  WatchContext *wc = NULL;
+  map<uint64_t, WatchContext *>::iterator iter = watchers.find(m->cookie);
+  if (iter != watchers.end())
+    wc = iter->second;
+
+  if (!wc)
+    return;
+
+  wc->notify(this, m);
+}
+
+int RadosClient::watch(PoolCtx& pool, const object_t& oid, uint64_t ver, uint64_t *cookie, librados::Rados::WatchCtx *ctx)
+{
+  utime_t ut = g_clock.now();
+
+  ObjectOperation *rd = new ObjectOperation();
+  if (!rd)
+    return -ENOMEM;
+
+  Mutex mylock("RadosClient::watch::mylock");
+  Cond cond;
+  bool done;
+  int r;
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  eversion_t objver;
+
+  lock.Lock();
+
+  WatchContext *wc;
+  register_watcher(pool, oid, ctx, rd, cookie, &wc);
+
+  object_locator_t oloc(pool.poolid);
+
+  if (pool.assert_ver) {
+    rd->assert_version(pool.assert_ver);
+    pool.assert_ver = 0;
+  }
+  rd->watch(*cookie, ver, 1);
+  bufferlist bl;
+  wc->linger_id = objecter->linger(oid, oloc, *rd, pool.snap_seq, bl, NULL, 0, onack, NULL, &objver);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  set_sync_op_version(pool, objver);
+
+  if (r < 0) {
+    lock.Lock();
+    unregister_watcher(*cookie);
+    lock.Unlock();
+  }
+
+  return r;
+}
+
+
+/* this is called with RadosClient::lock held */
+int RadosClient::_notify_ack(PoolCtx& pool, const object_t& oid, uint64_t notify_id, uint64_t ver)
+{
+  utime_t ut = g_clock.now();
+
+  Mutex mylock("RadosClient::watch::mylock");
+  Cond cond;
+  eversion_t objver;
+
+  object_locator_t oloc(pool.poolid);
+  ObjectOperation rd;
+  if (pool.assert_ver) {
+    rd.assert_version(pool.assert_ver);
+    pool.assert_ver = 0;
+  }
+  rd.notify_ack(notify_id, ver);
+  objecter->read(oid, oloc, rd, pool.snap_seq, NULL, 0, 0, 0);
+
+  return 0;
+}
+
+int RadosClient::unwatch(PoolCtx& pool, const object_t& oid, uint64_t cookie)
+{
+  utime_t ut = g_clock.now();
+  bufferlist inbl, outbl;
+
+  Mutex mylock("RadosClient::watch::mylock");
+  Cond cond;
+  bool done;
+  int r;
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  eversion_t ver;
+  lock.Lock();
+
+  unregister_watcher(cookie);
+
+  object_locator_t oloc(pool.poolid);
+  ObjectOperation rd;
+  if (pool.assert_ver) {
+    rd.assert_version(pool.assert_ver);
+    pool.assert_ver = 0;
+  }
+  rd.watch(cookie, 0, 0);
+  objecter->read(oid, oloc, rd, pool.snap_seq, &outbl, 0, onack, &ver);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  set_sync_op_version(pool, ver);
+
+  return r;
+}// ---------------------------------------------
+
+int RadosClient::notify(PoolCtx& pool, const object_t& oid, uint64_t ver)
+{
+  utime_t ut = g_clock.now();
+  bufferlist inbl, outbl;
+
+  Mutex mylock("RadosClient::notify::mylock");
+  Mutex mylock_all("RadosClient::notify::mylock_all");
+  Cond cond, cond_all;
+  bool done, done_all;
+  int r;
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  eversion_t objver;
+  uint64_t cookie;
+  C_NotifyComplete *ctx = new C_NotifyComplete(&mylock_all, &cond_all, &done_all);
+  ObjectOperation rd;
+
+  object_locator_t oloc(pool.poolid);
+  if (pool.assert_ver) {
+    rd.assert_version(pool.assert_ver);
+    pool.assert_ver = 0;
+  }
+  lock.Lock();
+  register_watcher(pool, oid, ctx, &rd, &cookie);
+  uint32_t prot_ver = 1;
+  uint32_t timeout = pool.notify_timeout;
+  ::encode(prot_ver, inbl);
+  ::encode(timeout, inbl);
+  rd.notify(cookie, ver, inbl);
+  objecter->read(oid, oloc, rd, pool.snap_seq, &outbl, 0, onack, &objver);
+  lock.Unlock();
+
+  mylock_all.Lock();
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  while (!done_all)
+    cond_all.Wait(mylock_all);
+  mylock_all.Unlock();
+  
+  lock.Lock();
+  unregister_watcher(cookie);
+  lock.Unlock();
+
+  set_sync_op_version(pool, objver);
+  delete ctx;
+
+  return r;
+}
 
 namespace librados {
 
@@ -1476,7 +1837,7 @@ int Rados::list_objects_open(pool_t pool, Rados::ListCtx *ctx)
   return 0;
 }
 
-int Rados::list_objects_more(Rados::ListCtx ctx, int max, std::list<string>& entries)
+int Rados::list_objects_more(Rados::ListCtx& ctx, int max, std::list<string>& entries)
 {
   if (!client)
     return -EINVAL;
@@ -1488,13 +1849,31 @@ int Rados::list_objects_more(Rados::ListCtx ctx, int max, std::list<string>& ent
     entries.push_back(h->list.front().name.c_str());
     h->list.pop_front();
   }
+  if (ctx.extra_info)
+    ctx.extra_info->append(h->extra_info);
   return r;
 }
 
-void Rados::list_objects_close(Rados::ListCtx ctx)
+void Rados::list_objects_close(Rados::ListCtx& ctx)
 {
   Objecter::ListContext *h = (Objecter::ListContext *)ctx.ctx;
   delete h;
+}
+
+void Rados::list_filter(Rados::ListCtx& ctx, bufferlist& filter, bufferlist *extra_info)
+{
+  Objecter::ListContext *h = (Objecter::ListContext *)ctx.ctx;
+  h->filter = filter;
+  ctx.extra_info = extra_info;
+}
+
+uint64_t Rados::get_last_version(rados_pool_t pool)
+{
+  if (!client)
+    return -EINVAL;
+
+  eversion_t ver = client->last_version(*(RadosClient::PoolCtx *)pool);
+  return ver.version;
 }
 
 
@@ -1807,12 +2186,57 @@ int Rados::AioCompletion::get_return_value()
   RadosClient::AioCompletion *c = (RadosClient::AioCompletion *)pc;
   return c->get_return_value();
 }
+int Rados::AioCompletion::get_version()
+{
+  RadosClient::AioCompletion *c = (RadosClient::AioCompletion *)pc;
+  return c->get_version();
+}
 void Rados::AioCompletion::release()
 {
   RadosClient::AioCompletion *c = (RadosClient::AioCompletion *)pc;
   c->put();
 }
 
+// watch/notify
+int Rados::watch(pool_t pool, const string& o,
+                 uint64_t ver, uint64_t *cookie, Rados::WatchCtx *ctx)
+{
+  if (!client)
+    return -EINVAL;
+  object_t oid(o);
+  return client->watch(*(RadosClient::PoolCtx *)pool, oid, ver, cookie, ctx);
+}
+
+int Rados::unwatch(pool_t pool, const string& o, uint64_t handle)
+{
+  uint64_t cookie = handle;
+  if (!client)
+    return -EINVAL;
+  object_t oid(o);
+  return client->unwatch(*(RadosClient::PoolCtx *)pool, oid, cookie);
+}
+
+int Rados::notify(pool_t pool, const string& o, uint64_t ver)
+{
+  if (!client)
+    return -EINVAL;
+  object_t oid(o);
+  return client->notify(*(RadosClient::PoolCtx *)pool, oid, ver);
+}
+
+void Rados::set_assert_version(pool_t pool, uint64_t ver)
+{
+  if (!client)
+    return;
+  client->set_assert_version(*(RadosClient::PoolCtx *)pool, ver);
+}
+
+void Rados::set_notify_timeout(pool_t pool, uint32_t timeout)
+{
+  if (!client)
+    return;
+  client->set_notify_timeout(*(RadosClient::PoolCtx *)pool, timeout);
+}
 }
 
 // ---------------------------------------------
@@ -1874,6 +2298,14 @@ extern "C" void rados_deinitialize()
   }
 
   rados_init_mutex.Unlock();
+}
+
+extern "C" void librados_version(int *major, int *minor)
+{
+  if (major)
+    *major = LIBRADOS_VER_MAJOR;
+  if (minor)
+    *minor = LIBRADOS_VER_MINOR;
 }
 
 extern "C" int rados_lookup_pool(const char *name)
@@ -1998,6 +2430,13 @@ extern "C" int rados_read(rados_pool_t pool, const char *o, off_t off, char *buf
   }
 
   return ret;
+}
+
+extern "C" uint64_t rados_get_last_version(rados_pool_t pool)
+{
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  eversion_t ver = radosp->last_version(*ctx);
+  return ver.version;
 }
 
 extern "C" int rados_create_pool(const char *name)
@@ -2251,6 +2690,11 @@ extern "C" int rados_aio_get_return_value(rados_completion_t c)
   return ((RadosClient::AioCompletion *)c)->get_return_value();
 }
 
+extern "C" uint64_t rados_aio_get_version(rados_completion_t c)
+{
+  return ((RadosClient::AioCompletion *)c)->get_version();
+}
+
 extern "C" void rados_aio_release(rados_completion_t c)
 {
   ((RadosClient::AioCompletion *)c)->put();
@@ -2285,4 +2729,38 @@ extern "C" int rados_aio_write_full(rados_pool_t pool, const char *o,
   bufferlist bl;
   bl.append(buf, len);
   return radosp->aio_write_full(*ctx, oid, bl, (RadosClient::AioCompletion*)completion);
+}
+
+struct C_WatchCB : public librados::Rados::WatchCtx {
+  rados_watchcb_t wcb;
+  void *arg;
+  C_WatchCB(rados_watchcb_t _wcb, void *_arg) : wcb(_wcb), arg(_arg) {}
+  void notify(uint8_t opcode, uint64_t ver) {
+    wcb(opcode, ver, arg);
+  }
+};
+
+int rados_watch(rados_pool_t pool, const char *o, uint64_t ver, uint64_t *handle,
+                rados_watchcb_t watchcb, void *arg)
+{
+  uint64_t *cookie = handle;
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  object_t oid(o);
+  C_WatchCB *wc = new C_WatchCB(watchcb, arg);
+  return radosp->watch(*ctx, oid, ver, cookie, wc);
+}
+
+int rados_unwatch(rados_pool_t pool, const char *o, uint64_t handle)
+{
+  uint64_t cookie = handle;
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  object_t oid(o);
+  return radosp->unwatch(*ctx, oid, cookie);
+}
+
+int rados_notify(rados_pool_t pool, const char *o, uint64_t ver)
+{
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  object_t oid(o);
+  return radosp->notify(*ctx, oid, ver);
 }

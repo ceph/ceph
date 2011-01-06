@@ -36,7 +36,7 @@
 
 #define DOUT_SUBSYS monc
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "monclient" << (hunting ? "(hunting)":"") << ": "
+#define dout_prefix *_dout << "monclient" << (hunting ? "(hunting)":"") << ": "
 
 
 /*

@@ -19,7 +19,7 @@
 
 #define DOUT_SUBSYS tp
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << name << " "
+#define dout_prefix *_dout << name << " "
 
 
 void ThreadPool::worker()

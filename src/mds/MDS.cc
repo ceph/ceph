@@ -70,7 +70,7 @@
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "mds" << whoami << '.' << incarnation << ' '
+#define dout_prefix *_dout << "mds" << whoami << '.' << incarnation << ' '
 
 
 
@@ -86,7 +86,7 @@ MDS::MDS(const char *n, Messenger *m, MonClient *mc) :
   continue_replay(false),
   messenger(m),
   monc(mc),
-  logclient(messenger, &mc->monmap, mc),
+  clog(messenger, &mc->monmap, mc, LogClient::NO_FLAGS),
   sessionmap(this) {
 
   orig_argc = 0;
@@ -444,7 +444,7 @@ int MDS::init(int wanted_state)
   dout(10) << sizeof(xlist<void*>::item) << "\t xlist<>::item   *2=" << 2*sizeof(xlist<void*>::item) << dendl;
 
   messenger->add_dispatcher_tail(this);
-  messenger->add_dispatcher_head(&logclient);
+  messenger->add_dispatcher_head(&clog);
 
   // get monmap
   monc->set_messenger(messenger);
@@ -503,9 +503,7 @@ void MDS::tick()
   // reschedule
   reset_tick();
 
-  _dout_check_log();
-
-  logclient.send_log();
+  clog.send_log();
 
   utime_t now = g_clock.now();
   utime_t delay = now;
@@ -749,18 +747,16 @@ void MDS::handle_command(MMonCommand *m)
       } else dout(0) << "bad migrate_dir target syntax" << dendl;
     } else dout(0) << "bad migrate_dir syntax" << dendl;
   } else if (m->cmd.size() == 1 && m->cmd[0] == "heapdump"){
-    stringstream ss;
     if (g_conf.tcmalloc_have) {
       if (!g_conf.profiler_running()) {
-        ss << g_conf.name << " can't dump heap: profiler not running";
+        clog.info() << g_conf.name << " can't dump heap: profiler not running\n";
       } else {
-        ss << g_conf.name << " dumping heap profile now";
+        clog.info() << g_conf.name << " dumping heap profile now\n";
         g_conf.profiler_dump("admin request");
       }
     } else {
-      ss << "tcmalloc not enabled, can't use profiler";
+      clog.info() << "tcmalloc not enabled, can't use profiler\n";
     }
-    logclient.log(LOG_INFO, ss);
   } else if (m->cmd.size() == 1 && m->cmd[0] == "enable_profiler_options") {
     char val[sizeof(int)*8+1];
     snprintf(val, sizeof(val), "%i", g_conf.profiler_allocation_interval);
@@ -769,22 +765,16 @@ void MDS::handle_command(MMonCommand *m)
     snprintf(val, sizeof(val), "%i", g_conf.profiler_highwater_interval);
     setenv("HEAP_PROFILE_INUSE_INTERVAL",
 	   val, g_conf.profiler_highwater_interval);
-    stringstream ss;
-    ss << g_conf.name << " set heap variables from current config";
-    logclient.log(LOG_INFO, ss);
+    clog.info() << g_conf.name << " set heap variables from current config\n";
   } else if (m->cmd.size() == 1 && m->cmd[0] == "start_profiler") {
     char location[PATH_MAX];
     snprintf(location, sizeof(location),
 	     "%s/%s", g_conf.log_dir, g_conf.name);
     g_conf.profiler_start(location);
-    stringstream ss;
-    ss << g_conf.name << " started profiler";
-    logclient.log(LOG_INFO, ss);
+    clog.info() << g_conf.name << " started profiler\n";
   } else if (m->cmd.size() == 1 && m->cmd[0] == "stop_profiler") {
     g_conf.profiler_stop();
-    stringstream ss;
-    ss << g_conf.name << " stopped profiler";
-    logclient.log(LOG_INFO, ss);
+    clog.info() << g_conf.name << " stopped profiler\n";
   }
   else dout(0) << "unrecognized command! " << m->cmd << dendl;
   m->put();
@@ -1345,13 +1335,22 @@ void MDS::standby_trim_segments()
   return;
 }
 
+void MDS::reopen_log()
+{
+  dout(1) << "reopen_log" << dendl;
+
+  // start new segment
+  mdlog->start_new_segment(0);
+
+  mdcache->rollback_uncommitted_fragments();
+}
+
 
 void MDS::resolve_start()
 {
   dout(1) << "resolve_start" << dendl;
 
-  // start new segment
-  mdlog->start_new_segment(0);
+  reopen_log();
 
   mdcache->resolve_start();
 }
@@ -1366,7 +1365,7 @@ void MDS::reconnect_start()
   dout(1) << "reconnect_start" << dendl;
 
   if (last_state == MDSMap::STATE_REPLAY)
-    mdlog->start_new_segment(0);
+    reopen_log();
 
   server->reconnect_clients();
   finish_contexts(waiting_for_reconnect);

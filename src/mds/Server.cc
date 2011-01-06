@@ -62,7 +62,7 @@ using namespace std;
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".server "
+#define dout_prefix *_dout << "mds" << mds->get_nodeid() << ".server "
 
 
 void Server::open_logger()
@@ -471,12 +471,10 @@ void Server::find_idle_sessions()
       break;
     }
     
-    stringstream ss;
     utime_t age = now;
     age -= session->last_cap_renew;
-    ss << "closing stale session " << session->inst << " after " << age;
-    mds->logclient.log(LOG_INFO, ss);
-
+    mds->clog.info() << "closing stale session " << session->inst
+	<< " after " << age << "\n";
     dout(10) << "autoclosing stale session " << session->inst << " last " << session->last_cap_renew << dendl;
     kill_session(session);
   }
@@ -534,7 +532,6 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     return;
   }
 
-  stringstream ss;
   utime_t delay = g_clock.now();
   delay -= reconnect_start;
   dout(10) << " reconnect_start " << reconnect_start << " delay " << delay << dendl;
@@ -542,10 +539,10 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   if (!mds->is_reconnect()) {
     // XXX maybe in the future we can do better than this?
     dout(1) << " no longer in reconnect state, ignoring reconnect, sending close" << dendl;
-    ss << "denied reconnect attempt (mds is " << ceph_mds_state_name(mds->get_state())
+    mds->clog.info() << "denied reconnect attempt (mds is "
+       << ceph_mds_state_name(mds->get_state())
        << ") from " << m->get_source_inst()
-       << " after " << delay << " (allowed interval " << g_conf.mds_reconnect_timeout << ")";
-    mds->logclient.log(LOG_INFO, ss);
+       << " after " << delay << " (allowed interval " << g_conf.mds_reconnect_timeout << ")\n";
     mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_connection());
     m->put();
     return;
@@ -563,11 +560,12 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     mdlog->start_submit_entry(new ESession(session->inst, true, pv),
 			      new C_MDS_session_finish(mds, session, sseq, true, pv));
     mdlog->flush();
-    ss << "reconnect by new " << session->inst << " after " << delay;
+    mds->clog.debug() << "reconnect by new " << session->inst
+	<< " after " << delay << "\n";
   } else {
-    ss << "reconnect by " << session->inst << " after " << delay;
+    mds->clog.debug() << "reconnect by " << session->inst
+	<< " after " << delay << "\n";
   }
-  mds->logclient.log(LOG_DEBUG, ss);
   
   // snaprealms
   for (vector<ceph_mds_snaprealm_reconnect>::iterator p = m->realms.begin();
@@ -1636,10 +1634,9 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino, u
 
   if (useino && useino != in->inode.ino) {
     dout(0) << "WARNING: client specified " << useino << " and i allocated " << in->inode.ino << dendl;
-    stringstream ss;
-    ss << mdr->client_request->get_source() << " specified ino " << useino
-       << " but mds" << mds->whoami << " allocated " << in->inode.ino;
-    mds->logclient.log(LOG_ERROR, ss);
+    mds->clog.error() << mdr->client_request->get_source()
+       << " specified ino " << useino
+       << " but mds" << mds->whoami << " allocated " << in->inode.ino << "\n";
     //assert(0); // just for now.
   }
     
@@ -2290,6 +2287,7 @@ void Server::handle_client_openc(MDRequest *mdr)
     layout = *dir_layout;
   else
     layout = mds->mdcache->default_file_layout;
+
   // fill in any special params from client
   if (req->head.args.open.stripe_unit)
     layout.fl_stripe_unit = req->head.args.open.stripe_unit;
@@ -2298,7 +2296,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   if (req->head.args.open.object_size)
     layout.fl_object_size = req->head.args.open.object_size;
   layout.fl_pg_preferred = req->head.args.open.preferred;
-  // validate layout
+
   if (!ceph_file_layout_is_valid(&layout)) {
     dout(10) << " invalid initial file layout" << dendl;
     reply_request(mdr, -EINVAL);
@@ -3242,8 +3240,11 @@ public:
 void Server::handle_client_mknod(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
+  client_t client = mdr->get_client();
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false, false);
+  ceph_file_layout *dir_layout = NULL;
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false, false,
+					 &dir_layout);
   if (!dn) return;
   if (mdr->snapid != CEPH_NOSNAP) {
     reply_request(mdr, -EROFS);
@@ -3254,11 +3255,25 @@ void Server::handle_client_mknod(MDRequest *mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  snapid_t follows = dn->get_dir()->inode->find_snaprealm()->get_newest_seq();
+  // set layout
+  ceph_file_layout layout;
+  if (dir_layout)
+    layout = *dir_layout;
+  else
+    layout = mds->mdcache->default_file_layout;
+
+  if (!ceph_file_layout_is_valid(&layout)) {
+    dout(10) << " invalid initial file layout" << dendl;
+    reply_request(mdr, -EINVAL);
+    return;
+  }
+
+  SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
+  snapid_t follows = realm->get_newest_seq();
   mdr->now = g_clock.real_now();
 
   CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
-				   req->head.args.mknod.mode);
+				   req->head.args.mknod.mode, &layout);
   assert(newi);
 
   dn->push_projected_linkage(newi);
@@ -3268,6 +3283,30 @@ void Server::handle_client_mknod(MDRequest *mdr)
     newi->inode.mode |= S_IFREG;
   newi->inode.version = dn->pre_dirty();
   newi->inode.rstat.rfiles = 1;
+
+  // if the client created a _regular_ file via MKNOD, it's highly likely they'll
+  // want to write to it (e.g., if they are reexporting NFS)
+  if (S_ISREG(newi->inode.mode)) {
+    dout(15) << " setting a client_range too, since this is a regular file" << dendl;
+    newi->inode.client_ranges[client].range.first = 0;
+    newi->inode.client_ranges[client].range.last = newi->inode.get_layout_size_increment();
+    newi->inode.client_ranges[client].follows = follows;
+
+    // issue a cap on the file
+    int cmode = CEPH_FILE_MODE_RDWR;
+    Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr->session, realm, req->is_replay());
+    if (cap) {
+      cap->set_wanted(0);
+
+      // put locks in excl mode
+      newi->filelock.set_state(LOCK_EXCL);
+      newi->authlock.set_state(LOCK_EXCL);
+      newi->xattrlock.set_state(LOCK_EXCL);
+      cap->issue_norevoke(CEPH_CAP_AUTH_EXCL|CEPH_CAP_AUTH_SHARED|
+			  CEPH_CAP_XATTR_EXCL|CEPH_CAP_XATTR_SHARED|
+			  CEPH_CAP_ANY_FILE_WR);
+    }
+  }
 
   if (follows >= dn->first)
     dn->first = follows + 1;
@@ -5610,10 +5649,10 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
     _rollback_repair_dir(mut, straydir, rollback.stray, rollback.ctime,
 			 target->is_dir(), -1, true, ti->dirstat, ti->rstat);
 
-  dout(-10) << "  srcdn back to " << *srcdn << dendl;
-  dout(-10) << "   srci back to " << *srcdnl->get_inode() << dendl;
-  dout(-10) << " destdn back to " << *destdn << dendl;
-  if (destdnl->get_inode()) dout(-10) << "  desti back to " << *destdnl->get_inode() << dendl;
+  dout(0) << "  srcdn back to " << *srcdn << dendl;
+  dout(0) << "   srci back to " << *srcdnl->get_inode() << dendl;
+  dout(0) << " destdn back to " << *destdn << dendl;
+  if (destdnl->get_inode()) dout(0) << "  desti back to " << *destdnl->get_inode() << dendl;
   
   // new subtree?
   if (srcdnl->is_primary() && srcdnl->get_inode()->is_dir()) {
