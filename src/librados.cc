@@ -1758,6 +1758,8 @@ int Rados::initialize(int argc, const char *argv[])
 
 void Rados::shutdown()
 {
+  if (!client)
+    return;
   client->shutdown();
 }
 
@@ -1834,6 +1836,8 @@ int Rados::get_fs_stats(statfs_t& result)
 
 int Rados::list_objects_open(pool_t pool, Rados::ListCtx *ctx)
 {
+  if (!client)
+    return -EINVAL;
   RadosClient::PoolCtx *p = (RadosClient::PoolCtx *)pool;
   Objecter::ListContext *h = new Objecter::ListContext;
   h->pool_id = p->poolid;
@@ -1861,6 +1865,8 @@ int Rados::list_objects_more(Rados::ListCtx& ctx, int max, std::list<string>& en
 
 void Rados::list_objects_close(Rados::ListCtx& ctx)
 {
+  if (!client)
+    return;
   Objecter::ListContext *h = (Objecter::ListContext *)ctx.ctx;
   delete h;
 }
@@ -1875,7 +1881,7 @@ void Rados::list_filter(Rados::ListCtx& ctx, bufferlist& filter, bufferlist *ext
 uint64_t Rados::get_last_version(rados_pool_t pool)
 {
   if (!client)
-    return -EINVAL;
+    return 0;
 
   eversion_t ver = client->last_version(*(RadosClient::PoolCtx *)pool);
   return ver.version;
@@ -2009,6 +2015,8 @@ int Rados::lookup_pool(const char *name)
 
 int Rados::open_pool(const char *name, rados_pool_t *pool)
 {
+  if (!client)
+    return -EINVAL;
   int poolid = client->lookup_pool(name);
   if (poolid >= 0) {
     RadosClient::PoolCtx *ctx = new RadosClient::PoolCtx(poolid, name, CEPH_NOSNAP);
@@ -2023,6 +2031,8 @@ int Rados::open_pool(const char *name, rados_pool_t *pool)
 
 int Rados::close_pool(rados_pool_t pool)
 {
+  if (!client)
+    return -EINVAL;
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   delete ctx;
   return 0;
@@ -2129,6 +2139,8 @@ int Rados::snap_get_stamp(rados_pool_t pool, snap_t snapid, time_t *t)
 int Rados::aio_read(rados_pool_t pool, const string& oid, off_t off, bufferlist *pbl, size_t len,
 		    Rados::AioCompletion *c)
 {
+  if (!client)
+    return -EINVAL;
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   RadosClient::AioCompletion *pc = (RadosClient::AioCompletion *)c->pc;
   int r = client->aio_read(*ctx, oid, off, pbl, len, pc);
@@ -2138,6 +2150,8 @@ int Rados::aio_read(rados_pool_t pool, const string& oid, off_t off, bufferlist 
 int Rados::aio_write(rados_pool_t pool, const string& oid, off_t off, const bufferlist& bl, size_t len,
 		     AioCompletion *c)
 {
+  if (!client)
+    return -EINVAL;
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   RadosClient::AioCompletion *pc = (RadosClient::AioCompletion *)c->pc;
   int r = client->aio_write(*ctx, oid, off, bl, len, pc);
@@ -2146,12 +2160,16 @@ int Rados::aio_write(rados_pool_t pool, const string& oid, off_t off, const buff
 
 Rados::AioCompletion *Rados::aio_create_completion()
 {
+  if (!client)
+    return NULL;
   RadosClient::AioCompletion *c = client->aio_create_completion();
   return new AioCompletion(c);
 }
 
 Rados::AioCompletion *Rados::aio_create_completion(void *cb_arg, callback_t cb_complete, callback_t cb_safe)
 {
+  if (!client)
+    return NULL;
   RadosClient::AioCompletion *c = client->aio_create_completion(cb_arg, cb_complete, cb_safe);
   return new AioCompletion(c);
 }
