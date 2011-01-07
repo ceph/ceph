@@ -237,7 +237,8 @@ const SnapContext& SnapRealm::get_snap_context()
 
 void SnapRealm::get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first, snapid_t last)
 {
-  dout(10) << "get_snap_info snaps " << get_snaps() << dendl;
+  const set<snapid_t>& snaps = get_snaps();
+  dout(10) << "get_snap_info snaps " << snaps << dendl;
 
   // include my snaps within interval [first,last]
   for (map<snapid_t, SnapInfo>::iterator p = srnode.snaps.lower_bound(first); // first element >= first
