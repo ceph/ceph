@@ -1761,6 +1761,11 @@ void Rados::shutdown()
   client->shutdown();
 }
 
+void Rados::version(int *major, int *minor, int *extra)
+{
+  librados_version(major, minor, extra);
+}
+
 int Rados::list_pools(std::list<string>& v)
 {
   if (!client)

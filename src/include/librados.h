@@ -23,6 +23,8 @@ extern "C" {
 
 #define LIBRADOS_VERSION_CODE LIBRADOS_VERSION(LIBRADOS_VER_MAJOR, LIBRADOS_VER_MINOR, LIBRADOS_VER_EXTRA)
 
+#define LIBRADOS_SUPPORTS_WATCH 1
+
 /* initialization */
 int rados_initialize(int argc, const char **argv); /* arguments are optional */
 void rados_deinitialize();

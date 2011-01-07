@@ -8,6 +8,8 @@
 #include <vector>
 #include "buffer.h"
 
+#include "librados.h"
+
 class RadosClient;
 class Context;
 
@@ -60,6 +62,8 @@ public:
 
   int initialize(int argc, const char *argv[]);
   void shutdown();
+
+  void version(int *major, int *minor, int *extra);
 
   int open_pool(const char *name, pool_t *pool);
   int close_pool(pool_t pool);
