@@ -39,3 +39,13 @@ crush/CrushWrapper_wrap.cxx
 /rbd
 /psim
 /sample.fetch_config
+
+/gtest/build-aux/config.h
+/gtest/build-aux/config.h.in
+/gtest/lib/
+/gtest/scripts/gtest-config
+/gtest/src/.dirstamp
+/gtest/Makefile.in
+/gtest/aclocal.m4
+/gtest/configure
+/unittest_*
