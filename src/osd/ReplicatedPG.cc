@@ -2339,7 +2339,7 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const sobject_t& s
       obc = new ObjectContext(oi, true, ssc);
     }
 
-    if (can_create)
+    if (can_create && !obc->obs.ssc)
       obc->obs.ssc = get_snapset_context(soid.oid, true);
 
     if (r >= 0) {
