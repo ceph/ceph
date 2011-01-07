@@ -50,6 +50,14 @@ split1() {
         split1_impl
 }
 
+many_pools() {
+        setup 3
+        for i in `seq 1 3000`; do
+                ./rados mkpool "pool${i}" || die "mkpool failed"
+        done
+        my_write_objects 1 10
+}
+
 run() {
         split1 || die "test failed"
 }
