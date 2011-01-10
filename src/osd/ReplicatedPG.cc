@@ -1639,7 +1639,7 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     }
   } else { //we got our context, let's use it to do the rollback!
     if (ctx->clone_obc &&
-	(ctx->clone_obc->obs.oi.prior_version == oi.version)) {
+	(ctx->clone_obc->obs.oi.soid.snap == snapid)) {
       //just cloned the rollback target, we don't need to do anything!
     
     } else {
