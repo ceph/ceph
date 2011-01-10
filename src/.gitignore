@@ -20,8 +20,22 @@ tags
 out
 acconfig.h.in
 acconfig.h
+/.libs
 
 *.so
 crush/*.fpicco
 CrushWrapper.pm
 crush/CrushWrapper_wrap.cxx
+
+/.git_version
+/cclass
+/cconf
+/cdebugpack
+/cephfs
+/dumpjournal
+/gceph
+/init-ceph
+/librados-config
+/rbd
+/psim
+/sample.fetch_config
