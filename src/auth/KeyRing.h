@@ -23,6 +23,10 @@
 class KeyRing {
   map<EntityName, EntityAuth> keys;
 
+  int parse_name(char *line, EntityName& name);
+  int parse_caps(char *line, map<string, bufferlist>& caps);
+  int parse_modifier(char *line, EntityName& name, map<string, bufferlist>& caps);
+  void decode_plaintext(bufferlist::iterator& bl);
 public:
   map<EntityName, EntityAuth>& get_keys() { return keys; }  // yuck
 
@@ -58,6 +62,9 @@ public:
   void set_uid(EntityName& ename, uint64_t auid) {
     keys[ename].auid = auid;
   }
+  void set_key(EntityName& ename, CryptoKey& key) {
+    keys[ename].key = key;
+  }
   void import(KeyRing& other);
 
   // encoders
@@ -66,11 +73,7 @@ public:
     ::encode(struct_v, bl);
     ::encode(keys, bl);
   }
-  void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    ::decode(keys, bl);
-  }
+  void decode(bufferlist::iterator& bl);
 };
 WRITE_CLASS_ENCODER(KeyRing)
 
