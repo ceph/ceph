@@ -210,10 +210,6 @@ testtimers_SOURCES = test/TestTimers.cc
 testtimers_LDADD = libceph.la libcrush.la -lpthread -lm $(CRYPTOPP_LIBS)
 bin_PROGRAMS += testtimers
 
-testencoding_SOURCES = test/TestEncoding.cc
-testencoding_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto
-bin_PROGRAMS += testencoding
-
 testdout_streambuf_SOURCES = test/TestDoutStreambuf.cc
 testdout_streambuf_LDADD = libceph.la libcrush.la -lpthread
 bin_PROGRAMS += testdout_streambuf
