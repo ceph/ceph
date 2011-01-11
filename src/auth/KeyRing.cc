@@ -17,6 +17,7 @@
 
 #include "config.h"
 #include "include/str_list.h"
+#include "common/ConfUtils.h"
 
 #include "Crypto.h"
 #include "auth/KeyRing.h"
@@ -30,80 +31,42 @@ using namespace std;
 
 KeyRing g_keyring;
 
-int KeyRing::parse_name(char *line, EntityName& name)
+static string remove_quotes(string& s)
 {
-  string s(line);
-  if (!name.from_str(s))
-    return -EINVAL;
-
-  return 0;
+  int n = s.size();
+  /* remove quotes from string */
+  if (s[0] == '"' && s[n - 1] == '"')
+    return s.substr(1, n-2);
+  return s;
 }
 
-int KeyRing::parse_caps(char *line, map<string, bufferlist>& caps)
+int KeyRing::set_modifier(const char *type, const char *val, EntityName& name, map<string, bufferlist>& caps)
 {
-  char *name;
-
-  if (*line != '[')
+  if (!val)
     return -EINVAL;
-
-  line++;
-
-  while (*line && isspace(*line))
-    line++;
-  name = line;
-
-  while (*line && !isspace(*line) && (*line != ']'))
-    line++;
-
-  if (isspace(*line)) {
-    *line = '\0';
-    line++;
-    while (isspace(*line))
-      line++;
-  }
-
-  if (*line != ']')
-    return -EINVAL;
-  *line = '\0';
-
-  string n(name);
-
-  line++;
-  while (isspace(*line))
-    line++;
-
-  string val(line);
-  bufferlist bl;
-  ::encode(val, bl);
-  caps[name] = bl;
-  return 0;
-}
-
-int KeyRing::parse_modifier(char *line, EntityName& name, map<string, bufferlist>& caps)
-{
-  char *type = strsep(&line, ":");
-  if (!line)
-    return -EINVAL;
-
-  while (*line && isspace(*line))
-    line++;
 
   if (strcmp(type, "key") == 0) {
     CryptoKey key;
-    string l(line);
+    string l(val);
+    l = remove_quotes(l);
     try {
       key.decode_base64(l);
     } catch (const buffer::error& err) {
       return -EINVAL;
     }
     set_key(name, key);
-  } else if (strcmp(type, "caps") == 0) {
-    int ret = parse_caps(line, caps);
-    if (ret < 0)
-      return ret;
-    set_caps(name, caps);
+  } else if (strncmp(type, "caps ", 5) == 0) {
+    const char *caps_entity = type + 5;
+    if (!*caps_entity)
+      return -EINVAL;
+      string l(val);
+      l = remove_quotes(l);
+      bufferlist bl;
+      ::encode(l, bl);
+      caps[caps_entity] = bl;
+      set_caps(name, caps);
   } else if (strcmp(type, "auid") == 0) {
-    uint64_t auid = strtoull(line, NULL, 0);
+    uint64_t auid = strtoull(val, NULL, 0);
     set_uid(name, auid);
   } else
     return -EINVAL;
@@ -112,11 +75,11 @@ int KeyRing::parse_modifier(char *line, EntityName& name, map<string, bufferlist
 }
 
 
-void KeyRing::decode_plaintext(bufferlist::iterator& bl)
+void KeyRing::decode_plaintext(bufferlist::iterator& bli)
 {
-  int ret = -EINVAL;
+  int ret;
 
-  bufferlist::iterator iter = bl;
+  bufferlist::iterator iter = bli;
 
   // find out the size of the buffer
   char c;
@@ -131,70 +94,56 @@ void KeyRing::decode_plaintext(bufferlist::iterator& bl)
 
   char *orig_src = new char[len + 1];
   orig_src[len] = '\0';
-  iter = bl;
+  iter = bli;
   int i;
   for (i = 0; i < len; i++) {
     ::decode(c, iter);
     orig_src[i] = c;
   }
 
-  char *src = orig_src;
+  bufferlist bl;
+  bl.append(orig_src, len);
+  ConfFile cf(&bl);
 
-  char *line;
-  int line_count;
+  cf.set_global(false);
 
-  EntityName name;
-  bool has_name = false;
-  map<string, bufferlist> caps;
+  if (!cf.parse()) {
+    derr << "cannot parse buffer" << dendl;
+    goto done_err;
+  }
 
-  for (line_count = 1; src; line_count++) {
-    line = strsep(&src, "\n\r");
+  for (std::list<ConfSection*>::const_iterator p =
+	    cf.get_section_list().begin();
+       p != cf.get_section_list().end(); ++p) {
+    string name = (*p)->get_name();
 
-    int alpha_index = 0;
-    bool had_alpha = 0;
+    EntityName ename;
+    map<string, bufferlist> caps;
+    if (!ename.from_str(name)) {
+      derr << "bad entity name: " << name << dendl;
+      goto done_err;
+    }
 
-    for (i = 0; line[i]; i++) {
-      switch (line[i]) {
-      case '#':
-        if (had_alpha)
-          goto parse_err;
+    ConfList& cl = (*p)->get_list();
+    ConfList::iterator cli;
+    for (cli = cl.begin(); cli != cl.end(); ++ cli) {
+      ConfLine *line = *cli;
+      const char *type = line->get_var();
+      if (!type)
         continue;
-      case ' ':
-      case '\t':
-        continue;
-      case '.': // this is a name
-        ret = parse_name(line + alpha_index, name);
-        if (ret < 0)
-          goto parse_err;
-        has_name = true;
-        caps.clear();
-        break;
-      case ':': // this is a modifier
-        if (!has_name)
-          goto parse_err;
-        ret = parse_modifier(line + alpha_index, name, caps);
-        if (ret < 0)
-          goto parse_err;
-        break;
-      default:
-        if (!had_alpha)
-          alpha_index = i;
-        had_alpha = 1;
-        break;
+
+      ret = set_modifier(type, line->get_val(), ename, caps);
+      if (ret < 0) {
+        derr << "error setting modifier for [" << name << "] type=" << type << " val=" << line->get_val() << dendl;
+        goto done_err;
       }
     }
   }
 
-  if (!has_name)
-    goto parse_err;
-
   delete[] orig_src;
-
   return;
 
-parse_err:
-  derr << "parse error at line " << line_count << ":" << dendl;
-  derr << line << dendl;
+done_err:
   delete[] orig_src;
   throw buffer::error();
 }
@@ -240,9 +189,9 @@ void KeyRing::print(ostream& out)
   for (map<EntityName, EntityAuth>::iterator p = keys.begin();
        p != keys.end();
        ++p) {
-    out << p->first << std::endl;
-    out << "\t key: " << p->second.key << std::endl;
-    out << "\tauid: " << p->second.auid << std::endl;
+    out << "[" << p->first << "]" << std::endl;
+    out << "\tkey = " << p->second.key << std::endl;
+    out << "\tauid = " << p->second.auid << std::endl;
 
     for (map<string, bufferlist>::iterator q = p->second.caps.begin();
 	 q != p->second.caps.end();
@@ -250,7 +199,7 @@ void KeyRing::print(ostream& out)
       bufferlist::iterator dataiter = q->second.begin();
       string caps;
       ::decode(caps, dataiter);
-      out << "\tcaps: [" << q->first << "] " << caps << std::endl;
+      out << "\tcaps " << q->first << " = \"" << caps << '"' << std::endl;
     }
   }
 }
