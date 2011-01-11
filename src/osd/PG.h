@@ -635,6 +635,10 @@ public:
     //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
     _lock.Unlock();
   }
+  void assert_locked() {
+    //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
+    assert(_lock.is_locked());
+  }
   void wait() {
     assert(_lock.is_locked());
     _cond.Wait(_lock);
