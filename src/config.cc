@@ -1114,7 +1114,6 @@ bool parse_config_file(ConfFile *cf, bool auto_update)
 {
   int opt_len = sizeof(config_optionsp)/sizeof(config_option);
 
-  cf->set_auto_update(false);
   cf->set_post_process_func(conf_post_process_val);
   if (!cf->parse())
 	return false;
