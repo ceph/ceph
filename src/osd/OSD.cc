@@ -4492,9 +4492,12 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
 void OSD::queue_pg_for_deletion(PG *pg)
 {
   dout(10) << *pg << " removing." << dendl;
+  pg->assert_locked();
   assert(pg->get_role() == -1);
-  pg->deleting = true;
-  remove_wq.queue(pg);
+  if (!pg->deleting) {
+    pg->deleting = true;
+    remove_wq.queue(pg);
+  }
 }
 
 void OSD::_remove_pg(PG *pg)
