@@ -15,8 +15,6 @@
 
 To extract the value of the "osd data" option for the osd0 daemon,
 
-# TODO shouldn't this say /mnt/osd0? is this the fault of cram?
-
   $ cconf -c foo.conf "osd data" -i 0 -t osd
   /mnt/osd0
 
