@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+
+if ! command -v pip >/dev/null; then
+    echo "$0: PIP not installed, skipping python-using tests." 1>&2
+    exit 1
+fi
+
+HERE="$(dirname "$0")"
+VENV="$HERE/virtualenv"
+CRAM_BIN="$VENV/bin/cram"
+if [ ! -e "$CRAM_BIN" ]; then
+    pip -E "$VENV" install downloads/cram-0.5.tar.gz
+fi
+
+HERE_ABS="$(readlink -f "$HERE")"
+
+# cram doesn't like seeing the same foo.t basename twice on the same
+# run, so run it once per directory
+for tool in "$HERE"/cli/*; do
+    PATH="$HERE_ABS/..:$PATH" "$CRAM_BIN" -v "$@" -- "$tool"/*.t
+done

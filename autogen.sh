@@ -18,4 +18,5 @@ libtoolize --force --copy
 autoconf
 autoheader
 automake -a --add-missing -Wall
+( cd src/gtest && autoreconf -fvi; )
 exit

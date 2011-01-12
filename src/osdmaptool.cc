@@ -126,7 +126,7 @@ int main(int argc, const char **argv)
       }
     }
     else {
-      cerr << me << ": couldn't open " << fn << ": " << cpp_strerror(r)
+      cerr << me << ": couldn't open " << fn << ": " << cpp_strerror(-r)
 	   << std::endl;
       return -1;
     }

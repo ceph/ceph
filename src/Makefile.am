@@ -3,11 +3,19 @@
 #
 
 AUTOMAKE_OPTIONS = gnu
+SUBDIRS =
+DIST_SUBDIRS = gtest
 CLEANFILES =
 bin_PROGRAMS =
 sbin_PROGRAMS =
 sbin_SCRIPTS =
 bin_SCRIPTS = crun cclass $(srcdir)/cclsinfo cdebugpack
+# C/C++ tests to build will be appended to this
+check_PROGRAMS =
+# tests to actually run on "make check"; if you need extra, non-test,
+# executables built, you need to replace this with manual assignments
+# target by target
+TESTS = $(check_PROGRAMS)
 
 # monitor
 cmon_SOURCES = cmon.cc msg/SimpleMessenger.cc
@@ -202,10 +210,6 @@ testtimers_SOURCES = test/TestTimers.cc
 testtimers_LDADD = libceph.la libcrush.la -lpthread -lm $(CRYPTOPP_LIBS)
 bin_PROGRAMS += testtimers
 
-testencoding_SOURCES = test/TestEncoding.cc
-testencoding_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto
-bin_PROGRAMS += testencoding
-
 testdout_streambuf_SOURCES = test/TestDoutStreambuf.cc
 testdout_streambuf_LDADD = libceph.la libcrush.la -lpthread
 bin_PROGRAMS += testdout_streambuf
@@ -306,6 +310,15 @@ libhadoopcephfs_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-r
 lib_LTLIBRARIES += libhadoopcephfs.la
 endif
 
+## unit tests
+unittest_encoding_SOURCES = test/encoding.cc
+unittest_encoding_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto \
+	$(top_builddir)/src/gtest/lib/libgtest.la \
+	$(top_builddir)/src/gtest/lib/libgtest_main.la
+unittest_encoding_CPPFLAGS = \
+	-I$(top_srcdir)/src/gtest/include \
+	-I$(top_builddir)/src/gtest/include
+check_PROGRAMS += unittest_encoding
 
 # shell scripts
 editpaths = sed \
@@ -889,3 +902,4 @@ uninstall-local:
 	-rmdir -p $(DESTDIR)$(sysconfdir)/ceph/
 	-rmdir -p $(DESTDIR)$(localstatedir)/log/ceph/stat
 	-rmdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
+

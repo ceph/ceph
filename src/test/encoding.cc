@@ -1,21 +1,34 @@
 #include "config.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
-#include "common/common_init.h"
 
-#include <iostream>
-#include <stdlib.h>
-#include <stdint.h>
-#include <string>
-#include <sstream>
-#include <vector>
+#include "gtest/gtest.h"
 
-using std::cout;
-using std::cerr;
-using std::string;
-using std::vector;
+template < typename T >
+static void test_encode_and_decode(const T& src)
+{
+  bufferlist bl(1000000);
+  encode(src, bl);
+  T dst;
+  bufferlist::iterator i(bl.begin());
+  decode(dst, i);
+  ASSERT_EQ(src, dst) << "Encoding roundtrip changed the string: orig=" << src << ", but new=" << dst;
+}
 
-static int multimap_ctor_count_tests(void);
+TEST(EncodingRoundTrip, StringSimple) {
+  string my_str("I am the very model of a modern major general");
+  test_encode_and_decode < std::string >(my_str);
+}
+
+TEST(EncodingRoundTrip, StringEmpty) {
+  string my_str("");
+  test_encode_and_decode < std::string >(my_str);
+}
+
+TEST(EncodingRoundTrip, StringNewline) {
+  string my_str("foo bar baz\n");
+  test_encode_and_decode < std::string >(my_str);
+}
 
 typedef std::multimap < int, std::string > multimap_t;
 typedef multimap_t::value_type my_val_ty;
@@ -31,50 +44,7 @@ static std::ostream& operator<<(std::ostream& oss, const multimap_t &multimap)
   return oss;
 }
 
-template < typename T >
-static int test_encode_and_decode(const T& src)
-{
-  bufferlist bl(1000000);
-
-  try {
-    // source
-    encode(src, bl);
-
-    // dest
-    T dst;
-    bufferlist::iterator i(bl.begin());
-    decode(dst, i);
-    if (src != dst) {
-      cout << "src = " << src << ", but dst = " << dst << std::endl;
-      return 1;
-    }
-//    else {
-//      cout << "src = " << src << ", and dst = " << dst << std::endl;
-//    }
-  }
-  catch (const ceph::buffer::malformed_input &e) {
-    cout << "got exception " << e.what() << std::endl;
-    return 1;
-  }
-  catch (const std::exception &e) {
-    cout << "got exception " << e.what() << std::endl;
-    return 1;
-  }
-  catch (...) {
-    cout << "unknown exception!" << std::endl;
-    return 1;
-  }
-  return 0;
-}
-
-static int test_string_sz(const char *str)
-{
-  string my_str(str);
-  return test_encode_and_decode < std::string >(my_str);
-}
-
-static int multimap_tests(void)
-{
+TEST(EncodingRoundTrip, Multimap) {
   multimap_t multimap;
   multimap.insert( my_val_ty(1, "foo") );
   multimap.insert( my_val_ty(2, "bar") );
@@ -82,57 +52,14 @@ static int multimap_tests(void)
   multimap.insert( my_val_ty(3, "lucky number 3") );
   multimap.insert( my_val_ty(10000, "large number") );
 
-  return test_encode_and_decode < multimap_t >(multimap);
+  test_encode_and_decode < multimap_t >(multimap);
 }
 
-int main(int argc, const char **argv)
-{
-  int ret = 0;
 
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
-  env_to_vec(args);
-
-  ceph_set_default_id("admin");
-  common_set_defaults(false);
-  common_init(args, "ceph", true);
-  set_foreground_logging();
-
-  ret = test_string_sz("I am the very model of a modern major general");
-  if (ret)
-    goto done;
-
-  ret = test_string_sz("");
-  if (ret)
-    goto done;
-
-  ret = test_string_sz("foo bar baz\n");
-  if (ret)
-    goto done;
-
-  ret = multimap_tests();
-  if (ret)
-    goto done;
-
-  ret = multimap_ctor_count_tests();
-  if (ret)
-    goto done;
-
-done:
-  if (ret) {
-    cout << "FAILURE" << std::endl;
-    return(EXIT_FAILURE);
-  }
-  cout << "SUCCESS" << std::endl;
-  return(EXIT_SUCCESS);
-}
 
 ///////////////////////////////////////////////////////
 // ConstructorCounter
 ///////////////////////////////////////////////////////
-template < typename T >
-int test_encode_and_decode(const T& src);
-
 template <typename T>
 class ConstructorCounter
 {
@@ -169,14 +96,24 @@ public:
     assigns = 0;
   }
 
-  static std::string get_totals(void)
+  static int get_default_ctor(void)
   {
-    std::ostringstream oss;
-    oss << "default_ctor = " << default_ctor
-	<< ", one_arg_ctor = " << one_arg_ctor
-	<< ", copy_ctor = " << copy_ctor
-	<< ", assigns = " << assigns << std::endl;
-    return oss.str();
+    return default_ctor;
+  }
+
+  static int get_one_arg_ctor(void)
+  {
+    return one_arg_ctor;
+  }
+
+  static int get_copy_ctor(void)
+  {
+    return copy_ctor;
+  }
+
+  static int get_assigns(void)
+  {
+    return assigns;
   }
 
   bool operator<(const ConstructorCounter &rhs) const
@@ -237,8 +174,7 @@ static std::ostream& operator<<(std::ostream& oss, const multimap2_t &multimap)
   return oss;
 }
 
-static int multimap_ctor_count_tests(void)
-{
+TEST(EncodingRoundTrip, MultimapConstructorCounter) {
   multimap2_t multimap2;
   multimap2.insert( val2_ty(my_key_t(1), my_val_t(10)) );
   multimap2.insert( val2_ty(my_key_t(2), my_val_t(20)) );
@@ -248,13 +184,15 @@ static int multimap_ctor_count_tests(void)
 
   my_key_t::init();
   my_val_t::init();
-  int ret = test_encode_and_decode < multimap2_t >(multimap2);
-  if (ret)
-    goto done;
-  cout << "totals for key type: " << my_key_t::get_totals() << std::endl;
-  cout << "totals for value type: " << my_val_t::get_totals() << std::endl;
-  my_val_t::get_totals();
+  test_encode_and_decode < multimap2_t >(multimap2);
 
-done:
-  return ret;
+  EXPECT_EQ(my_key_t::get_default_ctor(), 5);
+  EXPECT_EQ(my_key_t::get_one_arg_ctor(), 0);
+  EXPECT_EQ(my_key_t::get_copy_ctor(), 10);
+  EXPECT_EQ(my_key_t::get_assigns(), 0);
+
+  EXPECT_EQ(my_val_t::get_default_ctor(), 5);
+  EXPECT_EQ(my_val_t::get_one_arg_ctor(), 0);
+  EXPECT_EQ(my_val_t::get_copy_ctor(), 10);
+  EXPECT_EQ(my_val_t::get_assigns(), 0);
 }
