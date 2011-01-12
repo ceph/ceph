@@ -7,6 +7,9 @@
 #include <string>
 #include <list>
 
+#include "include/buffer.h"
+#include "common/Mutex.h"
+
 class ConfLine {
 	char *prefix;
 	char *var;
@@ -65,7 +68,11 @@ typedef std::list<ConfSection *> SectionList;
 
 class ConfFile {
 	char *filename;
-	bool auto_update;
+
+	ceph::bufferlist *pbl;
+	size_t buf_pos;
+	Mutex parse_lock;
+	bool default_global;
 
 	char *(*post_process_func)(const char *);
 
@@ -84,9 +91,15 @@ class ConfFile {
 
 	ConfSection *_add_section(const char *section, ConfLine *cl);
 	void _dump(int fd);
-	bool _parse(char *filename, ConfSection **psection);
+	bool _parse(const char *filename, ConfSection **psection);
+	void common_init();
+
+	int _read(int fd, char *buf, size_t size);
+	int _open();
+	int _close(int fd);
 public:
         ConfFile(const char *fname);
+        ConfFile(ceph::bufferlist *bl);
 	~ConfFile();
 
 	const SectionList& get_section_list() { return sections_list; }
@@ -113,8 +126,8 @@ public:
 
 	void dump();
 	int flush();
-	void set_auto_update(bool update) { auto_update = update; }
 	void set_post_process_func(char *(*func)(const char *)) {post_process_func = func; };
+	void set_global(bool global) { default_global = global; }
 };
 
 #endif

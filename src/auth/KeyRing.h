@@ -23,9 +23,7 @@
 class KeyRing {
   map<EntityName, EntityAuth> keys;
 
-  int parse_name(char *line, EntityName& name);
-  int parse_caps(char *line, map<string, bufferlist>& caps);
-  int parse_modifier(char *line, EntityName& name, map<string, bufferlist>& caps);
+  int set_modifier(const char *type, const char *val, EntityName& name, map<string, bufferlist>& caps);
   void decode_plaintext(bufferlist::iterator& bl);
 public:
   map<EntityName, EntityAuth>& get_keys() { return keys; }  // yuck
