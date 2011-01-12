@@ -24,9 +24,9 @@ To associate some capabilities with the key (namely, the ability to mount a Ceph
 To display the contents of the keyring:
 
   $ cauthtool -l keyring.bin
-  client.foo
-  \\t key: [a-zA-Z0-9+/]+=* \(esc\) (re)
-  \\tauid: [0-9]{20} \(esc\) (re)
-  \tcaps: [mds] allow (esc)
-  \tcaps: [mon] allow r (esc)
-  \tcaps: [osd] allow rw pool=data (esc)
+  [client.foo]
+  \\tkey = [a-zA-Z0-9+/]+=* \(esc\) (re)
+  \\tauid = [0-9]{20} \(esc\) (re)
+  \tcaps mds = "allow" (esc)
+  \tcaps mon = "allow r" (esc)
+  \tcaps osd = "allow rw pool=data" (esc)
