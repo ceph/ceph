@@ -22,6 +22,8 @@ using namespace std;
 #include "auth/Auth.h"
 #include "auth/KeyRing.h"
 
+#include <strstream>
+
 void usage()
 {
   cout << " usage: [--create-keyring] [--gen-key] [--name=<name>] [--set-uid=uid] [--caps=<filename>] [--list] [--print-key] <filename>" << std::endl;
@@ -54,6 +56,7 @@ int main(int argc, const char **argv)
   uint64_t auid = CEPH_AUTH_UID_DEFAULT;
   const char *name = g_conf.name;
   map<string,bufferlist> caps;
+  bool bin_keyring = false;
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("gen-key", 'g')) {
@@ -80,6 +83,8 @@ int main(int argc, const char **argv)
     } else if (CONF_ARG_EQ("set-uid", 'u')) {
       CONF_SAFE_SET_ARG_VAL(&auid, OPT_LONGLONG);
       set_auid = true;
+    } else if (CONF_ARG_EQ("bin", 'b')) {
+      CONF_SAFE_SET_ARG_VAL(&bin_keyring, OPT_BOOL);
     } else if (!fn) {
       fn = args[i];
     } else 
@@ -248,7 +253,15 @@ int main(int argc, const char **argv)
   // write result?
   if (modified) {
     bufferlist bl;
-    ::encode(keyring, bl);
+    if (bin_keyring) {
+      ::encode(keyring, bl);
+    } else {
+      std::ostrstream os;
+      keyring.print(os);
+      const char *str = os.str();
+      if (str)
+        bl.append(str, strlen(str) + 1);
+    }
     r = bl.write_file(fn, 0600);
     if (r < 0) {
       cerr << "could not write " << fn << std::endl;
