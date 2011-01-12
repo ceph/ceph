@@ -421,7 +421,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   }
   
   // continuing on to write path, make sure object context is registered
-  register_object_context(obc);
+  assert(obc->registered);
 
   // issue replica writes
   tid_t rep_tid = osd->get_tid();
@@ -586,7 +586,7 @@ bool ReplicatedPG::snap_trimmer()
       ObjectContext *obc;
       int r = find_object_context(coid.oid, coi.oloc, sn, &obc, false);
       assert(r == 0);
-      register_object_context(obc);
+      assert(obc->registered);
 
       vector<OSDOp> ops;
       tid_t rep_tid = osd->get_tid();
@@ -675,7 +675,7 @@ bool ReplicatedPG::snap_trimmer()
 
       sobject_t snapoid(coid.oid, snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR);
       ctx->snapset_obc = get_object_context(snapoid, coi.oloc, false);
-      register_object_context(ctx->snapset_obc);
+      assert(ctx->snapset_obc->registered);
       if (snapset.clones.empty() && !snapset.head_exists) {
 	dout(10) << coid << " removing " << snapoid << dendl;
 	ctx->log.push_back(Log::Entry(Log::Entry::DELETE, snapoid, ctx->at_version, 
@@ -1864,7 +1864,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 				      osd_reqid_t(), ctx->mtime));
 
 	ctx->snapset_obc->obs.exists = false;
-	register_object_context(ctx->snapset_obc);
+	assert(ctx->snapset_obc->registered);
       }
     }
   } else if (ctx->obs->ssc->snapset.clones.size()) {
@@ -1881,7 +1881,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     ctx->snapset_obc->obs.oi.version = ctx->at_version;
     ctx->snapset_obc->obs.oi.last_reqid = ctx->reqid;
     ctx->snapset_obc->obs.oi.mtime = ctx->mtime;
-    register_object_context(ctx->snapset_obc);
+    assert(ctx->snapset_obc->registered);
 
     bufferlist bv(sizeof(*poi));
     ::encode(ctx->snapset_obc->obs.oi, bv);
@@ -2347,6 +2347,7 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const sobject_t& s
 	ssc = get_snapset_context(soid.oid, true);
       obc = new ObjectContext(oi, true, ssc);
     }
+    register_object_context(obc);
 
     if (can_create && !obc->obs.ssc)
       obc->obs.ssc = get_snapset_context(soid.oid, true);
@@ -2504,6 +2505,7 @@ ReplicatedPG::SnapSetContext *ReplicatedPG::get_snapset_context(const object_t& 
 	return NULL;
     }
     ssc = new SnapSetContext(oid);
+    register_snapset_context(ssc);
     if (r >= 0) {
       bufferlist::iterator bvp = bv.begin();
       ssc->snapset.decode(bvp);
@@ -3506,7 +3508,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     if (is_primary()) {
       dout(10) << " setting up obc for " << soid << dendl;
       ObjectContext *obc = get_object_context(soid, op->oloc, true);
-      register_object_context(obc);
+      assert(obc->registered);
       obc->ondisk_write_lock();
       
       obc->obs.exists = true;
