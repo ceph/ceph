@@ -10,7 +10,7 @@ HERE="$(dirname "$0")"
 VENV="$HERE/virtualenv"
 CRAM_BIN="$VENV/bin/cram"
 if [ ! -e "$CRAM_BIN" ]; then
-    pip -E "$VENV" install downloads/cram-0.5.tar.gz
+    pip -E "$VENV" install "$HERE/downloads/cram-0.5.tar.gz"
 fi
 
 HERE_ABS="$(readlink -f "$HERE")"
