@@ -528,6 +528,15 @@ bool ReplicatedPG::snap_trimmer()
   lock();
   dout(10) << "snap_trimmer start, purged_snaps " << info.purged_snaps << dendl;
 
+  interval_set<snapid_t> s;
+  s.intersection_of(snap_trimq, info.purged_snaps);
+  if (!s.empty()) {
+    dout(0) << "WARNING - snap_trimmer: snap_trimq contained snaps already in "
+	    << "purged_snaps" << dendl;
+    snap_trimq.subtract(s);
+  }
+
+
   epoch_t current_set_started = info.history.last_epoch_started;
 
   while (snap_trimq.size() &&
