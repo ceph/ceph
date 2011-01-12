@@ -995,7 +995,7 @@ void MDS::handle_mds_map(MMDSMap *m)
 	mdcache->migrator->handle_mds_failure_or_stop(*p);
   }
 
-  if (standby_for_rank < 0) //if we're not replaying
+  if (!is_any_replay())
     balancer->try_rebalance();
 
  out:
