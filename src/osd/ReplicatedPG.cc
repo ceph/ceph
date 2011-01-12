@@ -1671,6 +1671,13 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       t.setattrs(coll_t(info.pgid), soid, attrs);
       ssc->snapset.head_exists = true;
 
+      // Adjust the cached objectcontext
+      ObjectContext *clone_context = get_object_context(rollback_to_sobject,
+							oi.oloc,
+							false);
+      assert(clone_context);
+      ctx->obs->oi.size = clone_context->obs.oi.size;
+
       map<snapid_t, interval_set<uint64_t> >::iterator iter =
 	ssc->snapset.clone_overlap.lower_bound(snapid);
       interval_set<uint64_t> overlaps = iter->second;
