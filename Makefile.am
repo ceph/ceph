@@ -5,9 +5,9 @@ SUBDIRS = . src man
 
 
 check-local:
-#	Build gtest before we build our own tests. Doing this
-#	instead of SUBDIRS gtest's own tests being run and slowing
-#	us down.
+#	Build gtest before we build our own tests. Doing this instead
+#	of SUBDIRS because with that, gtest's own tests would be run
+#	and that would slow us down.
 	@echo "Making lib/libgtest.a lib/libgtest_main.a in src/gtest"
 	@cd src/gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.la lib/libgtest_main.la
 
