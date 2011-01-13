@@ -311,6 +311,10 @@ lib_LTLIBRARIES += libhadoopcephfs.la
 endif
 
 ## unit tests
+
+# target to build but not run the unit tests
+unittests:: $(check_PROGRAMS)
+
 unittest_encoding_SOURCES = test/encoding.cc
 unittest_encoding_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto \
 	$(top_builddir)/src/gtest/lib/libgtest.la \
