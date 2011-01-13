@@ -4,7 +4,9 @@ EXTRA_DIST = autogen.sh ceph.spec.in
 SUBDIRS = . src man
 
 
-EXTRA_DIST += src/test/run-cli-tests
+EXTRA_DIST += \
+	src/test/run-cli-tests \
+	src/test/downloads
 check-local:
 #	Build gtest before we build our own tests. Doing this instead
 #	of SUBDIRS because with that, gtest's own tests would be run
