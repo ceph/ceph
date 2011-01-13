@@ -1819,11 +1819,13 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   clean_up_local(t); 
 
   // initialize snap_trimq
-  snap_trimq = pool->cached_removed_snaps;
-  snap_trimq.subtract(info.purged_snaps);
-  dout(10) << "activate - snap_trimq " << snap_trimq << dendl;
-  if (!snap_trimq.empty())
-    queue_snap_trim();
+  if (is_primary()) {
+    snap_trimq = pool->cached_removed_snaps;
+    snap_trimq.subtract(info.purged_snaps);
+    dout(10) << "activate - snap_trimq " << snap_trimq << dendl;
+    if (!snap_trimq.empty())
+      queue_snap_trim();
+  }
 
   // init complete pointer
   if (missing.num_missing() == 0 &&
