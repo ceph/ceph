@@ -3991,34 +3991,24 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       dout(10) << *pg << " writing updated stats" << dendl;
       pg->info.stats = info.stats;
 
-      // did a snap just get purged?
-      if (info.purged_snaps.size() < pg->info.purged_snaps.size()) {
-	stringstream ss;
-	ss << "pg " << pg->info.pgid << " replica got purged_snaps " << info.purged_snaps
-	   << " had " << pg->info.purged_snaps;
-	logclient.log(LOG_WARN, ss);
-	pg->info.purged_snaps = info.purged_snaps;
-      } else {
-	interval_set<snapid_t> p = info.purged_snaps;
-	p.subtract(pg->info.purged_snaps);
-	if (!p.empty()) {
-	  dout(10) << " purged_snaps " << pg->info.purged_snaps
-		   << " -> " << info.purged_snaps
-		   << " removed " << p << dendl;
-	  snapid_t sn = p.range_start();
-	  coll_t c(info.pgid, sn);
-	  t->remove_collection(c);
-
-	  pg->info.purged_snaps = info.purged_snaps;
-	}
+      // Handle changes to purged_snaps
+      interval_set<snapid_t> p;
+      p.union_of(info.purged_snaps, pg->info.purged_snaps);
+      p.subtract(pg->info.purged_snaps);
+      pg->info.purged_snaps = info.purged_snaps;
+      if (!p.empty()) {
+	dout(10) << " purged_snaps " << pg->info.purged_snaps
+		 << " -> " << info.purged_snaps
+		 << " removed " << p << dendl;
+	pg->adjust_local_snaps(*t, p);
       }
-
-      pg->write_info(*t);
-
-      if (!log.empty()) {
-	dout(10) << *pg << ": inactive replica merging new PG log entries" << dendl;
-	pg->merge_log(*t, info, log, from);
-      }
+    }
+    
+    pg->write_info(*t);
+    
+    if (!log.empty()) {
+      dout(10) << *pg << ": inactive replica merging new PG log entries" << dendl;
+      pg->merge_log(*t, info, log, from);
     }
   }
 
