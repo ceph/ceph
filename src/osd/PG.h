@@ -991,6 +991,7 @@ public:
   std::string get_corrupt_pg_log_name() const;
   void read_state(ObjectStore *store);
   coll_t make_snap_collection(ObjectStore::Transaction& t, snapid_t sn);
+  void adjust_local_snaps(ObjectStore::Transaction &t, interval_set<snapid_t> &to_check);
 
   void queue_snap_trim();
 

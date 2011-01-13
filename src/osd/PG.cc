@@ -1827,6 +1827,9 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       queue_snap_trim();
   }
 
+  // Check local snaps
+  adjust_local_snaps(t, info.purged_snaps);
+
   // init complete pointer
   if (missing.num_missing() == 0 &&
       info.last_complete != info.last_update) {
@@ -2688,7 +2691,18 @@ coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
   return c;
 }
 
-
+void PG::adjust_local_snaps(ObjectStore::Transaction &t, interval_set<snapid_t> &to_check)
+{
+  interval_set<snapid_t> to_remove;
+  to_remove.intersection_of(snap_collections, to_check);
+  while (!to_remove.empty()) {
+    snapid_t current = to_remove.range_start();
+    coll_t c(info.pgid, current);
+    t.remove_collection(c);
+    snap_collections.erase(current);
+  }
+  write_info(t);
+}
 
 
 // ==============================
