@@ -620,8 +620,18 @@ void ReplicatedPG::do_sub_op_reply(MOSDSubOpReply *r)
 
 bool ReplicatedPG::snap_trimmer()
 {
+  assert(is_primary());
   lock();
   dout(10) << "snap_trimmer start, purged_snaps " << info.purged_snaps << dendl;
+
+  interval_set<snapid_t> s;
+  s.intersection_of(snap_trimq, info.purged_snaps);
+  if (!s.empty()) {
+    dout(0) << "WARNING - snap_trimmer: snap_trimq contained snaps already in "
+	    << "purged_snaps" << dendl;
+    snap_trimq.subtract(s);
+  }
+
 
   epoch_t current_set_started = info.history.last_epoch_started;
 
@@ -1411,7 +1421,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	t.write(coll, soid, op.extent.offset, op.extent.length, nbl);
 	if (ssc->snapset.clones.size()) {
 	  snapid_t newest = *ssc->snapset.clones.rbegin();
+
+	  // Replace clone_overlap[newest] with an empty interval set since there
+	  // should no longer be any overlap
 	  ssc->snapset.clone_overlap.erase(newest);
+	  ssc->snapset.clone_overlap[newest];
 	  oi.size = 0;
 	}
 	if (op.extent.length != oi.size) {
@@ -1929,7 +1943,11 @@ inline void ReplicatedPG::_delete_head(OpContext *ctx)
   if (ssc->snapset.clones.size()) {
     snapid_t newest = *ssc->snapset.clones.rbegin();
     add_interval_usage(ssc->snapset.clone_overlap[newest], info.stats);
+
+    // Replace clone_overlap[newest] with an empty interval set since there
+    // should no longer be any overlap
     ssc->snapset.clone_overlap.erase(newest);  // ok, redundant.
+    ssc->snapset.clone_overlap[newest];
   }
   if (ctx->obs->exists) {
     info.stats.num_objects--;
@@ -1973,7 +1991,7 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     }
   } else { //we got our context, let's use it to do the rollback!
     if (ctx->clone_obc &&
-	(ctx->clone_obc->obs.oi.prior_version == oi.version)) {
+	(ctx->clone_obc->obs.oi.soid.snap == snapid)) {
       //just cloned the rollback target, we don't need to do anything!
     
     } else {
@@ -1996,9 +2014,17 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       t.setattrs(coll, soid, attrs);
       ssc->snapset.head_exists = true;
 
+      // Adjust the cached objectcontext
+      ObjectContext *clone_context = get_object_context(rollback_to_sobject,
+							oi.oloc,
+							false);
+      assert(clone_context);
+      ctx->obs->oi.size = clone_context->obs.oi.size;
+
       map<snapid_t, interval_set<uint64_t> >::iterator iter =
 	ssc->snapset.clone_overlap.lower_bound(snapid);
       interval_set<uint64_t> overlaps = iter->second;
+      assert(iter != ssc->snapset.clone_overlap.end());
       for ( ;
 	    iter != ssc->snapset.clone_overlap.end();
 	    ++iter)
@@ -2087,6 +2113,10 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     info.stats.num_object_clones++;
     ssc->snapset.clones.push_back(coid.snap);
     ssc->snapset.clone_size[coid.snap] = ctx->obs->oi.size;
+
+    // clone_overlap should contain an entry for each clone 
+    // (an empty interval_set if there is no overlap)
+    ssc->snapset.clone_overlap[coid.snap];
     if (ctx->obs->oi.size)
       ssc->snapset.clone_overlap[coid.snap].insert(0, ctx->obs->oi.size);
     
@@ -2668,7 +2698,7 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const sobject_t& s
     }
     register_object_context(obc);
 
-    if (can_create)
+    if (can_create && !obc->obs.ssc)
       obc->obs.ssc = get_snapset_context(soid.oid, true);
 
     if (r >= 0) {

@@ -172,6 +172,7 @@ public:
   static const int STATE_PURGING =     (1<<13);
   static const int STATE_DIRTYPARENT =  (1<<14);
   static const int STATE_DIRTYRSTAT =  (1<<15);
+  static const int STATE_STRAYPINNED = (1<<16);
 
   // -- waiters --
   static const uint64_t WAIT_DIR         = (1<<0);

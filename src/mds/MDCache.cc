@@ -574,7 +574,11 @@ void MDCache::populate_mydir()
     }
     assert(straydn);
     assert(strays[i]);
-    strays[i]->get(CInode::PIN_STRAY);
+    // we make multiple passes through this method; make sure we only pin each stray once.
+    if (!strays[i]->state_test(CInode::STATE_STRAYPINNED)) {
+      strays[i]->get(CInode::PIN_STRAY);
+      strays[i]->state_set(CInode::STATE_STRAYPINNED);
+    }
     dout(20) << " stray num " << i << " is " << *strays[i] << dendl;
   }
 
