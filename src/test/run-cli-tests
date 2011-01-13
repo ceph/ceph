@@ -7,7 +7,23 @@ if ! command -v pip >/dev/null; then
 fi
 
 SRCDIR="$(dirname "$0")"
-VENV="$SRCDIR/virtualenv"
+
+# build directory, if different, can be passed as an argument;
+# it is expected to point to the equivalent subdirectory of the
+# tree as where this script is stored
+BUILDDIR="$SRCDIR"
+case "$1" in
+    ''|-*)
+	# not set or looks like a flag to cram
+        ;;
+    *)
+	# looks like the builddir
+	BUILDDIR="$1"
+	shift
+	;;
+esac
+
+VENV="$BUILDDIR/virtualenv"
 CRAM_BIN="$VENV/bin/cram"
 if [ ! -e "$CRAM_BIN" ]; then
     pip -E "$VENV" install "$SRCDIR/downloads/cram-0.5.tar.gz"
