@@ -21,6 +21,7 @@
 
 #include <errno.h>
 #include <fstream>
+#include <sstream>
 #include <sys/uio.h>
 #include <limits.h>
 
@@ -39,8 +40,14 @@ void buffer::list::encode_base64(buffer::list& o)
 
 void buffer::list::decode_base64(buffer::list& e)
 {
-  bufferptr bp(e.length() * 3 / 4 + 4);
+  bufferptr bp(4 + ((e.length() * 3) / 4));
   int l = ceph_unarmor(bp.c_str(), bp.c_str() + bp.length(), e.c_str(), e.c_str() + e.length());
+  if (l < 0) {
+    std::ostringstream oss;
+    oss << "decode_base64: decoding failed:\n";
+    hexdump(oss);
+    throw buffer::malformed_input(oss.str().c_str());
+  }
   assert(l <= (int)bp.length());
   bp.set_length(l);
   push_back(bp);
