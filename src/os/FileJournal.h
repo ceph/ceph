@@ -98,22 +98,18 @@ private:
 
   // in journal
   deque<pair<uint64_t, off64_t> > journalq;  // track seq offsets, so we can trim later.
+  deque<pair<uint64_t,Context*> > completions;  // queued, writing, waiting for commit.
 
-  // currently being journaled and awaiting callback.
-  //  or, awaiting callback bc journal was full.
-  deque<uint64_t> writing_seq;
-  deque<Context*> writing_fin;
-
-  deque<Context*> waiting_for_notfull;
+  uint64_t writing_seq, journaled_seq;
+  bool plug_journal_completions;
 
   // waiting to be journaled
   struct write_item {
     uint64_t seq;
     bufferlist bl;
     int alignment;
-    Context *fin;
-    write_item(uint64_t s, bufferlist& b, int al, Context *f) :
-      seq(s), alignment(al), fin(f) { 
+    write_item(uint64_t s, bufferlist& b, int al) :
+      seq(s), alignment(al) { 
       bl.claim(b);
     }
   };
@@ -139,6 +135,8 @@ private:
   void start_writer();
   void stop_writer();
   void write_thread_entry();
+
+  void queue_completions_thru(uint64_t seq);
 
   int check_for_full(uint64_t seq, off64_t pos, off64_t size);
   int prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_t& orig_bytee);
@@ -173,6 +171,8 @@ private:
     last_committed_seq(0), 
     full_state(FULL_NOTFULL),
     fd(-1),
+    writing_seq(0), journaled_seq(0),
+    plug_journal_completions(false),
     write_lock("FileJournal::write_lock"),
     write_stop(false),
     write_thread(this) { }
@@ -198,7 +198,7 @@ private:
   void commit_start();
   void committed_thru(uint64_t seq);
   bool should_commit_now() {
-    return full_state != FULL_NOTFULL || !waiting_for_notfull.empty();
+    return full_state != FULL_NOTFULL;
   }
 
   void set_wait_on_full(bool b) { wait_on_full = b; }
