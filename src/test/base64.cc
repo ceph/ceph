@@ -33,3 +33,12 @@ TEST(CorrectBase64Encoding, StringSimple) {
   ceph_unarmor(out2, out2 + OUT_LEN, out, out + alen);
   ASSERT_STREQ(original, out2);
 }
+
+TEST(IncorrectBase64Encoding, StringSimple) {
+  static const int OUT_LEN = 4096;
+  const char * const bad_encoded = "FAKEBASE64 foo";
+  char out[OUT_LEN];
+  memset(out, 0, sizeof(out));
+  int alen = ceph_unarmor(out, out + OUT_LEN, bad_encoded, bad_encoded + strlen(bad_encoded));
+  ASSERT_LT(alen, 0);
+}
