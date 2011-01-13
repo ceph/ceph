@@ -13,8 +13,7 @@ check-local:
 	@cd src/gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.la lib/libgtest_main.la
 
 #	exercise cli tools
-	./src/test/run-cli-tests
-
+	$(srcdir)/src/test/run-cli-tests
 
 # "make distclean" both runs this and recurses into src/gtest, if
 # gtest is in DIST_SUBDIRS. Take extra care to not fail when
