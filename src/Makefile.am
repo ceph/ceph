@@ -315,14 +315,25 @@ endif
 # target to build but not run the unit tests
 unittests:: $(check_PROGRAMS)
 
-unittest_encoding_SOURCES = test/encoding.cc
-unittest_encoding_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto \
-	$(top_builddir)/src/gtest/lib/libgtest.la \
-	$(top_builddir)/src/gtest/lib/libgtest_main.la
-unittest_encoding_CPPFLAGS = \
+UNITTEST_CFLAGS = \
 	-I$(top_srcdir)/src/gtest/include \
 	-I$(top_builddir)/src/gtest/include
+UNITTEST_LDADD = \
+	$(top_builddir)/src/gtest/lib/libgtest.la \
+	$(top_builddir)/src/gtest/lib/libgtest_main.la
+
+unittest_encoding_SOURCES = test/encoding.cc
+unittest_encoding_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto \
+			  ${UNITTEST_LDADD}
+unittest_encoding_CPPFLAGS = ${AM_CFLAGS} ${UNITTEST_CFLAGS}
 check_PROGRAMS += unittest_encoding
+
+unittest_base64_SOURCES = test/base64.cc
+unittest_base64_LDFLAGS = -pthread
+unittest_base64_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto \
+			${UNITTEST_LDADD}
+unittest_base64_CPPFLAGS = ${AM_CFLAGS} ${UNITTEST_CFLAGS}
+check_PROGRAMS += unittest_base64
 
 # shell scripts
 editpaths = sed \
