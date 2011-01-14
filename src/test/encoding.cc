@@ -196,5 +196,3 @@ TEST(EncodingRoundTrip, MultimapConstructorCounter) {
   EXPECT_EQ(my_val_t::get_copy_ctor(), 10);
   EXPECT_EQ(my_val_t::get_assigns(), 0);
 }
-
-#include <test/unit_test_main.h>

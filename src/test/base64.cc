@@ -59,5 +59,3 @@ TEST(IncorrectBase64Decoding2, StringSimple) {
   }
   ASSERT_EQ(failed, true);
 }
-
-#include <test/unit_test_main.h>
