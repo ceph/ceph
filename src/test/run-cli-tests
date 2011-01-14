@@ -26,13 +26,16 @@ esac
 VENV="$BUILDDIR/virtualenv"
 CRAM_BIN="$VENV/bin/cram"
 if [ ! -e "$CRAM_BIN" ]; then
-    pip -E "$VENV" install "$SRCDIR/downloads/cram-0.5.tar.gz"
+    pip -E "$VENV" install "$SRCDIR/downloads/cram-0.5.0ceph.2011-01-14.tar.gz"
 fi
 
 SRCDIR_ABS="$(readlink -f "$SRCDIR")"
+BUILDDIR_ABS="$(readlink -f "$BUILDDIR")"
 
 # cram doesn't like seeing the same foo.t basename twice on the same
 # run, so run it once per directory
 for tool in "$SRCDIR"/cli/*; do
-    PATH="$SRCDIR_ABS/..:$PATH" "$CRAM_BIN" -v "$@" -- "$tool"/*.t
+    toolname="$(basename "$tool")"
+    install -d -m0755 -- "$BUILDDIR/cli/$toolname"
+    PATH="$BUILDDIR_ABS/..:$SRCDIR_ABS/..:$PATH" "$CRAM_BIN" -v "$@"  --error-dir="$BUILDDIR/cli/$toolname" -- "$tool"/*.t
 done
