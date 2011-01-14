@@ -206,7 +206,7 @@ if [ "$localhost" -eq 1 ]; then
 else
     HOSTNAME=`hostname`
     echo hostname $HOSTNAME
-    IP=`host $HOSTNAME | grep 'has address' | cut -d ' ' -f 4`
+    IP=`hostname --ip-address`
 fi
 echo "ip $IP"
 
