@@ -99,7 +99,7 @@ struct md_config_t {
 
   const char *pid_file;
 
-  const char *conf;
+  char *conf;
 
   const char *chdir;
 
