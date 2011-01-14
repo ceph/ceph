@@ -172,7 +172,7 @@ Session *Server::get_session(Message *m)
 /* This function DOES put the passed message before returning*/
 void Server::handle_client_session(MClientSession *m)
 {
-  version_t pv, piv = 0;
+  version_t pv;
   Session *session = get_session(m);
 
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
@@ -248,20 +248,7 @@ void Server::handle_client_session(MClientSession *m)
 		<< ", BUGGY!" << dendl;
 	assert(0);
       }
-      sseq = mds->sessionmap.set_state(session, Session::STATE_CLOSING);
-      pv = ++mds->sessionmap.projected;
-      
-      interval_set<inodeno_t> both = session->prealloc_inos;
-      both.insert(session->pending_prealloc_inos);
-      if (both.size()) {
-	mds->inotable->project_release_ids(both);
-	piv = mds->inotable->get_projected_version();
-      } else
-	piv = 0;
-      
-      mdlog->start_submit_entry(new ESession(m->get_source_inst(), false, pv, both, piv),
-				new C_MDS_session_finish(mds, session, sseq, false, pv, both, piv));
-      mdlog->flush();
+      journal_close_session(session, Session::STATE_CLOSING);
     }
     break;
 
@@ -300,11 +287,6 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       CDentry *dn = (CDentry*)r->parent;
       dout(20) << " killing client lease of " << *dn << dendl;
       dn->remove_client_lease(r, mds->locker);
-    }
-    while (!session->requests.empty()) {
-      MDRequest *mdr = session->requests.front(member_offset(MDRequest,
-							     item_session_request));
-      mdcache->request_kill(mdr);
     }
     
     if (piv) {
@@ -408,11 +390,7 @@ void Server::terminate_sessions()
 	session->is_killing() ||
 	session->is_closed())
       continue;
-    uint64_t sseq = mds->sessionmap.set_state(session, Session::STATE_CLOSING);
-    version_t pv = ++mds->sessionmap.projected;
-    mdlog->start_submit_entry(new ESession(session->inst, false, pv),
-			      new C_MDS_session_finish(mds, session, sseq, false, pv));
-    mdlog->flush();
+    journal_close_session(session, Session::STATE_CLOSING);
   }
 
   mdlog->wait_for_safe(new C_MDS_TerminatedSessions(this));
@@ -487,11 +465,7 @@ void Server::kill_session(Session *session)
        session->is_stale()) &&
       !session->is_importing()) {
     dout(10) << "kill_session " << session << dendl;
-    uint64_t sseq = mds->sessionmap.set_state(session, Session::STATE_KILLING);
-    version_t pv = ++mds->sessionmap.projected;
-    mdlog->start_submit_entry(new ESession(session->inst, false, pv),
-			      new C_MDS_session_finish(mds, session, sseq, false, pv));
-    mdlog->flush();
+    journal_close_session(session, Session::STATE_KILLING);
   } else {
     dout(10) << "kill_session importing or already closing/killing " << session << dendl;
     assert(session->is_closing() || 
@@ -499,6 +473,33 @@ void Server::kill_session(Session *session)
 	   session->is_killing() ||
 	   session->is_importing());
   }
+}
+
+void Server::journal_close_session(Session *session, int state)
+{
+  uint64_t sseq = mds->sessionmap.set_state(session, state);
+  version_t pv = ++mds->sessionmap.projected;
+  version_t piv = 0;
+
+  interval_set<inodeno_t> both = session->prealloc_inos;
+  both.insert(session->pending_prealloc_inos);
+  if (both.size()) {
+    mds->inotable->project_release_ids(both);
+    piv = mds->inotable->get_projected_version();
+  } else
+    piv = 0;
+
+  mdlog->start_submit_entry(new ESession(session->inst, false, pv, both, piv),
+			    new C_MDS_session_finish(mds, session, sseq, false, pv, both, piv));
+  mdlog->flush();
+
+  // clean up requests, too
+  while (!session->requests.empty()) {
+    MDRequest *mdr = session->requests.front(member_offset(MDRequest,
+							   item_session_request));
+    mdcache->request_kill(mdr);
+  }
+
 }
 
 void Server::reconnect_clients()

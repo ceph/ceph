@@ -82,6 +82,7 @@ public:
   void terminate_sessions();
   void find_idle_sessions();
   void kill_session(Session *session);
+  void journal_close_session(Session *session, int state);
   void reconnect_clients();
   void handle_client_reconnect(class MClientReconnect *m);
   //void process_reconnect_cap(CInode *in, int from, ceph_mds_cap_reconnect& capinfo);
