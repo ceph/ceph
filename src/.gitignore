@@ -71,4 +71,5 @@ crush/CrushWrapper_wrap.cxx
 /gtest/Makefile.in
 /gtest/aclocal.m4
 /gtest/configure
+/gtest/fused-src/
 /unittest_*
