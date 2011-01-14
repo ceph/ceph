@@ -26,3 +26,5 @@ clean-local:
 	  echo "Making clean in src/gtest"; \
 	  cd src/gtest && $(MAKE) $(AM_MAKEFLAGS) clean; \
 	fi
+
+	@rm -rf src/test/virtualenv
