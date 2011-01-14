@@ -22,7 +22,7 @@ using namespace std;
 #include "auth/Auth.h"
 #include "auth/KeyRing.h"
 
-#include <strstream>
+#include <sstream>
 
 void usage()
 {
@@ -256,11 +256,10 @@ int main(int argc, const char **argv)
     if (bin_keyring) {
       ::encode(keyring, bl);
     } else {
-      std::ostrstream os;
+      std::ostringstream os;
       keyring.print(os);
-      const char *str = os.str();
-      if (str)
-        bl.append(str, strlen(str) + 1);
+      string str = os.str();
+      bl.append(str);
     }
     r = bl.write_file(fn, 0600);
     if (r < 0) {
