@@ -36,12 +36,14 @@ cconf <flags> <action>\n\
 \n\
 ACTIONS\n\
   -l|--list-sections <prefix>     List sections in prefix\n\
-\n\
   --lookup <key> [defval]         Print a configuration setting to stdout.\n\
 				  If the setting is not defined, and the\n\
 				  optional argument defval is provide, it will\n\
 				  be printed instead. variables in defval are\n\
 				  interpolated.\n\
+  -r|--resolve-search             search for the first file that exists and\n\
+                                  can be opened in the resulted comma\n\
+                                  delimited search list.\n\
 \n\
 FLAGS\n\
   -i id                           Set id\n\
@@ -59,7 +61,11 @@ List sections beginning with 'mon'.\n\
 RETURN CODE\n\
 Return code will be 0 on success; error code otherwise.\n\
 ";
+}
 
+void error_exit()
+{
+  usage();
   exit(1);
 }
 
@@ -78,26 +84,37 @@ static int list_sections(const char *s)
   return 0;
 }
 
+static void print_val(const char *val, bool resolve_search)
+{
+  if (!resolve_search) {
+    puts(val);
+  } else {
+    string search_path(val);
+    string result;
+    if (ceph_resolve_file_search(search_path, result))
+      puts(result.c_str());
+  }
+}
+
 static int lookup_impl(const deque<const char *> &sections,
-		    const char *key, const char *defval)
+		    const char *key, const char *defval,
+                    bool resolve_search)
 {
   char *val = NULL;
   ConfFile *cf = conf_get_conf_file();
   if (!cf)
     return 2;
   conf_read_key(NULL, key, OPT_STR, (char **)&val, NULL);
-
   if (val) {
-    puts(val);
+    print_val(val, resolve_search);
     free(val);
     return 0;
   }
 
   for (unsigned int i=0; i<sections.size(); i++) {
     cf->read(sections[i], key, (char **)&val, NULL);
-
     if (val) {
-      puts(val);
+      print_val(val, resolve_search);
       free(val);
       return 0;
     }
@@ -106,7 +123,7 @@ static int lookup_impl(const deque<const char *> &sections,
   if (defval) {
     val = conf_post_process_val(defval);
     if (val) {
-      puts(val);
+      print_val(val, resolve_search);
       free(val);
       return 0;
     }
@@ -119,7 +136,7 @@ static int lookup_impl(const deque<const char *> &sections,
     char buf[1024];
     memset(buf, 0, sizeof(buf));
     if (ceph_def_conf_by_name(key, buf, sizeof(buf))) {
-      cout << buf << std::endl;
+      print_val(buf, resolve_search);
       return 0;
     }
   }
@@ -128,21 +145,22 @@ static int lookup_impl(const deque<const char *> &sections,
 }
 
 static int lookup(const deque<const char *> &sections,
-		   const vector<const char*> &nargs,
-		   vector<const char*>::const_iterator n)
+		  const vector<const char*> &nargs,
+		  vector<const char*>::const_iterator n,
+                  bool resolve_search)
 {
   const char *key = *n;
   ++n;
   if (n == nargs.end())
-    return lookup_impl(sections, key, NULL);
+    return lookup_impl(sections, key, NULL, resolve_search);
   const char *defval = *n;
   ++n;
   if (n == nargs.end())
-    return lookup_impl(sections, key, defval);
+    return lookup_impl(sections, key, defval, resolve_search);
 
   cerr << "lookup: Too many arguments. Expected only 1 or 2."
        << std::endl;
-  usage();
+  error_exit();
   return 1;
 }
 
@@ -152,6 +170,10 @@ int main(int argc, const char **argv)
   vector<const char*> args, nargs;
   deque<const char *> sections;
   DEFINE_CONF_VARS(usage);
+  bool resolve_search = false;
+  bool do_help = false;
+  bool do_list = false;
+  bool do_lookup = false;
 
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
@@ -164,6 +186,14 @@ int main(int argc, const char **argv)
     } else if (CONF_ARG_EQ("section", 's')) {
       CONF_SAFE_SET_ARG_VAL(&section, OPT_STR);
       sections.push_back(section);
+    } else if (CONF_ARG_EQ("resolve-search", 'r')) {
+      CONF_SAFE_SET_ARG_VAL(&resolve_search, OPT_BOOL);
+    } else if (CONF_ARG_EQ("help", 'h')) {
+      CONF_SAFE_SET_ARG_VAL(&do_help, OPT_BOOL);
+    } else if (CONF_ARG_EQ("list-sections", 'l')) {
+      CONF_SAFE_SET_ARG_VAL(&do_list, OPT_BOOL);
+    } else if (CONF_ARG_EQ("lookup", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&do_lookup, OPT_BOOL);
     }
     else {
       nargs.push_back(args[i]);
@@ -174,24 +204,27 @@ int main(int argc, const char **argv)
   common_init(nargs, type, false);
   set_foreground_logging();
 
-  if ((nargs.size() == 1) && (!strcmp(nargs[0], "-h"))) {
+  if (do_help) {
     usage();
+    exit(0);
   }
-  else if ((nargs.size() == 2) &&
-      (!strcmp(nargs[0], "--list_sections") || !strcmp(nargs[0], "-l"))) {
-    return list_sections(nargs[1]);
-  }
-  else if ((nargs.size() >= 2) && (!strcmp(nargs[0], "--lookup"))) {
+  if (!do_lookup && !do_list)
+    do_lookup = true;
+
+  if (do_list) {
+    if (nargs.size() != 1)
+      error_exit();
+    return list_sections(nargs[0]);
+  } else if (do_lookup) {
+    if (nargs.size() < 1 || nargs.size() > 2)
+      error_exit();
     vector<const char*>::const_iterator n = nargs.begin();
-    ++n;
-    return lookup(sections, nargs, n);
-  }
-  else if ((nargs.size() >= 1) && (nargs[0][0] == '-')) {
+    return lookup(sections, nargs, n, resolve_search);
+  } else if ((nargs.size() >= 1) && (nargs[0][0] == '-')) {
     cerr << "Parse error at argument: " << nargs[0] << std::endl;
-    usage();
-  }
-  else {
+    error_exit();
+  } else {
     vector<const char*>::const_iterator n = nargs.begin();
-    return lookup(sections, nargs, n);
+    return lookup(sections, nargs, n, resolve_search);
   }
 }

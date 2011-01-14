@@ -86,7 +86,7 @@ if [ $allhosts -eq 0 ]; then
 fi
 
 if [ -z "$adminkeyring" ]; then
-    echo "mkcephfs requires '-k /path/to/admin/keyring'. default location is /etc/ceph/keyring.bin."
+    echo "mkcephfs requires '-k /path/to/admin/keyring'. default location is /etc/ceph/keyring."
     usage_exit
 fi
 
@@ -208,12 +208,12 @@ for name in $what; do
 
 	if [ -n "$ssh" ]; then
 	    if [ -n "$user" ]; then
-		scp -p $adminkeyring $user@$host:$mon_data/admin_keyring.bin
+		scp -p $adminkeyring $user@$host:$mon_data/admin_keyring
 	    else
-		scp -p $adminkeyring $host:$mon_data/admin_keyring.bin
+		scp -p $adminkeyring $host:$mon_data/admin_keyring
 	    fi
 	else
-	    cp -av $adminkeyring $mon_data/admin_keyring.bin
+	    cp -av $adminkeyring $mon_data/admin_keyring
 	fi
     fi
 

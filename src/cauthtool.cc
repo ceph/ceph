@@ -26,7 +26,22 @@ using namespace std;
 
 void usage()
 {
-  cout << " usage: [--create-keyring] [--gen-key] [--name=<name>] [--set-uid=uid] [--caps=<filename>] [--list] [--print-key] <filename>" << std::endl;
+  cout << "usage: cauthtool keyringfile [OPTIONS]...\n"
+       << "where the options are:\n"
+       << "  -l, --list                    will list all keys and capabilities present in\n"
+       << "                                the keyring\n"
+       << "  -p, --print                   will print an encoded key for the specified\n"
+       << "                                entityname. This is suitable for the\n"
+       << "                                'mount -o secret=..' argument\n"
+       << "  -c, --create-keyring          will create a new keyring, overwriting any\n"
+       << "                                existing keyringfile\n"
+       << "  --gen-key                     will generate a new secret key for the\n"
+       << "                                specified entityname\n"
+       << "  --add-key                     will add an encoded key to the keyring\n"
+       << "  --cap subsystem capability    will set the capability for given subsystem\n"
+       << "  --caps capsfile               will set all of capabilities associated with a\n"
+       << "                                given key, for all subsystems\n"
+       << "  -b, --bin                     will create a binary formatted keyring" << std::endl;
   exit(1);
 }
 

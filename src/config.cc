@@ -372,7 +372,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(debug_finisher, 0, OPT_INT, 1),
 	OPTION(key, 0, OPT_STR, ""),
 	OPTION(keyfile, 'K', OPT_STR, ""),
-	OPTION(keyring, 'k', OPT_STR, "/etc/ceph/keyring.bin"),
+	OPTION(keyring, 'k', OPT_STR, "/etc/ceph/keyring,/etc/ceph/keyring.bin"),
 	OPTION(clock_lock, 0, OPT_BOOL, false),
 	OPTION(clock_tare, 0, OPT_BOOL, false),
 	OPTION(ms_tcp_nodelay, 0, OPT_BOOL, true),
@@ -1328,6 +1328,7 @@ void parse_config_options(std::vector<const char*>& args)
         nargs.push_back(args[i]);
   }
 
+
   env_override(&g_conf.keyring, "CEPH_KEYRING");
 
   install_sighandler(SIGHUP, sighup_handler, SA_RESTART);
@@ -1341,4 +1342,23 @@ void parse_config_options(std::vector<const char*>& args)
   install_sighandler(SIGSYS, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
 
   args = nargs;
+}
+
+bool ceph_resolve_file_search(string& filename_list, string& result)
+{
+  list<string> ls;
+  get_str_list(filename_list, ls);
+
+  list<string>::iterator iter;
+  for (iter = ls.begin(); iter != ls.end(); ++iter) {
+    int fd = ::open(iter->c_str(), O_RDONLY);
+    if (fd < 0)
+      continue;
+
+    close(fd);
+    result = *iter;
+    return true;
+  }
+
+  return false;
 }
