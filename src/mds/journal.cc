@@ -360,7 +360,7 @@ void EMetaBlob::update_segment(LogSegment *ls)
 
 void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 {
-  dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps" << dendl;
+  dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps by " << client_name << dendl;
 
   assert(logseg);
 
@@ -685,21 +685,22 @@ void ESession::replay(MDS *mds)
 	     << " >= " << cmapv << ", noop" << dendl;
   } else {
     dout(10) << "ESession.replay sessionmap " << mds->sessionmap.version
-	     << " < " << cmapv << " " << (open ? "open":"close") << dendl;
+	     << " < " << cmapv << " " << (open ? "open":"close") << " " << client_inst << dendl;
     mds->sessionmap.projected = ++mds->sessionmap.version;
     assert(mds->sessionmap.version == cmapv);
+    Session *session;
     if (open) {
-      Session *session = mds->sessionmap.get_or_add_session(client_inst);
+      session = mds->sessionmap.get_or_add_session(client_inst);
       if (session->is_closed())
 	mds->sessionmap.set_state(session, Session::STATE_OPEN);
-      dout(10) << "session " << session << " state " << session->get_state() << dendl;
     } else {
-      Session *session = mds->sessionmap.get_session(client_inst.name);
+      session = mds->sessionmap.get_session(client_inst.name);
       if (session->is_closed())
 	mds->sessionmap.remove_session(session);
       else
 	session->clear();    // the client has reconnected; keep the Session, but reset
     }
+    dout(10) << "session " << session << " state " << session->get_state() << dendl;
   }
 
   if (inos.size() && inotablev) {
