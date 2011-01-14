@@ -6,6 +6,7 @@ SUBDIRS = . src man
 
 EXTRA_DIST += \
 	src/test/run-cli-tests \
+	src/test/cli \
 	src/test/downloads
 check-local:
 #	Build gtest before we build our own tests. Doing this instead
