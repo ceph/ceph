@@ -531,6 +531,8 @@ bool conf_set_conf_val(void *field, opt_type_t type, const char *val);
 bool conf_cmd_equals(const char *cmd, const char *opt, char char_opt, unsigned int *val_pos);
 int ceph_def_conf_by_name(const char *name, char *buf, int len);
 
+bool ceph_resolve_file_search(string& filename_list, string& result);
+
 class ExportControl;
 ExportControl *conf_get_export_control();
 
