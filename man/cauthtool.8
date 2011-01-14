@@ -11,6 +11,7 @@ cauthtool \- ceph keyring manipulation tool
 [ \fB\-\-gen-key\fR ]
 [ \fB\-a\fR | \fB\-\-add-key \fIbase64_key\fP ]
 [ \fB\-\-caps\fR \fIcapfils\fP ]
+[ \fB\-b\fR | \fB\-\-bin\fR ]
 .SH DESCRIPTION
 .B cauthtool
 is a utility to create, view, and modify a Ceph keyring file.  A keyring
@@ -20,25 +21,28 @@ entity name, of the form \fI{client,mon,mds,osd}.name\fP.
 .SH OPTIONS
 .TP
 \fB\-l\fP, \fB\-\-list\fP
-will list all keys and capabilities present in the keyring.
+will list all keys and capabilities present in the keyring
 .TP
 \fB\-p\fP, \fB\-\-print\fP
-will print an encoded key for the specified \fIentityname\fP.  This is suitable for the mount -o secret= argument.
+will print an encoded key for the specified \fIentityname\fP.  This is suitable for the mount -o secret= argument
 .TP
 \fB\-c\fP, \fB\-\-create-keyring\fP
-will create a new keyring, overwriting any existing \fIkeyringfile\fP.
+will create a new keyring, overwriting any existing \fIkeyringfile\fP
 .TP
 \fB\-\-gen\-key\fP
-will generate a new secret key for the specified \fIentityname\fP:
+will generate a new secret key for the specified \fIentityname\fP
 .TP
 \fB\-\-add\-key\fP
-will add an encoded key to the keyring.
+will add an encoded key to the keyring
 .TP
 \fB\-\-cap\fI subsystem capability \fP
-will set the capability for given subsystem.
+will set the capability for given subsystem
 .TP
 \fB\-\-caps\fI capsfile \fP
-will set all of capabilities associated with a given key, for all subsystems.
+will set all of capabilities associated with a given key, for all subsystems
+.TP
+\fB\-b\fP, \fB\-\-bin\fP
+will create a binary formatted keyring
 
 .SH CAPABILITIES
 
@@ -80,19 +84,19 @@ subsystem (osd, mds, mon), and the value is the capability string (see above).
 .SH EXAMPLE
 To create a new keyring containing a key for \fIclient.foo\fP:
 .IP
-cauthtool -c -n client.foo --gen-key keyring.bin
+cauthtool -c -n client.foo --gen-key keyring
 .PP
 To associate some capabilities with the key (namely, the ability to mount a Ceph filesystem):
 .IP
-cauthtool -n client.foo --cap mds 'allow' --cap osd 'allow rw pool=data' --cap mon 'allow r' keyring.bin
+cauthtool -n client.foo --cap mds 'allow' --cap osd 'allow rw pool=data' --cap mon 'allow r' keyring
 .PP
 To display the contents of the keyring:
 .IP
-cauthtool -l keyring.bin
+cauthtool -l keyring
 .PP
 When mount a Ceph file system, you can grab the appropriately encoded secret key with
 .IP
-mount -t ceph serverhost:/ mountpoint -o name=foo,secret=`cauthtool -p -n client.foo keyring.bin`
+mount -t ceph serverhost:/ mountpoint -o name=foo,secret=`cauthtool -p -n client.foo keyring`
 .PP
 .SH AVAILABILITY
 .B cauthtool

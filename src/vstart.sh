@@ -350,7 +350,7 @@ if [ "$start_osd" -eq 1 ]; then
         osd journal size = 100
 EOF
 		    [ "$cephx" -eq 1 ] && cat <<EOF >> $conf
-        keyring = dev/osd$osd/keyring.bin
+        keyring = dev/osd$osd/keyring
 EOF
 	    fi
 	    echo mkfs osd$osd
@@ -359,7 +359,7 @@ EOF
 	    $cmd
 
 	    if [ "$cephx" -eq 1 ]; then
-		key_fn=dev/osd$osd/keyring.bin
+		key_fn=dev/osd$osd/keyring
 		$SUDO $CEPH_BIN/cauthtool --create-keyring --gen-key --name=osd.$osd \
 		    --cap mon 'allow *' \
 		    --cap osd 'allow *' \
