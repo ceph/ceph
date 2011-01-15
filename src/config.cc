@@ -1229,7 +1229,8 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
     }
   }
 
-  env_override(&g_conf.conf, "CEPH_CONF");
+  if (!conf_specified)
+    env_override(&g_conf.conf, "CEPH_CONF");
 
   // open new conf
   string fn = g_conf.conf;
