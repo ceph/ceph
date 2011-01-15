@@ -38,6 +38,11 @@ using namespace std;
 #include <sys/stat.h>
 #include <fcntl.h>
 
+void usage()
+{
+  cerr << "usage: cfuse [-m mon-ip-addr:mon-port] <mount point>" << std::endl;
+}
+
 int main(int argc, const char **argv, const char *envp[]) {
 
   //cerr << "cfuse starting " << myrank << "/" << world << std::endl;
@@ -68,7 +73,11 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   // get monmap
   MonClient mc;
-  if (mc.build_initial_monmap() < 0)
+  int ret = mc.build_initial_monmap();
+  if (ret == -EINVAL)
+    usage();
+
+  if (ret < 0)
     return -1;
 
   // start up network
