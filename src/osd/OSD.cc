@@ -2754,7 +2754,14 @@ void OSD::handle_osd_map(MOSDMap *m)
       state = STATE_BOOTING;
       up_epoch = 0;
 
-      int r = cluster_messenger->rebind();
+      int cport = cluster_messenger->get_myaddr().get_port();
+      int hbport = heartbeat_messenger->get_myaddr().get_port();
+
+      int r = cluster_messenger->rebind(hbport);
+      if (r != 0)
+	do_shutdown = true;  // FIXME: do_restart?
+
+      r = heartbeat_messenger->rebind(cport);
       if (r != 0)
 	do_shutdown = true;  // FIXME: do_restart?
 
