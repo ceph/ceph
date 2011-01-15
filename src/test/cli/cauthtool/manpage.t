@@ -1,8 +1,12 @@
+# TODO conflict with -c, it's not --create-keyring; fix manpage
+  $ cauthtool -c foo
+  error reading config file(s) foo
+  [1]
+
 # demonstrate that manpage examples fail without config
 # TODO fix the manpage
-  $ cauthtool -c -n client.foo --gen-key keyring.bin
-  error reading config file(s) /etc/ceph/ceph.conf, ~/.ceph/config, ceph.conf
-  [1]
+  $ cauthtool --create-keyring -n client.foo --gen-key keyring
+  creating keyring
 
 # work around the above
   $ touch ceph.conf
