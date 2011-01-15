@@ -60,6 +60,16 @@ void ceph_set_default_id(const char *id)
   g_default_id = strdup(id);
 }
 
+static void env_override(char **ceph_var, const char * const env_var)
+{
+  char *e = getenv(env_var);
+  if (!e)
+    return;
+  if (*ceph_var)
+    free(*ceph_var);
+  *ceph_var = strdup(e);
+}
+
 class ConfFileDestructor
 {
 public:
@@ -1218,6 +1228,9 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
       }
     }
   }
+
+  env_override(&g_conf.conf, "CEPH_CONF");
+
   // open new conf
   string fn = g_conf.conf;
   list<string> ls;
@@ -1288,16 +1301,6 @@ ConfFile *conf_get_conf_file()
 ExportControl *conf_get_export_control()
 {
   return ec;
-}
-
-static void env_override(char **ceph_var, const char * const env_var)
-{
-  char *e = getenv(env_var);
-  if (!e)
-    return;
-  if (*ceph_var)
-    free(*ceph_var);
-  *ceph_var = strdup(e);
 }
 
 void parse_config_options(std::vector<const char*>& args)
