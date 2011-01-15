@@ -37,5 +37,7 @@ BUILDDIR_ABS="$(readlink -f "$BUILDDIR")"
 for tool in "$SRCDIR"/cli/*; do
     toolname="$(basename "$tool")"
     install -d -m0755 -- "$BUILDDIR/cli/$toolname"
-    PATH="$BUILDDIR_ABS/..:$SRCDIR_ABS/..:$PATH" "$CRAM_BIN" -v "$@"  --error-dir="$BUILDDIR/cli/$toolname" -- "$tool"/*.t
+    env --ignore-environment \
+	PATH="$BUILDDIR_ABS/..:$SRCDIR_ABS/..:$PATH" \
+	"$CRAM_BIN" -v "$@"  --error-dir="$BUILDDIR/cli/$toolname" -- "$tool"/*.t
 done
