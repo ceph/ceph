@@ -34,11 +34,16 @@ BUILDDIR_ABS="$(readlink -f "$BUILDDIR")"
 
 # cram doesn't like seeing the same foo.t basename twice on the same
 # run, so run it once per directory
+FAILED=0
 for tool in "$SRCDIR"/cli/*; do
     toolname="$(basename "$tool")"
     install -d -m0755 -- "$BUILDDIR/cli/$toolname"
-    env --ignore-environment \
+    if ! env --ignore-environment \
 	PATH="$BUILDDIR_ABS/..:$SRCDIR_ABS/..:$PATH" \
 	CEPH_CONF=/dev/null \
-	"$CRAM_BIN" -v "$@"  --error-dir="$BUILDDIR/cli/$toolname" -- "$tool"/*.t
+	"$CRAM_BIN" -v "$@"  --error-dir="$BUILDDIR/cli/$toolname" -- "$tool"/*.t; then
+	FAILED=1
+    fi
 done
+
+exit "$FAILED"
