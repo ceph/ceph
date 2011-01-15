@@ -114,7 +114,9 @@ class C_Gather : public Context {
 private:
   int result;
   Context *onfinish;
+#ifdef DEBUG_GATHER
   std::set<Context*> waitfor;
+#endif
   int sub_created_count;
   int sub_existing_count;
   Mutex lock;
@@ -123,8 +125,10 @@ private:
 
   bool sub_finish(Context* sub, int r) {
     Mutex::Locker l(lock);
+#ifdef DEBUG_GATHER
     assert(waitfor.count(sub));
     waitfor.erase(sub);
+#endif
     --sub_existing_count;
 
     //generic_dout(0) << "C_Gather " << this << ".sub_finish(r=" << r << ") " << sub << " " << dendl;
@@ -183,7 +187,9 @@ public:
   ~C_Gather() {
     //generic_dout(0) << "C_Gather " << this << ".delete" << dendl;
     assert(sub_existing_count == 0);
+#ifdef DEBUG_GATHER
     assert(waitfor.empty());
+#endif
     assert(!onfinish);
   }
 
@@ -198,14 +204,18 @@ public:
     sub_created_count++;
     sub_existing_count++;
     Context *s = new C_GatherSub(this);
+#ifdef DEBUG_GATHER
     waitfor.insert(s);
+#endif
     //generic_dout(0) << "C_Gather " << this << ".new_sub is " << sub_created_count << " " << s << dendl;
     return s;
   }
   void rm_sub(Context *s) {
     Mutex::Locker l(lock);
+#ifdef DEBUG_GATHER
     assert(waitfor.count(s));
     waitfor.erase(s);
+#endif
     sub_existing_count--;
   }
 
