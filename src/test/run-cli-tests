@@ -39,5 +39,6 @@ for tool in "$SRCDIR"/cli/*; do
     install -d -m0755 -- "$BUILDDIR/cli/$toolname"
     env --ignore-environment \
 	PATH="$BUILDDIR_ABS/..:$SRCDIR_ABS/..:$PATH" \
+	CEPH_CONF=/dev/null \
 	"$CRAM_BIN" -v "$@"  --error-dir="$BUILDDIR/cli/$toolname" -- "$tool"/*.t
 done
