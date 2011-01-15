@@ -159,7 +159,7 @@ protected:
 
   virtual Connection *get_connection(const entity_inst_t& dest) = 0;
 
-  virtual int rebind() { return -EOPNOTSUPP; }
+  virtual int rebind(int avoid_port) { return -EOPNOTSUPP; }
 
 protected:
   //destruction should be handled via destroy()
