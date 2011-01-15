@@ -181,10 +181,13 @@ int KeyServer::_rotate_secret(uint32_t service_id)
   while (r.need_new_secrets(now)) {
     ExpiringCryptoKey ek;
     generate_secret(ek.key);
-    if (r.empty())
+    if (r.empty()) {
       ek.expiration = now;
-    else
-      ek.expiration = MAX(now, r.next().expiration);
+    } else {
+      utime_t next_ttl = now;
+      next_ttl += ttl;
+      ek.expiration = MAX(next_ttl, r.next().expiration);
+    }
     ek.expiration += ttl;
     uint64_t secret_id = r.add(ek);
     dout(10) << "_rotate_secret adding " << ceph_entity_type_name(service_id)
