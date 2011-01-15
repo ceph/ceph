@@ -1360,7 +1360,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
     heartbeat_to[from] = m->peer_as_of_epoch;
     heartbeat_inst[from] = m->get_source_inst();
 
-    if (locked && m->map_epoch)
+    if (locked && m->map_epoch && !is_booting())
       _share_map_incoming(m->get_source_inst(), m->map_epoch,
 			  (Session*) m->get_connection()->get_priv());
   }
@@ -1370,7 +1370,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 
     // only take peer stat or share map now if map_lock is uncontended
     if (locked) {
-      if (m->map_epoch)
+      if (m->map_epoch && !is_booting())
 	_share_map_incoming(m->get_source_inst(), m->map_epoch,
 			    (Session*) m->get_connection()->get_priv());
       take_peer_stat(from, m->peer_stat);  // only with map_lock held!
@@ -1955,6 +1955,8 @@ bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
   bool shared = false;
   dout(20) << "_share_map_incoming " << inst << " " << epoch << dendl;
   //assert(osd_lock.is_locked());
+
+  assert(!is_booting());
 
   // does client have old map?
   if (inst.name.is_client()) {
@@ -3325,6 +3327,13 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
       m->put();
       return false;
     }
+  }
+
+  // ok, we have at least as new a map as they do.  are we (re)booting?
+  if (is_booting()) {
+    dout(7) << "still in boot state, dropping message " << *m << dendl;
+    m->put();
+    return false;
   }
 
   return true;
