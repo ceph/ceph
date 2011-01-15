@@ -73,26 +73,43 @@ public:
     Incremental() : version(0), osdmap_epoch(0), pg_scan(0) {}
   };
 
-  void apply_incremental(Incremental& inc) {
+  void apply_incremental(const Incremental& inc) {
     assert(inc.version == version+1);
     version++;
-    for (map<pg_t,pg_stat_t>::iterator p = inc.pg_stat_updates.begin();
+    for (map<pg_t,pg_stat_t>::const_iterator p = inc.pg_stat_updates.begin();
 	 p != inc.pg_stat_updates.end();
 	 ++p) {
-      if (pg_stat.count(p->first))
-	stat_pg_sub(p->first, pg_stat[p->first]);
-      if (pg_stat.count(p->first) == 0)
-	pg_set.insert(p->first);
-      pg_stat[p->first] = p->second;
-      stat_pg_add(p->first, p->second);
+      const pg_t &update_pg(p->first);
+      const pg_stat_t &update_stat(p->second);
+      hash_map<pg_t,pg_stat_t>::iterator t = pg_stat.find(update_pg);
+      if (t == pg_stat.end()) {
+	hash_map<pg_t,pg_stat_t>::value_type v(update_pg, update_stat);
+	pg_stat.insert(v);
+      }
+      else {
+	stat_pg_sub(update_pg, t->second);
+	t->second = update_stat;
+      }
+      stat_pg_add(update_pg, update_stat);
     }
-    for (map<int,osd_stat_t>::iterator p = inc.osd_stat_updates.begin();
+    for (map<int,osd_stat_t>::const_iterator p = inc.osd_stat_updates.begin();
 	 p != inc.osd_stat_updates.end();
 	 ++p) {
-      if (osd_stat.count(p->first))
-	stat_osd_sub(osd_stat[p->first]);
-      osd_stat[p->first] = p->second;
-      stat_osd_add(p->second);
+      int osd = p->first;
+      const osd_stat_t &new_stats(p->second);
+
+      hash_map<int,osd_stat_t>::iterator t = osd_stat.find(osd);
+      if (t == osd_stat.end()) {
+	hash_map<int,osd_stat_t>::value_type v(osd, new_stats);
+	osd_stat.insert(v);
+      }
+      else {
+	stat_osd_sub(t->second);
+	t->second = new_stats;
+      }
+
+      stat_osd_add(new_stats);
+
       //update the full/nearful_osd sets
       int from = p->first;
       float ratio = ((float)p->second.kb_used) / (float) p->second.kb;
@@ -109,23 +126,30 @@ public:
 	nearfull_osds.erase(from);
       }
     }
-    for (set<pg_t>::iterator p = inc.pg_remove.begin();
+    for (set<pg_t>::const_iterator p = inc.pg_remove.begin();
 	 p != inc.pg_remove.end();
 	 p++) {
-      if (pg_set.count(*p)) {
-	pg_set.erase(*p);
-	stat_pg_sub(*p, pg_stat[*p]);
-	pg_stat.erase(*p);
+      const pg_t &removed_pg(*p);
+      set<pg_t>::iterator t = pg_set.find(removed_pg);
+      if (t != pg_set.end()) {
+	hash_map<pg_t,pg_stat_t>::iterator s = pg_stat.find(removed_pg);
+	if (s != pg_stat.end()) {
+	  stat_pg_sub(removed_pg, s->second);
+	  pg_stat.erase(s);
+	}
+	pg_set.erase(t);
       }
     }
 
     for (set<int>::iterator p = inc.osd_stat_rm.begin();
 	 p != inc.osd_stat_rm.end();
-	 p++) 
-      if (osd_stat.count(*p)) {
-	stat_osd_sub(osd_stat[*p]);
-	osd_stat.erase(*p);
+	 p++) {
+      hash_map<int,osd_stat_t>::iterator t = osd_stat.find(*p);
+      if (t != osd_stat.end()) {
+	stat_osd_sub(t->second);
+	osd_stat.erase(t);
       }
+    }
 
     if (inc.osdmap_epoch)
       last_osdmap_epoch = inc.osdmap_epoch;
@@ -153,7 +177,7 @@ public:
     pg_sum = pool_stat_t();
     osd_sum = osd_stat_t();
   }
-  void stat_pg_add(pg_t pgid, pg_stat_t &s) {
+  void stat_pg_add(const pg_t &pgid, const pg_stat_t &s) {
     num_pg++;
     num_pg_by_state[s.state]++;
     pg_pool_sum[pgid.pool()].add(s);
@@ -161,7 +185,7 @@ public:
     if (s.state & PG_STATE_CREATING)
       creating_pgs.insert(pgid);
   }
-  void stat_pg_sub(pg_t pgid, pg_stat_t &s) {
+  void stat_pg_sub(const pg_t &pgid, const pg_stat_t &s) {
     num_pg--;
     if (--num_pg_by_state[s.state] == 0)
       num_pg_by_state.erase(s.state);
@@ -170,11 +194,11 @@ public:
     if (s.state & PG_STATE_CREATING)
       creating_pgs.erase(pgid);
   }
-  void stat_osd_add(osd_stat_t &s) {
+  void stat_osd_add(const osd_stat_t &s) {
     num_osd++;
     osd_sum.add(s);
   }
-  void stat_osd_sub(osd_stat_t &s) {
+  void stat_osd_sub(const osd_stat_t &s) {
     num_osd--;
     osd_sum.sub(s);
   }

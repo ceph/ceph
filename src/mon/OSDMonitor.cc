@@ -146,6 +146,80 @@ void OSDMonitor::remove_redundant_pg_temp()
   }
 }
 
+/* Assign a lower weight to overloaded OSDs.
+ *
+ * The osds that will get a lower weight are those with with a utilization
+ * percentage 'oload' percent greater than the average utilization.
+ */
+int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str)
+{
+  if (oload <= 100) {
+    ostringstream oss;
+    oss << "You must give a percentageh higher than 100. "
+      "The reweighting threshold will be calculated as <average-utilization> "
+      "times <input-percentage>. For example, an argument of 200 would "
+      "reweight OSDs which are twice as utilized as the average OSD.\n";
+    out_str = oss.str();
+    dout(0) << "reweight_by_utilization: " << out_str << dendl;
+    return -EINVAL;
+  }
+
+  // Avoid putting a small number (or 0) in the denominator when calculating
+  // average_full
+  const PGMap &pgm = mon->pgmon()->pg_map;
+  if (pgm.osd_sum.kb < 1024) {
+    ostringstream oss;
+    oss << "Refusing to reweight: we only have " << pgm.osd_sum << " kb "
+      "across all osds!\n";
+    out_str = oss.str();
+    dout(0) << "reweight_by_utilization: " << out_str << dendl;
+    return -EDOM;
+  }
+
+  if (pgm.osd_sum.kb_used < 5 * 1024) {
+    ostringstream oss;
+    oss << "Refusing to reweight: we only have " << pgm.osd_sum << " kb "
+      "used across all osds!\n";
+    out_str = oss.str();
+    dout(0) << "reweight_by_utilization: " << out_str << dendl;
+    return -EDOM;
+  }
+
+  // Assign a lower weight to overloaded OSDs
+  float average_full = pgm.osd_sum.kb_used;
+  average_full /= pgm.osd_sum.kb;
+  float overload_full = average_full;
+  overload_full *= oload;
+  overload_full /= 100.0;
+
+  ostringstream oss;
+  char buf[128];
+  snprintf(buf, sizeof(buf), "average_full: %04f, overload_full: %04f. ",
+	   average_full, overload_full);
+  oss << buf;
+  std::string sep;
+  oss << "overloaded osds: ";
+  for (hash_map<int,osd_stat_t>::const_iterator p = pgm.osd_stat.begin();
+       p != pgm.osd_stat.end();
+       ++p) {
+    float full = p->second.kb_used;
+    full /= p->second.kb;
+    if (full >= overload_full) {
+      sep = ", ";
+      float new_weight = (1.0f - full) / (1.0f - overload_full);
+      osdmap.set_weightf(p->first, new_weight);
+      char buf[128];
+      snprintf(buf, sizeof(buf), "%d [%04f]", p->first, new_weight);
+      oss << sep << buf;
+    }
+  }
+  if (sep.empty()) {
+    oss << "(none)";
+  }
+  out_str = oss.str();
+  dout(0) << "reweight_by_utilization: finished with " << out_str << dendl;
+  return 0;
+}
 
 void OSDMonitor::create_pending()
 {
@@ -1630,6 +1704,21 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
 	ss << "don't know how to get pool field " << m->cmd[4];
 	goto out;
+      }
+    }
+    else if ((m->cmd.size() > 1) &&
+	     (m->cmd[1] == "reweight-by-utilization")) {
+      int oload = 70;
+      if (m->cmd.size() > 2) {
+	oload = atoi(m->cmd[2].c_str());
+      }
+      string out_str;
+      err = reweight_by_utilization(oload, out_str);
+      if (err) {
+	ss << "FAILED to reweight-by-utilization: " << out_str;
+      }
+      else {
+	ss << "SUCCESSFUL reweight-by-utilization: " << out_str;
       }
     }
     else {

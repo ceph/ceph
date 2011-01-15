@@ -72,7 +72,7 @@ private:
   void send_incremental(epoch_t first, entity_inst_t& dest);
 
   void remove_redundant_pg_temp();
-
+  int reweight_by_utilization(int oload, std::string& out_str);
  
   bool preprocess_failure(class MOSDFailure *m);
   bool prepare_failure(class MOSDFailure *m);
