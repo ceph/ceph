@@ -221,6 +221,7 @@ public:
 
   bool empty() { Mutex::Locker l(lock); return sub_existing_count == 0; }
   int get_num() { Mutex::Locker l(lock); return sub_created_count; }
+  int get_num_remaining() { Mutex::Locker l(lock); return sub_existing_count;}
 
   void finish(int r) {
     assert(0);    // nobody should ever call me.
