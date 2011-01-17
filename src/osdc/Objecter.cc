@@ -549,7 +549,7 @@ bool Objecter::recalc_op_target(Op *op)
   pg_t pgid = op->pgid;
   if (op->oid.name.length())
     pgid = osdmap->object_locator_to_pg(op->oid, op->oloc);
-  osdmap->pg_to_acting_osds(osdmap->raw_pg_to_pg(pgid), acting);
+  osdmap->pg_to_acting_osds(pgid, acting);
 
   if (op->pgid != pgid || is_pg_changed(op->acting, acting)) {
     op->pgid = pgid;
@@ -577,7 +577,7 @@ bool Objecter::recalc_linger_op_target(LingerOp *linger_op)
 {
   vector<int> acting;
   pg_t pgid = osdmap->object_locator_to_pg(linger_op->oid, linger_op->oloc);
-  osdmap->pg_to_acting_osds(osdmap->raw_pg_to_pg(pgid), acting);
+  osdmap->pg_to_acting_osds(pgid, acting);
 
   if (pgid != linger_op->pgid || is_pg_changed(linger_op->acting, acting)) {
     linger_op->pgid = pgid;
