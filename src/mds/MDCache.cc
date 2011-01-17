@@ -4445,8 +4445,8 @@ void MDCache::open_snap_parents()
 
   send_snaps(splits);
 
-  if (gather->get_num()) {
-    dout(10) << "open_snap_parents - waiting for " << gather->get_num() << dendl;
+  if (gather->get_num_remaining()) {
+    dout(10) << "open_snap_parents - waiting for " << gather->get_num_remaining() << dendl;
     gather->set_finisher(new C_MDC_OpenSnapParents(this));
   } else {
     assert(missing_snap_parents.empty());

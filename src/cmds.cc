@@ -114,6 +114,7 @@ int main(int argc, const char **argv)
     Dumper *journal_dumper = new Dumper(messenger, &mc);
     journal_dumper->init();
     journal_dumper->dump(dump_file);
+    mc.shutdown();
   } else {
     derr << "starting mds." << g_conf.id
         << " at " << messenger->get_ms_addr()

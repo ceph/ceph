@@ -49,7 +49,7 @@ static ostream& _prefix(SimpleMessenger *messenger) {
  * Accepter
  */
 
-int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_addr, int avoid_port)
+int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_addr, int avoid_port1, int avoid_port2)
 {
   // bind to a socket
   dout(10) << "accepter.bind" << dendl;
@@ -97,7 +97,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_add
   } else {
     // try a range of ports
     for (int port = CEPH_PORT_START; port <= CEPH_PORT_LAST; port++) {
-      if (port == avoid_port)
+      if (port == avoid_port1 || port == avoid_port2)
 	continue;
       listen_addr.set_port(port);
       rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), sizeof(listen_addr.ss_addr()));
@@ -155,9 +155,9 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_add
   return 0;
 }
 
-int SimpleMessenger::Accepter::rebind()
+int SimpleMessenger::Accepter::rebind(int avoid_port)
 {
-  dout(1) << "accepter.rebind" << dendl;
+  dout(1) << "accepter.rebind avoid " << avoid_port << dendl;
   
   stop();
 
@@ -166,7 +166,7 @@ int SimpleMessenger::Accepter::rebind()
   addr.set_port(0);
 
   dout(10) << " will try " << addr << dendl;
-  int r = bind(addr.get_nonce(), addr, old_port);
+  int r = bind(addr.get_nonce(), addr, old_port, avoid_port);
   if (r == 0)
     start();
   return r;
@@ -2301,11 +2301,11 @@ int SimpleMessenger::bind(entity_addr_t &bind_addr, int64_t force_nonce)
   return accepter.bind(force_nonce, bind_addr);
 }
 
-int SimpleMessenger::rebind()
+int SimpleMessenger::rebind(int avoid_port)
 {
-  dout(1) << "rebind" << dendl;
+  dout(1) << "rebind avoid " << avoid_port << dendl;
   mark_down_all();
-  return accepter.rebind();
+  return accepter.rebind(avoid_port);
 }
 
 static void remove_pid_file(int signal = 0)

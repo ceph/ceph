@@ -1387,7 +1387,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
     heartbeat_to[from] = m->peer_as_of_epoch;
     heartbeat_inst[from] = m->get_source_inst();
 
-    if (locked && m->map_epoch)
+    if (locked && m->map_epoch && !is_booting())
       _share_map_incoming(m->get_source_inst(), m->map_epoch,
 			  (Session*) m->get_connection()->get_priv());
   }
@@ -1397,7 +1397,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 
     // only take peer stat or share map now if map_lock is uncontended
     if (locked) {
-      if (m->map_epoch)
+      if (m->map_epoch && !is_booting())
 	_share_map_incoming(m->get_source_inst(), m->map_epoch,
 			    (Session*) m->get_connection()->get_priv());
       take_peer_stat(from, m->peer_stat);  // only with map_lock held!
@@ -2115,6 +2115,8 @@ bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
   bool shared = false;
   dout(20) << "_share_map_incoming " << inst << " " << epoch << dendl;
   //assert(osd_lock.is_locked());
+
+  assert(!is_booting());
 
   // does client have old map?
   if (inst.name.is_client()) {
@@ -2912,7 +2914,14 @@ void OSD::handle_osd_map(MOSDMap *m)
       state = STATE_BOOTING;
       up_epoch = 0;
 
-      int r = cluster_messenger->rebind();
+      int cport = cluster_messenger->get_myaddr().get_port();
+      int hbport = heartbeat_messenger->get_myaddr().get_port();
+
+      int r = cluster_messenger->rebind(hbport);
+      if (r != 0)
+	do_shutdown = true;  // FIXME: do_restart?
+
+      r = heartbeat_messenger->rebind(cport);
       if (r != 0)
 	do_shutdown = true;  // FIXME: do_restart?
 
@@ -3269,7 +3278,8 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
     if (pg->is_active()) {
       // i am active
       if (pg->is_primary() &&
-	  !pg->snap_trimq.empty())
+	  !pg->snap_trimq.empty() &&
+	  !pg->is_degraded())
 	pg->queue_snap_trim();
     }
     else if (pg->is_primary() &&
@@ -3485,6 +3495,13 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
       m->put();
       return false;
     }
+  }
+
+  // ok, we have at least as new a map as they do.  are we (re)booting?
+  if (is_booting()) {
+    dout(7) << "still in boot state, dropping message " << *m << dendl;
+    m->put();
+    return false;
   }
 
   return true;

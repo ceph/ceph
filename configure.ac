@@ -43,6 +43,8 @@ AC_ARG_WITH([debug],
             [with_debug=no])
 AM_CONDITIONAL(WITH_DEBUG, test "$with_debug" = "yes")
 
+AC_DEFINE([DEBUG_GATHER], [1], [Define if you want C_Gather debugging])
+
 # radosgw?
 AC_ARG_WITH([radosgw],
             [AS_HELP_STRING([--with-radosgw], [build RADOS gateway])],

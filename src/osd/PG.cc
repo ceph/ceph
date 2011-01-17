@@ -1826,7 +1826,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
     snap_trimq = pool->cached_removed_snaps;
     snap_trimq.subtract(info.purged_snaps);
     dout(10) << "activate - snap_trimq " << snap_trimq << dendl;
-    if (!snap_trimq.empty())
+    if (!snap_trimq.empty() && !is_degraded())
       queue_snap_trim();
   }
 

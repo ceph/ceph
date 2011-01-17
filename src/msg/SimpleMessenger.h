@@ -103,8 +103,8 @@ private:
     
     void *entry();
     void stop();
-    int bind(int64_t force_nonce, entity_addr_t &bind_addr, int avoid_port=0);
-    int rebind();
+    int bind(int64_t force_nonce, entity_addr_t &bind_addr, int avoid_port1=0, int avoid_port2=0);
+    int rebind(int avoid_port);
     int start();
   } accepter;
 
@@ -564,7 +564,7 @@ public:
   int start(bool nodaemon = false);
   void wait();
 
-  int rebind();
+  int rebind(int avoid_port);
 
   __u32 get_global_seq(__u32 old=0) {
     Mutex::Locker l(global_seq_lock);
