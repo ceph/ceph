@@ -106,6 +106,10 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
   created = modified = g_clock.now();
 
   set_max_osd(num_osd);
+
+  // pgp_num <= pg_num
+  if (pgp_bits > pg_bits)
+    pgp_bits = pg_bits; 
   
   // crush map
   map<int, const char*> rulesets;
