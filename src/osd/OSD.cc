@@ -4931,8 +4931,10 @@ void OSD::handle_misdirected_op(PG *pg, MOSDOp *op)
   } else {
     dout(7) << *pg << " misdirected op in " << op->get_map_epoch() << dendl;
     clog.warn() << op->get_source_inst() << " misdirected "
-       << op->get_reqid() << " " << pg->info.pgid << " to osd" << whoami
-       << " not " << pg->acting << "\n";
+		<< op->get_reqid() << " " << pg->info.pgid << " to osd" << whoami
+		<< " not " << pg->acting
+		<< " in e" << op->get_map_epoch() << "/" << osdmap->get_epoch()
+		<< "\n";
     reply_op_error(op, -ENXIO);
   }
 }
