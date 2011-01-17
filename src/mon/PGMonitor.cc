@@ -745,8 +745,10 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       r = -EINVAL;
       if (pgid.parse(m->cmd[2].c_str())) {
 	vector<int> up, acting;
+	pg_t mpgid = mon->osdmon()->osdmap.raw_pg_to_pg(pgid);
 	mon->osdmon()->osdmap.pg_to_up_acting_osds(pgid, up, acting);
-	ss << "osdmap e" << mon->osdmon()->osdmap.get_epoch() << " pg " << pgid
+	ss << "osdmap e" << mon->osdmon()->osdmap.get_epoch()
+	   << " pg " << pgid << " (" << mpgid << ")"
 	   << " -> up " << up << " acting " << acting;
 	r = 0;
       } else
