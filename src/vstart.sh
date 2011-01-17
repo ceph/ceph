@@ -240,7 +240,7 @@ done
 if [ "$start_mon" -eq 1 ]; then
 	if [ "$new" -eq 1 ]; then
 	# build and inject an initial osd map
-		$CEPH_BIN/osdmaptool --clobber --createsimple $CEPH_NUM_OSD $osdmap_fn --pg_bits 2
+		$CEPH_BIN/osdmaptool --clobber --createsimple $CEPH_NUM_OSD $osdmap_fn --pg_bits 2 --pgp_bits 4
 	fi
 
 	if [ "$new" -eq 1 ]; then
