@@ -119,6 +119,9 @@ AS_IF([test "x$with_hadoop" != xno],
              ])])
 AM_CONDITIONAL(WITH_HADOOPCLIENT, [test "$HAVE_JNI" = "1"])
 
+PKG_CHECK_MODULES([LIBEDIT], [libedit >= 2.11],
+                [], AC_MSG_FAILURE([No usable version of libedit found.]))
+
 #libatomic-ops? You want it!
 AC_ARG_WITH([libatomic-ops],
             [AS_HELP_STRING([--with-libatomic-ops],
@@ -162,10 +165,6 @@ AC_CHECK_HEADER([cryptopp/cryptlib.h],
 
 AC_LANG([C])
 
-AC_CHECK_HEADER([histedit.h],
-	[],
-	[AC_MSG_ERROR([Sorry you need histedit.h (libedit-dev on debian)])])
-
 AC_CHECK_MEMBER([struct fiemap_extent.fe_logical],
 	[AC_DEFINE([HAVE_FIEMAP_H], [], [linux/fiemap.h was found, fiemap ioctl will be used])],
 	[AC_MSG_NOTICE([linux/fiemap.h was not found or not usable; using local Ceph copy])],
@@ -177,6 +176,7 @@ AC_CHECK_HEADERS([sys/xattr.h arpa/inet.h netdb.h netinet/in.h sys/file.h sys/io
 AC_CHECK_FUNC([sync_file_range],
 	[AC_DEFINE([HAVE_SYNC_FILE_RANGE], [], [sync_file_range(2) is supported])],
 	[])
+
 
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
