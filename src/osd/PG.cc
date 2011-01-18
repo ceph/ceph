@@ -1827,6 +1827,9 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       queue_snap_trim();
   }
 
+  // Check local snaps
+  adjust_local_snaps(t, info.purged_snaps);
+
   // init complete pointer
   if (missing.num_missing() == 0 &&
       info.last_complete != info.last_update) {
@@ -2205,7 +2208,7 @@ void PG::write_info(ObjectStore::Transaction& t)
 {
   // pg state
   bufferlist infobl;
-  __u8 struct_v = 2;
+  __u8 struct_v = 3;
   ::encode(struct_v, infobl);
   ::encode(info, infobl);
   dout(20) << "write_info info " << infobl.length() << dendl;
@@ -2624,12 +2627,23 @@ void PG::read_state(ObjectStore *store)
     store->collection_getattr(coll, "snap_collections", bl);
     p = bl.begin();
     ::decode(struct_v, p);
-    ::decode(snap_collections, p);
   } else {
     bl.clear();
     store->read(coll_t::META_COLL, biginfo_oid, 0, 0, bl);
     p = bl.begin();
     ::decode(past_intervals, p);
+  }
+
+  if (struct_v < 3) {
+    set<snapid_t> snap_collections_temp;
+    ::decode(snap_collections_temp, p);
+    snap_collections.clear();
+    for (set<snapid_t>::iterator i = snap_collections_temp.begin();
+	 i != snap_collections_temp.end();
+	 ++i) {
+      snap_collections.insert(*i);
+    }
+  } else {
     ::decode(snap_collections, p);
   }
 
@@ -2666,7 +2680,7 @@ void PG::read_state(ObjectStore *store)
 coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
 {
   coll_t c(info.pgid, s);
-  if (snap_collections.count(s) == 0) {
+  if (!snap_collections.contains(s)) {
     snap_collections.insert(s);
     dout(10) << "create_snap_collection " << c << ", set now " << snap_collections << dendl;
     bufferlist bl;
@@ -2677,7 +2691,18 @@ coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
   return c;
 }
 
-
+void PG::adjust_local_snaps(ObjectStore::Transaction &t, interval_set<snapid_t> &to_check)
+{
+  interval_set<snapid_t> to_remove;
+  to_remove.intersection_of(snap_collections, to_check);
+  while (!to_remove.empty()) {
+    snapid_t current = to_remove.range_start();
+    coll_t c(info.pgid, current);
+    t.remove_collection(c);
+    snap_collections.erase(current);
+  }
+  write_info(t);
+}
 
 
 // ==============================

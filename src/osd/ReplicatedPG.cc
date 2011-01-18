@@ -546,6 +546,13 @@ bool ReplicatedPG::snap_trimmer()
 
     snapid_t sn = snap_trimq.range_start();
     coll_t c(info.pgid, sn);
+    if (!snap_collections.contains(sn)) {
+      // adjust pg info
+      info.purged_snaps.insert(sn);
+      snap_trimq.erase(sn);
+      dout(10) << "purged_snaps now " << info.purged_snaps << ", snap_trimq now " << snap_trimq << dendl;
+      continue;
+    }
     vector<sobject_t> ls;
     osd->store->collection_list(c, ls);
 

@@ -4008,34 +4008,24 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       dout(10) << *pg << " writing updated stats" << dendl;
       pg->info.stats = info.stats;
 
-      // did a snap just get purged?
-      if (info.purged_snaps.size() < pg->info.purged_snaps.size()) {
-	stringstream ss;
-	ss << "pg " << pg->info.pgid << " replica got purged_snaps " << info.purged_snaps
-	   << " had " << pg->info.purged_snaps;
-	logclient.log(LOG_WARN, ss);
-	pg->info.purged_snaps = info.purged_snaps;
-      } else {
-	interval_set<snapid_t> p = info.purged_snaps;
-	p.subtract(pg->info.purged_snaps);
-	if (!p.empty()) {
-	  dout(10) << " purged_snaps " << pg->info.purged_snaps
-		   << " -> " << info.purged_snaps
-		   << " removed " << p << dendl;
-	  snapid_t sn = p.range_start();
-	  coll_t c(info.pgid, sn);
-	  t->remove_collection(c);
-
-	  pg->info.purged_snaps = info.purged_snaps;
-	}
+      // Handle changes to purged_snaps
+      interval_set<snapid_t> p;
+      p.union_of(info.purged_snaps, pg->info.purged_snaps);
+      p.subtract(pg->info.purged_snaps);
+      pg->info.purged_snaps = info.purged_snaps;
+      if (!p.empty()) {
+	dout(10) << " purged_snaps " << pg->info.purged_snaps
+		 << " -> " << info.purged_snaps
+		 << " removed " << p << dendl;
+	pg->adjust_local_snaps(*t, p);
       }
-
-      pg->write_info(*t);
-
-      if (!log.empty()) {
-	dout(10) << *pg << ": inactive replica merging new PG log entries" << dendl;
-	pg->merge_log(*t, info, log, from);
-      }
+    }
+    
+    pg->write_info(*t);
+    
+    if (!log.empty()) {
+      dout(10) << *pg << ": inactive replica merging new PG log entries" << dendl;
+      pg->merge_log(*t, info, log, from);
     }
   }
 
@@ -4390,32 +4380,36 @@ void OSD::_remove_pg(PG *pg)
   ObjectStore::Transaction *rmt = new ObjectStore::Transaction;
 
   // snap collections
-  for (set<snapid_t>::iterator p = pg->snap_collections.begin();
+  for (interval_set<snapid_t>::iterator p = pg->snap_collections.begin();
        p != pg->snap_collections.end();
        p++) {
-    vector<sobject_t> olist;      
-    store->collection_list(coll_t(pgid, *p), olist);
-    dout(10) << "_remove_pg " << pgid << " snap " << *p << " " << olist.size() << " objects" << dendl;
-    for (vector<sobject_t>::iterator q = olist.begin();
-	 q != olist.end();
-	 q++) {
-      ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      t->remove(coll_t(pgid, *p), *q);
-      t->remove(coll_t(pgid), *q);          // we may hit this twice, but it's harmless
-      int tr = store->queue_transaction(&pg->osr, t);
-      assert(tr == 0);
-
-      if ((++n & 0xff) == 0) {
-	pg->unlock();
-	pg->lock();
-	if (!pg->deleting) {
-	  dout(10) << "_remove_pg aborted on " << *pg << dendl;
+    for (snapid_t cur = p.get_start();
+	 cur < p.get_start() + p.get_len();
+	 ++cur) {
+      vector<sobject_t> olist;      
+      store->collection_list(coll_t(pgid, cur), olist);
+      dout(10) << "_remove_pg " << pgid << " snap " << cur << " " << olist.size() << " objects" << dendl;
+      for (vector<sobject_t>::iterator q = olist.begin();
+	   q != olist.end();
+	   q++) {
+	ObjectStore::Transaction *t = new ObjectStore::Transaction;
+	t->remove(coll_t(pgid, cur), *q);
+	t->remove(coll_t(pgid), *q);          // we may hit this twice, but it's harmless
+	int tr = store->queue_transaction(&pg->osr, t);
+	assert(tr == 0);
+	
+	if ((++n & 0xff) == 0) {
 	  pg->unlock();
-	  return;
+	  pg->lock();
+	  if (!pg->deleting) {
+	    dout(10) << "_remove_pg aborted on " << *pg << dendl;
+	    pg->unlock();
+	    return;
+	  }
 	}
       }
+      rmt->remove_collection(coll_t(pgid, cur));
     }
-    rmt->remove_collection(coll_t(pgid, *p));
   }
 
   // (what remains of the) main collection
