@@ -2699,6 +2699,7 @@ void PG::adjust_local_snaps(ObjectStore::Transaction &t, interval_set<snapid_t> 
     snapid_t current = to_remove.range_start();
     coll_t c(info.pgid, current);
     t.remove_collection(c);
+    to_remove.erase(current);
     snap_collections.erase(current);
   }
   write_info(t);
