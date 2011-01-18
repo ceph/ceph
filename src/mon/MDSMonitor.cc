@@ -625,8 +625,9 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
     else if (m->cmd[1] == "fail" && m->cmd.size() == 3) {
       int w = atoi(m->cmd[2].c_str());
 
+      uint64_t gid = pending_mdsmap.up[w];
       if (pending_mdsmap.up.count(w) &&
-	  pending_mdsmap.mds_info.count(pending_mdsmap.up[w])) {
+	  pending_mdsmap.mds_info.count(gid)) {
 	utime_t until = g_clock.now();
 	until += g_conf.mds_blacklist_interval;
 	MDSMap::mds_info_t& info = pending_mdsmap.mds_info[pending_mdsmap.up[w]];
@@ -635,8 +636,11 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       }
       pending_mdsmap.failed.insert(w);
       pending_mdsmap.up.erase(w);
+      pending_mdsmap.mds_info.erase(gid);
+      last_beacon.erase(gid);
+
       stringstream ss;
-      ss << "failed mds" << w;
+      ss << "failed mds" << w << " gid " << gid;
       string rs;
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
