@@ -171,7 +171,8 @@ protected:
    *    @up + @failed = @in.  @in * @stopped = {}.
    */
 
-  uint32_t max_mds;
+  uint32_t max_mds; /* The maximum number of active MDSes. Also, the maximum rank. */
+
   set<int32_t> in;              // currently defined cluster
   map<int32_t,int32_t> inc;     // most recent incarnation.
   set<int32_t> failed, stopped; // which roles are failed or stopped
