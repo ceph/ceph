@@ -921,6 +921,7 @@ void MDSMonitor::tick()
 	si.inc = ++pending_mdsmap.inc[f];
 	pending_mdsmap.in.insert(f);
 	pending_mdsmap.up[f] = sgid;
+	pending_mdsmap.failed.erase(f);
 	do_propose = true;
       }
     }
