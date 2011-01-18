@@ -1577,7 +1577,7 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
       osd->queue_generate_backlog(this);
       return;
     }
-    for (unsigned i=0; i<acting.size(); i++) {
+    for (unsigned i=1; i<acting.size(); i++) {
       int o = acting[i];
       Info& pi = peer_info[o];
       if (pi.last_complete < pi.log_tail && !pi.log_backlog &&
