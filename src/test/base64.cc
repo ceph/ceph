@@ -34,6 +34,33 @@ TEST(RoundTrip, SimpleRoundTrip) {
   ASSERT_STREQ(original, out2);
 }
 
+TEST(RoundTrip, RandomRoundTrips) {
+  static const int IN_MAX = 1024;
+  static const int OUT_MAX = 4096;
+  static const int ITERS = 1000;
+  for (int i = 0; i < ITERS; ++i) {
+    unsigned int seed = i;
+    int in_len = rand_r(&seed) % IN_MAX;
+
+    char in[IN_MAX];
+    memset(in, 0, sizeof(in));
+    for (int j = 0; i < in_len; ++j) {
+      in[j] = rand_r(&seed) % 0xff;
+    }
+    char out[OUT_MAX];
+    memset(out, 0, sizeof(out));
+    int alen = ceph_armor(out, out + OUT_MAX, in, in + in_len);
+    ASSERT_GE(alen, 0);
+
+    char decoded[IN_MAX];
+    memset(decoded, 0, sizeof(decoded));
+    int blen = ceph_unarmor(decoded, decoded + OUT_MAX, out, out + alen);
+    ASSERT_GE(blen, 0);
+
+    ASSERT_EQ(memcmp(in, decoded, in_len), 0);
+  }
+}
+
 TEST(FuzzEncoding, BadDecode1) {
   static const int OUT_LEN = 4096;
   const char * const bad_encoded = "FAKEBASE64 foo";
