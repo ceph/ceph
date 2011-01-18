@@ -86,7 +86,7 @@ public:
   static const int STATE_CLIENTREPLAY = CEPH_MDS_STATE_CLIENTREPLAY; // up, active
   static const int STATE_ACTIVE =     CEPH_MDS_STATE_ACTIVE; // up, active
   static const int STATE_STOPPING  =  CEPH_MDS_STATE_STOPPING; // up, exporting metadata (-> standby or out)
-  
+
   struct mds_info_t {
     uint64_t global_id;
     string name;
@@ -319,6 +319,8 @@ public:
     }
     return 0;
   }
+
+  enum health_status_t get_health(std::ostream &ss) const;
 
   // mds states
   bool is_down(int m) { return up.count(m) == 0; }

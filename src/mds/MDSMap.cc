@@ -147,3 +147,42 @@ void MDSMap::print_summary(ostream& out)
   if (stopped.size())
     out << ", " << stopped.size() << " stopped";
 }
+
+enum health_status_t MDSMap::
+get_health(std::ostream &ss) const
+{
+  health_status_t ret(HEALTH_OK);
+  std::ostringstream oss;
+
+  if (!failed.empty()) {
+    oss << " There are failed MDSes: ";
+    string sep("");
+    for (set<int32_t>::const_iterator f = failed.begin();
+	 f != failed.end(); ++f) {
+      oss << sep << "rank " << *f;
+      sep = ", ";
+    }
+    oss << ".";
+    if (ret > HEALTH_ERR)
+      ret = HEALTH_ERR;
+  }
+
+  map<int32_t,uint64_t>::const_iterator u = up.begin();
+  map<int32_t,uint64_t>::const_iterator u_end = up.end();
+  map<uint64_t,mds_info_t>::const_iterator m_end = mds_info.end();
+  string prefix(" There are lagging MDSes: ");
+  for (; u != u_end; ++u) {
+    map<uint64_t,mds_info_t>::const_iterator m = mds_info.find(u->second);
+    assert(m != m_end);
+    const mds_info_t &mds_info(m->second);
+    if (mds_info.laggy()) {
+      oss << prefix << mds_info.name << "(rank " << mds_info.rank << ")" ;
+      prefix = ", ";
+      if (ret > HEALTH_WARN)
+	ret = HEALTH_WARN;
+    }
+  }
+  dout(0) << "get_health: " << oss.str() << " (ret = " << ret << ")" << dendl;
+  ss << oss.str();
+  return ret;
+}

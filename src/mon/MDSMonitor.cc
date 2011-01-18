@@ -420,22 +420,9 @@ void MDSMonitor::committed()
   tick();
 }
 
-enum health_status_t MDSMonitor::get_health(std::ostream &ss)
+enum health_status_t MDSMonitor::get_health(ostream &oss) const
 {
-  health_status_t ret(HEALTH_OK);
-
-  if (mdsmap.is_stopped()) {
-    ss << "mdsmap: STATUS_ERROR. Mdsmap is stopped! ";
-    ret = HEALTH_ERR;
-  }
-  else if (!mdsmap.is_full()) {
-    ss << "mdsmap: STATUS_WARN. Mdsmap is not full. ";
-    ret = HEALTH_WARN;
-  }
-  if (ret > HEALTH_OK) {
-    ss << "mdsmap: " << "'" << mdsmap << "'" << std::endl;
-  }
-  return ret;
+  return mdsmap.get_health(oss);
 }
 
 bool MDSMonitor::preprocess_command(MMonCommand *m)
