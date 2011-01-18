@@ -293,6 +293,16 @@ public:
     return p->first;
   }
 
+  const mds_info_t* find_by_name(const string& name) const {
+    for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
+	 p != mds_info.end();
+	 ++p) {
+      if (p->second.name == name)
+	return &p->second;
+    }
+    return NULL;
+  }
+
   uint64_t find_standby_for(int mds, string& name) {
     for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();

@@ -552,6 +552,34 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
     return false;
 }
 
+int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
+{
+  std::string err;
+  int w = strict_strtol(arg.c_str(), 10, &err);
+  if (!err.empty()) {
+    // Try to interpret the arg as an MDS name
+    const MDSMap::mds_info_t *mds_info = mdsmap.find_by_name(arg);
+    if (!mds_info) {
+      ss << "Can't find any MDS named '" << arg << "'";
+      return -ENOENT;
+    }
+    w = mds_info->rank;
+  }
+
+  if (pending_mdsmap.up.count(w) &&
+      pending_mdsmap.mds_info.count(pending_mdsmap.up[w])) {
+    utime_t until = g_clock.now();
+    until += g_conf.mds_blacklist_interval;
+    MDSMap::mds_info_t& info = pending_mdsmap.mds_info[pending_mdsmap.up[w]];
+    pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
+    mon->osdmon()->propose_pending();
+  }
+  pending_mdsmap.failed.insert(w);
+  pending_mdsmap.up.erase(w);
+  ss << "failed mds" << w;
+  return 0;
+}
+
 bool MDSMonitor::prepare_command(MMonCommand *m)
 {
   int r = -EINVAL;
@@ -608,24 +636,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       }
     }
     else if (m->cmd[1] == "fail" && m->cmd.size() == 3) {
-      int w = atoi(m->cmd[2].c_str());
-
-      if (pending_mdsmap.up.count(w) &&
-	  pending_mdsmap.mds_info.count(pending_mdsmap.up[w])) {
-	utime_t until = g_clock.now();
-	until += g_conf.mds_blacklist_interval;
-	MDSMap::mds_info_t& info = pending_mdsmap.mds_info[pending_mdsmap.up[w]];
-	pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
-	mon->osdmon()->propose_pending();
-      }
-      pending_mdsmap.failed.insert(w);
-      pending_mdsmap.up.erase(w);
-      stringstream ss;
-      ss << "failed mds" << w;
-      string rs;
-      getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
-      return true;
+      r = fail_mds(ss, m->cmd[2]);
     }
     else if (m->cmd[1] == "rm" && m->cmd.size() == 3) {
       uint64_t gid = atoll(m->cmd[2].c_str());
