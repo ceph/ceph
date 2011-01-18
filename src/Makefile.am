@@ -323,14 +323,14 @@ UNITTEST_LDADD = \
 	$(top_builddir)/src/gtest/lib/libgtest_main.la
 
 unittest_encoding_SOURCES = test/encoding.cc
-unittest_encoding_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto \
+unittest_encoding_LDADD = libceph.la libcrush.la -lpthread -lm \
 			  ${UNITTEST_LDADD}
 unittest_encoding_CPPFLAGS = ${AM_CFLAGS} ${UNITTEST_CFLAGS}
 check_PROGRAMS += unittest_encoding
 
 unittest_base64_SOURCES = test/base64.cc
 unittest_base64_LDFLAGS = -pthread
-unittest_base64_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto \
+unittest_base64_LDADD = libceph.la libcrush.la -lpthread -lm \
 			${UNITTEST_LDADD}
 unittest_base64_CPPFLAGS = ${AM_CFLAGS} ${UNITTEST_CFLAGS}
 check_PROGRAMS += unittest_base64
