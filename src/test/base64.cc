@@ -19,7 +19,7 @@
 
 #include "gtest/gtest.h"
 
-TEST(CorrectBase64RoundTrip, StringSimple) {
+TEST(RoundTrip, SimpleRoundTrip) {
   static const int OUT_LEN = 4096;
   const char * const original = "abracadabra";
   const char * const correctly_encoded = "YWJyYWNhZGFicmE=";
@@ -34,7 +34,7 @@ TEST(CorrectBase64RoundTrip, StringSimple) {
   ASSERT_STREQ(original, out2);
 }
 
-TEST(IncorrectBase64Decoding, StringSimple) {
+TEST(FuzzEncoding, BadDecode1) {
   static const int OUT_LEN = 4096;
   const char * const bad_encoded = "FAKEBASE64 foo";
   char out[OUT_LEN];
@@ -43,7 +43,7 @@ TEST(IncorrectBase64Decoding, StringSimple) {
   ASSERT_LT(alen, 0);
 }
 
-TEST(IncorrectBase64Decoding2, StringSimple) {
+TEST(FuzzEncoding, BadDecode2) {
   string str("FAKEBASE64 foo");
   bool failed = false;
   try {
