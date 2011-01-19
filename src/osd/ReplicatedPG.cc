@@ -659,6 +659,8 @@ bool ReplicatedPG::snap_trimmer()
 	// save adjusted snaps for this object
 	dout(10) << coid << " snaps " << snaps << " -> " << newsnaps << dendl;
 	coi.snaps.swap(newsnaps);
+	coi.prior_version = coi.version;
+	coi.version = ctx->at_version;
 	bl.clear();
 	::encode(coi, bl);
 	t->setattr(coll_t(info.pgid), coid, OI_ATTR, bl);
