@@ -1637,7 +1637,6 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 
   ObjectContext *rollback_to;
   int ret = find_object_context(soid.oid, oi.oloc, snapid, &rollback_to, false);
-  sobject_t& rollback_to_sobject = rollback_to->obs.oi.soid;
   if (ret) {
     if (-ENOENT == ret) {
       // there's no snapshot here, or there's no object.
@@ -1655,6 +1654,7 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       assert(0);
     }
   } else { //we got our context, let's use it to do the rollback!
+    sobject_t& rollback_to_sobject = rollback_to->obs.oi.soid;
     if (ctx->clone_obc &&
 	(ctx->clone_obc->obs.oi.soid.snap == snapid)) {
       //just cloned the rollback target, we don't need to do anything!
