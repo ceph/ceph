@@ -4,6 +4,7 @@
 #ifndef CEPH_DEBUG_H
 #define CEPH_DEBUG_H
 
+#include "config.h" // for g_conf
 #include "include/assert.h"
 #include "Mutex.h"
 #include "Clock.h"

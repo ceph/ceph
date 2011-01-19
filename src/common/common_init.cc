@@ -1,5 +1,6 @@
 
 #include "config.h"
+#include "common/signal.h"
 #include "tls.h"
 
 #include "include/color.h"
@@ -28,6 +29,7 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool i
 
   parse_startup_config_options(args, module_type);
   parse_config_options(args);
+  install_standard_sighandlers();
 
 #ifdef HAVE_LIBTCMALLOC
   if (g_conf.tcmalloc_profiler_run && g_conf.tcmalloc_have) {
