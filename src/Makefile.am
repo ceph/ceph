@@ -335,6 +335,11 @@ unittest_base64_LDADD = libceph.la libcrush.la -lpthread -lm \
 unittest_base64_CPPFLAGS = ${AM_CFLAGS} ${UNITTEST_CFLAGS}
 check_PROGRAMS += unittest_base64
 
+unittest_gather_SOURCES = test/gather.cc
+unittest_gather_LDADD = libceph.la ${UNITTEST_LDADD}
+unittest_gather_CPPFLAGS = ${AM_CFLAGS} ${UNITTEST_CFLAGS}
+check_PROGRAMS += unittest_gather
+
 # shell scripts
 editpaths = sed \
 	-e 's|@bindir[@]|$(bindir)|g' \
