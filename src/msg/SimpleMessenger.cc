@@ -34,6 +34,7 @@
 #include <fstream>
 
 #include "common/Timer.h"
+#include "common/signal.h"
 
 #define DOUT_SUBSYS ms
 #undef dout_prefix
@@ -2383,6 +2384,7 @@ int SimpleMessenger::start(bool nodaemon)
 
     if (1) {
       daemon(1, 0);
+      install_standard_sighandlers();
       write_pid_file(getpid());
     } else {
       pid_t pid = fork();
@@ -2394,6 +2396,7 @@ int SimpleMessenger::start(bool nodaemon)
 	::close(2);
 	_exit(0);
       }
+      install_standard_sighandlers();
     }
  
     if (g_conf.chdir && g_conf.chdir[0]) {
