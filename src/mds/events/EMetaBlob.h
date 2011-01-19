@@ -607,6 +607,12 @@ private:
     if (!pdft) pdft = &in->dirfragtree;
     if (!px) px = &in->xattrs;
 
+    default_file_layout *default_layout = NULL;
+    if (in->is_dir())
+      default_layout = (in->get_projected_node() ?
+                           in->get_projected_node()->dir_layout :
+                           in->default_layout);
+
     bufferlist snapbl;
     if (psnapbl)
       snapbl = *psnapbl;
@@ -620,7 +626,7 @@ private:
 		       0,
 		       *pi, *pdft, *px,
 		       in->symlink, snapbl,
-		       dirty);
+		       dirty, default_layout);
     return &root->inode;
   }
   
