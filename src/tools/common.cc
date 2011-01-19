@@ -554,10 +554,14 @@ int ceph_tool_common_init(ceph_tool_mode_t mode)
 
   if (g.mc.authenticate() < 0) {
     derr << "unable to authenticate as " << *g_conf.entity_name << dendl;
+    ceph_tool_messenger_shutdown();
+    ceph_tool_common_shutdown();
     return 1;
   }
   if (g.mc.get_monmap() < 0) {
     derr << "unable to get monmap" << dendl;
+    ceph_tool_messenger_shutdown();
+    ceph_tool_common_shutdown();
     return 1;
   }
   return 0;
