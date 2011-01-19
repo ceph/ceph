@@ -238,6 +238,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	cache->try_subtree_merge(dir);
 	export_unlock(dir);
 	export_state.erase(dir); // clean up
+	export_locks.erase(dir);
 	dir->state_clear(CDir::STATE_EXPORTING);
 	break;
 	
@@ -245,6 +246,7 @@ void Migrator::handle_mds_failure_or_stop(int who)
 	dout(10) << "export state=exporting : reversing, and unfreezing" << dendl;
 	export_reverse(dir);
 	export_state.erase(dir); // clean up
+	export_locks.erase(dir);
 	dir->state_clear(CDir::STATE_EXPORTING);
 	export_unlock(dir);
 	break;
@@ -693,6 +695,7 @@ void Migrator::export_frozen(CDir *dir)
     return;
   }
   mds->locker->rdlock_take_set(locks);
+  export_locks[dir].swap(locks);
   
   cache->show_subtrees();
 
@@ -1384,9 +1387,7 @@ void Migrator::export_unlock(CDir *dir)
 {
   dout(10) << "export_unlock " << *dir << dendl;
 
-  set<SimpleLock*> locks;
-  get_export_lock_set(dir, locks);
-  mds->locker->rdlock_finish_set(locks);
+  mds->locker->rdlock_finish_set(export_locks[dir]);
 
   list<Context*> ls;
   mds->queue_waiters(ls);
@@ -1444,6 +1445,7 @@ void Migrator::export_finish(CDir *dir)
   // remove from exporting list, clean up state
   dir->state_clear(CDir::STATE_EXPORTING);
   export_state.erase(dir);
+  export_locks.erase(dir);
   export_peer.erase(dir);
   export_notify_ack_waiting.erase(dir);
 
