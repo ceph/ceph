@@ -38,7 +38,7 @@ using namespace std;
 
 void usage()
 {
-  derr << "usage: cmds -i name [flags] [--mds rank] [[--journal_check]|[--hot-standby]]\n"
+  derr << "usage: cmds -i name [flags] [--mds rank] [[--journal_check]|[--hot-standby][rank]]\n"
        << "  -m monitorip:port\n"
        << "        connect to monitor at given address\n"
        << "  --debug_mds n\n"
@@ -83,6 +83,18 @@ int main(int argc, const char **argv)
         return -1;
       }
       shadow = MDSMap::STATE_ONESHOT_REPLAY;
+      char *endpoint = NULL;
+      int check_rank = strtol(args[i+1], &endpoint, 0);
+      if (*endpoint) {
+        if(g_conf.mds_standby_for_rank == -1 &&
+          !g_conf.mds_standby_for_name) {
+          dout(0) << "Error: no rank specified for journal replay!" << dendl;
+          return -1;
+        }
+      } else { // we got a rank from command line
+        g_conf.mds_standby_for_rank = check_rank;
+        ++i;
+      }
     } else if (!strcmp(args[i], "--hot-standby")) {
       dout(0) << "going into standby_replay" << dendl;
       if (shadow) {
@@ -90,6 +102,17 @@ int main(int argc, const char **argv)
         return -1;
       }
       shadow = MDSMap::STATE_STANDBY_REPLAY;
+      char *endpoint = NULL;
+      int check_rank = strtol(args[i+1], &endpoint, 0);
+      if (*endpoint) {
+        if(g_conf.mds_standby_for_rank == -1 &&
+          !g_conf.mds_standby_for_name) {
+          dout(0) << "no rank specified for standby, entering pool!" << dendl;
+        }
+      } else { // we got a rank from command line
+        g_conf.mds_standby_for_rank = check_rank;
+        ++i;
+      }
     } else {
       derr << "unrecognized arg " << args[i] << dendl;
       usage();
