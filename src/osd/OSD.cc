@@ -3118,7 +3118,7 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
       // i am active
       if (pg->is_primary() &&
 	  !pg->snap_trimq.empty() &&
-	  !pg->is_degraded())
+	  pg->is_clean())
 	pg->queue_snap_trim();
     }
     else if (pg->is_primary() &&
