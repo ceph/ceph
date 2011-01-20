@@ -578,23 +578,22 @@ bool ReplicatedPG::snap_trimmer()
 
       // load clone info
       bufferlist bl;
-      osd->store->getattr(coll_t(info.pgid), coid, OI_ATTR, bl);
-      object_info_t coi(bl);
+      ObjectContext *obc;
+      int r = find_object_context(coid.oid, OLOC_BLANK, sn, &obc, false, NULL);
+      assert(r == 0);
+      assert(obc->registered);
+      object_info_t &coi = obc->obs.oi;
       vector<snapid_t>& snaps = coi.snaps;
 
       // get snap set context
-      SnapSetContext *ssc = get_snapset_context(coid.oid, false);
+      if (!obc->obs.ssc)
+	obc->obs.ssc = get_snapset_context(coid.oid, false);
+      SnapSetContext *ssc = obc->obs.ssc;
       assert(ssc);
       SnapSet& snapset = ssc->snapset;
 
       dout(10) << coid << " snaps " << snaps << " old snapset " << snapset << dendl;
       assert(snapset.seq);
-
-      // set up repop
-      ObjectContext *obc;
-      int r = find_object_context(coid.oid, coi.oloc, sn, &obc, false);
-      assert(r == 0);
-      assert(obc->registered);
 
       vector<OSDOp> ops;
       tid_t rep_tid = osd->get_tid();
