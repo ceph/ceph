@@ -304,18 +304,26 @@ public:
   }
 
   uint64_t find_standby_for(int mds, string& name) {
+    map<uint64_t, mds_info_t>::const_iterator generic_standby
+      = mds_info.end();
     for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p) {
-      if (p->second.rank == -1 &&
-	  (p->second.standby_for_rank == mds ||
-	   p->second.standby_for_name == name) &&
+      if (((p->second.rank == -1 &&
+           (p->second.standby_for_rank == mds ||
+            p->second.standby_for_name == name)) ||
+	  (p->second.standby_for_rank == -2)) &&
 	  (p->second.state == MDSMap::STATE_STANDBY ||
 	      p->second.state == MDSMap::STATE_STANDBY_REPLAY) &&
-	  !p->second.laggy()) {
-	return p->first;
+	   !p->second.laggy()) {
+	if (p->second.standby_for_rank == -2)
+	  generic_standby = p;
+	else
+	  return p->first;
       }
     }
+    if (generic_standby != mds_info.end())
+      return generic_standby->first;
     for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p) {
