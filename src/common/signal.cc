@@ -13,11 +13,9 @@
  */
 
 #include "common/BackTrace.h"
-#include "common/DoutStreambuf.h"
 #include "common/Logger.h"
 #include "common/debug.h"
 
-#include <errno.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <sys/stat.h>
