@@ -324,18 +324,27 @@ public:
     }
     if (generic_standby != mds_info.end())
       return generic_standby->first;
+    return 0;
+  }
+  uint64_t find_unused_for(int mds, string& name) {
     for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p) {
       if (p->second.rank == -1 &&
 	  p->second.standby_for_rank < 0 &&
-	  p->second.standby_for_name.length() == 0 &&
 	  p->second.state == MDSMap::STATE_STANDBY &&
 	  !p->second.laggy()) {
 	return p->first;
       }
     }
     return 0;
+  }
+  uint64_t find_replacement_for(int mds, string& name) {
+    uint64_t standby = find_standby_for(mds, name);
+    if (standby)
+      return standby;
+    else
+      return find_unused_for(mds, name);
   }
 
   enum health_status_t get_health(std::ostream &ss) const;
