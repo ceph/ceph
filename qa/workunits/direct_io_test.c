@@ -235,9 +235,56 @@ done:
 	return ret;
 }
 
+static void usage(char *argv0)
+{
+	printf("%s: tests direct I/O\n", argv0);
+	printf("-d <seconds>:          sets duration to <seconds>\n");
+	printf("-h:                    this help\n");
+	printf("-p <pages>:            sets number of pages to allocate\n");
+}
+
+static void parse_args(int argc, char *argv[])
+{
+	int c;
+	while ((c = getopt (argc, argv, "d:hp:")) != -1) {
+		switch (c) {
+		case 'd':
+			g_duration = atoi(optarg);
+			if (g_duration <= 0) {
+				printf("tried to set invalid value of "
+				       "g_duration: %d\n", g_num_pages);
+				exit(1);
+			}
+			break;
+		case 'h':
+			usage(argv[0]);
+			exit(0);
+			break;
+		case 'p':
+			g_num_pages = atoi(optarg);
+			if (g_num_pages <= 0) {
+				printf("tried to set invalid value of "
+				       "g_num_pages: %d\n", g_num_pages);
+				exit(1);
+			}
+			break;
+		case '?':
+			usage(argv[0]);
+			exit(1);
+			break;
+		default:
+			usage(argv[0]);
+			exit(1);
+			break;
+		}
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
+
+	parse_args(argc, argv);
 
 	setvbuf(stdout, NULL, _IONBF, 0);
 
