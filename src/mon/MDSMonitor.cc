@@ -337,6 +337,16 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
     info.standby_for_rank = m->get_standby_for_rank();
     info.standby_for_name = m->get_standby_for_name();
 
+
+    if (!info.standby_for_name.empty()) {
+      if (pending_mdsmap.find_by_name(info.standby_for_name))
+        info.standby_for_rank =
+            pending_mdsmap.find_by_name(info.standby_for_name)->rank;
+    }
+    if (info.standby_for_rank >= 0) {
+      info.state = MDSMap::STATE_STANDBY_REPLAY;
+    }
+
     // initialize the beacon timer
     last_beacon[gid].stamp = g_clock.now();
     last_beacon[gid].seq = seq;
