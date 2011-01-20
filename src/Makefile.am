@@ -224,6 +224,24 @@ librados_a_SOURCES = ${librados_SOURCES}
 librados_a_CFLAGS = ${AM_CFLAGS}
 librados_a_CXXFLAGS = ${AM_CXXFLAGS}
 
+# librbd
+librbd_SOURCES = \
+	librbd.cc \
+	librados.cc \
+	msg/SimpleMessenger.cc \
+	osdc/Objecter.cc \
+	${libcommon_a_SOURCES}
+librbd_la_SOURCES = ${librbd_SOURCES}
+librbd_la_CFLAGS = ${AM_CFLAGS}
+librbd_la_CXXFLAGS = ${AM_CXXFLAGS}
+librbd_la_LIBADD = libcrush.la -lpthread $(CRYPTOPP_LIBS)
+librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^rbd_.*'
+lib_LTLIBRARIES += librbd.la
+
+librbd_a_SOURCES = ${librbd_SOURCES}
+librbd_a_CFLAGS = ${AM_CFLAGS}
+librbd_a_CXXFLAGS = ${AM_CXXFLAGS}
+
 rados_SOURCES = rados.cc
 rados_LDADD = librados.la -lpthread -lm $(CRYPTOPP_LIBS)
 bin_PROGRAMS += rados
@@ -388,7 +406,7 @@ endif
 noinst_LIBRARIES = \
 	libcommon.a libcrush.a \
 	libmon.a libmds.a libosdc.a libosd.a libclient.a \
-	libos.a librados.a libradosgw.a
+	libos.a librados.a librbd.a libradosgw.a
 
 noinst_LIBRARIES +=  #libcephclient_so.a
 
@@ -691,6 +709,8 @@ noinst_HEADERS = \
         include/inttypes.h\
 	include/librados.h\
 	include/librados.hpp\
+	include/librbd.h\
+	include/librbd.hpp\
 	include/linux_fiemap.h\
         include/lru.h\
 	include/msgr.h\
