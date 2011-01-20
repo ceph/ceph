@@ -4,8 +4,8 @@ cmds \- ceph metadata server daemon
 .SH SYNOPSIS
 .B cmds
 \fB\-i \fIname\fR
-[ \fB\-\-rank\fI rank\fR ]
-[ \fB\-\-shadow\fI rank\fR ]
+[[ \fB\-\-hot-standby\fI [rank]\fR ]|[\fB\-\-journal_check\fI [rank]\fR]]
+
 .SH DESCRIPTION
 .B cmds
 is the metadata server daemon for the Ceph distributed file system.
@@ -19,17 +19,14 @@ to identify daemon instances in the \fIceph.conf\fP.
 .PP
 Once the daemon has started, the monitor cluster will normally assign it
 a logical rank, or put it in a standby pool to take over for another daemon
-that crashes.  If a specific rank may be optionally specified on the
-command line, the daemon will be assigned that rank, or will be put in a
-separate standby queue specifically for that rank.
+that crashes. Some of the specified options can cause other behaviors.
+.PP
+If you specify hot-standby or journal-check, you must either specify the rank
+on the command line, or specify one of the mds_standby_for_[rank|name]
+parameters in the config. The command line specification overrides the config,
+and specifying the rank overrides specifying the name.
+
 .SH OPTIONS
-.TP
-\fB\-\-mds\fI rank\fP
-Start up as (or standby for) the given MDS rank.  If not specified, a rank will
-be assigned by the monitor cluster.
-\fB\-\-shadow\fI rank\fP
-Shadow a the given MDS rank.  The given MDS log will be replayed, checking for
-recovery errors.
 .TP
 \fB\-D\fP
 Debug mode: do not daemonize after startup (run in foreground) and send log output
