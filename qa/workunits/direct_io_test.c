@@ -31,6 +31,10 @@
  *
  */
 
+static int g_num_pages = 100;
+
+static int g_duration = 10;
+
 struct chunk {
 	uint64_t offset;
 	uint64_t pad0;
@@ -87,7 +91,7 @@ static int setup_temp_file(void)
 	int fd;
 	int64_t num_chunks, i;
 
-	if (page_size % sizeof(struct chunk) != 0) {
+	if (page_size % sizeof(struct chunk)) {
 		printf("setup_big_file: page_size doesn't divide evenly "
 			"into data blocks.\n");
 		return -EINVAL;
@@ -100,7 +104,7 @@ static int setup_temp_file(void)
 		return err;
 	}
 
-	num_chunks = page_size / sizeof(struct chunk);
+	num_chunks = g_num_pages * (page_size / sizeof(struct chunk));
 	for (i = 0; i < num_chunks; ++i) {
 		int ret;
 		struct chunk c;
@@ -129,7 +133,8 @@ static int setup_temp_file(void)
 static int verify_chunk(const struct chunk *c, uint64_t offset)
 {
 	if (c->offset != offset) {
-		printf("verify_chunk(%" PRId64 "): bad offset value\n", offset);
+		printf("verify_chunk(%" PRId64 "): bad offset value (got: %"
+		       PRId64 ", expected: %" PRId64 "\n", offset, c->offset, offset);
 		return EIO;
 	}
 	if (c->pad0 != 0) {
@@ -165,8 +170,9 @@ static int verify_chunk(const struct chunk *c, uint64_t offset)
 
 static int do_o_direct_reads(void)
 {
-	int fd, ret;
+	int fd, ret, i;
 	void *buf = 0;
+	time_t cur_time, end_time;
 	ret = posix_memalign(&buf, page_size, page_size);
 	if (ret) {
 		printf("do_o_direct_reads: posix_memalign returned %d\n", ret);
@@ -184,29 +190,43 @@ static int do_o_direct_reads(void)
 	ret = do_read(fd, buf, page_size);
 	if (ret)
 		goto close_fd;
-
 	ret = verify_chunk((struct chunk*)buf, 0);
 	if (ret)
 		goto close_fd;
 
-//	n = lseek(fd, 0, SEEK_END);
-//	printf("seek %d\n", n);
-//	n = lseek(fd, 0, SEEK_CUR);
-//	printf("seek %d\n", n);
-//	n = lseek(fd, 6656, SEEK_SET);
-//	printf("seek %d\n", n);
-//
-//	n = posix_memalign(&buf, 512, 8192);
-//	printf("posix_memalign ret %d buf %p\n", n, buf);
-//	memset(buf, 0, n);
-//
-//	n = read(fd, buf, 8192);
-//	printf("read %d bytes (err %d)\n", n, errno);
-//	char* buf1 = (char*)buf;
-//	for (i = 0; i < n; ++i)
-//		printf("%c", buf1[i]);
-//	printf("\n");
+	// read some random chunks and see how they look
+	cur_time = time(NULL);
+	end_time = cur_time + g_duration;
+	i = 0;
+	do {
+		time_t next_time;
+		uint64_t offset;
+		int page, seed;
 
+		seed = i++;
+		page = rand_r(&seed) % g_num_pages;
+		offset = page;
+		offset *= page_size;
+		if (lseek64(fd, offset, SEEK_SET) == -1) {
+			int err = errno;
+			printf("lseek64(%" PRId64 ") failed: error %d (%s)\n",
+			       err, strerror(err));
+			goto close_fd;
+		}
+		ret = do_read(fd, buf, page_size);
+		if (ret)
+			goto close_fd;
+		ret = verify_chunk((struct chunk*)buf, offset);
+		if (ret)
+			goto close_fd;
+		next_time = time(NULL);
+		if (next_time > cur_time) {
+			printf(".");
+		}
+		cur_time = next_time;
+	} while (time(NULL) < end_time);
+
+	printf("\ndo_o_direct_reads: SUCCESS\n");
 close_fd:
 	TEMP_FAILURE_RETRY(close(fd));
 free_buf:
@@ -218,6 +238,8 @@ done:
 int main(int argc, char *argv[])
 {
 	int ret;
+
+	setvbuf(stdout, NULL, _IONBF, 0);
 
 	page_size = getpagesize();
 
