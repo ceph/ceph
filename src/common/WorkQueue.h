@@ -91,8 +91,8 @@ public:
     void unlock() {
       pool->unlock();
     }
-    void _kick() {
-      pool->_kick();
+    void kick() {
+      pool->kick();
     }
     void drain() {
       pool->drain(this);
@@ -159,12 +159,6 @@ public:
   }
 
   void kick() {
-    _lock.Lock();
-    _cond.Signal();
-    _lock.Unlock();
-  }
-  void _kick() {
-    assert(_lock.is_locked());
     _cond.Signal();
   }
   void lock() {
