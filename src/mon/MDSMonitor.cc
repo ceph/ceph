@@ -830,11 +830,33 @@ void MDSMonitor::tick()
 	continue;
       }
 
-      if (since >= cutoff)
+      if (since >= cutoff && pending_mdsmap.mds_info[gid].standby_for_rank != -2)
 	continue;
+
 
       MDSMap::mds_info_t& info = pending_mdsmap.mds_info[gid];
 
+      if (since >= cutoff && info.standby_for_rank == -2) {
+        /* this mds is not laggy, but has no rank assigned.
+         * See if we can find it somebody to shadow
+         */
+        int gid = 0;
+        for (map<uint64_t,MDSMap::mds_info_t>::iterator i = pending_mdsmap.mds_info.begin();
+            i != pending_mdsmap.mds_info.end();
+            ++i) {
+          if (i->second.rank >= 0 &&
+              (gid = pending_mdsmap.find_standby_for(i->first, i->second.name)))
+            if (pending_mdsmap.get_info_gid(gid).state == MDSMap::STATE_STANDBY_REPLAY)
+              continue; // this MDS already has a standby
+          // hey, we found an MDS without a standby. Pair them!
+          info.standby_for_rank = i->second.rank;
+          dout(10) << "setting to shadow mds rank " << info.standby_for_rank << dendl;
+          info.state = MDSMap::STATE_STANDBY_REPLAY;
+          do_propose = true;
+          break;
+        }
+        continue;
+      }
       dout(10) << "no beacon from " << info.addr << " mds" << info.rank << "." << info.inc
 	       << " " << ceph_mds_state_name(info.state)
 	       << " since " << since << dendl;
