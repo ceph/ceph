@@ -1272,11 +1272,12 @@ void MDS::replay_done()
   }
 
   if (continue_replay) {
-    mdlog->get_journaler()->set_writeable();
     continue_replay = false;
     standby_replay_restart();
     return;
   }
+
+  mdlog->get_journaler()->set_writeable();
 
   if (g_conf.mds_wipe_sessions) {
     dout(1) << "wiping out client sessions" << dendl;
