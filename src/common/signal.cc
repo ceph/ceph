@@ -15,12 +15,16 @@
 #include "common/BackTrace.h"
 #include "common/Logger.h"
 #include "common/debug.h"
+#include "config.h"
 
 #include <signal.h>
 #include <sstream>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#define dout_prefix *_dout
+#define derr dout(0)
 
 typedef void (*signal_handler_t)(int);
 
@@ -112,4 +116,45 @@ void install_standard_sighandlers(void)
   install_sighandler(SIGXCPU, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
   install_sighandler(SIGXFSZ, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
   install_sighandler(SIGSYS, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
+}
+
+void block_all_signals(sigset_t *old_sigset)
+{
+  sigset_t sigset;
+  sigfillset(&sigset);
+  sigdelset(&sigset, SIGKILL);
+  if (pthread_sigmask(SIG_BLOCK, &sigset, old_sigset)) {
+    derr << "block_all_signals: sigprocmask failed" << dendl;
+    if (old_sigset)
+      sigaddset(old_sigset, SIGKILL);
+    return;
+  }
+  if (old_sigset)
+    sigdelset(old_sigset, SIGKILL);
+}
+
+void restore_sigset(const sigset_t *old_sigset)
+{
+  if (sigismember(old_sigset, SIGKILL) != 0) {
+    derr << "restore_sigset: not restoring invalid old_sigset" << dendl;
+    return;
+  }
+  if (pthread_sigmask(SIG_SETMASK, old_sigset, NULL)) {
+    derr << "restore_sigset: sigprocmask failed" << dendl;
+  }
+}
+
+void unblock_all_signals(sigset_t *old_sigset)
+{
+  sigset_t sigset;
+  sigfillset(&sigset);
+  sigdelset(&sigset, SIGKILL);
+  if (pthread_sigmask(SIG_UNBLOCK, &sigset, old_sigset)) {
+    derr << "unblock_all_signals: sigprocmask failed" << dendl;
+    if (old_sigset)
+      sigaddset(old_sigset, SIGKILL);
+    return;
+  }
+  if (old_sigset)
+    sigdelset(old_sigset, SIGKILL);
 }
