@@ -17,6 +17,7 @@
 #include "common/debug.h"
 
 #include <signal.h>
+#include <sstream>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -76,6 +77,28 @@ static void handle_fatal_signal(int signum)
 	   << " didn't terminate the process?" << std::endl;
   }
   exit(1);
+}
+
+#include <syslog.h>
+
+std::string signal_mask_to_str()
+{
+  sigset_t old_sigset;
+  if (pthread_sigmask(SIG_SETMASK, NULL, &old_sigset)) {
+    return "(pthread_signmask failed)";
+  }
+
+  ostringstream oss;
+  oss << "show_signal_mask: { ";
+  string sep("");
+  for (int signum = 0; signum < NSIG; ++signum) {
+    if (sigismember(&old_sigset, signum) == 1) {
+      oss << sep << signum;
+      sep = ", ";
+    }
+  }
+  oss << " }";
+  return oss.str();
 }
 
 void install_standard_sighandlers(void)
