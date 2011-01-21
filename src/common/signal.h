@@ -15,6 +15,9 @@
 #ifndef CEPH_COMMON_SIGNAL_H
 #define CEPH_COMMON_SIGNAL_H
 
+#include <signal.h>
+#include <string>
+
 // Install the standard Ceph signal handlers
 void install_standard_sighandlers(void);
 
