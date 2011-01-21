@@ -17,4 +17,6 @@
 
 void install_standard_sighandlers(void);
 
+std::string signal_mask_to_str();
+
 #endif
