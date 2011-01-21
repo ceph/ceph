@@ -16,10 +16,12 @@
 #ifndef CEPH_THREAD_H
 #define CEPH_THREAD_H
 
+#include "common/signal.h"
+#include "include/atomic.h"
+
+#include <errno.h>
 #include <pthread.h>
 #include <signal.h>
-#include <errno.h>
-#include "include/atomic.h"
 
 extern atomic_t _num_threads;  // hack: in config.cc
 
@@ -55,10 +57,6 @@ class Thread {
       return -EINVAL;
   }
   int create(size_t stacksize = 0) {
-    // mask signals in child's thread
-    sigset_t newmask, oldmask;
-    sigfillset(&newmask);
-    pthread_sigmask(SIG_BLOCK, &newmask, &oldmask);
 
     pthread_attr_t *thread_attr = NULL;
     stacksize &= PAGE_MASK;  // must be multiple of page
@@ -67,11 +65,18 @@ class Thread {
       pthread_attr_init(thread_attr);
       pthread_attr_setstacksize(thread_attr, stacksize);
     }
+
+    // The child thread will inherit our signal mask.  We want it to block all
+    // signals, so set our mask to that.  (It's ok to block signals for a
+    // little while-- they will just be delivered to another thread or
+    // delieverd to this thread later.)
+    sigset_t old_sigset;
+    block_all_signals(&old_sigset);
     int r = pthread_create(&thread_id, thread_attr, _entry_func, (void*)this);
+    restore_sigset(&old_sigset);
 
     if (thread_attr) 
       free(thread_attr);
-    pthread_sigmask(SIG_SETMASK, &oldmask, 0);
 
     if (r) {
       char buf[80];
