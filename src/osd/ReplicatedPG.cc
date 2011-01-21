@@ -674,7 +674,7 @@ bool ReplicatedPG::snap_trimmer()
 	    t->collection_add(coll_t(info.pgid, newsnaps[newsnaps.size()-1]), coll_t(info.pgid), coid);
 	}	      
 
-	ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, coid, ctx->at_version, ctx->obs->oi.version,
+	ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, coid, coi.version, coi.prior_version,
 				      osd_reqid_t(), ctx->mtime));
 	ctx->at_version.version++;
       }
