@@ -2247,8 +2247,6 @@ void FileStore::flusher_entry()
 
 void FileStore::sync_entry()
 {
-  Cond othercond;
-
   lock.Lock();
   while (!stop) {
     utime_t max_interval;
@@ -2256,21 +2254,29 @@ void FileStore::sync_entry()
     utime_t min_interval;
     min_interval.set_from_double(g_conf.filestore_min_sync_interval);
 
-    dout(20) << "sync_entry waiting for max_interval " << max_interval << dendl;
     utime_t startwait = g_clock.now();
+    if (!force_sync) {
+      dout(20) << "sync_entry waiting for max_interval " << max_interval << dendl;
+      sync_cond.WaitInterval(lock, max_interval);
+    } else {
+      dout(20) << "sync_entry not waiting, force_sync set" << dendl;
+    }
 
-    sync_cond.WaitInterval(lock, max_interval);
-
-    // wait for at least the min interval
-    utime_t woke = g_clock.now();
-    woke -= startwait;
-    dout(20) << "sync_entry woke after " << woke << dendl;
-    if (woke < min_interval) {
-      utime_t t = min_interval;
-      t -= woke;
-      dout(20) << "sync_entry waiting for another " << t 
-	       << " to reach min interval " << min_interval << dendl;
-      othercond.WaitInterval(lock, t);
+    if (force_sync) {
+      dout(20) << "sync_entry force_sync set" << dendl;
+      force_sync = false;
+    } else {
+      // wait for at least the min interval
+      utime_t woke = g_clock.now();
+      woke -= startwait;
+      dout(20) << "sync_entry woke after " << woke << dendl;
+      if (woke < min_interval) {
+	utime_t t = min_interval;
+	t -= woke;
+	dout(20) << "sync_entry waiting for another " << t 
+		 << " to reach min interval " << min_interval << dendl;
+	sync_cond.WaitInterval(lock, t);
+      }
     }
 
     list<Context*> fin;
@@ -2406,6 +2412,7 @@ void FileStore::_start_sync()
 void FileStore::start_sync()
 {
   Mutex::Locker l(lock);
+  force_sync = true;
   sync_cond.Signal();
 }
 

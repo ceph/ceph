@@ -75,6 +75,7 @@ class FileStore : public JournalingObjectStore {
 
   // sync thread
   Mutex lock;
+  bool force_sync;
   Cond sync_cond;
   uint64_t sync_epoch;
   list<Context*> sync_waiters;
@@ -235,7 +236,7 @@ class FileStore : public JournalingObjectStore {
     attrs(this), fake_attrs(false), 
     collections(this), fake_collections(false),
     lock("FileStore::lock"),
-    sync_epoch(0), stop(false), sync_thread(this),
+    force_sync(false), sync_epoch(0), stop(false), sync_thread(this),
     op_queue_len(0), op_queue_bytes(0), next_finish(0),
     op_tp("FileStore::op_tp", g_conf.filestore_op_threads), op_wq(this, &op_tp),
     flusher_queue_len(0), flusher_thread(this) {
