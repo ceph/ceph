@@ -54,7 +54,7 @@ TEST(RoundTrip, RandomRoundTrips) {
 
     char decoded[IN_MAX];
     memset(decoded, 0, sizeof(decoded));
-    int blen = ceph_unarmor(decoded, decoded + OUT_MAX, out, out + alen);
+    int blen = ceph_unarmor(decoded, decoded + IN_MAX, out, out + alen);
     ASSERT_GE(blen, 0);
 
     ASSERT_EQ(memcmp(in, decoded, in_len), 0);
