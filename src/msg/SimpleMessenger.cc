@@ -2410,12 +2410,11 @@ int SimpleMessenger::start(bool nodaemon)
   }
 
   // go!
-  if (did_bind) {
+  if (did_bind)
     accepter.start();
 
-    reaper_started = true;
-    reaper_thread.create();
-  }
+  reaper_started = true;
+  reaper_thread.create();
   return 0;
 }
 
