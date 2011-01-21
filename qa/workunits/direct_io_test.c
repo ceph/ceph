@@ -162,7 +162,8 @@ static int verify_chunk(const struct chunk *c, uint64_t offset)
 		return EIO;
 	}
 	if (c->not_offset != ~offset) {
-		printf("verify_chunk(%" PRId64 "): bad pad5 value\n", offset);
+		printf("verify_chunk(%" PRId64 "): bad not_offset value\n",
+		       offset);
 		return EIO;
 	}
 	return 0;
