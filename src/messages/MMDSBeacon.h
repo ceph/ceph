@@ -58,6 +58,7 @@ public:
 
   void set_standby_for_rank(int r) { standby_for_rank = r; }
   void set_standby_for_name(string& n) { standby_for_name = n; }
+  void set_standby_for_name(const char* c) { standby_for_name.assign(c); }
 
   void print(ostream& out) {
     out << "mdsbeacon(" << global_id << "/" << name << " " << ceph_mds_state_name(state) 
