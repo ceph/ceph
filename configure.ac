@@ -159,10 +159,6 @@ AC_CHECK_HEADER([boost/spirit.hpp],
                 [AC_DEFINE([HAVE_BOOST_SPIRIT_CORE_HPP])],
                 [AC_MSG_ERROR([Sorry you need to install the Boost spirit parser library (libboost-dev on debian)])])
 
-AC_CHECK_HEADER([cryptopp/cryptlib.h],
-	[],
-	[AC_MSG_ERROR([Sorry you need libcrypto++ dev files])])
-
 AC_LANG([C])
 
 AC_CHECK_MEMBER([struct fiemap_extent.fe_logical],
