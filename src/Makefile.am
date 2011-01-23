@@ -27,13 +27,13 @@ cosd_SOURCES = cosd.cc msg/SimpleMessenger.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
 cosd_LDADD = libosd.a libos.a libcrush.a libcommon.a -ldl -lpthread -lm $(CRYPTOPP_LIBS)
 bin_PROGRAMS += cosd
-cosd_CXXFLAGS = ${AM_CFLAGS}
+cosd_CXXFLAGS = ${AM_CXXFLAGS}
 
 # mds
 cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
 cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a -lpthread -lm $(CRYPTOPP_LIBS)
 bin_PROGRAMS += cmds
-cmds_CXXFLAGS = ${AM_CFLAGS}
+cmds_CXXFLAGS = ${AM_CXXFLAGS}
 
 # admin tools
 ceph_SOURCES = \
@@ -41,7 +41,7 @@ ceph_SOURCES = \
 	tools/ceph.cc \
 	tools/common.cc
 ceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm $(CRYPTOPP_LIBS)
-ceph_CXXFLAGS = ${AM_CFLAGS}
+ceph_CXXFLAGS = ${AM_CXXFLAGS}
 
 if WITH_GTK2
 ceph_tool_guidir = ${datadir}/ceph_tool/gui_resources/
@@ -70,7 +70,7 @@ gceph_SOURCES = \
 	tools/gui.cc
 gceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm $(CRYPTOPP_LIBS) \
 	$(GTKMM_LIBS)
-gceph_CXXFLAGS = ${AM_CFLAGS} $(GTKMM_CFLAGS) \
+gceph_CXXFLAGS = ${AM_CXXFLAGS} $(GTKMM_CFLAGS) \
 	-DCEPH_TOOL_GUIDIR="\"${ceph_tool_guidir}\""
 bin_PROGRAMS += gceph
 endif
@@ -112,7 +112,7 @@ core: cmon cosd cmds ceph cephfs librados-config cconf monmaptool osdmaptool cru
 if WITH_FUSE
 cfuse_SOURCES = cfuse.cc msg/SimpleMessenger.cc client/fuse.cc client/fuse_ll.cc
 cfuse_LDADD = -lfuse libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm $(CRYPTOPP_LIBS)
-cfuse_CXXFLAGS = ${AM_CFLAGS}
+cfuse_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += cfuse
 
 #if WITH_DEBUG
@@ -253,6 +253,7 @@ endif
 
 rbd_SOURCES = rbd.cc common/fiemap.cc
 rbd_LDADD = librados.la -lpthread -lm $(CRYPTOPP_LIBS)
+rbd_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += rbd
 
 if WITH_RADOSGW
@@ -266,10 +267,12 @@ libradosgw_a_SOURCES = \
 	rgw/rgw_rest.cc \
 	rgw/rgw_common.cc
 libradosgw_a_CFLAGS = ${AM_CFLAGS}
+libradosgw_a_CXXFLAGS = ${AM_CXXFLAGS}
 # lib_LTLIBRARIES += libradosgw.a
 
 radosgw_SOURCES = rgw/rgw_main.cc
 radosgw_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lexpat -lpthread -lm $(CRYPTOPP_LIBS)
+radosgw_CXXFLAGS = ${AM_CXXFLAGS}
 radosgw_admin_SOURCES = rgw/rgw_admin.cc
 radosgw_admin_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lexpat -lpthread -lm $(CRYPTOPP_LIBS)
 bin_PROGRAMS += radosgw radosgw_admin
@@ -278,10 +281,12 @@ endif
 if WITH_DEBUG
 testcrypto_SOURCES = testcrypto.cc
 testcrypto_LDADD = libcommon.a -lpthread -lm $(CRYPTOPP_LIBS)
+testcrypto_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += testcrypto
 
 testkeys_SOURCES = testkeys.cc
 testkeys_LDADD = libmon.a libcommon.a -lpthread -lm $(CRYPTOPP_LIBS)
+testkeys_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += testkeys
 endif
 
@@ -315,7 +320,7 @@ endif
 # target to build but not run the unit tests
 unittests:: $(check_PROGRAMS)
 
-UNITTEST_CFLAGS = \
+UNITTEST_CXXFLAGS = \
 	-I$(top_srcdir)/src/gtest/include \
 	-I$(top_builddir)/src/gtest/include
 UNITTEST_LDADD = \
@@ -325,19 +330,19 @@ UNITTEST_LDADD = \
 unittest_encoding_SOURCES = test/encoding.cc
 unittest_encoding_LDADD = libceph.la libcrush.la -lpthread -lm \
 			  ${UNITTEST_LDADD}
-unittest_encoding_CPPFLAGS = ${AM_CFLAGS} ${UNITTEST_CFLAGS}
+unittest_encoding_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_encoding
 
 unittest_base64_SOURCES = test/base64.cc
 unittest_base64_LDFLAGS = -pthread
 unittest_base64_LDADD = libceph.la libcrush.la -lpthread -lm \
 			${UNITTEST_LDADD}
-unittest_base64_CPPFLAGS = ${AM_CFLAGS} ${UNITTEST_CFLAGS}
+unittest_base64_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_base64
 
 unittest_gather_SOURCES = test/gather.cc
 unittest_gather_LDADD = libceph.la ${UNITTEST_LDADD}
-unittest_gather_CPPFLAGS = ${AM_CFLAGS} ${UNITTEST_CFLAGS}
+unittest_gather_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_gather
 
 # shell scripts
