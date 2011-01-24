@@ -98,13 +98,13 @@ static int sys_removexattr(const char *fn, const char *name)
 }
 
 
-int sys_removexattr(const char *fn, const char *name)
+static int sys_removexattr(const char *fn, const char *name)
 {
   int r = ::removexattr(fn, name, 0);
   return (r < 0 ? -errno : r);
 }
 
-int sys_listxattr(const char *fn, char *names, size_t len)
+static int sys_listxattr(const char *fn, char *names, size_t len)
 {
   int r = ::listxattr(fn, names, len, 0);
   return (r < 0 ? -errno : r);
