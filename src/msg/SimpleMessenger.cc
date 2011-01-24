@@ -876,8 +876,7 @@ int SimpleMessenger::Pipe::accept()
   if (!existing->policy.lossy) { /* if we're lossy, we can lose messages and
                                     should let the daemon handle it itself.
     Otherwise, take over other Connection so we don't lose older messages */
-    existing->connection_state->clear_pipe();
-    existing->connection_state->pipe = get();
+    existing->connection_state->reset_pipe(this);
     existing->connection_state->put();
     existing->connection_state = NULL;
 
