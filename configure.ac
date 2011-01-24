@@ -154,10 +154,11 @@ AC_HEADER_SYS_WAIT
 
 # spirit?
 AC_LANG([C++])
-AC_DEFINE([HAVE_BOOST_SPIRIT_CORE_HPP], [], [Description])
-AC_CHECK_HEADER([boost/spirit.hpp],
-                [AC_DEFINE([HAVE_BOOST_SPIRIT_CORE_HPP])],
-                [AC_MSG_ERROR([Sorry you need to install the Boost spirit parser library (libboost-dev on debian)])])
+
+AC_CHECK_HEADER([boost/spirit/include/classic_core.hpp], [],
+  [AC_CHECK_HEADER([boost/spirit.hpp], [use_bspirit_old_hdr=yes],
+    AC_MSG_FAILURE(["Can't find boost spirit headers"]))])
+AM_CONDITIONAL(USE_BOOST_SPIRIT_OLD_HDR, [test "$use_bspirit_old_hdr" = "yes"])
 
 AC_LANG([C])
 
