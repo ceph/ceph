@@ -30,20 +30,20 @@ using std::vector;
 
 static void usage()
 {
-  derr << "usage: ceph [options] [commands]" << dendl;
-  derr << "If no commands are specified, enter interactive mode." << dendl;
-  derr << "Commands:" << dendl;
-  derr << "   stop              -- cleanly shut down file system\n"
+  cout << "usage: ceph [options] [commands]\n";
+  cout << "If no commands are specified, enter interactive mode.\n";
+  cout << "Commands:\n";
+  cout << "   stop              -- cleanly shut down file system\n"
        << "   (osd|pg|mds) stat -- get monitor subsystem status\n"
-       << "   ..." << dendl;
-  derr << "Options:" << dendl;
-  derr << "   -i infile\n"
+       << "   ...\n";
+  cout << "Options:\n";
+  cout << "   -i infile\n"
        << "   -o outfile\n"
        << "        specify input or output file (for certain commands)\n"
        << "   -s or --status\n"
        << "        print current system status\n"
        << "   -w or --watch\n"
-       << "        watch system status changes in real time (push)" << dendl;
+       << "        watch system status changes in real time (push)\n";
   generic_client_usage(); // Will exit()
 }
 

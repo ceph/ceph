@@ -224,56 +224,6 @@ void parse_config_option_string(string& s)
   parse_config_options(nargs);
 }
 
-typedef void (*signal_handler_t)(int);
-
-static void install_sighandler(int signum, signal_handler_t handler, int flags)
-{
-  int ret;
-  struct sigaction oldact;
-  struct sigaction act;
-  memset(&act, 0, sizeof(act));
-
-  act.sa_handler = handler;
-  sigemptyset(&act.sa_mask);
-  act.sa_flags = flags;
-
-  ret = sigaction(signum, &act, &oldact);
-  if (ret != 0) {
-    fprintf(stderr, "failed to install signal handler for signal %d\n", signum);
-    exit(1);
-  }
-}
-
-void sighup_handler(int signum)
-{
-  _dout_need_open = true;
-  logger_reopen_all();
-}
-
-void handle_fatal_signal(int signum)
-{
-  *_dout << "*** Caught signal (" << sys_siglist[signum] << ") ***"
-	 << std::endl;
-  *_dout << "in thread " << std::hex << pthread_self() << std::endl;
-  BackTrace bt(0);
-  bt.print(*_dout);
-  _dout->flush();
-
-  // Use default handler to dump core
-  int ret = raise(signum);
-
-  // Normally, we won't get here. If we do, something is very weird.
-  if (ret) {
-    *_dout << "handle_fatal_signal: failed to re-raise signal " << signum
-	   << std::endl;
-  }
-  else {
-    *_dout << "handle_fatal_signal: default handler for signal " << signum
-	   << " didn't terminate the process?" << std::endl;
-  }
-  exit(1);
-}
-
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
@@ -1275,14 +1225,13 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
 
 void generic_usage(bool is_server)
 {
-  derr << "   -c ceph.conf or --conf=ceph.conf" << dendl;
-  derr << "        get options from given conf file" << dendl;
-  derr << "   -D   run in foreground." << dendl;
-  derr << "   -f   run in foreground. Show all log messages on stdout."
-       << dendl;
+  cout << "   -c ceph.conf or --conf=ceph.conf\n";
+  cout << "        get options from given conf file\n";
+  cout << "   -D   run in foreground.\n";
+  cout << "   -f   run in foreground. Show all log messages on stdout.\n";
   if (is_server) {
-    derr << "   --debug_ms N" << dendl;
-    derr << "        set message debug level (e.g. 1)" << dendl;
+    cout << "   --debug_ms N\n";
+    cout << "        set message debug level (e.g. 1)\n";
   }
 }
 
@@ -1335,19 +1284,7 @@ void parse_config_options(std::vector<const char*>& args)
         nargs.push_back(args[i]);
   }
 
-
   env_override(&g_conf.keyring, "CEPH_KEYRING");
-
-  install_sighandler(SIGHUP, sighup_handler, SA_RESTART);
-  install_sighandler(SIGSEGV, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGABRT, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGBUS, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGILL, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGFPE, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGXCPU, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGXFSZ, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-  install_sighandler(SIGSYS, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
-
   args = nargs;
 }
 

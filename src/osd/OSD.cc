@@ -2094,7 +2094,7 @@ void OSD::handle_command(MMonCommand *m)
 
       defer_recovery_until = g_clock.now();
       defer_recovery_until += g_conf.osd_recovery_delay_start;
-      recovery_wq._kick();
+      recovery_wq.kick();
     }
   }
   else dout(0) << "unrecognized command! " << m->cmd << dendl;
@@ -4885,7 +4885,7 @@ void OSD::finish_recovery_op(PG *pg, const sobject_t& soid, bool dequeue)
     recovery_queue.push_front(&pg->recovery_item);  // requeue
   }
 
-  recovery_wq._kick();
+  recovery_wq.kick();
   recovery_wq.unlock();
 }
 
@@ -4897,7 +4897,7 @@ void OSD::defer_recovery(PG *pg)
   recovery_wq.lock();
   pg->get();
   recovery_queue.push_back(&pg->recovery_item);
-  recovery_wq._kick();
+  recovery_wq.kick();
   recovery_wq.unlock();
 }
 

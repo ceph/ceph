@@ -235,5 +235,7 @@ AC_CONFIG_HEADERS([src/acconfig.h])
 AC_CONFIG_FILES([Makefile
 	src/Makefile
 	man/Makefile
+	qa/Makefile
+	qa/workunits/Makefile
 	ceph.spec])
 AC_OUTPUT

@@ -16,6 +16,7 @@
 
 #include "include/types.h"
 #include "common/Clock.h"
+#include "common/signal.h"
 
 #include "msg/Messenger.h"
 #include "mon/MonClient.h"
@@ -1570,6 +1571,7 @@ void MDS::respawn()
 
   dout(1) << " cwd " << get_current_dir_name() << dendl;
 
+  unblock_all_signals(NULL);
   execv(orig_argv[0], new_argv);
 
   dout(0) << "respawn execv " << orig_argv[0] << " failed with " << strerror(errno) << dendl;

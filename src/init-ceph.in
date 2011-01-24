@@ -290,8 +290,11 @@ for name in $what; do
 
 	status)
 	    pid=`cat $pid_file`
-	    ps $pid &> /dev/null
-	    exit $?
+            if [ -e /proc/$pid ]; then
+                 echo "$pid running..."
+                 exit 0
+            fi
+            exit 1
 	    ;;
 	forcestop)
 	    get_conf pre_forcestop "" "pre forcestop command"

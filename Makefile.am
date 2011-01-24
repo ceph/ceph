@@ -1,8 +1,7 @@
 AUTOMAKE_OPTIONS = gnu
 EXTRA_DIST = autogen.sh ceph.spec.in
 # the "." here makes sure check-local builds gtest before it is used
-SUBDIRS = . src man
-
+SUBDIRS = . src qa man
 
 EXTRA_DIST += \
 	src/test/run-cli-tests \

@@ -1,6 +1,7 @@
 #ifndef CEPH_BACKTRACE_H
 #define CEPH_BACKTRACE_H
 
+#include <iosfwd>
 #include <execinfo.h>
 #include <stdlib.h>
 
