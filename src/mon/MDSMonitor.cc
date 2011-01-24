@@ -393,6 +393,9 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
                        << "; it has rank " << info.standby_for_rank << dendl;
           info.state = MDSMap::STATE_STANDBY_REPLAY;
           info.state_seq = seq;
+        } else {
+          m->put();
+          return false;
         }
       } else if (m->get_standby_for_rank() >= 0 &&
                  !mdsmap.is_dne(m->get_standby_for_rank())) {
@@ -400,7 +403,11 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
         info.state = MDSMap::STATE_STANDBY_REPLAY;
         info.state_seq = seq;
         info.standby_for_rank = m->get_standby_for_rank();
-      } // else it's a standby for anybody, and is already in the list
+      } else { //it's a standby for anybody, and is already in the list
+        assert(pending_mdsmap.get_mds_info().count(info.global_id));
+        m->put();
+        return false;
+      }
     } else {
       info.state = state;
       info.state_seq = seq;
@@ -878,7 +885,7 @@ void MDSMonitor::tick()
       uint64_t sgid;
       if (info.rank >= 0 &&
 	  info.state != CEPH_MDS_STATE_STANDBY &&
-	  (sgid = pending_mdsmap.find_replacement_for(info.rank, info.name)) != 0) {
+	  (sgid = mdsmap.find_replacement_for(info.rank, info.name)) != 0) {
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sgid];
 	dout(10) << " replacing " << info.addr << " mds" << info.rank << "." << info.inc
 		 << " " << ceph_mds_state_name(info.state)
