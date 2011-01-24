@@ -24,6 +24,7 @@
 #include "include/color.h"
 
 #include "common/Timer.h"
+#include "common/errno.h"
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
@@ -2118,12 +2119,17 @@ int FileStore::_do_clone_range(int from, int to, uint64_t off, uint64_t len)
     int l = MIN(end-pos, buflen);
     r = ::read(from, buf, l);
     dout(25) << "  read from " << from << "~" << l << " got " << r << dendl;
-    if (r < 0)
+    if (r < 0) {
+      r = -errno;
+      derr << "FileStore::_do_clone_range: read error at " << from << "~" << len
+	   << ", " << cpp_strerror(r) << dendl;
       break;
+    }
     if (r == 0) {
       // hrm, bad source range, wtf.
-      dout(0) << "_do_clone_range got short read result at " << from << " of " << from << "~" << len << dendl;
       r = -ERANGE;
+      derr << "FileStore::_do_clone_range got short read result at " << from
+	      << " of " << from << "~" << len << dendl;
       break;
     }
     int op = 0;
@@ -2132,6 +2138,8 @@ int FileStore::_do_clone_range(int from, int to, uint64_t off, uint64_t len)
       dout(25) << " write to " << to << "~" << (r-op) << " got " << r2 << dendl;      
       if (r2 < 0) {
 	r = r2;
+	derr << "FileStore::_do_clone_range: write error at " << to << "~" << r-op
+	     << ", " << cpp_strerror(r) << dendl;
 	break;
       }
       op += r2;
@@ -2140,8 +2148,6 @@ int FileStore::_do_clone_range(int from, int to, uint64_t off, uint64_t len)
       break;
     pos += r;
   }
-  if (r < 0)
-    r = -errno;
   dout(20) << "_do_clone_range " << off << "~" << len << " = " << r << dendl;
   return r;
 }
@@ -2637,10 +2643,10 @@ int FileStore::_setattrs(coll_t cid, const sobject_t& oid, map<string,bufferptr>
       val = p->second.c_str();
     else
       val = "";
+    // ??? Why do we skip setting all the other attrs if one fails?
     r = do_setxattr(fn, n, val, p->second.length());
     if (r < 0) {
-      char buf[80];
-      cerr << "error setxattr " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
+      derr << "FileStore::_setattrs: do_setxattr returned " << r << dendl;
       break;
     }
   }
@@ -2899,8 +2905,9 @@ int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>
   dir = ::opendir(fn);
 
   if (!dir) {
+    int err = -errno;
     dout(0) << "error opening directory " << fn << dendl;
-    return -errno;
+    return err;
   }
 
   if (handle && *handle) {
@@ -2913,9 +2920,10 @@ int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>
     errno = 0;
     end = false;
     ::readdir_r(dir, &sde, &de);
-    if (!de && errno) {
+    int err = errno;
+    if (!de && err) {
       dout(0) << "error reading directory " << fn << dendl;
-      return -errno;
+      return -err;
     }
     if (!de) {
       end = true;
