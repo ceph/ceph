@@ -974,49 +974,6 @@ void MDSMonitor::tick()
     }
   }
 
-  // have a standby replay/shadow an active mds?
-  if (false &&
-      !pending_mdsmap.is_degraded() &&
-      pending_mdsmap.get_num_mds(MDSMap::STATE_STANDBY) >= pending_mdsmap.get_num_mds()) {
-    // see which nodes are shadowed
-    set<int> shadowed;
-    map<int, set<uint64_t> > avail;
-    for (map<uint64_t,MDSMap::mds_info_t>::iterator p = pending_mdsmap.mds_info.begin();
-	 p != pending_mdsmap.mds_info.end();
-	 p++) {
-      if (p->second.state == MDSMap::STATE_STANDBY_REPLAY) 
-	shadowed.insert(p->second.rank);
-      if (p->second.state == MDSMap::STATE_STANDBY &&
-	  !p->second.laggy())
-	avail[p->second.rank].insert(p->first);
-    }
-
-    // find an mds that needs a standby
-    set<int> in;
-    pending_mdsmap.get_mds_set(in);
-    for (set<int>::iterator p = in.begin(); p != in.end(); p++) {
-      if (shadowed.count(*p))
-	continue;  // already shadowed.
-      if (pending_mdsmap.get_state(*p) < MDSMap::STATE_ACTIVE)
-	continue;  // only shadow active mds
-      uint64_t sgid;
-      if (avail[*p].size()) {
-	sgid = *avail[*p].begin();
-	avail[*p].erase(avail[*p].begin());
-      } else if (avail[-1].size()) {
-	sgid = *avail[-1].begin();
-	avail[-1].erase(avail[-1].begin());
-      } else
-	continue;
-      dout(10) << "mds" << *p << " will be shadowed by " << sgid << dendl;
-
-      MDSMap::mds_info_t& info = pending_mdsmap.mds_info[sgid];
-      info.rank = *p;
-      info.state = MDSMap::STATE_STANDBY_REPLAY;
-      do_propose = true;
-    }
-  }
-
   if (do_propose)
     propose_pending();
 }
