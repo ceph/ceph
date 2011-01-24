@@ -339,9 +339,9 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
 
 
     if (!info.standby_for_name.empty()) {
-      if (pending_mdsmap.find_by_name(info.standby_for_name))
+      if (mdsmap.find_by_name(info.standby_for_name))
         info.standby_for_rank =
-            pending_mdsmap.find_by_name(info.standby_for_name)->rank;
+            mdsmap.find_by_name(info.standby_for_name)->rank;
     }
     if (info.standby_for_rank >= 0 && !mdsmap.is_dne(info.standby_for_rank)) {
       info.state = MDSMap::STATE_STANDBY_REPLAY;
@@ -853,8 +853,8 @@ void MDSMonitor::tick()
          * See if we can find it somebody to shadow
          */
         int gid = 0;
-        for (map<uint64_t,MDSMap::mds_info_t>::iterator i = pending_mdsmap.mds_info.begin();
-            i != pending_mdsmap.mds_info.end();
+        for (map<uint64_t,MDSMap::mds_info_t>::iterator i = mdsmap.mds_info.begin();
+            i != mdsmap.mds_info.end();
             ++i) {
           if (i->second.rank >= 0 &&
               (gid = pending_mdsmap.find_standby_for(i->first, i->second.name)))
