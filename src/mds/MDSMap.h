@@ -87,6 +87,16 @@ public:
   static const int STATE_ACTIVE =     CEPH_MDS_STATE_ACTIVE; // up, active
   static const int STATE_STOPPING  =  CEPH_MDS_STATE_STOPPING; // up, exporting metadata (-> standby or out)
 
+  // indicate startup standby preferences for MDS
+  // of course, if they have a specific rank to follow, they just set that!
+  static const int MDS_NO_STANDBY_PREF = -1; // doesn't have instructions to do anything
+  static const int MDS_STANDBY_ANY = -2; // is instructed to be standby-replay, may
+                                     // or may not have specific name to follow
+  static const int MDS_STANDBY_NAME = -3; // standby for a named MDS
+  static const int MDS_MATCHED_ACTIVE = -4; // has a matched standby, which if up
+                                            // it should follow, but otherwise should
+                                            // be assigned a rank
+
   struct mds_info_t {
     uint64_t global_id;
     string name;
@@ -312,11 +322,11 @@ public:
       if (((p->second.rank == -1 &&
            (p->second.standby_for_rank == mds ||
             p->second.standby_for_name == name)) ||
-	  (p->second.standby_for_rank == -2)) &&
+	  (p->second.standby_for_rank == MDS_STANDBY_ANY)) &&
 	  (p->second.state == MDSMap::STATE_STANDBY ||
 	      p->second.state == MDSMap::STATE_STANDBY_REPLAY) &&
 	   !p->second.laggy()) {
-	if (p->second.standby_for_rank == -2)
+	if (p->second.standby_for_rank == MDS_STANDBY_ANY)
 	  generic_standby = p;
 	else
 	  return p->first;
@@ -331,7 +341,8 @@ public:
 	 p != mds_info.end();
 	 ++p) {
       if (p->second.rank == -1 &&
-	  p->second.standby_for_rank < 0 &&
+	  (p->second.standby_for_rank == MDS_NO_STANDBY_PREF ||
+	   p->second.standby_for_rank == MDS_MATCHED_ACTIVE) &&
 	  p->second.state == MDSMap::STATE_STANDBY &&
 	  !p->second.laggy()) {
 	return p->first;

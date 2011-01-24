@@ -81,6 +81,7 @@ MDS::MDS(const char *n, Messenger *m, MonClient *mc) :
   timer(mds_lock),
   name(n),
   whoami(-1), incarnation(0),
+  standby_for_rank(MDSMap::MDS_NO_STANDBY_PREF),
   standby_type(0),
   continue_replay(false),
   messenger(m),
@@ -476,6 +477,18 @@ int MDS::init(int wanted_state)
     standby_type = wanted_state;
   }
 
+  standby_for_rank = g_conf.mds_standby_for_rank;
+  standby_for_name.assign(g_conf.mds_standby_for_name);
+
+  if (wanted_state == MDSMap::STATE_STANDBY_REPLAY &&
+      standby_for_rank == -1) {
+    if (standby_for_name.empty())
+      standby_for_rank = MDSMap::MDS_STANDBY_ANY;
+    else
+      standby_for_rank = MDSMap::MDS_STANDBY_NAME;
+  } else if (!standby_type && !standby_for_name.empty())
+    standby_for_rank = MDSMap::MDS_MATCHED_ACTIVE;
+
   beacon_start();
   whoami = -1;
   messenger->set_myname(entity_name_t::MDS(whoami));
@@ -593,8 +606,8 @@ void MDS::beacon_send()
   
   MMDSBeacon *beacon = new MMDSBeacon(monc->get_fsid(), monc->get_global_id(), name, mdsmap->get_epoch(), 
 				      want_state, beacon_last_seq);
-  beacon->set_standby_for_rank(g_conf.mds_standby_for_rank);
-  beacon->set_standby_for_name(g_conf.mds_standby_for_name);
+  beacon->set_standby_for_rank(standby_for_rank);
+  beacon->set_standby_for_name(standby_for_name);
 
   // include _my_ feature set
   beacon->set_compat(mdsmap_compat);
