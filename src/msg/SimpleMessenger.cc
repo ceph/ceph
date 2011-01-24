@@ -348,7 +348,7 @@ void SimpleMessenger::dispatch_entry()
 		  << "+" << m->get_data().length()
 		  << " (" << m->get_footer().front_crc << " " << m->get_footer().middle_crc
 		  << " " << m->get_footer().data_crc << ")"
-		  << " " << m 
+		  << " " << m << " con " << m->get_connection()
 		  << dendl;
 	  ms_deliver_dispatch(m);
 
@@ -442,14 +442,14 @@ int SimpleMessenger::send_message(Message *m, Connection *con)
   if (pipe) {
     dout(1) << "--> " << con->get_peer_addr() << " -- " << *m
             << " -- ?+" << m->get_data().length()
-            << " " << m
+            << " " << m << " con " << con
             << dendl;
 
     submit_message(m, pipe);
     pipe->put();
   } else {
-    dout(0) << "send_message dropped message " << *m << "because of no pipe"
-        << dendl;
+    dout(0) << "send_message dropped message " << *m << " because of no pipe on con " << con
+	    << dendl;
     // else we raced with reaper()
     m->put();
   }
