@@ -100,6 +100,19 @@ write_objects() {
         done
 }
 
+read_objects() {
+        ver=$1
+        num_objs=$2
+        obj_size=$3
+        [ -d "${TEMPDIR}" ] || die "must setup_tempdir"
+	chr=`perl -e "print chr(48+$ver)"`
+	head -c $obj_size /dev/zero  | tr '\0' "$chr" > $TEMPDIR/exemplar
+        for i in `seq -w 1 $num_objs`; do
+                ./rados -p $pool get obj$i $TEMPDIR/out$i || die "radostool failed"
+		cmp $TEMPDIR/out$i $TEMPDIR/exemplar || die "got back incorrect obj$i"
+        done
+}
+
 poll_cmd() {
         command=$1
         search_str=$2
