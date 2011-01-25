@@ -485,6 +485,9 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_wipe_ino_prealloc, 0, OPT_BOOL, 0),
 	OPTION(mds_skip_ino, 0, OPT_INT, 0),
 	OPTION(max_mds, 0, OPT_INT, 1),
+	OPTION(mds_standby_for_name, 0, OPT_STR, ""),
+	OPTION(mds_standby_for_rank, 0, OPT_INT, -1),
+	OPTION(mds_standby_replay, 0, OPT_BOOL, false),
 	OPTION(osd_data, 0, OPT_STR, ""),
 	OPTION(osd_journal, 0, OPT_STR, ""),
 	OPTION(osd_journal_size, 0, OPT_INT, 0),         // in mb

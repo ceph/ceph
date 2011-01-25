@@ -238,7 +238,8 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 	(state == MDSMap::STATE_STANDBY_REPLAY ||
 	    state == MDSMap::STATE_ONESHOT_REPLAY) &&
 	(pending_mdsmap.is_degraded() ||
-	 pending_mdsmap.get_state(m->get_standby_for_rank()) < MDSMap::STATE_ACTIVE)) {
+	 ((m->get_standby_for_rank() >= 0) &&
+	     pending_mdsmap.get_state(m->get_standby_for_rank()) < MDSMap::STATE_ACTIVE))) {
       dout(10) << "mds_beacon can't standby-replay mds" << m->get_standby_for_rank() << " at this time (cluster degraded, or mds not active)" << dendl;
       dout(10) << "pending_mdsmap.is_degraded()==" << pending_mdsmap.is_degraded()
           << " rank state: " << ceph_mds_state_name(pending_mdsmap.get_state(m->get_standby_for_rank())) << dendl;
@@ -336,6 +337,16 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
     info.standby_for_rank = m->get_standby_for_rank();
     info.standby_for_name = m->get_standby_for_name();
 
+
+    if (!info.standby_for_name.empty()) {
+      if (mdsmap.find_by_name(info.standby_for_name))
+        info.standby_for_rank =
+            mdsmap.find_by_name(info.standby_for_name)->rank;
+    }
+    if (info.standby_for_rank >= 0 && !mdsmap.is_dne(info.standby_for_rank)) {
+      info.state = MDSMap::STATE_STANDBY_REPLAY;
+    }
+
     // initialize the beacon timer
     last_beacon[gid].stamp = g_clock.now();
     last_beacon[gid].seq = seq;
@@ -360,6 +371,7 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
     dout(10) << "prepare_beacon mds" << info.rank
 	     << " " << ceph_mds_state_name(info.state)
 	     << " -> " << ceph_mds_state_name(state)
+	     << "  standby_for_rank=" << m->get_standby_for_rank()
 	     << dendl;
     if (state == MDSMap::STATE_STOPPED) {
       pending_mdsmap.up.erase(info.rank);
@@ -367,6 +379,35 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
       pending_mdsmap.stopped.insert(info.rank);
       pending_mdsmap.mds_info.erase(gid);  // last! info is a ref into this map
       last_beacon.erase(gid);
+    } else if (state == MDSMap::STATE_STANDBY_REPLAY) {
+      if (m->get_standby_for_rank() == MDSMap::MDS_STANDBY_NAME) {
+        /* convert name to rank. If we don't have it, do nothing. The
+	 mds will stay in standby and keep requesting the state change */
+        dout(20) << "looking for mds " << m->get_standby_for_name()
+                  << " to STANDBY_REPLAY for" << dendl;
+        const MDSMap::mds_info_t *found_mds = NULL;
+        if ((found_mds = mdsmap.find_by_name(m->get_standby_for_name())) &&
+            (found_mds->rank >= 0)) {
+          info.standby_for_rank = found_mds->rank;
+          dout(10) <<" found mds " << m->get_standby_for_name()
+                       << "; it has rank " << info.standby_for_rank << dendl;
+          info.state = MDSMap::STATE_STANDBY_REPLAY;
+          info.state_seq = seq;
+        } else {
+          m->put();
+          return false;
+        }
+      } else if (m->get_standby_for_rank() >= 0 &&
+                 !mdsmap.is_dne(m->get_standby_for_rank())) {
+        /* switch to standby-replay for this MDS*/
+        info.state = MDSMap::STATE_STANDBY_REPLAY;
+        info.state_seq = seq;
+        info.standby_for_rank = m->get_standby_for_rank();
+      } else { //it's a standby for anybody, and is already in the list
+        assert(pending_mdsmap.get_mds_info().count(info.global_id));
+        m->put();
+        return false;
+      }
     } else {
       info.state = state;
       info.state_seq = seq;
@@ -757,7 +798,7 @@ void MDSMonitor::tick()
     string name;
     while (pending_mdsmap.is_in(mds))
       mds++;
-    uint64_t newgid = pending_mdsmap.find_standby_for(mds, name);
+    uint64_t newgid = pending_mdsmap.find_unused_for(mds, name);
     if (!newgid)
       break;
 
@@ -812,11 +853,33 @@ void MDSMonitor::tick()
 	continue;
       }
 
-      if (since >= cutoff)
+      if (since >= cutoff && pending_mdsmap.mds_info[gid].standby_for_rank != MDSMap::MDS_STANDBY_ANY)
 	continue;
+
 
       MDSMap::mds_info_t& info = pending_mdsmap.mds_info[gid];
 
+      if (since >= cutoff && info.standby_for_rank == MDSMap::MDS_STANDBY_ANY) {
+        /* this mds is not laggy, but has no rank assigned.
+         * See if we can find it somebody to shadow
+         */
+        int gid = 0;
+        for (map<uint64_t,MDSMap::mds_info_t>::iterator i = mdsmap.mds_info.begin();
+            i != mdsmap.mds_info.end();
+            ++i) {
+          if (i->second.rank >= 0 &&
+              (gid = pending_mdsmap.find_standby_for(i->first, i->second.name)))
+            if (pending_mdsmap.get_info_gid(gid).state == MDSMap::STATE_STANDBY_REPLAY)
+              continue; // this MDS already has a standby
+          // hey, we found an MDS without a standby. Pair them!
+          info.standby_for_rank = i->second.rank;
+          dout(10) << "setting to shadow mds rank " << info.standby_for_rank << dendl;
+          info.state = MDSMap::STATE_STANDBY_REPLAY;
+          do_propose = true;
+          break;
+        }
+        continue;
+      }
       dout(10) << "no beacon from " << info.addr << " mds" << info.rank << "." << info.inc
 	       << " " << ceph_mds_state_name(info.state)
 	       << " since " << since << dendl;
@@ -826,7 +889,7 @@ void MDSMonitor::tick()
       uint64_t sgid;
       if (info.rank >= 0 &&
 	  info.state != CEPH_MDS_STATE_STANDBY &&
-	  (sgid = pending_mdsmap.find_standby_for(info.rank, info.name)) != 0) {
+	  (sgid = mdsmap.find_replacement_for(info.rank, info.name)) != 0) {
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sgid];
 	dout(10) << " replacing " << info.addr << " mds" << info.rank << "." << info.inc
 		 << " " << ceph_mds_state_name(info.state)
@@ -908,7 +971,7 @@ void MDSMonitor::tick()
       int f = *p++;
       uint64_t sgid;
       string name;  // FIXME
-      sgid = pending_mdsmap.find_standby_for(f, name);
+      sgid = pending_mdsmap.find_replacement_for(f, name);
       if (sgid) {
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sgid];
 	dout(0) << " taking over failed mds" << f << " with " << sgid << "/" << si.name << " " << si.addr << dendl;
@@ -920,49 +983,6 @@ void MDSMonitor::tick()
 	pending_mdsmap.failed.erase(f);
 	do_propose = true;
       }
-    }
-  }
-
-  // have a standby replay/shadow an active mds?
-  if (false &&
-      !pending_mdsmap.is_degraded() &&
-      pending_mdsmap.get_num_mds(MDSMap::STATE_STANDBY) >= pending_mdsmap.get_num_mds()) {
-    // see which nodes are shadowed
-    set<int> shadowed;
-    map<int, set<uint64_t> > avail;
-    for (map<uint64_t,MDSMap::mds_info_t>::iterator p = pending_mdsmap.mds_info.begin();
-	 p != pending_mdsmap.mds_info.end();
-	 p++) {
-      if (p->second.state == MDSMap::STATE_STANDBY_REPLAY) 
-	shadowed.insert(p->second.rank);
-      if (p->second.state == MDSMap::STATE_STANDBY &&
-	  !p->second.laggy())
-	avail[p->second.rank].insert(p->first);
-    }
-
-    // find an mds that needs a standby
-    set<int> in;
-    pending_mdsmap.get_mds_set(in);
-    for (set<int>::iterator p = in.begin(); p != in.end(); p++) {
-      if (shadowed.count(*p))
-	continue;  // already shadowed.
-      if (pending_mdsmap.get_state(*p) < MDSMap::STATE_ACTIVE)
-	continue;  // only shadow active mds
-      uint64_t sgid;
-      if (avail[*p].size()) {
-	sgid = *avail[*p].begin();
-	avail[*p].erase(avail[*p].begin());
-      } else if (avail[-1].size()) {
-	sgid = *avail[-1].begin();
-	avail[-1].erase(avail[-1].begin());
-      } else
-	continue;
-      dout(10) << "mds" << *p << " will be shadowed by " << sgid << dendl;
-
-      MDSMap::mds_info_t& info = pending_mdsmap.mds_info[sgid];
-      info.rank = *p;
-      info.state = MDSMap::STATE_STANDBY_REPLAY;
-      do_propose = true;
     }
   }
 

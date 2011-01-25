@@ -348,6 +348,10 @@ struct md_config_t {
   int mds_skip_ino;
   int max_mds;
 
+  int mds_standby_for_rank;
+  char* mds_standby_for_name;
+  bool mds_standby_replay;
+
   // osd
   const char *osd_data;
   const char *osd_journal;

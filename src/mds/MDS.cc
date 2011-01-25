@@ -82,7 +82,7 @@ MDS::MDS(const char *n, Messenger *m, MonClient *mc) :
   timer(mds_lock),
   name(n),
   whoami(-1), incarnation(0),
-  standby_for_rank(-1),
+  standby_for_rank(MDSMap::MDS_NO_STANDBY_PREF),
   standby_type(0),
   continue_replay(false),
   messenger(m),
@@ -460,14 +460,36 @@ int MDS::init(int wanted_state)
 
   timer.init();
 
+  if (wanted_state==MDSMap::STATE_BOOT && g_conf.mds_standby_replay)
+    wanted_state = MDSMap::STATE_STANDBY_REPLAY;
   // starting beacon.  this will induce an MDSMap from the monitor
   want_state = wanted_state;
-  if (g_conf.id && (wanted_state==MDSMap::STATE_STANDBY_REPLAY ||
-                    wanted_state==MDSMap::STATE_ONESHOT_REPLAY)) {
-    standby_for_rank = strtol(g_conf.id, NULL, 0);
+  if (wanted_state==MDSMap::STATE_STANDBY_REPLAY ||
+      wanted_state==MDSMap::STATE_ONESHOT_REPLAY) {
+    g_conf.mds_standby_replay = true;
+    if ( wanted_state == MDSMap::STATE_ONESHOT_REPLAY &&
+        (g_conf.mds_standby_for_rank == -1) &&
+        !g_conf.mds_standby_for_name) {
+      // uh-oh, must specify one or the other!
+      dout(0) << "Specified oneshot replay mode but not an MDS!" << dendl;
+      suicide();
+    }
     want_state = MDSMap::STATE_STANDBY;
     standby_type = wanted_state;
   }
+
+  standby_for_rank = g_conf.mds_standby_for_rank;
+  standby_for_name.assign(g_conf.mds_standby_for_name);
+
+  if (wanted_state == MDSMap::STATE_STANDBY_REPLAY &&
+      standby_for_rank == -1) {
+    if (standby_for_name.empty())
+      standby_for_rank = MDSMap::MDS_STANDBY_ANY;
+    else
+      standby_for_rank = MDSMap::MDS_STANDBY_NAME;
+  } else if (!standby_type && !standby_for_name.empty())
+    standby_for_rank = MDSMap::MDS_MATCHED_ACTIVE;
+
   beacon_start();
   whoami = -1;
   messenger->set_myname(entity_name_t::MDS(whoami));
@@ -840,7 +862,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     want_state = state = MDSMap::STATE_STANDBY;
     dout(1) << "handle_mds_map standby" << dendl;
 
-    if (standby_for_rank >= 0)
+    if (standby_type) // we want to be in standby_replay or oneshot_replay!
       request_state(standby_type);
 
     goto out;
@@ -899,7 +921,6 @@ void MDS::handle_mds_map(MMDSMap *m)
     if (oldstate == MDSMap::STATE_STANDBY_REPLAY) {
         dout(10) << "Monitor activated us! Deactivating replay loop" << dendl;
         assert (state == MDSMap::STATE_REPLAY);
-        standby_for_rank = -1;
     } else {
       // did i just recover?
       if ((is_active() || is_clientreplay()) &&
@@ -1009,7 +1030,7 @@ void MDS::handle_mds_map(MMDSMap *m)
 	mdcache->migrator->handle_mds_failure_or_stop(*p);
   }
 
-  if (standby_for_rank < 0) //if we're not replaying
+  if (!is_any_replay())
     balancer->try_rebalance();
 
  out:
@@ -1216,6 +1237,8 @@ void MDS::replay_start()
   if (is_standby_replay())
     continue_replay = true;
   
+  standby_type = 0;
+
   calc_recovery_set();
 
   dout(1) << " need osdmap epoch " << mdsmap->get_last_failure_osd_epoch()
@@ -1286,11 +1309,12 @@ void MDS::replay_done()
   }
 
   if (continue_replay) {
-    mdlog->get_journaler()->set_writeable();
     continue_replay = false;
     standby_replay_restart();
     return;
   }
+
+  mdlog->get_journaler()->set_writeable();
 
   if (g_conf.mds_wipe_sessions) {
     dout(1) << "wiping out client sessions" << dendl;
