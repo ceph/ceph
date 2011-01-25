@@ -81,6 +81,7 @@ public:
 	 ++p) {
       const pg_t &update_pg(p->first);
       const pg_stat_t &update_stat(p->second);
+      pg_set.insert(update_pg);
       hash_map<pg_t,pg_stat_t>::iterator t = pg_stat.find(update_pg);
       if (t == pg_stat.end()) {
 	hash_map<pg_t,pg_stat_t>::value_type v(update_pg, update_stat);
