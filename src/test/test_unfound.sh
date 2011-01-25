@@ -19,7 +19,8 @@ setup() {
         ./stop.sh
 
         # set recovery start to a really long time to ensure that we don't start recovery
-        ./vstart.sh -d -n -o 'osd recovery delay start = 10000' || die "vstart failed"
+        ./vstart.sh -d -n -o 'osd recovery delay start = 10000
+osd max scrubs = 0' || die "vstart failed"
 }
 
 osd_resurrection_1_impl() {
