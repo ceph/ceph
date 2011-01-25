@@ -31,9 +31,7 @@ echo component $component
 
 for dist in sid squeeze lenny maverick lucid
 do
-    dvers="$vers-$debsubver"
-    [ "$dist" = "squeeze" ] && dvers="$dvers~bpo60+1"
-    [ "$dist" = "lenny" ] && dvers="$dvers~bpo50+1"
+    dvers=`./debvers.sh $vers-$debsubver $dist`
     echo debian dist $dist vers $dvers
 
     for f in release/$vers/ceph_${dvers}_*.changes
