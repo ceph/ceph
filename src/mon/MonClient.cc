@@ -240,8 +240,8 @@ bool MonClient::ms_dispatch(Message *m)
 
 void MonClient::handle_monmap(MMonMap *m)
 {
+  Mutex::Locker lock(monc_lock);
   dout(10) << "handle_monmap " << *m << dendl;
-  monc_lock.Lock();
 
   assert(!cur_mon.empty());
   entity_addr_t cur_mon_addr = monmap.get_addr(cur_mon);
@@ -272,7 +272,6 @@ void MonClient::handle_monmap(MMonMap *m)
   else
     _finish_hunting();
 
-  monc_lock.Unlock();
   m->put();
 }
 
@@ -354,6 +353,8 @@ int MonClient::authenticate(double timeout)
 
 void MonClient::handle_auth(MAuthReply *m)
 {
+  Mutex::Locker lock(monc_lock);
+
   bufferlist::iterator p = m->result_bl.begin();
   if (state == MC_STATE_NEGOTIATING) {
     if (!auth || (int)m->protocol != auth->get_protocol()) {
@@ -411,6 +412,7 @@ void MonClient::handle_auth(MAuthReply *m)
 
 void MonClient::_send_mon_message(Message *m, bool force)
 {
+  assert(monc_lock.is_locked());
   assert(!cur_mon.empty());
   if (force || state == MC_STATE_HAVE_SESSION) {
     dout(10) << "_send_mon_message to mon." << cur_mon << " at " << monmap.get_inst(cur_mon) << dendl;
@@ -422,6 +424,7 @@ void MonClient::_send_mon_message(Message *m, bool force)
 
 void MonClient::_pick_new_mon()
 {
+  assert(monc_lock.is_locked());
   if (!cur_mon.empty())
     messenger->mark_down(monmap.get_addr(cur_mon));
 
@@ -437,6 +440,7 @@ void MonClient::_pick_new_mon()
 
 void MonClient::_reopen_session()
 {
+  assert(monc_lock.is_locked());
   dout(10) << "_reopen_session" << dendl;
 
   _pick_new_mon();
@@ -487,6 +491,7 @@ bool MonClient::ms_handle_reset(Connection *con)
 
 void MonClient::_finish_hunting()
 {
+  assert(monc_lock.is_locked());
   if (hunting) {
     dout(1) << "found mon." << cur_mon << dendl; 
     hunting = false;
@@ -530,6 +535,7 @@ void MonClient::schedule_tick()
 
 void MonClient::_renew_subs()
 {
+  assert(monc_lock.is_locked());
   if (sub_have.empty()) {
     dout(10) << "renew_subs - empty" << dendl;
     return;
@@ -550,6 +556,8 @@ void MonClient::_renew_subs()
 
 void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
 {
+  Mutex::Locker lock(monc_lock);
+  
   _finish_hunting();
 
   if (sub_renew_sent != utime_t()) {
@@ -566,6 +574,7 @@ void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
 
 int MonClient::_check_auth_tickets()
 {
+  assert(monc_lock.is_locked());
   if (state == MC_STATE_HAVE_SESSION && auth) {
     if (auth->need_tickets()) {
       dout(10) << "_check_auth_tickets getting new tickets!" << dendl;
@@ -582,6 +591,7 @@ int MonClient::_check_auth_tickets()
 
 int MonClient::_check_auth_rotating()
 {
+  assert(monc_lock.is_locked());
   if (!rotating_secrets ||
       !auth_principal_needs_rotating_keys(entity_name)) {
     dout(20) << "_check_auth_rotating not needed by " << entity_name << dendl;

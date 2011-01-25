@@ -566,17 +566,21 @@ int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
     w = mds_info->rank;
   }
 
-  if (pending_mdsmap.up.count(w) &&
-      pending_mdsmap.mds_info.count(pending_mdsmap.up[w])) {
-    utime_t until = g_clock.now();
-    until += g_conf.mds_blacklist_interval;
-    MDSMap::mds_info_t& info = pending_mdsmap.mds_info[pending_mdsmap.up[w]];
-    pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
-    mon->osdmon()->propose_pending();
+  if (pending_mdsmap.up.count(w)) {
+    uint64_t gid = pending_mdsmap.up[w];
+    if (pending_mdsmap.mds_info.count(gid)) {
+      utime_t until = g_clock.now();
+      until += g_conf.mds_blacklist_interval;
+      MDSMap::mds_info_t& info = pending_mdsmap.mds_info[pending_mdsmap.up[w]];
+      pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
+      mon->osdmon()->propose_pending();
+
+      pending_mdsmap.mds_info.erase(gid);
+    }
+    pending_mdsmap.up.erase(w);
+    pending_mdsmap.failed.insert(w);
+    ss << "failed mds" << w;
   }
-  pending_mdsmap.failed.insert(w);
-  pending_mdsmap.up.erase(w);
-  ss << "failed mds" << w;
   return 0;
 }
 
@@ -913,6 +917,7 @@ void MDSMonitor::tick()
 	si.inc = ++pending_mdsmap.inc[f];
 	pending_mdsmap.in.insert(f);
 	pending_mdsmap.up[f] = sgid;
+	pending_mdsmap.failed.erase(f);
 	do_propose = true;
       }
     }

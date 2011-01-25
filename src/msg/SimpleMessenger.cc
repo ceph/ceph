@@ -34,6 +34,7 @@
 #include <fstream>
 
 #include "common/Timer.h"
+#include "common/signal.h"
 
 #define DOUT_SUBSYS ms
 #undef dout_prefix
@@ -347,7 +348,7 @@ void SimpleMessenger::dispatch_entry()
 		  << "+" << m->get_data().length()
 		  << " (" << m->get_footer().front_crc << " " << m->get_footer().middle_crc
 		  << " " << m->get_footer().data_crc << ")"
-		  << " " << m 
+		  << " " << m << " con " << m->get_connection()
 		  << dendl;
 	  ms_deliver_dispatch(m);
 
@@ -441,14 +442,14 @@ int SimpleMessenger::send_message(Message *m, Connection *con)
   if (pipe) {
     dout(1) << "--> " << con->get_peer_addr() << " -- " << *m
             << " -- ?+" << m->get_data().length()
-            << " " << m << " con=" << (void *)con
+            << " " << m << " con " << con
             << dendl;
 
     submit_message(m, pipe);
     pipe->put();
   } else {
-    dout(0) << "send_message dropped message " << *m << "because of no pipe"
-        << dendl;
+    dout(0) << "send_message dropped message " << *m << " because of no pipe on con " << con
+	    << dendl;
     // else we raced with reaper()
     m->put();
   }
@@ -874,8 +875,7 @@ int SimpleMessenger::Pipe::accept()
   if (!existing->policy.lossy) { /* if we're lossy, we can lose messages and
                                     should let the daemon handle it itself.
     Otherwise, take over other Connection so we don't lose older messages */
-    existing->connection_state->clear_pipe();
-    existing->connection_state->pipe = get();
+    existing->connection_state->reset_pipe(this);
     existing->connection_state->put();
     existing->connection_state = NULL;
 
@@ -2383,6 +2383,7 @@ int SimpleMessenger::start(bool nodaemon)
 
     if (1) {
       daemon(1, 0);
+      install_standard_sighandlers();
       write_pid_file(getpid());
     } else {
       pid_t pid = fork();
@@ -2394,6 +2395,7 @@ int SimpleMessenger::start(bool nodaemon)
 	::close(2);
 	_exit(0);
       }
+      install_standard_sighandlers();
     }
  
     if (g_conf.chdir && g_conf.chdir[0]) {
@@ -2405,12 +2407,11 @@ int SimpleMessenger::start(bool nodaemon)
   }
 
   // go!
-  if (did_bind) {
+  if (did_bind)
     accepter.start();
 
-    reaper_started = true;
-    reaper_thread.create();
-  }
+  reaper_started = true;
+  reaper_thread.create();
   return 0;
 }
 

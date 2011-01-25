@@ -2363,9 +2363,6 @@ void MDCache::handle_mds_failure(int who)
   // tell the migrator too.
   migrator->handle_mds_failure_or_stop(who);
 
-  // kick any discovers that are waiting
-  kick_discovers(who);
-  
   // clean up any requests slave to/from this node
   list<MDRequest*> finish;
   for (hash_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();

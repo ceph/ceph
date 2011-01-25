@@ -702,7 +702,7 @@ public:
   Missing     missing;
   map<sobject_t, set<int> > missing_loc;
   
-  set<snapid_t> snap_collections;
+  interval_set<snapid_t> snap_collections;
   map<epoch_t,Interval> past_intervals;
 
   interval_set<snapid_t> snap_trimq;
@@ -1002,6 +1002,7 @@ public:
   std::string get_corrupt_pg_log_name() const;
   void read_state(ObjectStore *store);
   coll_t make_snap_collection(ObjectStore::Transaction& t, snapid_t sn);
+  void adjust_local_snaps(ObjectStore::Transaction &t, interval_set<snapid_t> &to_check);
 
   void queue_snap_trim();
 

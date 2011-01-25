@@ -620,7 +620,7 @@ void ReplicatedPG::do_sub_op_reply(MOSDSubOpReply *r)
 
 bool ReplicatedPG::snap_trimmer()
 {
-  assert(is_primary());
+  assert(is_primary() && is_clean());
   lock();
   dout(10) << "snap_trimmer start, purged_snaps " << info.purged_snaps << dendl;
 
@@ -641,6 +641,13 @@ bool ReplicatedPG::snap_trimmer()
 
     snapid_t sn = snap_trimq.range_start();
     coll_t c(info.pgid, sn);
+    if (!snap_collections.contains(sn)) {
+      // adjust pg info
+      info.purged_snaps.insert(sn);
+      snap_trimq.erase(sn);
+      dout(10) << "purged_snaps now " << info.purged_snaps << ", snap_trimq now " << snap_trimq << dendl;
+      continue;
+    }
     vector<sobject_t> ls;
     osd->store->collection_list(c, ls);
 
@@ -666,23 +673,22 @@ bool ReplicatedPG::snap_trimmer()
 
       // load clone info
       bufferlist bl;
-      osd->store->getattr(coll, coid, OI_ATTR, bl);
-      object_info_t coi(bl);
+      ObjectContext *obc;
+      int r = find_object_context(coid.oid, OLOC_BLANK, sn, &obc, false, NULL);
+      assert(r == 0);
+      assert(obc->registered);
+      object_info_t &coi = obc->obs.oi;
       vector<snapid_t>& snaps = coi.snaps;
 
       // get snap set context
-      SnapSetContext *ssc = get_snapset_context(coid.oid, false);
+      if (!obc->obs.ssc)
+	obc->obs.ssc = get_snapset_context(coid.oid, false);
+      SnapSetContext *ssc = obc->obs.ssc;
       assert(ssc);
       SnapSet& snapset = ssc->snapset;
 
       dout(10) << coid << " snaps " << snaps << " old snapset " << snapset << dendl;
       assert(snapset.seq);
-
-      // set up repop
-      ObjectContext *obc;
-      int r = find_object_context(coid.oid, coi.oloc, sn, &obc, false);
-      assert(r == 0);
-      assert(obc->registered);
 
       vector<OSDOp> ops;
       tid_t rep_tid = osd->get_tid();
@@ -747,6 +753,8 @@ bool ReplicatedPG::snap_trimmer()
 	// save adjusted snaps for this object
 	dout(10) << coid << " snaps " << snaps << " -> " << newsnaps << dendl;
 	coi.snaps.swap(newsnaps);
+	coi.prior_version = coi.version;
+	coi.version = ctx->at_version;
 	bl.clear();
 	::encode(coi, bl);
 	t->setattr(coll, coid, OI_ATTR, bl);
@@ -761,7 +769,7 @@ bool ReplicatedPG::snap_trimmer()
 	    t->collection_add(coll_t(info.pgid, newsnaps[newsnaps.size()-1]), coll, coid);
 	}	      
 
-	ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, coid, ctx->at_version, ctx->obs->oi.version,
+	ctx->log.push_back(Log::Entry(Log::Entry::MODIFY, coid, coi.version, coi.prior_version,
 				      osd_reqid_t(), ctx->mtime));
 	ctx->at_version.version++;
       }
@@ -1972,7 +1980,6 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 
   ObjectContext *rollback_to;
   int ret = find_object_context(soid.oid, oi.oloc, snapid, &rollback_to, false);
-  sobject_t& rollback_to_sobject = rollback_to->obs.oi.soid;
   if (ret) {
     if (-ENOENT == ret) {
       // there's no snapshot here, or there's no object.
@@ -1990,6 +1997,7 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       assert(0);
     }
   } else { //we got our context, let's use it to do the rollback!
+    sobject_t& rollback_to_sobject = rollback_to->obs.oi.soid;
     if (ctx->clone_obc &&
 	(ctx->clone_obc->obs.oi.soid.snap == snapid)) {
       //just cloned the rollback target, we don't need to do anything!

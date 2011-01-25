@@ -958,6 +958,19 @@ void MDS::handle_mds_map(MMDSMap *m)
   
   // did someone go active?
   if (is_clientreplay() || is_active() || is_stopping()) {
+    // ACTIVE|CLIENTREPLAY|REJOIN => we can discover from them.
+    set<int> olddis, dis;
+    oldmap->get_mds_set(olddis, MDSMap::STATE_ACTIVE);
+    oldmap->get_mds_set(olddis, MDSMap::STATE_CLIENTREPLAY);
+    oldmap->get_mds_set(olddis, MDSMap::STATE_REJOIN);
+    mdsmap->get_mds_set(dis, MDSMap::STATE_ACTIVE);
+    mdsmap->get_mds_set(dis, MDSMap::STATE_CLIENTREPLAY);
+    mdsmap->get_mds_set(dis, MDSMap::STATE_REJOIN);
+    for (set<int>::iterator p = dis.begin(); p != dis.end(); ++p) 
+      if (*p != whoami &&            // not me
+	  olddis.count(*p) == 0)  // newly so?
+	mdcache->kick_discovers(*p);
+
     set<int> oldactive, active;
     oldmap->get_mds_set(oldactive, MDSMap::STATE_ACTIVE);
     mdsmap->get_mds_set(active, MDSMap::STATE_ACTIVE);

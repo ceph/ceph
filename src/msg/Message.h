@@ -212,6 +212,12 @@ public:
       pipe = NULL;
     }
   }
+  void reset_pipe(RefCountedObject *p) {
+    Mutex::Locker l(lock);
+    if (pipe)
+      pipe->put();
+    pipe = p->get();
+  }
 
   int get_peer_type() { return peer_type; }
   void set_peer_type(int t) { peer_type = t; }

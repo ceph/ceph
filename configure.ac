@@ -3,7 +3,7 @@
 
 # Autoconf
 AC_PREREQ(2.59)
-AC_INIT([Ceph distributed file system], [0.24.1], 
+AC_INIT([Ceph distributed file system], [0.24.2], 
 	      [Sage Weil <sage@newdream.net>],
 	      [ceph])
 AC_CONFIG_SUBDIRS([src/gtest])
