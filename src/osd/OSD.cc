@@ -2740,6 +2740,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   bool do_shutdown = false;
+  bool do_restart = false;
   if (osdmap->get_epoch() > 0 &&
       state == STATE_ACTIVE) {
     if (!osdmap->exists(whoami)) {
@@ -2753,6 +2754,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       
       state = STATE_BOOTING;
       up_epoch = 0;
+      do_restart = true;
 
       int cport = cluster_messenger->get_myaddr().get_port();
       int hbport = heartbeat_messenger->get_myaddr().get_port();
@@ -2803,7 +2805,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   m->put();
 
 
-  if (is_booting())
+  if (do_restart)
     send_boot();
   if (do_shutdown)
     shutdown();
