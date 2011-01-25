@@ -867,16 +867,24 @@ void MDSMonitor::tick()
         for (map<uint64_t,MDSMap::mds_info_t>::iterator i = mdsmap.mds_info.begin();
             i != mdsmap.mds_info.end();
             ++i) {
-          if (i->second.rank >= 0 &&
-              (gid = pending_mdsmap.find_standby_for(i->first, i->second.name)))
-            if (pending_mdsmap.get_info_gid(gid).state == MDSMap::STATE_STANDBY_REPLAY)
-              continue; // this MDS already has a standby
-          // hey, we found an MDS without a standby. Pair them!
-          info.standby_for_rank = i->second.rank;
-          dout(10) << "setting to shadow mds rank " << info.standby_for_rank << dendl;
-          info.state = MDSMap::STATE_STANDBY_REPLAY;
-          do_propose = true;
-          break;
+          if (i->second.rank >= 0) {
+            if ((gid = pending_mdsmap.find_standby_for(
+                i->second.rank, i->second.name))) {
+              dout(20) << "checking rank " << i->second.rank << dendl;
+              dout(20) << "follower gid" << gid << "has state"
+                  << ceph_mds_state_name(pending_mdsmap.get_info_gid(gid).state) << dendl;
+              if (pending_mdsmap.get_info_gid(gid).state == MDSMap::STATE_STANDBY_REPLAY) {
+                dout(20) << "skipping this MDS since it has a follower!" << dendl;
+                continue; // this MDS already has a standby
+              }
+            }
+            // hey, we found an MDS without a standby. Pair them!
+            info.standby_for_rank = i->second.rank;
+            dout(10) << "setting to shadow mds rank " << info.standby_for_rank << dendl;
+            info.state = MDSMap::STATE_STANDBY_REPLAY;
+            do_propose = true;
+            break;
+          }
         }
         continue;
       }
