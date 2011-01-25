@@ -2747,9 +2747,22 @@ void OSD::handle_osd_map(MOSDMap *m)
       dout(0) << "map says i do not exist.  shutting down." << dendl;
       do_shutdown = true;   // don't call shutdown() while we have everything paused
     } else if (!osdmap->is_up(whoami) ||
-	       osdmap->get_addr(whoami) != client_messenger->get_myaddr()) {
+	       !osdmap->get_addr(whoami).probably_equals(client_messenger->get_myaddr()) ||
+	       !osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()) ||
+	       !osdmap->get_hb_addr(whoami).probably_equals(heartbeat_messenger->get_myaddr())) {
       stringstream ss;
-      ss << "map e" << osdmap->get_epoch() << " wrongly marked me down";
+      ss << "map e" << osdmap->get_epoch();
+      if (!osdmap->is_up(whoami))
+	ss << " wrongly marked me down or wrong addr";
+      else if (!osdmap->get_addr(whoami).probably_equals(client_messenger->get_myaddr()))
+	ss << " had wrong client addr (" << osdmap->get_addr(whoami)
+	   << " != my " << client_messenger->get_myaddr();
+      else if (osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()))
+	  ss << " had wrong client addr (" << osdmap->get_cluster_addr(whoami)
+	     << " != my " << cluster_messenger->get_myaddr();
+      else if (osdmap->get_hb_addr(whoami).probably_equals(heartbeat_messenger->get_myaddr()))
+	  ss << " had wrong client addr (" << osdmap->get_hb_addr(whoami)
+	     << " != my " << heartbeat_messenger->get_myaddr();
       logclient.log(LOG_WARN, ss);
       
       state = STATE_BOOTING;
