@@ -1656,10 +1656,8 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     }
   } else { //we got our context, let's use it to do the rollback!
     sobject_t& rollback_to_sobject = rollback_to->obs.oi.soid;
-    if (ctx->clone_obc &&
-	(ctx->clone_obc->obs.oi.soid.snap == snapid)) {
+    if (ctx->clone_obc && *ctx->clone_obc->obs.oi.snaps.rbegin() <= snapid) {
       //just cloned the rollback target, we don't need to do anything!
-    
     } else {
       /* 1) Delete current head
        * 2) Clone correct snapshot into head
