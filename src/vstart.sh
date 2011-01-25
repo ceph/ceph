@@ -6,6 +6,7 @@
 
 extra_conf=""
 new=0
+standby=0
 debug=0
 start_all=1
 start_mon=0
@@ -28,6 +29,7 @@ monmap_fn=".ceph_monmap"
 usage="usage: $0 [option]... [mon] [mds] [osd]\n"
 usage=$usage"options:\n"
 usage=$usage"\t-d, --debug\n"
+usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
 usage=$usage"\t-n, --new\n"
 usage=$usage"\t--valgrind[_{osd,mds,mon}] 'toolname args...'\n"
 usage=$usage"\t-m ip:port\t\tspecify monitor address\n"
@@ -42,6 +44,9 @@ while [ $# -ge 1 ]; do
 case $1 in
     -d | --debug )
 	    debug=1
+	    ;;
+    -s | --standby_mds)
+	    standby=1
 	    ;;
     -l | --localhost )
 	    localhost=1
@@ -171,6 +176,11 @@ else
         mds debug scatterstat = true
         mds verify scatter = true
         mds log max segments = 2'
+fi
+
+if [ "$standby" -eq 1 ]; then
+    echo "standby got set"
+    CEPH_NUM_MDS=$(($CEPH_NUM_MDS * 2))
 fi
 
 if [ -n "$MON_ADDR" ]; then
@@ -376,6 +386,8 @@ fi
 # mds
 if [ "$start_mds" -eq 1 ]; then
     mds=0
+    last_mds_name=a
+    set_standby=0
     for name in a b c d e f g h i j k l m n o p
     do
 	if [ "$new" -eq 1 ]; then
@@ -395,6 +407,18 @@ EOF
         keyring = $key_fn
 EOF
 		fi
+		if [ "$standby" -eq 1 ]; then
+		    echo "noticing standby set"
+		    if [ "$set_standby" -eq 1 ]; then
+			cat <<EOF >> $conf
+        mds standby replay = true
+        mds standby for name = $last_mds_nama
+EOF
+			set_standby=0
+		    else
+			set_standby=1
+		    fi
+		fi
 	    fi
 	    $SUDO $CEPH_BIN/cauthtool --create-keyring --gen-key --name=mds.$name \
 		--cap mon 'allow *' \
@@ -407,6 +431,7 @@ EOF
 	run 'mds' $CEPH_BIN/cmds -i $name $ARGS $CMDS_ARGS
 	
 	mds=$(($mds + 1))
+	last_mds_name=$name
 	[ $mds -eq $CEPH_NUM_MDS ] && break
 
 #valgrind --tool=massif $CEPH_BIN/cmds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
