@@ -774,8 +774,10 @@ view_pg_nodes(unsigned int begin, unsigned int end, bool view_all)
     pg_cluster_zoom = 0;
 
     current_pgs.clear();
-    std::copy(g.pgmap.pg_set.begin(), g.pgmap.pg_set.end(),
-	std::inserter(current_pgs, current_pgs.begin() ) );
+    for (hash_map<pg_t,pg_stat_t>::const_iterator p = g.pgmap.pg_stat.begin();
+	 p != g.pgmap.pg_stat.end(); ++p) {
+      current_pgs.push_back(p->first);
+    }
   }
   else
     size = end - begin;

@@ -31,7 +31,6 @@ public:
   epoch_t last_osdmap_epoch;   // last osdmap epoch i applied to the pgmap
   epoch_t last_pg_scan;  // osdmap epoch
   hash_map<pg_t,pg_stat_t> pg_stat;
-  set<pg_t>                pg_set;
   hash_map<int,osd_stat_t> osd_stat;
   set<int> full_osds;
   set<int> nearfull_osds;
@@ -81,7 +80,6 @@ public:
 	 ++p) {
       const pg_t &update_pg(p->first);
       const pg_stat_t &update_stat(p->second);
-      pg_set.insert(update_pg);
       hash_map<pg_t,pg_stat_t>::iterator t = pg_stat.find(update_pg);
       if (t == pg_stat.end()) {
 	hash_map<pg_t,pg_stat_t>::value_type v(update_pg, update_stat);
@@ -131,14 +129,10 @@ public:
 	 p != inc.pg_remove.end();
 	 p++) {
       const pg_t &removed_pg(*p);
-      set<pg_t>::iterator t = pg_set.find(removed_pg);
-      if (t != pg_set.end()) {
-	hash_map<pg_t,pg_stat_t>::iterator s = pg_stat.find(removed_pg);
-	if (s != pg_stat.end()) {
-	  stat_pg_sub(removed_pg, s->second);
-	  pg_stat.erase(s);
-	}
-	pg_set.erase(t);
+      hash_map<pg_t,pg_stat_t>::iterator s = pg_stat.find(removed_pg);
+      if (s != pg_stat.end()) {
+	stat_pg_sub(removed_pg, s->second);
+	pg_stat.erase(s);
       }
     }
 
@@ -233,7 +227,6 @@ public:
 	 p != pg_stat.end();
 	 ++p) {
       stat_pg_add(p->first, p->second);
-      pg_set.insert(p->first);
     }
     for (hash_map<int,osd_stat_t>::iterator p = osd_stat.begin();
 	 p != osd_stat.end();
@@ -249,16 +242,10 @@ public:
     ss << "full_ratio " << full_ratio << std::endl;
     ss << "nearfull_ratio " << nearfull_ratio << std::endl;
     ss << "pg_stat\tobjects\tmip\tunf\tdegr\tkb\tbytes\tlog\tdisklog\tstate\tv\treported\tup\tacting\tlast_scrub" << std::endl;
-    for (set<pg_t>::const_iterator p = pg_set.begin();
-	 p != pg_set.end();
-	 p++) {
-      hash_map<pg_t,pg_stat_t>::const_iterator i = pg_stat.find(*p);
-      if (i == pg_stat.end()) {
-	ss << *p << ": ERROR: no pg_stat information found" << std::endl;
-	continue;
-      }
+    for (hash_map<pg_t,pg_stat_t>::const_iterator i = pg_stat.begin();
+	 i != pg_stat.end(); ++i) {
       const pg_stat_t &st(i->second);
-      ss << *p 
+      ss << i->first
 	 << "\t" << st.num_objects
 	//<< "\t" << st.num_object_copies
 	 << "\t" << st.num_objects_missing_on_primary

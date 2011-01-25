@@ -640,12 +640,12 @@ bool PGMonitor::register_new_pgs()
   }
 
   // deleted pools?
-  for (set<pg_t>::iterator p = pg_map.pg_set.begin();
-       p != pg_map.pg_set.end();
-       p++) {
-    if (!osdmap->have_pg_pool(p->pool())) {
-      dout(20) << " removing creating_pg " << *p << " because containing pool deleted" << dendl;
-      pending_inc.pg_remove.insert(*p);
+  for (hash_map<pg_t,pg_stat_t>::const_iterator p = pg_map.pg_stat.begin();
+       p != pg_map.pg_stat.end(); ++p) {
+    if (!osdmap->have_pg_pool(p->first.pool())) {
+      dout(20) << " removing creating_pg " << p->first << " because "
+	       << "containing pool deleted" << dendl;
+      pending_inc.pg_remove.insert(p->first);
       ++removed;
     }
   }
