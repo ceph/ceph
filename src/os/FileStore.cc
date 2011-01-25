@@ -1034,8 +1034,6 @@ int FileStore::write_op_seq(int fd, uint64_t seq)
 
 int FileStore::mount() 
 {
-  char buf[80];
-
   if (g_conf.filestore_dev) {
     dout(0) << "mounting" << dendl;
     char cmd[100];
@@ -1049,8 +1047,10 @@ int FileStore::mount()
   struct stat st;
   int r = ::stat(basedir.c_str(), &st);
   if (r != 0) {
-    dout(0) << "unable to stat basedir " << basedir << ", " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    return -errno;
+    int err = errno;
+    dout(0) << "unable to stat basedir " << basedir << ": "
+	    << cpp_strerror(err) << dendl;
+    return -err;
   }
   
   // test for btrfs, xattrs, etc.
@@ -1059,9 +1059,9 @@ int FileStore::mount()
     return r;
 
   // get fsid
-  char fn[PATH_MAX];
-  snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
-  fsid_fd = ::open(fn, O_RDWR|O_CREAT, 0644);
+  char buf[PATH_MAX];
+  snprintf(buf, sizeof(buf), "%s/fsid", basedir.c_str());
+  fsid_fd = ::open(buf, O_RDWR|O_CREAT, 0644);
   ::read(fsid_fd, &fsid, sizeof(fsid));
 
   if (lock_fsid() < 0)
@@ -1079,8 +1079,8 @@ int FileStore::mount()
     if (!dir)
       return -errno;
 
-    struct dirent sde, *de;
-    while (::readdir_r(dir, &sde, &de) == 0) {
+    struct dirent *de;
+    while (::readdir_r(dir, (struct dirent *)buf, &de) == 0) {
       if (!de)
 	break;
       long long unsigned c;
@@ -2919,17 +2919,17 @@ bool FileStore::collection_empty(coll_t c)
 {  
   if (fake_collections) return collections.collection_empty(c);
 
-  char fn[PATH_MAX];
-  get_cdir(c, fn, sizeof(fn));
-  dout(15) << "collection_empty " << fn << dendl;
+  char buf[PATH_MAX];
+  get_cdir(c, buf, sizeof(buf));
+  dout(15) << "collection_empty " << buf << dendl;
 
-  DIR *dir = ::opendir(fn);
+  DIR *dir = ::opendir(buf);
   if (!dir)
     return -errno;
 
   bool empty = true;
-  struct dirent sde, *de;
-  while (::readdir_r(dir, &sde, &de) == 0) {
+  struct dirent *de;
+  while (::readdir_r(dir, (struct dirent*)buf, &de) == 0) {
     if (!de)
       break;
     // parse
@@ -2943,7 +2943,7 @@ bool FileStore::collection_empty(coll_t c)
   }
   
   ::closedir(dir);
-  dout(10) << "collection_empty " << fn << " = " << empty << dendl;
+  dout(10) << "collection_empty " << c << " = " << empty << dendl;
   return empty;
 }
 
@@ -2952,18 +2952,19 @@ int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>
 {  
   if (fake_collections) return collections.collection_list(c, ls);
 
-  char fn[PATH_MAX];
-  get_cdir(c, fn, sizeof(fn));
+  char buf[PATH_MAX];
+  get_cdir(c, buf, sizeof(buf));
 
   DIR *dir = NULL;
-  struct dirent sde, *de;
+
+  struct dirent *de;
   bool end;
   
-  dir = ::opendir(fn);
+  dir = ::opendir(buf);
 
   if (!dir) {
     int err = -errno;
-    dout(0) << "error opening directory " << fn << dendl;
+    dout(0) << "error opening directory " << buf << dendl;
     return err;
   }
 
@@ -2976,10 +2977,11 @@ int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>
   while (i < max_count) {
     errno = 0;
     end = false;
-    ::readdir_r(dir, &sde, &de);
+    ::readdir_r(dir, (struct dirent*)buf, &de);
     int err = errno;
     if (!de && err) {
-      dout(0) << "error reading directory " << fn << dendl;
+      dout(0) << "error reading directory for " << c << dendl;
+      ::closedir(dir);
       return -err;
     }
     if (!de) {
@@ -3006,7 +3008,7 @@ int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>
 
   ::closedir(dir);
 
-  dout(10) << "collection_list " << fn << " = 0 (" << ls.size() << " objects)" << dendl;
+  dout(10) << "collection_list " << c << " = 0 (" << ls.size() << " objects)" << dendl;
   return 0;
 }
 
@@ -3015,19 +3017,19 @@ int FileStore::collection_list(coll_t c, vector<sobject_t>& ls)
 {  
   if (fake_collections) return collections.collection_list(c, ls);
 
-  char fn[PATH_MAX];
-  get_cdir(c, fn, sizeof(fn));
-  dout(10) << "collection_list " << fn << dendl;
+  char buf[PATH_MAX];
+  get_cdir(c, buf, sizeof(buf));
+  dout(10) << "collection_list " << buf << dendl;
 
-  DIR *dir = ::opendir(fn);
+  DIR *dir = ::opendir(buf);
   if (!dir)
     return -errno;
   
   // first, build (ino, object) list
   vector< pair<ino_t,sobject_t> > inolist;
 
-  struct dirent sde, *de;
-  while (::readdir_r(dir, &sde, &de) == 0) {
+  struct dirent *de;
+  while (::readdir_r(dir, (struct dirent*)buf, &de) == 0) {
     if (!de)
       break;
     // parse
@@ -3042,7 +3044,7 @@ int FileStore::collection_list(coll_t c, vector<sobject_t>& ls)
   }
 
   // sort
-  dout(10) << "collection_list " << fn << " sorting " << inolist.size() << " objects" << dendl;
+  dout(10) << "collection_list " << c << " sorting " << inolist.size() << " objects" << dendl;
   sort(inolist.begin(), inolist.end());
 
   // build final list
@@ -3051,7 +3053,7 @@ int FileStore::collection_list(coll_t c, vector<sobject_t>& ls)
   for (vector< pair<ino_t,sobject_t> >::iterator p = inolist.begin(); p != inolist.end(); p++)
     ls[i++].swap(p->second);
   
-  dout(10) << "collection_list " << fn << " = 0 (" << ls.size() << " objects)" << dendl;
+  dout(10) << "collection_list " << c << " = 0 (" << ls.size() << " objects)" << dendl;
   ::closedir(dir);
   return 0;
 }
