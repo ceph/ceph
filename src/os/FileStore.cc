@@ -540,12 +540,12 @@ int FileStore::wipe_subvol(const char *s)
   strcpy(volargs.name, s);
   int fd = ::open(basedir.c_str(), O_RDONLY);
   if (fd < 0)
-    return fd;
+    return -errno;
   int r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &volargs);
-  ::close(fd);
+  TEMP_FAILURE_RETRY(::close(fd));
   if (r == 0) {
     dout(0) << "mkfs  removed old subvol " << s << dendl;
-    return r;
+    return 0;
   }
 
   dout(0) << "mkfs  removing old directory " << s << dendl;
@@ -557,109 +557,159 @@ int FileStore::wipe_subvol(const char *s)
 
 int FileStore::mkfs()
 {
-  char cmd[PATH_MAX];
+  int ret = 0;
+  char buf[PATH_MAX];
+  DIR *dir;
+  struct dirent *de;
+  int basedir_fd;
+  struct btrfs_ioctl_vol_args volargs;
+
   if (g_conf.filestore_dev) {
     dout(0) << "mounting" << dendl;
-    snprintf(cmd, sizeof(cmd), "mount %s", g_conf.filestore_dev);
-    system(cmd);
+    snprintf(buf, sizeof(buf), "mount %s", g_conf.filestore_dev);
+    system(buf);
   }
 
   dout(1) << "mkfs in " << basedir << dendl;
 
-  char fn[PATH_MAX];
-  snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
-  fsid_fd = ::open(fn, O_CREAT|O_RDWR, 0644);
-  if (fsid_fd < 0)
-    return -errno;
-  if (lock_fsid() < 0)
-    return -EBUSY;
+  snprintf(buf, sizeof(buf), "%s/fsid", basedir.c_str());
+  fsid_fd = ::open(buf, O_CREAT|O_WRONLY, 0644);
+  if (fsid_fd < 0) {
+    ret = -errno;
+    derr << "FileStore::mkfs: failed to open " << buf << ": "
+	 << cpp_strerror(ret) << dendl;
+    goto out;
+  }
+  if (lock_fsid() < 0) {
+    ret = -EBUSY;
+    goto close_fsid_fd;
+  }
 
   // wipe
-  DIR *dir = ::opendir(basedir.c_str());
-  if (!dir)
-    return -errno;
-  struct dirent sde, *de;
-  while (::readdir_r(dir, &sde, &de) == 0) {
+  dir = ::opendir(basedir.c_str());
+  if (!dir) {
+    ret = -errno;
+    derr << "FileStore::mkfs: failed to opendir " << basedir << dendl;
+    goto close_fsid_fd;
+  }
+  while (::readdir_r(dir, (struct dirent*)buf, &de) == 0) {
     if (!de)
       break;
     if (strcmp(de->d_name, ".") == 0 ||
 	strcmp(de->d_name, "..") == 0)
       continue;
+    if (strcmp(de->d_name, "fsid") == 0)
+      continue;
 
     char path[PATH_MAX];
     snprintf(path, sizeof(path), "%s/%s", basedir.c_str(), de->d_name);
     struct stat st;
-    int r = ::stat(path, &st);
-    if (S_ISDIR(st.st_mode)) 
-      r = wipe_subvol(de->d_name);
+    if (::stat(path, &st)) {
+      ret = -errno;
+      derr << "FileStore::mkfs: failed to stat " << de->d_name << dendl;
+      goto close_dir;
+    }
+    if (S_ISDIR(st.st_mode)) {
+      ret = wipe_subvol(de->d_name);
+      if (ret)
+	goto close_dir;
+    }
     else {
-      r = ::unlink(path);
+      if (::unlink(path)) {
+	ret = -errno;
+	derr << "FileStore::mkfs: failed to remove old file "
+	     << de->d_name << dendl;
+	goto close_dir;
+      }
       dout(0) << "mkfs  removing old file " << de->d_name << dendl;
     }
-    if (r < 0) {
-      char buf[100];
-      dout(0) << "problem wiping out " << de->d_name << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-      return -errno;
-    }
   }
-  ::closedir(dir);
- 
-  
+
   // fsid
   srand(time(0) + getpid());
   fsid = rand();
-
-  ::close(fsid_fd);
-  fsid_fd = ::open(fn, O_CREAT|O_RDWR, 0644);
-  if (fsid_fd < 0)
-    return -errno;
-  if (lock_fsid() < 0)
-    return -EBUSY;
-  ::write(fsid_fd, &fsid, sizeof(fsid));
-  ::close(fsid_fd);
+  if (TEMP_FAILURE_RETRY(::write(fsid_fd, &fsid, sizeof(fsid)))
+	!= sizeof(fsid)) {
+    ret = errno;
+    derr << "FileStore::mkfs: failed to write fsid: "
+	 << cpp_strerror(ret) << dendl;
+    goto close_fsid_fd;
+  }
+  if (TEMP_FAILURE_RETRY(::close(fsid_fd))) {
+    ret = errno;
+    derr << "FileStore::mkfs: close failed: can't write fsid: "
+	 << cpp_strerror(ret) << dendl;
+    fsid_fd = -1;
+    goto close_fsid_fd;
+  }
+  fsid_fd = -1;
   dout(10) << "mkfs fsid is " << fsid << dendl;
 
   // current
-  struct btrfs_ioctl_vol_args volargs;
   memset(&volargs, 0, sizeof(volargs));
-  int fd = ::open(basedir.c_str(), O_RDONLY);
+  basedir_fd = ::open(basedir.c_str(), O_RDONLY);
   volargs.fd = 0;
   strcpy(volargs.name, "current");
-  int r = ::ioctl(fd, BTRFS_IOC_SUBVOL_CREATE, (unsigned long int)&volargs);
-  if (r == 0) {
-    // yay
-    dout(2) << " created btrfs subvol " << current_fn << dendl;
-    ::chmod(current_fn, 0755);
-  } else if (errno == EEXIST) {
-    dout(2) << " current already exists" << dendl;
-    r = 0;
-  } else if (errno == EOPNOTSUPP || errno == ENOTTY) {
-    dout(2) << " BTRFS_IOC_SUBVOL_CREATE ioctl failed, trying mkdir " << current_fn << dendl;
-    r = ::mkdir(current_fn, 0755);
-    if (errno == EEXIST)
-      r = 0;
+  if (::ioctl(basedir_fd, BTRFS_IOC_SUBVOL_CREATE, (unsigned long int)&volargs)) {
+    ret = errno;
+    if (ret == EEXIST) {
+      dout(2) << " current already exists" << dendl;
+      // not fatal
+    }
+    else if (ret == EOPNOTSUPP || ret == ENOTTY) {
+      dout(2) << " BTRFS_IOC_SUBVOL_CREATE ioctl failed, trying mkdir "
+	      << current_fn << dendl;
+      if (::mkdir(current_fn, 0755)) {
+	ret = errno;
+	if (ret != EEXIST) {
+	  derr << "FileStore::mkfs: mkdir " << current_fn << " failed: "
+	       << cpp_strerror(ret) << dendl;
+	  goto close_basedir_fd;
+	}
+      }
+    }
+    else {
+      derr << "FileStore::mkfs: BTRFS_IOC_SUBVOL_CREATE failed with error "
+	   << cpp_strerror(ret) << dendl;
+      goto close_basedir_fd;
+    }
   }
-  ::close(fd);
-  if (r < 0) {
-    char err[80];
-    dout(0) << "failed to create current: " << strerror_r(errno, err, sizeof(err)) << dendl;
-    return -errno;
+  else {
+    // ioctl succeeded. yay
+    dout(2) << " created btrfs subvol " << current_fn << dendl;
+    if (::chmod(current_fn, 0755)) {
+      ret = -errno;
+      derr << "FileStore::mkfs: failed to chmod " << current_fn << " to 0755: "
+	   << cpp_strerror(ret) << dendl;
+      goto close_basedir_fd;
+    }
   }
 
   // journal?
-  int err = mkjournal();
-  if (err)
-    return err;
+  ret = mkjournal();
+  if (ret)
+    goto close_basedir_fd;
 
   if (g_conf.filestore_dev) {
-    char cmd[PATH_MAX];
     dout(0) << "umounting" << dendl;
-    snprintf(cmd, sizeof(cmd), "umount %s", g_conf.filestore_dev);
+    snprintf(buf, sizeof(buf), "umount %s", g_conf.filestore_dev);
     //system(cmd);
   }
 
   dout(1) << "mkfs done in " << basedir << dendl;
-  return 0;
+  ret = 0;
+
+close_basedir_fd:
+  TEMP_FAILURE_RETRY(::close(basedir_fd));
+close_dir:
+  ::closedir(dir);
+close_fsid_fd:
+  if (fsid_fd != -1) {
+    TEMP_FAILURE_RETRY(::close(fsid_fd));
+    fsid_fd = -1;
+  }
+out:
+  return ret;
 }
 
 int FileStore::mkjournal()
