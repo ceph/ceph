@@ -71,7 +71,7 @@ public:
   void ms_handle_remote_reset(Connection *con) {}
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
                          bool force_new);
-  void init();
+  void init(int rank);
   void shutdown();
   void dump(const char *dumpfile);
 };

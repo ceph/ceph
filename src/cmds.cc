@@ -38,11 +38,14 @@ using namespace std;
 
 void usage()
 {
-  derr << "usage: cmds -i name [flags] [--mds rank] [[--journal_check]|[--hot-standby][rank]]\n"
+  derr << "usage: cmds -i name [flags] [[--journal_check]|[--hot-standby][rank]]\n"
        << "  -m monitorip:port\n"
        << "        connect to monitor at given address\n"
        << "  --debug_mds n\n"
-       << "        debug MDS level (e.g. 10)\n" << dendl;
+       << "        debug MDS level (e.g. 10)\n"
+       << "  --dump-journal rank [filename]"
+       << "        dump the MDS journal for rank. Defaults to mds.journal.dump"
+       << dendl;
   generic_server_usage();
 }
 
@@ -70,10 +73,18 @@ int main(int argc, const char **argv)
     if (!strcmp(args[i], "--dump-journal")) {
       if (i + 1 < args.size() &&
           (args[i+1][0] != '-')) { // another argument?
-        dump_file = args[i+1];
+        shadow = strtol(args[i+1], 0, 0);
+        if (i + 2 < args.size() &&
+            (args[i+2][0] != '-')) {
+          dump_file = args[i+2];
+          ++i;
+        } else
+          dump_file = "mds.journal.dump";
         ++i;
-      } else
-        dump_file = "mds.journal.dump";
+      } else {
+        cout << "must specify rank of mds to dump!" << std::endl;
+        return -1;
+      }
       dump_journal = true;
       dout(0) << "dumping journal" << dendl;
     } else if (!strcmp(args[i], "--journal_check")) {
@@ -118,7 +129,7 @@ int main(int argc, const char **argv)
       usage();
     }
   }
-  if (!g_conf.id) {
+  if (!g_conf.id && !dump_journal) {
     derr << "must specify '-i name' with the cmds instance name" << dendl;
     usage();
   }
@@ -135,7 +146,7 @@ int main(int argc, const char **argv)
   messenger->bind();
   if (dump_journal) {
     Dumper *journal_dumper = new Dumper(messenger, &mc);
-    journal_dumper->init();
+    journal_dumper->init(shadow);
     journal_dumper->dump(dump_file);
     mc.shutdown();
   } else {

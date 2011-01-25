@@ -36,9 +36,9 @@ bool Dumper::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
   return *authorizer != NULL;
 }
 
-void Dumper::init() 
+void Dumper::init(int rank) 
 {
-  inodeno_t ino = MDS_INO_LOG_OFFSET + strtol(g_conf.id, 0, 0);
+  inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
   unsigned pg_pool = CEPH_METADATA_RULE;
   osdmap = new OSDMap();
   objecter = new Objecter(messenger, monc, osdmap, lock, timer);
