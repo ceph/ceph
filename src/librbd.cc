@@ -952,7 +952,6 @@ extern "C" void librbd_version(int *major, int *minor, int *extra)
     *extra = LIBRBD_VER_EXTRA;
 }
 
-#if 0 // C++ interface first
 static librbd::RBD rbd;
 
 extern "C" int rbd_initialize(int argc, const char **argv)
@@ -965,26 +964,42 @@ extern "C" void rbd_shutdown()
   rbd.shutdown();
 }
 
+extern "C" int rbd_open_pool(const char *pool_name, rbd_pool_t *pool)
+{
+  librbd::pool_t cpp_pool;
+  int r = rbd.open_pool(pool_name, &cpp_pool);
+  if (r < 0)
+    return r;
+
+  *pool = (rbd_pool_t) cpp_pool;
+  return 0;
+}
+
+extern "C" int rbd_close_pool(rbd_pool_t pool)
+{
+  return rbd.close_pool((librbd::pool_t) pool);
+}
+
 /* images */
-extern "C" int rbd_create_image(const char *pool, const char *name, size_t size)
+extern "C" int rbd_create(rbd_pool_t pool, const char *name, size_t size)
 {
-  return rbd.create_image(pool, name, size);
+  return rbd.create(pool, name, size);
 }
 
-extern "C" int rbd_remove_image(const char *pool, const char *name)
+extern "C" int rbd_remove(rbd_pool_t pool, const char *name)
 {
-  return rbd.remove_image(pool, name);
+  return rbd.remove(pool, name);
 }
 
-extern "C" int rbd_resize_image(const char *pool, const char *name, size_t size)
+extern "C" int rbd_resize(rbd_pool_t pool, const char *name, size_t size)
 {
-  return rbd.resize_image(pool, name, size);
+  return rbd.resize(pool, name, size);
 }
 
-extern "C" int rbd_stat_image(const char *pool, const char *name, rbd_image_info_t *info)
+extern "C" int rbd_stat(rbd_pool_t pool, const char *name, rbd_image_info_t *info)
 {
   librbd::image_info_t cpp_info;
-  int r = rbd.stat_image(pool, name, cpp_info);
+  int r = rbd.stat(pool, name, cpp_info);
   if (r < 0)
     return r;
 
@@ -995,10 +1010,11 @@ extern "C" int rbd_stat_image(const char *pool, const char *name, rbd_image_info
   return 0;
 }
 
-extern "C" size_t rbd_list_images(const char *pool, char **names, size_t max_names)
+extern "C" size_t rbd_list(rbd_pool_t pool, char **names, size_t max_names)
 {
   std::vector<string> cpp_names;
-  int r = rbd.list_images(pool, cpp_names);
+  librbd::pool_t cpp_pool = (librbd::pool_t) pool;
+  int r = rbd.list(cpp_pool, cpp_names);
   if (r == -ENOENT)
     return 0;
   if (r < 0)
@@ -1015,22 +1031,22 @@ extern "C" size_t rbd_list_images(const char *pool, char **names, size_t max_nam
 }
 
 /* snapshots */
-extern "C" int rbd_create_snap(const char *pool, const char *image, const char *snap_name)
+extern "C" int rbd_create_snap(rbd_pool_t pool, const char *image, const char *snap_name)
 {
   return rbd.create_snap(pool, image, snap_name);
 }
 
-extern "C" int rbd_remove_snap(const char *pool, const char *image, const char *snap_name)
+extern "C" int rbd_remove_snap(rbd_pool_t pool, const char *image, const char *snap_name)
 {
   return rbd.remove_snap(pool, image, snap_name);
 }
 
-extern "C" int rbd_rollback_snap(const char *pool, const char *image, const char *snap_name)
+extern "C" int rbd_rollback_snap(rbd_pool_t pool, const char *image, const char *snap_name)
 {
   return rbd.rollback_snap(pool, image, snap_name);
 }
 
-extern "C" size_t rbd_list_snaps(const char *pool, const char *image, rbd_snap_info_t *snaps, size_t max_snaps)
+extern "C" size_t rbd_list_snaps(rbd_pool_t pool, const char *image, rbd_snap_info_t *snaps, size_t max_snaps)
 {
   std::vector<librbd::snap_info_t> cpp_snaps;
   int r = rbd.list_snaps(pool, image, cpp_snaps);
@@ -1050,4 +1066,3 @@ extern "C" size_t rbd_list_snaps(const char *pool, const char *image, rbd_snap_i
   }
   return cpp_snaps.size();
 }
-#endif

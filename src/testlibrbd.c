@@ -29,32 +29,32 @@
 #define TEST_SNAP "testsnap"
 #define MB_BYTES(mb) (mb << 20)
 
-void test_create_and_stat(const char *name, size_t size)
+void test_create_and_stat(rbd_pool_t pool, const char *name, size_t size)
 {
   rbd_image_info_t info;
-  assert(rbd_create_image(TEST_POOL, name, size) == 0);
-  assert(rbd_stat_image(TEST_POOL, name, &info) == 0);
+  assert(rbd_create(pool, name, size) == 0);
+  assert(rbd_stat(pool, name, &info) == 0);
   printf("image has size %llu and order %d\n", (unsigned long long) info.size, info.order);
   assert(info.size == size);
 }
 
-void test_resize_and_stat(const char *name, size_t size)
+void test_resize_and_stat(rbd_pool_t pool, const char *name, size_t size)
 {
   rbd_image_info_t info;
-  assert(rbd_resize_image(TEST_POOL, name, size) == 0);
-  assert(rbd_stat_image(TEST_POOL, name, &info) == 0);
+  assert(rbd_resize(pool, name, size) == 0);
+  assert(rbd_stat(pool, name, &info) == 0);
   printf("image has size %llu and order %d\n", (unsigned long long) info.size, info.order);
   assert(info.size == size);
 }
 
-void test_ls(int num_expected, ...)
+void test_ls(rbd_pool_t pool, int num_expected, ...)
 {
   char **names;
   int num_images, i, j;
   char *expected;
   va_list ap;
   names = (char **) malloc(sizeof(char **) * 10);
-  num_images = rbd_list_images(TEST_POOL, names, 10);
+  num_images = rbd_list(pool, names, 10);
   printf("num images is: %d\nexpected: %d\n", num_images, num_expected);
   assert(num_images == num_expected);
 
@@ -87,24 +87,24 @@ void test_ls(int num_expected, ...)
   free(names);
 }
 
-void test_delete(const char *name)
+void test_delete(rbd_pool_t pool, const char *name)
 {
-  assert(rbd_remove_image(TEST_POOL, name) == 0);
+  assert(rbd_remove(pool, name) == 0);
 }
 
-void test_create_snap(const char *image, const char *name)
+void test_create_snap(rbd_pool_t pool, const char *image, const char *name)
 {
-  assert(rbd_create_snap(TEST_POOL, image, name) == 0);
+  assert(rbd_create_snap(pool, image, name) == 0);
 }
 
-void test_ls_snaps(char *image, int num_expected, ...)
+void test_ls_snaps(rbd_pool_t pool, char *image, int num_expected, ...)
 {
   rbd_snap_info_t *snaps;
   int num_snaps, i, j, expected_size;
   char *expected;
   va_list ap;
   snaps = (rbd_snap_info_t *) malloc(sizeof(rbd_snap_info_t *) * 10);
-  num_snaps = rbd_list_snaps(TEST_POOL, image, snaps, 10);
+  num_snaps = rbd_list_snaps(pool, image, snaps, 10);
   printf("num snaps is: %d\nexpected: %d\n", num_snaps, num_expected);
   assert(num_snaps == num_expected);
 
@@ -138,33 +138,36 @@ void test_ls_snaps(char *image, int num_expected, ...)
   free(snaps);
 }
 
-void test_delete_snap(const char *image, const char *name)
+void test_delete_snap(rbd_pool_t pool, const char *image, const char *name)
 {
-  assert(rbd_remove_snap(TEST_POOL, image, name) == 0);
+  assert(rbd_remove_snap(pool, image, name) == 0);
 }
 
 int main(int argc, const char **argv) 
 {
-  rbd_initialize(0, NULL);
-  test_ls(0);
-  test_create_and_stat(TEST_IMAGE, MB_BYTES(1));
-  test_ls(1, TEST_IMAGE);
-  test_ls_snaps(TEST_IMAGE, 0);
-  test_create_snap(TEST_IMAGE, TEST_SNAP);
-  test_ls_snaps(TEST_IMAGE, 1, TEST_SNAP, MB_BYTES(1));
-  test_resize_and_stat(TEST_IMAGE, MB_BYTES(2));
-  test_create_snap(TEST_IMAGE, TEST_SNAP "1");
-  test_ls_snaps(TEST_IMAGE, 2, TEST_SNAP, MB_BYTES(1), TEST_SNAP "1", MB_BYTES(2));
-  test_delete_snap(TEST_IMAGE, TEST_SNAP);
-  test_ls_snaps(TEST_IMAGE, 1, TEST_SNAP "1", MB_BYTES(2));
-  test_delete_snap(TEST_IMAGE, TEST_SNAP "1");
-  test_ls_snaps(TEST_IMAGE, 0);
-  test_create_and_stat(TEST_IMAGE "1", MB_BYTES(2));
-  test_ls(2, TEST_IMAGE, TEST_IMAGE "1");
-  test_delete(TEST_IMAGE);
-  test_ls(1, TEST_IMAGE "1");
-  test_delete(TEST_IMAGE "1");
-  test_ls(0);
+  rbd_pool_t pool;
+  assert(rbd_initialize(0, NULL) == 0);
+  assert(rbd_open_pool(TEST_POOL, &pool) == 0);
+  test_ls(pool, 0);
+  test_create_and_stat(pool, TEST_IMAGE, MB_BYTES(1));
+  test_ls(pool, 1, TEST_IMAGE);
+  test_ls_snaps(pool, TEST_IMAGE, 0);
+  test_create_snap(pool, TEST_IMAGE, TEST_SNAP);
+  test_ls_snaps(pool, TEST_IMAGE, 1, TEST_SNAP, MB_BYTES(1));
+  test_resize_and_stat(pool, TEST_IMAGE, MB_BYTES(2));
+  test_create_snap(pool, TEST_IMAGE, TEST_SNAP "1");
+  test_ls_snaps(pool, TEST_IMAGE, 2, TEST_SNAP, MB_BYTES(1), TEST_SNAP "1", MB_BYTES(2));
+  test_delete_snap(pool, TEST_IMAGE, TEST_SNAP);
+  test_ls_snaps(pool, TEST_IMAGE, 1, TEST_SNAP "1", MB_BYTES(2));
+  test_delete_snap(pool, TEST_IMAGE, TEST_SNAP "1");
+  test_ls_snaps(pool, TEST_IMAGE, 0);
+  test_create_and_stat(pool, TEST_IMAGE "1", MB_BYTES(2));
+  test_ls(pool, 2, TEST_IMAGE, TEST_IMAGE "1");
+  test_delete(pool, TEST_IMAGE);
+  test_ls(pool, 1, TEST_IMAGE "1");
+  test_delete(pool, TEST_IMAGE "1");
+  test_ls(pool, 0);
+  rbd_close_pool(pool);
   rbd_shutdown();
   return 0;
 }

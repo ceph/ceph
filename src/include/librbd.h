@@ -34,6 +34,7 @@ extern "C" {
 #define LIBRBD_SUPPORTS_WATCH 0
 
 typedef void *rbd_snap_t;
+typedef void *rbd_pool_t;
 
 typedef struct {
   uint64_t id;
@@ -54,21 +55,25 @@ void rbd_shutdown();
 
 void librbd_version(int *major, int *minor, int *extra);
 
+/* pools */
+int rbd_open_pool(const char *pool_name, rbd_pool_t *pool);
+int rbd_close_pool(rbd_pool_t pool);
+
 /* images */
-int rbd_create_image(const char* pool, const char *name, size_t size);
-int rbd_remove_image(const char* pool, const char *name);
-int rbd_resize_image(const char* pool, const char *name, size_t size);
-int rbd_stat_image(const char* pool, const char *name, rbd_image_info_t *info);
-size_t rbd_list_images(const char* pool, char **names, size_t max_names);
+int rbd_create(rbd_pool_t pool, const char *name, size_t size);
+int rbd_remove(rbd_pool_t pool, const char *name);
+int rbd_resize(rbd_pool_t pool, const char *name, size_t size);
+int rbd_stat(rbd_pool_t pool, const char *name, rbd_image_info_t *info);
+size_t rbd_list(rbd_pool_t pool, char **names, size_t max_names);
 
 /* snapshots */
-int rbd_create_snap(const char* pool, const char *image,
+int rbd_create_snap(rbd_pool_t pool, const char *image,
 		    const char *snapname);
-int rbd_remove_snap(const char* pool, const char *image,
+int rbd_remove_snap(rbd_pool_t pool, const char *image,
 		    const char *snapname);
-int rbd_rollback_snap(const char* pool, const char *image,
+int rbd_rollback_snap(rbd_pool_t pool, const char *image,
 		      const char *snapname);
-size_t rbd_list_snaps(const char* pool, const char *image,
+size_t rbd_list_snaps(rbd_pool_t pool, const char *image,
 		      rbd_snap_info_t *snaps, size_t max_snaps);
 
 #ifdef __cplusplus
