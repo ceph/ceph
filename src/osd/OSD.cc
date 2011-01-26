@@ -2048,6 +2048,7 @@ bool OSD::ms_dispatch(Message *m)
 {
   // lock!
   osd_lock.Lock();
+  do_waiters();
   ++dispatch_running;
   _dispatch(m);
   --dispatch_running;
@@ -2520,7 +2521,12 @@ void OSD::handle_osd_map(MOSDMap *m)
   osd_lock.Unlock();
 
   op_tp.pause();
+
+  // requeue under osd_lock to preserve ordering of _dispatch() wrt incoming messages
+  osd_lock.Lock();  
+
   op_wq.lock();
+
   list<Message*> rq;
   while (!op_queue.empty()) {
     PG *pg = op_queue.back();
@@ -2534,9 +2540,8 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(15) << " will requeue " << *mess << dendl;
     rq.push_front(mess);
   }
+  push_waiters(rq);  // requeue under osd_lock!
   op_wq.unlock();
-  push_waiters(rq);
-  osd_lock.Lock();
 
   recovery_tp.pause();
   disk_tp.pause_new();   // _process() may be waiting for a replica message

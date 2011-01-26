@@ -369,6 +369,7 @@ private:
     finished_lock.Unlock();
   }
   void push_waiters(list<class Message*>& ls) {
+    assert(osd_lock.is_locked());   // currently, at least.  be careful if we change this (see #743)
     finished_lock.Lock();
     finished.splice(finished.begin(), ls);
     finished_lock.Unlock();
