@@ -257,8 +257,8 @@ bin_PROGRAMS += testrados testradospp radosacl
 endif
 
 rbd_SOURCES = rbd.cc common/fiemap.cc
-rbd_LDADD = librados.la -lpthread -lm $(CRYPTOPP_LIBS)
 rbd_CXXFLAGS = ${AM_CXXFLAGS}
+rbd_LDADD = librados.a librbd.a libcrush.a -lpthread -lm $(CRYPTOPP_LIBS)
 bin_PROGRAMS += rbd
 
 if WITH_DEBUG
