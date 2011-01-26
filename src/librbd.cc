@@ -832,12 +832,12 @@ int librbd::RBDClient::open_pools(const char *pool_name, PoolCtx *ctx)
 int librbd::RBD::initialize(int argc, const char *argv[])
 {
   client = new RBDClient();
-  return ((librbd::RBDClient *)client)->initialize(argc, argv);
+  return client->initialize(argc, argv);
 }
 
 void librbd::RBD::shutdown()
 {
-  ((librbd::RBDClient *)client)->shutdown();
+  client->shutdown();
   delete (librbd::RBDClient *)client;
 }
 
@@ -847,7 +847,7 @@ int librbd::RBD::open_pool(const char *pool_name, pool_t *pool)
   if (!ctx)
     return -ENOMEM;
 
-  int ret = ((librbd::RBDClient *)client)->open_pools(pool_name, ctx);
+  int ret = client->open_pools(pool_name, ctx);
   if (ret < 0)
     return ret;
 
@@ -860,7 +860,7 @@ int librbd::RBD::close_pool(pool_t pool)
 {
   PoolCtx *ctx = (PoolCtx *)pool;
 
-  ((librbd::RBDClient *)client)->close_pools(ctx);
+  client->close_pools(ctx);
   delete ctx;
   
   return 0; 
@@ -871,7 +871,7 @@ int librbd::RBD::create(pool_t pool, const char *name, size_t size)
   string md_oid = name;
   md_oid += RBD_SUFFIX;
   int order = 0;
-  int r = ((librbd::RBDClient *)client)->do_create(ctx->md, md_oid, name, size, &order);
+  int r = client->do_create(ctx->md, md_oid, name, size, &order);
   return r;
 }
 
@@ -880,7 +880,7 @@ int librbd::RBD::remove(pool_t pool, const char *name)
   PoolCtx *ctx = (PoolCtx *)pool;
   string md_oid = name;
   md_oid += RBD_SUFFIX;
-  int r = ((librbd::RBDClient *)client)->do_delete(ctx, md_oid, name);
+  int r = client->do_delete(ctx, md_oid, name);
   return r;
 }
 
@@ -889,7 +889,7 @@ int librbd::RBD::resize(pool_t pool, const char *name, size_t size)
   PoolCtx *ctx = (PoolCtx *)pool;
   string md_oid = name;
   md_oid += RBD_SUFFIX;
-  int r = ((librbd::RBDClient *)client)->do_resize(ctx, md_oid, name, size);
+  int r = client->do_resize(ctx, md_oid, name, size);
   return r;
 }
 
@@ -898,35 +898,35 @@ int librbd::RBD::stat(pool_t pool, const char *name, image_info_t& info)
   PoolCtx *ctx = (PoolCtx *)pool;
   string md_oid = name;
   md_oid += RBD_SUFFIX;
-  int r = ((librbd::RBDClient *)client)->do_info(ctx, md_oid, info);
+  int r = client->do_info(ctx, md_oid, info);
   return r;
 }
 
 int librbd::RBD::list(pool_t pool, std::vector<string>& names)
 {
   PoolCtx *ctx = (PoolCtx *)pool;
-  int r = ((librbd::RBDClient *)client)->do_list(ctx, names);
+  int r = client->do_list(ctx, names);
   return r;
 }
 
 int librbd::RBD::create_snap(pool_t pool, const char *image_name, const char *snap_name)
 {
   PoolCtx *ctx = (PoolCtx *)pool;
-  int r = ((librbd::RBDClient *)client)->do_create_snap(ctx, image_name, snap_name);
+  int r = client->do_create_snap(ctx, image_name, snap_name);
   return r;
 }
 
 int librbd::RBD::remove_snap(pool_t pool, const char *image_name, const char *snap_name)
 {
   PoolCtx *ctx = (PoolCtx *)pool;
-  int r = ((librbd::RBDClient *)client)->do_remove_snap(ctx, image_name, snap_name);
+  int r = client->do_remove_snap(ctx, image_name, snap_name);
   return r;
 }
 
 int librbd::RBD::rollback_snap(pool_t pool, const char *image_name, const char *snap_name)
 {
   PoolCtx *ctx = (PoolCtx *)pool;
-  int r = ((librbd::RBDClient *)client)->do_rollback_snap(ctx, image_name, snap_name);
+  int r = client->do_rollback_snap(ctx, image_name, snap_name);
   return r;
 }
 
@@ -935,7 +935,7 @@ int librbd::RBD::list_snaps(pool_t pool, const char* image_name, std::vector<lib
   PoolCtx *ctx = (PoolCtx *)pool;
   string md_oid = image_name;
   md_oid += RBD_SUFFIX;
-  int r = ((librbd::RBDClient *)client)->do_list_snaps(ctx, md_oid, snaps);
+  int r = client->do_list_snaps(ctx, md_oid, snaps);
   return r;
 }
 

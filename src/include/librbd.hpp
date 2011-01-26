@@ -24,9 +24,8 @@
 #include "librados.hpp"
 #include "librbd.h"
 
-class RBD;
-
 namespace librbd {
+  class RBDClient;
   typedef void *pool_t;
 #if 0 // for IO
   typedef void *completion_t;
@@ -48,7 +47,7 @@ namespace librbd {
 
 class RBD
 {
-  void *client;
+  RBDClient *client;
 
 public:
   RBD() {}
