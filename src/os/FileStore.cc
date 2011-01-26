@@ -25,6 +25,7 @@
 
 #include "common/Timer.h"
 #include "common/errno.h"
+#include "common/run_cmd.h"
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
@@ -549,10 +550,9 @@ int FileStore::wipe_subvol(const char *s)
   }
 
   dout(0) << "mkfs  removing old directory " << s << dendl;
-  char cmd[PATH_MAX];
-  snprintf(cmd, sizeof(cmd), "rm -r %s/%s", basedir.c_str(), s);
-  system(cmd);
-  return 0;
+  char buf[PATH_MAX];
+  snprintf(buf, sizeof(buf), "%s/%s", basedir.c_str(), s);
+  return run_cmd("rm", "-r", buf, NULL);
 }
 
 int FileStore::mkfs()
@@ -566,8 +566,12 @@ int FileStore::mkfs()
 
   if (g_conf.filestore_dev) {
     dout(0) << "mounting" << dendl;
-    snprintf(buf, sizeof(buf), "mount %s", g_conf.filestore_dev);
-    system(buf);
+    ret = run_cmd("mount", g_conf.filestore_dev, NULL);
+    if (ret) {
+      derr << "FileStore::mkfs: failed to mount g_conf.filestore_dev "
+	   << "'" << g_conf.filestore_dev << "'. Error code " << ret << dendl;
+      goto out;
+    }
   }
 
   dout(1) << "mkfs in " << basedir << dendl;
@@ -1036,9 +1040,7 @@ int FileStore::mount()
 {
   if (g_conf.filestore_dev) {
     dout(0) << "mounting" << dendl;
-    char cmd[100];
-    snprintf(cmd, sizeof(cmd), "mount %s", g_conf.filestore_dev);
-    //system(cmd);
+    //run_cmd("mount", g_conf.filestore_dev, NULL);
   }
 
   dout(5) << "basedir " << basedir << " journal " << journalpath << dendl;
@@ -1268,10 +1270,8 @@ int FileStore::umount()
   ::close(basedir_fd);
 
   if (g_conf.filestore_dev) {
-    char cmd[PATH_MAX];
     dout(0) << "umounting" << dendl;
-    snprintf(cmd, sizeof(cmd), "umount %s", g_conf.filestore_dev);
-    //system(cmd);
+    //run_cmd("umount", g_conf.filestore_dev, NULL);
   }
 
   // nothing
@@ -3080,9 +3080,6 @@ int FileStore::_destroy_collection(coll_t c)
   get_cdir(c, fn, sizeof(fn));
   dout(15) << "_destroy_collection " << fn << dendl;
   int r = ::rmdir(fn);
-  //char cmd[PATH_MAX];
-  //snprintf(cmd, sizeof(cmd), "test -d %s && rm -r %s", fn, fn);
-  //system(cmd);
   if (r < 0) r = -errno;
   dout(10) << "_destroy_collection " << fn << " = " << r << dendl;
   return r;
