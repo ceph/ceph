@@ -940,6 +940,17 @@ int librbd::RBD::list_snaps(pool_t pool, const char* image_name, std::vector<lib
 }
 
 }
+
+extern "C" void librbd_version(int *major, int *minor, int *extra)
+{
+  if (major)
+    *major = LIBRBD_VER_MAJOR;
+  if (minor)
+    *minor = LIBRBD_VER_MINOR;
+  if (extra)
+    *extra = LIBRBD_VER_EXTRA;
+}
+
 #if 0 // C++ interface first
 static librbd::RBD rbd;
 
@@ -951,16 +962,6 @@ extern "C" int rbd_initialize(int argc, const char **argv)
 extern "C" void rbd_shutdown()
 {
   rbd.shutdown();
-}
-
-extern "C" void librbd_version(int *major, int *minor, int *extra)
-{
-  if (major)
-    *major = LIBRBD_VER_MAJOR;
-  if (minor)
-    *minor = LIBRBD_VER_MINOR;
-  if (extra)
-    *extra = LIBRBD_VER_EXTRA;
 }
 
 /* images */

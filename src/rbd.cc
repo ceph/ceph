@@ -314,18 +314,24 @@ static int rollback_image(librbd::pools_t& pp, struct rbd_obj_header_ondisk *hea
 static int do_list(const char* poolname)
 {
   std::vector<string> names;
-  int r = rbd.list_images(poolname, names);
+  librbd::pool_t pool;
+  int r = rbd.open_pool(poolname, &pool);
   if (r < 0)
     return r;
+
+  r = rbd.list(pool, names);
+  if (r < 0)
+    return r;
+  rbd.close_pool(pool);
 
   for (std::vector<string>::const_iterator i = names.begin(); i != names.end(); i++)
     cout << *i << std::endl;
   return 0;
 }
 
-static int do_create(const char *poolname, const char *imgname, size_t size)
+static int do_create(librbd::pool_t pool, const char *imgname, size_t size)
 {
-  int r = rbd.create_image(poolname, imgname, size);
+  int r = rbd.create(pool, imgname, size);
   if (r < 0)
     return r;
   return 0;
@@ -370,10 +376,10 @@ static int do_rename(const char *poolname, const char *imgname, const char *dest
 }
 */
 
-static int do_show_info(const char *poolname, const char *imgname)
+static int do_show_info(librbd::pool_t pool, const char *imgname)
 {
   librbd::image_info_t info;
-  int r = rbd.stat_image(poolname, imgname, info);
+  int r = rbd.stat(pool, imgname, info);
   if (r < 0)
     return r;
 
@@ -381,28 +387,28 @@ static int do_show_info(const char *poolname, const char *imgname)
   return 0;
 }
 
- static int do_delete(const char *poolname, const char *imgname)
+ static int do_delete(librbd::pool_t pool, const char *imgname)
 {
-  int r = rbd.remove_image(poolname, imgname);
+  int r = rbd.remove(pool, imgname);
   if (r < 0)
     return r;
 
   return 0;
 }
 
-static int do_resize(const char *poolname, const char *imgname, size_t size)
+static int do_resize(librbd::pool_t pool, const char *imgname, size_t size)
 {
-  int r = rbd.resize_image(poolname, imgname, size);
+  int r = rbd.resize(pool, imgname, size);
   if (r < 0)
     return r;
 
   return 0;
 }
 
-static int do_list_snaps(const char *poolname, const char *imgname)
+static int do_list_snaps(librbd::pool_t pool, const char *imgname)
 {
   std::vector<librbd::snap_info_t> snaps;
-  int r = rbd.list_snaps(poolname, imgname, snaps);
+  int r = rbd.list_snaps(pool, imgname, snaps);
   if (r < 0)
     return r;
 
@@ -412,27 +418,27 @@ static int do_list_snaps(const char *poolname, const char *imgname)
   return 0;
 }
 
-static int do_add_snap(const char *poolname, const char *imgname, const char *snapname)
+static int do_add_snap(librbd::pool_t pool, const char *imgname, const char *snapname)
 {
-  int r = rbd.create_snap(poolname, imgname, snapname);
+  int r = rbd.create_snap(pool, imgname, snapname);
   if (r < 0)
     return r;
 
   return 0;
 }
 
-static int do_remove_snap(const char *poolname, const char *imgname, const char *snapname)
+static int do_remove_snap(librbd::pool_t pool, const char *imgname, const char *snapname)
 {
-  int r = rbd.remove_snap(poolname, imgname, snapname);
+  int r = rbd.remove_snap(pool, imgname, snapname);
   if (r < 0)
     return r;
 
   return 0;
 }
 
-static int do_rollback_snap(const char *poolname, const char *imgname, const char *snapname)
+static int do_rollback_snap(librbd::pool_t pool, const char *imgname, const char *snapname)
 {
-  int r = rbd.rollback_snap(poolname, imgname, snapname);
+  int r = rbd.rollback_snap(pool, imgname, snapname);
   if (r < 0)
     return r;
 
@@ -798,8 +804,9 @@ static int do_watch(librbd::pools_t& pp, const char *imgname)
   return 0;
 }
 #endif
-static void err_exit()
+static void err_exit(librbd::pool_t pool)
 {
+  rbd.close_pool(pool);
   rbd.shutdown();
   exit(1);
 }
@@ -890,7 +897,7 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  librbd::pools_t pp = { 0, 0, 0 };
+  librbd::pool_t pool;
   vector<librados::snap_t> snaps;
   ::SnapContext snapc;
 
@@ -1006,7 +1013,12 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  int r;
+  int r = rbd.open_pool(poolname, &pool);
+  if (r < 0) {
+      cerr << "error opening pool " << poolname << " (err=" << r << ")" << std::endl;
+      err_exit(pool);
+  }
+
   /*
   if (snapname) {
     r = do_get_snapc(pp, md_oid, snapname, snapc, snaps, snapid);
@@ -1050,7 +1062,7 @@ int main(int argc, const char **argv)
       default:
         cerr << "error: " << strerror(-r) << std::endl;
       }
-      err_exit();
+      err_exit(pool);
     }
     break;
 
@@ -1058,17 +1070,17 @@ int main(int argc, const char **argv)
     if (!size) {
       cerr << "must specify size in MB to create an rbd image" << std::endl;
       usage();
-      err_exit();
+      err_exit(pool);
     }
     if (order && (order < 12 || order > 25)) {
       cerr << "order must be between 12 (4 KB) and 25 (32 MB)" << std::endl;
       usage();
-      err_exit();
+      err_exit(pool);
     }
-    r = do_create(poolname, imgname, size);
+    r = do_create(pool, imgname, size);
     if (r < 0) {
       cerr << "create error: " << strerror(-r) << std::endl;
-      err_exit();
+      err_exit(pool);
     }
     break;
 /*
@@ -1076,79 +1088,79 @@ int main(int argc, const char **argv)
     r = do_rename(poolname, imgname, destname);
     if (r < 0) {
       cerr << "rename error: " << strerror(-r) << std::endl;
-      err_exit();
+      err_exit(pool);
     }
     break;
 */
   case OPT_INFO:
-    r = do_show_info(poolname, imgname);
+    r = do_show_info(pool, imgname);
     if (r < 0) {
       cerr << "error: " << strerror(-r) << std::endl;
-      err_exit();
+      err_exit(pool);
     }
     break;
 
   case OPT_RM:
-    r = do_delete(poolname, imgname);
+    r = do_delete(pool, imgname);
     if (r < 0) {
       cerr << "delete error: " << strerror(-r) << std::endl;
-      err_exit();
+      err_exit(pool);
     }
     break;
 
   case OPT_RESIZE:
-    r = do_resize(poolname, imgname, size);
+    r = do_resize(pool, imgname, size);
     if (r < 0) {
       cerr << "resize error: " << strerror(-r) << std::endl;
-      err_exit();
+      err_exit(pool);
     }
     break;
 
   case OPT_SNAP_LIST:
     if (!imgname) {
       usage();
-      err_exit();
+      err_exit(pool);
     }
-    r = do_list_snaps(poolname, imgname);
+    r = do_list_snaps(pool, imgname);
     if (r < 0) {
       cerr << "failed to list snapshots: " << strerror(-r) << std::endl;
-      err_exit();
+      err_exit(pool);
     }
     break;
 
   case OPT_SNAP_CREATE:
     if (!imgname || !snapname) {
       usage();
-      err_exit();
+      err_exit(pool);
     }
-    r = do_add_snap(poolname, imgname, snapname);
+    r = do_add_snap(pool, imgname, snapname);
     if (r < 0) {
       cerr << "failed to create snapshot: " << strerror(-r) << std::endl;
-      err_exit();
+      err_exit(pool);
     }
     break;
 
   case OPT_SNAP_ROLLBACK:
     if (!imgname) {
       usage();
-      err_exit();
+      err_exit(pool);
     }
-    r = do_rollback_snap(poolname, imgname, snapname);
+    r = do_rollback_snap(pool, imgname, snapname);
     if (r < 0) {
       cerr << "rollback failed: " << strerror(-r) << std::endl;
-      err_exit();
+      err_exit(pool);
     }
     break;
 
   case OPT_SNAP_REMOVE:
     if (!imgname) {
       usage();
-      err_exit();
+      err_exit(pool);
     }
-    r = do_remove_snap(poolname, imgname, snapname);
+    r = do_remove_snap(pool, imgname, snapname);
     if (r < 0) {
       cerr << "rollback failed: " << strerror(-r) << std::endl;
-      err_exit();
+      err_exit(pool);
     }
     break;
     /*
@@ -1194,10 +1206,7 @@ int main(int argc, const char **argv)
     */
   }
 
-  /*  rados.close_pool(pool);
-  rados.close_pool(md_pool);
-  rados.shutdown();
-  */
+  rbd.close_pool(pool);
   rbd.shutdown();
   return 0;
 }
