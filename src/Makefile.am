@@ -261,6 +261,12 @@ rbd_LDADD = librados.la -lpthread -lm $(CRYPTOPP_LIBS)
 rbd_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += rbd
 
+if WITH_DEBUG
+testlibrbd_SOURCES = testlibrbd.c
+testlibrbd_LDADD = librados.a librbd.a libcrush.a -lpthread -lm $(CRYPTOPP_LIBS)
+bin_PROGRAMS += testlibrbd
+endif
+
 if WITH_RADOSGW
 libradosgw_a_SOURCES = \
 	rgw/rgw_fs.cc \
