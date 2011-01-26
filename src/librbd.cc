@@ -827,6 +827,7 @@ int librbd::RBDClient::open_pools(const char *pool_name, PoolCtx *ctx)
     return -1;
   }
   ctx->data = pool;
+  return 0;
 }
 
 int librbd::RBD::initialize(int argc, const char *argv[])
