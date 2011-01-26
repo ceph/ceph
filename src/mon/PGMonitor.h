@@ -93,6 +93,8 @@ private:
   void tick();  // check state, take actions
 
   void check_osd_map(epoch_t epoch);
+
+  enum health_status_t get_health(std::ostream &ss) const;
 };
 
 #endif

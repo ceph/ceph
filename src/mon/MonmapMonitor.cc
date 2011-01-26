@@ -20,6 +20,7 @@
 #include "common/Timer.h"
 #include "mon/MDSMonitor.h"
 #include "mon/OSDMonitor.h"
+#include "mon/PGMonitor.h"
 
 #include <sstream>
 #include "config.h"
@@ -160,6 +161,9 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
       if (ret < overall)
 	overall = ret;
       ret = mon->osdmon()->get_health(oss);
+      if (ret < overall)
+	overall = ret;
+      ret = mon->pgmon()->get_health(oss);
       if (ret < overall)
 	overall = ret;
     }
