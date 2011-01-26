@@ -128,13 +128,13 @@ public:
   int snap_lookup(PoolCtx *pool, const char *name, uint64_t *snapid);
   int snap_get_name(PoolCtx *pool, uint64_t snapid, std::string *s);
   int snap_get_stamp(PoolCtx *pool, uint64_t snapid, time_t *t);
-  int snap_create(const rados_pool_t pool, const char* snapname);
+  int snap_create(rados_pool_t pool, const char* snapname);
   int selfmanaged_snap_create(rados_pool_t pool, uint64_t *snapid);
-  int snap_remove(const rados_pool_t pool, const char* snapname);
-  int snap_rollback_object(const rados_pool_t pool, const object_t& oid,
+  int snap_remove(rados_pool_t pool, const char* snapname);
+  int snap_rollback_object(rados_pool_t pool, const object_t& oid,
 		    const char* snapname);
   int selfmanaged_snap_remove(rados_pool_t pool, uint64_t snapid);
-  int selfmanaged_snap_rollback_object(const rados_pool_t pool, const object_t& oid,
+  int selfmanaged_snap_rollback_object(rados_pool_t pool, const object_t& oid,
                                        SnapContext& snapc, uint64_t snapid);
 
   // io
@@ -161,8 +161,8 @@ public:
   int get_fs_stats(ceph_statfs& result);
 
   int create_pool(string& name, unsigned long long auid=0, __u8 crush_rule=0);
-  int delete_pool(const rados_pool_t& pool);
-  int change_pool_auid(const rados_pool_t& pool, unsigned long long auid);
+  int delete_pool(rados_pool_t pool);
+  int change_pool_auid(rados_pool_t pool, unsigned long long auid);
 
   int list(Objecter::ListContext *context, int max_entries);
 
@@ -623,7 +623,7 @@ int RadosClient::get_fs_stats(ceph_statfs& stats)
 
 // SNAPS
 
-int RadosClient::snap_create( const rados_pool_t pool, const char *snapName)
+int RadosClient::snap_create( rados_pool_t pool, const char *snapName)
 {
   int reply;
   int poolID = ((PoolCtx *)pool)->poolid;
@@ -666,7 +666,7 @@ int RadosClient::selfmanaged_snap_create(rados_pool_t pool, uint64_t *psnapid)
   return reply;
 }
 
-int RadosClient::snap_remove(const rados_pool_t pool, const char *snapName)
+int RadosClient::snap_remove(rados_pool_t pool, const char *snapName)
 {
   int reply;
   int poolID = ((PoolCtx *)pool)->poolid;
@@ -687,7 +687,7 @@ int RadosClient::snap_remove(const rados_pool_t pool, const char *snapName)
   return reply;
 }
 
-int RadosClient::selfmanaged_snap_rollback_object(const rados_pool_t pool,
+int RadosClient::selfmanaged_snap_rollback_object(rados_pool_t pool,
 				      const object_t& oid, SnapContext& snapc,
                                       uint64_t snapid)
 {
@@ -712,7 +712,7 @@ int RadosClient::selfmanaged_snap_rollback_object(const rados_pool_t pool,
   return reply;
 }
 
-int RadosClient::snap_rollback_object(const rados_pool_t pool_,
+int RadosClient::snap_rollback_object(rados_pool_t pool_,
 				      const object_t& oid, const char *snapName)
 {
   PoolCtx* pool = (PoolCtx *) pool_;
@@ -775,7 +775,7 @@ int RadosClient::create_pool(string& name, unsigned long long auid,
   return reply;
 }
 
-int RadosClient::delete_pool(const rados_pool_t& pool)
+int RadosClient::delete_pool(rados_pool_t pool)
 {
   int reply;
 
@@ -801,7 +801,7 @@ int RadosClient::delete_pool(const rados_pool_t& pool)
  * auid: the auid you wish the pool to have.
  * Returns: 0 on success, or -ERROR# on failure.
  */
-int RadosClient::change_pool_auid(const rados_pool_t& pool, unsigned long long auid)
+int RadosClient::change_pool_auid(rados_pool_t pool, unsigned long long auid)
 {
   int reply;
 
@@ -1809,13 +1809,13 @@ int Rados::create_pool(const char *name, uint64_t auid, __u8 crush_rule)
   return client->create_pool(str, auid, crush_rule);
 }
 
-int Rados::delete_pool(const rados_pool_t& pool)
+int Rados::delete_pool(rados_pool_t pool)
 {
   if (!client) return -EINVAL;
   return client->delete_pool(pool);
 }
 
-int Rados::change_pool_auid(const rados_pool_t& pool, uint64_t auid)
+int Rados::change_pool_auid(rados_pool_t pool, uint64_t auid)
 {
   if (!client) return -EINVAL;
   return client->change_pool_auid(pool, auid);
@@ -2040,36 +2040,36 @@ int Rados::close_pool(rados_pool_t pool)
 
 // SNAPS
 
-int Rados::snap_create(const rados_pool_t pool, const char *snapname) {
+int Rados::snap_create(rados_pool_t pool, const char *snapname) {
   if (!client) return -EINVAL;
   return client->snap_create(pool, snapname);
 }
 
-int Rados::snap_remove(const rados_pool_t pool, const char *snapname) {
+int Rados::snap_remove(rados_pool_t pool, const char *snapname) {
   if (!client) return -EINVAL;
   return client->snap_remove(pool, snapname);
 }
 
-int Rados::snap_rollback_object(const rados_pool_t pool, const std::string& oid,
+int Rados::snap_rollback_object(rados_pool_t pool, const std::string& oid,
 				const char *snapname) {
   if (!client) return -EINVAL;
   return client->snap_rollback_object(pool, oid, snapname);
 }
 
-int Rados::selfmanaged_snap_create(const rados_pool_t pool, uint64_t *snapid)
+int Rados::selfmanaged_snap_create(rados_pool_t pool, uint64_t *snapid)
 {
   if (!client) return -EINVAL;
   return client->selfmanaged_snap_create(pool, snapid);
 }
 
-int Rados::selfmanaged_snap_remove(const rados_pool_t pool,
+int Rados::selfmanaged_snap_remove(rados_pool_t pool,
 				   uint64_t snapid)
 {
   if (!client) return -EINVAL;
   return client->selfmanaged_snap_remove(pool, snapid);
 }
 
-int Rados::selfmanaged_snap_rollback_object(const rados_pool_t pool,
+int Rados::selfmanaged_snap_rollback_object(rados_pool_t pool,
                                 const std::string& oid,
                                 SnapContext& snapc, uint64_t snapid)
 {
@@ -2490,31 +2490,31 @@ extern "C" int rados_create_pool_with_all(const char *name, uint64_t auid,
   return radosp->create_pool(sname, auid, crush_rule);
 }
 
-extern "C" int rados_delete_pool(const rados_pool_t pool)
+extern "C" int rados_delete_pool(rados_pool_t pool)
 {
   return radosp->delete_pool(pool);
 }
 
-extern "C" int rados_change_pool_auid(const rados_pool_t pool, uint64_t auid)
+extern "C" int rados_change_pool_auid(rados_pool_t pool, uint64_t auid)
 {
   return radosp->change_pool_auid(pool, auid);
 }
 
 // snaps
 
-extern "C" int rados_snap_create(const rados_pool_t pool, const char *snapname)
+extern "C" int rados_snap_create(rados_pool_t pool, const char *snapname)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   return radosp->snap_create(ctx, snapname);
 }
 
-extern "C" int rados_snap_remove(const rados_pool_t pool, const char *snapname)
+extern "C" int rados_snap_remove(rados_pool_t pool, const char *snapname)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   return radosp->snap_remove(ctx, snapname);
 }
 
-extern "C" int rados_snap_rollback_object(const rados_pool_t pool,
+extern "C" int rados_snap_rollback_object(rados_pool_t pool,
 					  const char *oid,
 					  const char *snapname)
 {
@@ -2522,14 +2522,14 @@ extern "C" int rados_snap_rollback_object(const rados_pool_t pool,
   return radosp->snap_rollback_object(ctx, oid, snapname);
 }
 
-extern "C" int rados_selfmanaged_snap_create(const rados_pool_t pool,
+extern "C" int rados_selfmanaged_snap_create(rados_pool_t pool,
 					     uint64_t *snapid)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   return radosp->selfmanaged_snap_create(ctx, snapid);
 }
 
-extern "C" int rados_selfmanaged_snap_remove(const rados_pool_t pool,
+extern "C" int rados_selfmanaged_snap_remove(rados_pool_t pool,
 					     uint64_t snapid)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;

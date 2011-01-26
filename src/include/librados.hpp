@@ -111,16 +111,16 @@ public:
   int get_fs_stats(statfs_t& result);
 
   int create_pool(const char *name, uint64_t auid=0, __u8 crush_rule=0);
-  int delete_pool(const pool_t& pool);
-  int change_pool_auid(const pool_t& pool, uint64_t auid);
+  int delete_pool(pool_t pool);
+  int change_pool_auid(pool_t pool, uint64_t auid);
 
-  int snap_create(const pool_t pool, const char *snapname);
-  int selfmanaged_snap_create(const pool_t pool, uint64_t *snapid);
-  int snap_remove(const pool_t pool, const char *snapname);
-  int snap_rollback_object(const pool_t pool, const std::string& oid,
+  int snap_create(pool_t pool, const char *snapname);
+  int selfmanaged_snap_create(pool_t pool, uint64_t *snapid);
+  int snap_remove(pool_t pool, const char *snapname);
+  int snap_rollback_object(pool_t pool, const std::string& oid,
 			   const char *snapname);
-  int selfmanaged_snap_remove(const pool_t pool, uint64_t snapid);
-  int selfmanaged_snap_rollback_object(const pool_t pool,
+  int selfmanaged_snap_remove(pool_t pool, uint64_t snapid);
+  int selfmanaged_snap_rollback_object(pool_t pool,
                                 const std::string& oid,
                                 SnapContext& snapc, uint64_t snapid);
   int snap_list(pool_t pool, std::vector<snap_t> *snaps);
