@@ -27,9 +27,6 @@
 class RBD;
 
 namespace librbd {
-
-  using librados::RBDClient;
-
   typedef void *pool_t;
 #if 0 // for IO
   typedef void *completion_t;
@@ -48,9 +45,10 @@ namespace librbd {
     uint64_t num_objs;
     int order;
   } image_info_t;
+
 class RBD
 {
-  librados::RBDClient *client;
+  void *client;
 
 public:
   RBD() {}
@@ -65,16 +63,18 @@ public:
 
   void version(int *major, int *minor, int *extra);
 
-  int create(pool_t& pool, const char *name, size_t size);
-  int remove(pool_t& pool, const char *name);
-  int resize(pool_t& pool, const char *name, size_t size);
-  int stat(pool_t& pool, const char *name, image_info_t& info);
-  int list(pool_t& pool, std::vector<string>& names);
+  int open_pool(const char *pool_name, pool_t *pool);
+  int close_pool(pool_t pool);
+  int create(pool_t pool, const char *name, size_t size);
+  int remove(pool_t pool, const char *name);
+  int resize(pool_t pool, const char *name, size_t size);
+  int stat(pool_t pool, const char *name, image_info_t& info);
+  int list(pool_t pool, std::vector<string>& names);
 
-  int create_snap(pool_t& pool, const char *image_name, const char *snapname);
-  int remove_snap(pool_t& pool, const char *image_name, const char *snapname);
-  int rollback_snap(pool_t& pool, const char *image_name, const char *snapname);
-  int list_snaps(pool_t& pool, const char *image_name, std::vector<snap_info_t>& snaps);
+  int create_snap(pool_t pool, const char *image_name, const char *snapname);
+  int remove_snap(pool_t pool, const char *image_name, const char *snapname);
+  int rollback_snap(pool_t pool, const char *image_name, const char *snapname);
+  int list_snaps(pool_t pool, const char *image_name, std::vector<snap_info_t>& snaps);
 };
 
 }
