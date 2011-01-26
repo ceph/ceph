@@ -14,6 +14,7 @@
 
 #include "MonitorStore.h"
 #include "common/Clock.h"
+#include "common/run_cmd.h"
 
 #include "config.h"
 
@@ -106,16 +107,18 @@ int MonitorStore::umount()
 
 int MonitorStore::mkfs()
 {
-  char cmd[1024];
-  snprintf(cmd, sizeof(cmd), "test -d %s && /bin/rm -rf %s ; mkdir -p %s",
-	   dir.c_str(), dir.c_str(), dir.c_str());
-  dout(6) << "MonitorStore::mkfs: running command '" << cmd << "'" << dendl;
-  int res = system(cmd);
-  int r = WEXITSTATUS(res);
-  if (r) {
-    dout(0) << "FAILED to create monfs at " << dir.c_str() << " for "
-	    << g_conf.id << ": cmd '" << cmd << "'" << dendl;
-    return r;
+  int ret = run_cmd("rm", "-rf", dir.c_str(), NULL);
+  if (ret) {
+    derr << "MonitorStore::mkfs: failed to remove " << dir
+	 << ": rm returned " << ret << dendl;
+    return ret;
+  }
+
+  ret = run_cmd("mkdir", "-p", dir.c_str(), NULL);
+  if (ret) {
+    derr << "MonitorStore::mkfs: failed to mkdir -p " << dir
+	 << ": mkdir returned " << ret << dendl;
+    return ret;
   }
 
   dout(0) << "created monfs at " << dir.c_str() << " for " << g_conf.id << dendl;
