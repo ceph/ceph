@@ -345,6 +345,11 @@ unittest_gather_LDADD = libceph.la ${UNITTEST_LDADD}
 unittest_gather_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_gather
 
+unittest_run_cmd_SOURCES = test/run_cmd.cc
+unittest_run_cmd_LDADD = libceph.la ${UNITTEST_LDADD}
+unittest_run_cmd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_run_cmd
+
 # shell scripts
 editpaths = sed \
 	-e 's|@bindir[@]|$(bindir)|g' \
@@ -481,6 +486,7 @@ libcommon_files = \
 	common/sctp_crc32.c\
 	common/assert.cc \
 	common/dyn_snprintf.c \
+        common/run_cmd.cc \
 	common/WorkQueue.cc \
 	common/ConfUtils.cc \
 	common/MemoryModel.cc \
@@ -645,6 +651,7 @@ noinst_HEADERS = \
         common/common_init.h\
         common/signal.h\
         common/dyn_snprintf.h\
+        common/run_cmd.h\
         common/tls.h\
         config.h\
         crush/CrushWrapper.h\
