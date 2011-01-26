@@ -1118,7 +1118,7 @@ void OSDMonitor::mark_all_down()
   propose_pending();
 }
 
-enum health_status_t OSDMonitor::get_health(std::ostream &ss)
+enum health_status_t OSDMonitor::get_health(std::ostream &ss) const
 {
   enum health_status_t ret(HEALTH_OK);
 
