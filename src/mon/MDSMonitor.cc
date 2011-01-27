@@ -630,9 +630,9 @@ int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
   return 0;
 }
 
-int MDSMonitor::reset_cluster(std::ostream &ss)
+int MDSMonitor::cluster_fail(std::ostream &ss)
 {
-  dout(10) << "reset_cluster" << dendl;
+  dout(10) << "cluster_fail" << dendl;
 
   if (!pending_mdsmap.test_flag(CEPH_MDSMAP_DOWN)) {
     ss << "mdsmap must be marked DOWN first ('mds cluster_down')";
@@ -644,17 +644,6 @@ int MDSMonitor::reset_cluster(std::ostream &ss)
   }
 
   // --- reset the cluster map ---
-  pending_mdsmap.stopped.insert(pending_mdsmap.in.begin(),
-				pending_mdsmap.in.end());
-  pending_mdsmap.in.clear();
-  pending_mdsmap.stopped.insert(pending_mdsmap.failed.begin(),
-				pending_mdsmap.failed.end());
-  pending_mdsmap.failed.clear();
-  
-  pending_mdsmap.stopped.erase(0);
-  pending_mdsmap.failed.insert(0);
-  pending_mdsmap.in.insert(0);
-
   if (pending_mdsmap.mds_info.size()) {
     // blacklist all old mds's
     utime_t until = g_clock.now();
@@ -669,9 +658,12 @@ int MDSMonitor::reset_cluster(std::ostream &ss)
     mon->osdmon()->propose_pending();
   }
   pending_mdsmap.up.clear();
+  pending_mdsmap.failed.insert(pending_mdsmap.in.begin(),
+			       pending_mdsmap.in.end());
+  pending_mdsmap.in.clear();
   pending_mdsmap.mds_info.clear();
 
-  ss << "reset mds cluster to single mds";
+  ss << "failed all mds cluster members";
   return 0;
 }
 
@@ -753,8 +745,8 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     }
-    else if (m->cmd[1] == "cluster_reset") {
-      r = reset_cluster(ss);
+    else if (m->cmd[1] == "cluster_fail") {
+      r = cluster_fail(ss);
     }
     else if (m->cmd[1] == "cluster_down") {
       if (pending_mdsmap.test_flag(CEPH_MDSMAP_DOWN)) {

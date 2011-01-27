@@ -88,7 +88,7 @@ class MDSMonitor : public PaxosService {
 
   enum health_status_t get_health(std::ostream &ss) const;
   int fail_mds(std::ostream &ss, const std::string &arg);
-  int reset_cluster(std::ostream &ss);
+  int cluster_fail(std::ostream &ss);
 
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
