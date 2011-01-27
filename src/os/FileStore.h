@@ -19,6 +19,7 @@
 #include "ObjectStore.h"
 #include "JournalingObjectStore.h"
 
+#include "common/Timer.h"
 #include "common/WorkQueue.h"
 
 #include "common/Mutex.h"
@@ -78,6 +79,10 @@ class FileStore : public JournalingObjectStore {
   bool force_sync;
   Cond sync_cond;
   uint64_t sync_epoch;
+
+  Mutex sync_entry_timeo_lock;
+  SafeTimer timer;
+
   list<Context*> sync_waiters;
   bool stop;
   void sync_entry();

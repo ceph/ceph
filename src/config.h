@@ -450,6 +450,7 @@ struct md_config_t {
   int filestore_queue_max_ops;
   int filestore_queue_max_bytes;
   int filestore_op_threads;
+  float filestore_commit_timeout;
   
   // ebofs
   bool  ebofs;

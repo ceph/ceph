@@ -15,6 +15,7 @@
 
 
 #include "FileStore.h"
+#include "common/BackTrace.h"
 #include "include/types.h"
 
 #include "FileJournal.h"
@@ -53,7 +54,6 @@
 #endif // DARWIN
 
 #include <sstream>
-
 
 #define ATTR_MAX_NAME_LEN  128
 #define ATTR_MAX_BLOCK_LEN 2048
@@ -375,7 +375,10 @@ FileStore::FileStore(const char *base, const char *jdev) :
   attrs(this), fake_attrs(false),
   collections(this), fake_collections(false),
   lock("FileStore::lock"),
-  force_sync(false), sync_epoch(0), stop(false), sync_thread(this),
+  force_sync(false), sync_epoch(0),
+  sync_entry_timeo_lock("sync_entry_timeo_lock"),
+  timer(sync_entry_timeo_lock),
+  stop(false), sync_thread(this),
   op_queue_len(0), op_queue_bytes(0), next_finish(0),
   op_tp("FileStore::op_tp", g_conf.filestore_op_threads), op_wq(this, &op_tp),
   flusher_queue_len(0), flusher_thread(this)
@@ -1263,6 +1266,8 @@ int FileStore::mount()
   flusher_thread.create();
   op_finisher.start();
   ondisk_finisher.start();
+
+  timer.init();
 
   // all okay.
   return 0;
@@ -2327,6 +2332,23 @@ void FileStore::flusher_entry()
   lock.Unlock();
 }
 
+class SyncEntryTimeout : public Context {
+public:
+  SyncEntryTimeout() { }
+
+  void finish(int r) {
+    BackTrace *bt = new BackTrace(1);
+    _dout_lock.Lock();
+    *_dout << "FileStore: sync_entry timed out after "
+	   << g_conf.filestore_commit_timeout << " seconds.\n";
+    bt->print(*_dout);
+    _dout_lock.Unlock();
+    _dout->flush();
+    delete bt;
+    abort();
+  }
+};
+
 void FileStore::sync_entry()
 {
   lock.Lock();
@@ -2369,6 +2391,11 @@ void FileStore::sync_entry()
     if (commit_start()) {
       utime_t start = g_clock.now();
       uint64_t cp = committing_seq;
+
+      SyncEntryTimeout *sync_entry_timeo = new SyncEntryTimeout();
+      sync_entry_timeo_lock.Lock();
+      timer.add_event_after(g_conf.filestore_commit_timeout, sync_entry_timeo);
+      sync_entry_timeo_lock.Unlock();
 
       // make flusher stop flushing previously queued stuff
       sync_epoch++;
@@ -2464,6 +2491,10 @@ void FileStore::sync_entry()
       }
 
       dout(15) << "sync_entry committed to op_seq " << cp << dendl;
+
+      sync_entry_timeo_lock.Lock();
+      timer.cancel_event(sync_entry_timeo);
+      sync_entry_timeo_lock.Unlock();
     }
     
     lock.Lock();
