@@ -36,7 +36,6 @@
 dev
 mondata
 log
-.ceph_monmap
 mnt
 TAGS
 tags
@@ -73,3 +72,5 @@ crush/CrushWrapper_wrap.cxx
 /gtest/configure
 /gtest/fused-src/
 /unittest_*
+ceph.conf
+.ceph_keyring
