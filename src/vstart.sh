@@ -23,8 +23,8 @@ MON_ADDR=""
 conf="ceph.conf"
 
 keyring_fn=".ceph_keyring"
-osdmap_fn=".ceph_osdmap"
-monmap_fn=".ceph_monmap"
+osdmap_fn="/tmp/ceph_osdmap.$$"
+monmap_fn="/tmp/ceph_monmap.$$"
 
 usage="usage: $0 [option]... [mon] [mds] [osd]\n"
 usage=$usage"options:\n"
@@ -332,6 +332,8 @@ EOF
 		    echo $cmd
 		    $cmd
 		done
+
+		rm $monmap_fn
 	fi
 
 	# start monitors
@@ -346,6 +348,8 @@ EOF
 	# load classes
 	$CEPH_BIN/cclass -c $conf -a -L .libs
 fi
+
+rm $osdmap_fn
 
 #osd
 if [ "$start_osd" -eq 1 ]; then
