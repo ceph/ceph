@@ -27,6 +27,7 @@
 namespace librbd {
   class RBDClient;
   typedef void *pool_t;
+  typedef void *image_t;
 #if 0 // for IO
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
@@ -64,19 +65,21 @@ public:
 
   int open_pool(const char *pool_name, pool_t *pool);
   int close_pool(pool_t pool);
+  int open_image(pool_t pool, const char *name, image_t *image);
+  int close_image(image_t image);
   int create(pool_t pool, const char *name, size_t size);
-  int remove(pool_t pool, const char *name);
-  int resize(pool_t pool, const char *name, size_t size);
-  int stat(pool_t pool, const char *name, image_info_t& info);
+  int remove(pool_t pool, image_t image);
+  int resize(pool_t pool, image_t image, size_t size);
+  int stat(pool_t pool, image_t image, image_info_t& info);
   int list(pool_t pool, std::vector<string>& names);
-  int copy(pool_t src_pool, const char *imgname, pool_t dest_pool, const char *destname);
-  int rename(pool_t src_pool, const char *imgname, const char *destname);
+  int copy(pool_t src_pool, image_t image, pool_t dest_pool, const char *destname);
+  int rename(pool_t src_pool, image_t image, const char *destname);
 
-  int create_snap(pool_t pool, const char *image_name, const char *snap_name);
-  int remove_snap(pool_t pool, const char *image_name, const char *snap_name);
-  int rollback_snap(pool_t pool, const char *image_name, const char *snap_name);
-  int list_snaps(pool_t pool, const char *image_name, std::vector<snap_info_t>& snaps);
-  int set_snap(pool_t pool, const char *image_name, const char *snap_name);
+  int create_snap(pool_t pool, image_t image, const char *snap_name);
+  int remove_snap(pool_t pool, image_t image, const char *snap_name);
+  int rollback_snap(pool_t pool, image_t image, const char *snap_name);
+  int list_snaps(pool_t pool, image_t image, std::vector<snap_info_t>& snaps);
+  int set_snap(pool_t pool, image_t image, const char *snap_name);
 
   void get_rados_pools(pool_t pool, librados::pool_t *md_pool, librados::pool_t *data_pool);
 };

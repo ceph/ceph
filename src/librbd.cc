@@ -50,6 +50,12 @@ namespace librbd {
     pool_t data;
   };
 
+  struct ImageCtx {
+    struct rbd_obj_header_ondisk header;
+    ::SnapContext snapc;
+    vector<librados::snap_t> snaps;
+    std::string name;
+  };
 
 class RBDClient
 {
@@ -58,22 +64,22 @@ public:
   int initialize(int argc, const char *argv[]);
   void shutdown();
 
-  int set_snap(PoolCtx *pp, const char *image_name, const char *snap_name);
+  int set_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_name);
   int list(PoolCtx *pp, std::vector<string>& names);
-  int create_snap(PoolCtx *pp, const char *image_name, const char *snap_name);
+  int create_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_name);
   int create(pool_t& pool, string& md_oid, const char *imgname, uint64_t size, int *order);
-  int rename(PoolCtx *pp, const char *imgname, const char *dstname);
-  int info(PoolCtx *pp, string& md_oid, image_info_t& info);
-  int remove(PoolCtx *pp, string& md_oid, const char *imgname);
-  int resize(PoolCtx *pp, string& md_oid, const char *imgname, uint64_t size);
-  int list_snaps(PoolCtx *pp, string& md_oid, std::vector<snap_info_t>& snaps);
-  int add_snap(PoolCtx *pp, string& md_oid, const char *snap_name);
-  int rm_snap(PoolCtx *pp, string& md_oid, const char *snap_name);
+  int rename(PoolCtx *pp, ImageCtx *ictx, const char *dstname);
+  int info(PoolCtx *pp, ImageCtx *ictx, image_info_t& info);
+  int remove(PoolCtx *pp, ImageCtx *ictx, const char *imgname);
+  int resize(PoolCtx *pp, ImageCtx *ictx, const char *imgname, uint64_t size);
+  int list_snaps(PoolCtx *pp, ImageCtx *ictx, std::vector<snap_info_t>& snaps);
+  int add_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_name);
+  int rm_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_name);
   int get_snapc(PoolCtx *pp, string& md_oid, const char *snap_name,
 		   ::SnapContext& snapc, vector<snap_t>& snaps, uint64_t& snapid);
-  int rollback_snap(PoolCtx *pp, const char *image_name, const char *snap_name);
-  int remove_snap(PoolCtx *pp, const char *image_name, const char *snap_name);
-  int copy(PoolCtx *pp, const char *imgname, PoolCtx *pp_dest, const char *destname);
+  int rollback_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_name);
+  int remove_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_name);
+  int copy(PoolCtx *pp, ImageCtx *ictx, PoolCtx *pp_dest, const char *destname);
 
   int open_pools(const char *poolname, PoolCtx *pp);
   void close_pools(PoolCtx *pp);
@@ -89,8 +95,7 @@ public:
   int write_header(PoolCtx *pp, string& md_oid, bufferlist& header);
   int tmap_set(PoolCtx *pp, string& imgname);
   int tmap_rm(PoolCtx *pp, string& imgname);
-  int rollback_image(PoolCtx *pp, struct rbd_obj_header_ondisk *header,
-		     ::SnapContext& snapc, uint64_t snapid);
+  int rollback_image(PoolCtx *pp, ImageCtx *ictx, uint64_t snapid);
   static void image_info(rbd_obj_header_ondisk& header, librbd::image_info_t& info);
   static string get_block_oid(rbd_obj_header_ondisk *header, uint64_t num);
   static uint64_t get_max_block(rbd_obj_header_ondisk *header);
@@ -104,7 +109,7 @@ public:
 
 
 void librbd::RBDClient::init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
-				  size_t size, int *order, uint64_t bid)
+					size_t size, int *order, uint64_t bid)
 {
   uint32_t hi = bid >> 32;
   uint32_t lo = bid & 0xFFFFFFFF;
@@ -311,8 +316,7 @@ int librbd::RBDClient::tmap_rm(PoolCtx *pp, string& imgname)
   return rados.tmap_update(pp->md, RBD_DIRECTORY, cmdbl);
 }
 
-int librbd::RBDClient::rollback_image(PoolCtx *pp, struct rbd_obj_header_ondisk *header,
-				::SnapContext& snapc, uint64_t snapid)
+int librbd::RBDClient::rollback_image(PoolCtx *pp, ImageCtx *ictx, uint64_t snapid)
 {
   uint64_t numseg = get_max_block(header);
 
@@ -350,7 +354,7 @@ int librbd::RBDClient::list(PoolCtx *pp, std::vector<string>& names)
   return 0;
 }
 
-int librbd::RBDClient::create_snap(PoolCtx *pp, const char *image_name, const char *snap_name)
+int librbd::RBDClient::create_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_name)
 {
   librados::snap_t snapid = 0;
   vector<librados::snap_t> snaps;
@@ -367,11 +371,11 @@ int librbd::RBDClient::create_snap(PoolCtx *pp, const char *image_name, const ch
     return r;
 
   rados.set_snap(pp->data, snapid);
-  r = add_snap(pp, md_oid, snap_name);
+  r = add_snap(pp, ictx, snap_name);
   return r;
 }
 
-int librbd::RBDClient::remove_snap(PoolCtx *pp, const char *image_name, const char *snap_name)
+int librbd::RBDClient::remove_snap(PoolCtx *pp, image_t image, const char *snap_name)
 {
   librados::snap_t snapid = 0;
   vector<librados::snap_t> snaps;
@@ -395,7 +399,7 @@ int librbd::RBDClient::remove_snap(PoolCtx *pp, const char *image_name, const ch
 }
 
 int librbd::RBDClient::create(pool_t& pool, string& md_oid, const char *imgname,
-			   uint64_t size, int *order)
+			      uint64_t size, int *order)
 {
 
   // make sure it doesn't already exist
@@ -442,14 +446,14 @@ int librbd::RBDClient::create(pool_t& pool, string& md_oid, const char *imgname,
   return 0;
 }
 
-int librbd::RBDClient::rename(PoolCtx *pp, const char *imgname, const char *dstname)
+int librbd::RBDClient::rename(PoolCtx *pp, ImageCtx *ictx, const char *dstname)
 {
-  string md_oid = imgname;
+  string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
   string dst_md_oid = dstname;
   dst_md_oid += RBD_SUFFIX;
   string dstname_str = dstname;
-  string imgname_str = imgname;
+  string imgname_str = ictx->name;
   uint64_t ver;
   bufferlist header;
   int r = read_header_bl(pp->md, md_oid, header, &ver);
@@ -485,26 +489,19 @@ int librbd::RBDClient::rename(PoolCtx *pp, const char *imgname, const char *dstn
 }
 
 
-int librbd::RBDClient::info(PoolCtx *pp, string& md_oid, librbd::image_info_t& info)
+int librbd::RBDClient::info(PoolCtx *pp, ImageCtx *ictx, librbd::image_info_t& info)
 {
-  struct rbd_obj_header_ondisk header;
-  int r = read_header(pp->md, md_oid, &header, NULL);
-  if (r < 0)
-    return r;
-
-  image_info(header, info);
+  image_info(ictx->header, info);
   return 0;
 }
 
-int librbd::RBDClient::remove(PoolCtx *pp, string& md_oid, const char *imgname)
+int librbd::RBDClient::remove(PoolCtx *pp, ImageCtx *ictx)
 {
-  struct rbd_obj_header_ondisk header;
-  int r = read_header(pp->md, md_oid, &header, NULL);
-  if (r >= 0) {
-    trim_image(pp, imgname, &header, 0);
-    cout << "\rremoving header..." << std::endl;
-    rados.remove(pp->md, md_oid);
-  }
+  string md_oid = ictx->name;
+  md_oid += RBD_SUFFIX;
+  trim_image(pp, ictx->name, &(ictx->header), 0);
+  cout << "\rremoving header..." << std::endl;
+  rados.remove(pp->md, md_oid);
 
   cout << "removing rbd image to directory..." << std::endl;
   bufferlist cmdbl;
@@ -521,32 +518,30 @@ int librbd::RBDClient::remove(PoolCtx *pp, string& md_oid, const char *imgname)
   return 0;
 }
 
-int librbd::RBDClient::resize(PoolCtx *pp, string& md_oid, const char *imgname, uint64_t size)
+int librbd::RBDClient::resize(PoolCtx *pp, ImageCtx *ictx, uint64_t size)
 {
-  struct rbd_obj_header_ondisk header;
   uint64_t ver;
-  int r = read_header(pp->md, md_oid, &header, &ver);
-  if (r < 0)
-    return r;
+  string md_oid = ictx->name;
+  md_oid += RBD_SUFFIX;
 
   // trim
-  if (size == header.image_size) {
-    cout << "no change in size (" << size << " -> " << header.image_size << ")" << std::endl;
+  if (size == ictx->header.image_size) {
+    cout << "no change in size (" << size << " -> " << ictx->header.image_size << ")" << std::endl;
     return 0;
   }
 
-  if (size > header.image_size) {
-    cout << "expanding image " << size << " -> " << header.image_size << " objects" << std::endl;
-    header.image_size = size;
+  if (size > ictx->header.image_size) {
+    cout << "expanding image " << size << " -> " << ictx->header.image_size << " objects" << std::endl;
+    ictx->header.image_size = size;
   } else {
-    cout << "shrinking image " << size << " -> " << header.image_size << " objects" << std::endl;
-    trim_image(pp, imgname, &header, size);
-    header.image_size = size;
+    cout << "shrinking image " << size << " -> " << ictx->header.image_size << " objects" << std::endl;
+    trim_image(pp, ictx->name, &(ictx->header), size);
+    ictx->header.image_size = size;
   }
 
   // rewrite header
   bufferlist bl;
-  bl.append((const char *)&header, sizeof(header));
+  bl.append((const char *)&(ictx->header), sizeof(ictx->header));
   rados.set_assert_version(pp->md, ver);
   r = rados.write(pp->md, md_oid, 0, bl, bl.length());
   if (r == -ERANGE)
@@ -562,7 +557,7 @@ int librbd::RBDClient::resize(PoolCtx *pp, string& md_oid, const char *imgname, 
   return 0;
 }
 
-int librbd::RBDClient::list_snaps(PoolCtx *pp, string& md_oid, std::vector<librbd::snap_info_t>& snaps)
+int librbd::RBDClient::list_snaps(PoolCtx *pp, ImageCtx *ictx, std::vector<librbd::snap_info_t>& snaps)
 {
   bufferlist bl, bl2;
 
@@ -591,7 +586,7 @@ int librbd::RBDClient::list_snaps(PoolCtx *pp, string& md_oid, std::vector<librb
   return 0;
 }
 
-int librbd::RBDClient::add_snap(PoolCtx *pp, string& md_oid, const char *snap_name)
+int librbd::RBDClient::add_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_name)
 {
   bufferlist bl, bl2;
   uint64_t snap_id;
@@ -615,7 +610,7 @@ int librbd::RBDClient::add_snap(PoolCtx *pp, string& md_oid, const char *snap_na
   return 0;
 }
 
-int librbd::RBDClient::rm_snap(PoolCtx *pp, string& md_oid, const char *snap_name)
+int librbd::RBDClient::rm_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_name)
 {
   bufferlist bl, bl2;
 
@@ -672,7 +667,7 @@ int librbd::RBDClient::get_snapc(PoolCtx *pp, string& md_oid, const char *snap_n
   return 0;
 }
 
-int librbd::RBDClient::rollback_snap(PoolCtx *pp, const char *image_name, const char *snap_name)
+int librbd::RBDClient::rollback_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_name)
 {
   struct rbd_obj_header_ondisk header;
   librados::snap_t snapid = 0;
@@ -696,35 +691,30 @@ int librbd::RBDClient::rollback_snap(PoolCtx *pp, const char *image_name, const 
     cerr << "error reading header: " << md_oid << ": " << strerror(-r) << std::endl;
     return r;
   }
-  r = rollback_image(pp, &header, snapc, snapid);
+  r = rollback_image(pp, ictx, snapid);
   if (r < 0)
     return r;
 
   return 0;
 }
 
-int librbd::RBDClient::copy(PoolCtx *pp, const char *imgname, PoolCtx *pp_dest, const char *destname)
+int librbd::RBDClient::copy(PoolCtx *pp, ImageCtx *ictx, PoolCtx *pp_dest, const char *destname)
 {
-  struct rbd_obj_header_ondisk header, dest_header;
   int64_t ret;
   int r;
   string md_oid, dest_md_oid;
 
-  md_oid = imgname;
+  md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
   dest_md_oid = destname;
   dest_md_oid += RBD_SUFFIX;
 
-  ret = read_header(pp->md, md_oid, &header, NULL);
-  if (ret < 0)
-    return ret;
+  uint64_t numseg = get_max_block(&(ictx->header));
+  uint64_t block_size = get_block_size(&(ictx->header));
+  int order = ictx->header.options.order;
 
-  uint64_t numseg = get_max_block(&header);
-  uint64_t block_size = get_block_size(&header);
-  int order = header.options.order;
-
-  r = create(pp_dest->md, dest_md_oid, destname, header.image_size, &order);
+  r = create(pp_dest->md, dest_md_oid, destname, ictx->header.image_size, &order);
   if (r < 0) {
     cerr << "header creation failed" << std::endl;
     return r;
@@ -800,7 +790,7 @@ void librbd::RBDClient::shutdown()
   rados.shutdown();
 }
 
-int librbd::RBDClient::set_snap(PoolCtx *pp, const char *image_name, const char *snap_name)
+int librbd::RBDClient::set_snap(PoolCtx *pp, image_t image, const char *snap_name)
 {
   SnapContext snapc;
   uint64_t snapid;
@@ -856,7 +846,7 @@ int librbd::RBD::initialize(int argc, const char *argv[])
 void librbd::RBD::shutdown()
 {
   client->shutdown();
-  delete (librbd::RBDClient *)client;
+  delete client;
 }
 
 int librbd::RBD::open_pool(const char *pool_name, pool_t *pool)
@@ -883,6 +873,40 @@ int librbd::RBD::close_pool(pool_t pool)
   
   return 0; 
 }
+
+int librbd::RBD::open_image(pool_t pool, const char *name, image_t *image, const char *snap_name = NULL)
+{
+  PoolCtx *pctx = (PoolCtx *)pool;
+  ImageCtx *ictx = new librbd::ImageCtx;
+  if (!ictx)
+    return -ENOMEM;
+
+  ictx->name = name;
+  string md_oid = name;
+  md_oid += RBD_SUFFIX;
+
+  int r = client->read_header(pctx->md, md_oid, &(ictx->header), NULL);
+  if (r < 0)
+    return r;
+
+  if (snap_name) {
+    r = client->get_snapc(pctx, md_oid, snap_name, ictx->snapc, ictx->snaps, 0);
+    if (r < 0)
+      return r;
+  }
+
+  *image = (image_t)ictx;
+
+  return 0;
+}
+
+int librbd::RBD::close_image(image_t image)
+{
+  ImageCtx *ctx = (ImageCtx *)image;
+  delete ctx;
+  return 0; 
+}
+
 int librbd::RBD::create(pool_t pool, const char *name, size_t size)
 {
   PoolCtx *ctx = (PoolCtx *)pool;
@@ -893,30 +917,27 @@ int librbd::RBD::create(pool_t pool, const char *name, size_t size)
   return r;
 }
 
-int librbd::RBD::remove(pool_t pool, const char *name)
+int librbd::RBD::remove(pool_t pool, image_t image)
 {
   PoolCtx *ctx = (PoolCtx *)pool;
-  string md_oid = name;
-  md_oid += RBD_SUFFIX;
-  int r = client->remove(ctx, md_oid, name);
+  ImageCtx *ictx = (ImageCtx *)image;
+  int r = client->remove(ctx, ictx);
   return r;
 }
 
-int librbd::RBD::resize(pool_t pool, const char *name, size_t size)
+int librbd::RBD::resize(pool_t pool, image_t image, size_t size)
 {
   PoolCtx *ctx = (PoolCtx *)pool;
-  string md_oid = name;
-  md_oid += RBD_SUFFIX;
-  int r = client->resize(ctx, md_oid, name, size);
+  ImageCtx *ictx = (ImageCtx *)image;
+  int r = client->resize(ctx, ictx, size);
   return r;
 }
 
-int librbd::RBD::stat(pool_t pool, const char *name, image_info_t& info)
+int librbd::RBD::stat(pool_t pool, image_t image, image_info_t& info)
 {
   PoolCtx *ctx = (PoolCtx *)pool;
-  string md_oid = name;
-  md_oid += RBD_SUFFIX;
-  int r = client->info(ctx, md_oid, info);
+  ImageCtx *ictx = (ImageCtx *)image;
+  int r = client->info(ctx, ictx, info);
   return r;
 }
 
@@ -927,55 +948,60 @@ int librbd::RBD::list(pool_t pool, std::vector<string>& names)
   return r;
 }
 
-int librbd::RBD::copy(pool_t src_pool, const char *imgname, pool_t dest_pool, const char *destname)
+int librbd::RBD::copy(pool_t src_pool, image_t image, pool_t dest_pool, const char *destname)
 {
   PoolCtx *src_ctx = (PoolCtx *)src_pool;
   PoolCtx *dest_ctx = (PoolCtx *)dest_pool;
-  int r = ((librbd::RBDClient *)client)->copy(src_ctx, imgname, dest_ctx, destname);
+  ImageCtx *ictx = (ImageCtx *)image;
+  int r = ((librbd::RBDClient *)client)->copy(src_ctx, ictx, dest_ctx, destname);
   return r;
 }
 
-int librbd::RBD::rename(pool_t src_pool, const char *imgname, const char *destname)
+int librbd::RBD::rename(pool_t src_pool, image_t image, const char *destname)
 {
   PoolCtx *ctx = (PoolCtx *)src_pool;
-  int r = ((librbd::RBDClient *)client)->rename(ctx, imgname, destname);
+  ImageCtx *ictx = (ImageCtx *)image;
+  int r = ((librbd::RBDClient *)client)->rename(ctx, ictx, destname);
   return r;
 }
 
-int librbd::RBD::create_snap(pool_t pool, const char *image_name, const char *snap_name)
+int librbd::RBD::create_snap(pool_t pool, image_t image, const char *snap_name)
 {
   PoolCtx *ctx = (PoolCtx *)pool;
-  int r = client->create_snap(ctx, image_name, snap_name);
+  ImageCtx *ictx = (ImageCtx *)image;
+  int r = client->create_snap(ctx, ictx, snap_name);
   return r;
 }
 
-int librbd::RBD::remove_snap(pool_t pool, const char *image_name, const char *snap_name)
+int librbd::RBD::remove_snap(pool_t pool, image_t image, const char *snap_name)
 {
   PoolCtx *ctx = (PoolCtx *)pool;
-  int r = client->remove_snap(ctx, image_name, snap_name);
+  ImageCtx *ictx = (ImageCtx *)image;
+  int r = client->remove_snap(ctx, ictx, snap_name);
   return r;
 }
 
-int librbd::RBD::rollback_snap(pool_t pool, const char *image_name, const char *snap_name)
+int librbd::RBD::rollback_snap(pool_t pool, image_t image, const char *snap_name)
 {
   PoolCtx *ctx = (PoolCtx *)pool;
-  int r = client->rollback_snap(ctx, image_name, snap_name);
+  ImageCtx *ictx = (ImageCtx *)image;
+  int r = client->rollback_snap(ctx, ictx, snap_name);
   return r;
 }
 
-int librbd::RBD::list_snaps(pool_t pool, const char* image_name, std::vector<librbd::snap_info_t>& snaps)
+int librbd::RBD::list_snaps(pool_t pool, image_t image, std::vector<librbd::snap_info_t>& snaps)
 {
   PoolCtx *ctx = (PoolCtx *)pool;
-  string md_oid = image_name;
-  md_oid += RBD_SUFFIX;
-  int r = client->list_snaps(ctx, md_oid, snaps);
+  ImageCtx *ictx = (ImageCtx *)image;
+  int r = client->list_snaps(ctx, ictx, snaps);
   return r;
 }
 
-int librbd::RBD::set_snap(pool_t pool, const char *image_name, const char *snap_name)
+int librbd::RBD::set_snap(pool_t pool, image_t image, const char *snap_name)
 {
   PoolCtx *ctx = (PoolCtx *)pool;
-  return ((librbd::RBDClient *)client)->set_snap(ctx, image_name, snap_name);
+  ImageCtx *ictx = (ImageCtx *)image;
+  return client->set_snap(ctx, ictx, snap_name);
 }
 
 void librbd::RBD::get_rados_pools(pool_t pool, librados::pool_t *md_pool, librados::pool_t *data_pool)
@@ -999,6 +1025,7 @@ extern "C" void librbd_version(int *major, int *minor, int *extra)
     *extra = LIBRBD_VER_EXTRA;
 }
 
+#if 0 /* waiting until C++ interface stabilizes */
 static librbd::RBD rbd;
 
 extern "C" int rbd_initialize(int argc, const char **argv)
@@ -1113,3 +1140,4 @@ extern "C" size_t rbd_list_snaps(rbd_pool_t pool, const char *image, rbd_snap_in
   }
   return cpp_snaps.size();
 }
+#endif
