@@ -65,15 +65,15 @@ public:
 
   int open_pool(const char *pool_name, pool_t *pool);
   int close_pool(pool_t pool);
-  int open_image(pool_t pool, const char *name, image_t *image);
+  int open_image(pool_t pool, const char *name, image_t *image, const char *snap_name);
   int close_image(image_t image);
   int create(pool_t pool, const char *name, size_t size);
-  int remove(pool_t pool, image_t image);
+  int remove(pool_t pool, const char *name);
   int resize(pool_t pool, image_t image, size_t size);
   int stat(pool_t pool, image_t image, image_info_t& info);
   int list(pool_t pool, std::vector<string>& names);
-  int copy(pool_t src_pool, image_t image, pool_t dest_pool, const char *destname);
-  int rename(pool_t src_pool, image_t image, const char *destname);
+  int copy(pool_t src_pool, const char *srcname, pool_t dest_pool, const char *destname);
+  int rename(pool_t src_pool, const char *srcname, const char *destname);
 
   int create_snap(pool_t pool, image_t image, const char *snap_name);
   int remove_snap(pool_t pool, image_t image, const char *snap_name);
