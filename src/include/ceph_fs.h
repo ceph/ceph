@@ -235,6 +235,11 @@ struct ceph_mon_subscribe_ack {
 } __attribute__ ((packed));
 
 /*
+ * mdsmap flags
+ */
+#define CEPH_MDSMAP_DOWN    (1<<0)  /* cluster deliberately down */
+
+/*
  * mds states
  *   > 0 -> in
  *  <= 0 -> out

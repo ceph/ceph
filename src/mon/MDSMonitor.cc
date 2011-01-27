@@ -191,6 +191,11 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   if (!mon->is_leader())
     return false;
 
+  if (pending_mdsmap.test_flag(CEPH_MDSMAP_DOWN)) {
+    dout(7) << " mdsmap DOWN flag set, ignoring mds " << m->get_source_inst() << " beacon" << dendl;
+    goto out;
+  }
+
   // booted, but not in map?
   if (pending_mdsmap.is_dne_gid(gid)) {
     if (state != MDSMap::STATE_BOOT) {
@@ -629,6 +634,10 @@ int MDSMonitor::reset_cluster(std::ostream &ss)
 {
   dout(10) << "reset_cluster" << dendl;
 
+  if (!pending_mdsmap.test_flag(CEPH_MDSMAP_DOWN)) {
+    ss << "mdsmap must be marked DOWN first ('mds cluster_down')";
+    return -EPERM;
+  }
   if (pending_mdsmap.up.size() && !mon->osdmon()->paxos->is_writeable()) {
     ss << "osdmap not writeable, can't blacklist up mds's";
     return -EAGAIN;
@@ -746,6 +755,26 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "cluster_reset") {
       r = reset_cluster(ss);
+    }
+    else if (m->cmd[1] == "cluster_down") {
+      if (pending_mdsmap.test_flag(CEPH_MDSMAP_DOWN)) {
+	ss << "mdsmap already marked DOWN";
+	r = -EPERM;
+      } else {
+	pending_mdsmap.set_flag(CEPH_MDSMAP_DOWN);
+	ss << "marked mdsmap DOWN";
+	r = 0;
+      }
+    }
+    else if (m->cmd[1] == "cluster_up") {
+      if (pending_mdsmap.test_flag(CEPH_MDSMAP_DOWN)) {
+	pending_mdsmap.clear_flag(CEPH_MDSMAP_DOWN);
+	ss << "unmarked mdsmap DOWN";
+	r = 0;
+      } else {
+	ss << "mdsmap not marked DOWN";
+	r = -EPERM;
+      }
     }
     else if (m->cmd[1] == "compat" && m->cmd.size() == 4) {
       uint64_t f = atoll(m->cmd[3].c_str());
