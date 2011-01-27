@@ -47,7 +47,7 @@ int main(int argc, const char **argv)
   cout << "#dev " << filename << std::endl;
   cout << "#mb " << mb << std::endl;
 
-  ObjectStore *fs = new FileStore(filename);
+  ObjectStore *fs = new FileStore(filename, NULL);
   if (fs->mount() < 0) {
     cout << "mount failed" << std::endl;
     return -1;

@@ -101,14 +101,14 @@ int main(int argc, const char **argv)
   //src = new Ebofs(args[1]);
   //else
   if (strcmp(args[0], "filestore") == 0) 
-    src = new FileStore(args[1]);
+    src = new FileStore(args[1], NULL);
   else usage();
 
   //if (strcmp(args[2], "ebofs") == 0) 
   //dst = new Ebofs(args[3]);
   //else
   if (strcmp(args[2], "filestore") == 0) 
-    dst = new FileStore(args[3]);
+    dst = new FileStore(args[3], NULL);
   else usage();
 
   return dupstore(src, dst);

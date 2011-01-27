@@ -224,7 +224,7 @@ class FileStore : public JournalingObjectStore {
   int open_journal();
 
  public:
-  FileStore(const char *base, const char *jdev = 0);
+  FileStore(const char *base, const char *jdev);
 
   int _detect_fs();
   int _sanity_check_fs();
