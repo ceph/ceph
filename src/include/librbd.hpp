@@ -69,11 +69,16 @@ public:
   int resize(pool_t pool, const char *name, size_t size);
   int stat(pool_t pool, const char *name, image_info_t& info);
   int list(pool_t pool, std::vector<string>& names);
+  int copy(pool_t src_pool, const char *imgname, pool_t dest_pool, const char *destname);
+  int rename(pool_t src_pool, const char *imgname, const char *destname);
 
-  int create_snap(pool_t pool, const char *image_name, const char *snapname);
-  int remove_snap(pool_t pool, const char *image_name, const char *snapname);
-  int rollback_snap(pool_t pool, const char *image_name, const char *snapname);
+  int create_snap(pool_t pool, const char *image_name, const char *snap_name);
+  int remove_snap(pool_t pool, const char *image_name, const char *snap_name);
+  int rollback_snap(pool_t pool, const char *image_name, const char *snap_name);
   int list_snaps(pool_t pool, const char *image_name, std::vector<snap_info_t>& snaps);
+  int set_snap(pool_t pool, const char *image_name, const char *snap_name);
+
+  void get_rados_pools(pool_t pool, librados::pool_t *md_pool, librados::pool_t *data_pool);
 };
 
 }

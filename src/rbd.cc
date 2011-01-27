@@ -336,45 +336,14 @@ static int do_create(librbd::pool_t pool, const char *imgname, size_t size)
     return r;
   return 0;
 }
-/*
-static int do_rename(const char *poolname, const char *imgname, const char *destname)
-{
-  string dst_md_oid = dstname;
-  dst_md_oid += RBD_SUFFIX;
-  string dstname_str = dstname;
-  string imgname_str = imgname;
-  uint64_t ver;
-  bufferlist header;
-  int r = read_header_bl(pp.md, md_oid, header, &ver);
-  if (r < 0) {
-    cerr << "error reading header: " << md_oid << ": " << strerror(-r) << std::endl;
-    return r;
-  }
-  r = rados.stat(pp.md, dst_md_oid, NULL, NULL);
-  if (r == 0) {
-    cerr << "rbd image header " << dst_md_oid << " already exists" << std::endl;
-    return -EEXIST;
-  }
-  r = write_header(pp, dst_md_oid, header);
-   if (r < 0) {
-    cerr << "error writing header: " << dst_md_oid << ": " << strerror(-r) << std::endl;
-     return r;
-  }
-  r = tmap_set(pp, dstname_str);
-  if (r < 0) {
-    rados.remove(pp.md, dst_md_oid);
-    cerr << "can't add " << dst_md_oid << " to directory" << std::endl;
-    return r;
-  }
-  r = tmap_rm(pp, imgname_str);
-  if (r < 0)
-    cerr << "warning: couldn't remove old entry from directory (" << imgname_str << ")" << std::endl;
 
-  r = rados.remove(pp.md, md_oid);
+static int do_rename(librbd::pool_t pool, const char *imgname, const char *destname)
+{
+  int r = rbd.rename(pool, imgname, destname);
   if (r < 0)
-    cerr << "warning: couldn't remove old metadata" << std::endl;
+    return r;
+  return 0;
 }
-*/
 
 static int do_show_info(librbd::pool_t pool, const char *imgname)
 {
@@ -444,14 +413,16 @@ static int do_rollback_snap(librbd::pool_t pool, const char *imgname, const char
 
   return 0;
 }
-/*
-static int do_export(librbd::pools_t& pp, string& md_oid, const char *path)
+#if 0
+static int do_export(librbd::pool_t pool, string& md_oid, const char *path)
 {
   struct rbd_obj_header_ondisk header;
   int64_t ret;
   int r;
 
-  ret = read_header(pp.md, md_oid, &header, NULL);
+  librados::pool_t pool_md, pool_data;
+
+  ret = read_header(pool_md, md_oid, &header, NULL);
   if (ret < 0)
     return ret;
 
@@ -469,7 +440,7 @@ static int do_export(librbd::pools_t& pp, string& md_oid, const char *path)
     map<off_t, size_t> m;
     map<off_t, size_t>::iterator iter;
     off_t bl_ofs = 0;
-    r = rados.sparse_read(pp.data, oid, 0, block_size, m, bl);
+    r = rados.sparse_read(pool_data, oid, 0, block_size, m, bl);
     if (r < 0 && r == -ENOENT)
       r = 0;
     if (r < 0) {
@@ -508,7 +479,7 @@ done:
   close(fd);
   return ret;
 }
-*/
+#endif
 static const char *imgname_from_path(const char *path)
 {
   const char *imgname;
@@ -706,71 +677,14 @@ done:
 
   return r;
 }
+#endif
 
-static int do_copy(librbd::pools_t& pp, const char *imgname, const char *destname)
+static int do_copy(librbd::pool_t& pp, const char *imgname, librbd::pool_t& dest_pp, const char *destname)
 {
-  struct rbd_obj_header_ondisk header, dest_header;
-  int64_t ret;
-  int r;
-  string md_oid, dest_md_oid;
-
-  md_oid = imgname;
-  md_oid += RBD_SUFFIX;
-
-  dest_md_oid = destname;
-  dest_md_oid += RBD_SUFFIX;
-
-  ret = read_header(pp.md, md_oid, &header, NULL);
-  if (ret < 0)
-    return ret;
-
-  uint64_t numseg = get_max_block(&header);
-  uint64_t block_size = get_block_size(&header);
-  int order = header.options.order;
-
-  r = do_create(pp.dest, dest_md_oid, destname, header.image_size, &order);
-  if (r < 0) {
-    cerr << "header creation failed" << std::endl;
+  int r = rbd.copy(pp, imgname, dest_pp, destname);
+  if (r < 0)
     return r;
-  }
-
-  ret = read_header(pp.dest, dest_md_oid, &dest_header, NULL);
-  if (ret < 0) {
-    cerr << "failed to read newly created header" << std::endl;
-    return ret;
-  }
-
-  for (uint64_t i = 0; i < numseg; i++) {
-    bufferlist bl;
-    string oid = get_block_oid(&header, i);
-    string dest_oid = get_block_oid(&dest_header, i);
-    map<off_t, size_t> m;
-    map<off_t, size_t>::iterator iter;
-    r = rados.sparse_read(pp.data, oid, 0, block_size, m, bl);
-    if (r < 0 && r == -ENOENT)
-      r = 0;
-    if (r < 0)
-      return r;
-
-
-    for (iter = m.begin(); iter != m.end(); ++iter) {
-      off_t extent_ofs = iter->first;
-      size_t extent_len = iter->second;
-      bufferlist wrbl;
-      if (extent_ofs + extent_len > bl.length()) {
-        cerr << "data error!" << std::endl;
-        return -EIO;
-      }
-      bl.copy(extent_ofs, extent_len, wrbl);
-      r = rados.write(pp.dest, dest_oid, extent_ofs, wrbl, extent_len);
-      if (r < 0)
-        goto done;
-    }
-  }
-  r = 0;
-
-done:
-  return r;
+  return 0;
 }
 
 class RbdWatchCtx : public librados::Rados::WatchCtx {
@@ -783,17 +697,20 @@ public:
   }
 };
 
-static int do_watch(librbd::pools_t& pp, const char *imgname)
+static int do_watch(librbd::pool_t& pp, const char *imgname)
 {
   string md_oid, dest_md_oid;
   uint64_t cookie;
   RbdWatchCtx ctx(imgname);
+  librados::pool_t md_pool;
+
+  rbd.get_rados_pools(pp, &md_pool, NULL);
 
   md_oid = imgname;
   md_oid += RBD_SUFFIX;
 
   librados::Rados rados;
-  int r = rados.watch(pp.md, md_oid, 0, &cookie, &ctx);
+  int r = rados.watch(md_pool, md_oid, 0, &cookie, &ctx);
   if (r < 0) {
     cerr << "watch failed" << std::endl;
     return r;
@@ -803,7 +720,7 @@ static int do_watch(librbd::pools_t& pp, const char *imgname)
   getchar();
   return 0;
 }
-#endif
+
 static void err_exit(librbd::pool_t pool)
 {
   rbd.close_pool(pool);
@@ -1000,6 +917,8 @@ int main(int argc, const char **argv)
   if (!dest_poolname)
     dest_poolname = poolname;
 
+  librbd::pool_t dest_pool;
+
   if (opt_cmd == OPT_EXPORT && !path)
     path = imgname;
 
@@ -1019,38 +938,22 @@ int main(int argc, const char **argv)
       err_exit(pool);
   }
 
-  /*
   if (snapname) {
-    r = do_get_snapc(pp, md_oid, snapname, snapc, snaps, snapid);
-    if (r == -ENOENT) {
-      if (opt_cmd == OPT_SNAP_CREATE)
-        r = 0;
-      else
-        cerr << "snapshot not found: " << snapname << std::endl;
-    }
-    if (r < 0) {
-      cerr << "error searching for snapshot: " << strerror(-r) << std::endl;
-      err_exit(pp);
-    }
-
-    r = rados.set_snap_context(pool, snapc.seq, snaps);
-    if (r < 0) {
+    r = rbd.set_snap(pool, imgname, snapname);
+    if (r < 0 && !(r == -ENOENT && opt_cmd == OPT_SNAP_CREATE)) {
       cerr << "error setting snapshot context: " << strerror(-r) << std::endl;
-      err_exit(pp);
+      err_exit(pool);
     }
-
-    rados.set_snap(pool, snapid);
   }
 
   if (opt_cmd == OPT_COPY || opt_cmd == OPT_IMPORT) {
-    r = rados.open_pool(dest_poolname, &dest_pool);
+    r = rbd.open_pool(dest_poolname, &dest_pool);
     if (r < 0) {
       cerr << "error opening pool " << dest_poolname << " (err=" << r << ")" << std::endl;
-      err_exit(pp);
+      err_exit(pool);
     }
-    pp.dest = dest_pool;
   }
-  */
+
   switch (opt_cmd) {
   case OPT_LIST:
     r = do_list(poolname);
@@ -1083,15 +986,15 @@ int main(int argc, const char **argv)
       err_exit(pool);
     }
     break;
-/*
+
   case OPT_RENAME:
-    r = do_rename(poolname, imgname, destname);
+    r = do_rename(pool, imgname, destname);
     if (r < 0) {
       cerr << "rename error: " << strerror(-r) << std::endl;
       err_exit(pool);
     }
     break;
-*/
+
   case OPT_INFO:
     r = do_show_info(pool, imgname);
     if (r < 0) {
@@ -1163,47 +1066,46 @@ int main(int argc, const char **argv)
       err_exit(pool);
     }
     break;
-    /*
+#if 0
   case OPT_EXPORT:
     if (!path) {
       cerr << "pathname should be specified" << std::endl;
-      err_exit(pp);
+      err_exit(pool);
     }
-    r = do_export(pp, md_oid, path);
+    r = do_export(pool, md_oid, path);
     if (r < 0) {
       cerr << "export error: " << strerror(-r) << std::endl;
-      err_exit(pp);
+      err_exit(pool);
     }
     break;
 
   case OPT_IMPORT:
      if (!path) {
       cerr << "pathname should be specified" << std::endl;
-      err_exit(pp);
+      err_exit(pool);
     }
-    r = do_import(pp.dest, destname, order, path);
+    r = do_import(dest_pool, destname, order, path);
     if (r < 0) {
       cerr << "import failed: " << strerror(-r) << std::endl;
-      err_exit(pp);
+      err_exit(pool);
     }
     break;
-
+#endif
   case OPT_COPY:
-    r = do_copy(pp, imgname, destname);
+    r = do_copy(pool, imgname, dest_pool, destname);
     if (r < 0) {
       cerr << "copy failed: " << strerror(-r) << std::endl;
-      err_exit(pp);
+      err_exit(pool);
     }
     break;
 
   case OPT_WATCH:
-    r = do_watch(pp, imgname);
+    r = do_watch(pool, imgname);
     if (r < 0) {
       cerr << "watch failed: " << strerror(-r) << std::endl;
-      err_exit(pp);
+      err_exit(pool);
     }
     break;
-    */
   }
 
   rbd.close_pool(pool);
