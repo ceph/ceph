@@ -350,6 +350,11 @@ unittest_run_cmd_LDADD = libceph.la ${UNITTEST_LDADD}
 unittest_run_cmd_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_run_cmd
 
+unittest_signals_SOURCES = test/signals.cc
+unittest_signals_LDADD = libceph.la ${UNITTEST_LDADD}
+unittest_signals_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_signals
+
 # shell scripts
 editpaths = sed \
 	-e 's|@bindir[@]|$(bindir)|g' \

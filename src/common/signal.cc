@@ -15,6 +15,7 @@
 #include "common/BackTrace.h"
 #include "common/Logger.h"
 #include "common/debug.h"
+#include "common/signal.h"
 #include "config.h"
 
 #include <signal.h>
@@ -25,9 +26,7 @@
 
 #define dout_prefix *_dout
 
-typedef void (*signal_handler_t)(int);
-
-static void install_sighandler(int signum, signal_handler_t handler, int flags)
+void install_sighandler(int signum, signal_handler_t handler, int flags)
 {
   int ret;
   struct sigaction oldact;
