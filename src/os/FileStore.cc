@@ -363,6 +363,7 @@ done:
 
 FileStore::FileStore(const char *base, const char *jdev) :
   basedir(base), journalpath(jdev ? jdev:""),
+  fsid(0),
   btrfs(false), btrfs_trans_start_end(false), btrfs_clone_range(false),
   btrfs_snap_create(false),
   btrfs_snap_destroy(false),
@@ -370,6 +371,7 @@ FileStore::FileStore(const char *base, const char *jdev) :
   btrfs_wait_sync(false),
   ioctl_fiemap(false),
   fsid_fd(-1), op_fd(-1),
+  basedir_fd(-1), current_fd(-1),
   attrs(this), fake_attrs(false),
   collections(this), fake_collections(false),
   lock("FileStore::lock"),
