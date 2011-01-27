@@ -361,9 +361,31 @@ done:
   return r;
 }
 
+FileStore::FileStore(const char *base, const char *jdev) :
+  basedir(base), journalpath(jdev ? jdev:""),
+  btrfs(false), btrfs_trans_start_end(false), btrfs_clone_range(false),
+  btrfs_snap_create(false),
+  btrfs_snap_destroy(false),
+  btrfs_snap_create_v2(false),
+  btrfs_wait_sync(false),
+  ioctl_fiemap(false),
+  fsid_fd(-1), op_fd(-1),
+  attrs(this), fake_attrs(false),
+  collections(this), fake_collections(false),
+  lock("FileStore::lock"),
+  force_sync(false), sync_epoch(0), stop(false), sync_thread(this),
+  op_queue_len(0), op_queue_bytes(0), next_finish(0),
+  op_tp("FileStore::op_tp", g_conf.filestore_op_threads), op_wq(this, &op_tp),
+  flusher_queue_len(0), flusher_thread(this)
+{
+  ostringstream oss;
+  oss << basedir << "/current";
+  current_fn = oss.str();
 
-// .............
-
+  ostringstream sss;
+  sss << basedir << "/current/commit_op_seq";
+  current_op_seq_fn = sss.str();
+}
 
 static void get_attrname(const char *name, char *buf, int len)
 {
@@ -663,7 +685,7 @@ int FileStore::mkfs()
     else if (ret == EOPNOTSUPP || ret == ENOTTY) {
       dout(2) << " BTRFS_IOC_SUBVOL_CREATE ioctl failed, trying mkdir "
 	      << current_fn << dendl;
-      if (::mkdir(current_fn, 0755)) {
+      if (::mkdir(current_fn.c_str(), 0755)) {
 	ret = errno;
 	if (ret != EEXIST) {
 	  derr << "FileStore::mkfs: mkdir " << current_fn << " failed: "
@@ -681,7 +703,7 @@ int FileStore::mkfs()
   else {
     // ioctl succeeded. yay
     dout(2) << " created btrfs subvol " << current_fn << dendl;
-    if (::chmod(current_fn, 0755)) {
+    if (::chmod(current_fn.c_str(), 0755)) {
       ret = -errno;
       derr << "FileStore::mkfs: failed to chmod " << current_fn << " to 0755: "
 	   << cpp_strerror(ret) << dendl;
@@ -1009,7 +1031,7 @@ int FileStore::_sanity_check_fs()
 
 int FileStore::read_op_seq(const char *fn, uint64_t *seq)
 {
-  int op_fd = ::open(current_op_seq_fn, O_CREAT|O_RDWR, 0644);
+  int op_fd = ::open(current_op_seq_fn.c_str(), O_CREAT|O_RDWR, 0644);
   if (op_fd < 0)
     return op_fd;
 
@@ -1103,7 +1125,7 @@ int FileStore::mount()
       uint64_t cp = snaps.back();
       uint64_t curr_seq;
 
-      int curr_fd = read_op_seq(current_op_seq_fn, &curr_seq);
+      int curr_fd = read_op_seq(current_op_seq_fn.c_str(), &curr_seq);
       assert(curr_fd >= 0);
       close(curr_fd);
       dout(10) << "*** curr_seq=" << curr_seq << " cp=" << cp << dendl;
@@ -1144,7 +1166,7 @@ int FileStore::mount()
 	dout(0) << "error removing old current subvol: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
 	char s[PATH_MAX];
 	snprintf(s, sizeof(s), "%s/current.remove.me.%d", basedir.c_str(), rand());
-	r = ::rename(current_fn, s);
+	r = ::rename(current_fn.c_str(), s);
 	if (r) {
 	  dout(0) << "error renaming old current subvol: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
 	  return -errno;
@@ -1164,7 +1186,7 @@ int FileStore::mount()
 
       assert(curr_fd >= 0);
       if (cp != curr_seq) {
-        curr_fd = read_op_seq(current_op_seq_fn, &curr_seq);
+        curr_fd = read_op_seq(current_op_seq_fn.c_str(), &curr_seq);
         /* we'll use the higher version from now on */
         curr_seq = cp;
         write_op_seq(curr_fd, curr_seq);
@@ -1175,10 +1197,10 @@ int FileStore::mount()
 
   uint64_t initial_op_seq = 0;
 
-  current_fd = ::open(current_fn, O_RDONLY);
+  current_fd = ::open(current_fn.c_str(), O_RDONLY);
   assert(current_fd >= 0);
 
-  op_fd = read_op_seq(current_op_seq_fn, &initial_op_seq);
+  op_fd = read_op_seq(current_op_seq_fn.c_str(), &initial_op_seq);
   assert (op_fd >= 0);
   dout(5) << "mount op_seq is " << initial_op_seq << dendl;
 
