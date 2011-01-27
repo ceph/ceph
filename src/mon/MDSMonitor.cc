@@ -625,6 +625,47 @@ int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
   return 0;
 }
 
+int MDSMonitor::reset_cluster(std::ostream &ss)
+{
+  dout(10) << "reset_cluster" << dendl;
+
+  if (pending_mdsmap.up.size() && !mon->osdmon()->paxos->is_writeable()) {
+    ss << "osdmap not writeable, can't blacklist up mds's";
+    return -EAGAIN;
+  }
+
+  // --- reset the cluster map ---
+  pending_mdsmap.stopped.insert(pending_mdsmap.in.begin(),
+				pending_mdsmap.in.end());
+  pending_mdsmap.in.clear();
+  pending_mdsmap.stopped.insert(pending_mdsmap.failed.begin(),
+				pending_mdsmap.failed.end());
+  pending_mdsmap.failed.clear();
+  
+  pending_mdsmap.stopped.erase(0);
+  pending_mdsmap.failed.insert(0);
+  pending_mdsmap.in.insert(0);
+
+  if (pending_mdsmap.mds_info.size()) {
+    // blacklist all old mds's
+    utime_t until = g_clock.now();
+    until += g_conf.mds_blacklist_interval;
+    for (map<int32_t,uint64_t>::iterator p = pending_mdsmap.up.begin();
+	 p != pending_mdsmap.up.end();
+	 ++p) {
+      MDSMap::mds_info_t& info = pending_mdsmap.mds_info[p->second];
+      dout(10) << " blacklisting gid " << p->second << " " << info.addr << dendl;
+      pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
+    }
+    mon->osdmon()->propose_pending();
+  }
+  pending_mdsmap.up.clear();
+  pending_mdsmap.mds_info.clear();
+
+  ss << "reset mds cluster to single mds";
+  return 0;
+}
+
 bool MDSMonitor::prepare_command(MMonCommand *m)
 {
   int r = -EINVAL;
@@ -702,6 +743,9 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
+    }
+    else if (m->cmd[1] == "cluster_reset") {
+      r = reset_cluster(ss);
     }
     else if (m->cmd[1] == "compat" && m->cmd.size() == 4) {
       uint64_t f = atoll(m->cmd[3].c_str());
