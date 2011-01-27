@@ -526,7 +526,6 @@ int librbd::RBDClient::remove(PoolCtx *pp, const char *imgname)
 
 int librbd::RBDClient::resize(PoolCtx *pp, ImageCtx *ictx, uint64_t size)
 {
-  uint64_t ver;
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
@@ -548,7 +547,6 @@ int librbd::RBDClient::resize(PoolCtx *pp, ImageCtx *ictx, uint64_t size)
   // rewrite header
   bufferlist bl;
   bl.append((const char *)&(ictx->header), sizeof(ictx->header));
-  rados.set_assert_version(pp->md, ver);
   int r = rados.write(pp->md, md_oid, 0, bl, bl.length());
   if (r == -ERANGE)
     cerr << "operation might have conflicted with another client!" << std::endl;
