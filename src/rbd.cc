@@ -117,56 +117,6 @@ static void print_info(const char *imgname, librbd::image_info_t& info)
        << std::endl;
 }
 
-static string get_block_oid(rbd_obj_header_ondisk *header, uint64_t num)
-{
-  char o[RBD_MAX_SEG_NAME_SIZE];
-  snprintf(o, RBD_MAX_SEG_NAME_SIZE,
-	   "%s.%012" PRIx64, header->block_name, num);
-  return o;
-}
-
-static uint64_t get_max_block(rbd_obj_header_ondisk *header)
-{
-  uint64_t size = header->image_size;
-  int obj_order = header->options.order;
-  uint64_t block_size = 1 << obj_order;
-  uint64_t numseg = (size + block_size - 1) >> obj_order;
-
-  return numseg;
-}
-
-static uint64_t get_block_size(rbd_obj_header_ondisk *header)
-{
-  return 1 << header->options.order;
-}
-
-static uint64_t get_block_num(rbd_obj_header_ondisk *header, uint64_t ofs)
-{
-  int obj_order = header->options.order;
-  uint64_t num = ofs >> obj_order;
-
-  return num;
-}
-static uint64_t get_pos_in_block(rbd_obj_header_ondisk *header, uint64_t ofs)
-{
-  int obj_order = header->options.order;
-  uint64_t mask = (1 << obj_order) - 1;
-  return ofs & mask;
-}
-
-static uint64_t bounded_pos_in_block(rbd_obj_header_ondisk *header, uint64_t end_ofs, unsigned int i)
-{
-  int obj_order = header->options.order;
-  if (end_ofs >> obj_order > i)
-    return (1 << obj_order);
-  return get_pos_in_block(header, end_ofs);
-}
-
-static int init_rbd_info(struct rbd_info *info)
-{
-  memset(info, 0, sizeof(*info));
-  return 0;
-}
 /*
 int read_rbd_info(librbd::pools_t& pp, string& info_oid, struct rbd_info *info)
 {
@@ -322,9 +272,9 @@ static int do_list(librbd::pool_t pool)
   return 0;
 }
 
-static int do_create(librbd::pool_t pool, const char *imgname, size_t size)
+static int do_create(librbd::pool_t pool, const char *imgname, size_t size, int *order)
 {
-  int r = rbd.create(pool, imgname, size);
+  int r = rbd.create(pool, imgname, size, order);
   if (r < 0)
     return r;
   return 0;
@@ -406,73 +356,49 @@ static int do_rollback_snap(librbd::image_t image, const char *snapname)
 
   return 0;
 }
-#if 0
-static int do_export(librbd::pool_t pool, string& md_oid, const char *path)
+
+static int export_read_cb(off_t ofs, size_t len, const char *buf, void *arg)
 {
-  struct rbd_obj_header_ondisk header;
-  int64_t ret;
-  int r;
+  int ret;
+  int fd = *(int *)arg;
 
-  librados::pool_t pool_md, pool_data;
+  if (!buf) /* a hole */
+    return 0;
 
-  ret = read_header(pool_md, md_oid, &header, NULL);
+  ret = lseek64(fd, ofs, SEEK_SET);
   if (ret < 0)
-    return ret;
+    return -errno;
+  ret = write(fd, buf, len);
+  if (ret < 0)
+    return -errno;
+  return 0;
+}
 
-  uint64_t numseg = get_max_block(&header);
-  uint64_t block_size = get_block_size(&header);
+static int do_export(librbd::image_t image, const char *path)
+{
+  int r;
+  librbd::image_info_t info;
   int fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
-  uint64_t pos = 0;
-
   if (fd < 0)
     return -errno;
 
-  for (uint64_t i = 0; i < numseg; i++) {
-    bufferlist bl;
-    string oid = get_block_oid(&header, i);
-    map<off_t, size_t> m;
-    map<off_t, size_t>::iterator iter;
-    off_t bl_ofs = 0;
-    r = rados.sparse_read(pool_data, oid, 0, block_size, m, bl);
-    if (r < 0 && r == -ENOENT)
-      r = 0;
-    if (r < 0) {
-      ret = r;
-      goto done;
-    }
-
-    for (iter = m.begin(); iter != m.end(); ++iter) {
-      off_t extent_ofs = iter->first;
-      size_t extent_len = iter->second;
-      ret = lseek64(fd, pos + extent_ofs, SEEK_SET);
-      if (ret < 0) {
-	ret = -errno;
-	cerr << "could not seek to pos " << pos << std::endl;
-	goto done;
-      }
-      if (bl_ofs + extent_len > bl.length()) {
-        cerr << "data error!" << std::endl;
-        return -EIO;
-      }
-      ret = write(fd, bl.c_str() + bl_ofs, extent_len);
-      if (ret < 0)
-        goto done;
-      bl_ofs += extent_len;
-    }
-
-    pos += block_size;
-  }
-  r = ftruncate(fd, header.image_size);
+  r = rbd.stat(image, info);
   if (r < 0)
-    ret = -errno;
+    return r;
 
-  ret = 0;
+  r = rbd.read_iterate(image, 0, info.size, export_read_cb, (void *)&fd);
 
-done:
   close(fd);
-  return ret;
+  if (r < 0)
+    return r;
+
+  r = ftruncate(fd, info.size);
+  if (r < 0)
+    return r;
+
+  return 0;
 }
-#endif
+
 static const char *imgname_from_path(const char *path)
 {
   const char *imgname;
@@ -534,13 +460,12 @@ static void set_pool_image_name(const char *orig_pool, const char *orig_img,
 done_img:
   update_snap_name(*new_img, snap);
 }
-#if 0
-static int do_import(librados::pool_t pool, const char *imgname, int order, const char *path)
+
+static int do_import(librados::pool_t pool, const char *imgname, int *order, const char *path)
 {
   int fd = open(path, O_RDONLY);
   int r;
   uint64_t size;
-  uint64_t block_size;
   struct stat stat_buf;
   string md_oid;
   struct fiemap *fiemap;
@@ -564,19 +489,15 @@ static int do_import(librados::pool_t pool, const char *imgname, int order, cons
   md_oid = imgname;
   md_oid += RBD_SUFFIX;
 
-  //  r = do_create(pool, md_oid, imgname, size, &order);
+  r = do_create(pool, imgname, size, order);
   if (r < 0) {
     cerr << "image creation failed" << std::endl;
     return r;
   }
-
-  block_size = 1 << order;
-
-  /* FIXME: use fiemap to read sparse files */
-  struct rbd_obj_header_ondisk header;
-  r = read_header(pool, md_oid, &header, NULL);
+  librbd::image_t image;
+  r = rbd.open_image(pool, imgname, &image, NULL);
   if (r < 0) {
-    cerr << "error reading header" << std::endl;
+    cerr << "failed to open image" << std::endl;
     return r;
   }
 
@@ -601,12 +522,10 @@ static int do_import(librados::pool_t pool, const char *imgname, int order, cons
   uint64_t extent = 0;
 
   while (extent < fiemap->fm_mapped_extents) {
-    uint64_t start_block, end_block;
     off_t file_pos, end_ofs;
     size_t extent_len = 0;
 
     file_pos = fiemap->fm_extents[extent].fe_logical; /* position within the file we're reading */
-    start_block = get_block_num(&header, file_pos); /* starting block */
 
     do { /* try to merge consecutive extents */
 #define LARGE_ENOUGH_EXTENT (32 * 1024 * 1024)
@@ -617,8 +536,6 @@ static int do_import(librados::pool_t pool, const char *imgname, int order, cons
       extent_len += fiemap->fm_extents[extent].fe_length;  /* length of current extent */
       end_ofs = MIN(size, file_pos + extent_len);
 
-      end_block = get_block_num(&header, end_ofs - 1); /* ending block */
-
       extent++;
       if (extent == fiemap->fm_mapped_extents)
         break;
@@ -626,39 +543,32 @@ static int do_import(librados::pool_t pool, const char *imgname, int order, cons
     } while (end_ofs == (off_t)fiemap->fm_extents[extent].fe_logical);
 
     cerr << "rbd import file_pos=" << file_pos << " extent_len=" << extent_len << std::endl;
-    for (uint64_t i = start_block; i <= end_block; i++) {
-      uint64_t ofs_in_block = get_pos_in_block(&header, file_pos); /* the offset within the starting block */
-      uint64_t seg_size = bounded_pos_in_block(&header, end_ofs, i) - ofs_in_block;
-      uint64_t seg_left = seg_size;
-
-      cerr << "i=" << i << " (" << start_block << "/" << end_block << ") "
-           << "seg_size=" << seg_size << " seg_left=" << seg_left << std::endl;
-      while (seg_left) {
-        uint64_t len = seg_left;
-        bufferptr p(len);
-        cerr << "reading " << len << " bytes at offset " << file_pos << std::endl;
-	{
-	  ssize_t rval = TEMP_FAILURE_RETRY(::pread(fd, p.c_str(), len, file_pos));
-	  if (rval < 0) {
-	    r = -errno;
-	    cerr << "failed to read file: " << cpp_strerror(r) << std::endl;
-	    goto done;
-	  }
-	  len = rval;
-	}
+#define READ_BLOCK_LEN (4 * 1024 * 1024)
+    uint64_t left = extent_len;
+    while (left) {
+      uint64_t cur_seg = (left < READ_BLOCK_LEN ? left : READ_BLOCK_LEN);
+      while (cur_seg) {
+        bufferptr p(cur_seg);
+        cerr << "reading " << cur_seg << " bytes at offset " << file_pos << std::endl;
+        ssize_t rval = TEMP_FAILURE_RETRY(::pread(fd, p.c_str(), cur_seg, file_pos));
+        if (ret < 0) {
+          r = -errno;
+          cerr << "error reading file: " << cpp_strerror(r) << std::endl;
+          goto done;
+        }
+	len = rval
         bufferlist bl;
         bl.append(p);
-        string oid = get_block_oid(&header, i);
-        cerr << "writing " << len << " bytes at offset " << ofs_in_block << " at block " << oid << std::endl;
-        r = rados.write(pool, oid, ofs_in_block, bl, len);
+
+        r = rbd.write(image, file_pos, len, bl);
         if (r < 0) {
           cerr << "error writing to image block" << std::endl;
           goto done;
         }
 
-        seg_left -= len;
         file_pos += len;
-        ofs_in_block += len;
+        cur_seg -= len;
+        left -= len;
       }
     }
   }
@@ -670,7 +580,6 @@ done:
 
   return r;
 }
-#endif
 
 static int do_copy(librbd::pool_t& pp, const char *imgname, librbd::pool_t& dest_pp, const char *destname)
 {
@@ -933,7 +842,7 @@ int main(int argc, const char **argv)
   if (imgname &&
       (opt_cmd == OPT_RESIZE || opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
        opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
-       opt_cmd == OPT_SNAP_REMOVE)) {
+       opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_EXPORT)) {
     r = rbd.open_image(pool, imgname, &image, NULL);
     if (r < 0) {
       cerr << "error opening image " << imgname << " (err=" << r << ")" << std::endl;
@@ -983,7 +892,7 @@ int main(int argc, const char **argv)
       usage();
       err_exit(pool);
     }
-    r = do_create(pool, imgname, size);
+    r = do_create(pool, imgname, size, &order);
     if (r < 0) {
       cerr << "create error: " << strerror(-r) << std::endl;
       err_exit(pool);
@@ -1069,13 +978,13 @@ int main(int argc, const char **argv)
       err_exit(pool, image);
     }
     break;
-#if 0
+
   case OPT_EXPORT:
     if (!path) {
       cerr << "pathname should be specified" << std::endl;
       err_exit(pool);
     }
-    r = do_export(pool, md_oid, path);
+    r = do_export(image, path);
     if (r < 0) {
       cerr << "export error: " << strerror(-r) << std::endl;
       err_exit(pool);
@@ -1087,13 +996,13 @@ int main(int argc, const char **argv)
       cerr << "pathname should be specified" << std::endl;
       err_exit(pool);
     }
-    r = do_import(dest_pool, destname, order, path);
+    r = do_import(dest_pool, destname, &order, path);
     if (r < 0) {
       cerr << "import failed: " << strerror(-r) << std::endl;
       err_exit(pool);
     }
     break;
-#endif
+
   case OPT_COPY:
     r = do_copy(pool, imgname, dest_pool, destname);
     if (r < 0) {
