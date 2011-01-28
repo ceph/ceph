@@ -667,8 +667,6 @@ int librbd::RBDClient::get_snapc(PoolCtx *pp, string& md_oid, const char *snap_n
     ::decode(id, iter);
     ::decode(image_size, iter);
     ::decode(s, iter);
-    if (s.compare(snap_name) == 0)
-      ictx->snapid = id;
     ictx->snapc.snaps.push_back(id);
     ictx->snaps.push_back(id);
     ictx->add_snap(s, id);
@@ -679,8 +677,11 @@ int librbd::RBDClient::get_snapc(PoolCtx *pp, string& md_oid, const char *snap_n
     return -EIO;
   }
 
-  if (!ictx->snapid) {
-    return -ENOENT;
+  if (snap_name) {
+    ictx->set_snap(snap_name);
+    if (!ictx->snapid) {
+      return -ENOENT;
+    }
   }
 
   return 0;
