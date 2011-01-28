@@ -1569,8 +1569,12 @@ void OSD::tick()
   // only do waiters if dispatch() isn't currently running.  (if it is,
   // it'll do the waiters, and doing them here may screw up ordering
   // of op_queue vs handle_osd_map.)
-  if (!dispatch_running)
+  if (!dispatch_running) {
+    dispatch_running = true;
     do_waiters();
+    dispatch_running = false;
+    dispatch_cond.Signal();
+  }
 }
 
 // =========================================
@@ -2048,11 +2052,21 @@ bool OSD::ms_dispatch(Message *m)
 {
   // lock!
   osd_lock.Lock();
+  while (dispatch_running) {
+    dout(10) << "ms_dispatch waiting for other dispatch thread to complete" << dendl;
+    dispatch_cond.Wait(osd_lock);
+  }
+  dispatch_running = true;
+
   do_waiters();
-  ++dispatch_running;
   _dispatch(m);
-  --dispatch_running;
   do_waiters();
+
+  dispatch_running = false;
+  
+  // no need to signal here, since tick() doesn't wait.
+  //dispatch_cond.Signal();
+
   osd_lock.Unlock();
   return true;
 }

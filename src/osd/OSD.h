@@ -132,6 +132,7 @@ protected:
     }
   };
 
+  Cond dispatch_cond;
   int dispatch_running;
 
   void open_logger();
