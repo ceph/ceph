@@ -38,7 +38,6 @@
 #include "include/fiemap.h"
 
 static librbd::RBD rbd;
-//static librados::Rados rados;
 static string dir_oid = RBD_DIRECTORY;
 static string dir_info_oid = RBD_INFO;
 
@@ -311,18 +310,12 @@ static int rollback_image(librbd::pools_t& pp, struct rbd_obj_header_ondisk *hea
   return 0;
 }
 */
-static int do_list(const char* poolname)
+static int do_list(librbd::pool_t pool)
 {
   std::vector<string> names;
-  librbd::pool_t pool;
-  int r = rbd.open_pool(poolname, &pool);
+  int r = rbd.list(pool, names);
   if (r < 0)
     return r;
-
-  r = rbd.list(pool, names);
-  if (r < 0)
-    return r;
-  rbd.close_pool(pool);
 
   for (std::vector<string>::const_iterator i = names.begin(); i != names.end(); i++)
     cout << *i << std::endl;
@@ -345,10 +338,10 @@ static int do_rename(librbd::pool_t pool, const char *imgname, const char *destn
   return 0;
 }
 
-static int do_show_info(librbd::pool_t pool, const char *imgname)
+static int do_show_info(const char *imgname, librbd::image_t image)
 {
   librbd::image_info_t info;
-  int r = rbd.stat(pool, imgname, info);
+  int r = rbd.stat(image, info);
   if (r < 0)
     return r;
 
@@ -365,19 +358,19 @@ static int do_show_info(librbd::pool_t pool, const char *imgname)
   return 0;
 }
 
-static int do_resize(librbd::pool_t pool, const char *imgname, size_t size)
+static int do_resize(librbd::image_t image, size_t size)
 {
-  int r = rbd.resize(pool, imgname, size);
+  int r = rbd.resize(image, size);
   if (r < 0)
     return r;
 
   return 0;
 }
 
-static int do_list_snaps(librbd::pool_t pool, const char *imgname)
+static int do_list_snaps(librbd::image_t image)
 {
   std::vector<librbd::snap_info_t> snaps;
-  int r = rbd.list_snaps(pool, imgname, snaps);
+  int r = rbd.list_snaps(image, snaps);
   if (r < 0)
     return r;
 
@@ -387,27 +380,27 @@ static int do_list_snaps(librbd::pool_t pool, const char *imgname)
   return 0;
 }
 
-static int do_add_snap(librbd::pool_t pool, const char *imgname, const char *snapname)
+static int do_add_snap(librbd::image_t image, const char *snapname)
 {
-  int r = rbd.create_snap(pool, imgname, snapname);
+  int r = rbd.create_snap(image, snapname);
   if (r < 0)
     return r;
 
   return 0;
 }
 
-static int do_remove_snap(librbd::pool_t pool, const char *imgname, const char *snapname)
+static int do_remove_snap(librbd::image_t image, const char *snapname)
 {
-  int r = rbd.remove_snap(pool, imgname, snapname);
+  int r = rbd.remove_snap(image, snapname);
   if (r < 0)
     return r;
 
   return 0;
 }
 
-static int do_rollback_snap(librbd::pool_t pool, const char *imgname, const char *snapname)
+static int do_rollback_snap(librbd::image_t image, const char *snapname)
 {
-  int r = rbd.rollback_snap(pool, imgname, snapname);
+  int r = rbd.rollback_snap(image, snapname);
   if (r < 0)
     return r;
 
@@ -721,8 +714,10 @@ static int do_watch(librbd::pool_t& pp, const char *imgname)
   return 0;
 }
 
-static void err_exit(librbd::pool_t pool)
+static void err_exit(librbd::pool_t pool, librbd::image_t image = NULL)
 {
+  if (image)
+    rbd.close_image(image);
   rbd.close_pool(pool);
   rbd.shutdown();
   exit(1);
@@ -813,10 +808,6 @@ int main(int argc, const char **argv)
   DEFINE_CONF_VARS(usage_exit);
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-
-  librbd::pool_t pool;
-  vector<librados::snap_t> snaps;
-  ::SnapContext snapc;
 
   int opt_cmd = OPT_NO_CMD;
   common_set_defaults(false);
@@ -917,7 +908,8 @@ int main(int argc, const char **argv)
   if (!dest_poolname)
     dest_poolname = poolname;
 
-  librbd::pool_t dest_pool;
+  librbd::pool_t pool, dest_pool;
+  librbd::image_t image = NULL;
 
   if (opt_cmd == OPT_EXPORT && !path)
     path = imgname;
@@ -938,11 +930,22 @@ int main(int argc, const char **argv)
       err_exit(pool);
   }
 
+  if (imgname &&
+      (opt_cmd == OPT_RESIZE || opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
+       opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
+       opt_cmd == OPT_SNAP_REMOVE)) {
+    r = rbd.open_image(pool, imgname, &image, NULL);
+    if (r < 0) {
+      cerr << "error opening image " << imgname << " (err=" << r << ")" << std::endl;
+      err_exit(pool);
+    }
+  }
+
   if (snapname) {
-    r = rbd.set_snap(pool, imgname, snapname);
+    r = rbd.set_snap(image, snapname);
     if (r < 0 && !(r == -ENOENT && opt_cmd == OPT_SNAP_CREATE)) {
       cerr << "error setting snapshot context: " << strerror(-r) << std::endl;
-      err_exit(pool);
+      err_exit(pool, image);
     }
   }
 
@@ -956,7 +959,7 @@ int main(int argc, const char **argv)
 
   switch (opt_cmd) {
   case OPT_LIST:
-    r = do_list(poolname);
+    r = do_list(pool);
     if (r < 0) {
       switch (r) {
       case -ENOENT:
@@ -996,10 +999,10 @@ int main(int argc, const char **argv)
     break;
 
   case OPT_INFO:
-    r = do_show_info(pool, imgname);
+    r = do_show_info(imgname, image);
     if (r < 0) {
       cerr << "error: " << strerror(-r) << std::endl;
-      err_exit(pool);
+      err_exit(pool, image);
     }
     break;
 
@@ -1012,10 +1015,10 @@ int main(int argc, const char **argv)
     break;
 
   case OPT_RESIZE:
-    r = do_resize(pool, imgname, size);
+    r = do_resize(image, size);
     if (r < 0) {
       cerr << "resize error: " << strerror(-r) << std::endl;
-      err_exit(pool);
+      err_exit(pool, image);
     }
     break;
 
@@ -1024,22 +1027,22 @@ int main(int argc, const char **argv)
       usage();
       err_exit(pool);
     }
-    r = do_list_snaps(pool, imgname);
+    r = do_list_snaps(image);
     if (r < 0) {
       cerr << "failed to list snapshots: " << strerror(-r) << std::endl;
-      err_exit(pool);
+      err_exit(pool, image);
     }
     break;
 
   case OPT_SNAP_CREATE:
     if (!imgname || !snapname) {
       usage();
-      err_exit(pool);
+      err_exit(pool, image);
     }
-    r = do_add_snap(pool, imgname, snapname);
+    r = do_add_snap(image, snapname);
     if (r < 0) {
       cerr << "failed to create snapshot: " << strerror(-r) << std::endl;
-      err_exit(pool);
+      err_exit(pool, image);
     }
     break;
 
@@ -1048,10 +1051,10 @@ int main(int argc, const char **argv)
       usage();
       err_exit(pool);
     }
-    r = do_rollback_snap(pool, imgname, snapname);
+    r = do_rollback_snap(image, snapname);
     if (r < 0) {
       cerr << "rollback failed: " << strerror(-r) << std::endl;
-      err_exit(pool);
+      err_exit(pool, image);
     }
     break;
 
@@ -1060,10 +1063,10 @@ int main(int argc, const char **argv)
       usage();
       err_exit(pool);
     }
-    r = do_remove_snap(pool, imgname, snapname);
+    r = do_remove_snap(image, snapname);
     if (r < 0) {
       cerr << "rollback failed: " << strerror(-r) << std::endl;
-      err_exit(pool);
+      err_exit(pool, image);
     }
     break;
 #if 0
@@ -1107,6 +1110,9 @@ int main(int argc, const char **argv)
     }
     break;
   }
+
+  if (image)
+    rbd.close_image(image);
 
   rbd.close_pool(pool);
   rbd.shutdown();
