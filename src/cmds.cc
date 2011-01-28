@@ -43,20 +43,22 @@ void usage()
        << "        connect to monitor at given address\n"
        << "  --debug_mds n\n"
        << "        debug MDS level (e.g. 10)\n"
-       << "  --dump-journal rank [filename]"
-       << "        dump the MDS journal for rank. Defaults to mds.journal.dump"
+       << "  --dump-journal rank filename\n"
+       << "        dump the MDS journal for rank. Defaults to mds.journal.dump\n"
+       << "  --journal-check rank\n"
+       << "        replay the journal for rank, then exit\n"
+       << "  --hot-standby rank\n"
+       << "        stat up as a hot standby for rank\n"
        << dendl;
   generic_server_usage();
 }
 
 int main(int argc, const char **argv) 
 {
+  DEFINE_CONF_VARS(usage);
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  bool dump_journal = false;
-  const char *dump_file = NULL;
-  int shadow = 0;
 
   common_set_defaults(true);
 #ifdef HAVE_LIBTCMALLOC
@@ -69,64 +71,40 @@ int main(int argc, const char **argv)
   common_init(args, "mds", true);
 
   // mds specific args
-  for (unsigned i=0; i<args.size(); i++) {
-    if (!strcmp(args[i], "--dump-journal")) {
-      if (i + 1 < args.size() &&
-          (args[i+1][0] != '-')) { // another argument?
-        shadow = strtol(args[i+1], 0, 0);
-        if (i + 2 < args.size() &&
-            (args[i+2][0] != '-')) {
-          dump_file = args[i+2];
-          ++i;
-        } else
-          dump_file = "mds.journal.dump";
-        ++i;
-      } else {
-        cout << "must specify rank of mds to dump!" << std::endl;
-        return -1;
-      }
+  bool dump_journal = false;
+  const char *dump_file = NULL;
+  int shadow = 0;
+  FOR_EACH_ARG(args) {
+    if (CONF_ARG_EQ("dump-journal", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&shadow, OPT_INT);
+      CONF_SAFE_SET_ARG_VAL(&dump_file, OPT_STR);
       dump_journal = true;
-      dout(0) << "dumping journal" << dendl;
-    } else if (!strcmp(args[i], "--journal_check")) {
-      dout(0) << "checking journal"  << dendl;
+      dout(0) << "dumping journal for mds" << shadow << " to " << dump_file << dendl;
+   } else if (CONF_ARG_EQ("journal-check", '\0')) {
+      int check_rank;
+      CONF_SAFE_SET_ARG_VAL(&check_rank, OPT_INT);
+
       if (shadow) {
         dout(0) << "Error: can only select one standby state" << dendl;
         return -1;
       }
+      dout(0) << "requesting oneshot_replay for mds" << check_rank << dendl;
       shadow = MDSMap::STATE_ONESHOT_REPLAY;
-      char *endpoint = NULL;
-      int check_rank = strtol(args[i+1], &endpoint, 0);
-      if (*endpoint) {
-        if(g_conf.mds_standby_for_rank == -1 &&
-          !g_conf.mds_standby_for_name) {
-          dout(0) << "Error: no rank specified for journal replay!" << dendl;
-          return -1;
-        }
-      } else { // we got a rank from command line
-        g_conf.mds_standby_for_rank = check_rank;
-        ++i;
-      }
-    } else if (!strcmp(args[i], "--hot-standby")) {
-      dout(0) << "going into standby_replay" << dendl;
+      g_conf.mds_standby_for_rank = check_rank;
+      ++i;
+    } else if (CONF_ARG_EQ("hot-standby", '\0')) {
+      int check_rank;
+      CONF_SAFE_SET_ARG_VAL(&check_rank, OPT_INT);
       if (shadow) {
         dout(0) << "Error: can only select one standby state" << dendl;
         return -1;
       }
+      dout(0) << "requesting standby_replay for mds" << check_rank << dendl;
       shadow = MDSMap::STATE_STANDBY_REPLAY;
-      char *endpoint = NULL;
-      int check_rank = strtol(args[i+1], &endpoint, 0);
-      if (*endpoint) {
-        if(g_conf.mds_standby_for_rank == -1 &&
-          !g_conf.mds_standby_for_name) {
-          dout(0) << "no rank specified for standby, entering pool!" << dendl;
-        }
-      } else { // we got a rank from command line
-        g_conf.mds_standby_for_rank = check_rank;
-        ++i;
-      }
+      g_conf.mds_standby_for_rank = check_rank;
     } else {
       derr << "unrecognized arg " << args[i] << dendl;
-      usage();
+      ARGS_USAGE();
     }
   }
   if (!g_conf.id && !dump_journal) {
