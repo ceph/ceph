@@ -505,7 +505,6 @@ libcommon_files = \
 	common/tls.cc \
 	common/common_init.cc \
 	common/buffer.cc \
-	common/debug.cc \
 	common/signal.cc \
 	include/ceph_fs.cc \
 	include/ceph_hash.cc \
@@ -514,7 +513,8 @@ libcommon_files = \
 	config.cc \
 	common/page.cc \
 	common/lockdep.cc \
-	common/DoutStreambuf.cc
+	common/DoutStreambuf.cc \
+	common/debug.cc
 
 libcrush_a_SOURCES = \
 	crush/builder.c \
