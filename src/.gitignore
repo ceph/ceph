@@ -74,3 +74,4 @@ crush/CrushWrapper_wrap.cxx
 /unittest_*
 ceph.conf
 .ceph_keyring
+massif.out.*
