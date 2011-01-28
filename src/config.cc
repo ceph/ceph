@@ -31,10 +31,6 @@
 #include <fcntl.h>
 #include <signal.h>
 
-// for tstring stringtable
-#include "include/tstring.h"
-stringtable g_stab;
-
 #include "include/atomic.h"
 #include "include/str_list.h"
 
