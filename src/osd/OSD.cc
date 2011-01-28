@@ -1115,6 +1115,7 @@ void OSD::update_osd_stat()
 
 void OSD::_refresh_my_stat(utime_t now)
 {
+  assert(heartbeat_lock.is_locked());
   assert(peer_stat_lock.is_locked());
 
   // refresh?
@@ -1175,6 +1176,7 @@ void OSD::_refresh_my_stat(utime_t now)
 
 osd_peer_stat_t OSD::get_my_stat_for(utime_t now, int peer)
 {
+  Mutex::Locker hlock(heartbeat_lock);
   Mutex::Locker lock(peer_stat_lock);
   _refresh_my_stat(now);
   my_stat_on_peer[peer] = my_stat;
