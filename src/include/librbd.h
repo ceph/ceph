@@ -22,6 +22,7 @@ extern "C" {
 #include <netinet/in.h>
 #include <linux/types.h>
 #include <string.h>
+#include "librados.h"
 
 #define LIBRBD_VER_MAJOR 0
 #define LIBRBD_VER_MINOR 1
@@ -35,6 +36,7 @@ extern "C" {
 
 typedef void *rbd_snap_t;
 typedef void *rbd_pool_t;
+typedef void *rbd_image_t;
 
 typedef struct {
   uint64_t id;
@@ -60,21 +62,26 @@ int rbd_open_pool(const char *pool_name, rbd_pool_t *pool);
 int rbd_close_pool(rbd_pool_t pool);
 
 /* images */
-int rbd_create(rbd_pool_t pool, const char *name, size_t size);
-int rbd_remove(rbd_pool_t pool, const char *name);
-int rbd_resize(rbd_pool_t pool, const char *name, size_t size);
-int rbd_stat(rbd_pool_t pool, const char *name, rbd_image_info_t *info);
 size_t rbd_list(rbd_pool_t pool, char **names, size_t max_names);
+int rbd_create(rbd_pool_t pool, const char *name, size_t size, int *order);
+int rbd_remove(rbd_pool_t pool, const char *name);
+int rbd_copy(rbd_pool_t src_pool, const char *srcname, rbd_pool_t dest_pool, const char *destname);
+int rbd_rename(rbd_pool_t src_pool, const char *srcname, const char *destname);
+
+int rbd_open_image(rbd_pool_t pool, const char *name, rbd_image_t *image);
+int rbd_close_image(rbd_image_t image);
+int rbd_resize(rbd_image_t image, size_t size);
+int rbd_stat(rbd_image_t image, rbd_image_info_t *info);
 
 /* snapshots */
-int rbd_create_snap(rbd_pool_t pool, const char *image,
-		    const char *snapname);
-int rbd_remove_snap(rbd_pool_t pool, const char *image,
-		    const char *snapname);
-int rbd_rollback_snap(rbd_pool_t pool, const char *image,
-		      const char *snapname);
-size_t rbd_list_snaps(rbd_pool_t pool, const char *image,
-		      rbd_snap_info_t *snaps, size_t max_snaps);
+size_t rbd_list_snaps(rbd_image_t image, rbd_snap_info_t *snaps, size_t max_snaps);
+int rbd_create_snap(rbd_image_t image, const char *snapname);
+int rbd_remove_snap(rbd_image_t image, const char *snapname);
+int rbd_rollback_snap(rbd_image_t image, const char *snapname);
+int set_snap(rbd_image_t image, const char *snapname);
+
+/* lower level access */
+void get_rados_pools(rbd_pool_t pool, rados_pool_t *md_pool, rados_pool_t *data_pool);
 
 #ifdef __cplusplus
 }
