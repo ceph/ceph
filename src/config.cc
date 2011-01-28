@@ -338,7 +338,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(client_mount_timeout, 0, OPT_DOUBLE, 30.0),
 	OPTION(client_unmount_timeout, 0, OPT_DOUBLE, 10.0),
 	OPTION(client_tick_interval, 0, OPT_DOUBLE, 1.0),
-	OPTION(client_hack_balance_reads, 0, OPT_BOOL, false),
 	OPTION(client_trace, 0, OPT_STR, 0),
 	OPTION(client_readahead_min, 0, OPT_LONGLONG, 128*1024),  // readahead at _least_ this much.
 	OPTION(client_readahead_max_bytes, 0, OPT_LONGLONG, 0),  //8 * 1024*1024,

@@ -458,9 +458,6 @@ class Inode {
   list<Cond*>       waitfor_caps;
   list<Cond*>       waitfor_commit;
 
-  // <hack>
-  bool hack_balance_reads;
-  // </hack>
 #define dentry_of(a) (*(a->dn_set.begin()))
 
   void make_long_path(filepath& p) {
@@ -529,8 +526,7 @@ class Inode {
     oset((void *)this, layout->fl_pg_pool, ino),
     reported_size(0), wanted_max_size(0), requested_max_size(0),
     ref(0), ll_ref(0), 
-    dir(0), dn_set(),
-    hack_balance_reads(false)
+    dir(0), dn_set()
   {
     memset(&flushing_cap_tid, 0, sizeof(__u16)*CEPH_CAP_BITS);
   }
@@ -924,6 +920,8 @@ protected:
   //  - protects Client and buffer cache both!
   Mutex                  client_lock;
 
+  int filer_flags;
+
   // helpers
   void wake_inode_waiters(int mds);
   void wait_on_list(list<Cond*>& ls);
@@ -1082,6 +1080,9 @@ protected:
 
 
  public:
+  void set_filer_flags(int flags);
+  void clear_filer_flags(int flags);
+
   Client(Messenger *m, MonClient *mc);
   ~Client();
   void tear_down_cache();   
