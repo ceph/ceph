@@ -362,6 +362,9 @@ public:
       get_num_mds(STATE_REJOIN) + 
       failed.size();
   }
+  bool is_any_failed() {
+    return failed.size();
+  }
   bool is_rejoining() {  
     // nodes are rejoining cache state
     return 

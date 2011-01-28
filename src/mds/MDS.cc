@@ -926,7 +926,8 @@ void MDS::handle_mds_map(MMDSMap *m)
     if (oldresolve != resolve) {
       dout(10) << " resolve set is " << resolve << ", was " << oldresolve << dendl;
       calc_recovery_set();
-      mdcache->send_resolves();
+      if (!mdsmap->is_any_failed())
+	mdcache->send_resolves();
     }
   }
   
