@@ -596,7 +596,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
 
     // drop loner before doing waiters
     if (caps &&
-	in->is_auth() && in->get_loner() >= 0 && in->get_wanted_loner() < 0) {
+	in->is_auth() && in->get_wanted_loner() != in->get_loner()) {
       dout(10) << "  trying to drop loner" << dendl;
       if (in->try_drop_loner()) {
 	dout(10) << "  dropped loner" << dendl;
@@ -662,7 +662,7 @@ bool Locker::eval(CInode *in, int mask)
     eval_any(&in->policylock, &need_issue);
 
   // drop loner?
-  if (in->is_auth() && in->get_loner() >= 0 && in->get_wanted_loner() < 0) {
+  if (in->is_auth() && in->get_wanted_loner() != in->get_loner()) {
     dout(10) << "  trying to drop loner" << dendl;
     if (in->try_drop_loner()) {
       dout(10) << "  dropped loner" << dendl;
