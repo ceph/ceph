@@ -59,6 +59,11 @@ struct fiemap *read_fiemap(int fd)
     goto done_err;
   }
 
+  if (!fiemap->fm_mapped_extents) {
+    free(fiemap);
+    return NULL;
+  }
+
   /* Read in the extents */
   extents_size = sizeof(struct fiemap_extent) * (fiemap->fm_mapped_extents);
 

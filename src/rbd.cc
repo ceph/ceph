@@ -371,6 +371,8 @@ static int export_read_cb(off_t ofs, size_t len, const char *buf, void *arg)
   ret = write(fd, buf, len);
   if (ret < 0)
     return -errno;
+
+  cerr << "writing " << len << " bytes at ofs " << ofs << std::endl;
   return 0;
 }
 
@@ -387,14 +389,14 @@ static int do_export(librbd::image_t image, const char *path)
     return r;
 
   r = rbd.read_iterate(image, 0, info.size, export_read_cb, (void *)&fd);
-
-  close(fd);
   if (r < 0)
     return r;
 
   r = ftruncate(fd, info.size);
   if (r < 0)
     return r;
+
+  close(fd);
 
   return 0;
 }
@@ -500,8 +502,13 @@ static int do_import(librados::pool_t pool, const char *imgname, int *order, con
     cerr << "failed to open image" << std::endl;
     return r;
   }
-
+  fsync(fd); /* flush it first, otherwise extents information might not have been flushed yet */
   fiemap = read_fiemap(fd);
+  if (fiemap && !fiemap->fm_mapped_extents) {
+    cerr << "empty fiemap!" << std::endl;
+    free(fiemap);
+    fiemap = NULL;
+  }
   if (!fiemap) {
     fiemap = (struct fiemap *)malloc(sizeof(struct fiemap) +  sizeof(struct fiemap_extent));
     if (!fiemap) {
@@ -544,22 +551,25 @@ static int do_import(librados::pool_t pool, const char *imgname, int *order, con
 
     cerr << "rbd import file_pos=" << file_pos << " extent_len=" << extent_len << std::endl;
 #define READ_BLOCK_LEN (4 * 1024 * 1024)
-    uint64_t left = extent_len;
+    uint64_t left = end_ofs - file_pos;
     while (left) {
       uint64_t cur_seg = (left < READ_BLOCK_LEN ? left : READ_BLOCK_LEN);
       while (cur_seg) {
         bufferptr p(cur_seg);
         cerr << "reading " << cur_seg << " bytes at offset " << file_pos << std::endl;
         ssize_t rval = TEMP_FAILURE_RETRY(::pread(fd, p.c_str(), cur_seg, file_pos));
-        if (ret < 0) {
+        if (rval < 0) {
           r = -errno;
           cerr << "error reading file: " << cpp_strerror(r) << std::endl;
           goto done;
         }
 	len = rval
+        if (!len) {
+          r = 0;
+          goto done;
+        }
         bufferlist bl;
         bl.append(p);
-
         r = rbd.write(image, file_pos, len, bl);
         if (r < 0) {
           cerr << "error writing to image block" << std::endl;

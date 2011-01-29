@@ -419,6 +419,8 @@ static int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap)
   fiemap->fm_start = start;
   fiemap->fm_length = len;
 
+  fsync(fd); /* flush extents to disk if needed */
+
   if (ioctl(fd, FS_IOC_FIEMAP, fiemap) < 0) {
     ret = -errno;
     goto done_err;

@@ -942,9 +942,12 @@ int librbd::RBDClient::read(PoolCtx *ctx, ImageCtx *ictx, off_t ofs, size_t len,
 
 int librbd::RBDClient::write(PoolCtx *ctx, ImageCtx *ictx, off_t off, size_t len, const char *buf)
 {
+  if (!len)
+    return 0;
+
   int r, total_write = 0;
   uint64_t start_block = get_block_num(&ictx->header, off);
-  uint64_t end_block = get_block_num(&ictx->header, off + len);
+  uint64_t end_block = get_block_num(&ictx->header, off + len - 1);
   uint64_t block_size = get_block_size(&ictx->header);
   uint64_t left = len;
 
@@ -960,6 +963,7 @@ int librbd::RBDClient::write(PoolCtx *ctx, ImageCtx *ictx, off_t off, size_t len
     if ((uint64_t)r != write_len)
       return -EIO;
     total_write += write_len;
+    left -= write_len;
   }
   return total_write;
 }
