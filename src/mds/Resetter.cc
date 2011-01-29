@@ -12,16 +12,17 @@
  * 
  */
 
-#include "mds/Dumper.h"
+#include "mds/Resetter.h"
 #include "osdc/Journaler.h"
 #include "mds/mdstypes.h"
 #include "mon/MonClient.h"
+#include "mds/events/EResetJournal.h"
 
-Dumper::~Dumper()
+Resetter::~Resetter()
 {
 }
 
-bool Dumper::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
+bool Resetter::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
                          bool force_new)
 {
   if (dest_type == CEPH_ENTITY_TYPE_MON)
@@ -36,7 +37,7 @@ bool Dumper::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
   return *authorizer != NULL;
 }
 
-void Dumper::init(int rank) 
+void Resetter::init(int rank) 
 {
   inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
   unsigned pg_pool = CEPH_METADATA_RULE;
@@ -66,45 +67,68 @@ void Dumper::init(int rank)
   lock.Unlock();
 }
 
-void Dumper::shutdown()
+void Resetter::shutdown()
 {
   lock.Lock();
   timer.shutdown();
   lock.Unlock();
 }
 
-void Dumper::dump(const char *dump_file)
+void Resetter::reset()
 {
-  bool done = false;
+  Mutex lock("Resetter::reset::lock");
   Cond cond;
-  inodeno_t ino = MDS_INO_LOG_OFFSET + strtol(g_conf.id, 0, 0);;
+  bool done;
+  int r;
 
   lock.Lock();
-  journaler->recover(new C_SafeCond(&lock, &cond, &done));
+  journaler->recover(new C_SafeCond(&lock, &cond, &done, &r));
   while (!done)
     cond.Wait(lock);
   lock.Unlock();
+  assert(r == 0);
 
-  uint64_t start = journaler->get_read_pos();
-  uint64_t end = journaler->get_write_pos();
-  uint64_t len = end-start;
-  cout << "journal is " << start << "~" << len << std::endl;
+  uint64_t old_start = journaler->get_read_pos();
+  uint64_t old_end = journaler->get_write_pos();
+  uint64_t old_len = old_end - old_start;
+  cout << "old journal was " << old_start << "~" << old_len << std::endl;
 
-  Filer filer(objecter);
+  uint64_t new_start = ROUND_UP_TO(old_end+1, journaler->get_layout_period());
+  cout << "new journal start will be " << new_start
+       << " (" << (new_start - old_end) << " bytes past old end)" << std::endl;
+
+  journaler->set_read_pos(new_start);
+  journaler->set_write_pos(new_start);
+  journaler->set_expire_trimmed_pos(new_start);
+  journaler->set_writeable();
+
+  {
+    cout << "writing journal head" << std::endl;
+    journaler->write_head(new C_SafeCond(&lock, &cond, &done, &r));
+    lock.Lock();
+    while (!done)
+      cond.Wait(lock);
+    lock.Unlock();
+    assert(r == 0);
+  }
+
+  LogEvent *le = new EResetJournal;
+
   bufferlist bl;
-  filer.read(ino, &journaler->get_layout(), CEPH_NOSNAP,
-             start, len, &bl, 0, new C_SafeCond(&lock, &cond, &done));
+  le->encode_with_header(bl);
+  
+  cout << "writing EResetJournal entry" << std::endl;
+  journaler->append_entry(bl);
+  journaler->flush(new C_SafeCond(&lock, &cond, &done,&r));
   lock.Lock();
   while (!done)
     cond.Wait(lock);
   lock.Unlock();
+  assert(r == 0);
 
-  cout << "read " << bl.length() << " bytes" << std::endl;
-  bl.write_file(dump_file);
+  cout << "done" << std::endl;
+
   messenger->shutdown();
-
-  // wait for messenger to finish
   messenger->wait();
-
   shutdown();
 }

@@ -318,6 +318,13 @@ public:
   void wait_for_readable(Context *onfinish);
   void read_entry(bufferlist* bl, Context *onfinish);
   
+  void set_write_pos(int64_t p) { 
+    write_pos = flush_pos = ack_pos = safe_pos = p;
+  }
+  void set_expire_trimmed_pos(int64_t p) { 
+    expire_pos = trimming_pos = trimmed_pos = p;
+  }
+
   bool truncate_tail_junk(Context *fin);
 
   // trim

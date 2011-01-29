@@ -134,6 +134,15 @@ void InoTable::replay_release_ids(interval_set<inodeno_t>& ids)
 }
 
 
+void InoTable::replay_reset()
+{
+  dout(10) << "replay_reset " << free << dendl;
+  skip_inos(inodeno_t(1000000));  // a lot!
+  projected_free = free;
+  projected_version = ++version;
+}
+
+
 void InoTable::skip_inos(inodeno_t i)
 {
   dout(10) << "skip_inos was " << free << dendl;

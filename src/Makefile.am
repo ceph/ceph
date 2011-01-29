@@ -537,6 +537,7 @@ libmon_a_SOURCES = \
 
 libmds_a_SOURCES = \
 	mds/Dumper.cc \
+	mds/Resetter.cc \
 	mds/MDS.cc \
 	mds/locks.c \
 	mds/journal.cc \
@@ -740,6 +741,7 @@ noinst_HEADERS = \
 	mds/MDSTableServer.h\
 	mds/MDSTableClient.h\
         mds/Migrator.h\
+	mds/Resetter.h\
         mds/ScatterLock.h\
         mds/Server.h\
         mds/SessionMap.h\
@@ -753,6 +755,7 @@ noinst_HEADERS = \
         mds/events/EImportStart.h\
         mds/events/EMetaBlob.h\
         mds/events/EOpen.h\
+	mds/events/EResetJournal.h\
         mds/events/ESession.h\
         mds/events/ESessions.h\
         mds/events/ESlaveUpdate.h\

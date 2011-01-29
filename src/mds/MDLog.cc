@@ -180,8 +180,7 @@ void MDLog::submit_entry( LogEvent *le, Context *c, bool wait_safe )
   // encode it, with event type
   {
     bufferlist bl;
-    ::encode(le->_type, bl);
-    le->encode(bl);
+    le->encode_with_header(bl);
 
     dout(5) << "submit_entry " << journaler->get_write_pos() << "~" << bl.length()
 	    << " : " << *le << dendl;
@@ -565,7 +564,8 @@ void MDLog::_replay_thread()
     }
 
     // new segment?
-    if (le->get_type() == EVENT_SUBTREEMAP) {
+    if (le->get_type() == EVENT_SUBTREEMAP ||
+	le->get_type() == EVENT_RESETJOURNAL) {
       segments[pos] = new LogSegment(pos);
       logger->set(l_mdl_seg, segments.size());
     }
