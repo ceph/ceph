@@ -202,6 +202,18 @@ struct entity_addr_t {
     return a;
   }
 
+  bool probably_equals(const entity_addr_t &o) const {
+    if (get_port() != o.get_port())
+      return false;
+    if (get_nonce() != o.get_nonce())
+      return false;
+    if (is_blank_addr() || o.is_blank_addr())
+      return true;
+    if (memcmp(&addr, &o.addr, sizeof(addr)) == 0)
+      return true;
+    return false;
+  }
+  
   bool is_same_host(const entity_addr_t &o) const {
     if (addr.ss_family != o.addr.ss_family)
       return false;
@@ -214,7 +226,7 @@ struct entity_addr_t {
     return false;
   }
 
-  bool is_blank_addr() {
+  bool is_blank_addr() const {
     switch (addr.ss_family) {
     case AF_INET:
       return addr4.sin_addr.s_addr == INADDR_ANY;
