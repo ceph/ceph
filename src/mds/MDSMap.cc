@@ -60,8 +60,8 @@ CompatSet mdsmap_compat_base(feature_compat_base,
 
 void MDSMap::print(ostream& out) 
 {
-  out << "epoch " << epoch << std::endl;
-  out << "\nclient_epoch " << client_epoch << std::endl;
+  out << "epoch " << epoch << "\n";
+  out << "flags " << hex << flags << dec << "\n";
   out << "created " << created << std::endl;
   out << "modified " << modified << std::endl;
   out << "tableserver " << tableserver << std::endl;

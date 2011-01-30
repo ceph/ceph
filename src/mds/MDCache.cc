@@ -506,6 +506,12 @@ void MDCache::open_root_inode(Context *c)
   }
 }
 
+void MDCache::open_mydir_inode(Context *c)
+{
+  CInode *in = create_system_inode(MDS_INO_MDSDIR(mds->whoami), S_IFDIR|0755);  // initially inaccurate!
+  in->fetch(c);
+}
+
 void MDCache::open_root()
 {
   dout(10) << "open_root" << dendl;

@@ -26,6 +26,7 @@ using namespace std;
 #include "mon/MonMap.h"
 #include "mds/MDS.h"
 #include "mds/Dumper.h"
+#include "mds/Resetter.h"
 
 #include "msg/SimpleMessenger.h"
 
@@ -43,20 +44,25 @@ void usage()
        << "        connect to monitor at given address\n"
        << "  --debug_mds n\n"
        << "        debug MDS level (e.g. 10)\n"
-       << "  --dump-journal rank [filename]"
-       << "        dump the MDS journal for rank. Defaults to mds.journal.dump"
+       << "  --dump-journal rank filename\n"
+       << "        dump the MDS journal for rank. Defaults to mds.journal.dump\n"
+       << "  --journal-check rank\n"
+       << "        replay the journal for rank, then exit\n"
+       << "  --hot-standby rank\n"
+       << "        stat up as a hot standby for rank\n"
+       << "  --reset-journal rank\n"
+       << "        discard the MDS journal for rank, and replace it with a single\n"
+       << "        event that updates/resets inotable and sessionmap on replay.\n"
        << dendl;
   generic_server_usage();
 }
 
 int main(int argc, const char **argv) 
 {
+  DEFINE_CONF_VARS(usage);
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  bool dump_journal = false;
-  const char *dump_file = NULL;
-  int shadow = 0;
 
   common_set_defaults(true);
 #ifdef HAVE_LIBTCMALLOC
@@ -69,67 +75,45 @@ int main(int argc, const char **argv)
   common_init(args, "mds", true);
 
   // mds specific args
-  for (unsigned i=0; i<args.size(); i++) {
-    if (!strcmp(args[i], "--dump-journal")) {
-      if (i + 1 < args.size() &&
-          (args[i+1][0] != '-')) { // another argument?
-        shadow = strtol(args[i+1], 0, 0);
-        if (i + 2 < args.size() &&
-            (args[i+2][0] != '-')) {
-          dump_file = args[i+2];
-          ++i;
-        } else
-          dump_file = "mds.journal.dump";
-        ++i;
-      } else {
-        cout << "must specify rank of mds to dump!" << std::endl;
-        return -1;
-      }
-      dump_journal = true;
-      dout(0) << "dumping journal" << dendl;
-    } else if (!strcmp(args[i], "--journal_check")) {
-      dout(0) << "checking journal"  << dendl;
+  int shadow = 0;
+  int dump_journal = -1;
+  const char *dump_file = NULL;
+  int reset_journal = -1;
+  FOR_EACH_ARG(args) {
+    if (CONF_ARG_EQ("dump-journal", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&dump_journal, OPT_INT);
+      CONF_SAFE_SET_ARG_VAL(&dump_file, OPT_STR);
+      dout(0) << "dumping journal for mds" << dump_journal << " to " << dump_file << dendl;
+    } else if (CONF_ARG_EQ("reset-journal", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&reset_journal, OPT_INT);
+    } else if (CONF_ARG_EQ("journal-check", '\0')) {
+      int check_rank;
+      CONF_SAFE_SET_ARG_VAL(&check_rank, OPT_INT);
+      
       if (shadow) {
         dout(0) << "Error: can only select one standby state" << dendl;
         return -1;
       }
+      dout(0) << "requesting oneshot_replay for mds" << check_rank << dendl;
       shadow = MDSMap::STATE_ONESHOT_REPLAY;
-      char *endpoint = NULL;
-      int check_rank = strtol(args[i+1], &endpoint, 0);
-      if (*endpoint) {
-        if(g_conf.mds_standby_for_rank == -1 &&
-          !g_conf.mds_standby_for_name) {
-          dout(0) << "Error: no rank specified for journal replay!" << dendl;
-          return -1;
-        }
-      } else { // we got a rank from command line
-        g_conf.mds_standby_for_rank = check_rank;
-        ++i;
-      }
-    } else if (!strcmp(args[i], "--hot-standby")) {
-      dout(0) << "going into standby_replay" << dendl;
+      g_conf.mds_standby_for_rank = check_rank;
+      ++i;
+    } else if (CONF_ARG_EQ("hot-standby", '\0')) {
+      int check_rank;
+      CONF_SAFE_SET_ARG_VAL(&check_rank, OPT_INT);
       if (shadow) {
         dout(0) << "Error: can only select one standby state" << dendl;
         return -1;
       }
+      dout(0) << "requesting standby_replay for mds" << check_rank << dendl;
       shadow = MDSMap::STATE_STANDBY_REPLAY;
-      char *endpoint = NULL;
-      int check_rank = strtol(args[i+1], &endpoint, 0);
-      if (*endpoint) {
-        if(g_conf.mds_standby_for_rank == -1 &&
-          !g_conf.mds_standby_for_name) {
-          dout(0) << "no rank specified for standby, entering pool!" << dendl;
-        }
-      } else { // we got a rank from command line
-        g_conf.mds_standby_for_rank = check_rank;
-        ++i;
-      }
+      g_conf.mds_standby_for_rank = check_rank;
     } else {
       derr << "unrecognized arg " << args[i] << dendl;
-      usage();
+      ARGS_USAGE();
     }
   }
-  if (!g_conf.id && !dump_journal) {
+  if (!g_conf.id && dump_journal < 0 && reset_journal < 0) {
     derr << "must specify '-i name' with the cmds instance name" << dendl;
     usage();
   }
@@ -144,15 +128,20 @@ int main(int argc, const char **argv)
 
   SimpleMessenger *messenger = new SimpleMessenger();
   messenger->bind();
-  if (dump_journal) {
+  if (dump_journal >= 0) {
     Dumper *journal_dumper = new Dumper(messenger, &mc);
-    journal_dumper->init(shadow);
+    journal_dumper->init(dump_journal);
     journal_dumper->dump(dump_file);
+    mc.shutdown();
+  } else if (reset_journal >= 0) {
+    Resetter *jr = new Resetter(messenger, &mc);
+    jr->init(reset_journal);
+    jr->reset();
     mc.shutdown();
   } else {
     derr << "starting mds." << g_conf.id
-        << " at " << messenger->get_ms_addr()
-        << dendl;
+	 << " at " << messenger->get_ms_addr()
+	 << dendl;
 
     messenger->register_entity(entity_name_t::MDS(-1));
     assert_warn(messenger);

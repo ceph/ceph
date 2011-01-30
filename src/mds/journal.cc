@@ -20,6 +20,7 @@
 #include "events/ESessions.h"
 
 #include "events/EMetaBlob.h"
+#include "events/EResetJournal.h"
 
 #include "events/EUpdate.h"
 #include "events/ESlaveUpdate.h"
@@ -1108,5 +1109,24 @@ void EImportFinish::replay(MDS *mds)
 
 
 
+// ------------------------
+// EResetJournal
 
+void EResetJournal::replay(MDS *mds)
+{
+  dout(1) << "EResetJournal" << dendl;
+
+  mds->sessionmap.wipe();
+  mds->inotable->replay_reset();
+
+  if (mds->mdsmap->get_root() == mds->whoami) {
+    CDir *rootdir = mds->mdcache->get_root()->get_or_open_dirfrag(mds->mdcache, frag_t());
+    mds->mdcache->adjust_subtree_auth(rootdir, mds->whoami);   
+  }
+
+  CDir *mydir = mds->mdcache->get_myin()->get_or_open_dirfrag(mds->mdcache, frag_t());
+  mds->mdcache->adjust_subtree_auth(mydir, mds->whoami);   
+
+  mds->mdcache->show_subtrees();
+}
 

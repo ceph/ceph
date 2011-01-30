@@ -154,7 +154,7 @@ public:
 protected:
   // base map
   epoch_t epoch;
-  epoch_t client_epoch;  // incremented only when change is significant to client.
+  uint32_t flags;        // flags
   epoch_t last_failure;  // mds epoch of last failure
   epoch_t last_failure_osd_epoch; // osd epoch of last failure; any mds entering replay needs
                                   // at least this osdmap to ensure the blacklist propagates.
@@ -195,7 +195,7 @@ public:
   friend class MDSMonitor;
 
 public:
-  MDSMap() : epoch(0), client_epoch(0), last_failure(0), last_failure_osd_epoch(0), tableserver(0), root(0),
+  MDSMap() : epoch(0), flags(0), last_failure(0), last_failure_osd_epoch(0), tableserver(0), root(0),
 	     cas_pg_pool(0), metadata_pg_pool(0) {
     // hack.. this doesn't really belong here
     session_timeout = (int)g_conf.mds_session_timeout;
@@ -208,6 +208,11 @@ public:
   }
   uint64_t get_max_filesize() { return max_file_size; }
   
+  int get_flags() const { return flags; }
+  int test_flag(int f) const { return flags & f; }
+  void set_flag(int f) { flags |= f; }
+  void clear_flag(int f) { flags &= ~f; }
+
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
 
@@ -459,7 +464,7 @@ public:
     __u16 v = 2;
     ::encode(v, bl);
     ::encode(epoch, bl);
-    ::encode(client_epoch, bl);
+    ::encode(flags, bl);
     ::encode(last_failure, bl);
     ::encode(root, bl);
     ::encode(session_timeout, bl);
@@ -489,7 +494,7 @@ public:
     __u16 v;
     ::decode(v, p);
     ::decode(epoch, p);
-    ::decode(client_epoch, p);
+    ::decode(flags, p);
     ::decode(last_failure, p);
     ::decode(root, p);
     ::decode(session_timeout, p);
