@@ -44,7 +44,8 @@ void usage()
 }
 
 int main(int argc, const char **argv, const char *envp[]) {
-
+  DEFINE_CONF_VARS(usage);
+  int filer_flags = 0;
   //cerr << "cfuse starting " << myrank << "/" << world << std::endl;
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -55,8 +56,19 @@ int main(int argc, const char **argv, const char *envp[]) {
   g_conf.log_per_instance = true;
   common_init(args, "cfuse", true);
 
+  vector<const char*> nargs;
+  FOR_EACH_ARG(args) {
+    if (CONF_ARG_EQ("localize-reads", '\0')) {
+      cerr << "setting CEPH_OSD_FLAG_LOCALIZE_READS" << std::endl;
+      filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
+    }
+    else {
+      nargs.push_back(args[i]);
+    }
+  }
+
   // args for fuse
-  vec_to_argv(args, argc, argv);
+  vec_to_argv(nargs, argc, argv);
 
   // FUSE will chdir("/"); be ready.
   g_conf.chdir = strdup("/");
@@ -84,6 +96,9 @@ int main(int argc, const char **argv, const char *envp[]) {
   SimpleMessenger *messenger = new SimpleMessenger();
   messenger->register_entity(entity_name_t::CLIENT());
   Client *client = new Client(messenger, &mc);
+  if (filer_flags) {
+    client->set_filer_flags(filer_flags);
+  }
 
   // we need to handle the forking ourselves.
   bool daemonize = g_conf.daemonize;
