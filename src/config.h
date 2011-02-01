@@ -35,9 +35,6 @@ extern struct ceph_file_layout g_default_file_layout;
 #include <google/heap-profiler.h>
 #endif //HAVE_LIBTCMALLOC
 
-extern bool g_daemon;
-extern const char *g_default_id;
-
 struct EntityName;
 
 enum log_to_stderr_t {
