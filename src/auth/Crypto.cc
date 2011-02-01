@@ -29,19 +29,22 @@ int get_random_bytes(char *buf, int len)
   char *t = buf;
   int fd = ::open("/dev/urandom", O_RDONLY);
   int l = len;
+  int r;
   if (fd < 0)
     return -errno;
   while (l) {
-    int r = ::read(fd, t, l);
+    r = ::read(fd, t, l);
     if (r < 0) {
-      ::close(fd);
-      return -errno;
+      r = -errno;
+      goto out;
     }
     t += r;
     l -= r;
   }
+  r = 0;
+ out:
   ::close(fd);
-  return 0;
+  return r;
 }
 
 static int get_random_bytes(int len, bufferlist& bl)
