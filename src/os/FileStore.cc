@@ -1052,7 +1052,8 @@ int FileStore::mount()
 
       int curr_fd = read_op_seq(current_op_seq_fn, &curr_seq);
       assert(curr_fd >= 0);
-      close(curr_fd);
+      ::close(curr_fd);
+      curr_fd = -1;
       dout(10) << "*** curr_seq=" << curr_seq << " cp=" << cp << dendl;
      
       if (cp != curr_seq && !g_conf.osd_use_stale_snap) { 
@@ -1109,14 +1110,13 @@ int FileStore::mount()
       dout(10) << "mount rolled back to consistent snap " << cp << dendl;
       snaps.pop_back();
 
-      assert(curr_fd >= 0);
       if (cp != curr_seq) {
         curr_fd = read_op_seq(current_op_seq_fn, &curr_seq);
         /* we'll use the higher version from now on */
         curr_seq = cp;
         write_op_seq(curr_fd, curr_seq);
+	::close(curr_fd);
       }
-      close(curr_fd);
     }
   }
 
