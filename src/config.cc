@@ -51,11 +51,6 @@ static void fini_g_conf();
 
 const char *g_default_id = "admin";
 
-void ceph_set_default_id(const char *id)
-{
-  g_default_id = strdup(id);
-}
-
 static void env_override(char **ceph_var, const char * const env_var)
 {
   char *e = getenv(env_var);

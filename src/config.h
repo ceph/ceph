@@ -38,8 +38,6 @@ extern struct ceph_file_layout g_default_file_layout;
 extern bool g_daemon;
 extern const char *g_default_id;
 
-extern void ceph_set_default_id(const char *id);
-
 struct EntityName;
 
 enum log_to_stderr_t {
