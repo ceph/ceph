@@ -84,13 +84,6 @@ struct ceph_file_layout g_default_file_layout = {
  fl_object_stripe_unit: init_le32(0),
 };
 
-
-
-#include <msg/msg_types.h>
-
-// fake osd failures: osd -> time
-std::map<entity_name_t,float> g_fake_kill_after;
-
 md_config_t g_conf;
 
 #include <stdlib.h>
