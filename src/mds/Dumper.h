@@ -40,6 +40,8 @@ public:
   Mutex lock;
   SafeTimer timer;
 
+  int rank;
+
   /*
    * The messenger should be a valid SimpleMessenger. You should call bind()
    * before passing it in, but not do anything else.

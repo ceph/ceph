@@ -16,6 +16,7 @@
 #include "osdc/Journaler.h"
 #include "mds/mdstypes.h"
 #include "mon/MonClient.h"
+#include "common/errno.h"
 
 Dumper::~Dumper()
 {
@@ -77,7 +78,8 @@ void Dumper::dump(const char *dump_file)
 {
   bool done = false;
   Cond cond;
-  inodeno_t ino = MDS_INO_LOG_OFFSET + strtol(g_conf.id, 0, 0);;
+  int rank = strtol(g_conf.id, 0, 0);
+  inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
 
   lock.Lock();
   journaler->recover(new C_SafeCond(&lock, &cond, &done));
@@ -99,8 +101,33 @@ void Dumper::dump(const char *dump_file)
     cond.Wait(lock);
   lock.Unlock();
 
-  cout << "read " << bl.length() << " bytes" << std::endl;
-  bl.write_file(dump_file);
+  cout << "read " << bl.length() << " bytes at offset " << start << std::endl;
+
+  int fd = ::open(dump_file, O_WRONLY|O_CREAT|O_TRUNC, 0644);
+  if (fd >= 0) {
+    // include an informative header
+    char buf[200];
+    memset(buf, 0, sizeof(buf));
+    sprintf(buf, "Ceph mds%d journal dump\n start offset %llu (0x%llx)\n       length %llu (0x%llx)\n%c",
+	    rank, 
+	    (unsigned long long)start, (unsigned long long)start,
+	    (unsigned long long)bl.length(), (unsigned long long)bl.length(),
+	    4);
+    ::write(fd, buf, sizeof(buf));
+
+    // write the data
+    ::lseek64(fd, start, SEEK_SET);
+    bl.write_fd(fd);
+    ::close(fd);
+
+    cout << "wrote " << bl.length() << " bytes at offset " << start << " to " << dump_file << "\n"
+	 << "NOTE: this is a _sparse_ file; you can\n"
+	 << "\t$ tar cSzf " << dump_file << ".tgz " << dump_file << "\n"
+	 << "      to efficiently compress it while preserving sparseness." << std::endl;
+  } else {
+    int err = errno;
+    derr << "unable to open " << dump_file << ": " << cpp_strerror(err) << dendl;
+  }
   messenger->shutdown();
 
   // wait for messenger to finish
