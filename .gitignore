@@ -39,3 +39,4 @@ cscope.files
 cscope.out
 *.swp
 *.swo
+.metadata/
