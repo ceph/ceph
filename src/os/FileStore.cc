@@ -1130,10 +1130,11 @@ int FileStore::mount()
       uint64_t cp = snaps.back();
       uint64_t curr_seq;
 
-      int curr_fd = read_op_seq(current_op_seq_fn.c_str(), &curr_seq);
-      assert(curr_fd >= 0);
-      ::close(curr_fd);
-      curr_fd = -1;
+      {
+	int fd = read_op_seq(current_op_seq_fn.c_str(), &curr_seq);
+	assert(fd >= 0);
+	::close(fd);
+      }
       dout(10) << "*** curr_seq=" << curr_seq << " cp=" << cp << dendl;
      
       if (cp != curr_seq && !g_conf.osd_use_stale_snap) { 
@@ -1191,11 +1192,11 @@ int FileStore::mount()
       snaps.pop_back();
 
       if (cp != curr_seq) {
-        curr_fd = read_op_seq(current_op_seq_fn.c_str(), &curr_seq);
+        int fd = read_op_seq(current_op_seq_fn.c_str(), &curr_seq);
         /* we'll use the higher version from now on */
         curr_seq = cp;
-        write_op_seq(curr_fd, curr_seq);
-	::close(curr_fd);
+        write_op_seq(fd, curr_seq);
+	::close(fd);
       }
     }
   }
