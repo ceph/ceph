@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 
@@ -89,12 +89,12 @@ md_config_t g_conf;
 #include <stdlib.h>
 #include <string.h>
 
-void env_to_vec(std::vector<const char*>& args) 
+void env_to_vec(std::vector<const char*>& args)
 {
   char *p = getenv("CEPH_ARGS");
   if (!p) return;
-  
-  static char buf[1000];  
+
+  static char buf[1000];
   int len = MIN(strlen(p), sizeof(buf)-1);  // bleh.
   memcpy(buf, p, len);
   buf[len] = 0;
@@ -112,12 +112,12 @@ void env_to_vec(std::vector<const char*>& args)
   }
 }
 
-void env_to_deq(std::deque<const char*>& args) 
+void env_to_deq(std::deque<const char*>& args)
 {
   char *p = getenv("CEPH_ARGS");
   if (!p) return;
-  
-  static char buf[1000];  
+
+  static char buf[1000];
   int len = MIN(strlen(p), sizeof(buf)-1);  // bleh.
   memcpy(buf, p, len);
   buf[len] = 0;
@@ -157,10 +157,9 @@ void vec_to_argv(std::vector<const char*>& args,
   argc = 1;
   argv[0] = myname;
 
-  for (unsigned i=0; i<args.size(); i++) 
+  for (unsigned i=0; i<args.size(); i++)
     argv[argc++] = args[i];
 }
-
 
 bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec)
 {
@@ -180,9 +179,6 @@ bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec)
   }
   return true;
 }
-
-
-
 
 void parse_config_option_string(string& s)
 {
@@ -209,7 +205,7 @@ struct config_option {
   const char *conf_name;
   const char *name;
   void *val_ptr;
-  
+
   const char *def_str;
   long long def_longlong;
   double def_double;
@@ -327,7 +323,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mon_tick_interval, 0, OPT_INT, 5),
 	OPTION(mon_subscribe_interval, 0, OPT_DOUBLE, 300),
 	OPTION(mon_osd_down_out_interval, 0, OPT_INT, 300), // seconds
-	OPTION(mon_lease, 0, OPT_FLOAT, 5),  		    // lease interval
+	OPTION(mon_lease, 0, OPT_FLOAT, 5),		    // lease interval
 	OPTION(mon_lease_renew_interval, 0, OPT_FLOAT, 3), // on leader, to renew the lease
 	OPTION(mon_lease_ack_timeout, 0, OPT_FLOAT, 10.0), // on leader, if lease isn't acked by all peons
 	OPTION(mon_clock_drift_allowed, 0, OPT_FLOAT, .010), // allowed clock drift between monitors
@@ -387,7 +383,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(journaler_prefetch_periods, 0, OPT_INT, 50),   // * journal object size (1~MB? see above)
 	OPTION(journaler_batch_interval, 0, OPT_DOUBLE, .001),   // seconds.. max add'l latency we artificially incur
 	OPTION(journaler_batch_max, 0, OPT_LONGLONG, 0),  // max bytes we'll delay flushing; disable, for now....
-	OPTION(mds_max_file_size, 0, OPT_LONGLONG, 1ULL << 40), 
+	OPTION(mds_max_file_size, 0, OPT_LONGLONG, 1ULL << 40),
 	OPTION(mds_cache_size, 0, OPT_INT, 100000),
 	OPTION(mds_cache_mid, 0, OPT_FLOAT, .7),
 	OPTION(mds_mem_max, 0, OPT_INT, 1048576),        // KB
@@ -396,7 +392,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_beacon_grace, 0, OPT_FLOAT, 15),
 	OPTION(mds_blacklist_interval, 0, OPT_FLOAT, 24.0*60.0),  // how long to blacklist failed nodes
 	OPTION(mds_session_timeout, 0, OPT_FLOAT, 60),    // cap bits and leases time out if client idle
-	OPTION(mds_session_autoclose, 0, OPT_FLOAT, 300), // autoclose idle session 
+	OPTION(mds_session_autoclose, 0, OPT_FLOAT, 300), // autoclose idle session
 	OPTION(mds_client_lease, 0, OPT_FLOAT, 120),      // (assuming session stays alive)
 	OPTION(mds_reconnect_timeout, 0, OPT_FLOAT, 45),  // seconds to wait for clients during mds restart
 							  //  make it (mds_session_timeout - mds_beacon_grace)
@@ -610,7 +606,7 @@ bool conf_set_conf_val(void *field, opt_type_t type, const char *val)
   default:
     return false;
   }
-  
+
   return true;
 }
 
@@ -645,7 +641,7 @@ bool conf_set_conf_val(void *field, opt_type_t type, const char *val, long long 
   default:
     return false;
   }
-  
+
   return true;
 }
 
@@ -874,7 +870,7 @@ static bool get_var(const char *str, int pos, char *var_name, int len, int *new_
 	 isalnum(str[pos]) ||
          str[pos] == '_')) {
 	var_name[out_pos] = str[pos];
-	
+
 	out_pos	++;
 	if (out_pos == len)
 		return false;
@@ -942,8 +938,8 @@ char *conf_post_process_val(const char *val)
 	}
 	buf[out_pos] = val[i];
 	buf[out_pos + 1] = '\0';
-    	++out_pos;
-    	++i;
+	++out_pos;
+	++i;
     }
   }
 
@@ -959,7 +955,6 @@ do { \
   else \
     ret = cf->read(section, var, (type *)out, 0); \
 } while (0)
-    
 
 int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const char *conf_type,
 		      const char *alt_section, const char *key, opt_type_t type, void *out, void *def,
