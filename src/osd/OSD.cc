@@ -143,76 +143,115 @@ ObjectStore *OSD::create_object_store(const char *dev, const char *jdev)
   //return new Ebofs(dev, jdev);
 }
 
+#undef dout_prefix
+#define dout_prefix *_dout
 
 int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
 {
-  ObjectStore *store = create_object_store(dev, jdev);
-  if (!store)
-    return -ENOENT;
-  int err = store->mkfs();    
-  if (err < 0)
-    return err;
-  err = store->mount();
-  if (err < 0)
-    return err;
-    
+  int ret;
+  ObjectStore *store;
   OSDSuperblock sb;
   sb.fsid = fsid;
   sb.whoami = whoami;
 
-  write_meta(dev, fsid, whoami);
-
-  // age?
-  if (g_conf.osd_age_time != 0) {
-    cout << "aging..." << std::endl;
-    Ager ager(store);
-    if (g_conf.osd_age_time < 0) 
-      ager.load_freelist();
-    else 
-      ager.age(g_conf.osd_age_time, 
-	       g_conf.osd_age, 
-	       g_conf.osd_age - .05, 
-	       50000, 
-	       g_conf.osd_age - .05);
-  }
-
-  // benchmark?
-  if (g_conf.osd_auto_weight) {
-    bufferlist bl;
-    bufferptr bp(1048576);
-    bp.zero();
-    bl.push_back(bp);
-    cout << "testing disk bandwidth..." << std::endl;
-    utime_t start = g_clock.now();
-    object_t oid("disk_bw_test");
-    for (int i=0; i<1000; i++) {
-      ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      t->write(coll_t::META_COLL, sobject_t(oid, 0), i*bl.length(), bl.length(), bl);
-      store->queue_transaction(NULL, t);
+  try {
+    store = create_object_store(dev, jdev);
+    if (!store) {
+      ret = -ENOENT;
+      goto out;
     }
-    store->sync();
-    utime_t end = g_clock.now();
-    end -= start;
-    cout << "measured " << (1000.0 / (double)end) << " mb/sec" << std::endl;
-    ObjectStore::Transaction tr;
-    tr.remove(coll_t::META_COLL, sobject_t(oid, 0));
-    store->apply_transaction(tr);
-    
-    // set osd weight
-    sb.weight = (1000.0 / (double)end);
+    ret = store->mkfs();
+    if (ret) {
+      derr << "OSD::mkfs: FileStore::mkfs failed with error " << ret << dendl;
+      goto free_store;
+    }
+    ret = store->mount();
+    if (ret) {
+      derr << "OSD::mkfs: couldn't mount FileStore: error " << ret << dendl;
+      goto free_store;
+    }
+    ret = write_meta(dev, fsid, whoami);
+    if (ret) {
+      derr << "OSD::mkfs: failed to write fsid file: error " << ret << dendl;
+      goto umount_store;
+    }
+
+    // age?
+    if (g_conf.osd_age_time != 0) {
+      dout(0) << "aging..." << dendl;
+      Ager ager(store);
+      if (g_conf.osd_age_time < 0)
+	ager.load_freelist();
+      else
+	ager.age(g_conf.osd_age_time,
+		 g_conf.osd_age,
+		 g_conf.osd_age - .05,
+		 50000,
+		 g_conf.osd_age - .05);
+    }
+
+    // benchmark?
+    if (g_conf.osd_auto_weight) {
+      bufferlist bl;
+      bufferptr bp(1048576);
+      bp.zero();
+      bl.push_back(bp);
+      dout(0) << "testing disk bandwidth..." << dendl;
+      utime_t start = g_clock.now();
+      object_t oid("disk_bw_test");
+      for (int i=0; i<1000; i++) {
+	ObjectStore::Transaction *t = new ObjectStore::Transaction;
+	t->write(coll_t::META_COLL, sobject_t(oid, 0), i*bl.length(), bl.length(), bl);
+	store->queue_transaction(NULL, t);
+      }
+      store->sync();
+      utime_t end = g_clock.now();
+      end -= start;
+      dout(0) << "measured " << (1000.0 / (double)end) << " mb/sec" << dendl;
+      ObjectStore::Transaction tr;
+      tr.remove(coll_t::META_COLL, sobject_t(oid, 0));
+      ret = store->apply_transaction(tr);
+      if (ret) {
+	derr << "OSD::mkfs: error while benchmarking: apply_transaction returned "
+	     << ret << dendl;
+	goto umount_store;
+      }
+
+      // set osd weight
+      sb.weight = (1000.0 / (double)end);
+    }
+
+    {
+      bufferlist bl;
+      ::encode(sb, bl);
+
+      ObjectStore::Transaction t;
+      t.create_collection(coll_t::META_COLL);
+      t.write(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+      t.create_collection(coll_t::TEMP_COLL);
+      ret = store->apply_transaction(t);
+      if (ret) {
+	derr << "OSD::mkfs: error while writing OSD_SUPERBLOCK_POBJECT: "
+	     << "apply_transaction returned " << ret << dendl;
+	goto umount_store;
+      }
+    }
+  }
+  catch (const std::exception &se) {
+    derr << "OSD::mkfs: caught exception " << se.what() << dendl;
+    ret = 1000;
+  }
+  catch (...) {
+    derr << "OSD::mkfs: caught unknown exception." << dendl;
+    ret = 1000;
   }
 
-  bufferlist bl;
-  ::encode(sb, bl);
-
-  ObjectStore::Transaction t;
-  t.create_collection(coll_t::META_COLL);
-  t.write(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
-  t.create_collection(coll_t::TEMP_COLL);
-  int r = store->apply_transaction(t);
+umount_store:
   store->umount();
+free_store:
   delete store;
-  return r;
+out:
+  return ret;
 }
 
 int OSD::mkjournal(const char *dev, const char *jdev)
@@ -236,7 +275,6 @@ int OSD::flushjournal(const char *dev, const char *jdev)
   delete store;
   return err;
 }
-
 
 int OSD::write_meta(const char *base, const char *file, const char *val, size_t vallen)
 {
@@ -335,8 +373,8 @@ int OSD::peek_meta(const char *dev, string& magic, ceph_fsid_t& fsid, int& whoam
   return 0;
 }
 
-
-
+#undef dout_prefix
+#define dout_prefix _prefix(*_dout, whoami, osdmap)
 
 // cons/des
 

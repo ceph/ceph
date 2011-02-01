@@ -1293,14 +1293,31 @@ int FileStore::umount()
   op_finisher.stop();
   ondisk_finisher.stop();
 
-  ::close(fsid_fd);
-  ::close(op_fd);
-  ::close(current_fd);
-  ::close(basedir_fd);
+  if (fsid_fd >= 0) {
+    TEMP_FAILURE_RETRY(::close(fsid_fd));
+    fsid_fd = -1;
+  }
+  if (op_fd >= 0) {
+    TEMP_FAILURE_RETRY(::close(op_fd));
+    op_fd = -1;
+  }
+  if (current_fd >= 0) {
+    TEMP_FAILURE_RETRY(::close(current_fd));
+    current_fd = -1;
+  }
+  if (basedir_fd >= 0) {
+    TEMP_FAILURE_RETRY(::close(basedir_fd));
+    basedir_fd = -1;
+  }
 
   if (g_conf.filestore_dev) {
     dout(0) << "umounting" << dendl;
     //run_cmd("umount", g_conf.filestore_dev, NULL);
+  }
+
+  {
+    Mutex::Locker l(sync_entry_timeo_lock);
+    timer.shutdown();
   }
 
   // nothing
