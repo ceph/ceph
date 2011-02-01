@@ -1250,7 +1250,7 @@ md_config_t::md_config_t()
     set_conf_name(opt);
   }
 
-  g_conf.id = strdup("default");
+  g_conf.id = strdup("admin");
 }
 
 md_config_t::~md_config_t()
