@@ -37,6 +37,8 @@ using namespace std;
 #include <sys/stat.h>
 #include <fcntl.h>
 
+extern int syn_filer_flags;
+
 int main(int argc, const char **argv, char *envp[]) 
 {
   //cerr << "csyn starting" << std::endl;
@@ -71,6 +73,7 @@ int main(int argc, const char **argv, char *envp[])
     mclients[i] = new MonClient();
     mclients[i]->build_initial_monmap();
     Client *client = new Client(messengers[i], mclients[i]);
+    client->set_filer_flags(syn_filer_flags);
     SyntheticClient *syn = new SyntheticClient(client);
     clients.push_back(client);
     synclients.push_back(syn);
