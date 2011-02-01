@@ -42,8 +42,6 @@
 #include "auth/ExportControl.h"
 #include "auth/Auth.h"
 
-static bool show_config = false;
-
 static ConfFile *cf = NULL;
 static ExportControl *ec = NULL;
 
@@ -1086,6 +1084,7 @@ bool is_bool_param(const char *param)
 
 void parse_startup_config_options(std::vector<const char*>& args, const char *module_type)
 {
+  bool show_config = false;
   DEFINE_CONF_VARS(NULL);
   std::vector<const char *> nargs;
   bool conf_specified = false;
