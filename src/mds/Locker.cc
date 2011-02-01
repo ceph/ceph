@@ -1245,11 +1245,7 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t 
     bool sup = false;  // avoid sending two caps msgs, one for cap expansion, one for file_max change.
     if (cap && (cap->wanted() & ~cap->pending())) {
       issue_caps(in, cap);
-      cap->inc_suppress();
-      sup = true;
     }
-    if (sup)
-      cap->dec_suppress();
   
     if (share && in->is_auth() && in->filelock.is_stable())
       share_inode_max_size(in);
