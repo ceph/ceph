@@ -249,9 +249,11 @@ int OSD::write_meta(const char *base, const char *file, const char *val, size_t 
     return -errno;
   int r = ::write(fd, val, vallen);
   if (r < 0)
-    return -errno;
+    r = -errno;
+  else
+    r = 0;
   ::close(fd);
-  return 0;
+  return r;
 }
 
 int OSD::read_meta(const char *base, const char *file, char *val, size_t vallen)
