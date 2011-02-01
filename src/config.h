@@ -44,6 +44,9 @@ enum log_to_stderr_t {
 };
 
 struct md_config_t {
+  md_config_t();
+  ~md_config_t();
+
   char *type;
   char *id;
   char *name;

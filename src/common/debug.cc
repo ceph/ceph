@@ -19,7 +19,7 @@ bool _dout_need_open = true;
  * By using an early init_priority, we ensure that the dout lock is
  * initialized first and destroyed last.
  */
-Mutex _dout_lock __attribute__((init_priority(101)))
+Mutex _dout_lock __attribute__((init_priority(110)))
     ("_dout_lock", false, false /* no lockdep */);
 
 #define _STR(x) #x

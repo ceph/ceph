@@ -12,66 +12,45 @@
  *
  */
 
-
+#include "auth/Auth.h"
+#include "auth/ExportControl.h"
 #include "ceph_ver.h"
-#include "config.h"
-#include "include/types.h"
-
-#include "common/Clock.h"
-#include "common/DoutStreambuf.h"
-#include "common/Logger.h"
 #include "common/BackTrace.h"
+#include "common/Clock.h"
+#include "common/ConfUtils.h"
+#include "common/Logger.h"
 #include "common/common_init.h"
-
-#include <fstream>
-#include <stdlib.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <signal.h>
-
+#include "common/dyn_snprintf.h"
+#include "config.h"
 #include "include/atomic.h"
 #include "include/str_list.h"
-
+#include "include/types.h"
+#include "msg/msg_types.h"
 #include "osd/osd_types.h"
 
-#include "common/ConfUtils.h"
-#include "common/dyn_snprintf.h"
+#include <fcntl.h>
+#include <fstream>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
-#include "auth/ExportControl.h"
-#include "auth/Auth.h"
+/* Don't use standard Ceph logging in this file.
+ * We can't use logging until it's initialized, and a lot of the necessary
+ * initialization happens here.
+ */
+#undef dout
+#undef pdout
+#undef derr
+#undef generic_dout
+#undef dendl
 
+/* The Ceph configuration. */
+md_config_t g_conf __attribute__((init_priority(103)));
+
+/* These should be moved into md_config_t eventually, grrr */
 static ConfFile *cf = NULL;
 static ExportControl *ec = NULL;
-
-static void fini_g_conf();
-
-static void env_override(char **ceph_var, const char * const env_var)
-{
-  char *e = getenv(env_var);
-  if (!e)
-    return;
-  if (*ceph_var)
-    free(*ceph_var);
-  *ceph_var = strdup(e);
-}
-
-class ConfFileDestructor
-{
-public:
-  ConfFileDestructor() {}
-  ~ConfFileDestructor() {
-    if (cf) {
-      delete cf;
-      cf = NULL;
-      fini_g_conf();
-    }
-  }
-};
-
-static ConfFileDestructor cfd;
-
 
 atomic_t _num_threads(0);
 
@@ -84,10 +63,15 @@ struct ceph_file_layout g_default_file_layout = {
  fl_object_stripe_unit: init_le32(0),
 };
 
-md_config_t g_conf;
-
-#include <stdlib.h>
-#include <string.h>
+static void env_override(char **ceph_var, const char * const env_var)
+{
+  char *e = getenv(env_var);
+  if (!e)
+    return;
+  if (*ceph_var)
+    free(*ceph_var);
+  *ceph_var = strdup(e);
+}
 
 void env_to_vec(std::vector<const char*>& args)
 {
@@ -676,7 +660,6 @@ static bool conf_reset_val(void *field, opt_type_t type)
   return true;
 }
 
-
 static void set_conf_name(config_option *opt)
 {
   char *newsection = (char *)opt->section;
@@ -710,36 +693,6 @@ static void set_conf_name(config_option *opt)
   done:
     opt->section = newsection;
     opt->conf_name = (const char *)newconf;
-}
-
-static bool init_g_conf()
-{
-  int len = sizeof(config_optionsp)/sizeof(config_option);
-  int i;
-  config_option *opt;
-
-  memset(&g_conf, 0, sizeof(g_conf));
-
-  for (i = 0; i<len; i++) {
-    opt = &config_optionsp[i];
-    if (opt->val_ptr) {
-      conf_reset_val(opt->val_ptr, opt->type);
-    }
-    if (!conf_set_conf_val(opt->val_ptr,
-			   opt->type,
-			   opt->def_str,
-			   opt->def_longlong,
-			   opt->def_double)) {
-      cerr << "error initializing g_conf value num " << i << std::endl;
-      return false;
-    }
-
-    set_conf_name(opt);
-  }
-
-  g_conf.id = strdup("default");
-
-  return true;
 }
 
 static int def_conf_to_str(config_option *opt, char *buf, int len)
@@ -793,23 +746,6 @@ int ceph_def_conf_by_name(const char *name, char *buf, int buflen)
   free(newname);
   return ret;
 }
-
-static void fini_g_conf()
-{
-  int len = sizeof(config_optionsp)/sizeof(config_option);
-  int i;
-  config_option *opt;
-
-  for (i = 0; i<len; i++) {
-    opt = &config_optionsp[i];
-    if (opt->type == OPT_STR) {
-      free(*(char **)opt->val_ptr);
-    }
-    free((void *)opt->conf_name);
-  }
-}
-
-static bool g_conf_initialized = init_g_conf();
 
 static bool cmd_is_char(const char *cmd)
 {
@@ -1280,3 +1216,58 @@ bool ceph_resolve_file_search(string& filename_list, string& result)
 
   return false;
 }
+
+md_config_t::md_config_t()
+{
+	//
+	// Note: because our md_config_t structure is a global, the memory used to
+	// store it will start out zeroed. So there is no need to manually initialize
+	// everything to 0 here.
+	//
+	// However, it's good practice to add your new config option to config_optionsp
+	// so that its default value is explicit rather than implicit.
+	//
+
+  int len = sizeof(config_optionsp)/sizeof(config_option);
+  int i;
+  config_option *opt;
+
+  for (i = 0; i<len; i++) {
+    opt = &config_optionsp[i];
+    if (opt->val_ptr) {
+      conf_reset_val(opt->val_ptr, opt->type);
+    }
+    if (!conf_set_conf_val(opt->val_ptr,
+			   opt->type,
+			   opt->def_str,
+			   opt->def_longlong,
+			   opt->def_double)) {
+			std::ostringstream oss;
+			oss << "error initializing g_conf value num " << i;
+			assert(oss.str().c_str() == 0);
+    }
+
+    set_conf_name(opt);
+  }
+
+  g_conf.id = strdup("default");
+}
+
+md_config_t::~md_config_t()
+{
+  int len = sizeof(config_optionsp)/sizeof(config_option);
+  int i;
+  config_option *opt;
+
+  for (i = 0; i<len; i++) {
+    opt = &config_optionsp[i];
+    if (opt->type == OPT_STR) {
+      free(*(char **)opt->val_ptr);
+    }
+    free((void *)opt->conf_name);
+  }
+
+  delete cf;
+  cf = NULL;
+}
+
