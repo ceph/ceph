@@ -319,7 +319,7 @@ void RGWPutObj::execute()
       goto done;
     }
 
-    bool ret = policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
+    ret = policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
     if (!ret) {
        err.code = "InvalidArgument";
        ret = -EINVAL;
@@ -333,7 +333,7 @@ void RGWPutObj::execute()
 
     if (supplied_md5_b64) {
       RGW_LOG(15) << "supplied_md5_b64=" << supplied_md5_b64 << endl;
-      int ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[MD5::DIGESTSIZE + 1], 
+      ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[MD5::DIGESTSIZE + 1], 
 			     supplied_md5_b64, supplied_md5_b64 + strlen(supplied_md5_b64));
       RGW_LOG(15) << "ceph_armor ret=" << ret << endl;
       if (ret != MD5::DIGESTSIZE) {
