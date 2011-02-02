@@ -30,7 +30,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << objecter->messenger->get_myname() << ".filer "
 
-
 class Filer::C_Probe : public Context {
 public:
   Filer *filer;
@@ -40,7 +39,10 @@ public:
   utime_t mtime;
   C_Probe(Filer *f, Probe *p, object_t o) : filer(f), probe(p), oid(o), size(0) {}
   void finish(int r) {
-    filer->_probed(probe, oid, size, mtime);    
+    // TODO: handle this error.
+    assert(r == 0);
+
+    filer->_probed(probe, oid, size, mtime);
   }  
 };
 
@@ -140,12 +142,6 @@ void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mt
 	     << " should be " << shouldbe
 	     << ", actual is " << probe->known_size[p->oid]
 	     << dendl;
-
-    // error?
-    if (probe->known_size[p->oid] < 0) {
-      probe->err = probe->known_size[p->oid];
-      break;
-    }
 
     if (!probe->found_size) {
       assert(probe->known_size[p->oid] <= shouldbe);
