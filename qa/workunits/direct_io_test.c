@@ -20,6 +20,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 
 /*
@@ -171,7 +172,8 @@ static int verify_chunk(const struct chunk *c, uint64_t offset)
 
 static int do_o_direct_reads(void)
 {
-	int fd, ret, i;
+	int fd, ret;
+	unsigned int i;
 	void *buf = 0;
 	time_t cur_time, end_time;
 	ret = posix_memalign(&buf, page_size, page_size);
@@ -202,7 +204,8 @@ static int do_o_direct_reads(void)
 	do {
 		time_t next_time;
 		uint64_t offset;
-		int page, seed;
+		int page;
+		unsigned int seed;
 
 		seed = i++;
 		page = rand_r(&seed) % g_num_pages;
@@ -211,7 +214,7 @@ static int do_o_direct_reads(void)
 		if (lseek64(fd, offset, SEEK_SET) == -1) {
 			int err = errno;
 			printf("lseek64(%" PRId64 ") failed: error %d (%s)\n",
-			       err, strerror(err));
+			       offset, err, strerror(err));
 			goto close_fd;
 		}
 		ret = do_read(fd, buf, page_size);
