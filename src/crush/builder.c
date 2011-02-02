@@ -1,5 +1,6 @@
 
 #include <string.h>
+#include <limits.h>
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -23,7 +24,8 @@ struct crush_map *crush_create()
  */
 void crush_finalize(struct crush_map *map)
 {
-	int b, i;
+	int b;
+	__u32 i;
 
 	/* calc max_devices */
 	for (b=0; b<map->max_buckets; b++) {
@@ -51,23 +53,29 @@ void crush_finalize(struct crush_map *map)
 
 int crush_add_rule(struct crush_map *map, struct crush_rule *rule, int ruleno)
 {
+	__u32 r;
 	int oldsize;
 
-	if (ruleno < 0)
-		for (ruleno=0; ruleno < map->max_rules; ruleno++)
-			if (map->rules[ruleno] == 0) break;
+	if (ruleno < 0) {
+		for (r=0; r < map->max_rules; r++)
+			if (map->rules[r] == 0)
+				break;
+		assert(r <= INT_MAX);
+	}
+	else
+		r = ruleno;
 
-	if (ruleno >= map->max_rules) {
+	if (r >= map->max_rules) {
 		/* expand array */
 		oldsize = map->max_rules;
-		map->max_rules = ruleno+1;
+		map->max_rules = r+1;
 		map->rules = realloc(map->rules, map->max_rules * sizeof(map->rules[0]));
 		memset(map->rules + oldsize, 0, (map->max_rules-oldsize) * sizeof(map->rules[0]));
 	}
 
 	/* add it */
-	map->rules[ruleno] = rule;
-	return ruleno;
+	map->rules[r] = rule;
+	return r;
 }
 
 struct crush_rule *crush_make_rule(int len, int ruleset, int type, int minsize, int maxsize)
@@ -87,7 +95,7 @@ struct crush_rule *crush_make_rule(int len, int ruleset, int type, int minsize, 
  */
 void crush_rule_set_step(struct crush_rule *rule, int n, int op, int arg1, int arg2)
 {
-	assert(n < rule->len);
+	assert((__u32)n < rule->len);
 	rule->steps[n].op = op;
 	rule->steps[n].arg1 = arg1;
 	rule->steps[n].arg2 = arg2;
