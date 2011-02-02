@@ -61,6 +61,18 @@ TEST(RoundTrip, RandomRoundTrips) {
   }
 }
 
+TEST(EdgeCase, EndsInNewline) {
+  static const int OUT_MAX = 4096;
+
+  char b64[] =
+    "aaaa\n";
+
+    char decoded[OUT_MAX];
+    memset(decoded, 0, sizeof(decoded));
+    int blen = ceph_unarmor(decoded, decoded + OUT_MAX, b64, b64 + sizeof(b64)-1);
+    ASSERT_GE(blen, 0);
+}
+
 TEST(FuzzEncoding, BadDecode1) {
   static const int OUT_LEN = 4096;
   const char * const bad_encoded = "FAKEBASE64 foo";
