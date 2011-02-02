@@ -44,7 +44,7 @@ TEST(RoundTrip, RandomRoundTrips) {
 
     char in[IN_MAX];
     memset(in, 0, sizeof(in));
-    for (int j = 0; i < in_len; ++j) {
+    for (int j = 0; j < in_len; ++j) {
       in[j] = rand_r(&seed) % 0xff;
     }
     char out[OUT_MAX];
