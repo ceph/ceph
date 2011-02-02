@@ -50,29 +50,38 @@ namespace librbd {
     pool_t data;
   };
 
+  struct SnapInfo {
+    librados::snap_t id;
+    uint64_t size;
+    SnapInfo(librados::snap_t _id, uint64_t _size) : id(_id), size(_size) {};
+  };
+
   struct ImageCtx {
     struct rbd_obj_header_ondisk header;
     ::SnapContext snapc;
     vector<librados::snap_t> snaps;
-    std::map<std::string, librados::snap_t> snaps_by_name;
+    std::map<std::string, struct SnapInfo> snaps_by_name;
     uint64_t snapid;
     std::string name;
     struct PoolCtx *pctx;
 
     int set_snap(std::string snap_name)
     {
-      std::map<std::string, librados::snap_t>::iterator it = snaps_by_name.find(snap_name);
+      std::map<std::string, struct SnapInfo>::iterator it = snaps_by_name.find(snap_name);
       if (it != snaps_by_name.end()) {
-	snapid = it->second;
+	snapid = it->second.id;
 	return 0;
       }
       snapid = 0;
       return -ENOENT;
     }
 
-    void add_snap(std::string snap_name, librados::snap_t id)
+    void add_snap(std::string snap_name, librados::snap_t id, uint64_t size)
     {
-      snaps_by_name.insert(std::pair<std::string, librados::snap_t>(snap_name, id));
+      snapc.snaps.push_back(id);
+      snaps.push_back(id);
+      struct SnapInfo info(id, size);
+      snaps_by_name.insert(std::pair<std::string, struct SnapInfo>(snap_name, info));
     }
   };
 
@@ -588,28 +597,15 @@ int librbd::RBDClient::list_snaps(PoolCtx *pp, ImageCtx *ictx, std::vector<librb
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
-  int r = rados.exec(pp->md, md_oid, "rbd", "snap_list", bl, bl2);
-  if (r < 0) {
-    return r;
-  }
-
-  uint32_t num_snaps;
-  uint64_t snap_seq;
-  bufferlist::iterator iter = bl2.begin();
-  ::decode(snap_seq, iter);
-  ::decode(num_snaps, iter);
-  for (uint32_t i=0; i < num_snaps; i++) {
-    uint64_t id, image_size;
-    string s;
+  for (std::map<std::string, struct SnapInfo>::iterator it = ictx->snaps_by_name.begin();
+       it != ictx->snaps_by_name.end(); ++it) {
     librbd::snap_info_t info;
-    ::decode(id, iter);
-    ::decode(image_size, iter);
-    ::decode(s, iter);
-    info.name = s;
-    info.id = id;
-    info.size = image_size;
+    info.name = it->first;
+    info.id = it->second.id;
+    info.size = it->second.size;
     snaps.push_back(info);
   }
+
   return 0;
 }
 
@@ -680,9 +676,7 @@ int librbd::RBDClient::get_snapc(PoolCtx *pp, string& md_oid, const char *snap_n
     ::decode(id, iter);
     ::decode(image_size, iter);
     ::decode(s, iter);
-    ictx->snapc.snaps.push_back(id);
-    ictx->snaps.push_back(id);
-    ictx->add_snap(s, id);
+    ictx->add_snap(s, id, image_size);
   }
 
   if (!ictx->snapc.is_valid()) {
