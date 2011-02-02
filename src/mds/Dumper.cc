@@ -113,7 +113,8 @@ void Dumper::dump(const char *dump_file)
 	    (unsigned long long)start, (unsigned long long)start,
 	    (unsigned long long)bl.length(), (unsigned long long)bl.length(),
 	    4);
-    ::write(fd, buf, sizeof(buf));
+    int r = ::write(fd, buf, sizeof(buf));
+    assert(r >= 0);
 
     // write the data
     ::lseek64(fd, start, SEEK_SET);
