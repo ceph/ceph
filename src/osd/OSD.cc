@@ -149,7 +149,7 @@ ObjectStore *OSD::create_object_store(const char *dev, const char *jdev)
 int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
 {
   int ret;
-  ObjectStore *store;
+  ObjectStore *store = NULL;
   OSDSuperblock sb;
   sb.fsid = fsid;
   sb.whoami = whoami;
