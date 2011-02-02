@@ -155,14 +155,13 @@ void RGWGetObj::execute()
     goto done;
 
   while (ofs <= end) {
-    len = rgwstore->get_obj(&handle, s->bucket_str, s->object_str, &data, ofs, end);
-    if (len < 0) {
-      ret = len;
+    ret = rgwstore->get_obj(&handle, s->bucket_str, s->object_str, &data, ofs, end);
+    if (ret < 0) {
       goto done;
     }
 
     send_response(handle);
-    ofs += len;
+    ofs += ret;
     free(data);
   }
 
