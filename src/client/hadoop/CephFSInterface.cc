@@ -67,6 +67,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1initi
   env->ReleaseStringUTFChars(j_args, c_args);
   delete argv;
 
+  ceph_localize_reads(true);
   ceph_set_default_file_stripe_unit(block_size);
   ceph_set_default_object_size(block_size);
 

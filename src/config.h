@@ -214,7 +214,6 @@ struct md_config_t {
   double   client_mount_timeout;
   double   client_unmount_timeout;
   double   client_tick_interval;
-  bool client_hack_balance_reads;
   const char *client_trace;
   long long client_readahead_min;
   long long client_readahead_max_bytes;
