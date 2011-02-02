@@ -1242,7 +1242,6 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t 
     if (gather)
       eval_cap_gather(in);
   } else {
-    bool sup = false;  // avoid sending two caps msgs, one for cap expansion, one for file_max change.
     if (cap && (cap->wanted() & ~cap->pending())) {
       issue_caps(in, cap);
     }
