@@ -252,7 +252,21 @@ const static struct fuse_operations ceph_oper = {
   removexattr: 0,
   opendir: ceph_opendir,
   readdir: ceph_readdir,
-  releasedir: ceph_releasedir  
+  releasedir: ceph_releasedir,
+  fsyncdir : 0,
+  init : 0,
+  destroy : 0,
+  access : 0,
+  create : 0,
+  ftruncate : 0,
+  fgetattr : 0,
+  lock : 0,
+  utimens : 0,
+  bmap : 0,
+  flag_nullpath_ok : 0,
+  flag_reserved : 0,
+  ioctl : 0,
+  poll : 0,
 };
 
 
