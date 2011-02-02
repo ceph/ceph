@@ -29,7 +29,7 @@ using namespace librados;
 #include <stdlib.h>
 #include <time.h>
 #include <sstream>
-
+#include <errno.h>
 
 void usage() 
 {
@@ -65,13 +65,15 @@ void usage()
   cerr << "   rmsnap foo  -- remove snap 'foo'\n";
   cerr << "   rollback foo bar -- roll back object foo to snap 'bar'\n\n";
 
-  cerr << "   bench <seconds> write|seq|rand [-t concurrent_operations] [-b op_size]\n";
+  cerr << "   bench <seconds> write|seq|rand [-t concurrent_operations]\n";
   cerr << "              default is 16 concurrent IOs and 4 MB op size\n\n";
 
   cerr << "Options:\n";
   cerr << "   -p pool\n";
   cerr << "   --pool=pool\n";
   cerr << "        select given pool by name\n";
+  cerr << "   -b op_size\n";
+  cerr << "        set the size of write ops for put or benchmarking";
   cerr << "   -s name\n";
   cerr << "   --snap name\n";
   cerr << "        select given snap name for (read) IO\n";
@@ -342,8 +344,11 @@ int main(int argc, const char **argv)
       usage();
 
     string oid(nargs[1]);
+    bool stdio = false;
+    if (strcmp(nargs[2], "-") == 0)
+      stdio = true;
 
-    if (strcmp(nargs[2], "-") == 0) {
+    if (stdio) {
       char buf[256];
       while(!cin.eof()) {
 	cin.getline(buf, 256);
@@ -351,17 +356,28 @@ int main(int argc, const char **argv)
 	indata.append('\n');
       }
     } else {
-      ret = indata.read_file(nargs[2]);
-      if (ret) {
-	cerr << "error reading input file " << nargs[2] << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      int fd = open(nargs[2], O_RDONLY);
+      if (fd < 0) {
+	cerr << "error reading input file " << nargs[2] << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
 	goto out;
       }
-    }
+      char buf[op_size];
+      int count = op_size;
+      uint64_t offset = 0;
+      while (count == op_size) {
+        count = read(fd, buf, op_size);
+        if (count == 0)
+          continue;
+        indata.append(buf, count);
+        ret = rados.write(p, oid, offset, indata, count);
+        indata.clear();
 
-    ret = rados.write_full(p, oid, indata);
-    if (ret < 0) {
-      cerr << "error writing " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      goto out;
+        if (ret < 0) {
+          cerr << "error writing " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+          goto out;
+        }
+        offset += count;
+      }
     }
   }
   else if (strcmp(nargs[0], "setxattr") == 0) {
