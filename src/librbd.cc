@@ -112,7 +112,7 @@ public:
   int open_pools(const char *poolname, PoolCtx *pp);
   void close_pools(PoolCtx *pp);
 
-  void trim_image(PoolCtx *pp, const char *imgname, rbd_obj_header_ondisk *header, uint64_t newsize);
+  void trim_image(PoolCtx *pp, rbd_obj_header_ondisk *header, uint64_t newsize);
   int read_rbd_info(PoolCtx *pp, string& info_oid, struct rbd_info *info);
 
   int touch_rbd_info(librados::pool_t pool, string& info_oid);
@@ -221,7 +221,7 @@ int librbd::RBDClient::init_rbd_info(struct rbd_info *info)
   return 0;
 }
 
-void librbd::RBDClient::trim_image(PoolCtx *pp, const char *imgname, rbd_obj_header_ondisk *header, uint64_t newsize)
+void librbd::RBDClient::trim_image(PoolCtx *pp, rbd_obj_header_ondisk *header, uint64_t newsize)
 {
   uint64_t numseg = get_max_block(header);
   uint64_t start = get_block_num(header, newsize);
@@ -534,7 +534,7 @@ int librbd::RBDClient::remove(PoolCtx *pp, const char *imgname)
   struct rbd_obj_header_ondisk header;
   int r = read_header(pp->md, md_oid, &header, NULL);
   if (r >= 0) {
-    trim_image(pp, imgname, &header, 0);
+    trim_image(pp, &header, 0);
     cout << "\rremoving header..." << std::endl;
     rados.remove(pp->md, md_oid);
   }
@@ -570,7 +570,7 @@ int librbd::RBDClient::resize(PoolCtx *pp, ImageCtx *ictx, uint64_t size)
     ictx->header.image_size = size;
   } else {
     cout << "shrinking image " << size << " -> " << ictx->header.image_size << " objects" << std::endl;
-    trim_image(pp, ictx->name.c_str(), &(ictx->header), size);
+    trim_image(pp, &(ictx->header), size);
     ictx->header.image_size = size;
   }
 
