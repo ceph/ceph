@@ -2216,7 +2216,7 @@ int Rados::AioCompletion::get_version()
 void Rados::AioCompletion::release()
 {
   RadosClient::AioCompletion *c = (RadosClient::AioCompletion *)pc;
-  c->put();
+  c->release();
 }
 
 // watch/notify

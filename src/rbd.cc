@@ -463,6 +463,11 @@ done_img:
   update_snap_name(*new_img, snap);
 }
 
+static void write_completion(librbd::completion_t cb, void *arg)
+{
+  cout << "write_completion!" << std::endl;
+}
+
 static int do_import(librados::pool_t pool, const char *imgname, int *order, const char *path)
 {
   int fd = open(path, O_RDONLY);
@@ -570,7 +575,17 @@ static int do_import(librados::pool_t pool, const char *imgname, int *order, con
         }
         bufferlist bl;
         bl.append(p);
-        r = rbd.write(image, file_pos, len, bl);
+        cout << "write_completion=" << (void *)write_completion << std::endl;
+        librbd::RBD::AioCompletion *completion = rbd.aio_create_completion(NULL, write_completion);
+        if (!completion) {
+          r = -ENOMEM;
+          goto done;
+        }
+        r = rbd.aio_write(image, file_pos, len, bl, completion);
+        if (r < 0)
+          goto done;
+	completion->wait_for_complete();
+	completion->release();
         if (r < 0) {
           cerr << "error writing to image block" << std::endl;
           goto done;

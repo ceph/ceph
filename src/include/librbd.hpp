@@ -28,10 +28,8 @@ namespace librbd {
   class RBDClient;
   typedef void *pool_t;
   typedef void *image_t;
-#if 0 // for IO
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
-#endif
 
   typedef struct {
     uint64_t id;
@@ -53,6 +51,14 @@ class RBD
 public:
   RBD() {}
   ~RBD() {}
+
+  struct AioCompletion {
+    void *pc;
+    AioCompletion(void *_pc) : pc(_pc) {}
+    int wait_for_complete();
+    int get_return_value();
+    void release();
+  };
 
   /* We don't allow assignment or copying */
   RBD(const RBD& rhs);
@@ -89,6 +95,10 @@ public:
   int read_iterate(image_t image, off_t ofs, size_t len,
                    int (*cb)(off_t, size_t, const char *, void *), void *arg);
   int write(image_t image, off_t ofs, size_t len, bufferlist& bl);
+
+  AioCompletion *aio_create_completion(void *cb_arg, callback_t complete_cb);
+  int aio_write(image_t image, off_t off, size_t len, bufferlist& bl,
+                AioCompletion *c);
 
   /* lower level access */
   void get_rados_pools(pool_t pool, librados::pool_t *md_pool, librados::pool_t *data_pool);

@@ -16,6 +16,7 @@
 #include "config.h"
 
 #include "common/common_init.h"
+#include "common/Cond.h"
 #include "include/librbd.hpp"
 #include "include/byteorder.h"
 
@@ -88,7 +89,91 @@ namespace librbd {
 class RBDClient
 {
   librados::Rados rados;
+
 public:
+  struct AioCompletion;
+
+  struct AioBlockCompletion {
+    struct AioCompletion *completion;
+    off_t ofs;
+    size_t len;
+    AioBlockCompletion(AioCompletion *aio_completion, off_t _ofs, size_t _len) :
+                                            completion(aio_completion), ofs(_ofs), len(_len) {}
+    void complete(int r);
+  };
+
+  struct AioCompletion {
+    Mutex lock;
+    Cond cond;
+    bool done;
+    int rval;
+    callback_t complete_cb;
+    void *complete_arg;
+    int pending_count;
+    int ref;
+    bool released;
+
+    static void rados_cb(rados_completion_t cb, void *arg);
+
+    AioCompletion() : lock("RBDClient::AioCompletion::lock"), done(false), rval(0), pending_count(0),
+                      ref(1), released(false) {}
+    ~AioCompletion() { cout << "AioCompletion::~AioCompletion()" << std::endl; }
+    int wait_for_complete() {
+      lock.Lock();
+      while (!done)
+	cond.Wait(lock);
+      lock.Unlock();
+      return 0;
+    }
+
+    void add_block_completion(AioBlockCompletion *aio_completion) {
+      cout << "add_block_completion this=" << (void *)this << std::endl;
+      lock.Lock();
+      pending_count++;
+      lock.Unlock();
+      get();
+    }
+
+    void set_complete_cb(void *cb_arg, callback_t cb) {
+      complete_cb = cb;
+      complete_arg = cb_arg;
+    }
+
+    void complete_block(AioBlockCompletion *block_completion, int r);
+
+    int get_return_value() {
+      lock.Lock();
+      int r = rval;
+      lock.Unlock();
+      return r;
+    }
+
+    void get() {
+      lock.Lock();
+      assert(ref > 0);
+      ref++;
+      lock.Unlock();
+    }
+    void release() {
+      lock.Lock();
+      assert(!released);
+      released = true;
+      put_unlock();
+    }
+    void put() {
+      lock.Lock();
+      put_unlock();
+    }
+    void put_unlock() {
+      assert(ref > 0);
+      int n = --ref;
+      lock.Unlock();
+      if (!n)
+	delete this;
+    }
+  };
+  static void rados_cb(rados_completion_t cb, void *arg);
+
   int initialize(int argc, const char *argv[]);
   void shutdown();
 
@@ -139,6 +224,18 @@ public:
                    void *arg);
   int read(PoolCtx *ctx, ImageCtx *ictx, off_t off, size_t len, char *buf);
   int write(PoolCtx *ctx, ImageCtx *ictx, off_t off, size_t len, const char *buf);
+  int aio_write(PoolCtx *pool, ImageCtx *ictx, off_t off, size_t len, const char *buf,
+                AioCompletion *c);
+
+  AioCompletion *aio_create_completion() {
+    return new AioCompletion;
+  }
+  AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete) {
+    AioCompletion *c = new AioCompletion;
+    if (cb_complete)
+      c->set_complete_cb(cb_arg, cb_complete);
+    return c;
+  }
 };
 
 
@@ -966,6 +1063,70 @@ int librbd::RBDClient::write(PoolCtx *ctx, ImageCtx *ictx, off_t off, size_t len
   return total_write;
 }
 
+void librbd::RBDClient::AioBlockCompletion::complete(int r)
+{
+  cout << "AioBlockCompletion::complete()" << std::endl;
+  completion->complete_block(this, r);
+}
+
+void librbd::RBDClient::AioCompletion::complete_block(AioBlockCompletion *block_completion, int r)
+{
+  cout << "RBDClient::AioCompletion::complete_block this=" << (void *)this << std::endl;
+  lock.Lock();
+  if (r < 0 && r != -EEXIST && !rval)
+    rval = r;
+  assert(pending_count);
+  int count = --pending_count;
+  if (!count) {
+    complete_cb(this, complete_arg);
+    done = true;
+    cond.Signal();
+  }
+  put_unlock();
+}
+
+void librbd::RBDClient::rados_cb(rados_completion_t c, void *arg)
+{
+  AioBlockCompletion *block_completion = (AioBlockCompletion *)arg;
+  block_completion->complete(rados_aio_get_return_value(c));
+}
+
+int librbd::RBDClient::aio_write(PoolCtx *pool, ImageCtx *ictx, off_t off, size_t len, const char *buf,
+			         AioCompletion *c)
+{
+  if (!len)
+    return 0;
+
+  int r, total_write = 0;
+  uint64_t start_block = get_block_num(&ictx->header, off);
+  uint64_t end_block = get_block_num(&ictx->header, off + len - 1);
+  uint64_t block_size = get_block_size(&ictx->header);
+  uint64_t left = len;
+
+  if (off + len > ictx->header.image_size)
+    return -EINVAL;
+
+  for (uint64_t i = start_block; i <= end_block; i++) {
+    bufferlist bl;
+    string oid = get_block_oid(&ictx->header, i);
+    uint64_t block_ofs = get_block_ofs(&ictx->header, off + total_write);
+    uint64_t write_len = min(block_size - block_ofs, left);
+    bl.append(buf + total_write, write_len);
+    AioBlockCompletion *block_completion = new AioBlockCompletion(c, off, len);
+    c->add_block_completion(block_completion);
+    librados::Rados::AioCompletion *rados_completion = rados.aio_create_completion(block_completion, NULL, rados_cb);
+    r = rados.aio_write(pool->data, oid, block_ofs, bl, write_len, rados_completion);
+    if (r < 0)
+      goto done;
+    total_write += write_len;
+    left -= write_len;
+  }
+  return 0;
+done:
+  /* FIXME: cleanup all the allocated stuff */
+  return r;
+}
+
 /*
    RBD
 */
@@ -1158,7 +1319,42 @@ int librbd::RBD::write(image_t image, off_t ofs, size_t len, bufferlist& bl)
     return -EINVAL;
   return client->write(ictx->pctx, ictx, ofs, len, bl.c_str());
 }
+
+
+librbd::RBD::AioCompletion *librbd::RBD::aio_create_completion(void *cb_arg, callback_t complete_cb)
+{
+  RBDClient::AioCompletion *c = client->aio_create_completion(cb_arg, complete_cb);
+  return new AioCompletion(c);
 }
+
+int librbd::RBD::aio_write(image_t image, off_t off, size_t len, bufferlist& bl,
+		           AioCompletion *c)
+{
+  ImageCtx *ictx = (ImageCtx *)image;
+  if (bl.length() < len)
+    return -EINVAL;
+  return client->aio_write(ictx->pctx, ictx, off, len, bl.c_str(), (RBDClient::AioCompletion *)c->pc);
+}
+
+int librbd::RBD::AioCompletion::wait_for_complete()
+{
+  RBDClient::AioCompletion *c = (RBDClient::AioCompletion *)pc;
+  return c->wait_for_complete();
+}
+
+int librbd::RBD::AioCompletion::get_return_value()
+{
+  RBDClient::AioCompletion *c = (RBDClient::AioCompletion *)pc;
+  return c->get_return_value();
+}
+
+void librbd::RBD::AioCompletion::release()
+{
+  RBDClient::AioCompletion *c = (RBDClient::AioCompletion *)pc;
+  c->release();
+}
+
+} // namespace librbd
 
 extern "C" void librbd_version(int *major, int *minor, int *extra)
 {
