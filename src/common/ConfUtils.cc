@@ -540,11 +540,12 @@ int ConfLine::output(char *line, int max_len)
 void ConfFile::_dump(int fd)
 {
 	SectionList::iterator sec_iter, sec_end;
-	 ConfLine *cl;
+	ConfLine *cl;
 	char *line;
 	size_t max_line = MAX_LINE;
 	size_t len;
 	char *p;
+	int r;
 
 	line = (char *)malloc(max_line);
 
@@ -573,8 +574,12 @@ void ConfFile::_dump(int fd)
 
 					len = cl->output(line, max_line);
 				} while (len == max_line);
-				::write(fd, line, strlen(line));
-				::write(fd, "\n", 1);
+				r = ::write(fd, line, strlen(line));
+				if (r < 0)
+					return;
+				r = ::write(fd, "\n", 1);
+				if (r < 0)
+					return;
 			}
 		}
 	}
