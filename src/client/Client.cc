@@ -4262,7 +4262,7 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
 
     dout(10) << "off " << off << " this_offset " << hex << dirp->this_offset << dec << " size " << dirp->buffer->size()
 	     << " frag " << fg << dendl;
-    while (off - dirp->this_offset >= 0 &&
+    while (off >= dirp->this_offset &&
 	   off - dirp->this_offset < dirp->buffer->size()) {
       uint64_t pos = DirResult::make_fpos(fg, off);
       pair<string,Inode*>& ent = (*dirp->buffer)[off - dirp->this_offset];
