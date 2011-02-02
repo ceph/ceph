@@ -31,7 +31,7 @@ static struct errno_http hterrs[] = {
     { EEXIST, "409", "BucketAlreadyExists" },
     { ENOTEMPTY, "409", "BucketNotEmpty" },
     { ERANGE, "416", "InvalidRange" },
-    { 0, NULL }};
+    { 0, NULL, NULL }};
 
 void dump_errno(struct req_state *s, int err, struct rgw_err *rgwerr)
 {
