@@ -469,8 +469,7 @@ public:
 
     void copy_out(unsigned o, unsigned l, char *dest) const {
       assert(_raw);
-      if (!((o >= 0 && o <= _len) &&
-	    (l >= 0 && o+l <= _len)))
+      if (!((o <= _len) && (o+l <= _len)))
 	throw end_of_buffer();
       memcpy(dest, c_str()+o, l);
     }
@@ -513,8 +512,8 @@ public:
     
     void copy_in(unsigned o, unsigned l, const char *src) {
       assert(_raw);
-      assert(o >= 0 && o <= _len);
-      assert(l >= 0 && o+l <= _len);
+      assert(o <= _len);
+      assert(o+l <= _len);
       memcpy(c_str()+o, src, l);
     }
 
@@ -895,7 +894,6 @@ public:
     // data OUT
 
     void copy(unsigned off, unsigned len, char *dest) const {
-      assert(off >= 0);
       if (off + len > length())
 	throw end_of_buffer();
       if (last_p.get_off() != off) 
@@ -904,7 +902,6 @@ public:
     }
 
     void copy(unsigned off, unsigned len, list &dest) const {
-      assert(off >= 0);
       if (off + len > length())
 	throw end_of_buffer();
       if (last_p.get_off() != off) 
@@ -919,7 +916,6 @@ public:
     }
     
     void copy_in(unsigned off, unsigned len, const char *src) {
-      assert(off >= 0);
       if (off + len > length())
 	throw end_of_buffer();
       
@@ -1106,7 +1102,6 @@ public:
 	  break;
 	}
       }
-      assert(off >= 0);
       
       if (off) {
 	// add a reference to the front bit
