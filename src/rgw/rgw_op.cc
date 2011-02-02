@@ -433,7 +433,6 @@ int RGWCopyObj::init_common()
 {
   struct rgw_err err;
   RGWAccessControlPolicy dest_policy;
-  bool ret;
   bufferlist aclbl;
   bufferlist bl;
   RGWAccessControlPolicy src_policy;
