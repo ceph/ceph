@@ -599,7 +599,7 @@ int FileStore::wipe_subvol(const char *s)
 	strcmp(de->d_name, "..") == 0)
       continue;
     ostringstream oss;
-    oss << basedir << "/" << de->d_name;
+    oss << old_dir.str().c_str() << "/" << de->d_name;
     int ret = run_cmd("rm", "-rf", oss.str().c_str(), NULL);
     if (ret) {
       derr << "FileStore::wipe_subvol: failed to remove " << oss.str() << ": "
