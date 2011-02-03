@@ -449,6 +449,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_data, 0, OPT_STR, ""),
 	OPTION(osd_journal, 0, OPT_STR, ""),
 	OPTION(osd_journal_size, 0, OPT_INT, 0),         // in mb
+	OPTION(osd_max_write_size, 0, OPT_INT, 90),
 	OPTION(osd_balance_reads, 0, OPT_BOOL, false),
 	OPTION(osd_flash_crowd_iat_threshold, 0, OPT_INT, 0),
 	OPTION(osd_flash_crowd_iat_alpha, 0, OPT_DOUBLE, 0.125),

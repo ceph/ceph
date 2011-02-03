@@ -353,6 +353,7 @@ struct md_config_t {
   const char *osd_data;
   const char *osd_journal;
   int osd_journal_size;  // in mb
+  int osd_max_write_size; // in MB
   bool osd_balance_reads;
   int osd_flash_crowd_iat_threshold;  // flash crowd interarrival time threshold in ms
   double osd_flash_crowd_iat_alpha;
