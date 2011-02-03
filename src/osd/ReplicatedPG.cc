@@ -349,13 +349,19 @@ void ReplicatedPG::do_op(MOSDOp *op)
   snapid_t snapid;
   int r = find_object_context(op->get_oid(), op->get_object_locator(),
 			      op->get_snapid(), &obc, can_create, &snapid);
+
   if (r) {
     if (r == -EAGAIN) {
-      // missing the specific snap we need; requeue and wait.
-      assert(!can_create); // only happens on a read
-      sobject_t soid(op->get_oid(), snapid);
-      wait_for_missing_object(soid, op);
-      return;
+      // If we're not the primary of this OSD, and we have
+      // CEPH_OSD_FLAG_LOCALIZE_READS set, we just return -EAGAIN. Otherwise,
+      // we have to wait for the object.
+      if (is_primary() || (!(op->get_rmw_flags() & CEPH_OSD_FLAG_LOCALIZE_READS))) {
+	// missing the specific snap we need; requeue and wait.
+	assert(!can_create); // only happens on a read
+	sobject_t soid(op->get_oid(), snapid);
+	wait_for_missing_object(soid, op);
+	return;
+      }
     }
     osd->reply_op_error(op, r);
     return;

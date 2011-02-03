@@ -882,12 +882,14 @@ static int do_import(pool_t pool, const char *imgname, int order, const char *pa
         uint64_t len = seg_left;
         bufferptr p(len);
         cerr << "reading " << len << " bytes at offset " << file_pos << std::endl;
-        len = pread(fd, p.c_str(), len, file_pos);
-        if (len < 0) {
+        ssize_t ret = pread(fd, p.c_str(), len, file_pos);
+        if (ret < 0) {
           r = -errno;
           cerr << "error reading file\n" << std::endl;
           goto done;
-        }
+        } else {
+	  len = ret;
+	}
         bufferlist bl;
         bl.append(p);
         string oid = get_block_oid(&header, i);

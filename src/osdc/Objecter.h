@@ -275,6 +275,7 @@ public:
 
     pg_t pgid;
     vector<int> acting;
+    bool used_replica;
 
     Connection *con;  // for rx buffer only
 
@@ -303,7 +304,7 @@ public:
        int f, Context *ac, Context *co, eversion_t *ov) :
       session(NULL), session_item(this), incarnation(0),
       oid(o), oloc(ol),
-      con(NULL),
+      used_replica(false), con(NULL),
       snapid(CEPH_NOSNAP), outbl(0), flags(f), priority(0), onack(ac), oncommit(co), 
       tid(0), attempts(0),
       paused(false), objver(ov) {
@@ -501,7 +502,7 @@ public:
   map<epoch_t,list< pair<Context*, int> > > waiting_for_map;
 
   void send_op(Op *op);
-  bool is_pg_changed(vector<int>& a, vector<int>& b);
+  bool is_pg_changed(vector<int>& a, vector<int>& b, bool any_change=false);
   bool recalc_op_target(Op *op);
   bool recalc_linger_op_target(LingerOp *op);
 
