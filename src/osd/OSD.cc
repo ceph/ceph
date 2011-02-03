@@ -178,16 +178,15 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
 
     // age?
     if (g_conf.osd_age_time != 0) {
-      dout(0) << "aging..." << dendl;
-      Ager ager(store);
-      if (g_conf.osd_age_time < 0)
-	ager.load_freelist();
-      else
+      if (g_conf.osd_age_time >= 0) {
+	dout(0) << "aging..." << dendl;
+	Ager ager(store);
 	ager.age(g_conf.osd_age_time,
 		 g_conf.osd_age,
 		 g_conf.osd_age - .05,
 		 50000,
 		 g_conf.osd_age - .05);
+      }
     }
 
     // benchmark?

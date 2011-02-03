@@ -36,9 +36,6 @@ class Ager {
           int count,         // this many times
           float final_water,   // and end here ( <= low_water)
           int fake_size_mb=0);
-
-  void save_freelist(int);
-  void load_freelist();
 };
 
 #endif
