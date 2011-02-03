@@ -438,6 +438,11 @@ shell_common_SCRIPTS = ceph_common.sh
 libceph_includedir = $(includedir)/ceph
 libceph_include_DATA = $(srcdir)/client/libceph.h
 
+librbd_includedir = $(includedir)/rbd
+librbd_include_DATA = \
+	$(srcdir)/include/librbd.h \
+	$(srcdir)/include/librbd.hpp
+
 rados_includedir = $(includedir)/rados
 rados_include_DATA = \
 	$(srcdir)/include/librados.h \
