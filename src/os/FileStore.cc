@@ -595,9 +595,8 @@ int FileStore::wipe_subvol(const char *s)
   while (::readdir_r(dir, (struct dirent*)buf, &de) == 0) {
     if (!de)
       break;
-    if (strcmp(de->d_name, "."))
-      continue;
-    if (strcmp(de->d_name, ".."))
+    if (strcmp(de->d_name, ".") == 0 ||
+	strcmp(de->d_name, "..") == 0)
       continue;
     ostringstream oss;
     oss << basedir << "/" << de->d_name;
