@@ -12,7 +12,7 @@ typedef char bool;
 #include "include/ceph_fs.h"
 #include "locks.h"
 
-struct sm_state_t simplelock[LOCK_MAX] = {
+static const struct sm_state_t simplelock[LOCK_MAX] = {
                       // stable     loner  rep state  r     rp   rd   wr   fwr  l    x    caps,other
     [LOCK_SYNC]      = { 0,         false, LOCK_SYNC, ANY,  0,   ANY, 0,   0,   ANY, 0,   CEPH_CAP_GSHARED,0,0,CEPH_CAP_GSHARED },
     [LOCK_LOCK_SYNC] = { LOCK_SYNC, false, LOCK_LOCK, ANY,  XCL, XCL, 0,   0,   XCL, 0,   0,0,0,0 },
@@ -36,7 +36,7 @@ struct sm_state_t simplelock[LOCK_MAX] = {
 
 };
 
-struct sm_t sm_simplelock = {
+const struct sm_t sm_simplelock = {
 	.states = simplelock,
 	.allowed_ever_auth = CEPH_CAP_GSHARED | CEPH_CAP_GEXCL,
 	.allowed_ever_replica = CEPH_CAP_GSHARED,
@@ -50,7 +50,7 @@ struct sm_t sm_simplelock = {
 //  Tempsync _/
 // (out of date)
 
-struct sm_state_t scatterlock[LOCK_MAX] = {
+static const struct sm_state_t scatterlock[LOCK_MAX] = {
                       // stable     loner  rep state  r     rp   rd   wr   fwr  l    x    caps,other
     [LOCK_SYNC]      = { 0,         false, LOCK_SYNC, ANY,  0,   ANY, 0,   0,   ANY, 0,   CEPH_CAP_GSHARED,0,0,CEPH_CAP_GSHARED },
     [LOCK_LOCK_SYNC] = { LOCK_SYNC, false, LOCK_LOCK, AUTH, 0,   0,   0,   0,   0,   0,   0,0,0,0 },
@@ -72,7 +72,7 @@ struct sm_state_t scatterlock[LOCK_MAX] = {
     [LOCK_SYNC_MIX2] = { LOCK_MIX,  false, 0,         0,    0,   0,   0,   0,   0,   0,   0,0,0,0 },
 };
 
-struct sm_t sm_scatterlock = {
+const struct sm_t sm_scatterlock = {
 	.states = scatterlock,
 	.allowed_ever_auth = CEPH_CAP_GSHARED | CEPH_CAP_GEXCL,
 	.allowed_ever_replica = CEPH_CAP_GSHARED,
@@ -80,7 +80,7 @@ struct sm_t sm_scatterlock = {
 	.can_remote_xlock = 0,
 };
 
-struct sm_state_t filelock[LOCK_MAX] = {
+const struct sm_state_t filelock[LOCK_MAX] = {
                       // stable     loner  rep state  r     rp   rd   wr   fwr  l    x    caps(any,loner,xlocker,replica)
     [LOCK_SYNC]      = { 0,         false, LOCK_SYNC, ANY,  0,   ANY, 0,   0,   ANY, 0,   CEPH_CAP_GSHARED|CEPH_CAP_GCACHE|CEPH_CAP_GRD,0,0,CEPH_CAP_GSHARED|CEPH_CAP_GCACHE|CEPH_CAP_GRD },
     [LOCK_LOCK_SYNC] = { LOCK_SYNC, false, LOCK_LOCK, AUTH, 0,   0,   0,   0,   0,   0,   CEPH_CAP_GCACHE,0,0,0 },
@@ -115,7 +115,7 @@ struct sm_state_t filelock[LOCK_MAX] = {
     [LOCK_SCAN_LOCK] = { LOCK_LOCK, false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,   0,0,0,0 },
 };
 
-struct sm_t sm_filelock = {
+const struct sm_t sm_filelock = {
 	.states = filelock,
 	.allowed_ever_auth = (CEPH_CAP_GSHARED |
 			      CEPH_CAP_GEXCL |
@@ -137,12 +137,12 @@ struct sm_t sm_filelock = {
 };
 
 
-struct sm_state_t locallock[LOCK_MAX] = {
+const struct sm_state_t locallock[LOCK_MAX] = {
                       // stable     loner  rep state  r     rp   rd   wr   fwr  l    x    caps(any,loner,xlocker,replica)
     [LOCK_LOCK]      = { 0,         false, LOCK_LOCK, ANY,  0,   ANY, 0,   0,   ANY, AUTH,0,0,0,0 },
 };
 
-struct sm_t sm_locallock = {
+const struct sm_t sm_locallock = {
   .states = locallock,
   .allowed_ever_auth = 0,
   .allowed_ever_replica = 0,

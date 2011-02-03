@@ -19,7 +19,7 @@ struct errno_http {
   const char *default_code;
 };
 
-static struct errno_http hterrs[] = {
+const static struct errno_http hterrs[] = {
     { 0, "200", "" },
     { 204, "204", "NoContent" },
     { 206, "206", "" },

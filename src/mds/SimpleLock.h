@@ -51,7 +51,7 @@ extern "C" {
 
 struct LockType {
   int type;
-  sm_t *sm;
+  const sm_t *sm;
 
   LockType(int t) : type(t) {
     switch (type) {

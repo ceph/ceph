@@ -224,7 +224,7 @@ static int ceph_releasedir(const char *path, struct fuse_file_info *fi)
 
 
 
-static struct fuse_operations ceph_oper = {
+const static struct fuse_operations ceph_oper = {
   getattr: ceph_getattr,
   readlink: ceph_readlink,
   getdir: 0,
