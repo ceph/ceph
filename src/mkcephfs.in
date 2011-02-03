@@ -94,6 +94,9 @@ verify_conf
 
 get_name_list "$@"
 
+TDIR=`mktemp -d -t mkcephfs.XXXXXXXXXX` || exit 1
+trap "rm -rf ${TDIR}; exit" INT TERM EXIT
+
 # do core fs initialization steps
 if true; then
     # first, make a list of monitors
@@ -108,12 +111,12 @@ if true; then
     done
 
     # build monmap
-    monmap="/tmp/monmap.$$"
+    monmap="$TDIR/monmap.$$"
     echo $BINDIR/monmaptool --create --clobber $args --print $monmap || exit 1
     $BINDIR/monmaptool --create --clobber $args --print $monmap || exit 1
 
     # build osdmap
-    osdmap="/tmp/osdmap.$$"
+    osdmap="$TDIR/osdmap.$$"
     if [ -z "$numosd" ]; then
 	# find highest osd id - assumes the conf file complies with osd numbering requirements
 	maxosd=`$CCONF -c $conf -l osd | egrep -v '^osd$' | cut -c 4- | sort -n | tail -1`
@@ -126,7 +129,7 @@ if true; then
     get_conf crushmapsrc "$usecrushmapsrc" "crush map src" mon global
     if [ -n "$crushmapsrc" ]; then
 	echo Compiling crush map from $crushmapsrc to $crushmap
-	crushmap="/tmp/crushmap.$$"
+	crushmap="$TDIR/crushmap.$$"
 	$BINDIR/crushtool -c $crushmapsrc -o $crushmap
     fi
     get_conf crushmap "$usecrushmap" "crush map" mon global
@@ -136,7 +139,7 @@ if true; then
     fi
 
     # admin keyring
-    [ -z "$adminkeyring" ] && adminkeyring="/tmp/admin.keyring.$$"
+    [ -z "$adminkeyring" ] && adminkeyring="$TDIR/admin.keyring.$$"
     echo Building admin keyring at $adminkeyring
     [ -e "$monkeyring" ] && rm -f $monkeyring
     $BINDIR/cauthtool --create-keyring --gen-key --name=client.admin --set-uid=0 \
@@ -147,7 +150,7 @@ if true; then
 
     # mon keyring (for monitor)
     echo Building monitor keyring with all service keys
-    monkeyring="/tmp/monkeyring.$$"
+    monkeyring="$TDIR/monkeyring.$$"
     $BINDIR/cauthtool --create-keyring --gen-key --name=mon. $monkeyring
 
     $BINDIR/cauthtool --import-keyring $adminkeyring $monkeyring
@@ -160,20 +163,20 @@ if true; then
 	    $BINDIR/cauthtool --create-keyring --gen-key --name=osd.$id \
 		--cap mon 'allow rwx' \
 		--cap osd 'allow *' \
-		/tmp/keyring.osd.$id
-	    $BINDIR/cauthtool --import-keyring /tmp/keyring.osd.$id $monkeyring
+		$TDIR/keyring.osd.$id
+	    $BINDIR/cauthtool --import-keyring $TDIR/keyring.osd.$id $monkeyring
 	fi
 	if [ "$type" = "mds" ]; then
 	    $BINDIR/cauthtool --create-keyring --gen-key --name=mds.$id \
 		--cap mon 'allow rwx' \
 		--cap osd 'allow *' \
 		--cap mds 'allow' \
-		/tmp/keyring.mds.$id
-	    $BINDIR/cauthtool --import-keyring /tmp/keyring.mds.$id $monkeyring
+		$TDIR/keyring.mds.$id
+	    $BINDIR/cauthtool --import-keyring $TDIR/keyring.mds.$id $monkeyring
 	fi
     done
 
-    tmpkeyring="/tmp/keyring.$$"
+    tmpkeyring="$TDIR/keyring.$$"
 fi
 
 
@@ -246,17 +249,17 @@ for name in $what; do
 	if [ -n "$keyring" ]; then
 	    if [ -n "$ssh" ]; then
 		if [ -n "$user" ]; then
-		    scp /tmp/keyring.osd.$id $user@$host:$keyring
+		    scp $TDIR/keyring.osd.$id $user@$host:$keyring
 		else
-		    scp /tmp/keyring.osd.$id $host:$keyring
+		    scp $TDIR/keyring.osd.$id $host:$keyring
 		fi
 	    else
-		cp -v /tmp/keyring.osd.$id $keyring
+		cp -v $TDIR/keyring.osd.$id $keyring
 	    fi
 	else
 	    echo WARNING: no keyring specified for $name
 	fi
-	rm -f /tmp/keyring.osd.$id
+	rm -f $TDIR/keyring.osd.$id
     fi
 
     if [ "$type" = "mds" ]; then
@@ -264,17 +267,17 @@ for name in $what; do
 	if [ -n "$keyring" ]; then
 	    if [ -n "$ssh" ]; then
 		if [ -n "$user" ]; then
-		    scp /tmp/keyring.mds.$id $user@$host:$keyring
+		    scp $TDIR/keyring.mds.$id $user@$host:$keyring
 		else
-		    scp /tmp/keyring.mds.$id $host:$keyring
+		    scp $TDIR/keyring.mds.$id $host:$keyring
 		fi
 	    else
-		cp -v /tmp/keyring.mds.$id $keyring
+		cp -v $TDIR/keyring.mds.$id $keyring
 	    fi
 	else
 	    echo WARNING: no keyring specified for $name
 	fi
-	rm -f /tmp/keyring.mds.$id
+	rm -f $TDIR/keyring.mds.$id
     fi
 
 done
