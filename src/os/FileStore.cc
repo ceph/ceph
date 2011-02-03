@@ -567,8 +567,12 @@ int FileStore::wipe_subvol(const char *s)
   memset(&volargs, 0, sizeof(volargs));
   strcpy(volargs.name, s);
   int fd = ::open(basedir.c_str(), O_RDONLY);
-  if (fd < 0)
-    return -errno;
+  if (fd < 0) {
+    int err = errno;
+    derr << "FileStore::wipe_subvol: failed to open " << basedir << ": "
+	 << cpp_strerror(err) << dendl;
+    return -err;
+  }
   int r = ::ioctl(fd, BTRFS_IOC_SNAP_DESTROY, &volargs);
   TEMP_FAILURE_RETRY(::close(fd));
   if (r == 0) {
@@ -577,9 +581,36 @@ int FileStore::wipe_subvol(const char *s)
   }
 
   dout(0) << "mkfs  removing old directory " << s << dendl;
+  ostringstream old_dir;
+  old_dir << basedir << "/" << s;
+  DIR *dir = ::opendir(old_dir.str().c_str());
+  if (!dir) {
+    int err = errno;
+    derr << "FileStore::wipe_subvol: failed to opendir " << old_dir << ": "
+	 << cpp_strerror(err) << dendl;
+    return -err;
+  }
+  struct dirent *de;
   char buf[PATH_MAX];
-  snprintf(buf, sizeof(buf), "%s/%s", basedir.c_str(), s);
-  return run_cmd("rm", "-r", buf, NULL);
+  while (::readdir_r(dir, (struct dirent*)buf, &de) == 0) {
+    if (!de)
+      break;
+    if (strcmp(de->d_name, "."))
+      continue;
+    if (strcmp(de->d_name, ".."))
+      continue;
+    ostringstream oss;
+    oss << basedir << "/" << de->d_name;
+    int ret = run_cmd("rm", "-rf", oss.str().c_str(), NULL);
+    if (ret) {
+      derr << "FileStore::wipe_subvol: failed to remove " << oss.str() << ": "
+	   << "error " << ret << dendl;
+      ::closedir(dir);
+      return ret;
+    }
+  }
+  ::closedir(dir);
+  return 0;
 }
 
 int FileStore::mkfs()
