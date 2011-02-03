@@ -226,13 +226,12 @@ void librbd::RBDClient::trim_image(PoolCtx *pp, rbd_obj_header_ondisk *header, u
   uint64_t numseg = get_max_block(header);
   uint64_t start = get_block_num(header, newsize);
 
-  cout << "trimming image data from " << numseg << " to " << start << " objects..." << std::endl;
+  dout(2) << "trimming image data from " << numseg << " to " << start << " objects..." << dendl;
   for (uint64_t i=start; i<numseg; i++) {
     string oid = get_block_oid(header, i);
     rados.remove(pp->data, oid);
     if ((i & 127) == 0) {
-      cout << "\r\t" << i << "/" << numseg;
-      cout.flush();
+      dout(2) << "\r\t" << i << "/" << numseg << dendl;
     }
   }
 }
@@ -440,7 +439,7 @@ int librbd::RBDClient::create(pool_t& pool, string& md_oid, const char *imgname,
   // make sure it doesn't already exist
   int r = rados.stat(pool, md_oid, NULL, NULL);
   if (r == 0) {
-    cerr << "rbd image header " << md_oid << " already exists" << std::endl;
+    derr << "rbd image header " << md_oid << " already exists" << dendl;
     return -EEXIST;
   }
 
@@ -448,7 +447,7 @@ int librbd::RBDClient::create(pool_t& pool, string& md_oid, const char *imgname,
   string dir_info = RBD_INFO;
   r = rbd_assign_bid(pool, dir_info, &bid);
   if (r < 0) {
-    cerr << "failed to assign a block name for image" << std::endl;
+    derr << "failed to assign a block name for image" << dendl;
     return r;
   }
 
@@ -458,7 +457,7 @@ int librbd::RBDClient::create(pool_t& pool, string& md_oid, const char *imgname,
   bufferlist bl;
   bl.append((const char *)&header, sizeof(header));
 
-  cout << "adding rbd image to directory..." << std::endl;
+  dout(2) << "adding rbd image to directory..." << dendl;
   bufferlist cmdbl, emptybl;
   __u8 c = CEPH_OSD_TMAP_SET;
   ::encode(c, cmdbl);
@@ -466,18 +465,18 @@ int librbd::RBDClient::create(pool_t& pool, string& md_oid, const char *imgname,
   ::encode(emptybl, cmdbl);
   r = rados.tmap_update(pool, RBD_DIRECTORY, cmdbl);
   if (r < 0) {
-    cerr << "error adding img to directory: " << strerror(-r)<< std::endl;
+    derr << "error adding img to directory: " << strerror(-r)<< dendl;
     return r;
   }
 
-  cout << "creating rbd image..." << std::endl;
+  dout(2) << "creating rbd image..." << dendl;
   r = rados.write(pool, md_oid, 0, bl, bl.length());
   if (r < 0) {
-    cerr << "error writing header: " << strerror(-r) << std::endl;
+    derr << "error writing header: " << strerror(-r) << dendl;
     return r;
   }
 
-  cout << "done." << std::endl;
+  dout(2) << "done." << dendl;
   return 0;
 }
 
@@ -493,32 +492,32 @@ int librbd::RBDClient::rename(PoolCtx *pp, const char *srcname, const char *dstn
   bufferlist header;
   int r = read_header_bl(pp->md, md_oid, header, &ver);
   if (r < 0) {
-    cerr << "error reading header: " << md_oid << ": " << strerror(-r) << std::endl;
+    derr << "error reading header: " << md_oid << ": " << strerror(-r) << dendl;
     return r;
   }
   r = rados.stat(pp->md, dst_md_oid, NULL, NULL);
   if (r == 0) {
-    cerr << "rbd image header " << dst_md_oid << " already exists" << std::endl;
+    derr << "rbd image header " << dst_md_oid << " already exists" << dendl;
     return -EEXIST;
   }
   r = write_header(pp, dst_md_oid, header);
   if (r < 0) {
-    cerr << "error writing header: " << dst_md_oid << ": " << strerror(-r) << std::endl;
+    derr << "error writing header: " << dst_md_oid << ": " << strerror(-r) << dendl;
     return r;
   }
   r = tmap_set(pp, dstname_str);
   if (r < 0) {
     rados.remove(pp->md, dst_md_oid);
-    cerr << "can't add " << dst_md_oid << " to directory" << std::endl;
+    derr << "can't add " << dst_md_oid << " to directory" << dendl;
     return r;
   }
   r = tmap_rm(pp, imgname_str);
   if (r < 0)
-    cerr << "warning: couldn't remove old entry from directory (" << imgname_str << ")" << std::endl;
+    derr << "warning: couldn't remove old entry from directory (" << imgname_str << ")" << dendl;
 
   r = rados.remove(pp->md, md_oid);
   if (r < 0)
-    cerr << "warning: couldn't remove old metadata" << std::endl;
+    derr << "warning: couldn't remove old metadata" << dendl;
 
   return 0;
 }
@@ -539,22 +538,22 @@ int librbd::RBDClient::remove(PoolCtx *pp, const char *imgname)
   int r = read_header(pp->md, md_oid, &header, NULL);
   if (r >= 0) {
     trim_image(pp, &header, 0);
-    cout << "\rremoving header..." << std::endl;
+    dout(2) << "\rremoving header..." << dendl;
     rados.remove(pp->md, md_oid);
   }
 
-  cout << "removing rbd image to directory..." << std::endl;
+  dout(2) << "removing rbd image to directory..." << dendl;
   bufferlist cmdbl;
   __u8 c = CEPH_OSD_TMAP_RM;
   ::encode(c, cmdbl);
   ::encode(imgname, cmdbl);
   r = rados.tmap_update(pp->md, RBD_DIRECTORY, cmdbl);
   if (r < 0) {
-    cerr << "error removing img from directory: " << strerror(-r)<< std::endl;
+    derr << "error removing img from directory: " << strerror(-r)<< dendl;
     return r;
   }
 
-  cout << "done." << std::endl;
+  dout(2) << "done." << dendl;
   return 0;
 }
 
@@ -565,15 +564,15 @@ int librbd::RBDClient::resize(PoolCtx *pp, ImageCtx *ictx, uint64_t size)
 
   // trim
   if (size == ictx->header.image_size) {
-    cout << "no change in size (" << size << " -> " << ictx->header.image_size << ")" << std::endl;
+    dout(2) << "no change in size (" << size << " -> " << ictx->header.image_size << ")" << dendl;
     return 0;
   }
 
   if (size > ictx->header.image_size) {
-    cout << "expanding image " << size << " -> " << ictx->header.image_size << " objects" << std::endl;
+    dout(2) << "expanding image " << size << " -> " << ictx->header.image_size << " objects" << dendl;
     ictx->header.image_size = size;
   } else {
-    cout << "shrinking image " << size << " -> " << ictx->header.image_size << " objects" << std::endl;
+    dout(2) << "shrinking image " << size << " -> " << ictx->header.image_size << " objects" << dendl;
     trim_image(pp, &(ictx->header), size);
     ictx->header.image_size = size;
   }
@@ -583,15 +582,15 @@ int librbd::RBDClient::resize(PoolCtx *pp, ImageCtx *ictx, uint64_t size)
   bl.append((const char *)&(ictx->header), sizeof(ictx->header));
   int r = rados.write(pp->md, md_oid, 0, bl, bl.length());
   if (r == -ERANGE)
-    cerr << "operation might have conflicted with another client!" << std::endl;
+    derr << "operation might have conflicted with another client!" << dendl;
   if (r < 0) {
-    cerr << "error writing header: " << strerror(-r) << std::endl;
+    derr << "error writing header: " << strerror(-r) << dendl;
     return r;
   } else {
     notify_change(pp->md, md_oid, NULL);
   }
 
-  cout << "done." << std::endl;
+  dout(2) << "done." << dendl;
   return 0;
 }
 
@@ -622,7 +621,7 @@ int librbd::RBDClient::add_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_na
 
   int r = rados.selfmanaged_snap_create(pp->md, &snap_id);
   if (r < 0) {
-    cerr << "failed to create snap id: " << strerror(-r) << std::endl;
+    derr << "failed to create snap id: " << strerror(-r) << dendl;
     return r;
   }
 
@@ -631,7 +630,7 @@ int librbd::RBDClient::add_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_na
 
   r = rados.exec(pp->md, md_oid, "rbd", "snap_add", bl, bl2);
   if (r < 0) {
-    cerr << "rbd.snap_add execution failed failed: " << strerror(-r) << std::endl;
+    derr << "rbd.snap_add execution failed failed: " << strerror(-r) << dendl;
     return r;
   }
   notify_change(pp->md, md_oid, NULL);
@@ -647,7 +646,7 @@ int librbd::RBDClient::rm_snap(PoolCtx *pp, string& md_oid, const char *snap_nam
 
   int r = rados.exec(pp->md, md_oid, "rbd", "snap_remove", bl, bl2);
   if (r < 0) {
-    cerr << "rbd.snap_remove execution failed failed: " << strerror(-r) << std::endl;
+    derr << "rbd.snap_remove execution failed failed: " << strerror(-r) << dendl;
     return r;
   }
 
@@ -685,7 +684,7 @@ int librbd::RBDClient::get_snapc(PoolCtx *pp, string& md_oid, const char *snap_n
   }
 
   if (!ictx->snapc.is_valid()) {
-    cerr << "image snap context is invalid! can't rollback" << std::endl;
+    derr << "image snap context is invalid! can't rollback" << dendl;
     return -EIO;
   }
 
@@ -743,13 +742,13 @@ int librbd::RBDClient::copy(PoolCtx *pp, const char *srcname, PoolCtx *pp_dest, 
 
   r = create(pp_dest->md, dest_md_oid, destname, header.image_size, &order);
   if (r < 0) {
-    cerr << "header creation failed" << std::endl;
+    derr << "header creation failed" << dendl;
     return r;
   }
 
   ret = read_header(pp_dest->md, dest_md_oid, &dest_header, NULL);
   if (ret < 0) {
-    cerr << "failed to read newly created header" << std::endl;
+    derr << "failed to read newly created header" << dendl;
     return ret;
   }
 
@@ -771,7 +770,7 @@ int librbd::RBDClient::copy(PoolCtx *pp, const char *srcname, PoolCtx *pp_dest, 
       size_t extent_len = iter->second;
       bufferlist wrbl;
       if (extent_ofs + extent_len > bl.length()) {
-	cerr << "data error!" << std::endl;
+	derr << "data error!" << dendl;
 	return -EIO;
       }
       bl.copy(extent_ofs, extent_len, wrbl);
@@ -841,14 +840,14 @@ int librbd::RBDClient::open_pools(const char *pool_name, PoolCtx *ctx)
 
   int r = rados.open_pool(pool_name, &md_pool);
   if (r < 0) {
-    cerr << "error opening pool " << pool_name << " (err=" << r << ")" << std::endl;
+    derr << "error opening pool " << pool_name << " (err=" << r << ")" << dendl;
     return -1;
   }
   ctx->md = md_pool;
 
   r = rados.open_pool(pool_name, &pool);
   if (r < 0) {
-    cerr << "error opening pool " << pool_name << " (err=" << r << ")" << std::endl;
+    derr << "error opening pool " << pool_name << " (err=" << r << ")" << dendl;
     close_pools(ctx);
     return -1;
   }
@@ -1199,7 +1198,7 @@ extern "C" void rbd_shutdown()
 {
   rbd_init_mutex.Lock();
   if (!rbd_initialized) {
-    cerr << "rbd_shutdown() called without rbd_initialize()" << std::endl;
+    derr << "rbd_shutdown() called without rbd_initialize()" << dendl;
     rbd_init_mutex.Unlock();
     return;
   }
