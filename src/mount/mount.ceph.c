@@ -248,7 +248,12 @@ static char *parse_options(const char *data, int *filesys_flags)
 			int fd;
 			int len;
 
-			while (*end && *end != ',')
+			if (!fn || !*fn) {
+				printf("keyword secretfile found, but no secret file specified\n");
+				return NULL;
+			}
+
+			while (*end)
 				end++;
 			fd = open(fn, O_RDONLY);
 			if (fd < 0) {

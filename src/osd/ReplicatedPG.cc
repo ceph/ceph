@@ -626,8 +626,11 @@ void ReplicatedPG::do_sub_op_reply(MOSDSubOpReply *r)
 
 bool ReplicatedPG::snap_trimmer()
 {
-  assert(is_primary() && is_clean());
   lock();
+  if (!(is_primary() && is_clean() && is_active())) {
+    unlock();
+    return true;
+  }
   dout(10) << "snap_trimmer start, purged_snaps " << info.purged_snaps << dendl;
 
   interval_set<snapid_t> s;
