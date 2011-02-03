@@ -3464,7 +3464,6 @@ OSDMap *OSD::get_map(epoch_t epoch)
       incs.push_front(inc);
     }
   }
-  assert(e >= 0);
 
   // apply incrementals
   for (e++; e <= epoch; e++) {

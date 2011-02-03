@@ -148,9 +148,10 @@ inline utime_t& operator-=(utime_t& l, double f) {
   double fs = trunc(f);
   double ns = (f - fs) * (double)1000000000.0;
   l.sec_ref() -= (long)fs;
-  if (ns) {
+  long nsl = (long)ns;
+  if (nsl) {
     l.sec_ref()--;
-    l.nsec_ref() = 1000000000L + l.nsec_ref() - (long)ns;
+    l.nsec_ref() = 1000000000L + l.nsec_ref() - nsl;
   }
   l.normalize();
   return l;

@@ -3010,8 +3010,10 @@ void Server::handle_client_setdirlayout(MDRequest *mdr)
   default_file_layout *layout = new default_file_layout;
   if (cur->get_projected_dir_layout())
     layout->layout = *cur->get_projected_dir_layout();
-  else
+  else {
     layout->layout = g_default_file_layout;
+    layout->layout.fl_pg_pool = mds->mdsmap->get_data_pg_pool();
+  }
 
   if (req->head.args.setlayout.layout.fl_object_size > 0)
     layout->layout.fl_object_size = req->head.args.setlayout.layout.fl_object_size;

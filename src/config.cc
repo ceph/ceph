@@ -61,6 +61,8 @@ struct ceph_file_layout g_default_file_layout = {
  fl_object_size: init_le32(1<<22),
  fl_cas_hash: init_le32(0),
  fl_object_stripe_unit: init_le32(0),
+ fl_pg_preferred : init_le32(-1),
+ fl_pg_pool : init_le32(-1),
 };
 
 static void env_override(char **ceph_var, const char * const env_var)

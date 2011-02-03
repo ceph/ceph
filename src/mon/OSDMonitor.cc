@@ -1740,10 +1740,6 @@ bool OSDMonitor::preprocess_pool_op(MPoolOp *m)
     return preprocess_pool_op_create(m);
   }
 
-  if (m->pool < 0 ) {
-    _pool_op(m, -ENOENT, pending_inc.epoch);
-    return true; //done with this message
-  }
   bool snap_exists = false;
   pg_pool_t *pp = 0;
   if (pending_inc.new_pools.count(m->pool))

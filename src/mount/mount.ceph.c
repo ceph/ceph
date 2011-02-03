@@ -12,7 +12,7 @@
 #define BUF_SIZE 128
 
 int verboseflag = 0;
-const static char * const EMPTY_STRING = "";
+static const char * const EMPTY_STRING = "";
 
 #include "mtab.c"
 
