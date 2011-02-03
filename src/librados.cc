@@ -38,8 +38,8 @@ using namespace std;
 
 #include "osdc/Objecter.h"
 
-#include "include/librados.h"
-#include "include/librados.hpp"
+#include "include/rados/librados.h"
+#include "include/rados/librados.hpp"
 
 #include "messages/MWatchNotify.h"
 

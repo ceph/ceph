@@ -22,7 +22,7 @@ extern "C" {
 #include <netinet/in.h>
 #include <linux/types.h>
 #include <string.h>
-#include "librados.h"
+#include "../rados/librados.h"
 
 #define LIBRBD_VER_MAJOR 0
 #define LIBRBD_VER_MINOR 1

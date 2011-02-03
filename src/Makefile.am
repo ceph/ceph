@@ -440,13 +440,13 @@ libceph_include_DATA = $(srcdir)/client/libceph.h
 
 librbd_includedir = $(includedir)/rbd
 librbd_include_DATA = \
-	$(srcdir)/include/librbd.h \
-	$(srcdir)/include/librbd.hpp
+	$(srcdir)/include/rbd/librbd.h \
+	$(srcdir)/include/rbd/librbd.hpp
 
 rados_includedir = $(includedir)/rados
 rados_include_DATA = \
-	$(srcdir)/include/librados.h \
-	$(srcdir)/include/librados.hpp \
+	$(srcdir)/include/rados/librados.h \
+	$(srcdir)/include/rados/librados.hpp \
 	$(srcdir)/include/buffer.h \
 	$(srcdir)/include/atomic.h \
 	$(srcdir)/include/page.h \
@@ -718,10 +718,6 @@ noinst_HEADERS = \
         include/intarith.h\
         include/interval_set.h\
         include/inttypes.h\
-	include/librados.h\
-	include/librados.hpp\
-	include/librbd.h\
-	include/librbd.hpp\
 	include/linux_fiemap.h\
         include/lru.h\
 	include/msgr.h\
@@ -740,6 +736,10 @@ noinst_HEADERS = \
         include/dlist.h\
         include/elist.h\
         include/xlist.h\
+	include/rados/librados.h\
+	include/rados/librados.hpp\
+	include/rbd/librbd.h\
+	include/rbd/librbd.hpp\
 	logrotate.conf\
 	mds/flock.h\
 	mds/inode_backtrace.h\

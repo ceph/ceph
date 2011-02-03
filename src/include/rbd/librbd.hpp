@@ -20,8 +20,8 @@
 #include <list>
 #include <map>
 #include <vector>
-#include "buffer.h"
-#include "librados.hpp"
+#include "../rados/buffer.h"
+#include "../rados/librados.hpp"
 #include "librbd.h"
 
 namespace librbd {
