@@ -23,7 +23,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#undef dout_prefix
 #define dout_prefix *_dout
+#undef derr
 #define derr dout(0)
 
 typedef void (*signal_handler_t)(int);
