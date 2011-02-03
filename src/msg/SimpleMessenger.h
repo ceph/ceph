@@ -584,7 +584,7 @@ public:
 		      
   int send_keepalive(const entity_inst_t& addr);
 
-  void learned_addr(entity_addr_t peer_addr_for_me);
+  void learned_addr(const entity_addr_t& peer_addr_for_me);
   void init_local_pipe();
 
 } ;

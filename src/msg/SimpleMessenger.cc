@@ -2757,7 +2757,7 @@ void SimpleMessenger::mark_down(Connection *con)
   lock.Unlock();
 }
 
-void SimpleMessenger::learned_addr(entity_addr_t peer_addr_for_me)
+void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
 {
   lock.Lock();
   int port = ms_addr.get_port();
