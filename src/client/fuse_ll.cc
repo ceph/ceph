@@ -445,7 +445,7 @@ static void do_init(void *foo, fuse_conn_info *bar)
   }
 }
 
-static struct fuse_lowlevel_ops ceph_ll_oper = {
+const static struct fuse_lowlevel_ops ceph_ll_oper = {
  init: do_init,
  destroy: 0,
  lookup: ceph_ll_lookup,
