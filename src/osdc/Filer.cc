@@ -39,6 +39,11 @@ public:
   utime_t mtime;
   C_Probe(Filer *f, Probe *p, object_t o) : filer(f), probe(p), oid(o), size(0) {}
   void finish(int r) {
+    if (r == -ENOENT) {
+      r = 0;
+      assert(size == 0);
+    }
+
     // TODO: handle this error.
     assert(r == 0);
 
