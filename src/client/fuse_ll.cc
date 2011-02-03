@@ -445,7 +445,7 @@ static void do_init(void *foo, fuse_conn_info *bar)
   }
 }
 
-const static struct fuse_lowlevel_ops ceph_ll_oper = {
+static struct fuse_lowlevel_ops ceph_ll_oper = {
  init: do_init,
  destroy: 0,
  lookup: ceph_ll_lookup,
@@ -479,9 +479,7 @@ const static struct fuse_lowlevel_ops ceph_ll_oper = {
  create: ceph_ll_create,
  getlk: 0,
  setlk: 0,
- bmap : 0,
- ioctl : 0,
- poll : 0,
+ bmap: 0
 };
 
 int ceph_fuse_ll_main(Client *c, int argc, const char *argv[], int fd)
