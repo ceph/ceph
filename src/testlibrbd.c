@@ -33,7 +33,7 @@ void test_create_and_stat(rbd_pool_t pool, const char *name, size_t size)
 {
   rbd_image_info_t info;
   rbd_image_t image;
-  int order;
+  int order = 0;
   assert(rbd_create(pool, name, size, &order) == 0);
   assert(rbd_open_image(pool, name, &image) == 0);
   assert(rbd_stat(image, &info) == 0);
@@ -179,4 +179,3 @@ int main(int argc, const char **argv)
   rbd_shutdown();
   return 0;
 }
- 
