@@ -108,7 +108,9 @@ void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 
 // cons/des
 
-Client::Client(Messenger *m, MonClient *mc) : timer(client_lock), client_lock("Client::client_lock")
+Client::Client(Messenger *m, MonClient *mc)
+  : timer(client_lock), client_lock("Client::client_lock"),
+  filer_flags(0)
 {
   // which client am i?
   whoami = m->get_myname().num();
@@ -4260,7 +4262,7 @@ int Client::readdir_r_cb(DIR *d, add_dirent_cb_t cb, void *p)
 
     dout(10) << "off " << off << " this_offset " << hex << dirp->this_offset << dec << " size " << dirp->buffer->size()
 	     << " frag " << fg << dendl;
-    while (off - dirp->this_offset >= 0 &&
+    while (off >= dirp->this_offset &&
 	   off - dirp->this_offset < dirp->buffer->size()) {
       uint64_t pos = DirResult::make_fpos(fg, off);
       pair<string,Inode*>& ent = (*dirp->buffer)[off - dirp->this_offset];
@@ -4853,10 +4855,6 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
 
   dout(10) << "_read_sync " << *in << " " << off << "~" << len << dendl;
 
-  int flags = 0;
-  if (in->hack_balance_reads || g_conf.client_hack_balance_reads)
-    flags |= CEPH_OSD_FLAG_BALANCE_READS;
-
   Mutex flock("Client::_read_sync flock");
   Cond cond;
   while (left > 0) {
@@ -4867,7 +4865,7 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
     
     int wanted = left;
     filer->read_trunc(in->ino, &in->layout, in->snapid,
-		      pos, left, &tbl, flags,
+		      pos, left, &tbl, filer_flags,
 		      in->truncate_size, in->truncate_seq,
 		      onfinish);
     while (!done)
@@ -5035,7 +5033,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);  // released by onsafe callback
     
     filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
-		       offset, size, bl, g_clock.now(), 0,
+		       offset, size, bl, g_clock.now(), filer_flags,
 		       in->truncate_size, in->truncate_seq,
 		       onfinish, onsafe);
     
@@ -6524,4 +6522,16 @@ bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool 
     return true;
   *authorizer = monclient->auth->build_authorizer(dest_type);
   return true;
+}
+
+void Client::set_filer_flags(int flags)
+{
+  Mutex::Locker l(client_lock);
+  filer_flags |= flags;
+}
+
+void Client::clear_filer_flags(int flags)
+{
+  Mutex::Locker l(client_lock);
+  filer_flags &= ~flags;
 }

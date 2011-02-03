@@ -26,6 +26,7 @@
 #include "events/EImportFinish.h"
 #include "events/EFragment.h"
 
+#include "events/EResetJournal.h"
 #include "events/ESession.h"
 #include "events/ESessions.h"
 
@@ -58,6 +59,8 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   case EVENT_IMPORTSTART: le = new EImportStart; break;
   case EVENT_IMPORTFINISH: le = new EImportFinish; break;
   case EVENT_FRAGMENT: le = new EFragment; break;
+
+  case EVENT_RESETJOURNAL: le = new EResetJournal; break;
 
   case EVENT_SESSION: le = new ESession; break;
   case EVENT_SESSIONS: le = new ESessions; break;

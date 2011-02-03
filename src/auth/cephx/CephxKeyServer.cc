@@ -375,7 +375,7 @@ int KeyServer::_build_session_auth_info(uint32_t service_id, CephXServiceTicketI
 int KeyServer::build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info,
 				       CephXSessionAuthInfo& info)
 {
-  if (get_service_secret(service_id, info.service_secret, info.secret_id) < 0) {
+  if (!get_service_secret(service_id, info.service_secret, info.secret_id)) {
     return -EPERM;
   }
 

@@ -15,6 +15,7 @@
 #define __STDC_FORMAT_MACROS
 #include "config.h"
 
+#include "common/errno.h"
 #include "common/common_init.h"
 #include "include/librados.hpp"
 using namespace librados;
@@ -882,12 +883,15 @@ static int do_import(pool_t pool, const char *imgname, int order, const char *pa
         uint64_t len = seg_left;
         bufferptr p(len);
         cerr << "reading " << len << " bytes at offset " << file_pos << std::endl;
-        len = pread(fd, p.c_str(), len, file_pos);
-        if (len < 0) {
-          r = -errno;
-          cerr << "error reading file\n" << std::endl;
-          goto done;
-        }
+	{
+	  ssize_t rval = TEMP_FAILURE_RETRY(::pread(fd, p.c_str(), len, file_pos));
+	  if (rval < 0) {
+	    r = -errno;
+	    cerr << "failed to read file: " << cpp_strerror(r) << std::endl;
+	    goto done;
+	  }
+	  len = rval;
+	}
         bufferlist bl;
         bl.append(p);
         string oid = get_block_oid(&header, i);

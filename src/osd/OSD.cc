@@ -143,76 +143,115 @@ ObjectStore *OSD::create_object_store(const char *dev, const char *jdev)
   //return new Ebofs(dev, jdev);
 }
 
+#undef dout_prefix
+#define dout_prefix *_dout
 
 int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
 {
-  ObjectStore *store = create_object_store(dev, jdev);
-  if (!store)
-    return -ENOENT;
-  int err = store->mkfs();    
-  if (err < 0)
-    return err;
-  err = store->mount();
-  if (err < 0)
-    return err;
-    
+  int ret;
+  ObjectStore *store = NULL;
   OSDSuperblock sb;
   sb.fsid = fsid;
   sb.whoami = whoami;
 
-  write_meta(dev, fsid, whoami);
-
-  // age?
-  if (g_conf.osd_age_time != 0) {
-    cout << "aging..." << std::endl;
-    Ager ager(store);
-    if (g_conf.osd_age_time < 0) 
-      ager.load_freelist();
-    else 
-      ager.age(g_conf.osd_age_time, 
-	       g_conf.osd_age, 
-	       g_conf.osd_age - .05, 
-	       50000, 
-	       g_conf.osd_age - .05);
-  }
-
-  // benchmark?
-  if (g_conf.osd_auto_weight) {
-    bufferlist bl;
-    bufferptr bp(1048576);
-    bp.zero();
-    bl.push_back(bp);
-    cout << "testing disk bandwidth..." << std::endl;
-    utime_t start = g_clock.now();
-    object_t oid("disk_bw_test");
-    for (int i=0; i<1000; i++) {
-      ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      t->write(coll_t::META_COLL, sobject_t(oid, 0), i*bl.length(), bl.length(), bl);
-      store->queue_transaction(NULL, t);
+  try {
+    store = create_object_store(dev, jdev);
+    if (!store) {
+      ret = -ENOENT;
+      goto out;
     }
-    store->sync();
-    utime_t end = g_clock.now();
-    end -= start;
-    cout << "measured " << (1000.0 / (double)end) << " mb/sec" << std::endl;
-    ObjectStore::Transaction tr;
-    tr.remove(coll_t::META_COLL, sobject_t(oid, 0));
-    store->apply_transaction(tr);
-    
-    // set osd weight
-    sb.weight = (1000.0 / (double)end);
+    ret = store->mkfs();
+    if (ret) {
+      derr << "OSD::mkfs: FileStore::mkfs failed with error " << ret << dendl;
+      goto free_store;
+    }
+    ret = store->mount();
+    if (ret) {
+      derr << "OSD::mkfs: couldn't mount FileStore: error " << ret << dendl;
+      goto free_store;
+    }
+    ret = write_meta(dev, fsid, whoami);
+    if (ret) {
+      derr << "OSD::mkfs: failed to write fsid file: error " << ret << dendl;
+      goto umount_store;
+    }
+
+    // age?
+    if (g_conf.osd_age_time != 0) {
+      dout(0) << "aging..." << dendl;
+      Ager ager(store);
+      if (g_conf.osd_age_time < 0)
+	ager.load_freelist();
+      else
+	ager.age(g_conf.osd_age_time,
+		 g_conf.osd_age,
+		 g_conf.osd_age - .05,
+		 50000,
+		 g_conf.osd_age - .05);
+    }
+
+    // benchmark?
+    if (g_conf.osd_auto_weight) {
+      bufferlist bl;
+      bufferptr bp(1048576);
+      bp.zero();
+      bl.push_back(bp);
+      dout(0) << "testing disk bandwidth..." << dendl;
+      utime_t start = g_clock.now();
+      object_t oid("disk_bw_test");
+      for (int i=0; i<1000; i++) {
+	ObjectStore::Transaction *t = new ObjectStore::Transaction;
+	t->write(coll_t::META_COLL, sobject_t(oid, 0), i*bl.length(), bl.length(), bl);
+	store->queue_transaction(NULL, t);
+      }
+      store->sync();
+      utime_t end = g_clock.now();
+      end -= start;
+      dout(0) << "measured " << (1000.0 / (double)end) << " mb/sec" << dendl;
+      ObjectStore::Transaction tr;
+      tr.remove(coll_t::META_COLL, sobject_t(oid, 0));
+      ret = store->apply_transaction(tr);
+      if (ret) {
+	derr << "OSD::mkfs: error while benchmarking: apply_transaction returned "
+	     << ret << dendl;
+	goto umount_store;
+      }
+
+      // set osd weight
+      sb.weight = (1000.0 / (double)end);
+    }
+
+    {
+      bufferlist bl;
+      ::encode(sb, bl);
+
+      ObjectStore::Transaction t;
+      t.create_collection(coll_t::META_COLL);
+      t.write(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+      t.create_collection(coll_t::TEMP_COLL);
+      ret = store->apply_transaction(t);
+      if (ret) {
+	derr << "OSD::mkfs: error while writing OSD_SUPERBLOCK_POBJECT: "
+	     << "apply_transaction returned " << ret << dendl;
+	goto umount_store;
+      }
+    }
+  }
+  catch (const std::exception &se) {
+    derr << "OSD::mkfs: caught exception " << se.what() << dendl;
+    ret = 1000;
+  }
+  catch (...) {
+    derr << "OSD::mkfs: caught unknown exception." << dendl;
+    ret = 1000;
   }
 
-  bufferlist bl;
-  ::encode(sb, bl);
-
-  ObjectStore::Transaction t;
-  t.create_collection(coll_t::META_COLL);
-  t.write(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
-  t.create_collection(coll_t::TEMP_COLL);
-  int r = store->apply_transaction(t);
+umount_store:
   store->umount();
+free_store:
   delete store;
-  return r;
+out:
+  return ret;
 }
 
 int OSD::mkjournal(const char *dev, const char *jdev)
@@ -237,7 +276,6 @@ int OSD::flushjournal(const char *dev, const char *jdev)
   return err;
 }
 
-
 int OSD::write_meta(const char *base, const char *file, const char *val, size_t vallen)
 {
   char fn[PATH_MAX];
@@ -249,9 +287,11 @@ int OSD::write_meta(const char *base, const char *file, const char *val, size_t 
     return -errno;
   int r = ::write(fd, val, vallen);
   if (r < 0)
-    return -errno;
+    r = -errno;
+  else
+    r = 0;
   ::close(fd);
-  return 0;
+  return r;
 }
 
 int OSD::read_meta(const char *base, const char *file, char *val, size_t vallen)
@@ -333,8 +373,8 @@ int OSD::peek_meta(const char *dev, string& magic, ceph_fsid_t& fsid, int& whoam
   return 0;
 }
 
-
-
+#undef dout_prefix
+#define dout_prefix _prefix(*_dout, whoami, osdmap)
 
 // cons/des
 
@@ -1142,6 +1182,7 @@ void OSD::update_osd_stat()
 
 void OSD::_refresh_my_stat(utime_t now)
 {
+  assert(heartbeat_lock.is_locked());
   assert(peer_stat_lock.is_locked());
 
   // refresh?
@@ -1202,6 +1243,7 @@ void OSD::_refresh_my_stat(utime_t now)
 
 osd_peer_stat_t OSD::get_my_stat_for(utime_t now, int peer)
 {
+  Mutex::Locker hlock(heartbeat_lock);
   Mutex::Locker lock(peer_stat_lock);
   _refresh_my_stat(now);
   my_stat_on_peer[peer] = my_stat;
@@ -1602,8 +1644,12 @@ void OSD::tick()
   // only do waiters if dispatch() isn't currently running.  (if it is,
   // it'll do the waiters, and doing them here may screw up ordering
   // of op_queue vs handle_osd_map.)
-  if (!dispatch_running)
+  if (!dispatch_running) {
+    dispatch_running = true;
     do_waiters();
+    dispatch_running = false;
+    dispatch_cond.Signal();
+  }
 }
 
 // =========================================
@@ -2208,10 +2254,21 @@ bool OSD::ms_dispatch(Message *m)
 {
   // lock!
   osd_lock.Lock();
-  ++dispatch_running;
-  _dispatch(m);
-  --dispatch_running;
+  while (dispatch_running) {
+    dout(10) << "ms_dispatch waiting for other dispatch thread to complete" << dendl;
+    dispatch_cond.Wait(osd_lock);
+  }
+  dispatch_running = true;
+
   do_waiters();
+  _dispatch(m);
+  do_waiters();
+
+  dispatch_running = false;
+  
+  // no need to signal here, since tick() doesn't wait.
+  //dispatch_cond.Signal();
+
   osd_lock.Unlock();
   return true;
 }
@@ -2681,7 +2738,12 @@ void OSD::handle_osd_map(MOSDMap *m)
   osd_lock.Unlock();
 
   op_tp.pause();
+
+  // requeue under osd_lock to preserve ordering of _dispatch() wrt incoming messages
+  osd_lock.Lock();  
+
   op_wq.lock();
+
   list<Message*> rq;
   while (!op_queue.empty()) {
     PG *pg = op_queue.back();
@@ -2695,9 +2757,8 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(15) << " will requeue " << *mess << dendl;
     rq.push_front(mess);
   }
+  push_waiters(rq);  // requeue under osd_lock!
   op_wq.unlock();
-  push_waiters(rq);
-  osd_lock.Lock();
 
   recovery_tp.pause();
   disk_tp.pause_new();   // _process() may be waiting for a replica message
@@ -2901,18 +2962,35 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   bool do_shutdown = false;
+  bool do_restart = false;
   if (osdmap->get_epoch() > 0 &&
       state == STATE_ACTIVE) {
     if (!osdmap->exists(whoami)) {
       dout(0) << "map says i do not exist.  shutting down." << dendl;
       do_shutdown = true;   // don't call shutdown() while we have everything paused
     } else if (!osdmap->is_up(whoami) ||
-	       osdmap->get_addr(whoami) != client_messenger->get_myaddr()) {
-      clog.warn() << "map e" << osdmap->get_epoch()
-	<< " wrongly marked me down\n";
+	       !osdmap->get_addr(whoami).probably_equals(client_messenger->get_myaddr()) ||
+	       !osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()) ||
+	       !osdmap->get_hb_addr(whoami).probably_equals(heartbeat_messenger->get_myaddr())) {
+      if (!osdmap->is_up(whoami))
+	clog.warn() << "map e" << osdmap->get_epoch()
+		    << " wrongly marked me down or wrong addr";
+      else if (!osdmap->get_addr(whoami).probably_equals(client_messenger->get_myaddr()))
+	clog.warn() << "map e" << osdmap->get_epoch()
+		    << " had wrong client addr (" << osdmap->get_addr(whoami)
+		    << " != my " << client_messenger->get_myaddr();
+      else if (osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()))
+	clog.warn() << "map e" << osdmap->get_epoch()
+		    << " had wrong client addr (" << osdmap->get_cluster_addr(whoami)
+		    << " != my " << cluster_messenger->get_myaddr();
+      else if (osdmap->get_hb_addr(whoami).probably_equals(heartbeat_messenger->get_myaddr()))
+	clog.warn() << "map e" << osdmap->get_epoch()
+		    << " had wrong client addr (" << osdmap->get_hb_addr(whoami)
+		    << " != my " << heartbeat_messenger->get_myaddr();
       
       state = STATE_BOOTING;
       up_epoch = 0;
+      do_restart = true;
 
       int cport = cluster_messenger->get_myaddr().get_port();
       int hbport = heartbeat_messenger->get_myaddr().get_port();
@@ -2962,7 +3040,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   m->put();
 
 
-  if (is_booting())
+  if (do_restart)
     send_boot();
   if (do_shutdown)
     shutdown();
@@ -3386,7 +3464,6 @@ OSDMap *OSD::get_map(epoch_t epoch)
       incs.push_front(inc);
     }
   }
-  assert(e >= 0);
 
   // apply incrementals
   for (e++; e <= epoch; e++) {

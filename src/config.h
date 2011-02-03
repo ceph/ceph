@@ -35,11 +35,6 @@ extern struct ceph_file_layout g_default_file_layout;
 #include <google/heap-profiler.h>
 #endif //HAVE_LIBTCMALLOC
 
-extern bool g_daemon;
-extern const char *g_default_id;
-
-extern void ceph_set_default_id(const char *id);
-
 struct EntityName;
 
 enum log_to_stderr_t {
@@ -49,6 +44,9 @@ enum log_to_stderr_t {
 };
 
 struct md_config_t {
+  md_config_t();
+  ~md_config_t();
+
   char *type;
   char *id;
   char *name;
@@ -216,7 +214,6 @@ struct md_config_t {
   double   client_mount_timeout;
   double   client_unmount_timeout;
   double   client_tick_interval;
-  bool client_hack_balance_reads;
   const char *client_trace;
   long long client_readahead_min;
   long long client_readahead_max_bytes;
@@ -450,6 +447,7 @@ struct md_config_t {
   int filestore_queue_max_ops;
   int filestore_queue_max_bytes;
   int filestore_op_threads;
+  float filestore_commit_timeout;
   
   // ebofs
   bool  ebofs;

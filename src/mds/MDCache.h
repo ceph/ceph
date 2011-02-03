@@ -971,6 +971,7 @@ public:
 
   void open_root_inode(Context *c);
   void open_root();
+  void open_mydir_inode(Context *c);
   void populate_mydir();
 
   void _create_system_file(CDir *dir, const char *name, CInode *in, Context *fin);

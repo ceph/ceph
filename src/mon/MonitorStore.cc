@@ -90,9 +90,9 @@ int MonitorStore::mount()
   if (g_conf.chdir && g_conf.chdir[0] && dir[0] != '/') {
     // combine it with the cwd, in case fuse screws things up (i.e. fakefuse)
     string old = dir;
-    char cwd[1024];
-    getcwd(cwd, sizeof(cwd));
-    dir = cwd;
+    char cwd[PATH_MAX];
+    char *p = getcwd(cwd, sizeof(cwd));
+    dir = p;
     dir += "/";
     dir += old;
   }
@@ -139,13 +139,14 @@ version_t MonitorStore::get_int(const char *a, const char *b)
   else
     snprintf(fn, sizeof(fn), "%s/%s", dir.c_str(), a);
   
-  FILE *f = ::fopen(fn, "r");
-  if (!f) 
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0)
     return 0;
   
   char buf[20];
-  ::fgets(buf, 20, f);
-  ::fclose(f);
+  int r = ::read(fd, buf, sizeof(buf));
+  assert(r >= 0);
+  ::close(fd);
   
   version_t val = atoi(buf);
   
@@ -178,7 +179,8 @@ void MonitorStore::put_int(version_t val, const char *a, const char *b, bool syn
 
   int fd = ::open(tfn, O_WRONLY|O_CREAT, 0644);
   assert(fd >= 0);
-  ::write(fd, vs, strlen(vs));
+  int r = ::write(fd, vs, strlen(vs));
+  assert(r >= 0);
   if (sync)
     ::fsync(fd);
   ::close(fd);

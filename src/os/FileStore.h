@@ -19,6 +19,7 @@
 #include "ObjectStore.h"
 #include "JournalingObjectStore.h"
 
+#include "common/Timer.h"
 #include "common/WorkQueue.h"
 
 #include "common/Mutex.h"
@@ -37,8 +38,8 @@ using namespace __gnu_cxx;
 
 class FileStore : public JournalingObjectStore {
   string basedir, journalpath;
-  char current_fn[PATH_MAX];
-  char current_op_seq_fn[PATH_MAX];
+  std::string current_fn;
+  std::string current_op_seq_fn;
   uint64_t fsid;
   
   bool btrfs;
@@ -78,6 +79,10 @@ class FileStore : public JournalingObjectStore {
   bool force_sync;
   Cond sync_cond;
   uint64_t sync_epoch;
+
+  Mutex sync_entry_timeo_lock;
+  SafeTimer timer;
+
   list<Context*> sync_waiters;
   bool stop;
   void sync_entry();
@@ -224,26 +229,7 @@ class FileStore : public JournalingObjectStore {
   int open_journal();
 
  public:
-  FileStore(const char *base, const char *jdev = 0) : 
-    basedir(base), journalpath(jdev ? jdev:""),
-    btrfs(false), btrfs_trans_start_end(false), btrfs_clone_range(false),
-    btrfs_snap_create(false),
-    btrfs_snap_destroy(false),
-    btrfs_snap_create_v2(false),
-    btrfs_wait_sync(false),
-    ioctl_fiemap(false),
-    fsid_fd(-1), op_fd(-1),
-    attrs(this), fake_attrs(false), 
-    collections(this), fake_collections(false),
-    lock("FileStore::lock"),
-    force_sync(false), sync_epoch(0), stop(false), sync_thread(this),
-    op_queue_len(0), op_queue_bytes(0), next_finish(0),
-    op_tp("FileStore::op_tp", g_conf.filestore_op_threads), op_wq(this, &op_tp),
-    flusher_queue_len(0), flusher_thread(this) {
-    // init current_fn
-    snprintf(current_fn, sizeof(current_fn), "%s/current", basedir.c_str());
-    snprintf(current_op_seq_fn, sizeof(current_op_seq_fn), "%s/current/commit_op_seq", basedir.c_str());
-  }
+  FileStore(const char *base, const char *jdev);
 
   int _detect_fs();
   int _sanity_check_fs();

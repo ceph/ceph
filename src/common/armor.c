@@ -92,8 +92,11 @@ int ceph_unarmor(char *dst, const char *dst_end, const char *src, const char *en
 	while (src < end) {
 		int a, b, c, d;
 
-		if (src < end && src[0] == '\n')
+		if (src[0] == '\n') {
 			src++;
+			continue;
+		}
+
 		if (src + 4 > end)
 			return -EINVAL;
 		a = decode_bits(src[0]);

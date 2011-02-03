@@ -20,7 +20,7 @@ struct sm_state_t {
 };
 
 struct sm_t {
-  struct sm_state_t *states;
+  const struct sm_state_t *states;
   int allowed_ever_auth;
   int allowed_ever_replica;
   int careful;
@@ -33,10 +33,10 @@ struct sm_t {
 //#define FW   4 // fw to auth, if replica
 #define REQ  5 // req state change from auth, if replica
 
-extern struct sm_t sm_simplelock;
-extern struct sm_t sm_filelock;
-extern struct sm_t sm_scatterlock;
-extern struct sm_t sm_locallock;
+extern const struct sm_t sm_simplelock;
+extern const struct sm_t sm_filelock;
+extern const struct sm_t sm_scatterlock;
+extern const struct sm_t sm_locallock;
 
 
 

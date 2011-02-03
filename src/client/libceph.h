@@ -99,6 +99,7 @@ int ceph_set_default_file_stripe_count(int count);
 int ceph_set_default_object_size(int size);
 int ceph_set_default_file_replication(int replication);
 int ceph_set_default_preferred_pg(int pg);
+int ceph_localize_reads(int val);
 }
 
 #endif

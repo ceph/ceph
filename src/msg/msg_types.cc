@@ -64,6 +64,15 @@ bool entity_addr_t::parse(const char *s, const char **end)
       p++;
   }
 
+  if (*p == '/') {
+    // parse nonce, too
+    p++;
+    int nonce = atoi(p);
+    set_nonce(nonce);
+    while (*p && *p >= '0' && *p <= '9')
+      p++;
+  }
+
   if (end)
     *end = p;
   return true;

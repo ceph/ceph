@@ -958,7 +958,8 @@ void MDS::handle_mds_map(MMDSMap *m)
     if (oldresolve != resolve) {
       dout(10) << " resolve set is " << resolve << ", was " << oldresolve << dendl;
       calc_recovery_set();
-      mdcache->send_resolves();
+      if (!mdsmap->is_any_failed())
+	mdcache->send_resolves();
     }
   }
   
@@ -1170,16 +1171,23 @@ void MDS::boot_start(int step, int r)
     break;
 
   case 2:
-    if (is_starting() ||
-	whoami == mdsmap->get_root()) {  // load root inode off disk if we are auth
-      dout(2) << "boot_start " << step << ": loading/discovering root inode" << dendl;
-      mdcache->open_root_inode(new C_MDS_BootStart(this, 3));
-      break;
-    } else {
-      // replay.  make up fake root inode to start with
-      mdcache->create_root_inode();
-      step = 3;
+    {
+      dout(2) << "boot_start " << step << ": loading/discovering base inodes" << dendl;
+
+      C_Gather *gather = new C_Gather(new C_MDS_BootStart(this, 3));
+
+      mdcache->open_mydir_inode(gather->new_sub());
+
+      if (is_starting() ||
+	  whoami == mdsmap->get_root()) {  // load root inode off disk if we are auth
+	mdcache->open_root_inode(gather->new_sub());
+	break;
+      } else {
+	// replay.  make up fake root inode to start with
+	mdcache->create_root_inode();
+      }
     }
+    break;
 
   case 3:
     if (is_any_replay()) {

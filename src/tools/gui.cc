@@ -633,8 +633,6 @@ void GuiMonitor::view_osd_nodes(unsigned int begin, unsigned int end, bool
             }
             else if (g.osdmap.is_down(j))
                icon_status = ~CEPH_OSD_UP;
-            else
-               ;
          }
 
          row[icon_columns.status] = icon_status;

@@ -11,8 +11,8 @@
  * Foundation.  See file COPYING.
  */
 
-#ifndef JOURNAL_DUMPER_H_
-#define JOURNAL_DUMPER_H_
+#ifndef JOURNAL_RESETTER_H_
+#define JOURNAL_RESETTER_H_
 
 #include "osd/OSDMap.h"
 #include "osdc/Objecter.h"
@@ -26,11 +26,11 @@
  * This class lets you dump out an mds journal for troubleshooting or whatever.
  *
  * It was built to work with cmds so some of the design choices are random.
- * To use, create a Dumper, call init(), and then call dump() with the name
+ * To use, create a Resetter, call init(), and then call dump() with the name
  * of the file to dump to.
  */
 
-class Dumper : public Dispatcher {
+class Resetter : public Dispatcher {
 public:
   Objecter *objecter;
   Journaler *journaler;
@@ -40,21 +40,19 @@ public:
   Mutex lock;
   SafeTimer timer;
 
-  int rank;
-
   /*
    * The messenger should be a valid SimpleMessenger. You should call bind()
    * before passing it in, but not do anything else.
    * The MonClient needs to be valid, and you should have called
    * build_initial_monmap().
    */
-  Dumper(SimpleMessenger *messenger_, MonClient *monc_) :
+  Resetter(SimpleMessenger *messenger_, MonClient *monc_) :
     messenger(messenger_),
     monc(monc_),
-    lock("Dumper::lock"), timer(lock)
+    lock("Resetter::lock"), timer(lock)
   {}
 
-  virtual ~Dumper();
+  virtual ~Resetter();
 
   bool ms_dispatch(Message *m) {
     switch (m->get_type()) {
@@ -75,7 +73,7 @@ public:
                          bool force_new);
   void init(int rank);
   void shutdown();
-  void dump(const char *dumpfile);
+  void reset();
 };
 
-#endif /* JOURNAL_DUMPER_H_ */
+#endif /* JOURNAL_RESETTER_H_ */

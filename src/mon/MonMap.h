@@ -72,13 +72,13 @@ class MonMap {
 
   epoch_t get_epoch() { return epoch; }
 
-  void add(string name, entity_addr_t addr) {
+  void add(const string &name, const entity_addr_t &addr) {
     assert(mon_addr.count(name) == 0);
     mon_addr[name] = addr;
     calc_ranks();
   }
   
-  void remove(string name) {
+  void remove(const string &name) {
     assert(mon_addr.count(name));
     mon_addr.erase(name);
     calc_ranks();
@@ -88,7 +88,7 @@ class MonMap {
     return mon_addr.count(name);
   }
 
-  bool contains(entity_addr_t a) {
+  bool contains(const entity_addr_t &a) {
     for (map<string,entity_addr_t>::iterator p = mon_addr.begin();
 	 p != mon_addr.end();
 	 p++)

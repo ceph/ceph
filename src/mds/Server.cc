@@ -1766,8 +1766,9 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
 CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
 				    set<SimpleLock*> &rdlocks,
 				    bool want_auth,
-				    bool no_want_auth)  /* for readdir, who doesn't want auth _even_if_ it's
-							   a snapped dir */
+				    bool no_want_auth, /* for readdir, who doesn't want auth _even_if_ it's
+							  a snapped dir */
+				    ceph_file_layout **layout) 
 {
   MClientRequest *req = mdr->client_request;
   const filepath& refpath = n ? req->get_filepath2() : req->get_filepath();
@@ -1822,7 +1823,10 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
 
   for (int i=0; i<(int)mdr->dn[n].size(); i++) 
     rdlocks.insert(&mdr->dn[n][i]->lock);
-  mds->locker->include_snap_rdlocks(rdlocks, ref);
+  if (layout)
+    mds->locker->include_snap_rdlocks_wlayout(rdlocks, ref, layout);
+  else
+    mds->locker->include_snap_rdlocks(rdlocks, ref);
 
   // set and pin ref
   mdr->pin(ref);
@@ -2989,7 +2993,8 @@ void Server::handle_client_setdirlayout(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  ceph_file_layout *dir_layout = NULL;
+  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true, false, &dir_layout);
   if (!cur) return;
 
   if (mdr->snapid != CEPH_NOSNAP) {
@@ -3010,8 +3015,10 @@ void Server::handle_client_setdirlayout(MDRequest *mdr)
   default_file_layout *layout = new default_file_layout;
   if (cur->get_projected_dir_layout())
     layout->layout = *cur->get_projected_dir_layout();
+  else if (dir_layout)
+    layout->layout = *dir_layout;
   else
-    layout->layout = g_default_file_layout;
+    layout->layout = mds->mdcache->default_file_layout;
 
   if (req->head.args.setlayout.layout.fl_object_size > 0)
     layout->layout.fl_object_size = req->head.args.setlayout.layout.fl_object_size;

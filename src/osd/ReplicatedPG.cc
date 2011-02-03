@@ -349,13 +349,19 @@ void ReplicatedPG::do_op(MOSDOp *op)
   snapid_t snapid;
   int r = find_object_context(op->get_oid(), op->get_object_locator(),
 			      op->get_snapid(), &obc, can_create, &snapid);
+
   if (r) {
     if (r == -EAGAIN) {
-      // missing the specific snap we need; requeue and wait.
-      assert(!can_create); // only happens on a read
-      sobject_t soid(op->get_oid(), snapid);
-      wait_for_missing_object(soid, op);
-      return;
+      // If we're not the primary of this OSD, and we have
+      // CEPH_OSD_FLAG_LOCALIZE_READS set, we just return -EAGAIN. Otherwise,
+      // we have to wait for the object.
+      if (is_primary() || (!(op->get_rmw_flags() & CEPH_OSD_FLAG_LOCALIZE_READS))) {
+	// missing the specific snap we need; requeue and wait.
+	assert(!can_create); // only happens on a read
+	sobject_t soid(op->get_oid(), snapid);
+	wait_for_missing_object(soid, op);
+	return;
+      }
     }
     osd->reply_op_error(op, r);
     return;
@@ -620,8 +626,11 @@ void ReplicatedPG::do_sub_op_reply(MOSDSubOpReply *r)
 
 bool ReplicatedPG::snap_trimmer()
 {
-  assert(is_primary() && is_clean());
   lock();
+  if (!(is_primary() && is_clean() && is_active())) {
+    unlock();
+    return true;
+  }
   dout(10) << "snap_trimmer start, purged_snaps " << info.purged_snaps << dendl;
 
   interval_set<snapid_t> s;
@@ -1998,10 +2007,8 @@ void ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     }
   } else { //we got our context, let's use it to do the rollback!
     sobject_t& rollback_to_sobject = rollback_to->obs.oi.soid;
-    if (ctx->clone_obc &&
-	(ctx->clone_obc->obs.oi.soid.snap == snapid)) {
+    if (ctx->clone_obc && *ctx->clone_obc->obs.oi.snaps.rbegin() <= snapid) {
       //just cloned the rollback target, we don't need to do anything!
-    
     } else {
       /* 1) Delete current head
        * 2) Clone correct snapshot into head

@@ -385,3 +385,14 @@ extern "C" int ceph_get_file_stripe_address(int fh, loff_t offset, char *buf, in
   buf[len] = '\0'; // write a null char to terminate c-style string
   return 0;
 }
+
+extern "C" int ceph_localize_reads(int val)
+{
+  if (!client)
+    return -ENOENT;
+  if (!val)
+    client->clear_filer_flags(CEPH_OSD_FLAG_LOCALIZE_READS);
+  else
+    client->set_filer_flags(CEPH_OSD_FLAG_LOCALIZE_READS);
+  return 0;
+}

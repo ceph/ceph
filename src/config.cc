@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,58 +7,63 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
-
+#include "auth/Auth.h"
+#include "auth/ExportControl.h"
 #include "ceph_ver.h"
-#include "config.h"
-#include "include/types.h"
-
-#include "common/Clock.h"
-#include "common/DoutStreambuf.h"
-#include "common/Logger.h"
 #include "common/BackTrace.h"
+#include "common/Clock.h"
+#include "common/ConfUtils.h"
+#include "common/Logger.h"
 #include "common/common_init.h"
-
-#include <fstream>
-#include <stdlib.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <signal.h>
-
-// for tstring stringtable
-#include "include/tstring.h"
-stringtable g_stab;
-
+#include "common/dyn_snprintf.h"
+#include "config.h"
 #include "include/atomic.h"
 #include "include/str_list.h"
-
+#include "include/types.h"
+#include "msg/msg_types.h"
 #include "osd/osd_types.h"
 
-#include "common/ConfUtils.h"
-#include "common/dyn_snprintf.h"
+#include <fcntl.h>
+#include <fstream>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
-#include "auth/ExportControl.h"
-#include "auth/Auth.h"
+/* Don't use standard Ceph logging in this file.
+ * We can't use logging until it's initialized, and a lot of the necessary
+ * initialization happens here.
+ */
+#undef dout
+#undef pdout
+#undef derr
+#undef generic_dout
+#undef dendl
 
-static bool show_config = false;
+/* The Ceph configuration. */
+md_config_t g_conf __attribute__((init_priority(103)));
 
+/* These should be moved into md_config_t eventually, grrr */
 static ConfFile *cf = NULL;
 static ExportControl *ec = NULL;
 
-static void fini_g_conf();
+atomic_t _num_threads(0);
 
-const char *g_default_id = "admin";
-
-void ceph_set_default_id(const char *id)
-{
-  g_default_id = strdup(id);
-}
+// file layouts
+struct ceph_file_layout g_default_file_layout = {
+ fl_stripe_unit: init_le32(1<<22),
+ fl_stripe_count: init_le32(1),
+ fl_object_size: init_le32(1<<22),
+ fl_cas_hash: init_le32(0),
+ fl_object_stripe_unit: init_le32(0),
+ fl_pg_preferred : init_le32(-1),
+ fl_pg_pool : init_le32(-1),
+};
 
 static void env_override(char **ceph_var, const char * const env_var)
 {
@@ -70,54 +75,12 @@ static void env_override(char **ceph_var, const char * const env_var)
   *ceph_var = strdup(e);
 }
 
-class ConfFileDestructor
-{
-public:
-  ConfFileDestructor() {}
-  ~ConfFileDestructor() {
-    if (cf) {
-      delete cf;
-      cf = NULL;
-      fini_g_conf();
-    }
-  }
-};
-
-static ConfFileDestructor cfd;
-
-
-atomic_t _num_threads(0);
-
-// file layouts
-struct ceph_file_layout g_default_file_layout = {
- fl_stripe_unit: init_le32(1<<22),
- fl_stripe_count: init_le32(1),
- fl_object_size: init_le32(1<<22),
- fl_cas_hash: init_le32(0),
- fl_object_stripe_unit: init_le32(0),
-};
-
-
-
-#include <msg/msg_types.h>
-
-// fake osd failures: osd -> time
-std::map<entity_name_t,float> g_fake_kill_after;
-
-
-md_config_t g_conf;
-bool g_daemon = false;
-
-
-#include <stdlib.h>
-#include <string.h>
-
-void env_to_vec(std::vector<const char*>& args) 
+void env_to_vec(std::vector<const char*>& args)
 {
   char *p = getenv("CEPH_ARGS");
   if (!p) return;
-  
-  static char buf[1000];  
+
+  static char buf[1000];
   int len = MIN(strlen(p), sizeof(buf)-1);  // bleh.
   memcpy(buf, p, len);
   buf[len] = 0;
@@ -135,12 +98,12 @@ void env_to_vec(std::vector<const char*>& args)
   }
 }
 
-void env_to_deq(std::deque<const char*>& args) 
+void env_to_deq(std::deque<const char*>& args)
 {
   char *p = getenv("CEPH_ARGS");
   if (!p) return;
-  
-  static char buf[1000];  
+
+  static char buf[1000];
   int len = MIN(strlen(p), sizeof(buf)-1);  // bleh.
   memcpy(buf, p, len);
   buf[len] = 0;
@@ -180,10 +143,9 @@ void vec_to_argv(std::vector<const char*>& args,
   argc = 1;
   argv[0] = myname;
 
-  for (unsigned i=0; i<args.size(); i++) 
+  for (unsigned i=0; i<args.size(); i++)
     argv[argc++] = args[i];
 }
-
 
 bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec)
 {
@@ -203,9 +165,6 @@ bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec)
   }
   return true;
 }
-
-
-
 
 void parse_config_option_string(string& s)
 {
@@ -232,7 +191,7 @@ struct config_option {
   const char *conf_name;
   const char *name;
   void *val_ptr;
-  
+
   const char *def_str;
   long long def_longlong;
   double def_double;
@@ -350,7 +309,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mon_tick_interval, 0, OPT_INT, 5),
 	OPTION(mon_subscribe_interval, 0, OPT_DOUBLE, 300),
 	OPTION(mon_osd_down_out_interval, 0, OPT_INT, 300), // seconds
-	OPTION(mon_lease, 0, OPT_FLOAT, 5),  		    // lease interval
+	OPTION(mon_lease, 0, OPT_FLOAT, 5),		    // lease interval
 	OPTION(mon_lease_renew_interval, 0, OPT_FLOAT, 3), // on leader, to renew the lease
 	OPTION(mon_lease_ack_timeout, 0, OPT_FLOAT, 10.0), // on leader, if lease isn't acked by all peons
 	OPTION(mon_clock_drift_allowed, 0, OPT_FLOAT, .010), // allowed clock drift between monitors
@@ -381,7 +340,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(client_mount_timeout, 0, OPT_DOUBLE, 30.0),
 	OPTION(client_unmount_timeout, 0, OPT_DOUBLE, 10.0),
 	OPTION(client_tick_interval, 0, OPT_DOUBLE, 1.0),
-	OPTION(client_hack_balance_reads, 0, OPT_BOOL, false),
 	OPTION(client_trace, 0, OPT_STR, 0),
 	OPTION(client_readahead_min, 0, OPT_LONGLONG, 128*1024),  // readahead at _least_ this much.
 	OPTION(client_readahead_max_bytes, 0, OPT_LONGLONG, 0),  //8 * 1024*1024,
@@ -410,7 +368,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(journaler_prefetch_periods, 0, OPT_INT, 50),   // * journal object size (1~MB? see above)
 	OPTION(journaler_batch_interval, 0, OPT_DOUBLE, .001),   // seconds.. max add'l latency we artificially incur
 	OPTION(journaler_batch_max, 0, OPT_LONGLONG, 0),  // max bytes we'll delay flushing; disable, for now....
-	OPTION(mds_max_file_size, 0, OPT_LONGLONG, 1ULL << 40), 
+	OPTION(mds_max_file_size, 0, OPT_LONGLONG, 1ULL << 40),
 	OPTION(mds_cache_size, 0, OPT_INT, 100000),
 	OPTION(mds_cache_mid, 0, OPT_FLOAT, .7),
 	OPTION(mds_mem_max, 0, OPT_INT, 1048576),        // KB
@@ -419,7 +377,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_beacon_grace, 0, OPT_FLOAT, 15),
 	OPTION(mds_blacklist_interval, 0, OPT_FLOAT, 24.0*60.0),  // how long to blacklist failed nodes
 	OPTION(mds_session_timeout, 0, OPT_FLOAT, 60),    // cap bits and leases time out if client idle
-	OPTION(mds_session_autoclose, 0, OPT_FLOAT, 300), // autoclose idle session 
+	OPTION(mds_session_autoclose, 0, OPT_FLOAT, 300), // autoclose idle session
 	OPTION(mds_client_lease, 0, OPT_FLOAT, 120),      // (assuming session stays alive)
 	OPTION(mds_reconnect_timeout, 0, OPT_FLOAT, 45),  // seconds to wait for clients during mds restart
 							  //  make it (mds_session_timeout - mds_beacon_grace)
@@ -567,6 +525,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(filestore_queue_max_ops, 0, OPT_INT, 500),
 	OPTION(filestore_queue_max_bytes, 0, OPT_INT, 100 << 20),
 	OPTION(filestore_op_threads, 0, OPT_INT, 2),
+	OPTION(filestore_commit_timeout, 0, OPT_FLOAT, 600),
 	OPTION(ebofs, 0, OPT_BOOL, false),
 	OPTION(ebofs_cloneable, 0, OPT_BOOL, true),
 	OPTION(ebofs_verify, 0, OPT_BOOL, false),
@@ -632,7 +591,7 @@ bool conf_set_conf_val(void *field, opt_type_t type, const char *val)
   default:
     return false;
   }
-  
+
   return true;
 }
 
@@ -667,7 +626,7 @@ bool conf_set_conf_val(void *field, opt_type_t type, const char *val, long long 
   default:
     return false;
   }
-  
+
   return true;
 }
 
@@ -702,7 +661,6 @@ static bool conf_reset_val(void *field, opt_type_t type)
   return true;
 }
 
-
 static void set_conf_name(config_option *opt)
 {
   char *newsection = (char *)opt->section;
@@ -736,34 +694,6 @@ static void set_conf_name(config_option *opt)
   done:
     opt->section = newsection;
     opt->conf_name = (const char *)newconf;
-}
-
-static bool init_g_conf()
-{
-  int len = sizeof(config_optionsp)/sizeof(config_option);
-  int i;
-  config_option *opt;
-
-  memset(&g_conf, 0, sizeof(g_conf));
-
-  for (i = 0; i<len; i++) {
-    opt = &config_optionsp[i];
-    if (opt->val_ptr) {
-      conf_reset_val(opt->val_ptr, opt->type);
-    }
-    if (!conf_set_conf_val(opt->val_ptr,
-			   opt->type,
-			   opt->def_str,
-			   opt->def_longlong,
-			   opt->def_double)) {
-      cerr << "error initializing g_conf value num " << i << std::endl;
-      return false;
-    }
-
-    set_conf_name(opt);
-  }
-
-  return true;
 }
 
 static int def_conf_to_str(config_option *opt, char *buf, int len)
@@ -817,23 +747,6 @@ int ceph_def_conf_by_name(const char *name, char *buf, int buflen)
   free(newname);
   return ret;
 }
-
-static void fini_g_conf()
-{
-  int len = sizeof(config_optionsp)/sizeof(config_option);
-  int i;
-  config_option *opt;
-
-  for (i = 0; i<len; i++) {
-    opt = &config_optionsp[i];
-    if (opt->type == OPT_STR) {
-      free(*(char **)opt->val_ptr);
-    }
-    free((void *)opt->conf_name);
-  }
-}
-
-static bool g_conf_initialized = init_g_conf();
 
 static bool cmd_is_char(const char *cmd)
 {
@@ -894,7 +807,7 @@ static bool get_var(const char *str, int pos, char *var_name, int len, int *new_
 	 isalnum(str[pos]) ||
          str[pos] == '_')) {
 	var_name[out_pos] = str[pos];
-	
+
 	out_pos	++;
 	if (out_pos == len)
 		return false;
@@ -962,8 +875,8 @@ char *conf_post_process_val(const char *val)
 	}
 	buf[out_pos] = val[i];
 	buf[out_pos + 1] = '\0';
-    	++out_pos;
-    	++i;
+	++out_pos;
+	++i;
     }
   }
 
@@ -979,7 +892,6 @@ do { \
   else \
     ret = cf->read(section, var, (type *)out, 0); \
 } while (0)
-    
 
 int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const char *conf_type,
 		      const char *alt_section, const char *key, opt_type_t type, void *out, void *def,
@@ -1097,12 +1009,11 @@ bool is_bool_param(const char *param)
 
 void parse_startup_config_options(std::vector<const char*>& args, const char *module_type)
 {
+  bool show_config = false;
   DEFINE_CONF_VARS(NULL);
   std::vector<const char *> nargs;
   bool conf_specified = false;
 
-  if (!g_conf.id)
-    g_conf.id = (char *)g_default_id;
   if (!g_conf.type)
     g_conf.type = (char *)"";
 
@@ -1129,8 +1040,10 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
       g_conf.daemonize = false;
       force_foreground_logging = true;
     } else if (isdaemon && (CONF_ARG_EQ("id", 'i') || CONF_ARG_EQ("name", 'n'))) {
+      free(g_conf.id);
       CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
     } else if (!isdaemon && (CONF_ARG_EQ("id", 'I') || CONF_ARG_EQ("name", 'n'))) {
+      free(g_conf.id);
       CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
     } else {
       nargs.push_back(args[i]);
@@ -1141,25 +1054,23 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
 
   if (module_type) {
     g_conf.type = strdup(module_type);
-    if (g_conf.id) {
-      // is it "type.name"?
-      const char *dot = strchr(g_conf.id, '.');
-      if (dot) {
-	int tlen = dot - g_conf.id;
-	g_conf.type = (char *)malloc(tlen + 1);
-	memcpy(g_conf.type, g_conf.id, tlen);
-	g_conf.type[tlen] = 0;
-	g_conf.id = strdup(dot + 1);
-      }
-      
-      int len = strlen(g_conf.type) + strlen(g_conf.id) + 2;
-      g_conf.name = (char *)malloc(len);
-      snprintf(g_conf.name, len, "%s.%s", g_conf.type, g_conf.id);
-      g_conf.alt_name = (char *)malloc(len - 1);
-      snprintf(g_conf.alt_name, len - 1, "%s%s", module_type, g_conf.id);
-    } else {
-      g_conf.name = g_conf.type;
+    // is it "type.name"?
+    const char *dot = strchr(g_conf.id, '.');
+    if (dot) {
+      int tlen = dot - g_conf.id;
+      g_conf.type = (char *)malloc(tlen + 1);
+      memcpy(g_conf.type, g_conf.id, tlen);
+      g_conf.type[tlen] = 0;
+      char *new_g_conf_id = strdup(dot + 1);
+      free(g_conf.id);
+      g_conf.id = new_g_conf_id;
     }
+
+    int len = strlen(g_conf.type) + strlen(g_conf.id) + 2;
+    g_conf.name = (char *)malloc(len);
+    snprintf(g_conf.name, len, "%s.%s", g_conf.type, g_conf.id);
+    g_conf.alt_name = (char *)malloc(len - 1);
+    snprintf(g_conf.alt_name, len - 1, "%s%s", module_type, g_conf.id);
   }
   g_conf.entity_name = new EntityName;
   assert(g_conf.entity_name);
@@ -1306,3 +1217,58 @@ bool ceph_resolve_file_search(string& filename_list, string& result)
 
   return false;
 }
+
+md_config_t::md_config_t()
+{
+	//
+	// Note: because our md_config_t structure is a global, the memory used to
+	// store it will start out zeroed. So there is no need to manually initialize
+	// everything to 0 here.
+	//
+	// However, it's good practice to add your new config option to config_optionsp
+	// so that its default value is explicit rather than implicit.
+	//
+
+  int len = sizeof(config_optionsp)/sizeof(config_option);
+  int i;
+  config_option *opt;
+
+  for (i = 0; i<len; i++) {
+    opt = &config_optionsp[i];
+    if (opt->val_ptr) {
+      conf_reset_val(opt->val_ptr, opt->type);
+    }
+    if (!conf_set_conf_val(opt->val_ptr,
+			   opt->type,
+			   opt->def_str,
+			   opt->def_longlong,
+			   opt->def_double)) {
+			std::ostringstream oss;
+			oss << "error initializing g_conf value num " << i;
+			assert(oss.str().c_str() == 0);
+    }
+
+    set_conf_name(opt);
+  }
+
+  g_conf.id = strdup("admin");
+}
+
+md_config_t::~md_config_t()
+{
+  int len = sizeof(config_optionsp)/sizeof(config_option);
+  int i;
+  config_option *opt;
+
+  for (i = 0; i<len; i++) {
+    opt = &config_optionsp[i];
+    if (opt->type == OPT_STR) {
+      free(*(char **)opt->val_ptr);
+    }
+    free((void *)opt->conf_name);
+  }
+
+  delete cf;
+  cf = NULL;
+}
+

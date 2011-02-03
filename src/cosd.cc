@@ -284,7 +284,8 @@ int main(int argc, const char **argv)
   cluster_messenger->start(true);
 
   // start osd
-  if (osd->init() < 0) {
+  err = osd->init();
+  if (err < 0) {
     derr << TEXT_RED << " ** ERROR: initializing osd failed: " << cpp_strerror(-err)
          << TEXT_NORMAL << dendl;
     return 1;

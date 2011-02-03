@@ -48,6 +48,7 @@ using namespace std;
 list<int> syn_modes;
 list<int> syn_iargs;
 list<string> syn_sargs;
+int syn_filer_flags = 0;
 
 void parse_syn_options(vector<const char*>& args)
 {
@@ -244,6 +245,10 @@ void parse_syn_options(vector<const char*>& args)
         cerr << "unknown syn arg " << args[i] << std::endl;
         assert(0);
       }
+    }
+    else if (strcmp(args[i], "localize_reads") == 0) {
+      cerr << "set CEPH_OSD_FLAG_LOCALIZE_READS" << std::endl;
+      syn_filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
     }
     else {
       nargs.push_back(args[i]);

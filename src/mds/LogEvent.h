@@ -23,6 +23,8 @@
 #define EVENT_IMPORTFINISH 5
 #define EVENT_FRAGMENT     6
 
+#define EVENT_RESETJOURNAL 9
+
 #define EVENT_SESSION      10
 #define EVENT_SESSIONS     11
 
@@ -75,6 +77,10 @@ protected:
   virtual void decode(bufferlist::iterator &bl) = 0;
   static LogEvent *decode(bufferlist &bl);
 
+  void encode_with_header(bufferlist& bl) {
+    ::encode(_type, bl);
+    encode(bl);
+  }
 
   virtual void print(ostream& out) { 
     out << "event(" << _type << ")";

@@ -67,8 +67,8 @@ int rados_create_pool_with_auid(const char *name, uint64_t auid);
 int rados_create_pool_with_crush_rule(const char *name, __u8 crush_rule);
 int rados_create_pool_with_all(const char *name, uint64_t auid,
 			       __u8 crush_rule);
-int rados_delete_pool(const rados_pool_t pool);
-int rados_change_pool_auid(const rados_pool_t pool, uint64_t auid);
+int rados_delete_pool(rados_pool_t pool);
+int rados_change_pool_auid(rados_pool_t pool, uint64_t auid);
 
 /* objects */
 int rados_list_objects_open(rados_pool_t pool, rados_list_ctx_t *ctx);
@@ -77,12 +77,12 @@ void rados_list_objects_close(rados_list_ctx_t ctx);
 
 
 /* snapshots */
-int rados_snap_create(const rados_pool_t pool, const char *snapname);
-int rados_snap_remove(const rados_pool_t pool, const char *snapname);
-int rados_snap_rollback_object(const rados_pool_t pool, const char *oid,
+int rados_snap_create(rados_pool_t pool, const char *snapname);
+int rados_snap_remove(rados_pool_t pool, const char *snapname);
+int rados_snap_rollback_object(rados_pool_t pool, const char *oid,
 			  const char *snapname);
-int rados_selfmanaged_snap_create(const rados_pool_t pool, uint64_t *snapid);
-int rados_selfmanaged_snap_remove(const rados_pool_t pool, uint64_t snapid);
+int rados_selfmanaged_snap_create(rados_pool_t pool, uint64_t *snapid);
+int rados_selfmanaged_snap_remove(rados_pool_t pool, uint64_t snapid);
 int rados_snap_list(rados_pool_t pool, rados_snap_t *snaps, int maxlen);
 int rados_snap_lookup(rados_pool_t pool, const char *name, rados_snap_t *id);
 int rados_snap_get_name(rados_pool_t pool, rados_snap_t id, char *name, int maxlen);

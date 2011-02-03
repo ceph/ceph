@@ -35,7 +35,6 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  ceph_set_default_id("admin");
   common_set_defaults(false);
   common_init(args, "ceph", true);
   set_foreground_logging();

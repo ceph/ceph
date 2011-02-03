@@ -12,17 +12,17 @@
  * 
  */
 
-#include "mds/Dumper.h"
+#include "mds/Resetter.h"
 #include "osdc/Journaler.h"
 #include "mds/mdstypes.h"
 #include "mon/MonClient.h"
-#include "common/errno.h"
+#include "mds/events/EResetJournal.h"
 
-Dumper::~Dumper()
+Resetter::~Resetter()
 {
 }
 
-bool Dumper::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
+bool Resetter::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
                          bool force_new)
 {
   if (dest_type == CEPH_ENTITY_TYPE_MON)
@@ -37,7 +37,7 @@ bool Dumper::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
   return *authorizer != NULL;
 }
 
-void Dumper::init(int rank) 
+void Resetter::init(int rank) 
 {
   inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
   unsigned pg_pool = CEPH_METADATA_RULE;
@@ -67,72 +67,68 @@ void Dumper::init(int rank)
   lock.Unlock();
 }
 
-void Dumper::shutdown()
+void Resetter::shutdown()
 {
   lock.Lock();
   timer.shutdown();
   lock.Unlock();
 }
 
-void Dumper::dump(const char *dump_file)
+void Resetter::reset()
 {
-  bool done = false;
+  Mutex lock("Resetter::reset::lock");
   Cond cond;
-  int rank = strtol(g_conf.id, 0, 0);
-  inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
+  bool done;
+  int r;
 
   lock.Lock();
-  journaler->recover(new C_SafeCond(&lock, &cond, &done));
+  journaler->recover(new C_SafeCond(&lock, &cond, &done, &r));
   while (!done)
     cond.Wait(lock);
   lock.Unlock();
+  assert(r == 0);
 
-  uint64_t start = journaler->get_read_pos();
-  uint64_t end = journaler->get_write_pos();
-  uint64_t len = end-start;
-  cout << "journal is " << start << "~" << len << std::endl;
+  uint64_t old_start = journaler->get_read_pos();
+  uint64_t old_end = journaler->get_write_pos();
+  uint64_t old_len = old_end - old_start;
+  cout << "old journal was " << old_start << "~" << old_len << std::endl;
 
-  Filer filer(objecter);
-  bufferlist bl;
-  filer.read(ino, &journaler->get_layout(), CEPH_NOSNAP,
-             start, len, &bl, 0, new C_SafeCond(&lock, &cond, &done));
-  lock.Lock();
-  while (!done)
-    cond.Wait(lock);
-  lock.Unlock();
+  uint64_t new_start = ROUND_UP_TO(old_end+1, journaler->get_layout_period());
+  cout << "new journal start will be " << new_start
+       << " (" << (new_start - old_end) << " bytes past old end)" << std::endl;
 
-  cout << "read " << bl.length() << " bytes at offset " << start << std::endl;
+  journaler->set_read_pos(new_start);
+  journaler->set_write_pos(new_start);
+  journaler->set_expire_trimmed_pos(new_start);
+  journaler->set_writeable();
 
-  int fd = ::open(dump_file, O_WRONLY|O_CREAT|O_TRUNC, 0644);
-  if (fd >= 0) {
-    // include an informative header
-    char buf[200];
-    memset(buf, 0, sizeof(buf));
-    sprintf(buf, "Ceph mds%d journal dump\n start offset %llu (0x%llx)\n       length %llu (0x%llx)\n%c",
-	    rank, 
-	    (unsigned long long)start, (unsigned long long)start,
-	    (unsigned long long)bl.length(), (unsigned long long)bl.length(),
-	    4);
-    int r = ::write(fd, buf, sizeof(buf));
-    assert(r >= 0);
-
-    // write the data
-    ::lseek64(fd, start, SEEK_SET);
-    bl.write_fd(fd);
-    ::close(fd);
-
-    cout << "wrote " << bl.length() << " bytes at offset " << start << " to " << dump_file << "\n"
-	 << "NOTE: this is a _sparse_ file; you can\n"
-	 << "\t$ tar cSzf " << dump_file << ".tgz " << dump_file << "\n"
-	 << "      to efficiently compress it while preserving sparseness." << std::endl;
-  } else {
-    int err = errno;
-    derr << "unable to open " << dump_file << ": " << cpp_strerror(err) << dendl;
+  {
+    cout << "writing journal head" << std::endl;
+    journaler->write_head(new C_SafeCond(&lock, &cond, &done, &r));
+    lock.Lock();
+    while (!done)
+      cond.Wait(lock);
+    lock.Unlock();
+    assert(r == 0);
   }
+
+  LogEvent *le = new EResetJournal;
+
+  bufferlist bl;
+  le->encode_with_header(bl);
+  
+  cout << "writing EResetJournal entry" << std::endl;
+  journaler->append_entry(bl);
+  journaler->flush(new C_SafeCond(&lock, &cond, &done,&r));
+  lock.Lock();
+  while (!done)
+    cond.Wait(lock);
+  lock.Unlock();
+  assert(r == 0);
+
+  cout << "done" << std::endl;
+
   messenger->shutdown();
-
-  // wait for messenger to finish
   messenger->wait();
-
   shutdown();
 }

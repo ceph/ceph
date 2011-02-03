@@ -44,7 +44,7 @@ TEST(RoundTrip, RandomRoundTrips) {
 
     char in[IN_MAX];
     memset(in, 0, sizeof(in));
-    for (int j = 0; i < in_len; ++j) {
+    for (int j = 0; j < in_len; ++j) {
       in[j] = rand_r(&seed) % 0xff;
     }
     char out[OUT_MAX];
@@ -59,6 +59,18 @@ TEST(RoundTrip, RandomRoundTrips) {
 
     ASSERT_EQ(memcmp(in, decoded, in_len), 0);
   }
+}
+
+TEST(EdgeCase, EndsInNewline) {
+  static const int OUT_MAX = 4096;
+
+  char b64[] =
+    "aaaa\n";
+
+    char decoded[OUT_MAX];
+    memset(decoded, 0, sizeof(decoded));
+    int blen = ceph_unarmor(decoded, decoded + OUT_MAX, b64, b64 + sizeof(b64)-1);
+    ASSERT_GE(blen, 0);
 }
 
 TEST(FuzzEncoding, BadDecode1) {

@@ -60,7 +60,9 @@ bool      awake = false;
 bool      fm_shutdown = false;
 pthread_t thread_id;
 
-extern std::map<entity_name_t,float> g_fake_kill_after;  // in config.cc
+// fake osd failures: osd -> time
+static std::map<entity_name_t,float> g_fake_kill_after;
+
 utime_t start_time;
 map<utime_t,entity_name_t> fail_queue;
 list<Message*> sent_to_failed_queue;
