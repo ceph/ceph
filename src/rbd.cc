@@ -245,24 +245,11 @@ static int do_export(librbd::image_t image, const char *path)
   r = rbd.stat(image, info);
   if (r < 0)
     return r;
-#if 0
+
   r = rbd.read_iterate(image, 0, info.size, export_read_cb, (void *)&fd);
   if (r < 0)
     return r;
-#endif
-  librbd::RBD::AioCompletion *completion = rbd.aio_create_completion(NULL, NULL);
-  if (!completion) {
-    r = -ENOMEM;
-    goto done;
-  }
-  r = rbd.aio_read(image, 0, info.size, bl, completion);
-  completion->wait_for_complete();
-  r = completion->get_return_value();
-  completion->release();
-  if (r < 0) {
-    cerr << "error writing to image block" << std::endl;
-    goto done;
-  }
+
   r = write(fd, bl.c_str(), bl.length());
   if (r < 0)
     return r;
@@ -270,7 +257,7 @@ static int do_export(librbd::image_t image, const char *path)
   r = ftruncate(fd, info.size);
   if (r < 0)
     return r;
-done:
+
   close(fd);
 
   return 0;
@@ -336,11 +323,6 @@ static void set_pool_image_name(const char *orig_pool, const char *orig_img,
 
 done_img:
   update_snap_name(*new_img, snap);
-}
-
-static void write_completion(librbd::completion_t cb, void *arg)
-{
-  cout << "write_completion!" << std::endl;
 }
 
 static int do_import(librados::pool_t pool, const char *imgname, int *order, const char *path)
@@ -450,8 +432,7 @@ static int do_import(librados::pool_t pool, const char *imgname, int *order, con
         }
         bufferlist bl;
         bl.append(p);
-        cout << "write_completion=" << (void *)write_completion << std::endl;
-        librbd::RBD::AioCompletion *completion = rbd.aio_create_completion(NULL, write_completion);
+        librbd::RBD::AioCompletion *completion = rbd.aio_create_completion(NULL, NULL);
         if (!completion) {
           r = -ENOMEM;
           goto done;
