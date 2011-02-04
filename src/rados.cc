@@ -333,7 +333,10 @@ int main(int argc, const char **argv)
     }
 
     if (strcmp(nargs[2], "-") == 0) {
-      ::write(1, outdata.c_str(), outdata.length());
+      if (::write(1, outdata.c_str(), outdata.length()) < 0) {
+	int err = errno;
+	cerr << "error writing to stdout: error " << err << std::endl;
+      }
     } else {
       outdata.write_file(nargs[2]);
       generic_dout(0) << "wrote " << outdata.length() << " byte payload to " << nargs[2] << dendl;
