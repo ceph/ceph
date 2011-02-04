@@ -1709,7 +1709,8 @@ extern "C" int rbd_write(rbd_image_t image, off_t ofs, size_t len, const char *b
 extern "C" int rbd_aio_create_completion(void *cb_arg, rbd_callback_t complete_cb, rbd_completion_t *c)
 {
   librbd::RBDClient::AioCompletion *comp = rbd_client->aio_create_completion(cb_arg, complete_cb);
-  *c = (rbd_completion_t) comp;
+  librbd::RBD::AioCompletion *rbd_comp = new librbd::RBD::AioCompletion(comp);
+  *c = (rbd_completion_t) rbd_comp;
   return 0;
 }
 
@@ -1718,6 +1719,14 @@ extern "C" int rbd_aio_write(rbd_image_t image, off_t off, size_t len, const cha
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   return rbd_client->aio_write(ictx->pctx, ictx, off, len, buf, (librbd::RBDClient::AioCompletion *)comp->pc);
+}
+
+extern "C" int rbd_aio_read(rbd_image_t image, off_t off, size_t len, char *buf, rbd_completion_t c)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+  dout(10) << "librbd::RBD::aio_read() buf=" << (void *)buf << "~" << (void *)buf + len - 1 << dendl;
+  return rbd_client->aio_read(ictx->pctx, ictx, off, len, buf, (librbd::RBDClient::AioCompletion *)comp->pc);
 }
 
 extern "C" int rbd_aio_wait_for_complete(rbd_completion_t c)
