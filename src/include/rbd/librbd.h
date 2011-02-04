@@ -83,6 +83,19 @@ int set_snap(rbd_image_t image, const char *snapname);
 /* lower level access */
 void get_rados_pools(rbd_pool_t pool, rados_pool_t *md_pool, rados_pool_t *data_pool);
 
+/* I/O */
+typedef void *rbd_completion_t;
+typedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg);
+int rbd_read(rbd_image_t image, off_t ofs, size_t len, char *buf);
+int rbd_read_iterate(rbd_image_t image, off_t ofs, size_t len,
+		     int (*cb)(off_t, size_t, const char *, void *), void *arg);
+int rbd_write(rbd_image_t image, off_t ofs, size_t len, const char *buf);
+int rbd_aio_create_completion(void *cb_arg, rbd_callback_t complete_cb, rbd_completion_t *c);
+int rbd_aio_write(rbd_image_t image, off_t off, size_t len, const char *buf, rbd_completion_t c);
+int rbd_aio_wait_for_complete(rbd_completion_t c);
+int rbd_aio_get_return_value(rbd_completion_t c);
+void rbd_aio_release(rbd_completion_t c);
+
 #ifdef __cplusplus
 }
 #endif

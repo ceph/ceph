@@ -1560,3 +1560,64 @@ extern "C" size_t rbd_list_snaps(rbd_image_t image, rbd_snap_info_t *snaps, size
   }
   return cpp_snaps.size();
 }
+
+extern "C" int set_snap(rbd_image_t image, const char *snapname)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return rbd_client->set_snap(ictx->pctx, ictx, snapname);
+}
+
+/* I/O */
+extern "C" int rbd_read(rbd_image_t image, off_t ofs, size_t len, char *buf)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return rbd_client->read(ictx->pctx, ictx, ofs, len, buf);
+}
+
+extern "C" int rbd_read_iterate(rbd_image_t image, off_t ofs, size_t len,
+				int (*cb)(off_t, size_t, const char *, void *), void *arg)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return rbd_client->read_iterate(ictx->pctx, ictx, ofs, len, cb, arg);
+}
+
+extern "C" int rbd_write(rbd_image_t image, off_t ofs, size_t len, const char *buf)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return rbd_client->write(ictx->pctx, ictx, ofs, len, buf);
+}
+
+extern "C" int rbd_aio_create_completion(void *cb_arg, rbd_callback_t complete_cb, rbd_completion_t *c)
+{
+  librbd::RBDClient::AioCompletion *comp = rbd_client->aio_create_completion(cb_arg, complete_cb);
+  *c = (rbd_completion_t) comp;
+  return 0;
+}
+
+extern "C" int rbd_aio_write(rbd_image_t image, off_t off, size_t len, const char *buf, rbd_completion_t c)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+  return rbd_client->aio_write(ictx->pctx, ictx, off, len, buf, (librbd::RBDClient::AioCompletion *)comp->pc);
+}
+
+extern "C" int rbd_aio_wait_for_complete(rbd_completion_t c)
+{
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+  librbd::RBDClient::AioCompletion *ac = (librbd::RBDClient::AioCompletion *)comp->pc;
+  return ac->wait_for_complete();
+}
+
+extern "C" int rbd_aio_get_return_value(rbd_completion_t c)
+{
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+  librbd::RBDClient::AioCompletion *ac = (librbd::RBDClient::AioCompletion *)comp->pc;
+  return ac->get_return_value();
+}
+
+extern "C" void rbd_aio_release(rbd_completion_t c)
+{
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+  librbd::RBDClient::AioCompletion *ac = (librbd::RBDClient::AioCompletion *)comp->pc;
+  ac->release();
+}
