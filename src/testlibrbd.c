@@ -23,10 +23,12 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <time.h>
+#include <unistd.h>
 
 #define TEST_IMAGE "testimg"
 #define TEST_POOL "librbdtest"
 #define TEST_SNAP "testsnap"
+#define TEST_IO_SIZE 513
 #define MB_BYTES(mb) (mb << 20)
 
 void test_create_and_stat(rbd_pool_t pool, const char *name, size_t size)
@@ -148,6 +150,98 @@ void test_delete_snap(rbd_image_t image, const char *name)
   assert(rbd_remove_snap(image, name) == 0);
 }
 
+void simple_write_cb(rbd_completion_t cb, void *arg)
+{
+  //  printf("write completion cb called!\n");
+}
+
+void simple_read_cb(rbd_completion_t cb, void *arg)
+{
+  //  printf("read completion cb called!\n");
+}
+
+void aio_write_test_data(rbd_image_t image, const char *test_data, off_t off)
+{
+  rbd_completion_t comp;
+  rbd_aio_create_completion(NULL, (rbd_callback_t) simple_write_cb, &comp);
+  printf("created completion\n");
+  rbd_aio_write(image, off, strlen(test_data), test_data, comp);
+  printf("started write\n");
+  rbd_aio_wait_for_complete(comp);
+  printf("finished write\n");
+  rbd_aio_release(comp);
+}
+
+void write_test_data(rbd_image_t image, const char *test_data, off_t off)
+{
+  size_t written;
+  size_t len = strlen(test_data);
+  while (len > 0) {
+    written = rbd_write(image, off, len, test_data);
+    assert(written >= 0);
+    len -= written;
+    off += written;
+    printf("wrote: %u\n", (unsigned int) written);
+  }
+}
+
+void aio_read_test_data(rbd_image_t image, const char *expected, off_t off)
+{
+  rbd_completion_t comp;
+  char result[TEST_IO_SIZE];
+  rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
+  printf("created completion\n");
+  rbd_aio_read(image, off, strlen(expected), result, comp);
+  printf("started read\n");
+  rbd_aio_wait_for_complete(comp);
+  printf("finished read\n");
+  rbd_aio_release(comp);
+}
+
+void read_test_data(rbd_image_t image, const char *expected, off_t off)
+{
+  size_t read, total_read = 0;
+  size_t expected_len = strlen(expected);
+  size_t len = expected_len;
+  char result[TEST_IO_SIZE];
+  char *buf = result;
+  while (len > 0) {
+    read = rbd_read(image, off + total_read, len, buf);
+    assert(read >= 0);
+    total_read += read;
+    buf += read;
+    len -= read;
+    printf("read: %u\n", (unsigned int) read);
+  }
+  printf("read: %s\nexpected: %s\n", result, expected);
+  assert(strncmp(result, expected, expected_len) == 0);
+}
+
+void test_io(rbd_pool_t pool, rbd_image_t image)
+{
+  char test_data[TEST_IO_SIZE];
+  int i;
+
+  srand(time(0));
+  for (i = 0; i < TEST_IO_SIZE - 1; ++i) {
+    test_data[i] = (char) (rand() % (126 - 33) + 33);
+  }
+  test_data[TEST_IO_SIZE - 1] = '\0';
+
+  for (i = 0; i < 5; ++i)
+    write_test_data(image, test_data, strlen(test_data) * i);
+
+  for (i = 0; i < 5; ++i)
+    aio_write_test_data(image, test_data, strlen(test_data) * i);
+
+  for (i = 0; i < 5; ++i)
+    read_test_data(image, test_data, strlen(test_data) * i);
+
+  for (i = 0; i < 5; ++i)
+    aio_read_test_data(image, test_data, strlen(test_data) * i);
+
+}
+
 int main(int argc, const char **argv) 
 {
   rbd_pool_t pool;
@@ -162,6 +256,7 @@ int main(int argc, const char **argv)
   test_create_snap(image, TEST_SNAP);
   test_ls_snaps(image, 1, TEST_SNAP, MB_BYTES(1));
   test_resize_and_stat(image, MB_BYTES(2));
+  test_io(pool, image);
   test_create_snap(image, TEST_SNAP "1");
   test_ls_snaps(image, 2, TEST_SNAP, MB_BYTES(1), TEST_SNAP "1", MB_BYTES(2));
   test_delete_snap(image, TEST_SNAP);
