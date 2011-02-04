@@ -152,12 +152,12 @@ void test_delete_snap(rbd_image_t image, const char *name)
 
 void simple_write_cb(rbd_completion_t cb, void *arg)
 {
-  //  printf("write completion cb called!\n");
+  printf("write completion cb called!\n");
 }
 
 void simple_read_cb(rbd_completion_t cb, void *arg)
 {
-  //  printf("read completion cb called!\n");
+  printf("read completion cb called!\n");
 }
 
 void aio_write_test_data(rbd_image_t image, const char *test_data, off_t off)
@@ -168,6 +168,9 @@ void aio_write_test_data(rbd_image_t image, const char *test_data, off_t off)
   rbd_aio_write(image, off, strlen(test_data), test_data, comp);
   printf("started write\n");
   rbd_aio_wait_for_complete(comp);
+  int r = rbd_aio_get_return_value(comp);
+  printf("return value is: %d\n", r);
+  assert(r == 0);
   printf("finished write\n");
   rbd_aio_release(comp);
 }
@@ -194,6 +197,10 @@ void aio_read_test_data(rbd_image_t image, const char *expected, off_t off)
   rbd_aio_read(image, off, strlen(expected), result, comp);
   printf("started read\n");
   rbd_aio_wait_for_complete(comp);
+  int r = rbd_aio_get_return_value(comp);
+  printf("return value is: %d\n", r);
+  assert(r == TEST_IO_SIZE - 1);
+  assert(strncmp(expected, result, TEST_IO_SIZE) == 0);
   printf("finished read\n");
   rbd_aio_release(comp);
 }
