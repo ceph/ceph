@@ -33,6 +33,7 @@
 #include <iostream>
 #include <fstream>
 
+#include "common/errno.h"
 #include "common/Timer.h"
 #include "common/signal.h"
 
@@ -2308,25 +2309,50 @@ int SimpleMessenger::rebind(int avoid_port)
   return accepter.rebind(avoid_port);
 }
 
-static void remove_pid_file(int signal = 0)
+static void remove_pid_file(int in_signal_handler = 0)
 {
   if (!g_conf.pid_file)
     return;
 
   // only remove it if it has OUR pid in it!
   int fd = ::open(g_conf.pid_file, O_RDONLY);
-  if (fd >= 0) {
-    char buf[20];
-    ::read(fd, buf, 20);
-    ::close(fd);
-    int a = atoi(buf);
+  if (fd < 0) {
+    int err = errno;
+    if (!in_signal_handler) {
+      generic_dout(0) << "remove_pid_file: error opening " << g_conf.pid_file
+	    << ": " << cpp_strerror(err) << dendl;
+    }
+    return;
+  }
 
-    if (a == getpid())
-      ::unlink(g_conf.pid_file);
-    else if (!signal)
-      generic_dout(0) << "strange, pid file " << g_conf.pid_file 
-	      << " has " << a << ", not expected " << getpid()
-	      << dendl;
+  char buf[32];
+  memset(buf, 0, sizeof(buf));
+  if (TEMP_FAILURE_RETRY(::read(fd, buf, sizeof(buf)-1)) < 0) {
+    int err = errno;
+    if (!in_signal_handler) {
+      generic_dout(0) << "remove_pid_file: error reading " << g_conf.pid_file
+	    << ": " << cpp_strerror(err) << dendl;
+    }
+    return;
+  }
+  TEMP_FAILURE_RETRY(::close(fd));
+
+  int a = atoi(buf);
+  if (a != getpid()) {
+    if (!in_signal_handler) {
+      generic_dout(0) << "remove_pid_file: strange, pid file " << g_conf.pid_file
+	      << " has " << a << ", not expected " << getpid() << dendl;
+    }
+    return;
+  }
+
+  if (::unlink(g_conf.pid_file)) {
+    int err = errno;
+    if (!in_signal_handler) {
+      generic_dout(0) << "remove_pid_file: error unlinking " << g_conf.pid_file
+	    << ": " << cpp_strerror(err) << dendl;
+    }
+    return;
   }
 }
 
