@@ -1068,7 +1068,7 @@ int FileStore::read_op_seq(const char *fn, uint64_t *seq)
 {
   int op_fd = ::open(current_op_seq_fn.c_str(), O_CREAT|O_RDWR, 0644);
   if (op_fd < 0)
-    return op_fd;
+    return -errno;
 
   char s[40];
   int l = ::read(op_fd, s, sizeof(s));
@@ -1076,9 +1076,11 @@ int FileStore::read_op_seq(const char *fn, uint64_t *seq)
     s[l] = 0;
     *seq = atoll(s);
   } else {
-    char buf[80];
+    int err = errno;
     dout(0) << "error reading " << current_op_seq_fn << ": "
-     << strerror_r(errno, buf, sizeof(buf)) << dendl;
+     << cpp_strerror(err) << dendl;
+    ::close(op_fd);
+    return -err;
   }
 
   return op_fd;
@@ -1223,6 +1225,7 @@ int FileStore::mount()
 
       if (cp != curr_seq) {
         int fd = read_op_seq(current_op_seq_fn.c_str(), &curr_seq);
+	assert(fd >= 0);
         /* we'll use the higher version from now on */
         curr_seq = cp;
         write_op_seq(fd, curr_seq);
