@@ -285,6 +285,7 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
 
 int FileJournal::create()
 {
+  char *buf = 0;
   int ret;
   buffer::ptr bp;
   dout(2) << "create " << fn << dendl;
@@ -315,20 +316,26 @@ int FileJournal::create()
   }
 
   // zero first little bit, too.
-  {
-    char z[block_size];
-    memset(z, 0, block_size);
-    if (TEMP_FAILURE_RETRY(::pwrite(fd, z, block_size, get_top())) < 0) {
-      ret = errno;
-      derr << "FileJournal::create: error zeroing first " << block_size
-	   << " bytes " << cpp_strerror(ret) << dendl;
-      goto close_fd;
-    }
+  ret = posix_memalign((void**)&buf, block_size, block_size);
+  if (ret) {
+    derr << "FileJournal::create: failed to allocate " << block_size
+	 << " bytes of memory: " << cpp_strerror(ret) << dendl;
+    goto close_fd;
+  }
+  memset(buf, 0, block_size);
+  if (TEMP_FAILURE_RETRY(::pwrite(fd, buf, block_size, get_top())) < 0) {
+    ret = errno;
+    derr << "FileJournal::create: error zeroing first " << block_size
+	 << " bytes " << cpp_strerror(ret) << dendl;
+    goto free_buf;
   }
 
   dout(2) << "create done" << dendl;
   ret = 0;
 
+free_buf:
+  free(buf);
+  buf = 0;
 close_fd:
   if (TEMP_FAILURE_RETRY(::close(fd)) < 0) {
     ret = errno;
