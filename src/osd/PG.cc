@@ -2843,9 +2843,9 @@ void PG::sub_op_scrub(MOSDSubOp *op)
   op->put();
 }
 
-void PG::sub_op_scrub_reply(MOSDSubOpReply *op)
+void PG::sub_op_scrub_map(MOSDSubOp *op)
 {
-  dout(7) << "sub_op_scrub_reply" << dendl;
+  dout(7) << "sub_op_scrub_map" << dendl;
 
   if (op->map_epoch < info.history.same_acting_since) {
     dout(10) << "sub_op_scrub discarding old sub_op from "
@@ -2896,15 +2896,9 @@ void PG::_scan_list(ScrubMap &map, vector<sobject_t> &ls)
 void PG::_request_scrub_map(int replica, eversion_t version)
 {
     dout(10) << "scrub  requesting scrubmap from osd" << replica << dendl;
-    vector<OSDOp> scrub(1);
-    scrub[0].op.op = CEPH_OSD_OP_SCRUB;
-    sobject_t poid;
-    eversion_t v = version;
-    osd_reqid_t reqid;
-    MOSDSubOp *subop = new MOSDSubOp(reqid, info.pgid, poid, false, 0,
-				     osd->osdmap->get_epoch(), osd->get_tid(), v);
-    subop->ops = scrub;
-    osd->cluster_messenger->send_message(subop, //new MOSDPGScrub(info.pgid, osd->osdmap->get_epoch()),
+    MOSDRepScrub *repscrubop = new MOSDRepScrub(info.pgid, version, 
+						osd->osdmap->get_epoch());
+    osd->cluster_messenger->send_message(repscrubop,
 					 osd->osdmap->get_cluster_inst(replica));
 }
 
