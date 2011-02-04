@@ -1567,6 +1567,15 @@ extern "C" int rbd_set_snap(rbd_image_t image, const char *snapname)
   return rbd_client->set_snap(ictx->pctx, ictx, snapname);
 }
 
+extern "C" void rbd_get_rados_pools(rbd_pool_t pool, rados_pool_t *md_pool, rados_pool_t *data_pool)
+{
+  librbd::PoolCtx *ctx = (librbd::PoolCtx *)pool;
+  if (md_pool)
+    *md_pool = (rados_pool_t) ctx->md;
+  if (data_pool)
+    *data_pool = (rados_pool_t) ctx->data;
+}
+
 /* I/O */
 extern "C" int rbd_read(rbd_image_t image, off_t ofs, size_t len, char *buf)
 {

@@ -81,7 +81,7 @@ int rbd_rollback_snap(rbd_image_t image, const char *snapname);
 int rbd_set_snap(rbd_image_t image, const char *snapname);
 
 /* lower level access */
-void get_rados_pools(rbd_pool_t pool, rados_pool_t *md_pool, rados_pool_t *data_pool);
+void rbd_get_rados_pools(rbd_pool_t pool, rados_pool_t *md_pool, rados_pool_t *data_pool);
 
 /* I/O */
 typedef void *rbd_completion_t;
