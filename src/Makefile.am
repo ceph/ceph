@@ -330,7 +330,8 @@ UNITTEST_LDADD = \
 unittest_encoding_SOURCES = test/encoding.cc
 unittest_encoding_LDADD = libceph.la libcrush.la -lpthread -lm \
 			  ${UNITTEST_LDADD}
-unittest_encoding_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_encoding_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
+		     -fno-strict-aliasing
 check_PROGRAMS += unittest_encoding
 
 unittest_base64_SOURCES = test/base64.cc

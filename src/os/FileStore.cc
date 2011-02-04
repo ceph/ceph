@@ -779,10 +779,22 @@ int FileStore::mkjournal()
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
   int fd = ::open(fn, O_RDONLY, 0644);
-  if (fd < 0)
-    return -errno;
-  ::read(fd, &fsid, sizeof(fsid));
-  ::close(fd);
+  if (fd < 0) {
+    int err = errno;
+    derr << "FileStore::mkjournal: open error: " << cpp_strerror(err) << dendl;
+    return -err;
+  }
+  if (TEMP_FAILURE_RETRY(::read(fd, &fsid, sizeof(fsid))) < 0) {
+    int err = errno;
+    derr << "FileStore::mkjournal: read error: " << cpp_strerror(err) << dendl;
+    TEMP_FAILURE_RETRY(::close(fd));
+    return -err;
+  }
+  if (TEMP_FAILURE_RETRY(::close(fd))) {
+    int err = errno;
+    derr << "FileStore::mkjournal: close error: " << cpp_strerror(err) << dendl;
+    return -err;
+  }
 
   int ret = 0;
 
@@ -1091,12 +1103,16 @@ int FileStore::write_op_seq(int fd, uint64_t seq)
   char s[30];
   int ret;
   snprintf(s, sizeof(s), "%" PRId64 "\n", seq);
-  ret = ::pwrite(fd, s, strlen(s), 0);
+  ret = TEMP_FAILURE_RETRY(::pwrite(fd, s, strlen(s), 0));
   return ret;
 }
 
 int FileStore::mount() 
 {
+  int ret;
+  char buf[PATH_MAX];
+  uint64_t initial_op_seq;
+
   if (g_conf.filestore_dev) {
     dout(0) << "mounting" << dendl;
     //run_cmd("mount", g_conf.filestore_dev, NULL);
@@ -1105,40 +1121,63 @@ int FileStore::mount()
   dout(5) << "basedir " << basedir << " journal " << journalpath << dendl;
   
   // make sure global base dir exists
-  struct stat st;
-  int r = ::stat(basedir.c_str(), &st);
-  if (r != 0) {
-    int err = errno;
-    dout(0) << "unable to stat basedir " << basedir << ": "
-	    << cpp_strerror(err) << dendl;
-    return -err;
+  if (::access(basedir.c_str(), R_OK | W_OK)) {
+    ret = -errno;
+    derr << "FileStore::mount: unable to access basedir '" << basedir << "': "
+	    << cpp_strerror(ret) << dendl;
+    goto done;
   }
-  
+
   // test for btrfs, xattrs, etc.
-  r = _detect_fs();
-  if (r < 0)
-    return r;
+  ret = _detect_fs();
+  if (ret)
+    goto done;
 
   // get fsid
-  char buf[PATH_MAX];
   snprintf(buf, sizeof(buf), "%s/fsid", basedir.c_str());
   fsid_fd = ::open(buf, O_RDWR|O_CREAT, 0644);
-  ::read(fsid_fd, &fsid, sizeof(fsid));
+  if (fsid_fd < 0) {
+    ret = -errno;
+    derr << "FileStore::mount: error opening '" << buf << "': "
+	 << cpp_strerror(ret) << dendl;
+    goto done;
+  }
 
-  if (lock_fsid() < 0)
-    return -EBUSY;
+  fsid = 0;
+  if (TEMP_FAILURE_RETRY(::read(fsid_fd, &fsid, sizeof(fsid))) < 0) {
+    ret = -errno;
+    derr << "FileStore::mount: error reading fsid_fd: " << cpp_strerror(ret)
+	 << dendl;
+    goto close_fsid_fd;
+  }
+
+  if (lock_fsid() < 0) {
+    derr << "FileStore::mount: lock_fsid failed" << dendl;
+    ret = -EBUSY;
+    goto close_fsid_fd;
+  }
 
   dout(10) << "mount fsid is " << fsid << dendl;
 
   // open some dir handles
   basedir_fd = ::open(basedir.c_str(), O_RDONLY);
+  if (basedir_fd < 0) {
+    ret = -errno;
+    derr << "FileStore::mount: failed to open " << basedir << ": "
+	 << cpp_strerror(ret) << dendl;
+    basedir_fd = -1;
+    goto close_fsid_fd;
+  }
 
-  // roll back?
-  if (true) {
+  {
     // get snap list
     DIR *dir = ::opendir(basedir.c_str());
-    if (!dir)
-      return -errno;
+    if (!dir) {
+      ret = -errno;
+      derr << "FileStore::mount: opendir '" << basedir << "' failed: "
+	   << cpp_strerror(ret) << dendl;
+      goto close_basedir_fd;
+    }
 
     struct dirent *de;
     while (::readdir_r(dir, (struct dirent *)buf, &de) == 0) {
@@ -1149,10 +1188,16 @@ int FileStore::mount()
 	snaps.push_back(c);
     }
     
-    ::closedir(dir);
+    if (::closedir(dir) < 0) {
+      ret = -errno;
+      derr << "FileStore::closedir(basedir) failed: error " << cpp_strerror(ret)
+	   << dendl;
+      goto close_basedir_fd;
+    }
 
     dout(0) << "mount found snaps " << snaps << dendl;
   }
+
   if (btrfs && g_conf.filestore_btrfs_snap) {
     if (snaps.empty()) {
       dout(0) << "mount WARNING: no consistent snaps found, store may be in inconsistent state" << dendl;
@@ -1165,26 +1210,20 @@ int FileStore::mount()
       {
 	int fd = read_op_seq(current_op_seq_fn.c_str(), &curr_seq);
 	assert(fd >= 0);
-	::close(fd);
+	TEMP_FAILURE_RETRY(::close(fd));
       }
       dout(10) << "*** curr_seq=" << curr_seq << " cp=" << cp << dendl;
      
       if (cp != curr_seq && !g_conf.osd_use_stale_snap) { 
-        dout(0) << "\n"
-             << " ** ERROR: current volume data version is not equal to snapshotted version\n"
-	     << "           which can lead to data inconsistency. \n"
-	     << "           Current version=" << curr_seq << " snapshot version=" << cp << "\n"
-	     << "           Startup with snapshotted version can be forced using the\n"
-             <<"            'osd use stale snap = true' config option.\n"
-	     << dendl;
-        cerr << TEXT_RED
+        derr << TEXT_RED
 	     << " ** ERROR: current volume data version is not equal to snapshotted version\n"
 	     << "           which can lead to data inconsistency. \n"
 	     << "           Current version=" << curr_seq << " snapshot version=" << cp << "\n"
 	     << "           Startup with snapshotted version can be forced using the\n"
              <<"            'osd use stale snap = true' config option.\n"
-	     << TEXT_NORMAL;
-        exit(1);
+	     << TEXT_NORMAL << dendl;
+	ret = -ENOTSUP;
+	goto close_basedir_fd;
       }
 
       if (cp != curr_seq) {
@@ -1197,29 +1236,41 @@ int FileStore::mount()
       btrfs_ioctl_vol_args vol_args;
       vol_args.fd = 0;
       strcpy(vol_args.name, "current");
-      int r = ::ioctl(basedir_fd,
+      ret = ::ioctl(basedir_fd,
 		      BTRFS_IOC_SNAP_DESTROY,
 		      &vol_args);
-      if (r) {
-	char buf[80];
-	dout(0) << "error removing old current subvol: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+      if (ret) {
+	ret = errno;
+	derr << "FileStore::mount: error removing old current subvol: "
+	     << cpp_strerror(ret) << dendl;
 	char s[PATH_MAX];
 	snprintf(s, sizeof(s), "%s/current.remove.me.%d", basedir.c_str(), rand());
-	r = ::rename(current_fn.c_str(), s);
-	if (r) {
-	  dout(0) << "error renaming old current subvol: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-	  return -errno;
+	if (::rename(current_fn.c_str(), s)) {
+	  ret = -errno;
+	  derr << "FileStore::mount: error renaming old current subvol: "
+	       << cpp_strerror(ret) << dendl;
+	  goto close_basedir_fd;
 	}
       }
-      assert(r == 0);
 
       // roll back
       char s[PATH_MAX];
       snprintf(s, sizeof(s), "%s/" COMMIT_SNAP_ITEM, basedir.c_str(), (long long unsigned)cp);
       vol_args.fd = ::open(s, O_RDONLY);
-      r = ::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &vol_args);
-      assert(r == 0);
-      ::close(vol_args.fd);
+      if (vol_args.fd < 0) {
+	ret = -errno;
+	derr << "FileStore::mount: error opening '" << s << "': "
+	     << cpp_strerror(ret) << dendl;
+	goto close_basedir_fd;
+      }
+      if (::ioctl(basedir_fd, BTRFS_IOC_SNAP_CREATE, &vol_args)) {
+	ret = -errno;
+	derr << "FileStore::mount: error ioctl(BTRFS_IOC_SNAP_CREATE) failed: "
+	     << cpp_strerror(ret) << dendl;
+	TEMP_FAILURE_RETRY(::close(vol_args.fd));
+	goto close_basedir_fd;
+      }
+      TEMP_FAILURE_RETRY(::close(vol_args.fd));
       dout(10) << "mount rolled back to consistent snap " << cp << dendl;
       snaps.pop_back();
 
@@ -1229,18 +1280,27 @@ int FileStore::mount()
         /* we'll use the higher version from now on */
         curr_seq = cp;
         write_op_seq(fd, curr_seq);
-	::close(fd);
+	TEMP_FAILURE_RETRY(::close(fd));
       }
     }
   }
-
-  uint64_t initial_op_seq = 0;
+  initial_op_seq = 0;
 
   current_fd = ::open(current_fn.c_str(), O_RDONLY);
+  if (current_fd < 0) {
+    derr << "FileStore::mount: error opening: " << current_fn << ": "
+	 << cpp_strerror(ret) << dendl;
+    goto close_basedir_fd;
+  }
+
   assert(current_fd >= 0);
 
   op_fd = read_op_seq(current_op_seq_fn.c_str(), &initial_op_seq);
-  assert (op_fd >= 0);
+  if (op_fd < 0) {
+    derr << "FileStore::mount: read_op_seq failed" << dendl;
+    goto close_current_fd;
+  }
+
   dout(5) << "mount op_seq is " << initial_op_seq << dendl;
 
   // journal
@@ -1276,21 +1336,22 @@ int FileStore::mount()
       journal->set_wait_on_full(true);
   }
 
-  r = _sanity_check_fs();
-  if (r < 0)
-    return r;
+  ret = _sanity_check_fs();
+  if (ret) {
+    derr << "FileStore::mount: _sanity_check_fs failed with error "
+	 << ret << dendl;
+    goto close_current_fd;
+  }
 
-  r = journal_replay(initial_op_seq);
-  if (r < 0) {
-    char buf[40];
-    dout(0) << "mount failed to open journal " << journalpath << ": "
-	    << strerror_r(-r, buf, sizeof(buf)) << dendl;
-    cerr << "mount failed to open journal " << journalpath << ": "
-	 << strerror_r(-r, buf, sizeof(buf)) << std::endl;
-    if (r == -ENOTTY)
-      cerr << "maybe journal is not pointing to a block device and its size wasn't configured?" << std::endl;
-
-    return r;
+  ret = journal_replay(initial_op_seq);
+  if (ret < 0) {
+    derr << "mount failed to open journal " << journalpath << ": "
+	 << cpp_strerror(ret) << dendl;
+    if (ret == -ENOTTY) {
+      derr << "maybe journal is not pointing to a block device and its size "
+	   << "wasn't configured?" << dendl;
+    }
+    goto close_current_fd;
   }
 
   journal_start();
@@ -1305,6 +1366,19 @@ int FileStore::mount()
 
   // all okay.
   return 0;
+
+close_current_fd:
+  TEMP_FAILURE_RETRY(::close(current_fd));
+  current_fd = -1;
+close_basedir_fd:
+  TEMP_FAILURE_RETRY(::close(basedir_fd));
+  basedir_fd = -1;
+close_fsid_fd:
+  fsid = 0;
+  TEMP_FAILURE_RETRY(::close(fsid_fd));
+  fsid_fd = -1;
+done:
+  return ret;
 }
 
 int FileStore::umount() 

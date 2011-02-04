@@ -17,11 +17,12 @@
 #include "FileJournal.h"
 #include "include/color.h"
 
+#include <fcntl.h>
+#include <sstream>
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mount.h>
-#include <fcntl.h>
 
 
 #define DOUT_SUBSYS journal
@@ -145,74 +146,117 @@ int FileJournal::_open_block_device()
   return 0;
 }
 
+static int get_kernel_version(int *a, int *b, int *c)
+{
+  int ret;
+  char buf[128];
+  memset(buf, 0, sizeof(buf));
+  int fd = TEMP_FAILURE_RETRY(::open("/proc/version", O_RDONLY));
+  if (fd < 0) {
+    ret = errno;
+    derr << "get_kernel_version: failed to open /proc/version: "
+	 << cpp_strerror(ret) << dendl;
+    goto out;
+  }
+  ret = TEMP_FAILURE_RETRY(::read(fd, buf, sizeof(buf) - 1));
+  if (ret < 0) {
+    ret = errno;
+    derr << "get_kernel_version: failed to read from /proc/version: "
+	 << cpp_strerror(ret) << dendl;
+    goto close_fd;
+  }
+
+  if (sscanf(buf, "Linux version %d.%d.%d", a, b, c) != 3) {
+    derr << "get_kernel_version: failed to parse string: '"
+	 << buf << "'" << dendl;
+    ret = EIO;
+    goto close_fd;
+  }
+
+  dout(0) << " kernel version is " << *a <<"." << *b << "." << *c << dendl;
+  ret = 0;
+
+close_fd:
+  TEMP_FAILURE_RETRY(::close(fd));
+out:
+  return ret;
+}
+
 void FileJournal::_check_disk_write_cache() const
 {
+  ostringstream hdparm_cmd;
+  FILE *fp = NULL;
+  int a, b, c;
+
   if (geteuid() != 0) {
-    dout(10) << __func__ << ": not root, NOT checking disk write "
+    dout(10) << "_check_disk_write_cache: not root, NOT checking disk write "
       << "cache on raw block device " << fn << dendl;
-    return;
+    goto done;
   }
 
-  char cmd[4096];
-  snprintf(cmd, sizeof(cmd), "/sbin/hdparm -W %s > /tmp/out.%d",
-	   fn.c_str(), getpid());
-  int r = ::system(cmd);
-  if (r != 0) {
-    dout(10) << __func__ << ": failed to run '" << cmd
-      << "', NOT checking disk write cache on " << fn << dendl;
-    return;
+  hdparm_cmd << "/sbin/hdparm -W " << fn;
+  fp = popen(hdparm_cmd.str().c_str(), "r");
+  if (!fp) {
+    dout(10) << "_check_disk_write_cache: failed to run /sbin/hdparm: NOT "
+      << "checking disk write cache on raw block device " << fn << dendl;
+    goto done;
   }
 
-  snprintf(cmd, sizeof(cmd), "/tmp/out.%d", getpid());
-  FILE *f = ::fopen(cmd, "r");
-  if (!f) {
-    dout(10) << "_open failed to read '" << cmd
-      << "', NOT checking disk write cache on " << fn << dendl;
-    ::unlink(cmd);
-    return;
-  }
-
-  while (!feof(f)) {
-    char s[100];
-    fgets(s, sizeof(s), f);
-    int on;
-    if (sscanf(s, " write-caching =  %d", &on) == 1) {
-      if (on) {
-
-	// check kenrel version
-	char buf[40];
-	int fd = ::open("/proc/version", O_RDONLY);
-	::read(fd, buf, 39);
-	buf[39] = 0;
-	::close(fd);
-
-	int b, c;
-	int r = sscanf(buf, "Linux version 2.%d.%d", &b, &c);
-	dout(0) << " kernel version is 2." << b << "." << c << dendl;
-	if (r == 2 &&
-	    b >= 6 &&
-	    c >= 33) {
-	  // a-ok
-	} else {
-	  dout(0) << "WARNING: disk write cache is ON; journaling will not be reliable" << dendl;
-	  dout(0) << "         on kernels prior to 2.6.33 (recent kernels are safe)" << dendl;
-	  dout(0) << "         disable with 'hdparm -W 0 " << fn << "'" << dendl;
-	  cout << TEXT_RED
-	       << " ** WARNING: disk write cache is ON on " << fn << ".\n"
-	       << "    Journaling will not be reliable on kernels prior to 2.6.33\n"
-	       << "    (recent kernels are safe).  You can disable the write cache with\n"
-	       << "    'hdparm -W 0 " << fn << "'"
-	       << TEXT_NORMAL
-	       << std::endl;
-	}
-      } else {
-	dout(10) << "_open disk write cache is off (good) on " << fn << dendl;
+  while (true) {
+    char buf[256];
+    memset(buf, 0, sizeof(buf));
+    char *line = fgets(buf, sizeof(buf) - 1, fp);
+    if (!line) {
+      if (ferror(fp)) {
+	int ret = -errno;
+	derr << "_check_disk_write_cache: fgets error: " << cpp_strerror(ret)
+	     << dendl;
+	goto close_f;
       }
+      else {
+	// EOF.
+	break;
+      }
+    }
+
+    int on;
+    if (sscanf(line, " write-caching =  %d", &on) != 1)
+      continue;
+    if (!on) {
+      dout(10) << "_check_disk_write_cache: disk write cache is off (good) on "
+	       << fn << dendl;
       break;
     }
+
+    // is our kernel new enough?
+    if (get_kernel_version(&a, &b, &c)) {
+      dout(10) << "_check_disk_write_cache: failed to get kernel version."
+	       << dendl;
+    }
+    else if (a >= 2 && b >= 6 && c >= 33) {
+      dout(20) << "_check_disk_write_cache: disk write cache is on, but your "
+	       << "kernel is new enough to handle it correctly. (fn:"
+	       << fn << ")" << dendl;
+      break;
+    }
+    derr << TEXT_RED
+	 << " ** WARNING: disk write cache is ON on " << fn << ".\n"
+	 << "    Journaling will not be reliable on kernels prior to 2.6.33\n"
+	 << "    (recent kernels are safe).  You can disable the write cache with\n"
+	 << "    'hdparm -W 0 " << fn << "'"
+	 << TEXT_NORMAL
+	 << dendl;
+    break;
   }
-  fclose(f);
-  ::unlink(cmd);
+
+close_f:
+  if (::fclose(fp)) {
+    int ret = -errno;
+    derr << "_check_disk_write_cache: fclose error: " << cpp_strerror(ret)
+	 << dendl;
+  }
+done:
+  ;
 }
 
 int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
@@ -255,11 +299,15 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
 
 int FileJournal::create()
 {
+  char *buf = 0;
+  int64_t needed_space;
+  int ret;
+  buffer::ptr bp;
   dout(2) << "create " << fn << dendl;
 
-  int err = _open(true, true);
-  if (err < 0)
-    return err;
+  ret = _open(true, true);
+  if (ret < 0)
+    goto done;
 
   // write empty header
   memset(&header, 0, sizeof(header));
@@ -274,33 +322,54 @@ int FileJournal::create()
   header.start = get_top();
   print_header();
 
-  buffer::ptr bp = prepare_header();
-  int r = ::pwrite(fd, bp.c_str(), bp.length(), 0);
-  if (r < 0) {
-    int err = errno;
+  bp = prepare_header();
+  if (TEMP_FAILURE_RETRY(::pwrite(fd, bp.c_str(), bp.length(), 0)) < 0) {
+    ret = errno;
     derr << "FileJournal::create : create write header error "
-         << cpp_strerror(err) << dendl;
-    return -err;
+         << cpp_strerror(ret) << dendl;
+    goto close_fd;
   }
 
   // zero first little bit, too.
-  char z[block_size];
-  memset(z, 0, block_size);
-  ::pwrite(fd, z, block_size, get_top());
+  ret = posix_memalign((void**)&buf, block_size, block_size);
+  if (ret) {
+    derr << "FileJournal::create: failed to allocate " << block_size
+	 << " bytes of memory: " << cpp_strerror(ret) << dendl;
+    goto close_fd;
+  }
+  memset(buf, 0, block_size);
+  if (TEMP_FAILURE_RETRY(::pwrite(fd, buf, block_size, get_top())) < 0) {
+    ret = errno;
+    derr << "FileJournal::create: error zeroing first " << block_size
+	 << " bytes " << cpp_strerror(ret) << dendl;
+    goto free_buf;
+  }
 
-  TEMP_FAILURE_RETRY(::close(fd));
-  fd = -1;
-
-  int64_t needed_space = g_conf.osd_max_write_size << 20;
+  needed_space = g_conf.osd_max_write_size << 20;
   needed_space += (2 * sizeof(entry_header_t)) + get_top();
   if (header.max_size - header.start < needed_space) {
-    derr << "OSD journal is not large enough to hold osd_max_write_size bytes!"
-         << dendl;
-    return -ENOSPC;
+    derr << "FileJournal::create: OSD journal is not large enough to hold "
+	 << "osd_max_write_size bytes!" << dendl;
+    ret = -ENOSPC;
+    goto free_buf;
   }
 
   dout(2) << "create done" << dendl;
-  return 0;
+  ret = 0;
+
+free_buf:
+  free(buf);
+  buf = 0;
+close_fd:
+  if (TEMP_FAILURE_RETRY(::close(fd)) < 0) {
+    ret = errno;
+    derr << "FileJournal::create: error closing fd: " << cpp_strerror(ret)
+	 << dendl;
+    goto done;
+  }
+done:
+  fd = -1;
+  return ret;
 }
 
 int FileJournal::open(uint64_t next_seq)

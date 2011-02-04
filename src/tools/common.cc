@@ -450,7 +450,7 @@ int run_command(const char *line)
   bufferlist in;
   if (cmd.size() == 1 && cmd[0] == "print") {
     *g.log << "----" << std::endl;
-    write(1, in.c_str(), in.length());
+    TEMP_FAILURE_RETRY(::write(1, in.c_str(), in.length()));
     *g.log << "---- (" << in.length() << " bytes)" << std::endl;
     return 0;
   }
@@ -478,7 +478,7 @@ int run_command(const char *line)
   if (outfile) {
     if (strcmp(outfile, "-") == 0) {
       *g.log << "----" << std::endl;
-      write(1, in.c_str(), in.length());
+      TEMP_FAILURE_RETRY(::write(1, in.c_str(), in.length()));
       *g.log << "---- (" << in.length() << " bytes)" << std::endl;
     }
     else {
