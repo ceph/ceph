@@ -145,6 +145,42 @@ int FileJournal::_open_block_device()
   return 0;
 }
 
+static int get_kernel_version(int *a, int *b, int *c)
+{
+  int ret;
+  char buf[128];
+  memset(buf, 0, sizeof(buf));
+  int fd = TEMP_FAILURE_RETRY(::open("/proc/version", O_RDONLY));
+  if (fd < 0) {
+    ret = errno;
+    derr << "get_kernel_version: failed to open /proc/version: "
+	 << cpp_strerror(ret) << dendl;
+    goto out;
+  }
+  ret = TEMP_FAILURE_RETRY(::read(fd, buf, sizeof(buf) - 1));
+  if (ret < 0) {
+    ret = errno;
+    derr << "get_kernel_version: failed to read from /proc/version: "
+	 << cpp_strerror(ret) << dendl;
+    goto close_fd;
+  }
+
+  if (sscanf(buf, "Linux version %d.%d.%d", a, b, c) != 3) {
+    derr << "get_kernel_version: failed to parse string: '"
+	 << buf << "'" << dendl;
+    ret = EIO;
+    goto close_fd;
+  }
+
+  dout(0) << " kernel version is " << *a <<"." << *b << "." << *c << dendl;
+  ret = 0;
+
+close_fd:
+  TEMP_FAILURE_RETRY(::close(fd));
+out:
+  return ret;
+}
+
 void FileJournal::_check_disk_write_cache() const
 {
   if (geteuid() != 0) {
@@ -178,18 +214,12 @@ void FileJournal::_check_disk_write_cache() const
     int on;
     if (sscanf(s, " write-caching =  %d", &on) == 1) {
       if (on) {
-
-	// check kenrel version
-	char buf[40];
-	int fd = ::open("/proc/version", O_RDONLY);
-	::read(fd, buf, 39);
-	buf[39] = 0;
-	::close(fd);
-
-	int b, c;
-	int r = sscanf(buf, "Linux version 2.%d.%d", &b, &c);
-	dout(0) << " kernel version is 2." << b << "." << c << dendl;
-	if (r == 2 &&
+	int a, b ,c;
+	if (get_kernel_version(&a, &b, &c)) {
+	  derr << "error: failed to get kernel version" << dendl;
+	  a = b = c = 0;
+	}
+	if (a >= 2 &&
 	    b >= 6 &&
 	    c >= 33) {
 	  // a-ok
