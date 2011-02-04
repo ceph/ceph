@@ -191,8 +191,9 @@ int main(int argc, const char **argv)
     // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
     char s[20];
     snprintf(s, sizeof(s), "gmon/%d", getpid());
-    if (mkdir(s, 0755) == 0)
-      chdir(s);
+    if ((mkdir(s, 0755) == 0) && (chdir(s) == 0)) {
+      dout(0) << "cmds: gmon.out should be in " << s << dendl;
+    }
 
     generic_dout(0) << "stopped." << dendl;
   }
