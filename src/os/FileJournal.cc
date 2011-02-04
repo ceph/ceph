@@ -285,11 +285,13 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
 
 int FileJournal::create()
 {
+  int ret;
+  buffer::ptr bp;
   dout(2) << "create " << fn << dendl;
 
-  int err = _open(true, true);
-  if (err < 0)
-    return err;
+  ret = _open(true, true);
+  if (ret < 0)
+    goto done;
 
   // write empty header
   memset(&header, 0, sizeof(header));
@@ -304,24 +306,39 @@ int FileJournal::create()
   header.start = get_top();
   print_header();
 
-  buffer::ptr bp = prepare_header();
-  int r = ::pwrite(fd, bp.c_str(), bp.length(), 0);
-  if (r < 0) {
-    int err = errno;
+  bp = prepare_header();
+  if (TEMP_FAILURE_RETRY(::pwrite(fd, bp.c_str(), bp.length(), 0)) < 0) {
+    ret = errno;
     derr << "FileJournal::create : create write header error "
-         << cpp_strerror(err) << dendl;
-    return -err;
+         << cpp_strerror(ret) << dendl;
+    goto close_fd;
   }
 
   // zero first little bit, too.
-  char z[block_size];
-  memset(z, 0, block_size);
-  ::pwrite(fd, z, block_size, get_top());
+  {
+    char z[block_size];
+    memset(z, 0, block_size);
+    if (TEMP_FAILURE_RETRY(::pwrite(fd, z, block_size, get_top())) < 0) {
+      ret = errno;
+      derr << "FileJournal::create: error zeroing first " << block_size
+	   << " bytes " << cpp_strerror(ret) << dendl;
+      goto close_fd;
+    }
+  }
 
-  TEMP_FAILURE_RETRY(::close(fd));
-  fd = -1;
   dout(2) << "create done" << dendl;
-  return 0;
+  ret = 0;
+
+close_fd:
+  if (TEMP_FAILURE_RETRY(::close(fd)) < 0) {
+    ret = errno;
+    derr << "FileJournal::create: error closing fd: " << cpp_strerror(ret)
+	 << dendl;
+    goto done;
+  }
+done:
+  fd = -1;
+  return ret;
 }
 
 int FileJournal::open(uint64_t next_seq)
