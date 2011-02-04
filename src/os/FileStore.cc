@@ -779,10 +779,22 @@ int FileStore::mkjournal()
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
   int fd = ::open(fn, O_RDONLY, 0644);
-  if (fd < 0)
-    return -errno;
-  ::read(fd, &fsid, sizeof(fsid));
-  ::close(fd);
+  if (fd < 0) {
+    int err = errno;
+    derr << "FileStore::mkjournal: open error: " << cpp_strerror(err) << dendl;
+    return -err;
+  }
+  if (TEMP_FAILURE_RETRY(::read(fd, &fsid, sizeof(fsid))) < 0) {
+    int err = errno;
+    derr << "FileStore::mkjournal: read error: " << cpp_strerror(err) << dendl;
+    TEMP_FAILURE_RETRY(::close(fd));
+    return -err;
+  }
+  if (TEMP_FAILURE_RETRY(::close(fd))) {
+    int err = errno;
+    derr << "FileStore::mkjournal: close error: " << cpp_strerror(err) << dendl;
+    return -err;
+  }
 
   int ret = 0;
 
