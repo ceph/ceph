@@ -78,7 +78,7 @@ size_t rbd_list_snaps(rbd_image_t image, rbd_snap_info_t *snaps, size_t max_snap
 int rbd_create_snap(rbd_image_t image, const char *snapname);
 int rbd_remove_snap(rbd_image_t image, const char *snapname);
 int rbd_rollback_snap(rbd_image_t image, const char *snapname);
-int set_snap(rbd_image_t image, const char *snapname);
+int rbd_set_snap(rbd_image_t image, const char *snapname);
 
 /* lower level access */
 void get_rados_pools(rbd_pool_t pool, rados_pool_t *md_pool, rados_pool_t *data_pool);

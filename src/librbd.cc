@@ -1561,7 +1561,7 @@ extern "C" size_t rbd_list_snaps(rbd_image_t image, rbd_snap_info_t *snaps, size
   return cpp_snaps.size();
 }
 
-extern "C" int set_snap(rbd_image_t image, const char *snapname)
+extern "C" int rbd_set_snap(rbd_image_t image, const char *snapname)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   return rbd_client->set_snap(ictx->pctx, ictx, snapname);
