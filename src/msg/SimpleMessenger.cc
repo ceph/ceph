@@ -2402,9 +2402,9 @@ int SimpleMessenger::start(bool nodaemon)
   // daemonize?
   if (g_conf.daemonize && !nodaemon) {
     if (Thread::get_num_threads() > 0) {
-      dout(0) << "messenger.start BUG: there are " << Thread::get_num_threads()
-	      << " already started that will now die!  call messenger.start() sooner." 
-	      << dendl;
+      derr << "messenger.start BUG: there are " << Thread::get_num_threads()
+	   << " already started that will now die!  call messenger.start() sooner."
+	   << dendl;
     }
 
     daemon(1, 0);
@@ -2412,8 +2412,16 @@ int SimpleMessenger::start(bool nodaemon)
     write_pid_file(getpid());
  
     if (g_conf.chdir && g_conf.chdir[0]) {
-      ::mkdir(g_conf.chdir, 0700);
-      ::chdir(g_conf.chdir);
+      if (::mkdir(g_conf.chdir, 0700)) {
+	int err = errno;
+	derr << "messenger.start: error creating directory: '"
+	     << g_conf.chdir << "': " << cpp_strerror(err) << dendl;
+      }
+      else if (::chdir(g_conf.chdir)) {
+	int err = errno;
+	derr << "messenger.start: failed to chdir to directory: '"
+	     << g_conf.chdir << "': " << cpp_strerror(err) << dendl;
+      }
     }
     dout_handle_daemonize();
     dout(1) << "messenger.start daemonized" << dendl;
