@@ -1732,20 +1732,17 @@ extern "C" int rbd_aio_read(rbd_image_t image, off_t off, size_t len, char *buf,
 extern "C" int rbd_aio_wait_for_complete(rbd_completion_t c)
 {
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
-  librbd::RBDClient::AioCompletion *ac = (librbd::RBDClient::AioCompletion *)comp->pc;
-  return ac->wait_for_complete();
+  return comp->wait_for_complete();
 }
 
 extern "C" int rbd_aio_get_return_value(rbd_completion_t c)
 {
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
-  librbd::RBDClient::AioCompletion *ac = (librbd::RBDClient::AioCompletion *)comp->pc;
-  return ac->get_return_value();
+  return comp->get_return_value();
 }
 
 extern "C" void rbd_aio_release(rbd_completion_t c)
 {
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
-  librbd::RBDClient::AioCompletion *ac = (librbd::RBDClient::AioCompletion *)comp->pc;
-  ac->release();
+  comp->release();
 }
