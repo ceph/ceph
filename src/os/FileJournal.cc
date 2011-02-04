@@ -17,11 +17,12 @@
 #include "FileJournal.h"
 #include "include/color.h"
 
+#include <fcntl.h>
+#include <sstream>
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mount.h>
-#include <fcntl.h>
 
 
 #define DOUT_SUBSYS journal
@@ -183,66 +184,79 @@ out:
 
 void FileJournal::_check_disk_write_cache() const
 {
+  ostringstream hdparm_cmd;
+  FILE *fp = NULL;
+  int a, b, c;
+
   if (geteuid() != 0) {
-    dout(10) << __func__ << ": not root, NOT checking disk write "
+    dout(10) << "_check_disk_write_cache: not root, NOT checking disk write "
       << "cache on raw block device " << fn << dendl;
-    return;
+    goto done;
   }
 
-  char cmd[4096];
-  snprintf(cmd, sizeof(cmd), "/sbin/hdparm -W %s > /tmp/out.%d",
-	   fn.c_str(), getpid());
-  int r = ::system(cmd);
-  if (r != 0) {
-    dout(10) << __func__ << ": failed to run '" << cmd
-      << "', NOT checking disk write cache on " << fn << dendl;
-    return;
+  hdparm_cmd << "/sbin/hdparm -W " << fn;
+  fp = popen(hdparm_cmd.str().c_str(), "r");
+  if (!fp) {
+    dout(10) << "_check_disk_write_cache: failed to run /sbin/hdparm: NOT "
+      << "checking disk write cache on raw block device " << fn << dendl;
+    goto done;
   }
 
-  snprintf(cmd, sizeof(cmd), "/tmp/out.%d", getpid());
-  FILE *f = ::fopen(cmd, "r");
-  if (!f) {
-    dout(10) << "_open failed to read '" << cmd
-      << "', NOT checking disk write cache on " << fn << dendl;
-    ::unlink(cmd);
-    return;
-  }
-
-  while (!feof(f)) {
-    char s[100];
-    fgets(s, sizeof(s), f);
-    int on;
-    if (sscanf(s, " write-caching =  %d", &on) == 1) {
-      if (on) {
-	int a, b ,c;
-	if (get_kernel_version(&a, &b, &c)) {
-	  derr << "error: failed to get kernel version" << dendl;
-	  a = b = c = 0;
-	}
-	if (a >= 2 &&
-	    b >= 6 &&
-	    c >= 33) {
-	  // a-ok
-	} else {
-	  dout(0) << "WARNING: disk write cache is ON; journaling will not be reliable" << dendl;
-	  dout(0) << "         on kernels prior to 2.6.33 (recent kernels are safe)" << dendl;
-	  dout(0) << "         disable with 'hdparm -W 0 " << fn << "'" << dendl;
-	  cout << TEXT_RED
-	       << " ** WARNING: disk write cache is ON on " << fn << ".\n"
-	       << "    Journaling will not be reliable on kernels prior to 2.6.33\n"
-	       << "    (recent kernels are safe).  You can disable the write cache with\n"
-	       << "    'hdparm -W 0 " << fn << "'"
-	       << TEXT_NORMAL
-	       << std::endl;
-	}
-      } else {
-	dout(10) << "_open disk write cache is off (good) on " << fn << dendl;
+  while (true) {
+    char buf[256];
+    memset(buf, 0, sizeof(buf));
+    char *line = fgets(buf, sizeof(buf) - 1, fp);
+    if (!line) {
+      if (ferror(fp)) {
+	int ret = -errno;
+	derr << "_check_disk_write_cache: fgets error: " << cpp_strerror(ret)
+	     << dendl;
+	goto close_f;
       }
+      else {
+	// EOF.
+	break;
+      }
+    }
+
+    int on;
+    if (sscanf(line, " write-caching =  %d", &on) != 1)
+      continue;
+    if (!on) {
+      dout(10) << "_check_disk_write_cache: disk write cache is off (good) on "
+	       << fn << dendl;
       break;
     }
+
+    // is our kernel new enough?
+    if (get_kernel_version(&a, &b, &c)) {
+      dout(10) << "_check_disk_write_cache: failed to get kernel version."
+	       << dendl;
+    }
+    else if (a >= 2 && b >= 6 && c >= 33) {
+      dout(20) << "_check_disk_write_cache: disk write cache is on, but your "
+	       << "kernel is new enough to handle it correctly. (fn:"
+	       << fn << ")" << dendl;
+      break;
+    }
+    derr << TEXT_RED
+	 << " ** WARNING: disk write cache is ON on " << fn << ".\n"
+	 << "    Journaling will not be reliable on kernels prior to 2.6.33\n"
+	 << "    (recent kernels are safe).  You can disable the write cache with\n"
+	 << "    'hdparm -W 0 " << fn << "'"
+	 << TEXT_NORMAL
+	 << dendl;
+    break;
   }
-  fclose(f);
-  ::unlink(cmd);
+
+close_f:
+  if (::fclose(fp)) {
+    int ret = -errno;
+    derr << "_check_disk_write_cache: fclose error: " << cpp_strerror(ret)
+	 << dendl;
+  }
+done:
+  ;
 }
 
 int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
