@@ -2407,22 +2407,9 @@ int SimpleMessenger::start(bool nodaemon)
 	      << dendl;
     }
 
-    if (1) {
-      daemon(1, 0);
-      install_standard_sighandlers();
-      write_pid_file(getpid());
-    } else {
-      pid_t pid = fork();
-      if (pid) {
-	// i am parent
-	write_pid_file(pid);
-	::close(0);
-	::close(1);
-	::close(2);
-	_exit(0);
-      }
-      install_standard_sighandlers();
-    }
+    daemon(1, 0);
+    install_standard_sighandlers();
+    write_pid_file(getpid());
  
     if (g_conf.chdir && g_conf.chdir[0]) {
       ::mkdir(g_conf.chdir, 0700);
