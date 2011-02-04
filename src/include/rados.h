@@ -161,6 +161,12 @@ struct ceph_eversion {
 #define CEPH_OSDMAP_PAUSEREC (1<<4)  /* pause recovery */
 
 /*
+ * The error code to return when an OSD can't handle a write
+ * because it is too large.
+ */
+#define OSD_WRITETOOBIG EMSGSIZE
+
+/*
  * osd ops
  */
 #define CEPH_OSD_OP_MODE       0xf000

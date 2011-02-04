@@ -290,6 +290,15 @@ int FileJournal::create()
 
   TEMP_FAILURE_RETRY(::close(fd));
   fd = -1;
+
+  int64_t needed_space = g_conf.osd_max_write_size << 20;
+  needed_space += (2 * sizeof(entry_header_t)) + get_top();
+  if (header.max_size - header.start < needed_space) {
+    derr << "OSD journal is not large enough to hold osd_max_write_size bytes!"
+         << dendl;
+    return -ENOSPC;
+  }
+
   dout(2) << "create done" << dendl;
   return 0;
 }
