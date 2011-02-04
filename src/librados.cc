@@ -298,6 +298,38 @@ public:
     }
   };
   
+  struct C_aio_sparse_read_Ack : public Context {
+    AioCompletion *c;
+    bufferlist *data_bl;
+    std::map<off_t,size_t> *m;
+    
+    void finish(int r) {
+      c->lock.Lock();
+      c->rval = r;
+      c->ack = true;
+      c->cond.Signal();
+
+      bufferlist::iterator iter = c->bl.begin();
+      if (r >= 0) {
+        ::decode(*m, iter);
+        ::decode(*data_bl, iter);
+      }
+
+      if (c->callback_complete) {
+	rados_callback_t cb = c->callback_complete;
+	void *cb_arg = c->callback_arg;
+	c->lock.Unlock();
+	cb(c, cb_arg);
+	c->lock.Lock();
+      }
+
+      c->put_unlock();
+    }
+    C_aio_sparse_read_Ack(AioCompletion *_c) : c(_c) {
+      c->get();
+    }
+  };
+
   struct C_aio_Safe : public Context {
     AioCompletion *c;
     void finish(int r) {
@@ -328,6 +360,10 @@ public:
 	       AioCompletion *c);
   int aio_read(PoolCtx& pool, object_t oid, off_t off, char *buf, size_t len,
 	       AioCompletion *c);
+
+  int aio_sparse_read(PoolCtx& pool, const object_t oid, off_t off,
+		      std::map<off_t,size_t> *m, bufferlist *data_bl, size_t len,
+		      AioCompletion *c);
 
   int aio_write(PoolCtx& pool, object_t oid, off_t off, const bufferlist& bl, size_t len,
 		AioCompletion *c);
@@ -1029,9 +1065,9 @@ int RadosClient::aio_read(PoolCtx& pool, const object_t oid, off_t off, bufferli
   objecter->read(oid, oloc,
 		 off, len, pool.snap_seq, &c->bl, 0,
 		 onack, &c->objver);
-
   return 0;
 }
+
 int RadosClient::aio_read(PoolCtx& pool, const object_t oid, off_t off, char *buf, size_t len,
 			  AioCompletion *c)
 {
@@ -1046,6 +1082,26 @@ int RadosClient::aio_read(PoolCtx& pool, const object_t oid, off_t off, char *bu
 		 off, len, pool.snap_seq, &c->bl, 0,
 		 onack, &c->objver);
 
+  return 0;
+}
+
+int RadosClient::aio_sparse_read(PoolCtx& pool, const object_t oid, off_t off,
+			  std::map<off_t,size_t> *m, bufferlist *data_bl, size_t len,
+			  AioCompletion *c)
+{
+ 
+  C_aio_sparse_read_Ack *onack = new C_aio_sparse_read_Ack(c);
+  onack->m = m;
+  onack->data_bl = data_bl;
+  eversion_t ver;
+
+  c->pbl = NULL;
+
+  Mutex::Locker l(lock);
+  object_locator_t oloc(pool.poolid);
+  objecter->sparse_read(oid, oloc,
+		 off, len, pool.snap_seq, &c->bl, 0,
+		 onack);
   return 0;
 }
 
@@ -2143,6 +2199,18 @@ int Rados::aio_read(rados_pool_t pool, const string& oid, off_t off, bufferlist 
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   RadosClient::AioCompletion *pc = (RadosClient::AioCompletion *)c->pc;
   int r = client->aio_read(*ctx, oid, off, pbl, len, pc);
+  return r;
+}
+
+int Rados::aio_sparse_read(pool_t pool, const std::string& oid, off_t off,
+		    std::map<off_t,size_t> *m, bufferlist *data_bl, size_t len,
+		    AioCompletion *c)
+{
+  if (!client)
+    return -EINVAL;
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  RadosClient::AioCompletion *pc = (RadosClient::AioCompletion *)c->pc;
+  int r = client->aio_sparse_read(*ctx, oid, off, m, data_bl, len, pc);
   return r;
 }
 

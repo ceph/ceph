@@ -99,6 +99,7 @@ public:
   AioCompletion *aio_create_completion(void *cb_arg, callback_t complete_cb);
   int aio_write(image_t image, off_t off, size_t len, bufferlist& bl,
                 AioCompletion *c);
+  int aio_read(image_t image, off_t off, size_t len, bufferlist& bl, AioCompletion *c);
 
   /* lower level access */
   void get_rados_pools(pool_t pool, librados::pool_t *md_pool, librados::pool_t *data_pool);

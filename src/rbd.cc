@@ -117,149 +117,6 @@ static void print_info(const char *imgname, librbd::image_info_t& info)
        << std::endl;
 }
 
-/*
-int read_rbd_info(librbd::pools_t& pp, string& info_oid, struct rbd_info *info)
-{
-  int r;
-  bufferlist bl;
-
-  r = rados.read(pp.md, info_oid, 0, bl, sizeof(*info));
-  if (r < 0)
-    return r;
-  if (r == 0) {
-    return init_rbd_info(info);
-  }
-
-  if (r < (int)sizeof(*info))
-    return -EIO;
-
-  memcpy(info, bl.c_str(), r);
-  return 0;
-}
-
-static int touch_rbd_info(librados::pool_t pool, string& info_oid)
-{
-  bufferlist bl;
-  int r = rados.write(pool, info_oid, 0, bl, 0);
-  if (r < 0)
-    return r;
-  return 0;
-}
-
-static int rbd_assign_bid(librados::pool_t pool, string& info_oid, uint64_t *id)
-{
-  bufferlist bl, out;
-
-  *id = 0;
-
-  int r = touch_rbd_info(pool, info_oid);
-  if (r < 0)
-    return r;
-
-  r = rados.exec(pool, info_oid, "rbd", "assign_bid", bl, out);
-  if (r < 0)
-    return r;
-
-  bufferlist::iterator iter = out.begin();
-  ::decode(*id, iter);
-
-  return 0;
-}
-
-
-static int read_header_bl(librados::pool_t pool, string& md_oid, bufferlist& header, uint64_t *ver)
-{
-  int r;
-#define READ_SIZE 4096
-  do {
-    bufferlist bl;
-    r = rados.read(pool, md_oid, 0, bl, READ_SIZE);
-    if (r < 0)
-      return r;
-    header.claim_append(bl);
-   } while (r == READ_SIZE);
-
-  if (ver)
-    *ver = rados.get_last_version(pool);
-
-  return 0;
-}
-
-static int notify_change(librados::pool_t pool, string& oid, uint64_t *pver)
-{
-  uint64_t ver;
-  if (pver)
-    ver = *pver;
-  else
-    ver = rados.get_last_version(pool);
-  rados.notify(pool, oid, ver);
-  return 0;
-}
-
-static int read_header(librados::pool_t pool, string& md_oid, struct rbd_obj_header_ondisk *header, uint64_t *ver)
-{
-  bufferlist header_bl;
-  int r = read_header_bl(pool, md_oid, header_bl, ver);
-  if (r < 0)
-    return r;
-  if (header_bl.length() < (int)sizeof(*header))
-    return -EIO;
-  memcpy(header, header_bl.c_str(), sizeof(*header));
-
-  return 0;
-}
-
-static int write_header(librbd::pools_t& pp, string& md_oid, bufferlist& header)
-{
-  bufferlist bl;
-  int r = rados.write(pp.md, md_oid, 0, header, header.length());
-
-  notify_change(pp.md, md_oid, NULL);
-
-  return r;
-}
-
-static int tmap_set(librbd::pools_t& pp, string& imgname)
-{
-  bufferlist cmdbl, emptybl;
-  __u8 c = CEPH_OSD_TMAP_SET;
-  ::encode(c, cmdbl);
-  ::encode(imgname, cmdbl);
-  ::encode(emptybl, cmdbl);
-  return rados.tmap_update(pp.md, dir_oid, cmdbl);
-}
-
-static int tmap_rm(librbd::pools_t& pp, string& imgname)
-{
-  bufferlist cmdbl;
-  __u8 c = CEPH_OSD_TMAP_RM;
-  ::encode(c, cmdbl);
-  ::encode(imgname, cmdbl);
-  return rados.tmap_update(pp.md, dir_oid, cmdbl);
-}
-
-static int rollback_image(librbd::pools_t& pp, struct rbd_obj_header_ondisk *header,
-                          ::SnapContext& snapc, uint64_t snapid)
-{
-  uint64_t numseg = get_max_block(header);
-
-  for (uint64_t i = 0; i < numseg; i++) {
-    int r;
-    string oid = get_block_oid(header, i);
-    librados::SnapContext sn;
-    sn.seq = snapc.seq;
-    sn.snaps.clear();
-    vector<snapid_t>::iterator iter = snapc.snaps.begin();
-    for (; iter != snapc.snaps.end(); ++iter) {
-      sn.snaps.push_back(*iter);
-    }
-    r = rados.selfmanaged_snap_rollback_object(pp.data, oid, sn, snapid);
-    if (r < 0 && r != -ENOENT)
-      return r;
-  }
-  return 0;
-}
-*/
 static int do_list(librbd::pool_t pool)
 {
   std::vector<string> names;
@@ -380,6 +237,7 @@ static int do_export(librbd::image_t image, const char *path)
 {
   int r;
   librbd::image_info_t info;
+  bufferlist bl;
   int fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
   if (fd < 0)
     return -errno;
@@ -387,15 +245,32 @@ static int do_export(librbd::image_t image, const char *path)
   r = rbd.stat(image, info);
   if (r < 0)
     return r;
-
+#if 0
   r = rbd.read_iterate(image, 0, info.size, export_read_cb, (void *)&fd);
+  if (r < 0)
+    return r;
+#endif
+  librbd::RBD::AioCompletion *completion = rbd.aio_create_completion(NULL, NULL);
+  if (!completion) {
+    r = -ENOMEM;
+    goto done;
+  }
+  r = rbd.aio_read(image, 0, info.size, bl, completion);
+  completion->wait_for_complete();
+  r = completion->get_return_value();
+  completion->release();
+  if (r < 0) {
+    cerr << "error writing to image block" << std::endl;
+    goto done;
+  }
+  r = write(fd, bl.c_str(), bl.length());
   if (r < 0)
     return r;
 
   r = ftruncate(fd, info.size);
   if (r < 0)
     return r;
-
+done:
   close(fd);
 
   return 0;
@@ -585,6 +460,7 @@ static int do_import(librados::pool_t pool, const char *imgname, int *order, con
         if (r < 0)
           goto done;
 	completion->wait_for_complete();
+	r = completion->get_return_value();
 	completion->release();
         if (r < 0) {
           cerr << "error writing to image block" << std::endl;
