@@ -91,15 +91,15 @@ public:
   int set_snap(image_t image, const char *snap_name);
 
   /* I/O */
-  int read(image_t image, off_t ofs, size_t len, bufferlist& bl);
+  int read(image_t image, off_t ofs, size_t len, ceph::bufferlist& bl);
   int read_iterate(image_t image, off_t ofs, size_t len,
                    int (*cb)(off_t, size_t, const char *, void *), void *arg);
-  int write(image_t image, off_t ofs, size_t len, bufferlist& bl);
+  int write(image_t image, off_t ofs, size_t len, ceph::bufferlist& bl);
 
   AioCompletion *aio_create_completion(void *cb_arg, callback_t complete_cb);
-  int aio_write(image_t image, off_t off, size_t len, bufferlist& bl,
+  int aio_write(image_t image, off_t off, size_t len, ceph::bufferlist& bl,
                 AioCompletion *c);
-  int aio_read(image_t image, off_t off, size_t len, bufferlist& bl, AioCompletion *c);
+  int aio_read(image_t image, off_t off, size_t len, ceph::bufferlist& bl, AioCompletion *c);
 
   /* lower level access */
   void get_rados_pools(pool_t pool, librados::pool_t *md_pool, librados::pool_t *data_pool);
