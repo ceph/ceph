@@ -719,7 +719,7 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
   return 0;
 }
 
-void FileJournal::write_bl(off64_t& pos, bufferlist& bl)
+int FileJournal::write_bl(off64_t& pos, bufferlist& bl)
 {
   // make sure list segments are page aligned
   if (directio && (!bl.is_page_aligned() ||
@@ -733,12 +733,14 @@ void FileJournal::write_bl(off64_t& pos, bufferlist& bl)
   }
 
   ::lseek64(fd, pos, SEEK_SET);
-  int err = bl.write_fd(fd);
-  if (err) {
+  int ret = bl.write_fd(fd);
+  if (ret) {
     derr << "FileJournal::write_bl : write_fd failed: "
-	 << cpp_strerror(err) << dendl;
+	 << cpp_strerror(ret) << dendl;
+    return ret;
   }
   pos += bl.length();
+  return 0;
 }
 
 void FileJournal::do_write(bufferlist& bl)
@@ -779,7 +781,11 @@ void FileJournal::do_write(bufferlist& bl)
     dout(10) << "do_write wrapping, first bit at " << pos << " len " << first.length()
 	     << " second bit len " << second.length() << " (orig len " << bl.length() << ")" << dendl;
 
-    write_bl(pos, first);
+    if (write_bl(pos, first)) {
+      derr << "FileJournal::do_write: write_bl(pos=" << pos
+	   << ") failed" << dendl;
+      ceph_abort();
+    }
     assert(pos == header.max_size);
     if (hbp.length()) {
       // be sneaky: include the header in the second fragment
@@ -787,13 +793,28 @@ void FileJournal::do_write(bufferlist& bl)
       pos = 0;          // we included the header
     } else
       pos = get_top();  // no header, start after that
-    write_bl(pos, second);
+    if (write_bl(pos, second)) {
+      derr << "FileJournal::do_write: write_bl(pos=" << pos
+	   << ") failed" << dendl;
+      ceph_abort();
+    }
   } else {
     // header too?
-    if (hbp.length())
-      ::pwrite(fd, hbp.c_str(), hbp.length(), 0);
+    if (hbp.length()) {
+      if (TEMP_FAILURE_RETRY(::pwrite(fd, hbp.c_str(), hbp.length(), 0))) {
+	int err = errno;
+	derr << "FileJournal::do_write: pwrite(fd=" << fd
+	     << ", hbp.length=" << hbp.length() << ") failed :"
+	     << cpp_strerror(err) << dendl;
+	ceph_abort();
+      }
+    }
 
-    write_bl(pos, bl);
+    if (write_bl(pos, bl)) {
+      derr << "FileJournal::do_write: write_bl(pos=" << pos
+	   << ") failed" << dendl;
+      ceph_abort();
+    }
   }
 
   if (!directio) {

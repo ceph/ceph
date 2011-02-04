@@ -106,7 +106,7 @@ extern void __ceph_assert_warn(const char *assertion, const char *file, int line
  * Currently, it's the same as assert(0), but we may one day make assert a
  * debug-only thing, like it is in many projects.
  */
-#define ceph_abort assert(0)
+#define ceph_abort() assert(0)
 
 #endif
 

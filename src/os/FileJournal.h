@@ -143,7 +143,7 @@ private:
   int prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64_t& orig_ops, uint64_t& orig_bytes);
   void do_write(bufferlist& bl);
 
-  void write_bl(off64_t& pos, bufferlist& bl);
+  int write_bl(off64_t& pos, bufferlist& bl);
   void wrap_read_bl(off64_t& pos, int64_t len, bufferlist& bl);
 
   class Writer : public Thread {
