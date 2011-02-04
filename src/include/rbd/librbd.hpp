@@ -78,7 +78,7 @@ public:
   int copy(pool_t src_pool, const char *srcname, pool_t dest_pool, const char *destname);
   int rename(pool_t src_pool, const char *srcname, const char *destname);
 
-  int open_image(pool_t pool, const char *name, image_t *image, const char *snap_name);
+  int open_image(pool_t pool, const char *name, image_t *image, const char *snap_name = NULL);
   int close_image(image_t image);
   int resize(image_t image, size_t size);
   int stat(image_t image, image_info_t& info);

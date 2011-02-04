@@ -35,7 +35,7 @@ void test_create_and_stat(rbd_pool_t pool, const char *name, size_t size)
   rbd_image_t image;
   int order = 0;
   assert(rbd_create(pool, name, size, &order) == 0);
-  assert(rbd_open_image(pool, name, &image) == 0);
+  assert(rbd_open_image(pool, name, &image, NULL) == 0);
   assert(rbd_stat(image, &info) == 0);
   printf("image has size %llu and order %d\n", (unsigned long long) info.size, info.order);
   assert(info.size == size);
@@ -156,7 +156,7 @@ int main(int argc, const char **argv)
   assert(rbd_open_pool(TEST_POOL, &pool) == 0);
   test_ls(pool, 0);
   test_create_and_stat(pool, TEST_IMAGE, MB_BYTES(1));
-  assert(rbd_open_image(pool, TEST_IMAGE, &image) == 0);
+  assert(rbd_open_image(pool, TEST_IMAGE, &image, NULL) == 0);
   test_ls(pool, 1, TEST_IMAGE);
   test_ls_snaps(image, 0);
   test_create_snap(image, TEST_SNAP);

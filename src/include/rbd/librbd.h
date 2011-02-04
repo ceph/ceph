@@ -68,7 +68,7 @@ int rbd_remove(rbd_pool_t pool, const char *name);
 int rbd_copy(rbd_pool_t src_pool, const char *srcname, rbd_pool_t dest_pool, const char *destname);
 int rbd_rename(rbd_pool_t src_pool, const char *srcname, const char *destname);
 
-int rbd_open_image(rbd_pool_t pool, const char *name, rbd_image_t *image);
+int rbd_open_image(rbd_pool_t pool, const char *name, rbd_image_t *image, const char *snap_name);
 int rbd_close_image(rbd_image_t image);
 int rbd_resize(rbd_image_t image, size_t size);
 int rbd_stat(rbd_image_t image, rbd_image_info_t *info);
