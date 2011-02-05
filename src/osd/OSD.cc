@@ -384,6 +384,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   scrubs_pending(0),
   scrubs_active(0),
   scrub_wq(this, &disk_tp),
+  rep_scrub_wq(this, &disk_tp),
   remove_wq(this, &disk_tp)
 {
   monc->set_messenger(client_messenger);
