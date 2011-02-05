@@ -115,13 +115,6 @@ cfuse_LDADD = -lfuse libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm 
 cfuse_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += cfuse
 
-#if WITH_DEBUG
-#fakefuse_SOURCES = fakefuse.cc msg/FakeMessenger.cc client/fuse.cc client/fuse_ll.cc
-#fakefuse_LDADD = -lfuse libmon.a libmds.a libosd.a libos.a \
-#	libclient.a libosdc.a libcrush.a 
-#bin_PROGRAMS += fakefuse
-#endif
-
 endif
 
 # tcmalloc?
@@ -162,12 +155,6 @@ bin_PROGRAMS += dumpjournal dupstore streamtest
 test_trans_SOURCES = test_trans.cc
 test_trans_LDADD = libos.a libcommon.a -lpthread -lm $(CRYPTOPP_LIBS)
 bin_PROGRAMS += test_trans
-
-
-#fakesyn_SOURCES = fakesyn.cc msg/FakeMessenger.cc
-#fakesyn_LDADD = libmon.a libmds.a libosd.a libos.a \
-#	libclient.a libosdc.a libcrush.a libcommon.a
-#bin_PROGRAMS += fakesyn
 
 endif
 
@@ -884,7 +871,6 @@ noinst_HEADERS = \
 	mount/canonicalize.c\
 	mount/mtab.c\
         msg/Dispatcher.h\
-        msg/FakeMessenger.h\
         msg/Message.h\
         msg/Messenger.h\
         msg/SimpleMessenger.h\
