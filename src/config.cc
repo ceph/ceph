@@ -257,7 +257,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(pid_file, 0, OPT_STR, "/var/run/ceph/$type.$id.pid"),
 	OPTION(conf, 'c', OPT_STR, "/etc/ceph/ceph.conf, ~/.ceph/config, ceph.conf"),
 	OPTION(chdir, 0, OPT_STR, "/"),
-	OPTION(fake_clock, 0, OPT_BOOL, false),
 	OPTION(fakemessenger_serialize, 0, OPT_BOOL, true),
 	OPTION(kill_after, 0, OPT_INT, 0),
 	OPTION(max_open_files, 0, OPT_LONGLONG, 0),
@@ -281,7 +280,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(debug_filestore, 0, OPT_INT, 1),
 	OPTION(debug_journal, 0, OPT_INT, 1),
 	OPTION(debug_bdev, 0, OPT_INT, 1),         // block device
-	OPTION(debug_ns, 0, OPT_INT, 0),
 	OPTION(debug_ms, 0, OPT_INT, 0),
 	OPTION(debug_mon, 0, OPT_INT, 1),
 	OPTION(debug_monc, 0, OPT_INT, 0),
@@ -292,12 +290,10 @@ static struct config_option config_optionsp[] = {
 	OPTION(key, 0, OPT_STR, ""),
 	OPTION(keyfile, 'K', OPT_STR, ""),
 	OPTION(keyring, 'k', OPT_STR, "/etc/ceph/keyring,/etc/ceph/keyring.bin"),
-	OPTION(clock_lock, 0, OPT_BOOL, false),
 	OPTION(clock_tare, 0, OPT_BOOL, false),
 	OPTION(ms_tcp_nodelay, 0, OPT_BOOL, true),
 	OPTION(ms_initial_backoff, 0, OPT_DOUBLE, .2),
 	OPTION(ms_max_backoff, 0, OPT_DOUBLE, 15.0),
-	OPTION(ms_die_on_failure, 0, OPT_BOOL, false),
 	OPTION(ms_nocrc, 0, OPT_BOOL, false),
 	OPTION(ms_die_on_bad_msg, 0, OPT_BOOL, false),
 	OPTION(ms_dispatch_throttle_bytes, 0, OPT_INT, 100 << 20),
@@ -314,13 +310,10 @@ static struct config_option config_optionsp[] = {
 	OPTION(mon_lease_ack_timeout, 0, OPT_FLOAT, 10.0), // on leader, if lease isn't acked by all peons
 	OPTION(mon_clock_drift_allowed, 0, OPT_FLOAT, .010), // allowed clock drift between monitors
 	OPTION(mon_clock_drift_warn_backoff, 0, OPT_FLOAT, 5), // exponential backoff for clock drift warnings
-	OPTION(mon_lease_timeout, 0, OPT_FLOAT, 10.0),     // on peon, if lease isn't extended
 	OPTION(mon_accept_timeout, 0, OPT_FLOAT, 10.0),    // on leader, if paxos update isn't accepted
 	OPTION(mon_stop_on_last_unmount, 0, OPT_BOOL, false),
 	OPTION(mon_stop_with_last_mds, 0, OPT_BOOL, false),
-	OPTION(mon_allow_mds_bully, 0, OPT_BOOL, false),   // allow a booting mds to (forcibly) claim an mds # .. FIXME
 	OPTION(mon_pg_create_interval, 0, OPT_FLOAT, 30.0), // no more than every 30s
-	OPTION(mon_clientid_prealloc, 0, OPT_INT, 100),   // how many clientids to prealloc
 	OPTION(mon_globalid_prealloc, 0, OPT_INT, 100),   // how many globalids to prealloc
 	OPTION(mon_osd_report_timeout, 0, OPT_INT, 900),    // grace period before declaring unresponsive OSDs dead
 	OPTION(paxos_propose_interval, 0, OPT_DOUBLE, 1.0),  // gather updates for this long before proposing a map update
@@ -329,7 +322,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(auth_supported, 0, OPT_STR, "none"),
 	OPTION(auth_mon_ticket_ttl, 0, OPT_DOUBLE, 60*60*12),
 	OPTION(auth_service_ticket_ttl, 0, OPT_DOUBLE, 60*60),
-	OPTION(auth_nonce_len, 0, OPT_INT, 16),
 	OPTION(mon_client_hunt_interval, 0, OPT_DOUBLE, 3.0),   // try new mon every N seconds until we connect
 	OPTION(mon_client_ping_interval, 0, OPT_DOUBLE, 10.0),  // ping every N seconds
 	OPTION(client_cache_size, 0, OPT_INT, 16384),
@@ -355,8 +347,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(client_oc_target_dirty, 0, OPT_INT, 1024*1024* 8), // target dirty (keep this smallish)
 	// note: the max amount of "in flight" dirty data is roughly (max - target)
 	OPTION(client_oc_max_sync_write, 0, OPT_LONGLONG, 128*1024),   // sync writes >= this use wrlock
-	OPTION(objecter_buffer_uncommitted, 0, OPT_BOOL, true),  // this must be true for proper failure handling
-	OPTION(objecter_map_request_interval, 0, OPT_DOUBLE, 15.0), // request a new map every N seconds, if we have pending io
 	OPTION(objecter_tick_interval, 0, OPT_DOUBLE, 5.0),
 	OPTION(objecter_mon_retry_interval, 0, OPT_DOUBLE, 5.0),
 	OPTION(objecter_timeout, 0, OPT_DOUBLE, 10.0),    // before we ask for a map
@@ -378,7 +368,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_blacklist_interval, 0, OPT_FLOAT, 24.0*60.0),  // how long to blacklist failed nodes
 	OPTION(mds_session_timeout, 0, OPT_FLOAT, 60),    // cap bits and leases time out if client idle
 	OPTION(mds_session_autoclose, 0, OPT_FLOAT, 300), // autoclose idle session
-	OPTION(mds_client_lease, 0, OPT_FLOAT, 120),      // (assuming session stays alive)
 	OPTION(mds_reconnect_timeout, 0, OPT_FLOAT, 45),  // seconds to wait for clients during mds restart
 							  //  make it (mds_session_timeout - mds_beacon_grace)
 	OPTION(mds_tick_interval, 0, OPT_FLOAT, 5),
@@ -386,7 +375,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_scatter_nudge_interval, 0, OPT_FLOAT, 5),  // how quickly dirstat changes propagate up the hierarchy
 	OPTION(mds_client_prealloc_inos, 0, OPT_INT, 1000),
 	OPTION(mds_early_reply, 0, OPT_BOOL, true),
-	OPTION(mds_short_reply_trace, 0, OPT_BOOL, true),
 	OPTION(mds_use_tmap, 0, OPT_BOOL, true),        // use trivialmap for dir updates
 	OPTION(mds_default_dir_hash, 0, OPT_INT, CEPH_STR_HASH_RJENKINS),
 	OPTION(mds_log, 0, OPT_BOOL, true),
@@ -395,7 +383,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_log_max_events, 0, OPT_INT, -1),
 	OPTION(mds_log_max_segments, 0, OPT_INT, 30),  // segment size defined by FileLayout, above
 	OPTION(mds_log_max_expiring, 0, OPT_INT, 20),
-	OPTION(mds_log_pad_entry, 0, OPT_INT, 128),
 	OPTION(mds_log_eopen_size, 0, OPT_INT, 100),   // # open inodes per log entry
 	OPTION(mds_bal_sample_interval, 0, OPT_FLOAT, 3.0),  // every 5 seconds
 	OPTION(mds_bal_replicate_threshold, 0, OPT_FLOAT, 8000),
@@ -423,15 +410,12 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_bal_target_removal_min, 0, OPT_INT, 5), // min balance iterations before old target is removed
 	OPTION(mds_bal_target_removal_max, 0, OPT_INT, 10), // max balance iterations before old target is removed
 	OPTION(mds_replay_interval, 0, OPT_FLOAT, 1.0), // time to wait before starting replay again
-	OPTION(mds_trim_on_rejoin, 0, OPT_BOOL, true),
 	OPTION(mds_shutdown_check, 0, OPT_INT, 0),
-	OPTION(mds_verify_export_dirauth, 0, OPT_BOOL, true),
 	OPTION(mds_local_osd, 0, OPT_BOOL, false),
 	OPTION(mds_thrash_exports, 0, OPT_INT, 0),
 	OPTION(mds_thrash_fragments, 0, OPT_INT, 0),
 	OPTION(mds_dump_cache_on_map, 0, OPT_BOOL, false),
 	OPTION(mds_dump_cache_after_rejoin, 0, OPT_BOOL, false),
-	OPTION(mds_hack_log_expire_for_better_stats, 0, OPT_BOOL, false),
 	OPTION(mds_verify_scatter, 0, OPT_BOOL, false),
 	OPTION(mds_debug_scatterstat, 0, OPT_BOOL, false),
 	OPTION(mds_debug_frag, 0, OPT_BOOL, false),
@@ -453,16 +437,12 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_balance_reads, 0, OPT_BOOL, false),
 	OPTION(osd_flash_crowd_iat_threshold, 0, OPT_INT, 0),
 	OPTION(osd_flash_crowd_iat_alpha, 0, OPT_DOUBLE, 0.125),
-	OPTION(osd_balance_reads_temp, 0, OPT_DOUBLE, 100),  // send from client to replica
 	OPTION(osd_shed_reads, 0, OPT_INT, false),     // forward from primary to replica
 	OPTION(osd_shed_reads_min_latency, 0, OPT_DOUBLE, .01),       // min local latency
 	OPTION(osd_shed_reads_min_latency_diff, 0, OPT_DOUBLE, .01),  // min latency difference
 	OPTION(osd_shed_reads_min_latency_ratio, 0, OPT_DOUBLE, 1.5),  // 1.2 == 20% higher than peer
 	OPTION(osd_client_message_size_cap, 0, OPT_LONGLONG, 500*1024L*1024L), // default to 200MB client data allowed in-memory
-	OPTION(osd_immediate_read_from_cache, 0, OPT_BOOL, false), // osds to read from the cache immediately?
-	OPTION(osd_exclusive_caching, 0, OPT_BOOL, true),         // replicas evict replicated writes
 	OPTION(osd_stat_refresh_interval, 0, OPT_DOUBLE, .5),
-	OPTION(osd_min_pg_size_without_alive, 0, OPT_INT, 2),  // smallest pg we allow to activate without telling the monitor
 	OPTION(osd_pg_bits, 0, OPT_INT, 9),  // bits per osd
 	OPTION(osd_pgp_bits, 0, OPT_INT, 6),  // bits per osd
 	OPTION(osd_lpg_bits, 0, OPT_INT, 2),  // bits per osd
@@ -490,7 +470,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_min_down_reporters, 0, OPT_INT, 1),   // number of OSDs who need to report a down OSD for it to count
 	OPTION(osd_min_down_reports, 0, OPT_INT, 3),     // number of times a down OSD must be reported for it to count
 	OPTION(osd_replay_window, 0, OPT_INT, 45),
-	OPTION(osd_max_pull, 0, OPT_INT, 2),
 	OPTION(osd_preserve_trimmed_log, 0, OPT_BOOL, true),
 	OPTION(osd_recovery_delay_start, 0, OPT_FLOAT, 15),
 	OPTION(osd_recovery_max_active, 0, OPT_INT, 5),

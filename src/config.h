@@ -101,7 +101,6 @@ struct md_config_t {
 
   const char *chdir;
 
-  bool fake_clock;
   bool fakemessenger_serialize;
 
   int kill_after;
@@ -128,7 +127,6 @@ struct md_config_t {
   int debug_filestore;
   int debug_journal;
   int debug_bdev;
-  int debug_ns;
   int debug_ms;
   int debug_mon;
   int debug_monc;
@@ -138,7 +136,6 @@ struct md_config_t {
   int debug_finisher;
 
   // clock
-  bool clock_lock;
   bool clock_tare;
 
   // auth
@@ -162,7 +159,6 @@ struct md_config_t {
   bool ms_tcp_nodelay;
   double ms_initial_backoff;
   double ms_max_backoff;
-  bool ms_die_on_failure;
   bool ms_nocrc;
   bool ms_die_on_bad_msg;
   uint64_t ms_dispatch_throttle_bytes;
@@ -181,13 +177,10 @@ struct md_config_t {
   float mon_clock_drift_allowed;
   float mon_clock_drift_warn_backoff;
   float mon_lease_ack_timeout;
-  float mon_lease_timeout;
   float mon_accept_timeout;
   bool mon_stop_on_last_unmount;
   bool mon_stop_with_last_mds;
-  bool mon_allow_mds_bully;
   float mon_pg_create_interval;
-  int mon_clientid_prealloc;
   int mon_globalid_prealloc;
   int mon_osd_report_timeout;
 
@@ -199,7 +192,6 @@ struct md_config_t {
   char *auth_supported;
   double auth_mon_ticket_ttl;
   double auth_service_ticket_ttl;
-  int auth_nonce_len;
   EntityName *entity_name;
 
   double mon_client_hunt_interval;
@@ -233,9 +225,7 @@ struct md_config_t {
   int      client_notify_timeout;
 
   // objecter
-  bool  objecter_buffer_uncommitted;
   double objecter_mon_retry_interval;
-  double objecter_map_request_interval;
   double objecter_tick_interval;
   double objecter_timeout;
   uint64_t objecter_inflight_op_bytes;
@@ -263,7 +253,6 @@ struct md_config_t {
 
   float mds_session_timeout;
   float mds_session_autoclose;
-  float mds_client_lease;
   float mds_reconnect_timeout;
 
   float mds_tick_interval;
@@ -272,7 +261,6 @@ struct md_config_t {
 
   int mds_client_prealloc_inos;
   bool mds_early_reply;
-  bool mds_short_reply_trace;
 
   bool mds_use_tmap;
 
@@ -284,7 +272,6 @@ struct md_config_t {
   int mds_log_max_events;
   int mds_log_max_segments;
   int mds_log_max_expiring;
-  int mds_log_pad_entry;
   int mds_log_eopen_size;
   
   float mds_bal_sample_interval;  
@@ -317,10 +304,7 @@ struct md_config_t {
 
   float mds_replay_interval;
 
-  bool  mds_trim_on_rejoin;
   int   mds_shutdown_check;
-
-  bool  mds_verify_export_dirauth;     // debug flag
 
   bool  mds_local_osd;
 
@@ -328,8 +312,6 @@ struct md_config_t {
   int mds_thrash_fragments;
   bool mds_dump_cache_on_map;
   bool mds_dump_cache_after_rejoin;
-
-  bool mds_hack_log_expire_for_better_stats;
 
   // set these to non-zero to specify kill points
   bool mds_verify_scatter;
@@ -357,7 +339,6 @@ struct md_config_t {
   bool osd_balance_reads;
   int osd_flash_crowd_iat_threshold;  // flash crowd interarrival time threshold in ms
   double osd_flash_crowd_iat_alpha;
-  double osd_balance_reads_temp;
 
   int  osd_shed_reads;
   double osd_shed_reads_min_latency;
@@ -366,11 +347,7 @@ struct md_config_t {
 
   uint64_t osd_client_message_size_cap;
 
-  bool  osd_immediate_read_from_cache;
-  bool  osd_exclusive_caching;
   double osd_stat_refresh_interval;
-
-  int osd_min_pg_size_without_alive;
 
   int   osd_pg_bits;
   int   osd_pgp_bits;
@@ -402,7 +379,6 @@ struct md_config_t {
   int   osd_min_down_reporters;
   int   osd_min_down_reports;
   int   osd_replay_window;
-  int   osd_max_pull;
   bool  osd_preserve_trimmed_log;
 
   float osd_recovery_delay_start;
