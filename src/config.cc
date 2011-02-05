@@ -241,7 +241,7 @@ static struct config_option config_optionsp[] = {
         OPTION(profiler_highwater_interval, 0, OPT_INT, 104857600),
 	OPTION(logger, 0, OPT_BOOL, false),
 	OPTION(logger_interval, 0, OPT_INT, 1),
-	OPTION(logger_calc_variance, 0, OPT_BOOL, true),
+	OPTION(logger_calc_variance, 0, OPT_BOOL, false),
 	OPTION(logger_subdir, 0, OPT_STR, 0),
 	OPTION(logger_dir, 0, OPT_STR, "/var/log/ceph/stat"),
 	OPTION(log_file, 0, OPT_STR, 0),
