@@ -1665,7 +1665,11 @@ void SimpleMessenger::Pipe::writer()
       char tag = CEPH_MSGR_TAG_CLOSE;
       state = STATE_CLOSED;
       pipe_lock.Unlock();
-      if (sd) ::write(sd, &tag, 1);
+      if (sd) {
+	int r = ::write(sd, &tag, 1);
+	// we can ignore r, actually; we don't care if this succeeds.
+	r++; r = 0; // placate gcc
+      }
       pipe_lock.Lock();
       continue;
     }
@@ -2413,7 +2417,8 @@ int SimpleMessenger::start(bool nodaemon)
 	   << dendl;
     }
 
-    daemon(1, 0);
+    int r = daemon(1, 0);
+    assert(r >= 0);
     install_standard_sighandlers();
     write_pid_file(getpid());
  
