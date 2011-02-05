@@ -2363,21 +2363,27 @@ static void handle_signal(int sig)
   kill(getpid(), sig);
 }
 
-static void write_pid_file(int pid)
+int SimpleMessenger::write_pid_file(int pid)
 {
   if (!g_conf.pid_file)
-    return;
+    return 0;
 
+  int r = 0;
   int fd = ::open(g_conf.pid_file, O_CREAT|O_TRUNC|O_WRONLY, 0644);
   if (fd >= 0) {
     char buf[20];
     int len = snprintf(buf, sizeof(buf), "%d\n", pid);
-    ::write(fd, buf, len);
+    r = ::write(fd, buf, len);
+    if (r < 0)
+      r = -errno;
     ::close(fd);
 
     signal(SIGTERM, handle_signal);
     signal(SIGINT, handle_signal);
-  }
+  } else
+    r = -errno;
+  derr << "unable to write pid to " << g_conf.pid_file << ": " << cpp_strerror(errno) << dendl;
+  return r;
 }
 
 int SimpleMessenger::start(bool nodaemon)
