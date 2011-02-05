@@ -910,6 +910,7 @@ public:
   bool scrub_all_replicas_reserved() const;
   bool sched_scrub();
 
+  void replica_scrub(class MOSDRepScrub *op);
   void sub_op_scrub(class MOSDSubOp *op);
   void sub_op_scrub_reply(class MOSDSubOpReply *op);
   void sub_op_scrub_reserve(class MOSDSubOp *op);

@@ -3127,6 +3127,55 @@ void PG::repair_object(const sobject_t& soid, ScrubMap::object *po, int bad_peer
   osd->queue_for_recovery(this);
 }
 
+void PG::replica_scrub(MOSDRepScrub *msg)
+{
+  dout(7) << "replica_scrub" << dendl;
+
+  if (msg->map_epoch < info.history.same_acting_since) {
+    dout(10) << "replica_scrub discarding old replica_scrub from "
+	     << msg->map_epoch << " < " << info.history.same_acting_since << dendl;
+    msg->put();
+    return;
+  }
+
+  ScrubMap map;
+  if (msg->scrub_from > eversion_t()) {
+    epoch_t epoch = info.history.same_acting_since;
+    finalizing_scrub = 1;
+    while (last_update_applied != info.last_update) {
+      wait();
+      if (epoch != info.history.same_acting_since ||
+	  osd->is_stopping()) {
+	dout(10) << "scrub  pg changed, aborting" << dendl;
+	return;
+      }
+    }
+    build_inc_scrub_map(map, msg->scrub_from);
+    finalizing_scrub = 0;
+  } else {
+    build_scrub_map(map);
+  }
+
+  vector<OSDOp> scrub(1);
+  scrub[0].op.op = CEPH_OSD_OP_SCRUB_MAP;
+  sobject_t poid;
+  eversion_t v;
+  osd_reqid_t reqid;
+  MOSDSubOp *subop = new MOSDSubOp(reqid, info.pgid, poid, false, 0,
+				   osd->osdmap->get_epoch(), osd->get_tid(), v);
+  ::encode(map, subop->get_data());
+  subop->ops = scrub;
+
+  unlock();
+  osd->map_lock.get_read();
+  lock();
+
+  osd->cluster_messenger->send_message(subop, osd->osdmap->get_cluster_inst(acting[0]));
+
+  osd->map_lock.put_read();
+  msg->put();
+}
+
 void PG::scrub()
 {
   stringstream ss;
