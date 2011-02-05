@@ -145,6 +145,7 @@ Client::Client(Messenger *m, MonClient *mc)
   num_flushing_caps = 0;
 
   lru.lru_set_max(g_conf.client_cache_size);
+  lru.lru_set_midpoint(g_conf.client_cache_mid);
 
   // file handles
   free_fd_set.insert(10, 1<<30);
