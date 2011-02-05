@@ -481,9 +481,6 @@ void ReplicatedPG::do_sub_op(MOSDSubOp *op)
     case CEPH_OSD_OP_PUSH:
       sub_op_push(op);
       return;
-    case CEPH_OSD_OP_SCRUB:
-      sub_op_scrub(op);
-      return;
     case CEPH_OSD_OP_SCRUB_RESERVE:
       sub_op_scrub_reserve(op);
       return;

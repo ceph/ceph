@@ -911,7 +911,6 @@ public:
   bool sched_scrub();
 
   void replica_scrub(class MOSDRepScrub *op);
-  void sub_op_scrub(class MOSDSubOp *op);
   void sub_op_scrub_map(class MOSDSubOp *op);
   void sub_op_scrub_reserve(class MOSDSubOp *op);
   void sub_op_scrub_reserve_reply(class MOSDSubOpReply *op);

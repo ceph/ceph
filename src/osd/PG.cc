@@ -2807,41 +2807,6 @@ bool PG::sched_scrub()
   return ret;
 }
 
-void PG::sub_op_scrub(MOSDSubOp *op)
-{
-  dout(7) << "sub_op_scrub" << dendl;
-
-  if (op->map_epoch < info.history.same_acting_since) {
-    dout(10) << "sub_op_scrub discarding old sub_op from "
-	     << op->map_epoch << " < " << info.history.same_acting_since << dendl;
-    op->put();
-    return;
-  }
-
-  ScrubMap map;
-  if (op->version > eversion_t()) {
-    epoch_t epoch = info.history.same_acting_since;
-    finalizing_scrub = 1;
-    while (last_update_applied != info.last_update) {
-      wait();
-      if (epoch != info.history.same_acting_since ||
-	  osd->is_stopping()) {
-	dout(10) << "scrub  pg changed, aborting" << dendl;
-	return;
-      }
-    }
-    build_inc_scrub_map(map, op->version);
-    finalizing_scrub = 0;
-  } else {
-    build_scrub_map(map);
-  }
-
-  MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK); 
-  ::encode(map, reply->get_data());
-  osd->cluster_messenger->send_message(reply, op->get_connection());
-
-  op->put();
-}
 
 void PG::sub_op_scrub_map(MOSDSubOp *op)
 {
