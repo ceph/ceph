@@ -71,8 +71,6 @@ int main(int argc, const char **argv)
 #endif //HAVE_LIBTCMALLOC
   common_init(args, "osd", should_authenticate);
 
-  if (g_conf.clock_tare) g_clock.tare();
-
   // osd specific args
   bool mkfs = false;
   bool mkjournal = false;

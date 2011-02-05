@@ -53,8 +53,6 @@ int main(int argc, const char **argv, char *envp[])
 
   vec_to_argv(args, argc, argv);
 
-  if (g_conf.clock_tare) g_clock.tare();
-
   // get monmap
   MonClient mc;
   if (mc.build_initial_monmap() < 0)

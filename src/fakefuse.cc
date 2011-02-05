@@ -90,8 +90,6 @@ int main(int argc, const char **argv) {
   // FUSE will chdir("/"); be ready.
   g_conf.use_abspaths = true;
 
-  if (g_conf.clock_tare) g_clock.tare();
-
   MonMap *monmap = new MonMap(g_conf.num_mon);
   entity_addr_t a;
   a.nonce = getpid();

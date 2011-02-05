@@ -1751,8 +1751,6 @@ int Rados::initialize(int argc, const char *argv[])
   common_set_defaults(false);
   common_init(args, "librados", true);
 
-  if (g_conf.clock_tare) g_clock.tare();
-
   client = new RadosClient();
   return client->init();
 }
@@ -2275,8 +2273,6 @@ static void __rados_init(int argc, const char *argv[])
   }
   common_set_defaults(false);
   common_init(args, "librados", true);
-
-  if (g_conf.clock_tare) g_clock.tare();
 }
 
 static Mutex rados_init_mutex("rados_init");

@@ -40,10 +40,7 @@ class Clock {
   Mutex lock;
 
  public:
-  Clock() : lock("Clock::lock") {
-    // set offset
-    //tare();
-  }
+  Clock() : lock("Clock::lock") { }
 
   // real time.
   utime_t real_now() {
@@ -53,15 +50,6 @@ class Clock {
     return realnow;
   }
 
-  // relative time (from startup)
-  void tare() {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    zero.set_from_timeval(&tv);
-  }
-  void tare(utime_t z) {
-    zero = z;
-  }
   utime_t now() {
     //lock.Lock();  
     struct timeval tv;

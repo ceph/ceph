@@ -73,8 +73,6 @@ int main(int argc, const char **argv, const char *envp[]) {
   // FUSE will chdir("/"); be ready.
   g_conf.chdir = strdup("/");
 
-  if (g_conf.clock_tare) g_clock.tare();
-
   // check for 32-bit arch
   if (sizeof(long) == 4) {
     cerr << std::endl;

@@ -118,8 +118,6 @@ int main(int argc, const char **argv)
     usage();
   }
 
-  if (g_conf.clock_tare) g_clock.tare();
-
   // get monmap
   RotatingKeyRing rkeys(CEPH_ENTITY_TYPE_MDS, &g_keyring);
   MonClient mc(&rkeys);

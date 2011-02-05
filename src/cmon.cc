@@ -120,8 +120,6 @@ int main(int argc, const char **argv)
     return 0;
   }
 
-  if (g_conf.clock_tare) g_clock.tare();
-
   CompatSet mon_features(ceph_mon_feature_compat,
 			 ceph_mon_feature_ro_compat,
 			 ceph_mon_feature_incompat);

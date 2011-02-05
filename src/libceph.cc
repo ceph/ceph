@@ -44,7 +44,6 @@ extern "C" int ceph_initialize(int argc, const char **argv)
     argv_to_vec(argc, argv, args);
     common_set_defaults(false);
     common_init(args, "libceph", true);
-    if (g_conf.clock_tare) g_clock.tare();
     //monmap
     monclient = new MonClient();
     if (monclient->build_initial_monmap() < 0) {

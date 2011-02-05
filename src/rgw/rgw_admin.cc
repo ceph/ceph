@@ -102,8 +102,6 @@ int main(int argc, char **argv)
   RGWUserInfo info;
   RGWAccess *store;
 
-  if (g_conf.clock_tare) g_clock.tare();
-
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("user-gen", 'g')) {
       gen_user = true;

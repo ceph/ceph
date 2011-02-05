@@ -135,9 +135,6 @@ struct md_config_t {
   int debug_auth;
   int debug_finisher;
 
-  // clock
-  bool clock_tare;
-
   // auth
   char *key;
   char *keyfile;
