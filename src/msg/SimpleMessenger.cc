@@ -2320,14 +2320,8 @@ static void remove_pid_file(int in_signal_handler = 0)
 
   // only remove it if it has OUR pid in it!
   int fd = ::open(g_conf.pid_file, O_RDONLY);
-  if (fd < 0) {
-    int err = errno;
-    if (!in_signal_handler) {
-      generic_dout(0) << "remove_pid_file: error opening " << g_conf.pid_file
-	    << ": " << cpp_strerror(err) << dendl;
-    }
-    return;
-  }
+  if (fd < 0)
+    return;  // fail silently if there is no pid to remove
 
   char buf[32];
   memset(buf, 0, sizeof(buf));
