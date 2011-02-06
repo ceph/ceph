@@ -86,9 +86,6 @@ void MDLog::init_journaler()
   // inode
   ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();
   
-  //if (g_conf.mds_local_osd) 
-  //log_inode.layout.fl_pg_preferred = mds->get_nodeid() + g_conf.num_osd;  // hack
-  
   // log streamer
   if (journaler) delete journaler;
   journaler = new Journaler(ino, mds->mdsmap->get_metadata_pg_pool(), CEPH_FS_ONDISK_MAGIC, mds->objecter, 

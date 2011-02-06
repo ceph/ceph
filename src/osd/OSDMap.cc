@@ -95,8 +95,7 @@ void OSDMap::print_summary(ostream& out) const
 
 
 void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
-			  int num_osd, int num_dom, int pg_bits, int pgp_bits, int lpg_bits,
-			  int mds_local_osd)
+			  int num_osd, int num_dom, int pg_bits, int pgp_bits, int lpg_bits)
 {
   dout(10) << "build_simple on " << num_osd
 	   << " osds with " << pg_bits << " pg bits per osd, "
@@ -137,16 +136,6 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
   for (int i=0; i<num_osd; i++) {
     set_state(i, 0);
     set_weight(i, CEPH_OSD_OUT);
-  }
-  
-  if (mds_local_osd) {
-    set_max_osd(mds_local_osd+num_osd);
-
-    // add mds local osds, but don't put them in the crush mapping func
-    for (int i=0; i<mds_local_osd; i++) {
-      set_state(i+num_osd, 0);
-      set_weight(i+num_osd, CEPH_OSD_OUT);
-    }
   }
 }
 

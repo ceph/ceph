@@ -410,7 +410,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_bal_target_removal_max, 0, OPT_INT, 10), // max balance iterations before old target is removed
 	OPTION(mds_replay_interval, 0, OPT_FLOAT, 1.0), // time to wait before starting replay again
 	OPTION(mds_shutdown_check, 0, OPT_INT, 0),
-	OPTION(mds_local_osd, 0, OPT_BOOL, false),
 	OPTION(mds_thrash_exports, 0, OPT_INT, 0),
 	OPTION(mds_thrash_fragments, 0, OPT_INT, 0),
 	OPTION(mds_dump_cache_on_map, 0, OPT_BOOL, false),

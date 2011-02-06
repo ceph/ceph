@@ -303,8 +303,6 @@ struct md_config_t {
 
   int   mds_shutdown_check;
 
-  bool  mds_local_osd;
-
   int mds_thrash_exports;
   int mds_thrash_fragments;
   bool mds_dump_cache_on_map;

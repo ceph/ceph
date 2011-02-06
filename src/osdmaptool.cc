@@ -143,7 +143,7 @@ int main(int argc, const char **argv)
     }
     ceph_fsid_t fsid;
     memset(&fsid, 0, sizeof(ceph_fsid_t));
-    osdmap.build_simple(0, fsid, num_osd, num_dom, pg_bits, pgp_bits, lpg_bits, 0);
+    osdmap.build_simple(0, fsid, num_osd, num_dom, pg_bits, pgp_bits, lpg_bits);
     modified = true;
   }
 

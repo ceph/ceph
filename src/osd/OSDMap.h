@@ -1022,8 +1022,7 @@ private:
    */
   void build_simple(epoch_t e, ceph_fsid_t &fsid,
 		    int num_osd, int num_dom,
-		    int pg_bits, int pgp_bits, int lpg_bits,
-		    int mds_local_osd);
+		    int pg_bits, int pgp_bits, int lpg_bits);
   static void build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& poolsets, int num_osd, int num_dom=0);
 
 
