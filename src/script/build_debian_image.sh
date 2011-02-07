@@ -69,7 +69,7 @@ cp ~/.ssh/authorized_keys $root/root/.ssh/authorized_keys
 chmod 600 $root/root/.ssh/authorized_keys
 
 # packages
-for p in ssh
+for p in ssh libcrypto++
 do
 	chroot $root apt-get -y --force-yes install $p
 done
