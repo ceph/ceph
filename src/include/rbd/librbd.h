@@ -74,7 +74,8 @@ int rbd_resize(rbd_image_t image, size_t size);
 int rbd_stat(rbd_image_t image, rbd_image_info_t *info);
 
 /* snapshots */
-size_t rbd_list_snaps(rbd_image_t image, rbd_snap_info_t *snaps, size_t max_snaps);
+int rbd_list_snaps(rbd_image_t image, rbd_snap_info_t *snaps, int *max_snaps);
+void rbd_list_snaps_end(rbd_snap_info_t *snaps);
 int rbd_create_snap(rbd_image_t image, const char *snapname);
 int rbd_remove_snap(rbd_image_t image, const char *snapname);
 int rbd_rollback_snap(rbd_image_t image, const char *snapname);

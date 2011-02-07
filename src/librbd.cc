@@ -1649,7 +1649,7 @@ extern "C" int rbd_rollback_snap(rbd_image_t image, const char *snap_name)
   return rbd_client->rollback_snap(ictx->pctx, ictx, snap_name);
 }
 
-extern "C" size_t rbd_list_snaps(rbd_image_t image, rbd_snap_info_t *snaps, size_t max_snaps)
+extern "C" int rbd_list_snaps(rbd_image_t image, rbd_snap_info_t *snaps, int *max_snaps)
 {
   std::vector<librbd::snap_info_t> cpp_snaps;
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
@@ -1658,17 +1658,38 @@ extern "C" size_t rbd_list_snaps(rbd_image_t image, rbd_snap_info_t *snaps, size
     return 0;
   if (r < 0)
     return r;
-  if (max_snaps < cpp_snaps.size())
+  if (!max_snaps)
+    return -EINVAL;
+  if (*max_snaps < (int)cpp_snaps.size() + 1) {
+    *max_snaps = (int)cpp_snaps.size() + 1;
     return -ERANGE;
+  }
 
-  for (size_t i = 0; i < cpp_snaps.size(); i++) {
+  int i;
+
+  for (i = 0; i < (int)cpp_snaps.size(); i++) {
     snaps[i].id = cpp_snaps[i].id;
     snaps[i].size = cpp_snaps[i].size;
     snaps[i].name = strdup(cpp_snaps[i].name.c_str());
-    if (!snaps[i].name)
+    if (!snaps[i].name) {
+      for (int j = 0; j < i; j++)
+	free((void *)snaps[j].name);
       return -ENOMEM;
+    }
   }
-  return cpp_snaps.size();
+  snaps[i].id = 0;
+  snaps[i].size = 0;
+  snaps[i].name = NULL;
+
+  return (int)cpp_snaps.size();
+}
+
+extern "C" void rbd_list_snaps_end(rbd_snap_info_t *snaps)
+{
+  while (snaps->name) {
+    free((void *)snaps->name);
+    snaps++;
+  }
 }
 
 extern "C" int rbd_set_snap(rbd_image_t image, const char *snapname)
