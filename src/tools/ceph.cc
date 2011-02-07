@@ -15,6 +15,7 @@
 
 #include "common/common_init.h"
 #include "common/errno.h"
+#include "common/safe_io.h"
 #include "config.h"
 #include "tools/common.h"
 
@@ -69,26 +70,6 @@ static void parse_cmd_args(const vector<const char*> &args,
     } else {
       nargs->push_back(args[i]);
     }
-  }
-}
-
-static int safe_read(int fd, char *buf, size_t count)
-{
-  if (count > SSIZE_MAX)
-    return E2BIG;
-  while (1) {
-    int res;
-    res = read(fd, buf, count);
-    if (res < 0) {
-      int err = errno;
-      if (err == EINVAL)
-	continue;
-      return err;
-    }
-    count -= res;
-    buf += res;
-    if (count <= 0)
-      return 0;
   }
 }
 
