@@ -801,7 +801,7 @@ void FileJournal::do_write(bufferlist& bl)
   } else {
     // header too?
     if (hbp.length()) {
-      if (TEMP_FAILURE_RETRY(::pwrite(fd, hbp.c_str(), hbp.length(), 0))) {
+      if (TEMP_FAILURE_RETRY(::pwrite(fd, hbp.c_str(), hbp.length(), 0)) < 0) {
 	int err = errno;
 	derr << "FileJournal::do_write: pwrite(fd=" << fd
 	     << ", hbp.length=" << hbp.length() << ") failed :"
