@@ -102,7 +102,6 @@ case $1 in
 	    ;;
     -k )
 	    overwrite_conf=0
-	    shift
 	    ;;
     -o )
 	    extra_conf="$extra_conf	$2
