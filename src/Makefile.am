@@ -646,6 +646,7 @@ noinst_HEADERS = \
         common/signal.h\
         common/dyn_snprintf.h\
         common/run_cmd.h\
+	common/safe_io.h\
         common/tls.h\
         config.h\
         crush/CrushWrapper.h\
