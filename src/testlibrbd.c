@@ -54,19 +54,23 @@ void test_resize_and_stat(rbd_image_t image, size_t size)
   assert(info.size == size);
 }
 
-void test_ls(rbd_pool_t pool, int num_expected, ...)
+void test_ls(rbd_pool_t pool, size_t num_expected, ...)
 {
-  char **names;
   int num_images, i, j;
-  char *expected;
+  char *expected, *names, *cur_name;
   va_list ap;
-  names = (char **) malloc(sizeof(char **) * 10);
-  num_images = rbd_list(pool, names, 10);
+  size_t max_size = 1024;
+  names = (char *) malloc(sizeof(char *) * 1024);
+  printf("names is %x\n", names);
+  num_images = rbd_list(pool, names, &max_size);
+  printf("names is %x\n", names);
   printf("num images is: %d\nexpected: %d\n", num_images, num_expected);
+  assert(num_images >= 0);
   assert(num_images == num_expected);
 
-  for (i = 0; i < num_images; i++) {
-    printf("image: %s\n", names[i]);
+  for (i = 0, cur_name = names; i < num_images; i++) {
+    printf("image: %s\n", cur_name);
+    cur_name += strlen(cur_name) + 1;
   }
 
   va_start(ap, num_expected);
@@ -74,13 +78,14 @@ void test_ls(rbd_pool_t pool, int num_expected, ...)
     expected = va_arg(ap, char *);
     printf("expected = %s\n", expected);
     int found = 0;
-    for (j = 0; j < num_images; j++) {
-      if (names[j] == NULL)
+    for (j = 0, cur_name = names; j < num_images; j++) {
+      if (cur_name[0] == '_') {
+	cur_name += strlen(cur_name) + 1;
 	continue;
-      if (strcmp(names[j], expected) == 0) {
-	printf("found %s\n", names[j]);
-	free(names[j]);
-	names[j] = NULL;
+      }
+      if (strcmp(cur_name, expected) == 0) {
+	printf("found %s\n", cur_name);
+	cur_name[0] = '_';
 	found = 1;
 	break;
       }
@@ -88,8 +93,9 @@ void test_ls(rbd_pool_t pool, int num_expected, ...)
     assert(found);
   }
 
-  for (i = 0; i < num_images; i++) {
-    assert(names[i] == NULL);
+  for (i = 0, cur_name = names; i < num_images; i++) {
+    assert(cur_name[0] == '_');
+    cur_name += strlen(cur_name) + 1;
   }
   free(names);
 }
@@ -107,11 +113,11 @@ void test_create_snap(rbd_image_t image, const char *name)
 void test_ls_snaps(rbd_image_t image, int num_expected, ...)
 {
   rbd_snap_info_t *snaps;
-  int num_snaps, i, j, expected_size;
+  int num_snaps, i, j, expected_size, max_size = 10;
   char *expected;
   va_list ap;
   snaps = (rbd_snap_info_t *) malloc(sizeof(rbd_snap_info_t *) * 10);
-  num_snaps = rbd_list_snaps(image, snaps, 10);
+  num_snaps = rbd_list_snaps(image, snaps, &max_size);
   printf("num snaps is: %d\nexpected: %d\n", num_snaps, num_expected);
   assert(num_snaps == num_expected);
 
