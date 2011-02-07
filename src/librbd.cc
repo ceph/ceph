@@ -1545,23 +1545,31 @@ extern "C" int rbd_close_pool(rbd_pool_t pool)
 }
 
 /* images */
-extern "C" size_t rbd_list(rbd_pool_t pool, char **names, size_t max_names)
+extern "C" int rbd_list(rbd_pool_t pool, char *names, size_t *size)
 {
   std::vector<string> cpp_names;
   int r = rbd_client->list((librbd::PoolCtx *)pool, cpp_names);
   if (r == -ENOENT)
     return 0;
+
   if (r < 0)
     return r;
-  if (max_names < cpp_names.size())
-    return -ERANGE;
+
+  size_t expected_size = 0;
 
   for (size_t i = 0; i < cpp_names.size(); i++) {
-    names[i] = strdup(cpp_names[i].c_str());
-    if (!names[i])
-      return -ENOMEM;
+    expected_size += cpp_names[i].size() + 1;
   }
-  return cpp_names.size();
+  if (*size < expected_size) {
+    *size = expected_size;
+    return -ERANGE;
+  }
+
+  for (int i = 0; i < (int)cpp_names.size(); i++) {
+    strcpy(names, cpp_names[i].c_str());
+    names += strlen(names) + 1;
+  }
+  return (int)cpp_names.size();
 }
 
 extern "C" int rbd_create(rbd_pool_t pool, const char *name, size_t size, int *order)
@@ -1746,7 +1754,6 @@ extern "C" int rbd_aio_read(rbd_image_t image, off_t off, size_t len, char *buf,
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
-  dout(10) << "librbd::RBD::aio_read() buf=" << (void *)buf << "~" << (void *)buf + len - 1 << dendl;
   return rbd_client->aio_read(ictx->pctx, ictx, off, len, buf, (librbd::RBDClient::AioCompletion *)comp->pc);
 }
 

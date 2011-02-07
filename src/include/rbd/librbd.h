@@ -62,7 +62,7 @@ int rbd_open_pool(const char *pool_name, rbd_pool_t *pool);
 int rbd_close_pool(rbd_pool_t pool);
 
 /* images */
-size_t rbd_list(rbd_pool_t pool, char **names, size_t max_names);
+int rbd_list(rbd_pool_t pool, char *names, size_t *size);
 int rbd_create(rbd_pool_t pool, const char *name, size_t size, int *order);
 int rbd_remove(rbd_pool_t pool, const char *name);
 int rbd_copy(rbd_pool_t src_pool, const char *srcname, rbd_pool_t dest_pool, const char *destname);
