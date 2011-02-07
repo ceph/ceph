@@ -189,6 +189,9 @@ for name in $what; do
     check_host || continue
 
     if [ -n "$ssh" ] && ( echo $pushed_to | grep -v -q " $host " ); then
+        conf_dir=`dirname "$conf"`
+        ssh $host mkdir -p "$conf_dir"
+        ssh $host mkdir -p "$TDIR"
 	scp -q $conf $host:$conf
 	scp -q $osdmap $host:$osdmap
 	scp -q $monmap $host:$monmap
@@ -279,7 +282,9 @@ for name in $what; do
 	fi
 	rm -f $TDIR/keyring.mds.$id
     fi
-
+    if [ -n "$ssh" ]; then
+        ssh $host rm -rf $TDIR
+    fi
 done
 
 rm -f $monkeyring
