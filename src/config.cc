@@ -1051,10 +1051,6 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
     g_conf.alt_name = (char *)malloc(len - 1);
     snprintf(g_conf.alt_name, len - 1, "%s%s", module_type, g_conf.id);
   }
-  if (g_conf.log_to_syslog || g_conf.clog_to_syslog) {
-    // It's ok if g_conf.name is NULL here.
-    openlog(g_conf.name, LOG_ODELAY | LOG_PID, LOG_USER);
-  }
 
   g_conf.entity_name = new EntityName;
   assert(g_conf.entity_name);
@@ -1099,6 +1095,11 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
     exit(1);
   }
 
+  if (g_conf.log_to_syslog || g_conf.clog_to_syslog) {
+    closelog();
+    // It's ok if g_conf.name is NULL here.
+    openlog(g_conf.name, LOG_ODELAY | LOG_PID, LOG_USER);
+  }
   if (force_foreground_logging) {
     set_foreground_logging();
   }
