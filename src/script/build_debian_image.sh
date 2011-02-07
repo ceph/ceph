@@ -77,6 +77,6 @@ cp ~/.ssh/authorized_keys $root/root/.ssh/authorized_keys
 chmod 600 $root/root/.ssh/authorized_keys
 
 # packages
-chroot $root apt-get -y --force-yes install ssh libcrypto++
+chroot $root apt-get -y --force-yes install ssh libcrypto\+\+ bind9-host
 
 exit 0
