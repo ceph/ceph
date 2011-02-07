@@ -15,7 +15,7 @@
 #include "Journaler.h"
 
 #include "include/Context.h"
-#include "common/Logger.h"
+#include "common/ProfLogger.h"
 #include "msg/Messenger.h"
 
 #include "config.h"

@@ -17,7 +17,7 @@
 
 #include "MDS.h"
 
-class Logger;
+class ProfLogger;
 class LogEvent;
 class MDRequest;
 class Mutation;
@@ -41,7 +41,7 @@ class Server {
   MDCache *mdcache;
   MDLog *mdlog;
   Messenger *messenger;
-  Logger *logger;
+  ProfLogger *logger;
 
 public:
   int failed_reconnects;

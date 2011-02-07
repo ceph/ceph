@@ -16,42 +16,37 @@
 #ifndef CEPH_LOGGER_H
 #define CEPH_LOGGER_H
 
+#include "common/Clock.h"
+#include "common/ProfLogType.h"
 #include "include/types.h"
-#include "Clock.h"
 
 #include <string>
 #include <fstream>
 #include <vector>
-using std::vector;
-using std::string;
-using std::ofstream;
-
-
-#include "LogType.h"
 
 extern void logger_reopen_all();
 extern void logger_reset_all();
-extern void logger_add(class Logger *l);
-extern void logger_remove(class Logger *l);
+extern void logger_add(class ProfLogger *l);
+extern void logger_remove(class ProfLogger *l);
 extern void logger_tare(utime_t when);
 extern void logger_start();
 
-class Logger {
+class ProfLogger {
  protected:
   // my type
-  string name, filename;
-  LogType *type;
+  std::string name, filename;
+  ProfLogType *type;
 
   bool need_open;
   bool need_reset;
   bool need_close;
 
   // values for this instance
-  vector<int64_t> vals;
-  vector<double> fvals;
-  vector< vector<double> > vals_to_avg;  // for calculating variance
+  std::vector<int64_t> vals;
+  std::vector<double> fvals;
+  std::vector< std::vector<double> > vals_to_avg;  // for calculating variance
 
-  ofstream out;
+  std::ofstream out;
 
   // what i've written
   //int last_logged;
@@ -60,12 +55,12 @@ class Logger {
   void _open_log();
 
  public:
-  Logger(string n, LogType *t) :
+  ProfLogger(const std::string &n, ProfLogType *t) :
     name(n), type(t),
     need_open(true), need_reset(false), need_close(false),
     vals(t->num_keys), fvals(t->num_keys), vals_to_avg(t->num_keys),
     wrote_header_last(10000) { }
-  ~Logger();
+  ~ProfLogger();
 
   int64_t inc(int f, int64_t v = 1);
   int64_t set(int f, int64_t v);

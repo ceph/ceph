@@ -24,7 +24,7 @@ using namespace std;
 
 
 #include "include/filepath.h"
-#include "common/Logger.h"
+#include "common/ProfLogger.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>

@@ -43,8 +43,8 @@
 
 #include "InoTable.h"
 
-#include "common/Logger.h"
-#include "common/LogType.h"
+#include "common/ProfLogger.h"
+#include "common/ProfLogType.h"
 
 #include "common/Timer.h"
 
@@ -175,8 +175,8 @@ MDS::~MDS() {
 
 void MDS::open_logger()
 {
-  static LogType mds_logtype(l_mds_first, l_mds_last);
-  static LogType mdm_logtype(l_mdm_first, l_mdm_last);
+  static ProfLogType mds_logtype(l_mds_first, l_mds_last);
+  static ProfLogType mdm_logtype(l_mdm_first, l_mdm_last);
 
   static bool didit = false;
   if (!didit) {
@@ -270,12 +270,12 @@ void MDS::open_logger()
   char name[80];
   snprintf(name, sizeof(name), "mds.%s.%llu.log", g_conf.id,
            (unsigned long long) monc->get_global_id());
-  logger = new Logger(name, (LogType*)&mds_logtype);
+  logger = new ProfLogger(name, (ProfLogType*)&mds_logtype);
   logger_add(logger);
 
   snprintf(name, sizeof(name), "mds.%s.%llu.mem.log", g_conf.id,
            (unsigned long long) monc->get_global_id());
-  mlogger = new Logger(name, (LogType*)&mdm_logtype);
+  mlogger = new ProfLogger(name, (ProfLogType*)&mdm_logtype);
   logger_add(mlogger);
 
   mdlog->open_logger();

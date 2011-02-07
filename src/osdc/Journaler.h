@@ -57,7 +57,7 @@
 #include <map>
 
 class Context;
-class Logger;
+class ProfLogger;
 
 class Journaler {
 
@@ -109,7 +109,7 @@ private:
   Objecter *objecter;
   Filer filer;
 
-  Logger *logger;
+  ProfLogger *logger;
   int logger_key_lat;
 
   SafeTimer *timer;
@@ -227,7 +227,7 @@ private:
   }
 
 public:
-  Journaler(inodeno_t ino_, int pool, const char *mag, Objecter *obj, Logger *l, int lkey, SafeTimer *tim) : 
+  Journaler(inodeno_t ino_, int pool, const char *mag, Objecter *obj, ProfLogger *l, int lkey, SafeTimer *tim) : 
     last_written(mag), last_committed(mag),
     ino(ino_), pg_pool(pool), readonly(false), magic(mag),
     objecter(obj), filer(objecter), logger(l), logger_key_lat(lkey),

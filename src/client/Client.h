@@ -76,8 +76,8 @@ class Filer;
 class Objecter;
 class ObjectCacher;
 
-extern class LogType client_logtype;
-extern class Logger  *client_logger;
+extern class ProfLogType client_logtype;
+extern class ProfLogger  *client_logger;
 
 
 // ============================================

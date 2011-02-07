@@ -57,7 +57,7 @@ void common_set_defaults(bool daemon)
     cout << TEXT_YELLOW <<  " **          testing and review.  Do not trust it with important data.       **" << TEXT_NORMAL << std::endl;
 
     g_conf.daemonize = true;
-    g_conf.logger = true;
+    g_conf.profiling_logger = true;
   } else {
     g_conf.pid_file = 0;
   }

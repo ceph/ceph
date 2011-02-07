@@ -53,7 +53,7 @@ class MDS;
 class LogSegment;
 class ESubtreeMap;
 
-class Logger;
+class ProfLogger;
 
 #include <map>
 using std::map;
@@ -72,7 +72,7 @@ protected:
   inodeno_t ino;
   Journaler *journaler;
 
-  Logger *logger;
+  ProfLogger *logger;
 
 
   // -- replay --

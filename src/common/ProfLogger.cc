@@ -16,8 +16,8 @@
 
 #include <string>
 
-#include "LogType.h"
-#include "Logger.h"
+#include "ProfLogType.h"
+#include "ProfLogger.h"
 
 #include <iostream>
 #include <memory>
@@ -30,11 +30,11 @@
 
 #include "common/Timer.h"
 
-// per-process lock.  lame, but this way I protect LogType too!
-Mutex logger_lock("logger_lock");
-SafeTimer logger_timer(logger_lock);
+// per-process lock.  lame, but this way I protect ProfLogType too!
+Mutex prof_logger_lock("prof_logger_lock");
+SafeTimer logger_timer(prof_logger_lock);
 Context *logger_event = 0;
-list<Logger*> logger_list;
+list<ProfLogger*> logger_list;
 utime_t start;
 int last_flush = 0; // in seconds since start
 
@@ -50,7 +50,7 @@ static struct FlusherStopper {
   }
 } stopper;
 
-class C_FlushLoggers : public Context {
+class C_FlushProfLoggers : public Context {
 public:
   void finish(int r) {
     if (logger_event == this) {
@@ -74,14 +74,14 @@ void logger_reset_all()
 
 void logger_start()
 {
-  Mutex::Locker l(logger_lock);
+  Mutex::Locker l(prof_logger_lock);
   logger_timer.init();
   flush_all_loggers();
 }
 
 void logger_tare(utime_t s)
 {
-  Mutex::Locker l(logger_lock);
+  Mutex::Locker l(prof_logger_lock);
 
   generic_dout(10) << "logger_tare " << s << dendl;
 
@@ -97,9 +97,9 @@ void logger_tare(utime_t s)
   last_flush = fromstart.sec();
 }
 
-void logger_add(Logger *logger)
+void logger_add(ProfLogger *logger)
 {
-  Mutex::Locker l(logger_lock);
+  Mutex::Locker l(prof_logger_lock);
 
   if (logger_list.empty()) {
     if (start == utime_t())
@@ -109,11 +109,11 @@ void logger_add(Logger *logger)
   logger_list.push_back(logger);
 }
 
-void logger_remove(Logger *logger)
+void logger_remove(ProfLogger *logger)
 {
-  Mutex::Locker l(logger_lock);
+  Mutex::Locker l(prof_logger_lock);
 
-  for (list<Logger*>::iterator p = logger_list.begin();
+  for (list<ProfLogger*>::iterator p = logger_list.begin();
        p != logger_list.end();
        p++) {
     if (*p == logger) {
@@ -127,7 +127,7 @@ static void flush_all_loggers()
 {
   generic_dout(20) << "flush_all_loggers" << dendl;
 
-  if (!g_conf.logger)
+  if (!g_conf.profiling_logger)
     return;
 
   utime_t now = g_clock.now();
@@ -142,14 +142,14 @@ static void flush_all_loggers()
   int now_sec = fromstart.sec();
 
   // do any catching up we need to
-  bool twice = now_sec - last_flush >= 2 * g_conf.logger_interval;
+  bool twice = now_sec - last_flush >= 2 * g_conf.profiling_logger_interval;
  again:
   generic_dout(20) << "fromstart " << fromstart << " last_flush " << last_flush << " flushing" << dendl;
   
   bool reopen = logger_need_reopen;
   bool reset = logger_need_reset;
 
-  for (list<Logger*>::iterator p = logger_list.begin();
+  for (list<ProfLogger*>::iterator p = logger_list.begin();
        p != logger_list.end();
        ++p) 
     (*p)->_flush();
@@ -160,7 +160,7 @@ static void flush_all_loggers()
   if (reset && logger_need_reset)
     logger_need_reset = false;
 
-  last_flush = now_sec - (now_sec % g_conf.logger_interval);
+  last_flush = now_sec - (now_sec % g_conf.profiling_logger_interval);
   if (twice) {
     twice = false;
     goto again;
@@ -168,33 +168,33 @@ static void flush_all_loggers()
 
   // schedule next flush event
   utime_t next;
-  next.sec_ref() = start.sec() + last_flush + g_conf.logger_interval;
+  next.sec_ref() = start.sec() + last_flush + g_conf.profiling_logger_interval;
   next.nsec_ref() = start.nsec();
   generic_dout(20) << "logger now=" << now
 		   << "  start=" << start 
 		   << "  next=" << next 
 		   << dendl;
-  logger_event = new C_FlushLoggers;
+  logger_event = new C_FlushProfLoggers;
   logger_timer.add_event_at(next, logger_event);
 }
 
 static void stop()
 {
-  logger_lock.Lock();
+  prof_logger_lock.Lock();
   logger_timer.shutdown();
-  logger_lock.Unlock();
+  prof_logger_lock.Unlock();
 }
 
 
 
 // ---------
 
-void Logger::_open_log()
+void ProfLogger::_open_log()
 {
   struct stat st;
 
   filename = "";
-  if (g_conf.chdir && g_conf.chdir[0] && g_conf.logger_dir[0] != '/') {
+  if (g_conf.chdir && g_conf.chdir[0] && g_conf.profiling_logger_dir[0] != '/') {
     char cwd[PATH_MAX];
     char *c = getcwd(cwd, sizeof(cwd));
     assert(c);
@@ -202,21 +202,21 @@ void Logger::_open_log()
     filename += "/";
   }
   
-  filename = g_conf.logger_dir;
+  filename = g_conf.profiling_logger_dir;
 
   // make (feeble) attempt to create logger_dir
   if (::stat(filename.c_str(), &st))
     ::mkdir(filename.c_str(), 0750);
 
   filename += "/";
-  if (g_conf.logger_subdir) {
-    filename += g_conf.logger_subdir;
+  if (g_conf.profiling_logger_subdir) {
+    filename += g_conf.profiling_logger_subdir;
     ::mkdir( filename.c_str(), 0755 );   // make sure dir exists
     filename += "/";
   }
   filename += name;
 
-  generic_dout(10) << "Logger::_open " << filename << dendl;
+  generic_dout(10) << "ProfLogger::_open " << filename << dendl;
   if (out.is_open())
     out.close();
   out.open(filename.c_str(),
@@ -231,9 +231,9 @@ void Logger::_open_log()
 }
 
 
-Logger::~Logger()
+ProfLogger::~ProfLogger()
 {
-  Mutex::Locker l(logger_lock);
+  Mutex::Locker l(prof_logger_lock);
   
   _flush();
   out.close();
@@ -242,21 +242,21 @@ Logger::~Logger()
     logger_event = 0;       // stop the timer events.
 }
 
-void Logger::reopen()
+void ProfLogger::reopen()
 {
-  Mutex::Locker l(logger_lock);
+  Mutex::Locker l(prof_logger_lock);
   need_open = true;
 }
 
-void Logger::reset()
+void ProfLogger::reset()
 {
-  Mutex::Locker l(logger_lock);
+  Mutex::Locker l(prof_logger_lock);
   need_open = true;
   need_reset = true;
 }
 
 
-void Logger::_flush()
+void ProfLogger::_flush()
 {
   if (need_open || logger_need_reopen)
     _open_log();
@@ -269,7 +269,7 @@ void Logger::_flush()
     need_reset = false;
   }
 
-  generic_dout(20) << "Logger::_flush on " << this << dendl;
+  generic_dout(20) << "ProfLogger::_flush on " << this << dendl;
 
   // header?
   wrote_header_last++;
@@ -291,7 +291,7 @@ void Logger::_flush()
       if (vals[i] > 0) {
 	double avg = (fvals[i] / (double)vals[i]);
 	double var = 0.0;
-	if (g_conf.logger_calc_variance &&
+	if (g_conf.profiling_logger_calc_variance &&
 	    (unsigned)vals[i] == vals_to_avg[i].size()) {
 	  for (vector<double>::iterator p = vals_to_avg[i].begin(); p != vals_to_avg[i].end(); ++p) 
 	    var += (avg - *p) * (avg - *p);
@@ -324,79 +324,79 @@ void Logger::_flush()
 
 
 
-int64_t Logger::inc(int key, int64_t v)
+int64_t ProfLogger::inc(int key, int64_t v)
 {
-  if (!g_conf.logger)
+  if (!g_conf.profiling_logger)
     return 0;
-  logger_lock.Lock();
+  prof_logger_lock.Lock();
   int i = type->lookup_key(key);
   vals[i] += v;
   int64_t r = vals[i];
-  logger_lock.Unlock();
+  prof_logger_lock.Unlock();
   return r;
 }
 
-double Logger::finc(int key, double v)
+double ProfLogger::finc(int key, double v)
 {
-  if (!g_conf.logger)
+  if (!g_conf.profiling_logger)
     return 0;
-  logger_lock.Lock();
+  prof_logger_lock.Lock();
   int i = type->lookup_key(key);
   fvals[i] += v;
   double r = fvals[i];
-  logger_lock.Unlock();
+  prof_logger_lock.Unlock();
   return r;
 }
 
-int64_t Logger::set(int key, int64_t v)
+int64_t ProfLogger::set(int key, int64_t v)
 {
-  if (!g_conf.logger)
+  if (!g_conf.profiling_logger)
     return 0;
-  logger_lock.Lock();
+  prof_logger_lock.Lock();
   int i = type->lookup_key(key);
   //cout << this << " set " << i << " to " << v << std::endl;
   int64_t r = vals[i] = v;
-  logger_lock.Unlock();
+  prof_logger_lock.Unlock();
   return r;
 }
 
 
-double Logger::fset(int key, double v)
+double ProfLogger::fset(int key, double v)
 {
-  if (!g_conf.logger)
+  if (!g_conf.profiling_logger)
     return 0;
-  logger_lock.Lock();
+  prof_logger_lock.Lock();
   int i = type->lookup_key(key);
   //cout << this << " fset " << i << " to " << v << std::endl;
   double r = fvals[i] = v;
-  logger_lock.Unlock();
+  prof_logger_lock.Unlock();
   return r;
 }
 
-double Logger::favg(int key, double v)
+double ProfLogger::favg(int key, double v)
 {
-  if (!g_conf.logger)
+  if (!g_conf.profiling_logger)
     return 0;
-  logger_lock.Lock();
+  prof_logger_lock.Lock();
   int i = type->lookup_key(key);
   vals[i]++;
   double r = fvals[i] += v;
-  if (g_conf.logger_calc_variance)
+  if (g_conf.profiling_logger_calc_variance)
     vals_to_avg[i].push_back(v);
-  logger_lock.Unlock();
+  prof_logger_lock.Unlock();
   return r;
 }
 
-int64_t Logger::get(int key)
+int64_t ProfLogger::get(int key)
 {
-  if (!g_conf.logger)
+  if (!g_conf.profiling_logger)
     return 0;
-  logger_lock.Lock();
+  prof_logger_lock.Lock();
   int i = type->lookup_key(key);
   int64_t r = 0;
   if (i >= 0 && i < (int)vals.size())
     r = vals[i];
-  logger_lock.Unlock();
+  prof_logger_lock.Unlock();
   return r;
 }
 

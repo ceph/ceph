@@ -89,7 +89,7 @@ enum {
 class Messenger;
 class Message;
 class MonClient;
-class Logger;
+class ProfLogger;
 class ObjectStore;
 class OSDMap;
 class MLog;
@@ -112,7 +112,7 @@ protected:
   Messenger   *cluster_messenger;
   Messenger   *client_messenger;
   MonClient   *monc;
-  Logger      *logger;
+  ProfLogger      *logger;
   bool         logger_started;
   ObjectStore *store;
 

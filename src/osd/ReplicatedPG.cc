@@ -17,7 +17,7 @@
 
 #include "common/arch.h"
 #include "common/errno.h"
-#include "common/Logger.h"
+#include "common/ProfLogger.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"

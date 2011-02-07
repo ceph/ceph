@@ -19,8 +19,8 @@
 
 #include "osdc/Journaler.h"
 
-#include "common/LogType.h"
-#include "common/Logger.h"
+#include "common/ProfLogType.h"
+#include "common/ProfLogger.h"
 
 #include "events/ESubtreeMap.h"
 
@@ -34,7 +34,7 @@
 
 // cons/des
 
-LogType mdlog_logtype(l_mdl_first, l_mdl_last);
+ProfLogType mdlog_logtype(l_mdl_first, l_mdl_last);
 
 
 MDLog::~MDLog()
@@ -77,7 +77,7 @@ void MDLog::open_logger()
   // logger
   char name[80];
   snprintf(name, sizeof(name), "mds.%s.log", g_conf.id);
-  logger = new Logger(name, &mdlog_logtype);
+  logger = new ProfLogger(name, &mdlog_logtype);
   logger_add(logger);
 }
 

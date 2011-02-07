@@ -74,12 +74,12 @@ struct md_config_t {
   int profiler_allocation_interval;
   int profiler_highwater_interval;
 
-  // logger (profiling)
-  bool logger;
-  int logger_interval;
-  bool logger_calc_variance;
-  const char *logger_subdir;
-  const char *logger_dir;
+  // profiling logger
+  bool profiling_logger;
+  int profiling_logger_interval;
+  bool profiling_logger_calc_variance;
+  const char *profiling_logger_subdir;
+  const char *profiling_logger_dir;
 
   const char *log_file;
   const char *log_dir;

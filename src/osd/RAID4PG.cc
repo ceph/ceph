@@ -14,7 +14,7 @@
 #include "RAID4PG.h"
 #include "OSD.h"
 
-#include "common/Logger.h"
+#include "common/ProfLogger.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"

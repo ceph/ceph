@@ -21,16 +21,16 @@
 #include <vector>
 using std::vector;
 
-class LogType {
+class ProfLogType {
  protected:
   int first_key, num_keys;
   vector<const char*> key_name;
   vector<bool> inc_keys, avg_keys;
 
-  friend class Logger;
+  friend class ProfLogger;
 
  public:
-  LogType(int first, int tail) :
+  ProfLogType(int first, int tail) :
     first_key(first), num_keys(tail-first - 1),
     key_name(num_keys), inc_keys(num_keys), avg_keys(num_keys) {
     for (int i=0; i<num_keys; i++) {

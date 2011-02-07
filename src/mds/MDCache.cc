@@ -35,7 +35,7 @@
 #include "msg/Message.h"
 #include "msg/Messenger.h"
 
-#include "common/Logger.h"
+#include "common/ProfLogger.h"
 #include "common/MemoryModel.h"
 #include "osdc/Journaler.h"
 #include "osdc/Filer.h"

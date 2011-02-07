@@ -55,7 +55,7 @@ using namespace std;
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
-#include "common/Logger.h"
+#include "common/ProfLogger.h"
 
 
 
@@ -70,8 +70,8 @@ using namespace std;
 
 // static logger
 Mutex client_logger_lock("client_logger_lock");
-LogType client_logtype(l_c_first, l_c_last);
-Logger  *client_logger = 0;
+ProfLogType client_logtype(l_c_first, l_c_last);
+ProfLogger  *client_logger = 0;
 
 
 
@@ -294,7 +294,7 @@ void Client::init()
     char hostname[80];
     gethostname(hostname, 79);
     snprintf(s, sizeof(s), "clients.%s.%d", hostname, getpid());
-    client_logger = new Logger(s, &client_logtype);
+    client_logger = new ProfLogger(s, &client_logtype);
   }
   client_logger_lock.Unlock();
 }

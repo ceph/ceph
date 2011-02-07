@@ -261,8 +261,8 @@ if [ "$start_mon" -eq 1 ]; then
 	log dir = out
 	log per instance = true
 	log sym history = 100
-        logger = true
-	logger dir = log
+        profiling logger = true
+	profiling logger dir = log
 	chdir = ""
 	pid file = out/\$name.pid
 $extra_conf

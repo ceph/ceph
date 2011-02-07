@@ -47,8 +47,8 @@
 
 #include "include/filepath.h"
 #include "common/Timer.h"
-#include "common/Logger.h"
-#include "common/LogType.h"
+#include "common/ProfLogger.h"
+#include "common/ProfLogType.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -67,7 +67,7 @@ using namespace std;
 
 void Server::open_logger()
 {
-  static LogType mdserver_logtype(l_mdss_first, l_mdss_last);
+  static ProfLogType mdserver_logtype(l_mdss_first, l_mdss_last);
   static bool didit = false;
   if (!didit) {
     didit = true;
@@ -81,7 +81,7 @@ void Server::open_logger()
 
   char name[80];
   snprintf(name, sizeof(name), "mds.%s.server.log", g_conf.id);
-  logger = new Logger(name, &mdserver_logtype);
+  logger = new ProfLogger(name, &mdserver_logtype);
   logger_add(logger);
 }
 

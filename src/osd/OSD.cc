@@ -74,8 +74,8 @@
 
 #include "messages/MWatchNotify.h"
 
-#include "common/Logger.h"
-#include "common/LogType.h"
+#include "common/ProfLogger.h"
+#include "common/ProfLogType.h"
 #include "common/Timer.h"
 #include "common/LogClient.h"
 
@@ -611,7 +611,7 @@ void OSD::open_logger()
 {
   dout(10) << "open_logger" << dendl;
 
-  static LogType osd_logtype(l_osd_first, l_osd_last);
+  static ProfLogType osd_logtype(l_osd_first, l_osd_last);
   static bool didit = false;
   if (!didit) {
     didit = true;
@@ -668,7 +668,7 @@ void OSD::open_logger()
 
   char name[80];
   snprintf(name, sizeof(name), "osd.%d.log", whoami);
-  logger = new Logger(name, (LogType*)&osd_logtype);
+  logger = new ProfLogger(name, (ProfLogType*)&osd_logtype);
   logger_add(logger);  
 
   if (osdmap->get_epoch() > 0)

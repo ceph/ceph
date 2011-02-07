@@ -24,7 +24,7 @@
 #include "include/types.h"
 #include "include/Context.h"
 #include "common/DecayCounter.h"
-#include "common/Logger.h"
+#include "common/ProfLogger.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Timer.h"
@@ -179,7 +179,7 @@ class MDS : public Dispatcher {
   MDSTableClient *get_table_client(int t);
   MDSTableServer *get_table_server(int t);
 
-  Logger       *logger, *mlogger;
+  ProfLogger       *logger, *mlogger;
 
   int orig_argc;
   const char **orig_argv;

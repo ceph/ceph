@@ -13,7 +13,7 @@
  */
 
 #include "common/BackTrace.h"
-#include "common/Logger.h"
+#include "common/ProfLogger.h"
 #include "common/debug.h"
 #include "common/signal.h"
 #include "config.h"

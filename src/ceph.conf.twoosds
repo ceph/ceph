@@ -11,7 +11,7 @@
 ; ---------------------
 [global]
 	pid file = /home/sage/ceph/src/out/$name.pid
-	logger dir = /home/sage/ceph/src/log
+	profiling logger dir = /home/sage/ceph/src/log
 	log sym dir = /home/sage/ceph/src/out
 	chdir = /home/sage/ceph/src
 	restart on core dump = false

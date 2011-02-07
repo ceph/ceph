@@ -18,7 +18,7 @@
 #include "common/BackTrace.h"
 #include "common/Clock.h"
 #include "common/ConfUtils.h"
-#include "common/Logger.h"
+#include "common/ProfLogger.h"
 #include "common/common_init.h"
 #include "common/dyn_snprintf.h"
 #include "config.h"
@@ -240,11 +240,11 @@ static struct config_option config_optionsp[] = {
         OPTION(tcmalloc_profiler_run, 0, OPT_BOOL, false),
         OPTION(profiler_allocation_interval, 0, OPT_INT, 1073741824),
         OPTION(profiler_highwater_interval, 0, OPT_INT, 104857600),
-	OPTION(logger, 0, OPT_BOOL, false),
-	OPTION(logger_interval, 0, OPT_INT, 1),
-	OPTION(logger_calc_variance, 0, OPT_BOOL, false),
-	OPTION(logger_subdir, 0, OPT_STR, 0),
-	OPTION(logger_dir, 0, OPT_STR, "/var/log/ceph/stat"),
+	OPTION(profiling_logger, 0, OPT_BOOL, false),
+	OPTION(profiling_logger_interval, 0, OPT_INT, 1),
+	OPTION(profiling_logger_calc_variance, 0, OPT_BOOL, false),
+	OPTION(profiling_logger_subdir, 0, OPT_STR, 0),
+	OPTION(profiling_logger_dir, 0, OPT_STR, "/var/log/ceph/stat"),
 	OPTION(log_file, 0, OPT_STR, 0),
 	OPTION(log_dir, 0, OPT_STR, "/var/log/ceph"),
 	OPTION(log_sym_dir, 0, OPT_STR, 0),

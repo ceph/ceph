@@ -471,7 +471,7 @@ libcommon_files = \
 	msg/Message.cc \
 	msg/msg_types.cc \
 	common/BackTrace.cc \
-	common/Logger.cc \
+	common/ProfLogger.cc \
 	common/ClassLibrary.cc \
 	common/Clock.cc \
 	common/Timer.cc \
@@ -631,8 +631,8 @@ noinst_HEADERS = \
         common/ConfUtils.h\
         common/DecayCounter.h\
         common/Finisher.h\
-        common/LogType.h\
-        common/Logger.h\
+        common/ProfLogType.h\
+        common/ProfLogger.h\
         common/MemoryModel.h\
         common/Mutex.h\
         common/RWLock.h\
