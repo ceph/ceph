@@ -81,32 +81,6 @@ void usage_exit()
   exit(1);
 }
 
-static void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
-			    size_t size, int *order, uint64_t bid)
-{
-  uint32_t hi = bid >> 32;
-  uint32_t lo = bid & 0xFFFFFFFF;
-  memset(&ondisk, 0, sizeof(ondisk));
-
-  memcpy(&ondisk.text, RBD_HEADER_TEXT, sizeof(RBD_HEADER_TEXT));
-  memcpy(&ondisk.signature, RBD_HEADER_SIGNATURE, sizeof(RBD_HEADER_SIGNATURE));
-  memcpy(&ondisk.version, RBD_HEADER_VERSION, sizeof(RBD_HEADER_VERSION));
-
-  snprintf(ondisk.block_name, sizeof(ondisk.block_name), "rb.%x.%x", hi, lo);
-
-  if (!*order)
-    *order = RBD_DEFAULT_OBJ_ORDER;
-
-  ondisk.image_size = size;
-  ondisk.options.order = *order;
-  ondisk.options.crypt_type = RBD_CRYPT_NONE;
-  ondisk.options.comp_type = RBD_COMP_NONE;
-  ondisk.snap_seq = 0;
-  ondisk.snap_count = 0;
-  ondisk.reserved = 0;
-  ondisk.snap_names_len = 0;
-}
-
 static void print_info(const char *imgname, librbd::image_info_t& info)
 {
   cout << "rbd image '" << imgname << "':\n"

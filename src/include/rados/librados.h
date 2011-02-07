@@ -27,7 +27,7 @@ extern "C" {
 
 /* initialization */
 int rados_initialize(int argc, const char **argv); /* arguments are optional */
-void rados_deinitialize();
+void rados_deinitialize(void);
 
 void librados_version(int *major, int *minor, int *extra);
 

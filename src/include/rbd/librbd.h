@@ -53,7 +53,7 @@ typedef struct {
 
 /* initialization */
 int rbd_initialize(int argc, const char **argv); /* arguments are optional */
-void rbd_shutdown();
+void rbd_shutdown(void);
 
 void librbd_version(int *major, int *minor, int *extra);
 
