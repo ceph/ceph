@@ -48,7 +48,7 @@ void set_foreground_logging()
 
   g_conf.log_to_file = false;
 
-  if (_dout_need_open) {
+  {
     Mutex::Locker l(_dout_lock);
     _dout_open_log(false);
   }

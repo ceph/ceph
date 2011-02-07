@@ -1096,6 +1096,13 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
   if (force_foreground_logging) {
     set_foreground_logging();
   }
+  else {
+    // In the long term, it would be best to ensure that we read ceph.conf
+    // before initializing dout(). For now, just force a reopen here with the
+    // configuration we have just read.
+    Mutex::Locker l(_dout_lock);
+    _dout_open_log(false);
+  }
 
   if (!cf)
     return;

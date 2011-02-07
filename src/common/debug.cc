@@ -27,7 +27,6 @@ Mutex _dout_lock __attribute__((init_priority(110)))
 
 void _dout_open_log(bool print_version)
 {
-  assert(_dout_need_open);
   assert(_dout_lock.is_locked());
 
   if (!_doss) {
