@@ -7,12 +7,6 @@ Files: *
 Copyright: (c) 2004-2010 by Sage Weil <sage@newdream.net>
 License: LGPL2.1 (see /usr/share/common-licenses/LGPL-2.1)
 
-Files: src/client/fuse.cc
-Copyright: 
-    Copyright (C) 2001-2005  Miklos Szeredi <miklos@szeredi.hu>
-    Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
-License: GPL
-
 Files: src/rbd.cc
 Copyright:
     Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>

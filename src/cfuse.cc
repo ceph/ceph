@@ -20,7 +20,6 @@ using namespace std;
 #include "config.h"
 
 #include "client/Client.h"
-#include "client/fuse.h"
 #include "client/fuse_ll.h"
 
 #include "msg/SimpleMessenger.h"
@@ -135,10 +134,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     
     dout_create_rank_symlink(client->get_nodeid().v);
     cerr << "cfuse[" << getpid() << "]: starting fuse" << std::endl;
-    if (g_conf.fuse_ll)
-      r = ceph_fuse_ll_main(client, argc, argv, fd[1]);
-    else
-      r = ceph_fuse_main(client, argc, argv);
+    r = ceph_fuse_ll_main(client, argc, argv, fd[1]);
     cerr << "cfuse[" << getpid() << "]: fuse finished with error " << r << std::endl;
     
     client->unmount();

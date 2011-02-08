@@ -340,7 +340,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(client_mountpoint, 'r', OPT_STR, "/"),
 	OPTION(client_notify_timeout, 0, OPT_INT, 10), // in seconds
 	OPTION(fuse_direct_io, 0, OPT_INT, 0),
-	OPTION(fuse_ll, 0, OPT_BOOL, true),
 	OPTION(client_oc, 0, OPT_BOOL, true),
 	OPTION(client_oc_size, 0, OPT_INT, 1024*1024* 200),    // MB * n
 	OPTION(client_oc_max_dirty, 0, OPT_INT, 1024*1024* 100),    // MB * n  (dirty OR tx.. bigish)

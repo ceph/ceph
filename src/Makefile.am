@@ -110,7 +110,7 @@ core: cmon cosd cmds ceph cephfs librados-config cconf monmaptool osdmaptool cru
 
 # fuse targets?
 if WITH_FUSE
-cfuse_SOURCES = cfuse.cc msg/SimpleMessenger.cc client/fuse.cc client/fuse_ll.cc
+cfuse_SOURCES = cfuse.cc msg/SimpleMessenger.cc client/fuse_ll.cc
 cfuse_LDADD = -lfuse libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm $(CRYPTOPP_LIBS)
 cfuse_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += cfuse
@@ -608,7 +608,6 @@ noinst_HEADERS = \
         client/Client.h\
         client/SyntheticClient.h\
         client/Trace.h\
-        client/fuse.h\
         client/fuse_ll.h\
 	client/ioctl.h\
 	client/libceph.h\

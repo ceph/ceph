@@ -210,7 +210,6 @@ struct md_config_t {
   const char *client_snapdir;
   const char *client_mountpoint;
   int fuse_direct_io;
-  bool fuse_ll;
 
   // objectcacher
   bool     client_oc;
