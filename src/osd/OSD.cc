@@ -2756,8 +2756,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     PG *pg = i->second;
     if (pg->dirty_info)
       pg->write_info(t);
-    if (pg->dirty_log)
-      pg->write_log(t);
   }
 
   bool do_shutdown = false;
