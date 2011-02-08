@@ -44,7 +44,7 @@ bool logger_need_reset = false;
 static void flush_all_loggers();
 static void stop();
 
-static struct FlusherStopper {
+struct FlusherStopper {
   ~FlusherStopper() {
     stop();
   }

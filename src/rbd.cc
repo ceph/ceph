@@ -399,7 +399,7 @@ static int do_import(librados::pool_t pool, const char *imgname, int *order, con
           cerr << "error reading file: " << cpp_strerror(r) << std::endl;
           goto done;
         }
-	len = rval
+	size_t len = rval;
         if (!len) {
           r = 0;
           goto done;
