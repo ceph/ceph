@@ -4593,10 +4593,8 @@ void OSD::generate_backlog(PG *pg)
     C_Contexts *fin = new C_Contexts;
     pg->do_peer(*t, fin->contexts, query_map, NULL);
     do_queries(query_map);
-    if (pg->dirty_info)
-      pg->write_info(*t);
-    if (pg->dirty_log)
-      pg->write_log(*t);
+    pg->write_info(*t);
+    pg->write_log(*t);
     int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(tr == 0);
   }
