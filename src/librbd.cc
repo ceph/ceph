@@ -46,6 +46,8 @@ namespace librbd {
   using ceph::bufferlist;
   using librados::snap_t;
 
+  class WatchCtx;
+
   struct PoolCtx {
     pool_t md;
     pool_t data;
@@ -65,7 +67,15 @@ namespace librbd {
     uint64_t snapid;
     std::string name;
     struct PoolCtx *pctx;
+    WatchCtx *wctx;
+    bool needs_refresh;
+    Mutex lock;
 
+    ImageCtx(std::string imgname, PoolCtx *pp) : snapid(0),
+						 name(imgname),
+						 pctx(pp),
+						 needs_refresh(true),
+						 lock("librbd::ImageCtx::lock") {}
     int set_snap(std::string snap_name)
     {
       std::map<std::string, struct SnapInfo>::iterator it = snaps_by_name.find(snap_name);
@@ -84,6 +94,20 @@ namespace librbd {
       struct SnapInfo info(id, size);
       snaps_by_name.insert(std::pair<std::string, struct SnapInfo>(snap_name, info));
     }
+  };
+
+  class WatchCtx : public librados::Rados::WatchCtx {
+    ImageCtx *ictx;
+    bool valid;
+    Mutex lock;
+  public:
+    uint64_t cookie;
+    WatchCtx(ImageCtx *ctx) : ictx(ctx),
+			      valid(true),
+			      lock("librbd::RBDClient::WatchCtx") {}
+    virtual ~WatchCtx() {}
+    void invalidate();
+    virtual void notify(uint8_t opcode, uint64_t ver);
   };
 
 class RBDClient
@@ -198,8 +222,8 @@ public:
   int list_snaps(PoolCtx *pp, ImageCtx *ictx, std::vector<snap_info_t>& snaps);
   int add_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_name);
   int rm_snap(PoolCtx *pp, string& md_oid, const char *snap_name);
-  int get_snapc(PoolCtx *pp, string& md_oid, const char *snap_name,
-		ImageCtx *ictx);
+  int check_ictx(ImageCtx *ictx);
+  int refresh_ictx(ImageCtx *ictx, const char *snap_name);
   int rollback_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_name);
   int remove_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_name);
   int copy(PoolCtx *pp, const char *srcname, PoolCtx *pp_dest, const char *destname);
@@ -207,6 +231,7 @@ public:
   int open_pools(const char *poolname, PoolCtx *pp);
   void close_pools(PoolCtx *pp);
   int open_image(PoolCtx *pctx, ImageCtx *ictx, const char *name, const char *snap_name);
+  void close_image(ImageCtx *ictx);
 
   void trim_image(PoolCtx *pp, rbd_obj_header_ondisk *header, uint64_t newsize);
   int read_rbd_info(PoolCtx *pp, string& info_oid, struct rbd_info *info);
@@ -214,7 +239,7 @@ public:
   int touch_rbd_info(librados::pool_t pool, string& info_oid);
   int rbd_assign_bid(librados::pool_t pool, string& info_oid, uint64_t *id);
   int read_header_bl(librados::pool_t pool, string& md_oid, bufferlist& header, uint64_t *ver);
-  int notify_change(librados::pool_t pool, string& oid, uint64_t *pver);
+  int notify_change(librados::pool_t pool, string& oid, uint64_t *pver, ImageCtx *ictx);
   int read_header(librados::pool_t pool, string& md_oid, struct rbd_obj_header_ondisk *header, uint64_t *ver);
   int write_header(PoolCtx *pp, string& md_oid, bufferlist& header);
   int tmap_set(PoolCtx *pp, string& imgname);
@@ -252,6 +277,22 @@ public:
   librados::Rados& get_rados() { return rados; }
 };
 
+
+void librbd::WatchCtx::invalidate()
+{
+  Mutex::Locker l(lock);
+  valid = false;
+}
+
+void librbd::WatchCtx::notify(uint8_t opcode, uint64_t ver)
+{
+  Mutex::Locker l(lock);
+  cout <<  " got notification opcode=" << (int)opcode << " ver=" << ver << " cookie=" << cookie << std::endl;
+  if (valid) {
+    Mutex::Locker lictx(ictx->lock);
+    ictx->needs_refresh = true;
+  }
+}
 
 void librbd::RBDClient::init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
 					size_t size, int *order, uint64_t bid)
@@ -414,9 +455,16 @@ int librbd::RBDClient::read_header_bl(librados::pool_t pool, string& md_oid, buf
   return 0;
 }
 
-int librbd::RBDClient::notify_change(librados::pool_t pool, string& oid, uint64_t *pver)
+int librbd::RBDClient::notify_change(librados::pool_t pool, string& oid, uint64_t *pver, ImageCtx *ictx)
 {
   uint64_t ver;
+
+  if (ictx) {
+    ictx->lock.Lock();
+    ictx->needs_refresh = true;
+    ictx->lock.Unlock();
+  }
+
   if (pver)
     ver = *pver;
   else
@@ -443,7 +491,7 @@ int librbd::RBDClient::write_header(PoolCtx *pp, string& md_oid, bufferlist& hea
   bufferlist bl;
   int r = rados.write(pp->md, md_oid, 0, header, header.length());
 
-  notify_change(pp->md, md_oid, NULL);
+  notify_change(pp->md, md_oid, NULL, NULL);
 
   return r;
 }
@@ -469,6 +517,8 @@ int librbd::RBDClient::tmap_rm(PoolCtx *pp, string& imgname)
 
 int librbd::RBDClient::rollback_image(PoolCtx *pp, ImageCtx *ictx, uint64_t snapid)
 {
+  assert(ictx->lock.is_locked());
+
   uint64_t numseg = get_max_block(&(ictx->header));
 
   for (uint64_t i = 0; i < numseg; i++) {
@@ -507,38 +557,55 @@ int librbd::RBDClient::list(PoolCtx *pp, std::vector<std::string>& names)
 
 int librbd::RBDClient::create_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_name)
 {
-  string md_oid = ictx->name;
-  md_oid += RBD_SUFFIX;
-
-  int r = rados.set_snap_context(pp->data, ictx->snapc.seq, ictx->snaps);
+  ictx->lock.Lock();
+  int r = check_ictx(ictx);
+  ictx->lock.Unlock();
   if (r < 0)
     return r;
 
-  rados.set_snap(pp->data, 0);
-  r = add_snap(pp, ictx, snap_name);
-  get_snapc(pp, md_oid, NULL, ictx);
-
-  return r;
-}
-
-int librbd::RBDClient::remove_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_name)
-{
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
-
-  int r = ictx->set_snap(snap_name);
-  if (r < 0)
-    return r;
 
   r = rados.set_snap_context(pp->data, ictx->snapc.seq, ictx->snaps);
   if (r < 0)
     return r;
 
+  rados.set_snap(pp->data, 0);
+  r = add_snap(pp, ictx, snap_name);
+  notify_change(pp->md, md_oid, NULL, ictx);
+  return r;
+}
+
+int librbd::RBDClient::remove_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_name)
+{
+  ictx->lock.Lock();
+  int r = check_ictx(ictx);
+  if (r < 0) {
+    ictx->lock.Unlock();
+    return r;
+  }
+
+  string md_oid = ictx->name;
+  md_oid += RBD_SUFFIX;
+
+  r = ictx->set_snap(snap_name);
+  if (r < 0) {
+    ictx->lock.Unlock();
+    return r;
+  }
+
+  r = rados.set_snap_context(pp->data, ictx->snapc.seq, ictx->snaps);
+  if (r < 0) {
+    ictx->lock.Unlock();
+    return r;
+  }
+
   rados.set_snap(pp->data, ictx->snapid);
 
   r = rm_snap(pp, md_oid, snap_name);
   r = rados.selfmanaged_snap_remove(pp->data, ictx->snapid);
-  get_snapc(pp, md_oid, NULL, ictx);
+  ictx->lock.Unlock();
+  notify_change(pp->md, md_oid, NULL, ictx);
 
   return r;
 }
@@ -629,6 +696,7 @@ int librbd::RBDClient::rename(PoolCtx *pp, const char *srcname, const char *dstn
   r = rados.remove(pp->md, md_oid);
   if (r < 0)
     derr << "warning: couldn't remove old metadata" << dendl;
+  notify_change(pp->md, md_oid, NULL, NULL);
 
   return 0;
 }
@@ -636,6 +704,10 @@ int librbd::RBDClient::rename(PoolCtx *pp, const char *srcname, const char *dstn
 
 int librbd::RBDClient::info(PoolCtx *pp, ImageCtx *ictx, librbd::image_info_t& info)
 {
+  Mutex::Locker l(ictx->lock);
+  int r = check_ictx(ictx);
+  if (r < 0)
+    return r;
   image_info(ictx->header, info);
   return 0;
 }
@@ -670,12 +742,20 @@ int librbd::RBDClient::remove(PoolCtx *pp, const char *imgname)
 
 int librbd::RBDClient::resize(PoolCtx *pp, ImageCtx *ictx, uint64_t size)
 {
+  //  Mutex::Locker l(ictx->lock);
+  ictx->lock.Lock();
+  int r = check_ictx(ictx);
+  if (r < 0) {
+    ictx->lock.Unlock();
+    return r;
+  }
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
   // trim
   if (size == ictx->header.image_size) {
     dout(2) << "no change in size (" << size << " -> " << ictx->header.image_size << ")" << dendl;
+    ictx->lock.Unlock();
     return 0;
   }
 
@@ -691,14 +771,15 @@ int librbd::RBDClient::resize(PoolCtx *pp, ImageCtx *ictx, uint64_t size)
   // rewrite header
   bufferlist bl;
   bl.append((const char *)&(ictx->header), sizeof(ictx->header));
-  int r = rados.write(pp->md, md_oid, 0, bl, bl.length());
+  r = rados.write(pp->md, md_oid, 0, bl, bl.length());
+  ictx->lock.Unlock();
   if (r == -ERANGE)
     derr << "operation might have conflicted with another client!" << dendl;
   if (r < 0) {
     derr << "error writing header: " << strerror(-r) << dendl;
     return r;
   } else {
-    notify_change(pp->md, md_oid, NULL);
+    notify_change(pp->md, md_oid, NULL, ictx);
   }
 
   dout(2) << "done." << dendl;
@@ -707,6 +788,11 @@ int librbd::RBDClient::resize(PoolCtx *pp, ImageCtx *ictx, uint64_t size)
 
 int librbd::RBDClient::list_snaps(PoolCtx *pp, ImageCtx *ictx, std::vector<librbd::snap_info_t>& snaps)
 {
+  ictx->lock.Lock();
+  int r = check_ictx(ictx);
+  ictx->lock.Unlock();
+  if (r < 0)
+    return r;
   bufferlist bl, bl2;
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
@@ -744,7 +830,7 @@ int librbd::RBDClient::add_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_na
     derr << "rbd.snap_add execution failed failed: " << strerror(-r) << dendl;
     return r;
   }
-  notify_change(pp->md, md_oid, NULL);
+  notify_change(pp->md, md_oid, NULL, ictx);
 
   return 0;
 }
@@ -764,10 +850,25 @@ int librbd::RBDClient::rm_snap(PoolCtx *pp, string& md_oid, const char *snap_nam
   return 0;
 }
 
-int librbd::RBDClient::get_snapc(PoolCtx *pp, string& md_oid, const char *snap_name,
-				 ImageCtx *ictx)
+int librbd::RBDClient::check_ictx(ImageCtx *ictx)
 {
+  assert(ictx->lock.is_locked());
+  int r = 0;
+  if (ictx->needs_refresh)
+    r = refresh_ictx(ictx, NULL);
+  return r;
+}
+
+int librbd::RBDClient::refresh_ictx(ImageCtx *ictx, const char *snap_name)
+{
+  assert(ictx->lock.is_locked());
+  if (!ictx->needs_refresh)
+    return 0;
+
   bufferlist bl, bl2;
+  PoolCtx *pp = ictx->pctx;
+  string md_oid = ictx->name;
+  md_oid += RBD_SUFFIX;
 
   int r = read_header(pp->md, md_oid, &(ictx->header), NULL);
   if (r < 0)
@@ -795,7 +896,7 @@ int librbd::RBDClient::get_snapc(PoolCtx *pp, string& md_oid, const char *snap_n
   }
 
   if (!ictx->snapc.is_valid()) {
-    derr << "image snap context is invalid! can't rollback" << dendl;
+    derr << "image snap context is invalid!" << dendl;
     return -EIO;
   }
 
@@ -806,15 +907,21 @@ int librbd::RBDClient::get_snapc(PoolCtx *pp, string& md_oid, const char *snap_n
     }
   }
 
+  ictx->needs_refresh = false;
+
   return 0;
 }
 
 int librbd::RBDClient::rollback_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_name)
 {
+  Mutex::Locker l(ictx->lock);
+  int r = check_ictx(ictx);
+  if (r < 0)
+    return r;
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
-  int r = ictx->set_snap(snap_name);
+  r = ictx->set_snap(snap_name);
   if (r < 0)
     return r;
 
@@ -929,10 +1036,15 @@ void librbd::RBDClient::shutdown()
 
 int librbd::RBDClient::set_snap(PoolCtx *pp, ImageCtx *ictx, const char *snap_name)
 {
+  ictx->lock.Lock();
+  int r = check_ictx(ictx);
+  ictx->lock.Unlock();
+  if (r < 0)
+    return r;
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
-  int r = ictx->set_snap(snap_name);
+  r = ictx->set_snap(snap_name);
   if (r < 0)
     return r;
 
@@ -968,23 +1080,47 @@ int librbd::RBDClient::open_pools(const char *pool_name, PoolCtx *ctx)
 
 int librbd::RBDClient::open_image(PoolCtx *pctx, ImageCtx *ictx, const char *name, const char *snap_name)
 {
-  ictx->pctx = pctx;
-  ictx->name = name;
+  Mutex::Locker l(ictx->lock);
+  int r = refresh_ictx(ictx, snap_name);
+  if (r < 0)
+    return r;
+
+  WatchCtx *wctx = new WatchCtx(ictx);
+  if (!wctx)
+    return -ENOMEM;
+  ictx->wctx = wctx;
   string md_oid = name;
   md_oid += RBD_SUFFIX;
 
-  int r = get_snapc(pctx, md_oid, snap_name, ictx);
-  if (!snap_name && r == -ENOENT)
-    r = 0;
+  r = rados.watch(pctx->md, md_oid, 0, &(wctx->cookie), wctx);
   return r;
+}
+
+void librbd::RBDClient::close_image(ImageCtx *ictx)
+{
+  string md_oid = ictx->name;
+  md_oid += RBD_SUFFIX;
+
+  ictx->wctx->invalidate();
+  ictx->lock.Lock();
+  rados.unwatch(ictx->pctx->md, md_oid, ictx->wctx->cookie);
+  delete ictx->wctx;
+  ictx->lock.Unlock();
+  delete ictx;
+  ictx = NULL;
 }
 
 int librbd::RBDClient::read_iterate(PoolCtx *ctx, ImageCtx *ictx, off_t off, size_t len,
                                     int (*cb)(off_t, size_t, const char *, void *),
                                     void *arg)
 {
+  ictx->lock.Lock();
+  int r = check_ictx(ictx);
+  ictx->lock.Unlock();
+  if (r < 0)
+    return r;
   int64_t ret;
-  int r, total_read = 0;
+  int total_read = 0;
   uint64_t start_block = get_block_num(&ictx->header, off);
   uint64_t end_block = get_block_num(&ictx->header, off + len);
   uint64_t block_size = get_block_size(&ictx->header);
@@ -1067,7 +1203,13 @@ int librbd::RBDClient::write(PoolCtx *ctx, ImageCtx *ictx, off_t off, size_t len
   if (!len)
     return 0;
 
-  int r, total_write = 0;
+  ictx->lock.Lock();
+  int r = check_ictx(ictx);
+  ictx->lock.Unlock();
+  if (r < 0)
+    return r;
+
+  int total_write = 0;
   uint64_t start_block = get_block_num(&ictx->header, off);
   uint64_t end_block = get_block_num(&ictx->header, off + len - 1);
   uint64_t block_size = get_block_size(&ictx->header);
@@ -1170,7 +1312,13 @@ int librbd::RBDClient::aio_write(PoolCtx *pool, ImageCtx *ictx, off_t off, size_
   if (!len)
     return 0;
 
-  int r, total_write = 0;
+  ictx->lock.Lock();
+  int r = check_ictx(ictx);
+  ictx->lock.Unlock();
+  if (r < 0)
+    return r;
+
+  int total_write = 0;
   uint64_t start_block = get_block_num(&ictx->header, off);
   uint64_t end_block = get_block_num(&ictx->header, off + len - 1);
   uint64_t block_size = get_block_size(&ictx->header);
@@ -1211,8 +1359,14 @@ int librbd::RBDClient::aio_read(PoolCtx *ctx, ImageCtx *ictx, off_t off, size_t 
 				char *buf,
                                 AioCompletion *c)
 {
+  ictx->lock.Lock();
+  int r = check_ictx(ictx);
+  ictx->lock.Unlock();
+  if (r < 0)
+    return r;
+
   int64_t ret;
-  int r, total_read = 0;
+  int total_read = 0;
   uint64_t start_block = get_block_num(&ictx->header, off);
   uint64_t end_block = get_block_num(&ictx->header, off + len);
   uint64_t block_size = get_block_size(&ictx->header);
@@ -1297,18 +1451,18 @@ int librbd::RBD::close_pool(pool_t pool)
 int librbd::RBD::open_image(pool_t pool, const char *name, image_t *image, const char *snap_name)
 {
   PoolCtx *pctx = (PoolCtx *)pool;
-  ImageCtx *ictx = new librbd::ImageCtx;
+  ImageCtx *ictx = new ImageCtx(name, pctx);
   if (!ictx)
     return -ENOMEM;
-  client->open_image(pctx, ictx, name, snap_name);
+  int r = client->open_image(pctx, ictx, name, snap_name);
   *image = (image_t)ictx;
-  return 0;
+  return r;
 }
 
 int librbd::RBD::close_image(image_t image)
 {
   ImageCtx *ctx = (ImageCtx *)image;
-  delete ctx;
+  client->close_image(ctx);
   return 0; 
 }
 
@@ -1616,18 +1770,18 @@ extern "C" int rbd_rename(rbd_pool_t src_pool, const char *srcname, const char *
 extern "C" int rbd_open_image(rbd_pool_t pool, const char *name, rbd_image_t *image, const char *snap_name)
 {
   librbd::PoolCtx *pctx = (librbd::PoolCtx *)pool;
-  librbd::ImageCtx *ictx = new librbd::ImageCtx;
+  librbd::ImageCtx *ictx = new librbd::ImageCtx(name, pctx);
   if (!ictx)
     return -ENOMEM;
-  rbd_client->open_image(pctx, ictx, name, snap_name);
+  int r = rbd_client->open_image(pctx, ictx, name, snap_name);
   *image = (rbd_image_t)ictx;
-  return 0;
+  return r;
 }
 
 extern "C" int rbd_close_image(rbd_image_t image)
 {
   librbd::ImageCtx *ctx = (librbd::ImageCtx *)image;
-  delete ctx;
+  rbd_client->close_image(ctx);
   return 0; 
 }
 
