@@ -101,8 +101,6 @@ struct md_config_t {
 
   const char *chdir;
 
-  bool fakemessenger_serialize;
-
   int kill_after;
 
   long long max_open_files;
@@ -175,8 +173,6 @@ struct md_config_t {
   float mon_clock_drift_warn_backoff;
   float mon_lease_ack_timeout;
   float mon_accept_timeout;
-  bool mon_stop_on_last_unmount;
-  bool mon_stop_with_last_mds;
   float mon_pg_create_interval;
   int mon_globalid_prealloc;
   int mon_osd_report_timeout;
@@ -209,7 +205,6 @@ struct md_config_t {
   long long client_readahead_max_periods;
   const char *client_snapdir;
   const char *client_mountpoint;
-  int fuse_direct_io;
 
   // objectcacher
   bool     client_oc;
@@ -346,7 +341,6 @@ struct md_config_t {
   int   osd_pg_bits;
   int   osd_pgp_bits;
   int   osd_lpg_bits;
-  int   osd_object_layout;
   int   osd_pg_layout;
   int   osd_min_rep;
   int   osd_max_rep;

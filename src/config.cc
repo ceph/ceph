@@ -258,7 +258,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(pid_file, 0, OPT_STR, "/var/run/ceph/$type.$id.pid"),
 	OPTION(conf, 'c', OPT_STR, "/etc/ceph/ceph.conf, ~/.ceph/config, ceph.conf"),
 	OPTION(chdir, 0, OPT_STR, "/"),
-	OPTION(fakemessenger_serialize, 0, OPT_BOOL, true),
 	OPTION(kill_after, 0, OPT_INT, 0),
 	OPTION(max_open_files, 0, OPT_LONGLONG, 0),
 	OPTION(debug, 0, OPT_INT, 0),
@@ -311,8 +310,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(mon_clock_drift_allowed, 0, OPT_FLOAT, .010), // allowed clock drift between monitors
 	OPTION(mon_clock_drift_warn_backoff, 0, OPT_FLOAT, 5), // exponential backoff for clock drift warnings
 	OPTION(mon_accept_timeout, 0, OPT_FLOAT, 10.0),    // on leader, if paxos update isn't accepted
-	OPTION(mon_stop_on_last_unmount, 0, OPT_BOOL, false),
-	OPTION(mon_stop_with_last_mds, 0, OPT_BOOL, false),
 	OPTION(mon_pg_create_interval, 0, OPT_FLOAT, 30.0), // no more than every 30s
 	OPTION(mon_globalid_prealloc, 0, OPT_INT, 100),   // how many globalids to prealloc
 	OPTION(mon_osd_report_timeout, 0, OPT_INT, 900),    // grace period before declaring unresponsive OSDs dead
@@ -339,7 +336,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(client_snapdir, 0, OPT_STR, ".snap"),
 	OPTION(client_mountpoint, 'r', OPT_STR, "/"),
 	OPTION(client_notify_timeout, 0, OPT_INT, 10), // in seconds
-	OPTION(fuse_direct_io, 0, OPT_INT, 0),
 	OPTION(client_oc, 0, OPT_BOOL, true),
 	OPTION(client_oc_size, 0, OPT_INT, 1024*1024* 200),    // MB * n
 	OPTION(client_oc_max_dirty, 0, OPT_INT, 1024*1024* 100),    // MB * n  (dirty OR tx.. bigish)
@@ -444,7 +440,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_pg_bits, 0, OPT_INT, 9),  // bits per osd
 	OPTION(osd_pgp_bits, 0, OPT_INT, 6),  // bits per osd
 	OPTION(osd_lpg_bits, 0, OPT_INT, 2),  // bits per osd
-	OPTION(osd_object_layout, 0, OPT_INT, CEPH_OBJECT_LAYOUT_HASHINO),
 	OPTION(osd_pg_layout, 0, OPT_INT, CEPH_PG_LAYOUT_CRUSH),
 	OPTION(osd_min_rep, 0, OPT_INT, 1),
 	OPTION(osd_max_rep, 0, OPT_INT, 10),
