@@ -3115,6 +3115,12 @@ void PG::replica_scrub(MOSDRepScrub *msg)
     build_scrub_map(map);
   }
 
+  if (msg->map_epoch < info.history.same_acting_since) {
+    dout(10) << "replica_scrub discarding old replica_scrub result from "
+	     << msg->map_epoch << " < " << info.history.same_acting_since << dendl;
+    return;
+  }
+
   vector<OSDOp> scrub(1);
   scrub[0].op.op = CEPH_OSD_OP_SCRUB_MAP;
   sobject_t poid;
