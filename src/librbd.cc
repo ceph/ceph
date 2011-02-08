@@ -115,13 +115,18 @@ public:
     int rval;
     callback_t complete_cb;
     void *complete_arg;
+    rbd_completion_t rbd_comp;
     int pending_count;
     int ref;
     bool released;
 
-    AioCompletion() : lock("RBDClient::AioCompletion::lock"), done(false), rval(0), complete_cb(NULL), complete_arg(NULL), pending_count(0),
-                      ref(1), released(false) { dout(10) << "AioCompletion::AioCompletion() this=" << (void *)this << dendl; }
-    ~AioCompletion() { dout(10) << "AioCompletion::~AioCompletion()" << dendl; }
+    AioCompletion() : lock("RBDClient::AioCompletion::lock", true), done(false), rval(0), complete_cb(NULL), complete_arg(NULL),
+		      rbd_comp(NULL), pending_count(0), ref(1), released(false) {
+      dout(10) << "AioCompletion::AioCompletion() this=" << (void *)this << dendl;
+    }
+    ~AioCompletion() {
+      dout(10) << "AioCompletion::~AioCompletion()" << dendl;
+    }
     int wait_for_complete() {
       lock.Lock();
       while (!done)
@@ -236,7 +241,8 @@ public:
                char *buf, AioCompletion *c);
 
   AioCompletion *aio_create_completion() {
-    return new AioCompletion;
+    AioCompletion *c= new AioCompletion;
+    return c;
   }
   AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete) {
     AioCompletion *c = new AioCompletion;
@@ -1143,7 +1149,7 @@ void librbd::RBDClient::AioCompletion::complete_block(AioBlockCompletion *block_
   int count = --pending_count;
   if (!count) {
     if (complete_cb)
-      complete_cb(this, complete_arg);
+      complete_cb(rbd_comp, complete_arg);
     done = true;
     cond.Signal();
   }
@@ -1426,7 +1432,9 @@ int librbd::RBD::write(image_t image, off_t ofs, size_t len, bufferlist& bl)
 librbd::RBD::AioCompletion *librbd::RBD::aio_create_completion(void *cb_arg, callback_t complete_cb)
 {
   RBDClient::AioCompletion *c = client->aio_create_completion(cb_arg, complete_cb);
-  return new AioCompletion(c);
+  RBD::AioCompletion *rbd_completion = new AioCompletion(c);
+  c->rbd_comp = rbd_completion;
+  return rbd_completion;
 }
 
 int librbd::RBD::aio_write(image_t image, off_t off, size_t len, bufferlist& bl,
@@ -1739,6 +1747,7 @@ extern "C" int rbd_aio_create_completion(void *cb_arg, rbd_callback_t complete_c
 {
   librbd::RBDClient::AioCompletion *comp = rbd_client->aio_create_completion(cb_arg, complete_cb);
   librbd::RBD::AioCompletion *rbd_comp = new librbd::RBD::AioCompletion(comp);
+  comp->rbd_comp = rbd_comp;
   *c = (rbd_completion_t) rbd_comp;
   return 0;
 }
