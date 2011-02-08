@@ -468,14 +468,19 @@ static int do_watch(librbd::pool_t& pp, const char *imgname)
   md_oid += RBD_SUFFIX;
 
   librados::Rados rados;
+  rados.initialize(0, NULL);
   int r = rados.watch(md_pool, md_oid, 0, &cookie, &ctx);
   if (r < 0) {
     cerr << "watch failed" << std::endl;
+    rados.shutdown();
     return r;
   }
 
   cout << "press enter to exit..." << std::endl;
   getchar();
+
+  rados.shutdown();
+
   return 0;
 }
 
@@ -698,7 +703,7 @@ int main(int argc, const char **argv)
   if (imgname &&
       (opt_cmd == OPT_RESIZE || opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
        opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
-       opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_EXPORT)) {
+       opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_EXPORT || opt_cmd == OPT_WATCH)) {
     r = rbd.open_image(pool, imgname, &image, NULL);
     if (r < 0) {
       cerr << "error opening image " << imgname << " (err=" << r << ")" << std::endl;
