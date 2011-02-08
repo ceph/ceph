@@ -980,18 +980,19 @@ bool is_bool_param(const char *param)
 	return ((strcasecmp(param, "true")==0) || (strcasecmp(param, "false")==0));
 }
 
-void parse_startup_config_options(std::vector<const char*>& args, const char *module_type)
+void parse_startup_config_options(std::vector<const char*>& args,
+			  const char *module_type, int flags)
 {
   bool show_config = false;
   DEFINE_CONF_VARS(NULL);
   std::vector<const char *> nargs;
   bool conf_specified = false;
+  bool force_fg_logging = !!(flags & STARTUP_FLAG_FORCE_FG_LOGGING);
 
   if (!g_conf.type)
     g_conf.type = (char *)"";
 
   bool isdaemon = g_conf.daemonize;
-  bool force_foreground_logging = false;
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("version", 'v')) {
@@ -1008,10 +1009,10 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
       g_conf.public_addr.parse(args[++i]);
     } else if (CONF_ARG_EQ("nodaemon", 'D')) {
       g_conf.daemonize = false;
-      force_foreground_logging = true;
+      force_fg_logging = true;
     } else if (CONF_ARG_EQ("foreground", 'f')) {
       g_conf.daemonize = false;
-      force_foreground_logging = true;
+      force_fg_logging = true;
     } else if (isdaemon && (CONF_ARG_EQ("id", 'i') || CONF_ARG_EQ("name", 'n'))) {
       free(g_conf.id);
       CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
@@ -1094,10 +1095,11 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
     // It's ok if g_conf.name is NULL here.
     openlog(g_conf.name, LOG_ODELAY | LOG_PID, LOG_USER);
   }
-  if (force_foreground_logging) {
+
+  if (force_fg_logging)
     set_foreground_logging();
-  }
-  else {
+
+  {
     // In the long term, it would be best to ensure that we read ceph.conf
     // before initializing dout(). For now, just force a reopen here with the
     // configuration we have just read.

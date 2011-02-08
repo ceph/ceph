@@ -53,7 +53,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   common_set_defaults(false);
   g_conf.daemonize = true;
   g_conf.log_per_instance = true;
-  common_init(args, "cfuse", true);
+  common_init(args, "cfuse", STARTUP_FLAG_INIT_KEYS);
 
   vector<const char*> nargs;
   FOR_EACH_ARG(args) {

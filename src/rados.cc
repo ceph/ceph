@@ -96,8 +96,8 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   common_set_defaults(false);
-  common_init(args, "rados", true);
-  set_foreground_logging();
+  common_init(args, "rados",
+	      STARTUP_FLAG_FORCE_FG_LOGGING | STARTUP_FLAG_INIT_KEYS);
 
   vector<const char*> nargs;
   bufferlist indata, outdata;

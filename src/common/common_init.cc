@@ -15,6 +15,7 @@
 #include "auth/AuthSupported.h"
 #include "auth/KeyRing.h"
 #include "config.h"
+#include "common/common_init.h"
 #include "common/errno.h"
 #include "common/signal.h"
 #include "include/color.h"
@@ -47,11 +48,6 @@ void set_foreground_logging()
   g_conf.log_per_instance = false;
 
   g_conf.log_to_file = false;
-
-  {
-    Mutex::Locker l(_dout_lock);
-    _dout_open_log(false);
-  }
 }
 
 void common_set_defaults(bool daemon)
@@ -113,12 +109,12 @@ static void keyring_init(const char *filesearch)
   }
 }
 
-void common_init(std::vector<const char*>& args, const char *module_type, bool init_keys)
+void common_init(std::vector<const char*>& args, const char *module_type, int flags)
 {
   tls_init();
   tls_get_val()->disable_assert = 0;
 
-  parse_startup_config_options(args, module_type);
+  parse_startup_config_options(args, module_type, flags);
   parse_config_options(args);
   install_standard_sighandlers();
 
@@ -136,7 +132,9 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool i
   }
 #endif //HAVE_LIBTCMALLOC
 
-  if (init_keys && is_supported_auth(CEPH_AUTH_CEPHX))
-    keyring_init(g_conf.keyring);
+  if (flags & STARTUP_FLAG_INIT_KEYS)  {
+    if (is_supported_auth(CEPH_AUTH_CEPHX))
+      keyring_init(g_conf.keyring);
+  }
 }
 

@@ -1749,7 +1749,7 @@ int Rados::initialize(int argc, const char *argv[])
     env_to_vec(args);
   }
   common_set_defaults(false);
-  common_init(args, "librados", true);
+  common_init(args, "librados", STARTUP_FLAG_INIT_KEYS);
 
   client = new RadosClient();
   return client->init();
@@ -2272,7 +2272,7 @@ static void __rados_init(int argc, const char *argv[])
     env_to_vec(args);
   }
   common_set_defaults(false);
-  common_init(args, "librados", true);
+  common_init(args, "librados", STARTUP_FLAG_INIT_KEYS);
 }
 
 static Mutex rados_init_mutex("rados_init");

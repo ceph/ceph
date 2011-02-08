@@ -51,12 +51,12 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  bool should_authenticate = true;
+  int startup_flags = STARTUP_FLAG_INIT_KEYS;
   vector<const char *>::iterator args_iter;
 
   for (args_iter = args.begin(); args_iter != args.end(); ++args_iter) {
     if (strcmp(*args_iter, "--mkfs") == 0) {
-      should_authenticate = false;
+      startup_flags &= ~STARTUP_FLAG_INIT_KEYS;
       break;
     } 
   }
@@ -69,7 +69,7 @@ int main(int argc, const char **argv)
   g_conf.profiler_dump = HeapProfilerDump;
   g_conf.tcmalloc_have = true;
 #endif //HAVE_LIBTCMALLOC
-  common_init(args, "osd", should_authenticate);
+  common_init(args, "osd", startup_flags);
 
   // osd specific args
   bool mkfs = false;

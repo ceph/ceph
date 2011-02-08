@@ -46,8 +46,8 @@ int main(int argc, const char **argv, char *envp[])
   argv_to_vec(argc, argv, args);
 
   common_set_defaults(false);
-  common_init(args, "csyn", true);
-  set_foreground_logging();
+  common_init(args, "csyn",
+	      STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_FORCE_FG_LOGGING);
 
   parse_syn_options(args);   // for SyntheticClient
 

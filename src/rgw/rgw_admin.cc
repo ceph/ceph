@@ -83,8 +83,8 @@ int main(int argc, char **argv)
   env_to_vec(args);
 
   common_set_defaults(false);
-  common_init(args, "rgw", true);
-  set_foreground_logging();
+  common_init(args, "rgw",
+	      STARTUP_FLAG_FORCE_FG_LOGGING | STARTUP_FLAG_INIT_KEYS);
 
   const char *user_id = 0;
   const char *secret_key = 0;

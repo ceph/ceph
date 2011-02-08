@@ -132,7 +132,8 @@ static int lookup_impl(const deque<const char *> &sections,
   {
     // TODO: document exactly what we are doing here?
     std::vector<const char *> empty_args;
-    parse_startup_config_options(empty_args, type);
+    parse_startup_config_options(empty_args, type,
+				 STARTUP_FLAG_FORCE_FG_LOGGING);
     char buf[1024];
     memset(buf, 0, sizeof(buf));
     if (ceph_def_conf_by_name(key, buf, sizeof(buf))) {
@@ -201,8 +202,7 @@ int main(int argc, const char **argv)
   }
 
   common_set_defaults(false);
-  common_init(nargs, type, false);
-  set_foreground_logging();
+  common_init(nargs, type, STARTUP_FLAG_FORCE_FG_LOGGING);
 
   if (do_help) {
     usage();

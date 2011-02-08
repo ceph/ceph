@@ -53,8 +53,7 @@ int main(int argc, const char **argv)
   DEFINE_CONF_VARS(usage);
 
   common_set_defaults(false);
-  common_init(args, "cauthtool", false);
-  set_foreground_logging();
+  common_init(args, "cauthtool", STARTUP_FLAG_FORCE_FG_LOGGING);
 
   const char *me = argv[0];
 

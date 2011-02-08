@@ -94,8 +94,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   common_set_defaults(false);
-  common_init(args, "TestSignalHandlers", true);
-  set_foreground_logging();
+  common_init(args, "TestSignalHandlers", STARTUP_FLAG_FORCE_FG_LOGGING);
 
   DEFINE_CONF_VARS(usage);
   FOR_EACH_ARG(args) {

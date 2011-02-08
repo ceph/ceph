@@ -28,10 +28,10 @@ void usage()
 
 void usage_exit()
 {
-  assert(1);
   usage();
   exit(1);
 }
+
 int main(int argc, const char **argv) 
 {
   vector<const char*> args;
@@ -39,21 +39,28 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_set_defaults(false);
-  // common_init(args, "librados-config", false);  /* this overrides --version.. */
-  set_foreground_logging();
-
   bool opt_version = false;
   bool opt_vernum = false;
 
-  FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("version", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&opt_version, OPT_BOOL);
-    } else if (CONF_ARG_EQ("vernum", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&opt_vernum, OPT_BOOL);
-    } else {
-      usage_exit();
+  for (std::vector<const char*>::iterator i = args.begin();
+       i != args.end(); ) {
+    if (strcmp(*i, "--version") == 0) {
+      opt_version = true;
+      i = args.erase(i);
     }
+    else if (strcmp(*i, "--vernum") == 0) {
+      opt_vernum = true;
+      i = args.erase(i);
+    }
+    else
+      ++i;
+  }
+
+  common_set_defaults(false);
+  common_init(args, "librados-config", STARTUP_FLAG_FORCE_FG_LOGGING);
+
+  FOR_EACH_ARG(args) {
+    usage_exit();
   }
   if (!opt_version && !opt_vernum)
     usage_exit();

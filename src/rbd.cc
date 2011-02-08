@@ -1118,8 +1118,8 @@ int main(int argc, const char **argv)
   int opt_cmd = OPT_NO_CMD;
 
   common_set_defaults(false);
-  common_init(args, "rbd", true);
-  set_foreground_logging();
+  common_init(args, "rbd",
+	      STARTUP_FLAG_FORCE_FG_LOGGING | STARTUP_FLAG_INIT_KEYS);
 
   const char *poolname = NULL;
   uint64_t size = 0;

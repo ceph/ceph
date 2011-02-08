@@ -72,7 +72,7 @@ int main(int argc, const char **argv)
   g_conf.profiler_dump = HeapProfilerDump;
   g_conf.tcmalloc_have = true;
 #endif //HAVE_LIBTCMALLOC
-  common_init(args, "mds", true);
+  common_init(args, "mds", STARTUP_FLAG_INIT_KEYS);
 
   // mds specific args
   int shadow = 0;

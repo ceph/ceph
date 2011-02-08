@@ -36,8 +36,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   common_set_defaults(false);
-  common_init(args, "ceph", true);
-  set_foreground_logging();
+  common_init(args, "ceph", STARTUP_FLAG_FORCE_FG_LOGGING);
 
   DoutStreambuf<char> *dos = new DoutStreambuf<char>();
 
