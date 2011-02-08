@@ -3121,17 +3121,12 @@ void PG::replica_scrub(MOSDRepScrub *msg)
   eversion_t v;
   osd_reqid_t reqid;
   MOSDSubOp *subop = new MOSDSubOp(reqid, info.pgid, poid, false, 0,
-				   osd->osdmap->get_epoch(), osd->get_tid(), v);
+				   msg->map_epoch, osd->get_tid(), v);
   ::encode(map, subop->get_data());
   subop->ops = scrub;
 
-  unlock();
-  osd->map_lock.get_read();
-  lock();
+  osd->cluster_messenger->send_message(subop, msg->get_connection());
 
-  osd->cluster_messenger->send_message(subop, osd->osdmap->get_cluster_inst(acting[0]));
-
-  osd->map_lock.put_read();
   msg->put();
 }
 
