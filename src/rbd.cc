@@ -467,8 +467,7 @@ static int do_watch(librbd::pool_t& pp, const char *imgname)
   md_oid = imgname;
   md_oid += RBD_SUFFIX;
 
-  librados::Rados rados;
-  rados.initialize(0, NULL);
+  librados::Rados& rados = rbd.get_rados();
   int r = rados.watch(md_pool, md_oid, 0, &cookie, &ctx);
   if (r < 0) {
     cerr << "watch failed" << std::endl;
@@ -478,8 +477,6 @@ static int do_watch(librbd::pool_t& pp, const char *imgname)
 
   cout << "press enter to exit..." << std::endl;
   getchar();
-
-  rados.shutdown();
 
   return 0;
 }

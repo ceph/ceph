@@ -249,6 +249,7 @@ public:
     c->set_complete_cb(cb_arg, cb_complete);
     return c;
   }
+  librados::Rados& get_rados() { return rados; }
 };
 
 
@@ -1472,6 +1473,11 @@ void librbd::RBD::AioCompletion::release()
 {
   RBDClient::AioCompletion *c = (RBDClient::AioCompletion *)pc;
   c->release();
+}
+
+librados::Rados& librbd::RBD::get_rados()
+{
+  return client->get_rados();
 }
 
 } // namespace librbd

@@ -102,6 +102,7 @@ public:
   int aio_read(image_t image, off_t off, size_t len, ceph::bufferlist& bl, AioCompletion *c);
 
   /* lower level access */
+  librados::Rados& get_rados();
   void get_rados_pools(pool_t pool, librados::pool_t *md_pool, librados::pool_t *data_pool);
 };
 
