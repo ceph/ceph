@@ -764,6 +764,7 @@ noinst_HEADERS = \
         messages/MOSDPGTemp.h\
         messages/MOSDPGTrim.h\
         messages/MOSDPing.h\
+	messages/MOSDRepScrub.h\
 	messages/MOSDScrub.h\
         messages/MOSDSubOp.h\
         messages/MOSDSubOpReply.h\
