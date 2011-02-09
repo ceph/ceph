@@ -1,7 +1,7 @@
 # TODO it seems osdmaptool refuses to create files at all without --clobber
   $ osdmaptool --createsimple 3 myosdmap
   osdmaptool: osdmap file 'myosdmap'
-  \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ [0-9a-f]{12} can't open myosdmap: error 2: No such file or directory (re)
+  \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ [0-9a-f]{8,} can't open myosdmap: error 2: No such file or directory (re)
   osdmaptool: couldn't open myosdmap: error 2: No such file or directory
   [255]
 
