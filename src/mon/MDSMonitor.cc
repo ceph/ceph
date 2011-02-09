@@ -181,6 +181,12 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 	   << " " << m->get_compat()
 	   << dendl;
 
+  // make sure the address has a port
+  if (m->get_orig_source_addr().get_port() == 0) {
+    dout(1) << " ignoring boot message without a port" << dendl;
+    goto out;
+  }
+
   // check compat
   if (!m->get_compat().writeable(mdsmap.compat)) {
     dout(1) << " mds " << m->get_source_inst() << " can't write to mdsmap " << mdsmap.compat << dendl;

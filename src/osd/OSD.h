@@ -33,6 +33,7 @@
 #include "include/CompatSet.h"
 
 #include "auth/KeyRing.h"
+#include "messages/MOSDRepScrub.h"
 
 #include <map>
 #include <memory>
@@ -892,6 +893,54 @@ protected:
     }
   } scrub_wq;
 
+  struct RepScrubWQ : public ThreadPool::WorkQueue<MOSDRepScrub> {
+  private: 
+    OSD *osd;
+    list<MOSDRepScrub*> rep_scrub_queue;
+
+  public:
+    RepScrubWQ(OSD *o, ThreadPool *tp) : 
+      ThreadPool::WorkQueue<MOSDRepScrub>("OSD::RepScrubWQ", tp), osd(o) {}
+
+    bool _empty() {
+      return rep_scrub_queue.empty();
+    }
+    bool _enqueue(MOSDRepScrub *msg) {
+      rep_scrub_queue.push_back(msg);
+      return true;
+    }
+    void _dequeue(MOSDRepScrub *msg) {
+      assert(0); // Not applicable for this wq
+      return;
+    }
+    MOSDRepScrub *_dequeue() {
+      if (rep_scrub_queue.empty())
+	return NULL;
+      MOSDRepScrub *msg = rep_scrub_queue.front();
+      rep_scrub_queue.pop_front();
+      return msg;
+    }
+    void _process(MOSDRepScrub *msg) {
+      osd->osd_lock.Lock();
+      if (osd->_have_pg(msg->pgid)) {
+	PG *pg = osd->_lookup_lock_pg(msg->pgid);
+	osd->osd_lock.Unlock();
+	pg->replica_scrub(msg);
+	pg->unlock();
+      } else {
+	msg->put();
+	osd->osd_lock.Unlock();
+      }
+    }
+    void _clear() {
+      while (!rep_scrub_queue.empty()) {
+	MOSDRepScrub *msg = rep_scrub_queue.front();
+	rep_scrub_queue.pop_front();
+	msg->put();
+      }
+    }
+  } rep_scrub_wq;
+
   // -- removing --
   xlist<PG*> remove_queue;
 
@@ -982,6 +1031,7 @@ public:
   void reply_op_error(MOSDOp *op, int r);
   void handle_misdirected_op(PG *pg, MOSDOp *op);
 
+  void handle_rep_scrub(MOSDRepScrub *m);
   void handle_scrub(class MOSDScrub *m);
   void handle_osd_ping(class MOSDPing *m);
   void handle_op(class MOSDOp *m);

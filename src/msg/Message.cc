@@ -58,6 +58,7 @@ using namespace std;
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGMissing.h"
 #include "messages/MOSDScrub.h"
+#include "messages/MOSDRepScrub.h"
 
 #include "messages/MRemoveSnaps.h"
 
@@ -322,6 +323,9 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     break;
   case MSG_OSD_PG_MISSING:
     m = new MOSDPGMissing;
+    break;
+  case MSG_OSD_REP_SCRUB:
+    m = new MOSDRepScrub;
     break;
    // auth
   case CEPH_MSG_AUTH:

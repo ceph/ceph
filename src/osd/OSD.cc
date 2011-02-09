@@ -64,6 +64,7 @@
 #include "messages/MOSDAlive.h"
 
 #include "messages/MOSDScrub.h"
+#include "messages/MOSDRepScrub.h"
 
 #include "messages/MMonCommand.h"
 
@@ -429,6 +430,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   scrubs_pending(0),
   scrubs_active(0),
   scrub_wq(this, &disk_tp),
+  rep_scrub_wq(this, &disk_tp),
   remove_wq(this, &disk_tp),
   watch_lock("OSD::watch_lock"),
   watch_timer(watch_lock)
@@ -2414,6 +2416,10 @@ void OSD::_dispatch(Message *m)
     handle_scrub((MOSDScrub*)m);
     break;    
 
+  case MSG_OSD_REP_SCRUB:
+    handle_rep_scrub((MOSDRepScrub*)m);
+    break;    
+
   case MSG_CLASS:
     handle_class((MClass*)m);
     break;
@@ -2478,6 +2484,11 @@ void OSD::_dispatch(Message *m)
 
 }
 
+void OSD::handle_rep_scrub(MOSDRepScrub *m)
+{
+  dout(10) << "queueing MOSDRepScrub " << *m << dendl;
+  rep_scrub_wq.queue(m);
+}
 
 void OSD::handle_scrub(MOSDScrub *m)
 {
@@ -2956,8 +2967,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     PG *pg = i->second;
     if (pg->dirty_info)
       pg->write_info(t);
-    if (pg->dirty_log)
-      pg->write_log(t);
   }
 
   bool do_shutdown = false;
@@ -4793,10 +4802,8 @@ void OSD::generate_backlog(PG *pg)
     C_Contexts *fin = new C_Contexts;
     pg->do_peer(*t, fin->contexts, query_map, NULL);
     do_queries(query_map);
-    if (pg->dirty_info)
-      pg->write_info(*t);
-    if (pg->dirty_log)
-      pg->write_log(*t);
+    pg->write_info(*t);
+    pg->write_log(*t);
     int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
     assert(tr == 0);
   }

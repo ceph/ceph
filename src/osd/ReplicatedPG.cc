@@ -582,9 +582,6 @@ void ReplicatedPG::do_sub_op(MOSDSubOp *op)
     case CEPH_OSD_OP_PUSH:
       sub_op_push(op);
       return;
-    case CEPH_OSD_OP_SCRUB:
-      sub_op_scrub(op);
-      return;
     case CEPH_OSD_OP_SCRUB_RESERVE:
       sub_op_scrub_reserve(op);
       return;
@@ -593,6 +590,9 @@ void ReplicatedPG::do_sub_op(MOSDSubOp *op)
       return;
     case CEPH_OSD_OP_SCRUB_STOP:
       sub_op_scrub_stop(op);
+      return;
+    case CEPH_OSD_OP_SCRUB_MAP:
+      sub_op_scrub_map(op);
       return;
     }
   }
@@ -608,10 +608,6 @@ void ReplicatedPG::do_sub_op_reply(MOSDSubOpReply *r)
     case CEPH_OSD_OP_PUSH:
       // continue peer recovery
       sub_op_push_reply(r);
-      return;
-
-    case CEPH_OSD_OP_SCRUB:
-      sub_op_scrub_reply(r);
       return;
 
     case CEPH_OSD_OP_SCRUB_RESERVE:

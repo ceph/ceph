@@ -1636,6 +1636,7 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
       if (pi.last_update == pi.last_complete) {
 	dout(10) << " infering no missing (last_update==last_complete) for osd" << peer << dendl;
 	peer_missing[peer].num_missing();  // just create the entry.
+	continue;
       } else {
 	dout(10) << " still need log+missing from osd" << peer << dendl;
 	have_all_missing = false;
@@ -2808,45 +2809,10 @@ bool PG::sched_scrub()
   return ret;
 }
 
-void PG::sub_op_scrub(MOSDSubOp *op)
+
+void PG::sub_op_scrub_map(MOSDSubOp *op)
 {
-  dout(7) << "sub_op_scrub" << dendl;
-
-  if (op->map_epoch < info.history.same_acting_since) {
-    dout(10) << "sub_op_scrub discarding old sub_op from "
-	     << op->map_epoch << " < " << info.history.same_acting_since << dendl;
-    op->put();
-    return;
-  }
-
-  ScrubMap map;
-  if (op->version > eversion_t()) {
-    epoch_t epoch = info.history.same_acting_since;
-    finalizing_scrub = 1;
-    while (last_update_applied != info.last_update) {
-      wait();
-      if (epoch != info.history.same_acting_since ||
-	  osd->is_stopping()) {
-	dout(10) << "scrub  pg changed, aborting" << dendl;
-	return;
-      }
-    }
-    build_inc_scrub_map(map, op->version);
-    finalizing_scrub = 0;
-  } else {
-    build_scrub_map(map);
-  }
-
-  MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK); 
-  ::encode(map, reply->get_data());
-  osd->cluster_messenger->send_message(reply, op->get_connection());
-
-  op->put();
-}
-
-void PG::sub_op_scrub_reply(MOSDSubOpReply *op)
-{
-  dout(7) << "sub_op_scrub_reply" << dendl;
+  dout(7) << "sub_op_scrub_map" << dendl;
 
   if (op->map_epoch < info.history.same_acting_since) {
     dout(10) << "sub_op_scrub discarding old sub_op from "
@@ -2897,15 +2863,9 @@ void PG::_scan_list(ScrubMap &map, vector<sobject_t> &ls)
 void PG::_request_scrub_map(int replica, eversion_t version)
 {
     dout(10) << "scrub  requesting scrubmap from osd" << replica << dendl;
-    vector<OSDOp> scrub(1);
-    scrub[0].op.op = CEPH_OSD_OP_SCRUB;
-    sobject_t poid;
-    eversion_t v = version;
-    osd_reqid_t reqid;
-    MOSDSubOp *subop = new MOSDSubOp(reqid, info.pgid, poid, false, 0,
-				     osd->osdmap->get_epoch(), osd->get_tid(), v);
-    subop->ops = scrub;
-    osd->cluster_messenger->send_message(subop, //new MOSDPGScrub(info.pgid, osd->osdmap->get_epoch()),
+    MOSDRepScrub *repscrubop = new MOSDRepScrub(info.pgid, version, 
+						osd->osdmap->get_epoch());
+    osd->cluster_messenger->send_message(repscrubop,
 					 osd->osdmap->get_cluster_inst(replica));
 }
 
@@ -3126,6 +3086,56 @@ void PG::repair_object(const sobject_t& soid, ScrubMap::object *po, int bad_peer
     log.last_requested = eversion_t();
   }
   osd->queue_for_recovery(this);
+}
+
+void PG::replica_scrub(MOSDRepScrub *msg)
+{
+  dout(7) << "replica_scrub" << dendl;
+
+  if (msg->map_epoch < info.history.same_acting_since) {
+    dout(10) << "replica_scrub discarding old replica_scrub from "
+	     << msg->map_epoch << " < " << info.history.same_acting_since << dendl;
+    msg->put();
+    return;
+  }
+
+  ScrubMap map;
+  if (msg->scrub_from > eversion_t()) {
+    epoch_t epoch = info.history.same_acting_since;
+    finalizing_scrub = 1;
+    while (last_update_applied != info.last_update) {
+      wait();
+      if (epoch != info.history.same_acting_since ||
+	  osd->is_stopping()) {
+	dout(10) << "scrub  pg changed, aborting" << dendl;
+	return;
+      }
+    }
+    build_inc_scrub_map(map, msg->scrub_from);
+    finalizing_scrub = 0;
+  } else {
+    build_scrub_map(map);
+  }
+
+  if (msg->map_epoch < info.history.same_acting_since) {
+    dout(10) << "replica_scrub discarding old replica_scrub result from "
+	     << msg->map_epoch << " < " << info.history.same_acting_since << dendl;
+    return;
+  }
+
+  vector<OSDOp> scrub(1);
+  scrub[0].op.op = CEPH_OSD_OP_SCRUB_MAP;
+  sobject_t poid;
+  eversion_t v;
+  osd_reqid_t reqid;
+  MOSDSubOp *subop = new MOSDSubOp(reqid, info.pgid, poid, false, 0,
+				   msg->map_epoch, osd->get_tid(), v);
+  ::encode(map, subop->get_data());
+  subop->ops = scrub;
+
+  osd->cluster_messenger->send_message(subop, msg->get_connection());
+
+  msg->put();
 }
 
 void PG::scrub()

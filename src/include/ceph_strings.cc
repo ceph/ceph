@@ -60,6 +60,7 @@ const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_SCRUB_RESERVE: return "scrub-reserve";
 	case CEPH_OSD_OP_SCRUB_UNRESERVE: return "scrub-unreserve";
 	case CEPH_OSD_OP_SCRUB_STOP: return "scrub-stop";
+	case CEPH_OSD_OP_SCRUB_MAP: return "scrub-map";
 
 	case CEPH_OSD_OP_WRLOCK: return "wrlock";
 	case CEPH_OSD_OP_WRUNLOCK: return "wrunlock";
