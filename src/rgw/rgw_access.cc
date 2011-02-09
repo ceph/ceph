@@ -2,9 +2,10 @@
 #include "rgw_access.h"
 #include "rgw_fs.h"
 #include "rgw_rados.h"
+#include "rgw_cache.h"
 
-static RGWFS fs_provider;
-static RGWRados rados_provider;
+static RGWCache<RGWFS> fs_provider;
+static RGWCache<RGWRados> rados_provider;
 
 RGWAccess* RGWAccess::store;
 

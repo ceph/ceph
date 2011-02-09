@@ -177,6 +177,7 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
     }
 
     uint64_t s;
+    string p_str = *p;
     if (io_ctx.stat(*p, &s, &obj.mtime) < 0)
       continue;
     obj.size = s;

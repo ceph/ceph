@@ -153,7 +153,12 @@ public:
   virtual int set_attr(std::string& bucket, std::string& obj,
                        const char *name, bufferlist& bl) = 0;
 
-  /** 
+ /**
+  * stat an object
+  */
+  virtual int obj_stat(std::string& bucket, std::string& obj, size_t *psize, time_t *pmtime) = 0;
+
+ /** 
    * Given the name of the storage provider, initialize it
    * with the given arguments.
    */

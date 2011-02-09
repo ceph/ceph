@@ -84,6 +84,11 @@ int RGWFS::list_buckets_next(string& id, RGWObjEnt& obj, RGWAccessHandle *handle
   }
 }
 
+int RGWFS::obj_stat(string& bucket, string& obj, size_t *psize, time_t *pmtime)
+{
+  return -ENOTSUP;
+}
+
 int RGWFS::list_objects(string& id, string& bucket, int max, string& prefix, string& delim,
                        string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes)
 {
