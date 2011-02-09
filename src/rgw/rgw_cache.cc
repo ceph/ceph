@@ -8,11 +8,8 @@ using namespace std;
 int ObjectCache::get(string& name, bufferlist& bl)
 {
   map<string, bufferlist>::iterator iter = cache_map.find(name);
-  if (iter == cache_map.end()) {
-    cout << "cache: couldn't find name=" << name << endl;
+  if (iter == cache_map.end())
     return -ENOENT;
-  }
-  cout << "cache: found name=" << name << endl;
 
   bl = iter->second;
 
@@ -21,7 +18,7 @@ int ObjectCache::get(string& name, bufferlist& bl)
 
 void ObjectCache::put(string& name, bufferlist& bl)
 {
-  cout << "cache: put name=" << name << endl;
+  map<string, bufferlist>::iterator iter;
   cache_map[name] = bl;
 }
 

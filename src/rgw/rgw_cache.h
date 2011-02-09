@@ -14,7 +14,7 @@ class ObjectCache {
   std::map<string, bufferlist> cache_map;
 
 public:
-  ObjectCache() {}
+  ObjectCache() { }
   int get(std::string& name, bufferlist& bl);
   void put(std::string& name, bufferlist& bl);
 };
@@ -26,7 +26,7 @@ class RGWCache  : public T
 
   string normal_name(std::string& space, std::string& bucket, std::string& oid) {
     char buf[space.size() + 1 + bucket.size() + 1 + oid.size() + 1];
-    sprintf("%s+%s+%s", space.c_str(), bucket.c_str(), oid.c_str());
+    sprintf(buf, "%s+%s+%s", space.c_str(), bucket.c_str(), oid.c_str());
     return string(buf);
   }
 
@@ -48,7 +48,6 @@ int RGWCache<T>::get_obj(void **handle, std::string& bucket, std::string& oid,
             char **data, off_t ofs, off_t end)
 {
   string name = normal_name(data_space, bucket, oid);
-  cout << "bucket=" << bucket << " bucket[0]=" << bucket[0] << " ofs=" << ofs << " end=" << end << std::endl;
   if (bucket[0] != '.' || ofs != 0)
     return T::get_obj(handle, bucket, oid, data, ofs, end);
 
@@ -75,7 +74,6 @@ int RGWCache<T>::put_obj_data(std::string& id, std::string& bucket, std::string&
               off_t ofs, size_t len, time_t *mtime)
 {
   string name = normal_name(data_space, bucket, obj);
-  cout << "bucket=" << bucket << " bucket[0]=" << bucket[0] << " ofs=" << ofs << " len=" << len << std::endl;
   if (bucket[0] == '.' && ofs == 0) {
     bufferptr p(len);
     memcpy(p.c_str(), data, len);
