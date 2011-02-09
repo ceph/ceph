@@ -19,6 +19,7 @@
 #include "include/ceph_fs.h"
 #include "config.h"
 #include "common/armor.h"
+#include "common/Clock.h"
 
 #include <errno.h>
 

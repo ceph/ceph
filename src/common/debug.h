@@ -16,7 +16,6 @@
 #ifndef CEPH_DEBUG_H
 #define CEPH_DEBUG_H
 
-#include "Clock.h"
 #include "Mutex.h"
 #include "common/DoutStreambuf.h"
 #include "common/likely.h"
@@ -40,12 +39,10 @@ static inline void _dout_begin_line(signed int prio) {
     _dout_open_log(true);
 
   // Put priority information into dout
-  _doss->sputc(1);
   _doss->sputc(prio + 12);
 
   // Some information that goes in every dout message
-  *_dout << g_clock.now() << " " << std::hex << pthread_self()
-	 << std::dec << " ";
+  *_dout << std::hex << pthread_self() << std::dec << " ";
 }
 
 // intentionally conflict with endl

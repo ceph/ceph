@@ -23,10 +23,15 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <time.h>
 #include <sstream>
 #include <streambuf>
 #include <string.h>
 #include <syslog.h>
+
+///////////////////////////// Constants /////////////////////////////
+#define TIME_FMT "%04d-%02d-%02d %02d:%02d:%02d.%06ld"
+#define TIME_FMT_SZ 26
 
 ///////////////////////////// Globals /////////////////////////////
 // TODO: get rid of this lock using thread-local storage
@@ -213,58 +218,46 @@ DoutStreambuf<charT, traits>::overflow(DoutStreambuf<charT, traits>::int_type c)
 //    printf("overflow buffer: '%s'\n", buf);
   }
 
-  // Loop over all lines in the buffer.
-  signed int prio = 100;
-  charT* start = obuf;
-  while (true) {
-    char* end = strchrnul(start, '\n');
-    if (start == end) {
-      if (*start == '\0')
-	break;
-      // skip zero-length lines
-      ++start;
-      continue;
-    }
-    if (*start == '\1') {
-      // Decode some control characters
-      ++start;
-      unsigned char tmp = *((unsigned char*)start);
-      prio = tmp;
-      prio -= 12;
-      ++start;
-    }
-    *end = '\n';
-    char next = *(end+1);
-    *(end+1) = '\0';
+  // Get priority of message
+  signed int prio = obuf[TIME_FMT_SZ] - 12;
 
-    // Now 'start' points to a NULL-terminated string, which we want to
-    // output with priority 'prio'
-    int len = strlen(start);
-    if (flags & DOUTSB_FLAG_SYSLOG) {
-      //printf("syslogging: '%s' len=%d\n", start, len);
-      syslog(LOG_USER | dout_prio_to_syslog_prio(prio), "%s", start);
-    }
-    if (flags & DOUTSB_FLAG_STDOUT) {
-      // Just write directly out to the stdout fileno. There's no point in
-      // using something like fputs to write to a temporary buffer,
-      // because we would just have to flush that temporary buffer
-      // immediately.
-      if (safe_write(STDOUT_FILENO, start, len))
-	flags &= ~DOUTSB_FLAG_STDOUT;
-    }
-    if (flags & DOUTSB_FLAG_STDERR) {
-      if ((flags & DOUTSB_FLAG_STDERR_ALL) || (prio == -1)) {
-	if (safe_write(STDERR_FILENO, start, len))
-	  flags &= ~DOUTSB_FLAG_STDERR;
-      }
-    }
-    if (flags & DOUTSB_FLAG_OFILE) {
-      if (safe_write(ofd, start, len))
-	flags &= ~DOUTSB_FLAG_OFILE;
-    }
+  // Prepend date to buffer
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  struct tm tm;
+  localtime_r(&tv.tv_sec, &tm);
+  snprintf(obuf, TIME_FMT_SZ + 1, TIME_FMT,
+	   tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+	   tm.tm_hour, tm.tm_min, tm.tm_sec,
+	   tv.tv_usec);
 
-    *(end+1) = next;
-    start = end + 1;
+  // This byte was NULLed by snprintf, but we'd rather have a space there.
+  obuf[TIME_FMT_SZ] = ' ';
+
+  // Now 'obuf' points to a NULL-terminated string, which we want to
+  // output with priority 'prio'
+  int len = strlen(obuf);
+  if (flags & DOUTSB_FLAG_SYSLOG) {
+    syslog(LOG_USER | dout_prio_to_syslog_prio(prio), "%s",
+	   obuf + TIME_FMT_SZ + 1);
+  }
+  if (flags & DOUTSB_FLAG_STDOUT) {
+    // Just write directly out to the stdout fileno. There's no point in
+    // using something like fputs to write to a temporary buffer,
+    // because we would just have to flush that temporary buffer
+    // immediately.
+    if (safe_write(STDOUT_FILENO, obuf, len))
+      flags &= ~DOUTSB_FLAG_STDOUT;
+  }
+  if (flags & DOUTSB_FLAG_STDERR) {
+    if ((flags & DOUTSB_FLAG_STDERR_ALL) || (prio == -1)) {
+      if (safe_write(STDERR_FILENO, obuf, len))
+	flags &= ~DOUTSB_FLAG_STDERR;
+    }
+  }
+  if (flags & DOUTSB_FLAG_OFILE) {
+    if (safe_write(ofd, obuf, len))
+      flags &= ~DOUTSB_FLAG_OFILE;
   }
 
   _clear_output_buffer();
@@ -455,7 +448,7 @@ void DoutStreambuf<charT, traits>::_clear_output_buffer()
 {
   // Set up the put pointer.
   // Overflow is called when this buffer is filled
-  this->setp(obuf, obuf + OBUF_SZ - 5);
+  this->setp(obuf + TIME_FMT_SZ, obuf + OBUF_SZ - TIME_FMT_SZ - 5);
 }
 
 template <typename charT, typename traits>
