@@ -289,7 +289,7 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
   else {
     max_size = oldsize;
   }
-  block_size = MAX(blksize, PAGE_SIZE);
+  block_size = MAX(blksize, (blksize_t)PAGE_SIZE);
 
   dout(10) << "_open journal is not a block device, NOT checking disk "
            << "write cache on '" << fn << "'" << dendl;

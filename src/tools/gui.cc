@@ -91,13 +91,13 @@ static void gen_ranges(unsigned int m, unsigned int n,
 {
   unsigned int multiple = FLOOR(m, n);
   unsigned int remainder = m % n;
-  long int i, j;
 
   if (m <= n) {
-    for (i = 0; i < n; i++)
-      ranges[i] = (i < m) ? 1 : 0;
+    for (unsigned int k = 0; k < n; k++)
+      ranges[k] = (k < m) ? 1 : 0;
   }
   else {
+    signed int i, j;
     for (i = n - 1, j = (remainder) ? n - remainder: 0; i >= 0; i--) {
       if (j) {
 	ranges[i] = multiple - 1;

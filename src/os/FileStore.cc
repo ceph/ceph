@@ -898,7 +898,8 @@ int FileStore::_detect_fs()
   if (r < 0)
     return -errno;
 
-  if (st.f_type == 0x9123683E) {
+  static const __SWORD_TYPE BTRFS_F_TYPE(0x9123683E);
+  if (st.f_type == BTRFS_F_TYPE) {
     dout(0) << "mount detected btrfs" << dendl;      
     btrfs = true;
 
