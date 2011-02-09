@@ -488,7 +488,7 @@ int librbd::RBDClient::rollback_image(PoolCtx *pp, ImageCtx *ictx, uint64_t snap
   return 0;
 }
 
-int librbd::RBDClient::list(PoolCtx *pp, std::vector<string>& names)
+int librbd::RBDClient::list(PoolCtx *pp, std::vector<std::string>& names)
 {
   bufferlist bl;
   int r = rados.read(pp->md, RBD_DIRECTORY, 0, bl, 0);
@@ -1342,7 +1342,7 @@ int librbd::RBD::stat(image_t image, image_info_t& info)
   return r;
 }
 
-int librbd::RBD::list(pool_t pool, std::vector<string>& names)
+int librbd::RBD::list(pool_t pool, std::vector<std::string>& names)
 {
   PoolCtx *ctx = (PoolCtx *)pool;
   int r = client->list(ctx, names);
@@ -1561,7 +1561,7 @@ extern "C" int rbd_close_pool(rbd_pool_t pool)
 /* images */
 extern "C" int rbd_list(rbd_pool_t pool, char *names, size_t *size)
 {
-  std::vector<string> cpp_names;
+  std::vector<std::string> cpp_names;
   int r = rbd_client->list((librbd::PoolCtx *)pool, cpp_names);
   if (r == -ENOENT)
     return 0;

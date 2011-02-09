@@ -72,7 +72,7 @@ public:
   int open_pool(const char *pool_name, pool_t *pool);
   int close_pool(pool_t pool);
 
-  int list(pool_t pool, std::vector<string>& names);
+  int list(pool_t pool, std::vector<std::string>& names);
   int create(pool_t pool, const char *name, size_t size, int *order);
   int remove(pool_t pool, const char *name);
   int copy(pool_t src_pool, const char *srcname, pool_t dest_pool, const char *destname);
