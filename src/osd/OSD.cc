@@ -63,6 +63,7 @@
 #include "messages/MOSDAlive.h"
 
 #include "messages/MOSDScrub.h"
+#include "messages/MOSDRepScrub.h"
 
 #include "messages/MMonCommand.h"
 
@@ -384,6 +385,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   scrubs_pending(0),
   scrubs_active(0),
   scrub_wq(this, &disk_tp),
+  rep_scrub_wq(this, &disk_tp),
   remove_wq(this, &disk_tp)
 {
   monc->set_messenger(client_messenger);
@@ -2214,6 +2216,10 @@ void OSD::_dispatch(Message *m)
     handle_scrub((MOSDScrub*)m);
     break;    
 
+  case MSG_OSD_REP_SCRUB:
+    handle_rep_scrub((MOSDRepScrub*)m);
+    break;    
+
   case MSG_CLASS:
     handle_class((MClass*)m);
     break;
@@ -2278,6 +2284,11 @@ void OSD::_dispatch(Message *m)
 
 }
 
+void OSD::handle_rep_scrub(MOSDRepScrub *m)
+{
+  dout(10) << "queueing MOSDRepScrub " << *m << dendl;
+  rep_scrub_wq.queue(m);
+}
 
 void OSD::handle_scrub(MOSDScrub *m)
 {

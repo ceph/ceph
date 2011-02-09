@@ -74,6 +74,7 @@
 
 #define MSG_OSD_SCRUB          91
 #define MSG_OSD_PG_MISSING     92
+#define MSG_OSD_REP_SCRUB      93
 
 
 
