@@ -1768,7 +1768,7 @@ static void alloc_aligned_buffer(bufferlist& data, int len, int off)
   int head = 0;
   if (off & ~PAGE_MASK) {
     // head
-    head = MIN(PAGE_SIZE - (off & ~PAGE_MASK), (unsigned)left);
+    head = MIN(PAGE_SIZE - (off & ~PAGE_MASK), left);
     bufferptr bp = buffer::create(head);
     data.push_back(bp);
     left -= head;
