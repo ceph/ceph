@@ -33,8 +33,9 @@
 #include <iostream>
 #include <fstream>
 
-#include "common/errno.h"
 #include "common/Timer.h"
+#include "common/errno.h"
+#include "common/safe_io.h"
 #include "common/signal.h"
 
 #define DOUT_SUBSYS ms
@@ -2363,25 +2364,40 @@ static void handle_signal(int sig)
 
 int SimpleMessenger::write_pid_file(int pid)
 {
+  int ret, fd;
+
   if (!g_conf.pid_file)
     return 0;
 
-  int r = 0;
-  int fd = ::open(g_conf.pid_file, O_CREAT|O_TRUNC|O_WRONLY, 0644);
-  if (fd >= 0) {
-    char buf[20];
-    int len = snprintf(buf, sizeof(buf), "%d\n", pid);
-    r = ::write(fd, buf, len);
-    if (r < 0)
-      r = -errno;
-    ::close(fd);
+  fd = TEMP_FAILURE_RETRY(::open(g_conf.pid_file,
+				 O_CREAT|O_TRUNC|O_WRONLY, 0644));
+  if (fd < 0) {
+    int err = errno;
+    derr << "SimpleMessenger::write_pid_file: failed to open pid file '"
+	 << g_conf.pid_file << "': " << cpp_strerror(err) << dendl;
+    return err;
+  }
 
-    signal(SIGTERM, handle_signal);
-    signal(SIGINT, handle_signal);
-  } else
-    r = -errno;
-  derr << "unable to write pid to " << g_conf.pid_file << ": " << cpp_strerror(errno) << dendl;
-  return r;
+  char buf[20];
+  int len = snprintf(buf, sizeof(buf), "%d\n", pid);
+  ret = safe_write(fd, buf, len);
+  if (ret < 0) {
+    derr << "SimpleMessenger::write_pid_file: failed to write to pid file '"
+	 << g_conf.pid_file << "': " << cpp_strerror(ret) << dendl;
+    TEMP_FAILURE_RETRY(::close(fd));
+    return ret;
+  }
+  if (TEMP_FAILURE_RETRY(::close(fd))) {
+    ret = errno;
+    derr << "SimpleMessenger::write_pid_file: failed to close to pid file '"
+	 << g_conf.pid_file << "': " << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
+  signal(SIGTERM, handle_signal);
+  signal(SIGINT, handle_signal);
+
+  return 0;
 }
 
 int SimpleMessenger::start(bool nodaemon)
