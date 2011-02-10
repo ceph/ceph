@@ -79,6 +79,7 @@
 #include "common/ProfLogType.h"
 #include "common/Timer.h"
 #include "common/LogClient.h"
+#include "common/safe_io.h"
 
 #include "common/ClassHandler.h"
 
@@ -278,20 +279,32 @@ int OSD::flushjournal(const char *dev, const char *jdev)
 
 int OSD::write_meta(const char *base, const char *file, const char *val, size_t vallen)
 {
+  int ret;
   char fn[PATH_MAX];
   int fd;
 
   snprintf(fn, sizeof(fn), "%s/%s", base, file);
   fd = ::open(fn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
-  if (fd < 0)
-    return -errno;
-  int r = ::write(fd, val, vallen);
-  if (r < 0)
-    r = -errno;
-  else
-    r = 0;
-  ::close(fd);
-  return r;
+  if (fd < 0) {
+    ret = errno;
+    derr << "OSD::write_meta: error opening '" << fn << "': "
+	 << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+  ret = safe_write(fd, val, vallen);
+  if (ret) {
+    derr << "OSD::write_meta: failed to write to '" << fn << "': "
+	 << cpp_strerror(ret) << dendl;
+    TEMP_FAILURE_RETRY(::close(fd));
+    return ret;
+  }
+  if (TEMP_FAILURE_RETRY(::close(fd)) < 0) {
+    ret = errno;
+    derr << "OSD::write_meta: close error writing to '" << fn << "': "
+	 << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+  return 0;
 }
 
 int OSD::read_meta(const char *base, const char *file, char *val, size_t vallen)
@@ -301,12 +314,19 @@ int OSD::read_meta(const char *base, const char *file, char *val, size_t vallen)
 
   snprintf(fn, sizeof(fn), "%s/%s", base, file);
   fd = ::open(fn, O_RDONLY);
-  if (fd < 0)
-    return -1;
-  len = ::read(fd, val, vallen);
-  ::close(fd);
-  if (len > 0 && len < (int)vallen)
-    val[len] = 0;
+  if (fd < 0) {
+    int err = errno;
+    return -err;
+  }
+  len = safe_read(fd, val, vallen);
+  if (len < 0) {
+    TEMP_FAILURE_RETRY(::close(fd));
+    return len;
+  }
+  // close sometimes returns errors, but only after write()
+  TEMP_FAILURE_RETRY(::close(fd));
+
+  val[len] = 0;
   return len;
 }
 
