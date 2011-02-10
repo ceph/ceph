@@ -10,7 +10,11 @@ ssize_t safe_read(int fd, void *buf, size_t count)
 
 	while (count > 0) {
 		r = read(fd, buf, count);
-		if (r < 0) {
+		if (r <= 0) {
+			if (r == 0) {
+				// EOF
+				return -EDOM;
+			}
 			if (errno == EINTR)
 				continue;
 			return -errno;
@@ -44,11 +48,16 @@ ssize_t safe_pread(int fd, void *buf, size_t count, off_t offset)
 
 	while (count > 0) {
 		r = pread(fd, buf, count, offset);
-		if (r < 0) {
+		if (r <= 0) {
+			if (r == 0) {
+				// EOF
+				return -EDOM;
+			}
 			if (errno == EINTR)
 				continue;
 			return -errno;
 		}
+
 		count -= r;
 		buf = (char *)buf + r;
 		offset += r;
