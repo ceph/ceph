@@ -47,6 +47,7 @@ void usage()
   cerr << "Pool commands:\n";
   cerr << "   get objname [outfile] -- fetch object\n";
   cerr << "   put objname [infile] -- write object\n";
+  cerr << "   create objname -- create object\n";
   cerr << "   rm objname  -- remove object\n";
   cerr << "   listxattr objname\n";
   cerr << "   getxattr objname attr\n";
@@ -452,6 +453,16 @@ int main(int argc, const char **argv)
     ret = rados.remove(p, oid);
     if (ret < 0) {
       cerr << "error removing " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      goto out;
+    }
+  }
+  else if (strcmp(nargs[0], "create") == 0) {
+    if (!pool || nargs.size() < 2)
+      usage();
+    string oid(nargs[1]);
+    ret = rados.create(p, oid, true);
+    if (ret < 0) {
+      cerr << "error creating " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       goto out;
     }
   }
