@@ -82,13 +82,13 @@ run_s3() {
 create_bucket() {
 	bucket_name=$1
 
-	run_s3 create $tmp_bucket
+	run_s3 create $bucket_name
 }
 
 delete_bucket() {
 	bucket_name=$1
 
-	run_s3 delete $tmp_bucket
+	run_s3 delete $bucket_name
 }
 
 create_file() {
