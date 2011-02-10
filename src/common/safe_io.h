@@ -25,17 +25,23 @@ extern "C" {
    * These retry on EINTR, and on error return -errno instead of returning
    * 1 and setting errno).
    */
-  ssize_t safe_read(int fd, void *buf, size_t count);
-  ssize_t safe_write(int fd, const void *buf, size_t count);
-  ssize_t safe_pread(int fd, void *buf, size_t count, off_t offset);
-  ssize_t safe_pwrite(int fd, const void *buf, size_t count, off_t offset);
+  ssize_t safe_read(int fd, void *buf, size_t count)
+    __attribute__ ((warn_unused_result));
+  ssize_t safe_write(int fd, const void *buf, size_t count)
+    __attribute__ ((warn_unused_result));
+  ssize_t safe_pread(int fd, void *buf, size_t count, off_t offset)
+    __attribute__ ((warn_unused_result));
+  ssize_t safe_pwrite(int fd, const void *buf, size_t count, off_t offset)
+    __attribute__ ((warn_unused_result));
 
   /*
    * Same as the above functions, but return -EDOM unless exactly the requested
    * number of bytes can be read.
    */
-  ssize_t safe_read_exact(int fd, void *buf, size_t count);
-  ssize_t safe_pread_exact(int fd, void *buf, size_t count, off_t offset);
+  ssize_t safe_read_exact(int fd, void *buf, size_t count)
+    __attribute__ ((warn_unused_result));
+  ssize_t safe_pread_exact(int fd, void *buf, size_t count, off_t offset)
+    __attribute__ ((warn_unused_result));
 
 #ifdef __cplusplus
 }
