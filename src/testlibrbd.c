@@ -227,7 +227,7 @@ void read_test_data(rbd_image_t image, const char *expected, off_t off)
     printf("read: %u\n", (unsigned int) read);
   }
   printf("read: %s\nexpected: %s\n", result, expected);
-  assert(strncmp(result, expected, expected_len) == 0);
+  assert(memcmp(result, expected, expected_len) == 0);
 }
 
 void test_io(rbd_pool_t pool, rbd_image_t image)
@@ -259,7 +259,7 @@ int main(int argc, const char **argv)
 {
   rbd_pool_t pool;
   rbd_image_t image;
-  assert(rbd_initialize(0, NULL) == 0);
+  assert(rbd_initialize(argc, argv) == 0);
   assert(rbd_open_pool(TEST_POOL, &pool) == 0);
   test_ls(pool, 0);
   test_create_and_stat(pool, TEST_IMAGE, MB_BYTES(1));
