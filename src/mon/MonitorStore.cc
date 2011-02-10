@@ -141,13 +141,27 @@ version_t MonitorStore::get_int(const char *a, const char *b)
     snprintf(fn, sizeof(fn), "%s/%s", dir.c_str(), a);
   
   int fd = ::open(fn, O_RDONLY);
-  if (fd < 0)
+  if (fd < 0) {
+    int err = errno;
+    if (err == EEXIST) {
+      // Non-existent files are treated as containing 0.
+      return 0;
+    }
+    derr << "MonitorStore::get_int: failed to open '" << fn << "': "
+	 << cpp_strerror(err) << dendl;
     return 0;
+  }
   
   char buf[20];
-  int r = ::read(fd, buf, sizeof(buf));
-  assert(r >= 0);
-  ::close(fd);
+  memset(buf, 0, sizeof(buf));
+  int r = safe_read(fd, buf, sizeof(buf) - 1);
+  if (r < 0) {
+    derr << "MonitorStore::get_int: failed to read '" << fn << "': "
+	 << cpp_strerror(r) << dendl;
+    TEMP_FAILURE_RETRY(::close(fd));
+    return 0;
+  }
+  TEMP_FAILURE_RETRY(::close(fd));
   
   version_t val = atoi(buf);
   
