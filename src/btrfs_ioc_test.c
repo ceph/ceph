@@ -7,6 +7,7 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 
+#include "common/safe_io.h"
 #include "os/btrfs_ioctl.h"
 
 void do_open_wr(const char *fname, int *fd)
@@ -46,9 +47,10 @@ void do_write(int fd, int len)
 	}
 
 	memset(buf, 0, len);
-	rc = write(fd, buf, len);
-	if (rc < 0) {
-		perror("write");
+	rc = safe_write(fd, buf, len);
+	if (rc) {
+		fprintf(stderr, "safe_write failed with error %d (%s)\n",
+			rc, strerror(rc));
 		exit(1);
 	}
 
