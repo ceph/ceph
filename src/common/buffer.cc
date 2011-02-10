@@ -167,30 +167,6 @@ int buffer::list::write_file(const char *fn, int mode)
 
 int buffer::list::write_fd(int fd) const
 {
-  // write buffer piecewise
-  if (false) {
-    for (std::list<ptr>::const_iterator it = _buffers.begin(); 
-	 it != _buffers.end(); 
-	 ++it) {
-      int left = it->length();
-      if (!left)
-        continue;
-      const char *c = it->c_str();
-      while (left > 0) {
-	int r = ::write(fd, c, left);
-	if (r < 0) {
-	  int err = errno;
-	  if (err == EINTR)
-	    continue;
-	  return -err;
-	}
-	c += r;
-	left -= r;
-      }
-    }
-    return 0;
-  }
-
   // use writev!
   iovec iov[IOV_MAX];
   int iovlen = 0;
