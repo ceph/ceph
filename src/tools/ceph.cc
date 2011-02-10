@@ -92,10 +92,11 @@ static int get_indata(const char *in_file, bufferlist &indata)
 
   indata.push_back(buffer::create(st.st_size));
   indata.zero();
-  int ret = safe_read(fd, indata.c_str(), st.st_size);
+  int ret = safe_read_exact(fd, indata.c_str(), st.st_size);
   if (ret) {
     derr << "error reading in_file '" << in_file << "': "
 	 << cpp_strerror(ret) << dendl;
+    TEMP_FAILURE_RETRY(::close(fd));
     return 1;
   }
 
