@@ -451,6 +451,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   scrubs_pending(0),
   scrubs_active(0),
   scrub_wq(this, &disk_tp),
+  scrub_finalize_wq(this, &op_tp),
   rep_scrub_wq(this, &disk_tp),
   remove_wq(this, &disk_tp),
   watch_lock("OSD::watch_lock"),
