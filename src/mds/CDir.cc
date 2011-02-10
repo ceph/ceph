@@ -1744,7 +1744,8 @@ void CDir::_commit(version_t want)
   }
 
   ObjectOperation m;
-  if (is_complete()) {
+  if (is_complete() &&
+      (num_dirty > (num_head_items*g_conf.mds_dir_commit_ratio))) {
     fnode.snap_purged_thru = realm->get_last_destroyed();
     _commit_full(m, snaps);
   } else {
