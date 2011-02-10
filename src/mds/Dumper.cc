@@ -12,11 +12,12 @@
  * 
  */
 
+#include "common/errno.h"
+#include "common/safe_io.h"
 #include "mds/Dumper.h"
-#include "osdc/Journaler.h"
 #include "mds/mdstypes.h"
 #include "mon/MonClient.h"
-#include "common/errno.h"
+#include "osdc/Journaler.h"
 
 Dumper::~Dumper()
 {
@@ -113,8 +114,9 @@ void Dumper::dump(const char *dump_file)
 	    (unsigned long long)start, (unsigned long long)start,
 	    (unsigned long long)bl.length(), (unsigned long long)bl.length(),
 	    4);
-    int r = ::write(fd, buf, sizeof(buf));
-    assert(r >= 0);
+    int r = safe_write(fd, buf, sizeof(buf));
+    if (r)
+      ceph_abort();
 
     // write the data
     ::lseek64(fd, start, SEEK_SET);
