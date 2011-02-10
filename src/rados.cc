@@ -334,10 +334,7 @@ int main(int argc, const char **argv)
     }
 
     if (strcmp(nargs[2], "-") == 0) {
-      if (::write(1, outdata.c_str(), outdata.length()) < 0) {
-	int err = errno;
-	cerr << "error writing to stdout: error " << err << std::endl;
-      }
+      fwrite(outdata.c_str(), outdata.length(), 1, stdout);
     } else {
       outdata.write_file(nargs[2]);
       generic_dout(0) << "wrote " << outdata.length() << " byte payload to " << nargs[2] << dendl;
