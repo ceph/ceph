@@ -14,6 +14,7 @@
 
 #include "auth/AuthSupported.h"
 #include "auth/KeyRing.h"
+#include "common/safe_io.h"
 #include "config.h"
 #include "common/common_init.h"
 #include "common/errno.h"
@@ -89,16 +90,17 @@ static void keyring_init(const char *filesearch)
       int err = errno;
       derr << "unable to open " << g_conf.keyfile << ": "
 	   << cpp_strerror(err) << dendl;
-      exit(1);
+      ceph_abort();
     }
-    int len = ::read(fd, buf, sizeof(buf));
+    memset(buf, 0, sizeof(buf));
+    int len = safe_read(fd, buf, sizeof(buf) - 1);
     if (len < 0) {
-      int err = errno;
       derr << "unable to read key from " << g_conf.keyfile << ": "
-	   << cpp_strerror(err) << dendl;
-      exit(1);
+	   << cpp_strerror(len) << dendl;
+      TEMP_FAILURE_RETRY(::close(fd));
+      ceph_abort();
     }
-    ::close(fd);
+    TEMP_FAILURE_RETRY(::close(fd));
 
     buf[len] = 0;
     string k = buf;
