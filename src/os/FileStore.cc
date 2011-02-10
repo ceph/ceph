@@ -2034,8 +2034,9 @@ int FileStore::stat(coll_t cid, const sobject_t& oid, struct stat *st)
 }
 
 int FileStore::read(coll_t cid, const sobject_t& oid, 
-                    uint64_t offset, size_t len,
-                    bufferlist& bl) {
+                    uint64_t offset, size_t len, bufferlist& bl)
+{
+  size_t got;
   char fn[PATH_MAX];
   get_coname(cid, oid, fn, sizeof(fn));
 
@@ -2044,30 +2045,34 @@ int FileStore::read(coll_t cid, const sobject_t& oid,
   int r;
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
-    char buf[80];
-    dout(10) << "read couldn't open " << fn << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    r = -errno;
-  } else {
-    uint64_t actual = ::lseek64(fd, offset, SEEK_SET);
-    size_t got = 0;
-    
-    if (len == 0) {
-      struct stat st;
-      ::fstat(fd, &st);
-      len = st.st_size;
-    }
-    
-    if (actual == offset) {
-      bufferptr bptr(len);  // prealloc space for entire read
-      got = ::read(fd, bptr.c_str(), len);
-      bptr.set_length(got);   // properly size the buffer
-      if (got > 0) bl.push_back( bptr );   // put it in the target bufferlist
-    }
-    ::close(fd);
-    r = got;
+    int err = errno;
+    dout(10) << "FileStore::read(" << fn << "): open error "
+	     << cpp_strerror(err) << dendl;
+    return err;
   }
-  dout(10) << "read " << fn << " " << offset << "~" << len << " = " << r << dendl;
-  return r;
+
+  if (len == 0) {
+    struct stat st;
+    memset(&st, 0, sizeof(struct stat));
+    ::fstat(fd, &st);
+    len = st.st_size;
+  }
+
+  bufferptr bptr(len);  // prealloc space for entire read
+  got = safe_pread(fd, bptr.c_str(), len, offset);
+  if (got < 0) {
+    dout(10) << "FileStore::read(" << fn << "): pread error "
+	     << cpp_strerror(got) << dendl;
+    TEMP_FAILURE_RETRY(::close(fd));
+    return got;
+  }
+  bptr.set_length(got);   // properly size the buffer
+  bl.push_back(bptr);   // put it in the target bufferlist
+  TEMP_FAILURE_RETRY(::close(fd));
+
+  dout(10) << "FileStore::read " << fn << " " << offset << "~"
+	   << got << "/" << len << dendl;
+  return got;
 }
 
 int FileStore::fiemap(coll_t cid, const sobject_t& oid,
