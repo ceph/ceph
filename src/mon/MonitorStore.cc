@@ -14,8 +14,9 @@
 
 #include "MonitorStore.h"
 #include "common/Clock.h"
+#include "common/errno.h"
 #include "common/run_cmd.h"
-
+#include "common/safe_io.h"
 #include "config.h"
 
 #define DOUT_SUBSYS mon
@@ -177,14 +178,32 @@ void MonitorStore::put_int(version_t val, const char *a, const char *b, bool syn
   char tfn[1024];
   snprintf(tfn, sizeof(tfn), "%s.new", fn);
 
-  int fd = ::open(tfn, O_WRONLY|O_CREAT, 0644);
-  assert(fd >= 0);
-  int r = ::write(fd, vs, strlen(vs));
-  assert(r >= 0);
+  int fd = TEMP_FAILURE_RETRY(::open(tfn, O_WRONLY|O_CREAT, 0644));
+  if (fd < 0) {
+    int err = errno;
+    derr << "MonitorStore::put_int: failed to open '" << tfn << "': "
+	 << cpp_strerror(err) << dendl;
+    ceph_abort();
+  }
+  int r = safe_write(fd, vs, strlen(vs));
+  if (r) {
+    derr << "MonitorStore::put_int: failed to write to '" << tfn << "': "
+	 << cpp_strerror(r) << dendl;
+    ceph_abort();
+  }
   if (sync)
     ::fsync(fd);
-  ::close(fd);
-  ::rename(tfn, fn);
+  if (TEMP_FAILURE_RETRY(::close(fd))) {
+    derr << "MonitorStore::put_int: failed to close fd for '" << tfn << "': "
+	 << cpp_strerror(r) << dendl;
+    ceph_abort();
+  }
+  if (::rename(tfn, fn)) {
+    int err = errno;
+    derr << "MonitorStore::put_int: failed to rename '" << tfn << "' to "
+	 << "'" << fn << "': " << cpp_strerror(err) << dendl;
+    ceph_abort();
+  }
 }
 
 
