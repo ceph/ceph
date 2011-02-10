@@ -623,10 +623,11 @@ void ReplicatedPG::do_sub_op_reply(MOSDSubOpReply *r)
 bool ReplicatedPG::snap_trimmer()
 {
   lock();
-  if (!(is_primary() && is_clean() && is_active())) {
+  if (!(is_primary() && is_clean() && is_active() && !finalizing_scrub)) {
     unlock();
     return true;
   }
+
   dout(10) << "snap_trimmer start, purged_snaps " << info.purged_snaps << dendl;
 
   interval_set<snapid_t> s;
@@ -823,6 +824,12 @@ bool ReplicatedPG::snap_trimmer()
       // give other threads a chance at this pg
       unlock();
       lock();
+
+      if (finalizing_scrub) {
+	unlock();
+	return true;
+      }
+
       if (!(current_set_started == info.history.last_epoch_started &&
 	    is_active())) {
 	break;
@@ -855,6 +862,10 @@ bool ReplicatedPG::snap_trimmer()
     // reflected when we scan the next collection set.
     osd->store->flush();
     lock();
+
+    if (finalizing_scrub) {
+      return true;
+    }
   }  
 
   // done
