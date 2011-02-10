@@ -690,9 +690,8 @@ int FileStore::mkfs()
   // fsid
   srand(time(0) + getpid());
   fsid = rand();
-  if (TEMP_FAILURE_RETRY(::write(fsid_fd, &fsid, sizeof(fsid)))
-	!= sizeof(fsid)) {
-    ret = errno;
+  ret = safe_write(fsid_fd, &fsid, sizeof(fsid));
+  if (ret) {
     derr << "FileStore::mkfs: failed to write fsid: "
 	 << cpp_strerror(ret) << dendl;
     goto close_fsid_fd;
@@ -2337,7 +2336,7 @@ int FileStore::_do_clone_range(int from, int to, uint64_t off, uint64_t len)
     }
     int op = 0;
     while (op < r) {
-      int r2 = ::write(to, buf+op, r-op);
+      int r2 = safe_write(to, buf+op, r-op);
       dout(25) << " write to " << to << "~" << (r-op) << " got " << r2 << dendl;      
       if (r2 < 0) {
 	r = r2;
