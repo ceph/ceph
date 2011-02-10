@@ -12,6 +12,7 @@
 #include <list>
 #include <string>
 
+#include "common/safe_io.h"
 #include "ConfUtils.h"
 #include "dyn_snprintf.h"
 
@@ -574,10 +575,10 @@ void ConfFile::_dump(int fd)
 
 					len = cl->output(line, max_line);
 				} while (len == max_line);
-				r = ::write(fd, line, strlen(line));
+				r = safe_write(fd, line, strlen(line));
 				if (r < 0)
 					return;
-				r = ::write(fd, "\n", 1);
+				r = safe_write(fd, "\n", 1);
 				if (r < 0)
 					return;
 			}
@@ -636,7 +637,7 @@ int ConfFile::_open()
 int ConfFile::_read(int fd, char *buf, size_t size)
 {
 	if (filename)
-		return ::read(fd, buf, size);
+		return safe_read(fd, buf, size);
 
 	if (!pbl)
 		return -EINVAL;
