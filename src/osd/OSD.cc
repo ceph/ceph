@@ -1976,8 +1976,10 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
 {
   dout(10) << "handle_pg_stats_ack " << dendl;
 
-  if (!require_mon_peer(ack))
+  if (!require_mon_peer(ack)) {
+    ack->put();
     return;
+  }
 
   pg_stat_queue_lock.Lock();
 
