@@ -11,6 +11,7 @@
 #include <sys/uio.h>
 
 #include "common/Clock.h"
+#include "common/safe_io.h"
 
 #include <iostream>
 using namespace std;
@@ -40,7 +41,9 @@ int main(int argc, char **argv)
  
   utime_t start = g_clock.now();
   while (loop++ < count) {
-    ret = ::write(fd, buf, bsize);
+    ret = safe_write(fd, buf, bsize);
+    if (ret)
+      ceph_abort();
     //if ((loop % 100) == 0) 
     //fprintf(stderr, ".");
   }
