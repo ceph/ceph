@@ -16,6 +16,7 @@
 #include "common/DoutStreambuf.h"
 #include "common/errno.h"
 #include "common/Mutex.h"
+#include "common/safe_io.h"
 
 #include <values.h>
 #include <assert.h>
@@ -96,36 +97,13 @@ static inline int dout_prio_to_syslog_prio(int prio)
   return LOG_DEBUG;
 }
 
-static int safe_write(int fd, const char *buf, signed int len)
-{
-  int res;
-
-  assert(len != 0);
-  while (1) {
-    res = write(fd, buf, len);
-    if (res < 0) {
-      int err = errno;
-      if (err != EINTR) {
-	ostringstream oss;
-	oss << __func__ << ": failed to write to fd " << fd << ": "
-	    << cpp_strerror(err) << "\n";
-	TEMP_FAILURE_RETRY(::write(STDERR_FILENO, oss.str().c_str(),
-				   oss.str().size()));
-	syslog(LOG_USER | LOG_NOTICE, "%s", oss.str().c_str());
-	return err;
-      }
-    }
-    len -= res;
-    buf += res;
-    if (len <= 0)
-      return 0;
-  }
-}
-
 /* Complain about errors even without a logfile */
 static void primitive_log(const std::string &str)
 {
-  safe_write(STDERR_FILENO, str.c_str(), str.size());
+  if (safe_write(STDERR_FILENO, str.c_str(), str.size())) {
+    // ignore errors
+    ;
+  }
   syslog(LOG_USER | LOG_NOTICE, "%s", str.c_str());
 }
 
