@@ -930,6 +930,7 @@ protected:
       return pg;
     }
     void _process(PG *pg) {
+      pg->scrub_finalize();
       pg->put();
     }
     void _clear() {

@@ -896,11 +896,18 @@ public:
   // -- scrub --
   set<int> scrub_reserved_peers;
   map<int,ScrubMap> peer_scrub_map;
+  map<int,ScrubMap> scrub_received_maps;
   bool finalizing_scrub; 
   bool scrub_reserved, scrub_reserve_failed;
+  int scrub_waiting_on;
+  epoch_t scrub_epoch_start;
+  ScrubMap primary_scrubmap;
 
   void repair_object(const sobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
   void scrub();
+  void scrub_finalize();
+  void scrub_clear_state();
+  bool scrub_gather_replica_maps();
   void _scan_list(ScrubMap &map, vector<sobject_t> &ls);
   void _request_scrub_map(int replica, eversion_t version);
   void build_scrub_map(ScrubMap &map);
@@ -936,7 +943,8 @@ public:
     pg_stats_valid(false),
     finish_sync_event(NULL),
     finalizing_scrub(false),
-    scrub_reserved(false), scrub_reserve_failed(false)
+    scrub_reserved(false), scrub_reserve_failed(false),
+    scrub_waiting_on(0)
   {
     pool->get();
   }

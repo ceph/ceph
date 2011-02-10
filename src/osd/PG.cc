@@ -2815,7 +2815,11 @@ void PG::sub_op_scrub_map(MOSDSubOp *op)
     dout(10) << " got osd" << from << " scrub map" << dendl;
     bufferlist::iterator p = op->get_data().begin();
     peer_scrub_map[from].decode(p);
-    kick();
+    scrub_waiting_on--;
+    if (scrub_waiting_on == 0) {
+      assert(last_update_applied == info.last_update);
+      osd->scrub_finalize_wq.queue(this);
+    }
   }
 
   op->put();
@@ -3124,105 +3128,202 @@ void PG::replica_scrub(MOSDRepScrub *msg)
   msg->put();
 }
 
+/* Scrub:
+ * PG_STATE_SCRUBBING is set when the scrub is queued
+ * 
+ * Once the initial scrub has completed and the requests have gone out to 
+ * replicas for maps, finalizing_scrub is set.  scrub_waiting_on is set to 
+ * the number of maps outstanding (active.size()).
+ *
+ * If last_update_applied is behind the head of the log, scrub returns to be
+ * requeued by op_applied.
+ *
+ * Once last_update_applied == info.last_update, scrub catches itself up and
+ * decrements scrub_waiting_on.
+ *
+ * sub_op_scrub_map similarly decrements scrub_waiting_on for each map received.
+ * 
+ * Once scrub_waiting_on hits 0 (either in scrub or sub_op_scrub_map) 
+ * scrub_finalize is queued.
+ * 
+ * In scrub_finalize, if any replica maps are too old, new ones are requested,
+ * scrub_waiting_on is reset, and scrub_finalize returns to be requeued by
+ * sub_op_scrub_map.  If all maps are up to date, scrub_finalize checks 
+ * the maps and performs repairs.
+ */
 void PG::scrub()
 {
-  ScrubMap scrubmap;
-  int errors = 0, fixed = 0;
-  bool repair = state_test(PG_STATE_REPAIR);
-  const char *mode = repair ? "repair":"scrub";
-  map<int,ScrubMap> received_maps;
-  int waiting_on = 0;
 
   osd->map_lock.get_read();
   lock();
- 
-  epoch_t epoch = info.history.same_acting_since;
 
-  if (!is_primary() || !is_active() || !is_clean()) {
+  if (!is_primary() || !is_active() || !is_clean() || !is_scrubbing()) {
     dout(10) << "scrub -- not primary or active or not clean" << dendl;
+    state_clear(PG_STATE_REPAIR);
+    state_clear(PG_STATE_SCRUBBING);
     clear_scrub_reserved();
     unlock();
     osd->map_lock.put_read();
     return;
   }
 
-  dout(10) << "scrub start" << dendl;
-  state_set(PG_STATE_SCRUBBING);
+  if (!finalizing_scrub) {
+    dout(10) << "scrub start" << dendl;
+    update_stats();
+    scrub_received_maps.clear();
+    scrub_epoch_start = info.history.same_acting_since;
+
+    osd->sched_scrub_lock.Lock();
+    if (scrub_reserved) {
+      --(osd->scrubs_pending);
+      assert(osd->scrubs_pending >= 0);
+      scrub_reserved = false;
+      scrub_reserved_peers.clear();
+    }
+    ++(osd->scrubs_active);
+    osd->sched_scrub_lock.Unlock();
+
+    /* scrub_waiting_on == 0 iff all replicas have sent the requested maps and
+     * the primary has done a final scrub (which in turn can only happen if
+     * last_update_applied == info.last_update)
+     */
+    scrub_waiting_on = acting.size();
+
+    // request maps from replicas
+    for (unsigned i=1; i<acting.size(); i++) {
+      _request_scrub_map(acting[i], eversion_t());
+    }
+    osd->map_lock.put_read();
+
+    // Unlocks and relocks...
+    primary_scrubmap = ScrubMap();
+    build_scrub_map(primary_scrubmap);
+
+    if (scrub_epoch_start != info.history.same_acting_since) {
+      dout(10) << "scrub  pg changed, aborting" << dendl;
+      scrub_clear_state();
+      unlock();
+      return;
+    }
+
+    finalizing_scrub = true;
+    if (last_update_applied != info.last_update) {
+      dout(10) << "wait for cleanup" << dendl;
+      unlock();
+      return;
+    }
+  } else {
+    osd->map_lock.put_read();
+  }
+    
+
+  dout(10) << "clean up scrub" << dendl;
+  assert(last_update_applied == info.last_update);
+  
+  if (scrub_epoch_start != info.history.same_acting_since) {
+    dout(10) << "scrub  pg changed, aborting" << dendl;
+    scrub_clear_state();
+    unlock();
+    return;
+  }
+  
+  if (primary_scrubmap.valid_through != log.head) {
+    ScrubMap incr;
+    build_inc_scrub_map(incr, primary_scrubmap.valid_through);
+    primary_scrubmap.merge_incr(incr);
+  }
+  
+  --scrub_waiting_on;
+  if (scrub_waiting_on == 0) {
+    assert(last_update_applied == info.last_update);
+    osd->scrub_finalize_wq.queue(this);
+  }
+  
+  unlock();
+}
+
+void PG::scrub_clear_state()
+{
+  assert(_lock.is_locked());
+  state_clear(PG_STATE_SCRUBBING);
+  state_clear(PG_STATE_REPAIR);
   update_stats();
 
-  osd->sched_scrub_lock.Lock();
-  if (scrub_reserved) {
-    --(osd->scrubs_pending);
-    assert(osd->scrubs_pending >= 0);
-    scrub_reserved = false;
-    scrub_reserved_peers.clear();
-  }
-  ++(osd->scrubs_active);
-  osd->sched_scrub_lock.Unlock();
+  // active -> nothing.
+  osd->dec_scrubs_active();
 
-  // request maps from replicas
-  for (unsigned i=1; i<acting.size(); i++) {
-    _request_scrub_map(acting[i], eversion_t());
+  scrub_unreserve_replicas();
+  
+  osd->take_waiters(waiting_for_active);
+
+  finalizing_scrub = false;
+}
+
+bool PG::scrub_gather_replica_maps() {
+  assert(scrub_waiting_on == 0);
+  assert(peer_scrub_map.size() > 0 ||  acting.size() == 1);
+  assert(_lock.is_locked());
+
+  for (map<int,ScrubMap>::iterator p = peer_scrub_map.begin();
+       p != peer_scrub_map.end();
+       peer_scrub_map.erase(p++)) {
+    
+    dout(10) << "from replica " << p->first << dendl;
+    dout(10) << "map version is " << p->second.valid_through << dendl;
+    if (scrub_received_maps.count(p->first)) {
+      scrub_received_maps[p->first].merge_incr(p->second);
+    } else {
+      scrub_received_maps[p->first] = p->second;
+    }
+    
+    if (scrub_received_maps[p->first].valid_through != log.head) {
+      scrub_waiting_on++;
+      // Need to request another incremental map
+      _request_scrub_map(p->first, p->second.valid_through);
+    }
+  }
+  
+  if (scrub_waiting_on > 0) {
+    return false;
+  } else {
+    return true;
+  }
+}
+
+void PG::scrub_finalize() {
+  osd->map_lock.get_read();
+  lock();
+  assert(last_update_applied == info.last_update);
+
+  if (scrub_epoch_start != info.history.same_acting_since) {
+    dout(10) << "scrub  pg changed, aborting" << dendl;
+    scrub_clear_state();
+    unlock();
+    osd->map_lock.put_read();
+    return;
+  }
+  
+  if (!scrub_gather_replica_maps()) {
+    dout(10) << "maps not yet up to date, sent out new requests" << dendl;
+    unlock();
+    osd->map_lock.put_read();
+    return;
   }
   osd->map_lock.put_read();
 
-  build_scrub_map(scrubmap);
-
-  finalizing_scrub = true;
-  while (last_update_applied != info.last_update) {
-    wait();
-    if (epoch != info.history.same_acting_since ||
-	osd->is_stopping()) {
-      dout(10) << "scrub  pg changed, aborting" << dendl;
-      goto out;
-    }
-  }
-
-  waiting_on = acting.size() - 1;
-  while (waiting_on > 0) {
-    while (peer_scrub_map.size() == 0) {
-      wait();
-      if (epoch != info.history.same_acting_since ||
-	  osd->is_stopping()) {
-	dout(10) << "scrub  pg changed, aborting" << dendl;
-	goto out;
-      }
-    }
-
-
-    for (map<int,ScrubMap>::iterator p = peer_scrub_map.begin();
-	 p != peer_scrub_map.end();
-	 peer_scrub_map.erase(p++)) {
-
-      if (received_maps.count(p->first)) {
-	received_maps[p->first].merge_incr(p->second);
-      } else {
-	received_maps[p->first] = p->second;
-      }
-
-      if (received_maps[p->first].valid_through == log.head) {
-	waiting_on--;
-      } else {
-	// Need to request another incremental map
-	_request_scrub_map(p->first, p->second.valid_through);
-      }
-    }
-
-    if (scrubmap.valid_through != log.head) {
-      ScrubMap incr;
-      build_inc_scrub_map(incr, scrubmap.valid_through);
-      scrubmap.merge_incr(incr);
-    }
-  }
-
+  dout(10) << "scrub_finalize has maps, analyzing" << dendl;
+  stringstream ss;
+  int errors = 0, fixed = 0;
+  bool repair = state_test(PG_STATE_REPAIR);
+  const char *mode = repair ? "repair":"scrub";
   if (acting.size() > 1) {
     dout(10) << "scrub  comparing replica scrub maps" << dendl;
 
     // first, compare scrub maps
     vector<ScrubMap*> m(acting.size());
-    m[0] = &scrubmap;
+    m[0] = &primary_scrubmap;
     for (unsigned i=1; i<acting.size(); i++)
-      m[i] = &received_maps[acting[i]];
+      m[i] = &scrub_received_maps[acting[i]];
     map<sobject_t,ScrubMap::object>::iterator p[acting.size()];
     for (unsigned i=0; i<acting.size(); i++) {
       dout(2) << "scrub   osd" << acting[i] << " has " << m[i]->objects.size() << " items" << dendl;
@@ -3354,7 +3455,7 @@ void PG::scrub()
   */
 
   // ok, do the pg-type specific scrubbing
-  _scrub(scrubmap, errors, fixed);
+  _scrub(primary_scrubmap, errors, fixed);
 
   /*
   lock();
@@ -3382,7 +3483,6 @@ void PG::scrub()
 
   if (errors == 0 || (repair && (errors - fixed) == 0))
     state_clear(PG_STATE_INCONSISTENT);
-  state_clear(PG_STATE_REPAIR);
 
   // finish up
   osd->unreg_last_pg_scrub(info.pgid, info.history.last_scrub_stamp);
@@ -3397,23 +3497,18 @@ void PG::scrub()
     assert(tr == 0);
   }
 
-  share_pg_info();
-
- out:
-  state_clear(PG_STATE_SCRUBBING);
-  update_stats();
-
-  // active -> nothing.
-  osd->dec_scrubs_active();
-
-  scrub_unreserve_replicas();
-  
-  dout(10) << "scrub done" << dendl;
-
-  osd->take_waiters(waiting_for_active);
-
-  finalizing_scrub = false;
+  scrub_clear_state();
   unlock();
+
+  osd->map_lock.get_read();
+  lock();
+  if (is_active() && is_primary()) {
+    share_pg_info();
+  }
+  unlock();
+  osd->map_lock.put_read();
+
+  dout(10) << "scrub done" << dendl;
 }
 
 void PG::share_pg_info()
