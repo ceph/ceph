@@ -1012,7 +1012,7 @@ void parse_startup_config_options(std::vector<const char*>& args,
       force_fg_logging = true;
     } else if (CONF_ARG_EQ("foreground", 'f')) {
       g_conf.daemonize = false;
-      force_fg_logging = true;
+      force_fg_logging = false;
     } else if (isdaemon && (CONF_ARG_EQ("id", 'i') || CONF_ARG_EQ("name", 'n'))) {
       free(g_conf.id);
       CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
