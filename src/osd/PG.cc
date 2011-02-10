@@ -3078,26 +3078,43 @@ void PG::repair_object(const sobject_t& soid, ScrubMap::object *po, int bad_peer
   osd->queue_for_recovery(this);
 }
 
+/* replica_scrub
+ *
+ * If msg->scrub_from is not set, replica_scrub calls build_scrubmap to
+ * build a complete map (with the pg lock dropped).
+ *
+ * If msg->scrub_from is set, replica_scrub sets finalizing_scrub.
+ * Similarly to scrub, if last_update_applied is behind info.last_update
+ * replica_scrub returns to be requeued by sub_op_modify_applied.
+ * replica_scrub then builds an incremental scrub map with the 
+ * pg lock held.
+ */
 void PG::replica_scrub(MOSDRepScrub *msg)
 {
+  assert(!active_rep_scrub);
   dout(7) << "replica_scrub" << dendl;
 
   if (msg->map_epoch < info.history.same_acting_since) {
-    dout(10) << "replica_scrub discarding old replica_scrub from "
-	     << msg->map_epoch << " < " << info.history.same_acting_since << dendl;
+    if (finalizing_scrub) {
+      dout(10) << "scrub  pg changed, aborting" << dendl;
+      finalizing_scrub = 0;
+    } else {
+      dout(10) << "replica_scrub discarding old replica_scrub from "
+	       << msg->map_epoch << " < " << info.history.same_acting_since 
+	       << dendl;
+    }
     msg->put();
     return;
   }
 
   ScrubMap map;
   if (msg->scrub_from > eversion_t()) {
-    epoch_t epoch = info.history.same_acting_since;
-    finalizing_scrub = 1;
-    while (last_update_applied != info.last_update) {
-      wait();
-      if (epoch != info.history.same_acting_since ||
-	  osd->is_stopping()) {
-	dout(10) << "scrub  pg changed, aborting" << dendl;
+    if (finalizing_scrub) {
+      assert(last_update_applied == info.last_update);
+    } else {
+      finalizing_scrub = 1;
+      if (last_update_applied != info.last_update) {
+	active_rep_scrub = msg;
 	return;
       }
     }
@@ -3108,8 +3125,8 @@ void PG::replica_scrub(MOSDRepScrub *msg)
   }
 
   if (msg->map_epoch < info.history.same_acting_since) {
-    dout(10) << "replica_scrub discarding old replica_scrub result from "
-	     << msg->map_epoch << " < " << info.history.same_acting_since << dendl;
+    dout(10) << "scrub  pg changed, aborting" << dendl;
+    msg->put();
     return;
   }
 

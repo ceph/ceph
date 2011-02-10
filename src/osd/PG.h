@@ -24,6 +24,7 @@
 #include "OSDMap.h"
 #include "os/ObjectStore.h"
 #include "msg/Messenger.h"
+#include "messages/MOSDRepScrub.h"
 
 #include "common/DecayCounter.h"
 
@@ -902,6 +903,7 @@ public:
   int scrub_waiting_on;
   epoch_t scrub_epoch_start;
   ScrubMap primary_scrubmap;
+  MOSDRepScrub *active_rep_scrub;
 
   void repair_object(const sobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
   void scrub();
@@ -944,7 +946,8 @@ public:
     finish_sync_event(NULL),
     finalizing_scrub(false),
     scrub_reserved(false), scrub_reserve_failed(false),
-    scrub_waiting_on(0)
+    scrub_waiting_on(0),
+    active_rep_scrub(0)
   {
     pool->get();
   }
