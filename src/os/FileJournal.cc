@@ -14,6 +14,7 @@
 
 #include "config.h"
 #include "common/errno.h"
+#include "common/safe_io.h"
 #include "FileJournal.h"
 #include "include/color.h"
 
@@ -158,9 +159,8 @@ static int get_kernel_version(int *a, int *b, int *c)
 	 << cpp_strerror(ret) << dendl;
     goto out;
   }
-  ret = TEMP_FAILURE_RETRY(::read(fd, buf, sizeof(buf) - 1));
+  ret = safe_read(fd, buf, sizeof(buf) - 1);
   if (ret < 0) {
-    ret = errno;
     derr << "get_kernel_version: failed to read from /proc/version: "
 	 << cpp_strerror(ret) << dendl;
     goto close_fd;
@@ -1063,8 +1063,12 @@ void FileJournal::wrap_read_bl(off64_t& pos, int64_t olen, bufferlist& bl)
 #endif
     
     bufferptr bp = buffer::create(len);
-    int r = ::read(fd, bp.c_str(), len);
-    assert(r == len);
+    int r = safe_read_exact(fd, bp.c_str(), len);
+    if (r) {
+      derr << "FileJournal::wrap_read_bl: safe_read_exact returned "
+	   << r << dendl;
+      ceph_abort();
+    }
     bl.push_back(bp);
     pos += len;
     olen -= len;

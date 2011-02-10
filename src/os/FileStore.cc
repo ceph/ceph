@@ -27,6 +27,7 @@
 #include "common/Timer.h"
 #include "common/errno.h"
 #include "common/run_cmd.h"
+#include "common/safe_io.h"
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
@@ -776,6 +777,7 @@ out:
 int FileStore::mkjournal()
 {
   // read fsid
+  int ret;
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
   int fd = ::open(fn, O_RDONLY, 0644);
@@ -784,11 +786,11 @@ int FileStore::mkjournal()
     derr << "FileStore::mkjournal: open error: " << cpp_strerror(err) << dendl;
     return -err;
   }
-  if (TEMP_FAILURE_RETRY(::read(fd, &fsid, sizeof(fsid))) < 0) {
-    int err = errno;
-    derr << "FileStore::mkjournal: read error: " << cpp_strerror(err) << dendl;
+  ret = safe_read(fd, &fsid, sizeof(fsid));
+  if (ret < 0) {
+    derr << "FileStore::mkjournal: read error: " << cpp_strerror(ret) << dendl;
     TEMP_FAILURE_RETRY(::close(fd));
-    return -err;
+    return ret;
   }
   if (TEMP_FAILURE_RETRY(::close(fd))) {
     int err = errno;
@@ -796,7 +798,7 @@ int FileStore::mkjournal()
     return -err;
   }
 
-  int ret = 0;
+  ret = 0;
 
   open_journal();
   if (journal) {
@@ -1082,20 +1084,16 @@ int FileStore::read_op_seq(const char *fn, uint64_t *seq)
   int op_fd = ::open(current_op_seq_fn.c_str(), O_CREAT|O_RDWR, 0644);
   if (op_fd < 0)
     return -errno;
-
   char s[40];
-  int l = ::read(op_fd, s, sizeof(s));
-  if (l >= 0) {
-    s[l] = 0;
-    *seq = atoll(s);
-  } else {
-    int err = errno;
-    dout(0) << "error reading " << current_op_seq_fn << ": "
-     << cpp_strerror(err) << dendl;
-    ::close(op_fd);
-    return -err;
+  memset(s, 0, sizeof(s));
+  int ret = safe_read(op_fd, s, sizeof(s) - 1);
+  if (ret < 0) {
+    derr << "error reading " << current_op_seq_fn << ": "
+	 << cpp_strerror(ret) << dendl;
+    TEMP_FAILURE_RETRY(::close(op_fd));
+    return ret;
   }
-
+  *seq = atoll(s);
   return op_fd;
 }
 
@@ -1145,8 +1143,8 @@ int FileStore::mount()
   }
 
   fsid = 0;
-  if (TEMP_FAILURE_RETRY(::read(fsid_fd, &fsid, sizeof(fsid))) < 0) {
-    ret = -errno;
+  ret = safe_read_exact(fsid_fd, &fsid, sizeof(fsid));
+  if (ret) {
     derr << "FileStore::mount: error reading fsid_fd: " << cpp_strerror(ret)
 	 << dendl;
     goto close_fsid_fd;
