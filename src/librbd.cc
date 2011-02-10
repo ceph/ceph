@@ -1142,11 +1142,9 @@ int librbd::RBDClient::read_iterate(PoolCtx *ctx, ImageCtx *ictx, off_t off, siz
       ret = r;
       goto done;
     }
-
     for (iter = m.begin(); iter != m.end(); ++iter) {
       off_t extent_ofs = iter->first;
       size_t extent_len = iter->second;
-
       /* a hole? */
       if (extent_ofs - block_ofs) {
         r = cb(total_read + buf_bl_pos, extent_ofs - block_ofs, NULL, arg);

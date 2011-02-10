@@ -2124,6 +2124,9 @@ int FileStore::fiemap(coll_t cid, const sobject_t& oid,
     while (i < fiemap->fm_mapped_extents) {
       struct fiemap_extent *next = extent + 1;
 
+      dout(10) << "FileStore::fiemap() fm_mapped_extents=" << fiemap->fm_mapped_extents
+	       << " fe_logical=" << extent->fe_logical << " fe_length=" << extent->fe_length << dendl;
+
       /* try to merge extents */
       while ((i < fiemap->fm_mapped_extents - 1) &&
              (extent->fe_logical + extent->fe_length == next->fe_logical)) {
@@ -2134,8 +2137,8 @@ int FileStore::fiemap(coll_t cid, const sobject_t& oid,
           i++;
       }
 
-      if (extent->fe_logical + extent->fe_length > len)
-        extent->fe_length = len - extent->fe_logical;
+      if (extent->fe_logical + extent->fe_length > offset + len)
+        extent->fe_length = offset + len - extent->fe_logical;
       extmap[extent->fe_logical] = extent->fe_length;
       i++;
     }
