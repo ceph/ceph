@@ -14,7 +14,7 @@
 
 #include "include/types.h"
 
-#include "include/librados.hpp"
+#include "include/rados/librados.hpp"
 using namespace librados;
 
 #include "osdc/rados_bencher.h"

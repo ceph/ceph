@@ -224,6 +224,21 @@ librados_a_SOURCES = ${librados_SOURCES}
 librados_a_CFLAGS = ${AM_CFLAGS}
 librados_a_CXXFLAGS = ${AM_CXXFLAGS}
 
+# librbd
+librbd_SOURCES = \
+	librbd.cc
+
+librbd_la_SOURCES = ${librbd_SOURCES}
+librbd_la_CFLAGS = ${AM_CFLAGS}
+librbd_la_CXXFLAGS = ${AM_CXXFLAGS}
+librbd_la_LIBADD = librados.la libcrush.la -lpthread $(CRYPTOPP_LIBS)
+librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^rbd_.*'
+lib_LTLIBRARIES += librbd.la
+
+librbd_a_SOURCES = ${librbd_SOURCES}
+librbd_a_CFLAGS = ${AM_CFLAGS}
+librbd_a_CXXFLAGS = ${AM_CXXFLAGS}
+
 rados_SOURCES = rados.cc
 rados_LDADD = librados.la -lpthread -lm $(CRYPTOPP_LIBS)
 bin_PROGRAMS += rados
@@ -239,9 +254,17 @@ bin_PROGRAMS += testrados testradospp radosacl
 endif
 
 rbd_SOURCES = rbd.cc common/fiemap.cc
-rbd_LDADD = librados.la -lpthread -lm $(CRYPTOPP_LIBS)
 rbd_CXXFLAGS = ${AM_CXXFLAGS}
+rbd_LDADD = librbd.la librados.la libcrush.la -lpthread -lm $(CRYPTOPP_LIBS)
 bin_PROGRAMS += rbd
+
+if WITH_DEBUG
+testlibrbd_SOURCES = testlibrbd.c
+testlibrbd_LDADD = librbd.la libcrush.la -lpthread -lm $(CRYPTOPP_LIBS)
+testlibrbdpp_SOURCES = testlibrbdpp.cc
+testlibrbdpp_LDADD = librbd.la libcrush.la -lpthread -lm $(CRYPTOPP_LIBS)
+bin_PROGRAMS += testlibrbd testlibrbdpp
+endif
 
 if WITH_RADOSGW
 libradosgw_a_SOURCES = \
@@ -388,7 +411,7 @@ endif
 noinst_LIBRARIES = \
 	libcommon.a libcrush.a \
 	libmon.a libmds.a libosdc.a libosd.a libclient.a \
-	libos.a librados.a libradosgw.a
+	libos.a librados.a librbd.a libradosgw.a
 
 noinst_LIBRARIES +=  #libcephclient_so.a
 
@@ -414,10 +437,15 @@ shell_common_SCRIPTS = ceph_common.sh
 libceph_includedir = $(includedir)/ceph
 libceph_include_DATA = $(srcdir)/client/libceph.h
 
+librbd_includedir = $(includedir)/rbd
+librbd_include_DATA = \
+	$(srcdir)/include/rbd/librbd.h \
+	$(srcdir)/include/rbd/librbd.hpp
+
 rados_includedir = $(includedir)/rados
 rados_include_DATA = \
-	$(srcdir)/include/librados.h \
-	$(srcdir)/include/librados.hpp \
+	$(srcdir)/include/rados/librados.h \
+	$(srcdir)/include/rados/librados.hpp \
 	$(srcdir)/include/buffer.h \
 	$(srcdir)/include/atomic.h \
 	$(srcdir)/include/page.h \
@@ -688,8 +716,6 @@ noinst_HEADERS = \
         include/intarith.h\
         include/interval_set.h\
         include/inttypes.h\
-	include/librados.h\
-	include/librados.hpp\
 	include/linux_fiemap.h\
         include/lru.h\
 	include/msgr.h\
@@ -708,6 +734,10 @@ noinst_HEADERS = \
         include/dlist.h\
         include/elist.h\
         include/xlist.h\
+	include/rados/librados.h\
+	include/rados/librados.hpp\
+	include/rbd/librbd.h\
+	include/rbd/librbd.hpp\
 	logrotate.conf\
 	mds/flock.h\
 	mds/inode_backtrace.h\

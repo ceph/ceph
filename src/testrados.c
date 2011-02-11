@@ -12,7 +12,7 @@
  * 
  */
 
-#include "include/librados.h"
+#include "include/rados/librados.h"
 
 #include <stdio.h>
 #include <stdlib.h>

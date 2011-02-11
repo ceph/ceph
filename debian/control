@@ -12,7 +12,7 @@ Standards-Version: 3.9.1
 Package: ceph
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libedit2, hdparm, binutils
-Recommends: ceph-client-tools, ceph-fuse, libceph1, librados1, libcrush1, btrfs-tools
+Recommends: ceph-client-tools, ceph-fuse, libceph1, librados1, librbd1, libcrush1, btrfs-tools
 Description: distributed storage and file system
  Ceph is a distributed storage and network file system designed to provide
  excellent performance, reliability, and scalability.
@@ -170,6 +170,41 @@ Description: RADOS distributed object store client library (development files)
  .
  This package contains development files needed for building applications that
  link against librados.
+
+Package: librbd1
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, librados1
+Description: RADOS block device client library
+ RBD is a block device striped across multiple distributed objects
+ in RADOS, a reliable, autonomic distributed object storage cluster
+ developed as part of the Ceph distributed storage system.  This is a
+ shared library allowing applications to manage these block devices.
+
+Package: librbd1-dbg
+Architecture: any
+Section: debug
+Priority: extra
+Depends: librbd1 (= ${binary:Version}), ${misc:Depends}
+Description: debugging symbols for librbd1
+ RBD is a block device striped across multiple distributed objects
+ in RADOS, a reliable, autonomic distributed object storage cluster
+ developed as part of the Ceph distributed storage system.  This is a
+ shared library allowing applications to manage these block devices.
+ .
+ This package contains debugging symbols for librbd1.
+
+Package: librbd1-dev
+Architecture: any
+Section: libdevel
+Depends: ${shlibs:Depends}, ${misc:Depends}, librbd1 (= ${binary:Version})
+Description: RADOS block device client library (development files)
+ RBD is a block device striped across multiple distributed objects
+ in RADOS, a reliable, autonomic distributed object storage cluster
+ developed as part of the Ceph distributed storage system.  This is a
+ shared library allowing applications to manage these block devices.
+ .
+ This package contains development files needed for building applications that
+ link against librbd1.
 
 Package: libceph1
 Conflicts: libceph

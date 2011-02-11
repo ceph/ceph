@@ -16,7 +16,7 @@
 #include "config.h"
 
 #include "common/common_init.h"
-#include "include/librados.h"
+#include "include/rados/librados.h"
 
 void usage()
 {

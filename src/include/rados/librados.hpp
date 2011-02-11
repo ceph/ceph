@@ -145,8 +145,12 @@ public:
 
   int aio_read(pool_t pool, const std::string& oid, off_t off, bufferlist *pbl, size_t len,
 	       AioCompletion *c);
+  int aio_sparse_read(pool_t pool, const std::string& oid, off_t off,
+		      std::map<off_t,size_t> *m, bufferlist *data_bl, size_t len,
+		      AioCompletion *c);
   int aio_write(pool_t pool, const std::string& oid, off_t off, const bufferlist& bl, size_t len,
 		AioCompletion *c);
+
   AioCompletion *aio_create_completion();
   AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete, callback_t cb_safe);
 

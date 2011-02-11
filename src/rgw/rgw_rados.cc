@@ -4,7 +4,7 @@
 #include "rgw_access.h"
 #include "rgw_rados.h"
 
-#include "include/librados.hpp"
+#include "include/rados/librados.hpp"
 using namespace librados;
 
 #include <string>

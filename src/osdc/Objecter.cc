@@ -69,6 +69,9 @@ void Objecter::send_linger(LingerOp *info)
 		   onack, oncommit,
 		   info->pobjver);
     o->snapid = info->snap;
+
+    if (info->session)
+      recalc_op_target(o);
     op_submit(o, info->session);
     info->registering = true;
   } else {

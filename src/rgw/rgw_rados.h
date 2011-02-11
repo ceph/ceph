@@ -1,7 +1,7 @@
 #ifndef CEPH_RGWRADOS_H
 #define CEPH_RGWRADOS_H
 
-#include "include/librados.h"
+#include "include/rados/librados.h"
 #include "rgw_access.h"
 #include "rgw_common.h"
 

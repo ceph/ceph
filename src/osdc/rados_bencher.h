@@ -14,7 +14,7 @@
  * try and bench on a pool you don't have permission to access
  * it will just loop forever.
  */
-#include "include/librados.h"
+#include "include/rados/librados.h"
 #include "config.h"
 #include "common/common_init.h"
 #include "common/Cond.h"
