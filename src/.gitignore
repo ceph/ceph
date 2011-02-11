@@ -33,6 +33,8 @@
 /testdout_streambuf
 /testsignal_handlers
 /testtimers
+/testlibrbd
+/testlibrbdpp
 dev
 mondata
 log
