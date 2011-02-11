@@ -53,9 +53,6 @@ struct md_config_t {
   char *alt_name;
   char *host;
 
-  int num_mon;
-  int num_mds;
-  int num_osd;
   int num_client;
 
   //bool mkfs;

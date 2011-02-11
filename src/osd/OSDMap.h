@@ -796,54 +796,16 @@ private:
     ps_t pps = pool.raw_pg_to_pps(pg);  // placement ps
     unsigned size = pool.get_size();
 
-    switch (g_conf.osd_pg_layout) {
-    case CEPH_PG_LAYOUT_CRUSH:
-      {
-	int preferred = pg.preferred();
-	if (preferred >= max_osd || preferred >= crush.get_max_devices())
-	  preferred = -1;
+    assert(g_conf.osd_pg_layout == CEPH_PG_LAYOUT_CRUSH);
+    {
+      int preferred = pg.preferred();
+      if (preferred >= max_osd || preferred >= crush.get_max_devices())
+	preferred = -1;
 
-	// what crush rule?
-	int ruleno = crush.find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
-	if (ruleno >= 0)
-	  crush.do_rule(ruleno, pps, osds, size, preferred, osd_weight);
-      }
-      break;
-      
-    case CEPH_PG_LAYOUT_LINEAR:
-      for (unsigned i=0; i<size; i++) 
-	osds.push_back( (i + pps*size) % g_conf.num_osd );
-      break;
-      
-#if 0
-    case CEPH_PG_LAYOUT_HYBRID:
-      {
-	int h = crush_hash32(CRUSH_HASH_RJENKINS1, pps);
-	for (unsigned i=0; i<size; i++) 
-	  osds.push_back( (h+i) % g_conf.num_osd );
-      }
-      break;
-      
-    case CEPH_PG_LAYOUT_HASH:
-      {
-	for (unsigned i=0; i<size; i++) {
-	  int t = 1;
-	  int osd = 0;
-	  while (t++) {
-	    osd = crush_hash32_3(CRUSH_HASH_RJENKINS1, i, pps, t) % g_conf.num_osd;
-	    unsigned j = 0;
-	    for (; j<i; j++) 
-	      if (osds[j] == osd) break;
-	    if (j == i) break;
-	  }
-	  osds.push_back(osd);
-	}      
-      }
-      break;
-#endif
-      
-    default:
-      assert(0);
+      // what crush rule?
+      int ruleno = crush.find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
+      if (ruleno >= 0)
+	crush.do_rule(ruleno, pps, osds, size, preferred, osd_weight);
     }
   
     // no crush, but forcefeeding?
