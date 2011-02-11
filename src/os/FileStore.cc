@@ -2042,7 +2042,6 @@ int FileStore::read(coll_t cid, const sobject_t& oid,
 
   dout(15) << "read " << fn << " " << offset << "~" << len << dendl;
 
-  int r;
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
     int err = errno;
