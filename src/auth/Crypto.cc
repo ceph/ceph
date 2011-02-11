@@ -20,6 +20,7 @@
 #include "config.h"
 #include "common/armor.h"
 #include "common/Clock.h"
+#include "common/safe_io.h"
 
 #include <errno.h>
 
@@ -27,25 +28,14 @@ using namespace CryptoPP;
 
 int get_random_bytes(char *buf, int len)
 {
-  char *t = buf;
-  int fd = ::open("/dev/urandom", O_RDONLY);
-  int l = len;
-  int r;
+  int fd = TEMP_FAILURE_RETRY(::open("/dev/urandom", O_RDONLY));
   if (fd < 0)
     return -errno;
-  while (l) {
-    r = ::read(fd, t, l);
-    if (r < 0) {
-      r = -errno;
-      goto out;
-    }
-    t += r;
-    l -= r;
-  }
-  r = 0;
- out:
-  ::close(fd);
-  return r;
+  int ret = safe_read_exact(fd, buf, len);
+  if (ret)
+    return ret;
+  TEMP_FAILURE_RETRY(::close(fd));
+  return 0;
 }
 
 static int get_random_bytes(int len, bufferlist& bl)
