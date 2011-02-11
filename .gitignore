@@ -40,3 +40,4 @@ cscope.out
 *.swp
 *.swo
 .metadata/
+/py-compile
