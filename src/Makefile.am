@@ -736,6 +736,10 @@ noinst_HEADERS = \
         include/xlist.h\
 	include/rados/librados.h\
 	include/rados/librados.hpp\
+	include/rados/atomic.h\
+	include/rados/page.h\
+	include/rados/crc32c.h\
+	include/rados/buffer.h\
 	include/rbd/librbd.h\
 	include/rbd/librbd.hpp\
 	logrotate.conf\
