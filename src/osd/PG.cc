@@ -3307,6 +3307,105 @@ bool PG::scrub_gather_replica_maps() {
   }
 }
 
+bool PG::_compare_scrub_objects(ScrubMap::object &auth,
+				ScrubMap::object &candidate,
+				ostream &errorstream)
+{
+  bool ok = true;
+  if (auth.size != candidate.size) {
+    ok = false;
+    errorstream << "size " << candidate.size 
+		<< " != known size " << auth.size;
+  }
+  for (map<string,bufferptr>::const_iterator i = auth.attrs.begin();
+       i != auth.attrs.end();
+       i++) {
+    if (!candidate.attrs.count(i->first)) {
+      if (!ok)
+	errorstream << ", ";
+      ok = false;
+      errorstream << "missing attr " << i->first;
+    } else if (candidate.attrs.find(i->first)->second.cmp(i->second)) {
+      if (!ok)
+	errorstream << ", ";
+      ok = false;
+      errorstream << "attr value mismatch " << i->first;
+    }
+  }
+  for (map<string,bufferptr>::const_iterator i = candidate.attrs.begin();
+       i != candidate.attrs.end();
+       i++) {
+    if (!auth.attrs.count(i->first)) {
+      if (!ok)
+	errorstream << ", ";
+      ok = false;
+      errorstream << "extra attr " << i->first;
+    }
+  }
+  if (ok)
+    errorstream << " is ok!";
+  return ok;
+}
+
+void PG::_compare_scrubmaps(const map<int,ScrubMap*> &maps,  
+			    map<sobject_t, set<int> > &missing,
+			    map<sobject_t, set<int> > &inconsistent,
+			    map<sobject_t, int> &authoritative,
+			    ostream &errorstream)
+{
+  map<sobject_t,ScrubMap::object>::const_iterator i;
+  map<int, ScrubMap *>::const_iterator j;
+  set<sobject_t> master_set;
+
+  // Construct master set
+  for (j = maps.begin(); j != maps.end(); j++) {
+    for (i = j->second->objects.begin(); i != j->second->objects.end(); i++) {
+      master_set.insert(i->first);
+    }
+  }
+
+  // Check maps against master set and each other
+  for (set<sobject_t>::const_iterator k = master_set.begin();
+       k != master_set.end();
+       k++) {
+    map<int, ScrubMap *>::const_iterator auth = maps.end();
+    set<int> cur_missing;
+    set<int> cur_inconsistent;
+    for (j = maps.begin(); j != maps.end(); j++) {
+      if (j->second->objects.count(*k)) {
+	if (auth == maps.end()) {
+	  // Take first osd to have it as authoritative
+	  auth = j;
+	} else {
+	  // Compare 
+	  errorstream << info.pgid << " osd" << acting[j->first]
+		      << ": soid " << *k;
+	  if (!_compare_scrub_objects(auth->second->objects[*k],
+				      j->second->objects[*k],
+				      errorstream)) {
+	    cur_inconsistent.insert(j->first);
+	  }
+	  errorstream << std::endl;
+	}
+      } else {
+	cur_missing.insert(j->first);
+	errorstream << info.pgid
+		    << " osd" << acting[j->first] 
+		    << " missing " << *k << std::endl;
+      }
+    }
+    if (cur_missing.size()) {
+      missing[*k] = cur_missing;
+    }
+    if (cur_inconsistent.size()) {
+      inconsistent[*k] = cur_inconsistent;
+    }
+    if (cur_inconsistent.size() || cur_missing.size()) {
+      authoritative[*k] = auth->first;
+    }
+  }
+}
+
 void PG::scrub_finalize() {
   osd->map_lock.get_read();
   lock();
@@ -3329,158 +3428,77 @@ void PG::scrub_finalize() {
   osd->map_lock.put_read();
 
   dout(10) << "scrub_finalize has maps, analyzing" << dendl;
-  stringstream ss;
   int errors = 0, fixed = 0;
   bool repair = state_test(PG_STATE_REPAIR);
   const char *mode = repair ? "repair":"scrub";
   if (acting.size() > 1) {
     dout(10) << "scrub  comparing replica scrub maps" << dendl;
 
-    // first, compare scrub maps
-    vector<ScrubMap*> m(acting.size());
-    m[0] = &primary_scrubmap;
-    for (unsigned i=1; i<acting.size(); i++)
-      m[i] = &scrub_received_maps[acting[i]];
-    map<sobject_t,ScrubMap::object>::iterator p[acting.size()];
-    for (unsigned i=0; i<acting.size(); i++) {
-      dout(2) << "scrub   osd" << acting[i] << " has " << m[i]->objects.size() << " items" << dendl;
-      p[i] = m[i]->objects.begin();
-    }
-    
-    int num_missing = 0;
-    int num_bad = 0;
-    
-    while (1) {
-      ScrubMap::object *po = 0;
-      const sobject_t *psoid = 0;
-      int pi = -1;
-      bool anymissing = false;
-      for (unsigned i=0; i<acting.size(); i++) {
-	if (p[i] == m[i]->objects.end()) {
-	  anymissing = true;
-	  continue;
-	}
-	if (!po) {
-	  psoid = &(p[i]->first);
-	  po = &(p[i]->second);
-	  pi = i;
-	}
-	else if (*psoid != p[i]->first) {
-	  anymissing = true;
-	  if (*psoid > p[i]->first) {
-	    psoid = &(p[0]->first);
-	    po = &(p[i]->second);
-	    pi = i;
-	  }
-	}
-      }
-      if (!po) {
-	break;
-      }
-      if (anymissing) {
-	for (unsigned i=0; i<acting.size(); i++) {
-	  if (p[i] == m[i]->objects.end() || *psoid != p[i]->first) {
-	    osd->clog.error() << info.pgid << " " << mode << " osd" << acting[i] << " missing " << *psoid;
-	    num_missing++;
-	    
-	    if (repair)
-	      repair_object(*psoid, po, acting[i], acting[pi]);
-	  } else
-	    p[i]++;
-	}
-	continue;
-      }
-      
-      // compare
-      bool ok = true;
-      for (unsigned i=1; i<acting.size(); i++) {
-	bool peerok = true;
-	if (po->size != p[i]->second.size) {
-	  dout(0) << "scrub osd" << acting[i] << " " << *psoid
-		  << " size " << p[i]->second.size << " != " << po->size << dendl;
-	  osd->clog.error() << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
-	     << " size " << p[i]->second.size << " != " << po->size;
-	  peerok = ok = false;
-	  num_bad++;
-	}
-	if (po->attrs.size() != p[i]->second.attrs.size()) {
-	  dout(0) << "scrub osd" << acting[i] << " " << *psoid
-		  << " attr count " << p[i]->second.attrs.size() << " != " << po->attrs.size() << dendl;
-	  osd->clog.error() << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
-			    << " attr count " << p[i]->second.attrs.size() << " != " << po->attrs.size();
-	  peerok = ok = false;
-	  num_bad++;
-	}
-	for (map<string,bufferptr>::iterator q = po->attrs.begin(); q != po->attrs.end(); q++) {
-	  if (p[i]->second.attrs.count(q->first)) {
-	    if (q->second.cmp(p[i]->second.attrs[q->first])) {
-	      dout(0) << "scrub osd" << acting[i] << " " << *psoid
-		      << " attr " << q->first << " value mismatch" << dendl;
-	      osd->clog.error() << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
-				<< " attr " << q->first << " value mismatch";
-	      peerok = ok = false;
-	      num_bad++;
-	    }
-	  } else {
-	    dout(0) << "scrub osd" << acting[i] << " " << *psoid
-		    << " attr " << q->first << " missing" << dendl;
-	    osd->clog.error() << info.pgid << " " << mode << " osd" << acting[i] << " " << *psoid
-	       << " attr " << q->first << " missing";
-	    peerok = ok = false;
-	    num_bad++;
-	  }
-	}
+    stringstream ss;
 
-	if (!peerok && repair)
-	  repair_object(*psoid, po, acting[i], acting[pi]);
-      }
-      
-      if (ok)
-	dout(20) << "scrub  " << *psoid << " size " << po->size << " ok" << dendl;
-      
-      // next
-      for (unsigned i=0; i<acting.size(); i++)
-	p[i]++;
+    // Maps from objects with erros to missing/inconsistent peers
+    map<sobject_t, set<int> > missing;
+    map<sobject_t, set<int> > inconsistent;
+
+    // Map from object with errors to good peer
+    map<sobject_t, int> authoritative;
+    map<int,ScrubMap *> maps;
+
+    dout(2) << "scrub   osd" << acting[0] << " has " 
+	    << primary_scrubmap.objects.size() << " items" << dendl;
+    maps[0] = &primary_scrubmap;
+    for (unsigned i=1; i<acting.size(); i++) {
+      dout(2) << "scrub   osd" << acting[i] << " has " 
+	      << scrub_received_maps[acting[i]].objects.size() << " items" << dendl;
+      maps[i] = &scrub_received_maps[acting[i]];
     }
-    
-    if (num_missing || num_bad) {
-      stringstream ss;
-      ss << info.pgid << " " << mode << " " << num_missing << " missing, "
-	 << num_bad << " bad objects\n";
-      *_dout << ss.str();
-      _dout->flush();
+
+    _compare_scrubmaps(maps, missing, inconsistent, authoritative, ss);
+
+    if (authoritative.size()) {
+      ss << info.pgid << " " << mode << " " << missing.size() << " missing, "
+	 << inconsistent.size() << " inconsistent objects\n";
+      dout(2) << ss.str() << dendl;
       osd->clog.error(ss);
       state_set(PG_STATE_INCONSISTENT);
-      if (repair)
+      if (repair) {
 	state_clear(PG_STATE_CLEAN);
+	for (map<sobject_t, int>::iterator i = authoritative.begin();
+	     i != authoritative.end();
+	     i++) {
+	  set<int>::iterator j;
+	  
+	  if (missing.count(i->first)) {
+	    for (j = missing[i->first].begin();
+		 j != missing[i->first].end(); 
+		 j++) {
+	      repair_object(i->first, 
+			    &maps[i->second]->objects[i->first],
+			    acting[*j],
+			    acting[i->second]);
+	    }
+	  }
+	  if (inconsistent.count(i->first)) {
+	    for (j = inconsistent[i->first].begin(); 
+		 j != inconsistent[i->first].end(); 
+		 j++) {
+	      repair_object(i->first, 
+			    &maps[i->second]->objects[i->first],
+			    acting[*j],
+			    acting[i->second]);
+	    }
+	  }
+
+	}
+      }
     }
   }
-
-  /*
-  lock();
-  if (epoch != info.history.same_acting_since) {
-    dout(10) << "scrub  pg changed, aborting" << dendl;
-    goto out;
-  }
-  */
 
   // discard peer scrub info.
   peer_scrub_map.clear();
 
-  /*
-  unlock();
-  */
-
   // ok, do the pg-type specific scrubbing
   _scrub(primary_scrubmap, errors, fixed);
-
-  /*
-  lock();
-  if (epoch != info.history.same_acting_since) {
-    dout(10) << "scrub  pg changed, aborting" << dendl;
-    goto out;
-  }
-  */
 
   {
     stringstream oss;

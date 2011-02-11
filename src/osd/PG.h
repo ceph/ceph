@@ -906,6 +906,14 @@ public:
   MOSDRepScrub *active_rep_scrub;
 
   void repair_object(const sobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
+  bool _compare_scrub_objects(ScrubMap::object &auth,
+			      ScrubMap::object &candidate,
+			      ostream &errorstream);
+  void _compare_scrubmaps(const map<int,ScrubMap*> &maps,  
+			  map<sobject_t, set<int> > &missing,
+			  map<sobject_t, set<int> > &inconsistent,
+			  map<sobject_t, int> &authoritative,
+			  ostream &errorstream);
   void scrub();
   void scrub_finalize();
   void scrub_clear_state();
