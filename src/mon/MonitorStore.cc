@@ -143,7 +143,7 @@ version_t MonitorStore::get_int(const char *a, const char *b)
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
     int err = errno;
-    if (err == EEXIST) {
+    if (err == ENOENT) {
       // Non-existent files are treated as containing 0.
       return 0;
     }
