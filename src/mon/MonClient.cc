@@ -262,9 +262,11 @@ void MonClient::handle_monmap(MMonMap *m)
   map_cond.Signal();
   want_monmap = false;
 
-  if (!cur_mon.empty() && monmap.get_rank(cur_mon) < 0) {
-    dout(10) << "mon." << cur_mon << " went away" << dendl;
-    cur_mon.clear();
+  if (!cur_mon.empty()) {
+    if (!monmap.get_addr_name(cur_mon_addr, cur_mon)) {
+      dout(10) << "mon." << cur_mon << " went away" << dendl;
+      cur_mon.clear();
+    }
   }
 
   if (cur_mon.empty())
