@@ -25,13 +25,7 @@ extern "C" {
 
 #define LIBRADOS_SUPPORTS_WATCH 1
 
-/* initialization */
-int rados_initialize(int argc, const char **argv); /* arguments are optional */
-void rados_deinitialize(void);
-
-void librados_version(int *major, int *minor, int *extra);
-
-/* pools */
+typedef void *rados_cluster_t;
 typedef void *rados_pool_t;
 typedef void *rados_list_ctx_t;
 typedef uint64_t rados_snap_t;
@@ -53,19 +47,27 @@ struct rados_statfs_t {
   uint64_t num_objects;
 };
 
-int rados_open_pool(const char *name, rados_pool_t *pool);
+
+void librados_version(int *major, int *minor, int *extra);
+
+/* initialization */
+int rados_initialize(int argc, const char **argv, rados_cluster_t *cluster); /* arguments are optional */
+void rados_deinitialize(rados_cluster_t cluster);
+
+/* pools */
+int rados_open_pool(rados_cluster_t cluster, const char *name, rados_pool_t *pool);
 int rados_close_pool(rados_pool_t pool);
-int rados_lookup_pool(const char *name);
+int rados_lookup_pool(rados_cluster_t cluster, const char *name);
 
 int rados_stat_pool(rados_pool_t pool, struct rados_pool_stat_t *stats);
 
 void rados_set_snap(rados_pool_t pool, rados_snap_t snap);
 int rados_set_snap_context(rados_pool_t pool, rados_snap_t seq, rados_snap_t *snaps, int num_snaps);
 
-int rados_create_pool(const char *name);
-int rados_create_pool_with_auid(const char *name, uint64_t auid);
-int rados_create_pool_with_crush_rule(const char *name, __u8 crush_rule);
-int rados_create_pool_with_all(const char *name, uint64_t auid,
+int rados_create_pool(rados_cluster_t cluster, const char *name);
+int rados_create_pool_with_auid(rados_cluster_t cluster, const char *name, uint64_t auid);
+int rados_create_pool_with_crush_rule(rados_cluster_t cluster, const char *name, __u8 crush_rule);
+int rados_create_pool_with_all(rados_cluster_t cluster, const char *name, uint64_t auid,
 			       __u8 crush_rule);
 int rados_delete_pool(rados_pool_t pool);
 int rados_change_pool_auid(rados_pool_t pool, uint64_t auid);
