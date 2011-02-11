@@ -151,6 +151,7 @@ fi
 %{_libdir}/libceph.so.*
 %{_libdir}/libcrush.so.*
 %{_libdir}/librados.so.*
+%{_libdir}/librbd.so.*
 %{_libdir}/rados-classes/libcls_rbd.so.*
 /sbin/mkcephfs
 /sbin/mount.ceph
@@ -205,9 +206,12 @@ fi
 %{_includedir}/rados/crc32c.h
 %{_includedir}/rados/Spinlock.h
 %{_includedir}/rados/assert.h
+%{_includedir}/rbd/librbd.h
+%{_includedir}/rbd/librbd.hpp
 %{_libdir}/libceph.so
 %{_libdir}/libcrush.so
 %{_libdir}/librados.so
+%{_libdir}/librbd.so
 %{_libdir}/rados-classes/libcls_rbd.so
 
 %if %{with_radosgw}
