@@ -50,11 +50,14 @@ struct ceph_tool_data
   // A condition variable used to wake up the GUI thread
   Cond gui_cond;
 
+  bool concise;
+
   ceph_tool_data() :
     updates(EVERYTHING_UPDATE),
     log(&std::cout),
     slog(NULL),
-    lock("ceph.cc lock"), timer(lock)
+    lock("ceph.cc lock"), timer(lock),
+    concise(false)
   {
   }
 };

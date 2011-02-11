@@ -56,6 +56,8 @@ static void parse_cmd_args(const vector<const char*> &args,
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("in_file", 'i')) {
       CONF_SAFE_SET_ARG_VAL(in_file, OPT_STR);
+    } else if (CONF_ARG_EQ("concise", '\0')) {
+      g.concise = true;
     } else if (CONF_ARG_EQ("out_file", 'o')) {
       CONF_SAFE_SET_ARG_VAL(out_file, OPT_STR);
     } else if (CONF_ARG_EQ("status", 's')) {

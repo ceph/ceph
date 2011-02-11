@@ -297,7 +297,8 @@ static void send_command()
   m->cmd = pending_cmd;
   m->set_data(pending_bl);
 
-  *g.log << g_clock.now() << " mon" << " <- " << pending_cmd << std::endl;
+  if (!g.concise)
+    *g.log << g_clock.now() << " mon" << " <- " << pending_cmd << std::endl;
   g.mc.send_mon_message(m);
 }
 
@@ -353,10 +354,13 @@ int do_command(vector<string>& cmd, bufferlist& bl, string& rs, bufferlist& rbl)
 
   rs = rs;
   rbl = reply_bl;
-  *g.log << g_clock.now() << " "
-       << reply_from.name << " -> '"
-       << reply_rs << "' (" << reply_rc << ")"
-       << std::endl;
+  if (!g.concise)
+    *g.log << g_clock.now() << " "
+	   << reply_from.name << " -> '"
+	   << reply_rs << "' (" << reply_rc << ")"
+	   << std::endl;
+  else
+    cout << reply_rs << std::endl;
 
   return reply_rc;
 }
@@ -449,9 +453,11 @@ int run_command(const char *line)
 
   bufferlist in;
   if (cmd.size() == 1 && cmd[0] == "print") {
-    *g.log << "----" << std::endl;
+    if (!g.concise)
+      *g.log << "----" << std::endl;
     fwrite(in.c_str(), in.length(), 1, stdout);
-    *g.log << "---- (" << in.length() << " bytes)" << std::endl;
+    if (!g.concise)
+      *g.log << "---- (" << in.length() << " bytes)" << std::endl;
     return 0;
   }
 
@@ -460,7 +466,8 @@ int run_command(const char *line)
   bufferlist out;
   if (infile) {
     if (out.read_file(infile) == 0) {
-      *g.log << "read " << out.length() << " from " << infile << std::endl;
+      if (!g.concise)
+	*g.log << "read " << out.length() << " from " << infile << std::endl;
     } else {
       char buf[80];
       *g.log << "couldn't read from " << infile << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
@@ -477,19 +484,23 @@ int run_command(const char *line)
 
   if (outfile) {
     if (strcmp(outfile, "-") == 0) {
-      *g.log << "----" << std::endl;
+      if (!g.concise)
+	*g.log << "----" << std::endl;
       fwrite(in.c_str(), in.length(), 1, stdout);
-      *g.log << "---- (" << in.length() << " bytes)" << std::endl;
+      if (!g.concise)
+	*g.log << "---- (" << in.length() << " bytes)" << std::endl;
     }
     else {
       in.write_file(outfile);
-      *g.log << "wrote " << in.length() << " to "
-	     << outfile << std::endl;
+      if (!g.concise)
+	*g.log << "wrote " << in.length() << " to "
+	       << outfile << std::endl;
     }
   }
   else {
-    *g.log << "got " << in.length() << " byte payload; 'print' "
-      << "to dump to terminal, or add '>-' to command." << std::endl;
+    if (!g.concise)
+      *g.log << "got " << in.length() << " byte payload; 'print' "
+	     << "to dump to terminal, or add '>-' to command." << std::endl;
   }
   return 0;
 }
