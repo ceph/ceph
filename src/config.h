@@ -234,6 +234,7 @@ struct md_config_t {
   float mds_cache_mid;
   int   mds_mem_max;
   float mds_dir_commit_ratio;
+  int   mds_dir_max_commit_size;
   
   float mds_decay_halflife;
 

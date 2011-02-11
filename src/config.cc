@@ -356,6 +356,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_cache_mid, 0, OPT_FLOAT, .7),
 	OPTION(mds_mem_max, 0, OPT_INT, 1048576),        // KB
 	OPTION(mds_dir_commit_ratio, 0, OPT_FLOAT, .5),
+	OPTION(mds_dir_max_commit_size, 0, OPT_INT, 90), // MB
 	OPTION(mds_decay_halflife, 0, OPT_FLOAT, 5),
 	OPTION(mds_beacon_interval, 0, OPT_FLOAT, 4),
 	OPTION(mds_beacon_grace, 0, OPT_FLOAT, 15),
