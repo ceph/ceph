@@ -21,7 +21,7 @@ class ExportControl {
 	void _cleanup();	
 	ExportEntry *_find(entity_addr_t *addr, const char *path);
 public:
-	ExportControl() : lock("ExportControl") {}
+	ExportControl() : lock("ExportControl", false, false, false) {}
 	~ExportControl();
 
 	void load(ConfFile *cf);

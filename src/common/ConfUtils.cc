@@ -483,7 +483,8 @@ void ConfFile::common_init()
   default_global = true;
 }
 
-ConfFile::ConfFile(const char *fname) : parse_lock("ConfFile::parse_lock")
+ConfFile::ConfFile(const char *fname)
+  : parse_lock("ConfFile::parse_lock", false, false, false)
 {
   common_init();
 
@@ -493,7 +494,8 @@ ConfFile::ConfFile(const char *fname) : parse_lock("ConfFile::parse_lock")
     filename = NULL;
 }
 
-ConfFile::ConfFile(ceph::bufferlist *_pbl) : parse_lock("ConfFile::parse_lock")
+ConfFile::ConfFile(ceph::bufferlist *_pbl)
+  : parse_lock("ConfFile::parse_lock", false, false, false)
 {
   common_init();
   pbl =  _pbl;
