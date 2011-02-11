@@ -13,11 +13,12 @@
  */
 
 
-#include "config.h"
-#include "common/errno.h"
-#include "include/types.h"
 #include "armor.h"
+#include "common/errno.h"
+#include "common/safe_io.h"
+#include "config.h"
 #include "include/Spinlock.h"
+#include "include/types.h"
 
 #include <errno.h>
 #include <fstream>
@@ -93,7 +94,6 @@ void buffer::list::rebuild_page_aligned()
 
 int buffer::list::read_file(const char *fn, bool silent)
 {
-  struct stat st;
   int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY));
   if (fd < 0) {
     int err = errno;
@@ -102,40 +102,33 @@ int buffer::list::read_file(const char *fn, bool silent)
     }
     return -err;
   }
+
+  struct stat st;
+  memset(&st, 0, sizeof(st));
   ::fstat(fd, &st);
+
   int s = ROUND_UP_TO(st.st_size, PAGE_SIZE);
   bufferptr bp = buffer::create_page_aligned(s);
-  int left = st.st_size;
-  int got = 0;
-  while (left > 0) {
-    int r = ::read(fd, (void *)(bp.c_str() + got), left);
-    if (r == 0) {
+
+  ssize_t ret = safe_read(fd, (void*)bp.c_str(), st.st_size);
+  if (ret < 0) {
+      if (!silent) {
+	derr << "bufferlist::read_file(" << fn << "): read error:"
+	     << cpp_strerror(ret) << dendl;
+      }
+      TEMP_FAILURE_RETRY(::close(fd));
+      return ret;
+  }
+  else if (ret != st.st_size) {
       // Premature EOF.
       // Perhaps the file changed between stat() and read()?
       if (!silent) {
 	derr << "bufferlist::read_file(" << fn << "): warning: got premature "
 	     << "EOF:" << dendl;
       }
-      break;
-    }
-    else if (r < 0) {
-      int err = errno;
-      if (err == EINTR) {
-	// ignore EINTR, 'tis a silly error
-	continue;
-      }
-      if (!silent) {
-	derr << "bufferlist::read_file(" << fn << "): read error:"
-	     << cpp_strerror(err) << dendl;
-      }
-      TEMP_FAILURE_RETRY(::close(fd));
-      return -err;
-    }
-    got += r;
-    left -= r;
   }
   TEMP_FAILURE_RETRY(::close(fd));
-  bp.set_length(got);
+  bp.set_length(ret);
   append(bp);
   return 0;
 }
