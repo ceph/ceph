@@ -453,6 +453,8 @@ public:
   int num_inodes_with_caps;
   int num_caps;
 
+  unsigned max_dir_commit_size;
+
   ceph_file_layout default_file_layout;
   ceph_file_layout default_log_layout;
 

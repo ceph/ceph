@@ -128,6 +128,10 @@ MDCache::MDCache(MDS *m)
   num_inodes_with_caps = 0;
   num_caps = 0;
 
+  max_dir_commit_size = g_conf.mds_dir_max_commit_size ?
+                        (g_conf.mds_dir_max_commit_size << 20) :
+                        (0.9 *(g_conf.osd_max_write_size << 20));
+
   discover_last_tid = 0;
 
   last_cap_id = 0;
