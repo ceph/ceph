@@ -612,6 +612,8 @@ libclient_a_SOURCES = \
 dist-hook:
 	$(srcdir)/check_version $(srcdir)/.git_version
 
+python_PYTHON = pybind/rados.py
+
 # headers... and everything else we want to include in a 'make dist' 
 # that autotools doesn't magically identify.
 noinst_HEADERS = \

@@ -228,6 +228,9 @@ AS_IF([test "x$try_with_gtk2" != "xno"],
                  AC_MSG_RESULT([Sorry, a usable version of gtkmm was not found. We will build without it.])])])
 AM_CONDITIONAL(WITH_GTK2, [test "x$try_with_gtk2" != "xno"])
 
+AM_PATH_PYTHON([2.4],
+	[], [AC_MSG_FAILURE([Failed to find Python 2.4 or newer])])
+
 AC_CONFIG_HEADERS([src/acconfig.h])
 AC_CONFIG_FILES([Makefile
 	src/Makefile
