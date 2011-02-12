@@ -168,16 +168,17 @@ int main(int argc, const char **argv, const char *envp[]) {
     ::close(fd[1]);
 
     int r = -1;
-    ::read(fd[0], &r, sizeof(r));
-    if (r == 0) {
+    int err = safe_read_exact(fd[0], &r, sizeof(r));
+    if (err == 0 && r == 0) {
       // close stdout, etc.
       //cout << "success" << std::endl;
       ::close(0);
       ::close(1);
       ::close(2);
-    } else {
+    } else if (err)
+      cerr << "cfuse[" << getpid() << "]: mount failed: " << strerror(-err) << std::endl;
+    else
       cerr << "cfuse[" << getpid() << "]: mount failed: " << strerror(-r) << std::endl;
-    }
     return r;
   }
 }
