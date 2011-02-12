@@ -61,13 +61,10 @@ void test_ls(rbd_pool_t pool, size_t num_expected, ...)
   va_list ap;
   size_t max_size = 1024;
   names = (char *) malloc(sizeof(char *) * 1024);
-  int r = printf("names is %x\n", names);
-  assert(r >= 0);
+  printf("names is %p\n", names);
   num_images = rbd_list(pool, names, &max_size);
-  r = printf("names is %x\n", names);
-  assert(r >= 0);
-  r = printf("num images is: %d\nexpected: %d\n", num_images, num_expected);
-  assert(r >= 0);
+  printf("names is %p\n", names);
+  printf("num images is: %d\nexpected: %d\n", num_images, (int)num_expected);
   assert(num_images >= 0);
   assert(num_images == num_expected);
 
