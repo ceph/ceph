@@ -79,6 +79,10 @@ protected:
   virtual int_type underflow();
 
 private:
+  void dout_emergency_impl(const char * const str) const;
+  friend void dout_emergency(const char * const str);
+  friend void dout_emergency(const std::string &str);
+
   void _clear_output_buffer();
   std::string _calculate_opath() const;
   std::string _get_symlink_dir() const;
@@ -99,5 +103,10 @@ private:
   std::string isym_path;
   std::string rsym_path;
 };
+
+// Secret evil interfaces for writing logs without taking the lock.
+// DO NOT USE THESE unless you have a really good reason.
+extern void dout_emergency(const char * const str);
+extern void dout_emergency(const std::string &str);
 
 #endif

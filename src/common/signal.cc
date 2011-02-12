@@ -39,9 +39,11 @@ void install_sighandler(int signum, signal_handler_t handler, int flags)
 
   ret = sigaction(signum, &act, &oldact);
   if (ret != 0) {
-    *_dout << "install_sighandler: sigaction returned " << ret << " when "
-         << "trying to install a signal handler for "
-	 << sys_siglist[signum] << "\n";
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "install_sighandler: sigaction returned "
+	    "%d when trying to install a signal handler for %s\n",
+	     ret, sys_siglist[signum]);
+    dout_emergency(buf);
     exit(1);
   }
 }
@@ -59,29 +61,35 @@ static void handle_fatal_signal(int signum)
   // This code may itself trigger a SIGSEGV if the heap is corrupt. In that
   // case, SA_RESETHAND specifies that the default signal handler--
   // presumably dump core-- will handle it.
-  *_dout << "*** Caught signal (" << sys_siglist[signum] << ") ***"
-	 << std::endl;
-  *_dout << "in thread " << std::hex << pthread_self() << std::endl;
+  char buf[1024];
+  snprintf(buf, sizeof(buf), "*** Caught signal (%s) **\n "
+	    "in thread %p\n", sys_siglist[signum], (void*)pthread_self());
+  dout_emergency(buf);
+
+  // TODO: don't use an ostringstream here. It could call malloc(), which we
+  // don't want inside a signal handler.
+  // Also fix the backtrace code not to allocate memory.
   BackTrace bt(0);
-  bt.print(*_dout);
-  _dout->flush();
+  ostringstream oss;
+  bt.print(oss);
+  dout_emergency(oss.str());
 
   // Use default handler to dump core
   int ret = raise(signum);
 
   // Normally, we won't get here. If we do, something is very weird.
   if (ret) {
-    *_dout << "handle_fatal_signal: failed to re-raise signal " << signum
-	   << std::endl;
+    snprintf(buf, sizeof(buf), "handle_fatal_signal: failed to re-raise "
+	    "signal %d\n", signum);
+    dout_emergency(buf);
   }
   else {
-    *_dout << "handle_fatal_signal: default handler for signal " << signum
-	   << " didn't terminate the process?" << std::endl;
+    snprintf(buf, sizeof(buf), "handle_fatal_signal: default handler for "
+	    "signal %d didn't terminate the process?\n", signum);
+    dout_emergency(buf);
   }
   exit(1);
 }
-
-#include <syslog.h>
 
 std::string signal_mask_to_str()
 {

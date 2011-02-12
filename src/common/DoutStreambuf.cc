@@ -35,6 +35,8 @@
 #define TIME_FMT_SZ 26
 
 ///////////////////////////// Globals /////////////////////////////
+extern DoutStreambuf <char> *_doss;
+
 // TODO: get rid of this lock using thread-local storage
 extern Mutex _dout_lock;
 
@@ -97,16 +99,6 @@ static inline int dout_prio_to_syslog_prio(int prio)
   return LOG_DEBUG;
 }
 
-/* Complain about errors even without a logfile */
-static void primitive_log(const std::string &str)
-{
-  if (safe_write(STDERR_FILENO, str.c_str(), str.size())) {
-    // ignore errors
-    ;
-  }
-  syslog(LOG_USER | LOG_NOTICE, "%s", str.c_str());
-}
-
 static std::string get_basename(const std::string &filename)
 {
   size_t last_slash = filename.find_last_of("/");
@@ -143,7 +135,7 @@ static int create_symlink(string oldpath, const string &newpath)
 	ostringstream oss;
 	oss << __func__ << ": failed to remove '" << newpath << "': "
 	    << cpp_strerror(err) << "\n";
-	primitive_log(oss.str());
+	dout_emergency(oss.str());
 	return err;
       }
     }
@@ -152,7 +144,7 @@ static int create_symlink(string oldpath, const string &newpath)
       ostringstream oss;
       oss << __func__ << ": failed to symlink(oldpath='" << oldpath
 	  << "', newpath='" << newpath << "'): " << cpp_strerror(err) << "\n";
-      primitive_log(oss.str());
+      dout_emergency(oss.str());
       return err;
     }
   }
@@ -281,7 +273,7 @@ void DoutStreambuf<charT, traits>::read_global_config()
 	ostringstream oss;
 	oss << "DoutStreambuf::read_global_config: can't understand "
 	    << "g_conf.log_to_stderr = " << g_conf.log_to_stderr << "\n";
-	primitive_log(oss.str());
+	dout_emergency(oss.str());
 	break;
     }
   }
@@ -321,7 +313,7 @@ int DoutStreambuf<charT, traits>::handle_pid_change()
     if (ret) {
       ostringstream oss;
       oss << __func__ << ": failed to (re)create instance symlink\n";
-      primitive_log(oss.str());
+      dout_emergency(oss.str());
       return ret;
     }
   }
@@ -332,7 +324,7 @@ int DoutStreambuf<charT, traits>::handle_pid_change()
     if (ret) {
       ostringstream oss;
       oss << __func__ << ": failed to (re)create rank symlink\n";
-      primitive_log(oss.str());
+      dout_emergency(oss.str());
       return ret;
     }
   }
@@ -343,7 +335,7 @@ int DoutStreambuf<charT, traits>::handle_pid_change()
     ostringstream oss;
     oss << __func__ << ": failed to rename '" << opath << "' to "
         << "'" << new_opath << "': " << cpp_strerror(err) << "\n";
-    primitive_log(oss.str());
+    dout_emergency(oss.str());
     return err;
   }
 
@@ -369,7 +361,7 @@ int DoutStreambuf<charT, traits>::create_rank_symlink(int n)
     ostringstream oss;
     oss << __func__ << ": failed to create rank symlink with n = "
 	<< n << "\n";
-    primitive_log(oss.str());
+    dout_emergency(oss.str());
     return ret;
   }
 
@@ -453,7 +445,7 @@ std::string DoutStreambuf<charT, traits>::_calculate_opath() const
       int err = errno;
       ostringstream oss;
       oss << __func__ << ": error calling gethostname: " << cpp_strerror(err) << "\n";
-      primitive_log(oss.str());
+      dout_emergency(oss.str());
       return "";
     }
     ostringstream oss;
@@ -487,7 +479,7 @@ int DoutStreambuf<charT, traits>::_read_ofile_config()
   if (opath.empty()) {
     ostringstream oss;
     oss << __func__ << ": _calculate_opath failed.\n";
-    primitive_log(oss.str());
+    dout_emergency(oss.str());
     return 1;
   }
 
@@ -503,7 +495,7 @@ int DoutStreambuf<charT, traits>::_read_ofile_config()
     if (ret) {
       ostringstream oss;
       oss << __func__ << ": failed to rotate instance symlinks\n";
-      primitive_log(oss.str());
+      dout_emergency(oss.str());
       return ret;
     }
 
@@ -512,7 +504,7 @@ int DoutStreambuf<charT, traits>::_read_ofile_config()
     if (ret) {
       ostringstream oss;
       oss << __func__ << ": failed to create instance symlink\n";
-      primitive_log(oss.str());
+      dout_emergency(oss.str());
       return ret;
     }
   }
@@ -525,7 +517,7 @@ int DoutStreambuf<charT, traits>::_read_ofile_config()
     ostringstream oss;
     oss << "failed to open log file '" << opath << "': "
 	<< cpp_strerror(err) << "\n";
-    primitive_log(oss.str());
+    dout_emergency(oss.str());
     return err;
   }
 
@@ -580,7 +572,7 @@ int DoutStreambuf<charT, traits>::_rotate_files(const std::string &base)
 	ostringstream ess;
 	ess << __func__ << ": failed to unlink '" << path << "': "
 	    << cpp_strerror(err) << "\n";
-	primitive_log(ess.str());
+	dout_emergency(ess.str());
 	return err;
       }
       //*_dout << "---- " << getpid() << " removed " << path << " ----"
@@ -595,7 +587,7 @@ int DoutStreambuf<charT, traits>::_rotate_files(const std::string &base)
 	ostringstream ess;
 	ess << __func__ << ": failed to rename '" << path << "' to "
 	    << "'" << new_path << "': " << cpp_strerror(err) << "\n";
-	primitive_log(ess.str());
+	dout_emergency(ess.str());
 	return err;
       }
 //      *_dout << "---- " << getpid() << " renamed " << path << " -> "
@@ -603,6 +595,46 @@ int DoutStreambuf<charT, traits>::_rotate_files(const std::string &base)
     }
   }
   return 0;
+}
+
+template <typename charT, typename traits>
+void DoutStreambuf<charT, traits>::
+dout_emergency_impl(const char * const str) const
+{
+  int len = strlen(str);
+  if (ofd >= 0) {
+    if (safe_write(ofd, str, len)) {
+      ; // ignore error code
+    }
+  }
+  if (flags & DOUTSB_FLAG_SYSLOG) {
+    syslog(LOG_USER | LOG_CRIT, "%s", str);
+  }
+}
+
+/* This function may be called from a signal handler.
+ * This function may be called before dout has been initialized.
+ */
+void dout_emergency(const char * const str)
+{
+  int len = strlen(str);
+  if (safe_write(STDERR_FILENO, str, len)) {
+    // ignore errors
+    ;
+  }
+  if (safe_write(STDOUT_FILENO, str, len)) {
+    ; // ignore error code
+  }
+  /* Normally we would take the lock before even checking _doss, but since
+   * this is an emergency, we can't do that. */
+  if (_doss) {
+    _doss->dout_emergency_impl(str);
+  }
+}
+
+void dout_emergency(const std::string &str)
+{
+  dout_emergency(str.c_str());
 }
 
 // Explicit template instantiation
