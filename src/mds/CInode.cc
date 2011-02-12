@@ -1018,7 +1018,7 @@ void CInode::build_backtrace(inode_backtrace_t& bt)
   }
 }
 
-void CInode::encode_parent_mutation(ObjectOperation& m)
+unsigned CInode::encode_parent_mutation(ObjectOperation& m)
 {
   string path;
   make_path_string(path);
@@ -1030,6 +1030,7 @@ void CInode::encode_parent_mutation(ObjectOperation& m)
   bufferlist parent;
   ::encode(bt, parent);
   m.setxattr("parent", parent);
+  return path.length() + parent.length();
 }
 
 struct C_Inode_StoredParent : public Context {

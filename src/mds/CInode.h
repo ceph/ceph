@@ -559,7 +559,7 @@ private:
   void _stored_parent(version_t v, Context *fin);
 
   void build_backtrace(inode_backtrace_t& bt);
-  void encode_parent_mutation(ObjectOperation& m);
+  unsigned encode_parent_mutation(ObjectOperation& m);
 
   void encode_store(bufferlist& bl) {
     __u8 struct_v = 2;

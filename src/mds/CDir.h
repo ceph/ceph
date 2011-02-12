@@ -473,8 +473,11 @@ private:
   void commit_to(version_t want);
   void commit(version_t want, Context *c, bool ignore_authpinnability=false);
   void _commit(version_t want);
-  void _commit_full(ObjectOperation& m, const set<snapid_t> *snaps);
-  void _commit_partial(ObjectOperation& m, const set<snapid_t> *snaps);
+  map_t::iterator _commit_full(ObjectOperation& m, const set<snapid_t> *snaps,
+                           unsigned max_write_size=-1);
+  map_t::iterator _commit_partial(ObjectOperation& m, const set<snapid_t> *snaps,
+                       unsigned max_write_size=-1,
+                       map_t::iterator last_committed_dn=map_t::iterator());
   void _encode_dentry(CDentry *dn, bufferlist& bl, const set<snapid_t> *snaps);
   void _committed(version_t v, version_t last_renamed_version);
   void wait_for_commit(Context *c, version_t v=0);
