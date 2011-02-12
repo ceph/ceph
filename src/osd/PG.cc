@@ -546,7 +546,7 @@ void PG::search_for_missing(const Info &oinfo, const Missing *omissing,
 
     map<sobject_t, set<int> >::iterator ml = missing_loc.find(soid);
     if (ml == missing_loc.end()) {
-      hash_map<sobject_t, list<class Message*> >::iterator wmo =
+      map<sobject_t, list<class Message*> >::iterator wmo =
 	waiting_for_missing_object.find(soid);
       if (wmo != waiting_for_missing_object.end()) {
 	osd->take_waiters(wmo->second);
@@ -993,7 +993,7 @@ void PG::mark_obj_as_lost(ObjectStore::Transaction& t,
 {
   // Wake anyone waiting for this object. Now that it's been marked as lost,
   // we will just return an error code.
-  hash_map<sobject_t, list<class Message*> >::iterator wmo =
+  map<sobject_t, list<class Message*> >::iterator wmo =
     waiting_for_missing_object.find(lost_soid);
   if (wmo != waiting_for_missing_object.end()) {
     osd->take_waiters(wmo->second);
@@ -1320,8 +1320,6 @@ void PG::clear_primary_state()
 
   missing_loc.clear();
   log.reset_recovery_pointers();
-
-  stat_object_temp_rd.clear();
 
   scrub_reserved_peers.clear();
   peer_scrub_map.clear();
@@ -2730,9 +2728,9 @@ bool PG::block_if_wrlocked(MOSDOp* op, object_info_t& oi)
   return false; //the object wasn't locked, so the operation can be handled right away
 }
 
-void PG::take_object_waiters(hash_map<sobject_t, list<Message*> >& m)
+void PG::take_object_waiters(map<sobject_t, list<Message*> >& m)
 {
-  for (hash_map<sobject_t, list<Message*> >::iterator it = m.begin();
+  for (map<sobject_t, list<Message*> >::iterator it = m.begin();
        it != m.end();
        it++)
     osd->take_waiters(it->second);
