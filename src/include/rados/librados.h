@@ -25,7 +25,7 @@ extern "C" {
 
 #define LIBRADOS_SUPPORTS_WATCH 1
 
-typedef void *rados_cluster_t;
+typedef void *rados_t;
 typedef void *rados_pool_t;
 typedef void *rados_list_ctx_t;
 typedef uint64_t rados_snap_t;
@@ -48,46 +48,52 @@ struct rados_statfs_t {
 };
 
 
-void librados_version(int *major, int *minor, int *extra);
+void rados_version(int *major, int *minor, int *extra);
 
 /* initialization */
-int rados_initialize(int argc, const char **argv, rados_cluster_t *cluster); /* arguments are optional */
-void rados_deinitialize(rados_cluster_t cluster);
+int rados_init(rados_t *cluster);
+void rados_release(rados_t cluster);
+
+/* config */
+int rados_conf_parse_argv(rados_t cluster, int argc, const char **argv);
+int rados_conf_read_file(rados_t cluster, const char *path);
+int rados_conf_set(rados_t cluster, const char *option, const char *value);
+const char *rados_conf_get(rados_t cluster, const char *option);
 
 /* pools */
-int rados_open_pool(rados_cluster_t cluster, const char *name, rados_pool_t *pool);
-int rados_close_pool(rados_pool_t pool);
-int rados_lookup_pool(rados_cluster_t cluster, const char *name);
+int rados_pool_open(rados_t cluster, const char *name, rados_pool_t *pool);
+int rados_pool_close(rados_pool_t pool);
+int rados_pool_lookup(rados_t cluster, const char *name);
 
-int rados_stat_pool(rados_pool_t pool, struct rados_pool_stat_t *stats);
+int rados_pool_stat(rados_pool_t pool, struct rados_pool_stat_t *stats);
 
-void rados_set_snap(rados_pool_t pool, rados_snap_t snap);
-int rados_set_snap_context(rados_pool_t pool, rados_snap_t seq, rados_snap_t *snaps, int num_snaps);
+void rados_snap_set_read(rados_pool_t pool, rados_snap_t snap);
+int rados_snap_set_write_context(rados_pool_t pool, rados_snap_t seq, rados_snap_t *snaps, int num_snaps);
 
-int rados_create_pool(rados_cluster_t cluster, const char *name);
-int rados_create_pool_with_auid(rados_cluster_t cluster, const char *name, uint64_t auid);
-int rados_create_pool_with_crush_rule(rados_cluster_t cluster, const char *name, __u8 crush_rule);
-int rados_create_pool_with_all(rados_cluster_t cluster, const char *name, uint64_t auid,
+int rados_pool_create(rados_t cluster, const char *name);
+int rados_pool_create_with_auid(rados_t cluster, const char *name, uint64_t auid);
+int rados_pool_create_with_crush_rule(rados_t cluster, const char *name, __u8 crush_rule);
+int rados_pool_create_with_all(rados_t cluster, const char *name, uint64_t auid,
 			       __u8 crush_rule);
-int rados_delete_pool(rados_pool_t pool);
-int rados_change_pool_auid(rados_pool_t pool, uint64_t auid);
+int rados_pool_delete(rados_pool_t pool);
+int rados_pool_set_auid(rados_pool_t pool, uint64_t auid);
 
 /* objects */
-int rados_list_objects_open(rados_pool_t pool, rados_list_ctx_t *ctx);
-int rados_list_objects_next(rados_list_ctx_t ctx, const char **entry);
-void rados_list_objects_close(rados_list_ctx_t ctx);
+int rados_objects_list_open(rados_pool_t pool, rados_list_ctx_t *ctx);
+int rados_object_list_next(rados_list_ctx_t ctx, const char **entry);
+void rados_objects_list_close(rados_list_ctx_t ctx);
 
 
 /* snapshots */
-int rados_snap_create(rados_pool_t pool, const char *snapname);
-int rados_snap_remove(rados_pool_t pool, const char *snapname);
-int rados_snap_rollback_object(rados_pool_t pool, const char *oid,
+int rados_pool_snap_create(rados_pool_t pool, const char *snapname);
+int rados_pool_snap_remove(rados_pool_t pool, const char *snapname);
+int rados_pool_snap_rollback_object(rados_pool_t pool, const char *oid,
 			  const char *snapname);
-int rados_selfmanaged_snap_create(rados_pool_t pool, uint64_t *snapid);
-int rados_selfmanaged_snap_remove(rados_pool_t pool, uint64_t snapid);
-int rados_snap_list(rados_pool_t pool, rados_snap_t *snaps, int maxlen);
-int rados_snap_lookup(rados_pool_t pool, const char *name, rados_snap_t *id);
-int rados_snap_get_name(rados_pool_t pool, rados_snap_t id, char *name, int maxlen);
+int rados_pool_selfmanaged_snap_create(rados_pool_t pool, uint64_t *snapid);
+int rados_pool_selfmanaged_snap_remove(rados_pool_t pool, uint64_t snapid);
+int rados_pool_snap_list(rados_pool_t pool, rados_snap_t *snaps, int maxlen);
+int rados_pool_snap_lookup(rados_pool_t pool, const char *name, rados_snap_t *id);
+int rados_pool_snap_get_name(rados_pool_t pool, rados_snap_t id, char *name, int maxlen);
 
 /* sync io */
 uint64_t rados_get_last_version(rados_pool_t pool);

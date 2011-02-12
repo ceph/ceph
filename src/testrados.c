@@ -21,11 +21,14 @@
 int main(int argc, const char **argv) 
 {
   int i, r;
+  rados_t cl;
 
-  if (rados_initialize(argc, argv) < 0) {
+  if (rados_init(&cl) < 0) {
     printf("error initializing\n");
     exit(1);
   }
+
+  rados_conf_parse_argv(cl, argc, argv);
 
   /* create a pool */
   r = rados_create_pool("foo");

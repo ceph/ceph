@@ -68,7 +68,7 @@ int main(int argc, const char **argv)
 
   if (opt_version) {
     int maj, min, ext;
-    librados_version(&maj, &min, &ext);
+    rados_version(&maj, &min, &ext);
     cout << maj << "." << min << "." << ext << std::endl;
   } else if (opt_vernum) {
     cout << hex << LIBRADOS_VERSION_CODE << dec << std::endl;

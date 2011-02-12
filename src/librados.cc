@@ -1834,7 +1834,7 @@ void Rados::shutdown()
 
 void Rados::version(int *major, int *minor, int *extra)
 {
-  librados_version(major, minor, extra);
+  rados_version(major, minor, extra);
 }
 
 int Rados::list_pools(std::list<string>& v)
@@ -2345,51 +2345,44 @@ void Rados::set_notify_timeout(pool_t pool, uint32_t timeout)
 
 // ---------------------------------------------
 
-static void __rados_init(int argc, const char *argv[])
-{
-  vector<const char*> args;
-
-  if (argc && argv) {
-    argv_to_vec(argc, argv, args);
-    env_to_vec(args);
-  }
-  common_set_defaults(false);
-  common_init(args, "librados", STARTUP_FLAG_INIT_KEYS);
-}
-
 static Mutex rados_init_mutex("rados_init");
 static int rados_initialized = 0;
 
-extern "C" int rados_initialize(int argc, const char **argv, rados_cluster_t *pcluster) 
+extern "C" int rados_init(rados_t *pcluster) 
 {
   int ret = 0;
 
   rados_init_mutex.Lock();
-
   if (!rados_initialized) {
-    __rados_init(argc, argv);
-   ++rados_initialized;
+    // parse environment
+    vector<const char*> args;
+    env_to_vec(args);
+
+    common_set_defaults(false);
+    common_init(args, "librados", STARTUP_FLAG_INIT_KEYS);
+
+    ++rados_initialized;
   }
-  
+  rados_init_mutex.Unlock();
+
   RadosClient *radosp = new RadosClient;
   ret = radosp->init();
-  if (ret < 0)
-    goto done;
-  *pcluster = (void *)radosp;
-
-done:
-  rados_init_mutex.Unlock();
+  if (ret < 0) {
+    delete radosp;
+  } else {
+    *pcluster = (void *)radosp;
+  }
   return ret;
 }
 
-extern "C" void rados_deinitialize(rados_cluster_t cluster)
+extern "C" void rados_release(rados_t cluster)
 {
   RadosClient *radosp = (RadosClient *)cluster;
   radosp->shutdown();
   delete radosp;
 }
 
-extern "C" void librados_version(int *major, int *minor, int *extra)
+extern "C" void rados_version(int *major, int *minor, int *extra)
 {
   if (major)
     *major = LIBRADOS_VER_MAJOR;
@@ -2399,13 +2392,43 @@ extern "C" void librados_version(int *major, int *minor, int *extra)
     *extra = LIBRADOS_VER_EXTRA;
 }
 
-extern "C" int rados_lookup_pool(rados_cluster_t cluster, const char *name)
+
+// -- config --
+extern "C" int rados_conf_parse_argv(rados_t cluster, int argc, const char **argv)
+{
+  vector<const char*> args;
+
+  argv_to_vec(argc, argv, args);
+  common_init(args, "librados", STARTUP_FLAG_INIT_KEYS);
+
+  return 0;
+}
+
+
+extern "C" int rados_conf_read_file(rados_t cluster, const char *path)
+{
+  return 0;
+}
+
+extern "C" int rados_conf_set(rados_t cluster, const char *option, const char *value)
+{
+  return 0;
+}
+
+extern "C" const char *rados_conf_get(rados_t cluster, const char *option)
+{
+  return 0;
+}
+
+
+
+extern "C" int rados_lookup_pool(rados_t cluster, const char *name)
 {
   RadosClient *radosp = (RadosClient *)cluster;
   return radosp->lookup_pool(name);
 }
 
-extern "C" int rados_open_pool(rados_cluster_t cluster, const char *name, rados_pool_t *pool)
+extern "C" int rados_open_pool(rados_t cluster, const char *name, rados_pool_t *pool)
 {
   RadosClient *radosp = (RadosClient *)cluster;
   int poolid = radosp->lookup_pool(name);
@@ -2532,21 +2555,21 @@ extern "C" uint64_t rados_get_last_version(rados_pool_t pool)
   return ver.version;
 }
 
-extern "C" int rados_create_pool(rados_cluster_t cluster, const char *name)
+extern "C" int rados_create_pool(rados_t cluster, const char *name)
 {
   RadosClient *radosp = (RadosClient *)cluster;
   string sname(name);
   return radosp->create_pool(sname);
 }
 
-extern "C" int rados_create_pool_with_auid(rados_cluster_t cluster, const char *name, uint64_t auid)
+extern "C" int rados_create_pool_with_auid(rados_t cluster, const char *name, uint64_t auid)
 {
   RadosClient *radosp = (RadosClient *)cluster;
   string sname(name);
   return radosp->create_pool(sname, auid);
 }
 
-extern "C" int rados_create_pool_with_crush_rule(rados_cluster_t cluster, const char *name,
+extern "C" int rados_create_pool_with_crush_rule(rados_t cluster, const char *name,
 						 __u8 crush_rule)
 {
   RadosClient *radosp = (RadosClient *)cluster;
@@ -2554,7 +2577,7 @@ extern "C" int rados_create_pool_with_crush_rule(rados_cluster_t cluster, const 
   return radosp->create_pool(sname, 0, crush_rule);
 }
 
-extern "C" int rados_create_pool_with_all(rados_cluster_t cluster, const char *name, uint64_t auid,
+extern "C" int rados_create_pool_with_all(rados_t cluster, const char *name, uint64_t auid,
 					  __u8 crush_rule)
 {
   RadosClient *radosp = (RadosClient *)cluster;
