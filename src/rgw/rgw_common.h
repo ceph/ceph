@@ -189,6 +189,10 @@ struct req_state {
    const char *copy_source;
    const char *http_auth;
 
+   int prot_flags;
+
+   const char *os_auth_token;
+
    req_state() : acl(NULL) {}
 };
 

@@ -462,6 +462,12 @@ int main(int argc, const char **argv)
       return 1;
     }
     cout << "successfully created pool " << nargs[1] << std::endl;
+    pool_t p;
+    rados.open_pool(nargs[1], &p);
+    string s("lala");
+    rados.create(p, s, true);
+    rados.close_pool(p);
+    cout << "created object" << std::endl;
   }
   else if (strcmp(nargs[0], "rmpool") == 0) {
     if (nargs.size() < 2)

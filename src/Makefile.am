@@ -280,13 +280,14 @@ libradosgw_a_SOURCES = \
 	rgw/rgw_op.cc \
 	rgw/rgw_rest.cc \
 	rgw/rgw_common.cc \
-	rgw/rgw_cache.cc
+	rgw/rgw_cache.cc \
+	rgw/rgw_os.cc
 libradosgw_a_CFLAGS = ${AM_CFLAGS}
 libradosgw_a_CXXFLAGS = ${AM_CXXFLAGS}
 # lib_LTLIBRARIES += libradosgw.a
 
 radosgw_SOURCES = rgw/rgw_main.cc
-radosgw_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lexpat -lpthread -lm $(CRYPTOPP_LIBS)
+radosgw_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lexpat -lpthread -lm $(CRYPTOPP_LIBS) -lcurl
 radosgw_CXXFLAGS = ${AM_CXXFLAGS}
 radosgw_admin_SOURCES = rgw/rgw_admin.cc
 radosgw_admin_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lexpat -lpthread -lm $(CRYPTOPP_LIBS)

@@ -11,6 +11,8 @@
 #include <cryptopp/sha.h>
 #include <cryptopp/hmac.h>
 
+#include <curl/curl.h>
+
 #include "fcgiapp.h"
 
 #include "rgw_common.h"
@@ -19,6 +21,7 @@
 #include "rgw_user.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
+#include "rgw_os.h"
 
 #include <map>
 #include <string>
@@ -149,6 +152,9 @@ static bool verify_signature(struct req_state *s)
   string auth_id;
   string auth_sign;
 
+  if (s->prot_flags & RGW_REST_OPENSTACK)
+    return rgw_verify_os_token(s);
+
   if (!s->http_auth || !(*s->http_auth)) {
     auth_id = s->args.get("AWSAccessKeyId");
     if (auth_id.size()) {
@@ -248,6 +254,8 @@ int main(int argc, char *argv[])
   struct req_state s;
   struct fcgx_state fcgx;
   RGWHandler_REST rgwhandler;
+
+  curl_global_init(CURL_GLOBAL_ALL);
 
   if (!RGWAccess::init_storage_provider("rados", argc, argv)) {
     cerr << "Couldn't init storage provider (RADOS)" << endl;

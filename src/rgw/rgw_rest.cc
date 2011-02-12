@@ -461,6 +461,22 @@ void RGWPutACLs_REST::send_response()
   dump_start_xml(s);
 }
 
+static void next_tok(string& str, string& tok, char delim)
+{
+  if (str.size() == 0) {
+    tok = "";
+    return;
+  }
+  tok = str;
+  int pos = str.find(delim);
+  if (pos > 0) {
+    tok = str.substr(0, pos);
+    str = str.substr(pos + 1);
+  } else {
+    str = "";
+  }
+}
+
 void init_entities_from_header(struct req_state *s)
 {
   const char *gateway_dns_name;
@@ -519,8 +535,27 @@ void init_entities_from_header(struct req_state *s)
   pos = req.find('/');
   if (pos >= 0) {
     first = req.substr(0, pos);
+    if (first.compare("v1") == 0) /* FIXME: replace v1 with other token */
+      s->prot_flags |= RGW_REST_OPENSTACK;
   } else {
     first = req;
+  }
+
+  if (s->prot_flags & RGW_REST_OPENSTACK) {
+    string ver;
+    string auth_key;
+
+    RGW_LOG(10) << "before2" << std::endl;
+    next_tok(req, ver, '/');
+    RGW_LOG(10) << "ver=" << ver << std::endl;
+    next_tok(req, auth_key, '/');
+    RGW_LOG(10) << "auth_key=" << auth_key << std::endl;
+    s->os_auth_token = FCGX_GetParam("HTTP_X_AUTH_TOKEN", s->fcgx->envp);
+    next_tok(req, first, '/');
+
+    RGW_LOG(10) << "ver=" << ver << " auth_key=" << auth_key << " first=" << first << " req=" << req << std::endl;
+    if (first.size() == 0)
+      return;
   }
 
   if (!s->bucket) {
@@ -642,6 +677,7 @@ void RGWHandler_REST::provider_init_state()
   s->query = FCGX_GetParam("QUERY_STRING", s->fcgx->envp);
   s->length = FCGX_GetParam("CONTENT_LENGTH", s->fcgx->envp);
   s->content_type = FCGX_GetParam("CONTENT_TYPE", s->fcgx->envp);
+  s->prot_flags = 0;
 
   if (!s->method)
     s->op = OP_UNKNOWN;

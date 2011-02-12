@@ -124,6 +124,8 @@ bool url_decode(string& src_str, string& dest_str)
   int pos = 0;
   char c;
 
+  RGW_LOG(10) << "src=" << (void *)src << std::endl;
+
   while (*src) {
     if (*src != '%') {
       if (*src != '+') {
