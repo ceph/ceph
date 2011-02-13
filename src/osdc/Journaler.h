@@ -222,7 +222,8 @@ private:
   // only init_headers when following or first reading off-disk
   void init_headers(Header& h) {
     assert(readonly ||
-           state == STATE_READHEAD);
+           state == STATE_READHEAD ||
+           state == STATE_REREADHEAD);
     last_written = last_committed = h;
   }
 
