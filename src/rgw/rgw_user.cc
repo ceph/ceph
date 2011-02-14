@@ -13,6 +13,7 @@ using namespace std;
 
 static string ui_bucket = USER_INFO_BUCKET_NAME;
 static string ui_email_bucket = USER_INFO_EMAIL_BUCKET_NAME;
+static string ui_openstack_bucket = USER_INFO_OPENSTACK_BUCKET_NAME;
 static string root_bucket = ".rgw"; //keep this synced to rgw_rados.cc::ROOT_BUCKET!
 
 /**
@@ -102,14 +103,20 @@ int rgw_store_user_info(RGWUserInfo& info)
       ret = rgwstore->put_obj(info.user_id, ui_email_bucket, info.user_email, uid_bl.c_str(), uid_bl.length(), NULL, attrs);
   }
 
+  if (info.openstack_name.size()) {
+    ret = rgwstore->put_obj(info.user_id, ui_openstack_bucket, info.openstack_name, uid_bl.c_str(), uid_bl.length(), NULL, attrs);
+    if (ret == -ENOENT) {
+      map<string, bufferlist> attrs;
+      ret = rgwstore->create_bucket(info.user_id, ui_openstack_bucket, attrs);
+      if (ret >= 0)
+        ret = rgwstore->put_obj(info.user_id, ui_openstack_bucket, info.openstack_name, uid_bl.c_str(), uid_bl.length(), NULL, attrs);
+    }
+  }
+
   return ret;
 }
 
-/**
- * Given an email, finds the user_id associated with it.
- * returns: 0 on success, -ERR# on failure (including nonexistence)
- */
-int rgw_get_uid_by_email(string& email, string& user_id)
+int rgw_get_uid_from_index(string& key, string& bucket, string& user_id)
 {
   bufferlist bl;
   int ret;
@@ -121,12 +128,12 @@ int rgw_get_uid_by_email(string& email, string& user_id)
   bufferlist::iterator iter;
   size_t total_len;
 
-  ret = rgwstore->prepare_get_obj(ui_email_bucket, email, ofs, &end, NULL, NULL,
+  ret = rgwstore->prepare_get_obj(bucket, key, ofs, &end, NULL, NULL,
                                   NULL, NULL, NULL, NULL, &total_len, &handle, &err);
   if (ret < 0)
     return ret;
   do {
-    ret = rgwstore->get_obj(&handle, ui_email_bucket, email, &data, ofs, end);
+    ret = rgwstore->get_obj(&handle, bucket, key, &data, ofs, end);
     if (ret < 0)
       goto done;
     ofs += ret;
@@ -143,6 +150,23 @@ done:
   return ret;
 }
 
+/**
+ * Given an email, finds the user_id associated with it.
+ * returns: 0 on success, -ERR# on failure (including nonexistence)
+ */
+int rgw_get_uid_by_email(string& email, string& user_id)
+{
+  return rgw_get_uid_from_index(email, ui_email_bucket, user_id);
+}
+
+/**
+ * Given an openstack username, finds the user_id associated with it.
+ * returns: 0 on success, -ERR# on failure (including nonexistence)
+ */
+extern int rgw_get_uid_by_openstack(string& openstack_name, string& user_id)
+{
+  return rgw_get_uid_from_index(openstack_name, ui_openstack_bucket, user_id);
+}
 /**
  * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
  * Returns: 0 on success, -ERR# on failure.

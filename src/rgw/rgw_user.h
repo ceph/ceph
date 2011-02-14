@@ -10,6 +10,7 @@ using namespace std;
 
 #define USER_INFO_BUCKET_NAME ".users"
 #define USER_INFO_EMAIL_BUCKET_NAME ".users.email"
+#define USER_INFO_OPENSTACK_BUCKET_NAME ".users.openstack"
 #define RGW_USER_ANON_ID "anonymous"
 
 /**
@@ -47,6 +48,11 @@ extern int rgw_store_user_info(RGWUserInfo& info);
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_uid_by_email(string& email, string& user_id);
+/**
+ * Given an openstack username, finds the user_id associated with it.
+ * returns: 0 on success, -ERR# on failure (including nonexistence)
+ */
+extern int rgw_get_uid_by_openstack(string& openstack_name, string& user_id);
 /**
  * Given an RGWUserInfo, deletes the user and its bucket ACLs.
  */

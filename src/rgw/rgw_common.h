@@ -36,7 +36,7 @@ using namespace std;
 #define RGW_ATTR_META_PREFIX	RGW_ATTR_PREFIX "x-amz-meta-"
 #define RGW_ATTR_CONTENT_TYPE	RGW_ATTR_PREFIX "content_type"
 
-#define USER_INFO_VER 2
+#define USER_INFO_VER 3
 
 #define RGW_MAX_CHUNK_SIZE	(4*1024*1024)
 
@@ -118,6 +118,7 @@ struct RGWUserInfo
   string secret_key;
   string display_name;
   string user_email;
+  string openstack_name;
 
   RGWUserInfo() : auid(0) {}
 
@@ -129,6 +130,7 @@ struct RGWUserInfo
      ::encode(secret_key, bl);
      ::encode(display_name, bl);
      ::encode(user_email, bl);
+     ::encode(openstack_name, bl);
   }
   void decode(bufferlist::iterator& bl) {
      __u32 ver;
@@ -139,6 +141,7 @@ struct RGWUserInfo
     ::decode(secret_key, bl);
     ::decode(display_name, bl);
     ::decode(user_email, bl);
+    if (ver >= 3) ::decode(openstack_name, bl);
   }
 
   void clear() {
@@ -191,9 +194,11 @@ struct req_state {
 
    int prot_flags;
 
-   const char *os_auth_token;
+   char *os_auth_token;
+   char *os_user;
+   char *os_groups;
 
-   req_state() : acl(NULL) {}
+   req_state() : acl(NULL), os_auth_token(NULL), os_user(NULL), os_groups(NULL) {}
 };
 
 /** Store basic data on an object */

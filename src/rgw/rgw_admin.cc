@@ -31,6 +31,7 @@ void usage()
   cerr << "   --display-name=<name>" << std::endl;
   cerr << "   --bucket=<bucket>" << std::endl;
   cerr << "   --object=<object>" << std::endl;
+  cerr << "   --openstack-user=<group:name>" << std::endl;
   generic_client_usage();
   exit(1);
 }
@@ -92,6 +93,7 @@ int main(int argc, char **argv)
   const char *display_name = 0;
   const char *bucket = 0;
   const char *object = 0;
+  const char *openstack_user = 0;
   bool gen_user = false;
   bool mod_user = false;
   bool read_policy = false;
@@ -127,6 +129,8 @@ int main(int argc, char **argv)
       CONF_SAFE_SET_ARG_VAL(&auid, OPT_LONGLONG);
     } else if (CONF_ARG_EQ("delete_user", 'd')) {
       delete_user = true;
+    } else if (CONF_ARG_EQ("openstack-user", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&openstack_user, OPT_STR);
     } else {
       cerr << "unrecognized arg " << args[i] << std::endl;
       ARGS_USAGE();
@@ -201,6 +205,8 @@ int main(int argc, char **argv)
       info.user_email = user_email;
     if (auid)
       info.auid = auid;
+    if (openstack_user)
+      info.openstack_name = openstack_user;
 
     int err;
     if ((err = rgw_store_user_info(info)) < 0) {
@@ -209,6 +215,7 @@ int main(int argc, char **argv)
       cout << "User ID: " << info.user_id << std::endl;
       cout << "Secret Key: " << info.secret_key << std::endl;
       cout << "Display Name: " << info.display_name << std::endl;
+      cout << "OpenStack User: " << (info.openstack_name.size() ? info.openstack_name : "<undefined>")<< std::endl;
     }
   }
 

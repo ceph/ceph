@@ -711,6 +711,13 @@ void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
   s->canned_acl.clear();
   s->expect_cont = false;
 
+  free(s->os_auth_token);
+  free(s->os_user);
+  free(s->os_groups);
+  s->os_auth_token = NULL;
+  s->os_user = NULL;
+  s->os_groups = NULL;
+
   provider_init_state();
 }
 

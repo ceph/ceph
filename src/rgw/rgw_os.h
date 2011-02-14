@@ -4,8 +4,9 @@
 
 
 struct rgw_os_auth_info {
-  int retcode;
+  int status;
   char *auth_groups;
+  char *user;
   long long ttl;
 };
 

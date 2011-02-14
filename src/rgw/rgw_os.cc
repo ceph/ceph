@@ -29,6 +29,25 @@ static size_t read_http_header(void *ptr, size_t size, size_t nmemb, void *_info
       *p = '\0';
       RGW_LOG(10) << "os_auth:" << line << std::endl;
       // TODO: fill whatever data required here
+      char *l = line;
+      char *tok = strsep(&l, " \t:");
+      if (tok) {
+        while (l && *l == ' ')
+          l++;
+ 
+        if (strcmp(tok, "HTTP") == 0) {
+          info->status = atoi(l);
+        } else if (strcasecmp(tok, "X-Auth-Groups") == 0) {
+          info->auth_groups = strdup(l);
+          char *s = strchr(l, ',');
+          if (s) {
+            *s = '\0';
+            info->user = strdup(l);
+          }
+        } else if (strcasecmp(tok, "X-Auth-Ttl") == 0) {
+          info->ttl = atoll(l);
+        }
+      }
     }
     if (s != end)
       *p++ = *s++;
@@ -64,7 +83,23 @@ bool rgw_verify_os_token(req_state *s)
 {
   struct rgw_os_auth_info info;
 
-  int ret = rgw_os_validate_token(s->os_auth_token, &info);
+  memset(&info, 0, sizeof(info));
 
-  return true; // for now
+  info.status = 401; // start with access denied, validate_token might change that
+
+  int ret = rgw_os_validate_token(s->os_auth_token, &info);
+  if (ret < 0)
+    return ret;
+
+  if (!info.user) {
+    RGW_LOG(0) << "openstack auth didn't authorize a user" << std::endl;
+    return false;
+  }
+
+  s->os_user = info.user;
+  s->os_groups = info.auth_groups;
+
+  RGW_LOG(0) << "openstack user=" << s->os_user << std::endl;
+
+  return true;
 }
