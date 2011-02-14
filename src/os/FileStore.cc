@@ -2477,7 +2477,7 @@ public:
     _dout_lock.Unlock();
     _dout->flush();
     delete bt;
-    abort();
+    ceph_abort();
   }
 };
 
