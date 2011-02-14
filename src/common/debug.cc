@@ -46,7 +46,7 @@ void _dout_open_log(bool print_version)
 
 int dout_handle_daemonize()
 {
-  Mutex::Locker l(_dout_lock);
+  DoutLocker _dout_locker;
 
   if (_dout_need_open)
        _dout_open_log(true);
@@ -58,7 +58,7 @@ int dout_handle_daemonize()
 
 int dout_create_rank_symlink(int n)
 {
-  Mutex::Locker l(_dout_lock);
+  DoutLocker _dout_locker;
 
   if (_dout_need_open)
     _dout_open_log(true);

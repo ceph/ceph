@@ -34,6 +34,17 @@ extern int dout_handle_daemonize();
 
 extern int dout_create_rank_symlink(int n);
 
+class DoutLocker
+{
+public:
+  DoutLocker() {
+    _dout_lock.Lock();
+  }
+  ~DoutLocker() {
+    _dout_lock.Unlock();
+  }
+};
+
 static inline void _dout_begin_line(signed int prio) {
   if (unlikely(_dout_need_open))
     _dout_open_log(true);
@@ -66,7 +77,7 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
   if (0) {\
     char __array[((v >= -1) && (v <= 200)) ? 0 : -1] __attribute__((unused)); \
   }\
-  Mutex::Locker _dout_locker(_dout_lock);\
+  DoutLocker __dout_locker; \
   _dout_begin_line(v); \
 
 #define dout(v) \
