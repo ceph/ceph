@@ -498,7 +498,7 @@ protected:
   // -- placement groups --
   map<int, PGPool*> pool_map;
   hash_map<pg_t, PG*> pg_map;
-  hash_map<pg_t, list<Message*> > waiting_for_pg;
+  map<pg_t, list<Message*> > waiting_for_pg;
 
   PGPool *_get_pool(int id);
   void _put_pool(PGPool *p);
@@ -525,7 +525,7 @@ protected:
     }
   }
   void wake_all_pg_waiters() {
-    for (hash_map<pg_t, list<Message*> >::iterator p = waiting_for_pg.begin();
+    for (map<pg_t, list<Message*> >::iterator p = waiting_for_pg.begin();
 	 p != waiting_for_pg.end();
 	 p++)
       take_waiters(p->second);
