@@ -38,7 +38,7 @@
 extern DoutStreambuf <char> *_doss;
 
 // TODO: get rid of this lock using thread-local storage
-extern Mutex _dout_lock;
+extern pthread_mutex_t _dout_lock;
 
 //////////////////////// Helper functions //////////////////////////
 // Try a 0-byte write to a file descriptor to see if it open.
@@ -241,14 +241,14 @@ DoutStreambuf<charT, traits>::overflow(DoutStreambuf<charT, traits>::int_type c)
 template <typename charT, typename traits>
 void DoutStreambuf<charT, traits>::handle_stderr_closed()
 {
-  assert(_dout_lock.is_locked());
+  // should hold the dout_lock here
   flags &= ~DOUTSB_FLAG_STDERR;
 }
 
 template <typename charT, typename traits>
 void DoutStreambuf<charT, traits>::read_global_config()
 {
-  assert(_dout_lock.is_locked());
+  // should hold the dout_lock here
   flags = 0;
 
   if (ofd != -1) {
@@ -299,7 +299,7 @@ set_prio(int prio)
 template <typename charT, typename traits>
 int DoutStreambuf<charT, traits>::handle_pid_change()
 {
-  assert(_dout_lock.is_locked());
+  // should hold the dout_lock here
   if (!(flags & DOUTSB_FLAG_OFILE))
     return 0;
 
@@ -347,7 +347,7 @@ int DoutStreambuf<charT, traits>::handle_pid_change()
 template <typename charT, typename traits>
 int DoutStreambuf<charT, traits>::create_rank_symlink(int n)
 {
-  assert(_dout_lock.is_locked());
+  // should hold the dout_lock here
 
   if (!(flags & DOUTSB_FLAG_OFILE))
     return 0;
@@ -372,7 +372,7 @@ int DoutStreambuf<charT, traits>::create_rank_symlink(int n)
 template <typename charT, typename traits>
 std::string DoutStreambuf<charT, traits>::config_to_str() const
 {
-  assert(_dout_lock.is_locked());
+  // should hold the dout_lock here
   ostringstream oss;
   oss << "g_conf.log_to_stderr = " << g_conf.log_to_stderr << "\n";
   oss << "g_conf.log_to_syslog = " << g_conf.log_to_syslog << "\n";
@@ -424,7 +424,7 @@ void DoutStreambuf<charT, traits>::_clear_output_buffer()
 template <typename charT, typename traits>
 std::string DoutStreambuf<charT, traits>::_calculate_opath() const
 {
-  assert(_dout_lock.is_locked());
+  // should hold the dout_lock here
 
   // If g_conf.log_file was specified, that takes the highest priority
   if (!empty(g_conf.log_file)) {

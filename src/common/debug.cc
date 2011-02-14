@@ -15,19 +15,15 @@ bool _dout_need_open = true;
 
 /*
  * The dout lock protects calls to dout()
- *
- * By using an early init_priority, we ensure that the dout lock is
- * initialized first and destroyed last.
  */
-Mutex _dout_lock __attribute__((init_priority(110)))
-    ("_dout_lock", false, false /* no lockdep */);
+pthread_mutex_t _dout_lock = PTHREAD_MUTEX_INITIALIZER;
 
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
 void _dout_open_log(bool print_version)
 {
-  assert(_dout_lock.is_locked());
+  // should hold _dout_lock here
 
   if (!_doss) {
     _doss = new DoutStreambuf <char>();

@@ -26,7 +26,7 @@
 extern std::ostream *_dout;
 extern DoutStreambuf <char> *_doss;
 extern bool _dout_need_open;
-extern Mutex _dout_lock;
+extern pthread_mutex_t _dout_lock;
 
 extern void _dout_open_log(bool print_version);
 
@@ -38,10 +38,10 @@ class DoutLocker
 {
 public:
   DoutLocker() {
-    _dout_lock.Lock();
+    pthread_mutex_lock(&_dout_lock);
   }
   ~DoutLocker() {
-    _dout_lock.Unlock();
+    pthread_mutex_unlock(&_dout_lock);
   }
 };
 
