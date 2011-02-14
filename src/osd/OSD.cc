@@ -5181,7 +5181,8 @@ void OSD::handle_op(MOSDOp *op)
       return;
     }
     
-    if (op->get_data_len() > g_conf.osd_max_write_size << 20) {
+    if (g_conf.osd_max_write_size &&
+        op->get_data_len() > g_conf.osd_max_write_size << 20) {
       // journal can't hold commit!
       reply_op_error(op, -OSD_WRITETOOBIG);
       pg->unlock();
