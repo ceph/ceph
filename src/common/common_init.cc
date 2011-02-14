@@ -20,7 +20,6 @@
 #include "common/errno.h"
 #include "common/signal.h"
 #include "include/color.h"
-#include "tls.h"
 
 /* Set foreground logging
  *
@@ -112,9 +111,6 @@ static void keyring_init(const char *filesearch)
 
 void common_init(std::vector<const char*>& args, const char *module_type, int flags)
 {
-  tls_init();
-  tls_get_val()->disable_assert = 0;
-
   parse_startup_config_options(args, module_type, flags);
   parse_config_options(args);
   install_standard_sighandlers();

@@ -519,7 +519,6 @@ libcommon_files = \
 	mon/MonClient.cc \
 	osd/OSDMap.cc \
 	mds/MDSMap.cc \
-	common/tls.cc \
 	common/common_init.cc \
 	common/buffer.cc \
 	common/signal.cc \
@@ -677,7 +676,6 @@ noinst_HEADERS = \
         common/dyn_snprintf.h\
         common/run_cmd.h\
 	common/safe_io.h\
-        common/tls.h\
         config.h\
         crush/CrushWrapper.h\
         crush/CrushWrapper.i\

@@ -4,8 +4,6 @@
 
 #include "BackTrace.h"
 
-#include "common/tls.h"
-
 namespace ceph {
 
 void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *func)
