@@ -491,10 +491,6 @@ protected:
     return !object_contexts.empty();
   }
 
-  // load balancing
-  set<sobject_t> balancing_reads;
-  set<sobject_t> unbalancing_reads;
-  hash_map<sobject_t, list<Message*> > waiting_for_unbalanced_reads;  // i.e. primary-lock
 
   
   // pull

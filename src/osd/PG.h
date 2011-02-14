@@ -774,8 +774,6 @@ public:
 
   void take_object_waiters(map<sobject_t, list<Message*> >& m);
   
-  hash_map<sobject_t, list<Message*> > waiting_for_wr_unlock; 
-
   bool block_if_wrlocked(MOSDOp* op, object_info_t& oi);
 
 

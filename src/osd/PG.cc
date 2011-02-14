@@ -2706,28 +2706,6 @@ void PG::adjust_local_snaps(ObjectStore::Transaction &t, interval_set<snapid_t> 
 }
 
 
-// ==============================
-// Object locking
-
-//
-// If the target object of the operation op is locked for writing by another client, the function puts op to the waiting queue waiting_for_wr_unlock
-// returns true if object was locked, otherwise returns false
-// 
-bool PG::block_if_wrlocked(MOSDOp* op, object_info_t& oi)
-{
-  sobject_t soid(op->get_oid(), CEPH_NOSNAP);
-
-  if (oi.wrlock_by.tid &&
-      oi.wrlock_by.name != op->get_orig_source()) {
-    //the object is locked for writing by someone else -- add the op to the waiting queue      
-    dout(10) << "blocked on wrlock on " << oi << dendl;
-    waiting_for_wr_unlock[soid].push_back(op);
-    return true;
-  }
-  
-  return false; //the object wasn't locked, so the operation can be handled right away
-}
-
 void PG::take_object_waiters(map<sobject_t, list<Message*> >& m)
 {
   for (map<sobject_t, list<Message*> >::iterator it = m.begin();
