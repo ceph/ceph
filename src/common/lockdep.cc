@@ -9,11 +9,7 @@
 
 #include "config.h"
 
-#undef dout
-#define  dout(l)    if (l<=g_conf.debug_lockdep) *_dout << g_clock.now() << " " << std::hex << pthread_self() << std::dec << " lockdep: "
-
-#undef dendl
-#define dendl std::endl
+#define DOUT_SUBSYS lockdep
 
 // global
 int g_lockdep = 0;
