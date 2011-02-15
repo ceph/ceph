@@ -1001,6 +1001,7 @@ public:
   void adjust_local_snaps(ObjectStore::Transaction &t, interval_set<snapid_t> &to_check);
 
   void queue_snap_trim();
+  bool queue_scrub();
 
   void share_pg_info();
   void share_pg_log(const eversion_t &oldver);

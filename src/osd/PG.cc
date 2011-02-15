@@ -1991,6 +1991,16 @@ void PG::queue_snap_trim()
     dout(10) << "queue_snap_trim -- already trimming" << dendl;
 }
 
+bool PG::queue_scrub()
+{
+  assert(_lock.is_locked());
+  if (is_scrubbing()) {
+    return false;
+  }
+  state_set(PG_STATE_SCRUBBING);
+  osd->scrub_wq.queue(this);
+  return true;
+}
 
 struct C_PG_FinishRecovery : public Context {
   PG *pg;
@@ -2034,7 +2044,7 @@ void PG::_finish_recovery(Context *c)
 
     if (state_test(PG_STATE_INCONSISTENT)) {
       dout(10) << "_finish_recovery requeueing for scrub" << dendl;
-      osd->scrub_wq.queue(this);
+      queue_scrub();
     } else if (log.backlog) {
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       drop_backlog();
@@ -2774,7 +2784,7 @@ bool PG::sched_scrub()
       ret = true;
     } else if (scrub_reserved_peers.size() == acting.size()) {
       dout(20) << "sched_scrub: success, reserved self and replicas" << dendl;
-      osd->scrub_wq.queue(this);
+      queue_scrub();
       ret = true;
     } else {
       // none declined, since scrub_reserved is set
