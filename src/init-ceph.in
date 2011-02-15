@@ -34,6 +34,7 @@ usage_exit() {
 
 . $LIBDIR/ceph_common.sh
 
+EXIT_STATUS=0
 
 signal_daemon() {
     name=$1
@@ -289,12 +290,18 @@ for name in $what; do
 	    ;;
 
 	status)
-	    pid=`cat $pid_file`
-            if [ -e /proc/$pid ]; then
-                 echo "$pid running..."
-                 exit 0
+            if [ -e "$pid_file" ]; then
+                pid=`cat $pid_file`
+                if [ -e /proc/$pid ]; then
+                        echo "$pid running..."
+                else
+                        echo "not running: $pid dead"
+                        EXIT_STATUS=1
+                fi
+            else
+                echo "not running: no pid file"
+                EXIT_STATUS=1
             fi
-            exit 1
 	    ;;
 	forcestop)
 	    get_conf pre_forcestop "" "pre forcestop command"
@@ -340,4 +347,4 @@ for name in $what; do
     esac
 done
 
-exit 0
+exit $EXIT_STATUS
