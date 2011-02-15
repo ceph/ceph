@@ -290,16 +290,10 @@ for name in $what; do
 	    ;;
 
 	status)
-            if [ -e "$pid_file" ]; then
-                pid=`cat $pid_file`
-                if [ -e /proc/$pid ]; then
-                        echo "$pid running..."
-                else
-                        echo "not running: $pid dead"
-                        EXIT_STATUS=1
-                fi
+	    if daemon_is_running $name c$type $id $pid_file; then
+                echo "running..."
             else
-                echo "not running: no pid file"
+                echo "dead."
                 EXIT_STATUS=1
             fi
 	    ;;
