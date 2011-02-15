@@ -961,7 +961,7 @@ void ESlaveUpdate::replay(MDS *mds)
 
 void ESubtreeMap::replay(MDS *mds) 
 {
-  if (expire_pos)
+  if (expire_pos && expire_pos > mds->mdlog->journaler->get_expire_pos())
     mds->mdlog->journaler->set_expire_pos(expire_pos);
   // suck up the subtree map?
   if (mds->mdcache->is_subtrees()) {

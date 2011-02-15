@@ -932,6 +932,7 @@ void Journaler::trim()
   
   // trim
   assert(trim_to <= write_pos);
+  assert(trim_to <= expire_pos);
   assert(trim_to > trimming_pos);
   dout(10) << "trim trimming to " << trim_to 
 	   << ", trimmed/trimming/expire are " 
