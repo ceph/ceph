@@ -496,7 +496,6 @@ libcommon_files = \
 	auth/cephx/CephxProtocol.cc \
 	auth/none/AuthNoneAuthorizeHandler.cc \
 	auth/Crypto.cc \
-	auth/ExportControl.cc \
 	auth/KeyRing.cc \
 	auth/RotatingKeyRing.cc \
 	common/LogClient.cc \
@@ -637,7 +636,6 @@ noinst_HEADERS = \
 	auth/KeyRing.h\
 	auth/RotatingKeyRing.h\
 	auth/Crypto.h\
-	auth/ExportControl.h\
         client/Client.h\
         client/SyntheticClient.h\
         client/Trace.h\

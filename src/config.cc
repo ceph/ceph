@@ -13,7 +13,6 @@
  */
 
 #include "auth/Auth.h"
-#include "auth/ExportControl.h"
 #include "ceph_ver.h"
 #include "common/BackTrace.h"
 #include "common/Clock.h"
@@ -51,7 +50,6 @@ md_config_t g_conf __attribute__((init_priority(103)));
 
 /* These should be moved into md_config_t eventually, grrr */
 static ConfFile *cf = NULL;
-static ExportControl *ec = NULL;
 
 atomic_t _num_threads(0);
 
@@ -1114,12 +1112,6 @@ void parse_startup_config_options(std::vector<const char*>& args,
     cf->dump();
     exit(0);
   }
-
-  if (!ec) {
-    ec = new ExportControl();
-  }
-
-  ec->load(cf);
 }
 
 void generic_usage(bool is_server)
@@ -1148,11 +1140,6 @@ void generic_client_usage()
 ConfFile *conf_get_conf_file()
 {
   return cf;
-}
-
-ExportControl *conf_get_export_control()
-{
-  return ec;
 }
 
 void parse_config_options(std::vector<const char*>& args)

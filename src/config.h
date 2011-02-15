@@ -501,10 +501,6 @@ int ceph_def_conf_by_name(const char *name, char *buf, int len);
 
 bool ceph_resolve_file_search(string& filename_list, string& result);
 
-class ExportControl;
-ExportControl *conf_get_export_control();
-
-
 #define CONF_NEXT_VAL (val_pos ? &args[i][val_pos] : args[++i])
 
 #define CONF_SET_ARG_VAL(dest, type) \
