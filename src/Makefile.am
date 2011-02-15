@@ -156,6 +156,10 @@ test_trans_SOURCES = test_trans.cc
 test_trans_LDADD = libos.a libcommon.a -lpthread -lm $(CRYPTOPP_LIBS)
 bin_PROGRAMS += test_trans
 
+testsnaps_SOURCES = test/osd/TestSnaps.cc
+testsnaps_LDADD = librados.la -lpthread -lm $(CRYPTOPP_LIBS)
+bin_PROGRAMS += testsnaps
+
 endif
 
 
