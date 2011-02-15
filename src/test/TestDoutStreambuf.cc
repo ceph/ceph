@@ -40,9 +40,10 @@ int main(int argc, const char **argv)
 
   DoutStreambuf<char> *dos = new DoutStreambuf<char>();
 
-  _dout_lock.Lock();
-  dos->read_global_config();
-  _dout_lock.Unlock();
+  {
+    DoutLocker _dout_locker;
+    dos->read_global_config();
+  }
   derr << "using configuration: " << dos->config_to_str() << dendl;
 
   std::ostream oss(dos);

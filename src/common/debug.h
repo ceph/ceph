@@ -26,13 +26,24 @@
 extern std::ostream *_dout;
 extern DoutStreambuf <char> *_doss;
 extern bool _dout_need_open;
-extern Mutex _dout_lock;
+extern pthread_mutex_t _dout_lock;
 
 extern void _dout_open_log(bool print_version);
 
 extern int dout_handle_daemonize();
 
 extern int dout_create_rank_symlink(int n);
+
+class DoutLocker
+{
+public:
+  DoutLocker() {
+    pthread_mutex_lock(&_dout_lock);
+  }
+  ~DoutLocker() {
+    pthread_mutex_unlock(&_dout_lock);
+  }
+};
 
 static inline void _dout_begin_line(signed int prio) {
   if (unlikely(_dout_need_open))
@@ -66,7 +77,7 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
   if (0) {\
     char __array[((v >= -1) && (v <= 200)) ? 0 : -1] __attribute__((unused)); \
   }\
-  Mutex::Locker _dout_locker(_dout_lock);\
+  DoutLocker __dout_locker; \
   _dout_begin_line(v); \
 
 #define dout(v) \
@@ -88,6 +99,6 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
 
 extern void hex2str(const char *s, int len, char *buf, int dest_len);
 
-extern void hexdump(string msg, const char *s, int len);
+extern void hexdump(std::string msg, const char *s, int len);
 
 #endif

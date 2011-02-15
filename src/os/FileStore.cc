@@ -2470,14 +2470,12 @@ public:
 
   void finish(int r) {
     BackTrace *bt = new BackTrace(1);
-    _dout_lock.Lock();
-    *_dout << "FileStore: sync_entry timed out after "
+    generic_dout(-1) << "FileStore: sync_entry timed out after "
 	   << g_conf.filestore_commit_timeout << " seconds.\n";
     bt->print(*_dout);
-    _dout_lock.Unlock();
-    _dout->flush();
+    *_dout << dendl;
     delete bt;
-    abort();
+    ceph_abort();
   }
 };
 
