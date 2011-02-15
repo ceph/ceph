@@ -21,6 +21,8 @@
 #include "rgw_user.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
+#include "rgw_rest_s3.h"
+#include "rgw_rest_os.h"
 #include "rgw_os.h"
 
 #include <map>
@@ -253,7 +255,8 @@ int main(int argc, char *argv[])
 {
   struct req_state s;
   struct fcgx_state fcgx;
-  RGWHandler_REST rgwhandler;
+  RGWHandler_REST_S3 rgwhandler_s3;
+  RGWHandler_REST_OS rgwhandler_os;
 
   curl_global_init(CURL_GLOBAL_ALL);
 
@@ -268,8 +271,19 @@ int main(int argc, char *argv[])
 
   while (FCGX_Accept(&fcgx.in, &fcgx.out, &fcgx.err, &fcgx.envp) >= 0) 
   {
-    rgwhandler.init_state(&s, &fcgx);
+    RGWHandler *handler;
 
+    RGWHandler::init_state(&s, &fcgx);
+
+    rgw_init_rest(&s);
+
+    if (s.prot_flags & RGW_REST_OPENSTACK)
+      handler = &rgwhandler_os;
+    else
+      handler = &rgwhandler_s3;
+
+    handler->set_state(&s);
+    
     int ret = read_acls(&s);
     if (ret < 0) {
       switch (ret) {
@@ -288,7 +302,7 @@ int main(int argc, char *argv[])
       continue;
     }
 
-    ret = rgwhandler.read_permissions();
+    ret = handler->read_permissions();
     if (ret < 0) {
       abort_early(&s, ret);
       continue;
@@ -296,7 +310,7 @@ int main(int argc, char *argv[])
     if (s.expect_cont)
       dump_continue(&s);
 
-    RGWOp *op = rgwhandler.get_op();
+    RGWOp *op = handler->get_op();
     if (op) {
       op->execute();
     }

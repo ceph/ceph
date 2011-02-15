@@ -319,14 +319,14 @@ class RGWHandler {
 protected:
   struct req_state *s;
 
-  virtual void provider_init_state() = 0;
   int do_read_permissions(bool only_bucket);
 public:
   RGWHandler() {}
   virtual ~RGWHandler() {}
-  void init_state(struct req_state *s, struct fcgx_state *fcgx);
-  RGWOp *get_op();
+  static void init_state(struct req_state *s, struct fcgx_state *fcgx);
+  virtual RGWOp *get_op() = 0;
   virtual int read_permissions() = 0;
+  void set_state(struct req_state *_s) { s = _s; }
 };
 
 #endif

@@ -127,7 +127,6 @@ int rgw_get_uid_from_index(string& key, string& bucket, string& user_id)
   off_t ofs = 0, end = -1;
   bufferlist::iterator iter;
   size_t total_len;
-
   ret = rgwstore->prepare_get_obj(bucket, key, ofs, &end, NULL, NULL,
                                   NULL, NULL, NULL, NULL, &total_len, &handle, &err);
   if (ret < 0)

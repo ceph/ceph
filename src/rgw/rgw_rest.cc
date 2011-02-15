@@ -4,10 +4,6 @@
 #include "rgw_op.h"
 #include "rgw_rest.h"
 
-#define CGI_PRINTF(stream, format, ...) do { \
-   FCGX_FPrintF(stream, format, __VA_ARGS__); \
-} while (0)
-
 static void dump_status(struct req_state *s, const char *status)
 {
   CGI_PRINTF(s->fcgx->out,"Status: %s\n", status);
@@ -82,7 +78,7 @@ void close_section(struct req_state *s, const char *name)
   CGI_PRINTF(s->fcgx->out, "</%s>", name);
 }
 
-static void dump_content_length(struct req_state *s, size_t len)
+void dump_content_length(struct req_state *s, size_t len)
 {
   char buf[16];
   snprintf(buf, sizeof(buf), "%lu", len);
@@ -90,12 +86,13 @@ static void dump_content_length(struct req_state *s, size_t len)
   CGI_PRINTF(s->fcgx->out, "Accept-Ranges: %s\n", "bytes");
 }
 
-static void dump_etag(struct req_state *s, const char *etag)
+void dump_etag(struct req_state *s, const char *etag)
 {
   CGI_PRINTF(s->fcgx->out,"ETag: \"%s\"\n", etag);
 }
 
-static void dump_last_modified(struct req_state *s, time_t t) {
+void dump_last_modified(struct req_state *s, time_t t)
+{
 
   char timestr[TIME_BUF_SIZE];
   struct tm *tmp = gmtime(&t);
@@ -176,24 +173,6 @@ void end_header(struct req_state *s, const char *content_type)
   }
 }
 
-void list_all_buckets_start(struct req_state *s)
-{
-  open_section(s, "ListAllMyBucketsResult xmlns=\"http://doc.s3.amazonaws.com/2006-03-01\"");
-}
-
-void list_all_buckets_end(struct req_state *s)
-{
-  close_section(s, "ListAllMyBucketsResult");
-}
-
-void dump_bucket(struct req_state *s, RGWObjEnt& obj)
-{
-  open_section(s, "Bucket");
-  dump_value(s, "Name", obj.name.c_str());
-  dump_time(s, "CreationDate", &obj.mtime);
-  close_section(s, "Bucket");
-}
-
 void abort_early(struct req_state *s, int err)
 {
   dump_errno(s, err);
@@ -220,139 +199,6 @@ int RGWGetObj_REST::get_params()
   if_nomatch = FCGX_GetParam("HTTP_IF_NONE_MATCH", s->fcgx->envp);
 
   return 0;
-}
-
-int RGWGetObj_REST::send_response(void *handle)
-{
-  const char *content_type = NULL;
-  int orig_ret = ret;
-
-  if (sent_header)
-    goto send_data;
-
-  if (range_str)
-    dump_range(s, ofs, end);
-
-  dump_content_length(s, total_len);
-  dump_last_modified(s, lastmod);
-
-  if (!ret) {
-    map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
-    if (iter != attrs.end()) {
-      bufferlist& bl = iter->second;
-      if (bl.length()) {
-        char *etag = bl.c_str();
-        dump_etag(s, etag);
-      }
-    }
-
-    for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-       const char *name = iter->first.c_str();
-       if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
-         name += sizeof(RGW_ATTR_PREFIX) - 1;
-         CGI_PRINTF(s->fcgx->out,"%s: %s\r\n", name, iter->second.c_str());
-       } else if (!content_type && strcmp(name, RGW_ATTR_CONTENT_TYPE) == 0) {
-         content_type = iter->second.c_str();
-       }
-    }
-  }
-
-  if (range_str && !ret)
-    ret = 206; /* partial content */
-
-  dump_errno(s, ret, &err);
-  end_header(s, content_type);
-
-  sent_header = true;
-
-send_data:
-  if (get_data && !orig_ret) {
-    FCGX_PutStr(data, len, s->fcgx->out); 
-  }
-
-  return 0;
-}
-
-void RGWListBuckets_REST::send_response()
-{
-  dump_errno(s, ret);
-  end_header(s, "application/xml");
-  dump_start_xml(s);
-
-  list_all_buckets_start(s);
-  dump_owner(s, s->user.user_id, s->user.display_name);
-
-  map<string, RGWObjEnt>& m = buckets.get_buckets();
-  map<string, RGWObjEnt>::iterator iter;
-
-  open_section(s, "Buckets");
-  for (iter = m.begin(); iter != m.end(); ++iter) {
-    RGWObjEnt obj = iter->second;
-    dump_bucket(s, obj);
-  }
-  close_section(s, "Buckets");
-  list_all_buckets_end(s);
-}
-
-void RGWListBucket_REST::send_response()
-{
-  dump_errno(s, (ret < 0 ? ret : 0));
-
-  end_header(s, "application/xml");
-  dump_start_xml(s);
-  if (ret < 0)
-    return;
-
-  open_section(s, "ListBucketResult");
-  dump_value(s, "Name", s->bucket);
-  if (!prefix.empty())
-    dump_value(s, "Prefix", prefix.c_str());
-  if (!marker.empty())
-    dump_value(s, "Marker", marker.c_str());
-  if (!max_keys.empty()) {
-    dump_value(s, "MaxKeys", max_keys.c_str());
-  }
-  if (!delimiter.empty())
-    dump_value(s, "Delimiter", delimiter.c_str());
-
-  if (ret >= 0) {
-    vector<RGWObjEnt>::iterator iter;
-    for (iter = objs.begin(); iter != objs.end(); ++iter) {
-      open_section(s, "Contents");
-      dump_value(s, "Key", iter->name.c_str());
-      dump_time(s, "LastModified", &iter->mtime);
-      dump_value(s, "ETag", "&quot;%s&quot;", iter->etag);
-      dump_value(s, "Size", "%lld", iter->size);
-      dump_value(s, "StorageClass", "STANDARD");
-      dump_owner(s, s->user.user_id, s->user.display_name);
-      close_section(s, "Contents");
-    }
-    if (common_prefixes.size() > 0) {
-      open_section(s, "CommonPrefixes");
-      map<string, bool>::iterator pref_iter;
-      for (pref_iter = common_prefixes.begin(); pref_iter != common_prefixes.end(); ++pref_iter) {
-        dump_value(s, "Prefix", pref_iter->first.c_str());
-      }
-      close_section(s, "CommonPrefixes");
-    }
-  }
-  close_section(s, "ListBucketResult");
-}
-
-void RGWCreateBucket_REST::send_response()
-{
-  dump_errno(s, ret);
-  end_header(s);
-}
-
-void RGWDeleteBucket_REST::send_response()
-{
-  int r = ret;
-  if (!r)
-    r = 204;
-
-  dump_errno(s, r);
-  end_header(s);
 }
 
 
@@ -382,22 +228,6 @@ int RGWPutObj_REST::get_data()
   return 0;
 }
 
-void RGWPutObj_REST::send_response()
-{
-  dump_errno(s, ret, &err);
-  end_header(s);
-}
-
-void RGWDeleteObj_REST::send_response()
-{
-  int r = ret;
-  if (!r)
-    r = 204;
-
-  dump_errno(s, r);
-  end_header(s);
-}
-
 int RGWCopyObj_REST::get_params()
 {
   if_mod = FCGX_GetParam("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE", s->fcgx->envp);
@@ -406,34 +236,6 @@ int RGWCopyObj_REST::get_params()
   if_nomatch = FCGX_GetParam("HTTP_X_AMZ_COPY_IF_NONE_MATCH", s->fcgx->envp);
 
   return 0;
-}
-
-void RGWCopyObj_REST::send_response()
-{
-  dump_errno(s, ret, &err);
-
-  end_header(s);
-  if (ret == 0) {
-    open_section(s, "CopyObjectResult");
-    dump_time(s, "LastModified", &mtime);
-    map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
-    if (iter != attrs.end()) {
-      bufferlist& bl = iter->second;
-      if (bl.length()) {
-        char *etag = bl.c_str();
-        dump_value(s, "ETag", etag);
-      }
-    }
-    close_section(s, "CopyObjectResult");
-  }
-}
-
-void RGWGetACLs_REST::send_response()
-{
-  if (ret) dump_errno(s, ret);
-  end_header(s, "application/xml");
-  dump_start_xml(s);
-  FCGX_PutStr(acls.c_str(), acls.size(), s->fcgx->out); 
 }
 
 int RGWPutACLs_REST::get_params()
@@ -452,13 +254,6 @@ int RGWPutACLs_REST::get_params()
   }
 
   return ret;
-}
-
-void RGWPutACLs_REST::send_response()
-{
-  dump_errno(s, ret);
-  end_header(s, "application/xml");
-  dump_start_xml(s);
 }
 
 static void next_tok(string& str, string& tok, char delim)
@@ -665,7 +460,7 @@ static int str_to_bool(const char *s, int def_val)
           strcasecmp(s, "1"));
 }
 
-void RGWHandler_REST::provider_init_state()
+void rgw_init_rest(struct req_state *s)
 {
   s->path_name = FCGX_GetParam("SCRIPT_NAME", s->fcgx->envp);
   s->path_name_url = FCGX_GetParam("REQUEST_URI", s->fcgx->envp);
@@ -711,63 +506,31 @@ void RGWHandler_REST::provider_init_state()
   }
 }
 
-static bool is_acl_op(struct req_state *s)
+int RGWHandler_REST::read_permissions()
 {
-  return s->args.exists("acl");
-}
+  bool only_bucket;
 
-RGWOp *RGWHandler_REST::get_retrieve_obj_op(struct req_state *s, bool get_data)
-{
-  if (is_acl_op(s)) {
-    return &get_acls_op;
-  }
-
-  if (s->object) {
-    get_obj_op.set_get_data(get_data);
-    return &get_obj_op;
-  } else if (!s->bucket) {
-    return NULL;
-  }
-
-  return &list_bucket_op;
-}
-
-RGWOp *RGWHandler_REST::get_retrieve_op(struct req_state *s, bool get_data)
-{
-  if (s->bucket) {
+  switch (s->op) {
+  case OP_HEAD:
+  case OP_GET:
+    only_bucket = false;
+    break;
+  case OP_PUT:
+    /* is it a 'create bucket' request? */
+    if (s->object_str.size() == 0)
+      return 0;
     if (is_acl_op(s)) {
-      return &get_acls_op;
+      only_bucket = false;
+      break;
     }
-    return get_retrieve_obj_op(s, get_data);
+  case OP_DELETE:
+    only_bucket = true;
+    break;
+  default:
+    return -EINVAL;
   }
 
-  return &list_buckets_op;
-}
-
-RGWOp *RGWHandler_REST::get_create_op(struct req_state *s)
-{
-  if (is_acl_op(s)) {
-    return &put_acls_op;
-  } else if (s->object) {
-    if (!s->copy_source)
-      return &put_obj_op;
-    else
-      return &copy_obj_op;
-  } else if (s->bucket) {
-    return &create_bucket_op;
-  }
-
-  return NULL;
-}
-
-RGWOp *RGWHandler_REST::get_delete_op(struct req_state *s)
-{
-  if (s->object)
-    return &delete_obj_op;
-  else if (s->bucket)
-    return &delete_bucket_op;
-
-  return NULL;
+  return do_read_permissions(only_bucket);
 }
 
 RGWOp *RGWHandler_REST::get_op()
@@ -794,32 +557,5 @@ RGWOp *RGWHandler_REST::get_op()
     op->init(s);
   }
   return op;
-}
-
-int RGWHandler_REST::read_permissions()
-{
-  bool only_bucket;
-
-  switch (s->op) {
-  case OP_HEAD:
-  case OP_GET:
-    only_bucket = false;
-    break;
-  case OP_PUT:
-    /* is it a 'create bucket' request? */
-    if (s->object_str.size() == 0)
-      return 0;
-    if (is_acl_op(s)) {
-      only_bucket = false;
-      break;
-    }
-  case OP_DELETE:
-    only_bucket = true;
-    break;
-  default:
-    return -EINVAL;
-  }
-
-  return do_read_permissions(only_bucket);
 }
 

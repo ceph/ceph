@@ -279,6 +279,8 @@ libradosgw_a_SOURCES = \
 	rgw/rgw_access.cc \
 	rgw/rgw_op.cc \
 	rgw/rgw_rest.cc \
+	rgw/rgw_rest_os.cc \
+	rgw/rgw_rest_s3.cc \
 	rgw/rgw_common.cc \
 	rgw/rgw_cache.cc \
 	rgw/rgw_os.cc

@@ -581,8 +581,10 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
   if (*end < 0)
     *end = size - 1;
 
-  *total_size = (ofs <= *end ? *end + 1 - ofs : 0);
-  *lastmod = mtime;
+  if (total_size)
+    *total_size = (ofs <= *end ? *end + 1 - ofs : 0);
+  if (lastmod)
+    *lastmod = mtime;
 
   return 0;
 
