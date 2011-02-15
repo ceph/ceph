@@ -51,8 +51,6 @@ md_config_t g_conf __attribute__((init_priority(103)));
 /* These should be moved into md_config_t eventually, grrr */
 static ConfFile *cf = NULL;
 
-atomic_t _num_threads(0);
-
 // file layouts
 struct ceph_file_layout g_default_file_layout = {
  fl_stripe_unit: init_le32(1<<22),

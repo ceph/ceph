@@ -525,6 +525,7 @@ libcommon_files = \
 	common/common_init.cc \
 	common/buffer.cc \
 	common/signal.cc \
+	common/Thread.cc \
 	include/ceph_fs.cc \
 	include/ceph_hash.cc \
 	include/ceph_strings.cc \

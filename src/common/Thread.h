@@ -17,13 +17,12 @@
 #define CEPH_THREAD_H
 
 #include "common/signal.h"
+#include "config.h"
 #include "include/atomic.h"
 
 #include <errno.h>
 #include <pthread.h>
 #include <signal.h>
-
-extern atomic_t _num_threads;  // hack: in config.cc
 
 class Thread {
  private:
@@ -39,16 +38,15 @@ class Thread {
  private:
   static void *_entry_func(void *arg) {
     void *r = ((Thread*)arg)->entry();
-    _num_threads.dec();
     return r;
   }
 
  public:
+  static int get_num_threads(void);
+
   pthread_t &get_thread_id() { return thread_id; }
   bool is_started() { return thread_id != 0; }
   bool am_self() { return (pthread_self() == thread_id); }
-
-  static int get_num_threads() { return _num_threads.read(); }
 
   int kill(int signal) {
     if (thread_id)
@@ -82,7 +80,6 @@ class Thread {
       char buf[80];
       generic_dout(0) << "pthread_create failed with message: " << strerror_r(r, buf, sizeof(buf)) << dendl;
     } else {
-      _num_threads.inc();
       generic_dout(10) << "thread " << thread_id << " start" << dendl;
     }
     return r;
