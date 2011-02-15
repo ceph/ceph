@@ -111,6 +111,8 @@ protected:
 public:
   RGWHandler_REST_S3() : RGWHandler_REST() {}
   virtual ~RGWHandler_REST_S3() {}
+
+  bool authorize(struct req_state *s);
 };
 
 #endif

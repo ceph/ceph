@@ -1,4 +1,5 @@
 
+#include "rgw_os.h"
 #include "rgw_rest_os.h"
 
 RGWOp *RGWHandler_REST_OS::get_retrieve_obj_op(struct req_state *s, bool get_data)
@@ -53,4 +54,9 @@ RGWOp *RGWHandler_REST_OS::get_delete_op(struct req_state *s)
     return &delete_bucket_op;
 
   return NULL;
+}
+
+bool RGWHandler_REST_OS::authorize(struct req_state *s)
+{
+  return rgw_verify_os_token(s);
 }

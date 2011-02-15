@@ -324,9 +324,12 @@ public:
   RGWHandler() {}
   virtual ~RGWHandler() {}
   static void init_state(struct req_state *s, struct fcgx_state *fcgx);
+
+  void set_state(struct req_state *_s) { s = _s; }
+
   virtual RGWOp *get_op() = 0;
   virtual int read_permissions() = 0;
-  void set_state(struct req_state *_s) { s = _s; }
+  virtual bool authorize(struct req_state *s) = 0;
 };
 
 #endif

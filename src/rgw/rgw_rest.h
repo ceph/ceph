@@ -4,10 +4,6 @@
 
 #include "rgw_op.h"
 
-#define CGI_PRINTF(stream, format, ...) do { \
-   FCGX_FPrintF(stream, format, __VA_ARGS__); \
-} while (0)
-
 
 #define RGW_REST_OPENSTACK 0x1
 
@@ -99,12 +95,15 @@ protected:
   virtual RGWOp *get_create_op(struct req_state *s) = 0;
   virtual RGWOp *get_delete_op(struct req_state *s) = 0;
 
+  static void init_rest(struct req_state *s, struct fcgx_state *fcgx);
 public:
   int read_permissions();
   RGWOp *get_op();
-};
 
-extern void rgw_init_rest(struct req_state *s);
+  virtual bool authorize(struct req_state *s) = 0;
+
+  static RGWHandler *init_handler(struct req_state *s, struct fcgx_state *fcgx);
+};
 
 extern void dump_errno(struct req_state *s, int err, struct rgw_err *rgwerr = NULL);
 extern void end_header(struct req_state *s, const char *content_type = NULL);

@@ -109,6 +109,8 @@ protected:
 public:
   RGWHandler_REST_OS() : RGWHandler_REST() {}
   virtual ~RGWHandler_REST_OS() {}
+
+  bool authorize(struct req_state *s);
 };
 
 #endif

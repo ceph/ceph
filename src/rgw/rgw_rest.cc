@@ -3,6 +3,14 @@
 #include "rgw_access.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
+#include "rgw_rest_os.h"
+#include "rgw_rest_s3.h"
+
+
+
+static RGWHandler_REST_S3 rgwhandler_s3;
+static RGWHandler_REST_OS rgwhandler_os;
+
 
 static void dump_status(struct req_state *s, const char *status)
 {
@@ -460,8 +468,10 @@ static int str_to_bool(const char *s, int def_val)
           strcasecmp(s, "1"));
 }
 
-void rgw_init_rest(struct req_state *s)
+void RGWHandler_REST::init_rest(struct req_state *s, struct fcgx_state *fcgx)
 {
+  RGWHandler::init_state(s, fcgx);
+
   s->path_name = FCGX_GetParam("SCRIPT_NAME", s->fcgx->envp);
   s->path_name_url = FCGX_GetParam("REQUEST_URI", s->fcgx->envp);
   int pos = s->path_name_url.find('?');
@@ -557,5 +567,22 @@ RGWOp *RGWHandler_REST::get_op()
     op->init(s);
   }
   return op;
+}
+
+
+RGWHandler *RGWHandler_REST::init_handler(struct req_state *s, struct fcgx_state *fcgx)
+{
+  RGWHandler *handler;
+
+  init_rest(s, fcgx);
+
+  if (s->prot_flags & RGW_REST_OPENSTACK)
+    handler = &rgwhandler_os;
+  else
+    handler = &rgwhandler_s3;
+
+  handler->set_state(s);
+
+  return handler;
 }
 

@@ -26,6 +26,10 @@
 
 using namespace std;
 
+#define CGI_PRINTF(stream, format, ...) do { \
+   FCGX_FPrintF(stream, format, __VA_ARGS__); \
+} while (0)
+
 #define SERVER_NAME "RGWFS"
 
 #define RGW_ATTR_PREFIX  "user.rgw."
