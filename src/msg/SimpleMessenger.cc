@@ -2428,7 +2428,7 @@ int SimpleMessenger::start(bool nodaemon)
   // daemonize?
   if (g_conf.daemonize && !nodaemon) {
     int num_threads = Thread::get_num_threads();
-    if (num_threads > 0) {
+    if (num_threads > 1) {
       derr << "messenger.start BUG: there are " << num_threads << " threads"
 	   << " already started that will now die!  call messenger.start() sooner."
 	   << dendl;
