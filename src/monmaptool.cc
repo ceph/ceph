@@ -23,7 +23,7 @@
 using namespace std;
 
 #include "config.h"
-
+#include "common/common_init.h"
 #include "mon/MonMap.h"
 
 void usage()
@@ -37,6 +37,7 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   DEFINE_CONF_VARS(usage);
+  set_foreground_logging();
 
   const char *me = argv[0];
 
