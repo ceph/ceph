@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 
 // debug output
 std::ostream *_dout = NULL;
@@ -21,7 +22,20 @@ pthread_mutex_t _dout_lock = PTHREAD_MUTEX_INITIALIZER;
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
-void _dout_open_log(bool print_version)
+std::string ceph_version_to_string(void)
+{
+  std::ostringstream oss;
+  oss << "ceph version " << VERSION << " (commit:"
+      << STRINGIFY(CEPH_GIT_VER) << ")";
+  return oss.str();
+}
+
+void dout_output_ceph_version(void)
+{
+  generic_dout(-1) << ceph_version_to_string() << dendl;
+}
+
+void _dout_open_log()
 {
   // should hold _dout_lock here
 
@@ -33,11 +47,6 @@ void _dout_open_log(bool print_version)
     _dout = new std::ostream(_doss);
   }
 
-  if (print_version) {
-    _doss->sputc(11);
-    *_dout << "ceph version " << VERSION << " (commit:"
-	   << STRINGIFY(CEPH_GIT_VER) << ")" << std::endl;
-  }
   _dout_need_open = false;
 }
 
@@ -46,7 +55,7 @@ int dout_handle_daemonize()
   DoutLocker _dout_locker;
 
   if (_dout_need_open)
-       _dout_open_log(true);
+       _dout_open_log();
 
   assert(_doss);
   _doss->handle_stderr_closed();
@@ -58,7 +67,7 @@ int dout_create_rank_symlink(int n)
   DoutLocker _dout_locker;
 
   if (_dout_need_open)
-    _dout_open_log(true);
+    _dout_open_log();
 
   assert(_doss);
   return _doss->create_rank_symlink(n);

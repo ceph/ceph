@@ -1100,7 +1100,11 @@ void parse_startup_config_options(std::vector<const char*>& args,
     // before initializing dout(). For now, just force a reopen here with the
     // configuration we have just read.
     DoutLocker _dout_locker;
-    _dout_open_log(false);
+    _dout_open_log();
+  }
+
+  if (!force_fg_logging) {
+    dout_output_ceph_version();
   }
 
   if (!cf)

@@ -22,13 +22,18 @@
 #include "include/assert.h"
 
 #include <iosfwd>
+#include <string>
 
 extern std::ostream *_dout;
 extern DoutStreambuf <char> *_doss;
 extern bool _dout_need_open;
 extern pthread_mutex_t _dout_lock;
 
-extern void _dout_open_log(bool print_version);
+extern std::string ceph_version_to_string(void);
+
+extern void dout_output_ceph_version(void);
+
+extern void _dout_open_log();
 
 extern int dout_handle_daemonize();
 
@@ -47,7 +52,7 @@ public:
 
 static inline void _dout_begin_line(signed int prio) {
   if (unlikely(_dout_need_open))
-    _dout_open_log(true);
+    _dout_open_log();
 
   // Put priority information into dout
   _doss->sputc(prio + 12);
