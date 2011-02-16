@@ -176,7 +176,7 @@ for name in $what; do
     check_host || continue
 
     get_conf pid_file "/var/run/ceph/$type.$id.pid" "pid file"
-    [ -n "$pid_file" ] && mkdir -p `dirname $pid_file`
+    [ -n "$pid_file" ] && do_cmd "mkdir -p "`dirname $pid_file`
 
     get_conf log_dir "/var/log/ceph" "log dir"
     get_conf log_sym_dir "" "log sym dir"
