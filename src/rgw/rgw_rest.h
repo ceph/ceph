@@ -107,11 +107,9 @@ public:
 
 extern void dump_errno(struct req_state *s, int err, struct rgw_err *rgwerr = NULL);
 extern void end_header(struct req_state *s, const char *content_type = NULL);
-extern void dump_start_xml(struct req_state *s);
+extern void dump_start(struct req_state *s);
 extern void list_all_buckets_start(struct req_state *s);
 extern void dump_owner(struct req_state *s, string& id, string& name);
-extern void open_section(struct req_state *s, const char *name);
-extern void close_section(struct req_state *s, const char *name);
 extern void dump_content_length(struct req_state *s, size_t len);
 extern void dump_etag(struct req_state *s, const char *etag);
 extern void dump_last_modified(struct req_state *s, time_t t);
@@ -120,7 +118,6 @@ extern void abort_early(struct req_state *s, int err);
 extern void dump_range(struct req_state *s, off_t ofs, off_t end);
 extern void dump_continue(struct req_state *s);
 extern void list_all_buckets_end(struct req_state *s);
-extern void dump_value(struct req_state *s, const char *name, const char *fmt, ...);
 extern void dump_time(struct req_state *s, const char *name, time_t *t);
 
 #endif

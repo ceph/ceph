@@ -219,7 +219,7 @@ void RGWListBucket::execute()
   url_decode(s->args.get("prefix"), prefix);
   marker = s->args.get("marker");
   max_keys = s->args.get("max-keys");
- if (!max_keys.empty()) {
+  if (!max_keys.empty()) {
     max = atoi(max_keys.c_str());
   } else {
     max = -1;
@@ -699,8 +699,8 @@ void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
   }
   s->fcgx = fcgx;
   s->content_started = false;
-  s->indent = 0;
   s->err_exist = false;
+  s->format = 0;
   memset(&s->err, 0, sizeof(s->err));
   if (s->acl) {
      delete s->acl;

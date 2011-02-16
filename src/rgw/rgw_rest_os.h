@@ -19,7 +19,7 @@ public:
   RGWListBuckets_REST_OS() {}
   ~RGWListBuckets_REST_OS() {}
 
-  void send_response() {}
+  void send_response();
 };
 
 class RGWListBucket_REST_OS : public RGWListBucket_REST {

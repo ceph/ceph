@@ -14,20 +14,20 @@ using namespace CryptoPP;
 
 void list_all_buckets_start(struct req_state *s)
 {
-  open_section(s, "ListAllMyBucketsResult xmlns=\"http://doc.s3.amazonaws.com/2006-03-01\"");
+  s->formatter->open_array_section("ListAllMyBucketsResult xmlns=\"http://doc.s3.amazonaws.com/2006-03-01\"");
 }
 
 void list_all_buckets_end(struct req_state *s)
 {
-  close_section(s, "ListAllMyBucketsResult");
+  s->formatter->close_section("ListAllMyBucketsResult");
 }
 
 void dump_bucket(struct req_state *s, RGWObjEnt& obj)
 {
-  open_section(s, "Bucket");
-  dump_value(s, "Name", obj.name.c_str());
+  s->formatter->open_obj_section("Bucket");
+  s->formatter->dump_value_str("Name", obj.name.c_str());
   dump_time(s, "CreationDate", &obj.mtime);
-  close_section(s, "Bucket");
+  s->formatter->close_section("Bucket");
 }
 
 int RGWGetObj_REST_S3::send_response(void *handle)
@@ -69,6 +69,8 @@ int RGWGetObj_REST_S3::send_response(void *handle)
     ret = 206; /* partial content */
 
   dump_errno(s, ret, &err);
+  if (!content_type)
+    content_type = "binary/octet-stream";
   end_header(s, content_type);
 
   sent_header = true;
@@ -85,7 +87,7 @@ void RGWListBuckets_REST_S3::send_response()
 {
   dump_errno(s, ret);
   end_header(s, "application/xml");
-  dump_start_xml(s);
+  dump_start(s);
 
   list_all_buckets_start(s);
   dump_owner(s, s->user.user_id, s->user.display_name);
@@ -93,12 +95,12 @@ void RGWListBuckets_REST_S3::send_response()
   map<string, RGWObjEnt>& m = buckets.get_buckets();
   map<string, RGWObjEnt>::iterator iter;
 
-  open_section(s, "Buckets");
+  s->formatter->open_array_section("Buckets");
   for (iter = m.begin(); iter != m.end(); ++iter) {
     RGWObjEnt obj = iter->second;
     dump_bucket(s, obj);
   }
-  close_section(s, "Buckets");
+  s->formatter->close_section("Buckets");
   list_all_buckets_end(s);
 }
 
@@ -107,44 +109,44 @@ void RGWListBucket_REST_S3::send_response()
   dump_errno(s, (ret < 0 ? ret : 0));
 
   end_header(s, "application/xml");
-  dump_start_xml(s);
+  dump_start(s);
   if (ret < 0)
     return;
 
-  open_section(s, "ListBucketResult");
-  dump_value(s, "Name", s->bucket);
+  s->formatter->open_obj_section("ListBucketResult");
+  s->formatter->dump_value_str("Name", s->bucket);
   if (!prefix.empty())
-    dump_value(s, "Prefix", prefix.c_str());
+    s->formatter->dump_value_str("Prefix", prefix.c_str());
   if (!marker.empty())
-    dump_value(s, "Marker", marker.c_str());
+    s->formatter->dump_value_str("Marker", marker.c_str());
   if (!max_keys.empty()) {
-    dump_value(s, "MaxKeys", max_keys.c_str());
+    s->formatter->dump_value_str("MaxKeys", max_keys.c_str());
   }
   if (!delimiter.empty())
-    dump_value(s, "Delimiter", delimiter.c_str());
+    s->formatter->dump_value_str("Delimiter", delimiter.c_str());
 
   if (ret >= 0) {
     vector<RGWObjEnt>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
-      open_section(s, "Contents");
-      dump_value(s, "Key", iter->name.c_str());
+      s->formatter->open_array_section("Contents");
+      s->formatter->dump_value_str("Key", iter->name.c_str());
       dump_time(s, "LastModified", &iter->mtime);
-      dump_value(s, "ETag", "&quot;%s&quot;", iter->etag);
-      dump_value(s, "Size", "%lld", iter->size);
-      dump_value(s, "StorageClass", "STANDARD");
+      s->formatter->dump_value_str("ETag", "&quot;%s&quot;", iter->etag);
+      s->formatter->dump_value_int("Size", "%lld", iter->size);
+      s->formatter->dump_value_str("StorageClass", "STANDARD");
       dump_owner(s, s->user.user_id, s->user.display_name);
-      close_section(s, "Contents");
+      s->formatter->close_section("Contents");
     }
     if (common_prefixes.size() > 0) {
-      open_section(s, "CommonPrefixes");
+      s->formatter->open_array_section("CommonPrefixes");
       map<string, bool>::iterator pref_iter;
       for (pref_iter = common_prefixes.begin(); pref_iter != common_prefixes.end(); ++pref_iter) {
-        dump_value(s, "Prefix", pref_iter->first.c_str());
+        s->formatter->dump_value_str("Prefix", pref_iter->first.c_str());
       }
-      close_section(s, "CommonPrefixes");
+      s->formatter->close_section("CommonPrefixes");
     }
   }
-  close_section(s, "ListBucketResult");
+  s->formatter->close_section("ListBucketResult");
 }
 
 void RGWCreateBucket_REST_S3::send_response()
@@ -183,19 +185,19 @@ void RGWCopyObj_REST_S3::send_response()
 {
   dump_errno(s, ret, &err);
 
-  end_header(s);
+  end_header(s, "binary/octet-stream");
   if (ret == 0) {
-    open_section(s, "CopyObjectResult");
+    s->formatter->open_obj_section("CopyObjectResult");
     dump_time(s, "LastModified", &mtime);
     map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
     if (iter != attrs.end()) {
       bufferlist& bl = iter->second;
       if (bl.length()) {
         char *etag = bl.c_str();
-        dump_value(s, "ETag", etag);
+        s->formatter->dump_value_str("ETag", etag);
       }
     }
-    close_section(s, "CopyObjectResult");
+    s->formatter->close_section("CopyObjectResult");
   }
 }
 
@@ -203,7 +205,7 @@ void RGWGetACLs_REST_S3::send_response()
 {
   if (ret) dump_errno(s, ret);
   end_header(s, "application/xml");
-  dump_start_xml(s);
+  dump_start(s);
   FCGX_PutStr(acls.c_str(), acls.size(), s->fcgx->out); 
 }
 
@@ -211,7 +213,7 @@ void RGWPutACLs_REST_S3::send_response()
 {
   dump_errno(s, ret);
   end_header(s, "application/xml");
-  dump_start_xml(s);
+  dump_start(s);
 }
 
 RGWOp *RGWHandler_REST_S3::get_retrieve_obj_op(struct req_state *s, bool get_data)

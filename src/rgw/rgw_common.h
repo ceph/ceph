@@ -26,10 +26,6 @@
 
 using namespace std;
 
-#define CGI_PRINTF(stream, format, ...) do { \
-   FCGX_FPrintF(stream, format, __VA_ARGS__); \
-} while (0)
-
 #define SERVER_NAME "RGWFS"
 
 #define RGW_ATTR_PREFIX  "user.rgw."
@@ -46,6 +42,15 @@ using namespace std;
 
 #define RGW_LOG_BEGIN "RADOS S3 Gateway:"
 #define RGW_LOG(x) if ((x) <= rgw_log_level) cout << RGW_LOG_BEGIN << " "
+
+#define RGW_FORMAT_XML          1
+#define RGW_FORMAT_JSON         2
+
+#define CGI_PRINTF(stream, format, ...) do { \
+   FCGX_FPrintF(stream, format, __VA_ARGS__); \
+   printf(format, __VA_ARGS__); \
+} while (0)
+
 
 typedef void *RGWAccessHandle;
 
@@ -158,12 +163,34 @@ struct RGWUserInfo
 };
 WRITE_CLASS_ENCODER(RGWUserInfo)
 
+struct req_state;
+
+class RGWFormatter {
+protected:
+  struct req_state *s;
+
+  virtual void formatter_init() = 0;
+public:
+  RGWFormatter() {}
+  void init(struct req_state *_s) {
+    s = _s;
+    formatter_init();
+  }
+
+  virtual void open_array_section(const char *name) = 0;
+  virtual void open_obj_section(const char *name) = 0;
+  virtual void close_section(const char *name) = 0;
+  virtual void dump_value_int(const char *name, const char *fmt, ...) = 0;
+  virtual void dump_value_str(const char *name, const char *fmt, ...) = 0;
+};
+
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
    struct fcgx_state *fcgx;
    http_op op;
    bool content_started;
-   int indent;
+   int format;
+   RGWFormatter *formatter;
    const char *path_name;
    string path_name_url;
    const char *host;

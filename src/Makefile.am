@@ -283,7 +283,9 @@ libradosgw_a_SOURCES = \
 	rgw/rgw_rest_s3.cc \
 	rgw/rgw_common.cc \
 	rgw/rgw_cache.cc \
-	rgw/rgw_os.cc
+	rgw/rgw_os.cc \
+	rgw/rgw_formats.cc
+
 libradosgw_a_CFLAGS = ${AM_CFLAGS}
 libradosgw_a_CXXFLAGS = ${AM_CXXFLAGS}
 # lib_LTLIBRARIES += libradosgw.a

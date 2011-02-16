@@ -6,10 +6,16 @@
 #include "rgw_rest_os.h"
 #include "rgw_rest_s3.h"
 
+#include "rgw_formats.h"
+
 
 
 static RGWHandler_REST_S3 rgwhandler_s3;
 static RGWHandler_REST_OS rgwhandler_os;
+
+static RGWFormatter_Plain formatter_plain;
+static RGWFormatter_XML formatter_xml;
+static RGWFormatter_JSON formatter_json;
 
 
 static void dump_status(struct req_state *s, const char *status)
@@ -72,20 +78,6 @@ void dump_errno(struct req_state *s, int err, struct rgw_err *rgwerr)
   }
 }
 
-void open_section(struct req_state *s, const char *name)
-{
-  //CGI_PRINTF(s->fcgx->out, "%*s<%s>\n", s->indent, "", name);
-  CGI_PRINTF(s->fcgx->out, "<%s>", name);
-  ++s->indent;
-}
-
-void close_section(struct req_state *s, const char *name)
-{
-  --s->indent;
-  //CGI_PRINTF(s->fcgx->out, "%*s</%s>\n", s->indent, "", name);
-  CGI_PRINTF(s->fcgx->out, "</%s>", name);
-}
-
 void dump_content_length(struct req_state *s, size_t len)
 {
   char buf[16];
@@ -113,21 +105,6 @@ void dump_last_modified(struct req_state *s, time_t t)
   CGI_PRINTF(s->fcgx->out, "Last-Modified: %s\n", timestr);
 }
 
-void dump_value(struct req_state *s, const char *name, const char *fmt, ...)
-{
-#define LARGE_SIZE 8192
-  char buf[LARGE_SIZE];
-  va_list ap;
-
-  va_start(ap, fmt);
-  int n = vsnprintf(buf, LARGE_SIZE, fmt, ap);
-  va_end(ap);
-  if (n >= LARGE_SIZE)
-    return;
-  // CGI_PRINTF(s->fcgx->out, "%*s<%s>%s</%s>\n", s->indent, "", name, buf, name);
-  CGI_PRINTF(s->fcgx->out, "<%s>%s</%s>", name, buf, name);
-}
-
 static void dump_entry(struct req_state *s, const char *val)
 {
   // CGI_PRINTF(s->fcgx->out, "%*s<?%s?>\n", s->indent, "", val);
@@ -145,39 +122,51 @@ void dump_time(struct req_state *s, const char *name, time_t *t)
   if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T.000Z", tmp) == 0)
     return;
 
-  dump_value(s, name, buf); 
+  s->formatter->dump_value_str(name, buf); 
 }
 
 void dump_owner(struct req_state *s, string& id, string& name)
 {
-  open_section(s, "Owner");
-  dump_value(s, "ID", id.c_str());
-  dump_value(s, "DisplayName", name.c_str());
-  close_section(s, "Owner");
+  s->formatter->open_obj_section("Owner");
+  s->formatter->dump_value_str("ID", id.c_str());
+  s->formatter->dump_value_str("DisplayName", name.c_str());
+  s->formatter->close_section("Owner");
 }
 
-void dump_start_xml(struct req_state *s)
+void dump_start(struct req_state *s)
 {
   if (!s->content_started) {
-    dump_entry(s, "xml version=\"1.0\" encoding=\"UTF-8\"");
+    if (s->format == RGW_FORMAT_XML)
+      dump_entry(s, "xml version=\"1.0\" encoding=\"UTF-8\"");
     s->content_started = true;
   }
 }
 
 void end_header(struct req_state *s, const char *content_type)
 {
-  if (!content_type)
-    content_type = "binary/octet-stream";
+  if (!content_type) {
+    switch (s->format) {
+    case RGW_FORMAT_XML:
+      content_type = "application/xml";
+      break;
+    case RGW_FORMAT_JSON:
+      content_type = "application/json";
+      break;
+    default:
+      content_type = "text/plain";
+      break;
+    }
+  }
   CGI_PRINTF(s->fcgx->out,"Content-type: %s\r\n\r\n", content_type);
   if (s->err_exist) {
-    dump_start_xml(s);
+    dump_start(s);
     struct rgw_err &err = s->err;
-    open_section(s, "Error");
+    s->formatter->open_obj_section("Error");
     if (err.code)
-      dump_value(s, "Code", err.code);
+      s->formatter->dump_value_int("Code", "%s", err.code);
     if (err.message)
-      dump_value(s, "Message", err.message);
-    close_section(s, "Error");
+      s->formatter->dump_value_str("Message", err.message);
+    s->formatter->close_section("Error");
   }
 }
 
@@ -345,6 +334,25 @@ void init_entities_from_header(struct req_state *s)
   }
 
   if (s->prot_flags & RGW_REST_OPENSTACK) {
+    s->format = 0;
+    s->formatter = &formatter_plain;
+    string format_str = s->args.get("format");
+    if (format_str.compare("xml") == 0) {
+      s->format = RGW_FORMAT_XML;
+      s->formatter = &formatter_xml;
+    } else if (format_str.compare("json") == 0) {
+      s->format = RGW_FORMAT_JSON;
+      s->formatter = &formatter_json;
+    }
+  } else {
+    s->format = RGW_FORMAT_XML;
+  }
+
+  RGW_LOG(0) << "s->formatter=" << (void *)s->formatter << std::endl;
+
+  s->formatter->init(s); 
+
+  if (s->prot_flags & RGW_REST_OPENSTACK) {
     string ver;
     string auth_key;
 
@@ -360,6 +368,8 @@ void init_entities_from_header(struct req_state *s)
     if (first.size() == 0)
       return;
   }
+
+
 
   if (!s->bucket) {
     url_decode(first, s->bucket_str);

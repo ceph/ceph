@@ -2,6 +2,29 @@
 #include "rgw_os.h"
 #include "rgw_rest_os.h"
 
+void RGWListBuckets_REST_OS::send_response()
+{
+  dump_errno(s, ret);
+  end_header(s);
+  dump_start(s);
+
+  s->formatter->open_array_section("account");
+
+  // dump_owner(s, s->user.user_id, s->user.display_name);
+
+  map<string, RGWObjEnt>& m = buckets.get_buckets();
+  map<string, RGWObjEnt>::iterator iter;
+
+  for (iter = m.begin(); iter != m.end(); ++iter) {
+    RGWObjEnt obj = iter->second;
+    s->formatter->open_obj_section("container");
+    s->formatter->dump_value_str("name", obj.name.c_str());
+    /* FIXME: missing count, bytes */
+    s->formatter->close_section("container");
+  }
+  s->formatter->close_section("account");
+}
+
 RGWOp *RGWHandler_REST_OS::get_retrieve_obj_op(struct req_state *s, bool get_data)
 {
   if (is_acl_op(s)) {
