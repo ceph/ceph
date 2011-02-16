@@ -7,7 +7,7 @@
 
 set -e
 
-CEPH_NUM_MON=1 CEPH_NUM_MDS=1 CEPH_NUM_OSD=1 ./vstart.sh -n -d --valgrind_osd 'massif'
+CEPH_NUM_MON=1 CEPH_NUM_MDS=1 CEPH_NUM_OSD=$2 ./vstart.sh -n -d --valgrind_osd 'massif'
 
 for i in `seq 0 $1`; do
     for j in `seq 0 9`; do
