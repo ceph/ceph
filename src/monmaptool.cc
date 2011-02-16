@@ -101,7 +101,7 @@ int main(int argc, const char **argv)
 
   char buf[80];
   if (!create && r < 0) {
-    cerr << me << ": couldn't open " << fn << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
+    cerr << me << ": couldn't open " << fn << ": " << strerror_r(-r, buf, sizeof(buf)) << std::endl;
     return -1;
   }    
   else if (create && !clobber && r == 0) {
