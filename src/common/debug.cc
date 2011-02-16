@@ -34,8 +34,10 @@ void _dout_open_log(bool print_version)
   }
 
   if (print_version) {
+    _doss->sputc(11);
     *_dout << "ceph version " << VERSION << " (commit:"
 	   << STRINGIFY(CEPH_GIT_VER) << ")" << std::endl;
+    _dout->flush();
   }
   _dout_need_open = false;
 }
