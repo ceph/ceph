@@ -2720,7 +2720,7 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const sobject_t& s
 	// populate unconnected_watchers
 	utime_t now = g_clock.now();
 	for (map<entity_name_t, watch_info_t>::iterator p = obc->obs.oi.watchers.begin();
-	     p != obc->obs.oi.watchers.begin();
+	     p != obc->obs.oi.watchers.end();
 	     p++) {
 	  utime_t expire = now;
 	  expire += p->second.timeout_seconds;
