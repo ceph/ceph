@@ -22,6 +22,13 @@
 #include "common/debug.h"
 #include "common/Thread.h"
 
+/**
+ * Return the number of threads in this process. The data is
+ * retrieved from /proc and includes all threads, not just
+ * "child" threads.
+ * Behavior changed in 6fb416b083d518e5f524359cc3cacb66ccc63dca
+ * to support eventual elimination of global variables.
+ */
 int Thread::get_num_threads(void)
 {
   std::ostringstream oss;
