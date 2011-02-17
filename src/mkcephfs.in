@@ -282,6 +282,12 @@ for name in $what; do
 	fi
 	rm -f $TDIR/keyring.mds.$id
     fi
+done
+
+for name in $what; do
+    type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
+    id=`echo $name | cut -c 4- | sed 's/\\.//'`
+    num=$id
     if [ -n "$ssh" ]; then
         ssh $host rm -rf $TDIR
     fi
