@@ -2,7 +2,6 @@
 
 import rados
 
-# Create and destroy a pool
 r = rados.Rados()
 v = r.version()
 print "rados version %s" % str(v)
@@ -17,6 +16,11 @@ if r.pool_exists("foo2") != True:
 
 print "opening pool foo2"
 foo2_pool = r.open_pool("foo2")
+# give this pool to the anonymous AUID
+foo2_pool.change_auid(rados.ANONYMOUS_AUID)
+# well, actually, we want it back.
+foo2_pool.change_auid(rados.ADMIN_AUID)
+# now delete
 print "deleting pool foo2"
 foo2_pool.delete()
 

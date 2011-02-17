@@ -7,6 +7,9 @@ import ctypes
 import errno
 import time
 
+ANONYMOUS_AUID = 0xffffffffffffffff
+ADMIN_AUID = 0
+
 class Error(Exception):
     def __init__(self, code):
         self.code = code
@@ -211,6 +214,14 @@ class Pool(object):
     def require_pool_open(self):
         if self.state != "open":
             raise PoolStateError("The pool is %s" % self.state)
+
+    def change_auid(self, auid):
+        self.require_pool_open()
+        ret = self.librados.rados_change_pool_auid(self.pool_id,\
+                ctypes.c_int64(auid))
+        if ret < 0:
+            raise make_ex(ret, "error changing auid '%s' to %lld" %\
+                (pool_name, auid))
 
     def delete(self):
         self.require_pool_open()
