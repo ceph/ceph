@@ -88,7 +88,10 @@ void dump_content_length(struct req_state *s, size_t len)
 
 void dump_etag(struct req_state *s, const char *etag)
 {
-  CGI_PRINTF(s->fcgx->out,"ETag: \"%s\"\n", etag);
+  if (s->prot_flags & RGW_REST_OPENSTACK)
+    CGI_PRINTF(s->fcgx->out,"etag: %s\n", etag);
+  else
+    CGI_PRINTF(s->fcgx->out,"ETag: \"%s\"\n", etag);
 }
 
 void dump_last_modified(struct req_state *s, time_t t)
@@ -368,6 +371,9 @@ void init_entities_from_header(struct req_state *s)
     RGW_LOG(10) << "ver=" << ver << " auth_key=" << auth_key << " first=" << first << " req=" << req << std::endl;
     if (first.size() == 0)
       goto done;
+
+    url_decode(first, s->bucket_str);
+    s->bucket = s->bucket_str.c_str();
 
     pos = req.find('/');
   }

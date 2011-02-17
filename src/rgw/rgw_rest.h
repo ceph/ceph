@@ -9,6 +9,7 @@
 
 class RGWGetObj_REST : public RGWGetObj
 {
+protected:
   bool sent_header;
 public:
   RGWGetObj_REST() {}

@@ -110,7 +110,6 @@ void RGWDeleteObj_REST_OS::send_response()
 
 int RGWGetObj_REST_OS::send_response(void *handle)
 {
-#if 0
   const char *content_type = NULL;
   int orig_ret = ret;
 
@@ -158,7 +157,7 @@ send_data:
   if (get_data && !orig_ret) {
     FCGX_PutStr(data, len, s->fcgx->out); 
   }
-#endif
+
   return 0;
 }
 

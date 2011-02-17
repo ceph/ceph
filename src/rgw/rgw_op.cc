@@ -159,9 +159,11 @@ void RGWGetObj::execute()
     if (ret < 0) {
       goto done;
     }
+    len = ret;
+    ofs += len;
+    ret = 0;
 
     send_response(handle);
-    ofs += ret;
     free(data);
   }
 

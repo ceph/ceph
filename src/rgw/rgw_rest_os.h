@@ -6,7 +6,6 @@
 #include "rgw_rest.h"
 
 class RGWGetObj_REST_OS : public RGWGetObj_REST {
-  bool sent_header;
 public:
   RGWGetObj_REST_OS() {}
   ~RGWGetObj_REST_OS() {}

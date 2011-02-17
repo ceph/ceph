@@ -6,7 +6,6 @@
 
 class RGWGetObj_REST_S3 : public RGWGetObj_REST
 {
-  bool sent_header;
 public:
   RGWGetObj_REST_S3() {}
   ~RGWGetObj_REST_S3() {}
