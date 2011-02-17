@@ -4,6 +4,8 @@ import rados
 
 # Create and destroy a pool
 r = rados.Rados()
+v = r.version()
+print "rados version %s" % str(v)
 try:
     r.create_pool("foo2")
     print "created pool foo2"

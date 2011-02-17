@@ -66,6 +66,15 @@ class rados_pool_stat_t(Structure):
                 ("num_wr", c_uint64),
                 ("num_wr_kb", c_uint64)]
 
+class Version(object):
+    def __init__(self, major, minor, extra):
+        self.major = major
+        self.minor = minor
+        self.extra = extra
+
+    def __str__(self):
+        return "%d.%d.%d" % (self.major, self.minor, self.extra)
+
 class Rados(object):
     """librados python wrapper"""
     def __init__(self):
@@ -78,6 +87,14 @@ class Rados(object):
     def __del__(self):
         if (self.__dict__.has_key("initialized") and self.initialized == True):
             self.librados.rados_deinitialize()
+
+    def version(self):
+        major = ctypes.c_int()
+        minor = ctypes.c_int()
+        extra = ctypes.c_int()
+        ret = self.librados.librados_version(byref(major), byref(minor),\
+                                            byref(extra))
+        return Version(major.value, minor.value, extra.value)
 
     def create_pool(self, pool_name):
         ret = self.librados.rados_create_pool(c_char_p(pool_name))
