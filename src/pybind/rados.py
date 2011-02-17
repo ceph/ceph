@@ -9,6 +9,8 @@ import time
 class Error(Exception):
     def __init__(self, code):
         self.code = code
+    def __repr__(self):
+        return ("rados.Error(code=%d)" % self.code)
 
 class PermissionError(Exception):
     pass
@@ -26,6 +28,12 @@ class NoSpace(Exception):
     pass
 
 class IncompleteWriteError(Exception):
+    pass
+
+class PoolStateError(Exception):
+    pass
+
+class ObjectStateError(Exception):
     pass
 
 def make_ex(ret, msg):
@@ -57,19 +65,6 @@ class rados_pool_stat_t(Structure):
                 ("num_wr", c_uint64),
                 ("num_wr_kb", c_uint64)]
 
-def object_deleted(method):
-    def wrapper(self, *args, **kwargs):
-        try:
-            if self.deleted == False:
-                return method(self, *args, **kwargs)
-            else:
-                raise ObjectNotFound("Object has been deleted")
-        except:
-            raise
-    wrapper.__doc__ = method.__doc__
-    wrapper.__name__ = method.__name__
-    return wrapper
-
 class Rados(object):
     """librados python wrapper"""
     def __init__(self):
@@ -88,22 +83,12 @@ class Rados(object):
         if ret < 0:
             raise make_ex(ret, "error creating pool '%s'" % pool_name)
 
-    def delete_pool(self, pool_name):
-        ret = self.librados.rados_delete_pool(pool_name)
-        if ret < 0:
-            raise make_ex(ret, "error deleting pool '%s'" % pool_name)
-
     def open_pool(self, pool_name):
         pool = c_void_p()
         ret = self.librados.rados_open_pool(c_char_p(pool_name), byref(pool))
         if ret < 0:
-            raise make_ex(ret, "error opening pool '%s'" % pool)
+            raise make_ex(ret, "error opening pool '%s'" % pool_name)
         return Pool(pool_name, self.librados, pool)
-
-    def close_pool(self, pool):
-        ret = self.librados.rados_close_pool(pool)
-        if ret < 0:
-            raise make_ex(ret, "error closing pool '%s'" % pool)
 
 class Pool(object):
     """Pool object"""
@@ -111,14 +96,18 @@ class Pool(object):
         self.name = name
         self.librados = librados
         self.pool = pool
-        self.deleted = False
+        self.state = "open"
 
-    @object_deleted
+    def check_pool_state(self):
+        if self.state != "open":
+            raise PoolStateError("The pool is %s" % self.state)
+
     def get_object(self, key):
+        self.check_pool_state()
         return Object(self, key)
 
-    @object_deleted
     def write(self, key, string_to_write, offset = 0):
+        self.check_pool_state()
         length = len(string_to_write)
         ret = self.librados.rados_write(self.pool, c_char_p(key),
                     c_size_t(offset), c_char_p(string_to_write),
@@ -135,8 +124,8 @@ class Pool(object):
 returned %d, but %d was the maximum number of bytes it could have \
 written." % (self.name, ret, length))
 
-    @object_deleted
     def read(self, key, offset = 0, length = 8192):
+        self.check_pool_state()
         ret_buf = create_string_buffer(length)
         ret = self.librados.rados_read(self.pool, c_char_p(key), c_size_t(offset),
                                         ret_buf, c_size_t(length))
@@ -144,8 +133,8 @@ written." % (self.name, ret, length))
             raise make_ex("Pool.read(%s): failed to read %s" % (self.name, key))
         return ret_buf.value
 
-    @object_deleted
     def get_stats(self):
+        self.check_pool_state()
         stats = rados_pool_stat_t()
         ret = self.librados.rados_stat_pool(self.pool, byref(stats))
         if ret < 0:
@@ -163,15 +152,15 @@ written." % (self.name, ret, length))
                 "num_wr": stats.num_wr,
                 "num_wr_kb": stats.num_wr_kb }
 
-    @object_deleted
     def remove_object(self, key):
+        self.check_pool_state()
         ret = self.librados.rados_remove(self.pool, c_char_p(key))
         if ret < 0:
             raise make_ex(ret, "Failed to remove '%s'" % key)
         return True
 
-    @object_deleted
     def stat(self, key):
+        self.check_pool_state()
         """Stat object, returns, size/timestamp"""
         psize = c_uint64()
         pmtime = c_uint64()
@@ -182,8 +171,8 @@ written." % (self.name, ret, length))
             raise make_ex(ret, "Failed to stat %r" % key)
         return psize.value, time.localtime(pmtime.value)
 
-    @object_deleted
     def get_xattr(self, key, xattr_name):
+        self.check_pool_state()
         ret_length = 4096
         ret_buf = create_string_buffer(ret_length)
         ret = self.librados.rados_getxattr(self.pool, c_char_p(key),
@@ -192,8 +181,8 @@ written." % (self.name, ret, length))
             raise make_ex(ret, "Failed to get xattr %r" % xattr_name)
         return ret_buf.value
 
-    @object_deleted
     def set_xattr(self, key, xattr_name, xattr_value):
+        self.check_pool_state()
         ret = self.librados.rados_setxattr(self.pool, c_char_p(key),
                     c_char_p(xattr_name), c_char_p(xattr_value),
                     c_size_t(len(xattr_value)))
@@ -201,13 +190,28 @@ written." % (self.name, ret, length))
             raise make_ex(ret, "Failed to set xattr %r" % xattr_name)
         return True
 
-    @object_deleted
     def rm_xattr(self, key, xattr_name):
+        self.check_pool_state()
         ret = self.librados.rados_rmxattr(self.pool, c_char_p(key), c_char_p(xattr_name))
         if ret < 0:
             raise make_ex(ret, "Failed to delete key %r xattr %r" %
                 (key, xattr_name))
         return True
+
+    def delete(self):
+        self.check_pool_state()
+        ret = self.librados.rados_delete_pool(self.pool)
+        if ret < 0:
+            raise make_ex(ret, "error deleting pool '%s'" % pool_name)
+        self.state = "deleted"
+
+    def close(self, pool):
+        self.check_pool_state()
+        ret = self.librados.rados_close_pool(pool)
+        if ret < 0:
+            raise make_ex(ret, "error closing pool '%s'" % pool)
+        self.state = "closed"
+
 
 class Object(object):
     """Rados object wrapper, makes the object look like a file"""
@@ -215,41 +219,45 @@ class Object(object):
         self.key = key
         self.pool = pool
         self.offset = 0
-        self.deleted = False
+        self.state = "exists"
 
-    @object_deleted
+    def check_object_state(self):
+        if self.state != "exists":
+            raise ObjectStateError("The object is %s" % self.state)
+
     def read(self, length = 1024*1024):
+        self.check_object_state()
         ret = self.pool.read(self.key, self.offset, length)
         self.offset += len(ret)
         return ret
 
-    @object_deleted
     def write(self, string_to_write):
+        self.check_object_state()
         ret = self.pool.write(self.key, string_to_write, self.offset)
         self.offset += ret
         return ret
 
-    @object_deleted
     def remove(self):
+        self.check_object_state()
         self.pool.remove_object(self.key)
-        self.deleted = True
+        self.state = "removed"
 
-    @object_deleted
     def stat(self):
+        self.check_object_state()
         return self.pool.stat(self.key)
 
-    @object_deleted
     def seek(self, position):
+        self.check_object_state()
         self.offset = position
 
-    @object_deleted
     def get_xattr(self, xattr_name):
+        self.check_object_state()
         return self.pool.get_xattr(self.key, xattr_name)
 
-    @object_deleted
     def set_xattr(self, xattr_name, xattr_value):
+        self.check_object_state()
         return self.pool.set_xattr(self.key, xattr_name, xattr_value)
 
-    @object_deleted
     def rm_xattr(self, xattr_name):
+        self.check_object_state()
         return self.pool.rm_xattr(self.key, xattr_name)
