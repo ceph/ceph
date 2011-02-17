@@ -3,6 +3,7 @@ Copyright 2011, Hannu Valtonen <hannu.valtonen@ormod.com>
 """
 from ctypes import CDLL, c_char_p, c_size_t, c_void_p,\
     create_string_buffer, byref, Structure, c_uint64, pointer
+import ctypes
 import errno
 import time
 
@@ -91,6 +92,7 @@ class Rados(object):
         return Pool(pool_name, self.librados, pool)
 
 class ObjectIterator(object):
+    """rados.Pool Object iterator"""
     def __init__(self, pool):
         self.pool = pool
         self.ctx = c_void_p()
@@ -113,8 +115,61 @@ class ObjectIterator(object):
     def __del__(self):
         self.pool.librados.rados_list_objects_close(self.ctx)
 
+class SnapIterator(object):
+    """Snapshot iterator"""
+    def __init__(self, pool):
+        self.pool = pool
+        # We don't know how big a buffer we need until we've called the
+        # function. So use the exponential doubling strategy.
+        num_snaps = 10
+        while True:
+            self.snaps = (ctypes.c_uint64 * num_snaps)()
+            ret = self.pool.librados.rados_snap_list(self.pool.pool_id,
+                                self.snaps, num_snaps)
+            if (ret >= 0):
+                self.max_snap = ret
+                break
+            elif (ret != -errno.ERANGE):
+                raise make_ex(ret, "error calling rados_snap_list for \
+pool '%s'" % self.pool.pool_name)
+            num_snaps = num_snaps * 2;
+        self.cur_snap = 0
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        if (self.cur_snap >= self.max_snap):
+            raise StopIteration
+        snap_id = self.snaps[self.cur_snap]
+        name_len = 10
+        while True:
+            name = create_string_buffer(name_len)
+            ret = self.pool.librados.rados_snap_get_name(self.pool.pool_id,\
+                                snap_id, byref(name), name_len)
+            if (ret == 0):
+                name_len = ret
+                break
+            elif (ret != -errno.ERANGE):
+                raise make_ex(ret, "rados_snap_get_name error")
+            name_len = name_len * 2
+        snap = Snap(self.pool, name, snap_id)
+        self.cur_snap = self.cur_snap + 1
+        return snap
+
+class Snap(object):
+    """Snapshot object"""
+    def __init__(self, pool, name, snap_id):
+        self.pool = pool
+        self.name = name
+        self.snap_id = snap_id
+
+    def __str__(self):
+        return "rados.Snap(pool=%s,name=%s,snap_id=%d)" \
+            % (str(self.pool), self.name, self.snap_id)
+
 class Pool(object):
-    """Pool object"""
+    """rados.Pool object"""
     def __init__(self, name, librados, pool_id):
         self.name = name
         self.librados = librados
@@ -241,6 +296,29 @@ written." % (self.name, ret, length))
 
     def list_objects(self):
         return ObjectIterator(self)
+
+    def list_snaps(self):
+        return SnapIterator(self)
+
+    def create_snap(self, snap_name):
+        ret = self.librados.rados_snap_create(self.pool_id,
+                            c_char_p(snap_name))
+        if (ret != 0):
+            raise make_ex(ret, "Failed to create snap %s" % snap_name)
+
+    def remove_snap(self, snap_name):
+        ret = self.librados.rados_snap_remove(self.pool_id,
+                            c_char_p(snap_name))
+        if (ret != 0):
+            raise make_ex(ret, "Failed to remove snap %s" % snap_name)
+
+    def lookup_snap(self, snap_name):
+        snap_id = c_uint64()
+        ret = self.librados.rados_snap_lookup(self.pool_id,\
+                            c_char_p(snap_name), byref(snap_id))
+        if (ret != 0):
+            raise make_ex(ret, "Failed to lookup snap %s" % snap_name)
+        return Snap(self, snap_name, snap_id)
 
 class Object(object):
     """Rados object wrapper, makes the object look like a file"""
