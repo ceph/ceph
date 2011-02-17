@@ -153,7 +153,7 @@ pool '%s'" % self.pool.pool_name)
             elif (ret != -errno.ERANGE):
                 raise make_ex(ret, "rados_snap_get_name error")
             name_len = name_len * 2
-        snap = Snap(self.pool, name, snap_id)
+        snap = Snap(self.pool, name.value, snap_id)
         self.cur_snap = self.cur_snap + 1
         return snap
 
