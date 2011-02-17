@@ -32,6 +32,17 @@ except rados.ObjectExists:
 foo3_pool = r.open_pool("foo3")
 foo3_pool.write("abc", "abc")
 foo3_pool.write("def", "def")
+abc_str = foo3_pool.read("abc")
+if (abc_str != "abc"):
+    raise RuntimeError("error reading object abc: expected value abc, \
+got %s" % abc_str)
+# write_full replaces the whole 'def' object
+foo3_pool.write_full("def", "d")
+def_str = foo3_pool.read("def")
+if (def_str != "d"):
+    raise RuntimeError("error reading object def: expected value d, \
+got %s" % def_str)
+
 for obj in foo3_pool.list_objects():
     print str(obj)
 

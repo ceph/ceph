@@ -241,23 +241,36 @@ class Pool(object):
         self.require_pool_open()
         return Object(self, key)
 
-    def write(self, key, string_to_write, offset = 0):
+    def write(self, key, data, offset = 0):
         self.require_pool_open()
-        length = len(string_to_write)
+        length = len(data)
         ret = self.librados.rados_write(self.pool_id, c_char_p(key),
-                    c_size_t(offset), c_char_p(string_to_write),
-                    c_size_t(length))
+                 c_size_t(offset), c_char_p(data),
+                 c_size_t(length))
         if ret == length:
             return ret
         elif ret < 0:
             raise make_ex(ret, "Pool.write(%s): failed to write %s" % \
                 (self.name, key))
         elif ret < length:
-            raise IncompleteWriteError("Wrote only %ld/%ld bytes" % (ret, length))
+            raise IncompleteWriteError("Wrote only %ld out of %ld bytes" % \
+                (ret, length))
         else:
             raise make_ex("Pool.write(%s): logic error: rados_write \
 returned %d, but %d was the maximum number of bytes it could have \
 written." % (self.name, ret, length))
+
+    def write_full(self, key, data, full = False, offset = 0):
+        self.require_pool_open()
+        length = len(data)
+        ret = self.librados.rados_write_full(self.pool_id, c_char_p(key),
+                 c_size_t(offset), c_char_p(data),
+                 c_size_t(length))
+        if ret == 0:
+            return ret
+        else:
+            raise make_ex(ret, "Pool.write(%s): failed to write_full %s" % \
+                (self.name, key))
 
     def read(self, key, offset = 0, length = 8192):
         self.require_pool_open()
