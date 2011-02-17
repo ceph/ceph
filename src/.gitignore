@@ -35,6 +35,7 @@
 /testtimers
 /testlibrbd
 /testlibrbdpp
+/testsnaps
 dev
 mondata
 log
