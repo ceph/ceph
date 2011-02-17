@@ -260,7 +260,7 @@ class Pool(object):
 returned %d, but %d was the maximum number of bytes it could have \
 written." % (self.name, ret, length))
 
-    def write_full(self, key, data, full = False, offset = 0):
+    def write_full(self, key, data, offset = 0):
         self.require_pool_open()
         length = len(data)
         ret = self.librados.rados_write_full(self.pool_id, c_char_p(key),
