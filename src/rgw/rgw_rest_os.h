@@ -24,10 +24,13 @@ public:
 
 class RGWListBucket_REST_OS : public RGWListBucket_REST {
 public:
-  RGWListBucket_REST_OS() {}
+  RGWListBucket_REST_OS() {
+    limit_opt_name = "limit";
+    default_max = 10000;
+  }
   ~RGWListBucket_REST_OS() {}
 
-  void send_response() {}
+  void send_response();
 };
 
 class RGWCreateBucket_REST_OS : public RGWCreateBucket_REST {

@@ -15,7 +15,18 @@ void RGWListBuckets_REST_OS::send_response()
   map<string, RGWObjEnt>& m = buckets.get_buckets();
   map<string, RGWObjEnt>::iterator iter;
 
-  for (iter = m.begin(); iter != m.end(); ++iter) {
+  string marker = s->args.get("marker");
+  if (marker.empty())
+    iter = m.begin();
+  else
+    iter = m.upper_bound(marker);
+
+  int limit = 10000;
+  string limit_str = s->args.get("limit");
+  if (!limit_str.empty())
+    limit = atoi(limit_str.c_str());
+
+  for (int i = 0; i < limit && iter != m.end(); ++iter, ++i) {
     RGWObjEnt obj = iter->second;
     s->formatter->open_obj_section("container");
     s->formatter->dump_value_str("name", obj.name.c_str());
@@ -23,6 +34,45 @@ void RGWListBuckets_REST_OS::send_response()
     s->formatter->close_section("container");
   }
   s->formatter->close_section("account");
+}
+
+void RGWListBucket_REST_OS::send_response()
+{
+  dump_errno(s, (ret < 0 ? ret : 0));
+
+  end_header(s);
+  dump_start(s);
+  if (ret < 0)
+    return;
+
+  vector<RGWObjEnt>::iterator iter = objs.begin();
+
+  s->formatter->open_array_section("container");
+
+  for (; iter != objs.end(); ++iter) {
+    if (!marker.empty() && iter->name.compare(marker) <= 0) {
+      /* we expect marker to be upper-bount, whereas lower layer uses marker
+         as the starting point (like S3) */
+      continue;
+    }
+    s->formatter->open_obj_section("object");
+    s->formatter->dump_value_str("name", iter->name.c_str());
+    s->formatter->dump_value_str("hash", "&quot;%s&quot;", iter->etag);
+    s->formatter->dump_value_int("bytes", "%lld", iter->size);
+    dump_time(s, "last_modified", &iter->mtime);
+    s->formatter->close_section("object");
+  }
+#if 0
+    if (common_prefixes.size() > 0) {
+      s->formatter->open_array_section("CommonPrefixes");
+      map<string, bool>::iterator pref_iter;
+      for (pref_iter = common_prefixes.begin(); pref_iter != common_prefixes.end(); ++pref_iter) {
+        s->formatter->dump_value_str("Prefix", pref_iter->first.c_str());
+      }
+      s->formatter->close_section("CommonPrefixes");
+    }
+#endif
+  s->formatter->close_section("container");
 }
 
 RGWOp *RGWHandler_REST_OS::get_retrieve_obj_op(struct req_state *s, bool get_data)

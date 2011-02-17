@@ -132,6 +132,9 @@ protected:
   vector<RGWObjEnt> objs;
   map<string, bool> common_prefixes;
 
+  string limit_opt_name;
+  int default_max;
+
 public:
   RGWListBucket() {}
   ~RGWListBucket() {}

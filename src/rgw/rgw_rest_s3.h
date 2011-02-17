@@ -24,7 +24,10 @@ public:
 
 class RGWListBucket_REST_S3 : public RGWListBucket_REST {
 public:
-  RGWListBucket_REST_S3() {}
+  RGWListBucket_REST_S3() {
+    limit_opt_name ="max-keys";
+    default_max = 1000;
+  }
   ~RGWListBucket_REST_S3() {}
 
   void send_response();

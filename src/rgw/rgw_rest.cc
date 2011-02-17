@@ -367,9 +367,9 @@ void init_entities_from_header(struct req_state *s)
     RGW_LOG(10) << "ver=" << ver << " auth_key=" << auth_key << " first=" << first << " req=" << req << std::endl;
     if (first.size() == 0)
       return;
+
+    pos = req.find('/');
   }
-
-
 
   if (!s->bucket) {
     url_decode(first, s->bucket_str);
