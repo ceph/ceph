@@ -75,6 +75,93 @@ void RGWListBucket_REST_OS::send_response()
   s->formatter->close_section("container");
 }
 
+
+void RGWCreateBucket_REST_OS::send_response()
+{
+  dump_errno(s, ret);
+  end_header(s);
+}
+
+void RGWDeleteBucket_REST_OS::send_response()
+{
+  int r = ret;
+  if (!r)
+    r = 204;
+
+  dump_errno(s, r);
+  end_header(s);
+}
+
+void RGWPutObj_REST_OS::send_response()
+{
+  dump_errno(s, ret, &err);
+  end_header(s);
+}
+
+void RGWDeleteObj_REST_OS::send_response()
+{
+  int r = ret;
+  if (!r)
+    r = 204;
+
+  dump_errno(s, r);
+  end_header(s);
+}
+
+int RGWGetObj_REST_OS::send_response(void *handle)
+{
+#if 0
+  const char *content_type = NULL;
+  int orig_ret = ret;
+
+  if (sent_header)
+    goto send_data;
+
+  if (range_str)
+    dump_range(s, ofs, end);
+
+  dump_content_length(s, total_len);
+  dump_last_modified(s, lastmod);
+
+  if (!ret) {
+    map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
+    if (iter != attrs.end()) {
+      bufferlist& bl = iter->second;
+      if (bl.length()) {
+        char *etag = bl.c_str();
+        dump_etag(s, etag);
+      }
+    }
+
+    for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+       const char *name = iter->first.c_str();
+       if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
+         name += sizeof(RGW_ATTR_PREFIX) - 1;
+         CGI_PRINTF(s->fcgx->out,"%s: %s\r\n", name, iter->second.c_str());
+       } else if (!content_type && strcmp(name, RGW_ATTR_CONTENT_TYPE) == 0) {
+         content_type = iter->second.c_str();
+       }
+    }
+  }
+
+  if (range_str && !ret)
+    ret = 206; /* partial content */
+
+  dump_errno(s, ret, &err);
+  if (!content_type)
+    content_type = "binary/octet-stream";
+  end_header(s, content_type);
+
+  sent_header = true;
+
+send_data:
+  if (get_data && !orig_ret) {
+    FCGX_PutStr(data, len, s->fcgx->out); 
+  }
+#endif
+  return 0;
+}
+
 RGWOp *RGWHandler_REST_OS::get_retrieve_obj_op(struct req_state *s, bool get_data)
 {
   if (is_acl_op(s)) {

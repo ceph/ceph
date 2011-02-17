@@ -272,6 +272,8 @@ static void next_tok(string& str, string& tok, char delim)
 void init_entities_from_header(struct req_state *s)
 {
   const char *gateway_dns_name;
+  string req;
+  string first;
 
   gateway_dns_name = FCGX_GetParam("RGW_DNS_NAME", s->fcgx->envp);
   if (!gateway_dns_name)
@@ -283,6 +285,10 @@ void init_entities_from_header(struct req_state *s)
   s->bucket_str = "";
   s->object = NULL;
   s->object_str = "";
+
+  /* this is the default, might change in a few lines */
+  s->format = RGW_FORMAT_XML;
+  s->formatter = &formatter_xml;
 
   int pos;
   if (s->host) {
@@ -314,15 +320,14 @@ void init_entities_from_header(struct req_state *s)
   s->args.parse();
 
   if (*req_name != '/')
-    return;
+    goto done;
 
   req_name++;
 
   if (!*req_name)
-    return;
+    goto done;
 
-  string req(req_name);
-  string first;
+  req = req_name;
 
   pos = req.find('/');
   if (pos >= 0) {
@@ -344,13 +349,9 @@ void init_entities_from_header(struct req_state *s)
       s->format = RGW_FORMAT_JSON;
       s->formatter = &formatter_json;
     }
-  } else {
-    s->format = RGW_FORMAT_XML;
   }
 
   RGW_LOG(0) << "s->formatter=" << (void *)s->formatter << std::endl;
-
-  s->formatter->init(s); 
 
   if (s->prot_flags & RGW_REST_OPENSTACK) {
     string ver;
@@ -366,7 +367,7 @@ void init_entities_from_header(struct req_state *s)
 
     RGW_LOG(10) << "ver=" << ver << " auth_key=" << auth_key << " first=" << first << " req=" << req << std::endl;
     if (first.size() == 0)
-      return;
+      goto done;
 
     pos = req.find('/');
   }
@@ -377,7 +378,7 @@ void init_entities_from_header(struct req_state *s)
   } else {
     url_decode(req, s->object_str);
     s->object = s->object_str.c_str();
-    return;
+    goto done;
   }
 
   if (pos >= 0) {
@@ -388,6 +389,8 @@ void init_entities_from_header(struct req_state *s)
       s->object = s->object_str.c_str();
     }
   }
+done:
+  s->formatter->init(s);
 }
 
 static void line_unfold(const char *line, string& sdest)

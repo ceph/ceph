@@ -11,7 +11,7 @@ public:
   RGWGetObj_REST_OS() {}
   ~RGWGetObj_REST_OS() {}
 
-  int send_response(void *handle) { return 0; }
+  int send_response(void *handle);
 };
 
 class RGWListBuckets_REST_OS : public RGWListBuckets_REST {
@@ -38,7 +38,7 @@ public:
   RGWCreateBucket_REST_OS() {}
   ~RGWCreateBucket_REST_OS() {}
 
-  void send_response() {}
+  void send_response();
 };
 
 class RGWDeleteBucket_REST_OS : public RGWDeleteBucket_REST {
@@ -46,7 +46,7 @@ public:
   RGWDeleteBucket_REST_OS() {}
   ~RGWDeleteBucket_REST_OS() {}
 
-  void send_response() {}
+  void send_response();
 };
 
 class RGWPutObj_REST_OS : public RGWPutObj_REST {
@@ -54,7 +54,7 @@ public:
   RGWPutObj_REST_OS() {}
   ~RGWPutObj_REST_OS() {}
 
-  void send_response() {}
+  void send_response();
 };
 
 class RGWDeleteObj_REST_OS : public RGWDeleteObj_REST {
@@ -62,7 +62,7 @@ public:
   RGWDeleteObj_REST_OS() {}
   ~RGWDeleteObj_REST_OS() {}
 
-  void send_response() {}
+  void send_response();
 };
 
 class RGWCopyObj_REST_OS : public RGWCopyObj_REST {
