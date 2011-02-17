@@ -10,6 +10,9 @@ try:
 except rados.ObjectExists:
     print "pool foo2 already exists"
 
+if r.pool_exists("foo2") != True:
+    raise RuntimeError("we just created pool 'foo2', but it doesn't exist?")
+
 print "opening pool foo2"
 foo2_pool = r.open_pool("foo2")
 print "deleting pool foo2"
