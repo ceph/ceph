@@ -546,7 +546,7 @@ void PG::search_for_missing(const Info &oinfo, const Missing *omissing,
 
     map<sobject_t, set<int> >::iterator ml = missing_loc.find(soid);
     if (ml == missing_loc.end()) {
-      hash_map<sobject_t, list<class Message*> >::iterator wmo =
+      map<sobject_t, list<class Message*> >::iterator wmo =
 	waiting_for_missing_object.find(soid);
       if (wmo != waiting_for_missing_object.end()) {
 	osd->take_waiters(wmo->second);
@@ -993,7 +993,7 @@ void PG::mark_obj_as_lost(ObjectStore::Transaction& t,
 {
   // Wake anyone waiting for this object. Now that it's been marked as lost,
   // we will just return an error code.
-  hash_map<sobject_t, list<class Message*> >::iterator wmo =
+  map<sobject_t, list<class Message*> >::iterator wmo =
     waiting_for_missing_object.find(lost_soid);
   if (wmo != waiting_for_missing_object.end()) {
     osd->take_waiters(wmo->second);
@@ -1320,8 +1320,6 @@ void PG::clear_primary_state()
 
   missing_loc.clear();
   log.reset_recovery_pointers();
-
-  stat_object_temp_rd.clear();
 
   scrub_reserved_peers.clear();
   peer_scrub_map.clear();
@@ -2708,31 +2706,9 @@ void PG::adjust_local_snaps(ObjectStore::Transaction &t, interval_set<snapid_t> 
 }
 
 
-// ==============================
-// Object locking
-
-//
-// If the target object of the operation op is locked for writing by another client, the function puts op to the waiting queue waiting_for_wr_unlock
-// returns true if object was locked, otherwise returns false
-// 
-bool PG::block_if_wrlocked(MOSDOp* op, object_info_t& oi)
+void PG::take_object_waiters(map<sobject_t, list<Message*> >& m)
 {
-  sobject_t soid(op->get_oid(), CEPH_NOSNAP);
-
-  if (oi.wrlock_by.tid &&
-      oi.wrlock_by.name != op->get_orig_source()) {
-    //the object is locked for writing by someone else -- add the op to the waiting queue      
-    dout(10) << "blocked on wrlock on " << oi << dendl;
-    waiting_for_wr_unlock[soid].push_back(op);
-    return true;
-  }
-  
-  return false; //the object wasn't locked, so the operation can be handled right away
-}
-
-void PG::take_object_waiters(hash_map<sobject_t, list<Message*> >& m)
-{
-  for (hash_map<sobject_t, list<Message*> >::iterator it = m.begin();
+  for (map<sobject_t, list<Message*> >::iterator it = m.begin();
        it != m.end();
        it++)
     osd->take_waiters(it->second);

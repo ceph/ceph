@@ -767,21 +767,17 @@ public:
 
   // pg waiters
   list<class Message*>            waiting_for_active;
-  hash_map<sobject_t, 
-           list<class Message*> > waiting_for_missing_object, waiting_for_degraded_object;   
+  map<sobject_t, list<class Message*> > waiting_for_missing_object,
+                                        waiting_for_degraded_object;
   map<eversion_t,list<Message*> > waiting_for_ondisk;
   map<eversion_t,class MOSDOp*>   replay_queue;
 
-  void take_object_waiters(hash_map<sobject_t, list<Message*> >& m);
+  void take_object_waiters(map<sobject_t, list<Message*> >& m);
   
-  hash_map<sobject_t, list<Message*> > waiting_for_wr_unlock; 
-
   bool block_if_wrlocked(MOSDOp* op, object_info_t& oi);
 
 
   // stats
-  hash_map<sobject_t, DecayCounter> stat_object_temp_rd;
-
   Mutex pg_stats_lock;
   bool pg_stats_valid;
   pg_stat_t pg_stats_stable;

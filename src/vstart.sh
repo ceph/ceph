@@ -202,7 +202,7 @@ fi
 $SUDO rm -f core*
 
 test -d out || mkdir out
-$SUDO rm -f out/*
+$SUDO rm -rf out/*
 test -d log && rm -f log/*
 test -d gmon && $SUDO rm -rf gmon/*
 
