@@ -12,7 +12,6 @@
  *
  */
 
-#include "config.h"
 #include "common/debug.h"
 #include "common/hex.h"
 

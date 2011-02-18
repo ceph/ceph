@@ -16,16 +16,19 @@
 #ifndef CEPH_DEBUG_H
 #define CEPH_DEBUG_H
 
-#include "Mutex.h"
-#include "common/DoutStreambuf.h"
 #include "common/likely.h"
+#include "config.h"		    // need for g_conf
 #include "include/assert.h"
 
-#include <iosfwd>
-#include <string>
+#include <iostream>
+#include <pthread.h>
+#include <streambuf>
+
+template <typename T, typename U>
+class DoutStreambuf;
 
 extern std::ostream *_dout;
-extern DoutStreambuf <char> *_doss;
+extern DoutStreambuf <char, std::basic_string<char>::traits_type> *_doss;
 extern bool _dout_need_open;
 extern pthread_mutex_t _dout_lock;
 
@@ -34,6 +37,10 @@ extern void _dout_open_log();
 extern int dout_handle_daemonize();
 
 extern int dout_create_rank_symlink(int n);
+
+extern void dout_emergency(const char * const str);
+
+extern void dout_emergency(const std::string &str);
 
 class DoutLocker
 {
@@ -51,7 +58,8 @@ static inline void _dout_begin_line(signed int prio) {
     _dout_open_log();
 
   // Put priority information into dout
-  _doss->sputc(prio + 12);
+  std::streambuf *doss = (std::streambuf*)_doss;
+  doss->sputc(prio + 12);
 
   // Some information that goes in every dout message
   *_dout << std::hex << pthread_self() << std::dec << " ";

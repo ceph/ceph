@@ -98,6 +98,9 @@ extern void __ceph_assert_warn(const char *assertion, const char *file, int line
 
 #ifdef __cplusplus
 }
+
+using namespace ceph;
+
 #endif
 
 /*
