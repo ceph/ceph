@@ -20,6 +20,7 @@
 #include "config.h"
 #include "common/armor.h"
 #include "common/Clock.h"
+#include "common/hex.h"
 #include "common/safe_io.h"
 
 #include <errno.h>

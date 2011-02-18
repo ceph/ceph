@@ -535,7 +535,8 @@ libcommon_files = \
 	common/lockdep.cc \
 	common/DoutStreambuf.cc \
 	common/debug.cc \
-	common/version.cc
+	common/version.cc \
+	common/hex.cc
 
 libcrush_a_SOURCES = \
 	crush/builder.c \
@@ -655,6 +656,7 @@ noinst_HEADERS = \
 	common/WorkQueue.h\
 	common/debug.h\
 	common/version.h\
+	common/hex.h\
 	common/errno.h\
 	common/likely.h\
 	common/lockdep.h\

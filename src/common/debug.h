@@ -98,8 +98,4 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
 
 #define derr dout(-1)
 
-extern void hex2str(const char *s, int len, char *buf, int dest_len);
-
-extern void hexdump(std::string msg, const char *s, int len);
-
 #endif
