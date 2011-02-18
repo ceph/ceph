@@ -64,16 +64,9 @@ void common_set_defaults(bool daemon)
 
 static void keyring_init(const char *filesearch)
 {
-  const char *filename = filesearch;
-  string keyring_search = g_conf.keyring;
-  string new_keyring;
-  if (ceph_resolve_file_search(keyring_search, new_keyring)) {
-    filename = new_keyring.c_str();
-  }
-
-  int ret = g_keyring.load(filename);
+  int ret = g_keyring.load(g_conf.keyring);
   if (ret) {
-    derr << "keyring_init: failed to load " << filename << dendl;
+    derr << "keyring_init: failed to load " << g_conf.keyring << dendl;
     return;
   }
 
