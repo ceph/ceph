@@ -211,9 +211,15 @@ int RGWPutObj_REST::get_params()
 
 int RGWPutObj_REST::get_data()
 {
-  size_t cl = atoll(s->length) - ofs;
-  if (cl > RGW_MAX_CHUNK_SIZE)
+  size_t cl;
+  if (s->length) {
+    cl = atoll(s->length) - ofs;
+    if (cl > RGW_MAX_CHUNK_SIZE)
+      cl = RGW_MAX_CHUNK_SIZE;
+  } else {
     cl = RGW_MAX_CHUNK_SIZE;
+  }
+
   len = 0;
   if (cl) {
     data = (char *)malloc(cl);
@@ -223,7 +229,8 @@ int RGWPutObj_REST::get_data()
     len = FCGX_GetStr(data, cl, s->fcgx->in);
   }
 
-  supplied_md5_b64 = FCGX_GetParam("HTTP_CONTENT_MD5", s->fcgx->envp);
+  if (!ofs)
+    supplied_md5_b64 = FCGX_GetParam("HTTP_CONTENT_MD5", s->fcgx->envp);
 
   return 0;
 }
@@ -374,8 +381,13 @@ void init_entities_from_header(struct req_state *s)
 
     url_decode(first, s->bucket_str);
     s->bucket = s->bucket_str.c_str();
+   
+    if (req.size()) {
+      url_decode(req, s->object_str);
+      s->object = s->object_str.c_str();
+    }
 
-    pos = req.find('/');
+    goto done;
   }
 
   if (!s->bucket) {
