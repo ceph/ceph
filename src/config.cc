@@ -20,6 +20,7 @@
 #include "common/ProfLogger.h"
 #include "common/common_init.h"
 #include "common/dyn_snprintf.h"
+#include "common/version.h"
 #include "config.h"
 #include "include/atomic.h"
 #include "include/str_list.h"

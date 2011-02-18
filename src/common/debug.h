@@ -29,10 +29,6 @@ extern DoutStreambuf <char> *_doss;
 extern bool _dout_need_open;
 extern pthread_mutex_t _dout_lock;
 
-extern std::string ceph_version_to_string(void);
-
-extern void dout_output_ceph_version(void);
-
 extern void _dout_open_log();
 
 extern int dout_handle_daemonize();
