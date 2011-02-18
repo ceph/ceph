@@ -193,7 +193,7 @@ void aio_read_test_data(librbd::image_t image, const char *expected, off_t off)
   int r = comp->get_return_value();
   printf("return value is: %d\n", r);
   assert(r == TEST_IO_SIZE - 1);
-  assert(strncmp(expected, bl.c_str(), TEST_IO_SIZE) == 0);
+  assert(strncmp(expected, bl.c_str(), TEST_IO_SIZE - 1) == 0);
   printf("finished read\n");
   delete comp;
 }
