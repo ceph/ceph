@@ -12,24 +12,16 @@
  * 
  */
 
-
-
 #ifndef CEPH_CLOCK_H
 #define CEPH_CLOCK_H
 
-#include <iostream>
 #include <iomanip>
-
+#include <iostream>
 #include <sys/time.h>
 #include <time.h>
 
-#include "Mutex.h"
-
 #include "include/utime.h"
 
-
-
-// -- clock --
 class Clock {
  protected:
   //utime_t start_offset;
@@ -37,10 +29,9 @@ class Clock {
   utime_t last;
   utime_t zero;
 
-  Mutex lock;
-
  public:
-  Clock() : lock("Clock::lock") { }
+  Clock();
+  ~Clock();
 
   // real time.
   utime_t real_now() {
@@ -80,8 +71,6 @@ class Clock {
     ts->tv_sec = real.sec();
     ts->tv_nsec = real.nsec();
   }
-
-
 
   // absolute time
   time_t gettime() {

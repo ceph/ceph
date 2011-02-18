@@ -19,3 +19,8 @@
 // public
 Clock g_clock;
 
+Clock::Clock() {
+}
+
+Clock::~Clock() {
+}
