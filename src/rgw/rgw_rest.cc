@@ -31,6 +31,7 @@ struct errno_http {
 
 const static struct errno_http hterrs[] = {
     { 0, "200", "" },
+    { 201, "201", "Created" },
     { 204, "204", "NoContent" },
     { 206, "206", "" },
     { EINVAL, "400", "InvalidArgument" },

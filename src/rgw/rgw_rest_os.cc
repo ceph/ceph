@@ -94,6 +94,9 @@ void RGWDeleteBucket_REST_OS::send_response()
 
 void RGWPutObj_REST_OS::send_response()
 {
+  if (!ret)
+    ret = 201; // "created"
+  dump_etag(s, etag.c_str());
   dump_errno(s, ret, &err);
   end_header(s);
 }

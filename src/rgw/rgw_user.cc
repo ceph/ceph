@@ -88,27 +88,30 @@ int rgw_store_user_info(RGWUserInfo& info)
   if (ret < 0)
     return ret;
 
-  if (!info.user_email.size())
-    return ret;
-
+  bufferlist uid_bl;
   RGWUID ui;
   ui.user_id = info.user_id;
-  bufferlist uid_bl;
   ui.encode(uid_bl);
-  ret = rgwstore->put_obj(info.user_id, ui_email_bucket, info.user_email, uid_bl.c_str(), uid_bl.length(), NULL, attrs);
-  if (ret == -ENOENT) {
-    map<string, bufferlist> attrs;
-    ret = rgwstore->create_bucket(info.user_id, ui_email_bucket, attrs);
-    if (ret >= 0)
-      ret = rgwstore->put_obj(info.user_id, ui_email_bucket, info.user_email, uid_bl.c_str(), uid_bl.length(), NULL, attrs);
+
+  if (info.user_email.size()) {
+    ret = rgwstore->put_obj(info.user_id, ui_email_bucket, info.user_email, uid_bl.c_str(), uid_bl.length(), NULL, attrs);
+    if (ret == -ENOENT) {
+      map<string, bufferlist> attrs;
+      ret = rgwstore->create_bucket(info.user_id, ui_email_bucket, attrs);
+      if (ret >= 0)
+        ret = rgwstore->put_obj(info.user_id, ui_email_bucket, info.user_email, uid_bl.c_str(), uid_bl.length(), NULL, attrs);
+    }
   }
+
+  if (ret < 0)
+    return ret;
 
   if (info.openstack_name.size()) {
     ret = rgwstore->put_obj(info.user_id, ui_openstack_bucket, info.openstack_name, uid_bl.c_str(), uid_bl.length(), NULL, attrs);
     if (ret == -ENOENT) {
       map<string, bufferlist> attrs;
       ret = rgwstore->create_bucket(info.user_id, ui_openstack_bucket, attrs);
-      if (ret >= 0)
+      if (ret >= 0 && ret != -EEXIST)
         ret = rgwstore->put_obj(info.user_id, ui_openstack_bucket, info.openstack_name, uid_bl.c_str(), uid_bl.length(), NULL, attrs);
     }
   }
@@ -120,7 +123,7 @@ int rgw_get_uid_from_index(string& key, string& bucket, string& user_id)
 {
   bufferlist bl;
   int ret;
-  char *data;
+  char *data = NULL;
   struct rgw_err err;
   RGWUID uid;
   void *handle = NULL;
@@ -131,6 +134,10 @@ int rgw_get_uid_from_index(string& key, string& bucket, string& user_id)
                                   NULL, NULL, NULL, NULL, &total_len, &handle, &err);
   if (ret < 0)
     return ret;
+
+  if (total_len == 0)
+    return -EACCES;
+
   do {
     ret = rgwstore->get_obj(&handle, bucket, key, &data, ofs, end);
     if (ret < 0)

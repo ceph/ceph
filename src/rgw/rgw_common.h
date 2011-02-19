@@ -48,7 +48,7 @@ using namespace std;
 
 #define CGI_PRINTF(stream, format, ...) do { \
    FCGX_FPrintF(stream, format, __VA_ARGS__); \
-   printf(format, __VA_ARGS__); \
+   printf(">" format, __VA_ARGS__); \
 } while (0)
 
 
