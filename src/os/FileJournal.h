@@ -118,6 +118,8 @@ private:
   // throttle
   Throttle throttle_ops, throttle_bytes;
 
+  void put_throttle(uint64_t ops, uint64_t bytes);
+
   // write thread
   Mutex write_lock;
   Cond write_cond, write_empty_cond;

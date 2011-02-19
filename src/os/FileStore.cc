@@ -28,6 +28,7 @@
 #include "common/errno.h"
 #include "common/run_cmd.h"
 #include "common/safe_io.h"
+#include "common/ProfLogger.h"
 
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
@@ -382,7 +383,8 @@ FileStore::FileStore(const char *base, const char *jdev) :
   stop(false), sync_thread(this),
   op_queue_len(0), op_queue_bytes(0), next_finish(0),
   op_tp("FileStore::op_tp", g_conf.filestore_op_threads), op_wq(this, &op_tp),
-  flusher_queue_len(0), flusher_thread(this)
+  flusher_queue_len(0), flusher_thread(this),
+  logger(NULL)
 {
   ostringstream oss;
   oss << basedir << "/current";
@@ -1397,6 +1399,7 @@ int FileStore::umount()
   flusher_thread.join();
 
   journal_stop();
+  stop_logger();
 
   op_finisher.stop();
   ondisk_finisher.stop();
@@ -1433,6 +1436,61 @@ int FileStore::umount()
 }
 
 
+void FileStore::start_logger(int whoami, utime_t tare)
+{
+  dout(10) << "start_logger" << dendl;
+  assert(!logger);
+
+  static ProfLogType fs_logtype(l_os_first, l_os_last);
+  static bool didit = false;
+  if (!didit) {
+    didit = true;
+
+    fs_logtype.add_inc(l_os_in_ops, "in_o");
+    //fs_logtype.add_inc(l_os_in_bytes, "in_b");
+    fs_logtype.add_inc(l_os_readable_ops, "or_o");
+    fs_logtype.add_inc(l_os_readable_bytes, "or_b");
+    //fs_logtype.add_inc(l_os_commit_bytes, "com_o");
+    //fs_logtype.add_inc(l_os_commit_bytes, "com_b");
+
+    fs_logtype.add_set(l_os_jq_max_ops, "jq_mo");
+    fs_logtype.add_set(l_os_jq_ops, "jq_o");
+    fs_logtype.add_inc(l_os_j_ops, "j_o");
+    fs_logtype.add_set(l_os_jq_max_bytes, "jq_mb");
+    fs_logtype.add_set(l_os_jq_bytes, "jq_b");
+    fs_logtype.add_inc(l_os_j_bytes, "j_b");
+    fs_logtype.add_set(l_os_oq_max_ops, "oq_mo");
+    fs_logtype.add_set(l_os_oq_ops, "oq_o");
+    fs_logtype.add_inc(l_os_ops, "o");
+    fs_logtype.add_set(l_os_oq_max_bytes, "oq_mb");
+    fs_logtype.add_set(l_os_oq_bytes, "oq_b");
+    fs_logtype.add_inc(l_os_bytes, "b");
+    fs_logtype.add_set(l_os_committing, "comitng");
+  }
+
+  char name[80];
+  snprintf(name, sizeof(name), "osd.%d.fs.log", whoami);
+  logger = new ProfLogger(name, (ProfLogType*)&fs_logtype);
+  journal->logger = logger;
+  logger_add(logger);  
+  logger_tare(tare);
+  logger_start();
+}
+
+void FileStore::stop_logger()
+{
+  dout(10) << "stop_logger" << dendl;
+  if (logger) {
+    journal->logger = NULL;
+    logger_remove(logger);
+    delete logger;
+    logger = NULL;
+  }
+}
+
+
+
+
 /// -----------------------------
 
 void FileStore::queue_op(OpSequencer *osr, uint64_t op_seq, list<Transaction*>& tls,
@@ -1466,13 +1524,21 @@ void FileStore::queue_op(OpSequencer *osr, uint64_t op_seq, list<Transaction*>& 
   op_tp.lock();
 
   osr->queue(o);
+  _op_queue_throttle("queue_op");
 
   op_queue_len++;
   op_queue_bytes += bytes;
 
+  if (logger) {
+    logger->inc(l_os_ops);
+    logger->inc(l_os_bytes, bytes);
+    logger->set(l_os_oq_ops, op_queue_len);
+    logger->set(l_os_oq_bytes, op_queue_bytes);
+  }
+
   op_tp.unlock();
 
-  dout(10) << "queue_op " << o << " seq " << op_seq << " " << bytes << " bytes"
+  dout(5) << "queue_op " << o << " seq " << op_seq << " " << bytes << " bytes"
 	   << "   (queue has " << op_queue_len << " ops and " << op_queue_bytes << " bytes)"
 	   << dendl;
   op_wq.queue(osr);
@@ -1481,22 +1547,32 @@ void FileStore::queue_op(OpSequencer *osr, uint64_t op_seq, list<Transaction*>& 
 void FileStore::op_queue_throttle()
 {
   op_tp.lock();
+  _op_queue_throttle("op_queue_throttle");
+  op_tp.unlock();
+}
 
+void FileStore::_op_queue_throttle(const char *caller)
+{
   uint64_t max_ops = g_conf.filestore_queue_max_ops;
   uint64_t max_bytes = g_conf.filestore_queue_max_bytes;
+
   if (is_committing()) {
     max_ops += g_conf.filestore_queue_committing_max_ops;
     max_bytes += g_conf.filestore_queue_committing_max_bytes;
   }
 
+  if (logger) {
+    logger->set(l_os_oq_max_ops, max_ops);
+    logger->set(l_os_oq_max_bytes, max_bytes);
+  }
+
   while ((max_ops && op_queue_len >= max_ops) ||
 	 (max_bytes && op_queue_bytes >= max_bytes)) {
-    dout(2) << "op_queue_throttle waiting: "
+    dout(2) << caller << " waiting: "
 	     << op_queue_len << " > " << max_ops << " ops || "
 	     << op_queue_bytes << " > " << max_bytes << dendl;
     op_tp.wait(op_throttle_cond);
   }
-  op_tp.unlock();
 }
 
 void FileStore::_do_op(OpSequencer *osr)
@@ -1504,7 +1580,7 @@ void FileStore::_do_op(OpSequencer *osr)
   osr->apply_lock.Lock();
   Op *o = osr->peek_queue();
 
-  dout(10) << "_do_op " << o << " " << o->op << " osr " << osr << "/" << osr->parent << " start" << dendl;
+  dout(5) << "_do_op " << o << " " << o->op << " osr " << osr << "/" << osr->parent << " start" << dendl;
   int r = do_transactions(o->tls, o->op);
   op_apply_finish(o->op);
   dout(10) << "_do_op " << o << " " << o->op << " r = " << r
@@ -1526,6 +1602,11 @@ void FileStore::_finish_op(OpSequencer *osr)
   op_queue_len--;
   op_queue_bytes -= o->bytes;
   op_throttle_cond.Signal();
+
+  if (logger) {
+    logger->inc(l_os_readable_ops);
+    logger->inc(l_os_readable_bytes, o->bytes);
+  }
 
   if (next_finish == o->op) {
     dout(10) << "_finish_op " << o->op << " next_finish " << next_finish
@@ -1593,12 +1674,17 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     posr = &default_osr;
   if (posr->p) {
     osr = (OpSequencer *)posr->p;
-    dout(10) << "queue_transactions existing osr " << osr << "/" << osr->parent << dendl; //<< " w/ q " << osr->q << dendl;
+    dout(5) << "queue_transactions existing osr " << osr << "/" << osr->parent << dendl; //<< " w/ q " << osr->q << dendl;
   } else {
     osr = new OpSequencer;
     osr->parent = posr;
     posr->p = osr;
-    dout(10) << "queue_transactions new osr " << osr << "/" << osr->parent << dendl;
+    dout(5) << "queue_transactions new osr " << osr << "/" << osr->parent << dendl;
+  }
+
+  if (logger) {
+    logger->inc(l_os_in_ops);
+    //logger->inc(l_os_in_bytes, 1); 
   }
 
   if (journal && journal->is_writeable()) {
@@ -1612,7 +1698,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
       op_queue_throttle();   // make sure the journal isn't getting ahead of our op queue.
 
       uint64_t op = op_submit_start();
-      dout(10) << "queue_transactions (parallel) " << op << " " << tls << dendl;
+      dout(5) << "queue_transactions (parallel) " << op << " " << tls << dendl;
       
       _op_journal_transactions(tls, op, ondisk);
       
@@ -1628,7 +1714,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
       op_queue_throttle();   // make sure the journal isn't getting ahead of our op queue.
 
       uint64_t op = op_submit_start();
-      dout(10) << "queue_transactions (writeahead) " << op << " " << tls << dendl;
+      dout(5) << "queue_transactions (writeahead) " << op << " " << tls << dendl;
       osr->queue_journal(op);
       _op_journal_transactions(tls, op,
 			       new C_JournaledAhead(this, osr, op, tls, onreadable, ondisk, onreadable_sync));
@@ -1638,7 +1724,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   }
 
   uint64_t op = op_submit_start();
-  dout(10) << "queue_transactions (trailing journal) " << op << " " << tls << dendl;
+  dout(5) << "queue_transactions (trailing journal) " << op << " " << tls << dendl;
 
   _op_apply_start(op);
   int r = do_transactions(tls, op);
@@ -1660,6 +1746,11 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   op_submit_finish(op);
   op_apply_finish(op);
 
+  if (logger) {
+    logger->inc(l_os_readable_ops);
+    //fixme logger->inc(l_os_readable_bytes, 1);
+  }
+
   return r;
 }
 
@@ -1668,7 +1759,7 @@ void FileStore::_journaled_ahead(OpSequencer *osr, uint64_t op,
 				 Context *onreadable, Context *ondisk,
 				 Context *onreadable_sync)
 {
-  dout(10) << "_journaled_ahead " << op << " " << tls << dendl;
+  dout(5) << "_journaled_ahead " << op << " " << tls << dendl;
 
   op_queue_throttle();
 
@@ -2539,6 +2630,9 @@ void FileStore::sync_entry()
       timer.add_event_after(g_conf.filestore_commit_timeout, sync_entry_timeo);
       sync_entry_timeo_lock.Unlock();
 
+      if (logger)
+	logger->set(l_os_committing, 1);
+
       // make flusher stop flushing previously queued stuff
       sync_epoch++;
 
@@ -2612,6 +2706,9 @@ void FileStore::sync_entry()
       done -= start;
       dout(10) << "sync_entry commit took " << done << dendl;
       commit_finish();
+
+      if (logger)
+	logger->set(l_os_committing, 0);
 
       // remove old snaps?
       if (do_snap) {

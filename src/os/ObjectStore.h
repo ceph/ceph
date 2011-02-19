@@ -46,6 +46,32 @@ typedef uint64_t collection_list_handle_t;
  * low-level interface to the local OSD file system
  */
 
+class Logger;
+
+enum {
+  l_os_first = 84000,
+  l_os_in_ops,
+  l_os_in_bytes,
+  l_os_readable_ops,
+  l_os_readable_bytes,
+  l_os_commit_ops,
+  l_os_commit_bytes,
+  l_os_jq_max_ops,
+  l_os_jq_ops,
+  l_os_j_ops,
+  l_os_jq_max_bytes,
+  l_os_jq_bytes,
+  l_os_j_bytes,
+  l_os_oq_max_ops,
+  l_os_oq_ops,
+  l_os_ops,
+  l_os_oq_max_bytes,
+  l_os_oq_bytes,
+  l_os_bytes,
+  l_os_committing,
+  l_os_last,
+};
+
 
 static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) {
   ::encode(*attrset, bl);
@@ -54,6 +80,7 @@ static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) 
 class ObjectStore {
 public:
 
+  Logger *logger;
 
   class FragmentationStat {
   public:
@@ -552,7 +579,7 @@ public:
 
 
  public:
-  ObjectStore() {}
+  ObjectStore() : logger(NULL) {}
   virtual ~ObjectStore() {}
 
   // mgmt
@@ -639,6 +666,8 @@ public:
   virtual void _fake_writes(bool b) {};
   virtual void _get_frag_stat(FragmentationStat& st) {};
   
+  virtual void start_logger(int whoami, utime_t tare) {};
+
 };
 
 

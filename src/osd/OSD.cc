@@ -700,6 +700,9 @@ void OSD::start_logger()
   logger_tare(osdmap->get_created());
   logger_start();
   logger_started = true;
+
+  // start the objectstore logger too
+  store->start_logger(whoami, osdmap->get_created());
 }
 
 int OSD::shutdown()
