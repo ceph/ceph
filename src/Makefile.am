@@ -259,14 +259,14 @@ endif
 
 rbd_SOURCES = rbd.cc common/fiemap.cc
 rbd_CXXFLAGS = ${AM_CXXFLAGS}
-rbd_LDADD = librbd.la
+rbd_LDADD = librbd.la librados.la libcrush.la -lpthread -lm $(CRYPTOPP_LIBS)
 bin_PROGRAMS += rbd
 
 if WITH_DEBUG
 testlibrbd_SOURCES = testlibrbd.c
-testlibrbd_LDADD = librbd.la
+testlibrbd_LDADD = librbd.la libcrush.la -lpthread -lm $(CRYPTOPP_LIBS)
 testlibrbdpp_SOURCES = testlibrbdpp.cc
-testlibrbdpp_LDADD = librbd.la
+testlibrbdpp_LDADD = librbd.la libcrush.la -lpthread -lm $(CRYPTOPP_LIBS)
 bin_PROGRAMS += testlibrbd testlibrbdpp
 endif
 
