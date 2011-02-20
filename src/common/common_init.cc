@@ -72,16 +72,14 @@ static void keyring_init(const char *filesearch)
   }
 
   int ret = g_keyring.load(filename);
-  if (ret) {
-    derr << "keyring_init: failed to load " << filename << dendl;
-    return;
-  }
 
   if (g_conf.key && g_conf.key[0]) {
     string k = g_conf.key;
     EntityAuth ea;
     ea.key.decode_base64(k);
     g_keyring.add(*g_conf.entity_name, ea);
+
+    ret = 0;
   } else if (g_conf.keyfile && g_conf.keyfile[0]) {
     char buf[100];
     int fd = ::open(g_conf.keyfile, O_RDONLY);
@@ -106,6 +104,13 @@ static void keyring_init(const char *filesearch)
     EntityAuth ea;
     ea.key.decode_base64(k);
     g_keyring.add(*g_conf.entity_name, ea);
+
+    ret = 0;
+  }
+
+  if (ret) {
+    derr << "keyring_init: failed to load " << filename << dendl;
+    return;
   }
 }
 
