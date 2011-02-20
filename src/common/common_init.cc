@@ -14,12 +14,16 @@
 
 #include "auth/AuthSupported.h"
 #include "auth/KeyRing.h"
+#include "common/ceph_argparse.h"
 #include "common/safe_io.h"
+#include "common/signal.h"
+#include "common/version.h"
 #include "config.h"
 #include "common/common_init.h"
 #include "common/errno.h"
-#include "common/signal.h"
 #include "include/color.h"
+
+#include <syslog.h>
 
 /* Set foreground logging
  *
@@ -116,7 +120,30 @@ static void keyring_init(const char *filesearch)
 
 void common_init(std::vector<const char*>& args, const char *module_type, int flags)
 {
-  parse_startup_config_options(args, module_type, flags);
+  bool force_fg_logging = false;
+  parse_startup_config_options(args, module_type, flags, &force_fg_logging);
+
+  if (g_conf.log_to_syslog || g_conf.clog_to_syslog) {
+    closelog();
+    // It's ok if g_conf.name is NULL here.
+    openlog(g_conf.name, LOG_ODELAY | LOG_PID, LOG_USER);
+  }
+
+  if (force_fg_logging)
+    set_foreground_logging();
+
+  {
+    // In the long term, it would be best to ensure that we read ceph.conf
+    // before initializing dout(). For now, just force a reopen here with the
+    // configuration we have just read.
+    DoutLocker _dout_locker;
+    _dout_open_log();
+  }
+
+  if (!force_fg_logging) {
+    dout_output_ceph_version();
+  }
+
   parse_config_options(args);
   install_standard_sighandlers();
 

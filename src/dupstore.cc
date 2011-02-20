@@ -15,6 +15,7 @@
 #include <iostream>
 //#include "ebofs/Ebofs.h"
 #include "os/FileStore.h"
+#include "common/ceph_argparse.h"
 #include "common/common_init.h"
 
 #include <ext/hash_map>

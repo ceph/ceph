@@ -21,6 +21,7 @@
 #include "mon/AuthMonitor.h"
 #include "common/ConfUtils.h"
 #include "common/common_init.h"
+#include "common/ceph_argparse.h"
 #include "config.h"
 #include "include/str_list.h"
 
@@ -71,12 +72,11 @@ void error_exit()
 
 static int list_sections(const char *s)
 {
-  ConfFile *cf = conf_get_conf_file();
-  if (!cf)
+  if (!g_conf.cf)
     return 2;
   for (std::list<ConfSection*>::const_iterator p =
-	    cf->get_section_list().begin();
-       p != cf->get_section_list().end(); ++p)
+	    g_conf.cf->get_section_list().begin();
+       p != g_conf.cf->get_section_list().end(); ++p)
   {
     if (strncmp(s, (*p)->get_name().c_str(), strlen(s)) == 0)
       cout << (*p)->get_name() << std::endl;
@@ -101,8 +101,7 @@ static int lookup_impl(const deque<const char *> &sections,
                     bool resolve_search)
 {
   char *val = NULL;
-  ConfFile *cf = conf_get_conf_file();
-  if (!cf)
+  if (!g_conf.cf)
     return 2;
   conf_read_key(NULL, key, OPT_STR, (char **)&val, NULL);
   if (val) {
@@ -112,7 +111,7 @@ static int lookup_impl(const deque<const char *> &sections,
   }
 
   for (unsigned int i=0; i<sections.size(); i++) {
-    cf->read(sections[i], key, (char **)&val, NULL);
+    g_conf.cf->read(sections[i], key, (char **)&val, NULL);
     if (val) {
       print_val(val, resolve_search);
       free(val);
@@ -132,8 +131,9 @@ static int lookup_impl(const deque<const char *> &sections,
   {
     // TODO: document exactly what we are doing here?
     std::vector<const char *> empty_args;
+    bool force_fg_logging = false;
     parse_startup_config_options(empty_args, type,
-				 STARTUP_FLAG_FORCE_FG_LOGGING);
+			 STARTUP_FLAG_FORCE_FG_LOGGING, &force_fg_logging);
     char buf[1024];
     memset(buf, 0, sizeof(buf));
     if (ceph_def_conf_by_name(key, buf, sizeof(buf))) {

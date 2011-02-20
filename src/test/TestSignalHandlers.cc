@@ -18,6 +18,7 @@
  * Test the Ceph signal handlers
  */
 #include "common/DoutStreambuf.h"
+#include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/errno.h"
 #include "config.h"

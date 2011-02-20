@@ -23,6 +23,7 @@
 using namespace std;
 
 #include "config.h"
+#include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "mon/MonMap.h"
 

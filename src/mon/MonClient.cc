@@ -21,6 +21,7 @@
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
 #include "common/ConfUtils.h"
+#include "common/ceph_argparse.h"
 
 #include "MonClient.h"
 #include "MonMap.h"

@@ -27,6 +27,7 @@ using namespace std;
 #include "common/errno.h"
 #include "osd/OSDMap.h"
 #include "mon/MonMap.h"
+#include "common/ceph_argparse.h"
 #include "common/common_init.h"
 
 void usage()

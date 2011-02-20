@@ -13,6 +13,7 @@
  *
  */
 
+#include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/errno.h"
 #include "common/safe_io.h"

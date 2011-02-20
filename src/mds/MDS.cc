@@ -17,6 +17,7 @@
 #include "include/types.h"
 #include "common/Clock.h"
 #include "common/signal.h"
+#include "common/ceph_argparse.h"
 
 #include "msg/Messenger.h"
 #include "mon/MonClient.h"

@@ -16,6 +16,7 @@
 #include "config.h"
 
 #include "common/errno.h"
+#include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "include/rbd/librbd.hpp"
 #include "include/byteorder.h"

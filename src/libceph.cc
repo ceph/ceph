@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <iostream>
 
+#include "common/ceph_argparse.h"
 #include "common/Mutex.h"
 #include "messages/MMonMap.h"
 #include "common/common_init.h"

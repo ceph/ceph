@@ -8,6 +8,7 @@ using namespace std;
 #include "config.h"
 
 #include <cryptopp/osrng.h>
+#include "common/ceph_argparse.h"
 #include "common/common_init.h"
 
 #include "common/armor.h"

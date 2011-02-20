@@ -28,6 +28,7 @@ using namespace std;
 
 #include "common/Timer.h"
 #include "common/common_init.h"
+#include "common/ceph_argparse.h"
 
 #ifndef DARWIN
 #include <envz.h>

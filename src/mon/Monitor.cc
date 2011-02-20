@@ -39,6 +39,7 @@
 
 #include "messages/MAuthReply.h"
 
+#include "common/ceph_argparse.h"
 #include "common/Timer.h"
 #include "common/Clock.h"
 #include "include/color.h"

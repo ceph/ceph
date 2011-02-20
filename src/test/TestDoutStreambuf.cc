@@ -19,6 +19,7 @@
  * Check your syslog to see what it did.
  */
 #include "common/DoutStreambuf.h"
+#include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "config.h"
 

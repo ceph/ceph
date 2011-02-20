@@ -16,6 +16,7 @@
 //#include "ebofs/Ebofs.h"
 #include "os/FileStore.h"
 #include "common/common_init.h"
+#include "common/ceph_argparse.h"
 
 #undef dout_prefix
 #define dout_prefix *_dout

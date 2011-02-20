@@ -20,6 +20,7 @@
 #include "OSDMap.h"
 #include "Watch.h"
 
+#include "common/ceph_argparse.h"
 #include "os/FileStore.h"
 
 #ifdef USE_OSBDB

@@ -523,6 +523,7 @@ libcommon_files = \
 	osd/OSDMap.cc \
 	mds/MDSMap.cc \
 	common/common_init.cc \
+	common/ceph_argparse.cc \
 	common/buffer.cc \
 	common/signal.cc \
 	common/Thread.cc \

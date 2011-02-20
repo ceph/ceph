@@ -43,9 +43,13 @@ enum log_to_stderr_t {
   LOG_TO_STDERR_ALL = 2,
 };
 
+struct ConfFile;
+
 struct md_config_t {
   md_config_t();
   ~md_config_t();
+
+  ConfFile *cf;
 
   char *type;
   char *id;
@@ -467,32 +471,6 @@ typedef enum {
 	OPT_ADDR, OPT_U32
 } opt_type_t;
 
-/**
- * command line / environment argument parsing
- */
-void env_to_vec(std::vector<const char*>& args);
-void argv_to_vec(int argc, const char **argv,
-                 std::vector<const char*>& args);
-void vec_to_argv(std::vector<const char*>& args,
-                 int& argc, const char **&argv);
-void env_to_deq(std::deque<const char*>& args);
-void argv_to_deq(int argc, const char **argv,
-                 std::deque<const char*>& args);
-
-void parse_startup_config_options(std::vector<const char*>& args,
-				  const char *module_type, int flags);
-void parse_config_options(std::vector<const char*>& args);
-void parse_config_option_string(string& s);
-
-extern bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec);
-
-void generic_server_usage();
-void generic_client_usage();
-void generic_usage();
-
-class ConfFile;
-ConfFile *conf_get_conf_file();
-
 char *conf_post_process_val(const char *val);
 int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out, void *def, bool free_old_val = false);
 bool conf_set_conf_val(void *field, opt_type_t type, const char *val);
@@ -533,17 +511,24 @@ bool ceph_resolve_file_search(string& filename_list, string& result);
 #define CONF_ARG_EQ(str_cmd, char_cmd) \
 	conf_cmd_equals(args[i], str_cmd, char_cmd, &val_pos)
 
-#define DEFINE_CONF_VARS(usage_func) \
-	unsigned int val_pos __attribute__((unused)); \
-	void (*args_usage)() __attribute__((unused)) = usage_func; \
-	bool __isarg __attribute__((unused))
+struct config_option {
+  const char *section;
+  const char *conf_name;
+  const char *name;
+  void *val_ptr;
 
+  const char *def_str;
+  long long def_longlong;
+  double def_double;
 
-#define FOR_EACH_ARG(args) \
-	__isarg = 1 < args.size(); \
-	for (unsigned i=0; i<args.size(); i++, __isarg = i+1 < args.size()) 
+  opt_type_t type;
+  char char_option;  // if any
+};
 
-#define ARGS_USAGE() args_usage();
+extern struct config_option config_optionsp[];
+extern const int num_config_options;
+
+extern bool parse_config_file(ConfFile *cf, bool auto_update);
 
 #include "common/debug.h"
 

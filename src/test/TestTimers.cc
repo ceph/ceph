@@ -1,3 +1,4 @@
+#include "common/ceph_argparse.h"
 #include "common/Mutex.h"
 #include "common/Timer.h"
 #include "common/common_init.h"

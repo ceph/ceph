@@ -31,6 +31,7 @@ using namespace std;
 
 #include "msg/SimpleMessenger.h"
 
+#include "common/ceph_argparse.h"
 #include "common/Timer.h"
 #include "common/common_init.h"
 

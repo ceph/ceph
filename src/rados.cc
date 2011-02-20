@@ -20,6 +20,7 @@ using namespace librados;
 #include "osdc/rados_bencher.h"
 
 #include "config.h"
+#include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/Cond.h"
 #include "mds/inode_backtrace.h"
