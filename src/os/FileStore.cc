@@ -2353,7 +2353,7 @@ int FileStore::_do_clone_range(int from, int to, uint64_t off, uint64_t len)
 	     << ", " << cpp_strerror(r) << dendl;
 	break;
       }
-      op += r2;
+      op += (r-op);
     }
     if (r < 0)
       break;
