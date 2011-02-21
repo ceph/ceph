@@ -655,6 +655,7 @@ noinst_HEADERS = \
 	common/LogClient.h\
 	common/LogEntry.h\
 	common/WorkQueue.h\
+	common/ceph_argparse.h\
 	common/debug.h\
 	common/version.h\
 	common/hex.h\
