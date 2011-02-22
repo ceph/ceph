@@ -172,6 +172,8 @@ struct config_option config_optionsp[] = {
 	OPTION(mon_clock_drift_warn_backoff, 0, OPT_FLOAT, 5), // exponential backoff for clock drift warnings
 	OPTION(mon_accept_timeout, 0, OPT_FLOAT, 10.0),    // on leader, if paxos update isn't accepted
 	OPTION(mon_pg_create_interval, 0, OPT_FLOAT, 30.0), // no more than every 30s
+	OPTION(mon_osd_full_ratio, 0, OPT_INT, 95), // what % full makes an OSD "full"
+	OPTION(mon_osd_nearfull_ratio, 0, OPT_INT, 85), // what % full makes an OSD near full
 	OPTION(mon_globalid_prealloc, 0, OPT_INT, 100),   // how many globalids to prealloc
 	OPTION(mon_osd_report_timeout, 0, OPT_INT, 900),    // grace period before declaring unresponsive OSDs dead
 	OPTION(paxos_propose_interval, 0, OPT_DOUBLE, 1.0),  // gather updates for this long before proposing a map update

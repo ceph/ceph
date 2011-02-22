@@ -22,6 +22,7 @@
 #define CEPH_PGMAP_H
 
 #include "osd/osd_types.h"
+#include "config.h"
 #include <sstream>
 
 class PGMap {
@@ -202,8 +203,8 @@ public:
 	    last_osdmap_epoch(0), last_pg_scan(0),
 	    num_pg(0),
 	    num_osd(0),
-	    full_ratio(CEPH_OSD_FULL_RATIO),
-	    nearfull_ratio(CEPH_OSD_NEARFULL_RATIO) {}
+	    full_ratio(((float)g_conf.mon_osd_full_ratio)/100),
+	    nearfull_ratio(((float)g_conf.mon_osd_nearfull_ratio)/100) {}
 
   void encode(bufferlist &bl) {
     __u8 v = 1;

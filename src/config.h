@@ -176,6 +176,8 @@ struct md_config_t {
   float mon_lease_ack_timeout;
   float mon_accept_timeout;
   float mon_pg_create_interval;
+  int mon_osd_full_ratio;
+  int mon_osd_nearfull_ratio;
   int mon_globalid_prealloc;
   int mon_osd_report_timeout;
 
