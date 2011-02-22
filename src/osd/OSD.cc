@@ -1901,7 +1901,7 @@ void OSD::send_alive()
   if (up_thru_wanted > up_thru) {
     up_thru_pending = up_thru_wanted;
     dout(10) << "send_alive want " << up_thru_wanted << dendl;
-    monc->send_mon_message(new MOSDAlive(up_thru_wanted));
+    monc->send_mon_message(new MOSDAlive(osdmap->get_epoch(), up_thru_wanted));
   }
 }
 

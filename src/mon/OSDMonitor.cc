@@ -666,14 +666,14 @@ bool OSDMonitor::preprocess_alive(MOSDAlive *m)
 
   if (osdmap.is_up(from) &&
       osdmap.get_inst(from) == m->get_orig_source_inst() &&
-      osdmap.get_up_thru(from) >= m->map_epoch) {
+      osdmap.get_up_thru(from) >= m->want) {
     // yup.
-    dout(7) << "preprocess_alive e" << m->map_epoch << " dup from " << m->get_orig_source_inst() << dendl;
-    _reply_map(m, m->map_epoch);
+    dout(7) << "preprocess_alive want up_thru " << m->want << " dup from " << m->get_orig_source_inst() << dendl;
+    _reply_map(m, m->version);
     return true;
   }
   
-  dout(10) << "preprocess_alive e" << m->map_epoch
+  dout(10) << "preprocess_alive want up_thru " << m->want
 	   << " from " << m->get_orig_source_inst() << dendl;
   return false;
 
@@ -690,9 +690,10 @@ bool OSDMonitor::prepare_alive(MOSDAlive *m)
     mon->clog.debug() << m->get_orig_source_inst() << " alive\n";
   }
 
-  dout(7) << "prepare_alive e" << m->map_epoch << " from " << m->get_orig_source_inst() << dendl;
-  pending_inc.new_up_thru[from] = m->map_epoch;
-  paxos->wait_for_commit(new C_ReplyMap(this, m, m->map_epoch));
+  dout(7) << "prepare_alive want up_thru " << m->want << " have " << m->version
+	  << " from " << m->get_orig_source_inst() << dendl;
+  pending_inc.new_up_thru[from] = m->version;  // set to the latest map the OSD has
+  paxos->wait_for_commit(new C_ReplyMap(this, m, m->version));
   return true;
 }
 

@@ -21,9 +21,9 @@
 
 class MOSDAlive : public PaxosServiceMessage {
  public:
-  epoch_t map_epoch;
+  epoch_t want;
 
-  MOSDAlive(epoch_t e) : PaxosServiceMessage(MSG_OSD_ALIVE, e), map_epoch(e) { }
+  MOSDAlive(epoch_t h, epoch_t w) : PaxosServiceMessage(MSG_OSD_ALIVE, h), want(w) { }
   MOSDAlive() : PaxosServiceMessage(MSG_OSD_ALIVE, 0) {}
 private:
   ~MOSDAlive() {}
@@ -31,17 +31,17 @@ private:
 public:
   void encode_payload() {
     paxos_encode();
-    ::encode(map_epoch, payload);
+    ::encode(want, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
-    ::decode(map_epoch, p);
+    ::decode(want, p);
   }
 
   const char *get_type_name() { return "osd_alive"; }
   void print(ostream &out) {
-    out << "osd_alive(" << map_epoch << " v" << version << ")";
+    out << "osd_alive(want up_thru " << want << " have " << version << ")";
   }
   
 };
