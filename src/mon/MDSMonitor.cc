@@ -30,7 +30,7 @@
 
 #include <sstream>
 
-#include "config.h"
+#include "common/config.h"
 
 #define DOUT_SUBSYS mon
 #undef dout_prefix

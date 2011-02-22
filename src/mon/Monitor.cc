@@ -56,7 +56,7 @@
 
 #include "auth/AuthSupported.h"
 
-#include "config.h"
+#include "common/config.h"
 
 #include <errno.h>
 #include <limits.h>

@@ -530,7 +530,7 @@ libcommon_files = \
 	include/ceph_hash.cc \
 	include/ceph_strings.cc \
 	include/ceph_frag.cc \
-	config.cc \
+	common/config.cc \
 	common/page.cc \
 	common/lockdep.cc \
 	common/DoutStreambuf.cc \
@@ -684,7 +684,7 @@ noinst_HEADERS = \
         common/dyn_snprintf.h\
         common/run_cmd.h\
 	common/safe_io.h\
-        config.h\
+        common/config.h\
         crush/CrushWrapper.h\
         crush/CrushWrapper.i\
         crush/builder.h\

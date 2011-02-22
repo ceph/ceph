@@ -16,7 +16,7 @@
 #include "armor.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
-#include "config.h"
+#include "common/config.h"
 #include "include/Spinlock.h"
 #include "include/types.h"
 

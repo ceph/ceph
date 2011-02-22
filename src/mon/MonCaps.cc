@@ -1,5 +1,5 @@
 #include <errno.h>
-#include "config.h"
+#include "common/config.h"
 #include "MonCaps.h"
 #include "mon_types.h"
 

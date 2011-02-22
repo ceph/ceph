@@ -15,7 +15,7 @@
  * it will just loop forever.
  */
 #include "include/rados/librados.h"
-#include "config.h"
+#include "common/config.h"
 #include "common/common_init.h"
 #include "common/Cond.h"
 #include <iostream>

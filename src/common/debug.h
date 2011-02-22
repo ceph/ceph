@@ -17,7 +17,7 @@
 #define CEPH_DEBUG_H
 
 #include "common/likely.h"
-#include "config.h"		    // need for g_conf
+#include "common/config.h"		    // need for g_conf
 #include "include/assert.h"
 
 #include <iostream>

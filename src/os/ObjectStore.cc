@@ -3,7 +3,7 @@
 
 #include "ObjectStore.h"
 
-#include "config.h"
+#include "common/config.h"
 #include "common/Clock.h"
 
 #define dout_prefix *_dout << "ager: "

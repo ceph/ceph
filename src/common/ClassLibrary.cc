@@ -2,7 +2,7 @@
 #include "common/ClassVersion.h"
 #include "include/ClassLibrary.h"
 
-#include "config.h"
+#include "common/config.h"
 
 ClassInfo *ClassVersionMap::get(ClassVersion& ver)
 {

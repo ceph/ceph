@@ -16,7 +16,7 @@
 #include "cephx/CephxServiceHandler.h"
 #include "none/AuthNoneServiceHandler.h"
 #include "AuthSupported.h"
-#include "config.h"
+#include "common/config.h"
 
 #define DOUT_SUBSYS auth
 

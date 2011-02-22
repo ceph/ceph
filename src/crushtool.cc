@@ -19,7 +19,7 @@
 
 #include <sys/stat.h>
 
-#include "config.h"
+#include "common/config.h"
 
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"

@@ -21,7 +21,7 @@
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/errno.h"
-#include "config.h"
+#include "common/config.h"
 
 #include <errno.h>
 #include <iostream>

@@ -16,7 +16,7 @@
 #include "common/ProfLogger.h"
 #include "common/debug.h"
 #include "common/signal.h"
-#include "config.h"
+#include "common/config.h"
 
 #include <signal.h>
 #include <sstream>

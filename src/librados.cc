@@ -22,7 +22,7 @@
 #include <pthread.h>
 using namespace std;
 
-#include "config.h"
+#include "common/config.h"
 
 #include "mon/MonMap.h"
 #include "mds/MDS.h"

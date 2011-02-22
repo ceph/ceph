@@ -14,7 +14,7 @@
 
 
 
-#include "config.h"
+#include "common/config.h"
 #include "Allocator.h"
 #include "Ebofs.h"
 

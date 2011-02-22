@@ -15,7 +15,7 @@
 
 
 #include "PG.h"
-#include "config.h"
+#include "common/config.h"
 #include "OSD.h"
 
 #include "common/Timer.h"

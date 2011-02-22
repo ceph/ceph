@@ -15,7 +15,7 @@
 #ifndef CEPH_MDS_ETABLESERVER_H
 #define CEPH_MDS_ETABLESERVER_H
 
-#include "config.h"
+#include "common/config.h"
 #include "include/types.h"
 
 #include "../mds_table_types.h"

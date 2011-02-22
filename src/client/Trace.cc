@@ -23,7 +23,7 @@ using namespace __gnu_cxx;
 
 #include "common/Mutex.h"
 
-#include "config.h"
+#include "common/config.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>

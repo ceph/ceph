@@ -1,4 +1,4 @@
-#include "config.h"
+#include "common/config.h"
 #include "common/signal.h"
 
 #include "gtest/gtest.h"

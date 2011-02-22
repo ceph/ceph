@@ -15,7 +15,7 @@
 
 #include "common/common_init.h"
 #include "common/ceph_argparse.h"
-#include "config.h"
+#include "common/config.h"
 #include "tools/common.h"
 
 #include <iostream>

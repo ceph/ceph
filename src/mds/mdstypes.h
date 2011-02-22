@@ -14,7 +14,7 @@
 #include <map>
 using namespace std;
 
-#include "config.h"
+#include "common/config.h"
 #include "common/DecayCounter.h"
 #include "include/Context.h"
 

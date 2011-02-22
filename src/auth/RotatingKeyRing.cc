@@ -1,7 +1,7 @@
 #include <errno.h>
 #include <map>
 
-#include "config.h"
+#include "common/config.h"
 #include "include/str_list.h"
 
 #include "Crypto.h"

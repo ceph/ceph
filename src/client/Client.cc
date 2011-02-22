@@ -28,7 +28,7 @@
 #include <iostream>
 using namespace std;
 
-#include "config.h"
+#include "common/config.h"
 
 // ceph stuff
 #include "Client.h"
@@ -59,7 +59,7 @@ using namespace std;
 
 
 
-#include "config.h"
+#include "common/config.h"
 
 #define DOUT_SUBSYS client
 #undef dout_prefix

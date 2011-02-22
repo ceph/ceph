@@ -7,7 +7,7 @@
 
 #include <ext/hash_map>
 
-#include "config.h"
+#include "common/config.h"
 
 #define DOUT_SUBSYS lockdep
 

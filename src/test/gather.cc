@@ -11,7 +11,7 @@
  * Foundation.  See file COPYING.
  * 
  */
-#include "config.h"
+#include "common/config.h"
 #include "include/Context.h"
 #include "gtest/gtest.h"
 

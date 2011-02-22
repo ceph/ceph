@@ -21,7 +21,7 @@
 #include "common/DoutStreambuf.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
-#include "config.h"
+#include "common/config.h"
 
 #include <iostream>
 #include <sstream>

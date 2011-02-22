@@ -21,7 +21,7 @@
  *   disks, disk groups, total # osds,
  *
  */
-#include "config.h"
+#include "common/config.h"
 #include "include/types.h"
 #include "osd_types.h"
 #include "msg/Message.h"

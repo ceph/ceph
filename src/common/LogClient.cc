@@ -36,7 +36,7 @@
 
 #include "common/LogClient.h"
 
-#include "config.h"
+#include "common/config.h"
 
 /*
  * Given a clog log_type, return the equivalent syslog priority

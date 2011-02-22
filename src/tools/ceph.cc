@@ -17,7 +17,7 @@
 #include "common/common_init.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
-#include "config.h"
+#include "common/config.h"
 #include "tools/common.h"
 
 #include <limits.h>

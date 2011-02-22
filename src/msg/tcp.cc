@@ -3,7 +3,7 @@
 
 #include <poll.h>
 #include "tcp.h"
-#include "config.h"
+#include "common/config.h"
 
 /******************
  * tcp crap

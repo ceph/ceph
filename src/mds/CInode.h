@@ -17,7 +17,7 @@
 #ifndef CEPH_CINODE_H
 #define CEPH_CINODE_H
 
-#include "config.h"
+#include "common/config.h"
 #include "include/dlist.h"
 #include "include/elist.h"
 #include "include/types.h"

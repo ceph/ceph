@@ -1,5 +1,5 @@
 #include "common/DoutStreambuf.h"
-#include "config.h"
+#include "common/config.h"
 #include "debug.h"
 
 #include <iostream>

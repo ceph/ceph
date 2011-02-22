@@ -14,7 +14,7 @@
 
 #include "common/Mutex.h"
 #include "include/str_list.h"
-#include "config.h"
+#include "common/config.h"
 
 #define DOUT_SUBSYS auth
 

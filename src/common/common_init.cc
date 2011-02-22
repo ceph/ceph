@@ -18,7 +18,7 @@
 #include "common/safe_io.h"
 #include "common/signal.h"
 #include "common/version.h"
-#include "config.h"
+#include "common/config.h"
 #include "common/common_init.h"
 #include "common/errno.h"
 #include "include/color.h"

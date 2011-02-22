@@ -5,7 +5,7 @@
 
 using namespace std;
 
-#include "config.h"
+#include "common/config.h"
 
 #include <cryptopp/osrng.h>
 #include "common/ceph_argparse.h"

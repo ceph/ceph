@@ -2,7 +2,7 @@
 #include "CephxProtocol.h"
 #include "common/Clock.h"
 
-#include "config.h"
+#include "common/config.h"
 
 #define DOUT_SUBSYS auth
 #undef dout_prefix

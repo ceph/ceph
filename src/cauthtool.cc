@@ -14,7 +14,7 @@
 
 using namespace std;
 
-#include "config.h"
+#include "common/config.h"
 
 #include "common/ConfUtils.h"
 #include "common/ceph_argparse.h"

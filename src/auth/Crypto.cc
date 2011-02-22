@@ -17,7 +17,7 @@
 #include <cryptopp/filters.h>
 
 #include "include/ceph_fs.h"
-#include "config.h"
+#include "common/config.h"
 #include "common/armor.h"
 #include "common/Clock.h"
 #include "common/hex.h"

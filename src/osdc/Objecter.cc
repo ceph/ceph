@@ -38,7 +38,7 @@
 
 #include <errno.h>
 
-#include "config.h"
+#include "common/config.h"
 
 #define DOUT_SUBSYS objecter
 #undef dout_prefix

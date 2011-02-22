@@ -24,7 +24,7 @@
 
 #include "events/ESubtreeMap.h"
 
-#include "config.h"
+#include "common/config.h"
 
 #define DOUT_SUBSYS mds
 #undef DOUT_COND

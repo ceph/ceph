@@ -23,7 +23,7 @@ using namespace std;
 
 
 // ceph stuff
-#include "config.h"
+#include "common/config.h"
 #include "client/Client.h"
 #include "msg/SimpleMessenger.h"
 
