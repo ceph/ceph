@@ -49,17 +49,6 @@
 /* The Ceph configuration. */
 md_config_t g_conf __attribute__((init_priority(103)));
 
-// file layouts
-struct ceph_file_layout g_default_file_layout = {
- fl_stripe_unit: init_le32(1<<22),
- fl_stripe_count: init_le32(1),
- fl_object_size: init_le32(1<<22),
- fl_cas_hash: init_le32(0),
- fl_object_stripe_unit: init_le32(0),
- fl_pg_preferred : init_le32(-1),
- fl_pg_pool : init_le32(-1),
-};
-
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
