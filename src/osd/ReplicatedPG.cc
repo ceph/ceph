@@ -3178,7 +3178,16 @@ void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const sobject_t& soid,
 
 /** pull - request object from a peer
  */
-bool ReplicatedPG::pull(const sobject_t& soid)
+
+/*
+ * Return values:
+ *  NONE  - didn't pull anything
+ *  YES   - pulled what the caller wanted
+ *  OTHER - needed to pull something else first (_head or _snapdir)
+ */
+enum { PULL_NONE, PULL_OTHER, PULL_YES };
+
+int ReplicatedPG::pull(const sobject_t& soid)
 {
   eversion_t v = missing.missing[soid].need;
 
@@ -3200,7 +3209,7 @@ bool ReplicatedPG::pull(const sobject_t& soid)
 	  << dendl;
 
   if (fromosd < 0)
-    return false;
+    return PULL_NONE;
 
   map<sobject_t, interval_set<uint64_t> > clone_subsets;
   interval_set<uint64_t> data_subset;
@@ -3214,9 +3223,12 @@ bool ReplicatedPG::pull(const sobject_t& soid)
     if (missing.is_missing(head)) {
       if (pulling.count(head)) {
 	dout(10) << " missing but already pulling head " << head << dendl;
-	return false;
+	return PULL_NONE;
       } else {
-	return pull(head);
+	int r = pull(head);
+	if (r != PULL_NONE)
+	  return PULL_OTHER;
+	return PULL_NONE;
       }
     }
     head.snap = CEPH_SNAPDIR;
@@ -3225,7 +3237,10 @@ bool ReplicatedPG::pull(const sobject_t& soid)
 	dout(10) << " missing but already pulling snapdir " << head << dendl;
 	return false;
       } else {
-	return pull(head);
+  	int r = pull(head);
+	if (r != PULL_NONE)
+	  return PULL_OTHER;
+	return PULL_NONE;
       }
     }
 
@@ -3261,7 +3276,7 @@ bool ReplicatedPG::pull(const sobject_t& soid)
   send_pull_op(soid, v, true, p.data_subset_pulling, fromosd);
   
   start_recovery_op(soid);
-  return true;
+  return PULL_YES;
 }
 
 void ReplicatedPG::send_pull_op(const sobject_t& soid, eversion_t v, bool first,
@@ -4152,10 +4167,19 @@ int ReplicatedPG::recover_primary(int max)
 	  }
 	}
 	
-	if (pull(soid)) {
+	int r = pull(soid);
+	switch (r) {
+	case PULL_YES:
 	  ++started;
-	} else
+	  break;
+	case PULL_OTHER:
+	  ++started;
+	case PULL_NONE:
 	  ++skipped;
+	  break;
+	default:
+	  assert(0);
+	}
 	if (started >= max)
 	  return started;
       }
