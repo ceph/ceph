@@ -15,6 +15,7 @@
 
 
 #include "Trace.h"
+#include "common/debug.h"
 
 #include <iostream>
 #include <map>

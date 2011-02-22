@@ -2,6 +2,7 @@
 #include <map>
 
 #include "common/config.h"
+#include "common/debug.h"
 #include "include/str_list.h"
 
 #include "Crypto.h"

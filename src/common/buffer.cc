@@ -14,6 +14,7 @@
 
 
 #include "armor.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/config.h"
