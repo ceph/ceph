@@ -3323,7 +3323,7 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
     else if (pg->is_primary() &&
 	     !pg->is_active()) {
       // i am (inactive) primary
-      if (!pg->is_peering() || 
+      if ((!pg->is_peering() && !pg->is_replay()) || 
 	  (pg->need_up_thru && up_thru >= pg->info.history.same_acting_since))
 	pg->do_peer(t, tfin, query_map, &info_map);
     }
