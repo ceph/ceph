@@ -3386,7 +3386,7 @@ void ReplicatedPG::push_start(const sobject_t& soid, int peer,
 
   dout(10) << "push_start " << soid << " size " << size << " data " << data_subset
 	   << " cloning " << clone_subsets << dendl;    
-  send_push_op(soid, peer, size, true, complete, pi->data_subset_pushing, pi->clone_subsets);
+  send_push_op(soid, version, peer, size, true, complete, pi->data_subset_pushing, pi->clone_subsets);
 }
 
 
@@ -3394,7 +3394,7 @@ void ReplicatedPG::push_start(const sobject_t& soid, int peer,
  * push - send object to a peer
  */
 
-void ReplicatedPG::send_push_op(const sobject_t& soid, int peer, 
+void ReplicatedPG::send_push_op(const sobject_t& soid, eversion_t version, int peer, 
 				uint64_t size, bool first, bool complete,
 				interval_set<uint64_t> &data_subset,
 				map<sobject_t, interval_set<uint64_t> >& clone_subsets)
@@ -3422,6 +3422,12 @@ void ReplicatedPG::send_push_op(const sobject_t& soid, int peer,
   bufferlist bv;
   bv.push_back(attrset[OI_ATTR]);
   object_info_t oi(bv);
+
+  if (oi.version != version) {
+    osd->clog.error() << "push " << soid << " v " << version << " to osd" << peer
+		      << " failed because local copy is " << oi.version << "\n";
+    return;
+  }
 
   // ok
   dout(7) << "send_push_op " << soid << " v " << oi.version 
@@ -3482,7 +3488,8 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
       pi->data_subset_pushing.span_of(pi->data_subset, from, g_conf.osd_recovery_max_chunk);
       dout(10) << " pushing more, " << pi->data_subset_pushing << " of " << pi->data_subset << dendl;
       complete = pi->data_subset.range_end() == pi->data_subset_pushing.range_end();
-      send_push_op(soid, peer, pi->size, false, complete, pi->data_subset_pushing, pi->clone_subsets);
+      send_push_op(soid, pi->version, peer, pi->size, false, complete,
+		   pi->data_subset_pushing, pi->clone_subsets);
     } else {
       // done!
       peer_missing[peer].got(soid, pi->version);
@@ -3543,7 +3550,7 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
     // complete==false means nothing.  we don't know because the primary may
     // not be pulling the entire object.
 
-    send_push_op(soid, op->get_source().num(), size, op->first, complete, op->data_subset, op->clone_subsets);
+    send_push_op(soid, op->version, op->get_source().num(), size, op->first, complete, op->data_subset, op->clone_subsets);
   }
   op->put();
 }

@@ -525,7 +525,7 @@ protected:
 		  uint64_t size, eversion_t version,
 		  interval_set<uint64_t> &data_subset,
 		  map<sobject_t, interval_set<uint64_t> >& clone_subsets);
-  void send_push_op(const sobject_t& oid, int dest,
+  void send_push_op(const sobject_t& oid, eversion_t version, int dest,
 		    uint64_t size, bool first, bool complete,
 		    interval_set<uint64_t>& data_subset, 
 		    map<sobject_t, interval_set<uint64_t> >& clone_subsets);
