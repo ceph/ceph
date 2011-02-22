@@ -2418,17 +2418,21 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path)
 
 extern "C" int rados_conf_set(rados_t cluster, const char *option, const char *value)
 {
-  return 0;
+  int ret = g_conf.set_val(option, value);
+  if (ret == 0) {
+    // Simulate SIGHUP after a configuration change.
+    sighup_handler(SIGHUP);
+  }
+  return ret;
 }
 
-extern "C" const char *rados_conf_get(rados_t cluster, const char *option)
+extern "C" int rados_conf_get(rados_t cluster, const char *option, char **buf, int len)
 {
-  return 0;
+  return g_conf.get_val(option, buf, len);
 }
 
 
-
-extern "C" int rados_pool_lookup(rados_t cluster, const char *name)
+extern "C" int rados_lookup_pool(rados_t cluster, const char *name)
 {
   RadosClient *radosp = (RadosClient *)cluster;
   return radosp->lookup_pool(name);

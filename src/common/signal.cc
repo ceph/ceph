@@ -48,7 +48,7 @@ void install_sighandler(int signum, signal_handler_t handler, int flags)
   }
 }
 
-static void sighup_handler(int signum)
+void sighup_handler(int signum)
 {
   // All this does is set a few bits telling us to re-open our logfiles and
   // restart our central logging service.

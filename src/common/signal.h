@@ -22,6 +22,9 @@ typedef void (*signal_handler_t)(int);
 
 void install_sighandler(int signum, signal_handler_t handler, int flags);
 
+// handles SIGHUP
+void sighup_handler(int signum);
+
 // Install the standard Ceph signal handlers
 void install_standard_sighandlers(void);
 
