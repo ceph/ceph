@@ -13,7 +13,6 @@
  */
 
 #include "auth/Auth.h"
-#include "ceph_ver.h"
 #include "common/BackTrace.h"
 #include "common/Clock.h"
 #include "common/ConfUtils.h"
