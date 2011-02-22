@@ -30,6 +30,7 @@
 #include "CInode.h"
 #include "CDir.h"
 
+#include "include/ceph_fs.h"
 #include "include/filepath.h"
 
 #include "msg/Message.h"
@@ -86,6 +87,8 @@
 #include <string>
 #include <map>
 using namespace std;
+
+extern struct ceph_file_layout g_default_file_layout;
 
 #include "common/config.h"
 

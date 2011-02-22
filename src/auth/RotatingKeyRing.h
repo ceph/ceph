@@ -16,6 +16,7 @@
 #define CEPH_ROTATINGKEYRING_H
 
 #include "common/config.h"
+#include "common/Mutex.h"
 
 #include "auth/Crypto.h"
 #include "auth/Auth.h"

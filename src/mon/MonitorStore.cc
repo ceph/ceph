@@ -14,6 +14,7 @@
 
 #include "MonitorStore.h"
 #include "common/Clock.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/run_cmd.h"
 #include "common/safe_io.h"
