@@ -49,11 +49,6 @@ namespace librbd {
 
   class WatchCtx;
 
-  struct PoolCtx {
-    pool_t md;
-    pool_t data;
-  };
-
   struct SnapInfo {
     librados::snap_t id;
     uint64_t size;
@@ -68,6 +63,7 @@ namespace librbd {
     uint64_t snapid;
     std::string name;
     struct PoolCtx *pctx;
+    pool_t data;
     WatchCtx *wctx;
     bool needs_refresh;
     Mutex lock;
