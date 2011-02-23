@@ -133,7 +133,7 @@ public:
       ::decode(dirty, bl);
     }
 
-    void update_inode(CInode *in);
+    void update_inode(MDS *mds, CInode *in);
 
     void print(ostream& out) {
       out << " fullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv

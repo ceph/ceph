@@ -360,12 +360,14 @@ void EMetaBlob::update_segment(LogSegment *ls)
     //    ls->last_client_tid[client_reqs.rbegin()->client] = client_reqs.rbegin()->tid);
 }
 
-void EMetaBlob::fullbit::update_inode(CInode *in)
+void EMetaBlob::fullbit::update_inode(MDS *mds, CInode *in)
 {
   in->inode = inode;
   in->xattrs = xattrs;
   if (in->inode.is_dir()) {
     if (!(in->dirfragtree == dirfragtree)) {
+      dout(10) << "EMetaBlob::fullbit::update_inode dft " << in->dirfragtree << " -> "
+	       << dirfragtree << " on " << *in << dendl;
       in->dirfragtree = dirfragtree;
       in->force_dirfrags();
     }
@@ -395,7 +397,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     bool isnew = in ? false:true;
     if (!in)
       in = new CInode(mds->mdcache, true);
-    root->update_inode(in);
+    root->update_inode(mds, in);
     if (isnew)
       mds->mdcache->add_inode(in);
     if (root->dirty) in->_mark_dirty(logseg);
@@ -480,7 +482,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       CInode *in = mds->mdcache->get_inode(p->inode.ino, p->dnlast);
       if (!in) {
 	in = new CInode(mds->mdcache, true, p->dnfirst, p->dnlast);
-	p->update_inode(in);
+	p->update_inode(mds, in);
 	mds->mdcache->add_inode(in);
 	if (!dn->get_linkage()->is_null()) {
 	  if (dn->get_linkage()->is_primary()) {
@@ -507,7 +509,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	}
 	if (in->get_parent_dn() && in->inode.anchored != p->inode.anchored)
 	  in->get_parent_dn()->adjust_nested_anchors( (int)p->inode.anchored - (int)in->inode.anchored );
-	p->update_inode(in);
+	p->update_inode(mds, in);
 	if (p->dirty) in->_mark_dirty(logseg);
 	if (dn->get_linkage()->get_inode() != in) {
 	  if (!dn->get_linkage()->is_null())  // note: might be remote.  as with stray reintegration.
