@@ -149,7 +149,17 @@ class frag_t {
 
 inline std::ostream& operator<<(std::ostream& out, frag_t hb)
 {
-  return out << std::hex << hb.value() << std::dec << "/" << hb.bits();
+  //return out << std::hex << hb.value() << std::dec << "/" << hb.bits();
+  unsigned num = hb.bits();
+  if (num) {
+    unsigned val = hb.value();
+    unsigned bit = 1 << hb.mask_shift();
+    while (num--) {
+      out << ((val & bit) ? '1':'0');
+      bit--;	    
+    }
+  }
+  return out << '*';
 }
 
 inline void encode(frag_t f, bufferlist& bl) { encode_raw(f._enc, bl); }
