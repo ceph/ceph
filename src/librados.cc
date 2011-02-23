@@ -2418,12 +2418,14 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path)
 
 extern "C" int rados_conf_set(rados_t cluster, const char *option, const char *value)
 {
-  int ret = g_conf.set_val(option, value);
-  if (ret == 0) {
-    // Simulate SIGHUP after a configuration change.
-    sighup_handler(SIGHUP);
-  }
-  return ret;
+  return g_conf.set_val(option, value);
+}
+
+extern "C" int rados_conf_apply(void)
+{
+  // Simulate SIGHUP after a configuration change.
+  sighup_handler(SIGHUP);
+  return 0;
 }
 
 extern "C" int rados_conf_get(rados_t cluster, const char *option, char **buf, int len)

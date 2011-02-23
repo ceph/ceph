@@ -54,13 +54,20 @@ void rados_version(int *major, int *minor, int *extra);
 int rados_init(rados_t *cluster);
 void rados_release(rados_t cluster);
 
-/* config */
-int rados_conf_parse_argv(rados_t cluster, int argc, const char **argv);
+/* Config
+ *
+ * Functions for manipulating the Ceph configuration at runtime.
+ * After changing the Ceph configuration, you should call rados_conf_apply to
+ * ensure that the changes have been applied.
+ */
 int rados_conf_read_file(rados_t cluster, const char *path);
 
 /* Sets a configuration value from a string.
  * Returns 0 on success, error code otherwise. */
 int rados_conf_set(rados_t cluster, const char *option, const char *value);
+
+/* Applies any configuration changes */
+int rados_conf_apply(void);
 
 /* Returns a configuration value as a string.
  * If len is positive, that is the maximum number of bytes we'll write into the
