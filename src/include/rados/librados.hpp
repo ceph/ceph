@@ -100,15 +100,15 @@ public:
     bufferlist *extra_info;
     ListCtx() : ctx(NULL), extra_info(NULL) {}
   };
-  int list_objects_open(pool_t pool, Rados::ListCtx *ctx);
-  int list_objects_more(Rados::ListCtx& ctx, int max, std::list<std::string>& entries);
-  void list_objects_close(Rados::ListCtx& ctx);
+  int objects_list_open(pool_t pool, Rados::ListCtx *ctx);
+  int objects_list_more(Rados::ListCtx& ctx, int max, std::list<std::string>& entries);
+  void objects_list_close(Rados::ListCtx& ctx);
   void list_filter(Rados::ListCtx& ctx, bufferlist& filter, bufferlist *extra_info);
 
-  int list_pools(std::list<std::string>& v);
-  int get_pool_stats(std::list<std::string>& v,
+  int pool_list(std::list<std::string>& v);
+  int pool_get_stats(std::list<std::string>& v,
 		     std::map<std::string,pool_stat_t>& stats);
-  int get_fs_stats(statfs_t& result);
+  int fs_get_stats(statfs_t& result);
 
   int create_pool(const char *name, uint64_t auid=0, __u8 crush_rule=0);
   int delete_pool(pool_t pool);

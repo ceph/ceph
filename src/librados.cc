@@ -1837,14 +1837,14 @@ void Rados::version(int *major, int *minor, int *extra)
   rados_version(major, minor, extra);
 }
 
-int Rados::list_pools(std::list<string>& v)
+int Rados::pool_list(std::list<string>& v)
 {
   if (!client)
     return -EINVAL;
   return client->list_pools(v);
 }
 
-int Rados::get_pool_stats(std::list<string>& v, std::map<string,pool_stat_t>& result)
+int Rados::pool_get_stats(std::list<string>& v, std::map<string,pool_stat_t>& result)
 {
   if (!client)
     return -EINVAL;
@@ -1890,7 +1890,7 @@ int Rados::change_pool_auid(rados_pool_t pool, uint64_t auid)
   return client->change_pool_auid(pool, auid);
 }
 
-int Rados::get_fs_stats(statfs_t& result)
+int Rados::fs_get_stats(statfs_t& result)
 {
   if (!client)
     return -EINVAL;
@@ -1903,7 +1903,7 @@ int Rados::get_fs_stats(statfs_t& result)
   return r;
 }
 
-int Rados::list_objects_open(pool_t pool, Rados::ListCtx *ctx)
+int Rados::objects_list_open(pool_t pool, Rados::ListCtx *ctx)
 {
   if (!client)
     return -EINVAL;
@@ -1915,7 +1915,7 @@ int Rados::list_objects_open(pool_t pool, Rados::ListCtx *ctx)
   return 0;
 }
 
-int Rados::list_objects_more(Rados::ListCtx& ctx, int max, std::list<string>& entries)
+int Rados::objects_list_more(Rados::ListCtx& ctx, int max, std::list<string>& entries)
 {
   if (!client)
     return -EINVAL;
@@ -1932,7 +1932,7 @@ int Rados::list_objects_more(Rados::ListCtx& ctx, int max, std::list<string>& en
   return r;
 }
 
-void Rados::list_objects_close(Rados::ListCtx& ctx)
+void Rados::objects_list_close(Rados::ListCtx& ctx)
 {
   if (!client)
     return;
@@ -2422,13 +2422,13 @@ extern "C" const char *rados_conf_get(rados_t cluster, const char *option)
 
 
 
-extern "C" int rados_lookup_pool(rados_t cluster, const char *name)
+extern "C" int rados_pool_lookup(rados_t cluster, const char *name)
 {
   RadosClient *radosp = (RadosClient *)cluster;
   return radosp->lookup_pool(name);
 }
 
-extern "C" int rados_open_pool(rados_t cluster, const char *name, rados_pool_t *pool)
+extern "C" int rados_pool_open(rados_t cluster, const char *name, rados_pool_t *pool)
 {
   RadosClient *radosp = (RadosClient *)cluster;
   int poolid = radosp->lookup_pool(name);
@@ -2442,14 +2442,14 @@ extern "C" int rados_open_pool(rados_t cluster, const char *name, rados_pool_t *
   return poolid;
 }
 
-extern "C" int rados_close_pool(rados_pool_t pool)
+extern "C" int rados_pool_close(rados_pool_t pool)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   delete ctx;
   return 0;
 }
 
-extern "C" int rados_stat_pool(rados_pool_t pool, struct rados_pool_stat_t *stats)
+extern "C" int rados_pool_stat(rados_pool_t pool, struct rados_pool_stat_t *stats)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   list<string> ls;
@@ -2477,13 +2477,13 @@ extern "C" int rados_stat_pool(rados_pool_t pool, struct rados_pool_stat_t *stat
 }
 
 
-extern "C" void rados_set_snap(rados_pool_t pool, rados_snap_t seq)
+extern "C" void rados_snap_set_read(rados_pool_t pool, rados_snap_t seq)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   ctx->set_snap((snapid_t)seq);
 }
 
-extern "C" int rados_set_snap_context(rados_pool_t pool, rados_snap_t seq,
+extern "C" int rados_snap_set_write_context(rados_pool_t pool, rados_snap_t seq,
 				       rados_snap_t *snaps, int num_snaps)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
@@ -2555,21 +2555,21 @@ extern "C" uint64_t rados_get_last_version(rados_pool_t pool)
   return ver.version;
 }
 
-extern "C" int rados_create_pool(rados_t cluster, const char *name)
+extern "C" int rados_pool_create(rados_t cluster, const char *name)
 {
   RadosClient *radosp = (RadosClient *)cluster;
   string sname(name);
   return radosp->create_pool(sname);
 }
 
-extern "C" int rados_create_pool_with_auid(rados_t cluster, const char *name, uint64_t auid)
+extern "C" int rados_pool_create_with_auid(rados_t cluster, const char *name, uint64_t auid)
 {
   RadosClient *radosp = (RadosClient *)cluster;
   string sname(name);
   return radosp->create_pool(sname, auid);
 }
 
-extern "C" int rados_create_pool_with_crush_rule(rados_t cluster, const char *name,
+extern "C" int rados_pool_create_with_crush_rule(rados_t cluster, const char *name,
 						 __u8 crush_rule)
 {
   RadosClient *radosp = (RadosClient *)cluster;
@@ -2577,7 +2577,7 @@ extern "C" int rados_create_pool_with_crush_rule(rados_t cluster, const char *na
   return radosp->create_pool(sname, 0, crush_rule);
 }
 
-extern "C" int rados_create_pool_with_all(rados_t cluster, const char *name, uint64_t auid,
+extern "C" int rados_pool_create_with_all(rados_t cluster, const char *name, uint64_t auid,
 					  __u8 crush_rule)
 {
   RadosClient *radosp = (RadosClient *)cluster;
@@ -2585,13 +2585,13 @@ extern "C" int rados_create_pool_with_all(rados_t cluster, const char *name, uin
   return radosp->create_pool(sname, auid, crush_rule);
 }
 
-extern "C" int rados_delete_pool(rados_pool_t pool)
+extern "C" int rados_pool_delete(rados_pool_t pool)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   return ctx->client->delete_pool(ctx);
 }
 
-extern "C" int rados_change_pool_auid(rados_pool_t pool, uint64_t auid)
+extern "C" int rados_pool_change_auid(rados_pool_t pool, uint64_t auid)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   return ctx->client->change_pool_auid(ctx, auid);
@@ -2739,7 +2739,7 @@ extern "C" int rados_exec(rados_pool_t pool, const char *o, const char *cls, con
 
 /* list objects */
 
-extern "C" int rados_list_objects_open(rados_pool_t pool, rados_list_ctx_t *listh)
+extern "C" int rados_objects_list_open(rados_pool_t pool, rados_list_ctx_t *listh)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   Objecter::ListContext *h = new Objecter::ListContext;
@@ -2749,13 +2749,13 @@ extern "C" int rados_list_objects_open(rados_pool_t pool, rados_list_ctx_t *list
   return 0;
 }
 
-extern "C" void rados_list_objects_close(rados_list_ctx_t h)
+extern "C" void rados_objects_list_close(rados_list_ctx_t h)
 {
   RadosClient::ListCtx *lh = (RadosClient::ListCtx *)h;
   delete lh;
 }
 
-extern "C" int rados_list_objects_next(rados_list_ctx_t listctx, const char **entry)
+extern "C" int rados_objects_list_next(rados_list_ctx_t listctx, const char **entry)
 {
   RadosClient::ListCtx *lh = (RadosClient::ListCtx *)listctx;
   Objecter::ListContext *h = lh->lc;
