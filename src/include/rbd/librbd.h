@@ -69,7 +69,6 @@ int rbd_open(rados_pool_t pool, const char *name, rbd_image_t *image, const char
 int rbd_close(rbd_image_t image);
 int rbd_resize(rbd_image_t image, size_t size);
 int rbd_stat(rbd_image_t image, rbd_image_info_t *info, size_t infosize);
-int rbd_stat(rbd_image_t image, rbd_image_info_t *info, size_t infosize);
 
 /* snapshots */
 int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps, int *max_snaps);

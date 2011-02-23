@@ -25,8 +25,10 @@
 #include "librbd.h"
 
 namespace librbd {
+
+  using librados::pool_t;
+
   class RBDClient;
-  typedef void *pool_t;
   typedef void *image_t;
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
@@ -42,15 +44,16 @@ namespace librbd {
     uint64_t obj_size;
     uint64_t num_objs;
     int order;
+    char block_name_prefix[RBD_MAX_BLOCK_NAME_SIZE];
+    int parent_pool;                            /* -1 if none */
+    char parent_name[RBD_MAX_IMAGE_NAME_SIZE];  /* blank if none */
   } image_info_t;
 
 class RBD
 {
-  RBDClient *client;
-
 public:
-  RBD() {}
-  ~RBD() {}
+  RBD();
+  ~RBD();
 
   struct AioCompletion {
     void *pc;
@@ -64,13 +67,7 @@ public:
   RBD(const RBD& rhs);
   const RBD& operator=(const RBD& rhs);
 
-  int initialize(int argc, const char *argv[]);
-  void shutdown();
-
   void version(int *major, int *minor, int *extra);
-
-  int open_pool(const char *pool_name, pool_t *pool);
-  int close_pool(pool_t pool);
 
   int list(pool_t pool, std::vector<std::string>& names);
   int create(pool_t pool, const char *name, size_t size, int *order);
@@ -78,17 +75,17 @@ public:
   int copy(pool_t src_pool, const char *srcname, pool_t dest_pool, const char *destname);
   int rename(pool_t src_pool, const char *srcname, const char *destname);
 
-  int open_image(pool_t pool, const char *name, image_t *image, const char *snap_name = NULL);
-  int close_image(image_t image);
+  int open(pool_t pool, const char *name, image_t *image, const char *snap_name = NULL);
+  int close(image_t image);
   int resize(image_t image, size_t size);
-  int stat(image_t image, image_info_t& info);
+  int stat(image_t image, image_info_t& info, size_t infosize);
 
   /* snapshots */
-  int list_snaps(image_t image, std::vector<snap_info_t>& snaps);
-  int create_snap(image_t image, const char *snap_name);
-  int remove_snap(image_t image, const char *snap_name);
-  int rollback_snap(image_t image, const char *snap_name);
-  int set_snap(image_t image, const char *snap_name);
+  int snap_list(image_t image, std::vector<snap_info_t>& snaps);
+  int snap_create(image_t image, const char *snap_name);
+  int snap_remove(image_t image, const char *snap_name);
+  int snap_rollback(image_t image, const char *snap_name);
+  int snap_set(image_t image, const char *snap_name);
 
   /* I/O */
   int read(image_t image, off_t ofs, size_t len, ceph::bufferlist& bl);
@@ -100,10 +97,6 @@ public:
   int aio_write(image_t image, off_t off, size_t len, ceph::bufferlist& bl,
                 AioCompletion *c);
   int aio_read(image_t image, off_t off, size_t len, ceph::bufferlist& bl, AioCompletion *c);
-
-  /* lower level access */
-  librados::Rados& get_rados();
-  void get_rados_pools(pool_t pool, librados::pool_t *md_pool, librados::pool_t *data_pool);
 };
 
 }
