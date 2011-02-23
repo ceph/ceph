@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -14,6 +14,7 @@
 
 #define __STDC_FORMAT_MACROS
 #include "include/rbd/librbd.hpp"
+#include "include/rados/librados.hpp"
 #include "include/buffer.h"
 
 #include <algorithm>
@@ -36,30 +37,30 @@ using namespace std;
 
 librbd::RBD *rbd;
 
-void test_create_and_stat(librbd::pool_t pool, const char *name, size_t size)
+void test_create_and_stat(librados::pool_t pool, const char *name, size_t size)
 {
   librbd::image_info_t info;
   librbd::image_t image;
   int order = 0;
   assert(rbd->create(pool, name, size, &order) == 0);
-  assert(rbd->open_image(pool, name, &image, NULL) == 0);
-  assert(rbd->stat(image, info) == 0);
+  assert(rbd->open(pool, name, &image, NULL) == 0);
+  assert(rbd->stat(image, info, sizeof(info)) == 0);
   cout << "image has size " << info.size << " and order " << info.order << endl;
   assert(info.size == size);
   assert(info.order == order);
-  assert(rbd->close_image(image) == 0);
+  assert(rbd->close(image) == 0);
 }
 
 void test_resize_and_stat(librbd::image_t image, size_t size)
 {
   librbd::image_info_t info;
   assert(rbd->resize(image, size) == 0);
-  assert(rbd->stat(image, info) == 0);
+  assert(rbd->stat(image, info, sizeof(info)) == 0);
   cout << "image has size " << info.size << " and order " << info.order << endl;
   assert(info.size == size);
 }
 
-void test_ls(librbd::pool_t pool, size_t num_expected, ...)
+void test_ls(librados::pool_t pool, size_t num_expected, ...)
 {
   int r;
   size_t i;
@@ -89,14 +90,14 @@ void test_ls(librbd::pool_t pool, size_t num_expected, ...)
   assert(names.empty());
 }
 
-void test_delete(librbd::pool_t pool, const char *name)
+void test_delete(librados::pool_t pool, const char *name)
 {
   assert(rbd->remove(pool, name) == 0);
 }
 
 void test_create_snap(librbd::image_t image, const char *name)
 {
-  assert(rbd->create_snap(image, name) == 0);
+  assert(rbd->snap_create(image, name) == 0);
 }
 
 void test_ls_snaps(librbd::image_t image, size_t num_expected, ...)
@@ -106,7 +107,7 @@ void test_ls_snaps(librbd::image_t image, size_t num_expected, ...)
   char *expected;
   va_list ap;
   vector<librbd::snap_info_t> snaps;
-  r = rbd->list_snaps(image, snaps);
+  r = rbd->snap_list(image, snaps);
   assert(r >= 0);
   cout << "num snaps is: " << snaps.size() << endl
        << "expected: " << num_expected << endl;
@@ -142,7 +143,7 @@ void test_ls_snaps(librbd::image_t image, size_t num_expected, ...)
 
 void test_delete_snap(librbd::image_t image, const char *name)
 {
-  assert(rbd->remove_snap(image, name) == 0);
+  assert(rbd->snap_remove(image, name) == 0);
 }
 
 void simple_write_cb(librbd::completion_t cb, void *arg)
@@ -211,7 +212,7 @@ void read_test_data(librbd::image_t image, const char *expected, off_t off)
   assert(strncmp(bl.c_str(), expected, expected_len) == 0);
 }
 
-void test_io(librbd::pool_t pool, librbd::image_t image)
+void test_io(librados::pool_t pool, librbd::image_t image)
 {
   char test_data[TEST_IO_SIZE];
   int i;
@@ -238,14 +239,15 @@ void test_io(librbd::pool_t pool, librbd::image_t image)
 
 int main(int argc, const char **argv) 
 {
-  rbd = new librbd::RBD();
-  librbd::pool_t pool;
+  librados::Rados rados;
+  librados::pool_t pool;
   librbd::image_t image;
-  assert(rbd->initialize(0, NULL) == 0);
-  assert(rbd->open_pool(TEST_POOL, &pool) == 0);
+  rbd = new librbd::RBD();
+  assert(rados.init() == 0);
+  assert(rados.pool_open(TEST_POOL, &pool) == 0);
   test_ls(pool, 0);
   test_create_and_stat(pool, TEST_IMAGE, MB_BYTES(1));
-  assert(rbd->open_image(pool, TEST_IMAGE, &image, NULL) == 0);
+  assert(rbd->open(pool, TEST_IMAGE, &image, NULL) == 0);
   test_ls(pool, 1, TEST_IMAGE);
   test_ls_snaps(image, 0);
   test_create_snap(image, TEST_SNAP);
@@ -258,15 +260,15 @@ int main(int argc, const char **argv)
   test_ls_snaps(image, 1, TEST_SNAP "1", MB_BYTES(2));
   test_delete_snap(image, TEST_SNAP "1");
   test_ls_snaps(image, 0);
-  assert(rbd->close_image(image) == 0);
+  assert(rbd->close(image) == 0);
   test_create_and_stat(pool, TEST_IMAGE "1", MB_BYTES(2));
   test_ls(pool, 2, TEST_IMAGE, TEST_IMAGE "1");
   test_delete(pool, TEST_IMAGE);
   test_ls(pool, 1, TEST_IMAGE "1");
   test_delete(pool, TEST_IMAGE "1");
   test_ls(pool, 0);
-  rbd->close_pool(pool);
-  rbd->shutdown();
   delete rbd;
+  rados.pool_close(pool);
+  rados.release();
   return 0;
 }

@@ -174,24 +174,24 @@ int main(int argc, const char **argv)
       cerr << "snapid " << snapid << " doesn't exist in pool " << pool << std::endl;
       goto out;
     }
-    rados.set_snap(p, snapid);
+    rados.set_snap_read(p, snapid);
     cout << "selected snap " << snapid << " '" << snapname << "'" << std::endl;
   }
 
   // list pools?
   if (strcmp(nargs[0], "lspools") == 0) {
     list<string> vec;
-    rados.list_pools(vec);
+    rados.pool_list(vec);
     for (list<string>::iterator i = vec.begin(); i != vec.end(); ++i)
       cout << *i << std::endl;
   }
   else if (strcmp(nargs[0], "df") == 0) {
     // pools
     list<string> vec;
-    rados.list_pools(vec);
+    rados.pool_list(vec);
     
     map<string,pool_stat_t> stats;
-    rados.get_pool_stats(vec, stats);
+    rados.pool_get_stats(vec, stats);
 
     printf("%-15s "
 	   "%12s %12s %12s %12s "
@@ -215,7 +215,7 @@ int main(int argc, const char **argv)
 
     // total
     statfs_t tstats;
-    rados.get_fs_stats(tstats);
+    rados.fs_get_stats(tstats);
     printf("  total used    %12lld %12lld\n", (long long unsigned)tstats.kb_used,
 	   (long long unsigned)tstats.num_objects);
     printf("  total avail   %12lld\n", (long long unsigned)tstats.kb_avail);
@@ -236,7 +236,7 @@ int main(int argc, const char **argv)
       outstream = new ofstream(nargs[1]);
 
     Rados::ListCtx ctx;
-    rados.list_objects_open(p, &ctx);
+    rados.objects_list_open(p, &ctx);
     bufferlist extra_info;
     bool filter_parent = false;
     if (filter) {
@@ -274,7 +274,7 @@ int main(int argc, const char **argv)
     }
     while (1) {
       list<string> vec;
-      ret = rados.list_objects_more(ctx, 1 << 10, vec);
+      ret = rados.objects_list_more(ctx, 1 << 10, vec);
       if (ret < 0) {
 	cerr << "got error: " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
 	delete outstream;
@@ -293,7 +293,7 @@ int main(int argc, const char **argv)
         }
       }
     }
-    rados.list_objects_close(ctx);
+    rados.objects_list_close(ctx);
     if (!stdout)
       delete outstream;
   }

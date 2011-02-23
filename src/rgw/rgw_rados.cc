@@ -79,7 +79,7 @@ int RGWRados::list_buckets_init(std::string& id, RGWAccessHandle *handle)
   if (!state)
     return -ENOMEM;
 
-  int r = rados->list_pools(state->list);
+  int r = rados->pool_list(state->list);
   if (r < 0)
     return r;
   state->pos = state->list.begin();
@@ -149,10 +149,10 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
 
 #define MAX_ENTRIES 1000
   Rados::ListCtx ctx;
-  rados->list_objects_open(pool, &ctx);
+  rados->objects_list_open(pool, &ctx);
   do {
     list<string> entries;
-    r = rados->list_objects_more(ctx, MAX_ENTRIES, entries);
+    r = rados->objects_list_more(ctx, MAX_ENTRIES, entries);
     if (r < 0)
       return r;
 
@@ -163,7 +163,7 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
       }
     }
   } while (r);
-  rados->list_objects_close(ctx);
+  rados->objects_list_close(ctx);
 
   set<string>::iterator p;
   if (!marker.empty())

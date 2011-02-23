@@ -102,13 +102,13 @@ public:
       client(c), poolid(pid), name(n), snap_seq(s), assert_ver(0),
       notify_timeout(g_conf.client_notify_timeout) {}
 
-    void set_snap(snapid_t s) {
+    void set_snap_read(snapid_t s) {
       if (!s)
 	s = CEPH_NOSNAP;
       snap_seq = s;
     }
 
-    int set_snap_context(snapid_t seq, vector<snapid_t>& snaps) {
+    int set_snap_write_context(snapid_t seq, vector<snapid_t>& snaps) {
       SnapContext n;
       n.seq = seq;
       n.snaps = snaps;
@@ -2159,15 +2159,15 @@ int Rados::selfmanaged_snap_rollback_object(rados_pool_t pool,
   return client->selfmanaged_snap_rollback_object(pool, oid, sn, snapid);
 }
 
-void Rados::set_snap(rados_pool_t pool, snap_t seq)
+void Rados::set_snap_read(rados_pool_t pool, snap_t seq)
 {
   if (!client)
     return;
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
-  ctx->set_snap(seq);
+  ctx->set_snap_read(seq);
 }
 
-int Rados::set_snap_context(rados_pool_t pool, snap_t seq, vector<snap_t>& snaps)
+int Rados::set_snap_write_context(rados_pool_t pool, snap_t seq, vector<snap_t>& snaps)
 {
   if (!client)
     return -EINVAL;
@@ -2176,7 +2176,7 @@ int Rados::set_snap_context(rados_pool_t pool, snap_t seq, vector<snap_t>& snaps
   snv.resize(snaps.size());
   for (unsigned i=0; i<snaps.size(); i++)
     snv[i] = snaps[i];
-  return ctx->set_snap_context(seq, snv);
+  return ctx->set_snap_write_context(seq, snv);
 }
 
 int Rados::snap_list(rados_pool_t pool, vector<snap_t> *snaps)
@@ -2486,7 +2486,7 @@ extern "C" int rados_pool_stat(rados_pool_t pool, struct rados_pool_stat_t *stat
 extern "C" void rados_snap_set_read(rados_pool_t pool, rados_snap_t seq)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
-  ctx->set_snap((snapid_t)seq);
+  ctx->set_snap_read((snapid_t)seq);
 }
 
 extern "C" int rados_snap_set_write_context(rados_pool_t pool, rados_snap_t seq,
@@ -2497,7 +2497,7 @@ extern "C" int rados_snap_set_write_context(rados_pool_t pool, rados_snap_t seq,
   snv.resize(num_snaps);
   for (int i=0; i<num_snaps; i++)
     snv[i] = (snapid_t)snaps[i];
-  return ctx->set_snap_context((snapid_t)seq, snv);
+  return ctx->set_snap_write_context((snapid_t)seq, snv);
 }
 
 extern "C" int rados_write(rados_pool_t pool, const char *o, off_t off, const char *buf, size_t len)

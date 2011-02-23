@@ -261,8 +261,9 @@ int main(int argc, const char **argv)
   rados_t cluster;
   rados_pool_t pool;
   rbd_image_t image;
-  assert(rados_init(&cluster) == 0);
-  assert(rados_conf_parse_argv(cluster, argc, argv) == 0);
+  assert(rados_create(&cluster, NULL) == 0);
+  assert(rados_conf_read_file(cluster, "/etc/ceph/ceph.conf") == 0);
+  rados_reopen_log();
   assert(rados_pool_open(cluster, TEST_POOL, &pool) == 0);
   test_ls(pool, 0);
   test_create_and_stat(pool, TEST_IMAGE, MB_BYTES(1));
@@ -287,6 +288,6 @@ int main(int argc, const char **argv)
   test_delete(pool, TEST_IMAGE "1");
   test_ls(pool, 0);
   rados_pool_close(pool);
-  rados_release(cluster);
+  rados_destroy(cluster);
   return 0;
 }

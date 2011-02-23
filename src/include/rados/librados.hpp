@@ -70,8 +70,8 @@ public:
   int close_pool(pool_t pool);
   int lookup_pool(const char *name);
 
-  void set_snap(pool_t pool, snap_t seq);
-  int set_snap_context(pool_t pool, snap_t seq, std::vector<snap_t>& snaps);
+  void set_snap_read(pool_t pool, snap_t seq);
+  int set_snap_write_context(pool_t pool, snap_t seq, std::vector<snap_t>& snaps);
 
   uint64_t get_last_version(pool_t pool);
 

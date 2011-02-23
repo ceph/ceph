@@ -557,11 +557,11 @@ int snap_create(ImageCtx *ictx, const char *snap_name)
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
-  r = rados.snap_set_write_context(ictx->pool, ictx->snapc.seq, ictx->snaps);
+  r = rados.set_snap_write_context(ictx->pool, ictx->snapc.seq, ictx->snaps);
   if (r < 0)
     return r;
 
-  rados.snap_set_read(ictx->pool, 0);
+  rados.set_snap_read(ictx->pool, 0);
   r = add_snap(ictx, snap_name);
   notify_change(ictx->pool, md_oid, NULL, ictx);
   return r;
@@ -582,11 +582,11 @@ int snap_remove(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
-  r = rados.snap_set_write_context(ictx->pool, ictx->snapc.seq, ictx->snaps);
+  r = rados.set_snap_write_context(ictx->pool, ictx->snapc.seq, ictx->snaps);
   if (r < 0)
     return r;
 
-  rados.snap_set_read(ictx->pool, ictx->snapid);
+  rados.set_snap_read(ictx->pool, ictx->snapid);
 
   r = rm_snap(ictx->pool, md_oid, snap_name);
   r = rados.selfmanaged_snap_remove(ictx->pool, ictx->snapid);
@@ -909,11 +909,11 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
-  r = rados.snap_set_write_context(ictx->pool, ictx->snapc.seq, ictx->snaps);
+  r = rados.set_snap_write_context(ictx->pool, ictx->snapc.seq, ictx->snaps);
   if (r < 0)
     return r;
 
-  rados.snap_set_read(ictx->pool, ictx->snapid);
+  rados.set_snap_read(ictx->pool, ictx->snapid);
   r = rollback_image(ictx, ictx->snapid);
   if (r < 0)
     return r;
@@ -1000,11 +1000,11 @@ int snap_set(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
-  r = rados.snap_set_write_context(ictx->pool, ictx->snapc.seq, ictx->snaps);
+  r = rados.set_snap_write_context(ictx->pool, ictx->snapc.seq, ictx->snaps);
   if (r < 0)
     return r;
 
-  rados.snap_set_read(ictx->pool, ictx->snapid);
+  rados.set_snap_read(ictx->pool, ictx->snapid);
 
   return 0;
 }

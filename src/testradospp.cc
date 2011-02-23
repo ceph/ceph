@@ -153,11 +153,11 @@ int main(int argc, const char **argv)
   }
 
   Rados::ListCtx ctx;
-  rados.list_objects_open(pool, &ctx);
+  rados.objects_list_open(pool, &ctx);
   int entries;
   do {
     list<string> vec;
-    r = rados.list_objects_more(ctx, 2, vec);
+    r = rados.objects_list_more(ctx, 2, vec);
     entries = vec.size();
     cout << "list result=" << r << " entries=" << entries << std::endl;
     list<string>::iterator iter;
@@ -165,7 +165,7 @@ int main(int argc, const char **argv)
       cout << *iter << std::endl;
     }
   } while (entries);
-  rados.list_objects_close(ctx);
+  rados.objects_list_close(ctx);
 
 
   map<string, bufferlist> attrset;

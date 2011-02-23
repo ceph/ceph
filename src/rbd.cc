@@ -483,8 +483,8 @@ static void err_exit(librados::pool_t pool, librbd::image_t image = NULL)
 {
   if (image)
     rbd.close(image);
-  rados.pool_close(pool);
-  rados.release();
+  rados.close_pool(pool);
+  rados.shutdown();
   exit(1);
 }
 
@@ -685,14 +685,14 @@ int main(int argc, const char **argv)
     usage_exit();
   }
 
-  if (rados.init() < 0) {
+  if (rados.initialize(NULL, 0) < 0) {
     cerr << "error: couldn't initialize rados!" << std::endl;
     exit(1);
   }
 
   // TODO: add argc/argv conf
   
-  int r = rados.pool_open(poolname, &pool);
+  int r = rados.open_pool(poolname, &pool);
   if (r < 0) {
       cerr << "error opening pool " << poolname << " (err=" << r << ")" << std::endl;
       err_exit(pool);
@@ -718,7 +718,7 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_COPY || opt_cmd == OPT_IMPORT) {
-    r = rados.pool_open(dest_poolname, &dest_pool);
+    r = rados.open_pool(dest_poolname, &dest_pool);
     if (r < 0) {
       cerr << "error opening pool " << dest_poolname << " (err=" << r << ")" << std::endl;
       err_exit(pool);
@@ -882,7 +882,7 @@ int main(int argc, const char **argv)
   if (image)
     rbd.close(image);
 
-  rados.pool_close(pool);
-  rados.release();
+  rados.close_pool(pool);
+  rados.shutdown();
   return 0;
 }
