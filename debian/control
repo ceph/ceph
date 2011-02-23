@@ -249,7 +249,7 @@ Description: Ceph distributed file system client library (development files)
 
 Package: radosgw
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libexpat1, librados1, libcurl3-gnutls
+Depends: ${shlibs:Depends}, ${misc:Depends}, librados1
 Description: REST gateway for RADOS distributed object store
  RADOS is a distributed object store used by the Ceph distributed
  storage system.  This package provides a REST gateway to the
