@@ -20,11 +20,53 @@
 
 int main(int argc, const char **argv) 
 {
+  char tmp[32];
+  char *tmp2;
   int i, r;
   rados_t cl;
 
   if (rados_create(&cl, NULL) < 0) {
     printf("error initializing\n");
+    exit(1);
+  }
+
+  if (rados_conf_read_file(cl, "/etc/ceph/ceph.conf")) {
+    printf("error reading configuration file\n");
+    exit(1);
+  }
+
+  // Try to set a configuration option that doesn't exist.
+  // This should fail.
+  if (!rados_conf_set(cl, "config option that doesn't exist",
+                     "some random value")) {
+    printf("error: succeeded in setting nonexistent config option\n");
+    exit(1);
+  }
+
+  if (rados_conf_get(cl, "log to stderr", tmp, sizeof(tmp))) {
+    printf("error: failed to read log_to_stderr from config\n");
+    exit(1);
+  }
+
+  // Testing the version that uses malloc().
+  if (rados_conf_get_alloc(cl, "log to stderr", &tmp2)) {
+    printf("error: failed to read log_to_stderr from config\n");
+    exit(1);
+  }
+  free(tmp2);
+
+  // Can we change it? 
+  if (rados_conf_set(cl, "log to stderr", "2")) {
+    printf("error: error setting log_to_stderr\n");
+    exit(1);
+  }
+  rados_reopen_log();
+  if (rados_conf_get(cl, "log to stderr", tmp, sizeof(tmp))) {
+    printf("error: failed to read log_to_stderr from config\n");
+    exit(1);
+  }
+  if (tmp[0] != '2') {
+    printf("error: new setting for log_to_stderr failed to take effect.\n");
     exit(1);
   }
 

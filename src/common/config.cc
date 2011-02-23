@@ -983,13 +983,13 @@ int md_config_t::get_val(const char *key, char **buf, int len)
       }
     }
     string str(oss.str());
-    int l = strlen(oss.str().c_str()) + 1;
+    int l = strlen(str.c_str()) + 1;
     if (len == -1) {
       *buf = (char*)malloc(l);
-      strcpy(*buf, oss.str().c_str());
+      strcpy(*buf, str.c_str());
       return 0;
     }
-    snprintf(*buf, len, "%s", oss.str().c_str());
+    snprintf(*buf, len, "%s", str.c_str());
     return (l > len) ? -ENAMETOOLONG : 0;
   }
   // couldn't find a configuration option with key 'key'

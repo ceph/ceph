@@ -2352,6 +2352,31 @@ void Rados::set_notify_timeout(pool_t pool, uint32_t timeout)
 static Mutex rados_init_mutex("rados_init");
 static int rados_initialized = 0;
 
+static void rados_set_conf_defaults(md_config_t *conf)
+{
+  /* Default configuration values for rados clients.
+   * These can be overridden by using rados_conf_set or rados_conf_read.
+   */
+  free((void*)conf->log_file);
+  conf->log_file = NULL;
+
+  free((void*)conf->log_dir);
+  conf->log_dir = NULL;
+
+  free((void*)conf->log_sym_dir);
+  conf->log_sym_dir = NULL;
+
+  conf->log_sym_history = 0;
+
+  conf->log_to_stderr = LOG_TO_STDERR_SOME;
+
+  conf->log_to_syslog = false;
+
+  conf->log_per_instance = false;
+
+  conf->log_to_file = false;
+}
+
 extern "C" int rados_create(rados_t *pcluster, const char * const id)
 {
   rados_init_mutex.Lock();
@@ -2365,6 +2390,8 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
     common_init(args, "librados", STARTUP_FLAG_INIT_KEYS);
 
     ++rados_initialized;
+
+    rados_set_conf_defaults(&g_conf);
   }
   rados_init_mutex.Unlock();
   RadosClient *radosp = new RadosClient;
@@ -2397,19 +2424,17 @@ extern "C" void rados_version(int *major, int *minor, int *extra)
 
 
 // -- config --
-extern "C" int rados_conf_parse_argv(rados_t cluster, int argc, const char **argv)
-{
-  vector<const char*> args;
-
-  argv_to_vec(argc, argv, args);
-  common_init(args, "librados", STARTUP_FLAG_INIT_KEYS);
-
-  return 0;
-}
-
-
 extern "C" int rados_conf_read_file(rados_t cluster, const char *path)
 {
+  // TODO: don't call common_init again.
+  // Split out the config-reading part of common_init from the rest of it
+  vector<const char*> args;
+  args.push_back("-c");
+  args.push_back(path);
+  args.push_back("-i");
+  args.push_back(g_conf.id);
+  common_init(args, "librados", STARTUP_FLAG_INIT_KEYS);
+
   return 0;
 }
 
@@ -2418,15 +2443,22 @@ extern "C" int rados_conf_set(rados_t cluster, const char *option, const char *v
   return g_conf.set_val(option, value);
 }
 
-extern "C" int rados_reopen_log(void)
+extern "C" void rados_reopen_log(void)
 {
   sighup_handler(SIGHUP);
-  return 0;
 }
 
-extern "C" int rados_conf_get(rados_t cluster, const char *option, char **buf, int len)
+extern "C" int rados_conf_get(rados_t cluster, const char *option, char *buf, int len)
 {
-  return g_conf.get_val(option, buf, len);
+  char *tmp = buf;
+  if (len <= 0)
+    return -EINVAL;
+  return g_conf.get_val(option, &tmp, len);
+}
+
+extern "C" int rados_conf_get_alloc(rados_t cluster, const char *option, char **buf)
+{
+  return g_conf.get_val(option, buf, -1);
 }
 
 extern "C" int rados_pool_lookup(rados_t cluster, const char *name)
