@@ -178,6 +178,24 @@ void Migrator::handle_mds_failure_or_stop(int who)
   dout(5) << "handle_mds_failure_or_stop mds" << who << dendl;
 
   // check my exports
+
+  // first add an extra auth_pin on any freezes, so that canceling a
+  // nested freeze doesn't complete one further up the hierarchy and
+  // confuse the shit out of us.  we'll remove it after canceling the
+  // freeze.  this way no freeze completions run before we want them
+  // to.
+  list<CDir*> pinned_dirs;
+  for (map<CDir*,int>::iterator p = export_state.begin();
+       p != export_state.end();
+       ++p) {
+    if (p->second == EXPORT_FREEZING) {
+      CDir *dir = p->first;
+      dout(10) << "adding temp auth_pin on freezing " << *dir << dendl;
+      dir->auth_pin(this);
+      pinned_dirs.push_back(dir);
+    }
+  }
+
   map<CDir*,int>::iterator p = export_state.begin();
   while (p != export_state.end()) {
     map<CDir*,int>::iterator next = p;
@@ -411,6 +429,13 @@ void Migrator::handle_mds_failure_or_stop(int who)
     // next!
     q = next;
   }
+
+  while (!pinned_dirs.empty()) {
+    CDir *dir = pinned_dirs.front();
+    dout(10) << "removing temp auth_pin on " << *dir << dendl;
+    dir->auth_unpin(this);
+    pinned_dirs.pop_front();
+  }  
 }
 
 
