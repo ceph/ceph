@@ -1001,14 +1001,13 @@ void CDir::add_waiter(uint64_t tag, Context *c)
 void CDir::take_waiting(uint64_t mask, list<Context*>& ls)
 {
   if ((mask & WAIT_DENTRY) && waiting_on_dentry.size()) {
-    // take each each dentry waiter
-    map<string_snap_t, list<Context*> >::iterator it = 
-      waiting_on_dentry.begin(); 
-    while (it != waiting_on_dentry.end()) {
-      string name = it->first.name;
-      snapid_t snap = it->first.snapid;
-      it++;
-      take_dentry_waiting(name, snap, snap, ls);
+    // take all dentry waiters
+    while (!waiting_on_dentry.empty()) {
+      map<string_snap_t, list<Context*> >::iterator p = waiting_on_dentry.begin(); 
+      dout(10) << "take_waiting dentry " << p->first.name
+	       << " snap " << p->first.snapid << " on " << *this << dendl;
+      ls.splice(ls.end(), p->second);
+      waiting_on_dentry.erase(p);
     }
     put(PIN_DNWAITER);
   }
