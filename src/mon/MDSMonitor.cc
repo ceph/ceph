@@ -935,8 +935,8 @@ void MDSMonitor::tick()
          * See if we can find it somebody to shadow
          */
         int gid = 0;
-        for (map<uint64_t,MDSMap::mds_info_t>::iterator i = mdsmap.mds_info.begin();
-            i != mdsmap.mds_info.end();
+        for (map<uint64_t,MDSMap::mds_info_t>::iterator i = pending_mdsmap.mds_info.begin();
+            i != pending_mdsmap.mds_info.end();
             ++i) {
           if (i->second.rank >= 0) {
             if ((gid = pending_mdsmap.find_standby_for(
@@ -968,7 +968,7 @@ void MDSMonitor::tick()
       uint64_t sgid;
       if (info.rank >= 0 &&
 	  info.state != CEPH_MDS_STATE_STANDBY &&
-	  (sgid = mdsmap.find_replacement_for(info.rank, info.name)) != 0) {
+	  (sgid = pending_mdsmap.find_replacement_for(info.rank, info.name)) != 0) {
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sgid];
 	dout(10) << " replacing " << info.addr << " mds" << info.rank << "." << info.inc
 		 << " " << ceph_mds_state_name(info.state)
