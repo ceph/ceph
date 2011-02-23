@@ -360,6 +360,30 @@ void EMetaBlob::update_segment(LogSegment *ls)
     //    ls->last_client_tid[client_reqs.rbegin()->client] = client_reqs.rbegin()->tid);
 }
 
+void EMetaBlob::fullbit::update_inode(CInode *in)
+{
+  in->inode = inode;
+  in->xattrs = xattrs;
+  if (in->inode.is_dir()) {
+    if (!(in->dirfragtree == dirfragtree)) {
+      in->dirfragtree = dirfragtree;
+      in->force_dirfrags();
+    }
+
+    delete in->default_layout;
+    in->default_layout = dir_layout;
+    dir_layout = NULL;
+    /*
+     * we can do this before linking hte inode bc the split_at would
+     * be a no-op.. we have no children (namely open snaprealms) to
+     * divy up 
+     */
+    in->decode_snap_blob(snapbl);  
+  } else if (in->inode.is_symlink()) {
+    in->symlink = symlink;
+  }
+}
+
 void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 {
   dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps by " << client_name << dendl;

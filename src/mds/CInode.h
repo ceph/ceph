@@ -380,6 +380,7 @@ public:
   void close_dirfrags();
   bool has_subtree_root_dirfrag();
 
+  void force_dirfrags();
   void verify_dirfrags();
 
   void get_stickydirs();

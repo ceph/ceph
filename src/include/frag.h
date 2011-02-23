@@ -495,6 +495,13 @@ public:
 };
 WRITE_CLASS_ENCODER(fragtree_t)
 
+inline bool operator==(const fragtree_t& l, const fragtree_t& r) {
+  return l._splits == r._splits;
+}
+inline bool operator!=(const fragtree_t& l, const fragtree_t& r) {
+  return l._splits != r._splits;
+}
+
 inline std::ostream& operator<<(std::ostream& out, fragtree_t& ft)
 {
   out << "fragtree_t(";

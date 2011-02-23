@@ -473,6 +473,27 @@ void CInode::verify_dirfrags()
   assert(!bad);
 }
 
+void CInode::force_dirfrags()
+{
+  bool bad = false;
+  for (map<frag_t,CDir*>::iterator p = dirfrags.begin(); p != dirfrags.end(); ++p) {
+    if (!dirfragtree.is_leaf(p->first)) {
+      dout(0) << "have open dirfrag " << p->first << " but not leaf in " << dirfragtree
+	      << ": " << *p->second << dendl;
+      bad = true;
+    }
+  }
+
+  if (bad) {
+    list<frag_t> leaves;
+    dirfragtree.get_leaves(leaves);
+    for (list<frag_t>::iterator p = leaves.begin(); p != leaves.end(); ++p)
+      mdcache->get_force_dirfrag(dirfrag_t(ino(),*p));
+  }
+
+  verify_dirfrags();
+}
+
 CDir *CInode::get_approx_dirfrag(frag_t fg)
 {
   CDir *dir = get_dirfrag(fg);

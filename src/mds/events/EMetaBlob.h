@@ -133,24 +133,7 @@ public:
       ::decode(dirty, bl);
     }
 
-    void update_inode(CInode *in) {
-      in->inode = inode;
-      in->xattrs = xattrs;
-      if (in->inode.is_dir()) {
-	in->dirfragtree = dirfragtree;
-	delete in->default_layout;
-	in->default_layout = dir_layout;
-	dir_layout = NULL;
-	/*
-	 * we can do this before linking hte inode bc the split_at would
-	 * be a no-op.. we have no children (namely open snaprealms) to
-	 * divy up 
-	 */
-	in->decode_snap_blob(snapbl);  
-      } else if (in->inode.is_symlink()) {
-	in->symlink = symlink;
-      }
-    }
+    void update_inode(CInode *in);
 
     void print(ostream& out) {
       out << " fullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
