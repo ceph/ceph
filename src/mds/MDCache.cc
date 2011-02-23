@@ -3861,8 +3861,9 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
     dout(10) << " got " << *dir << dendl;
 
     // dentries
-    for (map<string_snap_t,MMDSCacheRejoin::dn_strong>::iterator q = ack->strong_dentries[p->first].begin();
-	 q != ack->strong_dentries[p->first].end();
+    map<string_snap_t,MMDSCacheRejoin::dn_strong>& dmap = ack->strong_dentries[p->first];
+    for (map<string_snap_t,MMDSCacheRejoin::dn_strong>::iterator q = dmap.begin();
+	 q != dmap.end();
 	 ++q) {
       CDentry *dn = dir->lookup(q->first.name, q->first.snapid);
       if (!dn) continue;  // must have trimmed?
