@@ -23,7 +23,7 @@ int main(int argc, const char **argv)
   int i, r;
   rados_t cl;
 
-  if (rados_init(&cl) < 0) {
+  if (rados_create(&cl, NULL) < 0) {
     printf("error initializing\n");
     exit(1);
   }
@@ -34,33 +34,33 @@ int main(int argc, const char **argv)
   }
 
   /* create a pool */
-  r = rados_create_pool("foo");
-  printf("rados_create_pool = %d\n", r);
+  r = rados_pool_create(cl, "foo");
+  printf("rados_pool_create = %d\n", r);
 
   rados_pool_t pool;
-  r = rados_open_pool("foo", &pool);
-  printf("rados_open_pool = %d, pool = %p\n", r, pool);
+  r = rados_pool_open(cl, "foo", &pool);
+  printf("rados_pool_open = %d, pool = %p\n", r, pool);
 
   /* stat */
   struct rados_pool_stat_t st;
-  r = rados_stat_pool(pool, &st);
-  printf("rados_stat_pool = %d, %lld KB, %lld objects\n", r, (long long)st.num_kb, (long long)st.num_objects);
+  r = rados_pool_stat(pool, &st);
+  printf("rados_pool_stat = %d, %lld KB, %lld objects\n", r, (long long)st.num_kb, (long long)st.num_objects);
 
   /* snapshots */
-  r = rados_snap_create(pool, "snap1");
-  printf("rados_snap_create snap1 = %d\n", r);
+  r = rados_pool_snap_create(pool, "snap1");
+  printf("rados_pool_snap_create snap1 = %d\n", r);
   rados_snap_t snaps[10];
-  r = rados_snap_list(pool, snaps, 10);
+  r = rados_pool_snap_list(pool, snaps, 10);
   for (i=0; i<r; i++) {
     char name[100];
-    rados_snap_get_name(pool, snaps[i], name, sizeof(name));
-    printf("rados_snap_list got snap %lld %s\n", (long long)snaps[i], name);
+    rados_pool_snap_get_name(pool, snaps[i], name, sizeof(name));
+    printf("rados_pool_snap_list got snap %lld %s\n", (long long)snaps[i], name);
   }
   rados_snap_t snapid;
-  r = rados_snap_lookup(pool, "snap1", &snapid);
-  printf("rados_snap_lookup snap1 got %lld, result %d\n", (long long)snapid, r);
-  r = rados_snap_remove(pool, "snap1");
-  printf("rados_snap_remove snap1 = %d\n", r);
+  r = rados_pool_snap_lookup(pool, "snap1", &snapid);
+  printf("rados_pool_snap_lookup snap1 got %lld, result %d\n", (long long)snapid, r);
+  r = rados_pool_snap_remove(pool, "snap1");
+  printf("rados_pool_snap_remove snap1 = %d\n", r);
 
   /* sync io */
   time_t tm;
@@ -115,21 +115,21 @@ int main(int argc, const char **argv)
 
   /* list objects */
   rados_list_ctx_t h;
-  r = rados_list_objects_open(pool, &h);
+  r = rados_objects_list_open(pool, &h);
   printf("rados_list_objects_open = %d, h = %p\n", r, h);
   const char *poolname;
-  while (rados_list_objects_next(h, &poolname) == 0)
+  while (rados_objects_list_next(h, &poolname) == 0)
     printf("rados_list_objects_next got object '%s'\n", poolname);
-  rados_list_objects_close(h);
+  rados_objects_list_close(h);
 
   /* stat */
-  r = rados_stat_pool(pool, &st);
+  r = rados_pool_stat(pool, &st);
   printf("rados_stat_pool = %d, %lld KB, %lld objects\n", r, (long long)st.num_kb, (long long)st.num_objects);
 
   /* delete a pool */
-  r = rados_delete_pool(pool);
+  r = rados_pool_delete(pool);
   printf("rados_delete_pool = %d\n", r);  
-  r = rados_close_pool(pool);
+  r = rados_pool_close(pool);
 
   rados_destroy(cl);
 

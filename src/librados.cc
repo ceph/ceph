@@ -2429,7 +2429,7 @@ extern "C" int rados_conf_get(rados_t cluster, const char *option, char **buf, i
   return g_conf.get_val(option, buf, len);
 }
 
-extern "C" int rados_lookup_pool(rados_t cluster, const char *name)
+extern "C" int rados_pool_lookup(rados_t cluster, const char *name)
 {
   RadosClient *radosp = (RadosClient *)cluster;
   return radosp->lookup_pool(name);
@@ -2569,7 +2569,8 @@ extern "C" int rados_pool_create(rados_t cluster, const char *name)
   return radosp->create_pool(sname);
 }
 
-extern "C" int rados_pool_create_with_auid(rados_t cluster, const char *name, uint64_t auid)
+extern "C" int rados_pool_create_with_auid(rados_t cluster, const char *name,
+					   uint64_t auid)
 {
   RadosClient *radosp = (RadosClient *)cluster;
   string sname(name);
@@ -2584,8 +2585,8 @@ extern "C" int rados_pool_create_with_crush_rule(rados_t cluster, const char *na
   return radosp->create_pool(sname, 0, crush_rule);
 }
 
-extern "C" int rados_pool_create_with_all(rados_t cluster, const char *name, uint64_t auid,
-					  __u8 crush_rule)
+extern "C" int rados_pool_create_with_all(rados_t cluster, const char *name,
+					  uint64_t auid, __u8 crush_rule)
 {
   RadosClient *radosp = (RadosClient *)cluster;
   string sname(name);
@@ -2606,19 +2607,19 @@ extern "C" int rados_pool_change_auid(rados_pool_t pool, uint64_t auid)
 
 // snaps
 
-extern "C" int rados_snap_create(rados_pool_t pool, const char *snapname)
+extern "C" int rados_pool_snap_create(rados_pool_t pool, const char *snapname)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   return ctx->client->snap_create(ctx, snapname);
 }
 
-extern "C" int rados_snap_remove(rados_pool_t pool, const char *snapname)
+extern "C" int rados_pool_snap_remove(rados_pool_t pool, const char *snapname)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   return ctx->client->snap_remove(ctx, snapname);
 }
 
-extern "C" int rados_snap_rollback_object(rados_pool_t pool,
+extern "C" int rados_pool_snap_rollback_object(rados_pool_t pool,
 					  const char *oid,
 					  const char *snapname)
 {
@@ -2626,21 +2627,22 @@ extern "C" int rados_snap_rollback_object(rados_pool_t pool,
   return ctx->client->snap_rollback_object(ctx, oid, snapname);
 }
 
-extern "C" int rados_selfmanaged_snap_create(rados_pool_t pool,
+extern "C" int rados_pool_selfmanaged_snap_create(rados_pool_t pool,
 					     uint64_t *snapid)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   return ctx->client->selfmanaged_snap_create(ctx, snapid);
 }
 
-extern "C" int rados_selfmanaged_snap_remove(rados_pool_t pool,
+extern "C" int rados_pool_selfmanaged_snap_remove(rados_pool_t pool,
 					     uint64_t snapid)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   return ctx->client->selfmanaged_snap_remove(ctx, snapid);
 }
 
-extern "C" int rados_snap_list(rados_pool_t pool, rados_snap_t *snaps, int maxlen)
+extern "C" int rados_pool_snap_list(rados_pool_t pool, rados_snap_t *snaps,
+				    int maxlen)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   vector<uint64_t> snapvec;
@@ -2655,13 +2657,15 @@ extern "C" int rados_snap_list(rados_pool_t pool, rados_snap_t *snaps, int maxle
   return -ERANGE;
 }
 
-extern "C" int rados_snap_lookup(rados_pool_t pool, const char *name, rados_snap_t *id)
+extern "C" int rados_pool_snap_lookup(rados_pool_t pool, const char *name,
+				      rados_snap_t *id)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   return ctx->client->snap_lookup(ctx, name, (uint64_t *)id);
 }
 
-extern "C" int rados_snap_get_name(rados_pool_t pool, rados_snap_t id, char *name, int maxlen)
+extern "C" int rados_pool_snap_get_name(rados_pool_t pool, rados_snap_t id,
+					char *name, int maxlen)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   std::string sname;
@@ -2675,7 +2679,8 @@ extern "C" int rados_snap_get_name(rados_pool_t pool, rados_snap_t id, char *nam
 }
 
 
-extern "C" int rados_getxattr(rados_pool_t pool, const char *o, const char *name, char *buf, size_t len)
+extern "C" int rados_getxattr(rados_pool_t pool, const char *o, const char *name,
+			      char *buf, size_t len)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   int ret;

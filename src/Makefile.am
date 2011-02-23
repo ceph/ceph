@@ -248,13 +248,13 @@ rados_LDADD = librados.la -lpthread -lm $(CRYPTOPP_LIBS)
 bin_PROGRAMS += rados
 
 if WITH_DEBUG
-#testrados_SOURCES = testrados.c
-#testrados_LDADD = librados.la -lpthread -lm $(CRYPTOPP_LIBS)
-#testradospp_SOURCES = testradospp.cc
-#testradospp_LDADD = librados.la -lpthread -lm
-#radosacl_SOURCES = radosacl.cc
-#radosacl_LDADD = librados.la -lpthread -lm $(CRYPTOPP_LIBS)
-#bin_PROGRAMS += testrados testradospp radosacl
+testrados_SOURCES = testrados.c
+testrados_LDADD = librados.la -lpthread -lm $(CRYPTOPP_LIBS)
+testradospp_SOURCES = testradospp.cc
+testradospp_LDADD = librados.la -lpthread -lm
+radosacl_SOURCES = radosacl.cc
+radosacl_LDADD = librados.la -lpthread -lm $(CRYPTOPP_LIBS)
+bin_PROGRAMS += testrados testradospp radosacl
 endif
 
 rbd_SOURCES = rbd.cc common/fiemap.cc

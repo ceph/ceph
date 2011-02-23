@@ -105,7 +105,7 @@ int rados_pool_set_auid(rados_pool_t pool, uint64_t auid);
 
 /* objects */
 int rados_objects_list_open(rados_pool_t pool, rados_list_ctx_t *ctx);
-int rados_object_list_next(rados_list_ctx_t ctx, const char **entry);
+int rados_objects_list_next(rados_list_ctx_t ctx, const char **entry);
 void rados_objects_list_close(rados_list_ctx_t ctx);
 
 
