@@ -54,6 +54,7 @@ class Rados
   RadosClient *client;
 public:
   Rados();
+  Rados(pool_t pool);
   ~Rados();
 
   /* We don't allow assignment or copying */

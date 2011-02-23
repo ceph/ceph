@@ -1803,6 +1803,12 @@ Rados::Rados() : client(NULL)
 {
 }
 
+Rados::Rados(pool_t pool)
+{
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  client = ctx->client;
+}
+
 Rados::~Rados()
 {
   if (client)
