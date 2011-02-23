@@ -965,11 +965,15 @@ noinst_HEADERS = \
 	rgw/rgw_access.h\
 	rgw/rgw_acl.h\
 	rgw/rgw_cache.h\
-	rgw/rgw_fs.h\
-	rgw/rgw_rados.h\
-	rgw/rgw_op.h\
-	rgw/rgw_rest.h\
 	rgw/rgw_common.h\
+	rgw/rgw_formats.h\
+	rgw/rgw_fs.h\
+	rgw/rgw_op.h\
+	rgw/rgw_os.h\
+	rgw/rgw_rados.h\
+	rgw/rgw_rest.h\
+	rgw/rgw_rest_os.h\
+	rgw/rgw_rest_s3.h\
 	rgw/rgw_user.h\
 	sample.ceph.conf\
 	tools/common.h\
