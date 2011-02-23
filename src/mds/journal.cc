@@ -1042,6 +1042,8 @@ void EFragment::replay(MDS *mds)
     }
   }
   metablob.replay(mds, _segment);
+  if (in && g_conf.mds_debug_frag)
+    in->verify_dirfrags();
 }
 
 

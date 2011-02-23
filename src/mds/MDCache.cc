@@ -8860,9 +8860,6 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 
     resultfrags.push_back(f);
   }
-
-  if (g_conf.mds_debug_frag)
-    diri->verify_dirfrags();
 }
 
 
@@ -9111,6 +9108,8 @@ void MDCache::fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits)
   list<CDir*> resultfrags;
   list<Context*> waiters;
   adjust_dir_fragments(diri, dirs, basefrag, bits, resultfrags, waiters, false);
+  if (g_conf.mds_debug_frag)
+    diri->verify_dirfrags();
   mds->queue_waiters(waiters);
 
   // journal
@@ -9233,7 +9232,9 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
     list<CDir*> resultfrags;
     adjust_dir_fragments(diri, notify->get_basefrag(), notify->get_bits(), 
 			 resultfrags, waiters, false);
-
+    if (g_conf.mds_debug_frag)
+      diri->verify_dirfrags();
+    
     /*
     // add new replica dirs values
     bufferlist::iterator p = notify->basebl.begin();
@@ -9260,6 +9261,8 @@ void MDCache::rollback_uncommitted_fragments()
     list<CDir*> resultfrags;
     list<Context*> waiters;
     adjust_dir_fragments(diri, p->first.frag, -p->second, resultfrags, waiters, true);
+    if (g_conf.mds_debug_frag)
+      diri->verify_dirfrags();
   }
   uncommitted_fragments.clear();
 }
