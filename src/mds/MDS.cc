@@ -856,6 +856,16 @@ void MDS::handle_mds_map(MMDSMap *m)
   state = mdsmap->get_state_gid(monc->get_global_id());
   dout(10) << "map says i am " << addr << " mds" << whoami << " state " << ceph_mds_state_name(state) << dendl;
 
+  // mark down any failed peers
+  for (map<uint64_t,MDSMap::mds_info_t>::const_iterator p = oldmap->get_mds_info().begin();
+       p != oldmap->get_mds_info().end();
+       ++p) {
+    if (mdsmap->get_mds_info().count(p->first) == 0) {
+      dout(10) << " peer mds gid " << p->first << " removed from map" << dendl;
+      messenger->mark_down(p->second.addr);
+    }
+  }
+
   if (state != oldstate)
     last_state = oldstate;
 
