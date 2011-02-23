@@ -150,7 +150,6 @@ int main(int argc, const char **argv)
     }
   }
 
-  common_set_defaults(false);
   common_init(nargs, type, STARTUP_FLAG_FORCE_FG_LOGGING);
 
   if (do_help) {

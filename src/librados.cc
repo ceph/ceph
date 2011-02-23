@@ -1824,7 +1824,6 @@ int Rados::initialize(int argc, const char *argv[])
     argv_to_vec(argc, argv, args);
     env_to_vec(args);
   }
-  common_set_defaults(false);
   common_init(args, "librados", STARTUP_FLAG_INIT_KEYS);
 
   return 0;
@@ -2361,7 +2360,6 @@ extern "C" int rados_create(rados_t *pcluster)
     vector<const char*> args;
     env_to_vec(args);
 
-    common_set_defaults(false);
     common_init(args, "librados", STARTUP_FLAG_INIT_KEYS);
 
     ++rados_initialized;

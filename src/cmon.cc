@@ -61,8 +61,7 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_set_defaults(true);
-  common_init(args, "mon", STARTUP_FLAG_INIT_KEYS);
+  common_init(args, "mon", STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_DAEMON);
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("mkfs", '\0')) {

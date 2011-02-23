@@ -83,7 +83,6 @@ int main(int argc, char **argv)
   argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
 
-  common_set_defaults(false);
   common_init(args, "rgw",
 	      STARTUP_FLAG_FORCE_FG_LOGGING | STARTUP_FLAG_INIT_KEYS);
 

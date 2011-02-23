@@ -54,18 +54,6 @@ void set_foreground_logging()
   g_conf.log_to_file = false;
 }
 
-void common_set_defaults(bool daemon)
-{
-  if (daemon) {
-    cout << TEXT_YELLOW << " ** WARNING: Ceph is still under heavy development, and is only suitable for **" << TEXT_NORMAL << std::endl;
-    cout << TEXT_YELLOW <<  " **          testing and review.  Do not trust it with important data.       **" << TEXT_NORMAL << std::endl;
-
-    g_conf.daemonize = true;
-  } else {
-    g_conf.pid_file = 0;
-  }
-}
-
 static void keyring_init(const char *filesearch)
 {
   const char *filename = filesearch;
@@ -121,6 +109,18 @@ static void keyring_init(const char *filesearch)
 void common_init(std::vector<const char*>& args, const char *module_type, int flags)
 {
   bool force_fg_logging = false;
+
+  if (flags & STARTUP_FLAG_DAEMON) {
+    cout << TEXT_YELLOW << " ** WARNING: Ceph is still under heavy development, "
+         << "and is only suitable for **" << TEXT_NORMAL << std::endl;
+    cout << TEXT_YELLOW <<  " **          testing and review.  Do not trust it "
+         << "with important data.       **" << TEXT_NORMAL << std::endl;
+    g_conf.daemonize = true;
+  }
+  else {
+    g_conf.pid_file = 0;
+  }
+
   parse_startup_config_options(args, module_type, flags, &force_fg_logging);
 
   if (g_conf.log_to_syslog || g_conf.clog_to_syslog) {

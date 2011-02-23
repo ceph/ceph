@@ -57,7 +57,6 @@ int main(int argc, const char **argv)
       ++i;
   }
 
-  common_set_defaults(false);
   common_init(args, "librados-config", STARTUP_FLAG_FORCE_FG_LOGGING);
 
   FOR_EACH_ARG(args) {

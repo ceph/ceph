@@ -576,7 +576,6 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   int opt_cmd = OPT_NO_CMD;
-  common_set_defaults(false);
   common_init(args, "rbd",
 	      STARTUP_FLAG_FORCE_FG_LOGGING | STARTUP_FLAG_INIT_KEYS);
 

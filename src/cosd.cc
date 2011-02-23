@@ -52,7 +52,7 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  int startup_flags = STARTUP_FLAG_INIT_KEYS;
+  int startup_flags = STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_DAEMON;
   vector<const char *>::iterator args_iter;
 
   for (args_iter = args.begin(); args_iter != args.end(); ++args_iter) {
@@ -62,7 +62,6 @@ int main(int argc, const char **argv)
     } 
   }
 
-  common_set_defaults(true);
 #ifdef HAVE_LIBTCMALLOC
   g_conf.profiler_start = HeapProfilerStart;
   g_conf.profiler_running = IsHeapProfilerRunning;
