@@ -51,8 +51,13 @@ struct rados_statfs_t {
 void rados_version(int *major, int *minor, int *extra);
 
 /* initialization */
-int rados_init(rados_t *cluster);
-void rados_release(rados_t cluster);
+int rados_create(rados_t *cluster);
+
+/* Connect to the cluster */
+int rados_connect(rados_t cluster);
+
+/* destroy the cluster instance */
+void rados_destroy(rados_t cluster);
 
 /* Config
  *
@@ -66,8 +71,12 @@ int rados_conf_read_file(rados_t cluster, const char *path);
  * Returns 0 on success, error code otherwise. */
 int rados_conf_set(rados_t cluster, const char *option, const char *value);
 
-/* Applies any configuration changes */
-int rados_conf_apply(void);
+/* Reopens the log file.
+ * You must do this after changing the logging configuration.
+ * It is also good practice to call this from your SIGHUP signal handler, so that users can send you
+ * a SIGHUP to reopen the log.
+ */
+int rados_reopen_log(void);
 
 /* Returns a configuration value as a string.
  * If len is positive, that is the maximum number of bytes we'll write into the

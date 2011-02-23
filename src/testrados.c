@@ -28,7 +28,10 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  rados_conf_parse_argv(cl, argc, argv);
+  if (rados_connect(cl)) {
+    printf("error connecting\n");
+    exit(1);
+  }
 
   /* create a pool */
   r = rados_create_pool("foo");
@@ -128,7 +131,7 @@ int main(int argc, const char **argv)
   printf("rados_delete_pool = %d\n", r);  
   r = rados_close_pool(pool);
 
-  rados_deinitialize();
+  rados_destroy(cl);
 
   return 0;
 }

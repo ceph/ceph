@@ -79,13 +79,13 @@ class RadosClient : public Dispatcher
   SafeTimer timer;
 
 public:
-  RadosClient() : messenger(NULL), lock("radosclient"), timer(lock),
-                  max_watch_cookie(0) {
-    messenger = new SimpleMessenger();
+  RadosClient() : messenger(NULL), objecter(NULL),
+	    lock("radosclient"), timer(lock), max_watch_cookie(0)
+  {
   }
 
   ~RadosClient();
-  int init();
+  int connect();
   void shutdown();
 
   struct PoolCtx {
@@ -484,14 +484,14 @@ public:
   }
 };
 
-int RadosClient::init()
+int RadosClient::connect()
 {
   // get monmap
   int ret = monclient.build_initial_monmap();
   if (ret < 0)
     return ret;
 
-  assert_warn(messenger);
+  messenger = new SimpleMessenger();
   if (!messenger)
     return -ENOMEM;
 
@@ -1827,8 +1827,7 @@ int Rados::initialize(int argc, const char *argv[])
   common_set_defaults(false);
   common_init(args, "librados", STARTUP_FLAG_INIT_KEYS);
 
-  client = new RadosClient();
-  return client->init();
+  return 0;
 }
 
 void Rados::shutdown()
@@ -2354,10 +2353,8 @@ void Rados::set_notify_timeout(pool_t pool, uint32_t timeout)
 static Mutex rados_init_mutex("rados_init");
 static int rados_initialized = 0;
 
-extern "C" int rados_init(rados_t *pcluster) 
+extern "C" int rados_create(rados_t *pcluster)
 {
-  int ret = 0;
-
   rados_init_mutex.Lock();
   if (!rados_initialized) {
     // parse environment
@@ -2370,18 +2367,18 @@ extern "C" int rados_init(rados_t *pcluster)
     ++rados_initialized;
   }
   rados_init_mutex.Unlock();
-
   RadosClient *radosp = new RadosClient;
-  ret = radosp->init();
-  if (ret < 0) {
-    delete radosp;
-  } else {
-    *pcluster = (void *)radosp;
-  }
-  return ret;
+  *pcluster = (void *)radosp;
+  return 0;
 }
 
-extern "C" void rados_release(rados_t cluster)
+extern "C" int rados_connect(rados_t cluster)
+{
+  RadosClient *radosp = (RadosClient *)cluster;
+  return radosp->connect();
+}
+
+extern "C" void rados_destroy(rados_t cluster)
 {
   RadosClient *radosp = (RadosClient *)cluster;
   radosp->shutdown();
@@ -2421,9 +2418,8 @@ extern "C" int rados_conf_set(rados_t cluster, const char *option, const char *v
   return g_conf.set_val(option, value);
 }
 
-extern "C" int rados_conf_apply(void)
+extern "C" int rados_reopen_log(void)
 {
-  // Simulate SIGHUP after a configuration change.
   sighup_handler(SIGHUP);
   return 0;
 }
@@ -2432,7 +2428,6 @@ extern "C" int rados_conf_get(rados_t cluster, const char *option, char **buf, i
 {
   return g_conf.get_val(option, buf, len);
 }
-
 
 extern "C" int rados_lookup_pool(rados_t cluster, const char *name)
 {
