@@ -51,7 +51,7 @@ struct rados_statfs_t {
 void rados_version(int *major, int *minor, int *extra);
 
 /* initialization */
-int rados_create(rados_t *cluster);
+int rados_create(rados_t *cluster, const char * const id);
 
 /* Connect to the cluster */
 int rados_connect(rados_t cluster);

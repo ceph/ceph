@@ -2352,7 +2352,7 @@ void Rados::set_notify_timeout(pool_t pool, uint32_t timeout)
 static Mutex rados_init_mutex("rados_init");
 static int rados_initialized = 0;
 
-extern "C" int rados_create(rados_t *pcluster)
+extern "C" int rados_create(rados_t *pcluster, const char * const id)
 {
   rados_init_mutex.Lock();
   if (!rados_initialized) {
@@ -2360,6 +2360,8 @@ extern "C" int rados_create(rados_t *pcluster)
     vector<const char*> args;
     env_to_vec(args);
 
+    if (id)
+      g_conf.id = strdup(id);
     common_init(args, "librados", STARTUP_FLAG_INIT_KEYS);
 
     ++rados_initialized;
