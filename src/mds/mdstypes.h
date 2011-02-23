@@ -1485,13 +1485,13 @@ protected:
 	ls.push_back(it->second);
 	pdout(10,g_conf.debug_mds) << (mdsco_db_line_prefix(this))
 				   << "take_waiting mask " << hex << mask << dec << " took " << it->second
-				   << " tag " << it->first
+				   << " tag " << hex << it->first << dec
 				   << " on " << *this
 				   << dendl;
 	waiting.erase(it++);
       } else {
 	pdout(10,g_conf.debug_mds) << "take_waiting mask " << hex << mask << dec << " SKIPPING " << it->second
-				   << " tag " << it->first
+				   << " tag " << hex << it->first << dec
 				   << " on " << *this 
 				   << dendl;
 	it++;
