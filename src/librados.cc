@@ -2674,9 +2674,8 @@ extern "C" int rados_pool_snap_remove(rados_pool_t pool, const char *snapname)
   return ctx->client->snap_remove(ctx, snapname);
 }
 
-extern "C" int rados_pool_snap_rollback_object(rados_pool_t pool,
-					  const char *oid,
-					  const char *snapname)
+extern "C" int rados_rollback(rados_pool_t pool, const char *oid,
+			      const char *snapname)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   return ctx->client->snap_rollback_object(ctx, oid, snapname);

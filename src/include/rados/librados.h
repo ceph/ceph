@@ -120,8 +120,8 @@ void rados_objects_list_close(rados_list_ctx_t ctx);
 /* snapshots */
 int rados_pool_snap_create(rados_pool_t pool, const char *snapname);
 int rados_pool_snap_remove(rados_pool_t pool, const char *snapname);
-int rados_pool_snap_rollback_object(rados_pool_t pool, const char *oid,
-			  const char *snapname);
+int rados_rollback(rados_pool_t pool, const char *oid,
+		   const char *snapname);
 void rados_pool_snap_set_read(rados_pool_t pool, rados_snap_t snap);
 int rados_pool_selfmanaged_snap_create(rados_pool_t pool, uint64_t *snapid);
 int rados_pool_selfmanaged_snap_remove(rados_pool_t pool, uint64_t snapid);
