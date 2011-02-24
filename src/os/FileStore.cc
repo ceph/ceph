@@ -750,7 +750,7 @@ int FileStore::wipe_subvol(const char *s)
 {
   struct btrfs_ioctl_vol_args volargs;
   memset(&volargs, 0, sizeof(volargs));
-  strcpy(volargs.name, s);
+  strncpy(volargs.name, s, sizeof(volargs.name)-1);
   int fd = ::open(basedir.c_str(), O_RDONLY);
   if (fd < 0) {
     int err = errno;

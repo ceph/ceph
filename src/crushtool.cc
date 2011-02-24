@@ -1114,10 +1114,11 @@ int main(int argc, const char **argv)
 	rootid = id;
 
 	char format[20];
+	format[sizeof(format)-1] = '\0';
 	if (l.size)
-	  snprintf(format, sizeof(format), "%s%%d", l.name);
+	  snprintf(format, sizeof(format)-1, "%s%%d", l.name);
 	else
-	  strcpy(format, l.name);
+	  strncpy(format, l.name, sizeof(format)-1);
 	char name[20];
 	snprintf(name, sizeof(name), format, i);
 	crush.set_item_name(id, name);
