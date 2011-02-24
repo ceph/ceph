@@ -1341,29 +1341,30 @@ RBD::~RBD()
 {
 }
 
-void librbd::RBD::version(int *major, int *minor, int *extra)
+void RBD::version(int *major, int *minor, int *extra)
 {
   rbd_version(major, minor, extra);
 }
 
-int librbd::RBD::open(pool_t pool, const char *name, image_t *image, const char *snap_name)
+Image *RBD::image_open(pool_t pool, const char *name)
+{
+  return image_open(pool, name, NULL);
+}
+
+Image *RBD::image_open(pool_t pool, const char *name, const char *snapname)
 {
   ImageCtx *ictx = new ImageCtx(name, pool);
   if (!ictx)
-    return -ENOMEM;
-  int r = librbd::open_image(pool, ictx, name, snap_name);
-  *image = (image_t)ictx;
-  return r;
+    return NULL;
+  int r = librbd::open_image(pool, ictx, name, snapname);
+  if (r < 0)
+    return NULL;
+
+  Image *image = new Image((image_ctx_t)ictx);
+  return image;
 }
 
-int librbd::RBD::close(image_t image)
-{
-  ImageCtx *ctx = (ImageCtx *)image;
-  librbd::close_image(ctx);
-  return 0; 
-}
-
-int librbd::RBD::create(pool_t pool, const char *name, size_t size, int *order)
+int RBD::create(pool_t pool, const char *name, size_t size, int *order)
 {
   string md_oid = name;
   md_oid += RBD_SUFFIX;
@@ -1371,144 +1372,163 @@ int librbd::RBD::create(pool_t pool, const char *name, size_t size, int *order)
   return r;
 }
 
-int librbd::RBD::remove(pool_t pool, const char *name)
+int RBD::remove(pool_t pool, const char *name)
 {
   int r = librbd::remove(pool, name);
   return r;
 }
 
-int librbd::RBD::resize(image_t image, size_t size)
-{
-  ImageCtx *ictx = (ImageCtx *)image;
-  int r = librbd::resize(ictx, size);
-  return r;
-}
-
-int librbd::RBD::stat(image_t image, image_info_t& info, size_t infosize)
-{
-  ImageCtx *ictx = (ImageCtx *)image;
-  int r = librbd::info(ictx, info, infosize);
-  return r;
-}
-
-int librbd::RBD::list(pool_t pool, std::vector<std::string>& names)
+int RBD::list(pool_t pool, std::vector<std::string>& names)
 {
   int r = librbd::list(pool, names);
   return r;
 }
 
-int librbd::RBD::copy(pool_t src_pool, const char *srcname, pool_t dest_pool, const char *destname)
+int RBD::copy(pool_t src_pool, const char *srcname, pool_t dest_pool, const char *destname)
 {
   int r = librbd::copy(src_pool, srcname, dest_pool, destname);
   return r;
 }
 
-int librbd::RBD::rename(pool_t src_pool, const char *srcname, const char *destname)
+int RBD::rename(pool_t src_pool, const char *srcname, const char *destname)
 {
   int r = librbd::rename(src_pool, srcname, destname);
   return r;
 }
 
-int librbd::RBD::snap_create(image_t image, const char *snap_name)
-{
-  ImageCtx *ictx = (ImageCtx *)image;
-  int r = librbd::snap_create(ictx, snap_name);
-  return r;
-}
-
-int librbd::RBD::snap_remove(image_t image, const char *snap_name)
-{
-  ImageCtx *ictx = (ImageCtx *)image;
-  int r = librbd::snap_remove(ictx, snap_name);
-  return r;
-}
-
-int librbd::RBD::snap_rollback(image_t image, const char *snap_name)
-{
-  ImageCtx *ictx = (ImageCtx *)image;
-  int r = librbd::snap_rollback(ictx, snap_name);
-  return r;
-}
-
-int librbd::RBD::snap_list(image_t image, std::vector<librbd::snap_info_t>& snaps)
-{
-  ImageCtx *ictx = (ImageCtx *)image;
-  return librbd::snap_list(ictx, snaps);
-}
-
-int librbd::RBD::snap_set(image_t image, const char *snap_name)
-{
-  ImageCtx *ictx = (ImageCtx *)image;
-  return librbd::snap_set(ictx, snap_name);
-}
-
-int librbd::RBD::read(image_t image, off_t ofs, size_t len, bufferlist& bl)
-{
-  ImageCtx *ictx = (ImageCtx *)image;
-  bufferptr ptr(len);
-  bl.push_back(ptr);
-  return librbd::read(ictx, ofs, len, bl.c_str());
-}
-
-int librbd::RBD::read_iterate(image_t image, off_t ofs, size_t len,
-                   int (*cb)(off_t, size_t, const char *, void *), void *arg)
-{
-  ImageCtx *ictx = (ImageCtx *)image;
-  return librbd::read_iterate(ictx, ofs, len, cb, arg);
-}
-
-int librbd::RBD::write(image_t image, off_t ofs, size_t len, bufferlist& bl)
-{
-  ImageCtx *ictx = (ImageCtx *)image;
-  if (bl.length() < len)
-    return -EINVAL;
-  return librbd::write(ictx, ofs, len, bl.c_str());
-}
-
-
-librbd::RBD::AioCompletion *librbd::RBD::aio_create_completion(void *cb_arg, callback_t complete_cb)
+RBD::AioCompletion::AioCompletion(void *cb_arg, callback_t complete_cb)
 {
   librbd::AioCompletion *c = librbd::aio_create_completion(cb_arg, complete_cb);
-  RBD::AioCompletion *rbd_completion = new AioCompletion(c);
-  c->rbd_comp = rbd_completion;
-  return rbd_completion;
+  pc = (void *)c;
+  c->rbd_comp = this;
 }
 
-int librbd::RBD::aio_write(image_t image, off_t off, size_t len, bufferlist& bl,
-		           AioCompletion *c)
-{
-  ImageCtx *ictx = (ImageCtx *)image;
-  if (bl.length() < len)
-    return -EINVAL;
-  return librbd::aio_write(ictx, off, len, bl.c_str(), (librbd::AioCompletion *)c->pc);
-}
-
-int librbd::RBD::aio_read(image_t image, off_t off, size_t len, bufferlist& bl,
-		          AioCompletion *c)
-{
-  ImageCtx *ictx = (ImageCtx *)image;
-  bufferptr ptr(len);
-  bl.push_back(ptr);
-  dout(10) << "librbd::RBD::aio_read() buf=" << (void *)bl.c_str() << "~" << (void *)(bl.c_str() + len - 1) << dendl;
-  return librbd::aio_read(ictx, off, len, bl.c_str(), (librbd::AioCompletion *)c->pc);
-}
-
-int librbd::RBD::AioCompletion::wait_for_complete()
+int RBD::AioCompletion::wait_for_complete()
 {
   librbd::AioCompletion *c = (librbd::AioCompletion *)pc;
   return c->wait_for_complete();
 }
 
-int librbd::RBD::AioCompletion::get_return_value()
+int RBD::AioCompletion::get_return_value()
 {
   librbd::AioCompletion *c = (librbd::AioCompletion *)pc;
   return c->get_return_value();
 }
 
-void librbd::RBD::AioCompletion::release()
+void RBD::AioCompletion::release()
 {
   librbd::AioCompletion *c = (librbd::AioCompletion *)pc;
   c->release();
+}
+
+/*
+  Image
+*/
+
+Image::Image()
+{
+}
+
+Image::Image(image_ctx_t ctx_) : ctx(ctx_)
+{
+}
+
+Image::~Image()
+{
+}
+
+void Image::close()
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  close_image(ictx);
+}
+
+int Image::resize(size_t size)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  int r = librbd::resize(ictx, size);
+  return r;
+}
+
+int Image::stat(image_info_t& info, size_t infosize)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  int r = librbd::info(ictx, info, infosize);
+  return r;
+}
+
+
+int Image::snap_create(const char *snap_name)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  int r = librbd::snap_create(ictx, snap_name);
+  return r;
+}
+
+int Image::snap_remove(const char *snap_name)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  int r = librbd::snap_remove(ictx, snap_name);
+  return r;
+}
+
+int Image::snap_rollback(const char *snap_name)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  int r = librbd::snap_rollback(ictx, snap_name);
+  return r;
+}
+
+int Image::snap_list(std::vector<librbd::snap_info_t>& snaps)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  return librbd::snap_list(ictx, snaps);
+}
+
+int Image::snap_set(const char *snap_name)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  return librbd::snap_set(ictx, snap_name);
+}
+
+int Image::read(off_t ofs, size_t len, bufferlist& bl)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  bufferptr ptr(len);
+  bl.push_back(ptr);
+  return librbd::read(ictx, ofs, len, bl.c_str());
+}
+
+int Image::read_iterate(off_t ofs, size_t len,
+                   int (*cb)(off_t, size_t, const char *, void *), void *arg)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  return librbd::read_iterate(ictx, ofs, len, cb, arg);
+}
+
+int Image::write(off_t ofs, size_t len, bufferlist& bl)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  if (bl.length() < len)
+    return -EINVAL;
+  return librbd::write(ictx, ofs, len, bl.c_str());
+}
+
+int Image::aio_write(off_t off, size_t len, bufferlist& bl, RBD::AioCompletion *c)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  if (bl.length() < len)
+    return -EINVAL;
+  return librbd::aio_write(ictx, off, len, bl.c_str(), (librbd::AioCompletion *)c->pc);
+}
+
+int Image::aio_read(off_t off, size_t len, bufferlist& bl, RBD::AioCompletion *c)
+{
+  ImageCtx *ictx = (ImageCtx *)ctx;
+  bufferptr ptr(len);
+  bl.push_back(ptr);
+  dout(10) << "Image::aio_read() buf=" << (void *)bl.c_str() << "~" << (void *)(bl.c_str() + len - 1) << dendl;
+  return librbd::aio_read(ictx, off, len, bl.c_str(), (librbd::AioCompletion *)c->pc);
 }
 
 } // namespace librbd
@@ -1692,9 +1712,7 @@ extern "C" int rbd_write(rbd_image_t image, off_t ofs, size_t len, const char *b
 
 extern "C" int rbd_aio_create_completion(void *cb_arg, rbd_callback_t complete_cb, rbd_completion_t *c)
 {
-  librbd::AioCompletion *comp = librbd::aio_create_completion(cb_arg, complete_cb);
-  librbd::RBD::AioCompletion *rbd_comp = new librbd::RBD::AioCompletion(comp);
-  comp->rbd_comp = rbd_comp;
+  librbd::RBD::AioCompletion *rbd_comp = new librbd::RBD::AioCompletion(cb_arg, complete_cb);
   *c = (rbd_completion_t) rbd_comp;
   return 0;
 }

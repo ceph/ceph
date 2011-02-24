@@ -28,8 +28,8 @@ namespace librbd {
 
   using librados::pool_t;
 
-  class RBDClient;
-  typedef void *image_t;
+  class Image;
+  typedef void *image_ctx_t;
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
 
@@ -49,46 +49,60 @@ public:
 
   struct AioCompletion {
     void *pc;
-    AioCompletion(void *_pc) : pc(_pc) {}
+    AioCompletion(void *cb_arg, callback_t complete_cb);
     int wait_for_complete();
     int get_return_value();
     void release();
   };
 
-  /* We don't allow assignment or copying */
-  RBD(const RBD& rhs);
-  const RBD& operator=(const RBD& rhs);
-
   void version(int *major, int *minor, int *extra);
 
+  Image *image_open(pool_t pool, const char *name);
+  Image *image_open(pool_t pool, const char *name, const char *snapname);
   int list(pool_t pool, std::vector<std::string>& names);
   int create(pool_t pool, const char *name, size_t size, int *order);
   int remove(pool_t pool, const char *name);
   int copy(pool_t src_pool, const char *srcname, pool_t dest_pool, const char *destname);
   int rename(pool_t src_pool, const char *srcname, const char *destname);
 
-  int open(pool_t pool, const char *name, image_t *image, const char *snap_name = NULL);
-  int close(image_t image);
-  int resize(image_t image, size_t size);
-  int stat(image_t image, image_info_t& info, size_t infosize);
+private:
+  /* We don't allow assignment or copying */
+  RBD(const RBD& rhs);
+  const RBD& operator=(const RBD& rhs);
+};
+
+class Image
+{
+public:
+  Image();
+  Image(image_ctx_t ctx_);
+  ~Image();
+
+  void close();
+  int resize(size_t size);
+  int stat(image_info_t &info, size_t infosize);
 
   /* snapshots */
-  int snap_list(image_t image, std::vector<snap_info_t>& snaps);
-  int snap_create(image_t image, const char *snap_name);
-  int snap_remove(image_t image, const char *snap_name);
-  int snap_rollback(image_t image, const char *snap_name);
-  int snap_set(image_t image, const char *snap_name);
+  int snap_list(std::vector<snap_info_t>& snaps);
+  int snap_create(const char *snapname);
+  int snap_remove(const char *snapname);
+  int snap_rollback(const char *snap_name);
+  int snap_set(const char *snap_name);
 
   /* I/O */
-  int read(image_t image, off_t ofs, size_t len, ceph::bufferlist& bl);
-  int read_iterate(image_t image, off_t ofs, size_t len,
+  int read(off_t ofs, size_t len, ceph::bufferlist& bl);
+  int read_iterate(off_t ofs, size_t len,
                    int (*cb)(off_t, size_t, const char *, void *), void *arg);
-  int write(image_t image, off_t ofs, size_t len, ceph::bufferlist& bl);
+  int write(off_t ofs, size_t len, ceph::bufferlist& bl);
 
-  AioCompletion *aio_create_completion(void *cb_arg, callback_t complete_cb);
-  int aio_write(image_t image, off_t off, size_t len, ceph::bufferlist& bl,
-                AioCompletion *c);
-  int aio_read(image_t image, off_t off, size_t len, ceph::bufferlist& bl, AioCompletion *c);
+  int aio_write(off_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
+  int aio_read(off_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
+
+private:
+  Image(const Image& rhs);
+  const Image& operator=(const Image& rhs);
+
+  image_ctx_t ctx;
 };
 
 }
