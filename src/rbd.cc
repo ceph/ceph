@@ -88,9 +88,15 @@ static void print_info(const char *imgname, librbd::image_info_t& info)
 {
   cout << "rbd image '" << imgname << "':\n"
        << "\tsize " << prettybyte_t(info.size) << " in "
-       << info.num_objs << " objects\n"
+       << info.num_objs << " objects"
+       << std::endl
        << "\torder " << info.order
        << " (" << prettybyte_t(info.obj_size) << " objects)"
+       << std::endl
+       << "\tblock_name_prefix: " << info.block_name_prefix
+       << std::endl
+       << "\tparent: " << info.parent_name
+       << " (pool " << info.parent_pool << ")"
        << std::endl;
 }
 

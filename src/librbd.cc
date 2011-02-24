@@ -311,6 +311,9 @@ void image_info(rbd_obj_header_ondisk& header, image_info_t& info, size_t infosi
   info.obj_size = 1 << obj_order;
   info.num_objs = header.image_size >> obj_order;
   info.order = obj_order;
+  memcpy(&info.block_name_prefix, &header.block_name, RBD_MAX_BLOCK_NAME_SIZE);
+  info.parent_pool = -1;
+  bzero(&info.parent_name, RBD_MAX_IMAGE_NAME_SIZE);
 }
 
 string get_block_oid(rbd_obj_header_ondisk *header, uint64_t num)
@@ -1595,17 +1598,8 @@ extern "C" int rbd_resize(rbd_image_t image, size_t size)
 
 extern "C" int rbd_stat(rbd_image_t image, rbd_image_info_t *info, size_t infosize)
 {
-  librbd::image_info_t cpp_info;
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  int r = librbd::info(ictx, cpp_info, infosize);
-  if (r < 0)
-    return r;
-
-  info->size = cpp_info.size;
-  info->obj_size = cpp_info.obj_size;
-  info->num_objs = cpp_info.num_objs;
-  info->order = cpp_info.order;
-  return 0;
+  return librbd::info(ictx, *info, infosize);
 }
 
 /* snapshots */

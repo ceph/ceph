@@ -39,15 +39,7 @@ namespace librbd {
     std::string name;
   } snap_info_t;
 
-  typedef struct {
-    uint64_t size;
-    uint64_t obj_size;
-    uint64_t num_objs;
-    int order;
-    char block_name_prefix[RBD_MAX_BLOCK_NAME_SIZE];
-    int parent_pool;                            /* -1 if none */
-    char parent_name[RBD_MAX_IMAGE_NAME_SIZE];  /* blank if none */
-  } image_info_t;
+  typedef rbd_image_info_t image_info_t;
 
 class RBD
 {
