@@ -959,7 +959,7 @@ void MDSMonitor::tick()
         }
         continue;
       }
-      dout(10) << "no beacon from " << info.addr << " mds" << info.rank << "." << info.inc
+      dout(10) << "no beacon from " << gid << " " << info.addr << " mds" << info.rank << "." << info.inc
 	       << " " << ceph_mds_state_name(info.state)
 	       << " since " << since << dendl;
       
@@ -970,7 +970,7 @@ void MDSMonitor::tick()
 	  info.state != CEPH_MDS_STATE_STANDBY &&
 	  (sgid = pending_mdsmap.find_replacement_for(info.rank, info.name)) != 0) {
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sgid];
-	dout(10) << " replacing " << info.addr << " mds" << info.rank << "." << info.inc
+	dout(10) << " replacing " << gid << " " << info.addr << " mds" << info.rank << "." << info.inc
 		 << " " << ceph_mds_state_name(info.state)
 		 << " with " << sgid << "/" << si.name << " " << si.addr << dendl;
 	switch (info.state) {
@@ -1011,7 +1011,7 @@ void MDSMonitor::tick()
 	last_beacon.erase(gid);
 	do_propose = true;
       } else if (info.state == MDSMap::STATE_STANDBY_REPLAY) {
-	dout(10) << " failing " << info.addr << " mds" << info.rank << "." << info.inc
+	dout(10) << " failing " << gid << " " << info.addr << " mds" << info.rank << "." << info.inc
 		 << " " << ceph_mds_state_name(info.state)
 		 << dendl;
 	pending_mdsmap.mds_info.erase(gid);
@@ -1020,12 +1020,12 @@ void MDSMonitor::tick()
       } else if (!info.laggy()) {
 	if (info.state == MDSMap::STATE_STANDBY) {
 	  // remove it
-	  dout(10) << " removing " << info.addr << " mds" << info.rank << "." << info.inc
+	  dout(10) << " removing " << gid << " " << info.addr << " mds" << info.rank << "." << info.inc
 		   << " " << ceph_mds_state_name(info.state)
 		   << " (laggy)" << dendl;
 	  pending_mdsmap.mds_info.erase(gid);
 	} else {
-	  dout(10) << " marking " << info.addr << " mds" << info.rank << "." << info.inc
+	  dout(10) << " marking " << gid << " " << info.addr << " mds" << info.rank << "." << info.inc
 		   << " " << ceph_mds_state_name(info.state)
 		   << " laggy" << dendl;
 	  info.laggy_since = now;
