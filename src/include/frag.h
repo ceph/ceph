@@ -149,15 +149,12 @@ class frag_t {
 
 inline std::ostream& operator<<(std::ostream& out, frag_t hb)
 {
-  //return out << std::hex << hb.value() << std::dec << "/" << hb.bits();
+  //out << std::hex << hb.value() << std::dec << "/" << hb.bits() << '=';
   unsigned num = hb.bits();
   if (num) {
     unsigned val = hb.value();
-    unsigned bit = 1 << hb.mask_shift();
-    while (num--) {
-      out << ((val & bit) ? '1':'0');
-      bit--;	    
-    }
+    for (unsigned bit = 23; num; num--, bit--) 
+      out << ((val & (1<<bit)) ? '1':'0');
   }
   return out << '*';
 }
