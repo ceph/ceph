@@ -70,6 +70,11 @@
 
 #include "common/config.h"
 
+#ifdef HAVE_PROFILER
+# include <google/profiler.h>
+#endif
+
+
 #define DOUT_SUBSYS mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds" << whoami << '.' << incarnation << ' '
@@ -773,7 +778,73 @@ void MDS::handle_command(MMonCommand *m)
 	} else dout(0) << "bad migrate_dir path" << dendl;
       } else dout(0) << "bad migrate_dir target syntax" << dendl;
     } else dout(0) << "bad migrate_dir syntax" << dendl;
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "heapdump"){
+  } 
+
+  else if (m->cmd[0] == "cpu_profiler_start" && m->cmd.size() == 2) {
+#ifdef HAVE_PROFILER
+    int r = ProfilerStart(m->cmd[1].c_str());
+    clog.info() << "cpu_profiler start, logging to " << m->cmd[1] << ", r=" << r << "\n";
+#else
+    clog.info() << "cpu_profiler support not linked in\n";
+#endif
+  }
+  else if (m->cmd[0] == "cpu_profiler_status") {
+#ifdef HAVE_PROFILER
+    if (ProfilingIsEnabledForAllThreads())
+      clog.info() << "cpu_profiler is enabled\n";
+    else
+      clog.info() << "cpu_profiler is not enabled\n";
+    ProfilerState st;
+    ProfilerGetCurrentState(&st);
+    clog.info() << "cpu_profiler " << (st.enabled ? "enabled":"not enabled")
+		<< " start_time " << st.start_time
+		<< " profile_name " << st.profile_name
+		<< " samples " << st.samples_gathered
+		<< "\n";
+#else
+    clog.info() << "cpu_profiler support not linked in\n";
+#endif
+  }
+  else if (m->cmd[0] == "cpu_profiler_flush") {
+#ifdef HAVE_PROFILER
+    clog.info() << "cpu_profiler flush\n";
+    ProfilerFlush();
+#else
+    clog.info() << "cpu_profiler support not linked in\n";
+#endif
+  }
+  else if (m->cmd[0] == "cpu_profiler_stop") {
+#ifdef HAVE_PROFILER
+    clog.info() << "cpu_profiler flush and stop\n";
+    ProfilerFlush();
+    ProfilerStop();
+#else
+    clog.info() << "cpu_profiler support not linked in\n";
+#endif
+  }
+
+ else if (m->cmd.size() == 1 && m->cmd[0] == "heap_profiler_options") {
+    char val[sizeof(int)*8+1];
+    snprintf(val, sizeof(val), "%i", g_conf.profiler_allocation_interval);
+    setenv("HEAP_PROFILE_ALLOCATION_INTERVAL",
+	   val, g_conf.profiler_allocation_interval);
+    snprintf(val, sizeof(val), "%i", g_conf.profiler_highwater_interval);
+    setenv("HEAP_PROFILE_INUSE_INTERVAL",
+	   val, g_conf.profiler_highwater_interval);
+    clog.info() << g_conf.name << " set heap variables from current config\n";
+  }
+  else if (m->cmd.size() == 1 && m->cmd[0] == "heap_profiler_start") {
+    char location[PATH_MAX];
+    snprintf(location, sizeof(location),
+	     "%s/%s", g_conf.log_dir, g_conf.name);
+    g_conf.profiler_start(location);
+    clog.info() << g_conf.name << " started profiler\n";
+  }
+  else if (m->cmd.size() == 1 && m->cmd[0] == "heap_profiler_stop") {
+    g_conf.profiler_stop();
+    clog.info() << g_conf.name << " stopped profiler\n";
+  }
+  else if (m->cmd.size() == 1 && m->cmd[0] == "heap_profiler_dump"){
     if (g_conf.tcmalloc_have) {
       if (!g_conf.profiler_running()) {
         clog.info() << g_conf.name << " can't dump heap: profiler not running\n";
@@ -784,25 +855,8 @@ void MDS::handle_command(MMonCommand *m)
     } else {
       clog.info() << "tcmalloc not enabled, can't use profiler\n";
     }
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "enable_profiler_options") {
-    char val[sizeof(int)*8+1];
-    snprintf(val, sizeof(val), "%i", g_conf.profiler_allocation_interval);
-    setenv("HEAP_PROFILE_ALLOCATION_INTERVAL",
-	   val, g_conf.profiler_allocation_interval);
-    snprintf(val, sizeof(val), "%i", g_conf.profiler_highwater_interval);
-    setenv("HEAP_PROFILE_INUSE_INTERVAL",
-	   val, g_conf.profiler_highwater_interval);
-    clog.info() << g_conf.name << " set heap variables from current config\n";
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "start_profiler") {
-    char location[PATH_MAX];
-    snprintf(location, sizeof(location),
-	     "%s/%s", g_conf.log_dir, g_conf.name);
-    g_conf.profiler_start(location);
-    clog.info() << g_conf.name << " started profiler\n";
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "stop_profiler") {
-    g_conf.profiler_stop();
-    clog.info() << g_conf.name << " stopped profiler\n";
   }
+
   else dout(0) << "unrecognized command! " << m->cmd << dendl;
   m->put();
 }
