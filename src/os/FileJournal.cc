@@ -299,7 +299,7 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
 
 int FileJournal::create()
 {
-  char *buf = 0;
+  void *buf = 0;
   int64_t needed_space;
   int ret;
   buffer::ptr bp;
@@ -331,7 +331,7 @@ int FileJournal::create()
   }
 
   // zero first little bit, too.
-  ret = posix_memalign((void**)&buf, block_size, block_size);
+  ret = posix_memalign(&buf, block_size, block_size);
   if (ret) {
     derr << "FileJournal::create: failed to allocate " << block_size
 	 << " bytes of memory: " << cpp_strerror(ret) << dendl;
