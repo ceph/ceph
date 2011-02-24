@@ -1664,12 +1664,13 @@ void FileStore::_journaled_ahead(OpSequencer *osr, uint64_t op,
 
   op_queue_throttle();
 
-  osr->dequeue_journal();
 
   // this should queue in order because the journal does it's completions in order.
   journal_lock.Lock();
   queue_op(osr, op, tls, onreadable, onreadable_sync);
   journal_lock.Unlock();
+
+  osr->dequeue_journal();
 
   // do ondisk completions async, to prevent any onreadable_sync completions
   // getting blocked behind an ondisk completion.
