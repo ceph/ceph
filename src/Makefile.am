@@ -409,7 +409,7 @@ AM_CFLAGS = -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE 
 AM_LDFLAGS = -Wl,--as-needed
 
 if WITH_LIBATOMIC
-LDADD += -latomic_ops
+AM_LDFLAGS += -latomic_ops
 endif
 
 noinst_LIBRARIES = \
