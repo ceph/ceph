@@ -2443,7 +2443,7 @@ extern "C" int rados_conf_set(rados_t cluster, const char *option, const char *v
   return g_conf.set_val(option, value);
 }
 
-extern "C" void rados_reopen_log(void)
+extern "C" void rados_reopen_log(rados_t cluster)
 {
   sighup_handler(SIGHUP);
 }
@@ -2456,15 +2456,38 @@ extern "C" int rados_conf_get(rados_t cluster, const char *option, char *buf, in
   return g_conf.get_val(option, &tmp, len);
 }
 
-extern "C" int rados_conf_get_alloc(rados_t cluster, const char *option, char **buf)
-{
-  return g_conf.get_val(option, buf, -1);
-}
-
 extern "C" int rados_pool_lookup(rados_t cluster, const char *name)
 {
   RadosClient *radosp = (RadosClient *)cluster;
   return radosp->lookup_pool(name);
+}
+
+extern "C" int rados_pool_list(rados_t cluster, char *buf, int len)
+{
+  RadosClient *client = (RadosClient *)cluster;
+  std::list<std::string> pools;
+  client->list_pools(pools);
+
+  char *b = buf;
+  if (b)
+    memset(b, 0, len);
+  int needed = 0;
+  std::list<std::string>::const_iterator i = pools.begin();
+  std::list<std::string>::const_iterator p_end = pools.end();
+  for (; i != p_end; ++i) {
+    if (len <= 0)
+      break;
+    int rl = i->length() + 1;
+    strncat(b, i->c_str(), len - 2); // leave space for two NULLs
+    needed += rl;
+    len -= rl;
+    b += rl;
+  }
+  for (; i != p_end; ++i) {
+    int rl = i->length() + 1;
+    needed += rl;
+  }
+  return needed + 1;
 }
 
 extern "C" int rados_pool_open(rados_t cluster, const char *name, rados_pool_t *pool)
@@ -2533,7 +2556,7 @@ extern "C" int rados_snap_set_write_context(rados_pool_t pool, rados_snap_t seq,
   return ctx->set_snap_write_context((snapid_t)seq, snv);
 }
 
-extern "C" int rados_write(rados_pool_t pool, const char *o, off_t off, const char *buf, size_t len)
+extern "C" int rados_write(rados_pool_t pool, const char *o, const char *buf, size_t len, off_t off)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   object_t oid(o);
@@ -2542,7 +2565,7 @@ extern "C" int rados_write(rados_pool_t pool, const char *o, off_t off, const ch
   return ctx->client->write(*ctx, oid, off, bl, len);
 }
 
-extern "C" int rados_write_full(rados_pool_t pool, const char *o, off_t off, const char *buf, size_t len)
+extern "C" int rados_write_full(rados_pool_t pool, const char *o, const char *buf, size_t len, off_t off)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   object_t oid(o);
@@ -2565,7 +2588,7 @@ extern "C" int rados_remove(rados_pool_t pool, const char *o)
   return ctx->client->remove(*ctx, oid);
 }
 
-extern "C" int rados_read(rados_pool_t pool, const char *o, off_t off, char *buf, size_t len)
+extern "C" int rados_read(rados_pool_t pool, const char *o, char *buf, size_t len, off_t off)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   int ret;
@@ -2868,8 +2891,8 @@ extern "C" void rados_aio_release(rados_completion_t c)
 }
 
 extern "C" int rados_aio_read(rados_pool_t pool, const char *o,
-			       off_t off, char *buf, size_t len,
-			       rados_completion_t completion)
+			       rados_completion_t completion,
+			       char *buf, size_t len, off_t off)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   object_t oid(o);
@@ -2877,8 +2900,8 @@ extern "C" int rados_aio_read(rados_pool_t pool, const char *o,
 }
 
 extern "C" int rados_aio_write(rados_pool_t pool, const char *o,
-			       off_t off, const char *buf, size_t len,
-			       rados_completion_t completion)
+				rados_completion_t completion,
+				const char *buf, size_t len, off_t off)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   object_t oid(o);
@@ -2888,8 +2911,8 @@ extern "C" int rados_aio_write(rados_pool_t pool, const char *o,
 }
 
 extern "C" int rados_aio_write_full(rados_pool_t pool, const char *o,
-			       off_t off, const char *buf, size_t len,
-			       rados_completion_t completion)
+			 rados_completion_t completion,
+			 const char *buf, size_t len, off_t off)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   object_t oid(o);

@@ -263,7 +263,7 @@ int main(int argc, const char **argv)
   rbd_image_t image;
   assert(rados_create(&cluster, NULL) == 0);
   assert(rados_conf_read_file(cluster, "/etc/ceph/ceph.conf") == 0);
-  rados_reopen_log();
+  rados_reopen_log(cluster);
   assert(rados_pool_open(cluster, TEST_POOL, &pool) == 0);
   test_ls(pool, 0);
   test_create_and_stat(pool, TEST_IMAGE, MB_BYTES(1));

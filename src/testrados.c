@@ -21,7 +21,6 @@
 int main(int argc, const char **argv) 
 {
   char tmp[32];
-  char *tmp2;
   int i, r;
   rados_t cl;
 
@@ -48,19 +47,12 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  // Testing the version that uses malloc().
-  if (rados_conf_get_alloc(cl, "log to stderr", &tmp2)) {
-    printf("error: failed to read log_to_stderr from config\n");
-    exit(1);
-  }
-  free(tmp2);
-
   // Can we change it? 
   if (rados_conf_set(cl, "log to stderr", "2")) {
     printf("error: error setting log_to_stderr\n");
     exit(1);
   }
-  rados_reopen_log();
+  rados_reopen_log(cl);
   if (rados_conf_get(cl, "log to stderr", tmp, sizeof(tmp))) {
     printf("error: failed to read log_to_stderr from config\n");
     exit(1);
@@ -82,6 +74,29 @@ int main(int argc, const char **argv)
   rados_pool_t pool;
   r = rados_pool_open(cl, "foo", &pool);
   printf("rados_pool_open = %d, pool = %p\n", r, pool);
+
+  /* list all pools */
+  {
+    int buf_sz = rados_pool_list(cl, NULL, 0);
+    printf("need buffer size of %d\n", buf_sz);
+    char buf[buf_sz];
+    int r = rados_pool_list(cl, buf, buf_sz);
+    if (r != buf_sz) {
+      printf("buffer size mismatch: got %d the first time, but %d "
+	     "the second.\n", buf_sz, r);
+      exit(1);
+    }
+    const char *b = buf;
+    printf("begin pools.\n");
+    while (1) {
+      if (b[0] == '\0')
+        break;
+      printf(" pool: '%s'\n", b);
+      b += strlen(b) + 1;
+    };
+    printf("end pools.\n");
+  }
+
 
   /* stat */
   struct rados_pool_stat_t st;
@@ -110,9 +125,9 @@ int main(int argc, const char **argv)
   time(&tm);
   snprintf(buf, 128, "%s", ctime(&tm));
   const char *oid = "foo_object";
-  r = rados_write(pool, oid, 0, buf, strlen(buf) + 1);
+  r = rados_write(pool, oid, buf, strlen(buf) + 1, 0);
   printf("rados_write = %d\n", r);
-  r = rados_read(pool, oid, 0, buf2, sizeof(buf2));
+  r = rados_read(pool, oid, buf2, sizeof(buf2), 0);
   printf("rados_read = %d\n", r);
   if (memcmp(buf, buf2, r))
     printf("*** content mismatch ***\n");
@@ -136,7 +151,7 @@ int main(int argc, const char **argv)
   /* exec */
   rados_exec(pool, oid, "crypto", "md5", buf, strlen(buf) + 1, buf, 128);
   printf("exec result=%s\n", buf);
-  r = rados_read(pool, oid, 0, buf2, 128);
+  r = rados_read(pool, oid, buf2, 128, 0);
   printf("read result=%s\n", buf2);
   printf("size=%d\n", r);
 
@@ -144,8 +159,8 @@ int main(int argc, const char **argv)
   rados_completion_t a, b;
   rados_aio_create_completion(0, 0, 0, &a);
   rados_aio_create_completion(0, 0, 0, &b);
-  rados_aio_write(pool, "a", 0, buf, 100, a);
-  rados_aio_write(pool, "../b/bb_bb_bb\\foo\\bar", 0, buf, 100, b);
+  rados_aio_write(pool, "a", a, buf, 100, 0);
+  rados_aio_write(pool, "../b/bb_bb_bb\\foo\\bar", b, buf, 100, 0);
   rados_aio_wait_for_safe(a);
   printf("a safe\n");
   rados_aio_wait_for_safe(b);
@@ -153,7 +168,7 @@ int main(int argc, const char **argv)
   rados_aio_release(a);
   rados_aio_release(b);
 
-  rados_read(pool, "../b/bb_bb_bb\\foo\\bar", 0, buf2, 128);
+  rados_read(pool, "../b/bb_bb_bb\\foo\\bar", buf2, 128, 0);
 
   /* list objects */
   rados_list_ctx_t h;

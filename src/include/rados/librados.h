@@ -76,7 +76,7 @@ int rados_conf_set(rados_t cluster, const char *option, const char *value);
  * It is also good practice to call this from your SIGHUP signal handler, so that users can send you
  * a SIGHUP to reopen the log.
  */
-void rados_reopen_log(void);
+void rados_reopen_log(rados_t cluster);
 
 /* Returns a configuration value as a string.
  * If len is positive, that is the maximum number of bytes we'll write into the
@@ -84,17 +84,24 @@ void rados_reopen_log(void);
  * Returns 0 on success, error code otherwise. Returns ENAMETOOLONG if the
  * buffer is too short. */
 int rados_conf_get(rados_t cluster, const char *option, char *buf, int len);
-int rados_conf_get_alloc(rados_t cluster, const char *option, char **buf);
 
 /* pools */
+
+/* Gets a list of pool names as NULL-terminated strings.
+ * The pool names will be placed in the supplied buffer one after another.
+ * After the last pool name, there will be two 0 bytes in a row.
+ *
+ * If len is too short to fit all the pool name entries we need, we will fill
+ * as much as we can.
+ * Returns the length of the buffer we would need to list all pools.
+ */
+int rados_pool_list(rados_t cluster, char *buf, int len);
+
 int rados_pool_open(rados_t cluster, const char *name, rados_pool_t *pool);
 int rados_pool_close(rados_pool_t pool);
 int rados_pool_lookup(rados_t cluster, const char *name);
 
 int rados_pool_stat(rados_pool_t pool, struct rados_pool_stat_t *stats);
-
-void rados_snap_set_read(rados_pool_t pool, rados_snap_t snap);
-int rados_snap_set_write_context(rados_pool_t pool, rados_snap_t seq, rados_snap_t *snaps, int num_snaps);
 
 int rados_pool_create(rados_t cluster, const char *name);
 int rados_pool_create_with_auid(rados_t cluster, const char *name, uint64_t auid);
@@ -115,8 +122,11 @@ int rados_pool_snap_create(rados_pool_t pool, const char *snapname);
 int rados_pool_snap_remove(rados_pool_t pool, const char *snapname);
 int rados_pool_snap_rollback_object(rados_pool_t pool, const char *oid,
 			  const char *snapname);
+void rados_pool_snap_set_read(rados_pool_t pool, rados_snap_t snap);
 int rados_pool_selfmanaged_snap_create(rados_pool_t pool, uint64_t *snapid);
 int rados_pool_selfmanaged_snap_remove(rados_pool_t pool, uint64_t snapid);
+int rados_pool_selfmanaged_snap_set_write_ctx(rados_pool_t pool, rados_snap_t seq, rados_snap_t *snaps, int num_snaps);
+
 int rados_pool_snap_list(rados_pool_t pool, rados_snap_t *snaps, int maxlen);
 int rados_pool_snap_lookup(rados_pool_t pool, const char *name, rados_snap_t *id);
 int rados_pool_snap_get_name(rados_pool_t pool, rados_snap_t id, char *name, int maxlen);
@@ -124,9 +134,9 @@ int rados_pool_snap_get_name(rados_pool_t pool, rados_snap_t id, char *name, int
 /* sync io */
 uint64_t rados_get_last_version(rados_pool_t pool);
 
-int rados_write(rados_pool_t pool, const char *oid, off_t off, const char *buf, size_t len);
-int rados_write_full(rados_pool_t pool, const char *oid, off_t off, const char *buf, size_t len);
-int rados_read(rados_pool_t pool, const char *oid, off_t off, char *buf, size_t len);
+int rados_write(rados_pool_t pool, const char *oid, const char *buf, size_t len, off_t off);
+int rados_write_full(rados_pool_t pool, const char *oid, const char *buf, size_t len, off_t off);
+int rados_read(rados_pool_t pool, const char *oid, char *buf, size_t len, off_t off);
 int rados_remove(rados_pool_t pool, const char *oid);
 int rados_trunc(rados_pool_t pool, const char *oid, size_t size);
 
@@ -155,14 +165,14 @@ int rados_aio_get_return_value(rados_completion_t c);
 uint64_t rados_aio_get_obj_ver(rados_completion_t c);
 void rados_aio_release(rados_completion_t c);
 int rados_aio_write(rados_pool_t pool, const char *oid,
-		    off_t off, const char *buf, size_t len,
-		    rados_completion_t completion);
+		    rados_completion_t completion,
+		    const char *buf, size_t len, off_t off);
 int rados_aio_write_full(rados_pool_t pool, const char *oid,
-			 off_t off, const char *buf, size_t len,
-			 rados_completion_t completion);
+			 rados_completion_t completion,
+			 const char *buf, size_t len, off_t off);
 int rados_aio_read(rados_pool_t pool, const char *oid,
-		   off_t off, char *buf, size_t len,
-		   rados_completion_t completion);
+		   rados_completion_t completion,
+		   char *buf, size_t len, off_t off);
 
 /* watch/notify */
 typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
