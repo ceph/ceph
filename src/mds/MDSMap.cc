@@ -144,8 +144,8 @@ void MDSMap::print_summary(ostream& out)
   
   if (failed.size())
     out << ", " << failed.size() << " failed";
-  if (stopped.size())
-    out << ", " << stopped.size() << " stopped";
+  //if (stopped.size())
+  //out << ", " << stopped.size() << " stopped";
 }
 
 enum health_status_t MDSMap::
