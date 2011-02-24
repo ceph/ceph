@@ -3,9 +3,7 @@
 
 # Autoconf
 AC_PREREQ(2.59)
-AC_INIT([Ceph distributed file system], [0.24.3], 
-	      [Sage Weil <sage@newdream.net>],
-	      [ceph])
+AC_INIT([ceph], [0.26~rc], [ceph-devel@vger.kernel.org])
 AC_CONFIG_SUBDIRS([src/gtest])
 
 # Environment
@@ -13,7 +11,7 @@ AC_CANONICAL_HOST
 AC_CANONICAL_TARGET
 
 # Automake
-AM_INIT_AUTOMAKE(ceph, 0.25~rc)
+AM_INIT_AUTOMAKE
 AM_PROG_CC_C_O
 AM_PROG_LIBTOOL
 
