@@ -140,9 +140,8 @@ void common_init(std::vector<const char*>& args, const char *module_type, int fl
     _dout_open_log();
   }
 
-  if (!force_fg_logging) {
-    dout_output_ceph_version();
-  }
+  if (g_conf.daemonize)
+    cout << ceph_version_to_string() << std::endl;
 
   parse_config_options(args);
   install_standard_sighandlers();
