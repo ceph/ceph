@@ -138,9 +138,9 @@ int main(int argc, const char **argv)
     jr->reset();
     mc.shutdown();
   } else {
-    derr << "starting mds." << g_conf.id
+    cout << "starting mds." << g_conf.id
 	 << " at " << messenger->get_ms_addr()
-	 << dendl;
+	 << std::endl;
 
     messenger->register_entity(entity_name_t::MDS(-1));
     assert_warn(messenger);

@@ -233,11 +233,11 @@ int main(int argc, const char **argv)
 
   messenger_hb->bind(hb_addr);
 
-  derr << "starting osd" << whoami
+  cout << "starting osd" << whoami
        << " at " << client_messenger->get_ms_addr() 
        << " osd_data " << g_conf.osd_data
        << " " << ((g_conf.osd_journal && g_conf.osd_journal[0]) ? g_conf.osd_journal:"(no journal)")
-       << dendl;
+       << std::endl;
 
   client_messenger->register_entity(entity_name_t::OSD(whoami));
   cluster_messenger->register_entity(entity_name_t::OSD(whoami));
