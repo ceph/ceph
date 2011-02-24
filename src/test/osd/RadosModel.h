@@ -33,7 +33,7 @@ typename T::iterator rand_choose(T &cont)
 
 struct TestOp
 {
-  librados::Rados::AioCompletion *completion;
+  librados::AioCompletion *completion;
   bool done;
   virtual void begin() = 0;
 

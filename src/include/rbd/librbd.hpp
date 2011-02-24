@@ -26,7 +26,7 @@
 
 namespace librbd {
 
-  using librados::pool_t;
+  using librados::PoolHandle;
 
   class RBDClient;
   typedef void *image_t;
@@ -61,13 +61,13 @@ public:
 
   void version(int *major, int *minor, int *extra);
 
-  int list(pool_t pool, std::vector<std::string>& names);
-  int create(pool_t pool, const char *name, size_t size, int *order);
-  int remove(pool_t pool, const char *name);
-  int copy(pool_t src_pool, const char *srcname, pool_t dest_pool, const char *destname);
-  int rename(pool_t src_pool, const char *srcname, const char *destname);
+  int list(PoolHandle& pool, std::vector<std::string>& names);
+  int create(PoolHandle& pool, const char *name, size_t size, int *order);
+  int remove(PoolHandle& pool, const char *name);
+  int copy(PoolHandle& src_pool, const char *srcname, PoolHandle& dest_pool, const char *destname);
+  int rename(PoolHandle& src_pool, const char *srcname, const char *destname);
 
-  int open(pool_t pool, const char *name, image_t *image, const char *snap_name = NULL);
+  int open(PoolHandle& pool, const char *name, image_t *image, const char *snap_name = NULL);
   int close(image_t image);
   int resize(image_t image, size_t size);
   int stat(image_t image, image_info_t& info, size_t infosize);

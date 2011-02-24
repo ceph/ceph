@@ -57,7 +57,7 @@ int rados_create(rados_t *cluster, const char * const id);
 int rados_connect(rados_t cluster);
 
 /* destroy the cluster instance */
-void rados_destroy(rados_t cluster);
+void rados_shutdown(rados_t cluster);
 
 /* Config
  *
@@ -169,7 +169,7 @@ int rados_aio_write(rados_pool_t pool, const char *oid,
 		    const char *buf, size_t len, off_t off);
 int rados_aio_write_full(rados_pool_t pool, const char *oid,
 			 rados_completion_t completion,
-			 const char *buf, size_t len, off_t off);
+			 const char *buf, size_t len);
 int rados_aio_read(rados_pool_t pool, const char *oid,
 		   rados_completion_t completion,
 		   char *buf, size_t len, off_t off);

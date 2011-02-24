@@ -30,7 +30,7 @@ void buf_to_hex(const unsigned char *buf, int len, char *str)
   }
 }
 
-class C_Watch : public Rados::WatchCtx {
+class C_Watch : public WatchCtx {
 public:
   C_Watch() {}
   void notify(uint8_t opcode, uint64_t ver) {
@@ -41,9 +41,39 @@ public:
 int main(int argc, const char **argv) 
 {
   Rados rados;
-  if (rados.initialize(argc, argv) < 0) {
+  if (rados.init(NULL) < 0) {
      cerr << "couldn't initialize rados!" << std::endl;
      exit(1);
+  }
+
+  if (rados.conf_read_file("/etc/ceph/ceph.conf")) {
+     cerr << "couldn't read configuration file." << std::endl;
+     exit(1);
+  }
+
+  if (!rados.conf_set("config option that doesn't exist",
+                     "some random value")) {
+    printf("error: succeeded in setting nonexistent config option\n");
+    exit(1);
+  }
+  if (rados.conf_set(cl, "log to stderr", "2")) {
+    printf("error: error setting log_to_stderr\n");
+    exit(1);
+  }
+  rados.reopen_log();
+  std::string tmp;
+  if (rados.conf_get("log to stderr", tmp)) {
+    printf("error: failed to read log_to_stderr from config\n");
+    exit(1);
+  }
+  if (tmp[0] != '2') {
+    printf("error: new setting for log_to_stderr failed to take effect.\n");
+    exit(1);
+  }
+
+  if (rados.connect()) {
+    printf("error connecting\n");
+    exit(1);
   }
 
   cout << "rados_initialize completed" << std::endl;
@@ -61,9 +91,8 @@ int main(int argc, const char **argv)
 
   const char *oid = "bar";
 
-  pool_t pool;
-
-  int r = rados.open_pool("data", &pool);
+  PoolHandle pool;
+  int r = rados.pool_open("data", &pool);
   cout << "open pool result = " << r << " pool = " << pool << std::endl;
 
   r = rados.write(pool, oid, 0, bl, bl.length());

@@ -1,20 +1,20 @@
 #ifndef CEPH_RGWRADOS_H
 #define CEPH_RGWRADOS_H
 
-#include "include/rados/librados.h"
+#include "include/rados/librados.hpp"
 #include "rgw_access.h"
 #include "rgw_common.h"
 
 class RGWRados  : public RGWAccess
 {
   /** Open the pool used as root for this gateway */
-  int open_root_pool(rados_pool_t *pool);
+  int open_root_pool();
 
   struct GetObjState {
-    rados_pool_t pool;
+    librados::PoolHandle pool;
     bool sent_data;
 
-    GetObjState() : pool(0), sent_data(false) {}
+    GetObjState() : sent_data(false) {}
   };
 
 public:

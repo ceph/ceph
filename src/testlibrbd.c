@@ -288,6 +288,6 @@ int main(int argc, const char **argv)
   test_delete(pool, TEST_IMAGE "1");
   test_ls(pool, 0);
   rados_pool_close(pool);
-  rados_destroy(cluster);
+  rados_shutdown(cluster);
   return 0;
 }
