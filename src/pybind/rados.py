@@ -113,7 +113,6 @@ class Rados(object):
 
     # Returns true if the pool exists; false otherwise.
     def pool_exists(self, pool_name):
-        pool = c_void_p()
         ret = self.librados.rados_lookup_pool(c_char_p(pool_name))
         if (ret >= 0):
             return True
