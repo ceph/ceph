@@ -59,15 +59,15 @@ void generate_object_name(char *s, int objnum, int pid = 0)
   }
 }
 
-int write_bench(librados::Rados& rados, librados::PoolHandle& pool,
+int write_bench(librados::Rados& rados, librados::IoCtx& pool,
 		 int secondsToRun, int concurrentios, bench_data *data);
-int seq_read_bench(librados::Rados& rados, librados::PoolHandle& pool,
+int seq_read_bench(librados::Rados& rados, librados::IoCtx& pool,
 		   int secondsToRun, int concurrentios, bench_data *data,
 		   int writePid);
 void *status_printer(void * data_store);
 void sanitize_object_contents(bench_data *data, int length);
 
-int aio_bench(librados::Rados& rados, librados::PoolHandle &pool, int operation,
+int aio_bench(librados::Rados& rados, librados::IoCtx &pool, int operation,
 	      int secondsToRun, int concurrentios, int op_size) {
   int object_size = op_size;
   int num_objects = 0;
@@ -136,7 +136,7 @@ void _aio_cb(void *cb, void *arg) {
   dataLock.Unlock();
 }
 
-int write_bench(librados::Rados& rados, librados::PoolHandle& pool,
+int write_bench(librados::Rados& rados, librados::IoCtx& pool,
 		 int secondsToRun, int concurrentios, bench_data *data) {
   cout << "Maintaining " << concurrentios << " concurrent writes of "
        << data->object_size << " bytes for at least "
@@ -311,7 +311,7 @@ int write_bench(librados::Rados& rados, librados::PoolHandle& pool,
   return -5;
 }
 
-int seq_read_bench(librados::Rados& rados, librados::PoolHandle& pool, int seconds_to_run,
+int seq_read_bench(librados::Rados& rados, librados::IoCtx& pool, int seconds_to_run,
 		   int concurrentios, bench_data *write_data, int pid) {
   bench_data *data = new bench_data();
   data->done = false;

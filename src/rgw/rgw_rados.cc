@@ -20,7 +20,7 @@ Rados *rados = NULL;
 #define ROOT_BUCKET ".rgw" //keep this synced to rgw_user.cc::root_bucket!
 
 static string root_bucket(ROOT_BUCKET);
-static librados::PoolHandle root_pool;
+static librados::IoCtx root_pool;
 
 /** 
  * Initialize the RADOS instance and prepare to do other ops
@@ -52,13 +52,13 @@ int RGWRados::initialize(int argc, char *argv[])
  */
 int RGWRados::open_root_pool()
 {
-  int r = rados->pool_open(root_bucket.c_str(), root_pool);
+  int r = rados->ioctx_open(root_bucket.c_str(), root_pool);
   if (r == -ENOENT) {
     r = rados->pool_create(root_bucket.c_str());
     if (r < 0)
       return r;
 
-    r = rados->pool_open(root_bucket.c_str(), root_pool);
+    r = rados->ioctx_open(root_bucket.c_str(), root_pool);
   }
 
   return r;
@@ -135,8 +135,8 @@ int RGWRados::list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle
 int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, string& delim,
 			   string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes)
 {
-  librados::PoolHandle pool;
-  int r = rados->pool_open(bucket.c_str(), pool);
+  librados::IoCtx pool;
+  int r = rados->ioctx_open(bucket.c_str(), pool);
   if (r < 0)
     return r;
 
@@ -237,9 +237,9 @@ int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::strin
 int RGWRados::put_obj_meta(std::string& id, std::string& bucket, std::string& oid,
                   time_t *mtime, map<string, bufferlist>& attrs)
 {
-  librados::PoolHandle pool;
+  librados::IoCtx pool;
 
-  int r = rados->pool_open(bucket.c_str(), pool);
+  int r = rados->ioctx_open(bucket.c_str(), pool);
   if (r < 0)
     return r;
 
@@ -278,9 +278,9 @@ int RGWRados::put_obj_meta(std::string& id, std::string& bucket, std::string& oi
 int RGWRados::put_obj_data(std::string& id, std::string& bucket, std::string& oid, const char *data, off_t ofs, size_t len,
                   time_t *mtime)
 {
-  librados::PoolHandle pool;
+  librados::IoCtx pool;
 
-  int r = rados->pool_open(bucket.c_str(), pool);
+  int r = rados->ioctx_open(bucket.c_str(), pool);
   if (r < 0)
     return r;
 
@@ -375,16 +375,7 @@ done_err:
  */
 int RGWRados::delete_bucket(std::string& id, std::string& bucket)
 {
-  int ret;
-  librados::PoolHandle pool;
-  ret = rados->pool_open(bucket.c_str(), pool);
-  if (ret < 0)
-    return ret;
-  ret = pool.destroy();
-  if (ret)
-    return ret;
-  ret = delete_obj(id, root_bucket, bucket);
-  return ret;
+  return rados->pool_delete(bucket.c_str());
 }
 
 /**
@@ -396,8 +387,8 @@ int RGWRados::delete_bucket(std::string& id, std::string& bucket)
  */
 int RGWRados::delete_obj(std::string& id, std::string& bucket, std::string& oid)
 {
-  librados::PoolHandle pool;
-  int r = rados->pool_open(bucket.c_str(), pool);
+  librados::IoCtx pool;
+  int r = rados->ioctx_open(bucket.c_str(), pool);
   if (r < 0)
     return r;
 
@@ -419,7 +410,7 @@ int RGWRados::delete_obj(std::string& id, std::string& bucket, std::string& oid)
 int RGWRados::get_attr(std::string& bucket, std::string& obj,
                        const char *name, bufferlist& dest)
 {
-  librados::PoolHandle pool;
+  librados::IoCtx pool;
   string actual_bucket = bucket;
   string actual_obj = obj;
 
@@ -428,7 +419,7 @@ int RGWRados::get_attr(std::string& bucket, std::string& obj,
     actual_bucket = root_bucket;
   }
 
-  int r = rados->pool_open(actual_bucket.c_str(), pool);
+  int r = rados->ioctx_open(actual_bucket.c_str(), pool);
   if (r < 0)
     return r;
 
@@ -450,7 +441,7 @@ int RGWRados::get_attr(std::string& bucket, std::string& obj,
 int RGWRados::set_attr(std::string& bucket, std::string& oid,
                        const char *name, bufferlist& bl)
 {
-  librados::PoolHandle pool;
+  librados::IoCtx pool;
   string actual_bucket = bucket;
   string actual_obj = oid;
 
@@ -459,7 +450,7 @@ int RGWRados::set_attr(std::string& bucket, std::string& oid,
     actual_bucket = root_bucket;
   }
 
-  int r = rados->pool_open(actual_bucket.c_str(), pool);
+  int r = rados->ioctx_open(actual_bucket.c_str(), pool);
   if (r < 0)
     return r;
 
@@ -521,7 +512,7 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
 
   *handle = state;
 
-  r = rados->pool_open(bucket.c_str(), state->pool);
+  r = rados->ioctx_open(bucket.c_str(), state->pool);
   if (r < 0)
     goto done_err;
 

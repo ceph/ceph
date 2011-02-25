@@ -150,9 +150,9 @@ int main(int argc, const char **argv)
   char buf[80];
 
   // open pool?
-  PoolHandle pool;
+  IoCtx pool;
   if (pool_name) {
-    ret = rados.pool_open(pool_name, pool);
+    ret = rados.ioctx_open(pool_name, pool);
     if (ret < 0) {
       cerr << "error opening pool " << pool_name << ": "
 	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
@@ -173,7 +173,7 @@ int main(int argc, const char **argv)
     ret = pool.snap_get_name(snapid, &name);
     if (ret < 0) {
       cerr << "snapid " << snapid << " doesn't exist in pool "
-	   << pool.get_name() << std::endl;
+	   << pool.get_pool_name() << std::endl;
       return 1;
     }
     pool.snap_set_read(snapid);
@@ -254,9 +254,9 @@ int main(int argc, const char **argv)
     uint64_t new_auid = strtol(nargs[1], 0, 10);
     ret = pool.set_auid(new_auid);
     if (ret < 0) {
-      cerr << "error changing auid on pool " << pool.get_name() << ':'
+      cerr << "error changing auid on pool " << pool.get_pool_name() << ':'
 	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-    } else cerr << "changed auid on pool " << pool.get_name()
+    } else cerr << "changed auid on pool " << pool.get_pool_name()
 		<< " to " << new_auid << std::endl;
   }
   else if (strcmp(nargs[0], "mapext") == 0) {
@@ -466,13 +466,8 @@ int main(int argc, const char **argv)
   else if (strcmp(nargs[0], "rmpool") == 0) {
     if (nargs.size() < 2)
       usage();
-    librados::PoolHandle rm_me;
-    ret = rados.pool_open(nargs[1], rm_me);
+    ret = rados.pool_delete(nargs[1]);
     if (ret >= 0) {
-      if (rm_me.destroy() < 0) {
-	cerr << "error deleting pool " << nargs[1] << ": "
-	     << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      }
       cout << "successfully deleted pool " << nargs[1] << std::endl;
     } else { //error
       cerr << "pool " << nargs[1] << " does not exist" << std::endl;

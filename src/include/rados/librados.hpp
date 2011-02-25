@@ -13,16 +13,14 @@
 class RadosClient;
 class Context;
 class AioCompletionImpl;
-class PoolCtx;
+class IoCtxImpl;
 
 namespace librados
 {
-  class Pool;
-  class PoolHandle;
+  class IoCtx;
   using ceph::bufferlist;
 
   typedef void *list_ctx_t;
-  typedef void *pool_t;
   typedef uint64_t snap_t;
   typedef uint64_t auid_t;
 
@@ -87,30 +85,26 @@ namespace librados
     AioCompletionImpl *pc;
   };
 
-  /* PoolHandle : Represents our view of a Pool.
+  /* IoCtx : This is a context in which we can perform I/O.
+   * It includes a Pool,
    *
    * Typical use (error checking omitted):
    *
-   * PoolHandle *p;
-   * rados.pool_open("my_pool", &pool);
+   * IoCtx *p;
+   * rados.ioctx_open("my_pool", &pool);
    * p->stat(&stats);
    * ... etc ...
    * delete p; // close our pool handle
    */
-  class PoolHandle
+  class IoCtx
   {
   public:
-    PoolHandle();
-    static void from_rados_pool_t(rados_pool_t p, PoolHandle &pool);
+    IoCtx();
+    static void from_rados_ioctx_t(rados_ioctx_t p, IoCtx &pool);
 
     // Close our pool handle
-    ~PoolHandle();
+    ~IoCtx();
     void close();
-
-    // Remove this Pool from the cluster.
-    // If successful, the pool handle will be closed after this call
-    // Returns 0 on success; error code otherwise.
-    int destroy();
 
     // set pool auid
     int set_auid(uint64_t auid_);
@@ -185,18 +179,17 @@ namespace librados
     // assert version for next sync operations
     void set_assert_version(uint64_t ver);
 
-    const std::string& get_name() const;
+    const std::string& get_pool_name() const;
   private:
-    /* You can only get Pool instances from Rados */
-    PoolHandle(PoolCtx *pool_ctx_);
+    /* You can only get IoCtx instances from Rados */
+    IoCtx(IoCtxImpl *io_ctx_impl_);
 
-    friend class Rados; // Only Rados can use our private constructor to create Pools.
+    friend class Rados; // Only Rados can use our private constructor to create IoCtxes.
 
     /* We don't allow assignment or copying */
-    PoolHandle(const PoolHandle& rhs);
-    const PoolHandle& operator=(const PoolHandle& rhs);
-    PoolCtx *pool_ctx;
-    std::string name;
+    IoCtx(const IoCtx& rhs);
+    const IoCtx& operator=(const IoCtx& rhs);
+    IoCtxImpl *io_ctx_impl;
   };
 
   class Rados
@@ -218,8 +211,10 @@ namespace librados
     int pool_create(const char *name);
     int pool_create(const char *name, uint64_t auid);
     int pool_create(const char *name, uint64_t auid, __u8 crush_rule);
-    int pool_open(const char *name, PoolHandle &pool);
+    int pool_delete(const char *name);
     int pool_lookup(const char *name);
+
+    int ioctx_open(const char *name, IoCtx &pool);
 
     /* listing objects */
     int pool_list(std::list<std::string>& v);

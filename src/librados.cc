@@ -71,18 +71,18 @@ using namespace std;
  */
 
 ///////////////////////////// RadosClient //////////////////////////////
-struct PoolCtx {
+struct IoCtxImpl {
   RadosClient *client;
   int poolid;
-  string name;
+  string pool_name;
   snapid_t snap_seq;
   SnapContext snapc;
   uint64_t assert_ver;
   eversion_t last_objver;
   uint32_t notify_timeout;
 
-  PoolCtx(RadosClient *c, int pid, const char *n, snapid_t s = CEPH_NOSNAP) :
-    client(c), poolid(pid), name(n), snap_seq(s), assert_ver(0),
+  IoCtxImpl(RadosClient *c, int pid, const char *pool_name_, snapid_t s = CEPH_NOSNAP) :
+    client(c), poolid(pid), pool_name(pool_name_), snap_seq(s), assert_ver(0),
     notify_timeout(g_conf.client_notify_timeout) {}
 
   void set_snap_read(snapid_t s) {
@@ -241,10 +241,10 @@ public:
   void shutdown();
 
   struct ListCtx {
-    PoolCtx *ctx;
+    IoCtxImpl *ctx;
     Objecter::ListContext *lc;
 
-    ListCtx(PoolCtx *c, Objecter::ListContext *l) : ctx(c), lc(l) {}
+    ListCtx(IoCtxImpl *c, Objecter::ListContext *l) : ctx(c), lc(l) {}
     ~ListCtx() {
       delete lc;
     }
@@ -264,45 +264,45 @@ public:
   }
 
   // snaps
-  int snap_list(PoolCtx *pool, vector<uint64_t> *snaps);
-  int snap_lookup(PoolCtx *pool, const char *name, uint64_t *snapid);
-  int snap_get_name(PoolCtx *pool, uint64_t snapid, std::string *s);
-  int snap_get_stamp(PoolCtx *pool, uint64_t snapid, time_t *t);
-  int snap_create(rados_pool_t pool, const char* snapname);
-  int selfmanaged_snap_create(rados_pool_t pool, uint64_t *snapid);
-  int snap_remove(rados_pool_t pool, const char* snapname);
-  int rollback(rados_pool_t pool_, const object_t& oid, const char *snapName);
-  int selfmanaged_snap_remove(rados_pool_t pool, uint64_t snapid);
-  int selfmanaged_snap_rollback_object(rados_pool_t pool, const object_t& oid,
+  int snap_list(IoCtxImpl *io, vector<uint64_t> *snaps);
+  int snap_lookup(IoCtxImpl *io, const char *name, uint64_t *snapid);
+  int snap_get_name(IoCtxImpl *io, uint64_t snapid, std::string *s);
+  int snap_get_stamp(IoCtxImpl *io, uint64_t snapid, time_t *t);
+  int snap_create(rados_ioctx_t io, const char* snapname);
+  int selfmanaged_snap_create(rados_ioctx_t io, uint64_t *snapid);
+  int snap_remove(rados_ioctx_t io, const char* snapname);
+  int rollback(rados_ioctx_t io_, const object_t& oid, const char *snapName);
+  int selfmanaged_snap_remove(rados_ioctx_t io, uint64_t snapid);
+  int selfmanaged_snap_rollback_object(rados_ioctx_t io, const object_t& oid,
                                        SnapContext& snapc, uint64_t snapid);
 
   // io
-  int create(PoolCtx& pool, const object_t& oid, bool exclusive);
-  int write(PoolCtx& pool, const object_t& oid, bufferlist& bl, size_t len, off_t off);
-  int write_full(PoolCtx& pool, const object_t& oid, bufferlist& bl);
-  int read(PoolCtx& pool, const object_t& oid, bufferlist& bl, size_t len, off_t off);
-  int mapext(PoolCtx& pool, const object_t& oid, off_t off, size_t len, std::map<off_t,size_t>& m);
-  int sparse_read(PoolCtx& pool, const object_t& oid, std::map<off_t,size_t>& m, bufferlist& bl,
+  int create(IoCtxImpl& io, const object_t& oid, bool exclusive);
+  int write(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len, off_t off);
+  int write_full(IoCtxImpl& io, const object_t& oid, bufferlist& bl);
+  int read(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len, off_t off);
+  int mapext(IoCtxImpl& io, const object_t& oid, off_t off, size_t len, std::map<off_t,size_t>& m);
+  int sparse_read(IoCtxImpl& io, const object_t& oid, std::map<off_t,size_t>& m, bufferlist& bl,
 		  size_t len, off_t off);
-  int remove(PoolCtx& pool, const object_t& oid);
-  int stat(PoolCtx& pool, const object_t& oid, uint64_t *psize, time_t *pmtime);
-  int trunc(PoolCtx& pool, const object_t& oid, size_t size);
+  int remove(IoCtxImpl& io, const object_t& oid);
+  int stat(IoCtxImpl& io, const object_t& oid, uint64_t *psize, time_t *pmtime);
+  int trunc(IoCtxImpl& io, const object_t& oid, size_t size);
 
-  int tmap_update(PoolCtx& pool, const object_t& oid, bufferlist& cmdbl);
-  int exec(PoolCtx& pool, const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
+  int tmap_update(IoCtxImpl& io, const object_t& oid, bufferlist& cmdbl);
+  int exec(IoCtxImpl& io, const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
 
-  int getxattr(PoolCtx& pool, const object_t& oid, const char *name, bufferlist& bl);
-  int setxattr(PoolCtx& pool, const object_t& oid, const char *name, bufferlist& bl);
-  int getxattrs(PoolCtx& pool, const object_t& oid, map<string, bufferlist>& attrset);
-  int rmxattr(PoolCtx& pool, const object_t& oid, const char *name);
+  int getxattr(IoCtxImpl& io, const object_t& oid, const char *name, bufferlist& bl);
+  int setxattr(IoCtxImpl& io, const object_t& oid, const char *name, bufferlist& bl);
+  int getxattrs(IoCtxImpl& io, const object_t& oid, map<string, bufferlist>& attrset);
+  int rmxattr(IoCtxImpl& io, const object_t& oid, const char *name);
 
   int pool_list(std::list<string>& ls);
   int get_pool_stats(std::list<string>& ls, map<string,pool_stat_t>& result);
   int get_fs_stats(ceph_statfs& result);
 
   int pool_create(string& name, unsigned long long auid=0, __u8 crush_rule=0);
-  int pool_delete(rados_pool_t pool);
-  int pool_change_auid(rados_pool_t pool, unsigned long long auid);
+  int pool_delete(const char *name);
+  int pool_change_auid(rados_ioctx_t io, unsigned long long auid);
 
   int list(Objecter::ListContext *context, int max_entries);
 
@@ -396,16 +396,16 @@ public:
     }
   };
 
-  int aio_read(PoolCtx& pool, const object_t oid, AioCompletionImpl *c,
+  int aio_read(IoCtxImpl& io, const object_t oid, AioCompletionImpl *c,
 			  bufferlist *pbl, size_t len, off_t off);
-  int aio_read(PoolCtx& pool, object_t oid, AioCompletionImpl *c,
+  int aio_read(IoCtxImpl& io, object_t oid, AioCompletionImpl *c,
 	       char *buf, size_t len, off_t off);
-  int aio_sparse_read(PoolCtx& pool, const object_t oid,
+  int aio_sparse_read(IoCtxImpl& io, const object_t oid,
 		    AioCompletionImpl *c, std::map<off_t,size_t> *m,
 		    bufferlist *data_bl, size_t len, off_t off);
-  int aio_write(PoolCtx& pool, const object_t &oid, AioCompletionImpl *c,
+  int aio_write(IoCtxImpl& io, const object_t &oid, AioCompletionImpl *c,
 		const bufferlist& bl, size_t len, off_t off);
-  int aio_write_full(PoolCtx& pool, const object_t &oid, AioCompletionImpl *c,
+  int aio_write_full(IoCtxImpl& io, const object_t &oid, AioCompletionImpl *c,
 		     const bufferlist& bl);
 
   static AioCompletionImpl *aio_create_completion() {
@@ -422,7 +422,7 @@ public:
 
   // watch/notify
   struct WatchContext {
-    PoolCtx pool_ctx;
+    IoCtxImpl io_ctx_impl;
     const object_t oid;
     uint64_t cookie;
     uint64_t ver;
@@ -430,14 +430,14 @@ public:
     ObjectOperation *op;
     uint64_t linger_id;
 
-    WatchContext(PoolCtx& _pc, const object_t& _oc, librados::WatchCtx *_ctx,
-                 ObjectOperation *_op) : pool_ctx(_pc), oid(_oc), ctx(_ctx), op(_op), linger_id(0) {}
+    WatchContext(IoCtxImpl& io_ctx_impl_, const object_t& _oc, librados::WatchCtx *_ctx,
+                 ObjectOperation *_op) : io_ctx_impl(io_ctx_impl_), oid(_oc), ctx(_ctx), op(_op), linger_id(0) {}
     ~WatchContext() {
     }
     void notify(RadosClient *client, MWatchNotify *m) {
       ctx->notify(m->opcode, m->ver);
       if (m->opcode != WATCH_NOTIFY_COMPLETE) {
-        client->_notify_ack(pool_ctx, oid, m->notify_id, m->ver);
+        client->_notify_ack(io_ctx_impl, oid, m->notify_id, m->ver);
       }
     }
   };
@@ -461,14 +461,14 @@ public:
   uint64_t max_watch_cookie;
   map<uint64_t, WatchContext *> watchers;
 
-  void set_sync_op_version(PoolCtx& pool, eversion_t& ver) {
-      pool.last_objver = ver;
+  void set_sync_op_version(IoCtxImpl& io, eversion_t& ver) {
+      io.last_objver = ver;
   }
 
-  void register_watcher(PoolCtx& pool, const object_t& oid, librados::WatchCtx *ctx,
+  void register_watcher(IoCtxImpl& io, const object_t& oid, librados::WatchCtx *ctx,
 			ObjectOperation *op, uint64_t *cookie, WatchContext **pwc = NULL) {
     assert(lock.is_locked());
-    WatchContext *wc = new WatchContext(pool, oid, ctx, op);
+    WatchContext *wc = new WatchContext(io, oid, ctx, op);
     *cookie = ++max_watch_cookie;
     watchers[*cookie] = wc;
     if (pwc)
@@ -489,20 +489,20 @@ public:
 
   void watch_notify(MWatchNotify *m);
 
-  int watch(PoolCtx& pool, const object_t& oid, uint64_t ver, uint64_t *cookie, librados::WatchCtx *ctx);
-  int unwatch(PoolCtx& pool, const object_t& oid, uint64_t cookie);
-  int notify(PoolCtx& pool, const object_t& oid, uint64_t ver);
-  int _notify_ack(PoolCtx& pool, const object_t& oid, uint64_t notify_id, uint64_t ver);
+  int watch(IoCtxImpl& io, const object_t& oid, uint64_t ver, uint64_t *cookie, librados::WatchCtx *ctx);
+  int unwatch(IoCtxImpl& io, const object_t& oid, uint64_t cookie);
+  int notify(IoCtxImpl& io, const object_t& oid, uint64_t ver);
+  int _notify_ack(IoCtxImpl& io, const object_t& oid, uint64_t notify_id, uint64_t ver);
 
-  eversion_t last_version(PoolCtx& pool) {
-    return pool.last_objver;
+  eversion_t last_version(IoCtxImpl& io) {
+    return io.last_objver;
   }
-  void set_assert_version(PoolCtx& pool, uint64_t ver) {
-    pool.assert_ver = ver;
+  void set_assert_version(IoCtxImpl& io, uint64_t ver) {
+    io.assert_ver = ver;
   }
 
-  void set_notify_timeout(PoolCtx& pool, uint32_t timeout) {
-    pool.notify_timeout = timeout;
+  void set_notify_timeout(IoCtxImpl& io, uint32_t timeout) {
+    io.notify_timeout = timeout;
   }
 };
 
@@ -696,10 +696,10 @@ int RadosClient::get_fs_stats(ceph_statfs& stats)
 
 // SNAPS
 
-int RadosClient::snap_create(rados_pool_t pool, const char *snapName)
+int RadosClient::snap_create(rados_ioctx_t io, const char *snapName)
 {
   int reply;
-  int poolID = ((PoolCtx *)pool)->poolid;
+  int poolID = ((IoCtxImpl *)io)->poolid;
   string sName(snapName);
 
   Mutex mylock ("RadosClient::snap_create::mylock");
@@ -717,10 +717,10 @@ int RadosClient::snap_create(rados_pool_t pool, const char *snapName)
   return reply;
 }
 
-int RadosClient::selfmanaged_snap_create(rados_pool_t pool, uint64_t *psnapid)
+int RadosClient::selfmanaged_snap_create(rados_ioctx_t io, uint64_t *psnapid)
 {
   int reply;
-  int poolID = ((PoolCtx *)pool)->poolid;
+  int poolID = ((IoCtxImpl *)io)->poolid;
 
   Mutex mylock("RadosClient::selfmanaged_snap_create::mylock");
   Cond cond;
@@ -739,10 +739,10 @@ int RadosClient::selfmanaged_snap_create(rados_pool_t pool, uint64_t *psnapid)
   return reply;
 }
 
-int RadosClient::snap_remove(rados_pool_t pool, const char *snapName)
+int RadosClient::snap_remove(rados_ioctx_t io, const char *snapName)
 {
   int reply;
-  int poolID = ((PoolCtx *)pool)->poolid;
+  int poolID = ((IoCtxImpl *)io)->poolid;
   string sName(snapName);
 
   Mutex mylock ("RadosClient::snap_remove::mylock");
@@ -760,12 +760,12 @@ int RadosClient::snap_remove(rados_pool_t pool, const char *snapName)
   return reply;
 }
 
-int RadosClient::selfmanaged_snap_rollback_object(rados_pool_t pool,
+int RadosClient::selfmanaged_snap_rollback_object(rados_ioctx_t io,
 				      const object_t& oid, SnapContext& snapc,
                                       uint64_t snapid)
 {
   int reply;
-  PoolCtx* ctx = (PoolCtx *) pool;
+  IoCtxImpl* ctx = (IoCtxImpl *) io;
 
   object_locator_t oloc(ctx->poolid);
 
@@ -785,15 +785,15 @@ int RadosClient::selfmanaged_snap_rollback_object(rados_pool_t pool,
   return reply;
 }
 
-int RadosClient::rollback(rados_pool_t pool_, const object_t& oid,
+int RadosClient::rollback(rados_ioctx_t io_, const object_t& oid,
 			  const char *snapName)
 {
-  PoolCtx* pool = (PoolCtx *) pool_;
+  IoCtxImpl* io = (IoCtxImpl *) io_;
   string sName(snapName);
 
   snapid_t snap;
   const map<int, pg_pool_t>& pools = objecter->osdmap->get_pools();
-  const pg_pool_t& pg_pool = pools.find(pool->poolid)->second;
+  const pg_pool_t& pg_pool = pools.find(io->poolid)->second;
   map<snapid_t, pool_snap_info_t>::const_iterator p;
   for (p = pg_pool.snaps.begin();
        p != pg_pool.snaps.end();
@@ -805,13 +805,13 @@ int RadosClient::rollback(rados_pool_t pool_, const object_t& oid,
   }
   if (p == pg_pool.snaps.end()) return -ENOENT;
 
-  return selfmanaged_snap_rollback_object(pool_, oid, pool->snapc, snap);
+  return selfmanaged_snap_rollback_object(io_, oid, io->snapc, snap);
 }
 
-int RadosClient::selfmanaged_snap_remove(rados_pool_t pool, uint64_t snapid)
+int RadosClient::selfmanaged_snap_remove(rados_ioctx_t io, uint64_t snapid)
 {
   int reply;
-  int poolID = ((PoolCtx *)pool)->poolid;
+  int poolID = ((IoCtxImpl *)io)->poolid;
 
   Mutex mylock("RadosClient::selfmanaged_snap_remove::mylock");
   Cond cond;
@@ -848,17 +848,18 @@ int RadosClient::pool_create(string& name, unsigned long long auid,
   return reply;
 }
 
-int RadosClient::pool_delete(rados_pool_t pool)
+int RadosClient::pool_delete(const char *name)
 {
-  int reply;
-
-  int poolID = ((PoolCtx *)pool)->poolid;
+  int tmp_pool_id = osdmap.lookup_pg_pool_name(name);
+  if (tmp_pool_id < 0)
+    return -ENOENT;
 
   Mutex mylock("RadosClient::pool_delete::mylock");
   Cond cond;
   bool done;
   lock.Lock();
-  objecter->delete_pool(poolID, new C_SafeCond(&mylock, &cond, &done, &reply));
+  int reply = 0;
+  objecter->delete_pool(tmp_pool_id, new C_SafeCond(&mylock, &cond, &done, &reply));
   lock.Unlock();
 
   mylock.Lock();
@@ -868,17 +869,17 @@ int RadosClient::pool_delete(rados_pool_t pool)
 }
 
 /**
- * Attempt to change a pool's associated auid "owner." Requires that you
+ * Attempt to change a io's associated auid "owner." Requires that you
  * have write permission on both the current and new auid.
- * pool: reference to the pool to change.
- * auid: the auid you wish the pool to have.
+ * io: reference to the io to change.
+ * auid: the auid you wish the io to have.
  * Returns: 0 on success, or -ERROR# on failure.
  */
-int RadosClient::pool_change_auid(rados_pool_t pool, unsigned long long auid)
+int RadosClient::pool_change_auid(rados_ioctx_t io, unsigned long long auid)
 {
   int reply;
 
-  int poolID = ((PoolCtx *)pool)->poolid;
+  int poolID = ((IoCtxImpl *)io)->poolid;
 
   Mutex mylock("RadosClient::pool_change_auid::mylock");
   Cond cond;
@@ -895,10 +896,10 @@ int RadosClient::pool_change_auid(rados_pool_t pool, unsigned long long auid)
   return reply;
 }
 
-int RadosClient::snap_list(PoolCtx *pool, vector<uint64_t> *snaps)
+int RadosClient::snap_list(IoCtxImpl *io, vector<uint64_t> *snaps)
 {
   Mutex::Locker l(lock);
-  const pg_pool_t *pi = objecter->osdmap->get_pg_pool(pool->poolid);
+  const pg_pool_t *pi = objecter->osdmap->get_pg_pool(io->poolid);
   for (map<snapid_t,pool_snap_info_t>::const_iterator p = pi->snaps.begin();
        p != pi->snaps.end();
        p++)
@@ -906,10 +907,10 @@ int RadosClient::snap_list(PoolCtx *pool, vector<uint64_t> *snaps)
   return 0;
 }
 
-int RadosClient::snap_lookup(PoolCtx *pool, const char *name, uint64_t *snapid)
+int RadosClient::snap_lookup(IoCtxImpl *io, const char *name, uint64_t *snapid)
 {
   Mutex::Locker l(lock);
-  const pg_pool_t *pi = objecter->osdmap->get_pg_pool(pool->poolid);
+  const pg_pool_t *pi = objecter->osdmap->get_pg_pool(io->poolid);
   for (map<snapid_t,pool_snap_info_t>::const_iterator p = pi->snaps.begin();
        p != pi->snaps.end();
        p++) {
@@ -921,10 +922,10 @@ int RadosClient::snap_lookup(PoolCtx *pool, const char *name, uint64_t *snapid)
   return -ENOENT;
 }
 
-int RadosClient::snap_get_name(PoolCtx *pool, uint64_t snapid, std::string *s)
+int RadosClient::snap_get_name(IoCtxImpl *io, uint64_t snapid, std::string *s)
 {
   Mutex::Locker l(lock);
-  const pg_pool_t *pi = objecter->osdmap->get_pg_pool(pool->poolid);
+  const pg_pool_t *pi = objecter->osdmap->get_pg_pool(io->poolid);
   map<snapid_t,pool_snap_info_t>::const_iterator p = pi->snaps.find(snapid);
   if (p == pi->snaps.end())
     return -ENOENT;
@@ -932,10 +933,10 @@ int RadosClient::snap_get_name(PoolCtx *pool, uint64_t snapid, std::string *s)
   return 0;
 }
 
-int RadosClient::snap_get_stamp(PoolCtx *pool, uint64_t snapid, time_t *t)
+int RadosClient::snap_get_stamp(IoCtxImpl *io, uint64_t snapid, time_t *t)
 {
   Mutex::Locker l(lock);
-  const pg_pool_t *pi = objecter->osdmap->get_pg_pool(pool->poolid);
+  const pg_pool_t *pi = objecter->osdmap->get_pg_pool(io->poolid);
   map<snapid_t,pool_snap_info_t>::const_iterator p = pi->snaps.find(snapid);
   if (p == pi->snaps.end())
     return -ENOENT;
@@ -971,12 +972,12 @@ int RadosClient::list(Objecter::ListContext *context, int max_entries)
   return r;
 }
 
-int RadosClient::create(PoolCtx& pool, const object_t& oid, bool exclusive)
+int RadosClient::create(IoCtxImpl& io, const object_t& oid, bool exclusive)
 {
   utime_t ut = g_clock.now();
 
   /* can't write to a snapshot */
-  if (pool.snap_seq != CEPH_NOSNAP)
+  if (io.snap_seq != CEPH_NOSNAP)
     return -EINVAL;
 
   Mutex mylock("RadosClient::create::mylock");
@@ -988,9 +989,9 @@ int RadosClient::create(PoolCtx& pool, const object_t& oid, bool exclusive)
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   objecter->create(oid, oloc,
-		  pool.snapc, ut, 0, (exclusive ? CEPH_OSD_OP_FLAG_EXCL : 0),
+		  io.snapc, ut, 0, (exclusive ? CEPH_OSD_OP_FLAG_EXCL : 0),
 		  onack, NULL, &ver);
   lock.Unlock();
 
@@ -999,18 +1000,18 @@ int RadosClient::create(PoolCtx& pool, const object_t& oid, bool exclusive)
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(pool, ver);
+  set_sync_op_version(io, ver);
 
   return r;
 }
 
-int RadosClient::write(PoolCtx& pool, const object_t& oid,
+int RadosClient::write(IoCtxImpl& io, const object_t& oid,
 		       bufferlist& bl, size_t len, off_t off)
 {
   utime_t ut = g_clock.now();
 
   /* can't write to a snapshot */
-  if (pool.snap_seq != CEPH_NOSNAP)
+  if (io.snap_seq != CEPH_NOSNAP)
     return -EINVAL;
 
   Mutex mylock("RadosClient::write::mylock");
@@ -1022,16 +1023,16 @@ int RadosClient::write(PoolCtx& pool, const object_t& oid,
   eversion_t ver;
 
   ObjectOperation op, *pop = NULL;
-  if (pool.assert_ver) {
-    op.assert_version(pool.assert_ver);
-    pool.assert_ver = 0;
+  if (io.assert_ver) {
+    op.assert_version(io.assert_ver);
+    io.assert_ver = 0;
     pop = &op;
   }
 
   lock.Lock();
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   objecter->write(oid, oloc,
-		  off, len, pool.snapc, bl, ut, 0,
+		  off, len, io.snapc, bl, ut, 0,
 		  onack, NULL, &ver, pop);
   lock.Unlock();
 
@@ -1040,7 +1041,7 @@ int RadosClient::write(PoolCtx& pool, const object_t& oid,
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(pool, ver);
+  set_sync_op_version(io, ver);
 
   if (r < 0)
     return r;
@@ -1048,12 +1049,12 @@ int RadosClient::write(PoolCtx& pool, const object_t& oid,
   return len;
 }
 
-int RadosClient::write_full(PoolCtx& pool, const object_t& oid, bufferlist& bl)
+int RadosClient::write_full(IoCtxImpl& io, const object_t& oid, bufferlist& bl)
 {
   utime_t ut = g_clock.now();
 
   /* can't write to a snapshot */
-  if (pool.snap_seq != CEPH_NOSNAP)
+  if (io.snap_seq != CEPH_NOSNAP)
     return -EINVAL;
 
   Mutex mylock("RadosClient::write_full::mylock");
@@ -1065,16 +1066,16 @@ int RadosClient::write_full(PoolCtx& pool, const object_t& oid, bufferlist& bl)
 
   eversion_t ver;
   ObjectOperation op, *pop = NULL;
-  if (pool.assert_ver) {
-    op.assert_version(pool.assert_ver);
-    pool.assert_ver = 0;
+  if (io.assert_ver) {
+    op.assert_version(io.assert_ver);
+    io.assert_ver = 0;
     pop = &op;
   }
 
   lock.Lock();
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   objecter->write_full(oid, oloc,
-		  pool.snapc, bl, ut, 0,
+		  io.snapc, bl, ut, 0,
 		  onack, NULL, &ver, pop);
   lock.Unlock();
 
@@ -1083,12 +1084,12 @@ int RadosClient::write_full(PoolCtx& pool, const object_t& oid, bufferlist& bl)
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(pool, ver);
+  set_sync_op_version(io, ver);
 
   return r;
 }
 
-int RadosClient::aio_read(PoolCtx& pool, const object_t oid, AioCompletionImpl *c,
+int RadosClient::aio_read(IoCtxImpl& io, const object_t oid, AioCompletionImpl *c,
 			  bufferlist *pbl, size_t len, off_t off)
 {
 
@@ -1098,14 +1099,14 @@ int RadosClient::aio_read(PoolCtx& pool, const object_t oid, AioCompletionImpl *
   c->pbl = pbl;
 
   Mutex::Locker l(lock);
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   objecter->read(oid, oloc,
-		 off, len, pool.snap_seq, &c->bl, 0,
+		 off, len, io.snap_seq, &c->bl, 0,
 		 onack, &c->objver);
   return 0;
 }
 
-int RadosClient::aio_read(PoolCtx& pool, const object_t oid, AioCompletionImpl *c,
+int RadosClient::aio_read(IoCtxImpl& io, const object_t oid, AioCompletionImpl *c,
 			  char *buf, size_t len, off_t off)
 {
   Context *onack = new C_aio_Ack(c);
@@ -1114,15 +1115,15 @@ int RadosClient::aio_read(PoolCtx& pool, const object_t oid, AioCompletionImpl *
   c->maxlen = len;
 
   Mutex::Locker l(lock);
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   objecter->read(oid, oloc,
-		 off, len, pool.snap_seq, &c->bl, 0,
+		 off, len, io.snap_seq, &c->bl, 0,
 		 onack, &c->objver);
 
   return 0;
 }
 
-int RadosClient::aio_sparse_read(PoolCtx& pool, const object_t oid,
+int RadosClient::aio_sparse_read(IoCtxImpl& io, const object_t oid,
 			  AioCompletionImpl *c, std::map<off_t,size_t> *m,
 			  bufferlist *data_bl, size_t len, off_t off)
 {
@@ -1135,14 +1136,14 @@ int RadosClient::aio_sparse_read(PoolCtx& pool, const object_t oid,
   c->pbl = NULL;
 
   Mutex::Locker l(lock);
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   objecter->sparse_read(oid, oloc,
-		 off, len, pool.snap_seq, &c->bl, 0,
+		 off, len, io.snap_seq, &c->bl, 0,
 		 onack);
   return 0;
 }
 
-int RadosClient::aio_write(PoolCtx& pool, const object_t &oid, AioCompletionImpl *c,
+int RadosClient::aio_write(IoCtxImpl& io, const object_t &oid, AioCompletionImpl *c,
 			   const bufferlist& bl, size_t len, off_t off)
 {
   SnapContext snapc;
@@ -1152,15 +1153,15 @@ int RadosClient::aio_write(PoolCtx& pool, const object_t &oid, AioCompletionImpl
   Context *onsafe = new C_aio_Safe(c);
 
   Mutex::Locker l(lock);
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   objecter->write(oid, oloc,
-		  off, len, pool.snapc, bl, ut, 0,
+		  off, len, io.snapc, bl, ut, 0,
 		  onack, onsafe, &c->objver);
 
   return 0;
 }
 
-int RadosClient::aio_write_full(PoolCtx& pool, const object_t &oid,
+int RadosClient::aio_write_full(IoCtxImpl& io, const object_t &oid,
 		AioCompletionImpl *c, const bufferlist& bl)
 {
   SnapContext snapc;
@@ -1170,15 +1171,15 @@ int RadosClient::aio_write_full(PoolCtx& pool, const object_t &oid,
   Context *onsafe = new C_aio_Safe(c);
 
   Mutex::Locker l(lock);
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   objecter->write_full(oid, oloc,
-		  pool.snapc, bl, ut, 0,
+		  io.snapc, bl, ut, 0,
 		  onack, onsafe, &c->objver);
 
   return 0;
 }
 
-int RadosClient::remove(PoolCtx& pool, const object_t& oid)
+int RadosClient::remove(IoCtxImpl& io, const object_t& oid)
 {
   SnapContext snapc;
   utime_t ut = g_clock.now();
@@ -1191,14 +1192,14 @@ int RadosClient::remove(PoolCtx& pool, const object_t& oid)
   eversion_t ver;
 
   ObjectOperation op, *pop = NULL;
-  if (pool.assert_ver) {
-    op.assert_version(pool.assert_ver);
-    pool.assert_ver = 0;
+  if (io.assert_ver) {
+    op.assert_version(io.assert_ver);
+    io.assert_ver = 0;
     pop = &op;
   }
 
   lock.Lock();
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   objecter->remove(oid, oloc,
 		  snapc, ut, 0,
 		  onack, NULL, &ver, pop);
@@ -1209,17 +1210,17 @@ int RadosClient::remove(PoolCtx& pool, const object_t& oid)
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(pool, ver);
+  set_sync_op_version(io, ver);
 
   return r;
 }
 
-int RadosClient::trunc(PoolCtx& pool, const object_t& oid, size_t size)
+int RadosClient::trunc(IoCtxImpl& io, const object_t& oid, size_t size)
 {
   utime_t ut = g_clock.now();
 
   /* can't write to a snapshot */
-  if (pool.snap_seq != CEPH_NOSNAP)
+  if (io.snap_seq != CEPH_NOSNAP)
     return -EINVAL;
 
   Mutex mylock("RadosClient::write_full::mylock");
@@ -1231,16 +1232,16 @@ int RadosClient::trunc(PoolCtx& pool, const object_t& oid, size_t size)
   eversion_t ver;
 
   ObjectOperation op, *pop = NULL;
-  if (pool.assert_ver) {
-    op.assert_version(pool.assert_ver);
-    pool.assert_ver = 0;
+  if (io.assert_ver) {
+    op.assert_version(io.assert_ver);
+    io.assert_ver = 0;
     pop = &op;
   }
 
   lock.Lock();
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   objecter->trunc(oid, oloc,
-		  pool.snapc, ut, 0,
+		  io.snapc, ut, 0,
 		  size, 0,
 		  onack, NULL, &ver, pop);
   lock.Unlock();
@@ -1250,12 +1251,12 @@ int RadosClient::trunc(PoolCtx& pool, const object_t& oid, size_t size)
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(pool, ver);
+  set_sync_op_version(io, ver);
 
   return r;
 }
 
-int RadosClient::tmap_update(PoolCtx& pool, const object_t& oid, bufferlist& cmdbl)
+int RadosClient::tmap_update(IoCtxImpl& io, const object_t& oid, bufferlist& cmdbl)
 {
   utime_t ut = g_clock.now();
 
@@ -1270,11 +1271,11 @@ int RadosClient::tmap_update(PoolCtx& pool, const object_t& oid, bufferlist& cmd
 
   lock.Lock();
   SnapContext snapc;
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   ObjectOperation wr;
-  if (pool.assert_ver) {
-    wr.assert_version(pool.assert_ver);
-    pool.assert_ver = 0;
+  if (io.assert_ver) {
+    wr.assert_version(io.assert_ver);
+    io.assert_ver = 0;
   }
   wr.tmap_update(cmdbl);
   objecter->mutate(oid, oloc, wr, snapc, ut, 0, onack, NULL, &ver);
@@ -1285,13 +1286,13 @@ int RadosClient::tmap_update(PoolCtx& pool, const object_t& oid, bufferlist& cmd
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(pool, ver);
+  set_sync_op_version(io, ver);
 
   return r;
 }
 
 
-int RadosClient::exec(PoolCtx& pool, const object_t& oid, const char *cls, const char *method,
+int RadosClient::exec(IoCtxImpl& io, const object_t& oid, const char *cls, const char *method,
 		      bufferlist& inbl, bufferlist& outbl)
 {
   utime_t ut = g_clock.now();
@@ -1305,14 +1306,14 @@ int RadosClient::exec(PoolCtx& pool, const object_t& oid, const char *cls, const
 
 
   lock.Lock();
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   ObjectOperation rd;
-  if (pool.assert_ver) {
-    rd.assert_version(pool.assert_ver);
-    pool.assert_ver = 0;
+  if (io.assert_ver) {
+    rd.assert_version(io.assert_ver);
+    io.assert_ver = 0;
   }
   rd.call(cls, method, inbl);
-  objecter->read(oid, oloc, rd, pool.snap_seq, &outbl, 0, onack, &ver);
+  objecter->read(oid, oloc, rd, io.snap_seq, &outbl, 0, onack, &ver);
   lock.Unlock();
 
   mylock.Lock();
@@ -1320,12 +1321,12 @@ int RadosClient::exec(PoolCtx& pool, const object_t& oid, const char *cls, const
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(pool, ver);
+  set_sync_op_version(io, ver);
 
   return r;
 }
 
-int RadosClient::read(PoolCtx& pool, const object_t& oid,
+int RadosClient::read(IoCtxImpl& io, const object_t& oid,
 		      bufferlist& bl, size_t len, off_t off)
 {
   SnapContext snapc;
@@ -1338,15 +1339,15 @@ int RadosClient::read(PoolCtx& pool, const object_t& oid,
   eversion_t ver;
 
   ObjectOperation op, *pop = NULL;
-  if (pool.assert_ver) {
-    op.assert_version(pool.assert_ver);
-    pool.assert_ver = 0;
+  if (io.assert_ver) {
+    op.assert_version(io.assert_ver);
+    io.assert_ver = 0;
     pop = &op;
   }
   lock.Lock();
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   objecter->read(oid, oloc,
-	      off, len, pool.snap_seq, &bl, 0,
+	      off, len, io.snap_seq, &bl, 0,
               onack, &ver, pop);
   lock.Unlock();
 
@@ -1356,7 +1357,7 @@ int RadosClient::read(PoolCtx& pool, const object_t& oid,
   mylock.Unlock();
   dout(10) << "Objecter returned from read r=" << r << dendl;
 
-  set_sync_op_version(pool, ver);
+  set_sync_op_version(io, ver);
 
   if (r < 0)
     return r;
@@ -1369,7 +1370,7 @@ int RadosClient::read(PoolCtx& pool, const object_t& oid,
   return bl.length();
 }
 
-int RadosClient::mapext(PoolCtx& pool, const object_t& oid, off_t off, size_t len, std::map<off_t,size_t>& m)
+int RadosClient::mapext(IoCtxImpl& io, const object_t& oid, off_t off, size_t len, std::map<off_t,size_t>& m)
 {
   SnapContext snapc;
   bufferlist bl;
@@ -1381,9 +1382,9 @@ int RadosClient::mapext(PoolCtx& pool, const object_t& oid, off_t off, size_t le
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   objecter->mapext(oid, oloc,
-	      off, len, pool.snap_seq, &bl, 0,
+	      off, len, io.snap_seq, &bl, 0,
               onack);
   lock.Unlock();
 
@@ -1402,7 +1403,7 @@ int RadosClient::mapext(PoolCtx& pool, const object_t& oid, off_t off, size_t le
   return m.size();
 }
 
-int RadosClient::sparse_read(PoolCtx& pool, const object_t& oid,
+int RadosClient::sparse_read(IoCtxImpl& io, const object_t& oid,
 	  std::map<off_t,size_t>& m, bufferlist& data_bl, size_t len, off_t off)
 {
   SnapContext snapc;
@@ -1415,9 +1416,9 @@ int RadosClient::sparse_read(PoolCtx& pool, const object_t& oid,
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   objecter->sparse_read(oid, oloc,
-	      off, len, pool.snap_seq, &bl, 0,
+	      off, len, io.snap_seq, &bl, 0,
               onack);
   lock.Unlock();
 
@@ -1437,7 +1438,7 @@ int RadosClient::sparse_read(PoolCtx& pool, const object_t& oid,
   return m.size();
 }
 
-int RadosClient::stat(PoolCtx& pool, const object_t& oid, uint64_t *psize, time_t *pmtime)
+int RadosClient::stat(IoCtxImpl& io, const object_t& oid, uint64_t *psize, time_t *pmtime)
 {
   SnapContext snapc;
 
@@ -1454,15 +1455,15 @@ int RadosClient::stat(PoolCtx& pool, const object_t& oid, uint64_t *psize, time_
     psize = &size;
 
   ObjectOperation op, *pop = NULL;
-  if (pool.assert_ver) {
-    op.assert_version(pool.assert_ver);
-    pool.assert_ver = 0;
+  if (io.assert_ver) {
+    op.assert_version(io.assert_ver);
+    io.assert_ver = 0;
     pop = &op;
   }
   lock.Lock();
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   objecter->stat(oid, oloc,
-	      pool.snap_seq, psize, &mtime, 0,
+	      io.snap_seq, psize, &mtime, 0,
               onack, &ver, pop);
   lock.Unlock();
 
@@ -1476,12 +1477,12 @@ int RadosClient::stat(PoolCtx& pool, const object_t& oid, uint64_t *psize, time_
     *pmtime = mtime.sec();
   }
 
-  set_sync_op_version(pool, ver);
+  set_sync_op_version(io, ver);
 
   return r;
 }
 
-int RadosClient::getxattr(PoolCtx& pool, const object_t& oid, const char *name, bufferlist& bl)
+int RadosClient::getxattr(IoCtxImpl& io, const object_t& oid, const char *name, bufferlist& bl)
 {
   SnapContext snapc;
 
@@ -1493,15 +1494,15 @@ int RadosClient::getxattr(PoolCtx& pool, const object_t& oid, const char *name, 
   eversion_t ver;
 
   ObjectOperation op, *pop = NULL;
-  if (pool.assert_ver) {
-    op.assert_version(pool.assert_ver);
-    pool.assert_ver = 0;
+  if (io.assert_ver) {
+    op.assert_version(io.assert_ver);
+    io.assert_ver = 0;
     pop = &op;
   }
   lock.Lock();
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   objecter->getxattr(oid, oloc,
-	      name, pool.snap_seq, &bl, 0,
+	      name, io.snap_seq, &bl, 0,
               onack, &ver, pop);
   lock.Unlock();
 
@@ -1511,7 +1512,7 @@ int RadosClient::getxattr(PoolCtx& pool, const object_t& oid, const char *name, 
   mylock.Unlock();
   dout(10) << "Objecter returned from getxattr" << dendl;
 
-  set_sync_op_version(pool, ver);
+  set_sync_op_version(io, ver);
 
   if (r < 0)
     return r;
@@ -1519,12 +1520,12 @@ int RadosClient::getxattr(PoolCtx& pool, const object_t& oid, const char *name, 
   return bl.length();
 }
 
-int RadosClient::rmxattr(PoolCtx& pool, const object_t& oid, const char *name)
+int RadosClient::rmxattr(IoCtxImpl& io, const object_t& oid, const char *name)
 {
   utime_t ut = g_clock.now();
 
   /* can't write to a snapshot */
-  if (pool.snap_seq != CEPH_NOSNAP)
+  if (io.snap_seq != CEPH_NOSNAP)
     return -EINVAL;
 
   Mutex mylock("RadosClient::rmxattr::mylock");
@@ -1535,17 +1536,17 @@ int RadosClient::rmxattr(PoolCtx& pool, const object_t& oid, const char *name)
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
 
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
 
   ObjectOperation op, *pop = NULL;
-  if (pool.assert_ver) {
-    op.assert_version(pool.assert_ver);
-    pool.assert_ver = 0;
+  if (io.assert_ver) {
+    op.assert_version(io.assert_ver);
+    io.assert_ver = 0;
     pop = &op;
   }
   lock.Lock();
   objecter->removexattr(oid, oloc, name,
-		  pool.snapc, ut, 0,
+		  io.snapc, ut, 0,
 		  onack, NULL, &ver, pop);
   lock.Unlock();
 
@@ -1554,7 +1555,7 @@ int RadosClient::rmxattr(PoolCtx& pool, const object_t& oid, const char *name)
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(pool, ver);
+  set_sync_op_version(io, ver);
 
   if (r < 0)
     return r;
@@ -1562,12 +1563,12 @@ int RadosClient::rmxattr(PoolCtx& pool, const object_t& oid, const char *name)
   return 0;
 }
 
-int RadosClient::setxattr(PoolCtx& pool, const object_t& oid, const char *name, bufferlist& bl)
+int RadosClient::setxattr(IoCtxImpl& io, const object_t& oid, const char *name, bufferlist& bl)
 {
   utime_t ut = g_clock.now();
 
   /* can't write to a snapshot */
-  if (pool.snap_seq != CEPH_NOSNAP)
+  if (io.snap_seq != CEPH_NOSNAP)
     return -EINVAL;
 
   Mutex mylock("RadosClient::setxattr::mylock");
@@ -1579,15 +1580,15 @@ int RadosClient::setxattr(PoolCtx& pool, const object_t& oid, const char *name, 
   eversion_t ver;
 
   ObjectOperation op, *pop = NULL;
-  if (pool.assert_ver) {
-    op.assert_version(pool.assert_ver);
-    pool.assert_ver = 0;
+  if (io.assert_ver) {
+    op.assert_version(io.assert_ver);
+    io.assert_ver = 0;
     pop = &op;
   }
   lock.Lock();
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   objecter->setxattr(oid, oloc, name,
-		  pool.snapc, bl, ut, 0,
+		  io.snapc, bl, ut, 0,
 		  onack, NULL, &ver, pop);
   lock.Unlock();
 
@@ -1596,7 +1597,7 @@ int RadosClient::setxattr(PoolCtx& pool, const object_t& oid, const char *name, 
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(pool, ver);
+  set_sync_op_version(io, ver);
 
   if (r < 0)
     return r;
@@ -1604,12 +1605,12 @@ int RadosClient::setxattr(PoolCtx& pool, const object_t& oid, const char *name, 
   return bl.length();
 }
 
-int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<std::string, bufferlist>& attrset)
+int RadosClient::getxattrs(IoCtxImpl& io, const object_t& oid, map<std::string, bufferlist>& attrset)
 {
   utime_t ut = g_clock.now();
 
   /* can't write to a snapshot */
-  if (pool.snap_seq != CEPH_NOSNAP)
+  if (io.snap_seq != CEPH_NOSNAP)
     return -EINVAL;
 
   Mutex mylock("RadosClient::getexattrs::mylock");
@@ -1619,17 +1620,17 @@ int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<std::string, 
   eversion_t ver;
 
   ObjectOperation op, *pop = NULL;
-  if (pool.assert_ver) {
-    op.assert_version(pool.assert_ver);
-    pool.assert_ver = 0;
+  if (io.assert_ver) {
+    op.assert_version(io.assert_ver);
+    io.assert_ver = 0;
     pop = &op;
   }
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   map<string, bufferlist> aset;
-  objecter->getxattrs(oid, oloc, pool.snap_seq,
+  objecter->getxattrs(oid, oloc, io.snap_seq,
 		      aset,
 		      0, onack, &ver, pop);
   lock.Unlock();
@@ -1647,7 +1648,7 @@ int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<std::string, 
     attrset[p->first.c_str()] = p->second;
   }
 
-  set_sync_op_version(pool, ver);
+  set_sync_op_version(io, ver);
 
   return r;
 }
@@ -1666,7 +1667,7 @@ void RadosClient::watch_notify(MWatchNotify *m)
   wc->notify(this, m);
 }
 
-int RadosClient::watch(PoolCtx& pool, const object_t& oid, uint64_t ver,
+int RadosClient::watch(IoCtxImpl& io, const object_t& oid, uint64_t ver,
 		       uint64_t *cookie, librados::WatchCtx *ctx)
 {
   utime_t ut = g_clock.now();
@@ -1685,17 +1686,17 @@ int RadosClient::watch(PoolCtx& pool, const object_t& oid, uint64_t ver,
   lock.Lock();
 
   WatchContext *wc;
-  register_watcher(pool, oid, ctx, rd, cookie, &wc);
+  register_watcher(io, oid, ctx, rd, cookie, &wc);
 
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
 
-  if (pool.assert_ver) {
-    rd->assert_version(pool.assert_ver);
-    pool.assert_ver = 0;
+  if (io.assert_ver) {
+    rd->assert_version(io.assert_ver);
+    io.assert_ver = 0;
   }
   rd->watch(*cookie, ver, 1);
   bufferlist bl;
-  wc->linger_id = objecter->linger(oid, oloc, *rd, pool.snap_seq, bl, NULL, 0, onack, NULL, &objver);
+  wc->linger_id = objecter->linger(oid, oloc, *rd, io.snap_seq, bl, NULL, 0, onack, NULL, &objver);
   lock.Unlock();
 
   mylock.Lock();
@@ -1703,7 +1704,7 @@ int RadosClient::watch(PoolCtx& pool, const object_t& oid, uint64_t ver,
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(pool, objver);
+  set_sync_op_version(io, objver);
 
   if (r < 0) {
     lock.Lock();
@@ -1716,7 +1717,7 @@ int RadosClient::watch(PoolCtx& pool, const object_t& oid, uint64_t ver,
 
 
 /* this is called with RadosClient::lock held */
-int RadosClient::_notify_ack(PoolCtx& pool, const object_t& oid, uint64_t notify_id, uint64_t ver)
+int RadosClient::_notify_ack(IoCtxImpl& io, const object_t& oid, uint64_t notify_id, uint64_t ver)
 {
   utime_t ut = g_clock.now();
 
@@ -1724,19 +1725,19 @@ int RadosClient::_notify_ack(PoolCtx& pool, const object_t& oid, uint64_t notify
   Cond cond;
   eversion_t objver;
 
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   ObjectOperation rd;
-  if (pool.assert_ver) {
-    rd.assert_version(pool.assert_ver);
-    pool.assert_ver = 0;
+  if (io.assert_ver) {
+    rd.assert_version(io.assert_ver);
+    io.assert_ver = 0;
   }
   rd.notify_ack(notify_id, ver);
-  objecter->read(oid, oloc, rd, pool.snap_seq, NULL, 0, 0, 0);
+  objecter->read(oid, oloc, rd, io.snap_seq, NULL, 0, 0, 0);
 
   return 0;
 }
 
-int RadosClient::unwatch(PoolCtx& pool, const object_t& oid, uint64_t cookie)
+int RadosClient::unwatch(IoCtxImpl& io, const object_t& oid, uint64_t cookie)
 {
   utime_t ut = g_clock.now();
   bufferlist inbl, outbl;
@@ -1751,14 +1752,14 @@ int RadosClient::unwatch(PoolCtx& pool, const object_t& oid, uint64_t cookie)
 
   unregister_watcher(cookie);
 
-  object_locator_t oloc(pool.poolid);
+  object_locator_t oloc(io.poolid);
   ObjectOperation rd;
-  if (pool.assert_ver) {
-    rd.assert_version(pool.assert_ver);
-    pool.assert_ver = 0;
+  if (io.assert_ver) {
+    rd.assert_version(io.assert_ver);
+    io.assert_ver = 0;
   }
   rd.watch(cookie, 0, 0);
-  objecter->read(oid, oloc, rd, pool.snap_seq, &outbl, 0, onack, &ver);
+  objecter->read(oid, oloc, rd, io.snap_seq, &outbl, 0, onack, &ver);
   lock.Unlock();
 
   mylock.Lock();
@@ -1766,12 +1767,12 @@ int RadosClient::unwatch(PoolCtx& pool, const object_t& oid, uint64_t cookie)
     cond.Wait(mylock);
   mylock.Unlock();
 
-  set_sync_op_version(pool, ver);
+  set_sync_op_version(io, ver);
 
   return r;
 }// ---------------------------------------------
 
-int RadosClient::notify(PoolCtx& pool, const object_t& oid, uint64_t ver)
+int RadosClient::notify(IoCtxImpl& io, const object_t& oid, uint64_t ver)
 {
   utime_t ut = g_clock.now();
   bufferlist inbl, outbl;
@@ -1787,19 +1788,19 @@ int RadosClient::notify(PoolCtx& pool, const object_t& oid, uint64_t ver)
   C_NotifyComplete *ctx = new C_NotifyComplete(&mylock_all, &cond_all, &done_all);
   ObjectOperation rd;
 
-  object_locator_t oloc(pool.poolid);
-  if (pool.assert_ver) {
-    rd.assert_version(pool.assert_ver);
-    pool.assert_ver = 0;
+  object_locator_t oloc(io.poolid);
+  if (io.assert_ver) {
+    rd.assert_version(io.assert_ver);
+    io.assert_ver = 0;
   }
   lock.Lock();
-  register_watcher(pool, oid, ctx, &rd, &cookie);
+  register_watcher(io, oid, ctx, &rd, &cookie);
   uint32_t prot_ver = 1;
-  uint32_t timeout = pool.notify_timeout;
+  uint32_t timeout = io.notify_timeout;
   ::encode(prot_ver, inbl);
   ::encode(timeout, inbl);
   rd.notify(cookie, ver, inbl);
-  objecter->read(oid, oloc, rd, pool.snap_seq, &outbl, 0, onack, &objver);
+  objecter->read(oid, oloc, rd, io.snap_seq, &outbl, 0, onack, &objver);
   lock.Unlock();
 
   mylock_all.Lock();
@@ -1816,7 +1817,7 @@ int RadosClient::notify(PoolCtx& pool, const object_t& oid, uint64_t ver)
   unregister_watcher(cookie);
   lock.Unlock();
 
-  set_sync_op_version(pool, objver);
+  set_sync_op_version(io, objver);
   delete ctx;
 
   return r;
@@ -1955,322 +1956,310 @@ release()
   c->release();
 }
 
-///////////////////////////// PoolHandle //////////////////////////////
-librados::PoolHandle::
-PoolHandle() : pool_ctx(NULL)
+///////////////////////////// IoCtx //////////////////////////////
+librados::IoCtx::
+IoCtx() : io_ctx_impl(NULL)
 {
 }
 
-void librados::PoolHandle::
-from_rados_pool_t(rados_pool_t p, PoolHandle &pool)
+void librados::IoCtx::
+from_rados_ioctx_t(rados_ioctx_t p, IoCtx &io)
 {
-  PoolCtx *pool_ctx = (PoolCtx*)p;
+  IoCtxImpl *io_ctx_impl = (IoCtxImpl*)p;
 
-  pool.pool_ctx = pool_ctx;
-  pool.name = pool_ctx->client->get_pool_name(pool_ctx->poolid);
+  io.io_ctx_impl = io_ctx_impl;
 }
 
-librados::PoolHandle::
-~PoolHandle()
+librados::IoCtx::
+~IoCtx()
 {
   close();
 }
 
-void librados::PoolHandle::
+void librados::IoCtx::
 close()
 {
-  delete pool_ctx;
-  pool_ctx = 0;
+  delete io_ctx_impl;
+  io_ctx_impl = 0;
 }
 
-int librados::PoolHandle::
-destroy()
-{
-  int ret = pool_ctx->client->pool_delete(pool_ctx);
-  if (ret)
-    return ret;
-  delete pool_ctx;
-  pool_ctx = NULL;
-  return 0;
-}
-
-int librados::PoolHandle::
+int librados::IoCtx::
 set_auid(uint64_t auid_)
 {
-  return pool_ctx->client->pool_change_auid(pool_ctx, auid_);
+  return io_ctx_impl->client->pool_change_auid(io_ctx_impl, auid_);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 create(const std::string& oid, bool exclusive)
 {
   object_t obj(oid);
-  return pool_ctx->client->create(*pool_ctx, obj, exclusive);
+  return io_ctx_impl->client->create(*io_ctx_impl, obj, exclusive);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 write(const std::string& oid, bufferlist& bl, size_t len, off_t off)
 {
   object_t obj(oid);
-  return pool_ctx->client->write(*pool_ctx, obj, bl, len, off);
+  return io_ctx_impl->client->write(*io_ctx_impl, obj, bl, len, off);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 write_full(const std::string& oid, bufferlist& bl)
 {
   object_t obj(oid);
-  return pool_ctx->client->write_full(*pool_ctx, obj, bl);
+  return io_ctx_impl->client->write_full(*io_ctx_impl, obj, bl);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 read(const std::string& oid, bufferlist& bl, size_t len, off_t off)
 {
   object_t obj(oid);
-  return pool_ctx->client->read(*pool_ctx, obj, bl, len, off);
+  return io_ctx_impl->client->read(*io_ctx_impl, obj, bl, len, off);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 remove(const std::string& oid)
 {
   object_t obj(oid);
-  return pool_ctx->client->remove(*pool_ctx, obj);
+  return io_ctx_impl->client->remove(*io_ctx_impl, obj);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 trunc(const std::string& oid, size_t size)
 {
   object_t obj(oid);
-  return pool_ctx->client->trunc(*pool_ctx, obj, size);
+  return io_ctx_impl->client->trunc(*io_ctx_impl, obj, size);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 mapext(const std::string& oid, off_t off, size_t len, std::map<off_t, size_t>& m)
 {
   object_t obj(oid);
-  return pool_ctx->client->mapext(*pool_ctx, oid, off, len, m);
+  return io_ctx_impl->client->mapext(*io_ctx_impl, oid, off, len, m);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 sparse_read(const std::string& oid, std::map<off_t, size_t>& m,
 	    bufferlist& bl, size_t len, off_t off)
 {
   object_t obj(oid);
-  return pool_ctx->client->sparse_read(*pool_ctx, oid, m, bl, len, off);
+  return io_ctx_impl->client->sparse_read(*io_ctx_impl, oid, m, bl, len, off);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 getxattr(const std::string& oid, const char *name, bufferlist& bl)
 {
   object_t obj(oid);
-  return pool_ctx->client->getxattr(*pool_ctx, obj, name, bl);
+  return io_ctx_impl->client->getxattr(*io_ctx_impl, obj, name, bl);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 getxattrs(const std::string& oid, map<std::string, bufferlist>& attrset)
 {
   object_t obj(oid);
-  return pool_ctx->client->getxattrs(*pool_ctx, obj, attrset);
+  return io_ctx_impl->client->getxattrs(*io_ctx_impl, obj, attrset);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 setxattr(const std::string& oid, const char *name, bufferlist& bl)
 {
   object_t obj(oid);
-  return pool_ctx->client->setxattr(*pool_ctx, obj, name, bl);
+  return io_ctx_impl->client->setxattr(*io_ctx_impl, obj, name, bl);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 rmxattr(const std::string& oid, const char *name)
 {
   object_t obj(oid);
-  return pool_ctx->client->rmxattr(*pool_ctx, obj, name);
+  return io_ctx_impl->client->rmxattr(*io_ctx_impl, obj, name);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 stat(const std::string& oid, uint64_t *psize, time_t *pmtime)
 {
   object_t obj(oid);
-  return pool_ctx->client->stat(*pool_ctx, oid, psize, pmtime);
+  return io_ctx_impl->client->stat(*io_ctx_impl, oid, psize, pmtime);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 exec(const std::string& oid, const char *cls, const char *method,
     bufferlist& inbl, bufferlist& outbl)
 {
   object_t obj(oid);
-  return pool_ctx->client->exec(*pool_ctx, obj, cls, method, inbl, outbl);
+  return io_ctx_impl->client->exec(*io_ctx_impl, obj, cls, method, inbl, outbl);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 tmap_update(const std::string& oid, bufferlist& cmdbl)
 {
   object_t obj(oid);
-  return pool_ctx->client->tmap_update(*pool_ctx, obj, cmdbl);
+  return io_ctx_impl->client->tmap_update(*io_ctx_impl, obj, cmdbl);
 }
 
-void librados::PoolHandle::
+void librados::IoCtx::
 snap_set_read(snap_t seq)
 {
-  pool_ctx->set_snap_read(seq);
+  io_ctx_impl->set_snap_read(seq);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 selfmanaged_snap_set_write_ctx(snap_t seq, vector<snap_t>& snaps)
 {
   vector<snapid_t> snv;
   snv.resize(snaps.size());
   for (unsigned i=0; i<snaps.size(); i++)
     snv[i] = snaps[i];
-  return pool_ctx->set_snap_write_context(seq, snv);
+  return io_ctx_impl->set_snap_write_context(seq, snv);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 snap_create(const char *snapname)
 {
-  return pool_ctx->client->snap_create(pool_ctx, snapname);
+  return io_ctx_impl->client->snap_create(io_ctx_impl, snapname);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 snap_lookup(const char *name, snap_t *snapid)
 {
-  return pool_ctx->client->snap_lookup(pool_ctx, name, snapid);
+  return io_ctx_impl->client->snap_lookup(io_ctx_impl, name, snapid);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 snap_get_stamp(snap_t snapid, time_t *t)
 {
-  return pool_ctx->client->snap_get_stamp(pool_ctx, snapid, t);
+  return io_ctx_impl->client->snap_get_stamp(io_ctx_impl, snapid, t);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 snap_get_name(snap_t snapid, std::string *s)
 {
-  return pool_ctx->client->snap_get_name(pool_ctx, snapid, s);
+  return io_ctx_impl->client->snap_get_name(io_ctx_impl, snapid, s);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 snap_remove(const char *snapname)
 {
-  return pool_ctx->client->snap_remove(pool_ctx, snapname);
+  return io_ctx_impl->client->snap_remove(io_ctx_impl, snapname);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 snap_list(std::vector<snap_t> *snaps)
 {
-  return pool_ctx->client->snap_list(pool_ctx, snaps);
+  return io_ctx_impl->client->snap_list(io_ctx_impl, snaps);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 rollback(const std::string& oid, const char *snapname)
 {
-  return pool_ctx->client->rollback(pool_ctx, oid, snapname);
+  return io_ctx_impl->client->rollback(io_ctx_impl, oid, snapname);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 selfmanaged_snap_create(uint64_t *snapid)
 {
-  return pool_ctx->client->selfmanaged_snap_create(pool_ctx, snapid);
+  return io_ctx_impl->client->selfmanaged_snap_create(io_ctx_impl, snapid);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 selfmanaged_snap_remove(uint64_t snapid)
 {
-  return pool_ctx->client->selfmanaged_snap_remove(pool_ctx, snapid);
+  return io_ctx_impl->client->selfmanaged_snap_remove(io_ctx_impl, snapid);
 }
 
-librados::ObjectIterator librados::PoolHandle::
+librados::ObjectIterator librados::IoCtx::
 objects_begin()
 {
   rados_list_ctx_t listh;
-  rados_objects_list_open(pool_ctx, &listh);
+  rados_objects_list_open(io_ctx_impl, &listh);
   return ObjectIterator(listh);
 }
 
-const librados::ObjectIterator& librados::PoolHandle::
+const librados::ObjectIterator& librados::IoCtx::
 objects_end() const
 {
   return ObjectIterator::__EndObjectIterator;
 }
 
-uint64_t librados::PoolHandle::
+uint64_t librados::IoCtx::
 get_last_version()
 {
-  eversion_t ver = pool_ctx->client->last_version(*pool_ctx);
+  eversion_t ver = io_ctx_impl->client->last_version(*io_ctx_impl);
   return ver.version;
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 aio_read(const std::string& oid, librados::AioCompletion *c,
 	 bufferlist *pbl, size_t len, off_t off)
 {
-  return pool_ctx->client->aio_read(*pool_ctx, oid, c->pc, pbl, len, off);
+  return io_ctx_impl->client->aio_read(*io_ctx_impl, oid, c->pc, pbl, len, off);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 aio_sparse_read(const std::string& oid, librados::AioCompletion *c,
 		std::map<off_t,size_t> *m, bufferlist *data_bl,
 		size_t len, off_t off)
 {
-  return pool_ctx->client->aio_sparse_read(*pool_ctx, oid, c->pc,
+  return io_ctx_impl->client->aio_sparse_read(*io_ctx_impl, oid, c->pc,
 					   m, data_bl, len, off);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 aio_write(const std::string& oid, librados::AioCompletion *c, const bufferlist& bl,
 	  size_t len, off_t off)
 {
-  return pool_ctx->client->aio_write(*pool_ctx, oid, c->pc, bl, len, off );
+  return io_ctx_impl->client->aio_write(*io_ctx_impl, oid, c->pc, bl, len, off );
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 aio_write_full(const std::string& oid, librados::AioCompletion *c, const bufferlist& bl)
 {
   object_t obj(oid);
-  return pool_ctx->client->aio_write_full(*pool_ctx, obj, c->pc, bl);
+  return io_ctx_impl->client->aio_write_full(*io_ctx_impl, obj, c->pc, bl);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 watch(const string& oid, uint64_t ver, uint64_t *cookie, librados::WatchCtx *ctx)
 {
   object_t obj(oid);
-  return pool_ctx->client->watch(*pool_ctx, obj, ver, cookie, ctx);
+  return io_ctx_impl->client->watch(*io_ctx_impl, obj, ver, cookie, ctx);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 unwatch(const string& oid, uint64_t handle)
 {
   uint64_t cookie = handle;
   object_t obj(oid);
-  return pool_ctx->client->unwatch(*pool_ctx, obj, cookie);
+  return io_ctx_impl->client->unwatch(*io_ctx_impl, obj, cookie);
 }
 
-int librados::PoolHandle::
+int librados::IoCtx::
 notify(const string& oid, uint64_t ver)
 {
   object_t obj(oid);
-  return pool_ctx->client->notify(*pool_ctx, obj, ver);
+  return io_ctx_impl->client->notify(*io_ctx_impl, obj, ver);
 }
 
-void librados::PoolHandle::
+void librados::IoCtx::
 set_notify_timeout(uint32_t timeout)
 {
-  pool_ctx->client->set_notify_timeout(*pool_ctx, timeout);
+  io_ctx_impl->client->set_notify_timeout(*io_ctx_impl, timeout);
 }
 
-void librados::PoolHandle::
+void librados::IoCtx::
 set_assert_version(uint64_t ver)
 {
-  pool_ctx->client->set_assert_version(*pool_ctx, ver);
+  io_ctx_impl->client->set_assert_version(*io_ctx_impl, ver);
 }
 
-const std::string& librados::PoolHandle::
-get_name() const
+const std::string& librados::IoCtx::
+get_pool_name() const
 {
-  return name;
+  return io_ctx_impl->pool_name;
 }
 
-librados::PoolHandle::
-PoolHandle(PoolCtx *pool_ctx_)
-  : pool_ctx(pool_ctx_)
+librados::IoCtx::
+IoCtx(IoCtxImpl *io_ctx_impl_)
+  : io_ctx_impl(io_ctx_impl_)
 {
 }
 
@@ -2366,27 +2355,32 @@ pool_create(const char *name, uint64_t auid, __u8 crush_rule)
 }
 
 int librados::Rados::
+pool_delete(const char *name)
+{
+  return client->pool_delete(name);
+}
+
+int librados::Rados::
 pool_list(std::list<std::string>& v)
 {
   return client->pool_list(v);
 }
 
 int librados::Rados::
-pool_open(const char *name, PoolHandle &pool)
-{
-  rados_pool_t p;
-  int ret = rados_pool_open((rados_t)client, name, &p);
-  if (ret)
-    return ret;
-  pool.pool_ctx = (PoolCtx*)p;
-  pool.name = name;
-  return 0;
-}
-
-int librados::Rados::
 pool_lookup(const char *name)
 {
   return client->lookup_pool(name);
+}
+
+int librados::Rados::
+ioctx_open(const char *name, IoCtx &io)
+{
+  rados_ioctx_t p;
+  int ret = rados_ioctx_open((rados_t)client, name, &p);
+  if (ret)
+    return ret;
+  io.io_ctx_impl = (IoCtxImpl*)p;
+  return 0;
 }
 
 int librados::Rados::
@@ -2548,13 +2542,13 @@ extern "C" int rados_conf_get(rados_t cluster, const char *option, char *buf, in
   return g_conf.get_val(option, &tmp, len);
 }
 
-extern "C" int rados_pool_lookup(rados_t cluster, const char *name)
+extern "C" int rados_ioctx_lookup(rados_t cluster, const char *name)
 {
   RadosClient *radosp = (RadosClient *)cluster;
   return radosp->lookup_pool(name);
 }
 
-extern "C" int rados_pool_list(rados_t cluster, char *buf, int len)
+extern "C" int rados_ioctx_list(rados_t cluster, char *buf, int len)
 {
   RadosClient *client = (RadosClient *)cluster;
   std::list<std::string> pools;
@@ -2582,39 +2576,39 @@ extern "C" int rados_pool_list(rados_t cluster, char *buf, int len)
   return needed + 1;
 }
 
-extern "C" int rados_pool_open(rados_t cluster, const char *name, rados_pool_t *pool)
+extern "C" int rados_ioctx_open(rados_t cluster, const char *name, rados_ioctx_t *io)
 {
   RadosClient *radosp = (RadosClient *)cluster;
   int poolid = radosp->lookup_pool(name);
   if (poolid >= 0) {
-    PoolCtx *ctx = new PoolCtx(radosp, poolid, name, CEPH_NOSNAP);
+    IoCtxImpl *ctx = new IoCtxImpl(radosp, poolid, name, CEPH_NOSNAP);
     if (!ctx)
       return -ENOMEM;
-    *pool = ctx;
+    *io = ctx;
     return 0;
   }
   return poolid;
 }
 
-extern "C" int rados_pool_close(rados_pool_t pool)
+extern "C" int rados_ioctx_close(rados_ioctx_t io)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   delete ctx;
   return 0;
 }
 
-extern "C" int rados_pool_stat(rados_pool_t pool, struct rados_pool_stat_t *stats)
+extern "C" int rados_ioctx_stat(rados_ioctx_t io, struct rados_ioctx_stat_t *stats)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *io_ctx_impl = (IoCtxImpl *)io;
   list<string> ls;
-  ls.push_back(ctx->name);
+  ls.push_back(io_ctx_impl->pool_name);
   map<string, ::pool_stat_t> rawresult;
 
-  int err = ctx->client->get_pool_stats(ls, rawresult);
+  int err = io_ctx_impl->client->get_pool_stats(ls, rawresult);
   if (err)
     return err;
 
-  ::pool_stat_t& r = rawresult[ctx->name];
+  ::pool_stat_t& r = rawresult[io_ctx_impl->pool_name];
   stats->num_kb = r.num_kb;
   stats->num_bytes = r.num_bytes;
   stats->num_objects = r.num_objects;
@@ -2631,16 +2625,16 @@ extern "C" int rados_pool_stat(rados_pool_t pool, struct rados_pool_stat_t *stat
 }
 
 
-extern "C" void rados_snap_set_read(rados_pool_t pool, rados_snap_t seq)
+extern "C" void rados_snap_set_read(rados_ioctx_t io, rados_snap_t seq)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   ctx->set_snap_read((snapid_t)seq);
 }
 
-extern "C" int rados_snap_set_write_context(rados_pool_t pool, rados_snap_t seq,
+extern "C" int rados_snap_set_write_context(rados_ioctx_t io, rados_snap_t seq,
 				       rados_snap_t *snaps, int num_snaps)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   vector<snapid_t> snv;
   snv.resize(num_snaps);
   for (int i=0; i<num_snaps; i++)
@@ -2648,41 +2642,41 @@ extern "C" int rados_snap_set_write_context(rados_pool_t pool, rados_snap_t seq,
   return ctx->set_snap_write_context((snapid_t)seq, snv);
 }
 
-extern "C" int rados_write(rados_pool_t pool, const char *o, const char *buf, size_t len, off_t off)
+extern "C" int rados_write(rados_ioctx_t io, const char *o, const char *buf, size_t len, off_t off)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   object_t oid(o);
   bufferlist bl;
   bl.append(buf, len);
   return ctx->client->write(*ctx, oid, bl, len, off);
 }
 
-extern "C" int rados_write_full(rados_pool_t pool, const char *o, const char *buf, size_t len, off_t off)
+extern "C" int rados_write_full(rados_ioctx_t io, const char *o, const char *buf, size_t len, off_t off)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   object_t oid(o);
   bufferlist bl;
   bl.append(buf, len);
   return ctx->client->write_full(*ctx, oid, bl);
 }
 
-extern "C" int rados_trunc(rados_pool_t pool, const char *o, size_t size)
+extern "C" int rados_trunc(rados_ioctx_t io, const char *o, size_t size)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   object_t oid(o);
   return ctx->client->trunc(*ctx, oid, size);
 }
 
-extern "C" int rados_remove(rados_pool_t pool, const char *o)
+extern "C" int rados_remove(rados_ioctx_t io, const char *o)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   object_t oid(o);
   return ctx->client->remove(*ctx, oid);
 }
 
-extern "C" int rados_read(rados_pool_t pool, const char *o, char *buf, size_t len, off_t off)
+extern "C" int rados_read(rados_ioctx_t io, const char *o, char *buf, size_t len, off_t off)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   int ret;
   object_t oid(o);
 
@@ -2702,21 +2696,21 @@ extern "C" int rados_read(rados_pool_t pool, const char *o, char *buf, size_t le
   return ret;
 }
 
-extern "C" uint64_t rados_get_last_version(rados_pool_t pool)
+extern "C" uint64_t rados_get_last_version(rados_ioctx_t io)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   eversion_t ver = ctx->client->last_version(*ctx);
   return ver.version;
 }
 
-extern "C" int rados_pool_create(rados_t cluster, const char *name)
+extern "C" int rados_ioctx_create(rados_t cluster, const char *name)
 {
   RadosClient *radosp = (RadosClient *)cluster;
   string sname(name);
   return radosp->pool_create(sname);
 }
 
-extern "C" int rados_pool_create_with_auid(rados_t cluster, const char *name,
+extern "C" int rados_ioctx_create_with_auid(rados_t cluster, const char *name,
 					   uint64_t auid)
 {
   RadosClient *radosp = (RadosClient *)cluster;
@@ -2724,7 +2718,7 @@ extern "C" int rados_pool_create_with_auid(rados_t cluster, const char *name,
   return radosp->pool_create(sname, auid);
 }
 
-extern "C" int rados_pool_create_with_crush_rule(rados_t cluster, const char *name,
+extern "C" int rados_ioctx_create_with_crush_rule(rados_t cluster, const char *name,
 						 __u8 crush_rule)
 {
   RadosClient *radosp = (RadosClient *)cluster;
@@ -2732,7 +2726,7 @@ extern "C" int rados_pool_create_with_crush_rule(rados_t cluster, const char *na
   return radosp->pool_create(sname, 0, crush_rule);
 }
 
-extern "C" int rados_pool_create_with_all(rados_t cluster, const char *name,
+extern "C" int rados_ioctx_create_with_all(rados_t cluster, const char *name,
 					  uint64_t auid, __u8 crush_rule)
 {
   RadosClient *radosp = (RadosClient *)cluster;
@@ -2740,57 +2734,57 @@ extern "C" int rados_pool_create_with_all(rados_t cluster, const char *name,
   return radosp->pool_create(sname, auid, crush_rule);
 }
 
-extern "C" int rados_pool_delete(rados_pool_t pool)
+extern "C" int rados_pool_delete(rados_t cluster, const char *pool_name)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
-  return ctx->client->pool_delete(ctx);
+  RadosClient *client = (RadosClient *)cluster;
+  return client->pool_delete(pool_name);
 }
 
-extern "C" int rados_pool_change_auid(rados_pool_t pool, uint64_t auid)
+extern "C" int rados_ioctx_change_auid(rados_ioctx_t io, uint64_t auid)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   return ctx->client->pool_change_auid(ctx, auid);
 }
 
 // snaps
 
-extern "C" int rados_pool_snap_create(rados_pool_t pool, const char *snapname)
+extern "C" int rados_ioctx_snap_create(rados_ioctx_t io, const char *snapname)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   return ctx->client->snap_create(ctx, snapname);
 }
 
-extern "C" int rados_pool_snap_remove(rados_pool_t pool, const char *snapname)
+extern "C" int rados_ioctx_snap_remove(rados_ioctx_t io, const char *snapname)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   return ctx->client->snap_remove(ctx, snapname);
 }
 
-extern "C" int rados_rollback(rados_pool_t pool, const char *oid,
+extern "C" int rados_rollback(rados_ioctx_t io, const char *oid,
 			      const char *snapname)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   return ctx->client->rollback(ctx, oid, snapname);
 }
 
-extern "C" int rados_pool_selfmanaged_snap_create(rados_pool_t pool,
+extern "C" int rados_ioctx_selfmanaged_snap_create(rados_ioctx_t io,
 					     uint64_t *snapid)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   return ctx->client->selfmanaged_snap_create(ctx, snapid);
 }
 
-extern "C" int rados_pool_selfmanaged_snap_remove(rados_pool_t pool,
+extern "C" int rados_ioctx_selfmanaged_snap_remove(rados_ioctx_t io,
 					     uint64_t snapid)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   return ctx->client->selfmanaged_snap_remove(ctx, snapid);
 }
 
-extern "C" int rados_pool_snap_list(rados_pool_t pool, rados_snap_t *snaps,
+extern "C" int rados_ioctx_snap_list(rados_ioctx_t io, rados_snap_t *snaps,
 				    int maxlen)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   vector<uint64_t> snapvec;
   int r = ctx->client->snap_list(ctx, &snapvec);
   if (r < 0)
@@ -2803,17 +2797,17 @@ extern "C" int rados_pool_snap_list(rados_pool_t pool, rados_snap_t *snaps,
   return -ERANGE;
 }
 
-extern "C" int rados_pool_snap_lookup(rados_pool_t pool, const char *name,
+extern "C" int rados_ioctx_snap_lookup(rados_ioctx_t io, const char *name,
 				      rados_snap_t *id)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   return ctx->client->snap_lookup(ctx, name, (uint64_t *)id);
 }
 
-extern "C" int rados_pool_snap_get_name(rados_pool_t pool, rados_snap_t id,
+extern "C" int rados_ioctx_snap_get_name(rados_ioctx_t io, rados_snap_t id,
 					char *name, int maxlen)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   std::string sname;
   int r = ctx->client->snap_get_name(ctx, id, &sname);
   if (r < 0)
@@ -2824,16 +2818,16 @@ extern "C" int rados_pool_snap_get_name(rados_pool_t pool, rados_snap_t id,
   return 0;
 }
 
-extern "C" int rados_pool_snap_get_stamp(rados_pool_t pool, rados_snap_t id, time_t *t)
+extern "C" int rados_ioctx_snap_get_stamp(rados_ioctx_t io, rados_snap_t id, time_t *t)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   return ctx->client->snap_get_stamp(ctx, id, t);
 }
 
-extern "C" int rados_getxattr(rados_pool_t pool, const char *o, const char *name,
+extern "C" int rados_getxattr(rados_ioctx_t io, const char *o, const char *name,
 			      char *buf, size_t len)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   int ret;
   object_t oid(o);
   bufferlist bl;
@@ -2848,42 +2842,42 @@ extern "C" int rados_getxattr(rados_pool_t pool, const char *o, const char *name
   return ret;
 }
 
-extern "C" int rados_setxattr(rados_pool_t pool, const char *o, const char *name, const char *buf, size_t len)
+extern "C" int rados_setxattr(rados_ioctx_t io, const char *o, const char *name, const char *buf, size_t len)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   object_t oid(o);
   bufferlist bl;
   bl.append(buf, len);
   return ctx->client->setxattr(*ctx, oid, name, bl);
 }
 
-extern "C" int rados_rmxattr(rados_pool_t pool, const char *o, const char *name)
+extern "C" int rados_rmxattr(rados_ioctx_t io, const char *o, const char *name)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   object_t oid(o);
   return ctx->client->rmxattr(*ctx, oid, name);
 }
 
-extern "C" int rados_stat(rados_pool_t pool, const char *o, uint64_t *psize, time_t *pmtime)
+extern "C" int rados_stat(rados_ioctx_t io, const char *o, uint64_t *psize, time_t *pmtime)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   object_t oid(o);
   return ctx->client->stat(*ctx, oid, psize, pmtime);
 }
 
-extern "C" int rados_tmap_update(rados_pool_t pool, const char *o, const char *cmdbuf, size_t cmdbuflen)
+extern "C" int rados_tmap_update(rados_ioctx_t io, const char *o, const char *cmdbuf, size_t cmdbuflen)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   object_t oid(o);
   bufferlist cmdbl;
   cmdbl.append(cmdbuf, cmdbuflen);
   return ctx->client->tmap_update(*ctx, oid, cmdbl);
 }
 
-extern "C" int rados_exec(rados_pool_t pool, const char *o, const char *cls, const char *method,
+extern "C" int rados_exec(rados_ioctx_t io, const char *o, const char *cls, const char *method,
                          const char *inbuf, size_t in_len, char *buf, size_t out_len)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   object_t oid(o);
   bufferlist inbl, outbl;
   int ret;
@@ -2902,9 +2896,9 @@ extern "C" int rados_exec(rados_pool_t pool, const char *o, const char *cls, con
 
 /* list objects */
 
-extern "C" int rados_objects_list_open(rados_pool_t pool, rados_list_ctx_t *listh)
+extern "C" int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *listh)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   Objecter::ListContext *h = new Objecter::ListContext;
   h->pool_id = ctx->poolid;
   h->pool_snap_seq = ctx->snap_seq;
@@ -2986,21 +2980,21 @@ extern "C" void rados_aio_release(rados_completion_t c)
   ((AioCompletionImpl*)c)->put();
 }
 
-extern "C" int rados_aio_read(rados_pool_t pool, const char *o,
+extern "C" int rados_aio_read(rados_ioctx_t io, const char *o,
 			       rados_completion_t completion,
 			       char *buf, size_t len, off_t off)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   object_t oid(o);
   return ctx->client->aio_read(*ctx, oid,
 	     (AioCompletionImpl*)completion, buf, len, off);
 }
 
-extern "C" int rados_aio_write(rados_pool_t pool, const char *o,
+extern "C" int rados_aio_write(rados_ioctx_t io, const char *o,
 				rados_completion_t completion,
 				const char *buf, size_t len, off_t off)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   object_t oid(o);
   bufferlist bl;
   bl.append(buf, len);
@@ -3008,11 +3002,11 @@ extern "C" int rados_aio_write(rados_pool_t pool, const char *o,
 	      (AioCompletionImpl*)completion, bl, len, off);
 }
 
-extern "C" int rados_aio_write_full(rados_pool_t pool, const char *o,
+extern "C" int rados_aio_write_full(rados_ioctx_t io, const char *o,
 			 rados_completion_t completion,
 			 const char *buf, size_t len)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   object_t oid(o);
   bufferlist bl;
   bl.append(buf, len);
@@ -3029,27 +3023,27 @@ struct C_WatchCB : public librados::WatchCtx {
   }
 };
 
-int rados_watch(rados_pool_t pool, const char *o, uint64_t ver, uint64_t *handle,
+int rados_watch(rados_ioctx_t io, const char *o, uint64_t ver, uint64_t *handle,
                 rados_watchcb_t watchcb, void *arg)
 {
   uint64_t *cookie = handle;
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   object_t oid(o);
   C_WatchCB *wc = new C_WatchCB(watchcb, arg);
   return ctx->client->watch(*ctx, oid, ver, cookie, wc);
 }
 
-int rados_unwatch(rados_pool_t pool, const char *o, uint64_t handle)
+int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t handle)
 {
   uint64_t cookie = handle;
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   object_t oid(o);
   return ctx->client->unwatch(*ctx, oid, cookie);
 }
 
-int rados_notify(rados_pool_t pool, const char *o, uint64_t ver)
+int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver)
 {
-  PoolCtx *ctx = (PoolCtx *)pool;
+  IoCtxImpl *ctx = (IoCtxImpl *)io;
   object_t oid(o);
   return ctx->client->notify(*ctx, oid, ver);
 }

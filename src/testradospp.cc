@@ -91,8 +91,8 @@ int main(int argc, const char **argv)
 
   const char *oid = "bar";
 
-  PoolHandle pool;
-  int r = rados.pool_open("data", pool);
+  IoCtx pool;
+  int r = rados.ioctx_open("data", pool);
   cout << "pool_open result = " << r << std::endl;
 
   r = pool.write(oid, bl, bl.length(), 0);

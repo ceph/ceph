@@ -99,7 +99,7 @@ static void print_info(const char *imgname, librbd::image_info_t& info)
        << std::endl;
 }
 
-static int do_list(librbd::RBD &rbd, librados::PoolHandle& pool)
+static int do_list(librbd::RBD &rbd, librados::IoCtx& pool)
 {
   std::vector<string> names;
   int r = rbd.list(pool, names);
@@ -111,7 +111,7 @@ static int do_list(librbd::RBD &rbd, librados::PoolHandle& pool)
   return 0;
 }
 
-static int do_create(librbd::RBD &rbd, librados::PoolHandle& pool,
+static int do_create(librbd::RBD &rbd, librados::IoCtx& pool,
 		     const char *imgname, size_t size, int *order)
 {
   int r = rbd.create(pool, imgname, size, order);
@@ -120,7 +120,7 @@ static int do_create(librbd::RBD &rbd, librados::PoolHandle& pool,
   return 0;
 }
 
-static int do_rename(librbd::RBD &rbd, librados::PoolHandle& pool,
+static int do_rename(librbd::RBD &rbd, librados::IoCtx& pool,
 		     const char *imgname, const char *destname)
 {
   int r = rbd.rename(pool, imgname, destname);
@@ -140,7 +140,7 @@ static int do_show_info(const char *imgname, librbd::Image *image)
   return 0;
 }
 
- static int do_delete(librbd::RBD &rbd, librados::PoolHandle& pool, const char *imgname)
+ static int do_delete(librbd::RBD &rbd, librados::IoCtx& pool, const char *imgname)
 {
   int r = rbd.remove(pool, imgname);
   if (r < 0)
@@ -309,7 +309,7 @@ done_img:
   update_snap_name(*new_img, snap);
 }
 
-static int do_import(librbd::RBD &rbd, librados::PoolHandle& pool,
+static int do_import(librbd::RBD &rbd, librados::IoCtx& pool,
 		     const char *imgname, int *order, const char *path)
 {
   int fd = open(path, O_RDONLY);
@@ -448,8 +448,8 @@ done:
   return r;
 }
 
-static int do_copy(librbd::RBD &rbd, librados::PoolHandle& pp,
-	   const char *imgname, librados::PoolHandle& dest_pp,
+static int do_copy(librbd::RBD &rbd, librados::IoCtx& pp,
+	   const char *imgname, librados::IoCtx& dest_pp,
 	   const char *destname)
 {
   int r = rbd.copy(pp, imgname, dest_pp, destname);
@@ -468,7 +468,7 @@ public:
   }
 };
 
-static int do_watch(librados::PoolHandle& pp, const char *imgname)
+static int do_watch(librados::IoCtx& pp, const char *imgname)
 {
   string md_oid, dest_md_oid;
   uint64_t cookie;
@@ -572,7 +572,7 @@ int main(int argc, const char **argv)
 {
   librados::Rados rados;
   librbd::RBD rbd;
-  librados::PoolHandle pool, dest_pool;
+  librados::IoCtx pool, dest_pool;
   std::auto_ptr < librbd::Image > image;
 
   vector<const char*> args;
@@ -698,7 +698,7 @@ int main(int argc, const char **argv)
   }
 
   // TODO: add conf
-  int r = rados.pool_open(poolname, pool);
+  int r = rados.ioctx_open(poolname, pool);
   if (r < 0) {
       cerr << "error opening pool " << poolname << " (err=" << r << ")" << std::endl;
       exit(1);
@@ -726,7 +726,7 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_COPY || opt_cmd == OPT_IMPORT) {
-    r = rados.pool_open(dest_poolname, dest_pool);
+    r = rados.ioctx_open(dest_poolname, dest_pool);
     if (r < 0) {
       cerr << "error opening pool " << dest_poolname << " (err=" << r << ")" << std::endl;
       exit(1);

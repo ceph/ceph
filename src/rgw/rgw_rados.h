@@ -11,7 +11,7 @@ class RGWRados  : public RGWAccess
   int open_root_pool();
 
   struct GetObjState {
-    librados::PoolHandle pool;
+    librados::IoCtx pool;
     bool sent_data;
 
     GetObjState() : sent_data(false) {}
