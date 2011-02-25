@@ -100,7 +100,7 @@ static void print_info(const char *imgname, librbd::image_info_t& info)
        << std::endl;
 }
 
-static int do_list(librados::pool_t pool)
+static int do_list(librados::PoolHandle& pool)
 {
   std::vector<string> names;
   int r = rbd.list(pool, names);
@@ -112,7 +112,7 @@ static int do_list(librados::pool_t pool)
   return 0;
 }
 
-static int do_create(librados::pool_t pool, const char *imgname, size_t size, int *order)
+static int do_create(librados::PoolHandle& pool, const char *imgname, size_t size, int *order)
 {
   int r = rbd.create(pool, imgname, size, order);
   if (r < 0)
@@ -120,7 +120,7 @@ static int do_create(librados::pool_t pool, const char *imgname, size_t size, in
   return 0;
 }
 
-static int do_rename(librados::pool_t pool, const char *imgname, const char *destname)
+static int do_rename(librados::PoolHandle& pool, const char *imgname, const char *destname)
 {
   int r = rbd.rename(pool, imgname, destname);
   if (r < 0)
@@ -139,7 +139,7 @@ static int do_show_info(const char *imgname, librbd::Image *image)
   return 0;
 }
 
- static int do_delete(librados::pool_t pool, const char *imgname)
+ static int do_delete(librados::PoolHandle& pool, const char *imgname)
 {
   int r = rbd.remove(pool, imgname);
   if (r < 0)
@@ -308,7 +308,7 @@ done_img:
   update_snap_name(*new_img, snap);
 }
 
-static int do_import(librados::pool_t pool, const char *imgname, int *order, const char *path)
+static int do_import(librados::PoolHandle& pool, const char *imgname, int *order, const char *path)
 {
   int fd = open(path, O_RDONLY);
   int r;
@@ -446,7 +446,7 @@ done:
   return r;
 }
 
-static int do_copy(librados::pool_t& pp, const char *imgname, librados::pool_t& dest_pp, const char *destname)
+static int do_copy(librados::PoolHandle& pp, const char *imgname, librados::PoolHandle& dest_pp, const char *destname)
 {
   int r = rbd.copy(pp, imgname, dest_pp, destname);
   if (r < 0)
@@ -454,7 +454,7 @@ static int do_copy(librados::pool_t& pp, const char *imgname, librados::pool_t& 
   return 0;
 }
 
-class RbdWatchCtx : public librados::Rados::WatchCtx {
+class RbdWatchCtx : public librados::WatchCtx {
   string name;
 public:
   RbdWatchCtx(const char *imgname) : name(imgname) {}
@@ -464,7 +464,7 @@ public:
   }
 };
 
-static int do_watch(librados::pool_t& pp, const char *imgname)
+static int do_watch(librados::PoolHandle& pp, const char *imgname)
 {
   string md_oid, dest_md_oid;
   uint64_t cookie;
@@ -473,7 +473,7 @@ static int do_watch(librados::pool_t& pp, const char *imgname)
   md_oid = imgname;
   md_oid += RBD_SUFFIX;
 
-  int r = rados.watch(pp, md_oid, 0, &cookie, &ctx);
+  int r = pp.watch(md_oid, 0, &cookie, &ctx);
   if (r < 0) {
     cerr << "watch failed" << std::endl;
     return r;
@@ -485,11 +485,14 @@ static int do_watch(librados::pool_t& pp, const char *imgname)
   return 0;
 }
 
-static void err_exit(librados::pool_t pool, librbd::Image *image = NULL)
+static void err_exit(librados::PoolHandle& pool, librbd::Image *image = NULL)
 {
   if (image)
     delete image;
-  rados.close_pool(pool);
+  pool.close();
+  if (image)
+    delete image;
+  pool.close();
   rados.shutdown();
   exit(1);
 }
@@ -679,7 +682,7 @@ int main(int argc, const char **argv)
   if (!dest_poolname)
     dest_poolname = poolname;
 
-  librados::pool_t pool, dest_pool;
+  librados::PoolHandle pool, dest_pool;
   librbd::Image *image = NULL;
 
   if (opt_cmd == OPT_EXPORT && !path)
@@ -690,14 +693,18 @@ int main(int argc, const char **argv)
     usage_exit();
   }
 
-  if (rados.initialize(NULL, 0) < 0) {
+  if (rados.init(NULL) < 0) {
     cerr << "error: couldn't initialize rados!" << std::endl;
     exit(1);
   }
 
-  // TODO: add argc/argv conf
-  
-  int r = rados.open_pool(poolname, &pool);
+  if (rados.connect() < 0) {
+    cerr << "error: couldn't connect to the cluster!" << std::endl;
+    exit(1);
+  }
+
+  // TODO: add conf
+  int r = rados.pool_open(poolname, pool);
   if (r < 0) {
       cerr << "error opening pool " << poolname << " (err=" << r << ")" << std::endl;
       err_exit(pool);
@@ -723,7 +730,7 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_COPY || opt_cmd == OPT_IMPORT) {
-    r = rados.open_pool(dest_poolname, &dest_pool);
+    r = rados.pool_open(dest_poolname, dest_pool);
     if (r < 0) {
       cerr << "error opening pool " << dest_poolname << " (err=" << r << ")" << std::endl;
       err_exit(pool);
@@ -887,7 +894,8 @@ int main(int argc, const char **argv)
   if (image)
     delete image;
 
-  rados.close_pool(pool);
+  pool.close();
+  dest_pool.close();
   rados.shutdown();
   return 0;
 }

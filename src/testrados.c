@@ -188,7 +188,7 @@ int main(int argc, const char **argv)
   printf("rados_delete_pool = %d\n", r);  
   r = rados_pool_close(pool);
 
-  rados_destroy(cl);
+  rados_shutdown(cl);
 
   return 0;
 }

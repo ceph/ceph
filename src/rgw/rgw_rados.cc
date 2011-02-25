@@ -20,7 +20,7 @@ Rados *rados = NULL;
 #define ROOT_BUCKET ".rgw" //keep this synced to rgw_user.cc::root_bucket!
 
 static string root_bucket(ROOT_BUCKET);
-static rados_pool_t root_pool;
+static librados::PoolHandle root_pool;
 
 /** 
  * Initialize the RADOS instance and prepare to do other ops
@@ -28,15 +28,20 @@ static rados_pool_t root_pool;
  */
 int RGWRados::initialize(int argc, char *argv[])
 {
+  int ret;
   rados = new Rados();
   if (!rados)
     return -ENOMEM;
 
-  int ret = rados->initialize(argc, (const char **)argv);
+  ret = rados->init(NULL);
   if (ret < 0)
    return ret;
 
-  ret = open_root_pool(&root_pool);
+  ret = rados->connect();
+  if (ret < 0)
+   return ret;
+
+  ret = open_root_pool();
 
   return ret;
 }
@@ -45,15 +50,15 @@ int RGWRados::initialize(int argc, char *argv[])
  * Open the pool used as root for this gateway
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::open_root_pool(rados_pool_t *pool)
+int RGWRados::open_root_pool()
 {
-  int r = rados->open_pool(root_bucket.c_str(), pool);
-  if (r < 0) {
-    r = rados->create_pool(root_bucket.c_str());
+  int r = rados->pool_open(root_bucket.c_str(), root_pool);
+  if (r == -ENOENT) {
+    r = rados->pool_create(root_bucket.c_str());
     if (r < 0)
       return r;
 
-    r = rados->open_pool(root_bucket.c_str(), pool);
+    r = rados->pool_open(root_bucket.c_str(), root_pool);
   }
 
   return r;
@@ -113,15 +118,6 @@ int RGWRados::list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle
   return 0;
 }
 
-static int open_pool(string& bucket, rados_pool_t *pool)
-{
-  return rados->open_pool(bucket.c_str(), pool);
-}
-
-static int close_pool(rados_pool_t pool)
-{
-  return rados->close_pool(pool);
-}
 /** 
  * get listing of the objects in a bucket.
  * id: ignored.
@@ -139,31 +135,21 @@ static int close_pool(rados_pool_t pool)
 int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, string& delim,
 			   string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes)
 {
-  rados_pool_t pool;
-  set<string> dir_set;
-
-  int r = rados->open_pool(bucket.c_str(), &pool);
+  librados::PoolHandle pool;
+  int r = rados->pool_open(bucket.c_str(), pool);
   if (r < 0)
     return r;
 
-
-#define MAX_ENTRIES 1000
-  Rados::ListCtx ctx;
-  rados->objects_list_open(pool, &ctx);
-  do {
-    list<string> entries;
-    r = rados->objects_list_more(ctx, MAX_ENTRIES, entries);
-    if (r < 0)
-      return r;
-
-    for (list<string>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
-      if (prefix.empty() ||
-          (iter->compare(0, prefix.size(), prefix) == 0)) {
-        dir_set.insert(*iter);
-      }
+  set<string> dir_set;
+  {
+    librados::ObjectIterator i_end = pool.objects_end();
+    for (librados::ObjectIterator i = pool.objects_begin(); i != i_end; ++i) {
+	if (prefix.empty() ||
+	    ((*i).compare(0, prefix.size(), prefix) == 0)) {
+	  dir_set.insert(*i);
+	}
     }
-  } while (r);
-  rados->objects_list_close(ctx);
+  }
 
   set<string>::iterator p;
   if (!marker.empty())
@@ -191,19 +177,18 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
     }
 
     uint64_t s;
-    if (rados->stat(pool, *p, &s, &obj.mtime) < 0)
+    if (pool.stat(*p, &s, &obj.mtime) < 0)
       continue;
     obj.size = s;
 
     bufferlist bl; 
     obj.etag[0] = '\0';
-    if (rados->getxattr(pool, *p, RGW_ATTR_ETAG, bl) >= 0) {
+    if (pool.getxattr(*p, RGW_ATTR_ETAG, bl) >= 0) {
       strncpy(obj.etag, bl.c_str(), sizeof(obj.etag));
       obj.etag[sizeof(obj.etag)-1] = '\0';
     }
     result.push_back(obj);
   }
-  rados->close_pool(pool);
 
   return count;
 }
@@ -215,7 +200,7 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
  */
 int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, uint64_t auid)
 {
-  int ret = rados->create(root_pool, bucket, true);
+  int ret = root_pool.create(bucket, true);
   if (ret < 0)
     return ret;
 
@@ -225,7 +210,7 @@ int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::strin
     bufferlist& bl = iter->second;
     
     if (bl.length()) {
-      ret = rados->setxattr(root_pool, bucket, name.c_str(), bl);
+      ret = root_pool.setxattr(bucket, name.c_str(), bl);
       if (ret < 0) {
         delete_bucket(id, bucket);
         return ret;
@@ -233,7 +218,7 @@ int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::strin
     }
   }
 
-  ret = rados->create_pool(bucket.c_str(), auid);
+  ret = rados->pool_create(bucket.c_str(), auid);
 
   return ret;
 }
@@ -252,9 +237,9 @@ int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::strin
 int RGWRados::put_obj_meta(std::string& id, std::string& bucket, std::string& oid,
                   time_t *mtime, map<string, bufferlist>& attrs)
 {
-  rados_pool_t pool;
+  librados::PoolHandle pool;
 
-  int r = open_pool(bucket, &pool);
+  int r = rados->pool_open(bucket.c_str(), pool);
   if (r < 0)
     return r;
 
@@ -264,19 +249,17 @@ int RGWRados::put_obj_meta(std::string& id, std::string& bucket, std::string& oi
     bufferlist& bl = iter->second;
 
     if (bl.length()) {
-      r = rados->setxattr(pool, oid, name.c_str(), bl);
+      r = pool.setxattr(oid, name.c_str(), bl);
       if (r < 0)
         return r;
     }
   }
 
   if (mtime) {
-    r = rados->stat(pool, oid, NULL, mtime);
+    r = pool.stat(oid, NULL, mtime);
     if (r < 0)
       return r;
   }
-
-  close_pool(pool);
 
   return 0;
 }
@@ -295,25 +278,23 @@ int RGWRados::put_obj_meta(std::string& id, std::string& bucket, std::string& oi
 int RGWRados::put_obj_data(std::string& id, std::string& bucket, std::string& oid, const char *data, off_t ofs, size_t len,
                   time_t *mtime)
 {
-  rados_pool_t pool;
+  librados::PoolHandle pool;
 
-  int r = open_pool(bucket, &pool);
+  int r = rados->pool_open(bucket.c_str(), pool);
   if (r < 0)
     return r;
 
   bufferlist bl;
   bl.append(data, len);
-  r = rados->write(pool, oid, ofs, bl, len);
+  r = pool.write(oid, bl, len, ofs);
   if (r < 0)
     return r;
 
   if (mtime) {
-    r = rados->stat(pool, oid, NULL, mtime);
+    r = pool.stat(oid, NULL, mtime);
     if (r < 0)
       return r;
   }
-
-  close_pool(pool);
 
   return 0;
 }
@@ -394,15 +375,16 @@ done_err:
  */
 int RGWRados::delete_bucket(std::string& id, std::string& bucket)
 {
-  rados_pool_t pool;
-
-  int r = open_pool(bucket, &pool);
-  if (r < 0) return r;
-
-  r = rados->delete_pool(pool);
-  if (r < 0) return r;
-  r = delete_obj(id, root_bucket, bucket);
-  return r;
+  int ret;
+  librados::PoolHandle pool;
+  ret = rados->pool_open(bucket.c_str(), pool);
+  if (ret < 0)
+    return ret;
+  ret = pool.destroy();
+  if (ret)
+    return ret;
+  ret = delete_obj(id, root_bucket, bucket);
+  return ret;
 }
 
 /**
@@ -414,13 +396,12 @@ int RGWRados::delete_bucket(std::string& id, std::string& bucket)
  */
 int RGWRados::delete_obj(std::string& id, std::string& bucket, std::string& oid)
 {
-  rados_pool_t pool;
-
-  int r = open_pool(bucket, &pool);
+  librados::PoolHandle pool;
+  int r = rados->pool_open(bucket.c_str(), pool);
   if (r < 0)
     return r;
 
-  r = rados->remove(pool, oid);
+  r = pool.remove(oid);
   if (r < 0)
     return r;
 
@@ -438,7 +419,7 @@ int RGWRados::delete_obj(std::string& id, std::string& bucket, std::string& oid)
 int RGWRados::get_attr(std::string& bucket, std::string& obj,
                        const char *name, bufferlist& dest)
 {
-  rados_pool_t pool;
+  librados::PoolHandle pool;
   string actual_bucket = bucket;
   string actual_obj = obj;
 
@@ -447,12 +428,11 @@ int RGWRados::get_attr(std::string& bucket, std::string& obj,
     actual_bucket = root_bucket;
   }
 
-  int r = open_pool(actual_bucket, &pool);
+  int r = rados->pool_open(actual_bucket.c_str(), pool);
   if (r < 0)
     return r;
 
-  r = rados->getxattr(pool, actual_obj, name, dest);
-
+  r = pool.getxattr(actual_obj, name, dest);
   if (r < 0)
     return r;
 
@@ -470,7 +450,7 @@ int RGWRados::get_attr(std::string& bucket, std::string& obj,
 int RGWRados::set_attr(std::string& bucket, std::string& oid,
                        const char *name, bufferlist& bl)
 {
-  rados_pool_t pool;
+  librados::PoolHandle pool;
   string actual_bucket = bucket;
   string actual_obj = oid;
 
@@ -479,12 +459,11 @@ int RGWRados::set_attr(std::string& bucket, std::string& oid,
     actual_bucket = root_bucket;
   }
 
-  int r = open_pool(actual_bucket, &pool);
+  int r = rados->pool_open(actual_bucket.c_str(), pool);
   if (r < 0)
     return r;
 
-  r = rados->setxattr(pool, actual_obj, name, bl);
-
+  r = pool.setxattr(actual_obj, name, bl);
   if (r < 0)
     return r;
 
@@ -542,16 +521,16 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
 
   *handle = state;
 
-  r = open_pool(bucket, &state->pool);
+  r = rados->pool_open(bucket.c_str(), state->pool);
   if (r < 0)
     goto done_err;
 
-  r = rados->stat(state->pool, oid, &size, &mtime);
+  r = state->pool.stat(oid, &size, &mtime);
   if (r < 0)
     goto done_err;
 
   if (attrs) {
-    r = rados->getxattrs(state->pool, oid, *attrs);
+    r = state->pool.getxattrs(oid, *attrs);
     if (rgw_log_level >= 20) {
       for (iter = attrs->begin(); iter != attrs->end(); ++iter) {
         RGW_LOG(20) << "Read xattr: " << iter->first << endl;
@@ -639,7 +618,7 @@ int RGWRados::get_obj(void **handle,
     len = RGW_MAX_CHUNK_SIZE;
 
   RGW_LOG(20) << "rados->read ofs=" << ofs << " len=" << len << endl;
-  int r = rados->read(state->pool, oid, ofs, bl, len);
+  int r = state->pool.read(oid, bl, len, ofs);
   RGW_LOG(20) << "rados->read r=" << r << endl;
 
   if (r > 0) {
@@ -648,7 +627,6 @@ int RGWRados::get_obj(void **handle,
   }
 
   if (r < 0 || !len || ((off_t)(ofs + len - 1) == end)) {
-    rados->close_pool(state->pool);
     delete state;
     *handle = NULL;
   }
@@ -661,7 +639,6 @@ void RGWRados::finish_get_obj(void **handle)
 {
   if (*handle) {
     GetObjState *state = *(GetObjState **)handle;
-    rados->close_pool(state->pool);
     delete state;
     *handle = NULL;
   }

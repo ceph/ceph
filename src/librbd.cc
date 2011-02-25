@@ -46,7 +46,7 @@ namespace librbd {
 
   using ceph::bufferlist;
   using librados::snap_t;
-  using librados::pool_t;
+  using librados::PoolHandle;
   using librados::Rados;
 
   class WatchCtx;
@@ -64,12 +64,12 @@ namespace librbd {
     std::map<std::string, struct SnapInfo> snaps_by_name;
     uint64_t snapid;
     std::string name;
-    pool_t pool;
+    PoolHandle &pool;
     WatchCtx *wctx;
     bool needs_refresh;
     Mutex lock;
 
-    ImageCtx(std::string imgname, pool_t p) : snapid(0),
+    ImageCtx(std::string imgname, PoolHandle& p) : snapid(0),
 						 name(imgname),
 						 pool(p),
 						 needs_refresh(true),
@@ -94,7 +94,7 @@ namespace librbd {
     }
   };
 
-  class WatchCtx : public librados::Rados::WatchCtx {
+  class WatchCtx : public librados::WatchCtx {
     ImageCtx *ictx;
     bool valid;
     Mutex lock;
@@ -201,36 +201,36 @@ namespace librbd {
   void rados_aio_sparse_read_cb(rados_completion_t cb, void *arg);
 
   int snap_set(ImageCtx *ictx, const char *snap_name);
-  int list(pool_t pool, std::vector<string>& names);
-  int create(pool_t pool, string& md_oid, const char *imgname, uint64_t size, int *order);
-  int rename(pool_t pool, const char *srcname, const char *dstname);
+  int list(PoolHandle& pool, std::vector<string>& names);
+  int create(PoolHandle& pool, string& md_oid, const char *imgname, uint64_t size, int *order);
+  int rename(PoolHandle& pool, const char *srcname, const char *dstname);
   int info(ImageCtx *ictx, image_info_t& info, size_t image_size);
-  int remove(pool_t pool, const char *imgname);
+  int remove(PoolHandle& pool, const char *imgname);
   int resize(ImageCtx *ictx, uint64_t size);
   int snap_create(ImageCtx *ictx, const char *snap_name);
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
   int snap_rollback(ImageCtx *ictx, const char *snap_name);
   int snap_remove(ImageCtx *ictx, const char *snap_name);
   int add_snap(ImageCtx *ictx, const char *snap_name);
-  int rm_snap(pool_t pool, string& md_oid, const char *snap_name);
+  int rm_snap(PoolHandle& pool, string& md_oid, const char *snap_name);
   int ictx_check(ImageCtx *ictx);
   int ictx_refresh(ImageCtx *ictx, const char *snap_name);
-  int copy(pool_t src_pool, const char *srcname, pool_t dest_pool, const char *destname);
+  int copy(PoolHandle& src_pool, const char *srcname, PoolHandle& dest_pool, const char *destname);
 
-  int open_image(pool_t pool, ImageCtx *ictx, const char *name, const char *snap_name);
+  int open_image(PoolHandle& pool, ImageCtx *ictx, const char *name, const char *snap_name);
   void close_image(ImageCtx *ictx);
 
-  void trim_image(pool_t pool, rbd_obj_header_ondisk *header, uint64_t newsize);
-  int read_rbd_info(pool_t pool, string& info_oid, struct rbd_info *info);
+  void trim_image(PoolHandle& pool, rbd_obj_header_ondisk *header, uint64_t newsize);
+  int read_rbd_info(PoolHandle& pool, string& info_oid, struct rbd_info *info);
 
-  int touch_rbd_info(pool_t pool, string& info_oid);
-  int rbd_assign_bid(pool_t pool, string& info_oid, uint64_t *id);
-  int read_header_bl(pool_t pool, string& md_oid, bufferlist& header, uint64_t *ver);
-  int notify_change(pool_t pool, string& oid, uint64_t *pver, ImageCtx *ictx);
-  int read_header(pool_t pool, string& md_oid, struct rbd_obj_header_ondisk *header, uint64_t *ver);
-  int write_header(pool_t pool, string& md_oid, bufferlist& header);
-  int tmap_set(pool_t pool, string& imgname);
-  int tmap_rm(pool_t pool, string& imgname);
+  int touch_rbd_info(PoolHandle& pool, string& info_oid);
+  int rbd_assign_bid(PoolHandle& pool, string& info_oid, uint64_t *id);
+  int read_header_bl(PoolHandle& pool, string& md_oid, bufferlist& header, uint64_t *ver);
+  int notify_change(PoolHandle& pool, string& oid, uint64_t *pver, ImageCtx *ictx);
+  int read_header(PoolHandle& pool, string& md_oid, struct rbd_obj_header_ondisk *header, uint64_t *ver);
+  int write_header(PoolHandle& pool, string& md_oid, bufferlist& header);
+  int tmap_set(PoolHandle& pool, string& imgname);
+  int tmap_rm(PoolHandle& pool, string& imgname);
   int rollback_image(ImageCtx *ictx, uint64_t snapid);
   void image_info(rbd_obj_header_ondisk& header, image_info_t& info, size_t info_size);
   string get_block_oid(rbd_obj_header_ondisk *header, uint64_t num);
@@ -360,27 +360,25 @@ int init_rbd_info(struct rbd_info *info)
   return 0;
 }
 
-void trim_image(pool_t pool, rbd_obj_header_ondisk *header, uint64_t newsize)
+void trim_image(PoolHandle& pool, rbd_obj_header_ondisk *header, uint64_t newsize)
 {
   uint64_t numseg = get_max_block(header);
   uint64_t start = get_block_num(header, newsize);
-  Rados rados(pool);
   dout(2) << "trimming image data from " << numseg << " to " << start << " objects..." << dendl;
   for (uint64_t i=start; i<numseg; i++) {
     string oid = get_block_oid(header, i);
-    rados.remove(pool, oid);
+    pool.remove(oid);
     if ((i & 127) == 0) {
       dout(2) << "\r\t" << i << "/" << numseg << dendl;
     }
   }
 }
 
-int read_rbd_info(pool_t pool, string& info_oid, struct rbd_info *info)
+int read_rbd_info(PoolHandle& pool, string& info_oid, struct rbd_info *info)
 {
   int r;
   bufferlist bl;
-  Rados rados(pool);
-  r = rados.read(pool, info_oid, 0, bl, sizeof(*info));
+  r = pool.read(info_oid, bl, sizeof(*info), 0);
   if (r < 0)
     return r;
   if (r == 0) {
@@ -394,27 +392,25 @@ int read_rbd_info(pool_t pool, string& info_oid, struct rbd_info *info)
   return 0;
 }
 
-int touch_rbd_info(pool_t pool, string& info_oid)
+int touch_rbd_info(PoolHandle& pool, string& info_oid)
 {
   bufferlist bl;
-  Rados rados(pool);
-  int r = rados.write(pool, info_oid, 0, bl, 0);
+  int r = pool.write(info_oid, bl, 0, 0);
   if (r < 0)
     return r;
   return 0;
 }
 
-int rbd_assign_bid(pool_t pool, string& info_oid, uint64_t *id)
+int rbd_assign_bid(PoolHandle& pool, string& info_oid, uint64_t *id)
 {
   bufferlist bl, out;
-  Rados rados(pool);
   *id = 0;
 
   int r = touch_rbd_info(pool, info_oid);
   if (r < 0)
     return r;
 
-  r = rados.exec(pool, info_oid, "rbd", "assign_bid", bl, out);
+  r = pool.exec(info_oid, "rbd", "assign_bid", bl, out);
   if (r < 0)
     return r;
 
@@ -425,29 +421,27 @@ int rbd_assign_bid(pool_t pool, string& info_oid, uint64_t *id)
 }
 
 
-int read_header_bl(pool_t pool, string& md_oid, bufferlist& header, uint64_t *ver)
+int read_header_bl(PoolHandle& pool, string& md_oid, bufferlist& header, uint64_t *ver)
 {
   int r;
-  Rados rados(pool);
 #define READ_SIZE 4096
   do {
     bufferlist bl;
-    r = rados.read(pool, md_oid, 0, bl, READ_SIZE);
+    r = pool.read(md_oid, bl, READ_SIZE, 0);
     if (r < 0)
       return r;
     header.claim_append(bl);
    } while (r == READ_SIZE);
 
   if (ver)
-    *ver = rados.get_last_version(pool);
+    *ver = pool.get_last_version();
 
   return 0;
 }
 
-int notify_change(pool_t pool, string& oid, uint64_t *pver, ImageCtx *ictx)
+int notify_change(PoolHandle& pool, string& oid, uint64_t *pver, ImageCtx *ictx)
 {
   uint64_t ver;
-  Rados rados(pool);
 
   if (ictx) {
     ictx->lock.Lock();
@@ -458,15 +452,14 @@ int notify_change(pool_t pool, string& oid, uint64_t *pver, ImageCtx *ictx)
   if (pver)
     ver = *pver;
   else
-    ver = rados.get_last_version(pool);
-  rados.notify(pool, oid, ver);
+    ver = pool.get_last_version();
+  pool.notify(oid, ver);
   return 0;
 }
 
-int read_header(pool_t pool, string& md_oid, struct rbd_obj_header_ondisk *header, uint64_t *ver)
+int read_header(PoolHandle& pool, string& md_oid, struct rbd_obj_header_ondisk *header, uint64_t *ver)
 {
   bufferlist header_bl;
-  Rados rados(pool);
   int r = read_header_bl(pool, md_oid, header_bl, ver);
   if (r < 0)
     return r;
@@ -477,42 +470,38 @@ int read_header(pool_t pool, string& md_oid, struct rbd_obj_header_ondisk *heade
   return 0;
 }
 
-int write_header(pool_t pool, string& md_oid, bufferlist& header)
+int write_header(PoolHandle& pool, string& md_oid, bufferlist& header)
 {
   bufferlist bl;
-  Rados rados(pool);
-  int r = rados.write(pool, md_oid, 0, header, header.length());
+  int r = pool.write(md_oid, header, header.length(), 0);
 
   notify_change(pool, md_oid, NULL, NULL);
 
   return r;
 }
 
-int tmap_set(pool_t pool, string& imgname)
+int tmap_set(PoolHandle& pool, string& imgname)
 {
   bufferlist cmdbl, emptybl;
-  Rados rados(pool);
   __u8 c = CEPH_OSD_TMAP_SET;
   ::encode(c, cmdbl);
   ::encode(imgname, cmdbl);
   ::encode(emptybl, cmdbl);
-  return rados.tmap_update(pool, RBD_DIRECTORY, cmdbl);
+  return pool.tmap_update(RBD_DIRECTORY, cmdbl);
 }
 
-int tmap_rm(pool_t pool, string& imgname)
+int tmap_rm(PoolHandle& pool, string& imgname)
 {
   bufferlist cmdbl;
-  Rados rados(pool);
   __u8 c = CEPH_OSD_TMAP_RM;
   ::encode(c, cmdbl);
   ::encode(imgname, cmdbl);
-  return rados.tmap_update(pool, RBD_DIRECTORY, cmdbl);
+  return pool.tmap_update(RBD_DIRECTORY, cmdbl);
 }
 
 int rollback_image(ImageCtx *ictx, uint64_t snapid)
 {
   uint64_t numseg = get_max_block(&(ictx->header));
-  Rados rados(ictx->pool);
 
   for (uint64_t i = 0; i < numseg; i++) {
     int r;
@@ -524,18 +513,17 @@ int rollback_image(ImageCtx *ictx, uint64_t snapid)
     for (; iter != ictx->snapc.snaps.end(); ++iter) {
       sn.snaps.push_back(*iter);
     }
-    r = rados.selfmanaged_snap_rollback_object(ictx->pool, oid, sn, snapid);
+    r = ictx->pool.selfmanaged_snap_rollback(oid, sn, snapid);
     if (r < 0 && r != -ENOENT)
       return r;
   }
   return 0;
 }
 
-int list(pool_t pool, std::vector<std::string>& names)
+int list(PoolHandle& pool, std::vector<std::string>& names)
 {
   bufferlist bl;
-  Rados rados(pool);
-  int r = rados.read(pool, RBD_DIRECTORY, 0, bl, 0);
+  int r = pool.read(RBD_DIRECTORY, bl, 0, 0);
   if (r < 0)
     return r;
 
@@ -555,16 +543,15 @@ int snap_create(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
-  Rados rados(ictx->pool);
-
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
-  r = rados.set_snap_write_context(ictx->pool, ictx->snapc.seq, ictx->snaps);
+  r = ictx->pool.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
   if (r < 0)
     return r;
 
-  rados.set_snap_read(ictx->pool, 0);
+  // probably a bug: what's so special about snap 0? (as opposed to CEPH_NOSNAP, etc?)
+  ictx->pool.snap_set_read(0);
   r = add_snap(ictx, snap_name);
   notify_change(ictx->pool, md_oid, NULL, ictx);
   return r;
@@ -576,8 +563,6 @@ int snap_remove(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
-  Rados rados(ictx->pool);
-
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
@@ -585,26 +570,24 @@ int snap_remove(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
-  r = rados.set_snap_write_context(ictx->pool, ictx->snapc.seq, ictx->snaps);
+  r = ictx->pool.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
   if (r < 0)
     return r;
 
-  rados.set_snap_read(ictx->pool, ictx->snapid);
+  ictx->pool.snap_set_read(ictx->snapid);
 
   r = rm_snap(ictx->pool, md_oid, snap_name);
-  r = rados.selfmanaged_snap_remove(ictx->pool, ictx->snapid);
+  r = ictx->pool.selfmanaged_snap_remove(ictx->snapid);
   notify_change(ictx->pool, md_oid, NULL, ictx);
 
   return r;
 }
 
-int create(pool_t pool, string& md_oid, const char *imgname,
+int create(PoolHandle& pool, string& md_oid, const char *imgname,
 			      uint64_t size, int *order)
 {
-  Rados rados(pool);
-
   // make sure it doesn't already exist
-  int r = rados.stat(pool, md_oid, NULL, NULL);
+  int r = pool.stat(md_oid, NULL, NULL);
   if (r == 0) {
     derr << "rbd image header " << md_oid << " already exists" << dendl;
     return -EEXIST;
@@ -630,14 +613,14 @@ int create(pool_t pool, string& md_oid, const char *imgname,
   ::encode(c, cmdbl);
   ::encode(imgname, cmdbl);
   ::encode(emptybl, cmdbl);
-  r = rados.tmap_update(pool, RBD_DIRECTORY, cmdbl);
+  r = pool.tmap_update(RBD_DIRECTORY, cmdbl);
   if (r < 0) {
     derr << "error adding img to directory: " << strerror(-r)<< dendl;
     return r;
   }
 
   dout(2) << "creating rbd image..." << dendl;
-  r = rados.write(pool, md_oid, 0, bl, bl.length());
+  r = pool.write(md_oid, bl, bl.length(), 0);
   if (r < 0) {
     derr << "error writing header: " << strerror(-r) << dendl;
     return r;
@@ -647,9 +630,8 @@ int create(pool_t pool, string& md_oid, const char *imgname,
   return 0;
 }
 
-int rename(pool_t pool, const char *srcname, const char *dstname)
+int rename(PoolHandle& pool, const char *srcname, const char *dstname)
 {
-  Rados rados(pool);
   string md_oid = srcname;
   md_oid += RBD_SUFFIX;
   string dst_md_oid = dstname;
@@ -663,7 +645,7 @@ int rename(pool_t pool, const char *srcname, const char *dstname)
     derr << "error reading header: " << md_oid << ": " << strerror(-r) << dendl;
     return r;
   }
-  r = rados.stat(pool, dst_md_oid, NULL, NULL);
+  r = pool.stat(dst_md_oid, NULL, NULL);
   if (r == 0) {
     derr << "rbd image header " << dst_md_oid << " already exists" << dendl;
     return -EEXIST;
@@ -675,7 +657,7 @@ int rename(pool_t pool, const char *srcname, const char *dstname)
   }
   r = tmap_set(pool, dstname_str);
   if (r < 0) {
-    rados.remove(pool, dst_md_oid);
+    pool.remove(dst_md_oid);
     derr << "can't add " << dst_md_oid << " to directory" << dendl;
     return r;
   }
@@ -683,7 +665,7 @@ int rename(pool_t pool, const char *srcname, const char *dstname)
   if (r < 0)
     derr << "warning: couldn't remove old entry from directory (" << imgname_str << ")" << dendl;
 
-  r = rados.remove(pool, md_oid);
+  r = pool.remove(md_oid);
   if (r < 0)
     derr << "warning: couldn't remove old metadata" << dendl;
   notify_change(pool, md_oid, NULL, NULL);
@@ -701,9 +683,8 @@ int info(ImageCtx *ictx, image_info_t& info, size_t infosize)
   return 0;
 }
 
-int remove(pool_t pool, const char *imgname)
+int remove(PoolHandle& pool, const char *imgname)
 {
-  Rados rados(pool);
   string md_oid = imgname;
   md_oid += RBD_SUFFIX;
 
@@ -712,7 +693,7 @@ int remove(pool_t pool, const char *imgname)
   if (r >= 0) {
     trim_image(pool, &header, 0);
     dout(2) << "\rremoving header..." << dendl;
-    rados.remove(pool, md_oid);
+    pool.remove(md_oid);
   }
 
   dout(2) << "removing rbd image to directory..." << dendl;
@@ -720,7 +701,7 @@ int remove(pool_t pool, const char *imgname)
   __u8 c = CEPH_OSD_TMAP_RM;
   ::encode(c, cmdbl);
   ::encode(imgname, cmdbl);
-  r = rados.tmap_update(pool, RBD_DIRECTORY, cmdbl);
+  r = pool.tmap_update(RBD_DIRECTORY, cmdbl);
   if (r < 0) {
     derr << "error removing img from directory: " << strerror(-r)<< dendl;
     return r;
@@ -736,7 +717,6 @@ int resize(ImageCtx *ictx, uint64_t size)
   if (r < 0)
     return r;
 
-  Rados rados(ictx->pool);
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
@@ -758,7 +738,7 @@ int resize(ImageCtx *ictx, uint64_t size)
   // rewrite header
   bufferlist bl;
   bl.append((const char *)&(ictx->header), sizeof(ictx->header));
-  r = rados.write(ictx->pool, md_oid, 0, bl, bl.length());
+  r = ictx->pool.write(md_oid, bl, bl.length(), 0);
   if (r == -ERANGE)
     derr << "operation might have conflicted with another client!" << dendl;
   if (r < 0) {
@@ -778,7 +758,6 @@ int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps)
   if (r < 0)
     return r;
   bufferlist bl, bl2;
-  Rados rados(ictx->pool);
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
@@ -798,11 +777,10 @@ int add_snap(ImageCtx *ictx, const char *snap_name)
 {
   bufferlist bl, bl2;
   uint64_t snap_id;
-  Rados rados(ictx->pool);
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
-  int r = rados.selfmanaged_snap_create(ictx->pool, &snap_id);
+  int r = ictx->pool.selfmanaged_snap_create(&snap_id);
   if (r < 0) {
     derr << "failed to create snap id: " << strerror(-r) << dendl;
     return r;
@@ -811,7 +789,7 @@ int add_snap(ImageCtx *ictx, const char *snap_name)
   ::encode(snap_name, bl);
   ::encode(snap_id, bl);
 
-  r = rados.exec(ictx->pool, md_oid, "rbd", "snap_add", bl, bl2);
+  r = ictx->pool.exec(md_oid, "rbd", "snap_add", bl, bl2);
   if (r < 0) {
     derr << "rbd.snap_add execution failed failed: " << strerror(-r) << dendl;
     return r;
@@ -821,13 +799,12 @@ int add_snap(ImageCtx *ictx, const char *snap_name)
   return 0;
 }
 
-int rm_snap(pool_t pool, string& md_oid, const char *snap_name)
+int rm_snap(PoolHandle& pool, string& md_oid, const char *snap_name)
 {
   bufferlist bl, bl2;
-  Rados rados(pool);
   ::encode(snap_name, bl);
 
-  int r = rados.exec(pool, md_oid, "rbd", "snap_remove", bl, bl2);
+  int r = pool.exec(md_oid, "rbd", "snap_remove", bl, bl2);
   if (r < 0) {
     derr << "rbd.snap_remove execution failed failed: " << strerror(-r) << dendl;
     return r;
@@ -851,14 +828,13 @@ int ictx_check(ImageCtx *ictx)
 int ictx_refresh(ImageCtx *ictx, const char *snap_name)
 {
   bufferlist bl, bl2;
-  Rados rados(ictx->pool);
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
   int r = read_header(ictx->pool, md_oid, &(ictx->header), NULL);
   if (r < 0)
     return r;
-  r = rados.exec(ictx->pool, md_oid, "rbd", "snap_list", bl, bl2);
+  r = ictx->pool.exec(md_oid, "rbd", "snap_list", bl, bl2);
   if (r < 0)
     return r;
 
@@ -904,7 +880,6 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name)
   int r = ictx_check(ictx);
   if (r < 0)
     return r;
-  Rados rados(ictx->pool);
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
@@ -912,11 +887,11 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
-  r = rados.set_snap_write_context(ictx->pool, ictx->snapc.seq, ictx->snaps);
+  r = ictx->pool.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
   if (r < 0)
     return r;
 
-  rados.set_snap_read(ictx->pool, ictx->snapid);
+  ictx->pool.snap_set_read(ictx->snapid);
   r = rollback_image(ictx, ictx->snapid);
   if (r < 0)
     return r;
@@ -924,13 +899,12 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name)
   return 0;
 }
 
-int copy(pool_t src_pool, const char *srcname, pool_t dest_pool, const char *destname)
+int copy(PoolHandle& src_pool, const char *srcname, PoolHandle& dest_pool, const char *destname)
 {
   struct rbd_obj_header_ondisk header, dest_header;
   int64_t ret;
   int r;
   string md_oid, dest_md_oid;
-  Rados rados(src_pool);
   md_oid = srcname;
   md_oid += RBD_SUFFIX;
 
@@ -963,7 +937,7 @@ int copy(pool_t src_pool, const char *srcname, pool_t dest_pool, const char *des
     string dest_oid = get_block_oid(&dest_header, i);
     map<off_t, size_t> m;
     map<off_t, size_t>::iterator iter;
-    r = rados.sparse_read(src_pool, oid, 0, block_size, m, bl);
+    r = src_pool.sparse_read(oid, m, bl, block_size, 0);
     if (r < 0 && r == -ENOENT)
       r = 0;
     if (r < 0)
@@ -979,7 +953,7 @@ int copy(pool_t src_pool, const char *srcname, pool_t dest_pool, const char *des
 	return -EIO;
       }
       bl.copy(extent_ofs, extent_len, wrbl);
-      r = rados.write(dest_pool, dest_oid, extent_ofs, wrbl, extent_len);
+      r = dest_pool.write(dest_oid, wrbl, extent_len, extent_ofs);
       if (r < 0)
 	goto done;
     }
@@ -995,7 +969,6 @@ int snap_set(ImageCtx *ictx, const char *snap_name)
   int r = ictx_check(ictx);
   if (r < 0)
     return r;
-  Rados rados(ictx->pool);
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
@@ -1003,16 +976,16 @@ int snap_set(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
-  r = rados.set_snap_write_context(ictx->pool, ictx->snapc.seq, ictx->snaps);
+  r = ictx->pool.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
   if (r < 0)
     return r;
 
-  rados.set_snap_read(ictx->pool, ictx->snapid);
+  ictx->pool.snap_set_read(ictx->snapid);
 
   return 0;
 }
 
-int open_image(pool_t pool, ImageCtx *ictx, const char *name, const char *snap_name)
+int open_image(PoolHandle& pool, ImageCtx *ictx, const char *name, const char *snap_name)
 {
   int r = ictx_refresh(ictx, snap_name);
   if (r < 0)
@@ -1025,19 +998,17 @@ int open_image(pool_t pool, ImageCtx *ictx, const char *name, const char *snap_n
   string md_oid = name;
   md_oid += RBD_SUFFIX;
 
-  Rados rados(pool);
-  r = rados.watch(ictx->pool, md_oid, 0, &(wctx->cookie), wctx);
+  r = ictx->pool.watch(md_oid, 0, &(wctx->cookie), wctx);
   return r;
 }
 
 void close_image(ImageCtx *ictx)
 {
-  Rados rados(ictx->pool);
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
   ictx->wctx->invalidate();
-  rados.unwatch(ictx->pool, md_oid, ictx->wctx->cookie);
+  ictx->pool.unwatch(md_oid, ictx->wctx->cookie);
   delete ictx->wctx;
   delete ictx;
   ictx = NULL;
@@ -1051,7 +1022,6 @@ int read_iterate(ImageCtx *ictx, off_t off, size_t len,
   if (r < 0)
     return r;
 
-  Rados rados(ictx->pool);
   int64_t ret;
   int total_read = 0;
   uint64_t start_block = get_block_num(&ictx->header, off);
@@ -1068,7 +1038,7 @@ int read_iterate(ImageCtx *ictx, off_t off, size_t len,
     map<off_t, size_t> m;
     map<off_t, size_t>::iterator iter;
     off_t bl_ofs = 0, buf_bl_pos = 0;
-    r = rados.sparse_read(ictx->pool, oid, block_ofs, read_len, m, bl);
+    r = ictx->pool.sparse_read(oid, m, bl, read_len, block_ofs);
     if (r < 0 && r == -ENOENT)
       r = 0;
     if (r < 0) {
@@ -1138,7 +1108,6 @@ int write(ImageCtx *ictx, off_t off, size_t len, const char *buf)
   if (r < 0)
     return r;
 
-  Rados rados(ictx->pool);
   int total_write = 0;
   uint64_t start_block = get_block_num(&ictx->header, off);
   uint64_t end_block = get_block_num(&ictx->header, off + len - 1);
@@ -1151,7 +1120,7 @@ int write(ImageCtx *ictx, off_t off, size_t len, const char *buf)
     uint64_t block_ofs = get_block_ofs(&ictx->header, off + total_write);
     uint64_t write_len = min(block_size - block_ofs, left);
     bl.append(buf + total_write, write_len);
-    r = rados.write(ictx->pool, oid, block_ofs, bl, write_len);
+    r = ictx->pool.write(oid, bl, write_len, block_ofs);
     if (r < 0)
       return r;
     if ((uint64_t)r != write_len)
@@ -1246,7 +1215,6 @@ int aio_write(ImageCtx *ictx, off_t off, size_t len, const char *buf,
   if (r < 0)
     return r;
 
-  Rados rados(ictx->pool);
   int total_write = 0;
   uint64_t start_block = get_block_num(&ictx->header, off);
   uint64_t end_block = get_block_num(&ictx->header, off + len - 1);
@@ -1264,8 +1232,9 @@ int aio_write(ImageCtx *ictx, off_t off, size_t len, const char *buf,
     bl.append(buf + total_write, write_len);
     AioBlockCompletion *block_completion = new AioBlockCompletion(c, off, len, NULL);
     c->add_block_completion(block_completion);
-    librados::Rados::AioCompletion *rados_completion = rados.aio_create_completion(block_completion, NULL, rados_cb);
-    r = rados.aio_write(ictx->pool, oid, block_ofs, bl, write_len, rados_completion);
+    librados::AioCompletion *rados_completion =
+      Rados::aio_create_completion(block_completion, NULL, rados_cb);
+    r = ictx->pool.aio_write(oid, rados_completion, bl, write_len, block_ofs);
     if (r < 0)
       goto done;
     total_write += write_len;
@@ -1292,7 +1261,6 @@ int aio_read(ImageCtx *ictx, off_t off, size_t len,
   if (r < 0)
     return r;
 
-  Rados rados(ictx->pool);
   int64_t ret;
   int total_read = 0;
   uint64_t start_block = get_block_num(&ictx->header, off);
@@ -1312,10 +1280,11 @@ int aio_read(ImageCtx *ictx, off_t off, size_t len,
     AioBlockCompletion *block_completion = new AioBlockCompletion(c, block_ofs, read_len, buf + total_read);
     c->add_block_completion(block_completion);
 
-    librados::Rados::AioCompletion *rados_completion = rados.aio_create_completion(block_completion, rados_aio_sparse_read_cb, rados_cb);
-    r = rados.aio_sparse_read(ictx->pool, oid, block_ofs,
+    librados::AioCompletion *rados_completion =
+      Rados::aio_create_completion(block_completion, rados_aio_sparse_read_cb, rados_cb);
+    r = ictx->pool.aio_sparse_read(oid, rados_completion,
 			      &block_completion->m, &block_completion->data_bl,
-			      read_len, rados_completion);
+			      read_len, block_ofs);
     if (r < 0 && r == -ENOENT)
       r = 0;
     if (r < 0) {
@@ -1346,12 +1315,12 @@ void RBD::version(int *major, int *minor, int *extra)
   rbd_version(major, minor, extra);
 }
 
-int RBD::open(pool_t pool, Image *image, const char *name)
+int RBD::open(PoolHandle& pool, Image *image, const char *name)
 {
   return open(pool, image, name, NULL);
 }
 
-int RBD::open(pool_t pool, Image *image, const char *name, const char *snapname)
+int RBD::open(PoolHandle& pool, Image *image, const char *name, const char *snapname)
 {
   ImageCtx *ictx = new ImageCtx(name, pool);
   if (!ictx)
@@ -1365,7 +1334,7 @@ int RBD::open(pool_t pool, Image *image, const char *name, const char *snapname)
   return 0;
 }
 
-int RBD::create(pool_t pool, const char *name, size_t size, int *order)
+int RBD::create(PoolHandle& pool, const char *name, size_t size, int *order)
 {
   string md_oid = name;
   md_oid += RBD_SUFFIX;
@@ -1373,25 +1342,25 @@ int RBD::create(pool_t pool, const char *name, size_t size, int *order)
   return r;
 }
 
-int RBD::remove(pool_t pool, const char *name)
+int RBD::remove(PoolHandle& pool, const char *name)
 {
   int r = librbd::remove(pool, name);
   return r;
 }
 
-int RBD::list(pool_t pool, std::vector<std::string>& names)
+int RBD::list(PoolHandle& pool, std::vector<std::string>& names)
 {
   int r = librbd::list(pool, names);
   return r;
 }
 
-int RBD::copy(pool_t src_pool, const char *srcname, pool_t dest_pool, const char *destname)
+int RBD::copy(PoolHandle& src_pool, const char *srcname, PoolHandle& dest_pool, const char *destname)
 {
   int r = librbd::copy(src_pool, srcname, dest_pool, destname);
   return r;
 }
 
-int RBD::rename(pool_t src_pool, const char *srcname, const char *destname)
+int RBD::rename(PoolHandle& src_pool, const char *srcname, const char *destname)
 {
   int r = librbd::rename(src_pool, srcname, destname);
   return r;
@@ -1537,8 +1506,10 @@ extern "C" void rbd_version(int *major, int *minor, int *extra)
 }
 
 /* images */
-extern "C" int rbd_list(rados_pool_t pool, char *names, size_t *size)
+extern "C" int rbd_list(rados_pool_t p, char *names, size_t *size)
 {
+  librados::PoolHandle pool;
+  librados::PoolHandle::from_rados_pool_t(p, pool);
   std::vector<std::string> cpp_names;
   int r = librbd::list(pool, cpp_names);
   if (r == -ENOENT)
@@ -1564,30 +1535,41 @@ extern "C" int rbd_list(rados_pool_t pool, char *names, size_t *size)
   return (int)cpp_names.size();
 }
 
-extern "C" int rbd_create(rados_pool_t pool, const char *name, size_t size, int *order)
+extern "C" int rbd_create(rados_pool_t p, const char *name, size_t size, int *order)
 {
+  librados::PoolHandle pool;
+  librados::PoolHandle::from_rados_pool_t(p, pool);
   string md_oid = name;
   md_oid += RBD_SUFFIX;
   return librbd::create(pool, md_oid, name, size, order);
 }
 
-extern "C" int rbd_remove(rados_pool_t pool, const char *name)
+extern "C" int rbd_remove(rados_pool_t p, const char *name)
 {
+  librados::PoolHandle pool;
+  librados::PoolHandle::from_rados_pool_t(p, pool);
   return librbd::remove(pool, name);
 }
 
-extern "C" int rbd_copy(rados_pool_t src_pool, const char *srcname, rados_pool_t dest_pool, const char *destname)
+extern "C" int rbd_copy(rados_pool_t src_p, const char *srcname, rados_pool_t dest_p, const char *destname)
 {
+  librados::PoolHandle src_pool, dest_pool;
+  librados::PoolHandle::from_rados_pool_t(src_p, src_pool);
+  librados::PoolHandle::from_rados_pool_t(dest_p, dest_pool);
   return librbd::copy(src_pool, srcname, dest_pool, destname);
 }
 
-extern "C" int rbd_rename(rados_pool_t src_pool, const char *srcname, const char *destname)
+extern "C" int rbd_rename(rados_pool_t src_p, const char *srcname, const char *destname)
 {
+  librados::PoolHandle src_pool;
+  librados::PoolHandle::from_rados_pool_t(src_p, src_pool);
   return librbd::rename(src_pool, srcname, destname);
 }
 
-extern "C" int rbd_open(rados_pool_t pool, const char *name, rbd_image_t *image, const char *snap_name)
+extern "C" int rbd_open(rados_pool_t p, const char *name, rbd_image_t *image, const char *snap_name)
 {
+  librados::PoolHandle pool;
+  librados::PoolHandle::from_rados_pool_t(p, pool);
   librbd::ImageCtx *ictx = new librbd::ImageCtx(name, pool);
   if (!ictx)
     return -ENOMEM;

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 /*
  * Ceph - scalable distributed file system
  *
@@ -6,15 +6,15 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  * Series of functions to test your rados installation. Notice
  * that this code is not terribly robust -- for instance, if you
  * try and bench on a pool you don't have permission to access
  * it will just loop forever.
  */
-#include "include/rados/librados.h"
+#include "include/rados/librados.hpp"
 #include "common/config.h"
 #include "common/common_init.h"
 #include "common/Cond.h"
@@ -59,15 +59,15 @@ void generate_object_name(char *s, int objnum, int pid = 0)
   }
 }
 
-int write_bench(Rados& rados, rados_pool_t pool,
+int write_bench(librados::Rados& rados, librados::PoolHandle& pool,
 		 int secondsToRun, int concurrentios, bench_data *data);
-int seq_read_bench(Rados& rados, rados_pool_t pool,
+int seq_read_bench(librados::Rados& rados, librados::PoolHandle& pool,
 		   int secondsToRun, int concurrentios, bench_data *data,
 		   int writePid);
 void *status_printer(void * data_store);
 void sanitize_object_contents(bench_data *data, int length);
-  
-int aio_bench(Rados& rados, rados_pool_t pool, int operation,
+
+int aio_bench(librados::Rados& rados, librados::PoolHandle &pool, int operation,
 	      int secondsToRun, int concurrentios, int op_size) {
   int object_size = op_size;
   int num_objects = 0;
@@ -78,7 +78,7 @@ int aio_bench(Rados& rados, rados_pool_t pool, int operation,
   //get data from previous write run, if available
   if (operation != OP_WRITE) {
     bufferlist object_data;
-    r = rados.read(pool, BENCH_DATA, 0, object_data, sizeof(int)*3);
+    r = pool.read(BENCH_DATA, object_data, sizeof(int)*3, 0);
     if (r <= 0) {
       delete[] contentsChars;
       if (r == -2)
@@ -92,7 +92,7 @@ int aio_bench(Rados& rados, rados_pool_t pool, int operation,
   } else {
     object_size = op_size;
   }
-  
+
   dataLock.Lock();
   bench_data *data = new bench_data();
   data->done = false;
@@ -122,7 +122,7 @@ int aio_bench(Rados& rados, rados_pool_t pool, int operation,
     cerr << "Random test not implemented yet!" << std::endl;
     r = -1;
   }
-  
+
  out:
   delete[] contentsChars;
   delete data;
@@ -136,13 +136,13 @@ void _aio_cb(void *cb, void *arg) {
   dataLock.Unlock();
 }
 
-int write_bench(Rados& rados, rados_pool_t pool,
+int write_bench(librados::Rados& rados, librados::PoolHandle& pool,
 		 int secondsToRun, int concurrentios, bench_data *data) {
   cout << "Maintaining " << concurrentios << " concurrent writes of "
        << data->object_size << " bytes for at least "
        << secondsToRun << " seconds." << std::endl;
-  
-  Rados::AioCompletion* completions[concurrentios];
+
+  librados::AioCompletion* completions[concurrentios];
   char* name[concurrentios];
   bufferlist* contents[concurrentios];
   double total_latency = 0;
@@ -164,7 +164,7 @@ int write_bench(Rados& rados, rados_pool_t pool,
   }
 
   pthread_t print_thread;
-  
+
   pthread_create(&print_thread, NULL, status_printer, (void *)data);
   dataLock.Lock();
   data->start_time = g_clock.now();
@@ -173,7 +173,7 @@ int write_bench(Rados& rados, rados_pool_t pool,
     start_times[i] = g_clock.now();
     completions[i] = rados.aio_create_completion((void *) &cond, 0,
 						 &_aio_cb);
-    r = rados.aio_write(pool, name[i], 0, *contents[i], data->object_size, completions[i]);
+    r = pool.aio_write(name[i], completions[i], *contents[i], data->object_size, 0);
     if (r < 0) { //naughty, doesn't clean up heap
       goto ERR;
     }
@@ -182,14 +182,14 @@ int write_bench(Rados& rados, rados_pool_t pool,
     ++data->in_flight;
     dataLock.Unlock();
   }
-  
+
   //keep on adding new writes as old ones complete until we've passed minimum time
   int slot;
   bufferlist* newContents;
   char* newName;
-  
+
   //don't need locking for reads because other thread doesn't write
-  
+
   runtime.set_from_double(secondsToRun);
   stopTime = data->start_time + runtime;
   while( g_clock.now() < stopTime ) {
@@ -230,13 +230,12 @@ int write_bench(Rados& rados, rados_pool_t pool,
     completions[slot]->release();
     completions[slot] = 0;
     timePassed = g_clock.now() - data->start_time;
-    
+
     //write new stuff to rados, then delete old stuff
     //and save locations of new stuff for later deletion
     start_times[slot] = g_clock.now();
-    completions[slot] = rados.aio_create_completion((void *) &cond, 0, 
-						 &_aio_cb);
-    r = rados.aio_write(pool, newName, 0, *newContents, data->object_size, completions[slot]);
+    completions[slot] = rados.aio_create_completion((void *) &cond, 0, &_aio_cb);
+    r = pool.aio_write(newName, completions[slot], *newContents, data->object_size, 0);
     if (r < 0) {//naughty; doesn't clean up heap space.
       goto ERR;
     }
@@ -285,7 +284,7 @@ int write_bench(Rados& rados, rados_pool_t pool,
   bandwidth = bandwidth/(1024*1024); // we want it in MB/sec
   char bw[20];
   snprintf(bw, sizeof(bw), "%.3lf \n", bandwidth);
-  
+
   cout << "Total time run:        " << timePassed << std::endl
        << "Total writes made:     " << data->finished << std::endl
        << "Write size:            " << data->object_size << std::endl
@@ -301,7 +300,7 @@ int write_bench(Rados& rados, rados_pool_t pool,
   ::encode(data->object_size, b_write);
   ::encode(data->finished, b_write);
   ::encode(getpid(), b_write);
-  rados.write(pool, BENCH_DATA, 0, b_write, sizeof(int)*3);
+  pool.write(BENCH_DATA, b_write, sizeof(int)*3, 0);
   return 0;
 
  ERR:
@@ -312,7 +311,7 @@ int write_bench(Rados& rados, rados_pool_t pool,
   return -5;
 }
 
-int seq_read_bench(Rados& rados, rados_pool_t pool, int seconds_to_run,
+int seq_read_bench(librados::Rados& rados, librados::PoolHandle& pool, int seconds_to_run,
 		   int concurrentios, bench_data *write_data, int pid) {
   bench_data *data = new bench_data();
   data->done = false;
@@ -327,7 +326,7 @@ int seq_read_bench(Rados& rados, rados_pool_t pool, int seconds_to_run,
   data->object_contents = write_data->object_contents;
 
   Cond cond;
-  Rados::AioCompletion* completions[concurrentios];
+  librados::AioCompletion* completions[concurrentios];
   char* name[concurrentios];
   bufferlist* contents[concurrentios];
   int index[concurrentios];
@@ -360,9 +359,8 @@ int seq_read_bench(Rados& rados, rados_pool_t pool, int seconds_to_run,
   for (int i = 0; i < concurrentios; ++i) {
     index[i] = i;
     start_times[i] = g_clock.now();
-    completions[i] = rados.aio_create_completion((void *) &cond,
-						 &_aio_cb, 0);
-    r = rados.aio_read(pool, name[i], 0, contents[i], data->object_size, completions[i]);
+    completions[i] = rados.aio_create_completion((void *) &cond, &_aio_cb, 0);
+    r = pool.aio_read(name[i], completions[i], contents[i], data->object_size, 0);
     if (r < 0) { //naughty, doesn't clean up heap -- oh, or handle the print thread!
       cerr << "r = " << r << std::endl;
       goto ERR;
@@ -419,9 +417,8 @@ int seq_read_bench(Rados& rados, rados_pool_t pool, int seconds_to_run,
     //start new read and check data if requested
     start_times[slot] = g_clock.now();
     contents[slot] = new bufferlist();
-    completions[slot] = rados.aio_create_completion((void *) &cond,
-						    &_aio_cb, 0);
-    r = rados.aio_read(pool, newName, 0, contents[slot], data->object_size, completions[slot]);
+    completions[slot] = rados.aio_create_completion((void *) &cond, &_aio_cb, 0);
+    r = pool.aio_read(newName, completions[slot], contents[slot], data->object_size, 0);
     if (r < 0) {
       goto ERR;
     }
@@ -521,8 +518,8 @@ void *status_printer(void * data_store) {
 	     << " max lat: " << data->max_latency
 	     << " avg lat: " << data->avg_latency << std::endl;
       //I'm naughty and don't reset the fill
-      cout << setfill(' ') 
-	   << setw(5) << "sec" 
+      cout << setfill(' ')
+	   << setw(5) << "sec"
 	   << setw(8) << "Cur ops"
 	   << setw(10) << "started"
 	   << setw(10) << "finished"
@@ -540,7 +537,7 @@ void *status_printer(void * data_store) {
     if (previous_writes != data->finished) {
       previous_writes = data->finished;
       cycleSinceChange = 0;
-      cout << setfill(' ') 
+      cout << setfill(' ')
 	   << setw(5) << i
 	   << setw(8) << data->in_flight
 	   << setw(10) << data->started
