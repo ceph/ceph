@@ -2824,6 +2824,11 @@ extern "C" int rados_pool_snap_get_name(rados_pool_t pool, rados_snap_t id,
   return 0;
 }
 
+extern "C" int rados_pool_snap_get_stamp(rados_pool_t pool, rados_snap_t id, time_t *t)
+{
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  return ctx->client->snap_get_stamp(ctx, id, t);
+}
 
 extern "C" int rados_getxattr(rados_pool_t pool, const char *o, const char *name,
 			      char *buf, size_t len)
