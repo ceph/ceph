@@ -128,10 +128,10 @@ static int do_rename(librados::pool_t pool, const char *imgname, const char *des
   return 0;
 }
 
-static int do_show_info(const char *imgname, librbd::image_t image)
+static int do_show_info(const char *imgname, librbd::Image *image)
 {
   librbd::image_info_t info;
-  int r = rbd.stat(image, info, sizeof(info));
+  int r = image->stat(info, sizeof(info));
   if (r < 0)
     return r;
 
@@ -148,19 +148,19 @@ static int do_show_info(const char *imgname, librbd::image_t image)
   return 0;
 }
 
-static int do_resize(librbd::image_t image, size_t size)
+static int do_resize(librbd::Image *image, size_t size)
 {
-  int r = rbd.resize(image, size);
+  int r = image->resize(size);
   if (r < 0)
     return r;
 
   return 0;
 }
 
-static int do_list_snaps(librbd::image_t image)
+static int do_list_snaps(librbd::Image *image)
 {
   std::vector<librbd::snap_info_t> snaps;
-  int r = rbd.snap_list(image, snaps);
+  int r = image->snap_list(snaps);
   if (r < 0)
     return r;
 
@@ -170,27 +170,27 @@ static int do_list_snaps(librbd::image_t image)
   return 0;
 }
 
-static int do_add_snap(librbd::image_t image, const char *snapname)
+static int do_add_snap(librbd::Image *image, const char *snapname)
 {
-  int r = rbd.snap_create(image, snapname);
+  int r = image->snap_create(snapname);
   if (r < 0)
     return r;
 
   return 0;
 }
 
-static int do_remove_snap(librbd::image_t image, const char *snapname)
+static int do_remove_snap(librbd::Image *image, const char *snapname)
 {
-  int r = rbd.snap_remove(image, snapname);
+  int r = image->snap_remove(snapname);
   if (r < 0)
     return r;
 
   return 0;
 }
 
-static int do_rollback_snap(librbd::image_t image, const char *snapname)
+static int do_rollback_snap(librbd::Image *image, const char *snapname)
 {
-  int r = rbd.snap_rollback(image, snapname);
+  int r = image->snap_rollback(snapname);
   if (r < 0)
     return r;
 
@@ -216,7 +216,7 @@ static int export_read_cb(off_t ofs, size_t len, const char *buf, void *arg)
   return 0;
 }
 
-static int do_export(librbd::image_t image, const char *path)
+static int do_export(librbd::Image *image, const char *path)
 {
   int r;
   librbd::image_info_t info;
@@ -225,11 +225,11 @@ static int do_export(librbd::image_t image, const char *path)
   if (fd < 0)
     return -errno;
 
-  r = rbd.stat(image, info, sizeof(info));
+  r = image->stat(info, sizeof(info));
   if (r < 0)
     return r;
 
-  r = rbd.read_iterate(image, 0, info.size, export_read_cb, (void *)&fd);
+  r = image->read_iterate(0, info.size, export_read_cb, (void *)&fd);
   if (r < 0)
     return r;
 
@@ -341,9 +341,9 @@ static int do_import(librados::pool_t pool, const char *imgname, int *order, con
     cerr << "image creation failed" << std::endl;
     return r;
   }
-  librbd::image_t image;
-  r = rbd.open(pool, imgname, &image, NULL);
-  if (r < 0) {
+  librbd::Image *image = NULL;
+  image = rbd.image_open(pool, imgname);
+  if (!image) {
     cerr << "failed to open image" << std::endl;
     return r;
   }
@@ -415,12 +415,12 @@ static int do_import(librados::pool_t pool, const char *imgname, int *order, con
         }
         bufferlist bl;
         bl.append(p);
-        librbd::RBD::AioCompletion *completion = rbd.aio_create_completion(NULL, NULL);
+        librbd::RBD::AioCompletion *completion = new librbd::RBD::AioCompletion(NULL, NULL);
         if (!completion) {
           r = -ENOMEM;
           goto done;
         }
-        r = rbd.aio_write(image, file_pos, len, bl, completion);
+        r = image->aio_write(file_pos, len, bl, completion);
         if (r < 0)
           goto done;
 	completion->wait_for_complete();
@@ -485,10 +485,10 @@ static int do_watch(librados::pool_t& pp, const char *imgname)
   return 0;
 }
 
-static void err_exit(librados::pool_t pool, librbd::image_t image = NULL)
+static void err_exit(librados::pool_t pool, librbd::Image *image = NULL)
 {
   if (image)
-    rbd.close(image);
+    image->close();
   rados.close_pool(pool);
   rados.shutdown();
   exit(1);
@@ -680,7 +680,7 @@ int main(int argc, const char **argv)
     dest_poolname = poolname;
 
   librados::pool_t pool, dest_pool;
-  librbd::image_t image = NULL;
+  librbd::Image *image = NULL;
 
   if (opt_cmd == OPT_EXPORT && !path)
     path = imgname;
@@ -707,15 +707,15 @@ int main(int argc, const char **argv)
       (opt_cmd == OPT_RESIZE || opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
        opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
        opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_EXPORT || opt_cmd == OPT_WATCH)) {
-    r = rbd.open(pool, imgname, &image, NULL);
-    if (r < 0) {
-      cerr << "error opening image " << imgname << " (err=" << r << ")" << std::endl;
+    image = rbd.image_open(pool, imgname);
+    if (!image) {
+      cerr << "error opening image " << imgname << std::endl;
       err_exit(pool);
     }
   }
 
   if (snapname) {
-    r = rbd.snap_set(image, snapname);
+    r = image->snap_set(snapname);
     if (r < 0 && !(r == -ENOENT && opt_cmd == OPT_SNAP_CREATE)) {
       cerr << "error setting snapshot context: " << strerror(-r) << std::endl;
       err_exit(pool, image);
@@ -885,7 +885,7 @@ int main(int argc, const char **argv)
   }
 
   if (image)
-    rbd.close(image);
+    image->close();
 
   rados.close_pool(pool);
   rados.shutdown();
