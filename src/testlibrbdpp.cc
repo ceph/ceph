@@ -40,7 +40,7 @@ librbd::RBD *rbd;
 void test_create_and_stat(librados::pool_t pool, const char *name, size_t size)
 {
   librbd::image_info_t info;
-  librbd::Image *image;
+  librbd::Image *image = NULL;
   int order = 0;
   assert(rbd->create(pool, name, size, &order) == 0);
   assert(rbd->open(pool, image, name, NULL) == 0);
@@ -243,7 +243,7 @@ int main(int argc, const char **argv)
 {
   librados::Rados rados;
   librados::pool_t pool;
-  librbd::Image *image;
+  librbd::Image *image = NULL;
   rbd = new librbd::RBD();
   assert(rados.initialize(0, NULL) == 0);
   assert(rados.open_pool(TEST_POOL, &pool) == 0);
