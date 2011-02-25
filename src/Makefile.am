@@ -265,9 +265,9 @@ bin_PROGRAMS += rbd
 if WITH_DEBUG
 testlibrbd_SOURCES = testlibrbd.c
 testlibrbd_LDADD = librbd.la librados.la libcrush.la -lpthread -lm $(CRYPTOPP_LIBS)
-#testlibrbdpp_SOURCES = testlibrbdpp.cc
-#testlibrbdpp_LDADD = librbd.la librados.la libcrush.la -lpthread -lm $(CRYPTOPP_LIBS)
-bin_PROGRAMS += testlibrbd
+testlibrbdpp_SOURCES = testlibrbdpp.cc
+testlibrbdpp_LDADD = librbd.la librados.la libcrush.la -lpthread -lm $(CRYPTOPP_LIBS)
+bin_PROGRAMS += testlibrbd testlibrbdpp
 endif
 
 if WITH_RADOSGW
