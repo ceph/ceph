@@ -95,6 +95,7 @@ write_objects() {
                 chr=`perl -e "print chr(48+$v)"`
                 head -c $obj_size /dev/zero  | tr '\0' "$chr" > $TEMPDIR/ver$v
                 for i in `seq -w 1 $num_objs`; do
+                        ./rados -p $pool rm obj$i || die "radostool failed"
                         ./rados -p $pool put obj$i $TEMPDIR/ver$v || die "radostool failed"
                 done
         done
