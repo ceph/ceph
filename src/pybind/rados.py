@@ -219,14 +219,14 @@ class Pool(object):
         ret = self.librados.rados_change_pool_auid(self.pool_id,\
                 ctypes.c_int64(auid))
         if ret < 0:
-            raise make_ex(ret, "error changing auid '%s' to %lld" %\
-                (pool_name, auid))
+            raise make_ex(ret, "error changing auid of '%s' to %lld" %\
+                (self.name, auid))
 
     def delete(self):
         self.require_pool_open()
         ret = self.librados.rados_delete_pool(self.pool_id)
         if ret < 0:
-            raise make_ex(ret, "error deleting pool '%s'" % pool_name)
+            raise make_ex(ret, "error deleting pool '%s'" % self.name)
         self.state = "deleted"
 
     def close(self):
