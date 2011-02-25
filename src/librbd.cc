@@ -231,7 +231,7 @@ namespace librbd {
   int write_header(PoolHandle& pool, string& md_oid, bufferlist& header);
   int tmap_set(PoolHandle& pool, string& imgname);
   int tmap_rm(PoolHandle& pool, string& imgname);
-  int rollback_image(ImageCtx *ictx, uint64_t snapid);
+  int rollback_image(ImageCtx *ictx, const char *snap_name);
   void image_info(rbd_obj_header_ondisk& header, image_info_t& info, size_t info_size);
   string get_block_oid(rbd_obj_header_ondisk *header, uint64_t num);
   uint64_t get_max_block(rbd_obj_header_ondisk *header);
@@ -506,7 +506,7 @@ int rollback_image(ImageCtx *ictx, const char *snap_name)
   for (uint64_t i = 0; i < numseg; i++) {
     int r;
     string oid = get_block_oid(&(ictx->header), i);
-    r = ictx->pool.snap_rollback_object(ictx->pool, oid, snap_name);
+    r = ictx->pool.rollback(oid, snap_name);
     if (r < 0 && r != -ENOENT)
       return r;
   }

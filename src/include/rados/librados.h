@@ -130,7 +130,7 @@ int rados_pool_selfmanaged_snap_set_write_ctx(rados_pool_t pool, rados_snap_t se
 int rados_pool_snap_list(rados_pool_t pool, rados_snap_t *snaps, int maxlen);
 int rados_pool_snap_lookup(rados_pool_t pool, const char *name, rados_snap_t *id);
 int rados_pool_snap_get_name(rados_pool_t pool, rados_snap_t id, char *name, int maxlen);
-int rados_pool_snap_get_stamp(PoolCtx *pool, uint64_t snapid, time_t *t);
+int rados_pool_snap_get_stamp(rados_pool_t pool, rados_snap_t id, time_t *t);
 
 /* sync io */
 uint64_t rados_get_last_version(rados_pool_t pool);
