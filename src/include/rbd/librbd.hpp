@@ -57,8 +57,8 @@ public:
 
   void version(int *major, int *minor, int *extra);
 
-  Image *image_open(pool_t pool, const char *name);
-  Image *image_open(pool_t pool, const char *name, const char *snapname);
+  int open(pool_t pool, Image *image, const char *name);
+  int open(pool_t pool, Image *image, const char *name, const char *snapname);
   int list(pool_t pool, std::vector<std::string>& names);
   int create(pool_t pool, const char *name, size_t size, int *order);
   int remove(pool_t pool, const char *name);
@@ -74,11 +74,8 @@ private:
 class Image
 {
 public:
-  Image();
-  Image(image_ctx_t ctx_);
   ~Image();
 
-  void close();
   int resize(size_t size);
   int stat(image_info_t &info, size_t infosize);
 
@@ -99,6 +96,10 @@ public:
   int aio_read(off_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
 
 private:
+  /* Image instances only come from RBD::open */
+  Image(image_ctx_t ctx_);
+  friend class RBD;
+
   Image(const Image& rhs);
   const Image& operator=(const Image& rhs);
 

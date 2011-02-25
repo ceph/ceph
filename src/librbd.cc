@@ -1346,22 +1346,23 @@ void RBD::version(int *major, int *minor, int *extra)
   rbd_version(major, minor, extra);
 }
 
-Image *RBD::image_open(pool_t pool, const char *name)
+int RBD::open(pool_t pool, Image *image, const char *name)
 {
-  return image_open(pool, name, NULL);
+  return open(pool, image, name, NULL);
 }
 
-Image *RBD::image_open(pool_t pool, const char *name, const char *snapname)
+int RBD::open(pool_t pool, Image *image, const char *name, const char *snapname)
 {
   ImageCtx *ictx = new ImageCtx(name, pool);
   if (!ictx)
-    return NULL;
+    return -ENOMEM;
+
   int r = librbd::open_image(pool, ictx, name, snapname);
   if (r < 0)
-    return NULL;
+    return r;
 
-  Image *image = new Image((image_ctx_t)ictx);
-  return image;
+  image = new Image((image_ctx_t)ictx);
+  return 0;
 }
 
 int RBD::create(pool_t pool, const char *name, size_t size, int *order)
@@ -1425,19 +1426,11 @@ void RBD::AioCompletion::release()
   Image
 */
 
-Image::Image()
-{
-}
-
 Image::Image(image_ctx_t ctx_) : ctx(ctx_)
 {
 }
 
 Image::~Image()
-{
-}
-
-void Image::close()
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   close_image(ictx);
