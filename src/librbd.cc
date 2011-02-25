@@ -499,21 +499,14 @@ int tmap_rm(PoolHandle& pool, string& imgname)
   return pool.tmap_update(RBD_DIRECTORY, cmdbl);
 }
 
-int rollback_image(ImageCtx *ictx, uint64_t snapid)
+int rollback_image(ImageCtx *ictx, const char *snap_name)
 {
   uint64_t numseg = get_max_block(&(ictx->header));
 
   for (uint64_t i = 0; i < numseg; i++) {
     int r;
     string oid = get_block_oid(&(ictx->header), i);
-    librados::SnapContext sn;
-    sn.seq = ictx->snapc.seq;
-    sn.snaps.clear();
-    vector<snapid_t>::iterator iter = ictx->snapc.snaps.begin();
-    for (; iter != ictx->snapc.snaps.end(); ++iter) {
-      sn.snaps.push_back(*iter);
-    }
-    r = ictx->pool.selfmanaged_snap_rollback(oid, sn, snapid);
+    r = ictx->pool.snap_rollback_object(ictx->pool, oid, snap_name);
     if (r < 0 && r != -ENOENT)
       return r;
   }
@@ -892,7 +885,7 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name)
     return r;
 
   ictx->pool.snap_set_read(ictx->snapid);
-  r = rollback_image(ictx, ictx->snapid);
+  r = rollback_image(ictx, snap_name);
   if (r < 0)
     return r;
 

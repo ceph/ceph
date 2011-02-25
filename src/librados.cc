@@ -2177,21 +2177,6 @@ selfmanaged_snap_remove(uint64_t snapid)
   return pool_ctx->client->selfmanaged_snap_remove(pool_ctx, snapid);
 }
 
-int librados::PoolHandle::
-selfmanaged_snap_rollback(const std::string& oid, SnapContext& snapc,
-			   uint64_t snapid)
-{
-  ::SnapContext sn;
-  sn.seq = snapc.seq;
-  sn.snaps.clear();
-  std::vector<snap_t>::const_iterator iter = snapc.snaps.begin();
-  for (; iter != snapc.snaps.end(); ++iter) {
-    sn.snaps.push_back(*iter);
-  }
-  return pool_ctx->client->
-    selfmanaged_snap_rollback_object(pool_ctx, oid, sn, snapid);
-}
-
 librados::ObjectIterator librados::PoolHandle::
 objects_begin()
 {
