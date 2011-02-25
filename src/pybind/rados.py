@@ -95,8 +95,8 @@ class Rados(object):
         major = ctypes.c_int()
         minor = ctypes.c_int()
         extra = ctypes.c_int()
-        ret = self.librados.librados_version(byref(major), byref(minor),\
-                                            byref(extra))
+        self.librados.librados_version(byref(major), byref(minor),
+                                       byref(extra))
         return Version(major.value, minor.value, extra.value)
 
     def create_pool(self, pool_name):
