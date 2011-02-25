@@ -342,8 +342,8 @@ static int do_import(librados::pool_t pool, const char *imgname, int *order, con
     return r;
   }
   librbd::Image *image = NULL;
-  image = rbd.image_open(pool, imgname);
-  if (!image) {
+  r = rbd.open(pool, image, imgname);
+  if (r < 0) {
     cerr << "failed to open image" << std::endl;
     return r;
   }
@@ -488,7 +488,7 @@ static int do_watch(librados::pool_t& pp, const char *imgname)
 static void err_exit(librados::pool_t pool, librbd::Image *image = NULL)
 {
   if (image)
-    image->close();
+    delete image;
   rados.close_pool(pool);
   rados.shutdown();
   exit(1);
@@ -707,9 +707,9 @@ int main(int argc, const char **argv)
       (opt_cmd == OPT_RESIZE || opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
        opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
        opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_EXPORT || opt_cmd == OPT_WATCH)) {
-    image = rbd.image_open(pool, imgname);
-    if (!image) {
-      cerr << "error opening image " << imgname << std::endl;
+    r = rbd.open(pool, image, imgname);
+    if (r < 0) {
+      cerr << "error opening image " << imgname << ": " << strerror(r) << std::endl;
       err_exit(pool);
     }
   }
@@ -885,7 +885,7 @@ int main(int argc, const char **argv)
   }
 
   if (image)
-    image->close();
+    delete image;
 
   rados.close_pool(pool);
   rados.shutdown();
