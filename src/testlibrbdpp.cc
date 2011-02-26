@@ -23,6 +23,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <errno.h>
+#include <memory>
 #include <sys/types.h>
 #include <string>
 #include <vector>
@@ -37,7 +38,7 @@ using namespace std;
 
 librbd::RBD *rbd;
 
-void test_create_and_stat(librados::pool_t pool, const char *name, size_t size)
+void test_create_and_stat(librados::PoolHandle& pool, const char *name, size_t size)
 {
   librbd::image_info_t info;
   librbd::Image *image = NULL;
@@ -60,7 +61,7 @@ void test_resize_and_stat(librbd::Image *image, size_t size)
   assert(info.size == size);
 }
 
-void test_ls(librados::pool_t pool, size_t num_expected, ...)
+void test_ls(librados::PoolHandle& pool, size_t num_expected, ...)
 {
   int r;
   size_t i;
@@ -90,7 +91,7 @@ void test_ls(librados::pool_t pool, size_t num_expected, ...)
   assert(names.empty());
 }
 
-void test_delete(librados::pool_t pool, const char *name)
+void test_delete(librados::PoolHandle& pool, const char *name)
 {
   assert(rbd->remove(pool, name) == 0);
 }
@@ -214,7 +215,7 @@ void read_test_data(librbd::Image *image, const char *expected, off_t off)
   assert(strncmp(bl.c_str(), expected, expected_len) == 0);
 }
 
-void test_io(librados::pool_t pool, librbd::Image *image)
+void test_io(librados::PoolHandle& pool, librbd::Image *image)
 {
   char test_data[TEST_IO_SIZE];
   int i;
@@ -242,27 +243,27 @@ void test_io(librados::pool_t pool, librbd::Image *image)
 int main(int argc, const char **argv) 
 {
   librados::Rados rados;
-  librados::pool_t pool;
-  librbd::Image *image = NULL;
+  librados::PoolHandle pool;
+  std::auto_ptr< librbd::Image > image;
   rbd = new librbd::RBD();
-  assert(rados.initialize(0, NULL) == 0);
-  assert(rados.open_pool(TEST_POOL, &pool) == 0);
+  assert(rados.init(NULL) == 0);
+  assert(rados.connect() == 0);
+  assert(rados.pool_open(TEST_POOL, pool) == 0);
   test_ls(pool, 0);
   test_create_and_stat(pool, TEST_IMAGE, MB_BYTES(1));
-  assert(rbd->open(pool, image, TEST_IMAGE, NULL) == 0);
+  assert(rbd->open(pool, image.get(), TEST_IMAGE, NULL) == 0);
   test_ls(pool, 1, TEST_IMAGE);
-  test_ls_snaps(image, 0);
-  test_create_snap(image, TEST_SNAP);
-  test_ls_snaps(image, 1, TEST_SNAP, MB_BYTES(1));
-  test_resize_and_stat(image, MB_BYTES(2));
-  test_io(pool, image);
-  test_create_snap(image, TEST_SNAP "1");
-  test_ls_snaps(image, 2, TEST_SNAP, MB_BYTES(1), TEST_SNAP "1", MB_BYTES(2));
-  test_delete_snap(image, TEST_SNAP);
-  test_ls_snaps(image, 1, TEST_SNAP "1", MB_BYTES(2));
-  test_delete_snap(image, TEST_SNAP "1");
-  test_ls_snaps(image, 0);
-  delete image;
+  test_ls_snaps(image.get(), 0);
+  test_create_snap(image.get(), TEST_SNAP);
+  test_ls_snaps(image.get(), 1, TEST_SNAP, MB_BYTES(1));
+  test_resize_and_stat(image.get(), MB_BYTES(2));
+  test_io(pool, image.get());
+  test_create_snap(image.get(), TEST_SNAP "1");
+  test_ls_snaps(image.get(), 2, TEST_SNAP, MB_BYTES(1), TEST_SNAP "1", MB_BYTES(2));
+  test_delete_snap(image.get(), TEST_SNAP);
+  test_ls_snaps(image.get(), 1, TEST_SNAP "1", MB_BYTES(2));
+  test_delete_snap(image.get(), TEST_SNAP "1");
+  test_ls_snaps(image.get(), 0);
   test_create_and_stat(pool, TEST_IMAGE "1", MB_BYTES(2));
   test_ls(pool, 2, TEST_IMAGE, TEST_IMAGE "1");
   test_delete(pool, TEST_IMAGE);
@@ -270,7 +271,6 @@ int main(int argc, const char **argv)
   test_delete(pool, TEST_IMAGE "1");
   test_ls(pool, 0);
   delete rbd;
-  rados.close_pool(pool);
   rados.shutdown();
   return 0;
 }
