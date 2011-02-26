@@ -59,15 +59,15 @@ void generate_object_name(char *s, int objnum, int pid = 0)
   }
 }
 
-int write_bench(librados::Rados& rados, librados::IoCtx& pool,
+int write_bench(librados::Rados& rados, librados::IoCtx& io_ctx,
 		 int secondsToRun, int concurrentios, bench_data *data);
-int seq_read_bench(librados::Rados& rados, librados::IoCtx& pool,
+int seq_read_bench(librados::Rados& rados, librados::IoCtx& io_ctx,
 		   int secondsToRun, int concurrentios, bench_data *data,
 		   int writePid);
 void *status_printer(void * data_store);
 void sanitize_object_contents(bench_data *data, int length);
 
-int aio_bench(librados::Rados& rados, librados::IoCtx &pool, int operation,
+int aio_bench(librados::Rados& rados, librados::IoCtx &io_ctx, int operation,
 	      int secondsToRun, int concurrentios, int op_size) {
   int object_size = op_size;
   int num_objects = 0;
@@ -78,7 +78,7 @@ int aio_bench(librados::Rados& rados, librados::IoCtx &pool, int operation,
   //get data from previous write run, if available
   if (operation != OP_WRITE) {
     bufferlist object_data;
-    r = pool.read(BENCH_DATA, object_data, sizeof(int)*3, 0);
+    r = io_ctx.read(BENCH_DATA, object_data, sizeof(int)*3, 0);
     if (r <= 0) {
       delete[] contentsChars;
       if (r == -2)
@@ -111,11 +111,11 @@ int aio_bench(librados::Rados& rados, librados::IoCtx &pool, int operation,
   sanitize_object_contents(data, data->object_size);
 
   if (OP_WRITE == operation) {
-    r = write_bench(rados, pool, secondsToRun, concurrentios, data);
+    r = write_bench(rados, io_ctx, secondsToRun, concurrentios, data);
     if (r != 0) goto out;
   }
   else if (OP_SEQ_READ == operation) {
-    r = seq_read_bench(rados, pool, secondsToRun, concurrentios, data, prevPid);
+    r = seq_read_bench(rados, io_ctx, secondsToRun, concurrentios, data, prevPid);
     if (r != 0) goto out;
   }
   else if (OP_RAND_READ == operation) {
@@ -136,7 +136,7 @@ void _aio_cb(void *cb, void *arg) {
   dataLock.Unlock();
 }
 
-int write_bench(librados::Rados& rados, librados::IoCtx& pool,
+int write_bench(librados::Rados& rados, librados::IoCtx& io_ctx,
 		 int secondsToRun, int concurrentios, bench_data *data) {
   cout << "Maintaining " << concurrentios << " concurrent writes of "
        << data->object_size << " bytes for at least "
@@ -173,7 +173,7 @@ int write_bench(librados::Rados& rados, librados::IoCtx& pool,
     start_times[i] = g_clock.now();
     completions[i] = rados.aio_create_completion((void *) &cond, 0,
 						 &_aio_cb);
-    r = pool.aio_write(name[i], completions[i], *contents[i], data->object_size, 0);
+    r = io_ctx.aio_write(name[i], completions[i], *contents[i], data->object_size, 0);
     if (r < 0) { //naughty, doesn't clean up heap
       goto ERR;
     }
@@ -235,7 +235,7 @@ int write_bench(librados::Rados& rados, librados::IoCtx& pool,
     //and save locations of new stuff for later deletion
     start_times[slot] = g_clock.now();
     completions[slot] = rados.aio_create_completion((void *) &cond, 0, &_aio_cb);
-    r = pool.aio_write(newName, completions[slot], *newContents, data->object_size, 0);
+    r = io_ctx.aio_write(newName, completions[slot], *newContents, data->object_size, 0);
     if (r < 0) {//naughty; doesn't clean up heap space.
       goto ERR;
     }
@@ -300,7 +300,7 @@ int write_bench(librados::Rados& rados, librados::IoCtx& pool,
   ::encode(data->object_size, b_write);
   ::encode(data->finished, b_write);
   ::encode(getpid(), b_write);
-  pool.write(BENCH_DATA, b_write, sizeof(int)*3, 0);
+  io_ctx.write(BENCH_DATA, b_write, sizeof(int)*3, 0);
   return 0;
 
  ERR:
@@ -311,7 +311,7 @@ int write_bench(librados::Rados& rados, librados::IoCtx& pool,
   return -5;
 }
 
-int seq_read_bench(librados::Rados& rados, librados::IoCtx& pool, int seconds_to_run,
+int seq_read_bench(librados::Rados& rados, librados::IoCtx& io_ctx, int seconds_to_run,
 		   int concurrentios, bench_data *write_data, int pid) {
   bench_data *data = new bench_data();
   data->done = false;
@@ -360,7 +360,7 @@ int seq_read_bench(librados::Rados& rados, librados::IoCtx& pool, int seconds_to
     index[i] = i;
     start_times[i] = g_clock.now();
     completions[i] = rados.aio_create_completion((void *) &cond, &_aio_cb, 0);
-    r = pool.aio_read(name[i], completions[i], contents[i], data->object_size, 0);
+    r = io_ctx.aio_read(name[i], completions[i], contents[i], data->object_size, 0);
     if (r < 0) { //naughty, doesn't clean up heap -- oh, or handle the print thread!
       cerr << "r = " << r << std::endl;
       goto ERR;
@@ -418,7 +418,7 @@ int seq_read_bench(librados::Rados& rados, librados::IoCtx& pool, int seconds_to
     start_times[slot] = g_clock.now();
     contents[slot] = new bufferlist();
     completions[slot] = rados.aio_create_completion((void *) &cond, &_aio_cb, 0);
-    r = pool.aio_read(newName, completions[slot], contents[slot], data->object_size, 0);
+    r = io_ctx.aio_read(newName, completions[slot], contents[slot], data->object_size, 0);
     if (r < 0) {
       goto ERR;
     }

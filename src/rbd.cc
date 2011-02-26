@@ -99,10 +99,10 @@ static void print_info(const char *imgname, librbd::image_info_t& info)
        << std::endl;
 }
 
-static int do_list(librbd::RBD &rbd, librados::IoCtx& pool)
+static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx)
 {
   std::vector<string> names;
-  int r = rbd.list(pool, names);
+  int r = rbd.list(io_ctx, names);
   if (r < 0)
     return r;
 
@@ -111,19 +111,19 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& pool)
   return 0;
 }
 
-static int do_create(librbd::RBD &rbd, librados::IoCtx& pool,
+static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 		     const char *imgname, size_t size, int *order)
 {
-  int r = rbd.create(pool, imgname, size, order);
+  int r = rbd.create(io_ctx, imgname, size, order);
   if (r < 0)
     return r;
   return 0;
 }
 
-static int do_rename(librbd::RBD &rbd, librados::IoCtx& pool,
+static int do_rename(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 		     const char *imgname, const char *destname)
 {
-  int r = rbd.rename(pool, imgname, destname);
+  int r = rbd.rename(io_ctx, imgname, destname);
   if (r < 0)
     return r;
   return 0;
@@ -140,9 +140,9 @@ static int do_show_info(const char *imgname, librbd::Image *image)
   return 0;
 }
 
- static int do_delete(librbd::RBD &rbd, librados::IoCtx& pool, const char *imgname)
+ static int do_delete(librbd::RBD &rbd, librados::IoCtx& io_ctx, const char *imgname)
 {
-  int r = rbd.remove(pool, imgname);
+  int r = rbd.remove(io_ctx, imgname);
   if (r < 0)
     return r;
 
@@ -309,7 +309,7 @@ done_img:
   update_snap_name(*new_img, snap);
 }
 
-static int do_import(librbd::RBD &rbd, librados::IoCtx& pool,
+static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 		     const char *imgname, int *order, const char *path)
 {
   int fd = open(path, O_RDONLY);
@@ -338,13 +338,13 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& pool,
   md_oid = imgname;
   md_oid += RBD_SUFFIX;
 
-  r = do_create(rbd, pool, imgname, size, order);
+  r = do_create(rbd, io_ctx, imgname, size, order);
   if (r < 0) {
     cerr << "image creation failed" << std::endl;
     return r;
   }
   librbd::Image *image = NULL;
-  r = rbd.open(pool, image, imgname);
+  r = rbd.open(io_ctx, image, imgname);
   if (r < 0) {
     cerr << "failed to open image" << std::endl;
     return r;
@@ -572,7 +572,7 @@ int main(int argc, const char **argv)
 {
   librados::Rados rados;
   librbd::RBD rbd;
-  librados::IoCtx pool, dest_pool;
+  librados::IoCtx io_ctx, dest_io_ctx;
   std::auto_ptr < librbd::Image > image;
 
   vector<const char*> args;
@@ -698,7 +698,7 @@ int main(int argc, const char **argv)
   }
 
   // TODO: add conf
-  int r = rados.ioctx_open(poolname, pool);
+  int r = rados.ioctx_open(poolname, io_ctx);
   if (r < 0) {
       cerr << "error opening pool " << poolname << " (err=" << r << ")" << std::endl;
       exit(1);
@@ -709,7 +709,7 @@ int main(int argc, const char **argv)
        opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
        opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_EXPORT || opt_cmd == OPT_WATCH)) {
     librbd::Image *image_ptr = NULL;
-    r = rbd.open(pool, image_ptr, imgname);
+    r = rbd.open(io_ctx, image_ptr, imgname);
     if (r < 0) {
       cerr << "error opening image " << imgname << ": " << strerror(r) << std::endl;
       exit(1);
@@ -726,7 +726,7 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_COPY || opt_cmd == OPT_IMPORT) {
-    r = rados.ioctx_open(dest_poolname, dest_pool);
+    r = rados.ioctx_open(dest_poolname, dest_io_ctx);
     if (r < 0) {
       cerr << "error opening pool " << dest_poolname << " (err=" << r << ")" << std::endl;
       exit(1);
@@ -735,7 +735,7 @@ int main(int argc, const char **argv)
 
   switch (opt_cmd) {
   case OPT_LIST:
-    r = do_list(rbd, pool);
+    r = do_list(rbd, io_ctx);
     if (r < 0) {
       switch (r) {
       case -ENOENT:
@@ -759,7 +759,7 @@ int main(int argc, const char **argv)
       usage();
       exit(1);
     }
-    r = do_create(rbd, pool, imgname, size, &order);
+    r = do_create(rbd, io_ctx, imgname, size, &order);
     if (r < 0) {
       cerr << "create error: " << strerror(-r) << std::endl;
       exit(1);
@@ -767,7 +767,7 @@ int main(int argc, const char **argv)
     break;
 
   case OPT_RENAME:
-    r = do_rename(rbd, pool, imgname, destname);
+    r = do_rename(rbd, io_ctx, imgname, destname);
     if (r < 0) {
       cerr << "rename error: " << strerror(-r) << std::endl;
       exit(1);
@@ -783,7 +783,7 @@ int main(int argc, const char **argv)
     break;
 
   case OPT_RM:
-    r = do_delete(rbd, pool, imgname);
+    r = do_delete(rbd, io_ctx, imgname);
     if (r < 0) {
       cerr << "delete error: " << strerror(-r) << std::endl;
       exit(1);
@@ -863,7 +863,7 @@ int main(int argc, const char **argv)
       cerr << "pathname should be specified" << std::endl;
       exit(1);
     }
-    r = do_import(rbd, dest_pool, destname, &order, path);
+    r = do_import(rbd, dest_io_ctx, destname, &order, path);
     if (r < 0) {
       cerr << "import failed: " << strerror(-r) << std::endl;
       exit(1);
@@ -871,7 +871,7 @@ int main(int argc, const char **argv)
     break;
 
   case OPT_COPY:
-    r = do_copy(rbd, pool, imgname, dest_pool, destname);
+    r = do_copy(rbd, io_ctx, imgname, dest_io_ctx, destname);
     if (r < 0) {
       cerr << "copy failed: " << strerror(-r) << std::endl;
       exit(1);
@@ -879,7 +879,7 @@ int main(int argc, const char **argv)
     break;
 
   case OPT_WATCH:
-    r = do_watch(pool, imgname);
+    r = do_watch(io_ctx, imgname);
     if (r < 0) {
       cerr << "watch failed: " << strerror(-r) << std::endl;
       exit(1);

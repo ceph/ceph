@@ -57,13 +57,13 @@ public:
 
   void version(int *major, int *minor, int *extra);
 
-  int open(IoCtx& pool, Image *image, const char *name);
-  int open(IoCtx& pool, Image *image, const char *name, const char *snapname);
-  int list(IoCtx& pool, std::vector<std::string>& names);
-  int create(IoCtx& pool, const char *name, size_t size, int *order);
-  int remove(IoCtx& pool, const char *name);
-  int copy(IoCtx& src_pool, const char *srcname, IoCtx& dest_pool, const char *destname);
-  int rename(IoCtx& src_pool, const char *srcname, const char *destname);
+  int open(IoCtx& io_ctx, Image *image, const char *name);
+  int open(IoCtx& io_ctx, Image *image, const char *name, const char *snapname);
+  int list(IoCtx& io_ctx, std::vector<std::string>& names);
+  int create(IoCtx& io_ctx, const char *name, size_t size, int *order);
+  int remove(IoCtx& io_ctx, const char *name);
+  int copy(IoCtx& src_io_ctx, const char *srcname, IoCtx& dest_io_ctx, const char *destname);
+  int rename(IoCtx& src_io_ctx, const char *srcname, const char *destname);
 
 private:
   /* We don't allow assignment or copying */

@@ -2548,7 +2548,7 @@ extern "C" int rados_ioctx_lookup(rados_t cluster, const char *name)
   return radosp->lookup_pool(name);
 }
 
-extern "C" int rados_ioctx_list(rados_t cluster, char *buf, int len)
+extern "C" int rados_pool_list(rados_t cluster, char *buf, int len)
 {
   RadosClient *client = (RadosClient *)cluster;
   std::list<std::string> pools;
@@ -2590,11 +2590,10 @@ extern "C" int rados_ioctx_open(rados_t cluster, const char *name, rados_ioctx_t
   return poolid;
 }
 
-extern "C" int rados_ioctx_close(rados_ioctx_t io)
+extern "C" void rados_ioctx_close(rados_ioctx_t io)
 {
   IoCtxImpl *ctx = (IoCtxImpl *)io;
   delete ctx;
-  return 0;
 }
 
 extern "C" int rados_ioctx_stat(rados_ioctx_t io, struct rados_ioctx_stat_t *stats)
@@ -2703,14 +2702,14 @@ extern "C" uint64_t rados_get_last_version(rados_ioctx_t io)
   return ver.version;
 }
 
-extern "C" int rados_ioctx_create(rados_t cluster, const char *name)
+extern "C" int rados_pool_create(rados_t cluster, const char *name)
 {
   RadosClient *radosp = (RadosClient *)cluster;
   string sname(name);
   return radosp->pool_create(sname);
 }
 
-extern "C" int rados_ioctx_create_with_auid(rados_t cluster, const char *name,
+extern "C" int rados_pool_create_with_auid(rados_t cluster, const char *name,
 					   uint64_t auid)
 {
   RadosClient *radosp = (RadosClient *)cluster;
@@ -2718,7 +2717,7 @@ extern "C" int rados_ioctx_create_with_auid(rados_t cluster, const char *name,
   return radosp->pool_create(sname, auid);
 }
 
-extern "C" int rados_ioctx_create_with_crush_rule(rados_t cluster, const char *name,
+extern "C" int rados_pool_create_with_crush_rule(rados_t cluster, const char *name,
 						 __u8 crush_rule)
 {
   RadosClient *radosp = (RadosClient *)cluster;
@@ -2726,7 +2725,7 @@ extern "C" int rados_ioctx_create_with_crush_rule(rados_t cluster, const char *n
   return radosp->pool_create(sname, 0, crush_rule);
 }
 
-extern "C" int rados_ioctx_create_with_all(rados_t cluster, const char *name,
+extern "C" int rados_pool_create_with_all(rados_t cluster, const char *name,
 					  uint64_t auid, __u8 crush_rule)
 {
   RadosClient *radosp = (RadosClient *)cluster;
@@ -2740,7 +2739,7 @@ extern "C" int rados_pool_delete(rados_t cluster, const char *pool_name)
   return client->pool_delete(pool_name);
 }
 
-extern "C" int rados_ioctx_change_auid(rados_ioctx_t io, uint64_t auid)
+extern "C" int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid)
 {
   IoCtxImpl *ctx = (IoCtxImpl *)io;
   return ctx->client->pool_change_auid(ctx, auid);

@@ -98,7 +98,7 @@ int rados_conf_get(rados_t cluster, const char *option, char *buf, int len);
 int rados_pool_list(rados_t cluster, char *buf, int len);
 
 int rados_ioctx_open(rados_t cluster, const char *pool_name, rados_ioctx_t *ioctx);
-int rados_ioctx_close(rados_ioctx_t io);
+void rados_ioctx_close(rados_ioctx_t io);
 int rados_ioctx_lookup(rados_t cluster, const char *pool_name);
 
 int rados_ioctx_stat(rados_ioctx_t io, struct rados_ioctx_stat_t *stats);
@@ -110,7 +110,6 @@ int rados_pool_create_with_crush_rule(rados_t cluster, const char *pool_name,
 int rados_pool_create_with_all(rados_t cluster, const char *pool_name, uint64_t auid,
 				     __u8 crush_rule);
 int rados_pool_delete(rados_t cluster, const char *pool_name);
-int rados_ioctx_pool_delete(rados_ioctx_t io);
 int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid);
 
 /* objects */

@@ -8,10 +8,10 @@
 class RGWRados  : public RGWAccess
 {
   /** Open the pool used as root for this gateway */
-  int open_root_pool();
+  int open_root_pool_ctx();
 
   struct GetObjState {
-    librados::IoCtx pool;
+    librados::IoCtx io_ctx;
     bool sent_data;
 
     GetObjState() : sent_data(false) {}

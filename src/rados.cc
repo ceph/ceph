@@ -149,10 +149,10 @@ int main(int argc, const char **argv)
   int ret = 0;
   char buf[80];
 
-  // open pool?
-  IoCtx pool;
+  // open io context.
+  IoCtx io_ctx;
   if (pool_name) {
-    ret = rados.ioctx_open(pool_name, pool);
+    ret = rados.ioctx_open(pool_name, io_ctx);
     if (ret < 0) {
       cerr << "error opening pool " << pool_name << ": "
 	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
@@ -162,7 +162,7 @@ int main(int argc, const char **argv)
 
   // snapname?
   if (snapname) {
-    ret = pool.snap_lookup(snapname, &snapid);
+    ret = io_ctx.snap_lookup(snapname, &snapid);
     if (ret < 0) {
       cerr << "error looking up snap '" << snapname << "': " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
@@ -170,13 +170,13 @@ int main(int argc, const char **argv)
   }
   if (snapid != CEPH_NOSNAP) {
     string name;
-    ret = pool.snap_get_name(snapid, &name);
+    ret = io_ctx.snap_get_name(snapid, &name);
     if (ret < 0) {
       cerr << "snapid " << snapid << " doesn't exist in pool "
-	   << pool.get_pool_name() << std::endl;
+	   << io_ctx.get_pool_name() << std::endl;
       return 1;
     }
-    pool.snap_set_read(snapid);
+    io_ctx.snap_set_read(snapid);
     cout << "selected snap " << snapid << " '" << snapname << "'" << std::endl;
   }
 
@@ -238,8 +238,8 @@ int main(int argc, const char **argv)
       outstream = new ofstream(nargs[1]);
 
     {
-      librados::ObjectIterator i = pool.objects_begin();
-      librados::ObjectIterator i_end = pool.objects_end();
+      librados::ObjectIterator i = io_ctx.objects_begin();
+      librados::ObjectIterator i_end = io_ctx.objects_end();
       for (; i != i_end; ++i) {
 	*outstream << *i << std::endl;
       }
@@ -252,11 +252,11 @@ int main(int argc, const char **argv)
       usage();
 
     uint64_t new_auid = strtol(nargs[1], 0, 10);
-    ret = pool.set_auid(new_auid);
+    ret = io_ctx.set_auid(new_auid);
     if (ret < 0) {
-      cerr << "error changing auid on pool " << pool.get_pool_name() << ':'
+      cerr << "error changing auid on pool " << io_ctx.get_pool_name() << ':'
 	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-    } else cerr << "changed auid on pool " << pool.get_pool_name()
+    } else cerr << "changed auid on pool " << io_ctx.get_pool_name()
 		<< " to " << new_auid << std::endl;
   }
   else if (strcmp(nargs[0], "mapext") == 0) {
@@ -264,7 +264,7 @@ int main(int argc, const char **argv)
       usage();
     string oid(nargs[1]);
     std::map<off_t, size_t> m;
-    ret = pool.mapext(oid, 0, -1, m);
+    ret = io_ctx.mapext(oid, 0, -1, m);
     if (ret < 0) {
       cerr << "mapext error on " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
@@ -278,7 +278,7 @@ int main(int argc, const char **argv)
     if (!pool_name || nargs.size() < 3)
       usage();
     string oid(nargs[1]);
-    ret = pool.read(oid, outdata, 0, 0);
+    ret = io_ctx.read(oid, outdata, 0, 0);
     if (ret < 0) {
       cerr << "error reading " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
@@ -321,7 +321,7 @@ int main(int argc, const char **argv)
         if (count == 0)
           continue;
         indata.append(buf, count);
-        ret = pool.write(oid, indata, count, offset);
+        ret = io_ctx.write(oid, indata, count, offset);
         indata.clear();
 
         if (ret < 0) {
@@ -343,7 +343,7 @@ int main(int argc, const char **argv)
     bufferlist bl;
     bl.append(attr_val.c_str(), attr_val.length());
 
-    ret = pool.setxattr(oid, attr_name.c_str(), bl);
+    ret = io_ctx.setxattr(oid, attr_name.c_str(), bl);
     if (ret < 0) {
       cerr << "error setting xattr " << pool_name << "/" << oid << "/" << attr_name << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
@@ -357,7 +357,7 @@ int main(int argc, const char **argv)
     string attr_name(nargs[2]);
 
     bufferlist bl;
-    ret = pool.getxattr(oid, attr_name.c_str(), bl);
+    ret = io_ctx.getxattr(oid, attr_name.c_str(), bl);
     if (ret < 0) {
       cerr << "error getting xattr " << pool_name << "/" << oid << "/" << attr_name << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
@@ -371,7 +371,7 @@ int main(int argc, const char **argv)
     string oid(nargs[1]);
     string attr_name(nargs[2]);
 
-    ret = pool.rmxattr(oid, attr_name.c_str());
+    ret = io_ctx.rmxattr(oid, attr_name.c_str());
     if (ret < 0) {
       cerr << "error removing xattr " << pool_name << "/" << oid << "/" << attr_name << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
@@ -383,7 +383,7 @@ int main(int argc, const char **argv)
     string oid(nargs[1]);
     map<std::string, bufferlist> attrset;
     bufferlist bl;
-    ret = pool.getxattrs(oid, attrset);
+    ret = io_ctx.getxattrs(oid, attrset);
     if (ret < 0) {
       cerr << "error getting xattr set " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
@@ -398,7 +398,7 @@ int main(int argc, const char **argv)
     if (!pool_name || nargs.size() < 2)
       usage();
     string oid(nargs[1]);
-    ret = pool.remove(oid);
+    ret = io_ctx.remove(oid);
     if (ret < 0) {
       cerr << "error removing " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
@@ -408,7 +408,7 @@ int main(int argc, const char **argv)
     if (!pool_name || nargs.size() < 2)
       usage();
     string oid(nargs[1]);
-    ret = pool.create(oid, true);
+    ret = io_ctx.create(oid, true);
     if (ret < 0) {
       cerr << "error creating " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
@@ -420,7 +420,7 @@ int main(int argc, const char **argv)
       usage();
     if (strcmp(nargs[1], "dump") == 0) {
       string oid(nargs[2]);
-      ret = pool.read(oid, outdata, 0, 0);
+      ret = io_ctx.read(oid, outdata, 0, 0);
       if (ret < 0) {
 	cerr << "error reading " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
 	return 1;
@@ -478,15 +478,15 @@ int main(int argc, const char **argv)
       usage();
 
     vector<snap_t> snaps;
-    pool.snap_list(&snaps);
+    io_ctx.snap_list(&snaps);
     for (vector<snap_t>::iterator i = snaps.begin();
 	 i != snaps.end();
 	 i++) {
       string s;
       time_t t;
-      if (pool.snap_get_name(*i, &s) < 0)
+      if (io_ctx.snap_get_name(*i, &s) < 0)
 	continue;
-      if (pool.snap_get_stamp(*i, &t) < 0)
+      if (io_ctx.snap_get_stamp(*i, &t) < 0)
 	continue;
       struct tm bdt;
       localtime_r(&t, &bdt);
@@ -511,7 +511,7 @@ int main(int argc, const char **argv)
     if (!pool_name || nargs.size() < 2)
       usage();
 
-    ret = pool.snap_create(nargs[1]);
+    ret = io_ctx.snap_create(nargs[1]);
     if (ret < 0) {
       cerr << "error creating pool " << pool_name << " snapshot " << nargs[1]
 	   << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
@@ -524,7 +524,7 @@ int main(int argc, const char **argv)
     if (!pool_name || nargs.size() < 2)
       usage();
 
-    ret = pool.snap_remove(nargs[1]);
+    ret = io_ctx.snap_remove(nargs[1]);
     if (ret < 0) {
       cerr << "error removing pool " << pool_name << " snapshot " << nargs[1]
 	   << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
@@ -537,7 +537,7 @@ int main(int argc, const char **argv)
     if (!pool_name || nargs.size() < 3)
       usage();
 
-    ret = pool.rollback(nargs[1], nargs[2]);
+    ret = io_ctx.rollback(nargs[1], nargs[2]);
     if (ret < 0) {
       cerr << "error rolling back pool " << pool_name << " to snapshot " << nargs[1]
 	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
@@ -560,7 +560,7 @@ int main(int argc, const char **argv)
       operation = OP_RAND_READ;
     else
       usage();
-    ret = aio_bench(rados, pool, operation, seconds, concurrent_ios, op_size);
+    ret = aio_bench(rados, io_ctx, operation, seconds, concurrent_ios, op_size);
     if (ret != 0)
       cerr << "error during benchmark: " << ret << std::endl;
   }

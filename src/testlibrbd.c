@@ -32,13 +32,13 @@
 #define TEST_IO_SIZE 513
 #define MB_BYTES(mb) (mb << 20)
 
-void test_create_and_stat(rados_ioctx_t io, const char *name, size_t size)
+void test_create_and_stat(rados_ioctx_t io_ctx, const char *name, size_t size)
 {
   rbd_image_info_t info;
   rbd_image_t image;
   int order = 0;
-  assert(rbd_create(pool, name, size, &order) == 0);
-  assert(rbd_open(pool, name, &image, NULL) == 0);
+  assert(rbd_create(io_ctx, name, size, &order) == 0);
+  assert(rbd_open(io_ctx, name, &image, NULL) == 0);
   assert(rbd_stat(image, &info, sizeof(info)) == 0);
   printf("image has size %llu and order %d\n", (unsigned long long) info.size, info.order);
   assert(info.size == size);
@@ -55,7 +55,7 @@ void test_resize_and_stat(rbd_image_t image, size_t size)
   assert(info.size == size);
 }
 
-void test_ls(rados_ioctx_t io, size_t num_expected, ...)
+void test_ls(rados_ioctx_t io_ctx, size_t num_expected, ...)
 {
   int num_images, i, j;
   char *expected, *names, *cur_name;
@@ -63,7 +63,7 @@ void test_ls(rados_ioctx_t io, size_t num_expected, ...)
   size_t max_size = 1024;
   names = (char *) malloc(sizeof(char *) * 1024);
   printf("names is %p\n", names);
-  num_images = rbd_list(pool, names, &max_size);
+  num_images = rbd_list(io_ctx, names, &max_size);
   printf("names is %p\n", names);
   printf("num images is: %d\nexpected: %d\n", num_images, (int)num_expected);
   assert(num_images >= 0);
@@ -101,9 +101,9 @@ void test_ls(rados_ioctx_t io, size_t num_expected, ...)
   free(names);
 }
 
-void test_delete(rados_ioctx_t io, const char *name)
+void test_delete(rados_ioctx_t io_ctx, const char *name)
 {
-  assert(rbd_remove(pool, name) == 0);
+  assert(rbd_remove(io_ctx, name) == 0);
 }
 
 void test_create_snap(rbd_image_t image, const char *name)
@@ -259,22 +259,22 @@ void test_io(rados_ioctx_t io, rbd_image_t image)
 int main(int argc, const char **argv) 
 {
   rados_t cluster;
-  rados_ioctx_t io;
+  rados_ioctx_t io_ctx;
   rbd_image_t image;
   assert(rados_create(&cluster, NULL) == 0);
   assert(rados_conf_read_file(cluster, "/etc/ceph/ceph.conf") == 0);
   rados_reopen_log(cluster);
-  assert(rados_ioctx_open(cluster, TEST_POOL, &pool) == 0);
+  assert(rados_ioctx_open(cluster, TEST_POOL, &io_ctx) == 0);
   assert(rados_connect(cluster) == 0);
-  test_ls(pool, 0);
-  test_create_and_stat(pool, TEST_IMAGE, MB_BYTES(1));
-  assert(rbd_open(pool, TEST_IMAGE, &image, NULL) == 0);
-  test_ls(pool, 1, TEST_IMAGE);
+  test_ls(io_ctx, 0);
+  test_create_and_stat(io_ctx, TEST_IMAGE, MB_BYTES(1));
+  assert(rbd_open(io_ctx, TEST_IMAGE, &image, NULL) == 0);
+  test_ls(io_ctx, 1, TEST_IMAGE);
   test_ls_snaps(image, 0);
   test_create_snap(image, TEST_SNAP);
   test_ls_snaps(image, 1, TEST_SNAP, MB_BYTES(1));
   test_resize_and_stat(image, MB_BYTES(2));
-  test_io(pool, image);
+  test_io(io_ctx, image);
   test_create_snap(image, TEST_SNAP "1");
   test_ls_snaps(image, 2, TEST_SNAP, MB_BYTES(1), TEST_SNAP "1", MB_BYTES(2));
   test_delete_snap(image, TEST_SNAP);
@@ -282,13 +282,13 @@ int main(int argc, const char **argv)
   test_delete_snap(image, TEST_SNAP "1");
   test_ls_snaps(image, 0);
   assert(rbd_close(image) == 0);
-  test_create_and_stat(pool, TEST_IMAGE "1", MB_BYTES(2));
-  test_ls(pool, 2, TEST_IMAGE, TEST_IMAGE "1");
-  test_delete(pool, TEST_IMAGE);
-  test_ls(pool, 1, TEST_IMAGE "1");
-  test_delete(pool, TEST_IMAGE "1");
-  test_ls(pool, 0);
-  rados_ioctx_close(pool);
+  test_create_and_stat(io_ctx, TEST_IMAGE "1", MB_BYTES(2));
+  test_ls(io_ctx, 2, TEST_IMAGE, TEST_IMAGE "1");
+  test_delete(io_ctx, TEST_IMAGE);
+  test_ls(io_ctx, 1, TEST_IMAGE "1");
+  test_delete(io_ctx, TEST_IMAGE "1");
+  test_ls(io_ctx, 0);
+  rados_ioctx_close(io_ctx);
   rados_shutdown(cluster);
   return 0;
 }
