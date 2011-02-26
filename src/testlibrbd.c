@@ -265,6 +265,7 @@ int main(int argc, const char **argv)
   assert(rados_conf_read_file(cluster, "/etc/ceph/ceph.conf") == 0);
   rados_reopen_log(cluster);
   assert(rados_ioctx_open(cluster, TEST_POOL, &pool) == 0);
+  assert(rados_connect(cluster) == 0);
   test_ls(pool, 0);
   test_create_and_stat(pool, TEST_IMAGE, MB_BYTES(1));
   assert(rbd_open(pool, TEST_IMAGE, &image, NULL) == 0);
