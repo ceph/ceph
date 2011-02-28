@@ -349,7 +349,7 @@ unittest_encoding_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 check_PROGRAMS += unittest_encoding
 
 unittest_base64_SOURCES = test/base64.cc
-unittest_base64_LDFLAGS = -pthread
+unittest_base64_LDFLAGS = -pthread ${AM_LDFLAGS}
 unittest_base64_LDADD = libceph.la libcrush.la -lpthread -lm \
 			${UNITTEST_LDADD}
 unittest_base64_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
