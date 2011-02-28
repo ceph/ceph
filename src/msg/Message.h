@@ -17,7 +17,7 @@
  
 /* public message types */
 #include "include/types.h"
-#include "config.h"
+#include "common/config.h"
 
 // monitor internal
 #define MSG_MON_ELECTION           65

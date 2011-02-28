@@ -18,7 +18,7 @@
 #include "Crypto.h"
 #include "msg/msg_types.h"
 
-#include "config.h"
+#include "common/config.h"
 
 #include <errno.h>
 

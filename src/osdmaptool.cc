@@ -22,7 +22,7 @@
 #include <string>
 using namespace std;
 
-#include "config.h"
+#include "common/config.h"
 
 #include "common/errno.h"
 #include "osd/OSDMap.h"
@@ -49,7 +49,6 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   DEFINE_CONF_VARS(usage);
 
-  common_set_defaults(false);
   common_init(args, "osdmaptool", STARTUP_FLAG_FORCE_FG_LOGGING);
 
   const char *me = argv[0];

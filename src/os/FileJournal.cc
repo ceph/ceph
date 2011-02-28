@@ -12,7 +12,7 @@
  * 
  */
 
-#include "config.h"
+#include "common/config.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "FileJournal.h"

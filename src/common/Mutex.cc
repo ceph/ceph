@@ -11,7 +11,7 @@ int g_lockdep = 0;
 
 #include <ext/hash_map>
 
-#include "config.h"
+#include "common/config.h"
 
 #undef dout
 #undef derr

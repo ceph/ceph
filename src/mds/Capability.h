@@ -19,7 +19,7 @@
 #include "include/buffer.h"
 #include "include/xlist.h"
 
-#include "config.h"
+#include "common/config.h"
 
 /*
 

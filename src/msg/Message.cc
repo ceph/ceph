@@ -128,7 +128,7 @@ using namespace std;
 
 #include "messages/MWatchNotify.h"
 
-#include "config.h"
+#include "common/config.h"
 
 #define DEBUGLVL  10    // debug level of output
 

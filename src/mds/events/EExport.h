@@ -15,7 +15,7 @@
 #ifndef CEPH_EEXPORT_H
 #define CEPH_EEXPORT_H
 
-#include "config.h"
+#include "common/config.h"
 #include "include/types.h"
 
 #include "../MDS.h"

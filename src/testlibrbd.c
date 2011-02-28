@@ -13,6 +13,7 @@
  */
 
 #define __STDC_FORMAT_MACROS
+#include "include/rados/librados.h"
 #include "include/rbd/librbd.h"
 
 #include <assert.h>
@@ -31,30 +32,30 @@
 #define TEST_IO_SIZE 513
 #define MB_BYTES(mb) (mb << 20)
 
-void test_create_and_stat(rbd_pool_t pool, const char *name, size_t size)
+void test_create_and_stat(rados_ioctx_t io_ctx, const char *name, size_t size)
 {
   rbd_image_info_t info;
   rbd_image_t image;
   int order = 0;
-  assert(rbd_create(pool, name, size, &order) == 0);
-  assert(rbd_open_image(pool, name, &image, NULL) == 0);
-  assert(rbd_stat(image, &info) == 0);
+  assert(rbd_create(io_ctx, name, size, &order) == 0);
+  assert(rbd_open(io_ctx, name, &image, NULL) == 0);
+  assert(rbd_stat(image, &info, sizeof(info)) == 0);
   printf("image has size %llu and order %d\n", (unsigned long long) info.size, info.order);
   assert(info.size == size);
   assert(info.order == order);
-  assert(rbd_close_image(image) == 0);
+  assert(rbd_close(image) == 0);
 }
 
 void test_resize_and_stat(rbd_image_t image, size_t size)
 {
   rbd_image_info_t info;
   assert(rbd_resize(image, size) == 0);
-  assert(rbd_stat(image, &info) == 0);
+  assert(rbd_stat(image, &info, sizeof(info)) == 0);
   printf("image has size %llu and order %d\n", (unsigned long long) info.size, info.order);
   assert(info.size == size);
 }
 
-void test_ls(rbd_pool_t pool, size_t num_expected, ...)
+void test_ls(rados_ioctx_t io_ctx, size_t num_expected, ...)
 {
   int num_images, i, j;
   char *expected, *names, *cur_name;
@@ -62,7 +63,7 @@ void test_ls(rbd_pool_t pool, size_t num_expected, ...)
   size_t max_size = 1024;
   names = (char *) malloc(sizeof(char *) * 1024);
   printf("names is %p\n", names);
-  num_images = rbd_list(pool, names, &max_size);
+  num_images = rbd_list(io_ctx, names, &max_size);
   printf("names is %p\n", names);
   printf("num images is: %d\nexpected: %d\n", num_images, (int)num_expected);
   assert(num_images >= 0);
@@ -100,14 +101,14 @@ void test_ls(rbd_pool_t pool, size_t num_expected, ...)
   free(names);
 }
 
-void test_delete(rbd_pool_t pool, const char *name)
+void test_delete(rados_ioctx_t io_ctx, const char *name)
 {
-  assert(rbd_remove(pool, name) == 0);
+  assert(rbd_remove(io_ctx, name) == 0);
 }
 
 void test_create_snap(rbd_image_t image, const char *name)
 {
-  assert(rbd_create_snap(image, name) == 0);
+  assert(rbd_snap_create(image, name) == 0);
 }
 
 void test_ls_snaps(rbd_image_t image, int num_expected, ...)
@@ -117,7 +118,7 @@ void test_ls_snaps(rbd_image_t image, int num_expected, ...)
   char *expected;
   va_list ap;
   snaps = (rbd_snap_info_t *) malloc(sizeof(rbd_snap_info_t *) * 10);
-  num_snaps = rbd_list_snaps(image, snaps, &max_size);
+  num_snaps = rbd_snap_list(image, snaps, &max_size);
   printf("num snaps is: %d\nexpected: %d\n", num_snaps, num_expected);
   assert(num_snaps == num_expected);
 
@@ -153,7 +154,7 @@ void test_ls_snaps(rbd_image_t image, int num_expected, ...)
 
 void test_delete_snap(rbd_image_t image, const char *name)
 {
-  assert(rbd_remove_snap(image, name) == 0);
+  assert(rbd_snap_remove(image, name) == 0);
 }
 
 void simple_write_cb(rbd_completion_t cb, void *arg)
@@ -230,7 +231,7 @@ void read_test_data(rbd_image_t image, const char *expected, off_t off)
   assert(memcmp(result, expected, expected_len) == 0);
 }
 
-void test_io(rbd_pool_t pool, rbd_image_t image)
+void test_io(rados_ioctx_t io, rbd_image_t image)
 {
   char test_data[TEST_IO_SIZE];
   int i;
@@ -244,46 +245,50 @@ void test_io(rbd_pool_t pool, rbd_image_t image)
   for (i = 0; i < 5; ++i)
     write_test_data(image, test_data, strlen(test_data) * i);
 
-  for (i = 0; i < 5; ++i)
+  for (i = 5; i < 10; ++i)
     aio_write_test_data(image, test_data, strlen(test_data) * i);
 
   for (i = 0; i < 5; ++i)
     read_test_data(image, test_data, strlen(test_data) * i);
 
-  for (i = 0; i < 5; ++i)
+  for (i = 5; i < 10; ++i)
     aio_read_test_data(image, test_data, strlen(test_data) * i);
 
 }
 
 int main(int argc, const char **argv) 
 {
-  rbd_pool_t pool;
+  rados_t cluster;
+  rados_ioctx_t io_ctx;
   rbd_image_t image;
-  assert(rbd_initialize(argc, argv) == 0);
-  assert(rbd_open_pool(TEST_POOL, &pool) == 0);
-  test_ls(pool, 0);
-  test_create_and_stat(pool, TEST_IMAGE, MB_BYTES(1));
-  assert(rbd_open_image(pool, TEST_IMAGE, &image, NULL) == 0);
-  test_ls(pool, 1, TEST_IMAGE);
+  assert(rados_create(&cluster, NULL) == 0);
+  assert(rados_conf_read_file(cluster, "/etc/ceph/ceph.conf") == 0);
+  rados_reopen_log(cluster);
+  assert(rados_ioctx_open(cluster, TEST_POOL, &io_ctx) == 0);
+  assert(rados_connect(cluster) == 0);
+  test_ls(io_ctx, 0);
+  test_create_and_stat(io_ctx, TEST_IMAGE, MB_BYTES(1));
+  assert(rbd_open(io_ctx, TEST_IMAGE, &image, NULL) == 0);
+  test_ls(io_ctx, 1, TEST_IMAGE);
   test_ls_snaps(image, 0);
   test_create_snap(image, TEST_SNAP);
   test_ls_snaps(image, 1, TEST_SNAP, MB_BYTES(1));
   test_resize_and_stat(image, MB_BYTES(2));
-  test_io(pool, image);
+  test_io(io_ctx, image);
   test_create_snap(image, TEST_SNAP "1");
   test_ls_snaps(image, 2, TEST_SNAP, MB_BYTES(1), TEST_SNAP "1", MB_BYTES(2));
   test_delete_snap(image, TEST_SNAP);
   test_ls_snaps(image, 1, TEST_SNAP "1", MB_BYTES(2));
   test_delete_snap(image, TEST_SNAP "1");
   test_ls_snaps(image, 0);
-  assert(rbd_close_image(image) == 0);
-  test_create_and_stat(pool, TEST_IMAGE "1", MB_BYTES(2));
-  test_ls(pool, 2, TEST_IMAGE, TEST_IMAGE "1");
-  test_delete(pool, TEST_IMAGE);
-  test_ls(pool, 1, TEST_IMAGE "1");
-  test_delete(pool, TEST_IMAGE "1");
-  test_ls(pool, 0);
-  rbd_close_pool(pool);
-  rbd_shutdown();
+  assert(rbd_close(image) == 0);
+  test_create_and_stat(io_ctx, TEST_IMAGE "1", MB_BYTES(2));
+  test_ls(io_ctx, 2, TEST_IMAGE, TEST_IMAGE "1");
+  test_delete(io_ctx, TEST_IMAGE);
+  test_ls(io_ctx, 1, TEST_IMAGE "1");
+  test_delete(io_ctx, TEST_IMAGE "1");
+  test_ls(io_ctx, 0);
+  rados_ioctx_close(io_ctx);
+  rados_shutdown(cluster);
   return 0;
 }

@@ -23,7 +23,7 @@
 #include <memory>
 #include "Clock.h"
 
-#include "config.h"
+#include "common/config.h"
 
 #include <sys/stat.h>
 #include <sys/types.h>

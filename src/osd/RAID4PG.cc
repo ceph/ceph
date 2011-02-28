@@ -22,7 +22,7 @@
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGRemove.h"
 
-#include "config.h"
+#include "common/config.h"
 
 #define DOUT_SUBSYS osd
 #undef dout_prefix

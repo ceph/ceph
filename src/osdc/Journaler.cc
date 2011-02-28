@@ -18,7 +18,7 @@
 #include "common/ProfLogger.h"
 #include "msg/Messenger.h"
 
-#include "config.h"
+#include "common/config.h"
 
 #define DOUT_SUBSYS journaler
 #undef dout_prefix

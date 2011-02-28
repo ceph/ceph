@@ -16,7 +16,7 @@
 #define CEPH_AUTHSERVICEHANDLER_H
 
 #include "include/types.h"
-#include "config.h"
+#include "common/config.h"
 #include "Auth.h"
 
 class KeyServer;

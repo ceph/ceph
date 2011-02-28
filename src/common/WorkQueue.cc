@@ -15,7 +15,7 @@
 #include "include/types.h"
 #include "WorkQueue.h"
 
-#include "config.h"
+#include "common/config.h"
 
 #define DOUT_SUBSYS tp
 #undef dout_prefix

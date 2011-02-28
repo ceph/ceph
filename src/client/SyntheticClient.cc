@@ -17,7 +17,7 @@
 using namespace std;
 
 
-#include "config.h"
+#include "common/config.h"
 #include "SyntheticClient.h"
 #include "osdc/Objecter.h"
 #include "osdc/Filer.h"
@@ -34,7 +34,7 @@ using namespace std;
 #include <math.h>
 #include <sys/statvfs.h>
 
-#include "config.h"
+#include "common/config.h"
 
 #define DOUT_SUBSYS client
 #undef dout_prefix

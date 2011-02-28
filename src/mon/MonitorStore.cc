@@ -14,10 +14,11 @@
 
 #include "MonitorStore.h"
 #include "common/Clock.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/run_cmd.h"
 #include "common/safe_io.h"
-#include "config.h"
+#include "common/config.h"
 
 #define DOUT_SUBSYS mon
 #undef dout_prefix

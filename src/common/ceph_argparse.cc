@@ -17,7 +17,7 @@
 #include "common/common_init.h"
 #include "common/ConfUtils.h"
 #include "common/version.h"
-#include "config.h"
+#include "common/config.h"
 #include "include/intarith.h"
 #include "include/str_list.h"
 #include "msg/msg_types.h"

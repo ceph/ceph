@@ -20,7 +20,7 @@
 
 #include "BackTrace.h"
 #include "common/debug.h"
-#include "config.h"
+#include "common/config.h"
 #include "include/assert.h"
 
 static bool dout_trylock(void)

@@ -21,7 +21,7 @@
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/errno.h"
-#include "config.h"
+#include "common/config.h"
 
 #include <errno.h>
 #include <iostream>
@@ -94,7 +94,6 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_set_defaults(false);
   common_init(args, "TestSignalHandlers", STARTUP_FLAG_FORCE_FG_LOGGING);
 
   DEFINE_CONF_VARS(usage);

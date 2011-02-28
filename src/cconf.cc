@@ -22,7 +22,7 @@
 #include "common/ConfUtils.h"
 #include "common/common_init.h"
 #include "common/ceph_argparse.h"
-#include "config.h"
+#include "common/config.h"
 #include "include/str_list.h"
 
 const char *type = NULL;
@@ -37,11 +37,9 @@ cconf <flags> <action>\n\
 \n\
 ACTIONS\n\
   -l|--list-sections <prefix>     List sections in prefix\n\
-  --lookup <key> [defval]         Print a configuration setting to stdout.\n\
-				  If the setting is not defined, and the\n\
-				  optional argument defval is provide, it will\n\
-				  be printed instead. variables in defval are\n\
-				  interpolated.\n\
+  --lookup <key>                  Print a configuration setting to stdout.\n\
+                                  Returns 0 (success) if the configuration setting is\n\
+				  found; 1 otherwise.\n\
   -r|--resolve-search             search for the first file that exists and\n\
                                   can be opened in the resulted comma\n\
                                   delimited search list.\n\
@@ -62,11 +60,6 @@ List sections beginning with 'mon'.\n\
 RETURN CODE\n\
 Return code will be 0 on success; error code otherwise.\n\
 ";
-}
-
-void error_exit()
-{
-  usage();
   exit(1);
 }
 
@@ -96,9 +89,8 @@ static void print_val(const char *val, bool resolve_search)
   }
 }
 
-static int lookup_impl(const deque<const char *> &sections,
-		    const char *key, const char *defval,
-                    bool resolve_search)
+static int lookup(const deque<const char *> &sections,
+		  const char *key, bool resolve_search)
 {
   char *val = NULL;
   if (!g_conf.cf)
@@ -119,49 +111,6 @@ static int lookup_impl(const deque<const char *> &sections,
     }
   }
 
-  if (defval) {
-    val = conf_post_process_val(defval);
-    if (val) {
-      print_val(val, resolve_search);
-      free(val);
-      return 0;
-    }
-  }
-
-  {
-    // TODO: document exactly what we are doing here?
-    std::vector<const char *> empty_args;
-    bool force_fg_logging = false;
-    parse_startup_config_options(empty_args, type,
-			 STARTUP_FLAG_FORCE_FG_LOGGING, &force_fg_logging);
-    char buf[1024];
-    memset(buf, 0, sizeof(buf));
-    if (ceph_def_conf_by_name(key, buf, sizeof(buf))) {
-      print_val(buf, resolve_search);
-      return 0;
-    }
-  }
-
-  return 1;
-}
-
-static int lookup(const deque<const char *> &sections,
-		  const vector<const char*> &nargs,
-		  vector<const char*>::const_iterator n,
-                  bool resolve_search)
-{
-  const char *key = *n;
-  ++n;
-  if (n == nargs.end())
-    return lookup_impl(sections, key, NULL, resolve_search);
-  const char *defval = *n;
-  ++n;
-  if (n == nargs.end())
-    return lookup_impl(sections, key, defval, resolve_search);
-
-  cerr << "lookup: Too many arguments. Expected only 1 or 2."
-       << std::endl;
-  error_exit();
   return 1;
 }
 
@@ -201,7 +150,6 @@ int main(int argc, const char **argv)
     }
   }
 
-  common_set_defaults(false);
   common_init(nargs, type, STARTUP_FLAG_FORCE_FG_LOGGING);
 
   if (do_help) {
@@ -213,18 +161,22 @@ int main(int argc, const char **argv)
 
   if (do_list) {
     if (nargs.size() != 1)
-      error_exit();
+      usage();
     return list_sections(nargs[0]);
   } else if (do_lookup) {
-    if (nargs.size() < 1 || nargs.size() > 2)
-      error_exit();
-    vector<const char*>::const_iterator n = nargs.begin();
-    return lookup(sections, nargs, n, resolve_search);
+    if (nargs.size() != 1) {
+      cerr << "lookup: expected exactly one argument" << std::endl;
+      usage();
+    }
+    return lookup(sections, nargs[0], resolve_search);
   } else if ((nargs.size() >= 1) && (nargs[0][0] == '-')) {
     cerr << "Parse error at argument: " << nargs[0] << std::endl;
-    error_exit();
+    usage();
   } else {
-    vector<const char*>::const_iterator n = nargs.begin();
-    return lookup(sections, nargs, n, resolve_search);
+    if (nargs.size() != 1) {
+      cerr << "lookup: expected exactly one argument" << std::endl;
+      usage();
+    }
+    return lookup(sections, nargs[0], resolve_search);
   }
 }

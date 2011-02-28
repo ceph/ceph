@@ -25,9 +25,11 @@
 #include "librbd.h"
 
 namespace librbd {
-  class RBDClient;
-  typedef void *pool_t;
-  typedef void *image_t;
+
+  using librados::IoCtx;
+
+  class Image;
+  typedef void *image_ctx_t;
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
 
@@ -37,73 +39,71 @@ namespace librbd {
     std::string name;
   } snap_info_t;
 
-  typedef struct {
-    uint64_t size;
-    uint64_t obj_size;
-    uint64_t num_objs;
-    int order;
-  } image_info_t;
+  typedef rbd_image_info_t image_info_t;
 
 class RBD
 {
-  RBDClient *client;
-
 public:
-  RBD() {}
-  ~RBD() {}
+  RBD();
+  ~RBD();
 
   struct AioCompletion {
     void *pc;
-    AioCompletion(void *_pc) : pc(_pc) {}
+    AioCompletion(void *cb_arg, callback_t complete_cb);
     int wait_for_complete();
     int get_return_value();
     void release();
   };
 
+  void version(int *major, int *minor, int *extra);
+
+  int open(IoCtx& io_ctx, Image *image, const char *name);
+  int open(IoCtx& io_ctx, Image *image, const char *name, const char *snapname);
+  int list(IoCtx& io_ctx, std::vector<std::string>& names);
+  int create(IoCtx& io_ctx, const char *name, size_t size, int *order);
+  int remove(IoCtx& io_ctx, const char *name);
+  int copy(IoCtx& src_io_ctx, const char *srcname, IoCtx& dest_io_ctx, const char *destname);
+  int rename(IoCtx& src_io_ctx, const char *srcname, const char *destname);
+
+private:
   /* We don't allow assignment or copying */
   RBD(const RBD& rhs);
   const RBD& operator=(const RBD& rhs);
+};
 
-  int initialize(int argc, const char *argv[]);
-  void shutdown();
+class Image
+{
+public:
+  ~Image();
 
-  void version(int *major, int *minor, int *extra);
-
-  int open_pool(const char *pool_name, pool_t *pool);
-  int close_pool(pool_t pool);
-
-  int list(pool_t pool, std::vector<std::string>& names);
-  int create(pool_t pool, const char *name, size_t size, int *order);
-  int remove(pool_t pool, const char *name);
-  int copy(pool_t src_pool, const char *srcname, pool_t dest_pool, const char *destname);
-  int rename(pool_t src_pool, const char *srcname, const char *destname);
-
-  int open_image(pool_t pool, const char *name, image_t *image, const char *snap_name = NULL);
-  int close_image(image_t image);
-  int resize(image_t image, size_t size);
-  int stat(image_t image, image_info_t& info);
+  int resize(size_t size);
+  int stat(image_info_t &info, size_t infosize);
 
   /* snapshots */
-  int list_snaps(image_t image, std::vector<snap_info_t>& snaps);
-  int create_snap(image_t image, const char *snap_name);
-  int remove_snap(image_t image, const char *snap_name);
-  int rollback_snap(image_t image, const char *snap_name);
-  int set_snap(image_t image, const char *snap_name);
+  int snap_list(std::vector<snap_info_t>& snaps);
+  int snap_create(const char *snapname);
+  int snap_remove(const char *snapname);
+  int snap_rollback(const char *snap_name);
+  int snap_set(const char *snap_name);
 
   /* I/O */
-  int read(image_t image, off_t ofs, size_t len, ceph::bufferlist& bl);
-  int read_iterate(image_t image, off_t ofs, size_t len,
+  int read(off_t ofs, size_t len, ceph::bufferlist& bl);
+  int read_iterate(off_t ofs, size_t len,
                    int (*cb)(off_t, size_t, const char *, void *), void *arg);
-  int write(image_t image, off_t ofs, size_t len, ceph::bufferlist& bl);
+  int write(off_t ofs, size_t len, ceph::bufferlist& bl);
 
-  AioCompletion *aio_create_completion(void *cb_arg, callback_t complete_cb);
-  int aio_write(image_t image, off_t off, size_t len, ceph::bufferlist& bl,
-                AioCompletion *c);
-  int aio_read(image_t image, off_t off, size_t len, ceph::bufferlist& bl, AioCompletion *c);
+  int aio_write(off_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
+  int aio_read(off_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
 
-  /* lower level access */
-  librados::Rados& get_rados();
-  void get_rados_pools(pool_t pool, librados::pool_t *md_pool, librados::pool_t *data_pool);
+private:
+  /* Image instances only come from RBD::open */
+  Image(image_ctx_t ctx_);
+  friend class RBD;
+
+  Image(const Image& rhs);
+  const Image& operator=(const Image& rhs);
+
+  image_ctx_t ctx;
 };
 
 }

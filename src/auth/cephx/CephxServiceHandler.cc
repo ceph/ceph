@@ -23,7 +23,7 @@
 #include <errno.h>
 #include <sstream>
 
-#include "config.h"
+#include "common/config.h"
 
 #define DOUT_SUBSYS auth
 #undef dout_prefix

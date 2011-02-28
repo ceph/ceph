@@ -35,7 +35,6 @@ extern "C" {
 #define LIBRBD_SUPPORTS_WATCH 0
 
 typedef void *rbd_snap_t;
-typedef void *rbd_pool_t;
 typedef void *rbd_image_t;
 
 typedef struct {
@@ -44,45 +43,40 @@ typedef struct {
   const char *name;
 } rbd_snap_info_t;
 
+#define RBD_MAX_IMAGE_NAME_SIZE 96
+#define RBD_MAX_BLOCK_NAME_SIZE 24
+
 typedef struct {
   uint64_t size;
   uint64_t obj_size;
   uint64_t num_objs;
   int order;
+  char block_name_prefix[RBD_MAX_BLOCK_NAME_SIZE];
+  int parent_pool;                            /* -1 if none */
+  char parent_name[RBD_MAX_IMAGE_NAME_SIZE];  /* blank if none */
 } rbd_image_info_t;
 
-/* initialization */
-int rbd_initialize(int argc, const char **argv); /* arguments are optional */
-void rbd_shutdown(void);
-
-void librbd_version(int *major, int *minor, int *extra);
-
-/* pools */
-int rbd_open_pool(const char *pool_name, rbd_pool_t *pool);
-int rbd_close_pool(rbd_pool_t pool);
+void rbd_version(int *major, int *minor, int *extra);
 
 /* images */
-int rbd_list(rbd_pool_t pool, char *names, size_t *size);
-int rbd_create(rbd_pool_t pool, const char *name, size_t size, int *order);
-int rbd_remove(rbd_pool_t pool, const char *name);
-int rbd_copy(rbd_pool_t src_pool, const char *srcname, rbd_pool_t dest_pool, const char *destname);
-int rbd_rename(rbd_pool_t src_pool, const char *srcname, const char *destname);
+int rbd_list(rados_ioctx_t io, char *names, size_t *size);
+int rbd_create(rados_ioctx_t io, const char *name, size_t size, int *order);
+int rbd_remove(rados_ioctx_t io, const char *name);
+int rbd_copy(rados_ioctx_t src_io_ctx, const char *srcname, rados_ioctx_t dest_io_ctx, const char *destname);
+int rbd_rename(rados_ioctx_t src_io_ctx, const char *srcname, const char *destname);
 
-int rbd_open_image(rbd_pool_t pool, const char *name, rbd_image_t *image, const char *snap_name);
-int rbd_close_image(rbd_image_t image);
+int rbd_open(rados_ioctx_t io, const char *name, rbd_image_t *image, const char *snap_name);
+int rbd_close(rbd_image_t image);
 int rbd_resize(rbd_image_t image, size_t size);
-int rbd_stat(rbd_image_t image, rbd_image_info_t *info);
+int rbd_stat(rbd_image_t image, rbd_image_info_t *info, size_t infosize);
 
 /* snapshots */
-int rbd_list_snaps(rbd_image_t image, rbd_snap_info_t *snaps, int *max_snaps);
-void rbd_list_snaps_end(rbd_snap_info_t *snaps);
-int rbd_create_snap(rbd_image_t image, const char *snapname);
-int rbd_remove_snap(rbd_image_t image, const char *snapname);
-int rbd_rollback_snap(rbd_image_t image, const char *snapname);
-int rbd_set_snap(rbd_image_t image, const char *snapname);
-
-/* lower level access */
-void rbd_get_rados_pools(rbd_pool_t pool, rados_pool_t *md_pool, rados_pool_t *data_pool);
+int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps, int *max_snaps);
+void rbd_snap_list_end(rbd_snap_info_t *snaps);
+int rbd_snap_create(rbd_image_t image, const char *snapname);
+int rbd_snap_remove(rbd_image_t image, const char *snapname);
+int rbd_snap_rollback(rbd_image_t image, const char *snapname);
+int rbd_snap_set(rbd_image_t image, const char *snapname);
 
 /* I/O */
 typedef void *rbd_completion_t;

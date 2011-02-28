@@ -12,7 +12,7 @@
  *
  */
 
-#include "config.h"
+#include "common/config.h"
 #include "ceph_ver.h"
 #include "common/debug.h"
 #include "common/version.h"

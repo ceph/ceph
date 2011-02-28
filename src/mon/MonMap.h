@@ -19,7 +19,7 @@
 
 #include "msg/Message.h"
 #include "include/types.h"
-//#include "config.h"
+//#include "common/config.h"
 
 class MonMap {
  public:

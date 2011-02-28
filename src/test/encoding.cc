@@ -1,4 +1,4 @@
-#include "config.h"
+#include "common/config.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
 

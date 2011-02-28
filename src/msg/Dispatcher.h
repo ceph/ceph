@@ -17,7 +17,7 @@
 #define CEPH_DISPATCHER_H
 
 #include "Message.h"
-#include "config.h"
+#include "common/config.h"
 #include "auth/Auth.h"
 
 class Messenger;

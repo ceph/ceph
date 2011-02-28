@@ -1,5 +1,5 @@
 
-#include "config.h"
+#include "common/config.h"
 #include "Finisher.h"
 
 #include "common/debug.h"

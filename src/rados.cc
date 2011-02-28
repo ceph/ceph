@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #include "include/types.h"
@@ -19,7 +19,7 @@ using namespace librados;
 
 #include "osdc/rados_bencher.h"
 
-#include "config.h"
+#include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/Cond.h"
@@ -32,7 +32,7 @@ using namespace librados;
 #include <sstream>
 #include <errno.h>
 
-void usage() 
+void usage()
 {
   cerr << "usage: rados [options] [commands]" << std::endl;
   /*  cerr << "If no commands are specified, enter interactive mode.\n";
@@ -90,33 +90,30 @@ void usage()
 
 **********************************************/
 
-int main(int argc, const char **argv) 
+int main(int argc, const char **argv)
 {
   DEFINE_CONF_VARS(usage);
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_set_defaults(false);
   common_init(args, "rados",
 	      STARTUP_FLAG_FORCE_FG_LOGGING | STARTUP_FLAG_INIT_KEYS);
 
   vector<const char*> nargs;
   bufferlist indata, outdata;
 
-  const char *pool = 0;
- 
+  const char *pool_name = 0;
+
   int concurrent_ios = 16;
   int op_size = 1 << 22;
 
   const char *snapname = 0;
   snap_t snapid = CEPH_NOSNAP;
 
-  const char *filter = NULL;
-
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("pool", 'p')) {
-      CONF_SAFE_SET_ARG_VAL(&pool, OPT_STR);
+      CONF_SAFE_SET_ARG_VAL(&pool_name, OPT_STR);
     } else if (CONF_ARG_EQ("snapid", 'S')) {
       CONF_SAFE_SET_ARG_VAL(&snapid, OPT_LONGLONG);
     } else if (CONF_ARG_EQ("snap", 's')) {
@@ -127,8 +124,6 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&concurrent_ios, OPT_INT);
     } else if (CONF_ARG_EQ("block-size", 'b')) {
       CONF_SAFE_SET_ARG_VAL(&op_size, OPT_INT);
-    } else if (CONF_ARG_EQ("filter", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&filter, OPT_STR);
     } else if (args[i][0] == '-' && nargs.empty()) {
       cerr << "unrecognized option " << args[i] << std::endl;
       usage();
@@ -141,55 +136,62 @@ int main(int argc, const char **argv)
 
   // open rados
   Rados rados;
-  if (rados.initialize(0, NULL) < 0) {
+  if (rados.init(NULL) < 0) {
      cerr << "couldn't initialize rados!" << std::endl;
+     exit(1);
+  }
+
+  if (rados.connect() < 0) {
+     cerr << "couldn't connect to cluster!" << std::endl;
      exit(1);
   }
 
   int ret = 0;
   char buf[80];
 
-  // open pool?
-  pool_t p;
-  if (pool) {
-    ret = rados.open_pool(pool, &p);
+  // open io context.
+  IoCtx io_ctx;
+  if (pool_name) {
+    ret = rados.ioctx_open(pool_name, io_ctx);
     if (ret < 0) {
-      cerr << "error opening pool " << pool << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      goto no_pool_out;
+      cerr << "error opening pool " << pool_name << ": "
+	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
     }
   }
 
   // snapname?
   if (snapname) {
-    ret = rados.snap_lookup(p, snapname, &snapid);
+    ret = io_ctx.snap_lookup(snapname, &snapid);
     if (ret < 0) {
       cerr << "error looking up snap '" << snapname << "': " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      goto out;
+      return 1;
     }
   }
   if (snapid != CEPH_NOSNAP) {
     string name;
-    ret = rados.snap_get_name(p, snapid, &name);
+    ret = io_ctx.snap_get_name(snapid, &name);
     if (ret < 0) {
-      cerr << "snapid " << snapid << " doesn't exist in pool " << pool << std::endl;
-      goto out;
+      cerr << "snapid " << snapid << " doesn't exist in pool "
+	   << io_ctx.get_pool_name() << std::endl;
+      return 1;
     }
-    rados.set_snap(p, snapid);
+    io_ctx.snap_set_read(snapid);
     cout << "selected snap " << snapid << " '" << snapname << "'" << std::endl;
   }
 
   // list pools?
   if (strcmp(nargs[0], "lspools") == 0) {
     list<string> vec;
-    rados.list_pools(vec);
+    rados.pool_list(vec);
     for (list<string>::iterator i = vec.begin(); i != vec.end(); ++i)
       cout << *i << std::endl;
   }
   else if (strcmp(nargs[0], "df") == 0) {
     // pools
     list<string> vec;
-    rados.list_pools(vec);
-    
+    rados.pool_list(vec);
+
     map<string,pool_stat_t> stats;
     rados.get_pool_stats(vec, stats);
 
@@ -223,9 +225,9 @@ int main(int argc, const char **argv)
   }
 
   else if (strcmp(nargs[0], "ls") == 0) {
-    if (!pool) {
+    if (!pool_name) {
       cerr << "pool name was not specified" << std::endl;
-      goto out;
+      return 1;
     }
 
     bool stdout = (nargs.size() < 2) || (strcmp(nargs[1], "-") == 0);
@@ -235,89 +237,37 @@ int main(int argc, const char **argv)
     else
       outstream = new ofstream(nargs[1]);
 
-    Rados::ListCtx ctx;
-    rados.list_objects_open(p, &ctx);
-    bufferlist extra_info;
-    bool filter_parent = false;
-    if (filter) {
-      char *flt_str = strdup(filter);
-      char *type = strtok(flt_str, " ");
-      if (!type) {
-        cerr << "filter type was not specified" << std::endl;
-        goto out;
-      }
-      char *xattr = NULL;
-      if (strcmp(type, "parent") != 0)
-        xattr = strtok(NULL, " ");
-      char *val = strtok(NULL, " ");
-
-      if (!val) {
-        cerr << "filter was not specified correctly" << std::endl;
-        goto out;
-      }
-
-      bufferlist bl;
-      ::encode(type, bl);
-      if (strcmp(type, "parent") ==  0) {
-        inodeno_t int_val = strtoll(val, NULL, 0);
-        ::encode(int_val, bl);
-        filter_parent = true;
-      } else if (strcmp(type, "plain") == 0) {
-        ::encode(xattr, bl);
-        ::encode(val, bl);
-      } else {
-        cerr << "unknown filter type" << std::endl;
-        goto out;
-      }
-
-      rados.list_filter(ctx, bl, &extra_info);
-    }
-    while (1) {
-      list<string> vec;
-      ret = rados.list_objects_more(ctx, 1 << 10, vec);
-      if (ret < 0) {
-	cerr << "got error: " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-	delete outstream;
-	goto out;
-      }
-      if (vec.empty())
-	break;
-
-      bufferlist::iterator exiter = extra_info.begin();
-      for (list<string>::iterator iter = vec.begin(); iter != vec.end(); ++iter) {
-	*outstream << *iter << std::endl;
-        if (filter_parent) {
-          inode_backpointer_t backp;
-          ::decode(backp, exiter);
-          cout << " dirino=" << backp.dirino << " dname=" << backp.dname << " v=" << backp.version << std::endl;
-        }
+    {
+      librados::ObjectIterator i = io_ctx.objects_begin();
+      librados::ObjectIterator i_end = io_ctx.objects_end();
+      for (; i != i_end; ++i) {
+	*outstream << *i << std::endl;
       }
     }
-    rados.list_objects_close(ctx);
     if (!stdout)
       delete outstream;
   }
   else if (strcmp(nargs[0], "chown") == 0) {
-    if (!pool || nargs.size() < 2)
+    if (!pool_name || nargs.size() < 2)
       usage();
 
     uint64_t new_auid = strtol(nargs[1], 0, 10);
-    ret = rados.change_pool_auid(p, new_auid);
+    ret = io_ctx.set_auid(new_auid);
     if (ret < 0) {
-      cerr << "error changing auid on pool " << pool << ':'
+      cerr << "error changing auid on pool " << io_ctx.get_pool_name() << ':'
 	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-    } else cerr << "changed auid on pool " << pool
+    } else cerr << "changed auid on pool " << io_ctx.get_pool_name()
 		<< " to " << new_auid << std::endl;
   }
   else if (strcmp(nargs[0], "mapext") == 0) {
-    if (!pool || nargs.size() < 2)
+    if (!pool_name || nargs.size() < 2)
       usage();
     string oid(nargs[1]);
     std::map<off_t, size_t> m;
-    ret = rados.mapext(p, oid, 0, -1, m);
+    ret = io_ctx.mapext(oid, 0, -1, m);
     if (ret < 0) {
-      cerr << "mapext error on " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      goto out;
+      cerr << "mapext error on " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
     }
     std::map<off_t, size_t>::iterator iter;
     for (iter = m.begin(); iter != m.end(); ++iter) {
@@ -325,13 +275,13 @@ int main(int argc, const char **argv)
     }
   }
   else if (strcmp(nargs[0], "get") == 0) {
-    if (!pool || nargs.size() < 3)
+    if (!pool_name || nargs.size() < 3)
       usage();
     string oid(nargs[1]);
-    ret = rados.read(p, oid, 0, outdata, 0);
+    ret = io_ctx.read(oid, outdata, 0, 0);
     if (ret < 0) {
-      cerr << "error reading " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      goto out;
+      cerr << "error reading " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
     }
 
     if (strcmp(nargs[2], "-") == 0) {
@@ -342,7 +292,7 @@ int main(int argc, const char **argv)
     }
   }
   else if (strcmp(nargs[0], "put") == 0) {
-    if (!pool || nargs.size() < 3)
+    if (!pool_name || nargs.size() < 3)
       usage();
 
     string oid(nargs[1]);
@@ -361,7 +311,7 @@ int main(int argc, const char **argv)
       int fd = open(nargs[2], O_RDONLY);
       if (fd < 0) {
 	cerr << "error reading input file " << nargs[2] << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
-	goto out;
+	return 1;
       }
       char buf[op_size];
       int count = op_size;
@@ -371,19 +321,19 @@ int main(int argc, const char **argv)
         if (count == 0)
           continue;
         indata.append(buf, count);
-        ret = rados.write(p, oid, offset, indata, count);
+        ret = io_ctx.write(oid, indata, count, offset);
         indata.clear();
 
         if (ret < 0) {
-          cerr << "error writing " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-          goto out;
+          cerr << "error writing " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+	  return 1;
         }
         offset += count;
       }
     }
   }
   else if (strcmp(nargs[0], "setxattr") == 0) {
-    if (!pool || nargs.size() < 4)
+    if (!pool_name || nargs.size() < 4)
       usage();
 
     string oid(nargs[1]);
@@ -393,50 +343,50 @@ int main(int argc, const char **argv)
     bufferlist bl;
     bl.append(attr_val.c_str(), attr_val.length());
 
-    ret = rados.setxattr(p, oid, attr_name.c_str(), bl);
+    ret = io_ctx.setxattr(oid, attr_name.c_str(), bl);
     if (ret < 0) {
-      cerr << "error setting xattr " << pool << "/" << oid << "/" << attr_name << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      goto out;
+      cerr << "error setting xattr " << pool_name << "/" << oid << "/" << attr_name << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
     }
   }
   else if (strcmp(nargs[0], "getxattr") == 0) {
-    if (!pool || nargs.size() < 3)
+    if (!pool_name || nargs.size() < 3)
       usage();
 
     string oid(nargs[1]);
     string attr_name(nargs[2]);
 
     bufferlist bl;
-    ret = rados.getxattr(p, oid, attr_name.c_str(), bl);
+    ret = io_ctx.getxattr(oid, attr_name.c_str(), bl);
     if (ret < 0) {
-      cerr << "error getting xattr " << pool << "/" << oid << "/" << attr_name << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      goto out;
+      cerr << "error getting xattr " << pool_name << "/" << oid << "/" << attr_name << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
     }
     string s(bl.c_str(), bl.length());
     cout << s << std::endl;
   } else if (strcmp(nargs[0], "rmxattr") == 0) {
-    if (!pool || nargs.size() < 3)
+    if (!pool_name || nargs.size() < 3)
       usage();
 
     string oid(nargs[1]);
     string attr_name(nargs[2]);
 
-    ret = rados.rmxattr(p, oid, attr_name.c_str());
+    ret = io_ctx.rmxattr(oid, attr_name.c_str());
     if (ret < 0) {
-      cerr << "error removing xattr " << pool << "/" << oid << "/" << attr_name << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      goto out;
+      cerr << "error removing xattr " << pool_name << "/" << oid << "/" << attr_name << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
     }
   } else if (strcmp(nargs[0], "listxattr") == 0) {
-    if (!pool || nargs.size() < 2)
+    if (!pool_name || nargs.size() < 2)
       usage();
 
     string oid(nargs[1]);
     map<std::string, bufferlist> attrset;
     bufferlist bl;
-    ret = rados.getxattrs(p, oid, attrset);
+    ret = io_ctx.getxattrs(oid, attrset);
     if (ret < 0) {
-      cerr << "error getting xattr set " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      goto out;
+      cerr << "error getting xattr set " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
     }
 
     for (map<std::string, bufferlist>::iterator iter = attrset.begin();
@@ -445,23 +395,23 @@ int main(int argc, const char **argv)
     }
   }
   else if (strcmp(nargs[0], "rm") == 0) {
-    if (!pool || nargs.size() < 2)
+    if (!pool_name || nargs.size() < 2)
       usage();
     string oid(nargs[1]);
-    ret = rados.remove(p, oid);
+    ret = io_ctx.remove(oid);
     if (ret < 0) {
-      cerr << "error removing " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      goto out;
+      cerr << "error removing " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
     }
   }
   else if (strcmp(nargs[0], "create") == 0) {
-    if (!pool || nargs.size() < 2)
+    if (!pool_name || nargs.size() < 2)
       usage();
     string oid(nargs[1]);
-    ret = rados.create(p, oid, true);
+    ret = io_ctx.create(oid, true);
     if (ret < 0) {
-      cerr << "error creating " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      goto out;
+      cerr << "error creating " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
     }
   }
 
@@ -470,10 +420,10 @@ int main(int argc, const char **argv)
       usage();
     if (strcmp(nargs[1], "dump") == 0) {
       string oid(nargs[2]);
-      ret = rados.read(p, oid, 0, outdata, 0);
+      ret = io_ctx.read(oid, outdata, 0, 0);
       if (ret < 0) {
-	cerr << "error reading " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-	goto out;
+	cerr << "error reading " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+	return 1;
       }
       bufferlist::iterator p = outdata.begin();
       bufferlist header;
@@ -489,7 +439,7 @@ int main(int argc, const char **argv)
 	q->second.hexdump(cout);
 	cout << "\n";
       }
-    }    
+    }
   }
 
   else if (strcmp(nargs[0], "mkpool") == 0) {
@@ -505,44 +455,38 @@ int main(int argc, const char **argv)
 	cerr << "using crush rule " << (int)crush_rule << std::endl;
       }
     }
-    ret = rados.create_pool(nargs[1], auid, crush_rule);
+    ret = rados.pool_create(nargs[1], auid, crush_rule);
     if (ret < 0) {
       cerr << "error creating pool " << nargs[1] << ": "
 	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      goto out;
+      return 1;
     }
     cout << "successfully created pool " << nargs[1] << std::endl;
   }
   else if (strcmp(nargs[0], "rmpool") == 0) {
     if (nargs.size() < 2)
       usage();
-    rados_pool_t rm_me;
-    ret = rados.open_pool(nargs[1], &rm_me);
+    ret = rados.pool_delete(nargs[1]);
     if (ret >= 0) {
-      ret = rados.delete_pool(rm_me);
-      if (ret < 0) {
-	cerr << "error deleting pool " << nargs[1] << ": "
-	     << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      }
       cout << "successfully deleted pool " << nargs[1] << std::endl;
     } else { //error
       cerr << "pool " << nargs[1] << " does not exist" << std::endl;
     }
   }
   else if (strcmp(nargs[0], "lssnap") == 0) {
-    if (!pool || nargs.size() != 1)
+    if (!pool_name || nargs.size() != 1)
       usage();
 
     vector<snap_t> snaps;
-    rados.snap_list(p, &snaps);
+    io_ctx.snap_list(&snaps);
     for (vector<snap_t>::iterator i = snaps.begin();
 	 i != snaps.end();
 	 i++) {
       string s;
       time_t t;
-      if (rados.snap_get_name(p, *i, &s) < 0)
+      if (io_ctx.snap_get_name(*i, &s) < 0)
 	continue;
-      if (rados.snap_get_stamp(p, *i, &t) < 0)
+      if (io_ctx.snap_get_stamp(*i, &t) < 0)
 	continue;
       struct tm bdt;
       localtime_r(&t, &bdt);
@@ -564,47 +508,47 @@ int main(int argc, const char **argv)
   }
 
   else if (strcmp(nargs[0], "mksnap") == 0) {
-    if (!pool || nargs.size() < 2)
+    if (!pool_name || nargs.size() < 2)
       usage();
-    
-    ret = rados.snap_create(p, nargs[1]);
+
+    ret = io_ctx.snap_create(nargs[1]);
     if (ret < 0) {
-      cerr << "error creating pool " << pool << " snapshot " << nargs[1]
+      cerr << "error creating pool " << pool_name << " snapshot " << nargs[1]
 	   << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      goto out;
+      return 1;
     }
-    cout << "created pool " << pool << " snap " << nargs[1] << std::endl;
+    cout << "created pool " << pool_name << " snap " << nargs[1] << std::endl;
   }
 
   else if (strcmp(nargs[0], "rmsnap") == 0) {
-    if (!pool || nargs.size() < 2)
+    if (!pool_name || nargs.size() < 2)
       usage();
-    
-    ret = rados.snap_remove(p, nargs[1]);
+
+    ret = io_ctx.snap_remove(nargs[1]);
     if (ret < 0) {
-      cerr << "error removing pool " << pool << " snapshot " << nargs[1]
+      cerr << "error removing pool " << pool_name << " snapshot " << nargs[1]
 	   << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      goto out;
+      return 1;
     }
-    cout << "removed pool " << pool << " snap " << nargs[1] << std::endl;
+    cout << "removed pool " << pool_name << " snap " << nargs[1] << std::endl;
   }
 
   else if (strcmp(nargs[0], "rollback") == 0) {
-    if (!pool || nargs.size() < 3)
+    if (!pool_name || nargs.size() < 3)
       usage();
 
-    ret = rados.snap_rollback_object(p, nargs[1], nargs[2]);
+    ret = io_ctx.rollback(nargs[1], nargs[2]);
     if (ret < 0) {
-      cerr << "error rolling back pool " << pool << " to snapshot " << nargs[1] 
+      cerr << "error rolling back pool " << pool_name << " to snapshot " << nargs[1]
 	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-      goto out;
+      return 1;
     }
-    cout << "rolled back pool " << pool
+    cout << "rolled back pool " << pool_name
 	 << " to snapshot " << nargs[2] << std::endl;
   }
-  
+
   else if (strcmp(nargs[0], "bench") == 0) {
-    if (!pool || nargs.size() < 3)
+    if (!pool_name || nargs.size() < 3)
       usage();
     int seconds = atoi(nargs[1]);
     int operation = 0;
@@ -616,7 +560,7 @@ int main(int argc, const char **argv)
       operation = OP_RAND_READ;
     else
       usage();
-    ret = aio_bench(rados, p, operation, seconds, concurrent_ios, op_size);
+    ret = aio_bench(rados, io_ctx, operation, seconds, concurrent_ios, op_size);
     if (ret != 0)
       cerr << "error during benchmark: " << ret << std::endl;
   }
@@ -625,14 +569,6 @@ int main(int argc, const char **argv)
     usage();
   }
 
- out:
-  if (pool)
-    rados.close_pool(p);
-
- no_pool_out:
-  rados.shutdown();
-  if (ret < 0)
-    return 1;
-  return 0;
+  return (ret < 0) ? 1 : 0;
 }
 

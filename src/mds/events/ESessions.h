@@ -15,7 +15,7 @@
 #ifndef CEPH_MDS_ESESSIONS_H
 #define CEPH_MDS_ESESSIONS_H
 
-#include "config.h"
+#include "common/config.h"
 #include "include/types.h"
 
 #include "../LogEvent.h"

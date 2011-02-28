@@ -17,7 +17,7 @@
 #include "common/common_init.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
-#include "config.h"
+#include "common/config.h"
 #include "tools/common.h"
 
 #include <limits.h>
@@ -114,7 +114,6 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_set_defaults(false);
   common_init(args, "ceph",
 	      STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_FORCE_FG_LOGGING);
 

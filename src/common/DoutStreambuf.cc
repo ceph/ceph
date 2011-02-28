@@ -12,7 +12,7 @@
  *
  */
 
-#include "config.h"
+#include "common/config.h"
 #include "common/DoutStreambuf.h"
 #include "common/errno.h"
 #include "common/Mutex.h"

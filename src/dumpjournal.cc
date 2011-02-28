@@ -17,7 +17,7 @@
 #include <string>
 using namespace std;
 
-#include "config.h"
+#include "common/config.h"
 
 #include "mon/MonMap.h"
 #include "mon/MonClient.h"
@@ -81,7 +81,6 @@ int main(int argc, const char **argv, const char *envp[])
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_set_defaults(false);
   common_init(args, "dumpjournal", STARTUP_FLAG_FORCE_FG_LOGGING);
 
   vec_to_argv(args, argc, argv);

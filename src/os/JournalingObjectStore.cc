@@ -1,7 +1,7 @@
 
 #include "JournalingObjectStore.h"
 
-#include "config.h"
+#include "common/config.h"
 
 #define DOUT_SUBSYS journal
 #undef dout_prefix
