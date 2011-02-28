@@ -1427,12 +1427,6 @@ void OSD::handle_osd_ping(MOSDPing *m)
 {
   dout(20) << "handle_osd_ping from " << m->get_source() << " got stat " << m->peer_stat << dendl;
 
-  if (!is_active()) {
-    dout(10) << "handle_osd_ping - not active" << dendl;
-    m->put();
-    return;
-  }
-
   if (ceph_fsid_compare(&superblock.fsid, &m->fsid)) {
     dout(20) << "handle_osd_ping from " << m->get_source()
 	     << " bad fsid " << m->fsid << " != " << superblock.fsid << dendl;
