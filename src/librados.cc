@@ -1145,7 +1145,6 @@ int RadosClient::aio_sparse_read(IoCtxImpl& io, const object_t oid,
 int RadosClient::aio_write(IoCtxImpl& io, const object_t &oid, AioCompletionImpl *c,
 			   const bufferlist& bl, size_t len, off_t off)
 {
-  SnapContext snapc;
   utime_t ut = g_clock.now();
 
   Context *onack = new C_aio_Ack(c);
@@ -1163,7 +1162,6 @@ int RadosClient::aio_write(IoCtxImpl& io, const object_t &oid, AioCompletionImpl
 int RadosClient::aio_write_full(IoCtxImpl& io, const object_t &oid,
 		AioCompletionImpl *c, const bufferlist& bl)
 {
-  SnapContext snapc;
   utime_t ut = g_clock.now();
 
   Context *onack = new C_aio_Ack(c);
@@ -1328,8 +1326,6 @@ int RadosClient::exec(IoCtxImpl& io, const object_t& oid, const char *cls, const
 int RadosClient::read(IoCtxImpl& io, const object_t& oid,
 		      bufferlist& bl, size_t len, off_t off)
 {
-  SnapContext snapc;
-
   Mutex mylock("RadosClient::read::mylock");
   Cond cond;
   bool done;
@@ -1371,7 +1367,6 @@ int RadosClient::read(IoCtxImpl& io, const object_t& oid,
 
 int RadosClient::mapext(IoCtxImpl& io, const object_t& oid, off_t off, size_t len, std::map<off_t,size_t>& m)
 {
-  SnapContext snapc;
   bufferlist bl;
 
   Mutex mylock("RadosClient::read::mylock");
@@ -1405,7 +1400,6 @@ int RadosClient::mapext(IoCtxImpl& io, const object_t& oid, off_t off, size_t le
 int RadosClient::sparse_read(IoCtxImpl& io, const object_t& oid,
 	  std::map<off_t,size_t>& m, bufferlist& data_bl, size_t len, off_t off)
 {
-  SnapContext snapc;
   bufferlist bl;
 
   Mutex mylock("RadosClient::read::mylock");
@@ -1439,8 +1433,6 @@ int RadosClient::sparse_read(IoCtxImpl& io, const object_t& oid,
 
 int RadosClient::stat(IoCtxImpl& io, const object_t& oid, uint64_t *psize, time_t *pmtime)
 {
-  SnapContext snapc;
-
   Mutex mylock("RadosClient::stat::mylock");
   Cond cond;
   bool done;
@@ -1483,8 +1475,6 @@ int RadosClient::stat(IoCtxImpl& io, const object_t& oid, uint64_t *psize, time_
 
 int RadosClient::getxattr(IoCtxImpl& io, const object_t& oid, const char *name, bufferlist& bl)
 {
-  SnapContext snapc;
-
   Mutex mylock("RadosClient::getxattr::mylock");
   Cond cond;
   bool done;
