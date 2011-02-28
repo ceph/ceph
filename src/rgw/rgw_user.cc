@@ -265,6 +265,7 @@ int rgw_add_bucket(string user_id, string bucket_name)
     RGWObjEnt new_bucket;
     new_bucket.name = bucket_name;
     new_bucket.size = 0;
+    time(&new_bucket.mtime);
     ::encode(new_bucket, bl);
 
     string buckets_obj_id;
