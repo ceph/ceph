@@ -554,6 +554,12 @@ libcommon_files = \
 	common/version.cc \
 	common/hex.cc
 
+if WITH_PROFILER
+libcommon_files += perfglue/cpu_profiler.cc
+else
+libcommon_files += perfglue/disabled_stubs.cc
+endif
+
 libcrush_a_SOURCES = \
 	crush/builder.c \
 	crush/mapper.c \
@@ -965,6 +971,7 @@ noinst_HEADERS = \
         osdc/Journaler.h\
         osdc/ObjectCacher.h\
         osdc/Objecter.h\
+        perfglue/cpu_profiler.h\
 	rgw/rgw_access.h\
 	rgw/rgw_acl.h\
 	rgw/rgw_fs.h\

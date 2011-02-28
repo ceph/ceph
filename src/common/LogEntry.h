@@ -17,6 +17,7 @@
 
 #include "include/types.h"
 #include "include/encoding.h"
+#include "msg/msg_types.h" // for entity_inst_t
 
 typedef enum {
   CLOG_DEBUG = 0,

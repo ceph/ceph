@@ -70,9 +70,7 @@
 
 #include "common/config.h"
 
-#ifdef HAVE_PROFILER
-# include <google/profiler.h>
-#endif
+#include "perfglue/cpu_profiler.h"
 
 
 #define DOUT_SUBSYS mds
@@ -779,50 +777,9 @@ void MDS::handle_command(MMonCommand *m)
       } else dout(0) << "bad migrate_dir target syntax" << dendl;
     } else dout(0) << "bad migrate_dir syntax" << dendl;
   } 
-
-  else if (m->cmd[0] == "cpu_profiler_start" && m->cmd.size() == 2) {
-#ifdef HAVE_PROFILER
-    int r = ProfilerStart(m->cmd[1].c_str());
-    clog.info() << "cpu_profiler start, logging to " << m->cmd[1] << ", r=" << r << "\n";
-#else
-    clog.info() << "cpu_profiler support not linked in\n";
-#endif
+  else if (m->cmd[0] == "cpu_profiler") {
+    cpu_profiler_handle_command(m->cmd, clog);
   }
-  else if (m->cmd[0] == "cpu_profiler_status") {
-#ifdef HAVE_PROFILER
-    if (ProfilingIsEnabledForAllThreads())
-      clog.info() << "cpu_profiler is enabled\n";
-    else
-      clog.info() << "cpu_profiler is not enabled\n";
-    ProfilerState st;
-    ProfilerGetCurrentState(&st);
-    clog.info() << "cpu_profiler " << (st.enabled ? "enabled":"not enabled")
-		<< " start_time " << st.start_time
-		<< " profile_name " << st.profile_name
-		<< " samples " << st.samples_gathered
-		<< "\n";
-#else
-    clog.info() << "cpu_profiler support not linked in\n";
-#endif
-  }
-  else if (m->cmd[0] == "cpu_profiler_flush") {
-#ifdef HAVE_PROFILER
-    clog.info() << "cpu_profiler flush\n";
-    ProfilerFlush();
-#else
-    clog.info() << "cpu_profiler support not linked in\n";
-#endif
-  }
-  else if (m->cmd[0] == "cpu_profiler_stop") {
-#ifdef HAVE_PROFILER
-    clog.info() << "cpu_profiler flush and stop\n";
-    ProfilerFlush();
-    ProfilerStop();
-#else
-    clog.info() << "cpu_profiler support not linked in\n";
-#endif
-  }
-
  else if (m->cmd.size() == 1 && m->cmd[0] == "heap_profiler_options") {
     char val[sizeof(int)*8+1];
     snprintf(val, sizeof(val), "%i", g_conf.profiler_allocation_interval);
