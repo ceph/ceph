@@ -7,8 +7,6 @@
 #ifndef CEPH_BYTEORDER_H
 #define CEPH_BYTEORDER_H
 
-#include <linux/types.h> // for __u8, etc.
-#include <stdint.h>      // for uint64_t, etc.
 #include <endian.h>
 
 static __inline__ __u16 swab16(__u16 val) 

@@ -7,7 +7,6 @@
  */
 
 #include "msgr.h"
-#include <string.h>
 
 /*
  * osdmap encoding versions
