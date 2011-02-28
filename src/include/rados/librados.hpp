@@ -11,16 +11,15 @@
 
 #include "librados.h"
 
-class RadosClient;
-class Context;
-class AioCompletionImpl;
-class IoCtxImpl;
-class ObjListCtx;
-
 namespace librados
 {
-  class IoCtx;
   using ceph::bufferlist;
+
+  class AioCompletionImpl;
+  class IoCtx;
+  class IoCtxImpl;
+  class ObjListCtx;
+  class RadosClient;
 
   typedef void *list_ctx_t;
   typedef uint64_t snap_t;
