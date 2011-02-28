@@ -19,20 +19,20 @@
   $ cconf -c test.conf bar -s xyzzy
   [1]
 
-  $ cconf -c test.conf bar notfound -s xyzzy
-  notfound
+  $ cconf -c test.conf bar -s xyzzy
+  [1]
 
-  $ cconf -c test.conf bar notfound -s xyzzy -s thud
+  $ cconf -c test.conf bar -s xyzzy -s thud
   red
 
-  $ cconf -c test.conf bar notfound -s nobar -s thud
+  $ cconf -c test.conf bar -s nobar -s thud
   red
 
-  $ cconf -c test.conf bar notfound -s thud -s baz
+  $ cconf -c test.conf bar -s thud -s baz
   red
 
-  $ cconf -c test.conf bar notfound -s baz -s thud
+  $ cconf -c test.conf bar -s baz -s thud
   yellow
 
-  $ cconf -c test.conf bar notfound -s xyzzy -s nobar -s thud -s baz
+  $ cconf -c test.conf bar -s xyzzy -s nobar -s thud -s baz
   red

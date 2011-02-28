@@ -39,7 +39,7 @@ ACTIONS\n\
   -l|--list-sections <prefix>     List sections in prefix\n\
   --lookup <key>                  Print a configuration setting to stdout.\n\
                                   Returns 0 (success) if the configuration setting is\n\
-				  found; 1 otherwise.\n\
+                                  found; 1 otherwise.\n\
   -r|--resolve-search             search for the first file that exists and\n\
                                   can be opened in the resulted comma\n\
                                   delimited search list.\n\
