@@ -26,7 +26,7 @@ debug_level=0
 verbose=0
 CFLAGS=""
 CXXFLAGS=""
-while getopts  "36d:hv" flag
+while getopts  "36d:hPv" flag
 do
     case $flag in
     3) CFLAGS="$CFLAGS -m32";;
@@ -34,6 +34,8 @@ do
     6) CFLAGS="$CFLAGS -m64";;
 
     d) debug_level=$OPTARG;;
+
+    P) with_profiler="--with-profiler ";;
 
     h) usage
         exit 0;;
@@ -93,5 +95,5 @@ export CXXFLAGS
 
 ./configure \
 --prefix=/usr --sbindir=/sbin --localstatedir=/var --sysconfdir=/etc \
---with-gtk2=yes --with-debug \
+--with-gtk2=yes --with-debug $with_profiler \
 || die "configure failed"
