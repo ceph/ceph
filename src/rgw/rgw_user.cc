@@ -45,7 +45,6 @@ int rgw_get_user_info(string user_id, RGWUserInfo& info)
     ofs += ret;
   } while (ofs <= end);
 
-
   iter = bl.begin();
   info.decode(iter); 
   ret = 0;
@@ -173,39 +172,157 @@ extern int rgw_get_uid_by_openstack(string& openstack_name, string& user_id)
 {
   return rgw_get_uid_from_index(openstack_name, ui_openstack_bucket, user_id);
 }
+
+static void get_buckets_obj(string& user_id, string& buckets_obj_id)
+{
+    buckets_obj_id = user_id;
+    buckets_obj_id += RGW_BUCKETS_OBJ_PREFIX;
+}
+
 /**
  * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
  * Returns: 0 on success, -ERR# on failure.
  */
-int rgw_get_user_buckets(string user_id, RGWUserBuckets& buckets)
+int rgw_read_buckets_attr(string user_id, RGWUserBuckets& buckets)
 {
   bufferlist bl;
-  int ret = rgwstore->get_attr(ui_bucket, user_id, RGW_ATTR_BUCKETS, bl);
-  switch (ret) {
-  case 0:
-    break;
-  case -ENODATA:
-    return 0;
-  default:
-    return ret;
-  }
+  int ret;
+  buckets.clear();
+  if (rgwstore->supports_tmap()) {
+    string buckets_obj_id;
+    get_buckets_obj(user_id, buckets_obj_id);
+    bufferlist bl;
+#define LARGE_ENOUGH_LEN (4096 * 1024)
+    size_t len = LARGE_ENOUGH_LEN;
 
-  bufferlist::iterator iter = bl.begin();
-  buckets.decode(iter);
+    do {
+      ret = rgwstore->read(ui_bucket, buckets_obj_id, 0, len, bl);
+      if (ret == -ENOENT) {
+        ret = 0;
+        return 0;
+      }
+      if (ret < 0)
+        return ret;
+
+      if (ret != len)
+        break;
+
+      len *= 2;
+    } while (1);
+
+    bufferlist::iterator p = bl.begin();
+    bufferlist header;
+    map<string,bufferlist> m;
+    ::decode(header, p);
+    ::decode(m, p);
+    for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); q++) {
+      bufferlist::iterator iter = q->second.begin();
+      RGWObjEnt bucket;
+      ::decode(bucket, iter);
+      buckets.add(bucket);
+    }
+  } else {
+    ret = rgwstore->get_attr(ui_bucket, user_id, RGW_ATTR_BUCKETS, bl);
+    switch (ret) {
+    case 0:
+      break;
+    case -ENODATA:
+      return 0;
+    default:
+      return ret;
+    }
+
+    bufferlist::iterator iter = bl.begin();
+    buckets.decode(iter);
+  }
 
   return 0;
 }
 
 /**
- * Store the set of buckets associated with a user.
+ * Store the set of buckets associated with a user on a n xattr
+ * not used with all backends
  * This completely overwrites any previously-stored list, so be careful!
  * Returns 0 on success, -ERR# otherwise.
  */
-int rgw_put_user_buckets(string user_id, RGWUserBuckets& buckets)
+int rgw_write_buckets_attr(string user_id, RGWUserBuckets& buckets)
 {
   bufferlist bl;
   buckets.encode(bl);
+
   int ret = rgwstore->set_attr(ui_bucket, user_id, RGW_ATTR_BUCKETS, bl);
+
+  return ret;
+}
+
+int rgw_add_bucket(string user_id, string bucket_name)
+{
+  int ret;
+
+  if (rgwstore->supports_tmap()) {
+    bufferlist bl;
+
+    RGWObjEnt new_bucket;
+    new_bucket.name = bucket_name;
+    new_bucket.size = 0;
+    ::encode(new_bucket, bl);
+
+    string buckets_obj_id;
+    get_buckets_obj(user_id, buckets_obj_id);
+
+    ret = rgwstore->tmap_set(ui_bucket, buckets_obj_id, bucket_name, bl);
+    if (ret < 0) {
+      RGW_LOG(0) << "error adding bucket to directory: " << strerror(-ret)<< std::endl;
+    }
+  } else {
+     RGWUserBuckets buckets;
+
+    ret = rgw_read_buckets_attr(user_id, buckets);
+    RGWObjEnt new_bucket;
+
+    switch (ret) {
+    case 0:
+    case -ENOENT:
+    case -ENODATA:
+      new_bucket.name = bucket_name;
+      new_bucket.size = 0;
+      time(&new_bucket.mtime);
+      buckets.add(new_bucket);
+      ret = rgw_write_buckets_attr(user_id, buckets);
+      break;
+    default:
+      RGW_LOG(10) << "rgw_write_buckets_attr returned " << ret << endl;
+      break;
+    }
+  }
+
+  return ret;
+}
+
+int rgw_remove_bucket(string user_id, string bucket_name)
+{
+  int ret;
+
+  if (rgwstore->supports_tmap()) {
+    bufferlist bl;
+
+    string buckets_obj_id;
+    get_buckets_obj(user_id, buckets_obj_id);
+
+    ret = rgwstore->tmap_del(ui_bucket, buckets_obj_id, bucket_name);
+    if (ret < 0) {
+      RGW_LOG(0) << "error removing bucket from directory: " << strerror(-ret)<< std::endl;
+    }
+  } else {
+    RGWUserBuckets buckets;
+
+    ret = rgw_read_buckets_attr(user_id, buckets);
+
+    if (ret == 0 || ret == -ENOENT) {
+      buckets.remove(bucket_name);
+      ret = rgw_write_buckets_attr(user_id, buckets);
+    }
+  }
 
   return ret;
 }
@@ -218,7 +335,7 @@ int rgw_put_user_buckets(string user_id, RGWUserBuckets& buckets)
  */
 int rgw_delete_user(RGWUserInfo& info) {
   RGWUserBuckets user_buckets;
-  rgw_get_user_buckets(info.user_id, user_buckets);
+  rgw_read_buckets_attr(info.user_id, user_buckets);
   map<string, RGWObjEnt>& buckets = user_buckets.get_buckets();
   for (map<string, RGWObjEnt>::iterator i = buckets.begin();
        i != buckets.end();

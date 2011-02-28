@@ -56,6 +56,7 @@ public:
             char **data, off_t ofs, off_t end);
 
   void finish_get_obj(void **handle);
+  int read(std::string& bucket, std::string& oid, off_t ofs, size_t size, bufferlist& bl);
   int obj_stat(string& bucket, string& obj, size_t *psize, time_t *pmtime);
 };
 

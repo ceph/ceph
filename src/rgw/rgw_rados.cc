@@ -626,7 +626,6 @@ int RGWRados::get_obj(void **handle,
   }
 
   return r;
-
 }
 
 void RGWRados::finish_get_obj(void **handle)
@@ -636,5 +635,61 @@ void RGWRados::finish_get_obj(void **handle)
     delete state;
     *handle = NULL;
   }
+}
+
+/* a simple object read */
+int RGWRados::read(std::string& bucket, std::string& oid, off_t ofs, size_t size, bufferlist& bl)
+{
+  librados::IoCtx io_ctx;
+  int r = rados->ioctx_create(bucket.c_str(), io_ctx);
+  if (r < 0)
+    return r;
+  r = io_ctx.read(oid, bl, size, ofs);
+  return r;
+}
+
+int RGWRados::obj_stat(std::string& bucket, std::string& obj, size_t *psize, time_t *pmtime)
+{
+  librados::IoCtx io_ctx;
+  int r = rados->ioctx_create(bucket.c_str(), io_ctx);
+  if (r < 0)
+    return r;
+  if (r < 0)
+    return r;
+  r = io_ctx.stat(obj, psize, pmtime);
+  return r;
+}
+
+int RGWRados::tmap_set(std::string& bucket, std::string& obj, std::string& key, bufferlist& bl)
+{
+  bufferlist cmdbl, emptybl;
+  __u8 c = CEPH_OSD_TMAP_SET;
+
+  ::encode(c, cmdbl);
+  ::encode(key, cmdbl);
+  ::encode(bl, cmdbl);
+  // ::encode(emptybl, cmdbl);
+  librados::IoCtx io_ctx;
+  int r = rados->ioctx_create(bucket.c_str(), io_ctx);
+  if (r < 0)
+    return r;
+  r = io_ctx.tmap_update(obj, cmdbl);
+  return r;
+}
+
+int RGWRados::tmap_del(std::string& bucket, std::string& obj, std::string& key)
+{
+  bufferlist cmdbl;
+  __u8 c = CEPH_OSD_TMAP_RM;
+
+  ::encode(c, cmdbl);
+  ::encode(key, cmdbl);
+
+  librados::IoCtx io_ctx;
+  int r = rados->ioctx_create(bucket.c_str(), io_ctx);
+  if (r < 0)
+    return r;
+  r = io_ctx.tmap_update(obj, cmdbl);
+  return r;
 }
 

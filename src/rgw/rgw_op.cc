@@ -199,13 +199,20 @@ int RGWGetObj::init_common()
 
 void RGWListBuckets::execute()
 {
-  ret = rgw_get_user_buckets(s->user.user_id, buckets);
+  ret = rgw_read_buckets_attr(s->user.user_id, buckets);
   if (ret < 0) {
     /* hmm.. something wrong here.. the user was authenticated, so it
        should exist, just try to recreate */
     RGW_LOG(10) << "WARNING: failed on rgw_get_user_buckets uid=" << s->user.user_id << endl;
+
+    /*
+
+    on a second thought, this is probably a bug and we should fail
+
     rgw_put_user_buckets(s->user.user_id, buckets);
     ret = 0;
+
+    */
   }
 
   send_response();
@@ -251,27 +258,8 @@ void RGWCreateBucket::execute()
   ret = rgwstore->create_bucket(s->user.user_id, s->bucket_str, attrs,
 				s->user.auid);
 
-  if (ret == 0) {
-    RGWUserBuckets buckets;
-
-    int r = rgw_get_user_buckets(s->user.user_id, buckets);
-    RGWObjEnt new_bucket;
-
-    switch (r) {
-    case 0:
-    case -ENOENT:
-    case -ENODATA:
-      new_bucket.name = s->bucket_str;
-      new_bucket.size = 0;
-      time(&new_bucket.mtime);
-      buckets.add(new_bucket);
-      ret = rgw_put_user_buckets(s->user.user_id, buckets);
-      break;
-    default:
-      RGW_LOG(10) << "rgw_get_user_buckets returned " << ret << endl;
-      break;
-    }
-  }
+  if (ret == 0)
+    ret = rgw_add_bucket(s->user.user_id, s->bucket_str);
 done:
   send_response();
 }
@@ -289,14 +277,7 @@ void RGWDeleteBucket::execute()
     ret = rgwstore->delete_bucket(s->user.user_id, s->bucket_str);
 
     if (ret == 0) {
-      RGWUserBuckets buckets;
-
-      int r = rgw_get_user_buckets(s->user.user_id, buckets);
-
-      if (r == 0 || r == -ENOENT) {
-        buckets.remove(s->bucket_str);
-        ret = rgw_put_user_buckets(s->user.user_id, buckets);
-      }
+      rgw_remove_bucket(s->user.user_id, s->bucket_str);
     }
   }
 

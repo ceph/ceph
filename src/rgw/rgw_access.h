@@ -2,6 +2,7 @@
 #define CEPH_RGW_ACCESS_H
 
 #include <time.h>
+#include <errno.h>
 #include <string>
 #include <vector>
 #include <include/types.h>
@@ -133,6 +134,11 @@ public:
   virtual void finish_get_obj(void **handle) = 0;
 
   /**
+   * a simple object read without keeping state
+   */
+  virtual int read(std::string& bucket, std::string& oid, off_t ofs, size_t size, bufferlist& bl) = 0;
+
+  /**
    * Get the attributes for an object.
    * bucket: name of the bucket holding the object.
    * obj: name of the object
@@ -157,6 +163,12 @@ public:
   * stat an object
   */
   virtual int obj_stat(std::string& bucket, std::string& obj, size_t *psize, time_t *pmtime) = 0;
+
+  virtual bool supports_tmap() { return false; }
+
+  virtual int tmap_set(std::string& bucket, std::string& obj, std::string& key, bufferlist& bl) { return -ENOTSUP; }
+  virtual int tmap_del(std::string& bucket, std::string& obj, std::string& key) { return -ENOTSUP; }
+
 
  /** 
    * Given the name of the storage provider, initialize it

@@ -36,6 +36,8 @@ using namespace std;
 #define RGW_ATTR_META_PREFIX	RGW_ATTR_PREFIX "x-amz-meta-"
 #define RGW_ATTR_CONTENT_TYPE	RGW_ATTR_PREFIX "content_type"
 
+#define RGW_BUCKETS_OBJ_PREFIX ".buckets"
+
 #define USER_INFO_VER 3
 
 #define RGW_MAX_CHUNK_SIZE	(4*1024*1024)

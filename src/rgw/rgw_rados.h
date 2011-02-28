@@ -85,7 +85,13 @@ public:
 
   virtual void finish_get_obj(void **handle);
 
+  virtual int read(std::string& bucket, std::string& oid, off_t ofs, size_t size, bufferlist& bl);
+
   virtual int obj_stat(std::string& bucket, std::string& obj, size_t *psize, time_t *pmtime);
+
+  virtual bool supports_tmap() { return true; }
+  int tmap_set(std::string& bucket, std::string& obj, std::string& key, bufferlist& bl);
+  int tmap_del(std::string& bucket, std::string& obj, std::string& key);
 };
 
 #endif

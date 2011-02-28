@@ -307,7 +307,6 @@ int RGWFS::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest
   return ret;
 }
 
-
 int RGWFS::delete_bucket(std::string& id, std::string& bucket)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1;
@@ -542,7 +541,7 @@ int RGWFS::get_obj(void **handle, std::string& bucket, std::string& obj,
   off_t pos = 0;
 
   while (pos < (off_t)len) {
-    r = read(state->fd, (*data) + pos, len - pos);
+    r = ::read(state->fd, (*data) + pos, len - pos);
     if (r > 0) {
       pos += r;
     } else {
@@ -580,5 +579,45 @@ void RGWFS::finish_get_obj(void **handle)
     delete state;
     *handle = NULL;
   }
+}
+
+int RGWFS::read(std::string& bucket, std::string& oid, off_t ofs, size_t size, bufferlist& bl)
+{
+  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + oid.size() + 1;
+  char buf[len];
+  int fd;
+  int r = -EINVAL;
+  bufferptr bp(size);
+  char *data;
+  size_t total = 0;
+
+  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), oid.c_str());
+
+  fd = open(buf, O_RDONLY, 0755);
+  if (fd < 0)
+    return -errno;
+
+#define READ_CHUNK (1024*1024)
+  data = (char *)malloc(READ_CHUNK);
+  if (!data) {
+    r = -ENOMEM;
+    goto done;
+  }
+
+  do {
+    r = ::read(fd, data, READ_CHUNK);
+    if (r < 0) {
+      r = -errno;
+      goto done;
+    }
+    bl.append(data, r);
+    total += r;
+  } while (r == READ_CHUNK);
+  r = total;
+
+done:
+  free(data);
+  close(fd);
+  return r;
 }
 
