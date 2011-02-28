@@ -1,6 +1,6 @@
 #include "auth/cephx/CephxKeyServer.h"
 
-#include "config.h"
+#include "common/config.h"
 
 
 #define AES_KEY_LEN	16

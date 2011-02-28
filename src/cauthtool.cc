@@ -14,7 +14,7 @@
 
 using namespace std;
 
-#include "config.h"
+#include "common/config.h"
 
 #include "common/ConfUtils.h"
 #include "common/ceph_argparse.h"
@@ -53,7 +53,6 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   DEFINE_CONF_VARS(usage);
 
-  common_set_defaults(false);
   common_init(args, "cauthtool", STARTUP_FLAG_FORCE_FG_LOGGING);
 
   const char *me = argv[0];

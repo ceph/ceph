@@ -17,7 +17,7 @@
 #define CEPH_THREAD_H
 
 #include "common/signal.h"
-#include "config.h"
+#include "common/config.h"
 #include "include/atomic.h"
 
 #include <errno.h>

@@ -26,7 +26,7 @@
 #include "osd/osd_types.h"
 #include "osd/PG.h"  // yuck
 
-#include "config.h"
+#include "common/config.h"
 #include <sstream>
 
 #define DOUT_SUBSYS mon

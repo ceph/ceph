@@ -48,6 +48,8 @@ struct ConfFile;
 struct md_config_t {
   md_config_t();
   ~md_config_t();
+  int get_val(const char *key, char **buf, int len);
+  int set_val(const char *key, const char *val);
 
   ConfFile *cf;
 

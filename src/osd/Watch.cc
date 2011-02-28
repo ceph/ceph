@@ -6,7 +6,7 @@
 #include "ReplicatedPG.h"
 #include "Watch.h"
 
-#include "config.h"
+#include "common/config.h"
 
 bool Watch::ack_notification(entity_name_t& watcher, Notification *notif)
 {

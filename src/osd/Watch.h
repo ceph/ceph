@@ -19,7 +19,7 @@
 #include <map>
 
 #include "OSD.h"
-#include "config.h"
+#include "common/config.h"
 
 class MWatchNotify;
 

@@ -21,7 +21,7 @@
 #include <string>
 using namespace std;
 
-#include "config.h"
+#include "common/config.h"
 
 #include "mon/MonMap.h"
 #include "mon/MonClient.h"
@@ -52,7 +52,7 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  int startup_flags = STARTUP_FLAG_INIT_KEYS;
+  int startup_flags = STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_DAEMON;
   vector<const char *>::iterator args_iter;
 
   for (args_iter = args.begin(); args_iter != args.end(); ++args_iter) {
@@ -62,7 +62,6 @@ int main(int argc, const char **argv)
     } 
   }
 
-  common_set_defaults(true);
 #ifdef HAVE_LIBTCMALLOC
   g_conf.profiler_start = HeapProfilerStart;
   g_conf.profiler_running = IsHeapProfilerRunning;
@@ -233,11 +232,11 @@ int main(int argc, const char **argv)
 
   messenger_hb->bind(hb_addr);
 
-  derr << "starting osd" << whoami
+  cout << "starting osd" << whoami
        << " at " << client_messenger->get_ms_addr() 
        << " osd_data " << g_conf.osd_data
        << " " << ((g_conf.osd_journal && g_conf.osd_journal[0]) ? g_conf.osd_journal:"(no journal)")
-       << dendl;
+       << std::endl;
 
   client_messenger->register_entity(entity_name_t::OSD(whoami));
   cluster_messenger->register_entity(entity_name_t::OSD(whoami));

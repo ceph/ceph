@@ -15,7 +15,7 @@
 #ifndef CEPH_KEYRING_H
 #define CEPH_KEYRING_H
 
-#include "config.h"
+#include "common/config.h"
 
 #include "auth/Crypto.h"
 #include "auth/Auth.h"

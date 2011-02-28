@@ -6,7 +6,7 @@
 #include "Ager.h"
 #include "os/ObjectStore.h"
 
-#include "config.h"
+#include "common/config.h"
 #include "common/Clock.h"
 
 // ick

@@ -21,7 +21,7 @@
 #include <string>
 using namespace std;
 
-#include "config.h"
+#include "common/config.h"
 
 #include "mon/MonMap.h"
 #include "mds/MDS.h"
@@ -65,7 +65,6 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_set_defaults(true);
 #ifdef HAVE_LIBTCMALLOC
   g_conf.profiler_start = HeapProfilerStart;
   g_conf.profiler_running = IsHeapProfilerRunning;
@@ -73,7 +72,7 @@ int main(int argc, const char **argv)
   g_conf.profiler_dump = HeapProfilerDump;
   g_conf.tcmalloc_have = true;
 #endif //HAVE_LIBTCMALLOC
-  common_init(args, "mds", STARTUP_FLAG_INIT_KEYS);
+  common_init(args, "mds", STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_DAEMON);
 
   // mds specific args
   int shadow = 0;
@@ -138,9 +137,9 @@ int main(int argc, const char **argv)
     jr->reset();
     mc.shutdown();
   } else {
-    derr << "starting mds." << g_conf.id
+    cout << "starting mds." << g_conf.id
 	 << " at " << messenger->get_ms_addr()
-	 << dendl;
+	 << std::endl;
 
     messenger->register_entity(entity_name_t::MDS(-1));
     assert_warn(messenger);

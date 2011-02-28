@@ -1,7 +1,7 @@
 #include "auth/Crypto.h"
 #include "common/Clock.h"
 
-#include "config.h"
+#include "common/config.h"
 
 
 #define AES_KEY_LEN	16

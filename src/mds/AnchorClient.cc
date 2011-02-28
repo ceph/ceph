@@ -20,7 +20,7 @@
 
 #include "messages/MMDSTableRequest.h"
 
-#include "config.h"
+#include "common/config.h"
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix

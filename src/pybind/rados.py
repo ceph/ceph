@@ -82,14 +82,15 @@ class Rados(object):
     """librados python wrapper"""
     def __init__(self):
         self.librados = CDLL('librados.so')
-        ret = self.librados.rados_initialize(None)
+        self.cluster = c_void_p()
+        ret = self.librados.rados_init(byref(self.cluster))
         if ret != 0:
             raise Error("rados_initialize failed with error code: %d" % ret)
         self.initialized = True
 
     def __del__(self):
         if (self.__dict__.has_key("initialized") and self.initialized == True):
-            self.librados.rados_deinitialize()
+            self.librados.rados_release(self.cluster)
 
     def version(self):
         major = ctypes.c_int()
@@ -100,20 +101,21 @@ class Rados(object):
         return Version(major.value, minor.value, extra.value)
 
     def create_pool(self, pool_name):
-        ret = self.librados.rados_create_pool(c_char_p(pool_name))
+        ret = self.librados.rados_pool_create(self.cluster, c_char_p(pool_name))
         if ret < 0:
             raise make_ex(ret, "error creating pool '%s'" % pool_name)
 
     def open_pool(self, pool_name):
         pool = c_void_p()
-        ret = self.librados.rados_open_pool(c_char_p(pool_name), byref(pool))
+        ret = self.librados.rados_open_pool(self.cluster, c_char_p(pool_name), byref(pool))
         if ret < 0:
             raise make_ex(ret, "error opening pool '%s'" % pool_name)
         return Pool(pool_name, self.librados, pool)
 
     # Returns true if the pool exists; false otherwise.
     def pool_exists(self, pool_name):
-        ret = self.librados.rados_lookup_pool(c_char_p(pool_name))
+        pool = c_void_p()
+        ret = self.librados.rados_pool_lookup(self.cluster, c_char_p(pool_name))
         if (ret >= 0):
             return True
         elif (ret == -errno.ENOENT):
@@ -127,7 +129,7 @@ class ObjectIterator(object):
         self.pool = pool
         self.ctx = c_void_p()
         ret = self.pool.librados.\
-            rados_list_objects_open(self.pool.pool_id, byref(self.ctx))
+            rados_objects_list_open(self.pool.pool_id, byref(self.ctx))
         if ret < 0:
             raise make_ex(ret, "error iterating over the objects in pool '%s'" \
                 % self.pool.pool_name)
@@ -137,13 +139,13 @@ class ObjectIterator(object):
 
     def next(self):
         key = c_char_p()
-        ret = self.pool.librados.rados_list_objects_next(self.ctx, byref(key))
+        ret = self.pool.librados.rados_object_list_next(self.ctx, byref(key))
         if ret < 0:
             raise StopIteration()
         return Object(self.pool, key)
 
     def __del__(self):
-        self.pool.librados.rados_list_objects_close(self.ctx)
+        self.pool.librados.rados_objects_list_close(self.ctx)
 
 class SnapIterator(object):
     """Snapshot iterator"""
@@ -154,7 +156,7 @@ class SnapIterator(object):
         num_snaps = 10
         while True:
             self.snaps = (ctypes.c_uint64 * num_snaps)()
-            ret = self.pool.librados.rados_snap_list(self.pool.pool_id,
+            ret = self.pool.librados.rados_pool_snap_list(self.pool.pool_id,
                                 self.snaps, num_snaps)
             if (ret >= 0):
                 self.max_snap = ret
@@ -175,7 +177,7 @@ pool '%s'" % self.pool.pool_name)
         name_len = 10
         while True:
             name = create_string_buffer(name_len)
-            ret = self.pool.librados.rados_snap_get_name(self.pool.pool_id,\
+            ret = self.pool.librados.rados_pool_snap_get_name(self.pool.pool_id,\
                                 snap_id, byref(name), name_len)
             if (ret == 0):
                 name_len = ret
@@ -231,7 +233,7 @@ class Pool(object):
 
     def close(self):
         self.require_pool_open()
-        ret = self.librados.rados_close_pool(self.pool_id)
+        ret = self.librados.rados_pool_close(self.pool_id)
         if ret < 0:
             raise make_ex(ret, "error closing pool '%s'" % self.pool_id)
         self.state = "closed"
@@ -352,20 +354,20 @@ written." % (self.name, ret, length))
         return SnapIterator(self)
 
     def create_snap(self, snap_name):
-        ret = self.librados.rados_snap_create(self.pool_id,
-                            c_char_p(snap_name))
+        ret = self.librados.rados_pool_snap_create(self.pool_id,
+                                    c_char_p(snap_name))
         if (ret != 0):
             raise make_ex(ret, "Failed to create snap %s" % snap_name)
 
     def remove_snap(self, snap_name):
-        ret = self.librados.rados_snap_remove(self.pool_id,
-                            c_char_p(snap_name))
+        ret = self.librados.rados_pool_snap_remove(self.pool_id,
+                                    c_char_p(snap_name))
         if (ret != 0):
             raise make_ex(ret, "Failed to remove snap %s" % snap_name)
 
     def lookup_snap(self, snap_name):
         snap_id = c_uint64()
-        ret = self.librados.rados_snap_lookup(self.pool_id,\
+        ret = self.librados.rados_pool_snap_lookup(self.pool_id,\
                             c_char_p(snap_name), byref(snap_id))
         if (ret != 0):
             raise make_ex(ret, "Failed to lookup snap %s" % snap_name)

@@ -33,7 +33,7 @@ typename T::iterator rand_choose(T &cont)
 
 struct TestOp
 {
-  librados::Rados::AioCompletion *completion;
+  librados::AioCompletion *completion;
   bool done;
   virtual void begin() = 0;
 
@@ -64,7 +64,7 @@ struct RadosTestContext
   set<string> oid_not_in_use;
   int current_snap;
   string pool_name;
-  librados::pool_t pool;
+  librados::IoCtx io_ctx;
   librados::Rados rados;
   int next_oid;
   string prefix;
@@ -79,8 +79,9 @@ struct RadosTestContext
     errors(0),
     max_in_flight(max_in_flight)
   {
-    rados.initialize(0, 0);
-    rados.open_pool(pool_name.c_str(), &pool);
+    rados.init(NULL);
+    rados.connect();
+    rados.ioctx_open(pool_name.c_str(), io_ctx);
     char hostname_cstr[100];
     gethostname(hostname_cstr, 100);
     stringstream hostpid;
@@ -224,12 +225,8 @@ struct WriteOp : public TestOp
     write_buffer.append(to_write.str());
     context.state_lock.Unlock();
 
-    context.rados.aio_write(context.pool,
-			    context.prefix+oid,
-			    0,
-			    write_buffer,
-			    to_write.str().length(),
-			    completion);
+    context.io_ctx.aio_write(context.prefix+oid, completion,
+			     write_buffer, to_write.str().length(), 0);
   }
 
   void finalize()
@@ -270,12 +267,8 @@ struct ReadOp : public TestOp
     context.find_object(oid, old_value);
 
     context.state_lock.Unlock();
-    context.rados.aio_read(context.pool,
-			   context.prefix+oid,
-			   0,
-			   &result,
-			   old_value.length(),
-			   completion);
+    context.io_ctx.aio_read(context.prefix+oid, completion,
+			   &result, old_value.length(), 0);
   }
 
   void finalize()
@@ -317,8 +310,7 @@ struct SnapCreateOp : public TestOp
 
     stringstream snap_name;
     snap_name << context.prefix << context.current_snap - 1;
-    context.rados.snap_create(context.pool,
-			      snap_name.str().c_str());
+    context.io_ctx.snap_create(snap_name.str().c_str());
   }
 };
 
@@ -339,8 +331,7 @@ struct SnapRemoveOp : public TestOp
 
     stringstream snap_name;
     snap_name << context.prefix << to_remove;
-    context.rados.snap_remove(context.pool,
-			      snap_name.str().c_str());
+    context.io_ctx.snap_remove(snap_name.str().c_str());
   }
 };
 
@@ -365,8 +356,6 @@ struct RollbackOp : public TestOp
 	
     stringstream snap_name;
     snap_name << context.prefix << roll_back_to;
-    context.rados.snap_rollback_object(context.pool,
-				       context.prefix+oid,
-				       snap_name.str().c_str());
+    context.io_ctx.rollback(context.prefix+oid, snap_name.str().c_str());
   }
 };

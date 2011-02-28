@@ -1,5 +1,5 @@
 
-#include "config.h"
+#include "common/config.h"
 
 #include "objclass/objclass.h"
 #include "osd/OSD.h"

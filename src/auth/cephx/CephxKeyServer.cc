@@ -12,7 +12,7 @@
  * 
  */
 
-#include "config.h"
+#include "common/config.h"
 
 #include "CephxKeyServer.h"
 #include "common/Timer.h"

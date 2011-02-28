@@ -18,7 +18,7 @@
 
 
 
-#include "config.h"
+#include "common/config.h"
 
 #define DOUT_SUBSYS paxos
 #undef dout_prefix

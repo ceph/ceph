@@ -264,9 +264,9 @@ bin_PROGRAMS += rbd
 
 if WITH_DEBUG
 testlibrbd_SOURCES = testlibrbd.c
-testlibrbd_LDADD = librbd.la libcrush.la -lpthread -lm $(CRYPTOPP_LIBS)
+testlibrbd_LDADD = librbd.la librados.la libcrush.la -lpthread -lm $(CRYPTOPP_LIBS)
 testlibrbdpp_SOURCES = testlibrbdpp.cc
-testlibrbdpp_LDADD = librbd.la libcrush.la -lpthread -lm $(CRYPTOPP_LIBS)
+testlibrbdpp_LDADD = librbd.la librados.la libcrush.la -lpthread -lm $(CRYPTOPP_LIBS)
 bin_PROGRAMS += testlibrbd testlibrbdpp
 endif
 
@@ -349,7 +349,7 @@ unittest_encoding_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} \
 check_PROGRAMS += unittest_encoding
 
 unittest_base64_SOURCES = test/base64.cc
-unittest_base64_LDFLAGS = -pthread
+unittest_base64_LDFLAGS = -pthread ${AM_LDFLAGS}
 unittest_base64_LDADD = libceph.la libcrush.la -lpthread -lm \
 			${UNITTEST_LDADD}
 unittest_base64_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
@@ -409,7 +409,7 @@ AM_CFLAGS = -Wall -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE 
 AM_LDFLAGS = -Wl,--as-needed
 
 if WITH_LIBATOMIC
-LDADD += -latomic_ops
+AM_LDFLAGS += -latomic_ops
 endif
 
 noinst_LIBRARIES = \
@@ -473,7 +473,6 @@ ceph_ver.h: .git_version
 ceph_ver.c: ./ceph_ver.h
 common/version.cc: ./ceph_ver.h
 common/BackTrace.cc: ./ceph_ver.h
-config.cc: ./ceph_ver.h
 
 # cleaning
 clean-local:
@@ -531,7 +530,7 @@ libcommon_files = \
 	include/ceph_hash.cc \
 	include/ceph_strings.cc \
 	include/ceph_frag.cc \
-	config.cc \
+	common/config.cc \
 	common/page.cc \
 	common/lockdep.cc \
 	common/DoutStreambuf.cc \
@@ -685,7 +684,7 @@ noinst_HEADERS = \
         common/dyn_snprintf.h\
         common/run_cmd.h\
 	common/safe_io.h\
-        config.h\
+        common/config.h\
         crush/CrushWrapper.h\
         crush/CrushWrapper.i\
         crush/builder.h\

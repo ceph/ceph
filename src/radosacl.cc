@@ -124,8 +124,12 @@ void get_user(ACLID& aclid, ACLEntity *entity)
 int main(int argc, const char **argv) 
 {
   Rados rados;
-  if (rados.initialize(0, NULL) < 0) {
+  if (rados.init(NULL) < 0) {
      cerr << "couldn't initialize rados!" << std::endl;
+     exit(1);
+  }
+  if (rados.connect() < 0) {
+     cerr << "couldn't connect to cluster!" << std::endl;
      exit(1);
   }
 
@@ -139,16 +143,16 @@ int main(int argc, const char **argv)
 
   const char *oid = "bar";
 
-  pool_t pool;
-  int r = rados.open_pool("data", &pool);
-  cout << "open pool result = " << r << " pool = " << pool << std::endl;
+  IoCtx io_ctx;
+  int r = rados.ioctx_open("data", io_ctx);
+  cout << "open io_ctx result = " << r << " pool = " << io_ctx.get_pool_name() << std::endl;
 
   ACLID id;
 
   snprintf(id.id, ID_SIZE + 1, "%.16x", 0x1234);
   cout << "id=" << id.id << std::endl;
 
-  r = rados.exec(pool, oid, "acl", "get", bl, bl2);
+  r = io_ctx.exec(oid, "acl", "get", bl, bl2);
   cout << "exec returned " << r << " len=" << bl2.length() << std::endl;
   ObjectACLs oa;
   if (r >= 0) {
@@ -159,14 +163,14 @@ int main(int argc, const char **argv)
   oa.set_acl(id, ACL_RD);
   bl.clear();
   oa.encode(bl);
-  r = rados.exec(pool, oid, "acl", "set", bl, bl2);
+  r = io_ctx.exec(oid, "acl", "set", bl, bl2);
 
   const unsigned char *md5 = (const unsigned char *)bl2.c_str();
   char md5_str[bl2.length()*2 + 1];
   buf_to_hex(md5, bl2.length(), md5_str);
   cout << "md5 result=" << md5_str << std::endl;
 
-  int size = rados.read(pool, oid, 0, bl2, 128);
+  int size = io_ctx.read(oid, bl2, 128, 0);
   cout << "read result=" << bl2.c_str() << std::endl;
   cout << "size=" << size << std::endl;
 
@@ -175,7 +179,7 @@ int main(int argc, const char **argv)
   int entries;
   do {
     list<object_t> vec;
-    r = rados.list(pool, 2, vec, ctx);
+    r = rados.list(io_ctx, 2, vec, ctx);
     entries = vec.size();
     cout << "list result=" << r << " entries=" << entries << std::endl;
     list<object_t>::iterator iter;
@@ -185,9 +189,9 @@ int main(int argc, const char **argv)
   } while (entries);
 #endif
 #if 0
-  r = rados.remove(pool, oid);
+  r = rados.remove(io_ctx, oid);
   cout << "remove result=" << r << std::endl;
-  rados.close_pool(pool);
+  rados.close_io_ctx(io_ctx);
 #endif
 
   return 0;

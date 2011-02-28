@@ -1,5 +1,6 @@
 #TODO just show an error, not the whole usage
   $ cconf
+  lookup: expected exactly one argument
   Ceph configuration query tool
   
   USAGE
@@ -7,11 +8,9 @@
   
   ACTIONS
     -l|--list-sections <prefix>     List sections in prefix
-    --lookup <key> [defval]         Print a configuration setting to stdout.
-  \t\t\t\t  If the setting is not defined, and the (esc)
-  \t\t\t\t  optional argument defval is provide, it will (esc)
-  \t\t\t\t  be printed instead. variables in defval are (esc)
-  \t\t\t\t  interpolated. (esc)
+    --lookup <key>                  Print a configuration setting to stdout.
+                                    Returns 0 (success) if the configuration setting is
+                                    found; 1 otherwise.
     -r|--resolve-search             search for the first file that exists and
                                     can be opened in the resulted comma
                                     delimited search list.

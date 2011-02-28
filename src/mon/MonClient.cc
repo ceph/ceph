@@ -32,7 +32,7 @@
 #include "include/str_list.h"
 #include "include/addr_parsing.h"
 
-#include "config.h"
+#include "common/config.h"
 
 
 #define DOUT_SUBSYS monc

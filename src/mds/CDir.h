@@ -20,7 +20,7 @@
 #include "include/types.h"
 #include "include/buffer.h"
 #include "mdstypes.h"
-#include "config.h"
+#include "common/config.h"
 #include "common/DecayCounter.h"
 
 #include <iostream>

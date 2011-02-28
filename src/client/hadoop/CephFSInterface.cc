@@ -2,7 +2,7 @@
 #include "CephFSInterface.h"
 
 #include "client/libceph.h"
-#include "config.h"
+#include "common/config.h"
 #include "msg/SimpleMessenger.h"
 #include "common/Timer.h"
 

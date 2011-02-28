@@ -27,7 +27,7 @@
 #include "common/safe_io.h"
 #include "include/types.h"
 #include "Client.h"
-#include "config.h"
+#include "common/config.h"
 
 static Client *client;
 

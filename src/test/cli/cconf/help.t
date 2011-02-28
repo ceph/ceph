@@ -6,11 +6,9 @@
   
   ACTIONS
     -l|--list-sections <prefix>     List sections in prefix
-    --lookup <key> [defval]         Print a configuration setting to stdout.
-  \t\t\t\t  If the setting is not defined, and the (esc)
-  \t\t\t\t  optional argument defval is provide, it will (esc)
-  \t\t\t\t  be printed instead. variables in defval are (esc)
-  \t\t\t\t  interpolated. (esc)
+    --lookup <key>                  Print a configuration setting to stdout.
+                                    Returns 0 (success) if the configuration setting is
+                                    found; 1 otherwise.
     -r|--resolve-search             search for the first file that exists and
                                     can be opened in the resulted comma
                                     delimited search list.
@@ -30,3 +28,4 @@
   
   RETURN CODE
   Return code will be 0 on success; error code otherwise.
+  [1]

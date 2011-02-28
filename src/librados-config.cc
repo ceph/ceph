@@ -13,7 +13,7 @@
  */
 
 #define __STDC_FORMAT_MACROS
-#include "config.h"
+#include "common/config.h"
 
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
@@ -57,7 +57,6 @@ int main(int argc, const char **argv)
       ++i;
   }
 
-  common_set_defaults(false);
   common_init(args, "librados-config", STARTUP_FLAG_FORCE_FG_LOGGING);
 
   FOR_EACH_ARG(args) {
@@ -68,7 +67,7 @@ int main(int argc, const char **argv)
 
   if (opt_version) {
     int maj, min, ext;
-    librados_version(&maj, &min, &ext);
+    rados_version(&maj, &min, &ext);
     cout << maj << "." << min << "." << ext << std::endl;
   } else if (opt_vernum) {
     cout << hex << LIBRADOS_VERSION_CODE << dec << std::endl;

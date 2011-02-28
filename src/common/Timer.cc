@@ -17,7 +17,7 @@
 #include "Thread.h"
 #include "Timer.h"
 
-#include "config.h"
+#include "common/config.h"
 #include "include/Context.h"
 
 #define DOUT_SUBSYS timer

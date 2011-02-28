@@ -30,6 +30,7 @@
 #include "CInode.h"
 #include "CDir.h"
 
+#include "include/ceph_fs.h"
 #include "include/filepath.h"
 
 #include "msg/Message.h"
@@ -87,7 +88,9 @@
 #include <map>
 using namespace std;
 
-#include "config.h"
+extern struct ceph_file_layout g_default_file_layout;
+
+#include "common/config.h"
 
 #define DOUT_SUBSYS mds
 #undef dout_prefix
@@ -3854,7 +3857,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
        p != ack->strong_dirfrags.end();
        ++p) {
     CDir *dir = get_dirfrag(p->first);
-    if (!dir) continue;  // must have trimmed?
+    assert(dir);
 
     dir->set_replica_nonce(p->second.nonce);
     dir->state_clear(CDir::STATE_REJOINING);
@@ -3866,7 +3869,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 	 q != dmap.end();
 	 ++q) {
       CDentry *dn = dir->lookup(q->first.name, q->first.snapid);
-      if (!dn) continue;  // must have trimmed?
+      assert(dn);
       CDentry::linkage_t *dnl = dn->get_linkage();
 
       assert(dn->last == q->first.snapid);
@@ -3919,7 +3922,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
     ::decode(last, p);
     ::decode(basebl, p);
     CInode *in = get_inode(ino, last);
-    if (!in) continue;
+    assert(in);
     bufferlist::iterator q = basebl.begin();
     in->_decode_base(q);
     dout(10) << " got inode base " << *in << dendl;
@@ -3940,7 +3943,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
     ::decode(lockbl, p);
     
     CInode *in = get_inode(ino, last);
-    if (!in) continue;
+    assert(in);
     in->set_replica_nonce(nonce);
     bufferlist::iterator q = lockbl.begin();
     in->_decode_locks_rejoin(q, rejoin_waiters);

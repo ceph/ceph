@@ -20,7 +20,7 @@
 #include "MonmapMonitor.h"
 #include "messages/MMonElection.h"
 
-#include "config.h"
+#include "common/config.h"
 
 #define DOUT_SUBSYS mon
 #undef dout_prefix

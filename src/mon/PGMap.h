@@ -22,7 +22,7 @@
 #define CEPH_PGMAP_H
 
 #include "osd/osd_types.h"
-#include "config.h"
+#include "common/config.h"
 #include <sstream>
 
 class PGMap {

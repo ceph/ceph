@@ -12,7 +12,7 @@
  * 
  */
 
-#include "config.h"
+#include "common/config.h"
 #include "osdc/Journaler.h"
 #include "events/EString.h"
 #include "events/ESubtreeMap.h"
@@ -51,7 +51,7 @@
 #include "Locker.h"
 
 
-#include "config.h"
+#include "common/config.h"
 
 #define DOUT_SUBSYS mds
 #undef DOUT_COND

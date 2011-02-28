@@ -17,7 +17,7 @@
 #include <string>
 using namespace std;
 
-#include "config.h"
+#include "common/config.h"
 
 #include "client/SyntheticClient.h"
 #include "client/Client.h"
@@ -46,7 +46,6 @@ int main(int argc, const char **argv, char *envp[])
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
 
-  common_set_defaults(false);
   common_init(args, "csyn",
 	      STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_FORCE_FG_LOGGING);
 

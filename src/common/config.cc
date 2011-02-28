@@ -13,7 +13,6 @@
  */
 
 #include "auth/Auth.h"
-#include "ceph_ver.h"
 #include "common/BackTrace.h"
 #include "common/Clock.h"
 #include "common/ConfUtils.h"
@@ -21,7 +20,7 @@
 #include "common/common_init.h"
 #include "common/dyn_snprintf.h"
 #include "common/version.h"
-#include "config.h"
+#include "common/config.h"
 #include "include/atomic.h"
 #include "include/str_list.h"
 #include "include/types.h"
@@ -48,17 +47,6 @@
 
 /* The Ceph configuration. */
 md_config_t g_conf __attribute__((init_priority(103)));
-
-// file layouts
-struct ceph_file_layout g_default_file_layout = {
- fl_stripe_unit: init_le32(1<<22),
- fl_stripe_count: init_le32(1),
- fl_object_size: init_le32(1<<22),
- fl_cas_hash: init_le32(0),
- fl_object_stripe_unit: init_le32(0),
- fl_pg_preferred : init_le32(-1),
- fl_pg_pool : init_le32(-1),
-};
 
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
@@ -901,6 +889,111 @@ md_config_t::md_config_t()
   }
 
   g_conf.id = strdup("admin");
+}
+
+int md_config_t::set_val(const char *key, const char *val)
+{
+  if (!key)
+    return -EINVAL;
+  if (!val)
+    return -EINVAL;
+  for (int i = 0; i<num_config_options; ++i) {
+    config_option *opt = &config_optionsp[i];
+    if (strcmp(opt->conf_name, key))
+      continue;
+
+    switch (opt->type) {
+      case OPT_NONE:
+	return -ENOSYS;
+      case OPT_INT:
+	*(int*)opt->val_ptr = atoi(val);
+	return 0;
+      case OPT_LONGLONG:
+	*(long long*)opt->val_ptr = atoll(val);
+	return 0;
+      case OPT_STR: {
+	char *p = (char*)opt->val_ptr;
+	free(p);
+	opt->val_ptr = strdup(val);
+	return 0;
+      }
+      case OPT_FLOAT:
+	*(float*)opt->val_ptr = atof(val);
+	return 0;
+      case OPT_DOUBLE:
+	*(double*)opt->val_ptr = atof(val);
+	return 0;
+      case OPT_BOOL:
+	*(bool*)opt->val_ptr = !!atoi(val);
+	return 0;
+      case OPT_U32:
+	*(int*)opt->val_ptr = atoi(val);
+	return 0;
+      case OPT_ADDR: {
+	entity_addr_t *addr = (entity_addr_t*)opt->val_ptr;
+	if (!addr->parse(val)) {
+	  return -EINVAL;
+	}
+	return 0;
+      }
+    }
+  }
+  // couldn't find a configuration option with key 'key'
+  return -ENOENT;
+}
+
+int md_config_t::get_val(const char *key, char **buf, int len)
+{
+  if (!key)
+    return -EINVAL;
+  for (int i = 0; i<num_config_options; ++i) {
+    const config_option *opt = &config_optionsp[i];
+    if (strcmp(opt->conf_name, key))
+      continue;
+
+    ostringstream oss;
+    switch (opt->type) {
+      case OPT_NONE:
+	return -ENOSYS;
+      case OPT_INT:
+	oss << *(int*)opt->val_ptr;
+	break;
+      case OPT_LONGLONG:
+	oss << *(long long*)opt->val_ptr;
+	break;
+      case OPT_STR:
+	if (opt->val_ptr)
+	  oss << (char*)opt->val_ptr;
+	break;
+      case OPT_FLOAT:
+	oss << *(float*)opt->val_ptr;
+	break;
+      case OPT_DOUBLE:
+	oss << *(double*)opt->val_ptr;
+	break;
+      case OPT_BOOL:
+	oss << *(bool*)opt->val_ptr;
+	break;
+      case OPT_U32:
+	oss << *(uint32_t*)opt->val_ptr;
+	break;
+      case OPT_ADDR: {
+	oss << *(entity_addr_t*)opt->val_ptr;
+	break;
+      }
+    }
+    string str(oss.str());
+    int l = strlen(str.c_str()) + 1;
+    if (len == -1) {
+      *buf = (char*)malloc(l);
+      strcpy(*buf, str.c_str());
+      return 0;
+    }
+    snprintf(*buf, len, "%s", str.c_str());
+    return (l > len) ? -ENAMETOOLONG : 0;
+  }
+  // couldn't find a configuration option with key 'key'
+  return -ENOENT;
 }
 
 md_config_t::~md_config_t()

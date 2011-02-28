@@ -17,7 +17,7 @@
 #include <string>
 using namespace std;
 
-#include "config.h"
+#include "common/config.h"
 
 #include "client/Client.h"
 #include "client/fuse_ll.h"
@@ -53,8 +53,8 @@ int main(int argc, const char **argv, const char *envp[]) {
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_set_defaults(false);
   g_conf.daemonize = true;
+  g_conf.pid_file = 0;
   g_conf.log_per_instance = true;
   common_init(args, "cfuse", STARTUP_FLAG_INIT_KEYS);
 
