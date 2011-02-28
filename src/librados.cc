@@ -202,6 +202,16 @@ struct AioCompletionImpl {
   }
 };
 
+struct ObjListCtx {
+  IoCtxImpl *ctx;
+  Objecter::ListContext *lc;
+
+  ObjListCtx(IoCtxImpl *c, Objecter::ListContext *l) : ctx(c), lc(l) {}
+  ~ObjListCtx() {
+    delete lc;
+  }
+};
+
 class RadosClient : public Dispatcher
 {
   OSDMap osdmap;
@@ -239,17 +249,6 @@ public:
   ~RadosClient();
   int connect();
   void shutdown();
-
-  struct ListCtx {
-    IoCtxImpl *ctx;
-    Objecter::ListContext *lc;
-
-    ListCtx(IoCtxImpl *c, Objecter::ListContext *l) : ctx(c), lc(l) {}
-    ~ListCtx() {
-      delete lc;
-    }
-  };
-
 
   int lookup_pool(const char *name) {
     int ret = osdmap.lookup_pg_pool_name(name);
@@ -1825,7 +1824,7 @@ int RadosClient::notify(IoCtxImpl& io, const object_t& oid, uint64_t ver)
 
 ///////////////////////////// ObjectIterator /////////////////////////////
 librados::ObjectIterator::
-ObjectIterator(rados_list_ctx_t ctx_)
+ObjectIterator(ObjListCtx *ctx_)
 : ctx(ctx_)
 {
 }
@@ -1833,20 +1832,17 @@ ObjectIterator(rados_list_ctx_t ctx_)
 librados::ObjectIterator::
 ~ObjectIterator()
 {
-  if (ctx) {
-    rados_objects_list_close(ctx);
-    ctx = NULL;
-  }
+  ctx.reset();
 }
 
 bool librados::ObjectIterator::
 operator==(const librados::ObjectIterator& rhs) const {
-  return (ctx == rhs.ctx);
+  return (ctx.get() == rhs.ctx.get());
 }
 
 bool librados::ObjectIterator::
 operator!=(const librados::ObjectIterator& rhs) const {
-  return (ctx != rhs.ctx);
+  return (ctx.get() != rhs.ctx.get());
 }
 
 const std::string& librados::ObjectIterator::
@@ -1873,10 +1869,9 @@ void librados::ObjectIterator::
 get_next()
 {
   const char *entry;
-  int ret = rados_objects_list_next(ctx, &entry);
+  int ret = rados_objects_list_next(ctx.get(), &entry);
   if (ret == -ENOENT) {
-    rados_objects_list_close(ctx);
-    ctx = NULL;
+    ctx.reset();
     *this = __EndObjectIterator;
     return;
   }
@@ -2171,7 +2166,9 @@ objects_begin()
 {
   rados_list_ctx_t listh;
   rados_objects_list_open(io_ctx_impl, &listh);
-  return ObjectIterator(listh);
+  ObjectIterator iter((ObjListCtx*)listh);
+  iter.get_next();
+  return iter;
 }
 
 const librados::ObjectIterator& librados::IoCtx::
@@ -2899,19 +2896,19 @@ extern "C" int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *listh
   Objecter::ListContext *h = new Objecter::ListContext;
   h->pool_id = ctx->poolid;
   h->pool_snap_seq = ctx->snap_seq;
-  *listh = (void *)new RadosClient::ListCtx(ctx, h);
+  *listh = (void *)new ObjListCtx(ctx, h);
   return 0;
 }
 
 extern "C" void rados_objects_list_close(rados_list_ctx_t h)
 {
-  RadosClient::ListCtx *lh = (RadosClient::ListCtx *)h;
+  ObjListCtx *lh = (ObjListCtx *)h;
   delete lh;
 }
 
 extern "C" int rados_objects_list_next(rados_list_ctx_t listctx, const char **entry)
 {
-  RadosClient::ListCtx *lh = (RadosClient::ListCtx *)listctx;
+  ObjListCtx *lh = (ObjListCtx *)listctx;
   Objecter::ListContext *h = lh->lc;
   int ret;
 

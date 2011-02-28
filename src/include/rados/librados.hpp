@@ -5,6 +5,7 @@
 #include <string>
 #include <list>
 #include <map>
+#include <tr1/memory>
 #include <vector>
 #include "buffer.h"
 
@@ -14,6 +15,7 @@ class RadosClient;
 class Context;
 class AioCompletionImpl;
 class IoCtxImpl;
+class ObjListCtx;
 
 namespace librados
 {
@@ -52,17 +54,17 @@ namespace librados
   class ObjectIterator : public std::iterator <std::forward_iterator_tag, std::string> {
   public:
     static const ObjectIterator __EndObjectIterator;
-    ObjectIterator(rados_list_ctx_t ctx_);
+    ObjectIterator(ObjListCtx *ctx_);
     ~ObjectIterator();
     bool operator==(const ObjectIterator& rhs) const;
     bool operator!=(const ObjectIterator& rhs) const;
     const std::string& operator*() const;
     ObjectIterator &operator++(); // Preincrement
     ObjectIterator operator++(int); // Postincrement
+    friend class IoCtx;
   private:
     void get_next();
-    rados_list_ctx_t ctx;
-    bufferlist *bl;
+    std::tr1::shared_ptr < ObjListCtx > ctx;
     std::string cur_obj;
   };
 

@@ -38,6 +38,12 @@ public:
   }
 };
 
+void testradospp_milestone(void)
+{
+  cout << "*** press enter to continue ***" << std::endl;
+  getchar();
+}
+
 int main(int argc, const char **argv) 
 {
   Rados rados;
@@ -77,8 +83,7 @@ int main(int argc, const char **argv)
   }
 
   cout << "rados_initialize completed" << std::endl;
-  cout << "*** press enter to continue ***" << std::endl;
-  getchar();
+  testradospp_milestone();
 
   time_t tm;
   bufferlist bl, bl2, blf;
@@ -112,34 +117,30 @@ int main(int argc, const char **argv)
   r = io_ctx.watch(oid, objver, &handle, &wc);
   cout << "io_ctx.watch returned " << r << std::endl;
 
-  cout << "*** press enter to continue ***" << std::endl;
-  getchar();
+  testradospp_milestone();
   io_ctx.set_notify_timeout(7);
   r = io_ctx.notify(oid, objver);
   cout << "io_ctx.notify returned " << r << std::endl;
-  cout << "*** press enter to continue ***" << std::endl;
-  getchar();
+  testradospp_milestone();
 
   r = io_ctx.notify(oid, objver);
   cout << "io_ctx.notify returned " << r << std::endl;
-  cout << "*** press enter to continue ***" << std::endl;
-  getchar();
+  testradospp_milestone();
 
   r = io_ctx.unwatch(oid, handle);
   cout << "io_ctx.unwatch returned " << r << std::endl;
   cout << "*** press enter to continue ***" << std::endl;
-  getchar();
+  testradospp_milestone();
 
   r = io_ctx.notify(oid, objver);
   cout << "io_ctx.notify returned " << r << std::endl;
   cout << "*** press enter to continue ***" << std::endl;
-  getchar();
+  testradospp_milestone();
   io_ctx.set_assert_version(objver);
 
   r = io_ctx.write(oid, bl, bl.length() - 1, 0);
   cout << "io_ctx.write returned " << r << std::endl;
 
-  exit(0);
   r = io_ctx.write(oid, bl, bl.length() - 2, 0);
   cout << "io_ctx.write returned " << r << std::endl;
   r = io_ctx.write(oid, bl, bl.length() - 3, 0);
@@ -189,10 +190,14 @@ int main(int argc, const char **argv)
       cout << s << std::endl;
   }
 
+  cout << "iterating over objects..." << std::endl;
+  int num_objs = 0;
   for (ObjectIterator iter = io_ctx.objects_begin();
-       iter != io_ctx.objects_end(); iter++) {
-    cout << *iter << std::endl;
+       iter != io_ctx.objects_end(); ++iter) {
+    num_objs++;
+    cout << "'" << *iter << "'" << std::endl;
   }
+  cout << "iterated over " << num_objs << " objects." << std::endl;
   map<string, bufferlist> attrset;
   io_ctx.getxattrs(oid, attrset);
 
