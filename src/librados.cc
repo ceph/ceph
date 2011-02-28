@@ -574,8 +574,10 @@ shutdown()
   objecter->shutdown();
   timer.shutdown();
   lock.Unlock();
-  messenger->shutdown();
-  messenger->wait();
+  if (messenger) {
+    messenger->shutdown();
+    messenger->wait();
+  }
   dout(1) << "shutdown" << dendl;
 }
 
