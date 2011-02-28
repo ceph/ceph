@@ -477,7 +477,6 @@ OSD::~OSD()
 {
   delete map_in_progress_cond;
   delete class_handler;
-  delete osdmap;
   logger_remove(logger);
   delete logger;
   delete store;
@@ -557,12 +556,7 @@ int OSD::init()
     derr << "OSD::init: unable to read current osdmap" << dendl;
     return -1;
   }
-  osdmap = new OSDMap;
-  if (superblock.current_epoch) {
-    bufferlist bl;
-    get_map_bl(superblock.current_epoch, bl);
-    osdmap->decode(bl);
-  }
+  osdmap = get_map(superblock.current_epoch);
 
   clear_temp();
 
@@ -817,6 +811,9 @@ int OSD::shutdown()
   monc->shutdown();
 
   delete watch;
+
+  clear_map_cache();
+  osdmap = 0;
 
   return r;
 }
@@ -2735,18 +2732,10 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (session)
     session->put();
 
-  if (osdmap) {
-    dout(3) << "handle_osd_map epochs [" 
-            << m->get_first() << "," << m->get_last() 
-            << "], i have " << osdmap->get_epoch()
-            << dendl;
-  } else {
-    dout(3) << "handle_osd_map epochs [" 
-            << m->get_first() << "," << m->get_last() 
-            << "], i have none"
-            << dendl;
-    osdmap = new OSDMap;
-  }
+  dout(3) << "handle_osd_map epochs [" 
+	  << m->get_first() << "," << m->get_last() 
+	  << "], i have " << osdmap->get_epoch()
+	  << dendl;
 
   // make sure there is something new, here, before we bother flushing the queues and such
   if (m->get_last() <= osdmap->get_epoch()) {
@@ -2895,13 +2884,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     if (!logger_started)
       start_logger();
 
-    delete osdmap;
-
-    // horrible hack to separate live osdmap from cached maps (until we switch to shared_ptr)
-    bufferlist bl;
-    newmap->encode(bl);
-    osdmap = new OSDMap;
-    osdmap->decode(bl);
+    osdmap = newmap;
 
     superblock.current_epoch = cur;
     advance_map(t);
@@ -3459,6 +3442,15 @@ void OSD::trim_map_cache(epoch_t oldest)
     epoch_t e = map_cache.begin()->first;
     OSDMap *o = map_cache.begin()->second;
     dout(10) << "trim_map_cache " << e << " " << o << dendl;
+    delete o;
+    map_cache.erase(map_cache.begin());
+  }
+}
+
+void OSD::clear_map_cache()
+{
+  while (!map_cache.empty()) {
+    OSDMap *o = map_cache.begin()->second;
     delete o;
     map_cache.erase(map_cache.begin());
   }

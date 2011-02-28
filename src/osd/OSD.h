@@ -474,6 +474,7 @@ private:
   OSDMap* get_map(epoch_t e);
   void add_map(OSDMap *o);
   void trim_map_cache(epoch_t oldest);
+  void clear_map_cache();
   void keep_map_from(epoch_t from);
 
   bool get_map_bl(epoch_t e, bufferlist& bl);
