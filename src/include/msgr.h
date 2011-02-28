@@ -1,9 +1,6 @@
 #ifndef CEPH_MSGR_H
 #define CEPH_MSGR_H
 
-#include <linux/types.h> // for __u8, etc.
-#include <sys/socket.h> // for sockaddr_storage
-
 /*
  * Data types for message passing layer used by Ceph.
  */

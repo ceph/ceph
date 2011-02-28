@@ -1,33 +1,7 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
-/*
- * Ceph - scalable distributed file system
- *
- * Copyright (C) 2011 New Dream Network
- *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software
- * Foundation.  See file COPYING.
- *
- */
-
 /*
  * Some non-inline ceph helpers
  */
-#include "include/byteorder.h"
-#include "include/ceph_fs.h"
 #include "types.h"
-
-struct ceph_file_layout g_default_file_layout = {
- fl_stripe_unit: mswab32(1<<22),
- fl_stripe_count: mswab32(1),
- fl_object_size: mswab32(1<<22),
- fl_cas_hash: mswab32(0),
- fl_object_stripe_unit: mswab32(0),
- fl_pg_preferred : mswab32(-1),
- fl_pg_pool : mswab32(-1),
-};
 
 /*
  * return true if @layout appears to be valid
