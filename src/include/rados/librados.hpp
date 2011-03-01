@@ -105,7 +105,6 @@ namespace librados
 
     // Close our pool handle
     ~IoCtx();
-    void close();
 
     // set pool auid
     int set_auid(uint64_t auid_);

@@ -2008,12 +2008,6 @@ from_rados_ioctx_t(rados_ioctx_t p, IoCtx &io)
 librados::IoCtx::
 ~IoCtx()
 {
-  close();
-}
-
-void librados::IoCtx::
-close()
-{
   delete io_ctx_impl;
   io_ctx_impl = 0;
 }
