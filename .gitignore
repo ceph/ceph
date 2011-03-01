@@ -41,3 +41,5 @@ cscope.out
 *.swo
 .metadata/
 /py-compile
+*.pyc
+*.pyo
