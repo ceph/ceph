@@ -2658,7 +2658,7 @@ extern "C" void rados_ioctx_destroy(rados_ioctx_t io)
   ctx->put();
 }
 
-extern "C" int rados_ioctx_stat(rados_ioctx_t io, struct rados_ioctx_stat_t *stats)
+extern "C" int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t *stats)
 {
   librados::IoCtxImpl *io_ctx_impl = (librados::IoCtxImpl *)io;
   list<string> ls;
