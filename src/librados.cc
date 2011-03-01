@@ -2017,6 +2017,9 @@ IoCtx(const IoCtx& rhs)
 librados::IoCtx& librados::IoCtx::
 operator=(const IoCtx& rhs)
 {
+  if (io_ctx_impl)
+    io_ctx_impl->ref_cnt--;
+
   io_ctx_impl = rhs.io_ctx_impl;
   io_ctx_impl->ref_cnt++;
   return *this;
