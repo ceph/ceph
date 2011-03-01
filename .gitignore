@@ -43,3 +43,4 @@ cscope.out
 /py-compile
 *.pyc
 *.pyo
+core
