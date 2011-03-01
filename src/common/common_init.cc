@@ -15,6 +15,7 @@
 #include "auth/AuthSupported.h"
 #include "auth/KeyRing.h"
 #include "common/ceph_argparse.h"
+#include "common/code_environment.h"
 #include "common/safe_io.h"
 #include "common/signal.h"
 #include "common/version.h"
@@ -114,7 +115,15 @@ void common_init(std::vector<const char*>& args, const char *module_type, int fl
 {
   bool force_fg_logging = false;
 
-  if (flags & STARTUP_FLAG_DAEMON) {
+  // TODO: make callers specify code env explicitly.
+  if (flags & STARTUP_FLAG_DAEMON)
+    g_code_env = CODE_ENVIRONMENT_DAEMON;
+  else if (flags & STARTUP_FLAG_LIBRARY)
+    g_code_env = CODE_ENVIRONMENT_LIBRARY;
+  else
+    g_code_env = CODE_ENVIRONMENT_UTILITY;
+
+  if (g_code_env == CODE_ENVIRONMENT_DAEMON) {
     cout << TEXT_YELLOW << " ** WARNING: Ceph is still under heavy development, "
          << "and is only suitable for **" << TEXT_NORMAL << std::endl;
     cout << TEXT_YELLOW <<  " **          testing and review.  Do not trust it "

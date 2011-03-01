@@ -2471,7 +2471,7 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
 
     if (id)
       g_conf.id = strdup(id);
-    common_init(args, "librados", STARTUP_FLAG_INIT_KEYS);
+    common_init(args, "librados", STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_LIBRARY);
 
     ++rados_initialized;
 
@@ -2517,7 +2517,7 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path)
   args.push_back(path);
   args.push_back("-i");
   args.push_back(g_conf.id);
-  common_init(args, "librados", STARTUP_FLAG_INIT_KEYS);
+  common_init(args, "librados", STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_LIBRARY);
 
   return 0;
 }

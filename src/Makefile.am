@@ -524,6 +524,7 @@ libcommon_files = \
 	common/common_init.cc \
 	common/ceph_argparse.cc \
 	common/buffer.cc \
+	common/code_environment.cc \
 	common/signal.cc \
 	common/Thread.cc \
 	include/ceph_fs.cc \
@@ -680,6 +681,7 @@ noinst_HEADERS = \
         common/arch.h\
         common/armor.h\
         common/common_init.h\
+	common/code_environment.h \
         common/signal.h\
         common/dyn_snprintf.h\
         common/run_cmd.h\

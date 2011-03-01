@@ -16,6 +16,7 @@
 #ifndef CEPH_THREAD_H
 #define CEPH_THREAD_H
 
+#include "common/code_environment.h"
 #include "common/signal.h"
 #include "common/config.h"
 #include "include/atomic.h"
@@ -64,14 +65,20 @@ class Thread {
       pthread_attr_setstacksize(thread_attr, stacksize);
     }
 
-    // The child thread will inherit our signal mask.  We want it to block all
-    // signals, so set our mask to that.  (It's ok to block signals for a
-    // little while-- they will just be delivered to another thread or
-    // delieverd to this thread later.)
-    sigset_t old_sigset;
-    block_all_signals(&old_sigset);
-    int r = pthread_create(&thread_id, thread_attr, _entry_func, (void*)this);
-    restore_sigset(&old_sigset);
+    int r;
+    if (g_code_env == CODE_ENVIRONMENT_LIBRARY) {
+      // The child thread will inherit our signal mask.  We want it to block all
+      // signals, so set our mask to that.  (It's ok to block signals for a
+      // little while-- they will just be delivered to another thread or
+      // delieverd to this thread later.)
+      sigset_t old_sigset;
+      block_all_signals(&old_sigset);
+      r = pthread_create(&thread_id, thread_attr, _entry_func, (void*)this);
+      restore_sigset(&old_sigset);
+    }
+    else {
+      r = pthread_create(&thread_id, thread_attr, _entry_func, (void*)this);
+    }
 
     if (thread_attr) 
       free(thread_attr);
