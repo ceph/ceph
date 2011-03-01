@@ -248,6 +248,12 @@ int main(int argc, const char **argv)
   rbd = new librbd::RBD();
   assert(rados.init(NULL) == 0);
   assert(rados.connect() == 0);
+  if (rados.pool_lookup(TEST_POOL) != -ENOENT) {
+    int r = rados.pool_delete(TEST_POOL);
+    printf("rados.pool_delete returned %d\n", r);
+  }
+  int r = rados.pool_create(TEST_POOL);
+  printf("rados.pool_create returned %d\n", r);
   assert(rados.ioctx_open(TEST_POOL, io_ctx) == 0);
   test_ls(io_ctx, 0);
   test_create_and_stat(io_ctx, TEST_IMAGE, MB_BYTES(1));

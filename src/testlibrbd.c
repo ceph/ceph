@@ -264,8 +264,17 @@ int main(int argc, const char **argv)
   assert(rados_create(&cluster, NULL) == 0);
   assert(rados_conf_read_file(cluster, "/etc/ceph/ceph.conf") == 0);
   rados_reopen_log(cluster);
-  assert(rados_ioctx_open(cluster, TEST_POOL, &io_ctx) == 0);
   assert(rados_connect(cluster) == 0);
+  if (rados_ioctx_lookup(cluster, TEST_POOL) != -ENOENT) {
+    int r = rados_pool_delete(cluster, TEST_POOL);
+    printf("rados_pool_delete returned %d\n", r);
+  }
+  int r = rados_pool_create(cluster, TEST_POOL);
+  printf("rados_pool_create returned %d\n", r);
+  assert(rados_ioctx_open(cluster, TEST_POOL, &io_ctx) == 0);
+  struct rados_ioctx_stat_t stats;
+  rados_ioctx_stat(io_ctx, &stats);
+  test_ls(io_ctx, 0);
   test_ls(io_ctx, 0);
   test_create_and_stat(io_ctx, TEST_IMAGE, MB_BYTES(1));
   assert(rbd_open(io_ctx, TEST_IMAGE, &image, NULL) == 0);
