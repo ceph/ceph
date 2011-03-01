@@ -81,7 +81,7 @@ struct RadosTestContext
   {
     rados.init(NULL);
     rados.connect();
-    rados.ioctx_open(pool_name.c_str(), io_ctx);
+    rados.ioctx_create(pool_name.c_str(), io_ctx);
     char hostname_cstr[100];
     gethostname(hostname_cstr, 100);
     stringstream hostpid;

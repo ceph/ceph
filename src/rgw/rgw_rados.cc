@@ -52,13 +52,13 @@ int RGWRados::initialize(int argc, char *argv[])
  */
 int RGWRados::open_root_pool_ctx()
 {
-  int r = rados->ioctx_open(root_bucket.c_str(), root_pool_ctx);
+  int r = rados->ioctx_create(root_bucket.c_str(), root_pool_ctx);
   if (r == -ENOENT) {
     r = rados->pool_create(root_bucket.c_str());
     if (r < 0)
       return r;
 
-    r = rados->ioctx_open(root_bucket.c_str(), root_pool_ctx);
+    r = rados->ioctx_create(root_bucket.c_str(), root_pool_ctx);
   }
 
   return r;
@@ -136,7 +136,7 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
 			   string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes)
 {
   librados::IoCtx io_ctx;
-  int r = rados->ioctx_open(bucket.c_str(), io_ctx);
+  int r = rados->ioctx_create(bucket.c_str(), io_ctx);
   if (r < 0)
     return r;
 
@@ -239,7 +239,7 @@ int RGWRados::put_obj_meta(std::string& id, std::string& bucket, std::string& oi
 {
   librados::IoCtx io_ctx;
 
-  int r = rados->ioctx_open(bucket.c_str(), io_ctx);
+  int r = rados->ioctx_create(bucket.c_str(), io_ctx);
   if (r < 0)
     return r;
 
@@ -280,7 +280,7 @@ int RGWRados::put_obj_data(std::string& id, std::string& bucket, std::string& oi
 {
   librados::IoCtx io_ctx;
 
-  int r = rados->ioctx_open(bucket.c_str(), io_ctx);
+  int r = rados->ioctx_create(bucket.c_str(), io_ctx);
   if (r < 0)
     return r;
 
@@ -388,7 +388,7 @@ int RGWRados::delete_bucket(std::string& id, std::string& bucket)
 int RGWRados::delete_obj(std::string& id, std::string& bucket, std::string& oid)
 {
   librados::IoCtx io_ctx;
-  int r = rados->ioctx_open(bucket.c_str(), io_ctx);
+  int r = rados->ioctx_create(bucket.c_str(), io_ctx);
   if (r < 0)
     return r;
 
@@ -419,7 +419,7 @@ int RGWRados::get_attr(std::string& bucket, std::string& obj,
     actual_bucket = root_bucket;
   }
 
-  int r = rados->ioctx_open(actual_bucket.c_str(), io_ctx);
+  int r = rados->ioctx_create(actual_bucket.c_str(), io_ctx);
   if (r < 0)
     return r;
 
@@ -450,7 +450,7 @@ int RGWRados::set_attr(std::string& bucket, std::string& oid,
     actual_bucket = root_bucket;
   }
 
-  int r = rados->ioctx_open(actual_bucket.c_str(), io_ctx);
+  int r = rados->ioctx_create(actual_bucket.c_str(), io_ctx);
   if (r < 0)
     return r;
 
@@ -512,7 +512,7 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
 
   *handle = state;
 
-  r = rados->ioctx_open(bucket.c_str(), state->io_ctx);
+  r = rados->ioctx_create(bucket.c_str(), state->io_ctx);
   if (r < 0)
     goto done_err;
 

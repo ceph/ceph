@@ -72,8 +72,8 @@ int main(int argc, const char **argv)
   printf("rados_ioctx_create = %d\n", r);
 
   rados_ioctx_t io_ctx;
-  r = rados_ioctx_open(cl, "foo", &io_ctx);
-  printf("rados_ioctx_open = %d, io_ctx = %p\n", r, io_ctx);
+  r = rados_ioctx_create(cl, "foo", &io_ctx);
+  printf("rados_ioctx_create = %d, io_ctx = %p\n", r, io_ctx);
 
   /* list all pools */
   {
@@ -185,7 +185,7 @@ int main(int argc, const char **argv)
 
   /* delete a pool */
   printf("rados_delete_pool = %d\n", r);  
-  rados_ioctx_close(io_ctx);
+  rados_ioctx_destroy(io_ctx);
 
   r = rados_pool_delete(cl, "foo");
   printf("rados_ioctx_pool_delete = %d\n", r);

@@ -698,7 +698,7 @@ int main(int argc, const char **argv)
   }
 
   // TODO: add conf
-  int r = rados.ioctx_open(poolname, io_ctx);
+  int r = rados.ioctx_create(poolname, io_ctx);
   if (r < 0) {
       cerr << "error opening pool " << poolname << " (err=" << r << ")" << std::endl;
       exit(1);
@@ -726,7 +726,7 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_COPY || opt_cmd == OPT_IMPORT) {
-    r = rados.ioctx_open(dest_poolname, dest_io_ctx);
+    r = rados.ioctx_create(dest_poolname, dest_io_ctx);
     if (r < 0) {
       cerr << "error opening pool " << dest_poolname << " (err=" << r << ")" << std::endl;
       exit(1);
