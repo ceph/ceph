@@ -145,8 +145,8 @@ int main(int argc, const char **argv)
   time_t mtime;
   r = rados_stat(io_ctx, oid, &size, &mtime);
   printf("rados_stat size = %lld mtime = %d = %d\n", (long long)size, (int)mtime, r);
-
-  /* tmap */
+  r = rados_stat(io_ctx, "does_not_exist", NULL, NULL);
+  printf("rados_stat(does_not_exist) = %d\n", r);
 
   /* exec */
   rados_exec(io_ctx, oid, "crypto", "md5", buf, strlen(buf) + 1, buf, 128);

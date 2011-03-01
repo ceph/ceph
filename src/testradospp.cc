@@ -99,6 +99,14 @@ int main(int argc, const char **argv)
   uint64_t objver = io_ctx.get_last_version();
   cout << "io_ctx.write returned " << r << " last_ver=" << objver << std::endl;
 
+  uint64_t stat_size;
+  time_t stat_mtime;
+  r = io_ctx.stat(oid, &stat_size, &stat_mtime);
+  cout << "io_ctx.stat size = " << stat_size << " mtime = " << stat_mtime << std::endl;
+
+  r = io_ctx.stat(oid, NULL, NULL);
+  cout << "io_ctx.stat(does_not_exist) = " << r;
+
   uint64_t handle;
   C_Watch wc;
   r = io_ctx.watch(oid, objver, &handle, &wc);
@@ -193,10 +201,8 @@ int main(int argc, const char **argv)
     cout << "xattr: " << it->first << std::endl;
   }
   
-#if 0
   r = io_ctx.remove(oid);
   cout << "remove result=" << r << std::endl;
-#endif
   rados.shutdown();
 
   return 0;
