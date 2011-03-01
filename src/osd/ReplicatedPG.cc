@@ -4236,6 +4236,11 @@ int ReplicatedPG::recover_object_replicas(const sobject_t& soid)
 
   // NOTE: we know we will get a valid oloc off of disk here.
   ObjectContext *obc = get_object_context(soid, OLOC_BLANK, false);
+  if (!obc) {
+    osd->clog.error() << "missing primary copy of " << soid << "\n";
+    return 0;
+  }
+
   dout(10) << " ondisk_read_lock for " << soid << dendl;
   obc->ondisk_read_lock();
   
