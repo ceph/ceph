@@ -274,7 +274,7 @@ testlibrbd_SOURCES = testlibrbd.c
 testlibrbd_LDADD = librbd.la librados.la libcrush.la -lpthread -lm \
 		   $(CRYPTOPP_LIBS) $(EXTRALIBS)
 testlibrbdpp_SOURCES = testlibrbdpp.cc
-testlibrbdpp_LDADD = librbd.la libcrush.la -lpthread -lm \
+testlibrbdpp_LDADD = librbd.la librados.la libcrush.la -lpthread -lm \
 		     $(CRYPTOPP_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += testlibrbd testlibrbdpp
 endif
