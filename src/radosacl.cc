@@ -144,7 +144,7 @@ int main(int argc, const char **argv)
   const char *oid = "bar";
 
   IoCtx io_ctx;
-  int r = rados.ioctx_open("data", io_ctx);
+  int r = rados.ioctx_create("data", io_ctx);
   cout << "open io_ctx result = " << r << " pool = " << io_ctx.get_pool_name() << std::endl;
 
   ACLID id;

@@ -97,8 +97,8 @@ int main(int argc, const char **argv)
   const char *oid = "bar";
 
   IoCtx io_ctx;
-  int r = rados.ioctx_open("data", io_ctx);
-  cout << "ioctx_open result = " << r << std::endl;
+  int r = rados.ioctx_create("data", io_ctx);
+  cout << "ioctx_create result = " << r << std::endl;
 
   r = io_ctx.write(oid, bl, bl.length(), 0);
   uint64_t objver = io_ctx.get_last_version();

@@ -152,7 +152,7 @@ int main(int argc, const char **argv)
   // open io context.
   IoCtx io_ctx;
   if (pool_name) {
-    ret = rados.ioctx_open(pool_name, io_ctx);
+    ret = rados.ioctx_create(pool_name, io_ctx);
     if (ret < 0) {
       cerr << "error opening pool " << pool_name << ": "
 	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;

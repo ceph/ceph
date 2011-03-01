@@ -2404,10 +2404,10 @@ pool_lookup(const char *name)
 }
 
 int librados::Rados::
-ioctx_open(const char *name, IoCtx &io)
+ioctx_create(const char *name, IoCtx &io)
 {
   rados_ioctx_t p;
-  int ret = rados_ioctx_open((rados_t)client, name, &p);
+  int ret = rados_ioctx_create((rados_t)client, name, &p);
   if (ret)
     return ret;
   io.io_ctx_impl = (IoCtxImpl*)p;
@@ -2607,7 +2607,7 @@ extern "C" int rados_pool_list(rados_t cluster, char *buf, int len)
   return needed + 1;
 }
 
-extern "C" int rados_ioctx_open(rados_t cluster, const char *name, rados_ioctx_t *io)
+extern "C" int rados_ioctx_create(rados_t cluster, const char *name, rados_ioctx_t *io)
 {
   librados::RadosClient *radosp = (librados::RadosClient *)cluster;
   int poolid = radosp->lookup_pool(name);
@@ -2621,7 +2621,7 @@ extern "C" int rados_ioctx_open(rados_t cluster, const char *name, rados_ioctx_t
   return poolid;
 }
 
-extern "C" void rados_ioctx_close(rados_ioctx_t io)
+extern "C" void rados_ioctx_destroy(rados_ioctx_t io)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   delete ctx;

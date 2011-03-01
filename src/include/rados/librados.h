@@ -97,8 +97,8 @@ int rados_conf_get(rados_t cluster, const char *option, char *buf, int len);
  */
 int rados_pool_list(rados_t cluster, char *buf, int len);
 
-int rados_ioctx_open(rados_t cluster, const char *pool_name, rados_ioctx_t *ioctx);
-void rados_ioctx_close(rados_ioctx_t io);
+int rados_ioctx_create(rados_t cluster, const char *pool_name, rados_ioctx_t *ioctx);
+void rados_ioctx_destroy(rados_ioctx_t io);
 int rados_ioctx_lookup(rados_t cluster, const char *pool_name);
 
 int rados_ioctx_stat(rados_ioctx_t io, struct rados_ioctx_stat_t *stats);
