@@ -4121,9 +4121,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     if (pg->is_active() && pg->have_unfound()) {
       // Make sure we've requested MISSING information from every OSD
       // we know about.
-      map< int, map<pg_t,PG::Query> > query_map;
       pg->discover_all_missing(query_map);
-      do_queries(query_map);
     }
 
     int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
@@ -4156,12 +4154,13 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 			   PG::Info &info, 
 			   PG::Log &log, 
 			   PG::Missing *missing,
+			   map< int, map<pg_t,PG::Query> >& query_map,
 			   map<int, MOSDPGInfo*>* info_map,
 			   int& created)
 {
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   C_Contexts *fin = new C_Contexts;
-
+  
   PG *pg = 0;
   if (!_have_pg(info.pgid)) {
     vector<int> up, acting;
@@ -4235,9 +4234,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       if (pg->have_unfound()) {
 	// Make sure we've requested MISSING information from every OSD
 	// we know about.
-	map< int, map<pg_t,PG::Query> > query_map;
 	pg->discover_all_missing(query_map);
-	do_queries(query_map);
       }
       else {
 	dout(10) << *pg << " ignoring osd" << from << " log, pg is already active" << dendl;
@@ -4248,10 +4245,8 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       pg->proc_replica_log(*t, info, log, *missing, from);
       
       // peer
-      map< int, map<pg_t,PG::Query> > query_map;
       pg->do_peer(*t, fin->contexts, query_map, info_map);
       pg->update_stats();
-      do_queries(query_map);
     }
   } else if (!pg->info.dne()) {
     if (!pg->is_active()) {
@@ -4263,7 +4258,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
       assert(pg->log.head == pg->info.last_update);
 
-      pg->activate(*t, fin->contexts, info_map);
+      pg->activate(*t, fin->contexts, query_map, info_map);
     } else {
       // ACTIVE REPLICA
       assert(pg->is_replica());
@@ -4311,9 +4306,11 @@ void OSD::handle_pg_log(MOSDPGLog *m)
   int created = 0;
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
+  map< int, map<pg_t,PG::Query> > query_map;
   _process_pg_info(m->get_epoch(), from, 
-		   m->info, m->log, &m->missing, 0,
+		   m->info, m->log, &m->missing, query_map, 0,
 		   created);
+  do_queries(query_map);
   if (created)
     update_heartbeat_peers();
 
@@ -4333,12 +4330,14 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
   PG::Log empty_log;
   map<int,MOSDPGInfo*> info_map;
   int created = 0;
+  map< int, map<pg_t,PG::Query> > query_map;
 
   for (vector<PG::Info>::iterator p = m->pg_info.begin();
        p != m->pg_info.end();
        ++p) 
-    _process_pg_info(m->get_epoch(), from, *p, empty_log, NULL, &info_map, created);
+    _process_pg_info(m->get_epoch(), from, *p, empty_log, NULL, query_map, &info_map, created);
 
+  do_queries(query_map);
   do_infos(info_map);
   if (created)
     update_heartbeat_peers();
@@ -4401,10 +4400,12 @@ void OSD::handle_pg_missing(MOSDPGMissing *m)
   if (!require_same_or_newer_map(m, m->get_epoch()))
     return;
 
+  map< int, map<pg_t,PG::Query> > query_map;
   PG::Log empty_log;
   int created = 0;
   _process_pg_info(m->get_epoch(), from, m->info,
-		   empty_log, &m->missing, NULL, created);
+		   empty_log, &m->missing, query_map, NULL, created);
+  do_queries(query_map);
   if (created)
     update_heartbeat_peers();
 
@@ -4861,6 +4862,8 @@ void OSD::activate_pg(pg_t pgid, utime_t activate_at)
 {
   assert(osd_lock.is_locked());
 
+  map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
+
   if (pg_map.count(pgid)) {
     PG *pg = _lookup_lock_pg(pgid);
     if (pg->is_crashed() &&
@@ -4869,12 +4872,14 @@ void OSD::activate_pg(pg_t pgid, utime_t activate_at)
 	pg->replay_until == activate_at) {
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       C_Contexts *fin = new C_Contexts;
-      pg->activate(*t, fin->contexts);
+      pg->activate(*t, fin->contexts, query_map);
       int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
       assert(tr == 0);
     }
     pg->unlock();
   }
+
+  do_queries(query_map);
 
   // wake up _all_ pg waiters; raw pg -> actual pg mapping may have shifted
   wake_all_pg_waiters();

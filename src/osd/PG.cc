@@ -1708,9 +1708,7 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
   } 
   else if (!is_active()) {
     // -- ok, activate!
-    activate(t, tfin, activator_map);
-    if (have_unfound())
-      discover_all_missing(query_map);
+    activate(t, tfin, query_map, activator_map);
   }
   else if (is_all_uptodate()) 
     finish_recovery(t, tfin);
@@ -1763,6 +1761,7 @@ void PG::build_might_have_unfound()
 }
 
 void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
+		  map< int, map<pg_t,Query> >& query_map,
 		  map<int, MOSDPGInfo*> *activator_map)
 {
   assert(!is_active());
@@ -1854,6 +1853,8 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
     if (is_primary()) {
       dout(10) << "activate - starting recovery" << dendl;
       osd->queue_for_recovery(this);
+      if (have_unfound())
+	discover_all_missing(query_map);
     }
   }
 
@@ -1938,9 +1939,6 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       }
     }
 
-    // discard unneeded peering state
-    //peer_log.clear(); // actually, do this carefully, in case peer() is called again.
-    
     // all clean?
     if (is_all_uptodate()) 
       finish_recovery(t, tfin);
