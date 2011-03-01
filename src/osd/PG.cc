@@ -1322,7 +1322,6 @@ void PG::clear_primary_state()
   log.reset_recovery_pointers();
 
   scrub_reserved_peers.clear();
-  peer_scrub_map.clear();
   osd->recovery_wq.dequeue(this);
   osd->snap_trim_wq.dequeue(this);
 }
@@ -2809,17 +2808,21 @@ void PG::sub_op_scrub_map(MOSDSubOp *op)
 
   int from = op->get_source().num();
 
-  if (peer_scrub_map.count(from)) {
-    dout(10) << " already had osd" << from << " scrub map" << dendl;
+  dout(10) << " got osd" << from << " scrub map" << dendl;
+  bufferlist::iterator p = op->get_data().begin();
+  if (scrub_received_maps.count(from)) {
+    ScrubMap incoming;
+    incoming.decode(p);
+    dout(10) << "from replica " << from << dendl;
+    dout(10) << "map version is " << incoming.valid_through << dendl;
+    scrub_received_maps[from].merge_incr(incoming);
   } else {
-    dout(10) << " got osd" << from << " scrub map" << dendl;
-    bufferlist::iterator p = op->get_data().begin();
-    peer_scrub_map[from].decode(p);
-    scrub_waiting_on--;
-    if (scrub_waiting_on == 0) {
-      assert(last_update_applied == info.last_update);
-      osd->scrub_finalize_wq.queue(this);
-    }
+    scrub_received_maps[from].decode(p);
+  }
+
+  if (--scrub_waiting_on == 0) {
+    assert(last_update_applied == info.last_update);
+    osd->scrub_finalize_wq.queue(this);
   }
 
   op->put();
@@ -3278,20 +3281,11 @@ void PG::scrub_clear_state()
 
 bool PG::scrub_gather_replica_maps() {
   assert(scrub_waiting_on == 0);
-  assert(peer_scrub_map.size() > 0 ||  acting.size() == 1);
   assert(_lock.is_locked());
 
-  for (map<int,ScrubMap>::iterator p = peer_scrub_map.begin();
-       p != peer_scrub_map.end();
-       peer_scrub_map.erase(p++)) {
-    
-    dout(10) << "from replica " << p->first << dendl;
-    dout(10) << "map version is " << p->second.valid_through << dendl;
-    if (scrub_received_maps.count(p->first)) {
-      scrub_received_maps[p->first].merge_incr(p->second);
-    } else {
-      scrub_received_maps[p->first] = p->second;
-    }
+  for (map<int,ScrubMap>::iterator p = scrub_received_maps.begin();
+       p != scrub_received_maps.end();
+       p++) {
     
     if (scrub_received_maps[p->first].valid_through != log.head) {
       scrub_waiting_on++;
@@ -3493,9 +3487,6 @@ void PG::scrub_finalize() {
       }
     }
   }
-
-  // discard peer scrub info.
-  peer_scrub_map.clear();
 
   // ok, do the pg-type specific scrubbing
   _scrub(primary_scrubmap, errors, fixed);

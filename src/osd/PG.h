@@ -896,7 +896,6 @@ public:
 
   // -- scrub --
   set<int> scrub_reserved_peers;
-  map<int,ScrubMap> peer_scrub_map;
   map<int,ScrubMap> scrub_received_maps;
   bool finalizing_scrub; 
   bool scrub_reserved, scrub_reserve_failed;
