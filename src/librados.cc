@@ -72,6 +72,7 @@ using namespace std;
 
 ///////////////////////////// RadosClient //////////////////////////////
 struct librados::IoCtxImpl {
+  Mutex lock;
   int ref_cnt;
   RadosClient *client;
   int poolid;
@@ -83,8 +84,9 @@ struct librados::IoCtxImpl {
   uint32_t notify_timeout;
 
   IoCtxImpl(RadosClient *c, int pid, const char *pool_name_, snapid_t s = CEPH_NOSNAP) :
-    ref_cnt(0), client(c), poolid(pid), pool_name(pool_name_), snap_seq(s),
-    assert_ver(0), notify_timeout(g_conf.client_notify_timeout) {}
+    lock("librados::IoCtxImpl"), ref_cnt(0), client(c), poolid(pid),
+    pool_name(pool_name_), snap_seq(s), assert_ver(0),
+    notify_timeout(g_conf.client_notify_timeout) {}
 
   void set_snap_read(snapid_t s) {
     if (!s)
@@ -100,6 +102,21 @@ struct librados::IoCtxImpl {
       return -EINVAL;
     snapc = n;
     return 0;
+  }
+
+  void get() {
+    lock.Lock();
+    ref_cnt++;
+    lock.Unlock();
+  }
+
+  void put() {
+    lock.Lock();
+    assert(ref_cnt > 0);
+    ref_cnt--;
+    lock.Unlock();
+    if (!ref_cnt)
+      delete this;
   }
 };
 
@@ -422,7 +439,7 @@ public:
 
   // watch/notify
   struct WatchContext {
-    IoCtxImpl io_ctx_impl;
+    IoCtxImpl *io_ctx_impl;
     const object_t oid;
     uint64_t cookie;
     uint64_t ver;
@@ -430,14 +447,17 @@ public:
     ObjectOperation *op;
     uint64_t linger_id;
 
-    WatchContext(IoCtxImpl& io_ctx_impl_, const object_t& _oc, librados::WatchCtx *_ctx,
-                 ObjectOperation *_op) : io_ctx_impl(io_ctx_impl_), oid(_oc), ctx(_ctx), op(_op), linger_id(0) {}
+    WatchContext(IoCtxImpl *io_ctx_impl_, const object_t& _oc, librados::WatchCtx *_ctx,
+                 ObjectOperation *_op) : io_ctx_impl(io_ctx_impl_), oid(_oc), ctx(_ctx), op(_op), linger_id(0) {
+      io_ctx_impl->get();
+    }
     ~WatchContext() {
+      io_ctx_impl->put();
     }
     void notify(RadosClient *client, MWatchNotify *m) {
       ctx->notify(m->opcode, m->ver);
       if (m->opcode != WATCH_NOTIFY_COMPLETE) {
-        client->_notify_ack(io_ctx_impl, oid, m->notify_id, m->ver);
+        client->_notify_ack(*io_ctx_impl, oid, m->notify_id, m->ver);
       }
     }
   };
@@ -468,7 +488,7 @@ public:
   void register_watcher(IoCtxImpl& io, const object_t& oid, librados::WatchCtx *ctx,
 			ObjectOperation *op, uint64_t *cookie, WatchContext **pwc = NULL) {
     assert(lock.is_locked());
-    WatchContext *wc = new WatchContext(io, oid, ctx, op);
+    WatchContext *wc = new WatchContext(&io, oid, ctx, op);
     *cookie = ++max_watch_cookie;
     watchers[*cookie] = wc;
     if (pwc)
@@ -2004,33 +2024,30 @@ from_rados_ioctx_t(rados_ioctx_t p, IoCtx &io)
   IoCtxImpl *io_ctx_impl = (IoCtxImpl*)p;
 
   io.io_ctx_impl = io_ctx_impl;
-  io_ctx_impl->ref_cnt++;
+  io_ctx_impl->get();
 }
 
 librados::IoCtx::
 IoCtx(const IoCtx& rhs)
 {
   io_ctx_impl = rhs.io_ctx_impl;
-  io_ctx_impl->ref_cnt++;
+  io_ctx_impl->get();
 }
 
 librados::IoCtx& librados::IoCtx::
 operator=(const IoCtx& rhs)
 {
   if (io_ctx_impl)
-    io_ctx_impl->ref_cnt--;
-
+    io_ctx_impl->put();
   io_ctx_impl = rhs.io_ctx_impl;
-  io_ctx_impl->ref_cnt++;
+  io_ctx_impl->get();
   return *this;
 }
 
 librados::IoCtx::
 ~IoCtx()
 {
-  io_ctx_impl->ref_cnt--;
-  if (io_ctx_impl->ref_cnt <= 0)
-    delete io_ctx_impl;
+  io_ctx_impl->put();
   io_ctx_impl = 0;
 }
 
@@ -2636,7 +2653,7 @@ extern "C" int rados_ioctx_create(rados_t cluster, const char *name, rados_ioctx
     if (!ctx)
       return -ENOMEM;
     *io = ctx;
-    ctx->ref_cnt++;
+    ctx->get();
     return 0;
   }
   return poolid;
@@ -2645,9 +2662,7 @@ extern "C" int rados_ioctx_create(rados_t cluster, const char *name, rados_ioctx
 extern "C" void rados_ioctx_destroy(rados_ioctx_t io)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  ctx->ref_cnt--;
-  if (ctx->ref_cnt <= 0)
-    delete ctx;
+  ctx->put();
 }
 
 extern "C" int rados_ioctx_stat(rados_ioctx_t io, struct rados_ioctx_stat_t *stats)
