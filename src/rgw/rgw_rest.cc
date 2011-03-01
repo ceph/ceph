@@ -111,7 +111,6 @@ void dump_last_modified(struct req_state *s, time_t t)
 
 static void dump_entry(struct req_state *s, const char *val)
 {
-  // CGI_PRINTF(s->fcgx->out, "%*s<?%s?>\n", s->indent, "", val);
   CGI_PRINTF(s->fcgx->out, "<?%s?>", val);
 }
 
