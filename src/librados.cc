@@ -72,8 +72,7 @@ using namespace std;
 
 ///////////////////////////// RadosClient //////////////////////////////
 struct librados::IoCtxImpl {
-  Mutex lock;
-  int ref_cnt;
+  atomic_t ref_cnt;
   RadosClient *client;
   int poolid;
   string pool_name;
@@ -84,7 +83,7 @@ struct librados::IoCtxImpl {
   uint32_t notify_timeout;
 
   IoCtxImpl(RadosClient *c, int pid, const char *pool_name_, snapid_t s = CEPH_NOSNAP) :
-    lock("librados::IoCtxImpl"), ref_cnt(0), client(c), poolid(pid),
+    ref_cnt(0), client(c), poolid(pid),
     pool_name(pool_name_), snap_seq(s), assert_ver(0),
     notify_timeout(g_conf.client_notify_timeout) {}
 
@@ -105,17 +104,11 @@ struct librados::IoCtxImpl {
   }
 
   void get() {
-    lock.Lock();
-    ref_cnt++;
-    lock.Unlock();
+    ref_cnt.inc();
   }
 
   void put() {
-    lock.Lock();
-    assert(ref_cnt > 0);
-    ref_cnt--;
-    lock.Unlock();
-    if (!ref_cnt)
+    if (ref_cnt.dec() == 0)
       delete this;
   }
 };
