@@ -81,6 +81,7 @@
 #include "common/Timer.h"
 #include "common/LogClient.h"
 #include "common/safe_io.h"
+#include "perfglue/cpu_profiler.h"
 
 #include "common/ClassHandler.h"
 
@@ -2163,6 +2164,9 @@ void OSD::handle_command(MMonCommand *m)
       defer_recovery_until += g_conf.osd_recovery_delay_start;
       recovery_wq.kick();
     }
+  }
+  else if (m->cmd[0] == "cpu_profiler") {
+    cpu_profiler_handle_command(m->cmd, clog);
   }
   else dout(0) << "unrecognized command! " << m->cmd << dendl;
 
