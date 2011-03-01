@@ -2013,7 +2013,8 @@ operator=(const IoCtx& rhs)
 librados::IoCtx::
 ~IoCtx()
 {
-  io_ctx_impl->put();
+  if (io_ctx_impl)
+    io_ctx_impl->put();
   io_ctx_impl = 0;
 }
 
