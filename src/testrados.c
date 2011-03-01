@@ -99,9 +99,9 @@ int main(int argc, const char **argv)
 
 
   /* stat */
-  struct rados_ioctx_stat_t st;
-  r = rados_ioctx_stat(io_ctx, &st);
-  printf("rados_ioctx_stat = %d, %lld KB, %lld objects\n", r, (long long)st.num_kb, (long long)st.num_objects);
+  struct rados_pool_stat_t st;
+  r = rados_ioctx_pool_stat(io_ctx, &st);
+  printf("rados_ioctx_pool_stat = %d, %lld KB, %lld objects\n", r, (long long)st.num_kb, (long long)st.num_objects);
 
   /* snapshots */
   r = rados_ioctx_snap_create(io_ctx, "snap1");
@@ -180,7 +180,7 @@ int main(int argc, const char **argv)
   rados_objects_list_close(h);
 
   /* stat */
-  r = rados_ioctx_stat(io_ctx, &st);
+  r = rados_ioctx_pool_stat(io_ctx, &st);
   printf("rados_stat_pool = %d, %lld KB, %lld objects\n", r, (long long)st.num_kb, (long long)st.num_objects);
 
   /* delete a pool */

@@ -272,8 +272,8 @@ int main(int argc, const char **argv)
   int r = rados_pool_create(cluster, TEST_POOL);
   printf("rados_pool_create returned %d\n", r);
   assert(rados_ioctx_create(cluster, TEST_POOL, &io_ctx) == 0);
-  struct rados_ioctx_stat_t stats;
-  rados_ioctx_stat(io_ctx, &stats);
+  struct rados_pool_stat_t stats;
+  rados_ioctx_pool_stat(io_ctx, &stats);
   test_ls(io_ctx, 0);
   test_ls(io_ctx, 0);
   test_create_and_stat(io_ctx, TEST_IMAGE, MB_BYTES(1));

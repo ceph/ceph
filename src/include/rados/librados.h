@@ -30,7 +30,7 @@ typedef void *rados_ioctx_t;
 typedef void *rados_list_ctx_t;
 typedef uint64_t rados_snap_t;
 
-struct rados_ioctx_stat_t {
+struct rados_pool_stat_t {
   uint64_t num_bytes;    // in bytes
   uint64_t num_kb;       // in KB
   uint64_t num_objects;
@@ -101,7 +101,7 @@ int rados_ioctx_create(rados_t cluster, const char *pool_name, rados_ioctx_t *io
 void rados_ioctx_destroy(rados_ioctx_t io);
 int rados_ioctx_lookup(rados_t cluster, const char *pool_name);
 
-int rados_ioctx_stat(rados_ioctx_t io, struct rados_ioctx_stat_t *stats);
+int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t *stats);
 
 int rados_pool_create(rados_t cluster, const char *pool_name);
 int rados_pool_create_with_auid(rados_t cluster, const char *pool_name, uint64_t auid);
