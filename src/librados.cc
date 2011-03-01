@@ -72,6 +72,7 @@ using namespace std;
 
 ///////////////////////////// RadosClient //////////////////////////////
 struct librados::IoCtxImpl {
+  int ref_cnt;
   RadosClient *client;
   int poolid;
   string pool_name;
@@ -82,8 +83,8 @@ struct librados::IoCtxImpl {
   uint32_t notify_timeout;
 
   IoCtxImpl(RadosClient *c, int pid, const char *pool_name_, snapid_t s = CEPH_NOSNAP) :
-    client(c), poolid(pid), pool_name(pool_name_), snap_seq(s), assert_ver(0),
-    notify_timeout(g_conf.client_notify_timeout) {}
+    ref_cnt(0), client(c), poolid(pid), pool_name(pool_name_), snap_seq(s),
+    assert_ver(0), notify_timeout(g_conf.client_notify_timeout) {}
 
   void set_snap_read(snapid_t s) {
     if (!s)
@@ -2003,12 +2004,30 @@ from_rados_ioctx_t(rados_ioctx_t p, IoCtx &io)
   IoCtxImpl *io_ctx_impl = (IoCtxImpl*)p;
 
   io.io_ctx_impl = io_ctx_impl;
+  io_ctx_impl->ref_cnt++;
+}
+
+librados::IoCtx::
+IoCtx(const IoCtx& rhs)
+{
+  io_ctx_impl = rhs.io_ctx_impl;
+  io_ctx_impl->ref_cnt++;
+}
+
+librados::IoCtx& librados::IoCtx::
+operator=(const IoCtx& rhs)
+{
+  io_ctx_impl = rhs.io_ctx_impl;
+  io_ctx_impl->ref_cnt++;
+  return *this;
 }
 
 librados::IoCtx::
 ~IoCtx()
 {
-  delete io_ctx_impl;
+  io_ctx_impl->ref_cnt--;
+  if (io_ctx_impl->ref_cnt <= 0)
+    delete io_ctx_impl;
   io_ctx_impl = 0;
 }
 
@@ -2616,6 +2635,7 @@ extern "C" int rados_ioctx_create(rados_t cluster, const char *name, rados_ioctx
     if (!ctx)
       return -ENOMEM;
     *io = ctx;
+    ctx->ref_cnt++;
     return 0;
   }
   return poolid;
@@ -2624,7 +2644,9 @@ extern "C" int rados_ioctx_create(rados_t cluster, const char *name, rados_ioctx
 extern "C" void rados_ioctx_destroy(rados_ioctx_t io)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  delete ctx;
+  ctx->ref_cnt--;
+  if (ctx->ref_cnt <= 0)
+    delete ctx;
 }
 
 extern "C" int rados_ioctx_stat(rados_ioctx_t io, struct rados_ioctx_stat_t *stats)
