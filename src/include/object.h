@@ -122,8 +122,8 @@ struct object_locator_t {
   }
 
   void clear() {
-    pool = 0;
-    preferred = 0;
+    pool = -1;
+    preferred = -1;
     key = "";
   }
 
