@@ -669,6 +669,7 @@ protected:
 			PG::Info &info, 
 			PG::Log &log, 
 			PG::Missing *missing,
+			map< int, map<pg_t,PG::Query> >& query_map,
 			map<int, MOSDPGInfo*>* info_map,
 			int& created);
 
