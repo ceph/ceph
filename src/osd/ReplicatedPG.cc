@@ -137,7 +137,16 @@ void ReplicatedPG::wait_for_degraded_object(const sobject_t& soid, Message *m)
 	    << soid 
 	    << ", pushing"
 	    << dendl;
-    recover_object_replicas(soid);
+    eversion_t v;
+    for (unsigned i = 1; i < acting.size(); i++) {
+      int peer = acting[i];
+      if (peer_missing.count(peer) &&
+	  peer_missing[peer].missing.count(soid)) {
+	v = peer_missing[peer].missing[soid].need;
+	break;
+      }
+    }
+    recover_object_replicas(soid, v);
   }
   waiting_for_degraded_object[soid].push_back(m);
 }
@@ -3453,7 +3462,7 @@ int ReplicatedPG::send_push_op(const sobject_t& soid, eversion_t version, int pe
   object_info_t oi(bv);
 
   if (oi.version != version) {
-    osd->clog.error() << "push " << soid << " v " << version << " to osd" << peer
+    osd->clog.error() << info.pgid << " push " << soid << " v " << version << " to osd" << peer
 		      << " failed because local copy is " << oi.version << "\n";
     return -1;
   }
@@ -3578,9 +3587,8 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
   struct stat st;
   int r = osd->store->stat(coll, soid, &st);
   if (r != 0) {
-    osd->clog.error() << op->get_source() << " tried to pull " << soid
-	<< " in " << info.pgid << " but got "
-	<< cpp_strerror(-r) << "\n";
+    osd->clog.error() << info.pgid << " " << op->get_source() << " tried to pull " << soid
+		      << " but got " << cpp_strerror(-r) << "\n";
     send_push_op_blank(soid, op->get_source().num());
   } else {
     uint64_t size = st.st_size;
@@ -4228,7 +4236,7 @@ int ReplicatedPG::recover_primary(int max)
   return started;
 }
 
-int ReplicatedPG::recover_object_replicas(const sobject_t& soid)
+int ReplicatedPG::recover_object_replicas(const sobject_t& soid, eversion_t v)
 {
   int started = 0;
 
@@ -4237,7 +4245,16 @@ int ReplicatedPG::recover_object_replicas(const sobject_t& soid)
   // NOTE: we know we will get a valid oloc off of disk here.
   ObjectContext *obc = get_object_context(soid, OLOC_BLANK, false);
   if (!obc) {
-    osd->clog.error() << "missing primary copy of " << soid << "\n";
+    osd->clog.error() << info.pgid << " missing primary copy of " << soid << "\n";
+    missing.add(soid, v, eversion_t());
+    for (unsigned i=1; i<acting.size(); i++) {
+      int peer = acting[i];
+      if (!peer_missing[peer].is_missing(soid, v)) {
+	dout(10) << info.pgid << " unexpectedly missing " << soid << " v" << v
+		 << ", will use copy on osd" << peer << dendl;
+	missing_loc[soid].insert(peer);
+      }
+    }
     return 0;
   }
 
@@ -4284,6 +4301,7 @@ int ReplicatedPG::recover_replicas(int max)
 	   p != m.rmissing.end() && started < max;
 	   ++p) {
       const sobject_t soid(p->second);
+      eversion_t v = p->first;
       if (pushing.count(soid)) {
 	dout(10) << __func__ << ": already pushing " << soid << dendl;
 	continue;
@@ -4297,7 +4315,7 @@ int ReplicatedPG::recover_replicas(int max)
       }
 
       dout(10) << __func__ << ": recover_object_replicas(" << soid << ")" << dendl;
-      started += recover_object_replicas(soid);
+      started += recover_object_replicas(soid, v);
     }
   }
 
