@@ -102,6 +102,8 @@ namespace librados
   public:
     IoCtx();
     static void from_rados_ioctx_t(rados_ioctx_t p, IoCtx &pool);
+    IoCtx(const IoCtx& rhs);
+    IoCtx& operator=(const IoCtx& rhs);
 
     // Close our pool handle
     ~IoCtx();
@@ -186,9 +188,7 @@ namespace librados
 
     friend class Rados; // Only Rados can use our private constructor to create IoCtxes.
 
-    /* We don't allow assignment or copying */
-    IoCtx(const IoCtx& rhs);
-    const IoCtx& operator=(const IoCtx& rhs);
+    int ref_cnt;
     IoCtxImpl *io_ctx_impl;
   };
 
