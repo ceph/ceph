@@ -1634,6 +1634,7 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
       if (pi.last_update == pi.last_complete) {
 	dout(10) << " infering no missing (last_update==last_complete) for osd" << peer << dendl;
 	peer_missing[peer].num_missing();  // just create the entry.
+	search_for_missing(peer_info[peer], &peer_missing[peer], peer);
 	continue;
       } else {
 	dout(10) << " still need log+missing from osd" << peer << dendl;
