@@ -57,8 +57,8 @@ public:
 
   void version(int *major, int *minor, int *extra);
 
-  int open(IoCtx& io_ctx, Image *image, const char *name);
-  int open(IoCtx& io_ctx, Image *image, const char *name, const char *snapname);
+  int open(IoCtx& io_ctx, Image& image, const char *name);
+  int open(IoCtx& io_ctx, Image& image, const char *name, const char *snapname);
   int list(IoCtx& io_ctx, std::vector<std::string>& names);
   int create(IoCtx& io_ctx, const char *name, size_t size, int *order);
   int remove(IoCtx& io_ctx, const char *name);
@@ -74,6 +74,7 @@ private:
 class Image
 {
 public:
+  Image();
   ~Image();
 
   int resize(size_t size);
@@ -96,8 +97,6 @@ public:
   int aio_read(off_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
 
 private:
-  /* Image instances only come from RBD::open */
-  Image(image_ctx_t ctx_);
   friend class RBD;
 
   Image(const Image& rhs);

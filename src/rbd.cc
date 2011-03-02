@@ -129,10 +129,10 @@ static int do_rename(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   return 0;
 }
 
-static int do_show_info(const char *imgname, librbd::Image *image)
+static int do_show_info(const char *imgname, librbd::Image& image)
 {
   librbd::image_info_t info;
-  int r = image->stat(info, sizeof(info));
+  int r = image.stat(info, sizeof(info));
   if (r < 0)
     return r;
 
@@ -149,19 +149,19 @@ static int do_show_info(const char *imgname, librbd::Image *image)
   return 0;
 }
 
-static int do_resize(librbd::Image *image, size_t size)
+static int do_resize(librbd::Image& image, size_t size)
 {
-  int r = image->resize(size);
+  int r = image.resize(size);
   if (r < 0)
     return r;
 
   return 0;
 }
 
-static int do_list_snaps(librbd::Image *image)
+static int do_list_snaps(librbd::Image& image)
 {
   std::vector<librbd::snap_info_t> snaps;
-  int r = image->snap_list(snaps);
+  int r = image.snap_list(snaps);
   if (r < 0)
     return r;
 
@@ -171,27 +171,27 @@ static int do_list_snaps(librbd::Image *image)
   return 0;
 }
 
-static int do_add_snap(librbd::Image *image, const char *snapname)
+static int do_add_snap(librbd::Image& image, const char *snapname)
 {
-  int r = image->snap_create(snapname);
+  int r = image.snap_create(snapname);
   if (r < 0)
     return r;
 
   return 0;
 }
 
-static int do_remove_snap(librbd::Image *image, const char *snapname)
+static int do_remove_snap(librbd::Image& image, const char *snapname)
 {
-  int r = image->snap_remove(snapname);
+  int r = image.snap_remove(snapname);
   if (r < 0)
     return r;
 
   return 0;
 }
 
-static int do_rollback_snap(librbd::Image *image, const char *snapname)
+static int do_rollback_snap(librbd::Image& image, const char *snapname)
 {
-  int r = image->snap_rollback(snapname);
+  int r = image.snap_rollback(snapname);
   if (r < 0)
     return r;
 
@@ -217,7 +217,7 @@ static int export_read_cb(off_t ofs, size_t len, const char *buf, void *arg)
   return 0;
 }
 
-static int do_export(librbd::Image *image, const char *path)
+static int do_export(librbd::Image& image, const char *path)
 {
   int r;
   librbd::image_info_t info;
@@ -226,11 +226,11 @@ static int do_export(librbd::Image *image, const char *path)
   if (fd < 0)
     return -errno;
 
-  r = image->stat(info, sizeof(info));
+  r = image.stat(info, sizeof(info));
   if (r < 0)
     return r;
 
-  r = image->read_iterate(0, info.size, export_read_cb, (void *)&fd);
+  r = image.read_iterate(0, info.size, export_read_cb, (void *)&fd);
   if (r < 0)
     return r;
 
@@ -343,7 +343,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     cerr << "image creation failed" << std::endl;
     return r;
   }
-  librbd::Image *image = NULL;
+  librbd::Image image;
   r = rbd.open(io_ctx, image, imgname);
   if (r < 0) {
     cerr << "failed to open image" << std::endl;
@@ -422,7 +422,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
           r = -ENOMEM;
           goto done;
         }
-        r = image->aio_write(file_pos, len, bl, completion);
+        r = image.aio_write(file_pos, len, bl, completion);
         if (r < 0)
           goto done;
 	completion->wait_for_complete();
@@ -573,7 +573,7 @@ int main(int argc, const char **argv)
   librados::Rados rados;
   librbd::RBD rbd;
   librados::IoCtx io_ctx, dest_io_ctx;
-  std::auto_ptr < librbd::Image > image;
+  librbd::Image image;
 
   vector<const char*> args;
   DEFINE_CONF_VARS(usage_exit);
@@ -708,17 +708,15 @@ int main(int argc, const char **argv)
       (opt_cmd == OPT_RESIZE || opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
        opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
        opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_EXPORT || opt_cmd == OPT_WATCH)) {
-    librbd::Image *image_ptr = NULL;
-    r = rbd.open(io_ctx, image_ptr, imgname);
+    r = rbd.open(io_ctx, image, imgname);
     if (r < 0) {
       cerr << "error opening image " << imgname << ": " << strerror(r) << std::endl;
       exit(1);
     }
-    image.reset(image_ptr);
   }
 
   if (snapname) {
-    r = image->snap_set(snapname);
+    r = image.snap_set(snapname);
     if (r < 0 && !(r == -ENOENT && opt_cmd == OPT_SNAP_CREATE)) {
       cerr << "error setting snapshot context: " << strerror(-r) << std::endl;
       exit(1);
@@ -775,7 +773,7 @@ int main(int argc, const char **argv)
     break;
 
   case OPT_INFO:
-    r = do_show_info(imgname, image.get());
+    r = do_show_info(imgname, image);
     if (r < 0) {
       cerr << "error: " << strerror(-r) << std::endl;
       exit(1);
@@ -791,7 +789,7 @@ int main(int argc, const char **argv)
     break;
 
   case OPT_RESIZE:
-    r = do_resize(image.get(), size);
+    r = do_resize(image, size);
     if (r < 0) {
       cerr << "resize error: " << strerror(-r) << std::endl;
       exit(1);
@@ -803,7 +801,7 @@ int main(int argc, const char **argv)
       usage();
       exit(1);
     }
-    r = do_list_snaps(image.get());
+    r = do_list_snaps(image);
     if (r < 0) {
       cerr << "failed to list snapshots: " << strerror(-r) << std::endl;
       exit(1);
@@ -815,7 +813,7 @@ int main(int argc, const char **argv)
       usage();
       exit(1);
     }
-    r = do_add_snap(image.get(), snapname);
+    r = do_add_snap(image, snapname);
     if (r < 0) {
       cerr << "failed to create snapshot: " << strerror(-r) << std::endl;
       exit(1);
@@ -827,7 +825,7 @@ int main(int argc, const char **argv)
       usage();
       exit(1);
     }
-    r = do_rollback_snap(image.get(), snapname);
+    r = do_rollback_snap(image, snapname);
     if (r < 0) {
       cerr << "rollback failed: " << strerror(-r) << std::endl;
       exit(1);
@@ -839,7 +837,7 @@ int main(int argc, const char **argv)
       usage();
       exit(1);
     }
-    r = do_remove_snap(image.get(), snapname);
+    r = do_remove_snap(image, snapname);
     if (r < 0) {
       cerr << "rollback failed: " << strerror(-r) << std::endl;
       exit(1);
@@ -851,7 +849,7 @@ int main(int argc, const char **argv)
       cerr << "pathname should be specified" << std::endl;
       exit(1);
     }
-    r = do_export(image.get(), path);
+    r = do_export(image, path);
     if (r < 0) {
       cerr << "export error: " << strerror(-r) << std::endl;
       exit(1);
