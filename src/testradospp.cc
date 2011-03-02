@@ -51,11 +51,12 @@ int main(int argc, const char **argv)
      cerr << "couldn't initialize rados!" << std::endl;
      exit(1);
   }
-
+#if 0
   if (rados.conf_read_file("/etc/ceph/ceph.conf")) {
      cerr << "couldn't read configuration file." << std::endl;
      exit(1);
   }
+#endif
 
   if (!rados.conf_set("config option that doesn't exist",
                      "some random value")) {
@@ -205,7 +206,6 @@ int main(int argc, const char **argv)
   for (it = attrset.begin(); it != attrset.end(); ++it) {
     cout << "xattr: " << it->first << std::endl;
   }
-  
   r = io_ctx.remove(oid);
   cout << "remove result=" << r << std::endl;
   rados.shutdown();
