@@ -13,7 +13,11 @@
 #ifndef HEAP_PROFILER_H_
 #define HEAP_PROFILER_H_
 
+#include <string>
+#include <vector>
 #include "common/config.h"
+
+class LogClient;
 
 /*
  * Ceph glue for the Google perftools heap profiler, included
@@ -39,6 +43,7 @@ void ceph_heap_profiler_stop();
 
 void ceph_heap_profiler_dump(const char *reason);
 
-
+void ceph_heap_profiler_handle_command(const std::vector<std::string> &cmd,
+                                       LogClient& clog);
 
 #endif /* HEAP_PROFILER_H_ */

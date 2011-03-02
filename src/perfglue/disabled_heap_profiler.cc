@@ -28,3 +28,6 @@ void ceph_heap_profiler_start() { return; }
 void ceph_heap_profiler_stop() { return; }
 
 void ceph_heap_profiler_dump(const char *reason) { return; }
+
+void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
+                                       LogClient& clog) { return; }

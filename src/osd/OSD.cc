@@ -2083,41 +2083,11 @@ void OSD::handle_command(MMonCommand *m)
     logger_reset_all();
   } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reopen") {
     logger_reopen_all();
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "heapdump") {
-    if (ceph_using_tcmalloc()) {
-      if (!ceph_heap_profiler_running()) {
-	clog.info() << "can't dump heap: profiler not running\n";
-      } else {
-	char *heap_stats = new char[1024];
-	ceph_heap_profiler_stats(heap_stats, 1024);
-        clog.info() << g_conf.name << "dumping heap profile now.\n"
-		    << heap_stats << std::endl;
-        ceph_heap_profiler_dump("admin request");
-      }
-    } else {
-      clog.info() << g_conf.name << " does not have tcmalloc, "
-	"can't use profiler\n";
-    }
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "enable_profiler_options") {
-    char val[sizeof(int)*8+1];
-    snprintf(val, sizeof(val), "%i", g_conf.profiler_allocation_interval);
-    setenv("HEAP_PROFILE_ALLOCATION_INTERVAL", val, g_conf.profiler_allocation_interval);
-    snprintf(val, sizeof(val), "%i", g_conf.profiler_highwater_interval);
-    setenv("HEAP_PROFILE_INUSE_INTERVAL", val, g_conf.profiler_highwater_interval);
-    clog.info() << g_conf.name << " set heap variables from current config";
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "start_profiler") {
-    ceph_heap_profiler_start();
-    clog.info() << g_conf.name << " started profiler \n";
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "stop_profiler") {
-    ceph_heap_profiler_stop();
-    clog.info() << g_conf.name << " stopped profiler\n";
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "release_heap") {
-    if (ceph_using_tcmalloc()) {
-      ceph_heap_release_free_memory();
-      clog.info() << g_conf.name << " releasing free RAM back to system.\n";
-    } else {
-      clog.warn() << "can't release RAM: not using tcmalloc!";
-    }
+  } else if (m->cmd[0] == "heap") {
+    if (ceph_using_tcmalloc())
+      ceph_heap_profiler_handle_command(m->cmd, clog);
+    else
+      clog.info() << "could not issue heap profiler command -- not using tcmalloc!\n";
   } else if (m->cmd.size() > 1 && m->cmd[0] == "debug") {
     if (m->cmd.size() == 3 && m->cmd[1] == "dump_missing") {
       const string &file_name(m->cmd[2]);
