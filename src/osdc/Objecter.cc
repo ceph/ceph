@@ -655,14 +655,9 @@ void Objecter::send_op(Op *op)
   op->incarnation = op->session->incarnation;
   op->stamp = g_clock.now();
 
-  ceph_object_layout ol;
-  ol.ol_pgid = op->pgid.v;
-  ol.ol_stripe_unit = 0;
-
-  MOSDOp *m = new MOSDOp(client_inc, op->tid,
-			 op->oid, ol, osdmap->get_epoch(),
+  MOSDOp *m = new MOSDOp(client_inc, op->tid, 
+			 op->oid, op->oloc, op->pgid, osdmap->get_epoch(),
 			 flags);
-  m->set_locator(op->oloc);
 
   m->set_snapid(op->snapid);
   m->set_snap_seq(op->snapc.seq);

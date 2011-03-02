@@ -325,7 +325,6 @@ enum {
 	CEPH_OSD_FLAG_EXEC =           0x0800,  /* op may exec */
 	CEPH_OSD_FLAG_EXEC_PUBLIC =    0x1000,  /* op may exec (public) */
 	CEPH_OSD_FLAG_LOCALIZE_READS = 0x2000,  /* read from nearby replica, if any */
-	CEPH_OSD_FLAG_OBJ_LOCATOR    = 0x4000,  /* read from nearby replica, if any */
 };
 
 enum {
