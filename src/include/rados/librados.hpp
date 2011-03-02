@@ -190,7 +190,6 @@ namespace librados
 
     friend class Rados; // Only Rados can use our private constructor to create IoCtxes.
 
-    int ref_cnt;
     IoCtxImpl *io_ctx_impl;
   };
 
