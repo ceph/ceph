@@ -37,6 +37,8 @@ using namespace std;
 #include "include/color.h"
 #include "common/errno.h"
 
+#include "perfglue/heap_profiler.h"
+
 void usage() 
 {
   derr << "usage: cosd -i osdid [--osd-data=path] [--osd-journal=path] "
@@ -62,14 +64,8 @@ int main(int argc, const char **argv)
     } 
   }
 
-#ifdef HAVE_LIBTCMALLOC
-  g_conf.profiler_start = HeapProfilerStart;
-  g_conf.profiler_running = IsHeapProfilerRunning;
-  g_conf.profiler_stop = HeapProfilerStop;
-  g_conf.profiler_dump = HeapProfilerDump;
-  g_conf.tcmalloc_have = true;
-#endif //HAVE_LIBTCMALLOC
   common_init(args, "osd", startup_flags);
+  ceph_heap_profiler_init();
 
   // osd specific args
   bool mkfs = false;

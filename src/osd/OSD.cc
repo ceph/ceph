@@ -82,6 +82,7 @@
 #include "common/LogClient.h"
 #include "common/safe_io.h"
 #include "perfglue/cpu_profiler.h"
+#include "perfglue/heap_profiler.h"
 
 #include "common/ClassHandler.h"
 
@@ -2083,12 +2084,15 @@ void OSD::handle_command(MMonCommand *m)
   } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reopen") {
     logger_reopen_all();
   } else if (m->cmd.size() == 1 && m->cmd[0] == "heapdump") {
-    if (g_conf.tcmalloc_have) {
-      if (!g_conf.profiler_running()) {
+    if (ceph_using_tcmalloc()) {
+      if (!ceph_heap_profiler_running()) {
 	clog.info() << "can't dump heap: profiler not running\n";
       } else {
-        clog.info() << g_conf.name << "dumping heap profile now\n";
-        g_conf.profiler_dump("admin request");
+	char *heap_stats = new char[1024];
+	ceph_heap_profiler_stats(heap_stats, 1024);
+        clog.info() << g_conf.name << "dumping heap profile now.\n"
+		    << heap_stats << std::endl;
+        ceph_heap_profiler_dump("admin request");
       }
     } else {
       clog.info() << g_conf.name << " does not have tcmalloc, "
@@ -2102,17 +2106,19 @@ void OSD::handle_command(MMonCommand *m)
     setenv("HEAP_PROFILE_INUSE_INTERVAL", val, g_conf.profiler_highwater_interval);
     clog.info() << g_conf.name << " set heap variables from current config";
   } else if (m->cmd.size() == 1 && m->cmd[0] == "start_profiler") {
-    char location[PATH_MAX];
-    snprintf(location, sizeof(location),
-	     "%s/%s", g_conf.log_dir, g_conf.name);
-    g_conf.profiler_start(location);
-    clog.info() << g_conf.name << " started profiler with output "
-      << location << "\n";
+    ceph_heap_profiler_start();
+    clog.info() << g_conf.name << " started profiler \n";
   } else if (m->cmd.size() == 1 && m->cmd[0] == "stop_profiler") {
-    g_conf.profiler_stop();
+    ceph_heap_profiler_stop();
     clog.info() << g_conf.name << " stopped profiler\n";
-  }
-  else if (m->cmd.size() > 1 && m->cmd[0] == "debug") {
+  } else if (m->cmd.size() == 1 && m->cmd[0] == "release_heap") {
+    if (ceph_using_tcmalloc()) {
+      ceph_heap_release_free_memory();
+      clog.info() << g_conf.name << " releasing free RAM back to system.\n";
+    } else {
+      clog.warn() << "can't release RAM: not using tcmalloc!";
+    }
+  } else if (m->cmd.size() > 1 && m->cmd[0] == "debug") {
     if (m->cmd.size() == 3 && m->cmd[1] == "dump_missing") {
       const string &file_name(m->cmd[2]);
       std::ofstream fout(file_name.c_str());

@@ -71,6 +71,7 @@
 #include "common/config.h"
 
 #include "perfglue/cpu_profiler.h"
+#include "perfglue/heap_profiler.h"
 
 
 #define DOUT_SUBSYS mds
@@ -791,23 +792,20 @@ void MDS::handle_command(MMonCommand *m)
     clog.info() << g_conf.name << " set heap variables from current config\n";
   }
   else if (m->cmd.size() == 1 && m->cmd[0] == "heap_profiler_start") {
-    char location[PATH_MAX];
-    snprintf(location, sizeof(location),
-	     "%s/%s", g_conf.log_dir, g_conf.name);
-    g_conf.profiler_start(location);
+    ceph_heap_profiler_start();
     clog.info() << g_conf.name << " started profiler\n";
   }
   else if (m->cmd.size() == 1 && m->cmd[0] == "heap_profiler_stop") {
-    g_conf.profiler_stop();
+    ceph_heap_profiler_stop();
     clog.info() << g_conf.name << " stopped profiler\n";
   }
   else if (m->cmd.size() == 1 && m->cmd[0] == "heap_profiler_dump"){
-    if (g_conf.tcmalloc_have) {
-      if (!g_conf.profiler_running()) {
+    if (ceph_using_tcmalloc()) {
+      if (!ceph_heap_profiler_running()) {
         clog.info() << g_conf.name << " can't dump heap: profiler not running\n";
       } else {
         clog.info() << g_conf.name << " dumping heap profile now\n";
-        g_conf.profiler_dump("admin request");
+        ceph_heap_profiler_dump("admin request");
       }
     } else {
       clog.info() << "tcmalloc not enabled, can't use profiler\n";
