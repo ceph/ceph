@@ -24,6 +24,7 @@
 #include "OSDMap.h"
 #include "os/ObjectStore.h"
 #include "msg/Messenger.h"
+#include "messages/MOSDRepScrub.h"
 
 #include "common/DecayCounter.h"
 
@@ -707,7 +708,7 @@ public:
 
   interval_set<snapid_t> snap_trimq;
 
-  xlist<PG*>::item recovery_item, backlog_item, scrub_item, snap_trim_item, remove_item, stat_queue_item;
+  xlist<PG*>::item recovery_item, backlog_item, scrub_item, scrub_finalize_item, snap_trim_item, remove_item, stat_queue_item;
   int recovery_ops_active;
 #ifdef DEBUG_RECOVERY_OIDS
   set<sobject_t> recovering_oids;
@@ -895,12 +896,27 @@ public:
 
   // -- scrub --
   set<int> scrub_reserved_peers;
-  map<int,ScrubMap> peer_scrub_map;
+  map<int,ScrubMap> scrub_received_maps;
   bool finalizing_scrub; 
   bool scrub_reserved, scrub_reserve_failed;
+  int scrub_waiting_on;
+  epoch_t scrub_epoch_start;
+  ScrubMap primary_scrubmap;
+  MOSDRepScrub *active_rep_scrub;
 
   void repair_object(const sobject_t& soid, ScrubMap::object *po, int bad_peer, int ok_peer);
+  bool _compare_scrub_objects(ScrubMap::object &auth,
+			      ScrubMap::object &candidate,
+			      ostream &errorstream);
+  void _compare_scrubmaps(const map<int,ScrubMap*> &maps,  
+			  map<sobject_t, set<int> > &missing,
+			  map<sobject_t, set<int> > &inconsistent,
+			  map<sobject_t, int> &authoritative,
+			  ostream &errorstream);
   void scrub();
+  void scrub_finalize();
+  void scrub_clear_state();
+  bool scrub_gather_replica_maps();
   void _scan_list(ScrubMap &map, vector<sobject_t> &ls);
   void _request_scrub_map(int replica, eversion_t version);
   void build_scrub_map(ScrubMap &map);
@@ -925,7 +941,7 @@ public:
     _lock("PG::_lock"),
     ref(0), deleting(false), dirty_info(false), dirty_log(false),
     info(p), coll(p), log_oid(loid), biginfo_oid(ioid),
-    recovery_item(this), backlog_item(this), scrub_item(this), snap_trim_item(this), remove_item(this), stat_queue_item(this),
+    recovery_item(this), backlog_item(this), scrub_item(this), scrub_finalize_item(this), snap_trim_item(this), remove_item(this), stat_queue_item(this),
     recovery_ops_active(0),
     generate_backlog_epoch(0),
     role(0),
@@ -936,7 +952,9 @@ public:
     pg_stats_valid(false),
     finish_sync_event(NULL),
     finalizing_scrub(false),
-    scrub_reserved(false), scrub_reserve_failed(false)
+    scrub_reserved(false), scrub_reserve_failed(false),
+    scrub_waiting_on(0),
+    active_rep_scrub(0)
   {
     pool->get();
   }

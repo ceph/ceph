@@ -897,6 +897,51 @@ protected:
     }
   } scrub_wq;
 
+  struct ScrubFinalizeWQ : public ThreadPool::WorkQueue<PG> {
+  private:
+    OSD *osd;
+    xlist<PG*> scrub_finalize_queue;
+
+  public:
+    ScrubFinalizeWQ(OSD *o, ThreadPool *tp) : 
+      ThreadPool::WorkQueue<PG>("OSD::ScrubFinalizeWQ", tp), osd(o) {}
+
+    bool _empty() {
+      return scrub_finalize_queue.empty();
+    }
+    bool _enqueue(PG *pg) {
+      if (pg->scrub_finalize_item.is_on_list()) {
+	return false;
+      }
+      pg->get();
+      scrub_finalize_queue.push_back(&pg->scrub_finalize_item);
+      return true;
+    }
+    void _dequeue(PG *pg) {
+      if (pg->scrub_finalize_item.remove_myself()) {
+	pg->put();
+      }
+    }
+    PG *_dequeue() {
+      if (scrub_finalize_queue.empty())
+	return NULL;
+      PG *pg = scrub_finalize_queue.front();
+      scrub_finalize_queue.pop_front();
+      return pg;
+    }
+    void _process(PG *pg) {
+      pg->scrub_finalize();
+      pg->put();
+    }
+    void _clear() {
+      while (scrub_finalize_queue.empty()) {
+	PG *pg = scrub_finalize_queue.front();
+	scrub_finalize_queue.pop_front();
+	pg->put();
+      }
+    }
+  } scrub_finalize_wq;
+
   struct RepScrubWQ : public ThreadPool::WorkQueue<MOSDRepScrub> {
   private: 
     OSD *osd;
