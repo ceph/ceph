@@ -3212,13 +3212,15 @@ int ReplicatedPG::pull(const sobject_t& soid)
   eversion_t v = missing.missing[soid].need;
 
   int fromosd = -1;
-  assert(missing_loc.count(soid));
-  for (set<int>::iterator p = missing_loc[soid].begin();
-       p != missing_loc[soid].end();
-       p++) {
-    if (osd->osdmap->is_up(*p)) {
-      fromosd = *p;
-      break;
+  map<sobject_t,set<int> >::iterator q = missing_loc.find(soid);
+  if (q != missing_loc.end()) {
+    for (set<int>::iterator p = q->second.begin();
+	 p != q->second.end();
+	 p++) {
+      if (osd->osdmap->is_up(*p)) {
+	fromosd = *p;
+	break;
+      }
     }
   }
   if (fromosd < 0) {
@@ -3987,11 +3989,18 @@ void ReplicatedPG::_failed_push(MOSDSubOp *op)
 {
   const sobject_t& soid = op->poid;
   int from = op->get_source().num();
-  set<int>& reps = missing_loc[soid];
-  dout(0) << "_failed_push " << soid << " from osd" << from
-	   << ", reps on " << reps << dendl;
+  map<sobject_t,set<int> >::iterator p = missing_loc.find(soid);
+  if (p != missing_loc.end()) {
+    dout(0) << "_failed_push " << soid << " from osd" << from
+	    << ", reps on " << p->second << dendl;
 
-  reps.erase(from);          // forget about this (bad) peer replica
+    p->second.erase(from);          // forget about this (bad) peer replica
+    if (p->second.empty())
+      missing_loc.erase(p);
+  } else {
+    dout(0) << "_failed_push " << soid << " from osd" << from
+	    << " but not in missing_loc ???" << dendl;
+  }
 
   finish_recovery_op(soid);  // close out this attempt,
   pulling.erase(soid);
@@ -4245,16 +4254,22 @@ int ReplicatedPG::recover_object_replicas(const sobject_t& soid, eversion_t v)
   // NOTE: we know we will get a valid oloc off of disk here.
   ObjectContext *obc = get_object_context(soid, OLOC_BLANK, false);
   if (!obc) {
-    osd->clog.error() << info.pgid << " missing primary copy of " << soid << "\n";
     missing.add(soid, v, eversion_t());
+    bool uhoh = true;
     for (unsigned i=1; i<acting.size(); i++) {
       int peer = acting[i];
       if (!peer_missing[peer].is_missing(soid, v)) {
 	dout(10) << info.pgid << " unexpectedly missing " << soid << " v" << v
 		 << ", will use copy on osd" << peer << dendl;
 	missing_loc[soid].insert(peer);
+	uhoh = false;
       }
     }
+    if (uhoh)
+      osd->clog.error() << info.pgid << " missing primary copy of " << soid << "\n";
+    else
+      osd->clog.error() << info.pgid << " missing primary copy of " << soid
+			<< ", will try copies on " << missing_loc[soid] << "\n";
     return 0;
   }
 
