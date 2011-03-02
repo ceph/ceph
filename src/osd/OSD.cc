@@ -2818,12 +2818,13 @@ void OSD::handle_osd_map(MOSDMap *m)
       dout(10) << "handle_osd_map  got full map for epoch " << e << dendl;
       OSDMap *o = new OSDMap;
       bufferlist& bl = p->second;
-
+      
       o->decode(bl);
       add_map(o);
 
       sobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::META_COLL, fulloid, 0, bl.length(), bl);
+      add_map_bl(e, bl);
       continue;
     }
 
@@ -2833,6 +2834,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       bufferlist& bl = p->second;
       sobject_t oid = get_inc_osdmap_pobject_name(e);
       t.write(coll_t::META_COLL, oid, 0, bl.length(), bl);
+      add_map_inc_bl(e, bl);
 
       OSDMap *o = new OSDMap;
       if (e > 1) {
@@ -2857,6 +2859,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
       sobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::META_COLL, fulloid, 0, fbl.length(), fbl);
+      add_map_bl(e, fbl);
       continue;
     }
 
@@ -2993,6 +2996,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   // everything through current epoch now on disk; keep anything after
   // that in cache
   keep_map_from(osdmap->get_epoch()+1);
+  trim_map_bl_cache(osdmap->get_epoch()+1);
 
   op_tp.unpause();
   recovery_tp.unpause();
@@ -3392,11 +3396,27 @@ void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool la
 
 bool OSD::get_map_bl(epoch_t e, bufferlist& bl)
 {
+  {
+    Mutex::Locker l(map_cache_lock);
+    map<epoch_t,bufferlist>::iterator p = map_bl.find(e);
+    if (p != map_bl.end()) {
+      bl = p->second;
+      return true;
+    }
+  }
   return store->read(coll_t::META_COLL, get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
 }
 
 bool OSD::get_inc_map_bl(epoch_t e, bufferlist& bl)
 {
+  {
+    Mutex::Locker l(map_cache_lock);
+    map<epoch_t,bufferlist>::iterator p = map_inc_bl.find(e);
+    if (p != map_inc_bl.end()) {
+      bl = p->second;
+      return true;
+    }
+  }
   return store->read(coll_t::META_COLL, get_inc_osdmap_pobject_name(e), 0, 0, bl) >= 0;
 }
 
@@ -3404,18 +3424,36 @@ void OSD::add_map(OSDMap *o)
 {
   Mutex::Locker l(map_cache_lock);
   epoch_t e = o->get_epoch();
-  dout(10) << "add_map " << e << " " << o << dendl;
-  map_cache[e] = o;
+  if (map_cache.count(e) == 0) {
+    dout(10) << "add_map " << e << " " << o << dendl;
+    map_cache[e] = o;
+  } else {
+    dout(10) << "add_map " << e << " already have it" << dendl;
+  }
+}
+
+void OSD::add_map_bl(epoch_t e, bufferlist& bl)
+{
+  Mutex::Locker l(map_cache_lock);
+  dout(10) << "add_map_bl " << e << " " << bl.length() << " bytes" << dendl;
+  map_bl[e] = bl;
+}
+void OSD::add_map_inc_bl(epoch_t e, bufferlist& bl)
+{
+  Mutex::Locker l(map_cache_lock);
+  dout(10) << "add_map_inc_bl " << e << " " << bl.length() << " bytes" << dendl;
+  map_inc_bl[e] = bl;
 }
 
 OSDMap *OSD::get_map(epoch_t epoch)
 {
-  Mutex::Locker l(map_cache_lock);
-
-  map<epoch_t,OSDMap*>::iterator p = map_cache.find(epoch);
-  if (p != map_cache.end()) {
-    dout(30) << "get_map " << epoch << " - cached " << p->second << dendl;
-    return p->second;
+  {
+    Mutex::Locker l(map_cache_lock);
+    map<epoch_t,OSDMap*>::iterator p = map_cache.find(epoch);
+    if (p != map_cache.end()) {
+      dout(30) << "get_map " << epoch << " - cached " << p->second << dendl;
+      return p->second;
+    }
   }
 
   OSDMap *map = new OSDMap;
@@ -3427,7 +3465,7 @@ OSDMap *OSD::get_map(epoch_t epoch)
   } else {
     dout(20) << "get_map " << epoch << " - return initial " << map << dendl;
   }
-  map_cache[epoch] = map;
+  add_map(map);
   return map;
 }
 
@@ -3436,6 +3474,16 @@ void OSD::keep_map_from(epoch_t from)
   Mutex::Locker l(map_cache_lock);
   dout(10) << "keep_map_from " << from << dendl;
   map_cache_keep_from = from;
+}
+
+void OSD::trim_map_bl_cache(epoch_t oldest)
+{
+  Mutex::Locker l(map_cache_lock);
+  dout(10) << "trim_map_bl_cache up to " << oldest << dendl;
+  while (!map_inc_bl.empty() && map_inc_bl.begin()->first < oldest)
+    map_inc_bl.erase(map_inc_bl.begin());
+  while (!map_bl.empty() && map_bl.begin()->first < oldest)
+    map_bl.erase(map_bl.begin());
 }
 
 void OSD::trim_map_cache(epoch_t oldest)
