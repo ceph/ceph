@@ -203,20 +203,7 @@ public:
 
   __u32 get_hash() const { return hash; }
 
-  /*
-  CInode *get_inode() const { return linkage.inode; }
-  inodeno_t get_remote_ino() { return linkage.remote_ino; }
-  unsigned char get_remote_d_type() { return linkage.remote_d_type; }
-
-  // dentry type is primary || remote || null
-  // inode ptr is required for primary, optional for remote, undefined for null
-  bool is_primary() { return linkage.is_primary(); }
-  bool is_remote() { return linkage.is_remote(); }
-  bool is_null() { return linkage.is_null(); }
-
-  inodeno_t get_ino();
-  */
-
+  // linkage
   linkage_t *get_linkage() { return &linkage; }
 
   linkage_t *_project_linkage() {
