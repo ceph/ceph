@@ -55,8 +55,6 @@ void set_foreground_logging()
   g_conf.log_to_syslog = false;
 
   g_conf.log_per_instance = false;
-
-  g_conf.log_to_file = false;
 }
 
 static void keyring_init(const char *filesearch)
@@ -138,7 +136,6 @@ void common_init(std::vector<const char*>& args, const char *module_type, int fl
     // some daemon-specific defaults
     g_conf.daemonize = true;
     g_conf.log_to_stderr = LOG_TO_STDERR_SOME;
-    g_conf.log_to_file = true;
     set_cv(&g_conf.log_dir, "/var/log/ceph");
     set_cv(&g_conf.pid_file, "/var/run/ceph/$type.$id.pid");
   }
