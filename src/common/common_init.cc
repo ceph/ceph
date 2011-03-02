@@ -141,6 +141,11 @@ void common_init(std::vector<const char*>& args, const char *module_type, int fl
   if (force_fg_logging)
     set_foreground_logging();
 
+  if (g_conf.daemonize)
+    cout << ceph_version_to_string() << std::endl;
+
+  parse_config_options(args);
+
   {
     // In the long term, it would be best to ensure that we read ceph.conf
     // before initializing dout(). For now, just force a reopen here with the
@@ -149,10 +154,6 @@ void common_init(std::vector<const char*>& args, const char *module_type, int fl
     _dout_open_log();
   }
 
-  if (g_conf.daemonize)
-    cout << ceph_version_to_string() << std::endl;
-
-  parse_config_options(args);
   install_standard_sighandlers();
 
 #ifdef HAVE_LIBTCMALLOC
