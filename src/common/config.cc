@@ -27,6 +27,7 @@
 #include "msg/msg_types.h"
 #include "osd/osd_types.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <fstream>
 #include <stdlib.h>

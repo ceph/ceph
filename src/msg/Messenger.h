@@ -27,6 +27,7 @@ using namespace std;
 #include "include/Context.h"
 #include "include/types.h"
 
+#include <errno.h>
 
 class MDS;
 class Timer;

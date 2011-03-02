@@ -24,6 +24,7 @@
 #include "common/errno.h"
 #include "include/color.h"
 
+#include <errno.h>
 #include <syslog.h>
 
 #ifdef HAVE_PROFILER
