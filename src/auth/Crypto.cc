@@ -26,8 +26,6 @@
 
 #include <errno.h>
 
-using namespace CryptoPP;
-
 int get_random_bytes(char *buf, int len)
 {
   int fd = TEMP_FAILURE_RETRY(::open("/dev/urandom", O_RDONLY));
@@ -84,8 +82,8 @@ int CryptoNone::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out
 
 
 // ---------------------------------------------------
-#define AES_KEY_LEN     ((size_t)AES::DEFAULT_KEYLENGTH)
-#define AES_BLOCK_LEN   ((size_t)AES::BLOCKSIZE)
+#define AES_KEY_LEN     ((size_t)CryptoPP::AES::DEFAULT_KEYLENGTH)
+#define AES_BLOCK_LEN   ((size_t)CryptoPP::AES::BLOCKSIZE)
 
 class CryptoAES : public CryptoHandler {
 public:
