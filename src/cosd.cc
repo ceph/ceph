@@ -45,6 +45,12 @@ void usage()
   generic_server_usage();
 }
 
+#ifdef HAVE_LIBTCMALLOC
+/* Adjust the return type */
+static bool isHeapProfilerRunning(void) {
+  return IsHeapProfilerRunning();
+}
+#endif //HAVE_LIBTCMALLOC
 
 int main(int argc, const char **argv) 
 {
@@ -64,7 +70,7 @@ int main(int argc, const char **argv)
 
 #ifdef HAVE_LIBTCMALLOC
   g_conf.profiler_start = HeapProfilerStart;
-  g_conf.profiler_running = IsHeapProfilerRunning;
+  g_conf.profiler_running = isHeapProfilerRunning;
   g_conf.profiler_stop = HeapProfilerStop;
   g_conf.profiler_dump = HeapProfilerDump;
   g_conf.tcmalloc_have = true;
