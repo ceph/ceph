@@ -48,14 +48,6 @@ static int get_random_bytes(int len, bufferlist& bl)
   return 0;
 }
 
-void generate_random_string(string& s, int len)
-{
-  char buf[len+1];
-  get_random_bytes(buf, len);
-  buf[len] = 0;
-  s = buf;
-}
-
 // ---------------------------------------------------
 
 class CryptoNone : public CryptoHandler {
