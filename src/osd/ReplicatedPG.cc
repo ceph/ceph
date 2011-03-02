@@ -4167,7 +4167,7 @@ int ReplicatedPG::recover_primary(int max)
 
     dout(10) << "recover_primary "
              << soid << " " << item.need
-	     << (unfound ? "":" (unfound)")
+	     << (unfound ? " (unfound)":"")
 	     << (missing.is_missing(soid) ? " (missing)":"")
 	     << (missing.is_missing(head) ? " (missing head)":"")
              << (pulling.count(soid) ? " (pulling)":"")
