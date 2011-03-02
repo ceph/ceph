@@ -396,6 +396,13 @@ unittest_bufferlist_LDADD = ${UNITTEST_LDADD}
 unittest_bufferlist_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_bufferlist
 
+unittest_crypto_SOURCES = test/crypto.cc
+unittest_crypto_LDFLAGS = ${AM_LDFLAGS}
+unittest_crypto_LDADD =  libceph.la \
+			${UNITTEST_LDADD}
+unittest_crypto_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_crypto
+
 # shell scripts
 editpaths = sed \
 	-e 's|@bindir[@]|$(bindir)|g' \
