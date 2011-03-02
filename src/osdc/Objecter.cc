@@ -662,6 +662,7 @@ void Objecter::send_op(Op *op)
   MOSDOp *m = new MOSDOp(client_inc, op->tid,
 			 op->oid, ol, osdmap->get_epoch(),
 			 flags);
+  m->set_locator(op->oloc);
 
   m->set_snapid(op->snapid);
   m->set_snap_seq(op->snapc.seq);

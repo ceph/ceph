@@ -38,6 +38,7 @@ public:
   vector<snapid_t> snaps;
   osd_peer_stat_t peer_stat;
   int rmw_flags;
+  object_locator_t oloc;
 
   friend class MOSDOpReply;
 
@@ -59,8 +60,12 @@ public:
   pg_t     get_pg() const { return pg_t(head.layout.ol_pgid); }
   //ceph_object_layout get_layout() { return head.layout; }
   object_locator_t get_object_locator() const {
-    pg_t pgid = get_pg();
-    return object_locator_t(pgid.pool(), pgid.preferred());
+    if ((int32_t)oloc.pool != -1)
+      return oloc;
+    else {
+     pg_t pgid = get_pg();
+     return object_locator_t(pgid.pool(), pgid.preferred());
+    }
   }
 
   epoch_t  get_map_epoch() { return head.osdmap_epoch; }
@@ -97,7 +102,7 @@ public:
     memset(&head, 0, sizeof(head));
     set_tid(tid);
     head.client_inc = inc;
-    head.layout = ol;
+    set_layout(ol);
     head.osdmap_epoch = mapepoch;
     head.flags = flags;
   }
@@ -106,7 +111,14 @@ private:
   ~MOSDOp() {}
 
 public:
-  void set_layout(const ceph_object_layout& l) { head.layout = l; }
+  void set_layout(const ceph_object_layout& l) {
+    head.layout = l;
+    pg_t pgid = get_pg();
+  }
+  void set_locator(const object_locator_t& ol) {
+    oloc = ol;
+    head.flags = head.flags | CEPH_OSD_FLAG_OBJ_LOCATOR;
+  }
   void set_version(eversion_t v) { head.reassert_version = v; }
   void set_mtime(utime_t mt) { head.mtime = mt; }
 
@@ -181,6 +193,8 @@ public:
     ::encode_nohead(snaps, payload);
     if (head.flags & CEPH_OSD_FLAG_PEERSTAT)
       ::encode(peer_stat, payload);
+    if (head.flags & CEPH_OSD_FLAG_OBJ_LOCATOR)
+      ::encode(oloc, payload);
   }
 
   virtual void decode_payload() {
@@ -197,6 +211,8 @@ public:
     decode_nohead(head.num_snaps, snaps, p);
     if (head.flags & CEPH_OSD_FLAG_PEERSTAT)
       ::decode(peer_stat, p);
+    if (head.flags & CEPH_OSD_FLAG_OBJ_LOCATOR)
+      ::decode(oloc, p);
   }
 
 
@@ -214,6 +230,9 @@ public:
 #endif
     if (head.snapid != CEPH_NOSNAP)
       out << "@" << snapid_t((uint64_t)head.snapid);
+
+    if (oloc.key.size())
+      out << " " << oloc;
 
     out << " " << ops;
     out << " " << pg_t(head.layout.ol_pgid);

@@ -2295,7 +2295,7 @@ get_pool_name() const
 }
 
 void librados::IoCtx::
-locator_set_key(const string& key)
+set_locator_key(const string& key)
 {
   io_ctx_impl->oloc.key = key;
 }

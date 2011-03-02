@@ -183,7 +183,7 @@ namespace librados
 
     const std::string& get_pool_name() const;
 
-    void locator_set_key(const std::string& key);
+    void set_locator_key(const std::string& key);
   private:
     /* You can only get IoCtx instances from Rados */
     IoCtx(IoCtxImpl *io_ctx_impl_);
