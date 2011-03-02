@@ -106,6 +106,12 @@ static void keyring_init(const char *filesearch)
   }
 }
 
+static void set_cv(const char ** key, const char * const val)
+{
+  free((void*)*key);
+  *key = strdup(val);
+}
+
 void common_init(std::vector<const char*>& args, const char *module_type, int flags)
 {
   bool force_fg_logging = false;
@@ -115,7 +121,13 @@ void common_init(std::vector<const char*>& args, const char *module_type, int fl
          << "and is only suitable for **" << TEXT_NORMAL << std::endl;
     cout << TEXT_YELLOW <<  " **          testing and review.  Do not trust it "
          << "with important data.       **" << TEXT_NORMAL << std::endl;
+
+    // some daemon-specific defaults
     g_conf.daemonize = true;
+    g_conf.log_to_stderr = LOG_TO_STDERR_SOME;
+    g_conf.log_to_file = true;
+    set_cv(&g_conf.log_dir, "/var/log/ceph");
+    set_cv(&g_conf.pid_file, "/var/run/ceph/$type.$id.pid");
   }
   else {
     g_conf.pid_file = 0;
