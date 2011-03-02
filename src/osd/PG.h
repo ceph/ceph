@@ -861,6 +861,7 @@ public:
 	      map<int, MOSDPGInfo*> *activator_map=0);
   void build_might_have_unfound();
   void activate(ObjectStore::Transaction& t, list<Context*>& tfin,
+		map< int, map<pg_t,Query> >& query_map,
 		map<int, MOSDPGInfo*> *activator_map=0);
 
   bool have_unfound() const { 
