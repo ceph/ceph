@@ -124,10 +124,20 @@ void install_standard_sighandlers(void)
   install_sighandler(SIGSYS, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
 }
 
-void block_all_signals(sigset_t *old_sigset)
+void block_signals(sigset_t *old_sigset, int *siglist)
 {
   sigset_t sigset;
-  sigfillset(&sigset);
+  if (!siglist) {
+    sigfillset(&sigset);
+  }
+  else {
+    int i = 0;
+    sigemptyset(&sigset);
+    while (siglist[i]) {
+      sigaddset(&sigset, siglist[i]);
+      ++i;
+    }
+  }
   sigdelset(&sigset, SIGKILL);
   if (pthread_sigmask(SIG_BLOCK, &sigset, old_sigset)) {
     derr << "block_all_signals: sigprocmask failed" << dendl;
