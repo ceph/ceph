@@ -22,18 +22,67 @@ using namespace std;
 
 void usage() 
 {
-  cerr << "usage: radosgw_admin <--user-gen | --user-modify | --read-policy | --list-buckets > [options...]" << std::endl;
-  cerr << "options:" << std::endl;
-  cerr << "   --uid=<id> (S3 uid)" << std::endl;
-  cerr << "   --auth_uid=<auid> (librados uid)" << std::endl;
-  cerr << "   --secret=<key>" << std::endl;
-  cerr << "   --email=<email>" << std::endl;
-  cerr << "   --display-name=<name>" << std::endl;
-  cerr << "   --bucket=<bucket>" << std::endl;
-  cerr << "   --object=<object>" << std::endl;
-  cerr << "   --openstack-user=<group:name>" << std::endl;
+  cerr << "usage: radosgw_admin <cmd> [options...]" << std::endl;
+  cerr << "commands:\n";
+  cerr << "  user create                create a new user\n" ;
+  cerr << "  user modify                modify user\n";
+  cerr << "  user info                  get user info\n";
+  cerr << "  user rm                    remove user\n";
+  cerr << "  buckets list               list buckets\n";
+  cerr << "  policy                     read bucket/object policy\n";
+  cerr << "options:\n";
+  cerr << "   --uid=<id>                S3 uid\n";
+  cerr << "   --os-user=<group:name>    OpenStack user\n";
+  cerr << "   --email=<email>\n";
+  cerr << "   --auth_uid=<auid>         librados uid\n";
+  cerr << "   --secret=<key>            S3 key\n";
+  cerr << "   --display-name=<name>\n";
+  cerr << "   --bucket=<bucket>\n";
+  cerr << "   --object=<object>\n";
   generic_client_usage();
   exit(1);
+}
+
+enum {
+  OPT_NO_CMD = 0,
+  OPT_USER_CREATE,
+  OPT_USER_INFO,
+  OPT_USER_MODIFY,
+  OPT_USER_RM,
+  OPT_BUCKETS_LIST,
+  OPT_POLICY,
+};
+
+static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
+{
+  *need_more = false;
+  if (strcmp(cmd, "user") == 0 ||
+      strcmp(cmd, "buckets") == 0) {
+    *need_more = true;
+    return 0;
+  }
+
+  if (strcmp(cmd, "policy") == 0)
+    return OPT_POLICY;
+
+  if (!prev_cmd)
+    return -EINVAL;
+
+  if (strcmp(prev_cmd, "user") == 0) {
+    if (strcmp(cmd, "create") == 0)
+      return OPT_USER_CREATE;
+    if (strcmp(cmd, "info") == 0)
+      return OPT_USER_INFO;
+    if (strcmp(cmd, "modify") == 0)
+      return OPT_USER_MODIFY;
+    if (strcmp(cmd, "rm") == 0)
+      return OPT_USER_RM;
+  } else if (strcmp(prev_cmd, "buckets") == 0) {
+    if (strcmp(cmd, "list") == 0)
+      return OPT_BUCKETS_LIST;
+  }
+
+  return -EINVAL;
 }
 
 int gen_rand_base64(char *dest, int size) /* size should be the required string size + 1 */
@@ -94,26 +143,15 @@ int main(int argc, char **argv)
   const char *bucket = 0;
   const char *object = 0;
   const char *openstack_user = 0;
-  bool gen_user = false;
-  bool mod_user = false;
-  bool read_policy = false;
-  bool list_buckets = false;
-  bool delete_user = false;
-  int actions = 0 ;
   uint64_t auid = 0;
   RGWUserInfo info;
   RGWAccess *store;
+  const char *prev_cmd = NULL;
+  int opt_cmd = OPT_NO_CMD;
+  bool need_more;
 
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("user-gen", 'g')) {
-      gen_user = true;
-    } else if (CONF_ARG_EQ("user-modify", 'm')) {
-      mod_user = true;
-    } else if (CONF_ARG_EQ("read-policy", 'p')) {
-      read_policy = true;
-    } else if (CONF_ARG_EQ("list-buckets", 'l')) {
-      list_buckets = true;
-    } else if (CONF_ARG_EQ("uid", 'i')) {
+    if (CONF_ARG_EQ("uid", 'i')) {
       CONF_SAFE_SET_ARG_VAL(&user_id, OPT_STR);
     } else if (CONF_ARG_EQ("secret", 's')) {
       CONF_SAFE_SET_ARG_VAL(&secret_key, OPT_STR);
@@ -125,17 +163,30 @@ int main(int argc, char **argv)
       CONF_SAFE_SET_ARG_VAL(&bucket, OPT_STR);
     } else if (CONF_ARG_EQ("object", 'o')) {
       CONF_SAFE_SET_ARG_VAL(&object, OPT_STR);
-    } else if (CONF_ARG_EQ("auth_uid", 'a')) {
+    } else if (CONF_ARG_EQ("auth-uid", 'a')) {
       CONF_SAFE_SET_ARG_VAL(&auid, OPT_LONGLONG);
-    } else if (CONF_ARG_EQ("delete_user", 'd')) {
-      delete_user = true;
-    } else if (CONF_ARG_EQ("openstack-user", '\0')) {
+    } else if (CONF_ARG_EQ("os-user", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&openstack_user, OPT_STR);
     } else {
-      cerr << "unrecognized arg " << args[i] << std::endl;
-      ARGS_USAGE();
+      if (!opt_cmd) {
+        opt_cmd = get_cmd(CONF_VAL, prev_cmd, &need_more);
+        if (opt_cmd < 0) {
+          cerr << "unrecognized arg " << args[i] << std::endl;
+          ARGS_USAGE();
+        }
+        if (need_more) {
+          prev_cmd = CONF_VAL;
+          continue;
+        }
+      } else {
+        cerr << "unrecognized arg " << args[i] << std::endl;
+        ARGS_USAGE();
+      }
     }
   }
+
+  if (opt_cmd == OPT_NO_CMD)
+    ARGS_USAGE();
 
   store = RGWAccess::init_storage_provider("rados", argc, argv);
   if (!store) {
@@ -143,10 +194,32 @@ int main(int argc, char **argv)
     return 5; //EIO
   }
 
+  string user_id_str;
 
-  if (mod_user) {
-    actions++;
+  if (opt_cmd != OPT_USER_CREATE && !user_id) {
+    bool found = false;
+    string s;
+    if (user_email) {
+      s = user_email;
+      if (rgw_get_uid_by_email(s, user_id_str) >= 0) {
+	found = true;
+      } else {
+	cerr << "could not find user by specified email" << std::endl;
+      }
+    }
+    if (!found && openstack_user) {
+      s = openstack_user;
+      if (rgw_get_uid_by_openstack(s, user_id_str) >= 0) {
+	found = true;
+      } else
+        cerr << "could not find user by specified opensatck username" << std::endl;
+    }
+    if (found)
+      user_id = user_id_str.c_str();
+  }
 
+
+  if (opt_cmd == OPT_USER_MODIFY || opt_cmd == OPT_USER_INFO) {
     if (!user_id) {
       cerr << "user_id was not specified, aborting" << std::endl;
       return 0;
@@ -160,8 +233,7 @@ int main(int argc, char **argv)
     }
   }
 
-  if (gen_user) {
-    actions++;
+  if (opt_cmd == OPT_USER_CREATE) {
     char secret_key_buf[SECRET_KEY_LEN + 1];
     char public_id_buf[PUBLIC_ID_LEN + 1];
     int ret;
@@ -194,7 +266,11 @@ int main(int argc, char **argv)
     }
   }
 
-  if (gen_user || mod_user) {
+
+  int err;
+  switch (opt_cmd) {
+  case OPT_USER_CREATE:
+  case OPT_USER_MODIFY:
     if (user_id)
       info.user_id = user_id;
     if (secret_key)
@@ -207,20 +283,23 @@ int main(int argc, char **argv)
       info.auid = auid;
     if (openstack_user)
       info.openstack_name = openstack_user;
-
-    int err;
+  
     if ((err = rgw_store_user_info(info)) < 0) {
       cerr << "error storing user info" << strerror(-err) << std::endl;
-    } else {
-      cout << "User ID: " << info.user_id << std::endl;
-      cout << "Secret Key: " << info.secret_key << std::endl;
-      cout << "Display Name: " << info.display_name << std::endl;
-      cout << "OpenStack User: " << (info.openstack_name.size() ? info.openstack_name : "<undefined>")<< std::endl;
+      break;
     }
+
+    /* fall through */
+
+  case OPT_USER_INFO:
+    cout << "User ID: " << info.user_id << std::endl;
+    cout << "Secret Key: " << info.secret_key << std::endl;
+    cout << "Display Name: " << info.display_name << std::endl;
+    cout << "OpenStack User: " << (info.openstack_name.size() ? info.openstack_name : "<undefined>")<< std::endl;
+    break;
   }
 
-  if (read_policy) {
-    actions++;
+  if (opt_cmd == OPT_POLICY) {
     bufferlist bl;
     if (!bucket)
       bucket = "";
@@ -240,8 +319,7 @@ int main(int argc, char **argv)
     }
   }
 
-  if (list_buckets) {
-    actions++;
+  if (opt_cmd == OPT_BUCKETS_LIST) {
     string id;
     RGWAccessHandle handle;
 
@@ -250,7 +328,6 @@ int main(int argc, char **argv)
       if (rgw_read_buckets_attr(user_id, buckets, false) < 0) {
         cout << "could not get buckets for uid " << user_id << std::endl;
       } else {
-        cout << "listing buckets for uid " << user_id << std::endl;
         map<string, RGWBucketEnt>& m = buckets.get_buckets();
         map<string, RGWBucketEnt>::iterator iter;
 
@@ -272,13 +349,9 @@ int main(int argc, char **argv)
     }
   }
 
-  if (delete_user) {
-    ++actions;
+  if (opt_cmd == OPT_USER_RM) {
     rgw_delete_user(info);
   }
-
-  if (!actions)
-    ARGS_USAGE();
 
   return 0;
 }
