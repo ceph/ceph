@@ -64,16 +64,22 @@ namespace librbd {
     std::map<std::string, struct SnapInfo> snaps_by_name;
     uint64_t snapid;
     std::string name;
-    IoCtx &io_ctx;
+    IoCtx data_ctx, md_ctx;
     WatchCtx *wctx;
     bool needs_refresh;
     Mutex lock;
 
     ImageCtx(std::string imgname, IoCtx& p) : snapid(0),
-						 name(imgname),
-						 io_ctx(p),
-						 needs_refresh(true),
-						 lock("librbd::ImageCtx::lock") {}
+					      name(imgname),
+					      needs_refresh(true),
+					      lock("librbd::ImageCtx::lock") {
+      md_ctx.dup(p);
+      data_ctx.dup(p);
+    }
+
+    ~ImageCtx() {
+    }
+
     int snap_set(std::string snap_name)
     {
       std::map<std::string, struct SnapInfo>::iterator it = snaps_by_name.find(snap_name);
@@ -215,7 +221,7 @@ namespace librbd {
   int rm_snap(IoCtx& io_ctx, string& md_oid, const char *snap_name);
   int ictx_check(ImageCtx *ictx);
   int ictx_refresh(ImageCtx *ictx, const char *snap_name);
-  int copy(IoCtx& src_io_ctx, const char *srcname, IoCtx& dest_io_ctx, const char *destname);
+  int copy(IoCtx& src_md_ctx, const char *srcname, IoCtx& dest_md_ctx, const char *destname);
 
   int open_image(IoCtx& io_ctx, ImageCtx *ictx, const char *name, const char *snap_name);
   void close_image(ImageCtx *ictx);
@@ -506,7 +512,7 @@ int rollback_image(ImageCtx *ictx, const char *snap_name)
   for (uint64_t i = 0; i < numseg; i++) {
     int r;
     string oid = get_block_oid(&(ictx->header), i);
-    r = ictx->io_ctx.rollback(oid, snap_name);
+    r = ictx->data_ctx.rollback(oid, snap_name);
     if (r < 0 && r != -ENOENT)
       return r;
   }
@@ -539,13 +545,13 @@ int snap_create(ImageCtx *ictx, const char *snap_name)
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
-  r = ictx->io_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
+  r = ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
   if (r < 0)
     return r;
 
-  ictx->io_ctx.snap_set_read(CEPH_NOSNAP);
+  ictx->data_ctx.snap_set_read(CEPH_NOSNAP);
   r = add_snap(ictx, snap_name);
-  notify_change(ictx->io_ctx, md_oid, NULL, ictx);
+  notify_change(ictx->md_ctx, md_oid, NULL, ictx);
   return r;
 }
 
@@ -562,15 +568,18 @@ int snap_remove(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
-  r = ictx->io_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
+  r = ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
   if (r < 0)
     return r;
 
-  ictx->io_ctx.snap_set_read(ictx->snapid);
+  ictx->data_ctx.snap_set_read(ictx->snapid);
 
-  r = rm_snap(ictx->io_ctx, md_oid, snap_name);
-  r = ictx->io_ctx.selfmanaged_snap_remove(ictx->snapid);
-  notify_change(ictx->io_ctx, md_oid, NULL, ictx);
+  r = rm_snap(ictx->md_ctx, md_oid, snap_name);
+  if (r < 0)
+    return r;
+
+  r = ictx->data_ctx.selfmanaged_snap_remove(ictx->snapid);
+  notify_change(ictx->md_ctx, md_oid, NULL, ictx);
 
   return r;
 }
@@ -723,21 +732,21 @@ int resize(ImageCtx *ictx, uint64_t size)
     ictx->header.image_size = size;
   } else {
     dout(2) << "shrinking image " << size << " -> " << ictx->header.image_size << " objects" << dendl;
-    trim_image(ictx->io_ctx, &(ictx->header), size);
+    trim_image(ictx->data_ctx, &(ictx->header), size);
     ictx->header.image_size = size;
   }
 
   // rewrite header
   bufferlist bl;
   bl.append((const char *)&(ictx->header), sizeof(ictx->header));
-  r = ictx->io_ctx.write(md_oid, bl, bl.length(), 0);
+  r = ictx->md_ctx.write(md_oid, bl, bl.length(), 0);
   if (r == -ERANGE)
     derr << "operation might have conflicted with another client!" << dendl;
   if (r < 0) {
     derr << "error writing header: " << strerror(-r) << dendl;
     return r;
   } else {
-    notify_change(ictx->io_ctx, md_oid, NULL, ictx);
+    notify_change(ictx->md_ctx, md_oid, NULL, ictx);
   }
 
   dout(2) << "done." << dendl;
@@ -772,7 +781,7 @@ int add_snap(ImageCtx *ictx, const char *snap_name)
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
-  int r = ictx->io_ctx.selfmanaged_snap_create(&snap_id);
+  int r = ictx->md_ctx.selfmanaged_snap_create(&snap_id);
   if (r < 0) {
     derr << "failed to create snap id: " << strerror(-r) << dendl;
     return r;
@@ -781,12 +790,12 @@ int add_snap(ImageCtx *ictx, const char *snap_name)
   ::encode(snap_name, bl);
   ::encode(snap_id, bl);
 
-  r = ictx->io_ctx.exec(md_oid, "rbd", "snap_add", bl, bl2);
+  r = ictx->md_ctx.exec(md_oid, "rbd", "snap_add", bl, bl2);
   if (r < 0) {
     derr << "rbd.snap_add execution failed failed: " << strerror(-r) << dendl;
     return r;
   }
-  notify_change(ictx->io_ctx, md_oid, NULL, ictx);
+  notify_change(ictx->md_ctx, md_oid, NULL, ictx);
 
   return 0;
 }
@@ -823,10 +832,10 @@ int ictx_refresh(ImageCtx *ictx, const char *snap_name)
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
-  int r = read_header(ictx->io_ctx, md_oid, &(ictx->header), NULL);
+  int r = read_header(ictx->md_ctx, md_oid, &(ictx->header), NULL);
   if (r < 0)
     return r;
-  r = ictx->io_ctx.exec(md_oid, "rbd", "snap_list", bl, bl2);
+  r = ictx->md_ctx.exec(md_oid, "rbd", "snap_list", bl, bl2);
   if (r < 0)
     return r;
 
@@ -879,11 +888,11 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
-  r = ictx->io_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
+  r = ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
   if (r < 0)
     return r;
 
-  ictx->io_ctx.snap_set_read(ictx->snapid);
+  ictx->data_ctx.snap_set_read(ictx->snapid);
   r = rollback_image(ictx, snap_name);
   if (r < 0)
     return r;
@@ -891,11 +900,13 @@ int snap_rollback(ImageCtx *ictx, const char *snap_name)
   return 0;
 }
 
-int copy(IoCtx& src_io_ctx, const char *srcname, IoCtx& dest_io_ctx, const char *destname)
+int copy(IoCtx& src_md_ctx, const char *srcname, IoCtx& dest_md_ctx, const char *destname)
 {
   struct rbd_obj_header_ondisk header, dest_header;
   int64_t ret;
   int r;
+  IoCtx src_data_ctx(src_md_ctx);
+  IoCtx dest_data_ctx(dest_md_ctx);
   string md_oid, dest_md_oid;
   md_oid = srcname;
   md_oid += RBD_SUFFIX;
@@ -903,7 +914,7 @@ int copy(IoCtx& src_io_ctx, const char *srcname, IoCtx& dest_io_ctx, const char 
   dest_md_oid = destname;
   dest_md_oid += RBD_SUFFIX;
 
-  ret = read_header(src_io_ctx, md_oid, &header, NULL);
+  ret = read_header(src_md_ctx, md_oid, &header, NULL);
   if (ret < 0)
     return ret;
 
@@ -911,13 +922,13 @@ int copy(IoCtx& src_io_ctx, const char *srcname, IoCtx& dest_io_ctx, const char 
   uint64_t block_size = get_block_size(&header);
   int order = header.options.order;
 
-  r = create(dest_io_ctx, dest_md_oid, destname, header.image_size, &order);
+  r = create(dest_md_ctx, dest_md_oid, destname, header.image_size, &order);
   if (r < 0) {
     derr << "header creation failed" << dendl;
     return r;
   }
 
-  ret = read_header(dest_io_ctx, dest_md_oid, &dest_header, NULL);
+  ret = read_header(dest_md_ctx, dest_md_oid, &dest_header, NULL);
   if (ret < 0) {
     derr << "failed to read newly created header" << dendl;
     return ret;
@@ -929,7 +940,7 @@ int copy(IoCtx& src_io_ctx, const char *srcname, IoCtx& dest_io_ctx, const char 
     string dest_oid = get_block_oid(&dest_header, i);
     map<off_t, size_t> m;
     map<off_t, size_t>::iterator iter;
-    r = src_io_ctx.sparse_read(oid, m, bl, block_size, 0);
+    r = src_data_ctx.sparse_read(oid, m, bl, block_size, 0);
     if (r < 0 && r == -ENOENT)
       r = 0;
     if (r < 0)
@@ -945,7 +956,7 @@ int copy(IoCtx& src_io_ctx, const char *srcname, IoCtx& dest_io_ctx, const char 
 	return -EIO;
       }
       bl.copy(extent_ofs, extent_len, wrbl);
-      r = dest_io_ctx.write(dest_oid, wrbl, extent_len, extent_ofs);
+      r = dest_data_ctx.write(dest_oid, wrbl, extent_len, extent_ofs);
       if (r < 0)
 	goto done;
     }
@@ -968,11 +979,11 @@ int snap_set(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
-  r = ictx->io_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
+  r = ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
   if (r < 0)
     return r;
 
-  ictx->io_ctx.snap_set_read(ictx->snapid);
+  ictx->data_ctx.snap_set_read(ictx->snapid);
 
   return 0;
 }
@@ -990,25 +1001,25 @@ int open_image(IoCtx& io_ctx, ImageCtx *ictx, const char *name, const char *snap
   string md_oid = name;
   md_oid += RBD_SUFFIX;
 
-  r = ictx->io_ctx.watch(md_oid, 0, &(wctx->cookie), wctx);
+  r = ictx->md_ctx.watch(md_oid, 0, &(wctx->cookie), wctx);
   return r;
 }
-
+// looks like too many puts are being done
 void close_image(ImageCtx *ictx)
 {
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
   ictx->wctx->invalidate();
-  ictx->io_ctx.unwatch(md_oid, ictx->wctx->cookie);
+  ictx->md_ctx.unwatch(md_oid, ictx->wctx->cookie);
   delete ictx->wctx;
   delete ictx;
   ictx = NULL;
 }
 
 int read_iterate(ImageCtx *ictx, off_t off, size_t len,
-                                    int (*cb)(off_t, size_t, const char *, void *),
-                                    void *arg)
+		 int (*cb)(off_t, size_t, const char *, void *),
+		 void *arg)
 {
   int r = ictx_check(ictx);
   if (r < 0)
@@ -1030,7 +1041,7 @@ int read_iterate(ImageCtx *ictx, off_t off, size_t len,
     map<off_t, size_t> m;
     map<off_t, size_t>::iterator iter;
     off_t bl_ofs = 0, buf_bl_pos = 0;
-    r = ictx->io_ctx.sparse_read(oid, m, bl, read_len, block_ofs);
+    r = ictx->data_ctx.sparse_read(oid, m, bl, read_len, block_ofs);
     if (r < 0 && r == -ENOENT)
       r = 0;
     if (r < 0) {
@@ -1112,7 +1123,7 @@ int write(ImageCtx *ictx, off_t off, size_t len, const char *buf)
     uint64_t block_ofs = get_block_ofs(&ictx->header, off + total_write);
     uint64_t write_len = min(block_size - block_ofs, left);
     bl.append(buf + total_write, write_len);
-    r = ictx->io_ctx.write(oid, bl, write_len, block_ofs);
+    r = ictx->data_ctx.write(oid, bl, write_len, block_ofs);
     if (r < 0)
       return r;
     if ((uint64_t)r != write_len)
@@ -1226,7 +1237,7 @@ int aio_write(ImageCtx *ictx, off_t off, size_t len, const char *buf,
     c->add_block_completion(block_completion);
     librados::AioCompletion *rados_completion =
       Rados::aio_create_completion(block_completion, NULL, rados_cb);
-    r = ictx->io_ctx.aio_write(oid, rados_completion, bl, write_len, block_ofs);
+    r = ictx->data_ctx.aio_write(oid, rados_completion, bl, write_len, block_ofs);
     if (r < 0)
       goto done;
     total_write += write_len;
@@ -1274,9 +1285,9 @@ int aio_read(ImageCtx *ictx, off_t off, size_t len,
 
     librados::AioCompletion *rados_completion =
       Rados::aio_create_completion(block_completion, rados_aio_sparse_read_cb, rados_cb);
-    r = ictx->io_ctx.aio_sparse_read(oid, rados_completion,
-			      &block_completion->m, &block_completion->data_bl,
-			      read_len, block_ofs);
+    r = ictx->data_ctx.aio_sparse_read(oid, rados_completion,
+				       &block_completion->m, &block_completion->data_bl,
+				       read_len, block_ofs);
     if (r < 0 && r == -ENOENT)
       r = 0;
     if (r < 0) {
@@ -1393,8 +1404,10 @@ Image::Image() : ctx(NULL)
 
 Image::~Image()
 {
-  ImageCtx *ictx = (ImageCtx *)ctx;
-  close_image(ictx);
+  if (ctx) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    close_image(ictx);
+  }
 }
 
 int Image::resize(size_t size)

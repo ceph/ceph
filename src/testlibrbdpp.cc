@@ -276,6 +276,5 @@ int main(int argc, const char **argv)
   test_delete(io_ctx, TEST_IMAGE "1");
   test_ls(io_ctx, 0);
   delete rbd;
-  rados.shutdown();
   return 0;
 }
