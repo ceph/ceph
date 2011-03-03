@@ -39,7 +39,7 @@ AC_ARG_WITH([profiler],
             [AS_HELP_STRING([--with-profiler], [build extra profiler binaries])],
 	    [with_profiler=yes],
             [with_profiler=no])
-AS_IF([test "x$with_profiler" != xyes],
+AS_IF([test "x$with_profiler" = xyes],
 	    [AC_CHECK_LIB([profiler], [ProfilerFlush], [],
 	        	  [AC_MSG_FAILURE([--with-profiler was given but libprofiler (libgoogle-perftools-dev on debian) not found])])],
 	    [])
