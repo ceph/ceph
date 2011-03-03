@@ -2502,8 +2502,6 @@ static void rados_set_conf_defaults(md_config_t *conf)
   conf->log_to_syslog = false;
 
   conf->log_per_instance = false;
-
-  conf->log_to_file = false;
 }
 
 extern "C" int rados_create(rados_t *pcluster, const char * const id)

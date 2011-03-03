@@ -22,7 +22,7 @@
 ssize_t safe_read(int fd, void *buf, size_t count)
 {
 	int r;
-	int cnt = 0;
+	size_t cnt = 0;
 
 	while (cnt < count) {
 		r = read(fd, buf, count - cnt);
@@ -46,7 +46,7 @@ ssize_t safe_read_exact(int fd, void *buf, size_t count)
 	int ret = safe_read(fd, buf, count);
 	if (ret < 0)
 		return ret;
-	if (ret != count)
+	if ((size_t)ret != count)
 		return -EDOM;
 	return 0;
 }
@@ -71,7 +71,7 @@ ssize_t safe_write(int fd, const void *buf, size_t count)
 ssize_t safe_pread(int fd, void *buf, size_t count, off_t offset)
 {
 	int r;
-	int cnt = 0;
+	size_t cnt = 0;
 	char *b = (char*)buf;
 
 	while (cnt < count) {
@@ -96,7 +96,7 @@ ssize_t safe_pread_exact(int fd, void *buf, size_t count, off_t offset)
 	int ret = safe_pread(fd, buf, count, offset);
 	if (ret < 0)
 		return ret;
-	if (ret != count)
+	if ((size_t)ret != count)
 		return -EDOM;
 	return 0;
 }

@@ -55,8 +55,6 @@ void set_foreground_logging()
   g_conf.log_to_syslog = false;
 
   g_conf.log_per_instance = false;
-
-  g_conf.log_to_file = false;
 }
 
 static void keyring_init(const char *filesearch)
@@ -111,6 +109,12 @@ static void keyring_init(const char *filesearch)
   }
 }
 
+static void set_cv(const char ** key, const char * const val)
+{
+  free((void*)*key);
+  *key = strdup(val);
+}
+
 void common_init(std::vector<const char*>& args, const char *module_type, int flags)
 {
   bool force_fg_logging = false;
@@ -128,7 +132,12 @@ void common_init(std::vector<const char*>& args, const char *module_type, int fl
          << "and is only suitable for **" << TEXT_NORMAL << std::endl;
     cout << TEXT_YELLOW <<  " **          testing and review.  Do not trust it "
          << "with important data.       **" << TEXT_NORMAL << std::endl;
+
+    // some daemon-specific defaults
     g_conf.daemonize = true;
+    g_conf.log_to_stderr = LOG_TO_STDERR_SOME;
+    set_cv(&g_conf.log_dir, "/var/log/ceph");
+    set_cv(&g_conf.pid_file, "/var/run/ceph/$type.$id.pid");
   }
   else {
     g_conf.pid_file = 0;
@@ -145,14 +154,6 @@ void common_init(std::vector<const char*>& args, const char *module_type, int fl
   if (force_fg_logging)
     set_foreground_logging();
 
-  {
-    // In the long term, it would be best to ensure that we read ceph.conf
-    // before initializing dout(). For now, just force a reopen here with the
-    // configuration we have just read.
-    DoutLocker _dout_locker;
-    _dout_open_log();
-  }
-
   if (g_conf.daemonize)
     cout << ceph_version_to_string() << std::endl;
 
@@ -166,6 +167,15 @@ void common_init(std::vector<const char*>& args, const char *module_type, int fl
 #endif
 
   parse_config_options(args);
+
+  {
+    // In the long term, it would be best to ensure that we read ceph.conf
+    // before initializing dout(). For now, just force a reopen here with the
+    // configuration we have just read.
+    DoutLocker _dout_locker;
+    _dout_open_log();
+  }
+
   install_standard_sighandlers();
 
 #ifdef HAVE_LIBTCMALLOC

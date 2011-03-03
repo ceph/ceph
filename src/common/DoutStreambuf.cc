@@ -278,7 +278,7 @@ void DoutStreambuf<charT, traits>::read_global_config()
     }
   }
 
-  if (g_conf.log_to_file) {
+  if ((!empty(g_conf.log_file)) || (!empty(g_conf.log_dir))) {
     if (_read_ofile_config() == 0) {
       flags |= DOUTSB_FLAG_OFILE;
     }
@@ -376,7 +376,6 @@ std::string DoutStreambuf<charT, traits>::config_to_str() const
   ostringstream oss;
   oss << "g_conf.log_to_stderr = " << g_conf.log_to_stderr << "\n";
   oss << "g_conf.log_to_syslog = " << g_conf.log_to_syslog << "\n";
-  oss << "g_conf.log_to_file = " << g_conf.log_to_file << "\n";
   oss << "g_conf.log_file = '" << cpp_str(g_conf.log_file) << "'\n";
   oss << "g_conf.log_dir = '" << cpp_str(g_conf.log_dir) << "'\n";
   oss << "g_conf.g_conf.log_per_instance = '"

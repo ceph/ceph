@@ -468,12 +468,17 @@ private:
 
   // osd map cache (past osd maps)
   map<epoch_t,OSDMap*> map_cache;
+  map<epoch_t,bufferlist> map_inc_bl;
+  map<epoch_t,bufferlist> map_bl;
   Mutex map_cache_lock;
   epoch_t map_cache_keep_from;
 
   OSDMap* get_map(epoch_t e);
   void add_map(OSDMap *o);
+  void add_map_bl(epoch_t e, bufferlist& bl);
+  void add_map_inc_bl(epoch_t e, bufferlist& bl);
   void trim_map_cache(epoch_t oldest);
+  void trim_map_bl_cache(epoch_t oldest);
   void clear_map_cache();
   void keep_map_from(epoch_t from);
 
@@ -669,6 +674,7 @@ protected:
 			PG::Info &info, 
 			PG::Log &log, 
 			PG::Missing *missing,
+			map< int, map<pg_t,PG::Query> >& query_map,
 			map<int, MOSDPGInfo*>* info_map,
 			int& created);
 

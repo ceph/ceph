@@ -38,7 +38,6 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   DEFINE_CONF_VARS(usage);
-  set_foreground_logging();
 
   const char *me = argv[0];
 

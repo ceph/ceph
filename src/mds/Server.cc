@@ -4916,8 +4916,10 @@ void Server::_rename_prepare(MDRequest *mdr,
   // dest
   if (srcdnl->is_remote()) {
     if (!linkmerge) {
-      if (destdn->is_auth())
+      if (destdn->is_auth()) {
 	mdr->more()->pvmap[destdn] = destdn->pre_dirty();
+        destdn->push_projected_linkage(srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
+      }
       if (srcdnl->get_inode()->is_auth()) {
 	pi = srcdnl->get_inode()->project_inode();
 	pi->version = srcdnl->get_inode()->pre_dirty();

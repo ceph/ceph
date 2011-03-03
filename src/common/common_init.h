@@ -13,6 +13,5 @@ enum {
 void common_init(std::vector<const char*>& args,
 		 const char *module_type,
                  int flags);
-void set_foreground_logging();
 
 #endif
