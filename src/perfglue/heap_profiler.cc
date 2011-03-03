@@ -79,11 +79,15 @@ void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
                                        LogClient &clog)
 {
   if (cmd.size() == 2 && cmd[1] == "dump") {
-    char *heap_stats = new char[1024];
-    ceph_heap_profiler_stats(heap_stats, 1024);
-    clog.info() << g_conf.name << "dumping heap profile now.\n"
-        << heap_stats << std::endl;
-    ceph_heap_profiler_dump("admin request");
+    if (!ceph_heap_profiler_running())
+      clog.info() << "heap profiler not running; can't dump!\n";
+    else {
+      char *heap_stats = new char[1024];
+      ceph_heap_profiler_stats(heap_stats, 1024);
+      clog.info() << g_conf.name << "dumping heap profile now.\n"
+          << heap_stats << std::endl;
+      ceph_heap_profiler_dump("admin request");
+    }
   } else if (cmd.size() == 2 && cmd[1] == "export_config") {
     char val[sizeof(int)*8+1];
     snprintf(val, sizeof(val), "%i", g_conf.profiler_allocation_interval);
