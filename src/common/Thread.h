@@ -66,19 +66,21 @@ class Thread {
     }
 
     int r;
+
+    // The child thread will inherit our signal mask.  Set our signal mask to
+    // the set of signals we want to block.  (It's ok to block signals more
+    // signals than usual for a little while-- they will just be delivered to
+    // another thread or delieverd to this thread later.)
+    sigset_t old_sigset;
     if (g_code_env == CODE_ENVIRONMENT_LIBRARY) {
-      // The child thread will inherit our signal mask.  We want it to block all
-      // signals, so set our mask to that.  (It's ok to block signals for a
-      // little while-- they will just be delivered to another thread or
-      // delieverd to this thread later.)
-      sigset_t old_sigset;
-      block_all_signals(&old_sigset);
-      r = pthread_create(&thread_id, thread_attr, _entry_func, (void*)this);
-      restore_sigset(&old_sigset);
+      block_signals(&old_sigset, NULL);
     }
     else {
-      r = pthread_create(&thread_id, thread_attr, _entry_func, (void*)this);
+      int to_block[] = { SIGPIPE , 0 };
+      block_signals(&old_sigset, to_block);
     }
+    r = pthread_create(&thread_id, thread_attr, _entry_func, (void*)this);
+    restore_sigset(&old_sigset);
 
     if (thread_attr) 
       free(thread_attr);

@@ -138,6 +138,10 @@ void common_init(std::vector<const char*>& args, const char *module_type, int fl
     g_conf.log_to_stderr = LOG_TO_STDERR_SOME;
     set_cv(&g_conf.log_dir, "/var/log/ceph");
     set_cv(&g_conf.pid_file, "/var/run/ceph/$type.$id.pid");
+
+    // block SIGPIPE
+    int siglist[] = { SIGPIPE, 0 };
+    block_signals(NULL, siglist);
   }
   else {
     g_conf.pid_file = 0;
