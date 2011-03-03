@@ -2042,7 +2042,7 @@ int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len, bool 
     if (len == 0) break;
     
     // hrmph.  trim r bytes off the front of our message.
-    dout(20) << "do_sendmail short write did " << r << ", still have " << len << dendl;
+    dout(20) << "do_sendmsg short write did " << r << ", still have " << len << dendl;
     while (r > 0) {
       if (msg->msg_iov[0].iov_len <= (size_t)r) {
 	// lose this whole item
