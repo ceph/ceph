@@ -82,6 +82,7 @@
 #include "common/LogClient.h"
 #include "common/safe_io.h"
 #include "perfglue/cpu_profiler.h"
+#include "perfglue/heap_profiler.h"
 
 #include "common/ClassHandler.h"
 
@@ -2077,37 +2078,12 @@ void OSD::handle_command(MMonCommand *m)
     logger_reset_all();
   } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reopen") {
     logger_reopen_all();
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "heapdump") {
-    if (g_conf.tcmalloc_have) {
-      if (!g_conf.profiler_running()) {
-	clog.info() << "can't dump heap: profiler not running\n";
-      } else {
-        clog.info() << g_conf.name << "dumping heap profile now\n";
-        g_conf.profiler_dump("admin request");
-      }
-    } else {
-      clog.info() << g_conf.name << " does not have tcmalloc, "
-	"can't use profiler\n";
-    }
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "enable_profiler_options") {
-    char val[sizeof(int)*8+1];
-    snprintf(val, sizeof(val), "%i", g_conf.profiler_allocation_interval);
-    setenv("HEAP_PROFILE_ALLOCATION_INTERVAL", val, g_conf.profiler_allocation_interval);
-    snprintf(val, sizeof(val), "%i", g_conf.profiler_highwater_interval);
-    setenv("HEAP_PROFILE_INUSE_INTERVAL", val, g_conf.profiler_highwater_interval);
-    clog.info() << g_conf.name << " set heap variables from current config";
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "start_profiler") {
-    char location[PATH_MAX];
-    snprintf(location, sizeof(location),
-	     "%s/%s", g_conf.log_dir, g_conf.name);
-    g_conf.profiler_start(location);
-    clog.info() << g_conf.name << " started profiler with output "
-      << location << "\n";
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "stop_profiler") {
-    g_conf.profiler_stop();
-    clog.info() << g_conf.name << " stopped profiler\n";
-  }
-  else if (m->cmd.size() > 1 && m->cmd[0] == "debug") {
+  } else if (m->cmd[0] == "heap") {
+    if (ceph_using_tcmalloc())
+      ceph_heap_profiler_handle_command(m->cmd, clog);
+    else
+      clog.info() << "could not issue heap profiler command -- not using tcmalloc!\n";
+  } else if (m->cmd.size() > 1 && m->cmd[0] == "debug") {
     if (m->cmd.size() == 3 && m->cmd[1] == "dump_missing") {
       const string &file_name(m->cmd[2]);
       std::ofstream fout(file_name.c_str());

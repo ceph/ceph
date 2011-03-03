@@ -129,12 +129,17 @@ if WITH_TCMALLOC
 tcmalloc_safety_flags = -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free
 cosd_LDADD += -ltcmalloc
 cosd_CXXFLAGS += ${tcmalloc_safety_flags}
+cosd_SOURCES += perfglue/heap_profiler.cc
 cmds_LDADD += -ltcmalloc
 cmds_CXXFLAGS += ${tcmalloc_safety_flags}
+cmds_SOURCES += perfglue/heap_profiler.cc
 if WITH_FUSE
 cfuse_LDADD += -ltcmalloc
 cfuse_CXXFLAGS += ${tcmalloc_safety_flags}
 endif #WITH_FUSE
+else
+cosd_SOURCES += perfglue/disabled_heap_profiler.cc
+cmds_SOURCES += perfglue/disabled_heap_profiler.cc
 endif # WITH_TCMALLOC
 
 # debug targets?
@@ -561,6 +566,7 @@ else
 libcommon_files += perfglue/disabled_stubs.cc
 endif
 
+
 libcrush_a_SOURCES = \
 	crush/builder.c \
 	crush/mapper.c \
@@ -974,6 +980,7 @@ noinst_HEADERS = \
         osdc/ObjectCacher.h\
         osdc/Objecter.h\
         perfglue/cpu_profiler.h\
+        perfglue/heap_profiler.h\
 	rgw/rgw_access.h\
 	rgw/rgw_acl.h\
 	rgw/rgw_fs.h\

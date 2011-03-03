@@ -93,6 +93,13 @@ WRITE_CLASS_ENCODER(default_file_layout);
 
 // cached inode wrapper
 class CInode : public MDSCacheObject {
+  /*
+   * This class uses a boost::pool to handle allocation. This is *not*
+   * thread-safe, so don't do allocations from multiple threads!
+   *
+   * Alternatively, switch the pool to use a boost::singleton_pool.
+   */
+
 private:
   static boost::pool<> pool;
 public:
