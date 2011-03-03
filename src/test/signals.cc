@@ -26,7 +26,7 @@ TEST(SignalApi, SimpleInstallAndTest)
 
   // blocked signal should not be delievered until we call sigsuspend()
   sigset_t old_sigset;
-  block_all_signals(&old_sigset);
+  block_signals(&old_sigset, NULL);
 
   int ret = kill(getpid(), SIGUSR1);
   ASSERT_EQ(ret, 0);
