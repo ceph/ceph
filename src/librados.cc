@@ -83,10 +83,24 @@ struct librados::IoCtxImpl {
   uint32_t notify_timeout;
   object_locator_t oloc;
 
+  IoCtxImpl() {}
   IoCtxImpl(RadosClient *c, int pid, const char *pool_name_, snapid_t s = CEPH_NOSNAP) :
     ref_cnt(0), client(c), poolid(pid),
     pool_name(pool_name_), snap_seq(s), assert_ver(0),
     notify_timeout(g_conf.client_notify_timeout), oloc(pid) {}
+
+  void dup(const IoCtxImpl& rhs) {
+    // Copy everything except the ref count
+    client = rhs.client;
+    poolid = rhs.poolid;
+    pool_name = rhs.pool_name;
+    snap_seq = rhs.snap_seq;
+    snapc = rhs.snapc;
+    assert_ver = rhs.assert_ver;
+    last_objver = rhs.last_objver;
+    notify_timeout = rhs.notify_timeout;
+    oloc = rhs.oloc;
+  }
 
   void set_snap_read(snapid_t s) {
     if (!s)
@@ -2016,6 +2030,16 @@ librados::IoCtx::
   if (io_ctx_impl)
     io_ctx_impl->put();
   io_ctx_impl = 0;
+}
+
+void librados::IoCtx::
+dup(const IoCtx& rhs)
+{
+  if (io_ctx_impl)
+    io_ctx_impl->put();
+  io_ctx_impl = new IoCtxImpl();
+  io_ctx_impl->get();
+  io_ctx_impl->dup(*rhs.io_ctx_impl);
 }
 
 int librados::IoCtx::

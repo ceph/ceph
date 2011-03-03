@@ -108,6 +108,9 @@ namespace librados
     // Close our pool handle
     ~IoCtx();
 
+    // deep copy
+    void dup(const IoCtx& rhs);
+
     // set pool auid
     int set_auid(uint64_t auid_);
 
