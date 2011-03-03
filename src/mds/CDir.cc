@@ -1776,7 +1776,7 @@ void CDir::_commit(version_t want)
 
   ObjectOperation m;
   map_t::iterator committed_dn;
-  unsigned max_write_size = -1;
+  unsigned max_write_size = cache->max_dir_commit_size;
 
   // update parent pointer while we're here.
   //  NOTE: the pointer is ONLY required to be valid for the first frag.  we put the xattr
