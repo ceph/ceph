@@ -543,8 +543,7 @@ int snap_create(ImageCtx *ictx, const char *snap_name)
   if (r < 0)
     return r;
 
-  // probably a bug: what's so special about snap 0? (as opposed to CEPH_NOSNAP, etc?)
-  ictx->io_ctx.snap_set_read(0);
+  ictx->io_ctx.snap_set_read(CEPH_NOSNAP);
   r = add_snap(ictx, snap_name);
   notify_change(ictx->io_ctx, md_oid, NULL, ictx);
   return r;
@@ -799,7 +798,7 @@ int rm_snap(IoCtx& io_ctx, string& md_oid, const char *snap_name)
 
   int r = io_ctx.exec(md_oid, "rbd", "snap_remove", bl, bl2);
   if (r < 0) {
-    derr << "rbd.snap_remove execution failed failed: " << strerror(-r) << dendl;
+    derr << "rbd.snap_remove execution failed: " << strerror(-r) << dendl;
     return r;
   }
 
