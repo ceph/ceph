@@ -1607,6 +1607,11 @@ CDir::map_t::iterator CDir::_commit_full(ObjectOperation& m, const set<snapid_t>
  * last dentry as encoded.)
  *
  * If we're passed a last_committed_dn, skip to the next dentry after that.
+ * Also, don't encode the header again -- we don't want to update it
+ * on-disk until all the updates have made it through, so keep the header
+ * in only the first changeset -- our caller is responsible for making sure
+ * that changeset doesn't go through until after all the others do, if it's
+ * necessary.
  */
 CDir::map_t::iterator CDir::_commit_partial(ObjectOperation& m,
                                   const set<snapid_t> *snaps,
@@ -1617,10 +1622,12 @@ CDir::map_t::iterator CDir::_commit_partial(ObjectOperation& m,
   bufferlist finalbl;
 
   // header
-  bufferlist header;
-  ::encode(fnode, header);
-  finalbl.append(CEPH_OSD_TMAP_HDR);
-  ::encode(header, finalbl);
+  if (last_committed_dn == map_t::iterator()) {
+    bufferlist header;
+    ::encode(fnode, header);
+    finalbl.append(CEPH_OSD_TMAP_HDR);
+    ::encode(header, finalbl);
+  }
 
   // updated dentries
   map_t::iterator p = items.begin();
@@ -1805,14 +1812,24 @@ void CDir::_commit(version_t want)
   else { // send in a different Context
     C_Gather *gather = new C_Gather(new C_Dir_Committed(this, get_version(),
                                          inode->inode.last_renamed_version));
-    cache->mds->objecter->mutate(oid, oloc, m, snapc, g_clock.now(), 0, NULL,
-                                gather->new_sub());
     while (committed_dn != items.end()) {
-      m = ObjectOperation();
-      committed_dn = _commit_partial(m, snaps, max_write_size, committed_dn);
-      cache->mds->objecter->mutate(oid, oloc, m, snapc, g_clock.now(), 0, NULL,
+      ObjectOperation n = ObjectOperation();
+      committed_dn = _commit_partial(n, snaps, max_write_size, committed_dn);
+      cache->mds->objecter->mutate(oid, oloc, n, snapc, g_clock.now(), 0, NULL,
                                   gather->new_sub());
     }
+    /*
+     * save the original object for last -- it contains the new header,
+     * which will be committed on-disk. If we were to send it off before
+     * the other commits, but die before sending them all, we'd think
+     * that the on-disk state was fully committed even though it wasn't!
+     * However, since the messages are strictly ordered between the MDS and
+     * the OSD, and since messages to a given PG are strictly ordered, if
+     * we simply send the message containing the header off last, we cannot
+     * get our header into an incorrect state.
+     */
+    cache->mds->objecter->mutate(oid, oloc, m, snapc, g_clock.now(), 0, NULL,
+                                gather->new_sub());
   }
 }
 
