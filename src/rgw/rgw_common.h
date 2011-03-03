@@ -262,6 +262,40 @@ struct RGWObjEnt {
 };
 WRITE_CLASS_ENCODER(RGWObjEnt)
 
+/** Store basic data on an object */
+struct RGWBucketEnt {
+  std::string name;
+  size_t size;
+  time_t mtime;
+  char etag[CryptoPP::Weak::MD5::DIGESTSIZE * 2 + 1];
+  uint64_t count;
+
+  void encode(bufferlist& bl) const {
+    __u8 struct_v = 2;
+    ::encode(struct_v, bl);
+    uint64_t s = size;
+    __u32 mt = mtime;
+    ::encode(name, bl);
+    ::encode(s, bl);
+    ::encode(mt, bl);
+    ::encode(count, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 struct_v;
+    ::decode(struct_v, bl);
+    __u32 mt;
+    uint64_t s;
+    ::decode(name, bl);
+    ::decode(s, bl);
+    ::decode(mt, bl);
+    size = s;
+    mtime = mt;
+    if (struct_v >= 2)
+      ::decode(count, bl);
+  }
+};
+WRITE_CLASS_ENCODER(RGWBucketEnt)
+
 static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
 {
   int i;

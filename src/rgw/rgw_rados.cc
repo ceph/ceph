@@ -692,4 +692,35 @@ int RGWRados::tmap_del(std::string& bucket, std::string& obj, std::string& key)
   r = io_ctx.tmap_update(obj, cmdbl);
   return r;
 }
+int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
+{
+  int count = 0;
+
+  map<string, RGWBucketEnt>::iterator iter;
+  list<string> buckets_list;
+  for (iter = m.begin(); iter != m.end(); ++iter) {
+    string bucket_name = iter->first;
+    buckets_list.push_back(bucket_name);
+  }
+  map<std::string,librados::pool_stat_t> stats;
+  int r = rados->get_pool_stats(buckets_list, stats);
+  if (r < 0)
+    return r;
+
+  map<string,pool_stat_t>::iterator stats_iter = stats.begin();
+
+  for (iter = m.begin(); iter != m.end(); ++iter) {
+    string bucket_name = iter->first;
+    if (stats_iter->first.compare(bucket_name) == 0) {
+      RGWBucketEnt& ent = iter->second;
+      pool_stat_t stat = stats_iter->second;
+      ent.count = stat.num_objects;
+      ent.size = stat.num_bytes;
+      stats_iter++;
+      count++;
+    }
+  }
+
+  return count;
+}
 

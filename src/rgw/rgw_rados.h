@@ -90,8 +90,9 @@ public:
   virtual int obj_stat(std::string& bucket, std::string& obj, size_t *psize, time_t *pmtime);
 
   virtual bool supports_tmap() { return true; }
-  int tmap_set(std::string& bucket, std::string& obj, std::string& key, bufferlist& bl);
-  int tmap_del(std::string& bucket, std::string& obj, std::string& key);
+  virtual int tmap_set(std::string& bucket, std::string& obj, std::string& key, bufferlist& bl);
+  virtual int tmap_del(std::string& bucket, std::string& obj, std::string& key);
+  virtual int update_containers_stats(map<string, RGWBucketEnt>& m);
 };
 
 #endif

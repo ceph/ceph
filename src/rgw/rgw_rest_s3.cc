@@ -22,7 +22,7 @@ void list_all_buckets_end(struct req_state *s)
   s->formatter->close_section("ListAllMyBucketsResult");
 }
 
-void dump_bucket(struct req_state *s, RGWObjEnt& obj)
+void dump_bucket(struct req_state *s, RGWBucketEnt& obj)
 {
   s->formatter->open_obj_section("Bucket");
   s->formatter->dump_value_str("Name", obj.name.c_str());
@@ -92,12 +92,12 @@ void RGWListBuckets_REST_S3::send_response()
   list_all_buckets_start(s);
   dump_owner(s, s->user.user_id, s->user.display_name);
 
-  map<string, RGWObjEnt>& m = buckets.get_buckets();
-  map<string, RGWObjEnt>::iterator iter;
+  map<string, RGWBucketEnt>& m = buckets.get_buckets();
+  map<string, RGWBucketEnt>::iterator iter;
 
   s->formatter->open_array_section("Buckets");
   for (iter = m.begin(); iter != m.end(); ++iter) {
-    RGWObjEnt obj = iter->second;
+    RGWBucketEnt obj = iter->second;
     dump_bucket(s, obj);
   }
   s->formatter->close_section("Buckets");

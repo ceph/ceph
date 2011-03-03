@@ -183,7 +183,7 @@ static void get_buckets_obj(string& user_id, string& buckets_obj_id)
  * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
  * Returns: 0 on success, -ERR# on failure.
  */
-int rgw_read_buckets_attr(string user_id, RGWUserBuckets& buckets)
+int rgw_read_buckets_attr(string user_id, RGWUserBuckets& buckets, bool need_stats)
 {
   bufferlist bl;
   int ret;
@@ -204,7 +204,7 @@ int rgw_read_buckets_attr(string user_id, RGWUserBuckets& buckets)
       if (ret < 0)
         return ret;
 
-      if (ret != len)
+      if ((size_t)ret != len)
         break;
 
       len *= 2;
@@ -217,7 +217,7 @@ int rgw_read_buckets_attr(string user_id, RGWUserBuckets& buckets)
     ::decode(m, p);
     for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); q++) {
       bufferlist::iterator iter = q->second.begin();
-      RGWObjEnt bucket;
+      RGWBucketEnt bucket;
       ::decode(bucket, iter);
       buckets.add(bucket);
     }
@@ -236,6 +236,15 @@ int rgw_read_buckets_attr(string user_id, RGWUserBuckets& buckets)
     buckets.decode(iter);
   }
 
+  list<string> buckets_list;
+
+  if (need_stats) {
+   map<string, RGWBucketEnt>& m = buckets.get_buckets();
+   int r = rgwstore->update_containers_stats(m);
+   if (r < 0)
+     RGW_LOG(0) << "could not get stats for buckets" << std::endl;
+
+  }
   return 0;
 }
 
@@ -262,7 +271,7 @@ int rgw_add_bucket(string user_id, string bucket_name)
   if (rgwstore->supports_tmap()) {
     bufferlist bl;
 
-    RGWObjEnt new_bucket;
+    RGWBucketEnt new_bucket;
     new_bucket.name = bucket_name;
     new_bucket.size = 0;
     time(&new_bucket.mtime);
@@ -276,10 +285,10 @@ int rgw_add_bucket(string user_id, string bucket_name)
       RGW_LOG(0) << "error adding bucket to directory: " << strerror(-ret)<< std::endl;
     }
   } else {
-     RGWUserBuckets buckets;
+    RGWUserBuckets buckets;
 
-    ret = rgw_read_buckets_attr(user_id, buckets);
-    RGWObjEnt new_bucket;
+    ret = rgw_read_buckets_attr(user_id, buckets, false);
+    RGWBucketEnt new_bucket;
 
     switch (ret) {
     case 0:
@@ -317,7 +326,7 @@ int rgw_remove_bucket(string user_id, string bucket_name)
   } else {
     RGWUserBuckets buckets;
 
-    ret = rgw_read_buckets_attr(user_id, buckets);
+    ret = rgw_read_buckets_attr(user_id, buckets, false);
 
     if (ret == 0 || ret == -ENOENT) {
       buckets.remove(bucket_name);
@@ -336,9 +345,9 @@ int rgw_remove_bucket(string user_id, string bucket_name)
  */
 int rgw_delete_user(RGWUserInfo& info) {
   RGWUserBuckets user_buckets;
-  rgw_read_buckets_attr(info.user_id, user_buckets);
-  map<string, RGWObjEnt>& buckets = user_buckets.get_buckets();
-  for (map<string, RGWObjEnt>::iterator i = buckets.begin();
+  rgw_read_buckets_attr(info.user_id, user_buckets, false);
+  map<string, RGWBucketEnt>& buckets = user_buckets.get_buckets();
+  for (map<string, RGWBucketEnt>::iterator i = buckets.begin();
        i != buckets.end();
        ++i) {
     string bucket_name = i->first;

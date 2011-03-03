@@ -12,8 +12,8 @@ void RGWListBuckets_REST_OS::send_response()
 
   // dump_owner(s, s->user.user_id, s->user.display_name);
 
-  map<string, RGWObjEnt>& m = buckets.get_buckets();
-  map<string, RGWObjEnt>::iterator iter;
+  map<string, RGWBucketEnt>& m = buckets.get_buckets();
+  map<string, RGWBucketEnt>::iterator iter;
 
   string marker = s->args.get("marker");
   if (marker.empty())
@@ -27,10 +27,11 @@ void RGWListBuckets_REST_OS::send_response()
     limit = atoi(limit_str.c_str());
 
   for (int i = 0; i < limit && iter != m.end(); ++iter, ++i) {
-    RGWObjEnt obj = iter->second;
+    RGWBucketEnt obj = iter->second;
     s->formatter->open_obj_section("container");
     s->formatter->dump_value_str("name", obj.name.c_str());
-    /* FIXME: missing count, bytes */
+    s->formatter->dump_value_int("count", "%lld", obj.count);
+    s->formatter->dump_value_int("bytes", "%lld", obj.size);
     s->formatter->close_section("container");
   }
   s->formatter->close_section("account");

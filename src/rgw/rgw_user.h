@@ -62,7 +62,7 @@ extern int rgw_delete_user(RGWUserInfo& user);
  */
 class RGWUserBuckets
 {
-  map<string, RGWObjEnt> buckets;
+  map<string, RGWBucketEnt> buckets;
 
 public:
   RGWUserBuckets() {}
@@ -76,7 +76,7 @@ public:
    * Check if the user owns a bucket by the given name.
    */
   bool owns(string& name) {
-    map<string, RGWObjEnt>::iterator iter;
+    map<string, RGWBucketEnt>::iterator iter;
     iter = buckets.find(name);
     return (iter != buckets.end());
   }
@@ -84,7 +84,7 @@ public:
   /**
    * Add a (created) bucket to the user's bucket list.
    */
-  void add(RGWObjEnt& bucket) {
+  void add(RGWBucketEnt& bucket) {
     buckets[bucket.name] = bucket;
   }
 
@@ -92,7 +92,7 @@ public:
    * Remove a bucket from the user's list by name.
    */
   void remove(string& name) {
-    map<string, RGWObjEnt>::iterator iter;
+    map<string, RGWBucketEnt>::iterator iter;
     iter = buckets.find(name);
     if (iter != buckets.end()) {
       buckets.erase(iter);
@@ -102,7 +102,7 @@ public:
   /**
    * Get the user's buckets as a map.
    */
-  map<string, RGWObjEnt>& get_buckets() { return buckets; }
+  map<string, RGWBucketEnt>& get_buckets() { return buckets; }
 
   /**
    * Cleanup data structure
@@ -115,7 +115,7 @@ WRITE_CLASS_ENCODER(RGWUserBuckets)
  * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
  * Returns: 0 on success, -ERR# on failure.
  */
-extern int rgw_read_buckets_attr(string user_id, RGWUserBuckets& buckets);
+extern int rgw_read_buckets_attr(string user_id, RGWUserBuckets& buckets, bool need_stats);
 
 /**
  * Store the set of buckets associated with a user.

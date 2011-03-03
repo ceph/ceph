@@ -247,15 +247,15 @@ int main(int argc, char **argv)
 
     if (user_id) {
       RGWUserBuckets buckets;
-      if (rgw_read_buckets_attr(user_id, buckets) < 0) {
+      if (rgw_read_buckets_attr(user_id, buckets, false) < 0) {
         cout << "could not get buckets for uid " << user_id << std::endl;
       } else {
         cout << "listing buckets for uid " << user_id << std::endl;
-        map<string, RGWObjEnt>& m = buckets.get_buckets();
-        map<string, RGWObjEnt>::iterator iter;
+        map<string, RGWBucketEnt>& m = buckets.get_buckets();
+        map<string, RGWBucketEnt>::iterator iter;
 
         for (iter = m.begin(); iter != m.end(); ++iter) {
-          RGWObjEnt obj = iter->second;
+          RGWBucketEnt obj = iter->second;
           cout << obj.name << std::endl;
         }
       }
