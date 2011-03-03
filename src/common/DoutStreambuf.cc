@@ -389,6 +389,21 @@ std::string DoutStreambuf<charT, traits>::config_to_str() const
   return oss.str();
 }
 
+template <typename charT, typename traits>
+void DoutStreambuf<charT, traits>::
+dout_emergency_to_file_and_syslog(const char * const str) const
+{
+  int len = strlen(str);
+  if (ofd >= 0) {
+    if (safe_write(ofd, str, len)) {
+      ; // ignore error code
+    }
+  }
+  if (flags & DOUTSB_FLAG_SYSLOG) {
+    syslog(LOG_USER | LOG_CRIT, "%s", str);
+  }
+}
+
 // This is called to flush the buffer.
 // This is called when we're done with the file stream (or when .flush() is called).
 template <typename charT, typename traits>
@@ -596,21 +611,6 @@ int DoutStreambuf<charT, traits>::_rotate_files(const std::string &base)
   return 0;
 }
 
-template <typename charT, typename traits>
-void DoutStreambuf<charT, traits>::
-dout_emergency_impl(const char * const str) const
-{
-  int len = strlen(str);
-  if (ofd >= 0) {
-    if (safe_write(ofd, str, len)) {
-      ; // ignore error code
-    }
-  }
-  if (flags & DOUTSB_FLAG_SYSLOG) {
-    syslog(LOG_USER | LOG_CRIT, "%s", str);
-  }
-}
-
 /* This function may be called from a signal handler.
  * This function may be called before dout has been initialized.
  */
@@ -627,7 +627,7 @@ void dout_emergency(const char * const str)
   /* Normally we would take the lock before even checking _doss, but since
    * this is an emergency, we can't do that. */
   if (_doss) {
-    _doss->dout_emergency_impl(str);
+    _doss->dout_emergency_to_file_and_syslog(str);
   }
 }
 

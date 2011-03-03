@@ -177,7 +177,7 @@ void parse_startup_config_options(std::vector<const char*>& args,
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("version", 'v')) {
-      cout << ceph_version_to_string() << std::endl;
+      cout << pretty_version_to_str() << std::endl;
       _exit(0);
     } else if (CONF_ARG_EQ("conf", 'c')) {
 	CONF_SAFE_SET_ARG_VAL(&g_conf.conf, OPT_STR);
