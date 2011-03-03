@@ -2042,7 +2042,7 @@ int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len, bool 
     if (len == 0) break;
     
     // hrmph.  trim r bytes off the front of our message.
-    dout(20) << "do_sendmail short write did " << r << ", still have " << len << dendl;
+    dout(20) << "do_sendmsg short write did " << r << ", still have " << len << dendl;
     while (r > 0) {
       if (msg->msg_iov[0].iov_len <= (size_t)r) {
 	// lose this whole item
@@ -2440,12 +2440,7 @@ int SimpleMessenger::start(bool nodaemon)
     write_pid_file(getpid());
  
     if (g_conf.chdir && g_conf.chdir[0]) {
-      if (::mkdir(g_conf.chdir, 0700)) {
-	int err = errno;
-	derr << "messenger.start: error creating directory: '"
-	     << g_conf.chdir << "': " << cpp_strerror(err) << dendl;
-      }
-      else if (::chdir(g_conf.chdir)) {
+      if (::chdir(g_conf.chdir)) {
 	int err = errno;
 	derr << "messenger.start: failed to chdir to directory: '"
 	     << g_conf.chdir << "': " << cpp_strerror(err) << dendl;

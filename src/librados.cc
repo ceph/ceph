@@ -72,6 +72,7 @@ using namespace std;
 
 ///////////////////////////// RadosClient //////////////////////////////
 struct librados::IoCtxImpl {
+  atomic_t ref_cnt;
   RadosClient *client;
   int poolid;
   string pool_name;
@@ -80,10 +81,12 @@ struct librados::IoCtxImpl {
   uint64_t assert_ver;
   eversion_t last_objver;
   uint32_t notify_timeout;
+  object_locator_t oloc;
 
   IoCtxImpl(RadosClient *c, int pid, const char *pool_name_, snapid_t s = CEPH_NOSNAP) :
-    client(c), poolid(pid), pool_name(pool_name_), snap_seq(s), assert_ver(0),
-    notify_timeout(g_conf.client_notify_timeout) {}
+    ref_cnt(0), client(c), poolid(pid),
+    pool_name(pool_name_), snap_seq(s), assert_ver(0),
+    notify_timeout(g_conf.client_notify_timeout), oloc(pid) {}
 
   void set_snap_read(snapid_t s) {
     if (!s)
@@ -99,6 +102,15 @@ struct librados::IoCtxImpl {
       return -EINVAL;
     snapc = n;
     return 0;
+  }
+
+  void get() {
+    ref_cnt.inc();
+  }
+
+  void put() {
+    if (ref_cnt.dec() == 0)
+      delete this;
   }
 };
 
@@ -421,7 +433,7 @@ public:
 
   // watch/notify
   struct WatchContext {
-    IoCtxImpl io_ctx_impl;
+    IoCtxImpl *io_ctx_impl;
     const object_t oid;
     uint64_t cookie;
     uint64_t ver;
@@ -429,14 +441,17 @@ public:
     ObjectOperation *op;
     uint64_t linger_id;
 
-    WatchContext(IoCtxImpl& io_ctx_impl_, const object_t& _oc, librados::WatchCtx *_ctx,
-                 ObjectOperation *_op) : io_ctx_impl(io_ctx_impl_), oid(_oc), ctx(_ctx), op(_op), linger_id(0) {}
+    WatchContext(IoCtxImpl *io_ctx_impl_, const object_t& _oc, librados::WatchCtx *_ctx,
+                 ObjectOperation *_op) : io_ctx_impl(io_ctx_impl_), oid(_oc), ctx(_ctx), op(_op), linger_id(0) {
+      io_ctx_impl->get();
+    }
     ~WatchContext() {
+      io_ctx_impl->put();
     }
     void notify(RadosClient *client, MWatchNotify *m) {
       ctx->notify(m->opcode, m->ver);
       if (m->opcode != WATCH_NOTIFY_COMPLETE) {
-        client->_notify_ack(io_ctx_impl, oid, m->notify_id, m->ver);
+        client->_notify_ack(*io_ctx_impl, oid, m->notify_id, m->ver);
       }
     }
   };
@@ -467,7 +482,7 @@ public:
   void register_watcher(IoCtxImpl& io, const object_t& oid, librados::WatchCtx *ctx,
 			ObjectOperation *op, uint64_t *cookie, WatchContext **pwc = NULL) {
     assert(lock.is_locked());
-    WatchContext *wc = new WatchContext(io, oid, ctx, op);
+    WatchContext *wc = new WatchContext(&io, oid, ctx, op);
     *cookie = ++max_watch_cookie;
     watchers[*cookie] = wc;
     if (pwc)
@@ -782,15 +797,13 @@ selfmanaged_snap_rollback_object(rados_ioctx_t io,
   int reply;
   IoCtxImpl* ctx = (IoCtxImpl *) io;
 
-  object_locator_t oloc(ctx->poolid);
-
   Mutex mylock("RadosClient::snap_rollback::mylock");
   Cond cond;
   bool done;
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &reply);
 
   lock.Lock();
-  objecter->rollback_object(oid, oloc, snapc, snapid,
+  objecter->rollback_object(oid, ctx->oloc, snapc, snapid,
 		     g_clock.now(), onack, NULL);
   lock.Unlock();
 
@@ -1015,8 +1028,7 @@ create(IoCtxImpl& io, const object_t& oid, bool exclusive)
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
-  object_locator_t oloc(io.poolid);
-  objecter->create(oid, oloc,
+  objecter->create(oid, io.oloc,
 		  io.snapc, ut, 0, (exclusive ? CEPH_OSD_OP_FLAG_EXCL : 0),
 		  onack, NULL, &ver);
   lock.Unlock();
@@ -1056,8 +1068,7 @@ write(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len, off_t off)
   }
 
   lock.Lock();
-  object_locator_t oloc(io.poolid);
-  objecter->write(oid, oloc,
+  objecter->write(oid, io.oloc,
 		  off, len, io.snapc, bl, ut, 0,
 		  onack, NULL, &ver, pop);
   lock.Unlock();
@@ -1100,8 +1111,7 @@ write_full(IoCtxImpl& io, const object_t& oid, bufferlist& bl)
   }
 
   lock.Lock();
-  object_locator_t oloc(io.poolid);
-  objecter->write_full(oid, oloc,
+  objecter->write_full(oid, io.oloc,
 		  io.snapc, bl, ut, 0,
 		  onack, NULL, &ver, pop);
   lock.Unlock();
@@ -1127,8 +1137,7 @@ aio_read(IoCtxImpl& io, const object_t oid, AioCompletionImpl *c,
   c->pbl = pbl;
 
   Mutex::Locker l(lock);
-  object_locator_t oloc(io.poolid);
-  objecter->read(oid, oloc,
+  objecter->read(oid, io.oloc,
 		 off, len, io.snap_seq, &c->bl, 0,
 		 onack, &c->objver);
   return 0;
@@ -1144,8 +1153,7 @@ aio_read(IoCtxImpl& io, const object_t oid, AioCompletionImpl *c,
   c->maxlen = len;
 
   Mutex::Locker l(lock);
-  object_locator_t oloc(io.poolid);
-  objecter->read(oid, oloc,
+  objecter->read(oid, io.oloc,
 		 off, len, io.snap_seq, &c->bl, 0,
 		 onack, &c->objver);
 
@@ -1166,8 +1174,7 @@ aio_sparse_read(IoCtxImpl& io, const object_t oid,
   c->pbl = NULL;
 
   Mutex::Locker l(lock);
-  object_locator_t oloc(io.poolid);
-  objecter->sparse_read(oid, oloc,
+  objecter->sparse_read(oid, io.oloc,
 		 off, len, io.snap_seq, &c->bl, 0,
 		 onack);
   return 0;
@@ -1183,8 +1190,7 @@ aio_write(IoCtxImpl& io, const object_t &oid, AioCompletionImpl *c,
   Context *onsafe = new C_aio_Safe(c);
 
   Mutex::Locker l(lock);
-  object_locator_t oloc(io.poolid);
-  objecter->write(oid, oloc,
+  objecter->write(oid, io.oloc,
 		  off, len, io.snapc, bl, ut, 0,
 		  onack, onsafe, &c->objver);
 
@@ -1201,8 +1207,7 @@ aio_write_full(IoCtxImpl& io, const object_t &oid,
   Context *onsafe = new C_aio_Safe(c);
 
   Mutex::Locker l(lock);
-  object_locator_t oloc(io.poolid);
-  objecter->write_full(oid, oloc,
+  objecter->write_full(oid, io.oloc,
 		  io.snapc, bl, ut, 0,
 		  onack, onsafe, &c->objver);
 
@@ -1230,8 +1235,7 @@ remove(IoCtxImpl& io, const object_t& oid)
   }
 
   lock.Lock();
-  object_locator_t oloc(io.poolid);
-  objecter->remove(oid, oloc,
+  objecter->remove(oid, io.oloc,
 		  snapc, ut, 0,
 		  onack, NULL, &ver, pop);
   lock.Unlock();
@@ -1271,8 +1275,7 @@ trunc(IoCtxImpl& io, const object_t& oid, size_t size)
   }
 
   lock.Lock();
-  object_locator_t oloc(io.poolid);
-  objecter->trunc(oid, oloc,
+  objecter->trunc(oid, io.oloc,
 		  io.snapc, ut, 0,
 		  size, 0,
 		  onack, NULL, &ver, pop);
@@ -1304,14 +1307,13 @@ tmap_update(IoCtxImpl& io, const object_t& oid, bufferlist& cmdbl)
 
   lock.Lock();
   ::SnapContext snapc;
-  object_locator_t oloc(io.poolid);
   ObjectOperation wr;
   if (io.assert_ver) {
     wr.assert_version(io.assert_ver);
     io.assert_ver = 0;
   }
   wr.tmap_update(cmdbl);
-  objecter->mutate(oid, oloc, wr, snapc, ut, 0, onack, NULL, &ver);
+  objecter->mutate(oid, io.oloc, wr, snapc, ut, 0, onack, NULL, &ver);
   lock.Unlock();
 
   mylock.Lock();
@@ -1340,14 +1342,13 @@ exec(IoCtxImpl& io, const object_t& oid, const char *cls, const char *method,
 
 
   lock.Lock();
-  object_locator_t oloc(io.poolid);
   ObjectOperation rd;
   if (io.assert_ver) {
     rd.assert_version(io.assert_ver);
     io.assert_ver = 0;
   }
   rd.call(cls, method, inbl);
-  objecter->read(oid, oloc, rd, io.snap_seq, &outbl, 0, onack, &ver);
+  objecter->read(oid, io.oloc, rd, io.snap_seq, &outbl, 0, onack, &ver);
   lock.Unlock();
 
   mylock.Lock();
@@ -1378,8 +1379,7 @@ RadosClient::read(IoCtxImpl& io, const object_t& oid,
     pop = &op;
   }
   lock.Lock();
-  object_locator_t oloc(io.poolid);
-  objecter->read(oid, oloc,
+  objecter->read(oid, io.oloc,
 	      off, len, io.snap_seq, &bl, 0,
               onack, &ver, pop);
   lock.Unlock();
@@ -1415,8 +1415,7 @@ mapext(IoCtxImpl& io, const object_t& oid, off_t off, size_t len, std::map<off_t
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
-  object_locator_t oloc(io.poolid);
-  objecter->mapext(oid, oloc,
+  objecter->mapext(oid, io.oloc,
 	      off, len, io.snap_seq, &bl, 0,
               onack);
   lock.Unlock();
@@ -1449,8 +1448,7 @@ sparse_read(IoCtxImpl& io, const object_t& oid,
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
-  object_locator_t oloc(io.poolid);
-  objecter->sparse_read(oid, oloc,
+  objecter->sparse_read(oid, io.oloc,
 	      off, len, io.snap_seq, &bl, 0,
               onack);
   lock.Unlock();
@@ -1493,8 +1491,7 @@ stat(IoCtxImpl& io, const object_t& oid, uint64_t *psize, time_t *pmtime)
     pop = &op;
   }
   lock.Lock();
-  object_locator_t oloc(io.poolid);
-  objecter->stat(oid, oloc,
+  objecter->stat(oid, io.oloc,
 	      io.snap_seq, psize, &mtime, 0,
               onack, &ver, pop);
   lock.Unlock();
@@ -1531,8 +1528,7 @@ getxattr(IoCtxImpl& io, const object_t& oid, const char *name, bufferlist& bl)
     pop = &op;
   }
   lock.Lock();
-  object_locator_t oloc(io.poolid);
-  objecter->getxattr(oid, oloc,
+  objecter->getxattr(oid, io.oloc,
 	      name, io.snap_seq, &bl, 0,
               onack, &ver, pop);
   lock.Unlock();
@@ -1568,8 +1564,6 @@ rmxattr(IoCtxImpl& io, const object_t& oid, const char *name)
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   eversion_t ver;
 
-  object_locator_t oloc(io.poolid);
-
   ObjectOperation op, *pop = NULL;
   if (io.assert_ver) {
     op.assert_version(io.assert_ver);
@@ -1577,7 +1571,7 @@ rmxattr(IoCtxImpl& io, const object_t& oid, const char *name)
     pop = &op;
   }
   lock.Lock();
-  objecter->removexattr(oid, oloc, name,
+  objecter->removexattr(oid, io.oloc, name,
 		  io.snapc, ut, 0,
 		  onack, NULL, &ver, pop);
   lock.Unlock();
@@ -1619,8 +1613,7 @@ setxattr(IoCtxImpl& io, const object_t& oid, const char *name, bufferlist& bl)
     pop = &op;
   }
   lock.Lock();
-  object_locator_t oloc(io.poolid);
-  objecter->setxattr(oid, oloc, name,
+  objecter->setxattr(oid, io.oloc, name,
 		  io.snapc, bl, ut, 0,
 		  onack, NULL, &ver, pop);
   lock.Unlock();
@@ -1662,9 +1655,8 @@ getxattrs(IoCtxImpl& io, const object_t& oid, map<std::string, bufferlist>& attr
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock.Lock();
-  object_locator_t oloc(io.poolid);
   map<string, bufferlist> aset;
-  objecter->getxattrs(oid, oloc, io.snap_seq,
+  objecter->getxattrs(oid, io.oloc, io.snap_seq,
 		      aset,
 		      0, onack, &ver, pop);
   lock.Unlock();
@@ -1724,15 +1716,13 @@ watch(IoCtxImpl& io, const object_t& oid, uint64_t ver,
   WatchContext *wc;
   register_watcher(io, oid, ctx, rd, cookie, &wc);
 
-  object_locator_t oloc(io.poolid);
-
   if (io.assert_ver) {
     rd->assert_version(io.assert_ver);
     io.assert_ver = 0;
   }
   rd->watch(*cookie, ver, 1);
   bufferlist bl;
-  wc->linger_id = objecter->linger(oid, oloc, *rd, io.snap_seq, bl, NULL, 0, onack, NULL, &objver);
+  wc->linger_id = objecter->linger(oid, io.oloc, *rd, io.snap_seq, bl, NULL, 0, onack, NULL, &objver);
   lock.Unlock();
 
   mylock.Lock();
@@ -1762,14 +1752,13 @@ _notify_ack(IoCtxImpl& io, const object_t& oid, uint64_t notify_id, uint64_t ver
   Cond cond;
   eversion_t objver;
 
-  object_locator_t oloc(io.poolid);
   ObjectOperation rd;
   if (io.assert_ver) {
     rd.assert_version(io.assert_ver);
     io.assert_ver = 0;
   }
   rd.notify_ack(notify_id, ver);
-  objecter->read(oid, oloc, rd, io.snap_seq, NULL, 0, 0, 0);
+  objecter->read(oid, io.oloc, rd, io.snap_seq, NULL, 0, 0, 0);
 
   return 0;
 }
@@ -1790,14 +1779,13 @@ unwatch(IoCtxImpl& io, const object_t& oid, uint64_t cookie)
 
   unregister_watcher(cookie);
 
-  object_locator_t oloc(io.poolid);
   ObjectOperation rd;
   if (io.assert_ver) {
     rd.assert_version(io.assert_ver);
     io.assert_ver = 0;
   }
   rd.watch(cookie, 0, 0);
-  objecter->read(oid, oloc, rd, io.snap_seq, &outbl, 0, onack, &ver);
+  objecter->read(oid, io.oloc, rd, io.snap_seq, &outbl, 0, onack, &ver);
   lock.Unlock();
 
   mylock.Lock();
@@ -1827,7 +1815,6 @@ notify(IoCtxImpl& io, const object_t& oid, uint64_t ver)
   C_NotifyComplete *ctx = new C_NotifyComplete(&mylock_all, &cond_all, &done_all);
   ObjectOperation rd;
 
-  object_locator_t oloc(io.poolid);
   if (io.assert_ver) {
     rd.assert_version(io.assert_ver);
     io.assert_ver = 0;
@@ -1839,7 +1826,7 @@ notify(IoCtxImpl& io, const object_t& oid, uint64_t ver)
   ::encode(prot_ver, inbl);
   ::encode(timeout, inbl);
   rd.notify(cookie, ver, inbl);
-  objecter->read(oid, oloc, rd, io.snap_seq, &outbl, 0, onack, &objver);
+  objecter->read(oid, io.oloc, rd, io.snap_seq, &outbl, 0, onack, &objver);
   lock.Unlock();
 
   mylock_all.Lock();
@@ -2003,12 +1990,31 @@ from_rados_ioctx_t(rados_ioctx_t p, IoCtx &io)
   IoCtxImpl *io_ctx_impl = (IoCtxImpl*)p;
 
   io.io_ctx_impl = io_ctx_impl;
+  io_ctx_impl->get();
+}
+
+librados::IoCtx::
+IoCtx(const IoCtx& rhs)
+{
+  io_ctx_impl = rhs.io_ctx_impl;
+  io_ctx_impl->get();
+}
+
+librados::IoCtx& librados::IoCtx::
+operator=(const IoCtx& rhs)
+{
+  if (io_ctx_impl)
+    io_ctx_impl->put();
+  io_ctx_impl = rhs.io_ctx_impl;
+  io_ctx_impl->get();
+  return *this;
 }
 
 librados::IoCtx::
 ~IoCtx()
 {
-  delete io_ctx_impl;
+  if (io_ctx_impl)
+    io_ctx_impl->put();
   io_ctx_impl = 0;
 }
 
@@ -2288,6 +2294,12 @@ get_pool_name() const
   return io_ctx_impl->pool_name;
 }
 
+void librados::IoCtx::
+set_locator_key(const string& key)
+{
+  io_ctx_impl->oloc.key = key;
+}
+
 librados::IoCtx::
 IoCtx(IoCtxImpl *io_ctx_impl_)
   : io_ctx_impl(io_ctx_impl_)
@@ -2490,8 +2502,6 @@ static void rados_set_conf_defaults(md_config_t *conf)
   conf->log_to_syslog = false;
 
   conf->log_per_instance = false;
-
-  conf->log_to_file = false;
 }
 
 extern "C" int rados_create(rados_t *pcluster, const char * const id)
@@ -2504,7 +2514,7 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
 
     if (id)
       g_conf.id = strdup(id);
-    common_init(args, "librados", STARTUP_FLAG_INIT_KEYS);
+    common_init(args, "librados", STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_LIBRARY);
 
     ++rados_initialized;
 
@@ -2550,7 +2560,7 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path)
   args.push_back(path);
   args.push_back("-i");
   args.push_back(g_conf.id);
-  common_init(args, "librados", STARTUP_FLAG_INIT_KEYS);
+  common_init(args, "librados", STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_LIBRARY);
 
   return 0;
 }
@@ -2616,6 +2626,7 @@ extern "C" int rados_ioctx_create(rados_t cluster, const char *name, rados_ioctx
     if (!ctx)
       return -ENOMEM;
     *io = ctx;
+    ctx->get();
     return 0;
   }
   return poolid;
@@ -2624,10 +2635,10 @@ extern "C" int rados_ioctx_create(rados_t cluster, const char *name, rados_ioctx
 extern "C" void rados_ioctx_destroy(rados_ioctx_t io)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  delete ctx;
+  ctx->put();
 }
 
-extern "C" int rados_ioctx_stat(rados_ioctx_t io, struct rados_ioctx_stat_t *stats)
+extern "C" int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t *stats)
 {
   librados::IoCtxImpl *io_ctx_impl = (librados::IoCtxImpl *)io;
   list<string> ls;
@@ -2776,6 +2787,14 @@ extern "C" int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid)
   return ctx->client->pool_change_auid(ctx, auid);
 }
 
+extern "C" void rados_ioctx_locator_set_key(rados_ioctx_t io, const char *key)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  if (key)
+    ctx->oloc.key = key;
+  else
+    ctx->oloc.key = "";
+}
 // snaps
 
 extern "C" int rados_ioctx_snap_create(rados_ioctx_t io, const char *snapname)

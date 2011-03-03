@@ -1308,12 +1308,12 @@ void RBD::version(int *major, int *minor, int *extra)
   rbd_version(major, minor, extra);
 }
 
-int RBD::open(IoCtx& io_ctx, Image *image, const char *name)
+int RBD::open(IoCtx& io_ctx, Image& image, const char *name)
 {
   return open(io_ctx, image, name, NULL);
 }
 
-int RBD::open(IoCtx& io_ctx, Image *image, const char *name, const char *snapname)
+int RBD::open(IoCtx& io_ctx, Image& image, const char *name, const char *snapname)
 {
   ImageCtx *ictx = new ImageCtx(name, io_ctx);
   if (!ictx)
@@ -1323,7 +1323,7 @@ int RBD::open(IoCtx& io_ctx, Image *image, const char *name, const char *snapnam
   if (r < 0)
     return r;
 
-  image = new Image((image_ctx_t)ictx);
+  image.ctx = (image_ctx_t) ictx;
   return 0;
 }
 
@@ -1388,7 +1388,7 @@ void RBD::AioCompletion::release()
   Image
 */
 
-Image::Image(image_ctx_t ctx_) : ctx(ctx_)
+Image::Image() : ctx(NULL)
 {
 }
 

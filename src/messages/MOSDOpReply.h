@@ -66,15 +66,15 @@ public:
     Message(CEPH_MSG_OSD_OPREPLY) {
     memset(&head, 0, sizeof(head));
     set_tid(req->get_tid());
-    head.client_inc = req->head.client_inc;
+    head.client_inc = req->client_inc;
     ops = req->ops;
     head.result = result;
     head.flags =
-      (req->head.flags & ~(CEPH_OSD_FLAG_ONDISK|CEPH_OSD_FLAG_ONNVRAM|CEPH_OSD_FLAG_ACK)) | acktype;
+      (req->flags & ~(CEPH_OSD_FLAG_ONDISK|CEPH_OSD_FLAG_ONNVRAM|CEPH_OSD_FLAG_ACK)) | acktype;
     oid = req->oid;
-    head.layout = req->head.layout;
+    head.layout.ol_pgid = req->pgid.v;
     head.osdmap_epoch = e;
-    head.reassert_version = req->head.reassert_version;
+    head.reassert_version = req->reassert_version;
   }
   MOSDOpReply() {}
 private:

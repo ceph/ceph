@@ -81,6 +81,8 @@
 #include "common/Timer.h"
 #include "common/LogClient.h"
 #include "common/safe_io.h"
+#include "perfglue/cpu_profiler.h"
+#include "perfglue/heap_profiler.h"
 
 #include "common/ClassHandler.h"
 
@@ -451,6 +453,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, M
   scrubs_pending(0),
   scrubs_active(0),
   scrub_wq(this, &disk_tp),
+  scrub_finalize_wq(this, &op_tp),
   rep_scrub_wq(this, &disk_tp),
   remove_wq(this, &disk_tp),
   watch_lock("OSD::watch_lock"),
@@ -1425,12 +1428,6 @@ void OSD::handle_osd_ping(MOSDPing *m)
 {
   dout(20) << "handle_osd_ping from " << m->get_source() << " got stat " << m->peer_stat << dendl;
 
-  if (!is_active()) {
-    dout(10) << "handle_osd_ping - not active" << dendl;
-    m->put();
-    return;
-  }
-
   if (ceph_fsid_compare(&superblock.fsid, &m->fsid)) {
     dout(20) << "handle_osd_ping from " << m->get_source()
 	     << " bad fsid " << m->fsid << " != " << superblock.fsid << dendl;
@@ -2081,37 +2078,12 @@ void OSD::handle_command(MMonCommand *m)
     logger_reset_all();
   } else if (m->cmd.size() == 2 && m->cmd[0] == "logger" && m->cmd[1] == "reopen") {
     logger_reopen_all();
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "heapdump") {
-    if (g_conf.tcmalloc_have) {
-      if (!g_conf.profiler_running()) {
-	clog.info() << "can't dump heap: profiler not running\n";
-      } else {
-        clog.info() << g_conf.name << "dumping heap profile now\n";
-        g_conf.profiler_dump("admin request");
-      }
-    } else {
-      clog.info() << g_conf.name << " does not have tcmalloc, "
-	"can't use profiler\n";
-    }
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "enable_profiler_options") {
-    char val[sizeof(int)*8+1];
-    snprintf(val, sizeof(val), "%i", g_conf.profiler_allocation_interval);
-    setenv("HEAP_PROFILE_ALLOCATION_INTERVAL", val, g_conf.profiler_allocation_interval);
-    snprintf(val, sizeof(val), "%i", g_conf.profiler_highwater_interval);
-    setenv("HEAP_PROFILE_INUSE_INTERVAL", val, g_conf.profiler_highwater_interval);
-    clog.info() << g_conf.name << " set heap variables from current config";
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "start_profiler") {
-    char location[PATH_MAX];
-    snprintf(location, sizeof(location),
-	     "%s/%s", g_conf.log_dir, g_conf.name);
-    g_conf.profiler_start(location);
-    clog.info() << g_conf.name << " started profiler with output "
-      << location << "\n";
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "stop_profiler") {
-    g_conf.profiler_stop();
-    clog.info() << g_conf.name << " stopped profiler\n";
-  }
-  else if (m->cmd.size() > 1 && m->cmd[0] == "debug") {
+  } else if (m->cmd[0] == "heap") {
+    if (ceph_using_tcmalloc())
+      ceph_heap_profiler_handle_command(m->cmd, clog);
+    else
+      clog.info() << "could not issue heap profiler command -- not using tcmalloc!\n";
+  } else if (m->cmd.size() > 1 && m->cmd[0] == "debug") {
     if (m->cmd.size() == 3 && m->cmd[1] == "dump_missing") {
       const string &file_name(m->cmd[2]);
       std::ofstream fout(file_name.c_str());
@@ -2163,6 +2135,9 @@ void OSD::handle_command(MMonCommand *m)
       defer_recovery_until += g_conf.osd_recovery_delay_start;
       recovery_wq.kick();
     }
+  }
+  else if (m->cmd[0] == "cpu_profiler") {
+    cpu_profiler_handle_command(m->cmd, clog);
   }
   else dout(0) << "unrecognized command! " << m->cmd << dendl;
 
@@ -2813,12 +2788,13 @@ void OSD::handle_osd_map(MOSDMap *m)
       dout(10) << "handle_osd_map  got full map for epoch " << e << dendl;
       OSDMap *o = new OSDMap;
       bufferlist& bl = p->second;
-
+      
       o->decode(bl);
       add_map(o);
 
       sobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::META_COLL, fulloid, 0, bl.length(), bl);
+      add_map_bl(e, bl);
       continue;
     }
 
@@ -2828,6 +2804,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       bufferlist& bl = p->second;
       sobject_t oid = get_inc_osdmap_pobject_name(e);
       t.write(coll_t::META_COLL, oid, 0, bl.length(), bl);
+      add_map_inc_bl(e, bl);
 
       OSDMap *o = new OSDMap;
       if (e > 1) {
@@ -2852,6 +2829,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
       sobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::META_COLL, fulloid, 0, fbl.length(), fbl);
+      add_map_bl(e, fbl);
       continue;
     }
 
@@ -2988,6 +2966,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   // everything through current epoch now on disk; keep anything after
   // that in cache
   keep_map_from(osdmap->get_epoch()+1);
+  trim_map_bl_cache(osdmap->get_epoch()+1);
 
   op_tp.unpause();
   recovery_tp.unpause();
@@ -3323,7 +3302,7 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
     else if (pg->is_primary() &&
 	     !pg->is_active()) {
       // i am (inactive) primary
-      if (!pg->is_peering() || 
+      if ((!pg->is_peering() && !pg->is_replay()) || 
 	  (pg->need_up_thru && up_thru >= pg->info.history.same_acting_since))
 	pg->do_peer(t, tfin, query_map, &info_map);
     }
@@ -3387,11 +3366,27 @@ void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool la
 
 bool OSD::get_map_bl(epoch_t e, bufferlist& bl)
 {
+  {
+    Mutex::Locker l(map_cache_lock);
+    map<epoch_t,bufferlist>::iterator p = map_bl.find(e);
+    if (p != map_bl.end()) {
+      bl = p->second;
+      return true;
+    }
+  }
   return store->read(coll_t::META_COLL, get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
 }
 
 bool OSD::get_inc_map_bl(epoch_t e, bufferlist& bl)
 {
+  {
+    Mutex::Locker l(map_cache_lock);
+    map<epoch_t,bufferlist>::iterator p = map_inc_bl.find(e);
+    if (p != map_inc_bl.end()) {
+      bl = p->second;
+      return true;
+    }
+  }
   return store->read(coll_t::META_COLL, get_inc_osdmap_pobject_name(e), 0, 0, bl) >= 0;
 }
 
@@ -3399,18 +3394,36 @@ void OSD::add_map(OSDMap *o)
 {
   Mutex::Locker l(map_cache_lock);
   epoch_t e = o->get_epoch();
-  dout(10) << "add_map " << e << " " << o << dendl;
-  map_cache[e] = o;
+  if (map_cache.count(e) == 0) {
+    dout(10) << "add_map " << e << " " << o << dendl;
+    map_cache[e] = o;
+  } else {
+    dout(10) << "add_map " << e << " already have it" << dendl;
+  }
+}
+
+void OSD::add_map_bl(epoch_t e, bufferlist& bl)
+{
+  Mutex::Locker l(map_cache_lock);
+  dout(10) << "add_map_bl " << e << " " << bl.length() << " bytes" << dendl;
+  map_bl[e] = bl;
+}
+void OSD::add_map_inc_bl(epoch_t e, bufferlist& bl)
+{
+  Mutex::Locker l(map_cache_lock);
+  dout(10) << "add_map_inc_bl " << e << " " << bl.length() << " bytes" << dendl;
+  map_inc_bl[e] = bl;
 }
 
 OSDMap *OSD::get_map(epoch_t epoch)
 {
-  Mutex::Locker l(map_cache_lock);
-
-  map<epoch_t,OSDMap*>::iterator p = map_cache.find(epoch);
-  if (p != map_cache.end()) {
-    dout(30) << "get_map " << epoch << " - cached " << p->second << dendl;
-    return p->second;
+  {
+    Mutex::Locker l(map_cache_lock);
+    map<epoch_t,OSDMap*>::iterator p = map_cache.find(epoch);
+    if (p != map_cache.end()) {
+      dout(30) << "get_map " << epoch << " - cached " << p->second << dendl;
+      return p->second;
+    }
   }
 
   OSDMap *map = new OSDMap;
@@ -3422,7 +3435,7 @@ OSDMap *OSD::get_map(epoch_t epoch)
   } else {
     dout(20) << "get_map " << epoch << " - return initial " << map << dendl;
   }
-  map_cache[epoch] = map;
+  add_map(map);
   return map;
 }
 
@@ -3431,6 +3444,16 @@ void OSD::keep_map_from(epoch_t from)
   Mutex::Locker l(map_cache_lock);
   dout(10) << "keep_map_from " << from << dendl;
   map_cache_keep_from = from;
+}
+
+void OSD::trim_map_bl_cache(epoch_t oldest)
+{
+  Mutex::Locker l(map_cache_lock);
+  dout(10) << "trim_map_bl_cache up to " << oldest << dendl;
+  while (!map_inc_bl.empty() && map_inc_bl.begin()->first < oldest)
+    map_inc_bl.erase(map_inc_bl.begin());
+  while (!map_bl.empty() && map_bl.begin()->first < oldest)
+    map_bl.erase(map_bl.begin());
 }
 
 void OSD::trim_map_cache(epoch_t oldest)
@@ -4064,9 +4087,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     if (pg->is_active() && pg->have_unfound()) {
       // Make sure we've requested MISSING information from every OSD
       // we know about.
-      map< int, map<pg_t,PG::Query> > query_map;
       pg->discover_all_missing(query_map);
-      do_queries(query_map);
     }
 
     int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
@@ -4099,12 +4120,13 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 			   PG::Info &info, 
 			   PG::Log &log, 
 			   PG::Missing *missing,
+			   map< int, map<pg_t,PG::Query> >& query_map,
 			   map<int, MOSDPGInfo*>* info_map,
 			   int& created)
 {
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   C_Contexts *fin = new C_Contexts;
-
+  
   PG *pg = 0;
   if (!_have_pg(info.pgid)) {
     vector<int> up, acting;
@@ -4178,9 +4200,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       if (pg->have_unfound()) {
 	// Make sure we've requested MISSING information from every OSD
 	// we know about.
-	map< int, map<pg_t,PG::Query> > query_map;
 	pg->discover_all_missing(query_map);
-	do_queries(query_map);
       }
       else {
 	dout(10) << *pg << " ignoring osd" << from << " log, pg is already active" << dendl;
@@ -4191,10 +4211,8 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       pg->proc_replica_log(*t, info, log, *missing, from);
       
       // peer
-      map< int, map<pg_t,PG::Query> > query_map;
       pg->do_peer(*t, fin->contexts, query_map, info_map);
       pg->update_stats();
-      do_queries(query_map);
     }
   } else if (!pg->info.dne()) {
     if (!pg->is_active()) {
@@ -4206,7 +4224,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       assert(pg->log.tail <= pg->info.last_complete || pg->log.backlog);
       assert(pg->log.head == pg->info.last_update);
 
-      pg->activate(*t, fin->contexts, info_map);
+      pg->activate(*t, fin->contexts, query_map, info_map);
     } else {
       // ACTIVE REPLICA
       assert(pg->is_replica());
@@ -4254,9 +4272,11 @@ void OSD::handle_pg_log(MOSDPGLog *m)
   int created = 0;
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
+  map< int, map<pg_t,PG::Query> > query_map;
   _process_pg_info(m->get_epoch(), from, 
-		   m->info, m->log, &m->missing, 0,
+		   m->info, m->log, &m->missing, query_map, 0,
 		   created);
+  do_queries(query_map);
   if (created)
     update_heartbeat_peers();
 
@@ -4276,12 +4296,14 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
   PG::Log empty_log;
   map<int,MOSDPGInfo*> info_map;
   int created = 0;
+  map< int, map<pg_t,PG::Query> > query_map;
 
   for (vector<PG::Info>::iterator p = m->pg_info.begin();
        p != m->pg_info.end();
        ++p) 
-    _process_pg_info(m->get_epoch(), from, *p, empty_log, NULL, &info_map, created);
+    _process_pg_info(m->get_epoch(), from, *p, empty_log, NULL, query_map, &info_map, created);
 
+  do_queries(query_map);
   do_infos(info_map);
   if (created)
     update_heartbeat_peers();
@@ -4344,10 +4366,12 @@ void OSD::handle_pg_missing(MOSDPGMissing *m)
   if (!require_same_or_newer_map(m, m->get_epoch()))
     return;
 
+  map< int, map<pg_t,PG::Query> > query_map;
   PG::Log empty_log;
   int created = 0;
   _process_pg_info(m->get_epoch(), from, m->info,
-		   empty_log, &m->missing, NULL, created);
+		   empty_log, &m->missing, query_map, NULL, created);
+  do_queries(query_map);
   if (created)
     update_heartbeat_peers();
 
@@ -4804,6 +4828,8 @@ void OSD::activate_pg(pg_t pgid, utime_t activate_at)
 {
   assert(osd_lock.is_locked());
 
+  map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
+
   if (pg_map.count(pgid)) {
     PG *pg = _lookup_lock_pg(pgid);
     if (pg->is_crashed() &&
@@ -4812,12 +4838,14 @@ void OSD::activate_pg(pg_t pgid, utime_t activate_at)
 	pg->replay_until == activate_at) {
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       C_Contexts *fin = new C_Contexts;
-      pg->activate(*t, fin->contexts);
+      pg->activate(*t, fin->contexts, query_map);
       int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
       assert(tr == 0);
     }
     pg->unlock();
   }
+
+  do_queries(query_map);
 
   // wake up _all_ pg waiters; raw pg -> actual pg mapping may have shifted
   wake_all_pg_waiters();

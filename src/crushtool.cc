@@ -775,8 +775,6 @@ struct layer_t {
 
 int main(int argc, const char **argv)
 {
-  set_foreground_logging();
-
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
 

@@ -34,6 +34,20 @@ AC_CHECK_LIB([pthread], [pthread_create], [true], AC_MSG_FAILURE([libpthread not
 PKG_CHECK_MODULES([CRYPTOPP], [libcrypto++], [], [
 	AC_SEARCH_LIBS([_ZTIN8CryptoPP14CBC_EncryptionE], [crypto++ cryptopp], [true], AC_MSG_FAILURE([libcrypto++ not found]), [-lpthread])])
 
+# profiler?
+AC_ARG_WITH([profiler],
+            [AS_HELP_STRING([--with-profiler], [build extra profiler binaries])],
+	    [with_profiler=yes],
+            [with_profiler=no])
+AS_IF([test "x$with_profiler" != xyes],
+	    [AC_CHECK_LIB([profiler], [ProfilerFlush], [],
+	        	  [AC_MSG_FAILURE([--with-profiler was given but libprofiler (libgoogle-perftools-dev on debian) not found])])],
+	    [])
+AM_CONDITIONAL(WITH_PROFILER, test "$with_profiler" = "yes")
+AS_IF([test "$with_profiler" = "yes"],
+      [AC_DEFINE([HAVE_PROFILER], [1], [Define if you have perftools profiler enabled])],
+      [])
+
 # debug crap?
 AC_ARG_WITH([debug],
             [AS_HELP_STRING([--with-debug], [build extra debug binaries])],

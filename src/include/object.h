@@ -104,7 +104,7 @@ struct file_object_t {
 // a locator constrains the placement of an object.  mainly, which pool
 // does it go in.
 struct object_locator_t {
-  __u32 pool;
+  __s32 pool;
   __s16 preferred;
   string key;
 
@@ -122,8 +122,8 @@ struct object_locator_t {
   }
 
   void clear() {
-    pool = 0;
-    preferred = 0;
+    pool = -1;
+    preferred = -1;
     key = "";
   }
 

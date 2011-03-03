@@ -278,7 +278,7 @@ void DoutStreambuf<charT, traits>::read_global_config()
     }
   }
 
-  if (g_conf.log_to_file) {
+  if ((!empty(g_conf.log_file)) || (!empty(g_conf.log_dir))) {
     if (_read_ofile_config() == 0) {
       flags |= DOUTSB_FLAG_OFILE;
     }
@@ -376,7 +376,6 @@ std::string DoutStreambuf<charT, traits>::config_to_str() const
   ostringstream oss;
   oss << "g_conf.log_to_stderr = " << g_conf.log_to_stderr << "\n";
   oss << "g_conf.log_to_syslog = " << g_conf.log_to_syslog << "\n";
-  oss << "g_conf.log_to_file = " << g_conf.log_to_file << "\n";
   oss << "g_conf.log_file = '" << cpp_str(g_conf.log_file) << "'\n";
   oss << "g_conf.log_dir = '" << cpp_str(g_conf.log_dir) << "'\n";
   oss << "g_conf.g_conf.log_per_instance = '"
@@ -388,6 +387,21 @@ std::string DoutStreambuf<charT, traits>::config_to_str() const
   oss << "rsym_path = '" << rsym_path << "'\n";
   oss << "log_sym_history = " << g_conf.log_sym_history  << "\n";
   return oss.str();
+}
+
+template <typename charT, typename traits>
+void DoutStreambuf<charT, traits>::
+dout_emergency_to_file_and_syslog(const char * const str) const
+{
+  int len = strlen(str);
+  if (ofd >= 0) {
+    if (safe_write(ofd, str, len)) {
+      ; // ignore error code
+    }
+  }
+  if (flags & DOUTSB_FLAG_SYSLOG) {
+    syslog(LOG_USER | LOG_CRIT, "%s", str);
+  }
 }
 
 // This is called to flush the buffer.
@@ -597,21 +611,6 @@ int DoutStreambuf<charT, traits>::_rotate_files(const std::string &base)
   return 0;
 }
 
-template <typename charT, typename traits>
-void DoutStreambuf<charT, traits>::
-dout_emergency_impl(const char * const str) const
-{
-  int len = strlen(str);
-  if (ofd >= 0) {
-    if (safe_write(ofd, str, len)) {
-      ; // ignore error code
-    }
-  }
-  if (flags & DOUTSB_FLAG_SYSLOG) {
-    syslog(LOG_USER | LOG_CRIT, "%s", str);
-  }
-}
-
 /* This function may be called from a signal handler.
  * This function may be called before dout has been initialized.
  */
@@ -628,7 +627,7 @@ void dout_emergency(const char * const str)
   /* Normally we would take the lock before even checking _doss, but since
    * this is an emergency, we can't do that. */
   if (_doss) {
-    _doss->dout_emergency_impl(str);
+    _doss->dout_emergency_to_file_and_syslog(str);
   }
 }
 

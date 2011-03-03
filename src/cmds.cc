@@ -65,13 +65,6 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-#ifdef HAVE_LIBTCMALLOC
-  g_conf.profiler_start = HeapProfilerStart;
-  g_conf.profiler_running = IsHeapProfilerRunning;
-  g_conf.profiler_stop = HeapProfilerStop;
-  g_conf.profiler_dump = HeapProfilerDump;
-  g_conf.tcmalloc_have = true;
-#endif //HAVE_LIBTCMALLOC
   common_init(args, "mds", STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_DAEMON);
 
   // mds specific args

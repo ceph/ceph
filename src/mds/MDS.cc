@@ -70,6 +70,10 @@
 
 #include "common/config.h"
 
+#include "perfglue/cpu_profiler.h"
+#include "perfglue/heap_profiler.h"
+
+
 #define DOUT_SUBSYS mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds" << whoami << '.' << incarnation << ' '
@@ -773,37 +777,16 @@ void MDS::handle_command(MMonCommand *m)
 	} else dout(0) << "bad migrate_dir path" << dendl;
       } else dout(0) << "bad migrate_dir target syntax" << dendl;
     } else dout(0) << "bad migrate_dir syntax" << dendl;
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "heapdump"){
-    if (g_conf.tcmalloc_have) {
-      if (!g_conf.profiler_running()) {
-        clog.info() << g_conf.name << " can't dump heap: profiler not running\n";
-      } else {
-        clog.info() << g_conf.name << " dumping heap profile now\n";
-        g_conf.profiler_dump("admin request");
-      }
-    } else {
-      clog.info() << "tcmalloc not enabled, can't use profiler\n";
-    }
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "enable_profiler_options") {
-    char val[sizeof(int)*8+1];
-    snprintf(val, sizeof(val), "%i", g_conf.profiler_allocation_interval);
-    setenv("HEAP_PROFILE_ALLOCATION_INTERVAL",
-	   val, g_conf.profiler_allocation_interval);
-    snprintf(val, sizeof(val), "%i", g_conf.profiler_highwater_interval);
-    setenv("HEAP_PROFILE_INUSE_INTERVAL",
-	   val, g_conf.profiler_highwater_interval);
-    clog.info() << g_conf.name << " set heap variables from current config\n";
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "start_profiler") {
-    char location[PATH_MAX];
-    snprintf(location, sizeof(location),
-	     "%s/%s", g_conf.log_dir, g_conf.name);
-    g_conf.profiler_start(location);
-    clog.info() << g_conf.name << " started profiler\n";
-  } else if (m->cmd.size() == 1 && m->cmd[0] == "stop_profiler") {
-    g_conf.profiler_stop();
-    clog.info() << g_conf.name << " stopped profiler\n";
+  } 
+  else if (m->cmd[0] == "cpu_profiler") {
+    cpu_profiler_handle_command(m->cmd, clog);
   }
-  else dout(0) << "unrecognized command! " << m->cmd << dendl;
+ else if (m->cmd[0] == "heap") {
+   if (!ceph_heap_profiler_running())
+     clog.info() << "tcmalloc not enabled, can't use heap profiler commands\n";
+   else
+     ceph_heap_profiler_handle_command(m->cmd, clog);
+ } else dout(0) << "unrecognized command! " << m->cmd << dendl;
   m->put();
 }
 

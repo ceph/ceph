@@ -468,12 +468,17 @@ private:
 
   // osd map cache (past osd maps)
   map<epoch_t,OSDMap*> map_cache;
+  map<epoch_t,bufferlist> map_inc_bl;
+  map<epoch_t,bufferlist> map_bl;
   Mutex map_cache_lock;
   epoch_t map_cache_keep_from;
 
   OSDMap* get_map(epoch_t e);
   void add_map(OSDMap *o);
+  void add_map_bl(epoch_t e, bufferlist& bl);
+  void add_map_inc_bl(epoch_t e, bufferlist& bl);
   void trim_map_cache(epoch_t oldest);
+  void trim_map_bl_cache(epoch_t oldest);
   void clear_map_cache();
   void keep_map_from(epoch_t from);
 
@@ -669,6 +674,7 @@ protected:
 			PG::Info &info, 
 			PG::Log &log, 
 			PG::Missing *missing,
+			map< int, map<pg_t,PG::Query> >& query_map,
 			map<int, MOSDPGInfo*>* info_map,
 			int& created);
 
@@ -896,6 +902,51 @@ protected:
       }
     }
   } scrub_wq;
+
+  struct ScrubFinalizeWQ : public ThreadPool::WorkQueue<PG> {
+  private:
+    OSD *osd;
+    xlist<PG*> scrub_finalize_queue;
+
+  public:
+    ScrubFinalizeWQ(OSD *o, ThreadPool *tp) : 
+      ThreadPool::WorkQueue<PG>("OSD::ScrubFinalizeWQ", tp), osd(o) {}
+
+    bool _empty() {
+      return scrub_finalize_queue.empty();
+    }
+    bool _enqueue(PG *pg) {
+      if (pg->scrub_finalize_item.is_on_list()) {
+	return false;
+      }
+      pg->get();
+      scrub_finalize_queue.push_back(&pg->scrub_finalize_item);
+      return true;
+    }
+    void _dequeue(PG *pg) {
+      if (pg->scrub_finalize_item.remove_myself()) {
+	pg->put();
+      }
+    }
+    PG *_dequeue() {
+      if (scrub_finalize_queue.empty())
+	return NULL;
+      PG *pg = scrub_finalize_queue.front();
+      scrub_finalize_queue.pop_front();
+      return pg;
+    }
+    void _process(PG *pg) {
+      pg->scrub_finalize();
+      pg->put();
+    }
+    void _clear() {
+      while (scrub_finalize_queue.empty()) {
+	PG *pg = scrub_finalize_queue.front();
+	scrub_finalize_queue.pop_front();
+	pg->put();
+      }
+    }
+  } scrub_finalize_wq;
 
   struct RepScrubWQ : public ThreadPool::WorkQueue<MOSDRepScrub> {
   private: 

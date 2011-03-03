@@ -15,6 +15,7 @@
 #include "auth/AuthSupported.h"
 #include "auth/KeyRing.h"
 #include "common/ceph_argparse.h"
+#include "common/code_environment.h"
 #include "common/safe_io.h"
 #include "common/signal.h"
 #include "common/version.h"
@@ -24,6 +25,10 @@
 #include "include/color.h"
 
 #include <syslog.h>
+
+#ifdef HAVE_PROFILER
+# include <google/profiler.h>
+#endif
 
 /* Set foreground logging
  *
@@ -50,8 +55,6 @@ void set_foreground_logging()
   g_conf.log_to_syslog = false;
 
   g_conf.log_per_instance = false;
-
-  g_conf.log_to_file = false;
 }
 
 static void keyring_init(const char *filesearch)
@@ -106,16 +109,35 @@ static void keyring_init(const char *filesearch)
   }
 }
 
+static void set_cv(const char ** key, const char * const val)
+{
+  free((void*)*key);
+  *key = strdup(val);
+}
+
 void common_init(std::vector<const char*>& args, const char *module_type, int flags)
 {
   bool force_fg_logging = false;
 
-  if (flags & STARTUP_FLAG_DAEMON) {
+  // TODO: make callers specify code env explicitly.
+  if (flags & STARTUP_FLAG_DAEMON)
+    g_code_env = CODE_ENVIRONMENT_DAEMON;
+  else if (flags & STARTUP_FLAG_LIBRARY)
+    g_code_env = CODE_ENVIRONMENT_LIBRARY;
+  else
+    g_code_env = CODE_ENVIRONMENT_UTILITY;
+
+  if (g_code_env == CODE_ENVIRONMENT_DAEMON) {
     cout << TEXT_YELLOW << " ** WARNING: Ceph is still under heavy development, "
          << "and is only suitable for **" << TEXT_NORMAL << std::endl;
     cout << TEXT_YELLOW <<  " **          testing and review.  Do not trust it "
          << "with important data.       **" << TEXT_NORMAL << std::endl;
+
+    // some daemon-specific defaults
     g_conf.daemonize = true;
+    g_conf.log_to_stderr = LOG_TO_STDERR_SOME;
+    set_cv(&g_conf.log_dir, "/var/log/ceph");
+    set_cv(&g_conf.pid_file, "/var/run/ceph/$type.$id.pid");
   }
   else {
     g_conf.pid_file = 0;
@@ -132,6 +154,17 @@ void common_init(std::vector<const char*>& args, const char *module_type, int fl
   if (force_fg_logging)
     set_foreground_logging();
 
+#ifdef HAVE_PROFILER
+  /*
+   * We need to call _something_ in libprofile.so so that the
+   * --as-needed stuff doesn't drop it from our .so dependencies.
+   * This is basically a no-op.
+   */
+  ProfilerFlush();
+#endif
+
+  parse_config_options(args);
+
   {
     // In the long term, it would be best to ensure that we read ceph.conf
     // before initializing dout(). For now, just force a reopen here with the
@@ -140,25 +173,7 @@ void common_init(std::vector<const char*>& args, const char *module_type, int fl
     _dout_open_log();
   }
 
-  if (g_conf.daemonize)
-    cout << ceph_version_to_string() << std::endl;
-
-  parse_config_options(args);
   install_standard_sighandlers();
-
-#ifdef HAVE_LIBTCMALLOC
-  if (g_conf.tcmalloc_profiler_run && g_conf.tcmalloc_have) {
-    char profile_name[PATH_MAX];
-    sprintf(profile_name, "%s/%s", g_conf.log_dir, g_conf.name);
-    char *val = new char[sizeof(int)*8+1];
-    sprintf(val, "%i", g_conf.profiler_allocation_interval);
-    setenv("HEAP_PROFILE_ALLOCATION_INTERVAL", val, g_conf.profiler_allocation_interval);
-    sprintf(val, "%i", g_conf.profiler_highwater_interval);
-    setenv("HEAP_PROFILE_INUSE_INTERVAL", val, g_conf.profiler_highwater_interval);
-    generic_dout(0) << "turning on heap profiler with prefix " << profile_name << dendl;
-    g_conf.profiler_start(profile_name);
-  }
-#endif //HAVE_LIBTCMALLOC
 
   if (flags & STARTUP_FLAG_INIT_KEYS)  {
     if (is_supported_auth(CEPH_AUTH_CEPHX))

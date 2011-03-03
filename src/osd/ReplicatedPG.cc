@@ -2385,7 +2385,8 @@ void ReplicatedPG::op_applied(RepGather *repop)
 
   last_update_applied = repop->v;
   if (last_update_applied == info.last_update && finalizing_scrub) {
-    kick();
+    dout(10) << "requeueing scrub for cleanup" << dendl;
+    osd->scrub_wq.queue(this);
   }
   update_stats();
 
@@ -3006,7 +3007,10 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
 
   last_update_applied = rm->op->version;
   if (last_update_applied == info.last_update && finalizing_scrub) {
-    kick();
+    assert(active_rep_scrub);
+    osd->rep_scrub_wq.queue(active_rep_scrub);
+    active_rep_scrub->put();
+    active_rep_scrub = 0;
   }
 
   unlock();
@@ -4015,6 +4019,14 @@ void ReplicatedPG::on_change()
 
   // clear reserved scrub state
   clear_scrub_reserved();
+
+  // clear scrub state
+  if (finalizing_scrub) {
+    scrub_clear_state();
+  } else if (is_scrubbing()) {
+    state_clear(PG_STATE_SCRUBBING);
+    state_clear(PG_STATE_REPAIR);
+  }
 
   // take object waiters
   take_object_waiters(waiting_for_missing_object);

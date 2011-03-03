@@ -311,20 +311,20 @@ extern const char *ceph_osd_op_name(int op);
  * An op may be READ, WRITE, or READ|WRITE.
  */
 enum {
-	CEPH_OSD_FLAG_ACK = 1,          /* want (or is) "ack" ack */
-	CEPH_OSD_FLAG_ONNVRAM = 2,      /* want (or is) "onnvram" ack */
-	CEPH_OSD_FLAG_ONDISK = 4,       /* want (or is) "ondisk" ack */
-	CEPH_OSD_FLAG_RETRY = 8,        /* resend attempt */
-	CEPH_OSD_FLAG_READ = 16,        /* op may read */
-	CEPH_OSD_FLAG_WRITE = 32,       /* op may write */
-	CEPH_OSD_FLAG_ORDERSNAP = 64,   /* EOLDSNAP if snapc is out of order */
-	CEPH_OSD_FLAG_PEERSTAT = 128,   /* msg includes osd_peer_stat */
-	CEPH_OSD_FLAG_BALANCE_READS = 256,
-	CEPH_OSD_FLAG_PARALLELEXEC = 512, /* execute op in parallel */
-	CEPH_OSD_FLAG_PGOP = 1024,      /* pg op, no object */
-	CEPH_OSD_FLAG_EXEC = 2048,      /* op may exec */
-	CEPH_OSD_FLAG_EXEC_PUBLIC = 4096, /* op may exec (public) */
-	CEPH_OSD_FLAG_LOCALIZE_READS = 8192,  /* read from nearby replica, if any */
+	CEPH_OSD_FLAG_ACK =            0x0001,  /* want (or is) "ack" ack */
+	CEPH_OSD_FLAG_ONNVRAM =        0x0002,  /* want (or is) "onnvram" ack */
+	CEPH_OSD_FLAG_ONDISK =         0x0004,  /* want (or is) "ondisk" ack */
+	CEPH_OSD_FLAG_RETRY =          0x0008,  /* resend attempt */
+	CEPH_OSD_FLAG_READ =           0x0010,  /* op may read */
+	CEPH_OSD_FLAG_WRITE =          0x0020,  /* op may write */
+	CEPH_OSD_FLAG_ORDERSNAP =      0x0040,  /* EOLDSNAP if snapc is out of order */
+	CEPH_OSD_FLAG_PEERSTAT =       0x0080,  /* msg includes osd_peer_stat */
+	CEPH_OSD_FLAG_BALANCE_READS =  0x0100,
+	CEPH_OSD_FLAG_PARALLELEXEC =   0x0200,  /* execute op in parallel */
+	CEPH_OSD_FLAG_PGOP =           0x0400,  /* pg op, no object */
+	CEPH_OSD_FLAG_EXEC =           0x0800,  /* op may exec */
+	CEPH_OSD_FLAG_EXEC_PUBLIC =    0x1000,  /* op may exec (public) */
+	CEPH_OSD_FLAG_LOCALIZE_READS = 0x2000,  /* read from nearby replica, if any */
 };
 
 enum {
@@ -388,30 +388,6 @@ struct ceph_osd_op {
 		} __attribute__ ((packed)) watch;
 };
 	__le32 payload_len;
-} __attribute__ ((packed));
-
-/*
- * osd request message header.  each request may include multiple
- * ceph_osd_op object operations.
- */
-struct ceph_osd_request_head {
-	__le32 client_inc;                 /* client incarnation */
-	struct ceph_object_layout layout;  /* pgid */
-	__le32 osdmap_epoch;               /* client's osdmap epoch */
-
-	__le32 flags;
-
-	struct ceph_timespec mtime;        /* for mutations only */
-	struct ceph_eversion reassert_version; /* if we are replaying op */
-
-	__le32 object_len;     /* length of object name */
-
-	__le64 snapid;         /* snapid to read */
-	__le64 snap_seq;       /* writer's snap context */
-	__le32 num_snaps;
-
-	__le16 num_ops;
-	struct ceph_osd_op ops[];  /* followed by ops[], obj, ticket, snaps */
 } __attribute__ ((packed));
 
 struct ceph_osd_reply_head {

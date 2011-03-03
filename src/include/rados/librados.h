@@ -30,7 +30,7 @@ typedef void *rados_ioctx_t;
 typedef void *rados_list_ctx_t;
 typedef uint64_t rados_snap_t;
 
-struct rados_ioctx_stat_t {
+struct rados_pool_stat_t {
   uint64_t num_bytes;    // in bytes
   uint64_t num_kb;       // in KB
   uint64_t num_objects;
@@ -46,7 +46,6 @@ struct rados_statfs_t {
   uint64_t kb, kb_used, kb_avail;
   uint64_t num_objects;
 };
-
 
 void rados_version(int *major, int *minor, int *extra);
 
@@ -101,7 +100,7 @@ int rados_ioctx_create(rados_t cluster, const char *pool_name, rados_ioctx_t *io
 void rados_ioctx_destroy(rados_ioctx_t io);
 int rados_ioctx_lookup(rados_t cluster, const char *pool_name);
 
-int rados_ioctx_stat(rados_ioctx_t io, struct rados_ioctx_stat_t *stats);
+int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t *stats);
 
 int rados_pool_create(rados_t cluster, const char *pool_name);
 int rados_pool_create_with_auid(rados_t cluster, const char *pool_name, uint64_t auid);
@@ -111,6 +110,8 @@ int rados_pool_create_with_all(rados_t cluster, const char *pool_name, uint64_t 
 				     __u8 crush_rule);
 int rados_pool_delete(rados_t cluster, const char *pool_name);
 int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid);
+
+void rados_ioctx_locator_set_key(rados_ioctx_t io, const char *key);
 
 /* objects */
 int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *ctx);

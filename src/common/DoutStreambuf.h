@@ -68,6 +68,10 @@ public:
 
   std::string config_to_str() const;
 
+  // Output a string directly to the file and to syslog
+  // (if those sinks are active)
+  void dout_emergency_to_file_and_syslog(const char * const str) const;
+
 protected:
   // Called when the buffer fills up
   virtual int_type overflow(int_type c);
@@ -79,7 +83,6 @@ protected:
   virtual int_type underflow();
 
 private:
-  void dout_emergency_impl(const char * const str) const;
   friend void dout_emergency(const char * const str);
   friend void dout_emergency(const std::string &str);
 

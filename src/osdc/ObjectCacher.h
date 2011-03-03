@@ -296,7 +296,7 @@ class ObjectCacher {
   // objects
   Object *get_object_maybe(sobject_t oid, object_locator_t &l) {
     // have it?
-    if ((l.pool < objects.size()) &&
+    if (((uint32_t)l.pool < objects.size()) &&
         (objects[l.pool].count(oid)))
       return objects[l.pool][oid];
     return NULL;
@@ -304,7 +304,7 @@ class ObjectCacher {
 
   Object *get_object(sobject_t oid, ObjectSet *oset, object_locator_t &l) {
     // have it?
-    if (l.pool < objects.size()) {
+    if ((uint32_t)l.pool < objects.size()) {
       if (objects[l.pool].count(oid))
         return objects[l.pool][oid];
     } else {
