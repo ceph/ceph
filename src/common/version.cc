@@ -12,9 +12,8 @@
  *
  */
 
-#include "common/config.h"
+#include "acconfig.h"
 #include "ceph_ver.h"
-#include "common/debug.h"
 #include "common/version.h"
 
 #include <sstream>
@@ -23,15 +22,20 @@
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
-std::string ceph_version_to_string(void)
+const char * const ceph_version_to_str(void)
+{
+  return VERSION;
+}
+
+const char * const git_version_to_str(void)
+{
+  return STRINGIFY(CEPH_GIT_VER);
+}
+
+std::string const pretty_version_to_str(void)
 {
   std::ostringstream oss;
   oss << "ceph version " << VERSION << " (commit:"
       << STRINGIFY(CEPH_GIT_VER) << ")";
   return oss.str();
-}
-
-void dout_output_ceph_version(void)
-{
-  generic_dout(-1) << ceph_version_to_string() << dendl;
 }

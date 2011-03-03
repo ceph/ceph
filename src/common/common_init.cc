@@ -154,9 +154,6 @@ void common_init(std::vector<const char*>& args, const char *module_type, int fl
   if (force_fg_logging)
     set_foreground_logging();
 
-  if (g_conf.daemonize)
-    cout << ceph_version_to_string() << std::endl;
-
 #ifdef HAVE_PROFILER
   /*
    * We need to call _something_ in libprofile.so so that the

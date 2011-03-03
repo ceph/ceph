@@ -15,10 +15,15 @@
 #ifndef CEPH_COMMON_VERSION_H
 #define CEPH_COMMON_VERSION_H
 
-// Return a string describing the Ceph version
-std::string ceph_version_to_string(void);
+#include <string>
 
-// Output Ceph version to dout with prio -1
-void dout_output_ceph_version(void);
+// Return a string describing the Ceph version
+const char * const ceph_version_to_str(void);
+
+// Return a string describing the git version
+const char * const git_version_to_str(void);
+
+// Return a formatted string describing the ceph and git versions
+std::string const pretty_version_to_str(void);
 
 #endif
