@@ -108,7 +108,7 @@ int CryptoAES::create(bufferptr& secret)
 int CryptoAES::validate_secret(bufferptr& secret)
 {
   if (secret.length() < (size_t)AES_KEY_LEN) {
-    dout(0) << "key is too short" << dendl;
+    dout(0) << "key is too short: " << secret.length() << "<" << AES_KEY_LEN << dendl;
     return -EINVAL;
   }
 
