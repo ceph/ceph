@@ -4228,16 +4228,15 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     // i am PRIMARY
     if (pg->is_active())  {
       // PG is ACTIVE
-      dout(10) << *pg << " searching osd" << from << " log for unfound items." << dendl;
-      pg->search_for_missing(info, missing, from);
-
-      if (pg->have_unfound()) {
-	// Make sure we've requested MISSING information from every OSD
-	// we know about.
-	pg->discover_all_missing(query_map);
-      }
-      else {
-	dout(10) << *pg << " ignoring osd" << from << " log, pg is already active" << dendl;
+      if (!pg->is_clean()) {
+	dout(10) << *pg << " searching osd" << from << " log for unfound items." << dendl;
+	pg->search_for_missing(info, missing, from);
+	if (pg->have_unfound()) {
+	  // Make sure we've requested MISSING information from every OSD
+	  // we know about.
+	  pg->discover_all_missing(query_map);
+	}
+	queue_for_recovery(pg);  // in case we found something.
       }
     }
     else if ((!log.empty()) && missing) {
