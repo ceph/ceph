@@ -293,6 +293,13 @@ struct RGWBucketEnt {
     if (struct_v >= 2)
       ::decode(count, bl);
   }
+  void clear() {
+    name="";
+    size = 0;
+    mtime = 0;
+    memset(etag, 0, sizeof(etag));
+    count = 0;
+  }
 };
 WRITE_CLASS_ENCODER(RGWBucketEnt)
 

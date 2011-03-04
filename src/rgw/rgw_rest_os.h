@@ -32,6 +32,14 @@ public:
   void send_response();
 };
 
+class RGWStatBucket_REST_OS : public RGWStatBucket_REST {
+public:
+  RGWStatBucket_REST_OS() {}
+  ~RGWStatBucket_REST_OS() {}
+
+  void send_response();
+};
+
 class RGWCreateBucket_REST_OS : public RGWCreateBucket_REST {
 public:
   RGWCreateBucket_REST_OS() {}
@@ -93,6 +101,7 @@ class RGWHandler_REST_OS : public RGWHandler_REST {
   RGWGetObj_REST_OS get_obj_op;
   RGWListBuckets_REST_OS list_buckets_op;
   RGWListBucket_REST_OS list_bucket_op;
+  RGWStatBucket_REST_OS stat_bucket_op;
   RGWCreateBucket_REST_OS create_bucket_op;
   RGWDeleteBucket_REST_OS delete_bucket_op;
   RGWPutObj_REST_OS put_obj_op;

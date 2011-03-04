@@ -218,6 +218,28 @@ void RGWListBuckets::execute()
   send_response();
 }
 
+void RGWStatBucket::execute()
+{
+  RGWUserBuckets buckets;
+  bucket.name = s->bucket;
+  buckets.add(bucket);
+  map<string, RGWBucketEnt>& m = buckets.get_buckets();
+  ret = rgwstore->update_containers_stats(m);
+  if (!ret)
+    ret = -EEXIST;
+  if (ret > 0) {
+    ret = 0;
+    map<string, RGWBucketEnt>::iterator iter = m.find(bucket.name);
+    if (iter != m.end()) {
+      bucket = iter->second;
+    } else {
+      ret = -EINVAL;
+    }
+  }
+
+  send_response();
+}
+
 void RGWListBucket::execute()
 {
   if (!verify_permission(s, RGW_PERM_READ)) {

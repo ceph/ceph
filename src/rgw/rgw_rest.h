@@ -35,6 +35,12 @@ public:
   ~RGWListBucket_REST() {}
 };
 
+class RGWStatBucket_REST : public RGWStatBucket {
+public:
+  RGWStatBucket_REST() {}
+  ~RGWStatBucket_REST() {}
+};
+
 class RGWCreateBucket_REST : public RGWCreateBucket {
 public:
   RGWCreateBucket_REST() {}

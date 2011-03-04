@@ -76,6 +76,25 @@ void RGWListBucket_REST_OS::send_response()
   s->formatter->close_section("container");
 }
 
+static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
+{
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%lld", bucket.count);
+  CGI_PRINTF(s->fcgx->out,"X-Container-Object-Count: %s\n", buf);
+  snprintf(buf, sizeof(buf), "%lld", bucket.size);
+  CGI_PRINTF(s->fcgx->out,"X-Container-Bytes-Used: %s\n", buf);
+}
+
+void RGWStatBucket_REST_OS::send_response()
+{
+  if (ret >= 0)
+    dump_container_metadata(s, bucket);
+
+  dump_errno(s, (ret < 0 ? ret : 0));
+
+  end_header(s);
+  dump_start(s);
+}
 
 void RGWCreateBucket_REST_OS::send_response()
 {
@@ -178,7 +197,10 @@ RGWOp *RGWHandler_REST_OS::get_retrieve_obj_op(struct req_state *s, bool get_dat
     return NULL;
   }
 
-  return &list_bucket_op;
+  if (get_data)
+    return &list_bucket_op;
+  else
+    return &stat_bucket_op;
 }
 
 RGWOp *RGWHandler_REST_OS::get_retrieve_op(struct req_state *s, bool get_data)

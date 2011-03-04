@@ -155,6 +155,25 @@ public:
   virtual void send_response() = 0;
 };
 
+class RGWStatBucket : public RGWOp {
+protected:
+  int ret;
+  RGWBucketEnt bucket;
+
+public:
+  virtual void init(struct req_state *s) {
+    RGWOp::init(s);
+    ret = 0;
+    bucket.clear();
+  }
+  RGWStatBucket() {}
+  ~RGWStatBucket() {}
+
+  void execute();
+
+  virtual void send_response() = 0;
+};
+
 class RGWCreateBucket : public RGWOp {
 protected:
   int ret;
