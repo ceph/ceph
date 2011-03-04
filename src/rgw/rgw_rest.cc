@@ -384,6 +384,7 @@ int RGWPutObj_REST::get_data()
 
 void RGWPutObj_REST::send_response()
 {
+  dump_etag(s, etag.c_str());
   dump_errno(s, ret, &err);
   end_header(s);
 }

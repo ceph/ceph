@@ -370,10 +370,10 @@ void RGWPutObj::execute()
     bufferlist aclbl;
     policy.encode(aclbl);
 
-    string md5_str(calc_md5);
+    etag = calc_md5;
     map<string, bufferlist> attrs;
     bufferlist bl;
-    bl.append(md5_str.c_str(), md5_str.size() + 1);
+    bl.append(etag.c_str(), etag.size() + 1);
     attrs[RGW_ATTR_ETAG] = bl;
     attrs[RGW_ATTR_ACL] = aclbl;
 
