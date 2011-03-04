@@ -26,7 +26,10 @@ class RGWCache  : public T
 
   string normal_name(std::string& space, std::string& bucket, std::string& oid) {
     char buf[space.size() + 1 + bucket.size() + 1 + oid.size() + 1];
-    sprintf(buf, "%s+%s+%s", space.c_str(), bucket.c_str(), oid.c_str());
+    const char *space_str = space.c_str();
+    const char *bucket_str = bucket.c_str();
+    const char *oid_str = oid.c_str();
+    sprintf(buf, "%s+%s+%s", space_str, bucket_str, oid_str);
     return string(buf);
   }
 

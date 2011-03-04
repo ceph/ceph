@@ -79,9 +79,9 @@ void RGWListBucket_REST_OS::send_response()
 static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
 {
   char buf[16];
-  snprintf(buf, sizeof(buf), "%lld", bucket.count);
+  snprintf(buf, sizeof(buf), "%lld", (long long)bucket.count);
   CGI_PRINTF(s->fcgx->out,"X-Container-Object-Count: %s\n", buf);
-  snprintf(buf, sizeof(buf), "%lld", bucket.size);
+  snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size);
   CGI_PRINTF(s->fcgx->out,"X-Container-Bytes-Used: %s\n", buf);
 }
 
