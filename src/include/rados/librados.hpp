@@ -92,7 +92,7 @@ namespace librados
    * Typical use (error checking omitted):
    *
    * IoCtx *p;
-   * rados.ioctx_create("my_pool", &pool);
+   * rados.ioctx_create("my_pool", &p);
    * p->stat(&stats);
    * ... etc ...
    * delete p; // close our pool handle
@@ -218,7 +218,7 @@ namespace librados
     int pool_delete(const char *name);
     int pool_lookup(const char *name);
 
-    int ioctx_create(const char *name, IoCtx &pool);
+    int ioctx_create(const char *name, IoCtx &pioctx);
 
     /* listing objects */
     int pool_list(std::list<std::string>& v);
