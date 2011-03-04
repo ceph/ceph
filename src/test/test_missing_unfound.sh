@@ -18,8 +18,8 @@ done
 #rm dev/osd[02]/current/*/test_40*
 
 # some on only one
-rm dev/osd0/current/*/test_5*
-rm dev/osd2/current/*/test_6*
+rm dev/osd0/current/*/test_*
+#rm dev/osd2/current/*/test_6*
 
 # ...and see how we fare!
 ./init-ceph start osd.1
