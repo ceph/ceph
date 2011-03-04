@@ -4228,16 +4228,15 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     // i am PRIMARY
     if (pg->is_active())  {
       // PG is ACTIVE
-      dout(10) << *pg << " searching osd" << from << " log for unfound items." << dendl;
-      pg->search_for_missing(info, missing, from);
-
-      if (pg->have_unfound()) {
-	// Make sure we've requested MISSING information from every OSD
-	// we know about.
-	pg->discover_all_missing(query_map);
-      }
-      else {
-	dout(10) << *pg << " ignoring osd" << from << " log, pg is already active" << dendl;
+      if (!pg->is_clean()) {
+	dout(10) << *pg << " searching osd" << from << " log for unfound items." << dendl;
+	pg->search_for_missing(info, missing, from);
+	if (pg->have_unfound()) {
+	  // Make sure we've requested MISSING information from every OSD
+	  // we know about.
+	  pg->discover_all_missing(query_map);
+	}
+	queue_for_recovery(pg);  // in case we found something.
       }
     }
     else if ((!log.empty()) && missing) {
@@ -4936,8 +4935,24 @@ void OSD::do_recovery(PG *pg)
     dout(10) << "do_recovery started " << started
 	     << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops) on "
 	     << *pg << dendl;
-    
-    if (started < max)
+
+    /*
+     * if we couldn't start any recovery ops and things are still
+     * unfound, see if we can discover more missing object locations.
+     * It may be that our initial locations were bad and we errored
+     * out while trying to pull.
+     */
+    if (!started && pg->have_unfound()) {
+      map< int, map<pg_t,PG::Query> > query_map;
+      pg->discover_all_missing(query_map, true);
+      if (query_map.size())
+	do_queries(query_map);
+      else {
+	dout(10) << "do_recovery  no luck, giving up on this pg for now" << dendl;
+	pg->recovery_item.remove_myself();	// sigh...
+      }
+    }
+    else if (started < max)
       pg->recovery_item.remove_myself();
     
     pg->unlock();

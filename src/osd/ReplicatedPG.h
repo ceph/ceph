@@ -511,7 +511,7 @@ protected:
   };
   map<sobject_t, map<int, push_info_t> > pushing;
 
-  int recover_object_replicas(const sobject_t& soid);
+  int recover_object_replicas(const sobject_t& soid, eversion_t v);
   void calc_head_subsets(SnapSet& snapset, const sobject_t& head,
 			 Missing& missing,
 			 interval_set<uint64_t>& data_subset,
@@ -525,10 +525,11 @@ protected:
 		  uint64_t size, eversion_t version,
 		  interval_set<uint64_t> &data_subset,
 		  map<sobject_t, interval_set<uint64_t> >& clone_subsets);
-  void send_push_op(const sobject_t& oid, eversion_t version, int dest,
-		    uint64_t size, bool first, bool complete,
-		    interval_set<uint64_t>& data_subset, 
-		    map<sobject_t, interval_set<uint64_t> >& clone_subsets);
+  int send_push_op(const sobject_t& oid, eversion_t version, int dest,
+		   uint64_t size, bool first, bool complete,
+		   interval_set<uint64_t>& data_subset, 
+		   map<sobject_t, interval_set<uint64_t> >& clone_subsets);
+  void send_push_op_blank(const sobject_t& soid, int peer);
 
   int pull(const sobject_t& oid);
   void send_pull_op(const sobject_t& soid, eversion_t v, bool first, const interval_set<uint64_t>& data_subset, int fromosd);
@@ -618,6 +619,7 @@ protected:
   void sub_op_modify_reply(MOSDSubOpReply *reply);
   void _wrote_pushed_object(ObjectStore::Transaction *t, ObjectContext *obc);
   void sub_op_push(MOSDSubOp *op);
+  void _failed_push(MOSDSubOp *op);
   void sub_op_push_reply(MOSDSubOpReply *reply);
   void sub_op_pull(MOSDSubOp *op);
 

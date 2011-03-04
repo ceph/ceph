@@ -137,7 +137,16 @@ void ReplicatedPG::wait_for_degraded_object(const sobject_t& soid, Message *m)
 	    << soid 
 	    << ", pushing"
 	    << dendl;
-    recover_object_replicas(soid);
+    eversion_t v;
+    for (unsigned i = 1; i < acting.size(); i++) {
+      int peer = acting[i];
+      if (peer_missing.count(peer) &&
+	  peer_missing[peer].missing.count(soid)) {
+	v = peer_missing[peer].missing[soid].need;
+	break;
+      }
+    }
+    recover_object_replicas(soid, v);
   }
   waiting_for_degraded_object[soid].push_back(m);
 }
@@ -3203,14 +3212,22 @@ int ReplicatedPG::pull(const sobject_t& soid)
   eversion_t v = missing.missing[soid].need;
 
   int fromosd = -1;
-  assert(missing_loc.count(soid));
-  for (set<int>::iterator p = missing_loc[soid].begin();
-       p != missing_loc[soid].end();
-       p++) {
-    if (osd->osdmap->is_up(*p)) {
-      fromosd = *p;
-      break;
+  map<sobject_t,set<int> >::iterator q = missing_loc.find(soid);
+  if (q != missing_loc.end()) {
+    for (set<int>::iterator p = q->second.begin();
+	 p != q->second.end();
+	 p++) {
+      if (osd->osdmap->is_up(*p)) {
+	fromosd = *p;
+	break;
+      }
     }
+  }
+  if (fromosd < 0) {
+    dout(7) << "pull " << soid
+	    << " v " << v 
+	    << " but it is unfound" << dendl;
+    return PULL_NONE;
   }
   
   dout(7) << "pull " << soid
@@ -3218,9 +3235,6 @@ int ReplicatedPG::pull(const sobject_t& soid)
 	  << " on osds " << missing_loc[soid]
 	  << " from osd" << fromosd
 	  << dendl;
-
-  if (fromosd < 0)
-    return PULL_NONE;
 
   map<sobject_t, interval_set<uint64_t> > clone_subsets;
   interval_set<uint64_t> data_subset;
@@ -3420,10 +3434,10 @@ void ReplicatedPG::push_start(const sobject_t& soid, int peer,
  * push - send object to a peer
  */
 
-void ReplicatedPG::send_push_op(const sobject_t& soid, eversion_t version, int peer, 
-				uint64_t size, bool first, bool complete,
-				interval_set<uint64_t> &data_subset,
-				map<sobject_t, interval_set<uint64_t> >& clone_subsets)
+int ReplicatedPG::send_push_op(const sobject_t& soid, eversion_t version, int peer, 
+			       uint64_t size, bool first, bool complete,
+			       interval_set<uint64_t> &data_subset,
+			       map<sobject_t, interval_set<uint64_t> >& clone_subsets)
 {
   // read data+attrs
   bufferlist bl;
@@ -3450,9 +3464,9 @@ void ReplicatedPG::send_push_op(const sobject_t& soid, eversion_t version, int p
   object_info_t oi(bv);
 
   if (oi.version != version) {
-    osd->clog.error() << "push " << soid << " v " << version << " to osd" << peer
+    osd->clog.error() << info.pgid << " push " << soid << " v " << version << " to osd" << peer
 		      << " failed because local copy is " << oi.version << "\n";
-    return;
+    return -1;
   }
 
   // ok
@@ -3484,6 +3498,20 @@ void ReplicatedPG::send_push_op(const sobject_t& soid, eversion_t version, int p
   subop->complete = complete;
   osd->cluster_messenger->
     send_message(subop, osd->osdmap->get_cluster_inst(peer));
+  return 0;
+}
+
+void ReplicatedPG::send_push_op_blank(const sobject_t& soid, int peer)
+{
+  // send a blank push back to the primary
+  osd_reqid_t rid;
+  MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, soid, false, 0,
+				   osd->osdmap->get_epoch(), osd->get_tid(), eversion_t());
+  subop->ops = vector<OSDOp>(1);
+  subop->ops[0].op.op = CEPH_OSD_OP_PUSH;
+  subop->first = false;
+  subop->complete = false;
+  osd->cluster_messenger->send_message(subop, osd->osdmap->get_cluster_inst(peer));
 }
 
 void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
@@ -3561,10 +3589,9 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
   struct stat st;
   int r = osd->store->stat(coll, soid, &st);
   if (r != 0) {
-    osd->clog.error() << op->get_source() << " tried to pull " << soid
-	<< " in " << info.pgid << " but got "
-	<< cpp_strerror(-r) << "\n";
-    // FIXME: do something more intelligent.. mark the pg as needing repair?
+    osd->clog.error() << info.pgid << " " << op->get_source() << " tried to pull " << soid
+		      << " but got " << cpp_strerror(-r) << "\n";
+    send_push_op_blank(soid, op->get_source().num());
   } else {
     uint64_t size = st.st_size;
 
@@ -3576,7 +3603,10 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
     // complete==false means nothing.  we don't know because the primary may
     // not be pulling the entire object.
 
-    send_push_op(soid, op->version, op->get_source().num(), size, op->first, complete, op->data_subset, op->clone_subsets);
+    r = send_push_op(soid, op->version, op->get_source().num(), size, op->first, complete,
+		     op->data_subset, op->clone_subsets);
+    if (r < 0)
+      send_push_op_blank(soid, op->get_source().num());
   }
   op->put();
 }
@@ -3649,6 +3679,12 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 	  << " clone_subsets " << op->clone_subsets
 	  << " data len " << op->get_data().length()
           << dendl;
+
+  if (v == eversion_t()) {
+    // replica doesn't have it!
+    _failed_push(op);
+    return;
+  }
 
   interval_set<uint64_t> data_subset;
   map<sobject_t, interval_set<uint64_t> > clone_subsets;
@@ -3748,23 +3784,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
       if (op->complete && !complete) {
 	dout(0) << " uh oh, we reached EOF on peer before we got everything we wanted" << dendl;
-
-	// hmm, do we have another source?
-	int from = op->get_source().num();
-	set<int>& reps = missing_loc[soid];
-	dout(0) << " we have reps on osds " << reps << dendl;
-	set<int>::iterator q = reps.begin();
-	if (q != reps.end() && *q == from) {
-	  q++;
-	  if (q != reps.end()) {
-	    dout(0) << " trying next replica on osd" << *q << dendl;
-	    reps.erase(reps.begin());  // forget about the bad replica...
-	    finish_recovery_op(soid);  // close out this attempt,
-	    pulling.erase(soid);
-	    pull(soid);	               // and try again.
-	  }
-	}
-	op->put();
+	_failed_push(op);
 	return;
       }
 
@@ -3965,6 +3985,28 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   op->put();  // at the end... soid is a ref to op->soid!
 }
 
+void ReplicatedPG::_failed_push(MOSDSubOp *op)
+{
+  const sobject_t& soid = op->poid;
+  int from = op->get_source().num();
+  map<sobject_t,set<int> >::iterator p = missing_loc.find(soid);
+  if (p != missing_loc.end()) {
+    dout(0) << "_failed_push " << soid << " from osd" << from
+	    << ", reps on " << p->second << dendl;
+
+    p->second.erase(from);          // forget about this (bad) peer replica
+    if (p->second.empty())
+      missing_loc.erase(p);
+  } else {
+    dout(0) << "_failed_push " << soid << " from osd" << from
+	    << " but not in missing_loc ???" << dendl;
+  }
+
+  finish_recovery_op(soid);  // close out this attempt,
+  pulling.erase(soid);
+
+  op->put();
+}
 
 
 /*
@@ -4067,10 +4109,12 @@ int ReplicatedPG::start_recovery_ops(int max)
     // All of the missing objects we have are unfound.
     // Recover the replicas.
     started = recover_replicas(max);
-  } else {
-    // We still have missing objects that we should grab from replicas.
-    started = recover_primary(max);
   }
+  if (!started) {
+    // We still have missing objects that we should grab from replicas.
+    started += recover_primary(max);
+  }
+  dout(10) << " started " << started << dendl;
 
   osd->logger->inc(l_osd_rop, started);
 
@@ -4134,7 +4178,7 @@ int ReplicatedPG::recover_primary(int max)
 
     dout(10) << "recover_primary "
              << soid << " " << item.need
-	     << (unfound ? "":" (unfound)")
+	     << (unfound ? " (unfound)":"")
 	     << (missing.is_missing(soid) ? " (missing)":"")
 	     << (missing.is_missing(head) ? " (missing head)":"")
              << (pulling.count(soid) ? " (pulling)":"")
@@ -4200,22 +4244,40 @@ int ReplicatedPG::recover_primary(int max)
     if (!skipped)
       log.last_requested = v;
   }
+
   return started;
 }
 
-int ReplicatedPG::recover_object_replicas(const sobject_t& soid)
+int ReplicatedPG::recover_object_replicas(const sobject_t& soid, eversion_t v)
 {
-  int started = 0;
-
   dout(10) << "recover_object_replicas " << soid << dendl;
 
   // NOTE: we know we will get a valid oloc off of disk here.
   ObjectContext *obc = get_object_context(soid, OLOC_BLANK, false);
+  if (!obc) {
+    missing.add(soid, v, eversion_t());
+    bool uhoh = true;
+    for (unsigned i=1; i<acting.size(); i++) {
+      int peer = acting[i];
+      if (!peer_missing[peer].is_missing(soid, v)) {
+	missing_loc[soid].insert(peer);
+	dout(10) << info.pgid << " unexpectedly missing " << soid << " v" << v
+		 << ", there should be a copy on osd" << peer << dendl;
+	uhoh = false;
+      }
+    }
+    if (uhoh)
+      osd->clog.error() << info.pgid << " missing primary copy of " << soid << ", unfound\n";
+    else
+      osd->clog.error() << info.pgid << " missing primary copy of " << soid
+			<< ", will try copies on " << missing_loc[soid] << "\n";
+    return 0;
+  }
+
   dout(10) << " ondisk_read_lock for " << soid << dendl;
   obc->ondisk_read_lock();
   
   start_recovery_op(soid);
-  started++;
 
   // who needs it?  
   for (unsigned i=1; i<acting.size(); i++) {
@@ -4230,7 +4292,7 @@ int ReplicatedPG::recover_object_replicas(const sobject_t& soid)
   obc->ondisk_read_unlock();
   put_object_context(obc);
 
-  return started;
+  return 1;
 }
 
 int ReplicatedPG::recover_replicas(int max)
@@ -4254,6 +4316,7 @@ int ReplicatedPG::recover_replicas(int max)
 	   p != m.rmissing.end() && started < max;
 	   ++p) {
       const sobject_t soid(p->second);
+      eversion_t v = p->first;
       if (pushing.count(soid)) {
 	dout(10) << __func__ << ": already pushing " << soid << dendl;
 	continue;
@@ -4267,7 +4330,7 @@ int ReplicatedPG::recover_replicas(int max)
       }
 
       dout(10) << __func__ << ": recover_object_replicas(" << soid << ")" << dendl;
-      started += recover_object_replicas(soid);
+      started += recover_object_replicas(soid, v);
     }
   }
 
