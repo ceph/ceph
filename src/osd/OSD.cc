@@ -4945,11 +4945,15 @@ void OSD::do_recovery(PG *pg)
      */
     if (!started && pg->have_unfound()) {
       map< int, map<pg_t,PG::Query> > query_map;
-      pg->discover_all_missing(query_map);
-      do_queries(query_map);
+      pg->discover_all_missing(query_map, true);
+      if (query_map.size())
+	do_queries(query_map);
+      else {
+	dout(10) << "do_recovery  no luck, giving up on this pg for now" << dendl;
+	pg->recovery_item.remove_myself();	// sigh...
+      }
     }
-
-    if (started < max)
+    else if (started < max)
       pg->recovery_item.remove_myself();
     
     pg->unlock();

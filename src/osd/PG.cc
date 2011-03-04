@@ -565,7 +565,7 @@ void PG::search_for_missing(const Info &oinfo, const Missing *omissing,
   dout(20) << "search_for_missing missing " << missing.missing << dendl;
 }
 
-void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map)
+void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map, bool desperate)
 {
   assert(missing.have_missing());
 
@@ -573,6 +573,17 @@ void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map)
 	   << missing.num_missing() << " missing, "
 	   << get_num_unfound() << " unfound"
 	   << dendl;
+
+  if (desperate) {
+    // get desperate: include all peers in set, in case our
+    // might_have_unfound calculation was somehow off
+    for (map<int,PG::Info>::iterator p = peer_info.begin();
+	 p != peer_info.end();
+	 ++p)
+      might_have_unfound.insert(p->first);
+    dout(10) << __func__ << " included all peers in might_have_unfound (getting desperate): "
+	     << might_have_unfound << dendl;
+  }
 
   std::set<int>::const_iterator m = might_have_unfound.begin();
   std::set<int>::const_iterator mend = might_have_unfound.end();
