@@ -4936,7 +4936,19 @@ void OSD::do_recovery(PG *pg)
     dout(10) << "do_recovery started " << started
 	     << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops) on "
 	     << *pg << dendl;
-    
+
+    /*
+     * if we couldn't start any recovery ops and things are still
+     * unfound, see if we can discover more missing object locations.
+     * It may be that our initial locations were bad and we errored
+     * out while trying to pull.
+     */
+    if (!started && pg->have_unfound()) {
+      map< int, map<pg_t,PG::Query> > query_map;
+      pg->discover_all_missing(query_map);
+      do_queries(query_map);
+    }
+
     if (started < max)
       pg->recovery_item.remove_myself();
     
