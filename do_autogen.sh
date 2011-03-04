@@ -5,14 +5,13 @@ usage() {
 do_autogen.sh: make a ceph build by running autogen, etc.
 
 -h:                              this help message
--3:                              build 32-bit
--6:                              build 64-bit
 -d <level>                       debug build
                                  level 0: no debug
                                  level 1: -g
                                  level 2: -Wall
                                  level 3: -Wextra
                                  level 4: even more...
+-P                               profiling build
 
 EOF
 }
@@ -26,16 +25,13 @@ debug_level=0
 verbose=0
 CFLAGS=""
 CXXFLAGS=""
+profile=0
 while getopts  "36d:hPv" flag
 do
     case $flag in
-    3) CFLAGS="$CFLAGS -m32";;
-
-    6) CFLAGS="$CFLAGS -m64";;
-
     d) debug_level=$OPTARG;;
 
-    P) with_profiler="--with-profiler ";;
+    P) profile=1;;
 
     h) usage
         exit 0;;
@@ -48,6 +44,16 @@ do
         exit 1;;
     esac
 done
+
+if [ $profile -eq 1 ]; then
+    if [ $debug_level -ne 0 ]; then
+       echo "Can't specify both -d and -P. Profiling builds are \
+different than debug builds."
+       exit 1
+    fi
+    CFLAGS="${CFLAGS} -fno-omit-frame-pointer"
+    debug_level=1
+fi
 
 if [ "${debug_level}" -ge 1 ]; then
     CFLAGS="${CFLAGS} -g"
