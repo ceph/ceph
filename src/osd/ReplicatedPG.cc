@@ -4109,10 +4109,12 @@ int ReplicatedPG::start_recovery_ops(int max)
     // All of the missing objects we have are unfound.
     // Recover the replicas.
     started = recover_replicas(max);
-  } else {
-    // We still have missing objects that we should grab from replicas.
-    started = recover_primary(max);
   }
+  if (!started) {
+    // We still have missing objects that we should grab from replicas.
+    started += recover_primary(max);
+  }
+  dout(10) << " started " << started << dendl;
 
   osd->logger->inc(l_osd_rop, started);
 
@@ -4242,13 +4244,12 @@ int ReplicatedPG::recover_primary(int max)
     if (!skipped)
       log.last_requested = v;
   }
+
   return started;
 }
 
 int ReplicatedPG::recover_object_replicas(const sobject_t& soid, eversion_t v)
 {
-  int started = 0;
-
   dout(10) << "recover_object_replicas " << soid << dendl;
 
   // NOTE: we know we will get a valid oloc off of disk here.
@@ -4259,14 +4260,14 @@ int ReplicatedPG::recover_object_replicas(const sobject_t& soid, eversion_t v)
     for (unsigned i=1; i<acting.size(); i++) {
       int peer = acting[i];
       if (!peer_missing[peer].is_missing(soid, v)) {
-	dout(10) << info.pgid << " unexpectedly missing " << soid << " v" << v
-		 << ", will use copy on osd" << peer << dendl;
 	missing_loc[soid].insert(peer);
+	dout(10) << info.pgid << " unexpectedly missing " << soid << " v" << v
+		 << ", there should be a copy on osd" << peer << dendl;
 	uhoh = false;
       }
     }
     if (uhoh)
-      osd->clog.error() << info.pgid << " missing primary copy of " << soid << "\n";
+      osd->clog.error() << info.pgid << " missing primary copy of " << soid << ", unfound\n";
     else
       osd->clog.error() << info.pgid << " missing primary copy of " << soid
 			<< ", will try copies on " << missing_loc[soid] << "\n";
@@ -4277,7 +4278,6 @@ int ReplicatedPG::recover_object_replicas(const sobject_t& soid, eversion_t v)
   obc->ondisk_read_lock();
   
   start_recovery_op(soid);
-  started++;
 
   // who needs it?  
   for (unsigned i=1; i<acting.size(); i++) {
@@ -4292,7 +4292,7 @@ int ReplicatedPG::recover_object_replicas(const sobject_t& soid, eversion_t v)
   obc->ondisk_read_unlock();
   put_object_context(obc);
 
-  return started;
+  return 1;
 }
 
 int ReplicatedPG::recover_replicas(int max)
