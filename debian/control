@@ -12,7 +12,7 @@ Standards-Version: 3.9.1
 Package: ceph
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libedit2, hdparm, binutils
-Recommends: ceph-client-tools, ceph-fuse, libceph1, librados1, librbd1, libcrush1, btrfs-tools
+Recommends: ceph-client-tools, ceph-fuse, libceph1, librados2, librbd1, libcrush1, btrfs-tools
 Description: distributed storage and file system
  Ceph is a distributed storage and network file system designed to provide
  excellent performance, reliability, and scalability.
@@ -134,7 +134,7 @@ Description: CRUSH mapping algorithm (development files)
  This package contains development files needed for building applications that
  link against libcrush.
 
-Package: librados1
+Package: librados2
 Conflicts: librados
 Replaces: librados
 Architecture: any
@@ -145,23 +145,23 @@ Description: RADOS distributed object store client library
  shared library allowing applications to access the distributed object
  store using a simple file-like interface.
 
-Package: librados1-dbg
+Package: librados2-dbg
 Architecture: any
 Section: debug
 Priority: extra
-Depends: librados1 (= ${binary:Version}), ${misc:Depends}
-Description: debugging symbols for librados1
+Depends: librados2 (= ${binary:Version}), ${misc:Depends}
+Description: debugging symbols for librados
  RADOS is a reliable, autonomic distributed object storage cluster
  developed as part of the Ceph distributed storage system.  This is a
  shared library allowing applications to access the distributed object
  store using a simple file-like interface.
  .
- This package contains debugging symbols for librados1.
+ This package contains debugging symbols for librados.
 
-Package: librados1-dev
+Package: librados2-dev
 Architecture: any
 Section: libdevel
-Depends: ${shlibs:Depends}, ${misc:Depends}, librados1 (= ${binary:Version})
+Depends: ${shlibs:Depends}, ${misc:Depends}, librados2 (= ${binary:Version})
 Description: RADOS distributed object store client library (development files)
  RADOS is a reliable, autonomic distributed object storage cluster
  developed as part of the Ceph distributed storage system.  This is a
@@ -173,7 +173,7 @@ Description: RADOS distributed object store client library (development files)
 
 Package: librbd1
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, librados1
+Depends: ${shlibs:Depends}, ${misc:Depends}, librados2
 Description: RADOS block device client library
  RBD is a block device striped across multiple distributed objects
  in RADOS, a reliable, autonomic distributed object storage cluster
@@ -245,7 +245,7 @@ Description: Ceph distributed file system client library (development files)
 
 Package: radosgw
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libexpat1, librados1
+Depends: ${shlibs:Depends}, ${misc:Depends}, libexpat1, librados2
 Description: REST gateway for RADOS distributed object store
  RADOS is a distributed object store used by the Ceph distributed
  storage system.  This package provides a REST gateway to the
