@@ -16,9 +16,9 @@
 /libcrush1-dbg
 /libcrush1-dev
 /libcrush1
-/librados1-dbg
-/librados1-dev
-/librados1
+/librados2-dbg
+/librados2-dev
+/librados2
 /librbd1-dbg
 /librbd1-dev
 /librbd1

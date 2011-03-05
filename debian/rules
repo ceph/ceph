@@ -65,7 +65,7 @@ binary-arch: build install
 	dh_strip -pceph-fuse --dbg-package=ceph-fuse-dbg
 	dh_strip -pceph-client-tools --dbg-package=ceph-client-tools-dbg
 	dh_strip -plibcrush1 --dbg-package=libcrush1-dbg
-	dh_strip -plibrados1 --dbg-package=librados1-dbg
+	dh_strip -plibrados2 --dbg-package=librados2-dbg
 	dh_strip -plibrbd1 --dbg-package=librbd1-dbg
 	dh_strip -plibceph1 --dbg-package=libceph1-dbg
 	dh_strip -pradosgw --dbg-package=radosgw-dbg

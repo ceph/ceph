@@ -300,7 +300,7 @@ struct config_option config_optionsp[] = {
 	OPTION(osd_shed_reads_min_latency_ratio, 0, OPT_DOUBLE, 1.5),  // 1.2 == 20% higher than peer
 	OPTION(osd_client_message_size_cap, 0, OPT_LONGLONG, 500*1024L*1024L), // default to 200MB client data allowed in-memory
 	OPTION(osd_stat_refresh_interval, 0, OPT_DOUBLE, .5),
-	OPTION(osd_pg_bits, 0, OPT_INT, 9),  // bits per osd
+	OPTION(osd_pg_bits, 0, OPT_INT, 6),  // bits per osd
 	OPTION(osd_pgp_bits, 0, OPT_INT, 6),  // bits per osd
 	OPTION(osd_lpg_bits, 0, OPT_INT, 2),  // bits per osd
 	OPTION(osd_pg_layout, 0, OPT_INT, CEPH_PG_LAYOUT_CRUSH),

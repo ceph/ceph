@@ -192,6 +192,7 @@ protected:
   off_t ofs;
   char *data;
   char *supplied_md5_b64;
+  string etag;
 
 public:
   RGWPutObj() {}
@@ -204,6 +205,7 @@ public:
     ofs = 0;
     data = NULL;
     supplied_md5_b64 = NULL;
+    etag = "";
   }
   void execute();
 

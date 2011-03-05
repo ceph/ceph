@@ -844,7 +844,8 @@ public:
   void check_for_lost_objects();
   void forget_lost_objects();
 
-  void discover_all_missing(std::map< int, map<pg_t,PG::Query> > &query_map);
+  void discover_all_missing(std::map< int, map<pg_t,PG::Query> > &query_map,
+			    bool desperate=false);
   
   bool build_backlog_map(map<eversion_t,Log::Entry>& omap);
   void assemble_backlog(map<eversion_t,Log::Entry>& omap);

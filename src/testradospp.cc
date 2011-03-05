@@ -206,6 +206,7 @@ int main(int argc, const char **argv)
   for (it = attrset.begin(); it != attrset.end(); ++it) {
     cout << "xattr: " << it->first << std::endl;
   }
+
   r = io_ctx.remove(oid);
   cout << "remove result=" << r << std::endl;
   rados.shutdown();

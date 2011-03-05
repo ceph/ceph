@@ -92,7 +92,7 @@ namespace librados
    * Typical use (error checking omitted):
    *
    * IoCtx *p;
-   * rados.ioctx_create("my_pool", &pool);
+   * rados.ioctx_create("my_pool", &p);
    * p->stat(&stats);
    * ... etc ...
    * delete p; // close our pool handle
@@ -186,7 +186,7 @@ namespace librados
 
     const std::string& get_pool_name() const;
 
-    void set_locator_key(const std::string& key);
+    void locator_set_key(const std::string& key);
   private:
     /* You can only get IoCtx instances from Rados */
     IoCtx(IoCtxImpl *io_ctx_impl_);
@@ -218,7 +218,7 @@ namespace librados
     int pool_delete(const char *name);
     int pool_lookup(const char *name);
 
-    int ioctx_create(const char *name, IoCtx &pool);
+    int ioctx_create(const char *name, IoCtx &pioctx);
 
     /* listing objects */
     int pool_list(std::list<std::string>& v);
