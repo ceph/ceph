@@ -130,8 +130,7 @@ struct crush_bucket_list {
 };
 
 struct crush_bucket_tree {
-	struct crush_bucket h;  /* note: h.size is _tree_ size, not number of
-				   actual items */
+	struct crush_bucket h;
 	__u8 num_nodes;
 	__u32 *node_weights;
 };
