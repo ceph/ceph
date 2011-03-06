@@ -2039,7 +2039,7 @@ int FileStore::stat(coll_t cid, const sobject_t& oid, struct stat *st)
 int FileStore::read(coll_t cid, const sobject_t& oid, 
                     uint64_t offset, size_t len, bufferlist& bl)
 {
-  size_t got;
+  int got;
   char fn[PATH_MAX];
   get_coname(cid, oid, fn, sizeof(fn));
 
