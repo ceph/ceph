@@ -175,7 +175,7 @@ void aio_write_test_data(librbd::Image& image, const char *test_data, off_t off)
 
 void write_test_data(librbd::Image& image, const char *test_data, off_t off)
 {
-  size_t written;
+  int written;
   size_t len = strlen(test_data);
   ceph::bufferlist bl;
   bl.append(test_data, len);
@@ -203,7 +203,7 @@ void aio_read_test_data(librbd::Image& image, const char *expected, off_t off)
 
 void read_test_data(librbd::Image& image, const char *expected, off_t off)
 {
-  size_t read, total_read = 0;
+  int read, total_read = 0;
   size_t expected_len = strlen(expected);
   size_t len = expected_len;
   ceph::bufferlist bl;

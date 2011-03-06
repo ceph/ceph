@@ -22,12 +22,12 @@
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
-const char * const ceph_version_to_str(void)
+const char *ceph_version_to_str(void)
 {
   return VERSION;
 }
 
-const char * const git_version_to_str(void)
+const char *git_version_to_str(void)
 {
   return STRINGIFY(CEPH_GIT_VER);
 }
