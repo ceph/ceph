@@ -304,6 +304,7 @@ public:
   // io
   int create(IoCtxImpl& io, const object_t& oid, bool exclusive);
   int write(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len, off_t off);
+  int append(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len);
   int write_full(IoCtxImpl& io, const object_t& oid, bufferlist& bl);
   int read(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len, off_t off);
   int mapext(IoCtxImpl& io, const object_t& oid, off_t off, size_t len, std::map<off_t,size_t>& m);
@@ -430,6 +431,8 @@ public:
 		    bufferlist *data_bl, size_t len, off_t off);
   int aio_write(IoCtxImpl& io, const object_t &oid, AioCompletionImpl *c,
 		const bufferlist& bl, size_t len, off_t off);
+  int aio_append(IoCtxImpl& io, const object_t &oid, AioCompletionImpl *c,
+		 const bufferlist& bl, size_t len);
   int aio_write_full(IoCtxImpl& io, const object_t &oid, AioCompletionImpl *c,
 		     const bufferlist& bl);
 
@@ -1101,6 +1104,49 @@ write(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len, off_t off)
 }
 
 int librados::RadosClient::
+append(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len)
+{
+  utime_t ut = g_clock.now();
+
+  /* can't write to a snapshot */
+  if (io.snap_seq != CEPH_NOSNAP)
+    return -EINVAL;
+
+  Mutex mylock("RadosClient::append::mylock");
+  Cond cond;
+  bool done;
+  int r;
+
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  eversion_t ver;
+
+  ObjectOperation op, *pop = NULL;
+  if (io.assert_ver) {
+    op.assert_version(io.assert_ver);
+    io.assert_ver = 0;
+    pop = &op;
+  }
+
+  lock.Lock();
+  objecter->append(oid, io.oloc,
+		  len, io.snapc, bl, ut, 0,
+		  onack, NULL, &ver, pop);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  set_sync_op_version(io, ver);
+
+  if (r < 0)
+    return r;
+
+  return len;
+}
+
+int librados::RadosClient::
 write_full(IoCtxImpl& io, const object_t& oid, bufferlist& bl)
 {
   utime_t ut = g_clock.now();
@@ -1206,6 +1252,23 @@ aio_write(IoCtxImpl& io, const object_t &oid, AioCompletionImpl *c,
   Mutex::Locker l(lock);
   objecter->write(oid, io.oloc,
 		  off, len, io.snapc, bl, ut, 0,
+		  onack, onsafe, &c->objver);
+
+  return 0;
+}
+
+int librados::RadosClient::
+aio_append(IoCtxImpl& io, const object_t &oid, AioCompletionImpl *c,
+          const bufferlist& bl, size_t len)
+{
+  utime_t ut = g_clock.now();
+
+  Context *onack = new C_aio_Ack(c);
+  Context *onsafe = new C_aio_Safe(c);
+
+  Mutex::Locker l(lock);
+  objecter->append(oid, io.oloc,
+		  len, io.snapc, bl, ut, 0,
 		  onack, onsafe, &c->objver);
 
   return 0;
@@ -2063,6 +2126,13 @@ write(const std::string& oid, bufferlist& bl, size_t len, off_t off)
 }
 
 int librados::IoCtx::
+append(const std::string& oid, bufferlist& bl, size_t len)
+{
+  object_t obj(oid);
+  return io_ctx_impl->client->append(*io_ctx_impl, obj, bl, len);
+}
+
+int librados::IoCtx::
 write_full(const std::string& oid, bufferlist& bl)
 {
   object_t obj(oid);
@@ -2268,7 +2338,14 @@ int librados::IoCtx::
 aio_write(const std::string& oid, librados::AioCompletion *c, const bufferlist& bl,
 	  size_t len, off_t off)
 {
-  return io_ctx_impl->client->aio_write(*io_ctx_impl, oid, c->pc, bl, len, off );
+  return io_ctx_impl->client->aio_write(*io_ctx_impl, oid, c->pc, bl, len, off);
+}
+
+int librados::IoCtx::
+aio_append(const std::string& oid, librados::AioCompletion *c, const bufferlist& bl,
+	  size_t len)
+{
+  return io_ctx_impl->client->aio_append(*io_ctx_impl, oid, c->pc, bl, len);
 }
 
 int librados::IoCtx::
@@ -2716,6 +2793,15 @@ extern "C" int rados_write(rados_ioctx_t io, const char *o, const char *buf, siz
   return ctx->client->write(*ctx, oid, bl, len, off);
 }
 
+extern "C" int rados_append(rados_ioctx_t io, const char *o, const char *buf, size_t len)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  bl.append(buf, len);
+  return ctx->client->append(*ctx, oid, bl, len);
+}
+
 extern "C" int rados_write_full(rados_ioctx_t io, const char *o, const char *buf, size_t len, off_t off)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
@@ -3073,6 +3159,18 @@ extern "C" int rados_aio_write(rados_ioctx_t io, const char *o,
   bl.append(buf, len);
   return ctx->client->aio_write(*ctx, oid,
 	      (librados::AioCompletionImpl*)completion, bl, len, off);
+}
+
+extern "C" int rados_aio_append(rados_ioctx_t io, const char *o,
+				rados_completion_t completion,
+				const char *buf, size_t len)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  bl.append(buf, len);
+  return ctx->client->aio_append(*ctx, oid,
+	      (librados::AioCompletionImpl*)completion, bl, len);
 }
 
 extern "C" int rados_aio_write_full(rados_ioctx_t io, const char *o,

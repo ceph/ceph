@@ -16,7 +16,7 @@ extern "C" {
 #endif
 
 #define LIBRADOS_VER_MAJOR 0
-#define LIBRADOS_VER_MINOR 25
+#define LIBRADOS_VER_MINOR 26
 #define LIBRADOS_VER_EXTRA 0
 
 #define LIBRADOS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
@@ -137,6 +137,7 @@ int rados_ioctx_snap_get_stamp(rados_ioctx_t io, rados_snap_t id, time_t *t);
 uint64_t rados_get_last_version(rados_ioctx_t io);
 
 int rados_write(rados_ioctx_t io, const char *oid, const char *buf, size_t len, off_t off);
+int rados_append(rados_ioctx_t io, const char *oid, const char *buf, size_t len);
 int rados_write_full(rados_ioctx_t io, const char *oid, const char *buf, size_t len, off_t off);
 int rados_read(rados_ioctx_t io, const char *oid, char *buf, size_t len, off_t off);
 int rados_remove(rados_ioctx_t io, const char *oid);
@@ -169,6 +170,9 @@ void rados_aio_release(rados_completion_t c);
 int rados_aio_write(rados_ioctx_t io, const char *oid,
 		    rados_completion_t completion,
 		    const char *buf, size_t len, off_t off);
+int rados_aio_append(rados_ioctx_t io, const char *oid,
+		     rados_completion_t completion,
+		     const char *buf, size_t len);
 int rados_aio_write_full(rados_ioctx_t io, const char *oid,
 			 rados_completion_t completion,
 			 const char *buf, size_t len);

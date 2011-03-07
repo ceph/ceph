@@ -118,6 +118,7 @@ namespace librados
     int create(const std::string& oid, bool exclusive);
 
     int write(const std::string& oid, bufferlist& bl, size_t len, off_t off);
+    int append(const std::string& oid, bufferlist& bl, size_t len);
     int write_full(const std::string& oid, bufferlist& bl);
     int read(const std::string& oid, bufferlist& bl, size_t len, off_t off);
     int remove(const std::string& oid);
@@ -172,6 +173,8 @@ namespace librados
 			size_t len, off_t off);
     int aio_write(const std::string& oid, AioCompletion *c, const bufferlist& bl,
 		  size_t len, off_t off);
+    int aio_append(const std::string& oid, AioCompletion *c, const bufferlist& bl,
+		  size_t len);
     int aio_write_full(const std::string& oid, AioCompletion *c, const bufferlist& bl);
 
     // watch/notify
