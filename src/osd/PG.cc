@@ -2023,6 +2023,9 @@ void PG::finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin)
   dout(10) << "finish_recovery" << dendl;
   state_set(PG_STATE_CLEAN);
   assert(info.last_complete == info.last_update);
+
+  // NOTE: this is actually a bit premature: we haven't purged the
+  // strays yet.
   info.history.last_epoch_clean = osd->osdmap->get_epoch();
   share_pg_info();
 
