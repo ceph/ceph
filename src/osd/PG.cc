@@ -258,6 +258,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
 
   peer_info[from] = oinfo;
   dout(10) << " peer osd" << from << " now " << oinfo << dendl;
+  might_have_unfound.insert(from);
 
   search_for_missing(oinfo, &omissing, from);
   peer_missing[from].swap(omissing);
@@ -565,7 +566,7 @@ void PG::search_for_missing(const Info &oinfo, const Missing *omissing,
   dout(20) << "search_for_missing missing " << missing.missing << dendl;
 }
 
-void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map, bool desperate)
+void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map)
 {
   assert(missing.have_missing());
 
@@ -573,17 +574,6 @@ void PG::discover_all_missing(map< int, map<pg_t,PG::Query> > &query_map, bool d
 	   << missing.num_missing() << " missing, "
 	   << get_num_unfound() << " unfound"
 	   << dendl;
-
-  if (desperate) {
-    // get desperate: include all peers in set, in case our
-    // might_have_unfound calculation was somehow off
-    for (map<int,PG::Info>::iterator p = peer_info.begin();
-	 p != peer_info.end();
-	 ++p)
-      might_have_unfound.insert(p->first);
-    dout(10) << __func__ << " included all peers in might_have_unfound (getting desperate): "
-	     << might_have_unfound << dendl;
-  }
 
   std::set<int>::const_iterator m = might_have_unfound.begin();
   std::set<int>::const_iterator mend = might_have_unfound.end();
@@ -1764,6 +1754,12 @@ void PG::build_might_have_unfound()
       might_have_unfound.insert(*a);
     }
   }
+
+  // include any (stray) peers
+  for (map<int,Info>::iterator p = peer_info.begin();
+       p != peer_info.end();
+       p++)
+    might_have_unfound.insert(p->first);
 
   // The objects which are unfound on the primary can't be found on the
   // primary itself.
