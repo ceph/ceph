@@ -63,7 +63,7 @@ int main(int argc, const char **argv)
     } 
   }
 
-  common_init(args, "osd", startup_flags);
+  common_init(args, CEPH_ENTITY_TYPE_OSD, startup_flags);
   ceph_heap_profiler_init();
 
   // osd specific args
@@ -111,8 +111,9 @@ int main(int argc, const char **argv)
 
   // whoami
   char *end;
-  int whoami = strtol(g_conf.id, &end, 10);
-  if (*end || end == g_conf.id || whoami < 0) {
+  const char *id = g_conf.name->get_id().c_str();
+  int whoami = strtol(id, &end, 10);
+  if (*end || end == id || whoami < 0) {
     derr << "must specify '-i #' where # is the osd number" << dendl;
     usage();
   }

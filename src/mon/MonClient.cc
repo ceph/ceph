@@ -286,7 +286,7 @@ void MonClient::init()
 
   messenger->add_dispatcher_head(this);
 
-  entity_name = *g_conf.entity_name;
+  entity_name = *g_conf.name;
   
   Mutex::Locker l(monc_lock);
   timer.init();

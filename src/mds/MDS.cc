@@ -15,6 +15,7 @@
 
 
 #include "include/types.h"
+#include "common/entity_name.h"
 #include "common/Clock.h"
 #include "common/signal.h"
 #include "common/ceph_argparse.h"
@@ -82,7 +83,7 @@
 
 
 // cons/des
-MDS::MDS(const char *n, Messenger *m, MonClient *mc) : 
+MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) : 
   mds_lock("MDS::mds_lock"),
   timer(mds_lock),
   name(n),
@@ -273,12 +274,14 @@ void MDS::open_logger()
 
   // open loggers
   char name[80];
-  snprintf(name, sizeof(name), "mds.%s.%llu.log", g_conf.id,
+  snprintf(name, sizeof(name), "mds.%s.%llu.log",
+	   g_conf.name->get_id().c_str(),
            (unsigned long long) monc->get_global_id());
   logger = new ProfLogger(name, (ProfLogType*)&mds_logtype);
   logger_add(logger);
 
-  snprintf(name, sizeof(name), "mds.%s.%llu.mem.log", g_conf.id,
+  snprintf(name, sizeof(name), "mds.%s.%llu.mem.log",
+	   g_conf.name->get_id().c_str(),
            (unsigned long long) monc->get_global_id());
   mlogger = new ProfLogger(name, (ProfLogType*)&mdm_logtype);
   logger_add(mlogger);

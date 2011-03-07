@@ -54,7 +54,9 @@ struct EntityName
   const char* get_type_str() const;
   bool is_admin() const;
   uint32_t get_type() const;
+  const char * get_type_name() const;
   const std::string &get_id() const;
+  bool has_default_id() const;
 
   friend bool operator<(const EntityName& a, const EntityName& b);
   friend std::ostream& operator<<(std::ostream& out, const EntityName& n);
@@ -64,6 +66,8 @@ private:
   std::string id;
   std::string type_id;
 };
+
+uint32_t str_to_ceph_entity_type(const char * str);
 
 WRITE_CLASS_ENCODER(EntityName);
 

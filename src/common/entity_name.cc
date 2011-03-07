@@ -22,21 +22,6 @@ using std::string;
 
 extern const char *ceph_entity_type_name(int type);
 
-uint32_t str_to_ceph_entity_type(const char * str)
-{
-  if (strcmp(str, "auth") == 0) {
-    return CEPH_ENTITY_TYPE_AUTH;
-  } else if (strcmp(str, "mon") == 0) {
-    return CEPH_ENTITY_TYPE_MON;
-  } else if (strcmp(str, "osd") == 0) {
-    return CEPH_ENTITY_TYPE_OSD;
-  } else if (strcmp(str, "mds") == 0) {
-    return CEPH_ENTITY_TYPE_MDS;
-  } else {
-    return CEPH_ENTITY_TYPE_CLIENT;
-  }
-}
-
 EntityName::
 EntityName()
   : type(0)
@@ -116,10 +101,22 @@ get_type() const
   return type;
 }
 
+const char *EntityName::
+get_type_name() const
+{
+  return ceph_entity_type_name(type);
+}
+
 const std::string &EntityName::
 get_id() const
 {
   return id;
+}
+
+bool EntityName::
+has_default_id() const
+{
+  return (id == "admin");
 }
 
 bool operator<(const EntityName& a, const EntityName& b)
@@ -130,4 +127,19 @@ bool operator<(const EntityName& a, const EntityName& b)
 std::ostream& operator<<(std::ostream& out, const EntityName& n)
 {
   return out << n.to_str();
+}
+
+uint32_t str_to_ceph_entity_type(const char * str)
+{
+  if (strcmp(str, "auth") == 0) {
+    return CEPH_ENTITY_TYPE_AUTH;
+  } else if (strcmp(str, "mon") == 0) {
+    return CEPH_ENTITY_TYPE_MON;
+  } else if (strcmp(str, "osd") == 0) {
+    return CEPH_ENTITY_TYPE_OSD;
+  } else if (strcmp(str, "mds") == 0) {
+    return CEPH_ENTITY_TYPE_MDS;
+  } else {
+    return CEPH_ENTITY_TYPE_CLIENT;
+  }
 }

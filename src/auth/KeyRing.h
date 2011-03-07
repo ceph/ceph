@@ -47,7 +47,7 @@ public:
     return false;
   }
   void get_master(CryptoKey& dest) {
-    get_secret(*g_conf.entity_name, dest);
+    get_secret(*g_conf.name, dest);
   }
 
   // modifiers

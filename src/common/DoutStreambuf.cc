@@ -14,6 +14,7 @@
 
 #include "common/config.h"
 #include "common/DoutStreambuf.h"
+#include "common/entity_name.h"
 #include "common/errno.h"
 #include "common/Mutex.h"
 #include "common/safe_io.h"
@@ -354,7 +355,8 @@ int DoutStreambuf<charT, traits>::create_rank_symlink(int n)
 
   ostringstream rss;
   std::string symlink_dir(_get_symlink_dir());
-  rss << symlink_dir << "/" << g_conf.type << "." << n;
+  rss << symlink_dir << "/" << g_conf.name->get_type_name() << "." << n;
+
   string rsym_path_(rss.str());
   int ret = create_symlink(opath, rsym_path_);
   if (ret) {
@@ -468,7 +470,7 @@ std::string DoutStreambuf<charT, traits>::_calculate_opath() const
   }
   else {
     ostringstream oss;
-    oss << log_dir << "/" << g_conf.type << "." << g_conf.id << ".log";
+    oss << log_dir << "/" << g_conf.name->to_str() << ".log";
     return oss.str();
   }
 }
@@ -501,7 +503,7 @@ int DoutStreambuf<charT, traits>::_read_ofile_config()
     // Calculate instance symlink path (isym_path)
     ostringstream iss;
     std::string symlink_dir(_get_symlink_dir());
-    iss << symlink_dir << "/" << g_conf.type << "." << g_conf.id;
+    iss << symlink_dir << "/" << g_conf.name->to_str();
     isym_path = iss.str();
 
     // Rotate isym_path

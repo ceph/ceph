@@ -49,10 +49,6 @@ struct md_config_t {
 
   ConfFile *cf;
 
-  char *type;
-  char *id;
-  char *name;
-  char *alt_name;
   char *host;
 
   int num_client;
@@ -181,7 +177,7 @@ struct md_config_t {
   char *auth_supported;
   double auth_mon_ticket_ttl;
   double auth_service_ticket_ttl;
-  EntityName *entity_name;
+  EntityName *name;
 
   double mon_client_hunt_interval;
   double mon_client_ping_interval;

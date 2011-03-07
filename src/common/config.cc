@@ -669,13 +669,13 @@ static const char *var_val(char *var_name)
 	const char *val;
 
 	if (strcmp(var_name, "type")==0)
-		return g_conf.type;
+		return g_conf.name->get_type_name();
 	if (strcmp(var_name, "id")==0)
-		return g_conf.id;
+		return g_conf.name->get_id().c_str();
 	if (strcmp(var_name, "num")==0)
-		return g_conf.id;
+		return g_conf.name->get_id().c_str();
 	if (strcmp(var_name, "name")==0)
-		return g_conf.name;
+		return g_conf.name->to_cstr();
 	if (strcmp(var_name, "host")==0)
 		return g_conf.host;
 
@@ -820,7 +820,11 @@ int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const ch
 
 int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out, void *def, bool free_old_val)
 {
-	return conf_read_key_ext(g_conf.name, g_conf.alt_name, g_conf.type,
+	std::string alt_name(g_conf.name->get_type_name());
+	alt_name += g_conf.name->get_id();
+
+	return conf_read_key_ext(g_conf.name->to_cstr(), alt_name.c_str(),
+				 g_conf.name->get_type_name(),
 				 alt_section, key, type, out, def, free_old_val);
 }
 
@@ -898,8 +902,6 @@ md_config_t::md_config_t()
 
     set_conf_name(opt);
   }
-
-  g_conf.id = strdup("admin");
 }
 
 int md_config_t::set_val(const char *key, const char *val)

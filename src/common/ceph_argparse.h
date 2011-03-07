@@ -54,8 +54,8 @@ extern void vec_to_argv(std::vector<const char*>& args,
 extern bool parse_ip_port_vec(const char *s, std::vector<entity_addr_t>& vec);
 extern void parse_config_option_string(std::string& s);
 extern void parse_startup_config_options(std::vector<const char*>& args,
-			  const char *module_type, int flags,
-			  bool *force_fg_logging);
+			  uint32_t module_type, int flags,
+			  bool *force_fg_logging, std::string id);
 extern void parse_config_options(std::vector<const char*>& args);
 
 extern void generic_server_usage();

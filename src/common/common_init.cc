@@ -73,7 +73,7 @@ static void keyring_init(const char *filesearch)
     string k = g_conf.key;
     EntityAuth ea;
     ea.key.decode_base64(k);
-    g_keyring.add(*g_conf.entity_name, ea);
+    g_keyring.add(*g_conf.name, ea);
 
     ret = 0;
   } else if (g_conf.keyfile && g_conf.keyfile[0]) {
@@ -99,7 +99,7 @@ static void keyring_init(const char *filesearch)
     string k = buf;
     EntityAuth ea;
     ea.key.decode_base64(k);
-    g_keyring.add(*g_conf.entity_name, ea);
+    g_keyring.add(*g_conf.name, ea);
 
     ret = 0;
   }
@@ -116,11 +116,10 @@ static void set_cv(const char ** key, const char * const val)
   *key = strdup(val);
 }
 
-void common_init(std::vector<const char*>& args, const char *module_type, int flags)
+void common_init(std::vector<const char*>& args, uint32_t module_type, int flags, std::string id)
 {
   bool force_fg_logging = false;
 
-  // TODO: make callers specify code env explicitly.
   if (flags & STARTUP_FLAG_DAEMON)
     g_code_env = CODE_ENVIRONMENT_DAEMON;
   else if (flags & STARTUP_FLAG_LIBRARY)
@@ -148,12 +147,11 @@ void common_init(std::vector<const char*>& args, const char *module_type, int fl
     g_conf.pid_file = 0;
   }
 
-  parse_startup_config_options(args, module_type, flags, &force_fg_logging);
+  parse_startup_config_options(args, module_type, flags, &force_fg_logging, id);
 
   if (g_conf.log_to_syslog || g_conf.clog_to_syslog) {
     closelog();
-    // It's ok if g_conf.name is NULL here.
-    openlog(g_conf.name, LOG_ODELAY | LOG_PID, LOG_USER);
+    openlog(g_conf.name->to_cstr(), LOG_ODELAY | LOG_PID, LOG_USER);
   }
 
   if (force_fg_logging)

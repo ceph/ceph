@@ -582,7 +582,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   int opt_cmd = OPT_NO_CMD;
-  common_init(args, "rbd",
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT,
 	      STARTUP_FLAG_FORCE_FG_LOGGING | STARTUP_FLAG_INIT_KEYS);
 
   const char *poolname = NULL;

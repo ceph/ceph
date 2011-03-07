@@ -43,7 +43,8 @@ extern "C" int ceph_initialize(int argc, const char **argv)
     //create everything to start a client
     vector<const char*> args;
     argv_to_vec(argc, argv, args);
-    common_init(args, "libceph", STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_LIBRARY);
+    common_init(args, CEPH_ENTITY_TYPE_CLIENT,
+		STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_LIBRARY);
     //monmap
     monclient = new MonClient();
     if (monclient->build_initial_monmap() < 0) {

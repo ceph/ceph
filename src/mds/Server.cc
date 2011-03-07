@@ -80,7 +80,7 @@ void Server::open_logger()
   }
 
   char name[80];
-  snprintf(name, sizeof(name), "mds.%s.server.log", g_conf.id);
+  snprintf(name, sizeof(name), "mds.%s.server.log", g_conf.name->get_id().c_str());
   logger = new ProfLogger(name, &mdserver_logtype);
   logger_add(logger);
 }

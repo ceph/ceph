@@ -21,11 +21,10 @@
 #include "mon/AuthMonitor.h"
 #include "common/ConfUtils.h"
 #include "common/common_init.h"
+#include "common/entity_name.h"
 #include "common/ceph_argparse.h"
 #include "common/config.h"
 #include "include/str_list.h"
-
-const char *type = NULL;
 
 static void usage()
 {
@@ -116,6 +115,7 @@ static int lookup(const deque<const char *> &sections,
 
 int main(int argc, const char **argv)
 {
+  const char *type = "client";
   char *section;
   vector<const char*> args, nargs;
   deque<const char *> sections;
@@ -124,6 +124,7 @@ int main(int argc, const char **argv)
   bool do_help = false;
   bool do_list = false;
   bool do_lookup = false;
+  string id("admin");
 
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
@@ -132,7 +133,9 @@ int main(int argc, const char **argv)
     if (CONF_ARG_EQ("type", 't')) {
       CONF_SAFE_SET_ARG_VAL(&type, OPT_STR);
     } else if (CONF_ARG_EQ("id", 'i')) {
-      CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
+      char *id_cstr;
+      CONF_SAFE_SET_ARG_VAL(&id_cstr, OPT_STR);
+      id = id_cstr;
     } else if (CONF_ARG_EQ("section", 's')) {
       CONF_SAFE_SET_ARG_VAL(&section, OPT_STR);
       sections.push_back(section);
@@ -150,7 +153,8 @@ int main(int argc, const char **argv)
     }
   }
 
-  common_init(nargs, type, STARTUP_FLAG_FORCE_FG_LOGGING);
+  common_init(nargs, str_to_ceph_entity_type(type),
+	      STARTUP_FLAG_FORCE_FG_LOGGING, id);
 
   if (do_help) {
     usage();

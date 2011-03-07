@@ -573,7 +573,7 @@ connect()
 
   int err = monclient.authenticate(g_conf.client_mount_timeout);
   if (err) {
-    dout(0) << *g_conf.entity_name << " authentication error " << strerror(-err) << dendl;
+    dout(0) << *g_conf.name << " authentication error " << strerror(-err) << dendl;
     shutdown();
     return err;
   }
@@ -2613,9 +2613,9 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
     vector<const char*> args;
     env_to_vec(args);
 
-    if (id)
-      g_conf.id = strdup(id);
-    common_init(args, "librados", STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_LIBRARY);
+    common_init(args, CEPH_ENTITY_TYPE_CLIENT,
+		STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_LIBRARY,
+		(g_conf.name ? g_conf.name->get_id().c_str() : "admin"));
 
     ++rados_initialized;
 
@@ -2659,9 +2659,9 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path)
   vector<const char*> args;
   args.push_back("-c");
   args.push_back(path);
-  args.push_back("-i");
-  args.push_back(g_conf.id);
-  common_init(args, "librados", STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_LIBRARY);
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT,
+	      STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_LIBRARY,
+	      (g_conf.name ? g_conf.name->get_id().c_str() : "admin"));
 
   return 0;
 }

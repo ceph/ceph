@@ -1,6 +1,8 @@
 #ifndef CEPH_COMMON_INIT_H
 #define CEPH_COMMON_INIT_H
 
+#include <stdint.h>
+#include <string>
 #include <vector>
 
 enum {
@@ -11,7 +13,6 @@ enum {
 };
 
 void common_init(std::vector<const char*>& args,
-		 const char *module_type,
-                 int flags);
+	  uint32_t module_type, int flags, std::string id = "admin");
 
 #endif

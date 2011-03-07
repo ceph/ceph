@@ -161,17 +161,14 @@ void parse_config_option_string(std::string& s)
 }
 
 void parse_startup_config_options(std::vector<const char*>& args,
-			  const char *module_type, int flags,
-			  bool *force_fg_logging)
+			  uint32_t module_type, int flags,
+			  bool *force_fg_logging, std::string id)
 {
   bool show_config = false;
   DEFINE_CONF_VARS(NULL);
   std::vector<const char *> nargs;
   bool conf_specified = false;
   *force_fg_logging = ((flags & STARTUP_FLAG_FORCE_FG_LOGGING) != 0);
-
-  if (!g_conf.type)
-    g_conf.type = (char *)"";
 
   bool isdaemon = g_conf.daemonize;
 
@@ -195,11 +192,13 @@ void parse_startup_config_options(std::vector<const char*>& args,
       g_conf.daemonize = false;
       *force_fg_logging = false;
     } else if (isdaemon && (CONF_ARG_EQ("id", 'i') || CONF_ARG_EQ("name", 'n'))) {
-      free(g_conf.id);
-      CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
+      char *id_cstr;
+      CONF_SAFE_SET_ARG_VAL(&id_cstr, OPT_STR);
+      id = id_cstr;
     } else if (!isdaemon && (CONF_ARG_EQ("id", 'I') || CONF_ARG_EQ("name", 'n'))) {
-      free(g_conf.id);
-      CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
+      char *id_cstr;
+      CONF_SAFE_SET_ARG_VAL(&id_cstr, OPT_STR);
+      id = id_cstr;
     } else {
       nargs.push_back(args[i]);
     }
@@ -207,31 +206,8 @@ void parse_startup_config_options(std::vector<const char*>& args,
   args.swap(nargs);
   nargs.clear();
 
-  if (module_type) {
-    g_conf.type = strdup(module_type);
-    // is it "type.name"?
-    const char *dot = strchr(g_conf.id, '.');
-    if (dot) {
-      int tlen = dot - g_conf.id;
-      g_conf.type = (char *)malloc(tlen + 1);
-      memcpy(g_conf.type, g_conf.id, tlen);
-      g_conf.type[tlen] = 0;
-      char *new_g_conf_id = strdup(dot + 1);
-      free(g_conf.id);
-      g_conf.id = new_g_conf_id;
-    }
-
-    int len = strlen(g_conf.type) + strlen(g_conf.id) + 2;
-    g_conf.name = (char *)malloc(len);
-    snprintf(g_conf.name, len, "%s.%s", g_conf.type, g_conf.id);
-    g_conf.alt_name = (char *)malloc(len - 1);
-    snprintf(g_conf.alt_name, len - 1, "%s%s", module_type, g_conf.id);
-  }
-
-  g_conf.entity_name = new EntityName;
-  assert(g_conf.entity_name);
-
-  g_conf.entity_name->set(g_conf.type, g_conf.id);
+  g_conf.name = new EntityName;
+  g_conf.name->set(module_type, id);
 
   if (g_conf.cf) {
     delete g_conf.cf;

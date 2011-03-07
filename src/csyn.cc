@@ -46,7 +46,7 @@ int main(int argc, const char **argv, char *envp[])
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
 
-  common_init(args, "csyn",
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT,
 	      STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_FORCE_FG_LOGGING);
 
   parse_syn_options(args);   // for SyntheticClient

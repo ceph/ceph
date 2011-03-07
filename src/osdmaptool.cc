@@ -49,7 +49,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   DEFINE_CONF_VARS(usage);
 
-  common_init(args, "osdmaptool", STARTUP_FLAG_FORCE_FG_LOGGING);
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, STARTUP_FLAG_FORCE_FG_LOGGING);
 
   const char *me = argv[0];
 

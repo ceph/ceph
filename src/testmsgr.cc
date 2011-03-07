@@ -70,7 +70,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_init(args, NULL, STARTUP_FLAG_FORCE_FG_LOGGING);
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, STARTUP_FLAG_FORCE_FG_LOGGING);
 
   vec_to_argv(args, argc, argv);
 
