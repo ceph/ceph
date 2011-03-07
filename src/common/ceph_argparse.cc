@@ -231,7 +231,7 @@ void parse_startup_config_options(std::vector<const char*>& args,
   g_conf.entity_name = new EntityName;
   assert(g_conf.entity_name);
 
-  g_conf.entity_name->from_type_id(g_conf.type, g_conf.id);
+  g_conf.entity_name->set(g_conf.type, g_conf.id);
 
   if (g_conf.cf) {
     delete g_conf.cf;
