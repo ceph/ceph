@@ -327,7 +327,7 @@ public:
 
       default: {
 	ostringstream oss;
-	oss << "coll_t::decode(): don't know how to decode verison "
+	oss << "coll_t::decode(): don't know how to decode version "
             << struct_v;
 	throw std::domain_error(oss.str());
       }

@@ -32,10 +32,13 @@ void install_standard_sighandlers(void);
 // Other threads may have a different set (this is per-thread thing).
 std::string signal_mask_to_str();
 
-// Block all signals. On success, stores the old set of blocked signals in
+// Block a list of signals. If siglist == NULL, blocks all signals.
+// If not, the list is terminated with a 0 element.
+//
+// On success, stores the old set of blocked signals in
 // old_sigset. On failure, stores an invalid set of blocked signals in
 // old_sigset.
-void block_all_signals(sigset_t *old_sigset);
+void block_signals(sigset_t *old_sigset, int *siglist);
 
 // Restore the set of blocked signals. Will not restore an invalid set of
 // blocked signals.

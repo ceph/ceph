@@ -44,3 +44,5 @@ cscope.out
 *.pyc
 *.pyo
 core
+/build-stamp
+/configure-stamp

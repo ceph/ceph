@@ -1488,7 +1488,9 @@ void OSD::heartbeat_entry()
     double wait = .5 + ((float)(rand() % 10)/10.0) * (float)g_conf.osd_heartbeat_interval;
     utime_t w;
     w.set_from_double(wait);
+    dout(30) << "heartbeat_entry sleeping for " << wait << dendl;
     heartbeat_cond.WaitInterval(heartbeat_lock, w);
+    dout(30) << "heartbeat_entry woke up" << dendl;
   }
   heartbeat_lock.Unlock();
 }
@@ -1519,6 +1521,8 @@ void OSD::heartbeat()
 {
   utime_t now = g_clock.now();
 
+  dout(30) << "heartbeat" << dendl;
+
   if (got_sigterm) {
     derr << "got SIGTERM, shutting down" << dendl;
     Message *m = new MGenericMessage(CEPH_MSG_SHUTDOWN);
@@ -1544,6 +1548,8 @@ void OSD::heartbeat()
     derr << "heartbeat: failed to read /proc/loadavg" << dendl;
   }
 
+  dout(30) << "heartbeat checking stats" << dendl;
+
   // calc my stats
   Mutex::Locker lock(peer_stat_lock);
   _refresh_my_stat(now);
@@ -1555,7 +1561,8 @@ void OSD::heartbeat()
   //load_calc.set_size(stat_ops);
 
   bool map_locked = map_lock.try_get_read();
-  
+  dout(30) << "heartbeat map_locked=" << map_locked << dendl;
+
   // send heartbeats
   for (map<int, epoch_t>::iterator i = heartbeat_to.begin();
        i != heartbeat_to.end();
@@ -1563,23 +1570,30 @@ void OSD::heartbeat()
     int peer = i->first;
     if (heartbeat_inst.count(peer)) {
       my_stat_on_peer[peer] = my_stat;
+      dout(30) << "heartbeat allocating ping for osd" << peer << dendl;
       Message *m = new MOSDPing(osdmap->get_fsid(),
 				map_locked ? osdmap->get_epoch():0, 
 				i->second,
 				my_stat);
       m->set_priority(CEPH_MSG_PRIO_HIGH);
+      dout(30) << "heartbeat sending ping to osd" << peer << dendl;
       heartbeat_messenger->send_message(m, heartbeat_inst[peer]);
     }
   }
 
-  if (map_locked)
+  if (map_locked) {
+    dout(30) << "heartbeat check" << dendl;
     heartbeat_check();
+  } else {
+    dout(30) << "heartbeat no map_lock, no check" << dendl;
+  }
 
   if (logger) logger->set(l_osd_hbto, heartbeat_to.size());
   if (logger) logger->set(l_osd_hbfrom, heartbeat_from.size());
 
   
   // hmm.. am i all alone?
+  dout(30) << "heartbeat lonely?" << dendl;
   if (heartbeat_from.empty() || heartbeat_to.empty()) {
     if (now - last_mon_heartbeat > g_conf.osd_mon_heartbeat_interval) {
       last_mon_heartbeat = now;
@@ -1589,8 +1603,11 @@ void OSD::heartbeat()
     }
   }
 
-  if (map_locked)
+  if (map_locked) {
+    dout(30) << "heartbeat put map_lock" << dendl;
     map_lock.put_read();
+  }
+  dout(30) << "heartbeat done" << dendl;
 }
 
 
@@ -4194,16 +4211,15 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     // i am PRIMARY
     if (pg->is_active())  {
       // PG is ACTIVE
-      dout(10) << *pg << " searching osd" << from << " log for unfound items." << dendl;
-      pg->search_for_missing(info, missing, from);
-
-      if (pg->have_unfound()) {
-	// Make sure we've requested MISSING information from every OSD
-	// we know about.
-	pg->discover_all_missing(query_map);
-      }
-      else {
-	dout(10) << *pg << " ignoring osd" << from << " log, pg is already active" << dendl;
+      if (!pg->is_clean()) {
+	dout(10) << *pg << " searching osd" << from << " log for unfound items." << dendl;
+	pg->search_for_missing(info, missing, from);
+	if (pg->have_unfound()) {
+	  // Make sure we've requested MISSING information from every OSD
+	  // we know about.
+	  pg->discover_all_missing(query_map);
+	}
+	queue_for_recovery(pg);  // in case we found something.
       }
     }
     else if ((!log.empty()) && missing) {
@@ -4902,8 +4918,24 @@ void OSD::do_recovery(PG *pg)
     dout(10) << "do_recovery started " << started
 	     << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops) on "
 	     << *pg << dendl;
-    
-    if (started < max)
+
+    /*
+     * if we couldn't start any recovery ops and things are still
+     * unfound, see if we can discover more missing object locations.
+     * It may be that our initial locations were bad and we errored
+     * out while trying to pull.
+     */
+    if (!started && pg->have_unfound()) {
+      map< int, map<pg_t,PG::Query> > query_map;
+      pg->discover_all_missing(query_map, true);
+      if (query_map.size())
+	do_queries(query_map);
+      else {
+	dout(10) << "do_recovery  no luck, giving up on this pg for now" << dendl;
+	pg->recovery_item.remove_myself();	// sigh...
+      }
+    }
+    else if (started < max)
       pg->recovery_item.remove_myself();
     
     pg->unlock();

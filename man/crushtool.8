@@ -37,7 +37,7 @@ will allow the tool to overwrite an existing \fIoutfile\fP (it will normally ref
 .SH BUILDING A MAP
 The build mode will generate relatively generic hierarchical maps.  The first argument simply
 specifies the number of devices (leaves) in the CRUSH hierarchy.  Each layer describes how the 
-layer (or raw devices) preceeding it should be grouped.
+layer (or raw devices) preceding it should be grouped.
 .PP
 Each \fIlayer\fP consists of
 .IP
@@ -49,7 +49,7 @@ name will be append a number to the provided \fIname\fP.
 The second component is the type of CRUSH bucket.  
 .PP
 The third component is the maximum size of the bucket.  If the size is \fI0\fP, a single bucket
-will be generated that includes everything in the preceeding layer.
+will be generated that includes everything in the preceding layer.
 .SH EXAMPLE
 Suppose we have 128 devices, each grouped into shelves with 4 devices each, and 8 shelves per
 rack.  We could create a three level hierarchy with:

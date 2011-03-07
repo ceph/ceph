@@ -92,7 +92,7 @@ namespace librados
    * Typical use (error checking omitted):
    *
    * IoCtx *p;
-   * rados.ioctx_create("my_pool", &pool);
+   * rados.ioctx_create("my_pool", &p);
    * p->stat(&stats);
    * ... etc ...
    * delete p; // close our pool handle
@@ -108,6 +108,9 @@ namespace librados
     // Close our pool handle
     ~IoCtx();
 
+    // deep copy
+    void dup(const IoCtx& rhs);
+
     // set pool auid
     int set_auid(uint64_t auid_);
 
@@ -115,6 +118,7 @@ namespace librados
     int create(const std::string& oid, bool exclusive);
 
     int write(const std::string& oid, bufferlist& bl, size_t len, off_t off);
+    int append(const std::string& oid, bufferlist& bl, size_t len);
     int write_full(const std::string& oid, bufferlist& bl);
     int read(const std::string& oid, bufferlist& bl, size_t len, off_t off);
     int remove(const std::string& oid);
@@ -169,6 +173,8 @@ namespace librados
 			size_t len, off_t off);
     int aio_write(const std::string& oid, AioCompletion *c, const bufferlist& bl,
 		  size_t len, off_t off);
+    int aio_append(const std::string& oid, AioCompletion *c, const bufferlist& bl,
+		  size_t len);
     int aio_write_full(const std::string& oid, AioCompletion *c, const bufferlist& bl);
 
     // watch/notify
@@ -183,7 +189,7 @@ namespace librados
 
     const std::string& get_pool_name() const;
 
-    void set_locator_key(const std::string& key);
+    void locator_set_key(const std::string& key);
   private:
     /* You can only get IoCtx instances from Rados */
     IoCtx(IoCtxImpl *io_ctx_impl_);
@@ -215,7 +221,7 @@ namespace librados
     int pool_delete(const char *name);
     int pool_lookup(const char *name);
 
-    int ioctx_create(const char *name, IoCtx &pool);
+    int ioctx_create(const char *name, IoCtx &pioctx);
 
     /* listing objects */
     int pool_list(std::list<std::string>& v);

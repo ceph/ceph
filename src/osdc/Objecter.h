@@ -791,6 +791,24 @@ private:
     o->snapc = snapc;
     return op_submit(o);
   }
+  tid_t append(const object_t& oid, const object_locator_t& oloc,
+	       uint64_t len, const SnapContext& snapc, const bufferlist &bl,
+	       utime_t mtime, int flags,
+	       Context *onack, Context *oncommit,
+	       eversion_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
+    vector<OSDOp> ops;
+    int i = init_ops(ops, 1, extra_ops);
+    ops[i].op.op = CEPH_OSD_OP_APPEND;
+    ops[i].op.extent.offset = 0;
+    ops[i].op.extent.length = len;
+    ops[i].op.extent.truncate_size = 0;
+    ops[i].op.extent.truncate_seq = 0;
+    ops[i].data = bl;
+    Op *o = new Op(oid, oloc, ops, flags | CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
+    o->mtime = mtime;
+    o->snapc = snapc;
+    return op_submit(o);
+  }
   tid_t write_trunc(const object_t& oid, const object_locator_t& oloc,
 	      uint64_t off, uint64_t len, const SnapContext& snapc, const bufferlist &bl,
 	      utime_t mtime, int flags,

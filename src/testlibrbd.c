@@ -67,7 +67,7 @@ void test_ls(rados_ioctx_t io_ctx, size_t num_expected, ...)
   printf("names is %p\n", names);
   printf("num images is: %d\nexpected: %d\n", num_images, (int)num_expected);
   assert(num_images >= 0);
-  assert(num_images == num_expected);
+  assert(num_images == (int)num_expected);
 
   for (i = 0, cur_name = names; i < num_images; i++) {
     printf("image: %s\n", cur_name);
@@ -136,7 +136,7 @@ void test_ls_snaps(rbd_image_t image, int num_expected, ...)
 	continue;
       if (strcmp(snaps[j].name, expected) == 0) {
 	printf("found %s with size %llu\n", snaps[j].name, (unsigned long long) snaps[j].size);
-	assert(snaps[j].size == expected_size);
+	assert((int)snaps[j].size == expected_size);
 	free((void *) snaps[j].name);
 	snaps[j].name = NULL;
 	found = 1;
@@ -184,7 +184,7 @@ void aio_write_test_data(rbd_image_t image, const char *test_data, off_t off)
 
 void write_test_data(rbd_image_t image, const char *test_data, off_t off)
 {
-  size_t written;
+  int written;
   size_t len = strlen(test_data);
   while (len > 0) {
     written = rbd_write(image, off, len, test_data);
@@ -214,7 +214,7 @@ void aio_read_test_data(rbd_image_t image, const char *expected, off_t off)
 
 void read_test_data(rbd_image_t image, const char *expected, off_t off)
 {
-  size_t read, total_read = 0;
+  int read, total_read = 0;
   size_t expected_len = strlen(expected);
   size_t len = expected_len;
   char result[TEST_IO_SIZE];
