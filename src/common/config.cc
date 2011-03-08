@@ -469,37 +469,6 @@ bool conf_set_conf_val(void *field, opt_type_t type, const char *val, long long 
   return true;
 }
 
-static bool conf_reset_val(void *field, opt_type_t type)
-{
-  switch (type) {
-  case OPT_BOOL:
-    *(bool *)field = 0;
-    break;
-  case OPT_INT:
-    *(int *)field = 0;
-    break;
-  case OPT_LONGLONG:
-    *(long long *)field = 0;
-    break;
-  case OPT_STR:
-      *(char **)field = NULL;
-    break;
-  case OPT_FLOAT:
-    *(float *)field = 0;
-    break;
-  case OPT_DOUBLE:
-    *(double *)field = 0;
-    break;
-  case OPT_ADDR:
-    *(entity_addr_t *)field = entity_addr_t();
-    break;
-  default:
-    return false;
-  }
-
-  return true;
-}
-
 static void set_conf_name(config_option *opt)
 {
   char *newsection = (char *)opt->section;
@@ -533,58 +502,6 @@ static void set_conf_name(config_option *opt)
   done:
     opt->section = newsection;
     opt->conf_name = (const char *)newconf;
-}
-
-static int def_conf_to_str(config_option *opt, char *buf, int len)
-{
-  int ret = 0;
-
-  switch (opt->type) {
-  case OPT_INT:
-  case OPT_BOOL:
-    ret = snprintf(buf, len, "%d", (int)opt->def_longlong);
-    break;
-  case OPT_LONGLONG:
-    ret = snprintf(buf, len, "%lld", opt->def_longlong);
-    break;
-  case OPT_STR:
-  case OPT_ADDR:
-    ret = snprintf(buf, len, "%s", opt->def_str);
-    break;
-  case OPT_FLOAT:
-  case OPT_DOUBLE:
-    ret = snprintf(buf, len, "%f", opt->def_double);
-    break;
-  default:
-    break;
-  }
-  return ret;
-}
-
-int ceph_def_conf_by_name(const char *name, char *buf, int buflen)
-{
-  char *newname = strdup(name);
-  int len = strlen(name);
-  config_option *opt;
-  int ret = 0;
-  int i;
-
-  for (i = 0; i < len; i++) {
-    if (newname[i] == ' ')
-      newname[i] = '_';
-  }
-
-  len = sizeof(config_optionsp)/sizeof(config_option);
-
-  for (i = 0; i < len; i++) {
-    opt = &config_optionsp[i];
-    if (strcmp(opt->name, newname) == 0) {
-      ret = def_conf_to_str(opt, buf, buflen);
-      break;
-    }
-  }
-  free(newname);
-  return ret;
 }
 
 static bool cmd_is_char(const char *cmd)
@@ -887,9 +804,6 @@ md_config_t::md_config_t()
 
   for (i = 0; i<len; i++) {
     opt = &config_optionsp[i];
-    if (opt->val_ptr) {
-      conf_reset_val(opt->val_ptr, opt->type);
-    }
     if (!conf_set_conf_val(opt->val_ptr,
          opt->type,
          opt->def_str,
