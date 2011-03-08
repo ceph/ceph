@@ -391,6 +391,11 @@ unittest_librados_LDADD = librados.la \
 unittest_librados_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_librados
 
+unittest_bufferlist_SOURCES = test/bufferlist.cc
+unittest_bufferlist_LDADD = ${UNITTEST_LDADD}
+unittest_bufferlist_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_bufferlist
+
 # shell scripts
 editpaths = sed \
 	-e 's|@bindir[@]|$(bindir)|g' \
