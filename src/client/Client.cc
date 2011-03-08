@@ -387,7 +387,7 @@ void Client::update_inode_file_bits(Inode *in,
 	       << truncate_size << dendl;
       in->truncate_size = truncate_size;
       in->oset.truncate_size = truncate_size;
-      if (g_conf.client_oc && prior_size > truncate_size) { //do actual truncation
+      if (g_conf.client_oc && prior_size > truncate_size) { //do actual in-memory truncation
 	vector<ObjectExtent> ls;
 	filer->file_to_extents(in->ino, &in->layout,
 			       truncate_size, prior_size - truncate_size,
@@ -2172,9 +2172,18 @@ void Client::_flush(Inode *in, Context *onfinish)
   if (!onfinish)
     onfinish = new C_NoopContext;
   bool safe = objectcacher->commit_set(&in->oset, onfinish);
-  if (safe && onfinish) {
-    onfinish->finish(0);
-    delete onfinish;
+  if (safe) {
+    if (onfinish) {
+      onfinish->finish(0);
+      delete onfinish;
+    }
+    /* if we're safe, there shouldn't be any refs to CEPH_CAP_FILE_BUFFER
+     * unless we're buffering the entire thing. In that case, clear the bit.
+     */
+    if (in->cap_refs[CEPH_CAP_FILE_BUFFER]) {
+      assert(in->cap_refs[CEPH_CAP_FILE_BUFFER] == 1);
+      put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+    }
   }
 }
 

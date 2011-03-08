@@ -1671,7 +1671,9 @@ uint64_t ObjectCacher::release_all()
 
 
 
-
+/**
+ * Truncate an ObjectSet by removing the objects in exls from the in-memory oset.
+ */
 void ObjectCacher::truncate_set(ObjectSet *oset, vector<ObjectExtent>& exls)
 {
   if (oset->objects.empty()) {
