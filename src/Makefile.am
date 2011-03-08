@@ -9,7 +9,7 @@ CLEANFILES =
 bin_PROGRAMS =
 sbin_PROGRAMS =
 sbin_SCRIPTS =
-bin_SCRIPTS = crun cclass $(srcdir)/cclsinfo cdebugpack
+bin_SCRIPTS = crun cclass $(srcdir)/cclsinfo cdebugpack crbdnamer
 # C/C++ tests to build will be appended to this
 check_PROGRAMS =
 # tests to actually run on "make check"; if you need extra, non-test,
@@ -432,6 +432,7 @@ EXTRA_DIST = $(srcdir)/verify-mds-journal.sh $(srcdir)/vstart.sh $(srcdir)/stop.
 	$(srcdir)/cclass.in $(srcdir)/cdebugpack.in \
 	$(srcdir)/cclsinfo $(srcdir)/make_version $(srcdir)/check_version \
 	$(srcdir)/.git_version \
+	$(srcdir)/crbdnamer \
 	$(ceph_tool_gui_DATA)
 
 # work around old versions of automake that don't define $docdir
