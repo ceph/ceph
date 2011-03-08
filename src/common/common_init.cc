@@ -24,6 +24,7 @@
 #include "common/errno.h"
 #include "include/color.h"
 
+#include <errno.h>
 #include <syslog.h>
 
 #ifdef HAVE_PROFILER
@@ -177,7 +178,8 @@ void common_init(std::vector<const char*>& args, const char *module_type, int fl
     _dout_open_log();
   }
 
-  install_standard_sighandlers();
+  if (g_code_env != CODE_ENVIRONMENT_LIBRARY)
+    install_standard_sighandlers();
 
   if (flags & STARTUP_FLAG_INIT_KEYS)  {
     if (is_supported_auth(CEPH_AUTH_CEPHX))

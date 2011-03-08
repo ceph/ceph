@@ -558,7 +558,8 @@ libcommon_files = \
 	common/DoutStreambuf.cc \
 	common/debug.cc \
 	common/version.cc \
-	common/hex.cc
+	common/hex.cc \
+	common/entity_name.cc
 
 if WITH_PROFILER
 libcommon_files += perfglue/cpu_profiler.cc

@@ -1063,7 +1063,7 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
   CephXSessionAuthInfo info;
   int ret;
   EntityName name;
-  name.entity_type = CEPH_ENTITY_TYPE_MON;
+  name.set_type(CEPH_ENTITY_TYPE_MON);
 
   auth_ticket_info.ticket.name = name;
   auth_ticket_info.ticket.global_id = 0;
