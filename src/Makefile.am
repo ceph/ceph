@@ -732,6 +732,7 @@ noinst_HEADERS = \
         common/run_cmd.h\
 	common/safe_io.h\
         common/config.h\
+	common/ceph_crypto.h\
         crush/CrushWrapper.h\
         crush/CrushWrapper.i\
         crush/builder.h\

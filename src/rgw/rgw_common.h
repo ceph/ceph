@@ -15,11 +15,10 @@
 #ifndef CEPH_RGW_COMMON_H
 #define CEPH_RGW_COMMON_H
 
+#include "common/ceph_crypto.h"
 #include "fcgiapp.h"
 
 #include <string.h>
-#define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
-#include <cryptopp/md5.h>
 #include <string>
 #include <map>
 #include "include/types.h"
@@ -197,7 +196,8 @@ struct RGWObjEnt {
   std::string name;
   size_t size;
   time_t mtime;
-  char etag[CryptoPP::Weak::MD5::DIGESTSIZE * 2 + 1];
+  // two md5 digests and a terminator
+  char etag[ceph::crypto::MD5::DIGESTSIZE * 2 + 1];
 
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
