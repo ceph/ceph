@@ -1224,7 +1224,7 @@ int aio_write(ImageCtx *ictx, off_t off, size_t len, const char *buf,
   uint64_t block_size = get_block_size(&ictx->header);
   uint64_t left = len;
 
-  if (off + len > ictx->header.image_size)
+  if ((uint64_t)(off + len) > (uint64_t)ictx->header.image_size)
     return -EINVAL;
 
   for (uint64_t i = start_block; i <= end_block; i++) {
