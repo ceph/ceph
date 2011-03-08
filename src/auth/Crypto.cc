@@ -95,8 +95,6 @@ public:
   int decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out);
 };
 
-static const unsigned char *aes_iv = (const unsigned char *)CEPH_AES_IV;
-
 int CryptoAES::create(bufferptr& secret)
 {
   bufferlist bl;
@@ -128,7 +126,7 @@ int CryptoAES::encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
   }
   string ciphertext;
   CryptoPP::AES::Encryption aesEncryption(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
-  CryptoPP::CBC_Mode_ExternalCipher::Encryption cbcEncryption( aesEncryption, aes_iv );
+  CryptoPP::CBC_Mode_ExternalCipher::Encryption cbcEncryption( aesEncryption, (const byte*)CEPH_AES_IV );
   CryptoPP::StringSink *sink = new CryptoPP::StringSink(ciphertext);
   if (!sink)
     return false;
@@ -156,7 +154,7 @@ int CryptoAES::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
   const unsigned char *key = (const unsigned char *)secret.c_str();
 
   CryptoPP::AES::Decryption aesDecryption(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
-  CryptoPP::CBC_Mode_ExternalCipher::Decryption cbcDecryption( aesDecryption, aes_iv );
+  CryptoPP::CBC_Mode_ExternalCipher::Decryption cbcDecryption( aesDecryption, (const byte*)CEPH_AES_IV );
 
   string decryptedtext;
   CryptoPP::StringSink *sink = new CryptoPP::StringSink(decryptedtext);
