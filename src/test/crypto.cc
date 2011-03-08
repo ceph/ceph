@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <time.h>
 
 #include "include/types.h"
 #include "auth/Crypto.h"
@@ -97,4 +98,72 @@ TEST(AES, Decrypt) {
 
   err = memcmp(plaintext_s, want_plaintext, sizeof(want_plaintext));
   ASSERT_EQ(0, err);
+}
+
+TEST(AES, Benchmark) {
+  int err;
+
+  struct timespec before;
+  struct timespec after;
+
+  err = clock_gettime(CLOCK_MONOTONIC, &before);
+  ASSERT_EQ(0, err);
+
+  char secret_s[16];
+  err = get_random_bytes(secret_s, sizeof(secret_s));
+  ASSERT_EQ(0, err);
+  bufferptr secret(secret_s, sizeof(secret_s));
+
+  char orig_plaintext_s[1024];
+  err = get_random_bytes(orig_plaintext_s, sizeof(orig_plaintext_s));
+  ASSERT_EQ(0, err);
+
+  bufferlist plaintext;
+  plaintext.append(orig_plaintext_s, sizeof(orig_plaintext_s));
+
+  for (int i=0; i<10000; i++) {
+    bufferlist cipher;
+    {
+      CryptoHandler *h = ceph_crypto_mgr.get_crypto(CEPH_CRYPTO_AES);
+
+      int success;
+      success = h->encrypt(secret, plaintext, cipher);
+      ASSERT_NE(false, success);
+    }
+    plaintext.clear();
+
+    {
+      CryptoHandler *h = ceph_crypto_mgr.get_crypto(CEPH_CRYPTO_AES);
+      int err;
+      err = h->decrypt(secret, cipher, plaintext);
+      ASSERT_EQ((int)sizeof(orig_plaintext_s), err);
+    }
+  }
+
+  err = clock_gettime(CLOCK_MONOTONIC, &after);
+  ASSERT_EQ(0, err);
+
+  char plaintext_s[sizeof(orig_plaintext_s)];
+  plaintext.copy(0, sizeof(plaintext_s), &plaintext_s[0]);
+  err = memcmp(plaintext_s, orig_plaintext_s, sizeof(orig_plaintext_s));
+  ASSERT_EQ(0, err);
+
+  // 64 bits of nanoseconds a lot, but nothing guarantees what if any
+  // epoch CLOCK_MONOTONIC has; shift measurements closer to 0 epoch
+  ASSERT_LE(before.tv_sec, after.tv_sec);
+  after.tv_sec -= before.tv_sec;
+  before.tv_sec = 0;
+
+  u_int64_t before_ns = before.tv_sec*1000000000 + before.tv_nsec;
+  u_int64_t after_ns = after.tv_sec*1000000000 + after.tv_nsec;
+  ASSERT_LE(before_ns, after_ns);
+  u_int64_t duration_ns = after_ns - before_ns;
+
+  // my desktop machine completes this in ~200ms with CryptoPP, ~750ms
+  // right now for NSS (too slow!), this allows for 1s before flagging
+  // a problem; not really robust but need something to detect really
+  // severe regressions
+  EXPECT_LT(duration_ns, 1000000000u);
+
+  RecordProperty("durationnanoseconds", duration_ns);
 }
