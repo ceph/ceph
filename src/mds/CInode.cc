@@ -685,6 +685,13 @@ CDir *CInode::get_parent_dir()
     return parent->dir;
   return NULL;
 }
+CDir *CInode::get_projected_parent_dir()
+{
+  CDentry *p = get_projected_parent_dn();
+  if (p)
+    return p->dir;
+  return NULL;
+}
 CInode *CInode::get_parent_inode() 
 {
   if (parent) 

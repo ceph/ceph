@@ -4718,7 +4718,7 @@ void Server::handle_client_rename(MDRequest *mdr)
       (srcdnl->get_inode()->is_anchored() || 
        (srcdnl->get_inode()->is_dir() && (srcdnl->get_inode()->inode.rstat.ranchors ||
 					  srcdnl->get_inode()->nested_anchors ||
-					  !mdcache->is_leaf_subtree(mdcache->get_subtree_root(srcdn->get_dir()))))) &&
+					  !mdcache->is_leaf_subtree(mdcache->get_projected_subtree_root(srcdn->get_dir()))))) &&
       !mdr->more()->src_reanchor_atid) {
     dout(10) << "reanchoring src->dst " << *srcdnl->get_inode() << dendl;
     vector<Anchor> trace;

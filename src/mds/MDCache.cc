@@ -1096,6 +1096,18 @@ CDir *MDCache::get_subtree_root(CDir *dir)
   }
 }
 
+CDir *MDCache::get_projected_subtree_root(CDir *dir)
+{
+  // find the underlying dir that delegates (or is about to delegate) auth
+  while (true) {
+    if (dir->is_subtree_root()) 
+      return dir;
+    dir = dir->get_inode()->get_projected_parent_dir();
+    if (!dir) 
+      return 0;             // none
+  }
+}
+
 void MDCache::remove_subtree(CDir *dir)
 {
   dout(10) << "remove_subtree " << *dir << dendl;
