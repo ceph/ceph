@@ -157,15 +157,6 @@ void common_init(std::vector<const char*>& args, uint32_t module_type, int flags
   if (force_fg_logging)
     set_foreground_logging();
 
-#ifdef HAVE_PROFILER
-  /*
-   * We need to call _something_ in libprofile.so so that the
-   * --as-needed stuff doesn't drop it from our .so dependencies.
-   * This is basically a no-op.
-   */
-  ProfilerFlush();
-#endif
-
   parse_config_options(args);
 
   {
