@@ -108,7 +108,7 @@ void KeyRing::decode_plaintext(bufferlist::iterator& bli)
 
   cf.set_global(false);
 
-  if (!cf.parse()) {
+  if (cf.parse() != 0) {
     derr << "cannot parse buffer" << dendl;
     goto done_err;
   }

@@ -91,11 +91,10 @@ class ConfFile {
 
 	ConfSection *_add_section(const char *section, ConfLine *cl);
 	void _dump(int fd);
-	bool _parse(const char *filename, ConfSection **psection);
+	int _parse(const char *filename, ConfSection **psection);
 	void common_init();
 
 	int _read(int fd, char *buf, size_t size);
-	int _open();
 	int _close(int fd);
 public:
         ConfFile(const char *fname);
@@ -105,7 +104,7 @@ public:
 	const SectionList& get_section_list() { return sections_list; }
 	const char *get_filename() { return filename; }
 
-	bool parse();
+	int parse();
 	int read(const char *section, const char *var, int *val, int def_val);
 	int read(const char *section, const char *var, unsigned int *val, unsigned int def_val);
 	int read(const char *section, const char *var, long long *val, long long def_val);

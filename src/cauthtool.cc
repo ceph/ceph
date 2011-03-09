@@ -208,7 +208,7 @@ int main(int argc, const char **argv)
   }
   if (caps_fn) {
     ConfFile *cf = new ConfFile(caps_fn);
-    if (!cf->parse()) {
+    if (cf->parse() != 0) {
       cerr << "could not parse caps file " << caps_fn << std::endl;
       exit(1);
     }

@@ -110,7 +110,7 @@ int MonClient::build_initial_monmap()
   if (!ls.empty()) {
     for (list<string>::iterator p = ls.begin(); p != ls.end(); p++) {
       ConfFile c(p->c_str());
-      if (c.parse()) {
+      if (c.parse() == 0) {
 	for (list<ConfSection*>::const_iterator q = c.get_section_list().begin();
 	     q != c.get_section_list().end();
 	     q++) {
