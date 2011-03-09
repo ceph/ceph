@@ -659,7 +659,7 @@ int ConfFile::_parse(const char *filename, ConfSection **psection)
 	char *line;
 	ConfLine *cl;
 	ConfSection *section = *psection;
-	int fd;
+	int fd = -1;
 	int max_line = MAX_LINE;
 	int eof = 0;
 	bool ret = 0;
