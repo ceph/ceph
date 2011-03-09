@@ -862,6 +862,14 @@ AM_CXXFLAGS = $(AM_COMMON_FLAGS) \
 	-Wnon-virtual-dtor \
 	-Wno-invalid-offsetof \
 	-Wstrict-null-sentinel
+# note: this is position dependant, it affects the -l options that
+# come after it on the command line. when you use ${AM_LDFLAGS} in
+# later rules, take care where you place it. for more information, see
+# http://blog.flameeyes.eu/2008/11/19/relationship-between-as-needed-and-no-undefined-part-1-what-do-they-do
+# http://blog.flameeyes.eu/2008/11/20/misguided-link-and-as-needed
+# http://www.gentoo.org/proj/en/qa/asneeded.xml
+# http://gcc.gnu.org/ml/gcc-help/2010-12/msg00338.html
+# http://sigquit.wordpress.com/2011/02/16/why-asneeded-doesnt-work-as-expected-for-your-libraries-on-your-autotools-project/
 AM_LDFLAGS = -Wl,--as-needed
 
 if USE_BOOST_SPIRIT_OLD_HDR
