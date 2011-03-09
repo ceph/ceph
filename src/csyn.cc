@@ -46,8 +46,8 @@ int main(int argc, const char **argv, char *envp[])
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
 
-  common_init(args, CEPH_ENTITY_TYPE_CLIENT,
-	      STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_FORCE_FG_LOGGING);
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY);
+  keyring_init(&g_conf);
 
   parse_syn_options(args);   // for SyntheticClient
 

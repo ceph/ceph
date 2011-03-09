@@ -2582,44 +2582,19 @@ aio_create_completion(void *cb_arg, callback_t cb_complete, callback_t cb_safe)
 static Mutex rados_init_mutex("rados_init");
 static int rados_initialized = 0;
 
-static void rados_set_conf_defaults(md_config_t *conf)
-{
-  /* Default configuration values for rados clients.
-   * These can be overridden by using rados_conf_set or rados_conf_read.
-   */
-  free((void*)conf->log_file);
-  conf->log_file = NULL;
-
-  free((void*)conf->log_dir);
-  conf->log_dir = NULL;
-
-  free((void*)conf->log_sym_dir);
-  conf->log_sym_dir = NULL;
-
-  conf->log_sym_history = 0;
-
-  conf->log_to_stderr = LOG_TO_STDERR_SOME;
-
-  conf->log_to_syslog = false;
-
-  conf->log_per_instance = false;
-}
-
 extern "C" int rados_create(rados_t *pcluster, const char * const id)
 {
   rados_init_mutex.Lock();
   if (!rados_initialized) {
-    // parse environment
-    vector<const char*> args;
-    env_to_vec(args);
+    CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
+    iparams.conf_file = "";
 
-    common_init(args, CEPH_ENTITY_TYPE_CLIENT,
-		STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_LIBRARY,
-		(g_conf.name ? g_conf.name->get_id().c_str() : "admin"));
+    // TODO: store this conf pointer in the RadosClient and use it as our
+    // configuration
+    md_config_t *conf = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY);
+    conf->parse_env(); // environment variables override
 
     ++rados_initialized;
-
-    rados_set_conf_defaults(&g_conf);
   }
   rados_init_mutex.Unlock();
   librados::RadosClient *radosp = new librados::RadosClient;
@@ -2629,6 +2604,9 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
 
 extern "C" int rados_connect(rados_t cluster)
 {
+  int ret = keyring_init(&g_conf);
+  if (ret)
+    return ret;
   librados::RadosClient *radosp = (librados::RadosClient *)cluster;
   return radosp->connect();
 }
@@ -2654,15 +2632,12 @@ extern "C" void rados_version(int *major, int *minor, int *extra)
 // -- config --
 extern "C" int rados_conf_read_file(rados_t cluster, const char *path)
 {
-  // TODO: don't call common_init again.
-  // Split out the config-reading part of common_init from the rest of it
-  vector<const char*> args;
-  args.push_back("-c");
-  args.push_back(path);
-  common_init(args, CEPH_ENTITY_TYPE_CLIENT,
-	      STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_LIBRARY,
-	      (g_conf.name ? g_conf.name->get_id().c_str() : "admin"));
-
+  std::list<std::string> conf_files;
+  conf_files.push_back(path);
+  int ret = g_conf.parse_config_files(conf_files);
+  if (ret)
+    return ret;
+  g_conf.parse_env(); // environment variables override
   return 0;
 }
 

@@ -24,9 +24,11 @@
  */
 
 #include <deque>
+#include <stdint.h>
 #include <string>
 #include <vector>
 
+#include "common/entity_name.h"
 #include "msg/msg_types.h"
 
 /////////////////////// Macros ///////////////////////
@@ -41,7 +43,19 @@
 	void (*args_usage)() __attribute__((unused)) = usage_func; \
 	bool __isarg __attribute__((unused))
 
+/////////////////////// Types ///////////////////////
+class CephInitParameters
+{
+public:
+  CephInitParameters(uint32_t module_type);
+  std::list<std::string> get_conf_files() const;
+
+  std::string conf_file;
+  EntityName name;
+};
+
 /////////////////////// Functions ///////////////////////
+extern void env_override(char **ceph_var, const char * const env_var);
 extern void env_to_vec(std::vector<const char*>& args);
 extern void env_to_deq(std::deque<const char*>& args);
 extern void argv_to_vec(int argc, const char **argv,
@@ -53,11 +67,12 @@ extern void vec_to_argv(std::vector<const char*>& args,
 
 extern bool parse_ip_port_vec(const char *s, std::vector<entity_addr_t>& vec);
 extern void parse_config_option_string(std::string& s);
-extern void parse_startup_config_options(std::vector<const char*>& args,
-			  uint32_t module_type, int flags,
-			  bool *force_fg_logging, std::string id);
-extern void parse_config_options(std::vector<const char*>& args);
-
+bool ceph_argparse_flag(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, ...);
+bool ceph_argparse_witharg(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, std::string *ret, ...);
+extern CephInitParameters ceph_argparse_early_args
+		(std::vector<const char*>& args, uint32_t module_type);
 extern void generic_server_usage();
 extern void generic_client_usage();
 

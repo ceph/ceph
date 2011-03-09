@@ -53,17 +53,15 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  int startup_flags = STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_DAEMON;
   vector<const char *>::iterator args_iter;
 
+  common_init(args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_DAEMON);
   for (args_iter = args.begin(); args_iter != args.end(); ++args_iter) {
     if (strcmp(*args_iter, "--mkfs") == 0) {
-      startup_flags &= ~STARTUP_FLAG_INIT_KEYS;
+      keyring_init(&g_conf);
       break;
-    } 
+    }
   }
-
-  common_init(args, CEPH_ENTITY_TYPE_OSD, startup_flags);
   ceph_heap_profiler_init();
 
   // osd specific args

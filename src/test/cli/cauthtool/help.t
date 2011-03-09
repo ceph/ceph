@@ -8,7 +8,7 @@
     -p, --print                   will print an encoded key for the specified
                                   entityname. This is suitable for the
                                   'mount -o secret=..' argument
-    -c, --create-keyring          will create a new keyring, overwriting any
+    -C, --create-keyring          will create a new keyring, overwriting any
                                   existing keyringfile
     --gen-key                     will generate a new secret key for the
                                   specified entityname

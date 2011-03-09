@@ -14,6 +14,7 @@
 
 #include "auth/Auth.h"
 #include "common/BackTrace.h"
+#include "common/ceph_argparse.h"
 #include "common/Clock.h"
 #include "common/ConfUtils.h"
 #include "common/ProfLogger.h"
@@ -97,9 +98,9 @@ struct config_option config_optionsp[] = {
   OPTION(monmap, 'M', OPT_STR, 0),
   OPTION(mon_host, 'm', OPT_STR, 0),
   OPTION(daemonize, 'd', OPT_BOOL, false),
-        OPTION(tcmalloc_profiler_run, 0, OPT_BOOL, false),
-        OPTION(profiler_allocation_interval, 0, OPT_INT, 1073741824),
-        OPTION(profiler_highwater_interval, 0, OPT_INT, 104857600),
+  OPTION(tcmalloc_profiler_run, 0, OPT_BOOL, false),
+  OPTION(profiler_allocation_interval, 0, OPT_INT, 1073741824),
+  OPTION(profiler_highwater_interval, 0, OPT_INT, 104857600),
   OPTION(profiling_logger, 0, OPT_BOOL, false),
   OPTION(profiling_logger_interval, 0, OPT_INT, 1),
   OPTION(profiling_logger_calc_variance, 0, OPT_BOOL, false),
@@ -115,7 +116,6 @@ struct config_option config_optionsp[] = {
   OPTION(clog_to_monitors, 0, OPT_BOOL, true),
   OPTION(clog_to_syslog, 0, OPT_BOOL, false),
   OPTION(pid_file, 0, OPT_STR, ""),
-  OPTION(conf, 'c', OPT_STR, "/etc/ceph/ceph.conf, ~/.ceph/config, ceph.conf"),
   OPTION(chdir, 0, OPT_STR, "/"),
   OPTION(kill_after, 0, OPT_INT, 0),
   OPTION(max_open_files, 0, OPT_LONGLONG, 0),
@@ -157,8 +157,8 @@ struct config_option config_optionsp[] = {
   OPTION(ms_die_on_bad_msg, 0, OPT_BOOL, false),
   OPTION(ms_dispatch_throttle_bytes, 0, OPT_INT, 100 << 20),
   OPTION(ms_bind_ipv6, 0, OPT_BOOL, false),
-        OPTION(ms_rwthread_stack_bytes, 0, OPT_INT, 1024 << 10),
-        OPTION(ms_tcp_read_timeout, 0, OPT_LONGLONG, 900),
+  OPTION(ms_rwthread_stack_bytes, 0, OPT_INT, 1024 << 10),
+  OPTION(ms_tcp_read_timeout, 0, OPT_LONGLONG, 900),
   OPTION(ms_inject_socket_failures, 0, OPT_LONGLONG, 0),
   OPTION(mon_data, 0, OPT_STR, ""),
   OPTION(mon_tick_interval, 0, OPT_INT, 5),
@@ -745,23 +745,6 @@ int conf_read_key(const char *alt_section, const char *key, opt_type_t type, voi
          alt_section, key, type, out, def, free_old_val);
 }
 
-bool parse_config_file(ConfFile *cf, bool auto_update)
-{
-  int opt_len = sizeof(config_optionsp)/sizeof(config_option);
-
-  cf->set_post_process_func(conf_post_process_val);
-  if (cf->parse() != 0)
-  return false;
-
-  for (int i=0; i<opt_len; i++) {
-      config_option *opt = &config_optionsp[i];
-      conf_read_key(NULL, opt->conf_name, opt->type, opt->val_ptr, opt->val_ptr, true);
-  }
-  conf_read_key(NULL, "lockdep", OPT_INT, &g_lockdep, &g_lockdep, false);
-
-  return true;
-}
-
 bool is_bool_param(const char *param)
 {
   return ((strcasecmp(param, "true")==0) || (strcasecmp(param, "false")==0));
@@ -786,7 +769,8 @@ bool ceph_resolve_file_search(std::string& filename_list, std::string& result)
   return false;
 }
 
-md_config_t::md_config_t()
+md_config_t::
+md_config_t()
   : cf(NULL)
 {
   //
@@ -818,7 +802,136 @@ md_config_t::md_config_t()
   }
 }
 
-int md_config_t::set_val(const char *key, const char *val)
+int md_config_t::
+parse_config_files(const std::list<std::string> &conf_files)
+{
+  // open new conf
+  list<string>::const_iterator c = conf_files.begin();
+  if (c == conf_files.end())
+    return -EINVAL;
+  while (true) {
+    if (c == conf_files.end())
+      return -EACCES;
+    ConfFile *cf_ = new ConfFile(c->c_str());
+    cf_->set_post_process_func(conf_post_process_val);
+    int res = cf_->parse();
+    if (res == 0) {
+      cf = cf_;
+      break;
+    }
+    delete cf_;
+    if (res == -EDOM)
+      return -EDOM;
+    ++c;
+  }
+
+  int opt_len = sizeof(config_optionsp)/sizeof(config_option);
+  for (int i=0; i<opt_len; i++) {
+    config_option *opt = &config_optionsp[i];
+    conf_read_key(NULL, opt->conf_name, opt->type, opt->val_ptr, opt->val_ptr, true);
+  }
+  conf_read_key(NULL, "lockdep", OPT_INT, &g_lockdep, &g_lockdep, false);
+
+  // post-process options
+  for (int i = 0; i<opt_len; i++) {
+    config_option *opt = &config_optionsp[i];
+    if (opt->type == OPT_STR && opt->val_ptr) {
+      if (*(char**)opt->val_ptr) {
+	*(char **)opt->val_ptr = conf_post_process_val(*(char **)opt->val_ptr);
+      }
+    }
+  }
+  return 0;
+}
+
+void md_config_t::
+parse_env()
+{
+  env_override(&keyring, "CEPH_KEYRING");
+}
+
+// FIXME: should be folded into parse_argv
+void md_config_t::
+parse_argv_part2(std::vector<const char*>& args)
+{
+  int opt_len = num_config_options;
+  DEFINE_CONF_VARS(NULL);
+
+  std::vector<const char*> nargs;
+  FOR_EACH_ARG(args) {
+    int optn;
+
+    for (optn = 0; optn < opt_len; optn++) {
+      if (CONF_ARG_EQ("lockdep", '\0')) {
+	CONF_SAFE_SET_ARG_VAL(&g_lockdep, OPT_INT);
+      } else if (CONF_ARG_EQ(config_optionsp[optn].name,
+	    config_optionsp[optn].char_option)) {
+        if (__isarg || val_pos || config_optionsp[optn].type == OPT_BOOL)
+	    CONF_SAFE_SET_ARG_VAL(config_optionsp[optn].val_ptr, config_optionsp[optn].type);
+        else
+          continue;
+      } else {
+        continue;
+      }
+      break;
+    }
+
+    if (optn == opt_len)
+        nargs.push_back(args[i]);
+  }
+
+  env_override(&g_conf.keyring, "CEPH_KEYRING");
+  args = nargs;
+}
+
+static void set_cv(const char **dst, const char *val)
+{
+  char **d = (char**)dst;
+  free(*d);
+  if (val)
+    *d = strdup(val);
+  else
+    *d = NULL;
+}
+
+void md_config_t::
+parse_argv(std::vector<const char*>& args)
+{
+  std::string val;
+  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_flag(args, i, "--show_conf", "-S", NULL)) {
+      cf->dump();
+      _exit(0);
+    }
+    else if (ceph_argparse_flag(args, i, "--nodaemon", "-D", NULL)) {
+      daemonize = false;
+    }
+    else if (ceph_argparse_flag(args, i, "--foreground", "-f", NULL)) {
+      daemonize = false;
+      set_cv(&log_dir, NULL);
+      set_cv(&pid_file, NULL);
+      set_cv(&log_sym_dir, NULL);
+      log_sym_history = 0;
+      log_to_stderr = LOG_TO_STDERR_ALL;
+      log_to_syslog = false;
+      log_per_instance = false;
+    }
+    else if (ceph_argparse_witharg(args, i, &val, "--monmap", "-M", NULL)) {
+      set_cv(&monmap, val.c_str());
+    }
+    else if (ceph_argparse_witharg(args, i, &val, "--bind", NULL)) {
+      public_addr.parse(val.c_str());
+    }
+    else {
+      // ignore
+      ++i;
+    }
+  }
+  parse_argv_part2(args);
+}
+
+int md_config_t::
+set_val(const char *key, const char *val)
 {
   if (!key)
     return -EINVAL;
@@ -869,7 +982,8 @@ int md_config_t::set_val(const char *key, const char *val)
   return -ENOENT;
 }
 
-int md_config_t::get_val(const char *key, char **buf, int len)
+int md_config_t::
+get_val(const char *key, char **buf, int len)
 {
   if (!key)
     return -EINVAL;
@@ -923,7 +1037,8 @@ int md_config_t::get_val(const char *key, char **buf, int len)
   return -ENOENT;
 }
 
-md_config_t::~md_config_t()
+md_config_t::
+~md_config_t()
 {
   int len = sizeof(config_optionsp)/sizeof(config_option);
   int i;

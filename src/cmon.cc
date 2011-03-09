@@ -61,8 +61,8 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_init(args, CEPH_ENTITY_TYPE_MON,
-	      STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_DAEMON);
+  common_init(args, CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON);
+  keyring_init(&g_conf);
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("mkfs", '\0')) {

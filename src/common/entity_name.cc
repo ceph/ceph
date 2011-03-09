@@ -83,6 +83,12 @@ set_type(const char *type_)
   set(type_, id);
 }
 
+void EntityName::
+set_id(const std::string &id_)
+{
+  set(type, id_);
+}
+
 const char* EntityName::
 get_type_str() const
 {
