@@ -24,7 +24,7 @@ int rgw_log_op(struct req_state *s)
   if (s->object)
     entry.obj = s->object;
   else
-    s->object = "-";
+    entry.obj = "-";
 
   set_param_str(s, "REMOTE_ADDR", entry.remote_addr);
   set_param_str(s, "HTTP_USER_AGENT", entry.user_agent);
