@@ -82,7 +82,7 @@ void get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs)
  * object: name of the object to get the ACL for.
  * Returns: 0 on success, -ERR# otherwise.
  */
-int read_acls(RGWAccessControlPolicy *policy, string& bucket, string& object)
+static int get_policy_from_attr(RGWAccessControlPolicy *policy, string& bucket, string& object)
 {
   bufferlist bl;
   int ret = 0;
@@ -100,6 +100,27 @@ int read_acls(RGWAccessControlPolicy *policy, string& bucket, string& object)
         RGW_LOG(15) << endl;
       }
     }
+  }
+
+  return ret;
+}
+
+int read_acls(struct req_state *s, RGWAccessControlPolicy *policy, string& bucket, string& object)
+{
+  int ret = get_policy_from_attr(policy, bucket, object);
+  if (ret == -ENOENT && object.size()) {
+    /* object does not exist checking the bucket's ACL to make sure
+       that we send a proper error code */
+    RGWAccessControlPolicy bucket_policy;
+    string no_object;
+    ret = get_policy_from_attr(&bucket_policy, bucket, no_object);
+    if (ret < 0)
+      return ret;
+
+    if (!verify_permission(&bucket_policy, s->user.user_id, RGW_PERM_READ))
+      ret = -EACCES;
+    else
+      ret = -ENOENT;
   }
 
   return ret;
@@ -127,7 +148,7 @@ int read_acls(struct req_state *s, bool only_bucket)
   if (!only_bucket)
     obj_str = s->object_str;
 
-  ret = read_acls(s->acl, s->bucket_str, obj_str);
+  ret = read_acls(s, s->acl, s->bucket_str, obj_str);
 
   return ret;
 }
@@ -466,7 +487,7 @@ int RGWCopyObj::init_common()
      return ret;
   }
   /* just checking the bucket's permission */
-  ret = read_acls(&src_policy, src_bucket, empty_str);
+  ret = read_acls(s, &src_policy, src_bucket, empty_str);
   if (ret < 0)
     return ret;
 

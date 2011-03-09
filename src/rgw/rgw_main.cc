@@ -90,6 +90,7 @@ int main(int argc, char *argv[])
         break;
       default:
         RGW_LOG(10) << "could not read acls" << " ret=" << ret << endl;
+        abort_early(&s, ret);
         goto done;
       }
     }
