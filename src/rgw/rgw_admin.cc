@@ -396,6 +396,7 @@ int main(int argc, char **argv)
            << entry.time << delim
            << entry.remote_addr << delim
            << entry.user << delim
+           << entry.op << delim
            << "\"" << entry.uri << "\"" << delim
            << entry.http_status << delim
            << entry.error_code << delim

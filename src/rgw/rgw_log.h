@@ -15,6 +15,7 @@ struct rgw_log_entry {
   string remote_addr;
   string user;
   string obj;
+  string op;
   string uri;
   string http_status;
   string error_code;
@@ -34,6 +35,7 @@ struct rgw_log_entry {
     ::encode(remote_addr, bl);
     ::encode(user, bl);
     ::encode(obj, bl);
+    ::encode(op, bl);
     ::encode(uri, bl);
     ::encode(http_status, bl);
     ::encode(error_code, bl);
@@ -52,6 +54,7 @@ struct rgw_log_entry {
     ::decode(remote_addr, p);
     ::decode(user, p);
     ::decode(obj, p);
+    ::decode(op, p);
     ::decode(uri, p);
     ::decode(http_status, p);
     ::decode(error_code, p);
