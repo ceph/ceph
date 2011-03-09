@@ -58,7 +58,7 @@ int RGWGetObj_REST_S3::send_response(void *handle)
        const char *name = iter->first.c_str();
        if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
          name += sizeof(RGW_ATTR_PREFIX) - 1;
-         CGI_PRINTF(s->fcgx->out,"%s: %s\r\n", name, iter->second.c_str());
+         CGI_PRINTF(s,"%s: %s\r\n", name, iter->second.c_str());
        } else if (!content_type && strcmp(name, RGW_ATTR_CONTENT_TYPE) == 0) {
          content_type = iter->second.c_str();
        }

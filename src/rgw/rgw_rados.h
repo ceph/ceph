@@ -93,6 +93,7 @@ public:
   virtual int tmap_set(std::string& bucket, std::string& obj, std::string& key, bufferlist& bl);
   virtual int tmap_del(std::string& bucket, std::string& obj, std::string& key);
   virtual int update_containers_stats(map<string, RGWBucketEnt>& m);
+  virtual int append_async(std::string& bucket, std::string& oid, size_t size, bufferlist& bl);
 };
 
 #endif

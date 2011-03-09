@@ -20,7 +20,8 @@ static RGWFormatter_JSON formatter_json;
 
 static void dump_status(struct req_state *s, const char *status)
 {
-  CGI_PRINTF(s->fcgx->out,"Status: %s\n", status);
+  s->status = status;
+  CGI_PRINTF(s,"Status: %s\n", status);
 }
 
 struct errno_http {
@@ -83,16 +84,16 @@ void dump_content_length(struct req_state *s, size_t len)
 {
   char buf[16];
   snprintf(buf, sizeof(buf), "%lu", len);
-  CGI_PRINTF(s->fcgx->out, "Content-Length: %s\n", buf);
-  CGI_PRINTF(s->fcgx->out, "Accept-Ranges: %s\n", "bytes");
+  CGI_PRINTF(s, "Content-Length: %s\n", buf);
+  CGI_PRINTF(s, "Accept-Ranges: %s\n", "bytes");
 }
 
 void dump_etag(struct req_state *s, const char *etag)
 {
   if (s->prot_flags & RGW_REST_OPENSTACK)
-    CGI_PRINTF(s->fcgx->out,"etag: %s\n", etag);
+    CGI_PRINTF(s,"etag: %s\n", etag);
   else
-    CGI_PRINTF(s->fcgx->out,"ETag: \"%s\"\n", etag);
+    CGI_PRINTF(s,"ETag: \"%s\"\n", etag);
 }
 
 void dump_last_modified(struct req_state *s, time_t t)
@@ -106,12 +107,12 @@ void dump_last_modified(struct req_state *s, time_t t)
   if (strftime(timestr, sizeof(timestr), "%a, %d %b %Y %H:%M:%S %Z", tmp) == 0)
     return;
 
-  CGI_PRINTF(s->fcgx->out, "Last-Modified: %s\n", timestr);
+  CGI_PRINTF(s, "Last-Modified: %s\n", timestr);
 }
 
 static void dump_entry(struct req_state *s, const char *val)
 {
-  CGI_PRINTF(s->fcgx->out, "<?%s?>", val);
+  CGI_PRINTF(s, "<?%s?>", val);
 }
 
 
@@ -160,7 +161,7 @@ void end_header(struct req_state *s, const char *content_type)
       break;
     }
   }
-  CGI_PRINTF(s->fcgx->out,"Content-type: %s\r\n\r\n", content_type);
+  CGI_PRINTF(s,"Content-type: %s\r\n\r\n", content_type);
   if (s->err_exist) {
     dump_start(s);
     struct rgw_err &err = s->err;
@@ -171,6 +172,7 @@ void end_header(struct req_state *s, const char *content_type)
       s->formatter->dump_value_str("Message", err.message);
     s->formatter->close_section("Error");
   }
+  s->header_ended = true;
 }
 
 void abort_early(struct req_state *s, int err)
@@ -187,7 +189,7 @@ void dump_continue(struct req_state *s)
 
 void dump_range(struct req_state *s, off_t ofs, off_t end)
 {
-    CGI_PRINTF(s->fcgx->out,"Content-Range: bytes %d-%d/%d\n", (int)ofs, (int)end, (int)end + 1);
+    CGI_PRINTF(s,"Content-Range: bytes %d-%d/%d\n", (int)ofs, (int)end, (int)end + 1);
 }
 
 int RGWGetObj_REST::get_params()
@@ -295,6 +297,11 @@ void init_entities_from_header(struct req_state *s)
   s->bucket_str = "";
   s->object = NULL;
   s->object_str = "";
+
+  s->status = NULL;
+  s->err_exist = false;
+  s->header_ended = false;
+  s->bytes_sent = 0;
 
   /* this is the default, might change in a few lines */
   s->format = RGW_FORMAT_XML;

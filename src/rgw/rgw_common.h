@@ -23,6 +23,7 @@
 #include <string>
 #include <map>
 #include "include/types.h"
+#include "include/utime.h"
 
 using namespace std;
 
@@ -46,8 +47,10 @@ using namespace std;
 #define RGW_FORMAT_XML          1
 #define RGW_FORMAT_JSON         2
 
-#define CGI_PRINTF(stream, format, ...) do { \
-   FCGX_FPrintF(stream, format, __VA_ARGS__); \
+#define CGI_PRINTF(state, format, ...) do { \
+   int __ret = FCGX_FPrintF(state->fcgx->out, format, __VA_ARGS__); \
+   if (state->header_ended) \
+     state->bytes_sent = __ret; \
    printf(">" format, __VA_ARGS__); \
 } while (0)
 
@@ -200,7 +203,10 @@ struct req_state {
    const char *content_type;
    bool err_exist;
    struct rgw_err err;
+   const char *status;
    bool expect_cont;
+   bool header_ended;
+   uint64_t bytes_sent; // bytes sent as a response, excluding header
 
    XMLArgs args;
 
@@ -228,6 +234,8 @@ struct req_state {
    char *os_auth_token;
    char *os_user;
    char *os_groups;
+
+   utime_t time;
 
    req_state() : acl(NULL), os_auth_token(NULL), os_user(NULL), os_groups(NULL) {}
 };

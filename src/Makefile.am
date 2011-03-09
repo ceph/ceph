@@ -298,7 +298,8 @@ libradosgw_a_SOURCES = \
 	rgw/rgw_common.cc \
 	rgw/rgw_cache.cc \
 	rgw/rgw_os.cc \
-	rgw/rgw_formats.cc
+	rgw/rgw_formats.cc \
+	rgw/rgw_log.cc
 
 libradosgw_a_CFLAGS = ${AM_CFLAGS}
 libradosgw_a_CXXFLAGS = ${AM_CXXFLAGS}
@@ -993,6 +994,7 @@ noinst_HEADERS = \
 	rgw/rgw_common.h\
 	rgw/rgw_formats.h\
 	rgw/rgw_fs.h\
+	rgw/rgw_log.h\
 	rgw/rgw_op.h\
 	rgw/rgw_os.h\
 	rgw/rgw_rados.h\

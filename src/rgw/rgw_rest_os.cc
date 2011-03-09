@@ -80,9 +80,9 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
 {
   char buf[16];
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.count);
-  CGI_PRINTF(s->fcgx->out,"X-Container-Object-Count: %s\n", buf);
+  CGI_PRINTF(s,"X-Container-Object-Count: %s\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size);
-  CGI_PRINTF(s->fcgx->out,"X-Container-Bytes-Used: %s\n", buf);
+  CGI_PRINTF(s,"X-Container-Bytes-Used: %s\n", buf);
 }
 
 void RGWStatBucket_REST_OS::send_response()
@@ -159,7 +159,7 @@ int RGWGetObj_REST_OS::send_response(void *handle)
        const char *name = iter->first.c_str();
        if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
          name += sizeof(RGW_ATTR_PREFIX) - 1;
-         CGI_PRINTF(s->fcgx->out,"%s: %s\r\n", name, iter->second.c_str());
+         CGI_PRINTF(s,"%s: %s\r\n", name, iter->second.c_str());
        } else if (!content_type && strcmp(name, RGW_ATTR_CONTENT_TYPE) == 0) {
          content_type = iter->second.c_str();
        }

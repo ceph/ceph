@@ -19,6 +19,7 @@
 #include "rgw_op.h"
 #include "rgw_rest.h"
 #include "rgw_os.h"
+#include "rgw_log.h"
 
 #include <map>
 #include <string>
@@ -80,6 +81,7 @@ int main(int argc, char *argv[])
   while (FCGX_Accept(&fcgx.in, &fcgx.out, &fcgx.err, &fcgx.envp) >= 0) 
   {
     RGWHandler *handler = RGWHandler_REST::init_handler(&s, &fcgx);
+    RGWOp *op;
     
     int ret = read_acls(&s);
     if (ret < 0) {
@@ -88,29 +90,29 @@ int main(int argc, char *argv[])
         break;
       default:
         RGW_LOG(10) << "could not read acls" << " ret=" << ret << endl;
-        abort_early(&s, -EPERM);
-        continue;
+        goto done;
       }
     }
     if (!handler->authorize(&s)) {
       RGW_LOG(10) << "failed to authorize request" << endl;
       abort_early(&s, -EPERM);
-      continue;
+      goto done;
     }
 
     ret = handler->read_permissions();
     if (ret < 0) {
       abort_early(&s, ret);
-      continue;
+      goto done;
     }
     if (s.expect_cont)
       dump_continue(&s);
 
-
-    RGWOp *op = handler->get_op();
+    op = handler->get_op();
     if (op) {
       op->execute();
     }
+done:
+    rgw_log_op(&s);
   }
   return 0;
 }

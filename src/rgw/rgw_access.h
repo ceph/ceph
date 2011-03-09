@@ -171,6 +171,8 @@ public:
 
   virtual int update_containers_stats(map<string, RGWBucketEnt>& m) { return -ENOTSUP; }
 
+  virtual int append_async(std::string& bucket, std::string& oid, size_t size, bufferlist& bl) { return -ENOTSUP; }
+
 
  /** 
    * Given the name of the storage provider, initialize it

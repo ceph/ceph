@@ -15,6 +15,7 @@ using namespace std;
 #include "rgw_user.h"
 #include "rgw_access.h"
 #include "rgw_acl.h"
+#include "rgw_log.h"
 
 
 #define SECRET_KEY_LEN 40
@@ -30,6 +31,7 @@ void usage()
   cerr << "  user rm                    remove user\n";
   cerr << "  buckets list               list buckets\n";
   cerr << "  policy                     read bucket/object policy\n";
+  cerr << "  log show                   dump a log from specific bucket, date\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                S3 uid\n";
   cerr << "   --os-user=<group:name>    OpenStack user\n";
@@ -39,6 +41,7 @@ void usage()
   cerr << "   --display-name=<name>\n";
   cerr << "   --bucket=<bucket>\n";
   cerr << "   --object=<object>\n";
+  cerr << "   --date=<yyyy-mm-dd>\n";
   generic_client_usage();
   exit(1);
 }
@@ -51,13 +54,15 @@ enum {
   OPT_USER_RM,
   OPT_BUCKETS_LIST,
   OPT_POLICY,
+  OPT_LOG_SHOW,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
 {
   *need_more = false;
   if (strcmp(cmd, "user") == 0 ||
-      strcmp(cmd, "buckets") == 0) {
+      strcmp(cmd, "buckets") == 0 ||
+      strcmp(cmd, "log") == 0) {
     *need_more = true;
     return 0;
   }
@@ -80,6 +85,9 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "buckets") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_BUCKETS_LIST;
+  } else if (strcmp(prev_cmd, "log") == 0) {
+    if (strcmp(cmd, "show") == 0)
+      return OPT_LOG_SHOW;
   }
 
   return -EINVAL;
@@ -123,9 +131,6 @@ int gen_rand_alphanumeric(char *dest, int size) /* size should be the required s
   return 0;
 }
 
-
-
-
 int main(int argc, char **argv) 
 {
   DEFINE_CONF_VARS(usage);
@@ -143,6 +148,7 @@ int main(int argc, char **argv)
   const char *bucket = 0;
   const char *object = 0;
   const char *openstack_user = 0;
+  const char *date = 0;
   uint64_t auid = 0;
   RGWUserInfo info;
   RGWAccess *store;
@@ -167,6 +173,8 @@ int main(int argc, char **argv)
       CONF_SAFE_SET_ARG_VAL(&auid, OPT_LONGLONG);
     } else if (CONF_ARG_EQ("os-user", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&openstack_user, OPT_STR);
+    } else if (CONF_ARG_EQ("date", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&date, OPT_STR);
     } else {
       if (!opt_cmd) {
         opt_cmd = get_cmd(CONF_VAL, prev_cmd, &need_more);
@@ -196,7 +204,7 @@ int main(int argc, char **argv)
 
   string user_id_str;
 
-  if (opt_cmd != OPT_USER_CREATE && !user_id) {
+  if (opt_cmd != OPT_USER_CREATE && opt_cmd != OPT_LOG_SHOW && !user_id) {
     bool found = false;
     string s;
     if (user_email) {
@@ -346,6 +354,56 @@ int main(int argc, char **argv)
           cout << obj.name << std::endl;
         }
       }
+    }
+  }
+
+  if (opt_cmd == OPT_LOG_SHOW) {
+    if (!date || !bucket) {
+      if (!date)
+        cerr << "date was not specified" << std::endl;
+      if (!bucket)
+        cerr << "bucket was not specified" << std::endl;
+      ARGS_USAGE();
+    }
+
+    string log_bucket = RGW_LOG_BUCKET_NAME;
+    string oid = date;
+    oid += "-";
+    oid += string(bucket);
+    size_t size;
+    int r = store->obj_stat(log_bucket, oid, &size, NULL);
+    if (r < 0) {
+      cerr << "error while doing stat on " <<  log_bucket << ":" << oid << " " << strerror(-r) << std::endl;
+      return -r;
+    }
+    bufferlist bl;
+    r = store->read(log_bucket, oid, 0, size, bl);
+    if (r < 0) {
+      cerr << "error while reading from " <<  log_bucket << ":" << oid << " " << strerror(-r) << std::endl;
+      return -r;
+    }
+
+    bufferlist::iterator iter = bl.begin();
+
+    struct rgw_log_entry entry;
+    const char *delim = " ";
+
+    while (!iter.end()) {
+      ::decode(entry, iter);
+
+      cout << entry.owner << delim
+           << entry.bucket << delim
+           << entry.time << delim
+           << entry.remote_addr << delim
+           << entry.user << delim
+           << "\"" << entry.uri << "\"" << delim
+           << entry.http_status << delim
+           << entry.error_code << delim
+           << entry.bytes_sent << delim
+           << entry.obj_size << delim
+           << entry.total_time.usec() << delim
+           << "\"" << entry.user_agent << "\"" << delim
+           << "\"" << entry.referrer << "\"" << std::endl;
     }
   }
 

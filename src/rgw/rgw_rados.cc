@@ -724,3 +724,15 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
   return count;
 }
 
+int RGWRados::append_async(std::string& bucket, std::string& oid, size_t size, bufferlist& bl)
+{
+  librados::IoCtx io_ctx;
+  int r = rados->ioctx_create(bucket.c_str(), io_ctx);
+  if (r < 0)
+    return r;
+  librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
+  r = io_ctx.aio_append(oid, completion, bl, size);
+  completion->release();
+  return r;
+}
+
