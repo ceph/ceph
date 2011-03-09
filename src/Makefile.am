@@ -688,6 +688,7 @@ noinst_HEADERS = \
 	common/debug.h\
 	common/version.h\
 	common/hex.h\
+	common/entity_name.h\
 	common/errno.h\
 	common/likely.h\
 	common/lockdep.h\
