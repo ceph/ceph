@@ -204,7 +204,7 @@ void RGWCopyObj_REST_S3::send_response()
 
 void RGWGetACLs_REST_S3::send_response()
 {
-  if (ret) dump_errno(s, ret);
+  dump_errno(s, ret);
   end_header(s, "application/xml");
   dump_start(s);
   FCGX_PutStr(acls.c_str(), acls.size(), s->fcgx->out); 

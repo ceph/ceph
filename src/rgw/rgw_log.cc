@@ -18,7 +18,6 @@ int rgw_log_op(struct req_state *s)
     RGW_LOG(0) << "nothing to log for operation" << std::endl;
     return -EINVAL;
   }
-
   entry.bucket = s->bucket;
 
   if (s->object)
@@ -38,7 +37,11 @@ int rgw_log_op(struct req_state *s)
   entry.time = s->time;
   entry.total_time = g_clock.now() - s->time;
   entry.bytes_sent = s->bytes_sent;
-  entry.http_status = s->status;
+  if (s->status)
+    entry.http_status = s->status;
+  else
+    entry.http_status = "200"; // default
+
   if (s->err_exist)
     entry.error_code = s->err.code;
   else
