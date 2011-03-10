@@ -1634,8 +1634,11 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
     if (pi.is_empty())
       continue;
     if (peer_missing.find(peer) == peer_missing.end()) {
-      if (pi.last_update == pi.last_complete) {
-	dout(10) << " infering no missing (last_update==last_complete) for osd" << peer << dendl;
+      if (pi.last_update == pi.last_complete &&  // peer has no missing
+	  pi.last_update == info.last_update) {  // peer is up to date
+	// replica has no missing and identical log as us.  no need to
+	// pull anything.
+	dout(10) << " infering up to date and no missing (last_update==last_complete) for osd" << peer << dendl;
 	peer_missing[peer].num_missing();  // just create the entry.
 	search_for_missing(peer_info[peer], &peer_missing[peer], peer);
 	continue;
