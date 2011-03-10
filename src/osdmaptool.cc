@@ -113,7 +113,8 @@ int main(int argc, const char **argv)
   cout << me << ": osdmap file '" << fn << "'" << std::endl;
   
   int r = 0;
-  if (!(createsimple && clobber)) {
+  struct stat st;
+  if (!createsimple && !clobber) {
     r = bl.read_file(fn);
     if (r == 0) {
       try {
@@ -130,7 +131,7 @@ int main(int argc, const char **argv)
       return -1;
     }
   }
-  else if (createsimple && !clobber && r == 0) {
+  else if (createsimple && !clobber && ::stat(fn, &st) == 0) {
     cerr << me << ": " << fn << " exists, --clobber to overwrite" << std::endl;
     return -1;
   }
