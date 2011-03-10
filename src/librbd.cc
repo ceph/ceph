@@ -13,10 +13,6 @@
  */
 
 #define __STDC_FORMAT_MACROS
-#include "common/config.h"
-
-#include "common/common_init.h"
-#include "common/ceph_argparse.h"
 #include "common/Cond.h"
 #include "include/rbd/librbd.hpp"
 #include "include/byteorder.h"
@@ -28,7 +24,6 @@
 #include <iostream>
 #include <stdlib.h>
 #include <sys/types.h>
-#include <time.h>
 
 #include <sys/ioctl.h>
 
