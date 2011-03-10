@@ -403,6 +403,13 @@ unittest_crypto_LDADD =  libceph.la \
 unittest_crypto_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_crypto
 
+unittest_ceph_crypto_SOURCES = test/ceph_crypto.cc
+unittest_ceph_crypto_LDFLAGS = ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
+unittest_ceph_crypto_LDADD = ${CRYPTO_LIBS} \
+			${UNITTEST_LDADD}
+unittest_ceph_crypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_ceph_crypto
+
 # shell scripts
 editpaths = sed \
 	-e 's|@bindir[@]|$(bindir)|g' \
