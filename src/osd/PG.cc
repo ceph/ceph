@@ -3600,9 +3600,9 @@ void PG::Missing::add(const sobject_t& oid, eversion_t need, eversion_t have)
   rmissing[need] = oid;
 }
 
-void PG::Missing::rm(const sobject_t& oid, eversion_t when)
+void PG::Missing::rm(const sobject_t& oid, eversion_t v)
 {
-  if (missing.count(oid) && missing[oid].need < when) {
+  if (missing.count(oid) && missing[oid].need <= v) {
     rmissing.erase(missing[oid].need);
     missing.erase(oid);
   }
