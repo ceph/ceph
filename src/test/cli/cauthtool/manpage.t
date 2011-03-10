@@ -5,7 +5,7 @@
 
 # demonstrate that manpage examples fail without config
 # TODO fix the manpage
-  $ cauthtool --create-keyring -i foo --gen-key keyring
+  $ cauthtool --create-keyring --name client.foo --gen-key keyring
   creating keyring
 
 # work around the above
@@ -13,7 +13,7 @@
 
 To create a new keyring containing a key for client.foo:
 
-  $ cauthtool --create-keyring -i foo --gen-key keyring.bin
+  $ cauthtool --create-keyring --id foo --gen-key keyring.bin
   creating keyring.bin
 
   $ cauthtool --create-keyring --name client.foo --gen-key keyring.bin

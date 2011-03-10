@@ -45,7 +45,7 @@ verify_conf() {
 
 check_host() {
     # what host is this daemon assigned to?
-    host=`$CCONF -c $conf -i $id -t $type host`
+    host=`$CCONF -c $conf --name $type.$id host`
     [ "$host" = "localhost" ] && host=""
     ssh=""
     rootssh=""
@@ -146,8 +146,8 @@ get_conf() {
 	key=$3
 	shift; shift; shift
 
-	[ "$verbose" -eq 1 ] && echo "$CCONF -c $conf -i $id -t $type \"$key\""
-	eval "$var=\"`$CCONF -c $conf -i $id -t $type \"$key\" || eval echo -n \"$def\"`\""
+	[ "$verbose" -eq 1 ] && echo "$CCONF -c $conf --name $type.$id \"$key\""
+	eval "$var=\"`$CCONF -c $conf --name $type.$id \"$key\" || eval echo -n \"$def\"`\""
 }
 
 get_conf_bool() {

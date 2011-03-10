@@ -44,13 +44,13 @@ ACTIONS\n\
                                   delimited search list.\n\
 \n\
 FLAGS\n\
-  -i id                           Set id\n\
+  --name name                     Set type.id\n\
   [-s <section>]                  Add to list of sections to search\n\
 \n\
 If there is no action given, the action will default to --lookup.\n\
 \n\
 EXAMPLES\n\
-$ cconf -i cconf -c /etc/ceph/ceph.conf -t mon -i 0 'mon addr'\n\
+$ cconf --name client.cconf -c /etc/ceph/ceph.conf -t mon -i 0 'mon addr'\n\
 Find out if there is a 'mon addr' defined in /etc/ceph/ceph.conf\n\
 \n\
 $ cconf -l mon\n\

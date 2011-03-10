@@ -250,7 +250,11 @@ CephInitParameters ceph_argparse_early_args
     else if (ceph_argparse_witharg(args, i, &val, "--conf", "-c", NULL)) {
       iparams.conf_file = val;
     }
-    else if (ceph_argparse_witharg(args, i, &val, "-i", "--id", NULL)) {
+    else if ((module_type != CEPH_ENTITY_TYPE_CLIENT) &&
+	     (ceph_argparse_witharg(args, i, &val, "-i", NULL))) {
+      iparams.name.set_id(val);
+    }
+    else if (ceph_argparse_witharg(args, i, &val, "--id", NULL)) {
       iparams.name.set_id(val);
     }
     else if (ceph_argparse_witharg(args, i, &val, "--name", "-n", NULL)) {
