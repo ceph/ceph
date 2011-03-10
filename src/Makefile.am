@@ -999,7 +999,8 @@ noinst_HEADERS = \
 	sample.ceph.conf\
 	tools/common.h\
 	tools/gui.h\
-	tools/gui_resources.h
+	tools/gui_resources.h\
+	test/osd/RadosModel.h
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_config_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
 	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
