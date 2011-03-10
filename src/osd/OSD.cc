@@ -3315,6 +3315,7 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
        it++) {
     PG *pg = it->second;
     pg->lock();
+    pg->check_recovery_op_pulls(*osdmap);
 
     if (pg->is_primary())
       num_pg_primary++;

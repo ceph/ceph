@@ -885,6 +885,7 @@ public:
   void clear_recovery_state();
   virtual void _clear_recovery_state() = 0;
   void defer_recovery();
+  virtual void check_recovery_op_pulls(const OSDMap &newmap) = 0;
   void start_recovery_op(const sobject_t& soid);
   void finish_recovery_op(const sobject_t& soid, bool dequeue=false);
 
