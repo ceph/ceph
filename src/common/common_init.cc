@@ -22,6 +22,7 @@
 #include "common/config.h"
 #include "common/common_init.h"
 #include "common/errno.h"
+#include "common/ceph_crypto.h"
 #include "include/color.h"
 
 #include <errno.h>
@@ -156,4 +157,6 @@ void common_init(std::vector < const char* >& args,
     cout << TEXT_YELLOW <<  " **          testing and review.  Do not trust it "
 	 << "with important data.       **" << TEXT_NORMAL << std::endl;
   }
+
+  ceph::crypto::init();
 }
