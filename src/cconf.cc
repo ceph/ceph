@@ -133,9 +133,13 @@ int main(int argc, const char **argv)
     if (CONF_ARG_EQ("type", 't')) {
       CONF_SAFE_SET_ARG_VAL(&type, OPT_STR);
     } else if (CONF_ARG_EQ("id", 'i')) {
-      char *id_cstr;
-      CONF_SAFE_SET_ARG_VAL(&id_cstr, OPT_STR);
-      id = id_cstr;
+      nargs.push_back("--id");
+      if (args.size() <= i+1) {
+	cerr << "option -I requires an argument" << std::endl;
+	_exit(1);
+      }
+      nargs.push_back(args[i+1]);
+      ++i;
     } else if (CONF_ARG_EQ("section", 's')) {
       CONF_SAFE_SET_ARG_VAL(&section, OPT_STR);
       sections.push_back(section);
@@ -153,8 +157,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  common_init(nargs, str_to_ceph_entity_type(type),
-	      STARTUP_FLAG_FORCE_FG_LOGGING, id);
+  common_init(nargs, str_to_ceph_entity_type(type), CODE_ENVIRONMENT_UTILITY);
 
   if (do_help) {
     usage();

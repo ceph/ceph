@@ -1,11 +1,10 @@
-# we can use CEPH_CONF to decide what config to read; this doesn't
-# output the same error as below because with just the environment,
-# the config is not considered explicitly specified
+# we can use CEPH_CONF to override the normal configuration file location.
   $ env CEPH_CONF=from-env cconf -s foo bar
-  [2]
+  \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ [0-9a-f]{8,} common_init: unable to open config file. (re)
+  [1]
 
 # command-line arguments should override environment
   $ env -u CEPH_CONF cconf -c from-args
-  error reading config file(s) from-args
+  \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ [0-9a-f]{8,} common_init: unable to open config file. (re)
   [1]
 

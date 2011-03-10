@@ -104,47 +104,40 @@ int MonClient::build_initial_monmap()
   }
 
   // config file?
-  string conf = g_conf.conf;
-  list<string> ls;
-  get_str_list(conf, ls);
-  if (!ls.empty()) {
-    for (list<string>::iterator p = ls.begin(); p != ls.end(); p++) {
-      ConfFile c(p->c_str());
-      if (c.parse() == 0) {
-	for (list<ConfSection*>::const_iterator q = c.get_section_list().begin();
-	     q != c.get_section_list().end();
-	     q++) {
-	  const char *section = (*q)->get_name().c_str();
-	  if (strncmp(section, "mon", 3) == 0) {
-	    const char *name = section + 3;
-	    if (name[0] == '.')
-	      name++;
-	    char *val = 0;
-	    c.read(section, "mon addr", &val, 0);
-	    if (!val || !val[0]) {
-	      delete val;
-	      continue;
-	    }
-	    entity_addr_t addr;
-	    if (!addr.parse(val)) {
-	      cerr << "unable to " << *p << " mon addr for " << section << " (" << val << ")" << std::endl;
-	      delete val;
-	      continue;
-	    }
-	    monmap.add(name, addr);
-	  }
-	}
-        break;
-      }
-    }
-    if (monmap.size())
-      return 0;
-    cerr << "unable to find any monitors in conf" << std::endl;
-    return -EINVAL;
+  if (!g_conf.cf) {
+    cerr << "Unable to find any monitors in the configuration "
+         << "file, because there is no configuration file. "
+	 << "Please specify monitors via -m monaddr or -c ceph.conf" << std::endl;
+    return -ENOENT;
   }
-
-  cerr << "please specify monitors via -m monaddr or -c ceph.conf" << std::endl;
-  return -ENOENT;
+  for (list<ConfSection*>::const_iterator q = g_conf.cf->get_section_list().begin();
+       q != g_conf.cf->get_section_list().end(); ++q) {
+    const char *section = (*q)->get_name().c_str();
+    if (strncmp(section, "mon", 3) == 0) {
+      const char *name = section + 3;
+      if (name[0] == '.')
+	name++;
+      char *val = 0;
+      g_conf.cf->read(section, "mon addr", &val, 0);
+      if (!val || !val[0]) {
+	delete val;
+	continue;
+      }
+      entity_addr_t addr;
+      if (!addr.parse(val)) {
+	cerr << "unable to parse mon addr for " << section << " (" << val << ")" << std::endl;
+	delete val;
+	continue;
+      }
+      monmap.add(name, addr);
+    }
+  }
+  if (monmap.size() == 0) {
+    cerr << "unable to find any monitors in conf. "
+	 << "please specify monitors via -m monaddr or -c ceph.conf" << std::endl;
+    return -ENOENT;
+  }
+  return 0;
 }
 
 

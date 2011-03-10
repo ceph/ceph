@@ -14,6 +14,10 @@
   $ cconf -c test.conf bar -s foo
   blue
 
+# test the funny "equals sign" argument passing convention
+  $ cconf --conf=test.conf bar -s foo
+  blue
+
 # TODO man page stops in the middle of a sentence
 
   $ cconf -c test.conf bar -s xyzzy
@@ -36,3 +40,4 @@
 
   $ cconf -c test.conf bar -s xyzzy -s nobar -s thud -s baz
   red
+

@@ -50,6 +50,7 @@ struct EntityName
   void set(const std::string &type_, const std::string &id_);
   void set_type(uint32_t type_);
   void set_type(const char *type);
+  void set_id(const std::string &id_);
 
   const char* get_type_str() const;
   bool is_admin() const;

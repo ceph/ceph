@@ -582,8 +582,8 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   int opt_cmd = OPT_NO_CMD;
-  common_init(args, CEPH_ENTITY_TYPE_CLIENT,
-	      STARTUP_FLAG_FORCE_FG_LOGGING | STARTUP_FLAG_INIT_KEYS);
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY);
+  keyring_init(&g_conf);
 
   const char *poolname = NULL;
   uint64_t size = 0;

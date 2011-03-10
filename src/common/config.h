@@ -41,9 +41,14 @@ enum log_to_stderr_t {
 
 struct ConfFile;
 
-struct md_config_t {
+struct md_config_t
+{
   md_config_t();
   ~md_config_t();
+  int parse_config_files(const std::list<std::string> &conf_files);
+  void parse_env();
+  void parse_argv_part2(std::vector<const char*>& args);
+  void parse_argv(std::vector<const char*>& args);
   int get_val(const char *key, char **buf, int len);
   int set_val(const char *key, const char *val);
 
@@ -85,8 +90,6 @@ struct md_config_t {
   bool clog_to_syslog;
 
   const char *pid_file;
-
-  char *conf;
 
   const char *chdir;
 
@@ -465,7 +468,6 @@ char *conf_post_process_val(const char *val);
 int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out, void *def, bool free_old_val = false);
 bool conf_set_conf_val(void *field, opt_type_t type, const char *val);
 bool conf_cmd_equals(const char *cmd, const char *opt, char char_opt, unsigned int *val_pos);
-int ceph_def_conf_by_name(const char *name, char *buf, int len);
 
 bool ceph_resolve_file_search(string& filename_list, string& result);
 
@@ -514,11 +516,6 @@ struct config_option {
   opt_type_t type;
   char char_option;  // if any
 };
-
-extern struct config_option config_optionsp[];
-extern const int num_config_options;
-
-extern bool parse_config_file(ConfFile *cf, bool auto_update);
 
 #include "common/debug.h"
 

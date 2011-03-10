@@ -34,7 +34,7 @@ void usage()
        << "  -p, --print                   will print an encoded key for the specified\n"
        << "                                entityname. This is suitable for the\n"
        << "                                'mount -o secret=..' argument\n"
-       << "  -c, --create-keyring          will create a new keyring, overwriting any\n"
+       << "  -C, --create-keyring          will create a new keyring, overwriting any\n"
        << "                                existing keyringfile\n"
        << "  --gen-key                     will generate a new secret key for the\n"
        << "                                specified entityname\n"
@@ -53,7 +53,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   DEFINE_CONF_VARS(usage);
 
-  common_init(args, CEPH_ENTITY_TYPE_CLIENT, STARTUP_FLAG_FORCE_FG_LOGGING);
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY);
   EntityName ename(*g_conf.name);
 
   const char *me = argv[0];
@@ -91,7 +91,7 @@ int main(int argc, const char **argv)
       ::encode(val, caps[key]);
     } else if (CONF_ARG_EQ("print-key", 'p')) {
       CONF_SAFE_SET_ARG_VAL(&print_key, OPT_BOOL);
-    } else if (CONF_ARG_EQ("create-keyring", 'c')) {
+    } else if (CONF_ARG_EQ("create-keyring", 'C')) {
       CONF_SAFE_SET_ARG_VAL(&create_keyring, OPT_BOOL);
     } else if (CONF_ARG_EQ("import-keyring", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&import_keyring, OPT_STR);
