@@ -351,7 +351,9 @@ void PG::merge_log(ObjectStore::Transaction& t,
       if (p->version <= log.head) {
 	dout(10) << "merge_log split point is " << *p << dendl;
 
-	if (p->version == log.head)
+	hash_map<sobject_t,Log::Entry*>::const_iterator oldobj = old_objects.find(p->soid);
+	if (oldobj != old_objects.end() &&
+	    oldobj->second->version == p->version)
 	  p++;       // move past the split point, if it also exists in our old log...
 	break;
       }
