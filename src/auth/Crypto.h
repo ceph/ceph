@@ -11,8 +11,8 @@
  * 
  */
 
-#ifndef CEPH_CRYPTO_H
-#define CEPH_CRYPTO_H
+#ifndef CEPH_AUTH_CRYPTO_H
+#define CEPH_AUTH_CRYPTO_H
 
 #include "include/types.h"
 
