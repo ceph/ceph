@@ -91,7 +91,7 @@ int main(int argc, const char **argv)
       ::encode(val, caps[key]);
     } else if (CONF_ARG_EQ("print-key", 'p')) {
       CONF_SAFE_SET_ARG_VAL(&print_key, OPT_BOOL);
-    } else if (CONF_ARG_EQ("create-keyring", 'C')) {
+    } else if (CONF_ARG_EQ("create-keyring", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&create_keyring, OPT_BOOL);
     } else if (CONF_ARG_EQ("import-keyring", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&import_keyring, OPT_STR);
