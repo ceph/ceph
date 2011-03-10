@@ -75,8 +75,59 @@ namespace ceph {
 	Restart();
       }
     };
+
+    class HMACSHA1 {
+    private:
+      PK11SlotInfo *slot;
+      PK11SymKey *symkey;
+      PK11Context *ctx;
+    public:
+      static const int DIGESTSIZE = 20;
+      HMACSHA1 (const byte *key, size_t length) {
+	slot = PK11_GetBestSlot(CKM_SHA_1_HMAC, NULL);
+	assert(slot);
+	SECItem keyItem;
+	keyItem.type = siBuffer;
+	keyItem.data = (unsigned char*)key;
+	keyItem.len = length;
+	symkey = PK11_ImportSymKey(slot, CKM_SHA_1_HMAC, PK11_OriginUnwrap,
+				   CKA_SIGN,  &keyItem, NULL);
+	assert(symkey);
+	SECItem param;
+	param.type = siBuffer;
+	param.data = NULL;
+	param.len = 0;
+	ctx = PK11_CreateContextBySymKey(CKM_SHA_1_HMAC, CKA_SIGN, symkey, &param);
+	assert(ctx);
+	Restart();
+      }
+      ~HMACSHA1 () {
+	PK11_DestroyContext(ctx, PR_TRUE);
+	PK11_FreeSymKey(symkey);
+	PK11_FreeSlot(slot);
+      }
+      void Restart() {
+	SECStatus s;
+	s = PK11_DigestBegin(ctx);
+	assert(s == SECSuccess);
+      }
+      void Update (const byte *input, size_t length) {
+	SECStatus s;
+	s = PK11_DigestOp(ctx, input, length);
+	assert(s == SECSuccess);
+      }
+      void Final (byte *digest) {
+	SECStatus s;
+	unsigned int dummy;
+	s = PK11_DigestFinal(ctx, digest, &dummy, DIGESTSIZE);
+	assert(s == SECSuccess);
+	assert(dummy == (unsigned int)DIGESTSIZE);
+	Restart();
+      }
+    };
   }
 }
+
 #else
 # error "No supported crypto implementation found."
 #endif
