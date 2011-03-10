@@ -131,6 +131,28 @@ int gen_rand_alphanumeric(char *dest, int size) /* size should be the required s
   return 0;
 }
 
+string escape_str(string& src, char c)
+{
+  int pos = 0;
+  string s = src;
+  string dest;
+
+  do {
+    int new_pos = src.find(c, pos);
+    if (new_pos >= 0) {
+      dest += src.substr(pos, new_pos - pos);
+      dest += "\\";
+      dest += c;
+    } else {
+      dest += src.substr(pos);
+      return dest;
+    }
+    pos = new_pos + 1;
+  } while (pos < (int)src.size());
+
+  return dest;
+}
+
 int main(int argc, char **argv) 
 {
   DEFINE_CONF_VARS(usage);
@@ -397,14 +419,14 @@ int main(int argc, char **argv)
            << entry.remote_addr << delim
            << entry.user << delim
            << entry.op << delim
-           << "\"" << entry.uri << "\"" << delim
+           << "\"" << escape_str(entry.uri, '"') << "\"" << delim
            << entry.http_status << delim
            << entry.error_code << delim
            << entry.bytes_sent << delim
            << entry.obj_size << delim
            << entry.total_time.usec() << delim
-           << "\"" << entry.user_agent << "\"" << delim
-           << "\"" << entry.referrer << "\"" << std::endl;
+           << "\"" << escape_str(entry.user_agent, '"') << "\"" << delim
+           << "\"" << escape_str(entry.referrer, '"') << "\"" << std::endl;
     }
   }
 
