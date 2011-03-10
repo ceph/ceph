@@ -116,7 +116,7 @@ Description: debugging symbols for libcrush1
  .
  This package contains debugging symbols for libcrush.
 
-Package: libcrush1-dev
+Package: libcrush-dev
 Architecture: any
 Section: libdevel
 Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush1 (= ${binary:Version})
@@ -158,7 +158,7 @@ Description: debugging symbols for librados
  .
  This package contains debugging symbols for librados.
 
-Package: librados2-dev
+Package: librados-dev
 Architecture: any
 Section: libdevel
 Depends: ${shlibs:Depends}, ${misc:Depends}, librados2 (= ${binary:Version})
@@ -193,7 +193,7 @@ Description: debugging symbols for librbd1
  .
  This package contains debugging symbols for librbd1.
 
-Package: librbd1-dev
+Package: librbd-dev
 Architecture: any
 Section: libdevel
 Depends: ${shlibs:Depends}, ${misc:Depends}, librbd1 (= ${binary:Version})
@@ -230,7 +230,7 @@ Description: debugging symbols for libceph1
  .
  This package contains debugging symbols for libceph1.
 
-Package: libceph1-dev
+Package: libceph-dev
 Architecture: any
 Section: libdevel
 Depends: ${shlibs:Depends}, ${misc:Depends}, libceph1 (= ${binary:Version})
