@@ -63,3 +63,56 @@ TEST(MD5, Restart) {
   err = memcmp(digest, want_digest, ceph::crypto::MD5::DIGESTSIZE);
   ASSERT_EQ(0, err);
 }
+
+TEST(HMACSHA1, DigestSize) {
+  int s = ceph::crypto::HMACSHA1::DIGESTSIZE;
+  ASSERT_EQ(20, s);
+}
+
+TEST(HMACSHA1, Simple) {
+  ceph::crypto::HMACSHA1 h((const byte*)"sekrit", 6);
+  h.Update((const byte*)"foo", 3);
+  unsigned char digest[ceph::crypto::HMACSHA1::DIGESTSIZE];
+  h.Final(digest);
+  int err;
+  unsigned char want_digest[ceph::crypto::HMACSHA1::DIGESTSIZE] = {
+    0x04, 0xbc, 0x52, 0x66, 0xb6, 0xff, 0xad, 0xad, 0x9d, 0x57,
+    0xce, 0x13, 0xea, 0x8c, 0xf5, 0x6b, 0xf9, 0x95, 0x2f, 0xd6,
+  };
+  err = memcmp(digest, want_digest, ceph::crypto::HMACSHA1::DIGESTSIZE);
+  ASSERT_EQ(0, err);
+}
+
+TEST(HMACSHA1, MultiUpdate) {
+  ceph::crypto::HMACSHA1 h((const byte*)"sekrit", 6);
+  h.Update((const byte*)"", 0);
+  h.Update((const byte*)"fo", 2);
+  h.Update((const byte*)"", 0);
+  h.Update((const byte*)"o", 1);
+  h.Update((const byte*)"", 0);
+  unsigned char digest[ceph::crypto::HMACSHA1::DIGESTSIZE];
+  h.Final(digest);
+  int err;
+  unsigned char want_digest[ceph::crypto::HMACSHA1::DIGESTSIZE] = {
+    0x04, 0xbc, 0x52, 0x66, 0xb6, 0xff, 0xad, 0xad, 0x9d, 0x57,
+    0xce, 0x13, 0xea, 0x8c, 0xf5, 0x6b, 0xf9, 0x95, 0x2f, 0xd6,
+  };
+  err = memcmp(digest, want_digest, ceph::crypto::HMACSHA1::DIGESTSIZE);
+  ASSERT_EQ(0, err);
+}
+
+TEST(HMACSHA1, Restart) {
+  ceph::crypto::HMACSHA1 h((const byte*)"sekrit", 6);
+  h.Update((const byte*)"bar", 3);
+  h.Restart();
+  h.Update((const byte*)"foo", 3);
+  unsigned char digest[ceph::crypto::HMACSHA1::DIGESTSIZE];
+  h.Final(digest);
+  int err;
+  unsigned char want_digest[ceph::crypto::HMACSHA1::DIGESTSIZE] = {
+    0x04, 0xbc, 0x52, 0x66, 0xb6, 0xff, 0xad, 0xad, 0x9d, 0x57,
+    0xce, 0x13, 0xea, 0x8c, 0xf5, 0x6b, 0xf9, 0x95, 0x2f, 0xd6,
+  };
+  err = memcmp(digest, want_digest, ceph::crypto::HMACSHA1::DIGESTSIZE);
+  ASSERT_EQ(0, err);
+}
