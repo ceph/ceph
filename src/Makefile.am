@@ -399,10 +399,10 @@ unittest_bufferlist_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_bufferlist
 
 unittest_crypto_SOURCES = test/crypto.cc
-unittest_crypto_LDFLAGS = -lrt ${AM_LDFLAGS}
-unittest_crypto_LDADD =  libceph.la \
+unittest_crypto_LDFLAGS = -lrt ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
+unittest_crypto_LDADD =  libceph.la ${CRYPTO_LIBS} \
 			${UNITTEST_LDADD}
-unittest_crypto_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_crypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_crypto
 
 unittest_ceph_crypto_SOURCES = test/ceph_crypto.cc

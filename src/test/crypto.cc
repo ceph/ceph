@@ -3,8 +3,18 @@
 
 #include "include/types.h"
 #include "auth/Crypto.h"
+#include "common/ceph_crypto.h"
 
 #include "gtest/gtest.h"
+
+class CryptoEnvironment: public ::testing::Environment {
+public:
+  void SetUp() {
+    ceph::crypto::init();
+  }
+};
+
+::testing::Environment* const crypto_env = ::testing::AddGlobalTestEnvironment(new CryptoEnvironment);
 
 TEST(AES, ValidateSecret) {
   CryptoHandler *h = ceph_crypto_mgr.get_crypto(CEPH_CRYPTO_AES);

@@ -206,20 +206,7 @@ static int nss_aes_operation(CK_ATTRIBUTE_TYPE op, bufferptr& secret, const buff
 
 class CryptoAES : public CryptoHandler {
 public:
-  CryptoAES() {
-#ifdef USE_NSS
-    SECStatus ret;
-    ret = NSS_NoDB_Init(NULL);
-    if (ret != SECSuccess) {
-      dout(0) << "initializing NSS crypto library failed (code "
-	      << PR_GetError() << "), aborting" << dendl;
-      exit(1);
-    }
-
-    
-#endif
-  }
-
+  CryptoAES() {}
   ~CryptoAES() {}
   int create(bufferptr& secret);
   int validate_secret(bufferptr& secret);
