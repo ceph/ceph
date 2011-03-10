@@ -6,12 +6,22 @@
 #ifdef USE_CRYPTOPP
 # define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
 # include <cryptopp/md5.h>
+# include <cryptopp/sha.h>
+# include <cryptopp/hmac.h>
 namespace ceph {
   namespace crypto {
     static inline void init() {
       // nothing
     }
     using CryptoPP::Weak::MD5;
+
+    class HMACSHA1: public CryptoPP::HMAC<CryptoPP::SHA1> {
+    public:
+      HMACSHA1 (const byte *key, size_t length)
+	: CryptoPP::HMAC<CryptoPP::SHA1>(key, length)
+	{
+	}
+    };
   }
 }
 #elif USE_NSS

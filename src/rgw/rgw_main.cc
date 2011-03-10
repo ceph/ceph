@@ -8,9 +8,6 @@
 #include <errno.h>
 #include <signal.h>
 
-#include <cryptopp/sha.h>
-#include <cryptopp/hmac.h>
-
 #include "fcgiapp.h"
 
 #include "rgw_common.h"
@@ -31,7 +28,7 @@
 #include "common/BackTrace.h"
 
 using namespace std;
-using namespace CryptoPP;
+using ceph::crypto::HMACSHA1;
 
 #define CGI_PRINTF(stream, format, ...) do { \
    FCGX_FPrintF(stream, format, __VA_ARGS__); \
@@ -122,15 +119,15 @@ static int calc_hmac_sha1(const char *key, int key_len,
                            const char *msg, int msg_len,
                            char *dest, int *len) /* dest should be large enough to hold result */
 {
-  if (*len < HMAC<SHA1>::DIGESTSIZE)
+  if (*len < HMACSHA1::DIGESTSIZE)
     return -EINVAL;
 
-  char hex_str[HMAC<SHA1>::DIGESTSIZE * 2 + 1];
+  char hex_str[HMACSHA1::DIGESTSIZE * 2 + 1];
 
-  HMAC<SHA1> hmac((const unsigned char *)key, key_len);
+  HMACSHA1 hmac((const unsigned char *)key, key_len);
   hmac.Update((const unsigned char *)msg, msg_len);
   hmac.Final((unsigned char *)dest);
-  *len = HMAC<SHA1>::DIGESTSIZE;
+  *len = HMACSHA1::DIGESTSIZE;
   
   buf_to_hex((unsigned char *)dest, *len, hex_str);
 
@@ -194,7 +191,7 @@ static bool verify_signature(struct req_state *s)
   const char *key = s->user.secret_key.c_str();
   int key_len = strlen(key);
 
-  char hmac_sha1[HMAC<SHA1>::DIGESTSIZE];
+  char hmac_sha1[HMACSHA1::DIGESTSIZE];
   int len = sizeof(hmac_sha1);
   if (calc_hmac_sha1(key, key_len, auth_hdr.c_str(), auth_hdr.size(), hmac_sha1, &len) < 0)
     return false;
