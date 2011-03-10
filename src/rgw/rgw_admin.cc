@@ -355,7 +355,7 @@ int main(int argc, char **argv)
 
     if (user_id) {
       RGWUserBuckets buckets;
-      if (rgw_read_buckets_attr(user_id, buckets, false) < 0) {
+      if (rgw_read_user_buckets(user_id, buckets, false) < 0) {
         cout << "could not get buckets for uid " << user_id << std::endl;
       } else {
         map<string, RGWBucketEnt>& m = buckets.get_buckets();

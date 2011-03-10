@@ -179,13 +179,36 @@ static void get_buckets_obj(string& user_id, string& buckets_obj_id)
     buckets_obj_id += RGW_BUCKETS_OBJ_PREFIX;
 }
 
+static int rgw_read_buckets_from_attr(string& user_id, RGWUserBuckets& buckets)
+{
+  bufferlist bl;
+  int ret = rgwstore->get_attr(ui_bucket, user_id, RGW_ATTR_BUCKETS, bl);
+  if (ret)
+    return ret;
+
+  bufferlist::iterator iter = bl.begin();
+  buckets.decode(iter);
+  return 0;
+}
+
+static void store_buckets(string& user_id, RGWUserBuckets& buckets)
+{
+  map<string, RGWBucketEnt>& m = buckets.get_buckets();
+  map<string, RGWBucketEnt>::iterator iter;
+  for (iter = m.begin(); iter != m.end(); ++iter) {
+    string bucket_name = iter->first;
+    int r = rgw_add_bucket(user_id, bucket_name);
+    if (r < 0)
+      RGW_LOG(0) << "failed to store bucket information for user " << user_id << " bucket=" << bucket_name << std::endl;
+  }
+}
+
 /**
  * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
  * Returns: 0 on success, -ERR# on failure.
  */
-int rgw_read_buckets_attr(string user_id, RGWUserBuckets& buckets, bool need_stats)
+int rgw_read_user_buckets(string user_id, RGWUserBuckets& buckets, bool need_stats)
 {
-  bufferlist bl;
   int ret;
   buckets.clear();
   if (rgwstore->supports_tmap()) {
@@ -198,6 +221,13 @@ int rgw_read_buckets_attr(string user_id, RGWUserBuckets& buckets, bool need_sta
     do {
       ret = rgwstore->read(ui_bucket, buckets_obj_id, 0, len, bl);
       if (ret == -ENOENT) {
+        /* try to read the old format */
+        ret = rgw_read_buckets_from_attr(user_id, buckets);
+        if (!ret) {
+          store_buckets(user_id, buckets);
+          goto done;
+        }
+
         ret = 0;
         return 0;
       }
@@ -222,20 +252,19 @@ int rgw_read_buckets_attr(string user_id, RGWUserBuckets& buckets, bool need_sta
       buckets.add(bucket);
     }
   } else {
-    ret = rgwstore->get_attr(ui_bucket, user_id, RGW_ATTR_BUCKETS, bl);
+    ret = rgw_read_buckets_from_attr(user_id, buckets);
     switch (ret) {
     case 0:
       break;
     case -ENODATA:
+      ret = 0;
       return 0;
     default:
       return ret;
     }
-
-    bufferlist::iterator iter = bl.begin();
-    buckets.decode(iter);
   }
 
+done:
   list<string> buckets_list;
 
   if (need_stats) {
@@ -287,7 +316,7 @@ int rgw_add_bucket(string user_id, string bucket_name)
   } else {
     RGWUserBuckets buckets;
 
-    ret = rgw_read_buckets_attr(user_id, buckets, false);
+    ret = rgw_read_user_buckets(user_id, buckets, false);
     RGWBucketEnt new_bucket;
 
     switch (ret) {
@@ -326,7 +355,7 @@ int rgw_remove_bucket(string user_id, string bucket_name)
   } else {
     RGWUserBuckets buckets;
 
-    ret = rgw_read_buckets_attr(user_id, buckets, false);
+    ret = rgw_read_user_buckets(user_id, buckets, false);
 
     if (ret == 0 || ret == -ENOENT) {
       buckets.remove(bucket_name);
@@ -345,7 +374,7 @@ int rgw_remove_bucket(string user_id, string bucket_name)
  */
 int rgw_delete_user(RGWUserInfo& info) {
   RGWUserBuckets user_buckets;
-  rgw_read_buckets_attr(info.user_id, user_buckets, false);
+  rgw_read_user_buckets(info.user_id, user_buckets, false);
   map<string, RGWBucketEnt>& buckets = user_buckets.get_buckets();
   for (map<string, RGWBucketEnt>::iterator i = buckets.begin();
        i != buckets.end();

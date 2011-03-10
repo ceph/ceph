@@ -115,7 +115,7 @@ WRITE_CLASS_ENCODER(RGWUserBuckets)
  * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
  * Returns: 0 on success, -ERR# on failure.
  */
-extern int rgw_read_buckets_attr(string user_id, RGWUserBuckets& buckets, bool need_stats);
+extern int rgw_read_user_buckets(string user_id, RGWUserBuckets& buckets, bool need_stats);
 
 /**
  * Store the set of buckets associated with a user.

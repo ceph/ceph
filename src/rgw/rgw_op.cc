@@ -222,7 +222,7 @@ int RGWGetObj::init_common()
 
 void RGWListBuckets::execute()
 {
-  ret = rgw_read_buckets_attr(s->user.user_id, buckets, !!(s->prot_flags & RGW_REST_OPENSTACK));
+  ret = rgw_read_user_buckets(s->user.user_id, buckets, !!(s->prot_flags & RGW_REST_OPENSTACK));
   if (ret < 0) {
     /* hmm.. something wrong here.. the user was authenticated, so it
        should exist, just try to recreate */
