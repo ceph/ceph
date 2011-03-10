@@ -15,7 +15,7 @@
 
 To extract the value of the "osd data" option for the osd0 daemon,
 
-  $ cconf -c foo.conf "osd data" -i 0 -t osd
+  $ cconf -c foo.conf "osd data" --name osd.0
   /mnt/osd0
 
 This is equivalent to doing specifying sections [osd0], [osd.0],

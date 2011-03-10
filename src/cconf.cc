@@ -115,7 +115,6 @@ static int lookup(const deque<const char *> &sections,
 
 int main(int argc, const char **argv)
 {
-  const char *type = "client";
   char *section;
   vector<const char*> args, nargs;
   deque<const char *> sections;
@@ -124,23 +123,12 @@ int main(int argc, const char **argv)
   bool do_help = false;
   bool do_list = false;
   bool do_lookup = false;
-  string id("admin");
 
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("type", 't')) {
-      CONF_SAFE_SET_ARG_VAL(&type, OPT_STR);
-    } else if (CONF_ARG_EQ("id", 'i')) {
-      nargs.push_back("--id");
-      if (args.size() <= i+1) {
-	cerr << "option -I requires an argument" << std::endl;
-	_exit(1);
-      }
-      nargs.push_back(args[i+1]);
-      ++i;
-    } else if (CONF_ARG_EQ("section", 's')) {
+    if (CONF_ARG_EQ("section", 's')) {
       CONF_SAFE_SET_ARG_VAL(&section, OPT_STR);
       sections.push_back(section);
     } else if (CONF_ARG_EQ("resolve-search", 'r')) {
@@ -157,7 +145,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  common_init(nargs, str_to_ceph_entity_type(type), CODE_ENVIRONMENT_UTILITY);
+  common_init(nargs, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY);
 
   if (do_help) {
     usage();

@@ -5,7 +5,7 @@
 
 # demonstrate that manpage examples fail without config
 # TODO fix the manpage
-  $ cauthtool --create-keyring -n foo --gen-key keyring
+  $ cauthtool --create-keyring -i foo --gen-key keyring
   creating keyring
 
 # work around the above
@@ -13,15 +13,15 @@
 
 To create a new keyring containing a key for client.foo:
 
-  $ cauthtool -C -n foo --gen-key keyring.bin
+  $ cauthtool --create-keyring -i foo --gen-key keyring.bin
   creating keyring.bin
 
-  $ cauthtool --create-keyring -t client -n foo --gen-key keyring.bin
+  $ cauthtool --create-keyring --name client.foo --gen-key keyring.bin
   creating keyring.bin
 
 To associate some capabilities with the key (namely, the ability to mount a Ceph filesystem):
 
-  $ cauthtool -t client -n foo --cap mds 'allow' --cap osd 'allow rw pool=data' --cap mon 'allow r' keyring.bin
+  $ cauthtool -n client.foo --cap mds 'allow' --cap osd 'allow rw pool=data' --cap mon 'allow r' keyring.bin
 
 To display the contents of the keyring:
 

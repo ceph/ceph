@@ -71,7 +71,6 @@ int main(int argc, const char **argv)
   uint64_t auid = CEPH_AUTH_UID_DEFAULT;
   map<string,bufferlist> caps;
   bool bin_keyring = false;
-  const char * type = NULL;
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("gen-key", 'g')) {
@@ -98,17 +97,12 @@ int main(int argc, const char **argv)
     } else if (CONF_ARG_EQ("set-uid", 'u')) {
       CONF_SAFE_SET_ARG_VAL(&auid, OPT_LONGLONG);
       set_auid = true;
-    } else if (CONF_ARG_EQ("type", 't')) {
-      CONF_SAFE_SET_ARG_VAL(&type, OPT_STR);
     } else if (CONF_ARG_EQ("bin", 'b')) {
       CONF_SAFE_SET_ARG_VAL(&bin_keyring, OPT_BOOL);
     } else if (!fn) {
       fn = args[i];
     } else 
       usage();
-  }
-  if (type) {
-    ename.set_type(type);
   }
   if (!fn && !gen_print_key) {
     cerr << me << ": must specify filename" << std::endl;

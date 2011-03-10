@@ -250,14 +250,15 @@ CephInitParameters ceph_argparse_early_args
     else if (ceph_argparse_witharg(args, i, &val, "--conf", "-c", NULL)) {
       iparams.conf_file = val;
     }
-    // So many different ways to set id... surely we can trim this a little?
-    else if ((module_type != CEPH_ENTITY_TYPE_CLIENT) &&
-	(ceph_argparse_witharg(args, i, &val, "--name", "-n", "-i", "--id", NULL))) {
+    else if (ceph_argparse_witharg(args, i, &val, "-i", "--id", NULL)) {
       iparams.name.set_id(val);
     }
-    else if ((module_type == CEPH_ENTITY_TYPE_CLIENT) &&
-	(ceph_argparse_witharg(args, i, &val, "--name", "-n", "-I", "--id", NULL))) {
-      iparams.name.set_id(val);
+    else if (ceph_argparse_witharg(args, i, &val, "--name", "-n", NULL)) {
+      if (!iparams.name.from_str(val)) {
+	std::cerr << "You must pass a string of the form ID.TYPE to "
+	  "the --name option." << std::endl;
+	_exit(1);
+      }
     }
     else {
       // ignore
@@ -269,10 +270,15 @@ CephInitParameters ceph_argparse_early_args
 
 static void generic_usage(bool is_server)
 {
-  cout << "   -c ceph.conf or --conf=ceph.conf\n";
-  cout << "        get options from given conf file\n";
-  cout << "   -D   run in foreground.\n";
-  cout << "   -f   run in foreground. Show all log messages on stdout.\n";
+  cout << "\
+--conf/-c        Read configuration from the given configuration file\n\
+-D               Run in the foreground.\n\
+-f               Run in foreground. Show all log messages on stderr.\n\
+--id             set ID\n\
+--name           set ID.TYPE\n\
+--version        show version and quit\n\
+" << std::endl;
+
   if (is_server) {
     cout << "   --debug_ms N\n";
     cout << "        set message debug level (e.g. 1)\n";
