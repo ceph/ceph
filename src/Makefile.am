@@ -295,13 +295,15 @@ libradosgw_a_SOURCES = \
 	rgw/rgw_rest.cc \
 	rgw/rgw_common.cc
 libradosgw_a_CFLAGS = ${AM_CFLAGS}
-libradosgw_a_CXXFLAGS = ${AM_CXXFLAGS}
+libradosgw_a_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
+libradosgw_a_LDFLAGS = ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
 # lib_LTLIBRARIES += libradosgw.a
 
 radosgw_SOURCES = rgw/rgw_main.cc
 radosgw_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-radosgw_CXXFLAGS = ${AM_CXXFLAGS}
+radosgw_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 radosgw_admin_SOURCES = rgw/rgw_admin.cc
+radosgw_admin_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 radosgw_admin_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lexpat -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += radosgw radosgw_admin
 endif
@@ -405,7 +407,7 @@ check_PROGRAMS += unittest_crypto
 
 unittest_ceph_crypto_SOURCES = test/ceph_crypto.cc
 unittest_ceph_crypto_LDFLAGS = ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
-unittest_ceph_crypto_LDADD = ${CRYPTO_LIBS} \
+unittest_ceph_crypto_LDADD = libcommon.a ${CRYPTO_LIBS} \
 			${UNITTEST_LDADD}
 unittest_ceph_crypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_ceph_crypto
@@ -581,7 +583,8 @@ libcommon_files = \
 	common/debug.cc \
 	common/version.cc \
 	common/hex.cc \
-	common/entity_name.cc
+	common/entity_name.cc \
+	common/ceph_crypto.cc
 
 if WITH_PROFILER
 libcommon_files += perfglue/cpu_profiler.cc
