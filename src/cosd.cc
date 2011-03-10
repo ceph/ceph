@@ -56,12 +56,7 @@ int main(int argc, const char **argv)
   vector<const char *>::iterator args_iter;
 
   common_init(args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_DAEMON);
-  for (args_iter = args.begin(); args_iter != args.end(); ++args_iter) {
-    if (strcmp(*args_iter, "--mkfs") == 0) {
-      keyring_init(&g_conf);
-      break;
-    }
-  }
+  
   ceph_heap_profiler_init();
 
   // osd specific args
@@ -83,6 +78,9 @@ int main(int argc, const char **argv)
       ARGS_USAGE();
     }
   }
+
+  if (!mkfs)
+    keyring_init(&g_conf);
 
   if (dump_pg_log) {
     bufferlist bl;
