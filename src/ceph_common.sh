@@ -45,11 +45,11 @@ verify_conf() {
 
 check_host() {
     # what host is this daemon assigned to?
-    host=`$CCONF -c $conf --name $type.$id host`
+    host=`$CCONF -c $conf -n $type.$id host`
     [ "$host" = "localhost" ] && host=""
     ssh=""
     rootssh=""
-    dir=$PWD
+    sshdir=$PWD
     get_conf user "" "user"
     if [ -n "$host" ]; then
 	#echo host for $name is $host, i am $hostname
@@ -66,7 +66,7 @@ check_host() {
 		ssh="ssh $user@$host"
 	    fi
 	    rootssh="ssh root@$host"
-	    get_conf dir "$dir" "ssh path"
+	    get_conf sshdir "$sshdir" "ssh path"
 	fi
     else
 	host=$hostname
@@ -121,7 +121,7 @@ get_name_list() {
     fi
 
     what=""
-    for f in "$orig"; do
+    for f in $orig; do
 	type=`echo $f | cut -c 1-3`   # e.g. 'mon', if $item is 'mon1'
 	id=`echo $f | cut -c 4- | sed 's/\\.//'`
 	all=`$CCONF -c $conf -l $type | egrep -v "^$type$"`
@@ -146,8 +146,13 @@ get_conf() {
 	key=$3
 	shift; shift; shift
 
-	[ "$verbose" -eq 1 ] && echo "$CCONF -c $conf --name $type.$id \"$key\""
-	eval "$var=\"`$CCONF -c $conf --name $type.$id \"$key\" || eval echo -n \"$def\"`\""
+	if [ -z "$1" ]; then
+	    [ "$verbose" -eq 1 ] && echo "$CCONF -c $conf -n $type.$id \"$key\""
+	    eval "$var=\"`$CCONF -c $conf -n $type.$id \"$key\" || eval echo -n \"$def\"`\""
+	else
+	    [ "$verbose" -eq 1 ] && echo "$CCONF -c $conf -s $1 \"$key\""
+	    eval "$var=\"`$CCONF -c $conf -s $1 \"$key\" || eval echo -n \"$def\"`\""
+	fi
 }
 
 get_conf_bool() {
