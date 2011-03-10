@@ -14,6 +14,10 @@ static void set_param_str(struct req_state *s, const char *name, string& str)
 int rgw_log_op(struct req_state *s)
 {
   struct rgw_log_entry entry;
+
+  if (!s->should_log)
+    return 0;
+
   if (!s->bucket) {
     RGW_LOG(0) << "nothing to log for operation" << std::endl;
     return -EINVAL;

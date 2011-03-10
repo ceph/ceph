@@ -12,6 +12,7 @@
 #include "rgw_rest.h"
 #include "rgw_acl.h"
 #include "rgw_user.h"
+#include "rgw_log.h"
 
 using namespace std;
 using namespace CryptoPP::Weak;
@@ -717,6 +718,9 @@ void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
       rgw_log_level = level;
     }
   }
+
+  const char *cgi_env_log = FCGX_GetParam("RGW_LOG_LEVEL", fcgx->envp);
+  s->should_log = rgw_str_to_bool(cgi_env_log, RGW_SHOULD_LOG_DEFAULT);
 
   if (rgw_log_level >= 20) {
     char *p;

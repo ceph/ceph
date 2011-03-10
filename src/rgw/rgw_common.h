@@ -207,6 +207,7 @@ struct req_state {
    bool expect_cont;
    bool header_ended;
    uint64_t bytes_sent; // bytes sent as a response, excluding header
+   bool should_log;
 
    XMLArgs args;
 
@@ -318,6 +319,16 @@ static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
   for (i = 0; i < len; i++) {
     sprintf(&str[i*2], "%02x", (int)buf[i]);
   }
+}
+
+static inline int rgw_str_to_bool(const char *s, int def_val)
+{
+  if (!s)
+    return def_val;
+
+  return (strcasecmp(s, "on") == 0 ||
+          strcasecmp(s, "yes") == 0 ||
+          strcasecmp(s, "1"));
 }
 
 /** */

@@ -6,6 +6,8 @@
 
 #define LOG_ENTRY_VER 1
 
+#define RGW_SHOULD_LOG_DEFAULT 1
+
 #define RGW_LOG_BUCKET_NAME ".log"
 
 struct rgw_log_entry {

@@ -1,5 +1,6 @@
 #include <errno.h>
 
+#include "rgw_common.h"
 #include "rgw_access.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
@@ -496,16 +497,6 @@ static void init_auth_info(struct req_state *s)
   }
 }
 
-static int str_to_bool(const char *s, int def_val)
-{
-  if (!s)
-    return def_val;
-
-  return (strcasecmp(s, "on") == 0 ||
-          strcasecmp(s, "yes") == 0 ||
-          strcasecmp(s, "1"));
-}
-
 void RGWHandler_REST::init_rest(struct req_state *s, struct fcgx_state *fcgx)
 {
   RGWHandler::init_state(s, fcgx);
@@ -548,7 +539,7 @@ void RGWHandler_REST::init_rest(struct req_state *s, struct fcgx_state *fcgx)
   s->http_auth = FCGX_GetParam("HTTP_AUTHORIZATION", s->fcgx->envp);
 
   const char *cgi_env_continue = FCGX_GetParam("RGW_PRINT_CONTINUE", s->fcgx->envp);
-  if (str_to_bool(cgi_env_continue, 0)) {
+  if (rgw_str_to_bool(cgi_env_continue, 0)) {
     const char *expect = FCGX_GetParam("HTTP_EXPECT", s->fcgx->envp);
     s->expect_cont = (expect && !strcasecmp(expect, "100-continue"));
   }
