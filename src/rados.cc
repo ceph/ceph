@@ -54,6 +54,7 @@ void usage()
   cerr << "   getxattr objname attr\n";
   cerr << "   setxattr objname attr val\n";
   cerr << "   rmxattr objname attr\n";
+  cerr << "   stat objname -- stat the named object\n";
   cerr << "   ls          -- list objects in pool\n\n";
   cerr << "   chown 123   -- change the pool owner to auid 123\n";
   cerr << "   mapext objname\n";
@@ -274,6 +275,22 @@ int main(int argc, const char **argv)
       cout << hex << iter->first << "\t" << iter->second << dec << std::endl;
     }
   }
+  else if (strcmp(nargs[0], "stat") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage();
+    string oid(nargs[1]);
+    uint64_t size;
+    time_t mtime;
+    ret = io_ctx.stat(oid, &size, &mtime);
+    if (ret < 0) {
+      cerr << " error stat-ing " << pool_name << "/" << oid << ": "
+           << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
+    } else {
+      cout << pool_name << "/" << oid
+           << " mtime " << mtime << ", size " << size << std::endl;
+    }
+  }
   else if (strcmp(nargs[0], "get") == 0) {
     if (!pool_name || nargs.size() < 3)
       usage();
@@ -313,7 +330,7 @@ int main(int argc, const char **argv)
 	cerr << "error reading input file " << nargs[2] << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
 	return 1;
       }
-      char buf[op_size];
+      char *buf = new char[op_size];
       int count = op_size;
       uint64_t offset = 0;
       while (count == op_size) {
