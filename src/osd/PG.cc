@@ -845,7 +845,7 @@ void PG::generate_past_intervals()
   }
 
   epoch_t first_epoch = 0;
-  epoch_t stop = MAX(1, info.history.last_epoch_clean);
+  epoch_t stop = MAX(info.history.epoch_created, info.history.last_epoch_clean);
   epoch_t last_epoch = info.history.same_acting_since - 1;
   dout(10) << __func__ << " over epochs " << stop << "-" << last_epoch << dendl;
 
