@@ -98,7 +98,7 @@ public:
 
   // cast to double
   operator double() {
-    return (double)sec() + ((double)nsec() / 100000000.0L);
+    return (double)sec() + ((double)nsec() / 1000000000.0L);
   }
   operator ceph_timespec() {
     ceph_timespec ts;
