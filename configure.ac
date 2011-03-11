@@ -130,18 +130,16 @@ PKG_CHECK_MODULES([LIBEDIT], [libedit >= 2.11],
 
 #libatomic-ops? You want it!
 AC_ARG_WITH([libatomic-ops],
-            [AS_HELP_STRING([--with-libatomic-ops],
-	    [use libatomic-ops to build Ceph's atomic_t type])],
+            [AS_HELP_STRING([--without-libatomic-ops],
+	    [disable libatomic-ops for the atomic_t type])],
             [],
-            [with_libatomic_ops=check])
+            [with_libatomic_ops=yes])
 AS_IF([test "x$with_libatomic_ops" != xno],
 	    [AC_CHECK_HEADER([atomic_ops.h],
              [HAVE_ATOMIC_OPS=1],
-             [if test "x$with_libatomic_ops" != xcheck; then
-                 AC_MSG_FAILURE(
-                   [--with-libatomic-ops was given but atomic_ops.h not found])
-               fi
-             ])])
+             [AC_MSG_FAILURE(
+                   [no libatomic-ops found (use --without-libatomic-ops to disable)])
+              ])])
 AS_IF([test "$HAVE_ATOMIC_OPS" = "1"],
 	[],
 	AC_DEFINE([NO_ATOMIC_OPS], [1], [Defined if you don't have atomic_ops]))
