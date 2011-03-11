@@ -78,9 +78,9 @@ AM_CONDITIONAL(WITH_RADOSGW, test "$RADOSGW" = "1")
 
 # fuse?
 AC_ARG_WITH([fuse],
-            [AS_HELP_STRING([--with-fuse], [use FUSE library for client])],
+            [AS_HELP_STRING([--without-fuse], [disable FUSE userspace client])],
             [],
-            [with_fuse=check])
+            [with_fuse=yes])
 LIBFUSE=
 AS_IF([test "x$with_fuse" != xno],
 	    [AC_CHECK_LIB([fuse], [fuse_main],
@@ -89,11 +89,8 @@ AS_IF([test "x$with_fuse" != xno],
                          [Define if you have fuse])
                HAVE_LIBFUSE=1
               ],
-             [if test "x$with_fuse" != xcheck; then
-                 AC_MSG_FAILURE(
-                   [--with-fuse was given but test failed])
-               fi
-             ])])
+             [AC_MSG_FAILURE(
+                   [no FUSE found (use --without-fuse to disable)])])])
 AM_CONDITIONAL(WITH_FUSE, [test "$HAVE_LIBFUSE" = "1"])
 
 # tcmalloc?
