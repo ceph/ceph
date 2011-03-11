@@ -376,7 +376,22 @@ done_err:
  */
 int RGWRados::delete_bucket(std::string& id, std::string& bucket)
 {
-  return rados->pool_delete(bucket.c_str());
+  int r = rados->pool_delete(bucket.c_str());
+  if (r < 0)
+    return r;
+
+  librados::IoCtx io_ctx;
+  r = rados->ioctx_create(ROOT_BUCKET, io_ctx);
+  if (r < 0) {
+    RGW_LOG(0) << "WARNING: failed to create context in delete_bucket, bucket object leaked" << std::endl;
+    return r;
+  }
+
+  r = io_ctx.remove(bucket);
+  if (r < 0)
+    return r;
+
+  return 0;
 }
 
 /**
