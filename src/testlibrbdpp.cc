@@ -13,6 +13,7 @@
  */
 
 #define __STDC_FORMAT_MACROS
+#include "include/assert.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rados/librados.hpp"
 #include "include/buffer.h"
