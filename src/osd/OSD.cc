@@ -2963,6 +2963,12 @@ void OSD::handle_osd_map(MOSDMap *m)
     superblock.clean_thru = osdmap->get_epoch();
   }
 
+  // completion
+  Mutex ulock("OSD::handle_osd_map() ulock");
+  Cond ucond;
+  bool udone;
+  fin->add(new C_SafeCond(&ulock, &ucond, &udone));
+
   // superblock and commit
   write_superblock(t);
   int r = store->apply_transaction(t, fin);
@@ -2976,8 +2982,22 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   map_lock.put_write();
 
+  /*
+   * wait for this to be stable.
+   *
+   * NOTE: This is almost certainly overkill.  The important things
+   * that need to be stable to make the peering/recovery stuff correct
+   * include:
+   *
+   *   - last_epoch_started, since that bounds how far back in time we
+   *     check old peers
+   *   - ???
+   */
   osd_lock.Unlock();
-  store->sync_and_flush();
+  ulock.Lock();
+  while (!udone)
+    ucond.Wait(ulock);
+  ulock.Unlock();
   osd_lock.Lock();
 
   // everything through current epoch now on disk; keep anything after
