@@ -120,6 +120,8 @@ Package: libcrush-dev
 Architecture: any
 Section: libdevel
 Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush1 (= ${binary:Version})
+Conflicts: libcrush1-dev
+Replaces: libcrush1-dev
 Description: CRUSH mapping algorithm (development files)
  CRUSH is a pseudo-random hash-like algorithm for mapping inputs to
  a changing hierarchy of devices without a centralized directory.  It was
@@ -162,6 +164,8 @@ Package: librados-dev
 Architecture: any
 Section: libdevel
 Depends: ${shlibs:Depends}, ${misc:Depends}, librados2 (= ${binary:Version})
+Conflicts: librados1-dev, librados2-dev
+Replaces: librados1-dev, librados2-dev
 Description: RADOS distributed object store client library (development files)
  RADOS is a reliable, autonomic distributed object storage cluster
  developed as part of the Ceph distributed storage system.  This is a
@@ -197,6 +201,8 @@ Package: librbd-dev
 Architecture: any
 Section: libdevel
 Depends: ${shlibs:Depends}, ${misc:Depends}, librbd1 (= ${binary:Version})
+Conflicts: librbd1-dev
+Replaces: librbd1-dev
 Description: RADOS block device client library (development files)
  RBD is a block device striped across multiple distributed objects
  in RADOS, a reliable, autonomic distributed object storage cluster
@@ -234,6 +240,8 @@ Package: libceph-dev
 Architecture: any
 Section: libdevel
 Depends: ${shlibs:Depends}, ${misc:Depends}, libceph1 (= ${binary:Version})
+Conflicts: libceph1-dev
+Replaces: libceph1-dev
 Description: Ceph distributed file system client library (development files)
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is a
