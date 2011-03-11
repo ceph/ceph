@@ -31,8 +31,56 @@ AC_PROG_LIBTOOL
 # Checks for libraries.
 AC_CHECK_LIB([m], [pow], [true], AC_MSG_FAILURE([libm not found]))
 AC_CHECK_LIB([pthread], [pthread_create], [true], AC_MSG_FAILURE([libpthread not found]))
-PKG_CHECK_MODULES([CRYPTOPP], [libcrypto++], [], [
-	AC_SEARCH_LIBS([_ZTIN8CryptoPP14CBC_EncryptionE], [crypto++ cryptopp], [true], AC_MSG_FAILURE([libcrypto++ not found]), [-lpthread])])
+
+# Find some crypto library for us to use, while letting user to decide which one to use.
+AC_ARG_WITH([cryptopp],
+	[AS_HELP_STRING([--with-cryptopp], [Use cryptographic functions from cryptopp])],
+	[],
+	[with_cryptopp=check])
+have_cryptopp=no
+# this looks clumsy but it's just if A then { success } else { if B then success }
+AS_IF([test "x$with_cryptopp" != "xno"],
+    [PKG_CHECK_MODULES([CRYPTOPP],
+	    [libcrypto++],
+	    [have_cryptopp=yes],
+	    [AC_SEARCH_LIBS([_ZTIN8CryptoPP14CBC_EncryptionE], [crypto++ cryptopp],
+		    [have_cryptopp=yes],
+		    [true],
+		    [-lpthread])])])
+# bail out if given explicit --with-cryptopp
+if test "x$have_cryptopp" = "xno" -a "x$with_cryptopp" != "xcheck" -a "x$with_cryptopp" != "xno"; then
+    AC_MSG_FAILURE([--with-cryptopp was given, but library was not found])
+fi
+
+AC_ARG_WITH([nss],
+	[AS_HELP_STRING([--with-nss], [Use cryptographic functions from nss])],
+	[],
+	[with_nss=check])
+have_nss=no
+AS_IF([test "x$with_nss" != "xno"],
+    [PKG_CHECK_MODULES([NSS], [nss], [have_nss=yes], [true])])
+# bail out if given explicit --with-nss
+if test "x$have_nss" = "xno" -a "x$with_nss" != "xcheck" -a "x$with_nss" != "xno"; then
+    AC_MSG_FAILURE([--with-nss was given, but library was not found])
+fi
+
+# now decide which crypto library to really use
+if test "x$have_cryptopp" = "xyes"; then
+    AC_MSG_NOTICE([using cryptopp for cryptography])
+    AC_DEFINE([USE_CRYPTOPP], [1], [Define if using CryptoPP.])
+    AC_SUBST([CRYPTO_CFLAGS], [$CRYPTOPP_CFLAGS])
+    AC_SUBST([CRYPTO_CXXFLAGS], [$CRYPTOPP_CXXFLAGS])
+    AC_SUBST([CRYPTO_LIBS], [$CRYPTOPP_LIBS])
+elif test "x$have_nss" = "xyes"; then
+    AC_MSG_NOTICE([using nss for cryptography])
+    AC_DEFINE([USE_NSS], [1], [Define if using NSS.])
+    AC_SUBST([CRYPTO_CFLAGS], [$NSS_CFLAGS])
+    # this needs CFLAGS too in practise to get the includes right. ugly.
+    AC_SUBST([CRYPTO_CXXFLAGS], [$NSS_CFLAGS $NSS_CXXFLAGS])
+    AC_SUBST([CRYPTO_LIBS], [$NSS_LIBS])
+else
+    AC_MSG_FAILURE([no suitable crypto library found])
+fi
 
 # profiler?
 AC_ARG_WITH([profiler],

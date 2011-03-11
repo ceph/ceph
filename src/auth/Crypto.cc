@@ -11,10 +11,17 @@
  * 
  */
 
+#include <assert.h>
 #include "Crypto.h"
-#include <cryptopp/modes.h>
-#include <cryptopp/aes.h>
-#include <cryptopp/filters.h>
+#ifdef USE_CRYPTOPP
+# include <cryptopp/modes.h>
+# include <cryptopp/aes.h>
+# include <cryptopp/filters.h>
+#elif USE_NSS
+# include <nspr.h>
+# include <nss.h>
+# include <pk11pub.h>
+#endif
 
 #include "include/ceph_fs.h"
 #include "common/config.h"
@@ -82,12 +89,137 @@ int CryptoNone::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out
 
 
 // ---------------------------------------------------
-#define AES_KEY_LEN     ((size_t)CryptoPP::AES::DEFAULT_KEYLENGTH)
-#define AES_BLOCK_LEN   ((size_t)CryptoPP::AES::BLOCKSIZE)
+#ifdef USE_CRYPTOPP
+# define AES_KEY_LEN     ((size_t)CryptoPP::AES::DEFAULT_KEYLENGTH)
+# define AES_BLOCK_LEN   ((size_t)CryptoPP::AES::BLOCKSIZE)
+#elif USE_NSS
+// when we say AES, we mean AES-128
+# define AES_KEY_LEN	16
+# define AES_BLOCK_LEN   16
+
+static int nss_aes_operation(CK_ATTRIBUTE_TYPE op, bufferptr& secret, const bufferlist& in, bufferlist& out) {
+  const CK_MECHANISM_TYPE mechanism = CKM_AES_CBC_PAD;
+
+  // sample source said this has to be at least size of input + 8,
+  // but i see 15 still fail with SEC_ERROR_OUTPUT_LEN
+  bufferptr out_tmp(in.length()+16);
+  int err = -EINVAL;
+
+  PK11SlotInfo *slot;
+
+  slot = PK11_GetBestSlot(mechanism, NULL);
+  if (!slot) {
+    dout(0) << "cannot find NSS slot to use: " << PR_GetError() << dendl;
+    goto err;
+  }
+
+  SECItem keyItem;
+
+  keyItem.type = siBuffer;
+  keyItem.data = (unsigned char*)secret.c_str();
+  keyItem.len = secret.length();
+
+  PK11SymKey *key;
+
+  key = PK11_ImportSymKey(slot, mechanism, PK11_OriginUnwrap, CKA_ENCRYPT,
+			  &keyItem, NULL);
+  if (!key) {
+    dout(0) << "cannot convert AES key for NSS: " << PR_GetError() << dendl;
+    goto err_slot;
+  }
+
+  SECItem ivItem;
+
+  ivItem.type = siBuffer;
+  // losing constness due to SECItem.data; IV should never be
+  // modified, regardless
+  ivItem.data = (unsigned char*)CEPH_AES_IV;
+  ivItem.len = sizeof(CEPH_AES_IV);
+
+  SECItem *param;
+
+  param = PK11_ParamFromIV(mechanism, &ivItem);
+  if (!param) {
+    dout(0) << "cannot set NSS IV param: " << PR_GetError() << dendl;
+    goto err_key;
+  }
+
+  PK11Context *ctx;
+
+  ctx = PK11_CreateContextBySymKey(mechanism, op, key, param);
+  if (!ctx) {
+    dout(0) << "cannot create NSS context: " << PR_GetError() << dendl;
+    goto err_param;
+  }
+
+  SECStatus ret;
+  int written;
+  // in is const, and PK11_CipherOp is not; C++ makes this hard to cheat,
+  // so just copy it to a temp buffer, at least for now
+  unsigned in_len;
+  unsigned char *in_buf;
+  in_len = in.length();
+  in_buf = (unsigned char*)malloc(in_len);
+  if (!in_buf) {
+    dout(0) << "NSS out of memory" << dendl;
+    err = -ENOMEM;
+    goto err_ctx;
+  }
+  in.copy(0, in_len, (char*)in_buf);
+  ret = PK11_CipherOp(ctx, (unsigned char*)out_tmp.c_str(), &written, out_tmp.length(),
+		      in_buf, in.length());
+  free(in_buf);
+  if (ret != SECSuccess) {
+    dout(0) << "NSS AES failed: " << PR_GetError() << dendl;
+    goto err_op;
+  }
+
+  unsigned int written2;
+  ret = PK11_DigestFinal(ctx, (unsigned char*)out_tmp.c_str()+written, &written2,
+			 out_tmp.length()-written);
+  if (ret != SECSuccess) {
+    dout(0) << "NSS AES final round failed: " << PR_GetError() << dendl;
+    goto err_op;
+  }
+
+  PK11_DestroyContext(ctx, PR_TRUE);
+  out_tmp.set_length(written + written2);
+  out.append(out_tmp);
+  return out_tmp.length();
+
+ err_op:
+ err_ctx:
+  PK11_DestroyContext(ctx, PR_TRUE);
+ err_param:
+  SECITEM_FreeItem(param, PR_TRUE);
+ err_key:
+  PK11_FreeSymKey(key);
+ err_slot:
+  PK11_FreeSlot(slot);
+ err:
+  return err;
+}
+
+#else
+# error "No supported crypto implementation found."
+#endif
 
 class CryptoAES : public CryptoHandler {
 public:
-  CryptoAES() {}
+  CryptoAES() {
+#ifdef USE_NSS
+    SECStatus ret;
+    ret = NSS_NoDB_Init(NULL);
+    if (ret != SECSuccess) {
+      dout(0) << "initializing NSS crypto library failed (code "
+	      << PR_GetError() << "), aborting" << dendl;
+      exit(1);
+    }
+
+    
+#endif
+  }
+
   ~CryptoAES() {}
   int create(bufferptr& secret);
   int validate_secret(bufferptr& secret);
@@ -117,40 +249,49 @@ int CryptoAES::validate_secret(bufferptr& secret)
 
 int CryptoAES::encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
 {
-  const unsigned char *key = (const unsigned char *)secret.c_str();
-  const unsigned char *in_buf;
-
   if (secret.length() < AES_KEY_LEN) {
     dout(0) << "key is too short" << dendl;
     return false;
   }
-  string ciphertext;
-  CryptoPP::AES::Encryption aesEncryption(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
-  CryptoPP::CBC_Mode_ExternalCipher::Encryption cbcEncryption( aesEncryption, (const byte*)CEPH_AES_IV );
-  CryptoPP::StringSink *sink = new CryptoPP::StringSink(ciphertext);
-  if (!sink)
-    return false;
-  CryptoPP::StreamTransformationFilter stfEncryptor(cbcEncryption, sink);
+#ifdef USE_CRYPTOPP
+  {
+    const unsigned char *key = (const unsigned char *)secret.c_str();
+    const unsigned char *in_buf;
 
-  for (std::list<bufferptr>::const_iterator it = in.buffers().begin(); 
-       it != in.buffers().end(); it++) {
-    in_buf = (const unsigned char *)it->c_str();
+    string ciphertext;
+    CryptoPP::AES::Encryption aesEncryption(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
+    CryptoPP::CBC_Mode_ExternalCipher::Encryption cbcEncryption( aesEncryption, (const byte*)CEPH_AES_IV );
+    CryptoPP::StringSink *sink = new CryptoPP::StringSink(ciphertext);
+    if (!sink)
+      return false;
+    CryptoPP::StreamTransformationFilter stfEncryptor(cbcEncryption, sink);
 
-    stfEncryptor.Put(in_buf, it->length());
+    for (std::list<bufferptr>::const_iterator it = in.buffers().begin();
+	 it != in.buffers().end(); it++) {
+      in_buf = (const unsigned char *)it->c_str();
+
+      stfEncryptor.Put(in_buf, it->length());
+    }
+    try {
+      stfEncryptor.MessageEnd();
+    } catch (CryptoPP::Exception& e) {
+      dout(0) << "encryptor.MessageEnd::Exception: " << e.GetWhat() << dendl;
+      return false;
+    }
+    out.append((const char *)ciphertext.c_str(), ciphertext.length());
   }
-  try {
-    stfEncryptor.MessageEnd();
-  } catch (CryptoPP::Exception& e) {
-    dout(0) << "encryptor.MessageEnd::Exception: " << e.GetWhat() << dendl;
-    return false;
-  }
-  out.append((const char *)ciphertext.c_str(), ciphertext.length());
-
+#elif USE_NSS
+  // the return type may be int but this CryptoAES::encrypt returns bools
+  return (nss_aes_operation(CKA_ENCRYPT, secret, in, out) >= 0);
+#else
+# error "No supported crypto implementation found."
+#endif
   return true;
 }
 
 int CryptoAES::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
 {
+#ifdef USE_CRYPTOPP
   const unsigned char *key = (const unsigned char *)secret.c_str();
 
   CryptoPP::AES::Decryption aesDecryption(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
@@ -176,6 +317,11 @@ int CryptoAES::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
 
   out.append((const char *)decryptedtext.c_str(), decryptedtext.length());
   return decryptedtext.length();
+#elif USE_NSS
+  return nss_aes_operation(CKA_DECRYPT, secret, in, out);
+#else
+# error "No supported crypto implementation found."
+#endif
 }
 
 
