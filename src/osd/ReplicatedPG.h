@@ -28,7 +28,8 @@ class PGLSFilter {
 protected:
   string xattr;
 public:
-  PGLSFilter() {}
+  PGLSFilter();
+  virtual ~PGLSFilter();
   virtual bool filter(bufferlist& xattr_data, bufferlist& outdata) = 0;
   virtual string& get_xattr() { return xattr; }
 };

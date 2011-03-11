@@ -57,7 +57,7 @@ static inline ostream& operator<<(ostream& out, const OSDCap& pc) {
 }
 
 struct CapMap {
-  ~CapMap();
+  virtual ~CapMap();
   virtual OSDCap& get_cap(string& name) = 0;
 };
 

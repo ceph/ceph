@@ -15,6 +15,14 @@
 
 using namespace std;
 
+TestOp::~TestOp()
+{
+}
+
+TestOpGenerator::~TestOpGenerator()
+{
+}
+
 struct SnapTestGenerator : public TestOpGenerator
 {
   TestOp *nextop;

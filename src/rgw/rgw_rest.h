@@ -9,7 +9,6 @@ class RGWGetObj_REST : public RGWGetObj
   bool sent_header;
 public:
   RGWGetObj_REST() {}
-  ~RGWGetObj_REST() {}
 
   virtual void init(struct req_state *s) {
     RGWGetObj::init(s);

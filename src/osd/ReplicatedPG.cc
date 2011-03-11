@@ -59,6 +59,14 @@ static const int LOAD_HYBRID     = 3;
 // Blank object locator
 static const object_locator_t OLOC_BLANK;
 
+PGLSFilter::PGLSFilter()
+{
+}
+
+PGLSFilter::~PGLSFilter()
+{
+}
+
 // =======================
 // pg changes
 

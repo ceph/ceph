@@ -13,6 +13,7 @@
  */
 class RGWAccess {
 public:
+  virtual ~RGWAccess();
   /** do all necessary setup of the storage device */
   virtual int initialize(int argc, char *argv[]) { return 0; }
   /** prepare a listing of all buckets. */
