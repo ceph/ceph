@@ -85,7 +85,11 @@ fi
 # profiler?
 AC_ARG_WITH([profiler],
             [AS_HELP_STRING([--with-profiler], [build extra profiler binaries])],
-	    [with_profiler=yes],
+	    [case "${withval}" in
+	    	  yes) with_profiler=yes ;;
+		  no)  with_profiler=no ;;
+		  *) AC_MSG_ERROR([bad value ${withval} for --with-profiler]) ;;
+	     esac],
             [with_profiler=no])
 AS_IF([test "x$with_profiler" = xyes],
 	    [AC_CHECK_LIB([profiler], [ProfilerFlush], [],
