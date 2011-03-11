@@ -128,6 +128,10 @@ struct librados::IoCtxImpl {
   }
 };
 
+librados::WatchCtx::
+~WatchCtx()
+{
+}
 
 struct librados::AioCompletionImpl {
   Mutex lock;

@@ -69,6 +69,7 @@ namespace librados
 
   class WatchCtx {
   public:
+    virtual ~WatchCtx();
     virtual void notify(uint8_t opcode, uint64_t ver) = 0;
   };
 
