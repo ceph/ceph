@@ -871,8 +871,9 @@ void PG::generate_past_intervals()
     i.acting.swap(tacting);
     if (i.acting.size()) {
       i.maybe_went_rw = 
-	lastmap->get_up_thru(i.acting[0]) >= first_epoch &&
-	lastmap->get_up_from(i.acting[0]) <= first_epoch;
+	(lastmap->get_up_thru(i.acting[0]) >= first_epoch &&
+	 lastmap->get_up_from(i.acting[0]) <= first_epoch) ||
+	(first_epoch == info.history.epoch_created);
       dout(10) << "generate_past_intervals " << i
 	       << " : primary up " << lastmap->get_up_from(i.acting[0])
 	       << "-" << lastmap->get_up_thru(i.acting[0])
@@ -1681,7 +1682,10 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
 
   // -- do need to notify the monitor?
   if (true) {
-    if (osd->osdmap->get_up_thru(osd->whoami) < info.history.same_acting_since) {
+    // NOTE: we can skip the up_thru check if this is a new PG and there
+    // were no prior intervals.
+    if (info.history.epoch_created < info.history.same_acting_since &&
+	osd->osdmap->get_up_thru(osd->whoami) < info.history.same_acting_since) {
       dout(10) << "up_thru " << osd->osdmap->get_up_thru(osd->whoami)
 	       << " < same_since " << info.history.same_acting_since
 	       << ", must notify monitor" << dendl;

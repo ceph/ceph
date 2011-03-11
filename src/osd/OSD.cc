@@ -3147,8 +3147,9 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 
       if (i.acting.size())
 	i.maybe_went_rw = 
-	  lastmap->get_up_thru(i.acting[0]) >= i.first &&
-	  lastmap->get_up_from(i.acting[0]) <= i.first;
+	  (lastmap->get_up_thru(i.acting[0]) >= i.first &&
+	   lastmap->get_up_from(i.acting[0]) <= i.first) ||
+	  i.first == pg->info.history.epoch_created;
       else
 	i.maybe_went_rw = 0;
 
