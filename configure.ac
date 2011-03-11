@@ -271,14 +271,20 @@ AC_CHECK_FUNC([sync_file_range],
 
 AC_ARG_WITH([gtk2],
         [AS_HELP_STRING([--with-gtk2], [Build the graphical tools.  Default=yes.])],
-        [try_with_gtk2=$withval],
-        [])
-AS_IF([test "x$try_with_gtk2" != "xno"],
+        [],
+        [with_gtk2=check])
+have_gtk2=no
+AS_IF([test "with_gtk2" != "xno"],
         [PKG_CHECK_MODULES(GTKMM, [gtkmm-2.4 >= 1.0.0],
-                [AC_DEFINE([HAVE_GTK2], [1], [we have gtk2])],
-                [try_with_gtk2=no
-                 AC_MSG_RESULT([Sorry, a usable version of gtkmm was not found. We will build without it.])])])
-AM_CONDITIONAL(WITH_GTK2, [test "x$try_with_gtk2" != "xno"])
+                [have_gtk2=yes
+		AC_DEFINE([HAVE_GTK2], [1], [we have gtk2])
+		],
+                [if test "x$with_gtk2" != xcheck; then
+		    AC_MSG_FAILURE(
+			[--with-gtk2 was given, but test for gtkmm failed])
+		 fi
+		])])
+AM_CONDITIONAL(WITH_GTK2, [test "x$have_gtk2" != "xno"])
 
 AM_PATH_PYTHON([2.4],
 	[], [AC_MSG_FAILURE([Failed to find Python 2.4 or newer])])
