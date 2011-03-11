@@ -1990,6 +1990,9 @@ unsigned FileStore::_do_transaction(Transaction& t)
       assert(0);
     }
 
+    if (r == -ENOTEMPTY) {
+      assert(0 == "ENOTEMPTY suggests garbage data in osd data dir");
+    }
     if (r == -ENOSPC) {
       // For now, if we hit _any_ ENOSPC, crash, before we do any damage
       // by partially applying transactions.

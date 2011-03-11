@@ -586,7 +586,7 @@ public:
     void add_event(Log::Entry& e);
     void revise_need(sobject_t oid, eversion_t need);
     void add(const sobject_t& oid, eversion_t need, eversion_t have);
-    void rm(const sobject_t& oid, eversion_t when);
+    void rm(const sobject_t& oid, eversion_t v);
     void got(const sobject_t& oid, eversion_t v);
     void got(const std::map<sobject_t, Missing::item>::iterator &m);
 

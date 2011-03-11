@@ -41,6 +41,7 @@ install: build
 	dh_installdirs
 
 	$(MAKE) DESTDIR=$(DESTDIR) install
+	install -D -m 644 udev/50-rbd.rules $(DESTDIR)/lib/udev/rules.d/50-rbd.rules
 
 # Add here commands to install the package into debian/testpack.
 # Build architecture-independent files here.

@@ -351,7 +351,9 @@ void PG::merge_log(ObjectStore::Transaction& t,
       if (p->version <= log.head) {
 	dout(10) << "merge_log split point is " << *p << dendl;
 
-	if (p->version == log.head)
+	hash_map<sobject_t,Log::Entry*>::const_iterator oldobj = old_objects.find(p->soid);
+	if (oldobj != old_objects.end() &&
+	    oldobj->second->version == p->version)
 	  p++;       // move past the split point, if it also exists in our old log...
 	break;
       }
@@ -843,7 +845,7 @@ void PG::generate_past_intervals()
   }
 
   epoch_t first_epoch = 0;
-  epoch_t stop = MAX(1, info.history.last_epoch_clean);
+  epoch_t stop = MAX(info.history.epoch_created, info.history.last_epoch_clean);
   epoch_t last_epoch = info.history.same_acting_since - 1;
   dout(10) << __func__ << " over epochs " << stop << "-" << last_epoch << dendl;
 
@@ -1632,8 +1634,11 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
     if (pi.is_empty())
       continue;
     if (peer_missing.find(peer) == peer_missing.end()) {
-      if (pi.last_update == pi.last_complete) {
-	dout(10) << " infering no missing (last_update==last_complete) for osd" << peer << dendl;
+      if (pi.last_update == pi.last_complete &&  // peer has no missing
+	  pi.last_update == info.last_update) {  // peer is up to date
+	// replica has no missing and identical log as us.  no need to
+	// pull anything.
+	dout(10) << " infering up to date and no missing (last_update==last_complete) for osd" << peer << dendl;
 	peer_missing[peer].num_missing();  // just create the entry.
 	search_for_missing(peer_info[peer], &peer_missing[peer], peer);
 	continue;
@@ -3723,9 +3728,9 @@ void PG::Missing::add(const sobject_t& oid, eversion_t need, eversion_t have)
   rmissing[need] = oid;
 }
 
-void PG::Missing::rm(const sobject_t& oid, eversion_t when)
+void PG::Missing::rm(const sobject_t& oid, eversion_t v)
 {
-  if (missing.count(oid) && missing[oid].need < when) {
+  if (missing.count(oid) && missing[oid].need <= v) {
     rmissing.erase(missing[oid].need);
     missing.erase(oid);
   }
