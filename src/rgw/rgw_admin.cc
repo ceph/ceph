@@ -242,7 +242,7 @@ int main(int argc, char **argv)
       if (rgw_get_uid_by_openstack(s, user_id_str) >= 0) {
 	found = true;
       } else
-        cerr << "could not find user by specified opensatck username" << std::endl;
+        cerr << "could not find user by specified openstack username" << std::endl;
     }
     if (found)
       user_id = user_id_str.c_str();
