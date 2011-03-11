@@ -103,7 +103,11 @@ AS_IF([test "$with_profiler" = "yes"],
 # debug crap?
 AC_ARG_WITH([debug],
             [AS_HELP_STRING([--with-debug], [build extra debug binaries])],
-            [with_debug=yes],
+            [case "${withval}" in
+		  yes) with_debug=yes ;;
+		  no)  with_debug=no ;;
+		  *) AC_MSG_ERROR([bad value ${withval} for --with-debug]) ;;
+	     esac],
             [with_debug=no])
 AM_CONDITIONAL(WITH_DEBUG, test "$with_debug" = "yes")
 
