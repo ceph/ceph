@@ -837,7 +837,7 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&dev, OPT_INT);
       float f;
       CONF_SAFE_SET_ARG_VAL(&f, OPT_FLOAT);
-      int w = f * (float)0x10000;
+      int w = (int)(f * 0x10000);
       if (w < 0)
 	w = 0;
       if (w > 0x10000)
