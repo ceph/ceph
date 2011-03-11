@@ -349,9 +349,17 @@ void init_entities_from_header(struct req_state *s)
 
   pos = req.find('/');
   if (pos >= 0) {
+    const char *openstack_url_prefix = FCGX_GetParam("RGW_OPENSTACK_URL_PREFIX", s->fcgx->envp);
+    bool cut_url = (openstack_url_prefix != NULL);
+    if (!openstack_url_prefix)
+      openstack_url_prefix = "v1";
     first = req.substr(0, pos);
-    if (first.compare("v1") == 0) /* FIXME: replace v1 with other token */
+    if (first.compare(openstack_url_prefix) == 0) {
       s->prot_flags |= RGW_REST_OPENSTACK;
+      if (cut_url) {
+        next_tok(req, first, '/');
+      }
+    }
   } else {
     first = req;
   }
