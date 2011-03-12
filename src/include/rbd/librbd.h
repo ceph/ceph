@@ -59,15 +59,15 @@ typedef struct {
 void rbd_version(int *major, int *minor, int *extra);
 
 /* images */
-int rbd_list(rados_ioctx_t io, char *names, size_t *size);
-int rbd_create(rados_ioctx_t io, const char *name, size_t size, int *order);
+int rbd_list(rados_ioctx_t io, char *names, uint64_t *size);
+int rbd_create(rados_ioctx_t io, const char *name, uint64_t size, int *order);
 int rbd_remove(rados_ioctx_t io, const char *name);
 int rbd_copy(rados_ioctx_t src_io_ctx, const char *srcname, rados_ioctx_t dest_io_ctx, const char *destname);
 int rbd_rename(rados_ioctx_t src_io_ctx, const char *srcname, const char *destname);
 
 int rbd_open(rados_ioctx_t io, const char *name, rbd_image_t *image, const char *snap_name);
 int rbd_close(rbd_image_t image);
-int rbd_resize(rbd_image_t image, size_t size);
+int rbd_resize(rbd_image_t image, uint64_t size);
 int rbd_stat(rbd_image_t image, rbd_image_info_t *info, size_t infosize);
 
 /* snapshots */
@@ -81,12 +81,12 @@ int rbd_snap_set(rbd_image_t image, const char *snapname);
 /* I/O */
 typedef void *rbd_completion_t;
 typedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg);
-int rbd_read(rbd_image_t image, off_t ofs, size_t len, char *buf);
-int rbd_read_iterate(rbd_image_t image, off_t ofs, size_t len,
-		     int (*cb)(off_t, size_t, const char *, void *), void *arg);
-int rbd_write(rbd_image_t image, off_t ofs, size_t len, const char *buf);
-int rbd_aio_write(rbd_image_t image, off_t off, size_t len, const char *buf, rbd_completion_t c);
-int rbd_aio_read(rbd_image_t image, off_t off, size_t len, char *buf, rbd_completion_t c);
+int rbd_read(rbd_image_t image, off_t ofs, uint64_t len, char *buf);
+int rbd_read_iterate(rbd_image_t image, off_t ofs, uint64_t len,
+		     int (*cb)(off_t, uint64_t, const char *, void *), void *arg);
+int rbd_write(rbd_image_t image, off_t ofs, uint64_t len, const char *buf);
+int rbd_aio_write(rbd_image_t image, off_t off, uint64_t len, const char *buf, rbd_completion_t c);
+int rbd_aio_read(rbd_image_t image, off_t off, uint64_t len, char *buf, rbd_completion_t c);
 int rbd_aio_create_completion(void *cb_arg, rbd_callback_t complete_cb, rbd_completion_t *c);
 int rbd_aio_wait_for_complete(rbd_completion_t c);
 int rbd_aio_get_return_value(rbd_completion_t c);
