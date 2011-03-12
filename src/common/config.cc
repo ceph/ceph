@@ -150,6 +150,7 @@ struct config_option config_optionsp[] = {
   OPTION(key, 0, OPT_STR, ""),
   OPTION(keyfile, 'K', OPT_STR, ""),
   OPTION(keyring, 'k', OPT_STR, "/etc/ceph/keyring,/etc/ceph/keyring.bin"),
+  OPTION(buffer_track_alloc, 0, OPT_BOOL, false),
   OPTION(ms_tcp_nodelay, 0, OPT_BOOL, true),
   OPTION(ms_initial_backoff, 0, OPT_DOUBLE, .2),
   OPTION(ms_max_backoff, 0, OPT_DOUBLE, 15.0),

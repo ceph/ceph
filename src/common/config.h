@@ -131,6 +131,9 @@ struct md_config_t
   char *keyfile;
   char *keyring;
 
+  // buffer
+  bool buffer_track_alloc;
+
   // messenger
 
   /*bool tcp_skip_rank0;
