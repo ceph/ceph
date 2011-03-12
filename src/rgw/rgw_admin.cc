@@ -315,7 +315,7 @@ int main(int argc, char **argv)
       info.openstack_name = openstack_user;
   
     if ((err = rgw_store_user_info(info)) < 0) {
-      cerr << "error storing user info" << strerror(-err) << std::endl;
+      cerr << "error storing user info: " << strerror(-err) << std::endl;
       break;
     }
 

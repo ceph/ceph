@@ -76,6 +76,16 @@ int rgw_store_user_info(RGWUserInfo& info)
   int ret;
   map<string,bufferlist> attrs;
 
+  if (info.openstack_name.size()) {
+    /* check if openstack mapping exists */
+    string os_uid;
+    int r = rgw_get_uid_by_openstack(info.openstack_name, os_uid);
+    if (r >= 0 && os_uid.compare(info.user_id) != 0) {
+      RGW_LOG(0) << "can't store user info, openstack id already mapped to another user" << std::endl;
+      return -EEXIST;
+    }
+  }
+
   ret = rgwstore->put_obj(info.user_id, ui_bucket, info.user_id, data, bl.length(), NULL, attrs);
 
   if (ret == -ENOENT) {
