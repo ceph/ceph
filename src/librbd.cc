@@ -1387,6 +1387,7 @@ void RBD::AioCompletion::release()
 {
   librbd::AioCompletion *c = (librbd::AioCompletion *)pc;
   c->release();
+  delete this;
 }
 
 /*
