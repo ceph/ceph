@@ -459,11 +459,9 @@ public:
     uint64_t cookie;
     uint64_t ver;
     librados::WatchCtx *ctx;
-    ObjectOperation *op;
     uint64_t linger_id;
 
-    WatchContext(IoCtxImpl *io_ctx_impl_, const object_t& _oc, librados::WatchCtx *_ctx,
-                 ObjectOperation *_op) : io_ctx_impl(io_ctx_impl_), oid(_oc), ctx(_ctx), op(_op), linger_id(0) {
+    WatchContext(IoCtxImpl *io_ctx_impl_, const object_t& _oc, librados::WatchCtx *_ctx) : io_ctx_impl(io_ctx_impl_), oid(_oc), ctx(_ctx), linger_id(0) {
       io_ctx_impl->get();
     }
     ~WatchContext() {
@@ -501,9 +499,9 @@ public:
   }
 
   void register_watcher(IoCtxImpl& io, const object_t& oid, librados::WatchCtx *ctx,
-			ObjectOperation *op, uint64_t *cookie, WatchContext **pwc = NULL) {
+			uint64_t *cookie, WatchContext **pwc = NULL) {
     assert(lock.is_locked());
-    WatchContext *wc = new WatchContext(&io, oid, ctx, op);
+    WatchContext *wc = new WatchContext(&io, oid, ctx);
     *cookie = ++max_watch_cookie;
     watchers[*cookie] = wc;
     if (pwc)
@@ -1783,10 +1781,7 @@ watch(IoCtxImpl& io, const object_t& oid, uint64_t ver,
 {
   utime_t ut = g_clock.now();
 
-  ObjectOperation *rd = new ObjectOperation();
-  if (!rd)
-    return -ENOMEM;
-
+  ObjectOperation rd;
   Mutex mylock("RadosClient::watch::mylock");
   Cond cond;
   bool done;
@@ -1797,15 +1792,15 @@ watch(IoCtxImpl& io, const object_t& oid, uint64_t ver,
   lock.Lock();
 
   WatchContext *wc;
-  register_watcher(io, oid, ctx, rd, cookie, &wc);
+  register_watcher(io, oid, ctx, cookie, &wc);
 
   if (io.assert_ver) {
-    rd->assert_version(io.assert_ver);
+    rd.assert_version(io.assert_ver);
     io.assert_ver = 0;
   }
-  rd->watch(*cookie, ver, 1);
+  rd.watch(*cookie, ver, 1);
   bufferlist bl;
-  wc->linger_id = objecter->linger(oid, io.oloc, *rd, io.snap_seq, bl, NULL, 0, onack, NULL, &objver);
+  wc->linger_id = objecter->linger(oid, io.oloc, rd, io.snap_seq, bl, NULL, 0, onack, NULL, &objver);
   lock.Unlock();
 
   mylock.Lock();
@@ -1903,7 +1898,7 @@ notify(IoCtxImpl& io, const object_t& oid, uint64_t ver)
     io.assert_ver = 0;
   }
   lock.Lock();
-  register_watcher(io, oid, ctx, &rd, &cookie);
+  register_watcher(io, oid, ctx, &cookie);
   uint32_t prot_ver = 1;
   uint32_t timeout = io.notify_timeout;
   ::encode(prot_ver, inbl);
