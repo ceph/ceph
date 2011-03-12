@@ -88,8 +88,8 @@ do_cmd() {
 	    sudo su $user -c "$1" || { [ -z "$3" ] && echo "failed: '$1'" && exit 1; }
 	fi
     else
-	[ $verbose -eq 1 ] && echo "--- $ssh $2 \"cd $dir ; ulimit -c unlimited ; $1\""
-	$ssh $2 "cd $dir ; ulimit -c unlimited ; $1" || { [ -z "$3" ] && echo "failed: '$ssh $1'" && exit 1; }
+	[ $verbose -eq 1 ] && echo "--- $ssh $2 \"cd $sshdir ; ulimit -c unlimited ; $1\""
+	$ssh $2 "cd $sshdir ; ulimit -c unlimited ; $1" || { [ -z "$3" ] && echo "failed: '$ssh $1'" && exit 1; }
     fi
 }
 
@@ -104,8 +104,8 @@ do_root_cmd() {
 	    sudo bash -c "$1" || { echo "failed: '$1'" ; exit 1; }
 	fi
     else
-	[ $verbose -eq 1 ] && echo "--- $rootssh $2 \"cd $dir ; ulimit -c unlimited ; $1\""
-	$rootssh $2 "cd $dir ; ulimit -c unlimited ; $1" || { echo "failed: '$rootssh $1'" ; exit 1; }
+	[ $verbose -eq 1 ] && echo "--- $rootssh $2 \"cd $sshdir ; ulimit -c unlimited ; $1\""
+	$rootssh $2 "cd $sshdir ; ulimit -c unlimited ; $1" || { echo "failed: '$rootssh $1'" ; exit 1; }
     fi
 }
 
