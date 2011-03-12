@@ -622,6 +622,8 @@ librados::RadosClient::
 {
   if (messenger)
     messenger->destroy();
+  if (objecter)
+    delete objecter;
 }
 
 
