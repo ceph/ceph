@@ -117,13 +117,13 @@ namespace librados
     // create an object
     int create(const std::string& oid, bool exclusive);
 
-    int write(const std::string& oid, bufferlist& bl, size_t len, off_t off);
+    int write(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
     int write_full(const std::string& oid, bufferlist& bl);
-    int read(const std::string& oid, bufferlist& bl, size_t len, off_t off);
+    int read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
     int remove(const std::string& oid);
     int trunc(const std::string& oid, size_t size);
-    int mapext(const std::string& o, off_t off, size_t len, std::map<off_t, size_t>& m);
-    int sparse_read(const std::string& o, std::map<off_t, size_t>& m, bufferlist& bl, size_t len, off_t off);
+    int mapext(const std::string& o, uint64_t off, size_t len, std::map<uint64_t, size_t>& m);
+    int sparse_read(const std::string& o, std::map<uint64_t, size_t>& m, bufferlist& bl, size_t len, uint64_t off);
     int getxattr(const std::string& oid, const char *name, bufferlist& bl);
     int getxattrs(const std::string& oid, std::map<std::string, bufferlist>& attrset);
     int setxattr(const std::string& oid, const char *name, bufferlist& bl);
@@ -166,12 +166,12 @@ namespace librados
     uint64_t get_last_version();
 
     int aio_read(const std::string& oid, AioCompletion *c,
-		 bufferlist *pbl, size_t len, off_t off);
+		 bufferlist *pbl, size_t len, uint64_t off);
     int aio_sparse_read(const std::string& oid, AioCompletion *c,
-			std::map<off_t,size_t> *m, bufferlist *data_bl,
-			size_t len, off_t off);
+			std::map<uint64_t,size_t> *m, bufferlist *data_bl,
+			size_t len, uint64_t off);
     int aio_write(const std::string& oid, AioCompletion *c, const bufferlist& bl,
-		  size_t len, off_t off);
+		  size_t len, uint64_t off);
     int aio_write_full(const std::string& oid, AioCompletion *c, const bufferlist& bl);
 
     // watch/notify

@@ -198,7 +198,7 @@ static int do_rollback_snap(librbd::Image& image, const char *snapname)
   return 0;
 }
 
-static int export_read_cb(off_t ofs, size_t len, const char *buf, void *arg)
+static int export_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg)
 {
   int ret;
   int fd = *(int *)arg;
