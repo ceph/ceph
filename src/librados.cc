@@ -2054,6 +2054,7 @@ release()
 {
   AioCompletionImpl *c = (AioCompletionImpl *)pc;
   c->release();
+  delete this;
 }
 
 ///////////////////////////// IoCtx //////////////////////////////

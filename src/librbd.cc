@@ -1235,7 +1235,6 @@ int aio_write(ImageCtx *ictx, off_t off, uint64_t len, const char *buf,
       Rados::aio_create_completion(block_completion, NULL, rados_cb);
     r = ictx->data_ctx.aio_write(oid, rados_completion, bl, write_len, block_ofs);
     rados_completion->release();
-    delete rados_completion;
     if (r < 0)
       goto done;
     total_write += write_len;
@@ -1287,7 +1286,6 @@ int aio_read(ImageCtx *ictx, off_t off, uint64_t len,
 				       &block_completion->m, &block_completion->data_bl,
 				       read_len, block_ofs);
     rados_completion->release();
-    delete rados_completion;
     if (r < 0 && r == -ENOENT)
       r = 0;
     if (r < 0) {
