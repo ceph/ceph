@@ -39,6 +39,11 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "monclient" << (hunting ? "(hunting)":"") << ": "
 
+MonClient::~MonClient()
+{
+  if (auth)
+    delete auth;
+}
 
 /*
  * build an initial monmap with any known monitor
