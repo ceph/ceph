@@ -135,6 +135,11 @@ void common_init(std::vector < const char* >& args,
 
   conf->parse_argv(args); // argv override
 
+  if (code_env != CODE_ENVIRONMENT_DAEMON) {
+      // The symlink stuff only really makes sense for daemons
+      conf->log_sym_history = false;
+  }
+
   if (conf->log_to_syslog || conf->clog_to_syslog) {
     closelog();
     openlog(g_conf.name->to_cstr(), LOG_ODELAY | LOG_PID, LOG_USER);
