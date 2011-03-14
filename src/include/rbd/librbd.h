@@ -60,14 +60,14 @@ void rbd_version(int *major, int *minor, int *extra);
 
 /* images */
 int rbd_list(rados_ioctx_t io, char *names, size_t *size);
-int rbd_create(rados_ioctx_t io, const char *name, size_t size, int *order);
+int rbd_create(rados_ioctx_t io, const char *name, uint64_t size, int *order);
 int rbd_remove(rados_ioctx_t io, const char *name);
 int rbd_copy(rados_ioctx_t src_io_ctx, const char *srcname, rados_ioctx_t dest_io_ctx, const char *destname);
 int rbd_rename(rados_ioctx_t src_io_ctx, const char *srcname, const char *destname);
 
 int rbd_open(rados_ioctx_t io, const char *name, rbd_image_t *image, const char *snap_name);
 int rbd_close(rbd_image_t image);
-int rbd_resize(rbd_image_t image, size_t size);
+int rbd_resize(rbd_image_t image, uint64_t size);
 int rbd_stat(rbd_image_t image, rbd_image_info_t *info, size_t infosize);
 
 /* snapshots */

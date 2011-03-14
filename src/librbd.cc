@@ -246,7 +246,7 @@ namespace librbd {
   uint64_t get_block_ofs(rbd_obj_header_ondisk *header, uint64_t ofs);
   int init_rbd_info(struct rbd_info *info);
   void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
-			      size_t size, int *order, uint64_t bid);
+			      uint64_t size, int *order, uint64_t bid);
 
   int read_iterate(ImageCtx *ictx, off_t off, size_t len,
                    int (*cb)(off_t, size_t, const char *, void *),
@@ -285,7 +285,7 @@ void WatchCtx::notify(uint8_t opcode, uint64_t ver)
 }
 
 void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
-					size_t size, int *order, uint64_t bid)
+					uint64_t size, int *order, uint64_t bid)
 {
   uint32_t hi = bid >> 32;
   uint32_t lo = bid & 0xFFFFFFFF;

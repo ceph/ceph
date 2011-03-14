@@ -60,7 +60,7 @@ public:
   int open(IoCtx& io_ctx, Image& image, const char *name);
   int open(IoCtx& io_ctx, Image& image, const char *name, const char *snapname);
   int list(IoCtx& io_ctx, std::vector<std::string>& names);
-  int create(IoCtx& io_ctx, const char *name, size_t size, int *order);
+  int create(IoCtx& io_ctx, const char *name, uint64_t size, int *order);
   int remove(IoCtx& io_ctx, const char *name);
   int copy(IoCtx& src_io_ctx, const char *srcname, IoCtx& dest_io_ctx, const char *destname);
   int rename(IoCtx& src_io_ctx, const char *srcname, const char *destname);
@@ -77,7 +77,7 @@ public:
   Image();
   ~Image();
 
-  int resize(size_t size);
+  int resize(uint64_t size);
   int stat(image_info_t &info, size_t infosize);
 
   /* snapshots */
