@@ -24,17 +24,17 @@
 
 class blobhash {
 public:
-  size_t operator()(const char *p, unsigned len) {
-    static rjhash<size_t> H;
-    size_t acc = 0;
-    while (len >= sizeof(size_t)) {
-      acc ^= *(size_t*)p;
-      p += sizeof(size_t);
-      len -= sizeof(size_t);
-    }   
+  uint32_t operator()(const char *p, unsigned len) {
+    static rjhash<uint32_t> H;
+    uint32_t acc = 0;
+    while (len >= sizeof(acc)) {
+      acc ^= *(uint32_t*)p;
+      p += sizeof(uint32_t);
+      len -= sizeof(uint32_t);
+    }
     int sh = 0;
     while (len) {
-      acc ^= (size_t)*p << sh;
+      acc ^= (uint32_t)*p << sh;
       sh += 8;
       len--;
       p++;
