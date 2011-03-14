@@ -171,7 +171,6 @@ void aio_write_test_data(librbd::Image& image, const char *test_data, off_t off)
   assert(r == 0);
   printf("finished write\n");
   comp->release();
-  delete comp;
 }
 
 void write_test_data(librbd::Image& image, const char *test_data, off_t off)
@@ -199,7 +198,6 @@ void aio_read_test_data(librbd::Image& image, const char *expected, off_t off)
   assert(strncmp(expected, bl.c_str(), TEST_IO_SIZE - 1) == 0);
   printf("finished read\n");
   comp->release();
-  delete comp;
 }
 
 void read_test_data(librbd::Image& image, const char *expected, off_t off)
@@ -247,6 +245,8 @@ int main(int argc, const char **argv)
   librbd::Image image;
   rbd = new librbd::RBD();
   assert(rados.init(NULL) == 0);
+  assert(rados.conf_read_file("/etc/ceph/ceph.conf") == 0);
+  rados.reopen_log();
   assert(rados.connect() == 0);
   if (rados.pool_lookup(TEST_POOL) != -ENOENT) {
     int r = rados.pool_delete(TEST_POOL);
