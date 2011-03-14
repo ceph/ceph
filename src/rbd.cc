@@ -112,7 +112,7 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx)
 }
 
 static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
-		     const char *imgname, size_t size, int *order)
+		     const char *imgname, uint64_t size, int *order)
 {
   int r = rbd.create(io_ctx, imgname, size, order);
   if (r < 0)
@@ -149,7 +149,7 @@ static int do_show_info(const char *imgname, librbd::Image& image)
   return 0;
 }
 
-static int do_resize(librbd::Image& image, size_t size)
+static int do_resize(librbd::Image& image, uint64_t size)
 {
   int r = image.resize(size);
   if (r < 0)
@@ -198,7 +198,7 @@ static int do_rollback_snap(librbd::Image& image, const char *snapname)
   return 0;
 }
 
-static int export_read_cb(off_t ofs, size_t len, const char *buf, void *arg)
+static int export_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg)
 {
   int ret;
   int fd = *(int *)arg;
