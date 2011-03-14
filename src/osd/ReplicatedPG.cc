@@ -3303,7 +3303,7 @@ int ReplicatedPG::pull(const sobject_t& soid)
 
   // take note
   assert(pulling.count(soid) == 0);
-  rec_from_peer[fromosd].insert(soid);
+  pull_from_peer[fromosd].insert(soid);
   pull_info_t& p = pulling[soid];
   p.version = v;
   p.from = fromosd;
@@ -3946,7 +3946,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     if (complete) {
       // close out pull op
       pulling.erase(soid);
-      rec_from_peer[pi->from].erase(soid);
+      pull_from_peer[pi->from].erase(soid);
       finish_recovery_op(soid);
       
       update_stats();
@@ -4017,7 +4017,7 @@ void ReplicatedPG::_failed_push(MOSDSubOp *op)
   }
 
   finish_recovery_op(soid);  // close out this attempt,
-  rec_from_peer[from].erase(soid);
+  pull_from_peer[from].erase(soid);
   pulling.erase(soid);
 
   op->put();
@@ -4088,7 +4088,7 @@ void ReplicatedPG::on_change()
   // clear pushing/pulling maps
   pushing.clear();
   pulling.clear();
-  rec_from_peer.clear();
+  pull_from_peer.clear();
 }
 
 void ReplicatedPG::on_role_change()
@@ -4114,16 +4114,15 @@ void ReplicatedPG::_clear_recovery_state()
 #endif
   pulling.clear();
   pushing.clear();
-  rec_from_peer.clear();
+  pull_from_peer.clear();
 }
 
-void ReplicatedPG::check_recovery_op_pulls(const OSDMap &osdmap)
+void ReplicatedPG::check_recovery_op_pulls(const OSDMap *osdmap)
 {
-  map<int, set<sobject_t> >::iterator j = rec_from_peer.begin();
-  for (;
-       j != rec_from_peer.end();
+  for (map<int, set<sobject_t> >::iterator j = pull_from_peer.begin();
+       j != pull_from_peer.end();
        ) {
-    if (osdmap.is_up(j->first)) {
+    if (osdmap->is_up(j->first)) {
       ++j;
       continue;
     }
@@ -4138,7 +4137,7 @@ void ReplicatedPG::check_recovery_op_pulls(const OSDMap &osdmap)
       finish_recovery_op(*i);
     }
     log.last_requested = eversion_t();
-    rec_from_peer.erase(j++);
+    pull_from_peer.erase(j++);
   }
 }
   
