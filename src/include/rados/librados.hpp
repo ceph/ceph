@@ -25,7 +25,7 @@ namespace librados
   typedef uint64_t snap_t;
   typedef uint64_t auid_t;
 
-  struct statfs_t {
+  struct cluster_stat_t {
     uint64_t kb, kb_used, kb_avail;
     uint64_t num_objects;
   };
@@ -224,7 +224,7 @@ namespace librados
     int pool_list(std::list<std::string>& v);
     int get_pool_stats(std::list<std::string>& v,
 		       std::map<std::string,pool_stat_t>& stats);
-    int statfs(statfs_t& result);
+    int cluster_stat(cluster_stat_t& result);
 
     // -- aio --
     static AioCompletion *aio_create_completion();

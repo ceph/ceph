@@ -17,7 +17,7 @@ extern "C" {
 
 #define LIBRADOS_VER_MAJOR 0
 #define LIBRADOS_VER_MINOR 25
-#define LIBRADOS_VER_EXTRA 0
+#define LIBRADOS_VER_EXTRA 1
 
 #define LIBRADOS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 
@@ -42,7 +42,7 @@ struct rados_pool_stat_t {
   uint64_t num_rd, num_rd_kb,num_wr, num_wr_kb;
 };
 
-struct rados_statfs_t {
+struct rados_cluster_stat_t {
   uint64_t kb, kb_used, kb_avail;
   uint64_t num_objects;
 };
@@ -85,7 +85,7 @@ void rados_reopen_log(rados_t cluster);
 int rados_conf_get(rados_t cluster, const char *option, char *buf, size_t len);
 
 /* cluster info */
-int rados_statfs(rados_t cluster, struct rados_statfs_t *result);
+int rados_cluster_stat(rados_t cluster, struct rados_cluster_stat_t *result);
 
 
 /* pools */
