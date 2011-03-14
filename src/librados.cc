@@ -480,7 +480,9 @@ public:
     Cond *cond;
     bool *done;
 
-    C_NotifyComplete(Mutex *_l, Cond *_c, bool *_d) : lock(_l), cond(_c), done(_d) {}
+    C_NotifyComplete(Mutex *_l, Cond *_c, bool *_d) : lock(_l), cond(_c), done(_d) {
+      *done = false;
+    }
 
     void notify(uint8_t opcode, uint64_t ver) {
       if (opcode != WATCH_NOTIFY_COMPLETE)
