@@ -306,8 +306,8 @@ public:
   int write(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len, uint64_t off);
   int write_full(IoCtxImpl& io, const object_t& oid, bufferlist& bl);
   int read(IoCtxImpl& io, const object_t& oid, bufferlist& bl, size_t len, uint64_t off);
-  int mapext(IoCtxImpl& io, const object_t& oid, uint64_t off, size_t len, std::map<uint64_t,size_t>& m);
-  int sparse_read(IoCtxImpl& io, const object_t& oid, std::map<uint64_t,size_t>& m, bufferlist& bl,
+  int mapext(IoCtxImpl& io, const object_t& oid, uint64_t off, size_t len, std::map<uint64_t,uint64_t>& m);
+  int sparse_read(IoCtxImpl& io, const object_t& oid, std::map<uint64_t,uint64_t>& m, bufferlist& bl,
 		  size_t len, uint64_t off);
   int remove(IoCtxImpl& io, const object_t& oid);
   int stat(IoCtxImpl& io, const object_t& oid, uint64_t *psize, time_t *pmtime);
@@ -366,7 +366,7 @@ public:
   struct C_aio_sparse_read_Ack : public Context {
     AioCompletionImpl *c;
     bufferlist *data_bl;
-    std::map<uint64_t,size_t> *m;
+    std::map<uint64_t,uint64_t> *m;
 
     void finish(int r) {
       c->lock.Lock();
@@ -426,7 +426,7 @@ public:
   int aio_read(IoCtxImpl& io, object_t oid, AioCompletionImpl *c,
 	       char *buf, size_t len, uint64_t off);
   int aio_sparse_read(IoCtxImpl& io, const object_t oid,
-		    AioCompletionImpl *c, std::map<uint64_t,size_t> *m,
+		    AioCompletionImpl *c, std::map<uint64_t,uint64_t> *m,
 		    bufferlist *data_bl, size_t len, uint64_t off);
   int aio_write(IoCtxImpl& io, const object_t &oid, AioCompletionImpl *c,
 		const bufferlist& bl, size_t len, uint64_t off);
@@ -1176,7 +1176,7 @@ aio_read(IoCtxImpl& io, const object_t oid, AioCompletionImpl *c,
 
 int librados::RadosClient::
 aio_sparse_read(IoCtxImpl& io, const object_t oid,
-                AioCompletionImpl *c, std::map<uint64_t,size_t> *m,
+                AioCompletionImpl *c, std::map<uint64_t,uint64_t> *m,
                 bufferlist *data_bl, size_t len, uint64_t off)
 {
 
@@ -1418,7 +1418,7 @@ RadosClient::read(IoCtxImpl& io, const object_t& oid,
 }
 
 int librados::RadosClient::
-mapext(IoCtxImpl& io, const object_t& oid, uint64_t off, size_t len, std::map<uint64_t,size_t>& m)
+mapext(IoCtxImpl& io, const object_t& oid, uint64_t off, size_t len, std::map<uint64_t,uint64_t>& m)
 {
   bufferlist bl;
 
@@ -1451,7 +1451,7 @@ mapext(IoCtxImpl& io, const object_t& oid, uint64_t off, size_t len, std::map<ui
 
 int librados::RadosClient::
 sparse_read(IoCtxImpl& io, const object_t& oid,
-	  std::map<uint64_t,size_t>& m, bufferlist& data_bl, size_t len, uint64_t off)
+	  std::map<uint64_t,uint64_t>& m, bufferlist& data_bl, size_t len, uint64_t off)
 {
   bufferlist bl;
 
@@ -2091,14 +2091,14 @@ trunc(const std::string& oid, uint64_t size)
 }
 
 int librados::IoCtx::
-mapext(const std::string& oid, uint64_t off, size_t len, std::map<uint64_t, size_t>& m)
+mapext(const std::string& oid, uint64_t off, size_t len, std::map<uint64_t,uint64_t>& m)
 {
   object_t obj(oid);
   return io_ctx_impl->client->mapext(*io_ctx_impl, oid, off, len, m);
 }
 
 int librados::IoCtx::
-sparse_read(const std::string& oid, std::map<uint64_t, size_t>& m,
+sparse_read(const std::string& oid, std::map<uint64_t,uint64_t>& m,
 	    bufferlist& bl, size_t len, uint64_t off)
 {
   object_t obj(oid);
@@ -2257,7 +2257,7 @@ aio_read(const std::string& oid, librados::AioCompletion *c,
 
 int librados::IoCtx::
 aio_sparse_read(const std::string& oid, librados::AioCompletion *c,
-		std::map<uint64_t,size_t> *m, bufferlist *data_bl,
+		std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
 		size_t len, uint64_t off)
 {
   return io_ctx_impl->client->aio_sparse_read(*io_ctx_impl, oid, c->pc,
