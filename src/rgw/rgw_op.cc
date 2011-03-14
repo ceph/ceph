@@ -746,6 +746,7 @@ void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
   s->os_user = NULL;
   s->os_groups = NULL;
   s->time = g_clock.now();
+  s->user.clear();
 }
 
 int RGWHandler::do_read_permissions(bool only_bucket)

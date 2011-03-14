@@ -82,8 +82,15 @@ int main(int argc, char *argv[])
   {
     RGWHandler *handler = RGWHandler_REST::init_handler(&s, &fcgx);
     RGWOp *op;
+    int ret;
     
-    int ret = read_acls(&s);
+    if (!handler->authorize(&s)) {
+      RGW_LOG(10) << "failed to authorize request" << endl;
+      abort_early(&s, -EPERM);
+      goto done;
+    }
+
+    ret = read_acls(&s);
     if (ret < 0) {
       switch (ret) {
       case -ENOENT:
@@ -94,12 +101,6 @@ int main(int argc, char *argv[])
         goto done;
       }
     }
-    if (!handler->authorize(&s)) {
-      RGW_LOG(10) << "failed to authorize request" << endl;
-      abort_early(&s, -EPERM);
-      goto done;
-    }
-
     ret = handler->read_permissions();
     if (ret < 0) {
       abort_early(&s, ret);
