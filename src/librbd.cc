@@ -1337,7 +1337,7 @@ int RBD::open(IoCtx& io_ctx, Image& image, const char *name, const char *snapnam
   return 0;
 }
 
-int RBD::create(IoCtx& io_ctx, const char *name, size_t size, int *order)
+int RBD::create(IoCtx& io_ctx, const char *name, uint64_t size, int *order)
 {
   string md_oid = name;
   md_oid += RBD_SUFFIX;
@@ -1410,7 +1410,7 @@ Image::~Image()
   }
 }
 
-int Image::resize(size_t size)
+int Image::resize(uint64_t size)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   int r = librbd::resize(ictx, size);
@@ -1540,7 +1540,7 @@ extern "C" int rbd_list(rados_ioctx_t p, char *names, size_t *size)
   return (int)cpp_names.size();
 }
 
-extern "C" int rbd_create(rados_ioctx_t p, const char *name, size_t size, int *order)
+extern "C" int rbd_create(rados_ioctx_t p, const char *name, uint64_t size, int *order)
 {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
@@ -1590,7 +1590,7 @@ extern "C" int rbd_close(rbd_image_t image)
   return 0; 
 }
 
-extern "C" int rbd_resize(rbd_image_t image, size_t size)
+extern "C" int rbd_resize(rbd_image_t image, uint64_t size)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   return librbd::resize(ictx, size);
