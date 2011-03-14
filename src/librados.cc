@@ -2476,7 +2476,7 @@ get_pool_stats(std::list<string>& v, std::map<string,pool_stat_t>& result)
 }
 
 int librados::Rados::
-get_fs_stats(statfs_t& result)
+statfs(statfs_t& result)
 {
   ceph_statfs stats;
   int r = client->get_fs_stats(stats);
@@ -2597,6 +2597,20 @@ extern "C" int rados_conf_set(rados_t cluster, const char *option, const char *v
 extern "C" void rados_reopen_log(rados_t cluster)
 {
   sighup_handler(SIGHUP);
+}
+
+/* cluster info */
+extern "C" int rados_statfs(rados_t cluster, rados_statfs_t *result)
+{
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+
+  ceph_statfs stats;
+  int r = client->get_fs_stats(stats);
+  result->kb = stats.kb;
+  result->kb_used = stats.kb_used;
+  result->kb_avail = stats.kb_avail;
+  result->num_objects = stats.num_objects;
+  return r;
 }
 
 extern "C" int rados_conf_get(rados_t cluster, const char *option, char *buf, size_t len)

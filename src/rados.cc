@@ -217,7 +217,7 @@ int main(int argc, const char **argv)
 
     // total
     statfs_t tstats;
-    rados.get_fs_stats(tstats);
+    rados.statfs(tstats);
     printf("  total used    %12lld %12lld\n", (long long unsigned)tstats.kb_used,
 	   (long long unsigned)tstats.num_objects);
     printf("  total avail   %12lld\n", (long long unsigned)tstats.kb_avail);

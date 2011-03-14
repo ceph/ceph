@@ -84,6 +84,10 @@ void rados_reopen_log(rados_t cluster);
  * buffer is too short. */
 int rados_conf_get(rados_t cluster, const char *option, char *buf, size_t len);
 
+/* cluster info */
+int rados_statfs(rados_t cluster, struct rados_statfs_t *result);
+
+
 /* pools */
 
 /* Gets a list of pool names as NULL-terminated strings.

@@ -224,7 +224,7 @@ namespace librados
     int pool_list(std::list<std::string>& v);
     int get_pool_stats(std::list<std::string>& v,
 		       std::map<std::string,pool_stat_t>& stats);
-    int get_fs_stats(statfs_t& result);
+    int statfs(statfs_t& result);
 
     // -- aio --
     static AioCompletion *aio_create_completion();
