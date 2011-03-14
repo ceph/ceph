@@ -264,13 +264,13 @@ int main(int argc, const char **argv)
     if (!pool_name || nargs.size() < 2)
       usage();
     string oid(nargs[1]);
-    std::map<off_t, uint64_t> m;
+    std::map<off_t, size_t> m;
     ret = io_ctx.mapext(oid, 0, -1, m);
     if (ret < 0) {
       cerr << "mapext error on " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
     }
-    std::map<off_t, uint64_t>::iterator iter;
+    std::map<off_t, size_t>::iterator iter;
     for (iter = m.begin(); iter != m.end(); ++iter) {
       cout << hex << iter->first << "\t" << iter->second << dec << std::endl;
     }

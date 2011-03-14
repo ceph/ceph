@@ -136,23 +136,23 @@ int rados_ioctx_snap_get_stamp(rados_ioctx_t io, rados_snap_t id, time_t *t);
 /* sync io */
 uint64_t rados_get_last_version(rados_ioctx_t io);
 
-int rados_write(rados_ioctx_t io, const char *oid, const char *buf, uint64_t len, off_t off);
-int rados_append(rados_ioctx_t io, const char *oid, const char *buf, uint64_t len);
-int rados_write_full(rados_ioctx_t io, const char *oid, const char *buf, uint64_t len, off_t off);
-int rados_read(rados_ioctx_t io, const char *oid, char *buf, uint64_t len, off_t off);
+int rados_write(rados_ioctx_t io, const char *oid, const char *buf, size_t len, off_t off);
+int rados_append(rados_ioctx_t io, const char *oid, const char *buf, size_t len);
+int rados_write_full(rados_ioctx_t io, const char *oid, const char *buf, size_t len, off_t off);
+int rados_read(rados_ioctx_t io, const char *oid, char *buf, size_t len, off_t off);
 int rados_remove(rados_ioctx_t io, const char *oid);
-int rados_trunc(rados_ioctx_t io, const char *oid, uint64_t size);
+int rados_trunc(rados_ioctx_t io, const char *oid, size_t size);
 
 /* attrs */
-int rados_getxattr(rados_ioctx_t io, const char *o, const char *name, char *buf, uint64_t len);
-int rados_setxattr(rados_ioctx_t io, const char *o, const char *name, const char *buf, uint64_t len);
+int rados_getxattr(rados_ioctx_t io, const char *o, const char *name, char *buf, size_t len);
+int rados_setxattr(rados_ioctx_t io, const char *o, const char *name, const char *buf, size_t len);
 int rados_rmxattr(rados_ioctx_t io, const char *o, const char *name);
 
 /* misc */
 int rados_stat(rados_ioctx_t io, const char *o, uint64_t *psize, time_t *pmtime);
-int rados_tmap_update(rados_ioctx_t io, const char *o, const char *cmdbuf, uint64_t cmdbuflen);
+int rados_tmap_update(rados_ioctx_t io, const char *o, const char *cmdbuf, size_t cmdbuflen);
 int rados_exec(rados_ioctx_t io, const char *oid, const char *cls, const char *method,
-	       const char *in_buf, uint64_t in_len, char *buf, uint64_t out_len);
+	       const char *in_buf, size_t in_len, char *buf, size_t out_len);
 
 /* async io */
 typedef void *rados_completion_t;
@@ -169,16 +169,16 @@ uint64_t rados_aio_get_obj_ver(rados_completion_t c);
 void rados_aio_release(rados_completion_t c);
 int rados_aio_write(rados_ioctx_t io, const char *oid,
 		    rados_completion_t completion,
-		    const char *buf, uint64_t len, off_t off);
+		    const char *buf, size_t len, off_t off);
 int rados_aio_append(rados_ioctx_t io, const char *oid,
 		     rados_completion_t completion,
-		     const char *buf, uint64_t len);
+		     const char *buf, size_t len);
 int rados_aio_write_full(rados_ioctx_t io, const char *oid,
 			 rados_completion_t completion,
-			 const char *buf, uint64_t len);
+			 const char *buf, size_t len);
 int rados_aio_read(rados_ioctx_t io, const char *oid,
 		   rados_completion_t completion,
-		   char *buf, uint64_t len, off_t off);
+		   char *buf, size_t len, off_t off);
 
 /* watch/notify */
 typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);

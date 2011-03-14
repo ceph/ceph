@@ -112,7 +112,7 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx)
 }
 
 static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
-		     const char *imgname, uint64_t size, int *order)
+		     const char *imgname, size_t size, int *order)
 {
   int r = rbd.create(io_ctx, imgname, size, order);
   if (r < 0)
@@ -149,7 +149,7 @@ static int do_show_info(const char *imgname, librbd::Image& image)
   return 0;
 }
 
-static int do_resize(librbd::Image& image, uint64_t size)
+static int do_resize(librbd::Image& image, size_t size)
 {
   int r = image.resize(size);
   if (r < 0)
@@ -198,7 +198,7 @@ static int do_rollback_snap(librbd::Image& image, const char *snapname)
   return 0;
 }
 
-static int export_read_cb(off_t ofs, uint64_t len, const char *buf, void *arg)
+static int export_read_cb(off_t ofs, size_t len, const char *buf, void *arg)
 {
   int ret;
   int fd = *(int *)arg;
@@ -377,7 +377,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 
   while (extent < fiemap->fm_mapped_extents) {
     off_t file_pos, end_ofs;
-    uint64_t extent_len = 0;
+    size_t extent_len = 0;
 
     file_pos = fiemap->fm_extents[extent].fe_logical; /* position within the file we're reading */
 
@@ -410,7 +410,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
           cerr << "error reading file: " << cpp_strerror(r) << std::endl;
           goto done;
         }
-	uint64_t len = rval;
+	size_t len = rval;
         if (!len) {
           r = 0;
           goto done;
