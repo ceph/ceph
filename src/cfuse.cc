@@ -53,10 +53,11 @@ int main(int argc, const char **argv, const char *envp[]) {
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  g_conf.daemonize = true;
-  g_conf.pid_file = 0;
-  g_conf.log_per_instance = true;
   common_init(args, "cfuse", STARTUP_FLAG_INIT_KEYS);
+
+  // temporary hack, until next rounge of common_init fixes land.
+  // until then we are forced to daemonize (sorry!).
+  g_conf.daemonize = true;
 
   vector<const char*> nargs;
   FOR_EACH_ARG(args) {
