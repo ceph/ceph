@@ -45,7 +45,7 @@ extern "C" int ceph_initialize(int argc, const char **argv)
     argv_to_vec(argc, argv, args);
     // The libceph API needs to be fixed so that we don't have to call
     // common_init here. Libraries should never call common_init.
-    common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_LIBRARY);
+    common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_LIBRARY, 0);
     keyring_init(&g_conf);
 
     //monmap
@@ -61,7 +61,7 @@ extern "C" int ceph_initialize(int argc, const char **argv)
     //at last the client
     client = new Client(messenger, monclient);
 
-    messenger->start();
+    messenger->start(false); // do not daemonize
 
     client->init();
   }

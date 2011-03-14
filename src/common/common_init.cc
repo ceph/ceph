@@ -86,7 +86,7 @@ int keyring_init(md_config_t *conf)
 }
 
 md_config_t *common_preinit(const CephInitParameters &iparams,
-			    enum code_environment_t code_env)
+			  enum code_environment_t code_env, int flags)
 {
   // set code environment
   g_code_env = code_env;
@@ -102,8 +102,10 @@ md_config_t *common_preinit(const CephInitParameters &iparams,
   switch (code_env) {
     case CODE_ENVIRONMENT_DAEMON:
       conf->daemonize = true;
-      conf->log_dir = strdup("/var/log/ceph");
-      conf->pid_file = strdup("/var/run/ceph/$type.$id.pid");
+      if (!(flags & CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS)) {
+	conf->log_dir = strdup("/var/log/ceph");
+	conf->pid_file = strdup("/var/run/ceph/$type.$id.pid");
+      }
       conf->log_to_stderr = LOG_TO_STDERR_SOME;
       break;
     default:
@@ -115,11 +117,11 @@ md_config_t *common_preinit(const CephInitParameters &iparams,
 }
 
 void common_init(std::vector < const char* >& args,
-	       uint32_t module_type, code_environment_t code_env)
+	       uint32_t module_type, code_environment_t code_env, int flags)
 {
   CephInitParameters iparams =
     ceph_argparse_early_args(args, module_type);
-  md_config_t *conf = common_preinit(iparams, code_env);
+  md_config_t *conf = common_preinit(iparams, code_env, flags);
 
   int ret = conf->parse_config_files(iparams.get_conf_files());
   if (ret == -EDOM) {

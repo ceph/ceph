@@ -65,7 +65,7 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_init(args, CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON);
+  common_init(args, CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON, 0);
   keyring_init(&g_conf);
 
   // mds specific args
@@ -153,7 +153,7 @@ int main(int argc, const char **argv)
     messenger->set_policy(entity_name_t::TYPE_CLIENT,
                           SimpleMessenger::Policy::stateful_server(supported, 0));
 
-    messenger->start();
+    messenger->start(g_conf.daemonize);
 
     // start mds
     MDS *mds = new MDS(g_conf.name->get_id().c_str(), messenger, &mc);

@@ -55,7 +55,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   vector<const char *>::iterator args_iter;
 
-  common_init(args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_DAEMON);
+  common_init(args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_DAEMON, 0);
   
   ceph_heap_profiler_init();
 
@@ -269,9 +269,9 @@ int main(int argc, const char **argv)
     return 1;
   }
 
-  client_messenger->start();
-  messenger_hb->start(true);  // only need to daemon() once
-  cluster_messenger->start(true);
+  client_messenger->start(g_conf.daemonize);
+  messenger_hb->start(false);  // do not daemonize (only need to daemonize once)
+  cluster_messenger->start(false); // do not daemonize (only need to daemonize once)
 
   // start osd
   err = osd->init();

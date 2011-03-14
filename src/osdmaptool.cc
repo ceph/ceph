@@ -49,7 +49,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   DEFINE_CONF_VARS(usage);
 
-  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY);
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
 
   const char *me = argv[0];
 

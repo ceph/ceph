@@ -553,7 +553,7 @@ int ceph_tool_common_init(ceph_tool_mode_t mode)
   // start up network
   messenger = new SimpleMessenger();
   messenger->register_entity(entity_name_t::CLIENT());
-  messenger->start();
+  messenger->start(false); // do not daemonize
   messenger->add_dispatcher_head(&dispatcher);
 
   g.lock.Lock();

@@ -173,7 +173,7 @@ int MonClient::get_monmap_privately()
     messenger = smessenger = new SimpleMessenger();
     smessenger->register_entity(entity_name_t::CLIENT(-1));
     messenger->add_dispatcher_head(this);
-    smessenger->start(true);  // do not daemonize!
+    smessenger->start(false);  // do not daemonize!
     temp_msgr = true; 
   }
   

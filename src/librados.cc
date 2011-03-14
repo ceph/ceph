@@ -567,7 +567,7 @@ connect()
 
   messenger->add_dispatcher_head(this);
 
-  messenger->start(1);
+  messenger->start(false); // do not daemonize
   messenger->add_dispatcher_head(this);
 
   dout(1) << "setting wanted keys" << dendl;
@@ -2595,7 +2595,7 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
 
     // TODO: store this conf pointer in the RadosClient and use it as our
     // configuration
-    md_config_t *conf = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY);
+    md_config_t *conf = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
     conf->parse_env(); // environment variables override
 
     ++rados_initialized;

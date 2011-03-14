@@ -61,7 +61,7 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_init(args, CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON);
+  common_init(args, CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, 0);
   keyring_init(&g_conf);
 
   FOR_EACH_ARG(args) {
@@ -216,7 +216,7 @@ int main(int argc, const char **argv)
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
   Monitor *mon = new Monitor(g_conf.name->get_id(), &store, messenger, &monmap);
 
-  messenger->start();  // may daemonize
+  messenger->start(g_conf.daemonize);
 
   uint64_t supported =
     CEPH_FEATURE_UID |

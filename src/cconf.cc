@@ -145,7 +145,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  common_init(nargs, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY);
+  common_init(nargs, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
 
   if (do_help) {
     usage();

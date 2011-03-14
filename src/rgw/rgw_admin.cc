@@ -91,7 +91,7 @@ int main(int argc, char **argv)
   argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
 
-  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY);
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   keyring_init(&g_conf);
 
   const char *user_id = 0;

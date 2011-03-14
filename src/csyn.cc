@@ -46,7 +46,7 @@ int main(int argc, const char **argv, char *envp[])
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
 
-  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY);
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   keyring_init(&g_conf);
 
   parse_syn_options(args);   // for SyntheticClient
@@ -75,7 +75,7 @@ int main(int argc, const char **argv, char *envp[])
     SyntheticClient *syn = new SyntheticClient(client);
     clients.push_back(client);
     synclients.push_back(syn);
-    messengers[i]->start();
+    messengers[i]->start(false); // do not daemonize
   }
 
   for (list<SyntheticClient*>::iterator p = synclients.begin(); 
