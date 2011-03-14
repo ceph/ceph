@@ -31,6 +31,7 @@ using namespace librados;
 #include <time.h>
 #include <sstream>
 #include <errno.h>
+#include <dirent.h>
 
 void usage()
 {
@@ -42,33 +43,33 @@ void usage()
        << "   ..." << std::endl;
   */
   cerr << "Commands:\n";
-  cerr << "   lspools     -- list pools\n";
-  cerr << "   df          -- show per-pool and total usage\n\n";
+  cerr << "   lspools                         list pools\n";
+  cerr << "   df                              show per-pool and total usage\n\n";
 
   cerr << "Pool commands:\n";
-  cerr << "   get objname [outfile] -- fetch object\n";
-  cerr << "   put objname [infile] -- write object\n";
-  cerr << "   create objname -- create object\n";
-  cerr << "   rm objname  -- remove object\n";
-  cerr << "   listxattr objname\n";
-  cerr << "   getxattr objname attr\n";
-  cerr << "   setxattr objname attr val\n";
-  cerr << "   rmxattr objname attr\n";
-  cerr << "   ls          -- list objects in pool\n\n";
-  cerr << "   chown 123   -- change the pool owner to auid 123\n";
-  cerr << "   mapext objname\n";
-
-  cerr << "   mkpool foo [123[ 4]]  -- create pool 'foo'\n"
-       << "                         [with auid 123[and using crush rule 4]]\n";
-  cerr << "   rmpool foo  -- remove pool 'foo'\n";
-  cerr << "   mkpool foo  -- create the pool 'foo'\n";
-  cerr << "   lssnap      -- list snaps\n";
-  cerr << "   mksnap foo  -- create snap 'foo'\n";
-  cerr << "   rmsnap foo  -- remove snap 'foo'\n";
-  cerr << "   rollback foo bar -- roll back object foo to snap 'bar'\n\n";
-
+  cerr << "   get <obj-name> [outfile]         fetch object\n";
+  cerr << "   put <obj-name> [infile]          write object\n";
+  cerr << "   create <obj-name>                create object\n";
+  cerr << "   rm <obj-name>                    remove object\n";
+  cerr << "   listxattr <obj-name>\n";
+  cerr << "   getxattr <obj-name> attr\n";
+  cerr << "   setxattr <obj-name> attr val\n";
+  cerr << "   rmxattr <obj-name> attr\n";
+  cerr << "   ls                               list objects in pool\n\n";
+  cerr << "   chown 123                        change the pool owner to auid 123\n";
+  cerr << "   mapext <obj-name>\n";
+  cerr << "   mkpool <pool-name> [123[ 4]]     create pool <pool-name>'\n"
+       << "                                    [with auid 123[and using crush rule 4]]\n";
+  cerr << "   rmpool <pool-name>               remove pool <pool-name>'\n";
+  cerr << "   mkpool <pool-name>               create the pool <pool-name>\n";
+  cerr << "   lssnap                           list snaps\n";
+  cerr << "   mksnap <snap-name>               create snap <snap-name>\n";
+  cerr << "   rmsnap <snap-name>               remove snap <snap-name>\n";
+  cerr << "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n\n";
+  cerr << "   import <dir>                     import pool from a directory\n";
+  cerr << "   export <dir>                     export pool into a directory\n";
   cerr << "   bench <seconds> write|seq|rand [-t concurrent_operations]\n";
-  cerr << "              default is 16 concurrent IOs and 4 MB op size\n\n";
+  cerr << "                                    default is 16 concurrent IOs and 4 MB op size\n\n";
 
   cerr << "Options:\n";
   cerr << "   -p pool\n";
@@ -82,7 +83,114 @@ void usage()
   cerr << "   -i infile\n";
   cerr << "   -o outfile\n";
   cerr << "        specify input or output file (for certain commands)\n";
+  cerr << "   --create-pool\n";
+  cerr << "        create the pool that was specified\n";
   exit(1);
+}
+
+static int do_get(IoCtx& io_ctx, const char *objname, const char *outfile, bool check_stdio)
+{
+  string oid(objname);
+  bufferlist outdata;
+  int ret = io_ctx.read(oid, outdata, 0, 0);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (check_stdio && strcmp(outfile, "-") == 0) {
+    fwrite(outdata.c_str(), outdata.length(), 1, stdout);
+  } else {
+    outdata.write_file(outfile);
+    generic_dout(0) << "wrote " << outdata.length() << " byte payload to " << outfile << dendl;
+  }
+
+  return 0;
+}
+
+static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op_size, bool check_stdio)
+{
+  string oid(objname);
+  bufferlist indata;
+  bool stdio = false;
+  if (check_stdio && strcmp(infile, "-") == 0)
+    stdio = true;
+
+  if (stdio) {
+    char buf[256];
+    while(!cin.eof()) {
+      cin.getline(buf, 256);
+      indata.append(buf);
+      indata.append('\n');
+    }
+  } else {
+    int fd = open(infile, O_RDONLY);
+    if (fd < 0) {
+      char buf[80];
+      cerr << "error reading input file " << infile << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
+      return 1;
+    }
+    char buf[op_size];
+    int count = op_size;
+    uint64_t offset = 0;
+    while (count == op_size) {
+      count = read(fd, buf, op_size);
+      if (count == 0)
+        continue;
+      indata.append(buf, count);
+      int ret = io_ctx.write(oid, indata, count, offset);
+      indata.clear();
+
+      if (ret < 0)
+        return ret;
+      offset += count;
+    }
+  }
+  return 0;
+}
+
+static int import_dir(IoCtx& io_ctx, string path, const char *name, int prefix_len, int op_size)
+{
+  string dir_str;
+  if (!path.empty())
+    dir_str = path + "/";
+  dir_str += name;
+
+  DIR *dir = opendir(dir_str.c_str());
+  if (!dir) {
+    int err = -errno;
+    generic_dout(0) << "couldn't open " << dir_str << ": " << strerror(-err) << dendl;
+    return -errno;
+  }
+
+  struct dirent *dent;
+  dent = readdir(dir);
+  while (dent) {
+    if (strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0)
+      goto next;
+    char buf[dir_str.size() + 1 + strlen(dent->d_name) + 1];
+    sprintf(buf, "%s/%s", dir_str.c_str(), dent->d_name);
+    generic_dout(0) << buf << dendl;
+    struct stat s;
+    if (stat(buf, &s) < 0) {
+      int err = -errno;
+      generic_dout(0) << "WARNING: failed to stat " << buf << ": " << strerror(-err) << dendl;
+    }
+    if (s.st_mode & S_IFDIR) {
+      import_dir(io_ctx, dir_str, dent->d_name, prefix_len, op_size); 
+    } else {
+      const char *oid = buf + prefix_len + 1; // cut out the the dir name from the object name
+      do_put(io_ctx, oid, buf, op_size, false);
+    }
+next:
+    dent = readdir(dir);
+  }
+  return 0;
+}
+
+static int do_import(IoCtx& io_ctx, const char *dir_name, int op_size)
+{
+  string empty;
+  return import_dir(io_ctx, empty, dir_name, strlen(dir_name), op_size);
 }
 
 
@@ -111,6 +219,8 @@ int main(int argc, const char **argv)
   const char *snapname = 0;
   snap_t snapid = CEPH_NOSNAP;
 
+  bool create_pool = false;
+
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("pool", 'p')) {
       CONF_SAFE_SET_ARG_VAL(&pool_name, OPT_STR);
@@ -124,6 +234,8 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&concurrent_ios, OPT_INT);
     } else if (CONF_ARG_EQ("block-size", 'b')) {
       CONF_SAFE_SET_ARG_VAL(&op_size, OPT_INT);
+    } else if (CONF_ARG_EQ("create-pool", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&create_pool, OPT_BOOL);
     } else if (args[i][0] == '-' && nargs.empty()) {
       cerr << "unrecognized option " << args[i] << std::endl;
       usage();
@@ -148,6 +260,20 @@ int main(int argc, const char **argv)
 
   int ret = 0;
   char buf[80];
+
+  if (create_pool && !pool_name) {
+    cerr << "--create-pool requested but pool_name was not specified!" << std::endl;
+    usage();
+  }
+
+  if (create_pool) {
+    ret = rados.pool_create(pool_name, 0, 0);
+    if (ret < 0) {
+      cerr << "error creating pool " << pool_name << ": "
+	   << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
+    }
+  }
 
   // open io context.
   IoCtx io_ctx;
@@ -277,59 +403,19 @@ int main(int argc, const char **argv)
   else if (strcmp(nargs[0], "get") == 0) {
     if (!pool_name || nargs.size() < 3)
       usage();
-    string oid(nargs[1]);
-    ret = io_ctx.read(oid, outdata, 0, 0);
+    ret = do_get(io_ctx, nargs[1], nargs[2], true);
     if (ret < 0) {
-      cerr << "error reading " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      cerr << "error getting " << pool_name << "/" << nargs[1] << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
-    }
-
-    if (strcmp(nargs[2], "-") == 0) {
-      fwrite(outdata.c_str(), outdata.length(), 1, stdout);
-    } else {
-      outdata.write_file(nargs[2]);
-      generic_dout(0) << "wrote " << outdata.length() << " byte payload to " << nargs[2] << dendl;
     }
   }
   else if (strcmp(nargs[0], "put") == 0) {
     if (!pool_name || nargs.size() < 3)
       usage();
-
-    string oid(nargs[1]);
-    bool stdio = false;
-    if (strcmp(nargs[2], "-") == 0)
-      stdio = true;
-
-    if (stdio) {
-      char buf[256];
-      while(!cin.eof()) {
-	cin.getline(buf, 256);
-	indata.append(buf);
-	indata.append('\n');
-      }
-    } else {
-      int fd = open(nargs[2], O_RDONLY);
-      if (fd < 0) {
-	cerr << "error reading input file " << nargs[2] << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
-	return 1;
-      }
-      char buf[op_size];
-      int count = op_size;
-      uint64_t offset = 0;
-      while (count == op_size) {
-        count = read(fd, buf, op_size);
-        if (count == 0)
-          continue;
-        indata.append(buf, count);
-        ret = io_ctx.write(oid, indata, count, offset);
-        indata.clear();
-
-        if (ret < 0) {
-          cerr << "error writing " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
-	  return 1;
-        }
-        offset += count;
-      }
+    ret = do_put(io_ctx, nargs[1], nargs[2], op_size, true);
+    if (ret < 0) {
+      cerr << "error putting " << pool_name << "/" << nargs[1] << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
     }
   }
   else if (strcmp(nargs[0], "setxattr") == 0) {
@@ -546,7 +632,16 @@ int main(int argc, const char **argv)
     cout << "rolled back pool " << pool_name
 	 << " to snapshot " << nargs[2] << std::endl;
   }
+  else if (strcmp(nargs[0], "import") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage();
 
+    ret = do_import(io_ctx, nargs[1], op_size);
+    if (ret < 0) {
+      cerr << "error importing " << pool_name << "/" << nargs[1] << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
+    }
+  }
   else if (strcmp(nargs[0], "bench") == 0) {
     if (!pool_name || nargs.size() < 3)
       usage();
