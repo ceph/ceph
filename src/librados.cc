@@ -311,7 +311,7 @@ public:
 		  size_t len, uint64_t off);
   int remove(IoCtxImpl& io, const object_t& oid);
   int stat(IoCtxImpl& io, const object_t& oid, uint64_t *psize, time_t *pmtime);
-  int trunc(IoCtxImpl& io, const object_t& oid, size_t size);
+  int trunc(IoCtxImpl& io, const object_t& oid, uint64_t size);
 
   int tmap_update(IoCtxImpl& io, const object_t& oid, bufferlist& cmdbl);
   int exec(IoCtxImpl& io, const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
@@ -1265,7 +1265,7 @@ remove(IoCtxImpl& io, const object_t& oid)
 }
 
 int librados::RadosClient::
-trunc(IoCtxImpl& io, const object_t& oid, size_t size)
+trunc(IoCtxImpl& io, const object_t& oid, uint64_t size)
 {
   utime_t ut = g_clock.now();
 
@@ -2084,7 +2084,7 @@ remove(const std::string& oid)
 }
 
 int librados::IoCtx::
-trunc(const std::string& oid, size_t size)
+trunc(const std::string& oid, uint64_t size)
 {
   object_t obj(oid);
   return io_ctx_impl->client->trunc(*io_ctx_impl, obj, size);
@@ -2728,7 +2728,7 @@ extern "C" int rados_write(rados_ioctx_t io, const char *o, const char *buf, siz
   return ctx->client->write(*ctx, oid, bl, len, off);
 }
 
-extern "C" int rados_write_full(rados_ioctx_t io, const char *o, const char *buf, size_t len, off_t off)
+extern "C" int rados_write_full(rados_ioctx_t io, const char *o, const char *buf, size_t len, uint64_t off)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   object_t oid(o);
@@ -2737,7 +2737,7 @@ extern "C" int rados_write_full(rados_ioctx_t io, const char *o, const char *buf
   return ctx->client->write_full(*ctx, oid, bl);
 }
 
-extern "C" int rados_trunc(rados_ioctx_t io, const char *o, size_t size)
+extern "C" int rados_trunc(rados_ioctx_t io, const char *o, uint64_t size)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   object_t oid(o);

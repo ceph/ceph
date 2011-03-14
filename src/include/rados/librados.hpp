@@ -121,7 +121,7 @@ namespace librados
     int write_full(const std::string& oid, bufferlist& bl);
     int read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
     int remove(const std::string& oid);
-    int trunc(const std::string& oid, size_t size);
+    int trunc(const std::string& oid, uint64_t size);
     int mapext(const std::string& o, uint64_t off, size_t len, std::map<uint64_t, size_t>& m);
     int sparse_read(const std::string& o, std::map<uint64_t, size_t>& m, bufferlist& bl, size_t len, uint64_t off);
     int getxattr(const std::string& oid, const char *name, bufferlist& bl);

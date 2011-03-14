@@ -144,7 +144,7 @@ int rados_write(rados_ioctx_t io, const char *oid, const char *buf, size_t len, 
 int rados_write_full(rados_ioctx_t io, const char *oid, const char *buf, size_t len, uint64_t off);
 int rados_read(rados_ioctx_t io, const char *oid, char *buf, size_t len, uint64_t off);
 int rados_remove(rados_ioctx_t io, const char *oid);
-int rados_trunc(rados_ioctx_t io, const char *oid, size_t size);
+int rados_trunc(rados_ioctx_t io, const char *oid, uint64_t size);
 
 /* attrs */
 int rados_getxattr(rados_ioctx_t io, const char *o, const char *name, char *buf, size_t len);
