@@ -1251,6 +1251,7 @@ void rados_aio_sparse_read_cb(rados_completion_t c, void *arg)
   dout(10) << "rados_aio_sparse_read_cb" << dendl;
   AioBlockCompletion *block_completion = (AioBlockCompletion *)arg;
   block_completion->complete(rados_aio_get_return_value(c));
+  delete block_completion;
 }
 
 int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
