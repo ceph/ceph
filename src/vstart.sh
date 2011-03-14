@@ -251,7 +251,7 @@ DAEMONOPTS="
 	log sym history = 100
         profiling logger = true
 	profiling logger dir = log
-	chdir = ""
+	chdir = \"\"
 	pid file = out/\$name.pid
 "
 
