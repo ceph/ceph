@@ -184,6 +184,7 @@ static int import_dir(IoCtx& io_ctx, string path, const char *name, int prefix_l
 next:
     dent = readdir(dir);
   }
+  closedir(dir);
   return 0;
 }
 
