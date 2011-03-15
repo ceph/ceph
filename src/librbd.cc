@@ -126,7 +126,7 @@ namespace librbd {
 
     AioBlockCompletion(AioCompletion *aio_completion, uint64_t _ofs, size_t _len, char *_buf) :
                                             completion(aio_completion), ofs(_ofs), len(_len), buf(_buf) {}
-    void complete(int r);
+    void complete(ssize_t r);
   };
 
   struct AioCompletion {
@@ -169,7 +169,7 @@ namespace librbd {
       complete_arg = cb_arg;
     }
 
-    void complete_block(AioBlockCompletion *block_completion, int r);
+    void complete_block(AioBlockCompletion *block_completion, ssize_t r);
 
     ssize_t get_return_value() {
       lock.Lock();
@@ -1134,7 +1134,7 @@ ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
   return total_write;
 }
 
-void AioBlockCompletion::complete(int r)
+void AioBlockCompletion::complete(ssize_t r)
 {
   dout(10) << "AioBlockCompletion::complete()" << dendl;
   if ((r >= 0 || r == -ENOENT) && buf) { // this was a sparse_read operation
@@ -1180,7 +1180,7 @@ void AioBlockCompletion::complete(int r)
   completion->complete_block(this, r);
 }
 
-void AioCompletion::complete_block(AioBlockCompletion *block_completion, int r)
+void AioCompletion::complete_block(AioBlockCompletion *block_completion, ssize_t r)
 {
   dout(10) << "AioCompletion::complete_block this=" << (void *)this << " complete_cb=" << (void *)complete_cb << dendl;
   lock.Lock();
