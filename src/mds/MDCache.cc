@@ -7618,9 +7618,20 @@ void MDCache::_purge_stray_purged(CDentry *dn)
 
     EUpdate *le = new EUpdate(mds->mdlog, "purge_stray");
     mds->mdlog->start_entry(le);
-    
+
+    // update dirfrag fragstat, rstat
+    CDir *dir = dn->get_dir();
+    fnode_t *pf = dir->project_fnode();
+    pf->version = dir->pre_dirty();
+    if (in->is_dir())
+      pf->fragstat.nsubdirs--;
+    else
+      pf->fragstat.nfiles--;
+    pf->rstat.sub(in->inode.accounted_rstat);
+
     le->metablob.add_dir_context(dn->dir);
-    le->metablob.add_null_dentry(dn, true);
+    EMetaBlob::dirlump& dl = le->metablob.add_dir(dn->dir, true, false, false);
+    le->metablob.add_null_dentry(dl, dn, true);
     le->metablob.add_destroyed_inode(in->ino());
 
     mds->mdlog->submit_entry(le, new C_MDC_PurgeStrayLogged(this, dn, pdv, mds->mdlog->get_current_segment()));
@@ -7658,6 +7669,8 @@ void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
   dn->dir->unlink_inode(dn);
   dn->pop_projected_linkage();
   dn->mark_dirty(pdv, ls);
+
+  dn->dir->pop_and_dirty_projected_fnode(ls);
 
   // drop inode
   if (in->is_dirty())
