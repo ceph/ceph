@@ -47,6 +47,8 @@
 #undef generic_dout
 #undef dendl
 
+const char *CEPH_CONF_FILE_DEFAULT = "/etc/ceph/ceph.conf, ~/.ceph/config, ceph.conf";
+
 /* The Ceph configuration. */
 md_config_t g_conf __attribute__((init_priority(103)));
 

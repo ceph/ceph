@@ -163,7 +163,7 @@ void parse_config_option_string(std::string& s)
 
 // The defaults for CephInitParameters
 CephInitParameters::CephInitParameters(uint32_t module_type)
-  : conf_file("/etc/ceph/ceph.conf, ~/.ceph/config, ceph.conf")
+  : conf_file(CEPH_CONF_FILE_DEFAULT)
 {
   const char *conf_file_ = getenv("CEPH_CONF");
   if (conf_file_)

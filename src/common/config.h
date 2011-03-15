@@ -41,6 +41,8 @@ enum log_to_stderr_t {
 
 struct ConfFile;
 
+extern const char *CEPH_CONF_FILE_DEFAULT;
+
 struct md_config_t
 {
   md_config_t();

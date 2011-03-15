@@ -23,6 +23,7 @@
 using namespace std;
 
 #include "common/config.h"
+#include "include/str_list.h"
 
 #include "mon/MonMap.h"
 #include "mds/MDS.h"
@@ -2636,8 +2637,11 @@ extern "C" void rados_version(int *major, int *minor, int *extra)
 // -- config --
 extern "C" int rados_conf_read_file(rados_t cluster, const char *path)
 {
+  if (!path)
+    path = CEPH_CONF_FILE_DEFAULT;
+
   std::list<std::string> conf_files;
-  conf_files.push_back(path);
+  get_str_list(path, conf_files);
   int ret = g_conf.parse_config_files(conf_files);
   if (ret)
     return ret;
