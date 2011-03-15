@@ -82,8 +82,8 @@ int rbd_snap_set(rbd_image_t image, const char *snapname);
 typedef void *rbd_completion_t;
 typedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg);
 int rbd_read(rbd_image_t image, uint64_t ofs, size_t len, char *buf);
-int rbd_read_iterate(rbd_image_t image, uint64_t ofs, size_t len,
-		     int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
+int64_t rbd_read_iterate(rbd_image_t image, uint64_t ofs, size_t len,
+			 int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
 int rbd_write(rbd_image_t image, uint64_t ofs, size_t len, const char *buf);
 int rbd_aio_write(rbd_image_t image, uint64_t off, size_t len, const char *buf, rbd_completion_t c);
 int rbd_aio_read(rbd_image_t image, uint64_t off, size_t len, char *buf, rbd_completion_t c);

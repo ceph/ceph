@@ -89,8 +89,8 @@ public:
 
   /* I/O */
   int read(uint64_t ofs, size_t len, ceph::bufferlist& bl);
-  int read_iterate(uint64_t ofs, size_t len,
-                   int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
+  int64_t read_iterate(uint64_t ofs, size_t len,
+		       int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
   int write(uint64_t ofs, size_t len, ceph::bufferlist& bl);
 
   int aio_write(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);

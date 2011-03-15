@@ -248,9 +248,9 @@ namespace librbd {
   void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
 			      uint64_t size, int *order, uint64_t bid);
 
-  int read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
-                   int (*cb)(uint64_t, size_t, const char *, void *),
-                   void *arg);
+  int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
+		       int (*cb)(uint64_t, size_t, const char *, void *),
+		       void *arg);
   int read(ImageCtx *ictx, uint64_t off, size_t len, char *buf);
   int write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf);
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
@@ -1017,16 +1017,16 @@ void close_image(ImageCtx *ictx)
   ictx = NULL;
 }
 
-int read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
-		 int (*cb)(uint64_t, size_t, const char *, void *),
-		 void *arg)
+int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
+		     int (*cb)(uint64_t, size_t, const char *, void *),
+		     void *arg)
 {
   int r = ictx_check(ictx);
   if (r < 0)
     return r;
 
   int64_t ret;
-  int total_read = 0;
+  int64_t total_read = 0;
   uint64_t start_block = get_block_num(&ictx->header, off);
   uint64_t end_block = get_block_num(&ictx->header, off + len);
   uint64_t block_size = get_block_size(&ictx->header);
@@ -1466,8 +1466,8 @@ int Image::read(uint64_t ofs, size_t len, bufferlist& bl)
   return librbd::read(ictx, ofs, len, bl.c_str());
 }
 
-int Image::read_iterate(uint64_t ofs, size_t len,
-                   int (*cb)(uint64_t, size_t, const char *, void *), void *arg)
+int64_t Image::read_iterate(uint64_t ofs, size_t len,
+			    int (*cb)(uint64_t, size_t, const char *, void *), void *arg)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   return librbd::read_iterate(ictx, ofs, len, cb, arg);
@@ -1677,8 +1677,8 @@ extern "C" int rbd_read(rbd_image_t image, uint64_t ofs, size_t len, char *buf)
   return librbd::read(ictx, ofs, len, buf);
 }
 
-extern "C" int rbd_read_iterate(rbd_image_t image, uint64_t ofs, size_t len,
-				int (*cb)(uint64_t, size_t, const char *, void *), void *arg)
+extern "C" int64_t rbd_read_iterate(rbd_image_t image, uint64_t ofs, size_t len,
+				    int (*cb)(uint64_t, size_t, const char *, void *), void *arg)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   return librbd::read_iterate(ictx, ofs, len, cb, arg);
