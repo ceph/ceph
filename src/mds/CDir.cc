@@ -197,7 +197,60 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   //dir_rep = REP_ALL;      // hack: to wring out some bugs! FIXME FIXME
 }
 
+/**
+ * Check the recursive statistics on size for consistency. For now,
+ * assert the correctness; later maybe we'll just return false
+ * if there's a problem.
+ */
+bool CDir::check_rstats()
+{
+  dout(20) << "check_rstats on " << this << dendl;
+  if (!is_complete()) {
+    dout(10) << "check_rstats bailing out -- incomplete dir!" << dendl;
+    return true;
+  }
+  // first, check basic counts
+  dout(20) << "get_num_head_items() = " << get_num_head_items()
+           << "; fnode.fragstat.nfiles=" << fnode.fragstat.nfiles
+           << " fnode.fragstat.nsubdirs=" << fnode.fragstat.nsubdirs << dendl;
+  if(!(get_num_head_items()==
+      (fnode.fragstat.nfiles + fnode.fragstat.nsubdirs))) {
+    dout(1) << "mismatch between head items and fnode.fragstat! printing dentries" << dendl;
+    for (map_t::iterator i = items.begin(); i != items.end(); ++i) {
+      //if (i->second->get_linkage()->is_primary())
+        dout(1) << *(i->second) << dendl;
+    }
+    assert(get_num_head_items() ==
+        (fnode.fragstat.nfiles + fnode.fragstat.nsubdirs));
+  }
 
+  nest_info_t sub_info;
+  for (map_t::iterator i = items.begin(); i != items.end(); ++i) {
+    if (i->second->get_linkage()->is_primary()) {
+      sub_info.add(i->second->get_linkage()->inode->inode.accounted_rstat);
+    }
+  }
+
+  dout(20) << "total of child dentrys: " << sub_info << dendl;
+  dout(20) << "my rstats:              " << fnode.rstat << dendl;
+  if ((!(sub_info.rbytes == fnode.rstat.rbytes)) ||
+      (!(sub_info.rfiles == fnode.rstat.rfiles)) ||
+      (!(sub_info.rsubdirs == fnode.rstat.rsubdirs))) {
+    dout(1) << "mismatch between child accounted_rstats and my rstats!" << dendl;
+    for (map_t::iterator i = items.begin(); i != items.end(); ++i) {
+      if (i->second->get_linkage()->is_primary()) {
+        dout(1) << *(i->second) << " "
+                << i->second->get_linkage()->inode->inode.accounted_rstat
+                << dendl;
+      }
+    }
+  }
+  assert(sub_info.rbytes == fnode.rstat.rbytes);
+  assert(sub_info.rfiles == fnode.rstat.rfiles);
+  assert(sub_info.rsubdirs == fnode.rstat.rsubdirs);
+  dout(0) << "check_rstats success on " << this << dendl;
+  return true;
+}
 
 
 CDentry *CDir::lookup(const char *name, snapid_t snap)

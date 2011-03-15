@@ -1781,6 +1781,7 @@ void CInode::finish_scatter_gather_update(int type)
 	       q++)
 	    mdcache->project_rstat_frag_to_inode(q->second.rstat, q->second.accounted_rstat,
 						 q->second.first, q->first, this, true);
+	  dir->check_rstats();
 	} else {
 	  dout(20) << fg << " skipping STALE accounted_rstat " << pf->accounted_rstat << dendl;
 	}
@@ -1805,6 +1806,7 @@ void CInode::finish_scatter_gather_update(int type)
 	    assert(!"unmatched rstat rbytes" == g_conf.mds_verify_scatter);
 	  }
 	}
+	dir->check_rstats();
       }
       dout(20) << " final rstat " << pi->rstat << dendl;
 

@@ -2040,6 +2040,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       }
     }
 
+    parent->check_rstats();
     // next parent!
     cur = pin;
     curi = pi;
@@ -9563,6 +9564,7 @@ void MDCache::dump_cache(const char *fn)
 	CDentry *dn = q->second;
 	myfile << "  " << *dn << std::endl;
       }
+      dir->check_rstats();
     }
   }
 
