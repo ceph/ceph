@@ -29,7 +29,7 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  if (rados_conf_read_file(cl, "/etc/ceph/ceph.conf")) {
+  if (rados_conf_read_file(cl, NULL)) {
     printf("error reading configuration file\n");
     exit(1);
   }
