@@ -200,7 +200,7 @@ static int do_rollback_snap(librbd::Image& image, const char *snapname)
 
 static int export_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg)
 {
-  int ret;
+  ssize_t ret;
   int fd = *(int *)arg;
 
   if (!buf) /* a hole */
