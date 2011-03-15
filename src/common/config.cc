@@ -99,7 +99,7 @@ struct config_option config_optionsp[] = {
   OPTION(num_client, 0, OPT_INT, 1),
   OPTION(monmap, 'M', OPT_STR, 0),
   OPTION(mon_host, 'm', OPT_STR, 0),
-  OPTION(daemonize, 'd', OPT_BOOL, false),
+  OPTION(daemonize, 0, OPT_BOOL, false),
   OPTION(tcmalloc_profiler_run, 0, OPT_BOOL, false),
   OPTION(profiler_allocation_interval, 0, OPT_INT, 1073741824),
   OPTION(profiler_highwater_interval, 0, OPT_INT, 104857600),
@@ -908,10 +908,11 @@ parse_argv(std::vector<const char*>& args)
       cf->dump();
       _exit(0);
     }
-    else if (ceph_argparse_flag(args, i, "--nodaemon", "-D", NULL)) {
-      daemonize = false;
-    }
     else if (ceph_argparse_flag(args, i, "--foreground", "-f", NULL)) {
+      daemonize = false;
+      set_cv(&pid_file, NULL);
+    }
+    else if (ceph_argparse_flag(args, i, "--debug", "-d", NULL)) {
       daemonize = false;
       set_cv(&log_dir, NULL);
       set_cv(&pid_file, NULL);

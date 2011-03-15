@@ -19,14 +19,12 @@ and is only useful performance-wise when it resides on a different
 disk than \fIdatapath\fP with low latency (ideally, an NVRAM device).
 .SH OPTIONS
 .TP
-\fB\-D\fP
-Debug mode: do not daemonize after startup (run in foreground) and send log output
-to stdout.
+\fB\-f\fP, \fB\-\-foreground\f
+Foreground: do not daemonize after startup (run in foreground).
+Do not generate a pid file. Useful when run via crun (8).
 .TP
-\fB\-f\fP
-do not daemonize after startup (run in foreground), but log to the usual location.
-Useful when run via 
-.BR crun (8).
+\fB\-d\fP, \fB\-\-debug\f
+Debug mode: like -f, but also send all log output to stderr.
 .TP
 \fB\-\-osd\-data \fIosddata\fP
 Use object store at \fIosddata\fP.
