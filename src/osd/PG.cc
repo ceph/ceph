@@ -1712,16 +1712,16 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
     dout(10) << "crashed, allowing op replay for " << g_conf.osd_replay_window
 	     << " until " << replay_until << dendl;
     state_set(PG_STATE_REPLAY);
-    state_clear(PG_STATE_PEERING);
     osd->replay_queue_lock.Lock();
     osd->replay_queue.push_back(pair<pg_t,utime_t>(info.pgid, replay_until));
     osd->replay_queue_lock.Unlock();
-  } 
-  else if (!is_active()) {
-    // -- ok, activate!
+  }
+
+  if (!is_active()) {
     activate(t, tfin, query_map, activator_map);
   }
-  else if (is_all_uptodate()) 
+
+  if (is_all_uptodate()) 
     finish_recovery(t, tfin);
 }
 
@@ -1797,11 +1797,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   state_clear(PG_STATE_STRAY);
   state_clear(PG_STATE_DOWN);
   state_clear(PG_STATE_PEERING);
-  if (is_crashed()) {
-    //assert(is_replay());      // HELP.. not on replica?
-    state_clear(PG_STATE_CRASHED);
-    state_clear(PG_STATE_REPLAY);
-  }
+  state_clear(PG_STATE_CRASHED);
   if (is_primary() && 
       osd->osdmap->get_pg_size(info.pgid) != acting.size())
     state_set(PG_STATE_DEGRADED);
@@ -1976,35 +1972,39 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
     update_stats();
   }
 
-  
-  // replay (queue them _before_ other waiting ops!)
-  if (!replay_queue.empty()) {
-    eversion_t c = info.last_update;
-    list<Message*> replay;
-    for (map<eversion_t,MOSDOp*>::iterator p = replay_queue.begin();
-         p != replay_queue.end();
-         p++) {
-      if (p->first <= info.last_update) {
-        dout(10) << "activate will WRNOOP " << p->first << " " << *p->second << dendl;
-        replay.push_back(p->second);
-        continue;
-      }
-      if (p->first.version != c.version+1) {
-        dout(10) << "activate replay " << p->first
-                 << " skipping " << c.version+1 - p->first.version 
-                 << " ops"
-                 << dendl;      
-      }
-      dout(10) << "activate replay " << p->first << " " << *p->second << dendl;
-      replay.push_back(p->second);
+  // waiters
+  if (!is_replay()) {
+    osd->take_waiters(waiting_for_active);
+  }
+}
+
+
+void PG::replay_queued_ops()
+{
+  assert(is_replay() && is_active() && !is_crashed());
+  eversion_t c = info.last_update;
+  list<Message*> replay;
+  dout(10) << "replay_queued_ops" << dendl;
+  state_clear(PG_STATE_REPLAY);
+
+  for (map<eversion_t,MOSDOp*>::iterator p = replay_queue.begin();
+       p != replay_queue.end();
+       p++) {
+    if (p->first.version != c.version+1) {
+      dout(10) << "activate replay " << p->first
+	       << " skipping " << c.version+1 - p->first.version 
+	       << " ops"
+	       << dendl;      
       c = p->first;
     }
-    replay_queue.clear();
-    osd->take_waiters(replay);
+    dout(10) << "activate replay " << p->first << " " << *p->second << dendl;
+    replay.push_back(p->second);
   }
-
-  // waiters
+  replay_queue.clear();
+  osd->take_waiters(replay);
   osd->take_waiters(waiting_for_active);
+  state_clear(PG_STATE_REPLAY);
+  update_stats();
 }
 
 void PG::_activate_committed(epoch_t e)

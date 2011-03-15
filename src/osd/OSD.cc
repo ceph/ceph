@@ -4896,24 +4896,18 @@ void OSD::activate_pg(pg_t pgid, utime_t activate_at)
 {
   assert(osd_lock.is_locked());
 
-  map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
-
+  dout(10) << "activate_pg" << dendl;
   if (pg_map.count(pgid)) {
     PG *pg = _lookup_lock_pg(pgid);
-    if (pg->is_crashed() &&
+    if (pg->is_active() &&
 	pg->is_replay() &&
 	pg->get_role() == 0 &&
 	pg->replay_until == activate_at) {
-      ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      C_Contexts *fin = new C_Contexts;
-      pg->activate(*t, fin->contexts, query_map);
-      int tr = store->queue_transaction(&pg->osr, t, new ObjectStore::C_DeleteTransaction(t), fin);
-      assert(tr == 0);
+
+      pg->replay_queued_ops();
     }
     pg->unlock();
   }
-
-  do_queries(query_map);
 
   // wake up _all_ pg waiters; raw pg -> actual pg mapping may have shifted
   wake_all_pg_waiters();
@@ -5187,22 +5181,17 @@ void OSD::handle_op(MOSDOp *op)
 
  
   // pg must be active.
-  if (!pg->is_active()) {
-    // replay?
+  if (pg->is_replay()) {
     if (op->get_version().version > 0) {
-      if (op->get_version() > pg->info.last_update) {
-	dout(7) << *pg << " queueing replay at " << op->get_version()
-		<< " for " << *op << dendl;
-	pg->replay_queue[op->get_version()] = op;
-	pg->unlock();
-	return;
-      } else {
-	dout(7) << *pg << " replay at " << op->get_version() << " <= " << pg->info.last_update 
-		<< " for " << *op
-		<< ", will queue for WRNOOP" << dendl;
-      }
+      dout(7) << *pg << " queueing replay at " << op->get_version()
+	      << " for " << *op << dendl;
+      pg->replay_queue[op->get_version()] = op;
+      pg->unlock();
+      return;
     }
-    
+  }
+	
+  if (!pg->is_active()) {
     dout(7) << *pg << " not active (yet)" << dendl;
     pg->waiting_for_active.push_back(op);
     pg->unlock();

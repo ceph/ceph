@@ -861,6 +861,7 @@ public:
 	      map< int, map<pg_t,Query> >& query_map,
 	      map<int, MOSDPGInfo*> *activator_map=0);
   void build_might_have_unfound();
+  void replay_queued_ops();
   void activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 		map< int, map<pg_t,Query> >& query_map,
 		map<int, MOSDPGInfo*> *activator_map=0);
