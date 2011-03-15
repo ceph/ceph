@@ -912,7 +912,7 @@ parse_argv(std::vector<const char*>& args)
       daemonize = false;
       set_cv(&pid_file, NULL);
     }
-    else if (ceph_argparse_flag(args, i, "--debug", "-d", NULL)) {
+    else if (ceph_argparse_flag(args, i, "-d", NULL)) {
       daemonize = false;
       set_cv(&log_dir, NULL);
       set_cv(&pid_file, NULL);
