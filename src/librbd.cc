@@ -121,14 +121,14 @@ namespace librbd {
 
     AioBlockCompletion(AioCompletion *aio_completion, uint64_t _ofs, size_t _len, char *_buf) :
                                             completion(aio_completion), ofs(_ofs), len(_len), buf(_buf) {}
-    void complete(int r);
+    void complete(ssize_t r);
   };
 
   struct AioCompletion {
     Mutex lock;
     Cond cond;
     bool done;
-    int rval;
+    ssize_t rval;
     callback_t complete_cb;
     void *complete_arg;
     rbd_completion_t rbd_comp;
@@ -164,11 +164,11 @@ namespace librbd {
       complete_arg = cb_arg;
     }
 
-    void complete_block(AioBlockCompletion *block_completion, int r);
+    void complete_block(AioBlockCompletion *block_completion, ssize_t r);
 
-    int get_return_value() {
+    ssize_t get_return_value() {
       lock.Lock();
-      int r = rval;
+      ssize_t r = rval;
       lock.Unlock();
       return r;
     }
@@ -243,11 +243,11 @@ namespace librbd {
   void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
 			      uint64_t size, int *order, uint64_t bid);
 
-  int read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
-                   int (*cb)(uint64_t, size_t, const char *, void *),
-                   void *arg);
-  int read(ImageCtx *ictx, uint64_t off, size_t len, char *buf);
-  int write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf);
+  int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
+		       int (*cb)(uint64_t, size_t, const char *, void *),
+		       void *arg);
+  ssize_t read(ImageCtx *ictx, uint64_t off, size_t len, char *buf);
+  ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf);
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
                 AioCompletion *c);
   int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
@@ -1012,16 +1012,16 @@ void close_image(ImageCtx *ictx)
   ictx = NULL;
 }
 
-int read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
-		 int (*cb)(uint64_t, size_t, const char *, void *),
-		 void *arg)
+int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
+		     int (*cb)(uint64_t, size_t, const char *, void *),
+		     void *arg)
 {
   int r = ictx_check(ictx);
   if (r < 0)
     return r;
 
   int64_t ret;
-  int total_read = 0;
+  int64_t total_read = 0;
   uint64_t start_block = get_block_num(&ictx->header, off);
   uint64_t end_block = get_block_num(&ictx->header, off + len);
   uint64_t block_size = get_block_size(&ictx->header);
@@ -1092,12 +1092,12 @@ static int simple_read_cb(uint64_t ofs, size_t len, const char *buf, void *arg)
 }
 
 
-int read(ImageCtx *ictx, uint64_t ofs, size_t len, char *buf)
+ssize_t read(ImageCtx *ictx, uint64_t ofs, size_t len, char *buf)
 {
   return read_iterate(ictx, ofs, len, simple_read_cb, buf);
 }
 
-int write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
+ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
 {
   if (!len)
     return 0;
@@ -1106,7 +1106,7 @@ int write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
   if (r < 0)
     return r;
 
-  int total_write = 0;
+  size_t total_write = 0;
   uint64_t start_block = get_block_num(&ictx->header, off);
   uint64_t end_block = get_block_num(&ictx->header, off + len - 1);
   uint64_t block_size = get_block_size(&ictx->header);
@@ -1129,7 +1129,7 @@ int write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
   return total_write;
 }
 
-void AioBlockCompletion::complete(int r)
+void AioBlockCompletion::complete(ssize_t r)
 {
   dout(10) << "AioBlockCompletion::complete()" << dendl;
   if ((r >= 0 || r == -ENOENT) && buf) { // this was a sparse_read operation
@@ -1175,7 +1175,7 @@ void AioBlockCompletion::complete(int r)
   completion->complete_block(this, r);
 }
 
-void AioCompletion::complete_block(AioBlockCompletion *block_completion, int r)
+void AioCompletion::complete_block(AioBlockCompletion *block_completion, ssize_t r)
 {
   dout(10) << "AioCompletion::complete_block this=" << (void *)this << " complete_cb=" << (void *)complete_cb << dendl;
   lock.Lock();
@@ -1214,7 +1214,7 @@ int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
   if (r < 0)
     return r;
 
-  int total_write = 0;
+  size_t total_write = 0;
   uint64_t start_block = get_block_num(&ictx->header, off);
   uint64_t end_block = get_block_num(&ictx->header, off + len - 1);
   uint64_t block_size = get_block_size(&ictx->header);
@@ -1381,7 +1381,7 @@ int RBD::AioCompletion::wait_for_complete()
   return c->wait_for_complete();
 }
 
-int RBD::AioCompletion::get_return_value()
+ssize_t RBD::AioCompletion::get_return_value()
 {
   librbd::AioCompletion *c = (librbd::AioCompletion *)pc;
   return c->get_return_value();
@@ -1458,7 +1458,7 @@ int Image::snap_set(const char *snap_name)
   return librbd::snap_set(ictx, snap_name);
 }
 
-int Image::read(uint64_t ofs, size_t len, bufferlist& bl)
+ssize_t Image::read(uint64_t ofs, size_t len, bufferlist& bl)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   bufferptr ptr(len);
@@ -1466,14 +1466,14 @@ int Image::read(uint64_t ofs, size_t len, bufferlist& bl)
   return librbd::read(ictx, ofs, len, bl.c_str());
 }
 
-int Image::read_iterate(uint64_t ofs, size_t len,
-                   int (*cb)(uint64_t, size_t, const char *, void *), void *arg)
+int64_t Image::read_iterate(uint64_t ofs, size_t len,
+			    int (*cb)(uint64_t, size_t, const char *, void *), void *arg)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   return librbd::read_iterate(ictx, ofs, len, cb, arg);
 }
 
-int Image::write(uint64_t ofs, size_t len, bufferlist& bl)
+ssize_t Image::write(uint64_t ofs, size_t len, bufferlist& bl)
 {
   ImageCtx *ictx = (ImageCtx *)ctx;
   if (bl.length() < len)
@@ -1671,20 +1671,20 @@ extern "C" int rbd_snap_set(rbd_image_t image, const char *snapname)
 }
 
 /* I/O */
-extern "C" int rbd_read(rbd_image_t image, uint64_t ofs, size_t len, char *buf)
+extern "C" ssize_t rbd_read(rbd_image_t image, uint64_t ofs, size_t len, char *buf)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   return librbd::read(ictx, ofs, len, buf);
 }
 
-extern "C" int rbd_read_iterate(rbd_image_t image, uint64_t ofs, size_t len,
-				int (*cb)(uint64_t, size_t, const char *, void *), void *arg)
+extern "C" int64_t rbd_read_iterate(rbd_image_t image, uint64_t ofs, size_t len,
+				    int (*cb)(uint64_t, size_t, const char *, void *), void *arg)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   return librbd::read_iterate(ictx, ofs, len, cb, arg);
 }
 
-extern "C" int rbd_write(rbd_image_t image, uint64_t ofs, size_t len, const char *buf)
+extern "C" ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len, const char *buf)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   return librbd::write(ictx, ofs, len, buf);
@@ -1717,7 +1717,7 @@ extern "C" int rbd_aio_wait_for_complete(rbd_completion_t c)
   return comp->wait_for_complete();
 }
 
-extern "C" int rbd_aio_get_return_value(rbd_completion_t c)
+extern "C" ssize_t rbd_aio_get_return_value(rbd_completion_t c)
 {
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   return comp->get_return_value();
