@@ -2152,7 +2152,7 @@ int FileStore::read(coll_t cid, const sobject_t& oid,
     int err = errno;
     dout(10) << "FileStore::read(" << fn << "): open error "
 	     << cpp_strerror(err) << dendl;
-    return err;
+    return -err;
   }
 
   if (len == 0) {
