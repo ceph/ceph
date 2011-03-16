@@ -2437,6 +2437,12 @@ init(const char * const id)
 }
 
 int librados::Rados::
+init_internal(md_config_t *conf)
+{
+  return rados_create_internal((rados_t *)&client, conf);
+}
+
+int librados::Rados::
 connect()
 {
   return client->connect();
@@ -2600,6 +2606,25 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
     conf->parse_env(); // environment variables override
 
     ++rados_initialized;
+  }
+  rados_init_mutex.Unlock();
+  librados::RadosClient *radosp = new librados::RadosClient;
+  *pcluster = (void *)radosp;
+  return 0;
+}
+
+/* This function is intended for use by Ceph daemons. These daemons have
+ * already called common_init and want to use that particular configuration for
+ * their cluster.
+ */
+extern "C" int rados_create_internal(rados_t *pcluster, md_config_t *conf)
+{
+  rados_init_mutex.Lock();
+  if (!rados_initialized) {
+    ++rados_initialized;
+    /* This is a no-op now. g_conf is still global and we can't actually do
+     * anything useful with the provided conf pointer.
+     */
   }
   rados_init_mutex.Unlock();
   librados::RadosClient *radosp = new librados::RadosClient;
