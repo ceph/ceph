@@ -1089,7 +1089,7 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
     PoolOp *op = pool_ops[tid];
     dout(10) << "have request " << tid << " at " << op << " Op: " << ceph_pool_op_name(op->pool_op) << dendl;
     if (op->blp)
-      op->blp->claim(*m->response_data);
+      op->blp->claim(m->response_data);
     if (m->version > last_seen_osdmap_version)
       last_seen_osdmap_version = m->version;
     if (m->replyCode == 0 && osdmap->get_epoch() < m->epoch) {

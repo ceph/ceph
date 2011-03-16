@@ -21,24 +21,27 @@ public:
   ceph_fsid_t fsid;
   __u32 replyCode;
   epoch_t epoch;
-  bufferlist *response_data;
+  bufferlist response_data;
 
-  //Once you pass in a response_data pointer it becomes the responsibility
-  // of the Message. Don't delete it! (This reduces memory copies.)
-  MPoolOpReply() : PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, 0), response_data(NULL)
+  MPoolOpReply() : PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, 0)
   {}
   MPoolOpReply( ceph_fsid_t& f, tid_t t, int rc, int e, version_t v) :
-    PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, v), fsid(f), replyCode(rc),
-    epoch(e), response_data(NULL) {
+    PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, v),
+    fsid(f),
+    replyCode(rc),
+    epoch(e) {
     set_tid(t);
   }
   MPoolOpReply( ceph_fsid_t& f, tid_t t, int rc, int e, version_t v,
 		bufferlist *blp) :
-    PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, v), fsid(f), replyCode(rc),
-    epoch(e), response_data(blp) {
+    PaxosServiceMessage(CEPH_MSG_POOLOP_REPLY, v),
+    fsid(f),
+    replyCode(rc),
+    epoch(e) {
     set_tid(t);
+    if (blp)
+      response_data.claim(*blp);
   }
-  ~MPoolOpReply() { if(response_data) delete response_data; }
 
   const char *get_type_name() { return "poolopreply"; }
 
@@ -52,10 +55,11 @@ public:
     ::encode(fsid, payload);
     ::encode(replyCode, payload);
     ::encode(epoch, payload);
-    if (response_data) {
+    if (response_data.length()) {
       ::encode(true, payload);
-      ::encode(*response_data, payload);
-    } else ::encode(false, payload);
+      ::encode(response_data, payload);
+    } else
+      ::encode(false, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -66,9 +70,8 @@ public:
     bool has_response_data;
     ::decode(has_response_data, p);
     if (has_response_data) {
-      response_data = new bufferlist();
-      ::decode(*response_data, p);
-    } else response_data = NULL;
+      ::decode(response_data, p);
+    }
   }
 };
 
