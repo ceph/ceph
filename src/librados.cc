@@ -2445,6 +2445,9 @@ init_internal(md_config_t *conf)
 int librados::Rados::
 connect()
 {
+  int ret = keyring_init(&g_conf);
+  if (ret)
+    return ret;
   return client->connect();
 }
 
