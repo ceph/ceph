@@ -103,7 +103,9 @@ int RGWCache<T>::obj_stat(std::string& bucket, std::string& obj, size_t *psize, 
   if (r == 0) {
     bufferlist::iterator iter = bl.begin();
     ::decode(size, iter);
-    ::decode(mtime, iter);
+    int64_t t;
+    ::decode(t, iter);
+    mtime = (time_t)t;
     goto done;
   }
   r = T::obj_stat(bucket, obj, &size, &mtime);
@@ -111,7 +113,8 @@ int RGWCache<T>::obj_stat(std::string& bucket, std::string& obj, size_t *psize, 
     return r;
   bl.clear();
   ::encode(size, bl);
-  ::encode(mtime, bl);
+  int64_t t = (int64_t)mtime;
+  ::encode(t, bl);
   cache.put(name, bl);
 done:
   if (psize)
