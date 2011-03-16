@@ -56,6 +56,11 @@ void Objecter::init()
 
 void Objecter::shutdown() 
 {
+  map<int,OSDSession*>::iterator p;
+  while (!osd_sessions.empty()) {
+    p = osd_sessions.begin();
+    close_session(p->second);
+  }
 }
 
 void Objecter::send_linger(LingerOp *info)
