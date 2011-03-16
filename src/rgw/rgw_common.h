@@ -26,6 +26,8 @@
 
 using namespace std;
 
+using ceph::crypto::MD5;
+
 #define RGW_ATTR_PREFIX  "user.rgw."
 
 #define RGW_ATTR_ACL		RGW_ATTR_PREFIX "acl"
@@ -277,7 +279,7 @@ struct RGWBucketEnt {
   std::string name;
   size_t size;
   time_t mtime;
-  char etag[CryptoPP::Weak::MD5::DIGESTSIZE * 2 + 1];
+  char etag[MD5::DIGESTSIZE * 2 + 1];
   uint64_t count;
 
   void encode(bufferlist& bl) const {
