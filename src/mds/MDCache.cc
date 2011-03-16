@@ -281,9 +281,12 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
   if (in->inode.is_dir()) {
     memset(&in->inode.layout, 0, sizeof(in->inode.layout));
     in->inode.dir_layout.dl_dir_hash = g_conf.mds_default_dir_hash;
+    ++in->inode.rstat.rsubdirs;
   } else {
     in->inode.layout = default_file_layout;
+    ++in->inode.rstat.rfiles;
   }
+  in->inode.accounted_rstat = in->inode.rstat;
 
   if (in->is_base()) {
     if (in->is_root())
@@ -325,12 +328,9 @@ void MDCache::create_empty_hierarchy(C_Gather *gather)
   cephdir->dir_rep = CDir::REP_ALL;   //NONE;
 
   ceph->inode.dirstat = cephdir->fnode.fragstat;
-  ceph->inode.rstat = cephdir->fnode.rstat;
-  ceph->inode.accounted_rstat = ceph->inode.rstat;
 
   rootdir->fnode.fragstat.nsubdirs = 1;
   rootdir->fnode.rstat = ceph->inode.rstat;
-  rootdir->fnode.rstat.rsubdirs++;
   rootdir->fnode.accounted_fragstat = rootdir->fnode.fragstat;
   rootdir->fnode.accounted_rstat = rootdir->fnode.rstat;
 
@@ -367,10 +367,11 @@ void MDCache::create_mydir_hierarchy(C_Gather *gather)
     stringstream name;
     name << "stray" << i;
     mydir->add_primary_dentry(name.str(), stray);
+
     stray->inode.dirstat = straydir->fnode.fragstat;
-    stray->inode.accounted_rstat = stray->inode.rstat;
 
     mydir->fnode.rstat.add(stray->inode.rstat);
+    mydir->fnode.fragstat.nsubdirs++;
     // save them
     straydir->mark_complete();
     straydir->mark_dirty(straydir->pre_dirty(), mds->mdlog->get_current_segment());
@@ -381,9 +382,7 @@ void MDCache::create_mydir_hierarchy(C_Gather *gather)
   string name = "journal";
   mydir->add_primary_dentry(name, journal);
 
-  mydir->fnode.fragstat.nsubdirs = 1;
-  mydir->fnode.fragstat.nfiles = 1;
-  mydir->fnode.rstat.rsubdirs++;
+  mydir->fnode.fragstat.nfiles++;
   mydir->fnode.rstat.rfiles++;
   mydir->fnode.accounted_fragstat = mydir->fnode.fragstat;
   mydir->fnode.accounted_rstat = mydir->fnode.rstat;
