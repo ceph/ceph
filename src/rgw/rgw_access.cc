@@ -17,7 +17,7 @@ RGWAccess::~RGWAccess()
 {
 }
 
-RGWAccess *RGWAccess::init_storage_provider(const char *type, int argc, char *argv[])
+RGWAccess *RGWAccess::init_storage_provider(const char *type, md_config_t *conf)
 {
   if (strcmp(type, "rados") == 0) {
     store = &rados_provider;
@@ -27,7 +27,7 @@ RGWAccess *RGWAccess::init_storage_provider(const char *type, int argc, char *ar
     store = NULL;
   }
 
-  if (store->initialize(argc, argv) < 0)
+  if (store->initialize(conf) < 0)
     store = NULL;
 
   return store;

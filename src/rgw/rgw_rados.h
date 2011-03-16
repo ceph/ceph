@@ -19,7 +19,7 @@ class RGWRados  : public RGWAccess
 
 public:
   /** Initialize the RADOS instance and prepare to do other ops */
-  virtual int initialize(int argc, char *argv[]);
+  virtual int initialize(md_config_t *conf);
   /** set up a bucket listing. id is ignored, handle is filled in. */
   virtual int list_buckets_init(std::string& id, RGWAccessHandle *handle);
   /** 

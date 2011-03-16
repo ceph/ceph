@@ -12,6 +12,9 @@
 
 #include "fcgiapp.h"
 
+#include "common/ceph_argparse.h"
+#include "common/common_init.h"
+#include "common/config.h"
 #include "rgw_common.h"
 #include "rgw_access.h"
 #include "rgw_acl.h"
@@ -32,20 +35,8 @@
 
 using namespace std;
 
-static sighandler_t sighandler_segv;
 static sighandler_t sighandler_usr1;
 static sighandler_t sighandler_alrm;
-
-/*
- * ?print out the C++ errors to log in case it fails
- */
-static void sigsegv_handler(int signum)
-{
-  BackTrace bt(0);
-  bt.print(cerr);
-
-  signal(signum, sighandler_segv);
-}
 
 static void godown_handler(int signum)
 {
@@ -62,19 +53,23 @@ static void godown_alarm(int signum)
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
  */
-int main(int argc, char *argv[])
+int main(int argc, const char **argv)
 {
   struct req_state s;
   struct fcgx_state fcgx;
 
   curl_global_init(CURL_GLOBAL_ALL);
 
-  if (!RGWAccess::init_storage_provider("rados", argc, argv)) {
-    cerr << "Couldn't init storage provider (RADOS)" << endl;
+  vector<const char*> args;
+  argv_to_vec(argc, argv, args);
+  env_to_vec(args);
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON, 0);
+
+  if (!RGWAccess::init_storage_provider("rados", &g_conf)) {
+    cerr << "Couldn't init storage provider (RADOS)" << std::endl;
     return 5; //EIO
   }
 
-  sighandler_segv = signal(SIGSEGV, sigsegv_handler);
   sighandler_usr1 = signal(SIGUSR1, godown_handler);
   sighandler_alrm = signal(SIGALRM, godown_alarm);
 
@@ -87,7 +82,7 @@ int main(int argc, char *argv[])
     int ret;
     
     if (!handler->authorize(&s)) {
-      RGW_LOG(10) << "failed to authorize request" << endl;
+      RGW_LOG(10) << "failed to authorize request" << std::endl;
       abort_early(&s, -EPERM);
       goto done;
     }
@@ -98,7 +93,7 @@ int main(int argc, char *argv[])
       case -ENOENT:
         break;
       default:
-        RGW_LOG(10) << "could not read acls" << " ret=" << ret << endl;
+        RGW_LOG(10) << "could not read acls" << " ret=" << ret << std::endl;
         abort_early(&s, ret);
         goto done;
       }
