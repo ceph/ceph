@@ -296,7 +296,7 @@ libradosgw_a_SOURCES = \
 	rgw/rgw_common.cc
 libradosgw_a_CFLAGS = ${AM_CFLAGS}
 libradosgw_a_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libradosgw_a_LDFLAGS = ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
+#libradosgw_a_LDFLAGS = ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
 # lib_LTLIBRARIES += libradosgw.a
 
 radosgw_SOURCES = rgw/rgw_main.cc
