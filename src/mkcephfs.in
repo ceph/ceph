@@ -173,7 +173,7 @@ if [ $preparemonmap -eq 1 ]; then
 
     type="mon"
     for name in $mons; do
-	id=`echo $name | cut -c 4- | sed 's/\\.//'`
+	id=`echo $name | cut -c 4- | sed 's/^\\.//'`
 	get_conf addr "" "mon addr"
 	args=$args" --add $id $addr"
     done
@@ -203,7 +203,7 @@ create_private_key()
 if [ -n "$initdaemon" ]; then
     name=$initdaemon
     type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
-    id=`echo $name | cut -c 4- | sed 's/\\.//'`
+    id=`echo $name | cut -c 4- | sed 's/^\\.//'`
     name="$type.$id"
     
     if [ $type = "osd" ]; then
@@ -229,7 +229,7 @@ if [ -n "$initlocaldaemons" ]; then
     get_name_list "$initlocaldaemons"
     for name in $what; do
 	type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
-	id=`echo $name | cut -c 4- | sed 's/\\.//'`
+	id=`echo $name | cut -c 4- | sed 's/^\\.//'`
 	num=$id
 	name="$type.$id"
 
@@ -246,7 +246,7 @@ fi
 if [ -n "$prepareosdfs" ]; then
     name=$prepareosdfs
     type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
-    id=`echo $name | cut -c 4- | sed 's/\\.//'`
+    id=`echo $name | cut -c 4- | sed 's/^\\.//'`
     name="$type.$id"
 
     get_conf osd_data "" "osd data"
@@ -291,7 +291,7 @@ if [ $preparemon -eq 1 ]; then
     echo "Building osdmap"
 
     # find highest osd id - assumes the conf file complies with osd numbering requirements
-    maxosd=`$CCONF -c $conf -l osd | egrep -v '^osd$' | sed 's/\.//' | cut -c 4- | sort -n | tail -1`
+    maxosd=`$CCONF -c $conf -l osd | egrep -v '^osd$' | sed 's/^\.//' | cut -c 4- | sort -n | tail -1`
     echo " highest numbered osd in $conf is osd.$maxosd"
     lastosd=$(($maxosd + 1))
 
@@ -333,7 +333,7 @@ if [ $preparemon -eq 1 ]; then
     do
 	kname=`echo $k | sed 's/.*key\.//'`
 	ktype=`echo $kname | cut -c 1-3`
-	kid=`echo $kname | cut -c 4- | sed 's/\\.//'`
+	kid=`echo $kname | cut -c 4- | sed 's/^\\.//'`
 	kname="$ktype.$kid"
 	secret=`cat $k`
 	if [ "$ktype" = "osd" ]; then
@@ -383,7 +383,7 @@ if [ $allhosts -eq 1 ]; then
     get_name_list "osd mds"
     for name in $what; do
 	type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
-	id=`echo $name | cut -c 4- | sed 's/\\.//'`
+	id=`echo $name | cut -c 4- | sed 's/^\\.//'`
 	num=$id
 	name="$type.$id"
 
@@ -420,7 +420,7 @@ if [ $allhosts -eq 1 ]; then
     get_name_list "mon"
     for name in $what; do
 	type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
-	id=`echo $name | cut -c 4- | sed 's/\\.//'`
+	id=`echo $name | cut -c 4- | sed 's/^\\.//'`
 	num=$id
 	name="$type.$id"
 
