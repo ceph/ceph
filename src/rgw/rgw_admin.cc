@@ -226,7 +226,7 @@ int main(int argc, char **argv)
   if (opt_cmd == OPT_NO_CMD)
     ARGS_USAGE();
 
-  store = RGWAccess::init_storage_provider("rados", argc, argv);
+  store = RGWAccess::init_storage_provider("rados", &g_conf);
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
     return 5; //EIO

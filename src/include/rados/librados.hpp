@@ -11,6 +11,8 @@
 
 #include "librados.h"
 
+struct md_config_t;
+
 namespace librados
 {
   using ceph::bufferlist;
@@ -209,6 +211,7 @@ namespace librados
     ~Rados();
 
     int init(const char * const id);
+    int init_internal(md_config_t * conf);
     int connect();
     void shutdown();
     int conf_read_file(const char * const path) const;
