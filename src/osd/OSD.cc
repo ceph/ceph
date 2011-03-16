@@ -4233,9 +4233,21 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     *_dout << "missing: " << *missing;
   *_dout << dendl;
 
-  unreg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
-  pg->info.history.merge(info.history);
-  reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
+  // don't update history (yet) if we are active and primary; the replica
+  // may be telling us they have activated (and committed) but we can't
+  // share that until _everyone_ does the same.
+  if (pg->is_active() && pg->is_primary() && pg->is_acting(from) &&
+      pg->info.history.last_epoch_started < pg->info.history.same_acting_since &&
+      info.history.last_epoch_started >= pg->info.history.same_acting_since) {
+    dout(10) << " peer osd" << from << " activated and committed" << dendl;
+    pg->peer_activated.insert(from);
+    if (pg->peer_activated.size() == pg->acting.size())
+      pg->all_activated_and_committed();
+  } else {
+    unreg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
+    pg->info.history.merge(info.history);
+    reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
+  }
 
   // dump log
   dout(15) << *pg << " my log = ";
