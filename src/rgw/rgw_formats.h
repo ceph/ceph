@@ -1,9 +1,15 @@
 #ifndef CEPH_RGW_FORMATS_H
 #define CEPH_RGW_FORMATS_H
 
+struct plain_stack_entry {
+  int size;
+  bool is_array;
+};
+
 class RGWFormatter_Plain : public RGWFormatter {
+  std::list<struct plain_stack_entry> stack;
 protected:
-  void formatter_init() {}
+  void formatter_init();
 
 public:
   RGWFormatter_Plain() : RGWFormatter() {}

@@ -2,17 +2,30 @@
 #include "rgw_formats.h"
 
 /* Plain */
+void RGWFormatter_Plain::formatter_init()
+{
+  stack.clear();
+}
 
 void RGWFormatter_Plain::open_obj_section(const char *name)
 {
+  struct plain_stack_entry new_entry;
+  new_entry.is_array = false;
+  new_entry.size = 0;
+  stack.push_back(new_entry);
 }
 
 void RGWFormatter_Plain::open_array_section(const char *name)
 {
+  struct plain_stack_entry new_entry;
+  new_entry.is_array = true;
+  new_entry.size = 0;
+  stack.push_back(new_entry);
 }
 
 void RGWFormatter_Plain::close_section(const char *name)
 {
+  stack.pop_back();
 }
 
 void RGWFormatter_Plain::dump_value_int(const char *name, const char *fmt, ...)
@@ -21,18 +34,32 @@ void RGWFormatter_Plain::dump_value_int(const char *name, const char *fmt, ...)
   char buf[LARGE_SIZE];
   va_list ap;
 
+  struct plain_stack_entry& entry = stack.back();
+  bool should_print = (stack.size() == 1);
+  entry.size++;
+
+  if (!should_print)
+    return;
+
   va_start(ap, fmt);
   int n = vsnprintf(buf, LARGE_SIZE, fmt, ap);
   va_end(ap);
   if (n >= LARGE_SIZE)
     return;
-  CGI_PRINTF(s, "%s\n", buf);
+  CGI_PRINTF(s, "%s\n", (int)entry.is_array, entry.size, buf);
 }
 
 void RGWFormatter_Plain::dump_value_str(const char *name, const char *fmt, ...)
 {
   char buf[LARGE_SIZE];
   va_list ap;
+
+  struct plain_stack_entry& entry = stack.back();
+  bool should_print = (!entry.is_array || entry.size == 0);
+  entry.size++;
+
+  if (!should_print)
+    return;
 
   va_start(ap, fmt);
   int n = vsnprintf(buf, LARGE_SIZE, fmt, ap);
