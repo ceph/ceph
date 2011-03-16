@@ -2599,7 +2599,9 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
   if (!rados_initialized) {
     CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
     iparams.conf_file = "";
-    iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
+    if (id) {
+      iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
+    }
 
     // TODO: store this conf pointer in the RadosClient and use it as our
     // configuration
