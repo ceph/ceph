@@ -65,6 +65,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON, 0);
 
+
   if (!RGWAccess::init_storage_provider("rados", &g_conf)) {
     cerr << "Couldn't init storage provider (RADOS)" << std::endl;
     return 5; //EIO

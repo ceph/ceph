@@ -2628,6 +2628,7 @@ extern "C" int rados_create_internal(rados_t *pcluster, md_config_t *conf)
   }
   rados_init_mutex.Unlock();
   librados::RadosClient *radosp = new librados::RadosClient;
+  keyring_init(&g_conf);
   *pcluster = (void *)radosp;
   return 0;
 }
