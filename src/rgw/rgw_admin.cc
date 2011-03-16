@@ -421,7 +421,7 @@ int main(int argc, char **argv)
     while (!iter.end()) {
       ::decode(entry, iter);
 
-      cout << entry.owner << delim
+      cout << (entry.owner.size() ? entry.owner : "-" ) << delim
            << entry.bucket << delim
            << entry.time << delim
            << entry.remote_addr << delim
