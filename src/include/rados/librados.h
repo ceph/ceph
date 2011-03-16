@@ -25,6 +25,8 @@ extern "C" {
 
 #define LIBRADOS_SUPPORTS_WATCH 1
 
+struct md_config_t;
+
 typedef void *rados_t;
 typedef void *rados_ioctx_t;
 typedef void *rados_list_ctx_t;
@@ -51,6 +53,9 @@ void rados_version(int *major, int *minor, int *extra);
 
 /* initialization */
 int rados_create(rados_t *cluster, const char * const id);
+
+/* internal API for creating rados clusters */
+int rados_create_internal(rados_t *cluster, struct md_config_t *conf);
 
 /* Connect to the cluster */
 int rados_connect(rados_t cluster);
