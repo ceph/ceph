@@ -134,8 +134,14 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
     uint64_t offset = 0;
     while (count == op_size) {
       count = read(fd, buf, op_size);
-      if (count == 0)
+      if (count == 0) {
+        if (!offset) {
+          int ret = io_ctx.create(oid, true);
+          if (ret < 0)
+            cerr << "WARNING: could not create object: " << oid << std::endl;
+        }
         continue;
+      }
       indata.append(buf, count);
       int ret = io_ctx.write(oid, indata, count, offset);
       indata.clear();
@@ -194,6 +200,57 @@ static int do_import(IoCtx& io_ctx, const char *dir_name, int op_size)
   return import_dir(io_ctx, empty, dir_name, strlen(dir_name), op_size);
 }
 
+static int do_export(IoCtx& io_ctx, const char *dir_name)
+{
+  map<string, bool> dircache;
+  map<string, bool>::iterator iter;
+  string path = dir_name;
+  path += "/";
+
+  bool skip;
+  librados::ObjectIterator i = io_ctx.objects_begin();
+  librados::ObjectIterator i_end = io_ctx.objects_end();
+  int r = mkdir(dir_name, 0700);
+  if (r < 0) {
+    r = -errno;
+    if (r != -EEXIST)
+      return r;
+  }
+  for (; i != i_end; ++i) {
+    string name = *i;
+    int start = 0;
+    int pos = name.find('/');
+    skip = false;
+    while (pos >= 0) {
+      string dest = path;
+      dest += name.substr(0, pos);
+      if (dest.compare("..") == 0) {
+        skip = true;
+        break;
+      }
+      iter = dircache.find(dest);
+      if (iter == dircache.end()) {
+        generic_dout(0) << "mkdir: " << dest << dendl;
+        mkdir(dest.c_str(), 0700);
+        dircache[dest] = true;
+      }
+      start = pos + 1;
+      if ((size_t)start < name.size())
+        pos = name.find('/', start);
+      else
+        break;
+    }
+    if (skip)
+      continue;
+    if ((size_t)start == name.size())
+      continue;
+    string newfile = path + name;
+    generic_dout(0) << "exporting " << name << " => " << newfile << dendl;
+    do_get(io_ctx, name.c_str(), newfile.c_str(), false);
+  }
+
+  return 0;
+}
 
 /**********************************************
 
@@ -640,6 +697,16 @@ int main(int argc, const char **argv)
     ret = do_import(io_ctx, nargs[1], op_size);
     if (ret < 0) {
       cerr << "error importing " << pool_name << "/" << nargs[1] << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
+    }
+  }
+  else if (strcmp(nargs[0], "export") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage();
+
+    ret = do_export(io_ctx, nargs[1]);
+    if (ret < 0) {
+      cerr << "error exporting " << pool_name << "/" << nargs[1] << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
     }
   }
