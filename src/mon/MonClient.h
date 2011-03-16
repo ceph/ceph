@@ -173,8 +173,7 @@ public:
     auth(NULL),
     rotating_secrets(rkeys) { }
 
-  ~MonClient() {
-  }
+  ~MonClient();
 
   void init();
   void shutdown();

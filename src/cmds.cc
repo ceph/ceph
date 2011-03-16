@@ -65,7 +65,8 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_init(args, "mds", STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_DAEMON);
+  common_init(args, CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON, 0);
+  keyring_init(&g_conf);
 
   // mds specific args
   int shadow = 0;
@@ -106,7 +107,7 @@ int main(int argc, const char **argv)
       ARGS_USAGE();
     }
   }
-  if (!g_conf.id && dump_journal < 0 && reset_journal < 0) {
+  if (g_conf.name->has_default_id() && dump_journal < 0 && reset_journal < 0) {
     derr << "must specify '-i name' with the cmds instance name" << dendl;
     usage();
   }
@@ -130,8 +131,7 @@ int main(int argc, const char **argv)
     jr->reset();
     mc.shutdown();
   } else {
-    cout << "starting mds." << g_conf.id
-	 << " at " << messenger->get_ms_addr()
+    cout << "starting " << *g_conf.name << " at " << messenger->get_ms_addr()
 	 << std::endl;
 
     messenger->register_entity(entity_name_t::MDS(-1));
@@ -153,10 +153,10 @@ int main(int argc, const char **argv)
     messenger->set_policy(entity_name_t::TYPE_CLIENT,
                           SimpleMessenger::Policy::stateful_server(supported, 0));
 
-    messenger->start();
+    messenger->start(g_conf.daemonize);
 
     // start mds
-    MDS *mds = new MDS(g_conf.id, messenger, &mc);
+    MDS *mds = new MDS(g_conf.name->get_id().c_str(), messenger, &mc);
 
     // in case we have to respawn...
     mds->orig_argc = argc;

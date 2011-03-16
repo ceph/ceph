@@ -700,6 +700,9 @@ void OSD::start_logger()
   logger_tare(osdmap->get_created());
   logger_start();
   logger_started = true;
+
+  // start the objectstore logger too
+  store->start_logger(whoami, osdmap->get_created());
 }
 
 int OSD::shutdown()
@@ -1144,7 +1147,8 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
            << ", start " << h
            << dendl;
 
-  for (epoch_t e = osdmap->get_epoch();
+  epoch_t e;
+  for (e = osdmap->get_epoch();
        e > from;
        e--) {
     // verify during intermediate epoch (e-1)
@@ -1175,6 +1179,17 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
 
     if (h.same_acting_since >= e && h.same_up_since >= e && h.same_primary_since >= e)
       break;
+  }
+
+  // base case: these floors should be the creation epoch if we didn't
+  // find any changes.
+  if (e == h.epoch_created) {
+    if (!h.same_acting_since)
+      h.same_acting_since = e;
+    if (!h.same_up_since)
+      h.same_up_since = e;
+    if (!h.same_primary_since)
+      h.same_primary_since = e;
   }
 
   dout(15) << "project_pg_history end " << h << dendl;
@@ -2963,6 +2978,12 @@ void OSD::handle_osd_map(MOSDMap *m)
     superblock.clean_thru = osdmap->get_epoch();
   }
 
+  // completion
+  Mutex ulock("OSD::handle_osd_map() ulock");
+  Cond ucond;
+  bool udone;
+  fin->add(new C_SafeCond(&ulock, &ucond, &udone));
+
   // superblock and commit
   write_superblock(t);
   int r = store->apply_transaction(t, fin);
@@ -2976,8 +2997,22 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   map_lock.put_write();
 
+  /*
+   * wait for this to be stable.
+   *
+   * NOTE: This is almost certainly overkill.  The important things
+   * that need to be stable to make the peering/recovery stuff correct
+   * include:
+   *
+   *   - last_epoch_started, since that bounds how far back in time we
+   *     check old peers
+   *   - ???
+   */
   osd_lock.Unlock();
-  store->sync_and_flush();
+  ulock.Lock();
+  while (!udone)
+    ucond.Wait(ulock);
+  ulock.Unlock();
   osd_lock.Lock();
 
   // everything through current epoch now on disk; keep anything after
@@ -3147,8 +3182,9 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 
       if (i.acting.size())
 	i.maybe_went_rw = 
-	  lastmap->get_up_thru(i.acting[0]) >= i.first &&
-	  lastmap->get_up_from(i.acting[0]) <= i.first;
+	  (lastmap->get_up_thru(i.acting[0]) >= i.first &&
+	   lastmap->get_up_from(i.acting[0]) <= i.first) ||
+	  i.first == pg->info.history.epoch_created;
       else
 	i.maybe_went_rw = 0;
 
@@ -3282,6 +3318,7 @@ void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
        it++) {
     PG *pg = it->second;
     pg->lock();
+    pg->check_recovery_op_pulls(osdmap);
 
     if (pg->is_primary())
       num_pg_primary++;
@@ -3873,6 +3910,8 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
 
     // figure history
     PG::Info::History history;
+    history.epoch_created = created;
+    history.last_epoch_clean = created;
     project_pg_history(pgid, history, created, up, acting);
     
     // register.
@@ -4085,6 +4124,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     } else {
       dout(10) << *pg << " got osd" << from << " info " << *it << dendl;
       pg->peer_info[from] = *it;
+      pg->might_have_unfound.insert(from);
 
       unreg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
       pg->info.history.merge(it->history);
@@ -4927,7 +4967,7 @@ void OSD::do_recovery(PG *pg)
      */
     if (!started && pg->have_unfound()) {
       map< int, map<pg_t,PG::Query> > query_map;
-      pg->discover_all_missing(query_map, true);
+      pg->discover_all_missing(query_map);
       if (query_map.size())
 	do_queries(query_map);
       else {

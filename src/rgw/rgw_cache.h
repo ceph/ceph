@@ -42,7 +42,7 @@ public:
   int get_obj(void **handle, std::string& bucket, std::string& oid, 
             char **data, off_t ofs, off_t end);
 
-  int obj_stat(std::string& bucket, std::string& obj, size_t *psize, time_t *pmtime);
+  int obj_stat(std::string& bucket, std::string& obj, uint64_t *psize, time_t *pmtime);
 };
 
 
@@ -88,7 +88,7 @@ int RGWCache<T>::put_obj_data(std::string& id, std::string& bucket, std::string&
 }
 
 template <class T>
-int RGWCache<T>::obj_stat(std::string& bucket, std::string& obj, size_t *psize, time_t *pmtime)
+int RGWCache<T>::obj_stat(std::string& bucket, std::string& obj, uint64_t *psize, time_t *pmtime)
 {
   if (bucket[0] != '.')
     return T::obj_stat(bucket, obj, psize, pmtime);
@@ -96,7 +96,7 @@ int RGWCache<T>::obj_stat(std::string& bucket, std::string& obj, size_t *psize, 
   string name = normal_name(stat_space, bucket, obj);
 
   bufferlist bl;
-  size_t size;
+  uint64_t size;
   time_t mtime;
 
   int r = cache.get(name, bl);

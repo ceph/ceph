@@ -59,6 +59,14 @@ static const int LOAD_HYBRID     = 3;
 // Blank object locator
 static const object_locator_t OLOC_BLANK;
 
+PGLSFilter::PGLSFilter()
+{
+}
+
+PGLSFilter::~PGLSFilter()
+{
+}
+
 // =======================
 // pg changes
 
@@ -3295,6 +3303,7 @@ int ReplicatedPG::pull(const sobject_t& soid)
 
   // take note
   assert(pulling.count(soid) == 0);
+  pull_from_peer[fromosd].insert(soid);
   pull_info_t& p = pulling[soid];
   p.version = v;
   p.from = fromosd;
@@ -3937,6 +3946,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     if (complete) {
       // close out pull op
       pulling.erase(soid);
+      pull_from_peer[pi->from].erase(soid);
       finish_recovery_op(soid);
       
       update_stats();
@@ -4007,6 +4017,7 @@ void ReplicatedPG::_failed_push(MOSDSubOp *op)
   }
 
   finish_recovery_op(soid);  // close out this attempt,
+  pull_from_peer[from].erase(soid);
   pulling.erase(soid);
 
   op->put();
@@ -4077,6 +4088,7 @@ void ReplicatedPG::on_change()
   // clear pushing/pulling maps
   pushing.clear();
   pulling.clear();
+  pull_from_peer.clear();
 }
 
 void ReplicatedPG::on_role_change()
@@ -4102,8 +4114,33 @@ void ReplicatedPG::_clear_recovery_state()
 #endif
   pulling.clear();
   pushing.clear();
+  pull_from_peer.clear();
 }
 
+void ReplicatedPG::check_recovery_op_pulls(const OSDMap *osdmap)
+{
+  for (map<int, set<sobject_t> >::iterator j = pull_from_peer.begin();
+       j != pull_from_peer.end();
+       ) {
+    if (osdmap->is_up(j->first)) {
+      ++j;
+      continue;
+    }
+    dout(10) << "Reseting pulls from osd" << j->first
+	     << ", osdmap has it marked down" << dendl;
+    
+    for (set<sobject_t>::iterator i = j->second.begin();
+	 i != j->second.end();
+	 ++i) {
+      assert(pulling.count(*i) == 1);
+      pulling.erase(*i);
+      finish_recovery_op(*i);
+    }
+    log.last_requested = eversion_t();
+    pull_from_peer.erase(j++);
+  }
+}
+  
 
 int ReplicatedPG::start_recovery_ops(int max)
 {

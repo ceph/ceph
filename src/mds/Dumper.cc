@@ -12,6 +12,11 @@
  * 
  */
 
+#ifndef _BACKWARD_BACKWARD_WARNING_H
+#define _BACKWARD_BACKWARD_WARNING_H   // make gcc 4.3 shut up about hash_*
+#endif
+
+#include "common/entity_name.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "mds/Dumper.h"
@@ -51,7 +56,7 @@ void Dumper::init(int rank)
 
   messenger->register_entity(entity_name_t::CLIENT());
   messenger->add_dispatcher_head(this);
-  messenger->start(true);
+  messenger->start(false); // do not daemonize
 
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON|CEPH_ENTITY_TYPE_OSD|CEPH_ENTITY_TYPE_MDS);
   monc->set_messenger(messenger);
@@ -79,7 +84,7 @@ void Dumper::dump(const char *dump_file)
 {
   bool done = false;
   Cond cond;
-  int rank = strtol(g_conf.id, 0, 0);
+  int rank = strtol(g_conf.name->get_id().c_str(), 0, 0);
   inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
 
   lock.Lock();

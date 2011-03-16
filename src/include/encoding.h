@@ -220,8 +220,13 @@ inline void decode(T o, bufferlist& bl)
 #include <deque>
 #include <vector>
 #include <string>
+
+#ifndef _BACKWARD_BACKWARD_WARNING_H
+#define _BACKWARD_BACKWARD_WARNING_H   // make gcc 4.3 shut up about hash_*
+#endif
 #include <ext/hash_map>
 #include <ext/hash_set>
+
 #include "triple.h"
 
 // pair

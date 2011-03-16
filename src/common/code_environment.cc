@@ -21,13 +21,11 @@
 #include <string>
 #include <sys/prctl.h>
 
-code_environment_t g_code_env;
+code_environment_t g_code_env = CODE_ENVIRONMENT_UTILITY;
 
 extern "C" const char *code_environment_to_str(enum code_environment_t e)
 {
   switch (e) {
-    case CODE_ENVIRONMENT_TEST:
-      return "CODE_ENVIRONMENT_TEST";
     case CODE_ENVIRONMENT_UTILITY:
       return "CODE_ENVIRONMENT_UTILITY";
     case CODE_ENVIRONMENT_DAEMON:

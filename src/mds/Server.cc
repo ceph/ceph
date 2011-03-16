@@ -80,7 +80,7 @@ void Server::open_logger()
   }
 
   char name[80];
-  snprintf(name, sizeof(name), "mds.%s.server.log", g_conf.id);
+  snprintf(name, sizeof(name), "mds.%s.server.log", g_conf.name->get_id().c_str());
   logger = new ProfLogger(name, &mdserver_logtype);
   logger_add(logger);
 }
@@ -4718,7 +4718,7 @@ void Server::handle_client_rename(MDRequest *mdr)
       (srcdnl->get_inode()->is_anchored() || 
        (srcdnl->get_inode()->is_dir() && (srcdnl->get_inode()->inode.rstat.ranchors ||
 					  srcdnl->get_inode()->nested_anchors ||
-					  !mdcache->is_leaf_subtree(mdcache->get_subtree_root(srcdn->get_dir()))))) &&
+					  !mdcache->is_leaf_subtree(mdcache->get_projected_subtree_root(srcdn->get_dir()))))) &&
       !mdr->more()->src_reanchor_atid) {
     dout(10) << "reanchoring src->dst " << *srcdnl->get_inode() << dendl;
     vector<Anchor> trace;

@@ -81,7 +81,7 @@ int main(int argc, const char **argv, const char *envp[])
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_init(args, "dumpjournal", STARTUP_FLAG_FORCE_FG_LOGGING);
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
 
   vec_to_argv(args, argc, argv);
 
@@ -95,8 +95,7 @@ int main(int argc, const char **argv, const char *envp[])
   // start up network
   SimpleMessenger *messenger = new SimpleMessenger();
   messenger->bind();
-  g_conf.daemonize = false; // not us!
-  messenger->start();
+  messenger->start(false); // do not daemonize
   messenger->register_entity(entity_name_t::CLIENT());
   messenger->add_dispatcher_head(&dispatcher);
 

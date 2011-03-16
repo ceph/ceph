@@ -78,6 +78,8 @@ int main(int argc, char *argv[])
   sighandler_usr1 = signal(SIGUSR1, godown_handler);
   sighandler_alrm = signal(SIGALRM, godown_alarm);
 
+  ceph::crypto::init();
+
   while (FCGX_Accept(&fcgx.in, &fcgx.out, &fcgx.err, &fcgx.envp) >= 0) 
   {
     RGWHandler *handler = RGWHandler_REST::init_handler(&s, &fcgx);

@@ -562,7 +562,7 @@ public:
 
   int bind(entity_addr_t& bind_addr, int64_t force_nonce = -1);
   int bind(int64_t force_nonce = -1) { return bind(g_conf.public_addr, force_nonce); }
-  int start(bool nodaemon = false);
+  int start(bool daemonize);
   void wait();
 
   int write_pid_file(int pid);

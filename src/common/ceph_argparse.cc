@@ -23,6 +23,7 @@
 #include "msg/msg_types.h"
 
 #include <deque>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string>
 #include <string.h>
@@ -42,7 +43,7 @@
 #undef generic_dout
 #undef dendl
 
-static void env_override(char **ceph_var, const char * const env_var)
+void env_override(char **ceph_var, const char * const env_var)
 {
   char *e = getenv(env_var);
   if (!e)
@@ -157,165 +158,131 @@ void parse_config_option_string(std::string& s)
     *p++ = 0;
     while (*p && *p == ' ') p++;
   }
-  parse_config_options(nargs);
+  g_conf.parse_argv(nargs);
 }
 
-void parse_startup_config_options(std::vector<const char*>& args,
-			  const char *module_type, int flags,
-			  bool *force_fg_logging)
+// The defaults for CephInitParameters
+CephInitParameters::CephInitParameters(uint32_t module_type)
+  : conf_file(CEPH_CONF_FILE_DEFAULT)
 {
-  bool show_config = false;
-  DEFINE_CONF_VARS(NULL);
-  std::vector<const char *> nargs;
-  bool conf_specified = false;
-  *force_fg_logging = ((flags & STARTUP_FLAG_FORCE_FG_LOGGING) != 0);
+  const char *conf_file_ = getenv("CEPH_CONF");
+  if (conf_file_)
+    conf_file = conf_file_;
+  name.set(module_type, "admin");
+}
 
-  if (!g_conf.type)
-    g_conf.type = (char *)"";
+std::list<std::string> CephInitParameters::
+get_conf_files() const
+{
+  std::list<std::string> ret;
+  get_str_list(conf_file, ret);
+  return ret;
+}
 
-  bool isdaemon = g_conf.daemonize;
+bool ceph_argparse_flag(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, ...)
+{
+  const char *first = *i;
+  const char *a;
+  va_list ap;
 
-  FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("version", 'v')) {
+  va_start(ap, i);
+  while (1) {
+    a = va_arg(ap, char*);
+    if (a == NULL)
+      return false;
+    if (strcmp(a, first) == 0) {
+      i = args.erase(i);
+      return true;
+    }
+  }
+}
+
+bool ceph_argparse_witharg(std::vector<const char*> &args,
+	std::vector<const char*>::iterator &i, std::string *ret, ...)
+{
+  const char *first = *i;
+  const char *a;
+  va_list ap;
+  int strlen_a;
+
+  // does this argument match any of the possibilities?
+  va_start(ap, ret);
+  while (1) {
+    a = va_arg(ap, char*);
+    if (a == NULL)
+      return false;
+    strlen_a = strlen(a);
+    if (strncmp(a, first, strlen(a)) == 0) {
+      if (first[strlen_a] == '=') {
+	*ret = first + strlen_a + 1;
+	i = args.erase(i);
+	return true;
+      }
+      else if (first[strlen_a] == '\0') {
+	// find second part (or not)
+	if (i+1 == args.end()) {
+	  std::cerr << "Option " << *i << " requires an argument." << std::endl;
+	  _exit(1);
+	}
+	i = args.erase(i);
+	*ret = *i;
+	i = args.erase(i);
+	return true;
+      }
+    }
+  }
+}
+
+CephInitParameters ceph_argparse_early_args
+	  (std::vector<const char*>& args, uint32_t module_type)
+{
+
+  CephInitParameters iparams(module_type);
+  std::string val;
+  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
+    if (strcmp(*i, "--") == 0)
+      break;
+    else if (ceph_argparse_flag(args, i, "--version", "-v", NULL)) {
       cout << pretty_version_to_str() << std::endl;
       _exit(0);
-    } else if (CONF_ARG_EQ("conf", 'c')) {
-	CONF_SAFE_SET_ARG_VAL(&g_conf.conf, OPT_STR);
-	conf_specified = true;
-    } else if (CONF_ARG_EQ("monmap", 'M')) {
-	CONF_SAFE_SET_ARG_VAL(&g_conf.monmap, OPT_STR);
-    } else if (CONF_ARG_EQ("show_conf", 'S')) {
-      show_config = true;
-    } else if (isdaemon && CONF_ARG_EQ("bind", 0)) {
-      g_conf.public_addr.parse(args[++i]);
-    } else if (CONF_ARG_EQ("nodaemon", 'D')) {
-      g_conf.daemonize = false;
-      *force_fg_logging = true;
-    } else if (CONF_ARG_EQ("foreground", 'f')) {
-      g_conf.daemonize = false;
-      *force_fg_logging = false;
-    } else if (isdaemon && (CONF_ARG_EQ("id", 'i') || CONF_ARG_EQ("name", 'n'))) {
-      free(g_conf.id);
-      CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
-    } else if (!isdaemon && (CONF_ARG_EQ("id", 'I') || CONF_ARG_EQ("name", 'n'))) {
-      free(g_conf.id);
-      CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
-    } else {
-      nargs.push_back(args[i]);
     }
-  }
-  args.swap(nargs);
-  nargs.clear();
-
-  if (module_type) {
-    g_conf.type = strdup(module_type);
-    // is it "type.name"?
-    const char *dot = strchr(g_conf.id, '.');
-    if (dot) {
-      int tlen = dot - g_conf.id;
-      g_conf.type = (char *)malloc(tlen + 1);
-      memcpy(g_conf.type, g_conf.id, tlen);
-      g_conf.type[tlen] = 0;
-      char *new_g_conf_id = strdup(dot + 1);
-      free(g_conf.id);
-      g_conf.id = new_g_conf_id;
+    else if (ceph_argparse_witharg(args, i, &val, "--conf", "-c", NULL)) {
+      iparams.conf_file = val;
     }
-
-    int len = strlen(g_conf.type) + strlen(g_conf.id) + 2;
-    g_conf.name = (char *)malloc(len);
-    snprintf(g_conf.name, len, "%s.%s", g_conf.type, g_conf.id);
-    g_conf.alt_name = (char *)malloc(len - 1);
-    snprintf(g_conf.alt_name, len - 1, "%s%s", module_type, g_conf.id);
-  }
-
-  g_conf.entity_name = new EntityName;
-  assert(g_conf.entity_name);
-
-  g_conf.entity_name->from_type_id(g_conf.type, g_conf.id);
-
-  if (g_conf.cf) {
-    delete g_conf.cf;
-    g_conf.cf = NULL;
-  }
-
-  // do post_process substitutions
-  int len = num_config_options;
-  for (int i = 0; i<len; i++) {
-    config_option *opt = &config_optionsp[i];
-    if (opt->type == OPT_STR && opt->val_ptr) {
-      if (*(char**)opt->val_ptr) {
-	*(char **)opt->val_ptr = conf_post_process_val(*(char **)opt->val_ptr);
+    else if ((module_type != CEPH_ENTITY_TYPE_CLIENT) &&
+	     (ceph_argparse_witharg(args, i, &val, "-i", NULL))) {
+      iparams.name.set_id(val);
+    }
+    else if (ceph_argparse_witharg(args, i, &val, "--id", NULL)) {
+      iparams.name.set_id(val);
+    }
+    else if (ceph_argparse_witharg(args, i, &val, "--name", "-n", NULL)) {
+      if (!iparams.name.from_str(val)) {
+	std::cerr << "You must pass a string of the form ID.TYPE to "
+	  "the --name option." << std::endl;
+	_exit(1);
       }
     }
-  }
-
-  if (!conf_specified)
-    env_override(&g_conf.conf, "CEPH_CONF");
-
-  // open new conf
-  string fn = g_conf.conf;
-  list<string> ls;
-  get_str_list(fn, ls);
-  bool read_conf = false;
-  for (list<string>::iterator p = ls.begin(); p != ls.end(); p++) {
-    g_conf.cf = new ConfFile(p->c_str());
-    read_conf = parse_config_file(g_conf.cf, true);
-    if (read_conf)
-      break;
-    delete g_conf.cf;
-    g_conf.cf = NULL;
-  }
-
-  if (conf_specified && !read_conf) {
-    cerr << "error reading config file(s) " << g_conf.conf << std::endl;
-    exit(1);
-  }
-
-  if (show_config) {
-    if (g_conf.cf)
-      g_conf.cf->dump();
-    exit(0);
-  }
-}
-
-void parse_config_options(std::vector<const char*>& args)
-{
-  int opt_len = num_config_options;
-  DEFINE_CONF_VARS(NULL);
-
-  std::vector<const char*> nargs;
-  FOR_EACH_ARG(args) {
-    int optn;
-
-    for (optn = 0; optn < opt_len; optn++) {
-      if (CONF_ARG_EQ("lockdep", '\0')) {
-	CONF_SAFE_SET_ARG_VAL(&g_lockdep, OPT_INT);
-      } else if (CONF_ARG_EQ(config_optionsp[optn].name,
-	    config_optionsp[optn].char_option)) {
-        if (__isarg || val_pos || config_optionsp[optn].type == OPT_BOOL)
-	    CONF_SAFE_SET_ARG_VAL(config_optionsp[optn].val_ptr, config_optionsp[optn].type);
-        else
-          continue;
-      } else {
-        continue;
-      }
-      break;
+    else {
+      // ignore
+      ++i;
     }
-
-    if (optn == opt_len)
-        nargs.push_back(args[i]);
   }
-
-  env_override(&g_conf.keyring, "CEPH_KEYRING");
-  args = nargs;
+  return iparams;
 }
 
 static void generic_usage(bool is_server)
 {
-  cout << "   -c ceph.conf or --conf=ceph.conf\n";
-  cout << "        get options from given conf file\n";
-  cout << "   -D   run in foreground.\n";
-  cout << "   -f   run in foreground. Show all log messages on stdout.\n";
+  cout << "\
+--conf/-c        Read configuration from the given configuration file\n\
+-D               Run in the foreground.\n\
+-f               Run in foreground. Show all log messages on stderr.\n\
+--id             set ID\n\
+--name           set ID.TYPE\n\
+--version        show version and quit\n\
+" << std::endl;
+
   if (is_server) {
     cout << "   --debug_ms N\n";
     cout << "        set message debug level (e.g. 1)\n";

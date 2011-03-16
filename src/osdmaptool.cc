@@ -49,7 +49,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   DEFINE_CONF_VARS(usage);
 
-  common_init(args, "osdmaptool", STARTUP_FLAG_FORCE_FG_LOGGING);
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
 
   const char *me = argv[0];
 
@@ -113,7 +113,8 @@ int main(int argc, const char **argv)
   cout << me << ": osdmap file '" << fn << "'" << std::endl;
   
   int r = 0;
-  if (!(createsimple && clobber)) {
+  struct stat st;
+  if (!createsimple && !clobber) {
     r = bl.read_file(fn);
     if (r == 0) {
       try {
@@ -130,7 +131,7 @@ int main(int argc, const char **argv)
       return -1;
     }
   }
-  else if (createsimple && !clobber && r == 0) {
+  else if (createsimple && !clobber && ::stat(fn, &st) == 0) {
     cerr << me << ": " << fn << " exists, --clobber to overwrite" << std::endl;
     return -1;
   }

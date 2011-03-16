@@ -128,10 +128,10 @@ void AnchorServer::_prepare(bufferlist &bl, uint64_t reqid, int bymds)
     version++;
 
     // make sure trace is in table
-    dout(0) << "trace.size=" << trace.size() << dendl;
+    dout(25) << "trace.size=" << trace.size() << dendl;
     for (unsigned i=0; i<trace.size(); i++) {
       add(trace[i].ino, trace[i].dirino, trace[i].dn_hash);
-      dout(0) << trace[i] << dendl;
+      dout(25) << trace[i] << dendl;
     }
     inc(ino);
     pending_create[version] = ino;  // so we can undo

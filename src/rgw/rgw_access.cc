@@ -13,6 +13,10 @@ static RGWRados rados_provider;
 
 RGWAccess* RGWAccess::store;
 
+RGWAccess::~RGWAccess()
+{
+}
+
 RGWAccess *RGWAccess::init_storage_provider(const char *type, int argc, char *argv[])
 {
   if (strcmp(type, "rados") == 0) {

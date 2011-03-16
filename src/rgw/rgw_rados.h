@@ -87,7 +87,7 @@ public:
 
   virtual int read(std::string& bucket, std::string& oid, off_t ofs, size_t size, bufferlist& bl);
 
-  virtual int obj_stat(std::string& bucket, std::string& obj, size_t *psize, time_t *pmtime);
+  virtual int obj_stat(std::string& bucket, std::string& obj, uint64_t *psize, time_t *pmtime);
 
   virtual bool supports_tmap() { return true; }
   virtual int tmap_set(std::string& bucket, std::string& obj, std::string& key, bufferlist& bl);

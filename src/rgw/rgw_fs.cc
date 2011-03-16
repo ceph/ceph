@@ -84,7 +84,7 @@ int RGWFS::list_buckets_next(string& id, RGWObjEnt& obj, RGWAccessHandle *handle
   }
 }
 
-int RGWFS::obj_stat(string& bucket, string& obj, size_t *psize, time_t *pmtime)
+int RGWFS::obj_stat(string& bucket, string& obj, uint64_t *psize, time_t *pmtime)
 {
   return -ENOTSUP;
 }

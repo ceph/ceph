@@ -14,13 +14,13 @@
                                     delimited search list.
   
   FLAGS
-    -i id                           Set id
+    --name name                     Set type.id
     [-s <section>]                  Add to list of sections to search
   
   If there is no action given, the action will default to --lookup.
   
   EXAMPLES
-  [$] cconf -i cconf -c /etc/ceph/ceph\.conf -t mon -i 0 'mon addr' (re)
+  [$] cconf --name client.cconf -c /etc/ceph/ceph.conf -t mon -i 0 'mon addr' (re)
   Find out if there is a 'mon addr' defined in /etc/ceph/ceph.conf
   
   [$] cconf -l mon (re)

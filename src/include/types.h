@@ -37,7 +37,11 @@
 // </macro hackery>
 
 
-#define _BACKWARD_BACKWARD_WARNING_H   /* make gcc 4.3 shut up about hash_*. */
+#ifdef __cplusplus
+#ifndef _BACKWARD_BACKWARD_WARNING_H
+#define _BACKWARD_BACKWARD_WARNING_H   // make gcc 4.3 shut up about hash_*
+#endif
+#endif
 
 extern "C" {
 #include <stdint.h>

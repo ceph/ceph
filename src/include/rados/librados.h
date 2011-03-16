@@ -42,7 +42,7 @@ struct rados_pool_stat_t {
   uint64_t num_rd, num_rd_kb,num_wr, num_wr_kb;
 };
 
-struct rados_statfs_t {
+struct rados_cluster_stat_t {
   uint64_t kb, kb_used, kb_avail;
   uint64_t num_objects;
 };
@@ -82,7 +82,11 @@ void rados_reopen_log(rados_t cluster);
  * buffer. If len == -1, we'll call malloc() and set *buf.
  * Returns 0 on success, error code otherwise. Returns ENAMETOOLONG if the
  * buffer is too short. */
-int rados_conf_get(rados_t cluster, const char *option, char *buf, int len);
+int rados_conf_get(rados_t cluster, const char *option, char *buf, size_t len);
+
+/* cluster info */
+int rados_cluster_stat(rados_t cluster, struct rados_cluster_stat_t *result);
+
 
 /* pools */
 
@@ -94,7 +98,7 @@ int rados_conf_get(rados_t cluster, const char *option, char *buf, int len);
  * as much as we can.
  * Returns the length of the buffer we would need to list all pools.
  */
-int rados_pool_list(rados_t cluster, char *buf, int len);
+int rados_pool_list(rados_t cluster, char *buf, size_t len);
 
 int rados_ioctx_create(rados_t cluster, const char *pool_name, rados_ioctx_t *ioctx);
 void rados_ioctx_destroy(rados_ioctx_t io);
@@ -136,12 +140,12 @@ int rados_ioctx_snap_get_stamp(rados_ioctx_t io, rados_snap_t id, time_t *t);
 /* sync io */
 uint64_t rados_get_last_version(rados_ioctx_t io);
 
-int rados_write(rados_ioctx_t io, const char *oid, const char *buf, size_t len, off_t off);
+int rados_write(rados_ioctx_t io, const char *oid, const char *buf, size_t len, uint64_t off);
+int rados_write_full(rados_ioctx_t io, const char *oid, const char *buf, size_t len, uint64_t off);
 int rados_append(rados_ioctx_t io, const char *oid, const char *buf, size_t len);
-int rados_write_full(rados_ioctx_t io, const char *oid, const char *buf, size_t len, off_t off);
-int rados_read(rados_ioctx_t io, const char *oid, char *buf, size_t len, off_t off);
+int rados_read(rados_ioctx_t io, const char *oid, char *buf, size_t len, uint64_t off);
 int rados_remove(rados_ioctx_t io, const char *oid);
-int rados_trunc(rados_ioctx_t io, const char *oid, size_t size);
+int rados_trunc(rados_ioctx_t io, const char *oid, uint64_t size);
 
 /* attrs */
 int rados_getxattr(rados_ioctx_t io, const char *o, const char *name, char *buf, size_t len);
@@ -169,7 +173,7 @@ uint64_t rados_aio_get_obj_ver(rados_completion_t c);
 void rados_aio_release(rados_completion_t c);
 int rados_aio_write(rados_ioctx_t io, const char *oid,
 		    rados_completion_t completion,
-		    const char *buf, size_t len, off_t off);
+		    const char *buf, size_t len, uint64_t off);
 int rados_aio_append(rados_ioctx_t io, const char *oid,
 		     rados_completion_t completion,
 		     const char *buf, size_t len);
@@ -178,7 +182,7 @@ int rados_aio_write_full(rados_ioctx_t io, const char *oid,
 			 const char *buf, size_t len);
 int rados_aio_read(rados_ioctx_t io, const char *oid,
 		   rados_completion_t completion,
-		   char *buf, size_t len, off_t off);
+		   char *buf, size_t len, uint64_t off);
 
 /* watch/notify */
 typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);

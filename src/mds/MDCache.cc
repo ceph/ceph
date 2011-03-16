@@ -1096,6 +1096,18 @@ CDir *MDCache::get_subtree_root(CDir *dir)
   }
 }
 
+CDir *MDCache::get_projected_subtree_root(CDir *dir)
+{
+  // find the underlying dir that delegates (or is about to delegate) auth
+  while (true) {
+    if (dir->is_subtree_root()) 
+      return dir;
+    dir = dir->get_inode()->get_projected_parent_dir();
+    if (!dir) 
+      return 0;             // none
+  }
+}
+
 void MDCache::remove_subtree(CDir *dir)
 {
   dout(10) << "remove_subtree " << *dir << dendl;
@@ -9267,6 +9279,9 @@ void MDCache::rollback_uncommitted_fragments()
     adjust_dir_fragments(diri, p->first.frag, -p->second, resultfrags, waiters, true);
     if (g_conf.mds_debug_frag)
       diri->verify_dirfrags();
+
+    EFragment *le = new EFragment(mds->mdlog, EFragment::OP_ROLLBACK, diri->ino(), p->first.frag, -p->second);
+    mds->mdlog->start_submit_entry(le);
   }
   uncommitted_fragments.clear();
 }

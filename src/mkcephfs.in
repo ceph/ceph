@@ -1,6 +1,53 @@
-#!/bin/sh 
+#!/bin/sh
+#
+# mkcephfs
+#
+# This tool is designed to be flexible.  There are two ways to go:
+#
+# The easy way does everything for you using ssh keys.  This does not
+# scale well for large clusters.
+#
+#  master$ mkcephfs -a -c /etc/ceph/ceph.conf
+#
+# Alternatively, you can use whatever file distribution and/or job
+# launching you want.
+#
+#  master$ mkdir /tmp/foo
+#  master$ mkcephfs -d /tmp/foo -c /etc/ceph/ceph.conf --prepare-monmap
+#
+#     ...copy/share /tmp/foo with all osd and mds nodes at /tmp/bar...
+#
+#  osd$ mkcephfs -d /tmp/bar --init-local-daemons osd
+#  mds$ mkcephfs -d /tmp/bar --init-local-daemons mds
+#
+#     ...gather contents of /tmp/bar's back into /tmp/foo...
+#
+#  master$ mkcephfs -d /tmp/foo --prepare-mon
+#
+#     ...distribute /tmp/foo to each monitor node...
+#
+#  mon$ mkcephfs -d /tmp/foo --init-local-daemons mon
+#  
+#  master$ cp /tmp/foo/keyring.admin /etc/ceph/keyring  # don't forget!
+#
+# In the degenerate case (one node), this is just
+#
+#  mkdir /tmp/foo
+#  mkcephfs -c ceph.conf -d /tmp/foo --prepare-monmap
+#  mkcephfs -d /tmp/foo --init-local-daemons mds
+#  mkcephfs -d /tmp/foo --init-local-daemons osd
+#  mkcephfs -d /tmp/foo --prepare-mon
+#  mkcephfs -d /tmp/foo --init-local-daemons mon
+#  cp /tmp/foo/keyring.admin /etc/ceph/keyring
+#
+# or simply
+#
+#  mkcephfs -a -c ceph.conf
+#
 
-# if we start up as ./init-ceph, assume everything else is in the
+set -e
+
+# if we start up as ./mkcephfs, assume everything else is in the
 # current directory too.
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
     BINDIR=.
@@ -13,7 +60,7 @@ else
 fi
 
 usage_exit() {
-    echo "usage: $0 -c ceph.conf [--allhosts] [--mkbtrfs] [-k adminkeyring]"
+    echo "usage: $0 -a -c ceph.conf [-k adminkeyring] [--mkbtrfs]"
     echo "   ** be careful, this WILL clobber old data; check your ceph.conf carefully **"
     exit
 }
@@ -22,25 +69,55 @@ usage_exit() {
 
 
 allhosts=0
-clobber=""
 mkbtrfs=0
+preparemonmap=0
+prepareosdfs=""
+initdaemon=""
+initdaemons=""
+preparemon=0
+
 numosd=
 usecrushmapsrc=
 usecrushmap=
 verbose=0
 adminkeyring=""
 conf=""
+dir=""
+moreargs=""
 
 while [ $# -ge 1 ]; do
 case $1 in
     -v )
 	    verbose=1;
 	    ;;
+    --dir | -d)
+	    [ -z "$2" ] && usage_exit
+	    shift
+	    dir=$1
+	    ;;
     --allhosts | -a)
 	    allhosts=1
 	    ;;
-    --clobber | --clobber_old_data)
-	    clobber="--clobber"
+    --prepare-monmap)
+	    preparemonmap=1
+	    ;;
+    --prepare-osdfs)
+	    [ -z "$2" ] && usage_exit
+	    shift
+	    prepareosdfs=$1
+	    ;;
+    --init-daemon)
+	    [ -z "$2" ] && usage_exit
+	    shift
+	    initdaemon=$1
+	    ;;
+    --init-local-daemons)
+	    [ -z "$2" ] && usage_exit
+	    shift
+	    initlocaldaemons=$1
+	    ;;
+    --prepare-mon)
+	    preparemon=1
 	    ;;
     --mkbtrfs)
 	    mkbtrfs=1
@@ -54,16 +131,19 @@ case $1 in
 	    [ -z "$2" ] && usage_exit
 	    shift
 	    numosd=$1
+	    moreargs="$moreargs --numosd $1"
 	    ;;
     --crushmapsrc)
 	    [ -z "$2" ] && usage_exit
 	    shift
 	    usecrushmapsrc=$1
+	    moreargs="$moreargs --crushmapsrc $1"
 	    ;;
     --crushmap)
 	    [ -z "$2" ] && usage_exit
 	    shift
 	    usecrushmap=$1
+	    moreargs="$moreargs --crushmap $1"
 	    ;;
     -k)
 	    [ -z "$2" ] && usage_exit
@@ -78,27 +158,15 @@ esac
 shift
 done
 
-[ -z "$conf" ] && usage_exit
 
-if [ $allhosts -eq 0 ]; then
-    echo "mkcephfs currently requires -a|--allhosts to initialize the whole fs at once."
-    usage_exit
-fi
+[ -z "$conf" ] && [ -n "$dir" ] && conf="$dir/conf"
 
-if [ -z "$adminkeyring" ]; then
-    echo "mkcephfs requires '-k /path/to/admin/keyring'. default location is /etc/ceph/keyring."
-    usage_exit
-fi
 
-verify_conf
+### prepare-monmap ###
 
-get_name_list "$@"
+if [ $preparemonmap -eq 1 ]; then
+    echo "preparing monmap in $dir/monmap"
 
-TDIR=`mktemp -d -t mkcephfs.XXXXXXXXXX` || exit 1
-trap "rm -rf ${TDIR}; exit" INT TERM EXIT
-
-# do core fs initialization steps
-if true; then
     # first, make a list of monitors
     mons=`$CCONF -c $conf -l mon | egrep -v '^mon$' | sort`
     args=""
@@ -111,186 +179,270 @@ if true; then
     done
 
     # build monmap
-    monmap="$TDIR/monmap.$$"
+    monmap="$dir/monmap"
     echo $BINDIR/monmaptool --create --clobber $args --print $monmap || exit 1
     $BINDIR/monmaptool --create --clobber $args --print $monmap || exit 1
+        
+    # copy conf
+    cp $conf $dir/conf
 
-    # build osdmap
-    osdmap="$TDIR/osdmap.$$"
-    if [ -z "$numosd" ]; then
-	# find highest osd id - assumes the conf file complies with osd numbering requirements
-	maxosd=`$CCONF -c $conf -l osd | egrep -v '^osd$' | cut -c 4- | sort -n | tail -1`
-	numosd=$(($maxosd + 1))
-	echo Highest osd in $conf is osd$maxosd, number of osd is $numosd.
+    exit 0
+fi
+
+
+### init-daemon ###
+
+create_private_key()
+{
+    get_conf keyring "$dir/keyring.$name" "keyring"
+    echo "creating private key for $name keyring $keyring"
+    $BINDIR/cauthtool --create-keyring --gen-key -n $name $keyring
+    $BINDIR/cauthtool -p -n $name $keyring > $dir/key.$name
+}
+
+if [ -n "$initdaemon" ]; then
+    name=$initdaemon
+    type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
+    id=`echo $name | cut -c 4- | sed 's/\\.//'`
+    name="$type.$id"
+    
+    if [ $type = "osd" ]; then
+	$BINDIR/cosd -c $conf --monmap $dir/monmap -i $id --mkfs
+	create_private_key
     fi
-    $BINDIR/osdmaptool --clobber --createsimple $numosd $osdmap || exit 1
+    
+    if [ $type = "mds" ]; then
+	create_private_key
+    fi
+
+    if [ $type = "mon" ]; then
+	$BINDIR/cmon -c $conf --mkfs -i $id --monmap $dir/monmap --osdmap $dir/osdmap -k $dir/keyring.mon
+    fi
+    
+    exit 0
+fi
+
+
+## init-local-daemons ##
+
+if [ -n "$initlocaldaemons" ]; then
+    get_name_list "$initlocaldaemons"
+    for name in $what; do
+	type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
+	id=`echo $name | cut -c 4- | sed 's/\\.//'`
+	num=$id
+	name="$type.$id"
+
+	check_host || continue
+
+	$0 -d $dir --init-daemon $name	
+    done
+    exit 0
+fi
+
+
+### prepare-osdfs ###
+
+if [ -n "$prepareosdfs" ]; then
+    name=$prepareosdfs
+    type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
+    id=`echo $name | cut -c 4- | sed 's/\\.//'`
+    name="$type.$id"
+
+    get_conf osd_data "" "osd data"
+    get_conf osd_journal "" "osd journal"
+    get_conf btrfs_path "$osd_data" "btrfs path"  # mount point defaults so osd data
+    get_conf btrfs_devs "" "btrfs devs"
+    first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
+    get_conf btrfs_opt "noatime" "btrfs options"
+    [ -n "$btrfs_opt" ] && btrfs_opt="-o $btrfs_opt"
+    get_conf osd_user "root" "user"
+    
+    if [ -n "$osd_journal" ] && echo "$btrfs_devs" | grep -q -w "$osd_journal" ; then
+	echo "ERROR: osd journal device ($osd_journal) also used by btrfs devs ($btrfs_devs)"
+	exit 1
+    fi
+    
+    test -d $osd_data || mkdir -p $osd_data
+
+    [ -n "$osd_journal" ] && test -d $osd_journal || mkdir -p `dirname $osd_journal`
+
+    umount $btrfs_path
+    for f in $btrfs_devs ; do
+	umount $f
+    done
+
+    modprobe btrfs
+    echo mkfs.btrfs $btrfs_devs
+    btrfsctl -a
+    echo mount -t btrfs $btrfs_opt $first_dev $btrfs_path
+    echo chown $osd_user $btrfs_path
+    echo chmod +w $btrfs_path
+    
+    exit 0
+fi
+
+
+
+### prepare-mon ###
+
+if [ $preparemon -eq 1 ]; then
+    # build osdmap
+    echo "Building osdmap"
+
+    # find highest osd id - assumes the conf file complies with osd numbering requirements
+    maxosd=`$CCONF -c $conf -l osd | egrep -v '^osd$' | sed 's/\.//' | cut -c 4- | sort -n | tail -1`
+    echo " highest numbered osd in $conf is osd.$maxosd"
+    lastosd=$(($maxosd + 1))
+
+    if [ -z "$numosd" ]; then
+	get_conf numosd "$lastosd" "num osd" mon global
+    fi
+    echo " num osd = $numosd"
+
+    $BINDIR/osdmaptool --createsimple $numosd $dir/osdmap
 
     # import crush map?
-    get_conf crushmapsrc "$usecrushmapsrc" "crush map src" mon global
+    get_conf crushmapsrc "" "crush map src" mon global
     if [ -n "$crushmapsrc" ]; then
-	echo Compiling crush map from $crushmapsrc to $crushmap
-	crushmap="$TDIR/crushmap.$$"
-	$BINDIR/crushtool -c $crushmapsrc -o $crushmap
+	echo Compiling crush map from $crushmapsrc to $dir/crushmap
+	$BINDIR/crushtool -c $crushmapsrc -o $dir/crushmap
     fi
     get_conf crushmap "$usecrushmap" "crush map" mon global
     if [ -n "$crushmap" ]; then
 	echo Importing crush map from $crushmap
-	$BINDIR/osdmaptool --clobber --import-crush $crushmap $osdmap
+	$BINDIR/osdmaptool --clobber --import-crush $crushmap $dir/osdmap
     fi
 
     # admin keyring
-    [ -z "$adminkeyring" ] && adminkeyring="$TDIR/admin.keyring.$$"
-    echo Building admin keyring at $adminkeyring
-    [ -e "$monkeyring" ] && rm -f $monkeyring
-    $BINDIR/cauthtool --create-keyring --gen-key --name=client.admin --set-uid=0 \
+    echo Generating admin key at $dir/keyring.admin
+    $BINDIR/cauthtool --create-keyring --gen-key -n client.admin $dir/keyring.admin
+
+    # mon keyring
+    echo Building initial monitor keyring
+    cp $dir/keyring.admin $dir/keyring.mon
+    $BINDIR/cauthtool -n client.admin --set-uid=0 \
 	--cap mon 'allow *' \
 	--cap osd 'allow *' \
 	--cap mds 'allow' \
-	$adminkeyring
+	$dir/keyring.mon
 
-    # mon keyring (for monitor)
-    echo Building monitor keyring with all service keys
-    monkeyring="$TDIR/monkeyring.$$"
-    $BINDIR/cauthtool --create-keyring --gen-key --name=mon. $monkeyring
+    $BINDIR/cauthtool --gen-key -n mon. $dir/keyring.mon
 
-    $BINDIR/cauthtool --import-keyring $adminkeyring $monkeyring
-
-    for name in $what; do
-	type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
-	id=`echo $name | cut -c 4- | sed 's/\\.//'`
-
-	if [ "$type" = "osd" ]; then
-	    $BINDIR/cauthtool --create-keyring --gen-key --name=osd.$id \
+    for k in $dir/key.*
+    do
+	kname=`echo $k | sed 's/.*key\.//'`
+	ktype=`echo $kname | cut -c 1-3`
+	kid=`echo $kname | cut -c 4- | sed 's/\\.//'`
+	kname="$ktype.$kid"
+	secret=`cat $k`
+	if [ "$ktype" = "osd" ]; then
+	    $BINDIR/cauthtool -n $kname --add-key $secret $dir/keyring.mon \
 		--cap mon 'allow rwx' \
-		--cap osd 'allow *' \
-		$TDIR/keyring.osd.$id
-	    $BINDIR/cauthtool --import-keyring $TDIR/keyring.osd.$id $monkeyring
+		--cap osd 'allow *'
 	fi
-	if [ "$type" = "mds" ]; then
-	    $BINDIR/cauthtool --create-keyring --gen-key --name=mds.$id \
-		--cap mon 'allow rwx' \
+	if [ "$ktype" = "mds" ]; then
+	    $BINDIR/cauthtool -n $kname --add-key $secret $dir/keyring.mon \
+		--cap mon "allow rwx" \
 		--cap osd 'allow *' \
-		--cap mds 'allow' \
-		$TDIR/keyring.mds.$id
-	    $BINDIR/cauthtool --import-keyring $TDIR/keyring.mds.$id $monkeyring
+		--cap mds 'allow'
 	fi
     done
 
-    tmpkeyring="$TDIR/keyring.$$"
+    exit 0
 fi
 
 
-# create monitors, osds
-for name in $what; do
-    type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
-    id=`echo $name | cut -c 4- | sed 's/\\.//'`
-    num=$id
 
-    check_host || continue
 
-    if [ -n "$ssh" ] && ( echo $pushed_to | grep -v -q " $host " ); then
-        conf_dir=`dirname "$conf"`
-        ssh $host mkdir -p "$conf_dir"
-        ssh $host mkdir -p "$TDIR"
-	scp -q $conf $host:$conf
-	scp -q $osdmap $host:$osdmap
-	scp -q $monmap $host:$monmap
-	pushed_to="$pushed_to $host "
+
+### do everything via ssh ###
+
+if [ $allhosts -eq 1 ]; then
+
+    verify_conf
+
+    # do it all
+    if [ -z "$dir" ]; then
+	dir=`mktemp -d -t mkcephfs.XXXXXXXXXX` || exit 1
+	echo "temp dir is $dir"
+	trap "rm $dir/* ; exit" INT TERM EXIT
     fi
 
-    if [ "$type" = "mon" ]; then
-	if [ -n "$ssh" ]; then
-	    if [ -n "$user" ]; then
-		scp -q $monkeyring $user@$host:$tmpkeyring
-	    else
-		scp -q $monkeyring $host:$tmpkeyring
-	    fi
-	else
-	    cp -a $monkeyring $tmpkeyring
-	    [ -n "$user" ] && chown $user $tmpkeyring
-	fi
-	get_conf mon_data "" "mon data"
-	do_cmd "$BINDIR/cmon -c $conf --mkfs -i $id --monmap $monmap --osdmap $osdmap -k $tmpkeyring ; rm -f $tmpkeyring"
-
-	if [ -n "$ssh" ]; then
-	    if [ -n "$user" ]; then
-		scp -p $adminkeyring $user@$host:$mon_data/admin_keyring
-	    else
-		scp -p $adminkeyring $host:$mon_data/admin_keyring
-	    fi
-	else
-	    cp -av $adminkeyring $mon_data/admin_keyring
-	fi
+    # temp dir on remote nodes
+    if [ -n "$ssh" ]; then
+	rdir="/tmp/mkfs.ceph.$$"
+	echo "remote temp dir is $rdir"
+    else
+	rdir=$dir
     fi
 
-    if [ "$type" = "osd" ]; then
-	get_conf osd_data "" "osd data"
-	get_conf osd_journal "" "osd journal"
-	get_conf keyring "" "keyring"
-	get_conf btrfs_path "$osd_data" "btrfs path"  # mount point defaults so osd data
-	get_conf btrfs_devs "" "btrfs devs"
-	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
-	get_conf btrfs_opt "noatime" "btrfs options"
-	[ -n "$btrfs_opt" ] && btrfs_opt="-o $btrfs_opt"
+    $0 --prepare-monmap -d $dir -c $conf
 
-	if [ -n "$osd_journal" ] && echo "$btrfs_devs" | grep -q -w "$osd_journal" ; then
-	    echo "ERROR: osd journal device ($osd_journal) also used by btrfs devs ($btrfs_devs)"
-	    continue
+    # osd, mds
+    get_name_list "osd mds"
+    for name in $what; do
+	type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
+	id=`echo $name | cut -c 4- | sed 's/\\.//'`
+	num=$id
+	name="$type.$id"
+
+	check_host || continue
+
+	if [ -n "$ssh" ] && ( echo $pushed_to | grep -v -q " $host " ); then
+	    echo pushing conf and monmap to $host
+	    do_cmd "mkdir -p $rdir"
+	    scp -q $dir/conf $host:$rdir
+	    scp -q $dir/monmap $host:$rdir
+	    pushed_to="$pushed_to $host "
 	fi
 	
-	do_cmd "test -d $osd_data || mkdir -p $osd_data"
-	[ -n "$osd_journal" ] && do_cmd "test -d $osd_journal || mkdir -p `dirname $osd_journal`"
-
 	if [ $mkbtrfs -eq 1 ]; then
-	    get_conf osd_user "root" "user"
-	    do_root_cmd "umount $btrfs_path ; for f in $btrfs_devs ; do umount \$f ; done ; modprobe btrfs ; mkfs.btrfs $btrfs_devs ; modprobe btrfs ; btrfsctl -a ; mount -t btrfs $btrfs_opt $first_dev $btrfs_path ; chown $osd_user $btrfs_path ; chmod +w $btrfs_path "
+	    do_root_cmd "$0 -d $rdir --prepare-osdfs $name"
 	fi
 
-	[ -n "$ssh" ] && scp $monmap $host:$monmap
-	do_cmd "$BINDIR/cosd -c $conf --monmap $monmap -i $num --mkfs --osd-data $osd_data"
+	do_cmd "$0 -d $rdir --init-daemon $name"
 
-	if [ -n "$keyring" ]; then
-	    if [ -n "$ssh" ]; then
-		if [ -n "$user" ]; then
-		    scp $TDIR/keyring.osd.$id $user@$host:$keyring
-		else
-		    scp $TDIR/keyring.osd.$id $host:$keyring
-		fi
-	    else
-		cp -v $TDIR/keyring.osd.$id $keyring
-	    fi
-	else
-	    echo WARNING: no keyring specified for $name
+	# collect the key
+	if [ -n "$ssh" ]; then
+	    echo collecting $name key
+	    scp -q $host:$rdir/key.$name $dir
+	    do_cmd "rm -r $rdir"
 	fi
-	rm -f $TDIR/keyring.osd.$id
-    fi
+    done
 
-    if [ "$type" = "mds" ]; then
-	get_conf keyring "" "keyring"
-	if [ -n "$keyring" ]; then
-	    if [ -n "$ssh" ]; then
-		if [ -n "$user" ]; then
-		    scp $TDIR/keyring.mds.$id $user@$host:$keyring
-		else
-		    scp $TDIR/keyring.mds.$id $host:$keyring
-		fi
-	    else
-		cp -v $TDIR/keyring.mds.$id $keyring
-	    fi
-	else
-	    echo WARNING: no keyring specified for $name
+    # prepare monitors
+    $0 -d $dir --prepare-mon $moreargs
+    
+    # mons
+    pushed_to=""
+
+    get_name_list "mon"
+    for name in $what; do
+	type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
+	id=`echo $name | cut -c 4- | sed 's/\\.//'`
+	num=$id
+	name="$type.$id"
+
+	check_host || continue
+	
+	if [ -n "$ssh" ] && ( echo $pushed_to | grep -v -q " $host " ); then
+	    echo pushing everything to $host
+	    ssh $host mkdir -p $rdir
+	    scp -q $dir/* $host:$rdir
+	    pushed_to="$pushed_to $host "
 	fi
-	rm -f $TDIR/keyring.mds.$id
-    fi
-done
+	
+	do_cmd "$0 -d $rdir --init-daemon $name"
+    done
 
-for name in $what; do
-    type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
-    id=`echo $name | cut -c 4- | sed 's/\\.//'`
-    num=$id
-    if [ -n "$ssh" ]; then
-        ssh $host rm -rf $TDIR
+    # admin keyring
+    if [ -z "$adminkeyring" ]; then
+	get_conf adminkeyring "/etc/ceph/keyring" "keyring" global
     fi
-done
+    echo "placing client.admin keyring in $adminkeyring"
+    cp $dir/keyring.admin $adminkeyring
 
-rm -f $monkeyring
+    exit 0
+fi
+

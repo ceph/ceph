@@ -25,7 +25,7 @@ namespace librados
   typedef uint64_t snap_t;
   typedef uint64_t auid_t;
 
-  struct statfs_t {
+  struct cluster_stat_t {
     uint64_t kb, kb_used, kb_avail;
     uint64_t num_objects;
   };
@@ -69,6 +69,7 @@ namespace librados
 
   class WatchCtx {
   public:
+    virtual ~WatchCtx();
     virtual void notify(uint8_t opcode, uint64_t ver) = 0;
   };
 
@@ -117,14 +118,14 @@ namespace librados
     // create an object
     int create(const std::string& oid, bool exclusive);
 
-    int write(const std::string& oid, bufferlist& bl, size_t len, off_t off);
+    int write(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
     int append(const std::string& oid, bufferlist& bl, size_t len);
     int write_full(const std::string& oid, bufferlist& bl);
-    int read(const std::string& oid, bufferlist& bl, size_t len, off_t off);
+    int read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
     int remove(const std::string& oid);
-    int trunc(const std::string& oid, size_t size);
-    int mapext(const std::string& o, off_t off, size_t len, std::map<off_t, size_t>& m);
-    int sparse_read(const std::string& o, std::map<off_t, size_t>& m, bufferlist& bl, size_t len, off_t off);
+    int trunc(const std::string& oid, uint64_t size);
+    int mapext(const std::string& o, uint64_t off, size_t len, std::map<uint64_t,uint64_t>& m);
+    int sparse_read(const std::string& o, std::map<uint64_t,uint64_t>& m, bufferlist& bl, size_t len, uint64_t off);
     int getxattr(const std::string& oid, const char *name, bufferlist& bl);
     int getxattrs(const std::string& oid, std::map<std::string, bufferlist>& attrset);
     int setxattr(const std::string& oid, const char *name, bufferlist& bl);
@@ -167,12 +168,12 @@ namespace librados
     uint64_t get_last_version();
 
     int aio_read(const std::string& oid, AioCompletion *c,
-		 bufferlist *pbl, size_t len, off_t off);
+		 bufferlist *pbl, size_t len, uint64_t off);
     int aio_sparse_read(const std::string& oid, AioCompletion *c,
-			std::map<off_t,size_t> *m, bufferlist *data_bl,
-			size_t len, off_t off);
+			std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
+			size_t len, uint64_t off);
     int aio_write(const std::string& oid, AioCompletion *c, const bufferlist& bl,
-		  size_t len, off_t off);
+		  size_t len, uint64_t off);
     int aio_append(const std::string& oid, AioCompletion *c, const bufferlist& bl,
 		  size_t len);
     int aio_write_full(const std::string& oid, AioCompletion *c, const bufferlist& bl);
@@ -227,7 +228,7 @@ namespace librados
     int pool_list(std::list<std::string>& v);
     int get_pool_stats(std::list<std::string>& v,
 		       std::map<std::string,pool_stat_t>& stats);
-    int get_fs_stats(statfs_t& result);
+    int cluster_stat(cluster_stat_t& result);
 
     // -- aio --
     static AioCompletion *aio_create_completion();

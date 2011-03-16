@@ -17,6 +17,8 @@
 #include "common/safe_io.h"
 #include "FileJournal.h"
 #include "include/color.h"
+#include "common/ProfLogger.h"
+#include "os/ObjectStore.h"
 
 #include <fcntl.h>
 #include <sstream>
@@ -597,9 +599,7 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
 	// throw out what we have so far
 	full_state = FULL_FULL;
 	while (!writeq.empty()) {
-	  dout(30) << "XXX throttle put " << writeq.front().bl.length() << dendl;
-	  throttle_ops.put(1);
-	  throttle_bytes.put(writeq.front().bl.length());
+	  put_throttle(1, writeq.front().bl.length());
 	  writeq.pop_front();
 	}  
 	print_header();
@@ -874,13 +874,13 @@ void FileJournal::flush()
 {
   write_lock.Lock();
   while ((!writeq.empty() || writing) && !write_stop) {
-    dout(10) << "flush waiting for writeq to empty and writes to complete" << dendl;
+    dout(5) << "flush waiting for writeq to empty and writes to complete" << dendl;
     write_empty_cond.Wait(write_lock);
   }
   write_lock.Unlock();
-  dout(10) << "flush waiting for finisher" << dendl;
+  dout(5) << "flush waiting for finisher" << dendl;
   finisher->wait_for_empty();
-  dout(10) << "flush done" << dendl;
+  dout(5) << "flush done" << dendl;
 }
 
 
@@ -914,13 +914,7 @@ void FileJournal::write_thread_entry()
     assert(r == 0);
     do_write(bl);
     
-    dout(30) << "XXX throttle put " << orig_bytes << dendl;
-    uint64_t new_ops = throttle_ops.put(orig_ops);
-    uint64_t new_bytes = throttle_bytes.put(orig_bytes);
-    dout(10) << "write_thread throttle finished " << orig_ops << " ops and " 
-	     << orig_bytes << " bytes, now "
-	     << new_ops << " ops and " << new_bytes << " bytes"
-	     << dendl;
+    put_throttle(orig_ops, orig_bytes);
   }
   write_empty_cond.Signal();
   write_lock.Unlock();
@@ -933,7 +927,7 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment, Conte
   Mutex::Locker locker(write_lock);  // ** lock **
 
   // dump on queue
-  dout(10) << "submit_entry seq " << seq
+  dout(5) << "submit_entry seq " << seq
 	   << " len " << e.length()
 	   << " (" << oncommit << ")" << dendl;
 
@@ -945,6 +939,13 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment, Conte
     dout(30) << "XXX throttle take " << e.length() << dendl;
     throttle_ops.take(1);
     throttle_bytes.take(e.length());
+
+    if (logger) {
+      logger->set(l_os_jq_max_ops, throttle_ops.get_max());
+      logger->set(l_os_jq_max_bytes, throttle_bytes.get_max());
+      logger->set(l_os_jq_ops, throttle_ops.get_current());
+      logger->set(l_os_jq_bytes, throttle_bytes.get_current());
+    }
 
     writeq.push_back(write_item(seq, e, alignment));
     write_cond.Signal();
@@ -981,16 +982,16 @@ void FileJournal::committed_thru(uint64_t seq)
   Mutex::Locker locker(write_lock);
 
   if (seq < last_committed_seq) {
-    dout(10) << "committed_thru " << seq << " < last_committed_seq " << last_committed_seq << dendl;
+    dout(5) << "committed_thru " << seq << " < last_committed_seq " << last_committed_seq << dendl;
     assert(seq >= last_committed_seq);
     return;
   }
   if (seq == last_committed_seq) {
-    dout(10) << "committed_thru " << seq << " == last_committed_seq " << last_committed_seq << dendl;
+    dout(5) << "committed_thru " << seq << " == last_committed_seq " << last_committed_seq << dendl;
     return;
   }
 
-  dout(10) << "committed_thru " << seq << " (last_committed_seq " << last_committed_seq << ")" << dendl;
+  dout(5) << "committed_thru " << seq << " (last_committed_seq " << last_committed_seq << ")" << dendl;
   last_committed_seq = seq;
 
   // adjust start pointer
@@ -1018,9 +1019,7 @@ void FileJournal::committed_thru(uint64_t seq)
     dout(15) << " dropping committed but unwritten seq " << writeq.front().seq 
 	     << " len " << writeq.front().bl.length()
 	     << dendl;
-    dout(30) << "XXX throttle put " << writeq.front().bl.length() << dendl;
-    throttle_ops.put(1);
-    throttle_bytes.put(writeq.front().bl.length());
+    put_throttle(1, writeq.front().bl.length());
     writeq.pop_front();  
   }
   
@@ -1029,6 +1028,25 @@ void FileJournal::committed_thru(uint64_t seq)
   dout(10) << "committed_thru done" << dendl;
 }
 
+
+void FileJournal::put_throttle(uint64_t ops, uint64_t bytes)
+{
+  uint64_t new_ops = throttle_ops.put(ops);
+  uint64_t new_bytes = throttle_bytes.put(bytes);
+  dout(5) << "put_throttle finished " << ops << " ops and " 
+	   << bytes << " bytes, now "
+	   << new_ops << " ops and " << new_bytes << " bytes"
+	   << dendl;
+
+  if (logger) {
+    logger->inc(l_os_j_ops, ops);
+    logger->inc(l_os_j_bytes, bytes);
+    logger->set(l_os_jq_ops, new_ops);
+    logger->set(l_os_jq_bytes, new_bytes);
+    logger->set(l_os_jq_max_ops, throttle_ops.get_max());
+    logger->set(l_os_jq_max_bytes, throttle_bytes.get_max());
+  }
+}
 
 void FileJournal::make_writeable()
 {

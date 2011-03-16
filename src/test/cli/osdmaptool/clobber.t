@@ -1,24 +1,16 @@
-# TODO it seems osdmaptool refuses to create files at all without --clobber
-  $ osdmaptool --createsimple 3 myosdmap
-  osdmaptool: osdmap file 'myosdmap'
-  \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ [0-9a-f]{8,} can't open myosdmap: error 2: No such file or directory (re)
-  osdmaptool: couldn't open myosdmap: error 2: No such file or directory
-  [255]
-
-  $ osdmaptool --createsimple 3 --clobber myosdmap
-  osdmaptool: osdmap file 'myosdmap'
-  osdmaptool: writing epoch 1 to myosdmap
-
-# TODO it seems osdmaptool will happily overwrite without --clobber
   $ osdmaptool --createsimple 3 myosdmap
   osdmaptool: osdmap file 'myosdmap'
   osdmaptool: writing epoch 1 to myosdmap
 
   $ ORIG_FSID="$(osdmaptool --print myosdmap|grep ^fsid)"
 
+  $ osdmaptool --createsimple 3 myosdmap
+  osdmaptool: osdmap file 'myosdmap'
+  osdmaptool: myosdmap exists, --clobber to overwrite
+  [255]
+
 # hasn't changed yet
 #TODO typo
-#TODO this one has so many pg_pools only because the above --clobber appended instead of overwriting?
   $ osdmaptool --print myosdmap
   osdmaptool: osdmap file 'myosdmap'
   epoch 1
@@ -31,10 +23,6 @@
   pg_pool 1 'metadata' pg_pool(rep pg_size 2 crush_ruleset 1 object_hash rjenkins pg_num 192 pgp_num 192 lpg_num 2 lpgp_num 2 last_change 0 owner 0)
   pg_pool 2 'casdata' pg_pool(rep pg_size 2 crush_ruleset 2 object_hash rjenkins pg_num 192 pgp_num 192 lpg_num 2 lpgp_num 2 last_change 0 owner 0)
   pg_pool 3 'rbd' pg_pool(rep pg_size 2 crush_ruleset 3 object_hash rjenkins pg_num 192 pgp_num 192 lpg_num 2 lpgp_num 2 last_change 0 owner 0)
-  pg_pool 4 'data' pg_pool(rep pg_size 2 crush_ruleset 0 object_hash rjenkins pg_num 192 pgp_num 192 lpg_num 2 lpgp_num 2 last_change 0 owner 0)
-  pg_pool 5 'metadata' pg_pool(rep pg_size 2 crush_ruleset 1 object_hash rjenkins pg_num 192 pgp_num 192 lpg_num 2 lpgp_num 2 last_change 0 owner 0)
-  pg_pool 6 'casdata' pg_pool(rep pg_size 2 crush_ruleset 2 object_hash rjenkins pg_num 192 pgp_num 192 lpg_num 2 lpgp_num 2 last_change 0 owner 0)
-  pg_pool 7 'rbd' pg_pool(rep pg_size 2 crush_ruleset 3 object_hash rjenkins pg_num 192 pgp_num 192 lpg_num 2 lpgp_num 2 last_change 0 owner 0)
   
   max_osd 3
   

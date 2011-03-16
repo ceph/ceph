@@ -20,17 +20,23 @@
 #include "include/Context.h"
 #include "common/Finisher.h"
 
+class ProfLogger;
+
 class Journal {
 protected:
   uint64_t fsid;
   Finisher *finisher;
+public:
+  ProfLogger *logger;
+protected:
   Cond *do_sync_cond;
   bool wait_on_full;
 
 public:
-  Journal(uint64_t f, Finisher *fin, Cond *c=0) : fsid(f), finisher(fin),
-					       do_sync_cond(c),
-					       wait_on_full(false) { }
+  Journal(uint64_t f, Finisher *fin, Cond *c=0) :
+    fsid(f), finisher(fin), logger(NULL),
+    do_sync_cond(c),
+    wait_on_full(false) { }
   virtual ~Journal() { }
 
   virtual int create() = 0;

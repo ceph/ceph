@@ -55,6 +55,7 @@ void usage()
   cerr << "   getxattr <obj-name> attr\n";
   cerr << "   setxattr <obj-name> attr val\n";
   cerr << "   rmxattr <obj-name> attr\n";
+  cerr << "   stat objname                     stat the named object\n";
   cerr << "   ls                               list objects in pool\n\n";
   cerr << "   chown 123                        change the pool owner to auid 123\n";
   cerr << "   mapext <obj-name>\n";
@@ -129,7 +130,7 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
       cerr << "error reading input file " << infile << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
       return 1;
     }
-    char buf[op_size];
+    char *buf = new char[op_size];
     int count = op_size;
     uint64_t offset = 0;
     while (count == op_size) {
@@ -263,8 +264,8 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_init(args, "rados",
-	      STARTUP_FLAG_FORCE_FG_LOGGING | STARTUP_FLAG_INIT_KEYS);
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  keyring_init(&g_conf);
 
   vector<const char*> nargs;
   bufferlist indata, outdata;
@@ -400,8 +401,8 @@ int main(int argc, const char **argv)
     }
 
     // total
-    statfs_t tstats;
-    rados.get_fs_stats(tstats);
+    cluster_stat_t tstats;
+    rados.cluster_stat(tstats);
     printf("  total used    %12lld %12lld\n", (long long unsigned)tstats.kb_used,
 	   (long long unsigned)tstats.num_objects);
     printf("  total avail   %12lld\n", (long long unsigned)tstats.kb_avail);
@@ -447,15 +448,31 @@ int main(int argc, const char **argv)
     if (!pool_name || nargs.size() < 2)
       usage();
     string oid(nargs[1]);
-    std::map<off_t, size_t> m;
+    std::map<uint64_t,uint64_t> m;
     ret = io_ctx.mapext(oid, 0, -1, m);
     if (ret < 0) {
       cerr << "mapext error on " << pool_name << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       return 1;
     }
-    std::map<off_t, size_t>::iterator iter;
+    std::map<uint64_t,uint64_t>::iterator iter;
     for (iter = m.begin(); iter != m.end(); ++iter) {
       cout << hex << iter->first << "\t" << iter->second << dec << std::endl;
+    }
+  }
+  else if (strcmp(nargs[0], "stat") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage();
+    string oid(nargs[1]);
+    uint64_t size;
+    time_t mtime;
+    ret = io_ctx.stat(oid, &size, &mtime);
+    if (ret < 0) {
+      cerr << " error stat-ing " << pool_name << "/" << oid << ": "
+           << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
+      return 1;
+    } else {
+      cout << pool_name << "/" << oid
+           << " mtime " << mtime << ", size " << size << std::endl;
     }
   }
   else if (strcmp(nargs[0], "get") == 0) {

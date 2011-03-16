@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2010 Dreamhost
+ * Copyright (C) 2010-2011 Dreamhost
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -22,45 +22,19 @@
 #include "common/config.h"
 #include "common/common_init.h"
 #include "common/errno.h"
+#include "common/ceph_crypto.h"
 #include "include/color.h"
 
+#include <errno.h>
 #include <syslog.h>
 
-#ifdef HAVE_PROFILER
-# include <google/profiler.h>
-#endif
-
-/* Set foreground logging
- *
- * Forces the process to log only to stderr, overriding whatever was in the ceph.conf.
- *
- * TODO: make this configurable by a command line switch or environment variable, if users want
- * an unusual logging setup for their foreground process.
- */
-void set_foreground_logging()
+int keyring_init(md_config_t *conf)
 {
-  free((void*)g_conf.log_file);
-  g_conf.log_file = NULL;
+  if (!is_supported_auth(CEPH_AUTH_CEPHX))
+    return 0;
 
-  free((void*)g_conf.log_dir);
-  g_conf.log_dir = NULL;
-
-  free((void*)g_conf.log_sym_dir);
-  g_conf.log_sym_dir = NULL;
-
-  g_conf.log_sym_history = 0;
-
-  g_conf.log_to_stderr = LOG_TO_STDERR_ALL;
-
-  g_conf.log_to_syslog = false;
-
-  g_conf.log_per_instance = false;
-}
-
-static void keyring_init(const char *filesearch)
-{
-  const char *filename = filesearch;
-  string keyring_search = g_conf.keyring;
+  const char *filename = conf->keyring;
+  string keyring_search = conf->keyring;
   string new_keyring;
   if (ceph_resolve_file_search(keyring_search, new_keyring)) {
     filename = new_keyring.c_str();
@@ -68,26 +42,26 @@ static void keyring_init(const char *filesearch)
 
   int ret = g_keyring.load(filename);
 
-  if (g_conf.key && g_conf.key[0]) {
-    string k = g_conf.key;
+  if (conf->key && conf->key[0]) {
+    string k = conf->key;
     EntityAuth ea;
     ea.key.decode_base64(k);
-    g_keyring.add(*g_conf.entity_name, ea);
+    g_keyring.add(*conf->name, ea);
 
     ret = 0;
-  } else if (g_conf.keyfile && g_conf.keyfile[0]) {
+  } else if (conf->keyfile && conf->keyfile[0]) {
     char buf[100];
-    int fd = ::open(g_conf.keyfile, O_RDONLY);
+    int fd = ::open(conf->keyfile, O_RDONLY);
     if (fd < 0) {
       int err = errno;
-      derr << "unable to open " << g_conf.keyfile << ": "
+      derr << "unable to open " << conf->keyfile << ": "
 	   << cpp_strerror(err) << dendl;
       ceph_abort();
     }
     memset(buf, 0, sizeof(buf));
     int len = safe_read(fd, buf, sizeof(buf) - 1);
     if (len < 0) {
-      derr << "unable to read key from " << g_conf.keyfile << ": "
+      derr << "unable to read key from " << conf->keyfile << ": "
 	   << cpp_strerror(len) << dendl;
       TEMP_FAILURE_RETRY(::close(fd));
       ceph_abort();
@@ -98,90 +72,101 @@ static void keyring_init(const char *filesearch)
     string k = buf;
     EntityAuth ea;
     ea.key.decode_base64(k);
-    g_keyring.add(*g_conf.entity_name, ea);
+
+    g_keyring.add(*conf->name, ea);
 
     ret = 0;
   }
 
   if (ret) {
     derr << "keyring_init: failed to load " << filename << dendl;
-    return;
+    return ret;
   }
+  return 0;
 }
 
-static void set_cv(const char ** key, const char * const val)
+md_config_t *common_preinit(const CephInitParameters &iparams,
+			  enum code_environment_t code_env, int flags)
 {
-  free((void*)*key);
-  *key = strdup(val);
+  // set code environment
+  g_code_env = code_env;
+
+  // Create a configuration object
+  // TODO: de-globalize
+  md_config_t *conf = &g_conf; //new md_config_t();
+
+  // Set up our entity name.
+  conf->name = new EntityName(iparams.name);
+
+  // Set some defaults based on code type
+  switch (code_env) {
+    case CODE_ENVIRONMENT_DAEMON:
+      conf->daemonize = true;
+      if (!(flags & CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS)) {
+	conf->log_dir = strdup("/var/log/ceph");
+	conf->pid_file = strdup("/var/run/ceph/$type.$id.pid");
+      }
+      conf->log_to_stderr = LOG_TO_STDERR_SOME;
+      break;
+    default:
+      conf->daemonize = false;
+      break;
+  }
+
+  return conf;
 }
 
-void common_init(std::vector<const char*>& args, const char *module_type, int flags)
+void common_init(std::vector < const char* >& args,
+	       uint32_t module_type, code_environment_t code_env, int flags)
 {
-  bool force_fg_logging = false;
+  CephInitParameters iparams =
+    ceph_argparse_early_args(args, module_type);
+  md_config_t *conf = common_preinit(iparams, code_env, flags);
 
-  // TODO: make callers specify code env explicitly.
-  if (flags & STARTUP_FLAG_DAEMON)
-    g_code_env = CODE_ENVIRONMENT_DAEMON;
-  else if (flags & STARTUP_FLAG_LIBRARY)
-    g_code_env = CODE_ENVIRONMENT_LIBRARY;
-  else
-    g_code_env = CODE_ENVIRONMENT_UTILITY;
-
-  if (g_code_env == CODE_ENVIRONMENT_DAEMON) {
-    cout << TEXT_YELLOW << " ** WARNING: Ceph is still under heavy development, "
-         << "and is only suitable for **" << TEXT_NORMAL << std::endl;
-    cout << TEXT_YELLOW <<  " **          testing and review.  Do not trust it "
-         << "with important data.       **" << TEXT_NORMAL << std::endl;
-
-    // some daemon-specific defaults
-    g_conf.daemonize = true;
-    g_conf.log_to_stderr = LOG_TO_STDERR_SOME;
-    set_cv(&g_conf.log_dir, "/var/log/ceph");
-    set_cv(&g_conf.pid_file, "/var/run/ceph/$type.$id.pid");
-
-    // block SIGPIPE
-    int siglist[] = { SIGPIPE, 0 };
-    block_signals(NULL, siglist);
+  int ret = conf->parse_config_files(iparams.get_conf_files());
+  if (ret == -EDOM) {
+    derr << "common_init: error parsing config file." << dendl;
+    _exit(1);
   }
-  else {
-    g_conf.pid_file = 0;
+  else if (ret) {
+    derr << "common_init: unable to open config file." << dendl;
+    _exit(1);
   }
 
-  parse_startup_config_options(args, module_type, flags, &force_fg_logging);
+  conf->parse_env(); // environment variables override
 
-  if (g_conf.log_to_syslog || g_conf.clog_to_syslog) {
+  conf->parse_argv(args); // argv override
+
+  if (code_env != CODE_ENVIRONMENT_DAEMON) {
+      // The symlink stuff only really makes sense for daemons
+      conf->log_sym_history = false;
+  }
+
+  if (conf->log_to_syslog || conf->clog_to_syslog) {
     closelog();
-    // It's ok if g_conf.name is NULL here.
-    openlog(g_conf.name, LOG_ODELAY | LOG_PID, LOG_USER);
+    openlog(g_conf.name->to_cstr(), LOG_ODELAY | LOG_PID, LOG_USER);
   }
-
-  if (force_fg_logging)
-    set_foreground_logging();
-
-#ifdef HAVE_PROFILER
-  /*
-   * We need to call _something_ in libprofile.so so that the
-   * --as-needed stuff doesn't drop it from our .so dependencies.
-   * This is basically a no-op.
-   */
-  ProfilerFlush();
-#endif
-
-  parse_config_options(args);
 
   {
-    // In the long term, it would be best to ensure that we read ceph.conf
-    // before initializing dout(). For now, just force a reopen here with the
-    // configuration we have just read.
+    // Force a reopen of dout() with the configuration we have just read.
     DoutLocker _dout_locker;
     _dout_open_log();
   }
 
+  // signal stuff
+  int siglist[] = { SIGPIPE, 0 };
+  block_signals(NULL, siglist);
   install_standard_sighandlers();
 
-  if (flags & STARTUP_FLAG_INIT_KEYS)  {
-    if (is_supported_auth(CEPH_AUTH_CEPHX))
-      keyring_init(g_conf.keyring);
+  if (code_env == CODE_ENVIRONMENT_DAEMON) {
+    cout << TEXT_YELLOW << " ** WARNING: Ceph is still under heavy development, "
+	 << "and is only suitable for **" << TEXT_NORMAL << std::endl;
+    cout << TEXT_YELLOW <<  " **          testing and review.  Do not trust it "
+	 << "with important data.       **" << TEXT_NORMAL << std::endl;
   }
-}
 
+  // this probably belongs somewhere else...
+  buffer_track_alloc = g_conf.buffer_track_alloc;
+
+  ceph::crypto::init();
+}

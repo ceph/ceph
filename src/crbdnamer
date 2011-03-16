@@ -1,0 +1,5 @@
+#!/bin/sh
+
+echo -n `cat /sys/devices/rbd/$1/pool`
+echo -n " "
+echo -n `cat /sys/devices/rbd/$1/name`

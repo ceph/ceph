@@ -51,12 +51,11 @@ int main(int argc, const char **argv)
      cerr << "couldn't initialize rados!" << std::endl;
      exit(1);
   }
-#if 0
-  if (rados.conf_read_file("/etc/ceph/ceph.conf")) {
+
+  if (rados.conf_read_file(NULL)) {
      cerr << "couldn't read configuration file." << std::endl;
      exit(1);
   }
-#endif
 
   if (!rados.conf_set("config option that doesn't exist",
                      "some random value")) {

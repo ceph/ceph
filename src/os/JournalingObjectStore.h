@@ -33,6 +33,7 @@ protected:
 
   Cond cond;
   Mutex journal_lock;
+  Mutex com_lock;
 
   list<uint64_t> ops_submitting;
   list<Cond*> ops_apply_blocked;
@@ -58,14 +59,19 @@ protected:
   bool commit_start();
   void commit_started();  // allow new ops (underlying fs should now be committing all prior ops)
   void commit_finish();
-
+  
+  bool is_committing() {
+    Mutex::Locker l(com_lock);
+    return committing_seq != committed_seq;
+  }
 
 public:
   JournalingObjectStore() : op_seq(0), 
 			    applied_seq(0), committing_seq(0), committed_seq(0), 
 			    open_ops(0), blocked(false),
 			    journal(NULL),
-			    journal_lock("JournalingObjectStore::journal_lock") { }
+			    journal_lock("JournalingObjectStore::journal_lock"),
+			    com_lock("JournalingObjectStore::com_lock") { }
   
 };
 

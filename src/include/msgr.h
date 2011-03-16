@@ -1,6 +1,10 @@
 #ifndef CEPH_MSGR_H
 #define CEPH_MSGR_H
 
+#ifdef __cplusplus
+#include <sys/socket.h> // for struct sockaddr_storage
+#endif
+
 /*
  * Data types for message passing layer used by Ceph.
  */

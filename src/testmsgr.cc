@@ -70,7 +70,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_init(args, NULL, STARTUP_FLAG_FORCE_FG_LOGGING);
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
 
   vec_to_argv(args, argc, argv);
 
@@ -96,7 +96,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
   messenger->add_dispatcher_head(&dispatcher);
 
-  rank->start();
+  rank->start(false); // do not daemonize
   
   int isend = 0;
   if (whoami == 0)

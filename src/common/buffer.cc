@@ -31,6 +31,7 @@ namespace ceph {
 
 Spinlock buffer_lock("buffer_lock");
 atomic_t buffer_total_alloc;
+bool buffer_track_alloc = true;
 
 void buffer::list::encode_base64(buffer::list& o)
 {

@@ -53,17 +53,10 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  int startup_flags = STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_DAEMON;
   vector<const char *>::iterator args_iter;
 
-  for (args_iter = args.begin(); args_iter != args.end(); ++args_iter) {
-    if (strcmp(*args_iter, "--mkfs") == 0) {
-      startup_flags &= ~STARTUP_FLAG_INIT_KEYS;
-      break;
-    } 
-  }
-
-  common_init(args, "osd", startup_flags);
+  common_init(args, CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_DAEMON, 0);
+  
   ceph_heap_profiler_init();
 
   // osd specific args
@@ -85,6 +78,9 @@ int main(int argc, const char **argv)
       ARGS_USAGE();
     }
   }
+
+  if (!mkfs)
+    keyring_init(&g_conf);
 
   if (dump_pg_log) {
     bufferlist bl;
@@ -111,8 +107,9 @@ int main(int argc, const char **argv)
 
   // whoami
   char *end;
-  int whoami = strtol(g_conf.id, &end, 10);
-  if (*end || end == g_conf.id || whoami < 0) {
+  const char *id = g_conf.name->get_id().c_str();
+  int whoami = strtol(id, &end, 10);
+  if (*end || end == id || whoami < 0) {
     derr << "must specify '-i #' where # is the osd number" << dendl;
     usage();
   }
@@ -272,9 +269,9 @@ int main(int argc, const char **argv)
     return 1;
   }
 
-  client_messenger->start();
-  messenger_hb->start(true);  // only need to daemon() once
-  cluster_messenger->start(true);
+  client_messenger->start(g_conf.daemonize);
+  messenger_hb->start(false);  // do not daemonize (only need to daemonize once)
+  cluster_messenger->start(false); // do not daemonize (only need to daemonize once)
 
   // start osd
   err = osd->init();

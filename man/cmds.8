@@ -28,14 +28,12 @@ and specifying the rank overrides specifying the name.
 
 .SH OPTIONS
 .TP
-\fB\-D\fP
-Debug mode: do not daemonize after startup (run in foreground) and send log output
-to stdout.
+\fB\-f\fP, \fB\-\-foreground\f
+Foreground: do not daemonize after startup (run in foreground).
+Do not generate a pid file. Useful when run via crun (8).
 .TP
-\fB\-f\fP
-do not daemonize after startup (run in foreground), but log to the usual location.
-Useful when run via 
-.BR crun (8).
+\fB\-d\fP
+Debug mode: like -f, but also send all log output to stderr.
 .TP
 \fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
 Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP

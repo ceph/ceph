@@ -84,7 +84,7 @@ void dump_errno(struct req_state *s, int err, struct rgw_err *rgwerr)
 void dump_content_length(struct req_state *s, size_t len)
 {
   char buf[16];
-  snprintf(buf, sizeof(buf), "%lu", len);
+  snprintf(buf, sizeof(buf), "%lu", (long unsigned int)len);
   CGI_PRINTF(s, "Content-Length: %s\n", buf);
   CGI_PRINTF(s, "Accept-Ranges: %s\n", "bytes");
 }

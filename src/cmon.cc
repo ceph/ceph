@@ -61,7 +61,8 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  common_init(args, "mon", STARTUP_FLAG_INIT_KEYS | STARTUP_FLAG_DAEMON);
+  common_init(args, CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, 0);
+  keyring_init(&g_conf);
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("mkfs", '\0')) {
@@ -70,13 +71,6 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&osdmapfn, OPT_STR);
     } else
       usage();
-  }
-
-  // whoami
-  string name = g_conf.id;
-  if (name.length() == 0) {
-    cerr << "must specify '-i id' where id is the mon name" << std::endl;
-    usage();
   }
 
   if (!g_conf.mon_data) {
@@ -112,11 +106,10 @@ int main(int argc, const char **argv)
 
     // go
     MonitorStore store(g_conf.mon_data);
-    Monitor mon(name, &store, 0, &monmap);
+    Monitor mon(g_conf.name->get_id(), &store, 0, &monmap);
     mon.mkfs(osdmapbl);
     cout << argv[0] << ": created monfs at " << g_conf.mon_data 
-	 << " for mon." << name
-	 << std::endl;
+	 << " for " << *g_conf.name << std::endl;
     return 0;
   }
 
@@ -188,12 +181,12 @@ int main(int argc, const char **argv)
     assert(v == monmap.get_epoch());
   }
 
-  if (!monmap.contains(name)) {
-    cerr << "mon." << name << " does not exist in monmap" << std::endl;
+  if (!monmap.contains(g_conf.name->get_id())) {
+    cerr << *g_conf.name << " does not exist in monmap" << std::endl;
     exit(1);
   }
 
-  entity_addr_t ipaddr = monmap.get_addr(name);
+  entity_addr_t ipaddr = monmap.get_addr(g_conf.name->get_id());
   entity_addr_t conf_addr;
   char *mon_addr_str;
 
@@ -206,14 +199,14 @@ int main(int argc, const char **argv)
   // bind
   SimpleMessenger *messenger = new SimpleMessenger();
 
-  int rank = monmap.get_rank(name);
+  int rank = monmap.get_rank(g_conf.name->get_id());
 
-  cout << "starting mon." << name << " rank " << rank
-       << " at " << monmap.get_addr(name)
+  cout << "starting " << *g_conf.name << " rank " << rank
+       << " at " << monmap.get_addr(g_conf.name->get_id())
        << " mon_data " << g_conf.mon_data
        << " fsid " << monmap.get_fsid()
        << std::endl;
-  g_conf.public_addr = monmap.get_addr(name);
+  g_conf.public_addr = monmap.get_addr(g_conf.name->get_id());
   err = messenger->bind();
   if (err < 0)
     return 1;
@@ -221,9 +214,9 @@ int main(int argc, const char **argv)
   // start monitor
   messenger->register_entity(entity_name_t::MON(rank));
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
-  Monitor *mon = new Monitor(name, &store, messenger, &monmap);
+  Monitor *mon = new Monitor(g_conf.name->get_id(), &store, messenger, &monmap);
 
-  messenger->start();  // may daemonize
+  messenger->start(g_conf.daemonize);
 
   uint64_t supported =
     CEPH_FEATURE_UID |

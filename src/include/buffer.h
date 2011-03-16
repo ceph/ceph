@@ -79,6 +79,7 @@ extern Spinlock buffer_lock;
 
 
 extern atomic_t buffer_total_alloc;
+extern bool buffer_track_alloc;
 
 class buffer {
   /*
@@ -117,10 +118,12 @@ private:
  
   /* hack for memory utilization debugging. */
   static void inc_total_alloc(unsigned len) {
-    buffer_total_alloc.add(len);
+    if (buffer_track_alloc)
+      buffer_total_alloc.add(len);
   }
   static void dec_total_alloc(unsigned len) {
-    buffer_total_alloc.sub(len);
+    if (buffer_track_alloc)
+      buffer_total_alloc.sub(len);
   }
 
  

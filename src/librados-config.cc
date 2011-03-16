@@ -57,7 +57,7 @@ int main(int argc, const char **argv)
       ++i;
   }
 
-  common_init(args, "librados-config", STARTUP_FLAG_FORCE_FG_LOGGING);
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
 
   FOR_EACH_ARG(args) {
     usage_exit();

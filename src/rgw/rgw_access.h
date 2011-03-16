@@ -14,6 +14,7 @@
  */
 class RGWAccess {
 public:
+  virtual ~RGWAccess();
   /** do all necessary setup of the storage device */
   virtual int initialize(int argc, char *argv[]) { return 0; }
   /** prepare a listing of all buckets. */
@@ -162,7 +163,7 @@ public:
  /**
   * stat an object
   */
-  virtual int obj_stat(std::string& bucket, std::string& obj, size_t *psize, time_t *pmtime) = 0;
+  virtual int obj_stat(std::string& bucket, std::string& obj, uint64_t *psize, time_t *pmtime) = 0;
 
   virtual bool supports_tmap() { return false; }
 

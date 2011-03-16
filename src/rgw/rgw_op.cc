@@ -15,7 +15,7 @@
 #include "rgw_log.h"
 
 using namespace std;
-using namespace CryptoPP::Weak;
+using ceph::crypto::MD5;
 
 static int parse_range(const char *range, off_t& ofs, off_t& end)
 {

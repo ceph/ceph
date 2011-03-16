@@ -337,7 +337,7 @@ bool cephx_decode_ticket(KeyStore *keys, uint32_t service_id, CephXTicketBlob& t
   }
 
   if (secret_id == (uint64_t)-1) {
-    if (!keys->get_secret(*g_conf.entity_name, service_secret)) {
+    if (!keys->get_secret(*g_conf.name, service_secret)) {
       dout(0) << "ceph_decode_ticket could not get general service secret for service_id="
 	      << ceph_entity_type_name(service_id) << " secret_id=" << secret_id << dendl;
       return false;
@@ -385,7 +385,7 @@ bool cephx_verify_authorizer(KeyStore *keys,
 
   if (ticket.secret_id == (uint64_t)-1) {
     EntityName name;
-    name.entity_type = service_id;
+    name.set_type(service_id);
     if (!keys->get_secret(name, service_secret)) {
       dout(0) << "verify_authorizer could not get general service secret for service "
 	      << ceph_entity_type_name(service_id) << " secret_id=" << ticket.secret_id << dendl;

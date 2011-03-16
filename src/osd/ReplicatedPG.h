@@ -28,7 +28,8 @@ class PGLSFilter {
 protected:
   string xattr;
 public:
-  PGLSFilter() {}
+  PGLSFilter();
+  virtual ~PGLSFilter();
   virtual bool filter(bufferlist& xattr_data, bufferlist& outdata) = 0;
   virtual string& get_xattr() { return xattr; }
 };
@@ -502,6 +503,9 @@ protected:
   };
   map<sobject_t, pull_info_t> pulling;
 
+  // Reverse mapping from osd peer to objects beging pulled from that peer
+  map<int, set<sobject_t> > pull_from_peer;
+
   // push
   struct push_info_t {
     uint64_t size;
@@ -531,6 +535,8 @@ protected:
 		   map<sobject_t, interval_set<uint64_t> >& clone_subsets);
   void send_push_op_blank(const sobject_t& soid, int peer);
 
+  // Cancels/resets pulls from peer
+  void check_recovery_op_pulls(const OSDMap *map);
   int pull(const sobject_t& oid);
   void send_pull_op(const sobject_t& soid, eversion_t v, bool first, const interval_set<uint64_t>& data_subset, int fromosd);
 

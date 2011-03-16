@@ -6,8 +6,6 @@
 using namespace std;
 
 #include "common/config.h"
-
-#include <cryptopp/osrng.h>
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 
@@ -16,6 +14,7 @@ using namespace std;
 #include "rgw_access.h"
 #include "rgw_acl.h"
 #include "rgw_log.h"
+#include "auth/Crypto.h"
 
 
 #define SECRET_KEY_LEN 40
@@ -95,13 +94,18 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
 
 int gen_rand_base64(char *dest, int size) /* size should be the required string size + 1 */
 {
-  unsigned char buf[size];
+  char buf[size];
   char tmp_dest[size + 4]; /* so that there's space for the extra '=' characters, and some */
+  int ret;
 
-  CryptoPP::AutoSeededRandomPool rng;
-  rng.GenerateBlock(buf, sizeof(buf));
+  ret = get_random_bytes(buf, sizeof(buf));
+  if (ret < 0) {
+    // assuming no threads here, for strerror
+    cerr << "cannot get random bytes: " << strerror(-ret) << std::endl;
+    return -1;
+  }
 
-  int ret = ceph_armor(tmp_dest, &tmp_dest[sizeof(tmp_dest)],
+  ret = ceph_armor(tmp_dest, &tmp_dest[sizeof(tmp_dest)],
 		   (const char *)buf, ((const char *)buf) + ((size - 1) * 3 + 4 - 1) / 4);
   if (ret < 0) {
     cerr << "ceph_armor failed" << std::endl;
@@ -118,8 +122,12 @@ static const char alphanum_table[]="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 int gen_rand_alphanumeric(char *dest, int size) /* size should be the required string size + 1 */
 {
-  CryptoPP::AutoSeededRandomPool rng;
-  rng.GenerateBlock((unsigned char *)dest, size);
+  int ret = get_random_bytes(dest, size);
+  if (ret < 0) {
+    // assuming no threads here, for strerror
+    cerr << "cannot get random bytes: " << strerror(-ret) << std::endl;
+    return -1;
+  }
 
   int i;
   for (i=0; i<size - 1; i++) {
@@ -160,8 +168,8 @@ int main(int argc, char **argv)
   argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
 
-  common_init(args, "rgw",
-	      STARTUP_FLAG_FORCE_FG_LOGGING | STARTUP_FLAG_INIT_KEYS);
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  keyring_init(&g_conf);
 
   const char *user_id = 0;
   const char *secret_key = 0;
@@ -392,7 +400,7 @@ int main(int argc, char **argv)
     string oid = date;
     oid += "-";
     oid += string(bucket);
-    size_t size;
+    uint64_t size;
     int r = store->obj_stat(log_bucket, oid, &size, NULL);
     if (r < 0) {
       cerr << "error while doing stat on " <<  log_bucket << ":" << oid << " " << strerror(-r) << std::endl;

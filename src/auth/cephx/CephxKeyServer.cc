@@ -330,7 +330,8 @@ bool KeyServer::get_rotating_encrypted(EntityName& name, bufferlist& enc_bl)
 
   CryptoKey& specific_key = mapiter->second.key;
 
-  map<uint32_t, RotatingSecrets>::iterator rotate_iter = data.rotating_secrets.find(name.entity_type);
+  map<uint32_t, RotatingSecrets>::iterator rotate_iter =
+    data.rotating_secrets.find(name.get_type());
   if (rotate_iter == data.rotating_secrets.end())
     return false;
 

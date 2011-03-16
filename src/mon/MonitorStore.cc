@@ -15,6 +15,7 @@
 #include "MonitorStore.h"
 #include "common/Clock.h"
 #include "common/debug.h"
+#include "common/entity_name.h"
 #include "common/errno.h"
 #include "common/run_cmd.h"
 #include "common/safe_io.h"
@@ -123,7 +124,8 @@ int MonitorStore::mkfs()
     return ret;
   }
 
-  dout(0) << "created monfs at " << dir.c_str() << " for " << g_conf.id << dendl;
+  dout(0) << "created monfs at " << dir.c_str() << " for "
+	  << g_conf.name->get_id() << dendl;
   return 0;
 }
 

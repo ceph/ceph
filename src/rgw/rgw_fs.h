@@ -57,7 +57,7 @@ public:
 
   void finish_get_obj(void **handle);
   int read(std::string& bucket, std::string& oid, off_t ofs, size_t size, bufferlist& bl);
-  int obj_stat(string& bucket, string& obj, size_t *psize, time_t *pmtime);
+  int obj_stat(string& bucket, string& obj, uint64_t *psize, time_t *pmtime);
 };
 
 #endif

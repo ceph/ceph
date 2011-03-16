@@ -16,6 +16,10 @@
 #include "common/config.h"
 #include "common/debug.h"
 
+CapMap::~CapMap()
+{
+}
+
 void PoolsMap::dump()
 {
   map<string, OSDCap>::iterator it;

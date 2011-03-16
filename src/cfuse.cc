@@ -53,10 +53,9 @@ int main(int argc, const char **argv, const char *envp[]) {
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  g_conf.daemonize = true;
-  g_conf.pid_file = 0;
-  g_conf.log_per_instance = true;
-  common_init(args, "cfuse", STARTUP_FLAG_INIT_KEYS);
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
+	      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+  keyring_init(&g_conf);
 
   vector<const char*> nargs;
   FOR_EACH_ARG(args) {
@@ -101,12 +100,9 @@ int main(int argc, const char **argv, const char *envp[]) {
   }
 
   // we need to handle the forking ourselves.
-  bool daemonize = g_conf.daemonize;
-  g_conf.daemonize = false;
-
   int fd[2] = {0, 0};  // parent's, child's
   pid_t childpid = 0;
-  if (daemonize) {
+  if (g_conf.daemonize) {
     int r = socketpair(AF_UNIX, SOCK_STREAM, 0, fd);
     if (r < 0) {
       cerr << "cfuse[" << getpid() << "]: unable to create socketpair: " << strerror(errno) << std::endl;
@@ -122,7 +118,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
     cout << "cfuse[" << getpid() << "]: starting ceph client" << std::endl;
 
-    messenger->start();
+    messenger->start(false); // Do not daemonize here
 
     // start client
     client->init();
@@ -150,7 +146,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     // wait for messenger to finish
     messenger->wait();
 
-    if (daemonize) {
+    if (g_conf.daemonize) {
       //cout << "child signalling parent with " << r << std::endl;
       int32_t out = r;
       int ret = safe_write(fd[1], &out, sizeof(out));

@@ -34,7 +34,7 @@ void usage()
        << "  -p, --print                   will print an encoded key for the specified\n"
        << "                                entityname. This is suitable for the\n"
        << "                                'mount -o secret=..' argument\n"
-       << "  -c, --create-keyring          will create a new keyring, overwriting any\n"
+       << "  -C, --create-keyring          will create a new keyring, overwriting any\n"
        << "                                existing keyringfile\n"
        << "  --gen-key                     will generate a new secret key for the\n"
        << "                                specified entityname\n"
@@ -53,7 +53,8 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   DEFINE_CONF_VARS(usage);
 
-  common_init(args, "cauthtool", STARTUP_FLAG_FORCE_FG_LOGGING);
+  common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  EntityName ename(*g_conf.name);
 
   const char *me = argv[0];
 
@@ -68,7 +69,6 @@ int main(int argc, const char **argv)
   const char *import_keyring = NULL;
   bool set_auid = false;
   uint64_t auid = CEPH_AUTH_UID_DEFAULT;
-  const char *name = g_conf.name;
   map<string,bufferlist> caps;
   bool bin_keyring = false;
 
@@ -90,7 +90,7 @@ int main(int argc, const char **argv)
       ::encode(val, caps[key]);
     } else if (CONF_ARG_EQ("print-key", 'p')) {
       CONF_SAFE_SET_ARG_VAL(&print_key, OPT_BOOL);
-    } else if (CONF_ARG_EQ("create-keyring", 'c')) {
+    } else if (CONF_ARG_EQ("create-keyring", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&create_keyring, OPT_BOOL);
     } else if (CONF_ARG_EQ("import-keyring", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&import_keyring, OPT_STR);
@@ -125,12 +125,6 @@ int main(int argc, const char **argv)
     cerr << "can't both gen_key and add_key" << std::endl;
     usage();
   }	
-  if (caps_fn || caps.size() || add_key || gen_key || print_key || set_auid) {
-    if (!name || !(*name)) {
-      cerr << "must specify entity name" << std::endl;
-      usage();
-    }
-  }
 
   if (gen_print_key) {
     CryptoKey key;
@@ -142,12 +136,6 @@ int main(int argc, const char **argv)
   // keyring --------
   bool modified = false;
   KeyRing keyring;
-  string s = name;
-  EntityName ename;
-  if (name[0] && !ename.from_str(s)) {
-    cerr << "'" << s << "' is not a valid entity name" << std::endl;
-    exit(1);
-  }
 
   bufferlist bl;
   int r = 0;
@@ -200,10 +188,6 @@ int main(int argc, const char **argv)
     modified = true;
   }
   if (add_key) {
-    if (!name) {
-      cerr << "must specify a name to add a key" << std::endl;
-      exit(1);
-    }
     EntityAuth eauth;
     string ekey(add_key);
     try {
@@ -212,13 +196,13 @@ int main(int argc, const char **argv)
       cerr << "can't decode key '" << add_key << "'" << std::endl;
       exit(1);
     }
-    keyring.add(ename, eauth);    
+    keyring.add(ename, eauth);
     modified = true;
-    cout << "added entity " << ename << " auth " << eauth << std::endl;  
+    cout << "added entity " << ename << " auth " << eauth << std::endl;
   }
   if (caps_fn) {
     ConfFile *cf = new ConfFile(caps_fn);
-    if (!cf->parse()) {
+    if (cf->parse() != 0) {
       cerr << "could not parse caps file " << caps_fn << std::endl;
       exit(1);
     }
@@ -243,10 +227,6 @@ int main(int argc, const char **argv)
     modified = true;
   }
   if (set_auid) {
-    if (!name) {
-      cerr << "must specify a name to set a uid" << std::endl;
-      exit(1);
-    }
     keyring.set_uid(ename, auid);
     modified = true;
   }

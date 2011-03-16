@@ -31,13 +31,65 @@ AC_PROG_LIBTOOL
 # Checks for libraries.
 AC_CHECK_LIB([m], [pow], [true], AC_MSG_FAILURE([libm not found]))
 AC_CHECK_LIB([pthread], [pthread_create], [true], AC_MSG_FAILURE([libpthread not found]))
-PKG_CHECK_MODULES([CRYPTOPP], [libcrypto++], [], [
-	AC_SEARCH_LIBS([_ZTIN8CryptoPP14CBC_EncryptionE], [crypto++ cryptopp], [true], AC_MSG_FAILURE([libcrypto++ not found]), [-lpthread])])
+
+# Find some crypto library for us to use, while letting user to decide which one to use.
+AC_ARG_WITH([cryptopp],
+	[AS_HELP_STRING([--with-cryptopp], [Use cryptographic functions from cryptopp])],
+	[],
+	[with_cryptopp=check])
+have_cryptopp=no
+# this looks clumsy but it's just if A then { success } else { if B then success }
+AS_IF([test "x$with_cryptopp" != "xno"],
+    [PKG_CHECK_MODULES([CRYPTOPP],
+	    [libcrypto++],
+	    [have_cryptopp=yes],
+	    [AC_SEARCH_LIBS([_ZTIN8CryptoPP14CBC_EncryptionE], [crypto++ cryptopp],
+		    [have_cryptopp=yes],
+		    [true],
+		    [-lpthread])])])
+# bail out if given explicit --with-cryptopp
+if test "x$have_cryptopp" = "xno" -a "x$with_cryptopp" != "xcheck" -a "x$with_cryptopp" != "xno"; then
+    AC_MSG_FAILURE([--with-cryptopp was given, but library was not found])
+fi
+
+AC_ARG_WITH([nss],
+	[AS_HELP_STRING([--with-nss], [Use cryptographic functions from nss])],
+	[],
+	[with_nss=check])
+have_nss=no
+AS_IF([test "x$with_nss" != "xno"],
+    [PKG_CHECK_MODULES([NSS], [nss], [have_nss=yes], [true])])
+# bail out if given explicit --with-nss
+if test "x$have_nss" = "xno" -a "x$with_nss" != "xcheck" -a "x$with_nss" != "xno"; then
+    AC_MSG_FAILURE([--with-nss was given, but library was not found])
+fi
+
+# now decide which crypto library to really use
+if test "x$have_cryptopp" = "xyes"; then
+    AC_MSG_NOTICE([using cryptopp for cryptography])
+    AC_DEFINE([USE_CRYPTOPP], [1], [Define if using CryptoPP.])
+    AC_SUBST([CRYPTO_CFLAGS], [$CRYPTOPP_CFLAGS])
+    AC_SUBST([CRYPTO_CXXFLAGS], [$CRYPTOPP_CXXFLAGS])
+    AC_SUBST([CRYPTO_LIBS], [$CRYPTOPP_LIBS])
+elif test "x$have_nss" = "xyes"; then
+    AC_MSG_NOTICE([using nss for cryptography])
+    AC_DEFINE([USE_NSS], [1], [Define if using NSS.])
+    AC_SUBST([CRYPTO_CFLAGS], [$NSS_CFLAGS])
+    # this needs CFLAGS too in practise to get the includes right. ugly.
+    AC_SUBST([CRYPTO_CXXFLAGS], [$NSS_CFLAGS $NSS_CXXFLAGS])
+    AC_SUBST([CRYPTO_LIBS], [$NSS_LIBS])
+else
+    AC_MSG_FAILURE([no suitable crypto library found])
+fi
 
 # profiler?
 AC_ARG_WITH([profiler],
             [AS_HELP_STRING([--with-profiler], [build extra profiler binaries])],
-	    [with_profiler=yes],
+	    [case "${withval}" in
+	    	  yes) with_profiler=yes ;;
+		  no)  with_profiler=no ;;
+		  *) AC_MSG_ERROR([bad value ${withval} for --with-profiler]) ;;
+	     esac],
             [with_profiler=no])
 AS_IF([test "x$with_profiler" = xyes],
 	    [AC_CHECK_LIB([profiler], [ProfilerFlush], [],
@@ -51,7 +103,11 @@ AS_IF([test "$with_profiler" = "yes"],
 # debug crap?
 AC_ARG_WITH([debug],
             [AS_HELP_STRING([--with-debug], [build extra debug binaries])],
-            [with_debug=yes],
+            [case "${withval}" in
+		  yes) with_debug=yes ;;
+		  no)  with_debug=no ;;
+		  *) AC_MSG_ERROR([bad value ${withval} for --with-debug]) ;;
+	     esac],
             [with_debug=no])
 AM_CONDITIONAL(WITH_DEBUG, test "$with_debug" = "yes")
 
@@ -83,9 +139,9 @@ AM_CONDITIONAL(WITH_RADOSGW, test "$RADOSGW" = "1")
 
 # fuse?
 AC_ARG_WITH([fuse],
-            [AS_HELP_STRING([--with-fuse], [use FUSE library for client])],
+            [AS_HELP_STRING([--without-fuse], [disable FUSE userspace client])],
             [],
-            [with_fuse=check])
+            [with_fuse=yes])
 LIBFUSE=
 AS_IF([test "x$with_fuse" != xno],
 	    [AC_CHECK_LIB([fuse], [fuse_main],
@@ -94,18 +150,15 @@ AS_IF([test "x$with_fuse" != xno],
                          [Define if you have fuse])
                HAVE_LIBFUSE=1
               ],
-             [if test "x$with_fuse" != xcheck; then
-                 AC_MSG_FAILURE(
-                   [--with-fuse was given but test failed])
-               fi
-             ])])
+             [AC_MSG_FAILURE(
+                   [no FUSE found (use --without-fuse to disable)])])])
 AM_CONDITIONAL(WITH_FUSE, [test "$HAVE_LIBFUSE" = "1"])
 
 # tcmalloc?
 AC_ARG_WITH([tcmalloc],
-	    [AS_HELP_STRING([--with--tcmalloc], [use tcmalloc instead of ptmallc])],
+	    [AS_HELP_STRING([--without-tcmalloc], [disable tcmalloc for memory allocations])],
 	    [],
-	    [with_tcmalloc=check])
+	    [with_tcmalloc=yes])
 TCMALLOC=
 AS_IF([test "x$with_tcmalloc" != xno],
 	    [AC_CHECK_LIB([tcmalloc], [malloc],
@@ -114,11 +167,8 @@ AS_IF([test "x$with_tcmalloc" != xno],
 	       		 [Define if you have tcmalloc])
 	       HAVE_LIBTCMALLOC=1
 	     ],
-	    [if test "x$with_tcmalloc" != xcheck; then
-	        AC_MSG_FAILURE(
-		  [--with-tcmalloc was given but test failed])
-	      fi
-	    ])])
+	    [AC_MSG_FAILURE(
+		  [no tcmalloc found (use --without-tcmalloc to disable)])])])
 AM_CONDITIONAL(WITH_TCMALLOC, [test "$HAVE_LIBTCMALLOC" = "1"])
 
 # jni?
@@ -141,18 +191,16 @@ PKG_CHECK_MODULES([LIBEDIT], [libedit >= 2.11],
 
 #libatomic-ops? You want it!
 AC_ARG_WITH([libatomic-ops],
-            [AS_HELP_STRING([--with-libatomic-ops],
-	    [use libatomic-ops to build Ceph's atomic_t type])],
+            [AS_HELP_STRING([--without-libatomic-ops],
+	    [disable libatomic-ops for the atomic_t type])],
             [],
-            [with_libatomic_ops=check])
+            [with_libatomic_ops=yes])
 AS_IF([test "x$with_libatomic_ops" != xno],
 	    [AC_CHECK_HEADER([atomic_ops.h],
              [HAVE_ATOMIC_OPS=1],
-             [if test "x$with_libatomic_ops" != xcheck; then
-                 AC_MSG_FAILURE(
-                   [--with-libatomic-ops was given but atomic_ops.h not found])
-               fi
-             ])])
+             [AC_MSG_FAILURE(
+                   [no libatomic-ops found (use --without-libatomic-ops to disable)])
+              ])])
 AS_IF([test "$HAVE_ATOMIC_OPS" = "1"],
 	[],
 	AC_DEFINE([NO_ATOMIC_OPS], [1], [Defined if you don't have atomic_ops]))
@@ -236,14 +284,20 @@ AC_CHECK_FUNC([sync_file_range],
 
 AC_ARG_WITH([gtk2],
         [AS_HELP_STRING([--with-gtk2], [Build the graphical tools.  Default=yes.])],
-        [try_with_gtk2=$withval],
-        [])
-AS_IF([test "x$try_with_gtk2" != "xno"],
+        [],
+        [with_gtk2=check])
+have_gtk2=no
+AS_IF([test "x$with_gtk2" != "xno"],
         [PKG_CHECK_MODULES(GTKMM, [gtkmm-2.4 >= 1.0.0],
-                [AC_DEFINE([HAVE_GTK2], [1], [we have gtk2])],
-                [try_with_gtk2=no
-                 AC_MSG_RESULT([Sorry, a usable version of gtkmm was not found. We will build without it.])])])
-AM_CONDITIONAL(WITH_GTK2, [test "x$try_with_gtk2" != "xno"])
+                [have_gtk2=yes
+		AC_DEFINE([HAVE_GTK2], [1], [we have gtk2])
+		],
+                [if test "x$with_gtk2" != xcheck; then
+		    AC_MSG_FAILURE(
+			[--with-gtk2 was given, but test for gtkmm failed])
+		 fi
+		])])
+AM_CONDITIONAL(WITH_GTK2, [test "x$have_gtk2" != "xno"])
 
 AM_PATH_PYTHON([2.4],
 	[], [AC_MSG_FAILURE([Failed to find Python 2.4 or newer])])

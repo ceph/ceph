@@ -1,10 +1,17 @@
+
 ceph (0.26~rc-1) experimental; urgency=low
 
   * Make ceph x86 and x64 only due to dependency on architecture dependent
     google-perftools (closes: #614890).
   * Correct section of libcrush1, librados1, librbd1 and libceph1 to libs.
 
- -- Laszlo Boszormenyi (GCS) <gcs@debian.hu>  Mon, 07 Mar 2011 11:34:02 -0800
+ -- Laszlo Boszormenyi (GCS) <gcs@debian.hu>  Mon, 21 Mar 2011 11:34:02 -0800
+
+ceph (0.25.1-1) experimental; urgency=low
+
+  * New upstream release 
+
+ -- Sage Weil <sage@newdream.net>  Mon, 14 Mar 2011 14:43:47 -0700
 
 ceph (0.25-1) experimental; urgency=low
 

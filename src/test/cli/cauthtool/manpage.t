@@ -1,11 +1,11 @@
 # TODO conflict with -c, it's not --create-keyring; fix manpage
   $ cauthtool -c foo
-  error reading config file(s) foo
+  \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ [0-9a-f]{8,} common_init: unable to open config file. (re)
   [1]
 
 # demonstrate that manpage examples fail without config
 # TODO fix the manpage
-  $ cauthtool --create-keyring -n client.foo --gen-key keyring
+  $ cauthtool --create-keyring --name client.foo --gen-key keyring
   creating keyring
 
 # work around the above
@@ -13,12 +13,10 @@
 
 To create a new keyring containing a key for client.foo:
 
-#TODO apparently -c is not enough for --create-keyring; fix manpage
-  $ cauthtool -c -n client.foo --gen-key keyring.bin
-  can't open keyring.bin: No such file or directory
-  [1]
+  $ cauthtool --create-keyring --id foo --gen-key keyring.bin
+  creating keyring.bin
 
-  $ cauthtool --create-keyring -n client.foo --gen-key keyring.bin
+  $ cauthtool --create-keyring --name client.foo --gen-key keyring.bin
   creating keyring.bin
 
 To associate some capabilities with the key (namely, the ability to mount a Ceph filesystem):

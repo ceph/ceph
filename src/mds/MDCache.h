@@ -550,6 +550,7 @@ public:
   void subtree_merge_writebehind_finish(CInode *in, Mutation *mut);
   void eval_subtree_root(CInode *diri);
   CDir *get_subtree_root(CDir *dir);
+  CDir *get_projected_subtree_root(CDir *dir);
   bool is_leaf_subtree(CDir *dir) {
     assert(subtrees.count(dir));
     return subtrees[dir].empty();

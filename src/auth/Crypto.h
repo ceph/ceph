@@ -11,8 +11,8 @@
  * 
  */
 
-#ifndef CEPH_CRYPTO_H
-#define CEPH_CRYPTO_H
+#ifndef CEPH_AUTH_CRYPTO_H
+#define CEPH_AUTH_CRYPTO_H
 
 #include "include/types.h"
 
@@ -87,6 +87,9 @@ static inline ostream& operator<<(ostream& out, const CryptoKey& k)
 
 /*
  * Driver for a particular algorithm
+ *
+ * To use these functions, you need to call ceph::crypto::init(), see
+ * common/ceph_crypto.h. common_init already does this for you.
  */
 class CryptoHandler {
 public:
@@ -106,7 +109,6 @@ public:
 extern CryptoManager ceph_crypto_mgr;
 
 extern int get_random_bytes(char *buf, int len);
-extern void generate_random_string(string& s, int len);
 
 
 #endif

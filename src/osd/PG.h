@@ -586,7 +586,7 @@ public:
     void add_event(Log::Entry& e);
     void revise_need(sobject_t oid, eversion_t need);
     void add(const sobject_t& oid, eversion_t need, eversion_t have);
-    void rm(const sobject_t& oid, eversion_t when);
+    void rm(const sobject_t& oid, eversion_t v);
     void got(const sobject_t& oid, eversion_t v);
     void got(const std::map<sobject_t, Missing::item>::iterator &m);
 
@@ -844,8 +844,7 @@ public:
   void check_for_lost_objects();
   void forget_lost_objects();
 
-  void discover_all_missing(std::map< int, map<pg_t,PG::Query> > &query_map,
-			    bool desperate=false);
+  void discover_all_missing(std::map< int, map<pg_t,PG::Query> > &query_map);
   
   bool build_backlog_map(map<eversion_t,Log::Entry>& omap);
   void assemble_backlog(map<eversion_t,Log::Entry>& omap);
@@ -886,6 +885,7 @@ public:
   void clear_recovery_state();
   virtual void _clear_recovery_state() = 0;
   void defer_recovery();
+  virtual void check_recovery_op_pulls(const OSDMap *newmap) = 0;
   void start_recovery_op(const sobject_t& soid);
   void finish_recovery_op(const sobject_t& soid, bool dequeue=false);
 

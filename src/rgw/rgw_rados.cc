@@ -663,7 +663,7 @@ int RGWRados::read(std::string& bucket, std::string& oid, off_t ofs, size_t size
   return r;
 }
 
-int RGWRados::obj_stat(std::string& bucket, std::string& obj, size_t *psize, time_t *pmtime)
+int RGWRados::obj_stat(std::string& bucket, std::string& obj, uint64_t *psize, time_t *pmtime)
 {
   librados::IoCtx io_ctx;
   int r = rados->ioctx_create(bucket.c_str(), io_ctx);

@@ -327,7 +327,7 @@ class MDS : public Dispatcher {
 
 
  public:
-  MDS(const char *n, Messenger *m, MonClient *mc);
+  MDS(const std::string &n, Messenger *m, MonClient *mc);
   ~MDS();
 
   // who am i etc

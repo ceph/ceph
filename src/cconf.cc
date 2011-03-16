@@ -21,11 +21,10 @@
 #include "mon/AuthMonitor.h"
 #include "common/ConfUtils.h"
 #include "common/common_init.h"
+#include "common/entity_name.h"
 #include "common/ceph_argparse.h"
 #include "common/config.h"
 #include "include/str_list.h"
-
-const char *type = NULL;
 
 static void usage()
 {
@@ -45,13 +44,13 @@ ACTIONS\n\
                                   delimited search list.\n\
 \n\
 FLAGS\n\
-  -i id                           Set id\n\
+  --name name                     Set type.id\n\
   [-s <section>]                  Add to list of sections to search\n\
 \n\
 If there is no action given, the action will default to --lookup.\n\
 \n\
 EXAMPLES\n\
-$ cconf -i cconf -c /etc/ceph/ceph.conf -t mon -i 0 'mon addr'\n\
+$ cconf --name client.cconf -c /etc/ceph/ceph.conf -t mon -i 0 'mon addr'\n\
 Find out if there is a 'mon addr' defined in /etc/ceph/ceph.conf\n\
 \n\
 $ cconf -l mon\n\
@@ -129,11 +128,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("type", 't')) {
-      CONF_SAFE_SET_ARG_VAL(&type, OPT_STR);
-    } else if (CONF_ARG_EQ("id", 'i')) {
-      CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
-    } else if (CONF_ARG_EQ("section", 's')) {
+    if (CONF_ARG_EQ("section", 's')) {
       CONF_SAFE_SET_ARG_VAL(&section, OPT_STR);
       sections.push_back(section);
     } else if (CONF_ARG_EQ("resolve-search", 'r')) {
@@ -150,7 +145,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  common_init(nargs, type, STARTUP_FLAG_FORCE_FG_LOGGING);
+  common_init(nargs, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
 
   if (do_help) {
     usage();

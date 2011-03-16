@@ -623,19 +623,6 @@ ConfSection *ConfFile::_add_section(const char *section, ConfLine *cl)
 	return sec;
 }
 
-int ConfFile::_open()
-{
-	if (filename)
-		return open(filename, O_RDONLY);
-
-	if (!pbl)
-		return -EINVAL;
-
-	buf_pos = 0;
-
-	return 0;
-}
-
 int ConfFile::_read(int fd, char *buf, size_t size)
 {
 	if (filename)
@@ -665,21 +652,28 @@ int ConfFile::_close(int fd)
 	return 0;
 }
 
-bool ConfFile::_parse(const char *filename, ConfSection **psection)
+int ConfFile::_parse(const char *filename, ConfSection **psection)
 {
 	char *buf;
 	int len, i, l;
 	char *line;
 	ConfLine *cl;
 	ConfSection *section = *psection;
-	int fd;
+	int fd = -1;
 	int max_line = MAX_LINE;
 	int eof = 0;
-	bool ret = true;
+	bool ret = 0;
 
-	fd = _open();
-	if (fd < 0)
-		return false;
+	if (filename) {
+		fd = open(filename, O_RDONLY);
+		if (fd < 0)
+			return -errno;
+	}
+	else {
+		if (!pbl)
+			return -EINVAL;
+		buf_pos = 0;
+	}
 
 	line = (char *)malloc(max_line);
 	l = 0;
@@ -688,7 +682,7 @@ bool ConfFile::_parse(const char *filename, ConfSection **psection)
 	do {
 		len = _read(fd, buf, BUF_SIZE);
 		if (len < 0) {
-			ret = false;
+			ret = -EDOM;
 			goto done;
 		}
 
@@ -714,7 +708,7 @@ bool ConfFile::_parse(const char *filename, ConfSection **psection)
 				if (cl->get_var()) {
 					if (strcmp(cl->get_var(), "include") == 0) {
 						if (!filename) { // don't allow including if we're not using files
-							ret = false;
+							ret = -EDOM;
 							goto done;
 						}
 						if (!_parse(cl->get_val(), &section)) {
@@ -723,7 +717,7 @@ bool ConfFile::_parse(const char *filename, ConfSection **psection)
 					} else {
 						char *norm_var = cl->get_norm_var();
 						if (!section) {
-							ret = false;
+							ret = -EDOM;
 							goto done;
 						}
 						section->conf_map[norm_var] = cl;
@@ -758,7 +752,7 @@ done:
 	return ret;
 }
 
-bool ConfFile::parse()
+int ConfFile::parse()
 {
 	ConfSection *section = NULL;
 
@@ -770,7 +764,7 @@ bool ConfFile::parse()
 		sections_list.push_back(section);
 	}
 
-	bool res = _parse(filename, &section);
+	int res = _parse(filename, &section);
 	parse_lock.Unlock();
 	return res;
 }

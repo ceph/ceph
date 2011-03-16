@@ -2406,7 +2406,7 @@ int SimpleMessenger::write_pid_file(int pid)
   return 0;
 }
 
-int SimpleMessenger::start(bool nodaemon)
+int SimpleMessenger::start(bool daemonize)
 {
   // register at least one entity, first!
   assert(my_type >= 0); 
@@ -2426,7 +2426,7 @@ int SimpleMessenger::start(bool nodaemon)
   lock.Unlock();
 
   // daemonize?
-  if (g_conf.daemonize && !nodaemon) {
+  if (daemonize) {
     int num_threads = Thread::get_num_threads();
     if (num_threads > 1) {
       derr << "messenger.start BUG: there are " << num_threads - 1

@@ -19,90 +19,9 @@
 #include "msg/msg_types.h"
 
 #include "common/config.h"
-
-#include <errno.h>
+#include "common/entity_name.h"
 
 class Cond;
-
-struct EntityName {
-  uint32_t entity_type;
-  string name;
-
-  EntityName() : entity_type(0) {}
-
-  void encode(bufferlist& bl) const {
-    ::encode(entity_type, bl);
-    ::encode(name, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(entity_type, bl);
-    ::decode(name, bl);
-  }
-
-  void to_str(string& str) const {
-    str.append(ceph_entity_type_name(entity_type));
-    str.append(".");
-    str.append(name);
-  }
-  string to_str() const {
-    string s;
-    to_str(s);
-    return s;
-  }
-
-  bool from_str(const string& s) {
-    int pos = s.find('.');
-
-    if (pos < 0)
-      return false;
-   
-    string pre = s.substr(0, pos);
-    const char *pres = pre.c_str();
-
-    set_type(pres);
-
-    name = s.substr(pos + 1);
-
-    return true;
-  }
-
-  void set_type(const char *type) {
-    if (strcmp(type, "auth") == 0) {
-      entity_type = CEPH_ENTITY_TYPE_AUTH;
-    } else if (strcmp(type, "mon") == 0) {
-      entity_type = CEPH_ENTITY_TYPE_MON;
-    } else if (strcmp(type, "osd") == 0) {
-      entity_type = CEPH_ENTITY_TYPE_OSD;
-    } else if (strcmp(type, "mds") == 0) {
-      entity_type = CEPH_ENTITY_TYPE_MDS;
-    } else {
-      entity_type = CEPH_ENTITY_TYPE_CLIENT;
-    }
-  }
-  void from_type_id(const char *type, const char *id) {
-    set_type(type);
-    name = id;
-  }
-
-  void get_type_str(string& s) {
-    s = ceph_entity_type_name(entity_type);
-  }
-
-  bool is_admin() {
-    return (name.compare("admin") == 0);
-  }
-};
-WRITE_CLASS_ENCODER(EntityName);
-
-inline bool operator<(const EntityName& a, const EntityName& b) {
-  return (a.entity_type < b.entity_type) || (a.entity_type == b.entity_type && a.name < b.name);
-}
-
-static inline ostream& operator<<(ostream& out, const EntityName& n) {
-  return out << n.to_str();
-}
-
-
 
 struct EntityAuth {
   uint64_t auid;
@@ -314,8 +233,8 @@ public:
 
 static inline bool auth_principal_needs_rotating_keys(EntityName& name)
 {
-  return ((name.entity_type == CEPH_ENTITY_TYPE_OSD) ||
-          (name.entity_type == CEPH_ENTITY_TYPE_MDS));
+  uint32_t ty(name.get_type());
+  return ((ty == CEPH_ENTITY_TYPE_OSD) || (ty == CEPH_ENTITY_TYPE_MDS));
 }
 
 #endif

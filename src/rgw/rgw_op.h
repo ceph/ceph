@@ -37,7 +37,7 @@ protected:
   struct rgw_err err;
 public:
   RGWOp() {}
-  ~RGWOp() {}
+  virtual ~RGWOp() {}
 
   virtual void init(struct req_state *s) {
     this->s = s;
@@ -70,7 +70,6 @@ protected:
   int init_common();
 public:
   RGWGetObj() {}
-  ~RGWGetObj() {}
 
   virtual void init(struct req_state *s) {
     RGWOp::init(s);
@@ -114,7 +113,6 @@ public:
     buckets.clear();
   }
   RGWListBuckets() {}
-  ~RGWListBuckets() {}
 
   void execute();
 
@@ -137,7 +135,6 @@ protected:
 
 public:
   RGWListBucket() {}
-  ~RGWListBucket() {}
 
   virtual void init(struct req_state *s) {
     RGWOp::init(s);
@@ -180,7 +177,6 @@ protected:
 
 public:
   RGWCreateBucket() {}
-  ~RGWCreateBucket() {}
 
   void execute();
   virtual void init(struct req_state *s) {
@@ -196,7 +192,6 @@ protected:
 
 public:
   RGWDeleteBucket() {}
-  ~RGWDeleteBucket() {}
 
   virtual void init(struct req_state *s) {
     RGWOp::init(s);
@@ -218,7 +213,6 @@ protected:
 
 public:
   RGWPutObj() {}
-  ~RGWPutObj() {}
 
   virtual void init(struct req_state *s) {
     RGWOp::init(s);
@@ -242,7 +236,6 @@ protected:
 
 public:
   RGWDeleteObj() {}
-  ~RGWDeleteObj() {}
 
   virtual void init(struct req_state *s) {
     RGWOp::init(s);
@@ -273,7 +266,6 @@ protected:
   int init_common();
 public:
   RGWCopyObj() {}
-  ~RGWCopyObj() {}
 
   virtual void init(struct req_state *s) {
     RGWOp::init(s);
@@ -305,7 +297,6 @@ protected:
 
 public:
   RGWGetACLs() {}
-  ~RGWGetACLs() {}
 
   virtual void init(struct req_state *s) {
     RGWOp::init(s);
@@ -325,7 +316,6 @@ protected:
 
 public:
   RGWPutACLs() {}
-  ~RGWPutACLs() {}
 
   virtual void init(struct req_state *s) {
     RGWOp::init(s);
