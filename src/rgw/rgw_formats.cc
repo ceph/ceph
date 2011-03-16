@@ -5,6 +5,7 @@
 void RGWFormatter_Plain::formatter_init()
 {
   stack.clear();
+  min_stack_level = 0;
 }
 
 void RGWFormatter_Plain::open_obj_section(const char *name)
@@ -34,8 +35,11 @@ void RGWFormatter_Plain::dump_value_int(const char *name, const char *fmt, ...)
   char buf[LARGE_SIZE];
   va_list ap;
 
+  if (!min_stack_level)
+    min_stack_level = stack.size();
+
   struct plain_stack_entry& entry = stack.back();
-  bool should_print = (stack.size() == 1);
+  bool should_print = (stack.size() == min_stack_level && !entry.size);
   entry.size++;
 
   if (!should_print)
@@ -46,7 +50,7 @@ void RGWFormatter_Plain::dump_value_int(const char *name, const char *fmt, ...)
   va_end(ap);
   if (n >= LARGE_SIZE)
     return;
-  CGI_PRINTF(s, "%s\n", (int)entry.is_array, entry.size, buf);
+  CGI_PRINTF(s, "(%d %d) %s\n", (int)entry.is_array, entry.size, buf);
 }
 
 void RGWFormatter_Plain::dump_value_str(const char *name, const char *fmt, ...)
@@ -55,7 +59,11 @@ void RGWFormatter_Plain::dump_value_str(const char *name, const char *fmt, ...)
   va_list ap;
 
   struct plain_stack_entry& entry = stack.back();
-  bool should_print = (!entry.is_array || entry.size == 0);
+
+  if (!min_stack_level)
+    min_stack_level = stack.size();
+
+  bool should_print = (stack.size() == min_stack_level && !entry.size);
   entry.size++;
 
   if (!should_print)

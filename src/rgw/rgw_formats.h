@@ -8,6 +8,7 @@ struct plain_stack_entry {
 
 class RGWFormatter_Plain : public RGWFormatter {
   std::list<struct plain_stack_entry> stack;
+  size_t min_stack_level;
 protected:
   void formatter_init();
 
