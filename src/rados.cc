@@ -147,10 +147,13 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
       int ret = io_ctx.write(oid, indata, count, offset);
       indata.clear();
 
-      if (ret < 0)
+      if (ret < 0) {
+        close(fd);
         return ret;
+      }
       offset += count;
     }
+    close(fd);
   }
   return 0;
 }
