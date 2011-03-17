@@ -94,7 +94,7 @@ int main(int argc, const char **argv, const char *envp[])
   
   // start up network
   SimpleMessenger *messenger = new SimpleMessenger();
-  messenger->bind();
+  messenger->bind(getpid());
   messenger->start(false); // do not daemonize
   messenger->register_entity(entity_name_t::CLIENT());
   messenger->add_dispatcher_head(&dispatcher);
