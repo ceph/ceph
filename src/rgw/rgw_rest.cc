@@ -115,7 +115,7 @@ void dump_last_modified(struct req_state *s, time_t t)
 
 static void dump_entry(struct req_state *s, const char *val)
 {
-  CGI_PRINTF(s, "<?%s?>", val);
+  s->formatter->write_data("<?%s?>", val);
 }
 
 
@@ -182,6 +182,7 @@ void abort_early(struct req_state *s, int err)
 {
   dump_errno(s, err);
   end_header(s);
+  s->formatter->flush();
 }
 
 void dump_continue(struct req_state *s)

@@ -5,8 +5,13 @@
 void RGWListBuckets_REST_OS::send_response()
 {
   dump_errno(s, ret);
-  end_header(s);
+
   dump_start(s);
+
+  if (ret < 0) {
+    end_header(s);
+    return;
+  }
 
   s->formatter->open_array_section("account");
 
@@ -35,16 +40,21 @@ void RGWListBuckets_REST_OS::send_response()
     s->formatter->close_section("container");
   }
   s->formatter->close_section("account");
+
+  dump_content_length(s, s->formatter->get_len());
+  end_header(s);
+  s->formatter->flush();
 }
 
 void RGWListBucket_REST_OS::send_response()
 {
   dump_errno(s, (ret < 0 ? ret : 0));
 
-  end_header(s);
   dump_start(s);
-  if (ret < 0)
+  if (ret < 0) {
+    end_header(s);
     return;
+  }
 
   vector<RGWObjEnt>::iterator iter = objs.begin();
 
@@ -74,6 +84,9 @@ void RGWListBucket_REST_OS::send_response()
     }
 #endif
   s->formatter->close_section("container");
+
+  end_header(s);
+  s->formatter->flush();
 }
 
 static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
@@ -94,12 +107,14 @@ void RGWStatBucket_REST_OS::send_response()
 
   end_header(s);
   dump_start(s);
+  s->formatter->flush();
 }
 
 void RGWCreateBucket_REST_OS::send_response()
 {
   dump_errno(s, ret);
   end_header(s);
+  s->formatter->flush();
 }
 
 void RGWDeleteBucket_REST_OS::send_response()
@@ -110,6 +125,7 @@ void RGWDeleteBucket_REST_OS::send_response()
 
   dump_errno(s, r);
   end_header(s);
+  s->formatter->flush();
 }
 
 void RGWPutObj_REST_OS::send_response()
@@ -119,6 +135,7 @@ void RGWPutObj_REST_OS::send_response()
   dump_etag(s, etag.c_str());
   dump_errno(s, ret, &err);
   end_header(s);
+  s->formatter->flush();
 }
 
 void RGWDeleteObj_REST_OS::send_response()
@@ -129,6 +146,7 @@ void RGWDeleteObj_REST_OS::send_response()
 
   dump_errno(s, r);
   end_header(s);
+  s->formatter->flush();
 }
 
 int RGWGetObj_REST_OS::send_response(void *handle)
@@ -180,6 +198,7 @@ send_data:
   if (get_data && !orig_ret) {
     FCGX_PutStr(data, len, s->fcgx->out); 
   }
+  s->formatter->flush();
 
   return 0;
 }

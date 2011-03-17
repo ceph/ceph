@@ -50,7 +50,7 @@ void RGWFormatter_Plain::dump_value_int(const char *name, const char *fmt, ...)
   va_end(ap);
   if (n >= LARGE_SIZE)
     return;
-  CGI_PRINTF(s, "(%d %d) %s\n", (int)entry.is_array, entry.size, buf);
+  write_data("%s\n", buf);
 }
 
 void RGWFormatter_Plain::dump_value_str(const char *name, const char *fmt, ...)
@@ -74,7 +74,7 @@ void RGWFormatter_Plain::dump_value_str(const char *name, const char *fmt, ...)
   va_end(ap);
   if (n >= LARGE_SIZE)
     return;
-  CGI_PRINTF(s, "%s\n", buf);
+  write_data("%s\n", buf);
 }
 
 /* XML */
@@ -86,14 +86,14 @@ void RGWFormatter_XML::formatter_init()
 
 void RGWFormatter_XML::open_section(const char *name)
 {
-  CGI_PRINTF(s, "<%s>", name);
+  write_data("<%s>", name);
   ++indent;
 }
 
 void RGWFormatter_XML::close_section(const char *name)
 {
   --indent;
-  CGI_PRINTF(s, "</%s>", name);
+  write_data("</%s>", name);
 }
 
 void RGWFormatter_XML::dump_value_int(const char *name, const char *fmt, ...)
@@ -107,7 +107,7 @@ void RGWFormatter_XML::dump_value_int(const char *name, const char *fmt, ...)
   va_end(ap);
   if (n >= LARGE_SIZE)
     return;
-  CGI_PRINTF(s, "<%s>%s</%s>", name, buf, name);
+  write_data("<%s>%s</%s>", name, buf, name);
 }
 
 void RGWFormatter_XML::dump_value_str(const char *name, const char *fmt, ...)
@@ -120,7 +120,7 @@ void RGWFormatter_XML::dump_value_str(const char *name, const char *fmt, ...)
   va_end(ap);
   if (n >= LARGE_SIZE)
     return;
-  CGI_PRINTF(s, "<%s>%s</%s>", name, buf, name);
+  write_data("<%s>%s</%s>", name, buf, name);
 }
 
 /* JSON */
@@ -134,10 +134,10 @@ void RGWFormatter_JSON::open_section(bool is_array)
 {
   if (stack.size()) {
     struct json_stack_entry& entry = stack.back();
-    CGI_PRINTF(s, "%s\n", (entry.size ? "," : ""));
+    write_data("%s\n", (entry.size ? "," : ""));
     entry.size++;
   }
-  CGI_PRINTF(s, "%c", (is_array ? '[' : '{'));
+  write_data("%c", (is_array ? '[' : '{'));
 
   struct json_stack_entry new_entry;
   new_entry.is_array = is_array;
@@ -159,7 +159,7 @@ void RGWFormatter_JSON::close_section(const char *name)
 {
   struct json_stack_entry& entry = stack.back();
 
-  CGI_PRINTF(s, "%c", (entry.is_array ? ']' : '}'));
+  write_data("%c", (entry.is_array ? ']' : '}'));
 
   stack.pop_back();
 }
@@ -177,7 +177,7 @@ void RGWFormatter_JSON::dump_value_int(const char *name, const char *fmt, ...)
   va_end(ap);
   if (n >= LARGE_SIZE)
     return;
-  CGI_PRINTF(s, "%s\"%s\":%s", (entry.size ? ", " : ""), name, buf);
+  write_data("%s\"%s\":%s", (entry.size ? ", " : ""), name, buf);
   entry.size++;
 }
 
@@ -193,7 +193,7 @@ void RGWFormatter_JSON::dump_value_str(const char *name, const char *fmt, ...)
   va_end(ap);
   if (n >= LARGE_SIZE)
     return;
-  CGI_PRINTF(s, "%s\"%s\":\"%s\"", (entry.size ? ", " : ""), name, buf);
+  write_data("%s\"%s\":\"%s\"", (entry.size ? ", " : ""), name, buf);
   entry.size++;
 }
 

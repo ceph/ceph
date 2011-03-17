@@ -172,16 +172,26 @@ struct req_state;
 class RGWFormatter {
 protected:
   struct req_state *s;
+  char *buf;
+  int len;
+  int max_len;
 
   virtual void formatter_init() = 0;
 public:
-  RGWFormatter() {}
+  RGWFormatter() : buf(NULL), len(0), max_len(0) {}
   virtual ~RGWFormatter() {}
   void init(struct req_state *_s) {
     s = _s;
+    if (buf)
+      free(buf);
+    buf = NULL;
+    len = 0;
+    max_len = 0;
     formatter_init();
   }
-
+  void write_data(const char *fmt, ...);
+  virtual void flush();
+  virtual int get_len() { return (len ? len - 1 : 0); } // don't include null termination in length
   virtual void open_array_section(const char *name) = 0;
   virtual void open_obj_section(const char *name) = 0;
   virtual void close_section(const char *name) = 0;
