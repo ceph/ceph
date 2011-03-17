@@ -567,7 +567,7 @@ public:
   int start(bool daemonize, uint64_t nonce);  // if we didn't bind
   int start(bool daemonize) {                 // if we did
     assert(did_bind);
-    start(daemonize, 0);
+    return start(daemonize, 0);
   }
   void wait();
 
