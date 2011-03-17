@@ -1061,8 +1061,42 @@ void EExport::replay(MDS *mds)
 
   // adjust auth away
   mds->mdcache->adjust_bounded_subtree_auth(dir, realbounds, pair<int,int>(CDIR_AUTH_UNKNOWN, CDIR_AUTH_UNKNOWN));
-  mds->mdcache->trim_non_auth_subtree(dir);
-  mds->mdcache->try_subtree_merge(dir);
+
+  // can we now trim child subtrees?
+  set<CDir*> bounds;
+  mds->mdcache->get_subtree_bounds(dir, bounds);
+  for (set<CDir*>::iterator p = bounds.begin(); p != bounds.end(); p++) {
+    CDir *bd = *p;
+    if (bd->get_dir_auth().first != mds->whoami &&  // we are not auth
+	bd->get_num_any() == 0) {                   // and empty
+      CInode *bi = bd->get_inode();
+      dout(10) << "EExport.replay " << base << " closing empty non-auth child subtree " << *bd << dendl;
+      mds->mdcache->remove_subtree(bd);
+      bd->mark_clean();
+      bi->close_dirfrag(bd->get_frag());
+    }
+  }
+
+  if (mds->mdcache->trim_non_auth_subtree(dir)) {
+    // keep
+    mds->mdcache->try_subtree_merge(dir);
+  } else {
+    // can we trim this subtree (and possibly our ancestors) too?
+    CInode *diri = dir->get_inode();
+    while (!diri->is_base()) {
+      dir = mds->mdcache->get_subtree_root(diri->get_parent_dir());
+      if (dir->get_dir_auth().first == mds->whoami)
+	break;  // we are auth, keep.
+      dout(10) << "EExport.replay " << base << " parent subtree also non-auth: " << *dir << dendl;
+      if (mds->mdcache->trim_non_auth_subtree(dir))
+	break;
+      dout(10) << "EExport.replay " << base << " closing empty parent subtree " << *dir << dendl;
+      mds->mdcache->remove_subtree(dir);
+      dir->mark_clean();
+      diri = dir->get_inode();
+      diri->close_dirfrag(dir->get_frag());
+    }
+  }
 }
 
 

@@ -1060,6 +1060,8 @@ void MDCache::adjust_bounded_subtree_auth(CDir *dir, vector<dirfrag_t>& bound_df
 
 void MDCache::map_dirfrag_set(list<dirfrag_t>& dfs, set<CDir*>& result)
 {
+  dout(10) << "map_dirfrag_set " << dfs << dendl;
+
   // group by inode
   map<inodeno_t, fragset_t> ino_fragset;
   for (list<dirfrag_t>::iterator p = dfs.begin(); p != dfs.end(); ++p)
@@ -1070,7 +1072,8 @@ void MDCache::map_dirfrag_set(list<dirfrag_t>& dfs, set<CDir*>& result)
        p != ino_fragset.end();
        ++p) {
     CInode *in = get_inode(p->first);
-    if (!in) continue;
+    if (!in)
+      continue;
 
     list<frag_t> fglist;
     for (set<frag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q)
@@ -1081,7 +1084,8 @@ void MDCache::map_dirfrag_set(list<dirfrag_t>& dfs, set<CDir*>& result)
 
     for (list<frag_t>::iterator q = fglist.begin(); q != fglist.end(); ++q) {
       CDir *dir = in->get_dirfrag(*q);
-      if (dir) result.insert(dir);
+      if (dir)
+	result.insert(dir);
     }
   }
 }
