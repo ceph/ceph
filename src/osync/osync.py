@@ -26,6 +26,7 @@ import hashlib
 import mimetypes
 import os
 import shutil
+import string
 import sys
 import traceback
 
@@ -93,7 +94,7 @@ class Store(object):
     def make_store(url, create):
         s3_url = strip_prefix("s3://", url)
         if (s3_url):
-            return S3Store(url, create)
+            return S3Store(s3_url, create)
         file_url = strip_prefix("file://", url)
         if (file_url):
             return FileStore(file_url, create)
@@ -133,17 +134,23 @@ class S3Store(Store):
             raise Exception("S3Store URLs are of the form \
 s3://host/bucket/key_prefix. Failed to find the host.")
         self.host = url[0:host_end]
-        bucket_end = string.find(url, host_end+1, "/")
-        if (host_end == -1):
+        bucket_end = url.find("/", host_end+1)
+        if (bucket_end == -1):
             self.bucket_name = url[host_end+1:]
             self.key_prefix = ""
         else:
             self.bucket_name = url[host_end+1:bucket_end]
-            self.key_prefix = url[bucket_end:]
-        self.host = url[0:host_end]
+            self.key_prefix = url[bucket_end+1:]
+        if (self.bucket_name == ""):
+            raise Exception("S3Store URLs are of the form \
+s3://host/bucket/key_prefix. Failed to find the bucket.")
+        if (opts.more_verbose):
+            print "self.host = '" + self.host + "', ",
+            print "self.bucket_name = '" + self.bucket_name + "' ",
+            print "self.key_prefix = '" + self.key_prefix + "'"
         self.conn = S3Connection(calling_format=OrdinaryCallingFormat(),
-            host="rgw-1.ceph.dreamhost.com", is_secure=False)
-        self.bucket = conn.get_bucket(self.bucket_name)
+                                 host=self.host, is_secure=False)
+        self.bucket = self.conn.get_bucket(self.bucket_name)
         Store.__init__(self, "s3://" + url)
     def __str__(self):
         return "s3://" + self.host + "/" + self.bucket_name + "/" + self.key_prefix
@@ -160,18 +167,23 @@ s3://host/bucket/key_prefix. Failed to find the host.")
     def all_objects(self):
         blrs = self.bucket.list(prefix = self.key_prefix)
         return S3StoreIterator(blrs)
-    def locate_object(self, name):
-        k = self.bucket.get_key(name)
+    def locate_object(self, obj):
+        print "obj.name = " + obj.name
+        k = self.bucket.get_key(obj.name)
         if (k == None):
             return None
-        return Object(name, k.md5, k.size)
+        return Object(obj.name, k.md5, k.size)
     def upload(self, local_copy, obj):
-        mime = mimetypes.guess_type(local_copy)
-        if (mime == None):
-            mime = "application/octet-stream"
+        if (opts.more_verbose):
+            print "UPLOAD: local_copy.path='" + local_copy.path + "' " + \
+                "obj='" + obj.name + "'"
+#        mime = mimetypes.guess_type(local_copy.path)[0]
+#        if (mime == NoneType):
+#            mime = "application/octet-stream"
         k = Key(self.bucket)
-        k.key = Key(obj.name)
-        k.set_metadata("Content-Type", mime)
+        k.key = obj.name
+        print "obj.name = " + k.key + ", type(k.key) = " + str(type(k.key))
+        #k.set_metadata("Content-Type", mime)
         k.set_contents_from_filename(local_copy.path)
 
 ###### FileStore #######
@@ -291,6 +303,7 @@ except NonexistentStore as e:
     sys.exit(1)
 except Exception as e:
     print >>stderr, "error creating source: " + str(e)
+    traceback.print_exc(100000, stderr)
     sys.exit(1)
 try:
     if (opts.more_verbose):
@@ -302,6 +315,7 @@ except NonexistentStore as e:
     sys.exit(1)
 except Exception as e:
     print >>stderr, "error creating destination: " + str(e)
+    traceback.print_exc(100000, stderr)
     sys.exit(1)
 
 for sobj in src.all_objects():
