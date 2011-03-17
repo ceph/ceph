@@ -950,13 +950,13 @@ set_val(const char *key, const char *val)
 
     switch (opt->type) {
       case OPT_NONE:
-  return -ENOSYS;
+        return -ENOSYS;
       case OPT_INT:
-  *(int*)opt->val_ptr = atoi(val);
-  return 0;
+        *(int*)opt->val_ptr = atoi(val);
+        return 0;
       case OPT_LONGLONG:
-  *(long long*)opt->val_ptr = atoll(val);
-  return 0;
+        *(long long*)opt->val_ptr = atoll(val);
+        return 0;
       case OPT_STR: {
 	char **p = (char**)opt->val_ptr;
 	free(*p);
@@ -964,23 +964,23 @@ set_val(const char *key, const char *val)
 	return 0;
       }
       case OPT_FLOAT:
-  *(float*)opt->val_ptr = atof(val);
-  return 0;
+        *(float*)opt->val_ptr = atof(val);
+        return 0;
       case OPT_DOUBLE:
-  *(double*)opt->val_ptr = atof(val);
-  return 0;
+        *(double*)opt->val_ptr = atof(val);
+        return 0;
       case OPT_BOOL:
-  *(bool*)opt->val_ptr = !!atoi(val);
-  return 0;
+        *(bool*)opt->val_ptr = !!atoi(val);
+        return 0;
       case OPT_U32:
-  *(int*)opt->val_ptr = atoi(val);
-  return 0;
+        *(int*)opt->val_ptr = atoi(val);
+        return 0;
       case OPT_ADDR: {
-  entity_addr_t *addr = (entity_addr_t*)opt->val_ptr;
-  if (!addr->parse(val)) {
-    return -EINVAL;
-  }
-  return 0;
+        entity_addr_t *addr = (entity_addr_t*)opt->val_ptr;
+        if (!addr->parse(val)) {
+          return -EINVAL;
+        }
+        return 0;
       }
     }
   }
@@ -1001,13 +1001,13 @@ get_val(const char *key, char **buf, int len)
     ostringstream oss;
     switch (opt->type) {
       case OPT_NONE:
-  return -ENOSYS;
+        return -ENOSYS;
       case OPT_INT:
-  oss << *(int*)opt->val_ptr;
-  break;
+        oss << *(int*)opt->val_ptr;
+        break;
       case OPT_LONGLONG:
-  oss << *(long long*)opt->val_ptr;
-  break;
+        oss << *(long long*)opt->val_ptr;
+        break;
       case OPT_STR: {
 	char *p = *((char**)opt->val_ptr);
 	if (p)
@@ -1015,20 +1015,20 @@ get_val(const char *key, char **buf, int len)
       }
       break;
       case OPT_FLOAT:
-  oss << *(float*)opt->val_ptr;
-  break;
+        oss << *(float*)opt->val_ptr;
+        break;
       case OPT_DOUBLE:
-  oss << *(double*)opt->val_ptr;
-  break;
+        oss << *(double*)opt->val_ptr;
+        break;
       case OPT_BOOL:
-  oss << *(bool*)opt->val_ptr;
-  break;
+        oss << *(bool*)opt->val_ptr;
+        break;
       case OPT_U32:
-  oss << *(uint32_t*)opt->val_ptr;
-  break;
+        oss << *(uint32_t*)opt->val_ptr;
+        break;
       case OPT_ADDR: {
-  oss << *(entity_addr_t*)opt->val_ptr;
-  break;
+        oss << *(entity_addr_t*)opt->val_ptr;
+        break;
       }
     }
     string str(oss.str());
