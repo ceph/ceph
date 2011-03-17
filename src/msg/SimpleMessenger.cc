@@ -2418,8 +2418,12 @@ int SimpleMessenger::start(bool nodaemon)
     return 0;
   }
 
-  if (!did_bind)
-    ms_addr.nonce = getpid();
+  if (!did_bind) {
+    // NOTE: this is a racy temp fix.  it's fixed for real in v0.26
+    static uint64_t instance = 0;
+    ms_addr.nonce = (uint64_t)getpid() + (instance * 1000000ull);
+    instance++;
+  }
 
   dout(1) << "messenger.start" << dendl;
   started = true;
