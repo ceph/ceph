@@ -5,8 +5,6 @@
 #include "rgw_op.h"
 
 
-#define RGW_REST_OPENSTACK 0x1
-
 class RGWGetObj_REST : public RGWGetObj
 {
 protected:

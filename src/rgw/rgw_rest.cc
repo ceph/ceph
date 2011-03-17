@@ -6,6 +6,7 @@
 #include "rgw_rest.h"
 #include "rgw_rest_os.h"
 #include "rgw_rest_s3.h"
+#include "rgw_os_auth.h"
 
 #include "rgw_formats.h"
 
@@ -13,6 +14,7 @@
 
 static RGWHandler_REST_S3 rgwhandler_s3;
 static RGWHandler_REST_OS rgwhandler_os;
+static RGWHandler_OS_Auth rgwhandler_os_auth;
 
 static RGWFormatter_Plain formatter_plain;
 static RGWFormatter_XML formatter_xml;
@@ -415,6 +417,9 @@ void init_entities_from_header(struct req_state *s)
     goto done;
   }
 
+  if (strcmp(s->bucket, "auth") == 0)
+    s->prot_flags |= RGW_REST_OPENSTACK_AUTH;
+
   if (pos >= 0) {
     string encoded_obj_str = req.substr(pos+1);
     url_decode(encoded_obj_str, s->object_str);
@@ -615,6 +620,8 @@ RGWHandler *RGWHandler_REST::init_handler(struct req_state *s, struct fcgx_state
 
   if (s->prot_flags & RGW_REST_OPENSTACK)
     handler = &rgwhandler_os;
+  else if (s->prot_flags & RGW_REST_OPENSTACK_AUTH)
+    handler = &rgwhandler_os_auth;
   else
     handler = &rgwhandler_s3;
 
