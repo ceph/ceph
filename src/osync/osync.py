@@ -168,7 +168,6 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
         blrs = self.bucket.list(prefix = self.key_prefix)
         return S3StoreIterator(blrs)
     def locate_object(self, obj):
-        print "obj.name = " + obj.name
         k = self.bucket.get_key(obj.name)
         if (k == None):
             return None
@@ -182,7 +181,6 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
 #            mime = "application/octet-stream"
         k = Key(self.bucket)
         k.key = obj.name
-        print "obj.name = " + k.key + ", type(k.key) = " + str(type(k.key))
         #k.set_metadata("Content-Type", mime)
         k.set_contents_from_filename(local_copy.path)
 
