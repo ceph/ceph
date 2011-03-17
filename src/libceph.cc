@@ -35,6 +35,7 @@ static int client_mount = 0;
 static Client *client = NULL;
 static MonClient *monclient = NULL;
 static SimpleMessenger *messenger = NULL;
+static int instance = 0;
 
 extern "C" int ceph_initialize(int argc, const char **argv)
 {
@@ -61,7 +62,8 @@ extern "C" int ceph_initialize(int argc, const char **argv)
     //at last the client
     client = new Client(messenger, monclient);
 
-    messenger->start(false); // do not daemonize
+    uint64_t nonce = (uint64_t)++instance * 1000000ull + (uint64_t)getpid();
+    messenger->start(false, nonce); // do not daemonize
 
     client->init();
   }
