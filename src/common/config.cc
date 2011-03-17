@@ -958,10 +958,10 @@ set_val(const char *key, const char *val)
   *(long long*)opt->val_ptr = atoll(val);
   return 0;
       case OPT_STR: {
-  char *p = (char*)opt->val_ptr;
-  free(p);
-  opt->val_ptr = strdup(val);
-  return 0;
+	char **p = (char**)opt->val_ptr;
+	free(*p);
+	*p = strdup(val);
+	return 0;
       }
       case OPT_FLOAT:
   *(float*)opt->val_ptr = atof(val);
@@ -1008,10 +1008,12 @@ get_val(const char *key, char **buf, int len)
       case OPT_LONGLONG:
   oss << *(long long*)opt->val_ptr;
   break;
-      case OPT_STR:
-  if (opt->val_ptr)
-    oss << (char*)opt->val_ptr;
-  break;
+      case OPT_STR: {
+	char *p = *((char**)opt->val_ptr);
+	if (p)
+	  oss << p;
+      }
+      break;
       case OPT_FLOAT:
   oss << *(float*)opt->val_ptr;
   break;
