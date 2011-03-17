@@ -608,7 +608,8 @@ shutdown()
 {
   lock.Lock();
   monclient.shutdown();
-  objecter->shutdown();
+  if (objecter)
+    objecter->shutdown();
   timer.shutdown();
   lock.Unlock();
   if (messenger) {
