@@ -24,7 +24,7 @@
 
 const char *ceph_version_to_str(void)
 {
-  return VERSION;
+  return CEPH_GIT_NICE_VER;
 }
 
 const char *git_version_to_str(void)
@@ -35,7 +35,7 @@ const char *git_version_to_str(void)
 std::string const pretty_version_to_str(void)
 {
   std::ostringstream oss;
-  oss << "ceph version " << VERSION << " (commit:"
+  oss << "ceph version " << CEPH_GIT_NICE_VER << " (commit:"
       << STRINGIFY(CEPH_GIT_VER) << ")";
   return oss.str();
 }
