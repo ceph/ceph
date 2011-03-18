@@ -2707,7 +2707,7 @@ extern "C" int rados_conf_get(rados_t cluster, const char *option, char *buf, si
   return g_conf.get_val(option, &tmp, len);
 }
 
-extern "C" int rados_ioctx_lookup(rados_t cluster, const char *name)
+extern "C" int rados_pool_lookup(rados_t cluster, const char *name)
 {
   librados::RadosClient *radosp = (librados::RadosClient *)cluster;
   return radosp->lookup_pool(name);
