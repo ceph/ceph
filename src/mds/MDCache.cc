@@ -5543,6 +5543,59 @@ bool MDCache::trim_non_auth_subtree(CDir *directory)
   return keep_directory;
 }
 
+/*
+ * during replay, when we determine a subtree is no longer ours, we
+ * try to trim it from our cache.  because subtrees must be connected
+ * to the root, the fact that we can trim this tree may mean that our
+ * children or parents can also be trimmed.
+ */
+void MDCache::try_trim_non_auth_subtree(CDir *dir)
+{
+  dout(10) << "try_trim_nonauth_subtree " << *dir << dendl;
+
+  // can we now trim child subtrees?
+  set<CDir*> bounds;
+  get_subtree_bounds(dir, bounds);
+  for (set<CDir*>::iterator p = bounds.begin(); p != bounds.end(); p++) {
+    CDir *bd = *p;
+    if (bd->get_dir_auth().first != mds->whoami &&  // we are not auth
+	bd->get_num_any() == 0) {                   // and empty
+      CInode *bi = bd->get_inode();
+      dout(10) << " closing empty non-auth child subtree " << *bd << dendl;
+      remove_subtree(bd);
+      bd->mark_clean();
+      bi->close_dirfrag(bd->get_frag());
+    }
+  }
+
+  if (trim_non_auth_subtree(dir)) {
+    // keep
+    try_subtree_merge(dir);
+  } else {
+    // can we trim this subtree (and possibly our ancestors) too?
+    CInode *diri;
+    while (true) {
+      dout(10) << " closing empty subtree " << *dir << dendl;
+      remove_subtree(dir);
+      dir->mark_clean();
+      diri = dir->get_inode();
+      diri->close_dirfrag(dir->get_frag());
+
+      if (diri->is_base())
+	break;
+
+      dir = get_subtree_root(diri->get_parent_dir());
+      if (dir->get_dir_auth().first == mds->whoami)
+	break;  // we are auth, keep.
+
+      dout(10) << " parent subtree also non-auth: " << *dir << dendl;
+      if (trim_non_auth_subtree(dir))
+	break;
+    }
+  }
+}
+
+
 /* This function DOES put the passed message before returning */
 void MDCache::handle_cache_expire(MCacheExpire *m)
 {

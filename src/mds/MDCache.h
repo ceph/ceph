@@ -859,6 +859,7 @@ public:
   void send_expire_messages(map<int, MCacheExpire*>& expiremap);
   void trim_non_auth();      // trim out trimmable non-auth items
   bool trim_non_auth_subtree(CDir *directory);
+  void try_trim_non_auth_subtree(CDir *dir);
 
   void trim_client_leases();
   void check_memory_usage();
