@@ -149,6 +149,7 @@ class MMDSCacheRejoin : public Message {
 
   // weak
   map<inodeno_t, map<string_snap_t, dn_weak> > weak;
+  set<dirfrag_t> weak_dirfrags;
   set<vinodeno_t> weak_inodes;
   map<inodeno_t, lock_bls> inode_scatterlocks;
 
@@ -233,6 +234,9 @@ public:
   }
    
   // dentries
+  void add_weak_dirfrag(dirfrag_t df) {
+    weak_dirfrags.insert(df);
+  }
   void add_weak_dentry(inodeno_t dirino, const string& dname, snapid_t last, dn_weak& dnw) {
     weak[dirino][string_snap_t(dname, last)] = dnw;
   }
@@ -261,6 +265,7 @@ public:
     ::encode(cap_export_bl, payload);
     ::encode(strong_dirfrags, payload);
     ::encode(weak, payload);
+    ::encode(weak_dirfrags, payload);
     ::encode(weak_inodes, payload);
     ::encode(strong_dentries, payload);
     ::encode(authpinned_dentries, payload);
@@ -283,6 +288,7 @@ public:
     }
     ::decode(strong_dirfrags, p);
     ::decode(weak, p);
+    ::decode(weak_dirfrags, p);
     ::decode(weak_inodes, p);
     ::decode(strong_dentries, p);
     ::decode(authpinned_dentries, p);

@@ -3227,6 +3227,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
   
   if (mds->is_rejoin()) {
     // WEAK
+    rejoin->add_weak_dirfrag(dir->dirfrag());
     for (CDir::map_t::iterator p = dir->items.begin();
 	 p != dir->items.end();
 	 ++p) {
@@ -3366,7 +3367,8 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 	 p != weak->cap_exports.end();
 	 ++p) {
       CInode *in = get_inode(p->first);
-      if (in && !in->is_auth()) continue;
+      if (in && !in->is_auth())
+	continue;
       filepath& path = weak->cap_export_paths[p->first];
       if (!in) {
 	if (!path_is_mine(path))
@@ -3404,6 +3406,30 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
   
   // walk weak map
   set<CDir*> dirs_to_share;
+  for (set<dirfrag_t>::iterator p = weak->weak_dirfrags.begin();
+       p != weak->weak_dirfrags.end();
+       ++p) {
+    CInode *diri = get_inode(p->ino);
+    if (!diri)
+      dout(0) << " missing dir ino " << p->ino << dendl;
+    assert(diri);
+    
+    frag_t fg = diri->dirfragtree[p->frag.value()];
+    CDir *dir = diri->get_dirfrag(fg);
+    if (!dir)
+      dout(0) << " missing dir for " << p->frag << " (which maps to " << fg << ") on " << *diri << dendl;
+    assert(dir);
+    if (dirs_to_share.count(dir)) {
+      dout(10) << " already have " << p->frag << " -> " << fg << " " << *dir << dendl;
+    } else {
+      dirs_to_share.insert(dir);
+      int nonce = dir->add_replica(from);
+      dout(10) << " have " << p->frag << " -> " << fg << " " << *dir << dendl;
+      if (ack)
+	ack->add_strong_dirfrag(dir->dirfrag(), nonce, dir->dir_rep);
+    }
+  }
+
   for (map<inodeno_t,map<string_snap_t,MMDSCacheRejoin::dn_weak> >::iterator p = weak->weak.begin();
        p != weak->weak.end();
        ++p) {
@@ -3425,13 +3451,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 	if (!dir)
 	  dout(0) << " missing dir frag " << fg << " on " << *diri << dendl;
 	assert(dir);
-	if (dirs_to_share.count(dir) == 0) {
-	  dirs_to_share.insert(dir);
-	  int nonce = dir->add_replica(from);
-	  dout(10) << " have " << *dir << dendl;
-	  if (ack)
-	    ack->add_strong_dirfrag(dir->dirfrag(), nonce, dir->dir_rep);
-	}
+	assert(dirs_to_share.count(dir));
       }
 
       // and dentry
