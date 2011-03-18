@@ -3,7 +3,12 @@
 
 # Autoconf
 AC_PREREQ(2.59)
-AC_INIT([ceph], [0.26~rc], [ceph-devel@vger.kernel.org])
+
+# NOTE: This version is _only_ used for naming the tarball.  The
+# VERSION define is not used by the code.  It gets a version string
+# from 'git describe'; see src/ceph_ver.[ch]
+AC_INIT([ceph], [0.26rc], [ceph-devel@vger.kernel.org])
+
 AC_CONFIG_SUBDIRS([src/gtest])
 
 # Environment
