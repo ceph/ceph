@@ -2814,7 +2814,7 @@ void MDCache::disambiguate_imports()
 void MDCache::add_ambiguous_import(dirfrag_t base, vector<dirfrag_t>& bounds) 
 {
   assert(my_ambiguous_imports.count(base) == 0);
-  my_ambiguous_imports[base].swap( bounds );
+  my_ambiguous_imports[base].swap(bounds);
 }
 
 

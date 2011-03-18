@@ -696,6 +696,10 @@ public:
   bool have_ambiguous_import(dirfrag_t base) {
     return my_ambiguous_imports.count(base);
   }
+  void get_ambiguous_import_bounds(dirfrag_t base, vector<dirfrag_t>& bounds) {
+    assert(my_ambiguous_imports.count(base));
+    bounds = my_ambiguous_imports[base];
+  }
   void cancel_ambiguous_import(dirfrag_t dirino);
   void finish_ambiguous_import(dirfrag_t dirino);
   void resolve_start();
