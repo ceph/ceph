@@ -11,7 +11,7 @@
 #include "msg/SimpleMessenger.h"
 #include "client/Client.h"
 
-#include "ceph_ver.h"
+#include "common/version.h"
 
 /* ************* ************* ************* *************
  * C interface
@@ -20,8 +20,9 @@
 extern "C" const char *ceph_version(int *pmajor, int *pminor, int *ppatch)
 {
   int major, minor, patch;
-
-  int n = sscanf(CEPH_GIT_NICE_VER, "%d.%d.%d", &major, &minor, &patch);
+  const char *v = ceph_version_to_str();
+  
+  int n = sscanf(v, "%d.%d.%d", &major, &minor, &patch);
   if (pmajor)
     *pmajor = (n >= 1) ? major : 0;
   if (pminor)
