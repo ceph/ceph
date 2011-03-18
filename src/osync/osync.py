@@ -28,6 +28,7 @@ import os
 import shutil
 import string
 import sys
+import tempfile
 import traceback
 
 global opts
@@ -122,7 +123,7 @@ class S3StoreIterator(object):
     def next(self):
         # This will raise StopIteration when there are no more objects to
         # iterate on
-        key = blrs.next()
+        key = self.blrs.next()
         ret = Object(key.name, key.md5, key.size)
         return ret
 
@@ -166,7 +167,7 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
         return S3StoreLocalCopy(temp_file.name)
     def all_objects(self):
         blrs = self.bucket.list(prefix = self.key_prefix)
-        return S3StoreIterator(blrs)
+        return S3StoreIterator(blrs.__iter__())
     def locate_object(self, obj):
         k = self.bucket.get_key(obj.name)
         if (k == None):
@@ -333,8 +334,8 @@ for sobj in src.all_objects():
         if (opts.verbose):
             print ". " + sobj.name
     if (upload):
+        local_copy = src.make_local_copy(sobj)
         try:
-            local_copy = src.make_local_copy(sobj)
             dst.upload(local_copy, sobj)
         finally:
             local_copy.remove()
