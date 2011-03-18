@@ -2437,9 +2437,9 @@ init(const char * const id)
 }
 
 int librados::Rados::
-init_internal(md_config_t *conf)
+init_with_config(md_config_t *conf)
 {
-  return rados_create_internal((rados_t *)&client, conf);
+  return rados_create_with_config((rados_t *)&client, conf);
 }
 
 int librados::Rados::
@@ -2620,7 +2620,7 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
  * already called common_init and want to use that particular configuration for
  * their cluster.
  */
-extern "C" int rados_create_internal(rados_t *pcluster, md_config_t *conf)
+extern "C" int rados_create_with_config(rados_t *pcluster, md_config_t *conf)
 {
   rados_init_mutex.Lock();
   if (!rados_initialized) {

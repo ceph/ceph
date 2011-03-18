@@ -33,7 +33,7 @@ int RGWRados::initialize(md_config_t *conf)
   if (!rados)
     return -ENOMEM;
 
-  ret = rados->init_internal(conf);
+  ret = rados->init_with_config(conf);
   if (ret < 0)
    return ret;
 

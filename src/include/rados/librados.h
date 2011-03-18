@@ -16,7 +16,7 @@ extern "C" {
 #endif
 
 #define LIBRADOS_VER_MAJOR 0
-#define LIBRADOS_VER_MINOR 26
+#define LIBRADOS_VER_MINOR 27
 #define LIBRADOS_VER_EXTRA 0
 
 #define LIBRADOS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
@@ -54,8 +54,8 @@ void rados_version(int *major, int *minor, int *extra);
 /* initialization */
 int rados_create(rados_t *cluster, const char * const id);
 
-/* internal API for creating rados clusters */
-int rados_create_internal(rados_t *cluster, struct md_config_t *conf);
+/* initialize rados with an existing configuration. */
+int rados_create_with_config(rados_t *cluster, struct md_config_t *conf);
 
 /* Connect to the cluster */
 int rados_connect(rados_t cluster);
