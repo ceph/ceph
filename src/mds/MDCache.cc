@@ -1874,14 +1874,18 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     // rstat
     if (!primary_dn) {
       // don't update parent this pass
-    } else if (!parent->inode->nestlock.can_wrlock(-1)) {
+    } else if (!linkunlink && !parent->inode->nestlock.can_wrlock(-1)) {
       dout(20) << " unwritable parent nestlock " << parent->inode->nestlock
 	       << ", marking dirty rstat on " << *cur << dendl;
-      cur->mark_dirty_rstat();      
+      cur->mark_dirty_rstat();
    } else {
       // if we don't hold a wrlock reference on this nestlock, take one,
       // because we are about to write into the dirfrag fnode and that needs
       // to commit before the lock can cycle.
+     if (linkunlink) {
+       assert(parent->inode->nestlock.get_num_wrlocks());
+     }
+
       if (mut->wrlocks.count(&parent->inode->nestlock) == 0) {
 	dout(10) << " taking wrlock on " << parent->inode->nestlock << " on " << *parent->inode << dendl;
 	mds->locker->wrlock_force(&parent->inode->nestlock, mut);
