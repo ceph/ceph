@@ -515,7 +515,6 @@ ceph_ver.h: .git_version
 
 ceph_ver.c: ./ceph_ver.h
 common/version.cc: ./ceph_ver.h
-common/BackTrace.cc: ./ceph_ver.h
 
 # cleaning
 clean-local:
