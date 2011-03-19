@@ -8,6 +8,16 @@ ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
   MAKEFLAGS += -j$(NUMJOBS)
 endif
 
+export DEB_HOST_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
+export DEB_BUILD_GNU_TYPE ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
+
+# Recommended snippet for Autoconf 2.52 or later
+ifeq ($(DEB_BUILD_GNU_TYPE), $(DEB_HOST_GNU_TYPE))
+  confflags += --build $(DEB_HOST_GNU_TYPE)
+else
+  confflags += --build $(DEB_BUILD_GNU_TYPE) --host $(DEB_HOST_GNU_TYPE)
+endif
+
 configure: configure-stamp
 configure-stamp:
 	dh_testdir
@@ -18,7 +28,8 @@ build-stamp: configure-stamp
 	dh_testdir
 
 	./autogen.sh
-	./configure --prefix=/usr --sbindir=/sbin --localstatedir=/var --sysconfdir=/etc
+	./configure --prefix=/usr --sbindir=/sbin --localstatedir=/var \
+		--sysconfdir=/etc $(confflags)
 	$(MAKE)
 	cp src/init-ceph debian/ceph.init
 	cp src/logrotate.conf debian/ceph.logrotate
