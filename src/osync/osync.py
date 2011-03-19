@@ -21,6 +21,7 @@ from boto.s3.key import Key
 from optparse import OptionParser
 from sys import stderr
 import boto
+import base64
 import errno
 import hashlib
 import mimetypes
@@ -53,12 +54,23 @@ def get_md5(f, block_size=2**20):
         if not data:
             break
         md5.update(data)
-    return md5.digest()
+    return "%s" % md5.hexdigest()
 
 def strip_prefix(prefix, s):
     if not (s[0:len(prefix)] == prefix):
         return None
     return s[len(prefix):]
+
+def etag_to_md5(etag):
+    if (etag[:1] == '"'):
+        start = 1
+    else:
+        start = 0
+    if (etag[-1:] == '"'):
+        end = -1
+    else:
+        end = None
+    return etag[start:end]
 
 ###### NonexistentStore #######
 class NonexistentStore(Exception):
@@ -69,7 +81,7 @@ class Object(object):
     def __init__(self, name, md5, size):
         self.name = name
         self.md5 = md5
-        self.size = size
+        self.size = int(size)
     def equals(self, rhs):
         if (self.name != rhs.name):
             return False
@@ -124,7 +136,7 @@ class S3StoreIterator(object):
         # This will raise StopIteration when there are no more objects to
         # iterate on
         key = self.blrs.next()
-        ret = Object(key.name, key.md5, key.size)
+        ret = Object(key.name, etag_to_md5(key.etag), key.size)
         return ret
 
 class S3Store(Store):
@@ -172,7 +184,7 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
         k = self.bucket.get_key(obj.name)
         if (k == None):
             return None
-        return Object(obj.name, k.md5, k.size)
+        return Object(obj.name, etag_to_md5(k.etag), k.size)
     def upload(self, local_copy, obj):
         if (opts.more_verbose):
             print "UPLOAD: local_copy.path='" + local_copy.path + "' " + \
