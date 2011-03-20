@@ -18,6 +18,14 @@ else
   confflags += --build $(DEB_BUILD_GNU_TYPE) --host $(DEB_HOST_GNU_TYPE)
 endif
 
+export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
+
+ifeq ($(DEB_HOST_ARCH), armel)
+  # armel supports ARMv4t or above instructions sets.
+  # libatomic-ops is only usable with Ceph for ARMv6 or above.
+  extraopts += --without-libatomic-ops
+endif
+
 configure: configure-stamp
 configure-stamp:
 	dh_testdir
@@ -29,7 +37,7 @@ build-stamp: configure-stamp
 
 	./autogen.sh
 	./configure --prefix=/usr --sbindir=/sbin --localstatedir=/var \
-		--sysconfdir=/etc $(confflags)
+		--sysconfdir=/etc $(extraopts) $(confflags)
 	$(MAKE)
 	cp src/init-ceph debian/ceph.init
 	cp src/logrotate.conf debian/ceph.logrotate
