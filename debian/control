@@ -39,7 +39,7 @@ Suggests: ceph
 Description: FUSE-based client for the Ceph distributed file system
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is a
- FUSE-based client that allows you to mount a Ceph file system without
+ FUSE-based client that allows one to mount a Ceph file system without
  root privileges.
  .
  Because the FUSE-based client has certain inherent performance
@@ -56,7 +56,7 @@ Depends: ceph-fuse (= ${binary:Version}), ${misc:Depends}
 Description: debugging symbols for ceph-fuse
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is a
- FUSE-based client that allows you to mount a Ceph file system without
+ FUSE-based client that allows one to mount a Ceph file system without
  root privileges.
  .
  This package contains the debugging symbols for ceph-fuse.
@@ -68,7 +68,7 @@ Suggests: ceph
 Description: utilities to mount a ceph filesystem with the kernel client
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is the mount
- utility, that allows to mount the ceph fs with the kernel client.
+ utility, that allows one to mount the ceph fs with the kernel client.
 
 Package: ceph-client-tools-dbg
 Architecture: linux-any
@@ -78,7 +78,7 @@ Priority: extra
 Description: debugging symbols for ceph-client-tools
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is the mount
- utility, that allows to mount the ceph fs with the kernel client.
+ utility, that allows one to mount the ceph fs with the kernel client.
  .
  This package contains the debugging symbols for ceph-client-tools.
 
