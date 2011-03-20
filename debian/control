@@ -6,11 +6,11 @@ Vcs-Git: git://ceph.newdream.net/git/ceph.git
 Vcs-Browser: http://ceph.newdream.net/git/?p=ceph.git;a=summary
 Maintainer: Laszlo Boszormenyi (GCS) <gcs@debian.hu>
 Uploaders: Sage Weil <sage@newdream.net>
-Build-Depends: debhelper (>= 6.0.7~), autotools-dev, autoconf, automake, cdbs, libfuse-dev, libboost-dev, libedit-dev, libcrypto++-dev, libtool, libexpat1-dev, libfcgi-dev, libatomic-ops-dev, libgoogle-perftools-dev, pkg-config, libgtkmm-2.4-dev, python, python-dev
+Build-Depends: debhelper (>= 6.0.7~), autotools-dev, autoconf, automake, cdbs, libfuse-dev, libboost-dev, libedit-dev, libcrypto++-dev, libtool, libexpat1-dev, libfcgi-dev, libatomic-ops-dev, libgoogle-perftools-dev [i386 amd64], pkg-config, libgtkmm-2.4-dev, python, python-dev
 Standards-Version: 3.9.1
 
 Package: ceph
-Architecture: i386 amd64
+Architecture: linux-any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libedit2, hdparm, binutils
 Recommends: ceph-client-tools, ceph-fuse, libceph1, librados2, librbd1, libcrush1, btrfs-tools
 Description: distributed storage and file system
@@ -21,7 +21,7 @@ Description: distributed storage and file system
  running, and administering a Ceph storage cluster.
 
 Package: ceph-dbg
-Architecture: i386 amd64
+Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: ceph (= ${binary:Version}), ${misc:Depends}
@@ -32,7 +32,7 @@ Description: debugging symbols for ceph
  This package contains the debugging symbols for ceph.
 
 Package: ceph-fuse
-Architecture: i386 amd64
+Architecture: linux-any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libfuse2
 Recommends: fuse-utils
 Suggests: ceph
@@ -49,7 +49,7 @@ Description: FUSE-based client for the Ceph distributed file system
  do.
 
 Package: ceph-fuse-dbg
-Architecture: i386 amd64
+Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: ceph-fuse (= ${binary:Version}), ${misc:Depends}
@@ -62,7 +62,7 @@ Description: debugging symbols for ceph-fuse
  This package contains the debugging symbols for ceph-fuse.
 
 Package: ceph-client-tools
-Architecture: i386 amd64
+Architecture: linux-any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Suggests: ceph
 Description: utilities to mount a ceph filesystem with the kernel client
@@ -71,7 +71,7 @@ Description: utilities to mount a ceph filesystem with the kernel client
  utility, that allows to mount the ceph fs with the kernel client.
 
 Package: ceph-client-tools-dbg
-Architecture: i386 amd64
+Architecture: linux-any
 Depends: ceph-client-tools (= ${binary:Version}), ${misc:Depends}
 Section: debug
 Priority: extra
@@ -85,7 +85,7 @@ Description: debugging symbols for ceph-client-tools
 Package: libcrush1
 Conflicts: libcrush
 Replaces: libcrush
-Architecture: i386 amd64
+Architecture: linux-any
 Section: libs
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: CRUSH placement algorithm
@@ -100,7 +100,7 @@ Description: CRUSH placement algorithm
  across failure domains.
 
 Package: libcrush1-dbg
-Architecture: i386 amd64
+Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: libcrush1 (= ${binary:Version}), ${misc:Depends}
@@ -118,7 +118,7 @@ Description: debugging symbols for libcrush1
  This package contains debugging symbols for libcrush.
 
 Package: libcrush-dev
-Architecture: i386 amd64
+Architecture: linux-any
 Section: libdevel
 Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush1 (= ${binary:Version})
 Conflicts: libcrush1-dev
@@ -140,7 +140,7 @@ Description: CRUSH mapping algorithm (development files)
 Package: librados2
 Conflicts: librados
 Replaces: librados
-Architecture: i386 amd64
+Architecture: linux-any
 Section: libs
 Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush1
 Description: RADOS distributed object store client library
@@ -150,7 +150,7 @@ Description: RADOS distributed object store client library
  store using a simple file-like interface.
 
 Package: librados2-dbg
-Architecture: i386 amd64
+Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: librados2 (= ${binary:Version}), ${misc:Depends}
@@ -163,7 +163,7 @@ Description: debugging symbols for librados
  This package contains debugging symbols for librados.
 
 Package: librados-dev
-Architecture: i386 amd64
+Architecture: linux-any
 Section: libdevel
 Depends: ${shlibs:Depends}, ${misc:Depends}, librados2 (= ${binary:Version})
 Conflicts: librados1-dev, librados2-dev
@@ -178,7 +178,7 @@ Description: RADOS distributed object store client library (development files)
  link against librados.
 
 Package: librbd1
-Architecture: i386 amd64
+Architecture: linux-any
 Section: libs
 Depends: ${shlibs:Depends}, ${misc:Depends}, librados2
 Description: RADOS block device client library
@@ -188,7 +188,7 @@ Description: RADOS block device client library
  shared library allowing applications to manage these block devices.
 
 Package: librbd1-dbg
-Architecture: i386 amd64
+Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: librbd1 (= ${binary:Version}), ${misc:Depends}
@@ -201,7 +201,7 @@ Description: debugging symbols for librbd1
  This package contains debugging symbols for librbd1.
 
 Package: librbd-dev
-Architecture: i386 amd64
+Architecture: linux-any
 Section: libdevel
 Depends: ${shlibs:Depends}, ${misc:Depends}, librbd1 (= ${binary:Version})
 Conflicts: librbd1-dev
@@ -218,7 +218,7 @@ Description: RADOS block device client library (development files)
 Package: libceph1
 Conflicts: libceph
 Replaces: libceph
-Architecture: i386 amd64
+Architecture: linux-any
 Section: libs
 Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush1
 Description: Ceph distributed file system client library
@@ -228,7 +228,7 @@ Description: Ceph distributed file system client library
  file system via a POSIX-like interface.
 
 Package: libceph1-dbg
-Architecture: i386 amd64
+Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: libceph1 (= ${binary:Version}), ${misc:Depends}
@@ -241,7 +241,7 @@ Description: debugging symbols for libceph1
  This package contains debugging symbols for libceph1.
 
 Package: libceph-dev
-Architecture: i386 amd64
+Architecture: linux-any
 Section: libdevel
 Depends: ${shlibs:Depends}, ${misc:Depends}, libceph1 (= ${binary:Version})
 Conflicts: libceph1-dev
@@ -256,7 +256,7 @@ Description: Ceph distributed file system client library (development files)
  link against libceph.
 
 Package: radosgw
-Architecture: i386 amd64
+Architecture: linux-any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libexpat1, librados2
 Description: REST gateway for RADOS distributed object store
  RADOS is a distributed object store used by the Ceph distributed
@@ -267,7 +267,7 @@ Description: REST gateway for RADOS distributed object store
  This package contains the proxy daemon and related tools only.
 
 Package: radosgw-dbg
-Architecture: i386 amd64
+Architecture: linux-any
 Section: debug
 Priority: extra
 Depends: radosgw (= ${binary:Version}), ${misc:Depends}
