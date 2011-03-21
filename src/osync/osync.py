@@ -72,6 +72,12 @@ def etag_to_md5(etag):
         end = None
     return etag[start:end]
 
+def getenv(e):
+    if os.environ.has_key(e):
+        return os.environ[e]
+    else:
+        return None
+
 ###### NonexistentStore #######
 class NonexistentStore(Exception):
     pass
@@ -104,10 +110,10 @@ class Object(object):
 ###### Store #######
 class Store(object):
     @staticmethod
-    def make_store(url, create):
+    def make_store(url, create, akey, skey):
         s3_url = strip_prefix("s3://", url)
         if (s3_url):
-            return S3Store(s3_url, create)
+            return S3Store(s3_url, create, akey, skey)
         file_url = strip_prefix("file://", url)
         if (file_url):
             return FileStore(file_url, create)
@@ -140,7 +146,7 @@ class S3StoreIterator(object):
         return ret
 
 class S3Store(Store):
-    def __init__(self, url, create):
+    def __init__(self, url, create, akey, skey):
         # Parse the s3 url
         host_end = string.find(url, "/")
         if (host_end == -1):
@@ -162,7 +168,8 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
             print "self.bucket_name = '" + self.bucket_name + "' ",
             print "self.key_prefix = '" + self.key_prefix + "'"
         self.conn = S3Connection(calling_format=OrdinaryCallingFormat(),
-                                 host=self.host, is_secure=False)
+                host=self.host, is_secure=False,
+                aws_access_key_id=akey, aws_secret_access_key=skey)
         self.bucket = self.conn.get_bucket(self.bucket_name)
         Store.__init__(self, "s3://" + url)
     def __str__(self):
@@ -292,7 +299,19 @@ osync -v s3://myhost/mybucket file://mydir
 osync -v file://mydir s3://myhost/mybucket
 
 # synchronize two S3 buckets
+SRC_AKEY=foo SRC_SKEY=foo \
+DST_AKEY=foo DST_SKEY=foo \
 osync -v s3://myhost/mybucket1 s3://myhost/mybucket2
+
+Note: You must specify an AWS access key and secret access key when accessing
+S3. osync honors these environment variables:
+SRC_AKEY          Access key for the source URL
+SRC_SKEY          Secret access key for the source URL
+DST_AKEY          Access key for the destination URL
+DST_SKEY          Secret access key for the destination URL
+
+If these environment variables are not given, we will fall back on libboto
+defaults.
 
 osync (options) [source] [destination]"""
 
@@ -301,6 +320,10 @@ parser = OptionParser(USAGE)
     #metavar="FILE", help="set config file")
 #parser.add_option("-n", "--dry-run", action="store_true", \
 #    dest="dry_run")
+parser.add_option("-S", "--source-config",
+    dest="source_config", help="boto configuration file to use for the S3 source")
+parser.add_option("-D", "--dest-config",
+    dest="dest_config", help="boto configuration file to use for the S3 destination")
 parser.add_option("-c", "--create-dest", action="store_true", \
     dest="create", help="create the destination if it doesn't already exist")
 parser.add_option("--delete-before", action="store_true", \
@@ -335,7 +358,8 @@ dst_name = args[1]
 try:
     if (opts.more_verbose):
         print "SOURCE: " + src_name
-    src = Store.make_store(src_name, False)
+    src = Store.make_store(src_name, False,
+            getenv("SRC_AKEY"), getenv("SRC_SKEY"))
 except NonexistentStore as e:
     print >>stderr, "Fatal error: Source " + src_name + " does not exist."
     sys.exit(1)
@@ -346,7 +370,8 @@ except Exception as e:
 try:
     if (opts.more_verbose):
         print "DESTINATION: " + dst_name
-    dst = Store.make_store(dst_name, opts.create)
+    dst = Store.make_store(dst_name, opts.create,
+            getenv("DST_AKEY"), getenv("DST_SKEY"))
 except NonexistentStore as e:
     print >>stderr, "Fatal error: Destination " + dst_name + " does " +\
         "not exist. Run with -c or --create-dest to create it automatically."
