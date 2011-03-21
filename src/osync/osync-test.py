@@ -65,6 +65,13 @@ def compare_directories(dir_a, dir_b):
         print "comparing directories %s and %s" % (dir_a, dir_b)
     subprocess.check_call(["diff", "-r", dir_a, dir_b])
 
+def count_obj_in_dir(d):
+    """counts the number of objects in a directory (WITHOUT recursing)"""
+    num_objects = 0
+    for f in os.listdir(d):
+        num_objects = num_objects + 1
+    return num_objects
+
 ###### OsyncTestBucket #######
 class OsyncTestBucket(object):
     def __init__(self, url, akey, skey):
@@ -181,8 +188,9 @@ if (opts.verbose):
     print "test a dry run between local directories"
 os.mkdir("%s/dir1b" % tdir)
 osync_check("file://%s/dir1" % tdir, "file://%s/dir1b" % tdir, ["-n"])
-for f in os.listdir("/%s/dir1b" % tdir):
+if (count_obj_in_dir("/%s/dir1b" % tdir) != 0):
     raise RuntimeError("error! the dry run copied some files!")
+
 if (opts.verbose):
     print "dry run didn't do anything. good."
 osync_check("file://%s/dir1" % tdir, "file://%s/dir1b" % tdir, [])
@@ -243,5 +251,30 @@ if (len(opts.buckets) >= 2):
     compare_directories("%s/dir1" % tdir, "%s/dir4" % tdir)
     if (opts.verbose):
         print "successfully copied one bucket to another."
+    if (opts.verbose):
+        print "adding another object to bucket1..."
+    os.mkdir("%s/small" % tdir)
+    f = open("%s/small/new_thing" % tdir, 'w')
+    f.write("a new object!!!")
+    f.close()
+    osync_check("%s/small" % tdir, opts.buckets[1], [])
+    osync_check(opts.buckets[0], "%s/bucket0_out" % tdir, ["-c"])
+    osync_check(opts.buckets[1], "%s/bucket1_out" % tdir, ["-c"])
+    bucket0_count = count_obj_in_dir("/%s/bucket0_out" % tdir)
+    bucket1_count = count_obj_in_dir("/%s/bucket1_out" % tdir)
+    if (bucket1_count != bucket0_count + 1):
+        raise RuntimeError("error! expected one extra object in bucket1! \
+bucket0_count=%d, bucket1_count=%d" % (bucket0_count, bucket1_count))
+    if (opts.verbose):
+        print "copying bucket0 to bucket1..."
+    osync_check(opts.buckets[0], opts.buckets[1], ["-c", "--delete-before"])
+    osync_check(opts.buckets[0], "%s/bucket0_out" % tdir, ["--delete-after"])
+    osync_check(opts.buckets[1], "%s/bucket1_out" % tdir, ["--delete-after"])
+    bucket0_count = count_obj_in_dir("/%s/bucket0_out" % tdir)
+    bucket1_count = count_obj_in_dir("/%s/bucket1_out" % tdir)
+    if (bucket0_count != bucket1_count):
+        raise RuntimeError("error! expected the same number of objects \
+in bucket0 and bucket1. bucket0_count=%d, bucket1_count=%d" \
+% (bucket0_count, bucket1_count))
 
 sys.exit(0)
