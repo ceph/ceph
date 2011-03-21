@@ -146,7 +146,7 @@ int main(int argc, const char **argv)
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error creating fresh journal " << g_conf.osd_journal
 	   << " for object store " << g_conf.osd_data
-	   << ": " << cpp_strerror(-err) << dendl;
+	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
       exit(1);
     }
     derr << "created new journal " << g_conf.osd_journal
@@ -158,7 +158,7 @@ int main(int argc, const char **argv)
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error flushing journal " << g_conf.osd_journal
 	   << " for object store " << g_conf.osd_data
-	   << ": " << cpp_strerror(-err) << dendl;
+	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
       exit(1);
     }
     derr << "flushed journal " << g_conf.osd_journal

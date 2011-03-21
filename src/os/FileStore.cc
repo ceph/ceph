@@ -1037,7 +1037,7 @@ int FileStore::_sanity_check_fs()
     cerr << TEXT_RED 
 	 << " ** WARNING: more than one of 'filestore journal {writeahead,parallel,trailing}'\n"
 	 << "             is enabled in ceph.conf.  You must choose a single journal mode."
-	 << std::endl;
+	 << TEXT_NORMAL << std::endl;
     return -EINVAL;
   }
 
