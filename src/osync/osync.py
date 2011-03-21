@@ -196,6 +196,10 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
         k.key = obj.name
         #k.set_metadata("Content-Type", mime)
         k.set_contents_from_filename(local_copy.path)
+    def remove(self, obj):
+        self.bucket.delete_key(obj.name)
+        if (opts.more_verbose):
+            print "S3Store: removed %s" % obj.name
 
 ###### FileStore #######
 class FileStoreIterator(object):
@@ -261,8 +265,21 @@ class FileStore(Store):
         #print "s='" + s +"', d='" + d + "'"
         mkdir_p(os.path.dirname(d))
         shutil.copy(s, d)
+    def remove(self, obj):
+        os.unlink(self.base + "/" + obj.name)
+        if (opts.more_verbose):
+            print "FileStore: removed %s" % obj.name
 
 ###### Functions #######
+def delete_unreferenced(src, dst):
+    """ delete everything from dst that is not referenced in src """
+    if (opts.more_verbose):
+        print "handling deletes."
+    for dobj in dst.all_objects():
+        sobj = src.locate_object(dobj)
+        if (sobj == None):
+            dst.remove(dobj)
+
 USAGE = """
 osync synchronizes objects. The source and destination can both be local or
 both remote.
@@ -286,6 +303,12 @@ parser = OptionParser(USAGE)
 #    dest="dry_run")
 parser.add_option("-c", "--create-dest", action="store_true", \
     dest="create", help="create the destination if it doesn't already exist")
+parser.add_option("--delete-before", action="store_true", \
+    dest="delete_before", help="delete objects that aren't in SOURCE from \
+DESTINATION before transferring any objects")
+parser.add_option("-d", "--delete-after", action="store_true", \
+    dest="delete_after", help="delete objects that aren't in SOURCE from \
+DESTINATION after doing all transfers.")
 parser.add_option("-v", "--verbose", action="store_true", \
     dest="verbose", help="be verbose")
 parser.add_option("-V", "--more-verbose", action="store_true", \
@@ -303,6 +326,10 @@ if (opts.more_verbose):
     opts.verbose = True
     boto.set_stream_logger("stdout")
     boto.log.info("Enabling verbose boto logging.")
+if (opts.delete_before and opts.delete_after):
+    print >>stderr, "It doesn't make sense to specify both --delete-before \
+and --delete-after."
+    sys.exit(1)
 src_name = args[0]
 dst_name = args[1]
 try:
@@ -329,6 +356,9 @@ except Exception as e:
     traceback.print_exc(100000, stderr)
     sys.exit(1)
 
+if (opts.delete_before):
+    delete_unreferenced(src, dst)
+
 for sobj in src.all_objects():
     if (opts.more_verbose):
         print "handling " + sobj.name
@@ -351,6 +381,9 @@ for sobj in src.all_objects():
             dst.upload(local_copy, sobj)
         finally:
             local_copy.remove()
+
+if (opts.delete_after):
+    delete_unreferenced(src, dst)
 
 if (opts.more_verbose):
     print "finished."
