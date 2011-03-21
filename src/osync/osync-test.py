@@ -26,6 +26,36 @@ import sys
 global opts
 global tdir
 
+###### Helper functions #######
+def getenv(e):
+    if os.environ.has_key(e):
+        return os.environ[e]
+    else:
+        return None
+
+def osync(src, dst, misc):
+    full = ["./osync.py"]
+    e = {}
+    if (isinstance(src, OsyncTestBucket)):
+        full.append(src.url)
+        e["SRC_AKEY"] = src.akey
+        e["SRC_SKEY"] = src.skey
+    else:
+        full.append(src)
+    if (isinstance(dst, OsyncTestBucket)):
+        full.append(dst.url)
+        e["DST_AKEY"] = dst.akey
+        e["DST_SKEY"] = dst.skey
+    else:
+        full.append(dst)
+    full.extend(misc)
+    return subprocess.call(full, stderr=opts.error_out, env=e)
+
+def osync_check(src, dst, opts):
+    ret = osync(src, dst, opts)
+    if (ret != 0):
+        raise RuntimeError("call to osync failed!")
+
 def cleanup_tempdir():
     if tdir != None and opts.keep_tempdir == False:
         shutil.rmtree(tdir)
@@ -35,18 +65,51 @@ def compare_directories(dir_a, dir_b):
         print "comparing directories %s and %s" % (dir_a, dir_b)
     subprocess.check_call(["diff", "-r", dir_a, dir_b])
 
+###### OsyncTestBucket #######
+class OsyncTestBucket(object):
+    def __init__(self, url, akey, skey):
+        self.url = url
+        self.akey = akey
+        self.skey = skey
+
+###### Main #######
+# change directory to osync directory
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 # parse options
-parser = OptionParser("osync-test.sh")
+parser = OptionParser("""osync-test.sh
+A system test for osync.
+
+Important environment variables:
+URL1, SKEY1, AKEY1: to set up bucket1 (optional)
+URL2, SKEY2, AKEY2: to set up bucket2 (optional)""")
 parser.add_option("-k", "--keep-tempdir", action="store_true",
     dest="keep_tempdir", default=False,
     help="create the destination if it doesn't already exist")
 parser.add_option("-v", "--verbose", action="store_true",
     dest="verbose", default=False,
     help="run verbose")
-parser.add_option("-L", "--local-only", action="store_true",
-    dest="local_only", default=False,
-    help="run local tests only (no actual S3)")
+parser.add_option("-V", "--more-verbose", action="store_true", \
+    dest="more_verbose", help="be really, really verbose (developer mode)")
 (opts, args) = parser.parse_args()
+if (opts.more_verbose):
+    opts.verbose = True
+
+# parse environment
+opts.buckets = []
+if (not os.environ.has_key("URL1")):
+    print "no bucket urls were given. Running local tests only."
+elif (not os.environ.has_key("URL2")):
+    opts.buckets.append(OsyncTestBucket(getenv("URL1"), getenv("AKEY1"),
+                        getenv("SKEY1")))
+    print "have scratch1_url: will test bucket transfers"
+else:
+    opts.buckets.append(OsyncTestBucket(getenv("URL1"), getenv("AKEY1"),
+                        getenv("SKEY1")))
+    opts.buckets.append(OsyncTestBucket(getenv("URL2"), getenv("AKEY2"),
+                getenv("SKEY2")))
+    print "have both scratch1_url and scratch2_url: will test \
+bucket-to-bucket transfers."
 
 # set up temporary directory
 tdir = tempfile.mkdtemp()
@@ -77,8 +140,10 @@ for i in range(0, 1000):
     f.write("%d." % i)
 f.close()
 
-dev_null = open("/dev/null", 'w')
-#e = { "BOTO_CONFIG" : ("%s/boto_config" % tdir) }
+if (opts.more_verbose):
+    opts.error_out = sys.stderr
+else:
+    opts.error_out = open("/dev/null", 'w')
 
 # copy this tree to somewhere else
 subprocess.check_call(["cp", "-r", "%s/dir1" % tdir, "%s/dir1a" % tdir])
@@ -88,7 +153,7 @@ compare_directories("%s/dir1" % tdir, "%s/dir1a" % tdir)
 
 # we should fail here, because we didn't supply -c
 ret = subprocess.call(["./osync.py", "file://%s/dir1" % tdir,
-                "file://%s/dir2" % tdir], stderr=dev_null, env=e)
+                "file://%s/dir2" % tdir], stderr=opts.error_out)
 if (ret == 0):
     raise RuntimeError("expected this call to osync to fail, because \
 we didn't supply -c. But it succeeded.")
@@ -97,17 +162,34 @@ if (opts.verbose):
 
 # now supply -c and it should work
 ret = subprocess.check_call(["./osync.py", "-c", "file://%s/dir1" % tdir,
-                "file://%s/dir2" % tdir], stderr=dev_null, env=e)
+                "file://%s/dir2" % tdir], stderr=opts.error_out)
 compare_directories("%s/dir1" % tdir, "%s/dir2" % tdir)
 if (opts.verbose):
     print "successfully created dir2 from dir1"
 
-if (not local_only):
+if (len(opts.buckets) > 0):
     # first, let's empty out the S3 bucket
-    ret = subprocess.check_call(["./osync.py", "-c", "--delete-after",
-        "file://%s/empty" % tdir, "s3://test-bucket/"], stderr=dev_null, env=e)
+    os.mkdir("%s/empty1" % tdir)
+    if (opts.verbose):
+        print "emptying out bucket1..."
+    osync_check("file://%s/empty1" % tdir, opts.buckets[0],
+                ["-c", "--delete-after"])
 
-    ret = subprocess.check_call(["./osync.py", "-c", "file://%s/dir1" % tdir,
-                    "s3://test-bucket/"], stderr=dev_null, env=e)
+    # make sure that the empty worked
+    osync_check(opts.buckets[0], "file://%s/empty2" % tdir, ["-c"])
+    compare_directories("%s/empty1" % tdir, "%s/empty2" % tdir)
+    if (opts.verbose):
+        print "successfully emptied out the bucket."
+
+    if (opts.verbose):
+        print "copying the sample directory to the test bucket..."
+    # now copy the sample files to the test bucket
+    osync_check("file://%s/dir1" % tdir, opts.buckets[0], [])
+
+    # make sure that the copy worked
+    osync_check(opts.buckets[0], "file://%s/dir3" % tdir, ["-c"])
+    compare_directories("%s/dir1" % tdir, "%s/dir3" % tdir)
+    if (opts.verbose):
+        print "successfully copied the sample directory to the test bucket."
 
 sys.exit(0)
