@@ -180,6 +180,8 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
         self.bucket = self.conn.lookup(self.bucket_name)
         if (self.bucket == None):
             if (create):
+                if (opts.dry_run):
+                    raise Exception("logic error: this should be unreachable.")
                 self.bucket = self.conn.create_bucket(bucket_name = self.bucket_name)
             else:
                 raise RuntimeError("%s: no such bucket as %s" % \
@@ -209,6 +211,8 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
         if (opts.more_verbose):
             print "UPLOAD: local_copy.path='" + local_copy.path + "' " + \
                 "obj='" + obj.name + "'"
+        if (opts.dry_run):
+            return
 #        mime = mimetypes.guess_type(local_copy.path)[0]
 #        if (mime == NoneType):
 #            mime = "application/octet-stream"
@@ -217,6 +221,8 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
         #k.set_metadata("Content-Type", mime)
         k.set_contents_from_filename(local_copy.path)
     def remove(self, obj):
+        if (opts.dry_run):
+            return
         self.bucket.delete_key(obj.name)
         if (opts.more_verbose):
             print "S3Store: removed %s" % obj.name
@@ -256,6 +262,8 @@ class FileStore(Store):
         if (self.base[-1:] == '/'):
             self.base = self.base[:-1]
         if (create):
+            if (opts.dry_run):
+                raise Exception("logic error: this should be unreachable.")
             mkdir_p(self.base)
         elif (not os.path.isdir(self.base)):
             raise NonexistentStore()
@@ -280,12 +288,16 @@ class FileStore(Store):
             return None
         return Object.from_file(obj.name, path)
     def upload(self, local_copy, obj):
+        if (opts.dry_run):
+            return
         s = local_copy.path
         d = self.base + "/" + obj.name
         #print "s='" + s +"', d='" + d + "'"
         mkdir_p(os.path.dirname(d))
         shutil.copy(s, d)
     def remove(self, obj):
+        if (opts.dry_run):
+            return
         os.unlink(self.base + "/" + obj.name)
         if (opts.more_verbose):
             print "FileStore: removed %s" % obj.name
@@ -331,10 +343,8 @@ defaults.
 osync (options) [source] [destination]"""
 
 parser = OptionParser(USAGE)
-#parser.add_option("-c", "--config-file", dest="config_file", \
-    #metavar="FILE", help="set config file")
-#parser.add_option("-n", "--dry-run", action="store_true", \
-#    dest="dry_run")
+parser.add_option("-n", "--dry-run", action="store_true", \
+    dest="dry_run", default=False)
 parser.add_option("-S", "--source-config",
     dest="source_config", help="boto configuration file to use for the S3 source")
 parser.add_option("-D", "--dest-config",
@@ -352,6 +362,9 @@ parser.add_option("-v", "--verbose", action="store_true", \
 parser.add_option("-V", "--more-verbose", action="store_true", \
     dest="more_verbose", help="be really, really verbose (developer mode)")
 (opts, args) = parser.parse_args()
+if (opts.create and opts.dry_run):
+    raise Exception("You can't run with both --create-dest and --dry-run! \
+By definition, a dry run never changes anything.")
 if (len(args) < 2):
     print >>stderr, "Expected two positional arguments: source and destination"
     print >>stderr, USAGE
