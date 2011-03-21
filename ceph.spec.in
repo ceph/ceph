@@ -1,6 +1,11 @@
 %define with_radosgw %{?_with_radosgw: 1} %{!?_with_radosgw: 0}
 %define with_gtk2 %{?_with_gtk2: 1} %{!?_with_gtk2: 0}
 
+%if ! (0%{?fedora} > 12 || 0%{?rhel} > 5)
+%{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
+%{!?python_sitearch: %global python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(1))")}
+%endif
+
 Name:          ceph
 Version:       @VERSION@
 Release:       4%{?dist}
@@ -177,6 +182,9 @@ fi
 %{_mandir}/man8/cdebugpack.8*
 %{_mandir}/man8/cclass.8.gz
 %{_mandir}/man8/cclsinfo.8.gz
+%{python_sitelib}/rados.py
+%{python_sitelib}/rados.pyc
+%{python_sitelib}/rados.pyo
 %dir %{_localstatedir}/lib/ceph/
 %dir %{_localstatedir}/lib/ceph/tmp/
 %dir %{_localstatedir}/log/ceph/
