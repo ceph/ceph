@@ -117,7 +117,12 @@ class Store(object):
         file_url = strip_prefix("file://", url)
         if (file_url):
             return FileStore(file_url, create)
-        raise Exception("Failed to find s3:// or file:// prefix.")
+        if (url[0:1] == "/"):
+            return FileStore(url, create)
+        if (url[0:2] == "./"):
+            return FileStore(url, create)
+        raise Exception("Failed to find a prefix of s3://, file://, /, or ./ \
+Cannot handle this URL.")
     def __init__(self, url):
         self.url = url
 

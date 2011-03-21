@@ -98,17 +98,20 @@ if (opts.more_verbose):
 # parse environment
 opts.buckets = []
 if (not os.environ.has_key("URL1")):
-    print "no bucket urls were given. Running local tests only."
+    if (opts.verbose):
+        print "no bucket urls were given. Running local tests only."
 elif (not os.environ.has_key("URL2")):
     opts.buckets.append(OsyncTestBucket(getenv("URL1"), getenv("AKEY1"),
                         getenv("SKEY1")))
-    print "have scratch1_url: will test bucket transfers"
+    if (opts.verbose):
+        print "have scratch1_url: will test bucket transfers"
 else:
     opts.buckets.append(OsyncTestBucket(getenv("URL1"), getenv("AKEY1"),
                         getenv("SKEY1")))
     opts.buckets.append(OsyncTestBucket(getenv("URL2"), getenv("AKEY2"),
                 getenv("SKEY2")))
-    print "have both scratch1_url and scratch2_url: will test \
+    if (opts.verbose):
+        print "have both scratch1_url and scratch2_url: will test \
 bucket-to-bucket transfers."
 
 # set up temporary directory
@@ -164,6 +167,13 @@ if (opts.verbose):
 ret = subprocess.check_call(["./osync.py", "-c", "file://%s/dir1" % tdir,
                 "file://%s/dir2" % tdir], stderr=opts.error_out)
 compare_directories("%s/dir1" % tdir, "%s/dir2" % tdir)
+
+# test the alternate syntax where we leave off the file://, and it is assumed
+# because the url begins with / or ./
+ret = subprocess.check_call(["./osync.py", "-c", "file://%s/dir1" % tdir,
+                "/%s/dir2" % tdir], stderr=opts.error_out)
+compare_directories("%s/dir1" % tdir, "%s/dir2" % tdir)
+
 if (opts.verbose):
     print "successfully created dir2 from dir1"
 
