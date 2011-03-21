@@ -719,8 +719,8 @@ void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
     }
   }
 
-  const char *cgi_env_log = FCGX_GetParam("RGW_LOG_LEVEL", fcgx->envp);
-  s->should_log = rgw_str_to_bool(cgi_env_log, RGW_SHOULD_LOG_DEFAULT);
+  const char *cgi_should_log = FCGX_GetParam("RGW_SHOULD_LOG", fcgx->envp);
+  s->should_log = rgw_str_to_bool(cgi_should_log, RGW_SHOULD_LOG_DEFAULT);
 
   if (rgw_log_level >= 20) {
     char *p;
