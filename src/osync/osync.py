@@ -72,9 +72,11 @@ def etag_to_md5(etag):
         end = None
     return etag[start:end]
 
-def getenv(e):
-    if os.environ.has_key(e):
-        return os.environ[e]
+def getenv(a, b):
+    if os.environ.has_key(a):
+        return os.environ[a]
+    elif os.environ.has_key(b):
+        return os.environ[b]
     else:
         return None
 
@@ -320,6 +322,8 @@ SRC_AKEY          Access key for the source URL
 SRC_SKEY          Secret access key for the source URL
 DST_AKEY          Access key for the destination URL
 DST_SKEY          Secret access key for the destination URL
+AKEY              Access key for both source and dest
+SKEY              Secret access key for both source and dest
 
 If these environment variables are not given, we will fall back on libboto
 defaults.
@@ -370,7 +374,7 @@ try:
     if (opts.more_verbose):
         print "SOURCE: " + src_name
     src = Store.make_store(src_name, False,
-            getenv("SRC_AKEY"), getenv("SRC_SKEY"))
+            getenv("SRC_AKEY", "AKEY"), getenv("SRC_SKEY", "SKEY"))
 except NonexistentStore as e:
     print >>stderr, "Fatal error: Source " + src_name + " does not exist."
     sys.exit(1)
@@ -382,7 +386,7 @@ try:
     if (opts.more_verbose):
         print "DESTINATION: " + dst_name
     dst = Store.make_store(dst_name, opts.create,
-            getenv("DST_AKEY"), getenv("DST_SKEY"))
+            getenv("DST_AKEY", "AKEY"), getenv("DST_SKEY", "SKEY"))
 except NonexistentStore as e:
     print >>stderr, "Fatal error: Destination " + dst_name + " does " +\
         "not exist. Run with -c or --create-dest to create it automatically."
