@@ -177,7 +177,7 @@ compare_directories("%s/dir1" % tdir, "%s/dir2" % tdir)
 if (opts.verbose):
     print "successfully created dir2 from dir1"
 
-if (len(opts.buckets) > 0):
+if (len(opts.buckets) >= 1):
     # first, let's empty out the S3 bucket
     os.mkdir("%s/empty1" % tdir)
     if (opts.verbose):
@@ -201,5 +201,19 @@ if (len(opts.buckets) > 0):
     compare_directories("%s/dir1" % tdir, "%s/dir3" % tdir)
     if (opts.verbose):
         print "successfully copied the sample directory to the test bucket."
+
+if (len(opts.buckets) >= 2):
+    if (opts.verbose):
+        print "copying dir1 to bucket0..."
+    osync_check("file://%s/dir1" % tdir, opts.buckets[0], [])
+    if (opts.verbose):
+        print "copying bucket0 to bucket1..."
+    osync_check(opts.buckets[0], opts.buckets[1], ["-c"])
+    if (opts.verbose):
+        print "copying bucket1 to dir4..."
+    osync_check(opts.buckets[1], "file://%s/dir4" % tdir, ["-c"])
+    compare_directories("%s/dir1" % tdir, "%s/dir4" % tdir)
+    if (opts.verbose):
+        print "successfully copied one bucket to another."
 
 sys.exit(0)
