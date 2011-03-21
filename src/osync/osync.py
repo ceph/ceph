@@ -175,7 +175,13 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
         self.conn = S3Connection(calling_format=OrdinaryCallingFormat(),
                 host=self.host, is_secure=False,
                 aws_access_key_id=akey, aws_secret_access_key=skey)
-        self.bucket = self.conn.get_bucket(self.bucket_name)
+        self.bucket = self.conn.lookup(self.bucket_name)
+        if (self.bucket == None):
+            if (create):
+                self.bucket = self.conn.create_bucket(bucket_name = self.bucket_name)
+            else:
+                raise RuntimeError("%s: no such bucket as %s" % \
+                    (url, self.bucket_name))
         Store.__init__(self, "s3://" + url)
     def __str__(self):
         return "s3://" + self.host + "/" + self.bucket_name + "/" + self.key_prefix
