@@ -52,7 +52,7 @@ static ostream& _prefix(SimpleMessenger *messenger) {
  * Accepter
  */
 
-int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_addr, int avoid_port1, int avoid_port2)
+int SimpleMessenger::Accepter::bind(uint64_t nonce, entity_addr_t &bind_addr, int avoid_port1, int avoid_port2)
 {
   // bind to a socket
   dout(10) << "accepter.bind" << dendl;
@@ -145,10 +145,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce, entity_addr_t &bind_add
 
   if (messenger->ms_addr.get_port() == 0) {
     messenger->ms_addr = listen_addr;
-    if (force_nonce >= 0)
-      messenger->ms_addr.nonce = force_nonce;
-    else
-      messenger->ms_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
+    messenger->ms_addr.nonce = nonce;
   }
 
   messenger->init_local_pipe();
@@ -2298,7 +2295,7 @@ void SimpleMessenger::queue_reap(Pipe *pipe)
 
 
 
-int SimpleMessenger::bind(entity_addr_t &bind_addr, int64_t force_nonce)
+int SimpleMessenger::bind(entity_addr_t bind_addr, int64_t nonce)
 {
   lock.Lock();
   if (started) {
@@ -2310,7 +2307,7 @@ int SimpleMessenger::bind(entity_addr_t &bind_addr, int64_t force_nonce)
   lock.Unlock();
 
   // bind to a socket
-  return accepter.bind(force_nonce, bind_addr);
+  return accepter.bind(nonce, bind_addr);
 }
 
 int SimpleMessenger::rebind(int avoid_port)
@@ -2406,7 +2403,7 @@ int SimpleMessenger::write_pid_file(int pid)
   return 0;
 }
 
-int SimpleMessenger::start(bool daemonize)
+int SimpleMessenger::start(bool daemonize, uint64_t nonce)
 {
   // register at least one entity, first!
   assert(my_type >= 0); 
@@ -2417,9 +2414,10 @@ int SimpleMessenger::start(bool daemonize)
     lock.Unlock();
     return 0;
   }
-
-  if (!did_bind)
-    ms_addr.nonce = getpid();
+  
+  if (!did_bind) {
+    ms_addr.nonce = nonce;
+  }
 
   dout(1) << "messenger.start" << dendl;
   started = true;

@@ -304,7 +304,7 @@ libradosgw_a_SOURCES = \
 
 libradosgw_a_CFLAGS = ${AM_CFLAGS}
 libradosgw_a_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
-libradosgw_a_LDFLAGS = ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
+#libradosgw_a_LDFLAGS = ${CRYPTO_LDFLAGS} ${AM_LDFLAGS}
 # lib_LTLIBRARIES += libradosgw.a
 
 radosgw_SOURCES = rgw/rgw_main.cc
@@ -523,7 +523,6 @@ ceph_ver.h: .git_version
 
 ceph_ver.c: ./ceph_ver.h
 common/version.cc: ./ceph_ver.h
-common/BackTrace.cc: ./ceph_ver.h
 
 # cleaning
 clean-local:

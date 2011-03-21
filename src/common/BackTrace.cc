@@ -6,7 +6,7 @@
 
 #include "BackTrace.h"
 
-#include "ceph_ver.h"
+#include "common/version.h"
 #include "acconfig.h"
 
 #define _STR(x) #x
@@ -16,7 +16,7 @@ namespace ceph {
 
 void BackTrace::print(std::ostream& out)
 {
-  out << " ceph version " << VERSION << " (commit:" << STRINGIFY(CEPH_GIT_VER) << ")" << std::endl;
+  out << " " << pretty_version_to_str() << std::endl;
   for (size_t i = skip; i < size; i++) {
     //      out << " " << (i-skip+1) << ": " << strings[i] << std::endl;
 

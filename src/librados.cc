@@ -51,6 +51,9 @@ using namespace std;
 #define dout_prefix *_dout << "librados: "
 
 
+static atomic_t rados_instance;
+
+
 /*
  * Structure of this file
  *
@@ -568,7 +571,11 @@ connect()
 
   messenger->add_dispatcher_head(this);
 
-  messenger->start(false); // do not daemonize
+  uint64_t nonce;
+  rados_instance.inc();
+  nonce = getpid() + (1000000 * (uint64_t)rados_instance.read());
+
+  messenger->start(false, nonce); // do not daemonize
   messenger->add_dispatcher_head(this);
 
   dout(1) << "setting wanted keys" << dendl;
@@ -608,7 +615,8 @@ shutdown()
 {
   lock.Lock();
   monclient.shutdown();
-  objecter->shutdown();
+  if (objecter)
+    objecter->shutdown();
   timer.shutdown();
   lock.Unlock();
   if (messenger) {
@@ -2602,6 +2610,9 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
   if (!rados_initialized) {
     CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
     iparams.conf_file = "";
+    if (id) {
+      iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
+    }
 
     // TODO: store this conf pointer in the RadosClient and use it as our
     // configuration

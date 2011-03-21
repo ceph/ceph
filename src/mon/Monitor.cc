@@ -963,7 +963,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   int err = store->mkfs();
   if (err) {
     dout(0) << TEXT_RED << "** ERROR: store->mkfs failed with error code "
-	    << err << ". Aborting." << dendl;
+	    << err << ". Aborting." << TEXT_NORMAL << dendl;
     exit(1);
   }
 

@@ -118,7 +118,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
     cout << "cfuse[" << getpid() << "]: starting ceph client" << std::endl;
 
-    messenger->start(false); // Do not daemonize here
+    messenger->start(false, getpid()); // Do not daemonize here
 
     // start client
     client->init();

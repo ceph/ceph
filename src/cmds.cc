@@ -119,7 +119,7 @@ int main(int argc, const char **argv)
     return -1;
 
   SimpleMessenger *messenger = new SimpleMessenger();
-  messenger->bind();
+  messenger->bind(getpid());
   if (dump_journal >= 0) {
     Dumper *journal_dumper = new Dumper(messenger, &mc);
     journal_dumper->init(dump_journal);

@@ -1,12 +1,14 @@
 #!/bin/bash
 
-cur=`cat $1`
+cur=`head -1 $1`
+v=`tail -1 $1 | cut -c 2-`
 
 print_all() {
 	echo "#ifndef CEPH_VERSION_H"
 	echo "#define CEPH_VERSION_H"
 	echo
 	echo "#define CEPH_GIT_VER $cur"
+	echo "#define CEPH_GIT_NICE_VER \"$v\""
 	echo
 	echo "#endif"
 }

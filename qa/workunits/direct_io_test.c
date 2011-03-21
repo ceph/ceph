@@ -98,7 +98,7 @@ static int setup_temp_file(void)
 		return -EINVAL;
 	}
 
-	fd = mkostemps(temp_file, 0, O_WRONLY | O_TRUNC);
+	fd = mkstemp(temp_file);
 	if (fd < 0) {
 		int err = errno;
 		printf("setup_big_file: mkostemps failed with error %d\n", err);

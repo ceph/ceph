@@ -759,6 +759,7 @@ public:
   set<int>             peer_backlog_requested;
   set<int>             peer_missing_requested;
   set<int>             stray_purged;  // i deleted these strays; ignore racing PGInfo from them
+  set<int>             peer_activated;
 
   // primary-only, recovery-only state
   set<int>             might_have_unfound;  // These osds might have objects on them
@@ -860,9 +861,12 @@ public:
 	      map< int, map<pg_t,Query> >& query_map,
 	      map<int, MOSDPGInfo*> *activator_map=0);
   void build_might_have_unfound();
+  void replay_queued_ops();
   void activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 		map< int, map<pg_t,Query> >& query_map,
 		map<int, MOSDPGInfo*> *activator_map=0);
+  void _activate_committed(epoch_t e);
+  void all_activated_and_committed();
 
   bool have_unfound() const { 
     return missing.num_missing() > missing_loc.size();

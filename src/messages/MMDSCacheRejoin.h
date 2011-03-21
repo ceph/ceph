@@ -148,7 +148,7 @@ class MMDSCacheRejoin : public Message {
   WRITE_CLASS_ENCODER(lock_bls)
 
   // weak
-  map<dirfrag_t, map<string_snap_t, dn_weak> > weak;
+  map<inodeno_t, map<string_snap_t, dn_weak> > weak;
   set<vinodeno_t> weak_inodes;
   map<inodeno_t, lock_bls> inode_scatterlocks;
 
@@ -228,22 +228,16 @@ public:
   }
   
   // dirfrags
-  void add_weak_dirfrag(dirfrag_t df) {
-    weak[df];
-  }
-  void add_weak_dirfrag(dirfrag_t df, map<string_snap_t,dn_weak>& dnmap) {
-    weak[df] = dnmap;
-  }
   void add_strong_dirfrag(dirfrag_t df, int n, int dr) {
     strong_dirfrags[df] = dirfrag_strong(n, dr);
   }
    
   // dentries
-  void add_weak_dentry(dirfrag_t df, const string& dname, snapid_t last, dn_weak& dnw) {
-    weak[df][string_snap_t(dname, last)] = dnw;
+  void add_weak_dentry(inodeno_t dirino, const string& dname, snapid_t last, dn_weak& dnw) {
+    weak[dirino][string_snap_t(dname, last)] = dnw;
   }
-  void add_weak_primary_dentry(dirfrag_t df, const string& dname, snapid_t first, snapid_t last, inodeno_t ino) {
-    weak[df][string_snap_t(dname, last)] = dn_weak(first, ino);
+  void add_weak_primary_dentry(inodeno_t dirino, const string& dname, snapid_t first, snapid_t last, inodeno_t ino) {
+    weak[dirino][string_snap_t(dname, last)] = dn_weak(first, ino);
   }
   void add_strong_dentry(dirfrag_t df, const string& dname, snapid_t first, snapid_t last, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int ls) {
     strong_dentries[df][string_snap_t(dname, last)] = dn_strong(first, pi, ri, rdt, n, ls);

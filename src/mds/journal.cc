@@ -1039,7 +1039,7 @@ void EFragment::replay(MDS *mds)
       break;
 
     case OP_ROLLBACK:
-      mds->mdcache->adjust_dir_fragments(in, basefrag, -bits, resultfrags, waiters, true);
+      mds->mdcache->adjust_dir_fragments(in, basefrag, bits, resultfrags, waiters, true);
       break;
     }
   }

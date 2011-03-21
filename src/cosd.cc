@@ -146,7 +146,7 @@ int main(int argc, const char **argv)
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error creating fresh journal " << g_conf.osd_journal
 	   << " for object store " << g_conf.osd_data
-	   << ": " << cpp_strerror(-err) << dendl;
+	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
       exit(1);
     }
     derr << "created new journal " << g_conf.osd_journal
@@ -158,7 +158,7 @@ int main(int argc, const char **argv)
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error flushing journal " << g_conf.osd_journal
 	   << " for object store " << g_conf.osd_data
-	   << ": " << cpp_strerror(-err) << dendl;
+	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
       exit(1);
     }
     derr << "flushed journal " << g_conf.osd_journal
@@ -208,21 +208,21 @@ int main(int argc, const char **argv)
   SimpleMessenger *messenger_hb = new SimpleMessenger();
 
   if (client_addr_set)
-    client_messenger->bind(g_conf.public_addr);
+    client_messenger->bind(g_conf.public_addr, getpid());
   else
-    client_messenger->bind();
+    client_messenger->bind(getpid());
 
   entity_addr_t hb_addr;  // hb should bind to same ip ad cluster_addr (if specified)
 
   if (cluster_addr_set) {
-    cluster_messenger->bind(g_conf.cluster_addr);
+    cluster_messenger->bind(g_conf.cluster_addr, getpid());
     hb_addr = g_conf.cluster_addr;
     hb_addr.set_port(0);
   } else {
-    cluster_messenger->bind();
+    cluster_messenger->bind(getpid());
   }
 
-  messenger_hb->bind(hb_addr);
+  messenger_hb->bind(hb_addr, getpid());
 
   cout << "starting osd" << whoami
        << " at " << client_messenger->get_ms_addr() 

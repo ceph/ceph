@@ -16,6 +16,7 @@
 #include "common/Clock.h"
 #include "common/config.h"
 #include "common/debug.h"
+#include "include/buffer.h"
 
 #define DOUT_SUBSYS auth
 #undef dout_prefix
@@ -368,18 +369,22 @@ bool cephx_verify_authorizer(KeyStore *keys,
 			     CephXServiceTicketInfo& ticket_info, bufferlist& reply_bl)
 {
   __u8 authorizer_v;
-  ::decode(authorizer_v, indata);
-
   uint32_t service_id;
   uint64_t global_id;
   CryptoKey service_secret;
-
-  ::decode(global_id, indata);
-  ::decode(service_id, indata);
-
   // ticket blob
   CephXTicketBlob ticket;
-  ::decode(ticket, indata);
+
+
+  try {
+    ::decode(authorizer_v, indata);
+    ::decode(global_id, indata);
+    ::decode(service_id, indata);
+    ::decode(ticket, indata);
+  } catch (buffer::end_of_buffer e) {
+    // Unable to decode!
+    return false;
+  }
   dout(10) << "verify_authorizer decrypted service " << ceph_entity_type_name(service_id)
 	   << " secret_id=" << ticket.secret_id << dendl;
 

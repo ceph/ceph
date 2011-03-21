@@ -104,7 +104,7 @@ private:
     
     void *entry();
     void stop();
-    int bind(int64_t force_nonce, entity_addr_t &bind_addr, int avoid_port1=0, int avoid_port2=0);
+    int bind(uint64_t nonce, entity_addr_t &bind_addr, int avoid_port1=0, int avoid_port2=0);
     int rebind(int avoid_port);
     int start();
   } accepter;
@@ -560,9 +560,15 @@ public:
 
   //void set_listen_addr(tcpaddr_t& a);
 
-  int bind(entity_addr_t& bind_addr, int64_t force_nonce = -1);
-  int bind(int64_t force_nonce = -1) { return bind(g_conf.public_addr, force_nonce); }
-  int start(bool daemonize);
+  int bind(entity_addr_t bind_addr, int64_t nonce);
+  int bind(uint64_t nonce) {
+    return bind(g_conf.public_addr, nonce);
+  }
+  int start(bool daemonize, uint64_t nonce);  // if we didn't bind
+  int start(bool daemonize) {                 // if we did
+    assert(did_bind);
+    return start(daemonize, 0);
+  }
   void wait();
 
   int write_pid_file(int pid);

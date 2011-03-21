@@ -1312,6 +1312,7 @@ void PG::clear_primary_state()
   peer_missing.clear();
   need_up_thru = false;
   peer_last_complete_ondisk.clear();
+  peer_activated.clear();
   min_last_complete_ondisk = eversion_t();
   stray_purged.clear();
   might_have_unfound.clear();
@@ -1711,16 +1712,16 @@ void PG::do_peer(ObjectStore::Transaction& t, list<Context*>& tfin,
     dout(10) << "crashed, allowing op replay for " << g_conf.osd_replay_window
 	     << " until " << replay_until << dendl;
     state_set(PG_STATE_REPLAY);
-    state_clear(PG_STATE_PEERING);
     osd->replay_queue_lock.Lock();
     osd->replay_queue.push_back(pair<pg_t,utime_t>(info.pgid, replay_until));
     osd->replay_queue_lock.Unlock();
-  } 
-  else if (!is_active()) {
-    // -- ok, activate!
+  }
+
+  if (!is_active()) {
     activate(t, tfin, query_map, activator_map);
   }
-  else if (is_all_uptodate()) 
+
+  if (is_all_uptodate()) 
     finish_recovery(t, tfin);
 }
 
@@ -1776,6 +1777,15 @@ void PG::build_might_have_unfound()
   dout(15) << __func__ << ": built " << might_have_unfound << dendl;
 }
 
+struct C_PG_ActivateCommitted : public Context {
+  PG *pg;
+  epoch_t epoch;
+  C_PG_ActivateCommitted(PG *p, epoch_t e) : pg(p), epoch(e) {}
+  void finish(int r) {
+    pg->_activate_committed(epoch);
+  }
+};
+
 void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 		  map< int, map<pg_t,Query> >& query_map,
 		  map<int, MOSDPGInfo*> *activator_map)
@@ -1787,11 +1797,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   state_clear(PG_STATE_STRAY);
   state_clear(PG_STATE_DOWN);
   state_clear(PG_STATE_PEERING);
-  if (is_crashed()) {
-    //assert(is_replay());      // HELP.. not on replica?
-    state_clear(PG_STATE_CRASHED);
-    state_clear(PG_STATE_REPLAY);
-  }
+  state_clear(PG_STATE_CRASHED);
   if (is_primary() && 
       osd->osdmap->get_pg_size(info.pgid) != acting.size())
     state_set(PG_STATE_DEGRADED);
@@ -1807,10 +1813,7 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
       build_might_have_unfound();
     }
   }
-
-  info.history.last_epoch_started = osd->osdmap->get_epoch();
-  trim_past_intervals();
-  
+ 
   if (role == 0) {    // primary state
     last_update_ondisk = info.last_update;
     min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
@@ -1835,6 +1838,9 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
   // clean up stray objects
   clean_up_local(t); 
 
+  // find out when we commit
+  tfin.push_back(new C_PG_ActivateCommitted(this, info.history.same_acting_since));
+  
   // initialize snap_trimq
   if (is_primary()) {
     snap_trimq = pool->cached_removed_snaps;
@@ -1966,35 +1972,81 @@ void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
     update_stats();
   }
 
-  
-  // replay (queue them _before_ other waiting ops!)
-  if (!replay_queue.empty()) {
-    eversion_t c = info.last_update;
-    list<Message*> replay;
-    for (map<eversion_t,MOSDOp*>::iterator p = replay_queue.begin();
-         p != replay_queue.end();
-         p++) {
-      if (p->first <= info.last_update) {
-        dout(10) << "activate will WRNOOP " << p->first << " " << *p->second << dendl;
-        replay.push_back(p->second);
-        continue;
-      }
-      if (p->first.version != c.version+1) {
-        dout(10) << "activate replay " << p->first
-                 << " skipping " << c.version+1 - p->first.version 
-                 << " ops"
-                 << dendl;      
-      }
-      dout(10) << "activate replay " << p->first << " " << *p->second << dendl;
-      replay.push_back(p->second);
+  // waiters
+  if (!is_replay()) {
+    osd->take_waiters(waiting_for_active);
+  }
+}
+
+
+void PG::replay_queued_ops()
+{
+  assert(is_replay() && is_active() && !is_crashed());
+  eversion_t c = info.last_update;
+  list<Message*> replay;
+  dout(10) << "replay_queued_ops" << dendl;
+  state_clear(PG_STATE_REPLAY);
+
+  for (map<eversion_t,MOSDOp*>::iterator p = replay_queue.begin();
+       p != replay_queue.end();
+       p++) {
+    if (p->first.version != c.version+1) {
+      dout(10) << "activate replay " << p->first
+	       << " skipping " << c.version+1 - p->first.version 
+	       << " ops"
+	       << dendl;      
       c = p->first;
     }
-    replay_queue.clear();
-    osd->take_waiters(replay);
+    dout(10) << "activate replay " << p->first << " " << *p->second << dendl;
+    replay.push_back(p->second);
+  }
+  replay_queue.clear();
+  osd->take_waiters(replay);
+  osd->take_waiters(waiting_for_active);
+  state_clear(PG_STATE_REPLAY);
+  update_stats();
+}
+
+void PG::_activate_committed(epoch_t e)
+{
+  if (e < info.history.same_acting_since) {
+    dout(10) << "_activate_committed " << e << ", that was an old interval" << dendl;
+    return;
   }
 
-  // waiters
-  osd->take_waiters(waiting_for_active);
+  if (is_primary()) {
+    peer_activated.insert(osd->whoami);
+    dout(10) << "_activate_committed " << e << " peer_activated now " << peer_activated << dendl;
+    if (peer_activated.size() == acting.size())
+      all_activated_and_committed();
+  } else {
+    dout(10) << "_activate_committed " << e << " telling primary" << dendl;
+    MOSDPGInfo *m = new MOSDPGInfo(osd->osdmap->get_epoch());
+    PG::Info i = info;
+    i.history.last_epoch_started = e;
+    m->pg_info.push_back(i);
+    osd->cluster_messenger->send_message(m, osd->osdmap->get_cluster_inst(acting[0]));
+  }
+}
+
+/*
+ * update info.history.last_epoch_started ONLY after we and all
+ * replicas have activated AND committed the activate transaction
+ * (i.e. the peering results are stable on disk).
+ */
+void PG::all_activated_and_committed()
+{
+  dout(10) << "all_activated_and_committed" << dendl;
+  assert(is_primary());
+  assert(peer_activated.size() == acting.size());
+
+  info.history.last_epoch_started = osd->osdmap->get_epoch();
+  share_pg_info();
+
+  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  write_info(*t);
+  int tr = osd->store->queue_transaction(&osr, t);
+  assert(tr == 0);
 }
 
 void PG::queue_snap_trim()

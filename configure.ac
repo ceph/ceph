@@ -3,7 +3,12 @@
 
 # Autoconf
 AC_PREREQ(2.59)
-AC_INIT([ceph], [0.26~rc], [ceph-devel@vger.kernel.org])
+
+# NOTE: This version is _only_ used for naming the tarball.  The
+# VERSION define is not used by the code.  It gets a version string
+# from 'git describe'; see src/ceph_ver.[ch]
+AC_INIT([ceph], [0.26rc], [ceph-devel@vger.kernel.org])
+
 AC_CONFIG_SUBDIRS([src/gtest])
 
 # Environment
@@ -288,7 +293,7 @@ AC_ARG_WITH([gtk2],
         [with_gtk2=check])
 have_gtk2=no
 AS_IF([test "x$with_gtk2" != "xno"],
-        [PKG_CHECK_MODULES(GTKMM, [gtkmm-2.4 >= 1.0.0],
+        [PKG_CHECK_MODULES(GTKMM, [gtkmm-2.4 >= 2.13],
                 [have_gtk2=yes
 		AC_DEFINE([HAVE_GTK2], [1], [we have gtk2])
 		],
