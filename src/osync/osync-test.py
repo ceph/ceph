@@ -177,6 +177,34 @@ compare_directories("%s/dir1" % tdir, "%s/dir2" % tdir)
 if (opts.verbose):
     print "successfully created dir2 from dir1"
 
+if (opts.verbose):
+    print "test a dry run between local directories"
+os.mkdir("%s/dir1b" % tdir)
+osync_check("file://%s/dir1" % tdir, "file://%s/dir1b" % tdir, ["-n"])
+for f in os.listdir("/%s/dir1b" % tdir):
+    raise RuntimeError("error! the dry run copied some files!")
+if (opts.verbose):
+    print "dry run didn't do anything. good."
+osync_check("file://%s/dir1" % tdir, "file://%s/dir1b" % tdir, [])
+compare_directories("%s/dir1" % tdir, "%s/dir1b" % tdir)
+if (opts.verbose):
+    print "regular run synchronized the directories."
+
+if (opts.verbose):
+    print "test running without --delete-after or --delete-before..."
+osync_check("file://%s/dir1b" % tdir, "file://%s/dir1c" % tdir, ["-c"])
+os.unlink("%s/dir1b/a" % tdir)
+osync_check("/%s/dir1b" % tdir, "file://%s/dir1c" % tdir, [])
+if not os.path.exists("/%s/dir1c/a" % tdir):
+    raise RuntimeError("error: running without --delete-after or \
+--delete-before still deleted files from the destination!")
+if (opts.verbose):
+    print "test running _with_ --delete-after..."
+osync_check("/%s/dir1b" % tdir, "file://%s/dir1c" % tdir, ["--delete-after"])
+if os.path.exists("/%s/dir1c/a" % tdir):
+    raise RuntimeError("error: running with --delete-after \
+failed to delete files from the destination!")
+
 if (len(opts.buckets) >= 1):
     # first, let's empty out the S3 bucket
     os.mkdir("%s/empty1" % tdir)
@@ -205,10 +233,10 @@ if (len(opts.buckets) >= 1):
 if (len(opts.buckets) >= 2):
     if (opts.verbose):
         print "copying dir1 to bucket0..."
-    osync_check("file://%s/dir1" % tdir, opts.buckets[0], [])
+    osync_check("file://%s/dir1" % tdir, opts.buckets[0], ["--delete-before"])
     if (opts.verbose):
         print "copying bucket0 to bucket1..."
-    osync_check(opts.buckets[0], opts.buckets[1], ["-c"])
+    osync_check(opts.buckets[0], opts.buckets[1], ["-c", "--delete-after"])
     if (opts.verbose):
         print "copying bucket1 to dir4..."
     osync_check(opts.buckets[1], "file://%s/dir4" % tdir, ["-c"])
