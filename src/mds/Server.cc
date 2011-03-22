@@ -3833,6 +3833,7 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
     dn->pre_dirty();
     mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, 1);
     le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type()); // new remote
+    dn->push_projected_linkage(targeti->ino(), targeti->d_type());
   } else {
     dn->pre_dirty();
     mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, -1);
