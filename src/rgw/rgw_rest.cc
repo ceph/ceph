@@ -1,16 +1,30 @@
 #include <errno.h>
 
+#include "rgw_common.h"
 #include "rgw_access.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
+#include "rgw_rest_os.h"
+#include "rgw_rest_s3.h"
+#include "rgw_os_auth.h"
 
-#define CGI_PRINTF(stream, format, ...) do { \
-   FCGX_FPrintF(stream, format, __VA_ARGS__); \
-} while (0)
+#include "rgw_formats.h"
+
+
+
+static RGWHandler_REST_S3 rgwhandler_s3;
+static RGWHandler_REST_OS rgwhandler_os;
+static RGWHandler_OS_Auth rgwhandler_os_auth;
+
+static RGWFormatter_Plain formatter_plain;
+static RGWFormatter_XML formatter_xml;
+static RGWFormatter_JSON formatter_json;
+
 
 static void dump_status(struct req_state *s, const char *status)
 {
-  CGI_PRINTF(s->fcgx->out,"Status: %s\n", status);
+  s->status = status;
+  CGI_PRINTF(s,"Status: %s\n", status);
 }
 
 struct errno_http {
@@ -21,6 +35,7 @@ struct errno_http {
 
 const static struct errno_http hterrs[] = {
     { 0, "200", "" },
+    { 201, "201", "Created" },
     { 204, "204", "NoContent" },
     { 206, "206", "" },
     { EINVAL, "400", "InvalidArgument" },
@@ -68,34 +83,24 @@ void dump_errno(struct req_state *s, int err, struct rgw_err *rgwerr)
   }
 }
 
-void open_section(struct req_state *s, const char *name)
-{
-  //CGI_PRINTF(s->fcgx->out, "%*s<%s>\n", s->indent, "", name);
-  CGI_PRINTF(s->fcgx->out, "<%s>", name);
-  ++s->indent;
-}
-
-void close_section(struct req_state *s, const char *name)
-{
-  --s->indent;
-  //CGI_PRINTF(s->fcgx->out, "%*s</%s>\n", s->indent, "", name);
-  CGI_PRINTF(s->fcgx->out, "</%s>", name);
-}
-
-static void dump_content_length(struct req_state *s, size_t len)
+void dump_content_length(struct req_state *s, size_t len)
 {
   char buf[16];
   snprintf(buf, sizeof(buf), "%lu", (long unsigned int)len);
-  CGI_PRINTF(s->fcgx->out, "Content-Length: %s\n", buf);
-  CGI_PRINTF(s->fcgx->out, "Accept-Ranges: %s\n", "bytes");
+  CGI_PRINTF(s, "Content-Length: %s\n", buf);
+  CGI_PRINTF(s, "Accept-Ranges: %s\n", "bytes");
 }
 
-static void dump_etag(struct req_state *s, const char *etag)
+void dump_etag(struct req_state *s, const char *etag)
 {
-  CGI_PRINTF(s->fcgx->out,"ETag: \"%s\"\n", etag);
+  if (s->prot_flags & RGW_REST_OPENSTACK)
+    CGI_PRINTF(s,"etag: %s\n", etag);
+  else
+    CGI_PRINTF(s,"ETag: \"%s\"\n", etag);
 }
 
-static void dump_last_modified(struct req_state *s, time_t t) {
+void dump_last_modified(struct req_state *s, time_t t)
+{
 
   char timestr[TIME_BUF_SIZE];
   struct tm *tmp = gmtime(&t);
@@ -105,28 +110,12 @@ static void dump_last_modified(struct req_state *s, time_t t) {
   if (strftime(timestr, sizeof(timestr), "%a, %d %b %Y %H:%M:%S %Z", tmp) == 0)
     return;
 
-  CGI_PRINTF(s->fcgx->out, "Last-Modified: %s\n", timestr);
-}
-
-void dump_value(struct req_state *s, const char *name, const char *fmt, ...)
-{
-#define LARGE_SIZE 8192
-  char buf[LARGE_SIZE];
-  va_list ap;
-
-  va_start(ap, fmt);
-  int n = vsnprintf(buf, LARGE_SIZE, fmt, ap);
-  va_end(ap);
-  if (n >= LARGE_SIZE)
-    return;
-  // CGI_PRINTF(s->fcgx->out, "%*s<%s>%s</%s>\n", s->indent, "", name, buf, name);
-  CGI_PRINTF(s->fcgx->out, "<%s>%s</%s>", name, buf, name);
+  CGI_PRINTF(s, "Last-Modified: %s\n", timestr);
 }
 
 static void dump_entry(struct req_state *s, const char *val)
 {
-  // CGI_PRINTF(s->fcgx->out, "%*s<?%s?>\n", s->indent, "", val);
-  CGI_PRINTF(s->fcgx->out, "<?%s?>", val);
+  s->formatter->write_data("<?%s?>", val);
 }
 
 
@@ -140,64 +129,60 @@ void dump_time(struct req_state *s, const char *name, time_t *t)
   if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T.000Z", tmp) == 0)
     return;
 
-  dump_value(s, name, buf); 
+  s->formatter->dump_value_str(name, buf); 
 }
 
 void dump_owner(struct req_state *s, string& id, string& name)
 {
-  open_section(s, "Owner");
-  dump_value(s, "ID", id.c_str());
-  dump_value(s, "DisplayName", name.c_str());
-  close_section(s, "Owner");
+  s->formatter->open_obj_section("Owner");
+  s->formatter->dump_value_str("ID", id.c_str());
+  s->formatter->dump_value_str("DisplayName", name.c_str());
+  s->formatter->close_section("Owner");
 }
 
-void dump_start_xml(struct req_state *s)
+void dump_start(struct req_state *s)
 {
   if (!s->content_started) {
-    dump_entry(s, "xml version=\"1.0\" encoding=\"UTF-8\"");
+    if (s->format == RGW_FORMAT_XML)
+      dump_entry(s, "xml version=\"1.0\" encoding=\"UTF-8\"");
     s->content_started = true;
   }
 }
 
 void end_header(struct req_state *s, const char *content_type)
 {
-  if (!content_type)
-    content_type = "binary/octet-stream";
-  CGI_PRINTF(s->fcgx->out,"Content-type: %s\r\n\r\n", content_type);
-  if (s->err_exist) {
-    dump_start_xml(s);
-    struct rgw_err &err = s->err;
-    open_section(s, "Error");
-    if (err.code)
-      dump_value(s, "Code", err.code);
-    if (err.message)
-      dump_value(s, "Message", err.message);
-    close_section(s, "Error");
+  if (!content_type) {
+    switch (s->format) {
+    case RGW_FORMAT_XML:
+      content_type = "application/xml";
+      break;
+    case RGW_FORMAT_JSON:
+      content_type = "application/json";
+      break;
+    default:
+      content_type = "text/plain";
+      break;
+    }
   }
-}
-
-void list_all_buckets_start(struct req_state *s)
-{
-  open_section(s, "ListAllMyBucketsResult xmlns=\"http://doc.s3.amazonaws.com/2006-03-01\"");
-}
-
-void list_all_buckets_end(struct req_state *s)
-{
-  close_section(s, "ListAllMyBucketsResult");
-}
-
-void dump_bucket(struct req_state *s, RGWObjEnt& obj)
-{
-  open_section(s, "Bucket");
-  dump_value(s, "Name", obj.name.c_str());
-  dump_time(s, "CreationDate", &obj.mtime);
-  close_section(s, "Bucket");
+  CGI_PRINTF(s,"Content-type: %s\r\n\r\n", content_type);
+  if (s->err_exist) {
+    dump_start(s);
+    struct rgw_err &err = s->err;
+    s->formatter->open_obj_section("Error");
+    if (err.code)
+      s->formatter->dump_value_int("Code", "%s", err.code);
+    if (err.message)
+      s->formatter->dump_value_str("Message", err.message);
+    s->formatter->close_section("Error");
+  }
+  s->header_ended = true;
 }
 
 void abort_early(struct req_state *s, int err)
 {
   dump_errno(s, err);
   end_header(s);
+  s->formatter->flush();
 }
 
 void dump_continue(struct req_state *s)
@@ -208,7 +193,7 @@ void dump_continue(struct req_state *s)
 
 void dump_range(struct req_state *s, off_t ofs, off_t end)
 {
-    CGI_PRINTF(s->fcgx->out,"Content-Range: bytes %d-%d/%d\n", (int)ofs, (int)end, (int)end + 1);
+    CGI_PRINTF(s,"Content-Range: bytes %d-%d/%d\n", (int)ofs, (int)end, (int)end + 1);
 }
 
 int RGWGetObj_REST::get_params()
@@ -222,139 +207,6 @@ int RGWGetObj_REST::get_params()
   return 0;
 }
 
-int RGWGetObj_REST::send_response(void *handle)
-{
-  const char *content_type = NULL;
-  int orig_ret = ret;
-
-  if (sent_header)
-    goto send_data;
-
-  if (range_str)
-    dump_range(s, ofs, end);
-
-  dump_content_length(s, total_len);
-  dump_last_modified(s, lastmod);
-
-  if (!ret) {
-    map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
-    if (iter != attrs.end()) {
-      bufferlist& bl = iter->second;
-      if (bl.length()) {
-        char *etag = bl.c_str();
-        dump_etag(s, etag);
-      }
-    }
-
-    for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-       const char *name = iter->first.c_str();
-       if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
-         name += sizeof(RGW_ATTR_PREFIX) - 1;
-         CGI_PRINTF(s->fcgx->out,"%s: %s\r\n", name, iter->second.c_str());
-       } else if (!content_type && strcmp(name, RGW_ATTR_CONTENT_TYPE) == 0) {
-         content_type = iter->second.c_str();
-       }
-    }
-  }
-
-  if (range_str && !ret)
-    ret = 206; /* partial content */
-
-  dump_errno(s, ret, &err);
-  end_header(s, content_type);
-
-  sent_header = true;
-
-send_data:
-  if (get_data && !orig_ret) {
-    FCGX_PutStr(data, len, s->fcgx->out); 
-  }
-
-  return 0;
-}
-
-void RGWListBuckets_REST::send_response()
-{
-  dump_errno(s, ret);
-  end_header(s, "application/xml");
-  dump_start_xml(s);
-
-  list_all_buckets_start(s);
-  dump_owner(s, s->user.user_id, s->user.display_name);
-
-  map<string, RGWObjEnt>& m = buckets.get_buckets();
-  map<string, RGWObjEnt>::iterator iter;
-
-  open_section(s, "Buckets");
-  for (iter = m.begin(); iter != m.end(); ++iter) {
-    RGWObjEnt obj = iter->second;
-    dump_bucket(s, obj);
-  }
-  close_section(s, "Buckets");
-  list_all_buckets_end(s);
-}
-
-void RGWListBucket_REST::send_response()
-{
-  dump_errno(s, (ret < 0 ? ret : 0));
-
-  end_header(s, "application/xml");
-  dump_start_xml(s);
-  if (ret < 0)
-    return;
-
-  open_section(s, "ListBucketResult");
-  dump_value(s, "Name", s->bucket);
-  if (!prefix.empty())
-    dump_value(s, "Prefix", prefix.c_str());
-  if (!marker.empty())
-    dump_value(s, "Marker", marker.c_str());
-  if (!max_keys.empty()) {
-    dump_value(s, "MaxKeys", max_keys.c_str());
-  }
-  if (!delimiter.empty())
-    dump_value(s, "Delimiter", delimiter.c_str());
-
-  if (ret >= 0) {
-    vector<RGWObjEnt>::iterator iter;
-    for (iter = objs.begin(); iter != objs.end(); ++iter) {
-      open_section(s, "Contents");
-      dump_value(s, "Key", iter->name.c_str());
-      dump_time(s, "LastModified", &iter->mtime);
-      dump_value(s, "ETag", "&quot;%s&quot;", iter->etag);
-      dump_value(s, "Size", "%lld", iter->size);
-      dump_value(s, "StorageClass", "STANDARD");
-      dump_owner(s, s->user.user_id, s->user.display_name);
-      close_section(s, "Contents");
-    }
-    if (common_prefixes.size() > 0) {
-      open_section(s, "CommonPrefixes");
-      map<string, bool>::iterator pref_iter;
-      for (pref_iter = common_prefixes.begin(); pref_iter != common_prefixes.end(); ++pref_iter) {
-        dump_value(s, "Prefix", pref_iter->first.c_str());
-      }
-      close_section(s, "CommonPrefixes");
-    }
-  }
-  close_section(s, "ListBucketResult");
-}
-
-void RGWCreateBucket_REST::send_response()
-{
-  dump_errno(s, ret);
-  end_header(s);
-}
-
-void RGWDeleteBucket_REST::send_response()
-{
-  int r = ret;
-  if (!r)
-    r = 204;
-
-  dump_errno(s, r);
-  end_header(s);
-}
-
 
 int RGWPutObj_REST::get_params()
 {
@@ -365,9 +217,15 @@ int RGWPutObj_REST::get_params()
 
 int RGWPutObj_REST::get_data()
 {
-  size_t cl = atoll(s->length) - ofs;
-  if (cl > RGW_MAX_CHUNK_SIZE)
+  size_t cl;
+  if (s->length) {
+    cl = atoll(s->length) - ofs;
+    if (cl > RGW_MAX_CHUNK_SIZE)
+      cl = RGW_MAX_CHUNK_SIZE;
+  } else {
     cl = RGW_MAX_CHUNK_SIZE;
+  }
+
   len = 0;
   if (cl) {
     data = (char *)malloc(cl);
@@ -377,26 +235,10 @@ int RGWPutObj_REST::get_data()
     len = FCGX_GetStr(data, cl, s->fcgx->in);
   }
 
-  supplied_md5_b64 = FCGX_GetParam("HTTP_CONTENT_MD5", s->fcgx->envp);
+  if (!ofs)
+    supplied_md5_b64 = FCGX_GetParam("HTTP_CONTENT_MD5", s->fcgx->envp);
 
   return 0;
-}
-
-void RGWPutObj_REST::send_response()
-{
-  dump_etag(s, etag.c_str());
-  dump_errno(s, ret, &err);
-  end_header(s);
-}
-
-void RGWDeleteObj_REST::send_response()
-{
-  int r = ret;
-  if (!r)
-    r = 204;
-
-  dump_errno(s, r);
-  end_header(s);
 }
 
 int RGWCopyObj_REST::get_params()
@@ -407,34 +249,6 @@ int RGWCopyObj_REST::get_params()
   if_nomatch = FCGX_GetParam("HTTP_X_AMZ_COPY_IF_NONE_MATCH", s->fcgx->envp);
 
   return 0;
-}
-
-void RGWCopyObj_REST::send_response()
-{
-  dump_errno(s, ret, &err);
-
-  end_header(s);
-  if (ret == 0) {
-    open_section(s, "CopyObjectResult");
-    dump_time(s, "LastModified", &mtime);
-    map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
-    if (iter != attrs.end()) {
-      bufferlist& bl = iter->second;
-      if (bl.length()) {
-        char *etag = bl.c_str();
-        dump_value(s, "ETag", etag);
-      }
-    }
-    close_section(s, "CopyObjectResult");
-  }
-}
-
-void RGWGetACLs_REST::send_response()
-{
-  if (ret) dump_errno(s, ret);
-  end_header(s, "application/xml");
-  dump_start_xml(s);
-  FCGX_PutStr(acls.c_str(), acls.size(), s->fcgx->out); 
 }
 
 int RGWPutACLs_REST::get_params()
@@ -455,16 +269,27 @@ int RGWPutACLs_REST::get_params()
   return ret;
 }
 
-void RGWPutACLs_REST::send_response()
+static void next_tok(string& str, string& tok, char delim)
 {
-  dump_errno(s, ret);
-  end_header(s, "application/xml");
-  dump_start_xml(s);
+  if (str.size() == 0) {
+    tok = "";
+    return;
+  }
+  tok = str;
+  int pos = str.find(delim);
+  if (pos > 0) {
+    tok = str.substr(0, pos);
+    str = str.substr(pos + 1);
+  } else {
+    str = "";
+  }
 }
 
 void init_entities_from_header(struct req_state *s)
 {
   const char *gateway_dns_name;
+  string req;
+  string first;
 
   gateway_dns_name = FCGX_GetParam("RGW_DNS_NAME", s->fcgx->envp);
   if (!gateway_dns_name)
@@ -476,6 +301,15 @@ void init_entities_from_header(struct req_state *s)
   s->bucket_str = "";
   s->object = NULL;
   s->object_str = "";
+
+  s->status = NULL;
+  s->err_exist = false;
+  s->header_ended = false;
+  s->bytes_sent = 0;
+
+  /* this is the default, might change in a few lines */
+  s->format = RGW_FORMAT_XML;
+  s->formatter = &formatter_xml;
 
   int pos;
   if (s->host) {
@@ -507,21 +341,72 @@ void init_entities_from_header(struct req_state *s)
   s->args.parse();
 
   if (*req_name != '/')
-    return;
+    goto done;
 
   req_name++;
 
   if (!*req_name)
-    return;
+    goto done;
 
-  string req(req_name);
-  string first;
+  req = req_name;
 
   pos = req.find('/');
   if (pos >= 0) {
+    const char *openstack_url_prefix = FCGX_GetParam("RGW_OPENSTACK_URL_PREFIX", s->fcgx->envp);
+    bool cut_url = (openstack_url_prefix != NULL);
+    if (!openstack_url_prefix)
+      openstack_url_prefix = "v1";
     first = req.substr(0, pos);
+    if (first.compare(openstack_url_prefix) == 0) {
+      s->prot_flags |= RGW_REST_OPENSTACK;
+      if (cut_url) {
+        next_tok(req, first, '/');
+      }
+    }
   } else {
     first = req;
+  }
+
+  if (s->prot_flags & RGW_REST_OPENSTACK) {
+    s->format = 0;
+    s->formatter = &formatter_plain;
+    string format_str = s->args.get("format");
+    if (format_str.compare("xml") == 0) {
+      s->format = RGW_FORMAT_XML;
+      s->formatter = &formatter_xml;
+    } else if (format_str.compare("json") == 0) {
+      s->format = RGW_FORMAT_JSON;
+      s->formatter = &formatter_json;
+    }
+  }
+
+  RGW_LOG(0) << "s->formatter=" << (void *)s->formatter << std::endl;
+
+  if (s->prot_flags & RGW_REST_OPENSTACK) {
+    string ver;
+    string auth_key;
+
+    RGW_LOG(10) << "before2" << std::endl;
+    next_tok(req, ver, '/');
+    RGW_LOG(10) << "ver=" << ver << std::endl;
+    next_tok(req, auth_key, '/');
+    RGW_LOG(10) << "auth_key=" << auth_key << std::endl;
+    s->os_auth_token = FCGX_GetParam("HTTP_X_AUTH_TOKEN", s->fcgx->envp);
+    next_tok(req, first, '/');
+
+    RGW_LOG(10) << "ver=" << ver << " auth_key=" << auth_key << " first=" << first << " req=" << req << std::endl;
+    if (first.size() == 0)
+      goto done;
+
+    url_decode(first, s->bucket_str);
+    s->bucket = s->bucket_str.c_str();
+   
+    if (req.size()) {
+      url_decode(req, s->object_str);
+      s->object = s->object_str.c_str();
+    }
+
+    goto done;
   }
 
   if (!s->bucket) {
@@ -530,8 +415,11 @@ void init_entities_from_header(struct req_state *s)
   } else {
     url_decode(req, s->object_str);
     s->object = s->object_str.c_str();
-    return;
+    goto done;
   }
+
+  if (strcmp(s->bucket, "auth") == 0)
+    s->prot_flags |= RGW_REST_OPENSTACK_AUTH;
 
   if (pos >= 0) {
     string encoded_obj_str = req.substr(pos+1);
@@ -541,6 +429,8 @@ void init_entities_from_header(struct req_state *s)
       s->object = s->object_str.c_str();
     }
   }
+done:
+  s->formatter->init(s);
 }
 
 static void line_unfold(const char *line, string& sdest)
@@ -621,18 +511,10 @@ static void init_auth_info(struct req_state *s)
   }
 }
 
-static int str_to_bool(const char *s, int def_val)
+void RGWHandler_REST::init_rest(struct req_state *s, struct fcgx_state *fcgx)
 {
-  if (!s)
-    return def_val;
+  RGWHandler::init_state(s, fcgx);
 
-  return (strcasecmp(s, "on") == 0 ||
-          strcasecmp(s, "yes") == 0 ||
-          strcasecmp(s, "1"));
-}
-
-void RGWHandler_REST::provider_init_state()
-{
   s->path_name = FCGX_GetParam("SCRIPT_NAME", s->fcgx->envp);
   s->path_name_url = FCGX_GetParam("REQUEST_URI", s->fcgx->envp);
   int pos = s->path_name_url.find('?');
@@ -643,6 +525,7 @@ void RGWHandler_REST::provider_init_state()
   s->query = FCGX_GetParam("QUERY_STRING", s->fcgx->envp);
   s->length = FCGX_GetParam("CONTENT_LENGTH", s->fcgx->envp);
   s->content_type = FCGX_GetParam("CONTENT_TYPE", s->fcgx->envp);
+  s->prot_flags = 0;
 
   if (!s->method)
     s->op = OP_UNKNOWN;
@@ -670,69 +553,37 @@ void RGWHandler_REST::provider_init_state()
   s->http_auth = FCGX_GetParam("HTTP_AUTHORIZATION", s->fcgx->envp);
 
   const char *cgi_env_continue = FCGX_GetParam("RGW_PRINT_CONTINUE", s->fcgx->envp);
-  if (str_to_bool(cgi_env_continue, 0)) {
+  if (rgw_str_to_bool(cgi_env_continue, 0)) {
     const char *expect = FCGX_GetParam("HTTP_EXPECT", s->fcgx->envp);
     s->expect_cont = (expect && !strcasecmp(expect, "100-continue"));
   }
 }
 
-static bool is_acl_op(struct req_state *s)
+int RGWHandler_REST::read_permissions()
 {
-  return s->args.exists("acl");
-}
+  bool only_bucket;
 
-RGWOp *RGWHandler_REST::get_retrieve_obj_op(struct req_state *s, bool get_data)
-{
-  if (is_acl_op(s)) {
-    return &get_acls_op;
-  }
-
-  if (s->object) {
-    get_obj_op.set_get_data(get_data);
-    return &get_obj_op;
-  } else if (!s->bucket) {
-    return NULL;
-  }
-
-  return &list_bucket_op;
-}
-
-RGWOp *RGWHandler_REST::get_retrieve_op(struct req_state *s, bool get_data)
-{
-  if (s->bucket) {
+  switch (s->op) {
+  case OP_HEAD:
+  case OP_GET:
+    only_bucket = false;
+    break;
+  case OP_PUT:
+    /* is it a 'create bucket' request? */
+    if (s->object_str.size() == 0)
+      return 0;
     if (is_acl_op(s)) {
-      return &get_acls_op;
+      only_bucket = false;
+      break;
     }
-    return get_retrieve_obj_op(s, get_data);
+  case OP_DELETE:
+    only_bucket = true;
+    break;
+  default:
+    return -EINVAL;
   }
 
-  return &list_buckets_op;
-}
-
-RGWOp *RGWHandler_REST::get_create_op(struct req_state *s)
-{
-  if (is_acl_op(s)) {
-    return &put_acls_op;
-  } else if (s->object) {
-    if (!s->copy_source)
-      return &put_obj_op;
-    else
-      return &copy_obj_op;
-  } else if (s->bucket) {
-    return &create_bucket_op;
-  }
-
-  return NULL;
-}
-
-RGWOp *RGWHandler_REST::get_delete_op(struct req_state *s)
-{
-  if (s->object)
-    return &delete_obj_op;
-  else if (s->bucket)
-    return &delete_bucket_op;
-
-  return NULL;
+  return do_read_permissions(only_bucket);
 }
 
 RGWOp *RGWHandler_REST::get_op()
@@ -761,30 +612,22 @@ RGWOp *RGWHandler_REST::get_op()
   return op;
 }
 
-int RGWHandler_REST::read_permissions()
+
+RGWHandler *RGWHandler_REST::init_handler(struct req_state *s, struct fcgx_state *fcgx)
 {
-  bool only_bucket;
+  RGWHandler *handler;
 
-  switch (s->op) {
-  case OP_HEAD:
-  case OP_GET:
-    only_bucket = false;
-    break;
-  case OP_PUT:
-    /* is it a 'create bucket' request? */
-    if (s->object_str.size() == 0)
-      return 0;
-    if (is_acl_op(s)) {
-      only_bucket = false;
-      break;
-    }
-  case OP_DELETE:
-    only_bucket = true;
-    break;
-  default:
-    return -EINVAL;
-  }
+  init_rest(s, fcgx);
 
-  return do_read_permissions(only_bucket);
+  if (s->prot_flags & RGW_REST_OPENSTACK)
+    handler = &rgwhandler_os;
+  else if (s->prot_flags & RGW_REST_OPENSTACK_AUTH)
+    handler = &rgwhandler_os_auth;
+  else
+    handler = &rgwhandler_s3;
+
+  handler->set_state(s);
+
+  return handler;
 }
 

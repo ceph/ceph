@@ -19,32 +19,32 @@ class RGWRados  : public RGWAccess
 
 public:
   /** Initialize the RADOS instance and prepare to do other ops */
-  int initialize(int argc, char *argv[]);
+  virtual int initialize(md_config_t *conf);
   /** set up a bucket listing. id is ignored, handle is filled in. */
-  int list_buckets_init(std::string& id, RGWAccessHandle *handle);
+  virtual int list_buckets_init(std::string& id, RGWAccessHandle *handle);
   /** 
    * get the next bucket in the listing. id is ignored, obj is filled in,
    * handle is updated.
    */
-  int list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle *handle);
+  virtual int list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle *handle);
 
   /** get listing of the objects in a bucket */
-  int list_objects(std::string& id, std::string& bucket, int max, std::string& prefix, std::string& delim,
+  virtual int list_objects(std::string& id, std::string& bucket, int max, std::string& prefix, std::string& delim,
                    std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes);
 
   /**
    * create a bucket with name bucket and the given list of attrs
    * returns 0 on success, -ERR# otherwise.
    */
-  int create_bucket(std::string& id, std::string& bucket, map<std::string,bufferlist>& attrs, uint64_t auid=0);
+  virtual int create_bucket(std::string& id, std::string& bucket, map<std::string,bufferlist>& attrs, uint64_t auid=0);
 
   /** Write/overwrite an object to the bucket storage. */
-  int put_obj_meta(std::string& id, std::string& bucket, std::string& obj, time_t *mtime,
+  virtual int put_obj_meta(std::string& id, std::string& bucket, std::string& obj, time_t *mtime,
               map<std::string, bufferlist>& attrs);
-  int put_obj_data(std::string& id, std::string& bucket, std::string& obj, const char *data,
+  virtual int put_obj_data(std::string& id, std::string& bucket, std::string& obj, const char *data,
               off_t ofs, size_t len, time_t *mtime);
   /** Copy an object, with many extra options */
-  int copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
+  virtual int copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
                std::string& src_bucket, std::string& src_obj,
                time_t *mtime,
                const time_t *mod_ptr,
@@ -54,21 +54,21 @@ public:
                map<std::string, bufferlist>& attrs,
                struct rgw_err *err);
   /** delete a bucket*/
-  int delete_bucket(std::string& id, std::string& bucket);
+  virtual int delete_bucket(std::string& id, std::string& bucket);
 
   /** Delete an object.*/
-  int delete_obj(std::string& id, std::string& bucket, std::string& obj);
+  virtual int delete_obj(std::string& id, std::string& bucket, std::string& obj);
 
   /** Get the attributes for an object.*/
-  int get_attr(std::string& bucket, std::string& obj,
+  virtual int get_attr(std::string& bucket, std::string& obj,
                const char *name, bufferlist& dest);
 
   /** Set an attr on an object. */
-  int set_attr(std::string& bucket, std::string& obj,
+  virtual int set_attr(std::string& bucket, std::string& obj,
                        const char *name, bufferlist& bl);
 
   /** Get data about an object out of RADOS and into memory. */
-  int prepare_get_obj(std::string& bucket, std::string& obj, 
+  virtual int prepare_get_obj(std::string& bucket, std::string& obj, 
             off_t ofs, off_t *end,
             map<string, bufferlist> *attrs,
             const time_t *mod_ptr,
@@ -80,10 +80,20 @@ public:
             void **handle,
             struct rgw_err *err);
 
-  int get_obj(void **handle, std::string& bucket, std::string& oid, 
+  virtual int get_obj(void **handle, std::string& bucket, std::string& oid, 
             char **data, off_t ofs, off_t end);
 
-  void finish_get_obj(void **handle);
+  virtual void finish_get_obj(void **handle);
+
+  virtual int read(std::string& bucket, std::string& oid, off_t ofs, size_t size, bufferlist& bl);
+
+  virtual int obj_stat(std::string& bucket, std::string& obj, uint64_t *psize, time_t *pmtime);
+
+  virtual bool supports_tmap() { return true; }
+  virtual int tmap_set(std::string& bucket, std::string& obj, std::string& key, bufferlist& bl);
+  virtual int tmap_del(std::string& bucket, std::string& obj, std::string& key);
+  virtual int update_containers_stats(map<string, RGWBucketEnt>& m);
+  virtual int append_async(std::string& bucket, std::string& oid, size_t size, bufferlist& bl);
 };
 
 #endif

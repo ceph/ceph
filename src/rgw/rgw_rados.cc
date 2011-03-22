@@ -26,14 +26,14 @@ static librados::IoCtx root_pool_ctx;
  * Initialize the RADOS instance and prepare to do other ops
  * Returns 0 on success, -ERR# on failure.
  */
-int RGWRados::initialize(int argc, char *argv[])
+int RGWRados::initialize(md_config_t *conf)
 {
   int ret;
   rados = new Rados();
   if (!rados)
     return -ENOMEM;
 
-  ret = rados->init(NULL);
+  ret = rados->init_with_config(conf);
   if (ret < 0)
    return ret;
 
@@ -177,6 +177,7 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
     }
 
     uint64_t s;
+    string p_str = *p;
     if (io_ctx.stat(*p, &s, &obj.mtime) < 0)
       continue;
     obj.size = s;
@@ -375,7 +376,22 @@ done_err:
  */
 int RGWRados::delete_bucket(std::string& id, std::string& bucket)
 {
-  return rados->pool_delete(bucket.c_str());
+  int r = rados->pool_delete(bucket.c_str());
+  if (r < 0)
+    return r;
+
+  librados::IoCtx io_ctx;
+  r = rados->ioctx_create(ROOT_BUCKET, io_ctx);
+  if (r < 0) {
+    RGW_LOG(0) << "WARNING: failed to create context in delete_bucket, bucket object leaked" << std::endl;
+    return r;
+  }
+
+  r = io_ctx.remove(bucket);
+  if (r < 0)
+    return r;
+
+  return 0;
 }
 
 /**
@@ -580,8 +596,10 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
   if (*end < 0)
     *end = size - 1;
 
-  *total_size = (ofs <= *end ? *end + 1 - ofs : 0);
-  *lastmod = mtime;
+  if (total_size)
+    *total_size = (ofs <= *end ? *end + 1 - ofs : 0);
+  if (lastmod)
+    *lastmod = mtime;
 
   return 0;
 
@@ -623,7 +641,6 @@ int RGWRados::get_obj(void **handle,
   }
 
   return r;
-
 }
 
 void RGWRados::finish_get_obj(void **handle)
@@ -633,5 +650,104 @@ void RGWRados::finish_get_obj(void **handle)
     delete state;
     *handle = NULL;
   }
+}
+
+/* a simple object read */
+int RGWRados::read(std::string& bucket, std::string& oid, off_t ofs, size_t size, bufferlist& bl)
+{
+  librados::IoCtx io_ctx;
+  int r = rados->ioctx_create(bucket.c_str(), io_ctx);
+  if (r < 0)
+    return r;
+  r = io_ctx.read(oid, bl, size, ofs);
+  return r;
+}
+
+int RGWRados::obj_stat(std::string& bucket, std::string& obj, uint64_t *psize, time_t *pmtime)
+{
+  librados::IoCtx io_ctx;
+  int r = rados->ioctx_create(bucket.c_str(), io_ctx);
+  if (r < 0)
+    return r;
+  if (r < 0)
+    return r;
+  r = io_ctx.stat(obj, psize, pmtime);
+  return r;
+}
+
+int RGWRados::tmap_set(std::string& bucket, std::string& obj, std::string& key, bufferlist& bl)
+{
+  bufferlist cmdbl, emptybl;
+  __u8 c = CEPH_OSD_TMAP_SET;
+
+  ::encode(c, cmdbl);
+  ::encode(key, cmdbl);
+  ::encode(bl, cmdbl);
+  // ::encode(emptybl, cmdbl);
+  librados::IoCtx io_ctx;
+  int r = rados->ioctx_create(bucket.c_str(), io_ctx);
+  if (r < 0)
+    return r;
+  r = io_ctx.tmap_update(obj, cmdbl);
+  return r;
+}
+
+int RGWRados::tmap_del(std::string& bucket, std::string& obj, std::string& key)
+{
+  bufferlist cmdbl;
+  __u8 c = CEPH_OSD_TMAP_RM;
+
+  ::encode(c, cmdbl);
+  ::encode(key, cmdbl);
+
+  librados::IoCtx io_ctx;
+  int r = rados->ioctx_create(bucket.c_str(), io_ctx);
+  if (r < 0)
+    return r;
+  r = io_ctx.tmap_update(obj, cmdbl);
+  return r;
+}
+int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
+{
+  int count = 0;
+
+  map<string, RGWBucketEnt>::iterator iter;
+  list<string> buckets_list;
+  for (iter = m.begin(); iter != m.end(); ++iter) {
+    string bucket_name = iter->first;
+    buckets_list.push_back(bucket_name);
+  }
+  map<std::string,librados::pool_stat_t> stats;
+  int r = rados->get_pool_stats(buckets_list, stats);
+  if (r < 0)
+    return r;
+
+  map<string,pool_stat_t>::iterator stats_iter = stats.begin();
+
+  for (iter = m.begin(); iter != m.end(); ++iter) {
+    string bucket_name = iter->first;
+    if (stats_iter->first.compare(bucket_name) == 0) {
+      RGWBucketEnt& ent = iter->second;
+      pool_stat_t stat = stats_iter->second;
+      ent.count = stat.num_objects;
+      ent.size = stat.num_bytes;
+      stats_iter++;
+      count++;
+    }
+  }
+
+  return count;
+}
+
+int RGWRados::append_async(std::string& bucket, std::string& oid, size_t size, bufferlist& bl)
+{
+  librados::IoCtx io_ctx;
+  int r = rados->ioctx_create(bucket.c_str(), io_ctx);
+  if (r < 0)
+    return r;
+  librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
+  r = io_ctx.aio_append(oid, completion, bl, size);
+  completion->release();
+  return r;
 }
 

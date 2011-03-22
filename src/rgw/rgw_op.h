@@ -18,6 +18,9 @@ using namespace std;
 
 struct req_state;
 
+#define RGW_REST_OPENSTACK      0x1
+#define RGW_REST_OPENSTACK_AUTH 0x2
+
 /** Get the HTTP request metadata */
 extern void get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs);
 /**
@@ -130,6 +133,9 @@ protected:
   vector<RGWObjEnt> objs;
   map<string, bool> common_prefixes;
 
+  string limit_opt_name;
+  int default_max;
+
 public:
   RGWListBucket() {}
 
@@ -144,6 +150,25 @@ public:
     objs.clear();
     common_prefixes.clear();
   }
+  void execute();
+
+  virtual void send_response() = 0;
+};
+
+class RGWStatBucket : public RGWOp {
+protected:
+  int ret;
+  RGWBucketEnt bucket;
+
+public:
+  virtual void init(struct req_state *s) {
+    RGWOp::init(s);
+    ret = 0;
+    bucket.clear();
+  }
+  RGWStatBucket() {}
+  ~RGWStatBucket() {}
+
   void execute();
 
   virtual void send_response() = 0;
@@ -311,14 +336,17 @@ class RGWHandler {
 protected:
   struct req_state *s;
 
-  virtual void provider_init_state() = 0;
   int do_read_permissions(bool only_bucket);
 public:
   RGWHandler() {}
   virtual ~RGWHandler() {}
-  void init_state(struct req_state *s, struct fcgx_state *fcgx);
-  RGWOp *get_op();
+  static void init_state(struct req_state *s, struct fcgx_state *fcgx);
+
+  void set_state(struct req_state *_s) { s = _s; }
+
+  virtual RGWOp *get_op() = 0;
   virtual int read_permissions() = 0;
+  virtual bool authorize(struct req_state *s) = 0;
 };
 
 #endif
