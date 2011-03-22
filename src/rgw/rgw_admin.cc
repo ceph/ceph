@@ -8,6 +8,7 @@ using namespace std;
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
+#include "common/errno.h"
 
 #include "common/armor.h"
 #include "rgw_user.h"
@@ -100,8 +101,7 @@ int gen_rand_base64(char *dest, int size) /* size should be the required string 
 
   ret = get_random_bytes(buf, sizeof(buf));
   if (ret < 0) {
-    // assuming no threads here, for strerror
-    cerr << "cannot get random bytes: " << strerror(-ret) << std::endl;
+    cerr << "cannot get random bytes: " << cpp_strerror(-ret) << std::endl;
     return -1;
   }
 
@@ -124,8 +124,7 @@ int gen_rand_alphanumeric(char *dest, int size) /* size should be the required s
 {
   int ret = get_random_bytes(dest, size);
   if (ret < 0) {
-    // assuming no threads here, for strerror
-    cerr << "cannot get random bytes: " << strerror(-ret) << std::endl;
+    cerr << "cannot get random bytes: " << cpp_strerror(-ret) << std::endl;
     return -1;
   }
 
@@ -323,7 +322,7 @@ int main(int argc, char **argv)
       info.openstack_name = openstack_user;
   
     if ((err = rgw_store_user_info(info)) < 0) {
-      cerr << "error storing user info: " << strerror(-err) << std::endl;
+      cerr << "error storing user info: " << cpp_strerror(-err) << std::endl;
       break;
     }
 
@@ -403,13 +402,15 @@ int main(int argc, char **argv)
     uint64_t size;
     int r = store->obj_stat(log_bucket, oid, &size, NULL);
     if (r < 0) {
-      cerr << "error while doing stat on " <<  log_bucket << ":" << oid << " " << strerror(-r) << std::endl;
+      cerr << "error while doing stat on " <<  log_bucket << ":" << oid
+	   << " " << cpp_strerror(-r) << std::endl;
       return -r;
     }
     bufferlist bl;
     r = store->read(log_bucket, oid, 0, size, bl);
     if (r < 0) {
-      cerr << "error while reading from " <<  log_bucket << ":" << oid << " " << strerror(-r) << std::endl;
+      cerr << "error while reading from " <<  log_bucket << ":" << oid
+	   << " " << cpp_strerror(-r) << std::endl;
       return -r;
     }
 
