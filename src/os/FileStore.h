@@ -206,11 +206,13 @@ class FileStore : public JournalingObjectStore {
 
   void _do_op(OpSequencer *o);
   void _finish_op(OpSequencer *o);
-  void queue_op(OpSequencer *osr, uint64_t op, list<Transaction*>& tls, Context *onreadable, Context *onreadable_sync);
-  void op_queue_throttle();
-  void _op_queue_throttle(const char *caller = 0);
-  void _journaled_ahead(OpSequencer *osr, uint64_t op, list<Transaction*> &tls,
-			Context *onreadable, Context *ondisk, Context *onreadable_sync);
+  Op *build_op(list<Transaction*>& tls,
+	       Context *onreadable, Context *onreadable_sync);
+  void queue_op(OpSequencer *osr, Op *o);
+  void op_queue_reserve_throttle(Op *o);
+  void _op_queue_reserve_throttle(Op *o, const char *caller = 0);
+  void _op_queue_release_throttle(Op *o);
+  void _journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk);
   friend class C_JournaledAhead;
 
   // flusher thread
