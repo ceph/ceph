@@ -8,6 +8,7 @@
 
 #include "rgw_common.h"
 #include "rgw_os.h"
+#include "rgw_os_auth.h"
 #include "rgw_user.h"
 
 
@@ -82,6 +83,14 @@ static int rgw_os_validate_token(const char *token, struct rgw_os_auth_info *inf
 
 bool rgw_verify_os_token(req_state *s)
 {
+  if (strncmp(s->os_auth_token, "AUTH_rgwtk", 10) == 0) {
+    int ret = rgw_os_verify_signed_token(s->os_auth_token, s->user);
+    if (ret < 0)
+      return false;
+
+    return  true;
+  }
+
   struct rgw_os_auth_info info;
 
   memset(&info, 0, sizeof(info));

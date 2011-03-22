@@ -360,30 +360,6 @@ static void get_auth_header(struct req_state *s, string& dest, bool qsr)
 }
 
 /*
- * calculate the sha1 value of a given msg and key
- */
-static int calc_hmac_sha1(const char *key, int key_len,
-                           const char *msg, int msg_len,
-                           char *dest, int *len) /* dest should be large enough to hold result */
-{
-  if (*len < HMACSHA1::DIGESTSIZE)
-    return -EINVAL;
-
-  char hex_str[HMACSHA1::DIGESTSIZE * 2 + 1];
-
-  HMACSHA1 hmac((const unsigned char *)key, key_len);
-  hmac.Update((const unsigned char *)msg, msg_len);
-  hmac.Final((unsigned char *)dest);
-  *len = HMACSHA1::DIGESTSIZE;
-  
-  buf_to_hex((unsigned char *)dest, *len, hex_str);
-
-  RGW_LOG(15) << "hmac=" << hex_str << endl;
-
-  return 0;
-}
-
-/*
  * verify that a signed request comes from the keyholder
  * by checking the signature against our locally-computed version
  */
