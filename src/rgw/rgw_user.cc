@@ -3,6 +3,7 @@
 #include <string>
 #include <map>
 
+#include "common/errno.h"
 #include "rgw_access.h"
 #include "rgw_acl.h"
 
@@ -326,7 +327,8 @@ int rgw_add_bucket(string user_id, string bucket_name)
 
     ret = rgwstore->tmap_set(ui_bucket, buckets_obj_id, bucket_name, bl);
     if (ret < 0) {
-      RGW_LOG(0) << "error adding bucket to directory: " << strerror(-ret)<< std::endl;
+      RGW_LOG(0) << "error adding bucket to directory: "
+		 << cpp_strerror(-ret)<< std::endl;
     }
   } else {
     RGWUserBuckets buckets;
@@ -365,7 +367,8 @@ int rgw_remove_bucket(string user_id, string bucket_name)
 
     ret = rgwstore->tmap_del(ui_bucket, buckets_obj_id, bucket_name);
     if (ret < 0) {
-      RGW_LOG(0) << "error removing bucket from directory: " << strerror(-ret)<< std::endl;
+      RGW_LOG(0) << "error removing bucket from directory: "
+		 << cpp_strerror(-ret)<< std::endl;
     }
   } else {
     RGWUserBuckets buckets;
