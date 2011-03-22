@@ -198,13 +198,13 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
 }
 
 /**
- * Check the recursive statistics on size for consistency. For now,
- * assert the correctness; later maybe we'll just return false
- * if there's a problem.
+ * Check the recursive statistics on size for consistency.
+ * If mds_debug_scatterstat is enabled, assert for correctness,
+ * otherwise just print out the mismatch and continue.
  */
 bool CDir::check_rstats()
 {
-  dout(20) << "check_rstats on " << this << dendl;
+  dout(25) << "check_rstats on " << this << dendl;
   if (!is_complete()) {
     dout(10) << "check_rstats bailing out -- incomplete dir!" << dendl;
     return true;
@@ -220,8 +220,9 @@ bool CDir::check_rstats()
       //if (i->second->get_linkage()->is_primary())
         dout(1) << *(i->second) << dendl;
     }
-    assert(get_num_head_items() ==
-        (fnode.fragstat.nfiles + fnode.fragstat.nsubdirs));
+    assert(!g_conf.mds_debug_scatterstat ||
+           (get_num_head_items() ==
+            (fnode.fragstat.nfiles + fnode.fragstat.nsubdirs)));
   }
 
   nest_info_t sub_info;
@@ -231,8 +232,8 @@ bool CDir::check_rstats()
     }
   }
 
-  dout(20) << "total of child dentrys: " << sub_info << dendl;
-  dout(20) << "my rstats:              " << fnode.rstat << dendl;
+  dout(25) << "total of child dentrys: " << sub_info << dendl;
+  dout(25) << "my rstats:              " << fnode.rstat << dendl;
   if ((!(sub_info.rbytes == fnode.rstat.rbytes)) ||
       (!(sub_info.rfiles == fnode.rstat.rfiles)) ||
       (!(sub_info.rsubdirs == fnode.rstat.rsubdirs))) {
@@ -245,10 +246,10 @@ bool CDir::check_rstats()
       }
     }
   }
-  assert(sub_info.rbytes == fnode.rstat.rbytes);
-  assert(sub_info.rfiles == fnode.rstat.rfiles);
-  assert(sub_info.rsubdirs == fnode.rstat.rsubdirs);
-  dout(0) << "check_rstats success on " << this << dendl;
+  assert(!g_conf.mds_debug_scatterstat || sub_info.rbytes == fnode.rstat.rbytes);
+  assert(!g_conf.mds_debug_scatterstat || sub_info.rfiles == fnode.rstat.rfiles);
+  assert(!g_conf.mds_debug_scatterstat || sub_info.rsubdirs == fnode.rstat.rsubdirs);
+  dout(10) << "check_rstats complete on " << this << dendl;
   return true;
 }
 
