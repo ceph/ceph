@@ -37,6 +37,7 @@ void usage()
   cerr << "   --email=<email>\n";
   cerr << "   --auth_uid=<auid>         librados uid\n";
   cerr << "   --secret=<key>            S3 key\n";
+  cerr << "   --os-secret=<key>         OpenStack key\n";
   cerr << "   --display-name=<name>\n";
   cerr << "   --bucket=<bucket>\n";
   cerr << "   --object=<object>\n";
@@ -178,6 +179,7 @@ int main(int argc, char **argv)
   const char *bucket = 0;
   const char *object = 0;
   const char *openstack_user = 0;
+  const char *openstack_key = 0;
   const char *date = 0;
   uint64_t auid = 0;
   RGWUserInfo info;
@@ -203,6 +205,8 @@ int main(int argc, char **argv)
       CONF_SAFE_SET_ARG_VAL(&auid, OPT_LONGLONG);
     } else if (CONF_ARG_EQ("os-user", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&openstack_user, OPT_STR);
+    } else if (CONF_ARG_EQ("os-secret", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&openstack_key, OPT_STR);
     } else if (CONF_ARG_EQ("date", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&date, OPT_STR);
     } else {
@@ -321,6 +325,8 @@ int main(int argc, char **argv)
       info.auid = auid;
     if (openstack_user)
       info.openstack_name = openstack_user;
+    if (openstack_key)
+      info.openstack_key = openstack_key;
   
     if ((err = rgw_store_user_info(info)) < 0) {
       cerr << "error storing user info: " << strerror(-err) << std::endl;
@@ -334,6 +340,7 @@ int main(int argc, char **argv)
     cout << "Secret Key: " << info.secret_key << std::endl;
     cout << "Display Name: " << info.display_name << std::endl;
     cout << "OpenStack User: " << (info.openstack_name.size() ? info.openstack_name : "<undefined>")<< std::endl;
+    cout << "OpenStack Key: " << (info.openstack_key.size() ? info.openstack_key : "<undefined>")<< std::endl;
     break;
   }
 

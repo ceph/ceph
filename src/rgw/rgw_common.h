@@ -38,7 +38,7 @@ using ceph::crypto::MD5;
 
 #define RGW_BUCKETS_OBJ_PREFIX ".buckets"
 
-#define USER_INFO_VER 3
+#define USER_INFO_VER 4
 
 #define RGW_MAX_CHUNK_SIZE	(4*1024*1024)
 
@@ -132,6 +132,7 @@ struct RGWUserInfo
   string display_name;
   string user_email;
   string openstack_name;
+  string openstack_key;
 
   RGWUserInfo() : auid(0) {}
 
@@ -144,6 +145,7 @@ struct RGWUserInfo
      ::encode(display_name, bl);
      ::encode(user_email, bl);
      ::encode(openstack_name, bl);
+     ::encode(openstack_key, bl);
   }
   void decode(bufferlist::iterator& bl) {
      __u32 ver;
@@ -155,6 +157,7 @@ struct RGWUserInfo
     ::decode(display_name, bl);
     ::decode(user_email, bl);
     if (ver >= 3) ::decode(openstack_name, bl);
+    if (ver >= 4) ::decode(openstack_key, bl);
   }
 
   void clear() {
