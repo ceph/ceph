@@ -420,6 +420,12 @@ unittest_ceph_crypto_LDADD = libcommon.a ${CRYPTO_LIBS} \
 unittest_ceph_crypto_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_ceph_crypto
 
+unittest_utf8_SOURCES = test/utf8.cc
+unittest_utf8_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_utf8_LDADD = libcommon.a ${UNITTEST_LDADD}
+unittest_utf8_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_utf8
+
 # shell scripts
 editpaths = sed \
 	-e 's|@bindir[@]|$(bindir)|g' \
@@ -585,6 +591,7 @@ libcommon_files = \
 	include/ceph_strings.cc \
 	include/ceph_frag.cc \
 	common/config.cc \
+	common/utf8.c \
 	common/page.cc \
 	common/lockdep.cc \
 	common/DoutStreambuf.cc \
@@ -751,6 +758,7 @@ noinst_HEADERS = \
 	common/safe_io.h\
         common/config.h\
 	common/ceph_crypto.h\
+	common/utf8.h\
         crush/CrushWrapper.h\
         crush/CrushWrapper.i\
         crush/builder.h\
