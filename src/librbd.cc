@@ -319,8 +319,8 @@ void image_info(rbd_obj_header_ondisk& header, image_info_t& info, size_t infosi
 
 string get_block_oid(rbd_obj_header_ondisk *header, uint64_t num)
 {
-  char o[RBD_MAX_SEG_NAME_SIZE];
-  snprintf(o, RBD_MAX_SEG_NAME_SIZE,
+  char o[RBD_MAX_BLOCK_NAME_SIZE];
+  snprintf(o, RBD_MAX_BLOCK_NAME_SIZE,
        "%s.%012" PRIx64, header->block_name, num);
   return o;
 }
