@@ -1054,6 +1054,7 @@ PG *OSD::lookup_lock_raw_pg(pg_t pgid)
   return pg;
 }
 
+
 void OSD::load_pgs()
 {
   assert(osd_lock.is_locked());
@@ -1100,6 +1101,94 @@ void OSD::load_pgs()
   dout(10) << "load_pgs done" << dendl;
 }
  
+
+/*
+ * look up a pg.  if we have it, great.  if not, consider creating it IF the pg mapping
+ * hasn't changed since the given epoch and we are the primary.
+ */
+PG *OSD::get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& created,
+			  bool primary,
+			  ObjectStore::Transaction **pt,
+			  C_Contexts **pfin)
+{
+  PG *pg;
+
+  if (!_have_pg(info.pgid)) {
+    // same primary?
+    vector<int> up, acting;
+    osdmap->pg_to_up_acting_osds(info.pgid, up, acting);
+    int role = osdmap->calc_pg_role(whoami, acting, acting.size());
+
+    PG::Info::History history = info.history;
+    project_pg_history(info.pgid, history, epoch, up, acting);
+
+    if (epoch < history.same_acting_since) {
+      dout(10) << "get_or_create_pg " << info.pgid << " acting changed in "
+	       << history.same_acting_since << " (msg from " << epoch << ")" << dendl;
+      return NULL;
+    }
+
+    bool create = false;
+    if (primary) {
+      assert(role == 0);  // otherwise, probably bug in project_pg_history.
+
+      // DNE on source?
+      if (info.dne()) {
+	// is there a creation pending on this pg?
+	if (creating_pgs.count(info.pgid)) {
+	  creating_pgs[info.pgid].prior.erase(from);
+	  if (!can_create_pg(info.pgid))
+	    return NULL;
+	  create = true;
+	} else {
+	  dout(10) << "get_or_create_pg " << info.pgid
+		   << " DNE on source, but creation probe, ignoring" << dendl;
+	  return NULL;
+	}
+      }
+      creating_pgs.erase(info.pgid);
+    } else {
+      assert(role != 0);    // i should be replica
+      assert(!info.dne());  // and pg exists if we are hearing about it
+    }
+
+    // ok, create PG locally using provided Info and History
+    *pt = new ObjectStore::Transaction;
+    *pfin = new C_Contexts;
+    if (create) {
+      pg = _create_lock_new_pg(info.pgid, acting, **pt);
+    } else {
+      pg = _create_lock_pg(info.pgid, **pt);
+      pg->acting.swap(acting);
+      pg->up.swap(up);
+      pg->set_role(role);
+      pg->info.history = history;
+      reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
+      pg->clear_primary_state();  // yep, notably, set hml=false
+      pg->write_info(**pt);
+      pg->write_log(**pt);
+    }
+      
+    created++;
+    dout(10) << *pg << " is new" << dendl;
+    
+    // kick any waiters
+    wake_pg_waiters(pg->info.pgid);
+  } else {
+    // already had it.  did the mapping change?
+    pg = _lookup_lock_pg(info.pgid);
+    if (epoch < pg->info.history.same_acting_since) {
+      dout(10) << *pg << " get_or_create_pg acting changed in "
+	       << pg->info.history.same_acting_since
+	       << " (msg from " << epoch << ")" << dendl;
+      pg->unlock();
+      return NULL;
+    }
+    *pt = new ObjectStore::Transaction;
+    *pfin = new C_Contexts;
+  }
+  return pg;
+}
 
 
 /*
@@ -4041,77 +4130,9 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 
     ObjectStore::Transaction *t;
     C_Contexts *fin;
-  
-    if (!_have_pg(pgid)) {
-      // same primary?
-      vector<int> up, acting;
-      osdmap->pg_to_up_acting_osds(pgid, up, acting);
-      int role = osdmap->calc_pg_role(whoami, acting, acting.size());
-
-      PG::Info::History history = it->history;
-      project_pg_history(pgid, history, m->get_epoch(), up, acting);
-
-      if (m->get_epoch() < history.same_acting_since) {
-        dout(10) << "handle_pg_notify pg " << pgid << " acting changed in "
-                 << history.same_acting_since << " (msg from " << m->get_epoch() << ")" << dendl;
-        continue;
-      }
-
-      assert(role == 0);  // otherwise, probably bug in project_pg_history.
-      
-      // DNE on source?
-      bool create = false;
-      if (it->dne()) {  
-	// is there a creation pending on this pg?
-	if (creating_pgs.count(pgid)) {
-	  creating_pgs[pgid].prior.erase(from);
-
-	  if (!can_create_pg(pgid))
-	    continue;
-	  create = true;
-	} else {
-	  dout(10) << "handle_pg_notify pg " << pgid
-		   << " DNE on source, but creation probe, ignoring" << dendl;
-	  continue;
-	}
-      }
-      creating_pgs.erase(pgid);
-
-      // ok, create PG locally using provided Info and History
-      t = new ObjectStore::Transaction;
-      fin = new C_Contexts;
-      if (create) {
-	pg = _create_lock_new_pg(pgid, acting, *t);
-      } else {
-	pg = _create_lock_pg(pgid, *t);
-	pg->acting.swap(acting);
-	pg->up.swap(up);
-	pg->set_role(role);
-	pg->info.history = history;
-	reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
-	pg->clear_primary_state();  // yep, notably, set hml=false
-	pg->write_info(*t);
-	pg->write_log(*t);
-      }
-      
-      created++;
-      dout(10) << *pg << " is new" << dendl;
-    
-      // kick any waiters
-      wake_pg_waiters(pg->info.pgid);
-    } else {
-      // already had it.  am i (still) the primary?
-      pg = _lookup_lock_pg(pgid);
-      if (m->get_epoch() < pg->info.history.same_acting_since) {
-        dout(10) << *pg << " handle_pg_notify acting changed in "
-                 << pg->info.history.same_acting_since
-                 << " (msg from " << m->get_epoch() << ")" << dendl;
-        pg->unlock();
-        continue;
-      }
-      t = new ObjectStore::Transaction;
-      fin = new C_Contexts;
-    }
+    pg = get_or_create_pg(*it, m->get_epoch(), from, created, true, &t, &fin);
+    if (!pg)
+      continue;
 
     if (pg->peer_info.count(from) &&
 	pg->peer_info[from].last_update == it->last_update) {
@@ -4181,45 +4202,13 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 			   map<int, MOSDPGInfo*>* info_map,
 			   int& created)
 {
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  C_Contexts *fin = new C_Contexts;
-  
-  PG *pg = 0;
-  if (!_have_pg(info.pgid)) {
-    vector<int> up, acting;
-    osdmap->pg_to_up_acting_osds(info.pgid, up, acting);
-    int role = osdmap->calc_pg_role(whoami, acting, acting.size());
+  ObjectStore::Transaction *t;
+  C_Contexts *fin;  
+  PG *pg;
 
-    project_pg_history(info.pgid, info.history, epoch, up, acting);
-    if (epoch < info.history.same_acting_since) {
-      dout(10) << "got old info " << info << " on non-existent pg, ignoring" << dendl;
-      return;
-    }
-
-    // create pg!
-    assert(role != 0);
-    assert(!info.dne());
-    pg = _create_lock_pg(info.pgid, *t);
-    dout(10) << " got info on new pg, creating" << dendl;
-    pg->acting.swap(acting);
-    pg->up.swap(up);
-    pg->set_role(role);
-    pg->info.history = info.history;
-    reg_last_pg_scrub(pg->info.pgid, pg->info.history.last_scrub_stamp);
-    pg->write_info(*t);
-    pg->write_log(*t);
-    created++;
-  } else {
-    pg = _lookup_lock_pg(info.pgid);
-    if (epoch < pg->info.history.same_acting_since) {
-      // The peering stuff resets when the acting set changes, so ignore any messges sent
-      // before that.
-      dout(10) << *pg << " got old info " << info << ", ignoring" << dendl;
-      pg->unlock();
-      return;
-    }
-  }
-  assert(pg);
+  pg = get_or_create_pg(info, epoch, from, created, false, &t, &fin);
+  if (!pg)
+    return;
 
   dout(10) << *pg << ": " << __func__ << " info: " << info << ", ";
   if (log.empty())

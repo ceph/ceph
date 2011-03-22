@@ -522,6 +522,10 @@ protected:
   PG *lookup_lock_pg(pg_t pgid);
   PG *lookup_lock_raw_pg(pg_t pgid);
 
+  PG *get_or_create_pg(const PG::Info& info, epoch_t epoch, int from, int& pcreated, bool primary,
+		       ObjectStore::Transaction **pt,
+		       C_Contexts **pfin);
+  
   void load_pgs();
   void calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset);
   void project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
