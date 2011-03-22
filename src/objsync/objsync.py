@@ -12,7 +12,7 @@
 #
 
 """
-osync.py: the object synchronizer
+objsync.py: the object synchronizer
 """
 
 from boto.s3.connection import OrdinaryCallingFormat
@@ -313,23 +313,23 @@ def delete_unreferenced(src, dst):
             dst.remove(dobj)
 
 USAGE = """
-osync synchronizes objects. The source and destination can both be local or
+objsync synchronizes objects. The source and destination can both be local or
 both remote.
 
 Examples:
 # copy contents of mybucket to disk
-osync -v s3://myhost/mybucket file://mydir
+objsync -v s3://myhost/mybucket file://mydir
 
 # copy contents of mydir to an S3 bucket
-osync -v file://mydir s3://myhost/mybucket
+objsync -v file://mydir s3://myhost/mybucket
 
 # synchronize two S3 buckets
 SRC_AKEY=foo SRC_SKEY=foo \
 DST_AKEY=foo DST_SKEY=foo \
-osync -v s3://myhost/mybucket1 s3://myhost/mybucket2
+objsync -v s3://myhost/mybucket1 s3://myhost/mybucket2
 
 Note: You must specify an AWS access key and secret access key when accessing
-S3. osync honors these environment variables:
+S3. objsync honors these environment variables:
 SRC_AKEY          Access key for the source URL
 SRC_SKEY          Secret access key for the source URL
 DST_AKEY          Access key for the destination URL
@@ -340,7 +340,7 @@ SKEY              Secret access key for both source and dest
 If these environment variables are not given, we will fall back on libboto
 defaults.
 
-osync (options) [source] [destination]"""
+objsync (options) [source] [destination]"""
 
 parser = OptionParser(USAGE)
 parser.add_option("-n", "--dry-run", action="store_true", \
