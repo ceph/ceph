@@ -4764,6 +4764,10 @@ void Server::handle_client_rename(MDRequest *mdr)
       xlocks.insert(&srcdn->versionlock);
     if (destdn->is_projected())
       xlocks.insert(&destdn->versionlock);
+    // also take rdlock on all ancestor dentries for destdn.  this ensures that the
+    // destdn can be traversed to by the witnesses.
+    for (int i=0; i<(int)desttrace.size(); i++) 
+      xlocks.insert(&desttrace[i]->versionlock);
   }
 
   // we need to update srci's ctime.  xlock its least contended lock to do that...
