@@ -60,19 +60,18 @@ CompatSet mdsmap_compat_base(feature_compat_base,
 
 void MDSMap::print(ostream& out) 
 {
-  out << "epoch " << epoch << "\n";
-  out << "flags " << hex << flags << dec << "\n";
-  out << "created " << created << std::endl;
-  out << "modified " << modified << std::endl;
-  out << "tableserver " << tableserver << std::endl;
-  out << "root " << root << std::endl;
-  out << "session_timeout " << session_timeout << "\n"
-      << "session_autoclose " << session_autoclose << "\n";
-  out << "last_failure " << last_failure << "\n"
-      << "last_failure_osd_epoch" << last_failure_osd_epoch << "\n";
-
-  out << "\ncompat\t" << compat << std::endl;
-  out << "\nmax_mds\t" << max_mds << std::endl;
+  out << "epoch\t" << epoch << "\n";
+  out << "flags\t" << hex << flags << dec << "\n";
+  out << "created\t" << created << "\n";
+  out << "modified\t" << modified << "\n";
+  out << "tableserver\t" << tableserver << "\n";
+  out << "root\t" << root << "\n";
+  out << "session_timeout\t" << session_timeout << "\n"
+      << "session_autoclose\t" << session_autoclose << "\n";
+  out << "last_failure\t" << last_failure << "\n"
+      << "last_failure_osd_epoch\t" << last_failure_osd_epoch << "\n";
+  out << "compat\t" << compat << "\n";
+  out << "max_mds\t" << max_mds << "\n";
   out << "in\t" << in << "\n"
       << "up\t" << up << "\n"
       << "failed\t" << failed << "\n"
