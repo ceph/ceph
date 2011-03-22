@@ -2811,10 +2811,10 @@ void MDCache::disambiguate_imports()
 }
 
 
-void MDCache::add_ambiguous_import(dirfrag_t base, vector<dirfrag_t>& bounds) 
+void MDCache::add_ambiguous_import(dirfrag_t base, const vector<dirfrag_t>& bounds) 
 {
   assert(my_ambiguous_imports.count(base) == 0);
-  my_ambiguous_imports[base].swap(bounds);
+  my_ambiguous_imports[base] = bounds;
 }
 
 
@@ -5593,26 +5593,29 @@ void MDCache::try_trim_non_auth_subtree(CDir *dir)
     try_subtree_merge(dir);
   } else {
     // can we trim this subtree (and possibly our ancestors) too?
-    CInode *diri;
     while (true) {
-      dout(10) << " closing empty subtree " << *dir << dendl;
-      remove_subtree(dir);
-      dir->mark_clean();
-      diri = dir->get_inode();
-      diri->close_dirfrag(dir->get_frag());
-
+      CInode *diri = dir->get_inode();
       if (diri->is_base())
 	break;
 
-      dir = get_subtree_root(diri->get_parent_dir());
-      if (dir->get_dir_auth().first == mds->whoami)
+      CDir *psub = get_subtree_root(diri->get_parent_dir());
+      dout(10) << " parent subtree is " << *psub << dendl;
+      if (psub->get_dir_auth().first == mds->whoami)
 	break;  // we are auth, keep.
 
-      dout(10) << " parent subtree also non-auth: " << *dir << dendl;
-      if (trim_non_auth_subtree(dir))
+      dout(10) << " closing empty non-auth subtree " << *dir << dendl;
+      remove_subtree(dir);
+      dir->mark_clean();
+      diri->close_dirfrag(dir->get_frag());
+
+      dout(10) << " parent subtree also non-auth: " << *psub << dendl;
+      if (trim_non_auth_subtree(psub))
 	break;
+      dir = psub;
     }
   }
+
+  show_subtrees();
 }
 
 

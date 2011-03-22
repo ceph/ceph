@@ -691,7 +691,7 @@ public:
   }
 
   // ambiguous imports
-  void add_ambiguous_import(dirfrag_t base, vector<dirfrag_t>& bounds);
+  void add_ambiguous_import(dirfrag_t base, const vector<dirfrag_t>& bounds);
   void add_ambiguous_import(CDir *base, const set<CDir*>& bounds);
   bool have_ambiguous_import(dirfrag_t base) {
     return my_ambiguous_imports.count(base);

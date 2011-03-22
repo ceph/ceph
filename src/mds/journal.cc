@@ -1077,7 +1077,7 @@ void EImportStart::update_segment()
 
 void EImportStart::replay(MDS *mds)
 {
-  dout(10) << "EImportStart.replay " << base << dendl;
+  dout(10) << "EImportStart.replay " << base << " bounds " << bounds << dendl;
   //metablob.print(*_dout);
   metablob.replay(mds, _segment);
 
