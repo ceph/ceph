@@ -47,12 +47,12 @@ extern int rgw_store_user_info(RGWUserInfo& info);
  * Given an email, finds the user_id associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_uid_by_email(string& email, string& user_id);
+extern int rgw_get_uid_by_email(string& email, string& user_id, RGWUserInfo& info);
 /**
  * Given an openstack username, finds the user_id associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_uid_by_openstack(string& openstack_name, string& user_id);
+extern int rgw_get_uid_by_openstack(string& openstack_name, string& user_id, RGWUserInfo& info);
 /**
  * Given an RGWUserInfo, deletes the user and its bucket ACLs.
  */

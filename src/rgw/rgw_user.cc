@@ -79,7 +79,8 @@ int rgw_store_user_info(RGWUserInfo& info)
   if (info.openstack_name.size()) {
     /* check if openstack mapping exists */
     string os_uid;
-    int r = rgw_get_uid_by_openstack(info.openstack_name, os_uid);
+    RGWUserInfo inf;
+    int r = rgw_get_uid_by_openstack(info.openstack_name, os_uid, inf);
     if (r >= 0 && os_uid.compare(info.user_id) != 0) {
       RGW_LOG(0) << "can't store user info, openstack id already mapped to another user" << std::endl;
       return -EEXIST;
@@ -100,7 +101,8 @@ int rgw_store_user_info(RGWUserInfo& info)
   bufferlist uid_bl;
   RGWUID ui;
   ui.user_id = info.user_id;
-  ui.encode(uid_bl);
+  ::encode(ui, uid_bl);
+  ::encode(info, uid_bl);
 
   if (info.user_email.size()) {
     ret = rgwstore->put_obj(info.user_id, ui_email_bucket, info.user_email, uid_bl.c_str(), uid_bl.length(), NULL, attrs);
@@ -128,7 +130,7 @@ int rgw_store_user_info(RGWUserInfo& info)
   return ret;
 }
 
-int rgw_get_uid_from_index(string& key, string& bucket, string& user_id)
+int rgw_get_uid_from_index(string& key, string& bucket, string& user_id, RGWUserInfo& info)
 {
   bufferlist bl;
   int ret;
@@ -157,8 +159,11 @@ int rgw_get_uid_from_index(string& key, string& bucket, string& user_id)
   } while (ofs <= end);
 
   iter = bl.begin();
-  uid.decode(iter); 
+  ::decode(uid, iter);
   user_id = uid.user_id;
+  if (!iter.end()) {
+    info.decode(iter);
+  }
   ret = 0;
 done:
   rgwstore->finish_get_obj(&handle);
@@ -169,18 +174,18 @@ done:
  * Given an email, finds the user_id associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-int rgw_get_uid_by_email(string& email, string& user_id)
+int rgw_get_uid_by_email(string& email, string& user_id, RGWUserInfo& info)
 {
-  return rgw_get_uid_from_index(email, ui_email_bucket, user_id);
+  return rgw_get_uid_from_index(email, ui_email_bucket, user_id, info);
 }
 
 /**
  * Given an openstack username, finds the user_id associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_uid_by_openstack(string& openstack_name, string& user_id)
+extern int rgw_get_uid_by_openstack(string& openstack_name, string& user_id, RGWUserInfo& info)
 {
-  return rgw_get_uid_from_index(openstack_name, ui_openstack_bucket, user_id);
+  return rgw_get_uid_from_index(openstack_name, ui_openstack_bucket, user_id, info);
 }
 
 static void get_buckets_obj(string& user_id, string& buckets_obj_id)

@@ -106,17 +106,12 @@ bool rgw_verify_os_token(req_state *s)
 
   string auth_id;
 
-  if (rgw_get_uid_by_openstack(openstack_user, auth_id) < 0) {
+  if (rgw_get_uid_by_openstack(openstack_user, auth_id, s->user) < 0) {
     RGW_LOG(0) << "couldn't map openstack user" << std::endl;
     return false;
   }
 
   RGW_LOG(0) << "auth_id=" << auth_id << std::endl;
-
-  if (rgw_get_user_info(auth_id, s->user) < 0) {
-    RGW_LOG(5) << "error reading user info, uid=" << auth_id << std::endl;
-    return false;
-  }
 
   return true;
 }

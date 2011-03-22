@@ -243,7 +243,7 @@ int main(int argc, char **argv)
     string s;
     if (user_email) {
       s = user_email;
-      if (rgw_get_uid_by_email(s, user_id_str) >= 0) {
+      if (rgw_get_uid_by_email(s, user_id_str, info) >= 0) {
 	found = true;
       } else {
 	cerr << "could not find user by specified email" << std::endl;
@@ -251,7 +251,7 @@ int main(int argc, char **argv)
     }
     if (!found && openstack_user) {
       s = openstack_user;
-      if (rgw_get_uid_by_openstack(s, user_id_str) >= 0) {
+      if (rgw_get_uid_by_openstack(s, user_id_str, info) >= 0) {
 	found = true;
       } else
         cerr << "could not find user by specified openstack username" << std::endl;
@@ -269,7 +269,7 @@ int main(int argc, char **argv)
 
     string user_id_str = user_id;
 
-    if (rgw_get_user_info(user_id_str, info) < 0) {
+    if (info.user_id.empty() && rgw_get_user_info(user_id_str, info) < 0) {
       cerr << "error reading user info, aborting" << std::endl;
       exit(1);
     }
