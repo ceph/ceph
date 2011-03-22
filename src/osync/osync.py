@@ -72,6 +72,14 @@ def etag_to_md5(etag):
         end = None
     return etag[start:end]
 
+def getenv(a, b):
+    if os.environ.has_key(a):
+        return os.environ[a]
+    elif os.environ.has_key(b):
+        return os.environ[b]
+    else:
+        return None
+
 ###### NonexistentStore #######
 class NonexistentStore(Exception):
     pass
@@ -104,14 +112,19 @@ class Object(object):
 ###### Store #######
 class Store(object):
     @staticmethod
-    def make_store(url, create):
+    def make_store(url, create, akey, skey):
         s3_url = strip_prefix("s3://", url)
         if (s3_url):
-            return S3Store(s3_url, create)
+            return S3Store(s3_url, create, akey, skey)
         file_url = strip_prefix("file://", url)
         if (file_url):
             return FileStore(file_url, create)
-        raise Exception("Failed to find s3:// or file:// prefix.")
+        if (url[0:1] == "/"):
+            return FileStore(url, create)
+        if (url[0:2] == "./"):
+            return FileStore(url, create)
+        raise Exception("Failed to find a prefix of s3://, file://, /, or ./ \
+Cannot handle this URL.")
     def __init__(self, url):
         self.url = url
 
@@ -140,7 +153,7 @@ class S3StoreIterator(object):
         return ret
 
 class S3Store(Store):
-    def __init__(self, url, create):
+    def __init__(self, url, create, akey, skey):
         # Parse the s3 url
         host_end = string.find(url, "/")
         if (host_end == -1):
@@ -162,8 +175,17 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
             print "self.bucket_name = '" + self.bucket_name + "' ",
             print "self.key_prefix = '" + self.key_prefix + "'"
         self.conn = S3Connection(calling_format=OrdinaryCallingFormat(),
-                                 host=self.host, is_secure=False)
-        self.bucket = self.conn.get_bucket(self.bucket_name)
+                host=self.host, is_secure=False,
+                aws_access_key_id=akey, aws_secret_access_key=skey)
+        self.bucket = self.conn.lookup(self.bucket_name)
+        if (self.bucket == None):
+            if (create):
+                if (opts.dry_run):
+                    raise Exception("logic error: this should be unreachable.")
+                self.bucket = self.conn.create_bucket(bucket_name = self.bucket_name)
+            else:
+                raise RuntimeError("%s: no such bucket as %s" % \
+                    (url, self.bucket_name))
         Store.__init__(self, "s3://" + url)
     def __str__(self):
         return "s3://" + self.host + "/" + self.bucket_name + "/" + self.key_prefix
@@ -189,6 +211,8 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
         if (opts.more_verbose):
             print "UPLOAD: local_copy.path='" + local_copy.path + "' " + \
                 "obj='" + obj.name + "'"
+        if (opts.dry_run):
+            return
 #        mime = mimetypes.guess_type(local_copy.path)[0]
 #        if (mime == NoneType):
 #            mime = "application/octet-stream"
@@ -197,6 +221,8 @@ s3://host/bucket/key_prefix. Failed to find the bucket.")
         #k.set_metadata("Content-Type", mime)
         k.set_contents_from_filename(local_copy.path)
     def remove(self, obj):
+        if (opts.dry_run):
+            return
         self.bucket.delete_key(obj.name)
         if (opts.more_verbose):
             print "S3Store: removed %s" % obj.name
@@ -236,6 +262,8 @@ class FileStore(Store):
         if (self.base[-1:] == '/'):
             self.base = self.base[:-1]
         if (create):
+            if (opts.dry_run):
+                raise Exception("logic error: this should be unreachable.")
             mkdir_p(self.base)
         elif (not os.path.isdir(self.base)):
             raise NonexistentStore()
@@ -260,12 +288,16 @@ class FileStore(Store):
             return None
         return Object.from_file(obj.name, path)
     def upload(self, local_copy, obj):
+        if (opts.dry_run):
+            return
         s = local_copy.path
         d = self.base + "/" + obj.name
         #print "s='" + s +"', d='" + d + "'"
         mkdir_p(os.path.dirname(d))
         shutil.copy(s, d)
     def remove(self, obj):
+        if (opts.dry_run):
+            return
         os.unlink(self.base + "/" + obj.name)
         if (opts.more_verbose):
             print "FileStore: removed %s" % obj.name
@@ -292,15 +324,31 @@ osync -v s3://myhost/mybucket file://mydir
 osync -v file://mydir s3://myhost/mybucket
 
 # synchronize two S3 buckets
+SRC_AKEY=foo SRC_SKEY=foo \
+DST_AKEY=foo DST_SKEY=foo \
 osync -v s3://myhost/mybucket1 s3://myhost/mybucket2
+
+Note: You must specify an AWS access key and secret access key when accessing
+S3. osync honors these environment variables:
+SRC_AKEY          Access key for the source URL
+SRC_SKEY          Secret access key for the source URL
+DST_AKEY          Access key for the destination URL
+DST_SKEY          Secret access key for the destination URL
+AKEY              Access key for both source and dest
+SKEY              Secret access key for both source and dest
+
+If these environment variables are not given, we will fall back on libboto
+defaults.
 
 osync (options) [source] [destination]"""
 
 parser = OptionParser(USAGE)
-#parser.add_option("-c", "--config-file", dest="config_file", \
-    #metavar="FILE", help="set config file")
-#parser.add_option("-n", "--dry-run", action="store_true", \
-#    dest="dry_run")
+parser.add_option("-n", "--dry-run", action="store_true", \
+    dest="dry_run", default=False)
+parser.add_option("-S", "--source-config",
+    dest="source_config", help="boto configuration file to use for the S3 source")
+parser.add_option("-D", "--dest-config",
+    dest="dest_config", help="boto configuration file to use for the S3 destination")
 parser.add_option("-c", "--create-dest", action="store_true", \
     dest="create", help="create the destination if it doesn't already exist")
 parser.add_option("--delete-before", action="store_true", \
@@ -314,6 +362,9 @@ parser.add_option("-v", "--verbose", action="store_true", \
 parser.add_option("-V", "--more-verbose", action="store_true", \
     dest="more_verbose", help="be really, really verbose (developer mode)")
 (opts, args) = parser.parse_args()
+if (opts.create and opts.dry_run):
+    raise Exception("You can't run with both --create-dest and --dry-run! \
+By definition, a dry run never changes anything.")
 if (len(args) < 2):
     print >>stderr, "Expected two positional arguments: source and destination"
     print >>stderr, USAGE
@@ -335,7 +386,8 @@ dst_name = args[1]
 try:
     if (opts.more_verbose):
         print "SOURCE: " + src_name
-    src = Store.make_store(src_name, False)
+    src = Store.make_store(src_name, False,
+            getenv("SRC_AKEY", "AKEY"), getenv("SRC_SKEY", "SKEY"))
 except NonexistentStore as e:
     print >>stderr, "Fatal error: Source " + src_name + " does not exist."
     sys.exit(1)
@@ -346,7 +398,8 @@ except Exception as e:
 try:
     if (opts.more_verbose):
         print "DESTINATION: " + dst_name
-    dst = Store.make_store(dst_name, opts.create)
+    dst = Store.make_store(dst_name, opts.create,
+            getenv("DST_AKEY", "AKEY"), getenv("DST_SKEY", "SKEY"))
 except NonexistentStore as e:
     print >>stderr, "Fatal error: Destination " + dst_name + " does " +\
         "not exist. Run with -c or --create-dest to create it automatically."
