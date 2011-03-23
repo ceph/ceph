@@ -176,6 +176,11 @@ void RGW_OS_Auth_Get::execute()
   RGWUserInfo info;
   bufferlist bl;
 
+  if (!os_url || !url_prefix) {
+    RGW_LOG(0) << "server is misconfigured, missing RGW_OPENSTACK_URL_PREFIX or RGW_OPENSTACK_URL" << std::endl;
+    ret = -EINVAL;
+    goto done;
+  }
 
   if (!key || !user)
     goto done;
@@ -189,7 +194,7 @@ void RGW_OS_Auth_Get::execute()
     goto done;
   }
 
-  CGI_PRINTF(s, "X-Storage-Url: %s/%s/v1\n", os_url, url_prefix);
+  CGI_PRINTF(s, "X-Storage-Url: %s/%s/v1/AUTH_rgw\n", os_url, url_prefix);
 
   if ((ret = encode_token(info.openstack_name, info.openstack_key, bl)) < 0)
     goto done;
