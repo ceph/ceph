@@ -101,5 +101,5 @@ export CXXFLAGS
 
 ./configure \
 --prefix=/usr --sbindir=/sbin --localstatedir=/var --sysconfdir=/etc \
---with-gtk2=yes --with-debug $with_profiler \
+--with-gtk2=yes --with-debug $with_profiler --with-cryptopp \
 || die "configure failed"

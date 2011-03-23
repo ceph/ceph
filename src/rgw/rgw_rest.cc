@@ -1,5 +1,6 @@
 #include <errno.h>
 
+#include "common/utf8.h"
 #include "rgw_common.h"
 #include "rgw_access.h"
 #include "rgw_op.h"
@@ -33,12 +34,17 @@ struct errno_http {
   const char *default_code;
 };
 
+#define INVALID_BUCKET_NAME 2000
+#define INVALID_OBJECT_NAME 2001
+
 const static struct errno_http hterrs[] = {
     { 0, "200", "" },
     { 201, "201", "Created" },
     { 204, "204", "NoContent" },
     { 206, "206", "" },
     { EINVAL, "400", "InvalidArgument" },
+    { INVALID_BUCKET_NAME, "400", "InvalidBucketName" },
+    { INVALID_OBJECT_NAME, "400", "InvalidObjectName" },
     { EACCES, "403", "AccessDenied" },
     { EPERM, "403", "AccessDenied" },
     { ENOENT, "404", "NoSuchKey" },
@@ -511,8 +517,66 @@ static void init_auth_info(struct req_state *s)
   }
 }
 
-void RGWHandler_REST::init_rest(struct req_state *s, struct fcgx_state *fcgx)
+// This function enforces some fairly strict limits on bucket names.  These
+// correspond to Amazon's "recommendations", and are stricter than its actual
+// hard-and-fast rules about bucket names.  This way, all our buckets will be
+// accessible via the virtual host calling format, rather than only some of
+// them.
+static int validate_bucket_name(const char *bucket)
 {
+  int len = strlen(bucket);
+  if (len < 3) {
+    if (len == 0)
+      return 0;
+    // Name too short
+    return INVALID_BUCKET_NAME;
+  }
+  else if (len > 63) {
+    // Name too long
+    return INVALID_BUCKET_NAME;
+  }
+  for (const char *s = bucket; *s; ++s) {
+    char c = *s;
+    if (islower(c))
+      continue;
+    if (isdigit(c))
+      continue;
+    if (c == '-')
+      continue;
+    // Invalid character
+    // Yes, we are even excluding capital letters.
+    return INVALID_BUCKET_NAME;
+  }
+  // can't have dashes at the beginning or the end.
+  if (bucket[0] == '-')
+    return INVALID_BUCKET_NAME;
+  if (bucket[len-1] == '-')
+    return INVALID_BUCKET_NAME;
+  return 0;
+}
+
+// "The name for a key is a sequence of Unicode characters whose UTF-8 encoding
+// is at most 1024 bytes long."
+// However, we can still have control characters and other nasties in there.
+// Just as long as they're utf-8 nasties.
+static int validate_object_name(const char *object)
+{
+  int len = strlen(object);
+  if (len > 1024) {
+    // Name too long
+    return INVALID_OBJECT_NAME;
+  }
+
+  if (check_utf8(object, len)) {
+    // Object names must be valid UTF-8.
+    return INVALID_OBJECT_NAME;
+  }
+  return 0;
+}
+
+int RGWHandler_REST::init_rest(struct req_state *s, struct fcgx_state *fcgx)
+{
+  int ret = 0;
   RGWHandler::init_state(s, fcgx);
 
   s->path_name = FCGX_GetParam("SCRIPT_NAME", s->fcgx->envp);
@@ -541,6 +605,12 @@ void RGWHandler_REST::init_rest(struct req_state *s, struct fcgx_state *fcgx)
     s->op = OP_UNKNOWN;
 
   init_entities_from_header(s);
+  ret = validate_bucket_name(s->bucket_str.c_str());
+  if (ret)
+    return ret;
+  ret = validate_object_name(s->object_str.c_str());
+  if (ret)
+    return ret;
   RGW_LOG(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket ? s->bucket : "<NULL>") << endl;
 
   init_auth_info(s);
@@ -557,6 +627,7 @@ void RGWHandler_REST::init_rest(struct req_state *s, struct fcgx_state *fcgx)
     const char *expect = FCGX_GetParam("HTTP_EXPECT", s->fcgx->envp);
     s->expect_cont = (expect && !strcasecmp(expect, "100-continue"));
   }
+  return ret;
 }
 
 int RGWHandler_REST::read_permissions()
@@ -613,11 +684,12 @@ RGWOp *RGWHandler_REST::get_op()
 }
 
 
-RGWHandler *RGWHandler_REST::init_handler(struct req_state *s, struct fcgx_state *fcgx)
+RGWHandler *RGWHandler_REST::init_handler(struct req_state *s, struct fcgx_state *fcgx,
+					  int *init_error)
 {
   RGWHandler *handler;
 
-  init_rest(s, fcgx);
+  *init_error = init_rest(s, fcgx);
 
   if (s->prot_flags & RGW_REST_OPENSTACK)
     handler = &rgwhandler_os;

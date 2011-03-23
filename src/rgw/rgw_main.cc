@@ -78,10 +78,16 @@ int main(int argc, const char **argv)
 
   while (FCGX_Accept(&fcgx.in, &fcgx.out, &fcgx.err, &fcgx.envp) >= 0) 
   {
-    RGWHandler *handler = RGWHandler_REST::init_handler(&s, &fcgx);
     RGWOp *op;
+    int init_error = 0;
+    RGWHandler *handler = RGWHandler_REST::init_handler(&s, &fcgx, &init_error);
     int ret;
     
+    if (init_error != 0) {
+      abort_early(&s, init_error);
+      goto done;
+    }
+
     if (!handler->authorize(&s)) {
       RGW_LOG(10) << "failed to authorize request" << std::endl;
       abort_early(&s, -EPERM);

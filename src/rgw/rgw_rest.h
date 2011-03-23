@@ -99,14 +99,15 @@ protected:
   virtual RGWOp *get_create_op(struct req_state *s) = 0;
   virtual RGWOp *get_delete_op(struct req_state *s) = 0;
 
-  static void init_rest(struct req_state *s, struct fcgx_state *fcgx);
+  static int init_rest(struct req_state *s, struct fcgx_state *fcgx);
 public:
   int read_permissions();
   RGWOp *get_op();
 
   virtual bool authorize(struct req_state *s) = 0;
 
-  static RGWHandler *init_handler(struct req_state *s, struct fcgx_state *fcgx);
+  static RGWHandler *init_handler(struct req_state *s, struct fcgx_state *fcgx,
+				  int *init_error);
 };
 
 extern void dump_errno(struct req_state *s, int err, struct rgw_err *rgwerr = NULL);
