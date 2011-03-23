@@ -26,7 +26,7 @@ static int build_token(string& os_user, string& key, uint64_t nonce, utime_t& ex
   char k[HMACSHA1::DIGESTSIZE];
   memset(k, 0, sizeof(k));
   const char *s = key.c_str();
-  for (int i = 0; i < key.length(); i++, s++) {
+  for (int i = 0; i < (int)key.length(); i++, s++) {
     k[i % HMACSHA1::DIGESTSIZE] |= *s;
   }
   int ret = calc_hmac_sha1(k, sizeof(k), bl.c_str(), bl.length(),
