@@ -345,10 +345,6 @@ obsync (options) [source] [destination]"""
 parser = OptionParser(USAGE)
 parser.add_option("-n", "--dry-run", action="store_true", \
     dest="dry_run", default=False)
-parser.add_option("-S", "--source-config",
-    dest="source_config", help="boto configuration file to use for the S3 source")
-parser.add_option("-D", "--dest-config",
-    dest="dest_config", help="boto configuration file to use for the S3 destination")
 parser.add_option("-c", "--create-dest", action="store_true", \
     dest="create", help="create the destination if it doesn't already exist")
 parser.add_option("--delete-before", action="store_true", \
