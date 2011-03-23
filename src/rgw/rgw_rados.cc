@@ -532,9 +532,11 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
   if (r < 0)
     goto done_err;
 
-  r = state->io_ctx.stat(oid, &size, &mtime);
-  if (r < 0)
-    goto done_err;
+  if (total_size || end) {
+    r = state->io_ctx.stat(oid, &size, &mtime);
+    if (r < 0)
+      goto done_err;
+  }
 
   if (attrs) {
     r = state->io_ctx.getxattrs(oid, *attrs);
@@ -593,7 +595,7 @@ int RGWRados::prepare_get_obj(std::string& bucket, std::string& oid,
     }
   }
 
-  if (*end < 0)
+  if (end && *end < 0)
     *end = size - 1;
 
   if (total_size)

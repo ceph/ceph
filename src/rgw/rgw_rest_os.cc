@@ -41,6 +41,8 @@ void RGWListBuckets_REST_OS::send_response()
   }
   s->formatter->close_section("account");
 
+RGW_LOG(0) << "formatter->get_len=" << s->formatter->get_len() << std::endl;
+
   dump_content_length(s, s->formatter->get_len());
   end_header(s);
   s->formatter->flush();

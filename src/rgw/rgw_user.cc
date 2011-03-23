@@ -17,6 +17,7 @@ static string ui_email_bucket = USER_INFO_EMAIL_BUCKET_NAME;
 static string ui_openstack_bucket = USER_INFO_OPENSTACK_BUCKET_NAME;
 static string root_bucket = ".rgw"; //keep this synced to rgw_rados.cc::ROOT_BUCKET!
 
+#define READ_CHUNK_LEN (16 * 1024)
 /**
  * Get the info for a user out of storage.
  * Returns: 0 on success, -ERR# on failure
@@ -28,23 +29,26 @@ int rgw_get_user_info(string user_id, RGWUserInfo& info)
   char *data;
   struct rgw_err err;
   void *handle = NULL;
-  off_t ofs = 0, end = -1;
-  size_t total_len;
+  int request_len = READ_CHUNK_LEN;
   time_t lastmod;
   bufferlist::iterator iter;
-
-  ret = rgwstore->prepare_get_obj(ui_bucket, user_id, ofs, &end, NULL, NULL, NULL, &lastmod, NULL, NULL, &total_len, &handle, &err);
+  ret = rgwstore->prepare_get_obj(ui_bucket, user_id, 0, NULL, NULL, NULL, NULL, &lastmod, NULL, NULL, NULL, &handle, &err);
   if (ret < 0)
     return ret;
-  do {
-    ret = rgwstore->get_obj(&handle, ui_bucket, user_id, &data, ofs, end);
+  do { // we want to read the whole user info in one chunk to avoid any possible race
+    ret = rgwstore->get_obj(&handle, ui_bucket, user_id, &data, 0, request_len - 1);
     if (ret < 0) {
       goto done;
     }
-    bl.append(data, ret);
+    if (ret < request_len)
+      break;
+
     free(data);
-    ofs += ret;
-  } while (ofs <= end);
+    request_len *= 2;
+  } while (true);
+
+  bl.append(data, ret);
+  free(data);
 
   iter = bl.begin();
   info.decode(iter); 
@@ -139,25 +143,25 @@ int rgw_get_uid_from_index(string& key, string& bucket, string& user_id, RGWUser
   struct rgw_err err;
   RGWUID uid;
   void *handle = NULL;
-  off_t ofs = 0, end = -1;
   bufferlist::iterator iter;
-  size_t total_len;
-  ret = rgwstore->prepare_get_obj(bucket, key, ofs, &end, NULL, NULL,
-                                  NULL, NULL, NULL, NULL, &total_len, &handle, &err);
+  int request_len = READ_CHUNK_LEN;
+  ret = rgwstore->prepare_get_obj(bucket, key, 0, NULL, NULL, NULL,
+                                  NULL, NULL, NULL, NULL, NULL, &handle, &err);
   if (ret < 0)
     return ret;
 
-  if (total_len == 0)
-    return -EACCES;
-
   do {
-    ret = rgwstore->get_obj(&handle, bucket, key, &data, ofs, end);
+    ret = rgwstore->get_obj(&handle, bucket, key, &data, 0, request_len - 1);
     if (ret < 0)
       goto done;
-    ofs += ret;
-    bl.append(data, ret);
+    if (ret < request_len)
+      break;
     free(data);
-  } while (ofs <= end);
+    request_len *= 2;
+  } while (true);
+
+  bl.append(data, ret);
+  free(data);
 
   iter = bl.begin();
   ::decode(uid, iter);
