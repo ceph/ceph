@@ -168,8 +168,8 @@ void RGW_OS_Auth_Get::execute()
 
   const char *key = FCGX_GetParam("HTTP_X_AUTH_KEY", s->fcgx->envp);
   const char *user = FCGX_GetParam("HTTP_X_AUTH_USER", s->fcgx->envp);
-  const char *dns_name = FCGX_GetParam("RGW_DNS_NAME", s->fcgx->envp);
   const char *url_prefix = FCGX_GetParam("RGW_OPENSTACK_URL_PREFIX", s->fcgx->envp);
+  const char *os_url = FCGX_GetParam("RGW_OPENSTACK_URL", s->fcgx->envp);
 
   string user_str = user;
   string user_id;
@@ -189,7 +189,7 @@ void RGW_OS_Auth_Get::execute()
     goto done;
   }
 
-  CGI_PRINTF(s, "X-Storage-Url: http://%s/%s/v1\n", dns_name, url_prefix);
+  CGI_PRINTF(s, "X-Storage-Url: %s/%s/v1\n", os_url, url_prefix);
 
   if ((ret = encode_token(info.openstack_name, info.openstack_key, bl)) < 0)
     goto done;
