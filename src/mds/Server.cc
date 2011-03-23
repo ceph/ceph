@@ -5046,9 +5046,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
   
   // target inode
   if (oldin) {
-    bool dest_primary = false;
     if (destdnl->is_primary()) {
-      dest_primary = true;
       assert(straydn);
       dout(10) << "straydn is " << *straydn << dendl;
       destdn->get_dir()->unlink_inode(destdn);
@@ -5060,15 +5058,15 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 
       mdcache->touch_dentry_bottom(straydn);  // drop dn as quickly as possible.
 
+      // nlink-- targeti
+      if (oldin->is_auth()) {
+	bool hadrealm = (oldin->snaprealm ? true : false);
+	oldin->pop_and_dirty_projected_inode(mdr->ls);
+	if (oldin->snaprealm && !hadrealm)
+	  mdcache->do_realm_invalidate_and_update_notify(oldin, CEPH_SNAP_OP_SPLIT);
+      }
     } else {
       destdn->get_dir()->unlink_inode(destdn);
-    }
-    // nlink-- targeti
-    if (oldin->is_auth() && dest_primary) {
-      bool hadrealm = (oldin->snaprealm ? true : false);
-      oldin->pop_and_dirty_projected_inode(mdr->ls);
-      if (oldin->snaprealm && !hadrealm)
-        mdcache->do_realm_invalidate_and_update_notify(oldin, CEPH_SNAP_OP_SPLIT);
     }
   }
 
