@@ -267,17 +267,17 @@ if [ -n "$prepareosdfs" ]; then
 
     [ -n "$osd_journal" ] && test -d $osd_journal || mkdir -p `dirname $osd_journal`
 
-    umount $btrfs_path
+    umount $btrfs_path || true
     for f in $btrfs_devs ; do
-	umount $f
+	umount $f || true
     done
 
-    modprobe btrfs
+    modprobe btrfs || true
     echo mkfs.btrfs $btrfs_devs
     btrfsctl -a
-    echo mount -t btrfs $btrfs_opt $first_dev $btrfs_path
-    echo chown $osd_user $btrfs_path
-    echo chmod +w $btrfs_path
+    mount -t btrfs $btrfs_opt $first_dev $btrfs_path
+    chown $osd_user $btrfs_path
+    chmod +w $btrfs_path
     
     exit 0
 fi
@@ -397,7 +397,7 @@ if [ $allhosts -eq 1 ]; then
 	    pushed_to="$pushed_to $host "
 	fi
 	
-	if [ $mkbtrfs -eq 1 ]; then
+	if [ $mkbtrfs -eq 1 ] && $type = "osd"; then
 	    do_root_cmd "$0 -d $rdir --prepare-osdfs $name"
 	fi
 
