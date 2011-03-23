@@ -1898,7 +1898,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       // because we are about to write into the dirfrag fnode and that needs
       // to commit before the lock can cycle.
      if (linkunlink) {
-       assert(parent->inode->nestlock.get_num_wrlocks());
+       assert(parent->inode->nestlock.get_num_wrlocks() || mut->is_slave());
      }
 
       if (mut->wrlocks.count(&parent->inode->nestlock) == 0) {
