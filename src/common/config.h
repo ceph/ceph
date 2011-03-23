@@ -101,6 +101,7 @@ struct md_config_t
 
   int debug;
   int debug_lockdep;
+  int debug_context;
   int debug_mds;
   int debug_mds_balancer;
   int debug_mds_log;

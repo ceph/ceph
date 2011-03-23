@@ -47,12 +47,12 @@ inline void finish_contexts(std::list<Context*>& finished,
   list<Context*> ls;
   ls.swap(finished); // swap out of place to avoid weird loops
 
-  generic_dout(10) << ls.size() << " contexts to finish with " << result << dendl;
+  cdout(context, 10) << ls.size() << " contexts to finish with " << result << dendl;
   for (std::list<Context*>::iterator it = ls.begin(); 
        it != ls.end(); 
        it++) {
     Context *c = *it;
-    generic_dout(10) << "---- " << c << dendl;
+    cdout(context, 10) << "---- " << c << dendl;
     c->finish(result);
     delete c;
   }
@@ -67,12 +67,12 @@ inline void finish_contexts(std::vector<Context*>& finished,
   vector<Context*> ls;
   ls.swap(finished); // swap out of place to avoid weird loops
 
-  generic_dout(10) << ls.size() << " contexts to finish with " << result << dendl;
+  cdout(context, 10) << ls.size() << " contexts to finish with " << result << dendl;
   for (std::vector<Context*>::iterator it = ls.begin(); 
        it != ls.end(); 
        it++) {
     Context *c = *it;
-    generic_dout(10) << "---- " << c << dendl;
+    cdout(context, 10) << "---- " << c << dendl;
     c->finish(result);
     delete c;
   }
@@ -131,7 +131,11 @@ private:
 #endif
     --sub_existing_count;
 
-    //generic_dout(0) << "C_Gather " << this << ".sub_finish(r=" << r << ") " << sub << " " << dendl;
+    cdout(context, 10) << "C_Gather " << this << ".sub_finish(r=" << r << ") " << sub
+#ifdef DEBUG_GATHER
+		    << " (remaining " << waitfor << ")"
+#endif
+		    << dendl;
 
     if (r < 0 && result == 0)
       result = r;
@@ -182,10 +186,10 @@ public:
                                           lock("C_Gather::lock", true, false), //disable lockdep
                                           any(an),
 					  activated(onfinish ? true : false) {
-    //generic_dout(0) << "C_Gather " << this << ".new" << dendl;
+    cdout(context, 10) << "C_Gather " << this << ".new" << dendl;
   }
   ~C_Gather() {
-    //generic_dout(0) << "C_Gather " << this << ".delete" << dendl;
+    cdout(context, 10) << "C_Gather " << this << ".delete" << dendl;
     assert(sub_existing_count == 0);
 #ifdef DEBUG_GATHER
     assert(waitfor.empty());
@@ -207,7 +211,7 @@ public:
 #ifdef DEBUG_GATHER
     waitfor.insert(s);
 #endif
-    //generic_dout(0) << "C_Gather " << this << ".new_sub is " << sub_created_count << " " << s << dendl;
+    cdout(context, 10) << "C_Gather " << this << ".new_sub is " << sub_created_count << " " << s << dendl;
     return s;
   }
   void rm_sub(Context *s) {

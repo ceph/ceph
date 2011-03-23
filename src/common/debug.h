@@ -94,6 +94,11 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
     dout_impl(v) \
     dout_prefix
 
+#define cdout(sys, v)	      \
+  do { if (v <= XDOUT_CONDVAR(sys)) { \
+    dout_impl(v) \
+    dout_prefix
+
 #define pdout(v, p) \
   do { if ((v) <= (p)) {\
     dout_impl(v) \

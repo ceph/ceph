@@ -12,7 +12,7 @@
 #
 
 """
-objsync_test.py: a system test for objsync
+obsync_test.py: a system test for obsync
 """
 
 from optparse import OptionParser
@@ -33,16 +33,16 @@ def getenv(e):
     else:
         return None
 
-def objsync(src, dst, misc):
-    full = ["./objsync.py"]
+def obsync(src, dst, misc):
+    full = ["./obsync.py"]
     e = {}
-    if (isinstance(src, ObjSyncTestBucket)):
+    if (isinstance(src, ObSyncTestBucket)):
         full.append(src.url)
         e["SRC_AKEY"] = src.akey
         e["SRC_SKEY"] = src.skey
     else:
         full.append(src)
-    if (isinstance(dst, ObjSyncTestBucket)):
+    if (isinstance(dst, ObSyncTestBucket)):
         full.append(dst.url)
         e["DST_AKEY"] = dst.akey
         e["DST_SKEY"] = dst.skey
@@ -51,10 +51,10 @@ def objsync(src, dst, misc):
     full.extend(misc)
     return subprocess.call(full, stderr=opts.error_out, env=e)
 
-def objsync_check(src, dst, opts):
-    ret = objsync(src, dst, opts)
+def obsync_check(src, dst, opts):
+    ret = obsync(src, dst, opts)
     if (ret != 0):
-        raise RuntimeError("call to objsync failed!")
+        raise RuntimeError("call to obsync failed!")
 
 def cleanup_tempdir():
     if tdir != None and opts.keep_tempdir == False:
@@ -72,8 +72,8 @@ def count_obj_in_dir(d):
         num_objects = num_objects + 1
     return num_objects
 
-###### ObjSyncTestBucket #######
-class ObjSyncTestBucket(object):
+###### ObSyncTestBucket #######
+class ObSyncTestBucket(object):
     def __init__(self, url, akey, skey):
         self.url = url
         self.akey = akey
@@ -108,14 +108,14 @@ if (not os.environ.has_key("URL1")):
     if (opts.verbose):
         print "no bucket urls were given. Running local tests only."
 elif (not os.environ.has_key("URL2")):
-    opts.buckets.append(ObjSyncTestBucket(getenv("URL1"), getenv("AKEY1"),
+    opts.buckets.append(ObSyncTestBucket(getenv("URL1"), getenv("AKEY1"),
                         getenv("SKEY1")))
     if (opts.verbose):
         print "have scratch1_url: will test bucket transfers"
 else:
-    opts.buckets.append(ObjSyncTestBucket(getenv("URL1"), getenv("AKEY1"),
+    opts.buckets.append(ObSyncTestBucket(getenv("URL1"), getenv("AKEY1"),
                         getenv("SKEY1")))
-    opts.buckets.append(ObjSyncTestBucket(getenv("URL2"), getenv("AKEY2"),
+    opts.buckets.append(ObSyncTestBucket(getenv("URL2"), getenv("AKEY2"),
                 getenv("SKEY2")))
     if (opts.verbose):
         print "have both scratch1_url and scratch2_url: will test \

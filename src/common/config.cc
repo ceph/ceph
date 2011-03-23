@@ -123,6 +123,7 @@ struct config_option config_optionsp[] = {
   OPTION(max_open_files, 0, OPT_LONGLONG, 0),
   OPTION(debug, 0, OPT_INT, 0),
   OPTION(debug_lockdep, 0, OPT_INT, 0),
+  OPTION(debug_context, 0, OPT_INT, 0),
   OPTION(debug_mds, 0, OPT_INT, 1),
   OPTION(debug_mds_balancer, 0, OPT_INT, 1),
   OPTION(debug_mds_log, 0, OPT_INT, 1),
