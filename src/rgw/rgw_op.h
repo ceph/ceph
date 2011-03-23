@@ -18,9 +18,6 @@ using namespace std;
 
 struct req_state;
 
-#define RGW_REST_OPENSTACK      0x1
-#define RGW_REST_OPENSTACK_AUTH 0x2
-
 /** Get the HTTP request metadata */
 extern void get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs);
 /**

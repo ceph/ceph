@@ -83,6 +83,8 @@ void RGWListBucket_REST_OS::send_response()
       s->formatter->dump_value_str("name", iter->name.c_str());
       s->formatter->dump_value_str("hash", "&quot;%s&quot;", iter->etag);
       s->formatter->dump_value_int("bytes", "%lld", iter->size);
+      if (iter->content_type.size())
+        s->formatter->dump_value_str("content_type", iter->content_type.c_str());
       dump_time(s, "last_modified", &iter->mtime);
       s->formatter->close_section("object");
     }
