@@ -4620,7 +4620,9 @@ void Server::handle_client_rename(MDRequest *mdr)
     if (oldin->is_dir())
       rdlocks.insert(&oldin->filelock);
   }
-  if (srcdnl->is_primary() && srci->is_dir())
+  if (srcdnl->is_primary() && srci->is_dir())  
+    // FIXME: this should happen whenever we are renamning between
+    // realms, regardless of the file type
     xlocks.insert(&srci->snaplock);  // FIXME: an auth bcast could be sufficient?
   else
     rdlocks.insert(&srci->snaplock);
