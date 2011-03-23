@@ -5064,6 +5064,9 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 	oldin->pop_and_dirty_projected_inode(mdr->ls);
 	if (oldin->snaprealm && !hadrealm)
 	  mdcache->do_realm_invalidate_and_update_notify(oldin, CEPH_SNAP_OP_SPLIT);
+      } else {
+	// FIXME this snaprealm is not filled out correctly
+	//oldin->open_snaprealm();  might be sufficient..	
       }
     } else {
       destdn->get_dir()->unlink_inode(destdn);
@@ -5114,6 +5117,8 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 	desti->state_set(CInode::STATE_DIRTYPARENT);
 	dout(10) << "added dir to logsegment renamed_files list " << *desti << dendl;
       }
+    } else {
+      // FIXME: fix up snaprealm!
     }
   }
 
