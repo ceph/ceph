@@ -4801,7 +4801,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   }
 
   // moving between snaprealms?
-  if (!srci->snaprealm &&
+  if (srcdnl->is_primary() && !srci->snaprealm &&
       srci->find_snaprealm() != destdn->get_dir()->inode->find_snaprealm()) {
     dout(10) << " renaming between snaprealms, creating snaprealm for " << *srci << dendl;
     mds->mdcache->snaprealm_create(mdr, srci);
