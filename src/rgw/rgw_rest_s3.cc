@@ -414,7 +414,7 @@ bool RGWHandler_REST_S3::authorize(struct req_state *s)
   const char *key = s->user.secret_key.c_str();
   int key_len = strlen(key);
 
-  char hmac_sha1[HMACSHA1::DIGESTSIZE];
+  char hmac_sha1[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
   int len = sizeof(hmac_sha1);
   if (calc_hmac_sha1(key, key_len, auth_hdr.c_str(), auth_hdr.size(), hmac_sha1, &len) < 0)
     return false;

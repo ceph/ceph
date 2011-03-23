@@ -353,23 +353,23 @@ void RGWPutObj::execute()
        goto done;
     }
 
-    char supplied_md5_bin[MD5::DIGESTSIZE + 1];
-    char supplied_md5[MD5::DIGESTSIZE * 2 + 1];
-    char calc_md5[MD5::DIGESTSIZE * 2 + 1];
-    unsigned char m[MD5::DIGESTSIZE];
+    char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
+    char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+    char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+    unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
 
     if (supplied_md5_b64) {
       RGW_LOG(15) << "supplied_md5_b64=" << supplied_md5_b64 << endl;
-      ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[MD5::DIGESTSIZE + 1], 
+      ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1],
 			     supplied_md5_b64, supplied_md5_b64 + strlen(supplied_md5_b64));
       RGW_LOG(15) << "ceph_armor ret=" << ret << endl;
-      if (ret != MD5::DIGESTSIZE) {
+      if (ret != CEPH_CRYPTO_MD5_DIGESTSIZE) {
         err.code = "InvalidDigest";
         ret = -EINVAL;
         goto done;
       }
 
-      buf_to_hex((const unsigned char *)supplied_md5_bin, MD5::DIGESTSIZE, supplied_md5);
+      buf_to_hex((const unsigned char *)supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE, supplied_md5);
       RGW_LOG(15) << "supplied_md5=" << supplied_md5 << endl;
     }
 
@@ -388,7 +388,7 @@ void RGWPutObj::execute()
 
     hash.Final(m);
 
-    buf_to_hex(m, MD5::DIGESTSIZE, calc_md5);
+    buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
 
     if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
        err.code = "BadDigest";

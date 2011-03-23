@@ -29,19 +29,19 @@ int calc_hmac_sha1(const char *key, int key_len,
                    const char *msg, int msg_len,
                    char *dest, int *len) /* dest should be large enough to hold result */
 {
-  if (*len < HMACSHA1::DIGESTSIZE)
+  if (*len < CEPH_CRYPTO_HMACSHA1_DIGESTSIZE)
     return -EINVAL;
 
-  char hex_str[HMACSHA1::DIGESTSIZE * 2 + 1];
-  char key_buf[HMACSHA1::DIGESTSIZE];
-  key_len = max(key_len, HMACSHA1::DIGESTSIZE);
+  char hex_str[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2 + 1];
+  char key_buf[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
+  key_len = max(key_len, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
   memcpy(key_buf, key, key_len);
-  memset(key_buf + key_len, 0, HMACSHA1::DIGESTSIZE - key_len);
+  memset(key_buf + key_len, 0, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE - key_len);
 
   HMACSHA1 hmac((const unsigned char *)key, key_len);
   hmac.Update((const unsigned char *)msg, msg_len);
   hmac.Final((unsigned char *)dest);
-  *len = HMACSHA1::DIGESTSIZE;
+  *len = CEPH_CRYPTO_HMACSHA1_DIGESTSIZE;
   
   buf_to_hex((unsigned char *)dest, *len, hex_str);
 

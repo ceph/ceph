@@ -3,6 +3,9 @@
 
 #include "acconfig.h"
 
+#define CEPH_CRYPTO_MD5_DIGESTSIZE 16
+#define CEPH_CRYPTO_HMACSHA1_DIGESTSIZE 20
+
 #ifdef USE_CRYPTOPP
 # define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
 #include <string.h>
@@ -22,6 +25,7 @@ namespace ceph {
 	: CryptoPP::HMAC<CryptoPP::SHA1>(key, length)
 	{
 	}
+      ~HMACSHA1();
     };
   }
 }
@@ -48,7 +52,6 @@ namespace ceph {
     private:
       PK11Context *ctx;
     public:
-      static const int DIGESTSIZE = 16;
       MD5 () {
 	ctx = PK11_CreateDigestContext(SEC_OID_MD5);
 	assert(ctx);
@@ -70,9 +73,9 @@ namespace ceph {
       void Final (byte *digest) {
 	SECStatus s;
 	unsigned int dummy;
-	s = PK11_DigestFinal(ctx, digest, &dummy, DIGESTSIZE);
+	s = PK11_DigestFinal(ctx, digest, &dummy, CEPH_CRYPTO_MD5_DIGESTSIZE);
 	assert(s == SECSuccess);
-	assert(dummy == (unsigned int)DIGESTSIZE);
+	assert(dummy == CEPH_CRYPTO_MD5_DIGESTSIZE);
 	Restart();
       }
     };
@@ -83,7 +86,7 @@ namespace ceph {
       PK11SymKey *symkey;
       PK11Context *ctx;
     public:
-      static const int DIGESTSIZE = 20;
+      static const int DIGESTSIZE;
       HMACSHA1 (const byte *key, size_t length) {
 	slot = PK11_GetBestSlot(CKM_SHA_1_HMAC, NULL);
 	assert(slot);
@@ -102,11 +105,7 @@ namespace ceph {
 	assert(ctx);
 	Restart();
       }
-      ~HMACSHA1 () {
-	PK11_DestroyContext(ctx, PR_TRUE);
-	PK11_FreeSymKey(symkey);
-	PK11_FreeSlot(slot);
-      }
+      ~HMACSHA1 ();
       void Restart() {
 	SECStatus s;
 	s = PK11_DigestBegin(ctx);
@@ -120,9 +119,9 @@ namespace ceph {
       void Final (byte *digest) {
 	SECStatus s;
 	unsigned int dummy;
-	s = PK11_DigestFinal(ctx, digest, &dummy, DIGESTSIZE);
+	s = PK11_DigestFinal(ctx, digest, &dummy, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
 	assert(s == SECSuccess);
-	assert(dummy == (unsigned int)DIGESTSIZE);
+	assert(dummy == CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
 	Restart();
       }
     };

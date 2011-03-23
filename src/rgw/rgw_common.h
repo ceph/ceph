@@ -262,7 +262,7 @@ struct RGWObjEnt {
   size_t size;
   time_t mtime;
   // two md5 digests and a terminator
-  char etag[ceph::crypto::MD5::DIGESTSIZE * 2 + 1];
+  char etag[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
 
   void encode(bufferlist& bl) const {
     __u8 struct_v = 1;
@@ -292,7 +292,7 @@ struct RGWBucketEnt {
   std::string name;
   size_t size;
   time_t mtime;
-  char etag[MD5::DIGESTSIZE * 2 + 1];
+  char etag[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   uint64_t count;
 
   void encode(bufferlist& bl) const {

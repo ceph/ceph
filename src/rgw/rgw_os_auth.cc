@@ -16,25 +16,25 @@ static int build_token(string& os_user, string& key, uint64_t nonce, utime_t& ex
   ::encode(nonce, bl);
   ::encode(expiration, bl);
 
-  bufferptr p(HMACSHA1::DIGESTSIZE);
+  bufferptr p(CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
   int len = p.length();
 
   char buf[bl.length() * 2 + 1];
   buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
   RGW_LOG(0) << "bl=" << buf << std::endl;
 
-  char k[HMACSHA1::DIGESTSIZE];
+  char k[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
   memset(k, 0, sizeof(k));
   const char *s = key.c_str();
   for (int i = 0; i < (int)key.length(); i++, s++) {
-    k[i % HMACSHA1::DIGESTSIZE] |= *s;
+    k[i % CEPH_CRYPTO_HMACSHA1_DIGESTSIZE] |= *s;
   }
   int ret = calc_hmac_sha1(k, sizeof(k), bl.c_str(), bl.length(),
                             p.c_str(), &len);
   if (ret < 0)
      return ret;
 
-  if (len != HMACSHA1::DIGESTSIZE)
+  if (len != CEPH_CRYPTO_HMACSHA1_DIGESTSIZE)
     return -EINVAL;
 
   bl.append(p);
