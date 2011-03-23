@@ -5084,8 +5084,6 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       destdn->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
     if (destdnl->get_inode()->is_auth())
       destdnl->get_inode()->pop_and_dirty_projected_inode(mdr->ls);
-    else
-      destdnl->get_inode()->open_snaprealm();
   } else {
     srcdn->get_dir()->unlink_inode(srcdn);
     if (destdn->is_auth())
