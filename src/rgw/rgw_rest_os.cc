@@ -59,32 +59,45 @@ void RGWListBucket_REST_OS::send_response()
   }
 
   vector<RGWObjEnt>::iterator iter = objs.begin();
+  map<string, bool>::iterator pref_iter = common_prefixes.begin();
 
   s->formatter->open_array_section("container");
 
-  for (; iter != objs.end(); ++iter) {
-    if (!marker.empty() && iter->name.compare(marker) <= 0) {
-      /* we expect marker to be upper-bount, whereas lower layer uses marker
-         as the starting point (like S3) */
-      continue;
+  while (iter != objs.end() || pref_iter != common_prefixes.end()) {
+    bool do_pref = false;
+    bool do_objs = false;
+    if (pref_iter == common_prefixes.end())
+      do_objs = true;
+    else if (iter == objs.end())
+      do_pref = true;
+    else if (iter->name.compare(pref_iter->first) == 0) {
+      do_objs = true;
+      pref_iter++;
+    } else if (iter->name.compare(pref_iter->first) <= 0)
+      do_objs = true;
+    else
+      do_pref = true;
+
+    if (do_objs && (marker.empty() || iter->name.compare(marker) > 0)) {
+      s->formatter->open_obj_section("object");
+      s->formatter->dump_value_str("name", iter->name.c_str());
+      s->formatter->dump_value_str("hash", "&quot;%s&quot;", iter->etag);
+      s->formatter->dump_value_int("bytes", "%lld", iter->size);
+      dump_time(s, "last_modified", &iter->mtime);
+      s->formatter->close_section("object");
     }
-    s->formatter->open_obj_section("object");
-    s->formatter->dump_value_str("name", iter->name.c_str());
-    s->formatter->dump_value_str("hash", "&quot;%s&quot;", iter->etag);
-    s->formatter->dump_value_int("bytes", "%lld", iter->size);
-    dump_time(s, "last_modified", &iter->mtime);
-    s->formatter->close_section("object");
+
+    if (do_pref &&  (marker.empty() || pref_iter->first.compare(marker) > 0)) {
+      s->formatter->open_obj_section("object");
+      s->formatter->dump_value_str("name", pref_iter->first.c_str());
+      s->formatter->close_section("object");
+    }
+    if (do_objs)
+      iter++;
+    else
+      pref_iter++;
   }
-#if 0
-    if (common_prefixes.size() > 0) {
-      s->formatter->open_array_section("CommonPrefixes");
-      map<string, bool>::iterator pref_iter;
-      for (pref_iter = common_prefixes.begin(); pref_iter != common_prefixes.end(); ++pref_iter) {
-        s->formatter->dump_value_str("Prefix", pref_iter->first.c_str());
-      }
-      s->formatter->close_section("CommonPrefixes");
-    }
-#endif
+
   s->formatter->close_section("container");
 
   end_header(s);
