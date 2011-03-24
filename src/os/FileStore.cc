@@ -1569,7 +1569,8 @@ void FileStore::_op_queue_reserve_throttle(Op *o, const char *caller)
   }
 
   while ((max_ops && (op_queue_len + 1) > max_ops) ||
-	 (max_bytes && (op_queue_bytes + o->bytes) > max_bytes)) {
+	 (max_bytes && op_queue_bytes      // let single large ops through!
+	  && (op_queue_bytes + o->bytes) > max_bytes)) {
     dout(2) << caller << " waiting: "
 	     << op_queue_len + 1 << " > " << max_ops << " ops || "
 	     << op_queue_bytes + o->bytes << " > " << max_bytes << dendl;
