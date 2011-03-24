@@ -626,12 +626,16 @@ int RGWHandler_REST::init_rest(struct req_state *s, struct fcgx_state *fcgx)
     s->op = OP_UNKNOWN;
 
   init_entities_from_header(s);
-  ret = validate_bucket_name(s->bucket_str.c_str());
-  if (ret)
-    return ret;
-  ret = validate_object_name(s->object_str.c_str());
-  if (ret)
-    return ret;
+  if (!s->bucket_str.empty()) {
+    ret = validate_bucket_name(s->bucket_str.c_str());
+    if (ret)
+      return ret;
+  }
+  if (!s->object_str.empty()) {
+    ret = validate_object_name(s->object_str.c_str());
+    if (ret)
+      return ret;
+  }
   RGW_LOG(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket ? s->bucket : "<NULL>") << endl;
 
   init_auth_info(s);
