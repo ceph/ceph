@@ -38,6 +38,12 @@ parser.add_option("-c", "--create-bucket",
     dest="create_bucket", help="create the bucket")
 parser.add_option("-d", "--delete-bucket",
     dest="delete_bucket", help="delete the bucket")
+parser.add_option("--bucket-exists",
+    dest="bucket_exists", help="test if a bucket exists")
+parser.add_option("-l", "--list-buckets", action="store_true",
+    dest="list_buckets", help="list all buckets")
+parser.add_option("-L", "--list-buckets-detailed", action="store_true",
+    dest="list_buckets_detailed", help="list all buckets with details")
 (opts, args) = parser.parse_args()
 
 if (len(args) != 1):
@@ -62,3 +68,18 @@ if (opts.delete_bucket):
     print "deleting bucket '%s' ..." % opts.delete_bucket
     bucket.delete()
     print "done."
+if (opts.bucket_exists):
+    bucket = conn.lookup(opts.bucket_exists)
+    if (bucket == None):
+        print "bucket '%s' does not exist"
+        sys.exit(1)
+    else:
+        print "found bucket '%s'."
+if (opts.list_buckets):
+    blrs = conn.get_all_buckets()
+    for b in blrs:
+        print b
+if (opts.list_buckets_detailed):
+    blrs = conn.get_all_buckets()
+    for b in blrs:
+        print b.__dict__
