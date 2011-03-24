@@ -5573,7 +5573,6 @@ void Server::_logged_slave_rename(MDRequest *mdr,
 
     // remove mdr auth pin
     mdr->auth_unpin(srcdnl->get_inode());
-    assert(!srcdnl->get_inode()->is_auth_pinned());
     
     dout(10) << " exported srci " << *srcdnl->get_inode() << dendl;
   }
