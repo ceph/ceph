@@ -193,7 +193,7 @@ class MDS : public Dispatcher {
   list<Context*> waiting_for_active, waiting_for_replay, waiting_for_reconnect;
   list<Context*> replay_queue;
   map<int, list<Context*> > waiting_for_active_peer;
-  list<Context*> waiting_for_nolaggy;
+  list<Message*> waiting_for_nolaggy;
 
   map<int,version_t> peer_mdsmap_epoch;
 
@@ -262,11 +262,10 @@ class MDS : public Dispatcher {
   version_t               beacon_last_seq;          // last seq sent to monitor
   map<version_t,utime_t>  beacon_seq_stamp;         // seq # -> time sent
   utime_t                 beacon_last_acked_stamp;  // last time we sent a beacon that got acked
-  bool laggy;
+  bool was_laggy;
   utime_t laggy_until;
-  utime_t last_tick;
 
-  bool is_laggy() { return laggy; }
+  bool is_laggy();
   utime_t get_laggy_until() { return laggy_until; }
 
   class C_MDS_BeaconSender : public Context {
@@ -324,7 +323,9 @@ class MDS : public Dispatcher {
   bool ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
 			       bool& isvalid);
-
+  void ms_handle_connect(Connection *con);
+  bool ms_handle_reset(Connection *con);
+  void ms_handle_remote_reset(Connection *con);
 
  public:
   MDS(const std::string &n, Messenger *m, MonClient *mc);
@@ -394,11 +395,10 @@ class MDS : public Dispatcher {
 
   // messages
   bool _dispatch(Message *m);
-  
-  void ms_handle_connect(Connection *con);
-  bool ms_handle_reset(Connection *con);
-  void ms_handle_remote_reset(Connection *con);
 
+  bool handle_core_message(Message *m);
+  bool handle_deferrable_message(Message *m);
+  
   // special message types
   void handle_command(class MMonCommand *m);
   void handle_mds_map(class MMDSMap *m);
