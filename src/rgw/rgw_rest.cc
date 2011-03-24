@@ -517,6 +517,29 @@ static void init_auth_info(struct req_state *s)
   }
 }
 
+static bool looks_like_ip_address(const char *bucket)
+{
+  int num_periods = 0;
+  bool expect_period = false;
+  for (const char *b = bucket; *b; ++b) {
+    if (*b == '.') {
+      if (!expect_period)
+	return false;
+      ++num_periods;
+      if (num_periods > 3)
+	return false;
+      expect_period = false;
+    }
+    else if (isdigit(*b)) {
+      expect_period = true;
+    }
+    else {
+      return false;
+    }
+  }
+  return (num_periods == 3);
+}
+
 // This function enforces Amazon's spec for bucket names.
 // (The requirements, not the recommendations.)
 static int validate_bucket_name(const char *bucket)
@@ -531,27 +554,24 @@ static int validate_bucket_name(const char *bucket)
     return INVALID_BUCKET_NAME;
   }
 
-  if (!(islower(bucket[0]) || isdigit(bucket[0]))) {
+  if (!(isalpha(bucket[0]) || isdigit(bucket[0]))) {
     // bucket names must start with a number or letter
     return INVALID_BUCKET_NAME;
   }
-
-  bool looks_like_ip_address = isdigit(bucket[0]);
 
   for (const char *s = bucket; *s; ++s) {
     char c = *s;
     if (isdigit(c) || (c == '.'))
       continue;
-    looks_like_ip_address = false;
-    if (islower(c))
+    if (isalpha(c))
       continue;
     if ((c == '-') || (c == '_'))
       continue;
     // Invalid character
-    // Yes, we even exclude capital letters.
     return INVALID_BUCKET_NAME;
   }
-  if (looks_like_ip_address)
+
+  if (looks_like_ip_address(bucket))
     return INVALID_BUCKET_NAME;
   return 0;
 }
