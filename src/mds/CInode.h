@@ -1084,6 +1084,8 @@ public:
   bool is_frozen_dir();
   bool is_freezing();
 
+  /* Freeze the inode. auth_pin_allowance lets the caller account for any
+   * auth_pins it is itself holding/responsible for. */
   bool freeze_inode(int auth_pin_allowance=0);
   void unfreeze_inode(list<Context*>& finished);
 
