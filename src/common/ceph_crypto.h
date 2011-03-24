@@ -86,7 +86,6 @@ namespace ceph {
       PK11SymKey *symkey;
       PK11Context *ctx;
     public:
-      static const int DIGESTSIZE;
       HMACSHA1 (const byte *key, size_t length) {
 	slot = PK11_GetBestSlot(CKM_SHA_1_HMAC, NULL);
 	assert(slot);
