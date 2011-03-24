@@ -282,7 +282,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   // audit handling of anchor transactions?
 
   // once we are otherwise trimmable, make sure journal is fully safe on disk.
-  if (!gather) {
+  if (g_conf.mds_log_unsafe && !gather) {
     if (!trimmable_at)
       trimmable_at = mds->mdlog->get_write_pos();
 
