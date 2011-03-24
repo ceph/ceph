@@ -517,40 +517,41 @@ static void init_auth_info(struct req_state *s)
   }
 }
 
-// This function enforces some fairly strict limits on bucket names.  These
-// correspond to Amazon's "recommendations", and are stricter than its actual
-// hard-and-fast rules about bucket names.  This way, all our buckets will be
-// accessible via the virtual host calling format, rather than only some of
-// them.
+// This function enforces Amazon's spec for bucket names.
+// (The requirements, not the recommendations.)
 static int validate_bucket_name(const char *bucket)
 {
   int len = strlen(bucket);
   if (len < 3) {
-    if (len == 0)
-      return 0;
     // Name too short
     return INVALID_BUCKET_NAME;
   }
-  else if (len > 63) {
+  else if (len > 255) {
     // Name too long
     return INVALID_BUCKET_NAME;
   }
-  for (const char *s = bucket; *s; ++s) {
-    char c = *s;
-    if (islower(c))
-      continue;
-    if (isdigit(c))
-      continue;
-    if (c == '-')
-      continue;
-    // Invalid character
-    // Yes, we are even excluding capital letters.
+
+  if (!(islower(bucket[0]) || isdigit(bucket[0]))) {
+    // bucket names must start with a number or letter
     return INVALID_BUCKET_NAME;
   }
-  // can't have dashes at the beginning or the end.
-  if (bucket[0] == '-')
+
+  bool looks_like_ip_address = isdigit(bucket[0]);
+
+  for (const char *s = bucket; *s; ++s) {
+    char c = *s;
+    if (isdigit(c) || (c == '.'))
+      continue;
+    looks_like_ip_address = false;
+    if (islower(c))
+      continue;
+    if ((c == '-') || (c == '_'))
+      continue;
+    // Invalid character
+    // Yes, we even exclude capital letters.
     return INVALID_BUCKET_NAME;
-  if (bucket[len-1] == '-')
+  }
+  if (looks_like_ip_address)
     return INVALID_BUCKET_NAME;
   return 0;
 }
