@@ -2126,7 +2126,7 @@ int FileStore::stat(coll_t cid, const sobject_t& oid, struct stat *st)
   int r = ::stat(fn, st);
   if (r < 0)
     r = -errno;
-  dout(10) << "stat " << fn << " = " << r << dendl;
+  dout(10) << "stat " << fn << " = " << r << " (size " << st->st_size << ")" << dendl;
   return r;
 }
 
