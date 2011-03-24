@@ -12,9 +12,9 @@
 #
 
 """
-boto_del.py: simple bucket deletion program
+boto_tool.py: s3cmd-like tool for operating on s3
 
-A lot of common s3 clients can't delete weirdly named buckets.
+A lot of common s3 clients can't handle weird names.
 But this little script can do it!
 """
 
@@ -25,7 +25,10 @@ from optparse import OptionParser
 from sys import stderr
 import boto
 import os
+import string
 import sys
+
+global conn
 
 def getenv(a):
     if os.environ.has_key(a):
@@ -33,53 +36,202 @@ def getenv(a):
     else:
         return None
 
-parser = OptionParser("boto_tool.py: a simple s3 client")
-parser.add_option("-c", "--create-bucket",
-    dest="create_bucket", help="create the bucket")
-parser.add_option("-d", "--delete-bucket",
-    dest="delete_bucket", help="delete the bucket")
-parser.add_option("--bucket-exists",
-    dest="bucket_exists", help="test if a bucket exists")
-parser.add_option("-l", "--list-buckets", action="store_true",
-    dest="list_buckets", help="list all buckets")
-parser.add_option("-L", "--list-buckets-detailed", action="store_true",
-    dest="list_buckets_detailed", help="list all buckets with details")
-(opts, args) = parser.parse_args()
+def strip_prefix(prefix, s):
+    if not (s[0:len(prefix)] == prefix):
+        return None
+    return s[len(prefix):]
 
-if (len(args) != 1):
-    print "expected one positional argument: a host"
-    sys.exit(1)
+def list_all_buckets(args):
+    parser = OptionParser()
+    parser.add_option("-v", "--verbose", action="store_true",
+        dest="verbose", default=False, help="verbose output")
+    (opts, args) = parser.parse_args(args)
+    blrs = conn.get_all_buckets()
+    for b in blrs:
+        if (opts.verbose):
+            print b.__dict__
+        else:
+            print b
 
-host = args[0]
+def mkbucket(args):
+    if (len(args) < 1):
+        print "must give an argument to mkbucket"
+        return 255
+    bucket_name = args[0]
+    print "creating bucket '%s' ..." % bucket_name
+    bucket = conn.create_bucket(bucket_name)
+    print "done."
+    return 0
+
+def rmbucket(args):
+    if (len(args) < 1):
+        print "must give an argument to rmbucket"
+        return 255
+    bucket = conn.lookup(opts.delete_bucket)
+    if (bucket == None):
+        print "bucket '%s' no longer exists" % opts.delete_bucket
+        return 255
+    print "deleting bucket '%s' ..." % opts.delete_bucket
+    bucket.delete()
+    print "done."
+    return 0
+
+def bucket_exists(args):
+    if (len(args) < 1):
+        print "must give an argument to exists"
+        return 255
+    bucket = conn.lookup(opts.bucket_exists)
+    if (bucket == None):
+        print "bucket '%s' does not exist"
+        return 1
+    else:
+        print "found bucket '%s'."
+    return 0
+
+def put_obj(bucket_name, args):
+    parser = OptionParser()
+    parser.add_option("-f", "--filename", dest="filename",
+                        help="file name (default stdin)")
+    (opts, args) = parser.parse_args(args)
+    if (len(args) < 1):
+        print "put requires an argument: the object name"
+        return 255
+    obj_name = args[0]
+    print "uploading to bucket: '%s', object name: '%s'" % (bucket_name, obj_name)
+    bucket = conn.lookup(bucket_name)
+    k = Key(bucket)
+    k.key = obj_name
+    if (opts.filename == None):
+        print "sorry, no support for put-from-stdin yet. use -f"
+        return 255
+    else:
+        k.set_contents_from_filename(opts.filename)
+
+def get_obj(bucket_name, args):
+    parser = OptionParser()
+    parser.add_option("-f", "--filename", dest="filename",
+                        help="file name (default stdin)")
+    (opts, args) = parser.parse_args(args)
+    if (len(args) < 1):
+        print "get requires an argument: the object name"
+        return 255
+    obj_name = args[0]
+    print "downloading from bucket: '%s', object name: '%s'" % (bucket_name, obj_name)
+    bucket = conn.lookup(bucket_name)
+    k = Key(bucket)
+    k.key = obj_name
+    if (opts.filename == None):
+        k.get_contents_to_file(sys.stdout)
+    else:
+        k.get_contents_to_filename(opts.filename)
+
+def list_obj(bucket_name, args):
+    if (len(args) < 1):
+        prefix = None
+    else:
+        prefix = args[0]
+    bucket = conn.lookup(bucket_name)
+    for key in bucket.list(prefix = prefix):
+        print key.name
+
+def rm_obj(bucket_name, args):
+    if (len(args) < 1):
+        obj_name = None
+    else:
+        obj_name = args[0]
+    print "removing from bucket: '%s', object name: '%s'" % (bucket_name, obj_name)
+    bucket = conn.lookup(bucket_name)
+    bucket.delete_key(obj_name)
+    print "done."
+
+def head_obj(bucket_name, args):
+    parser = OptionParser()
+    parser.add_option("-f", "--filename", dest="filename",
+                        help="file name (default stdin)")
+    (opts, args) = parser.parse_args(args)
+    if (len(args) < 1):
+        print "get requires an argument: the object name"
+        return 255
+    obj_name = args[0]
+    print "downloading from bucket: '%s', object name: '%s'" % (bucket_name, obj_name)
+    bucket = conn.lookup(bucket_name)
+    k = bucket.get_key(k, obj_name)
+    print k
+
+def usage():
+    print """
+boto_tool.py
+    ./boto_tool.py -h
+    ./boto_tool.py --help
+        Show this help
+    ./boto_tool.py <host> ls
+        Lists all buckets in a host
+    ./boto_tool.py <host> <bucket> ls
+        Lists all objects in a bucket
+    ./boto_tool.py <host> <bucket> ls <prefix>
+        Lists all objects in a bucket that have a given prefix
+    ./boto_tool.py <host> mkbucket <bucket>
+        Create a new bucket
+    ./boto_tool.py <host> rmbucket <bucket>
+        Remove a bucket
+    ./boto_tool.py <host> exists <bucket>
+        Tests if a bucket exists
+    ./boto_tool.py <host> <bucket> put <object> [opts]
+        Upload an object
+        opts:
+            -f filename            file name (default stdin)
+    ./boto_tool.py <host> <bucket> get <object> [opts]
+        Gets an object
+        opts:
+            -f filename            file name (default stdout)
+    ./boto_tool.py <host> <bucket> head <object> [opts]
+        Gets the headers of an object
+"""
+
+if (len(sys.argv) < 2):
+    usage()
+    sys.exit(255)
+
+if (sys.argv[1] == "-h") or (sys.argv[1] == "--help"):
+    usage()
+    sys.exit(0)
+
+host = sys.argv[1]
 
 conn = S3Connection(calling_format=OrdinaryCallingFormat(), is_secure=False,
                 host = host,
                 aws_access_key_id=getenv("AKEY"),
                 aws_secret_access_key=getenv("SKEY"))
-if (opts.create_bucket):
-    print "creating bucket '%s' ..." % opts.create_bucket
-    bucket = conn.create_bucket(opts.create_bucket)
-    print "done."
-if (opts.delete_bucket):
-    bucket = conn.lookup(opts.delete_bucket)
-    if (bucket == None):
-        print "bucket '%s' no longer exists" % opts.delete_bucket
-        sys.exit(1)
-    print "deleting bucket '%s' ..." % opts.delete_bucket
-    bucket.delete()
-    print "done."
-if (opts.bucket_exists):
-    bucket = conn.lookup(opts.bucket_exists)
-    if (bucket == None):
-        print "bucket '%s' does not exist"
-        sys.exit(1)
+
+if (sys.argv[2] == "ls"):
+    sys.exit(list_all_buckets(sys.argv[3:]))
+elif (sys.argv[2] == "mkbucket"):
+    sys.exit(mkbucket(sys.argv[3:]))
+elif (sys.argv[2] == "rmbucket"):
+    sys.exit(rmbucket(sys.argv[3:]))
+elif (sys.argv[2] == "exists"):
+    sys.exit(bucket_exists(sys.argv[3:]))
+else:
+    # bucket operations
+    wb = strip_prefix("bucket:", sys.argv[2])
+    if (wb):
+        bucket_name = wb
     else:
-        print "found bucket '%s'."
-if (opts.list_buckets):
-    blrs = conn.get_all_buckets()
-    for b in blrs:
-        print b
-if (opts.list_buckets_detailed):
-    blrs = conn.get_all_buckets()
-    for b in blrs:
-        print b.__dict__
+        bucket_name = sys.argv[2]
+    if (len(sys.argv) < 4):
+        print "too few arguments. -h for help."
+        sys.exit(255)
+    if (sys.argv[3] == "put"):
+        sys.exit(put_obj(bucket_name, sys.argv[4:]))
+    elif (sys.argv[3] == "get"):
+        sys.exit(get_obj(bucket_name, sys.argv[4:]))
+    elif (sys.argv[3] == "ls"):
+        sys.exit(list_obj(bucket_name, sys.argv[4:]))
+    elif (sys.argv[3] == "rm"):
+        sys.exit(rm_obj(bucket_name, sys.argv[4:]))
+    elif (sys.argv[3] == "head"):
+        sys.exit(head_obj(bucket_name, sys.argv[4:]))
+    else:
+        print "unknown operation on bucket"
+        sys.exit(255)
+
