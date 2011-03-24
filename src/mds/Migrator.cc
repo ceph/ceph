@@ -883,7 +883,7 @@ void Migrator::export_go(CDir *dir)
   dout(7) << "export_go " << *dir << " to " << dest << dendl;
 
   // first sync log to flush out e.g. any cap imports
-  mds->mdlog->wait_for_sync(new C_M_ExportGo(this, dir));
+  mds->mdlog->wait_for_safe(new C_M_ExportGo(this, dir));
   mds->mdlog->flush();
 }
 

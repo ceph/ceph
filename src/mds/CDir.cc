@@ -1175,7 +1175,7 @@ void CDir::log_mark_dirty()
 {
   MDLog *mdlog = inode->mdcache->mds->mdlog;
   version_t pv = pre_dirty();
-  mdlog->wait_for_sync(new C_Dir_Dirty(this, pv, mdlog->get_current_segment()));
+  mdlog->wait_for_safe(new C_Dir_Dirty(this, pv, mdlog->get_current_segment()));
 }
 
 void CDir::mark_complete() {

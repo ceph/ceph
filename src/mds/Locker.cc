@@ -2265,7 +2265,7 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
   mdcache->journal_dirty_inode(mut, &le->metablob, in, follows);
 
   mds->mdlog->submit_entry(le);
-  mds->mdlog->wait_for_sync(new C_Locker_FileUpdate_finish(this, in, mut, false,
+  mds->mdlog->wait_for_safe(new C_Locker_FileUpdate_finish(this, in, mut, false,
 							   client, NULL, ack));
 }
 
@@ -2484,7 +2484,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   mdcache->journal_dirty_inode(mut, &le->metablob, in, follows);
 
   mds->mdlog->submit_entry(le);
-  mds->mdlog->wait_for_sync(new C_Locker_FileUpdate_finish(this, in, mut, change_max, 
+  mds->mdlog->wait_for_safe(new C_Locker_FileUpdate_finish(this, in, mut, change_max, 
 							   client, cap, ack));
   // only flush immediately if the lock is unstable, or unissued caps are wanted, or max_size is 
   // changing
@@ -3291,7 +3291,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   in->finish_scatter_gather_update_accounted(lock->get_type(), mut, &le->metablob);
 
   mds->mdlog->submit_entry(le);
-  mds->mdlog->wait_for_sync(new C_Locker_ScatterWB(this, lock, mut));
+  mds->mdlog->wait_for_safe(new C_Locker_ScatterWB(this, lock, mut));
 }
 
 void Locker::scatter_writebehind_finish(ScatterLock *lock, Mutation *mut)

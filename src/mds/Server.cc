@@ -753,8 +753,7 @@ void Server::journal_and_reply(MDRequest *mdr, CInode *in, CDentry *dn, LogEvent
   early_reply(mdr, in, dn);
   
   mdr->committing = true;
-  mdlog->submit_entry(le, fin,
-		      mdr->did_ino_allocation());
+  mdlog->submit_entry(le, fin);
   
   if (mdr->client_request && mdr->client_request->is_replay()) {
     if (mds->queue_one_replay()) {

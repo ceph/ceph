@@ -847,7 +847,7 @@ void MDCache::try_subtree_merge_at(CDir *dir)
       journal_dirty_inode(mut, &le->metablob, in);
       
       mds->mdlog->submit_entry(le);
-      mds->mdlog->wait_for_sync(new C_MDC_SubtreeMergeWB(this, in, mut));
+      mds->mdlog->wait_for_safe(new C_MDC_SubtreeMergeWB(this, in, mut));
       mds->mdlog->flush();
     }
   } 
@@ -2673,7 +2673,7 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
       if (uncommitted_slave_updates[from].empty())
 	uncommitted_slave_updates.erase(from);
 
-      mds->mdlog->wait_for_sync(new C_MDC_SlaveCommit(this, from, *p));
+      mds->mdlog->wait_for_safe(new C_MDC_SlaveCommit(this, from, *p));
       mds->mdlog->flush();
     } else {
       MDRequest *mdr = request_get(*p);
