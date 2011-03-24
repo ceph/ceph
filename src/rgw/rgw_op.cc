@@ -280,6 +280,18 @@ void RGWListBucket::execute()
   }
   url_decode(s->args.get("delimiter"), delimiter);
 
+  if (s->prot_flags & RGW_REST_OPENSTACK) {
+    string path_args = s->args.get("path");
+    if (!path_args.empty()) {
+      if (!delimiter.empty() || !prefix.empty()) {
+        ret = -EINVAL;
+        goto done;
+      }
+      url_decode(path_args, prefix);
+      delimiter="/";
+    }
+  }
+
   ret = rgwstore->list_objects(s->user.user_id, s->bucket_str, max, prefix, delimiter, marker, objs, common_prefixes,
                                !!(s->prot_flags & RGW_REST_OPENSTACK));
 done:
