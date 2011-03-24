@@ -4783,6 +4783,8 @@ void Server::handle_client_rename(MDRequest *mdr)
   if (srcdnl->is_primary() && srci->is_dir())  
     // FIXME: this should happen whenever we are renamning between
     // realms, regardless of the file type
+    // FIXME: If/when this changes, make sure to update the
+    // "allowance" in handle_slave_rename_prep
     xlocks.insert(&srci->snaplock);  // FIXME: an auth bcast could be sufficient?
   else
     rdlocks.insert(&srci->snaplock);
@@ -5453,7 +5455,8 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
       //  - avoid conflicting lock state changes
       //  - avoid concurrent updates to the inode
       //     (this could also be accomplished with the versionlock)
-      int allowance = 2; // for the mdr auth_pin, one for the xlock state
+      int allowance = 2; // 1 for the mdr auth_pin, 1 for the link lock
+      allowance += srcdnl->get_inode()->is_dir(); // for the snap lock
       dout(10) << " freezing srci " << *srcdnl->get_inode() << " with allowance " << allowance << dendl;
       if (!srcdnl->get_inode()->freeze_inode(allowance)) {
 	srcdnl->get_inode()->add_waiter(CInode::WAIT_FROZEN, new C_MDS_RetryRequest(mdcache, mdr));
