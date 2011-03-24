@@ -243,7 +243,7 @@ void JournalingObjectStore::_op_journal_transactions(list<ObjectStore::Transacti
 						     Context *onjournal)
 {
   assert(journal_lock.is_locked());
-  dout(10) << "op_journal_transactions " << op << dendl;
+  dout(10) << "op_journal_transactions " << op << " " << tls << dendl;
     
   if (journal && journal->is_writeable()) {
     bufferlist tbl;

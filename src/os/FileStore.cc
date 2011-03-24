@@ -1702,9 +1702,9 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     journal->throttle();
     o->op = op_submit_start();
     if (g_conf.filestore_journal_parallel) {
-      dout(5) << "queue_transactions (parallel) " << o->op << " " << tls << dendl;
+      dout(5) << "queue_transactions (parallel) " << o->op << " " << o->tls << dendl;
       
-      _op_journal_transactions(tls, o->op, ondisk);
+      _op_journal_transactions(o->tls, o->op, ondisk);
       
       // queue inside journal lock, to preserve ordering
       queue_op(osr, o);
@@ -1713,7 +1713,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
       
       osr->queue_journal(o->op);
 
-      _op_journal_transactions(tls, o->op, new C_JournaledAhead(this, osr, o, ondisk));
+      _op_journal_transactions(o->tls, o->op, new C_JournaledAhead(this, osr, o, ondisk));
     } else {
       assert(0);
     }
