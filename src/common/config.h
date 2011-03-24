@@ -178,6 +178,8 @@ struct md_config_t
   int mon_globalid_prealloc;
   int mon_osd_report_timeout;
 
+  bool mon_force_standby_active;
+
   double paxos_propose_interval;
   double paxos_min_wait;
   double paxos_observer_timeout;

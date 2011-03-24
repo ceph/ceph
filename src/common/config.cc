@@ -179,6 +179,7 @@ struct config_option config_optionsp[] = {
   OPTION(mon_osd_nearfull_ratio, 0, OPT_INT, 85), // what % full makes an OSD near full
   OPTION(mon_globalid_prealloc, 0, OPT_INT, 100),   // how many globalids to prealloc
   OPTION(mon_osd_report_timeout, 0, OPT_INT, 900),    // grace period before declaring unresponsive OSDs dead
+  OPTION(mon_force_standby_active, 0, OPT_BOOL, true), // should mons force standby-replay mds to be active
   OPTION(paxos_propose_interval, 0, OPT_DOUBLE, 1.0),  // gather updates for this long before proposing a map update
   OPTION(paxos_min_wait, 0, OPT_DOUBLE, 0.05),  // min time to gather updates for after period of inactivity
   OPTION(paxos_observer_timeout, 0, OPT_DOUBLE, 5*60), // gather updates for this long before proposing a map update
