@@ -281,24 +281,6 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   // FIXME client requests...?
   // audit handling of anchor transactions?
 
-  // once we are otherwise trimmable, make sure journal is fully safe on disk.
-  if (g_conf.mds_log_unsafe && !gather) {
-    if (!trimmable_at)
-      trimmable_at = mds->mdlog->get_write_pos();
-
-    if (trimmable_at <= mds->mdlog->get_safe_pos()) {
-      dout(6) << "LogSegment(" << offset << ").try_to_expire trimmable at " << trimmable_at
-	      << " <= " << mds->mdlog->get_safe_pos() << dendl;
-    } else {
-      dout(6) << "LogSegment(" << offset << ").try_to_expire trimmable at " << trimmable_at
-	      << " > " << mds->mdlog->get_safe_pos()
-	      << ", waiting for safe journal flush" << dendl;
-      if (!gather) gather = new C_Gather;
-      mds->mdlog->wait_for_safe(gather->new_sub());
-      mds->mdlog->flush();
-    }
-  }
-
   if (gather) {
     dout(6) << "LogSegment(" << offset << ").try_to_expire waiting" << dendl;
     assert(!gather->empty());
