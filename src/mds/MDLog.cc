@@ -396,9 +396,9 @@ void MDLog::_expired(LogSegment *ls)
 
   if (!capped && ls == get_current_segment()) {
     dout(5) << "_expired not expiring " << ls->offset << ", last one and !capped" << dendl;
-  } else if (ls->end > journaler->get_write_ack_pos()) {
-    dout(5) << "_expired not expiring " << ls->offset << ", not fully flushed yet, ack "
-	    << journaler->get_write_ack_pos() << " < end " << ls->end << dendl;
+  } else if (ls->end > journaler->get_write_safe_pos()) {
+    dout(5) << "_expired not expiring " << ls->offset << ", not fully flushed yet, safe "
+	    << journaler->get_write_safe_pos() << " < end " << ls->end << dendl;
   } else {
     // expired.
     expired_segments.insert(ls);
