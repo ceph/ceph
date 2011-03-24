@@ -149,7 +149,7 @@ void MDLog::append()
 
 // -------------------------------------------------
 
-void MDLog::submit_entry( LogEvent *le, Context *c, bool wait_safe ) 
+void MDLog::submit_entry(LogEvent *le, Context *c) 
 {
   assert(!mds->is_any_replay());
   assert(le == cur_event);
@@ -199,21 +199,8 @@ void MDLog::submit_entry( LogEvent *le, Context *c, bool wait_safe )
 
   unflushed++;
 
-  if (c) {
-    
-    if (!g_conf.mds_log_unsafe)
-      wait_safe = true;
-
-    if (0) {
-      unflushed = 0;
-      journaler->flush();
-    }
-
-    if (wait_safe)
-      journaler->wait_for_flush(0, c);
-    else
-      journaler->wait_for_flush(c, 0);      
-  }
+  if (c)
+    journaler->wait_for_flush(0, c);
   
   // start a new segment?
   //  FIXME: should this go elsewhere?
@@ -229,21 +216,7 @@ void MDLog::submit_entry( LogEvent *le, Context *c, bool wait_safe )
   }
 }
 
-void MDLog::wait_for_sync( Context *c )
-{
-  if (!g_conf.mds_log_unsafe)
-    return wait_for_safe(c);
-
-  if (g_conf.mds_log) {
-    // wait
-    journaler->wait_for_flush(c, 0);
-  } else {
-    // hack: bypass.
-    c->finish(0);
-    delete c;
-  }
-}
-void MDLog::wait_for_safe( Context *c )
+void MDLog::wait_for_safe(Context *c)
 {
   if (g_conf.mds_log) {
     // wait
@@ -284,7 +257,7 @@ void MDLog::start_new_segment(Context *onsync)
   ESubtreeMap *le = mds->mdcache->create_subtree_map();
   submit_entry(le, new C_MDL_WroteSubtreeMap(this, mds->mdlog->get_write_pos()));
   if (onsync) {
-    wait_for_sync(onsync);  
+    wait_for_safe(onsync);  
     flush();
   }
 

@@ -202,14 +202,13 @@ public:
     assert(cur_event == NULL);
     cur_event = e;
   }
-  void submit_entry( LogEvent *e, Context *c = 0, bool wait_for_safe=false );
-  void start_submit_entry(LogEvent *e, Context *c = 0, bool wait_for_safe=false) {
+  void submit_entry(LogEvent *e, Context *c = 0);
+  void start_submit_entry(LogEvent *e, Context *c = 0) {
     start_entry(e);
-    submit_entry(e, c, wait_for_safe);
+    submit_entry(e, c);
   }
   bool entry_is_open() { return cur_event != NULL; }
 
-  void wait_for_sync( Context *c );
   void wait_for_safe( Context *c );
   void flush();
   bool is_flushed() {

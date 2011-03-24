@@ -86,7 +86,7 @@ void MDSTableServer::handle_commit(MMDSTableRequest *req)
     _note_commit(tid);
     mds->mdlog->start_submit_entry(new ETableServer(table, TABLESERVER_OP_COMMIT, 0, -1, 
 						    tid, version));
-    mds->mdlog->wait_for_sync(new C_Commit(this, req));
+    mds->mdlog->wait_for_safe(new C_Commit(this, req));
   }
   else if (tid <= version) {
     dout(0) << "got commit for tid " << tid << " <= " << version 
