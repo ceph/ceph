@@ -35,6 +35,7 @@ class C_MT_Save : public Context {
 public:
   C_MT_Save(MDSTable *i, version_t v) : ida(i), version(v) {}
   void finish(int r) {
+    assert(r >= 0);
     ida->save_2(version);
   }
 };
