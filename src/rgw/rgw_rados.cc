@@ -133,7 +133,8 @@ int RGWRados::list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle
  *     here.
  */
 int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, string& delim,
-			   string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes)
+			   string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes,
+			   bool get_content_type)
 {
   librados::IoCtx io_ctx;
   int r = rados->ioctx_create(bucket.c_str(), io_ctx);
@@ -187,6 +188,13 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
     if (io_ctx.getxattr(*p, RGW_ATTR_ETAG, bl) >= 0) {
       strncpy(obj.etag, bl.c_str(), sizeof(obj.etag));
       obj.etag[sizeof(obj.etag)-1] = '\0';
+    }
+    if (get_content_type) {
+      bl.clear();
+      obj.content_type = "";
+      if (io_ctx.getxattr(*p, RGW_ATTR_CONTENT_TYPE, bl) >= 0) {
+        obj.content_type = bl.c_str();
+      }
     }
     result.push_back(obj);
   }

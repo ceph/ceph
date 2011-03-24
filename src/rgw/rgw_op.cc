@@ -272,7 +272,6 @@ void RGWListBucket::execute()
 
   url_decode(s->args.get("prefix"), prefix);
   marker = s->args.get("marker");
-
   max_keys = s->args.get(limit_opt_name);
   if (!max_keys.empty()) {
     max = atoi(max_keys.c_str());
@@ -280,7 +279,9 @@ void RGWListBucket::execute()
     max = default_max;
   }
   url_decode(s->args.get("delimiter"), delimiter);
-  ret = rgwstore->list_objects(s->user.user_id, s->bucket_str, max, prefix, delimiter, marker, objs, common_prefixes);
+
+  ret = rgwstore->list_objects(s->user.user_id, s->bucket_str, max, prefix, delimiter, marker, objs, common_prefixes,
+                               !!(s->prot_flags & RGW_REST_OPENSTACK));
 done:
   send_response();
 }

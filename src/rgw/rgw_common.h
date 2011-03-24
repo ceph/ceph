@@ -48,6 +48,9 @@ using ceph::crypto::MD5;
 #define RGW_FORMAT_XML          1
 #define RGW_FORMAT_JSON         2
 
+#define RGW_REST_OPENSTACK      0x1
+#define RGW_REST_OPENSTACK_AUTH 0x2
+
 #define CGI_PRINTF(state, format, ...) do { \
    int __ret = FCGX_FPrintF(state->fcgx->out, format, __VA_ARGS__); \
    if (state->header_ended) \
@@ -263,29 +266,8 @@ struct RGWObjEnt {
   time_t mtime;
   // two md5 digests and a terminator
   char etag[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
-
-  void encode(bufferlist& bl) const {
-    __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    uint64_t s = size;
-    __u32 mt = mtime;
-    ::encode(name, bl);
-    ::encode(s, bl);
-    ::encode(mt, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    __u8 struct_v;
-    ::decode(struct_v, bl);
-    __u32 mt;
-    uint64_t s;
-    ::decode(name, bl);
-    ::decode(s, bl);
-    ::decode(mt, bl);
-    size = s;
-    mtime = mt;
-  }
+  string content_type;
 };
-WRITE_CLASS_ENCODER(RGWObjEnt)
 
 /** Store basic data on an object */
 struct RGWBucketEnt {
