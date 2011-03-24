@@ -25,29 +25,22 @@ int parse_time(const char *time_str, time_t *time)
 /*
  * calculate the sha1 value of a given msg and key
  */
-int calc_hmac_sha1(const char *key, int key_len,
-                   const char *msg, int msg_len,
-                   char *dest, int *len) /* dest should be large enough to hold result */
+void calc_hmac_sha1(const char *key, int key_len,
+                    const char *msg, int msg_len, char *dest)
+/* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
 {
-  if (*len < CEPH_CRYPTO_HMACSHA1_DIGESTSIZE)
-    return -EINVAL;
-
-  char hex_str[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2 + 1];
   char key_buf[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
-  key_len = max(key_len, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
+  memset(key_buf, 0, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
   memcpy(key_buf, key, key_len);
-  memset(key_buf + key_len, 0, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE - key_len);
 
   HMACSHA1 hmac((const unsigned char *)key, key_len);
   hmac.Update((const unsigned char *)msg, msg_len);
   hmac.Final((unsigned char *)dest);
-  *len = CEPH_CRYPTO_HMACSHA1_DIGESTSIZE;
   
-  buf_to_hex((unsigned char *)dest, *len, hex_str);
+  char hex_str[(CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2) + 1];
+  buf_to_hex((unsigned char *)dest, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE, hex_str);
 
   RGW_LOG(15) << "hmac=" << hex_str << endl;
-
-  return 0;
 }
 
 int NameVal::parse()

@@ -415,12 +415,11 @@ bool RGWHandler_REST_S3::authorize(struct req_state *s)
   int key_len = strlen(key);
 
   char hmac_sha1[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
-  int len = sizeof(hmac_sha1);
-  if (calc_hmac_sha1(key, key_len, auth_hdr.c_str(), auth_hdr.size(), hmac_sha1, &len) < 0)
-    return false;
+  calc_hmac_sha1(key, key_len, auth_hdr.c_str(), auth_hdr.size(), hmac_sha1);
 
   char b64[64]; /* 64 is really enough */
-  int ret = ceph_armor(b64, &b64[sizeof(b64)], hmac_sha1, &hmac_sha1[len]);
+  int ret = ceph_armor(b64, b64 + 64, hmac_sha1,
+		       hmac_sha1 + CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
   if (ret < 0) {
     RGW_LOG(10) << "ceph_armor failed" << endl;
     return false;

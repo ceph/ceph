@@ -17,7 +17,6 @@ static int build_token(string& os_user, string& key, uint64_t nonce, utime_t& ex
   ::encode(expiration, bl);
 
   bufferptr p(CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
-  int len = p.length();
 
   char buf[bl.length() * 2 + 1];
   buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
@@ -29,13 +28,7 @@ static int build_token(string& os_user, string& key, uint64_t nonce, utime_t& ex
   for (int i = 0; i < (int)key.length(); i++, s++) {
     k[i % CEPH_CRYPTO_HMACSHA1_DIGESTSIZE] |= *s;
   }
-  int ret = calc_hmac_sha1(k, sizeof(k), bl.c_str(), bl.length(),
-                            p.c_str(), &len);
-  if (ret < 0)
-     return ret;
-
-  if (len != CEPH_CRYPTO_HMACSHA1_DIGESTSIZE)
-    return -EINVAL;
+  calc_hmac_sha1(k, sizeof(k), bl.c_str(), bl.length(), p.c_str());
 
   bl.append(p);
 

@@ -358,9 +358,10 @@ extern bool verify_permission(struct req_state *s, int perm);
  * by converting %-escaped strings into characters, etc*/
 extern bool url_decode(string& src_str, string& dest_str);
 
-extern int calc_hmac_sha1(const char *key, int key_len,
-                          const char *msg, int msg_len,
-                          char *dest, int *len); /* dest should be large enough to hold result */
+extern void calc_hmac_sha1(const char *key, int key_len,
+                          const char *msg, int msg_len, char *dest);
+/* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
+
 /* loglevel of the gateway */
 extern int rgw_log_level;
 
