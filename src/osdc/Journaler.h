@@ -166,17 +166,14 @@ private:
   // writer
   uint64_t write_pos;       // logical write position, where next entry will go
   uint64_t flush_pos;       // where we will flush. if write_pos>flush_pos, we're buffering writes.
-  uint64_t ack_pos;         // what has been acked.
   uint64_t safe_pos;        // what has been committed safely to disk.
   bufferlist write_buf;  // write buffer.  flush_pos + write_buf.length() == write_pos.
 
-  std::set<uint64_t> pending_ack, pending_safe;
-  std::map<uint64_t, std::list<Context*> > waitfor_ack;  // when flushed through given offset
+  std::set<uint64_t> pending_safe;
   std::map<uint64_t, std::list<Context*> > waitfor_safe; // when safe through given offset
-  std::set<uint64_t> ack_barrier;
 
   void _do_flush(unsigned amount=0);
-  void _finish_flush(int r, uint64_t start, utime_t stamp, bool safe);
+  void _finish_flush(int r, uint64_t start, utime_t stamp);
   class C_Flush;
   friend class C_Flush;
 
@@ -231,7 +228,7 @@ public:
     objecter(obj), filer(objecter), logger(l), logger_key_lat(lkey),
     timer(tim), delay_flush_event(0),
     state(STATE_UNDEF), error(0),
-    write_pos(0), flush_pos(0), ack_pos(0), safe_pos(0),
+    write_pos(0), flush_pos(0), safe_pos(0),
     read_pos(0), requested_pos(0), received_pos(0),
     fetch_len(0), temp_fetch_len(0), prefetch_from(0),
     junk_tail_pos(0),
@@ -248,7 +245,6 @@ public:
     error = 0;
     write_pos = 0;
     flush_pos = 0;
-    ack_pos = 0;
     safe_pos = 0;
     read_pos = 0;
     requested_pos = 0;
@@ -288,7 +284,6 @@ public:
   int get_error() { return error; }
 
   uint64_t get_write_pos() const { return write_pos; }
-  uint64_t get_write_ack_pos() const { return ack_pos; }
   uint64_t get_write_safe_pos() const { return safe_pos; }
   uint64_t get_read_pos() const { return read_pos; }
   uint64_t get_expire_pos() const { return expire_pos; }
@@ -299,8 +294,8 @@ public:
 
   // write
   uint64_t append_entry(bufferlist& bl);
-  void wait_for_flush(Context *onsync = 0, Context *onsafe = 0, bool add_ack_barrier=false);
-  void flush(Context *onsync = 0, Context *onsafe = 0, bool add_ack_barrier=false);
+  void wait_for_flush(Context *onsafe = 0);
+  void flush(Context *onsafe = 0);
 
   // read
   void set_read_pos(int64_t p) { 
@@ -315,7 +310,7 @@ public:
   void wait_for_readable(Context *onfinish);
   
   void set_write_pos(int64_t p) { 
-    write_pos = flush_pos = ack_pos = safe_pos = p;
+    write_pos = flush_pos = safe_pos = p;
   }
   void set_expire_trimmed_pos(int64_t p) { 
     expire_pos = trimming_pos = trimmed_pos = p;

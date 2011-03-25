@@ -200,7 +200,7 @@ void MDLog::submit_entry(LogEvent *le, Context *c)
   unflushed++;
 
   if (c)
-    journaler->wait_for_flush(0, c);
+    journaler->wait_for_flush(c);
   
   // start a new segment?
   //  FIXME: should this go elsewhere?
@@ -220,7 +220,7 @@ void MDLog::wait_for_safe(Context *c)
 {
   if (g_conf.mds_log) {
     // wait
-    journaler->wait_for_flush(0, c);
+    journaler->wait_for_flush(c);
   } else {
     // hack: bypass.
     c->finish(0);

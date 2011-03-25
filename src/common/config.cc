@@ -214,7 +214,6 @@ struct config_option config_optionsp[] = {
   OPTION(objecter_timeout, 0, OPT_DOUBLE, 10.0),    // before we ask for a map
   OPTION(objecter_inflight_op_bytes, 0, OPT_LONGLONG, 1024*1024*100), //max in-flight data (both directions)
   OPTION(journaler_allow_split_entries, 0, OPT_BOOL, true),
-  OPTION(journaler_safe, 0, OPT_BOOL, true),  // wait for COMMIT on journal writes
   OPTION(journaler_write_head_interval, 0, OPT_INT, 15),
   OPTION(journaler_cache, 0, OPT_BOOL, false), // cache writes for later readback
   OPTION(journaler_prefetch_periods, 0, OPT_INT, 10),   // * journal object size (1~MB? see above)
