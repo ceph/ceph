@@ -188,6 +188,7 @@ private:
   bufferlist reading_buf; // what i'm reading into
 
   uint64_t fetch_len;     // how much to read at a time
+  uint64_t temp_fetch_len;
   uint64_t prefetch_from; // how far from end do we read next chunk
 
   int64_t junk_tail_pos; // for truncate
@@ -198,9 +199,6 @@ private:
   // for wait_for_readable()
   Context    *on_readable;
 
-  bool _is_reading() {
-    return requested_pos > received_pos;
-  }
   void _finish_read(int r);     // we just read some (read completion callback)
   void _issue_read(int64_t len);  // read some more
   void _prefetch();             // maybe read ahead
@@ -236,7 +234,7 @@ public:
     state(STATE_UNDEF), error(0),
     write_pos(0), flush_pos(0), ack_pos(0), safe_pos(0),
     read_pos(0), requested_pos(0), received_pos(0),
-    fetch_len(0), prefetch_from(0),
+    fetch_len(0), temp_fetch_len(0), prefetch_from(0),
     junk_tail_pos(0),
     read_bl(0), on_read_finish(0), on_readable(0),
     expire_pos(0), trimming_pos(0), trimmed_pos(0) 
@@ -314,6 +312,8 @@ public:
     read_pos = requested_pos = received_pos = p;
     read_buf.clear();
   }
+
+  bool _is_readable();
   bool is_readable();
   bool try_read_entry(bufferlist& bl);
   void wait_for_readable(Context *onfinish);
