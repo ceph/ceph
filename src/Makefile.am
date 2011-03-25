@@ -606,7 +606,8 @@ libcommon_files = \
 	common/version.cc \
 	common/hex.cc \
 	common/entity_name.cc \
-	common/ceph_crypto.cc
+	common/ceph_crypto.cc \
+	common/pidfile.cc
 
 if WITH_PROFILER
 libcommon_files += perfglue/cpu_profiler.cc
@@ -1052,7 +1053,8 @@ noinst_HEADERS = \
 	tools/common.h\
 	tools/gui.h\
 	tools/gui_resources.h\
-	test/osd/RadosModel.h
+	test/osd/RadosModel.h\
+	common/pidfile.h
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(cephfs_SOURCES) $(librados_config_SOURCES) $(cauthtool_SOURCES) $(monmaptool_SOURCES) \
 	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \

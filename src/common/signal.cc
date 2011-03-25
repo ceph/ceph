@@ -14,6 +14,7 @@
 
 #include "common/BackTrace.h"
 #include "common/ProfLogger.h"
+#include "common/pidfile.h"
 #include "common/debug.h"
 #include "common/signal.h"
 #include "common/config.h"
@@ -56,6 +57,37 @@ void sighup_handler(int signum)
   logger_reopen_all();
 }
 
+static void reraise_fatal(int signum)
+{
+  // Use default handler to dump core
+  int ret = raise(signum);
+
+  // Normally, we won't get here. If we do, something is very weird.
+  char buf[1024];
+  if (ret) {
+    snprintf(buf, sizeof(buf), "reraise_fatal: failed to re-raise "
+	    "signal %d\n", signum);
+    dout_emergency(buf);
+  }
+  else {
+    snprintf(buf, sizeof(buf), "reraise_fatal: default handler for "
+	    "signal %d didn't terminate the process?\n", signum);
+    dout_emergency(buf);
+  }
+  exit(1);
+}
+
+static void handle_shutdown_signal(int signum)
+{
+  char buf[1024];
+  snprintf(buf, sizeof(buf), "*** Caught signal (%s) **\n "
+	    "in thread %p. Shutting down.\n",
+	    sys_siglist[signum], (void*)pthread_self());
+  dout_emergency(buf);
+  pidfile_remove();
+  reraise_fatal(signum);
+}
+
 static void handle_fatal_signal(int signum)
 {
   // This code may itself trigger a SIGSEGV if the heap is corrupt. In that
@@ -65,6 +97,7 @@ static void handle_fatal_signal(int signum)
   snprintf(buf, sizeof(buf), "*** Caught signal (%s) **\n "
 	    "in thread %p\n", sys_siglist[signum], (void*)pthread_self());
   dout_emergency(buf);
+  pidfile_remove();
 
   // TODO: don't use an ostringstream here. It could call malloc(), which we
   // don't want inside a signal handler.
@@ -74,21 +107,7 @@ static void handle_fatal_signal(int signum)
   bt.print(oss);
   dout_emergency(oss.str());
 
-  // Use default handler to dump core
-  int ret = raise(signum);
-
-  // Normally, we won't get here. If we do, something is very weird.
-  if (ret) {
-    snprintf(buf, sizeof(buf), "handle_fatal_signal: failed to re-raise "
-	    "signal %d\n", signum);
-    dout_emergency(buf);
-  }
-  else {
-    snprintf(buf, sizeof(buf), "handle_fatal_signal: default handler for "
-	    "signal %d didn't terminate the process?\n", signum);
-    dout_emergency(buf);
-  }
-  exit(1);
+  reraise_fatal(signum);
 }
 
 std::string signal_mask_to_str()
@@ -122,6 +141,8 @@ void install_standard_sighandlers(void)
   install_sighandler(SIGXCPU, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
   install_sighandler(SIGXFSZ, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
   install_sighandler(SIGSYS, handle_fatal_signal, SA_RESETHAND | SA_NODEFER);
+  install_sighandler(SIGTERM, handle_shutdown_signal, SA_RESETHAND | SA_NODEFER);
+  install_sighandler(SIGINT, handle_shutdown_signal, SA_RESETHAND | SA_NODEFER);
 }
 
 void block_signals(sigset_t *old_sigset, int *siglist)

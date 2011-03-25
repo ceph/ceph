@@ -35,8 +35,8 @@
 
 #include "common/Timer.h"
 #include "common/errno.h"
+#include "common/pidfile.h"
 #include "common/safe_io.h"
-#include "common/signal.h"
 
 #define DOUT_SUBSYS ms
 #undef dout_prefix
@@ -2317,92 +2317,6 @@ int SimpleMessenger::rebind(int avoid_port)
   return accepter.rebind(avoid_port);
 }
 
-static void remove_pid_file(int in_signal_handler = 0)
-{
-  if (!g_conf.pid_file)
-    return;
-
-  // only remove it if it has OUR pid in it!
-  int fd = ::open(g_conf.pid_file, O_RDONLY);
-  if (fd < 0)
-    return;  // fail silently if there is no pid to remove
-
-  char buf[32];
-  memset(buf, 0, sizeof(buf));
-  if (TEMP_FAILURE_RETRY(::read(fd, buf, sizeof(buf)-1)) < 0) {
-    int err = errno;
-    if (!in_signal_handler) {
-      generic_dout(0) << "remove_pid_file: error reading " << g_conf.pid_file
-	    << ": " << cpp_strerror(err) << dendl;
-    }
-    return;
-  }
-  TEMP_FAILURE_RETRY(::close(fd));
-
-  int a = atoi(buf);
-  if (a != getpid()) {
-    if (!in_signal_handler) {
-      generic_dout(0) << "remove_pid_file: strange, pid file " << g_conf.pid_file
-	      << " has " << a << ", not expected " << getpid() << dendl;
-    }
-    return;
-  }
-
-  if (::unlink(g_conf.pid_file)) {
-    int err = errno;
-    if (!in_signal_handler) {
-      generic_dout(0) << "remove_pid_file: error unlinking " << g_conf.pid_file
-	    << ": " << cpp_strerror(err) << dendl;
-    }
-    return;
-  }
-}
-
-static void handle_signal(int sig)
-{
-  remove_pid_file(sig);
-  signal(sig, SIG_DFL);
-  kill(getpid(), sig);
-}
-
-int SimpleMessenger::write_pid_file(int pid)
-{
-  int ret, fd;
-
-  if (!g_conf.pid_file)
-    return 0;
-
-  fd = TEMP_FAILURE_RETRY(::open(g_conf.pid_file,
-				 O_CREAT|O_TRUNC|O_WRONLY, 0644));
-  if (fd < 0) {
-    int err = errno;
-    derr << "SimpleMessenger::write_pid_file: failed to open pid file '"
-	 << g_conf.pid_file << "': " << cpp_strerror(err) << dendl;
-    return err;
-  }
-
-  char buf[20];
-  int len = snprintf(buf, sizeof(buf), "%d\n", pid);
-  ret = safe_write(fd, buf, len);
-  if (ret < 0) {
-    derr << "SimpleMessenger::write_pid_file: failed to write to pid file '"
-	 << g_conf.pid_file << "': " << cpp_strerror(ret) << dendl;
-    TEMP_FAILURE_RETRY(::close(fd));
-    return ret;
-  }
-  if (TEMP_FAILURE_RETRY(::close(fd))) {
-    ret = errno;
-    derr << "SimpleMessenger::write_pid_file: failed to close to pid file '"
-	 << g_conf.pid_file << "': " << cpp_strerror(ret) << dendl;
-    return ret;
-  }
-
-  signal(SIGTERM, handle_signal);
-  signal(SIGINT, handle_signal);
-
-  return 0;
-}
-
 int SimpleMessenger::start(bool daemonize, uint64_t nonce)
 {
   // register at least one entity, first!
@@ -2435,7 +2349,7 @@ int SimpleMessenger::start(bool daemonize, uint64_t nonce)
     int r = daemon(1, 0);
     assert(r >= 0);
     install_standard_sighandlers();
-    write_pid_file(getpid());
+    pidfile_write(&g_conf);
  
     if (g_conf.chdir && g_conf.chdir[0]) {
       if (::chdir(g_conf.chdir)) {
@@ -2742,7 +2656,7 @@ void SimpleMessenger::wait()
 
   dout(10) << "wait: done." << dendl;
   dout(1) << "shutdown complete." << dendl;
-  remove_pid_file();
+  pidfile_remove();
   started = false;
   did_bind = false;
   my_type = -1;
