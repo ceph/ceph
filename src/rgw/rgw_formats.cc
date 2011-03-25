@@ -47,10 +47,8 @@ void RGWFormatter_Plain::dump_value_int(const char *name, const char *fmt, ...)
     return;
 
   va_start(ap, fmt);
-  int n = vsnprintf(buf, LARGE_SIZE, fmt, ap);
+  vsnprintf(buf, LARGE_SIZE, fmt, ap);
   va_end(ap);
-  if (n >= LARGE_SIZE)
-    return;
   write_data("%s\n", buf);
 }
 
@@ -71,10 +69,8 @@ void RGWFormatter_Plain::dump_value_str(const char *name, const char *fmt, ...)
     return;
 
   va_start(ap, fmt);
-  int n = vsnprintf(buf, LARGE_SIZE, fmt, ap);
+  vsnprintf(buf, LARGE_SIZE, fmt, ap);
   va_end(ap);
-  if (n >= LARGE_SIZE)
-    return;
   write_data("%s\n", buf);
 }
 
@@ -104,10 +100,8 @@ void RGWFormatter_XML::dump_value_int(const char *name, const char *fmt, ...)
   va_list ap;
 
   va_start(ap, fmt);
-  int n = vsnprintf(buf, LARGE_SIZE, fmt, ap);
+  vsnprintf(buf, LARGE_SIZE, fmt, ap);
   va_end(ap);
-  if (n >= LARGE_SIZE)
-    return;
   write_data("<%s>%s</%s>", name, buf, name);
 }
 
@@ -117,10 +111,8 @@ void RGWFormatter_XML::dump_value_str(const char *name, const char *fmt, ...)
   va_list ap;
 
   va_start(ap, fmt);
-  int n = vsnprintf(buf, LARGE_SIZE, fmt, ap);
+  vsnprintf(buf, LARGE_SIZE, fmt, ap);
   va_end(ap);
-  if (n >= LARGE_SIZE)
-    return;
   int len = escape_xml_attr_len(buf);
   char escaped[len];
   escape_xml_attr(buf, escaped);
@@ -177,10 +169,8 @@ void RGWFormatter_JSON::dump_value_int(const char *name, const char *fmt, ...)
   struct json_stack_entry& entry = stack.back();
 
   va_start(ap, fmt);
-  int n = vsnprintf(buf, LARGE_SIZE, fmt, ap);
+  vsnprintf(buf, LARGE_SIZE, fmt, ap);
   va_end(ap);
-  if (n >= LARGE_SIZE)
-    return;
   write_data("%s\"%s\":%s", (entry.size ? ", " : ""), name, buf);
   entry.size++;
 }
@@ -193,15 +183,13 @@ void RGWFormatter_JSON::dump_value_str(const char *name, const char *fmt, ...)
   struct json_stack_entry& entry = stack.back();
 
   va_start(ap, fmt);
-  int n = vsnprintf(buf, LARGE_SIZE, fmt, ap);
+  vsnprintf(buf, LARGE_SIZE, fmt, ap);
   va_end(ap);
 
   int len = escape_json_attr_len(buf);
   char escaped[len];
   escape_json_attr(buf, escaped);
 
-  if (n >= LARGE_SIZE)
-    return;
   write_data("%s\"%s\":\"%s\"", (entry.size ? ", " : ""), name, escaped);
   entry.size++;
 }
