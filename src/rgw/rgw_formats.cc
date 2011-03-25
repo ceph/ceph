@@ -1,3 +1,4 @@
+#include "rgw_escape.h"
 #include "rgw_common.h"
 #include "rgw_formats.h"
 
@@ -120,7 +121,10 @@ void RGWFormatter_XML::dump_value_str(const char *name, const char *fmt, ...)
   va_end(ap);
   if (n >= LARGE_SIZE)
     return;
-  write_data("<%s>%s</%s>", name, buf, name);
+  int len = escape_xml_attr_len(buf);
+  char escaped[len];
+  escape_xml_attr(buf, escaped);
+  write_data("<%s>%s</%s>", name, escaped, name);
 }
 
 /* JSON */

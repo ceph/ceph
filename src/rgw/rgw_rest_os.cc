@@ -81,7 +81,7 @@ void RGWListBucket_REST_OS::send_response()
     if (do_objs && (marker.empty() || iter->name.compare(marker) > 0)) {
       s->formatter->open_obj_section("object");
       s->formatter->dump_value_str("name", iter->name.c_str());
-      s->formatter->dump_value_str("hash", "&quot;%s&quot;", iter->etag);
+      s->formatter->dump_value_str("hash", "\"%s\"", iter->etag);
       s->formatter->dump_value_int("bytes", "%lld", iter->size);
       if (iter->content_type.size())
         s->formatter->dump_value_str("content_type", iter->content_type.c_str());

@@ -300,7 +300,8 @@ libradosgw_a_SOURCES = \
 	rgw/rgw_os.cc \
 	rgw/rgw_os_auth.cc \
 	rgw/rgw_formats.cc \
-	rgw/rgw_log.cc
+	rgw/rgw_log.cc \
+	rgw/rgw_escape.c
 
 libradosgw_a_CFLAGS = ${AM_CFLAGS}
 libradosgw_a_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
@@ -425,6 +426,12 @@ unittest_utf8_LDFLAGS = -pthread ${AM_LDFLAGS}
 unittest_utf8_LDADD = libcommon.a ${UNITTEST_LDADD}
 unittest_utf8_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_utf8
+
+unittest_rgw_escape_SOURCES = test/rgw_escape.cc rgw/rgw_escape.c
+unittest_rgw_escape_LDFLAGS = -pthread ${AM_LDFLAGS}
+unittest_rgw_escape_LDADD = libcommon.a ${UNITTEST_LDADD}
+unittest_rgw_escape_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+check_PROGRAMS += unittest_rgw_escape
 
 # shell scripts
 editpaths = sed \
@@ -1040,6 +1047,7 @@ noinst_HEADERS = \
 	rgw/rgw_rest_os.h\
 	rgw/rgw_rest_s3.h\
 	rgw/rgw_user.h\
+	rgw/rgw_escape.h\
 	sample.ceph.conf\
 	tools/common.h\
 	tools/gui.h\

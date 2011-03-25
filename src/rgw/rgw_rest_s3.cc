@@ -133,7 +133,7 @@ void RGWListBucket_REST_S3::send_response()
       s->formatter->open_array_section("Contents");
       s->formatter->dump_value_str("Key", iter->name.c_str());
       dump_time(s, "LastModified", &iter->mtime);
-      s->formatter->dump_value_str("ETag", "&quot;%s&quot;", iter->etag);
+      s->formatter->dump_value_str("ETag", "\"%s\"", iter->etag);
       s->formatter->dump_value_int("Size", "%lld", iter->size);
       s->formatter->dump_value_str("StorageClass", "STANDARD");
       dump_owner(s, s->user.user_id, s->user.display_name);
