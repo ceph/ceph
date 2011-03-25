@@ -546,6 +546,10 @@ static int validate_bucket_name(const char *bucket)
 {
   int len = strlen(bucket);
   if (len < 3) {
+    if (len == 0) {
+      // This request doesn't specify a bucket at all
+      return 0;
+    }
     // Name too short
     return INVALID_BUCKET_NAME;
   }
