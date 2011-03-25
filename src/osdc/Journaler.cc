@@ -671,7 +671,9 @@ void Journaler::_finish_read(int r, uint64_t offset, bufferlist& bl)
 
 void Journaler::_assimilate_prefetch()
 {
-  bool any = false;
+  bool was_readable = _is_readable();
+
+  bool got_any = false;
   while (!prefetch_buf.empty()) {
     map<uint64_t,bufferlist>::iterator p = prefetch_buf.begin();
     if (p->first != received_pos) {
@@ -686,15 +688,15 @@ void Journaler::_assimilate_prefetch()
     read_buf.claim_append(p->second);
     assert(received_pos <= requested_pos);
     prefetch_buf.erase(p);
-    any = true;
+    got_any = true;
   }
 
-  if (any)
+  if (got_any)
     dout(10) << "_assimilate_prefetch read_buf now " << read_pos << "~" << read_buf.length() 
 	     << ", read pointers " << read_pos << "/" << received_pos << "/" << requested_pos
 	     << dendl;
 
-  if (any && _is_readable()) {
+  if (got_any && !was_readable && _is_readable()) {
     // readable!
     dout(10) << "_finish_read now readable" << dendl;
     if (on_readable) {
@@ -754,10 +756,20 @@ void Journaler::_issue_read(int64_t len)
 	   << ", read pointers " << read_pos << "/" << received_pos << "/" << (requested_pos+len)
 	   << dendl;
   
-  C_Read *c = new C_Read(this, requested_pos);
-  filer.read(ino, &layout, CEPH_NOSNAP,
-	     requested_pos, len, &c->bl, 0, c);
-  requested_pos += len;
+  // step by period (object).  _don't_ do a single big filer.read()
+  // here because it will wait for all object reads to complete before
+  // giving us back any data.  this way we can process whatever bits
+  // come in that are contiguous.
+  uint64_t period = get_layout_period();
+  while (len > 0) {
+    uint64_t e = requested_pos + period;
+    e -= e % period;
+    uint64_t l = e - requested_pos;
+    C_Read *c = new C_Read(this, requested_pos);
+    filer.read(ino, &layout, CEPH_NOSNAP, requested_pos, l, &c->bl, 0, c);
+    requested_pos += l;
+    len -= l;
+  }
 }
 
 void Journaler::_prefetch()
