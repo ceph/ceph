@@ -24,11 +24,11 @@
 /* Static string length */
 #define SSTRL(x) ((sizeof(x)/sizeof(x[0])) - 1)
 
-#define LESS_THAN_ESCAPE		"&lt;"
-#define AMPERSAND_ESCAPE		"&amp;"
-#define GREATER_THAN_ESCAPE		"&gt;"
-#define SGL_QUOTE_ESCAPE		"&apos;"
-#define DBL_QUOTE_ESCAPE		"&quot;"
+#define LESS_THAN_XESCAPE		"&lt;"
+#define AMPERSAND_XESCAPE		"&amp;"
+#define GREATER_THAN_XESCAPE		"&gt;"
+#define SGL_QUOTE_XESCAPE		"&apos;"
+#define DBL_QUOTE_XESCAPE		"&quot;"
 
 int escape_xml_attr_len(const char *buf)
 {
@@ -38,19 +38,19 @@ int escape_xml_attr_len(const char *buf)
 		char c = *b;
 		switch (c) {
 		case '<':
-			ret += SSTRL(LESS_THAN_ESCAPE);
+			ret += SSTRL(LESS_THAN_XESCAPE);
 			break;
 		case '&':
-			ret += SSTRL(AMPERSAND_ESCAPE);
+			ret += SSTRL(AMPERSAND_XESCAPE);
 			break;
 		case '>':
-			ret += SSTRL(GREATER_THAN_ESCAPE);
+			ret += SSTRL(GREATER_THAN_XESCAPE);
 			break;
 		case '\'':
-			ret += SSTRL(SGL_QUOTE_ESCAPE);
+			ret += SSTRL(SGL_QUOTE_XESCAPE);
 			break;
 		case '"':
-			ret += SSTRL(DBL_QUOTE_ESCAPE);
+			ret += SSTRL(DBL_QUOTE_XESCAPE);
 			break;
 		default:
 			// Escape control characters.
@@ -76,24 +76,24 @@ void escape_xml_attr(const char *buf, char *out)
 		char c = *b;
 		switch (c) {
 		case '<':
-			memcpy(o, LESS_THAN_ESCAPE, SSTRL(LESS_THAN_ESCAPE));
-			o += SSTRL(LESS_THAN_ESCAPE);
+			memcpy(o, LESS_THAN_XESCAPE, SSTRL(LESS_THAN_XESCAPE));
+			o += SSTRL(LESS_THAN_XESCAPE);
 			break;
 		case '&':
-			memcpy(o, AMPERSAND_ESCAPE, SSTRL(AMPERSAND_ESCAPE));
-			o += SSTRL(AMPERSAND_ESCAPE);
+			memcpy(o, AMPERSAND_XESCAPE, SSTRL(AMPERSAND_XESCAPE));
+			o += SSTRL(AMPERSAND_XESCAPE);
 			break;
 		case '>':
-			memcpy(o, GREATER_THAN_ESCAPE, SSTRL(GREATER_THAN_ESCAPE));
-			o += SSTRL(GREATER_THAN_ESCAPE);
+			memcpy(o, GREATER_THAN_XESCAPE, SSTRL(GREATER_THAN_XESCAPE));
+			o += SSTRL(GREATER_THAN_XESCAPE);
 			break;
 		case '\'':
-			memcpy(o, SGL_QUOTE_ESCAPE, SSTRL(SGL_QUOTE_ESCAPE));
-			o += SSTRL(SGL_QUOTE_ESCAPE);
+			memcpy(o, SGL_QUOTE_XESCAPE, SSTRL(SGL_QUOTE_XESCAPE));
+			o += SSTRL(SGL_QUOTE_XESCAPE);
 			break;
 		case '"':
-			memcpy(o, DBL_QUOTE_ESCAPE, SSTRL(DBL_QUOTE_ESCAPE));
-			o += SSTRL(DBL_QUOTE_ESCAPE);
+			memcpy(o, DBL_QUOTE_XESCAPE, SSTRL(DBL_QUOTE_XESCAPE));
+			o += SSTRL(DBL_QUOTE_XESCAPE);
 			break;
 		default:
 			// Escape control characters.
@@ -101,6 +101,100 @@ void escape_xml_attr(const char *buf, char *out)
 				    (c == 0x7f)) {
 				sprintf(o, "&#x%02x;", c);
 				o += 6;
+			}
+			else {
+				*o++ = c;
+			}
+			break;
+		}
+	}
+	// null terminator
+	*o = '\0';
+}
+
+#define SGL_QUOTE_JESCAPE "\\'"
+#define DBL_QUOTE_JESCAPE "\\\""
+#define BACKSLASH_JESCAPE "\\\\"
+#define SLASH_JESCAPE "\\/"
+#define TAB_JESCAPE "\\t"
+#define NEWLINE_JESCAPE "\\n"
+
+int escape_json_attr_len(const char *buf)
+{
+	const char *b;
+	int ret = 0;
+	for (b = buf; *b; ++b) {
+		char c = *b;
+		switch (c) {
+		case '\'':
+			ret += SSTRL(SGL_QUOTE_JESCAPE);
+			break;
+		case '"':
+			ret += SSTRL(DBL_QUOTE_JESCAPE);
+			break;
+		case '\\':
+			ret += SSTRL(BACKSLASH_JESCAPE);
+			break;
+		case '/':
+			ret += SSTRL(SLASH_JESCAPE);
+			break;
+		case '\t':
+			ret += SSTRL(TAB_JESCAPE);
+			break;
+		case '\n':
+			ret += SSTRL(NEWLINE_JESCAPE);
+			break;
+		default:
+			// Escape control characters.
+			if ((c < 0x20) || (c == 0x7f)) {
+				ret += 5;
+			}
+			else {
+				ret++;
+			}
+		}
+	}
+	// leave room for null terminator
+	ret++;
+	return ret;
+}
+
+void escape_json_attr(const char *buf, char *out)
+{
+	char *o = out;
+	const char *b;
+	for (b = buf; *b; ++b) {
+		char c = *b;
+		switch (c) {
+		case '\'':
+			memcpy(o, SGL_QUOTE_JESCAPE, SSTRL(SGL_QUOTE_JESCAPE));
+			o += SSTRL(SGL_QUOTE_JESCAPE);
+			break;
+		case '"':
+			memcpy(o, DBL_QUOTE_JESCAPE, SSTRL(DBL_QUOTE_JESCAPE));
+			o += SSTRL(DBL_QUOTE_JESCAPE);
+			break;
+		case '\\':
+			memcpy(o, BACKSLASH_JESCAPE, SSTRL(BACKSLASH_JESCAPE));
+			o += SSTRL(BACKSLASH_JESCAPE);
+			break;
+		case '/':
+			memcpy(o, SLASH_JESCAPE, SSTRL(SLASH_JESCAPE));
+			o += SSTRL(SLASH_JESCAPE);
+			break;
+		case '\t':
+			memcpy(o, TAB_JESCAPE, SSTRL(TAB_JESCAPE));
+			o += SSTRL(TAB_JESCAPE);
+			break;
+		case '\n':
+			memcpy(o, NEWLINE_JESCAPE, SSTRL(NEWLINE_JESCAPE));
+			o += SSTRL(NEWLINE_JESCAPE);
+			break;
+		default:
+			// Escape control characters.
+			if ((c < 0x20) || (c == 0x7f)) {
+				sprintf(o, "\\%04x", c);
+				o += 5;
 			}
 			else {
 				*o++ = c;

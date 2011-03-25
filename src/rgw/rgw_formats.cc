@@ -195,9 +195,14 @@ void RGWFormatter_JSON::dump_value_str(const char *name, const char *fmt, ...)
   va_start(ap, fmt);
   int n = vsnprintf(buf, LARGE_SIZE, fmt, ap);
   va_end(ap);
+
+  int len = escape_json_attr_len(buf);
+  char escaped[len];
+  escape_json_attr(buf, escaped);
+
   if (n >= LARGE_SIZE)
     return;
-  write_data("%s\"%s\":\"%s\"", (entry.size ? ", " : ""), name, buf);
+  write_data("%s\"%s\":\"%s\"", (entry.size ? ", " : ""), name, escaped);
   entry.size++;
 }
 
