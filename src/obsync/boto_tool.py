@@ -188,7 +188,7 @@ boto_tool.py
         Gets the headers of an object
 """
 
-if (len(sys.argv) < 2):
+if (len(sys.argv) < 3):
     usage()
     sys.exit(255)
 
