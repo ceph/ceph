@@ -217,7 +217,7 @@ struct config_option config_optionsp[] = {
   OPTION(journaler_safe, 0, OPT_BOOL, true),  // wait for COMMIT on journal writes
   OPTION(journaler_write_head_interval, 0, OPT_INT, 15),
   OPTION(journaler_cache, 0, OPT_BOOL, false), // cache writes for later readback
-  OPTION(journaler_prefetch_periods, 0, OPT_INT, 50),   // * journal object size (1~MB? see above)
+  OPTION(journaler_prefetch_periods, 0, OPT_INT, 10),   // * journal object size (1~MB? see above)
   OPTION(journaler_batch_interval, 0, OPT_DOUBLE, .001),   // seconds.. max add'l latency we artificially incur
   OPTION(journaler_batch_max, 0, OPT_LONGLONG, 0),  // max bytes we'll delay flushing; disable, for now....
   OPTION(mds_max_file_size, 0, OPT_LONGLONG, 1ULL << 40),
