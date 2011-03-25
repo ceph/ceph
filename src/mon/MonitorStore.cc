@@ -110,14 +110,14 @@ int MonitorStore::umount()
 
 int MonitorStore::mkfs()
 {
-  int ret = run_cmd("rm", "-rf", dir.c_str(), NULL);
+  int ret = run_cmd("rm", "-rf", dir.c_str(), (char*)NULL);
   if (ret) {
     derr << "MonitorStore::mkfs: failed to remove " << dir
 	 << ": rm returned " << ret << dendl;
     return ret;
   }
 
-  ret = run_cmd("mkdir", "-p", dir.c_str(), NULL);
+  ret = run_cmd("mkdir", "-p", dir.c_str(), (char*)NULL);
   if (ret) {
     derr << "MonitorStore::mkfs: failed to mkdir -p " << dir
 	 << ": mkdir returned " << ret << dendl;

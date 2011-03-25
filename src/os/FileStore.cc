@@ -605,7 +605,7 @@ int FileStore::wipe_subvol(const char *s)
       continue;
     ostringstream oss;
     oss << old_dir.str().c_str() << "/" << de->d_name;
-    int ret = run_cmd("rm", "-rf", oss.str().c_str(), NULL);
+    int ret = run_cmd("rm", "-rf", oss.str().c_str(), (char*)NULL);
     if (ret) {
       derr << "FileStore::wipe_subvol: failed to remove " << oss.str() << ": "
 	   << "error " << ret << dendl;
@@ -628,7 +628,7 @@ int FileStore::mkfs()
 
   if (g_conf.filestore_dev) {
     dout(0) << "mounting" << dendl;
-    ret = run_cmd("mount", g_conf.filestore_dev, NULL);
+    ret = run_cmd("mount", g_conf.filestore_dev, (char*)NULL);
     if (ret) {
       derr << "FileStore::mkfs: failed to mount g_conf.filestore_dev "
 	   << "'" << g_conf.filestore_dev << "'. Error code " << ret << dendl;
@@ -1117,7 +1117,7 @@ int FileStore::mount()
 
   if (g_conf.filestore_dev) {
     dout(0) << "mounting" << dendl;
-    //run_cmd("mount", g_conf.filestore_dev, NULL);
+    //run_cmd("mount", g_conf.filestore_dev, (char*)NULL);
   }
 
   dout(5) << "basedir " << basedir << " journal " << journalpath << dendl;
@@ -1423,7 +1423,7 @@ int FileStore::umount()
 
   if (g_conf.filestore_dev) {
     dout(0) << "umounting" << dendl;
-    //run_cmd("umount", g_conf.filestore_dev, NULL);
+    //run_cmd("umount", g_conf.filestore_dev, (char*)NULL);
   }
 
   {
