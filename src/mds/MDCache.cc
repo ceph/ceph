@@ -322,7 +322,8 @@ void MDCache::create_empty_hierarchy(C_Gather *gather)
 
   // create ceph dir
   CInode *ceph = create_system_inode(MDS_INO_CEPH, S_IFDIR);
-  rootdir->add_primary_dentry(".ceph", ceph);
+  CDentry *dn = rootdir->add_primary_dentry(".ceph", ceph);
+  dn->_mark_dirty(mds->mdlog->get_current_segment());
 
   CDir *cephdir = ceph->get_or_open_dirfrag(this, frag_t());
   cephdir->dir_rep = CDir::REP_ALL;   //NONE;
