@@ -748,41 +748,6 @@ void Journaler::_prefetch()
   }
 }
 
-
-void Journaler::read_entry(bufferlist *bl, Context *onfinish)
-{
-  // only one read at a time!
-  assert(read_bl == 0);
-  assert(on_read_finish == 0);
-  
-  if (is_readable()) {
-    dout(10) << "read_entry at " << read_pos << ", read_buf is " 
-	     << read_pos << "~" << read_buf.length() 
-	     << ", readable now" << dendl;
-
-    // nice, just do it now.
-    bool r = try_read_entry(*bl);
-    assert(r);
-    
-    // callback
-    onfinish->finish(0);
-    delete onfinish;    
-  } else {
-    dout(10) << "read_entry at " << read_pos << ", read_buf is " 
-	     << read_pos << "~" << read_buf.length() 
-	     << ", not readable now" << dendl;
-
-    bl->clear();
-
-    // set it up
-    read_bl = bl;
-    on_read_finish = onfinish;
-
-    // is_readable() will have already initiated a read (if it was possible)
-  }
-}
-
-
 /* is_readable()
  *  return true if next entry is ready.
  *  kickstart read as necessary.

@@ -317,7 +317,6 @@ public:
   bool is_readable();
   bool try_read_entry(bufferlist& bl);
   void wait_for_readable(Context *onfinish);
-  void read_entry(bufferlist* bl, Context *onfinish);
   
   void set_write_pos(int64_t p) { 
     write_pos = flush_pos = ack_pos = safe_pos = p;
