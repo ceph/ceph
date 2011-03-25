@@ -194,9 +194,6 @@ private:
 
   int64_t junk_tail_pos; // for truncate
 
-  // for read_entry() in-progress read
-  bufferlist *read_bl;
-  Context    *on_read_finish;
   // for wait_for_readable()
   Context    *on_readable;
 
@@ -238,7 +235,7 @@ public:
     read_pos(0), requested_pos(0), received_pos(0),
     fetch_len(0), temp_fetch_len(0), prefetch_from(0),
     junk_tail_pos(0),
-    read_bl(0), on_read_finish(0), on_readable(0),
+    on_readable(0),
     expire_pos(0), trimming_pos(0), trimmed_pos(0) 
   {
   }
@@ -259,8 +256,6 @@ public:
     fetch_len = 0;
     prefetch_from = 0;
     junk_tail_pos = 0;
-    read_bl = 0;
-    on_read_finish = 0;
     assert(!on_readable);
     expire_pos = 0;
     trimming_pos = 0;
@@ -310,7 +305,6 @@ public:
   // read
   void set_read_pos(int64_t p) { 
     assert(requested_pos == received_pos);  // we can't cope w/ in-progress read right now.
-    assert(read_bl == 0); // ...
     read_pos = requested_pos = received_pos = p;
     read_buf.clear();
   }

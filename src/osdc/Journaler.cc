@@ -705,20 +705,6 @@ void Journaler::_assimilate_prefetch()
       f->finish(0);
       delete f;
     }
-
-    if (read_bl) {
-      bool r = try_read_entry(*read_bl);
-      assert(r);  // this should have worked.
-
-      // clear state
-      Context *f = on_read_finish;
-      on_read_finish = 0;
-      read_bl = 0;
-      
-      // do callback
-      f->finish(0);
-      delete f;
-    }
   }
 }
 
