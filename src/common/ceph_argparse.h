@@ -47,7 +47,7 @@
 class CephInitParameters
 {
 public:
-  CephInitParameters(uint32_t module_type);
+  CephInitParameters(uint32_t module_type, const char *conf_file_);
   std::list<std::string> get_conf_files() const;
 
   std::string conf_file;
@@ -72,7 +72,7 @@ bool ceph_argparse_flag(std::vector<const char*> &args,
 bool ceph_argparse_witharg(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, std::string *ret, ...);
 extern CephInitParameters ceph_argparse_early_args
-		(std::vector<const char*>& args, uint32_t module_type);
+	    (std::vector<const char*>& args, uint32_t module_type, int flags);
 extern void generic_server_usage();
 extern void generic_client_usage();
 

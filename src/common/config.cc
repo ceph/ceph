@@ -817,7 +817,7 @@ parse_config_files(const std::list<std::string> &conf_files)
     return -EINVAL;
   while (true) {
     if (c == conf_files.end())
-      return -EACCES;
+      return -EINVAL;
     ConfFile *cf_ = new ConfFile(c->c_str());
     cf_->set_post_process_func(conf_post_process_val);
     int res = cf_->parse();

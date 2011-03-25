@@ -162,12 +162,12 @@ void parse_config_option_string(std::string& s)
 }
 
 // The defaults for CephInitParameters
-CephInitParameters::CephInitParameters(uint32_t module_type)
-  : conf_file(CEPH_CONF_FILE_DEFAULT)
+CephInitParameters::CephInitParameters(uint32_t module_type, const char *conf_file_)
+  : conf_file(conf_file_)
 {
-  const char *conf_file_ = getenv("CEPH_CONF");
-  if (conf_file_)
-    conf_file = conf_file_;
+  const char *c = getenv("CEPH_CONF");
+  if (c)
+    conf_file = c;
   name.set(module_type, "admin");
 }
 
@@ -235,10 +235,11 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
 }
 
 CephInitParameters ceph_argparse_early_args
-	  (std::vector<const char*>& args, uint32_t module_type)
+	  (std::vector<const char*>& args, uint32_t module_type, int flags)
 {
-
-  CephInitParameters iparams(module_type);
+  const char *conf = (flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE) ?
+    "" : CEPH_CONF_FILE_DEFAULT;
+  CephInitParameters iparams(module_type, conf);
   std::string val;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (strcmp(*i, "--") == 0)

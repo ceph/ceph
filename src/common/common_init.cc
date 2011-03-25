@@ -120,7 +120,7 @@ void common_init(std::vector < const char* >& args,
 	       uint32_t module_type, code_environment_t code_env, int flags)
 {
   CephInitParameters iparams =
-    ceph_argparse_early_args(args, module_type);
+    ceph_argparse_early_args(args, module_type, flags);
   md_config_t *conf = common_preinit(iparams, code_env, flags);
 
   int ret = conf->parse_config_files(iparams.get_conf_files());
@@ -128,8 +128,14 @@ void common_init(std::vector < const char* >& args,
     derr << "common_init: error parsing config file." << dendl;
     _exit(1);
   }
+  else if (ret == -EINVAL) {
+    if (!(flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)) {
+      derr << "common_init: unable to open config file." << dendl;
+      _exit(1);
+    }
+  }
   else if (ret) {
-    derr << "common_init: unable to open config file." << dendl;
+    derr << "common_init: error reading config file." << dendl;
     _exit(1);
   }
 

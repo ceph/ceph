@@ -2608,7 +2608,7 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
 {
   rados_init_mutex.Lock();
   if (!rados_initialized) {
-    CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
+    CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT, CEPH_CONF_FILE_DEFAULT);
     iparams.conf_file = "";
     if (id) {
       iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
