@@ -177,7 +177,18 @@ int main(int argc, const char **argv)
   }
 
   int size = io_ctx.read(oid, bl2, 128, 0);
-  cout << "read result=" << bl2.c_str() << std::endl;
+  if (size <= 0) {
+    cout << "failed to read oid " << oid << "." << std::endl;
+    exit(1);
+  }
+  if (size > 4096) {
+    cout << "read too many bytes from oid " << oid << "." << std::endl;
+    exit(1);
+  }
+  char rbuf[size + 1];
+  memcpy(rbuf, bl2.c_str(), size);
+  rbuf[size] = '\0';
+  cout << "read result='" << rbuf << "'" << std::endl;
   cout << "size=" << size << std::endl;
 
   const char *oid2 = "jjj10.rbd";
