@@ -34,7 +34,7 @@ void Journaler::create(ceph_file_layout *l)
 
   set_layout(l);
 
-  write_pos = flush_pos = ack_pos = safe_pos =
+  write_pos = flush_pos = safe_pos =
     read_pos = requested_pos = received_pos =
     expire_pos = trimming_pos = trimmed_pos = layout.fl_stripe_count * layout.fl_object_size;
 }
@@ -50,7 +50,10 @@ void Journaler::set_layout(ceph_file_layout *l)
 
   // prefetch intelligently.
   // (watch out, this is big if you use big objects or weird striping)
-  fetch_len = layout.fl_stripe_count * layout.fl_object_size * g_conf.journaler_prefetch_periods;
+  uint64_t periods = g_conf.journaler_prefetch_periods;
+  if (periods < 2)
+    periods = 2;  // we need at least 2 periods to make progress.
+  fetch_len = layout.fl_stripe_count * layout.fl_object_size * periods;
   prefetch_from = fetch_len / 2;
 }
 
@@ -199,7 +202,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
     return;
   }
 
-  write_pos = flush_pos = ack_pos = safe_pos = h.write_pos;
+  write_pos = flush_pos = safe_pos = h.write_pos;
   read_pos = requested_pos = received_pos = expire_pos = h.expire_pos;
   trimmed_pos = trimming_pos = h.trimmed_pos;
 
@@ -235,7 +238,7 @@ void Journaler::reprobe(Context *finish)
 void Journaler::_finish_reprobe(int r, uint64_t new_end, Context *onfinish) {
   assert(new_end >= write_pos);
   assert(r >= 0);
-  write_pos = flush_pos = ack_pos = safe_pos = new_end;
+  write_pos = flush_pos = safe_pos = new_end;
   state = STATE_ACTIVE;
   onfinish->finish(r);
   delete onfinish;
@@ -261,7 +264,7 @@ void Journaler::_finish_probe_end(int r, uint64_t end)
 
   state = STATE_ACTIVE;
 
-  write_pos = flush_pos = ack_pos = safe_pos = end;
+  write_pos = flush_pos = safe_pos = end;
   
   // done.
   list<Context*> ls;
@@ -350,18 +353,19 @@ class Journaler::C_Flush : public Context {
   Journaler *ls;
   uint64_t start;
   utime_t stamp;
-  bool safe;
 public:
-  C_Flush(Journaler *l, int64_t s, utime_t st, bool sa) : ls(l), start(s), stamp(st), safe(sa) {}
-  void finish(int r) { ls->_finish_flush(r, start, stamp, safe); }
+  C_Flush(Journaler *l, int64_t s, utime_t st) : ls(l), start(s), stamp(st) {}
+  void finish(int r) {
+    ls->_finish_flush(r, start, stamp);
+  }
 };
 
-void Journaler::_finish_flush(int r, uint64_t start, utime_t stamp, bool safe)
+void Journaler::_finish_flush(int r, uint64_t start, utime_t stamp)
 {
   assert(!readonly);
   assert(r>=0);
 
-  assert((!safe && start >= ack_pos) || (safe && start >= safe_pos));
+  assert(start >= safe_pos);
   assert(start < flush_pos);
 
   // calc latency?
@@ -371,61 +375,26 @@ void Journaler::_finish_flush(int r, uint64_t start, utime_t stamp, bool safe)
     logger->favg(logger_key_lat, lat);
   }
 
-  // adjust ack_pos
-  if (!safe) {
-    assert(pending_ack.count(start));
-    pending_ack.erase(start);
-    if (pending_ack.empty())
-      ack_pos = flush_pos;
-    else
-      ack_pos = *pending_ack.begin();
-    if (!ack_barrier.empty() && *ack_barrier.begin() < ack_pos)
-      ack_pos = *ack_barrier.begin();
-  } else {
-    assert(pending_safe.count(start));
-    pending_safe.erase(start);
-    if (pending_safe.empty())
-      safe_pos = flush_pos;
-    else
-      safe_pos = *pending_safe.begin();
-    if (ack_pos < safe_pos)
-      ack_pos = safe_pos;
-    
-    if (ack_barrier.count(start)) {
-      ack_barrier.erase(start);
-      
-      if (ack_pos == start) {
-	if (pending_ack.empty())
-	  ack_pos = flush_pos;
-	else
-	  ack_pos = *pending_ack.begin();
-	if (!ack_barrier.empty() && *ack_barrier.begin() < ack_pos)
-	  ack_pos = *ack_barrier.begin();
-      }
-    }
-  }
+  // adjust safe_pos
+  assert(pending_safe.count(start));
+  pending_safe.erase(start);
+  if (pending_safe.empty())
+    safe_pos = flush_pos;
+  else
+    safe_pos = *pending_safe.begin();
 
-  dout(10) << "_finish_flush " << (safe ? "safe":"ack") << " from " << start
-	   << ", pending_ack " << pending_ack
-    //<< ", pending_safe " << pending_safe
-	   << ", ack_barrier " << ack_barrier
+  dout(10) << "_finish_flush safe from " << start
+	   << ", pending_safe " << pending_safe
 	   << ", write positions now " << write_pos << "/" << flush_pos
-	   << "/" << ack_pos << "/" << safe_pos
+	   << "/" << safe_pos
 	   << dendl;
 
-  // kick waiters <= ack_pos
-  while (!waitfor_ack.empty()) {
-    if (waitfor_ack.begin()->first > ack_pos) break;
-    finish_contexts(waitfor_ack.begin()->second);
-    waitfor_ack.erase(waitfor_ack.begin());
-  }
-  if (safe) {
-    while (!waitfor_safe.empty()) {
-      if (waitfor_safe.begin()->first > safe_pos) break;
-      finish_contexts(waitfor_safe.begin()->second);
-      waitfor_safe.erase(waitfor_safe.begin());
-    }
-
+  // kick waiters <= safe_pos
+  while (!waitfor_safe.empty()) {
+    if (waitfor_safe.begin()->first > safe_pos)
+      break;
+    finish_contexts(waitfor_safe.begin()->second);
+    waitfor_safe.erase(waitfor_safe.begin());
   }
 }
 
@@ -510,13 +479,7 @@ void Journaler::_do_flush(unsigned amount)
   utime_t now = g_clock.now();
   SnapContext snapc;
 
-  Context *onack = 0;
-  if (!g_conf.journaler_safe) {
-    onack = new C_Flush(this, flush_pos, now, false);  // on ACK
-    pending_ack.insert(flush_pos);
-  }
-
-  Context *onsafe = new C_Flush(this, flush_pos, now, true);  // on COMMIT
+  Context *onsafe = new C_Flush(this, flush_pos, now);  // on COMMIT
   pending_safe.insert(flush_pos);
 
   bufferlist write_bl;
@@ -531,67 +494,49 @@ void Journaler::_do_flush(unsigned amount)
   filer.write(ino, &layout, snapc,
 	      flush_pos, len, write_bl, g_clock.now(),
 	      0,
-	      onack, onsafe);
+	      NULL, onsafe);
 
   flush_pos += len;
   assert(write_buf.length() == write_pos - flush_pos);
     
-  dout(10) << "_do_flush write pointers now at " << write_pos << "/" << flush_pos << "/" << ack_pos << "/" << safe_pos << dendl;
+  dout(10) << "_do_flush write pointers now at " << write_pos << "/" << flush_pos << "/" << safe_pos << dendl;
 }
 
 
 
-void Journaler::wait_for_flush(Context *onsync, Context *onsafe, bool add_ack_barrier)
+void Journaler::wait_for_flush(Context *onsafe)
 {
   assert(!readonly);
-  if (g_conf.journaler_safe && onsync) {
-    assert(!onsafe);
-    onsafe = onsync;
-    onsync = 0;
-  }
   
-  // all flushed and acked?
-  if (write_pos == ack_pos) {
+  // all flushed and safe?
+  if (write_pos == safe_pos) {
     assert(write_buf.length() == 0);
     dout(10) << "flush nothing to flush, write pointers at " 
-	     << write_pos << "/" << flush_pos << "/" << ack_pos << "/" << safe_pos << dendl;
-    if (onsync) {
-      onsync->finish(0);
-      delete onsync;
-      onsync = 0;
-    }
+	     << write_pos << "/" << flush_pos << "/" << safe_pos << dendl;
     if (onsafe) {
-      if (write_pos == safe_pos) {
-	onsafe->finish(0);
-	delete onsafe;
-	onsafe = 0;
-      } else {
-	waitfor_safe[write_pos].push_back(onsafe);
-      }
+      onsafe->finish(0);
+      delete onsafe;
+      onsafe = 0;
     }
     return;
   }
 
   // queue waiter
-  if (onsync) 
-    waitfor_ack[write_pos].push_back(onsync);
   if (onsafe) 
     waitfor_safe[write_pos].push_back(onsafe);
-  if (add_ack_barrier)
-    ack_barrier.insert(write_pos);
 }  
 
-void Journaler::flush(Context *onsync, Context *onsafe, bool add_ack_barrier)
+void Journaler::flush(Context *onsafe)
 {
   assert(!readonly);
-  wait_for_flush(onsync, onsafe, add_ack_barrier);
-  if (write_pos == ack_pos)
+  wait_for_flush(onsafe);
+  if (write_pos == safe_pos)
     return;
 
   if (write_pos == flush_pos) {
     assert(write_buf.length() == 0);
     dout(10) << "flush nothing to flush, write pointers at "
-	     << write_pos << "/" << flush_pos << "/" << ack_pos << "/" << safe_pos << dendl;
+	     << write_pos << "/" << flush_pos << "/" << safe_pos << dendl;
   } else {
     if (1) {
       // maybe buffer
@@ -625,19 +570,26 @@ void Journaler::flush(Context *onsync, Context *onsafe, bool add_ack_barrier)
 
 class Journaler::C_Read : public Context {
   Journaler *ls;
+  uint64_t offset;
 public:
-  C_Read(Journaler *l) : ls(l) {}
-  void finish(int r) { ls->_finish_read(r); }
+  bufferlist bl;
+  C_Read(Journaler *l, uint64_t o) : ls(l), offset(o) {}
+  void finish(int r) {
+    ls->_finish_read(r, offset, bl);
+  }
 };
 
 class Journaler::C_RetryRead : public Context {
   Journaler *ls;
 public:
   C_RetryRead(Journaler *l) : ls(l) {}
-  void finish(int r) { ls->is_readable(); }  // this'll kickstart.
+  void finish(int r) {
+    // kickstart.
+    ls->_prefetch();
+  }  
 };
 
-void Journaler::_finish_read(int r)
+void Journaler::_finish_read(int r, uint64_t offset, bufferlist& bl)
 {
   if (r < 0) {
     dout(0) << "_finish_read got error " << r << dendl;
@@ -652,15 +604,41 @@ void Journaler::_finish_read(int r)
   }
   assert(r>=0);
 
-  dout(10) << "_finish_read got " << received_pos << "~" << reading_buf.length() << dendl;
-  received_pos += reading_buf.length();
-  read_buf.claim_append(reading_buf);
-  assert(received_pos <= requested_pos);
-  dout(10) << "_finish_read read_buf now " << read_pos << "~" << read_buf.length() 
-	   << ", read pointers " << read_pos << "/" << received_pos << "/" << requested_pos
-	   << dendl;
-  
-  if (is_readable()) { // NOTE: this check may read more
+  dout(10) << "_finish_read got " << offset << "~" << bl.length() << dendl;
+  prefetch_buf[offset].swap(bl);
+
+  _assimilate_prefetch();
+  _prefetch();
+}
+
+void Journaler::_assimilate_prefetch()
+{
+  bool was_readable = _is_readable();
+
+  bool got_any = false;
+  while (!prefetch_buf.empty()) {
+    map<uint64_t,bufferlist>::iterator p = prefetch_buf.begin();
+    if (p->first != received_pos) {
+      uint64_t gap = p->first - received_pos;
+      dout(10) << "_assimilate_prefetch gap of " << gap << " from received_pos " << received_pos
+	       << " to first prefetched buffer " << p->first << dendl;
+      break;
+    }
+
+    dout(10) << "_assimilate_prefetch " << p->first << "~" << p->second.length() << dendl;
+    received_pos += p->second.length();
+    read_buf.claim_append(p->second);
+    assert(received_pos <= requested_pos);
+    prefetch_buf.erase(p);
+    got_any = true;
+  }
+
+  if (got_any)
+    dout(10) << "_assimilate_prefetch read_buf now " << read_pos << "~" << read_buf.length() 
+	     << ", read pointers " << read_pos << "/" << received_pos << "/" << requested_pos
+	     << dendl;
+
+  if (got_any && !was_readable && _is_readable()) {
     // readable!
     dout(10) << "_finish_read now readable" << dendl;
     if (on_readable) {
@@ -669,24 +647,7 @@ void Journaler::_finish_read(int r)
       f->finish(0);
       delete f;
     }
-
-    if (read_bl) {
-      bool r = try_read_entry(*read_bl);
-      assert(r);  // this should have worked.
-
-      // clear state
-      Context *f = on_read_finish;
-      on_read_finish = 0;
-      read_bl = 0;
-      
-      // do callback
-      f->finish(0);
-      delete f;
-    }
   }
-  
-  // prefetch?
-  _prefetch();
 }
 
 /* NOTE: this could be slightly smarter... we could allow
@@ -699,29 +660,23 @@ void Journaler::_issue_read(int64_t len)
   // make sure we're fully flushed
   _do_flush();
 
-  if (_is_reading()) {
-    dout(10) << "_issue_read " << len << " waiting, already reading " 
-	     << received_pos << "~" << (requested_pos-received_pos) << dendl;
-    return;
-  } 
-  assert(requested_pos == received_pos);
-
-  // stuck at ack_pos?
-  assert(requested_pos <= ack_pos);
-  if (requested_pos == ack_pos) {
-    dout(10) << "_issue_read requested_pos = ack_pos = " << ack_pos << ", waiting" << dendl;
+  // stuck at safe_pos?
+  //  (this is needed if we are reading the tail of a journal we are also writing to)
+  assert(requested_pos <= safe_pos);
+  if (requested_pos == safe_pos) {
+    dout(10) << "_issue_read requested_pos = safe_pos = " << safe_pos << ", waiting" << dendl;
     assert(write_pos > requested_pos);
-    if (flush_pos == ack_pos)
+    if (flush_pos == safe_pos)
       flush();
-    assert(flush_pos > ack_pos);
-    waitfor_ack[flush_pos].push_back(new C_RetryRead(this));
+    assert(flush_pos > safe_pos);
+    waitfor_safe[flush_pos].push_back(new C_RetryRead(this));
     return;
   }
 
   // don't read too much
-  if (requested_pos + len > ack_pos) {
-    len = ack_pos - requested_pos;
-    dout(10) << "_issue_read reading only up to ack_pos " << ack_pos << dendl;
+  if (requested_pos + len > safe_pos) {
+    len = safe_pos - requested_pos;
+    dout(10) << "_issue_read reading only up to safe_pos " << safe_pos << dendl;
   }
 
   // go.
@@ -729,68 +684,61 @@ void Journaler::_issue_read(int64_t len)
 	   << ", read pointers " << read_pos << "/" << received_pos << "/" << (requested_pos+len)
 	   << dendl;
   
-  filer.read(ino, &layout, CEPH_NOSNAP,
-	     requested_pos, len, &reading_buf, 0,
-	     new C_Read(this));
-  requested_pos += len;
+  // step by period (object).  _don't_ do a single big filer.read()
+  // here because it will wait for all object reads to complete before
+  // giving us back any data.  this way we can process whatever bits
+  // come in that are contiguous.
+  uint64_t period = get_layout_period();
+  while (len > 0) {
+    uint64_t e = requested_pos + period;
+    e -= e % period;
+    uint64_t l = e - requested_pos;
+    C_Read *c = new C_Read(this, requested_pos);
+    filer.read(ino, &layout, CEPH_NOSNAP, requested_pos, l, &c->bl, 0, c);
+    requested_pos += l;
+    len -= l;
+  }
 }
 
 void Journaler::_prefetch()
 {
-  // prefetch?
-  uint64_t left = requested_pos - read_pos;
-  if (left <= prefetch_from &&      // should read more,
-      !_is_reading() &&             // and not reading anything right now
-      write_pos > requested_pos) {  // there's something more to read...
-    dout(10) << "_prefetch only " << left << " < " << prefetch_from
-	     << ", prefetching " << dendl;
-    _issue_read(fetch_len);
-  }
-}
-
-
-void Journaler::read_entry(bufferlist *bl, Context *onfinish)
-{
-  // only one read at a time!
-  assert(read_bl == 0);
-  assert(on_read_finish == 0);
-  
-  if (is_readable()) {
-    dout(10) << "read_entry at " << read_pos << ", read_buf is " 
-	     << read_pos << "~" << read_buf.length() 
-	     << ", readable now" << dendl;
-
-    // nice, just do it now.
-    bool r = try_read_entry(*bl);
-    assert(r);
-    
-    // callback
-    onfinish->finish(0);
-    delete onfinish;    
+  // prefetch
+  uint64_t pf;
+  if (temp_fetch_len) {
+    dout(10) << "_prefetch temp_fetch_len " << temp_fetch_len << dendl;
+    pf = temp_fetch_len;
+    temp_fetch_len = 0;
   } else {
-    dout(10) << "read_entry at " << read_pos << ", read_buf is " 
-	     << read_pos << "~" << read_buf.length() 
-	     << ", not readable now" << dendl;
+    pf = fetch_len;
+  }
 
-    bl->clear();
+  uint64_t raw_target = read_pos + pf;
 
-    // set it up
-    read_bl = bl;
-    on_read_finish = onfinish;
+  // only read full log segments
+  uint64_t period = get_layout_period();
+  uint64_t target = raw_target - (raw_target % period);
 
-    // is_readable() will have already initiated a read (if it was possible)
+  // don't read past the log tail
+  if (target > write_pos)
+    target = write_pos;
+
+  if (requested_pos < target) {
+    uint64_t len = target - requested_pos;
+    dout(10) << "_prefetch " << pf << " requested_pos " << requested_pos << " < target " << target
+	     << " (" << raw_target << "), prefetching " << len << dendl;
+    _issue_read(len);
   }
 }
-
 
 /* is_readable()
  *  return true if next entry is ready.
  *  kickstart read as necessary.
  */
-bool Journaler::is_readable() 
+bool Journaler::_is_readable()
 {
   // anything to read?
-  if (read_pos == write_pos) return false;
+  if (read_pos == write_pos)
+    return false;
 
   // have enough for entry size?
   uint32_t s = 0;
@@ -810,23 +758,28 @@ bool Journaler::is_readable()
     dout(10) << "is_readable() detected partial entry at tail, adjusting write_pos to " << read_pos << dendl;
     if (write_pos > read_pos)
       junk_tail_pos = write_pos; // note old tail
-    write_pos = flush_pos = ack_pos = safe_pos = read_pos;
+    write_pos = flush_pos = safe_pos = read_pos;
     assert(write_buf.length() == 0);
-
+    
     // truncate?
     // FIXME: how much?
-    
     return false;
-  } 
-
-  // start reading some more?
-  if (!_is_reading()) {
-    if (s)
-      fetch_len = MAX(fetch_len, (sizeof(s)+s-read_buf.length()));
-    _issue_read(fetch_len);
   }
 
+  uint64_t need = (sizeof(s)+s-read_buf.length());
+  if (need > fetch_len) {
+    dout(10) << "_is_readable noting temp_fetch_len " << temp_fetch_len
+	     << " for len " << s << " entry" << dendl;
+    temp_fetch_len = need;
+  }
   return false;
+}
+
+bool Journaler::is_readable() 
+{
+  bool r =_is_readable();
+  _prefetch();
+  return r;
 }
 
 bool Journaler::truncate_tail_junk(Context *c)
@@ -887,7 +840,7 @@ bool Journaler::try_read_entry(bufferlist& bl)
 void Journaler::wait_for_readable(Context *onreadable)
 {
   dout(10) << "wait_for_readable at " << read_pos << " onreadable " << onreadable << dendl;
-  assert(!is_readable());
+  assert(!_is_readable());
   assert(on_readable == 0);
   on_readable = onreadable;
 }
@@ -911,7 +864,7 @@ public:
 void Journaler::trim()
 {
   assert(!readonly);
-  uint64_t period = layout.fl_stripe_count * layout.fl_object_size;
+  uint64_t period = get_layout_period();
 
   uint64_t trim_to = last_committed.expire_pos;
   trim_to -= trim_to % period;
