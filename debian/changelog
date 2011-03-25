@@ -6,8 +6,10 @@ ceph (0.26~rc-1) experimental; urgency=low
   * Make Ceph cross buildable (closes: #618939), thanks to Hector Oron.
   * Disable libatomic-ops on ARMv4t (armel) archs to prevent FTBFS
     (closes: #615235), thanks go to Hector Oron again.
+  * Rename librados1{,-dbg,-dev} packages to librados2{,-dbg,-dev} ones;
+    conflict with and replace the former ones.
 
- -- Laszlo Boszormenyi (GCS) <gcs@debian.hu>  Mon, 21 Mar 2011 11:34:02 -0800
+ -- Laszlo Boszormenyi (GCS) <gcs@debian.hu>  Fri, 25 Mar 2011 19:42:11 +0100
 
 ceph (0.25.1-1) experimental; urgency=low
 
