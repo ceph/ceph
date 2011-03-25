@@ -185,7 +185,8 @@ private:
   uint64_t requested_pos; // what we've requested from OSD.
   uint64_t received_pos;  // what we've received from OSD.
   bufferlist read_buf; // read buffer.  unused_field + read_buf.length() == prefetch_pos.
-  bufferlist reading_buf; // what i'm reading into
+
+  map<uint64_t,bufferlist> prefetch_buf;
 
   uint64_t fetch_len;     // how much to read at a time
   uint64_t temp_fetch_len;
@@ -199,7 +200,8 @@ private:
   // for wait_for_readable()
   Context    *on_readable;
 
-  void _finish_read(int r);     // we just read some (read completion callback)
+  void _finish_read(int r, uint64_t offset, bufferlist &bl); // read completion callback
+  void _assimilate_prefetch();
   void _issue_read(int64_t len);  // read some more
   void _prefetch();             // maybe read ahead
   class C_Read;
