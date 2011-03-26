@@ -638,11 +638,6 @@ void Journaler::_assimilate_prefetch()
   }
 }
 
-/* NOTE: this could be slightly smarter... we could allow
- * multiple reads to be in progress.  e.g., if we prefetch, but
- * then discover we need even more for an especially large entry.
- * i don't think that circumstance will arise particularly often.
- */
 void Journaler::_issue_read(int64_t len)
 {
   // make sure we're fully flushed
@@ -718,9 +713,8 @@ void Journaler::_prefetch()
   }
 }
 
-/* is_readable()
- *  return true if next entry is ready.
- *  kickstart read as necessary.
+/*
+ * _is_readable() - return true if next entry is ready.
  */
 bool Journaler::_is_readable()
 {
@@ -763,6 +757,9 @@ bool Journaler::_is_readable()
   return false;
 }
 
+/*
+ * is_readable() - kickstart prefetch, too
+ */
 bool Journaler::is_readable() 
 {
   bool r =_is_readable();
