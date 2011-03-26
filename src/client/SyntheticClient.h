@@ -73,6 +73,7 @@
 
 #define SYNCLIENT_MODE_DUMP 63
 
+#define SYNCLIENT_MODE_LOOKUPHASH     70
 
 #define SYNCLIENT_MODE_TRUNCATE     200
 
@@ -87,6 +88,7 @@
 #define SYNCLIENT_MODE_RMSNAP 1001
 
 #define SYNCLIENT_MODE_MKSNAPFILE 1002
+
 
 
 void parse_syn_options(vector<const char*>& args);
@@ -259,6 +261,8 @@ class SyntheticClient {
   int thrash_links(const char *basedir, int dirs, int files, int depth, int n);
 
   void import_find(const char *basedir, const char *find, bool writedata);
+
+  int lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name);
 
   int chunk_file(string &filename);
 
