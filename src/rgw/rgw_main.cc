@@ -93,18 +93,6 @@ int main(int argc, const char **argv)
       abort_early(&s, -EPERM);
       goto done;
     }
-
-    ret = read_acls(&s);
-    if (ret < 0) {
-      switch (ret) {
-      case -ENOENT:
-        break;
-      default:
-        RGW_LOG(10) << "could not read acls" << " ret=" << ret << std::endl;
-        abort_early(&s, ret);
-        goto done;
-      }
-    }
     ret = handler->read_permissions();
     if (ret < 0) {
       abort_early(&s, ret);
