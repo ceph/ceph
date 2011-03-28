@@ -40,11 +40,13 @@ enum log_to_stderr_t {
 };
 
 struct ConfFile;
+class config_option;
 
 extern const char *CEPH_CONF_FILE_DEFAULT;
 
 struct md_config_t
 {
+public:
   md_config_t();
   ~md_config_t();
   int parse_config_files(const std::list<std::string> &conf_files);
@@ -54,6 +56,10 @@ struct md_config_t
   int set_val(const char *key, const char *val);
   int get_val(const char *key, char **buf, int len);
 
+private:
+  void set_val_from_default(const config_option *opt);
+
+public:
   ConfFile *cf;
 
   char *host;

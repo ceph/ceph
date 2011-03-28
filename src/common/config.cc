@@ -95,8 +95,8 @@ struct ceph_file_layout g_default_file_layout = {
 
 struct config_option config_optionsp[] = {
   OPTION(host, 0, OPT_STR, "localhost"),
-  OPTION(public_addr, 0, OPT_ADDR, ""),
-  OPTION(cluster_addr, 0, OPT_ADDR, ""),
+  OPTION(public_addr, 0, OPT_ADDR, NULL),
+  OPTION(cluster_addr, 0, OPT_ADDR, NULL),
   OPTION(num_client, 0, OPT_INT, 1),
   OPTION(monmap, 'M', OPT_STR, 0),
   OPTION(mon_host, 'm', OPT_STR, 0),
@@ -400,41 +400,6 @@ struct config_option config_optionsp[] = {
 
 const int num_config_options = sizeof(config_optionsp) / sizeof(config_option);
 
-bool conf_set_conf_val(void *field, opt_type_t type, const char *val, long long intval, double doubleval)
-{
-  switch (type) {
-  case OPT_BOOL:
-    *(bool *)field = intval;
-    break;
-  case OPT_INT:
-    *(int *)field = intval;
-    break;
-  case OPT_LONGLONG:
-    *(long long *)field = intval;
-    break;
-  case OPT_STR:
-    if (val) {
-      *(char **)field = strdup(val);
-    } else {
-      *(char **)field = NULL;
-    }
-    break;
-  case OPT_FLOAT:
-    *(float *)field = doubleval;
-    break;
-  case OPT_DOUBLE:
-    *(double *)field = doubleval;
-    break;
-  case OPT_ADDR:
-    ((entity_addr_t *)field)->parse(val);
-    break;
-  default:
-    return false;
-  }
-
-  return true;
-}
-
 static void set_conf_name(config_option *opt)
 {
   char *newsection = (char *)opt->section;
@@ -702,23 +667,9 @@ md_config_t()
   // However, it's good practice to add your new config option to config_optionsp
   // so that its default value is explicit rather than implicit.
   //
-
-  int len = sizeof(config_optionsp)/sizeof(config_option);
-  int i;
-  config_option *opt;
-
-  for (i = 0; i<len; i++) {
-    opt = &config_optionsp[i];
-    if (!conf_set_conf_val(opt->val_ptr,
-         opt->type,
-         opt->def_str,
-         opt->def_longlong,
-         opt->def_double)) {
-      std::ostringstream oss;
-      oss << "error initializing g_conf value num " << i;
-      assert(oss.str().c_str() == 0);
-    }
-
+  for (int i = 0; i < num_config_options; i++) {
+    config_option *opt = config_optionsp + i;
+    set_val_from_default(opt);
     set_conf_name(opt);
   }
 }
@@ -1003,4 +954,50 @@ get_val(const char *key, char **buf, int len)
   }
   // couldn't find a configuration option with key 'key'
   return -ENOENT;
+}
+
+void md_config_t::
+set_val_from_default(const config_option *opt)
+{
+  switch (opt->type) {
+    case OPT_INT:
+      *(int*)opt->val_ptr = opt->def_longlong;
+      break;
+    case OPT_LONGLONG:
+      *(long long*)opt->val_ptr = opt->def_longlong;
+      break;
+    case OPT_STR:
+      *(char **)opt->val_ptr = opt->def_str ? strdup(opt->def_str) : strdup("");
+      break;
+    case OPT_FLOAT:
+      *(float *)opt->val_ptr = (float)opt->def_double;
+      break;
+    case OPT_DOUBLE:
+      *(double *)opt->val_ptr = opt->def_double;
+      break;
+    case OPT_BOOL:
+      *(double *)opt->val_ptr = (bool)opt->def_longlong;
+      break;
+    case OPT_U32:
+      *(uint32_t *)opt->val_ptr = (uint32_t)opt->def_longlong;
+      break;
+    case OPT_ADDR: {
+      if (!opt->def_str) {
+	// entity_addr_t has a default constructor, so we don't need to
+	// do anything here.
+	break;
+      }
+      entity_addr_t *addr = (entity_addr_t*)opt->val_ptr;
+      if (!addr->parse(opt->def_str)) {
+	ostringstream oss;
+	oss << "Default value for " << opt->conf_name << " cannot be parsed."
+	    << std::endl;
+	assert(oss.str() == 0);
+      }
+      break;
+     }
+    default:
+      assert("unreachable" == 0);
+      break;
+   }
 }
