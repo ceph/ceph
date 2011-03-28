@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #ifndef CEPH_CONFIG_H
@@ -51,8 +51,8 @@ struct md_config_t
   void parse_env();
   void parse_argv_part2(std::vector<const char*>& args);
   void parse_argv(std::vector<const char*>& args);
-  int get_val(const char *key, char **buf, int len);
   int set_val(const char *key, const char *val);
+  int get_val(const char *key, char **buf, int len);
 
   ConfFile *cf;
 
@@ -61,7 +61,7 @@ struct md_config_t
   int num_client;
 
   //bool mkfs;
-  
+
   const char *monmap;
   const char *mon_host;
   bool daemonize;
@@ -230,7 +230,7 @@ struct md_config_t
   int   journaler_prefetch_periods;
   double journaler_batch_interval;
   long long unsigned journaler_batch_max;
-  
+
   // mds
   uint64_t mds_max_file_size;
   int   mds_cache_size;
@@ -238,7 +238,7 @@ struct md_config_t
   int   mds_mem_max;
   float mds_dir_commit_ratio;
   int   mds_dir_max_commit_size;
-  
+
   float mds_decay_halflife;
 
   float mds_beacon_interval;
@@ -266,8 +266,8 @@ struct md_config_t
   int mds_log_max_segments;
   int mds_log_max_expiring;
   int mds_log_eopen_size;
-  
-  float mds_bal_sample_interval;  
+
+  float mds_bal_sample_interval;
   float mds_bal_replicate_threshold;
   float mds_bal_unreplicate_threshold;
   bool mds_bal_frag;
@@ -361,8 +361,8 @@ struct md_config_t
 
   float   osd_age;
   int   osd_age_time;
-  int   osd_heartbeat_interval;  
-  int   osd_mon_heartbeat_interval;  
+  int   osd_heartbeat_interval;
+  int   osd_mon_heartbeat_interval;
   int   osd_heartbeat_grace;
   int   osd_mon_report_interval_max;
   int   osd_mon_report_interval_min;
@@ -417,7 +417,7 @@ struct md_config_t
   int filestore_queue_committing_max_bytes;
   int filestore_op_threads;
   float filestore_commit_timeout;
-  
+
   // ebofs
   bool  ebofs;
   bool  ebofs_cloneable;
@@ -430,7 +430,7 @@ struct md_config_t
   unsigned ebofs_max_prefetch;
   bool  ebofs_realloc;
   bool ebofs_verify_csum_on_read;
-  
+
   // journal
   bool journal_dio;
   bool journal_block_align;
@@ -444,7 +444,7 @@ struct md_config_t
   bool  bdev_lock;
   int   bdev_iothreads;
   int   bdev_idle_kick_after_ms;
-  int   bdev_el_fw_max_ms;  
+  int   bdev_el_fw_max_ms;
   int   bdev_el_bw_max_ms;
   bool  bdev_el_bidir;
   int   bdev_iov_max;
@@ -464,7 +464,7 @@ struct md_config_t
 #endif // USE_OSBDB
 };
 
-extern md_config_t g_conf;     
+extern md_config_t g_conf;
 
 typedef enum {
 	OPT_NONE, OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL,

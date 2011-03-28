@@ -722,6 +722,25 @@ md_config_t()
   }
 }
 
+md_config_t::
+~md_config_t()
+{
+  int len = sizeof(config_optionsp)/sizeof(config_option);
+  int i;
+  config_option *opt;
+
+  for (i = 0; i<len; i++) {
+    opt = &config_optionsp[i];
+    if (opt->type == OPT_STR) {
+      free(*(char **)opt->val_ptr);
+    }
+    free((void *)opt->conf_name);
+  }
+
+  delete cf;
+  cf = NULL;
+}
+
 int md_config_t::
 parse_config_files(const std::list<std::string> &conf_files)
 {
@@ -959,23 +978,3 @@ get_val(const char *key, char **buf, int len)
   // couldn't find a configuration option with key 'key'
   return -ENOENT;
 }
-
-md_config_t::
-~md_config_t()
-{
-  int len = sizeof(config_optionsp)/sizeof(config_option);
-  int i;
-  config_option *opt;
-
-  for (i = 0; i<len; i++) {
-    opt = &config_optionsp[i];
-    if (opt->type == OPT_STR) {
-      free(*(char **)opt->val_ptr);
-    }
-    free((void *)opt->conf_name);
-  }
-
-  delete cf;
-  cf = NULL;
-}
-
