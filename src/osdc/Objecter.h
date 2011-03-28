@@ -130,15 +130,22 @@ struct ObjectOperation {
     bufferlist bl;
     add_data(CEPH_OSD_OP_READ, off, len, bl);
   }
-  void write(uint64_t off, uint64_t len, bufferlist& bl) {
-    add_data(CEPH_OSD_OP_WRITE, off, len, bl);
+  void write(uint64_t off, bufferlist& bl) {
+    add_data(CEPH_OSD_OP_WRITE, off, bl.length(), bl);
   }
   void write_full(bufferlist& bl) {
     add_data(CEPH_OSD_OP_WRITEFULL, 0, bl.length(), bl);
   }
+  void append(bufferlist& bl) {
+    add_data(CEPH_OSD_OP_APPEND, 0, bl.length(), bl);
+  }
   void zero(uint64_t off, uint64_t len) {
     bufferlist bl;
     add_data(CEPH_OSD_OP_ZERO, off, len, bl);
+  }
+  void truncate(uint64_t off) {
+    bufferlist bl;
+    add_data(CEPH_OSD_OP_TRUNCATE, off, 0, bl);
   }
   void remove() {
     bufferlist bl;
