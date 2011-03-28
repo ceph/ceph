@@ -399,45 +399,6 @@ struct config_option config_optionsp[] = {
 
 const int num_config_options = sizeof(config_optionsp) / sizeof(config_option);
 
-bool conf_set_conf_val(void *field, opt_type_t type, const char *val)
-{
-  switch (type) {
-  case OPT_BOOL:
-    if (strcasecmp(val, "false") == 0)
-      *(bool *)field = false;
-    else if (strcasecmp(val, "true") == 0)
-      *(bool *)field = true;
-    else
-      *(bool *)field = (bool)atoi(val);
-    break;
-  case OPT_INT:
-    *(int *)field = atoi(val);
-    break;
-  case OPT_LONGLONG:
-    *(long long *)field = atoll(val);
-    break;
-  case OPT_STR:
-    if (val)
-      *(char **)field = strdup(val);
-    else
-      *(char **)field = NULL;
-    break;
-  case OPT_FLOAT:
-    *(float *)field = atof(val);
-    break;
-  case OPT_DOUBLE:
-    *(double *)field = strtod(val, NULL);
-    break;
-  case OPT_ADDR:
-    ((entity_addr_t *)field)->parse(val);
-    break;
-  default:
-    return false;
-  }
-
-  return true;
-}
-
 bool conf_set_conf_val(void *field, opt_type_t type, const char *val, long long intval, double doubleval)
 {
   switch (type) {
@@ -506,51 +467,6 @@ static void set_conf_name(config_option *opt)
   done:
     opt->section = newsection;
     opt->conf_name = (const char *)newconf;
-}
-
-static bool cmd_is_char(const char *cmd)
-{
-  return ((cmd[0] == '-') &&
-    cmd[1] && !cmd[2]);
-}
-
-bool conf_cmd_equals(const char *cmd, const char *opt, char char_opt, unsigned int *val_pos)
-{
-  unsigned int i;
-  unsigned int len = strlen(opt);
-
-  *val_pos = 0;
-
-  if (!*cmd)
-    return false;
-
-  if (char_opt && cmd_is_char(cmd))
-    return (char_opt == cmd[1]);
-
-  if ((cmd[0] != '-') || (cmd[1] != '-'))
-    return false;
-
-  for (i=0; i<len; i++) {
-    if ((opt[i] == '_') || (opt[i] == '-')) {
-      switch (cmd[i+2]) {
-      case '-':
-      case '_':
-        continue;
-      default:
-        break;
-      }
-    }
-
-    if (cmd[i+2] != opt[i])
-      return false;
-  }
-
-  if (cmd[i+2] == '=')
-    *val_pos = i+3;
-  else if (cmd[i+2])
-    return false;
-
-  return true;
 }
 
 static bool get_var(const char *str, int pos, char *var_name, int len, int *new_pos)

@@ -43,6 +43,38 @@
 	void (*args_usage)() __attribute__((unused)) = usage_func; \
 	bool __isarg __attribute__((unused))
 
+#define CONF_NEXT_VAL (val_pos ? &args[i][val_pos] : args[++i])
+
+#define CONF_SET_ARG_VAL(dest, type) \
+	ceph_argparse_cmdline_val(dest, type, CONF_NEXT_VAL)
+
+#define CONF_VAL args[i]
+
+#define CONF_SAFE_SET_ARG_VAL(dest, type) \
+	do { \
+          __isarg = i+1 < args.size(); \
+          if (__isarg && !val_pos && \
+              args[i+1][0] == '-' && args[i+1][1] != '\0') \
+              __isarg = false; \
+          if (type == OPT_BOOL) { \
+		if (val_pos) { \
+			CONF_SET_ARG_VAL(dest, type); \
+		} else \
+			ceph_argparse_cmdline_val(dest, type, "true"); \
+          } else if (__isarg || val_pos) { \
+		CONF_SET_ARG_VAL(dest, type); \
+	  } else if (args_usage) \
+		args_usage(); \
+	} while (0)
+
+#define CONF_ARG_EQ(str_cmd, char_cmd) \
+	ceph_argparse_cmd_equals(args[i], str_cmd, char_cmd, &val_pos)
+
+extern bool ceph_argparse_cmdline_val(void *field, int type,
+				      const char *val);
+extern bool ceph_argparse_cmd_equals(const char *cmd, const char *opt,
+				     char char_opt, unsigned int *val_pos);
+
 /////////////////////// Types ///////////////////////
 class CephInitParameters
 {
