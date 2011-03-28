@@ -599,6 +599,7 @@ libcommon_files = \
 	include/ceph_frag.cc \
 	common/config.cc \
 	common/utf8.c \
+	common/strtol.cc \
 	common/page.cc \
 	common/lockdep.cc \
 	common/DoutStreambuf.cc \
@@ -767,6 +768,7 @@ noinst_HEADERS = \
         common/config.h\
 	common/ceph_crypto.h\
 	common/utf8.h\
+	common/strtol.h\
         crush/CrushWrapper.h\
         crush/CrushWrapper.i\
         crush/builder.h\

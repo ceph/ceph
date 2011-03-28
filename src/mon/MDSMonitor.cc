@@ -18,6 +18,7 @@
 #include "MonitorStore.h"
 #include "OSDMonitor.h"
 
+#include "common/strtol.h"
 #include "messages/MMDSMap.h"
 #include "messages/MMDSBeacon.h"
 #include "messages/MMDSLoadTargets.h"

@@ -21,6 +21,7 @@
 
 #include "crush/CrushWrapper.h"
 
+#include "common/strtol.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMap.h"
 #include "messages/MOSDBoot.h"

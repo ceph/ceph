@@ -232,8 +232,6 @@ private:
   Monitor& operator=(const Monitor &rhs);
 };
 
-int strict_strtol(const char *str, int base, std::string *err);
-
 #define CEPH_MON_FEATURE_INCOMPAT_BASE CompatSet::Feature (1, "initial feature set (~v.18)")
 extern const CompatSet::Feature ceph_mon_feature_compat[];
 extern const CompatSet::Feature ceph_mon_feature_ro_compat[];
