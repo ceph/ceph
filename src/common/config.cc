@@ -22,6 +22,7 @@
 #include "common/dyn_snprintf.h"
 #include "common/version.h"
 #include "common/config.h"
+#include "common/strtol.h"
 #include "include/atomic.h"
 #include "include/str_list.h"
 #include "include/types.h"
@@ -885,12 +886,22 @@ set_val(const char *key, const char *val)
     switch (opt->type) {
       case OPT_NONE:
         return -ENOSYS;
-      case OPT_INT:
-        *(int*)opt->val_ptr = atoi(val);
-        return 0;
-      case OPT_LONGLONG:
-        *(long long*)opt->val_ptr = atoll(val);
-        return 0;
+      case OPT_INT: {
+	std::string err;
+	int f = strict_strtol(val, 10, &err);
+	if (!err.empty())
+	  return -EINVAL;
+	*(int*)opt->val_ptr = f;
+	return 0;
+      }
+      case OPT_LONGLONG: {
+	std::string err;
+	long long f = strict_strtoll(val, 10, &err);
+	if (!err.empty())
+	  return -EINVAL;
+	*(long long*)opt->val_ptr = f;
+	return 0;
+      }
       case OPT_STR: {
 	char **p = (char**)opt->val_ptr;
 	free(*p);
@@ -904,11 +915,26 @@ set_val(const char *key, const char *val)
         *(double*)opt->val_ptr = atof(val);
         return 0;
       case OPT_BOOL:
-        *(bool*)opt->val_ptr = !!atoi(val);
-        return 0;
-      case OPT_U32:
-        *(int*)opt->val_ptr = atoi(val);
-        return 0;
+	if (strcasecmp(val, "false") == 0)
+	  *(bool*)opt->val_ptr = false;
+	else if (strcasecmp(val, "true") == 0)
+	  *(bool*)opt->val_ptr = true;
+	else {
+	  std::string err;
+	  int b = strict_strtol((const char*)val, 10, &err);
+	  if (!err.empty())
+	    return -EINVAL;
+	  *(bool*)opt->val_ptr = !!b;
+	}
+	return 0;
+      case OPT_U32: {
+	std::string err;
+	int f = strict_strtol((const char*)val, 10, &err);
+	if (!err.empty())
+	  return -EINVAL;
+	*(int*)opt->val_ptr = f;
+	return 0;
+      }
       case OPT_ADDR: {
         entity_addr_t *addr = (entity_addr_t*)opt->val_ptr;
         if (!addr->parse(val)) {
