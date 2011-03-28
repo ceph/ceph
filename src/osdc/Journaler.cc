@@ -429,19 +429,6 @@ uint64_t Journaler::append_entry(bufferlist& bl)
 	
   dout(10) << "append_entry len " << bl.length() << " to " << write_pos << "~" << (bl.length() + sizeof(uint32_t)) << dendl;
   
-  // cache?
-  //  NOTE: this is a dumb thing to do; this is used for a benchmarking
-  //   purposes only.
-  if (g_conf.journaler_cache &&
-      write_pos == read_pos + read_buf.length()) {
-    dout(10) << "append_entry caching in read_buf too" << dendl;
-    assert(requested_pos == received_pos);
-    assert(requested_pos == read_pos + read_buf.length());
-    ::encode(s, read_buf);
-    read_buf.append(bl);
-    requested_pos = received_pos = write_pos + sizeof(s) + s;
-  }
-
   // append
   ::encode(s, write_buf);
   write_buf.claim_append(bl);

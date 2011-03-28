@@ -215,7 +215,6 @@ struct config_option config_optionsp[] = {
   OPTION(objecter_inflight_op_bytes, 0, OPT_LONGLONG, 1024*1024*100), //max in-flight data (both directions)
   OPTION(journaler_allow_split_entries, 0, OPT_BOOL, true),
   OPTION(journaler_write_head_interval, 0, OPT_INT, 15),
-  OPTION(journaler_cache, 0, OPT_BOOL, false), // cache writes for later readback
   OPTION(journaler_prefetch_periods, 0, OPT_INT, 10),   // * journal object size (1~MB? see above)
   OPTION(journaler_batch_interval, 0, OPT_DOUBLE, .001),   // seconds.. max add'l latency we artificially incur
   OPTION(journaler_batch_max, 0, OPT_LONGLONG, 0),  // max bytes we'll delay flushing; disable, for now....

@@ -227,7 +227,6 @@ struct md_config_t
   // journaler
   bool  journaler_allow_split_entries;
   int   journaler_write_head_interval;
-  bool  journaler_cache;
   int   journaler_prefetch_periods;
   double journaler_batch_interval;
   long long unsigned journaler_batch_max;
