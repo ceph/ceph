@@ -36,21 +36,16 @@
 	__isarg = 1 < args.size(); \
 	for (unsigned i=0; i<args.size(); i++, __isarg = i+1 < args.size())
 
-#define ARGS_USAGE() args_usage();
-
 #define DEFINE_CONF_VARS(usage_func) \
 	unsigned int val_pos __attribute__((unused)); \
 	void (*args_usage)() __attribute__((unused)) = usage_func; \
 	bool __isarg __attribute__((unused))
 
-#define CONF_NEXT_VAL (val_pos ? &args[i][val_pos] : args[++i])
+#define CEPH_ARGPARSE_NEXT_VAL (val_pos ? &args[i][val_pos] : args[++i])
 
-#define CONF_SET_ARG_VAL(dest, type) \
-	ceph_argparse_cmdline_val(dest, type, CONF_NEXT_VAL)
+#define CEPH_ARGPARSE_VAL args[i]
 
-#define CONF_VAL args[i]
-
-#define CONF_SAFE_SET_ARG_VAL(dest, type) \
+#define CEPH_ARGPARSE_SET_ARG_VAL(dest, type) \
 	do { \
           __isarg = i+1 < args.size(); \
           if (__isarg && !val_pos && \
@@ -58,16 +53,16 @@
               __isarg = false; \
           if (type == OPT_BOOL) { \
 		if (val_pos) { \
-			CONF_SET_ARG_VAL(dest, type); \
+			ceph_argparse_cmdline_val(dest, type, CEPH_ARGPARSE_NEXT_VAL); \
 		} else \
 			ceph_argparse_cmdline_val(dest, type, "true"); \
           } else if (__isarg || val_pos) { \
-		CONF_SET_ARG_VAL(dest, type); \
+		ceph_argparse_cmdline_val(dest, type, CEPH_ARGPARSE_NEXT_VAL); \
 	  } else if (args_usage) \
 		args_usage(); \
 	} while (0)
 
-#define CONF_ARG_EQ(str_cmd, char_cmd) \
+#define CEPH_ARGPARSE_EQ(str_cmd, char_cmd) \
 	ceph_argparse_cmd_equals(args[i], str_cmd, char_cmd, &val_pos)
 
 extern bool ceph_argparse_cmdline_val(void *field, int type,

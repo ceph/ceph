@@ -188,46 +188,46 @@ int main(int argc, char **argv)
   bool need_more;
 
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("uid", 'i')) {
-      CONF_SAFE_SET_ARG_VAL(&user_id, OPT_STR);
-    } else if (CONF_ARG_EQ("secret", 's')) {
-      CONF_SAFE_SET_ARG_VAL(&secret_key, OPT_STR);
-    } else if (CONF_ARG_EQ("email", 'e')) {
-      CONF_SAFE_SET_ARG_VAL(&user_email, OPT_STR);
-    } else if (CONF_ARG_EQ("display-name", 'n')) {
-      CONF_SAFE_SET_ARG_VAL(&display_name, OPT_STR);
-    } else if (CONF_ARG_EQ("bucket", 'b')) {
-      CONF_SAFE_SET_ARG_VAL(&bucket, OPT_STR);
-    } else if (CONF_ARG_EQ("object", 'o')) {
-      CONF_SAFE_SET_ARG_VAL(&object, OPT_STR);
-    } else if (CONF_ARG_EQ("auth-uid", 'a')) {
-      CONF_SAFE_SET_ARG_VAL(&auid, OPT_LONGLONG);
-    } else if (CONF_ARG_EQ("os-user", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&openstack_user, OPT_STR);
-    } else if (CONF_ARG_EQ("os-secret", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&openstack_key, OPT_STR);
-    } else if (CONF_ARG_EQ("date", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&date, OPT_STR);
+    if (CEPH_ARGPARSE_EQ("uid", 'i')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&user_id, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("secret", 's')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&secret_key, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("email", 'e')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&user_email, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("display-name", 'n')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&display_name, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("bucket", 'b')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&bucket, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("object", 'o')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&object, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("auth-uid", 'a')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&auid, OPT_LONGLONG);
+    } else if (CEPH_ARGPARSE_EQ("os-user", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&openstack_user, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("os-secret", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&openstack_key, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("date", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&date, OPT_STR);
     } else {
       if (!opt_cmd) {
-        opt_cmd = get_cmd(CONF_VAL, prev_cmd, &need_more);
+        opt_cmd = get_cmd(CEPH_ARGPARSE_VAL, prev_cmd, &need_more);
         if (opt_cmd < 0) {
           cerr << "unrecognized arg " << args[i] << std::endl;
-          ARGS_USAGE();
+          usage();
         }
         if (need_more) {
-          prev_cmd = CONF_VAL;
+          prev_cmd = CEPH_ARGPARSE_VAL;
           continue;
         }
       } else {
         cerr << "unrecognized arg " << args[i] << std::endl;
-        ARGS_USAGE();
+        usage();
       }
     }
   }
 
   if (opt_cmd == OPT_NO_CMD)
-    ARGS_USAGE();
+    usage();
 
   store = RGWAccess::init_storage_provider("rados", &g_conf);
   if (!store) {
@@ -399,7 +399,7 @@ int main(int argc, char **argv)
         cerr << "date was not specified" << std::endl;
       if (!bucket)
         cerr << "bucket was not specified" << std::endl;
-      ARGS_USAGE();
+      usage();
     }
 
     string log_bucket = RGW_LOG_BUCKET_NAME;

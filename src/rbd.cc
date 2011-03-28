@@ -591,34 +591,34 @@ int main(int argc, const char **argv)
   const char *imgname = NULL, *snapname = NULL, *destname = NULL, *dest_poolname = NULL, *path = NULL;
   bool is_snap_cmd = false;
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("pool", 'p')) {
-      CONF_SAFE_SET_ARG_VAL(&poolname, OPT_STR);
-    } else if (CONF_ARG_EQ("dest-pool", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&dest_poolname, OPT_STR);
-    } else if (CONF_ARG_EQ("snap", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&snapname, OPT_STR);
-    } else if (CONF_ARG_EQ("image", 'i')) {
-      CONF_SAFE_SET_ARG_VAL(&imgname, OPT_STR);
-    } else if (CONF_ARG_EQ("size", 's')) {
-      CONF_SAFE_SET_ARG_VAL(&size, OPT_LONGLONG);
+    if (CEPH_ARGPARSE_EQ("pool", 'p')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&poolname, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("dest-pool", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&dest_poolname, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("snap", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&snapname, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("image", 'i')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&imgname, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("size", 's')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&size, OPT_LONGLONG);
       size <<= 20; // MB -> bytes
-    } else if (CONF_ARG_EQ("order", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&order, OPT_INT);
-    } else if (CONF_ARG_EQ("path", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&path, OPT_STR);
-    } else if (CONF_ARG_EQ("dest", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&destname, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("order", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&order, OPT_INT);
+    } else if (CEPH_ARGPARSE_EQ("path", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&path, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("dest", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&destname, OPT_STR);
     } else {
       if (!opt_cmd) {
-        opt_cmd = get_cmd(CONF_VAL, &is_snap_cmd);
+        opt_cmd = get_cmd(CEPH_ARGPARSE_VAL, &is_snap_cmd);
         if (opt_cmd < 0) {
-          cerr << "invalid command: " << CONF_VAL << std::endl;
+          cerr << "invalid command: " << CEPH_ARGPARSE_VAL << std::endl;
           usage_exit();
         }
       } else {
         switch (opt_cmd) {
           case OPT_LIST:
-            set_conf_param(CONF_VAL, &poolname, NULL);
+            set_conf_param(CEPH_ARGPARSE_VAL, &poolname, NULL);
             break;
           case OPT_INFO:
           case OPT_CREATE:
@@ -629,17 +629,17 @@ int main(int argc, const char **argv)
           case OPT_SNAP_REMOVE:
           case OPT_SNAP_LIST:
           case OPT_WATCH:
-            set_conf_param(CONF_VAL, &imgname, NULL);
+            set_conf_param(CEPH_ARGPARSE_VAL, &imgname, NULL);
             break;
           case OPT_EXPORT:
-            set_conf_param(CONF_VAL, &imgname, &path);
+            set_conf_param(CEPH_ARGPARSE_VAL, &imgname, &path);
             break;
           case OPT_IMPORT:
-            set_conf_param(CONF_VAL, &path, &destname);
+            set_conf_param(CEPH_ARGPARSE_VAL, &path, &destname);
             break;
           case OPT_COPY:
           case OPT_RENAME:
-            set_conf_param(CONF_VAL, &imgname, &destname);
+            set_conf_param(CEPH_ARGPARSE_VAL, &imgname, &destname);
             break;
         }
       }

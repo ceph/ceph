@@ -71,33 +71,33 @@ int main(int argc, const char **argv)
   bool test_crush = false;
 
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("help", 'h')) {
+    if (CEPH_ARGPARSE_EQ("help", 'h')) {
       usage();
-    } else if (CONF_ARG_EQ("print", 'p')) {
-      CONF_SAFE_SET_ARG_VAL(&print, OPT_BOOL);
-    } else if (CONF_ARG_EQ("createsimple", '\0')) {
+    } else if (CEPH_ARGPARSE_EQ("print", 'p')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&print, OPT_BOOL);
+    } else if (CEPH_ARGPARSE_EQ("createsimple", '\0')) {
       createsimple = true;
-      CONF_SAFE_SET_ARG_VAL(&num_osd, OPT_INT);
-    } else if (CONF_ARG_EQ("clobber", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&clobber, OPT_BOOL);
-    } else if (CONF_ARG_EQ("pg_bits", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&pg_bits, OPT_INT);
-    } else if (CONF_ARG_EQ("pgp_bits", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&pgp_bits, OPT_INT);
-    } else if (CONF_ARG_EQ("lpg_bits", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&lpg_bits, OPT_INT);
-    } else if (CONF_ARG_EQ("num_dom", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&num_dom, OPT_INT);
-    } else if (CONF_ARG_EQ("export_crush", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&export_crush, OPT_STR);
-    } else if (CONF_ARG_EQ("import_crush", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&import_crush, OPT_STR);
-    } else if (CONF_ARG_EQ("test_map_pg", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&test_map_pg, OPT_STR);
-    } else if (CONF_ARG_EQ("test_map_object", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&test_map_object, OPT_STR);
-    } else if (CONF_ARG_EQ("test_crush", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&test_crush, OPT_BOOL);
+      CEPH_ARGPARSE_SET_ARG_VAL(&num_osd, OPT_INT);
+    } else if (CEPH_ARGPARSE_EQ("clobber", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&clobber, OPT_BOOL);
+    } else if (CEPH_ARGPARSE_EQ("pg_bits", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&pg_bits, OPT_INT);
+    } else if (CEPH_ARGPARSE_EQ("pgp_bits", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&pgp_bits, OPT_INT);
+    } else if (CEPH_ARGPARSE_EQ("lpg_bits", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&lpg_bits, OPT_INT);
+    } else if (CEPH_ARGPARSE_EQ("num_dom", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&num_dom, OPT_INT);
+    } else if (CEPH_ARGPARSE_EQ("export_crush", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&export_crush, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("import_crush", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&import_crush, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("test_map_pg", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&test_map_pg, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("test_map_object", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&test_map_object, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("test_crush", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&test_crush, OPT_BOOL);
     } else if (!fn)
       fn = args[i];
     else 

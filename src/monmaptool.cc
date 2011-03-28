@@ -52,13 +52,13 @@ int main(int argc, const char **argv)
   common_init(args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
 	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("print", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&print, OPT_BOOL);
-    } else if (CONF_ARG_EQ("create", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&create, OPT_BOOL);
-    } else if (CONF_ARG_EQ("clobber", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&clobber, OPT_BOOL);
-    } else if (CONF_ARG_EQ("add", '\0')) {
+    if (CEPH_ARGPARSE_EQ("print", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&print, OPT_BOOL);
+    } else if (CEPH_ARGPARSE_EQ("create", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&create, OPT_BOOL);
+    } else if (CEPH_ARGPARSE_EQ("clobber", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&clobber, OPT_BOOL);
+    } else if (CEPH_ARGPARSE_EQ("add", '\0')) {
       if (++i >= args.size())
 	usage();
       string name = args[i];
@@ -71,7 +71,7 @@ int main(int argc, const char **argv)
       }
       add[name] = addr;
       modified = true;
-    } else if (CONF_ARG_EQ("rm", '\0')) {
+    } else if (CEPH_ARGPARSE_EQ("rm", '\0')) {
       if (++i >= args.size())
 	usage();
       string name = args[i];

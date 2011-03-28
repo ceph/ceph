@@ -128,17 +128,17 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("section", 's')) {
-      CONF_SAFE_SET_ARG_VAL(&section, OPT_STR);
+    if (CEPH_ARGPARSE_EQ("section", 's')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&section, OPT_STR);
       sections.push_back(section);
-    } else if (CONF_ARG_EQ("resolve-search", 'r')) {
-      CONF_SAFE_SET_ARG_VAL(&resolve_search, OPT_BOOL);
-    } else if (CONF_ARG_EQ("help", 'h')) {
-      CONF_SAFE_SET_ARG_VAL(&do_help, OPT_BOOL);
-    } else if (CONF_ARG_EQ("list-sections", 'l')) {
-      CONF_SAFE_SET_ARG_VAL(&do_list, OPT_BOOL);
-    } else if (CONF_ARG_EQ("lookup", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&do_lookup, OPT_BOOL);
+    } else if (CEPH_ARGPARSE_EQ("resolve-search", 'r')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&resolve_search, OPT_BOOL);
+    } else if (CEPH_ARGPARSE_EQ("help", 'h')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&do_help, OPT_BOOL);
+    } else if (CEPH_ARGPARSE_EQ("list-sections", 'l')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&do_list, OPT_BOOL);
+    } else if (CEPH_ARGPARSE_EQ("lookup", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&do_lookup, OPT_BOOL);
     }
     else {
       nargs.push_back(args[i]);

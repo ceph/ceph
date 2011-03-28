@@ -797,46 +797,46 @@ int main(int argc, const char **argv)
   DEFINE_CONF_VARS(usage);
 
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("clobber", '\0')) {
+    if (CEPH_ARGPARSE_EQ("clobber", '\0')) {
       clobber = true;
-    } else if (CONF_ARG_EQ("decompile", 'd')) {
-      CONF_SAFE_SET_ARG_VAL(&infn, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("decompile", 'd')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&infn, OPT_STR);
       decompile = true;
-    } else if (CONF_ARG_EQ("outfn", 'o')) {
-      CONF_SAFE_SET_ARG_VAL(&outfn, OPT_STR);
-    } else if (CONF_ARG_EQ("compile", 'c')) {
-      CONF_SAFE_SET_ARG_VAL(&srcfn, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("outfn", 'o')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&outfn, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("compile", 'c')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&srcfn, OPT_STR);
       compile = true;
-    } else if (CONF_ARG_EQ("test", 't')) {
-      CONF_SAFE_SET_ARG_VAL(&infn, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("test", 't')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&infn, OPT_STR);
       test = true;
-    } else if (CONF_ARG_EQ("verbose", 'v')) {
+    } else if (CEPH_ARGPARSE_EQ("verbose", 'v')) {
       verbose++;
-    } else if (CONF_ARG_EQ("build", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&build, OPT_BOOL);
-    } else if (CONF_ARG_EQ("num_osds", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&num_osds, OPT_INT);
-    } else if (CONF_ARG_EQ("num_rep", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&num_rep, OPT_INT);
-    } else if (CONF_ARG_EQ("max_x", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&max_x, OPT_INT);
-    } else if (CONF_ARG_EQ("min_x", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&min_x, OPT_INT);
-    } else if (CONF_ARG_EQ("x", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&min_x, OPT_INT);
+    } else if (CEPH_ARGPARSE_EQ("build", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&build, OPT_BOOL);
+    } else if (CEPH_ARGPARSE_EQ("num_osds", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&num_osds, OPT_INT);
+    } else if (CEPH_ARGPARSE_EQ("num_rep", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&num_rep, OPT_INT);
+    } else if (CEPH_ARGPARSE_EQ("max_x", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&max_x, OPT_INT);
+    } else if (CEPH_ARGPARSE_EQ("min_x", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&min_x, OPT_INT);
+    } else if (CEPH_ARGPARSE_EQ("x", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&min_x, OPT_INT);
       max_x = min_x;
-    } else if (CONF_ARG_EQ("max_rule", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&max_rule, OPT_INT);
-    } else if (CONF_ARG_EQ("min_rule", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&min_rule, OPT_INT);
-    } else if (CONF_ARG_EQ("rule", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&min_rule, OPT_INT);
+    } else if (CEPH_ARGPARSE_EQ("max_rule", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&max_rule, OPT_INT);
+    } else if (CEPH_ARGPARSE_EQ("min_rule", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&min_rule, OPT_INT);
+    } else if (CEPH_ARGPARSE_EQ("rule", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&min_rule, OPT_INT);
       max_rule = min_rule;
-    } else if (CONF_ARG_EQ("weight", 'w')) {
+    } else if (CEPH_ARGPARSE_EQ("weight", 'w')) {
       int dev;
-      CONF_SAFE_SET_ARG_VAL(&dev, OPT_INT);
+      CEPH_ARGPARSE_SET_ARG_VAL(&dev, OPT_INT);
       float f;
-      CONF_SAFE_SET_ARG_VAL(&f, OPT_FLOAT);
+      CEPH_ARGPARSE_SET_ARG_VAL(&f, OPT_FLOAT);
       int w = (int)(f * 0x10000);
       if (w < 0)
 	w = 0;

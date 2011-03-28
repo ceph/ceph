@@ -284,20 +284,20 @@ int main(int argc, const char **argv)
   bool create_pool = false;
 
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("pool", 'p')) {
-      CONF_SAFE_SET_ARG_VAL(&pool_name, OPT_STR);
-    } else if (CONF_ARG_EQ("snapid", 'S')) {
-      CONF_SAFE_SET_ARG_VAL(&snapid, OPT_LONGLONG);
-    } else if (CONF_ARG_EQ("snap", 's')) {
-      CONF_SAFE_SET_ARG_VAL(&snapname, OPT_STR);
-    } else if (CONF_ARG_EQ("help", 'h')) {
+    if (CEPH_ARGPARSE_EQ("pool", 'p')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&pool_name, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("snapid", 'S')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&snapid, OPT_LONGLONG);
+    } else if (CEPH_ARGPARSE_EQ("snap", 's')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&snapname, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("help", 'h')) {
       usage();
-    } else if (CONF_ARG_EQ("concurrent-ios", 't')) {
-      CONF_SAFE_SET_ARG_VAL(&concurrent_ios, OPT_INT);
-    } else if (CONF_ARG_EQ("block-size", 'b')) {
-      CONF_SAFE_SET_ARG_VAL(&op_size, OPT_INT);
-    } else if (CONF_ARG_EQ("create-pool", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&create_pool, OPT_BOOL);
+    } else if (CEPH_ARGPARSE_EQ("concurrent-ios", 't')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&concurrent_ios, OPT_INT);
+    } else if (CEPH_ARGPARSE_EQ("block-size", 'b')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&op_size, OPT_INT);
+    } else if (CEPH_ARGPARSE_EQ("create-pool", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&create_pool, OPT_BOOL);
     } else if (args[i][0] == '-' && nargs.empty()) {
       cerr << "unrecognized option " << args[i] << std::endl;
       usage();

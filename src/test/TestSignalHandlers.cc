@@ -98,13 +98,13 @@ int main(int argc, const char **argv)
 
   DEFINE_CONF_VARS(usage);
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("simple_segv", 's')) {
+    if (CEPH_ARGPARSE_EQ("simple_segv", 's')) {
       simple_segv_test();
     }
-    else if (CONF_ARG_EQ("infinite_recursion", 'r')) {
+    else if (CEPH_ARGPARSE_EQ("infinite_recursion", 'r')) {
       infinite_recursion_test();
     }
-    else if (CONF_ARG_EQ("help", 'h')) {
+    else if (CEPH_ARGPARSE_EQ("help", 'h')) {
       usage();
     }
   }

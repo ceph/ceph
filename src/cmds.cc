@@ -74,15 +74,15 @@ int main(int argc, const char **argv)
   const char *dump_file = NULL;
   int reset_journal = -1;
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("dump-journal", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&dump_journal, OPT_INT);
-      CONF_SAFE_SET_ARG_VAL(&dump_file, OPT_STR);
+    if (CEPH_ARGPARSE_EQ("dump-journal", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&dump_journal, OPT_INT);
+      CEPH_ARGPARSE_SET_ARG_VAL(&dump_file, OPT_STR);
       dout(0) << "dumping journal for mds" << dump_journal << " to " << dump_file << dendl;
-    } else if (CONF_ARG_EQ("reset-journal", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&reset_journal, OPT_INT);
-    } else if (CONF_ARG_EQ("journal-check", '\0')) {
+    } else if (CEPH_ARGPARSE_EQ("reset-journal", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&reset_journal, OPT_INT);
+    } else if (CEPH_ARGPARSE_EQ("journal-check", '\0')) {
       int check_rank;
-      CONF_SAFE_SET_ARG_VAL(&check_rank, OPT_INT);
+      CEPH_ARGPARSE_SET_ARG_VAL(&check_rank, OPT_INT);
       
       if (shadow) {
         dout(0) << "Error: can only select one standby state" << dendl;
@@ -92,9 +92,9 @@ int main(int argc, const char **argv)
       shadow = MDSMap::STATE_ONESHOT_REPLAY;
       g_conf.mds_standby_for_rank = check_rank;
       ++i;
-    } else if (CONF_ARG_EQ("hot-standby", '\0')) {
+    } else if (CEPH_ARGPARSE_EQ("hot-standby", '\0')) {
       int check_rank;
-      CONF_SAFE_SET_ARG_VAL(&check_rank, OPT_INT);
+      CEPH_ARGPARSE_SET_ARG_VAL(&check_rank, OPT_INT);
       if (shadow) {
         dout(0) << "Error: can only select one standby state" << dendl;
         return -1;
@@ -104,7 +104,7 @@ int main(int argc, const char **argv)
       g_conf.mds_standby_for_rank = check_rank;
     } else {
       derr << "unrecognized arg " << args[i] << dendl;
-      ARGS_USAGE();
+      usage();
     }
   }
   if (g_conf.name->has_default_id() && dump_journal < 0 && reset_journal < 0) {

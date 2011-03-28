@@ -59,7 +59,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   vector<const char*> nargs;
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("localize-reads", '\0')) {
+    if (CEPH_ARGPARSE_EQ("localize-reads", '\0')) {
       cerr << "setting CEPH_OSD_FLAG_LOCALIZE_READS" << std::endl;
       filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
     }

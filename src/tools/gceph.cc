@@ -41,7 +41,7 @@ static void parse_gceph_args(const vector<const char*> &args)
 {
   DEFINE_CONF_VARS(usage);
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("help", 'h')) {
+    if (CEPH_ARGPARSE_EQ("help", 'h')) {
       usage();
     }
   }

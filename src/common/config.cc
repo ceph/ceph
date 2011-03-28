@@ -782,12 +782,12 @@ parse_argv_part2(std::vector<const char*>& args)
     int optn;
 
     for (optn = 0; optn < opt_len; optn++) {
-      if (CONF_ARG_EQ("lockdep", '\0')) {
-	CONF_SAFE_SET_ARG_VAL(&g_lockdep, OPT_INT);
-      } else if (CONF_ARG_EQ(config_optionsp[optn].name,
+      if (CEPH_ARGPARSE_EQ("lockdep", '\0')) {
+	CEPH_ARGPARSE_SET_ARG_VAL(&g_lockdep, OPT_INT);
+      } else if (CEPH_ARGPARSE_EQ(config_optionsp[optn].name,
 	    config_optionsp[optn].char_option)) {
         if (__isarg || val_pos || config_optionsp[optn].type == OPT_BOOL)
-	    CONF_SAFE_SET_ARG_VAL(config_optionsp[optn].val_ptr, config_optionsp[optn].type);
+	    CEPH_ARGPARSE_SET_ARG_VAL(config_optionsp[optn].val_ptr, config_optionsp[optn].type);
         else
           continue;
       } else {

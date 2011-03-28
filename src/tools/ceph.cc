@@ -55,17 +55,17 @@ static void parse_cmd_args(const vector<const char*> &args,
 {
   DEFINE_CONF_VARS(usage);
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("in_file", 'i')) {
-      CONF_SAFE_SET_ARG_VAL(in_file, OPT_STR);
-    } else if (CONF_ARG_EQ("concise", '\0')) {
+    if (CEPH_ARGPARSE_EQ("in_file", 'i')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(in_file, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("concise", '\0')) {
       g.concise = true;
-    } else if (CONF_ARG_EQ("out_file", 'o')) {
-      CONF_SAFE_SET_ARG_VAL(out_file, OPT_STR);
-    } else if (CONF_ARG_EQ("status", 's')) {
+    } else if (CEPH_ARGPARSE_EQ("out_file", 'o')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(out_file, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("status", 's')) {
       *mode = CEPH_TOOL_MODE_ONE_SHOT_OBSERVER;
-    } else if (CONF_ARG_EQ("watch", 'w')) {
+    } else if (CEPH_ARGPARSE_EQ("watch", 'w')) {
       *mode = CEPH_TOOL_MODE_OBSERVER;
-    } else if (CONF_ARG_EQ("help", 'h')) {
+    } else if (CEPH_ARGPARSE_EQ("help", 'h')) {
       usage();
     } else if (args[i][0] == '-' && nargs->empty()) {
       derr << "unrecognized option " << args[i] << dendl;

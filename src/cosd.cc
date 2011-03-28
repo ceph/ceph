@@ -65,17 +65,17 @@ int main(int argc, const char **argv)
   bool flushjournal = false;
   char *dump_pg_log = 0;
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("mkfs", '\0')) {
+    if (CEPH_ARGPARSE_EQ("mkfs", '\0')) {
       mkfs = true;
-    } else if (CONF_ARG_EQ("mkjournal", '\0')) {
+    } else if (CEPH_ARGPARSE_EQ("mkjournal", '\0')) {
       mkjournal = true;
-    } else if (CONF_ARG_EQ("flush-journal", '\0')) {
+    } else if (CEPH_ARGPARSE_EQ("flush-journal", '\0')) {
       flushjournal = true;
-    } else if (CONF_ARG_EQ("dump-pg-log", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&dump_pg_log, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("dump-pg-log", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&dump_pg_log, OPT_STR);
     } else {
       derr << "unrecognized arg " << args[i] << dendl;
-      ARGS_USAGE();
+      usage();
     }
   }
 

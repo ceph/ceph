@@ -65,10 +65,10 @@ int main(int argc, const char **argv)
   keyring_init(&g_conf);
 
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("mkfs", '\0')) {
+    if (CEPH_ARGPARSE_EQ("mkfs", '\0')) {
       mkfs = true;
-    } else if (CONF_ARG_EQ("osdmap", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&osdmapfn, OPT_STR);
+    } else if (CEPH_ARGPARSE_EQ("osdmap", '\0')) {
+      CEPH_ARGPARSE_SET_ARG_VAL(&osdmapfn, OPT_STR);
     } else
       usage();
   }
