@@ -203,6 +203,13 @@ int main(int argc, const char **argv)
       cout << s << std::endl;
   }
 
+  cout << "compound operation..." << std::endl;
+  ObjectOperation o;
+  o.write(0, bl);
+  o.setxattr("foo", bl2);
+  r = io_ctx.operate(oid, &o, &bl2);
+  cout << "operate result=" << r << std::endl;
+
   cout << "iterating over objects..." << std::endl;
   int num_objs = 0;
   for (ObjectIterator iter = io_ctx.objects_begin();

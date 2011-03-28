@@ -20,6 +20,7 @@ namespace librados
   class AioCompletionImpl;
   class IoCtx;
   class IoCtxImpl;
+  class ObjectOperationImpl;
   class ObjListCtx;
   class RadosClient;
 
@@ -87,6 +88,37 @@ namespace librados
     int get_version();
     void release();
     AioCompletionImpl *pc;
+  };
+
+  /*
+   * ObjectOperation : compount object operation
+   * Batch multiple object operations into a single request, to be applied
+   * atomically.
+   */
+  class ObjectOperation
+  {
+  public:
+    ObjectOperation();
+    ~ObjectOperation();
+
+    void write(uint64_t off, const bufferlist& bl);
+    void write_full(const bufferlist& bl);
+    void append(const bufferlist& bl);
+    void remove();
+    void truncate(uint64_t off);
+    void zero(uint64_t off, uint64_t len);
+    void rmxattr(const char *name);
+    void setxattr(const char *name, const bufferlist& bl);
+    void tmap_update(const bufferlist& cmdbl);
+
+    void exec(const char *cls, const char *method, bufferlist& bl);
+
+  private:
+    ObjectOperationImpl *impl;
+    ObjectOperation(const ObjectOperation& rhs);
+    ObjectOperation& operator=(const ObjectOperation& rhs);
+    friend class IoCtx;
+    friend class Rados;
   };
 
   /* IoCtx : This is a context in which we can perform I/O.
@@ -179,6 +211,10 @@ namespace librados
     int aio_append(const std::string& oid, AioCompletion *c, const bufferlist& bl,
 		  size_t len);
     int aio_write_full(const std::string& oid, AioCompletion *c, const bufferlist& bl);
+
+    // compound object operations
+    int operate(const std::string& oid, ObjectOperation *op, bufferlist *pbl);
+    int aio_operate(const std::string& oid, AioCompletion *c, ObjectOperation *op, bufferlist *pbl);
 
     // watch/notify
     int watch(const std::string& o, uint64_t ver, uint64_t *handle,
