@@ -242,7 +242,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 		} else if (strncmp(data, "_netdev", 7) == 0) {
 			skip = 1;  /* ignore */
 
-		} else if (strncmp(data, "secretfile", 7) == 0) {
+		} else if (strncmp(data, "secretfile", 10) == 0) {
 			char *fn = value;
 			char *end = fn;
 			int fd;
