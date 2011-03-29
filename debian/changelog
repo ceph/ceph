@@ -11,6 +11,12 @@ ceph (0.26~rc-1) experimental; urgency=low
 
  -- Laszlo Boszormenyi (GCS) <gcs@debian.hu>  Fri, 25 Mar 2011 19:42:11 +0100
 
+ceph (0.25.2-1) experimental; urgency=low
+
+  * New upstream release 
+
+ -- Sage Weil <sage@newdream.net>  Sun, 20 Mar 2011 21:07:38 -0700
+
 ceph (0.25.1-1) experimental; urgency=low
 
   * New upstream release 
