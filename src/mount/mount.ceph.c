@@ -356,6 +356,30 @@ static int parse_arguments(int argc, char *const *const argv,
 	return 0;
 }
 
+/* modprobe failing doesn't necessarily prevent from working, so this
+   returns void */
+static void modprobe(void) {
+	int status;
+	status = system("modprobe ceph");
+	if (status < 0) {
+		fprintf(stderr, "mount.ceph: cannot run modprobe: %s\n", strerror(errno));
+	} else if (WIFEXITED(status)) {
+		status = WEXITSTATUS(status);
+		if (status != 0) {
+			fprintf(stderr,
+				"mount.ceph: modprobe failed, exit status %d\n",
+				status);
+		}
+	} else if (WIFSIGNALED(status)) {
+		fprintf(stderr,
+			"mount.ceph: modprobe failed with signal %d\n",
+			WTERMSIG(status));
+	} else {
+		fprintf(stderr, "mount.ceph: weird status from modprobe: %d\n",
+			status);
+	}
+}
+
 static void usage(const char *prog_name)
 {
 	printf("usage: %s [src] [mount-point] [-v] [-o ceph-options]\n",
@@ -386,6 +410,8 @@ int main(int argc, char *argv[])
 		printf("failed to resolve source\n");
 		exit(1);
 	}
+
+	modprobe();
 
 	popts = parse_options(opts, &flags);
 	if (!popts) {
