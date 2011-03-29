@@ -276,6 +276,10 @@ static char *parse_options(const char *data, int *filesys_flags)
 			data = "secret";
 			value = secret;
 			skip = 0;
+		} else if (strncmp(data, "secret", 6) == 0) {
+			skip = 0;
+		} else if (strncmp(data, "name", 4) == 0) {
+			skip = 0;
 		} else {
 			skip = 0;
 			if (verboseflag)
