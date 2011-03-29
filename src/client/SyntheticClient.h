@@ -237,7 +237,7 @@ class SyntheticClient {
   int write_fd(int fd, int size, int wrsize);
 
   int write_batch(int nfile, int mb, int chunk);
-  int read_file(string& fn, int mb, int chunk, bool ignoreprint=false);
+  int read_file(const std::string& fn, int mb, int chunk, bool ignoreprint=false);
 
   int create_objects(int nobj, int osize, int inflight);
   int object_rw(int nobj, int osize, int wrpc, int overlap, 

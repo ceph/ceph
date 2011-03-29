@@ -2037,7 +2037,9 @@ int SyntheticClient::write_batch(int nfile, int size, int wrsize)
   return 0;
 }
 
-int SyntheticClient::read_file(string& fn, int size, int rdsize, bool ignoreprint)   // size is in MB, wrsize in bytes
+// size is in MB, wrsize in bytes
+int SyntheticClient::read_file(const std::string& fn, int size,
+			       int rdsize, bool ignoreprint)
 {
   char *buf = new char[rdsize]; 
   memset(buf, 1, rdsize);
