@@ -122,16 +122,13 @@ int MonClient::build_initial_monmap()
       const char *name = section + 3;
       if (name[0] == '.')
 	name++;
-      char *val = 0;
-      g_conf.cf->read(section, "mon addr", &val, 0);
-      if (!val || !val[0]) {
-	delete val;
+      std::string val;
+      g_conf.cf->read(section, "mon addr", &val, "");
+      if (val.empty())
 	continue;
-      }
       entity_addr_t addr;
-      if (!addr.parse(val)) {
+      if (!addr.parse(val.c_str())) {
 	cerr << "unable to parse mon addr for " << section << " (" << val << ")" << std::endl;
-	delete val;
 	continue;
       }
       monmap.add(name, addr);

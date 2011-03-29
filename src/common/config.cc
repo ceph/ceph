@@ -435,96 +435,49 @@ static void set_conf_name(config_option *opt)
     opt->conf_name = (const char *)newconf;
 }
 
-static bool get_var(const char *str, int pos, char *var_name, int len, int *new_pos)
+static const char *CONF_METAVARIABLES[] =
+      { "type", "name", "host", "num", "id" };
+static const int NUM_CONF_METAVARIABLES =
+      (sizeof(CONF_METAVARIABLES) / sizeof(CONF_METAVARIABLES[0]));
+
+void conf_post_process_val(std::string &val)
 {
-  int bracket = (str[pos] == '{');
-  int out_pos = 0;
-
-  if (bracket) {
-    pos++;
-  }
-
-  while (str[pos] &&
-  ((bracket && str[pos] != '}') ||
-   isalnum(str[pos]) ||
-         str[pos] == '_')) {
-  var_name[out_pos] = str[pos];
-
-  out_pos ++;
-  if (out_pos == len)
-    return false;
-  pos++;
-  }
-
-  var_name[out_pos] = '\0';
-
-
-  if (bracket && (str[pos] == '}'))
-  pos++;
-
-  *new_pos = pos;
-
-  return true;
-}
-
-static const char *var_val(char *var_name)
-{
-  const char *val;
-
-  if (strcmp(var_name, "type")==0)
-    return g_conf.name->get_type_name();
-  if (strcmp(var_name, "id")==0)
-    return g_conf.name->get_id().c_str();
-  if (strcmp(var_name, "num")==0)
-    return g_conf.name->get_id().c_str();
-  if (strcmp(var_name, "name")==0)
-    return g_conf.name->to_cstr();
-  if (strcmp(var_name, "host")==0)
-    return g_conf.host;
-
-  val = getenv(var_name);
-  if (!val)
-    val = "";
-
-  return val;
-}
-
-#define MAX_LINE 256
-#define MAX_VAR_LEN 32
-
-char *conf_post_process_val(const char *val)
-{
-  char var_name[MAX_VAR_LEN];
-  char *buf;
-  int i=0;
-  size_t out_pos = 0;
-  size_t max_line = MAX_LINE;
-
-  buf = (char *)malloc(max_line);
-  *buf = 0;
-
-  while (val[i]) {
-    if (val[i] == '$') {
-  if (get_var(val, i+1, var_name, MAX_VAR_LEN, &i)) {
-    out_pos = dyn_snprintf(&buf, &max_line, 2, "%s%s", buf, var_val(var_name));
-  } else {
-    ++i;
-  }
-    } else {
-  if (out_pos == max_line - 1) {
-    max_line *= 2;
-    buf = (char *)realloc(buf, max_line);
-  }
-  buf[out_pos] = val[i];
-  buf[out_pos + 1] = '\0';
-  ++out_pos;
-  ++i;
+  string out;
+  string::size_type sz = val.size();
+  out.reserve(sz);
+  for (string::size_type s = 0; s < sz; ) {
+    if (val[s] != '$') {
+      out += val[s++];
+      continue;
     }
+    string::size_type rem = sz - (s + 1);
+    int i;
+    for (i = 0; i < NUM_CONF_METAVARIABLES; ++i) {
+      size_t clen = strlen(CONF_METAVARIABLES[i]);
+      if (rem < clen)
+	continue;
+      if (strncmp(val.c_str() + s + 1, CONF_METAVARIABLES[i], clen))
+	continue;
+      if (strcmp(CONF_METAVARIABLES[i], "type")==0)
+	out += g_conf.name->get_type_name();
+      else if (strcmp(CONF_METAVARIABLES[i], "name")==0)
+	out += g_conf.name->to_cstr();
+      else if (strcmp(CONF_METAVARIABLES[i], "host")==0)
+	out += g_conf.host;
+      else if (strcmp(CONF_METAVARIABLES[i], "num")==0)
+	out += g_conf.name->get_id().c_str();
+      else if (strcmp(CONF_METAVARIABLES[i], "id")==0)
+	out += g_conf.name->get_id().c_str();
+      else
+	assert(0); // unreachable
+      break;
+    }
+    if (i == NUM_CONF_METAVARIABLES)
+      out += val[s++];
+    else
+      s += strlen(CONF_METAVARIABLES[i]) + 1;
   }
-
-  buf[out_pos] = '\0';
-
-  return buf;
+  val = out;
 }
 
 #define OPT_READ_TYPE(ret, section, var, type, out, def) \
@@ -539,10 +492,8 @@ int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const ch
           const char *alt_section, const char *key, opt_type_t type, void *out, void *def,
           bool free_old_val)
 {
-  int s;
   int ret;
-  char *tmp = 0;
-  for (s=0; s<5; s++) {
+  for (int s=0; s<5; s++) {
     const char *section;
 
     switch (s) {
@@ -570,14 +521,13 @@ int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const ch
     }
 
     switch (type) {
-    case OPT_STR:
-      if (free_old_val)
-        tmp = *(char **)out;
-      OPT_READ_TYPE(ret, section, key, char *, out, def);
-      if (free_old_val &&
-          *(char **)out != tmp)
-          free(tmp);
+    case OPT_STR: {
+      std::string str;
+      std::string my_default(*(char**)def);
+      ret = g_conf.cf->read(section, key, &str, my_default);
+      *(char**)out = strdup(str.c_str());
       break;
+    }
     case OPT_BOOL:
       OPT_READ_TYPE(ret, section, key, bool, out, def);
       break;
@@ -593,32 +543,33 @@ int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const ch
     case OPT_DOUBLE:
       OPT_READ_TYPE(ret, section, key, double, out, def);
       break;
-    case OPT_ADDR:
-      ret = g_conf.cf->read(section, key, &tmp, (char *)def);
-      if (*tmp == *((char *)def)) {
-          ret = 0;
+    case OPT_ADDR: {
+      std::string str;
+      if (!g_conf.cf->_find_var(section, key)) {
+	ret = 0;
       }
       else {
-        ret = 1;
-      }
-      if ((1 == ret) &&!(((entity_addr_t*)out)->parse(tmp))) {
-        cerr << "Addr " << tmp << " failed to parse! Shutting down" << std::endl;
-        exit(1);
+	std::string my_default("");
+	ret = g_conf.cf->read(section, key, &str, my_default);
+	if (((entity_addr_t*)out)->parse(str.c_str()) == 0) {
+	  cerr << "Addr " << str << " failed to parse! Shutting down" << std::endl;
+	  exit(1);
+	}
+	ret = 1;
       }
       break;
+    }
     case OPT_U32:
       OPT_READ_TYPE(ret, section, key, uint32_t, out, def);
       break;
     default:
-  ret = 0;
+	ret = 0;
         break;
     }
 
     if (ret)
-  break;
+      return ret;
   }
-
-  return ret;
 }
 
 int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out, void *def, bool free_old_val)
@@ -727,8 +678,13 @@ parse_config_files(const std::list<std::string> &conf_files)
   for (int i = 0; i<opt_len; i++) {
     config_option *opt = &config_optionsp[i];
     if (opt->type == OPT_STR && opt->val_ptr) {
-      if (*(char**)opt->val_ptr) {
-	*(char **)opt->val_ptr = conf_post_process_val(*(char **)opt->val_ptr);
+      char *s = *(char**)opt->val_ptr;
+      if (s) {
+	// this is going away soon...
+	std::string str(s);
+	conf_post_process_val(str);
+	free(s);
+	*(char **)opt->val_ptr = strdup(str.c_str());
       }
     }
   }

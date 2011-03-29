@@ -74,13 +74,12 @@ class ConfFile {
 	Mutex parse_lock;
 	bool default_global;
 
-	char *(*post_process_func)(const char *);
+	void (*post_process_func)(std::string &);
 
 	SectionMap sections;
 	SectionList sections_list;
 	ConfList global_list;
 
-	ConfLine *_find_var(const char *section, const char* var);
 	ConfLine *_add_var(const char *section, const char* var);
 
 	template<typename T>
@@ -104,13 +103,15 @@ public:
 	const SectionList& get_section_list() { return sections_list; }
 	const char *get_filename() { return filename; }
 
+	ConfLine *_find_var(const char *section, const char* var);
+
 	int parse();
 	int read(const char *section, const char *var, int *val, int def_val);
 	int read(const char *section, const char *var, unsigned int *val, unsigned int def_val);
 	int read(const char *section, const char *var, long long *val, long long def_val);
 	int read(const char *section, const char *var, unsigned long long *val, unsigned long long def_val);
 	int read(const char *section, const char *var, bool *val, bool def_val);
-	int read(const char *section, const char *var, char **val, const char *def_val);
+	int read(const char *section, const char *var, std::string *val, const std::string &def_val);
 	int read(const char *section, const char *var, float *val, float def_val);
 	int read(const char *section, const char *var, double *val, double def_val);
 
@@ -125,7 +126,7 @@ public:
 
 	void dump();
 	int flush();
-	void set_post_process_func(char *(*func)(const char *)) {post_process_func = func; };
+	void set_post_process_func(void (*func)(std::string &)) {post_process_func = func; };
 	void set_global(bool global) { default_global = global; }
 };
 

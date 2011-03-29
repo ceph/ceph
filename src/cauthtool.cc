@@ -210,14 +210,13 @@ int main(int argc, const char **argv)
     map<string, bufferlist> caps;
     const char *key_names[] = { "mon", "osd", "mds", NULL };
     for (int i=0; key_names[i]; i++) {
-      char *val;
+      std::string val;
       cf->read("global", key_names[i], &val, NULL);
-      if (val) {
+      if (!val.empty()) {
         bufferlist bl;
         ::encode(val, bl);
         string s(key_names[i]);
         caps[s] = bl; 
-        free(val);
       }
     }
     keyring.set_caps(ename, caps);

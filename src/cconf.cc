@@ -91,25 +91,27 @@ static void print_val(const char *val, bool resolve_search)
 static int lookup(const deque<const char *> &sections,
 		  const char *key, bool resolve_search)
 {
-  char *val = NULL;
   if (!g_conf.cf)
     return 2;
-  conf_read_key(NULL, key, OPT_STR, (char **)&val, NULL);
-  if (val) {
-    print_val(val, resolve_search);
-    free(val);
+
+  std::string val;
+  std::string my_default("");
+  if (conf_read_key(NULL, key, OPT_STR, &val, (void*)&my_default)) {
+    print_val(val.c_str(), resolve_search);
     return 0;
   }
 
-  for (unsigned int i=0; i<sections.size(); i++) {
-    g_conf.cf->read(sections[i], key, (char **)&val, NULL);
-    if (val) {
-      print_val(val, resolve_search);
-      free(val);
-      return 0;
-    }
+  // Search the sections.
+  for (deque<const char*>::const_iterator s = sections.begin();
+       s != sections.end(); ++s) {
+    if (!g_conf.cf->_find_var(*s, key))
+      continue;
+    g_conf.cf->read(*s, key, (std::string *)&val, "");
+    print_val(val.c_str(), resolve_search);
+    return 0;
   }
 
+  // Not found
   return 1;
 }
 

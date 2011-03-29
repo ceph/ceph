@@ -842,80 +842,64 @@ ConfLine *ConfFile::_add_var(const char *section, const char* var)
 	return cl;
 }
 
-template<typename T>
-static void _conf_copy(T *dst_val, T def_val)
+static void _conf_decode(int *dst_val, const std::string &str_val)
 {
-	*dst_val = def_val;
+	*dst_val = atoi(str_val.c_str());
 }
 
-template<>
-void _conf_copy<char *>(char **dst_val, char *def_val)
+static void _conf_decode(unsigned int *dst_val, const std::string &str_val)
 {
-	if (def_val)
-		*dst_val = strdup(def_val);
-	else
-		*dst_val = NULL;
+	*dst_val = strtoul(str_val.c_str(), NULL, 0);
 }
 
-static void _conf_decode(int *dst_val, char *str_val)
+static void _conf_decode(unsigned long long *dst_val, const std::string &str_val)
 {
-	*dst_val = atoi(str_val);
+	*dst_val = strtoull(str_val.c_str(), NULL, 0);
+}
+static void _conf_decode(long long *dst_val, const std::string &str_val)
+{
+	*dst_val = strtoll(str_val.c_str(), NULL, 0);
 }
 
-static void _conf_decode(unsigned int *dst_val, char *str_val)
+static void _conf_decode(bool *dst_val, const std::string &str_val)
 {
-	*dst_val = strtoul(str_val, NULL, 0);
-}
-
-static void _conf_decode(unsigned long long *dst_val, char *str_val)
-{
-	*dst_val = strtoull(str_val, NULL, 0);
-}
-static void _conf_decode(long long *dst_val, char *str_val)
-{
-	*dst_val = strtoll(str_val, NULL, 0);
-}
-
-static void _conf_decode(bool *dst_val, char *str_val)
-{
-	if (strcasecmp(str_val, "true")==0) {
+	if (strcasecmp(str_val.c_str(), "true")==0) {
 		*dst_val = true;
-	} else if (strcasecmp(str_val, "false")==0) {
+	} else if (strcasecmp(str_val.c_str(), "false")==0) {
 		*dst_val = false;
 	} else {
-		*dst_val = atoi(str_val);
+		*dst_val = atoi(str_val.c_str());
 	}
 }
 
-static void _conf_decode(char **dst_val, char *str_val)
+static void _conf_decode(std::string *dst_val, const std::string &str_val)
 {
 	int len;
 
-	len = strlen(str_val);
+	len = str_val.size();
+	const char *s = str_val.c_str();
 
-	if (*str_val == '"') {
-		str_val++;
+	if (*s == '"') {
+		s++;
 		for (len = len-1; len > 0; len--) {
-			if (str_val[len] == '"')
+			if (s[len] == '"')
 				break;
 		}
 	}
 
-	*dst_val = (char *)malloc(len + 1);
-	strncpy(*dst_val, str_val, len);
-	(*dst_val)[len] = '\0';
+	*dst_val = std::string(s, len);
 }
 
-static int _conf_decode(float *dst_val, char *str_val)
+static int _conf_decode(float *dst_val, const std::string &str_val)
 {
-	*dst_val = atof(str_val);
+	*dst_val = atof(str_val.c_str());
 
 	return 1;
 }
 
-static int _conf_decode(double *dst_val, char *str_val)
+static int _conf_decode(double *dst_val, const std::string &str_val)
 {
-	*dst_val = atof(str_val);
+	*dst_val = atof(str_val.c_str());
 
 	return 1;
 }
@@ -998,30 +982,21 @@ static int _conf_encode(char *dst_str, int max_len, char *val)
 template<typename T>
 int ConfFile::_read(const char *section, const char *var, T *val, T def_val)
 {
-	ConfLine *cl;
-	char *str_val;
-	bool should_free = false;
+	ConfLine *cl = _find_var(section, var);
+	if (!cl || !cl->get_val()) {
+		*val = def_val;
+		return 0;
+	}
 
-	cl = _find_var(section, var);
-	if (!cl || !cl->get_val())
-		goto notfound;
-
-	str_val = cl->get_val();
+	std::string str_val(cl->get_val());
 
 	if (post_process_func) {
-		str_val = post_process_func(str_val);
-		should_free = true;
+		post_process_func(str_val);
 	}
 
 	_conf_decode(val, str_val);
-	if (should_free)
-		free(str_val);
 
 	return 1;
-notfound:
-	_conf_copy<T>(val, def_val);
-
-	return 0;
 }
 
 template<typename T>
@@ -1069,9 +1044,9 @@ int ConfFile::read(const char *section, const char *var, bool *val, bool def_val
 	return _read<bool>(section, var, val, def_val);
 }
 
-int ConfFile::read(const char *section, const char *var, char **val, const char *def_val)
+int ConfFile::read(const char *section, const char *var, std::string *val, const std::string &def_val)
 {
-	return _read<char *>(section, var, val, (char *)def_val);
+	return _read<std::string>(section, var, val, def_val);
 }
 
 int ConfFile::read(const char *section, const char *var, float *val, float def_val)
