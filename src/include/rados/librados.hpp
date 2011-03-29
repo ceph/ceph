@@ -101,6 +101,7 @@ namespace librados
     ObjectOperation();
     ~ObjectOperation();
 
+    void create(bool exclusive);
     void write(uint64_t off, const bufferlist& bl);
     void write_full(const bufferlist& bl);
     void append(const bufferlist& bl);

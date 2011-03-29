@@ -133,6 +133,12 @@ struct librados::IoCtxImpl {
 };
 
 
+void librados::ObjectOperation::create(bool exclusive)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->create(exclusive);
+}
+
 void librados::ObjectOperation::write(uint64_t off, const bufferlist& bl)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
