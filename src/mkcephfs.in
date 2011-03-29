@@ -396,7 +396,7 @@ if [ $allhosts -eq 1 ]; then
 	    scp -q $dir/monmap $host:$rdir
 	fi
 	
-	if [ $mkbtrfs -eq 1 ] && $type = "osd"; then
+	if [ $mkbtrfs -eq 1 ] && [ "$type" = "osd" ]; then
 	    do_root_cmd "$0 -d $rdir --prepare-osdfs $name"
 	fi
 
