@@ -207,21 +207,13 @@ int main(int argc, const char **argv)
   SimpleMessenger *cluster_messenger = new SimpleMessenger();
   SimpleMessenger *messenger_hb = new SimpleMessenger();
 
-  if (client_addr_set)
-    client_messenger->bind(g_conf.public_addr, getpid());
-  else
-    client_messenger->bind(getpid());
+  client_messenger->bind(g_conf.public_addr, getpid());
+  cluster_messenger->bind(g_conf.cluster_addr, getpid());
 
-  entity_addr_t hb_addr;  // hb should bind to same ip ad cluster_addr (if specified)
-
-  if (cluster_addr_set) {
-    cluster_messenger->bind(g_conf.cluster_addr, getpid());
-    hb_addr = g_conf.cluster_addr;
+  // hb should bind to same ip as cluster_addr (if specified)
+  entity_addr_t hb_addr = g_conf.cluster_addr;
+  if (!hb_addr.is_blank_addr())
     hb_addr.set_port(0);
-  } else {
-    cluster_messenger->bind(getpid());
-  }
-
   messenger_hb->bind(hb_addr, getpid());
 
   cout << "starting osd" << whoami
