@@ -313,11 +313,15 @@ void RGWCreateBucket::execute()
 
   attrs[RGW_ATTR_ACL] = aclbl;
 
+  ret = rgw_add_bucket(s->user.user_id, s->bucket_str);
+  if (ret)
+    goto done;
+
   ret = rgwstore->create_bucket(s->user.user_id, s->bucket_str, attrs,
 				s->user.auid);
+  if (ret)
+    rgw_remove_bucket(s->user.user_id, s->bucket_str);
 
-  if (ret == 0)
-    ret = rgw_add_bucket(s->user.user_id, s->bucket_str);
 done:
   send_response();
 }
