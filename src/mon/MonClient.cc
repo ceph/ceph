@@ -54,7 +54,7 @@ int MonClient::build_initial_monmap()
   dout(10) << "build_initial_monmap" << dendl;
 
   // file?
-  if (g_conf.monmap) {
+  if (g_conf.monmap && g_conf.monmap[0]) {
     const char *monmap_fn = g_conf.monmap;
     int r;
     try {
@@ -71,7 +71,7 @@ int MonClient::build_initial_monmap()
   }
 
   // -m foo?
-  if (g_conf.mon_host) {
+  if (g_conf.mon_host && g_conf.mon_host[0]) {
     vector<entity_addr_t> addrs;
     if (parse_ip_port_vec(g_conf.mon_host, addrs)) {
       for (unsigned i=0; i<addrs.size(); i++) {
