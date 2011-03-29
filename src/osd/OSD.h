@@ -124,7 +124,7 @@ protected:
   LogClient clog;
 
   int whoami;
-  const char *dev_path, *journal_path;
+  std::string dev_path, journal_path;
 
   class C_Tick : public Context {
     OSD *osd;
@@ -1054,13 +1054,14 @@ protected:
   /* internal and external can point to the same messenger, they will still
    * be cleaned up properly*/
   OSD(int id, Messenger *internal, Messenger *external, Messenger *hbm, MonClient *mc,
-      const char *dev = 0, const char *jdev = 0);
+      const std::string &dev, const std::string &jdev);
   ~OSD();
 
   // static bits
   static int find_osd_dev(char *result, int whoami);
-  static ObjectStore *create_object_store(const char *dev, const char *jdev);
-  static int mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami);
+  static ObjectStore *create_object_store(const std::string &dev, const std::string &jdev);
+  static int mkfs(const std::string &dev, const std::string &jdev,
+		  ceph_fsid_t fsid, int whoami);
   static int mkjournal(const char *dev, const char *jdev);
   static int flushjournal(const char *dev, const char *jdev);
   /* remove any non-user xattrs from a map of them */
@@ -1075,11 +1076,13 @@ protected:
   }
 
 private:
-  static int write_meta(const char *base, const char *file, const char *val, size_t vallen);
-  static int read_meta(const char *base, const char *file, char *val, size_t vallen);
-  static int write_meta(const char *base, ceph_fsid_t& fsid, int whoami);
+  static int write_meta(const std::string &base, const std::string &file,
+			const char *val, size_t vallen);
+  static int read_meta(const std::string &base, const std::string &file,
+		       char *val, size_t vallen);
+  static int write_meta(const std::string &base, ceph_fsid_t& fsid, int whoami);
 public:
-  static int peek_meta(const char *dev, string& magic, ceph_fsid_t& fsid, int& whoami);
+  static int peek_meta(const std::string &dev, string& magic, ceph_fsid_t& fsid, int& whoami);
   
 
   // startup/shutdown

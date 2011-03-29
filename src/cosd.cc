@@ -260,7 +260,9 @@ int main(int argc, const char **argv)
 
 
 
-  OSD *osd = new OSD(whoami, cluster_messenger, client_messenger, messenger_hb, &mc, g_conf.osd_data, g_conf.osd_journal);
+  OSD *osd = new OSD(whoami, cluster_messenger, client_messenger, messenger_hb, &mc,
+		     (g_conf.osd_data ? g_conf.osd_data : ""),
+		     (g_conf.osd_journal ? g_conf.osd_journal : ""));
 
   int err = osd->pre_init();
   if (err < 0) {

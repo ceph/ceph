@@ -363,8 +363,8 @@ done:
   return r;
 }
 
-FileStore::FileStore(const char *base, const char *jdev) :
-  basedir(base), journalpath(jdev ? jdev:""),
+FileStore::FileStore(const std::string &base, const std::string &jdev) :
+  basedir(base), journalpath(jdev),
   fsid(0),
   btrfs(false), btrfs_trans_start_end(false), btrfs_clone_range(false),
   btrfs_snap_create(false),

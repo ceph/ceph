@@ -240,7 +240,7 @@ public:
   void stop_logger();
 
  public:
-  FileStore(const char *base, const char *jdev);
+  FileStore(const std::string &base, const std::string &jdev);
 
   int _detect_fs();
   int _sanity_check_fs();

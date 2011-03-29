@@ -130,10 +130,11 @@ const struct CompatSet::Feature ceph_osd_feature_ro_compat[] = {
 
 
 
-ObjectStore *OSD::create_object_store(const char *dev, const char *jdev)
+ObjectStore *OSD::
+create_object_store(const std::string &dev, const std::string &jdev)
 {
   struct stat st;
-  if (::stat(dev, &st) != 0)
+  if (::stat(dev.c_str(), &st) != 0)
     return 0;
 
   //if (g_conf.ebofs) 
@@ -151,7 +152,7 @@ ObjectStore *OSD::create_object_store(const char *dev, const char *jdev)
 #undef dout_prefix
 #define dout_prefix *_dout
 
-int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
+int OSD::mkfs(const std::string &dev, const std::string &jdev, ceph_fsid_t fsid, int whoami)
 {
   int ret;
   ObjectStore *store = NULL;
@@ -280,13 +281,14 @@ int OSD::flushjournal(const char *dev, const char *jdev)
   return err;
 }
 
-int OSD::write_meta(const char *base, const char *file, const char *val, size_t vallen)
+int OSD::write_meta(const std::string &base, const std::string &file,
+		    const char *val, size_t vallen)
 {
   int ret;
   char fn[PATH_MAX];
   int fd;
 
-  snprintf(fn, sizeof(fn), "%s/%s", base, file);
+  snprintf(fn, sizeof(fn), "%s/%s", base.c_str(), file.c_str());
   fd = ::open(fn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
   if (fd < 0) {
     ret = errno;
@@ -310,12 +312,13 @@ int OSD::write_meta(const char *base, const char *file, const char *val, size_t 
   return 0;
 }
 
-int OSD::read_meta(const char *base, const char *file, char *val, size_t vallen)
+int OSD::read_meta(const  std::string &base, const std::string &file,
+		   char *val, size_t vallen)
 {
   char fn[PATH_MAX];
   int fd, len;
 
-  snprintf(fn, sizeof(fn), "%s/%s", base, file);
+  snprintf(fn, sizeof(fn), "%s/%s", base.c_str(), file.c_str());
   fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
     int err = errno;
@@ -340,7 +343,7 @@ int OSD::read_meta(const char *base, const char *file, char *val, size_t vallen)
 		(f)->fsid[8], (f)->fsid[9], (f)->fsid[10], (f)->fsid[11],  \
 		(f)->fsid[12], (f)->fsid[13], (f)->fsid[14], (f)->fsid[15]
 
-int OSD::write_meta(const char *base, ceph_fsid_t& fsid, int whoami)
+int OSD::write_meta(const std::string &base, ceph_fsid_t& fsid, int whoami)
 {
   char val[80];
   
@@ -356,7 +359,8 @@ int OSD::write_meta(const char *base, ceph_fsid_t& fsid, int whoami)
   return 0;
 }
 
-int OSD::peek_meta(const char *dev, string& magic, ceph_fsid_t& fsid, int& whoami)
+int OSD::peek_meta(const std::string &dev, std::string& magic,
+		   ceph_fsid_t& fsid, int& whoami)
 {
   char val[80] = { 0 };
 
@@ -401,7 +405,9 @@ int OSD::peek_meta(const char *dev, string& magic, ceph_fsid_t& fsid, int& whoam
 
 // cons/des
 
-OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger, Messenger *hbm, MonClient *mc, const char *dev, const char *jdev) :
+OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
+	 Messenger *hbm, MonClient *mc,
+	 const std::string &dev, const std::string &jdev) :
   osd_lock("OSD::osd_lock"),
   timer(osd_lock),
   cluster_messenger(internal_messenger),
@@ -528,7 +534,8 @@ int OSD::init()
   watch = new Watch();
 
   // mount.
-  dout(2) << "mounting " << dev_path << " " << (journal_path ? journal_path : "(no journal)") << dendl;
+  dout(2) << "mounting " << dev_path << " "
+	  << (journal_path.empty() ? "(no journal)" : journal_path) << dendl;
   assert(store);  // call pre_init() first!
 
   int r = store->mount();
