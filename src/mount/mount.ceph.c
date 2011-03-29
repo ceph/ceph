@@ -5,6 +5,8 @@
 #include <errno.h>
 #include <sys/mount.h>
 #include <keyutils.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 #include "common/armor.h"
 
