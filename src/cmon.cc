@@ -188,7 +188,7 @@ int main(int argc, const char **argv)
       tmp.set_epoch(v);
     }
     bufferlist mapbl;
-    test.encode(mapbl);
+    tmp.encode(mapbl);
     bufferlist final;
     ::encode(v, final);
     ::encode(mapbl, final);
