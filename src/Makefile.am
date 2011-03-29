@@ -96,7 +96,8 @@ osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = libcrush.a libcommon.a -lpthread -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
-mount_ceph_SOURCES = mount/mount.ceph.c
+mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c
+mount_ceph_LDFLAGS = -lkeyutils
 sbin_PROGRAMS += mount.ceph
 
 # user tools
