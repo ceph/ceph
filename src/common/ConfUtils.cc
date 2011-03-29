@@ -842,26 +842,25 @@ ConfLine *ConfFile::_add_var(const char *section, const char* var)
 	return cl;
 }
 
-static void _conf_decode(int *dst_val, const std::string &str_val)
+static int _conf_decode(int *dst_val, const std::string &str_val)
 {
 	*dst_val = atoi(str_val.c_str());
+	return 0;
 }
 
-static void _conf_decode(unsigned int *dst_val, const std::string &str_val)
+static int _conf_decode(unsigned int *dst_val, const std::string &str_val)
 {
 	*dst_val = strtoul(str_val.c_str(), NULL, 0);
+	return 0;
 }
 
-static void _conf_decode(unsigned long long *dst_val, const std::string &str_val)
-{
-	*dst_val = strtoull(str_val.c_str(), NULL, 0);
-}
-static void _conf_decode(long long *dst_val, const std::string &str_val)
+static int _conf_decode(long long *dst_val, const std::string &str_val)
 {
 	*dst_val = strtoll(str_val.c_str(), NULL, 0);
+	return 0;
 }
 
-static void _conf_decode(bool *dst_val, const std::string &str_val)
+static int _conf_decode(bool *dst_val, const std::string &str_val)
 {
 	if (strcasecmp(str_val.c_str(), "true")==0) {
 		*dst_val = true;
@@ -870,9 +869,10 @@ static void _conf_decode(bool *dst_val, const std::string &str_val)
 	} else {
 		*dst_val = atoi(str_val.c_str());
 	}
+	return 0;
 }
 
-static void _conf_decode(std::string *dst_val, const std::string &str_val)
+static int _conf_decode(std::string *dst_val, const std::string &str_val)
 {
 	int len;
 
@@ -888,20 +888,21 @@ static void _conf_decode(std::string *dst_val, const std::string &str_val)
 	}
 
 	*dst_val = std::string(s, len);
+	return 0;
 }
 
 static int _conf_decode(float *dst_val, const std::string &str_val)
 {
 	*dst_val = atof(str_val.c_str());
 
-	return 1;
+	return 0;
 }
 
 static int _conf_decode(double *dst_val, const std::string &str_val)
 {
 	*dst_val = atof(str_val.c_str());
 
-	return 1;
+	return 0;
 }
 
 static int _conf_encode(char *dst_str, int len, int val)
@@ -980,12 +981,11 @@ static int _conf_encode(char *dst_str, int max_len, char *val)
 }
 
 template<typename T>
-int ConfFile::_read(const char *section, const char *var, T *val, T def_val)
+int ConfFile::read(const char *section, const char *var, T *val)
 {
 	ConfLine *cl = _find_var(section, var);
 	if (!cl || !cl->get_val()) {
-		*val = def_val;
-		return 0;
+		return -ENOENT;
 	}
 
 	std::string str_val(cl->get_val());
@@ -994,9 +994,11 @@ int ConfFile::_read(const char *section, const char *var, T *val, T def_val)
 		post_process_func(str_val);
 	}
 
-	_conf_decode(val, str_val);
+	int ret = _conf_decode(val, str_val);
+	if (ret)
+		return ret;
 
-	return 1;
+	return 0;
 }
 
 template<typename T>
@@ -1015,48 +1017,6 @@ int ConfFile::_write(const char *section, const char *var, T val)
 	cl->set_val(line);
 	
 	return 1;
-}
-
-int ConfFile::read(const char *section, const char *var, int *val, int def_val)
-{
-	return _read(section, var, val, def_val);
-}
-
-int ConfFile::read(const char *section, const char *var, unsigned int *val, unsigned int def_val)
-{
-	return _read<unsigned int>(section, var, val, def_val);
-}
-
-int ConfFile::read(const char *section, const char *var, long long *val, 
-		   long long def_val)
-{
-	return _read<long long>(section, var, val, def_val);
-}
-
-int ConfFile::read(const char *section, const char *var, unsigned long long *val, 
-		   unsigned long long def_val)
-{
-	return _read<unsigned long long>(section, var, val, def_val);
-}
-
-int ConfFile::read(const char *section, const char *var, bool *val, bool def_val)
-{
-	return _read<bool>(section, var, val, def_val);
-}
-
-int ConfFile::read(const char *section, const char *var, std::string *val, const std::string &def_val)
-{
-	return _read<std::string>(section, var, val, def_val);
-}
-
-int ConfFile::read(const char *section, const char *var, float *val, float def_val)
-{
-	return _read<float>(section, var, val, def_val);
-}
-
-int ConfFile::read(const char *section, const char *var, double *val, double def_val)
-{
-	return _read<double>(section, var, val, def_val);
 }
 
 int ConfFile::write(const char *section, const char *var, int val)
@@ -1098,6 +1058,29 @@ int ConfFile::write(const char *section, const char *var, char *val)
 {
 	return _write<char *>(section, var, val);
 }
+
+// Explicit template instantiation
+template
+int ConfFile::read<bool>(const char *section, const char *var, bool *val);
+
+template
+int ConfFile::read<long long>(const char *section, const char *var, long long *val);
+
+template
+int ConfFile::read<int>(const char *section, const char *var, int *val);
+
+template
+int ConfFile::read<float>(const char *section, const char *var, float *val);
+
+template
+int ConfFile::read<double>(const char *section, const char *var, double *val);
+
+template
+int ConfFile::read<std::string>(const char *section, const char *var, std::string *val);
+
+template
+int ConfFile::read<uint32_t>(const char *section, const char *var, uint32_t *val);
+
 #if 0
 void parse_test(char *line)
 {

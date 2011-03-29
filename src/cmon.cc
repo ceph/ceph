@@ -188,14 +188,14 @@ int main(int argc, const char **argv)
 
   entity_addr_t ipaddr = monmap.get_addr(g_conf.name->get_id());
   entity_addr_t conf_addr;
-  std::string mon_addr_str;
+  char *mon_addr_str;
 
-  std::string my_default("");
-  if (conf_read_key(NULL, "mon addr", OPT_STR, &mon_addr_str, (void*)&my_default) &&
-      conf_addr.parse(mon_addr_str.c_str()) &&
-      ipaddr != conf_addr) {
-    cerr << "WARNING: 'mon addr' config option " << conf_addr << " does not match monmap file" << std::endl
-	 << "         continuing with monmap configuration" << std::endl;
+  if (conf_read_key(NULL, "mon addr", OPT_STR, &mon_addr_str) == 0) {
+    if (conf_addr.parse(mon_addr_str) && ipaddr != conf_addr) {
+      cerr << "WARNING: 'mon addr' config option " << conf_addr << " does not match monmap file" << std::endl
+	   << "         continuing with monmap configuration" << std::endl;
+    }
+    free(mon_addr_str);
   }
 
   // bind

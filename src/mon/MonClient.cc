@@ -123,7 +123,7 @@ int MonClient::build_initial_monmap()
       if (name[0] == '.')
 	name++;
       std::string val;
-      g_conf.cf->read(section, "mon addr", &val, "");
+      g_conf.cf->read<std::string>(section, "mon addr", &val);
       if (val.empty())
 	continue;
       entity_addr_t addr;

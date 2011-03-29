@@ -480,106 +480,93 @@ void conf_post_process_val(std::string &val)
   val = out;
 }
 
-#define OPT_READ_TYPE(ret, section, var, type, out, def) \
-do { \
-  if (def) \
-    ret = g_conf.cf->read(section, var, (type *)out, *(type *)def); \
-  else \
-    ret = g_conf.cf->read(section, var, (type *)out, 0); \
-} while (0)
+static int conf_read_key_ext_impl(const char *section, const char *key,
+			   opt_type_t type, void* out)
+{
+  switch (type) {
+    case OPT_STR: {
+      std::string str;
+      int ret = g_conf.cf->read<std::string>(section, key, &str);
+      if (ret)
+	return ret;
+      *(char**)out = strdup(str.c_str());
+      return 0;
+    }
+    case OPT_BOOL:
+      return g_conf.cf->read <bool>(section, key, (bool*)out);
+    case OPT_LONGLONG:
+      return g_conf.cf->read<long long>(section, key, (long long*)out);
+    case OPT_INT:
+      return g_conf.cf->read<int>(section, key, (int*)out);
+    case OPT_FLOAT:
+      return g_conf.cf->read<float>(section, key, (float*)out);
+    case OPT_DOUBLE:
+      return g_conf.cf->read<double>(section, key, (double*)out);
+    case OPT_ADDR: {
+      std::string str;
+      int ret = g_conf.cf->read<std::string>(section, key, &str);
+      if (ret)
+	return ret;
+      if (((entity_addr_t*)out)->parse(str.c_str()) == 0) {
+	cerr << "Addr " << str << " failed to parse!" << std::endl;
+	return -EINVAL;
+      }
+      return 0;
+    }
+    case OPT_U32:
+      return g_conf.cf->read<uint32_t>(section, key, (uint32_t*)out);
+    case OPT_NONE:
+      return -ENOSYS;
+  }
+  return -ENOSYS;
+}
 
 int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const char *conf_type,
-          const char *alt_section, const char *key, opt_type_t type, void *out, void *def,
-          bool free_old_val)
+          const char *alt_section, const char *key, opt_type_t type, void *out)
 {
-  int ret;
   for (int s=0; s<5; s++) {
     const char *section;
 
     switch (s) {
       case 0:
-          section = conf_name;
-          if (section)
-            break;
+	    section = conf_name;
+	    if (!section)
+	      continue;
+	    break;
       case 1:
-          section = conf_alt_name;
-          if (section)
-            break;
+	    section = conf_alt_name;
+	    if (!section)
+	      continue;
+	    break;
       case 2:
-      s = 2;
             section = conf_type;
-            if (section)
-              break;
+	    if (!section)
+	      continue;
+	    break;
       case 3:
-      s = 3;
             section = alt_section;
-      if (section)
-        break;
-      default:
-      s = 4;
-      section = "global";
+	    if (!section)
+	      continue;
+	    break;
+      case 4:
+	    section = "global";
+	    break;
     }
-
-    switch (type) {
-    case OPT_STR: {
-      std::string str;
-      std::string my_default(*(char**)def);
-      ret = g_conf.cf->read(section, key, &str, my_default);
-      *(char**)out = strdup(str.c_str());
-      break;
-    }
-    case OPT_BOOL:
-      OPT_READ_TYPE(ret, section, key, bool, out, def);
-      break;
-    case OPT_LONGLONG:
-      OPT_READ_TYPE(ret, section, key, long long, out, def);
-      break;
-    case OPT_INT:
-      OPT_READ_TYPE(ret, section, key, int, out, def);
-      break;
-    case OPT_FLOAT:
-      OPT_READ_TYPE(ret, section, key, float, out, def);
-      break;
-    case OPT_DOUBLE:
-      OPT_READ_TYPE(ret, section, key, double, out, def);
-      break;
-    case OPT_ADDR: {
-      std::string str;
-      if (!g_conf.cf->_find_var(section, key)) {
-	ret = 0;
-      }
-      else {
-	std::string my_default("");
-	ret = g_conf.cf->read(section, key, &str, my_default);
-	if (((entity_addr_t*)out)->parse(str.c_str()) == 0) {
-	  cerr << "Addr " << str << " failed to parse! Shutting down" << std::endl;
-	  exit(1);
-	}
-	ret = 1;
-      }
-      break;
-    }
-    case OPT_U32:
-      OPT_READ_TYPE(ret, section, key, uint32_t, out, def);
-      break;
-    default:
-	ret = 0;
-        break;
-    }
-
-    if (ret)
+    int ret = conf_read_key_ext_impl(section, key, type, out);
+    if (ret != -ENOENT)
       return ret;
   }
+  return -ENOENT;
 }
 
-int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out, void *def, bool free_old_val)
+int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out)
 {
   std::string alt_name(g_conf.name->get_type_name());
   alt_name += g_conf.name->get_id();
 
   return conf_read_key_ext(g_conf.name->to_cstr(), alt_name.c_str(),
          g_conf.name->get_type_name(),
-         alt_section, key, type, out, def, free_old_val);
+         alt_section, key, type, out);
 }
 
 bool is_bool_param(const char *param)
@@ -670,9 +657,10 @@ parse_config_files(const std::list<std::string> &conf_files)
   int opt_len = sizeof(config_optionsp)/sizeof(config_option);
   for (int i=0; i<opt_len; i++) {
     config_option *opt = &config_optionsp[i];
-    conf_read_key(NULL, opt->conf_name, opt->type, opt->val_ptr, opt->val_ptr, true);
+    conf_read_key(NULL, opt->conf_name, opt->type, opt->val_ptr);
   }
-  conf_read_key(NULL, "lockdep", OPT_INT, &g_lockdep, &g_lockdep, false);
+  g_lockdep = false;
+  conf_read_key(NULL, "lockdep", OPT_INT, &g_lockdep);
 
   // post-process options
   for (int i = 0; i<opt_len; i++) {

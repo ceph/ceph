@@ -478,7 +478,7 @@ typedef enum {
 } opt_type_t;
 
 char *conf_post_process_val(const char *val);
-int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out, void *def, bool free_old_val = false);
+int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out);
 
 bool ceph_resolve_file_search(string& filename_list, string& result);
 

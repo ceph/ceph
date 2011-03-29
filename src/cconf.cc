@@ -94,21 +94,35 @@ static int lookup(const deque<const char *> &sections,
   if (!g_conf.cf)
     return 2;
 
-  std::string val;
-  std::string my_default("");
-  if (conf_read_key(NULL, key, OPT_STR, &val, (void*)&my_default)) {
-    print_val(val.c_str(), resolve_search);
-    return 0;
+  char *val;
+  int ret = conf_read_key(NULL, key, OPT_STR, &val);
+  if (ret != -ENOENT) {
+    if (ret == 0) {
+      print_val(val, resolve_search);
+      free(val);
+      return 0;
+    }
+    else {
+      cerr << "error looking up '" << key << "': error " << ret << std::endl;
+      return 1;
+    }
   }
 
   // Search the sections.
   for (deque<const char*>::const_iterator s = sections.begin();
        s != sections.end(); ++s) {
-    if (!g_conf.cf->_find_var(*s, key))
-      continue;
-    g_conf.cf->read(*s, key, (std::string *)&val, "");
-    print_val(val.c_str(), resolve_search);
-    return 0;
+    std::string sval;
+    int ret = g_conf.cf->read<std::string>(*s, key, &sval);
+    if (ret != -ENOENT) {
+      if (ret == 0) {
+	print_val(sval.c_str(), resolve_search);
+	return 0;
+      }
+      else {
+	cerr << "error looking up '" << key << "': error " << ret << std::endl;
+	return 3;
+      }
+    }
   }
 
   // Not found

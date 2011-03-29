@@ -83,9 +83,6 @@ class ConfFile {
 	ConfLine *_add_var(const char *section, const char* var);
 
 	template<typename T>
-	int _read(const char *section, const char *var, T *val, const T def_val);
-
-	template<typename T>
 	int _write(const char *section, const char *var, const T val);
 
 	ConfSection *_add_section(const char *section, ConfLine *cl);
@@ -106,14 +103,9 @@ public:
 	ConfLine *_find_var(const char *section, const char* var);
 
 	int parse();
-	int read(const char *section, const char *var, int *val, int def_val);
-	int read(const char *section, const char *var, unsigned int *val, unsigned int def_val);
-	int read(const char *section, const char *var, long long *val, long long def_val);
-	int read(const char *section, const char *var, unsigned long long *val, unsigned long long def_val);
-	int read(const char *section, const char *var, bool *val, bool def_val);
-	int read(const char *section, const char *var, std::string *val, const std::string &def_val);
-	int read(const char *section, const char *var, float *val, float def_val);
-	int read(const char *section, const char *var, double *val, double def_val);
+
+	template<typename T>
+	int read(const char *section, const char *var, T *val);
 
 	int write(const char *section, const char *var, int val);
 	int write(const char *section, const char *var, unsigned int val);
