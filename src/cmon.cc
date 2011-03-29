@@ -56,6 +56,7 @@ int main(int argc, const char **argv)
 
   bool mkfs = false;
   const char *osdmapfn = 0;
+  const char *inject_monmap = 0;
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -69,6 +70,8 @@ int main(int argc, const char **argv)
       mkfs = true;
     } else if (CONF_ARG_EQ("osdmap", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&osdmapfn, OPT_STR);
+    } else if (CONF_ARG_EQ("inject_monmap", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&inject_monmap, OPT_STR);
     } else
       usage();
   }
@@ -160,6 +163,43 @@ int main(int argc, const char **argv)
     CompatSet diff = mon_features.unsupported(ondisk_features);
     //NEEDS_COMPATSET_ITER
     exit(1);
+  }
+
+
+  // inject new monmap?
+  if (inject_monmap) {
+    bufferlist bl;
+    int r = bl.read_file(inject_monmap);
+    if (r) {
+      cerr << "unable to read monmap from " << inject_monmap << std::endl;
+      exit(1);
+    }
+
+    // get next version
+    version_t v = store.get_int("monmap", "last_committed");
+    cout << "last committed monmap epoch is " << v << ", injected map will be " << (v+1) << std::endl;
+    v++;
+
+    // set the version
+    MonMap tmp;
+    tmp.decode(bl);
+    if (tmp.get_epoch() != v) {
+      cout << "changing monmap epoch from " << tmp.get_epoch() << " to " << v << std::endl;
+      tmp.set_epoch(v);
+    }
+    bufferlist mapbl;
+    test.encode(mapbl);
+    bufferlist final;
+    ::encode(v, final);
+    ::encode(mapbl, final);
+
+    // save it
+    store.put_bl_sn(mapbl, "monmap", v);
+    store.put_bl_ss(final, "monmap", "latest");
+    store.put_int(v, "monmap", "last_committed");
+
+    cout << "done." << std::endl;
+    exit(0);
   }
 
 

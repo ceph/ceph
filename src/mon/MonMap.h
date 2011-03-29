@@ -71,6 +71,7 @@ class MonMap {
   }
 
   epoch_t get_epoch() { return epoch; }
+  void set_epoch(epoch_t e) { epoch = e; }
 
   void add(const string &name, const entity_addr_t &addr) {
     assert(mon_addr.count(name) == 0);
