@@ -51,10 +51,11 @@ struct ObjectOperation {
 
   ObjectOperation() : flags(0), priority(0) {}
 
-  void add_op(int op) {
+  OSDOp& add_op(int op) {
     int s = ops.size();
     ops.resize(s+1);
     ops[s].op.op = op;
+    return ops[s];
   }
   void add_data(int op, uint64_t off, uint64_t len, bufferlist& bl) {
     int s = ops.size();
@@ -123,6 +124,11 @@ struct ObjectOperation {
     else
       add_pgls_filter(CEPH_OSD_OP_PGLS_FILTER, count, filter, cookie);
     flags |= CEPH_OSD_FLAG_PGOP;
+  }
+
+  void create(bool excl) {
+    OSDOp& o = add_op(CEPH_OSD_OP_CREATE);
+    o.op.flags = (excl ? CEPH_OSD_OP_FLAG_EXCL : 0);
   }
 
   // object data

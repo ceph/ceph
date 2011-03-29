@@ -27,6 +27,7 @@ const char *ceph_osd_op_name(int op)
 
 	case CEPH_OSD_OP_MASKTRUNC: return "masktrunc";
 
+	case CEPH_OSD_OP_CREATE: return "create";
 	case CEPH_OSD_OP_WRITE: return "write";
 	case CEPH_OSD_OP_DELETE: return "delete";
 	case CEPH_OSD_OP_TRUNCATE: return "truncate";
