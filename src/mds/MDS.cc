@@ -904,10 +904,16 @@ void MDS::handle_mds_map(MMDSMap *m)
   if (oldwhoami != whoami)
     dout_create_rank_symlink(whoami);
   
-  if (oldwhoami != whoami) {
+  if (oldwhoami != whoami || oldstate != state) {
     // update messenger.
-    dout(1) << "handle_mds_map i am now mds" << whoami << "." << incarnation << dendl;
-    messenger->set_myname(entity_name_t::MDS(whoami));
+    if (state == MDSMap::STATE_STANDBY_REPLAY || state == MDSMap::STATE_ONESHOT_REPLAY) {
+      dout(1) << "handle_mds_map i am now mds" << monc->get_global_id() << "." << incarnation
+	      << "replaying mds" << whoami << "." << incarnation << dendl;
+      messenger->set_myname(entity_name_t::MDS(monc->get_global_id()));
+    } else {
+      dout(1) << "handle_mds_map i am now mds" << whoami << "." << incarnation << dendl;
+      messenger->set_myname(entity_name_t::MDS(whoami));
+    }
   }
 
   // tell objecter my incarnation
