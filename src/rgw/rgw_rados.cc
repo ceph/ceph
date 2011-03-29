@@ -209,25 +209,20 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
  */
 int RGWRados::create_bucket(std::string& id, std::string& bucket, map<std::string, bufferlist>& attrs, uint64_t auid)
 {
-  int ret = root_pool_ctx.create(bucket, true);
+  librados::ObjectOperation op;
+  op.create(true);
+
+  for (map<string, bufferlist>::iterator iter = attrs.begin(); iter != attrs.end(); ++iter)
+    op.setxattr(iter->first.c_str(), iter->second);
+
+  bufferlist outbl;
+  int ret = root_pool_ctx.operate(bucket, &op, &outbl);
   if (ret < 0)
     return ret;
 
-  map<string, bufferlist>::iterator iter;
-  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-    string name = iter->first;
-    bufferlist& bl = iter->second;
-    
-    if (bl.length()) {
-      ret = root_pool_ctx.setxattr(bucket, name.c_str(), bl);
-      if (ret < 0) {
-        delete_bucket(id, bucket);
-        return ret;
-      }
-    }
-  }
-
   ret = rados->pool_create(bucket.c_str(), auid);
+  if (ret)
+    root_pool_ctx.remove(bucket);
 
   return ret;
 }
