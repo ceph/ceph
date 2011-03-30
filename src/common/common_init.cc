@@ -33,13 +33,11 @@ int keyring_init(md_config_t *conf)
   if (!is_supported_auth(CEPH_AUTH_CEPHX))
     return 0;
 
-  const char *filename = NULL;
-  string new_keyring;
-  if (ceph_resolve_file_search(conf->keyring, new_keyring)) {
-    filename = new_keyring.c_str();
+  int ret = 0;
+  string filename;
+  if (ceph_resolve_file_search(conf->keyring, filename)) {
+    ret = g_keyring.load(filename);
   }
-
-  int ret = g_keyring.load(filename);
 
   if (!conf->key.empty()) {
     EntityAuth ea;
@@ -76,11 +74,9 @@ int keyring_init(md_config_t *conf)
     ret = 0;
   }
 
-  if (ret) {
+  if (ret)
     derr << "keyring_init: failed to load " << filename << dendl;
-    return ret;
-  }
-  return 0;
+  return ret;
 }
 
 md_config_t *common_preinit(const CephInitParameters &iparams,
