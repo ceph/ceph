@@ -1062,8 +1062,8 @@ protected:
   static ObjectStore *create_object_store(const std::string &dev, const std::string &jdev);
   static int mkfs(const std::string &dev, const std::string &jdev,
 		  ceph_fsid_t fsid, int whoami);
-  static int mkjournal(const char *dev, const char *jdev);
-  static int flushjournal(const char *dev, const char *jdev);
+  static int mkjournal(const std::string &dev, const std::string &jdev);
+  static int flushjournal(const std::string &dev, const std::string &jdev);
   /* remove any non-user xattrs from a map of them */
   void filter_xattrs(map<string, bufferptr>& attrs) {
     for (map<string, bufferptr>::iterator iter = attrs.begin();

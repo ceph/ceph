@@ -82,7 +82,6 @@ public:
 };
 
 /////////////////////// Functions ///////////////////////
-extern void env_override(char **ceph_var, const char * const env_var);
 extern void env_to_vec(std::vector<const char*>& args);
 extern void env_to_deq(std::deque<const char*>& args);
 extern void argv_to_vec(int argc, const char **argv,

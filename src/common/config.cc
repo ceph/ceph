@@ -67,7 +67,6 @@ struct ceph_file_layout g_default_file_layout = {
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
-
 #define OPTION_OPT_STR(section, name, schar, type, def_val) \
        { STRINGIFY(section), NULL, STRINGIFY(name), \
      &g_conf.name, def_val, 0, 0, type, schar }
@@ -110,7 +109,7 @@ struct config_option config_optionsp[] = {
   OPTION(profiling_logger_subdir, 0, OPT_STR, 0),
   OPTION(profiling_logger_dir, 0, OPT_STR, "/var/log/ceph/stat"),
   OPTION(log_file, 0, OPT_STR, 0),
-  OPTION(log_dir, 0, OPT_STR, ""),
+  OPTION(log_dir, 0, OPT_STR, 0),
   OPTION(log_sym_dir, 0, OPT_STR, 0),
   OPTION(log_sym_history, 0, OPT_INT, 10),
   OPTION(log_to_stderr, 0, OPT_INT, LOG_TO_STDERR_ALL),
@@ -118,7 +117,7 @@ struct config_option config_optionsp[] = {
   OPTION(log_per_instance, 0, OPT_BOOL, false),
   OPTION(clog_to_monitors, 0, OPT_BOOL, true),
   OPTION(clog_to_syslog, 0, OPT_BOOL, false),
-  OPTION(pid_file, 0, OPT_STR, ""),
+  OPTION(pid_file, 0, OPT_STR, 0),
   OPTION(chdir, 0, OPT_STR, "/"),
   OPTION(kill_after, 0, OPT_INT, 0),
   OPTION(max_open_files, 0, OPT_LONGLONG, 0),
@@ -151,8 +150,8 @@ struct config_option config_optionsp[] = {
   OPTION(debug_tp, 0, OPT_INT, 0),
   OPTION(debug_auth, 0, OPT_INT, 1),
   OPTION(debug_finisher, 0, OPT_INT, 1),
-  OPTION(key, 0, OPT_STR, ""),
-  OPTION(keyfile, 'K', OPT_STR, ""),
+  OPTION(key, 0, OPT_STR, 0),
+  OPTION(keyfile, 'K', OPT_STR, 0),
   OPTION(keyring, 'k', OPT_STR, "/etc/ceph/keyring,/etc/ceph/keyring.bin"),
   OPTION(buffer_track_alloc, 0, OPT_BOOL, false),
   OPTION(ms_tcp_nodelay, 0, OPT_BOOL, true),
@@ -165,7 +164,7 @@ struct config_option config_optionsp[] = {
   OPTION(ms_rwthread_stack_bytes, 0, OPT_INT, 1024 << 10),
   OPTION(ms_tcp_read_timeout, 0, OPT_LONGLONG, 900),
   OPTION(ms_inject_socket_failures, 0, OPT_LONGLONG, 0),
-  OPTION(mon_data, 0, OPT_STR, ""),
+  OPTION(mon_data, 0, OPT_STR, 0),
   OPTION(mon_tick_interval, 0, OPT_INT, 5),
   OPTION(mon_subscribe_interval, 0, OPT_DOUBLE, 300),
   OPTION(mon_osd_down_out_interval, 0, OPT_INT, 300), // seconds
@@ -288,11 +287,11 @@ struct config_option config_optionsp[] = {
   OPTION(mds_wipe_ino_prealloc, 0, OPT_BOOL, 0),
   OPTION(mds_skip_ino, 0, OPT_INT, 0),
   OPTION(max_mds, 0, OPT_INT, 1),
-  OPTION(mds_standby_for_name, 0, OPT_STR, ""),
+  OPTION(mds_standby_for_name, 0, OPT_STR, 0),
   OPTION(mds_standby_for_rank, 0, OPT_INT, -1),
   OPTION(mds_standby_replay, 0, OPT_BOOL, false),
-  OPTION(osd_data, 0, OPT_STR, ""),
-  OPTION(osd_journal, 0, OPT_STR, ""),
+  OPTION(osd_data, 0, OPT_STR, 0),
+  OPTION(osd_journal, 0, OPT_STR, 0),
   OPTION(osd_journal_size, 0, OPT_INT, 0),         // in mb
   OPTION(osd_max_write_size, 0, OPT_INT, 90),
   OPTION(osd_balance_reads, 0, OPT_BOOL, false),
@@ -440,7 +439,8 @@ bool is_bool_param(const char *param)
   return ((strcasecmp(param, "true")==0) || (strcasecmp(param, "false")==0));
 }
 
-bool ceph_resolve_file_search(std::string& filename_list, std::string& result)
+bool ceph_resolve_file_search(const std::string& filename_list,
+			      std::string& result)
 {
   list<string> ls;
   get_str_list(filename_list, ls);
@@ -481,14 +481,6 @@ md_config_t()
 md_config_t::
 ~md_config_t()
 {
-  for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
-    config_option *opt = &config_optionsp[i];
-    if (opt->type == OPT_STR) {
-      free(*(char **)opt->val_ptr);
-    }
-    free((void *)opt->conf_name);
-  }
-
   delete cf;
   cf = NULL;
 }
@@ -540,7 +532,8 @@ parse_config_files(const std::list<std::string> &conf_files)
 void md_config_t::
 parse_env()
 {
-  env_override(&keyring, "CEPH_KEYRING");
+  if (getenv("CEPH_KEYRING"))
+    keyring = getenv("CEPH_KEYRING");
 }
 
 // FIXME: should be folded into parse_argv
@@ -572,18 +565,7 @@ parse_argv_part2(std::vector<const char*>& args)
         nargs.push_back(args[i]);
   }
 
-  env_override(&g_conf.keyring, "CEPH_KEYRING");
   args = nargs;
-}
-
-static void set_cv(const char **dst, const char *val)
-{
-  char **d = (char**)dst;
-  free(*d);
-  if (val)
-    *d = strdup(val);
-  else
-    *d = NULL;
 }
 
 void md_config_t::
@@ -597,20 +579,20 @@ parse_argv(std::vector<const char*>& args)
     }
     else if (ceph_argparse_flag(args, i, "--foreground", "-f", NULL)) {
       daemonize = false;
-      set_cv(&pid_file, NULL);
+      pid_file = "";
     }
     else if (ceph_argparse_flag(args, i, "-d", NULL)) {
       daemonize = false;
-      set_cv(&log_dir, NULL);
-      set_cv(&pid_file, NULL);
-      set_cv(&log_sym_dir, NULL);
+      log_dir = "";
+      pid_file = "";
+      log_sym_dir = "";
       log_sym_history = 0;
       log_to_stderr = LOG_TO_STDERR_ALL;
       log_to_syslog = false;
       log_per_instance = false;
     }
     else if (ceph_argparse_witharg(args, i, &val, "--monmap", "-M", NULL)) {
-      set_cv(&monmap, val.c_str());
+      monmap = val;
     }
     else if (ceph_argparse_witharg(args, i, &val, "--bind", NULL)) {
       public_addr.parse(val.c_str());
@@ -660,12 +642,9 @@ get_val(const char *key, char **buf, int len) const
       case OPT_LONGLONG:
         oss << *(long long*)opt->val_ptr;
         break;
-      case OPT_STR: {
-	char *p = *((char**)opt->val_ptr);
-	if (p)
-	  oss << p;
-      }
-      break;
+      case OPT_STR:
+	oss << *((std::string*)opt->val_ptr);
+	break;
       case OPT_FLOAT:
         oss << *(float*)opt->val_ptr;
         break;
@@ -763,7 +742,7 @@ set_val_from_default(const config_option *opt)
       *(long long*)opt->val_ptr = opt->def_longlong;
       break;
     case OPT_STR:
-      *(char **)opt->val_ptr = opt->def_str ? strdup(opt->def_str) : strdup("");
+      *(std::string *)opt->val_ptr = opt->def_str ? opt->def_str : "";
       break;
     case OPT_FLOAT:
       *(float *)opt->val_ptr = (float)opt->def_double;
@@ -772,7 +751,7 @@ set_val_from_default(const config_option *opt)
       *(double *)opt->val_ptr = opt->def_double;
       break;
     case OPT_BOOL:
-      *(double *)opt->val_ptr = (bool)opt->def_longlong;
+      *(bool *)opt->val_ptr = (bool)opt->def_longlong;
       break;
     case OPT_U32:
       *(uint32_t *)opt->val_ptr = (uint32_t)opt->def_longlong;
@@ -820,12 +799,9 @@ set_val_impl(const char *val, config_option *opt)
       *(long long*)opt->val_ptr = f;
       return 0;
     }
-    case OPT_STR: {
-      char **p = (char**)opt->val_ptr;
-      free(*p);
-      *p = strdup(val);
+    case OPT_STR:
+      *(std::string*)opt->val_ptr = val ? val : "";
       return 0;
-    }
     case OPT_FLOAT:
       *(float*)opt->val_ptr = atof(val);
       return 0;
@@ -909,4 +885,3 @@ conf_post_process_val(std::string &val) const
   }
   val = out;
 }
-

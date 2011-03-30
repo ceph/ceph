@@ -98,7 +98,7 @@ extern "C" int ceph_mount()
   int ret;
   Mutex::Locker lock(ceph_client_mutex);
   if(!client_mount) {
-     ret = client->mount();
+     ret = client->mount("");
      if (ret!=0)
        return ret;
   }

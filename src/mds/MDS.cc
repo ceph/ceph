@@ -477,7 +477,7 @@ int MDS::init(int wanted_state)
     g_conf.mds_standby_replay = true;
     if ( wanted_state == MDSMap::STATE_ONESHOT_REPLAY &&
         (g_conf.mds_standby_for_rank == -1) &&
-        !g_conf.mds_standby_for_name) {
+        g_conf.mds_standby_for_name.empty()) {
       // uh-oh, must specify one or the other!
       dout(0) << "Specified oneshot replay mode but not an MDS!" << dendl;
       suicide();

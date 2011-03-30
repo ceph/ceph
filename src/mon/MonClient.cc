@@ -22,6 +22,7 @@
 #include "messages/MMonSubscribeAck.h"
 #include "common/ConfUtils.h"
 #include "common/ceph_argparse.h"
+#include "common/errno.h"
 
 #include "MonClient.h"
 #include "MonMap.h"
@@ -54,26 +55,25 @@ int MonClient::build_initial_monmap()
   dout(10) << "build_initial_monmap" << dendl;
 
   // file?
-  if (g_conf.monmap && g_conf.monmap[0]) {
-    const char *monmap_fn = g_conf.monmap;
+  if (!g_conf.monmap.empty()) {
     int r;
     try {
-      r = monmap.read(monmap_fn);
+      r = monmap.read(g_conf.monmap.c_str());
     }
     catch (const buffer::error &e) {
       r = -EINVAL;
     }
     if (r >= 0)
       return 0;
-    char buf[80];
-    cerr << "unable to read/decode monmap from " << monmap_fn << ": " << strerror_r(-r, buf, sizeof(buf)) << std::endl;
+    cerr << "unable to read/decode monmap from " << g_conf.monmap
+	 << ": " << cpp_strerror(-r) << std::endl;
     return r;
   }
 
   // -m foo?
-  if (g_conf.mon_host && g_conf.mon_host[0]) {
+  if (!g_conf.mon_host.empty()) {
     vector<entity_addr_t> addrs;
-    if (parse_ip_port_vec(g_conf.mon_host, addrs)) {
+    if (parse_ip_port_vec(g_conf.mon_host.c_str(), addrs)) {
       for (unsigned i=0; i<addrs.size(); i++) {
 	char n[2];
 	n[0] = 'a' + i;
@@ -85,8 +85,8 @@ int MonClient::build_initial_monmap()
       return 0;
     } else { //maybe they passed us a DNS-resolvable name
       char *hosts = NULL;
-      char *old_addrs = new char[strlen(g_conf.mon_host)+1];
-      strcpy(old_addrs, g_conf.mon_host);
+      char *old_addrs = new char[g_conf.mon_host.size() + 1];
+      strcpy(old_addrs, g_conf.mon_host.c_str());
       hosts = mount_resolve_dest(old_addrs);
       delete [] old_addrs;
       if (!hosts)

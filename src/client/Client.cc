@@ -65,7 +65,7 @@ using namespace std;
 #undef dout_prefix
 #define dout_prefix *_dout << "client" << whoami << " "
 
-#define  tout       if (g_conf.client_trace) traceout
+#define  tout       if (!g_conf.client_trace.empty()) traceout
 
 
 // static logger
@@ -2945,7 +2945,7 @@ void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
 // -------------------
 // MOUNT
 
-int Client::mount(const char *mount_root)
+int Client::mount(const std::string &mount_root)
 {
   Mutex::Locker lock(client_lock);
 
@@ -2978,7 +2978,8 @@ int Client::mount(const char *mount_root)
   //  fuse assumes it's always there.
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
   filepath fp(CEPH_INO_ROOT);
-  if (mount_root) fp = filepath(mount_root);
+  if (!mount_root.empty())
+    fp = filepath(mount_root.c_str());
   req->set_filepath(fp);
   req->head.args.getattr.mask = CEPH_STAT_CAP_INODE_ALL;
   int res = make_request(req, -1, -1);
@@ -2990,8 +2991,8 @@ int Client::mount(const char *mount_root)
   _ll_get(root);
 
   // trace?
-  if (g_conf.client_trace) {
-    traceout.open(g_conf.client_trace);
+  if (!g_conf.client_trace.empty()) {
+    traceout.open(g_conf.client_trace.c_str());
     if (traceout.is_open()) {
       dout(1) << "opened trace file '" << g_conf.client_trace << "'" << dendl;
     } else {
@@ -3105,7 +3106,7 @@ int Client::unmount()
   }
 
   // stop tracing
-  if (g_conf.client_trace) {
+  if (!g_conf.client_trace.empty()) {
     dout(1) << "closing trace file '" << g_conf.client_trace << "'" << dendl;
     traceout.close();
   }

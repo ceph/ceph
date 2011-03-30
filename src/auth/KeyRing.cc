@@ -160,13 +160,13 @@ void KeyRing::decode(bufferlist::iterator& bl) {
   }
 }
 
-int KeyRing::load(const char *filename)
+int KeyRing::load(const std::string &filename)
 {
-  if (!filename)
+  if (filename.empty())
     return -EINVAL;
 
   bufferlist bl;
-  int ret = bl.read_file(filename, true);
+  int ret = bl.read_file(filename.c_str(), true);
   if (ret < 0) {
     derr << "error reading file: " << filename << dendl;
     return ret;

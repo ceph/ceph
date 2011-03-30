@@ -626,9 +626,9 @@ int FileStore::mkfs()
   int basedir_fd;
   struct btrfs_ioctl_vol_args volargs;
 
-  if (g_conf.filestore_dev && g_conf.filestore_dev[0]) {
+  if (!g_conf.filestore_dev.empty()) {
     dout(0) << "mounting" << dendl;
-    ret = run_cmd("mount", g_conf.filestore_dev, (char*)NULL);
+    ret = run_cmd("mount", g_conf.filestore_dev.c_str(), (char*)NULL);
     if (ret) {
       derr << "FileStore::mkfs: failed to mount g_conf.filestore_dev "
 	   << "'" << g_conf.filestore_dev << "'. Error code " << ret << dendl;
@@ -755,9 +755,9 @@ int FileStore::mkfs()
   if (ret)
     goto close_basedir_fd;
 
-  if (g_conf.filestore_dev && g_conf.filestore_dev[0]) {
+  if (!g_conf.filestore_dev.empty()) {
     dout(0) << "umounting" << dendl;
-    snprintf(buf, sizeof(buf), "umount %s", g_conf.filestore_dev);
+    snprintf(buf, sizeof(buf), "umount %s", g_conf.filestore_dev.c_str());
     //system(cmd);
   }
 
@@ -1115,7 +1115,7 @@ int FileStore::mount()
   char buf[PATH_MAX];
   uint64_t initial_op_seq;
 
-  if (g_conf.filestore_dev && g_conf.filestore_dev[0]) {
+  if (!g_conf.filestore_dev.empty()) {
     dout(0) << "mounting" << dendl;
     //run_cmd("mount", g_conf.filestore_dev, (char*)NULL);
   }
@@ -1421,7 +1421,7 @@ int FileStore::umount()
     basedir_fd = -1;
   }
 
-  if (g_conf.filestore_dev && g_conf.filestore_dev[0]) {
+  if (!g_conf.filestore_dev.empty()) {
     dout(0) << "umounting" << dendl;
     //run_cmd("umount", g_conf.filestore_dev, (char*)NULL);
   }

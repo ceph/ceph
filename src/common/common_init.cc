@@ -33,25 +33,23 @@ int keyring_init(md_config_t *conf)
   if (!is_supported_auth(CEPH_AUTH_CEPHX))
     return 0;
 
-  const char *filename = conf->keyring;
-  string keyring_search = conf->keyring;
+  const char *filename = NULL;
   string new_keyring;
-  if (ceph_resolve_file_search(keyring_search, new_keyring)) {
+  if (ceph_resolve_file_search(conf->keyring, new_keyring)) {
     filename = new_keyring.c_str();
   }
 
   int ret = g_keyring.load(filename);
 
-  if (conf->key && conf->key[0]) {
-    string k = conf->key;
+  if (!conf->key.empty()) {
     EntityAuth ea;
-    ea.key.decode_base64(k);
+    ea.key.decode_base64(conf->key);
     g_keyring.add(*conf->name, ea);
 
     ret = 0;
-  } else if (conf->keyfile && conf->keyfile[0]) {
+  } else if (!conf->keyfile.empty()) {
     char buf[100];
-    int fd = ::open(conf->keyfile, O_RDONLY);
+    int fd = ::open(conf->keyfile.c_str(), O_RDONLY);
     if (fd < 0) {
       int err = errno;
       derr << "unable to open " << conf->keyfile << ": "
@@ -103,8 +101,8 @@ md_config_t *common_preinit(const CephInitParameters &iparams,
     case CODE_ENVIRONMENT_DAEMON:
       conf->daemonize = true;
       if (!(flags & CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS)) {
-	conf->log_dir = strdup("/var/log/ceph");
-	conf->pid_file = strdup("/var/run/ceph/$type.$id.pid");
+	conf->log_dir = "/var/log/ceph";
+	conf->pid_file = "/var/run/ceph/$type.$id.pid";
       }
       conf->log_to_stderr = LOG_TO_STDERR_SOME;
       break;

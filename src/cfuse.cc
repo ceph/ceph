@@ -72,7 +72,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   vec_to_argv(nargs, argc, argv);
 
   // FUSE will chdir("/"); be ready.
-  g_conf.chdir = strdup("/");
+  g_conf.chdir = "/";
 
   // check for 32-bit arch
   if (sizeof(long) == 4) {
@@ -125,7 +125,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     
     // start up fuse
     // use my argc, argv (make sure you pass a mount point!)
-    int r = client->mount(g_conf.client_mountpoint);
+    int r = client->mount(g_conf.client_mountpoint.c_str());
     if (r < 0) {
       cerr << "cfuse[" << getpid() << "]: ceph mount failed with " << strerror(-r) << std::endl;
       goto out_shutdown;

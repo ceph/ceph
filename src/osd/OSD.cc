@@ -259,7 +259,7 @@ out:
   return ret;
 }
 
-int OSD::mkjournal(const char *dev, const char *jdev)
+int OSD::mkjournal(const std::string &dev, const std::string &jdev)
 {
   ObjectStore *store = create_object_store(dev, jdev);
   if (!store)
@@ -267,7 +267,7 @@ int OSD::mkjournal(const char *dev, const char *jdev)
   return store->mkjournal();
 }
 
-int OSD::flushjournal(const char *dev, const char *jdev)
+int OSD::flushjournal(const std::string &dev, const std::string &jdev)
 {
   ObjectStore *store = create_object_store(dev, jdev);
   if (!store)

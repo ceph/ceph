@@ -114,7 +114,7 @@ int main(int argc, const char **argv)
     usage();
   }
 
-  if (!g_conf.osd_data) {
+  if (g_conf.osd_data.empty()) {
     derr << "must specify '--osd-data=foo' data path" << dendl;
     usage();
   }
@@ -136,7 +136,7 @@ int main(int argc, const char **argv)
       exit(1);
     }
     derr << "created object store " << g_conf.osd_data;
-    if (g_conf.osd_journal)
+    if (!g_conf.osd_journal.empty())
       *_dout << " journal " << g_conf.osd_journal;
     *_dout << " for osd" << whoami << " fsid " << mc.monmap.fsid << dendl;
     exit(0);
@@ -227,7 +227,8 @@ int main(int argc, const char **argv)
   cout << "starting osd" << whoami
        << " at " << client_messenger->get_ms_addr() 
        << " osd_data " << g_conf.osd_data
-       << " " << ((g_conf.osd_journal && g_conf.osd_journal[0]) ? g_conf.osd_journal:"(no journal)")
+       << " " << ((g_conf.osd_journal.empty()) ?
+		    "(no journal)" : g_conf.osd_journal)
        << std::endl;
 
   client_messenger->register_entity(entity_name_t::OSD(whoami));
@@ -261,8 +262,7 @@ int main(int argc, const char **argv)
 
 
   OSD *osd = new OSD(whoami, cluster_messenger, client_messenger, messenger_hb, &mc,
-		     (g_conf.osd_data ? g_conf.osd_data : ""),
-		     (g_conf.osd_journal ? g_conf.osd_journal : ""));
+		     g_conf.osd_data, g_conf.osd_journal);
 
   int err = osd->pre_init();
   if (err < 0) {

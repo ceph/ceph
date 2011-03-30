@@ -31,11 +31,10 @@ int pidfile_write(const md_config_t *conf)
 {
   int ret, fd;
 
-  const char *pfile = conf->pid_file;
-  if ((pfile == NULL) || (!pfile[0])) {
+  if (conf->pid_file.empty()) {
     return pidfile_remove();
   }
-  strncpy(pid_file, pfile, PATH_MAX);
+  snprintf(pid_file, PATH_MAX, "%s", conf->pid_file.c_str());
 
   fd = TEMP_FAILURE_RETRY(::open(pid_file,
 				 O_CREAT|O_TRUNC|O_WRONLY, 0644));

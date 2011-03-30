@@ -50,24 +50,6 @@ static bool fd_is_open(int fd)
   return (res == 0);
 }
 
-static bool empty(const char *str)
-{
-  if (!str)
-    return true;
-  if (!str[0])
-    return true;
-  return false;
-}
-
-static string cpp_str(const char *str)
-{
-  if (!str)
-    return "(NULL)";
-  if (str[0] == '\0')
-    return "(empty)";
-  return str;
-}
-
 static std::string normalize_relative(const char *from)
 {
   if (from[0] == '/')
@@ -279,7 +261,7 @@ void DoutStreambuf<charT, traits>::read_global_config()
     }
   }
 
-  if ((!empty(g_conf.log_file)) || (!empty(g_conf.log_dir))) {
+  if ((!g_conf.log_file.empty()) || (!g_conf.log_dir.empty())) {
     if (_read_ofile_config() == 0) {
       flags |= DOUTSB_FLAG_OFILE;
     }
@@ -378,8 +360,8 @@ std::string DoutStreambuf<charT, traits>::config_to_str() const
   ostringstream oss;
   oss << "g_conf.log_to_stderr = " << g_conf.log_to_stderr << "\n";
   oss << "g_conf.log_to_syslog = " << g_conf.log_to_syslog << "\n";
-  oss << "g_conf.log_file = '" << cpp_str(g_conf.log_file) << "'\n";
-  oss << "g_conf.log_dir = '" << cpp_str(g_conf.log_dir) << "'\n";
+  oss << "g_conf.log_file = '" << g_conf.log_file << "'\n";
+  oss << "g_conf.log_dir = '" << g_conf.log_dir << "'\n";
   oss << "g_conf.g_conf.log_per_instance = '"
       << g_conf.log_per_instance << "'\n";
   oss << "flags = 0x" << std::hex << flags << std::dec << "\n";
@@ -443,15 +425,15 @@ std::string DoutStreambuf<charT, traits>::_calculate_opath() const
   // should hold the dout_lock here
 
   // If g_conf.log_file was specified, that takes the highest priority
-  if (!empty(g_conf.log_file)) {
-    return normalize_relative(g_conf.log_file);
+  if (!g_conf.log_file.empty()) {
+    return normalize_relative(g_conf.log_file.c_str());
   }
 
   string log_dir;
-  if (empty(g_conf.log_dir))
+  if (g_conf.log_dir.empty())
     log_dir = normalize_relative(".");
   else
-    log_dir = normalize_relative(g_conf.log_dir);
+    log_dir = normalize_relative(g_conf.log_dir.c_str());
 
   if (g_conf.log_per_instance) {
     char hostname[255];
@@ -478,8 +460,8 @@ std::string DoutStreambuf<charT, traits>::_calculate_opath() const
 template <typename charT, typename traits>
 std::string DoutStreambuf<charT, traits>::_get_symlink_dir() const
 {
-  if (!empty(g_conf.log_sym_dir))
-    return normalize_relative(g_conf.log_sym_dir);
+  if (!g_conf.log_sym_dir.empty())
+    return normalize_relative(g_conf.log_sym_dir.c_str());
   else
     return get_dirname(opath);
 }
@@ -499,7 +481,7 @@ int DoutStreambuf<charT, traits>::_read_ofile_config()
     return 1;
   }
 
-  if (empty(g_conf.log_file) && g_conf.log_per_instance) {
+  if (g_conf.log_file.empty() && g_conf.log_per_instance) {
     // Calculate instance symlink path (isym_path)
     ostringstream iss;
     std::string symlink_dir(_get_symlink_dir());

@@ -73,20 +73,20 @@ int main(int argc, const char **argv)
       usage();
   }
 
-  if (!g_conf.mon_data) {
+  if (g_conf.mon_data.empty()) {
     cerr << "must specify '--mon-data=foo' data path" << std::endl;
     usage();
   }
 
   // -- mkfs --
   if (mkfs) {
-    if (!g_conf.monmap || !osdmapfn)
+    if (g_conf.monmap.empty() || !osdmapfn)
       usage();
 
     // make sure it doesn't already exist
         /*
     struct stat st;
-    if (::lstat(g_conf.mon_data, &st) == 0) {
+    if (::lstat(g_conf.mon_data.c_str(), &st) == 0) {
       cerr << "monfs dir " << g_conf.mon_data << " already exists; remove it first" << std::endl;
       usage();
     }
@@ -94,7 +94,7 @@ int main(int argc, const char **argv)
 
     // load monmap
     bufferlist monmapbl, osdmapbl;
-    int err = monmapbl.read_file(g_conf.monmap);
+    int err = monmapbl.read_file(g_conf.monmap.c_str());
     if (err < 0)
       exit(1);
     MonMap monmap;

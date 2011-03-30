@@ -26,7 +26,8 @@ int ClassHandler::_load_class(ClassData &cls)
   cls_deps_t *(*cls_deps)();
 
   char fname[80];
-  snprintf(fname, sizeof(fname), "%s/class-XXXXXX", g_conf.osd_class_tmp);
+  snprintf(fname, sizeof(fname), "%s/class-XXXXXX",
+	   g_conf.osd_class_tmp.c_str());
 
   int fd = mkstemp(fname);
   if (fd < 0) {

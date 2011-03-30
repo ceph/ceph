@@ -40,7 +40,7 @@ public:
     std::string str;
   };
 
-  MonitorStore(const char *d) : dir(d) { }
+  MonitorStore(const std::string &d) : dir(d) { }
   ~MonitorStore() { }
 
   int mkfs();  // wipe

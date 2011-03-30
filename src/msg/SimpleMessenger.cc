@@ -2351,8 +2351,8 @@ int SimpleMessenger::start(bool daemonize, uint64_t nonce)
     install_standard_sighandlers();
     pidfile_write(&g_conf);
  
-    if (g_conf.chdir && g_conf.chdir[0]) {
-      if (::chdir(g_conf.chdir)) {
+    if (!g_conf.chdir.empty()) {
+      if (::chdir(g_conf.chdir.c_str())) {
 	int err = errno;
 	derr << "messenger.start: failed to chdir to directory: '"
 	     << g_conf.chdir << "': " << cpp_strerror(err) << dendl;

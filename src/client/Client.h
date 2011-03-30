@@ -1222,7 +1222,7 @@ private:
 		    Dentry **pdn, bool expect_null=false);
 
 public:
-  int mount(const char *mount_root = NULL);
+  int mount(const std::string &mount_root);
   int unmount();
 
   // these shoud (more or less) mirror the actual system calls.

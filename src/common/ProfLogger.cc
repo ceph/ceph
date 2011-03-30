@@ -194,7 +194,8 @@ void ProfLogger::_open_log()
   struct stat st;
 
   filename = "";
-  if (g_conf.chdir && g_conf.chdir[0] && g_conf.profiling_logger_dir[0] != '/') {
+  if ((!g_conf.chdir.empty()) &&
+      (g_conf.profiling_logger_dir.substr(0,1) != "/")) {
     char cwd[PATH_MAX];
     char *c = getcwd(cwd, sizeof(cwd));
     assert(c);
@@ -209,7 +210,7 @@ void ProfLogger::_open_log()
     ::mkdir(filename.c_str(), 0750);
 
   filename += "/";
-  if (g_conf.profiling_logger_subdir) {
+  if (!g_conf.profiling_logger_subdir.empty()) {
     filename += g_conf.profiling_logger_subdir;
     ::mkdir( filename.c_str(), 0755 );   // make sure dir exists
     filename += "/";

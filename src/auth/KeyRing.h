@@ -28,7 +28,7 @@ class KeyRing {
 public:
   map<EntityName, EntityAuth>& get_keys() { return keys; }  // yuck
 
-  int load(const char *filename);
+  int load(const std::string &filename);
   void print(ostream& out);
 
   // accessors

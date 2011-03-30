@@ -128,16 +128,6 @@ bool ceph_argparse_cmdline_val(void *field, int type, const char *val)
   return true;
 }
 
-void env_override(char **ceph_var, const char * const env_var)
-{
-  char *e = getenv(env_var);
-  if (!e)
-    return;
-  if (*ceph_var)
-    free(*ceph_var);
-  *ceph_var = strdup(e);
-}
-
 void env_to_vec(std::vector<const char*>& args)
 {
   char *p = getenv("CEPH_ARGS");

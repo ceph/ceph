@@ -91,14 +91,14 @@ private:
   ConfFile *cf;
 
 public:
-  char *host;
+  std::string host;
 
   int num_client;
 
   //bool mkfs;
 
-  const char *monmap;
-  const char *mon_host;
+  std::string monmap;
+  std::string mon_host;
   bool daemonize;
 
   //profiling
@@ -110,12 +110,12 @@ public:
   bool profiling_logger;
   int profiling_logger_interval;
   bool profiling_logger_calc_variance;
-  const char *profiling_logger_subdir;
-  const char *profiling_logger_dir;
+  std::string profiling_logger_subdir;
+  std::string profiling_logger_dir;
 
-  const char *log_file;
-  const char *log_dir;
-  const char *log_sym_dir;
+  std::string log_file;
+  std::string log_dir;
+  std::string log_sym_dir;
   int log_sym_history;
 
   int log_to_stderr;
@@ -126,9 +126,9 @@ public:
   bool clog_to_monitors;
   bool clog_to_syslog;
 
-  const char *pid_file;
+  std::string pid_file;
 
-  const char *chdir;
+  std::string chdir;
 
   int kill_after;
 
@@ -165,9 +165,9 @@ public:
   int debug_finisher;
 
   // auth
-  char *key;
-  char *keyfile;
-  char *keyring;
+  std::string key;
+  std::string keyfile;
+  std::string keyring;
 
   // buffer
   bool buffer_track_alloc;
@@ -197,7 +197,7 @@ public:
   uint64_t ms_inject_socket_failures;
 
   // mon
-  const char *mon_data;
+  std::string mon_data;
   int mon_tick_interval;
   double mon_subscribe_interval;
   int mon_osd_down_out_interval;
@@ -220,7 +220,7 @@ public:
   double paxos_observer_timeout;
 
   // auth
-  char *auth_supported;
+  std::string auth_supported;
   double auth_mon_ticket_ttl;
   double auth_service_ticket_ttl;
   EntityName *name;
@@ -237,12 +237,12 @@ public:
   double   client_mount_timeout;
   double   client_unmount_timeout;
   double   client_tick_interval;
-  const char *client_trace;
+  std::string client_trace;
   long long client_readahead_min;
   long long client_readahead_max_bytes;
   long long client_readahead_max_periods;
-  const char *client_snapdir;
-  const char *client_mountpoint;
+  std::string client_snapdir;
+  std::string client_mountpoint;
 
   // objectcacher
   bool     client_oc;
@@ -354,12 +354,12 @@ public:
   int max_mds;
 
   int mds_standby_for_rank;
-  char* mds_standby_for_name;
+  std::string mds_standby_for_name;
   bool mds_standby_replay;
 
   // osd
-  const char *osd_data;
-  const char *osd_journal;
+  std::string osd_data;
+  std::string osd_journal;
   int osd_journal_size;  // in mb
   int osd_max_write_size; // in MB
   bool osd_balance_reads;
@@ -416,7 +416,7 @@ public:
 
   double osd_class_error_timeout;
   double osd_class_timeout;
-  const char *osd_class_tmp;
+  std::string osd_class_tmp;
 
   int osd_max_scrubs;
   float osd_scrub_load_threshold;
@@ -435,7 +435,7 @@ public:
   double   filestore_min_sync_interval;
   bool  filestore_fake_attrs;
   bool  filestore_fake_collections;
-  const char  *filestore_dev;
+  std::string filestore_dev;
   bool filestore_btrfs_trans;
   bool filestore_btrfs_snap;
   bool filestore_btrfs_clone_range;
@@ -506,7 +506,8 @@ typedef enum {
 	OPT_ADDR, OPT_U32
 } opt_type_t;
 
-bool ceph_resolve_file_search(string& filename_list, string& result);
+bool ceph_resolve_file_search(const std::string& filename_list,
+			      std::string& result);
 
 struct config_option {
   const char *section;
