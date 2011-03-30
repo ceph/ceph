@@ -766,6 +766,8 @@ int main(int argc, const char **argv)
     usage();
   }
 
+  if (ret)
+    cerr << "error " << (-ret) << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
   return (ret < 0) ? 1 : 0;
 }
 
