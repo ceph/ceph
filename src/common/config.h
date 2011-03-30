@@ -82,7 +82,7 @@ private:
   // Private function for setting a default for a config option
   void set_val_from_default(const config_option *opt);
 
-  int set_val_impl(const char *val, config_option *opt);
+  int set_val_impl(const char *val, const config_option *opt);
 
   // Do metavariable expansions
   void conf_post_process_val(std::string &val) const;
@@ -520,7 +520,6 @@ struct config_option {
   double def_double;
 
   opt_type_t type;
-  char char_option;  // if any
 };
 
 #include "common/debug.h"

@@ -319,21 +319,21 @@ CephInitParameters ceph_argparse_early_args
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (strcmp(*i, "--") == 0)
       break;
-    else if (ceph_argparse_flag(args, i, "--version", "-v", NULL)) {
+    else if (ceph_argparse_flag(args, i, "--version", "-v", (char*)NULL)) {
       cout << pretty_version_to_str() << std::endl;
       _exit(0);
     }
-    else if (ceph_argparse_witharg(args, i, &val, "--conf", "-c", NULL)) {
+    else if (ceph_argparse_witharg(args, i, &val, "--conf", "-c", (char*)NULL)) {
       iparams.conf_file = val;
     }
     else if ((module_type != CEPH_ENTITY_TYPE_CLIENT) &&
-	     (ceph_argparse_witharg(args, i, &val, "-i", NULL))) {
+	     (ceph_argparse_witharg(args, i, &val, "-i", (char*)NULL))) {
       iparams.name.set_id(val);
     }
-    else if (ceph_argparse_witharg(args, i, &val, "--id", NULL)) {
+    else if (ceph_argparse_witharg(args, i, &val, "--id", (char*)NULL)) {
       iparams.name.set_id(val);
     }
-    else if (ceph_argparse_witharg(args, i, &val, "--name", "-n", NULL)) {
+    else if (ceph_argparse_witharg(args, i, &val, "--name", "-n", (char*)NULL)) {
       if (!iparams.name.from_str(val)) {
 	std::cerr << "You must pass a string of the form ID.TYPE to "
 	  "the --name option." << std::endl;
