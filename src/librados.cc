@@ -109,11 +109,13 @@ struct librados::IoCtxImpl {
   void set_snap_read(snapid_t s) {
     if (!s)
       s = CEPH_NOSNAP;
+    dout(10) << "set snap read " << snap_seq << " -> " << s << dendl;
     snap_seq = s;
   }
 
   int set_snap_write_context(snapid_t seq, vector<snapid_t>& snaps) {
     ::SnapContext n;
+    dout(10) << "set snap write context: seq = " << seq << " and snaps = " << snaps << dendl;
     n.seq = seq;
     n.snaps = snaps;
     if (!n.is_valid())

@@ -14,6 +14,7 @@
 
 #define __STDC_FORMAT_MACROS
 #include "common/Cond.h"
+#include "common/errno.h"
 #include "include/rbd/librbd.hpp"
 #include "include/byteorder.h"
 
@@ -370,7 +371,7 @@ void trim_image(IoCtx& io_ctx, rbd_obj_header_ondisk *header, uint64_t newsize)
     string oid = get_block_oid(header, i);
     io_ctx.remove(oid);
     if ((i & 127) == 0) {
-      dout(2) << "\r\t" << i << "/" << numseg << dendl;
+      dout(2) << "\t" << i << "/" << numseg << dendl;
     }
   }
 }
@@ -516,6 +517,8 @@ int rollback_image(ImageCtx *ictx, const char *snap_name)
 
 int list(IoCtx& io_ctx, std::vector<std::string>& names)
 {
+  dout(20) << "list " << &io_ctx << dendl;
+
   bufferlist bl;
   int r = io_ctx.read(RBD_DIRECTORY, bl, 0, 0);
   if (r < 0)
@@ -533,6 +536,8 @@ int list(IoCtx& io_ctx, std::vector<std::string>& names)
 
 int snap_create(ImageCtx *ictx, const char *snap_name)
 {
+  dout(20) << "snap_create " << ictx << " " << snap_name << dendl;
+
   int r = ictx_check(ictx);
   if (r < 0)
     return r;
@@ -552,6 +557,8 @@ int snap_create(ImageCtx *ictx, const char *snap_name)
 
 int snap_remove(ImageCtx *ictx, const char *snap_name)
 {
+  dout(20) << "snap_remove " << ictx << " " << snap_name << dendl;
+
   int r = ictx_check(ictx);
   if (r < 0)
     return r;
@@ -582,6 +589,8 @@ int snap_remove(ImageCtx *ictx, const char *snap_name)
 int create(IoCtx& io_ctx, string& md_oid, const char *imgname,
 			      uint64_t size, int *order)
 {
+  dout(20) << "create " << &io_ctx << " name = " << imgname << " size = " << size << dendl;
+
   // make sure it doesn't already exist
   int r = io_ctx.stat(md_oid, NULL, NULL);
   if (r == 0) {
@@ -628,6 +637,8 @@ int create(IoCtx& io_ctx, string& md_oid, const char *imgname,
 
 int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
 {
+  dout(20) << "rename " << &io_ctx << " " << srcname << " -> " << dstname << dendl;
+
   string md_oid = srcname;
   md_oid += RBD_SUFFIX;
   string dst_md_oid = dstname;
@@ -672,6 +683,8 @@ int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
 
 int info(ImageCtx *ictx, image_info_t& info, size_t infosize)
 {
+  dout(20) << "info " << ictx << dendl;
+
   int r = ictx_check(ictx);
   if (r < 0)
     return r;
@@ -681,6 +694,8 @@ int info(ImageCtx *ictx, image_info_t& info, size_t infosize)
 
 int remove(IoCtx& io_ctx, const char *imgname)
 {
+  dout(20) << "remove " << &io_ctx << " " << imgname << dendl;
+
   string md_oid = imgname;
   md_oid += RBD_SUFFIX;
 
@@ -688,7 +703,7 @@ int remove(IoCtx& io_ctx, const char *imgname)
   int r = read_header(io_ctx, md_oid, &header, NULL);
   if (r >= 0) {
     trim_image(io_ctx, &header, 0);
-    dout(2) << "\rremoving header..." << dendl;
+    dout(2) << "removing header..." << dendl;
     io_ctx.remove(md_oid);
   }
 
@@ -709,6 +724,8 @@ int remove(IoCtx& io_ctx, const char *imgname)
 
 int resize(ImageCtx *ictx, uint64_t size)
 {
+  dout(20) << "resize " << ictx << " " << ictx->header.image_size << " -> " << size << dendl;
+
   int r = ictx_check(ictx);
   if (r < 0)
     return r;
@@ -750,6 +767,8 @@ int resize(ImageCtx *ictx, uint64_t size)
 
 int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps)
 {
+  dout(20) << "snap_list " << ictx << dendl;
+
   int r = ictx_check(ictx);
   if (r < 0)
     return r;
@@ -811,6 +830,7 @@ int rm_snap(IoCtx& io_ctx, string& md_oid, const char *snap_name)
 
 int ictx_check(ImageCtx *ictx)
 {
+  dout(20) << "ictx_check " << ictx << dendl;
   ictx->lock.Lock();
   bool needs_refresh = ictx->needs_refresh;
   ictx->lock.Unlock();
@@ -827,12 +847,22 @@ int ictx_refresh(ImageCtx *ictx, const char *snap_name)
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
+  if (snap_name) {
+    dout(20) << "ictx_refresh " << ictx << " snap = " << snap_name << dendl;
+  } else {
+    dout(20) << "ictx_refresh " << ictx << " no snap" << dendl;
+  }
+
   int r = read_header(ictx->md_ctx, md_oid, &(ictx->header), NULL);
-  if (r < 0)
+  if (r < 0) {
+    derr << "Error reading header: " << cpp_strerror(-r) << dendl;
     return r;
+  }
   r = ictx->md_ctx.exec(md_oid, "rbd", "snap_list", bl, bl2);
-  if (r < 0)
+  if (r < 0) {
+    derr << "Error listing snapshots: " << cpp_strerror(-r) << dendl;
     return r;
+  }
 
   ictx->snaps.clear();
   ictx->snapc.snaps.clear();
@@ -873,6 +903,8 @@ int ictx_refresh(ImageCtx *ictx, const char *snap_name)
 
 int snap_rollback(ImageCtx *ictx, const char *snap_name)
 {
+  dout(20) << "snap_rollback " << ictx << " snap = " << snap_name << dendl;
+
   int r = ictx_check(ictx);
   if (r < 0)
     return r;
@@ -964,6 +996,8 @@ done:
 
 int snap_set(ImageCtx *ictx, const char *snap_name)
 {
+  dout(20) << "snap_set " << ictx << " snap = " << (snap_name ? snap_name : "NULL") << dendl;
+
   int r = ictx_check(ictx);
   if (r < 0)
     return r;
@@ -985,6 +1019,10 @@ int snap_set(ImageCtx *ictx, const char *snap_name)
 
 int open_image(IoCtx& io_ctx, ImageCtx *ictx, const char *name, const char *snap_name)
 {
+  string sn = snap_name ? snap_name : "NULL";
+  dout(20) << "open_image " << &io_ctx << " ictx =  " << ictx
+	   << " name =  " << name << " snap_name = " << (snap_name ? snap_name : "NULL") << dendl;
+
   int r = ictx_refresh(ictx, snap_name);
   if (r < 0)
     return r;
@@ -999,9 +1037,11 @@ int open_image(IoCtx& io_ctx, ImageCtx *ictx, const char *name, const char *snap
   r = ictx->md_ctx.watch(md_oid, 0, &(wctx->cookie), wctx);
   return r;
 }
-// looks like too many puts are being done
+
 void close_image(ImageCtx *ictx)
 {
+  dout(20) << "close_image " << ictx << dendl;
+
   string md_oid = ictx->name;
   md_oid += RBD_SUFFIX;
 
@@ -1016,6 +1056,8 @@ int64_t read_iterate(ImageCtx *ictx, uint64_t off, size_t len,
 		     int (*cb)(uint64_t, size_t, const char *, void *),
 		     void *arg)
 {
+  dout(20) << "read_iterate " << ictx << " off = " << off << " len = " << len << dendl;
+
   int r = ictx_check(ictx);
   if (r < 0)
     return r;
@@ -1099,6 +1141,8 @@ ssize_t read(ImageCtx *ictx, uint64_t ofs, size_t len, char *buf)
 
 ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
 {
+  dout(20) << "write " << ictx << " off = " << off << " len = " << len << dendl;
+
   if (!len)
     return 0;
 
@@ -1207,6 +1251,8 @@ void rados_cb(rados_completion_t c, void *arg)
 int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
 			         AioCompletion *c)
 {
+  dout(20) << "aio_write " << ictx << " off = " << off << " len = " << len << dendl;
+
   if (!len)
     return 0;
 
@@ -1258,6 +1304,8 @@ int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
 				char *buf,
                                 AioCompletion *c)
 {
+  dout(20) << "aio_read " << ictx << " off = " << off << " len = " << len << dendl;
+
   int r = ictx_check(ictx);
   if (r < 0)
     return r;
