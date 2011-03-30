@@ -389,12 +389,11 @@ if [ $allhosts -eq 1 ]; then
 
 	check_host || continue
 
-	if [ -n "$ssh" ] && ( echo $pushed_to | grep -v -q " $host " ); then
+	if [ -n "$ssh" ]; then
 	    echo pushing conf and monmap to $host
 	    do_cmd "mkdir -p $rdir"
 	    scp -q $dir/conf $host:$rdir
 	    scp -q $dir/monmap $host:$rdir
-	    pushed_to="$pushed_to $host "
 	fi
 	
 	if [ $mkbtrfs -eq 1 ] && $type = "osd"; then
@@ -415,7 +414,6 @@ if [ $allhosts -eq 1 ]; then
     $0 -d $dir --prepare-mon $moreargs
     
     # mons
-    pushed_to=""
 
     get_name_list "mon"
     for name in $what; do
@@ -426,11 +424,10 @@ if [ $allhosts -eq 1 ]; then
 
 	check_host || continue
 	
-	if [ -n "$ssh" ] && ( echo $pushed_to | grep -v -q " $host " ); then
+	if [ -n "$ssh" ]; then
 	    echo pushing everything to $host
 	    ssh $host mkdir -p $rdir
 	    scp -q $dir/* $host:$rdir
-	    pushed_to="$pushed_to $host "
 	fi
 	
 	do_cmd "$0 -d $rdir --init-daemon $name"
