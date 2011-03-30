@@ -2324,6 +2324,15 @@ selfmanaged_snap_remove(uint64_t snapid)
   return io_ctx_impl->client->selfmanaged_snap_remove(io_ctx_impl, snapid);
 }
 
+int librados::IoCtx::
+selfmanaged_snap_rollback(const std::string& oid, uint64_t snapid)
+{
+  return io_ctx_impl->client->selfmanaged_snap_rollback_object(io_ctx_impl,
+							       oid,
+							       io_ctx_impl->snapc,
+							       snapid);
+}
+
 librados::ObjectIterator librados::IoCtx::
 objects_begin()
 {
@@ -2988,6 +2997,14 @@ extern "C" int rados_ioctx_selfmanaged_snap_remove(rados_ioctx_t io,
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   return ctx->client->selfmanaged_snap_remove(ctx, snapid);
+}
+
+extern "C" int rados_ioctx_selfmanaged_snap_rollback(rados_ioctx_t io,
+						     const char *oid,
+						     uint64_t snapid)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  return ctx->client->selfmanaged_snap_rollback_object(ctx, oid, ctx->snapc, snapid);
 }
 
 extern "C" int rados_ioctx_snap_list(rados_ioctx_t io, rados_snap_t *snaps,

@@ -136,6 +136,7 @@ int rados_rollback(rados_ioctx_t io, const char *oid,
 void rados_ioctx_snap_set_read(rados_ioctx_t io, rados_snap_t snap);
 int rados_ioctx_selfmanaged_snap_create(rados_ioctx_t io, uint64_t *snapid);
 int rados_ioctx_selfmanaged_snap_remove(rados_ioctx_t io, uint64_t snapid);
+int rados_ioctx_selfmanaged_snap_rollback(rados_ioctx_t io, const char *oid, uint64_t snapid);
 int rados_ioctx_selfmanaged_snap_set_write_ctx(rados_ioctx_t io, rados_snap_t seq, rados_snap_t *snaps, int num_snaps);
 
 int rados_ioctx_snap_list(rados_ioctx_t io, rados_snap_t *snaps, int maxlen);
