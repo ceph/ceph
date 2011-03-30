@@ -660,7 +660,7 @@ void Journaler::_finish_read(int r)
 	   << ", read pointers " << read_pos << "/" << received_pos << "/" << requested_pos
 	   << dendl;
   
-  if (is_readable()) { // NOTE: this check may read more
+  if (is_readable() || read_pos == write_pos) { // NOTE: this check may read more
     // readable!
     dout(10) << "_finish_read now readable" << dendl;
     if (on_readable) {
